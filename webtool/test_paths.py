@@ -29,3 +29,12 @@ def test_atomic_write_creates_file_and_no_tmp(tmp_path):
     paths.atomic_write(str(target), "hällo\n")
     assert target.read_text(encoding="utf-8") == "hällo\n"
     assert not (tmp_path / "out.txt.tmp").exists()  # tmp wurde umbenannt
+
+
+def test_transcript_bases_excludes_derived(monkeypatch, tmp_path):
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    t = tmp_path / "P" / "transkripte"
+    t.mkdir(parents=True)
+    for n in ["S1.json", "S1.edit.json", "S1.correction.json", "S2.json"]:
+        (t / n).write_text("{}", encoding="utf-8")
+    assert paths.transcript_bases("P") == ["S1", "S2"]

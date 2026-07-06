@@ -60,3 +60,9 @@ def test_apply_respects_human_edited(project):
     # --force ueberschreibt
     assert correct.cmd_apply("Demo", "S1", force=True) == "written"
     assert "Neu." in (t / "S1.edit.json").read_text(encoding="utf-8")
+
+
+def test_apply_missing_correction_returns_missing(project):
+    _root, t = project
+    assert correct.cmd_apply("Demo", "S1") == "missing"
+    assert not (t / "S1.edit.json").exists()

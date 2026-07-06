@@ -7,7 +7,6 @@
 Der eigentliche LLM-Korrekturschritt liegt dazwischen (Workflow tools/correct_label.mjs).
 """
 import argparse
-import glob
 import json
 import os
 
@@ -19,12 +18,7 @@ AUDIO_EXT = (".mp3", ".wav", ".m4a", ".aac", ".flac", ".ogg", ".opus", ".wma", "
 
 
 def bases(project: str) -> list:
-    tdir = paths.transkripte_dir(project)
-    if not os.path.isdir(tdir):
-        return []
-    return sorted({os.path.splitext(os.path.basename(p))[0]
-                   for p in glob.glob(os.path.join(tdir, "*.json"))
-                   if not p.endswith(".edit.json")})
+    return paths.transcript_bases(project)
 
 
 def _audio_name(project: str, base: str) -> str:
@@ -64,8 +58,12 @@ def cmd_apply(project: str, base: str, force: bool = False) -> str:
                 return "skipped"
         except json.JSONDecodeError:
             pass  # korrupte edit.json -> darf ueberschrieben werden
+    cpath = os.path.join(tdir, base + ".correction.json")
+    if not os.path.exists(cpath):
+        print(f"apply: FEHLT {base}.correction.json - erst Korrektur-Workflow laufen lassen")
+        return "missing"
     raw = _load(os.path.join(tdir, base + ".json"))
-    correction = _load(os.path.join(tdir, base + ".correction.json"))
+    correction = _load(cpath)
     doc = apply_correction(raw, correction, base=base, project=project,
                            audio=_audio_name(project, base))
     paths.atomic_write(epath, json.dumps(doc, ensure_ascii=False, indent=1))

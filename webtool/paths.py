@@ -1,4 +1,5 @@
 """Pfade + Namensvalidierung (Trust-Boundary: project/base kommen aus der URL)."""
+import glob
 import os
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -25,6 +26,20 @@ def transkripte_dir(project: str) -> str:
 def audio_dir(project: str) -> str:
     d = os.path.join(project_dir(project), "audio")
     return d if os.path.isdir(d) else project_dir(project)
+
+
+def transcript_bases(project: str) -> list:
+    """Basisnamen der Roh-Transkripte (<base>.json), ohne abgeleitete
+    <base>.edit.json / <base>.correction.json."""
+    tdir = transkripte_dir(project)
+    if not os.path.isdir(tdir):
+        return []
+    out = set()
+    for p in glob.glob(os.path.join(tdir, "*.json")):
+        if p.endswith(".edit.json") or p.endswith(".correction.json"):
+            continue
+        out.add(os.path.splitext(os.path.basename(p))[0])
+    return sorted(out)
 
 
 def atomic_write(path: str, text: str) -> None:

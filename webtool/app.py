@@ -1,5 +1,4 @@
 """FastAPI-Backend für den Transkribor-Editor (Stufe 1)."""
-import glob
 import json
 import os
 
@@ -17,12 +16,7 @@ AUDIO_EXT = (".mp3", ".wav", ".m4a", ".aac", ".flac", ".ogg", ".opus", ".wma", "
 
 
 def _bases(project: str):
-    tdir = paths.transkripte_dir(project)
-    if not os.path.isdir(tdir):
-        return []
-    return sorted({os.path.splitext(os.path.basename(p))[0]
-                   for p in glob.glob(os.path.join(tdir, "*.json"))
-                   if not p.endswith(".edit.json")})
+    return paths.transcript_bases(project)
 
 
 def find_audio(project: str, base: str):
