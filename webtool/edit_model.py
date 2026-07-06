@@ -1,0 +1,48 @@
+"""Whisper-Rohausgabe (<base>.json) -> kanonisches edit.json-Dokument."""
+
+COMPRESSION_RATIO_THRESHOLD = 2.4
+NO_SPEECH_THRESHOLD = 0.6
+LOGPROB_THRESHOLD = -1.0
+
+
+def compute_flags(segment: dict) -> dict:
+    cr = segment.get("compression_ratio", 0.0)
+    nsp = segment.get("no_speech_prob", 0.0)
+    alp = segment.get("avg_logprob", 0.0)
+    return {
+        "hallucination": cr > COMPRESSION_RATIO_THRESHOLD,
+        "silence": nsp > NO_SPEECH_THRESHOLD and alp < LOGPROB_THRESHOLD,
+        "low_conf": alp < LOGPROB_THRESHOLD,
+    }
+
+
+def build_edit_doc(raw: dict, *, base: str, project: str, audio: str) -> dict:
+    segments = []
+    for seg in raw.get("segments", []):
+        text = (seg.get("text") or "").strip()
+        segments.append({
+            "id": seg.get("id"),
+            "start": seg.get("start"),
+            "end": seg.get("end"),
+            "speaker": "",
+            "raw_text": text,
+            "text": text,
+            "words": [
+                {"word": w.get("word", ""), "start": w.get("start"),
+                 "end": w.get("end"), "probability": w.get("probability", 1.0)}
+                for w in seg.get("words", [])
+            ],
+            "flags": compute_flags(seg),
+            "note": "",
+        })
+    return {
+        "base": base,
+        "project": project,
+        "audio": audio,
+        "language": raw.get("language", "de"),
+        "human_edited": False,
+        "context": "",
+        "speakers": [],
+        "segments": segments,
+        "annotations": [],
+    }
