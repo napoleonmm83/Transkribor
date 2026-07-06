@@ -1,0 +1,24 @@
+import os
+import pytest
+from webtool import paths
+
+
+def test_safe_name_accepts_normal():
+    assert paths.safe_name("Foodfestival-Maienfeld") == "Foodfestival-Maienfeld"
+    assert paths.safe_name("C0687_01913077") == "C0687_01913077"
+
+
+@pytest.mark.parametrize("bad", ["../etc", "a/b", "a\\b", "..", "", "x\x00y"])
+def test_safe_name_rejects_traversal(bad):
+    with pytest.raises(ValueError):
+        paths.safe_name(bad)
+
+
+def test_projekte_root_respects_env(monkeypatch, tmp_path):
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    assert paths.projekte_root() == str(tmp_path)
+
+
+def test_project_dir_joins(monkeypatch, tmp_path):
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    assert paths.project_dir("P") == os.path.join(str(tmp_path), "P")
