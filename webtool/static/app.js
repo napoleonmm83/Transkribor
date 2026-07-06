@@ -1,4 +1,6 @@
 const $ = (s, r = document) => r.querySelector(s);
+import WaveSurfer from "/vendor/wavesurfer.esm.js";
+let ws = null, stopAt = null;
 const state = { project: null, base: null, doc: null, dirty: false };
 
 async function loadProjects() {
@@ -35,6 +37,7 @@ async function openFile(project, base, node) {
   $("#save").disabled = false; $("#export").disabled = false;
   renderSegments();
   window.dispatchEvent(new CustomEvent("file-loaded"));  // Tasks 7/8 hängen sich hier ein
+  setupPlayer();
 }
 
 function fmt(t) {
@@ -47,6 +50,7 @@ function renderSegments() {
   (state.doc.segments || []).forEach((seg, i) => {
     const row = document.createElement("div");
     row.className = "seg"; row.dataset.i = i;
+    row.ondblclick = () => window.dispatchEvent(new CustomEvent("play-seg", { detail: i }));
     const spk = document.createElement("input");
     spk.value = seg.speaker || ""; spk.placeholder = "Sprecher…";
     spk.oninput = () => { seg.speaker = spk.value; markDirty(); };
@@ -89,3 +93,39 @@ $("#save").onclick = save;
 $("#export").onclick = exportMd;
 window.addEventListener("beforeunload", e => { if (state.dirty) e.preventDefault(); });
 loadProjects();
+
+function setupPlayer() {
+  if (ws) { ws.destroy(); ws = null; }
+  $("#player").innerHTML = "";
+  ws = WaveSurfer.create({
+    container: "#player", height: 72, waveColor: "#b9c6d6", progressColor: "#4f7fbf",
+    url: `/api/projects/${encodeURIComponent(state.project)}/audio/${encodeURIComponent(state.base)}`,
+  });
+  ws.on("timeupdate", (t) => {
+    if (stopAt != null && t >= stopAt) { ws.pause(); stopAt = null; }
+    highlightAt(t);
+  });
+}
+
+function playSeg(i) {
+  const seg = state.doc.segments[i];
+  if (!ws) return;
+  stopAt = seg.end;
+  ws.setTime(seg.start);
+  ws.play();
+}
+
+function highlightAt(t) {
+  const segs = state.doc.segments;
+  let idx = -1;
+  for (let i = 0; i < segs.length; i++) {
+    if (t >= segs[i].start && t < segs[i].end) { idx = i; break; }
+  }
+  document.querySelectorAll(".seg.active").forEach(n => n.classList.remove("active"));
+  if (idx >= 0) {
+    const row = document.querySelector(`.seg[data-i="${idx}"]`);
+    if (row) row.classList.add("active");
+  }
+}
+
+window.addEventListener("play-seg", (e) => playSeg(e.detail));
