@@ -23,3 +23,8 @@ body { margin: 0; display: flex; height: 100vh; font: 15px/1.5 system-ui, sans-s
 .seg .flag { font-size: 13px; }
 .seg .text { outline: none; }
 .seg .text:focus { background: #fffef5; box-shadow: 0 0 0 2px #f0e0a0; border-radius: 3px; }
+.seg .toggle { cursor: pointer; user-select: none; }
+.raw-words { grid-column: 2; margin-top: 4px; font-size: 13px; color: #444; }
+.raw-words.hidden { display: none; }
+.w-yellow { background: #fff2b0; border-radius: 2px; }
+.w-red { background: #ffc2c2; border-radius: 2px; }

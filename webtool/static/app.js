@@ -2,6 +2,7 @@ const $ = (s, r = document) => r.querySelector(s);
 import WaveSurfer from "/vendor/wavesurfer.esm.js";
 let ws = null, stopAt = null;
 const state = { project: null, base: null, doc: null, dirty: false };
+const thr = { yellow: 0.6, red: 0.4 };
 
 async function loadProjects() {
   const { projects } = await (await fetch("/api/projects")).json();
@@ -66,7 +67,18 @@ function renderSegments() {
     const text = document.createElement("div");
     text.className = "text"; text.contentEditable = "true"; text.textContent = seg.text;
     text.oninput = () => { seg.text = text.textContent; markDirty(); };
-    row.append(meta, text); box.appendChild(row);
+    row.append(meta, text);
+    const toggle = document.createElement("span");
+    toggle.className = "toggle"; toggle.textContent = "🔍"; toggle.title = "Roh-Wörter / Unsicherheit";
+    flag.after(toggle);
+    const raw = document.createElement("div");
+    raw.className = "raw-words hidden"; raw.dataset.i = i;
+    toggle.onclick = () => {
+      raw.classList.toggle("hidden");
+      if (!raw.classList.contains("hidden")) paintWords(raw);
+    };
+    row.append(raw);
+    box.appendChild(row);
   });
 }
 
@@ -91,6 +103,40 @@ async function exportMd() {
 
 $("#save").onclick = save;
 $("#export").onclick = exportMd;
+
+function wireThresholds() {
+  const y = $("#thrYellow"), r = $("#thrRed");
+  const upd = () => {
+    thr.yellow = +y.value; thr.red = +r.value;
+    $("#thrYellowV").textContent = thr.yellow.toFixed(2);
+    $("#thrRedV").textContent = thr.red.toFixed(2);
+    document.querySelectorAll(".raw-words:not(.hidden)").forEach(el => paintWords(el));
+  };
+  y.oninput = upd; r.oninput = upd; upd();
+}
+
+function wordClass(w, isEdge) {
+  const p = w.probability ?? 1;
+  if (p < thr.red) return "w-red";
+  if (!isEdge && p < thr.yellow) return "w-yellow";  // Randwort nur ab roter Schwelle färben
+  return "";
+}
+
+function paintWords(el) {
+  const seg = state.doc.segments[+el.dataset.i];
+  el.innerHTML = "";
+  const n = seg.words.length;
+  seg.words.forEach((w, k) => {
+    const span = document.createElement("span");
+    const isEdge = (k === 0 || k === n - 1);
+    span.className = wordClass(w, isEdge);
+    span.textContent = w.word;
+    el.appendChild(span);
+  });
+}
+
+wireThresholds();
+
 window.addEventListener("beforeunload", e => { if (state.dirty) e.preventDefault(); });
 loadProjects();
 
