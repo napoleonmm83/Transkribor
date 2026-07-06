@@ -96,3 +96,40 @@ def test_tag_uncertain_segments_threshold_and_no_words():
     raw2 = {"segments": [{"id": 0, "start": 0, "end": 1, "text": "x",
              "words": [{"word": "x", "probability": 0.8}]}]}
     assert "[[x|0.80]]" in em.tag_uncertain_segments(raw2, threshold=0.85)[0]["tagged_text"]
+
+
+def test_apply_correction_overlays_by_id():
+    raw = {"language": "de", "segments": [
+        {"id": 0, "start": 0.0, "end": 1.0, "text": " Ich bin Mathias.",
+         "compression_ratio": 1.0, "no_speech_prob": 0.01, "avg_logprob": -0.3,
+         "words": [{"word": " Ich", "start": 0.0, "end": 0.5, "probability": 0.4}]},
+        {"id": 1, "start": 1.0, "end": 2.0, "text": " Aha.",
+         "compression_ratio": 1.0, "no_speech_prob": 0.01, "avg_logprob": -0.3, "words": []},
+    ]}
+    correction = {
+        "base": "B", "context": "Vorstellung.",
+        "speakers": ["Interviewer", "Matthias"],
+        "segments": [
+            {"id": 0, "speaker": "Matthias", "text": "Ich bin Matthias."},
+            # id 1 absichtlich NICHT korrigiert
+        ],
+        "annotations": ["Stelle X unklar."],
+    }
+    doc = em.apply_correction(raw, correction, base="B", project="P", audio="B.mp3")
+    assert doc["context"] == "Vorstellung."
+    assert doc["speakers"] == ["Interviewer", "Matthias"]
+    assert doc["annotations"] == ["Stelle X unklar."]
+    assert doc["human_edited"] is False
+    s0 = doc["segments"][0]
+    assert s0["text"] == "Ich bin Matthias." and s0["speaker"] == "Matthias"
+    assert s0["raw_text"] == "Ich bin Mathias."  # Roh bleibt erhalten
+    assert s0["words"][0]["probability"] == 0.4 and s0["flags"] == {"hallucination": False, "silence": False, "low_conf": False}
+    s1 = doc["segments"][1]
+    assert s1["text"] == "Aha." and s1["speaker"] == ""  # nicht korrigiert -> Rohtext, leerer Sprecher
+
+
+def test_apply_correction_empty_correction_keeps_raw():
+    raw = {"segments": [{"id": 0, "start": 0, "end": 1, "text": " Hallo.", "words": []}]}
+    doc = em.apply_correction(raw, {}, base="B", project="P", audio="")
+    assert doc["segments"][0]["text"] == "Hallo." and doc["segments"][0]["speaker"] == ""
+    assert doc["context"] == "" and doc["speakers"] == [] and doc["annotations"] == []

@@ -78,3 +78,21 @@ def tag_uncertain_segments(raw: dict, threshold: float = UNCERTAIN_TAG_THRESHOLD
             "tagged_text": tagged,
         })
     return out
+
+
+def apply_correction(raw: dict, correction: dict, *, base: str, project: str, audio: str) -> dict:
+    """edit.json aus Roh bauen und die segment-genaue Korrektur (Text/Sprecher je id)
+    sowie context/speakers/annotations einweben. Nicht korrigierte Segmente behalten Rohtext."""
+    doc = build_edit_doc(raw, base=base, project=project, audio=audio)
+    doc["context"] = (correction.get("context") or "").strip()
+    doc["speakers"] = list(correction.get("speakers") or [])
+    doc["annotations"] = [str(a).strip() for a in (correction.get("annotations") or []) if str(a).strip()]
+    by_id = {c.get("id"): c for c in (correction.get("segments") or [])}
+    for seg in doc["segments"]:
+        c = by_id.get(seg["id"])
+        if c is not None:
+            text = (c.get("text") or "").strip()
+            if text:
+                seg["text"] = text
+            seg["speaker"] = (c.get("speaker") or "").strip()
+    return doc
