@@ -55,3 +55,16 @@ Rohtranskript. Ergebnis: `transkripte\<base>.md`.
   ```
 - ffmpeg (`winget install Gyan.FFmpeg`) — `transcribe.py` findet es automatisch.
 - Modell `large-v3` lädt beim ersten Lauf einmalig (~3 GB) nach `~\.cache\whisper`.
+
+## Editieren im Browser (Web-Tool, Stufe 1)
+
+Lokaler Editor zum abschnittweisen Prüfen/Korrigieren mit Klick-zum-Abspielen:
+
+```powershell
+.\webtool.ps1        # startet http://127.0.0.1:8000/ und öffnet den Browser
+```
+
+- Zeigt vorhandene Transkripte pro Projekt, spielt je Abschnitt das Audio-Snippet,
+  hebt unsichere Wörter hervor (Whisper-`probability`, Schwellen verstellbar).
+- Korrektionen werden **nicht-destruktiv** in `<base>.edit.json` gespeichert; die
+  Roh-`<base>.json` bleibt unangetastet; `<base>.md` wird als Export daraus erzeugt.

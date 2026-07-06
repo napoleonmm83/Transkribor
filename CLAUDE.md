@@ -57,3 +57,6 @@ mit Projektbeschreibung + bekannten Namen (verbessert Whisper und die Korrektur)
 - ffmpeg: wird von `transcribe.py` automatisch gefunden (winget Gyan.FFmpeg) oder muss auf PATH sein.
 - Whisper-Modell-Cache: `%USERPROFILE%\.cache\whisper` (einmaliger Download ~3 GB).
 - Env-Overrides: `WHISPER_MODEL` (default large-v3), `WHISPER_LANG` (default de).
+- Web-Editor (Stufe 1): `.\webtool.ps1` → FastAPI (`webtool/app.py`) + `webtool/static/`.
+  Kanonisches Editier-Dokument `<base>.edit.json` (aus Roh-`<base>.json`), Export `<base>.md`.
+  Spec: `docs/superpowers/specs/2026-07-06-transkribor-webtool-design.md`.
