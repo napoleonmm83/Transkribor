@@ -70,3 +70,4 @@ mit Projektbeschreibung + bekannten Namen (verbessert Whisper und die Korrektur)
 - Web-Editor (Stufe 1): `.\webtool.ps1` → FastAPI (`webtool/app.py`) + `webtool/static/`.
   Kanonisches Editier-Dokument `<base>.edit.json` (aus Roh-`<base>.json`), Export `<base>.md`.
   Spec: `docs/superpowers/specs/2026-07-06-transkribor-webtool-design.md`.
+- Stufe 2a (Browser-Transkription): `POST /audio` (Upload), `POST /transcribe` (startet `transcribe.py` via `webtool/jobs.py`-Job), `GET /api/jobs/{id}` (Polling). Job-Registry ist in-memory (threading+Popen) — kein `--reload` während Jobs.

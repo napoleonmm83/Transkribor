@@ -68,3 +68,5 @@ Lokaler Editor zum abschnittweisen Prüfen/Korrigieren mit Klick-zum-Abspielen:
   hebt unsichere Wörter hervor (Whisper-`probability`, Schwellen verstellbar).
 - Korrektionen werden **nicht-destruktiv** in `<base>.edit.json` gespeichert; die
   Roh-`<base>.json` bleibt unangetastet; `<base>.md` wird als Export daraus erzeugt.
+
+**Transkribieren im Browser (Stufe 2a):** In der Projektliste lädt ⬆ Audio in `projekte\<NAME>\audio\` hoch und ▶ startet `transcribe.py` als Hintergrundjob; der Fortschritt erscheint live im Panel. Hinweis: **nicht mit `uvicorn --reload` starten, während Jobs laufen** — ein Reload killt laufende Jobs und die Job-Liste.
