@@ -28,3 +28,9 @@ body { margin: 0; display: flex; height: 100vh; font: 15px/1.5 system-ui, sans-s
 .raw-words.hidden { display: none; }
 .w-yellow { background: #fff2b0; border-radius: 2px; }
 .w-red { background: #ffc2c2; border-radius: 2px; }
+#projects .proj { display: flex; align-items: center; gap: 6px; }
+#projects .proj .grow { flex: 1; }
+#projects .proj button, #projects .proj label.up { font-size: 12px; cursor: pointer; border: 1px solid #ccc; background: #fff; border-radius: 4px; padding: 1px 5px; }
+#projects .proj button:disabled { opacity: .5; cursor: default; }
+#jobstatus { margin-top: 10px; padding: 8px; background: #111; color: #b8e0b8; font: 11px/1.35 ui-monospace, monospace; border-radius: 4px; white-space: pre-wrap; max-height: 180px; overflow: auto; }
+#jobstatus.hidden { display: none; }

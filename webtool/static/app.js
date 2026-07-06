@@ -10,7 +10,21 @@ async function loadProjects() {
   el.innerHTML = "";
   for (const p of projects) {
     const h = document.createElement("div");
-    h.className = "proj"; h.textContent = p.name; el.appendChild(h);
+    h.className = "proj";
+    const name = document.createElement("span");
+    name.className = "grow"; name.textContent = p.name;
+    const up = document.createElement("label");
+    up.className = "up"; up.textContent = "⬆"; up.title = "Audio hochladen";
+    const upInput = document.createElement("input");
+    upInput.type = "file"; upInput.accept = "audio/*,.mp3,.wav,.m4a,.aac,.flac,.ogg,.opus,.wma,.mp4";
+    upInput.style.display = "none";
+    upInput.onchange = () => uploadAudio(p.name, upInput.files[0]);
+    up.appendChild(upInput);
+    const tr = document.createElement("button");
+    tr.textContent = "▶"; tr.title = "Transkribieren";
+    tr.onclick = () => startTranscribe(p.name, tr);
+    h.append(name, up, tr);
+    el.appendChild(h);
     for (const f of p.files) {
       const d = document.createElement("div");
       d.className = "file";
@@ -174,3 +188,45 @@ function highlightAt(t) {
 }
 
 window.addEventListener("play-seg", (e) => playSeg(e.detail));
+
+async function uploadAudio(project, fileObj) {
+  if (!fileObj) return;
+  const fd = new FormData();
+  fd.append("file", fileObj);
+  const res = await fetch(`/api/projects/${encodeURIComponent(project)}/audio`,
+    { method: "POST", body: fd });
+  if (!res.ok) {
+    const msg = await res.json().catch(() => ({}));
+    showJob(`Upload fehlgeschlagen: ${msg.detail || res.status}`);
+    return;
+  }
+  showJob(`Hochgeladen: ${(await res.json()).file}`);
+  loadProjects();
+}
+
+async function startTranscribe(project, btn) {
+  btn.disabled = true;
+  const res = await fetch(`/api/projects/${encodeURIComponent(project)}/transcribe`, { method: "POST" });
+  if (!res.ok) { showJob(`Start fehlgeschlagen: ${res.status}`); btn.disabled = false; return; }
+  const { job_id } = await res.json();
+  pollJob(job_id, () => { btn.disabled = false; loadProjects(); });
+}
+
+function showJob(text) {
+  const box = $("#jobstatus");
+  box.classList.remove("hidden");
+  box.textContent = text;
+  box.scrollTop = box.scrollHeight;
+}
+
+function pollJob(jobId, onDone) {
+  const tick = async () => {
+    const res = await fetch(`/api/jobs/${encodeURIComponent(jobId)}`);
+    if (!res.ok) { showJob("Job nicht gefunden."); return; }
+    const j = await res.json();
+    showJob((j.lines || []).slice(-12).join("\n") || `Status: ${j.status}`);
+    if (j.status === "running") { setTimeout(tick, 1500); }
+    else { showJob(((j.lines || []).slice(-12).join("\n")) + `\n[${j.status}]`); if (onDone) onDone(); }
+  };
+  tick();
+}
