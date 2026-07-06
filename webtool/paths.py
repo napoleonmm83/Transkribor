@@ -9,7 +9,7 @@ def projekte_root() -> str:
 
 
 def safe_name(name: str) -> str:
-    if not name or "/" in name or "\\" in name or ".." in name or "\x00" in name:
+    if not name or "/" in name or "\\" in name or ":" in name or ".." in name or "\x00" in name:
         raise ValueError(f"unsicherer Name: {name!r}")
     return name
 
