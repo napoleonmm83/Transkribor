@@ -3,10 +3,12 @@ import glob
 import json
 import os
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse
 
 from . import paths
 from .edit_model import build_edit_doc
+from .render_md import render_md
 
 app = FastAPI(title="Transkribor Editor")
 
@@ -41,6 +43,14 @@ def _edit_path(project, base):
 
 def _md_path(project, base):
     return os.path.join(paths.transkripte_dir(project), base + ".md")
+
+
+def _validate(project: str, base: str) -> None:
+    try:
+        paths.safe_name(project)
+        paths.safe_name(base)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="ungültiger Name")
 
 
 def load_or_build_doc(project: str, base: str) -> dict:
@@ -81,8 +91,38 @@ def list_projects():
 
 @app.get("/api/projects/{project}/files/{base}")
 def get_file(project: str, base: str):
-    try:
-        paths.safe_name(project); paths.safe_name(base)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="ungültiger Name")
+    _validate(project, base)
     return load_or_build_doc(project, base)
+
+
+@app.get("/api/projects/{project}/audio/{base}")
+def get_audio(project: str, base: str):
+    _validate(project, base)
+    audio = find_audio(project, base)
+    if not audio:
+        raise HTTPException(status_code=404, detail="kein Audio")
+    return FileResponse(audio)  # Starlette FileResponse unterstützt HTTP-Range
+
+
+@app.put("/api/projects/{project}/files/{base}")
+async def save_file(project: str, base: str, request: Request):
+    _validate(project, base)
+    doc = await request.json()
+    doc["human_edited"] = True
+    tdir = paths.transkripte_dir(project)
+    os.makedirs(tdir, exist_ok=True)
+    with open(_edit_path(project, base), "w", encoding="utf-8") as fh:
+        json.dump(doc, fh, ensure_ascii=False, indent=1)
+    with open(_md_path(project, base), "w", encoding="utf-8") as fh:
+        fh.write(render_md(doc))
+    return {"ok": True}
+
+
+@app.post("/api/projects/{project}/files/{base}/export")
+def export_file(project: str, base: str):
+    _validate(project, base)
+    doc = load_or_build_doc(project, base)
+    md = render_md(doc)
+    with open(_md_path(project, base), "w", encoding="utf-8") as fh:
+        fh.write(md)
+    return {"md": md}

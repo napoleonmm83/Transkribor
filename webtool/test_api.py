@@ -39,3 +39,33 @@ def test_get_file_builds_doc(client):
 
 def test_get_missing_file_404(client):
     assert client.get("/api/projects/Demo/files/nope").status_code == 404
+
+
+def test_audio_range_206(client):
+    r = client.get("/api/projects/Demo/audio/S1", headers={"Range": "bytes=0-3"})
+    assert r.status_code == 206
+    assert r.content == b"ID3f"
+
+
+def test_put_saves_non_destructive(client, tmp_path):
+    doc = client.get("/api/projects/Demo/files/S1").json()
+    doc["segments"][0]["speaker"] = "Interviewer"
+    doc["segments"][0]["text"] = "Hallo, Welt!"
+    r = client.put("/api/projects/Demo/files/S1", json=doc)
+    assert r.status_code == 200 and r.json()["ok"] is True
+
+    tdir = tmp_path / "Demo" / "transkripte"
+    saved = (tdir / "S1.edit.json").read_text(encoding="utf-8")
+    assert '"human_edited": true' in saved
+    assert "Interviewer" in saved
+    md = (tdir / "S1.md").read_text(encoding="utf-8")
+    assert "**Interviewer:** Hallo, Welt!" in md
+    # Roh-JSON unangetastet
+    raw = (tdir / "S1.json").read_text(encoding="utf-8")
+    assert "Hallo Welt." in raw and "Hallo, Welt!" not in raw
+
+
+def test_export_returns_md(client):
+    client.get("/api/projects/Demo/files/S1")
+    r = client.post("/api/projects/Demo/files/S1/export")
+    assert r.status_code == 200 and r.json()["md"].startswith("# Interview S1")
