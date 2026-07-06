@@ -5,6 +5,7 @@ import os
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from . import paths
 from .edit_model import build_edit_doc
@@ -126,3 +127,7 @@ def export_file(project: str, base: str):
     with open(_md_path(project, base), "w", encoding="utf-8") as fh:
         fh.write(md)
     return {"md": md}
+
+
+_STATIC = os.path.join(os.path.dirname(__file__), "static")
+app.mount("/", StaticFiles(directory=_STATIC, html=True), name="static")
