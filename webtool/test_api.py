@@ -100,3 +100,18 @@ def test_job_status_and_404(client, monkeypatch):
     monkeypatch.setattr(jobs_mod, "get", lambda jid: {"id": jid, "status": "running", "lines": ["x"]} if jid == "j1" else None)
     assert client.get("/api/jobs/j1").json()["status"] == "running"
     assert client.get("/api/jobs/nope").status_code == 404
+
+
+def test_upload_ok_and_duplicate_409(client, tmp_path):
+    files = {"file": ("Neu.mp3", b"ID3audio", "audio/mpeg")}
+    r = client.post("/api/projects/Demo/audio", files=files)
+    assert r.status_code == 200 and r.json()["base"] == "Neu"
+    assert (tmp_path / "Demo" / "audio" / "Neu.mp3").read_bytes() == b"ID3audio"
+    # zweiter Upload derselben Datei -> 409
+    r2 = client.post("/api/projects/Demo/audio", files={"file": ("Neu.mp3", b"x", "audio/mpeg")})
+    assert r2.status_code == 409
+
+
+def test_upload_bad_extension_400(client):
+    r = client.post("/api/projects/Demo/audio", files={"file": ("schad.txt", b"x", "text/plain")})
+    assert r.status_code == 400

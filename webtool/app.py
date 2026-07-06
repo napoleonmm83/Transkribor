@@ -1,9 +1,10 @@
 """FastAPI-Backend für den Transkribor-Editor (Stufe 1)."""
 import json
 import os
+import shutil
 import sys
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -143,6 +144,25 @@ def job_status(job_id: str):
     if r is None:
         raise HTTPException(status_code=404, detail="kein Job")
     return r
+
+
+@app.post("/api/projects/{project}/audio")
+async def upload_audio(project: str, file: UploadFile = File(...)):
+    _validate(project)
+    name = os.path.basename(file.filename or "")           # vom Browser mitgesendete Pfade entfernen
+    base, ext = os.path.splitext(name)
+    ext = ext.lower()
+    _validate(base)
+    if ext not in AUDIO_EXT:
+        raise HTTPException(status_code=400, detail=f"nicht unterstützte Endung: {ext or '(keine)'}")
+    adir = os.path.join(paths.project_dir(project), "audio")
+    os.makedirs(adir, exist_ok=True)
+    dest = os.path.join(adir, base + ext)
+    if os.path.exists(dest):
+        raise HTTPException(status_code=409, detail="Datei existiert bereits")
+    with open(dest, "wb") as out:
+        shutil.copyfileobj(file.file, out)
+    return {"ok": True, "base": base, "file": base + ext}
 
 
 _STATIC = os.path.join(os.path.dirname(__file__), "static")
