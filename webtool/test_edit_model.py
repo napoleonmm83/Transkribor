@@ -133,3 +133,18 @@ def test_apply_correction_empty_correction_keeps_raw():
     doc = em.apply_correction(raw, {}, base="B", project="P", audio="")
     assert doc["segments"][0]["text"] == "Hallo." and doc["segments"][0]["speaker"] == ""
     assert doc["context"] == "" and doc["speakers"] == [] and doc["annotations"] == []
+
+
+def test_apply_correction_empty_text_and_missing_speaker():
+    raw = {"segments": [
+        {"id": 0, "start": 0, "end": 1, "text": " Roh A.", "words": []},
+        {"id": 1, "start": 1, "end": 2, "text": " Roh B.", "words": []},
+    ]}
+    correction = {"segments": [
+        {"id": 0, "speaker": "X", "text": "   "},   # leerer Text -> Rohtext bleibt, Sprecher wird gesetzt
+        {"id": 1, "text": "Neu B."},                # kein speaker-Key -> speaker ""
+    ]}
+    doc = em.apply_correction(raw, correction, base="B", project="P", audio="")
+    s0, s1 = doc["segments"]
+    assert s0["text"] == "Roh A." and s0["speaker"] == "X"
+    assert s1["text"] == "Neu B." and s1["speaker"] == ""
