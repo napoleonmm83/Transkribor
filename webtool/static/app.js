@@ -220,13 +220,20 @@ function showJob(text) {
 }
 
 function pollJob(jobId, onDone) {
+  let done = false;
+  const finish = (msg) => { if (done) return; done = true; if (msg) showJob(msg); if (onDone) onDone(); };
   const tick = async () => {
-    const res = await fetch(`/api/jobs/${encodeURIComponent(jobId)}`);
-    if (!res.ok) { showJob("Job nicht gefunden."); return; }
-    const j = await res.json();
-    showJob((j.lines || []).slice(-12).join("\n") || `Status: ${j.status}`);
-    if (j.status === "running") { setTimeout(tick, 1500); }
-    else { showJob(((j.lines || []).slice(-12).join("\n")) + `\n[${j.status}]`); if (onDone) onDone(); }
+    try {
+      const res = await fetch(`/api/jobs/${encodeURIComponent(jobId)}`);
+      if (!res.ok) { finish("Job nicht gefunden."); return; }
+      const j = await res.json();
+      const tail = (j.lines || []).slice(-12).join("\n");
+      showJob(tail || `Status: ${j.status}`);
+      if (j.status === "running") { setTimeout(tick, 1500); }
+      else { finish(tail + `\n[${j.status}]`); }
+    } catch (e) {
+      finish("Verbindungsfehler beim Job-Polling.");
+    }
   };
   tick();
 }
