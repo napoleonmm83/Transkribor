@@ -208,7 +208,8 @@ async function startTranscribe(project, btn) {
   btn.disabled = true;
   const res = await fetch(`/api/projects/${encodeURIComponent(project)}/transcribe`, { method: "POST" });
   if (!res.ok) { showJob(`Start fehlgeschlagen: ${res.status}`); btn.disabled = false; return; }
-  const { job_id } = await res.json();
+  const { job_id, started } = await res.json();
+  if (!started) { showJob("Es läuft bereits eine Transkription (Projekt oder GPU belegt)."); btn.disabled = false; return; }
   pollJob(job_id, () => { btn.disabled = false; loadProjects(); });
 }
 

@@ -147,7 +147,7 @@ def job_status(job_id: str):
 
 
 @app.post("/api/projects/{project}/audio")
-async def upload_audio(project: str, file: UploadFile = File(...)):
+def upload_audio(project: str, file: UploadFile = File(...)):
     _validate(project)
     name = os.path.basename(file.filename or "")           # vom Browser mitgesendete Pfade entfernen
     base, ext = os.path.splitext(name)
@@ -158,10 +158,11 @@ async def upload_audio(project: str, file: UploadFile = File(...)):
     adir = os.path.join(paths.project_dir(project), "audio")
     os.makedirs(adir, exist_ok=True)
     dest = os.path.join(adir, base + ext)
-    if os.path.exists(dest):
+    try:
+        with open(dest, "xb") as out:  # exklusiv: FileExistsError statt TOCTOU
+            shutil.copyfileobj(file.file, out)
+    except FileExistsError:
         raise HTTPException(status_code=409, detail="Datei existiert bereits")
-    with open(dest, "wb") as out:
-        shutil.copyfileobj(file.file, out)
     return {"ok": True, "base": base, "file": base + ext}
 
 
