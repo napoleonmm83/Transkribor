@@ -46,3 +46,35 @@ def build_edit_doc(raw: dict, *, base: str, project: str, audio: str) -> dict:
         "segments": segments,
         "annotations": [],
     }
+
+
+UNCERTAIN_TAG_THRESHOLD = 0.5
+
+
+def tag_uncertain_segments(raw: dict, threshold: float = UNCERTAIN_TAG_THRESHOLD) -> list:
+    """Pro Roh-Segment ein {id,start,end,tagged_text}; Wörter mit
+    probability < threshold inline als [[Wort|0.pp]] markiert (für die LLM-Korrektur)."""
+    out = []
+    for seg in raw.get("segments", []):
+        words = seg.get("words", [])
+        if words:
+            parts = []
+            for w in words:
+                word = w.get("word", "")
+                prob = w.get("probability", 1.0)
+                stripped = word.strip()
+                if stripped and prob < threshold:
+                    lead = word[: len(word) - len(word.lstrip())]  # führende Leerzeichen erhalten
+                    parts.append(f"{lead}[[{stripped}|{prob:.2f}]]")
+                else:
+                    parts.append(word)
+            tagged = "".join(parts).strip()
+        else:
+            tagged = (seg.get("text") or "").strip()
+        out.append({
+            "id": seg.get("id"),
+            "start": seg.get("start"),
+            "end": seg.get("end"),
+            "tagged_text": tagged,
+        })
+    return out
