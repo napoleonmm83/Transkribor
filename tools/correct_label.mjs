@@ -1,19 +1,18 @@
 export const meta = {
   name: 'transkribor-correct-label',
-  description: 'Kontext-Korrektur und Sprecher-Labeling von Interview-Transkripten (Whisper-Rohausgabe -> lesbares, sprecher-markiertes .md)',
+  description: 'Segment-ausgerichtete Kontext-Korrektur + Sprecher-Labeling (liefert strukturierte Korrektur je Datei; Assembly zu edit.json/md via `python -m webtool.correct apply`)',
   phases: [
-    { title: 'Glossar', detail: 'Gemeinsame Eigennamen/Kontext aus allen Transkripten extrahieren' },
-    { title: 'Korrektur+Labeling', detail: 'Pro Datei: Kontextkorrektur + Sprechertrennung, schreibt .md' },
-    { title: 'Verifikation', detail: 'Pro Datei: Treue-Check gegen Rohtranskript, korrigiert Übertreibungen' },
+    { title: 'Glossar', detail: 'Gemeinsame Eigennamen/Kontext aus allen Roh-Transkripten' },
+    { title: 'Korrektur+Labeling', detail: 'Pro Datei: segment-genaue Korrektur + Sprecher aus <base>.tagged.txt' },
+    { title: 'Verifikation', detail: 'Pro Datei: Treue-Check gegen Rohtranskript' },
   ],
 }
 
-// args: { dir: "<...\\transkripte>", bases: ["basename", ...], context?: "Projektbeschreibung" }
 const A = typeof args === 'string' ? JSON.parse(args) : args
 const DIR = String(A.dir)
 const BASES = A.bases
 const CONTEXT = (A.context && String(A.context).trim())
-  || 'Interviews (gesprochene Sprache oft Schweizerdeutsch/Dialekt), die Whisper large-v3 nach Standarddeutsch transkribiert hat. Es gibt ASR-Fehler, v.␣a. bei Eigennamen und Dialektbegriffen.'
+  || 'Interviews (gesprochene Sprache oft Schweizerdeutsch/Dialekt), von Whisper large-v3 nach Standarddeutsch transkribiert. Es gibt ASR-Fehler, v.a. bei Eigennamen und Dialektbegriffen.'
 
 const GLOSSARY_SCHEMA = {
   type: 'object',
@@ -43,28 +42,28 @@ const GLOSSARY_SCHEMA = {
   required: ['context_summary', 'proper_nouns', 'likely_corrections'],
 }
 
-const CORRECT_SCHEMA = {
+const CORRECTION_SCHEMA = {
   type: 'object',
   properties: {
     base: { type: 'string' },
-    output_path: { type: 'string' },
-    speaker_labels: { type: 'array', items: { type: 'string' } },
-    corrections_count: { type: 'number' },
-    uncertain_notes: { type: 'array', items: { type: 'string' } },
+    context: { type: 'string' },
+    speakers: { type: 'array', items: { type: 'string' } },
+    segments: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          id: { type: 'number' },
+          speaker: { type: 'string' },
+          text: { type: 'string' },
+        },
+        required: ['id', 'speaker', 'text'],
+      },
+    },
+    annotations: { type: 'array', items: { type: 'string' } },
     summary: { type: 'string' },
   },
-  required: ['base', 'output_path', 'summary'],
-}
-
-const VERIFY_SCHEMA = {
-  type: 'object',
-  properties: {
-    base: { type: 'string' },
-    verdict: { type: 'string', enum: ['clean', 'fixed'] },
-    issues_found: { type: 'array', items: { type: 'string' } },
-    changes_made: { type: 'array', items: { type: 'string' } },
-  },
-  required: ['base', 'verdict'],
+  required: ['base', 'segments', 'summary'],
 }
 
 // ---- Phase 0: gemeinsames Glossar (Barrier: braucht alle Dateien) ----
@@ -78,79 +77,58 @@ Projekt-Kontext: ${CONTEXT}
 Lies ALLE folgenden Roh-Transkripte vollständig:
 ${rawList}
 
-Erstelle daraus ein JSON-Glossar, das die späteren Korrektur-Agenten für KONSISTENZ nutzen:
-- context_summary: 3–6 Sätze, worum es geht (wiederkehrende Themen, Art der Fragen).
-- proper_nouns: wiederkehrende Namen/Orte/Betriebe/Marken als {correct, variants:[so falsch gehört], note}. Nur aufnehmen, wenn mit vernünftiger Sicherheit aus Kontext oder Allgemeinwissen bestimmbar. ERFINDE KEINE Namen — im Zweifel weglassen.
-- likely_corrections: wiederkehrende Nicht-Eigenname-Fehler / im Kontext sinnlose Begriffe als {wrong, right, why}. Konservativ bleiben.
+Erstelle daraus ein JSON-Glossar für KONSISTENTE Korrekturen:
+- context_summary: 3–6 Sätze, worum es geht.
+- proper_nouns: wiederkehrende Namen/Orte/Betriebe/Marken als {correct, variants:[so falsch gehört], note}. Nur mit vernünftiger Sicherheit. ERFINDE KEINE Namen.
+- likely_corrections: wiederkehrende Nicht-Eigenname-Fehler als {wrong, right, why}. Konservativ.
 
-Ziel ist Konsistenz über alle Dateien. Lieber wenige sichere Einträge als viele geratene.`,
+Lieber wenige sichere Einträge als viele geratene.`,
   { schema: GLOSSARY_SCHEMA, effort: 'high', label: 'glossar', phase: 'Glossar' }
 )
-
 log(`Glossar: ${glossary.proper_nouns?.length || 0} Eigennamen, ${glossary.likely_corrections?.length || 0} Korrekturen`)
 const gjson = JSON.stringify(glossary, null, 1)
 
-// ---- Phase 1+2: pro Datei Korrektur → Verifikation (Pipeline, kein Barrier) ----
+// ---- Phase 1+2: pro Datei Korrektur → Verifikation (Pipeline) ----
 phase('Korrektur+Labeling')
 
-const correctPrompt = (base) => `Du korrigierst und formatierst EIN Interview-Transkript.
+const correctPrompt = (base) => `Du korrigierst EIN Interview-Transkript SEGMENT FÜR SEGMENT.
 
 Projekt-Kontext: ${CONTEXT}
 
-Rohdaten (Whisper large-v3, mit Zeitstempeln pro Segment) liegen in:
-${DIR}\\${base}.segments.txt
-Lies diese Datei vollständig.
+Die Rohsegmente liegen (mit Segment-ID pro Zeile im Format "[<id>] <text>") in:
+${DIR}\\${base}.tagged.txt
+Lies diese Datei vollständig. Unsichere Wörter sind inline als [[Wort|Wahrscheinlichkeit]] markiert (niedrige Whisper-Wahrscheinlichkeit).
 
-Gemeinsames Glossar (für konsistente Korrekturen über alle Interviews — nutze es):
+Gemeinsames Glossar (für konsistente Korrekturen — nutze es):
 ${gjson}
 
 AUFGABE:
-1) KONTEXT ERFASSEN: Verstehe, worum es in diesem Gespräch geht.
-2) KORRIGIEREN: Verbessere klare ASR-Fehler anhand des Kontexts und des Glossars — falsch gehörte Wörter, Eigennamen, im Kontext sinnlose Begriffe. Normalisiere zu lesbarem Standarddeutsch (Schweizer Schreibung, "ss" statt "ß"). WICHTIG: Bleib inhaltlich TREU — nichts erfinden, nichts hinzudichten, den Sinn NICHT verändern, nicht paraphrasieren/glätten über das Nötige hinaus. Fülltext (äh, ähm, Wiederholungen) darf dezent bereinigt werden.
-3) SPRECHER MARKIEREN: Meist genau zwei Sprecher:
-   - **Interviewer** = stellt die Fragen.
-   - Die befragte Person = antwortet. Stellt sie sich vor (Name/Betrieb/Rolle), nutze diesen Namen als Label (z.␣B. **Hans Müller (Betrieb X)**), sonst **Befragte Person**.
-   Gruppiere aufeinanderfolgende Whisper-Segmente pro Sprecherwechsel zu zusammenhängenden Redebeiträgen (Segmentgrenzen ≠ Sprecherwechsel — nutze Inhalt/Frage-Antwort-Logik und Pausen in den Zeitstempeln).
-4) Bei WIRKLICH unsicheren Korrekturen: Original beibehalten und am Ende unter "## Anmerkungen" kurz notieren (nichts still erfinden).
+1) KORRIGIEREN: Verbessere klare ASR-Fehler mit Kontext + Glossar. Konzentriere dich PRIMÄR auf die [[...]]-markierten unsicheren Wörter; unmarkierte nur ändern, wenn im Kontext eindeutig falsch. Normalisiere zu lesbarem Standarddeutsch (Schweizer "ss"). Bleib TREU: nichts erfinden, Sinn NICHT verändern, nicht über das Nötige hinaus glätten. Fülltext (äh, ähm) darf dezent bereinigt werden. Gib normalen Text zurück (OHNE [[...]]-Markierungen).
+2) PRO SEGMENT: Gib für JEDE Segment-ID aus der Datei GENAU EINEN Eintrag {id, speaker, text} zurück (keine ID auslassen, keine Segmente zusammenfassen — die Redebeitrags-Bündelung passiert später).
+3) SPRECHER: Meist zwei — Interviewer (stellt Fragen) und die befragte Person (Name/Betrieb falls im Gespräch genannt, z.␣B. "Hans Müller", sonst "Befragte Person"). Ordne jedem Segment den passenden Sprecher zu.
+4) UNSICHER: Wirklich unklare Stellen im Original belassen und in annotations (Freitext) vermerken — nichts still erfinden.
 
-SCHREIBE das Ergebnis als Markdown nach: ${DIR}\\${base}.md
-Format:
-# Interview ${base}
+Gib das JSON-Objekt gemäss Schema zurück: base="${base}", context (1–2 Sätze zum Gespräch), speakers (Liste der vorkommenden Sprecher-Labels), segments ([{id,speaker,text}] für ALLE IDs), annotations, summary.`
 
-**Kontext:** <1–2 Sätze zu diesem konkreten Gespräch>
+const verifyPrompt = (base, corr) => `Du prüfst eine bereits erstellte SEGMENT-GENAUE Korrektur auf TREUE gegen das Rohtranskript und gibst die (ggf. korrigierte) Fassung zurück.
 
----
+Rohtranskript (mit Zeitstempeln): ${DIR}\\${base}.segments.txt  — lies es vollständig.
 
-**Interviewer:** <Frage/Beitrag>
-
-**<Name oder Befragte Person>:** <Antwort>
-
-... (weiter im Wechsel) ...
-
-## Anmerkungen
-- <nur falls nötig: unsichere Stellen>
-
-Gib danach das JSON-Ergebnis zurück (base, output_path, speaker_labels, corrections_count, uncertain_notes, summary).`
-
-const verifyPrompt = (base) => `Du prüfst ein bereits korrigiertes Interview-Transkript auf TREUE und Konsistenz.
-
-Vergleiche:
-- Korrigiert:  ${DIR}\\${base}.md   (lies vollständig)
-- Rohtranskript: ${DIR}\\${base}.segments.txt   (lies vollständig)
+Zu prüfende Korrektur (JSON):
+${JSON.stringify(corr, null, 1)}
 
 Prüfe kritisch:
-1) HALLUZINATION/DRIFT: Wurde Inhalt hinzugefügt, weggelassen oder im Sinn verändert, der nicht im Roh-Transkript steht? Übermässiges Umschreiben? → zurück näher ans Original.
-2) SPRECHER: Sind die Labels plausibel und konsistent (Interviewer stellt Fragen; Antworten korrekt zugeordnet)? Korrigiere Fehlzuordnungen.
-3) RESTFEHLER: Offensichtliche verbleibende ASR-Fehler oder im Kontext sinnlose Begriffe (konservativ, nur wenn klar).
-4) Format sauber.
+1) HALLUZINATION/DRIFT: Wurde Inhalt hinzugefügt/weggelassen/im Sinn verändert, der nicht im Roh steht? Übermässiges Umschreiben? → näher ans Original zurück.
+2) VOLLSTÄNDIGKEIT: Ist für JEDE Roh-Segment-ID genau ein Eintrag vorhanden? Fehlende ergänzen (Text nah am Roh), überzählige/zusammengefasste auftrennen.
+3) SPRECHER: Plausibel und konsistent (Interviewer stellt Fragen; Antworten korrekt zugeordnet)? Korrigiere Fehlzuordnungen.
+4) RESTFEHLER: Offensichtliche verbleibende ASR-Fehler (konservativ, nur wenn klar).
 
-Wenn Änderungen nötig: ÜBERSCHREIBE ${DIR}\\${base}.md mit der verbesserten Version (gleiches Format). Sonst nichts ändern.
-Gib JSON zurück: base, verdict ('clean' oder 'fixed'), issues_found, changes_made.`
+Gib das VOLLSTÄNDIGE, geprüfte Korrektur-Objekt gemäss Schema zurück (base, context, speakers, segments, annotations, summary). Ändere NUR, was wirklich nötig ist; unproblematische Segmente unverändert übernehmen. Ergänze in summary knapp, was du geändert hast (oder "keine Änderung").`
 
-const results = await pipeline(
+const corrections = await pipeline(
   BASES,
-  (base) => agent(correctPrompt(base), { label: `korr:${base}`, phase: 'Korrektur+Labeling', schema: CORRECT_SCHEMA, effort: 'high' }),
-  (_prev, base) => agent(verifyPrompt(base), { label: `verify:${base}`, phase: 'Verifikation', schema: VERIFY_SCHEMA, effort: 'high' })
+  (base) => agent(correctPrompt(base), { label: `korr:${base}`, phase: 'Korrektur+Labeling', schema: CORRECTION_SCHEMA, effort: 'high' }),
+  (corr, base) => agent(verifyPrompt(base, corr), { label: `verify:${base}`, phase: 'Verifikation', schema: CORRECTION_SCHEMA, effort: 'high' })
 )
 
-return { glossary, files: results.filter(Boolean) }
+return { glossary, corrections: corrections.filter(Boolean) }
