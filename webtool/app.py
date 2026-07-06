@@ -54,14 +54,6 @@ def _validate(project: str, base: str) -> None:
         raise HTTPException(status_code=400, detail="ungültiger Name")
 
 
-def _atomic_write(path: str, text: str) -> None:
-    """Schreibe erst in .tmp, dann os.replace() -> nie halb-geschriebene Datei."""
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as fh:
-        fh.write(text)
-    os.replace(tmp, path)
-
-
 def load_or_build_doc(project: str, base: str) -> dict:
     epath = _edit_path(project, base)
     if os.path.exists(epath):
@@ -126,8 +118,8 @@ async def save_file(project: str, base: str, request: Request):
     doc["human_edited"] = True
     tdir = paths.transkripte_dir(project)
     os.makedirs(tdir, exist_ok=True)
-    _atomic_write(_edit_path(project, base), json.dumps(doc, ensure_ascii=False, indent=1))
-    _atomic_write(_md_path(project, base), render_md(doc))
+    paths.atomic_write(_edit_path(project, base), json.dumps(doc, ensure_ascii=False, indent=1))
+    paths.atomic_write(_md_path(project, base), render_md(doc))
     return {"ok": True}
 
 

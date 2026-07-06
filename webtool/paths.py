@@ -25,3 +25,11 @@ def transkripte_dir(project: str) -> str:
 def audio_dir(project: str) -> str:
     d = os.path.join(project_dir(project), "audio")
     return d if os.path.isdir(d) else project_dir(project)
+
+
+def atomic_write(path: str, text: str) -> None:
+    """Schreibe erst in .tmp, dann os.replace() -> nie halb-geschriebene Datei."""
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        fh.write(text)
+    os.replace(tmp, path)

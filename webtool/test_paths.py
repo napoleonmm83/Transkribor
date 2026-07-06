@@ -22,3 +22,10 @@ def test_projekte_root_respects_env(monkeypatch, tmp_path):
 def test_project_dir_joins(monkeypatch, tmp_path):
     monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
     assert paths.project_dir("P") == os.path.join(str(tmp_path), "P")
+
+
+def test_atomic_write_creates_file_and_no_tmp(tmp_path):
+    target = tmp_path / "out.txt"
+    paths.atomic_write(str(target), "hällo\n")
+    assert target.read_text(encoding="utf-8") == "hällo\n"
+    assert not (tmp_path / "out.txt.tmp").exists()  # tmp wurde umbenannt
