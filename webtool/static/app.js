@@ -37,7 +37,6 @@ async function openFile(project, base, node) {
   $("#current").textContent = `${project} / ${base}`;
   $("#save").disabled = false; $("#export").disabled = false;
   renderSegments();
-  window.dispatchEvent(new CustomEvent("file-loaded"));  // Tasks 7/8 hängen sich hier ein
   setupPlayer();
 }
 

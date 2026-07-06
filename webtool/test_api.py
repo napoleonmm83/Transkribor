@@ -69,3 +69,9 @@ def test_export_returns_md(client):
     client.get("/api/projects/Demo/files/S1")
     r = client.post("/api/projects/Demo/files/S1/export")
     assert r.status_code == 200 and r.json()["md"].startswith("# Interview S1")
+
+
+def test_invalid_project_name_400(client):
+    # ':' triggers safe_name rejection -> _validate -> HTTP 400 at the endpoint layer
+    r = client.get("/api/projects/a:b/files/x")
+    assert r.status_code == 400

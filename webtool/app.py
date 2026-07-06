@@ -54,11 +54,22 @@ def _validate(project: str, base: str) -> None:
         raise HTTPException(status_code=400, detail="ungültiger Name")
 
 
+def _atomic_write(path: str, text: str) -> None:
+    """Schreibe erst in .tmp, dann os.replace() -> nie halb-geschriebene Datei."""
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        fh.write(text)
+    os.replace(tmp, path)
+
+
 def load_or_build_doc(project: str, base: str) -> dict:
     epath = _edit_path(project, base)
     if os.path.exists(epath):
-        with open(epath, encoding="utf-8") as fh:
-            return json.load(fh)
+        try:
+            with open(epath, encoding="utf-8") as fh:
+                return json.load(fh)
+        except json.JSONDecodeError:
+            pass  # korrupte edit.json -> aus Roh neu aufbauen (self-heal)
     rpath = _raw_path(project, base)
     if not os.path.exists(rpath):
         raise HTTPException(status_code=404, detail=f"kein Roh-Transkript: {base}")
@@ -77,15 +88,18 @@ def list_projects():
         for name in sorted(os.listdir(root)):
             if not os.path.isdir(os.path.join(root, name)):
                 continue
-            files = []
-            for base in _bases(name):
-                files.append({
-                    "base": base,
-                    "has_audio": find_audio(name, base) is not None,
-                    "has_raw": os.path.exists(_raw_path(name, base)),
-                    "has_edit": os.path.exists(_edit_path(name, base)),
-                    "has_md": os.path.exists(_md_path(name, base)),
-                })
+            try:
+                files = []
+                for base in _bases(name):
+                    files.append({
+                        "base": base,
+                        "has_audio": find_audio(name, base) is not None,
+                        "has_raw": os.path.exists(_raw_path(name, base)),
+                        "has_edit": os.path.exists(_edit_path(name, base)),
+                        "has_md": os.path.exists(_md_path(name, base)),
+                    })
+            except ValueError:
+                continue  # ponytail: un-nennbaren Ordner überspringen statt die ganze Liste zu 500en
             out.append({"name": name, "files": files})
     return {"projects": out}
 
@@ -112,10 +126,8 @@ async def save_file(project: str, base: str, request: Request):
     doc["human_edited"] = True
     tdir = paths.transkripte_dir(project)
     os.makedirs(tdir, exist_ok=True)
-    with open(_edit_path(project, base), "w", encoding="utf-8") as fh:
-        json.dump(doc, fh, ensure_ascii=False, indent=1)
-    with open(_md_path(project, base), "w", encoding="utf-8") as fh:
-        fh.write(render_md(doc))
+    _atomic_write(_edit_path(project, base), json.dumps(doc, ensure_ascii=False, indent=1))
+    _atomic_write(_md_path(project, base), render_md(doc))
     return {"ok": True}
 
 
