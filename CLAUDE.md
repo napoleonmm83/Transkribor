@@ -24,17 +24,27 @@ Korrektur → Verifikation gegen das Rohtranskript):
 
 1. Sammle die Basisnamen: alle `*.segments.txt` in `projekte\<NAME>\transkripte\` (Dateiname ohne Endung).
 2. Lies `projekte\<NAME>\kontext.md` falls vorhanden → `context`.
-3. Starte den Workflow:
+3. **Vor-Taggen** (unsichere Wörter für den LLM markieren):
+   ```
+   E:\Git\Transkribor\.venv\Scripts\python.exe -m webtool.correct prep "<NAME>"
+   ```
+   (erzeugt `<base>.tagged.txt` je Datei)
+4. **Korrektur-Workflow** (segment-genaue Korrektur + Sprecher):
    ```
    Workflow({ scriptPath: "E:\\Git\\Transkribor\\tools\\correct_label.mjs",
               args: { dir: "E:\\Git\\Transkribor\\projekte\\<NAME>\\transkripte",
                       bases: [ ...basenames... ],
                       context: "<Inhalt von kontext.md oder kurze Beschreibung>" } })
    ```
-   (Der Workflow braucht die Workflow-/Orchestrierungs-Funktion. Ist sie nicht verfügbar,
-   führe die Korrektur **inline** aus — dieselben Regeln, Datei für Datei, siehe unten.)
+   Der Workflow liefert `{ glossary, corrections: [{ base, context, speakers, segments, annotations, summary }] }`.
+   (Ist die Workflow-Funktion nicht verfügbar, führe die Korrektur **inline** aus — dieselben Regeln, siehe unten — und erzeuge dieselbe Korrektur-Struktur pro Datei.)
+5. **Assemblieren**: pro Datei die zurückgegebene Korrektur nach `projekte\<NAME>\transkripte\<base>.correction.json` schreiben, dann:
+   ```
+   E:\Git\Transkribor\.venv\Scripts\python.exe -m webtool.correct apply "<NAME>" "<base>"
+   ```
+   (baut `<base>.edit.json` + `<base>.md`; überschreibt `edit.json` mit `human_edited=true` nicht — dafür `--force`).
 
-Ergebnis: `projekte\<NAME>\transkripte\<base>.md` — das fertige Transkript.
+Ergebnis: `projekte\<NAME>\transkripte\<base>.edit.json` (Editor-Dokument, im Web-Tool bearbeitbar) + `<base>.md` (Export).
 
 ## Korrektur-Regeln (gelten für Workflow UND inline)
 - **Treu bleiben:** klare ASR-Fehler korrigieren (falsch gehörte Wörter, Eigennamen, im
