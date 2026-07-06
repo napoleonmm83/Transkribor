@@ -12,7 +12,10 @@ async function loadProjects() {
       const d = document.createElement("div");
       d.className = "file";
       const badge = f.has_edit ? "✎" : (f.has_md ? "✓" : (f.has_audio ? "●" : ""));
-      d.innerHTML = `${f.base} <span class="badge">${badge}</span>`;
+      d.textContent = f.base + " ";
+      const b = document.createElement("span");
+      b.className = "badge"; b.textContent = badge;
+      d.appendChild(b);
       d.onclick = () => openFile(p.name, f.base, d);
       el.appendChild(d);
     }
@@ -24,7 +27,9 @@ async function openFile(project, base, node) {
   document.querySelectorAll(".file.active").forEach(n => n.classList.remove("active"));
   if (node) node.classList.add("active");
   state.project = project; state.base = base;
-  state.doc = await (await fetch(`/api/projects/${project}/files/${base}`)).json();
+  const res = await fetch(`/api/projects/${encodeURIComponent(project)}/files/${encodeURIComponent(base)}`);
+  if (!res.ok) { $("#status").textContent = "Laden fehlgeschlagen!"; return; }
+  state.doc = await res.json();
   state.dirty = false;
   $("#current").textContent = `${project} / ${base}`;
   $("#save").disabled = false; $("#export").disabled = false;
@@ -39,7 +44,7 @@ function fmt(t) {
 
 function renderSegments() {
   const box = $("#segments"); box.innerHTML = "";
-  state.doc.segments.forEach((seg, i) => {
+  (state.doc.segments || []).forEach((seg, i) => {
     const row = document.createElement("div");
     row.className = "seg"; row.dataset.i = i;
     const spk = document.createElement("input");
@@ -64,14 +69,17 @@ function renderSegments() {
 function markDirty() { state.dirty = true; $("#status").textContent = "● ungespeichert"; }
 
 async function save() {
-  await fetch(`/api/projects/${state.project}/files/${state.base}`,
+  const res = await fetch(`/api/projects/${encodeURIComponent(state.project)}/files/${encodeURIComponent(state.base)}`,
     { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(state.doc) });
+  if (!res.ok) { $("#status").textContent = "Fehler beim Speichern!"; return; }
   state.dirty = false; $("#status").textContent = "gespeichert";
 }
 
 async function exportMd() {
-  const { md } = await (await fetch(
-    `/api/projects/${state.project}/files/${state.base}/export`, { method: "POST" })).json();
+  const res = await fetch(
+    `/api/projects/${encodeURIComponent(state.project)}/files/${encodeURIComponent(state.base)}/export`, { method: "POST" });
+  if (!res.ok) { $("#status").textContent = "Export fehlgeschlagen!"; return; }
+  const { md } = await res.json();
   const blob = new Blob([md], { type: "text/markdown" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob); a.download = `${state.base}.md`; a.click();
