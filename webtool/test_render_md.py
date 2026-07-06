@@ -35,3 +35,35 @@ def test_annotations_only_when_present():
     md = render_md(doc1)
     assert "## Anmerkungen" in md
     assert "- Unsichere Stelle." in md and "- Segment-Notiz." in md
+
+
+def test_skips_interior_empty_text_in_run():
+    doc = {"base": "B", "context": "", "annotations": [], "segments": [
+        _seg(0, "Hans", "Erster Teil."),
+        _seg(1, "Hans", "   "),
+        _seg(2, "Hans", "Zweiter Teil."),
+    ]}
+    assert "**Hans:** Erster Teil. Zweiter Teil." in render_md(doc)
+
+
+def test_all_empty_turn_omitted():
+    doc = {"base": "B", "context": "", "annotations": [], "segments": [
+        _seg(0, "Hans", "   "),
+        _seg(1, "Interviewer", "Frage?"),
+    ]}
+    md = render_md(doc)
+    assert "**Hans:**" not in md
+    assert "**Interviewer:** Frage?" in md
+
+
+def test_empty_segments_and_speaker_none():
+    assert "# Interview B" in render_md(
+        {"base": "B", "context": "", "annotations": [], "segments": []})
+    doc = {"base": "B", "context": "", "annotations": [],
+           "segments": [{"id": 0, "speaker": None, "text": "Hallo."}]}
+    assert "**Befragte Person:** Hallo." in render_md(doc)
+
+
+def test_whitespace_context_omitted():
+    doc = {"base": "B", "context": "   ", "annotations": [], "segments": [_seg(0, "A", "x")]}
+    assert "**Kontext:**" not in render_md(doc)

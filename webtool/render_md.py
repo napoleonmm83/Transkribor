@@ -4,8 +4,9 @@
 def render_md(doc: dict) -> str:
     segs = doc.get("segments", [])
     lines = [f"# Interview {doc.get('base', '')}", ""]
-    if doc.get("context"):
-        lines += [f"**Kontext:** {doc['context']}", ""]
+    context = (doc.get("context") or "").strip()
+    if context:
+        lines += [f"**Kontext:** {context}", ""]
     lines += ["---", ""]
 
     i = 0
@@ -18,7 +19,8 @@ def render_md(doc: dict) -> str:
             if t:
                 texts.append(t)
             j += 1
-        lines += [f"**{speaker}:** {' '.join(texts)}", ""]
+        if texts:
+            lines += [f"**{speaker}:** {' '.join(texts)}", ""]
         i = j
 
     notes = [n.strip() for n in doc.get("annotations", []) if n.strip()]
