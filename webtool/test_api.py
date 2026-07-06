@@ -95,6 +95,24 @@ def test_transcribe_invalid_name_400(client):
     assert client.post("/api/projects/a:b/transcribe").status_code == 400
 
 
+def test_correct_starts_job(client, monkeypatch):
+    calls = {}
+    def fake_start(project, cmd, cwd, kind):
+        calls["project"] = project; calls["kind"] = kind; calls["cmd"] = cmd
+        return "corr123", True
+    import webtool.jobs as jobs_mod
+    monkeypatch.setattr(jobs_mod, "start", fake_start)
+    r = client.post("/api/projects/Demo/correct")
+    assert r.status_code == 200
+    assert r.json() == {"job_id": "corr123", "started": True}
+    assert calls["kind"] == "correct" and calls["project"] == "Demo"
+    assert calls["cmd"][-3:] == ["webtool.correct", "run", "Demo"]
+
+
+def test_correct_invalid_name_400(client):
+    assert client.post("/api/projects/a:b/correct").status_code == 400
+
+
 def test_job_status_and_404(client, monkeypatch):
     import webtool.jobs as jobs_mod
     monkeypatch.setattr(jobs_mod, "get", lambda jid: {"id": jid, "status": "running", "lines": ["x"]} if jid == "j1" else None)

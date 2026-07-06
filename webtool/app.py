@@ -138,6 +138,14 @@ def transcribe(project: str):
     return {"job_id": job_id, "started": started}
 
 
+@app.post("/api/projects/{project}/correct")
+def correct(project: str):
+    _validate(project)
+    cmd = [sys.executable, "-m", "webtool.correct", "run", project]
+    job_id, started = jobs.start(project, cmd, paths.ROOT, "correct")
+    return {"job_id": job_id, "started": started}
+
+
 @app.get("/api/jobs/{job_id}")
 def job_status(job_id: str):
     r = jobs.get(job_id)

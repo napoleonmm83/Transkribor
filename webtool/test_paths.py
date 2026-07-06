@@ -35,6 +35,6 @@ def test_transcript_bases_excludes_derived(monkeypatch, tmp_path):
     monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
     t = tmp_path / "P" / "transkripte"
     t.mkdir(parents=True)
-    for n in ["S1.json", "S1.edit.json", "S1.correction.json", "S2.json"]:
+    for n in ["S1.json", "S1.edit.json", "S1.correction.json", "S2.json", "_glossar.json"]:
         (t / n).write_text("{}", encoding="utf-8")
-    assert paths.transcript_bases("P") == ["S1", "S2"]
+    assert paths.transcript_bases("P") == ["S1", "S2"]  # _glossar.json ist Meta, kein Transkript

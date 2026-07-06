@@ -23,7 +23,10 @@ async function loadProjects() {
     const tr = document.createElement("button");
     tr.textContent = "▶"; tr.title = "Transkribieren";
     tr.onclick = () => startTranscribe(p.name, tr);
-    h.append(name, up, tr);
+    const co = document.createElement("button");
+    co.textContent = "✎"; co.title = "Korrigieren + Sprecher (Claude)";
+    co.onclick = () => startCorrect(p.name, co);
+    h.append(name, up, tr, co);
     el.appendChild(h);
     for (const f of p.files) {
       const d = document.createElement("div");
@@ -210,6 +213,15 @@ async function startTranscribe(project, btn) {
   if (!res.ok) { showJob(`Start fehlgeschlagen: ${res.status}`); btn.disabled = false; return; }
   const { job_id, started } = await res.json();
   if (!started) { showJob("Es läuft bereits eine Transkription (Projekt oder GPU belegt)."); btn.disabled = false; return; }
+  pollJob(job_id, () => { btn.disabled = false; loadProjects(); });
+}
+
+async function startCorrect(project, btn) {
+  btn.disabled = true;
+  const res = await fetch(`/api/projects/${encodeURIComponent(project)}/correct`, { method: "POST" });
+  if (!res.ok) { showJob(`Start fehlgeschlagen: ${res.status}`); btn.disabled = false; return; }
+  const { job_id, started } = await res.json();
+  if (!started) { showJob("Es läuft bereits ein Job für dieses Projekt."); btn.disabled = false; return; }
   pollJob(job_id, () => { btn.disabled = false; loadProjects(); });
 }
 
