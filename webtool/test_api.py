@@ -75,3 +75,28 @@ def test_invalid_project_name_400(client):
     # ':' triggers safe_name rejection -> _validate -> HTTP 400 at the endpoint layer
     r = client.get("/api/projects/a:b/files/x")
     assert r.status_code == 400
+
+
+def test_transcribe_starts_job(client, monkeypatch):
+    calls = {}
+    def fake_start(project, cmd, cwd, kind):
+        calls["project"] = project; calls["kind"] = kind; calls["cmd"] = cmd
+        return "job123", True
+    import webtool.jobs as jobs_mod
+    monkeypatch.setattr(jobs_mod, "start", fake_start)
+    r = client.post("/api/projects/Demo/transcribe")
+    assert r.status_code == 200
+    assert r.json() == {"job_id": "job123", "started": True}
+    assert calls["kind"] == "transcribe" and calls["project"] == "Demo"
+    assert calls["cmd"][-1] == "Demo" and calls["cmd"][1].endswith("transcribe.py")
+
+
+def test_transcribe_invalid_name_400(client):
+    assert client.post("/api/projects/a:b/transcribe").status_code == 400
+
+
+def test_job_status_and_404(client, monkeypatch):
+    import webtool.jobs as jobs_mod
+    monkeypatch.setattr(jobs_mod, "get", lambda jid: {"id": jid, "status": "running", "lines": ["x"]} if jid == "j1" else None)
+    assert client.get("/api/jobs/j1").json()["status"] == "running"
+    assert client.get("/api/jobs/nope").status_code == 404

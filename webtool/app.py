@@ -1,11 +1,13 @@
 """FastAPI-Backend für den Transkribor-Editor (Stufe 1)."""
 import json
 import os
+import sys
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from . import jobs
 from . import paths
 from .edit_model import build_edit_doc
 from .render_md import render_md
@@ -125,6 +127,25 @@ def export_file(project: str, base: str):
     with open(_md_path(project, base), "w", encoding="utf-8") as fh:
         fh.write(md)
     return {"md": md}
+
+
+@app.post("/api/projects/{project}/transcribe")
+def transcribe(project: str):
+    try:
+        paths.safe_name(project)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="ungültiger Name")
+    cmd = [sys.executable, os.path.join(paths.ROOT, "transcribe.py"), project]
+    job_id, started = jobs.start(project, cmd, paths.ROOT, "transcribe")
+    return {"job_id": job_id, "started": started}
+
+
+@app.get("/api/jobs/{job_id}")
+def job_status(job_id: str):
+    r = jobs.get(job_id)
+    if r is None:
+        raise HTTPException(status_code=404, detail="kein Job")
+    return r
 
 
 _STATIC = os.path.join(os.path.dirname(__file__), "static")
