@@ -148,3 +148,12 @@ def test_apply_correction_empty_text_and_missing_speaker():
     s0, s1 = doc["segments"]
     assert s0["text"] == "Roh A." and s0["speaker"] == "X"
     assert s1["text"] == "Neu B." and s1["speaker"] == ""
+
+
+def test_apply_correction_strips_residual_tags_and_drops_none_annotation():
+    raw = {"segments": [{"id": 0, "start": 0, "end": 1, "text": " x", "words": []}]}
+    correction = {"segments": [{"id": 0, "speaker": "A", "text": "Ich fahre nach [[Chur|0.31]]."}],
+                  "annotations": [None, "  ", "echte Notiz"]}
+    doc = em.apply_correction(raw, correction, base="B", project="P", audio="")
+    assert doc["segments"][0]["text"] == "Ich fahre nach Chur."
+    assert doc["annotations"] == ["echte Notiz"]

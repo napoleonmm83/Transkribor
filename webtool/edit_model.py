@@ -1,5 +1,9 @@
 """Whisper-Rohausgabe (<base>.json) -> kanonisches edit.json-Dokument."""
 
+import re
+
+_TAG_RE = re.compile(r"\[\[(.+?)\|[0-9.]+\]\]")
+
 COMPRESSION_RATIO_THRESHOLD = 2.4
 NO_SPEECH_THRESHOLD = 0.6
 LOGPROB_THRESHOLD = -1.0
@@ -86,12 +90,12 @@ def apply_correction(raw: dict, correction: dict, *, base: str, project: str, au
     doc = build_edit_doc(raw, base=base, project=project, audio=audio)
     doc["context"] = (correction.get("context") or "").strip()
     doc["speakers"] = list(correction.get("speakers") or [])
-    doc["annotations"] = [str(a).strip() for a in (correction.get("annotations") or []) if str(a).strip()]
+    doc["annotations"] = [str(a).strip() for a in (correction.get("annotations") or []) if a is not None and str(a).strip()]
     by_id = {c.get("id"): c for c in (correction.get("segments") or [])}
     for seg in doc["segments"]:
         c = by_id.get(seg["id"])
         if c is not None:
-            text = (c.get("text") or "").strip()
+            text = _TAG_RE.sub(r"\1", (c.get("text") or "")).strip()  # evtl. uebrige [[Wort|prob]]-Marker entfernen
             if text:
                 seg["text"] = text
             seg["speaker"] = (c.get("speaker") or "").strip()
