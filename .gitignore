@@ -3,9 +3,8 @@
 __pycache__/
 *.pyc
 
-# Grosse Rohdaten pro Projekt
-projekte/*/audio/
-projekte/*/transkripte/*.json
+# Projekt-Daten (Interview-Audio + Transkripte) bleiben lokal, nicht ins Repo
+projekte/
 
 # Windows
 Thumbs.db
