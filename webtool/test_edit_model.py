@@ -39,3 +39,27 @@ def test_build_edit_doc_shape():
     assert seg["speaker"] == "" and seg["note"] == ""
     assert seg["words"][0]["probability"] == 0.13
     assert seg["flags"] == {"hallucination": False, "silence": False, "low_conf": False}
+
+
+def test_compute_flags_boundaries_are_strict():
+    # exakt auf der Schwelle -> Flag NICHT gesetzt (strikte >/<)
+    assert em.compute_flags(
+        {"compression_ratio": 2.4, "no_speech_prob": 0.0, "avg_logprob": 0.0}
+    )["hallucination"] is False
+    assert em.compute_flags(
+        {"compression_ratio": 1.0, "no_speech_prob": 0.6, "avg_logprob": -1.5}
+    )["silence"] is False
+    assert em.compute_flags(
+        {"compression_ratio": 1.0, "no_speech_prob": 0.0, "avg_logprob": -1.0}
+    )["low_conf"] is False
+
+
+def test_build_edit_doc_edge_cases():
+    # keine segments -> leere Liste, Sprache default "de"
+    doc = em.build_edit_doc({}, base="B", project="P", audio="")
+    assert doc["segments"] == [] and doc["language"] == "de"
+    # segment ohne words + ohne Metrik-Keys -> [] bzw. alle Flags False
+    raw = {"segments": [{"id": 0, "start": 0.0, "end": 1.0, "text": "x"}]}
+    seg = em.build_edit_doc(raw, base="B", project="P", audio="")["segments"][0]
+    assert seg["words"] == []
+    assert seg["flags"] == {"hallucination": False, "silence": False, "low_conf": False}
