@@ -42,10 +42,10 @@ def _md_path(project, base):
     return os.path.join(paths.transkripte_dir(project), base + ".md")
 
 
-def _validate(project: str, base: str) -> None:
+def _validate(*names: str) -> None:
     try:
-        paths.safe_name(project)
-        paths.safe_name(base)
+        for n in names:
+            paths.safe_name(n)
     except ValueError:
         raise HTTPException(status_code=400, detail="ungültiger Name")
 
@@ -131,10 +131,7 @@ def export_file(project: str, base: str):
 
 @app.post("/api/projects/{project}/transcribe")
 def transcribe(project: str):
-    try:
-        paths.safe_name(project)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="ungültiger Name")
+    _validate(project)
     cmd = [sys.executable, os.path.join(paths.ROOT, "transcribe.py"), project]
     job_id, started = jobs.start(project, cmd, paths.ROOT, "transcribe")
     return {"job_id": job_id, "started": started}
