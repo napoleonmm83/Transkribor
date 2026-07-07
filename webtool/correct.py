@@ -211,6 +211,39 @@ Exaktes Schema (Pflicht — sonst bleibt der Text auf dem Rohstand):
 Gib ausser der geschriebenen Datei nichts weiter aus."""
 
 
+def _verify_prompt(base: str, tagged_path: str, cpath: str, context: str) -> str:
+    return f"""Du prüfst eine bereits erstellte SEGMENT-GENAUE Korrektur auf TREUE gegen das Rohtranskript (TREUE-CHECK) und schreibst die geprüfte Fassung zurück.
+
+Projekt-Kontext: {context or DEFAULT_CONTEXT}
+
+1) Lies das ROH vollständig (Read-Tool) aus:
+{tagged_path}
+   Jede Zeile: "[<id>] <text>", unsichere Wörter inline als [[Wort|Wahrscheinlichkeit]] markiert.
+2) Lies die zu prüfende Korrektur (Read-Tool) aus:
+{cpath}
+
+Prüfe kritisch gegen das ROH — konservativ, im Zweifel näher am Original:
+- HALLUZINATION/DRIFT: Inhalt hinzugefügt/weggelassen/im Sinn verändert, der nicht im Roh steht? Übermässiges Umschreiben? → näher ans Original zurück.
+- VOLLSTÄNDIGKEIT: für JEDE Roh-Segment-ID genau ein Eintrag? Fehlende ergänzen (Text nah am Roh), zusammengefasste auftrennen.
+- SPRECHER: plausibel und konsistent (Interviewer stellt Fragen; Antworten korrekt zugeordnet)? Fehlzuordnungen korrigieren.
+- RESTFEHLER: offensichtliche verbleibende ASR-Fehler nur wenn eindeutig (konservativ).
+- UNSICHER: wirklich unklare Stellen NICHT raten — nah am Original belassen und unter annotations vermerken. Entferne evtl. übrige [[...]]-Markierungen im Text.
+
+Schreibe die VOLLSTÄNDIGE, geprüfte Korrektur mit dem Write-Tool als JSON nach GENAU diesem Pfad (alle Segment-IDs, gleiches Schema):
+{cpath}
+
+Schema:
+{{
+  "base": "{base}",
+  "context": "1-2 Sätze zum Gespräch",
+  "speakers": ["Interviewer", "..."],
+  "segments": [{{"id": <zahl>, "speaker": "...", "text": "..."}}],
+  "annotations": ["..."],
+  "summary": "was du geändert hast, oder 'keine Änderung'"
+}}
+Ändere NUR, was wirklich nötig ist; unproblematische Segmente unverändert übernehmen. Gib ausser der geschriebenen Datei nichts weiter aus."""
+
+
 def _glossary(project: str, context: str) -> str:
     """Ein claude-Aufruf über alle .raw.txt -> _glossar.json. Gibt das Glossar als
     JSON-Text zurück (leer, wenn es fehlschlägt -> Korrektur läuft ohne Glossar weiter)."""
@@ -238,7 +271,7 @@ def _glossary(project: str, context: str) -> str:
     return json.dumps(g, ensure_ascii=False, indent=1)
 
 
-def cmd_run(project: str, base: str = None, force: bool = False) -> int:
+def cmd_run(project: str, base: str = None, force: bool = False, verify: bool = True) -> int:
     tdir = paths.transkripte_dir(project)
     all_bases = bases(project)
     if base is not None:                               # expliziter Einzel-Datei-Lauf (Per-Datei-✎)
@@ -273,6 +306,13 @@ def cmd_run(project: str, base: str = None, force: bool = False) -> int:
                 print(f"→ Korrigiere {b} …", flush=True)
                 tagged = os.path.abspath(os.path.join(tdir, b + ".tagged.txt"))
                 _run_claude(_correct_prompt(b, tagged, os.path.abspath(cpath), gjson, context))
+                if verify and _valid_correction(cpath):    # Treue-Pass nur auf eine GÜLTIGE Erst-Korrektur
+                    print(f"→ Verifiziere {b} (Treue gegen Roh) …", flush=True)
+                    good = _load(cpath)                     # Snapshot: darf nicht durch einen kaputten Verify verloren gehen
+                    _run_claude(_verify_prompt(b, tagged, os.path.abspath(cpath), context))
+                    if not _valid_correction(cpath):        # Verify hat die gültige Korrektur zerstört -> zurückrollen
+                        paths.atomic_write(cpath, json.dumps(good, ensure_ascii=False, indent=1))
+                        print(f"⚠ Verifikation ungültig — behalte unverifizierte {b}.correction.json", flush=True)
             if not _valid_correction(cpath):
                 print(f"✗ FEHLT/ungültig: {b}.correction.json — überspringe", flush=True)
                 continue
@@ -296,6 +336,7 @@ def main(argv=None):
     a.add_argument("--force", action="store_true")
     r = sub.add_parser("run"); r.add_argument("project")
     r.add_argument("base", nargs="?"); r.add_argument("--force", action="store_true")
+    r.add_argument("--no-verify", action="store_true")   # Treue-Pass abschalten (auch via Env TRANSKRIBOR_VERIFY=0)
     args = ap.parse_args(argv)
     paths.safe_name(args.project)
     if args.cmd == "prep":
@@ -303,7 +344,11 @@ def main(argv=None):
     elif args.cmd == "run":
         if args.base is not None:
             paths.safe_name(args.base)
-        done = cmd_run(args.project, args.base, args.force)
+        # Treue-Pass: Default an; abschaltbar per --no-verify oder Env TRANSKRIBOR_VERIFY=0
+        # (Env greift server-weit — der Job-Subprozess erbt die uvicorn-Umgebung, kein Browser-Toggle).
+        verify = (os.environ.get("TRANSKRIBOR_VERIFY", "1").strip().lower()
+                  not in ("0", "false", "no")) and not args.no_verify
+        done = cmd_run(args.project, args.base, args.force, verify)
         # Exitcode fürs Job-Signal: Fehler nur, wenn Dateien VERSUCHT wurden aber KEINE gelang —
         # sonst wäre der Job „done" trotz Totalausfall (z.B. claude fehlt auf PATH). Scope = eine
         # Datei (Per-Datei-Lauf) oder alle; „nichts zu tun" (human_edited ohne --force / keine bzw.

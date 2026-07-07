@@ -82,6 +82,12 @@ def _fake_claude(t, calls):
             _dump(m.group(1), {"context_summary": "Bäckerei-Interviews.",
                                "proper_nouns": [{"correct": "Matthias"}], "likely_corrections": []})
             return
+        if "TREUE-CHECK" in prompt:                      # Verifikations-Pass: prüft cpath, gibt geprüfte Fassung zurück
+            cpath = re.search(r"(\S+\.correction\.json)", prompt).group(1)
+            corr = json.loads(open(cpath, encoding="utf-8").read())
+            corr.setdefault("annotations", []).append("verifiziert (Fake)")   # Text unverändert, nur Beleg
+            _dump(cpath, corr)
+            return
         m = re.search(r"(\S+\.correction\.json)", prompt)
         if m:
             cpath = m.group(1)
@@ -114,8 +120,52 @@ def test_run_full_flow(project, monkeypatch):
     assert doc["segments"][0]["speaker"] == "Interviewer"
     assert doc["human_edited"] is False
     assert "**Interviewer:** Ich bin Matthias." in (t / "S1.md").read_text(encoding="utf-8")
-    # zwei claude-Aufrufe: Glossar + eine Datei
-    assert len(calls) == 2
+    # drei claude-Aufrufe: Glossar + Korrektur + Verifikation
+    assert len(calls) == 3
+    assert any("TREUE-CHECK" in c for c in calls)                    # Verifikations-Pass lief
+    assert "verifiziert (Fake)" in (t / "S1.edit.json").read_text(encoding="utf-8")  # geprüfte Fassung gewann
+    assert "verifiziert (Fake)" in (t / "S1.md").read_text(encoding="utf-8")         # -> ## Anmerkungen
+
+
+def test_run_no_verify_skips_verify(project, monkeypatch):
+    _root, t = project
+    calls = []
+    monkeypatch.setattr(correct, "_run_claude", _fake_claude(t, calls))
+    assert correct.cmd_run("Demo", verify=False) == 1
+    assert len(calls) == 2                                   # nur Glossar + Korrektur, kein Verify
+    assert all("TREUE-CHECK" not in c for c in calls)
+    assert "verifiziert (Fake)" not in (t / "S1.edit.json").read_text(encoding="utf-8")
+
+
+def test_run_verify_invalid_restores_stage1(project, monkeypatch):
+    _root, t = project
+
+    def fake(prompt):
+        if "_glossar.json" in prompt:
+            return
+        cpath = re.search(r"(\S+\.correction\.json)", prompt).group(1)
+        if "TREUE-CHECK" in prompt:                          # Verify schreibt kaputtes JSON
+            with open(cpath, "w", encoding="utf-8") as fh:
+                fh.write("{ kaputt kein json")
+            return
+        _dump(cpath, {"base": "S1", "context": "x", "speakers": ["Interviewer"],
+                      "segments": [{"id": 0, "speaker": "Interviewer", "text": "Ich bin Matthias."}],
+                      "annotations": [], "summary": "ok"})
+    monkeypatch.setattr(correct, "_run_claude", fake)
+    assert correct.cmd_run("Demo") == 1                      # Rollback -> gültige Erst-Korrektur bleibt, apply läuft
+    corr = json.loads((t / "S1.correction.json").read_text(encoding="utf-8"))
+    assert corr["segments"][0]["text"] == "Ich bin Matthias."   # zurückgerollt, nicht das kaputte JSON
+    assert "Ich bin Matthias." in (t / "S1.edit.json").read_text(encoding="utf-8")
+
+
+def test_main_no_verify_flag_and_env(project, monkeypatch):
+    seen = {}
+    monkeypatch.setattr(correct, "cmd_run",
+                        lambda project, base=None, force=False, verify=True: seen.update(verify=verify) or 1)
+    correct.main(["run", "Demo"]);                assert seen["verify"] is True   # Default an
+    correct.main(["run", "Demo", "--no-verify"]); assert seen["verify"] is False  # Flag schaltet ab
+    monkeypatch.setenv("TRANSKRIBOR_VERIFY", "0")
+    correct.main(["run", "Demo"]);                assert seen["verify"] is False  # Env schaltet ab
 
 
 def test_run_skips_human_edited(project, monkeypatch):
