@@ -284,3 +284,27 @@ def test_run_claude_timeout_is_caught(project, monkeypatch, capsys):
     monkeypatch.setattr(correct.subprocess, "run", boom)
     correct._run_claude("x")                             # Timeout gefangen, kein Crash
     assert "Timeout" in capsys.readouterr().out
+
+
+# ---- 2C: CLI-Exitcode signalisiert Total-Ausfall (sonst wird der Job faelschlich "done") ----
+
+def test_run_cli_exits_nonzero_when_nothing_corrected(project, monkeypatch):
+    # claude schreibt nie etwas (z.B. nicht auf PATH) -> jede versuchte Datei schlaegt fehl
+    monkeypatch.setattr(correct, "_run_claude", lambda prompt: None)
+    with pytest.raises(SystemExit) as ei:
+        correct.main(["run", "Demo"])
+    assert ei.value.code != 0                            # Job-Signal: Fehler, nicht "done"
+
+
+def test_run_cli_ok_when_all_human_edited(project, monkeypatch):
+    _root, t = project
+    (t / "S1.edit.json").write_text(json.dumps(
+        {"human_edited": True, "segments": [{"id": 0, "text": "Von Hand."}]}), encoding="utf-8")
+    monkeypatch.setattr(correct, "_run_claude", lambda prompt: None)
+    correct.main(["run", "Demo"])                        # alles uebersprungen -> kein Fehlalarm
+
+
+def test_run_cli_ok_on_success(project, monkeypatch):
+    _root, t = project
+    monkeypatch.setattr(correct, "_run_claude", _fake_claude(t, []))
+    correct.main(["run", "Demo"])                        # 1/1 korrigiert -> kein SystemExit
