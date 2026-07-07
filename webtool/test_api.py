@@ -145,6 +145,13 @@ def test_job_status_and_404(client, monkeypatch):
     assert client.get("/api/jobs/nope").status_code == 404
 
 
+def test_cancel_job_endpoint(client, monkeypatch):
+    import webtool.jobs as jobs_mod
+    monkeypatch.setattr(jobs_mod, "cancel", lambda jid: True if jid == "j1" else None)
+    assert client.post("/api/jobs/j1/cancel").json() == {"cancelled": True}
+    assert client.post("/api/jobs/nope/cancel").status_code == 404
+
+
 def test_upload_ok_and_duplicate_409(client, tmp_path):
     files = {"file": ("Neu.mp3", b"ID3audio", "audio/mpeg")}
     r = client.post("/api/projects/Demo/audio", files=files)

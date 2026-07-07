@@ -166,6 +166,13 @@ def job_status(job_id: str):
     return r
 
 
+@app.post("/api/jobs/{job_id}/cancel")
+def cancel_job(job_id: str):
+    if jobs.cancel(job_id) is None:
+        raise HTTPException(status_code=404, detail="kein aktiver Job")
+    return {"cancelled": True}
+
+
 @app.post("/api/projects/{project}/audio")
 def upload_audio(project: str, file: UploadFile = File(...)):
     _validate(project)
