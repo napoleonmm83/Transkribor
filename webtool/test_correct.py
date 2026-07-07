@@ -223,3 +223,64 @@ def test_run_survives_corrupt_raw(project, monkeypatch):
     assert (t / "S1.tagged.txt").exists()               # prep hat S1 trotz korruptem S2 getaggt
     assert (t / "S1.edit.json").exists()
     assert not (t / "S2.edit.json").exists()
+
+
+# ---- _run_claude: Vertrag (argv/cwd/stdin/timeout) + Fehlerzweige (subprocess gefälscht) ----
+
+def test_run_claude_argv_and_confinement(project, monkeypatch):
+    from webtool import paths
+    captured = {}
+
+    class _R:
+        returncode = 0
+        stdout = ""
+        stderr = ""
+
+    def fake_run(cmd, **kw):
+        captured["cmd"] = cmd
+        captured["kw"] = kw
+        return _R()
+
+    monkeypatch.setattr(correct, "_claude_exe", lambda: "C:/fake/claude.exe")
+    monkeypatch.setattr(correct.subprocess, "run", fake_run)
+    correct._run_claude("MEIN PROMPT")
+    root = paths.projekte_root()
+    assert captured["cmd"] == [
+        "C:/fake/claude.exe", "-p", "--model", "opus",
+        "--permission-mode", "acceptEdits", "--allowedTools", "Read,Write",
+        "--add-dir", root,
+    ]
+    assert captured["kw"]["cwd"] == root                 # Confinement auf projekte_root
+    assert captured["kw"]["input"] == "MEIN PROMPT"      # Prompt über stdin, nicht argv
+    assert captured["kw"]["timeout"] == correct.CLAUDE_TIMEOUT
+
+
+def test_run_claude_missing_exe_is_silent(project, monkeypatch):
+    ran = {"subprocess": False}
+    monkeypatch.setattr(correct.shutil, "which", lambda name: None)   # claude nicht auf PATH
+    monkeypatch.setattr(correct.subprocess, "run",
+                        lambda *a, **k: ran.__setitem__("subprocess", True))
+    correct._run_claude("x")                             # darf nicht crashen
+    assert ran["subprocess"] is False                    # still geschluckt: kein subprocess-Aufruf
+
+
+def test_run_claude_nonzero_returncode_logs(project, monkeypatch, capsys):
+    class _R:
+        returncode = 2
+        stdout = "boom"
+        stderr = ""
+
+    monkeypatch.setattr(correct, "_claude_exe", lambda: "claude")
+    monkeypatch.setattr(correct.subprocess, "run", lambda *a, **k: _R())
+    correct._run_claude("x")                             # kein Crash bei exit!=0
+    assert "claude exit 2" in capsys.readouterr().out
+
+
+def test_run_claude_timeout_is_caught(project, monkeypatch, capsys):
+    def boom(*a, **k):
+        raise correct.subprocess.TimeoutExpired(cmd="claude", timeout=correct.CLAUDE_TIMEOUT)
+
+    monkeypatch.setattr(correct, "_claude_exe", lambda: "claude")
+    monkeypatch.setattr(correct.subprocess, "run", boom)
+    correct._run_claude("x")                             # Timeout gefangen, kein Crash
+    assert "Timeout" in capsys.readouterr().out
