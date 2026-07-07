@@ -292,7 +292,17 @@ def main(argv=None):
     if args.cmd == "prep":
         cmd_prep(args.project)
     elif args.cmd == "run":
-        cmd_run(args.project)
+        done = cmd_run(args.project)
+        # Exitcode fürs Job-Signal: Fehler nur, wenn Dateien VERSUCHT wurden (nicht human_edited)
+        # aber KEINE gelang — sonst wäre der Job „done" trotz Totalausfall (z.B. claude fehlt auf PATH).
+        # „Nichts zu tun" (alle human_edited / keine Dateien) ist kein Fehler.
+        tdir = paths.transkripte_dir(args.project)
+        attempted = sum(1 for b in bases(args.project)
+                        if not _is_human_edited(os.path.join(tdir, b + ".edit.json")))
+        if attempted and not done:
+            print(f"run: FEHLER — 0 von {attempted} versuchten Datei(en) korrigiert "
+                  f"(claude nicht erreichbar oder ohne Ausgabe?)", flush=True)
+            raise SystemExit(1)
     else:
         paths.safe_name(args.base)
         cmd_apply(args.project, args.base, args.force)
