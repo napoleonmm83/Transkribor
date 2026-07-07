@@ -136,7 +136,10 @@ Job **grün trotz Totalausfall**. Ein distinktes Signal einführen.
 
 ## Phase 3 — Editor-UX (rein Frontend, parallel zu Phase 2)
 
-### 3A — Sprecher-Dropdown aus `doc.speakers` (P2.2)  ·  Aufwand: S
+### 3A — Sprecher-Dropdown aus `doc.speakers` (P2.2)  ·  Aufwand: S  ·  ✅ ERLEDIGT (2026-07-07)
+
+> **Ergebnis:** `renderSegments` baut `<datalist id=spk-options>` aus `Union(doc.speakers, alle seg.speaker)`, jedes Sprecher-Input via `list=`. Native Vorschläge + Freitext, kein `<select>` → kein stiller Werteverlust; neu getippte Sprecher werden bei commit ergänzt. Im Browser verifiziert (Optionen-Union, Freitext, dynamisch, Werterhalt); kein JS-Test-Harness im Repo.
+
 
 **Ziel:** Spec §5.2 „Dropdown aus speakers + Freitext". Native `<input list>` + `<datalist>`.
 

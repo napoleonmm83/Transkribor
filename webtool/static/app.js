@@ -64,13 +64,31 @@ function fmt(t) {
 
 function renderSegments() {
   const box = $("#segments"); box.innerHTML = "";
+  // Sprecher-Vorschläge: Union aus doc.speakers + allen im Dokument gesetzten seg.speaker,
+  // damit auch Werte wie „Befragte Person" (nicht zwingend in speakers) als Vorschlag erscheinen.
+  const spkOpts = new Set(state.doc.speakers || []);
+  (state.doc.segments || []).forEach(s => { if (s.speaker) spkOpts.add(s.speaker); });
+  const datalist = document.createElement("datalist");
+  datalist.id = "spk-options";
+  for (const name of spkOpts) {
+    const o = document.createElement("option"); o.value = name; datalist.appendChild(o);
+  }
+  box.appendChild(datalist);
   (state.doc.segments || []).forEach((seg, i) => {
     const row = document.createElement("div");
     row.className = "seg"; row.dataset.i = i;
     row.ondblclick = () => window.dispatchEvent(new CustomEvent("play-seg", { detail: i }));
     const spk = document.createElement("input");
+    spk.setAttribute("list", "spk-options");   // native Vorschlagsliste (Dropdown) + Freitext
     spk.value = seg.speaker || ""; spk.placeholder = "Sprecher…";
     spk.oninput = () => { seg.speaker = spk.value; markDirty(); };
+    spk.onchange = () => {                      // committeten neuen Sprecher als Vorschlag ergänzen
+      const v = spk.value.trim();
+      if (v && !spkOpts.has(v)) {
+        spkOpts.add(v);
+        const o = document.createElement("option"); o.value = v; datalist.appendChild(o);
+      }
+    };
     const time = document.createElement("span");
     time.className = "time"; time.textContent = `[${fmt(seg.start)}]`;
     time.onclick = () => window.dispatchEvent(new CustomEvent("play-seg", { detail: i }));
