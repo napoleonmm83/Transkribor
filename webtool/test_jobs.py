@@ -1,6 +1,21 @@
+import os
+import subprocess
 import sys
 import time
 from webtool import jobs
+
+
+def _alive(pid):
+    if os.name == "nt":
+        # Bytes vergleichen: dt. tasklist-Ausgabe ist nicht UTF-8 -> text=True würde crashen
+        out = subprocess.run(["tasklist", "/FI", f"PID eq {pid}", "/NH"],
+                             capture_output=True).stdout
+        return str(pid).encode() in out
+    try:
+        os.kill(pid, 0)
+        return True
+    except OSError:
+        return False
 
 
 def _wait(job_id, timeout=5.0):
@@ -52,3 +67,41 @@ def test_only_one_transcribe_at_a_time():
 
 def test_get_unknown_returns_none():
     assert jobs.get("doesnotexist") is None
+
+
+def test_cancel_unknown_returns_none():
+    assert jobs.cancel("doesnotexist") is None
+
+
+def test_cancel_finished_returns_none():
+    jid, _ = jobs.start("P_fin", _echo_cmd(1), cwd=None, kind="correct")
+    _wait(jid)
+    assert jobs.cancel(jid) is None  # schon terminal -> nichts abzubrechen
+
+
+def test_cancel_kills_process_tree():
+    # Äußerer Prozess spawnt einen Enkel (wie jobs->python->claude) und druckt dessen PID.
+    code = ("import subprocess, sys, time\n"
+            "p = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)'])\n"
+            "print(p.pid, flush=True)\n"
+            "time.sleep(30)\n")
+    jid, started = jobs.start("P_cancel", [sys.executable, "-c", code], cwd=None, kind="correct")
+    assert started is True
+    grandchild = None
+    deadline = time.time() + 5
+    while time.time() < deadline:
+        r = jobs.get(jid)
+        if r and r["pid"] and r["lines"]:
+            grandchild = int(r["lines"][0])
+            break
+        time.sleep(0.02)
+    assert grandchild is not None and _alive(grandchild)  # Baum steht
+
+    assert jobs.cancel(jid) is True
+    r = _wait(jid)
+    assert r["status"] == "cancelled"
+    # taskkill /T killt den ganzen Baum -> Enkel stirbt (kurz auf OS-Aufräumen warten)
+    deadline = time.time() + 5
+    while _alive(grandchild) and time.time() < deadline:
+        time.sleep(0.05)
+    assert not _alive(grandchild)

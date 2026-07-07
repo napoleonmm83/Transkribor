@@ -37,3 +37,6 @@ body { margin: 0; display: flex; height: 100vh; font: 15px/1.5 system-ui, sans-s
 #projects .proj button:disabled { opacity: .5; cursor: default; }
 #jobstatus { margin-top: 10px; padding: 8px; background: #111; color: #b8e0b8; font: 11px/1.35 ui-monospace, monospace; border-radius: 4px; white-space: pre-wrap; max-height: 180px; overflow: auto; }
 #jobstatus.hidden { display: none; }
+#canceljob { margin-top: 6px; font-size: 12px; cursor: pointer; border: 1px solid #c0392b; background: #fff; color: #c0392b; border-radius: 4px; padding: 2px 8px; }
+#canceljob:disabled { opacity: .5; cursor: default; }
+#canceljob.hidden { display: none; }

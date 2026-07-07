@@ -271,7 +271,16 @@ function showJob(text) {
 
 function pollJob(jobId, onDone) {
   let done = false;
-  const finish = (msg) => { if (done) return; done = true; if (msg) showJob(msg); if (onDone) onDone(); };
+  const cancelBtn = $("#canceljob");
+  const finish = (msg) => { if (done) return; done = true; if (cancelBtn) cancelBtn.classList.add("hidden"); if (msg) showJob(msg); if (onDone) onDone(); };
+  if (cancelBtn) {
+    cancelBtn.disabled = false;
+    cancelBtn.classList.remove("hidden");
+    cancelBtn.onclick = () => {  // nur POST + selbst sperren; der nächste Poll sieht status "cancelled" und ruft finish()
+      cancelBtn.disabled = true;
+      fetch(`/api/jobs/${encodeURIComponent(jobId)}/cancel`, { method: "POST" });
+    };
+  }
   const tick = async () => {
     try {
       const res = await fetch(`/api/jobs/${encodeURIComponent(jobId)}`);
