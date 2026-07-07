@@ -238,40 +238,48 @@ def _glossary(project: str, context: str) -> str:
     return json.dumps(g, ensure_ascii=False, indent=1)
 
 
-def cmd_run(project: str) -> int:
+def cmd_run(project: str, base: str = None, force: bool = False) -> int:
     tdir = paths.transkripte_dir(project)
     all_bases = bases(project)
+    if base is not None:                               # expliziter Einzel-Datei-Lauf (Per-Datei-✎)
+        if base not in all_bases:
+            print(f"run: keine solche Datei: {base!r}", flush=True)
+            return 0
+        all_bases = [base]
     if not all_bases:
         print("run: keine Roh-Transkripte — erst transkribieren", flush=True)
         return 0
     print(f"run: {len(all_bases)} Datei(en) in Projekt {project!r}", flush=True)
     cmd_prep(project)                                  # -> <base>.tagged.txt
     context = _context(project)
-    gjson = _glossary(project, context)
+    gjson = _glossary(project, context)                # Glossar bleibt korpus-weit (über bases(project))
     done = 0
-    for base in all_bases:
+    for b in all_bases:
         try:  # eine kaputte Datei darf den Batch nicht abbrechen
-            epath = os.path.join(tdir, base + ".edit.json")
-            cpath = os.path.join(tdir, base + ".correction.json")
-            raw_json = os.path.join(tdir, base + ".json")
-            if _is_human_edited(epath):
-                print(f"↷ SKIP {base} (human_edited=true)", flush=True)
+            epath = os.path.join(tdir, b + ".edit.json")
+            cpath = os.path.join(tdir, b + ".correction.json")
+            raw_json = os.path.join(tdir, b + ".json")
+            if _is_human_edited(epath) and not force:
+                print(f"↷ SKIP {b} (human_edited=true; --force zum Neu-Korrigieren)", flush=True)
                 continue
-            # vorhandene correction nur wiederverwenden, wenn sie neuer als die Roh-JSON ist
-            # (nach einer Neu-Transkription wäre sie sonst veraltet und würde auf falsche IDs gewoben)
-            if os.path.exists(cpath) and os.path.getmtime(cpath) >= os.path.getmtime(raw_json):
-                print(f"↷ nutze vorhandene {base}.correction.json", flush=True)
+            # correction nur im Batch (kein explizites base) und nicht erzwungen wiederverwenden — ein
+            # expliziter Einzel-Datei-Lauf korrigiert bewusst neu. Reuse setzt zudem voraus, dass die
+            # correction neuer als die Roh-JSON ist (sonst nach Neu-Transkription veraltet).
+            reuse = (base is None and not force
+                     and os.path.exists(cpath) and os.path.getmtime(cpath) >= os.path.getmtime(raw_json))
+            if reuse:
+                print(f"↷ nutze vorhandene {b}.correction.json", flush=True)
             else:
-                print(f"→ Korrigiere {base} …", flush=True)
-                tagged = os.path.abspath(os.path.join(tdir, base + ".tagged.txt"))
-                _run_claude(_correct_prompt(base, tagged, os.path.abspath(cpath), gjson, context))
+                print(f"→ Korrigiere {b} …", flush=True)
+                tagged = os.path.abspath(os.path.join(tdir, b + ".tagged.txt"))
+                _run_claude(_correct_prompt(b, tagged, os.path.abspath(cpath), gjson, context))
             if not _valid_correction(cpath):
-                print(f"✗ FEHLT/ungültig: {base}.correction.json — überspringe", flush=True)
+                print(f"✗ FEHLT/ungültig: {b}.correction.json — überspringe", flush=True)
                 continue
-            cmd_apply(project, base)                     # -> edit.json + md (human_edited-geschützt)
+            cmd_apply(project, b, force=force)           # force überschreibt human_edited edit.json
             done += 1
         except Exception as e:
-            print(f"✗ Fehler bei {base}: {e} — überspringe", flush=True)
+            print(f"✗ Fehler bei {b}: {e} — überspringe", flush=True)
     print(f"run: fertig — {done}/{len(all_bases)} Datei(en) korrigiert", flush=True)
     return done
 
@@ -287,18 +295,24 @@ def main(argv=None):
     a = sub.add_parser("apply"); a.add_argument("project"); a.add_argument("base")
     a.add_argument("--force", action="store_true")
     r = sub.add_parser("run"); r.add_argument("project")
+    r.add_argument("base", nargs="?"); r.add_argument("--force", action="store_true")
     args = ap.parse_args(argv)
     paths.safe_name(args.project)
     if args.cmd == "prep":
         cmd_prep(args.project)
     elif args.cmd == "run":
-        done = cmd_run(args.project)
-        # Exitcode fürs Job-Signal: Fehler nur, wenn Dateien VERSUCHT wurden (nicht human_edited)
-        # aber KEINE gelang — sonst wäre der Job „done" trotz Totalausfall (z.B. claude fehlt auf PATH).
-        # „Nichts zu tun" (alle human_edited / keine Dateien) ist kein Fehler.
+        if args.base is not None:
+            paths.safe_name(args.base)
+        done = cmd_run(args.project, args.base, args.force)
+        # Exitcode fürs Job-Signal: Fehler nur, wenn Dateien VERSUCHT wurden aber KEINE gelang —
+        # sonst wäre der Job „done" trotz Totalausfall (z.B. claude fehlt auf PATH). Scope = eine
+        # Datei (Per-Datei-Lauf) oder alle; „nichts zu tun" (human_edited ohne --force / keine bzw.
+        # unbekannte Datei) ist kein Fehler.
         tdir = paths.transkripte_dir(args.project)
-        attempted = sum(1 for b in bases(args.project)
-                        if not _is_human_edited(os.path.join(tdir, b + ".edit.json")))
+        present = bases(args.project)
+        scope = [args.base] if args.base else present
+        attempted = sum(1 for b in scope if b in present
+                        and (args.force or not _is_human_edited(os.path.join(tdir, b + ".edit.json"))))
         if attempted and not done:
             print(f"run: FEHLER — 0 von {attempted} versuchten Datei(en) korrigiert "
                   f"(claude nicht erreichbar oder ohne Ausgabe?)", flush=True)

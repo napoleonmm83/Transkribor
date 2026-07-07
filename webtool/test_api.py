@@ -113,6 +113,31 @@ def test_correct_invalid_name_400(client):
     assert client.post("/api/projects/a:b/correct").status_code == 400
 
 
+def test_correct_file_starts_scoped_job(client, monkeypatch):
+    calls = {}
+    def fake_start(project, cmd, cwd, kind):
+        calls["cmd"] = cmd; calls["kind"] = kind; calls["project"] = project
+        return "cf1", True
+    import webtool.jobs as jobs_mod
+    monkeypatch.setattr(jobs_mod, "start", fake_start)
+    r = client.post("/api/projects/Demo/files/S1/correct")
+    assert r.status_code == 200 and r.json() == {"job_id": "cf1", "started": True}
+    assert calls["kind"] == "correct" and calls["project"] == "Demo"
+    assert calls["cmd"][-3:] == ["run", "Demo", "S1"]         # base im Scope, kein --force
+    # force=true -> --force ans Ende
+    r2 = client.post("/api/projects/Demo/files/S1/correct", params={"force": "true"})
+    assert r2.status_code == 200
+    assert calls["cmd"][-1] == "--force" and calls["cmd"][-4:-1] == ["run", "Demo", "S1"]
+
+
+def test_correct_file_unknown_base_404(client):
+    assert client.post("/api/projects/Demo/files/nope/correct").status_code == 404
+
+
+def test_correct_file_invalid_name_400(client):
+    assert client.post("/api/projects/Demo/files/a:b/correct").status_code == 400
+
+
 def test_job_status_and_404(client, monkeypatch):
     import webtool.jobs as jobs_mod
     monkeypatch.setattr(jobs_mod, "get", lambda jid: {"id": jid, "status": "running", "lines": ["x"]} if jid == "j1" else None)
