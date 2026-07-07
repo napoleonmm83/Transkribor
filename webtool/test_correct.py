@@ -308,3 +308,60 @@ def test_run_cli_ok_on_success(project, monkeypatch):
     _root, t = project
     monkeypatch.setattr(correct, "_run_claude", _fake_claude(t, []))
     correct.main(["run", "Demo"])                        # 1/1 korrigiert -> kein SystemExit
+
+
+# ---- P2.1: Per-Datei-Korrektur (base-Scope + --force) ----
+
+def _add_S2(t):
+    raw2 = {"language": "de", "segments": [
+        {"id": 0, "start": 0.0, "end": 1.0, "text": " Zweite Datei.",
+         "compression_ratio": 1.0, "no_speech_prob": 0.01, "avg_logprob": -0.3, "words": []}]}
+    (t / "S2.json").write_text(json.dumps(raw2), encoding="utf-8")
+    (t / "S2.raw.txt").write_text("Zweite Datei.\n", encoding="utf-8")
+
+
+def test_run_single_base_scopes_to_file_and_bypasses_reuse(project, monkeypatch):
+    _root, t = project
+    _add_S2(t)
+    # frische correction für S1: im BATCH würde sie wiederverwendet, der explizite Einzel-Lauf soll neu korrigieren
+    (t / "S1.correction.json").write_text(json.dumps(
+        {"base": "S1", "segments": [{"id": 0, "speaker": "X", "text": "Alt."}]}), encoding="utf-8")
+    calls = []
+    monkeypatch.setattr(correct, "_run_claude", _fake_claude(t, calls))
+    assert correct.cmd_run("Demo", base="S1") == 1
+    assert (t / "S1.edit.json").exists()
+    assert not (t / "S2.edit.json").exists()                  # S2 unangetastet
+    assert any("S1.correction.json" in c for c in calls)      # neu korrigiert (Reuse-Guard bypassed)
+    assert all("S2.correction.json" not in c for c in calls)  # S2 nie angefasst
+
+
+def test_run_single_base_unknown_returns_zero(project, monkeypatch):
+    _root, t = project
+    calls = []
+    monkeypatch.setattr(correct, "_run_claude", _fake_claude(t, calls))
+    assert correct.cmd_run("Demo", base="gibtsnicht") == 0
+    assert all(".correction.json" not in c for c in calls)    # keine Korrektur ausgelöst
+
+
+def test_run_single_base_force_recorrects_human_edited(project, monkeypatch):
+    _root, t = project
+    (t / "S1.edit.json").write_text(json.dumps(
+        {"human_edited": True, "segments": [{"id": 0, "text": "Von Hand."}]}), encoding="utf-8")
+    calls = []
+    monkeypatch.setattr(correct, "_run_claude", _fake_claude(t, calls))
+    assert correct.cmd_run("Demo", base="S1") == 0            # ohne force: human_edited geschützt
+    assert "Von Hand." in (t / "S1.edit.json").read_text(encoding="utf-8")
+    assert correct.cmd_run("Demo", base="S1", force=True) == 1  # mit force: neu korrigiert + überschrieben
+    assert "Von Hand." not in (t / "S1.edit.json").read_text(encoding="utf-8")
+
+
+def test_run_cli_base_arg_and_force(project, monkeypatch):
+    _root, t = project
+    _add_S2(t)
+    monkeypatch.setattr(correct, "_run_claude", _fake_claude(t, []))
+    correct.main(["run", "Demo", "S1"])                       # nur S1 im Scope
+    assert (t / "S1.edit.json").exists() and not (t / "S2.edit.json").exists()
+    (t / "S2.edit.json").write_text(json.dumps(
+        {"human_edited": True, "segments": [{"id": 0, "text": "Hand."}]}), encoding="utf-8")
+    correct.main(["run", "Demo", "S2", "--force"])            # --force überschreibt human_edited
+    assert "Hand." not in (t / "S2.edit.json").read_text(encoding="utf-8")

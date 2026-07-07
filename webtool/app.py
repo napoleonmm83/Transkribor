@@ -146,6 +146,18 @@ def correct(project: str):
     return {"job_id": job_id, "started": started}
 
 
+@app.post("/api/projects/{project}/files/{base}/correct")
+def correct_file(project: str, base: str, force: bool = False):
+    _validate(project, base)
+    if not os.path.exists(_raw_path(project, base)):
+        raise HTTPException(status_code=404, detail=f"kein Roh-Transkript: {base}")
+    cmd = [sys.executable, "-m", "webtool.correct", "run", project, base]
+    if force:
+        cmd.append("--force")                     # nur nach expliziter UI-Bestätigung (human_edited)
+    job_id, started = jobs.start(project, cmd, paths.ROOT, "correct")
+    return {"job_id": job_id, "started": started}
+
+
 @app.get("/api/jobs/{job_id}")
 def job_status(job_id: str):
     r = jobs.get(job_id)
