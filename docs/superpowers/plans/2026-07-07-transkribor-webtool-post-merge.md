@@ -97,7 +97,10 @@ Per-Datei-Klick einen vollen Korpus-Glossarlauf).
 
 **Akzeptanz:** 2. Lauf ohne geänderte `.raw.txt` ⇒ kein Opus-Glossar-Call; neuere `.raw.txt` ⇒ Neu-Bau; fehlendes/ungültiges `_glossar.json` ⇒ wie bisher ohne Glossar weiter (keine Regression).
 
-### 2B — `_run_claude`-Vertragstest + Fehlerzweige (P3.1)  ·  Aufwand: M
+### 2B — `_run_claude`-Vertragstest + Fehlerzweige (P3.1)  ·  Aufwand: M  ·  ✅ ERLEDIGT (2026-07-07)
+
+> **Ergebnis:** 4 Coverage-Tests (`subprocess.run`/`_claude_exe` gefälscht): argv + cwd-Confinement + stdin + timeout, plus die drei Fehlerzweige (fehlende Exe → still, `returncode≠0` → geloggt, `TimeoutExpired` → gefangen). Kein Produktionscode. Commit `c57d806`.
+
 
 **Ziel:** Die 2b-Kernmechanik automatisiert absichern, **bevor P2.1 die Aufrufstellen vervielfacht**.
 Kein echter `claude`-Lauf (das ist P1) — `subprocess.run` faken.
@@ -112,7 +115,10 @@ Kein echter `claude`-Lauf (das ist P1) — `subprocess.run` faken.
 
 **Akzeptanz:** argv/cwd/stdin/timeout-Vertrag belegt; `_claude_exe`-Zweige belegt; **kein** echter Prozess/Netz/Opus in CI.
 
-### 2C — Echtes Fehlersignal statt „grün trotz 0 Korrekturen"  ·  Aufwand: S–M
+### 2C — Echtes Fehlersignal statt „grün trotz 0 Korrekturen"  ·  Aufwand: S–M  ·  ✅ ERLEDIGT (2026-07-07)
+
+> **Ergebnis:** `main()`-`run`-Zweig exitet `1`, wenn Dateien versucht (nicht `human_edited`) aber 0 korrigiert wurden → Job wird Fehler statt „done". „Nichts zu tun" bleibt Erfolg (kein Fehlalarm). 3 CLI-Tests. Commit `0d959a4`. (Nur der Aggregat-Exit; `_run_claude` bleibt pro Aufruf bewusst still.)
+
 
 **Ziel:** Heute liefert `cmd_run` Exit 0 / Job-Status `done` auch bei **0/N** korrigiert — z.B.
 `claude` nicht auf PATH → `FileNotFoundError` geschluckt (`correct.py:138`), jede Datei skippt,
