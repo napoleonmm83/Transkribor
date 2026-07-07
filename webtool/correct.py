@@ -221,8 +221,13 @@ def _glossary(project: str, context: str) -> str:
     if not raw_files:
         print("  keine .raw.txt gefunden — überspringe Glossar", flush=True)
         return ""
-    print("→ Glossar (gemeinsame Namen/Begriffe) …", flush=True)
-    _run_claude(_glossary_prompt(gpath, raw_files, context))
+    # vorhandenes Glossar nur wiederverwenden, wenn es neuer als JEDE Roh-Text-Datei ist
+    # (korpus-weit: eine neu transkribierte Datei macht das gemeinsame Glossar veraltet)
+    if os.path.exists(gpath) and os.path.getmtime(gpath) >= max(os.path.getmtime(f) for f in raw_files):
+        print("↷ nutze vorhandenes _glossar.json", flush=True)
+    else:
+        print("→ Glossar (gemeinsame Namen/Begriffe) …", flush=True)
+        _run_claude(_glossary_prompt(gpath, raw_files, context))
     try:
         g = _load(gpath)
     except (OSError, json.JSONDecodeError):

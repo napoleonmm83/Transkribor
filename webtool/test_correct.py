@@ -142,6 +142,51 @@ def test_run_reuses_existing_correction(project, monkeypatch):
     assert "Schon da." in (t / "S1.edit.json").read_text(encoding="utf-8")  # apply nutzte vorhandene
 
 
+def test_run_reuses_fresh_glossary(project, monkeypatch):
+    _root, t = project
+    # vorhandenes Glossar, neuer als alle .raw.txt -> soll NICHT neu per claude gebaut werden
+    gpath = t / "_glossar.json"
+    gpath.write_text(json.dumps(
+        {"context_summary": "vorhanden", "proper_nouns": [{"correct": "Matthias"}],
+         "likely_corrections": []}), encoding="utf-8")
+    raw_mtime = (t / "S1.raw.txt").stat().st_mtime
+    os.utime(gpath, (raw_mtime + 10, raw_mtime + 10))   # deterministisch neuer als raw
+    calls = []
+    monkeypatch.setattr(correct, "_run_claude", _fake_claude(t, calls))
+    assert correct.cmd_run("Demo") == 1
+    assert all("_glossar.json" not in c for c in calls)   # Glossar wiederverwendet, kein claude-Aufruf
+    assert any(".correction.json" in c for c in calls)    # Datei-Korrektur lief trotzdem
+
+
+def test_run_regenerates_stale_glossary(project, monkeypatch):
+    _root, t = project
+    # veraltetes Glossar (aelter als eine .raw.txt, z.B. nach Neu-Transkription) -> neu bauen
+    gpath = t / "_glossar.json"
+    gpath.write_text(json.dumps(
+        {"context_summary": "alt", "proper_nouns": [], "likely_corrections": []}), encoding="utf-8")
+    g_mtime = gpath.stat().st_mtime
+    os.utime(t / "S1.raw.txt", (g_mtime + 10, g_mtime + 10))   # raw neuer -> Glossar stale
+    calls = []
+    monkeypatch.setattr(correct, "_run_claude", _fake_claude(t, calls))
+    assert correct.cmd_run("Demo") == 1
+    assert any("_glossar.json" in c for c in calls)       # Glossar neu erzeugt (nicht stale wiederverwendet)
+
+
+def test_run_reruns_stale_correction(project, monkeypatch):
+    _root, t = project
+    # veraltete correction.json (aelter als die Roh-JSON) -> claude muss neu laufen, nicht reusen
+    (t / "S1.correction.json").write_text(json.dumps(
+        {"base": "S1", "segments": [{"id": 0, "speaker": "X", "text": "Veraltet."}]}), encoding="utf-8")
+    c_mtime = (t / "S1.correction.json").stat().st_mtime
+    os.utime(t / "S1.json", (c_mtime + 10, c_mtime + 10))   # Roh neuer -> correction stale
+    calls = []
+    monkeypatch.setattr(correct, "_run_claude", _fake_claude(t, calls))
+    assert correct.cmd_run("Demo") == 1
+    assert any("S1.correction.json" in c for c in calls)   # neu korrigiert (stale nicht wiederverwendet)
+    edit = (t / "S1.edit.json").read_text(encoding="utf-8")
+    assert "Ich bin Matthias." in edit and "Veraltet." not in edit
+
+
 def test_run_continues_after_missing_correction(project, monkeypatch):
     _root, t = project
     # zweite Datei, deren claude-Korrektur "fehlschlägt" (keine correction.json)
