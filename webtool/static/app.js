@@ -32,10 +32,16 @@ async function loadProjects() {
       const d = document.createElement("div");
       d.className = "file";
       const badge = f.has_edit ? "✎" : (f.has_md ? "✓" : (f.has_audio ? "●" : ""));
-      d.textContent = f.base + " ";
-      const b = document.createElement("span");
-      b.className = "badge"; b.textContent = badge;
-      d.appendChild(b);
+      const fname = document.createElement("span");
+      fname.className = "grow"; fname.textContent = f.base + " ";
+      const bd = document.createElement("span");
+      bd.className = "badge"; bd.textContent = badge;
+      fname.appendChild(bd);
+      const cf = document.createElement("button");
+      cf.className = "corr-file"; cf.textContent = "✎";
+      cf.title = "Nur diese Datei korrigieren (Claude)";
+      cf.onclick = (e) => { e.stopPropagation(); startCorrectFile(p.name, f.base, cf, f.has_edit); };
+      d.append(fname, cf);
       d.onclick = () => openFile(p.name, f.base, d);
       el.appendChild(d);
     }
@@ -237,6 +243,19 @@ async function startTranscribe(project, btn) {
 async function startCorrect(project, btn) {
   btn.disabled = true;
   const res = await fetch(`/api/projects/${encodeURIComponent(project)}/correct`, { method: "POST" });
+  if (!res.ok) { showJob(`Start fehlgeschlagen: ${res.status}`); btn.disabled = false; return; }
+  const { job_id, started } = await res.json();
+  if (!started) { showJob("Es läuft bereits ein Job für dieses Projekt."); btn.disabled = false; return; }
+  pollJob(job_id, () => { btn.disabled = false; loadProjects(); });
+}
+
+async function startCorrectFile(project, base, btn, hasEdit) {
+  // Re-Korrektur einer schon bearbeiteten Datei nur nach ausdrücklicher Bestätigung (Spec §2) -> force
+  if (hasEdit && !confirm(`„${base}" neu korrigieren? Überschreibt die vorhandene (ggf. handbearbeitete) Version.`)) return;
+  btn.disabled = true;
+  const url = `/api/projects/${encodeURIComponent(project)}/files/${encodeURIComponent(base)}/correct`
+    + (hasEdit ? "?force=true" : "");
+  const res = await fetch(url, { method: "POST" });
   if (!res.ok) { showJob(`Start fehlgeschlagen: ${res.status}`); btn.disabled = false; return; }
   const { job_id, started } = await res.json();
   if (!started) { showJob("Es läuft bereits ein Job für dieses Projekt."); btn.disabled = false; return; }

@@ -165,7 +165,11 @@ doc-level `annotations`-Feld. `markDirty`/`save` greifen bereits.
 
 ---
 
-## P2.1 — Per-Datei-Korrektur  ·  Aufwand: M–L  ·  ZULETZT
+## P2.1 — Per-Datei-Korrektur  ·  Aufwand: M–L  ·  ✅ ERLEDIGT (2026-07-07)
+
+> **Entscheidungen (Nutzer):** (a) Glossar korpus-weit reuse · (b) `jobs.py`-Dedupe bleibt pro Projekt · (c) Per-Datei-✎ korrigiert immer neu (bypasst Reuse-Guard), `human_edited` nur nach UI-Bestätigung → `--force`.
+> **Umgesetzt:** `cmd_run(project, base=None, force=False)` + `run <project> [base] [--force]`; Endpoint `POST /api/projects/{p}/files/{base}/correct[?force=]` (404 bei unbekanntem base); Per-Datei-✎ im Editor (Confirm→`?force=true` bei has_edit). 2C-Fehlersignal respektiert Scope+force. **7 neue Tests** (Backend+API, Suite 70→77), Frontend browser-verifiziert (fetch-capture: scoped URL, force nur nach Confirm).
+
 
 > **Kein Einzelticket.** Berührt 3 Schichten (correct.py, app.py, app.js) **plus** die
 > jobs.py-Dedupe-Invariante. Erst Vorentscheidungen klären, dann bauen. Setzt **2A** voraus.
