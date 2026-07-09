@@ -121,3 +121,6 @@
     @apply bg-background text-foreground;
     }
 }
+
+.u-yellow { text-decoration: underline dotted 2px; text-underline-offset: 3px; color: var(--color-amber-600, #d9a300); }
+.u-red { text-decoration: underline dotted 2px; text-underline-offset: 3px; color: var(--color-red-500, #d05a5a); background: color-mix(in srgb, currentColor 9%, transparent); }
