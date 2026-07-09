@@ -22,7 +22,7 @@ export function SegmentView({ seg, thr, active, onPlay, updateSegment }: {
   return (
     <div className={`group relative rounded px-2 py-1 ${active ? 'bg-primary/10' : ''}`}>
       <button onClick={onPlay} title="Abspielen"
-        className={`absolute -left-5 top-1.5 opacity-0 group-hover:opacity-100 text-primary text-xs ${focusRing}`}>▶</button>
+        className={`absolute -left-5 top-1.5 opacity-60 group-hover:opacity-100 text-primary text-xs ${focusRing}`}>▶</button>
       <span className="mr-2 align-top text-[10px] text-muted-foreground select-none">{fmt(seg.start)} {flags}</span>
       {editing
         ? <SegmentEditor initial={seg.text}
