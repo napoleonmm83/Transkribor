@@ -3,6 +3,11 @@ import WaveSurfer from "/vendor/wavesurfer.esm.js";
 let ws = null, stopAt = null;
 const state = { project: null, base: null, doc: null, dirty: false };
 const thr = { yellow: 0.6, red: 0.4 };
+// Whisper-Wortgrenzen (DTW-Alignment) sitzen knapp auf der Sprache: das Playback stoppte
+// exakt auf der Kante → Wortausklang am Ende (und gelegentlich der Onset) fehlte. Wie in
+// professionellen Untertitel-/Transkript-Editoren mit Lead-in/Lead-out puffern.
+// ponytail: feste Werte sind der Kalibrier-Knopf für die ASR-Kanten — bei Bedarf nachziehen.
+const PAD = { in: 0.15, out: 0.35 };
 
 async function loadProjects() {
   const { projects } = await (await fetch("/api/projects")).json();
@@ -193,11 +198,18 @@ function setupPlayer() {
   });
 }
 
+function playWindow(seg, duration) {
+  const from = Math.max(0, seg.start - PAD.in);
+  const end = seg.end + PAD.out;
+  return { from, to: Number.isFinite(duration) ? Math.min(duration, end) : end };
+}
+
 function playSeg(i) {
   const seg = state.doc.segments[i];
   if (!ws) return;
-  stopAt = seg.end;
-  ws.setTime(seg.start);
+  const { from, to } = playWindow(seg, ws.getDuration());
+  stopAt = to;
+  ws.setTime(from);
   ws.play();
 }
 
