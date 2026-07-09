@@ -13,3 +13,6 @@ desktop.ini
 
 # Superpowers Brainstorming-Companion (lokale Mockups)
 .superpowers/
+
+# React-Build-Output (aus webtool/frontend), von FastAPI ausgeliefert
+webtool/static/
