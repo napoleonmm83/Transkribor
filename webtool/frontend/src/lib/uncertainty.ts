@@ -7,9 +7,10 @@ export function isCorrected(seg: Segment): boolean {
 }
 
 export function tokenizeUncertain(seg: Segment, thr: Thresholds): Token[] {
+  const n = seg.words.length
   return seg.words.map((w, i) => {
     const p = w.probability ?? 1
-    const isEdge = i === 0  // Only first word is edge (speaker start boundary)
+    const isEdge = i === 0 || i === n - 1
     let cls: Token['cls'] = ''
     if (p < thr.red) cls = 'u-red'
     else if (!isEdge && p < thr.yellow) cls = 'u-yellow'
