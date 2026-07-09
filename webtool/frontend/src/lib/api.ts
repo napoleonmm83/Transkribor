@@ -1,0 +1,45 @@
+import type { Project, EditDoc, JobStatus, StartJob } from './types'
+
+const enc = encodeURIComponent
+async function jn<T>(r: Response): Promise<T> {
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || `HTTP ${r.status}`)
+  return r.json() as Promise<T>
+}
+
+export function audioUrl(project: string, base: string) {
+  return `/api/projects/${enc(project)}/audio/${enc(base)}`
+}
+export async function listProjects(): Promise<Project[]> {
+  return (await jn<{ projects: Project[] }>(await fetch('/api/projects'))).projects
+}
+export async function getDoc(project: string, base: string): Promise<EditDoc> {
+  return jn(await fetch(`/api/projects/${enc(project)}/files/${enc(base)}`))
+}
+export async function saveDoc(project: string, base: string, doc: EditDoc): Promise<void> {
+  await jn(await fetch(`/api/projects/${enc(project)}/files/${enc(base)}`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(doc) }))
+}
+export async function exportMd(project: string, base: string): Promise<string> {
+  return (await jn<{ md: string }>(await fetch(
+    `/api/projects/${enc(project)}/files/${enc(base)}/export`, { method: 'POST' }))).md
+}
+const post = (u: string) => fetch(u, { method: 'POST' })
+export async function startTranscribe(project: string): Promise<StartJob> {
+  return jn(await post(`/api/projects/${enc(project)}/transcribe`))
+}
+export async function startCorrect(project: string): Promise<StartJob> {
+  return jn(await post(`/api/projects/${enc(project)}/correct`))
+}
+export async function startCorrectFile(project: string, base: string, force: boolean): Promise<StartJob> {
+  return jn(await post(`/api/projects/${enc(project)}/files/${enc(base)}/correct${force ? '?force=true' : ''}`))
+}
+export async function getJob(jobId: string): Promise<JobStatus> {
+  return jn(await fetch(`/api/jobs/${enc(jobId)}`))
+}
+export async function cancelJob(jobId: string): Promise<void> {
+  await post(`/api/jobs/${enc(jobId)}/cancel`)
+}
+export async function uploadAudio(project: string, file: File): Promise<{ base: string; file: string }> {
+  const fd = new FormData(); fd.append('file', file)
+  return jn(await fetch(`/api/projects/${enc(project)}/audio`, { method: 'POST', body: fd }))
+}
