@@ -575,16 +575,24 @@ describe('uncertainty', () => {
     expect(isCorrected(base({}))).toBe(false)
     expect(isCorrected(base({ text: 'a B c' }))).toBe(true)
   })
-  it('färbt mittleres Wort nach Konfidenz', () => {
-    const t = tokenizeUncertain(base({}), thr)
-    expect(t.map(x => x.cls)).toEqual(['', 'u-red', 'u-yellow'])
-    expect(t.map(x => x.text)).toEqual(['a', ' b', ' c'])
+  it('färbt mittleres Wort nach Konfidenz, Ränder geschützt', () => {
+    const y = base({ words: [w('a', 0.9), w(' b', 0.5), w(' c', 0.9)] })
+    expect(tokenizeUncertain(y, thr).map(x => x.cls)).toEqual(['', 'u-yellow', ''])
+    const r = base({ words: [w('a', 0.9), w(' b', 0.3), w(' c', 0.9)] })
+    expect(tokenizeUncertain(r, thr).map(x => x.cls)).toEqual(['', 'u-red', ''])
   })
-  it('Randwort nur ab rot', () => {
-    const seg = base({ words: [w('a', 0.5), w(' b', 0.9), w(' c', 0.9)] })
-    expect(tokenizeUncertain(seg, thr)[0].cls).toBe('') // 0.5<yellow, aber Randwort -> nicht gelb
-    const seg2 = base({ words: [w('a', 0.3), w(' b', 0.9), w(' c', 0.9)] })
-    expect(tokenizeUncertain(seg2, thr)[0].cls).toBe('u-red') // Randwort ab rot schon
+  it('Randwörter (erstes UND letztes) nur ab rot', () => {
+    const f = base({ words: [w('a', 0.5), w(' b', 0.9), w(' c', 0.9)] })
+    expect(tokenizeUncertain(f, thr)[0].cls).toBe('')            // erstes, gelb-Bereich -> geschützt
+    const fr = base({ words: [w('a', 0.3), w(' b', 0.9), w(' c', 0.9)] })
+    expect(tokenizeUncertain(fr, thr)[0].cls).toBe('u-red')      // erstes, rot -> gefärbt
+    const l = base({ words: [w('a', 0.9), w(' b', 0.9), w(' c', 0.5)] })
+    expect(tokenizeUncertain(l, thr)[2].cls).toBe('')            // letztes, gelb-Bereich -> geschützt
+    const lr = base({ words: [w('a', 0.9), w(' b', 0.9), w(' c', 0.3)] })
+    expect(tokenizeUncertain(lr, thr)[2].cls).toBe('u-red')      // letztes, rot -> gefärbt
+  })
+  it('behält Token-Text inkl. führender Leerzeichen', () => {
+    expect(tokenizeUncertain(base({}), thr).map(x => x.text)).toEqual(['a', ' b', ' c'])
   })
 })
 ```

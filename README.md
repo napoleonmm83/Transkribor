@@ -58,11 +58,16 @@ Rohtranskript. Ergebnis: `transkripte\<base>.md`.
 
 ## Editieren im Browser (Web-Tool, Stufe 1)
 
-Lokaler Editor zum abschnittweisen Prüfen/Korrigieren mit Klick-zum-Abspielen:
+Lokaler Editor zum abschnittweisen Prüfen/Korrigieren mit Klick-zum-Abspielen. Frontend ist
+React 19 + Vite + TypeScript + Tailwind v4 + shadcn/ui (`webtool/frontend/`), gebaut nach
+`webtool/static/` (git-ignoriert) und von FastAPI ausgeliefert:
 
 ```powershell
-.\webtool.ps1        # startet http://127.0.0.1:8000/ und öffnet den Browser
+.\webtool.ps1        # baut das Frontend bei Bedarf, startet http://127.0.0.1:8000/, öffnet den Browser
 ```
+
+Frontend-Entwicklung mit Hot-Reload: `npm --prefix webtool/frontend run dev` (Vite auf :5173,
+proxied `/api` zum FastAPI-Backend auf :8000).
 
 - Zeigt vorhandene Transkripte pro Projekt, spielt je Abschnitt das Audio-Snippet,
   hebt unsichere Wörter hervor (Whisper-`probability`, Schwellen verstellbar).
