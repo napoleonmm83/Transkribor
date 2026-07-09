@@ -16,6 +16,10 @@ _lock = threading.Lock()
 _CREATE_NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 _PRUNE_AGE = 3600          # fertige Jobs nach 1h vergessen
 
+# ponytail: beide Kinds belegen die eine GPU (correct diarisiert via pyannote) -> serialisieren.
+# Grob: serialisiert auch ein correct OHNE Diarisierung; fuer ein Ein-Nutzer-Tool ok.
+GPU_KINDS = ("transcribe", "correct")
+
 
 def _prune_locked():
     now = time.time()
@@ -30,11 +34,11 @@ def start(project: str, cmd: list, cwd, kind: str):
         _prune_locked()
         if project in _active:
             return _active[project], False
-        if kind == "transcribe":
-            running_t = [jid for jid, r in _jobs.items()
-                         if r["kind"] == "transcribe" and r["status"] == "running"]
-            if running_t:
-                return running_t[0], False  # Einzel-GPU: nur ein Transcribe-Job
+        if kind in GPU_KINDS:
+            running_gpu = [jid for jid, r in _jobs.items()
+                           if r["kind"] in GPU_KINDS and r["status"] == "running"]
+            if running_gpu:
+                return running_gpu[0], False  # Einzel-GPU: nur ein GPU-Job (transcribe|correct) zugleich
         jid = uuid.uuid4().hex[:12]
         _jobs[jid] = {"id": jid, "project": project, "kind": kind, "status": "running",
                       "lines": [], "returncode": None, "started": time.time(),
