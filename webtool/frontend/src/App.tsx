@@ -2,7 +2,8 @@ import { useMemo, useRef, useState } from 'react'
 import { useProjects } from '@/hooks/useProjects'
 import { useDoc } from '@/hooks/useDoc'
 import { useThresholds } from '@/hooks/useThresholds'
-import { uploadAudio, audioUrl } from '@/lib/api'
+import { useJob } from '@/hooks/useJob'
+import { uploadAudio, audioUrl, startTranscribe, startCorrect, startCorrectFile } from '@/lib/api'
 import { Sidebar } from '@/components/Sidebar'
 import { Toolbar } from '@/components/Toolbar'
 import { Transcript } from '@/components/Transcript'
@@ -13,19 +14,24 @@ import type { WaveHandle } from '@/components/Waveform'
 export default function App() {
   const { projects, refresh } = useProjects()
   const [sel, setSel] = useState<{ project: string; base: string } | null>(null)
-  const { doc, dirty, updateSegment, save, exportDownload } = useDoc(sel?.project ?? null, sel?.base ?? null)
+  const { doc, dirty, updateSegment, save, exportDownload, reload } = useDoc(sel?.project ?? null, sel?.base ?? null)
   const { thr, setThr } = useThresholds()
+  const { start } = useJob()
   const title = useMemo(() => (sel ? `${sel.project} / ${sel.base}` : '— keine Datei —'), [sel])
   const waveRef = useRef<WaveHandle>(null)
   const [currentTime, setCurrentTime] = useState(0)
   const onUpload = async (project: string, file: File) => { await uploadAudio(project, file); refresh() }
-  const noop = () => {}
+  const onTranscribe = (project: string) => start(() => startTranscribe(project), `Transkribieren ${project}`, refresh)
+  const onCorrect = (project: string) => start(() => startCorrect(project), `Korrigieren ${project}`, refresh)
+  const onCorrectFile = (project: string, base: string, force: boolean) =>
+    start(() => startCorrectFile(project, base, force), `Korrigieren ${base}`,
+      () => { refresh(); if (sel?.project === project && sel?.base === base) reload() })
 
   return (
     <div className="grid h-screen grid-rows-[auto_1fr_auto] grid-cols-[260px_1fr]">
       <aside className="row-span-3 border-r overflow-auto">
         <Sidebar projects={projects} active={sel} onOpen={setSel} onUpload={onUpload}
-          onTranscribe={noop} onCorrect={noop} onCorrectFile={noop} />
+          onTranscribe={onTranscribe} onCorrect={onCorrect} onCorrectFile={onCorrectFile} />
       </aside>
       <div className="col-start-2"><Toolbar title={title} dirty={dirty} canSave={!!doc}
         onSave={save} onExport={exportDownload} settings={<ThresholdPopover thr={thr} setThr={setThr} />} /></div>
