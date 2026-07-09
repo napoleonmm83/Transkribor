@@ -11,7 +11,7 @@ export function Sidebar({ projects, active, onOpen, onUpload, onTranscribe, onCo
   onUpload: (project: string, file: File) => void;
   onTranscribe: (project: string) => void;
   onCorrect: (project: string) => void;
-  onCorrectFile: (project: string, base: string, hasEdit: boolean) => void;
+  onCorrectFile: (project: string, base: string, force: boolean) => void;
 }) {
   const fileInput = useRef<HTMLInputElement>(null)
   const pendingProject = useRef<string>('')
@@ -35,7 +35,7 @@ export function Sidebar({ projects, active, onOpen, onUpload, onTranscribe, onCo
             <FileRow key={f.base} file={f}
               active={active?.project === p.name && active?.base === f.base}
               onOpen={() => onOpen({ project: p.name, base: f.base })}
-              onCorrectFile={() => onCorrectFile(p.name, f.base, f.has_edit)} />
+              onCorrectFile={force => onCorrectFile(p.name, f.base, force)} />
           ))}
         </div>
       ))}
