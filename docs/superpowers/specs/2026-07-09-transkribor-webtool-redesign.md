@@ -131,7 +131,7 @@ Wort-Konfidenzen liegen auf `words` (Roh-ASR). Nach Korrektur weicht `text` von 
 - Schwellen (gelb/rot) global im ⚙-Popover (`Slider`), localStorage-persistiert; Randwörter erst ab Rot färben (heutige Logik).
 
 ### 7.4 Sprecher (`SpeakerCombobox`)
-Freitext **mit** Vorschlägen: shadcn-`Popover` + `Command` (Combobox-Muster), Vorschlagsliste = Union aus `doc.speakers` + allen gesetzten `seg.speaker`. **Freitext-Eingabe muss erlaubt sein** (Command wählt normalerweise nur) — neuer Wert wird committed und als Vorschlag ergänzt. Pro Redebeitrag ein Sprecher-Feld (setzt `speaker` auf allen Segmenten des Blocks); Sprecher-Farbe konsistent pro Name (Interviewer/Befragte visuell unterscheidbar).
+Freitext **mit** Vorschlägen: shadcn-`Popover` + `Command` (Combobox-Muster), Vorschlagsliste = Union aus `doc.speakers` + allen gesetzten `seg.speaker`. **Freitext-Eingabe muss erlaubt sein** (Command wählt normalerweise nur) — neuer Wert wird committed und als Vorschlag ergänzt. **Pro Segment** ein Sprecher-Feld (wie heute) → granular, ein Sprecherwechsel mitten in einem Block ist korrigierbar. Aufeinanderfolgende Segmente gleichen Sprechers werden als **ein** Redebeitrags-Block dargestellt: der Name steht einmal betont als Block-Kopf, jedes Segment bleibt aber einzeln editierbar (kompaktes Feld, z.B. beim Hover/Fokus). Ändert man den Sprecher eines Segments, teilt sich der Block bei der nächsten Gruppierung neu. Sprecher-Farbe konsistent pro Name (Interviewer/Befragte visuell unterscheidbar).
 
 ### 7.5 Jobs & Status (Sonner)
 Transkribieren/Korrigieren/Per-Datei-Korrektur/Cancel über die bestehenden Endpunkte. Fortschritt als **Sonner-Toast** mit Live-Tail der Job-Zeilen; **Cancel** als Toast-Action (`POST /api/jobs/{id}/cancel`). Dedupe „ein Job pro Projekt" respektieren (Server liefert `started:false`). Nach Abschluss Projektliste refreshen. Destruktive Bestätigungen (Neu-Korrektur einer editierten Datei) via `AlertDialog`.
@@ -181,7 +181,7 @@ Projekt-/Dateiliste + Badges · Upload · Transkribieren · Korrigieren (Projekt
 ## 12. Nicht im Scope (YAGNI)
 Diarization/Stufe 3 · Notizen-UI (3B) · Mehrbenutzer/Auth · client-seitiges Routing · Server-Rendering · i18n · Committen des Build-Bundles.
 
-## 13. Offene Review-Punkte
-1. **Build-Artefakt**: `static/` git-ignoriert + Build-Guard in `webtool.ps1` (Empfehlung) — oder Bundle doch committen, damit ein frischer Clone ohne Node läuft?
-2. **Unsicherheit bei korrigierten Segmenten** (§7.3): Inline nur für unkorrigierte + „🔍 Roh"-Reveal für korrigierte — passt das, oder Marker-Verhalten anders gewünscht?
-3. **Sprecher pro Redebeitrag vs. pro Segment**: Feld pro Block (setzt alle Segmente) — ok? (Heute pro Segment.)
+## 13. Review-Entscheidungen (geklärt 2026-07-09)
+1. **Build-Artefakt**: `webtool/static/` git-ignoriert + Build-Guard in `webtool.ps1` (baut, falls Bundle fehlt). Kein committetes Bundle.
+2. **Unsicherheit bei korrigierten Segmenten** (§7.3): Inline nur für **unkorrigierte** Segmente; korrigierte bleiben sauber, Roh-Wörter+Konfidenz per „🔍 Roh"-Reveal.
+3. **Sprecher**: **pro Segment** (wie heute), granular; Darstellung als Redebeitrags-Block mit einmal betontem Namen, Segmente einzeln editierbar (§7.4).
