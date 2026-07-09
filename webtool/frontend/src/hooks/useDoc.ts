@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { toast } from 'sonner'
 import type { EditDoc, Segment } from '@/lib/types'
 import { getDoc, saveDoc, exportMd } from '@/lib/api'
 
@@ -22,15 +23,18 @@ export function useDoc(project: string | null, base: string | null) {
 
   const save = useCallback(async () => {
     if (!doc || !project || !base) return
-    await saveDoc(project, base, doc); setDirty(false)
+    try { await saveDoc(project, base, doc); setDirty(false); toast.success('Gespeichert') }
+    catch (e) { toast.error('Speichern fehlgeschlagen: ' + (e as Error).message) }
   }, [doc, project, base])
 
   const exportDownload = useCallback(async () => {
     if (!project || !base) return
-    const md = await exportMd(project, base)
-    const a = document.createElement('a')
-    a.href = URL.createObjectURL(new Blob([md], { type: 'text/markdown' }))
-    a.download = `${base}.md`; a.click()
+    try {
+      const md = await exportMd(project, base)
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(new Blob([md], { type: 'text/markdown' }))
+      a.download = `${base}.md`; a.click()
+    } catch (e) { toast.error('Export fehlgeschlagen: ' + (e as Error).message) }
   }, [project, base])
 
   return { doc, dirty, loading, updateSegment, save, exportDownload, reload }
