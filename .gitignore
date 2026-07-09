@@ -6,6 +6,9 @@ __pycache__/
 # Projekt-Daten (Interview-Audio + Transkripte) bleiben lokal, nicht ins Repo
 projekte/
 
+# Lokale Secrets/Config (HF_TOKEN etc.) — nie committen; Vorlage: .env.example
+.env
+
 # Windows
 Thumbs.db
 desktop.ini
