@@ -415,3 +415,53 @@ def test_run_cli_base_arg_and_force(project, monkeypatch):
         {"human_edited": True, "segments": [{"id": 0, "text": "Hand."}]}), encoding="utf-8")
     correct.main(["run", "Demo", "S2", "--force"])            # --force überschreibt human_edited
     assert "Hand." not in (t / "S2.edit.json").read_text(encoding="utf-8")
+
+
+# ---- Stufe 3: Diarisierung (pyannote gefälscht über webtool.diarize.diarize_file) ----
+
+def _fake_turns(prompt=None):
+    # zwei Sprecher, passend zum project-Fixture (S1.json hat 1 Segment 0.0–1.0)
+    return [{"start": 0.0, "end": 1.0, "cluster": "SPEAKER_00"}]
+
+
+def test_cmd_diarize_writes_sidecar(project, monkeypatch):
+    _root, t = project
+    import webtool.diarize as diar
+    monkeypatch.setattr(diar, "diarize_file", lambda audio, min_speakers=2: _fake_turns())
+    assert correct.cmd_diarize("Demo") == 1
+    side = json.loads((t / "S1.diar.json").read_text(encoding="utf-8"))
+    assert side["segments"] == [{"id": 0, "speaker": "Sprecher 1"}]
+    assert side["turns"] and side["audio"] == "S1.mp3"
+
+
+def test_cmd_diarize_disabled_by_env(project, monkeypatch):
+    _root, t = project
+    monkeypatch.setenv("TRANSKRIBOR_DIARIZE", "0")
+    import webtool.diarize as diar
+    called = {"n": 0}
+    monkeypatch.setattr(diar, "diarize_file", lambda *a, **k: called.__setitem__("n", called["n"] + 1) or [])
+    assert correct.cmd_diarize("Demo") == 0
+    assert called["n"] == 0 and not (t / "S1.diar.json").exists()
+
+
+def test_cmd_diarize_best_effort_on_error(project, monkeypatch):
+    _root, t = project
+    import webtool.diarize as diar
+    def boom(*a, **k):
+        raise RuntimeError("pyannote kaputt")
+    monkeypatch.setattr(diar, "diarize_file", boom)
+    assert correct.cmd_diarize("Demo") == 0            # Fehler geschluckt, kein Crash
+    assert not (t / "S1.diar.json").exists()
+
+
+def test_cmd_diarize_idempotent_skip(project, monkeypatch):
+    _root, t = project
+    # frisches Sidecar (neuer als S1.json) -> diarize_file darf nicht laufen
+    (t / "S1.diar.json").write_text(json.dumps({"segments": [{"id": 0, "speaker": "Sprecher 1"}]}), encoding="utf-8")
+    j_mtime = (t / "S1.json").stat().st_mtime
+    os.utime(t / "S1.diar.json", (j_mtime + 10, j_mtime + 10))
+    import webtool.diarize as diar
+    called = {"n": 0}
+    monkeypatch.setattr(diar, "diarize_file", lambda *a, **k: called.__setitem__("n", called["n"] + 1) or [])
+    assert correct.cmd_diarize("Demo") == 0
+    assert called["n"] == 0
