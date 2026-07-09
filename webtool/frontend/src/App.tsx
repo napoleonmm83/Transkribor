@@ -1,19 +1,23 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useProjects } from '@/hooks/useProjects'
 import { useDoc } from '@/hooks/useDoc'
-import { uploadAudio } from '@/lib/api'
+import { uploadAudio, audioUrl } from '@/lib/api'
 import { Sidebar } from '@/components/Sidebar'
 import { Toolbar } from '@/components/Toolbar'
 import { PlayerDock } from '@/components/PlayerDock'
+import type { WaveHandle } from '@/components/Waveform'
 
 export default function App() {
   const { projects, refresh } = useProjects()
   const [sel, setSel] = useState<{ project: string; base: string } | null>(null)
   const { doc, dirty, updateSegment, save, exportDownload } = useDoc(sel?.project ?? null, sel?.base ?? null)
   const title = useMemo(() => (sel ? `${sel.project} / ${sel.base}` : '— keine Datei —'), [sel])
-  // ponytail: updateSegment is wired for Task 10-11 (Transcript); no consumer yet,
-  // so mark used to satisfy noUnusedLocals until that slot lands.
+  const waveRef = useRef<WaveHandle>(null)
+  const [currentTime, setCurrentTime] = useState(0)
+  // ponytail: updateSegment/currentTime are wired for Task 10-11 (Transcript, active-segment
+  // highlight); no consumer yet, so mark used to satisfy noUnusedLocals until that slot lands.
   void updateSegment
+  void currentTime
   const onUpload = async (project: string, file: File) => { await uploadAudio(project, file); refresh() }
   const noop = () => {}
 
@@ -28,7 +32,9 @@ export default function App() {
       <main className="col-start-2 overflow-auto">
         {/* Task 10/11: <Transcript doc={doc} updateSegment={updateSegment} ... /> */}
       </main>
-      <div className="col-start-2"><PlayerDock /></div>
+      <div className="col-start-2">
+        <PlayerDock url={sel ? audioUrl(sel.project, sel.base) : undefined} onTime={setCurrentTime} waveRef={waveRef} />
+      </div>
     </div>
   )
 }
