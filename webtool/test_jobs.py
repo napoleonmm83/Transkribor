@@ -65,6 +65,22 @@ def test_only_one_transcribe_at_a_time():
     _wait(jidA)
 
 
+def test_correct_blocks_transcribe():
+    slow = [sys.executable, "-c", "import time; time.sleep(0.6)"]
+    jidC, sC = jobs.start("ProjC", slow, cwd=None, kind="correct")
+    jidT, sT = jobs.start("ProjD", slow, cwd=None, kind="transcribe")
+    assert sC is True and sT is False and jidT == jidC   # transcribe wartet auf laufende correct-GPU
+    _wait(jidC)
+
+
+def test_transcribe_blocks_correct():
+    slow = [sys.executable, "-c", "import time; time.sleep(0.6)"]
+    jidT, sT = jobs.start("ProjE", slow, cwd=None, kind="transcribe")
+    jidC, sC = jobs.start("ProjF", slow, cwd=None, kind="correct")
+    assert sT is True and sC is False and jidC == jidT
+    _wait(jidT)
+
+
 def test_get_unknown_returns_none():
     assert jobs.get("doesnotexist") is None
 
