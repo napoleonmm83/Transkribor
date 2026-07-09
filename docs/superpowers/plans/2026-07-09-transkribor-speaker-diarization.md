@@ -25,7 +25,8 @@ torch 2.11+cu128 (vorhanden) + torchaudio + torchcodec, pytest.
 - **Cluster-Label:** `"Sprecher N"` (1-basig, nach erster zeitlicher Erscheinung des Clusters).
 - **Aktivierung:** Default **an**; `TRANSKRIBOR_DIARIZE` ∈ {`0`,`false`,`no`} schaltet server-weit ab.
 - **Sidecar:** `<base>.diar.json` unter `projekte/<NAME>/transkripte/` (git-ignoriert), idempotent (frischer als `<base>.json` → Skip).
-- **Lazy-Import-Regel:** `webtool/diarize.py` importiert torch/pyannote NUR innerhalb von Funktionen — `import webtool.diarize` muss ohne installiertes pyannote gelingen (Tests + Fallback).
+- **Lazy-Import-Regel:** `webtool/diarize.py` importiert torch/pyannote/whisper NUR innerhalb von Funktionen — `import webtool.diarize` muss ohne installiertes pyannote gelingen (Tests + Fallback).
+- **Audio-Laden (Windows-torchcodec-Bypass, im Spike bestätigt):** pyannotes eingebautes File-Decoding (torchcodec) lädt auf Windows NICHT (`libtorchcodec_core*.dll` fehlt/inkompatibel; nur eine Warnung beim Import, kein harter Fehler). Audio daher **in-memory** an die Pipeline geben: `whisper.load_audio(path)` (ffmpeg, 16 kHz mono float32) → `{"waveform": (1,time)-float32-Tensor, "sample_rate": 16000}`. ffmpeg via `_ensure_ffmpeg` (winget Gyan.FFmpeg, spiegelt `transcribe.ensure_ffmpeg`) auf PATH bringen. torchcodec bleibt installiert (pyannote-Hard-Dep), wird aber nicht zum Decoden benutzt.
 - **Best-effort-Regel:** jeder pyannote-Fehler in `cmd_diarize` wird geloggt + übersprungen; er darf die Korrektur NIE abbrechen.
 - **Frontend + `edit.json`/`md`-Schema:** unverändert.
 - Trust-Boundary neuer Pfade weiterhin über `paths.safe_name` (schon in `main()` vorhanden).
@@ -40,6 +41,13 @@ torch 2.11+cu128 (vorhanden) + torchaudio + torchcodec, pytest.
 torch 2.11+cu128, Py3.13) lädt, GPU nutzt und plausible Cluster liefert. **Kein Produktivcode** —
 ein Wegwerf-Smoke im Scratchpad. Blockt Task 2–7, falls der Install scheitert (dann Fallback
 sherpa-onnx, siehe Ende).
+
+**Status (Controller, 2026-07-09):** Install ✅ (`torch 2.11.0+cu128`, cuda True — KEIN Downgrade;
+`pyannote.audio 4.0.7` importiert). ⚠️ **torchcodec lädt auf Windows nicht** → In-Memory-Audio-Bypass
+(siehe Global Constraints + Task 2 `_load_waveform`), im Spike bestätigt (whisper.load_audio → (1,time)
+float32). **Offen: eigentlicher Modell-Run** (braucht `HF_TOKEN` — User) → wird beim E2E (Task 7)
+mitverifiziert. Step 1/3/4 unten sind damit erledigt bzw. durch den In-Memory-Pfad ersetzt; nur
+Step 2 (Token/Bedingungen) bleibt offen.
 
 **Files:**
 - Wegwerf: `%SCRATCHPAD%\diar_spike.py` (nicht committen)
@@ -204,10 +212,37 @@ def _pipeline():
     return _PIPELINE
 
 
+def _ensure_ffmpeg():
+    """ffmpeg auf PATH sicherstellen (whisper.load_audio ruft es via subprocess).
+    Bewusst dupliziert (mirror von transcribe.ensure_ffmpeg), um webtool nicht ans
+    Root-Skript transcribe.py zu koppeln."""
+    import glob
+    from shutil import which
+    if which("ffmpeg"):
+        return
+    for d in glob.glob(os.path.expandvars(
+            r"%LOCALAPPDATA%\Microsoft\WinGet\Packages\Gyan.FFmpeg*\ffmpeg*\bin")):
+        if os.path.exists(os.path.join(d, "ffmpeg.exe")):
+            os.environ["PATH"] = d + os.pathsep + os.environ.get("PATH", "")
+            return
+
+
+def _load_waveform(audio_path: str) -> dict:
+    """Audio -> {'waveform': (1,time) float32-Tensor, 'sample_rate': 16000} via
+    whisper.load_audio (ffmpeg, 16 kHz mono). Umgeht das auf Windows kaputte
+    torchcodec-Decoding von pyannote."""
+    import torch
+    import whisper
+    _ensure_ffmpeg()
+    samples = whisper.load_audio(audio_path)            # float32 numpy, 16 kHz mono
+    return {"waveform": torch.from_numpy(samples).unsqueeze(0), "sample_rate": 16000}
+
+
 def diarize_file(audio_path: str, min_speakers: int = 2) -> list:
     """Diarisiert eine Audiodatei -> [{'start','end','cluster'}] (zeitlich sortiert).
-    'cluster' ist das rohe pyannote-Label (z.B. 'SPEAKER_00')."""
-    diarization = _pipeline()(audio_path, min_speakers=min_speakers)
+    'cluster' ist das rohe pyannote-Label (z.B. 'SPEAKER_00'). Audio wird in-memory
+    geladen (torchcodec-Bypass, siehe _load_waveform)."""
+    diarization = _pipeline()(_load_waveform(audio_path), min_speakers=min_speakers)
     turns = [{"start": float(t.start), "end": float(t.end), "cluster": spk}
              for t, _, spk in diarization.itertracks(yield_label=True)]
     turns.sort(key=lambda t: (t["start"], t["end"]))
