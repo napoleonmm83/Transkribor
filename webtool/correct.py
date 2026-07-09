@@ -37,13 +37,18 @@ def bases(project: str) -> list:
     return paths.transcript_bases(project)
 
 
-def _audio_name(project: str, base: str) -> str:
+def _audio_path(project: str, base: str) -> str:
     adir = paths.audio_dir(project)
     for ext in AUDIO_EXT:
         cand = os.path.join(adir, base + ext)
         if os.path.exists(cand):
-            return os.path.basename(cand)
+            return cand
     return ""
+
+
+def _audio_name(project: str, base: str) -> str:
+    p = _audio_path(project, base)
+    return os.path.basename(p) if p else ""
 
 
 def _load(path: str) -> dict:
@@ -64,6 +69,51 @@ def cmd_prep(project: str) -> int:
         except (OSError, json.JSONDecodeError) as e:
             print(f"prep: SKIP {base} (Roh-JSON unlesbar: {e})", flush=True)
     print(f"prep: {n} Datei(en) getaggt in {tdir}")
+    return n
+
+
+def _diarize_enabled() -> bool:
+    return os.environ.get("TRANSKRIBOR_DIARIZE", "1").strip().lower() not in ("0", "false", "no")
+
+
+def cmd_diarize(project: str) -> int:
+    """Akustische Diarisierung je Datei -> <base>.diar.json (best-effort, idempotent).
+    Fehlt pyannote/HF_TOKEN oder scheitert die Diarisierung, wird die Datei übersprungen
+    (kein Sidecar) — die Korrektur läuft dann ohne Cluster (Text-Raten wie bisher)."""
+    if not _diarize_enabled():
+        print("↷ Diarisierung deaktiviert (TRANSKRIBOR_DIARIZE=0)", flush=True)
+        return 0
+    tdir = paths.transkripte_dir(project)
+    n = 0
+    for base in bases(project):
+        dpath = os.path.join(tdir, base + ".diar.json")
+        raw_json = os.path.join(tdir, base + ".json")
+        try:
+            if os.path.exists(dpath) and os.path.getmtime(dpath) >= os.path.getmtime(raw_json):
+                print(f"↷ nutze vorhandene {base}.diar.json", flush=True)
+                continue
+            audio = _audio_path(project, base)
+            if not audio:
+                print(f"diarize: SKIP {base} (kein Audio gefunden)", flush=True)
+                continue
+            from . import diarize                       # lazy: zieht torch/pyannote erst hier
+            raw = _load(raw_json)
+            print(f"→ Diarisiere {base} …", flush=True)
+            turns = diarize.diarize_file(audio)
+            if not turns:
+                print(f"diarize: SKIP {base} (keine Sprecher erkannt)", flush=True)
+                continue
+            seg_speakers = diarize.assign_clusters(raw, turns)
+            doc = {"base": base, "audio": os.path.basename(audio), "min_speakers": 2,
+                   "turns": turns,
+                   "segments": [{"id": sid, "speaker": spk} for sid, spk in seg_speakers.items()]}
+            paths.atomic_write(dpath, json.dumps(doc, ensure_ascii=False, indent=1))
+            n += 1
+        except (OSError, json.JSONDecodeError) as e:
+            print(f"diarize: SKIP {base} (Roh-JSON unlesbar: {e})", flush=True)
+        except Exception as e:                          # pyannote/Token/GPU-Fehler dürfen NIE den Lauf killen
+            print(f"diarize: SKIP {base} ({type(e).__name__}: {e}) — Korrektur ohne Cluster", flush=True)
+    print(f"diarize: {n} Datei(en) diarisiert", flush=True)
     return n
 
 
