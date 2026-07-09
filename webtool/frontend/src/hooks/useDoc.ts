@@ -8,7 +8,7 @@ export function useDoc(project: string | null, base: string | null) {
   const [loading, setLoading] = useState(false)
 
   const reload = useCallback(() => {
-    if (!project || !base) { setDoc(null); return }
+    if (!project || !base) { setDoc(null); setDirty(false); return }
     setLoading(true)
     getDoc(project, base).then(d => { setDoc(d); setDirty(false) })
       .catch(() => setDoc(null)).finally(() => setLoading(false))

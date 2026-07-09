@@ -20,6 +20,11 @@ export function Sidebar({ projects, active, onOpen, onUpload, onTranscribe, onCo
       <h1 className="mb-3 text-lg font-semibold">Transkribor</h1>
       <input ref={fileInput} type="file" hidden accept="audio/*,.mp3,.wav,.m4a,.aac,.flac,.ogg,.opus,.wma,.mp4"
         onChange={e => { const f = e.target.files?.[0]; if (f) onUpload(pendingProject.current, f); e.target.value = '' }} />
+      {projects.length === 0 && (
+        <p className="text-sm text-muted-foreground">
+          Keine Projekte. Lege einen Ordner unter <code>projekte\&lt;NAME&gt;\audio</code> an.
+        </p>
+      )}
       {projects.map(p => (
         <div key={p.name} className="mb-3">
           <div className="flex items-center gap-1">

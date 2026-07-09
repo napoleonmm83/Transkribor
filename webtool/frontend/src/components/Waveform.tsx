@@ -31,14 +31,14 @@ export const Waveform = forwardRef<WaveHandle, { url: string; onTime: (t: number
       playSegment(s) {
         if (!wavesurfer) return
         const { from, to } = playWindow(s, wavesurfer.getDuration())
-        wavesurfer.play(from, to)
+        wavesurfer.play(from, to)?.catch(() => {})
       },
       playTurn(segs) {
         if (!wavesurfer || !segs.length) return
         const dur = wavesurfer.getDuration()
         const from = playWindow(segs[0], dur).from
         const to = playWindow(segs[segs.length - 1], dur).to
-        wavesurfer.play(from, to)
+        wavesurfer.play(from, to)?.catch(() => {})
       },
     }), [wavesurfer])
 
