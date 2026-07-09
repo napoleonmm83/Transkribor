@@ -8,7 +8,14 @@ describe('FileRow', () => {
   it('öffnet bei Enter-Taste (a11y)', () => {
     const onOpen = vi.fn()
     render(<FileRow file={file} active={false} onOpen={onOpen} onCorrectFile={vi.fn()} />)
-    fireEvent.keyDown(screen.getByRole('button', { name: /^a/ }), { key: 'Enter' })
+    fireEvent.keyDown(screen.getByRole('button', { name: /Datei a öffnen/ }), { key: 'Enter' })
     expect(onOpen).toHaveBeenCalled()
+  })
+
+  it('bubblet Enter vom verschachtelten ✎-Button NICHT zur Zeile', () => {
+    const onOpen = vi.fn()
+    render(<FileRow file={file} active={false} onOpen={onOpen} onCorrectFile={vi.fn()} />)
+    fireEvent.keyDown(screen.getByRole('button', { name: /korrigieren/i }), { key: 'Enter' })
+    expect(onOpen).not.toHaveBeenCalled()
   })
 })

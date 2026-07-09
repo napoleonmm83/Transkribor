@@ -20,8 +20,11 @@ export function FileRow({ file, active, onOpen, onCorrectFile }: {
     </Button>
   )
   return (
-    <div onClick={onOpen} role="button" tabIndex={0}
-      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen() } }}
+    <div onClick={onOpen} role="button" tabIndex={0} aria-label={`Datei ${file.base} öffnen`}
+      onKeyDown={e => {
+        if (e.target !== e.currentTarget) return
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen() }
+      }}
       className={cn('flex items-center gap-2 rounded px-2 py-1 text-sm cursor-pointer hover:bg-accent',
         active && 'bg-accent')}>
       <span className="flex-1 truncate">{file.base} <span className="text-muted-foreground text-xs">{badge}</span></span>
