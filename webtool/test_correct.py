@@ -7,6 +7,7 @@ from webtool import correct
 
 @pytest.fixture
 def project(monkeypatch, tmp_path):
+    monkeypatch.setenv("TRANSKRIBOR_DIARIZE", "0")   # hermetisch: kein Test rührt echtes pyannote an
     monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
     t = tmp_path / "Demo" / "transkripte"
     t.mkdir(parents=True)
@@ -444,6 +445,7 @@ def _fake_turns(prompt=None):
 
 def test_cmd_diarize_writes_sidecar(project, monkeypatch):
     _root, t = project
+    monkeypatch.setenv("TRANSKRIBOR_DIARIZE", "1")
     import webtool.diarize as diar
     monkeypatch.setattr(diar, "diarize_file", lambda audio, min_speakers=2: _fake_turns())
     assert correct.cmd_diarize("Demo") == 1
@@ -464,6 +466,7 @@ def test_cmd_diarize_disabled_by_env(project, monkeypatch):
 
 def test_cmd_diarize_best_effort_on_error(project, monkeypatch):
     _root, t = project
+    monkeypatch.setenv("TRANSKRIBOR_DIARIZE", "1")
     import webtool.diarize as diar
     def boom(*a, **k):
         raise RuntimeError("pyannote kaputt")
@@ -474,6 +477,7 @@ def test_cmd_diarize_best_effort_on_error(project, monkeypatch):
 
 def test_cmd_diarize_idempotent_skip(project, monkeypatch):
     _root, t = project
+    monkeypatch.setenv("TRANSKRIBOR_DIARIZE", "1")
     # frisches Sidecar (neuer als S1.json) -> diarize_file darf nicht laufen
     (t / "S1.diar.json").write_text(json.dumps({"segments": [{"id": 0, "speaker": "Sprecher 1"}]}), encoding="utf-8")
     j_mtime = (t / "S1.json").stat().st_mtime
@@ -483,3 +487,17 @@ def test_cmd_diarize_idempotent_skip(project, monkeypatch):
     monkeypatch.setattr(diar, "diarize_file", lambda *a, **k: called.__setitem__("n", called["n"] + 1) or [])
     assert correct.cmd_diarize("Demo") == 0
     assert called["n"] == 0
+
+
+def test_run_diarizes_before_prep_and_injects(project, monkeypatch):
+    _root, t = project
+    monkeypatch.setenv("TRANSKRIBOR_DIARIZE", "1")
+    import webtool.diarize as diar
+    monkeypatch.setattr(diar, "diarize_file",
+                        lambda audio, min_speakers=2: [{"start": 0.0, "end": 1.0, "cluster": "SPEAKER_00"}])
+    calls = []
+    monkeypatch.setattr(correct, "_run_claude", _fake_claude(t, calls))
+    assert correct.cmd_run("Demo") == 1
+    assert (t / "S1.diar.json").exists()                        # diarisiert
+    assert (t / "S1.tagged.txt").read_text(encoding="utf-8").startswith("[0] (Sprecher 1) ")  # Präfix im Prep
+    assert any("(Sprecher N)" in c and ".tagged.txt" in c for c in calls)  # Korrektur-Prompt erklärt das Präfix
