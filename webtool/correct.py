@@ -56,6 +56,15 @@ def _load(path: str) -> dict:
         return json.load(fh)
 
 
+def _load_diar_clusters(tdir: str, base: str) -> dict:
+    """{seg_id: 'Sprecher N'} aus <base>.diar.json, oder {} wenn keins/ungültig."""
+    try:
+        segs = _load(os.path.join(tdir, base + ".diar.json")).get("segments") or []
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return {s.get("id"): s.get("speaker") for s in segs if s.get("speaker")}
+
+
 def cmd_prep(project: str) -> int:
     tdir = paths.transkripte_dir(project)
     n = 0
@@ -63,8 +72,13 @@ def cmd_prep(project: str) -> int:
         try:  # eine kaputte/gesperrte Roh-JSON darf den Batch nicht stoppen
             raw = _load(os.path.join(tdir, base + ".json"))
             segs = tag_uncertain_segments(raw)
-            text = "\n".join(f"[{s['id']}] {s['tagged_text']}" for s in segs) + "\n"
-            paths.atomic_write(os.path.join(tdir, base + ".tagged.txt"), text)
+            clusters = _load_diar_clusters(tdir, base)      # {} wenn nicht diarisiert
+            lines = []
+            for s in segs:
+                spk = clusters.get(s["id"])
+                prefix = f"({spk}) " if spk else ""
+                lines.append(f"[{s['id']}] {prefix}{s['tagged_text']}")
+            paths.atomic_write(os.path.join(tdir, base + ".tagged.txt"), "\n".join(lines) + "\n")
             n += 1
         except (OSError, json.JSONDecodeError) as e:
             print(f"prep: SKIP {base} (Roh-JSON unlesbar: {e})", flush=True)

@@ -30,15 +30,15 @@ def audio_dir(project: str) -> str:
 
 def transcript_bases(project: str) -> list:
     """Basisnamen der Roh-Transkripte (<base>.json), ohne abgeleitete
-    <base>.edit.json / <base>.correction.json und ohne Meta-Artefakte (_*.json,
-    z.B. _glossar.json aus Stufe 2b)."""
+    <base>.edit.json / <base>.correction.json / <base>.diar.json und ohne
+    Meta-Artefakte (_*.json, z.B. _glossar.json aus Stufe 2b)."""
     tdir = transkripte_dir(project)
     if not os.path.isdir(tdir):
         return []
     out = set()
     for p in glob.glob(os.path.join(tdir, "*.json")):
         name = os.path.basename(p)
-        if name.startswith("_") or p.endswith((".edit.json", ".correction.json")):
+        if name.startswith("_") or p.endswith((".edit.json", ".correction.json", ".diar.json")):
             continue
         out.add(os.path.splitext(name)[0])
     return sorted(out)
