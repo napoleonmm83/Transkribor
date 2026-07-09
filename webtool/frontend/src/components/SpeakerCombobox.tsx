@@ -2,9 +2,10 @@ import { useState } from 'react'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Command, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
 import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 
-export function SpeakerCombobox({ value, options, onChange }: {
-  value: string; options: string[]; onChange: (v: string) => void;
+export function SpeakerCombobox({ value, options, onChange, className }: {
+  value: string; options: string[]; onChange: (v: string) => void; className?: string;
 }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -12,7 +13,8 @@ export function SpeakerCombobox({ value, options, onChange }: {
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="ghost" size="sm" className="h-6 px-1 text-xs font-normal text-muted-foreground">
+        <Button variant="ghost" size="sm"
+          className={cn('h-6 px-1 text-xs font-normal text-muted-foreground', className)}>
           {value || 'Sprecher…'}</Button>
       </PopoverTrigger>
       <PopoverContent className="w-56 p-0">

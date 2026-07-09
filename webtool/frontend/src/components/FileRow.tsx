@@ -14,12 +14,14 @@ export function FileRow({ file, active, onOpen, onCorrectFile }: {
   const badge = file.has_edit ? '✎' : file.has_md ? '✓' : file.has_audio ? '●' : ''
   const button = (
     <Button size="icon" variant="ghost" className="size-6" title="Nur diese Datei korrigieren"
+      aria-label="Nur diese Datei korrigieren"
       onClick={e => { e.stopPropagation(); if (!file.has_edit) onCorrectFile(false) }}>
       <Pencil className="size-3" />
     </Button>
   )
   return (
-    <div onClick={onOpen}
+    <div onClick={onOpen} role="button" tabIndex={0}
+      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen() } }}
       className={cn('flex items-center gap-2 rounded px-2 py-1 text-sm cursor-pointer hover:bg-accent',
         active && 'bg-accent')}>
       <span className="flex-1 truncate">{file.base} <span className="text-muted-foreground text-xs">{badge}</span></span>

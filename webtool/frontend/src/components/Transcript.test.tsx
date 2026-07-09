@@ -28,4 +28,10 @@ describe('Transcript', () => {
     expect(screen.getAllByText(/Befragte Person/).length).toBeGreaterThan(0)
     expect(screen.getByText('w1')).toHaveClass('u-red')
   })
+
+  it('zeigt "Keine Datei geöffnet" nicht während des Ladens', () => {
+    render(<Transcript doc={null} loading thr={{ yellow: 0.6, red: 0.4 }} activeId={null}
+      onPlaySeg={vi.fn()} onPlayTurn={vi.fn()} updateSegment={vi.fn()} />)
+    expect(screen.queryByText(/Keine Datei geöffnet/)).not.toBeInTheDocument()
+  })
 })
