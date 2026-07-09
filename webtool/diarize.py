@@ -59,9 +59,13 @@ def diarize_file(audio_path: str, min_speakers: int = 2) -> list:
     """Diarisiert eine Audiodatei -> [{'start','end','cluster'}] (zeitlich sortiert).
     'cluster' ist das rohe pyannote-Label (z.B. 'SPEAKER_00'). Audio wird in-memory
     geladen (torchcodec-Bypass, siehe _load_waveform)."""
-    diarization = _pipeline()(_load_waveform(audio_path), min_speakers=min_speakers)
+    output = _pipeline()(_load_waveform(audio_path), min_speakers=min_speakers)
+    # pyannote 4.x/community-1 liefert ein DiarizeOutput-Objekt; die Annotation (mit
+    # itertracks) steckt in .speaker_diarization. Ältere Versionen geben die Annotation
+    # direkt zurück -> getattr-Fallback macht diarize_file robust gegen beide APIs.
+    annotation = getattr(output, "speaker_diarization", output)
     turns = [{"start": float(t.start), "end": float(t.end), "cluster": spk}
-             for t, _, spk in diarization.itertracks(yield_label=True)]
+             for t, _, spk in annotation.itertracks(yield_label=True)]
     turns.sort(key=lambda t: (t["start"], t["end"]))
     return turns
 
