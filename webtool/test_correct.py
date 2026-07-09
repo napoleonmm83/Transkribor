@@ -31,6 +31,24 @@ def test_prep_writes_tagged(project):
     assert "[[Mathias|0.30]]" in tagged
 
 
+def test_prep_injects_cluster_prefix(project):
+    _root, t = project
+    (t / "S1.diar.json").write_text(json.dumps(
+        {"base": "S1", "segments": [{"id": 0, "speaker": "Sprecher 2"}]}), encoding="utf-8")
+    assert correct.cmd_prep("Demo") == 1
+    tagged = (t / "S1.tagged.txt").read_text(encoding="utf-8")
+    assert tagged.startswith("[0] (Sprecher 2) ")
+    assert "[[Mathias|0.30]]" in tagged                # Unsicherheits-Tagging bleibt erhalten
+
+
+def test_prep_without_diar_has_no_prefix(project):
+    _root, t = project
+    assert correct.cmd_prep("Demo") == 1
+    tagged = (t / "S1.tagged.txt").read_text(encoding="utf-8")
+    assert tagged.startswith("[0] ")
+    assert "(Sprecher" not in tagged                   # kein Sidecar -> kein Präfix (Fallback)
+
+
 def test_apply_builds_edit_and_md(project):
     _root, t = project
     (t / "S1.correction.json").write_text(json.dumps({
