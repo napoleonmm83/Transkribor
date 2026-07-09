@@ -35,10 +35,10 @@ def start(project: str, cmd: list, cwd, kind: str):
         if project in _active:
             return _active[project], False
         if kind in GPU_KINDS:
-            running_gpu = [jid for jid, r in _jobs.items()
-                           if r["kind"] in GPU_KINDS and r["status"] == "running"]
-            if running_gpu:
-                return running_gpu[0], False  # Einzel-GPU: nur ein GPU-Job (transcribe|correct) zugleich
+            busy = next((jid for jid, r in _jobs.items()
+                         if r["kind"] in GPU_KINDS and r["status"] == "running"), None)
+            if busy is not None:
+                return busy, False  # Einzel-GPU: nur ein GPU-Job (transcribe|correct) zugleich
         jid = uuid.uuid4().hex[:12]
         _jobs[jid] = {"id": jid, "project": project, "kind": kind, "status": "running",
                       "lines": [], "returncode": None, "started": time.time(),
