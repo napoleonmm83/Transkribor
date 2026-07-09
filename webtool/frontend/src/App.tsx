@@ -18,8 +18,6 @@ export default function App() {
   const title = useMemo(() => (sel ? `${sel.project} / ${sel.base}` : '— keine Datei —'), [sel])
   const waveRef = useRef<WaveHandle>(null)
   const [currentTime, setCurrentTime] = useState(0)
-  // ponytail: editing lands in Task 11; Transcript here is read-only, onEdit is a stub.
-  void updateSegment
   const onUpload = async (project: string, file: File) => { await uploadAudio(project, file); refresh() }
   const noop = () => {}
 
@@ -35,7 +33,7 @@ export default function App() {
         <Transcript doc={doc} thr={thr} currentTime={currentTime}
           onPlaySeg={s => waveRef.current?.playSegment(s)}
           onPlayTurn={segs => waveRef.current?.playTurn(segs)}
-          onEdit={noop} />
+          updateSegment={updateSegment} />
       </main>
       <div className="col-start-2">
         <PlayerDock url={sel ? audioUrl(sel.project, sel.base) : undefined} onTime={setCurrentTime} waveRef={waveRef} />

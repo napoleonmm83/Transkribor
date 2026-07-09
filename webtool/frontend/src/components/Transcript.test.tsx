@@ -22,9 +22,10 @@ const doc: EditDoc = {
 describe('Transcript', () => {
   it('rendert Sprecher-Labels und markiert unkorrigierte unsichere Wörter', () => {
     render(<TooltipProvider><Transcript doc={doc} thr={{ yellow: 0.6, red: 0.4 }} currentTime={0}
-      onPlaySeg={vi.fn()} onPlayTurn={vi.fn()} onEdit={vi.fn()} /></TooltipProvider>)
-    expect(screen.getByText(/Interviewer/)).toBeInTheDocument()
-    expect(screen.getByText(/Befragte Person/)).toBeInTheDocument()
+      onPlaySeg={vi.fn()} onPlayTurn={vi.fn()} updateSegment={vi.fn()} /></TooltipProvider>)
+    // Sprecher-Name erscheint sowohl im Block-Kopf als auch in der Per-Segment-Combobox.
+    expect(screen.getAllByText(/Interviewer/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/Befragte Person/).length).toBeGreaterThan(0)
     expect(screen.getByText('w1')).toHaveClass('u-red')
   })
 })
