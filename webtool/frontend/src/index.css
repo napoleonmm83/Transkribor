@@ -122,5 +122,6 @@
     }
 }
 
-.u-yellow { text-decoration: underline dotted 2px; text-underline-offset: 3px; color: var(--color-amber-600, #d9a300); }
+.u-yellow { text-decoration: underline dotted 2px; text-underline-offset: 3px; color: var(--color-amber-700, #b45309); }
+.dark .u-yellow { color: var(--color-amber-500, #f59e0b); }
 .u-red { text-decoration: underline dotted 2px; text-underline-offset: 3px; color: var(--color-red-500, #d05a5a); background: color-mix(in srgb, currentColor 9%, transparent); }
