@@ -72,7 +72,10 @@ def cmd_prep(project: str) -> int:
         try:  # eine kaputte/gesperrte Roh-JSON darf den Batch nicht stoppen
             raw = _load(os.path.join(tdir, base + ".json"))
             segs = tag_uncertain_segments(raw)
-            clusters = _load_diar_clusters(tdir, base)      # {} wenn nicht diarisiert
+            # Kill-Switch muss auch die KONSUMPTION eines evtl. liegen gebliebenen Sidecars
+            # unterdrücken, nicht nur dessen Erzeugung — sonst injiziert ein altes
+            # <base>.diar.json trotz TRANSKRIBOR_DIARIZE=0 weiterhin das (Sprecher N)-Präfix.
+            clusters = _load_diar_clusters(tdir, base) if _diarize_enabled() else {}
             lines = []
             for s in segs:
                 spk = clusters.get(s["id"])
@@ -90,16 +93,18 @@ def _diarize_enabled() -> bool:
     return os.environ.get("TRANSKRIBOR_DIARIZE", "1").strip().lower() not in ("0", "false", "no")
 
 
-def cmd_diarize(project: str) -> int:
+def cmd_diarize(project: str, only_bases: list = None) -> int:
     """Akustische Diarisierung je Datei -> <base>.diar.json (best-effort, idempotent).
     Fehlt pyannote/HF_TOKEN oder scheitert die Diarisierung, wird die Datei übersprungen
-    (kein Sidecar) — die Korrektur läuft dann ohne Cluster (Text-Raten wie bisher)."""
+    (kein Sidecar) — die Korrektur läuft dann ohne Cluster (Text-Raten wie bisher).
+    only_bases scopt auf einen Einzel-Datei-Lauf (✎) — sonst wäre ein Ein-Datei-run GPU-teuer
+    fürs ganze Projekt, obwohl Diarisierung pro Datei unabhängig ist."""
     if not _diarize_enabled():
         print("↷ Diarisierung deaktiviert (TRANSKRIBOR_DIARIZE=0)", flush=True)
         return 0
     tdir = paths.transkripte_dir(project)
     n = 0
-    for base in bases(project):
+    for base in (only_bases if only_bases is not None else bases(project)):
         dpath = os.path.join(tdir, base + ".diar.json")
         raw_json = os.path.join(tdir, base + ".json")
         try:
@@ -347,7 +352,7 @@ def cmd_run(project: str, base: str = None, force: bool = False, verify: bool = 
         print("run: keine Roh-Transkripte — erst transkribieren", flush=True)
         return 0
     print(f"run: {len(all_bases)} Datei(en) in Projekt {project!r}", flush=True)
-    cmd_diarize(project)                               # -> <base>.diar.json (best-effort, GPU)
+    cmd_diarize(project, all_bases)                    # -> <base>.diar.json (best-effort, GPU); scoped auf all_bases
     cmd_prep(project)                                  # -> <base>.tagged.txt (Cluster-Präfix falls diarisiert)
     context = _context(project)
     gjson = _glossary(project, context)                # Glossar bleibt korpus-weit (über bases(project))
