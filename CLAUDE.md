@@ -69,6 +69,14 @@ Ergebnis: `projekte\<NAME>\transkripte\<base>.edit.json` (Editor-Dokument, im We
 `projekte\<NAME>\audio\` erstellen, Audio hineinlegen, optional `projekte\<NAME>\kontext.md`
 mit Projektbeschreibung + bekannten Namen (verbessert Whisper und die Korrektur).
 
+## GitHub-Management (Claude übernimmt das autonom)
+Code-Änderungen landen ohne Rückfrage über den Standard-Flow — nicht direkt auf master:
+Feature-Branch → Commit → `gh pr create --base master` → CI/Mergeability prüfen →
+Rebase-Merge (`gh pr merge <#> --rebase --delete-branch`) → lokal `master` per Fast-Forward
+nachziehen + verifizieren. Diese Regel ist die dauerhafte Freigabe für Push/PR/Merge auf das
+(private) Remote. Vorher fragen nur bei: `projekte\`-Inhalten (Interviewdaten bleiben lokal,
+nie committen), unklarem Scope, oder history-verändernden Aktionen (force-push, Reset).
+
 ## Umgebung (Fakten)
 - venv: `.venv` (Python 3.13, torch cu128 + openai-whisper) — GPU: RTX 5080 / Blackwell (sm_120).
 - ffmpeg: wird von `transcribe.py` automatisch gefunden (winget Gyan.FFmpeg) oder muss auf PATH sein.
