@@ -250,14 +250,14 @@ Projekt-Kontext: {context or DEFAULT_CONTEXT}
 
 1) Lies die Rohsegmente vollständig (Read-Tool) aus:
 {tagged_path}
-   Jede Zeile: "[<id>] <text>". Unsichere Wörter sind inline als [[Wort|Wahrscheinlichkeit]] markiert (niedrige Whisper-Konfidenz) — dort besonders genau hinsehen.
+   Jede Zeile: "[<id>] (Sprecher N) <text>" — das Präfix (Sprecher N) ist die AKUSTISCH erkannte Sprecher-Gruppe (Diarisierung); fehlt es, gibt es keine akustische Info. Unsichere Wörter sind inline als [[Wort|Wahrscheinlichkeit]] markiert (niedrige Whisper-Konfidenz) — dort besonders genau hinsehen.
 
 Gemeinsames Glossar (für konsistente Schreibweisen — nutze es, ergänze nichts Erfundenes):
 {gjson or "(keins)"}
 
 2) KORRIGIEREN: klare ASR-Fehler mit Kontext + Glossar verbessern, zu lesbarem Standarddeutsch normalisieren (Schweizer „ss"). BLEIB TREU: nichts erfinden, den Sinn nicht verändern, nicht über das Nötige hinaus glätten (Füllwörter wie „äh"/„ähm" dürfen dezent weg). Entferne die [[...]]-Markierungen im Ausgabetext.
 3) PRO SEGMENT: gib für JEDE Segment-ID aus der Datei GENAU EINEN Eintrag {{id, speaker, text}} zurück — keine ID auslassen, keine Segmente zusammenfassen (die Redebeitrags-Bündelung passiert später).
-4) SPRECHER: meist zwei — „Interviewer" (stellt Fragen) und die befragte Person (Name/Betrieb falls im Gespräch genannt, sonst „Befragte Person"). Ordne jedem Segment den passenden Sprecher zu.
+4) SPRECHER: Das akustische (Sprecher N)-Präfix ist die WAHRHEIT, WER spricht — vergib pro Cluster GENAU EINEN konsistenten Namen: meist „Interviewer" (stellt Fragen) und die befragte Person (Name/Betrieb falls genannt, sonst „Befragte Person"). Du DARFST zwei Cluster demselben Namen zuordnen, wenn klar dieselbe Person. Eine Cluster-Grenze nur überschreiben, wenn sie offensichtlich falsch ist (z.B. ein einzelnes Rückkanal-Wort). Fehlt das Präfix, ordne nach Inhalt zu (wie bisher). Gib JEDEM Segment einen Sprecher.
 5) UNSICHER: wirklich unklare Stellen NICHT raten — nah am Original belassen und unter annotations vermerken.
 
 Schreibe das Ergebnis mit dem Write-Tool als JSON nach GENAU diesem Pfad:
@@ -282,14 +282,14 @@ Projekt-Kontext: {context or DEFAULT_CONTEXT}
 
 1) Lies das ROH vollständig (Read-Tool) aus:
 {tagged_path}
-   Jede Zeile: "[<id>] <text>", unsichere Wörter inline als [[Wort|Wahrscheinlichkeit]] markiert.
+   Jede Zeile: "[<id>] (Sprecher N) <text>" — das (Sprecher N)-Präfix ist die akustische Sprecher-Gruppe (falls vorhanden); unsichere Wörter inline als [[Wort|Wahrscheinlichkeit]] markiert.
 2) Lies die zu prüfende Korrektur (Read-Tool) aus:
 {cpath}
 
 Prüfe kritisch gegen das ROH — konservativ, im Zweifel näher am Original:
 - HALLUZINATION/DRIFT: Inhalt hinzugefügt/weggelassen/im Sinn verändert, der nicht im Roh steht? Übermässiges Umschreiben? → näher ans Original zurück.
 - VOLLSTÄNDIGKEIT: für JEDE Roh-Segment-ID genau ein Eintrag? Fehlende ergänzen (Text nah am Roh), zusammengefasste auftrennen.
-- SPRECHER: plausibel und konsistent (Interviewer stellt Fragen; Antworten korrekt zugeordnet)? Fehlzuordnungen korrigieren.
+- SPRECHER: konsistent pro akustischem (Sprecher N)-Cluster und plausibel (Interviewer stellt Fragen; Antworten korrekt zugeordnet)? Fehlzuordnungen korrigieren.
 - RESTFEHLER: offensichtliche verbleibende ASR-Fehler nur wenn eindeutig (konservativ).
 - UNSICHER: wirklich unklare Stellen NICHT raten — nah am Original belassen und unter annotations vermerken. Entferne evtl. übrige [[...]]-Markierungen im Text.
 
@@ -347,7 +347,8 @@ def cmd_run(project: str, base: str = None, force: bool = False, verify: bool = 
         print("run: keine Roh-Transkripte — erst transkribieren", flush=True)
         return 0
     print(f"run: {len(all_bases)} Datei(en) in Projekt {project!r}", flush=True)
-    cmd_prep(project)                                  # -> <base>.tagged.txt
+    cmd_diarize(project)                               # -> <base>.diar.json (best-effort, GPU)
+    cmd_prep(project)                                  # -> <base>.tagged.txt (Cluster-Präfix falls diarisiert)
     context = _context(project)
     gjson = _glossary(project, context)                # Glossar bleibt korpus-weit (über bases(project))
     done = 0
