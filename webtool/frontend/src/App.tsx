@@ -12,9 +12,9 @@ import { PlayerDock } from '@/components/PlayerDock'
 import type { WaveHandle } from '@/components/Waveform'
 
 export default function App() {
-  const { projects, refresh } = useProjects()
+  const { projects, loading: projectsLoading, refresh } = useProjects()
   const [sel, setSel] = useState<{ project: string; base: string } | null>(null)
-  const { doc, dirty, updateSegment, save, exportDownload, reload } = useDoc(sel?.project ?? null, sel?.base ?? null)
+  const { doc, dirty, loading: docLoading, updateSegment, save, exportDownload, reload } = useDoc(sel?.project ?? null, sel?.base ?? null)
   const { thr, setThr } = useThresholds()
   const { start } = useJob()
   const title = useMemo(() => (sel ? `${sel.project} / ${sel.base}` : '— keine Datei —'), [sel])
@@ -50,13 +50,13 @@ export default function App() {
   return (
     <div className="grid h-screen grid-rows-[auto_1fr_auto] grid-cols-[260px_1fr]">
       <aside className="row-span-3 border-r overflow-auto">
-        <Sidebar projects={projects} active={sel} onOpen={openFile} onUpload={onUpload}
+        <Sidebar projects={projects} loading={projectsLoading} active={sel} onOpen={openFile} onUpload={onUpload}
           onTranscribe={onTranscribe} onCorrect={onCorrect} onCorrectFile={onCorrectFile} />
       </aside>
       <div className="col-start-2"><Toolbar title={title} dirty={dirty} canSave={!!doc}
         onSave={save} onExport={exportDownload} settings={<ThresholdPopover thr={thr} setThr={setThr} />} /></div>
       <main className="col-start-2 overflow-auto">
-        <Transcript doc={doc} thr={thr} activeId={activeId}
+        <Transcript doc={doc} loading={docLoading} thr={thr} activeId={activeId}
           onPlaySeg={s => waveRef.current?.playSegment(s)}
           onPlayTurn={segs => waveRef.current?.playTurn(segs)}
           updateSegment={updateSegment} />

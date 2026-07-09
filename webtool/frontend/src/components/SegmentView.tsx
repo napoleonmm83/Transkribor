@@ -18,7 +18,7 @@ export function SegmentView({ seg, thr, active, onPlay, updateSegment }: {
     ? <UncertainWord key={i} word={seg.words[i]} cls={t.cls} />
     : <span key={i}>{t.text}</span>)
   const body = corrected ? seg.text : rawTokens
-  const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 rounded-sm'
+  const focusRing = 'focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 rounded-sm'
   return (
     <div className={`group relative rounded px-2 py-1 ${active ? 'bg-primary/10' : ''}`}>
       <button onClick={onPlay} title="Abspielen"

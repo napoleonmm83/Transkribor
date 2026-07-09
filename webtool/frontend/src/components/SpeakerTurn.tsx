@@ -21,9 +21,10 @@ export function SpeakerTurn({ turn, thr, activeId, onPlaySeg, onPlayTurn, update
       </button>
       <div>
         {turn.segments.map(s => (
-          <div key={s.id}>
+          <div key={s.id} className="group">
             <SpeakerCombobox value={s.speaker} options={speakerOptions}
-              onChange={v => updateSegment(s.id, { speaker: v })} />
+              onChange={v => updateSegment(s.id, { speaker: v })}
+              className="opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100" />
             <SegmentView seg={s} thr={thr} active={activeId === s.id}
               onPlay={() => onPlaySeg(s)} updateSegment={updateSegment} />
           </div>

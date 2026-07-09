@@ -5,8 +5,8 @@ import { Button } from '@/components/ui/button'
 import { FileRow } from './FileRow'
 
 type Sel = { project: string; base: string } | null
-export function Sidebar({ projects, active, onOpen, onUpload, onTranscribe, onCorrect, onCorrectFile }: {
-  projects: Project[]; active: Sel;
+export function Sidebar({ projects, loading, active, onOpen, onUpload, onTranscribe, onCorrect, onCorrectFile }: {
+  projects: Project[]; loading?: boolean; active: Sel;
   onOpen: (s: { project: string; base: string }) => void;
   onUpload: (project: string, file: File) => void;
   onTranscribe: (project: string) => void;
@@ -20,7 +20,10 @@ export function Sidebar({ projects, active, onOpen, onUpload, onTranscribe, onCo
       <h1 className="mb-3 text-lg font-semibold">Transkribor</h1>
       <input ref={fileInput} type="file" hidden accept="audio/*,.mp3,.wav,.m4a,.aac,.flac,.ogg,.opus,.wma,.mp4"
         onChange={e => { const f = e.target.files?.[0]; if (f) onUpload(pendingProject.current, f); e.target.value = '' }} />
-      {projects.length === 0 && (
+      {projects.length === 0 && loading && (
+        <p className="text-sm text-muted-foreground">lädt…</p>
+      )}
+      {projects.length === 0 && !loading && (
         <p className="text-sm text-muted-foreground">
           Keine Projekte. Lege einen Ordner unter <code>projekte\&lt;NAME&gt;\audio</code> an.
         </p>
@@ -29,11 +32,11 @@ export function Sidebar({ projects, active, onOpen, onUpload, onTranscribe, onCo
         <div key={p.name} className="mb-3">
           <div className="flex items-center gap-1">
             <span className="flex-1 font-medium text-sm">{p.name}</span>
-            <Button size="icon" variant="ghost" className="size-6" title="Audio hochladen"
+            <Button size="icon" variant="ghost" className="size-6" title="Audio hochladen" aria-label="Audio hochladen"
               onClick={() => { pendingProject.current = p.name; fileInput.current?.click() }}><Upload className="size-3.5" /></Button>
-            <Button size="icon" variant="ghost" className="size-6" title="Transkribieren"
+            <Button size="icon" variant="ghost" className="size-6" title="Transkribieren" aria-label="Transkribieren"
               onClick={() => onTranscribe(p.name)}><Play className="size-3.5" /></Button>
-            <Button size="icon" variant="ghost" className="size-6" title="Korrigieren + Sprecher"
+            <Button size="icon" variant="ghost" className="size-6" title="Korrigieren + Sprecher" aria-label="Korrigieren + Sprecher"
               onClick={() => onCorrect(p.name)}><Pencil className="size-3.5" /></Button>
           </div>
           {p.files.map(f => (
