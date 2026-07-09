@@ -14,7 +14,8 @@ export function SpeakerTurn({ turn, thr, activeId, onPlaySeg, onPlayTurn, update
   return (
     <div className="grid grid-cols-[150px_1fr] items-start gap-3 border-l-2 py-2 pl-3"
       style={{ borderColor: turn.speaker ? color(turn.speaker) : 'transparent' }}>
-      <button onClick={() => onPlayTurn(turn.segments)} className="text-left text-sm font-semibold"
+      <button onClick={() => onPlayTurn(turn.segments)}
+        className="rounded-sm text-left text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
         style={{ color: turn.speaker ? color(turn.speaker) : undefined }}>
         {turn.speaker || '(kein Sprecher)'} <span className="opacity-50">▶</span>
       </button>

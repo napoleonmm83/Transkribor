@@ -18,7 +18,7 @@ export function SpeakerCombobox({ value, options, onChange }: {
       <PopoverContent className="w-56 p-0">
         <Command>
           <CommandInput placeholder="Sprecher…" value={query} onValueChange={setQuery}
-            onKeyDown={e => { if (e.key === 'Enter' && query.trim()) { e.preventDefault(); commit(query.trim()) } }} />
+            onKeyDown={e => { if (e.key === 'Enter' && query.trim()) { e.preventDefault(); e.stopPropagation(); commit(query.trim()) } }} />
           <CommandList>
             <CommandGroup>
               {query.trim() && !options.includes(query.trim()) &&
