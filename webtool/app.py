@@ -194,4 +194,5 @@ def upload_audio(project: str, file: UploadFile = File(...)):
 
 
 _STATIC = os.path.join(os.path.dirname(__file__), "static")
+os.makedirs(_STATIC, exist_ok=True)  # Build-loser Checkout: Verzeichnis muss existieren, sonst crasht der Mount
 app.mount("/", StaticFiles(directory=_STATIC, html=True), name="static")
