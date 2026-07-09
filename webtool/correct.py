@@ -60,7 +60,7 @@ def _load_diar_clusters(tdir: str, base: str) -> dict:
     """{seg_id: 'Sprecher N'} aus <base>.diar.json, oder {} wenn keins/ungültig."""
     try:
         segs = _load(os.path.join(tdir, base + ".diar.json")).get("segments") or []
-    except (OSError, json.JSONDecodeError):
+    except Exception:      # fehlend/korrupt/nicht-dict -> keine Cluster; darf den prep-Batch nie killen
         return {}
     return {s.get("id"): s.get("speaker") for s in segs if s.get("speaker")}
 
@@ -89,6 +89,9 @@ def cmd_prep(project: str) -> int:
     return n
 
 
+DIARIZE_MIN_SPEAKERS = 2      # pyannote-Untergrenze; das Sidecar zeichnet denselben Wert auf (kein Drift)
+
+
 def _diarize_enabled() -> bool:
     return os.environ.get("TRANSKRIBOR_DIARIZE", "1").strip().lower() not in ("0", "false", "no")
 
@@ -108,6 +111,8 @@ def cmd_diarize(project: str, only_bases: list = None) -> int:
         dpath = os.path.join(tdir, base + ".diar.json")
         raw_json = os.path.join(tdir, base + ".json")
         try:
+            # >= (nicht >): das Sidecar wird stets NACH der Roh-JSON geschrieben; ein Skip bei exakt
+            # gleicher Sekunde ist unrealistisch (Transkription dauert Minuten). Neu-Diarisieren = Sidecar löschen.
             if os.path.exists(dpath) and os.path.getmtime(dpath) >= os.path.getmtime(raw_json):
                 print(f"↷ nutze vorhandene {base}.diar.json", flush=True)
                 continue
@@ -118,19 +123,19 @@ def cmd_diarize(project: str, only_bases: list = None) -> int:
             from . import diarize                       # lazy: zieht torch/pyannote erst hier
             raw = _load(raw_json)
             print(f"→ Diarisiere {base} …", flush=True)
-            turns = diarize.diarize_file(audio)
+            turns = diarize.diarize_file(audio, min_speakers=DIARIZE_MIN_SPEAKERS)
             if not turns:
                 print(f"diarize: SKIP {base} (keine Sprecher erkannt)", flush=True)
                 continue
             seg_speakers = diarize.assign_clusters(raw, turns)
-            doc = {"base": base, "audio": os.path.basename(audio), "min_speakers": 2,
+            doc = {"base": base, "audio": os.path.basename(audio), "min_speakers": DIARIZE_MIN_SPEAKERS,
                    "turns": turns,
                    "segments": [{"id": sid, "speaker": spk} for sid, spk in seg_speakers.items()]}
             paths.atomic_write(dpath, json.dumps(doc, ensure_ascii=False, indent=1))
             n += 1
-        except (OSError, json.JSONDecodeError) as e:
+        except json.JSONDecodeError as e:               # nur die Roh-JSON parst nicht
             print(f"diarize: SKIP {base} (Roh-JSON unlesbar: {e})", flush=True)
-        except Exception as e:                          # pyannote/Token/GPU-Fehler dürfen NIE den Lauf killen
+        except Exception as e:                          # pyannote/Token/GPU/HF-403 (erbt OSError!) — NIE den Lauf killen
             print(f"diarize: SKIP {base} ({type(e).__name__}: {e}) — Korrektur ohne Cluster", flush=True)
     print(f"diarize: {n} Datei(en) diarisiert", flush=True)
     return n

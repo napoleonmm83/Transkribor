@@ -41,3 +41,11 @@ def test_over_segmentation_yields_three_labels():
              {"start": 1.0, "end": 2.0, "cluster": "B"},
              {"start": 2.0, "end": 3.0, "cluster": "C"}]
     assert diarize.assign_clusters(raw, turns) == {0: "Sprecher 1", 1: "Sprecher 2", 2: "Sprecher 3"}
+
+
+def test_first_segment_no_overlap_falls_back_to_earliest_cluster():
+    # Erstes Segment ohne Overlap, kein Vorgänger (prev=None) -> frühester Cluster (nicht "SPEAKER_00")
+    raw = _raw([(10.0, 11.0)])                        # ausserhalb aller Turns
+    turns = [{"start": 2.0, "end": 3.0, "cluster": "A"},
+             {"start": 0.0, "end": 1.0, "cluster": "B"}]   # B erscheint zuerst -> Sprecher 1
+    assert diarize.assign_clusters(raw, turns) == {0: "Sprecher 1"}

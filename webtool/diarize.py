@@ -89,6 +89,8 @@ def assign_clusters(raw: dict, turns: list) -> dict:
             if ov > 0:
                 by_cluster[t["cluster"]] = by_cluster.get(t["cluster"], 0.0) + ov
         if by_cluster:
+            # Gleichstand (exakt gleicher Overlap) ist deterministisch: max() nimmt den ersten
+            # Cluster in Turn-Reihenfolge. Real quasi nie, da Overlaps praktisch nie exakt gleich sind.
             spk = label[max(by_cluster, key=by_cluster.get)]
         else:
             spk = prev if prev is not None else (label[earliest] if earliest else "Sprecher 1")
