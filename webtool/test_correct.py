@@ -32,14 +32,27 @@ def test_prep_writes_tagged(project):
     assert "[[Mathias|0.30]]" in tagged
 
 
-def test_prep_injects_cluster_prefix(project):
+def test_prep_injects_cluster_prefix(project, monkeypatch):
     _root, t = project
+    monkeypatch.setenv("TRANSKRIBOR_DIARIZE", "1")     # Fixture-Default ist 0 (hermetisch) -> hier bewusst an
     (t / "S1.diar.json").write_text(json.dumps(
         {"base": "S1", "segments": [{"id": 0, "speaker": "Sprecher 2"}]}), encoding="utf-8")
     assert correct.cmd_prep("Demo") == 1
     tagged = (t / "S1.tagged.txt").read_text(encoding="utf-8")
     assert tagged.startswith("[0] (Sprecher 2) ")
     assert "[[Mathias|0.30]]" in tagged                # Unsicherheits-Tagging bleibt erhalten
+
+
+def test_prep_no_prefix_when_diarize_disabled(project):
+    _root, t = project
+    # TRANSKRIBOR_DIARIZE=0 (Fixture-Default) muss auch die KONSUMPTION eines liegen
+    # gebliebenen Sidecars unterdrücken, nicht nur dessen Erzeugung.
+    (t / "S1.diar.json").write_text(json.dumps(
+        {"base": "S1", "segments": [{"id": 0, "speaker": "Sprecher 2"}]}), encoding="utf-8")
+    assert correct.cmd_prep("Demo") == 1
+    tagged = (t / "S1.tagged.txt").read_text(encoding="utf-8")
+    assert tagged.startswith("[0] ")
+    assert "(Sprecher" not in tagged                   # Kill-Switch: Sidecar wird nicht konsumiert
 
 
 def test_prep_without_diar_has_no_prefix(project):
@@ -487,6 +500,24 @@ def test_cmd_diarize_idempotent_skip(project, monkeypatch):
     monkeypatch.setattr(diar, "diarize_file", lambda *a, **k: called.__setitem__("n", called["n"] + 1) or [])
     assert correct.cmd_diarize("Demo") == 0
     assert called["n"] == 0
+
+
+def test_run_single_base_diarizes_only_that_file(project, monkeypatch):
+    _root, t = project
+    _add_S2(t)
+    (_root / "Demo" / "audio" / "S2.mp3").write_bytes(b"x")   # Audio nötig, sonst überspringt cmd_diarize S2 eh
+    monkeypatch.setenv("TRANSKRIBOR_DIARIZE", "1")
+    import webtool.diarize as diar
+    calls = {"n": 0}
+    def fake_diarize(audio, min_speakers=2):
+        calls["n"] += 1
+        return [{"start": 0.0, "end": 1.0, "cluster": "SPEAKER_00"}]
+    monkeypatch.setattr(diar, "diarize_file", fake_diarize)
+    monkeypatch.setattr(correct, "_run_claude", _fake_claude(t, []))
+    assert correct.cmd_run("Demo", base="S1") == 1
+    assert calls["n"] == 1                              # nur S1 diarisiert, nicht das ganze Projekt
+    assert (t / "S1.diar.json").exists()
+    assert not (t / "S2.diar.json").exists()
 
 
 def test_run_diarizes_before_prep_and_injects(project, monkeypatch):
