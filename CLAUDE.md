@@ -87,7 +87,8 @@ nie committen), unklarem Scope, oder history-verändernden Aktionen (force-push,
   `webtool/frontend/`, gebaut nach `webtool/static/` (git-ignoriert, Build-Output) und von
   FastAPI (`webtool/app.py`) via `StaticFiles(html=True)` ausgeliefert. `.\webtool.ps1` baut
   das Frontend bei fehlendem `webtool\static\index.html` automatisch (`npm install` + `run
-  build`), startet dann uvicorn (:8000) und öffnet den Browser. Frontend-Entwicklung mit
+  build`), lädt eine optionale git-ignorierte `.env` (KEY=VALUE, z.B. `HF_TOKEN` — Vorlage
+  `.env.example`), startet dann uvicorn (:8000) und öffnet den Browser. Frontend-Entwicklung mit
   Hot-Reload: `npm --prefix webtool/frontend run dev` (Vite :5173, proxied `/api` zu :8000).
   Kanonisches Editier-Dokument bleibt `<base>.edit.json` (aus Roh-`<base>.json`), Export
   `<base>.md`. Spec: `docs/superpowers/specs/2026-07-06-transkribor-webtool-design.md`.
