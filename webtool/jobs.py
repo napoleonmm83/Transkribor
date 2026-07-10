@@ -116,3 +116,15 @@ def get(job_id: str):
         snap["lines"] = list(r["lines"])
         snap.pop("proc", None)                # Popen-Handle ist nicht JSON-serialisierbar
         return snap
+
+
+def active_for(project: str):
+    """{'id','kind'} des laufenden Jobs fuer das Projekt, sonst None."""
+    with _lock:
+        jid = _active.get(project)
+        if jid is None:
+            return None
+        r = _jobs.get(jid)
+        if r is None or r["status"] != "running":
+            return None
+        return {"id": r["id"], "kind": r["kind"]}
