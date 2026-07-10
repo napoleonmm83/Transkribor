@@ -43,3 +43,11 @@ export async function uploadAudio(project: string, file: File): Promise<{ base: 
   const fd = new FormData(); fd.append('file', file)
   return jn(await fetch(`/api/projects/${enc(project)}/audio`, { method: 'POST', body: fd }))
 }
+export async function createProject(name: string): Promise<{ ok: boolean; name: string }> {
+  return jn(await fetch('/api/projects', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }),
+  }))
+}
+export async function deleteProject(project: string): Promise<void> {
+  await jn(await fetch(`/api/projects/${enc(project)}`, { method: 'DELETE' }))
+}
