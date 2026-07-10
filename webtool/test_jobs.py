@@ -121,3 +121,13 @@ def test_cancel_kills_process_tree():
     while _alive(grandchild) and time.time() < deadline:
         time.sleep(0.05)
     assert not _alive(grandchild)
+
+
+def test_active_for_running_then_none():
+    slow = [sys.executable, "-c", "import time; time.sleep(0.6)"]
+    assert jobs.active_for("P_af") is None
+    jid, started = jobs.start("P_af", slow, cwd=None, kind="correct")
+    assert started is True
+    assert jobs.active_for("P_af") == {"id": jid, "kind": "correct"}
+    _wait(jid)
+    assert jobs.active_for("P_af") is None
