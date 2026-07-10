@@ -14,6 +14,16 @@ def test_safe_name_rejects_traversal(bad):
         paths.safe_name(bad)
 
 
+def test_safe_name_rejects_bare_dot_and_dotdot():
+    # "." -> project_dir() == projekte_root() selbst -> rmtree würde die ganze
+    # projekte/-Wurzel löschen (Task 4 Review-Fund). ".." war schon vorher über
+    # die Substring-Prüfung abgedeckt, hier zusätzlich explizit gesperrt.
+    with pytest.raises(ValueError):
+        paths.safe_name(".")
+    with pytest.raises(ValueError):
+        paths.safe_name("..")
+
+
 def test_projekte_root_respects_env(monkeypatch, tmp_path):
     monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
     assert paths.projekte_root() == str(tmp_path)

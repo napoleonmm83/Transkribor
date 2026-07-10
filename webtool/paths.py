@@ -10,7 +10,10 @@ def projekte_root() -> str:
 
 
 def safe_name(name: str) -> str:
-    if not name or "/" in name or "\\" in name or ":" in name or ".." in name or "\x00" in name:
+    # "." / ".." resolven auf Eltern-/Self-Verzeichnis -> dürfen project_dir()
+    # nie erreichen (sonst rmtree auf projekte_root() selbst, siehe Task 4 Review).
+    if (not name or name in (".", "..") or "/" in name or "\\" in name
+            or ":" in name or ".." in name or "\x00" in name):
         raise ValueError(f"unsicherer Name: {name!r}")
     return name
 
