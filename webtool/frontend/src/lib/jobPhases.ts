@@ -25,6 +25,8 @@ export function parseJobPhases(kind: string, lines: string[]): JobPhases {
       continue
     }
 
+    if (kind !== 'correct') continue
+
     // kind === 'correct'
     if ((m = l.match(/^→ Diarisiere (.+) …$/))) { active = { base: m[1], phase: 'diarize' }; global = 'diarize' }
     else if ((m = l.match(/^→ Korrigiere (.+) …$/))) { active = { base: m[1], phase: 'correct' }; global = null }
