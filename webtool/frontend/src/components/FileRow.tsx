@@ -1,17 +1,18 @@
 import { Pencil } from 'lucide-react'
-import type { ProjectFile } from '@/lib/types'
+import type { FilePhase, FileState, ProjectFile } from '@/lib/types'
 import { Button } from '@/components/ui/button'
+import { FileStatusPill } from '@/components/FileStatusPill'
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
 import { cn } from '@/lib/utils'
 
-export function FileRow({ file, active, onOpen, onCorrectFile }: {
+export function FileRow({ file, active, onOpen, onCorrectFile, phase, state, jobRunning }: {
   file: ProjectFile; active: boolean;
   onOpen: () => void; onCorrectFile: (force: boolean) => void;
+  phase?: FilePhase; state?: FileState; jobRunning?: boolean;
 }) {
-  const badge = file.has_edit ? '✎' : file.has_md ? '✓' : file.has_audio ? '●' : ''
   const button = (
     <Button size="icon" variant="ghost" className="size-6" title="Nur diese Datei korrigieren"
       aria-label="Nur diese Datei korrigieren"
@@ -27,7 +28,8 @@ export function FileRow({ file, active, onOpen, onCorrectFile }: {
       }}
       className={cn('flex items-center gap-2 rounded px-2 py-1 text-sm cursor-pointer hover:bg-accent',
         active && 'bg-accent')}>
-      <span className="flex-1 truncate">{file.base} <span className="text-muted-foreground text-xs">{badge}</span></span>
+      <span className="flex-1 truncate">{file.base}</span>
+      <FileStatusPill file={file} active={phase} state={state} jobRunning={jobRunning} />
       {file.has_edit ? (
         <AlertDialog>
           <AlertDialogTrigger asChild>{button}</AlertDialogTrigger>

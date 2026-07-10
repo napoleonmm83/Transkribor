@@ -1,23 +1,26 @@
 import { useRef } from 'react'
+import { Link } from 'react-router-dom'
 import { Upload, Play, Pencil } from 'lucide-react'
-import type { Project } from '@/lib/types'
+import type { JobPhases, Project } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { FileRow } from './FileRow'
 
 type Sel = { project: string; base: string } | null
-export function Sidebar({ projects, loading, active, onOpen, onUpload, onTranscribe, onCorrect, onCorrectFile }: {
+export function Sidebar({ projects, loading, active, onOpen, onUpload, onTranscribe, onCorrect, onCorrectFile, backTo, phases, jobRunning }: {
   projects: Project[]; loading?: boolean; active: Sel;
   onOpen: (s: { project: string; base: string }) => void;
   onUpload: (project: string, file: File) => void;
   onTranscribe: (project: string) => void;
   onCorrect: (project: string) => void;
   onCorrectFile: (project: string, base: string, force: boolean) => void;
+  backTo?: string; phases?: JobPhases; jobRunning?: boolean;
 }) {
   const fileInput = useRef<HTMLInputElement>(null)
   const pendingProject = useRef<string>('')
   return (
     <div className="p-3">
       <h1 className="mb-3 text-lg font-semibold">Transkribor</h1>
+      {backTo && <Link to={backTo} className="mb-2 block text-sm text-muted-foreground hover:underline">‹ zurück</Link>}
       <input ref={fileInput} type="file" hidden accept="audio/*,.mp3,.wav,.m4a,.aac,.flac,.ogg,.opus,.wma,.mp4"
         onChange={e => { const f = e.target.files?.[0]; if (f) onUpload(pendingProject.current, f); e.target.value = '' }} />
       {projects.length === 0 && loading && (
@@ -43,7 +46,10 @@ export function Sidebar({ projects, loading, active, onOpen, onUpload, onTranscr
             <FileRow key={f.base} file={f}
               active={active?.project === p.name && active?.base === f.base}
               onOpen={() => onOpen({ project: p.name, base: f.base })}
-              onCorrectFile={force => onCorrectFile(p.name, f.base, force)} />
+              onCorrectFile={force => onCorrectFile(p.name, f.base, force)}
+              phase={jobRunning && phases?.active?.base === f.base ? phases.active.phase : undefined}
+              state={jobRunning ? phases?.perBase[f.base] : undefined}
+              jobRunning={jobRunning} />
           ))}
         </div>
       ))}
