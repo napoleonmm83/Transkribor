@@ -15,3 +15,11 @@ export type JobStatus = { status: 'running' | 'done' | 'error' | 'cancelled'; li
 export type StartJob = { job_id: string; started: boolean };
 export type Thresholds = { yellow: number; red: number };
 export type Turn = { key: string; speaker: string; segments: Segment[] };
+export type FilePhase = 'diarize' | 'correct' | 'verify' | 'transcribe';
+export type GlobalPhase = 'diarize' | 'prep' | 'glossary';
+export type FileState = 'done' | 'skipped' | 'failed';
+export type JobPhases = {
+  global: GlobalPhase | null;
+  active: { base: string; phase: FilePhase } | null;
+  perBase: Record<string, FileState>;
+};
