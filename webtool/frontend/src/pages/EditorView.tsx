@@ -4,6 +4,7 @@ import { useProjects } from '@/hooks/useProjects'
 import { useDoc } from '@/hooks/useDoc'
 import { useThresholds } from '@/hooks/useThresholds'
 import { useJob } from '@/hooks/useJob'
+import { useActiveJob } from '@/hooks/useActiveJob'
 import { uploadAudio, audioUrl, startTranscribe, startCorrect, startCorrectFile } from '@/lib/api'
 import { Sidebar } from '@/components/Sidebar'
 import { Toolbar } from '@/components/Toolbar'
@@ -20,6 +21,8 @@ export function EditorView() {
   const { doc, dirty, loading: docLoading, updateSegment, save, exportDownload, reload } = useDoc(sel?.project ?? null, sel?.base ?? null)
   const { thr, setThr } = useThresholds()
   const { start } = useJob()
+  const { job, phases, adopt } = useActiveJob()
+  const running = !!job && job.status === 'running' && job.project === project
   const title = useMemo(() => (sel ? `${sel.project} / ${sel.base}` : '— keine Datei —'), [sel])
   const waveRef = useRef<WaveHandle>(null)
   const [activeId, setActiveId] = useState<number | null>(null)
@@ -45,14 +48,17 @@ export function EditorView() {
   const onTranscribe = (p: string) => start(() => startTranscribe(p), `Transkribieren ${p}`, refresh)
   const onCorrect = (p: string) => start(() => startCorrect(p), `Korrigieren ${p}`, refresh)
   const onCorrectFile = (p: string, b: string, force: boolean) =>
-    start(() => startCorrectFile(p, b, force), `Korrigieren ${b}`,
+    start(() => startCorrectFile(p, b, force).then(res => { if (res.started) adopt(res.job_id, p, 'correct'); return res }),
+      `Korrigieren ${b}`,
       () => { refresh(); if (sel?.project === p && sel?.base === b) reload() })
 
   return (
     <div className="grid h-screen grid-rows-[auto_1fr_auto] grid-cols-[260px_1fr]">
       <aside className="row-span-3 border-r overflow-auto">
-        <Sidebar projects={projects} loading={projectsLoading} active={sel} onOpen={openFile} onUpload={onUpload}
-          onTranscribe={onTranscribe} onCorrect={onCorrect} onCorrectFile={onCorrectFile} />
+        <Sidebar projects={projects.filter(p => p.name === project)} loading={projectsLoading}
+          active={sel} onOpen={openFile} onUpload={onUpload}
+          onTranscribe={onTranscribe} onCorrect={onCorrect} onCorrectFile={onCorrectFile}
+          backTo={project ? `/p/${encodeURIComponent(project)}` : '/'} phases={phases} jobRunning={running} />
       </aside>
       <div className="col-start-2"><Toolbar title={title} dirty={dirty} canSave={!!doc}
         onSave={save} onExport={exportDownload} settings={<ThresholdPopover thr={thr} setThr={setThr} />} /></div>
