@@ -191,3 +191,25 @@ def test_create_project_ok_and_duplicate_409(client, tmp_path):
 def test_create_project_invalid_name_400(client):
     assert client.post("/api/projects", json={"name": "a/b"}).status_code == 400
     assert client.post("/api/projects", json={"name": ""}).status_code == 400
+
+
+def test_delete_project_ok(client, tmp_path):
+    assert (tmp_path / "Demo").is_dir()
+    r = client.delete("/api/projects/Demo")
+    assert r.status_code == 200 and r.json() == {"ok": True}
+    assert not (tmp_path / "Demo").exists()
+
+
+def test_delete_project_blocked_when_active_409(client, tmp_path, monkeypatch):
+    import webtool.jobs as jobs_mod
+    monkeypatch.setattr(jobs_mod, "active_for", lambda name: {"id": "j", "kind": "correct"})
+    assert client.delete("/api/projects/Demo").status_code == 409
+    assert (tmp_path / "Demo").is_dir()  # nicht gelöscht
+
+
+def test_delete_project_unknown_404(client):
+    assert client.delete("/api/projects/Nope").status_code == 404
+
+
+def test_delete_project_invalid_name_400(client):
+    assert client.delete("/api/projects/a:b").status_code == 400
