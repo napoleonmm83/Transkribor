@@ -224,3 +224,24 @@ def test_delete_project_dot_is_rejected_no_data_loss(client, tmp_path):
     assert r.status_code != 200          # niemals gelöscht
     assert (tmp_path / "Demo").is_dir()  # Root + Demo unangetastet
     assert tmp_path.is_dir()
+
+
+def test_unknown_api_path_404(client):
+    assert client.get("/api/nope").status_code == 404
+
+
+def test_spa_serves_index_for_deep_link(client):
+    from webtool import app as app_mod
+    idx = app_mod._INDEX
+    created = not os.path.exists(idx)
+    if created:
+        os.makedirs(app_mod._STATIC, exist_ok=True)
+        with open(idx, "w", encoding="utf-8") as fh:
+            fh.write("<!doctype html><div id=root></div>")
+    try:
+        r = client.get("/p/Demo/S1")
+        assert r.status_code == 200
+        assert "text/html" in r.headers["content-type"]
+    finally:
+        if created:
+            os.remove(idx)

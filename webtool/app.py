@@ -6,7 +6,6 @@ import sys
 
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from . import jobs
@@ -224,5 +223,22 @@ def upload_audio(project: str, file: UploadFile = File(...)):
 
 
 _STATIC = os.path.join(os.path.dirname(__file__), "static")
-os.makedirs(_STATIC, exist_ok=True)  # Build-loser Checkout: Verzeichnis muss existieren, sonst crasht der Mount
-app.mount("/", StaticFiles(directory=_STATIC, html=True), name="static")
+os.makedirs(_STATIC, exist_ok=True)  # Build-loser Checkout: Verzeichnis muss existieren
+_INDEX = os.path.join(_STATIC, "index.html")
+
+
+@app.get("/{full_path:path}")
+def spa(full_path: str):
+    # Unbekannte API-Pfade -> echtes 404 (nicht das SPA-HTML zurueckgeben).
+    if full_path.startswith("api/"):
+        raise HTTPException(status_code=404, detail="kein Endpoint")
+    # Existierende statische Datei ausliefern, aber nur INNERHALB von _STATIC
+    # (Path-Traversal-Schutz: realpath darf _STATIC nicht verlassen).
+    if full_path:
+        target = os.path.realpath(os.path.join(_STATIC, full_path))
+        if target.startswith(os.path.realpath(_STATIC) + os.sep) and os.path.isfile(target):
+            return FileResponse(target)
+    # Sonst index.html -> der Client-Router (BrowserRouter) uebernimmt die Route.
+    if os.path.isfile(_INDEX):
+        return FileResponse(_INDEX)
+    raise HTTPException(status_code=404, detail="Frontend nicht gebaut")
