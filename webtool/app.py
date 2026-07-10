@@ -230,7 +230,7 @@ _INDEX = os.path.join(_STATIC, "index.html")
 @app.get("/{full_path:path}")
 def spa(full_path: str):
     # Unbekannte API-Pfade -> echtes 404 (nicht das SPA-HTML zurueckgeben).
-    if full_path.startswith("api/"):
+    if full_path == "api" or full_path.startswith("api/"):
         raise HTTPException(status_code=404, detail="kein Endpoint")
     # Existierende statische Datei ausliefern, aber nur INNERHALB von _STATIC
     # (Path-Traversal-Schutz: realpath darf _STATIC nicht verlassen).

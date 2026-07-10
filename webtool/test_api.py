@@ -230,6 +230,10 @@ def test_unknown_api_path_404(client):
     assert client.get("/api/nope").status_code == 404
 
 
+def test_bare_api_path_404(client):
+    assert client.get("/api").status_code == 404
+
+
 def test_spa_serves_index_for_deep_link(client):
     from webtool import app as app_mod
     idx = app_mod._INDEX
