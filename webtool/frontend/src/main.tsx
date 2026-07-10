@@ -6,14 +6,17 @@ import App from './App.tsx'
 import { ThemeProvider } from './components/ThemeProvider.tsx'
 import { Toaster } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
+import { JobProvider } from '@/hooks/useActiveJob'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ThemeProvider>
       <TooltipProvider>
-        <BrowserRouter>
-          <App />
-        </BrowserRouter>
+        <JobProvider>
+          <BrowserRouter>
+            <App />
+          </BrowserRouter>
+        </JobProvider>
         <Toaster richColors position="bottom-right" />
       </TooltipProvider>
     </ThemeProvider>
