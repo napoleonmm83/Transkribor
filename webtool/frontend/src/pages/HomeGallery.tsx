@@ -29,7 +29,7 @@ export function HomeGallery() {
           const done = p.files.filter(f => f.has_edit).length
           return (
             <div key={p.name} className="group relative rounded-lg border p-4 hover:bg-accent">
-              <div className="absolute right-2 top-2 opacity-0 group-hover:opacity-100">
+              <div className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 focus-within:opacity-100">
                 <DeleteProjectDialog project={p.name} onDeleted={refresh} />
               </div>
               <Link to={`/p/${encodeURIComponent(p.name)}`} className="block">

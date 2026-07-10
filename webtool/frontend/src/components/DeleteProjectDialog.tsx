@@ -5,18 +5,19 @@ import { deleteProject } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialog, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
 
 export function DeleteProjectDialog({ project, onDeleted }: { project: string; onDeleted: () => void }) {
+  const [open, setOpen] = useState(false)
   const [confirm, setConfirm] = useState('')
   const del = async () => {
     try { await deleteProject(project) } catch (e) { toast.error(`Löschen fehlgeschlagen: ${(e as Error).message}`); return }
-    onDeleted()
+    setOpen(false); onDeleted()
   }
   return (
-    <AlertDialog onOpenChange={() => setConfirm('')}>
+    <AlertDialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) setConfirm('') }}>
       <AlertDialogTrigger asChild>
         <Button size="icon" variant="ghost" className="size-6" title="Projekt löschen" aria-label={`Projekt ${project} löschen`}>
           <Trash2 className="size-3.5" />
@@ -32,7 +33,7 @@ export function DeleteProjectDialog({ project, onDeleted }: { project: string; o
         <Input aria-label="Projektname bestätigen" value={confirm} onChange={e => setConfirm(e.target.value)} placeholder={project} />
         <AlertDialogFooter>
           <AlertDialogCancel>Abbrechen</AlertDialogCancel>
-          <AlertDialogAction disabled={confirm !== project} onClick={del}>Löschen</AlertDialogAction>
+          <Button variant="destructive" disabled={confirm !== project} onClick={del}>Löschen</Button>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
