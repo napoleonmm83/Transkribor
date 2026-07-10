@@ -178,3 +178,16 @@ def test_list_projects_active_job_reported(client, monkeypatch):
                         lambda name: {"id": "j9", "kind": "correct"} if name == "Demo" else None)
     demo = next(p for p in client.get("/api/projects").json()["projects"] if p["name"] == "Demo")
     assert demo["active_job"] == {"id": "j9", "kind": "correct"}
+
+
+def test_create_project_ok_and_duplicate_409(client, tmp_path):
+    r = client.post("/api/projects", json={"name": "Neu"})
+    assert r.status_code == 200 and r.json() == {"ok": True, "name": "Neu"}
+    assert (tmp_path / "Neu" / "audio").is_dir()
+    assert client.post("/api/projects", json={"name": "Neu"}).status_code == 409
+    assert client.post("/api/projects", json={"name": "Demo"}).status_code == 409
+
+
+def test_create_project_invalid_name_400(client):
+    assert client.post("/api/projects", json={"name": "a/b"}).status_code == 400
+    assert client.post("/api/projects", json={"name": ""}).status_code == 400
