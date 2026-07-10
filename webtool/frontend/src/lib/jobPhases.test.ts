@@ -39,6 +39,13 @@ describe('parseJobPhases — correct', () => {
     ])
     expect(p.perBase).toEqual({ A: 'done' })
   })
+  it('Basisname mit Klammern -> SKIP greedy bis (human_edited=', () => {
+    const p = parseJobPhases('correct', [
+      '↷ SKIP Interview (Teil 1) (human_edited=true; --force zum Neu-Korrigieren)',
+      'apply: SKIP Zweites (Teil 2) (human_edited=true; --force zum Ueberschreiben)',
+    ])
+    expect(p.perBase).toEqual({ 'Interview (Teil 1)': 'skipped', 'Zweites (Teil 2)': 'skipped' })
+  })
 })
 
 describe('parseJobPhases — transcribe', () => {

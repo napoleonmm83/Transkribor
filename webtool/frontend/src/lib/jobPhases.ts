@@ -30,8 +30,8 @@ export function parseJobPhases(kind: string, lines: string[]): JobPhases {
     else if ((m = l.match(/^→ Korrigiere (.+) …$/))) { active = { base: m[1], phase: 'correct' }; global = null }
     else if ((m = l.match(/^→ Verifiziere (.+) \(Treue gegen Roh\) …$/))) { active = { base: m[1], phase: 'verify' }; global = null }
     else if ((m = l.match(/^apply: (.+) -> edit\.json/))) terminal(m[1], 'done')
-    else if ((m = l.match(/^apply: SKIP (.+?) \(/))) terminal(m[1], 'skipped')
-    else if ((m = l.match(/^↷ SKIP (.+?) \(/))) terminal(m[1], 'skipped')
+    else if ((m = l.match(/^apply: SKIP (.+) \(human_edited=/))) terminal(m[1], 'skipped')
+    else if ((m = l.match(/^↷ SKIP (.+) \(human_edited=/))) terminal(m[1], 'skipped')
     else if ((m = l.match(/^apply: FEHLT (.+?)\.correction\.json/))) terminal(m[1], 'failed')
     else if ((m = l.match(/^✗ FEHLT\/ungültig: (.+?)\.correction\.json/))) terminal(m[1], 'failed')
     else if ((m = l.match(/^✗ Fehler bei (.+?): /))) terminal(m[1], 'failed')
