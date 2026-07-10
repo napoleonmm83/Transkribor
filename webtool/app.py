@@ -89,7 +89,7 @@ def list_projects():
                     })
             except ValueError:
                 continue  # ponytail: un-nennbaren Ordner überspringen statt die ganze Liste zu 500en
-            out.append({"name": name, "files": files})
+            out.append({"name": name, "files": files, "active_job": jobs.active_for(name)})
     return {"projects": out}
 
 

@@ -165,3 +165,16 @@ def test_upload_ok_and_duplicate_409(client, tmp_path):
 def test_upload_bad_extension_400(client):
     r = client.post("/api/projects/Demo/audio", files={"file": ("schad.txt", b"x", "text/plain")})
     assert r.status_code == 400
+
+
+def test_list_projects_active_job_default_none(client):
+    demo = next(p for p in client.get("/api/projects").json()["projects"] if p["name"] == "Demo")
+    assert demo["active_job"] is None
+
+
+def test_list_projects_active_job_reported(client, monkeypatch):
+    import webtool.jobs as jobs_mod
+    monkeypatch.setattr(jobs_mod, "active_for",
+                        lambda name: {"id": "j9", "kind": "correct"} if name == "Demo" else None)
+    demo = next(p for p in client.get("/api/projects").json()["projects"] if p["name"] == "Demo")
+    assert demo["active_job"] == {"id": "j9", "kind": "correct"}
