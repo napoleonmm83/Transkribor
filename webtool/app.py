@@ -111,6 +111,18 @@ def create_project(body: NewProject):
     return {"ok": True, "name": name}
 
 
+@app.delete("/api/projects/{project}")
+def delete_project(project: str):
+    _validate(project)
+    if jobs.active_for(project):
+        raise HTTPException(status_code=409, detail="Job läuft — erst abbrechen")
+    pdir = paths.project_dir(project)
+    if not os.path.isdir(pdir):
+        raise HTTPException(status_code=404, detail="kein Projekt")
+    shutil.rmtree(pdir)
+    return {"ok": True}
+
+
 @app.get("/api/projects/{project}/files/{base}")
 def get_file(project: str, base: str):
     _validate(project, base)
