@@ -23,6 +23,11 @@ export function EditorView() {
   const { start } = useJob()
   const { job, phases, adopt } = useActiveJob()
   const running = !!job && job.status === 'running' && job.project === project
+  const activeProject = projects.find(x => x.name === project)
+  useEffect(() => {
+    const aj = activeProject?.active_job
+    if (aj && job?.id !== aj.id) adopt(aj.id, project!, aj.kind)
+  }, [activeProject?.active_job?.id, job?.id, project, adopt])
   const title = useMemo(() => (sel ? `${sel.project} / ${sel.base}` : '— keine Datei —'), [sel])
   const waveRef = useRef<WaveHandle>(null)
   const [activeId, setActiveId] = useState<number | null>(null)
