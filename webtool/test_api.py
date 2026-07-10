@@ -213,3 +213,14 @@ def test_delete_project_unknown_404(client):
 
 def test_delete_project_invalid_name_400(client):
     assert client.delete("/api/projects/a:b").status_code == 400
+
+
+def test_delete_project_dot_is_rejected_no_data_loss(client, tmp_path):
+    # %2e (percent-encoded ".") wird von Starlette/httpx NICHT wie ein
+    # literales "." normalisiert -> project="." erreicht den Handler.
+    # Ohne den safe_name-Fix: project_dir(".") == projekte_root() -> rmtree
+    # löscht die gesamte projekte/-Wurzel (Task 4 Review-Fund).
+    r = client.delete("/api/projects/%2e")
+    assert r.status_code != 200          # niemals gelöscht
+    assert (tmp_path / "Demo").is_dir()  # Root + Demo unangetastet
+    assert tmp_path.is_dir()
