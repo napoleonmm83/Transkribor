@@ -94,6 +94,7 @@ def transcribe_project(name, model, language):
         if os.path.exists(out_json):
             print(f"[{name}] skip (vorhanden): {base}", flush=True)
             continue
+        print(f"[{name}] -> transkribiere {base} …", flush=True)
         t0 = time.time()
         try:
             result = m.transcribe(
