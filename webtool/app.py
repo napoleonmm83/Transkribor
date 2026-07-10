@@ -7,6 +7,7 @@ import sys
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 
 from . import jobs
 from . import paths
@@ -91,6 +92,23 @@ def list_projects():
                 continue  # ponytail: un-nennbaren Ordner überspringen statt die ganze Liste zu 500en
             out.append({"name": name, "files": files, "active_job": jobs.active_for(name)})
     return {"projects": out}
+
+
+class NewProject(BaseModel):
+    name: str
+
+
+@app.post("/api/projects")
+def create_project(body: NewProject):
+    try:
+        name = paths.safe_name(body.name.strip())
+    except ValueError:
+        raise HTTPException(status_code=400, detail="ungültiger Name")
+    pdir = paths.project_dir(name)
+    if os.path.exists(pdir):
+        raise HTTPException(status_code=409, detail="Projekt existiert bereits")
+    os.makedirs(os.path.join(pdir, "audio"))
+    return {"ok": True, "name": name}
 
 
 @app.get("/api/projects/{project}/files/{base}")
