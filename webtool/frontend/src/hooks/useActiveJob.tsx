@@ -38,9 +38,17 @@ export function JobProvider({ children, intervalMs = 1500 }: { children: ReactNo
     if (!jobId || !running) return
     let alive = true
     let timer: ReturnType<typeof setTimeout>
+    let failures = 0
     const tick = async () => {
       let j
-      try { j = await getJob(jobId) } catch { if (alive) setJob(null); return }
+      try { j = await getJob(jobId); failures = 0 }
+      catch {
+        if (!alive) return
+        failures++
+        if (failures >= 3) { listeners.current.forEach(fn => fn()); setJob(null); return }
+        timer = setTimeout(tick, intervalMs)
+        return
+      }
       if (!alive) return
       setPhases(parseJobPhases(jobKind!, j.lines))
       if (j.status === 'running') { timer = setTimeout(tick, intervalMs) }
