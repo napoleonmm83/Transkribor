@@ -6,6 +6,7 @@ import { useProjects } from '@/hooks/useProjects'
 import { useActiveJob } from '@/hooks/useActiveJob'
 import { FileStatusPill } from '@/components/FileStatusPill'
 import { UploadDropzone } from '@/components/UploadDropzone'
+import { UrlFetch } from '@/components/UrlFetch'
 import { Button } from '@/components/ui/button'
 import { startTranscribe, startCorrect, startCorrectFile, cancelJob } from '@/lib/api'
 import type { StartJob } from '@/lib/types'
@@ -56,12 +57,17 @@ export function ProjectWorkspace() {
         </div>
       )}
 
-      <div className="mb-4">
+      <div className="mb-4 space-y-3">
         <UploadDropzone project={project!} onDone={refresh} />
+        <UrlFetch project={project!} onStart={res => {
+          if (!res.started) { toast.warning('Es läuft bereits ein Job für dieses Projekt.'); return }
+          adopt(res.job_id, project!, 'transcribe')
+          toast.success('Herunterladen gestartet')
+        }} />
       </div>
 
       {p && p.files.length === 0 && (
-        <p className="text-sm text-muted-foreground">Noch keine Dateien — lade Audio hoch und transkribiere.</p>
+        <p className="text-sm text-muted-foreground">Noch keine Dateien — lade Audio hoch, füge eine Video-URL ein und transkribiere.</p>
       )}
       <ul className="divide-y rounded border">
         {p?.files.map(f => {
