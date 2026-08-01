@@ -51,14 +51,20 @@ def list_projects():
                   if os.path.isdir(os.path.join(PROJEKTE, d)))
 
 
-def find_audio(proj_dir):
+def find_audio(proj_dir, only=None):
+    """Audiodateien des Projekts. only=[basisnamen] beschraenkt auf genau diese
+    (URL-Import: nur das eben Geladene transkribieren, nicht das ganze Projekt)."""
     ad = audio_dir(proj_dir)
     files = [f for f in sorted(glob.glob(os.path.join(ad, "*")))
              if f.lower().endswith(AUDIO_EXT)]
+    if only is not None:
+        want = set(only)
+        files = [f for f in files
+                 if os.path.splitext(os.path.basename(f))[0] in want]
     return files
 
 
-def transcribe_project(name, model, language):
+def transcribe_project(name, model, language, only=None):
     import torch, whisper
     proj_dir = os.path.join(PROJEKTE, name)
     if not os.path.isdir(proj_dir):
@@ -66,7 +72,7 @@ def transcribe_project(name, model, language):
         return
     out_dir = os.path.join(proj_dir, "transkripte")
     os.makedirs(out_dir, exist_ok=True)
-    files = find_audio(proj_dir)
+    files = find_audio(proj_dir, only)
     if not files:
         print(f"[{name}] keine Audiodateien in {audio_dir(proj_dir)}")
         return
