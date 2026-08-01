@@ -17,7 +17,7 @@ export type StartJob = { job_id: string; started: boolean };
 export type Thresholds = { yellow: number; red: number };
 export type Turn = { key: string; speaker: string; segments: Segment[] };
 export type FilePhase = 'diarize' | 'correct' | 'verify' | 'transcribe';
-export type GlobalPhase = 'diarize' | 'prep' | 'glossary';
+export type GlobalPhase = 'diarize' | 'prep' | 'glossary' | 'download';
 export type FileState = 'done' | 'skipped' | 'failed';
 export type JobPhases = {
   global: GlobalPhase | null;
