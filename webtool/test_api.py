@@ -234,6 +234,33 @@ def test_bare_api_path_404(client):
     assert client.get("/api").status_code == 404
 
 
+def test_fetch_startet_job(client, monkeypatch):
+    from webtool import jobs
+    gestartet = {}
+    monkeypatch.setattr(jobs, "start",
+                        lambda project, cmd, cwd, kind: gestartet.update(cmd=cmd, kind=kind) or ("j1", True))
+    r = client.post("/api/projects/Demo/fetch", json={"urls": ["https://youtu.be/abc123"]})
+    assert r.status_code == 200 and r.json() == {"job_id": "j1", "started": True}
+    assert gestartet["kind"] == "transcribe"          # erbt GPU-Serialisierung + Dedupe
+    assert gestartet["cmd"][-2:] == ["Demo", "https://youtu.be/abc123"]
+
+
+def test_fetch_lehnt_fremde_plattform_ab(client):
+    r = client.post("/api/projects/Demo/fetch", json={"urls": ["https://vimeo.com/1"]})
+    assert r.status_code == 400
+    assert "vimeo.com" in r.json()["detail"]
+
+
+def test_fetch_ohne_url_400(client):
+    assert client.post("/api/projects/Demo/fetch", json={"urls": ["  "]}).status_code == 400
+
+
+def test_fetch_zu_viele_urls_400(client):
+    urls = [f"https://youtu.be/v{i}" for i in range(21)]
+    r = client.post("/api/projects/Demo/fetch", json={"urls": urls})
+    assert r.status_code == 400
+
+
 def test_spa_serves_index_for_deep_link(client):
     from webtool import app as app_mod
     idx = app_mod._INDEX

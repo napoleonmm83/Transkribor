@@ -8,6 +8,7 @@ from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
+from . import fetch as fetch_mod
 from . import jobs
 from . import paths
 from .edit_model import build_edit_doc
@@ -16,6 +17,7 @@ from .render_md import render_md
 app = FastAPI(title="Transkribor Editor")
 
 AUDIO_EXT = (".mp3", ".wav", ".m4a", ".aac", ".flac", ".ogg", ".opus", ".wma", ".mp4")
+MAX_FETCH_URLS = 20
 
 
 def _bases(project: str):
@@ -184,6 +186,29 @@ def correct_file(project: str, base: str, force: bool = False):
     if force:
         cmd.append("--force")                     # nur nach expliziter UI-Bestätigung (human_edited)
     job_id, started = jobs.start(project, cmd, paths.ROOT, "correct")
+    return {"job_id": job_id, "started": started}
+
+
+class FetchBody(BaseModel):
+    urls: list[str]
+
+
+@app.post("/api/projects/{project}/fetch")
+def fetch_urls(project: str, body: FetchBody):
+    """URL-Import: laedt Audio von YouTube/Instagram und transkribiert genau diese Dateien."""
+    _validate(project)
+    urls = [u.strip() for u in body.urls if u.strip()]
+    if not urls:
+        raise HTTPException(status_code=400, detail="keine URL angegeben")
+    if len(urls) > MAX_FETCH_URLS:
+        raise HTTPException(status_code=400,
+                            detail=f"maximal {MAX_FETCH_URLS} URLs pro Auftrag")
+    try:
+        urls = [fetch_mod.check_url(u) for u in urls]   # zweite Instanz: fetch.py prueft erneut
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    cmd = [sys.executable, "-m", "webtool.fetch", project, *urls]
+    job_id, started = jobs.start(project, cmd, paths.ROOT, "transcribe")
     return {"job_id": job_id, "started": started}
 
 
