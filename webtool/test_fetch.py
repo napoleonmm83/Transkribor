@@ -162,6 +162,16 @@ def test_download_one_stellt_ffmpeg_vor_dem_download_sicher(projekt, monkeypatch
     assert reihenfolge.index("ffmpeg") < reihenfolge.index("download")
 
 
+def test_download_one_ohne_ffmpeg_bricht_vor_dem_download_ab(projekt, monkeypatch):
+    # ensure_ffmpeg() liefert False, statt zu werfen. Ohne Auswertung liefe yt-dlp trotzdem
+    # los und der Postprocessor scheiterte hinterher mit "ffprobe and ffmpeg not found".
+    monkeypatch.setattr(transcribe_mod, "ensure_ffmpeg", lambda: False)
+    monkeypatch.setattr(_FakeYDL, "extract_info",
+                        lambda *a, **k: pytest.fail("ohne ffmpeg darf nichts geladen werden"))
+    with pytest.raises(RuntimeError, match="ffmpeg"):
+        fetch.download_one("Demo", "https://youtu.be/vid123")
+
+
 def test_download_one_ohne_yt_dlp_meldet_klar(projekt, monkeypatch):
     monkeypatch.setattr(fetch, "yt_dlp", None)
     with pytest.raises(RuntimeError, match="yt-dlp"):

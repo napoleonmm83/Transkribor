@@ -14,7 +14,7 @@ export function UrlFetch({ project, onStart }: { project: string; onStart: (res:
     setBusy(true); setErr('')
     try {
       const res = await fetchUrls(project, urls)
-      setText('')
+      if (res.started) setText('')   // nicht gestartet -> Eingabe stehen lassen
       onStart(res)
     } catch (e) {
       setErr((e as Error).message)
