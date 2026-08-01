@@ -33,6 +33,11 @@ export async function startCorrect(project: string): Promise<StartJob> {
 export async function startCorrectFile(project: string, base: string, force: boolean): Promise<StartJob> {
   return jn(await post(`/api/projects/${enc(project)}/files/${enc(base)}/correct${force ? '?force=true' : ''}`))
 }
+export async function fetchUrls(project: string, urls: string[]): Promise<StartJob> {
+  return jn(await fetch(`/api/projects/${enc(project)}/fetch`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ urls }),
+  }))
+}
 export async function getJob(jobId: string): Promise<JobStatus> {
   return jn(await fetch(`/api/jobs/${enc(jobId)}`))
 }

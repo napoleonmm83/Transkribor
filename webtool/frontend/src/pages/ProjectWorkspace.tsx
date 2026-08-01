@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button'
 import { startTranscribe, startCorrect, startCorrectFile, cancelJob } from '@/lib/api'
 import type { StartJob } from '@/lib/types'
 
-const GLOBAL_LABEL = { diarize: 'Diarisieren…', prep: 'Vorbereiten…', glossary: 'Glossar wird erstellt…' } as const
+const GLOBAL_LABEL = { diarize: 'Diarisieren…', prep: 'Vorbereiten…', glossary: 'Glossar wird erstellt…', download: 'Herunterladen…' } as const
 
 export function ProjectWorkspace() {
   const { project } = useParams<{ project: string }>()

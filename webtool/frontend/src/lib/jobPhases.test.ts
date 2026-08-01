@@ -62,3 +62,33 @@ describe('parseJobPhases — transcribe', () => {
     expect(parseJobPhases('transcribe', ['[Demo] FEHLER A: broken pipe']).perBase).toEqual({ A: 'failed' })
   })
 })
+
+describe('URL-Import', () => {
+  it('meldet Herunterladen und danach die Transkription', () => {
+    const p = parseJobPhases('transcribe', [
+      '[fetch] lade Mein Interview …',
+    ])
+    expect(p.global).toBe('download')
+    expect(p.active).toBeNull()
+  })
+
+  it('beendet die Download-Phase nach der Bilanzzeile', () => {
+    const p = parseJobPhases('transcribe', [
+      '[fetch] lade Mein Interview …',
+      '[fetch] fertig Mein Interview',
+      '[fetch] 1 von 1 geladen',
+      '[Demo] -> transkribiere Mein Interview …',
+    ])
+    expect(p.global).toBeNull()
+    expect(p.active).toEqual({ base: 'Mein Interview', phase: 'transcribe' })
+  })
+
+  it('haelt eine fetch-FEHLER-Zeile aus der perBase-Auswertung heraus', () => {
+    // '[fetch] FEHLER <url>: …' darf NICHT als Datei-Fehlschlag gelesen werden
+    const p = parseJobPhases('transcribe', [
+      '[fetch] FEHLER https://youtu.be/x: Video ist nicht öffentlich abrufbar (Login nötig)',
+      '[fetch] 0 von 1 geladen',
+    ])
+    expect(p.perBase).toEqual({})
+  })
+})

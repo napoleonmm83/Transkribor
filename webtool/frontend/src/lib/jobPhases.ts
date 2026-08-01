@@ -18,6 +18,13 @@ export function parseJobPhases(kind: string, lines: string[]): JobPhases {
     let m: RegExpMatchArray | null
 
     if (kind === 'transcribe') {
+      // MUSS vor den Regexen unten stehen: '[fetch] FEHLER <url>: …' wuerde sonst von
+      // /^\[.+?\] FEHLER (.+?): / als Datei-Fehlschlag mit der URL als Basisnamen gelesen.
+      if (l.startsWith('[fetch] ')) {
+        if (/^\[fetch\] \d+ von \d+ geladen$/.test(l)) global = null
+        else { active = null; global = 'download' }
+        continue
+      }
       if ((m = l.match(/^\[.+?\] -> transkribiere (.+) …$/))) { active = { base: m[1], phase: 'transcribe' }; global = null }
       else if ((m = l.match(/^\[.+?\] fertig (.+?): /))) terminal(m[1], 'done')
       else if ((m = l.match(/^\[.+?\] skip \(vorhanden\): (.+)$/))) terminal(m[1], 'skipped')
