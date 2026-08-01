@@ -101,6 +101,10 @@ def download_one(project: str, url: str) -> str:
     """Laedt die Tonspur nach projekte/<project>/audio/. Liefert den Basisnamen."""
     if yt_dlp is None:
         raise RuntimeError(f"yt-dlp ist nicht installiert — {_PIP_HINWEIS}")
+    # Der FFmpegExtractAudio-Postprocessor laeuft im extract_info(download=True) unten und
+    # sucht ffmpeg auf PATH. ensure_ffmpeg() legt den winget-Pfad dorthin — muss also HIER
+    # stehen, nicht erst vor dem Whisper-Lauf in main().
+    transcribe.ensure_ffmpeg()
     adir = os.path.join(paths.project_dir(project), "audio")
     os.makedirs(adir, exist_ok=True)
 
