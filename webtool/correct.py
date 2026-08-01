@@ -13,6 +13,7 @@ API-Key). `prep`/`apply` sind deterministisches Python; der LLM-Schritt liegt da
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -25,6 +26,9 @@ AUDIO_EXT = (".mp3", ".wav", ".m4a", ".aac", ".flac", ".ogg", ".opus", ".wma", "
 
 CLAUDE_MODEL = "opus"
 CLAUDE_TIMEOUT = 900          # s pro claude-Aufruf; Hänger killen statt Job blockieren
+CHUNK_SEGMENTS = 150          # max. Segmente pro claude-Aufruf; darüber wird die Datei gestückelt.
+                              # Der Engpass ist der OUTPUT: ~540 Segmente sind ~15k Tokens JSON am
+                              # Stück und laufen in CLAUDE_TIMEOUT (echter Fall: 21-min-Interview).
 _CREATE_NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 DEFAULT_CONTEXT = (
     "Interviews (gesprochene Sprache oft Schweizerdeutsch/Dialekt), von Whisper "
@@ -253,11 +257,28 @@ Schema:
 Nimm nur Einträge mit vernünftiger Sicherheit auf — ERFINDE KEINE Namen. Lieber wenige sichere als viele geratene. Gib ausser der geschriebenen Datei nichts weiter aus."""
 
 
-def _correct_prompt(base: str, tagged_path: str, cpath: str, gjson: str, context: str) -> str:
+def _scope(id_range, known: str = "") -> tuple:
+    """(Block-Anweisung, Kurzform) für gestückelte Dateien; ('', 'aus der Datei') = ganze Datei.
+    Die schon vergebenen Sprecher-Namen wandern mit, sonst tauft Block 4 denselben
+    Menschen anders als Block 1."""
+    if not id_range:
+        return "", "aus der Datei"
+    a, b = id_range
+    hint = ("\nBereits vergebene Sprecher-Namen aus früheren Blöcken — verwende sie EXAKT so weiter "
+            f"(gleicher Mensch = gleicher Name): {known}" if known else "")
+    block = (f"\nNUR EIN BLOCK: Diese Datei wird blockweise bearbeitet. Lies sie GANZ als Kontext, gib aber "
+             f"AUSSCHLIESSLICH die Segmente mit den IDs {a} bis {b} (einschliesslich) aus — keine ID "
+             f"ausserhalb, keine innerhalb auslassen.{hint}\n")
+    return block, f"von {a} bis {b}"
+
+
+def _correct_prompt(base: str, tagged_path: str, cpath: str, gjson: str, context: str,
+                    id_range=None, known: str = "") -> str:
+    block, scope = _scope(id_range, known)
     return f"""Du korrigierst EIN Interview-Transkript SEGMENT FÜR SEGMENT (oft Schweizerdeutsch -> lesbares Standarddeutsch) und labelst die Sprecher.
 
 Projekt-Kontext: {context or DEFAULT_CONTEXT}
-
+{block}
 1) Lies die Rohsegmente vollständig (Read-Tool) aus:
 {tagged_path}
    Jede Zeile: "[<id>] (Sprecher N) <text>" — das Präfix (Sprecher N) ist die AKUSTISCH erkannte Sprecher-Gruppe (Diarisierung); fehlt es, gibt es keine akustische Info. Unsichere Wörter sind inline als [[Wort|Wahrscheinlichkeit]] markiert (niedrige Whisper-Konfidenz) — dort besonders genau hinsehen.
@@ -266,7 +287,7 @@ Gemeinsames Glossar (für konsistente Schreibweisen — nutze es, ergänze nicht
 {gjson or "(keins)"}
 
 2) KORRIGIEREN: klare ASR-Fehler mit Kontext + Glossar verbessern, zu lesbarem Standarddeutsch normalisieren (Schweizer „ss"). BLEIB TREU: nichts erfinden, den Sinn nicht verändern, nicht über das Nötige hinaus glätten (Füllwörter wie „äh"/„ähm" dürfen dezent weg). Entferne die [[...]]-Markierungen im Ausgabetext.
-3) PRO SEGMENT: gib für JEDE Segment-ID aus der Datei GENAU EINEN Eintrag {{id, speaker, text}} zurück — keine ID auslassen, keine Segmente zusammenfassen (die Redebeitrags-Bündelung passiert später).
+3) PRO SEGMENT: gib für JEDE Segment-ID {scope} GENAU EINEN Eintrag {{id, speaker, text}} zurück — keine ID auslassen, keine Segmente zusammenfassen (die Redebeitrags-Bündelung passiert später).
 4) SPRECHER: Das akustische (Sprecher N)-Präfix ist die WAHRHEIT, WER spricht — vergib pro Cluster GENAU EINEN konsistenten Namen: meist „Interviewer" (stellt Fragen) und die befragte Person (Name/Betrieb falls genannt, sonst „Befragte Person"). Du DARFST zwei Cluster demselben Namen zuordnen, wenn klar dieselbe Person. Eine Cluster-Grenze nur überschreiben, wenn sie offensichtlich falsch ist (z.B. ein einzelnes Rückkanal-Wort). Fehlt das Präfix, ordne nach Inhalt zu (wie bisher). Gib JEDEM Segment einen Sprecher.
 5) UNSICHER: wirklich unklare Stellen NICHT raten — nah am Original belassen und unter annotations vermerken.
 
@@ -285,11 +306,12 @@ Exaktes Schema (Pflicht — sonst bleibt der Text auf dem Rohstand):
 Gib ausser der geschriebenen Datei nichts weiter aus."""
 
 
-def _verify_prompt(base: str, tagged_path: str, cpath: str, context: str) -> str:
+def _verify_prompt(base: str, tagged_path: str, cpath: str, context: str, id_range=None) -> str:
+    block, scope = _scope(id_range)
     return f"""Du prüfst eine bereits erstellte SEGMENT-GENAUE Korrektur auf TREUE gegen das Rohtranskript (TREUE-CHECK) und schreibst die geprüfte Fassung zurück.
 
 Projekt-Kontext: {context or DEFAULT_CONTEXT}
-
+{block}
 1) Lies das ROH vollständig (Read-Tool) aus:
 {tagged_path}
    Jede Zeile: "[<id>] (Sprecher N) <text>" — das (Sprecher N)-Präfix ist die akustische Sprecher-Gruppe (falls vorhanden); unsichere Wörter inline als [[Wort|Wahrscheinlichkeit]] markiert.
@@ -298,12 +320,12 @@ Projekt-Kontext: {context or DEFAULT_CONTEXT}
 
 Prüfe kritisch gegen das ROH — konservativ, im Zweifel näher am Original:
 - HALLUZINATION/DRIFT: Inhalt hinzugefügt/weggelassen/im Sinn verändert, der nicht im Roh steht? Übermässiges Umschreiben? → näher ans Original zurück.
-- VOLLSTÄNDIGKEIT: für JEDE Roh-Segment-ID genau ein Eintrag? Fehlende ergänzen (Text nah am Roh), zusammengefasste auftrennen.
+- VOLLSTÄNDIGKEIT: für JEDE Roh-Segment-ID {scope} genau ein Eintrag? Fehlende ergänzen (Text nah am Roh), zusammengefasste auftrennen.
 - SPRECHER: konsistent pro akustischem (Sprecher N)-Cluster und plausibel (Interviewer stellt Fragen; Antworten korrekt zugeordnet)? Fehlzuordnungen korrigieren.
 - RESTFEHLER: offensichtliche verbleibende ASR-Fehler nur wenn eindeutig (konservativ).
 - UNSICHER: wirklich unklare Stellen NICHT raten — nah am Original belassen und unter annotations vermerken. Entferne evtl. übrige [[...]]-Markierungen im Text.
 
-Schreibe die VOLLSTÄNDIGE, geprüfte Korrektur mit dem Write-Tool als JSON nach GENAU diesem Pfad (alle Segment-IDs, gleiches Schema):
+Schreibe die VOLLSTÄNDIGE, geprüfte Korrektur mit dem Write-Tool als JSON nach GENAU diesem Pfad (alle Segment-IDs {scope}, gleiches Schema):
 {cpath}
 
 Schema:
@@ -345,6 +367,122 @@ def _glossary(project: str, context: str) -> str:
     return json.dumps(g, ensure_ascii=False, indent=1)
 
 
+_ID_RE = re.compile(r"^\[(\d+)\]")
+
+
+def _tagged_ids(tagged_path: str) -> list:
+    """Segment-IDs in genau der Reihenfolge, in der claude sie in <base>.tagged.txt sieht."""
+    with open(tagged_path, encoding="utf-8") as fh:
+        return [int(m.group(1)) for m in (_ID_RE.match(line) for line in fh) if m]
+
+
+def _speaker_hint(docs: list, clusters: dict) -> str:
+    """Sprecher-Namen der schon korrigierten Blöcke — je akustischem Cluster, falls
+    diarisiert, sonst als blosse Namensliste."""
+    by_cluster, names = {}, []
+    for d in docs:
+        for s in (d.get("segments") or []):
+            if not isinstance(s, dict):
+                continue
+            name = str(s.get("speaker") or "").strip()
+            if not name:
+                continue
+            if name not in names:
+                names.append(name)
+            c = clusters.get(s.get("id"))
+            if c and c not in by_cluster:
+                by_cluster[c] = name
+    if by_cluster:
+        return "; ".join(f"{c} = {n}" for c, n in sorted(by_cluster.items()))
+    return ", ".join(names)
+
+
+def _merge_parts(docs: list, base: str) -> dict:
+    """Block-Korrekturen zu EINER correction.json vereinen (IDs aufsteigend, Sprecher-Liste
+    vereinigt, Anmerkungen aneinandergehängt)."""
+    segs, speakers, ann = [], [], []
+    for d in docs:
+        segs.extend(s for s in (d.get("segments") or []) if isinstance(s, dict))
+        for name in (d.get("speakers") or []):
+            if name not in speakers:
+                speakers.append(name)
+        ann.extend(str(a).strip() for a in (d.get("annotations") or []) if a is not None and str(a).strip())
+    segs.sort(key=lambda s: s.get("id") if isinstance(s.get("id"), int) else 0)
+    return {"base": base,
+            "context": next((d.get("context") for d in docs if d.get("context")), ""),
+            "speakers": speakers, "segments": segs, "annotations": ann,
+            "summary": next((d.get("summary") for d in docs if d.get("summary")), "")}
+
+
+def _correct_one(base: str, tagged: str, target: str, gjson: str, context: str, verify: bool,
+                 id_range=None, known: str = "") -> None:
+    """Ein claude-Korrekturlauf (+ optionaler Treue-Pass) mit Ziel `target` — ganze Datei
+    oder ein ID-Block. Die Fortschritts-Zeilen sind Vertrag mit dem Frontend-Job-Parser
+    (webtool/frontend/src/lib/jobPhases.ts) — Format nicht ändern."""
+    print(f"→ Korrigiere {base} …", flush=True)
+    _run_claude(_correct_prompt(base, tagged, target, gjson, context, id_range, known))
+    if verify and _valid_correction(target):    # Treue-Pass nur auf eine GÜLTIGE Erst-Korrektur
+        print(f"→ Verifiziere {base} (Treue gegen Roh) …", flush=True)
+        good = _load(target)                    # Snapshot: darf nicht durch einen kaputten Verify verloren gehen
+        _run_claude(_verify_prompt(base, tagged, target, context, id_range))
+        if not _valid_correction(target):       # Verify hat die gültige Korrektur zerstört -> zurückrollen
+            paths.atomic_write(target, json.dumps(good, ensure_ascii=False, indent=1))
+            print(f"⚠ Verifikation ungültig — behalte unverifizierte {base}.correction.json", flush=True)
+
+
+def _correct_file(project: str, base: str, gjson: str, context: str, verify: bool) -> None:
+    """Korrektur für EINE Datei -> <base>.correction.json.
+
+    Bis CHUNK_SEGMENTS Segmente genau wie bisher: ein claude-Aufruf schreibt direkt die
+    correction.json. Darüber blockweise, weil ein einzelner Aufruf sonst tausende Zeilen
+    JSON am Stück schreiben müsste und in CLAUDE_TIMEOUT läuft. Jeder Block schreibt sein
+    eigenes <base>.partN.correction.json; die bleiben bei Abbruch/Fehler liegen und werden
+    beim nächsten Lauf wiederverwendet (Resume je Block statt je Datei). Zusammengeführt
+    wird nur, wenn ALLE Blöcke gültig sind — eine halbe correction.json würde beim nächsten
+    Lauf als fertig durchgewinkt und die fehlenden Blöcke nie nachgeholt."""
+    tdir = paths.transkripte_dir(project)
+    cpath = os.path.abspath(os.path.join(tdir, base + ".correction.json"))
+    tagged = os.path.abspath(os.path.join(tdir, base + ".tagged.txt"))
+    raw_json = os.path.join(tdir, base + ".json")   # Frische-Anker der Blöcke: die Roh-JSON, NICHT
+    ids = _tagged_ids(tagged)                       # tagged.txt — das schreibt cmd_prep bei JEDEM Lauf neu,
+                                                    # womit kein Block je „neuer" wäre und der Resume tot.
+    if len(ids) <= CHUNK_SEGMENTS:
+        _correct_one(base, tagged, cpath, gjson, context, verify)
+        return
+    chunks = [ids[i:i + CHUNK_SEGMENTS] for i in range(0, len(ids), CHUNK_SEGMENTS)]
+    clusters = _load_diar_clusters(tdir, base) if _diarize_enabled() else {}
+    print(f"  {len(ids)} Segmente → {len(chunks)} Blöcke à max. {CHUNK_SEGMENTS}", flush=True)
+    docs, parts = [], []
+    for i, chunk in enumerate(chunks, 1):
+        ppath = os.path.abspath(os.path.join(tdir, f"{base}.part{i}.correction.json"))
+        parts.append(ppath)
+        print(f"  Block {i}/{len(chunks)} (IDs {chunk[0]}–{chunk[-1]})", flush=True)
+        if _valid_correction(ppath) and os.path.getmtime(ppath) >= os.path.getmtime(raw_json):
+            print(f"  ↷ Block {i} schon vorhanden", flush=True)
+        else:
+            _correct_one(base, tagged, ppath, gjson, context, verify,
+                         id_range=(chunk[0], chunk[-1]), known=_speaker_hint(docs, clusters))
+        if _valid_correction(ppath):
+            docs.append(_load(ppath))
+        else:
+            print(f"  ✗ Block {i} ohne gültiges Ergebnis", flush=True)
+    if len(docs) < len(chunks):
+        print(f"  ✗ {len(chunks) - len(docs)} von {len(chunks)} Blöcken fehlgeschlagen — Teil-Dateien "
+              f"bleiben liegen, ein erneuter Lauf holt nur diese nach", flush=True)
+        return
+    merged = _merge_parts(docs, base)
+    fehlend = len(ids) - len({s.get("id") for s in merged["segments"]})
+    if fehlend > 0:                              # Blöcke gültig, aber IDs ausgelassen -> apply lässt sie roh
+        print(f"  ⚠ {fehlend} Segment(e) ohne Korrektur — bleiben auf Rohstand", flush=True)
+    paths.atomic_write(cpath, json.dumps(merged, ensure_ascii=False, indent=1))
+    print(f"  ✓ {len(chunks)} Blöcke zusammengeführt ({len(merged['segments'])} Segmente)", flush=True)
+    for p in parts:                              # erst nach erfolgreichem Merge aufräumen
+        try:
+            os.remove(p)
+        except OSError:
+            pass
+
+
 def cmd_run(project: str, base: str = None, force: bool = False, verify: bool = True) -> int:
     tdir = paths.transkripte_dir(project)
     all_bases = bases(project)
@@ -378,16 +516,7 @@ def cmd_run(project: str, base: str = None, force: bool = False, verify: bool = 
             if reuse:
                 print(f"↷ nutze vorhandene {b}.correction.json", flush=True)
             else:
-                print(f"→ Korrigiere {b} …", flush=True)
-                tagged = os.path.abspath(os.path.join(tdir, b + ".tagged.txt"))
-                _run_claude(_correct_prompt(b, tagged, os.path.abspath(cpath), gjson, context))
-                if verify and _valid_correction(cpath):    # Treue-Pass nur auf eine GÜLTIGE Erst-Korrektur
-                    print(f"→ Verifiziere {b} (Treue gegen Roh) …", flush=True)
-                    good = _load(cpath)                     # Snapshot: darf nicht durch einen kaputten Verify verloren gehen
-                    _run_claude(_verify_prompt(b, tagged, os.path.abspath(cpath), context))
-                    if not _valid_correction(cpath):        # Verify hat die gültige Korrektur zerstört -> zurückrollen
-                        paths.atomic_write(cpath, json.dumps(good, ensure_ascii=False, indent=1))
-                        print(f"⚠ Verifikation ungültig — behalte unverifizierte {b}.correction.json", flush=True)
+                _correct_file(project, b, gjson, context, verify)
             if not _valid_correction(cpath):
                 print(f"✗ FEHLT/ungültig: {b}.correction.json — überspringe", flush=True)
                 continue
