@@ -143,9 +143,18 @@ gewöhnlicher Job ist.
 
 ## 7 · Abhängigkeit
 
-`yt-dlp` neu in `requirements.txt`. Unvermeidbar — die Extraktion von YouTube/Instagram
-ist nichts, was ein paar Zeilen selbst leisten. ffmpeg ist bereits Voraussetzung
+`yt-dlp` neu im `.venv`. Unvermeidbar — die Extraktion von YouTube/Instagram ist nichts,
+was ein paar Zeilen selbst leisten. ffmpeg ist bereits Voraussetzung
 (`transcribe.py:ensure_ffmpeg`) und wird für die m4a-Extraktion mitbenutzt.
+
+Das Repo hat **keine `requirements.txt`** (torch cu128 hängt an einem Custom-Index; die
+Umgebung ist in `CLAUDE.md` unter „Umgebung (Fakten)" beschrieben). Der URL-Import führt
+deshalb keine Manifest-Datei ein, sondern folgt dem Muster von pyannote:
+`.venv\Scripts\pip install yt-dlp` plus eine Zeile in `CLAUDE.md`.
+
+**Instagram altert schnell:** yt-dlp-Extraktoren brechen dort regelmäßig. Deshalb enthält
+die Fehlermeldung bei nicht-Login-Fehlern den Hinweis `pip install -U yt-dlp` — das ist in
+der Praxis der häufigste Fix.
 
 ## 8 · Tests (`webtool/test_fetch.py`)
 
