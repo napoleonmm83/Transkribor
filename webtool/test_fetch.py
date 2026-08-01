@@ -143,6 +143,25 @@ def test_download_one_weicht_bei_kollision_aus(projekt):
     assert (projekt / "Demo" / "audio" / "Mein Interview.m4a").read_bytes() == b"alt"
 
 
+def test_download_one_stellt_ffmpeg_vor_dem_download_sicher(projekt, monkeypatch):
+    # E2E-Fund: der FFmpegExtractAudio-Postprocessor laeuft WAEHREND download_one.
+    # ensure_ffmpeg erst in main() (nach allen Downloads) ist zu spaet -> yt-dlp bricht mit
+    # "ffprobe and ffmpeg not found" ab, obwohl die .m4a schon auf der Platte liegt.
+    reihenfolge = []
+    monkeypatch.setattr(transcribe_mod, "ensure_ffmpeg",
+                        lambda: reihenfolge.append("ffmpeg") or True)
+    orig = _FakeYDL.extract_info
+
+    def spy(self, url, download=False):
+        if download:
+            reihenfolge.append("download")
+        return orig(self, url, download=download)
+
+    monkeypatch.setattr(_FakeYDL, "extract_info", spy)
+    fetch.download_one("Demo", "https://youtu.be/vid123")
+    assert reihenfolge.index("ffmpeg") < reihenfolge.index("download")
+
+
 def test_download_one_ohne_yt_dlp_meldet_klar(projekt, monkeypatch):
     monkeypatch.setattr(fetch, "yt_dlp", None)
     with pytest.raises(RuntimeError, match="yt-dlp"):
