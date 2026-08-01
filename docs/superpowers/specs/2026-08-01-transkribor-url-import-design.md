@@ -68,7 +68,9 @@ Marcus später in der Dateiliste sieht. Ableitung:
 
 - Zeichen entfernen/ersetzen, die `safe_name()` ablehnt: `/ \ : ..` sowie NUL
 - Steuerzeichen und für Windows unzulässige Zeichen (`< > " | ? *`) entfernen
-- Umlaute/ß bleiben erhalten (lesbar; das Dateisystem ist NTFS/UTF-8)
+- Ergebnis ist **reines ASCII**: Umlaute/ß werden umgeschrieben (`ü` → `ue`, `ß` → `ss`),
+  Akzente/Emoji/fremde Schriften fallen weg. Entscheidung Marcus — lesbar bleibt wichtiger
+  als originalgetreu, und ASCII-Namen überleben jede Toolchain unfallfrei.
 - Mehrfach-Leerzeichen kollabieren, an den Rändern trimmen
 - auf 80 Zeichen kürzen
 - leeres Ergebnis (z. B. rein emoji-Titel) → Fallback `<plattform>-<video-id>`
@@ -182,7 +184,8 @@ Ergänzend in `test_api.py`: `POST …/fetch` mit ungültiger URL → 400.
 
 1. `transcribe.py`: Parameter `only` + Test
 2. `webtool/fetch.py` inkl. Basisnamen-Ableitung + `test_fetch.py`
-3. `requirements.txt`: `yt-dlp`
+3. `yt-dlp` ins venv installieren (das Repo führt keine `requirements.txt`, siehe Abschnitt 7)
+   und den Schritt in `CLAUDE.md` dokumentieren
 4. `app.py`: `POST /api/projects/{project}/fetch` + Test
 5. Frontend: `api.ts`, `jobPhases.ts`, `UrlFetch.tsx`, `ProjectWorkspace.tsx`
 6. End-to-End mit einem echten öffentlichen YouTube-Video und einem öffentlichen Reel

@@ -29,6 +29,17 @@ describe('UrlFetch', () => {
     expect(onStart).not.toHaveBeenCalled()
   })
 
+  it('behaelt die URLs, wenn schon ein Job laeuft', async () => {
+    // started:false heisst "nicht gestartet" -> die Eingabe darf nicht verloren gehen,
+    // sonst muss Marcus alle URLs neu eintippen, nur um es gleich noch mal zu versuchen.
+    vi.mocked(api.fetchUrls).mockResolvedValue({ job_id: 'j9', started: false })
+    render(<UrlFetch project="Demo" onStart={vi.fn()} />)
+    const feld = screen.getByLabelText('Video-URLs')
+    fireEvent.change(feld, { target: { value: 'https://youtu.be/a' } })
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /holen/i })) })
+    expect(feld).toHaveValue('https://youtu.be/a')
+  })
+
   it('bleibt ohne Eingabe untaetig', () => {
     render(<UrlFetch project="Demo" onStart={vi.fn()} />)
     expect(screen.getByRole('button', { name: /holen/i })).toBeDisabled()
