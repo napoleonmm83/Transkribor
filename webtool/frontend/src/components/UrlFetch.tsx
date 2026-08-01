@@ -1,0 +1,48 @@
+import { useState } from 'react'
+import { Link2 } from 'lucide-react'
+import { fetchUrls } from '@/lib/api'
+import { Button } from '@/components/ui/button'
+import type { StartJob } from '@/lib/types'
+
+export function UrlFetch({ project, onStart }: { project: string; onStart: (res: StartJob) => void }) {
+  const [text, setText] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  const urls = text.split('\n').map(u => u.trim()).filter(Boolean)
+
+  const submit = async () => {
+    setBusy(true); setErr('')
+    try {
+      const res = await fetchUrls(project, urls)
+      setText('')
+      onStart(res)
+    } catch (e) {
+      setErr((e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="rounded border p-3">
+      <label htmlFor="url-fetch" className="mb-1 block text-sm text-muted-foreground">
+        Video-URLs
+      </label>
+      <textarea
+        id="url-fetch" aria-label="Video-URLs" rows={2} value={text} disabled={busy}
+        onChange={e => setText(e.target.value)}
+        placeholder="YouTube- oder Instagram-Reel-Links, eine URL pro Zeile"
+        className="w-full resize-y rounded border bg-background p-2 text-sm"
+      />
+      <div className="mt-2 flex items-center gap-3">
+        <Button variant="outline" size="sm" disabled={!urls.length || busy} onClick={submit}>
+          <Link2 className="size-4" /> {busy ? 'startet…' : 'Holen'}
+        </Button>
+        {urls.length > 1 && (
+          <span className="text-xs text-muted-foreground">{urls.length} URLs</span>
+        )}
+        {err && <span className="text-xs text-destructive">{err}</span>}
+      </div>
+    </div>
+  )
+}
