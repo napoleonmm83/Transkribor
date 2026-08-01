@@ -205,8 +205,21 @@ def test_check_url_lehnt_alles_andere_ab(url):
 
 # --- safe_base ---------------------------------------------------------------
 
-def test_safe_base_behaelt_umlaute_und_lesbarkeit():
-    assert fetch.safe_base("Interview mit Hans Müller", "yt-1") == "Interview mit Hans Müller"
+def test_safe_base_transliteriert_umlaute():
+    # 'raus' heisst umschreiben, nicht loeschen -- 'Mller' waere unlesbar
+    assert fetch.safe_base("Interview mit Hans Müller", "yt-1") == "Interview mit Hans Mueller"
+    assert fetch.safe_base("Grüße aus Zürich", "yt-1") == "Gruesse aus Zuerich"
+    assert fetch.safe_base("ÄÖÜ Test", "yt-1") == "AeOeUe Test"
+
+
+def test_safe_base_wirft_emoji_und_akzente_raus():
+    assert fetch.safe_base("Reel 🎬 aus Bern", "yt-1") == "Reel aus Bern"
+    assert fetch.safe_base("Café Niño", "yt-1") == "Cafe Nino"
+
+
+def test_safe_base_ergebnis_ist_reines_ascii():
+    got = fetch.safe_base("Ø 漢字 Ünter", "yt-1")
+    assert got.isascii()
 
 
 def test_safe_base_entfernt_pfad_und_windows_zeichen():
@@ -285,6 +298,9 @@ ALLOWED_HOSTS = {
 MAX_BASE = 80
 # Pfadtrenner, unter Windows verbotene Zeichen und Steuerzeichen
 _BAD = re.compile(r'[\\/:*?"<>|\x00-\x1f]')
+# Dateinamen bleiben ASCII (Entscheidung Marcus): umschreiben statt loeschen.
+_UMLAUTE = str.maketrans({"ä": "ae", "ö": "oe", "ü": "ue", "ß": "ss",
+                          "Ä": "Ae", "Ö": "Oe", "Ü": "Ue"})
 
 
 def check_url(url: str) -> str:
@@ -300,12 +316,19 @@ def check_url(url: str) -> str:
 
 
 def safe_base(title: str, fallback: str) -> str:
-    """Videotitel -> lesbarer Dateiname, der paths.safe_name() ueberlebt."""
-    s = unicodedata.normalize("NFC", title or "")
+    """Videotitel -> ASCII-Dateiname, der paths.safe_name() ueberlebt.
+
+    Umlaute werden umgeschrieben (Mueller, nicht Mller), alles uebrige Nicht-ASCII
+    (Emoji, Akzente, fremde Schriften) faellt weg. Hart auf MAX_BASE gekuerzt.
+    """
+    s = unicodedata.normalize("NFC", title or "").translate(_UMLAUTE)
+    # NFKD zerlegt é -> e+Akzent, 'ignore' wirft den Akzent und alles Uebrige weg.
+    # MUSS nach dem translate stehen, sonst wuerde ü ueber u+Trema zu 'u' statt 'ue'.
+    s = unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode("ascii")
     s = _BAD.sub(" ", s)          # ersetzen statt loeschen -> keine Wortverklebung
     s = s.replace(".", " ")       # '..' verbietet safe_name; einzelne Punkte stoeren splitext
     s = re.sub(r"\s+", " ", s).strip(" -")
-    s = s[:MAX_BASE].strip(" -")  # nach dem Kuerzen erneut trimmen
+    s = s[:MAX_BASE].strip(" -")  # harter Schnitt, danach erneut trimmen
     return paths.safe_name(s or fallback)   # letzte Instanz; wirft nur bei einem Bug
 
 
