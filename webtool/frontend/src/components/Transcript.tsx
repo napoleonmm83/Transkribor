@@ -4,10 +4,11 @@ import type { EditDoc, Segment, Thresholds } from '@/lib/types'
 import { groupIntoTurns } from '@/lib/grouping'
 import { SpeakerTurn } from './SpeakerTurn'
 
-export function Transcript({ doc, loading, thr, activeId, onPlaySeg, onPlayTurn, updateSegment }: {
+export function Transcript({ doc, loading, thr, activeId, onPlaySeg, onPlayTurn, updateSegment, renameSpeaker }: {
   doc: EditDoc | null; loading?: boolean; thr: Thresholds; activeId: number | null;
   onPlaySeg: (s: Segment) => void; onPlayTurn: (segs: Segment[]) => void;
   updateSegment: (id: number, patch: Partial<Segment>) => void;
+  renameSpeaker: (from: string, to: string) => void;
 }) {
   const turns = useMemo(() => (doc ? groupIntoTurns(doc.segments) : []), [doc])
   const speakerOptions = useMemo(() =>
@@ -36,7 +37,7 @@ export function Transcript({ doc, loading, thr, activeId, onPlaySeg, onPlayTurn,
         {turns.map(t => (
           <SpeakerTurn key={t.key} turn={t} thr={thr} activeId={activeId}
             onPlaySeg={onPlaySeg} onPlayTurn={onPlayTurn}
-            updateSegment={updateSegment} speakerOptions={speakerOptions} />
+            updateSegment={updateSegment} renameSpeaker={renameSpeaker} speakerOptions={speakerOptions} />
         ))}
         {doc.annotations.length > 0 && (
           <section className="mt-8 border-t pt-4">

@@ -18,7 +18,7 @@ export function EditorView() {
   const navigate = useNavigate()
   const { projects, loading: projectsLoading, refresh } = useProjects()
   const sel = project && base ? { project, base } : null
-  const { doc, dirty, loading: docLoading, updateSegment, save, exportDownload, reload } = useDoc(sel?.project ?? null, sel?.base ?? null)
+  const { doc, dirty, loading: docLoading, updateSegment, renameSpeaker, save, exportDownload, reload } = useDoc(sel?.project ?? null, sel?.base ?? null)
   const { thr, setThr } = useThresholds()
   const { start } = useJob()
   const { job, phases, adopt } = useActiveJob()
@@ -71,7 +71,7 @@ export function EditorView() {
         <Transcript doc={doc} loading={docLoading} thr={thr} activeId={activeId}
           onPlaySeg={s => waveRef.current?.playSegment(s)}
           onPlayTurn={segs => waveRef.current?.playTurn(segs)}
-          updateSegment={updateSegment} />
+          updateSegment={updateSegment} renameSpeaker={renameSpeaker} />
       </main>
       <div className="col-start-2">
         <PlayerDock url={sel ? audioUrl(sel.project, sel.base) : undefined} onTime={onTime} waveRef={waveRef} />
