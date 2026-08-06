@@ -1,9 +1,9 @@
-import { useEffect } from 'react'
+import { useEffect, useMemo } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { Play, Pencil, X } from 'lucide-react'
 import { useProjects } from '@/hooks/useProjects'
-import { useActiveJob } from '@/hooks/useActiveJob'
+import { mergePhases, useActiveJob } from '@/hooks/useActiveJob'
 import { FileStatusPill } from '@/components/FileStatusPill'
 import { UploadDropzone } from '@/components/UploadDropzone'
 import { UrlFetch } from '@/components/UrlFetch'
@@ -19,9 +19,13 @@ export function ProjectWorkspace() {
   const { project } = useParams<{ project: string }>()
   const navigate = useNavigate()
   const { projects, refresh } = useProjects()
-  const { jobs, phases, adopt, onSettled } = useActiveJob()
+  const { jobs, adopt, onSettled } = useActiveJob()
   const p = projects.find(x => x.name === project)
-  const meine = jobs.filter(j => j.project === project && j.status === 'running')
+  const meine = useMemo(() => jobs.filter(j => j.project === project && j.status === 'running'),
+    [jobs, project])
+  // NUR die eigenen Jobs mergen: Basisnamen wiederholen sich ueber Projekte hinweg
+  // ('Timeline 1' liegt in mehreren), sonst zeigt die Pille den fremden Status.
+  const phases = useMemo(() => mergePhases(meine), [meine])
   const running = meine.length > 0
 
   useEffect(() => onSettled(() => refresh()), [onSettled, refresh])

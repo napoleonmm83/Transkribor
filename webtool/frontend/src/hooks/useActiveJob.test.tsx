@@ -7,7 +7,8 @@ import * as api from '@/lib/api'
 vi.mock('@/lib/api')
 
 function Probe() {
-  const { jobs, phases, adopt } = useActiveJob()
+  const { jobs, adopt } = useActiveJob()
+  const phases = mergePhases(jobs.filter(j => j.status === 'running'))
   return (
     <div>
       <button onClick={() => adopt('j1', 'Demo', 'correct')}>go</button>
@@ -68,6 +69,14 @@ describe('mergePhases', () => {
     expect(m.active).toEqual({ A: { phase: 'correct' } })
     expect(m.perBase).toEqual({ B: 'done' })
     expect(m.global).toBeNull()
+  })
+
+  it('bei gleicher Datei in zwei Jobs gewinnt transcribe — unabhaengig von der Reihenfolge', () => {
+    // Das Transkript wird gerade ersetzt, die Korrektur arbeitet auf gleich veralteten Daten.
+    const t = job('j1', 'transcribe', { global: null, active: { A: { phase: 'transcribe', pct: 20 } }, perBase: {} })
+    const c = job('j2', 'correct', { global: null, active: { A: { phase: 'correct' } }, perBase: {} })
+    expect(mergePhases([t, c]).active.A).toEqual({ phase: 'transcribe', pct: 20 })
+    expect(mergePhases([c, t]).active.A).toEqual({ phase: 'transcribe', pct: 20 })
   })
 
   it('global gilt nur, solange keine Datei laeuft', () => {

@@ -4,7 +4,7 @@ import { useProjects } from '@/hooks/useProjects'
 import { useDoc } from '@/hooks/useDoc'
 import { useThresholds } from '@/hooks/useThresholds'
 import { useJob } from '@/hooks/useJob'
-import { useActiveJob } from '@/hooks/useActiveJob'
+import { mergePhases, useActiveJob } from '@/hooks/useActiveJob'
 import { uploadAudio, audioUrl, startTranscribe, startCorrect, startCorrectFile } from '@/lib/api'
 import { Sidebar } from '@/components/Sidebar'
 import { Toolbar } from '@/components/Toolbar'
@@ -21,8 +21,11 @@ export function EditorView() {
   const { doc, dirty, loading: docLoading, updateSegment, renameSpeaker, save, exportDownload, reload } = useDoc(sel?.project ?? null, sel?.base ?? null)
   const { thr, setThr } = useThresholds()
   const { start } = useJob()
-  const { jobs, phases, adopt } = useActiveJob()
-  const running = jobs.some(j => j.project === project && j.status === 'running')
+  const { jobs, adopt } = useActiveJob()
+  const meine = useMemo(() => jobs.filter(j => j.project === project && j.status === 'running'),
+    [jobs, project])
+  const phases = useMemo(() => mergePhases(meine), [meine])   // nur eigenes Projekt, s. mergePhases
+  const running = meine.length > 0
   const activeProject = projects.find(x => x.name === project)
   const aktiveIds = (activeProject?.active_jobs ?? []).map(j => j.id).join(',')
   useEffect(() => {

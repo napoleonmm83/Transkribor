@@ -76,7 +76,9 @@ def _run(jid, cmd, cwd):
             fn()
         except Exception as e:                # ein kaputter Nachlauf darf den Job nicht faerben
             with _lock:
-                _jobs[jid]["lines"].append(f"NACHLAUF-FEHLER: {e}")
+                r = _jobs.get(jid)            # der Nachlauf dauert Minuten — der Job kann
+                if r is not None:             # zwischenzeitlich weggepruned worden sein
+                    r["lines"].append(f"NACHLAUF-FEHLER: {e}")
 
 
 def _run_proc(jid, cmd, cwd):

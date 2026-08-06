@@ -637,3 +637,49 @@ def test_parallel_calls_stay_under_the_global_cap(project, monkeypatch):
     assert correct.cmd_run("Demo", verify=False) == 2          # beide Dateien fertig
     assert state["max"] <= 2                                   # Deckel hat gehalten
     assert state["max"] > 1                                    # ... und es lief wirklich parallel
+
+
+def test_verify_pass_bekommt_die_schon_vergebenen_sprechernamen(project, monkeypatch):
+    """Der Treue-Pass schreibt die Datei NEU und prueft dabei die Sprecherzuordnung. Ohne
+    `known` taufte er Block 2..n um und machte den Anker aus Block 1 wieder zunichte."""
+    _root, t = project
+    _write_raw(t, "S1", 4)
+    monkeypatch.setattr(correct, "CHUNK_SEGMENTS", 2)
+    calls = []
+    monkeypatch.setattr(correct, "_run_claude", _chunk_claude(t, calls))
+    assert correct.cmd_run("Demo") == 1
+    verifies = [c for c in calls if "TREUE-CHECK" in c]
+    assert len(verifies) == 2
+    spaeter = [c for c in verifies if "IDs 0 bis 1" not in c]
+    assert spaeter and all("Bereits vergebene Sprecher-Namen" in c for c in spaeter)
+
+
+def test_gescheiterter_block1_stoppt_die_datei(project, monkeypatch):
+    """Sonst schreiben die Bloecke 2..n gueltige Teil-Dateien mit selbst erfundenen Namen,
+    die der naechste Lauf als 'schon vorhanden' wiederverwendet — dauerhaft inkonsistent."""
+    _root, t = project
+    _write_raw(t, "S1", 6)
+    monkeypatch.setattr(correct, "CHUNK_SEGMENTS", 2)
+    schreibe = _chunk_claude(t, [])
+
+    def nur_block1_faellt_aus(prompt):
+        if "IDs 0 bis 1" in prompt and "TREUE-CHECK" not in prompt:
+            return                                   # claude schreibt nichts -> Block 1 ungueltig
+        schreibe(prompt)
+
+    monkeypatch.setattr(correct, "_run_claude", nur_block1_faellt_aus)
+    assert correct.cmd_run("Demo", verify=False) == 0
+    assert not (t / "S1.correction.json").exists()
+    assert not (t / "S1.part2.correction.json").exists()   # Block 2 lief gar nicht erst
+    assert not (t / "S1.part3.correction.json").exists()
+
+
+def test_kaputtes_TRANSKRIBOR_PARALLEL_faellt_auf_den_default(monkeypatch):
+    monkeypatch.setenv("TRANSKRIBOR_PARALLEL", "drei")
+    import importlib
+    neu = importlib.reload(correct)
+    try:
+        assert neu.CLAUDE_PARALLEL == 3
+    finally:
+        monkeypatch.delenv("TRANSKRIBOR_PARALLEL")
+        importlib.reload(correct)

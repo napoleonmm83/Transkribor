@@ -63,4 +63,26 @@ describe('ProjectWorkspace (Stub)', () => {
     expect(screen.getAllByRole('button', { name: /Abbrechen/ })).toHaveLength(2)
     expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '40')
   })
+
+  it('zeigt NICHT den Status einer gleichnamigen Datei aus einem anderen Projekt', async () => {
+    // 'Timeline 1' liegt real in mehreren Projekten — ohne Projekt-Filter wuerde die Pille
+    // den Fortschritt des fremden Jobs anzeigen.
+    vi.mocked(api.listProjects).mockResolvedValue([
+      { name: 'Demo', files: [{ base: 'Timeline 1', has_audio: true, has_raw: true, has_edit: false, has_md: false }],
+        active_jobs: [] },
+      { name: 'Anderes', files: [{ base: 'Timeline 1', has_audio: true, has_raw: true, has_edit: false, has_md: false }],
+        active_jobs: [{ id: 'fremd', kind: 'correct' }] },
+    ])
+    vi.mocked(api.getJob).mockResolvedValue({ status: 'running', lines: ['→ Korrigiere Timeline 1 …'] })
+    render(
+      <MemoryRouter initialEntries={['/p/Demo']}>
+        <JobProvider intervalMs={5}>
+          <Routes><Route path="/p/:project" element={<ProjectWorkspace />} /></Routes>
+        </JobProvider>
+      </MemoryRouter>,
+    )
+    expect(await screen.findByRole('button', { name: 'Timeline 1' })).toBeInTheDocument()
+    expect(screen.queryByText('Korrigieren Timeline 1…')).not.toBeInTheDocument()   // keine Job-Leiste
+    expect(screen.queryByRole('button', { name: /Abbrechen/ })).not.toBeInTheDocument()
+  })
 })
