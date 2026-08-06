@@ -10,7 +10,7 @@ type Ctx = {
   adopt: (id: string, project: string, kind: string) => void
   onSettled: (fn: () => void) => () => void
 }
-const EMPTY: JobPhases = { global: null, active: null, perBase: {} }
+const EMPTY: JobPhases = { global: null, active: {}, perBase: {} }
 const JobContext = createContext<Ctx | null>(null)
 
 export function JobProvider({ children, intervalMs = 1500 }: { children: ReactNode; intervalMs?: number }) {

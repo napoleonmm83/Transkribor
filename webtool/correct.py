@@ -17,6 +17,8 @@ import re
 import shutil
 import subprocess
 import sys
+import threading
+from concurrent.futures import ThreadPoolExecutor
 
 from . import paths
 from .edit_model import tag_uncertain_segments, apply_correction
@@ -29,6 +31,11 @@ CLAUDE_TIMEOUT = 900          # s pro claude-Aufruf; Hänger killen statt Job bl
 CHUNK_SEGMENTS = 150          # max. Segmente pro claude-Aufruf; darüber wird die Datei gestückelt.
                               # Der Engpass ist der OUTPUT: ~540 Segmente sind ~15k Tokens JSON am
                               # Stück und laufen in CLAUDE_TIMEOUT (echter Fall: 21-min-Interview).
+# Gleichzeitige claude-Aufrufe. Die Aufrufe warten fast nur auf Opus, also parallelisieren
+# Threads sie gut. Der Deckel sitzt bewusst an _run_claude und nicht an den Executors: Datei-
+# und Block-Parallelität wären sonst multiplikativ (3 Dateien × 3 Blöcke = 9 Opus-Sessions).
+CLAUDE_PARALLEL = max(1, int(os.environ.get("TRANSKRIBOR_PARALLEL") or 3))
+_claude_slots = threading.Semaphore(CLAUDE_PARALLEL)
 _CREATE_NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 DEFAULT_CONTEXT = (
     "Interviews (gesprochene Sprache oft Schweizerdeutsch/Dialekt), von Whisper "
@@ -218,16 +225,21 @@ def _run_claude(prompt: str) -> None:
     except FileNotFoundError as e:
         print(f"  {e}", flush=True)
         return
+    # Ohne MCP-Server: 16,3s -> 7,7s Startup je Aufruf (gemessen). Die Korrektur braucht nur
+    # Read/Write — und sie verarbeitet nicht vertrauenswürdigen Transkripttext, da haben die
+    # persönlichen MCP-Server (Mail, Notion, …) ohnehin nichts verloren.
     cmd = [exe, "-p", "--model", CLAUDE_MODEL,
            "--permission-mode", "acceptEdits", "--allowedTools", "Read,Write",
+           "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}',
            "--add-dir", paths.projekte_root()]
     try:
         # ponytail: subprocess.run-timeout killt nur den claude-Prozess, nicht dessen
         # Kind-Prozessbaum (MCP-Server) — für ein lokales Ein-Nutzer-Tool ok; falls je
         # relevant: claude in einem Windows-Job-Object starten und die Gruppe killen.
-        r = subprocess.run(cmd, cwd=paths.projekte_root(), input=prompt, capture_output=True,
-                           text=True, encoding="utf-8", errors="replace", timeout=CLAUDE_TIMEOUT,
-                           creationflags=_CREATE_NO_WINDOW)
+        with _claude_slots:      # globaler Deckel über alle parallelen Dateien UND Blöcke
+            r = subprocess.run(cmd, cwd=paths.projekte_root(), input=prompt, capture_output=True,
+                               text=True, encoding="utf-8", errors="replace", timeout=CLAUDE_TIMEOUT,
+                               creationflags=_CREATE_NO_WINDOW)
         if r.returncode != 0:
             tail = ((r.stdout or "") + (r.stderr or "")).strip()[-500:]
             print(f"  claude exit {r.returncode}: {tail}", flush=True)
@@ -415,14 +427,16 @@ def _merge_parts(docs: list, base: str) -> dict:
 
 
 def _correct_one(base: str, tagged: str, target: str, gjson: str, context: str, verify: bool,
-                 id_range=None, known: str = "") -> None:
+                 id_range=None, known: str = "", part: str = "") -> None:
     """Ein claude-Korrekturlauf (+ optionaler Treue-Pass) mit Ziel `target` — ganze Datei
     oder ein ID-Block. Die Fortschritts-Zeilen sind Vertrag mit dem Frontend-Job-Parser
-    (webtool/frontend/src/lib/jobPhases.ts) — Format nicht ändern."""
-    print(f"→ Korrigiere {base} …", flush=True)
+    (webtool/frontend/src/lib/jobPhases.ts) — Format nicht ändern. `part` (z.B. ' · Block 2/3')
+    gehört in JEDE Zeile: bei parallelen Läufen verschränken sich die Ausgaben, eine Zeile
+    ohne Basisnamen liesse sich keinem Lauf mehr zuordnen."""
+    print(f"→ Korrigiere {base}{part} …", flush=True)
     _run_claude(_correct_prompt(base, tagged, target, gjson, context, id_range, known))
     if verify and _valid_correction(target):    # Treue-Pass nur auf eine GÜLTIGE Erst-Korrektur
-        print(f"→ Verifiziere {base} (Treue gegen Roh) …", flush=True)
+        print(f"→ Verifiziere {base}{part} (Treue gegen Roh) …", flush=True)
         good = _load(target)                    # Snapshot: darf nicht durch einen kaputten Verify verloren gehen
         _run_claude(_verify_prompt(base, tagged, target, context, id_range))
         if not _valid_correction(target):       # Verify hat die gültige Korrektur zerstört -> zurückrollen
@@ -451,31 +465,43 @@ def _correct_file(project: str, base: str, gjson: str, context: str, verify: boo
         return
     chunks = [ids[i:i + CHUNK_SEGMENTS] for i in range(0, len(ids), CHUNK_SEGMENTS)]
     clusters = _load_diar_clusters(tdir, base) if _diarize_enabled() else {}
-    print(f"  {len(ids)} Segmente → {len(chunks)} Blöcke à max. {CHUNK_SEGMENTS}", flush=True)
-    docs, parts = [], []
-    for i, chunk in enumerate(chunks, 1):
-        ppath = os.path.abspath(os.path.join(tdir, f"{base}.part{i}.correction.json"))
-        parts.append(ppath)
-        print(f"  Block {i}/{len(chunks)} (IDs {chunk[0]}–{chunk[-1]})", flush=True)
+    parts = [os.path.abspath(os.path.join(tdir, f"{base}.part{i}.correction.json"))
+             for i in range(1, len(chunks) + 1)]
+    print(f"  {base}: {len(ids)} Segmente → {len(chunks)} Blöcke à max. {CHUNK_SEGMENTS}", flush=True)
+
+    def block(i: int, known: str):
+        chunk, ppath = chunks[i - 1], parts[i - 1]
+        label = f" · Block {i}/{len(chunks)}"
         if _valid_correction(ppath) and os.path.getmtime(ppath) >= os.path.getmtime(raw_json):
-            print(f"  ↷ Block {i} schon vorhanden", flush=True)
+            print(f"  ↷ {base}{label} schon vorhanden", flush=True)
         else:
             _correct_one(base, tagged, ppath, gjson, context, verify,
-                         id_range=(chunk[0], chunk[-1]), known=_speaker_hint(docs, clusters))
+                         id_range=(chunk[0], chunk[-1]), known=known, part=label)
         if _valid_correction(ppath):
-            docs.append(_load(ppath))
-        else:
-            print(f"  ✗ Block {i} ohne gültiges Ergebnis", flush=True)
+            print(f"  ✓ {base}{label} fertig", flush=True)
+            return _load(ppath)
+        print(f"  ✗ {base}{label} ohne gültiges Ergebnis", flush=True)
+        return None
+
+    # Block 1 läuft ALLEIN vor: aus ihm kommt die Cluster→Name-Zuordnung, an der sich alle
+    # weiteren Blöcke orientieren. Parallel von Anfang an würde jeder Block eigene Namen für
+    # denselben Sprecher erfinden, und _merge_parts hätte am Ende vier Personen statt zwei.
+    docs = [block(1, "")]
+    if len(chunks) > 1:
+        known = _speaker_hint([d for d in docs if d], clusters)
+        with ThreadPoolExecutor(max_workers=min(len(chunks) - 1, CLAUDE_PARALLEL)) as ex:
+            docs += list(ex.map(lambda i: block(i, known), range(2, len(chunks) + 1)))
+    docs = [d for d in docs if d]
     if len(docs) < len(chunks):
-        print(f"  ✗ {len(chunks) - len(docs)} von {len(chunks)} Blöcken fehlgeschlagen — Teil-Dateien "
+        print(f"  ✗ {base}: {len(chunks) - len(docs)} von {len(chunks)} Blöcken fehlgeschlagen — Teil-Dateien "
               f"bleiben liegen, ein erneuter Lauf holt nur diese nach", flush=True)
         return
     merged = _merge_parts(docs, base)
     fehlend = len(ids) - len({s.get("id") for s in merged["segments"]})
     if fehlend > 0:                              # Blöcke gültig, aber IDs ausgelassen -> apply lässt sie roh
-        print(f"  ⚠ {fehlend} Segment(e) ohne Korrektur — bleiben auf Rohstand", flush=True)
+        print(f"  ⚠ {base}: {fehlend} Segment(e) ohne Korrektur — bleiben auf Rohstand", flush=True)
     paths.atomic_write(cpath, json.dumps(merged, ensure_ascii=False, indent=1))
-    print(f"  ✓ {len(chunks)} Blöcke zusammengeführt ({len(merged['segments'])} Segmente)", flush=True)
+    print(f"  ✓ {base}: {len(chunks)} Blöcke zusammengeführt ({len(merged['segments'])} Segmente)", flush=True)
     for p in parts:                              # erst nach erfolgreichem Merge aufräumen
         try:
             os.remove(p)
@@ -499,15 +525,14 @@ def cmd_run(project: str, base: str = None, force: bool = False, verify: bool = 
     cmd_prep(project)                                  # -> <base>.tagged.txt (Cluster-Präfix falls diarisiert)
     context = _context(project)
     gjson = _glossary(project, context)                # Glossar bleibt korpus-weit (über bases(project))
-    done = 0
-    for b in all_bases:
+    def one(b: str) -> bool:
         try:  # eine kaputte Datei darf den Batch nicht abbrechen
             epath = os.path.join(tdir, b + ".edit.json")
             cpath = os.path.join(tdir, b + ".correction.json")
             raw_json = os.path.join(tdir, b + ".json")
             if _is_human_edited(epath) and not force:
                 print(f"↷ SKIP {b} (human_edited=true; --force zum Neu-Korrigieren)", flush=True)
-                continue
+                return False
             # correction nur im Batch (kein explizites base) und nicht erzwungen wiederverwenden — ein
             # expliziter Einzel-Datei-Lauf korrigiert bewusst neu. Reuse setzt zudem voraus, dass die
             # correction neuer als die Roh-JSON ist (sonst nach Neu-Transkription veraltet).
@@ -519,11 +544,17 @@ def cmd_run(project: str, base: str = None, force: bool = False, verify: bool = 
                 _correct_file(project, b, gjson, context, verify)
             if not _valid_correction(cpath):
                 print(f"✗ FEHLT/ungültig: {b}.correction.json — überspringe", flush=True)
-                continue
+                return False
             cmd_apply(project, b, force=force)           # force überschreibt human_edited edit.json
-            done += 1
+            return True
         except Exception as e:
             print(f"✗ Fehler bei {b}: {e} — überspringe", flush=True)
+            return False
+
+    # Dateien sind nach dem Glossar voneinander unabhängig -> parallel. Die Threads warten fast
+    # nur auf Opus; wie viele davon wirklich gleichzeitig laufen, regelt _claude_slots.
+    with ThreadPoolExecutor(max_workers=min(len(all_bases), CLAUDE_PARALLEL)) as ex:
+        done = sum(ex.map(one, all_bases))
     print(f"run: fertig — {done}/{len(all_bases)} Datei(en) korrigiert", flush=True)
     return done
 
