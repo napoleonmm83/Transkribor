@@ -47,7 +47,7 @@ export function Sidebar({ projects, loading, active, onOpen, onUpload, onTranscr
               active={active?.project === p.name && active?.base === f.base}
               onOpen={() => onOpen({ project: p.name, base: f.base })}
               onCorrectFile={force => onCorrectFile(p.name, f.base, force)}
-              phase={jobRunning && phases?.active?.base === f.base ? phases.active.phase : undefined}
+              phase={jobRunning ? phases?.active[f.base]?.phase : undefined}
               state={jobRunning ? phases?.perBase[f.base] : undefined}
               jobRunning={jobRunning} />
           ))}

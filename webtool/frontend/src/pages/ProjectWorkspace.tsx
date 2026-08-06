@@ -50,7 +50,7 @@ export function ProjectWorkspace() {
         </Button>
       </div>
 
-      {running && !phases.active && phases.global && (
+      {running && !Object.keys(phases.active).length && phases.global && (
         <div className="mb-3 flex items-center justify-between rounded bg-accent px-3 py-2 text-sm">
           <span>{GLOBAL_LABEL[phases.global]}</span>
           <Button variant="ghost" size="sm" onClick={() => job && cancelJob(job.id)}><X className="size-4" /> Abbrechen</Button>
@@ -71,7 +71,7 @@ export function ProjectWorkspace() {
       )}
       <ul className="divide-y rounded border">
         {p?.files.map(f => {
-          const active = running && phases.active?.base === f.base ? phases.active : undefined
+          const active = running ? phases.active[f.base] : undefined
           const state = running ? phases.perBase[f.base] : undefined
           return (
             <li key={f.base} className="px-3 py-2">

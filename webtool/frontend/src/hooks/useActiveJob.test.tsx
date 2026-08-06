@@ -10,7 +10,9 @@ function Probe() {
   return (
     <div>
       <button onClick={() => adopt('j1', 'Demo', 'correct')}>go</button>
-      <span data-testid="active">{phases.active ? `${phases.active.base}:${phases.active.phase}` : '-'}</span>
+      <span data-testid="active">
+        {Object.entries(phases.active).map(([b, a]) => `${b}:${a.phase}`).join(',') || '-'}
+      </span>
       <span data-testid="status">{job?.status ?? 'none'}</span>
     </div>
   )

@@ -330,6 +330,9 @@ def test_run_claude_argv_and_confinement(project, monkeypatch):
     assert captured["cmd"] == [
         "C:/fake/claude.exe", "-p", "--model", "opus",
         "--permission-mode", "acceptEdits", "--allowedTools", "Read,Write",
+        # kein MCP-Server: halbiert den Startup und haelt die persoenlichen Server (Mail,
+        # Notion, …) aus einem Lauf raus, der nicht vertrauenswuerdigen Text verarbeitet
+        "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}',
         "--add-dir", root,
     ]
     assert captured["kw"]["cwd"] == root                 # Confinement auf projekte_root
@@ -532,3 +535,105 @@ def test_run_diarizes_before_prep_and_injects(project, monkeypatch):
     assert (t / "S1.diar.json").exists()                        # diarisiert
     assert (t / "S1.tagged.txt").read_text(encoding="utf-8").startswith("[0] (Sprecher 1) ")  # Präfix im Prep
     assert any("(Sprecher N)" in c and ".tagged.txt" in c for c in calls)  # Korrektur-Prompt erklärt das Präfix
+
+
+# ---- Chunking + Parallelität ----
+
+def _write_raw(t, base: str, n: int):
+    """Roh-Transkript mit n Segmenten — genug, um CHUNK_SEGMENTS zu ueberschreiten."""
+    raw = {"language": "de", "segments": [
+        {"id": i, "start": float(i), "end": i + 1.0, "text": f" Satz {i}.",
+         "compression_ratio": 1.0, "no_speech_prob": 0.01, "avg_logprob": -0.3,
+         "words": [{"word": f" Satz{i}", "start": float(i), "end": i + 0.5, "probability": 0.3}]}
+        for i in range(n)]}
+    (t / f"{base}.json").write_text(json.dumps(raw), encoding="utf-8")
+    (t / f"{base}.raw.txt").write_text("Text.\n", encoding="utf-8")
+
+
+def _chunk_claude(t, calls, lock=None):
+    """Fake-claude, der die Block-Anweisung BEACHTET (nur IDs a..b ausgeben) — sonst
+    lieferte jeder Block die ganze Datei und der Merge waere blind gegen ID-Fehler."""
+    def fake(prompt):
+        if lock:
+            with lock:
+                calls.append(prompt)
+        else:
+            calls.append(prompt)
+        m = re.search(r"(\S+_glossar\.json)", prompt)
+        if m:
+            _dump(m.group(1), {"context_summary": "x", "proper_nouns": [], "likely_corrections": []})
+            return
+        cpath = re.search(r"(\S+\.correction\.json)", prompt).group(1)
+        if "TREUE-CHECK" in prompt:
+            return                                   # Treue-Pass laesst die Datei unveraendert
+        base = re.sub(r"(\.part\d+)?\.correction\.json$", "", os.path.basename(cpath))
+        raw = json.loads((t / (base + ".json")).read_text(encoding="utf-8"))
+        ids = [s["id"] for s in raw["segments"]]
+        r = re.search(r"IDs (\d+) bis (\d+)", prompt)
+        if r:
+            a, b = int(r.group(1)), int(r.group(2))
+            ids = [i for i in ids if a <= i <= b]
+        _dump(cpath, {"base": base, "context": "", "speakers": ["Interviewer"],
+                      "segments": [{"id": i, "speaker": "Interviewer", "text": f"Satz {i}."} for i in ids],
+                      "annotations": [], "summary": ""})
+    return fake
+
+
+def test_chunked_file_merges_all_blocks(project, monkeypatch):
+    _root, t = project
+    _write_raw(t, "S1", 6)
+    monkeypatch.setattr(correct, "CHUNK_SEGMENTS", 2)          # -> 3 Bloecke
+    calls = []
+    monkeypatch.setattr(correct, "_run_claude", _chunk_claude(t, calls))
+    assert correct.cmd_run("Demo") == 1
+    corr = json.loads((t / "S1.correction.json").read_text(encoding="utf-8"))
+    assert [s["id"] for s in corr["segments"]] == [0, 1, 2, 3, 4, 5]   # vollstaendig und sortiert
+    assert not list(t.glob("*.part*.correction.json"))                 # Teil-Dateien nach Merge weg
+
+
+def test_first_block_is_the_anchor_for_speaker_names(project, monkeypatch):
+    """Block 1 laeuft ohne Hinweis, alle spaeteren MIT — sonst taufen die parallelen
+    Bloecke denselben Menschen unterschiedlich und _merge_parts zaehlt vier Personen."""
+    _root, t = project
+    _write_raw(t, "S1", 6)
+    monkeypatch.setattr(correct, "CHUNK_SEGMENTS", 2)
+    calls = []
+    monkeypatch.setattr(correct, "_run_claude", _chunk_claude(t, calls))
+    assert correct.cmd_run("Demo", verify=False) == 1
+    korr = [c for c in calls if "_glossar.json" not in c]
+    erster = next(c for c in korr if "IDs 0 bis 1" in c)
+    spaeter = [c for c in korr if "IDs 0 bis 1" not in c]
+    assert "Bereits vergebene Sprecher-Namen" not in erster
+    assert len(spaeter) == 2
+    assert all("Bereits vergebene Sprecher-Namen" in c and "Interviewer" in c for c in spaeter)
+
+
+def test_parallel_calls_stay_under_the_global_cap(project, monkeypatch):
+    """Der Deckel sitzt in _run_claude, nicht in den Executors: zwei Dateien à drei Bloecke
+    duerfen NICHT 2x3 gleichzeitige claude-Prozesse ergeben."""
+    import threading, time
+    _root, t = project
+    _write_raw(t, "S1", 6)
+    _write_raw(t, "S2", 6)
+    (_root / "Demo" / "audio" / "S2.mp3").write_bytes(b"x")
+    monkeypatch.setattr(correct, "CHUNK_SEGMENTS", 2)
+    monkeypatch.setattr(correct, "_claude_slots", threading.Semaphore(2))
+    monkeypatch.setattr(correct, "_claude_exe", lambda: "C:/fake/claude.exe")
+
+    lock, state = threading.Lock(), {"jetzt": 0, "max": 0}
+    schreibe = _chunk_claude(t, [], lock)
+
+    def fake_run(cmd, **kw):
+        with lock:
+            state["jetzt"] += 1
+            state["max"] = max(state["max"], state["jetzt"])
+        time.sleep(0.05)                     # Ueberlappung erzwingen, sonst misst der Test nichts
+        schreibe(kw["input"])                # echtes claude schreibt die Datei via Write-Tool
+        with lock:
+            state["jetzt"] -= 1
+        return type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+
+    monkeypatch.setattr(correct.subprocess, "run", fake_run)
+    assert correct.cmd_run("Demo", verify=False) == 2          # beide Dateien fertig
+    assert state["max"] <= 2                                   # Deckel hat gehalten
+    assert state["max"] > 1                                    # ... und es lief wirklich parallel

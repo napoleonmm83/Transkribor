@@ -19,8 +19,10 @@ export type Turn = { key: string; speaker: string; segments: Segment[] };
 export type FilePhase = 'diarize' | 'correct' | 'verify' | 'transcribe';
 export type GlobalPhase = 'diarize' | 'prep' | 'glossary' | 'download';
 export type FileState = 'done' | 'skipped' | 'failed';
+export type FileWork = { phase: FilePhase; pct?: number; detail?: string };
 export type JobPhases = {
   global: GlobalPhase | null;
-  active: { base: string; phase: FilePhase; pct?: number; detail?: string } | null;
+  /** Basisname -> was daran gerade laeuft. Mehrere Eintraege, weil correct parallel arbeitet. */
+  active: Record<string, FileWork>;
   perBase: Record<string, FileState>;
 };

@@ -11,19 +11,28 @@ describe('parseJobPhases — correct', () => {
       '→ Korrigiere A …', 'apply: A -> edit.json + md (12 Segmente)',
       '→ Korrigiere B …', '→ Verifiziere B (Treue gegen Roh) …',
     ])
-    expect(p.active).toEqual({ base: 'B', phase: 'verify' })
+    expect(p.active).toEqual({ B: { phase: 'verify' } })
     expect(p.perBase).toEqual({ A: 'done' })
     expect(p.global).toBeNull()
   })
+  it('mehrere Dateien gleichzeitig — verschraenkte Zeilen bleiben getrennt', () => {
+    const p = parseJobPhases('correct', [
+      '→ Korrigiere A …', '→ Korrigiere B …', '→ Korrigiere C …',
+      '→ Verifiziere A (Treue gegen Roh) …',
+      'apply: B -> edit.json + md (12 Segmente)',
+    ])
+    expect(p.active).toEqual({ A: { phase: 'verify' }, C: { phase: 'correct' } })
+    expect(p.perBase).toEqual({ B: 'done' })
+  })
   it('Vorstufe: global=glossary, kein active', () => {
     const p = parseJobPhases('correct', ['→ Glossar (…) …'])
-    expect(p.active).toBeNull()
+    expect(p.active).toEqual({})
     expect(p.global).toBe('glossary')
   })
   it('diarize-SKIP ist kein Fehler', () => {
     const p = parseJobPhases('correct', ['diarize: SKIP A (kein Audio gefunden)', '→ Korrigiere A …'])
     expect(p.perBase.A).toBeUndefined()
-    expect(p.active).toEqual({ base: 'A', phase: 'correct' })
+    expect(p.active).toEqual({ A: { phase: 'correct' } })
   })
   it('SKIP human_edited + FEHLT -> terminal', () => {
     const p = parseJobPhases('correct', [
@@ -31,7 +40,7 @@ describe('parseJobPhases — correct', () => {
       '✗ FEHLT/ungültig: B.correction.json — überspringe',
     ])
     expect(p.perBase).toEqual({ A: 'skipped', B: 'failed' })
-    expect(p.active).toBeNull()
+    expect(p.active).toEqual({})
   })
   it('reuse -> apply -> done', () => {
     const p = parseJobPhases('correct', [
@@ -39,31 +48,38 @@ describe('parseJobPhases — correct', () => {
     ])
     expect(p.perBase).toEqual({ A: 'done' })
   })
-  it('Blockzaehler -> Prozent + Detail, Verify-Pass ist die halbe Blockbreite', () => {
+  it('Fortschritt einer gestueckelten Datei = fertige Bloecke', () => {
     const p = parseJobPhases('correct', [
-      '540 Segmente → 4 Blöcke à max. 150',
-      'Block 1/4 (IDs 0–149)', '→ Korrigiere A …', '→ Verifiziere A (Treue gegen Roh) …',
-      'Block 2/4 (IDs 150–299)', '→ Korrigiere A …',
+      'A: 540 Segmente → 4 Blöcke à max. 150',
+      '→ Korrigiere A · Block 1/4 …', '→ Verifiziere A · Block 1/4 (Treue gegen Roh) …',
+      '✓ A · Block 1/4 fertig',
+      '→ Korrigiere A · Block 2/4 …', '→ Korrigiere A · Block 3/4 …',
     ])
-    expect(p.active).toEqual({ base: 'A', phase: 'correct', pct: 25, detail: 'Block 2/4' })
+    expect(p.active).toEqual({ A: { phase: 'correct', pct: 25, detail: '1/4 Blöcke' } })
   })
-  it('halber Block waehrend der Verifikation', () => {
+  it('uebersprungene und gescheiterte Bloecke zaehlen auch als erledigt', () => {
     const p = parseJobPhases('correct', [
-      'Block 1/4 (IDs 0–149)', '→ Korrigiere A …', '→ Verifiziere A (Treue gegen Roh) …',
+      'A: 300 Segmente → 2 Blöcke à max. 150',
+      '↷ A · Block 1/2 schon vorhanden', '✗ A · Block 2/2 ohne gültiges Ergebnis',
+      '→ Korrigiere A · Block 2/2 …',
     ])
-    expect(p.active).toEqual({ base: 'A', phase: 'verify', pct: 13, detail: 'Block 1/4' })
+    expect(p.active.A.pct).toBe(100)
   })
   it('Blockzaehler endet mit der Datei — die naechste faengt ohne an', () => {
     const p = parseJobPhases('correct', [
-      'Block 1/4 (IDs 0–149)', '→ Korrigiere A …',
+      'A: 540 Segmente → 4 Blöcke à max. 150', '→ Korrigiere A · Block 1/4 …',
       'apply: A -> edit.json + md (540 Segmente)',
       '→ Korrigiere B …',
     ])
-    expect(p.active).toEqual({ base: 'B', phase: 'correct' })
+    expect(p.active).toEqual({ B: { phase: 'correct' } })
   })
   it('ungechunkte Datei bleibt ohne Prozent', () => {
     const p = parseJobPhases('correct', ['→ Korrigiere A …'])
-    expect(p.active).toEqual({ base: 'A', phase: 'correct' })
+    expect(p.active).toEqual({ A: { phase: 'correct' } })
+  })
+  it('Basisname mit Blockzusatz wird nicht abgeschnitten', () => {
+    const p = parseJobPhases('correct', ['→ Korrigiere Timeline 1 · Block 2/3 …'])
+    expect(Object.keys(p.active)).toEqual(['Timeline 1'])
   })
   it('Basisname mit Klammern -> SKIP greedy bis (human_edited=', () => {
     const p = parseJobPhases('correct', [
@@ -81,7 +97,7 @@ describe('parseJobPhases — transcribe', () => {
       '[Demo] -> transkribiere A …', '[Demo] fertig A: 12s, 40 Segmente, Audio 2:00, 10.0x',
       '[Demo] skip (vorhanden): B', '[Demo] -> transkribiere C …',
     ])
-    expect(p.active).toEqual({ base: 'C', phase: 'transcribe' })
+    expect(p.active).toEqual({ C: { phase: 'transcribe' } })
     expect(p.perBase).toEqual({ A: 'done', B: 'skipped' })
   })
   it('FEHLER -> failed', () => {
@@ -95,7 +111,7 @@ describe('parseJobPhases — transcribe', () => {
       '  0%|          | 0/1906 [00:00<?, ?frames/s]E:\\…\\whisper\\timing.py:42: UserWarning: Failed to launch Triton kernels…',
       ' 45%|████▌     | 858/1906 [00:02<00:02, 500.00frames/s]',
     ])
-    expect(p.active).toEqual({ base: 'A', phase: 'transcribe', pct: 45 })
+    expect(p.active).toEqual({ A: { phase: 'transcribe', pct: 45 } })
   })
   it('tqdm-Rest nach der fertig-Zeile faellt nicht auf eine tote Datei zurueck', () => {
     const p = parseJobPhases('transcribe', [
@@ -103,7 +119,7 @@ describe('parseJobPhases — transcribe', () => {
       '[Demo] fertig A: 45s, 40 Segmente, Audio 2:00, 2.6x',
       '100%|##########| 100000/100000 [00:45<00:00, 2222.00frames/s]',
     ])
-    expect(p.active).toBeNull()
+    expect(p.active).toEqual({})
     expect(p.perBase).toEqual({ A: 'done' })
   })
 })
@@ -114,9 +130,14 @@ describe('describePhases', () => {
   it('nennt Phase und Datei statt roher Log-Zeilen', () => {
     expect(von('correct', ['→ Verifiziere Timeline 1 (Treue gegen Roh) …'])).toBe('Verifizieren Timeline 1…')
   })
-  it('haengt Blockzaehler bzw. Prozent an', () => {
-    expect(von('correct', ['Block 2/4 (IDs 150–299)', '→ Korrigiere A …'])).toBe('Korrigieren A · Block 2/4')
+  it('haengt Blockfortschritt bzw. Prozent an', () => {
+    expect(von('correct', ['A: 600 Segmente → 4 Blöcke à max. 150', '✓ A · Block 1/4 fertig',
+      '→ Korrigiere A · Block 2/4 …'])).toBe('Korrigieren A · 1/4 Blöcke')
     expect(von('transcribe', ['[D] -> transkribiere A …', ' 45%|##| 45/100'])).toBe('Transkribieren A · 45%')
+  })
+  it('zaehlt bei parallelen Dateien alle laufenden auf', () => {
+    expect(von('correct', ['→ Korrigiere A …', '→ Verifiziere B (Treue gegen Roh) …']))
+      .toBe('Korrigieren A…  |  Verifizieren B…')
   })
   it('faellt auf die Vorstufe zurueck, wenn keine Datei aktiv ist', () => {
     expect(von('correct', ['prep: 4 Datei(en) getaggt in E:\\x'])).toBe('Vorbereiten…')
@@ -132,7 +153,7 @@ describe('URL-Import', () => {
       '[fetch] lade Mein Interview …',
     ])
     expect(p.global).toBe('download')
-    expect(p.active).toBeNull()
+    expect(p.active).toEqual({})
   })
 
   it('beendet die Download-Phase nach der Bilanzzeile', () => {
@@ -143,7 +164,7 @@ describe('URL-Import', () => {
       '[Demo] -> transkribiere Mein Interview …',
     ])
     expect(p.global).toBeNull()
-    expect(p.active).toEqual({ base: 'Mein Interview', phase: 'transcribe' })
+    expect(p.active).toEqual({ 'Mein Interview': { phase: 'transcribe' } })
   })
 
   it('haelt eine fetch-FEHLER-Zeile aus der perBase-Auswertung heraus', () => {
