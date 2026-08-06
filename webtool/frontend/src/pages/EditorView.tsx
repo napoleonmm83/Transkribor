@@ -21,13 +21,13 @@ export function EditorView() {
   const { doc, dirty, loading: docLoading, updateSegment, renameSpeaker, save, exportDownload, reload } = useDoc(sel?.project ?? null, sel?.base ?? null)
   const { thr, setThr } = useThresholds()
   const { start } = useJob()
-  const { job, phases, adopt } = useActiveJob()
-  const running = !!job && job.status === 'running' && job.project === project
+  const { jobs, phases, adopt } = useActiveJob()
+  const running = jobs.some(j => j.project === project && j.status === 'running')
   const activeProject = projects.find(x => x.name === project)
+  const aktiveIds = (activeProject?.active_jobs ?? []).map(j => j.id).join(',')
   useEffect(() => {
-    const aj = activeProject?.active_job
-    if (aj && job?.id !== aj.id) adopt(aj.id, project!, aj.kind)
-  }, [activeProject?.active_job?.id, job?.id, project, adopt])
+    for (const aj of activeProject?.active_jobs ?? []) adopt(aj.id, project!, aj.kind)
+  }, [aktiveIds, project, adopt])  // eslint-disable-line react-hooks/exhaustive-deps
   const title = useMemo(() => (sel ? `${sel.project} / ${sel.base}` : '— keine Datei —'), [sel])
   const waveRef = useRef<WaveHandle>(null)
   const [activeId, setActiveId] = useState<number | null>(null)

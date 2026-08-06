@@ -10,7 +10,7 @@ export function HomeGallery() {
   const navigate = useNavigate()
 
   // Solange irgendein Projekt einen laufenden Job hat, die Liste periodisch nachladen.
-  const anyActive = projects.some(p => p.active_job)
+  const anyActive = projects.some(p => p.active_jobs?.length)
   useEffect(() => {
     if (!anyActive) return
     const t = setInterval(refresh, 3000)
@@ -37,12 +37,13 @@ export function HomeGallery() {
                 <div className="text-sm text-muted-foreground">
                   {p.files.length} Datei{p.files.length === 1 ? '' : 'en'} · {done} ✓
                 </div>
-                {p.active_job && (
-                  <div className="mt-2 inline-flex items-center gap-1 text-xs text-primary">
+                {/* mehrere moeglich: Transkription und Korrektur laufen nebeneinander */}
+                {(p.active_jobs ?? []).map(j => (
+                  <div key={j.id} className="mt-2 flex items-center gap-1 text-xs text-primary">
                     <Loader2 className="size-3 animate-spin" />
-                    {p.active_job.kind === 'transcribe' ? 'Transkribieren…' : 'Korrigieren…'}
+                    {j.kind === 'transcribe' ? 'Transkribieren…' : 'Korrigieren…'}
                   </div>
-                )}
+                ))}
               </Link>
             </div>
           )

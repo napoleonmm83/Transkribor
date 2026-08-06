@@ -11,7 +11,8 @@ export type EditDoc = {
 };
 export type ProjectFile = { base: string; has_audio: boolean; has_raw: boolean; has_edit: boolean; has_md: boolean };
 export type ActiveJob = { id: string; kind: string };
-export type Project = { name: string; files: ProjectFile[]; active_job?: ActiveJob | null };
+/** Mehrere, weil Transkription und Korrektur eines Projekts gleichzeitig laufen duerfen. */
+export type Project = { name: string; files: ProjectFile[]; active_jobs?: ActiveJob[] };
 export type JobStatus = { status: 'running' | 'done' | 'error' | 'cancelled'; lines: string[]; kind?: string };
 export type StartJob = { job_id: string; started: boolean };
 export type Thresholds = { yellow: number; red: number };
