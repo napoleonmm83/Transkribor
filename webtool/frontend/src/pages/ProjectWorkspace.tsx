@@ -9,6 +9,7 @@ import { UploadDropzone } from '@/components/UploadDropzone'
 import { UrlFetch } from '@/components/UrlFetch'
 import { Button } from '@/components/ui/button'
 import { startTranscribe, startCorrect, startCorrectFile, cancelJob } from '@/lib/api'
+import { cn } from '@/lib/utils'
 import type { StartJob } from '@/lib/types'
 
 const GLOBAL_LABEL = { diarize: 'Diarisieren…', prep: 'Vorbereiten…', glossary: 'Glossar wird erstellt…', download: 'Herunterladen…' } as const
@@ -71,19 +72,31 @@ export function ProjectWorkspace() {
       )}
       <ul className="divide-y rounded border">
         {p?.files.map(f => {
-          const active = running && phases.active?.base === f.base ? phases.active.phase : undefined
+          const active = running && phases.active?.base === f.base ? phases.active : undefined
           const state = running ? phases.perBase[f.base] : undefined
           return (
-            <li key={f.base} className="flex items-center gap-3 px-3 py-2">
-              <button className="flex-1 truncate text-left text-sm hover:underline"
-                onClick={() => navigate(`/p/${encodeURIComponent(project!)}/${encodeURIComponent(f.base)}`)}>
-                {f.base}
-              </button>
-              <FileStatusPill file={f} active={active} state={state} jobRunning={running} />
-              <Button size="icon" variant="ghost" className="size-6" title="Nur diese Datei korrigieren"
-                onClick={() => startJob(() => startCorrectFile(project!, f.base, false), 'correct', `Korrigieren ${f.base}`)}>
-                <Pencil className="size-3.5" />
-              </Button>
+            <li key={f.base} className="px-3 py-2">
+              <div className="flex items-center gap-3">
+                {/* Audio ohne Roh-Transkript ist zwar sichtbar, aber weder oeffen- noch korrigierbar. */}
+                <button className={cn('flex-1 truncate text-left text-sm', f.has_raw ? 'hover:underline' : 'text-muted-foreground')}
+                  disabled={!f.has_raw}
+                  onClick={() => navigate(`/p/${encodeURIComponent(project!)}/${encodeURIComponent(f.base)}`)}>
+                  {f.base}
+                </button>
+                <FileStatusPill file={f} active={active?.phase} pct={active?.pct} detail={active?.detail}
+                  state={state} jobRunning={running} />
+                <Button size="icon" variant="ghost" className="size-6" title="Nur diese Datei korrigieren"
+                  disabled={!f.has_raw}
+                  onClick={() => startJob(() => startCorrectFile(project!, f.base, false), 'correct', `Korrigieren ${f.base}`)}>
+                  <Pencil className="size-3.5" />
+                </Button>
+              </div>
+              {active?.pct != null && (
+                <div className="mt-1 h-1 overflow-hidden rounded bg-accent" role="progressbar"
+                  aria-valuenow={active.pct} aria-valuemin={0} aria-valuemax={100} aria-label={f.base}>
+                  <div className="h-full bg-primary transition-all" style={{ width: `${active.pct}%` }} />
+                </div>
+              )}
             </li>
           )
         })}
