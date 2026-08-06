@@ -65,20 +65,76 @@ def test_only_one_transcribe_at_a_time():
     _wait(jidA)
 
 
-def test_correct_blocks_transcribe():
+def test_correct_blockiert_keine_transcribe():
+    """Eine 25-Minuten-Korrektur darf keine Transkription aufhalten — sie haengt an Opus,
+    nicht an der GPU (GPU_KINDS = nur transcribe)."""
     slow = [sys.executable, "-c", "import time; time.sleep(0.6)"]
     jidC, sC = jobs.start("ProjC", slow, cwd=None, kind="correct")
     jidT, sT = jobs.start("ProjD", slow, cwd=None, kind="transcribe")
-    assert sC is True and sT is False and jidT == jidC   # transcribe wartet auf laufende correct-GPU
-    _wait(jidC)
+    assert sC is True and sT is True and jidT != jidC
+    _wait(jidC); _wait(jidT)
 
 
-def test_transcribe_blocks_correct():
+def test_transcribe_blockiert_keine_correct():
     slow = [sys.executable, "-c", "import time; time.sleep(0.6)"]
     jidT, sT = jobs.start("ProjE", slow, cwd=None, kind="transcribe")
     jidC, sC = jobs.start("ProjF", slow, cwd=None, kind="correct")
-    assert sT is True and sC is False and jidC == jidT
-    _wait(jidT)
+    assert sT is True and sC is True
+    _wait(jidT); _wait(jidC)
+
+
+def test_transcribe_und_correct_parallel_im_selben_projekt():
+    """Dedupe geht je (Projekt, Art) — im selben Projekt duerfen beide Arten gleichzeitig
+    laufen, zwei gleiche Arten nicht."""
+    slow = [sys.executable, "-c", "import time; time.sleep(0.6)"]
+    jidT, sT = jobs.start("P_mix", slow, cwd=None, kind="transcribe")
+    jidC, sC = jobs.start("P_mix", slow, cwd=None, kind="correct")
+    jidC2, sC2 = jobs.start("P_mix", slow, cwd=None, kind="correct")
+    assert sT is True and sC is True
+    assert sC2 is False and jidC2 == jidC          # zweite correct-Runde wird abgewiesen
+    assert {j["kind"] for j in jobs.active_for("P_mix")} == {"transcribe", "correct"}
+    _wait(jidT); _wait(jidC)
+
+
+def test_then_laeuft_nach_erfolg_und_darf_neu_starten():
+    """Der Nachlauf (Auto-Korrektur) muss den Slot des beendeten Jobs neu belegen koennen —
+    er laeuft deshalb erst, nachdem _active freigegeben wurde."""
+    gelaufen = []
+
+    def nachlauf():
+        jid2, ok = jobs.start("P_then", _echo_cmd(1), cwd=None, kind="transcribe")
+        gelaufen.append(ok)
+        _wait(jid2)
+
+    jid, _ = jobs.start("P_then", _echo_cmd(1), cwd=None, kind="transcribe", then=nachlauf)
+    _wait(jid)
+    for _ in range(100):                           # then laeuft im Job-Thread, kurz nachlaufen lassen
+        if gelaufen:
+            break
+        time.sleep(0.02)
+    assert gelaufen == [True]
+
+
+def test_then_laeuft_nicht_nach_abbruch():
+    gelaufen = []
+    slow = [sys.executable, "-c", "import time; time.sleep(5)"]
+    jid, _ = jobs.start("P_cancel_then", slow, cwd=None, kind="transcribe",
+                        then=lambda: gelaufen.append(True))
+    for _ in range(100):
+        if jobs.get(jid)["pid"]:
+            break
+        time.sleep(0.02)
+    jobs.cancel(jid)
+    _wait(jid)
+    time.sleep(0.2)
+    assert gelaufen == []                          # abgebrochen ist nicht 'done'
+
+
+def test_when_done_auf_fertigem_job_ist_false():
+    jid, _ = jobs.start("P_wd", _echo_cmd(1), cwd=None, kind="correct")
+    _wait(jid)
+    assert jobs.when_done(jid, lambda: None) is False
+    assert jobs.when_done("gibtsnicht", lambda: None) is False
 
 
 def test_get_unknown_returns_none():
@@ -125,9 +181,9 @@ def test_cancel_kills_process_tree():
 
 def test_active_for_running_then_none():
     slow = [sys.executable, "-c", "import time; time.sleep(0.6)"]
-    assert jobs.active_for("P_af") is None
+    assert jobs.active_for("P_af") == []
     jid, started = jobs.start("P_af", slow, cwd=None, kind="correct")
     assert started is True
-    assert jobs.active_for("P_af") == {"id": jid, "kind": "correct"}
+    assert jobs.active_for("P_af") == [{"id": jid, "kind": "correct"}]
     _wait(jid)
-    assert jobs.active_for("P_af") is None
+    assert jobs.active_for("P_af") == []

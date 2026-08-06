@@ -101,7 +101,7 @@ def list_projects():
                     })
             except ValueError:
                 continue  # ponytail: un-nennbaren Ordner überspringen statt die ganze Liste zu 500en
-            out.append({"name": name, "files": files, "active_job": jobs.active_for(name)})
+            out.append({"name": name, "files": files, "active_jobs": jobs.active_for(name)})
     return {"projects": out}
 
 
@@ -171,11 +171,32 @@ def export_file(project: str, base: str):
     return {"md": md}
 
 
+def _autocorrect_enabled() -> bool:
+    return (os.environ.get("TRANSKRIBOR_AUTOCORRECT") or "1").lower() not in ("0", "false", "no")
+
+
+def _autocorrect(project: str) -> None:
+    """Korrektur nach der Transkription. Laeuft im Job-Thread, nicht im Browser — ein
+    geschlossener Tab darf die Kette nicht unterbrechen. `correct run` ist idempotent, holt
+    also genau die neu transkribierten Dateien nach."""
+    if not _autocorrect_enabled():
+        return
+    cmd = [sys.executable, "-m", "webtool.correct", "run", project]
+    job_id, started = jobs.start(project, cmd, paths.ROOT, "correct")
+    if started:
+        return
+    # Es korrigiert schon eine aeltere Runde — die kennt die neuen Dateien nicht. Also hinten
+    # anhaengen. when_done()==False heisst: der Job war eben fertig -> sofort nochmal.
+    if not jobs.when_done(job_id, lambda: _autocorrect(project)):
+        _autocorrect(project)
+
+
 @app.post("/api/projects/{project}/transcribe")
 def transcribe(project: str):
     _validate(project)
     cmd = [sys.executable, os.path.join(paths.ROOT, "transcribe.py"), project]
-    job_id, started = jobs.start(project, cmd, paths.ROOT, "transcribe")
+    job_id, started = jobs.start(project, cmd, paths.ROOT, "transcribe",
+                                 then=lambda: _autocorrect(project))
     return {"job_id": job_id, "started": started}
 
 
@@ -218,7 +239,8 @@ def fetch_urls(project: str, body: FetchBody):
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     cmd = [sys.executable, "-m", "webtool.fetch", project, *urls]
-    job_id, started = jobs.start(project, cmd, paths.ROOT, "transcribe")
+    job_id, started = jobs.start(project, cmd, paths.ROOT, "transcribe",
+                                 then=lambda: _autocorrect(project))
     return {"job_id": job_id, "started": started}
 
 

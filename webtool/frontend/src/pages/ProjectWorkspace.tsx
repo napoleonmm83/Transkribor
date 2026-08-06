@@ -9,28 +9,33 @@ import { UploadDropzone } from '@/components/UploadDropzone'
 import { UrlFetch } from '@/components/UrlFetch'
 import { Button } from '@/components/ui/button'
 import { startTranscribe, startCorrect, startCorrectFile, cancelJob } from '@/lib/api'
-import { GLOBAL_LABEL } from '@/lib/jobPhases'
+import { describePhases } from '@/lib/jobPhases'
 import { cn } from '@/lib/utils'
 import type { StartJob } from '@/lib/types'
+
+const KIND_LABEL: Record<string, string> = { transcribe: 'Transkribieren…', correct: 'Korrigieren…' }
 
 export function ProjectWorkspace() {
   const { project } = useParams<{ project: string }>()
   const navigate = useNavigate()
   const { projects, refresh } = useProjects()
-  const { job, phases, adopt, onSettled } = useActiveJob()
+  const { jobs, phases, adopt, onSettled } = useActiveJob()
   const p = projects.find(x => x.name === project)
-  const running = !!job && job.status === 'running' && job.project === project
+  const meine = jobs.filter(j => j.project === project && j.status === 'running')
+  const running = meine.length > 0
 
   useEffect(() => onSettled(() => refresh()), [onSettled, refresh])
-  // Discovery: laufenden Job nach Reload/aus der Liste adoptieren
+  // Discovery: laufende Jobs nach Reload/aus der Liste adoptieren — es koennen zwei sein
+  // (Transkription + Korrektur laufen im selben Projekt nebeneinander).
+  const aktiveIds = (p?.active_jobs ?? []).map(j => j.id).join(',')
   useEffect(() => {
-    if (p?.active_job && job?.id !== p.active_job.id) adopt(p.active_job.id, project!, p.active_job.kind)
-  }, [p?.active_job?.id, job?.id, project, adopt, p?.active_job])
+    for (const aj of p?.active_jobs ?? []) adopt(aj.id, project!, aj.kind)
+  }, [aktiveIds, project, adopt])  // eslint-disable-line react-hooks/exhaustive-deps
 
   const startJob = async (fn: () => Promise<StartJob>, kind: string, label: string) => {
     let res: StartJob
     try { res = await fn() } catch (e) { toast.error(`${label} fehlgeschlagen: ${(e as Error).message}`); return }
-    if (!res.started) { toast.warning('Es läuft bereits ein Job für dieses Projekt.'); return }
+    if (!res.started) { toast.warning(`Es läuft bereits ein ${label}-Job für dieses Projekt.`); return }
     adopt(res.job_id, project!, kind)
     toast.success(`${label} gestartet`)
   }
@@ -50,12 +55,16 @@ export function ProjectWorkspace() {
         </Button>
       </div>
 
-      {running && !Object.keys(phases.active).length && phases.global && (
-        <div className="mb-3 flex items-center justify-between rounded bg-accent px-3 py-2 text-sm">
-          <span>{GLOBAL_LABEL[phases.global]}</span>
-          <Button variant="ghost" size="sm" onClick={() => job && cancelJob(job.id)}><X className="size-4" /> Abbrechen</Button>
+      {/* Eine Leiste je laufendem Job — Transkription und Korrektur laufen nebeneinander,
+          und jede braucht ihren eigenen Abbrechen-Knopf. */}
+      {meine.map(j => (
+        <div key={j.id} className="mb-2 flex items-center justify-between gap-2 rounded bg-accent px-3 py-2 text-sm">
+          <span className="truncate">{describePhases(j.phases) || KIND_LABEL[j.kind] || 'läuft…'}</span>
+          <Button variant="ghost" size="sm" className="shrink-0" onClick={() => cancelJob(j.id)}>
+            <X className="size-4" /> Abbrechen
+          </Button>
         </div>
-      )}
+      ))}
 
       <div className="mb-4 space-y-3">
         <UploadDropzone project={project!} onDone={refresh} />

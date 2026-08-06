@@ -95,8 +95,9 @@ def test_invalid_project_name_400(client):
 
 def test_transcribe_starts_job(client, monkeypatch):
     calls = {}
-    def fake_start(project, cmd, cwd, kind):
+    def fake_start(project, cmd, cwd, kind, then=None):
         calls["project"] = project; calls["kind"] = kind; calls["cmd"] = cmd
+        calls["then"] = then
         return "job123", True
     import webtool.jobs as jobs_mod
     monkeypatch.setattr(jobs_mod, "start", fake_start)
@@ -105,6 +106,7 @@ def test_transcribe_starts_job(client, monkeypatch):
     assert r.json() == {"job_id": "job123", "started": True}
     assert calls["kind"] == "transcribe" and calls["project"] == "Demo"
     assert calls["cmd"][-1] == "Demo" and calls["cmd"][1].endswith("transcribe.py")
+    assert callable(calls["then"])                # Auto-Korrektur haengt am Job, nicht am Browser
 
 
 def test_transcribe_invalid_name_400(client):
@@ -183,17 +185,17 @@ def test_upload_bad_extension_400(client):
     assert r.status_code == 400
 
 
-def test_list_projects_active_job_default_none(client):
+def test_list_projects_active_jobs_default_empty(client):
     demo = next(p for p in client.get("/api/projects").json()["projects"] if p["name"] == "Demo")
-    assert demo["active_job"] is None
+    assert demo["active_jobs"] == []
 
 
-def test_list_projects_active_job_reported(client, monkeypatch):
+def test_list_projects_active_jobs_reported(client, monkeypatch):
     import webtool.jobs as jobs_mod
-    monkeypatch.setattr(jobs_mod, "active_for",
-                        lambda name: {"id": "j9", "kind": "correct"} if name == "Demo" else None)
+    laufend = [{"id": "j9", "kind": "correct"}, {"id": "j8", "kind": "transcribe"}]
+    monkeypatch.setattr(jobs_mod, "active_for", lambda name: laufend if name == "Demo" else [])
     demo = next(p for p in client.get("/api/projects").json()["projects"] if p["name"] == "Demo")
-    assert demo["active_job"] == {"id": "j9", "kind": "correct"}
+    assert demo["active_jobs"] == laufend         # beide Arten gleichzeitig sind erlaubt
 
 
 def test_create_project_ok_and_duplicate_409(client, tmp_path):
@@ -254,10 +256,12 @@ def test_fetch_startet_job(client, monkeypatch):
     from webtool import jobs
     gestartet = {}
     monkeypatch.setattr(jobs, "start",
-                        lambda project, cmd, cwd, kind: gestartet.update(cmd=cmd, kind=kind) or ("j1", True))
+                        lambda project, cmd, cwd, kind, then=None:
+                        gestartet.update(cmd=cmd, kind=kind, then=then) or ("j1", True))
     r = client.post("/api/projects/Demo/fetch", json={"urls": ["https://youtu.be/abc123"]})
     assert r.status_code == 200 and r.json() == {"job_id": "j1", "started": True}
     assert gestartet["kind"] == "transcribe"          # erbt GPU-Serialisierung + Dedupe
+    assert callable(gestartet["then"])                # auch der URL-Import korrigiert danach
     assert gestartet["cmd"][-2:] == ["Demo", "https://youtu.be/abc123"]
 
 
@@ -292,3 +296,57 @@ def test_spa_serves_index_for_deep_link(client):
     finally:
         if created:
             os.remove(idx)
+
+
+# ---- Auto-Korrektur nach der Transkription ----
+
+def test_autocorrect_startet_correct_run(client, monkeypatch):
+    from webtool import app as app_mod
+    gestartet = {}
+    monkeypatch.setattr(app_mod.jobs, "start",
+                        lambda project, cmd, cwd, kind, then=None:
+                        gestartet.update(project=project, cmd=cmd, kind=kind) or ("j1", True))
+    app_mod._autocorrect("Demo")
+    assert gestartet["kind"] == "correct"
+    assert gestartet["cmd"][-3:] == ["webtool.correct", "run", "Demo"]
+
+
+def test_autocorrect_abschaltbar(client, monkeypatch):
+    from webtool import app as app_mod
+    monkeypatch.setenv("TRANSKRIBOR_AUTOCORRECT", "0")
+    monkeypatch.setattr(app_mod.jobs, "start",
+                        lambda *a, **k: pytest.fail("darf nicht starten"))
+    app_mod._autocorrect("Demo")
+
+
+def test_autocorrect_reiht_sich_hinter_eine_laufende_korrektur(client, monkeypatch):
+    """Die laufende Runde kennt die eben transkribierten Dateien nicht — also anhaengen,
+    statt die Auto-Korrektur stillschweigend fallen zu lassen."""
+    from webtool import app as app_mod
+    versuche, angehaengt = [], []
+
+    def fake_start(project, cmd, cwd, kind, then=None):
+        versuche.append(kind)
+        return ("laeuft_schon", False) if len(versuche) == 1 else ("j2", True)
+
+    monkeypatch.setattr(app_mod.jobs, "start", fake_start)
+    monkeypatch.setattr(app_mod.jobs, "when_done",
+                        lambda jid, fn: angehaengt.append((jid, fn)) or True)
+    app_mod._autocorrect("Demo")
+    assert len(versuche) == 1 and angehaengt[0][0] == "laeuft_schon"
+    angehaengt[0][1]()                                  # der blockierende Job ist fertig
+    assert versuche == ["correct", "correct"]           # zweiter Versuch lief
+
+
+def test_autocorrect_versucht_sofort_neu_wenn_der_blocker_schon_weg_ist(client, monkeypatch):
+    from webtool import app as app_mod
+    versuche = []
+
+    def fake_start(project, cmd, cwd, kind, then=None):
+        versuche.append(kind)
+        return ("weg", False) if len(versuche) == 1 else ("j2", True)
+
+    monkeypatch.setattr(app_mod.jobs, "start", fake_start)
+    monkeypatch.setattr(app_mod.jobs, "when_done", lambda jid, fn: False)   # schon terminal
+    app_mod._autocorrect("Demo")
+    assert versuche == ["correct", "correct"]
