@@ -1,4 +1,21 @@
-import type { FileState, GlobalPhase, JobPhases } from './types'
+import type { FilePhase, FileState, GlobalPhase, JobPhases } from './types'
+
+export const PHASE_LABEL: Record<FilePhase, string> = {
+  diarize: 'Diarisieren', correct: 'Korrigieren', verify: 'Verifizieren', transcribe: 'Transkribieren',
+}
+export const GLOBAL_LABEL: Record<GlobalPhase, string> = {
+  diarize: 'Diarisieren…', prep: 'Vorbereiten…', glossary: 'Glossar wird erstellt…', download: 'Herunterladen…',
+}
+
+/** Einzeiler fuer Toast & Co. — nie rohe Log-Zeilen anzeigen, die sind fuer den Parser, nicht fuer Menschen. */
+export function describePhases(p: JobPhases): string {
+  if (p.active) {
+    const { base, phase, pct, detail } = p.active
+    const wie = detail ?? (pct != null ? `${pct}%` : null)
+    return `${PHASE_LABEL[phase]} ${base}${wie ? ` · ${wie}` : '…'}`
+  }
+  return p.global ? GLOBAL_LABEL[p.global] : ''
+}
 
 // Der correct- wie der transcribe-Treiber verarbeiten Dateien STRENG SEQUENTIELL
 // -> zu jedem Zeitpunkt hoechstens EIN aktiver {base, phase}-Cursor. Wir scannen die

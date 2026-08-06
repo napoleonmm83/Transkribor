@@ -1,9 +1,7 @@
 import { Loader2 } from 'lucide-react'
 import type { FilePhase, FileState, ProjectFile } from '@/lib/types'
+import { PHASE_LABEL } from '@/lib/jobPhases'
 
-const PHASE_LABEL: Record<FilePhase, string> = {
-  diarize: 'Diarisieren', correct: 'Korrigieren', verify: 'Verifizieren', transcribe: 'Transkribieren',
-}
 const STATE_LABEL: Record<FileState, string> = { done: 'Fertig', skipped: 'Übersprungen', failed: 'Fehler' }
 const STATE_ICON: Record<FileState, string> = { done: '✓', skipped: '↷', failed: '✗' }
 

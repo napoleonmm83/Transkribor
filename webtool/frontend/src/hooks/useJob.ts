@@ -1,5 +1,6 @@
 import { toast } from 'sonner'
 import { getJob, cancelJob } from '@/lib/api'
+import { describePhases, parseJobPhases } from '@/lib/jobPhases'
 import type { StartJob } from '@/lib/types'
 
 export function useJob() {
@@ -17,15 +18,19 @@ export function useJob() {
     const tick = async () => {
       let j
       try { j = await getJob(res.job_id) } catch { toast.error(`${label}: Job nicht gefunden`, { id }); return }
-      const tail = j.lines.slice(-3).join('\n')
       if (j.status === 'running') {
-        toast.loading(`${label}\n${tail}`, { id, duration: Infinity,
+        // description statt roher Log-Zeilen: die enthalten Pfade und pyannote-Warnungen,
+        // und Sonner rendert '\n' nicht als Umbruch -> alles klebte zu einem Klumpen zusammen.
+        toast.loading(label, { id, duration: Infinity,
+          description: describePhases(parseJobPhases(j.kind ?? '', j.lines)) || undefined,
           action: cancelling ? undefined : { label: 'Abbrechen', onClick: cancel } })
         setTimeout(tick, 1500)
       } else {
         if (j.status === 'done') toast.success(`${label} fertig`, { id, duration: 4000 })
         else if (j.status === 'cancelled') toast.warning(`${label} abgebrochen`, { id, duration: 4000 })
-        else toast.error(`${label} — Fehler\n${tail}`, { id, duration: 8000 })
+        // Im Fehlerfall bleiben die Roh-Zeilen die einzige Diagnose — sonst steht der Nutzer ohne da.
+        else toast.error(`${label} — Fehler`, { id, duration: 8000,
+          description: j.lines.filter(l => l.trim()).slice(-3).join(' · ') || undefined })
         onDone?.()
       }
     }

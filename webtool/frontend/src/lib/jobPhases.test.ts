@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseJobPhases } from './jobPhases'
+import { describePhases, parseJobPhases } from './jobPhases'
 
 describe('parseJobPhases — correct', () => {
   it('aktive Datei + Phase, sequentiell', () => {
@@ -105,6 +105,24 @@ describe('parseJobPhases — transcribe', () => {
     ])
     expect(p.active).toBeNull()
     expect(p.perBase).toEqual({ A: 'done' })
+  })
+})
+
+describe('describePhases', () => {
+  const von = (kind: string, lines: string[]) => describePhases(parseJobPhases(kind, lines))
+
+  it('nennt Phase und Datei statt roher Log-Zeilen', () => {
+    expect(von('correct', ['→ Verifiziere Timeline 1 (Treue gegen Roh) …'])).toBe('Verifizieren Timeline 1…')
+  })
+  it('haengt Blockzaehler bzw. Prozent an', () => {
+    expect(von('correct', ['Block 2/4 (IDs 150–299)', '→ Korrigiere A …'])).toBe('Korrigieren A · Block 2/4')
+    expect(von('transcribe', ['[D] -> transkribiere A …', ' 45%|##| 45/100'])).toBe('Transkribieren A · 45%')
+  })
+  it('faellt auf die Vorstufe zurueck, wenn keine Datei aktiv ist', () => {
+    expect(von('correct', ['prep: 4 Datei(en) getaggt in E:\\x'])).toBe('Vorbereiten…')
+  })
+  it('leer, solange nichts erkennbar laeuft — pyannote-Warnungen erzeugen keinen Text', () => {
+    expect(von('correct', ['  warnings.warn(', 'UserWarning: std(): degrees of freedom is <= 0'])).toBe('')
   })
 })
 
