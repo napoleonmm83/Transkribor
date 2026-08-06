@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { Transcript } from './Transcript'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import type { EditDoc, Word } from '@/lib/types'
@@ -22,16 +22,28 @@ const doc: EditDoc = {
 describe('Transcript', () => {
   it('rendert Sprecher-Labels und markiert unkorrigierte unsichere Wörter', () => {
     render(<TooltipProvider><Transcript doc={doc} thr={{ yellow: 0.6, red: 0.4 }} activeId={null}
-      onPlaySeg={vi.fn()} onPlayTurn={vi.fn()} updateSegment={vi.fn()} /></TooltipProvider>)
+      onPlaySeg={vi.fn()} onPlayTurn={vi.fn()} updateSegment={vi.fn()} renameSpeaker={vi.fn()} /></TooltipProvider>)
     // Sprecher-Name erscheint sowohl im Block-Kopf als auch in der Per-Segment-Combobox.
     expect(screen.getAllByText(/Interviewer/).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/Befragte Person/).length).toBeGreaterThan(0)
     expect(screen.getByText('w1')).toHaveClass('u-red')
   })
 
+  it('Name im Block-Kopf benennt global um, nicht nur das Segment', () => {
+    const renameSpeaker = vi.fn(), updateSegment = vi.fn()
+    render(<TooltipProvider><Transcript doc={doc} thr={{ yellow: 0.6, red: 0.4 }} activeId={null}
+      onPlaySeg={vi.fn()} onPlayTurn={vi.fn()} updateSegment={updateSegment} renameSpeaker={renameSpeaker} /></TooltipProvider>)
+    fireEvent.click(screen.getAllByTitle('Sprecher im ganzen Transkript umbenennen')[0])
+    const input = screen.getByPlaceholderText('Sprecher…')
+    fireEvent.change(input, { target: { value: 'Beni Dürr' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(renameSpeaker).toHaveBeenCalledWith('Interviewer', 'Beni Dürr')
+    expect(updateSegment).not.toHaveBeenCalled()
+  })
+
   it('zeigt "Keine Datei geöffnet" nicht während des Ladens', () => {
     render(<Transcript doc={null} loading thr={{ yellow: 0.6, red: 0.4 }} activeId={null}
-      onPlaySeg={vi.fn()} onPlayTurn={vi.fn()} updateSegment={vi.fn()} />)
+      onPlaySeg={vi.fn()} onPlayTurn={vi.fn()} updateSegment={vi.fn()} renameSpeaker={vi.fn()} />)
     expect(screen.queryByText(/Keine Datei geöffnet/)).not.toBeInTheDocument()
   })
 })

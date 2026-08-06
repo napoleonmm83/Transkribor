@@ -4,8 +4,9 @@ import { Command, CommandGroup, CommandInput, CommandItem, CommandList } from '@
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
-export function SpeakerCombobox({ value, options, onChange, className }: {
+export function SpeakerCombobox({ value, options, onChange, className, style, title }: {
   value: string; options: string[]; onChange: (v: string) => void; className?: string;
+  style?: React.CSSProperties; title?: string;
 }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -13,7 +14,7 @@ export function SpeakerCombobox({ value, options, onChange, className }: {
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="ghost" size="sm"
+        <Button variant="ghost" size="sm" style={style} title={title}
           className={cn('h-6 px-1 text-xs font-normal text-muted-foreground', className)}>
           {value || 'Sprecher…'}</Button>
       </PopoverTrigger>
