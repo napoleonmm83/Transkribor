@@ -24,6 +24,15 @@ def _bases(project: str):
     return paths.transcript_bases(project)
 
 
+def _audio_bases(project: str) -> set:
+    """Basisnamen der Audiodateien. Damit sind Dateien im Workspace schon nach dem
+    Upload/Download sichtbar — nicht erst, wenn Whisper die Roh-JSON geschrieben hat."""
+    adir = paths.audio_dir(project)
+    if not os.path.isdir(adir):
+        return set()
+    return {os.path.splitext(f)[0] for f in os.listdir(adir) if f.lower().endswith(AUDIO_EXT)}
+
+
 def find_audio(project: str, base: str):
     adir = paths.audio_dir(project)
     for ext in AUDIO_EXT:
@@ -80,11 +89,12 @@ def list_projects():
             if not os.path.isdir(os.path.join(root, name)):
                 continue
             try:
+                audio = _audio_bases(name)
                 files = []
-                for base in _bases(name):
+                for base in sorted(set(_bases(name)) | audio):
                     files.append({
                         "base": base,
-                        "has_audio": find_audio(name, base) is not None,
+                        "has_audio": base in audio,
                         "has_raw": os.path.exists(_raw_path(name, base)),
                         "has_edit": os.path.exists(_edit_path(name, base)),
                         "has_md": os.path.exists(_md_path(name, base)),

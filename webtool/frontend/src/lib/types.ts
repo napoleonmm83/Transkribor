@@ -21,6 +21,6 @@ export type GlobalPhase = 'diarize' | 'prep' | 'glossary' | 'download';
 export type FileState = 'done' | 'skipped' | 'failed';
 export type JobPhases = {
   global: GlobalPhase | null;
-  active: { base: string; phase: FilePhase } | null;
+  active: { base: string; phase: FilePhase; pct?: number; detail?: string } | null;
   perBase: Record<string, FileState>;
 };

@@ -39,6 +39,32 @@ describe('parseJobPhases — correct', () => {
     ])
     expect(p.perBase).toEqual({ A: 'done' })
   })
+  it('Blockzaehler -> Prozent + Detail, Verify-Pass ist die halbe Blockbreite', () => {
+    const p = parseJobPhases('correct', [
+      '540 Segmente → 4 Blöcke à max. 150',
+      'Block 1/4 (IDs 0–149)', '→ Korrigiere A …', '→ Verifiziere A (Treue gegen Roh) …',
+      'Block 2/4 (IDs 150–299)', '→ Korrigiere A …',
+    ])
+    expect(p.active).toEqual({ base: 'A', phase: 'correct', pct: 25, detail: 'Block 2/4' })
+  })
+  it('halber Block waehrend der Verifikation', () => {
+    const p = parseJobPhases('correct', [
+      'Block 1/4 (IDs 0–149)', '→ Korrigiere A …', '→ Verifiziere A (Treue gegen Roh) …',
+    ])
+    expect(p.active).toEqual({ base: 'A', phase: 'verify', pct: 13, detail: 'Block 1/4' })
+  })
+  it('Blockzaehler endet mit der Datei — die naechste faengt ohne an', () => {
+    const p = parseJobPhases('correct', [
+      'Block 1/4 (IDs 0–149)', '→ Korrigiere A …',
+      'apply: A -> edit.json + md (540 Segmente)',
+      '→ Korrigiere B …',
+    ])
+    expect(p.active).toEqual({ base: 'B', phase: 'correct' })
+  })
+  it('ungechunkte Datei bleibt ohne Prozent', () => {
+    const p = parseJobPhases('correct', ['→ Korrigiere A …'])
+    expect(p.active).toEqual({ base: 'A', phase: 'correct' })
+  })
   it('Basisname mit Klammern -> SKIP greedy bis (human_edited=', () => {
     const p = parseJobPhases('correct', [
       '↷ SKIP Interview (Teil 1) (human_edited=true; --force zum Neu-Korrigieren)',
@@ -60,6 +86,25 @@ describe('parseJobPhases — transcribe', () => {
   })
   it('FEHLER -> failed', () => {
     expect(parseJobPhases('transcribe', ['[Demo] FEHLER A: broken pipe']).perBase).toEqual({ A: 'failed' })
+  })
+  it('tqdm-Balken von Whisper -> Prozent der aktiven Datei', () => {
+    // Zeilen 1:1 aus einem echten Lauf: Whisper haengt UserWarnings OHNE Zeilenumbruch
+    // an die tqdm-Zeile an — der Prozentwert steht trotzdem vorn.
+    const p = parseJobPhases('transcribe', [
+      '[Demo] -> transkribiere A …',
+      '  0%|          | 0/1906 [00:00<?, ?frames/s]E:\\…\\whisper\\timing.py:42: UserWarning: Failed to launch Triton kernels…',
+      ' 45%|████▌     | 858/1906 [00:02<00:02, 500.00frames/s]',
+    ])
+    expect(p.active).toEqual({ base: 'A', phase: 'transcribe', pct: 45 })
+  })
+  it('tqdm-Rest nach der fertig-Zeile faellt nicht auf eine tote Datei zurueck', () => {
+    const p = parseJobPhases('transcribe', [
+      '[Demo] -> transkribiere A …', ' 99%|#########9| 99000/100000 [00:44<00:00, 2250.00frames/s]',
+      '[Demo] fertig A: 45s, 40 Segmente, Audio 2:00, 2.6x',
+      '100%|##########| 100000/100000 [00:45<00:00, 2222.00frames/s]',
+    ])
+    expect(p.active).toBeNull()
+    expect(p.perBase).toEqual({ A: 'done' })
   })
 })
 

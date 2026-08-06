@@ -29,6 +29,22 @@ def test_list_projects(client):
     assert f["has_raw"] and f["has_audio"] and not f["has_edit"]
 
 
+def test_list_projects_zeigt_audio_ohne_transkript(client, tmp_path):
+    """Frisch hochgeladenes/geladenes Audio muss sofort sichtbar sein — nicht erst,
+    wenn Whisper die Roh-JSON geschrieben hat (sonst zeigt der Workspace '0 Dateien')."""
+    (tmp_path / "Demo" / "audio" / "Neu.m4a").write_bytes(b"fake")
+    demo = next(p for p in client.get("/api/projects").json()["projects"] if p["name"] == "Demo")
+    neu = next(x for x in demo["files"] if x["base"] == "Neu")
+    assert neu["has_audio"] and not neu["has_raw"]
+    assert [x["base"] for x in demo["files"]] == ["Neu", "S1"]
+
+
+def test_list_projects_ignoriert_nicht_audio_dateien(client, tmp_path):
+    (tmp_path / "Demo" / "audio" / "notizen.txt").write_text("kein Audio", encoding="utf-8")
+    demo = next(p for p in client.get("/api/projects").json()["projects"] if p["name"] == "Demo")
+    assert [x["base"] for x in demo["files"]] == ["S1"]
+
+
 def test_get_file_builds_doc(client):
     r = client.get("/api/projects/Demo/files/S1")
     assert r.status_code == 200
