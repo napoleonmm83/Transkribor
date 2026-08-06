@@ -34,7 +34,10 @@ CHUNK_SEGMENTS = 150          # max. Segmente pro claude-Aufruf; darüber wird d
 # Gleichzeitige claude-Aufrufe. Die Aufrufe warten fast nur auf Opus, also parallelisieren
 # Threads sie gut. Der Deckel sitzt bewusst an _run_claude und nicht an den Executors: Datei-
 # und Block-Parallelität wären sonst multiplikativ (3 Dateien × 3 Blöcke = 9 Opus-Sessions).
-CLAUDE_PARALLEL = max(1, int(os.environ.get("TRANSKRIBOR_PARALLEL") or 3))
+try:
+    CLAUDE_PARALLEL = max(1, int(os.environ.get("TRANSKRIBOR_PARALLEL") or 3))
+except ValueError:                # Tippfehler in der .env darf den Korrekturlauf nicht killen
+    CLAUDE_PARALLEL = 3
 _claude_slots = threading.Semaphore(CLAUDE_PARALLEL)
 _CREATE_NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 DEFAULT_CONTEXT = (
@@ -318,8 +321,12 @@ Exaktes Schema (Pflicht — sonst bleibt der Text auf dem Rohstand):
 Gib ausser der geschriebenen Datei nichts weiter aus."""
 
 
-def _verify_prompt(base: str, tagged_path: str, cpath: str, context: str, id_range=None) -> str:
-    block, scope = _scope(id_range)
+def _verify_prompt(base: str, tagged_path: str, cpath: str, context: str, id_range=None,
+                   known: str = "") -> str:
+    # `known` MUSS mit: der Treue-Pass prueft ausdruecklich die Sprecherzuordnung und schreibt
+    # die Datei neu. Ohne die schon vergebenen Namen taufte er Block 2..n um und haette den
+    # Anker aus Block 1 wieder zunichte gemacht.
+    block, scope = _scope(id_range, known)
     return f"""Du prüfst eine bereits erstellte SEGMENT-GENAUE Korrektur auf TREUE gegen das Rohtranskript (TREUE-CHECK) und schreibst die geprüfte Fassung zurück.
 
 Projekt-Kontext: {context or DEFAULT_CONTEXT}
@@ -438,7 +445,7 @@ def _correct_one(base: str, tagged: str, target: str, gjson: str, context: str, 
     if verify and _valid_correction(target):    # Treue-Pass nur auf eine GÜLTIGE Erst-Korrektur
         print(f"→ Verifiziere {base}{part} (Treue gegen Roh) …", flush=True)
         good = _load(target)                    # Snapshot: darf nicht durch einen kaputten Verify verloren gehen
-        _run_claude(_verify_prompt(base, tagged, target, context, id_range))
+        _run_claude(_verify_prompt(base, tagged, target, context, id_range, known))
         if not _valid_correction(target):       # Verify hat die gültige Korrektur zerstört -> zurückrollen
             paths.atomic_write(target, json.dumps(good, ensure_ascii=False, indent=1))
             print(f"⚠ Verifikation ungültig — behalte unverifizierte {base}.correction.json", flush=True)
@@ -487,6 +494,13 @@ def _correct_file(project: str, base: str, gjson: str, context: str, verify: boo
     # weiteren Blöcke orientieren. Parallel von Anfang an würde jeder Block eigene Namen für
     # denselben Sprecher erfinden, und _merge_parts hätte am Ende vier Personen statt zwei.
     docs = [block(1, "")]
+    if not docs[0]:
+        # Ohne Anker duerfen die uebrigen Bloecke NICHT laufen: sie schrieben gueltige
+        # Teil-Dateien mit selbst erfundenen Namen, die der naechste Lauf als "schon
+        # vorhanden" wiederverwendet — die Inkonsistenz waere dann dauerhaft.
+        print(f"  ✗ {base}: Block 1 gescheitert — die weiteren Blöcke braeuchten seine "
+              f"Sprecher-Zuordnung, ein erneuter Lauf faengt bei Block 1 an", flush=True)
+        return
     if len(chunks) > 1:
         known = _speaker_hint([d for d in docs if d], clusters)
         with ThreadPoolExecutor(max_workers=min(len(chunks) - 1, CLAUDE_PARALLEL)) as ex:

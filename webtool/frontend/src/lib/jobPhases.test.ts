@@ -60,10 +60,20 @@ describe('parseJobPhases — correct', () => {
   it('uebersprungene und gescheiterte Bloecke zaehlen auch als erledigt', () => {
     const p = parseJobPhases('correct', [
       'A: 300 Segmente → 2 Blöcke à max. 150',
-      '↷ A · Block 1/2 schon vorhanden', '✗ A · Block 2/2 ohne gültiges Ergebnis',
+      '→ Korrigiere A · Block 1/2 …', '✗ A · Block 1/2 ohne gültiges Ergebnis',
       '→ Korrigiere A · Block 2/2 …',
     ])
-    expect(p.active.A.pct).toBe(100)
+    expect(p.active.A).toEqual({ phase: 'correct', pct: 50, detail: '1/2 Blöcke' })
+  })
+  it('ein wiederverwendeter Block zaehlt EINMAL, nicht zweimal', () => {
+    // correct.py meldet beim Reuse '↷ schon vorhanden' UND faellt danach in dieselbe
+    // Pruefung, die '✓ fertig' druckt — ein blosser Zaehler schoesse ueber 100%.
+    const p = parseJobPhases('correct', [
+      'A: 300 Segmente → 2 Blöcke à max. 150',
+      '↷ A · Block 1/2 schon vorhanden', '✓ A · Block 1/2 fertig',
+      '→ Korrigiere A · Block 2/2 …',
+    ])
+    expect(p.active.A).toEqual({ phase: 'correct', pct: 50, detail: '1/2 Blöcke' })
   })
   it('Blockzaehler endet mit der Datei — die naechste faengt ohne an', () => {
     const p = parseJobPhases('correct', [

@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { getJob } from '@/lib/api'
 import { parseJobPhases } from '@/lib/jobPhases'
 import type { JobPhases } from '@/lib/types'
@@ -6,8 +6,6 @@ import type { JobPhases } from '@/lib/types'
 export type Job = { id: string; project: string; kind: string; status: string; phases: JobPhases }
 type Ctx = {
   jobs: Job[]
-  /** Ueber alle LAUFENDEN Jobs gemergt — fuer die Statuspille je Datei. */
-  phases: JobPhases
   adopt: (id: string, project: string, kind: string) => void
   onSettled: (fn: () => void) => () => void
 }
@@ -15,15 +13,23 @@ const EMPTY: JobPhases = { global: null, active: {}, perBase: {} }
 const JobContext = createContext<Ctx | null>(null)
 
 /** Transkription und Korrektur duerfen gleichzeitig laufen (jobs.py: Dedupe je Projekt UND Art),
- *  also mehrere Jobs zusammenfuehren. `active` ist nach Basisnamen indiziert, das mergt sauber;
- *  ein perBase-Eintrag muss weichen, wenn dieselbe Datei woanders gerade wieder laeuft — sonst
- *  maskiert das 'Fertig' der Transkription die laufende Korrektur (FileStatusPill prueft state zuerst). */
+ *  also mehrere Jobs zusammenfuehren. NUR Jobs EINES Projekts hineingeben — `active` ist nach
+ *  Basisnamen indiziert, und derselbe Basisname existiert durchaus in mehreren Projekten.
+ *
+ *  Zwei Regeln, ohne die die Anzeige von der Job-Reihenfolge abhinge:
+ *  - Ein perBase-Eintrag weicht, wenn dieselbe Datei in einem anderen Job gerade laeuft — sonst
+ *    maskiert das 'Fertig' der Transkription die laufende Korrektur (FileStatusPill prueft state zuerst).
+ *  - Kollidieren zwei aktive Phasen auf derselben Datei, gewinnt 'transcribe': dann wird das
+ *    Transkript gerade ersetzt, und die Korrektur arbeitet auf gleich veralteten Daten. */
 export function mergePhases(jobs: Job[]): JobPhases {
   const active: JobPhases['active'] = {}
   const perBase: JobPhases['perBase'] = {}
   let global: JobPhases['global'] = null
   for (const j of jobs) {
-    Object.assign(active, j.phases.active)
+    for (const [base, work] of Object.entries(j.phases.active)) {
+      if (base in active && j.kind !== 'transcribe') continue
+      active[base] = work
+    }
     Object.assign(perBase, j.phases.perBase)
     global = global ?? j.phases.global
   }
@@ -80,9 +86,10 @@ export function JobProvider({ children, intervalMs = 1500 }: { children: ReactNo
     return () => { alive = false; clearTimeout(timer) }
   }, [runningIds, intervalMs])
 
-  const phases = useMemo(() => mergePhases(jobs.filter(j => j.status === 'running')), [jobs])
-
-  return <JobContext.Provider value={{ jobs, phases, adopt, onSettled }}>{children}</JobContext.Provider>
+  // Bewusst KEIN projektuebergreifendes `phases` im Context: das war die Falle — die Datei-Pillen
+  // haetten den Status eines gleichnamigen Files aus einem anderen Projekt gezeigt.
+  // Verbraucher filtern selbst auf ihr Projekt und rufen mergePhases().
+  return <JobContext.Provider value={{ jobs, adopt, onSettled }}>{children}</JobContext.Provider>
 }
 
 export function useActiveJob(): Ctx {

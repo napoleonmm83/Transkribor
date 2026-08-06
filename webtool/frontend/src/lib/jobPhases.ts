@@ -14,7 +14,10 @@ export const GLOBAL_LABEL: Record<GlobalPhase, string> = {
 export function parseJobPhases(kind: string, lines: string[]): JobPhases {
   const perBase: Record<string, FileState> = {}
   const active: Record<string, FileWork> = {}
-  const blocks: Record<string, { done: number; total: number }> = {}
+  // Blocknummern statt Zaehler: ein wiederverwendeter Block meldet '↷ schon vorhanden' UND
+  // '✓ fertig' (correct.py faellt nach dem Reuse in dieselbe Pruefung) — ein ++ zaehlte ihn
+  // doppelt und der Balken schoesse ueber 100%.
+  const blocks: Record<string, { done: Set<number>; total: number }> = {}
   let global: GlobalPhase | null = null
   let cursor: string | null = null            // transcribe: die eine laufende Datei
 
@@ -28,9 +31,11 @@ export function parseJobPhases(kind: string, lines: string[]): JobPhases {
   // dafuer nicht mehr: bei parallelen Bloecken laufen 2 und 3 gleichzeitig.
   const prog = (base: string): Partial<FileWork> => {
     const b = blocks[base]
-    return b ? { pct: Math.round((b.done / b.total) * 100), detail: `${b.done}/${b.total} Blöcke` } : {}
+    if (!b) return {}
+    const fertig = Math.min(b.done.size, b.total)
+    return { pct: Math.round((fertig / b.total) * 100), detail: `${fertig}/${b.total} Blöcke` }
   }
-  const blockDone = (base: string) => { if (blocks[base]) blocks[base].done++ }
+  const blockDone = (base: string, nr: number) => { blocks[base]?.done.add(nr) }
 
   for (const rawLine of lines) {
     const l = rawLine.trim()
@@ -63,8 +68,10 @@ export function parseJobPhases(kind: string, lines: string[]): JobPhases {
     if (kind !== 'correct') continue
 
     if ((m = l.match(/^→ Diarisiere (.+) …$/))) { active[m[1]] = { phase: 'diarize' }; global = 'diarize' }
-    else if ((m = l.match(/^(.+?): \d+ Segmente → (\d+) Blöcke/))) blocks[m[1]] = { done: 0, total: +m[2] }
-    else if ((m = l.match(/^[✓✗↷] (.+?) · Block \d+\/\d+ (fertig|ohne|schon)/))) blockDone(m[1])
+    else if ((m = l.match(/^(.+?): \d+ Segmente → (\d+) Blöcke/))) blocks[m[1]] = { done: new Set(), total: +m[2] }
+    // ✓ / ↷ / ✗ heissen alle "laeuft nicht mehr" — ob der Block geglueckt ist, sagt am Ende
+    // der Terminal-Status der Datei, nicht der Balken.
+    else if ((m = l.match(/^[✓✗↷] (.+?) · Block (\d+)\/\d+ (fertig|ohne|schon)/))) blockDone(m[1], +m[2])
     else if ((m = l.match(/^→ Korrigiere (.+?)(?: · Block \d+\/\d+)? …$/)))
       { active[m[1]] = { phase: 'correct', ...prog(m[1]) }; global = null }
     else if ((m = l.match(/^→ Verifiziere (.+?)(?: · Block \d+\/\d+)? \(Treue gegen Roh\) …$/)))

@@ -3,6 +3,7 @@ import json
 import os
 import shutil
 import sys
+import time
 
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
@@ -182,13 +183,19 @@ def _autocorrect(project: str) -> None:
     if not _autocorrect_enabled():
         return
     cmd = [sys.executable, "-m", "webtool.correct", "run", project]
-    job_id, started = jobs.start(project, cmd, paths.ROOT, "correct")
-    if started:
-        return
-    # Es korrigiert schon eine aeltere Runde — die kennt die neuen Dateien nicht. Also hinten
-    # anhaengen. when_done()==False heisst: der Job war eben fertig -> sofort nochmal.
-    if not jobs.when_done(job_id, lambda: _autocorrect(project)):
-        _autocorrect(project)
+    # Schleife statt Rekursion: zwischen 'status=done' und dem Freigeben von _active gibt es ein
+    # Fenster, in dem start() "laeuft schon" und when_done() "schon terminal" meldet. Rekursiv
+    # waere das eine ungebremste Kette; hier sind es hoechstens ein paar Runden mit Pause.
+    for _ in range(10):
+        job_id, started = jobs.start(project, cmd, paths.ROOT, "correct")
+        if started:
+            return
+        # Es korrigiert schon eine aeltere Runde — die kennt die neuen Dateien nicht, also
+        # hinten anhaengen. when_done()==False heisst: der Job ist eben fertig geworden.
+        if jobs.when_done(job_id, lambda: _autocorrect(project)):
+            return
+        time.sleep(0.2)
+    print(f"Auto-Korrektur fuer {project!r} aufgegeben: Slot blieb belegt", file=sys.stderr)
 
 
 @app.post("/api/projects/{project}/transcribe")
