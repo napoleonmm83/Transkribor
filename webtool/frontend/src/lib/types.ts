@@ -16,6 +16,16 @@ export type Project = { name: string; files: ProjectFile[]; active_jobs?: Active
 export type JobStatus = { status: 'running' | 'done' | 'error' | 'cancelled'; lines: string[]; kind?: string };
 export type StartJob = { job_id: string; started: boolean };
 export type Thresholds = { yellow: number; red: number };
+export type ProviderInfo = {
+  id: string; label: string; needs_key: boolean;
+  base: string; default_model: string; keys_url: string; hint: string;
+};
+/** `has_key` statt des Keys: der Schluessel verlaesst den Server nie. */
+export type Settings = {
+  provider: string; model: string; base_url: string; has_key: boolean;
+  providers: ProviderInfo[]; env_key: string;
+};
+export type ModelInfo = { id: string; label: string };
 export type Turn = { key: string; speaker: string; segments: Segment[] };
 export type FilePhase = 'diarize' | 'correct' | 'verify' | 'transcribe';
 export type GlobalPhase = 'diarize' | 'prep' | 'glossary' | 'download';

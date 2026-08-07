@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 @pytest.fixture
 def client(monkeypatch, tmp_path):
     monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    monkeypatch.setenv("TRANSKRIBOR_SETTINGS", str(tmp_path / "settings.json"))
     proj = tmp_path / "Demo"
     (proj / "audio").mkdir(parents=True)
     (proj / "transkripte").mkdir()
@@ -381,3 +382,46 @@ def test_autocorrect_versucht_sofort_neu_wenn_der_blocker_schon_weg_ist(client, 
     monkeypatch.setattr(app_mod.jobs, "when_done", lambda jid, fn: False)   # schon terminal
     app_mod._autocorrect("Demo")
     assert versuche == ["correct", "correct"]
+
+
+# --- Einstellungen (KI-Anbieter) ---------------------------------------------
+
+def test_settings_default_ist_abo(client):
+    r = client.get("/api/settings")
+    assert r.status_code == 200
+    d = r.json()
+    assert d["provider"] == "claude-cli" and d["has_key"] is False
+    assert any(p["id"] == "anthropic" for p in d["providers"])
+
+
+def test_settings_speichern_und_key_bleibt_geheim(client):
+    r = client.put("/api/settings", json={"provider": "anthropic", "model": "claude-opus-5",
+                                          "api_key": "sk-streng-geheim"})
+    assert r.status_code == 200 and r.json()["has_key"] is True
+    # Der Key darf ueber KEINEN Endpoint zurueckkommen — er verlaesst den Server nie.
+    assert "sk-streng-geheim" not in r.text
+    assert "sk-streng-geheim" not in client.get("/api/settings").text
+
+
+def test_settings_modellwechsel_behaelt_den_key(client):
+    client.put("/api/settings", json={"provider": "anthropic", "api_key": "sk-a"})
+    r = client.put("/api/settings", json={"model": "claude-sonnet-5"})
+    assert r.json() == {"provider": "anthropic", "model": "claude-sonnet-5",
+                        "base_url": "", "has_key": True}
+
+
+def test_settings_unbekannter_anbieter_400(client):
+    assert client.put("/api/settings", json={"provider": "erfunden"}).status_code == 400
+
+
+def test_settings_modelle_ohne_key_400(client):
+    client.put("/api/settings", json={"provider": "anthropic"})
+    r = client.get("/api/settings/models")
+    assert r.status_code == 400 and "Key" in r.json()["detail"]
+
+
+def test_settings_test_meldet_fehler_statt_zu_500en(client, monkeypatch):
+    from webtool import llm
+    monkeypatch.setattr(llm, "check", lambda: (_ for _ in ()).throw(llm.LLMError("kein Netz")))
+    r = client.post("/api/settings/test")
+    assert r.status_code == 200 and r.json() == {"ok": False, "detail": "kein Netz"}
