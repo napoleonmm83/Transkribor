@@ -3,7 +3,6 @@ import json
 import os
 import shutil
 import sys
-import time
 
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
@@ -182,36 +181,28 @@ def _autocorrect(project: str) -> None:
     also genau die neu transkribierten Dateien nach."""
     if not _autocorrect_enabled():
         return
-    cmd = [sys.executable, "-m", "webtool.correct", "run", project]
-    # Schleife statt Rekursion: zwischen 'status=done' und dem Freigeben von _active gibt es ein
-    # Fenster, in dem start() "laeuft schon" und when_done() "schon terminal" meldet. Rekursiv
-    # waere das eine ungebremste Kette; hier sind es hoechstens ein paar Runden mit Pause.
-    for _ in range(10):
-        job_id, started = jobs.start(project, cmd, paths.ROOT, "correct")
-        if started:
-            return
-        # Es korrigiert schon eine aeltere Runde — die kennt die neuen Dateien nicht, also
-        # hinten anhaengen. when_done()==False heisst: der Job ist eben fertig geworden.
-        if jobs.when_done(job_id, lambda: _autocorrect(project)):
-            return
-        time.sleep(0.2)
-    print(f"Auto-Korrektur fuer {project!r} aufgegeben: Slot blieb belegt", file=sys.stderr)
+    jobs.request(project, [sys.executable, "-m", "webtool.correct", "run", project],
+                 paths.ROOT, "correct")
+
+
+def _start_transcribe(project: str):
+    """Transkription anstossen; danach automatisch korrigieren."""
+    return jobs.request(project, [sys.executable, os.path.join(paths.ROOT, "transcribe.py"), project],
+                        paths.ROOT, "transcribe", then=lambda: _autocorrect(project))
 
 
 @app.post("/api/projects/{project}/transcribe")
 def transcribe(project: str):
     _validate(project)
-    cmd = [sys.executable, os.path.join(paths.ROOT, "transcribe.py"), project]
-    job_id, started = jobs.start(project, cmd, paths.ROOT, "transcribe",
-                                 then=lambda: _autocorrect(project))
+    job_id, started = _start_transcribe(project)
     return {"job_id": job_id, "started": started}
 
 
 @app.post("/api/projects/{project}/correct")
 def correct(project: str):
     _validate(project)
-    cmd = [sys.executable, "-m", "webtool.correct", "run", project]
-    job_id, started = jobs.start(project, cmd, paths.ROOT, "correct")
+    job_id, started = jobs.request(project, [sys.executable, "-m", "webtool.correct", "run", project],
+                                   paths.ROOT, "correct")
     return {"job_id": job_id, "started": started}
 
 
@@ -245,9 +236,11 @@ def fetch_urls(project: str, body: FetchBody):
         urls = [fetch_mod.check_url(u) for u in urls]   # zweite Instanz: fetch.py prueft erneut
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    cmd = [sys.executable, "-m", "webtool.fetch", project, *urls]
-    job_id, started = jobs.start(project, cmd, paths.ROOT, "transcribe",
-                                 then=lambda: _autocorrect(project))
+    # Eigene Job-Art: der Download braucht keine GPU. Als "transcribe" gefuehrt wuerde er von
+    # jeder laufenden Transkription blockiert — und die laeuft seit dem Auto-Trigger oft.
+    cmd = [sys.executable, "-m", "webtool.fetch", "--download-only", project, *urls]
+    job_id, started = jobs.start(project, cmd, paths.ROOT, "fetch",
+                                 then=lambda: _start_transcribe(project))
     return {"job_id": job_id, "started": started}
 
 
@@ -283,7 +276,10 @@ def upload_audio(project: str, file: UploadFile = File(...)):
             shutil.copyfileobj(file.file, out)
     except FileExistsError:
         raise HTTPException(status_code=409, detail="Datei existiert bereits")
-    return {"ok": True, "base": base, "file": base + ext}
+    # Hochladen IST der Startschuss: Transkription (und danach Korrektur) laufen von selbst an.
+    # jobs.request() sorgt dafuer, dass ein Mehrfach-Upload hoechstens EINEN Nachlauf anhaengt.
+    job_id, started = _start_transcribe(project)
+    return {"ok": True, "base": base, "file": base + ext, "job_id": job_id, "started": started}
 
 
 _STATIC = os.path.join(os.path.dirname(__file__), "static")

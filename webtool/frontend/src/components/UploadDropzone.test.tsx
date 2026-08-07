@@ -19,4 +19,18 @@ describe('UploadDropzone', () => {
     await waitFor(() => expect(onDone).toHaveBeenCalled())
     expect(screen.getByText(/existiert bereits/)).toBeInTheDocument()
   })
+
+  it('reicht den vom Upload gestarteten Transkriptions-Job nach oben', async () => {
+    // Ohne das muesste der Workspace bis zum naechsten Poll warten, bis der Balken erscheint.
+    vi.mocked(api.uploadAudio)
+      .mockResolvedValueOnce({ base: 'a', file: 'a.mp3', job_id: 'j7', started: true })
+      .mockResolvedValueOnce({ base: 'c', file: 'c.wav', job_id: 'j7', started: false })
+    const onDone = vi.fn()
+    render(<UploadDropzone project="Demo" onDone={onDone} />)
+    const input = screen.getByTestId('upload-input') as HTMLInputElement
+    const files = [new File(['x'], 'a.mp3'), new File(['z'], 'c.wav')]
+    await act(async () => { fireEvent.change(input, { target: { files } }) })
+    // zuletzt gemeldeter Stand gewinnt: der zweite Upload lief in denselben, schon laufenden Job
+    await waitFor(() => expect(onDone).toHaveBeenCalledWith({ job_id: 'j7', started: false }))
+  })
 })

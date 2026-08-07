@@ -5,12 +5,14 @@ Fortschritt = stdout-Zeilen im Job-Log; via GET /api/jobs/{id} gepollt.
 """
 import os
 import subprocess
+import sys
 import threading
 import time
 import uuid
 
 _jobs = {}                 # job_id -> record
 _active = {}               # (project, kind) -> job_id (Dedupe: je Art einer pro Projekt)
+_pending = set()           # (project, kind) mit genau EINEM vorgemerkten Nachlauf
 _lock = threading.Lock()
 
 _CREATE_NO_WINDOW = 0x08000000 if os.name == "nt" else 0
@@ -50,6 +52,38 @@ def start(project: str, cmd: list, cwd, kind: str, then=None):
         _active[(project, kind)] = jid
     threading.Thread(target=_run, args=(jid, cmd, cwd), daemon=True).start()
     return jid, True
+
+
+def request(project: str, cmd: list, cwd, kind: str, then=None):
+    """Startet den Job — oder merkt genau EINEN Nachlauf vor, wenn der Slot belegt ist.
+
+    Ein Upload/Import soll immer zu einer Verarbeitung fuehren, auch wenn gerade eine laeuft:
+    die kennt die eben hochgeladene Datei nicht. Ohne die _pending-Sperre wuerden fuenf
+    Uploads fuenf Whisper-Laeufe hinter dem laufenden aufreihen — einer reicht, er sieht
+    ohnehin alle inzwischen dazugekommenen Dateien.
+    """
+    key = (project, kind)
+    for _ in range(10):
+        jid, started = start(project, cmd, cwd, kind, then=then)
+        if started:
+            return jid, True
+        with _lock:
+            if key in _pending:
+                return jid, False        # schon vorgemerkt -> der Nachlauf nimmt die neuen Dateien mit
+            _pending.add(key)
+
+        def rerun(_key=key):
+            with _lock:
+                _pending.discard(_key)
+            request(project, cmd, cwd, kind, then=then)
+
+        if when_done(jid, rerun):
+            return jid, False
+        with _lock:                       # jid wurde eben terminal -> Slot frei, gleich nochmal
+            _pending.discard(key)
+        time.sleep(0.05)
+    print(f"Nachlauf fuer {project!r}/{kind} aufgegeben: Slot blieb belegt", file=sys.stderr)
+    return None, False
 
 
 def when_done(job_id: str, fn) -> bool:

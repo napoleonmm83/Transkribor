@@ -76,6 +76,12 @@ def transcribe_project(name, model, language, only=None):
     if not files:
         print(f"[{name}] keine Audiodateien in {audio_dir(proj_dir)}")
         return
+    # Vor dem Modell pruefen, ob ueberhaupt etwas offen ist: seit ein Upload die Transkription
+    # selbst ausloest, laufen Leerlauf-Runden regelmaessig, und load_model kostet ~30s + 3 GB.
+    if not any(not os.path.exists(os.path.join(out_dir, os.path.splitext(os.path.basename(f))[0] + ".json"))
+               for f in files):
+        print(f"[{name}] nichts zu tun — {len(files)} Datei(en) bereits transkribiert", flush=True)
+        return
 
     # optionaler Kontext -> Whisper initial_prompt
     prompt = ("Interview auf Schweizerdeutsch, transkribiert nach Standarddeutsch. "

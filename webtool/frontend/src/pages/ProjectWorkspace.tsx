@@ -9,11 +9,9 @@ import { UploadDropzone } from '@/components/UploadDropzone'
 import { UrlFetch } from '@/components/UrlFetch'
 import { Button } from '@/components/ui/button'
 import { startTranscribe, startCorrect, startCorrectFile, cancelJob } from '@/lib/api'
-import { describePhases } from '@/lib/jobPhases'
+import { describePhases, KIND_LABEL } from '@/lib/jobPhases'
 import { cn } from '@/lib/utils'
 import type { StartJob } from '@/lib/types'
-
-const KIND_LABEL: Record<string, string> = { transcribe: 'Transkribieren…', correct: 'Korrigieren…' }
 
 export function ProjectWorkspace() {
   const { project } = useParams<{ project: string }>()
@@ -36,10 +34,18 @@ export function ProjectWorkspace() {
     for (const aj of p?.active_jobs ?? []) adopt(aj.id, project!, aj.kind)
   }, [aktiveIds, project, adopt])  // eslint-disable-line react-hooks/exhaustive-deps
 
-  const startJob = async (fn: () => Promise<StartJob>, kind: string, label: string) => {
+  // `started === false` heisst bei transcribe/correct NICHT "abgelehnt": das Backend haengt den
+  // Lauf hinten an (jobs.request). Nur der Einzel-Datei-Lauf wird wirklich abgewiesen.
+  const startJob = async (fn: () => Promise<StartJob>, kind: string, label: string, queues = true) => {
     let res: StartJob
     try { res = await fn() } catch (e) { toast.error(`${label} fehlgeschlagen: ${(e as Error).message}`); return }
-    if (!res.started) { toast.warning(`Es läuft bereits ein ${label}-Job für dieses Projekt.`); return }
+    if (!res.started) {
+      toast[queues ? 'info' : 'warning'](queues
+        ? `${label}: läuft schon — wird danach nachgeholt.`
+        : `Es läuft bereits ein ${label}-Job für dieses Projekt.`)
+      if (queues) refresh()
+      return
+    }
     adopt(res.job_id, project!, kind)
     toast.success(`${label} gestartet`)
   }
@@ -71,11 +77,16 @@ export function ProjectWorkspace() {
       ))}
 
       <div className="mb-4 space-y-3">
-        <UploadDropzone project={project!} onDone={refresh} />
+        <UploadDropzone project={project!} onDone={job => {
+          refresh()
+          // Sofort adoptieren statt auf den naechsten Poll zu warten — der Balken soll direkt stehen.
+          if (job?.started) { adopt(job.job_id, project!, 'transcribe'); toast.success('Transkription gestartet') }
+          else if (job) toast.info('Transkription läuft schon — die neuen Dateien kommen danach dran.')
+        }} />
         <UrlFetch project={project!} onStart={res => {
-          if (!res.started) { toast.warning('Es läuft bereits ein Job für dieses Projekt.'); return }
-          adopt(res.job_id, project!, 'transcribe')
-          toast.success('Herunterladen gestartet')
+          if (!res.started) { toast.warning('Es läuft bereits ein Import für dieses Projekt.'); return }
+          adopt(res.job_id, project!, 'fetch')
+          toast.success('Herunterladen gestartet — Transkription folgt automatisch')
         }} />
       </div>
 
@@ -99,7 +110,7 @@ export function ProjectWorkspace() {
                   state={state} jobRunning={running} />
                 <Button size="icon" variant="ghost" className="size-6" title="Nur diese Datei korrigieren"
                   disabled={!f.has_raw}
-                  onClick={() => startJob(() => startCorrectFile(project!, f.base, false), 'correct', `Korrigieren ${f.base}`)}>
+                  onClick={() => startJob(() => startCorrectFile(project!, f.base, false), 'correct', `Korrigieren ${f.base}`, false)}>
                   <Pencil className="size-3.5" />
                 </Button>
               </div>

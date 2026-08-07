@@ -187,3 +187,52 @@ def test_active_for_running_then_none():
     assert jobs.active_for("P_af") == [{"id": jid, "kind": "correct"}]
     _wait(jid)
     assert jobs.active_for("P_af") == []
+
+
+def test_request_startet_sofort_wenn_frei():
+    jid, started = jobs.request("P_req", _echo_cmd(1), cwd=None, kind="transcribe")
+    assert started is True
+    assert _wait(jid)["status"] == "done"
+
+
+def test_request_haengt_genau_einen_nachlauf_an():
+    """Fuenf Uploads waehrend eines laufenden Laufs duerfen nicht fuenf Laeufe aufreihen —
+    einer reicht, er sieht ohnehin alle inzwischen dazugekommenen Dateien."""
+    slow = [sys.executable, "-c", "import time; time.sleep(0.5)"]
+    jid, started = jobs.request("P_req1", slow, cwd=None, kind="transcribe")
+    assert started is True
+    for _ in range(5):                       # alle waehrend des laufenden Jobs
+        jid2, ok = jobs.request("P_req1", _echo_cmd(1), cwd=None, kind="transcribe")
+        assert ok is False and jid2 == jid   # eingereiht, nicht gestartet
+    _wait(jid)
+    # der eine vorgemerkte Nachlauf laeuft im Job-Thread an
+    deadline = time.time() + 5
+    while time.time() < deadline:
+        laufend = jobs.active_for("P_req1")
+        if laufend:
+            _wait(laufend[0]["id"])
+            break
+        time.sleep(0.02)
+    nachlaeufe = [r for r in jobs._jobs.values()
+                  if r["project"] == "P_req1" and r["id"] != jid]
+    assert len(nachlaeufe) == 1, f"genau ein Nachlauf erwartet, waren {len(nachlaeufe)}"
+    assert ("P_req1", "transcribe") not in jobs._pending   # Vormerkung wieder freigegeben
+
+
+def test_request_gibt_pending_frei_wenn_der_blocker_schon_weg_ist(monkeypatch):
+    """when_done()==False heisst 'Job eben terminal' -> sofort neu versuchen, nicht aufgeben."""
+    versuche = []
+    echt_start = jobs.start
+
+    def fake_start(project, cmd, cwd, kind, then=None):
+        versuche.append(kind)
+        if len(versuche) == 1:
+            return "weg", False
+        return echt_start(project, cmd, cwd, kind, then=then)
+
+    monkeypatch.setattr(jobs, "start", fake_start)
+    monkeypatch.setattr(jobs, "when_done", lambda jid, fn: False)
+    jid, started = jobs.request("P_req2", _echo_cmd(1), cwd=None, kind="correct")
+    assert started is True and versuche == ["correct", "correct"]
+    _wait(jid)
+    assert ("P_req2", "correct") not in jobs._pending

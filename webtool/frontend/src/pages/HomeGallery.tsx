@@ -1,21 +1,15 @@
-import { useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
 import { useProjects } from '@/hooks/useProjects'
+import { KIND_LABEL } from '@/lib/jobPhases'
 import { NewProjectDialog } from '@/components/NewProjectDialog'
 import { DeleteProjectDialog } from '@/components/DeleteProjectDialog'
 
 export function HomeGallery() {
+  // Der Poll steckt in useProjects — Jobs starten inzwischen auch ohne Klick (Upload -> Transkription
+  // -> Korrektur), die Galerie muss sie also sehen, ohne dass hier vorher schon einer lief.
   const { projects, refresh } = useProjects()
   const navigate = useNavigate()
-
-  // Solange irgendein Projekt einen laufenden Job hat, die Liste periodisch nachladen.
-  const anyActive = projects.some(p => p.active_jobs?.length)
-  useEffect(() => {
-    if (!anyActive) return
-    const t = setInterval(refresh, 3000)
-    return () => clearInterval(t)
-  }, [anyActive, refresh])
 
   return (
     <div className="mx-auto max-w-4xl p-6">
@@ -41,7 +35,7 @@ export function HomeGallery() {
                 {(p.active_jobs ?? []).map(j => (
                   <div key={j.id} className="mt-2 flex items-center gap-1 text-xs text-primary">
                     <Loader2 className="size-3 animate-spin" />
-                    {j.kind === 'transcribe' ? 'Transkribieren…' : 'Korrigieren…'}
+                    {KIND_LABEL[j.kind] ?? 'Läuft…'}
                   </div>
                 ))}
               </Link>

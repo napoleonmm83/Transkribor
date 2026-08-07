@@ -16,6 +16,11 @@ def client(monkeypatch, tmp_path):
          "compression_ratio": 1.1, "no_speech_prob": 0.01, "avg_logprob": -0.3,
          "words": [{"word": " Hallo", "start": 0.0, "end": 0.5, "probability": 0.9}]}]}
     (proj / "transkripte" / "S1.json").write_text(json.dumps(raw), encoding="utf-8")
+    # Seit dem Auto-Trigger startet schon ein Upload einen Job — ohne diese Attrappe waere das
+    # ein echter Whisper-Subprozess, der auch noch die globale Job-Registry der Tests verschmutzt.
+    # Tests, die den Start pruefen, patchen `start` danach selbst.
+    import webtool.jobs as jobs_mod
+    monkeypatch.setattr(jobs_mod, "start", lambda *a, **k: ("job-fake", True))
     from webtool.app import app
     return TestClient(app)
 
@@ -115,7 +120,7 @@ def test_transcribe_invalid_name_400(client):
 
 def test_correct_starts_job(client, monkeypatch):
     calls = {}
-    def fake_start(project, cmd, cwd, kind):
+    def fake_start(project, cmd, cwd, kind, then=None):
         calls["project"] = project; calls["kind"] = kind; calls["cmd"] = cmd
         return "corr123", True
     import webtool.jobs as jobs_mod
@@ -178,6 +183,30 @@ def test_upload_ok_and_duplicate_409(client, tmp_path):
     # zweiter Upload derselben Datei -> 409
     r2 = client.post("/api/projects/Demo/audio", files={"file": ("Neu.mp3", b"x", "audio/mpeg")})
     assert r2.status_code == 409
+
+
+def test_upload_startet_transkription(client, monkeypatch):
+    """Hochladen IST der Trigger — ohne den muesste der Nutzer zusaetzlich auf 'Transkribieren'."""
+    calls = {}
+    def fake_start(project, cmd, cwd, kind, then=None):
+        calls["kind"] = kind; calls["cmd"] = cmd; calls["then"] = then
+        return "upl1", True
+    import webtool.jobs as jobs_mod
+    monkeypatch.setattr(jobs_mod, "start", fake_start)
+    r = client.post("/api/projects/Demo/audio", files={"file": ("Neu.mp3", b"a", "audio/mpeg")})
+    assert r.status_code == 200
+    assert r.json()["job_id"] == "upl1" and r.json()["started"] is True
+    assert calls["kind"] == "transcribe" and calls["cmd"][1].endswith("transcribe.py")
+    assert callable(calls["then"])              # und danach automatisch korrigieren
+
+
+def test_upload_ohne_job_start_bleibt_erfolgreich(client, monkeypatch):
+    """Ein abgelehnter/aufgeschobener Job darf den Upload nicht als Fehler erscheinen lassen."""
+    import webtool.jobs as jobs_mod
+    monkeypatch.setattr(jobs_mod, "start", lambda *a, **k: ("laeuft_schon", False))
+    monkeypatch.setattr(jobs_mod, "when_done", lambda jid, fn: True)
+    r = client.post("/api/projects/Demo/audio", files={"file": ("Neu.mp3", b"a", "audio/mpeg")})
+    assert r.status_code == 200 and r.json()["started"] is False
 
 
 def test_upload_bad_extension_400(client):
@@ -260,8 +289,10 @@ def test_fetch_startet_job(client, monkeypatch):
                         gestartet.update(cmd=cmd, kind=kind, then=then) or ("j1", True))
     r = client.post("/api/projects/Demo/fetch", json={"urls": ["https://youtu.be/abc123"]})
     assert r.status_code == 200 and r.json() == {"job_id": "j1", "started": True}
-    assert gestartet["kind"] == "transcribe"          # erbt GPU-Serialisierung + Dedupe
-    assert callable(gestartet["then"])                # auch der URL-Import korrigiert danach
+    # Eigene Art: der Download braucht keine GPU und darf nicht hinter einer Transkription warten
+    assert gestartet["kind"] == "fetch"
+    assert callable(gestartet["then"])                # danach transkribieren (und korrigieren)
+    assert "--download-only" in gestartet["cmd"]
     assert gestartet["cmd"][-2:] == ["Demo", "https://youtu.be/abc123"]
 
 

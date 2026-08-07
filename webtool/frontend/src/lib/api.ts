@@ -44,7 +44,9 @@ export async function getJob(jobId: string): Promise<JobStatus> {
 export async function cancelJob(jobId: string): Promise<void> {
   await post(`/api/jobs/${enc(jobId)}/cancel`)
 }
-export async function uploadAudio(project: string, file: File): Promise<{ base: string; file: string }> {
+/** Der Upload stoesst serverseitig direkt die Transkription an -> job_id/started kommen mit zurueck. */
+export async function uploadAudio(project: string, file: File):
+  Promise<{ base: string; file: string; job_id?: string; started?: boolean }> {
   const fd = new FormData(); fd.append('file', file)
   return jn(await fetch(`/api/projects/${enc(project)}/audio`, { method: 'POST', body: fd }))
 }

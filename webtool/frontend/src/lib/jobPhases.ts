@@ -6,6 +6,10 @@ export const PHASE_LABEL: Record<FilePhase, string> = {
 export const GLOBAL_LABEL: Record<GlobalPhase, string> = {
   diarize: 'Diarisieren…', prep: 'Vorbereiten…', glossary: 'Glossar wird erstellt…', download: 'Herunterladen…',
 }
+/** Fallback, solange ein Job noch keine auswertbare Zeile geschrieben hat (Prozessstart, Modell-Ladezeit). */
+export const KIND_LABEL: Record<string, string> = {
+  transcribe: 'Transkribieren…', correct: 'Korrigieren…', fetch: 'Herunterladen…',
+}
 
 // Der correct-Treiber arbeitet Dateien UND Bloecke parallel (correct.py: ThreadPoolExecutor,
 // gedeckelt durch _claude_slots) -> mehrere gleichzeitig aktive Dateien, und die stdout-Zeilen
@@ -41,7 +45,10 @@ export function parseJobPhases(kind: string, lines: string[]): JobPhases {
     const l = rawLine.trim()
     let m: RegExpMatchArray | null
 
-    if (kind === 'transcribe') {
+    // 'fetch' ist der reine Download-Job (app.py: eigene Art, damit er keinen GPU-Slot belegt).
+    // Er sendet nur '[fetch] …'-Zeilen, teilt sich das Format aber mit dem CLI-Aufruf, bei dem
+    // Download und Transkription noch im selben Job stecken.
+    if (kind === 'transcribe' || kind === 'fetch') {
       // MUSS vor den Regexen unten stehen: '[fetch] FEHLER <url>: …' wuerde sonst von
       // /^\[.+?\] FEHLER (.+?): / als Datei-Fehlschlag mit der URL als Basisnamen gelesen.
       if (l.startsWith('[fetch] ')) {

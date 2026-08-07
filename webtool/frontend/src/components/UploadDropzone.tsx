@@ -2,12 +2,13 @@ import { useRef, useState } from 'react'
 import { Upload } from 'lucide-react'
 import { uploadAudio } from '@/lib/api'
 import { cn } from '@/lib/utils'
+import type { StartJob } from '@/lib/types'
 
 const AUDIO_RE = /\.(mp3|wav|m4a|aac|flac|ogg|opus|wma|mp4)$/i
 type Status = 'uploading' | 'done' | 'exists' | 'error'
 type Item = { name: string; status: Status; msg?: string }
 
-export function UploadDropzone({ project, onDone }: { project: string; onDone?: () => void }) {
+export function UploadDropzone({ project, onDone }: { project: string; onDone?: (job?: StartJob) => void }) {
   const [items, setItems] = useState<Item[]>([])
   const [over, setOver] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -19,15 +20,22 @@ export function UploadDropzone({ project, onDone }: { project: string; onDone?: 
     const audio = files.filter(f => AUDIO_RE.test(f.name))
     if (!audio.length) return
     setItems(audio.map(f => ({ name: f.name, status: 'uploading' as Status })))
+    // Jeder Upload stoesst serverseitig die Transkription an; der Job ist fuer alle derselbe
+    // (Dedupe je Projekt+Art), also reicht die zuletzt gemeldete Job-ID zum Adoptieren.
+    let job: StartJob | undefined
     // ponytail: sequentiell statt Pool — lokale Uploads sind quasi instant; Pool nachruesten bei Bedarf
     for (const f of audio) {
-      try { await uploadAudio(project, f); patch(f.name, { status: 'done' }) }
+      try {
+        const r = await uploadAudio(project, f)
+        if (r.job_id) job = { job_id: r.job_id, started: !!r.started }
+        patch(f.name, { status: 'done' })
+      }
       catch (e) {
         const msg = (e as Error).message
         patch(f.name, { status: /existiert bereits/.test(msg) ? 'exists' : 'error', msg })
       }
     }
-    onDone?.()
+    onDone?.(job)
   }
 
   return (
@@ -42,7 +50,10 @@ export function UploadDropzone({ project, onDone }: { project: string; onDone?: 
         className={cn('flex items-center justify-center gap-2 rounded border border-dashed p-6 text-sm text-muted-foreground cursor-pointer',
           over && 'border-primary bg-accent')}
       >
-        <Upload className="size-4" /> Audio hierher ziehen oder klicken
+        <div className="text-center">
+          <div className="flex items-center justify-center gap-2"><Upload className="size-4" /> Audio hierher ziehen oder klicken</div>
+          <div className="mt-1 text-xs">Transkription und Korrektur starten automatisch.</div>
+        </div>
       </div>
       <input ref={inputRef} data-testid="upload-input" type="file" hidden multiple
         accept="audio/*,.mp3,.wav,.m4a,.aac,.flac,.ogg,.opus,.wma,.mp4"
