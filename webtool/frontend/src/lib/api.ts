@@ -1,4 +1,4 @@
-import type { Project, EditDoc, JobStatus, StartJob } from './types'
+import type { Project, EditDoc, JobStatus, StartJob, Settings, ModelInfo } from './types'
 
 const enc = encodeURIComponent
 async function jn<T>(r: Response): Promise<T> {
@@ -57,4 +57,19 @@ export async function createProject(name: string): Promise<{ ok: boolean; name: 
 }
 export async function deleteProject(project: string): Promise<void> {
   await jn(await fetch(`/api/projects/${enc(project)}`, { method: 'DELETE' }))
+}
+export async function getSettings(): Promise<Settings> {
+  return jn(await fetch('/api/settings'))
+}
+/** Nur gesetzte Felder senden — ein ausgelassenes api_key laesst den gespeicherten Key stehen. */
+export async function saveSettings(patch: Record<string, string>): Promise<Settings> {
+  return jn(await fetch('/api/settings', {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch),
+  }))
+}
+export async function listModels(): Promise<ModelInfo[]> {
+  return (await jn<{ models: ModelInfo[] }>(await fetch('/api/settings/models'))).models
+}
+export async function testSettings(): Promise<{ ok: boolean; detail: string }> {
+  return jn(await post('/api/settings/test'))
 }

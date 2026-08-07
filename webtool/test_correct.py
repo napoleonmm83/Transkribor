@@ -9,6 +9,9 @@ from webtool import correct
 def project(monkeypatch, tmp_path):
     monkeypatch.setenv("TRANSKRIBOR_DIARIZE", "0")   # hermetisch: kein Test rührt echtes pyannote an
     monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    # Sonst entschiede die echte Einstellungsdatei des Entwicklers, ob die Tests den Abo- oder
+    # den API-Weg nehmen — und mit hinterlegtem Key gingen sie gegen einen echten Anbieter.
+    monkeypatch.setenv("TRANSKRIBOR_SETTINGS", str(tmp_path / "settings.json"))
     t = tmp_path / "Demo" / "transkripte"
     t.mkdir(parents=True)
     (tmp_path / "Demo" / "audio").mkdir()

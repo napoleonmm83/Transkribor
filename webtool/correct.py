@@ -20,6 +20,7 @@ import sys
 import threading
 from concurrent.futures import ThreadPoolExecutor
 
+from . import llm
 from . import paths
 from .edit_model import tag_uncertain_segments, apply_correction
 from .render_md import render_md
@@ -250,6 +251,23 @@ def _run_claude(prompt: str) -> None:
         print(f"  claude Timeout nach {CLAUDE_TIMEOUT}s", flush=True)
 
 
+def _ask_llm(prompt: str, inputs: list, output: str) -> None:
+    """Eine LLM-Runde, unabhaengig vom eingestellten Anbieter.
+
+    Beim Abo schreibt `claude -p` die Zieldatei per Write-Tool selbst; mit API-Key gibt es
+    keine Werkzeuge, also wandern die Eingaben in den Prompt und die Antwort schreibt llm.py.
+    In beiden Faellen gilt: Erfolg wird an der geschriebenen Datei gemessen, ein Fehler wird
+    nur geloggt — eine Datei darf den Batch nicht abbrechen."""
+    if not llm.use_api():
+        _run_claude(prompt)
+        return
+    with _claude_slots:                      # derselbe Deckel wie im Abo-Weg
+        try:
+            llm.complete_to_file(prompt, inputs, output)
+        except llm.LLMError as e:
+            print(f"  KI-Anbieter: {e}", flush=True)
+
+
 def _glossary_prompt(gpath: str, raw_files: list, context: str) -> str:
     files = "\n".join(raw_files)
     return f"""Du erstellst ein GEMEINSAMES Glossar, mit dem anschliessend mehrere Interview-Transkripte KONSISTENT korrigiert werden.
@@ -375,7 +393,7 @@ def _glossary(project: str, context: str) -> str:
         print("↷ nutze vorhandenes _glossar.json", flush=True)
     else:
         print("→ Glossar (gemeinsame Namen/Begriffe) …", flush=True)
-        _run_claude(_glossary_prompt(gpath, raw_files, context))
+        _ask_llm(_glossary_prompt(gpath, raw_files, context), raw_files, gpath)
     try:
         g = _load(gpath)
     except (OSError, json.JSONDecodeError):
@@ -441,11 +459,14 @@ def _correct_one(base: str, tagged: str, target: str, gjson: str, context: str, 
     gehört in JEDE Zeile: bei parallelen Läufen verschränken sich die Ausgaben, eine Zeile
     ohne Basisnamen liesse sich keinem Lauf mehr zuordnen."""
     print(f"→ Korrigiere {base}{part} …", flush=True)
-    _run_claude(_correct_prompt(base, tagged, target, gjson, context, id_range, known))
+    _ask_llm(_correct_prompt(base, tagged, target, gjson, context, id_range, known),
+             [tagged], target)
     if verify and _valid_correction(target):    # Treue-Pass nur auf eine GÜLTIGE Erst-Korrektur
         print(f"→ Verifiziere {base}{part} (Treue gegen Roh) …", flush=True)
         good = _load(target)                    # Snapshot: darf nicht durch einen kaputten Verify verloren gehen
-        _run_claude(_verify_prompt(base, tagged, target, context, id_range, known))
+        # Der Treue-Pass prueft die Korrektur GEGEN das Roh -> ohne API-Werkzeuge braucht er beide Dateien.
+        _ask_llm(_verify_prompt(base, tagged, target, context, id_range, known),
+                 [tagged, target], target)
         if not _valid_correction(target):       # Verify hat die gültige Korrektur zerstört -> zurückrollen
             paths.atomic_write(target, json.dumps(good, ensure_ascii=False, indent=1))
             print(f"⚠ Verifikation ungültig — behalte unverifizierte {base}.correction.json", flush=True)

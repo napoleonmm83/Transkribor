@@ -10,7 +10,9 @@ from pydantic import BaseModel
 
 from . import fetch as fetch_mod
 from . import jobs
+from . import llm
 from . import paths
+from . import settings
 from .edit_model import build_edit_doc
 from .render_md import render_md
 
@@ -242,6 +244,45 @@ def fetch_urls(project: str, body: FetchBody):
     job_id, started = jobs.start(project, cmd, paths.ROOT, "fetch",
                                  then=lambda: _start_transcribe(project))
     return {"job_id": job_id, "started": started}
+
+
+class SettingsBody(BaseModel):
+    provider: str | None = None
+    model: str | None = None
+    base_url: str | None = None
+    api_key: str | None = None          # weggelassen = gespeicherten Key behalten
+
+
+@app.get("/api/settings")
+def get_settings():
+    """Nie den Key ausliefern — nur, OB einer hinterlegt ist."""
+    return {**settings.public(), "providers": llm.provider_list(),
+            "env_key": llm.env_key_hint()}
+
+
+@app.put("/api/settings")
+def put_settings(body: SettingsBody):
+    patch = {k: v for k, v in body.model_dump().items() if v is not None}
+    if "provider" in patch and patch["provider"] not in llm.PROVIDERS:
+        raise HTTPException(status_code=400, detail=f"unbekannter Anbieter: {patch['provider']}")
+    return settings.public(settings.save(patch))
+
+
+@app.get("/api/settings/models")
+def settings_models():
+    """Modellliste live beim Anbieter holen — eine fest verdrahtete Liste waere in drei Monaten falsch."""
+    try:
+        return {"models": llm.list_models()}
+    except llm.LLMError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/settings/test")
+def settings_test():
+    try:
+        return llm.check()
+    except llm.LLMError as e:
+        return {"ok": False, "detail": str(e)}
 
 
 @app.get("/api/jobs/{job_id}")
