@@ -185,4 +185,10 @@ describe('URL-Import', () => {
     ])
     expect(p.perBase).toEqual({})
   })
+  it('liest die Zeilen des reinen Download-Jobs (kind fetch)', () => {
+    // app.py fuehrt den URL-Import als eigene Art 'fetch' -> derselbe Zeilen-Dialekt wie transcribe
+    const p = parseJobPhases('fetch', ['[fetch] lade Mein Interview …'])
+    expect(p.global).toBe('download')
+    expect(p.active).toEqual({})
+  })
 })

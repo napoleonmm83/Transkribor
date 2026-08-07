@@ -133,6 +133,10 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description="URL-Import (YouTube/Instagram) fuer ein Projekt")
     ap.add_argument("project")
     ap.add_argument("urls", nargs="+")
+    # Das Web-Tool laedt nur herunter und laesst danach den normalen Transkriptions-Job laufen:
+    # sonst belegte der Import einen GPU-Slot fuer die ganze Download-Dauer und wuerde selbst
+    # von jeder laufenden Transkription blockiert. Direkter CLI-Aufruf transkribiert wie bisher.
+    ap.add_argument("--download-only", action="store_true")
     args = ap.parse_args(argv)
     paths.safe_name(args.project)
 
@@ -145,6 +149,8 @@ def main(argv=None):
     print(f"[fetch] {len(geladen)} von {len(args.urls)} geladen", flush=True)
     if not geladen:
         raise SystemExit(1)      # Job-Status 'error'; Whisper wird gar nicht erst geladen
+    if args.download_only:
+        return
 
     transcribe.ensure_ffmpeg()
     transcribe.transcribe_project(args.project,
