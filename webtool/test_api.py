@@ -407,7 +407,7 @@ def test_settings_modellwechsel_behaelt_den_key(client):
     client.put("/api/settings", json={"provider": "anthropic", "api_key": "sk-a"})
     r = client.put("/api/settings", json={"model": "claude-sonnet-5"})
     assert r.json() == {"provider": "anthropic", "model": "claude-sonnet-5",
-                        "base_url": "", "has_key": True}
+                        "base_url": "", "has_key": True, "has_hf_token": False}
 
 
 def test_settings_unbekannter_anbieter_400(client):

@@ -8,7 +8,7 @@ import type { Settings } from '@/lib/types'
 vi.mock('@/lib/api')
 
 const BASIS: Settings = {
-  provider: 'claude-cli', model: '', base_url: '', has_key: false, env_key: '',
+  provider: 'claude-cli', model: '', base_url: '', has_key: false, has_hf_token: false, env_key: '',
   providers: [
     { id: 'claude-cli', label: 'Claude Code Abo (kein Key)', needs_key: false, base: '', default_model: '', keys_url: '', hint: 'Nutzt das Abo.' },
     { id: 'anthropic', label: 'Anthropic (Claude)', needs_key: true, base: 'https://api.anthropic.com/v1', default_model: 'claude-opus-5', keys_url: 'https://x', hint: '' },
@@ -43,7 +43,7 @@ describe('SettingsPage', () => {
     zeige({ provider: 'anthropic' })
     const feld = await screen.findByPlaceholderText('sk-…')
     await act(async () => { fireEvent.change(feld, { target: { value: 'sk-neu' } }) })
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Speichern/ })) })
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Key speichern/ })) })
     await waitFor(() => expect(api.saveSettings).toHaveBeenCalledWith({ api_key: 'sk-neu' }))
     expect((feld as HTMLInputElement).value).toBe('')
   })

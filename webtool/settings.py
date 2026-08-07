@@ -23,7 +23,11 @@ def path() -> str:
     return os.path.join(base, "Transkribor", "settings.json")
 
 
-DEFAULTS = {"provider": "claude-cli", "model": "", "base_url": "", "api_key": ""}
+DEFAULTS = {"provider": "claude-cli", "model": "", "base_url": "", "api_key": "",
+            # Sprecher-Diarisierung (pyannote). Lag bisher nur in der .env, die ausschliesslich
+            # webtool.ps1 laedt — in der Desktop-App gibt es die nicht, und ohne Token faellt die
+            # Diarisierung still aus ("Sprecher nicht erkannt", ohne Hinweis).
+            "hf_token": ""}
 
 
 def load() -> dict:
@@ -60,7 +64,15 @@ def save(patch: dict) -> dict:
 
 
 def public(cfg: dict = None) -> dict:
-    """Fuers Frontend: alles ausser dem Key."""
+    """Fuers Frontend: alles ausser den Geheimnissen."""
     cfg = cfg if cfg is not None else load()
     return {"provider": cfg["provider"], "model": cfg["model"],
-            "base_url": cfg["base_url"], "has_key": bool(cfg["api_key"])}
+            "base_url": cfg["base_url"], "has_key": bool(cfg["api_key"]),
+            "has_hf_token": bool(cfg["hf_token"])}
+
+
+def job_env() -> dict:
+    """Geheimnisse, die die Job-Subprozesse brauchen. Eine echte Umgebungsvariable gewinnt —
+    wer HF_TOKEN gesetzt hat (webtool.ps1 aus der .env, CI), soll sie behalten."""
+    tok = load()["hf_token"]
+    return {"HF_TOKEN": tok} if tok and not os.environ.get("HF_TOKEN") else {}

@@ -10,6 +10,8 @@ import threading
 import time
 import uuid
 
+from . import settings
+
 _jobs = {}                 # job_id -> record
 _active = {}               # (project, kind) -> job_id (Dedupe: je Art einer pro Projekt)
 _pending = set()           # (project, kind) mit genau EINEM vorgemerkten Nachlauf
@@ -117,7 +119,10 @@ def _run(jid, cmd, cwd):
 
 def _run_proc(jid, cmd, cwd):
     try:
-        env = {**os.environ, "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8"}
+        # settings.job_env() reicht das HF_TOKEN aus den Einstellungen durch: die .env laedt nur
+        # webtool.ps1, in der Desktop-App gibt es keine — sonst faellt die Diarisierung still aus.
+        env = {**os.environ, **settings.job_env(),
+               "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8"}
         proc = subprocess.Popen(
             cmd, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             text=True, encoding="utf-8", errors="replace", bufsize=1,

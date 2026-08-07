@@ -4,12 +4,29 @@ Interview-Audio → kontextkorrigierte, **sprecher-markierte** Transkripte.
 Schweizerdeutsch (oder andere Sprachen) mit **Whisper large-v3** (GPU), danach ein
 LLM-Korrekturlauf (via Claude Code) für Kontextfehler und Sprecher-Labels.
 
+## Desktop-App (empfohlen)
+
+`Transkribor-Setup-<version>.exe` aus den [Releases](https://github.com/napoleonmm83/Transkribor/releases)
+installieren und starten. Beim ersten Start richtet die App die Spracherkennung selbst ein
+(Python, ffmpeg, PyTorch mit CUDA, Whisper — mehrere GB, 10–30 Minuten, mit Fortschrittsanzeige).
+Danach läuft alles offline auf dem eigenen Rechner. Updates meldet die App selbst.
+
+Audio hineinziehen genügt: **Transkription und Korrektur starten automatisch**, der Status
+aktualisiert sich live. Unter *Einstellungen* wird hinterlegt, womit korrigiert wird — Claude-Code-Abo
+(kein Key) oder ein API-Key von Anthropic, OpenAI, Google, OpenRouter oder einem beliebigen
+OpenAI-kompatiblen Dienst (auch lokal, z.B. Ollama).
+
+Selbst bauen: `npm install && npm run dist` → `dist\Transkribor-Setup-<version>.exe`.
+
 ## Projektstruktur
 
 ```
 Transkribor/
 ├── transcribe.py          # Whisper-Transkription (projekt-aware)
 ├── transkribieren.ps1     # Starter für PowerShell
+├── webtool/               # FastAPI-Backend + React-Editor (webtool.ps1 startet beides)
+├── electron/              # Desktop-Hülle: Ersteinrichtung, Server-Start, Auto-Update
+├── requirements.txt       # Python-Pakete ohne torch (das kommt aus dem CUDA-Index)
 ├── tools/correct_label.mjs# Claude-Workflow: Kontextkorrektur + Sprecher
 ├── CLAUDE.md              # Anleitung für Claude (Korrektur-Schritt)
 ├── .venv/                 # Python-Umgebung (nicht in Git)

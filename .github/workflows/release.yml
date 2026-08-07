@@ -1,0 +1,30 @@
+name: Release
+
+# Getaggter Push baut den Installer und haengt ihn an ein GitHub-Release.
+# electron-updater sucht genau dort nach Updates (siehe package.json -> build.publish).
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write            # electron-builder legt das Release an und laedt die Assets hoch
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci --no-audit --fund=false
+      # Das Frontend wird mitgebaut: der Installer liefert webtool/static aus,
+      # dort steht sonst nichts (git-ignoriert, reiner Build-Output).
+      - run: npm run release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installer
+          path: dist/*.exe

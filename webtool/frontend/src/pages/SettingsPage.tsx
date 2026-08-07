@@ -11,7 +11,9 @@ import type { ModelInfo, ProviderInfo, Settings } from '@/lib/types'
 export function SettingsPage() {
   const [s, setS] = useState<Settings | null>(null)
   const [modelle, setModelle] = useState<ModelInfo[]>([])
-  const [key, setKey] = useState('')          // nur der NEU eingetippte Key; der gespeicherte kommt nie her
+  // Nur das NEU Eingetippte; die gespeicherten Geheimnisse kommen nie zum Frontend zurueck.
+  const [key, setKey] = useState('')
+  const [hf, setHf] = useState('')
   const [laedt, setLaedt] = useState(false)
   const [testet, setTestet] = useState(false)
 
@@ -89,7 +91,7 @@ export function SettingsPage() {
                 placeholder={s.has_key ? '•••••••• (gespeichert)' : 'sk-…'} autoComplete="off" />
               <Button variant="outline" disabled={!key}
                 onClick={() => speichern({ api_key: key }, () => { setKey(''); toast.success('Key gespeichert') })}>
-                <KeyRound className="size-4" /> Speichern
+                <KeyRound className="size-4" /> Key speichern
               </Button>
             </div>
             <p className="mt-1 text-xs text-muted-foreground">
@@ -120,6 +122,27 @@ export function SettingsPage() {
           </div>
         </div>
       )}
+
+      {/* Getrennt vom Anbieter: die Diarisierung laeuft lokal mit pyannote, das Token dient nur
+          dem Modell-Download bei Hugging Face. */}
+      <div className="mt-8 border-t pt-6">
+        <label className="mb-1 block text-sm font-medium">Sprecher-Erkennung (optional)</label>
+        <div className="flex gap-2">
+          <Input type="password" value={hf} onChange={e => setHf(e.target.value)}
+            placeholder={s.has_hf_token ? '•••••••• (gespeichert)' : 'Hugging-Face-Token (hf_…)'} autoComplete="off" />
+          <Button variant="outline" disabled={!hf}
+            onClick={() => speichern({ hf_token: hf }, () => { setHf(''); toast.success('Token gespeichert') })}>
+            Token speichern
+          </Button>
+        </div>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Ohne Token ordnet Transkribor die Sprecher allein aus dem Text zu. Mit Token trennt
+          pyannote sie akustisch — dafür einmalig&nbsp;
+          <a className="underline" href="https://huggingface.co/pyannote/speaker-diarization-community-1" target="_blank" rel="noreferrer">
+            die Modellbedingungen akzeptieren</a> und&nbsp;
+          <a className="underline" href="https://huggingface.co/settings/tokens" target="_blank" rel="noreferrer">ein Token erstellen</a>.
+        </p>
+      </div>
 
       <div className="mt-8 flex items-center gap-2">
         <Button onClick={testen} disabled={testet}>

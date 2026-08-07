@@ -19,3 +19,7 @@ desktop.ini
 
 # React-Build-Output (aus webtool/frontend), von FastAPI ausgeliefert
 webtool/static/
+
+# Electron: Abhaengigkeiten und gebauter Installer
+node_modules/
+dist/
