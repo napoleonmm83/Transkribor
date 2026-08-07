@@ -251,6 +251,7 @@ class SettingsBody(BaseModel):
     model: str | None = None
     base_url: str | None = None
     api_key: str | None = None          # weggelassen = gespeicherten Key behalten
+    hf_token: str | None = None         # fuer die Sprecher-Diarisierung (pyannote)
 
 
 @app.get("/api/settings")

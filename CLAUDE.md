@@ -65,6 +65,49 @@ Ergebnis: `projekte\<NAME>\transkripte\<base>.edit.json` (Editor-Dokument, im We
 - **Unsicheres offenlegen:** wirklich unklare Stellen nicht raten, sondern unter
   „## Anmerkungen" am Dateiende vermerken.
 
+## KI-Anbieter (Einstellungsseite `/einstellungen`)
+Die Korrektur hing fest am Claude-Code-Abo; jetzt wählt der Nutzer Anbieter + Modell im Browser.
+- `webtool/settings.py` — JSON im Nutzerprofil (`%APPDATA%\Transkribor\settings.json`), **nicht im
+  Repo**: ein Key hat in einem git-Verzeichnis nichts verloren. Frisch gelesen bei jedem Zugriff (wie
+  die Env-Variablen) → ein Wechsel greift ohne Server-Neustart. `public()` liefert `has_key`/
+  `has_hf_token` statt der Geheimnisse; die verlassen den Server nie, auch nicht über `GET /api/settings`.
+- `webtool/llm.py` — Abo (`claude -p`) plus Anthropic-, OpenAI-, Google-, OpenRouter- und
+  Custom-Endpoints (letzteres deckt Ollama/LM Studio/Groq/… ab). **Zwei HTTP-Dialekte reichen für
+  alle**, darum `urllib` statt fünf SDKs — das hält auch den Auto-Installer klein. Modellliste kommt
+  live vom Anbieter (`GET /models`), eine fest verdrahtete wäre in drei Monaten falsch.
+- **Der Unterschied der beiden Welten ist, WER die Dateien anfasst:** `claude -p` liest und schreibt
+  selbst (Read/Write-Tools), die API kennt keine Werkzeuge. Darum nimmt `correct._ask_llm(prompt,
+  inputs, output)` Pfade — dieselben Prompts, zwei Zustellwege; im API-Weg landen die Eingaben im
+  Prompt und `llm.complete_to_file` schreibt nur **gültiges** JSON (eine halbe `correction.json`
+  würde der nächste Lauf als „fertig" durchwinken). Der `_claude_slots`-Deckel gilt für beide.
+- **Kein stiller Rückfall aufs Abo**, wenn der Key fehlt: wer einen Anbieter einstellt, soll den
+  Konfigurationsfehler sehen und nicht heimlich etwas anderes bekommen.
+- Endpoints: `GET/PUT /api/settings`, `GET /api/settings/models`, `POST /api/settings/test`. Ein
+  ausgelassenes `api_key` im PUT behält den gespeicherten Key (das Frontend kennt ihn nicht).
+
+## Desktop-App (Electron)
+`.\webtool.ps1` bleibt der Entwickler-Weg; für Nutzer gibt es einen Installer.
+- `electron/main.js` — Fenster **zuerst** (die Ersteinrichtung dauert Minuten; wer auf nichts schaut,
+  hält die App für kaputt), dann Umgebung prüfen → ggf. einrichten → uvicorn starten → App laden.
+  `startLaeuft` ist der Riegel gegen den Doppelstart (`whenReady` prüft, und die Statusseite fragt
+  beim Laden selbst nochmal — sonst laufen zwei uvicorn auf zwei Ports).
+- `electron/backend.js` — das, was `webtool.ps1` tat, plus was ihm fehlte: freier Port statt fest
+  8000, Warten auf „antwortet" (statt den Browser ins Leere zu schicken) und `taskkill /T` beim
+  Beenden (sonst bleiben Whisper/claude als Waisen mit belegter GPU zurück).
+- `electron/setup.js` — Erstinstallation: Python/ffmpeg via winget, venv, torch **cu128 zuerst**
+  (`requirements.txt` enthält torch bewusst NICHT — mit `--extra-index-url` zöge pip sonst das
+  CPU-Rad und die GPU wäre still weg), dann der Rest. Die venv gilt erst als fertig, wenn
+  `import torch, whisper, fastapi, uvicorn` durchläuft — ein abgebrochener pip-Lauf sieht sonst
+  „installiert" aus.
+- `electron/paths.js` — **gepackt wird nie neben die .exe geschrieben** (Program Files ist
+  schreibgeschützt und wird beim Update ersetzt): venv, `projekte/` und Einstellungen liegen in
+  `userData`. Im Repo bleibt alles dort, wo `webtool.ps1` es erwartet.
+- Bauen: `npm install && npm run dist` → `dist\Transkribor-Setup-<version>.exe` (~96 MB; die ML-Seite
+  kommt beim ersten Start dazu, ein 5-GB-Setup bei jedem Update wäre unzumutbar).
+  Release: Tag `v*` pushen → `.github/workflows/release.yml` baut und veröffentlicht,
+  `electron-updater` zieht von dort. **Offen:** die Release-Assets müssen öffentlich sein (privates
+  Repo braucht clientseitig ein Token), und der Installer ist unsigniert → SmartScreen-Warnung.
+
 ## Neues Projekt anlegen
 `projekte\<NAME>\audio\` erstellen, Audio hineinlegen, optional `projekte\<NAME>\kontext.md`
 mit Projektbeschreibung + bekannten Namen (verbessert Whisper und die Korrektur).
@@ -81,7 +124,7 @@ nie committen), unklarem Scope, oder history-verändernden Aktionen (force-push,
 - venv: `.venv` (Python 3.13, torch cu128 + openai-whisper) — GPU: RTX 5080 / Blackwell (sm_120).
 - ffmpeg: wird von `transcribe.py` automatisch gefunden (winget Gyan.FFmpeg) oder muss auf PATH sein.
 - Whisper-Modell-Cache: `%USERPROFILE%\.cache\whisper` (einmaliger Download ~3 GB).
-- Env-Overrides: `WHISPER_MODEL` (default large-v3), `WHISPER_LANG` (default de), `TRANSKRIBOR_VERIFY` (default 1; `0`/`false`/`no` schaltet den 2b-Treue-Pass server-weit ab), `TRANSKRIBOR_DIARIZE` (default 1; `0`/`false`/`no` schaltet die akustische Sprecher-Diarisierung server-weit ab — Erzeugung UND Konsumption), `TRANSKRIBOR_PARALLEL` (default 3; gleichzeitige `claude -p`-Aufrufe), `TRANSKRIBOR_AUTOCORRECT` (default 1; `0` stoppt die automatische Korrektur nach der Transkription), `HF_TOKEN` (für die pyannote-Diarisierung; gated Modell).
+- Env-Overrides: `WHISPER_MODEL` (default large-v3), `WHISPER_LANG` (default de), `TRANSKRIBOR_VERIFY` (default 1; `0`/`false`/`no` schaltet den 2b-Treue-Pass server-weit ab), `TRANSKRIBOR_DIARIZE` (default 1; `0`/`false`/`no` schaltet die akustische Sprecher-Diarisierung server-weit ab — Erzeugung UND Konsumption), `TRANSKRIBOR_PARALLEL` (default 3; gleichzeitige `claude -p`-Aufrufe), `TRANSKRIBOR_AUTOCORRECT` (default 1; `0` stoppt die automatische Korrektur nach der Transkription), `HF_TOKEN` (für die pyannote-Diarisierung; gated Modell — inzwischen auch über die Einstellungsseite setzbar, eine echte Env gewinnt), `TRANSKRIBOR_SETTINGS` (Pfad der Einstellungsdatei; **Tests müssen das setzen**, sonst entscheidet die echte Datei des Entwicklers über den KI-Anbieter).
 - Stufe 3 (Sprecher-Diarisierung): `webtool/diarize.py` (pyannote.audio 4.0.7, Modell `speaker-diarization-community-1`, GPU) läuft als **Prep-Schritt im `correct run`** (vor `prep`, auf den Lauf gescopt), schreibt best-effort `<base>.diar.json` (Turns + `{id, "Sprecher N"}` je Segment, idempotent). `cmd_prep` webt das `(Sprecher N)`-Präfix in `<base>.tagged.txt`; der Korrektur-Prompt lässt Claude pro akustischem Cluster einen konsistenten Namen vergeben (**Hybrid**: Akustik trennt *wer wann*, LLM benennt *wie*). Fehlt pyannote/`HF_TOKEN` oder scheitert die GPU → kein Sidecar → Korrektur wie bisher (reines Text-Raten, keine Regression). **Windows-Gotcha:** pyannotes torchcodec-File-Decoding lädt nicht (`libtorchcodec_core*.dll`) → Audio wird in-memory via `whisper.load_audio` (ffmpeg, 16 kHz mono) geladen und als `{waveform, sample_rate}`-Dict übergeben. Modell-Cache `~/.cache/huggingface`. `jobs.py` serialisiert `transcribe`+`correct` auf der einen GPU. **Einmal-Setup:** `HF_TOKEN` setzen und die Modellbedingungen unter huggingface.co/pyannote/speaker-diarization-community-1 akzeptieren.
 - Web-Editor (Stufe 1): React 19 + Vite + TypeScript + Tailwind v4 + shadcn/ui in
   `webtool/frontend/`, gebaut nach `webtool/static/` (git-ignoriert, Build-Output) und von
@@ -106,7 +149,9 @@ nie committen), unklarem Scope, oder history-verändernden Aktionen (force-push,
   Spec/Plan: `docs/superpowers/specs/2026-07-10-transkribor-projekt-workspace-status-design.md`.
 - Stufe 2a (Browser-Transkription): `POST /audio` (Upload), `POST /transcribe` (startet `transcribe.py` via `webtool/jobs.py`-Job), `GET /api/jobs/{id}` (Polling), `POST /api/jobs/{id}/cancel` (bricht den Job samt Prozessbaum ab → Status `cancelled`; auf Windows via `taskkill /F /T`, weil `terminate()` den `claude`+MCP-Subtree verwaisen liesse). Job-Registry ist in-memory (threading+Popen) — kein `--reload` während Jobs.
 - **Job-Modell:** Dedupe je **(Projekt, Art)**, nicht je Projekt — Transkription und Korrektur eines Projekts laufen **nebeneinander**. `GPU_KINDS = ("transcribe",)`: nur Whisper wird global serialisiert; `correct` hängt an Opus und braucht die GPU nur für den kurzen pyannote-Schritt, es dort mitzuführen hiesse, dass eine 25-Minuten-Korrektur jede Transkription blockiert. `jobs.active_for(project)` liefert deshalb eine **Liste**, `GET /api/projects` gibt `active_jobs: [{id,kind}]`, und der `JobProvider` verfolgt mehrere Jobs und mergt ihre Phasen (`mergePhases`; ein laufender Job verdrängt den Terminal-Status derselben Datei aus einem anderen Job).
-- **Auto-Korrektur:** Nach einer erfolgreichen Transkription (auch nach URL-Import) startet automatisch `correct run` — `jobs.start(..., then=…)` ruft den Nachlauf im Job-Thread auf, also unabhängig vom Browser. Läuft schon eine Korrektur für das Projekt (die die neuen Dateien nicht kennt), hängt sich der Lauf per `jobs.when_done` hinten an. Abschaltbar per `TRANSKRIBOR_AUTOCORRECT=0`.
+- **Auto-Trigger — Hochladen IST der Startschuss:** `POST /api/projects/{p}/audio` startet die Transkription selbst und gibt die Job-ID zurück (der Workspace adoptiert sie sofort, statt bis zum nächsten Poll zu warten); danach läuft über `then=` die Korrektur an. Kern ist **`jobs.request()`**: startet den Job **oder merkt genau EINEN Nachlauf vor** — fünf Uploads während eines laufenden Laufs reihen so nicht fünf Whisper-Läufe auf, einer sieht ohnehin alle inzwischen dazugekommenen Dateien. `transcribe.py` lädt das 3-GB-Modell nicht mehr, wenn nichts offen ist (Leerlauf-Runden sind seitdem Alltag und kosteten je ~30s). Abschaltbar bleibt nur die Korrektur (`TRANSKRIBOR_AUTOCORRECT=0`).
+- **URL-Import ist eine eigene Job-Art `fetch`** (nicht mehr `transcribe`): der Download braucht keine GPU und wurde als GPU-Art von jeder laufenden Transkription blockiert — und die läuft seit dem Auto-Trigger ständig. `python -m webtool.fetch --download-only` lädt nur, `then=` übergibt an den normalen Transkriptions-Job; der direkte CLI-Aufruf transkribiert weiterhin selbst. `jobPhases.ts` behandelt `fetch` wie `transcribe` (gleicher Zeilen-Dialekt), `KIND_LABEL` liefert den Fallback-Text.
+- **Live-Status ohne Reload:** `useProjects` pollt `/api/projects` (Default 4s, ersetzt das alte Intervall in `HomeGallery`). Nötig, seit Jobs auch ohne Klick starten — sonst sähe ein offener Tab weder die neue Datei noch den fremd gestarteten Job. Kein `setLoading` beim Poll (sonst flackert die Liste), und ein Poll-Fehler behält die letzte bekannte Liste.
 - Stufe 2b (Browser-Korrektur): `POST /api/projects/{project}/correct` startet `python -m webtool.correct run <NAME>` als `jobs.py`-Job (kind `correct`; Dedupe je `(Projekt, "correct")` — läuft also parallel zu einer Transkription desselben Projekts). Der `run`-Driver macht `prep` → ein `claude -p` für ein gemeinsames `_glossar.json` → pro Datei ein `claude -p` (Korrektur, schreibt `<base>.correction.json`) → per Default ein zweiter `claude -p` (**Treue-Verifikation** gegen das ID-getaggte `<base>.tagged.txt`, überschreibt `correction.json` mit der geprüften Fassung; ein ungültig schreibender Verify wird auf die gültige Erst-Korrektur zurückgerollt) → `apply`. Aufruf: `claude -p "<prompt>" --model opus --permission-mode acceptEdits --allowedTools Read,Write --strict-mcp-config --mcp-config '{"mcpServers":{}}' --add-dir <projekte_root>`, `cwd`=Repo-Root (lädt diese CLAUDE.md). **Kein MCP-Server:** halbiert den Startup (16,3s → 7,7s gemessen) und hält die persönlichen Server aus einem Lauf raus, der nicht vertrauenswürdigen Transkripttext verarbeitet.
   **Parallelität:** Dateien laufen nach dem Glossar parallel, Blöcke einer Datei ebenfalls — aber **Block 1 läuft allein vor**, weil aus ihm die Cluster→Name-Zuordnung kommt, an der sich alle weiteren Blöcke orientieren (`known=_speaker_hint(...)`; sonst tauft jeder Block denselben Menschen anders). Der Deckel sitzt als `threading.Semaphore` in `_run_claude` und **nicht** in den Executors — sonst wären Datei- und Block-Parallelität multiplikativ. Default 3, via `TRANSKRIBOR_PARALLEL`. **Folge fürs Log:** die stdout-Zeilen verschränken sich, deshalb trägt **jede** Fortschrittszeile ihren Basisnamen (`→ Korrigiere <base> · Block i/n …`, `✓ <base> · Block i/n fertig`) — Vertrag mit `jobPhases.ts`, das `active` als `Record<base, …>` führt. **Erfolg = geschriebene `correction.json` existiert+parst+hat `segments`** (nicht Exitcode); fehlt sie → Datei überspringen, Rest weiterlaufen. Idempotent: `human_edited=true` oder vorhandene `correction.json` → SKIP. Ein via Cancel abgebrochener Lauf ist damit **resumbar**: schon fertig geschriebene `correction.json` bleiben stehen, ein Re-Run überspringt sie und holt nur fehlende/mid-write-kaputte (parsen nicht → gelten als „nicht vorhanden") nach; `apply` läuft beim erneuten Lauf. Der Treue-Pass ist Default-an, abschaltbar via `--no-verify` bzw. `TRANSKRIBOR_VERIFY=0` (kein Browser-Toggle — die Env greift server-weit über den uvicorn-Prozess). Verdoppelt die Opus-Aufrufe pro Datei; Cancel bricht Ausreißer ab. Kein API-Key (Claude-Code-Abo). Der Workflow `tools/correct_label.mjs` (Schritt 2 unten) bleibt die Alternative (Parallelität + In-Memory-Schema-Validierung der Agent-Ausgaben).
 - URL-Import (YouTube/Instagram): `webtool/fetch.py` (yt-dlp) lädt die Tonspur als `.m4a`

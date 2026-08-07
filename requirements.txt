@@ -1,0 +1,11 @@
+# Python-Abhaengigkeiten OHNE torch — das kommt aus dem CUDA-Index und wird vom Installer
+# (electron/setup.js, Schritt "torch") separat installiert:
+#   pip install torch --index-url https://download.pytorch.org/whl/cu128
+# Beides in eine Datei zu packen ginge nur mit --extra-index-url, und dann zieht pip je nach
+# Aufloesung das CPU-Rad von PyPI — die GPU waere still weg.
+openai-whisper
+fastapi
+uvicorn[standard]
+python-multipart
+pyannote.audio==4.0.7
+yt-dlp

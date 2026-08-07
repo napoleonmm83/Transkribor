@@ -147,3 +147,29 @@ def test_complete_to_file_schreibt_bei_muell_nichts(cfg, monkeypatch, tmp_path):
     with pytest.raises(llm.LLMError):
         llm.complete_to_file("p", [str(quelle)], str(ziel))
     assert not ziel.exists()
+
+
+# --- HF_TOKEN an die Job-Subprozesse ------------------------------------------
+
+def test_job_env_reicht_hf_token_durch(cfg, monkeypatch):
+    """Ohne das faellt die Diarisierung in der Desktop-App still aus: die .env laedt nur webtool.ps1."""
+    monkeypatch.delenv("HF_TOKEN", raising=False)
+    settings.save({"hf_token": "hf_abc"})
+    assert settings.job_env() == {"HF_TOKEN": "hf_abc"}
+
+
+def test_echte_env_gewinnt_ueber_einstellung(cfg, monkeypatch):
+    monkeypatch.setenv("HF_TOKEN", "hf_aus_env")
+    settings.save({"hf_token": "hf_aus_datei"})
+    assert settings.job_env() == {}          # webtool.ps1/.env behaelt das letzte Wort
+
+
+def test_job_env_leer_ohne_token(cfg, monkeypatch):
+    monkeypatch.delenv("HF_TOKEN", raising=False)
+    assert settings.job_env() == {}
+
+
+def test_public_verraet_das_hf_token_nicht(cfg):
+    settings.save({"hf_token": "hf_geheim"})
+    pub = settings.public()
+    assert pub["has_hf_token"] is True and "hf_geheim" not in json.dumps(pub)

@@ -23,7 +23,7 @@ export type ProviderInfo = {
 /** `has_key` statt des Keys: der Schluessel verlaesst den Server nie. */
 export type Settings = {
   provider: string; model: string; base_url: string; has_key: boolean;
-  providers: ProviderInfo[]; env_key: string;
+  has_hf_token: boolean; providers: ProviderInfo[]; env_key: string;
 };
 export type ModelInfo = { id: string; label: string };
 export type Turn = { key: string; speaker: string; segments: Segment[] };
