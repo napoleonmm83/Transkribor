@@ -7,22 +7,28 @@ webtool.diarize` bleibt leicht und ohne installiertes pyannote lauffähig (Best-
 im Aufrufer)."""
 import os
 
-DIAR_MODEL = "pyannote/speaker-diarization-community-1"
+# Das Modell liegt IM Repo (models/, ~31 MB) und wird mit der App ausgeliefert, statt bei
+# Hugging Face zu haengen: dessen Gate ist ein Kontaktformular, kein Lizenzhindernis
+# (CC-BY-4.0), kostete den Nutzer aber Konto + Token + Haekchen im Browser — der einzige
+# Einrichtungsschritt der Desktop-App, den kein Klick loesen konnte. Die config.yaml
+# referenziert ihre Gewichte als `$model/...` und `$model` ist ihr eigenes Verzeichnis,
+# der Ordner ist also unveraendert verschiebbar.
+DIAR_MODEL = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                          "models", "speaker-diarization-community-1", "config.yaml")
 _PIPELINE = None
 
 
 def _pipeline():
-    """Lazy-Singleton der pyannote-Pipeline (Modell-Download beim 1. Aufruf; GPU falls vorhanden)."""
+    """Lazy-Singleton der pyannote-Pipeline (Modell aus models/; GPU falls vorhanden)."""
     global _PIPELINE
     if _PIPELINE is None:
         import torch
         from pyannote.audio import Pipeline
-        token = os.environ.get("HF_TOKEN")
-        if not token:
-            raise RuntimeError("HF_TOKEN fehlt — pyannote-Modell ist gated (Token einmalig setzen)")
-        pipe = Pipeline.from_pretrained(DIAR_MODEL, token=token)
+        if not os.path.exists(DIAR_MODEL):
+            raise RuntimeError(f"Diarisierungsmodell fehlt: {DIAR_MODEL}")
+        pipe = Pipeline.from_pretrained(DIAR_MODEL)
         if pipe is None:
-            raise RuntimeError(f"pyannote-Pipeline nicht geladen ({DIAR_MODEL}) — Modellbedingungen akzeptiert?")
+            raise RuntimeError(f"pyannote-Pipeline nicht geladen ({DIAR_MODEL})")
         # Dasselbe Geraet wie die Transkription (webtool/device.py). Scheitert MPS hier,
         # bleibt es beim Best-effort-Verhalten: kein .diar.json, Korrektur laeuft wie vor
         # Stufe 3 weiter — die Sprechertrennung faellt aus, nicht der Lauf.

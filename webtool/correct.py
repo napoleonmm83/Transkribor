@@ -113,7 +113,7 @@ def _diarize_enabled() -> bool:
 
 def cmd_diarize(project: str, only_bases: list = None) -> int:
     """Akustische Diarisierung je Datei -> <base>.diar.json (best-effort, idempotent).
-    Fehlt pyannote/HF_TOKEN oder scheitert die Diarisierung, wird die Datei übersprungen
+    Fehlt pyannote oder scheitert die Diarisierung, wird die Datei übersprungen
     (kein Sidecar) — die Korrektur läuft dann ohne Cluster (Text-Raten wie bisher).
     only_bases scopt auf einen Einzel-Datei-Lauf (✎) — sonst wäre ein Ein-Datei-run GPU-teuer
     fürs ganze Projekt, obwohl Diarisierung pro Datei unabhängig ist."""

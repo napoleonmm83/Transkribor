@@ -16,7 +16,7 @@ import { useUpdate } from '@/hooks/useUpdate'
 import type { UpdateZustand } from '@/lib/types'
 
 const BASIS: Settings = {
-  provider: 'claude-cli', model: '', base_url: '', has_key: false, has_hf_token: false, env_key: '',
+  provider: 'claude-cli', model: '', base_url: '', has_key: false, env_key: '',
   whisper_model: 'large-v3', whisper_lang: 'de',
   whisper_choices: [
     { id: 'turbo', label: 'Schnell und gut', hint: 'nahe large-Qualität' },

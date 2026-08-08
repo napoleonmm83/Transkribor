@@ -45,10 +45,9 @@ def path() -> str:
 
 
 DEFAULTS = {"provider": "claude-cli", "model": "", "base_url": "", "api_key": "",
-            # Sprecher-Diarisierung (pyannote). Lag bisher nur in der .env, die ausschliesslich
-            # webtool.ps1 laedt — in der Desktop-App gibt es die nicht, und ohne Token faellt die
-            # Diarisierung still aus ("Sprecher nicht erkannt", ohne Hinweis).
-            "hf_token": "",
+            # Kein hf_token mehr: die Diarisierung laedt ihr Modell aus models/ statt von
+            # Hugging Face. Ein in einer alten settings.json verbliebener Token faellt beim
+            # naechsten load() heraus (der Filter kennt nur DEFAULTS) — keine Migration noetig.
             # Whisper-Stufe und -Sprache. large-v3/de ist das bisherige Verhalten —
             # eine Verhaltensaenderung fuer Bestandsnutzer waere unnoetig.
             "whisper_model": "large-v3", "whisper_lang": "de"}
@@ -96,16 +95,14 @@ def public(cfg: dict = None) -> dict:
     cfg = cfg if cfg is not None else load()
     return {"provider": cfg["provider"], "model": cfg["model"],
             "base_url": cfg["base_url"], "has_key": bool(cfg["api_key"]),
-            "has_hf_token": bool(cfg["hf_token"]),
             "whisper_model": cfg["whisper_model"], "whisper_lang": cfg["whisper_lang"]}
 
 
 def job_env() -> dict:
     """Was die Job-Subprozesse aus den Einstellungen brauchen. Eine echte Umgebungsvariable
-    gewinnt immer — wer HF_TOKEN oder WHISPER_MODEL gesetzt hat (webtool.ps1 aus der .env,
-    CI), soll sie behalten."""
+    gewinnt immer — wer WHISPER_MODEL gesetzt hat (webtool.ps1 aus der .env, CI), soll sie
+    behalten."""
     cfg = load()
-    paare = (("HF_TOKEN", "hf_token"), ("WHISPER_MODEL", "whisper_model"),
-             ("WHISPER_LANG", "whisper_lang"))
+    paare = (("WHISPER_MODEL", "whisper_model"), ("WHISPER_LANG", "whisper_lang"))
     return {env: cfg[key] for env, key in paare
             if cfg[key] and not os.environ.get(env)}

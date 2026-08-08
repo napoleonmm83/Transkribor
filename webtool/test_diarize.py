@@ -51,31 +51,47 @@ def test_first_segment_no_overlap_falls_back_to_earliest_cluster():
     assert diarize.assign_clusters(raw, turns) == {0: "Sprecher 1"}
 
 
-def test_pipeline_nutzt_geraetewahl(monkeypatch):
-    """Die Diarisierung muss dasselbe Geraet waehlen wie die Transkription —
-    sonst rechnet die eine auf der GPU und die andere auf der CPU."""
+def test_modell_liegt_im_repo():
+    """Das Modell wird mitgeliefert statt von Hugging Face geladen — fehlt der Ordner (oder
+    faellt er aus dem extraResources-Filter), gibt es keine Sprechertrennung mehr."""
+    import os
+    assert os.path.exists(diarize.DIAR_MODEL), diarize.DIAR_MODEL
+    ordner = os.path.dirname(diarize.DIAR_MODEL)
+    for teil in ("segmentation/pytorch_model.bin", "embedding/pytorch_model.bin",
+                 "plda/plda.npz", "plda/xvec_transform.npz"):
+        assert os.path.exists(os.path.join(ordner, *teil.split("/"))), teil
+
+
+def test_pipeline_nutzt_geraetewahl_und_lokales_modell(monkeypatch):
+    """Zwei Vertraege in einem Aufruf: dasselbe Geraet wie die Transkription (sonst rechnet
+    die eine auf der GPU und die andere auf der CPU), und das Modell kommt aus dem lokalen
+    Ordner — eine Repo-ID wuerde Hugging Face samt Token wieder einschleppen."""
     import types
     import sys
     from webtool import device, diarize
 
-    gewaehlt = []
+    gewaehlt, geladen = [], []
     fake_torch = types.ModuleType("torch")
     fake_torch.device = lambda d: f"torchdevice:{d}"
     monkeypatch.setitem(sys.modules, "torch", fake_torch)
     monkeypatch.setattr(device, "pick", lambda: "mps")
-    monkeypatch.setenv("HF_TOKEN", "hf_test")
 
     class FakePipe:
         def to(self, d):
             gewaehlt.append(d)
             return self
 
+    def fake_from_pretrained(*a, **k):
+        geladen.append((a, k))
+        return FakePipe()
+
     fake_pa = types.ModuleType("pyannote.audio")
-    fake_pa.Pipeline = types.SimpleNamespace(from_pretrained=lambda *a, **k: FakePipe())
+    fake_pa.Pipeline = types.SimpleNamespace(from_pretrained=fake_from_pretrained)
     monkeypatch.setitem(sys.modules, "pyannote", types.ModuleType("pyannote"))
     monkeypatch.setitem(sys.modules, "pyannote.audio", fake_pa)
     monkeypatch.setattr(diarize, "_PIPELINE", None)
 
     diarize._pipeline()
     assert gewaehlt == ["torchdevice:mps"]
+    assert geladen == [((diarize.DIAR_MODEL,), {})]     # lokaler Pfad, kein token=
     monkeypatch.setattr(diarize, "_PIPELINE", None)      # Singleton nicht vergiften

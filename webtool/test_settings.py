@@ -10,7 +10,7 @@ from webtool import settings
 @pytest.fixture(autouse=True)
 def eigene_datei(tmp_path, monkeypatch):
     monkeypatch.setenv("TRANSKRIBOR_SETTINGS", str(tmp_path / "settings.json"))
-    for name in ("WHISPER_MODEL", "WHISPER_LANG", "HF_TOKEN"):
+    for name in ("WHISPER_MODEL", "WHISPER_LANG"):
         monkeypatch.delenv(name, raising=False)
 
 
