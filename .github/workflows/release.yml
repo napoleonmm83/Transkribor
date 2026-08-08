@@ -1,30 +1,133 @@
 name: Release
 
-# Getaggter Push baut den Installer und haengt ihn an ein GitHub-Release.
-# electron-updater sucht genau dort nach Updates (siehe package.json -> build.publish).
+# Getaggter Push (v*) baut die Installer aller drei Plattformen; workflow_dispatch tut
+# dasselbe fuer einen beliebigen Branch, um vor einem echten Release testen zu koennen.
+#
+# Warum eine Matrix und kein einzelner Job: ein macOS-dmg laesst sich NUR auf einem
+# macOS-Runner bauen (Codesign-Werkzeuge, hdiutil), ein deb sinnvoll nur auf Linux.
+# Cross-Building gibt es dafuer nicht.
 on:
   push:
     tags: ['v*']
   workflow_dispatch:
 
 permissions:
-  contents: write            # electron-builder legt das Release an und laedt die Assets hoch
+  contents: write            # das Release anlegen und die Assets hochladen
 
 jobs:
-  windows:
-    runs-on: windows-latest
+  bauen:
+    strategy:
+      fail-fast: false       # ein gescheiterter Mac-Build darf Windows nicht mitreissen
+      matrix:
+        include:
+          - os: windows-latest
+            name: windows
+            muster: dist/*.exe
+          - os: macos-latest         # seit macos-14 arm64 — passt zu build.mac.arch
+            name: macos
+            muster: dist/*.dmg
+          - os: ubuntu-latest
+            name: linux
+            muster: |
+              dist/*.AppImage
+              dist/*.deb
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      # Umgebungsbefund VOR dem Bau: scheitert der Lauf, ist das die erste Frage.
+      - name: Umgebung
+        shell: bash
+        run: |
+          echo "runner   : ${{ matrix.os }} / $(uname -sm 2>/dev/null || echo windows)"
+          echo "node     : $(node -v)   npm: $(npm -v)"
+          echo "python   : $(python3 --version 2>&1 || python --version 2>&1 || echo 'keins')"
+          echo "electron : $(node -p "require('./package.json').devDependencies.electron")"
+          echo "builder  : $(node -p "require('./package.json').devDependencies['electron-builder']")"
+          echo "targets  : $(node -p "JSON.stringify(require('./package.json').build[process.env.PL]||{})")"
+        env:
+          PL: ${{ matrix.name == 'macos' && 'mac' || matrix.name == 'windows' && 'win' || 'linux' }}
+
       - run: npm ci --no-audit --fund=false
+
+      - run: npm run test:electron        # billig, und schlaegt vor dem teuren Bau fehl
+
       # Das Frontend wird mitgebaut: der Installer liefert webtool/static aus,
       # dort steht sonst nichts (git-ignoriert, reiner Build-Output).
-      - run: npm run release
+      - run: npm run dist
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Ohne Entwicklerzertifikat wuerde electron-builder auf macOS nach einer
+          # Identitaet suchen und scheitern. Das Ergebnis ist unsigniert — Gatekeeper
+          # verlangt beim ersten Start Rechtsklick > Oeffnen. Signatur/Notarisierung
+          # sind bewusst eine eigene, spaetere Spec.
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+          DEBUG: electron-builder          # jeder Schritt benannt, statt nur "exit 1"
+
+      # Was ist tatsaechlich entstanden? Ohne diese Liste raet man bei einem leeren Upload.
+      - name: Inhalt von dist/
+        if: always()
+        shell: bash
+        run: ls -la dist/ || echo "dist/ existiert nicht"
+
       - uses: actions/upload-artifact@v4
         with:
-          name: installer
-          path: dist/*.exe
+          name: installer-${{ matrix.name }}
+          path: ${{ matrix.muster }}
+          if-no-files-found: error      # ein leerer Upload sieht sonst wie Erfolg aus
+
+      # Bei einem Fehlschlag die Spuren mitnehmen: builder-debug.yml nennt die genaue
+      # electron-builder-Konfiguration nach dem Aufloesen, die npm-Logs den Ursprung
+      # eines gescheiterten Downloads.
+      - name: Fehlerspuren sichern
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fehlerspur-${{ matrix.name }}
+          path: |
+            dist/builder-debug.yml
+            dist/builder-effective-config.yaml
+            ~/.npm/_logs/
+          if-no-files-found: ignore
+
+  veroeffentlichen:
+    needs: bauen
+    if: always() && contains(needs.bauen.result, 'success')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: artefakte
+          merge-multiple: true
+      - name: Release-Namen bestimmen
+        id: name
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+            echo "vorab=false" >> "$GITHUB_OUTPUT"
+          else
+            # Kein Tag: ein Testbau. Eigener Name, damit er den echten v-Tag nicht belegt.
+            echo "tag=v$(node -p "require('./package.json').version")-build${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+            echo "vorab=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Draft-Release anlegen
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          ls -la artefakte/
+          gh release create "${{ steps.name.outputs.tag }}" \
+            --draft \
+            ${{ steps.name.outputs.vorab == 'true' && '--prerelease' || '' }} \
+            --target "${GITHUB_SHA}" \
+            --title "Transkribor ${{ steps.name.outputs.tag }}" \
+            --notes "Unsignierte Testbauten aus \`${GITHUB_REF_NAME}\` (${GITHUB_SHA:0:7}).
+
+          **macOS:** unsigniert — beim ersten Start Rechtsklick auf die App > *Öffnen*, sonst blockt Gatekeeper.
+          **Windows:** unsigniert — SmartScreen zeigt *Weitere Informationen* > *Trotzdem ausführen*.
+
+          Beim ersten Start richtet die App die Python-Seite selbst ein (mehrere GB, 10–30 Minuten)." \
+            artefakte/*

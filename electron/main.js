@@ -10,6 +10,7 @@ const { app, BrowserWindow, ipcMain, shell, dialog } = require('electron')
 const path = require('path')
 const backend = require('./backend')
 const setup = require('./setup')
+const protokoll = require('./protokoll')
 
 let win = null
 let bereit = false
@@ -17,7 +18,14 @@ let bereit = false
 // selbst nochmal nach — ohne diesen Riegel starten zwei uvicorn-Prozesse auf zwei Ports.
 let startLaeuft = null
 
+/**
+ * Alles, was ins Fenster geht, geht auch in die Datei — hier ist der Punkt, durch den BEIDE
+ * Quellen laufen (setup.einrichten und backend.start). Nur 'log' und 'fehler' werden
+ * mitgeschrieben: 'phase' und 'status' sind Anzeigezustand, keine Fehlerspur.
+ */
 function senden(kanal, nutzlast) {
+  if (kanal === 'log') protokoll.schreiben(String(nutzlast))
+  if (kanal === 'fehler') protokoll.schreiben(`FEHLER: ${nutzlast}`)
   if (win && !win.isDestroyed()) win.webContents.send(kanal, nutzlast)
 }
 
@@ -48,12 +56,22 @@ function serverStarten() {
 /** Prueft die Umgebung; ist alles da, startet der Server sofort — sonst wartet die Seite auf den Klick. */
 async function pruefen() {
   const s = await setup.status()
+  // In die Datei, nicht nur ins Fenster: "Python nicht gefunden" ist ohne den Befund daneben
+  // (was WURDE gefunden, wo liegt die venv) nicht diagnostizierbar.
+  protokoll.befund('Umgebungsbefund', s)
   senden('status', s)
   if (s.venv) await serverStarten()
   return s
 }
 
 ipcMain.handle('status', () => pruefen())
+
+// Der Weg vom "bei mir kommt ein Fehler" zu einer Datei, die man verschicken kann.
+ipcMain.handle('protokollOeffnen', () => {
+  protokoll.schreiben('— Protokoll vom Nutzer geoeffnet —')
+  shell.showItemInFolder(protokoll.pfad())
+  return protokoll.pfad()
+})
 
 ipcMain.handle('einrichten', async () => {
   const r = await setup.einrichten(z => senden('log', z), s => senden('phase', { schritt: s }))
@@ -65,6 +83,7 @@ ipcMain.handle('einrichten', async () => {
 ipcMain.handle('logs', () => backend.log())
 
 app.whenReady().then(async () => {
+  protokoll.kopf()
   fenster()
   await pruefen()
   if (app.isPackaged) {
