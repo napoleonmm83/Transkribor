@@ -6,7 +6,16 @@ Module._load = (req, ...rest) =>
 
 const test = require('node:test')
 const assert = require('node:assert')
-const { plan } = require('./setup')
+const { plan, spawnEnv } = require('./setup')
+
+/** process.platform ist read-only — fuer den Test kurz umbiegen und sicher zuruecksetzen. */
+function aufPlattform(p, fn) {
+  const echt = process.platform
+  Object.defineProperty(process, 'platform', { value: p, configurable: true })
+  try { return fn() } finally {
+    Object.defineProperty(process, 'platform', { value: echt, configurable: true })
+  }
+}
 
 test('Windows: winget automatisch, torch aus dem CUDA-Index', () => {
   const p = plan('win32', '')
@@ -35,4 +44,16 @@ test('Linux ohne erkannten Paketmanager nennt trotzdem die Pakete', () => {
 
 test('Linux zieht cu128 ohne vorherige NVIDIA-Erkennung', () => {
   assert.match(plan('linux', 'apt').torchIndex, /cu128/)
+})
+
+test('macOS: Homebrew-Pfade stehen VOR dem geerbten PATH (launchd kennt sie nicht)', () => {
+  const pfad = aufPlattform('darwin', () => spawnEnv().PATH)
+  assert.ok(pfad.startsWith('/opt/homebrew/bin:/usr/local/bin:'),
+    `Homebrew muss vorne stehen, sonst gewinnt /usr/bin/python3 (3.9): ${pfad}`)
+  assert.ok(pfad.endsWith(process.env.PATH || ''))     // geerbtes PATH bleibt dahinter
+})
+
+test('Windows und Linux erben die Umgebung unveraendert', () => {
+  assert.strictEqual(aufPlattform('win32', spawnEnv), process.env)
+  assert.strictEqual(aufPlattform('linux', spawnEnv), process.env)
 })

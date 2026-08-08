@@ -16,6 +16,19 @@ const P = require('./paths')
 
 const TORCH_INDEX = 'https://download.pytorch.org/whl/cu128'
 const MIN_PY = [3, 10]
+const MAC_PFADE = '/opt/homebrew/bin:/usr/local/bin'   // Apple Silicon, dann Intel-Homebrew
+
+/**
+ * Umgebung fuer jeden spawn hier. Eine aus dem Finder gestartete .app erbt launchds PATH
+ * (/usr/bin:/bin:/usr/sbin:/sbin), nicht den der Shell — per brew installiertes Python und
+ * ffmpeg sind im Terminal da und fuer die App unsichtbar. VORangestellt, nicht angehaengt:
+ * sonst gewinnt /usr/bin/python3 (macOS liefert 3.9, von MIN_PY abgelehnt) gegen brews Python.
+ * Dieselbe Lektion wie POSIX_FFMPEG_DIRS in transcribe.py, nur eine Schicht frueher.
+ */
+function spawnEnv() {
+  if (process.platform !== 'darwin') return process.env
+  return { ...process.env, PATH: MAC_PFADE + ':' + (process.env.PATH || '') }
+}
 
 const LINUX_PAKETE = {
   apt: 'sudo apt install python3 python3-venv ffmpeg',
@@ -66,7 +79,7 @@ function lauf(cmd, args, onLine, opts = {}) {
     onLine(`> ${cmd} ${args.join(' ')}`)
     let proc
     try {
-      proc = spawn(cmd, args, { windowsHide: true, ...opts })
+      proc = spawn(cmd, args, { windowsHide: true, env: spawnEnv(), ...opts })
     } catch (e) {
       onLine(`FEHLER: ${e.message}`)
       return resolve(-1)
@@ -92,7 +105,7 @@ function lauf(cmd, args, onLine, opts = {}) {
 function ausgabe(cmd, args) {
   return new Promise(resolve => {
     let proc
-    try { proc = spawn(cmd, args, { windowsHide: true }) } catch { return resolve(null) }
+    try { proc = spawn(cmd, args, { windowsHide: true, env: spawnEnv() }) } catch { return resolve(null) }
     let s = ''
     proc.stdout.on('data', b => { s += b })
     proc.stderr.on('data', b => { s += b })          // `python --version` schrieb frueher nach stderr
@@ -138,6 +151,8 @@ async function status() {
     winget: process.platform === 'win32' ? (await ausgabe('winget', ['--version'])) || '' : '',
     venvPfad: P.venv,
     projektePfad: P.projekte,
+    // Nicht leer heisst: hier installiert die App nichts selbst (macOS/Linux), der Nutzer
+    // braucht den Befehl. Auf Windows bleibt es leer — winget uebernimmt.
     hinweis: (py && ff) ? '' : pl.hinweis,
   }
 }
@@ -209,4 +224,4 @@ async function einrichten(onLine, onSchritt) {
   return { ok: true }
 }
 
-module.exports = { status, einrichten, venvVollstaendig, findePython, plan }
+module.exports = { status, einrichten, venvVollstaendig, findePython, plan, spawnEnv }

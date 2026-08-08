@@ -29,6 +29,10 @@
   #fehler { display:none; margin-top:16px; border:1px solid #7a3b3b; background:#1d1113; border-radius:8px;
             padding:12px 14px; color:#ffb4b4; white-space:pre-wrap; }
   .hinweis { margin-top:14px; color:var(--dim); font-size:12px; }
+  /* Der Befehl muss zum Kopieren taugen: markierbar, monospace, abgesetzt. */
+  #befehl { display:none; margin-top:14px; border:1px solid var(--line); border-radius:8px;
+            padding:10px 12px; background:#08080a; color:var(--fg);
+            font:12px/1.6 ui-monospace, Consolas, monospace; user-select:text; white-space:pre-wrap; }
 </style>
 </head>
 <body>
@@ -45,6 +49,7 @@
   </div>
 
   <div id="fehler"></div>
+  <p id="befehl"></p>
   <pre id="log"></pre>
   <p class="hinweis" id="hinweis"></p>
 </div>
@@ -68,9 +73,18 @@ function zeigeStatus(s) {
   zeile('ffmpeg', !!s.ffmpeg, s.ffmpeg)
   zeile('Python-Umgebung (Whisper, PyTorch)', s.venv, s.venv ? s.venvPfad : '')
   $('hinweis').textContent = 'Projekte liegen in ' + s.projektePfad
+  // Auf macOS/Linux installiert die App Python/ffmpeg nicht selbst. Dann ist dieser Befehl das
+  // Einzige, was weiterhilft — er gehört vor den Klick, nicht in eine rote Box danach.
+  $('befehl').textContent = s.hinweis || ''
+  $('befehl').style.display = s.hinweis ? 'block' : 'none'
   if (s.venv) {
     $('sub').textContent = 'Alles bereit — starte …'
     $('los').style.display = 'none'
+  } else if (s.hinweis) {
+    $('sub').textContent = 'Transkribor braucht Python und ffmpeg. Bitte den Befehl unten einmal ' +
+      'im Terminal ausführen, dann „Jetzt einrichten“ — den Rest (Spracherkennung, mehrere GB) ' +
+      'lädt die App selbst.'
+    $('los').style.display = ''
   } else {
     $('sub').textContent = 'Beim ersten Start lädt Transkribor die Spracherkennung herunter ' +
       '(mehrere GB, je nach Leitung 10–30 Minuten). Danach läuft alles offline auf deinem Rechner.'
