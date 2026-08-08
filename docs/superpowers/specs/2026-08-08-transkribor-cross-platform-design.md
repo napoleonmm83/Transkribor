@@ -168,6 +168,18 @@ Daraus folgt:
 keine eigene Logik und kann den Grund direkt anzeigen („kein `claude` gefunden" ist eine andere
 Handlungsanweisung als „kein API-Key hinterlegt").
 
+### 8. Prozessbaum-Abbruch auf POSIX — `webtool/jobs.py`
+
+Beim Schreiben des Plans aufgefallen und nachträglich aufgenommen: `_kill_tree` ruft auf
+POSIX nur `proc.terminate()`. Das beendet den Python-Prozess, während Whisper und `claude`
+als Waisen mit belegter GPU weiterlaufen — genau das, was `taskkill /F /T` auf Windows
+verhindert. Der vorhandene `ponytail:`-Kommentar in `jobs.py:165` benennt die Lösung bereits:
+`Popen(start_new_session=True)` plus `os.killpg`.
+
+Auf einer Plattform abbrechen zu können und auf der anderen nicht, ist für eine
+Cross-Platform-Freigabe kein haltbarer Zustand — deshalb gehört das in diese Spec und nicht
+in einen späteren Aufräumlauf.
+
 ## Datenfluss
 
 ```
@@ -191,6 +203,7 @@ Schlüssel und eine gemeinsame Geräteentscheidung dazu.
 | Unbekannter Modellname in `settings.json` | auf `large-v3` zurückfallen statt Absturz beim Laden |
 | ffmpeg nur unter `/opt/homebrew/bin` | Pfad vor dem Lauf in `PATH` ergänzen |
 | Kein KI-Anbieter nutzbar | Auto-Korrektur überspringen, Knopf deaktiviert, Transkription unberührt |
+| Abbruch auf macOS/Linux | Prozessgruppe abräumen; ist sie schon weg, auf `terminate()` zurückfallen statt zu werfen |
 
 ## Tests
 
