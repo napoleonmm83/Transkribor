@@ -1,4 +1,5 @@
 import os
+import signal
 import subprocess
 import sys
 import time
@@ -249,6 +250,45 @@ def test_popen_ohne_sitzung_auf_windows(monkeypatch):
     assert jobs._popen_kwargs().get("start_new_session", False) is False
 
 
+def test_start_reicht_die_popen_kwargs_wirklich_durch(monkeypatch):
+    """_popen_kwargs() und _kill_tree tragen einander: os.killpg(os.getpgid(pid)) ist nur
+    erlaubt, WEIL das Kind Sitzungsfuehrer ist. Faellt start_new_session am Popen-Aufruf weg,
+    liefert getpgid die Gruppe des Servers — der Abbruch wuerde uvicorn selbst killen. Beide
+    Bausteine sind einzeln getestet, diese Naht bisher nicht."""
+    gesehen = {}
+
+    class FakeProc:
+        pid = 1234
+        returncode = 0
+        stdout = iter(())
+
+        def wait(self):
+            return 0
+
+    monkeypatch.setattr(jobs.os, "name", "posix")
+    monkeypatch.setattr(jobs.subprocess, "Popen",
+                        lambda cmd, **kw: (gesehen.update(kw), FakeProc())[1])
+    jid, started = jobs.start("P_kwargs", ["egal"], cwd=None, kind="correct")
+    assert started is True
+    assert _wait(jid)["status"] == "done"
+    assert gesehen.get("start_new_session") is True
+
+
+def test_cancel_all_bricht_laufende_jobs_ab():
+    """Beim Herunterfahren: auf POSIX erreicht das SIGTERM nur uvicorn, die Kinder sitzen
+    in eigenen Sitzungen und blieben sonst als Waisen mit belegter GPU zurueck."""
+    slow = [sys.executable, "-c", "import time; time.sleep(5)"]
+    jid, started = jobs.start("P_shutdown", slow, cwd=None, kind="correct")
+    assert started is True
+    for _ in range(100):
+        if jobs.get(jid)["pid"]:
+            break
+        time.sleep(0.02)
+    assert jid in jobs.cancel_all()
+    assert _wait(jid)["status"] == "cancelled"
+    assert jid not in jobs.cancel_all()     # fertige Jobs nicht nochmal anfassen
+
+
 def test_kill_tree_posix_nutzt_prozessgruppe(monkeypatch):
     getoetet = []
 
@@ -259,9 +299,12 @@ def test_kill_tree_posix_nutzt_prozessgruppe(monkeypatch):
 
     monkeypatch.setattr(jobs.os, "name", "posix")
     monkeypatch.setattr(jobs.os, "getpgid", lambda pid: pid, raising=False)
-    monkeypatch.setattr(jobs.os, "killpg", lambda pgid, sig: getoetet.append(("killpg", pgid)), raising=False)
+    monkeypatch.setattr(jobs.os, "killpg",
+                        lambda pgid, sig: getoetet.append(("killpg", pgid, sig)), raising=False)
     jobs._kill_tree(FakeProc())
-    assert getoetet == [("killpg", 4711)]
+    # SIGKILL, nicht SIGTERM: whisper faengt SIGTERM ab bzw. braucht zu lange, und der
+    # Abbruch soll die GPU sofort freigeben. (Windows kennt SIGKILL nicht -> 9.)
+    assert getoetet == [("killpg", 4711, getattr(signal, "SIGKILL", 9))]
 
 
 def test_kill_tree_posix_faellt_auf_terminate_zurueck(monkeypatch):

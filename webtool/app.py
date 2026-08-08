@@ -3,6 +3,7 @@ import json
 import os
 import shutil
 import sys
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
@@ -17,7 +18,17 @@ from . import settings
 from .edit_model import build_edit_doc
 from .render_md import render_md
 
-app = FastAPI(title="Transkribor Editor")
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    yield
+    # Beim Herunterfahren die Kinder mitnehmen. Die Desktop-App schickt dem Server beim
+    # Beenden ein SIGTERM — das erreicht auf POSIX nur uvicorn, whisper/claude sitzen in
+    # eigenen Sitzungen und blieben sonst als Waisen mit belegter GPU zurueck.
+    for jid in jobs.cancel_all():
+        print(f"[shutdown] Job {jid} abgebrochen", flush=True)
+
+
+app = FastAPI(title="Transkribor Editor", lifespan=_lifespan)
 
 AUDIO_EXT = (".mp3", ".wav", ".m4a", ".aac", ".flac", ".ogg", ".opus", ".wma", ".mp4")
 MAX_FETCH_URLS = 20

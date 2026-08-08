@@ -191,6 +191,21 @@ def cancel(job_id: str):
     return True
 
 
+def cancel_all():
+    """Alle laufenden Jobs abbrechen — fuer das Herunterfahren des Servers.
+
+    Auf POSIX erreicht das SIGTERM beim Beenden der App nur uvicorn selbst: die Kinder
+    sitzen bewusst in eigenen Sitzungen (_popen_kwargs), also erreicht sie auch kein
+    Gruppensignal. Ohne diesen Aufruf liefe whisper nach dem Schliessen des Fensters
+    als Waise mit belegter GPU weiter. Auf Windows raeumt schon taskkill /T auf.
+    """
+    with _lock:
+        laufend = [jid for jid, r in _jobs.items() if r["status"] == "running"]
+    for jid in laufend:
+        cancel(jid)
+    return laufend
+
+
 def get(job_id: str):
     with _lock:
         r = _jobs.get(job_id)

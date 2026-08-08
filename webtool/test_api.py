@@ -479,6 +479,9 @@ def test_autocorrect_startet_nicht_ohne_anbieter(client, monkeypatch):
     """Sonst scheitert nach jedem Upload ein Korrektur-Job — der erste Eindruck der App."""
     from webtool import app as appmod
     gestartet = []
+    # Ohne das Setzen waere der Test auf einem Rechner mit TRANSKRIBOR_AUTOCORRECT=0
+    # gruen, ohne das Anbieter-Gate ueberhaupt zu erreichen.
+    monkeypatch.setenv("TRANSKRIBOR_AUTOCORRECT", "1")
     monkeypatch.setattr(appmod.llm, "available", lambda: (False, "kein claude"))
     monkeypatch.setattr(appmod.jobs, "request",
                         lambda *a, **k: gestartet.append(a) or ("id", True))
@@ -489,11 +492,23 @@ def test_autocorrect_startet_nicht_ohne_anbieter(client, monkeypatch):
 def test_autocorrect_startet_mit_anbieter(client, monkeypatch):
     from webtool import app as appmod
     gestartet = []
+    monkeypatch.setenv("TRANSKRIBOR_AUTOCORRECT", "1")
     monkeypatch.setattr(appmod.llm, "available", lambda: (True, ""))
     monkeypatch.setattr(appmod.jobs, "request",
                         lambda *a, **k: gestartet.append(a) or ("id", True))
     appmod._autocorrect("Testprojekt")
     assert len(gestartet) == 1
+
+
+def test_shutdown_bricht_laufende_jobs_ab(client, monkeypatch):
+    """Beim Beenden der App bekommt uvicorn ein SIGTERM — auf POSIX erreicht das die
+    Job-Kinder nicht (eigene Sitzungen). Ohne diesen Haken laeuft whisper weiter."""
+    from webtool import app as appmod
+    gerufen = []
+    monkeypatch.setattr(appmod.jobs, "cancel_all", lambda: gerufen.append(True) or [])
+    with TestClient(appmod.app):
+        pass                                   # Kontext verlassen -> lifespan-Shutdown
+    assert gerufen == [True]
 
 
 def test_settings_meldet_ai_ready(client, monkeypatch):
