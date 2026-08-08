@@ -98,17 +98,28 @@ jobs:
       fail-fast: false       # ein gescheiterter Mac-Build darf Windows nicht mitreissen
       matrix:
         include:
+          # Die `latest*.yml` MUESSEN mit: electron-updater fragt genau diese Datei im
+          # Release ab: ohne sie bekommt es einen 404 und meldet nie ein Update. Die
+          # `.blockmap` erlaubt differentielle Downloads (nur die geaenderten Bloecke statt
+          # 100 MB). Beides entsteht im Bau und fiel vorher durch das Muster `dist/*.exe`.
           - os: windows-latest
             name: windows
-            muster: dist/*.exe
+            muster: |
+              dist/*.exe
+              dist/*.blockmap
+              dist/latest.yml
           - os: macos-latest         # seit macos-14 arm64 — passt zu build.mac.arch
             name: macos
-            muster: dist/*.dmg
+            muster: |
+              dist/*.dmg
+              dist/*.blockmap
+              dist/latest-mac.yml
           - os: ubuntu-latest
             name: linux
             muster: |
               dist/*.AppImage
               dist/*.deb
+              dist/latest-linux.yml
     runs-on: ${{ matrix.os }}
     steps:
       # Bei einem Release den frisch gesetzten Tag auschecken, nicht den Stand von vorher —
