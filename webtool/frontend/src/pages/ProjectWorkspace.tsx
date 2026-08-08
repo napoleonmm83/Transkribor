@@ -130,10 +130,10 @@ export function ProjectWorkspace() {
               const active = running ? phases.active[f.base] : undefined
               const state = running ? phases.perBase[f.base] : undefined
               return (
-                <li key={f.base} className="px-3 py-2.5 transition-colors hover:bg-muted/50">
+                <li key={f.base} className="px-3 py-2.5 transition-colors hover:bg-muted/60">
                   <div className="flex items-center gap-3">
                     {/* Audio ohne Roh-Transkript ist zwar sichtbar, aber weder oeffen- noch korrigierbar. */}
-                    <button className={cn('flex-1 truncate rounded text-left text-sm outline-none',
+                    <button className={cn('flex-1 truncate rounded-md text-left text-sm outline-none',
                       'focus-visible:ring-2 focus-visible:ring-ring',
                       f.has_raw ? 'font-medium hover:underline' : 'cursor-not-allowed text-muted-foreground')}
                       disabled={!f.has_raw}
