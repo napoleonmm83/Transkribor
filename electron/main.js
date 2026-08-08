@@ -88,10 +88,15 @@ app.whenReady().then(async () => {
   await pruefen()
   if (app.isPackaged) {
     // Erst nach dem Start pruefen: ein Update-Fehler (kein Netz, privates Repo) darf den
-    // Start nie blockieren, deshalb bewusst verschluckt statt als Dialog.
+    // Start nie blockieren, deshalb kein Dialog — aber ins Protokoll gehoert er.
     try {
       const { autoUpdater } = require('electron-updater')
       autoUpdater.logger = null
+      // Auf macOS scheitert das derzeit systematisch: Squirrel.Mac verlangt eine echte
+      // Signatur, unsere dmg ist nur ad-hoc signiert (siehe CLAUDE.md). Ohne diese Zeile
+      // bliebe der Mac still auf einer alten Version stehen, ohne dass irgendwo steht warum.
+      // Mit Developer ID + Notarisierung laeuft es hier ohne Aenderung wieder an.
+      autoUpdater.on('error', (e, nachricht) => protokoll.schreiben(`Update-Pruefung fehlgeschlagen: ${nachricht || (e && e.message) || e}`))
       autoUpdater.on('update-downloaded', async info => {
         const a = await dialog.showMessageBox(win, {
           type: 'info', buttons: ['Jetzt neu starten', 'Später'], defaultId: 0,
@@ -100,8 +105,11 @@ app.whenReady().then(async () => {
         })
         if (a.response === 0) { backend.stop(); autoUpdater.quitAndInstall() }
       })
-      autoUpdater.checkForUpdates().catch(() => {})
-    } catch { /* ohne Update-Feed laeuft die App normal weiter */ }
+      autoUpdater.checkForUpdates().catch(() => {})   // schon ueber 'error' protokolliert
+    } catch (e) {
+      // Ohne Update-Feed laeuft die App normal weiter — aber auch das steht dann in der Datei.
+      protokoll.schreiben(`Update-Pruefung nicht moeglich: ${e && e.message || e}`)
+    }
   }
 })
 
