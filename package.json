@@ -1,7 +1,7 @@
 {
   "name": "transkribor",
   "productName": "Transkribor",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "license": "MIT",
   "description": "Interview-Transkription (Whisper, lokal) mit KI-Korrektur und Sprecher-Labeling",
@@ -59,14 +59,24 @@
       "artifactName": "${productName}-Setup-${version}.${ext}"
     },
     "mac": {
-      "target": [{ "target": "dmg", "arch": ["arm64"] }],
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ],
       "category": "public.app-category.productivity",
       "identity": "-",
       "hardenedRuntime": false,
       "artifactName": "${productName}-${version}-${arch}.${ext}"
     },
     "linux": {
-      "target": ["AppImage", "deb"],
+      "target": [
+        "AppImage",
+        "deb"
+      ],
       "category": "AudioVideo",
       "synopsis": "Interview-Transkription mit Whisper, lokal",
       "artifactName": "${productName}-${version}.${ext}"
@@ -87,11 +97,23 @@
     },
     "dmg": {
       "background": "build/background.png",
-      "window": { "width": 540, "height": 380 },
+      "window": {
+        "width": 540,
+        "height": 380
+      },
       "iconSize": 80,
       "contents": [
-        { "x": 140, "y": 170, "type": "file" },
-        { "x": 400, "y": 170, "type": "link", "path": "/Applications" }
+        {
+          "x": 140,
+          "y": 170,
+          "type": "file"
+        },
+        {
+          "x": 400,
+          "y": 170,
+          "type": "link",
+          "path": "/Applications"
+        }
       ]
     },
     "nsis": {
