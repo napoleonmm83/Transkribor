@@ -14,8 +14,10 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Namen bewusst ohne Testzahlen: die erste Zahl war nach einem einzigen PR falsch (242 -> 244),
+  # und ein Jobname, der luegt, ist schlechter als einer, der nichts verspricht.
   python:
-    name: Python (242)
+    name: Python
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -35,7 +37,7 @@ jobs:
       - run: python -m pytest webtool -q
 
   frontend:
-    name: Frontend (127)
+    name: Frontend
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -57,7 +59,7 @@ jobs:
         working-directory: webtool/frontend
 
   electron:
-    name: Electron (34)
+    name: Electron
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7

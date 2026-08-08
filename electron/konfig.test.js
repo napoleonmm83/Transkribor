@@ -36,3 +36,17 @@ test('die Pruefung faengt den Fehler, der die CI dreimal abbrechen liess', () =>
   const kaputt = { ...konfig, linux: { ...konfig.linux, depends: ['libasound2'] } }
   assert.strictEqual(pruefen(kaputt).gueltig, false)
 })
+
+test('extraResources nimmt Modellgewichte und deren Lizenz mit', () => {
+  // Seit dem Wegfall des HF-Tokens liegt das Diarisierungsmodell im Repo und MUSS ins Paket.
+  // Faellt der Filter weg, laeuft die Sprechertrennung im Installer still nicht — genau der
+  // Schaden, den der Umbau beseitigen sollte, und im Repo unsichtbar, weil dort alles da ist.
+  //
+  // LICENSE-MODELLE.md haengt mit dran: CC-BY-4.0 erlaubt die Weitergabe der Gewichte nur
+  // gegen Namensnennung. Gewichte ohne die Lizenzdatei auszuliefern waere ein Lizenzverstoss,
+  // nicht bloss eine fehlende Datei.
+  const filter = (konfig.extraResources || []).flatMap(r => r.filter || [])
+  for (const noetig of ['models/**/*', 'LICENSE-MODELLE.md']) {
+    assert.ok(filter.includes(noetig), `${noetig} fehlt in extraResources: ${filter.join(', ')}`)
+  }
+})
