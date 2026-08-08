@@ -1,7 +1,18 @@
 name: Release
 
-# Getaggter Push (v*) baut die Installer aller drei Plattformen; workflow_dispatch tut
-# dasselbe fuer einen beliebigen Branch, um vor einem echten Release testen zu koennen.
+# Drei Wege hier hinein:
+#   1. workflow_dispatch, freigeben=false -> Testbau. Entwurf mit Laufnummer, belegt
+#      keinen echten Tag. Die Vorgabe, damit ein Fehlklick nichts veroeffentlicht.
+#   2. workflow_dispatch, freigeben=true  -> echtes Release. Die HOEHE der Version kommt
+#      aus den Commit-Typen seit dem letzten Tag (feat -> minor, fix/perf -> patch,
+#      "!" oder BREAKING CHANGE -> major); der ZEITPUNKT ist dieser Klick.
+#   3. Getaggter Push v*                  -> echtes Release aus einem Tag von Hand.
+#
+# Warum nicht bei jedem Merge auf master: an jeder Version haengen hier drei Runner, vier
+# Installer und ein Update-Prompt beim Nutzer. Das pro Tippfehler-Fix auszuloesen ist
+# Rauschen. Die Zahl automatisch zu bestimmen loest das eigentliche Problem (niemand denkt
+# ans Anheben), ohne den Zeitpunkt aus der Hand zu geben — dieselbe Trennung wie bei
+# release-please, nur ohne die Abhaengigkeit.
 #
 # Warum eine Matrix und kein einzelner Job: ein macOS-dmg laesst sich NUR auf einem
 # macOS-Runner bauen (Codesign-Werkzeuge, hdiutil), ein deb sinnvoll nur auf Linux.
@@ -10,12 +21,79 @@ on:
   push:
     tags: ['v*']
   workflow_dispatch:
+    inputs:
+      freigeben:
+        description: 'Echtes Release veroeffentlichen (Version wird automatisch hochgezaehlt)'
+        type: boolean
+        default: false
+
+# Zwei Merges kurz hintereinander wuerden sonst gleichzeitig die Version hochzaehlen und
+# sich gegenseitig den Push zerschiessen. Nicht abbrechen: ein halb fertiges Release ist
+# schlimmer als eines, das wartet.
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 permissions:
-  contents: write            # das Release anlegen und die Assets hochladen
+  contents: write            # das Release anlegen, die Assets hochladen, die Version pushen
 
 jobs:
+  # Entscheidet, WAS dieser Lauf ist, und hebt bei einem Merge die Version.
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      art: ${{ steps.plan.outputs.art }}       # release | test | keine
+      ref: ${{ steps.plan.outputs.ref }}       # was gebaut wird (leer = Vorgabe)
+      tag: ${{ steps.plan.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0     # ohne Historie und Tags gibt es kein `git describe`
+      - id: plan
+        shell: bash
+        run: |
+          set -euo pipefail
+          schreib() { echo "$1=$2" >> "$GITHUB_OUTPUT"; }
+
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            echo "Von Hand gesetzter Tag — bauen und veroeffentlichen."
+            schreib art release; schreib tag "${GITHUB_REF#refs/tags/}"; schreib ref ""
+            exit 0
+          fi
+          if [ "${{ inputs.freigeben }}" != "true" ]; then
+            echo "Testbau — nichts wird veroeffentlicht, die Version bleibt unangetastet."
+            schreib art test; schreib tag ""; schreib ref ""
+            exit 0
+          fi
+
+          letzter="$(git describe --tags --abbrev=0 2>/dev/null || true)"
+          if [ -z "$letzter" ]; then
+            # Ohne Ausgangspunkt muesste man die GESAMTE Historie auswerten. Den Anfang
+            # setzt ein Mensch: einmal `git tag v0.2.0 && git push --tags`.
+            echo "Noch kein v-Tag. Den ersten bitte von Hand setzen, danach zaehlt das hier hoch."
+            exit 1
+          fi
+
+          # Die Entscheidung steht in scripts/versionshoehe.sh, damit
+          # scripts/versionshoehe.test.sh genau das prueft, was hier laeuft.
+          hoehe="$(bash scripts/versionshoehe.sh "$letzter")"
+
+          if [ -z "$hoehe" ]; then
+            # Freigeben angeklickt, aber es gibt nichts freizugeben. Abbrechen statt still
+            # ein Release mit identischem Inhalt danebenzustellen.
+            echo "Seit $letzter nur chore/docs/ci/test — es gibt nichts zu veroeffentlichen."
+            exit 1
+          fi
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          neu="$(npm version "$hoehe" -m 'chore(release): %s' | tail -1)"
+          echo "Seit $letzter: $hoehe -> $neu"
+          git push origin "HEAD:${GITHUB_REF_NAME}" --follow-tags
+          schreib art release; schreib tag "$neu"; schreib ref "$neu"
+
   bauen:
+    needs: version
     strategy:
       fail-fast: false       # ein gescheiterter Mac-Build darf Windows nicht mitreissen
       matrix:
@@ -33,7 +111,11 @@ jobs:
               dist/*.deb
     runs-on: ${{ matrix.os }}
     steps:
+      # Bei einem Release den frisch gesetzten Tag auschecken, nicht den Stand von vorher —
+      # sonst baut die Matrix die alte Versionsnummer in die Installer.
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.version.outputs.ref }}
       - uses: actions/setup-node@v7
         with:
           node-version: 22
@@ -54,6 +136,12 @@ jobs:
 
       - run: npm run test:electron        # billig, und schlaegt vor dem teuren Bau fehl
 
+      # Die Versionslogik entscheidet ueber Nummern, die man nach dem Veroeffentlichen nicht
+      # mehr zurueckholt — sie wird mitgeprueft, nicht nur benutzt.
+      - name: Versionslogik pruefen
+        shell: bash
+        run: bash scripts/versionshoehe.test.sh
+
       # electron-updater vergleicht die Version aus der package.json, NICHT den Tag. Ein Tag
       # v0.2.0 auf einer package.json mit 0.1.0 baut Installer, die sich als 0.1.0 ausgeben —
       # das Update erreicht dann nie jemanden, und niemand sieht warum. Also hier abbrechen.
@@ -69,11 +157,11 @@ jobs:
           fi
           echo "Tag und Version stimmen ueberein: $pkg"
 
-      # Ohne Tag ist es ein Testbau: die Laufnummer in die Version stempeln, sonst heissen die
-      # Installer aus zehn Laeufen gleich und man weiss nicht, welchen man geladen hat.
-      # Nur im Runner-Arbeitsverzeichnis — commitet wird das nie.
+      # Beim Testbau die Laufnummer in die Version stempeln, sonst heissen die Installer aus
+      # zehn Laeufen gleich und man weiss nicht, welchen man geladen hat. Nur im
+      # Runner-Arbeitsverzeichnis — commitet wird das nie.
       - name: Testbau kennzeichnen
-        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        if: needs.version.outputs.art == 'test'
         shell: bash
         run: |
           npm pkg set "version=$(node -p "require('./package.json').version")-build${GITHUB_RUN_NUMBER}"
@@ -124,10 +212,12 @@ jobs:
     # gebaut haben. Das ist Absicht — ein Release, in dem eine Plattform fehlt, ist
     # schlimmer als keines: der Nutzer laedt es und findet seine Datei nicht. Die
     # Artefakte der erfolgreichen Jobs liegen unabhaengig davon zum Download bereit.
-    needs: bauen
+    needs: [version, bauen]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.version.outputs.ref }}
       - uses: actions/download-artifact@v8
         with:
           path: artefakte
@@ -136,26 +226,32 @@ jobs:
         id: name
         shell: bash
         run: |
-          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
-            echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
-            echo "vorab=false" >> "$GITHUB_OUTPUT"
+          if [ "${{ needs.version.outputs.art }}" = "release" ]; then
+            # Der Tag existiert bereits (von Hand gesetzt oder eben gepusht) — kein --target.
+            echo "tag=${{ needs.version.outputs.tag }}" >> "$GITHUB_OUTPUT"
+            echo "test=false" >> "$GITHUB_OUTPUT"
+            echo "zusatz=" >> "$GITHUB_OUTPUT"
           else
-            # Kein Tag: ein Testbau. Eigener Name, damit er den echten v-Tag nicht belegt.
+            # Testbau: eigener Name mit Laufnummer, damit er keinen echten v-Tag belegt.
             echo "tag=v$(node -p "require('./package.json').version")-build${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
-            echo "vorab=true" >> "$GITHUB_OUTPUT"
+            echo "test=true" >> "$GITHUB_OUTPUT"
+            echo "zusatz=--draft --prerelease --target ${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
           fi
-      - name: Draft-Release anlegen
+      - name: Release anlegen
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
           ls -la artefakte/
+          if [ "${{ steps.name.outputs.test }}" = "true" ]; then
+            kopf="Unsignierte Testbauten aus \`${GITHUB_REF_NAME}\` (${GITHUB_SHA:0:7}) — kein Release."
+          else
+            kopf="Transkribor ${{ steps.name.outputs.tag }}"
+          fi
           gh release create "${{ steps.name.outputs.tag }}" \
-            --draft \
-            ${{ steps.name.outputs.vorab == 'true' && '--prerelease' || '' }} \
-            --target "${GITHUB_SHA}" \
+            ${{ steps.name.outputs.zusatz }} \
             --title "Transkribor ${{ steps.name.outputs.tag }}" \
-            --notes "Unsignierte Testbauten aus \`${GITHUB_REF_NAME}\` (${GITHUB_SHA:0:7}).
+            --notes "$kopf
 
           **macOS:** ad-hoc signiert, nicht notarisiert — beim ersten Start blockt Gatekeeper. Rechtsklick auf die App > *Öffnen*; wird das nicht angeboten (macOS 15+), einmal starten und dann *Systemeinstellungen > Datenschutz & Sicherheit > Dennoch öffnen*.
           **Windows:** unsigniert — SmartScreen zeigt *Weitere Informationen* > *Trotzdem ausführen*.
