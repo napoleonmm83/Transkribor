@@ -1,0 +1,65 @@
+'use strict'
+/**
+ * Update-Zustand als EIN Objekt. Der autoUpdater wird hineingereicht statt importiert:
+ * so laeuft der Automat im Test ohne Electron, wie setup.plan() es vormacht.
+ */
+
+/**
+ * Leerstring heisst: dieses System kann sich selbst aktualisieren.
+ * Sonst ein CODE, kein Satz — die Formulierung steht in SettingsPage.tsx, wo Umlaute
+ * erlaubt sind und der Text hingehoert.
+ */
+function nichtMoeglich(plattform, gepackt, appimage) {
+  if (!gepackt) return 'entwicklung'
+  // Squirrel.Mac verlangt eine echte Signatur; unsere dmg ist nur ad-hoc signiert.
+  if (plattform === 'darwin') return 'darwin'
+  // Die Variable setzt die AppImage-Laufzeit selbst; ein deb-Start hat sie nicht, und
+  // fuer deb kennt electron-updater ohnehin keinen Weg.
+  if (plattform === 'linux' && !appimage) return 'kein-appimage'
+  return ''
+}
+
+/**
+ * Baut den Automaten. `aendert` wird bei jeder Zustandsaenderung gerufen — daran haengt
+ * die Anzeige im Fenster.
+ */
+function erstellen({ autoUpdater, version, plattform, gepackt, appimage, aendert }) {
+  const grund = nichtMoeglich(plattform, gepackt, appimage)
+  let stand = grund ? { version, art: 'nicht_moeglich', grund } : { version, art: 'unbekannt' }
+
+  const setzen = neu => { stand = { version, ...neu }; aendert(stand) }
+
+  if (!grund) {
+    // Ohne das laedt electron-updater beim Pruefen sofort los und "erst auf Klick"
+    // waere wirkungslos.
+    autoUpdater.autoDownload = false
+    autoUpdater.on('update-available', info => setzen({
+      art: 'verfuegbar',
+      neue: info.version,
+      groesse: (info.files && info.files[0] && info.files[0].size) || 0,
+    }))
+    autoUpdater.on('update-not-available', () => setzen({ art: 'aktuell' }))
+    autoUpdater.on('download-progress', p => setzen({
+      art: 'laedt',
+      prozent: p.percent,
+      geladen: p.transferred,
+      gesamt: p.total,
+      tempo: p.bytesPerSecond,
+    }))
+    autoUpdater.on('update-downloaded', info => setzen({ art: 'bereit', neue: info.version }))
+    autoUpdater.on('error', e => setzen({ art: 'fehler', text: String((e && e.message) || e) }))
+  }
+
+  return {
+    zustand: () => stand,
+    pruefen: () => {
+      if (grund) return                       // wuerde ohnehin scheitern
+      setzen({ art: 'prueft' })
+      autoUpdater.checkForUpdates().catch(() => {})   // Fehler kommt ueber 'error'
+    },
+    laden: () => { if (!grund) autoUpdater.downloadUpdate().catch(() => {}) },
+    installieren: () => { if (!grund) autoUpdater.quitAndInstall() },
+  }
+}
+
+module.exports = { nichtMoeglich, erstellen }
