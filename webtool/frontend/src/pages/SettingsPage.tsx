@@ -32,7 +32,7 @@ export function SettingsPage() {
   const [laedt, setLaedt] = useState(false)
   const [testet, setTestet] = useState(false)
   const [hw, setHw] = useState<Hardware | null>(null)
-  const { zustand: upd, pruefen, laden, installieren } = useUpdate()
+  const { zustand: upd, pruefen, laden, installieren, protokollOeffnen } = useUpdate()
 
   useEffect(() => { getSettings().then(setS).catch(e => toast.error(String(e))) }, [])
   useEffect(() => { getHardware().then(setHw).catch(() => setHw(null)) }, [])
@@ -221,7 +221,7 @@ export function SettingsPage() {
             {upd.art === 'aktuell' && <span className="text-muted-foreground"> · aktuell</span>}
           </p>
 
-          {(upd.art === 'unbekannt' || upd.art === 'aktuell' || upd.art === 'prueft') && (
+          {(upd.art === 'unbekannt' || upd.art === 'aktuell' || upd.art === 'prueft' || upd.art === 'fehler') && (
             <Button className="mt-3" variant="outline" disabled={upd.art === 'prueft'} onClick={pruefen}>
               {upd.art === 'prueft'
                 ? <><Loader2 className="size-4 animate-spin" /> Wird geprüft …</>
@@ -232,13 +232,17 @@ export function SettingsPage() {
           {upd.art === 'verfuegbar' && (
             <div className="mt-3">
               <p className="text-sm">{upd.neue} verfügbar</p>
-              <Button className="mt-2" onClick={laden}>Herunterladen ({mb(upd.groesse)} MB)</Button>
+              <Button className="mt-2" onClick={laden}>
+                Herunterladen{upd.groesse != null && ` (${mb(upd.groesse)} MB)`}
+              </Button>
             </div>
           )}
 
           {upd.art === 'laedt' && (
             <div className="mt-3">
-              <div className="h-2 w-full overflow-hidden rounded bg-muted">
+              <div className="h-2 w-full overflow-hidden rounded bg-muted" role="progressbar"
+                aria-valuenow={Math.round(upd.prozent)} aria-valuemin={0} aria-valuemax={100}
+                aria-label="Update wird heruntergeladen">
                 <div className="h-full bg-primary transition-all" style={{ width: `${upd.prozent}%` }} />
               </div>
               <p className="mt-2 text-sm text-muted-foreground">
@@ -256,7 +260,8 @@ export function SettingsPage() {
 
           {upd.art === 'fehler' && (
             <p className="mt-3 text-sm text-muted-foreground">
-              Prüfung fehlgeschlagen: {upd.text} — Einzelheiten stehen im Protokoll.
+              Prüfung fehlgeschlagen: {upd.text} — Einzelheiten stehen im{' '}
+              <button type="button" className="underline" onClick={protokollOeffnen}>Protokoll</button>.
             </p>
           )}
 

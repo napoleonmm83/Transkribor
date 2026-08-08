@@ -88,7 +88,9 @@ ipcMain.handle('update:status', () => aktualisierer && aktualisierer.zustand())
 ipcMain.handle('update:pruefen', () => aktualisierer && aktualisierer.pruefen())
 ipcMain.handle('update:laden', () => aktualisierer && aktualisierer.laden())
 ipcMain.handle('update:installieren', () => {
-  if (!aktualisierer) return
+  // Erst wenn der Download wirklich fertig ist: sonst laeuft die App mit totem Backend
+  // weiter, ohne dass quitAndInstall() je zum Neustart kommt.
+  if (!aktualisierer || aktualisierer.zustand().art !== 'bereit') return
   backend.stop()          // sonst bleibt uvicorn als Waise mit belegter GPU zurueck
   aktualisierer.installieren()
 })

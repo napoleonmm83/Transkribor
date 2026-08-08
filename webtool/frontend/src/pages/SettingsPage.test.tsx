@@ -103,14 +103,13 @@ describe('SettingsPage', () => {
 })
 
 function zeigeMit(zustand: UpdateZustand | null) {
-  vi.mocked(useUpdate).mockReturnValue({
-    zustand, pruefen: vi.fn(), laden: vi.fn(), installieren: vi.fn(),
-  })
+  const spies = { pruefen: vi.fn(), laden: vi.fn(), installieren: vi.fn(), protokollOeffnen: vi.fn() }
+  vi.mocked(useUpdate).mockReturnValue({ zustand, ...spies })
   // SettingsPage zeigt bis zum Laden von getSettings nur "Lädt…" und braucht wegen <Link> einen Router —
   // beides gibt der Brief nicht her, ohne das wuerde jeder Test hier auf "Lädt…" haengen bleiben.
   vi.mocked(api.getSettings).mockResolvedValue(BASIS)
   vi.mocked(api.getHardware).mockResolvedValue({ device: 'cuda', name: 'NVIDIA RTX 5080', torch_ok: true })
-  return render(<MemoryRouter><SettingsPage /></MemoryRouter>)
+  return { ...render(<MemoryRouter><SettingsPage /></MemoryRouter>), spies }
 }
 
 describe('Abschnitt Version und Updates', () => {
@@ -140,11 +139,18 @@ describe('Abschnitt Version und Updates', () => {
     expect(screen.getByRole('button', { name: /Herunterladen \(94 MB\)/ })).toBeTruthy()
   })
 
+  it('bietet den Download ohne Groesse an, statt "0 MB" zu erfinden', async () => {
+    zeigeMit({ version: '0.2.1', art: 'verfuegbar', neue: '0.3.0', groesse: null })
+    const btn = await screen.findByRole('button', { name: 'Herunterladen' })
+    expect(btn.textContent).not.toMatch(/MB/)
+  })
+
   it('zeigt beim Laden Prozent, MB und Tempo', async () => {
     zeigeMit({ version: '0.2.1', art: 'laedt', prozent: 43.2, geladen: 41 * 1048576, gesamt: 94 * 1048576, tempo: 6.2 * 1048576 })
     expect(await screen.findByText(/43 %/)).toBeTruthy()
     expect(screen.getByText(/41 von 94 MB/)).toBeTruthy()
     expect(screen.getByText(/6,2 MB\/s/)).toBeTruthy()
+    expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '43')
   })
 
   it('bietet nach dem Laden den Neustart an', async () => {
@@ -170,6 +176,15 @@ describe('Abschnitt Version und Updates', () => {
   it('zeigt einen Fehler samt Weg zum Protokoll', async () => {
     zeigeMit({ version: '0.2.1', art: 'fehler', text: '404 releases.atom' })
     expect(await screen.findByText(/404 releases\.atom/)).toBeTruthy()
+  })
+
+  it('im Fehlerzustand: erneut pruefen bleibt moeglich, und es gibt einen Weg ins Protokoll', async () => {
+    // War vorher eine Sackgasse: kein Knopf, kein Weg raus ausser Neustart.
+    const { spies } = zeigeMit({ version: '0.2.1', art: 'fehler', text: '404 releases.atom' })
+    await screen.findByText(/404 releases\.atom/)
+    expect(screen.getByRole('button', { name: /Nach Updates suchen/ })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /Protokoll/ }))
+    expect(spies.protokollOeffnen).toHaveBeenCalled()
   })
 
   it('sperrt den Knopf waehrend der Pruefung', async () => {

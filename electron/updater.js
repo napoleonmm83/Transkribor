@@ -36,7 +36,9 @@ function erstellen({ autoUpdater, version, plattform, gepackt, appimage, aendert
     autoUpdater.on('update-available', info => setzen({
       art: 'verfuegbar',
       neue: info.version,
-      groesse: (info.files && info.files[0] && info.files[0].size) || 0,
+      // Fehlende Groesse bleibt unbekannt statt zu "0 MB" zu werden — das waere eine
+      // Behauptung, die die Anzeige nicht belegen kann.
+      groesse: (info.files && info.files[0] && info.files[0].size) || null,
     }))
     autoUpdater.on('update-not-available', () => setzen({ art: 'aktuell' }))
     autoUpdater.on('download-progress', p => setzen({
@@ -47,7 +49,12 @@ function erstellen({ autoUpdater, version, plattform, gepackt, appimage, aendert
       tempo: p.bytesPerSecond,
     }))
     autoUpdater.on('update-downloaded', info => setzen({ art: 'bereit', neue: info.version }))
-    autoUpdater.on('error', e => setzen({ art: 'fehler', text: String((e && e.message) || e) }))
+    // electron-updater liefert den ausfuehrlichen Text als zweites Argument
+    // ("Cannot check for updates: <stack>") — der geht sonst verloren.
+    autoUpdater.on('error', (e, nachricht) => setzen({
+      art: 'fehler',
+      text: nachricht || String((e && e.message) || e),
+    }))
   }
 
   return {
