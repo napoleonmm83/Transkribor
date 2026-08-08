@@ -4,6 +4,20 @@ import os
 import transcribe
 
 
+def test_opts_fp16_nur_bei_cuda():
+    """fp16 auf MPS oder CPU wuerde werfen bzw. still falsch rechnen."""
+    assert transcribe._opts("prompt", "de", "cuda")["fp16"] is True
+    assert transcribe._opts("prompt", "de", "mps")["fp16"] is False
+    assert transcribe._opts("prompt", "de", "cpu")["fp16"] is False
+
+
+def test_opts_reicht_prompt_und_sprache_durch():
+    o = transcribe._opts("Kontext hier", "en", "cpu")
+    assert o["initial_prompt"] == "Kontext hier"
+    assert o["language"] == "en"
+    assert o["word_timestamps"] is True      # Grundlage fuer die Audio-Synchronisation
+
+
 def _projekt(tmp_path, *namen):
     adir = tmp_path / "audio"
     adir.mkdir()
