@@ -114,6 +114,37 @@ function lauf(cmd, args, onLine, opts = {}) {
   })
 }
 
+/**
+ * ffmpeg im winget-Paketverzeichnis suchen. Gyan.FFmpeg legt KEINEN Link in WinGet\Links —
+ * es steht also nach der Installation trotzdem nie auf dem PATH. `where ffmpeg` meldete es
+ * darum dauerhaft als fehlend, obwohl transcribe.ensure_ffmpeg() dieselbe Datei laengst
+ * benutzt: die Statusseite log jeden Windows-Nutzer an, und einrichten() liess winget bei
+ * JEDEM Lauf neu installieren.
+ *
+ * `wurzel` ist Parameter, damit die Suche ohne echtes winget pruefbar ist — wie plan().
+ */
+function wingetFfmpeg(wurzel = path.join(process.env.LOCALAPPDATA || '', 'Microsoft', 'WinGet', 'Packages')) {
+  const lies = d => { try { return fs.readdirSync(d) } catch { return [] } }
+  for (const paket of lies(wurzel).filter(n => n.startsWith('Gyan.FFmpeg'))) {
+    for (const bau of lies(path.join(wurzel, paket)).filter(n => n.startsWith('ffmpeg'))) {
+      const exe = path.join(wurzel, paket, bau, 'bin', 'ffmpeg.exe')
+      if (fs.existsSync(exe)) return exe
+    }
+  }
+  return ''
+}
+
+/**
+ * Der eine Ort, an dem gefragt wird "gibt es ffmpeg?" — sonst driften Statusanzeige und
+ * Einrichtung auseinander. macOS/Linux braucht keinen Sonderweg: ausgabe() spawnt mit
+ * spawnEnv(), das die brew-Pfade voranstellt.
+ */
+async function findeFfmpeg() {
+  const auf = await ausgabe(process.platform === 'win32' ? 'where' : 'which', ['ffmpeg'])
+  if (auf) return auf.split(/\r?\n/)[0].trim()
+  return process.platform === 'win32' ? wingetFfmpeg() : ''
+}
+
 function ausgabe(cmd, args) {
   return new Promise(resolve => {
     let proc
@@ -154,11 +185,11 @@ async function venvVollstaendig() {
 
 async function status() {
   const py = await findePython()
-  const ff = await ausgabe(process.platform === 'win32' ? 'where' : 'which', ['ffmpeg'])
+  const ff = await findeFfmpeg()
   const pl = plan(process.platform, await paketmanager())
   return {
     python: py ? `Python ${py.version}` : '',
-    ffmpeg: ff ? ff.split(/\r?\n/)[0].trim() : '',
+    ffmpeg: ff,
     venv: await venvVollstaendig(),
     winget: process.platform === 'win32' ? (await ausgabe('winget', ['--version'])) || '' : '',
     venvPfad: P.venv,
@@ -191,12 +222,12 @@ async function einrichten(onLine, onSchritt) {
   if (!py) return { ok: false, fehler: `Kein Python >= 3.10 gefunden. ${pl.hinweis}` }
   schritte.push(`Python: ${py.version}`)
 
-  if (!(await ausgabe(process.platform === 'win32' ? 'where' : 'which', ['ffmpeg']))) {
+  if (!(await findeFfmpeg())) {
     if (pl.autoInstall) {
       onSchritt('ffmpeg installieren')
       onLine('ffmpeg nicht gefunden — installiere ueber winget …')
-      // Nicht abbrechen wenn es scheitert: transcribe.ensure_ffmpeg() findet auch den winget-Pfad
-      // ausserhalb des PATH, und ohne ffmpeg laeuft immerhin noch das Bearbeiten vorhandener Transkripte.
+      // Nicht abbrechen wenn es scheitert: ohne ffmpeg laeuft immerhin noch das Bearbeiten
+      // vorhandener Transkripte.
       await lauf('winget', ['install', '-e', '--id', 'Gyan.FFmpeg',
         '--accept-package-agreements', '--accept-source-agreements'], onLine)
     } else {
@@ -236,4 +267,4 @@ async function einrichten(onLine, onSchritt) {
   return { ok: true }
 }
 
-module.exports = { status, einrichten, venvVollstaendig, findePython, plan, spawnEnv }
+module.exports = { status, einrichten, venvVollstaendig, findePython, plan, spawnEnv, wingetFfmpeg }

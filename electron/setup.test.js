@@ -6,7 +6,7 @@ Module._load = (req, ...rest) =>
 
 const test = require('node:test')
 const assert = require('node:assert')
-const { plan, spawnEnv } = require('./setup')
+const { plan, spawnEnv, wingetFfmpeg } = require('./setup')
 
 /** process.platform ist read-only — fuer den Test kurz umbiegen und sicher zuruecksetzen. */
 function aufPlattform(p, fn) {
@@ -75,4 +75,18 @@ test('backend.js startet uvicorn mit spawnEnv, nicht mit blankem process.env', (
 test('Windows und Linux erben die Umgebung unveraendert', () => {
   assert.strictEqual(aufPlattform('win32', spawnEnv), process.env)
   assert.strictEqual(aufPlattform('linux', spawnEnv), process.env)
+})
+
+test('ffmpeg wird im winget-Paketordner gefunden — dort steht es nie auf dem PATH', () => {
+  const fs = require('node:fs'), os = require('node:os'), path = require('node:path')
+  const wurzel = fs.mkdtempSync(path.join(os.tmpdir(), 'winget-'))
+  const bin = path.join(wurzel, 'Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe',
+    'ffmpeg-9.0-full_build', 'bin')
+  fs.mkdirSync(bin, { recursive: true })
+  fs.writeFileSync(path.join(bin, 'ffmpeg.exe'), '')
+  assert.strictEqual(wingetFfmpeg(wurzel), path.join(bin, 'ffmpeg.exe'))
+})
+
+test('fehlendes winget-Verzeichnis liefert Leerstring statt zu werfen', () => {
+  assert.strictEqual(wingetFfmpeg('C:\gibt-es-nicht-42'), '')
 })
