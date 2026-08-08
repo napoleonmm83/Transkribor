@@ -7,6 +7,10 @@ from webtool import llm, settings
 def cfg(monkeypatch, tmp_path):
     """Einstellungen ins tmp_path — nie die echte Datei des Entwicklers anfassen."""
     monkeypatch.setenv("TRANSKRIBOR_SETTINGS", str(tmp_path / "settings.json"))
+    # Isoliere auch Whisper-Umgebungsvariablen, sonst sind die Tests nichtdeterministisch
+    # auf einer Maschine, wo .env oder die Shell diese setzen.
+    for name in ("WHISPER_MODEL", "WHISPER_LANG", "HF_TOKEN"):
+        monkeypatch.delenv(name, raising=False)
     return tmp_path
 
 
@@ -166,7 +170,8 @@ def test_echte_env_gewinnt_ueber_einstellung(cfg, monkeypatch):
                                    "WHISPER_LANG": "de"}  # webtool.ps1/.env behaelt das letzte Wort fuer HF_TOKEN
 
 
-def test_job_env_leer_ohne_token(cfg, monkeypatch):
+def test_job_env_ohne_token_nur_whisper_defaults(cfg, monkeypatch):
+    """Ohne HF_TOKEN bleibt nur die Whisper-Konfiguration."""
     monkeypatch.delenv("HF_TOKEN", raising=False)
     assert settings.job_env() == {"WHISPER_MODEL": "large-v3", "WHISPER_LANG": "de"}
 
