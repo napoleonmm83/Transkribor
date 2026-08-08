@@ -8,11 +8,7 @@ from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from . import fetch as fetch_mod
-from . import jobs
-from . import llm
-from . import paths
-from . import settings
+from . import device, fetch as fetch_mod, jobs, llm, paths, settings
 from .edit_model import build_edit_doc
 from .render_md import render_md
 
@@ -20,6 +16,9 @@ app = FastAPI(title="Transkribor Editor")
 
 AUDIO_EXT = (".mp3", ".wav", ".m4a", ".aac", ".flac", ".ogg", ".opus", ".wma", ".mp4")
 MAX_FETCH_URLS = 20
+# Einmal pro Serverlauf ermittelt: der torch-Import kostet Sekunden, und die Antwort
+# aendert sich zur Laufzeit nicht — eine neue GPU erfordert ohnehin einen Neustart.
+_HARDWARE = None
 
 
 def _bases(project: str):
@@ -252,13 +251,16 @@ class SettingsBody(BaseModel):
     base_url: str | None = None
     api_key: str | None = None          # weggelassen = gespeicherten Key behalten
     hf_token: str | None = None         # fuer die Sprecher-Diarisierung (pyannote)
+    whisper_model: str | None = None    # Qualitaetsstufe der Transkription
+    whisper_lang: str | None = None
 
 
 @app.get("/api/settings")
 def get_settings():
     """Nie den Key ausliefern — nur, OB einer hinterlegt ist."""
     return {**settings.public(), "providers": llm.provider_list(),
-            "env_key": llm.env_key_hint()}
+            "env_key": llm.env_key_hint(),
+            "whisper_choices": list(settings.WHISPER_CHOICES)}
 
 
 @app.put("/api/settings")
@@ -266,7 +268,20 @@ def put_settings(body: SettingsBody):
     patch = {k: v for k, v in body.model_dump().items() if v is not None}
     if "provider" in patch and patch["provider"] not in llm.PROVIDERS:
         raise HTTPException(status_code=400, detail=f"unbekannter Anbieter: {patch['provider']}")
+    if "whisper_model" in patch and patch["whisper_model"] not in settings.KNOWN_WHISPER_MODELS:
+        raise HTTPException(status_code=400,
+                            detail=f"unbekanntes Whisper-Modell: {patch['whisper_model']}")
     return settings.public(settings.save(patch))
+
+
+@app.get("/api/hardware")
+def hardware():
+    """Worauf gerechnet wird. 'Warum dauert das so lange' ist die haeufigste Frage —
+    wer sieht, dass 'cpu' laeuft, hat die Antwort ohne Support."""
+    global _HARDWARE
+    if _HARDWARE is None:
+        _HARDWARE = device.describe()
+    return _HARDWARE
 
 
 @app.get("/api/settings/models")
