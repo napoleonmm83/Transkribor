@@ -33,16 +33,18 @@ export function Transcript({ doc, loading, thr, activeId, onPlaySeg, onPlayTurn,
     : <div className="p-8 text-center text-muted-foreground">Keine Datei geöffnet.</div>
   return (
     <ScrollArea className="h-full">
-      <div ref={contentRef} className="mx-auto max-w-3xl p-4">
+      {/* Lesebreite statt Fensterbreite: die Sprecherspalte ist 150px breit, der Rest bleibt
+          fuer den Satz — auf einem breiten Monitor liefen die Zeilen sonst auf 120 Zeichen. */}
+      <div ref={contentRef} className="mx-auto max-w-[calc(150px+var(--measure))] px-6 py-8">
         {turns.map(t => (
           <SpeakerTurn key={t.key} turn={t} thr={thr} activeId={activeId}
             onPlaySeg={onPlaySeg} onPlayTurn={onPlayTurn}
             updateSegment={updateSegment} renameSpeaker={renameSpeaker} speakerOptions={speakerOptions} />
         ))}
         {doc.annotations.length > 0 && (
-          <section className="mt-8 border-t pt-4">
-            <h2 className="mb-2 text-sm font-semibold">Anmerkungen</h2>
-            <ul className="list-disc pl-5 text-sm text-muted-foreground">{doc.annotations.map((a, i) => <li key={i}>{a}</li>)}</ul>
+          <section className="mt-12 border-t pt-5">
+            <h2 className="rubrik mb-3">Anmerkungen</h2>
+            <ul className="lesebreite list-disc space-y-1.5 pl-5 text-sm leading-relaxed text-muted-foreground">{doc.annotations.map((a, i) => <li key={i}>{a}</li>)}</ul>
           </section>
         )}
       </div>

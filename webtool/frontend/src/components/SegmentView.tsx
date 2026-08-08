@@ -23,12 +23,14 @@ export function SegmentView({ seg, thr, active, onPlay, updateSegment }: {
     <div data-seg-id={seg.id} className={`group relative rounded px-2 py-1 ${active ? 'bg-primary/15 ring-2 ring-inset ring-primary/60' : ''}`}>
       <button onClick={onPlay} title="Abspielen"
         className={`absolute -left-5 top-1.5 opacity-60 group-hover:opacity-100 text-primary text-xs ${focusRing}`}>▶</button>
-      <span className="mr-2 align-top text-[11px] text-foreground/65 select-none">{fmt(seg.start)} {flags}</span>
+      {/* Zeitmarke in der Mono: gleiche Ziffernbreite, damit die Marken untereinander
+          eine Spalte bilden statt zu tanzen. */}
+      <span className="mr-2 select-none align-top font-mono text-[11px] tabular-nums text-muted-foreground">{fmt(seg.start)} {flags}</span>
       {editing
         ? <SegmentEditor initial={seg.text}
             onCommit={t => { updateSegment(seg.id, { text: t }); setEditing(false) }}
             onCancel={() => setEditing(false)} />
-        : <span onClick={() => setEditing(true)} className="cursor-text leading-relaxed">{body}</span>}
+        : <span onClick={() => setEditing(true)} className="lesesatz cursor-text">{body}</span>}
       {corrected &&
         <button onClick={() => setShowRaw(v => !v)} title="Roh-Wörter anzeigen"
           className={`ml-1.5 align-top text-xs opacity-30 hover:opacity-100 ${showRaw ? 'opacity-100' : ''} ${focusRing}`}>🔍</button>}

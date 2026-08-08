@@ -25,8 +25,8 @@ export function SpeakerTurn({ turn, thr, activeId, onPlaySeg, onPlayTurn, update
               onChange={v => renameSpeaker(turn.speaker, v)}
               title="Sprecher im ganzen Transkript umbenennen"
               style={{ color: color(turn.speaker) }}
-              className="h-auto min-w-0 truncate px-0 text-left text-sm font-semibold hover:bg-transparent" />
-          : <span className="truncate text-sm font-semibold text-muted-foreground">(kein Sprecher)</span>}
+              className="rubrik h-auto min-w-0 truncate px-0 text-left hover:bg-transparent" />
+          : <span className="rubrik truncate">(kein Sprecher)</span>}
         <button onClick={() => onPlayTurn(turn.segments)} title="Redebeitrag abspielen"
           className="ml-1 shrink-0 rounded-sm px-1 text-sm opacity-50 hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50">
           ▶
