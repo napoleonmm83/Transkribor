@@ -12,7 +12,8 @@
 
 ## Globale Vorgaben
 
-- **Sprache:** Bezeichner, Kommentare und Oberflächentexte auf Deutsch, wie im ganzen Repo. **Keine Umlaute in `electron/*.js`** (bestehende Konvention, siehe `setup.js`); in `.tsx`-Oberflächentexten und Markdown sind Umlaute erwünscht.
+- **Sprache:** Bezeichner und Kommentare auf Deutsch, wie im ganzen Repo. **Keine Umlaute in `electron/*.js`** (bestehende Konvention, siehe `setup.js`); in `.tsx` und Markdown sind Umlaute erwünscht.
+- **Anzeigetexte gehören ins Frontend, nicht nach Electron.** `electron/updater.js` liefert für `nicht_moeglich` nur einen **Code** (`entwicklung` | `darwin` | `kein-appimage`); die deutschen Sätze mit Umlauten stehen in `SettingsPage.tsx`. So kollidiert die Umlaut-Regel nicht mit lesbarer Oberfläche, und Electron kennt den Grund, ohne die Formulierung zu besitzen.
 - **Zustandsobjekt:** trägt IMMER `version` (laufende App-Version) und `art`; die übrigen Felder hängen von `art` ab.
 - **Acht `art`-Werte:** `unbekannt`, `prueft`, `aktuell`, `verfuegbar`, `laedt`, `bereit`, `fehler`, `nicht_moeglich`.
 - **Electron-Tests:** `node --test electron/*.test.js` über `npm run test:electron`. Kein Framework, keine Fixtures.
@@ -31,7 +32,7 @@ Das Herz. Kapselt `electron-updater` hinter einer Schnittstelle, die ohne Electr
 - Anlegen: `electron/updater.test.js`
 
 **Schnittstellen:**
-- Liefert: `nichtMoeglich(plattform, gepackt, appimage) -> string` (Leerstring = Update möglich)
+- Liefert: `nichtMoeglich(plattform, gepackt, appimage) -> '' | 'entwicklung' | 'darwin' | 'kein-appimage'` (Leerstring = Update möglich). **Codes, keine Sätze** — die Formulierung gehört ins Frontend.
 - Liefert: `erstellen({ autoUpdater, version, plattform, gepackt, appimage, aendert }) -> { zustand, pruefen, laden, installieren }`
   - `zustand()` gibt das aktuelle Objekt zurück
   - `aendert(zustandsObjekt)` wird bei **jeder** Änderung gerufen
@@ -47,15 +48,15 @@ const assert = require('node:assert')
 const { nichtMoeglich, erstellen } = require('./updater')
 
 test('Entwicklungsmodus kann sich nicht selbst aktualisieren', () => {
-  assert.match(nichtMoeglich('win32', false, false), /Entwicklungsmodus/)
+  assert.strictEqual(nichtMoeglich('win32', false, false), 'entwicklung')
 })
 
 test('macOS kann es nicht, solange die App nicht notarisiert ist', () => {
-  assert.match(nichtMoeglich('darwin', true, false), /macOS/)
+  assert.strictEqual(nichtMoeglich('darwin', true, false), 'darwin')
 })
 
 test('Linux nur als AppImage — ein deb-Start hat die Variable nicht', () => {
-  assert.match(nichtMoeglich('linux', true, false), /AppImage/)
+  assert.strictEqual(nichtMoeglich('linux', true, false), 'kein-appimage')
   assert.strictEqual(nichtMoeglich('linux', true, true), '')
 })
 
@@ -80,14 +81,18 @@ Erwartet: FEHLSCHLAG mit `Cannot find module './updater'`
  * so laeuft der Automat im Test ohne Electron, wie setup.plan() es vormacht.
  */
 
-/** Leerstring heisst: dieses System kann sich selbst aktualisieren. */
+/**
+ * Leerstring heisst: dieses System kann sich selbst aktualisieren.
+ * Sonst ein CODE, kein Satz — die Formulierung steht in SettingsPage.tsx, wo Umlaute
+ * erlaubt sind und der Text hingehoert.
+ */
 function nichtMoeglich(plattform, gepackt, appimage) {
-  if (!gepackt) return 'Entwicklungsmodus — Updates gibt es nur in der installierten App.'
+  if (!gepackt) return 'entwicklung'
   // Squirrel.Mac verlangt eine echte Signatur; unsere dmg ist nur ad-hoc signiert.
-  if (plattform === 'darwin') return 'Auf macOS nicht moeglich, solange die App nicht notarisiert ist.'
+  if (plattform === 'darwin') return 'darwin'
   // Die Variable setzt die AppImage-Laufzeit selbst; ein deb-Start hat sie nicht, und
   // fuer deb kennt electron-updater ohnehin keinen Weg.
-  if (plattform === 'linux' && !appimage) return 'Nur die AppImage kann sich selbst aktualisieren.'
+  if (plattform === 'linux' && !appimage) return 'kein-appimage'
   return ''
 }
 
@@ -417,7 +422,8 @@ export type UpdateZustand =
   | { version: string; art: 'laedt'; prozent: number; geladen: number; gesamt: number; tempo: number }
   | { version: string; art: 'bereit'; neue: string }
   | { version: string; art: 'fehler'; text: string }
-  | { version: string; art: 'nicht_moeglich'; grund: string }
+  /** `grund` ist ein Code, kein Satz — der deutsche Text steht in SettingsPage.tsx. */
+  | { version: string; art: 'nicht_moeglich'; grund: 'entwicklung' | 'darwin' | 'kein-appimage' }
 ```
 
 - [ ] **Schritt 2: Test schreiben**
@@ -607,10 +613,19 @@ describe('Abschnitt Version und Updates', () => {
     expect(await screen.findByRole('button', { name: /Neu starten und installieren/ })).toBeTruthy()
   })
 
-  it('nennt den Grund, wenn die Plattform es nicht kann, samt Link', async () => {
-    zeigeMit({ version: '0.2.1', art: 'nicht_moeglich', grund: 'Auf macOS nicht moeglich, solange die App nicht notarisiert ist.' })
+  it('macht aus dem Code einen deutschen Satz, samt Link', async () => {
+    zeigeMit({ version: '0.2.1', art: 'nicht_moeglich', grund: 'darwin' })
     expect(await screen.findByText(/nicht notarisiert/)).toBeTruthy()
+    expect(screen.getByText(/möglich/)).toBeTruthy()          // mit Umlaut, nicht "moeglich"
     expect(screen.getByRole('link', { name: /Versionen/ })).toBeTruthy()
+  })
+
+  it('kennt auch die beiden anderen Gruende', async () => {
+    zeigeMit({ version: '0.2.1', art: 'nicht_moeglich', grund: 'entwicklung' })
+    expect(await screen.findByText(/Entwicklungsmodus/)).toBeTruthy()
+    cleanup()
+    zeigeMit({ version: '0.2.1', art: 'nicht_moeglich', grund: 'kein-appimage' })
+    expect(await screen.findByText(/AppImage/)).toBeTruthy()
   })
 
   it('zeigt einen Fehler samt Weg zum Protokoll', async () => {
@@ -648,6 +663,13 @@ const RELEASES = 'https://github.com/napoleonmm83/Transkribor/releases'
 /** Bytes als MB mit einer Nachkommastelle, deutsches Dezimalkomma. */
 function mb(bytes: number, stellen = 0) {
   return (bytes / 1048576).toFixed(stellen).replace('.', ',')
+}
+
+/** Der Grund kommt als Code aus Electron — der Satz gehoert hierher, wo Umlaute erlaubt sind. */
+const GRUENDE: Record<string, string> = {
+  entwicklung: 'Entwicklungsmodus — Updates gibt es nur in der installierten App.',
+  darwin: 'Auf macOS nicht möglich, solange die App nicht notarisiert ist.',
+  'kein-appimage': 'Nur die AppImage kann sich selbst aktualisieren.',
 }
 ```
 
@@ -703,7 +725,7 @@ Vor dem schliessenden `</div>` der Seite einfügen:
 
     {upd.art === 'nicht_moeglich' && (
       <p className="mt-3 text-sm text-muted-foreground">
-        {upd.grund}{' '}
+        {GRUENDE[upd.grund] ?? 'Updates sind auf diesem System nicht möglich.'}{' '}
         <a className="underline" href={RELEASES} target="_blank" rel="noreferrer">Versionen ansehen</a>
       </p>
     )}
