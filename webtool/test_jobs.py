@@ -4,6 +4,12 @@ import sys
 import time
 from webtool import jobs
 
+# On Windows, os.getpgid and os.killpg don't exist. Add stubs so monkeypatch can work.
+if not hasattr(os, 'getpgid'):
+    setattr(os, 'getpgid', None)
+if not hasattr(os, 'killpg'):
+    setattr(os, 'killpg', None)
+
 
 def _alive(pid):
     if os.name == "nt":
@@ -236,3 +242,47 @@ def test_request_gibt_pending_frei_wenn_der_blocker_schon_weg_ist(monkeypatch):
     assert started is True and versuche == ["correct", "correct"]
     _wait(jid)
     assert ("P_req2", "correct") not in jobs._pending
+
+
+def test_popen_startet_eigene_sitzung_auf_posix(monkeypatch):
+    """Ohne eigene Prozessgruppe erreicht der Abbruch die Kinder nicht."""
+    monkeypatch.setattr(jobs.os, "name", "posix")
+    assert jobs._popen_kwargs()["start_new_session"] is True
+
+
+def test_popen_ohne_sitzung_auf_windows(monkeypatch):
+    monkeypatch.setattr(jobs.os, "name", "nt")
+    assert jobs._popen_kwargs().get("start_new_session", False) is False
+
+
+def test_kill_tree_posix_nutzt_prozessgruppe(monkeypatch):
+    getoetet = []
+
+    class FakeProc:
+        pid = 4711
+        def terminate(self):
+            getoetet.append("terminate")
+
+    monkeypatch.setattr(jobs.os, "name", "posix")
+    monkeypatch.setattr(jobs.os, "getpgid", lambda pid: pid)
+    monkeypatch.setattr(jobs.os, "killpg", lambda pgid, sig: getoetet.append(("killpg", pgid)))
+    jobs._kill_tree(FakeProc())
+    assert getoetet == [("killpg", 4711)]
+
+
+def test_kill_tree_posix_faellt_auf_terminate_zurueck(monkeypatch):
+    """Prozess schon weg oder keine Rechte — nicht werfen, der Abbruch muss durchlaufen."""
+    getoetet = []
+
+    class FakeProc:
+        pid = 4711
+        def terminate(self):
+            getoetet.append("terminate")
+
+    def explodiere(*a):
+        raise ProcessLookupError()
+
+    monkeypatch.setattr(jobs.os, "name", "posix")
+    monkeypatch.setattr(jobs.os, "getpgid", explodiere)
+    jobs._kill_tree(FakeProc())
+    assert getoetet == ["terminate"]

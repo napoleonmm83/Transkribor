@@ -4,6 +4,7 @@ threading + subprocess.Popen; kein asyncio/Celery/Redis. Ein einzelner lokaler N
 Fortschritt = stdout-Zeilen im Job-Log; via GET /api/jobs/{id} gepollt.
 """
 import os
+import signal
 import subprocess
 import sys
 import threading
@@ -19,6 +20,12 @@ _lock = threading.Lock()
 
 _CREATE_NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 _PRUNE_AGE = 3600          # fertige Jobs nach 1h vergessen
+
+
+def _popen_kwargs() -> dict:
+    """Auf POSIX eine eigene Prozessgruppe — nur so erreicht der Abbruch spaeter auch die
+    Kinder (whisper, claude). Auf Windows leistet das taskkill /T, siehe _kill_tree."""
+    return {} if os.name == "nt" else {"start_new_session": True}
 
 # Nur Whisper belegt die GPU dauerhaft und gross (large-v3, ganze Audiolaenge). `correct`
 # haengt fast nur an Opus und braucht die GPU nur fuer den kurzen pyannote-Schritt — es hier
@@ -126,7 +133,7 @@ def _run_proc(jid, cmd, cwd):
         proc = subprocess.Popen(
             cmd, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             text=True, encoding="utf-8", errors="replace", bufsize=1,
-            creationflags=_CREATE_NO_WINDOW, env=env,
+            creationflags=_CREATE_NO_WINDOW, env=env, **_popen_kwargs(),
         )
         with _lock:
             _jobs[jid]["pid"] = proc.pid
@@ -161,8 +168,13 @@ def _kill_tree(proc):
         # ein blosses terminate() liesse den claude-Subtree verwaisen (vgl. correct.py:147-149).
         subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)],
                        capture_output=True, creationflags=_CREATE_NO_WINDOW)  # exit!=0 (schon weg) ist ok
-    else:
-        # ponytail: killt nur den direkten Prozess; für Baum-Kill auf POSIX Popen(start_new_session=True)+os.killpg
+        return
+    # Dasselbe auf POSIX: die Prozessgruppe aus _popen_kwargs() abraeumen. Ein blosses
+    # terminate() liesse whisper/claude als Waisen mit belegter GPU zurueck.
+    try:
+        sigkill = getattr(signal, 'SIGKILL', 9)
+        os.killpg(os.getpgid(proc.pid), sigkill)
+    except (ProcessLookupError, PermissionError, OSError):
         proc.terminate()
 
 
