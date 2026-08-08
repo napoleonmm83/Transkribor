@@ -426,3 +426,48 @@ def test_settings_test_meldet_fehler_statt_zu_500en(client, monkeypatch):
     monkeypatch.setattr(llm, "check", lambda: (_ for _ in ()).throw(llm.LLMError("kein Netz")))
     r = client.post("/api/settings/test")
     assert r.status_code == 200 and r.json() == {"ok": False, "detail": "kein Netz"}
+
+
+# --- Hardware und Whisper-Einstellungen (Task 6) ---
+
+def test_hardware_endpoint(client, monkeypatch):
+    from webtool import app as appmod
+    from webtool import device
+    monkeypatch.setattr(appmod, "_HARDWARE", None)
+    monkeypatch.setattr(device, "describe",
+                        lambda: {"device": "cuda", "name": "RTX 5080", "torch_ok": True})
+    r = client.get("/api/hardware")
+    assert r.status_code == 200
+    assert r.json()["device"] == "cuda"
+
+
+def test_hardware_wird_gecacht(client, monkeypatch):
+    """Der torch-Import kostet Sekunden — genau einmal pro Serverlauf."""
+    from webtool import app as appmod
+    from webtool import device
+    rufe = []
+    monkeypatch.setattr(appmod, "_HARDWARE", None)
+    monkeypatch.setattr(device, "describe",
+                        lambda: (rufe.append(1),
+                                 {"device": "cpu", "name": "CPU", "torch_ok": True})[1])
+    client.get("/api/hardware")
+    client.get("/api/hardware")
+    assert len(rufe) == 1
+
+
+def test_settings_liefert_whisper_auswahl(client):
+    r = client.get("/api/settings")
+    body = r.json()
+    assert body["whisper_model"] == "large-v3"
+    assert any(c["id"] == "turbo" for c in body["whisper_choices"])
+
+
+def test_settings_speichert_whisper_modell(client):
+    r = client.put("/api/settings", json={"whisper_model": "turbo"})
+    assert r.status_code == 200
+    assert r.json()["whisper_model"] == "turbo"
+
+
+def test_settings_lehnt_unbekanntes_whisper_modell_ab(client):
+    r = client.put("/api/settings", json={"whisper_model": "gibt-es-nicht"})
+    assert r.status_code == 400
