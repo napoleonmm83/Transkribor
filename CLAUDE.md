@@ -102,6 +102,11 @@ Die Korrektur hing fest am Claude-Code-Abo; jetzt wählt der Nutzer Anbieter + M
 - `electron/paths.js` — **gepackt wird nie neben die .exe geschrieben** (Program Files ist
   schreibgeschützt und wird beim Update ersetzt): venv, `projekte/` und Einstellungen liegen in
   `userData`. Im Repo bleibt alles dort, wo `webtool.ps1` es erwartet.
+- **Update-Zustand liegt in `electron/updater.js`**, nicht in `main.js`: der Automat bekommt
+  den `autoUpdater` hineingereicht und ist damit ohne Electron testbar. `autoDownload` ist
+  **aus** — sonst zöge das Prüfen sofort 100 MB, ungefragt. Die Oberfläche dazu steht in den
+  Einstellungen (`useUpdate` + `SettingsPage`) und erscheint im reinen Browser gar nicht,
+  weil `window.transkribor` dort fehlt.
 - Bauen: `npm install && npm run dist` → `dist\Transkribor-Setup-<version>.exe` (~96 MB; die ML-Seite
   kommt beim ersten Start dazu, ein 5-GB-Setup bei jedem Update wäre unzumutbar).
   Release: Tag `v*` pushen → `.github/workflows/release.yml` baut und veröffentlicht,
