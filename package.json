@@ -4,7 +4,10 @@
   "version": "0.1.0",
   "private": true,
   "description": "Interview-Transkription (Whisper, lokal) mit KI-Korrektur und Sprecher-Labeling",
-  "author": "Marcus Martini",
+  "author": {
+    "name": "Marcus Martini",
+    "email": "marcusmartini83@gmail.com"
+  },
   "main": "electron/main.js",
   "scripts": {
     "build:frontend": "npm --prefix webtool/frontend install && npm --prefix webtool/frontend run build",
