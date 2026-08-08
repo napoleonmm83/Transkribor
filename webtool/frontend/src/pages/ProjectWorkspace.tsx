@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { Play, Pencil, X } from 'lucide-react'
 import { useProjects } from '@/hooks/useProjects'
+import { useAiReady } from '@/hooks/useAiReady'
 import { mergePhases, useActiveJob } from '@/hooks/useActiveJob'
 import { FileStatusPill } from '@/components/FileStatusPill'
 import { UploadDropzone } from '@/components/UploadDropzone'
@@ -18,6 +19,7 @@ export function ProjectWorkspace() {
   const navigate = useNavigate()
   const { projects, refresh } = useProjects()
   const { jobs, adopt, onSettled } = useActiveJob()
+  const aiReason = useAiReady()          // nicht leer -> Korrektur waere ein Leerlauf
   const p = projects.find(x => x.name === project)
   const meine = useMemo(() => jobs.filter(j => j.project === project && j.status === 'running'),
     [jobs, project])
@@ -60,9 +62,14 @@ export function ProjectWorkspace() {
         <Button variant="outline" size="sm" onClick={() => startJob(() => startTranscribe(project!), 'transcribe', 'Transkribieren')}>
           <Play className="size-4" /> Transkribieren
         </Button>
-        <Button variant="outline" size="sm" onClick={() => startJob(() => startCorrect(project!), 'correct', 'Korrigieren')}>
-          <Pencil className="size-4" /> Korrigieren
-        </Button>
+        {/* title am Wrapper, nicht am Knopf: ein deaktivierter Knopf hat pointer-events:none
+            und zeigt seinen eigenen Tooltip nie an. */}
+        <span title={aiReason || undefined} className="inline-flex">
+          <Button variant="outline" size="sm" disabled={!!aiReason}
+            onClick={() => startJob(() => startCorrect(project!), 'correct', 'Korrigieren')}>
+            <Pencil className="size-4" /> Korrigieren
+          </Button>
+        </span>
       </div>
 
       {/* Eine Leiste je laufendem Job — Transkription und Korrektur laufen nebeneinander,
@@ -108,11 +115,13 @@ export function ProjectWorkspace() {
                 </button>
                 <FileStatusPill file={f} active={active?.phase} pct={active?.pct} detail={active?.detail}
                   state={state} jobRunning={running} />
-                <Button size="icon" variant="ghost" className="size-6" title="Nur diese Datei korrigieren"
-                  disabled={!f.has_raw}
-                  onClick={() => startJob(() => startCorrectFile(project!, f.base, false), 'correct', `Korrigieren ${f.base}`, false)}>
-                  <Pencil className="size-3.5" />
-                </Button>
+                <span title={aiReason || undefined} className="inline-flex">
+                  <Button size="icon" variant="ghost" className="size-6" title="Nur diese Datei korrigieren"
+                    disabled={!f.has_raw || !!aiReason}
+                    onClick={() => startJob(() => startCorrectFile(project!, f.base, false), 'correct', `Korrigieren ${f.base}`, false)}>
+                    <Pencil className="size-3.5" />
+                  </Button>
+                </span>
               </div>
               {active?.pct != null && (
                 <div className="mt-1 h-1 overflow-hidden rounded bg-accent" role="progressbar"

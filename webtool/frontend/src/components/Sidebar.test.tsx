@@ -18,4 +18,26 @@ describe('Sidebar', () => {
       onTranscribe={vi.fn()} onCorrect={vi.fn()} onCorrectFile={vi.fn()} />)
     expect(screen.queryByText(/Keine Projekte/)).not.toBeInTheDocument()
   })
+
+  it('sperrt Korrigieren ohne KI-Anbieter und nennt den Grund', () => {
+    // Ohne Gate liefe der Job an, überspränge jede Datei und endete grün — ein
+    // schlechterer erster Eindruck als ein Fehler.
+    const grund = 'Claude Code ist nicht installiert. Unter „Einstellungen" einrichten.'
+    render(<Sidebar projects={projects} active={null} onOpen={vi.fn()} onUpload={vi.fn()}
+      onTranscribe={vi.fn()} onCorrect={vi.fn()} onCorrectFile={vi.fn()} aiReason={grund} />)
+    expect(screen.getByLabelText('Korrigieren + Sprecher')).toBeDisabled()
+    expect(screen.getByLabelText('Nur diese Datei korrigieren')).toBeDisabled()
+    expect(screen.getAllByTitle(grund)).toHaveLength(2)           // Grund als Tooltip an beiden
+    expect(screen.getByLabelText('Transkribieren')).not.toBeDisabled()  // nur die Korrektur
+  })
+
+  it('lässt Korrigieren zu, wenn ein Anbieter eingerichtet ist', () => {
+    const onCorrect = vi.fn()
+    render(<Sidebar projects={projects} active={null} onOpen={vi.fn()} onUpload={vi.fn()}
+      onTranscribe={vi.fn()} onCorrect={onCorrect} onCorrectFile={vi.fn()} aiReason="" />)
+    const knopf = screen.getByLabelText('Korrigieren + Sprecher')
+    expect(knopf).not.toBeDisabled()
+    fireEvent.click(knopf)
+    expect(onCorrect).toHaveBeenCalledWith('P')
+  })
 })

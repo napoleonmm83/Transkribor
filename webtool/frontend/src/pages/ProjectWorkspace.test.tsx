@@ -1,13 +1,51 @@
-import { describe, it, expect, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import { ProjectWorkspace } from './ProjectWorkspace'
 import { JobProvider } from '@/hooks/useActiveJob'
 import * as api from '@/lib/api'
+import type { Settings } from '@/lib/types'
 
 vi.mock('@/lib/api')
 
+const einstellungen = (s: Partial<Settings>) =>
+  vi.mocked(api.getSettings).mockResolvedValue({ ai_ready: true, ai_reason: '', ...s } as Settings)
+
 describe('ProjectWorkspace (Stub)', () => {
+  beforeEach(() => einstellungen({}))          // Korrektur-Gate: eingerichtet, sofern nicht anders gesagt
+
+  const nurDemo = () => vi.mocked(api.listProjects).mockResolvedValue([
+    { name: 'Demo', files: [{ base: 'S1', has_audio: true, has_raw: true, has_edit: false, has_md: false }], active_jobs: [] },
+  ])
+
+  it('sperrt Korrigieren, solange kein KI-Anbieter eingerichtet ist', async () => {
+    // Sonst startet der Job, überspringt jede Datei und endet grün — sieht aus wie Erfolg.
+    nurDemo()
+    einstellungen({ ai_ready: false, ai_reason: 'Kein API-Key hinterlegt.' })
+    render(
+      <MemoryRouter initialEntries={['/p/Demo']}>
+        <JobProvider>
+          <Routes><Route path="/p/:project" element={<ProjectWorkspace />} /></Routes>
+        </JobProvider>
+      </MemoryRouter>,
+    )
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Korrigieren' })).toBeDisabled())
+    expect(screen.getAllByTitle(/Kein API-Key hinterlegt/)).toHaveLength(2)   // Projekt + Datei
+    expect(screen.getByRole('button', { name: 'Transkribieren' })).not.toBeDisabled()
+  })
+
+  it('lässt Korrigieren zu, wenn ein Anbieter eingerichtet ist', async () => {
+    nurDemo()
+    render(
+      <MemoryRouter initialEntries={['/p/Demo']}>
+        <JobProvider>
+          <Routes><Route path="/p/:project" element={<ProjectWorkspace />} /></Routes>
+        </JobProvider>
+      </MemoryRouter>,
+    )
+    expect(await screen.findByRole('button', { name: 'Korrigieren' })).not.toBeDisabled()
+  })
+
   it('listet Dateien des Projekts mit Links', async () => {
     vi.mocked(api.listProjects).mockResolvedValue([
       { name: 'Demo', files: [{ base: 'S1', has_audio: true, has_raw: true, has_edit: false, has_md: false }], active_jobs: [] },

@@ -8,14 +8,16 @@ import {
 } from '@/components/ui/alert-dialog'
 import { cn } from '@/lib/utils'
 
-export function FileRow({ file, active, onOpen, onCorrectFile, phase, state, jobRunning }: {
+export function FileRow({ file, active, onOpen, onCorrectFile, phase, state, jobRunning, aiReason }: {
   file: ProjectFile; active: boolean;
   onOpen: () => void; onCorrectFile: (force: boolean) => void;
   phase?: FilePhase; state?: FileState; jobRunning?: boolean;
+  /** Nicht leer = kein nutzbarer KI-Anbieter: Korrigieren deaktiviert, Text als Tooltip. */
+  aiReason?: string;
 }) {
   const button = (
     <Button size="icon" variant="ghost" className="size-6" title="Nur diese Datei korrigieren"
-      aria-label="Nur diese Datei korrigieren"
+      aria-label="Nur diese Datei korrigieren" disabled={!!aiReason}
       onClick={e => { e.stopPropagation(); if (!file.has_edit) onCorrectFile(false) }}>
       <Pencil className="size-3" />
     </Button>
@@ -30,6 +32,9 @@ export function FileRow({ file, active, onOpen, onCorrectFile, phase, state, job
         active && 'bg-accent')}>
       <span className="flex-1 truncate">{file.base}</span>
       <FileStatusPill file={file} active={phase} state={state} jobRunning={jobRunning} />
+      {/* title am Wrapper: ein deaktivierter Knopf hat pointer-events:none und zeigt
+          seinen eigenen Tooltip nie an. */}
+      <span title={aiReason || undefined} className="inline-flex">
       {file.has_edit ? (
         <AlertDialog>
           <AlertDialogTrigger asChild>{button}</AlertDialogTrigger>
@@ -45,6 +50,7 @@ export function FileRow({ file, active, onOpen, onCorrectFile, phase, state, job
           </AlertDialogContent>
         </AlertDialog>
       ) : button}
+      </span>
     </div>
   )
 }

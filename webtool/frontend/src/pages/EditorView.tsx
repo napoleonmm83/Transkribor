@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useProjects } from '@/hooks/useProjects'
+import { useAiReady } from '@/hooks/useAiReady'
 import { useDoc } from '@/hooks/useDoc'
 import { useThresholds } from '@/hooks/useThresholds'
 import { useJob } from '@/hooks/useJob'
@@ -22,6 +23,7 @@ export function EditorView() {
   const { thr, setThr } = useThresholds()
   const { start } = useJob()
   const { jobs, adopt } = useActiveJob()
+  const aiReason = useAiReady()          // nicht leer -> Korrektur waere ein Leerlauf
   const meine = useMemo(() => jobs.filter(j => j.project === project && j.status === 'running'),
     [jobs, project])
   const phases = useMemo(() => mergePhases(meine), [meine])   // nur eigenes Projekt, s. mergePhases
@@ -66,7 +68,8 @@ export function EditorView() {
         <Sidebar projects={projects.filter(p => p.name === project)} loading={projectsLoading}
           active={sel} onOpen={openFile} onUpload={onUpload}
           onTranscribe={onTranscribe} onCorrect={onCorrect} onCorrectFile={onCorrectFile}
-          backTo={project ? `/p/${encodeURIComponent(project)}` : '/'} phases={phases} jobRunning={running} />
+          backTo={project ? `/p/${encodeURIComponent(project)}` : '/'} phases={phases} jobRunning={running}
+          aiReason={aiReason} />
       </aside>
       <div className="col-start-2"><Toolbar title={title} dirty={dirty} canSave={!!doc}
         onSave={save} onExport={exportDownload} settings={<ThresholdPopover thr={thr} setThr={setThr} />} /></div>
