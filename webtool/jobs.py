@@ -172,7 +172,7 @@ def _kill_tree(proc):
     # Dasselbe auf POSIX: die Prozessgruppe aus _popen_kwargs() abraeumen. Ein blosses
     # terminate() liesse whisper/claude als Waisen mit belegter GPU zurueck.
     try:
-        sigkill = getattr(signal, 'SIGKILL', 9)
+        sigkill = getattr(signal, 'SIGKILL', 9)  # ponytail: Rueckfall auf 9 nur fuer Tests auf Windows-als-posix
         os.killpg(os.getpgid(proc.pid), sigkill)
     except (ProcessLookupError, PermissionError, OSError):
         proc.terminate()
