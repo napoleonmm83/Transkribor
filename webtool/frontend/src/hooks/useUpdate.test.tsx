@@ -5,8 +5,9 @@ import type { UpdateZustand } from '@/lib/types'
 
 const AKTUELL: UpdateZustand = { version: '0.2.1', art: 'aktuell' }
 
-function bruecke(start: UpdateZustand) {
+function bruecke(start: UpdateZustand | null) {
   let melden: ((z: UpdateZustand) => void) | null = null
+  const abmelden = vi.fn()
   const api = {
     update: {
       status: vi.fn().mockResolvedValue(start),
@@ -14,10 +15,14 @@ function bruecke(start: UpdateZustand) {
       laden: vi.fn().mockResolvedValue(undefined),
       installieren: vi.fn().mockResolvedValue(undefined),
     },
-    on: (kanal: string, fn: (z: UpdateZustand) => void) => { if (kanal === 'update') melden = fn },
+    protokollOeffnen: vi.fn().mockResolvedValue('C:\\log.txt'),
+    on: (kanal: string, fn: (z: UpdateZustand) => void) => {
+      if (kanal === 'update') melden = fn
+      return abmelden
+    },
   }
   ;(window as unknown as { transkribor: unknown }).transkribor = api
-  return { api, schieben: (z: UpdateZustand) => act(() => melden?.(z)) }
+  return { api, abmelden, schieben: (z: UpdateZustand) => act(() => melden?.(z)) }
 }
 
 describe('useUpdate', () => {
@@ -51,5 +56,27 @@ describe('useUpdate', () => {
     await waitFor(() => expect(result.current.zustand?.art).toBe('verfuegbar'))
     act(() => result.current.laden())
     expect(api.update.laden).toHaveBeenCalled()
+  })
+
+  it('reicht protokollOeffnen durch — der Weg aus dem Fehlerzustand', async () => {
+    const { api } = bruecke(AKTUELL)
+    const { result } = renderHook(() => useUpdate())
+    await waitFor(() => expect(result.current.zustand).toEqual(AKTUELL))
+    act(() => result.current.protokollOeffnen())
+    expect(api.protokollOeffnen).toHaveBeenCalled()
+  })
+
+  it('wenn der Automat in Electron nicht gebaut werden konnte, bleibt der Zustand null', async () => {
+    bruecke(null)
+    const { result } = renderHook(() => useUpdate())
+    await waitFor(() => expect(result.current.zustand).toBeNull())
+  })
+
+  it('meldet den Listener beim Unmount ab — sonst haeufen sich Hoerer bei jedem Seitenwechsel', async () => {
+    const { abmelden } = bruecke(AKTUELL)
+    const { result, unmount } = renderHook(() => useUpdate())
+    await waitFor(() => expect(result.current.zustand).toEqual(AKTUELL))
+    unmount()
+    expect(abmelden).toHaveBeenCalledTimes(1)
   })
 })

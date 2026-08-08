@@ -90,6 +90,19 @@ test('ein Fehler landet im Zustand statt im Nichts', () => {
   assert.match(u.zustand().text, /releases\.atom/)
 })
 
+test('der ausfuehrliche Text von electron-updater geht nicht verloren', () => {
+  // electron-updater liefert als zweites Argument den langen Text — der ging vorher unter.
+  const { au, u } = bauen()
+  au.feuern('error', new Error('boom'), 'Cannot check for updates: boom')
+  assert.strictEqual(u.zustand().text, 'Cannot check for updates: boom')
+})
+
+test('fehlende Groesse wird nicht zu "0 MB" erfunden', () => {
+  const { au, u } = bauen()
+  au.feuern('update-available', { version: '0.3.0', files: [] })
+  assert.strictEqual(u.zustand().groesse, null)
+})
+
 test('wo Updates unmoeglich sind, wird gar nicht erst geprueft', () => {
   const { au, u } = bauen({ plattform: 'darwin' })
   assert.strictEqual(u.zustand().art, 'nicht_moeglich')

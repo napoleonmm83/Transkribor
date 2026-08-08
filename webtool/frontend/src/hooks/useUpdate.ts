@@ -3,12 +3,13 @@ import type { UpdateZustand } from '@/lib/types'
 
 type Bruecke = {
   update: {
-    status: () => Promise<UpdateZustand>
+    status: () => Promise<UpdateZustand | null>   // null: der Automat wurde nicht gebaut
     pruefen: () => Promise<void>
     laden: () => Promise<void>
     installieren: () => Promise<void>
   }
-  on: (kanal: string, fn: (z: UpdateZustand) => void) => void
+  protokollOeffnen: () => Promise<string>
+  on: (kanal: string, fn: (z: UpdateZustand) => void) => () => void   // Rueckgabe: Abmelden
 }
 
 function bruecke(): Bruecke | null {
@@ -26,12 +27,15 @@ export function useUpdate() {
     if (!b) return
     b.update.status().then(setZustand).catch(() => {})
     // Jede Aenderung wird geschoben — kein Polling, der Fortschritt kaeme sonst ruckelig an.
-    b.on('update', setZustand)
+    // Abmelden beim Unmount: die Einstellungsseite ist eine Route, ohne das haeuft
+    // wiederholtes Verlassen+Oeffnen Hoerer an.
+    return b.on('update', setZustand)
   }, [])
 
   const pruefen = useCallback(() => { bruecke()?.update.pruefen().catch(() => {}) }, [])
   const laden = useCallback(() => { bruecke()?.update.laden().catch(() => {}) }, [])
   const installieren = useCallback(() => { bruecke()?.update.installieren().catch(() => {}) }, [])
+  const protokollOeffnen = useCallback(() => { bruecke()?.protokollOeffnen().catch(() => {}) }, [])
 
-  return { zustand, pruefen, laden, installieren }
+  return { zustand, pruefen, laden, installieren, protokollOeffnen }
 }
