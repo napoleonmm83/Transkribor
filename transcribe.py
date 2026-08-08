@@ -18,18 +18,31 @@ from shutil import which
 ROOT = os.path.dirname(os.path.abspath(__file__))
 PROJEKTE = os.path.join(ROOT, "projekte")
 AUDIO_EXT = (".mp3", ".wav", ".m4a", ".aac", ".flac", ".ogg", ".opus", ".wma", ".mp4")
+# Homebrew-Pfade: GUI-Apps erben auf macOS ein anderes PATH als die Shell — per brew
+# installiertes ffmpeg ist im Terminal da und fuer die App unsichtbar.
+POSIX_FFMPEG_DIRS = ("/opt/homebrew/bin", "/usr/local/bin", "/usr/bin")
 
 
 def ensure_ffmpeg():
     """ffmpeg auf PATH sicherstellen (Whisper braucht das Binary)."""
     if which("ffmpeg"):
         return True
-    for d in glob.glob(os.path.expandvars(
-            r"%LOCALAPPDATA%\Microsoft\WinGet\Packages\Gyan.FFmpeg*\ffmpeg*\bin")):
-        if os.path.exists(os.path.join(d, "ffmpeg.exe")):
+    if sys.platform == "win32":
+        for d in glob.glob(os.path.expandvars(
+                r"%LOCALAPPDATA%\Microsoft\WinGet\Packages\Gyan.FFmpeg*\ffmpeg*\bin")):
+            if os.path.exists(os.path.join(d, "ffmpeg.exe")):
+                os.environ["PATH"] = d + os.pathsep + os.environ.get("PATH", "")
+                return True
+        print("WARN: ffmpeg nicht gefunden. Installiere: winget install Gyan.FFmpeg",
+              file=sys.stderr)
+        return False
+    for d in POSIX_FFMPEG_DIRS:
+        if os.path.exists(os.path.join(d, "ffmpeg")):
             os.environ["PATH"] = d + os.pathsep + os.environ.get("PATH", "")
             return True
-    print("WARN: ffmpeg nicht gefunden. Installiere: winget install Gyan.FFmpeg", file=sys.stderr)
+    hinweis = ("brew install ffmpeg" if sys.platform == "darwin"
+               else "sudo apt install ffmpeg")
+    print(f"WARN: ffmpeg nicht gefunden. Installiere: {hinweis}", file=sys.stderr)
     return False
 
 
