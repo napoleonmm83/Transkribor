@@ -53,6 +53,25 @@ test('macOS: Homebrew-Pfade stehen VOR dem geerbten PATH (launchd kennt sie nich
   assert.ok(pfad.endsWith(process.env.PATH || ''))     // geerbtes PATH bleibt dahinter
 })
 
+test('macOS: das Nutzer-bin ist dabei — dort landet claude', () => {
+  const pfad = aufPlattform('darwin', () => spawnEnv().PATH)
+  const nutzerBin = require('path').join(require('os').homedir(), '.local', 'bin')
+  // Kein split(':') — auf einem Windows-Entwicklungsrechner enthaelt homedir() den
+  // Laufwerksbuchstaben ("C:\Users\..."), der Trenner zerlegte den Pfad mitten durch.
+  assert.ok(pfad.includes(nutzerBin),
+    `~/.local/bin fehlt, shutil.which("claude") findet nichts: ${pfad}`)
+})
+
+test('backend.js startet uvicorn mit spawnEnv, nicht mit blankem process.env', () => {
+  // Naht-Test: der Serverprozess vererbt seine Umgebung an jeden Job (jobs.py nutzt
+  // {**os.environ}). Faellt spawnEnv hier weg, sucht claude/ffmpeg wieder im leeren PATH.
+  const quelle = require('fs').readFileSync(require('path').join(__dirname, 'backend.js'), 'utf8')
+  assert.match(quelle, /\.\.\.S\.spawnEnv\(\)/,
+    'backend.js muss die uvicorn-Umgebung ueber setup.spawnEnv() bauen')
+  assert.ok(!/env:\s*\{\s*\.\.\.process\.env/.test(quelle),
+    'blankes ...process.env im uvicorn-env waere der alte, kaputte Zustand')
+})
+
 test('Windows und Linux erben die Umgebung unveraendert', () => {
   assert.strictEqual(aufPlattform('win32', spawnEnv), process.env)
   assert.strictEqual(aufPlattform('linux', spawnEnv), process.env)

@@ -9,6 +9,7 @@ const fs = require('fs')
 const http = require('http')
 const net = require('net')
 const P = require('./paths')
+const S = require('./setup')
 
 let proc = null
 let port = 0
@@ -59,7 +60,11 @@ async function start(onLine) {
       cwd: P.pyRoot,
       windowsHide: true,
       env: {
-        ...process.env,
+        // spawnEnv statt process.env: auf macOS steht Homebrew sonst nicht im PATH des
+        // Servers — und jeder Job erbt diese Umgebung (jobs.py startet mit {**os.environ}).
+        // Ohne das findet llm.available()s shutil.which("claude") ein installiertes Claude
+        // Code nicht und meldet dem Nutzer "nicht installiert".
+        ...S.spawnEnv(),
         ...envDatei(),
         PYTHONUNBUFFERED: '1',
         PYTHONIOENCODING: 'utf-8',

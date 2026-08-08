@@ -11,23 +11,35 @@
  */
 const { spawn } = require('child_process')
 const fs = require('fs')
+const os = require('os')
 const path = require('path')
 const P = require('./paths')
 
 const TORCH_INDEX = 'https://download.pytorch.org/whl/cu128'
 const MIN_PY = [3, 10]
-const MAC_PFADE = '/opt/homebrew/bin:/usr/local/bin'   // Apple Silicon, dann Intel-Homebrew
 
 /**
- * Umgebung fuer jeden spawn hier. Eine aus dem Finder gestartete .app erbt launchds PATH
- * (/usr/bin:/bin:/usr/sbin:/sbin), nicht den der Shell — per brew installiertes Python und
- * ffmpeg sind im Terminal da und fuer die App unsichtbar. VORangestellt, nicht angehaengt:
- * sonst gewinnt /usr/bin/python3 (macOS liefert 3.9, von MIN_PY abgelehnt) gegen brews Python.
+ * Suchpfade, die eine aus dem Finder gestartete .app NICHT erbt: Homebrew (Apple Silicon,
+ * dann Intel) und das Nutzer-bin, in dem CLI-Werkzeuge wie `claude` ueblicherweise landen.
+ */
+function macPfade() {
+  return ['/opt/homebrew/bin', '/usr/local/bin', path.join(os.homedir(), '.local', 'bin')]
+}
+
+/**
+ * Umgebung fuer jeden spawn — auch fuer den uvicorn-Start in backend.js. Eine aus dem Finder
+ * gestartete .app erbt launchds PATH (/usr/bin:/bin:/usr/sbin:/sbin), nicht den der Shell:
+ * per brew installiertes Python, ffmpeg und claude sind im Terminal da und fuer die App
+ * unsichtbar. VORangestellt, nicht angehaengt — sonst gewinnt /usr/bin/python3 (macOS liefert
+ * 3.9, von MIN_PY abgelehnt) gegen brews Python.
+ *
+ * Wir biegen bewusst NICHT process.env.PATH global um: das veraenderte auch alles andere, was
+ * die App startet. Die Umgebung pro spawn zu bauen haelt die Aenderung dort, wo sie hingehoert.
  * Dieselbe Lektion wie POSIX_FFMPEG_DIRS in transcribe.py, nur eine Schicht frueher.
  */
 function spawnEnv() {
   if (process.platform !== 'darwin') return process.env
-  return { ...process.env, PATH: MAC_PFADE + ':' + (process.env.PATH || '') }
+  return { ...process.env, PATH: macPfade().join(':') + ':' + (process.env.PATH || '') }
 }
 
 const LINUX_PAKETE = {
