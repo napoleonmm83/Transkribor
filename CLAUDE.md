@@ -114,6 +114,13 @@ Die Korrektur hing fest am Claude-Code-Abo; jetzt wählt der Nutzer Anbieter + M
   PyPI-Standardrad auf macOS (bringt MPS mit; einen CUDA-Index gibt es dort nicht).
   Tests: `npm run test:electron` (`node --test`, keine Framework-Abhängigkeit).
 - Build-Ziele: `nsis` (Windows), `dmg` arm64 (macOS), `AppImage`+`deb` (Linux).
+- **`linux.depends` ist vollständig aufzuzählen, nicht zu ergänzen** — die Angabe *ersetzt*
+  electron-builders Vorgabeliste. Dort fehlt `libasound2`: Electron braucht es, `apt` zieht es
+  über keine der anderen Abhängigkeiten nach (mit `apt-get install --simulate` belegt), und ohne
+  es stirbt der Start mit `error while loading shared libraries`. Auf Ubuntu 24.04 heisst das
+  Paket `libasound2t64` und liefert `libasound2` per `Provides` — die Angabe passt also auf
+  beide. `linux.synopsis` muss gesetzt sein, sonst bleibt die Kurzbeschreibung des deb leer und
+  `apt search` zeigt nichts an (`description` füllt nur die Langfassung).
 - **macOS-Signatur — `mac.identity: "-"` (ad-hoc) ist Pflicht, nicht Kosmetik.** Mit
   `CSC_IDENTITY_AUTO_DISCOVERY=false` liess electron-builder das Signieren ganz aus; da das
   Umpacken die von Electron mitgebrachte Signatur ohnehin zerstört, kam die App ohne gültige
