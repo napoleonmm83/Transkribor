@@ -1,0 +1,4 @@
+# Shell-Skripte MUESSEN LF behalten. Auf Windows steht core.autocrlf=true (auch auf dem
+# GitHub-Runner), und ein `.sh` mit CRLF scheitert unter bash am \r — die CI fuehrt
+# scripts/versionshoehe.test.sh auf allen drei Plattformen aus.
+*.sh text eol=lf
