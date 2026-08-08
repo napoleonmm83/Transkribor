@@ -1,4 +1,5 @@
 """Tests fuer den only=-Filter aus dem URL-Import (kein torch/whisper noetig)."""
+import importlib
 import os
 import sys
 import types
@@ -139,3 +140,16 @@ def test_echter_mps_ausfall_bleibt_auf_der_cpu(tmp_path, monkeypatch):
     assert geladen == ["mps", "cpu"]                         # kein Zurueckschalten
     assert (proj / "transkripte" / "a.json").exists()
     assert (proj / "transkripte" / "b.json").exists()
+
+
+def test_projekte_folgt_der_umgebungsvariable(tmp_path, monkeypatch):
+    """Gepackt liegen die Projekte in userData, NICHT neben dem Code: backend.js setzt
+    TRANSKRIBOR_PROJEKTE, paths.py liest es — transcribe.py hatte es fest verdrahtet und
+    meldete im Installer bei jedem Lauf "Projekt nicht gefunden"."""
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    try:
+        importlib.reload(transcribe)
+        assert transcribe.PROJEKTE == str(tmp_path)
+    finally:
+        monkeypatch.delenv("TRANSKRIBOR_PROJEKTE")
+        importlib.reload(transcribe)      # sonst sehen Folgetests den tmp_path
