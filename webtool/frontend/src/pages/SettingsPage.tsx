@@ -2,11 +2,11 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 import { KeyRound, Loader2, RefreshCw } from 'lucide-react'
-import { getSettings, listModels, saveSettings, testSettings } from '@/lib/api'
+import { getHardware, getSettings, listModels, saveSettings, testSettings } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import type { ModelInfo, ProviderInfo, Settings } from '@/lib/types'
+import type { Hardware, ModelInfo, ProviderInfo, Settings } from '@/lib/types'
 
 export function SettingsPage() {
   const [s, setS] = useState<Settings | null>(null)
@@ -16,8 +16,10 @@ export function SettingsPage() {
   const [hf, setHf] = useState('')
   const [laedt, setLaedt] = useState(false)
   const [testet, setTestet] = useState(false)
+  const [hw, setHw] = useState<Hardware | null>(null)
 
   useEffect(() => { getSettings().then(setS).catch(e => toast.error(String(e))) }, [])
+  useEffect(() => { getHardware().then(setHw).catch(() => setHw(null)) }, [])
 
   const prov: ProviderInfo | undefined = s?.providers.find(p => p.id === s.provider)
   const istAbo = s?.provider === 'claude-cli'
@@ -64,6 +66,42 @@ export function SettingsPage() {
         Womit korrigiert Transkribor die Transkripte? Die Transkription selbst läuft immer lokal
         mit Whisper auf deiner GPU — nur die Korrektur und Sprecher-Zuordnung braucht ein Sprachmodell.
       </p>
+
+      <div className="mb-8 rounded-md border p-4">
+        <label className="mb-1 block text-sm font-medium">Qualität der Transkription</label>
+        <Select value={s.whisper_model} onValueChange={m => speichern({ whisper_model: m })}>
+          <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {s.whisper_choices.map(c => (
+              <SelectItem key={c.id} value={c.id}>
+                {c.label}{c.hint && ` — ${c.hint}`}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <p className="mt-2 text-xs text-muted-foreground">
+          {hw
+            ? <>Rechnet auf: <span className="font-medium">{hw.name}</span></>
+            : 'Gerät wird ermittelt …'}
+          {hw?.device === 'cpu' && (
+            <span className="block text-amber-600 dark:text-amber-500">
+              {s.whisper_model.startsWith('large')
+                ? 'Ohne GPU braucht „Beste Qualität" auf der CPU sehr lange — für längere Interviews besser „Schnell und gut" wählen. '
+                : ''}
+              Wenn dieser Rechner eine NVIDIA-Grafikkarte hat, wurde PyTorch ohne CUDA
+              installiert — dann die Umgebung neu einrichten.
+            </span>
+          )}
+        </p>
+      </div>
+
+      {!s.ai_ready && (
+        <div className="mb-6 rounded-md border border-amber-500/50 bg-amber-500/10 p-3 text-sm">
+          <span className="font-medium">Korrektur ist nicht eingerichtet.</span>{' '}
+          {s.ai_reason} Die Transkription funktioniert trotzdem — nur die Korrektur und
+          Sprecher-Zuordnung brauchen ein Sprachmodell.
+        </div>
+      )}
 
       <label className="mb-1 block text-sm font-medium">Anbieter</label>
       <Select value={s.provider} onValueChange={anbieterWechseln}>
