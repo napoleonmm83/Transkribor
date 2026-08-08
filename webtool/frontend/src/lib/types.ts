@@ -25,7 +25,7 @@ export type Hardware = { device: string; name: string; torch_ok: boolean };
 /** `has_key` statt des Keys: der Schluessel verlaesst den Server nie. */
 export type Settings = {
   provider: string; model: string; base_url: string; has_key: boolean;
-  has_hf_token: boolean; providers: ProviderInfo[]; env_key: string;
+  providers: ProviderInfo[]; env_key: string;
   whisper_model: string; whisper_lang: string; whisper_choices: WhisperChoice[];
   ai_ready: boolean; ai_reason: string;
 };

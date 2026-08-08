@@ -41,7 +41,6 @@ export function SettingsPage() {
   const [modelle, setModelle] = useState<ModelInfo[]>([])
   // Nur das NEU Eingetippte; die gespeicherten Geheimnisse kommen nie zum Frontend zurueck.
   const [key, setKey] = useState('')
-  const [hf, setHf] = useState('')
   const [laedt, setLaedt] = useState(false)
   const [testet, setTestet] = useState(false)
   const [hw, setHw] = useState<Hardware | null>(null)
@@ -209,24 +208,17 @@ export function SettingsPage() {
         </div>
       </Abschnitt>
 
-      {/* Getrennt vom Anbieter: die Diarisierung laeuft lokal mit pyannote, das Token dient nur
-          dem Modell-Download bei Hugging Face. */}
-      <Abschnitt titel="Sprecher-Erkennung (optional)">
-        <div className="flex gap-2">
-          <Input id="feld-hf" type="password" value={hf} onChange={e => setHf(e.target.value)}
-            aria-label="Hugging-Face-Token"
-            placeholder={s.has_hf_token ? '•••••••• (gespeichert)' : 'Hugging-Face-Token (hf_…)'} autoComplete="off" />
-          <Button variant="outline" disabled={!hf}
-            onClick={() => speichern({ hf_token: hf }, () => { setHf(''); toast.success('Token gespeichert') })}>
-            Token speichern
-          </Button>
-        </div>
+      {/* Nichts einzustellen — der Abschnitt bleibt, weil er die CC-BY-Namensnennung fuer die
+          mitgelieferten Gewichte traegt (siehe LICENSE-MODELLE.md). */}
+      <Abschnitt titel="Sprecher-Erkennung">
+        <p className="text-sm">
+          Transkribor trennt die Sprecher akustisch und braucht dafür weder Konto noch Token.
+        </p>
         <p className="mt-1.5 text-xs text-muted-foreground">
-          Ohne Token ordnet Transkribor die Sprecher allein aus dem Text zu. Mit Token trennt
-          pyannote sie akustisch — dafür einmalig&nbsp;
+          Modell:&nbsp;
           <a className="underline underline-offset-2 hover:text-foreground" href="https://huggingface.co/pyannote/speaker-diarization-community-1" target="_blank" rel="noreferrer">
-            die Modellbedingungen akzeptieren</a> und&nbsp;
-          <a className="underline underline-offset-2 hover:text-foreground" href="https://huggingface.co/settings/tokens" target="_blank" rel="noreferrer">ein Token erstellen</a>.
+            pyannote speaker-diarization-community-1</a>, mitgeliefert unter&nbsp;
+          <a className="underline underline-offset-2 hover:text-foreground" href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">CC BY 4.0</a>.
         </p>
       </Abschnitt>
 

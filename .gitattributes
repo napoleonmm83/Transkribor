@@ -2,3 +2,10 @@
 # GitHub-Runner), und ein `.sh` mit CRLF scheitert unter bash am \r — die CI fuehrt
 # scripts/versionshoehe.test.sh auf allen drei Plattformen aus.
 *.sh text eol=lf
+
+# Modellgewichte: -text schaltet JEDE Zeilenende-Umwandlung ab. Git erkennt Binaerdateien
+# sonst per Heuristik (NUL-Byte in den ersten 8000 Bytes) — bei 26 MB Tensoren ist das eine
+# Wette, und ein einziges umgewandeltes \n macht das Modell unbrauchbar, ohne dass es
+# jemandem beim Klonen auffaellt. Die config.yaml daneben ist echter Text.
+models/** -text
+models/**/*.yaml text eol=lf

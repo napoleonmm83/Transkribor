@@ -7,7 +7,7 @@ import type { Settings } from '@/lib/types'
 vi.mock('@/lib/api')
 
 const BASIS = {
-  provider: 'claude-cli', model: '', base_url: '', has_key: false, has_hf_token: false,
+  provider: 'claude-cli', model: '', base_url: '', has_key: false,
   env_key: '', whisper_model: 'large-v3', whisper_lang: 'de', whisper_choices: [],
   providers: [], ai_ready: true, ai_reason: '',
 } as Settings

@@ -70,7 +70,7 @@ Die Korrektur hing fest am Claude-Code-Abo; jetzt wählt der Nutzer Anbieter + M
 - `webtool/settings.py` — JSON im Nutzerprofil (`%APPDATA%\Transkribor\settings.json`), **nicht im
   Repo**: ein Key hat in einem git-Verzeichnis nichts verloren. Frisch gelesen bei jedem Zugriff (wie
   die Env-Variablen) → ein Wechsel greift ohne Server-Neustart. `public()` liefert `has_key`/
-  `has_hf_token` statt der Geheimnisse; die verlassen den Server nie, auch nicht über `GET /api/settings`.
+  statt der Geheimnisse; die verlassen den Server nie, auch nicht über `GET /api/settings`.
 - `webtool/llm.py` — Abo (`claude -p`) plus Anthropic-, OpenAI-, Google-, OpenRouter- und
   Custom-Endpoints (letzteres deckt Ollama/LM Studio/Groq/… ab). **Zwei HTTP-Dialekte reichen für
   alle**, darum `urllib` statt fünf SDKs — das hält auch den Auto-Installer klein. Modellliste kommt
@@ -170,7 +170,7 @@ nie committen), unklarem Scope, oder history-verändernden Aktionen (force-push,
   `transcribe.ensure_ffmpeg()`, `diarize._ensure_ffmpeg()` und `setup.wingetFfmpeg()` tun das,
   bewusst je gespiegelt. Eine reine PATH-Prüfung meldet dauerhaft „fehlt", obwohl alles läuft.
 - Whisper-Modell-Cache: `%USERPROFILE%\.cache\whisper` (einmaliger Download ~3 GB).
-- Env-Overrides: `WHISPER_MODEL` (default large-v3), `WHISPER_LANG` (default de), `TRANSKRIBOR_VERIFY` (default 1; `0`/`false`/`no` schaltet den 2b-Treue-Pass server-weit ab), `TRANSKRIBOR_DIARIZE` (default 1; `0`/`false`/`no` schaltet die akustische Sprecher-Diarisierung server-weit ab — Erzeugung UND Konsumption), `TRANSKRIBOR_PARALLEL` (default 3; gleichzeitige `claude -p`-Aufrufe), `TRANSKRIBOR_AUTOCORRECT` (default 1; `0` stoppt die automatische Korrektur nach der Transkription), `HF_TOKEN` (für die pyannote-Diarisierung; gated Modell — inzwischen auch über die Einstellungsseite setzbar, eine echte Env gewinnt), `TRANSKRIBOR_SETTINGS` (Pfad der Einstellungsdatei; **Tests müssen das setzen**, sonst entscheidet die echte Datei des Entwicklers über den KI-Anbieter), `TRANSKRIBOR_PROJEKTE` (Wurzel der Projektordner; `electron/backend.js` setzt sie auf `userData/projekte` — **jeder** Zugriff auf Projektpfade muss sie lesen, sonst sucht der gepackte Lauf neben dem Code und findet nichts).
+- Env-Overrides: `WHISPER_MODEL` (default large-v3), `WHISPER_LANG` (default de), `TRANSKRIBOR_VERIFY` (default 1; `0`/`false`/`no` schaltet den 2b-Treue-Pass server-weit ab), `TRANSKRIBOR_DIARIZE` (default 1; `0`/`false`/`no` schaltet die akustische Sprecher-Diarisierung server-weit ab — Erzeugung UND Konsumption), `TRANSKRIBOR_PARALLEL` (default 3; gleichzeitige `claude -p`-Aufrufe), `TRANSKRIBOR_AUTOCORRECT` (default 1; `0` stoppt die automatische Korrektur nach der Transkription), `TRANSKRIBOR_SETTINGS` (Pfad der Einstellungsdatei; **Tests müssen das setzen**, sonst entscheidet die echte Datei des Entwicklers über den KI-Anbieter), `TRANSKRIBOR_PROJEKTE` (Wurzel der Projektordner; `electron/backend.js` setzt sie auf `userData/projekte` — **jeder** Zugriff auf Projektpfade muss sie lesen, sonst sucht der gepackte Lauf neben dem Code und findet nichts).
 - **Gerätewahl liegt in `webtool/device.py`** (`pick()` → cuda | mps | cpu), genutzt von
   `transcribe.py` und `webtool/diarize.py`. Upstream-Whisper kennt **kein MPS** — es wählt nur
   `cuda if torch.cuda.is_available() else cpu`. Scheitert MPS mitten in der Transkription,
@@ -179,7 +179,7 @@ nie committen), unklarem Scope, oder history-verändernden Aktionen (force-push,
   CPU, während die Anzeige weiter „mps" behauptet).
 - **Whisper-Stufe und -Sprache stehen in den Einstellungen** (`whisper_model`, `whisper_lang`)
   und reisen über `settings.job_env()` → `jobs.py` → `transcribe.py`. Eine echte
-  Umgebungsvariable `WHISPER_MODEL`/`WHISPER_LANG` gewinnt (wie bei `HF_TOKEN`). Default bleibt
+  Umgebungsvariable `WHISPER_MODEL`/`WHISPER_LANG` gewinnt. Default bleibt
   `large-v3`/`de`. Auswahl im Browser: tiny / small / medium / turbo / large-v3.
 - **ffmpeg auf macOS:** GUI-Apps erben dort ein anderes `PATH` als die Shell — per `brew`
   installiertes ffmpeg liegt unter `/opt/homebrew/bin` und ist für die App sonst unsichtbar
@@ -189,14 +189,27 @@ nie committen), unklarem Scope, oder history-verändernden Aktionen (force-push,
   Job zu starten, der scheitert; `GET /api/settings` liefert `ai_ready`/`ai_reason` fürs
   Frontend. Geprüft wird die Fähigkeit, nicht die Einstellung — das erspart eine Migration.
 - **`GET /api/hardware`** meldet das aktive Rechenwerk (einmal pro Serverlauf ermittelt).
-- Stufe 3 (Sprecher-Diarisierung): `webtool/diarize.py` (pyannote.audio 4.0.7, Modell `speaker-diarization-community-1`, GPU) läuft als **Prep-Schritt im `correct run`** (vor `prep`, auf den Lauf gescopt), schreibt best-effort `<base>.diar.json` (Turns + `{id, "Sprecher N"}` je Segment, idempotent). `cmd_prep` webt das `(Sprecher N)`-Präfix in `<base>.tagged.txt`; der Korrektur-Prompt lässt Claude pro akustischem Cluster einen konsistenten Namen vergeben (**Hybrid**: Akustik trennt *wer wann*, LLM benennt *wie*). Fehlt pyannote/`HF_TOKEN` oder scheitert die GPU → kein Sidecar → Korrektur wie bisher (reines Text-Raten, keine Regression). **Windows-Gotcha:** pyannotes torchcodec-File-Decoding lädt nicht (`libtorchcodec_core*.dll`) → Audio wird in-memory via `whisper.load_audio` (ffmpeg, 16 kHz mono) geladen und als `{waveform, sample_rate}`-Dict übergeben. Modell-Cache `~/.cache/huggingface`. `jobs.py` serialisiert `transcribe`+`correct` auf der einen GPU. **Einmal-Setup:** `HF_TOKEN` setzen und die Modellbedingungen unter huggingface.co/pyannote/speaker-diarization-community-1 akzeptieren.
+- Stufe 3 (Sprecher-Diarisierung): `webtool/diarize.py` (pyannote.audio 4.0.7, Modell `speaker-diarization-community-1`, GPU) läuft als **Prep-Schritt im `correct run`** (vor `prep`, auf den Lauf gescopt), schreibt best-effort `<base>.diar.json` (Turns + `{id, "Sprecher N"}` je Segment, idempotent). `cmd_prep` webt das `(Sprecher N)`-Präfix in `<base>.tagged.txt`; der Korrektur-Prompt lässt Claude pro akustischem Cluster einen konsistenten Namen vergeben (**Hybrid**: Akustik trennt *wer wann*, LLM benennt *wie*). Fehlt pyannote oder scheitert die GPU → kein Sidecar → Korrektur wie bisher (reines Text-Raten, keine Regression). **Windows-Gotcha:** pyannotes torchcodec-File-Decoding lädt nicht (`libtorchcodec_core*.dll`) → Audio wird in-memory via `whisper.load_audio` (ffmpeg, 16 kHz mono) geladen und als `{waveform, sample_rate}`-Dict übergeben. `jobs.py` serialisiert `transcribe`+`correct` auf der einen GPU. **Kein Einmal-Setup mehr** — siehe nächster Punkt.
+- **Das Diarisierungsmodell liegt im Repo (`models/speaker-diarization-community-1/`, 31 MB)** und
+  reist über `extraResources` in den Installer; `diarize.DIAR_MODEL` zeigt auf dessen `config.yaml`
+  (relativ zu `webtool/`, gilt im Repo wie unter `resources/py`). **`HF_TOKEN` gibt es nicht mehr** —
+  weder Env, noch Einstellung, noch Feld im Browser. Grund: das HF-Gate ist ein Kontaktformular,
+  keine Lizenzschranke (**CC-BY-4.0**, Weitergabe erlaubt), kostete den Nutzer aber Konto + Token +
+  Häkchen — der einzige Einrichtungsschritt, den kein Klick lösen konnte, und bei fehlendem Token
+  fiel die Sprechertrennung **still** aus. Möglich ist das, weil die `config.yaml` ihre Gewichte als
+  `$model/…` referenziert und `$model` ihr **eigenes Verzeichnis** ist → der Ordner ist unverändert
+  verschiebbar (der `os.chdir`-Trick aus den pyannote-Tutorials gilt der alten 3.1-config, hier
+  **nicht** nachbauen). CC-BY verlangt Namensnennung: `LICENSE-MODELLE.md` (liegt dem Paket bei) plus
+  eine Zeile auf der Einstellungsseite. `test_diarize.py` prüft beides ab, was ein Verpackungsfehler
+  brechen würde: dass die Gewichte da sind und dass `from_pretrained` einen **Pfad** bekommt (eine
+  Repo-ID schleppte Hugging Face samt Token wieder ein).
 - Web-Editor (Stufe 1): React 19 + Vite + TypeScript + Tailwind v4 + shadcn/ui in
   `webtool/frontend/`, gebaut nach `webtool/static/` (git-ignoriert, Build-Output) und von
   FastAPI (`webtool/app.py`) via **SPA-Catch-all** (`GET /{full_path}` → existierende statische
   Datei mit realpath-Guard, sonst `index.html`; unbekannte `/api/...` → 404) ausgeliefert —
   nötig, damit BrowserRouter-Deep-Links (`/p/…`) nach einem Reload laden. `.\webtool.ps1` baut
   das Frontend bei fehlendem `webtool\static\index.html` automatisch (`npm install` + `run
-  build`), lädt eine optionale git-ignorierte `.env` (KEY=VALUE, z.B. `HF_TOKEN` — Vorlage
+  build`), lädt eine optionale git-ignorierte `.env` (KEY=VALUE, z.B. `TRANSKRIBOR_DIARIZE` — Vorlage
   `.env.example`), startet dann uvicorn (:8000) und öffnet den Browser. Frontend-Entwicklung mit
   Hot-Reload: `npm --prefix webtool/frontend run dev` (Vite :5173, proxied `/api` zu :8000).
   Kanonisches Editier-Dokument bleibt `<base>.edit.json` (aus Roh-`<base>.json`), Export

@@ -126,8 +126,8 @@ def _run(jid, cmd, cwd):
 
 def _run_proc(jid, cmd, cwd):
     try:
-        # settings.job_env() reicht das HF_TOKEN aus den Einstellungen durch: die .env laedt nur
-        # webtool.ps1, in der Desktop-App gibt es keine — sonst faellt die Diarisierung still aus.
+        # settings.job_env() reicht die Whisper-Einstellungen durch: die .env laedt nur
+        # webtool.ps1, in der Desktop-App gibt es keine.
         env = {**os.environ, **settings.job_env(),
                "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8"}
         proc = subprocess.Popen(

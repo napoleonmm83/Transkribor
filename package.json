@@ -41,6 +41,8 @@
           "transcribe.py",
           "requirements.txt",
           "CLAUDE.md",
+          "LICENSE-MODELLE.md",
+          "models/**/*",
           "!webtool/frontend/**",
           "!webtool/test_*.py",
           "!**/__pycache__/**"
