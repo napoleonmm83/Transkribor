@@ -1,4 +1,8 @@
-"""edit.json-Dokument -> Markdown-Export (<base>.md)."""
+"""edit.json-Dokument -> Markdown-Export (<base>.md).
+
+Reihenfolge: Kontext, Zusammenfassung, dann das Gespraech, Anmerkungen ans Ende. Wer die
+Datei oeffnet, fragt zuerst "worum geht es hier" — nicht nach 400 Segmenten.
+"""
 
 
 def render_md(doc: dict) -> str:
@@ -7,6 +11,9 @@ def render_md(doc: dict) -> str:
     context = (doc.get("context") or "").strip()
     if context:
         lines += [f"**Kontext:** {context}", ""]
+    summary = (doc.get("summary") or "").strip()
+    if summary:
+        lines += ["## Zusammenfassung", "", summary, ""]
     lines += ["---", ""]
 
     i = 0
