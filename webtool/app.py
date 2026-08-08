@@ -8,7 +8,12 @@ from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from . import device, fetch as fetch_mod, jobs, llm, paths, settings
+from . import device
+from . import fetch as fetch_mod
+from . import jobs
+from . import llm
+from . import paths
+from . import settings
 from .edit_model import build_edit_doc
 from .render_md import render_md
 
