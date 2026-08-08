@@ -41,3 +41,12 @@ export type JobPhases = {
   active: Record<string, FileWork>;
   perBase: Record<string, FileState>;
 };
+/** Update-Zustand aus Electron. `version` ist immer die LAUFENDE App-Version. */
+export type UpdateZustand =
+  | { version: string; art: 'unbekannt' | 'prueft' | 'aktuell' }
+  | { version: string; art: 'verfuegbar'; neue: string; groesse: number }
+  | { version: string; art: 'laedt'; prozent: number; geladen: number; gesamt: number; tempo: number }
+  | { version: string; art: 'bereit'; neue: string }
+  | { version: string; art: 'fehler'; text: string }
+  /** `grund` ist ein Code, kein Satz — der deutsche Text steht in SettingsPage.tsx. */
+  | { version: string; art: 'nicht_moeglich'; grund: 'entwicklung' | 'darwin' | 'kein-appimage' };
