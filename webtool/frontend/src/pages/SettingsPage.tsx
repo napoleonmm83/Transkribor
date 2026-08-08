@@ -80,10 +80,16 @@ export function SettingsPage() {
           </SelectContent>
         </Select>
         <p className="mt-2 text-xs text-muted-foreground">
-          {hw
-            ? <>Rechnet auf: <span className="font-medium">{hw.name}</span></>
-            : 'Gerät wird ermittelt …'}
-          {hw?.device === 'cpu' && (
+          {/* Ohne torch gibt es kein Rechenwerk, auf das man zeigen könnte — und ein
+              CUDA-Hinweis wäre dann die falsche Fährte: es fehlt die ganze Umgebung. */}
+          {!hw ? 'Gerät wird ermittelt …'
+            : hw.torch_ok
+              ? <>Rechnet auf: <span className="font-medium">{hw.name}</span></>
+              : <span className="text-amber-600 dark:text-amber-500">
+                  Die Python-Umgebung ist unvollständig (PyTorch fehlt) — bitte Transkribor
+                  neu starten und die Einrichtung durchlaufen lassen.
+                </span>}
+          {hw?.torch_ok && hw.device === 'cpu' && (
             <span className="block text-amber-600 dark:text-amber-500">
               {s.whisper_model.startsWith('large')
                 ? 'Ohne GPU braucht „Beste Qualität" auf der CPU sehr lange — für längere Interviews besser „Schnell und gut" wählen. '
