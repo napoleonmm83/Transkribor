@@ -5,46 +5,33 @@
 
 /* Schriften liegen im Repo, nicht am CDN: die App laeuft gepackt womoeglich ohne Netz, und
    ein <link> zu Google Fonts faellt dann still auf Systemschriften zurueck — genau der
-   Zustand, den wir hier verlassen. 264 KB in einem 94-MB-Installer sind gratis.
-   unicode-range: der latin-Schnitt deckt Umlaute und ss ab (U+00C0–00FF). */
+   Zustand, den wir hier verlassen. 80 KB in einem 94-MB-Installer sind gratis.
+   Alle drei sind variabel (ein File deckt 400–700 ab), unicode-range = latin inkl. Umlaute.
+   Kursive fehlt bewusst: keine Komponente setzt sie, und ein ungenutztes File ist Ballast. */
 @font-face {
-  font-family: "Literata"; font-style: normal; font-weight: 400 700; font-display: swap;
-  src: url("/fonts/literata.woff2") format("woff2");
+  font-family: "Space Grotesk"; font-style: normal; font-weight: 400 700; font-display: swap;
+  src: url("/fonts/space-grotesk.woff2") format("woff2");
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215;
 }
 @font-face {
-  font-family: "Literata"; font-style: italic; font-weight: 400 600; font-display: swap;
-  src: url("/fonts/literata-italic.woff2") format("woff2");
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+2000-206F, U+20AC, U+2122;
+  font-family: "DM Sans"; font-style: normal; font-weight: 400 700; font-display: swap;
+  src: url("/fonts/dm-sans.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215;
 }
 @font-face {
-  font-family: "IBM Plex Sans"; font-weight: 400; font-display: swap;
-  src: url("/fonts/plex-400.woff2") format("woff2");
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+2000-206F, U+20AC, U+2122;
-}
-@font-face {
-  font-family: "IBM Plex Sans"; font-weight: 500; font-display: swap;
-  src: url("/fonts/plex-500.woff2") format("woff2");
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+2000-206F, U+20AC, U+2122;
-}
-@font-face {
-  font-family: "IBM Plex Sans"; font-weight: 600; font-display: swap;
-  src: url("/fonts/plex-600.woff2") format("woff2");
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+2000-206F, U+20AC, U+2122;
-}
-@font-face {
-  font-family: "IBM Plex Mono"; font-weight: 400; font-display: swap;
-  src: url("/fonts/plex-mono-400.woff2") format("woff2");
+  font-family: "JetBrains Mono"; font-style: normal; font-weight: 400; font-display: swap;
+  src: url("/fonts/jetbrains-mono.woff2") format("woff2");
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+2000-206F, U+20AC, U+2122;
 }
 
 @theme inline {
-    /* Plex Sans fuer die Bedienung, Literata fuer den Transkripttext. Die Trennung ist der
-       Kern: was der Nutzer STUNDENLANG liest, bekommt eine Leseschrift; was er bedient,
-       eine klar unterscheidbare Groteske. */
-    --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
-    --font-serif: "Literata", ui-serif, Georgia, serif;
-    --font-mono: "IBM Plex Mono", ui-monospace, "Cascadia Code", monospace;
+    /* Zwei Groteske mit klarer Arbeitsteilung: Space Grotesk hat eigenwillige Formen (das
+       gestutzte g, das schmale a) — stark als Titel, unruhig als Fliesstext. DM Sans ist das
+       Gegenteil: unauffaellig und auch nach der zwanzigsten Minute noch ruhig zu lesen.
+       Deshalb traegt Space Grotesk NUR Ueberschriften. */
+    --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+    --font-display: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+    --font-mono: "JetBrains Mono", ui-monospace, "Cascadia Code", monospace;
 
     --radius-sm: calc(var(--radius) - 4px);
     --radius-md: calc(var(--radius) - 2px);
@@ -86,89 +73,80 @@
     --color-sidebar-ring: var(--sidebar-ring);
 }
 
-/* „Redaktionsstube": warmes Papier statt reinweiss, Tinte statt Schwarz.
-   Reines Weiss bei voller Helligkeit ermuedet ueber Stunden — und Stunden sind hier der
-   Normalfall. Der Akzent ist bewusst KUEHL und LEISE: Bernstein und Rot sind in dieser App
-   inhaltlich belegt (unsichere Woerter). Eine laute Bedienfarbe wuerde mit dem einzigen
-   Signal konkurrieren, auf das der Nutzer achten muss. */
+/* Neutrale Graustufe, EIN Akzent (Indigo). Der Akzent muss kuehl bleiben und darf nicht ins
+   Gelb-Rote laufen: Bernstein und Rot sind in dieser App inhaltlich belegt (unsichere
+   Woerter, s. .u-yellow/.u-red). Indigo liegt weit genug davon entfernt, dass die Markierung
+   im Text auch neben einem blauen Knopf noch als Warnung liest. */
 :root {
-    --radius: 0.375rem;                      /* knapper als das Starterkit: gedruckter, weniger Bonbon */
+    --radius: 0.5rem;                        /* 8px */
     --measure: 68ch;                         /* Lesebreite; darueber verliert das Auge die Zeile */
-    /* Schatten warm und knapp. Der blaugraue Standardschatten liegt auf warmem Papier wie ein
-       Fremdkoerper — ein Blatt wirft einen Schatten in der Farbe der Tinte, nicht in Blau. */
-    --schatten-blatt: 0 1px 2px oklch(0.25 0.02 60 / 0.05), 0 2px 8px oklch(0.25 0.02 60 / 0.04);
-    --schatten-hoch: 0 2px 4px oklch(0.25 0.02 60 / 0.07), 0 8px 20px oklch(0.25 0.02 60 / 0.07);
-    --background: oklch(0.986 0.004 85);     /* Papier */
-    --foreground: oklch(0.22 0.012 60);      /* warme Tinte */
-    --card: oklch(1 0 0);
-    --card-foreground: oklch(0.22 0.012 60);
-    --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.22 0.012 60);
-    --primary: oklch(0.42 0.105 245);        /* Tiefblau, ruhig */
-    --primary-foreground: oklch(0.99 0.003 85);
-    --secondary: oklch(0.955 0.006 80);
-    --secondary-foreground: oklch(0.28 0.012 60);
-    --muted: oklch(0.955 0.006 80);
-    --muted-foreground: oklch(0.47 0.011 65);  /* 7:1 auf Papier — die alte Fassung war zu blass */
-    --accent: oklch(0.945 0.010 240);
-    --accent-foreground: oklch(0.30 0.055 245);
-    --destructive: oklch(0.52 0.19 27);
-    --border: oklch(0.895 0.007 78);
-    --input: oklch(0.895 0.007 78);
-    --ring: oklch(0.42 0.105 245);
-    --chart-1: oklch(0.646 0.222 41.116);
-    --chart-2: oklch(0.6 0.118 184.704);
-    --chart-3: oklch(0.398 0.07 227.392);
-    --chart-4: oklch(0.828 0.189 84.429);
-    --chart-5: oklch(0.769 0.188 70.08);
-    --sidebar: oklch(0.984 0.003 247.858);
-    --sidebar-foreground: oklch(0.129 0.042 264.695);
-    --sidebar-primary: oklch(0.208 0.042 265.755);
-    --sidebar-primary-foreground: oklch(0.984 0.003 247.858);
-    --sidebar-accent: oklch(0.968 0.007 247.896);
-    --sidebar-accent-foreground: oklch(0.208 0.042 265.755);
-    --sidebar-border: oklch(0.929 0.013 255.508);
-    --sidebar-ring: oklch(0.704 0.04 256.788);
+    --background: #FAFAFA;
+    --foreground: #18181B;
+    --card: #FFFFFF;
+    --card-foreground: #18181B;
+    --popover: #FFFFFF;
+    --popover-foreground: #18181B;
+    --primary: #4F46E5;
+    --primary-foreground: #FFFFFF;
+    --secondary: #F4F4F5;
+    --secondary-foreground: #27272A;
+    --muted: #F4F4F5;
+    --muted-foreground: #52525B;             /* 7,4:1 auf #FAFAFA — nicht blasser setzen */
+    --accent: #EEF2FF;
+    --accent-foreground: #3730A3;
+    --destructive: #DC2626;
+    --border: #E4E4E7;
+    --input: #E4E4E7;
+    --ring: #4F46E5;
+    --chart-1: #4F46E5;
+    --chart-2: #0EA5E9;
+    --chart-3: #14B8A6;
+    --chart-4: #A855F7;
+    --chart-5: #64748B;
+    --sidebar: #FFFFFF;
+    --sidebar-foreground: #18181B;
+    --sidebar-primary: #4F46E5;
+    --sidebar-primary-foreground: #FFFFFF;
+    --sidebar-accent: #F4F4F5;
+    --sidebar-accent-foreground: #18181B;
+    --sidebar-border: #E4E4E7;
+    --sidebar-ring: #4F46E5;
 }
 
-/* Nachtschreibtisch: warmes Dunkel statt Blauschwarz. Blaustich im Dunkelmodus wirkt
-   kalt und laesst Papierweiss-Text haerter erscheinen als noetig. */
+/* Nahezu schwarzer Grund mit einem Hauch Blau. Der Akzent MUSS hier aufgehellt werden:
+   #4F46E5 auf #0B0B0F erreicht keine 3:1 und waere als Knopfflaeche unlesbar. */
 .dark {
-    /* Im Dunkeln traegt der Schatten nicht — dort uebernimmt die Kante die Trennung.
-       Ein staerkerer Schatten auf dunklem Grund erzeugt nur Matsch. */
-    --schatten-blatt: 0 1px 2px oklch(0 0 0 / 0.25);
-    --schatten-hoch: 0 4px 16px oklch(0 0 0 / 0.35);
-    --background: oklch(0.185 0.006 70);
-    --foreground: oklch(0.93 0.005 80);
-    --card: oklch(0.225 0.006 70);
-    --card-foreground: oklch(0.93 0.005 80);
-    --popover: oklch(0.225 0.006 70);
-    --popover-foreground: oklch(0.93 0.005 80);
-    --primary: oklch(0.71 0.10 240);         /* aufgehellt: 0.42 waere auf Dunkel unlesbar */
-    --primary-foreground: oklch(0.17 0.010 245);
-    --secondary: oklch(0.27 0.006 70);
-    --secondary-foreground: oklch(0.93 0.005 80);
-    --muted: oklch(0.27 0.006 70);
-    --muted-foreground: oklch(0.72 0.008 75);
-    --accent: oklch(0.29 0.020 240);
-    --accent-foreground: oklch(0.88 0.030 240);
-    --destructive: oklch(0.66 0.17 25);
-    --border: oklch(1 0 0 / 11%);
-    --input: oklch(1 0 0 / 15%);
-    --ring: oklch(0.71 0.10 240);
-    --chart-1: oklch(0.488 0.243 264.376);
-    --chart-2: oklch(0.696 0.17 162.48);
-    --chart-3: oklch(0.769 0.188 70.08);
-    --chart-4: oklch(0.627 0.265 303.9);
-    --chart-5: oklch(0.645 0.246 16.439);
-    --sidebar: oklch(0.208 0.042 265.755);
-    --sidebar-foreground: oklch(0.984 0.003 247.858);
-    --sidebar-primary: oklch(0.488 0.243 264.376);
-    --sidebar-primary-foreground: oklch(0.984 0.003 247.858);
-    --sidebar-accent: oklch(0.279 0.041 260.031);
-    --sidebar-accent-foreground: oklch(0.984 0.003 247.858);
-    --sidebar-border: oklch(1 0 0 / 10%);
-    --sidebar-ring: oklch(0.551 0.027 264.364);
+    --background: #0B0B0F;
+    --foreground: #FAFAFA;
+    --card: #131318;
+    --card-foreground: #FAFAFA;
+    --popover: #131318;
+    --popover-foreground: #FAFAFA;
+    --primary: #818CF8;
+    --primary-foreground: #1E1B4B;
+    --secondary: #1F1F26;
+    --secondary-foreground: #FAFAFA;
+    --muted: #1F1F26;
+    --muted-foreground: #A1A1AA;             /* 8,1:1 auf #0B0B0F */
+    --accent: #1E1B4B;
+    --accent-foreground: #C7D2FE;
+    --destructive: #F87171;
+    --border: rgb(255 255 255 / 10%);
+    --input: rgb(255 255 255 / 14%);
+    --ring: #818CF8;
+    --chart-1: #818CF8;
+    --chart-2: #38BDF8;
+    --chart-3: #2DD4BF;
+    --chart-4: #C084FC;
+    --chart-5: #94A3B8;
+    --sidebar: #0F0F14;
+    --sidebar-foreground: #FAFAFA;
+    --sidebar-primary: #818CF8;
+    --sidebar-primary-foreground: #1E1B4B;
+    --sidebar-accent: #1F1F26;
+    --sidebar-accent-foreground: #FAFAFA;
+    --sidebar-border: rgb(255 255 255 / 10%);
+    --sidebar-ring: #818CF8;
 }
 
 @layer base {
@@ -180,11 +158,11 @@
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
     }
-  /* Ueberschriften in der Leseschrift: sie sind Teil des redaktionellen Satzes, nicht der
-     Bedienung. Enger gesetzt, weil Literata bei Grossgraden sonst luftig wirkt. */
+  /* Ueberschriften in Space Grotesk und eng gesetzt. Geometrische Groteske wirken bei
+     Grossgraden sonst auseinandergefallen; erst das negative Sperren macht den Titel kompakt. */
   h1, h2, h3 {
-    font-family: var(--font-serif);
-    letter-spacing: -0.015em;
+    font-family: var(--font-display);
+    letter-spacing: -0.02em;
     }
   /* Zahlen in Tabellen und Fortschritten duerfen beim Hochzaehlen nicht springen. */
   time, [data-zahl] {
@@ -192,12 +170,13 @@
     }
 }
 
-/* Rubrik: die kleine gesperrte Versalzeile ueber einem Abschnitt — das Signal aus dem
-   Zeitschriftensatz, das eine Seite sofort gegliedert aussehen laesst. */
+/* Rubrik: die kleine gesperrte Versalzeile ueber einem Abschnitt. Traegt die Gliederung,
+   ohne eine weitere Schriftgroesse in die Hierarchie einzufuehren. */
 .rubrik {
+  font-family: var(--font-display);
   font-size: 0.6875rem;
-  font-weight: 600;
-  letter-spacing: 0.12em;
+  font-weight: 500;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--muted-foreground);
 }
@@ -205,52 +184,50 @@
 /* Lesebreite. Ohne sie laufen Zeilen auf einem 1400-px-Fenster auf 120 Zeichen. */
 .lesebreite { max-width: var(--measure); }
 
-/* Blatt: die Karte als Papier auf dem Tisch. Vorher war das ein nackter 1px-Rahmen, der
-   auf papierfarbenem Grund praktisch verschwindet — die Galerie sah aus wie eine Tabelle
-   ohne Zeilen. Der Schatten trennt, ohne eine zweite Farbe einzufuehren. */
+/* Transkripttext: DM Sans, etwas groesser und deutlich luftiger als Bedienflaechen. Der
+   Durchschuss ist der eigentliche Hebel — 1.7 statt der ueblichen 1.5 macht aus einer
+   Textwand einen Absatz, den man auch nach einer Stunde noch verfolgt. */
+.lesesatz {
+  font-size: 1.0625rem;
+  line-height: 1.7;
+  letter-spacing: -0.006em;
+}
+
+/* Blatt: Karte allein durch Flaeche und Kante, ohne Schatten — die gewaehlte Richtung
+   traegt die Trennung ueber Kontrast, nicht ueber Tiefe. */
 .blatt {
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  box-shadow: var(--schatten-blatt);
-  transition: box-shadow 180ms ease, border-color 180ms ease, transform 180ms ease;
+  transition: border-color 160ms ease, background-color 160ms ease;
 }
-/* Nur anfassbare Blaetter heben ab — ein Hover-Effekt auf etwas Totem ist ein Versprechen,
+/* Nur anfassbare Blaetter reagieren — ein Hover-Effekt auf etwas Totem ist ein Versprechen,
    das die Oberflaeche nicht einloest. */
 a.blatt:hover, .blatt-klickbar:hover {
-  box-shadow: var(--schatten-hoch);
-  border-color: color-mix(in oklab, var(--primary) 28%, var(--border));
-  transform: translateY(-1px);
+  border-color: color-mix(in oklab, var(--primary) 45%, var(--border));
 }
 
 /* Zifferblatt-Ziffern fuer Laufzeiten und Zaehler: gleiche Breite, damit nichts springt. */
 .ziffern { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 
-/* Transkripttext bekommt die Leseschrift und mehr Durchschuss als Bedienflaechen. */
-.lesesatz {
-  font-family: var(--font-serif);
-  font-size: 1.0625rem;
-  line-height: 1.68;
-}
-
-/* Unsichere Woerter: das EINZIGE laute Signal der Oberflaeche. Deshalb bleibt der Rest
-   kuehl und leise — hier soll das Auge hinspringen, sonst nirgends. */
+/* Unsichere Woerter: das EINZIGE warme Signal der Oberflaeche. Deshalb bleibt der Rest
+   neutral und kuehl — hier soll das Auge hinspringen, sonst nirgends. */
 .u-yellow {
   text-decoration: underline dotted 2px;
   text-underline-offset: 3px;
-  text-decoration-color: oklch(0.72 0.15 75);
-  color: oklch(0.48 0.11 70);
+  text-decoration-color: #D97706;
+  color: #B45309;
 }
-.dark .u-yellow { color: oklch(0.82 0.13 80); text-decoration-color: oklch(0.72 0.14 78); }
+.dark .u-yellow { color: #FBBF24; text-decoration-color: #D97706; }
 .u-red {
   text-decoration: underline dotted 2px;
   text-underline-offset: 3px;
-  text-decoration-color: oklch(0.58 0.19 27);
-  color: oklch(0.48 0.18 27);
+  text-decoration-color: #DC2626;
+  color: #B91C1C;
   background: color-mix(in oklab, currentColor 8%, transparent);
   border-radius: 2px;
 }
-.dark .u-red { color: oklch(0.76 0.15 27); background: color-mix(in oklab, currentColor 14%, transparent); }
+.dark .u-red { color: #F87171; background: color-mix(in oklab, currentColor 16%, transparent); }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }

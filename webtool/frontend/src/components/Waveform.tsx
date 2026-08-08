@@ -6,9 +6,12 @@ import type { Segment } from '@/lib/types'
 
 export type WaveHandle = { playSegment: (s: Segment) => void; playTurn: (s: Segment[]) => void }
 
+// Wavesurfer malt auf Canvas und kann keine CSS-Variablen lesen — die Werte muessen hier
+// stehen. Sie spiegeln die Tokens aus index.css: Neutralton fuer die ungespielte Welle,
+// --primary fuer den Fortschritt. Bei einer Palettenaenderung mit anpassen.
 const colors = (dark: boolean) => ({
-  waveColor: dark ? '#3f4657' : '#b9c6d6',
-  progressColor: dark ? '#7b86f0' : '#4f5bd3',
+  waveColor: dark ? '#3F3F46' : '#D4D4D8',        // zinc-700 / zinc-300
+  progressColor: dark ? '#818CF8' : '#4F46E5',    // --primary hell/dunkel
 })
 
 export const Waveform = forwardRef<WaveHandle, { url: string; onTime: (t: number) => void }>(
