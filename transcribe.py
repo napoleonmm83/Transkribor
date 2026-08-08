@@ -16,7 +16,10 @@ import sys, os, json, glob, time, argparse
 from shutil import which
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
-PROJEKTE = os.path.join(ROOT, "projekte")
+# Gepackt liegen die Projekte in userData, nicht neben dem Code (Program Files ist
+# schreibgeschuetzt): backend.js setzt TRANSKRIBOR_PROJEKTE, webtool/paths.py liest es.
+# Hier bewusst gespiegelt statt importiert — das Skript muss ohne webtool laufen.
+PROJEKTE = os.environ.get("TRANSKRIBOR_PROJEKTE") or os.path.join(ROOT, "projekte")
 AUDIO_EXT = (".mp3", ".wav", ".m4a", ".aac", ".flac", ".ogg", ".opus", ".wma", ".mp4")
 # Homebrew-Pfade: GUI-Apps erben auf macOS ein anderes PATH als die Shell — per brew
 # installiertes ffmpeg ist im Terminal da und fuer die App unsichtbar.
