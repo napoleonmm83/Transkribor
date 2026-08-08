@@ -180,3 +180,47 @@ def test_public_verraet_das_hf_token_nicht(cfg):
     settings.save({"hf_token": "hf_geheim"})
     pub = settings.public()
     assert pub["has_hf_token"] is True and "hf_geheim" not in json.dumps(pub)
+
+
+# --- Verfuegbarkeit (available) -----------------------------------------------
+
+def test_available_abo_ohne_claude_binary(monkeypatch, tmp_path):
+    """Der Erstnutzer-Fall: claude-cli ist Default, claude ist nicht installiert."""
+    monkeypatch.setenv("TRANSKRIBOR_SETTINGS", str(tmp_path / "s.json"))
+    monkeypatch.setattr(llm.shutil, "which", lambda n: None)
+    ok, grund = llm.available()
+    assert ok is False
+    assert "Claude Code" in grund
+
+
+def test_available_abo_mit_claude_binary(monkeypatch, tmp_path):
+    monkeypatch.setenv("TRANSKRIBOR_SETTINGS", str(tmp_path / "s.json"))
+    monkeypatch.setattr(llm.shutil, "which", lambda n: "C:/claude.cmd")
+    assert llm.available() == (True, "")
+
+
+def test_available_api_ohne_key(monkeypatch, tmp_path):
+    monkeypatch.setenv("TRANSKRIBOR_SETTINGS", str(tmp_path / "s.json"))
+    settings.save({"provider": "openai", "model": "gpt-4o"})
+    ok, grund = llm.available()
+    assert ok is False and "API-Key" in grund
+
+
+def test_available_api_ohne_modell(monkeypatch, tmp_path):
+    monkeypatch.setenv("TRANSKRIBOR_SETTINGS", str(tmp_path / "s.json"))
+    settings.save({"provider": "openai", "api_key": "sk-x", "model": ""})
+    ok, grund = llm.available()
+    assert ok is False and "Modell" in grund
+
+
+def test_available_api_vollstaendig(monkeypatch, tmp_path):
+    monkeypatch.setenv("TRANSKRIBOR_SETTINGS", str(tmp_path / "s.json"))
+    settings.save({"provider": "openai", "api_key": "sk-x", "model": "gpt-4o"})
+    assert llm.available() == (True, "")
+
+
+def test_available_custom_ohne_basis_url(monkeypatch, tmp_path):
+    monkeypatch.setenv("TRANSKRIBOR_SETTINGS", str(tmp_path / "s.json"))
+    settings.save({"provider": "custom", "model": "llama3", "base_url": ""})
+    ok, grund = llm.available()
+    assert ok is False and "Basis-URL" in grund

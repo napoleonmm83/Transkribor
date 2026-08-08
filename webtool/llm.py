@@ -17,6 +17,7 @@ Das haelt auch den Auto-Installer klein, der sonst pro Anbieter ein SDK mitschle
 import json
 import os
 import re
+import shutil
 import urllib.error
 import urllib.request
 
@@ -72,6 +73,29 @@ def use_api() -> bool:
     Rueckfall auf das Abo, wenn der Key fehlt: wer einen Anbieter einstellt, soll den
     Konfigurationsfehler sehen und nicht heimlich etwas anderes bekommen."""
     return _cfg()[1]["shape"] != "cli"
+
+
+def available() -> tuple:
+    """(nutzbar, Begruendung) — prueft die FAEHIGKEIT zu korrigieren, nicht die Absicht.
+
+    Ein frisch installierter Nutzer hat "claude-cli" als Voreinstellung und kein
+    claude-Binary. Ohne diese Pruefung startet nach jedem Upload automatisch eine
+    Korrektur, die scheitert — das waere der erste Eindruck der App. Ueber die
+    Faehigkeit statt ueber einen anderen Default zu gehen erspart eine Migration:
+    wer claude installiert hat, merkt nichts.
+    """
+    cfg, prov = _cfg()
+    if prov["shape"] == "cli":
+        if shutil.which("claude"):
+            return True, ""
+        return False, "Claude Code ist auf diesem Rechner nicht installiert."
+    if prov["needs_key"] and not cfg["api_key"]:
+        return False, f"Kein API-Key fuer {prov['label']} hinterlegt."
+    if not _base_url(cfg, prov):
+        return False, "Keine Basis-URL eingestellt."
+    if not cfg["model"]:
+        return False, "Kein Modell ausgewaehlt."
+    return True, ""
 
 
 def _base_url(cfg: dict, prov: dict) -> str:
