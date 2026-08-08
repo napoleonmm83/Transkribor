@@ -74,7 +74,11 @@ Claude Code in diesem Ordner öffnen und sagen: **„transkribiere Projekt \<Nam
 korrigiert jede Datei im Kontext, markiert die Sprecher und verifiziert gegen das
 Rohtranskript. Ergebnis: `transkripte\<base>.md`.
 
-## Voraussetzungen
+## Manuelle Einrichtung (Windows, CLI)
+
+Nur relevant, wenn du **nicht** die Desktop-App nutzt, sondern die Python-Umgebung selbst
+aufsetzt (bislang nur für Windows dokumentiert — siehe „Systemvoraussetzungen" oben für die
+allgemeine Geräteunterstützung).
 
 - NVIDIA-GPU (getestet: RTX 5080 / Blackwell), Treiber mit CUDA 12.8+.
 - Python-Umgebung liegt in `.venv` (torch cu128 + openai-whisper). Neu aufsetzen:
