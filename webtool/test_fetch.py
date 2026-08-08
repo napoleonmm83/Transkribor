@@ -122,10 +122,18 @@ class _FakeYtDlp:
 
 @pytest.fixture
 def projekt(monkeypatch, tmp_path):
-    """Leeres Projekt 'Demo' + gefaelschtes yt-dlp; setzt die Fake-Steuerung zurueck."""
+    """Leeres Projekt 'Demo' + gefaelschtes yt-dlp; setzt die Fake-Steuerung zurueck.
+
+    ffmpeg gehoert mit in die Faelschung: `download_one` prueft es VOR dem Download, und
+    ohne den Patch borgen sich diese Tests das ffmpeg des Entwicklerrechners. Auf einem
+    Runner ohne ffmpeg fielen drei von ihnen um — und `test_login_fehler_wird_uebersetzt`
+    pruefte in Wahrheit nie die Login-Meldung, weil der ffmpeg-Fehler vorher kam.
+    Wer ffmpeg selbst zum Thema hat, patcht spaeter im Testkoerper und gewinnt damit.
+    """
     monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
     (tmp_path / "Demo" / "audio").mkdir(parents=True)
     monkeypatch.setattr(fetch, "yt_dlp", _FakeYtDlp)
+    monkeypatch.setattr(transcribe_mod, "ensure_ffmpeg", lambda: True)
     _FakeYDL.title, _FakeYDL.video_id, _FakeYDL.fehler = "Mein Interview", "vid123", None
     return tmp_path
 
