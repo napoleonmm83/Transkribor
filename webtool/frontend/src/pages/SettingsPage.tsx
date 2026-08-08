@@ -3,10 +3,25 @@ import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 import { KeyRound, Loader2, RefreshCw } from 'lucide-react'
 import { getHardware, getSettings, listModels, saveSettings, testSettings } from '@/lib/api'
+import { useUpdate } from '@/hooks/useUpdate'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import type { Hardware, ModelInfo, ProviderInfo, Settings } from '@/lib/types'
+
+const RELEASES = 'https://github.com/napoleonmm83/Transkribor/releases'
+
+/** Bytes als MB mit einer Nachkommastelle, deutsches Dezimalkomma. */
+function mb(bytes: number, stellen = 0) {
+  return (bytes / 1048576).toFixed(stellen).replace('.', ',')
+}
+
+/** Der Grund kommt als Code aus Electron — der Satz gehoert hierher, wo Umlaute erlaubt sind. */
+const GRUENDE: Record<string, string> = {
+  entwicklung: 'Entwicklungsmodus — Updates gibt es nur in der installierten App.',
+  darwin: 'Auf macOS nicht möglich, solange die App nicht notarisiert ist.',
+  'kein-appimage': 'Nur die AppImage kann sich selbst aktualisieren.',
+}
 
 export function SettingsPage() {
   const [s, setS] = useState<Settings | null>(null)
@@ -17,6 +32,7 @@ export function SettingsPage() {
   const [laedt, setLaedt] = useState(false)
   const [testet, setTestet] = useState(false)
   const [hw, setHw] = useState<Hardware | null>(null)
+  const { zustand: upd, pruefen, laden, installieren } = useUpdate()
 
   useEffect(() => { getSettings().then(setS).catch(e => toast.error(String(e))) }, [])
   useEffect(() => { getHardware().then(setHw).catch(() => setHw(null)) }, [])
@@ -196,6 +212,62 @@ export function SettingsPage() {
           Änderungen greifen sofort — auch für schon laufende Korrekturen ab dem nächsten Block.
         </span>
       </div>
+
+      {upd && (
+        <div className="mt-8 border-t pt-6">
+          <h2 className="font-medium">Version und Updates</h2>
+          <p className="mt-1 text-sm">
+            <span className="font-medium">Transkribor {upd.version}</span>
+            {upd.art === 'aktuell' && <span className="text-muted-foreground"> · aktuell</span>}
+          </p>
+
+          {(upd.art === 'unbekannt' || upd.art === 'aktuell' || upd.art === 'prueft') && (
+            <Button className="mt-3" variant="outline" disabled={upd.art === 'prueft'} onClick={pruefen}>
+              {upd.art === 'prueft'
+                ? <><Loader2 className="size-4 animate-spin" /> Wird geprüft …</>
+                : 'Nach Updates suchen'}
+            </Button>
+          )}
+
+          {upd.art === 'verfuegbar' && (
+            <div className="mt-3">
+              <p className="text-sm">{upd.neue} verfügbar</p>
+              <Button className="mt-2" onClick={laden}>Herunterladen ({mb(upd.groesse)} MB)</Button>
+            </div>
+          )}
+
+          {upd.art === 'laedt' && (
+            <div className="mt-3">
+              <div className="h-2 w-full overflow-hidden rounded bg-muted">
+                <div className="h-full bg-primary transition-all" style={{ width: `${upd.prozent}%` }} />
+              </div>
+              <p className="mt-2 text-sm text-muted-foreground">
+                {Math.round(upd.prozent)} % · {mb(upd.geladen)} von {mb(upd.gesamt)} MB · {mb(upd.tempo, 1)} MB/s
+              </p>
+            </div>
+          )}
+
+          {upd.art === 'bereit' && (
+            <div className="mt-3">
+              <p className="text-sm">{upd.neue} ist bereit.</p>
+              <Button className="mt-2" onClick={installieren}>Neu starten und installieren</Button>
+            </div>
+          )}
+
+          {upd.art === 'fehler' && (
+            <p className="mt-3 text-sm text-muted-foreground">
+              Prüfung fehlgeschlagen: {upd.text} — Einzelheiten stehen im Protokoll.
+            </p>
+          )}
+
+          {upd.art === 'nicht_moeglich' && (
+            <p className="mt-3 text-sm text-muted-foreground">
+              {GRUENDE[upd.grund] ?? 'Updates sind auf diesem System nicht möglich.'}{' '}
+              <a className="underline" href={RELEASES} target="_blank" rel="noreferrer">Versionen ansehen</a>
+            </p>
+          )}
+        </div>
+      )}
     </div>
   )
 }
