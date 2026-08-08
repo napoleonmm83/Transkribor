@@ -26,8 +26,10 @@ WHISPER_CHOICES = (
     {"id": "tiny", "label": "Sehr schnell", "hint": "grobe Fehler, nur zum Ausprobieren"},
     {"id": "small", "label": "Schnell", "hint": "brauchbar bei klarem Hochdeutsch"},
     {"id": "medium", "label": "Ausgewogen", "hint": ""},
-    {"id": "turbo", "label": "Schnell und gut", "hint": "nahe large-Qualitaet, deutlich schneller"},
-    {"id": "large-v3", "label": "Beste Qualitaet", "hint": "langsamste, bester Dialekt"},
+    # Umlaute: die ASCII-Konvention dieses Repos gilt Kommentaren, nicht der Oberflaeche.
+    # Diese Werte stehen als Text im Auswahlmenue; "Qualitaet" las dort jeder Nutzer mit.
+    {"id": "turbo", "label": "Schnell und gut", "hint": "nahe large-Qualität, deutlich schneller"},
+    {"id": "large-v3", "label": "Beste Qualität", "hint": "langsamste, bester Dialekt"},
 )
 
 
