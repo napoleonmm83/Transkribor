@@ -25,6 +25,7 @@
     "productName": "Transkribor",
     "files": [
       "electron/**/*",
+      "!electron/*.test.js",
       "!**/__pycache__/**"
     ],
     "extraResources": [
