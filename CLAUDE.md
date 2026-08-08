@@ -107,6 +107,13 @@ Die Korrektur hing fest am Claude-Code-Abo; jetzt wählt der Nutzer Anbieter + M
   Release: Tag `v*` pushen → `.github/workflows/release.yml` baut und veröffentlicht,
   `electron-updater` zieht von dort. **Offen:** die Release-Assets müssen öffentlich sein (privates
   Repo braucht clientseitig ein Token), und der Installer ist unsigniert → SmartScreen-Warnung.
+- `electron/setup.js` — `plan(platform, paketmanager)` entscheidet, was die Plattform braucht:
+  Windows installiert Python/ffmpeg automatisch per winget, **macOS und Linux zeigen nur den
+  Befehl zum Kopieren** (beides bräuchte sudo bzw. vorhandenes Homebrew — eine GUI-App, die
+  dafür einen Passwort-Prompt öffnet, ist zu viel Magie). torch: cu128 auf Windows/Linux,
+  PyPI-Standardrad auf macOS (bringt MPS mit; einen CUDA-Index gibt es dort nicht).
+  Tests: `npm run test:electron` (`node --test`, keine Framework-Abhängigkeit).
+- Build-Ziele: `nsis` (Windows), `dmg` arm64 (macOS), `AppImage`+`deb` (Linux).
 
 ## Neues Projekt anlegen
 `projekte\<NAME>\audio\` erstellen, Audio hineinlegen, optional `projekte\<NAME>\kontext.md`
@@ -125,6 +132,24 @@ nie committen), unklarem Scope, oder history-verändernden Aktionen (force-push,
 - ffmpeg: wird von `transcribe.py` automatisch gefunden (winget Gyan.FFmpeg) oder muss auf PATH sein.
 - Whisper-Modell-Cache: `%USERPROFILE%\.cache\whisper` (einmaliger Download ~3 GB).
 - Env-Overrides: `WHISPER_MODEL` (default large-v3), `WHISPER_LANG` (default de), `TRANSKRIBOR_VERIFY` (default 1; `0`/`false`/`no` schaltet den 2b-Treue-Pass server-weit ab), `TRANSKRIBOR_DIARIZE` (default 1; `0`/`false`/`no` schaltet die akustische Sprecher-Diarisierung server-weit ab — Erzeugung UND Konsumption), `TRANSKRIBOR_PARALLEL` (default 3; gleichzeitige `claude -p`-Aufrufe), `TRANSKRIBOR_AUTOCORRECT` (default 1; `0` stoppt die automatische Korrektur nach der Transkription), `HF_TOKEN` (für die pyannote-Diarisierung; gated Modell — inzwischen auch über die Einstellungsseite setzbar, eine echte Env gewinnt), `TRANSKRIBOR_SETTINGS` (Pfad der Einstellungsdatei; **Tests müssen das setzen**, sonst entscheidet die echte Datei des Entwicklers über den KI-Anbieter).
+- **Gerätewahl liegt in `webtool/device.py`** (`pick()` → cuda | mps | cpu), genutzt von
+  `transcribe.py` und `webtool/diarize.py`. Upstream-Whisper kennt **kein MPS** — es wählt nur
+  `cuda if torch.cuda.is_available() else cpu`. Scheitert MPS mitten in der Transkription,
+  lädt `transcribe.py` das Modell **einmal** auf CPU neu und schreibt das ins Log;
+  `PYTORCH_ENABLE_MPS_FALLBACK=1` setzen wir bewusst NICHT (schöbe einzelne Ops still auf die
+  CPU, während die Anzeige weiter „mps" behauptet).
+- **Whisper-Stufe und -Sprache stehen in den Einstellungen** (`whisper_model`, `whisper_lang`)
+  und reisen über `settings.job_env()` → `jobs.py` → `transcribe.py`. Eine echte
+  Umgebungsvariable `WHISPER_MODEL`/`WHISPER_LANG` gewinnt (wie bei `HF_TOKEN`). Default bleibt
+  `large-v3`/`de`. Auswahl im Browser: tiny / small / medium / turbo / large-v3.
+- **ffmpeg auf macOS:** GUI-Apps erben dort ein anderes `PATH` als die Shell — per `brew`
+  installiertes ffmpeg liegt unter `/opt/homebrew/bin` und ist für die App sonst unsichtbar
+  (`POSIX_FFMPEG_DIRS` in `transcribe.py`).
+- **`llm.available()`** prüft, ob überhaupt korrigiert werden kann (claude auf dem PATH bzw.
+  Key + Modell). Die Auto-Korrektur startet ohne nutzbaren Anbieter **gar nicht**, statt einen
+  Job zu starten, der scheitert; `GET /api/settings` liefert `ai_ready`/`ai_reason` fürs
+  Frontend. Geprüft wird die Fähigkeit, nicht die Einstellung — das erspart eine Migration.
+- **`GET /api/hardware`** meldet das aktive Rechenwerk (einmal pro Serverlauf ermittelt).
 - Stufe 3 (Sprecher-Diarisierung): `webtool/diarize.py` (pyannote.audio 4.0.7, Modell `speaker-diarization-community-1`, GPU) läuft als **Prep-Schritt im `correct run`** (vor `prep`, auf den Lauf gescopt), schreibt best-effort `<base>.diar.json` (Turns + `{id, "Sprecher N"}` je Segment, idempotent). `cmd_prep` webt das `(Sprecher N)`-Präfix in `<base>.tagged.txt`; der Korrektur-Prompt lässt Claude pro akustischem Cluster einen konsistenten Namen vergeben (**Hybrid**: Akustik trennt *wer wann*, LLM benennt *wie*). Fehlt pyannote/`HF_TOKEN` oder scheitert die GPU → kein Sidecar → Korrektur wie bisher (reines Text-Raten, keine Regression). **Windows-Gotcha:** pyannotes torchcodec-File-Decoding lädt nicht (`libtorchcodec_core*.dll`) → Audio wird in-memory via `whisper.load_audio` (ffmpeg, 16 kHz mono) geladen und als `{waveform, sample_rate}`-Dict übergeben. Modell-Cache `~/.cache/huggingface`. `jobs.py` serialisiert `transcribe`+`correct` auf der einen GPU. **Einmal-Setup:** `HF_TOKEN` setzen und die Modellbedingungen unter huggingface.co/pyannote/speaker-diarization-community-1 akzeptieren.
 - Web-Editor (Stufe 1): React 19 + Vite + TypeScript + Tailwind v4 + shadcn/ui in
   `webtool/frontend/`, gebaut nach `webtool/static/` (git-ignoriert, Build-Output) und von
