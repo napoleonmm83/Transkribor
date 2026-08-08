@@ -4,6 +4,19 @@ Interview-Audio → kontextkorrigierte, **sprecher-markierte** Transkripte.
 Schweizerdeutsch (oder andere Sprachen) mit **Whisper large-v3** (GPU), danach ein
 LLM-Korrekturlauf (via Claude Code) für Kontextfehler und Sprecher-Labels.
 
+## Systemvoraussetzungen
+
+Die Transkription läuft lokal auf deinem Rechner. Empfohlen:
+
+- **Windows / Linux:** NVIDIA-GPU mit aktuellem Treiber
+- **macOS:** Apple Silicon (M1 oder neuer)
+- **Ohne GPU** läuft alles ebenfalls, aber deutlich langsamer — dann in den Einstellungen
+  eine kleinere Qualitätsstufe als „Beste Qualität" wählen.
+
+Die Korrektur und Sprecher-Zuordnung brauchen zusätzlich ein Sprachmodell (eigener API-Key,
+lokales Modell über einen OpenAI-kompatiblen Endpunkt wie Ollama, oder ein Claude-Code-Abo).
+**Ohne Sprachmodell funktioniert die Transkription vollständig** — nur die Korrektur entfällt.
+
 ## Desktop-App (empfohlen)
 
 `Transkribor-Setup-<version>.exe` aus den [Releases](https://github.com/napoleonmm83/Transkribor/releases)
