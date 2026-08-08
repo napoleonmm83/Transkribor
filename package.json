@@ -60,6 +60,8 @@
     "mac": {
       "target": [{ "target": "dmg", "arch": ["arm64"] }],
       "category": "public.app-category.productivity",
+      "identity": "-",
+      "hardenedRuntime": false,
       "artifactName": "${productName}-${version}-${arch}.${ext}"
     },
     "linux": {

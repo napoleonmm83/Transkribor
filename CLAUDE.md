@@ -114,6 +114,17 @@ Die Korrektur hing fest am Claude-Code-Abo; jetzt wählt der Nutzer Anbieter + M
   PyPI-Standardrad auf macOS (bringt MPS mit; einen CUDA-Index gibt es dort nicht).
   Tests: `npm run test:electron` (`node --test`, keine Framework-Abhängigkeit).
 - Build-Ziele: `nsis` (Windows), `dmg` arm64 (macOS), `AppImage`+`deb` (Linux).
+- **macOS-Signatur — `mac.identity: "-"` (ad-hoc) ist Pflicht, nicht Kosmetik.** Mit
+  `CSC_IDENTITY_AUTO_DISCOVERY=false` liess electron-builder das Signieren ganz aus; da das
+  Umpacken die von Electron mitgebrachte Signatur ohnehin zerstört, kam die App ohne gültige
+  Signatur an und macOS meldete **„Transkribor ist beschädigt"** — mit *keinem* Weg, sie
+  trotzdem zu öffnen (Rechtsklick > Öffnen hilft nur bei gültig signierten Apps). Ad-hoc
+  signiert heisst: kein Zertifikat, aber gültig → Gatekeeper zeigt die normale
+  „nicht verifiziert"-Meldung, die der Nutzer bestätigen kann. Dazu `hardenedRuntime: false`
+  — Hardened Runtime + ad-hoc bräuchte sonst die Entitlement-Ausnahme
+  `com.apple.security.cs.disable-library-validation`, und nötig ist er erst zur Notarisierung.
+  Eine bereits geladene „beschädigte" App repariert man lokal mit
+  `xattr -dr com.apple.quarantine <App>` + `codesign --force --deep --sign - <App>`.
 
 ## Neues Projekt anlegen
 `projekte\<NAME>\audio\` erstellen, Audio hineinlegen, optional `projekte\<NAME>\kontext.md`
