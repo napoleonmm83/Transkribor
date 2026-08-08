@@ -50,7 +50,11 @@ export function UploadDropzone({ project, onDone }: { project: string; onDone?: 
         // blatt = dieselbe Flaeche wie die Dateiliste darunter; nur die Kante ist gestrichelt,
         // weil das die Konvention fuer "hier ablegen" ist. Vorher: eigener 4px-Radius und
         // kein Kartenuntergrund — zwei Kaesten uebereinander, die sichtbar nicht zusammengehoerten.
+        // Fokusring explizit: die Flaeche ist ein div mit tabIndex, bekaeme also nur den
+        // Standardring des Browsers. Jedes andere Bedienelement hier traegt denselben
+        // ring-2 — ohne ihn faellt ausgerechnet die groesste Klickflaeche aus der Reihe.
         className={cn('blatt blatt-klickbar flex cursor-pointer items-center justify-center gap-2 border-dashed p-6 text-sm text-muted-foreground',
+          'outline-none focus-visible:ring-2 focus-visible:ring-ring',
           over && 'border-primary bg-accent text-accent-foreground')}
       >
         <div className="text-center">
@@ -65,7 +69,7 @@ export function UploadDropzone({ project, onDone }: { project: string; onDone?: 
         <ul className="mt-2 space-y-0.5 text-xs">
           {items.map(it => (
             <li key={it.name} className="flex items-center justify-between gap-2">
-              <span className="truncate">{it.name}</span>
+              <span className="min-w-0 flex-1 truncate">{it.name}</span>
               {/* Letztes Glyph-als-Symbol im Projekt: '✓' erbte die Textfarbe nicht und hiess
                   fuer einen Screenreader nichts. Gleiche Bildsprache wie FileStatusPill. */}
               <span className={cn('inline-flex shrink-0 items-center gap-1.5',
@@ -73,7 +77,9 @@ export function UploadDropzone({ project, onDone }: { project: string; onDone?: 
                 {it.status === 'uploading' && <><Loader2 className="size-3 animate-spin" aria-hidden="true" /> lädt…</>}
                 {it.status === 'done' && <><Check className="size-3" aria-hidden="true" /> geladen</>}
                 {it.status === 'exists' && 'existiert bereits'}
-                {it.status === 'error' && <><TriangleAlert className="size-3" aria-hidden="true" /> {it.msg ?? 'Fehler'}</>}
+                {/* || statt ??: ein Error mit leerer message ist nicht null, liesse den Text
+                    aber verschwinden — dann staende nur das Warndreieck ohne Grund da. */}
+                {it.status === 'error' && <><TriangleAlert className="size-3" aria-hidden="true" /> {it.msg || 'Fehler'}</>}
               </span>
             </li>
           ))}

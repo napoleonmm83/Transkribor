@@ -34,7 +34,7 @@ export function FileRow({ file, active, onOpen, onCorrectFile, phase, state, job
       className={cn('flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm',
         'transition-colors hover:bg-muted/60 outline-none focus-visible:ring-2 focus-visible:ring-ring',
         active && 'bg-accent text-accent-foreground hover:bg-accent')}>
-      <span className="flex-1 truncate">{file.base}</span>
+      <span className="min-w-0 flex-1 truncate">{file.base}</span>
       <FileStatusPill file={file} active={phase} state={state} jobRunning={jobRunning} />
       {/* title am Wrapper: ein deaktivierter Knopf hat pointer-events:none und zeigt
           seinen eigenen Tooltip nie an. */}

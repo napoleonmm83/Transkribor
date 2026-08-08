@@ -12,7 +12,7 @@ export function Toolbar({ title, dirty, canSave, onSave, onExport, settings }: {
     // Kein sticky noetig: EditorView setzt die Leiste als eigene Grid-Zeile, gescrollt wird
     // nur das <main> darunter.
     <header className="flex items-center gap-2 border-b px-3 py-2">
-      <span className="truncate text-sm font-medium">{title}</span>
+      <span className="min-w-0 truncate text-sm font-medium">{title}</span>
       {dirty && (
         <span className="inline-flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
           <span className="size-1.5 rounded-full bg-amber-500" aria-hidden="true" />

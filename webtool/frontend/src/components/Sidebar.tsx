@@ -48,7 +48,7 @@ export function Sidebar({ projects, loading, active, onOpen, onUpload, onTranscr
         <div key={p.name} className="mb-3">
           <div className="rubrik mb-1">Projekt</div>
           <div className="mb-2 flex items-center gap-1">
-            <h2 className="flex-1 truncate text-base font-semibold">{p.name}</h2>
+            <h2 className="min-w-0 flex-1 truncate text-base font-semibold">{p.name}</h2>
             <Button size="icon" variant="ghost" className="size-8" title="Audio hochladen" aria-label="Audio hochladen"
               onClick={() => { pendingProject.current = p.name; fileInput.current?.click() }}><Upload className="size-3.5" /></Button>
             <Button size="icon" variant="ghost" className="size-8" title="Transkribieren" aria-label="Transkribieren"

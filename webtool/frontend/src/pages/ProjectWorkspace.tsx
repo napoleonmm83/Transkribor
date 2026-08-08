@@ -82,7 +82,7 @@ export function ProjectWorkspace() {
                          bg-primary/5 px-3 py-2.5 text-sm">
               <span className="flex min-w-0 items-center gap-2">
                 <Loader2 className="size-4 shrink-0 animate-spin text-primary" aria-hidden="true" />
-                <span className="truncate">{describePhases(j.phases) || KIND_LABEL[j.kind] || 'läuft…'}</span>
+                <span className="min-w-0 truncate">{describePhases(j.phases) || KIND_LABEL[j.kind] || 'läuft…'}</span>
               </span>
               <Button variant="ghost" size="sm" className="shrink-0" onClick={() => cancelJob(j.id)}>
                 <X className="size-4" /> Abbrechen
@@ -133,7 +133,7 @@ export function ProjectWorkspace() {
                 <li key={f.base} className="px-3 py-2.5 transition-colors hover:bg-muted/60">
                   <div className="flex items-center gap-3">
                     {/* Audio ohne Roh-Transkript ist zwar sichtbar, aber weder oeffen- noch korrigierbar. */}
-                    <button className={cn('flex-1 truncate rounded-md text-left text-sm outline-none',
+                    <button className={cn('min-w-0 flex-1 truncate rounded-md text-left text-sm outline-none',
                       'focus-visible:ring-2 focus-visible:ring-ring',
                       f.has_raw ? 'font-medium hover:underline' : 'cursor-not-allowed text-muted-foreground')}
                       disabled={!f.has_raw}
