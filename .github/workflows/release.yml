@@ -92,8 +92,11 @@ jobs:
           if-no-files-found: ignore
 
   veroeffentlichen:
+    # Kein `if`: der Job laeuft per Voreinstellung nur, wenn ALLE Matrix-Plattformen
+    # gebaut haben. Das ist Absicht — ein Release, in dem eine Plattform fehlt, ist
+    # schlimmer als keines: der Nutzer laedt es und findet seine Datei nicht. Die
+    # Artefakte der erfolgreichen Jobs liegen unabhaengig davon zum Download bereit.
     needs: bauen
-    if: always() && contains(needs.bauen.result, 'success')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
