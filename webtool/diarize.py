@@ -39,12 +39,19 @@ def _ensure_ffmpeg():
     Bewusst dupliziert (mirror von transcribe.ensure_ffmpeg), um webtool nicht ans
     Root-Skript transcribe.py zu koppeln."""
     import glob
+    import sys
     from shutil import which
     if which("ffmpeg"):
         return
-    for d in glob.glob(os.path.expandvars(
-            r"%LOCALAPPDATA%\Microsoft\WinGet\Packages\Gyan.FFmpeg*\ffmpeg*\bin")):
-        if os.path.exists(os.path.join(d, "ffmpeg.exe")):
+    if sys.platform == "win32":
+        for d in glob.glob(os.path.expandvars(
+                r"%LOCALAPPDATA%\Microsoft\WinGet\Packages\Gyan.FFmpeg*\ffmpeg*\bin")):
+            if os.path.exists(os.path.join(d, "ffmpeg.exe")):
+                os.environ["PATH"] = d + os.pathsep + os.environ.get("PATH", "")
+                return
+        return
+    for d in ("/opt/homebrew/bin", "/usr/local/bin", "/usr/bin"):
+        if os.path.exists(os.path.join(d, "ffmpeg")):
             os.environ["PATH"] = d + os.pathsep + os.environ.get("PATH", "")
             return
 

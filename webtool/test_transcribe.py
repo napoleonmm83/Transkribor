@@ -48,3 +48,33 @@ def test_find_audio_mit_leerem_only_liefert_nichts(tmp_path):
 def test_find_audio_only_unbekannter_name_ist_leer(tmp_path):
     proj = _projekt(tmp_path, "a.mp3")
     assert transcribe.find_audio(proj, only=["gibtsnicht"]) == []
+
+
+def test_ensure_ffmpeg_findet_homebrew(monkeypatch, tmp_path):
+    """macOS: GUI-Apps sehen /opt/homebrew/bin nicht im PATH."""
+    import transcribe
+    brew = tmp_path / "opt" / "homebrew" / "bin"
+    brew.mkdir(parents=True)
+    (brew / "ffmpeg").write_text("#!/bin/sh\n")
+
+    monkeypatch.setattr(transcribe, "which", lambda n: None)
+    monkeypatch.setattr(transcribe.sys, "platform", "darwin")
+    monkeypatch.setattr(transcribe, "POSIX_FFMPEG_DIRS", (str(brew),))
+    monkeypatch.setenv("PATH", "")
+
+    assert transcribe.ensure_ffmpeg() is True
+    assert str(brew) in os.environ["PATH"]
+
+
+def test_ensure_ffmpeg_kein_winget_glob_auf_posix(monkeypatch):
+    """Der winget-Pfad ist Windows-spezifisch und darf auf POSIX nicht angefasst werden."""
+    import transcribe
+    monkeypatch.setattr(transcribe, "which", lambda n: None)
+    monkeypatch.setattr(transcribe.sys, "platform", "linux")
+    monkeypatch.setattr(transcribe, "POSIX_FFMPEG_DIRS", ())
+
+    def explodiere(*a, **k):
+        raise AssertionError("glob darf auf POSIX nicht laufen")
+
+    monkeypatch.setattr(transcribe.glob, "glob", explodiere)
+    assert transcribe.ensure_ffmpeg() is False
