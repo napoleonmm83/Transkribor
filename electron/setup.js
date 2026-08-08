@@ -17,6 +17,49 @@ const P = require('./paths')
 const TORCH_INDEX = 'https://download.pytorch.org/whl/cu128'
 const MIN_PY = [3, 10]
 
+const LINUX_PAKETE = {
+  apt: 'sudo apt install python3 python3-venv ffmpeg',
+  dnf: 'sudo dnf install python3 ffmpeg',
+  pacman: 'sudo pacman -S python ffmpeg',
+}
+
+/**
+ * Was auf dieser Plattform zu tun ist — reine Funktion, damit die Entscheidung ohne
+ * laufendes Electron pruefbar ist.
+ *
+ * Auf macOS/Linux installieren wir NICHT selbst: beides braeuchte sudo bzw. ein
+ * vorhandenes Homebrew, und eine GUI-App, die dafuer einen Passwort-Prompt aufmacht,
+ * ist zu viel Magie. Stattdessen zeigt die Statusseite den Befehl zum Kopieren.
+ *
+ * torch: macOS bekommt das normale PyPI-Rad — es bringt MPS mit, ein CUDA-Index
+ * existiert dort gar nicht. Linux zieht cu128 ohne vorherige NVIDIA-Erkennung: die
+ * Raeder installieren auch ohne Karte und fallen zur Laufzeit auf CPU zurueck.
+ */
+function plan(platform, paketmanager) {
+  if (platform === 'win32') {
+    return { torchIndex: TORCH_INDEX, autoInstall: true, hinweis: '' }
+  }
+  if (platform === 'darwin') {
+    return {
+      torchIndex: null,
+      autoInstall: false,
+      hinweis: 'Bitte einmalig installieren:  brew install python ffmpeg',
+    }
+  }
+  const befehl = LINUX_PAKETE[paketmanager]
+    || 'Bitte python3 (>= 3.10), python3-venv und ffmpeg ueber die Paketverwaltung installieren.'
+  return { torchIndex: TORCH_INDEX, autoInstall: false, hinweis: `Bitte einmalig installieren:  ${befehl}` }
+}
+
+/** Welcher Paketmanager liegt auf diesem Linux? Leerstring, wenn keiner erkannt wird. */
+async function paketmanager() {
+  if (process.platform !== 'linux') return ''
+  for (const p of ['apt', 'dnf', 'pacman']) {
+    if (await ausgabe('which', [p])) return p
+  }
+  return ''
+}
+
 /** Kommando ausfuehren und jede Zeile melden. Loest mit dem Exitcode auf, wirft nie. */
 function lauf(cmd, args, onLine, opts = {}) {
   return new Promise(resolve => {
@@ -87,6 +130,7 @@ async function venvVollstaendig() {
 async function status() {
   const py = await findePython()
   const ff = await ausgabe(process.platform === 'win32' ? 'where' : 'which', ['ffmpeg'])
+  const pl = plan(process.platform, await paketmanager())
   return {
     python: py ? `Python ${py.version}` : '',
     ffmpeg: ff ? ff.split(/\r?\n/)[0].trim() : '',
@@ -94,6 +138,7 @@ async function status() {
     winget: process.platform === 'win32' ? (await ausgabe('winget', ['--version'])) || '' : '',
     venvPfad: P.venv,
     projektePfad: P.projekte,
+    hinweis: (py && ff) ? '' : pl.hinweis,
   }
 }
 
@@ -104,8 +149,10 @@ async function status() {
 async function einrichten(onLine, onSchritt) {
   const schritte = []
   let py = await findePython()
+  const pm = await paketmanager()
+  const pl = plan(process.platform, pm)
 
-  if (!py && process.platform === 'win32') {
+  if (!py && pl.autoInstall) {
     onSchritt('Python installieren')
     onLine('Python nicht gefunden — installiere Python 3.13 ueber winget …')
     const code = await lauf('winget', ['install', '-e', '--id', 'Python.Python.3.13',
@@ -114,16 +161,20 @@ async function einrichten(onLine, onSchritt) {
     py = await findePython()
     if (!py) return { ok: false, fehler: 'Python wurde installiert, ist aber noch nicht im PATH. Bitte Transkribor neu starten.' }
   }
-  if (!py) return { ok: false, fehler: 'Kein Python >= 3.10 gefunden.' }
+  if (!py) return { ok: false, fehler: `Kein Python >= 3.10 gefunden. ${pl.hinweis}` }
   schritte.push(`Python: ${py.version}`)
 
   if (!(await ausgabe(process.platform === 'win32' ? 'where' : 'which', ['ffmpeg']))) {
-    onSchritt('ffmpeg installieren')
-    onLine('ffmpeg nicht gefunden — installiere ueber winget …')
-    // Nicht abbrechen wenn es scheitert: transcribe.ensure_ffmpeg() findet auch den winget-Pfad
-    // ausserhalb des PATH, und ohne ffmpeg laeuft immerhin noch das Bearbeiten vorhandener Transkripte.
-    await lauf('winget', ['install', '-e', '--id', 'Gyan.FFmpeg',
-      '--accept-package-agreements', '--accept-source-agreements'], onLine)
+    if (pl.autoInstall) {
+      onSchritt('ffmpeg installieren')
+      onLine('ffmpeg nicht gefunden — installiere ueber winget …')
+      // Nicht abbrechen wenn es scheitert: transcribe.ensure_ffmpeg() findet auch den winget-Pfad
+      // ausserhalb des PATH, und ohne ffmpeg laeuft immerhin noch das Bearbeiten vorhandener Transkripte.
+      await lauf('winget', ['install', '-e', '--id', 'Gyan.FFmpeg',
+        '--accept-package-agreements', '--accept-source-agreements'], onLine)
+    } else {
+      onLine(`ffmpeg nicht gefunden. ${pl.hinweis}`)
+    }
   }
 
   if (!P.exists(P.venvPython(P.venv))) {
@@ -137,13 +188,16 @@ async function einrichten(onLine, onSchritt) {
   onSchritt('pip aktualisieren')
   await lauf(vpy, ['-m', 'pip', 'install', '-U', 'pip'], onLine)
 
-  onSchritt('PyTorch mit CUDA laden (mehrere GB, dauert)')
-  let code = await lauf(vpy, ['-m', 'pip', 'install', 'torch', '--index-url', TORCH_INDEX], onLine)
-  if (code !== 0) {
+  onSchritt(pl.torchIndex ? 'PyTorch mit CUDA laden (mehrere GB, dauert)'
+                          : 'PyTorch laden (mehrere GB, dauert)')
+  const torchArgs = ['-m', 'pip', 'install', 'torch']
+  if (pl.torchIndex) torchArgs.push('--index-url', pl.torchIndex)
+  let code = await lauf(vpy, torchArgs, onLine)
+  if (code !== 0 && pl.torchIndex) {
     onLine('CUDA-Variante fehlgeschlagen — versuche die CPU-Variante (Transkription wird dann langsam).')
     code = await lauf(vpy, ['-m', 'pip', 'install', 'torch'], onLine)
-    if (code !== 0) return { ok: false, fehler: 'PyTorch konnte nicht installiert werden.' }
   }
+  if (code !== 0) return { ok: false, fehler: 'PyTorch konnte nicht installiert werden.' }
 
   onSchritt('Whisper und Werkzeuge laden')
   code = await lauf(vpy, ['-m', 'pip', 'install', '-r', P.requirements], onLine)
@@ -155,4 +209,4 @@ async function einrichten(onLine, onSchritt) {
   return { ok: true }
 }
 
-module.exports = { status, einrichten, venvVollstaendig, findePython }
+module.exports = { status, einrichten, venvVollstaendig, findePython, plan }
