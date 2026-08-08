@@ -1,11 +1,19 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, act, cleanup } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { SettingsPage } from './SettingsPage'
 import * as api from '@/lib/api'
 import type { Hardware, Settings } from '@/lib/types'
 
 vi.mock('@/lib/api')
+// Default: kein Electron -> Abschnitt bleibt aus, wie es SettingsPage ausserhalb dieses
+// Tests auch fuer alle SettingsPage-Tests erwartet, die zeigeMit gar nicht aufrufen.
+vi.mock('@/hooks/useUpdate', () => ({
+  useUpdate: vi.fn(() => ({ zustand: null, pruefen: vi.fn(), laden: vi.fn(), installieren: vi.fn() })),
+}))
+
+import { useUpdate } from '@/hooks/useUpdate'
+import type { UpdateZustand } from '@/lib/types'
 
 const BASIS: Settings = {
   provider: 'claude-cli', model: '', base_url: '', has_key: false, has_hf_token: false, env_key: '',
@@ -91,5 +99,78 @@ describe('SettingsPage', () => {
     zeige({ whisper_model: 'large-v3' })
     await screen.findByText(/NVIDIA RTX 5080/)
     expect(screen.queryByText(/auf der CPU sehr lange/i)).not.toBeInTheDocument()
+  })
+})
+
+function zeigeMit(zustand: UpdateZustand | null) {
+  vi.mocked(useUpdate).mockReturnValue({
+    zustand, pruefen: vi.fn(), laden: vi.fn(), installieren: vi.fn(),
+  })
+  // SettingsPage zeigt bis zum Laden von getSettings nur "Lädt…" und braucht wegen <Link> einen Router —
+  // beides gibt der Brief nicht her, ohne das wuerde jeder Test hier auf "Lädt…" haengen bleiben.
+  vi.mocked(api.getSettings).mockResolvedValue(BASIS)
+  vi.mocked(api.getHardware).mockResolvedValue({ device: 'cuda', name: 'NVIDIA RTX 5080', torch_ok: true })
+  return render(<MemoryRouter><SettingsPage /></MemoryRouter>)
+}
+
+describe('Abschnitt Version und Updates', () => {
+  it('ohne Electron erscheint der Abschnitt gar nicht', async () => {
+    zeigeMit(null)
+    expect(screen.queryByText(/Version und Updates/)).toBeNull()
+  })
+
+  it('zeigt die laufende Version', async () => {
+    zeigeMit({ version: '0.2.1', art: 'aktuell' })
+    expect(await screen.findByText(/0\.2\.1/)).toBeTruthy()
+    expect(screen.getByText(/aktuell/)).toBeTruthy()
+  })
+
+  it('vor der ersten Pruefung nur Version und Knopf, kein "aktuell"', async () => {
+    zeigeMit({ version: '0.2.1', art: 'unbekannt' })
+    expect(await screen.findByRole('button', { name: /Nach Updates suchen/ })).toBeTruthy()
+    expect(screen.queryByText(/aktuell/)).toBeNull()   // sonst behauptet die Seite Wissen, das sie nicht hat
+  })
+
+  it('bietet den Download mit Groesse an', async () => {
+    zeigeMit({ version: '0.2.1', art: 'verfuegbar', neue: '0.3.0', groesse: 98566144 })
+    expect(await screen.findByText(/0\.3\.0 verfügbar/)).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Herunterladen \(94 MB\)/ })).toBeTruthy()
+  })
+
+  it('zeigt beim Laden Prozent, MB und Tempo', async () => {
+    zeigeMit({ version: '0.2.1', art: 'laedt', prozent: 43.2, geladen: 41 * 1048576, gesamt: 94 * 1048576, tempo: 6.2 * 1048576 })
+    expect(await screen.findByText(/43 %/)).toBeTruthy()
+    expect(screen.getByText(/41 von 94 MB/)).toBeTruthy()
+    expect(screen.getByText(/6,2 MB\/s/)).toBeTruthy()
+  })
+
+  it('bietet nach dem Laden den Neustart an', async () => {
+    zeigeMit({ version: '0.2.1', art: 'bereit', neue: '0.3.0' })
+    expect(await screen.findByRole('button', { name: /Neu starten und installieren/ })).toBeTruthy()
+  })
+
+  it('macht aus dem Code einen deutschen Satz, samt Link', async () => {
+    zeigeMit({ version: '0.2.1', art: 'nicht_moeglich', grund: 'darwin' })
+    expect(await screen.findByText(/nicht notarisiert/)).toBeTruthy()
+    expect(screen.getByText(/möglich/)).toBeTruthy()          // mit Umlaut, nicht "moeglich"
+    expect(screen.getByRole('link', { name: /Versionen/ })).toBeTruthy()
+  })
+
+  it('kennt auch die beiden anderen Gruende', async () => {
+    zeigeMit({ version: '0.2.1', art: 'nicht_moeglich', grund: 'entwicklung' })
+    expect(await screen.findByText(/Entwicklungsmodus/)).toBeTruthy()
+    cleanup()
+    zeigeMit({ version: '0.2.1', art: 'nicht_moeglich', grund: 'kein-appimage' })
+    expect(await screen.findByText(/AppImage/)).toBeTruthy()
+  })
+
+  it('zeigt einen Fehler samt Weg zum Protokoll', async () => {
+    zeigeMit({ version: '0.2.1', art: 'fehler', text: '404 releases.atom' })
+    expect(await screen.findByText(/404 releases\.atom/)).toBeTruthy()
+  })
+
+  it('sperrt den Knopf waehrend der Pruefung', async () => {
+    zeigeMit({ version: '0.2.1', art: 'prueft' })
+    expect((await screen.findByRole('button', { name: /Wird geprüft/ })).hasAttribute('disabled')).toBe(true)
   })
 })
