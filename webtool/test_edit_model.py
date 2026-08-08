@@ -12,8 +12,10 @@ def test_compute_flags_kennt_kein_no_speech_prob():
     Vorher stand hier ein Test, der die tote "silence"-Flagge grün bestätigte: er fütterte ein
     handgebautes Dict, das der Decoder so nie ausgibt. Grüner Test, null Aussage.
     """
-    stumm = {"compression_ratio": 1.0, "no_speech_prob": 0.99, "avg_logprob": -0.2}
-    assert em.compute_flags(stumm) == {"hallucination": False, "low_conf": False}
+    # Genau der Fall, den die alte Flagge gesetzt haette (nsp > 0.6 UND alp < -1.0) — die
+    # Dict-Gleichheit laesst eine Wiedereinfuehrung also auffliegen, statt sie durchzuwinken.
+    stumm = {"compression_ratio": 1.0, "no_speech_prob": 0.99, "avg_logprob": -1.5}
+    assert em.compute_flags(stumm) == {"hallucination": False, "low_conf": True}
 
 
 def test_compute_flags_low_conf_only():
