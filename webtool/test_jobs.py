@@ -4,12 +4,6 @@ import sys
 import time
 from webtool import jobs
 
-# On Windows, os.getpgid and os.killpg don't exist. Add stubs so monkeypatch can work.
-if not hasattr(os, 'getpgid'):
-    setattr(os, 'getpgid', None)
-if not hasattr(os, 'killpg'):
-    setattr(os, 'killpg', None)
-
 
 def _alive(pid):
     if os.name == "nt":
@@ -264,8 +258,8 @@ def test_kill_tree_posix_nutzt_prozessgruppe(monkeypatch):
             getoetet.append("terminate")
 
     monkeypatch.setattr(jobs.os, "name", "posix")
-    monkeypatch.setattr(jobs.os, "getpgid", lambda pid: pid)
-    monkeypatch.setattr(jobs.os, "killpg", lambda pgid, sig: getoetet.append(("killpg", pgid)))
+    monkeypatch.setattr(jobs.os, "getpgid", lambda pid: pid, raising=False)
+    monkeypatch.setattr(jobs.os, "killpg", lambda pgid, sig: getoetet.append(("killpg", pgid)), raising=False)
     jobs._kill_tree(FakeProc())
     assert getoetet == [("killpg", 4711)]
 
@@ -279,10 +273,12 @@ def test_kill_tree_posix_faellt_auf_terminate_zurueck(monkeypatch):
         def terminate(self):
             getoetet.append("terminate")
 
-    def explodiere(*a):
+    def explodiere(pid):
+        getoetet.append(("getpgid-versucht", pid))
         raise ProcessLookupError()
 
     monkeypatch.setattr(jobs.os, "name", "posix")
-    monkeypatch.setattr(jobs.os, "getpgid", explodiere)
+    monkeypatch.setattr(jobs.os, "getpgid", explodiere, raising=False)
+    monkeypatch.setattr(jobs.os, "killpg", lambda pgid, sig: None, raising=False)
     jobs._kill_tree(FakeProc())
-    assert getoetet == ["terminate"]
+    assert getoetet == [("getpgid-versucht", 4711), "terminate"]
