@@ -1,6 +1,6 @@
 import { useRef } from 'react'
 import { Link } from 'react-router-dom'
-import { Upload, Play, Pencil } from 'lucide-react'
+import { ArrowLeft, Upload, Play, Pencil } from 'lucide-react'
 import type { JobPhases, Project } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { FileRow } from './FileRow'
@@ -22,7 +22,13 @@ export function Sidebar({ projects, loading, active, onOpen, onUpload, onTranscr
   return (
     <div className="p-3">
       <h1 className="mb-3 text-lg font-semibold">Transkribor</h1>
-      {backTo && <Link to={backTo} className="mb-2 block text-sm text-muted-foreground hover:underline">‹ zurück</Link>}
+      {backTo && (
+        <Link to={backTo}
+          className="mb-2 inline-flex items-center gap-1.5 text-sm text-muted-foreground
+                     transition-colors hover:text-foreground">
+          <ArrowLeft className="size-3.5" aria-hidden="true" /> zurück
+        </Link>
+      )}
       <input ref={fileInput} type="file" hidden accept="audio/*,.mp3,.wav,.m4a,.aac,.flac,.ogg,.opus,.wma,.mp4"
         onChange={e => { const f = e.target.files?.[0]; if (f) onUpload(pendingProject.current, f); e.target.value = '' }} />
       {projects.length === 0 && loading && (
