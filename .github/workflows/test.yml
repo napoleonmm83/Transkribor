@@ -1,0 +1,76 @@
+name: Tests
+
+# Laeuft bei jedem PR und auf master. Bis hierher lief KEINE der drei Suiten automatisch —
+# nur `npm run test:electron`, und das erst im Release-Workflow, also lange nach dem Merge.
+# 369 von 403 Tests haben sich darauf verlassen, dass jemand sie von Hand tippt.
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+# Ein neuer Push auf denselben PR macht den vorigen Lauf wertlos.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    name: Python (242)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+
+      # BEWUSST ohne torch, openai-whisper, pyannote.audio und yt-dlp: die sind alle nur
+      # INNERHALB von Funktionen importiert (webtool/device.py erklaert warum), die Suite
+      # laeuft ohne sie durch — 40 MB statt mehreren GB, 7s statt Minuten.
+      #
+      # Das ist kein Sparen, sondern ein Waechter: schleicht sich ein `import torch` auf
+      # Modulebene ein, faellt dieser Job um. Genau die Regression, die man sonst erst
+      # bemerkt, wenn die Einstellungsseite in einer halben Umgebung nicht mehr laedt.
+      - run: pip install fastapi python-multipart pytest httpx
+
+      - run: python -m pytest webtool -q
+
+  frontend:
+    name: Frontend (127)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: webtool/frontend/package-lock.json
+
+      - run: npm ci --no-audit --fund=false
+        working-directory: webtool/frontend
+
+      - run: npm test
+        working-directory: webtool/frontend
+
+      # Nicht redundant zu `npm test`: vitest transpiliert nur, `build` faehrt `tsc -b`
+      # davor. Typfehler in ungetesteten Pfaden faellt sonst niemandem auf.
+      - run: npm run build
+        working-directory: webtool/frontend
+
+  electron:
+    name: Electron (34)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci --no-audit --fund=false
+
+      - run: npm run test:electron
+
+      # Prueft die Versionslogik, die ueber Nummern entscheidet, die man nach dem
+      # Veroeffentlichen nicht zurueckholt. Lief bisher nur im Release-Workflow — also erst,
+      # wenn ein Fehler darin schon teuer geworden waere.
+      - run: bash scripts/versionshoehe.test.sh
