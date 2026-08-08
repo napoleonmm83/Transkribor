@@ -25,7 +25,7 @@ export function PageHeader({ rubrik, titel, zurueck, zurueckText = 'Übersicht',
         // Eigene Zeile statt neben dem Titel: als Nachbar des H1 las sich der Pfeil wie ein
         // Teil des Titels. -mx-2 haelt den Text trotz Klickflaeche in der Fluchtlinie.
         <Link to={zurueck}
-          className="-mx-2 mb-2 inline-flex items-center gap-1.5 rounded px-2 py-1 text-sm
+          className="-mx-2 mb-2 inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-sm
                      text-muted-foreground transition-colors hover:text-foreground">
           <ArrowLeft className="size-4" aria-hidden="true" />
           {zurueckText}

@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { Upload } from 'lucide-react'
+import { Check, Loader2, TriangleAlert, Upload } from 'lucide-react'
 import { uploadAudio } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import type { StartJob } from '@/lib/types'
@@ -47,8 +47,11 @@ export function UploadDropzone({ project, onDone }: { project: string; onDone?: 
         onDragOver={e => { e.preventDefault(); setOver(true) }}
         onDragLeave={() => setOver(false)}
         onDrop={e => { e.preventDefault(); setOver(false); upload(Array.from(e.dataTransfer.files)) }}
-        className={cn('flex items-center justify-center gap-2 rounded border border-dashed p-6 text-sm text-muted-foreground cursor-pointer',
-          over && 'border-primary bg-accent')}
+        // blatt = dieselbe Flaeche wie die Dateiliste darunter; nur die Kante ist gestrichelt,
+        // weil das die Konvention fuer "hier ablegen" ist. Vorher: eigener 4px-Radius und
+        // kein Kartenuntergrund — zwei Kaesten uebereinander, die sichtbar nicht zusammengehoerten.
+        className={cn('blatt blatt-klickbar flex cursor-pointer items-center justify-center gap-2 border-dashed p-6 text-sm text-muted-foreground',
+          over && 'border-primary bg-accent text-accent-foreground')}
       >
         <div className="text-center">
           <div className="flex items-center justify-center gap-2"><Upload className="size-4" /> Audio hierher ziehen oder klicken</div>
@@ -61,13 +64,16 @@ export function UploadDropzone({ project, onDone }: { project: string; onDone?: 
       {items.length > 0 && (
         <ul className="mt-2 space-y-0.5 text-xs">
           {items.map(it => (
-            <li key={it.name} className="flex justify-between gap-2">
+            <li key={it.name} className="flex items-center justify-between gap-2">
               <span className="truncate">{it.name}</span>
-              <span className="text-muted-foreground">
-                {it.status === 'uploading' && 'lädt…'}
-                {it.status === 'done' && '✓'}
+              {/* Letztes Glyph-als-Symbol im Projekt: '✓' erbte die Textfarbe nicht und hiess
+                  fuer einen Screenreader nichts. Gleiche Bildsprache wie FileStatusPill. */}
+              <span className={cn('inline-flex shrink-0 items-center gap-1.5',
+                it.status === 'error' ? 'text-destructive' : 'text-muted-foreground')}>
+                {it.status === 'uploading' && <><Loader2 className="size-3 animate-spin" aria-hidden="true" /> lädt…</>}
+                {it.status === 'done' && <><Check className="size-3" aria-hidden="true" /> geladen</>}
                 {it.status === 'exists' && 'existiert bereits'}
-                {it.status === 'error' && `Fehler: ${it.msg ?? ''}`}
+                {it.status === 'error' && <><TriangleAlert className="size-3" aria-hidden="true" /> {it.msg ?? 'Fehler'}</>}
               </span>
             </li>
           ))}

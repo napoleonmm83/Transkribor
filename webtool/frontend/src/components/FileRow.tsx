@@ -15,11 +15,14 @@ export function FileRow({ file, active, onOpen, onCorrectFile, phase, state, job
   /** Nicht leer = kein nutzbarer KI-Anbieter: Korrigieren deaktiviert, Text als Tooltip. */
   aiReason?: string;
 }) {
+  // Gleiche Beschriftung und Symbolgroesse wie in der Arbeitsflaeche: es ist derselbe Knopf,
+  // nur in einer dichteren Umgebung. Der Dateiname im Namen macht ihn in einer Liste
+  // unterscheidbar — "Nur diese Datei" ist vorgelesen in Zeile 7 von 12 wertlos.
   const button = (
-    <Button size="icon" variant="ghost" className="size-6" title="Nur diese Datei korrigieren"
-      aria-label="Nur diese Datei korrigieren" disabled={!!aiReason}
+    <Button size="icon" variant="ghost" className="size-8" title="Nur diese Datei korrigieren"
+      aria-label={`Nur „${file.base}" korrigieren`} disabled={!!aiReason}
       onClick={e => { e.stopPropagation(); if (!file.has_edit) onCorrectFile(false) }}>
-      <Pencil className="size-3" />
+      <Pencil className="size-3.5" />
     </Button>
   )
   return (
@@ -28,8 +31,9 @@ export function FileRow({ file, active, onOpen, onCorrectFile, phase, state, job
         if (e.target !== e.currentTarget) return
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen() }
       }}
-      className={cn('flex items-center gap-2 rounded px-2 py-1 text-sm cursor-pointer hover:bg-accent',
-        active && 'bg-accent')}>
+      className={cn('flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm',
+        'transition-colors hover:bg-muted/60 outline-none focus-visible:ring-2 focus-visible:ring-ring',
+        active && 'bg-accent text-accent-foreground hover:bg-accent')}>
       <span className="flex-1 truncate">{file.base}</span>
       <FileStatusPill file={file} active={phase} state={state} jobRunning={jobRunning} />
       {/* title am Wrapper: ein deaktivierter Knopf hat pointer-events:none und zeigt

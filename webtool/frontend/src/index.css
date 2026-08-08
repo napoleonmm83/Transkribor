@@ -170,6 +170,13 @@
     }
 }
 
+/* ALLE eigenen Klassen liegen in @layer components — und das ist kein Ordnungsfimmel:
+   ungeschichtetes CSS schlaegt in der Kaskade JEDE Utility aus @layer utilities. Vorher
+   gewann `.rubrik` gegen ein danebenstehendes `normal-case`, und `.blatt` haette jedes
+   `border-dashed` uebersteuert — die Utility stand im Markup, wirkte aber nicht. In dieser
+   Schicht gilt wieder die erwartete Reihenfolge: Utility sticht Komponente. */
+@layer components {
+
 /* Rubrik: die kleine gesperrte Versalzeile ueber einem Abschnitt. Traegt die Gliederung,
    ohne eine weitere Schriftgroesse in die Hierarchie einzufuehren. */
 .rubrik {
@@ -228,6 +235,8 @@ a.blatt:hover, .blatt-klickbar:hover {
   border-radius: 2px;
 }
 .dark .u-red { color: #F87171; background: color-mix(in oklab, currentColor 16%, transparent); }
+
+}  /* @layer components */
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }

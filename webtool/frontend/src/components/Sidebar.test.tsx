@@ -26,7 +26,8 @@ describe('Sidebar', () => {
     render(<Sidebar projects={projects} active={null} onOpen={vi.fn()} onUpload={vi.fn()}
       onTranscribe={vi.fn()} onCorrect={vi.fn()} onCorrectFile={vi.fn()} aiReason={grund} />)
     expect(screen.getByLabelText('Korrigieren + Sprecher')).toBeDisabled()
-    expect(screen.getByLabelText('Nur diese Datei korrigieren')).toBeDisabled()
+    // Der Name traegt den Dateinamen: in einer Liste ist "Nur diese Datei" vorgelesen wertlos.
+    expect(screen.getByLabelText('Nur „a" korrigieren')).toBeDisabled()
     expect(screen.getAllByTitle(grund)).toHaveLength(2)           // Grund als Tooltip an beiden
     expect(screen.getByLabelText('Transkribieren')).not.toBeDisabled()  // nur die Korrektur
   })
