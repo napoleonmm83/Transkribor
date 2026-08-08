@@ -33,8 +33,8 @@ jobs:
               dist/*.deb
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
       # Umgebungsbefund VOR dem Bau: scheitert der Lauf, ist das die erste Frage.
@@ -56,13 +56,16 @@ jobs:
 
       # Das Frontend wird mitgebaut: der Installer liefert webtool/static aus,
       # dort steht sonst nichts (git-ignoriert, reiner Build-Output).
+      #
+      # macOS-Signatur: KEIN CSC_IDENTITY_AUTO_DISCOVERY=false mehr. Das liess
+      # electron-builder das Signieren ganz aus — und weil das Umpacken die von
+      # Electron mitgelieferte Signatur ohnehin zerstoert, kam die App beim Nutzer
+      # ohne gueltige Signatur an: macOS meldet dann „ist beschaedigt" und bietet
+      # KEIN Oeffnen-trotzdem an. `mac.identity: "-"` (package.json) signiert
+      # stattdessen ad-hoc — ohne Zertifikat, aber gueltig. Signatur mit Developer
+      # ID + Notarisierung bleibt eine eigene, spaetere Spec.
       - run: npm run dist
         env:
-          # Ohne Entwicklerzertifikat wuerde electron-builder auf macOS nach einer
-          # Identitaet suchen und scheitern. Das Ergebnis ist unsigniert — Gatekeeper
-          # verlangt beim ersten Start Rechtsklick > Oeffnen. Signatur/Notarisierung
-          # sind bewusst eine eigene, spaetere Spec.
-          CSC_IDENTITY_AUTO_DISCOVERY: false
           DEBUG: electron-builder          # jeder Schritt benannt, statt nur "exit 1"
 
       # Was ist tatsaechlich entstanden? Ohne diese Liste raet man bei einem leeren Upload.
@@ -71,7 +74,7 @@ jobs:
         shell: bash
         run: ls -la dist/ || echo "dist/ existiert nicht"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: installer-${{ matrix.name }}
           path: ${{ matrix.muster }}
@@ -82,7 +85,7 @@ jobs:
       # eines gescheiterten Downloads.
       - name: Fehlerspuren sichern
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: fehlerspur-${{ matrix.name }}
           path: |
@@ -99,8 +102,8 @@ jobs:
     needs: bauen
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
         with:
           path: artefakte
           merge-multiple: true
@@ -129,7 +132,7 @@ jobs:
             --title "Transkribor ${{ steps.name.outputs.tag }}" \
             --notes "Unsignierte Testbauten aus \`${GITHUB_REF_NAME}\` (${GITHUB_SHA:0:7}).
 
-          **macOS:** unsigniert — beim ersten Start Rechtsklick auf die App > *Öffnen*, sonst blockt Gatekeeper.
+          **macOS:** ad-hoc signiert, nicht notarisiert — beim ersten Start blockt Gatekeeper. Rechtsklick auf die App > *Öffnen*; wird das nicht angeboten (macOS 15+), einmal starten und dann *Systemeinstellungen > Datenschutz & Sicherheit > Dennoch öffnen*.
           **Windows:** unsigniert — SmartScreen zeigt *Weitere Informationen* > *Trotzdem ausführen*.
 
           Beim ersten Start richtet die App die Python-Seite selbst ein (mehrere GB, 10–30 Minuten)." \
