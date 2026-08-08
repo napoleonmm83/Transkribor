@@ -1,6 +1,21 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": [
+    "group:allNonMajor buendelt Minor+Patch aller Manager in EINEN PR. Ohne das kuendigte",
+    "Renovate 15 Einzel-PRs fuer den ersten Lauf an — bei einem Ein-Personen-Projekt liest",
+    "die niemand einzeln durch, und was niemand liest, wird durchgewinkt. Majors bleiben",
+    "bewusst einzeln: dort steckt das Risiko, und dort will man den Changelog sehen."
+  ],
   "extends": [
-    "config:recommended"
+    "config:recommended",
+    "group:allNonMajor"
+  ],
+  "packageRules": [
+    {
+      "description": "Die CI-Python-Version folgt der venv (3.13), nicht dem Neuesten. Der Python-Job laeuft bewusst OHNE torch — ein Sprung auf 3.14 bliebe also gruen, waehrend die echte Umgebung weiter 3.13 faehrt und torch cu128 dort womoeglich gar kein Rad hat. Ein CI, das eine Version testet, die niemand ausfuehrt, ist schlimmer als keines.",
+      "matchManagers": ["github-actions"],
+      "matchDepNames": ["python"],
+      "enabled": false
+    }
   ]
 }
