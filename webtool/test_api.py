@@ -332,7 +332,19 @@ def test_spa_serves_index_for_deep_link(client):
 
 # ---- Auto-Korrektur nach der Transkription ----
 
-def test_autocorrect_startet_correct_run(client, monkeypatch):
+@pytest.fixture
+def mit_anbieter(monkeypatch):
+    """_autocorrect bricht seit dem ai_ready-Gate ab, wenn `llm.available()` falsch ist.
+
+    Ohne diesen Patch haengen die Tests daran, ob auf dem Rechner `claude` installiert ist:
+    beim Entwickler ist es das, auf dem CI-Runner nicht. Dort brachen sie in Zeile 1 von
+    _autocorrect ab und pruefte keiner mehr, was er behauptet — gruen aus dem falschen Grund.
+    """
+    from webtool import app as app_mod
+    monkeypatch.setattr(app_mod.llm, "available", lambda: (True, ""))
+
+
+def test_autocorrect_startet_correct_run(client, monkeypatch, mit_anbieter):
     from webtool import app as app_mod
     gestartet = {}
     monkeypatch.setattr(app_mod.jobs, "start",
@@ -351,7 +363,7 @@ def test_autocorrect_abschaltbar(client, monkeypatch):
     app_mod._autocorrect("Demo")
 
 
-def test_autocorrect_reiht_sich_hinter_eine_laufende_korrektur(client, monkeypatch):
+def test_autocorrect_reiht_sich_hinter_eine_laufende_korrektur(client, monkeypatch, mit_anbieter):
     """Die laufende Runde kennt die eben transkribierten Dateien nicht — also anhaengen,
     statt die Auto-Korrektur stillschweigend fallen zu lassen."""
     from webtool import app as app_mod
@@ -370,7 +382,7 @@ def test_autocorrect_reiht_sich_hinter_eine_laufende_korrektur(client, monkeypat
     assert versuche == ["correct", "correct"]           # zweiter Versuch lief
 
 
-def test_autocorrect_versucht_sofort_neu_wenn_der_blocker_schon_weg_ist(client, monkeypatch):
+def test_autocorrect_versucht_sofort_neu_wenn_der_blocker_schon_weg_ist(client, monkeypatch, mit_anbieter):
     from webtool import app as app_mod
     versuche = []
 
