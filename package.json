@@ -10,7 +10,8 @@
     "build:frontend": "npm --prefix webtool/frontend install && npm --prefix webtool/frontend run build",
     "start": "npm run build:frontend && electron .",
     "dist": "npm run build:frontend && electron-builder --publish never",
-    "release": "npm run build:frontend && electron-builder --publish always"
+    "release": "npm run build:frontend && electron-builder --publish always",
+    "test:electron": "node --test electron/*.test.js"
   },
   "devDependencies": {
     "electron": "^43.3.0",
@@ -51,6 +52,16 @@
         }
       ],
       "artifactName": "${productName}-Setup-${version}.${ext}"
+    },
+    "mac": {
+      "target": [{ "target": "dmg", "arch": ["arm64"] }],
+      "category": "public.app-category.productivity",
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
+    },
+    "linux": {
+      "target": ["AppImage", "deb"],
+      "category": "AudioVideo",
+      "artifactName": "${productName}-${version}.${ext}"
     },
     "nsis": {
       "oneClick": false,
