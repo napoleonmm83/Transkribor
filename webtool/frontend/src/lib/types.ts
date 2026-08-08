@@ -1,5 +1,6 @@
 export type Word = { word: string; start: number | null; end: number | null; probability: number };
-export type Flags = { hallucination: boolean; silence: boolean; low_conf: boolean };
+/** Aeltere edit.json fuehren noch ein `silence` mit; das liest schlicht niemand mehr. */
+export type Flags = { hallucination: boolean; low_conf: boolean };
 export type Segment = {
   id: number; start: number; end: number; speaker: string;
   raw_text: string; text: string; words: Word[]; flags: Flags; note: string;
@@ -16,7 +17,6 @@ export type ActiveJob = { id: string; kind: string };
 export type Project = { name: string; files: ProjectFile[]; active_jobs?: ActiveJob[] };
 export type JobStatus = { status: 'running' | 'done' | 'error' | 'cancelled'; lines: string[]; kind?: string };
 export type StartJob = { job_id: string; started: boolean };
-export type Thresholds = { yellow: number; red: number };
 export type ProviderInfo = {
   id: string; label: string; needs_key: boolean;
   base: string; default_model: string; keys_url: string; hint: string;

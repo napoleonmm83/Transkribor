@@ -12,16 +12,16 @@ const doc: EditDoc = {
   human_edited: false, context: '', speakers: ['Interviewer', 'Befragte Person'],
   segments: [
     { id: 1, start: 0, end: 2, speaker: 'Interviewer', raw_text: 'w0 w1 w2', text: 'w0 w1 w2',
-      words: mkWords([1, 0.2, 1]), flags: { hallucination: false, silence: false, low_conf: false }, note: '' },
+      words: mkWords([1, 0.2, 1]), flags: { hallucination: false, low_conf: false }, note: '' },
     { id: 2, start: 2, end: 4, speaker: 'Befragte Person', raw_text: 'hallo', text: 'hallo',
-      words: mkWords([1]), flags: { hallucination: false, silence: false, low_conf: false }, note: '' },
+      words: mkWords([1]), flags: { hallucination: false, low_conf: false }, note: '' },
   ],
   annotations: [],
 }
 
 describe('Transcript', () => {
   it('rendert Sprecher-Labels und markiert unkorrigierte unsichere Wörter', () => {
-    render(<TooltipProvider><Transcript doc={doc} thr={{ yellow: 0.6, red: 0.4 }} activeId={null}
+    render(<TooltipProvider><Transcript doc={doc} activeId={null}
       onPlaySeg={vi.fn()} onPlayTurn={vi.fn()} updateSegment={vi.fn()} renameSpeaker={vi.fn()} /></TooltipProvider>)
     // Sprecher-Name erscheint sowohl im Block-Kopf als auch in der Per-Segment-Combobox.
     expect(screen.getAllByText(/Interviewer/).length).toBeGreaterThan(0)
@@ -31,7 +31,7 @@ describe('Transcript', () => {
 
   it('Name im Block-Kopf benennt global um, nicht nur das Segment', () => {
     const renameSpeaker = vi.fn(), updateSegment = vi.fn()
-    render(<TooltipProvider><Transcript doc={doc} thr={{ yellow: 0.6, red: 0.4 }} activeId={null}
+    render(<TooltipProvider><Transcript doc={doc} activeId={null}
       onPlaySeg={vi.fn()} onPlayTurn={vi.fn()} updateSegment={updateSegment} renameSpeaker={renameSpeaker} /></TooltipProvider>)
     fireEvent.click(screen.getAllByTitle('Sprecher im ganzen Transkript umbenennen')[0])
     const input = screen.getByPlaceholderText('Sprecher…')
@@ -43,7 +43,7 @@ describe('Transcript', () => {
 
   it('zeigt die Zusammenfassung vor dem Gespräch', () => {
     render(<TooltipProvider><Transcript doc={{ ...doc, summary: 'Es geht um Brot.' }}
-      thr={{ yellow: 0.6, red: 0.4 }} activeId={null}
+      activeId={null}
       onPlaySeg={vi.fn()} onPlayTurn={vi.fn()} updateSegment={vi.fn()} renameSpeaker={vi.fn()} /></TooltipProvider>)
     const zus = screen.getByText('Es geht um Brot.')
     expect(zus).toBeInTheDocument()
@@ -58,13 +58,13 @@ describe('Transcript', () => {
 
   it('ohne Zusammenfassung keine leere Rubrik', () => {
     // Vor diesem Feature geschriebene edit.json haben den Schluessel gar nicht.
-    render(<TooltipProvider><Transcript doc={doc} thr={{ yellow: 0.6, red: 0.4 }} activeId={null}
+    render(<TooltipProvider><Transcript doc={doc} activeId={null}
       onPlaySeg={vi.fn()} onPlayTurn={vi.fn()} updateSegment={vi.fn()} renameSpeaker={vi.fn()} /></TooltipProvider>)
     expect(screen.queryByText('Zusammenfassung')).not.toBeInTheDocument()
   })
 
   it('zeigt "Keine Datei geöffnet" nicht während des Ladens', () => {
-    render(<Transcript doc={null} loading thr={{ yellow: 0.6, red: 0.4 }} activeId={null}
+    render(<Transcript doc={null} loading activeId={null}
       onPlaySeg={vi.fn()} onPlayTurn={vi.fn()} updateSegment={vi.fn()} renameSpeaker={vi.fn()} />)
     expect(screen.queryByText(/Keine Datei geöffnet/)).not.toBeInTheDocument()
   })

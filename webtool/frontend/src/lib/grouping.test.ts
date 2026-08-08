@@ -4,7 +4,7 @@ import type { EditDoc, Segment } from './types'
 
 const seg = (id: number, speaker: string): Segment => ({
   id, start: id, end: id + 1, speaker, raw_text: '', text: '', words: [],
-  flags: { hallucination: false, silence: false, low_conf: false }, note: '',
+  flags: { hallucination: false, low_conf: false }, note: '',
 })
 
 describe('groupIntoTurns', () => {

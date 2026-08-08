@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import type { EditDoc, Segment, Thresholds } from '@/lib/types'
+import type { EditDoc, Segment } from '@/lib/types'
 import { groupIntoTurns } from '@/lib/grouping'
 import { SpeakerTurn } from './SpeakerTurn'
 
-export function Transcript({ doc, loading, thr, activeId, onPlaySeg, onPlayTurn, updateSegment, renameSpeaker }: {
-  doc: EditDoc | null; loading?: boolean; thr: Thresholds; activeId: number | null;
+export function Transcript({ doc, loading, activeId, onPlaySeg, onPlayTurn, updateSegment, renameSpeaker }: {
+  doc: EditDoc | null; loading?: boolean; activeId: number | null;
   onPlaySeg: (s: Segment) => void; onPlayTurn: (segs: Segment[]) => void;
   updateSegment: (id: number, patch: Partial<Segment>) => void;
   renameSpeaker: (from: string, to: string) => void;
@@ -46,7 +46,7 @@ export function Transcript({ doc, loading, thr, activeId, onPlaySeg, onPlayTurn,
           </section>
         )}
         {turns.map(t => (
-          <SpeakerTurn key={t.key} turn={t} thr={thr} activeId={activeId}
+          <SpeakerTurn key={t.key} turn={t} activeId={activeId}
             onPlaySeg={onPlaySeg} onPlayTurn={onPlayTurn}
             updateSegment={updateSegment} renameSpeaker={renameSpeaker} speakerOptions={speakerOptions} />
         ))}

@@ -4,9 +4,9 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { FLAGS } from './SegmentView'
 import { ThemeToggle } from './ThemeToggle'
 
-export function Toolbar({ title, dirty, canSave, onSave, onExport, settings }: {
+export function Toolbar({ title, dirty, canSave, onSave, onExport }: {
   title: string; dirty: boolean; canSave: boolean;
-  onSave: () => void; onExport: () => void; settings: React.ReactNode;
+  onSave: () => void; onExport: () => void;
 }) {
   return (
     // Kein sticky noetig: EditorView setzt die Leiste als eigene Grid-Zeile, gescrollt wird
@@ -22,21 +22,28 @@ export function Toolbar({ title, dirty, canSave, onSave, onExport, settings }: {
       <div className="flex-1" />
       <Tooltip>
         <TooltipTrigger asChild>
-          <Button size="icon" variant="ghost" aria-label="Flags-Legende"><CircleHelp className="size-4" /></Button>
+          <Button size="icon" variant="ghost" aria-label="Legende"><CircleHelp className="size-4" /></Button>
         </TooltipTrigger>
-        {/* Legende aus derselben Quelle wie die Segmente (FLAGS) — vorher standen die
-            Symbole doppelt im Code und konnten auseinanderlaufen. */}
-        <TooltipContent>
-          <span className="flex flex-col gap-1">
+        {/* Symbole aus derselben Quelle wie die Segmente (FLAGS) — vorher standen sie doppelt
+            im Code und konnten auseinanderlaufen. Die Wortfarben stehen seit dem Wegfall der
+            Schwellen-Schieber nur noch hier: sonst erklaert sie im Editor nichts mehr. */}
+        <TooltipContent className="max-w-80">
+          <span className="flex flex-col gap-2.5">
             {FLAGS.map(f => (
-              <span key={f.key} className="flex items-center gap-1.5">
-                <f.icon className="size-3" aria-hidden="true" /> {f.titel}
+              <span key={f.key} className="flex gap-1.5">
+                <f.icon className="mt-0.5 size-3 shrink-0" aria-hidden="true" />
+                <span>{f.titel} — <span className="opacity-70">{f.erklaerung}</span></span>
               </span>
             ))}
+            <span className="border-t pt-2 opacity-70">
+              Im unkorrigierten Text markiert die Farbe, wie sicher sich Whisper beim einzelnen
+              Wort war: <span className="u-yellow">unsicher</span> unter 0.60,{' '}
+              <span className="u-red">sehr unsicher</span> unter 0.40. Der genaue Wert steht im
+              Tooltip des Wortes.
+            </span>
           </span>
         </TooltipContent>
       </Tooltip>
-      {settings}
       <Button size="sm" variant="secondary" disabled={!canSave} onClick={onSave}>
         <Save className="size-4" /> Speichern
       </Button>

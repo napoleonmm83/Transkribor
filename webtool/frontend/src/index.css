@@ -236,6 +236,14 @@ a.blatt:hover, .blatt-klickbar:hover {
 }
 .dark .u-red { color: #F87171; background: color-mix(in oklab, currentColor 16%, transparent); }
 
+/* Der Tooltip liegt auf `bg-foreground`, also immer auf der INVERTIERTEN Flaeche. Die Muster
+   in der Legende brauchen dort die jeweils andere Fassung — sonst steht das helle Braun des
+   Hell-Modus auf fast schwarzem Grund und ist genau da unlesbar, wo es die Farbe erklaeren soll. */
+[data-slot="tooltip-content"] .u-yellow { color: #FBBF24; }
+[data-slot="tooltip-content"] .u-red { color: #F87171; }
+.dark [data-slot="tooltip-content"] .u-yellow { color: #B45309; }
+.dark [data-slot="tooltip-content"] .u-red { color: #B91C1C; }
+
 }  /* @layer components */
 
 @media (prefers-reduced-motion: reduce) {

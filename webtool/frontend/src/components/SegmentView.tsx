@@ -1,29 +1,32 @@
 import { useState } from 'react'
-import { CircleHelp, Play, ScanSearch, TriangleAlert, VolumeX } from 'lucide-react'
-import type { Segment, Thresholds } from '@/lib/types'
+import { CircleHelp, Play, ScanSearch, TriangleAlert } from 'lucide-react'
+import type { Segment } from '@/lib/types'
 import { isCorrected, tokenizeUncertain } from '@/lib/uncertainty'
 import { UncertainWord } from './UncertainWord'
 import { SegmentEditor } from './SegmentEditor'
 
 function fmt(t: number) { const s = Math.max(0, t | 0); return `${(s / 60) | 0}:${String(s % 60).padStart(2, '0')}` }
 
-/** Die drei Segment-Flags. Als Emoji (⚠ 🔇) rendern sie je nach System in einer fremden
- *  Schrift, erben die Textfarbe nicht und heissen fuer einen Screenreader gar nichts. */
+/** Die Segment-Flags. Als Emoji (⚠ 🔇) rendern sie je nach System in einer fremden
+ *  Schrift, erben die Textfarbe nicht und heissen fuer einen Screenreader gar nichts.
+ *  `erklaerung` steht hier statt in der Legende: ein Symbolname allein ("Halluzination")
+ *  sagt niemandem, was er mit dem Segment tun soll. */
 export const FLAGS = [
-  { key: 'hallucination', icon: TriangleAlert, titel: 'Halluzination' },
-  { key: 'silence', icon: VolumeX, titel: 'Stille' },
-  { key: 'low_conf', icon: CircleHelp, titel: 'geringe Konfidenz' },
+  { key: 'hallucination', icon: TriangleAlert, titel: 'Halluzination',
+    erklaerung: 'Auffällig repetitiver Text — Whisper hat sich womöglich verhakt. Gegen die Aufnahme prüfen.' },
+  { key: 'low_conf', icon: CircleHelp, titel: 'Geringe Konfidenz',
+    erklaerung: 'Whisper war im ganzen Segment unsicher, nicht nur bei einzelnen Wörtern.' },
 ] as const
 
-export function SegmentView({ seg, thr, active, onPlay, updateSegment }: {
-  seg: Segment; thr: Thresholds; active: boolean; onPlay: () => void;
+export function SegmentView({ seg, active, onPlay, updateSegment }: {
+  seg: Segment; active: boolean; onPlay: () => void;
   updateSegment: (id: number, patch: Partial<Segment>) => void;
 }) {
   const [editing, setEditing] = useState(false)
   const [showRaw, setShowRaw] = useState(false)
   const corrected = isCorrected(seg)
   const flags = FLAGS.filter(f => seg.flags[f.key])
-  const rawTokens = tokenizeUncertain(seg, thr).map((t, i) => t.cls
+  const rawTokens = tokenizeUncertain(seg).map((t, i) => t.cls
     ? <UncertainWord key={i} word={seg.words[i]} cls={t.cls} />
     : <span key={i}>{t.text}</span>)
   const body = corrected ? seg.text : rawTokens
@@ -41,7 +44,7 @@ export function SegmentView({ seg, thr, active, onPlay, updateSegment }: {
         <span className="mr-1.5 inline-flex select-none items-center gap-1 align-top">
           {/* Name und Tooltip am Wrapper: lucide-Icons nehmen kein title-Prop. */}
           {flags.map(f => (
-            <span key={f.key} role="img" aria-label={f.titel} title={f.titel}
+            <span key={f.key} role="img" aria-label={f.titel} title={`${f.titel} — ${f.erklaerung}`}
               className="inline-flex text-amber-600 dark:text-amber-500">
               <f.icon className="size-3" aria-hidden="true" />
             </span>
