@@ -54,6 +54,31 @@ jobs:
 
       - run: npm run test:electron        # billig, und schlaegt vor dem teuren Bau fehl
 
+      # electron-updater vergleicht die Version aus der package.json, NICHT den Tag. Ein Tag
+      # v0.2.0 auf einer package.json mit 0.1.0 baut Installer, die sich als 0.1.0 ausgeben —
+      # das Update erreicht dann nie jemanden, und niemand sieht warum. Also hier abbrechen.
+      - name: Tag und package.json muessen uebereinstimmen
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          tag="${GITHUB_REF#refs/tags/v}"
+          pkg="$(node -p "require('./package.json').version")"
+          if [ "$tag" != "$pkg" ]; then
+            echo "Tag v$tag passt nicht zu package.json $pkg — Version vor dem Taggen anheben."
+            exit 1
+          fi
+          echo "Tag und Version stimmen ueberein: $pkg"
+
+      # Ohne Tag ist es ein Testbau: die Laufnummer in die Version stempeln, sonst heissen die
+      # Installer aus zehn Laeufen gleich und man weiss nicht, welchen man geladen hat.
+      # Nur im Runner-Arbeitsverzeichnis — commitet wird das nie.
+      - name: Testbau kennzeichnen
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        shell: bash
+        run: |
+          npm pkg set "version=$(node -p "require('./package.json').version")-build${GITHUB_RUN_NUMBER}"
+          echo "Version fuer diesen Bau: $(node -p "require('./package.json').version")"
+
       # Das Frontend wird mitgebaut: der Installer liefert webtool/static aus,
       # dort steht sonst nichts (git-ignoriert, reiner Build-Output).
       #
