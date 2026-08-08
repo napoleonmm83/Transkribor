@@ -125,6 +125,10 @@ Die Korrektur hing fest am Claude-Code-Abo; jetzt wählt der Nutzer Anbieter + M
   `com.apple.security.cs.disable-library-validation`, und nötig ist er erst zur Notarisierung.
   Eine bereits geladene „beschädigte" App repariert man lokal mit
   `xattr -dr com.apple.quarantine <App>` + `codesign --force --deep --sign - <App>`.
+  **Preis der ad-hoc-Lösung: Auto-Update ist auf macOS tot** — Squirrel.Mac verlangt eine
+  echte Signatur, ad-hoc reicht laut Electron-Doku ausdrücklich nicht. `main.js` schreibt den
+  Fehlschlag deshalb ins Protokoll, statt ihn zu verschlucken (sonst bliebe ein Mac still auf
+  einer alten Version stehen). Mit Developer ID + Notarisierung läuft es ohne Codeänderung an.
 
 ## Neues Projekt anlegen
 `projekte\<NAME>\audio\` erstellen, Audio hineinlegen, optional `projekte\<NAME>\kontext.md`
