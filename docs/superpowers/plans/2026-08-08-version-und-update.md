@@ -578,8 +578,11 @@ function zeigeMit(zustand: UpdateZustand | null) {
 }
 
 describe('Abschnitt Version und Updates', () => {
+  beforeEach(() => vi.clearAllMocks())
+
   it('ohne Electron erscheint der Abschnitt gar nicht', async () => {
     zeigeMit(null)
+    await screen.findByText(/Qualität der Transkription/i)
     expect(screen.queryByText(/Version und Updates/)).toBeNull()
   })
 
