@@ -6,13 +6,15 @@
  * Das Fenster kommt ZUERST, nicht der Server: die Einrichtung dauert beim ersten Mal Minuten,
  * und ein Nutzer, der so lange auf nichts schaut, haelt die App fuer kaputt.
  */
-const { app, BrowserWindow, ipcMain, shell, dialog } = require('electron')
+const { app, BrowserWindow, ipcMain, shell } = require('electron')
 const path = require('path')
 const backend = require('./backend')
 const setup = require('./setup')
 const protokoll = require('./protokoll')
+const updater = require('./updater')
 
 let win = null
+let aktualisierer = null
 let bereit = false
 // Der Start darf nur EINMAL laufen: whenReady() prueft, und die Statusseite fragt beim Laden
 // selbst nochmal nach — ohne diesen Riegel starten zwei uvicorn-Prozesse auf zwei Ports.
@@ -82,34 +84,39 @@ ipcMain.handle('einrichten', async () => {
 
 ipcMain.handle('logs', () => backend.log())
 
+ipcMain.handle('update:status', () => aktualisierer && aktualisierer.zustand())
+ipcMain.handle('update:pruefen', () => aktualisierer && aktualisierer.pruefen())
+ipcMain.handle('update:laden', () => aktualisierer && aktualisierer.laden())
+ipcMain.handle('update:installieren', () => {
+  if (!aktualisierer) return
+  backend.stop()          // sonst bleibt uvicorn als Waise mit belegter GPU zurueck
+  aktualisierer.installieren()
+})
+
 app.whenReady().then(async () => {
   protokoll.kopf()
   fenster()
   await pruefen()
-  if (app.isPackaged) {
-    // Erst nach dem Start pruefen: ein Update-Fehler (kein Netz, privates Repo) darf den
-    // Start nie blockieren, deshalb kein Dialog — aber ins Protokoll gehoert er.
-    try {
-      const { autoUpdater } = require('electron-updater')
-      autoUpdater.logger = null
-      // Auf macOS scheitert das derzeit systematisch: Squirrel.Mac verlangt eine echte
-      // Signatur, unsere dmg ist nur ad-hoc signiert (siehe CLAUDE.md). Ohne diese Zeile
-      // bliebe der Mac still auf einer alten Version stehen, ohne dass irgendwo steht warum.
-      // Mit Developer ID + Notarisierung laeuft es hier ohne Aenderung wieder an.
-      autoUpdater.on('error', (e, nachricht) => protokoll.schreiben(`Update-Pruefung fehlgeschlagen: ${nachricht || (e && e.message) || e}`))
-      autoUpdater.on('update-downloaded', async info => {
-        const a = await dialog.showMessageBox(win, {
-          type: 'info', buttons: ['Jetzt neu starten', 'Später'], defaultId: 0,
-          message: `Transkribor ${info.version} ist bereit.`,
-          detail: 'Die neue Version wird beim Neustart installiert.',
-        })
-        if (a.response === 0) { backend.stop(); autoUpdater.quitAndInstall() }
-      })
-      autoUpdater.checkForUpdates().catch(() => {})   // schon ueber 'error' protokolliert
-    } catch (e) {
-      // Ohne Update-Feed laeuft die App normal weiter — aber auch das steht dann in der Datei.
-      protokoll.schreiben(`Update-Pruefung nicht moeglich: ${e && e.message || e}`)
-    }
+  // Update: Pruefen laeuft von selbst, Laden erst auf Klick. Der Zustand geht ins Fenster
+  // (Einstellungen), Fehler zusaetzlich ins Protokoll — ein Popup, das man wegklickt und
+  // nicht wiederfindet, gibt es bewusst nicht mehr.
+  try {
+    const { autoUpdater } = require('electron-updater')
+    autoUpdater.logger = null
+    aktualisierer = updater.erstellen({
+      autoUpdater,
+      version: app.getVersion(),
+      plattform: process.platform,
+      gepackt: app.isPackaged,
+      appimage: !!process.env.APPIMAGE,
+      aendert: z => {
+        if (z.art === 'fehler') protokoll.schreiben(`Update-Pruefung fehlgeschlagen: ${z.text}`)
+        if (win && !win.isDestroyed()) win.webContents.send('update', z)
+      },
+    })
+    aktualisierer.pruefen()
+  } catch (e) {
+    protokoll.schreiben(`Update-Pruefung nicht moeglich: ${e && e.message || e}`)
   }
 })
 
