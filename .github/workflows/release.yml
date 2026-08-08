@@ -129,7 +129,7 @@ jobs:
           ref: ${{ needs.version.outputs.ref }}
       - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 24
       # Umgebungsbefund VOR dem Bau: scheitert der Lauf, ist das die erste Frage.
       - name: Umgebung
         shell: bash
