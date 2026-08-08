@@ -238,9 +238,11 @@ a.blatt:hover, .blatt-klickbar:hover {
 
 /* Der Tooltip liegt auf `bg-foreground`, also immer auf der INVERTIERTEN Flaeche. Die Muster
    in der Legende brauchen dort die jeweils andere Fassung — sonst steht das helle Braun des
-   Hell-Modus auf fast schwarzem Grund und ist genau da unlesbar, wo es die Farbe erklaeren soll. */
-[data-slot="tooltip-content"] .u-yellow { color: #FBBF24; }
-[data-slot="tooltip-content"] .u-red { color: #F87171; }
+   Hell-Modus auf fast schwarzem Grund und ist genau da unlesbar, wo es die Farbe erklaeren soll.
+   `currentColor` fuer die Unterstreichung: sonst bliebe die Punktlinie auf dem Hell-Modus-Ton
+   stehen, waehrend die Schrift schon gedreht hat. */
+[data-slot="tooltip-content"] .u-yellow { color: #FBBF24; text-decoration-color: currentColor; }
+[data-slot="tooltip-content"] .u-red { color: #F87171; text-decoration-color: currentColor; }
 .dark [data-slot="tooltip-content"] .u-yellow { color: #B45309; }
 .dark [data-slot="tooltip-content"] .u-red { color: #B91C1C; }
 
