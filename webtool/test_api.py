@@ -471,3 +471,34 @@ def test_settings_speichert_whisper_modell(client):
 def test_settings_lehnt_unbekanntes_whisper_modell_ab(client):
     r = client.put("/api/settings", json={"whisper_model": "gibt-es-nicht"})
     assert r.status_code == 400
+
+
+# --- Auto-Korrektur mit Anbieter-Gate (Task 8) ---
+
+def test_autocorrect_startet_nicht_ohne_anbieter(client, monkeypatch):
+    """Sonst scheitert nach jedem Upload ein Korrektur-Job — der erste Eindruck der App."""
+    from webtool import app as appmod
+    gestartet = []
+    monkeypatch.setattr(appmod.llm, "available", lambda: (False, "kein claude"))
+    monkeypatch.setattr(appmod.jobs, "request",
+                        lambda *a, **k: gestartet.append(a) or ("id", True))
+    appmod._autocorrect("Testprojekt")
+    assert gestartet == []
+
+
+def test_autocorrect_startet_mit_anbieter(client, monkeypatch):
+    from webtool import app as appmod
+    gestartet = []
+    monkeypatch.setattr(appmod.llm, "available", lambda: (True, ""))
+    monkeypatch.setattr(appmod.jobs, "request",
+                        lambda *a, **k: gestartet.append(a) or ("id", True))
+    appmod._autocorrect("Testprojekt")
+    assert len(gestartet) == 1
+
+
+def test_settings_meldet_ai_ready(client, monkeypatch):
+    from webtool import app as appmod
+    monkeypatch.setattr(appmod.llm, "available", lambda: (False, "kein claude"))
+    body = client.get("/api/settings").json()
+    assert body["ai_ready"] is False
+    assert body["ai_reason"] == "kein claude"
