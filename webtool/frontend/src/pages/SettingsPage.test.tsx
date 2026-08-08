@@ -80,6 +80,13 @@ describe('SettingsPage', () => {
     expect(await screen.findByText(/auf der CPU sehr lange/i)).toBeInTheDocument()
   })
 
+  it('nennt bei fehlendem PyTorch die Umgebung statt CUDA', async () => {
+    // "Rechnet auf: PyTorch nicht installiert" plus CUDA-Hinweis war die falsche Fährte.
+    zeige({}, { device: 'cpu', name: 'PyTorch nicht installiert', torch_ok: false })
+    expect(await screen.findByText(/Umgebung ist unvollständig/)).toBeInTheDocument()
+    expect(screen.queryByText(/NVIDIA-Grafikkarte/)).not.toBeInTheDocument()
+  })
+
   it('zeigt keine CPU-Warnung, wenn eine GPU rechnet', async () => {
     zeige({ whisper_model: 'large-v3' })
     await screen.findByText(/NVIDIA RTX 5080/)
