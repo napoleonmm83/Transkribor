@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 import { KeyRound, Loader2, RefreshCw } from 'lucide-react'
 import { getHardware, getSettings, listModels, saveSettings, testSettings } from '@/lib/api'
 import { useUpdate } from '@/hooks/useUpdate'
+import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -21,6 +21,19 @@ const GRUENDE: Record<string, string> = {
   entwicklung: 'Entwicklungsmodus — Updates gibt es nur in der installierten App.',
   darwin: 'Auf macOS nicht möglich, solange die App nicht notarisiert ist.',
   'kein-appimage': 'Nur die AppImage kann sich selbst aktualisieren.',
+}
+
+/**
+ * Abschnitt als Blatt. Vorher trennten nur `border-t`-Striche — die Seite las sich als eine
+ * lange Rolle, in der Whisper-Qualitaet, KI-Anbieter und Update-Stand gleich wichtig aussahen.
+ */
+function Abschnitt({ titel, children }: { titel: string; children: React.ReactNode }) {
+  return (
+    <section className="blatt mb-6 p-5">
+      <h2 className="rubrik mb-4">{titel}</h2>
+      {children}
+    </section>
+  )
 }
 
 export function SettingsPage() {
@@ -73,20 +86,19 @@ export function SettingsPage() {
   if (!s) return <div className="mx-auto max-w-2xl p-6 text-sm text-muted-foreground">Lädt…</div>
 
   return (
-    <div className="mx-auto max-w-2xl p-6">
-      <div className="mb-3 flex items-center gap-3">
-        <Link className="text-sm text-muted-foreground hover:underline" to="/">‹ Home</Link>
-        <h1 className="text-xl font-semibold">Einstellungen</h1>
-      </div>
-      <p className="mb-6 text-sm text-muted-foreground">
+    <div className="mx-auto max-w-2xl p-6 sm:p-8">
+      <PageHeader rubrik="Transkribor" titel="Einstellungen" zurueck="/" zurueckText="Projekte" />
+      <p className="mb-8 max-w-prose text-sm text-muted-foreground">
         Womit korrigiert Transkribor die Transkripte? Die Transkription selbst läuft immer lokal
         mit Whisper auf deiner GPU — nur die Korrektur und Sprecher-Zuordnung braucht ein Sprachmodell.
       </p>
 
-      <div className="mb-8 rounded-md border p-4">
-        <label className="mb-1 block text-sm font-medium">Qualität der Transkription</label>
+      <Abschnitt titel="Transkription">
+        {/* shadcn-Select ist ein <button>, kein <select> — htmlFor greift daran nicht.
+            aria-labelledby ist hier die Bindung, die Screenreader tatsaechlich lesen. */}
+        <label id="lbl-whisper" className="mb-1.5 block text-sm font-medium">Qualität der Transkription</label>
         <Select value={s.whisper_model} onValueChange={m => speichern({ whisper_model: m })}>
-          <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+          <SelectTrigger className="w-full" aria-labelledby="lbl-whisper"><SelectValue /></SelectTrigger>
           <SelectContent>
             {s.whisper_choices.map(c => (
               <SelectItem key={c.id} value={c.id}>
@@ -100,7 +112,7 @@ export function SettingsPage() {
               CUDA-Hinweis wäre dann die falsche Fährte: es fehlt die ganze Umgebung. */}
           {!hw ? 'Gerät wird ermittelt …'
             : hw.torch_ok
-              ? <>Rechnet auf: <span className="font-medium">{hw.name}</span></>
+              ? <>Rechnet auf: <span className="font-medium text-foreground">{hw.name}</span></>
               : <span className="text-amber-600 dark:text-amber-500">
                   Die Python-Umgebung ist unvollständig (PyTorch fehlt) — bitte Transkribor
                   neu starten und die Einrichtung durchlaufen lassen.
@@ -115,108 +127,110 @@ export function SettingsPage() {
             </span>
           )}
         </p>
-      </div>
+      </Abschnitt>
 
       {!s.ai_ready && (
-        <div className="mb-6 rounded-md border border-amber-500/50 bg-amber-500/10 p-3 text-sm">
+        <div className="mb-6 rounded-lg border border-amber-500/50 bg-amber-500/10 p-4 text-sm">
           <span className="font-medium">Korrektur ist nicht eingerichtet.</span>{' '}
           {s.ai_reason} Die Transkription funktioniert trotzdem — nur die Korrektur und
           Sprecher-Zuordnung brauchen ein Sprachmodell.
         </div>
       )}
 
-      <label className="mb-1 block text-sm font-medium">Anbieter</label>
-      <Select value={s.provider} onValueChange={anbieterWechseln}>
-        <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-        <SelectContent>
-          {s.providers.map(p => <SelectItem key={p.id} value={p.id}>{p.label}</SelectItem>)}
-        </SelectContent>
-      </Select>
-      {prov?.hint && <p className="mt-1 text-xs text-muted-foreground">{prov.hint}</p>}
+      <Abschnitt titel="Korrektur">
+        <label id="lbl-anbieter" className="mb-1.5 block text-sm font-medium">Anbieter</label>
+        <Select value={s.provider} onValueChange={anbieterWechseln}>
+          <SelectTrigger className="w-full" aria-labelledby="lbl-anbieter"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {s.providers.map(p => <SelectItem key={p.id} value={p.id}>{p.label}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        {prov?.hint && <p className="mt-1.5 text-xs text-muted-foreground">{prov.hint}</p>}
 
-      {prov && !istAbo && (
-        <div className="mt-6 space-y-6">
-          {prov.id === 'custom' && (
+        {prov && !istAbo && (
+          <div className="mt-6 space-y-6">
+            {prov.id === 'custom' && (
+              <div>
+                <label htmlFor="feld-basis-url" className="mb-1.5 block text-sm font-medium">Basis-URL</label>
+                <Input id="feld-basis-url" defaultValue={s.base_url} placeholder="http://localhost:11434/v1"
+                  onBlur={e => e.target.value !== s.base_url && speichern({ base_url: e.target.value })} />
+              </div>
+            )}
+
             <div>
-              <label className="mb-1 block text-sm font-medium">Basis-URL</label>
-              <Input defaultValue={s.base_url} placeholder="http://localhost:11434/v1"
-                onBlur={e => e.target.value !== s.base_url && speichern({ base_url: e.target.value })} />
+              <label htmlFor="feld-key" className="mb-1.5 block text-sm font-medium">API-Key</label>
+              <div className="flex gap-2">
+                <Input id="feld-key" type="password" value={key} onChange={e => setKey(e.target.value)}
+                  placeholder={s.has_key ? '•••••••• (gespeichert)' : 'sk-…'} autoComplete="off" />
+                <Button variant="outline" disabled={!key}
+                  onClick={() => speichern({ api_key: key }, () => { setKey(''); toast.success('Key gespeichert') })}>
+                  <KeyRound className="size-4" /> Key speichern
+                </Button>
+              </div>
+              <p className="mt-1.5 text-xs text-muted-foreground">
+                Wird nur lokal in deinem Benutzerprofil gespeichert und nie wieder angezeigt.
+                {prov.keys_url && <> <a className="underline underline-offset-2 hover:text-foreground" href={prov.keys_url} target="_blank" rel="noreferrer">Key erstellen</a></>}
+                {s.env_key && <> · Umgebungsvariable {s.env_key} ist gesetzt.</>}
+              </p>
             </div>
-          )}
 
-          <div>
-            <label className="mb-1 block text-sm font-medium">API-Key</label>
-            <div className="flex gap-2">
-              <Input type="password" value={key} onChange={e => setKey(e.target.value)}
-                placeholder={s.has_key ? '•••••••• (gespeichert)' : 'sk-…'} autoComplete="off" />
-              <Button variant="outline" disabled={!key}
-                onClick={() => speichern({ api_key: key }, () => { setKey(''); toast.success('Key gespeichert') })}>
-                <KeyRound className="size-4" /> Key speichern
-              </Button>
-            </div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Wird nur lokal in deinem Benutzerprofil gespeichert und nie wieder angezeigt.
-              {prov.keys_url && <> <a className="underline" href={prov.keys_url} target="_blank" rel="noreferrer">Key erstellen</a></>}
-              {s.env_key && <> · Umgebungsvariable {s.env_key} ist gesetzt.</>}
-            </p>
-          </div>
-
-          <div>
-            <label className="mb-1 block text-sm font-medium">Modell</label>
-            <div className="flex gap-2">
-              {modelle.length > 0 ? (
-                <Select value={s.model} onValueChange={m => speichern({ model: m })}>
-                  <SelectTrigger className="w-full"><SelectValue placeholder="Modell wählen" /></SelectTrigger>
-                  <SelectContent>
-                    {modelle.map(m => <SelectItem key={m.id} value={m.id}>{m.label}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              ) : (
-                <Input defaultValue={s.model} placeholder="Modellname"
-                  onBlur={e => e.target.value !== s.model && speichern({ model: e.target.value })} />
-              )}
-              <Button variant="outline" onClick={modelleLaden} disabled={laedt} title="Modelle vom Anbieter laden">
-                {laedt ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
-              </Button>
+            <div>
+              <label id="lbl-modell" htmlFor="feld-modell" className="mb-1.5 block text-sm font-medium">Modell</label>
+              <div className="flex gap-2">
+                {modelle.length > 0 ? (
+                  <Select value={s.model} onValueChange={m => speichern({ model: m })}>
+                    <SelectTrigger className="w-full" aria-labelledby="lbl-modell"><SelectValue placeholder="Modell wählen" /></SelectTrigger>
+                    <SelectContent>
+                      {modelle.map(m => <SelectItem key={m.id} value={m.id}>{m.label}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input id="feld-modell" defaultValue={s.model} placeholder="Modellname"
+                    onBlur={e => e.target.value !== s.model && speichern({ model: e.target.value })} />
+                )}
+                <Button variant="outline" onClick={modelleLaden} disabled={laedt} title="Modelle vom Anbieter laden">
+                  {laedt ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
+                  <span className="sr-only">Modelle vom Anbieter laden</span>
+                </Button>
+              </div>
             </div>
           </div>
+        )}
+
+        <div className="mt-6 flex flex-wrap items-center gap-x-3 gap-y-2 border-t pt-5">
+          <Button onClick={testen} disabled={testet}>
+            {testet && <Loader2 className="size-4 animate-spin" />} Verbindung testen
+          </Button>
+          <span className="text-xs text-muted-foreground">
+            Änderungen greifen sofort — auch für schon laufende Korrekturen ab dem nächsten Block.
+          </span>
         </div>
-      )}
+      </Abschnitt>
 
       {/* Getrennt vom Anbieter: die Diarisierung laeuft lokal mit pyannote, das Token dient nur
           dem Modell-Download bei Hugging Face. */}
-      <div className="mt-8 border-t pt-6">
-        <label className="mb-1 block text-sm font-medium">Sprecher-Erkennung (optional)</label>
+      <Abschnitt titel="Sprecher-Erkennung (optional)">
         <div className="flex gap-2">
-          <Input type="password" value={hf} onChange={e => setHf(e.target.value)}
+          <Input id="feld-hf" type="password" value={hf} onChange={e => setHf(e.target.value)}
+            aria-label="Hugging-Face-Token"
             placeholder={s.has_hf_token ? '•••••••• (gespeichert)' : 'Hugging-Face-Token (hf_…)'} autoComplete="off" />
           <Button variant="outline" disabled={!hf}
             onClick={() => speichern({ hf_token: hf }, () => { setHf(''); toast.success('Token gespeichert') })}>
             Token speichern
           </Button>
         </div>
-        <p className="mt-1 text-xs text-muted-foreground">
+        <p className="mt-1.5 text-xs text-muted-foreground">
           Ohne Token ordnet Transkribor die Sprecher allein aus dem Text zu. Mit Token trennt
           pyannote sie akustisch — dafür einmalig&nbsp;
-          <a className="underline" href="https://huggingface.co/pyannote/speaker-diarization-community-1" target="_blank" rel="noreferrer">
+          <a className="underline underline-offset-2 hover:text-foreground" href="https://huggingface.co/pyannote/speaker-diarization-community-1" target="_blank" rel="noreferrer">
             die Modellbedingungen akzeptieren</a> und&nbsp;
-          <a className="underline" href="https://huggingface.co/settings/tokens" target="_blank" rel="noreferrer">ein Token erstellen</a>.
+          <a className="underline underline-offset-2 hover:text-foreground" href="https://huggingface.co/settings/tokens" target="_blank" rel="noreferrer">ein Token erstellen</a>.
         </p>
-      </div>
-
-      <div className="mt-8 flex items-center gap-2">
-        <Button onClick={testen} disabled={testet}>
-          {testet && <Loader2 className="size-4 animate-spin" />} Verbindung testen
-        </Button>
-        <span className="text-xs text-muted-foreground">
-          Änderungen greifen sofort — auch für schon laufende Korrekturen ab dem nächsten Block.
-        </span>
-      </div>
+      </Abschnitt>
 
       {upd && (
-        <div className="mt-8 border-t pt-6">
-          <h2 className="font-medium">Version und Updates</h2>
-          <p className="mt-1 text-sm">
+        <Abschnitt titel="Version und Updates">
+          <p className="text-sm">
             <span className="font-medium">Transkribor {upd.version}</span>
             {upd.art === 'aktuell' && <span className="text-muted-foreground"> · aktuell</span>}
           </p>
@@ -240,13 +254,13 @@ export function SettingsPage() {
 
           {upd.art === 'laedt' && (
             <div className="mt-3">
-              <div className="h-2 w-full overflow-hidden rounded bg-muted" role="progressbar"
+              <div className="h-2 w-full overflow-hidden rounded-full bg-muted" role="progressbar"
                 aria-valuenow={Math.round(upd.prozent)} aria-valuemin={0} aria-valuemax={100}
                 aria-label="Update wird heruntergeladen">
-                <div className="h-full bg-primary transition-all" style={{ width: `${upd.prozent}%` }} />
+                <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${upd.prozent}%` }} />
               </div>
               <p className="mt-2 text-sm text-muted-foreground">
-                {Math.round(upd.prozent)} % · {mb(upd.geladen)} von {mb(upd.gesamt)} MB · {mb(upd.tempo, 1)} MB/s
+                <span className="ziffern">{Math.round(upd.prozent)} %</span> · {mb(upd.geladen)} von {mb(upd.gesamt)} MB · {mb(upd.tempo, 1)} MB/s
               </p>
             </div>
           )}
@@ -261,17 +275,17 @@ export function SettingsPage() {
           {upd.art === 'fehler' && (
             <p className="mt-3 text-sm text-muted-foreground">
               Prüfung fehlgeschlagen: {upd.text} — Einzelheiten stehen im{' '}
-              <button type="button" className="underline" onClick={protokollOeffnen}>Protokoll</button>.
+              <button type="button" className="underline underline-offset-2 hover:text-foreground" onClick={protokollOeffnen}>Protokoll</button>.
             </p>
           )}
 
           {upd.art === 'nicht_moeglich' && (
             <p className="mt-3 text-sm text-muted-foreground">
               {GRUENDE[upd.grund] ?? 'Updates sind auf diesem System nicht möglich.'}{' '}
-              <a className="underline" href={RELEASES} target="_blank" rel="noreferrer">Versionen ansehen</a>
+              <a className="underline underline-offset-2 hover:text-foreground" href={RELEASES} target="_blank" rel="noreferrer">Versionen ansehen</a>
             </p>
           )}
-        </div>
+        </Abschnitt>
       )}
     </div>
   )

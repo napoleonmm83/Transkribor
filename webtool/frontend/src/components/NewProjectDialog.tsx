@@ -7,7 +7,11 @@ import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog'
 
-export function NewProjectDialog({ onCreated }: { onCreated: (name: string) => void }) {
+export function NewProjectDialog({ onCreated, trigger }: {
+  onCreated: (name: string) => void
+  /** Eigener Ausloeser. Der Leerzustand der Galerie braucht einen einladenderen als '+ Projekt'. */
+  trigger?: React.ReactNode
+}) {
   const [open, setOpen] = useState(false)
   const [name, setName] = useState('')
   const submit = async () => {
@@ -18,7 +22,7 @@ export function NewProjectDialog({ onCreated }: { onCreated: (name: string) => v
   }
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild><Button size="sm">+ Projekt</Button></DialogTrigger>
+      <DialogTrigger asChild>{trigger ?? <Button size="sm">+ Projekt</Button>}</DialogTrigger>
       <DialogContent>
         <DialogHeader><DialogTitle>Neues Projekt</DialogTitle></DialogHeader>
         <label className="text-sm" htmlFor="np-name">Projektname</label>

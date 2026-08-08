@@ -33,9 +33,10 @@ export function Transcript({ doc, loading, thr, activeId, onPlaySeg, onPlayTurn,
     : <div className="p-8 text-center text-muted-foreground">Keine Datei geöffnet.</div>
   return (
     <ScrollArea className="h-full">
-      {/* Lesebreite statt Fensterbreite: die Sprecherspalte ist 150px breit, der Rest bleibt
-          fuer den Satz — auf einem breiten Monitor liefen die Zeilen sonst auf 120 Zeichen. */}
-      <div ref={contentRef} className="mx-auto max-w-[calc(150px+var(--measure))] px-6 py-8">
+      {/* Lesebreite statt Fensterbreite: die Sprecherspalte ist 112px breit, der Rest bleibt
+          fuer den Satz — auf einem breiten Monitor liefen die Zeilen sonst auf 120 Zeichen.
+          Muss mit grid-cols in SpeakerTurn uebereinstimmen. */}
+      <div ref={contentRef} className="mx-auto max-w-[calc(112px+var(--measure))] px-6 py-8">
         {turns.map(t => (
           <SpeakerTurn key={t.key} turn={t} thr={thr} activeId={activeId}
             onPlaySeg={onPlaySeg} onPlayTurn={onPlayTurn}

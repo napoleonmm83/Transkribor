@@ -23,3 +23,6 @@ webtool/static/
 # Electron: Abhaengigkeiten und gebauter Installer
 node_modules/
 dist/
+
+# Playwright-MCP: Konsolenprotokolle und Snapshots aus Dogfood-Sitzungen
+.playwright-mcp/

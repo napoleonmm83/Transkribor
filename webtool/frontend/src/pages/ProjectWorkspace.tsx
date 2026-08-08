@@ -1,13 +1,14 @@
 import { useEffect, useMemo } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
-import { Play, Pencil, X } from 'lucide-react'
+import { Play, Pencil, X, FileAudio, Loader2 } from 'lucide-react'
 import { useProjects } from '@/hooks/useProjects'
 import { useAiReady } from '@/hooks/useAiReady'
 import { mergePhases, useActiveJob } from '@/hooks/useActiveJob'
 import { FileStatusPill } from '@/components/FileStatusPill'
 import { UploadDropzone } from '@/components/UploadDropzone'
 import { UrlFetch } from '@/components/UrlFetch'
+import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
 import { startTranscribe, startCorrect, startCorrectFile, cancelJob } from '@/lib/api'
 import { describePhases, KIND_LABEL } from '@/lib/jobPhases'
@@ -52,14 +53,13 @@ export function ProjectWorkspace() {
     toast.success(`${label} gestartet`)
   }
 
+  const dateien = p?.files ?? []
+
   return (
-    <div className="mx-auto max-w-3xl p-6">
-      <div className="mb-3 flex items-center gap-3">
-        <Link className="text-sm text-muted-foreground hover:underline" to="/">‹ Home</Link>
-        <h1 className="text-xl font-semibold">{project}</h1>
-      </div>
-      <div className="mb-4 flex gap-2">
-        <Button variant="outline" size="sm" onClick={() => startJob(() => startTranscribe(project!), 'transcribe', 'Transkribieren')}>
+    <div className="mx-auto max-w-3xl p-6 sm:p-8">
+      <PageHeader rubrik="Projekt" titel={project ?? ''} zurueck="/" zurueckText="Projekte">
+        <Button variant="outline" size="sm"
+          onClick={() => startJob(() => startTranscribe(project!), 'transcribe', 'Transkribieren')}>
           <Play className="size-4" /> Transkribieren
         </Button>
         {/* title am Wrapper, nicht am Knopf: ein deaktivierter Knopf hat pointer-events:none
@@ -70,69 +70,101 @@ export function ProjectWorkspace() {
             <Pencil className="size-4" /> Korrigieren
           </Button>
         </span>
-      </div>
+      </PageHeader>
 
       {/* Eine Leiste je laufendem Job — Transkription und Korrektur laufen nebeneinander,
           und jede braucht ihren eigenen Abbrechen-Knopf. */}
-      {meine.map(j => (
-        <div key={j.id} className="mb-2 flex items-center justify-between gap-2 rounded bg-accent px-3 py-2 text-sm">
-          <span className="truncate">{describePhases(j.phases) || KIND_LABEL[j.kind] || 'läuft…'}</span>
-          <Button variant="ghost" size="sm" className="shrink-0" onClick={() => cancelJob(j.id)}>
-            <X className="size-4" /> Abbrechen
-          </Button>
+      {meine.length > 0 && (
+        <div className="mb-6 space-y-2" aria-live="polite">
+          {meine.map(j => (
+            <div key={j.id}
+              className="flex items-center justify-between gap-3 rounded-lg border border-primary/25
+                         bg-primary/5 px-3 py-2.5 text-sm">
+              <span className="flex min-w-0 items-center gap-2">
+                <Loader2 className="size-4 shrink-0 animate-spin text-primary" aria-hidden="true" />
+                <span className="truncate">{describePhases(j.phases) || KIND_LABEL[j.kind] || 'läuft…'}</span>
+              </span>
+              <Button variant="ghost" size="sm" className="shrink-0" onClick={() => cancelJob(j.id)}>
+                <X className="size-4" /> Abbrechen
+              </Button>
+            </div>
+          ))}
         </div>
-      ))}
-
-      <div className="mb-4 space-y-3">
-        <UploadDropzone project={project!} onDone={job => {
-          refresh()
-          // Sofort adoptieren statt auf den naechsten Poll zu warten — der Balken soll direkt stehen.
-          if (job?.started) { adopt(job.job_id, project!, 'transcribe'); toast.success('Transkription gestartet') }
-          else if (job) toast.info('Transkription läuft schon — die neuen Dateien kommen danach dran.')
-        }} />
-        <UrlFetch project={project!} onStart={res => {
-          if (!res.started) { toast.warning('Es läuft bereits ein Import für dieses Projekt.'); return }
-          adopt(res.job_id, project!, 'fetch')
-          toast.success('Herunterladen gestartet — Transkription folgt automatisch')
-        }} />
-      </div>
-
-      {p && p.files.length === 0 && (
-        <p className="text-sm text-muted-foreground">Noch keine Dateien — lade Audio hoch, füge eine Video-URL ein und transkribiere.</p>
       )}
-      <ul className="divide-y rounded border">
-        {p?.files.map(f => {
-          const active = running ? phases.active[f.base] : undefined
-          const state = running ? phases.perBase[f.base] : undefined
-          return (
-            <li key={f.base} className="px-3 py-2">
-              <div className="flex items-center gap-3">
-                {/* Audio ohne Roh-Transkript ist zwar sichtbar, aber weder oeffen- noch korrigierbar. */}
-                <button className={cn('flex-1 truncate text-left text-sm', f.has_raw ? 'hover:underline' : 'text-muted-foreground')}
-                  disabled={!f.has_raw}
-                  onClick={() => navigate(`/p/${encodeURIComponent(project!)}/${encodeURIComponent(f.base)}`)}>
-                  {f.base}
-                </button>
-                <FileStatusPill file={f} active={active?.phase} pct={active?.pct} detail={active?.detail}
-                  state={state} jobRunning={running} />
-                <span title={aiReason || undefined} className="inline-flex">
-                  <Button size="icon" variant="ghost" className="size-6" title="Nur diese Datei korrigieren"
-                    disabled={!f.has_raw || !!aiReason}
-                    onClick={() => startJob(() => startCorrectFile(project!, f.base, false), 'correct', `Korrigieren ${f.base}`, false)}>
-                    <Pencil className="size-3.5" />
-                  </Button>
-                </span>
-              </div>
-              {active?.pct != null && (
-                <div className="mt-1 h-1 overflow-hidden rounded bg-accent" role="progressbar"
-                  aria-valuenow={active.pct} aria-valuemin={0} aria-valuemax={100} aria-label={f.base}>
-                  <div className="h-full bg-primary transition-all" style={{ width: `${active.pct}%` }} />
-                </div>
-              )}
-            </li>
-          )
-        })}
-      </ul>
+
+      <section className="mb-8">
+        <h2 className="rubrik mb-3">Material hinzufügen</h2>
+        <div className="space-y-3">
+          <UploadDropzone project={project!} onDone={job => {
+            refresh()
+            // Sofort adoptieren statt auf den naechsten Poll zu warten — der Balken soll direkt stehen.
+            if (job?.started) { adopt(job.job_id, project!, 'transcribe'); toast.success('Transkription gestartet') }
+            else if (job) toast.info('Transkription läuft schon — die neuen Dateien kommen danach dran.')
+          }} />
+          <UrlFetch project={project!} onStart={res => {
+            if (!res.started) { toast.warning('Es läuft bereits ein Import für dieses Projekt.'); return }
+            adopt(res.job_id, project!, 'fetch')
+            toast.success('Herunterladen gestartet — Transkription folgt automatisch')
+          }} />
+        </div>
+      </section>
+
+      <section>
+        <h2 className="rubrik mb-3">
+          Dateien{dateien.length > 0 && <span className="ziffern ml-2 normal-case">{dateien.length}</span>}
+        </h2>
+
+        {p && dateien.length === 0 && (
+          <div className="blatt flex flex-col items-center px-6 py-12 text-center">
+            <FileAudio className="size-7 text-muted-foreground" aria-hidden="true" />
+            <p className="mt-3 max-w-sm text-sm text-muted-foreground">
+              Noch keine Dateien. Lade Audio hoch oder füge eine Video-URL ein — die
+              Transkription startet von selbst.
+            </p>
+          </div>
+        )}
+
+        {dateien.length > 0 && (
+          <ul className="blatt divide-y divide-border overflow-hidden">
+            {dateien.map(f => {
+              const active = running ? phases.active[f.base] : undefined
+              const state = running ? phases.perBase[f.base] : undefined
+              return (
+                <li key={f.base} className="px-3 py-2.5 transition-colors hover:bg-muted/50">
+                  <div className="flex items-center gap-3">
+                    {/* Audio ohne Roh-Transkript ist zwar sichtbar, aber weder oeffen- noch korrigierbar. */}
+                    <button className={cn('flex-1 truncate rounded text-left text-sm outline-none',
+                      'focus-visible:ring-2 focus-visible:ring-ring',
+                      f.has_raw ? 'font-medium hover:underline' : 'cursor-not-allowed text-muted-foreground')}
+                      disabled={!f.has_raw}
+                      onClick={() => navigate(`/p/${encodeURIComponent(project!)}/${encodeURIComponent(f.base)}`)}>
+                      {f.base}
+                    </button>
+                    <FileStatusPill file={f} active={active?.phase} pct={active?.pct} detail={active?.detail}
+                      state={state} jobRunning={running} mitText />
+                    <span title={aiReason || undefined} className="inline-flex">
+                      <Button size="icon" variant="ghost" className="size-8" title="Nur diese Datei korrigieren"
+                        aria-label={`Nur „${f.base}" korrigieren`}
+                        disabled={!f.has_raw || !!aiReason}
+                        onClick={() => startJob(() => startCorrectFile(project!, f.base, false), 'correct', `Korrigieren ${f.base}`, false)}>
+                        <Pencil className="size-3.5" />
+                      </Button>
+                    </span>
+                  </div>
+                  {active?.pct != null && (
+                    <div className="mt-2 h-1 overflow-hidden rounded-full bg-muted" role="progressbar"
+                      aria-valuenow={active.pct} aria-valuemin={0} aria-valuemax={100} aria-label={f.base}>
+                      <div className="h-full rounded-full bg-primary transition-all duration-300"
+                        style={{ width: `${active.pct}%` }} />
+                    </div>
+                  )}
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </section>
+
       {!p && <p className="text-sm text-muted-foreground">Projekt nicht gefunden.</p>}
     </div>
   )

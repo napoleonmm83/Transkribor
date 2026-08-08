@@ -28,8 +28,21 @@ describe('FileStatusPill', () => {
     render(<FileStatusPill file={f()} jobRunning />)
     expect(screen.getByText(/Wartet/)).toBeInTheDocument()
   })
-  it('statisches Badge ohne Job', () => {
+  // Frueher stand hier ein Emoji ('✎'). Der Test prueft jetzt den zugaenglichen Namen statt
+  // des Glyphs — genau das, was das Emoji nicht hatte.
+  it('statisches Badge ohne Job traegt einen Namen', () => {
     render(<FileStatusPill file={f({ has_edit: true })} />)
-    expect(screen.getByText('✎')).toBeInTheDocument()
+    expect(screen.getByLabelText('Korrigiert')).toBeInTheDocument()
+  })
+  it('Audio ohne Transkript ist als solches erkennbar', () => {
+    render(<FileStatusPill file={f({ has_raw: false })} />)
+    expect(screen.getByLabelText(/Nur Audio/)).toBeInTheDocument()
+  })
+  // Regression: die Kette fiel frueher von has_raw direkt auf has_audio durch und behauptete
+  // damit "noch nicht transkribiert" ueber eine fertig transkribierte Datei.
+  it('transkribiert, aber unkorrigiert wird NICHT als reines Audio ausgegeben', () => {
+    render(<FileStatusPill file={f({ has_raw: true })} />)
+    expect(screen.getByLabelText(/Transkribiert/)).toBeInTheDocument()
+    expect(screen.queryByLabelText(/Nur Audio/)).toBeNull()
   })
 })
