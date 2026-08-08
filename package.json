@@ -69,6 +69,15 @@
       "category": "AudioVideo",
       "artifactName": "${productName}-${version}.${ext}"
     },
+    "dmg": {
+      "background": "build/background.png",
+      "window": { "width": 540, "height": 380 },
+      "iconSize": 80,
+      "contents": [
+        { "x": 140, "y": 170, "type": "file" },
+        { "x": 400, "y": 170, "type": "link", "path": "/Applications" }
+      ]
+    },
     "nsis": {
       "oneClick": false,
       "perMachine": false,

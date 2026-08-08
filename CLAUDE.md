@@ -129,6 +129,13 @@ Die Korrektur hing fest am Claude-Code-Abo; jetzt wählt der Nutzer Anbieter + M
   echte Signatur, ad-hoc reicht laut Electron-Doku ausdrücklich nicht. `main.js` schreibt den
   Fehlschlag deshalb ins Protokoll, statt ihn zu verschlucken (sonst bliebe ein Mac still auf
   einer alten Version stehen). Mit Developer ID + Notarisierung läuft es ohne Codeänderung an.
+- **DMG-Hintergrund erklärt die Gatekeeper-Warnung, bevor sie kommt.** Ankündigen kann die App
+  sie nicht — vor dem erlaubten Start läuft kein Code von uns, das DMG-Fenster ist die einzige
+  Fläche davor. `build/hintergrund.py` (PIL, Segoe UI) rendert `background.png` + `@2x`; die
+  **PNG sind committet**, weil die CI-Runner weder PIL noch die Schriften haben. Die
+  Symbolpositionen stehen doppelt — `dmg.contents` in `package.json` und `SYMBOL_*` im Skript
+  (nur für den Pfeil) — die muss man **zusammen** ändern. Das Skript bricht ab, wenn eine
+  Textzeile aus der Hinweiskarte läuft.
 
 ## Neues Projekt anlegen
 `projekte\<NAME>\audio\` erstellen, Audio hineinlegen, optional `projekte\<NAME>\kontext.md`
