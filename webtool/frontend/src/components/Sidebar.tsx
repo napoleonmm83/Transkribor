@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { FileRow } from './FileRow'
 
 type Sel = { project: string; base: string } | null
-export function Sidebar({ projects, loading, active, onOpen, onUpload, onTranscribe, onCorrect, onCorrectFile, backTo, phases, jobRunning }: {
+export function Sidebar({ projects, loading, active, onOpen, onUpload, onTranscribe, onCorrect, onCorrectFile, backTo, phases, jobRunning, aiReason }: {
   projects: Project[]; loading?: boolean; active: Sel;
   onOpen: (s: { project: string; base: string }) => void;
   onUpload: (project: string, file: File) => void;
@@ -14,6 +14,8 @@ export function Sidebar({ projects, loading, active, onOpen, onUpload, onTranscr
   onCorrect: (project: string) => void;
   onCorrectFile: (project: string, base: string, force: boolean) => void;
   backTo?: string; phases?: JobPhases; jobRunning?: boolean;
+  /** Nicht leer = kein nutzbarer KI-Anbieter: Korrigieren deaktiviert, Text als Tooltip. */
+  aiReason?: string;
 }) {
   const fileInput = useRef<HTMLInputElement>(null)
   const pendingProject = useRef<string>('')
@@ -39,8 +41,13 @@ export function Sidebar({ projects, loading, active, onOpen, onUpload, onTranscr
               onClick={() => { pendingProject.current = p.name; fileInput.current?.click() }}><Upload className="size-3.5" /></Button>
             <Button size="icon" variant="ghost" className="size-6" title="Transkribieren" aria-label="Transkribieren"
               onClick={() => onTranscribe(p.name)}><Play className="size-3.5" /></Button>
-            <Button size="icon" variant="ghost" className="size-6" title="Korrigieren + Sprecher" aria-label="Korrigieren + Sprecher"
-              onClick={() => onCorrect(p.name)}><Pencil className="size-3.5" /></Button>
+            {/* title am Wrapper: ein deaktivierter Knopf hat pointer-events:none und
+                zeigt seinen eigenen Tooltip nie. */}
+            <span title={aiReason || undefined} className="inline-flex">
+              <Button size="icon" variant="ghost" className="size-6" title="Korrigieren + Sprecher" aria-label="Korrigieren + Sprecher"
+                disabled={!!aiReason}
+                onClick={() => onCorrect(p.name)}><Pencil className="size-3.5" /></Button>
+            </span>
           </div>
           {p.files.map(f => (
             <FileRow key={f.base} file={f}
@@ -49,7 +56,7 @@ export function Sidebar({ projects, loading, active, onOpen, onUpload, onTranscr
               onCorrectFile={force => onCorrectFile(p.name, f.base, force)}
               phase={jobRunning ? phases?.active[f.base]?.phase : undefined}
               state={jobRunning ? phases?.perBase[f.base] : undefined}
-              jobRunning={jobRunning} />
+              jobRunning={jobRunning} aiReason={aiReason} />
           ))}
         </div>
       ))}
