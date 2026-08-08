@@ -64,6 +64,18 @@ def find_audio(proj_dir, only=None):
     return files
 
 
+def _opts(prompt, language, device):
+    """Whisper-Optionen an einer Stelle — der MPS-Rueckfall ruft transcribe() ein zweites
+    Mal auf und darf die Parameter nicht auseinanderlaufen lassen."""
+    return dict(
+        language=language, task="transcribe",
+        word_timestamps=True, beam_size=5, best_of=5,
+        temperature=(0.0, 0.2, 0.4, 0.6, 0.8, 1.0),
+        condition_on_previous_text=True, initial_prompt=prompt,
+        fp16=(device == "cuda"), verbose=False,
+    )
+
+
 def transcribe_project(name, model, language, only=None):
     import torch, whisper
     proj_dir = os.path.join(PROJEKTE, name)
@@ -93,10 +105,10 @@ def transcribe_project(name, model, language, only=None):
         if txt:
             prompt = txt[:800]
 
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    print(f"[{name}] device={device}", flush=True)
-    if device == "cuda":
-        print(f"[{name}] gpu:", torch.cuda.get_device_name(0), flush=True)
+    from webtool import device as devicemod
+    device = devicemod.pick()
+    info = devicemod.describe()
+    print(f"[{name}] device={device} ({info['name']})", flush=True)
     print(f"[{name}] Modell {model}, {len(files)} Datei(en)", flush=True)
     m = whisper.load_model(model, device=device)
 
@@ -109,16 +121,24 @@ def transcribe_project(name, model, language, only=None):
         print(f"[{name}] -> transkribiere {base} …", flush=True)
         t0 = time.time()
         try:
-            result = m.transcribe(
-                f, language=language, task="transcribe",
-                word_timestamps=True, beam_size=5, best_of=5,
-                temperature=(0.0, 0.2, 0.4, 0.6, 0.8, 1.0),
-                condition_on_previous_text=True, initial_prompt=prompt,
-                fp16=(device == "cuda"), verbose=False,
-            )
+            result = m.transcribe(f, **_opts(prompt, language, device))
         except Exception as e:
-            print(f"[{name}] FEHLER {base}: {e}", flush=True)
-            continue
+            if device == "mps":
+                # MPS deckt nicht jede Whisper-Operation ab. Einmal auf CPU wechseln und es
+                # LAUT sagen: PYTORCH_ENABLE_MPS_FALLBACK=1 wuerde einzelne Ops still auf die
+                # CPU schieben, die Anzeige behauptete weiter "mps", und der Nutzer wunderte
+                # sich nur ueber die Laufzeit.
+                print(f"[{name}] MPS gescheitert ({e}) — lade Modell erneut auf CPU", flush=True)
+                device = "cpu"
+                m = whisper.load_model(model, device=device)
+                try:
+                    result = m.transcribe(f, **_opts(prompt, language, device))
+                except Exception as e2:
+                    print(f"[{name}] FEHLER {base}: {e2}", flush=True)
+                    continue
+            else:
+                print(f"[{name}] FEHLER {base}: {e}", flush=True)
+                continue
         dt = time.time() - t0
         with open(out_json, "w", encoding="utf-8") as fh:
             json.dump(result, fh, ensure_ascii=False, indent=1)
