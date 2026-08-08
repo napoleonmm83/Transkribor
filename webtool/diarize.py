@@ -23,8 +23,13 @@ def _pipeline():
         pipe = Pipeline.from_pretrained(DIAR_MODEL, token=token)
         if pipe is None:
             raise RuntimeError(f"pyannote-Pipeline nicht geladen ({DIAR_MODEL}) — Modellbedingungen akzeptiert?")
-        if torch.cuda.is_available():
-            pipe.to(torch.device("cuda"))
+        # Dasselbe Geraet wie die Transkription (webtool/device.py). Scheitert MPS hier,
+        # bleibt es beim Best-effort-Verhalten: kein .diar.json, Korrektur laeuft wie vor
+        # Stufe 3 weiter — die Sprechertrennung faellt aus, nicht der Lauf.
+        from . import device as devicemod
+        dev = devicemod.pick()
+        if dev != "cpu":
+            pipe.to(torch.device(dev))
         _PIPELINE = pipe
     return _PIPELINE
 
