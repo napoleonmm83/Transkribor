@@ -187,6 +187,12 @@ def _autocorrect(project: str) -> None:
     also genau die neu transkribierten Dateien nach."""
     if not _autocorrect_enabled():
         return
+    ok, grund = llm.available()
+    if not ok:
+        # Kein Job statt eines Jobs, der scheitert: die Transkription ist fertig und
+        # nutzbar, es fehlt nur die Korrektur. Eine Zeile ins Log, kein Fehlerzustand.
+        print(f"[autocorrect] uebersprungen — {grund}", flush=True)
+        return
     jobs.request(project, [sys.executable, "-m", "webtool.correct", "run", project],
                  paths.ROOT, "correct")
 
@@ -263,9 +269,11 @@ class SettingsBody(BaseModel):
 @app.get("/api/settings")
 def get_settings():
     """Nie den Key ausliefern — nur, OB einer hinterlegt ist."""
+    ai_ready, ai_reason = llm.available()
     return {**settings.public(), "providers": llm.provider_list(),
             "env_key": llm.env_key_hint(),
-            "whisper_choices": list(settings.WHISPER_CHOICES)}
+            "whisper_choices": list(settings.WHISPER_CHOICES),
+            "ai_ready": ai_ready, "ai_reason": ai_reason}
 
 
 @app.put("/api/settings")
