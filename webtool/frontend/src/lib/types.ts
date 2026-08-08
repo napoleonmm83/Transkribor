@@ -6,7 +6,8 @@ export type Segment = {
 };
 export type EditDoc = {
   base: string; project: string; audio: string; language: string;
-  human_edited: boolean; context: string; speakers: string[];
+  // summary optional: vor diesem Feature geschriebene edit.json haben den Schluessel nicht.
+  human_edited: boolean; context: string; summary?: string; speakers: string[];
   segments: Segment[]; annotations: string[];
 };
 export type ProjectFile = { base: string; has_audio: boolean; has_raw: boolean; has_edit: boolean; has_md: boolean };

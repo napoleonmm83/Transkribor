@@ -582,6 +582,18 @@ def _chunk_claude(t, calls, lock=None):
     return fake
 
 
+def test_merge_haengt_zusammenfassungen_aller_bloecke_aneinander():
+    """"Erster nicht-leerer" hiesse bei einer 390-Segment-Datei, dass die Zusammenfassung des
+    ganzen Gespraechs in Wahrheit nur das erste Drittel beschreibt — ohne dass man es sieht.
+    Leere Bloecke duerfen dabei keine doppelten Leerzeichen hinterlassen."""
+    docs = [{"summary": "Teil eins.", "verification": "nichts geaendert."},
+            {"summary": "", "verification": ""},
+            {"summary": "Teil drei.", "verification": "Segment 5 zurueckgeholt."}]
+    m = correct._merge_parts(docs, "S1")
+    assert m["summary"] == "Teil eins. Teil drei."
+    assert m["verification"] == "nichts geaendert. Segment 5 zurueckgeholt."
+
+
 def test_chunked_file_merges_all_blocks(project, monkeypatch):
     _root, t = project
     _write_raw(t, "S1", 6)

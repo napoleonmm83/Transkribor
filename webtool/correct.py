@@ -334,7 +334,7 @@ Exaktes Schema (Pflicht — sonst bleibt der Text auf dem Rohstand):
   "speakers": ["Interviewer", "..."],
   "segments": [{{"id": <zahl>, "speaker": "...", "text": "..."}}],
   "annotations": ["..."],
-  "summary": "kurze Zusammenfassung"
+  "summary": "3-5 Sätze: worum es im Gespräch INHALTLICH geht (kein Bericht über deine Korrekturen)"
 }}
 Gib ausser der geschriebenen Datei nichts weiter aus."""
 
@@ -372,7 +372,8 @@ Schema:
   "speakers": ["Interviewer", "..."],
   "segments": [{{"id": <zahl>, "speaker": "...", "text": "..."}}],
   "annotations": ["..."],
-  "summary": "was du geändert hast, oder 'keine Änderung'"
+  "summary": "3-5 Sätze: worum es im Gespräch INHALTLICH geht. Übernimm die vorhandene Zusammenfassung, wenn sie stimmt; schreibe hier NICHT, was du geändert hast",
+  "verification": "was du geändert hast, oder 'keine Änderung'"
 }}
 Ändere NUR, was wirklich nötig ist; unproblematische Segmente unverändert übernehmen. Gib ausser der geschriebenen Datei nichts weiter aus."""
 
@@ -436,7 +437,13 @@ def _speaker_hint(docs: list, clusters: dict) -> str:
 
 def _merge_parts(docs: list, base: str) -> dict:
     """Block-Korrekturen zu EINER correction.json vereinen (IDs aufsteigend, Sprecher-Liste
-    vereinigt, Anmerkungen aneinandergehängt)."""
+    vereinigt, Anmerkungen aneinandergehängt).
+
+    `summary` und `verification` werden ANEINANDERGEHÄNGT, nicht vom ersten Block genommen:
+    jeder Block sieht nur seinen eigenen ID-Bereich, und „erster nicht-leerer" hiesse bei einer
+    390-Segment-Datei, dass die Zusammenfassung des ganzen Gesprächs in Wahrheit das erste
+    Drittel beschreibt — ohne dass man es der Datei ansieht.
+    """
     segs, speakers, ann = [], [], []
     for d in docs:
         segs.extend(s for s in (d.get("segments") or []) if isinstance(s, dict))
@@ -445,10 +452,14 @@ def _merge_parts(docs: list, base: str) -> dict:
                 speakers.append(name)
         ann.extend(str(a).strip() for a in (d.get("annotations") or []) if a is not None and str(a).strip())
     segs.sort(key=lambda s: s.get("id") if isinstance(s.get("id"), int) else 0)
+
+    def verbinde(feld):
+        return " ".join(str(d.get(feld)).strip() for d in docs if str(d.get(feld) or "").strip())
+
     return {"base": base,
             "context": next((d.get("context") for d in docs if d.get("context")), ""),
             "speakers": speakers, "segments": segs, "annotations": ann,
-            "summary": next((d.get("summary") for d in docs if d.get("summary")), "")}
+            "summary": verbinde("summary"), "verification": verbinde("verification")}
 
 
 def _correct_one(base: str, tagged: str, target: str, gjson: str, context: str, verify: bool,

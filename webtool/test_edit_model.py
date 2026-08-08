@@ -128,11 +128,23 @@ def test_apply_correction_overlays_by_id():
     assert s1["text"] == "Aha." and s1["speaker"] == ""  # nicht korrigiert -> Rohtext, leerer Sprecher
 
 
+def test_apply_correction_uebernimmt_die_zusammenfassung():
+    """summary fiel bisher still heraus: die correction.json hatte es, die edit.json nie —
+    14 von 14 echten Dateien hatten ein leeres Feld, obwohl die Korrektur eins geschrieben hat.
+    `verification` bleibt draussen: Pruefprotokoll ist kein Inhalt."""
+    raw = {"segments": [{"id": 0, "start": 0, "end": 1, "text": " Hallo.", "words": []}]}
+    doc = em.apply_correction(raw, {"summary": "  Es geht um Brot.  ", "verification": "keine Änderung"},
+                              base="B", project="P", audio="")
+    assert doc["summary"] == "Es geht um Brot."
+    assert "verification" not in doc
+
+
 def test_apply_correction_empty_correction_keeps_raw():
     raw = {"segments": [{"id": 0, "start": 0, "end": 1, "text": " Hallo.", "words": []}]}
     doc = em.apply_correction(raw, {}, base="B", project="P", audio="")
     assert doc["segments"][0]["text"] == "Hallo." and doc["segments"][0]["speaker"] == ""
     assert doc["context"] == "" and doc["speakers"] == [] and doc["annotations"] == []
+    assert doc["summary"] == ""
 
 
 def test_apply_correction_empty_text_and_missing_speaker():

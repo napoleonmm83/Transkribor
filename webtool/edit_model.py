@@ -46,6 +46,7 @@ def build_edit_doc(raw: dict, *, base: str, project: str, audio: str) -> dict:
         "language": raw.get("language", "de"),
         "human_edited": False,
         "context": "",
+        "summary": "",
         "speakers": [],
         "segments": segments,
         "annotations": [],
@@ -89,6 +90,10 @@ def apply_correction(raw: dict, correction: dict, *, base: str, project: str, au
     sowie context/speakers/annotations einweben. Nicht korrigierte Segmente behalten Rohtext."""
     doc = build_edit_doc(raw, base=base, project=project, audio=audio)
     doc["context"] = (correction.get("context") or "").strip()
+    # summary fiel bisher still heraus: die correction.json hatte es, die edit.json nie —
+    # der Korrektur-Pass schrieb also 14 von 14 Zusammenfassungen in den Papierkorb.
+    # `verification` bleibt bewusst in der correction.json: das ist Prüfprotokoll, kein Inhalt.
+    doc["summary"] = (correction.get("summary") or "").strip()
     doc["speakers"] = list(correction.get("speakers") or [])
     doc["annotations"] = [str(a).strip() for a in (correction.get("annotations") or []) if a is not None and str(a).strip()]
     by_id = {c.get("id"): c for c in (correction.get("segments") or [])}

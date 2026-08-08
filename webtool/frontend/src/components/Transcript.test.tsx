@@ -41,6 +41,28 @@ describe('Transcript', () => {
     expect(updateSegment).not.toHaveBeenCalled()
   })
 
+  it('zeigt die Zusammenfassung vor dem Gespräch', () => {
+    render(<TooltipProvider><Transcript doc={{ ...doc, summary: 'Es geht um Brot.' }}
+      thr={{ yellow: 0.6, red: 0.4 }} activeId={null}
+      onPlaySeg={vi.fn()} onPlayTurn={vi.fn()} updateSegment={vi.fn()} renameSpeaker={vi.fn()} /></TooltipProvider>)
+    const zus = screen.getByText('Es geht um Brot.')
+    expect(zus).toBeInTheDocument()
+    // Vor dem ersten Segment: die Frage "worum geht es hier" stellt man beim Oeffnen.
+    // Anker ist das Segment selbst, nicht sein Text — der wird wortweise gerendert
+    // (Konfidenz-Faerbung), ein zusammenhaengender Textknoten existiert nicht.
+    const erstesSegment = document.querySelector('[data-seg-id="1"]')!
+    // compareDocumentPosition liefert eine Bitmaske — maskieren, nicht gleichsetzen.
+    expect(zus.compareDocumentPosition(erstesSegment)
+      & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('ohne Zusammenfassung keine leere Rubrik', () => {
+    // Vor diesem Feature geschriebene edit.json haben den Schluessel gar nicht.
+    render(<TooltipProvider><Transcript doc={doc} thr={{ yellow: 0.6, red: 0.4 }} activeId={null}
+      onPlaySeg={vi.fn()} onPlayTurn={vi.fn()} updateSegment={vi.fn()} renameSpeaker={vi.fn()} /></TooltipProvider>)
+    expect(screen.queryByText('Zusammenfassung')).not.toBeInTheDocument()
+  })
+
   it('zeigt "Keine Datei geöffnet" nicht während des Ladens', () => {
     render(<Transcript doc={null} loading thr={{ yellow: 0.6, red: 0.4 }} activeId={null}
       onPlaySeg={vi.fn()} onPlayTurn={vi.fn()} updateSegment={vi.fn()} renameSpeaker={vi.fn()} />)

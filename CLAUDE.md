@@ -43,7 +43,11 @@ Korrektur → Verifikation gegen das Rohtranskript):
                       bases: [ ...basenames... ],
                       context: "<Inhalt von kontext.md oder kurze Beschreibung>" } })
    ```
-   Der Workflow liefert `{ glossary, corrections: [{ base, context, speakers, segments, annotations, summary }] }`.
+   Der Workflow liefert `{ glossary, corrections: [{ base, context, speakers, segments, annotations, summary, verification }] }`.
+   **`summary` = worum es inhaltlich geht, `verification` = was der Treue-Pass geändert hat.**
+   Beides stand früher in `summary`; weil Verify zuletzt schreibt, landete in 13 von 14 echten
+   Dateien ein Änderungsprotokoll statt einer Zusammenfassung. Nur `summary` wandert in die
+   `edit.json` (und in den Markdown-Export) — Prüfprotokoll ist kein Inhalt.
    (Ist die Workflow-Funktion nicht verfügbar, führe die Korrektur **inline** aus — dieselben Regeln, siehe unten — und erzeuge dieselbe Korrektur-Struktur pro Datei.)
 5. **Assemblieren**: pro Datei die zurückgegebene Korrektur nach `projekte\<NAME>\transkripte\<base>.correction.json` schreiben, dann:
    ```

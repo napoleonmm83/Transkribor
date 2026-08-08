@@ -37,6 +37,14 @@ export function Transcript({ doc, loading, thr, activeId, onPlaySeg, onPlayTurn,
           fuer den Satz — auf einem breiten Monitor liefen die Zeilen sonst auf 120 Zeichen.
           Muss mit grid-cols in SpeakerTurn uebereinstimmen. */}
       <div ref={contentRef} className="mx-auto max-w-[calc(112px+var(--measure))] px-6 py-8">
+        {/* Vor dem Transkript, nicht danach: die Zusammenfassung beantwortet "worum geht es
+            hier", und diese Frage stellt man beim Oeffnen, nicht nach 400 Segmenten. */}
+        {doc.summary?.trim() && (
+          <section className="mb-8 border-b pb-5">
+            <h2 className="rubrik mb-3">Zusammenfassung</h2>
+            <p className="lesebreite text-sm leading-relaxed text-muted-foreground">{doc.summary}</p>
+          </section>
+        )}
         {turns.map(t => (
           <SpeakerTurn key={t.key} turn={t} thr={thr} activeId={activeId}
             onPlaySeg={onPlaySeg} onPlayTurn={onPlayTurn}

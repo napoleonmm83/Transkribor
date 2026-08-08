@@ -27,6 +27,20 @@ def test_context_and_empty_speaker():
     assert "**Befragte Person:** Hallo." in md
 
 
+def test_zusammenfassung_steht_vor_dem_gespraech():
+    doc = {"base": "B", "context": "", "summary": "Es geht um Brot.", "annotations": [],
+           "segments": [_seg(0, "Hans", "Hallo.")]}
+    md = render_md(doc)
+    assert "## Zusammenfassung" in md and "Es geht um Brot." in md
+    assert md.index("Es geht um Brot.") < md.index("Hallo.")
+
+
+def test_ohne_zusammenfassung_keine_leere_rubrik():
+    """Vor diesem Feature geschriebene edit.json haben den Schluessel gar nicht."""
+    doc = {"base": "B", "context": "", "annotations": [], "segments": [_seg(0, "Hans", "Hallo.")]}
+    assert "Zusammenfassung" not in render_md(doc)
+
+
 def test_annotations_only_when_present():
     doc0 = {"base": "B", "context": "", "annotations": [], "segments": [_seg(0, "A", "x")]}
     assert "## Anmerkungen" not in render_md(doc0)

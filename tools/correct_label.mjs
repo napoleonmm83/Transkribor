@@ -61,7 +61,11 @@ const CORRECTION_SCHEMA = {
       },
     },
     annotations: { type: 'array', items: { type: 'string' } },
+    // summary = worum es INHALTLICH geht. Der Treue-Bericht gehoert nach `verification`:
+    // beides in ein Feld zu schreiben hiess, dass der Verify-Pass die Zusammenfassung
+    // ueberschrieb und am Ende ein Aenderungsprotokoll im Editor stand.
     summary: { type: 'string' },
+    verification: { type: 'string' },
   },
   required: ['base', 'segments', 'summary'],
 }
@@ -123,7 +127,7 @@ Prüfe kritisch:
 3) SPRECHER: Plausibel und konsistent (Interviewer stellt Fragen; Antworten korrekt zugeordnet)? Korrigiere Fehlzuordnungen.
 4) RESTFEHLER: Offensichtliche verbleibende ASR-Fehler (konservativ, nur wenn klar).
 
-Gib das VOLLSTÄNDIGE, geprüfte Korrektur-Objekt gemäss Schema zurück (base, context, speakers, segments, annotations, summary). Ändere NUR, was wirklich nötig ist; unproblematische Segmente unverändert übernehmen. Ergänze in summary knapp, was du geändert hast (oder "keine Änderung").`
+Gib das VOLLSTÄNDIGE, geprüfte Korrektur-Objekt gemäss Schema zurück (base, context, speakers, segments, annotations, summary, verification). Ändere NUR, was wirklich nötig ist; unproblematische Segmente unverändert übernehmen. In "summary" gehört weiterhin der INHALT des Gesprächs (vorhandene Zusammenfassung übernehmen, wenn sie stimmt), in "verification" knapp, was du geändert hast (oder "keine Änderung").`
 
 const corrections = await pipeline(
   BASES,
