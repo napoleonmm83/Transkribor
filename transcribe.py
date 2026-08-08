@@ -141,14 +141,21 @@ def transcribe_project(name, model, language, only=None):
                 # LAUT sagen: PYTORCH_ENABLE_MPS_FALLBACK=1 wuerde einzelne Ops still auf die
                 # CPU schieben, die Anzeige behauptete weiter "mps", und der Nutzer wunderte
                 # sich nur ueber die Laufzeit.
-                print(f"[{name}] MPS gescheitert ({e}) — lade Modell erneut auf CPU", flush=True)
+                # Ob es an MPS lag, weiss hier niemand — der Fehler kann auch von einer
+                # kaputten Datei kommen. Deshalb erst behaupten, wenn der CPU-Versuch klappt.
+                print(f"[{name}] {base} auf mps fehlgeschlagen ({e}) — Versuch auf CPU", flush=True)
                 device = "cpu"
                 m = whisper.load_model(model, device=device)
                 try:
                     result = m.transcribe(f, **_opts(prompt, language, device))
                 except Exception as e2:
+                    # Auf CPU genauso kaputt -> lag nicht an MPS. Geraet zuruecksetzen, sonst
+                    # laeuft der ganze Rest des Laufs wegen EINER Datei langsam auf der CPU.
                     print(f"[{name}] FEHLER {base}: {e2}", flush=True)
+                    device = "mps"
+                    m = whisper.load_model(model, device=device)
                     continue
+                print(f"[{name}] MPS deckt diese Datei nicht ab — Lauf bleibt auf CPU", flush=True)
             else:
                 print(f"[{name}] FEHLER {base}: {e}", flush=True)
                 continue

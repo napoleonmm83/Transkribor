@@ -1,5 +1,7 @@
 """Tests fuer den only=-Filter aus dem URL-Import (kein torch/whisper noetig)."""
 import os
+import sys
+import types
 
 import transcribe
 
@@ -78,3 +80,62 @@ def test_ensure_ffmpeg_kein_winget_glob_auf_posix(monkeypatch):
 
     monkeypatch.setattr(transcribe.glob, "glob", explodiere)
     assert transcribe.ensure_ffmpeg() is False
+
+
+# --- MPS-Rueckfall (Task I3) --------------------------------------------------
+
+def _whisper_attrappe(monkeypatch, kaputt=(), nur_cpu=()):
+    """Minimales whisper/torch statt eines echten 3-GB-Modells. `kaputt` scheitert auf jedem
+    Geraet (defekte Datei), `nur_cpu` nur auf mps (echte MPS-Luecke). Liefert die Liste der
+    Geraete, auf die load_model gerufen wurde — daran haengt der ganze Test."""
+    geladen = []
+
+    class Modell:
+        def __init__(self, device):
+            self.device = device
+
+        def transcribe(self, f, **kw):
+            name = os.path.basename(f)
+            if name in kaputt:
+                raise RuntimeError("Datei laesst sich nicht lesen")
+            if self.device == "mps" and name in nur_cpu:
+                raise RuntimeError("aten::_index_put_impl_ fehlt auf MPS")
+            return {"text": "hallo", "segments": [{"start": 0.0, "end": 1.0, "text": "hallo"}]}
+
+    fake = types.ModuleType("whisper")
+    fake.load_model = lambda model, device=None: (geladen.append(device), Modell(device))[1]
+    monkeypatch.setitem(sys.modules, "whisper", fake)
+    monkeypatch.setitem(sys.modules, "torch", types.ModuleType("torch"))
+    from webtool import device as devicemod
+    monkeypatch.setattr(devicemod, "pick", lambda: "mps")
+    monkeypatch.setattr(devicemod, "describe",
+                        lambda: {"device": "mps", "name": "Apple GPU", "torch_ok": True})
+    return geladen
+
+
+def _mps_projekt(tmp_path, monkeypatch, **wie):
+    proj = tmp_path / "P"
+    (proj / "audio").mkdir(parents=True)
+    for n in ("a.mp3", "b.mp3"):
+        (proj / "audio" / n).write_bytes(b"x")
+    monkeypatch.setattr(transcribe, "PROJEKTE", str(tmp_path))
+    return proj, _whisper_attrappe(monkeypatch, **wie)
+
+
+def test_kaputte_datei_zieht_den_rest_des_laufs_nicht_auf_die_cpu(tmp_path, monkeypatch):
+    """Scheitert eine Datei AUCH auf der CPU, lag es nicht an MPS — sonst macht eine
+    kaputte Datei an Position 1 aus einem 20-Minuten-Lauf einen Stundenlauf."""
+    proj, geladen = _mps_projekt(tmp_path, monkeypatch, kaputt={"a.mp3"})
+    transcribe.transcribe_project("P", "large-v3", "de")
+    assert geladen == ["mps", "cpu", "mps"]                  # Geraet wiederhergestellt
+    assert not (proj / "transkripte" / "a.json").exists()    # die kaputte Datei bleibt liegen
+    assert (proj / "transkripte" / "b.json").exists()        # der Rest lief weiter (auf mps)
+
+
+def test_echter_mps_ausfall_bleibt_auf_der_cpu(tmp_path, monkeypatch):
+    """Klappt die CPU, war es wirklich MPS — dann nicht bei jeder Datei neu ausprobieren."""
+    proj, geladen = _mps_projekt(tmp_path, monkeypatch, nur_cpu={"a.mp3", "b.mp3"})
+    transcribe.transcribe_project("P", "large-v3", "de")
+    assert geladen == ["mps", "cpu"]                         # kein Zurueckschalten
+    assert (proj / "transkripte" / "a.json").exists()
+    assert (proj / "transkripte" / "b.json").exists()
