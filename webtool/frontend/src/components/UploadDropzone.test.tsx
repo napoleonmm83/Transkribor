@@ -20,6 +20,16 @@ describe('UploadDropzone', () => {
     expect(screen.getByText(/existiert bereits/)).toBeInTheDocument()
   })
 
+  it('nennt einen Grund, auch wenn der Fehler keine Meldung traegt', async () => {
+    // `?? 'Fehler'` griff hier nicht: eine leere message ist nicht null. Uebrig blieb ein
+    // Warndreieck ohne Text — der Nutzer sieht, dass etwas schieflief, aber nicht was.
+    vi.mocked(api.uploadAudio).mockRejectedValueOnce(new Error(''))
+    render(<UploadDropzone project="Demo" onDone={vi.fn()} />)
+    const input = screen.getByTestId('upload-input') as HTMLInputElement
+    await act(async () => { fireEvent.change(input, { target: { files: [new File(['x'], 'a.mp3')] } }) })
+    expect(await screen.findByText('Fehler')).toBeInTheDocument()
+  })
+
   it('reicht den vom Upload gestarteten Transkriptions-Job nach oben', async () => {
     // Ohne das muesste der Workspace bis zum naechsten Poll warten, bis der Balken erscheint.
     vi.mocked(api.uploadAudio)
