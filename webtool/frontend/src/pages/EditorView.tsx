@@ -3,14 +3,12 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useProjects } from '@/hooks/useProjects'
 import { useAiReady } from '@/hooks/useAiReady'
 import { useDoc } from '@/hooks/useDoc'
-import { useThresholds } from '@/hooks/useThresholds'
 import { useJob } from '@/hooks/useJob'
 import { mergePhases, useActiveJob } from '@/hooks/useActiveJob'
 import { uploadAudio, audioUrl, startTranscribe, startCorrect, startCorrectFile } from '@/lib/api'
 import { Sidebar } from '@/components/Sidebar'
 import { Toolbar } from '@/components/Toolbar'
 import { Transcript } from '@/components/Transcript'
-import { ThresholdPopover } from '@/components/ThresholdPopover'
 import { PlayerDock } from '@/components/PlayerDock'
 import type { WaveHandle } from '@/components/Waveform'
 
@@ -20,7 +18,6 @@ export function EditorView() {
   const { projects, loading: projectsLoading, refresh } = useProjects()
   const sel = project && base ? { project, base } : null
   const { doc, dirty, loading: docLoading, updateSegment, renameSpeaker, save, exportDownload, reload } = useDoc(sel?.project ?? null, sel?.base ?? null)
-  const { thr, setThr } = useThresholds()
   const { start } = useJob()
   const { jobs, adopt } = useActiveJob()
   const aiReason = useAiReady()          // nicht leer -> Korrektur waere ein Leerlauf
@@ -72,9 +69,9 @@ export function EditorView() {
           aiReason={aiReason} />
       </aside>
       <div className="col-start-2"><Toolbar title={title} dirty={dirty} canSave={!!doc}
-        onSave={save} onExport={exportDownload} settings={<ThresholdPopover thr={thr} setThr={setThr} />} /></div>
+        onSave={save} onExport={exportDownload} /></div>
       <main className="col-start-2 overflow-auto">
-        <Transcript doc={doc} loading={docLoading} thr={thr} activeId={activeId}
+        <Transcript doc={doc} loading={docLoading} activeId={activeId}
           onPlaySeg={s => waveRef.current?.playSegment(s)}
           onPlayTurn={segs => waveRef.current?.playTurn(segs)}
           updateSegment={updateSegment} renameSpeaker={renameSpeaker} />

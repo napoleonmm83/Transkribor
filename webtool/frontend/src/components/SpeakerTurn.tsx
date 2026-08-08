@@ -1,5 +1,5 @@
 import { Play } from 'lucide-react'
-import type { Segment, Thresholds, Turn } from '@/lib/types'
+import type { Segment, Turn } from '@/lib/types'
 import { SegmentView } from './SegmentView'
 import { SpeakerCombobox } from './SpeakerCombobox'
 
@@ -16,8 +16,8 @@ function color(speaker: string) { // stabil je Name (Interviewer/Befragte unters
   let h = 0; for (const c of speaker) h = (h * 31 + c.charCodeAt(0)) % 997
   return SPRECHERFARBEN[h % SPRECHERFARBEN.length]
 }
-export function SpeakerTurn({ turn, thr, activeId, onPlaySeg, onPlayTurn, updateSegment, renameSpeaker, speakerOptions }: {
-  turn: Turn; thr: Thresholds; activeId: number | null;
+export function SpeakerTurn({ turn, activeId, onPlaySeg, onPlayTurn, updateSegment, renameSpeaker, speakerOptions }: {
+  turn: Turn; activeId: number | null;
   onPlaySeg: (s: Segment) => void; onPlayTurn: (segs: Segment[]) => void;
   updateSegment: (id: number, patch: Partial<Segment>) => void;
   renameSpeaker: (from: string, to: string) => void; speakerOptions: string[];
@@ -52,7 +52,7 @@ export function SpeakerTurn({ turn, thr, activeId, onPlaySeg, onPlayTurn, update
             <SpeakerCombobox value={s.speaker} options={speakerOptions}
               onChange={v => updateSegment(s.id, { speaker: v })}
               className="opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100" />
-            <SegmentView seg={s} thr={thr} active={activeId === s.id}
+            <SegmentView seg={s} active={activeId === s.id}
               onPlay={() => onPlaySeg(s)} updateSegment={updateSegment} />
           </div>
         ))}

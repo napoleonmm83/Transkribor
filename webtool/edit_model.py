@@ -5,17 +5,24 @@ import re
 _TAG_RE = re.compile(r"\[\[(.+?)\|[0-9.]+\]\]")
 
 COMPRESSION_RATIO_THRESHOLD = 2.4
-NO_SPEECH_THRESHOLD = 0.6
 LOGPROB_THRESHOLD = -1.0
 
 
 def compute_flags(segment: dict) -> dict:
+    """Auffälligkeiten je Segment für die Editor-Anzeige.
+
+    Es gab hier eine dritte Flagge "silence" (`no_speech_prob > 0.6 AND avg_logprob < -1.0`).
+    Die konnte **nie** anschlagen, und zwar nicht aus Zufall: das ist wortwörtlich Whispers
+    eigene Skip-Bedingung (`whisper/transcribe.py`, `should_skip`) — solche Segmente wirft der
+    Decoder weg, bevor er die JSON schreibt. Wir haben die Upstream-Schwelle abgeschrieben,
+    ohne zu prüfen, ob Upstream schon danach filtert. Über 2472 echte Rohsegmente: 0 Treffer,
+    während "hallucination" 27 und "low_conf" 9 mal ansprang. Ein Symbol in der Legende, das
+    kein Nutzer je zu sehen bekommt, ist schlimmer als keines — es lässt ihn suchen.
+    """
     cr = segment.get("compression_ratio", 0.0)
-    nsp = segment.get("no_speech_prob", 0.0)
     alp = segment.get("avg_logprob", 0.0)
     return {
         "hallucination": cr > COMPRESSION_RATIO_THRESHOLD,
-        "silence": nsp > NO_SPEECH_THRESHOLD and alp < LOGPROB_THRESHOLD,
         "low_conf": alp < LOGPROB_THRESHOLD,
     }
 

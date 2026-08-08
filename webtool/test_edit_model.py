@@ -3,22 +3,23 @@ from webtool import edit_model as em
 
 def test_compute_flags_hallucination():
     seg = {"compression_ratio": 2.5, "no_speech_prob": 0.1, "avg_logprob": -0.3}
-    assert em.compute_flags(seg) == {"hallucination": True, "silence": False, "low_conf": False}
+    assert em.compute_flags(seg) == {"hallucination": True, "low_conf": False}
 
 
-def test_compute_flags_silence_needs_both():
-    seg = {"compression_ratio": 1.0, "no_speech_prob": 0.7, "avg_logprob": -1.5}
-    f = em.compute_flags(seg)
-    assert f["silence"] is True and f["low_conf"] is True
-    # hoher no_speech_prob allein (avg_logprob gut) ist KEINE Stille
-    seg2 = {"compression_ratio": 1.0, "no_speech_prob": 0.7, "avg_logprob": -0.2}
-    assert em.compute_flags(seg2)["silence"] is False
+def test_compute_flags_kennt_kein_no_speech_prob():
+    """Kein Flag darf an `no_speech_prob` hängen — Whisper hat diese Segmente schon verworfen.
+
+    Vorher stand hier ein Test, der die tote "silence"-Flagge grün bestätigte: er fütterte ein
+    handgebautes Dict, das der Decoder so nie ausgibt. Grüner Test, null Aussage.
+    """
+    stumm = {"compression_ratio": 1.0, "no_speech_prob": 0.99, "avg_logprob": -0.2}
+    assert em.compute_flags(stumm) == {"hallucination": False, "low_conf": False}
 
 
 def test_compute_flags_low_conf_only():
     seg = {"compression_ratio": 1.0, "no_speech_prob": 0.1, "avg_logprob": -1.2}
     f = em.compute_flags(seg)
-    assert f == {"hallucination": False, "silence": False, "low_conf": True}
+    assert f == {"hallucination": False, "low_conf": True}
 
 
 def test_build_edit_doc_shape():
@@ -38,7 +39,7 @@ def test_build_edit_doc_shape():
     assert seg["raw_text"] == "Ich bin da." and seg["text"] == "Ich bin da."
     assert seg["speaker"] == "" and seg["note"] == ""
     assert seg["words"][0]["probability"] == 0.13
-    assert seg["flags"] == {"hallucination": False, "silence": False, "low_conf": False}
+    assert seg["flags"] == {"hallucination": False, "low_conf": False}
 
 
 def test_compute_flags_boundaries_are_strict():
@@ -46,9 +47,6 @@ def test_compute_flags_boundaries_are_strict():
     assert em.compute_flags(
         {"compression_ratio": 2.4, "no_speech_prob": 0.0, "avg_logprob": 0.0}
     )["hallucination"] is False
-    assert em.compute_flags(
-        {"compression_ratio": 1.0, "no_speech_prob": 0.6, "avg_logprob": -1.5}
-    )["silence"] is False
     assert em.compute_flags(
         {"compression_ratio": 1.0, "no_speech_prob": 0.0, "avg_logprob": -1.0}
     )["low_conf"] is False
@@ -62,7 +60,7 @@ def test_build_edit_doc_edge_cases():
     raw = {"segments": [{"id": 0, "start": 0.0, "end": 1.0, "text": "x"}]}
     seg = em.build_edit_doc(raw, base="B", project="P", audio="")["segments"][0]
     assert seg["words"] == []
-    assert seg["flags"] == {"hallucination": False, "silence": False, "low_conf": False}
+    assert seg["flags"] == {"hallucination": False, "low_conf": False}
 
 
 def test_tag_uncertain_segments_wraps_low_prob():
@@ -123,7 +121,7 @@ def test_apply_correction_overlays_by_id():
     s0 = doc["segments"][0]
     assert s0["text"] == "Ich bin Matthias." and s0["speaker"] == "Matthias"
     assert s0["raw_text"] == "Ich bin Mathias."  # Roh bleibt erhalten
-    assert s0["words"][0]["probability"] == 0.4 and s0["flags"] == {"hallucination": False, "silence": False, "low_conf": False}
+    assert s0["words"][0]["probability"] == 0.4 and s0["flags"] == {"hallucination": False, "low_conf": False}
     s1 = doc["segments"][1]
     assert s1["text"] == "Aha." and s1["speaker"] == ""  # nicht korrigiert -> Rohtext, leerer Sprecher
 
