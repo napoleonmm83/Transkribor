@@ -34,8 +34,10 @@ export function PageHeader({ rubrik, titel, zurueck, zurueckText = 'Übersicht',
       <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
         <div className="min-w-0">
           {rubrik && <div className="rubrik mb-1.5">{rubrik}</div>}
-          {/* break-words: Projektnamen sind Nutzereingaben und koennen beliebig lang sein. */}
-          <h1 className="text-2xl font-semibold break-words">{titel}</h1>
+          {/* break-words: Projektnamen sind Nutzereingaben und koennen beliebig lang sein.
+              3xl statt 2xl: Space Grotesk hat bei kleinen Graden zu wenig Eigenart, um den
+              Wechsel zur Bedienschrift ueberhaupt sichtbar zu machen. */}
+          <h1 className="text-3xl font-semibold break-words">{titel}</h1>
         </div>
         {children && <div className="flex shrink-0 items-center gap-2">{children}</div>}
       </div>

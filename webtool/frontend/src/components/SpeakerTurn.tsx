@@ -3,9 +3,18 @@ import type { Segment, Thresholds, Turn } from '@/lib/types'
 import { SegmentView } from './SegmentView'
 import { SpeakerCombobox } from './SpeakerCombobox'
 
-function color(speaker: string) { // stabile Farbe je Name (Interviewer/Befragte unterscheidbar)
-  let h = 0; for (const c of speaker) h = (h * 31 + c.charCodeAt(0)) % 360
-  return `oklch(0.65 0.15 ${h})`
+/**
+ * Feste Reihe statt freiem Farbwinkel. Vorher lieferte der Namens-Hash IRGENDEINEN Ton aus
+ * 360 Grad — mal Gruen, mal Braun, und mit etwas Pech genau das Bernstein bzw. Rot, das in
+ * dieser App die unsicheren Woerter markiert. Diese sechs liegen alle im kuehlen Bereich
+ * (Indigo bis Smaragd), sind untereinander klar unterscheidbar und kollidieren mit keinem
+ * Warnsignal. Die Helligkeit 0.62 traegt auf hellem UND dunklem Grund.
+ */
+const SPRECHERFARBEN = [265, 230, 195, 300, 155, 210].map(h => `oklch(0.62 0.15 ${h})`)
+
+function color(speaker: string) { // stabil je Name (Interviewer/Befragte unterscheidbar)
+  let h = 0; for (const c of speaker) h = (h * 31 + c.charCodeAt(0)) % 997
+  return SPRECHERFARBEN[h % SPRECHERFARBEN.length]
 }
 export function SpeakerTurn({ turn, thr, activeId, onPlaySeg, onPlayTurn, updateSegment, renameSpeaker, speakerOptions }: {
   turn: Turn; thr: Thresholds; activeId: number | null;
