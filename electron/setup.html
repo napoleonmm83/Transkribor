@@ -21,6 +21,8 @@
            background:var(--akzent); color:#0b0b0c; font-weight:600; cursor:pointer; }
   button[disabled] { opacity:.5; cursor:default; }
   button.leise { background:transparent; color:var(--fg); border-color:var(--line); font-weight:400; }
+  /* Im Fehlerfall ist die Protokolldatei das Einzige, was der Nutzer weitergeben kann. */
+  button.hervor { border-color:var(--akzent); color:var(--akzent); }
   .zeile { display:flex; gap:10px; align-items:center; }
   #phase { color:var(--akzent); }
   #log { display:none; margin-top:18px; max-height:34vh; overflow:auto; background:#08080a; border:1px solid var(--line);
@@ -45,6 +47,7 @@
   <div class="zeile">
     <button id="los" style="display:none">Jetzt einrichten</button>
     <button id="logbtn" class="leise">Details</button>
+    <button id="datei" class="leise" title="Vollständiges Protokoll im Dateimanager zeigen">Protokoll öffnen</button>
     <span id="phase"></span>
   </div>
 
@@ -108,9 +111,14 @@ window.transkribor.on('fehler', t => {
   $('los').textContent = 'Erneut versuchen'
   $('los').style.display = ''
   log.style.display = 'block'          // im Fehlerfall ist das Log das Einzige, was hilft
+  $('datei').classList.add('hervor')   // ... und die Datei das, was man verschicken kann
 })
 
 $('logbtn').onclick = () => { log.style.display = log.style.display === 'block' ? 'none' : 'block' }
+$('datei').onclick = async () => {
+  const p = await window.transkribor.protokollOeffnen()
+  $('phase').textContent = 'Protokoll: ' + p
+}
 $('los').onclick = async () => {
   $('los').disabled = true
   $('fehler').style.display = 'none'
