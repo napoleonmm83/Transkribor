@@ -233,6 +233,10 @@ def test_codex_laeuft_nur_im_lesemodus(cfg, monkeypatch):
     assert cmd[1] == "exec"
     assert "--sandbox" in cmd and cmd[cmd.index("--sandbox") + 1] == "read-only"
     assert "--dangerously-bypass-approvals-and-sandbox" not in cmd
+    # Dieselbe Regel wie `--strict-mcp-config` beim claude-Weg: die persoenliche
+    # ~/.codex/config.toml bringt MCP-Server und eigene Instruktionen mit, die in einem Lauf
+    # ueber fremden Transkripttext nichts zu suchen haben.
+    assert "--ignore-user-config" in cmd
 
 
 def test_codex_prompt_geht_ueber_stdin(cfg, monkeypatch):

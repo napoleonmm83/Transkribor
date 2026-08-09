@@ -70,6 +70,9 @@ PROVIDERS = {
 # (`gemini -p`), aber ihr Abo-Zugang ist fuer Einzelpersonen abgeschaltet: sie antwortet mit
 # `IneligibleTierError: This client is no longer supported for Gemini Code Assist for
 # individuals`. Gemessen, nicht vermutet — auch mit gesetztem GEMINI_CLI_TRUST_WORKSPACE.
+# Das ist eine PRODUKTENTSCHEIDUNG, kein Kontoproblem: die Meldung verweist selbst auf die
+# Ablösung durch Antigravity (https://antigravity.google). Wer den Fehler sieht, braucht
+# also weder seine Anmeldung zu reparieren noch spaeter erneut zu probieren.
 # Nebenbefund fuer den Fall, dass Google das je zurueckdreht: `--approval-mode plan`
 # (Lesemodus) wird in einem nicht vertrauten Ordner STILL auf "default" herabgestuft. Wer
 # gemini hier aufnimmt, muss den Lesemodus also nachpruefen statt ihn anzunehmen.
@@ -146,6 +149,12 @@ def _run_codex(cfg: dict, prov: dict, prompt: str) -> str:
     Werkzeuge braucht dieser Weg ohnehin nicht: die Eingaben stehen dank `_with_files`
     vollstaendig im Prompt, geschrieben wird die Datei hier.
 
+    **`--ignore-user-config` ist dieselbe Regel wie `--strict-mcp-config` beim claude-Weg:**
+    die persoenliche `~/.codex/config.toml` bringt MCP-Server, eigene Anbieter und eigene
+    Instruktionen mit — nichts davon hat in einem Lauf zu suchen, der fremden Transkripttext
+    verarbeitet. Die Anmeldung bleibt davon unberuehrt (sie haengt an `CODEX_HOME`, nicht an
+    der config.toml), E2E nachgeprueft.
+
     **`-o` statt die Konsolenausgabe zu lesen:** `codex exec` druckt seinen Sitzungsverlauf
     mit, und darin steht der PROMPT im Klartext. `parse_json` sucht von der ersten `{` bis
     zur letzten `}` und griffe quer durch dieses Echo. `-o` schreibt ausschliesslich die
@@ -160,7 +169,8 @@ def _run_codex(cfg: dict, prov: dict, prompt: str) -> str:
         raise LLMError(f"{prov['label']}: '{prov['bin']}' ist nicht auf dem PATH")
     with tempfile.TemporaryDirectory() as tmp:
         ziel = os.path.join(tmp, "antwort.txt")
-        cmd = [exe, "exec", "--sandbox", "read-only", "--skip-git-repo-check", "-o", ziel]
+        cmd = [exe, "exec", "--sandbox", "read-only", "--skip-git-repo-check",
+               "--ignore-user-config", "-o", ziel]
         if cfg["model"]:
             cmd += ["-m", cfg["model"]]
         cmd.append("-")
