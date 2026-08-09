@@ -110,7 +110,7 @@ def test_apply_missing_correction_returns_missing(project):
 def _fake_claude(t, calls):
     """Ersatz für _run_claude: schreibt kanonische Dateien wie das echte claude -p
     (Write-Tool). Zielpfad wird — wie im echten Prompt — aus dem Prompt gelesen."""
-    def fake(prompt):
+    def fake(prompt, workdir):
         calls.append(prompt)
         m = re.search(r"(\S+_glossar\.json)", prompt)
         if m:
@@ -175,7 +175,7 @@ def test_run_no_verify_skips_verify(project, monkeypatch):
 def test_run_verify_invalid_restores_stage1(project, monkeypatch):
     _root, t = project
 
-    def fake(prompt):
+    def fake(prompt, workdir):
         if "_glossar.json" in prompt:
             return
         cpath = re.search(r"(\S+\.correction\.json)", prompt).group(1)
@@ -280,7 +280,7 @@ def test_run_continues_after_missing_correction(project, monkeypatch):
          "compression_ratio": 1.0, "no_speech_prob": 0.01, "avg_logprob": -0.3, "words": []}]}
     (t / "S2.json").write_text(json.dumps(raw2), encoding="utf-8")
 
-    def fake(prompt):
+    def fake(prompt, workdir):
         if "_glossar.json" in prompt:
             return
         if "S1.correction.json" in prompt:
@@ -297,7 +297,7 @@ def test_run_survives_corrupt_raw(project, monkeypatch):
     _root, t = project
     (t / "S2.json").write_text("{ kaputt, kein json", encoding="utf-8")  # z.B. abgebrochene Transkription
 
-    def fake(prompt):
+    def fake(prompt, workdir):
         if "_glossar.json" in prompt:
             return
         _dump(re.search(r"(\S+\.correction\.json)", prompt).group(1),
@@ -328,19 +328,34 @@ def test_run_claude_argv_and_confinement(project, monkeypatch):
 
     monkeypatch.setattr(correct, "_claude_exe", lambda: "C:/fake/claude.exe")
     monkeypatch.setattr(correct.subprocess, "run", fake_run)
-    correct._run_claude("MEIN PROMPT")
-    root = paths.projekte_root()
+    tdir = paths.transkripte_dir("Demo")
+    correct._run_claude("MEIN PROMPT", tdir)
     assert captured["cmd"] == [
         "C:/fake/claude.exe", "-p", "--model", "opus",
         "--permission-mode", "acceptEdits", "--allowedTools", "Read,Write",
         # kein MCP-Server: halbiert den Startup und haelt die persoenlichen Server (Mail,
         # Notion, …) aus einem Lauf raus, der nicht vertrauenswuerdigen Text verarbeitet
         "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}',
-        "--add-dir", root,
+        "--add-dir", tdir,
     ]
-    assert captured["kw"]["cwd"] == root                 # Confinement auf projekte_root
+    assert captured["kw"]["cwd"] == tdir                 # Confinement auf EIN Projekt
     assert captured["kw"]["input"] == "MEIN PROMPT"      # Prompt über stdin, nicht argv
     assert captured["kw"]["timeout"] == correct.CLAUDE_TIMEOUT
+    # Der Projektbaum als Ganzes darf es NICHT sein: ein praepariertes Transkript koennte
+    # sonst in die Transkripte jedes anderen Projekts schreiben (Prompt-Injection).
+    assert captured["kw"]["cwd"] != paths.projekte_root()
+
+
+def test_ask_llm_confines_claude_to_the_output_dir(project, monkeypatch):
+    """_ask_llm leitet den Schreibbereich aus dem Zielpfad ab — genau EIN Projekt."""
+    from webtool import paths
+    _root, t = project
+    gesehen = {}
+    monkeypatch.setattr(correct.llm, "use_api", lambda: False)
+    monkeypatch.setattr(correct, "_run_claude", lambda p, wd: gesehen.update(workdir=wd))
+    correct._ask_llm("prompt", [], str(t / "S1.correction.json"))
+    assert gesehen["workdir"] == str(t)
+    assert gesehen["workdir"] != paths.projekte_root()
 
 
 def test_run_claude_missing_exe_is_silent(project, monkeypatch):
@@ -348,7 +363,7 @@ def test_run_claude_missing_exe_is_silent(project, monkeypatch):
     monkeypatch.setattr(correct.shutil, "which", lambda name: None)   # claude nicht auf PATH
     monkeypatch.setattr(correct.subprocess, "run",
                         lambda *a, **k: ran.__setitem__("subprocess", True))
-    correct._run_claude("x")                             # darf nicht crashen
+    correct._run_claude("x", ".")                             # darf nicht crashen
     assert ran["subprocess"] is False                    # still geschluckt: kein subprocess-Aufruf
 
 
@@ -360,7 +375,7 @@ def test_run_claude_nonzero_returncode_logs(project, monkeypatch, capsys):
 
     monkeypatch.setattr(correct, "_claude_exe", lambda: "claude")
     monkeypatch.setattr(correct.subprocess, "run", lambda *a, **k: _R())
-    correct._run_claude("x")                             # kein Crash bei exit!=0
+    correct._run_claude("x", ".")                             # kein Crash bei exit!=0
     assert "claude exit 2" in capsys.readouterr().out
 
 
@@ -370,7 +385,7 @@ def test_run_claude_timeout_is_caught(project, monkeypatch, capsys):
 
     monkeypatch.setattr(correct, "_claude_exe", lambda: "claude")
     monkeypatch.setattr(correct.subprocess, "run", boom)
-    correct._run_claude("x")                             # Timeout gefangen, kein Crash
+    correct._run_claude("x", ".")                             # Timeout gefangen, kein Crash
     assert "Timeout" in capsys.readouterr().out
 
 
@@ -378,7 +393,7 @@ def test_run_claude_timeout_is_caught(project, monkeypatch, capsys):
 
 def test_run_cli_exits_nonzero_when_nothing_corrected(project, monkeypatch):
     # claude schreibt nie etwas (z.B. nicht auf PATH) -> jede versuchte Datei schlaegt fehl
-    monkeypatch.setattr(correct, "_run_claude", lambda prompt: None)
+    monkeypatch.setattr(correct, "_run_claude", lambda prompt, workdir: None)
     with pytest.raises(SystemExit) as ei:
         correct.main(["run", "Demo"])
     assert ei.value.code != 0                            # Job-Signal: Fehler, nicht "done"
@@ -388,7 +403,7 @@ def test_run_cli_ok_when_all_human_edited(project, monkeypatch):
     _root, t = project
     (t / "S1.edit.json").write_text(json.dumps(
         {"human_edited": True, "segments": [{"id": 0, "text": "Von Hand."}]}), encoding="utf-8")
-    monkeypatch.setattr(correct, "_run_claude", lambda prompt: None)
+    monkeypatch.setattr(correct, "_run_claude", lambda prompt, workdir: None)
     correct.main(["run", "Demo"])                        # alles uebersprungen -> kein Fehlalarm
 
 
@@ -556,7 +571,9 @@ def _write_raw(t, base: str, n: int):
 def _chunk_claude(t, calls, lock=None):
     """Fake-claude, der die Block-Anweisung BEACHTET (nur IDs a..b ausgeben) — sonst
     lieferte jeder Block die ganze Datei und der Merge waere blind gegen ID-Fehler."""
-    def fake(prompt):
+    # workdir hat einen Default, weil zwei Tests diesen Schreiber DIREKT aufrufen (statt ihn
+    # auf _run_claude zu patchen) — dort ist der Arbeitsordner belanglos.
+    def fake(prompt, workdir=None):
         if lock:
             with lock:
                 calls.append(prompt)
@@ -677,7 +694,7 @@ def test_gescheiterter_block1_stoppt_die_datei(project, monkeypatch):
     monkeypatch.setattr(correct, "CHUNK_SEGMENTS", 2)
     schreibe = _chunk_claude(t, [])
 
-    def nur_block1_faellt_aus(prompt):
+    def nur_block1_faellt_aus(prompt, workdir=None):
         if "IDs 0 bis 1" in prompt and "TREUE-CHECK" not in prompt:
             return                                   # claude schreibt nichts -> Block 1 ungueltig
         schreibe(prompt)

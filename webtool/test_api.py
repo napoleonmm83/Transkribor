@@ -529,3 +529,38 @@ def test_settings_meldet_ai_ready(client, monkeypatch):
     body = client.get("/api/settings").json()
     assert body["ai_ready"] is False
     assert body["ai_reason"] == "kein claude"
+
+
+# ---- Trust-Boundary Browser: Origin-Guard ----
+# Der Server hoert nur auf 127.0.0.1, aber eine beliebige besuchte Webseite darf ihm
+# "simple" Requests schicken (multipart-Upload, POST ohne Body -> kein Preflight).
+
+def test_fremder_origin_wird_abgewiesen(client):
+    r = client.post("/api/projects/Demo/transcribe", headers={"Origin": "https://evil.example"})
+    assert r.status_code == 403
+
+
+def test_fremder_origin_kann_kein_audio_unterschieben(client, tmp_path):
+    """Der teuerste Fall: multipart ist CORS-safelisted, loest also KEINEN Preflight aus."""
+    r = client.post("/api/projects/Neu/audio", headers={"Origin": "https://evil.example"},
+                    files={"file": ("x.mp3", b"ID3fake", "audio/mpeg")})
+    assert r.status_code == 403
+    assert not (tmp_path / "Neu").exists()      # upload_audio legt den Ordner sonst selbst an
+
+
+def test_origin_null_wird_abgewiesen(client):
+    """Sandboxed iframe / file:// schickt 'null' — kein Hostname, also nicht Loopback."""
+    assert client.post("/api/projects/Demo/transcribe", headers={"Origin": "null"}).status_code == 403
+
+
+@pytest.mark.parametrize("origin", ["http://127.0.0.1:8000", "http://localhost:5173",
+                                    "http://[::1]:8000"])
+def test_eigene_und_dev_herkunft_bleiben_erlaubt(client, origin):
+    """Das eigene Frontend, der Vite-Dev-Server (:5173) und die Desktop-App (freier Port)."""
+    assert client.post("/api/projects/Demo/transcribe", headers={"Origin": origin}).status_code == 200
+
+
+def test_ohne_origin_unveraendert(client):
+    """curl, die Tests und jeder Nicht-Browser schicken keinen Origin."""
+    assert client.get("/api/projects").status_code == 200
+    assert client.post("/api/projects/Demo/transcribe").status_code == 200

@@ -11,6 +11,8 @@ Frontend mit `has_key` statt dem Schluessel selbst.
 import json
 import os
 
+from . import paths
+
 
 # Alle Namen, die whisper.load_model akzeptiert. Ein handverdrehtes "base" soll
 # funktionieren, ein vertipptes "larg-v3" aber nicht erst beim Modell-Laden auffallen.
@@ -31,6 +33,39 @@ WHISPER_CHOICES = (
     {"id": "turbo", "label": "Schnell und gut", "hint": "nahe large-Qualität, deutlich schneller"},
     {"id": "large-v3", "label": "Beste Qualität", "hint": "langsamste, bester Dialekt"},
 )
+
+
+def env_path() -> str:
+    """Pfad der `.env`. TRANSKRIBOR_ENV, weil die gepackte App ihre Datei in `userData`
+    hat — neben der .exe liegt sie nie (Program Files ist schreibgeschuetzt)."""
+    return os.environ.get("TRANSKRIBOR_ENV") or os.path.join(paths.ROOT, ".env")
+
+
+def load_env() -> list:
+    """`.env` (KEY=VALUE je Zeile, `#` = Kommentar) nach os.environ. Gibt die gesetzten
+    Namen zurueck (fuers Protokoll). Eine fehlende Datei ist der Normalfall, kein Fehler.
+
+    Lag vorher doppelt in webtool.ps1 und electron/backend.js — zwei Parser in zwei
+    Sprachen fuer dieselbe Datei, und wer uvicorn von Hand startete, bekam sie gar nicht.
+    Die Datei gewinnt gegen eine bereits gesetzte Variable: genau das taten beide Launcher
+    (webtool.ps1 setzte unbedingt, backend.js legte die .env ueber die geerbte Umgebung).
+    """
+    gesetzt = []
+    try:
+        with open(env_path(), encoding="utf-8-sig") as fh:
+            zeilen = fh.readlines()
+    except OSError:
+        return gesetzt
+    for zeile in zeilen:
+        t = zeile.strip()
+        if not t or t.startswith("#") or "=" not in t:
+            continue
+        k, v = t.split("=", 1)                      # nur beim ERSTEN =, Werte duerfen welche enthalten
+        k = k.strip()
+        if k:
+            os.environ[k] = v.strip().strip('"').strip("'")
+            gesetzt.append(k)
+    return gesetzt
 
 
 def path() -> str:

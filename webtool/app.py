@@ -4,9 +4,10 @@ import os
 import shutil
 import sys
 from contextlib import asynccontextmanager
+from urllib.parse import urlparse
 
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
 from . import device
@@ -17,6 +18,13 @@ from . import paths
 from . import settings
 from .edit_model import build_edit_doc
 from .render_md import render_md
+
+# Vor allem anderen: die .env kann TRANSKRIBOR_PROJEKTE & Co. setzen, und die liest
+# jeder folgende Zugriff aus os.environ. Frueher taten das die Launcher (webtool.ps1,
+# electron/backend.js) — damit sah ein von Hand gestartetes uvicorn die Datei nie.
+for _name in settings.load_env():
+    print(f"[.env] {_name}", flush=True)
+
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
@@ -29,6 +37,29 @@ async def _lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Transkribor Editor", lifespan=_lifespan)
+
+# Trust-Boundary Browser. Der Server hoert nur auf 127.0.0.1 — aus dem Netz ist er nicht
+# erreichbar. Aber JEDE Seite, die der Nutzer im Browser offen hat, darf ihm "simple"
+# Cross-Origin-Requests schicken: multipart-Upload und POST ohne Body loesen keinen
+# Preflight aus. Ohne diese Pruefung koennte eine besuchte Fremdseite Audio in ein Projekt
+# legen (upload_audio legt den Ordner sogar an) und GPU-Jobs starten. Lesen kann sie die
+# Antwort nie — es gibt keine CORS-Header —, es geht ausschliesslich um Schreibzugriffe.
+#
+# Warum der Origin-Header reicht: der Browser setzt ihn selbst, eine Seite kann ihn nicht
+# faelschen. Same-Origin-Aufrufe des eigenen Frontends tragen einen Loopback-Origin (oder
+# bei GET gar keinen), der Vite-Dev-Server auf :5173 ebenfalls — beide bleiben nutzbar.
+# Nicht-Browser-Aufrufe (curl, die Tests) schicken keinen Origin und laufen unveraendert.
+_LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
+
+
+@app.middleware("http")
+async def _nur_lokale_herkunft(request: Request, call_next):
+    origin = request.headers.get("origin")
+    # "null" (sandboxed iframe, file://) hat keinen Hostnamen -> faellt korrekt durch.
+    if origin and (urlparse(origin).hostname or "").lower() not in _LOOPBACK_HOSTS:
+        return JSONResponse({"detail": "fremde Herkunft"}, status_code=403)
+    return await call_next(request)
+
 
 AUDIO_EXT = (".mp3", ".wav", ".m4a", ".aac", ".flac", ".ogg", ".opus", ".wma", ".mp4")
 MAX_FETCH_URLS = 20
