@@ -68,7 +68,11 @@ function plan(platform, paketmanager) {
     return {
       torchIndex: null,
       autoInstall: false,
-      hinweis: 'Bitte einmalig installieren:  brew install python ffmpeg',
+      // whisper-cpp ist die ASR-Engine auf Apple Silicon (gemessen 5.29x statt 0.81x
+      // realtime, siehe webtool/whispercpp.py). Fehlt es, laeuft die Transkription
+      // weiter — nur langsam ueber faster-whisper auf der CPU. Darum steht es in
+      // derselben Zeile wie python und ffmpeg und nicht in einem eigenen Schritt.
+      hinweis: 'Bitte einmalig installieren:  brew install python ffmpeg whisper-cpp',
     }
   }
   const befehl = LINUX_PAKETE[paketmanager]
@@ -186,20 +190,36 @@ async function venvVollstaendig() {
   return r !== null && r.includes('ok')
 }
 
+/**
+ * whisper-cli (Homebrew-Paket whisper-cpp) — die ASR-Engine auf Apple Silicon.
+ * Leerstring heisst nicht "kaputt": ohne sie faellt webtool/device.py auf
+ * faster-whisper zurueck, die Transkription laeuft weiter, nur langsam.
+ */
+async function findeWhisperCpp() {
+  if (process.platform !== 'darwin') return ''
+  const auf = await ausgabe('which', ['whisper-cli'])
+  return auf ? auf.split(/\r?\n/)[0].trim() : ''
+}
+
 async function status() {
   const py = await findePython()
   const ff = await findeFfmpeg()
+  const wcpp = await findeWhisperCpp()
   const pl = plan(process.platform, await paketmanager())
+  const macFehlt = process.platform === 'darwin' && !wcpp
   return {
     python: py ? `Python ${py.version}` : '',
     ffmpeg: ff,
+    whispercpp: wcpp,
     venv: await venvVollstaendig(),
     winget: process.platform === 'win32' ? (await ausgabe('winget', ['--version'])) || '' : '',
     venvPfad: P.venv,
     projektePfad: P.projekte,
     // Nicht leer heisst: hier installiert die App nichts selbst (macOS/Linux), der Nutzer
     // braucht den Befehl. Auf Windows bleibt es leer — winget uebernimmt.
-    hinweis: (py && ff) ? '' : pl.hinweis,
+    // whisper-cpp zaehlt mit: es fehlt sonst still, und der Nutzer wartet das Sechsfache,
+    // ohne zu erfahren, dass ein `brew install` das behebt.
+    hinweis: (py && ff && !macFehlt) ? '' : pl.hinweis,
   }
 }
 

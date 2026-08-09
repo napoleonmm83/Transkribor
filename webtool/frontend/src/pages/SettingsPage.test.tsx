@@ -88,15 +88,29 @@ describe('SettingsPage', () => {
     expect(await screen.findByText(/auf der CPU sehr lange/i)).toBeInTheDocument()
   })
 
-  it('warnt auf Apple Silicon, obwohl device "mps" meldet', async () => {
+  it('nennt auf Apple Silicon den fehlenden whisper-cpp statt CUDA', async () => {
     // Der Hinweis hing frueher an `device`. Auf einem Mac steht dort "mps" (das gilt der
     // Sprechertrennung), waehrend die Transkription auf der CPU rechnet — der Hinweis waere
     // also genau dort still gewesen, wo er am noetigsten ist.
+    // Seit whisper.cpp ist `asr: 'cpu'` auf einem Mac kein Naturgesetz mehr, sondern eine
+    // fehlende Installation. Der Hinweis muss deshalb den Befehl nennen, nicht bedauern.
     zeige({ whisper_model: 'large-v3' },
-          { device: 'mps', name: 'Apple Silicon (Metal)', torch_ok: true, asr: 'cpu' })
+          { device: 'mps', name: 'Apple Silicon (Metal)', torch_ok: true, asr: 'cpu',
+            asr_engine: 'faster-whisper' })
     expect(await screen.findByText(/auf der CPU sehr lange/i)).toBeInTheDocument()
-    expect(screen.getByText(/keine GPU-Unterstützung/i)).toBeInTheDocument()
+    expect(screen.getByText(/brew install whisper-cpp/i)).toBeInTheDocument()
     expect(screen.queryByText(/NVIDIA-Grafikkarte/i)).not.toBeInTheDocument()
+  })
+
+  it('schweigt, wenn whisper.cpp auf der Apple-GPU rechnet', async () => {
+    // Der Gegenfall zum Test darueber: laeuft Metal, gibt es nichts zu warnen. Ohne diesen
+    // Test bliebe unbemerkt, dass die CPU-Warnung nur an `asr === 'cpu'` haengt.
+    zeige({ whisper_model: 'large-v3' },
+          { device: 'mps', name: 'Apple Silicon (Metal)', torch_ok: true, asr: 'metal',
+            asr_engine: 'whisper.cpp' })
+    expect(await screen.findByText(/Apple Silicon \(Metal\)/)).toBeInTheDocument()
+    expect(screen.queryByText(/auf der CPU sehr lange/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/brew install whisper-cpp/i)).not.toBeInTheDocument()
   })
 
   it('nennt bei fehlendem PyTorch die Umgebung statt CUDA', async () => {

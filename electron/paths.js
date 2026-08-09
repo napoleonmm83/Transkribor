@@ -23,6 +23,10 @@ module.exports = {
   // Im Repo die vorhandene .venv weiterverwenden — wer schon eingerichtet hat, soll nicht 5 GB neu laden.
   venv: istPaket ? path.join(daten, 'venv') : path.join(pyRoot, '.venv'),
   projekte: istPaket ? path.join(daten, 'projekte') : path.join(pyRoot, 'projekte'),
+  // GGML-Modelle fuer whisper.cpp (Apple Silicon). Gepackt nach userData, aus demselben
+  // Grund wie projekte: das Verzeichnis neben der .app ist schreibgeschuetzt und wird
+  // beim Update ersetzt — ein 1-GB-Modell duerfte man dann bei jedem Update neu laden.
+  ggml: istPaket ? path.join(daten, 'ggml') : path.join(pyRoot, 'models', 'ggml'),
   envDatei: istPaket ? path.join(daten, '.env') : path.join(pyRoot, '.env'),
   requirements: path.join(pyRoot, 'requirements.txt'),
   /** python.exe der venv (existiert erst nach der Einrichtung). */

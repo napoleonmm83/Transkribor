@@ -74,6 +74,12 @@ function zeigeStatus(s) {
   check.innerHTML = ''
   zeile('Python', !!s.python, s.python)
   zeile('ffmpeg', !!s.ffmpeg, s.ffmpeg)
+  // Nur auf macOS: dort ist whisper-cpp die schnelle Engine (Metal). Fehlt sie, läuft
+  // alles weiter — sechsmal langsamer. Das gehört sichtbar in die Liste und nicht in
+  // eine Fußnote, sonst sucht der Nutzer die Ursache bei seiner Hardware.
+  if (s.whispercpp !== undefined && navigator.platform.startsWith('Mac')) {
+    zeile('whisper-cpp (Apple-GPU)', !!s.whispercpp, s.whispercpp || 'fehlt — Transkription läuft langsam auf der CPU')
+  }
   zeile('Python-Umgebung (Whisper, PyTorch)', s.venv, s.venv ? s.venvPfad : '')
   $('hinweis').textContent = 'Projekte liegen in ' + s.projektePfad
   // Auf macOS/Linux installiert die App Python/ffmpeg nicht selbst. Dann ist dieser Befehl das

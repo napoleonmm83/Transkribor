@@ -43,6 +43,7 @@
           "CLAUDE.md",
           "LICENSE-MODELLE.md",
           "models/**/*",
+          "!models/ggml/**",
           "!webtool/frontend/**",
           "!webtool/test_*.py",
           "!**/__pycache__/**"

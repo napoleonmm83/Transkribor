@@ -6,6 +6,10 @@ __pycache__/
 # Projekt-Daten (Interview-Audio + Transkripte) bleiben lokal, nicht ins Repo
 projekte/
 
+# GGML-Modelle fuer whisper.cpp: zur Laufzeit geladen (1 GB), kommen vom GitHub-Release.
+# Das pyannote-Modell darueber liegt bewusst IM Repo — dieser Unterordner nicht.
+models/ggml/
+
 # Lokale Secrets/Config (API-Keys etc.) — nie committen; Vorlage: .env.example
 .env
 

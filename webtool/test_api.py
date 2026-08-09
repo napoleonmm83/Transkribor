@@ -445,26 +445,42 @@ def test_settings_test_meldet_fehler_statt_zu_500en(client, monkeypatch):
 def test_hardware_endpoint(client, monkeypatch):
     from webtool import app as appmod
     from webtool import device
-    monkeypatch.setattr(appmod, "_HARDWARE", None)
+    monkeypatch.setattr(appmod, "_HARDWARE", {})
     monkeypatch.setattr(device, "describe",
-                        lambda: {"device": "cuda", "name": "RTX 5080", "torch_ok": True})
+                        lambda m: {"device": "cuda", "name": "RTX 5080", "torch_ok": True})
     r = client.get("/api/hardware")
     assert r.status_code == 200
     assert r.json()["device"] == "cuda"
 
 
 def test_hardware_wird_gecacht(client, monkeypatch):
-    """Der torch-Import kostet Sekunden — genau einmal pro Serverlauf."""
+    """Der torch-Import kostet Sekunden — genau einmal pro Whisper-Stufe."""
     from webtool import app as appmod
     from webtool import device
     rufe = []
-    monkeypatch.setattr(appmod, "_HARDWARE", None)
+    monkeypatch.setattr(appmod, "_HARDWARE", {})
     monkeypatch.setattr(device, "describe",
-                        lambda: (rufe.append(1),
-                                 {"device": "cpu", "name": "CPU", "torch_ok": True})[1])
+                        lambda m: (rufe.append(m),
+                                   {"device": "cpu", "name": "CPU", "torch_ok": True})[1])
     client.get("/api/hardware")
     client.get("/api/hardware")
     assert len(rufe) == 1
+
+
+def test_hardware_bekommt_die_eingestellte_stufe(client, monkeypatch):
+    """Auf Apple Silicon haengt die Engine an der Whisper-Stufe (device.asr_engine).
+    Wuerde der Endpunkt sie nicht durchreichen, meldete er nach einem Wechsel das
+    falsche Rechenwerk — genau die Luege, die device.describe() vermeiden soll."""
+    from webtool import app as appmod
+    from webtool import device, settings
+    monkeypatch.setattr(appmod, "_HARDWARE", {})
+    monkeypatch.setattr(settings, "load", lambda: {**settings.DEFAULTS,
+                                                   "whisper_model": "turbo"})
+    gesehen = []
+    monkeypatch.setattr(device, "describe",
+                        lambda m: (gesehen.append(m), {"device": "cpu"})[1])
+    client.get("/api/hardware")
+    assert gesehen == ["turbo"]
 
 
 def test_settings_liefert_whisper_auswahl(client):

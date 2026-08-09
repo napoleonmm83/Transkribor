@@ -25,7 +25,11 @@ export type WhisperChoice = { id: string; label: string; hint: string };
 // `device` gilt der torch-Welt (Sprechertrennung, kann "mps"), `asr` der Transkription
 // (faster-whisper/CTranslate2, nur "cuda"/"cpu"). Auf einem Mac laufen die beiden ausein-
 // ander — deshalb zwei Felder statt einem.
-export type Hardware = { device: string; name: string; torch_ok: boolean; asr: string };
+// `asr` ist "cuda" | "cpu" | "metal"; "metal" heisst, dass whisper.cpp rechnet
+// (Apple Silicon). `asr_engine` nennt sie beim Namen — fuers Protokoll und fuer
+// Fehlerberichte, in denen "warum ist das langsam" die haeufigste Frage ist.
+export type Hardware = { device: string; name: string; torch_ok: boolean; asr: string;
+                         asr_engine?: string };
 /** `has_key` statt des Keys: der Schluessel verlaesst den Server nie. */
 export type Settings = {
   provider: string; model: string; base_url: string; has_key: boolean;
