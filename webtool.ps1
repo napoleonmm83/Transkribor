@@ -1,4 +1,4 @@
-# Startet den Transkribor-Editor lokal und öffnet den Browser.
+﻿# Startet den Transkribor-Editor lokal und öffnet den Browser.
 $py = Join-Path $PSScriptRoot ".venv\Scripts\python.exe"
 
 # .env (git-ignoriert) laden, falls vorhanden — Env-Overrides wie TRANSKRIBOR_DIARIZE EINMAL
