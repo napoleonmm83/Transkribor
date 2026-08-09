@@ -128,7 +128,7 @@ export function SettingsPage() {
                 ? 'Ohne GPU braucht „Beste Qualität" auf der CPU sehr lange — für längere Interviews besser „Schnell und gut" wählen. '
                 : ''}
               {hw.device === 'mps'
-                ? 'Die Sprechertrennung nutzt die Apple-GPU, die Transkription rechnet auf der CPU — dafür gibt es auf Apple Silicon keine GPU-Unterstützung.'
+                ? 'Die Transkription könnte hier die Apple-GPU nutzen und wäre damit rund sechsmal schneller. Dafür fehlt whisper-cpp — einmalig „brew install whisper-cpp“ im Terminal, dann Transkribor neu starten.'
                 : 'Wenn dieser Rechner eine NVIDIA-Grafikkarte hat, wurde PyTorch ohne CUDA installiert — dann die Umgebung neu einrichten.'}
             </span>
           )}

@@ -164,7 +164,11 @@ def _faster_attrappe(monkeypatch, kaputt=()):
     from webtool import device as devicemod
     monkeypatch.setattr(devicemod, "pick_asr", lambda: "cpu")
     monkeypatch.setattr(devicemod, "describe",
-                        lambda: {"device": "cpu", "name": "CPU", "torch_ok": True, "asr": "cpu"})
+                        lambda m="": {"device": "cpu", "name": "CPU", "torch_ok": True,
+                                      "asr": "cpu", "asr_engine": "faster-whisper"})
+    # Sonst haengt dieser Test an der Maschine: auf einem Entwickler-Mac mit installiertem
+    # whisper-cli waehlt asr_engine() whisper.cpp, und die Attrappe oben liefe ins Leere.
+    monkeypatch.setattr(devicemod, "asr_engine", lambda m: "faster-whisper")
     return gesehen
 
 

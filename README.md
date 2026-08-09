@@ -9,9 +9,17 @@ LLM-Korrekturlauf (via Claude Code) für Kontextfehler und Sprecher-Labels.
 Die Transkription läuft lokal auf deinem Rechner. Empfohlen:
 
 - **Windows / Linux:** NVIDIA-GPU mit aktuellem Treiber
-- **macOS:** Apple Silicon (M1 oder neuer)
+- **macOS:** Apple Silicon (M1 oder neuer), dazu einmalig
+  `brew install python ffmpeg whisper-cpp`
 - **Ohne GPU** läuft alles ebenfalls, aber deutlich langsamer — dann in den Einstellungen
   eine kleinere Qualitätsstufe als „Beste Qualität" wählen.
+
+Auf Apple Silicon transkribiert **whisper.cpp über Metal**, auf Windows und Linux
+**faster-whisper über CUDA**. Fehlt `whisper-cpp`, rechnet der Mac weiter — nur rund
+sechsmal langsamer auf der CPU; die Einstellungsseite sagt es dann und nennt den Befehl.
+Gemessen auf einem M1 Pro mit `large-v3`: 5,3x Echtzeit über Metal gegen 0,8x auf der CPU.
+Die Zahlen und die Begründung stehen in
+[`docs/superpowers/specs/2026-08-09-transkribor-apple-silicon-asr-design.md`](docs/superpowers/specs/2026-08-09-transkribor-apple-silicon-asr-design.md).
 
 Die Korrektur und Sprecher-Zuordnung brauchen zusätzlich ein Sprachmodell (eigener API-Key,
 lokales Modell über einen OpenAI-kompatiblen Endpunkt wie Ollama, oder ein Claude-Code-Abo).

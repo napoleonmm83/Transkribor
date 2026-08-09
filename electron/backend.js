@@ -58,6 +58,9 @@ async function start(onLine) {
         // Nutzerdaten liegen nie neben der .exe — Program Files ist schreibgeschuetzt und
         // wird beim Update ersetzt.
         TRANSKRIBOR_PROJEKTE: P.projekte,
+        // Dasselbe fuer die GGML-Modelle der Apple-Silicon-Engine (webtool/whispercpp.py):
+        // sie werden zur Laufzeit geladen, gehoeren also zu den Nutzerdaten, nicht zum Paket.
+        TRANSKRIBOR_GGML: P.ggml,
       },
     })
   proc.stdout.on('data', b => String(b).split(/\r?\n/).filter(Boolean).forEach(merke))

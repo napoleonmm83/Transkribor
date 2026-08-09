@@ -123,6 +123,15 @@ def _modell(model, device):
     _cuda_dlls_auf_pfad()                       # VOR dem Import: so lief der gepruefte Fall
     from faster_whisper import WhisperModel
     # int8 auf der CPU: float16 ist dort teils gar nicht implementiert und sonst langsam.
+    #
+    # `cpu_threads` bleibt beim Default (4) — das ist gemessen, nicht vergessen. Auf einem
+    # M1 Pro (6 Performance-, 2 Effizienzkerne, 2.0 Min Audio, large-v3):
+    #     4 Threads (Default)  82s   1.45x    <- schnellste Variante
+    #     6 Threads           104s   1.14x
+    #     8 Threads           171s   0.70x
+    # Alle Kerne zu nehmen halbiert den Durchsatz: CTranslate2 synchronisiert je Schicht,
+    # und sobald Threads auf den Effizienzkernen landen, wartet der ganze Block auf sie.
+    # int8_float32 lag bei gleicher Threadzahl im Rauschen (101.7s gegen 104.4s).
     return WhisperModel(model, device=device,
                         compute_type="float16" if device == "cuda" else "int8")
 
@@ -168,14 +177,24 @@ def transcribe_project(name, model, language, only=None):
             prompt = txt[:800]
 
     from webtool import device as devicemod
-    device = devicemod.pick_asr()
-    info = devicemod.describe()
-    # Auf einem Mac meldet describe() "mps" (das gilt der Diarisierung), die ASR laeuft aber
-    # auf der CPU. Das gehoert ins Log, sonst sucht der Nutzer den Fehler bei sich.
-    warum = " — CTranslate2 kennt kein MPS, ASR rechnet auf der CPU" if info["device"] == "mps" else ""
-    print(f"[{name}] device={device} ({info['name']}){warum}", flush=True)
+    engine = devicemod.asr_engine(model)
+    if engine == "whisper.cpp":
+        # Apple Silicon: Metal statt CPU. Gemessen 5.29x gegen 0.81x realtime — die
+        # Begruendung steht in webtool/whispercpp.py.
+        print(f"[{name}] engine=whisper.cpp (Metal)", flush=True)
+    else:
+        device = devicemod.pick_asr()
+        info = devicemod.describe(model)
+        # Auf einem Mac ohne whisper.cpp meldet describe() "mps" (das gilt der
+        # Diarisierung), die ASR laeuft aber auf der CPU. Das gehoert ins Log, sonst
+        # sucht der Nutzer den Fehler bei sich.
+        warum = (" — CTranslate2 kennt kein MPS, ASR rechnet auf der CPU"
+                 if info["device"] == "mps" else "")
+        print(f"[{name}] device={device} ({info['name']}){warum}", flush=True)
     print(f"[{name}] Modell {model}, {len(files)} Datei(en)", flush=True)
-    m = _modell(model, device)
+    # Das Modell erst laden, wenn feststeht, dass gerechnet wird — bei whisper.cpp
+    # uebernimmt das transkribiere() pro Datei (der Unterprozess haelt nichts vor).
+    m = None if engine == "whisper.cpp" else _modell(model, device)
 
     for f in files:
         base = os.path.splitext(os.path.basename(f))[0]
@@ -190,8 +209,12 @@ def transcribe_project(name, model, language, only=None):
             # MPS oder an der Datei lag, Geraet wiederherstellen. Mit CTranslate2 gibt es den
             # Fall nicht mehr — pick_asr() liefert nur cuda oder cpu, und beide koennen alles.
             # Bleibt die Regel, die davon uebrig ist: eine kaputte Datei ueberspringen, der
-            # Lauf geht weiter.
-            result = _ergebnis(*m.transcribe(f, **_opts(prompt, language)))
+            # Lauf geht weiter. Fuer whisper.cpp gilt sie genauso.
+            if engine == "whisper.cpp":
+                from webtool import whispercpp
+                result = whispercpp.transkribiere(f, model, language, prompt)
+            else:
+                result = _ergebnis(*m.transcribe(f, **_opts(prompt, language)))
         except Exception as e:
             print(f"[{name}] FEHLER {base}: {e}", flush=True)
             continue

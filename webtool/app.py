@@ -63,9 +63,11 @@ async def _nur_lokale_herkunft(request: Request, call_next):
 
 AUDIO_EXT = (".mp3", ".wav", ".m4a", ".aac", ".flac", ".ogg", ".opus", ".wma", ".mp4")
 MAX_FETCH_URLS = 20
-# Einmal pro Serverlauf ermittelt: der torch-Import kostet Sekunden, und die Antwort
-# aendert sich zur Laufzeit nicht — eine neue GPU erfordert ohnehin einen Neustart.
-_HARDWARE = None
+# Je Whisper-Stufe einmal pro Serverlauf ermittelt: der torch-Import kostet Sekunden,
+# und die Antwort aendert sich zur Laufzeit nicht — eine neue GPU erfordert ohnehin einen
+# Neustart. Ein Wechsel der Stufe kann die Engine wechseln (device.asr_engine), darum
+# ein dict statt eines einzelnen Werts.
+_HARDWARE = {}
 
 
 def _bases(project: str):
@@ -334,10 +336,14 @@ def put_settings(body: SettingsBody):
 def hardware():
     """Worauf gerechnet wird. 'Warum dauert das so lange' ist die haeufigste Frage —
     wer sieht, dass 'cpu' laeuft, hat die Antwort ohne Support."""
-    global _HARDWARE
-    if _HARDWARE is None:
-        _HARDWARE = device.describe()
-    return _HARDWARE
+    # Je Whisper-Stufe gecacht, nicht global: auf Apple Silicon haengt die Engine an der
+    # Stufe (device.asr_engine), ein einmal gemerktes Ergebnis wuerde nach einem Wechsel
+    # das falsche Rechenwerk melden. Der teure Teil ist der torch-Import, und den zahlt
+    # man so hoechstens einmal pro Stufe.
+    modell = settings.load()["whisper_model"]
+    if modell not in _HARDWARE:
+        _HARDWARE[modell] = device.describe(modell)
+    return _HARDWARE[modell]
 
 
 @app.get("/api/settings/models")

@@ -4,6 +4,11 @@
 # Beides in eine Datei zu packen ginge nur mit --extra-index-url, und dann zieht pip je nach
 # Aufloesung das CPU-Rad von PyPI — die GPU waere still weg.
 faster-whisper
+# Nur fuer den GGML-Modell-Download in webtool/whispercpp.py: python.org-Python nutzt
+# auf macOS nicht die System-Keychain, urllib scheitert dort sonst mit
+# CERTIFICATE_VERIFY_FAILED. Kaeme transitiv ohnehin herein — worauf man sich
+# verlaesst, gehoert benannt.
+certifi
 fastapi
 uvicorn[standard]
 python-multipart

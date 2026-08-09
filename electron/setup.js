@@ -60,7 +60,7 @@ const LINUX_PAKETE = {
  * existiert dort gar nicht. Linux zieht cu128 ohne vorherige NVIDIA-Erkennung: die
  * Raeder installieren auch ohne Karte und fallen zur Laufzeit auf CPU zurueck.
  */
-function plan(platform, paketmanager) {
+function plan(platform, paketmanager, arch = process.arch) {
   if (platform === 'win32') {
     return { torchIndex: TORCH_INDEX, autoInstall: true, hinweis: '' }
   }
@@ -68,7 +68,17 @@ function plan(platform, paketmanager) {
     return {
       torchIndex: null,
       autoInstall: false,
-      hinweis: 'Bitte einmalig installieren:  brew install python ffmpeg',
+      // whisper-cpp ist die ASR-Engine auf Apple Silicon (gemessen 5.29x statt 0.81x
+      // realtime, siehe webtool/whispercpp.py). Fehlt es, laeuft die Transkription
+      // weiter — nur langsam ueber faster-whisper auf der CPU. Darum steht es in
+      // derselben Zeile wie python und ffmpeg und nicht in einem eigenen Schritt.
+      //
+      // NUR auf arm64: webtool/device.py:asr_engine prueft die Architektur, ein
+      // Intel-Mac bekommt dort immer faster-whisper. Ihn trotzdem `brew install
+      // whisper-cpp` tippen zu lassen waere ein Rat, der nichts bewirkt.
+      hinweis: arch === 'arm64'
+        ? 'Bitte einmalig installieren:  brew install python ffmpeg whisper-cpp'
+        : 'Bitte einmalig installieren:  brew install python ffmpeg',
     }
   }
   const befehl = LINUX_PAKETE[paketmanager]
@@ -186,20 +196,42 @@ async function venvVollstaendig() {
   return r !== null && r.includes('ok')
 }
 
+/** Nutzt diese Maschine ueberhaupt whisper.cpp? Spiegelt device.apple_silicon() —
+ *  auf einem Intel-Mac rechnet immer faster-whisper, dort gibt es nichts zu melden. */
+function nutztWhisperCpp(platform = process.platform, arch = process.arch) {
+  return platform === 'darwin' && arch === 'arm64'
+}
+
+/**
+ * whisper-cli (Homebrew-Paket whisper-cpp) — die ASR-Engine auf Apple Silicon.
+ * Leerstring heisst nicht "kaputt": ohne sie faellt webtool/device.py auf
+ * faster-whisper zurueck, die Transkription laeuft weiter, nur langsam.
+ */
+async function findeWhisperCpp() {
+  if (!nutztWhisperCpp()) return ''
+  const auf = await ausgabe('which', ['whisper-cli'])
+  return auf ? auf.split(/\r?\n/)[0].trim() : ''
+}
+
 async function status() {
   const py = await findePython()
   const ff = await findeFfmpeg()
+  const wcpp = await findeWhisperCpp()
   const pl = plan(process.platform, await paketmanager())
+  const macFehlt = nutztWhisperCpp() && !wcpp
   return {
     python: py ? `Python ${py.version}` : '',
     ffmpeg: ff,
+    whispercpp: wcpp,
     venv: await venvVollstaendig(),
     winget: process.platform === 'win32' ? (await ausgabe('winget', ['--version'])) || '' : '',
     venvPfad: P.venv,
     projektePfad: P.projekte,
     // Nicht leer heisst: hier installiert die App nichts selbst (macOS/Linux), der Nutzer
     // braucht den Befehl. Auf Windows bleibt es leer — winget uebernimmt.
-    hinweis: (py && ff) ? '' : pl.hinweis,
+    // whisper-cpp zaehlt mit: es fehlt sonst still, und der Nutzer wartet das Sechsfache,
+    // ohne zu erfahren, dass ein `brew install` das behebt.
+    hinweis: (py && ff && !macFehlt) ? '' : pl.hinweis,
   }
 }
 
@@ -270,4 +302,5 @@ async function einrichten(onLine, onSchritt) {
   return { ok: true }
 }
 
-module.exports = { status, einrichten, venvVollstaendig, findePython, plan, spawnEnv, wingetFfmpeg }
+module.exports = { status, einrichten, venvVollstaendig, findePython, plan, spawnEnv,
+                   wingetFfmpeg, nutztWhisperCpp }
