@@ -164,10 +164,29 @@ def test_available_abo_ohne_claude_binary(monkeypatch, tmp_path):
     assert "Claude Code" in grund
 
 
+def _anmeldung(monkeypatch, angemeldet: bool):
+    """Anmeldezustand vortaeuschen, ohne die echte CLI zu befragen."""
+    from webtool import auth
+    monkeypatch.setattr(auth, "status", lambda p: {
+        "unterstuetzt": True, "angemeldet": angemeldet,
+        "detail": "Angemeldet." if angemeldet else "Nicht angemeldet."})
+
+
 def test_available_abo_mit_claude_binary(monkeypatch, tmp_path):
     monkeypatch.setenv("TRANSKRIBOR_SETTINGS", str(tmp_path / "s.json"))
     monkeypatch.setattr(llm.shutil, "which", lambda n: "C:/claude.cmd")
+    _anmeldung(monkeypatch, True)
     assert llm.available() == (True, "")
+
+
+def test_available_abo_installiert_aber_nicht_angemeldet(monkeypatch, tmp_path):
+    """Vorher meldete das gruen, und die Auto-Korrektur startete einen Lauf, der am Login
+    scheiterte — genau das soll available() verhindern."""
+    monkeypatch.setenv("TRANSKRIBOR_SETTINGS", str(tmp_path / "s.json"))
+    monkeypatch.setattr(llm.shutil, "which", lambda n: "C:/claude.cmd")
+    _anmeldung(monkeypatch, False)
+    ok, grund = llm.available()
+    assert ok is False and "nicht angemeldet" in grund
 
 
 def test_available_api_ohne_key(monkeypatch, tmp_path):
@@ -302,3 +321,20 @@ def test_provider_list_nennt_die_abo_clis(cfg):
     # Gemini bleibt als API-Anbieter, aber NICHT als Abo — der CLI-Zugang ist fuer
     # Einzelpersonen abgeschaltet (IneligibleTierError).
     assert "gemini-cli" not in nach_id and nach_id["google"]["cli"] is False
+
+
+def test_check_meldet_die_fehlende_anmeldung_statt_eines_rohen_401(cfg, monkeypatch):
+    """Gemeldet wurde beim Testknopf: `401 Unauthorized: Missing bearer … cf-ray: …`.
+    Technisch richtig und unbrauchbar — die Antwort darauf ist "anmelden", und genau die
+    stand nicht da. check() fragt jetzt zuerst available()."""
+    settings.save({"provider": "codex-cli", "model": ""})
+    monkeypatch.setattr(llm.shutil, "which", lambda n: "C:/fake/codex")
+    _anmeldung(monkeypatch, False)
+
+    def platzt(*a, **k):
+        raise AssertionError("check() darf bei fehlender Anmeldung gar nicht erst aufrufen")
+    monkeypatch.setattr(llm, "_run_codex", platzt)
+
+    r = llm.check()
+    assert r["ok"] is False and "nicht angemeldet" in r["detail"]
+    assert "cf-ray" not in r["detail"]

@@ -46,6 +46,10 @@ describe('SettingsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(api.listModels).mockResolvedValue([])
+    // Vorgabe „kein Anmeldezustand" — der Anmeldeblock bleibt damit aus allen Tests
+    // heraus, die ihn nicht meinen. Ohne die Vorgabe liefert der Automock `undefined`,
+    // und `.then` darauf reisst jeden Test um.
+    vi.mocked(api.getAuth).mockResolvedValue({ unterstuetzt: false, angemeldet: false, detail: '' })
   })
 
   it('zeigt im Abo kein Key-Feld — aber sehr wohl die Modellwahl', async () => {
@@ -115,6 +119,27 @@ describe('SettingsPage', () => {
     expect(screen.getByPlaceholderText('Modellname')).toBeInTheDocument()
   })
 
+  it('behält im Modellfeld keinen überholten Wert, wenn sich das gespeicherte Modell ändert', async () => {
+    // Aus dem Feld: von Claude (Alias „opus“) auf Codex gewechselt — im unkontrollierten
+    // Textfeld stand weiter „opus“, und der nächste Klick schrieb es per onBlur als
+    // Codex-Modell ZURÜCK. `codex exec -m opus` scheitert daran.
+    // Hier über das Key-Speichern ausgelöst, weil das denselben Weg nimmt: `s` ändert sich,
+    // während die Komponente montiert bleibt — genau die Lage, in der `defaultValue` klebt.
+    vi.mocked(api.saveSettings).mockResolvedValue({ ...BASIS, provider: 'anthropic', has_key: true, model: '' })
+    zeige({ provider: 'anthropic', has_key: true, model: 'opus' })
+    const feld = await screen.findByPlaceholderText('Modellname')
+    expect((feld as HTMLInputElement).value).toBe('opus')
+
+    const keyFeld = screen.getByPlaceholderText(/gespeichert/)
+    await act(async () => { fireEvent.change(keyFeld, { target: { value: 'sk-neu' } }) })
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Key speichern/ })) })
+
+    const neu = await screen.findByPlaceholderText('Modellname')
+    expect((neu as HTMLInputElement).value).toBe('')
+    await act(async () => { fireEvent.blur(neu) })
+    expect(api.saveSettings).not.toHaveBeenCalledWith(expect.objectContaining({ model: 'opus' }))
+  })
+
   it('bleibt beim Textfeld, wenn der Anbieter keine Liste kennt', async () => {
     // Codex hat keinen Befehl, der Modelle auflistet — die leere Liste ist hier kein
     // Fehler, sondern die Wahrheit. Leer lassen heisst: Voreinstellung der CLI.
@@ -140,6 +165,54 @@ describe('SettingsPage', () => {
     await waitFor(() => expect(api.listModels).toHaveBeenCalled())
     await act(async () => { fireEvent.click(screen.getByTitle(/Modelle neu vom Anbieter laden/)) })
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('401')))
+  })
+
+  it('zeigt beim Abo den Anmeldezustand statt nur „installiert“', async () => {
+    // Der eigentliche Zweck: vorher meldete die App grün, sobald das Programm da war —
+    // nicht angemeldet fiel erst mitten in der Korrektur auf.
+    vi.mocked(api.getAuth).mockResolvedValue({
+      unterstuetzt: true, angemeldet: true, detail: 'Angemeldet als a@b.c (max)' })
+    zeige()
+    expect(await screen.findByText('Angemeldet als a@b.c (max)')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Neu anmelden/ })).toBeInTheDocument()
+  })
+
+  it('bietet bei fehlender Anmeldung einen Anmelde-Knopf', async () => {
+    vi.mocked(api.getAuth).mockResolvedValue({
+      unterstuetzt: true, angemeldet: false, detail: 'Nicht angemeldet.' })
+    zeige()
+    expect(await screen.findByText('Nicht angemeldet.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Anmelden/ })).toBeInTheDocument()
+  })
+
+  it('zeigt die Anmelde-URL und nimmt den Code entgegen (Claude-Weg)', async () => {
+    vi.mocked(api.getAuth).mockResolvedValue({
+      unterstuetzt: true, angemeldet: false, detail: 'Nicht angemeldet.' })
+    vi.mocked(api.startLogin).mockResolvedValue({
+      laeuft: true, url: 'https://claude.com/cai/oauth/authorize?x=1', braucht_code: true })
+    vi.mocked(api.submitLoginCode).mockResolvedValue({ laeuft: true, braucht_code: true })
+    zeige()
+    const knopf = await screen.findByRole('button', { name: /^Anmelden/ })
+    await act(async () => { fireEvent.click(knopf) })
+    expect(await screen.findByRole('link', { name: /claude\.com/ })).toHaveAttribute(
+      'href', 'https://claude.com/cai/oauth/authorize?x=1')
+    const feld = screen.getByPlaceholderText(/Code aus dem Browser/)
+    await act(async () => { fireEvent.change(feld, { target: { value: 'abc123' } }) })
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Bestätigen' })) })
+    await waitFor(() => expect(api.submitLoginCode).toHaveBeenCalledWith('abc123'))
+  })
+
+  it('zeigt beim Geräte-Flow den Code an und verlangt keine Eingabe (Codex-Weg)', async () => {
+    // Codex dreht die Richtung um: der Code gehört auf die Webseite, nicht in unser Feld.
+    vi.mocked(api.getAuth).mockResolvedValue({
+      unterstuetzt: true, angemeldet: false, detail: 'Not logged in' })
+    vi.mocked(api.startLogin).mockResolvedValue({
+      laeuft: true, url: 'https://auth.openai.com/device', code: 'ABCD-1234', braucht_code: false })
+    zeige({ provider: 'codex-cli' })
+    const knopf = await screen.findByRole('button', { name: /^Anmelden/ })
+    await act(async () => { fireEvent.click(knopf) })
+    expect(await screen.findByText('ABCD-1234')).toBeInTheDocument()
+    expect(screen.queryByPlaceholderText(/Code aus dem Browser/)).not.toBeInTheDocument()
   })
 
   it('zeigt die Whisper-Qualitätsstufe und das aktive Gerät', async () => {

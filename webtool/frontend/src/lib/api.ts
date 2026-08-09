@@ -1,4 +1,6 @@
-import type { Project, EditDoc, JobStatus, StartJob, Settings, ModelInfo, Hardware } from './types'
+import type {
+  Project, EditDoc, JobStatus, StartJob, Settings, ModelInfo, Hardware, AuthStatus, LoginState,
+} from './types'
 
 const enc = encodeURIComponent
 async function jn<T>(r: Response): Promise<T> {
@@ -23,7 +25,13 @@ export async function exportMd(project: string, base: string): Promise<string> {
   return (await jn<{ md: string }>(await fetch(
     `/api/projects/${enc(project)}/files/${enc(base)}/export`, { method: 'POST' }))).md
 }
-const post = (u: string) => fetch(u, { method: 'POST' })
+/** Body ist optional: fast alle POSTs hier sind reine Auslöser ohne Nutzlast. */
+const post = (u: string, body?: unknown) => fetch(u, {
+  method: 'POST',
+  ...(body === undefined ? {} : {
+    headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  }),
+})
 export async function startTranscribe(project: string): Promise<StartJob> {
   return jn(await post(`/api/projects/${enc(project)}/transcribe`))
 }
@@ -75,4 +83,19 @@ export async function listModels(): Promise<ModelInfo[]> {
 }
 export async function testSettings(): Promise<{ ok: boolean; detail: string }> {
   return jn(await post('/api/settings/test'))
+}
+export async function getAuth(): Promise<AuthStatus> {
+  return jn(await fetch('/api/settings/auth'))
+}
+export async function startLogin(): Promise<LoginState> {
+  return jn(await post('/api/settings/auth/login'))
+}
+export async function loginState(): Promise<LoginState> {
+  return jn(await fetch('/api/settings/auth/login'))
+}
+export async function submitLoginCode(code: string): Promise<LoginState> {
+  return jn(await post('/api/settings/auth/login/code', { code }))
+}
+export async function cancelLogin(): Promise<LoginState> {
+  return jn(await post('/api/settings/auth/login/cancel'))
 }

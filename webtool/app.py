@@ -10,6 +10,7 @@ from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
+from . import auth
 from . import device
 from . import fetch as fetch_mod
 from . import jobs
@@ -300,6 +301,10 @@ def fetch_urls(project: str, body: FetchBody):
     return {"job_id": job_id, "started": started}
 
 
+class AuthCodeBody(BaseModel):
+    code: str
+
+
 class SettingsBody(BaseModel):
     provider: str | None = None
     model: str | None = None
@@ -361,6 +366,42 @@ def settings_test():
         return llm.check()
     except llm.LLMError as e:
         return {"ok": False, "detail": str(e)}
+
+
+@app.get("/api/settings/auth")
+def settings_auth():
+    """Anmeldezustand des eingestellten Abo-Anbieters. Fuer API-Anbieter `unterstuetzt: false`
+    — dort IST der Key die Anmeldung."""
+    return auth.status(settings.load()["provider"])
+
+
+@app.post("/api/settings/auth/login")
+def settings_auth_login():
+    try:
+        return auth.start(settings.load()["provider"])
+    except (ValueError, FileNotFoundError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/api/settings/auth/login")
+def settings_auth_login_state():
+    # Auf den eingestellten Anbieter gefiltert: sonst zeigt ein Wechsel waehrend eines
+    # laufenden Vorgangs dessen URL unter der Ueberschrift des neuen Anbieters.
+    return auth.zustand(settings.load()["provider"])
+
+
+@app.post("/api/settings/auth/login/code")
+def settings_auth_login_code(body: AuthCodeBody):
+    """Den aus dem Browser zurueckgebrachten Code an die wartende CLI reichen."""
+    try:
+        return auth.code(body.code)
+    except RuntimeError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/settings/auth/login/cancel")
+def settings_auth_login_cancel():
+    return auth.abbrechen()
 
 
 @app.get("/api/jobs/{job_id}")

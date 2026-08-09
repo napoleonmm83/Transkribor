@@ -114,6 +114,47 @@ Die Korrektur hing fest am Claude-Code-Abo; jetzt wählt der Nutzer Anbieter + M
 - Endpoints: `GET/PUT /api/settings`, `GET /api/settings/models`, `POST /api/settings/test`. Ein
   ausgelassenes `api_key` im PUT behält den gespeicherten Key (das Frontend kennt ihn nicht).
 
+## Anmeldung an den Abo-CLIs (`webtool/auth.py`)
+Beide Abos melden sich im Browser an; die App fragt den Zustand ab und fährt den Vorgang.
+- **Installiert ≠ angemeldet.** `available()` prüfte nur den PATH, meldete grün, und die
+  Auto-Korrektur startete einen Lauf, der am Login scheiterte. Jetzt fragt sie zusätzlich
+  `auth.status()` — das kostet **0,09 s (codex) bzw. 0,26 s (claude)**, gemessen, gegen einen
+  abgebrochenen Korrekturlauf von Minuten. `check()` fragt zuerst `available()`: sonst legt der
+  Testknopf bei abgemeldetem Codex ein rohes `401 … Missing bearer … cf-ray: …` vor — richtig,
+  aber unbrauchbar, weil die einzige sinnvolle Reaktion („anmelden") nicht darin steht.
+- **Zwei Richtungen, eine Oberfläche:** `claude auth login --claudeai` druckt eine URL und
+  **wartet auf einen Code** über stdin (`redirect_uri` zeigt auf platform.claude.com — es gibt
+  keinen lokalen Callback zum Abfangen). `codex login --device-auth` druckt URL **und** Code,
+  eingegeben wird beides im Browser, die CLI pollt selbst. Darum hängt das Eingabefeld an
+  `braucht_code`, nicht am Anbieternamen.
+- **Eigenes Modul statt `jobs.py`**, zwei gemessene Gründe: der Login braucht **stdin** (allen
+  Jobs eine nie beschriebene Pipe zu geben, wäre eine Verhaltensänderung für Transkription und
+  Korrektur), und `jobs.py` liest **zeilenweise** — `Paste code here if prompted > ` kommt ohne
+  Zeilenumbruch und läge dort im Puffer. `auth.py` liest deshalb zeichenweise.
+- **ANSI-Codes müssen raus, bevor irgendetwas in der Ausgabe gesucht wird.** Codex schreibt
+  `\x1b[94mhttps://…\x1b[0m` und `\x1b[94mIUO4-YVUNH\x1b[0m`. Ungefiltert frisst die URL-Regex
+  das `\x1b[0m` mit (kaputter Link), und die Wortgrenze vor dem Code scheitert am `m` aus
+  `[94m` — zwischen zwei Wortzeichen gibt es keine. Der Code blieb unsichtbar, und der
+  Geräte-Flow konnte nie fertig werden.
+- **Erfolg misst `status()`, nicht der Exitcode** — dieselbe Regel wie bei `_run_claude` (Datei)
+  und `_run_codex` (Antwortdatei): ein abgebrochener Browser-Flow endet auch mit 0.
+- **Der Vorgang ist auf den eingestellten Anbieter gefiltert** (`zustand(provider)`), und das
+  Frontend baut den Block per `key={s.provider}` neu auf. **Beides ist nötig:** wer während
+  einer Codex-Anmeldung auf das Claude-Abo umstellte, sah sonst die Codex-URL unter der
+  Claude-Überschrift. Ein Wechsel beendet den gegenstandslosen Vorgang samt Prozessbaum; ein
+  Doppelklick auf denselben Anbieter dagegen **nicht** — sonst stirbt der Versuch, in dessen
+  Browser-Tab gerade jemand tippt.
+- **Das Modellfeld braucht `key={provider|model}`.** Es ist unkontrolliert (`defaultValue` +
+  Speichern bei `onBlur`); ohne den Schlüssel behielt es beim Anbieterwechsel den alten Wert und
+  schrieb ihn beim nächsten Klick **zurück** — `opus` landete so als Codex-Modell in der
+  Einstellungsdatei, woran `codex exec -m opus` scheitert.
+- Endpoints: `GET /api/settings/auth`, `POST|GET /api/settings/auth/login`,
+  `POST /api/settings/auth/login/code`, `POST /api/settings/auth/login/cancel`.
+- Tests laufen gegen eine **nachgebaute CLI**, nie gegen `claude`/`codex`: ein echter
+  Login-Aufruf griffe in die Anmeldung des Entwicklers ein. Der Preis dafür ist real — die
+  ANSI-Falle und der Anbieterwechsel fielen erst im Browser auf, weil das Skript sauberen Text
+  druckte. Wer hier etwas ändert, sieht sich die **Rohausgabe** der echten CLI an.
+
 ## Desktop-App (Electron)
 `.\webtool.ps1` bleibt der Entwickler-Weg; für Nutzer gibt es einen Installer.
 - `electron/main.js` — Fenster **zuerst** (die Ersteinrichtung dauert Minuten; wer auf nichts schaut,

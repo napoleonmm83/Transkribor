@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { KeyRound, Loader2, RefreshCw } from 'lucide-react'
-import { getHardware, getSettings, listModels, saveSettings, testSettings } from '@/lib/api'
+import { KeyRound, Loader2, LogIn, RefreshCw } from 'lucide-react'
+import {
+  cancelLogin, getAuth, getHardware, getSettings, listModels, loginState,
+  saveSettings, startLogin, submitLoginCode, testSettings,
+} from '@/lib/api'
 import { useUpdate } from '@/hooks/useUpdate'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import type { Hardware, ModelInfo, ProviderInfo, Settings } from '@/lib/types'
+import type { AuthStatus, Hardware, LoginState, ModelInfo, ProviderInfo, Settings } from '@/lib/types'
 
 const RELEASES = 'https://github.com/napoleonmm83/Transkribor/releases'
 
@@ -36,6 +39,97 @@ function Abschnitt({ titel, children }: { titel: string; children: React.ReactNo
   )
 }
 
+/** Anmeldung an einer Abo-CLI. Zwei Wege, eine Oberflaeche:
+ *  - Claude gibt eine URL aus und WARTET auf einen Code aus dem Browser (`braucht_code`).
+ *  - Codex zeigt URL und Code an, der Nutzer tippt sie dort ein, die CLI merkt es selbst.
+ *  Deshalb haengt das Eingabefeld an `braucht_code` und nicht am Anbieternamen. */
+function AnmeldungAbo({ status, neuPruefen }: { status: AuthStatus; neuPruefen: () => void }) {
+  const [lauf, setLauf] = useState<LoginState | null>(null)
+  const [code, setCode] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  // Nur solange etwas laeuft gepollt — ein Dauerintervall auf einer Einstellungsseite,
+  // auf der meistens nichts passiert, ist reine Last.
+  useEffect(() => {
+    if (!lauf?.laeuft) return
+    const t = setInterval(async () => {
+      const z = await loginState().catch(() => null)
+      if (!z) return
+      setLauf(z)
+      if (!z.laeuft) {
+        neuPruefen()
+        if (z.ok) toast.success('Angemeldet')
+        else toast.error(z.fehler || 'Anmeldung fehlgeschlagen')
+      }
+    }, 1500)
+    return () => clearInterval(t)
+  }, [lauf?.laeuft, neuPruefen])
+
+  const starten = async () => {
+    setBusy(true); setCode('')
+    try { setLauf(await startLogin()) }
+    catch (e) { toast.error(`Anmeldung: ${(e as Error).message}`) }
+    finally { setBusy(false) }
+  }
+  const senden = async () => {
+    setBusy(true)
+    try { setLauf(await submitLoginCode(code)); setCode('') }
+    catch (e) { toast.error(`Code: ${(e as Error).message}`) }
+    finally { setBusy(false) }
+  }
+  const abbrechen = async () => { setLauf(await cancelLogin().catch(() => null)); neuPruefen() }
+
+  if (!status.unterstuetzt) return null
+
+  return (
+    <div>
+      <span className="mb-1.5 block text-sm font-medium">Anmeldung</span>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <span className={`text-sm ${status.angemeldet ? 'text-muted-foreground' : 'text-amber-600 dark:text-amber-500'}`}>
+          {status.detail}
+        </span>
+        {!lauf?.laeuft && (
+          <Button variant="outline" size="sm" onClick={starten} disabled={busy}>
+            {busy ? <Loader2 className="size-4 animate-spin" /> : <LogIn className="size-4" />}
+            {status.angemeldet ? 'Neu anmelden' : 'Anmelden'}
+          </Button>
+        )}
+      </div>
+
+      {lauf?.laeuft && (
+        <div className="mt-3 space-y-3 rounded-lg border p-4 text-sm">
+          {lauf.url
+            ? <p>
+                Im Browser öffnen:{' '}
+                <a className="underline underline-offset-2 break-all hover:text-foreground"
+                   href={lauf.url} target="_blank" rel="noreferrer">{lauf.url}</a>
+              </p>
+            : <p className="text-muted-foreground flex items-center gap-2">
+                <Loader2 className="size-4 animate-spin" /> Anmeldeseite wird vorbereitet …
+              </p>}
+
+          {/* Codex zeigt den Einmalcode an — der gehoert auf die Webseite, nicht hierher. */}
+          {lauf.code && (
+            <p>Code auf der Seite eingeben: <code className="rounded bg-muted px-1.5 py-0.5 font-mono">{lauf.code}</code></p>
+          )}
+
+          {/* Claude wartet umgekehrt auf den Code, den der Browser ausgibt. */}
+          {lauf.braucht_code && (
+            <div className="flex gap-2">
+              <Input value={code} onChange={e => setCode(e.target.value)} autoComplete="off"
+                placeholder="Code aus dem Browser hier einfügen"
+                onKeyDown={e => { if (e.key === 'Enter' && code.trim()) senden() }} />
+              <Button onClick={senden} disabled={!code.trim() || busy}>Bestätigen</Button>
+            </div>
+          )}
+
+          <Button variant="ghost" size="sm" onClick={abbrechen}>Abbrechen</Button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function SettingsPage() {
   const [s, setS] = useState<Settings | null>(null)
   const [modelle, setModelle] = useState<ModelInfo[]>([])
@@ -48,6 +142,15 @@ export function SettingsPage() {
 
   useEffect(() => { getSettings().then(setS).catch(e => toast.error(String(e))) }, [])
   useEffect(() => { getHardware().then(setHw).catch(() => setHw(null)) }, [])
+
+  // Anmeldezustand hängt am Anbieter. Nach einer Anmeldung auch die Einstellungen neu holen:
+  // `ai_ready` kippt dadurch, und der Warnbalken oben soll sofort verschwinden.
+  const [autz, setAutz] = useState<AuthStatus | null>(null)
+  const autzLaden = useCallback(() => {
+    getAuth().then(setAutz).catch(() => setAutz(null))
+    getSettings().then(setS).catch(() => {})
+  }, [])
+  useEffect(() => { if (s?.provider) autzLaden() }, [s?.provider, autzLaden])
 
   const prov: ProviderInfo | undefined = s?.providers.find(p => p.id === s.provider)
   // Frueher `s.provider === 'claude-cli'`: das war die Frage "ist es DAS Abo". Seit es zwei
@@ -190,6 +293,17 @@ export function SettingsPage() {
 
         {prov && (
           <div className="mt-6 space-y-6">
+            {/* Abo-CLIs bringen ihre eigene Anmeldung mit — bis hierher sagte die App nur,
+                ob das Programm INSTALLIERT ist, und meldete grün, während niemand
+                angemeldet war. Die Korrektur scheiterte dann erst mitten im Lauf. */}
+            {/* `key` am Anbieter: sonst behält der Block beim Umstellen seinen laufenden
+                Vorgang im State und zeigt die URL des ALTEN Anbieters unter der neuen
+                Überschrift. Der Server filtert zusätzlich — beides ist nötig, weil der
+                State hier lokal ist und nicht auf einen Serverwechsel wartet. */}
+            {istCli && autz && (
+              <AnmeldungAbo key={s.provider} status={autz} neuPruefen={autzLaden} />
+            )}
+
             {prov.id === 'custom' && (
               <div>
                 <label htmlFor="feld-basis-url" className="mb-1.5 block text-sm font-medium">Basis-URL</label>
@@ -230,7 +344,15 @@ export function SettingsPage() {
                     </SelectContent>
                   </Select>
                 ) : (
-                  <Input id="feld-modell" defaultValue={s.model} placeholder="Modellname"
+                  /* `key` erzwingt einen Neuaufbau, wenn Anbieter oder Modell wechseln.
+                     Ohne ihn behält das unkontrollierte Feld seinen `defaultValue`: beim
+                     Wechsel von Claude zu Codex stand dort weiter „opus", und der nächste
+                     Klick schrieb es über `onBlur` als Codex-Modell ZURÜCK — ein
+                     Claude-Alias, an dem `codex exec -m opus` scheitert. Während des
+                     Tippens ändert sich `s.model` nicht (gespeichert wird erst bei
+                     onBlur), der Schlüssel ist also stabil, solange das Feld den Fokus hat. */
+                  <Input id="feld-modell" key={`${s.provider}|${s.model}`}
+                    defaultValue={s.model} placeholder="Modellname"
                     onBlur={e => e.target.value !== s.model && speichern({ model: e.target.value })} />
                 )}
                 {/* Pfeilfunktion, nicht `onClick={modelleLaden}`: sonst landet das

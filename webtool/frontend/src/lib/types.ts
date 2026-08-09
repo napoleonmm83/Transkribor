@@ -40,6 +40,15 @@ export type Settings = {
   ai_ready: boolean; ai_reason: string;
 };
 export type ModelInfo = { id: string; label: string };
+/** Anmeldezustand einer Abo-CLI. `unterstuetzt: false` heisst: der Anbieter kennt so etwas
+ *  nicht — bei den API-Anbietern IST der Key die Anmeldung. */
+export type AuthStatus = { unterstuetzt: boolean; angemeldet: boolean; detail: string };
+/** Laufender Anmeldevorgang. `braucht_code`: Claude gibt eine URL aus und WARTET auf einen
+ *  Code; Codex zeigt URL und Code an und pollt selbst. */
+export type LoginState = {
+  laeuft: boolean; provider?: string; url?: string; code?: string;
+  braucht_code?: boolean; fertig?: boolean; ok?: boolean; fehler?: string; ausgabe?: string;
+};
 export type Turn = { key: string; speaker: string; segments: Segment[] };
 export type FilePhase = 'diarize' | 'correct' | 'verify' | 'transcribe';
 export type GlobalPhase = 'diarize' | 'prep' | 'glossary' | 'download';
