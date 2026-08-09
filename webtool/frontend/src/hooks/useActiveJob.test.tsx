@@ -1,3 +1,4 @@
+import { StrictMode, useEffect } from 'react'
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { JobProvider, mergePhases, useActiveJob, type Job } from './useActiveJob'
@@ -6,9 +7,11 @@ import * as api from '@/lib/api'
 
 vi.mock('@/lib/api')
 
-function Probe() {
-  const { jobs, adopt } = useActiveJob()
+function Probe({ beiSettled }: { beiSettled?: () => void } = {}) {
+  const { jobs, adopt, onSettled } = useActiveJob()
   const phases = mergePhases(jobs.filter(j => j.status === 'running'))
+  // GENAU wie ProjectWorkspace.tsx: der Verbraucher registriert sich in einem Effekt.
+  useEffect(() => (beiSettled ? onSettled(beiSettled) : undefined), [onSettled, beiSettled])
   return (
     <div>
       <button onClick={() => adopt('j1', 'Demo', 'correct')}>go</button>
@@ -40,6 +43,55 @@ describe('useActiveJob', () => {
     render(<JobProvider intervalMs={5}><Probe /></JobProvider>)
     fireEvent.click(screen.getByText('go'))
     await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('done'))
+  })
+
+  // Die drei folgenden Faelle haengen an EINER Ursache: `settled` und `failures` wurden als
+  // Seiteneffekte IM setJobs-Updater berechnet. React ruft Updater in der Render-Phase — also
+  // erst NACH der Zeile, die `settled` auswertet, und unter StrictMode zweimal.
+
+  it('ruft die onSettled-Listener, wenn ein Job terminal wird', async () => {
+    // Gemessen vor dem Fix: 0 Aufrufe. ProjectWorkspace haengt daran sein refresh() — der
+    // Ausfall blieb nur deshalb unbemerkt, weil useProjects ohnehin alle 4s pollt.
+    vi.mocked(api.getJob)
+      .mockResolvedValueOnce({ status: 'running', lines: ['→ Korrigiere A …'] })
+      .mockResolvedValue({ status: 'done', lines: ['apply: A -> edit.json + md (2 Segmente)'] })
+    const settled = vi.fn()
+    render(<JobProvider intervalMs={5}><Probe beiSettled={settled} /></JobProvider>)
+    fireEvent.click(screen.getByText('go'))
+    await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('done'))
+    await waitFor(() => expect(settled).toHaveBeenCalled())
+  })
+
+  it('pollt nach dem Terminal-Status nicht weiter', async () => {
+    // Der Grund fuer den CI-Flake: tick() plante bedingungslos neu, und nur das Aufraeumen des
+    // Effekts kam dem zuvor — ein Wettlauf, den ein langsamer Runner verliert. Der Extra-Aufruf
+    // traf dann einen erschoepften mockResolvedValueOnce -> undefined.then -> Unhandled Rejection.
+    let n = 0
+    vi.mocked(api.getJob).mockImplementation(async () => {
+      n += 1
+      return n === 1 ? { status: 'running', lines: ['→ Korrigiere A …'] }
+                     : { status: 'done', lines: ['apply: A -> edit.json + md (2 Segmente)'] }
+    })
+    render(<JobProvider intervalMs={5}><Probe /></JobProvider>)
+    fireEvent.click(screen.getByText('go'))
+    await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('done'))
+    const beiTerminal = n
+    await new Promise(r => setTimeout(r, 60))            // 12x das Poll-Intervall
+    expect(n).toBe(beiTerminal)
+  })
+
+  it('zaehlt Fehlschlaege einmal pro Runde, auch unter StrictMode', async () => {
+    // StrictMode ruft Updater doppelt. Mit failures.current IM Updater zaehlte jede Runde
+    // doppelt — aus "dreimal weg -> aufgeben" wuerde nach zwei Netzhaengern aufgegeben.
+    vi.mocked(api.getJob)
+      .mockRejectedValueOnce(new Error('net'))
+      .mockRejectedValueOnce(new Error('net'))
+      .mockResolvedValue({ status: 'running', lines: ['→ Korrigiere A …'] })
+    render(<StrictMode><JobProvider intervalMs={5}><Probe /></JobProvider></StrictMode>)
+    fireEvent.click(screen.getByText('go'))
+    // Zwei Fehlschlaege duerfen den Job NICHT toeten — der dritte Versuch klappt.
+    await waitFor(() => expect(screen.getByTestId('active').textContent).toBe('A:correct'))
+    expect(screen.getByTestId('status').textContent).toBe('running')
   })
 
   it('verfolgt Transkription und Korrektur gleichzeitig und mergt ihre Phasen', async () => {
