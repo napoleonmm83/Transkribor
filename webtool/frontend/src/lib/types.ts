@@ -17,8 +17,10 @@ export type ActiveJob = { id: string; kind: string };
 export type Project = { name: string; files: ProjectFile[]; active_jobs?: ActiveJob[] };
 export type JobStatus = { status: 'running' | 'done' | 'error' | 'cancelled'; lines: string[]; kind?: string };
 export type StartJob = { job_id: string; started: boolean };
+/** `cli`: laeuft ueber ein lokales Programm mit eigener Anmeldung (Claude-Code- oder
+ *  ChatGPT-Abo) — dort gibt es kein Key-Feld, ein Modell aber sehr wohl. */
 export type ProviderInfo = {
-  id: string; label: string; needs_key: boolean;
+  id: string; label: string; needs_key: boolean; cli: boolean;
   base: string; default_model: string; keys_url: string; hint: string;
 };
 export type WhisperChoice = { id: string; label: string; hint: string };

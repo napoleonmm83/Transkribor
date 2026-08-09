@@ -75,15 +75,40 @@ Die Korrektur hing fest am Claude-Code-Abo; jetzt wählt der Nutzer Anbieter + M
   Repo**: ein Key hat in einem git-Verzeichnis nichts verloren. Frisch gelesen bei jedem Zugriff (wie
   die Env-Variablen) → ein Wechsel greift ohne Server-Neustart. `public()` liefert `has_key`/
   statt der Geheimnisse; die verlassen den Server nie, auch nicht über `GET /api/settings`.
-- `webtool/llm.py` — Abo (`claude -p`) plus Anthropic-, OpenAI-, Google-, OpenRouter- und
-  Custom-Endpoints (letzteres deckt Ollama/LM Studio/Groq/… ab). **Zwei HTTP-Dialekte reichen für
-  alle**, darum `urllib` statt fünf SDKs — das hält auch den Auto-Installer klein. Modellliste kommt
-  live vom Anbieter (`GET /models`), eine fest verdrahtete wäre in drei Monaten falsch.
-- **Der Unterschied der beiden Welten ist, WER die Dateien anfasst:** `claude -p` liest und schreibt
-  selbst (Read/Write-Tools), die API kennt keine Werkzeuge. Darum nimmt `correct._ask_llm(prompt,
-  inputs, output)` Pfade — dieselben Prompts, zwei Zustellwege; im API-Weg landen die Eingaben im
-  Prompt und `llm.complete_to_file` schreibt nur **gültiges** JSON (eine halbe `correction.json`
-  würde der nächste Lauf als „fertig" durchwinken). Der `_claude_slots`-Deckel gilt für beide.
+- `webtool/llm.py` — **zwei Abos** (Claude Code via `claude -p`, ChatGPT via `codex exec`) plus
+  Anthropic-, OpenAI-, Google-, OpenRouter- und Custom-Endpoints (letzteres deckt
+  Ollama/LM Studio/Groq/… ab). **Zwei HTTP-Dialekte reichen für alle**, darum `urllib` statt fünf
+  SDKs — das hält auch den Auto-Installer klein. Modellliste kommt live vom Anbieter
+  (`GET /models`), eine fest verdrahtete wäre in drei Monaten falsch.
+- **Bei den Abo-CLIs gibt es keine Liste zu holen** — weder `claude` noch `codex` kennt einen
+  Befehl, der Modelle auflistet, und die Fehlermeldung eines ungültigen Modells zählt auch keine
+  auf (beides geprüft). Dort stehen **Aliase** in `PROVIDERS`: `opus`/`sonnet`/`haiku`/`fable`
+  zeigen immer auf die neueste Generation, weil Anthropic den Zeiger umbiegt — der Grund gegen
+  eine feste Liste (in drei Monaten falsch) trifft sie also nicht. **Leeres Modell heisst „nimm
+  deine eigene Voreinstellung"**, darum ist es bei CLIs kein Pflichtfeld. `list_models()`
+  beantwortet beide Fälle über denselben Endpoint, damit das Frontend nicht zwei Wege kennt.
+- **Die Gemini-CLI fehlt absichtlich als Abo:** ihr Zugang ist für Einzelpersonen abgeschaltet
+  (`IneligibleTierError`, gemessen — auch mit `GEMINI_CLI_TRUST_WORKSPACE`). Als API-Anbieter mit
+  eigenem Key bleibt Gemini unverändert nutzbar. Nebenbefund für den Fall einer Rückkehr:
+  `--approval-mode plan` wird in einem nicht vertrauten Ordner **still** auf `default`
+  herabgestuft — der Lesemodus wäre dort also nachzuprüfen, nicht anzunehmen.
+- **Der Unterschied der beiden Welten ist, WER die Dateien anfasst** — nicht Abo gegen Key:
+  `claude -p` liest und schreibt selbst (Read/Write-Tools), **alle anderen** (API *und* Codex)
+  kennen keine Werkzeuge. Darum nimmt `correct._ask_llm(prompt, inputs, output)` Pfade —
+  dieselben Prompts, zwei Zustellwege; im werkzeuglosen Weg landen die Eingaben im Prompt
+  (`_with_files`) und `llm.complete_to_file` schreibt nur **gültiges** JSON (eine halbe
+  `correction.json` würde der nächste Lauf als „fertig" durchwinken). `llm.use_api()` beantwortet
+  genau diese Frage, der `_claude_slots`-Deckel gilt für alle.
+- **`codex exec` läuft zwingend mit `--sandbox read-only`.** Im Prompt steht Transkripttext, der
+  aus einem URL-Import stammen kann — eine Injektion darf höchstens Unsinn *antworten*, niemals
+  Dateien anfassen. Werkzeuge braucht der Weg ohnehin nicht. Die Antwort kommt über
+  **`-o <datei>`**, nicht aus der Konsolenausgabe: `codex exec` druckt seinen Sitzungsverlauf mit,
+  und darin steht der **Prompt im Klartext** — `parse_json` (erste `{` bis letzte `}`) griffe quer
+  durch dieses Echo. Erfolg wird an der Antwortdatei gemessen, nicht am Exitcode: ein
+  gescheiterter Login endet mit 0.
+- **Das Modell für `claude -p` kommt aus den Einstellungen** (`correct.py`, Rückfall `opus`).
+  Vorher war es eine Konstante — wer sein Opus-Kontingent aufgebraucht hatte, konnte nicht auf
+  `sonnet` ausweichen.
 - **Kein stiller Rückfall aufs Abo**, wenn der Key fehlt: wer einen Anbieter einstellt, soll den
   Konfigurationsfehler sehen und nicht heimlich etwas anderes bekommen.
 - Endpoints: `GET/PUT /api/settings`, `GET /api/settings/models`, `POST /api/settings/test`. Ein

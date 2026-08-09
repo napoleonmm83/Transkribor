@@ -18,6 +18,8 @@ import json
 import os
 import re
 import shutil
+import subprocess
+import tempfile
 import urllib.error
 import urllib.request
 
@@ -30,9 +32,23 @@ MAX_TOKENS = 32000     # Korrektur-Bloecke sind gross; bei Anthropic zaehlt Denk
 # Ein Eintrag je Anbieter. `shape` waehlt den HTTP-Dialekt — mehr als diese zwei gibt es in der
 # Praxis nicht: fast alle Anbieter (Groq, Mistral, DeepSeek, xAI, Ollama, LM Studio) sprechen
 # den OpenAI-Dialekt, und wer nicht in der Liste steht, kommt ueber "custom" mit eigener URL rein.
+#
+# `models` gibt es nur bei den Abo-CLIs, und zwar als ALIASE. Fragen kann man sie nicht:
+# weder `claude` noch `codex` kennt einen Befehl, der Modelle auflistet, und die Fehlermeldung
+# eines ungueltigen Modells zaehlt auch keine auf (beides geprueft). Aliase sind hier aber
+# genau das Richtige statt eine Notloesung: 'opus' zeigt immer auf die neueste
+# Opus-Generation, weil Anthropic den Zeiger umbiegt. Eine Liste konkreter Modell-IDs waere
+# in drei Monaten falsch — diese hier bleibt richtig. Leeres Modell heisst bei beiden CLIs
+# "nimm deine eigene Voreinstellung", darum ist es kein Pflichtfeld.
 PROVIDERS = {
     "claude-cli": {"label": "Claude Code Abo (kein Key)", "shape": "cli", "needs_key": False,
+                   "bin": "claude", "models": ["opus", "sonnet", "haiku", "fable"],
+                   "default_model": "opus",
                    "hint": "Nutzt das angemeldete Claude-Code-Abo auf diesem Rechner."},
+    "codex-cli": {"label": "ChatGPT-Abo (Codex CLI, kein Key)", "shape": "codex",
+                  "needs_key": False, "bin": "codex", "models": [],
+                  "hint": "Nutzt das angemeldete ChatGPT-Abo auf diesem Rechner "
+                          "(einmalig `codex login`). Modell leer lassen = Codex' Voreinstellung."},
     "anthropic": {"label": "Anthropic (Claude)", "shape": "anthropic", "needs_key": True,
                   "base": "https://api.anthropic.com/v1", "default_model": "claude-opus-5",
                   "keys_url": "https://console.anthropic.com/settings/keys"},
@@ -50,13 +66,29 @@ PROVIDERS = {
                                    "oder ein anderer OpenAI-kompatibler Dienst."},
 }
 
+# Die Gemini-CLI fehlt hier ABSICHTLICH als Abo. Sie ist installierbar und kann headless
+# (`gemini -p`), aber ihr Abo-Zugang ist fuer Einzelpersonen abgeschaltet: sie antwortet mit
+# `IneligibleTierError: This client is no longer supported for Gemini Code Assist for
+# individuals`. Gemessen, nicht vermutet — auch mit gesetztem GEMINI_CLI_TRUST_WORKSPACE.
+# Nebenbefund fuer den Fall, dass Google das je zurueckdreht: `--approval-mode plan`
+# (Lesemodus) wird in einem nicht vertrauten Ordner STILL auf "default" herabgestuft. Wer
+# gemini hier aufnimmt, muss den Lesemodus also nachpruefen statt ihn anzunehmen.
+# Als API-Anbieter mit eigenem Key bleibt Gemini oben unter "google" unveraendert nutzbar.
+
 
 class LLMError(RuntimeError):
     """Anbieterseitiger Fehler in nutzerlesbarer Form (Netz, Key, Modell, Kontingent)."""
 
 
 def provider_list() -> list:
+    # Ohne `models`: die Liste holt das Frontend ueber /api/settings/models — egal ob sie
+    # live vom Anbieter kommt oder aus den Aliasen oben. Sie hier ZUSAETZLICH mitzuschicken
+    # waere ein zweiter Weg zu denselben Daten und damit eine zweite Wahrheit.
+    # `cli` statt `shape`: die Oberflaeche muss wissen, ob es hier ein Key-Feld braucht —
+    # nicht, welchen HTTP-Dialekt der Anbieter spricht. Den Dialektnamen nach aussen zu
+    # geben hiesse, eine interne Entscheidung zur API-Zusage zu machen.
     return [{"id": pid, "label": p["label"], "needs_key": p["needs_key"],
+             "cli": p["shape"] in ("cli", "codex"),
              "base": p.get("base", ""), "default_model": p.get("default_model", ""),
              "keys_url": p.get("keys_url", ""), "hint": p.get("hint", "")}
             for pid, p in PROVIDERS.items()]
@@ -85,10 +117,10 @@ def available() -> tuple:
     wer claude installiert hat, merkt nichts.
     """
     cfg, prov = _cfg()
-    if prov["shape"] == "cli":
-        if shutil.which("claude"):
+    if prov["shape"] in ("cli", "codex"):
+        if _exe(prov):
             return True, ""
-        return False, "Claude Code ist auf diesem Rechner nicht installiert."
+        return False, f"{prov['label']}: '{prov['bin']}' ist auf diesem Rechner nicht installiert."
     if prov["needs_key"] and not cfg["api_key"]:
         return False, f"Kein API-Key fuer {prov['label']} hinterlegt."
     if not _base_url(cfg, prov):
@@ -96,6 +128,61 @@ def available() -> tuple:
     if not cfg["model"]:
         return False, "Kein Modell ausgewaehlt."
     return True, ""
+
+
+def _exe(prov: dict) -> str:
+    """Pfad zur CLI des Anbieters, oder "". `.cmd` mitpruefen: npm-Installationen legen unter
+    Windows einen Shim mit dieser Endung ab, den `which` ohne Endung nicht findet."""
+    name = prov.get("bin", "")
+    return (shutil.which(name) or shutil.which(name + ".cmd")) if name else ""
+
+
+def _run_codex(cfg: dict, prov: dict, prompt: str) -> str:
+    """Eine Runde gegen das ChatGPT-Abo ueber `codex exec`. Liefert den Antworttext.
+
+    **`--sandbox read-only` ist Pflicht, nicht Vorsicht.** Im Prompt steht Transkripttext,
+    der aus einem URL-Import stammen kann — also aus einer Quelle, die dem Nutzer nicht
+    gehoert. Eine Injektion darf hoechstens Unsinn ANTWORTEN, niemals Dateien anfassen.
+    Werkzeuge braucht dieser Weg ohnehin nicht: die Eingaben stehen dank `_with_files`
+    vollstaendig im Prompt, geschrieben wird die Datei hier.
+
+    **`-o` statt die Konsolenausgabe zu lesen:** `codex exec` druckt seinen Sitzungsverlauf
+    mit, und darin steht der PROMPT im Klartext. `parse_json` sucht von der ersten `{` bis
+    zur letzten `}` und griffe quer durch dieses Echo. `-o` schreibt ausschliesslich die
+    Schlussantwort.
+
+    Der Prompt kommt ueber stdin (`-`), nicht als Argument: mit eingebetteten Transkripten
+    sprengt er unter Windows das Laengenlimit der Kommandozeile — dieselbe Regel wie bei
+    `correct._run_claude`.
+    """
+    exe = _exe(prov)
+    if not exe:
+        raise LLMError(f"{prov['label']}: '{prov['bin']}' ist nicht auf dem PATH")
+    with tempfile.TemporaryDirectory() as tmp:
+        ziel = os.path.join(tmp, "antwort.txt")
+        cmd = [exe, "exec", "--sandbox", "read-only", "--skip-git-repo-check", "-o", ziel]
+        if cfg["model"]:
+            cmd += ["-m", cfg["model"]]
+        cmd.append("-")
+        try:
+            p = subprocess.run(cmd, input=prompt, capture_output=True, text=True,
+                               encoding="utf-8", errors="replace", timeout=TIMEOUT)
+        except subprocess.TimeoutExpired:
+            raise LLMError(f"{prov['label']} hat nach {TIMEOUT}s nicht geantwortet") from None
+        except OSError as e:
+            raise LLMError(f"{prov['label']} liess sich nicht starten: {e}") from None
+        try:
+            with open(ziel, encoding="utf-8") as fh:
+                antwort = fh.read().strip()
+        except OSError:
+            antwort = ""
+    if not antwort:
+        # Der Exitcode allein taugt nicht: `codex exec` endet auch nach einem gescheiterten
+        # Login mit 0. Die fehlende Antwortdatei ist das verlaessliche Signal.
+        spur = (p.stderr or p.stdout or "").strip()[-400:]
+        raise LLMError(f"{prov['label']} lieferte keine Antwort (Exitcode {p.returncode}). "
+                       f"{spur or 'Angemeldet? Einmalig `codex login` ausfuehren.'}")
+    return antwort
 
 
 def _base_url(cfg: dict, prov: dict) -> str:
@@ -131,6 +218,10 @@ def _headers(cfg: dict, prov: dict) -> dict:
 def complete(prompt: str) -> str:
     """Eine Runde gegen den eingestellten API-Anbieter. Liefert den Antworttext."""
     cfg, prov = _cfg()
+    # Der Abo-Weg ueber eine CLI hat weder URL noch Key noch Pflichtmodell — die Pruefungen
+    # darunter gelten nur den HTTP-Anbietern.
+    if prov["shape"] == "codex":
+        return _run_codex(cfg, prov, prompt)
     base = _base_url(cfg, prov)
     if not base:
         raise LLMError("Keine Basis-URL eingestellt")
@@ -160,8 +251,10 @@ def list_models() -> list:
     """Modelle des eingestellten Anbieters (beide Dialekte kennen GET /models). Eine feste
     Liste im Code waere nach dem naechsten Modellwechsel falsch — lieber live fragen."""
     cfg, prov = _cfg()
-    if prov["shape"] == "cli":
-        return []
+    if prov["shape"] in ("cli", "codex"):
+        # Die Aliase aus PROVIDERS — es gibt keine Quelle, die man fragen koennte (siehe
+        # den Kommentar dort). Leere Liste heisst: Modellname von Hand, oder leer lassen.
+        return [{"id": m, "label": m} for m in prov.get("models", ())]
     base = _base_url(cfg, prov)
     if not base:
         raise LLMError("Keine Basis-URL eingestellt")
@@ -224,13 +317,17 @@ def check() -> dict:
     """Kurzer Verbindungstest fuer die Einstellungsseite."""
     cfg, prov = _cfg()
     if prov["shape"] == "cli":
-        import shutil
-        exe = shutil.which("claude") or shutil.which("claude.cmd")
+        # Nur Vorhandensein: ein echter `claude -p`-Testlauf kostet ~8s Startzeit plus eine
+        # Abfrage vom Kontingent, und mehr als "installiert" kann er hier nicht beweisen.
+        exe = _exe(prov)
         return {"ok": bool(exe), "detail": exe or "claude CLI nicht auf PATH (Abo-Modus braucht "
                                                  "eine Claude-Code-Installation)"}
+    # Fuer codex laeuft hier bewusst ein ECHTER Aufruf durch: anders als bei claude sagt die
+    # blosse Anwesenheit des Binaers nichts ueber die Anmeldung, und ein nicht angemeldetes
+    # `codex exec` scheitert erst mitten im ersten Korrekturlauf.
     antwort = complete("Antworte exakt mit dem JSON {\"ok\": true} und sonst nichts.")
     return {"ok": bool(parse_json(antwort).get("ok", True)),
-            "detail": f"{prov['label']} · {cfg['model']} antwortet"}
+            "detail": f"{prov['label']} · {cfg['model'] or 'Voreinstellung'} antwortet"}
 
 
 def env_key_hint() -> str:

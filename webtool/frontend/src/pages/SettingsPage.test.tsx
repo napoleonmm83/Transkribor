@@ -28,8 +28,9 @@ const BASIS: Settings = {
   ],
   ai_ready: true, ai_reason: '',
   providers: [
-    { id: 'claude-cli', label: 'Claude Code Abo (kein Key)', needs_key: false, base: '', default_model: '', keys_url: '', hint: 'Nutzt das Abo.' },
-    { id: 'anthropic', label: 'Anthropic (Claude)', needs_key: true, base: 'https://api.anthropic.com/v1', default_model: 'claude-opus-5', keys_url: 'https://x', hint: '' },
+    { id: 'claude-cli', label: 'Claude Code Abo (kein Key)', needs_key: false, cli: true, base: '', default_model: 'opus', keys_url: '', hint: 'Nutzt das Abo.' },
+    { id: 'codex-cli', label: 'ChatGPT-Abo (Codex CLI, kein Key)', needs_key: false, cli: true, base: '', default_model: '', keys_url: '', hint: 'Nutzt das ChatGPT-Abo.' },
+    { id: 'anthropic', label: 'Anthropic (Claude)', needs_key: true, cli: false, base: 'https://api.anthropic.com/v1', default_model: 'claude-opus-5', keys_url: 'https://x', hint: '' },
   ],
 }
 
@@ -47,10 +48,33 @@ describe('SettingsPage', () => {
     vi.mocked(api.listModels).mockResolvedValue([])
   })
 
-  it('zeigt im Abo-Modus weder Key- noch Modellfeld', async () => {
-    zeige()
+  it('zeigt im Abo kein Key-Feld — aber sehr wohl die Modellwahl', async () => {
+    // Das Abo bringt seine Anmeldung selbst mit; ein Key-Feld waere eine falsche
+    // Aufforderung. Das Modell ist trotzdem waehlbar: `claude --model` nimmt Aliase,
+    // und bei leerem Opus-Kontingent will man auf sonnet ausweichen koennen.
+    vi.mocked(api.listModels).mockResolvedValue([{ id: 'opus', label: 'opus' }, { id: 'sonnet', label: 'sonnet' }])
+    zeige({ model: 'opus' })
     expect(await screen.findByText(/Nutzt das Abo/)).toBeInTheDocument()
     expect(screen.queryByText('API-Key')).not.toBeInTheDocument()
+    expect(await screen.findByText('Modell')).toBeInTheDocument()
+  })
+
+  it('bietet im Abo die Modell-Aliase zur Auswahl an', async () => {
+    // Aliase, nicht konkrete IDs: 'opus' zeigt immer auf die neueste Generation.
+    vi.mocked(api.listModels).mockResolvedValue([{ id: 'opus', label: 'opus' }, { id: 'sonnet', label: 'sonnet' }])
+    zeige({ model: 'opus' })
+    await waitFor(() => expect(api.listModels).toHaveBeenCalled())
+    expect(await screen.findByText('opus')).toBeInTheDocument()
+  })
+
+  it('zeigt auch beim Codex-Abo kein Key-Feld', async () => {
+    // Zweites Abo, gleiche Regel — und der Beweis, dass die Entscheidung am `cli`-Merkmal
+    // des Servers haengt und nicht an einer Namensliste im Frontend.
+    zeige({ provider: 'codex-cli' })
+    // Auf den Hinweistext prüfen, nicht auf das Label: das steht auch im Auswahlmenü.
+    expect(await screen.findByText(/Nutzt das ChatGPT-Abo/)).toBeInTheDocument()
+    expect(screen.queryByText('API-Key')).not.toBeInTheDocument()
+    expect(await screen.findByText('Modell')).toBeInTheDocument()
   })
 
   it('zeigt einen gespeicherten Key nie im Klartext', async () => {
@@ -91,11 +115,13 @@ describe('SettingsPage', () => {
     expect(screen.getByPlaceholderText('Modellname')).toBeInTheDocument()
   })
 
-  it('fragt im Abo-Modus nicht nach Modellen', async () => {
-    // `claude -p` hat keine Modellliste; llm.list_models() gibt fuer "cli" leer zurueck.
-    zeige()
-    await screen.findByText(/Nutzt das Abo/)
-    expect(api.listModels).not.toHaveBeenCalled()
+  it('bleibt beim Textfeld, wenn der Anbieter keine Liste kennt', async () => {
+    // Codex hat keinen Befehl, der Modelle auflistet — die leere Liste ist hier kein
+    // Fehler, sondern die Wahrheit. Leer lassen heisst: Voreinstellung der CLI.
+    vi.mocked(api.listModels).mockResolvedValue([])
+    zeige({ provider: 'codex-cli' })
+    await waitFor(() => expect(api.listModels).toHaveBeenCalled())
+    expect(await screen.findByPlaceholderText('Modellname')).toBeInTheDocument()
   })
 
   it('bleibt beim Textfeld, wenn das automatische Laden scheitert — ohne Fehlblase', async () => {
