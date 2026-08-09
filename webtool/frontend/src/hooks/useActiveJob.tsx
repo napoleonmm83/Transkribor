@@ -64,23 +64,39 @@ export function JobProvider({ children, intervalMs = 1500 }: { children: ReactNo
       const ergebnisse = await Promise.all(ids.map(id =>
         getJob(id).then(r => [id, r] as const).catch(() => [id, null] as const)))
       if (!alive) return
-      let settled = false
-      setJobs(prev => prev.map(j => {
-        const treffer = ergebnisse.find(([id]) => id === j.id)
-        if (!treffer) return j
-        const [, r] = treffer
-        if (!r) {
-          failures.current[j.id] = (failures.current[j.id] ?? 0) + 1
-          if (failures.current[j.id] < 3) return j
-          settled = true                       // dreimal weg -> aufgeben, nicht endlos pollen
-          return { ...j, status: 'error' }
+
+      // Den Ausgang HIER bestimmen, nicht im setJobs-Updater. React ruft Updater in der
+      // Render-Phase — also erst NACH den Zeilen unten — und unter StrictMode zweimal.
+      // Beides stand vorher drin und beides ging schief: `settled` war unten immer noch
+      // false (die onSettled-Listener feuerten nie, gemessen 0x), und `failures` zaehlte
+      // doppelt, womit aus "dreimal weg" schon nach zwei Netzhaengern ein Abbruch wurde.
+      // Ein Updater darf rechnen, aber nichts entscheiden und nichts veraendern.
+      const neu: Record<string, string> = {}
+      for (const [id, r] of ergebnisse) {
+        if (r) {
+          failures.current[id] = 0
+          neu[id] = r.status
+        } else {
+          failures.current[id] = (failures.current[id] ?? 0) + 1
+          neu[id] = failures.current[id] >= 3 ? 'error' : 'running'  // dreimal weg -> aufgeben
         }
-        failures.current[j.id] = 0
-        if (r.status !== 'running') settled = true
-        return { ...j, status: r.status, phases: parseJobPhases(j.kind, r.lines) }
+      }
+      const ergebnis = new Map(ergebnisse)
+      setJobs(prev => prev.map(j => {
+        if (!(j.id in neu)) return j
+        const r = ergebnis.get(j.id)
+        // parseJobPhases darf hier stehen: reine Funktion von (kind, lines).
+        if (r) return { ...j, status: r.status, phases: parseJobPhases(j.kind, r.lines) }
+        return neu[j.id] === 'error' ? { ...j, status: 'error' } : j
       }))
-      if (settled) listeners.current.forEach(fn => fn())
-      timer = setTimeout(tick, intervalMs)
+
+      const stati = Object.values(neu)
+      if (stati.some(s => s !== 'running')) listeners.current.forEach(fn => fn())
+      // Nur weiterpollen, solange wirklich etwas laeuft. Bedingungslos neu zu planen liess
+      // nach dem letzten Job einen Timer stehen, den allein das Aufraeumen des Effekts noch
+      // abfangen konnte — ein Wettlauf, den ein ausgelasteter CI-Runner verliert. Der
+      // Extra-Aufruf traf dort einen erschoepften Mock: undefined.then -> Unhandled Rejection.
+      if (stati.some(s => s === 'running')) timer = setTimeout(tick, intervalMs)
     }
     tick()
     return () => { alive = false; clearTimeout(timer) }
