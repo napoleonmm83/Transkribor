@@ -1,10 +1,16 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react'
 import { useWavesurfer } from '@wavesurfer/react'
-import { playWindow } from '@/lib/playback'
+import { playWindow, naechsteAktion, skipZiel, type Fenster } from '@/lib/playback'
 import { useTheme } from '@/components/ThemeProvider'
 import type { Segment } from '@/lib/types'
 
-export type WaveHandle = { playSegment: (s: Segment) => void; playTurn: (s: Segment[]) => void }
+export type WaveHandle = {
+  playSegment: (s: Segment) => void
+  playTurn: (s: Segment[]) => void
+  /** Play/Pause. `seg` = das Segment unter dem Cursor, falls es eines gibt. */
+  toggle: (seg?: Segment | null) => void
+  skip: (sekunden: number) => void
+}
 
 // Wavesurfer malt auf Canvas und kann keine CSS-Variablen lesen — die Werte muessen hier
 // stehen. Sie spiegeln die Tokens aus index.css: Neutralton fuer die ungespielte Welle,
@@ -23,6 +29,12 @@ export const Waveform = forwardRef<WaveHandle, { url: string; onTime: (t: number
       ...colors(theme === 'dark'),
     })
 
+    // Das zuletzt angespielte Stueck. Muss hier liegen und nicht in wavesurfer: der loescht
+    // seine eigene Endgrenze (stopAtPosition) im pause-Handler, ein blosses playPause() liefe
+    // darum ueber das Segmentende hinaus.
+    const fenster = useRef<Fenster | null>(null)
+    useEffect(() => { fenster.current = null }, [url])   // andere Datei -> alte Grenze gilt nicht
+
     useEffect(() => {
       if (!wavesurfer) return
       return wavesurfer.on('timeupdate', (t: number) => onTime(t))
@@ -34,6 +46,7 @@ export const Waveform = forwardRef<WaveHandle, { url: string; onTime: (t: number
       playSegment(s) {
         if (!wavesurfer) return
         const { from, to } = playWindow(s, wavesurfer.getDuration())
+        fenster.current = { from, to, segId: s.id }
         wavesurfer.play(from, to)?.catch(() => {})
       },
       playTurn(segs) {
@@ -41,7 +54,33 @@ export const Waveform = forwardRef<WaveHandle, { url: string; onTime: (t: number
         const dur = wavesurfer.getDuration()
         const from = playWindow(segs[0], dur).from
         const to = playWindow(segs[segs.length - 1], dur).to
+        fenster.current = { from, to, segId: null }
         wavesurfer.play(from, to)?.catch(() => {})
+      },
+      toggle(seg) {
+        if (!wavesurfer) return
+        const a = naechsteAktion({
+          laeuft: wavesurfer.isPlaying(),
+          fenster: fenster.current,
+          zeit: wavesurfer.getCurrentTime(),
+          segment: seg ?? null,
+          dauer: wavesurfer.getDuration(),
+        })
+        if (a.art === 'pause') { wavesurfer.pause(); return }
+        if (a.art === 'fenster') {
+          fenster.current = { from: a.from, to: a.to, segId: a.segId }
+          wavesurfer.play(a.from, a.to)?.catch(() => {})
+          return
+        }
+        if (a.to == null) fenster.current = null
+        // Kein Startwert: die Position bleibt stehen, nur die Grenze wird neu gesetzt.
+        wavesurfer.play(undefined, a.to)?.catch(() => {})
+      },
+      skip(sekunden) {
+        if (!wavesurfer) return
+        // setTime loescht stopAtPosition — hier erwuenscht: wer vorspult, will ueber das
+        // Segmentende hinaus hoeren. Das Ref bleibt stehen, naechsteAktion verwirft es dann.
+        wavesurfer.setTime(skipZiel(wavesurfer.getCurrentTime(), sekunden, wavesurfer.getDuration()))
       },
     }), [wavesurfer])
 
