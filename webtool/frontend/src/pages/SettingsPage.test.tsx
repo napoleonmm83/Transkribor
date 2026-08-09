@@ -1,11 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, act, cleanup } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
+import { toast } from 'sonner'
 import { SettingsPage } from './SettingsPage'
 import * as api from '@/lib/api'
 import type { Hardware, Settings } from '@/lib/types'
 
 vi.mock('@/lib/api')
+// Ohne diesen Mock waere `expect(toast.error).not.toHaveBeenCalled()` keine Zusicherung,
+// sondern ein Aufruf an eine echte Funktion, die immer "nicht aufgerufen" meldet.
+vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 // Default: kein Electron -> Abschnitt bleibt aus, wie es SettingsPage ausserhalb dieses
 // Tests auch fuer alle SettingsPage-Tests erwartet, die zeigeMit gar nicht aufrufen.
 vi.mock('@/hooks/useUpdate', () => ({
@@ -36,7 +40,12 @@ const zeige = (s: Partial<Settings> = {}, hw: Hardware = { device: 'cuda', name:
 }
 
 describe('SettingsPage', () => {
-  beforeEach(() => vi.clearAllMocks())
+  // Der Automock von '@/lib/api' liefert sonst `undefined` — eine Antwort, die die echte
+  // API nie gibt. Seit die Seite von selbst laedt, traefe die JEDEN Test mit Anbieter.
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(api.listModels).mockResolvedValue([])
+  })
 
   it('zeigt im Abo-Modus weder Key- noch Modellfeld', async () => {
     zeige()
@@ -63,13 +72,48 @@ describe('SettingsPage', () => {
     expect((feld as HTMLInputElement).value).toBe('')
   })
 
-  it('holt die Modellliste erst auf Klick beim Anbieter', async () => {
+  it('holt die Modellliste von selbst und bietet sie zur Auswahl an', async () => {
     vi.mocked(api.listModels).mockResolvedValue([{ id: 'claude-opus-5', label: 'Claude Opus 5' }])
-    zeige({ provider: 'anthropic', has_key: true })
+    zeige({ provider: 'anthropic', has_key: true, model: 'claude-opus-5' })
+    // Ohne Klick: der Knopf war da, aber niemand fand ihn — dann tippt man Modell-IDs ab.
+    await waitFor(() => expect(api.listModels).toHaveBeenCalled())
+    // Aus dem Textfeld ist eine Auswahl geworden.
+    await waitFor(() => expect(screen.queryByPlaceholderText('Modellname')).not.toBeInTheDocument())
+    expect(await screen.findByText('Claude Opus 5')).toBeInTheDocument()
+  })
+
+  it('fragt ohne hinterlegten Key gar nicht erst beim Anbieter an', async () => {
+    // Anthropic braucht einen Key. Ohne ihn ist die Anfrage ein sicherer Fehlschlag —
+    // den bei jedem Seitenaufbau zu bezahlen, waere sinnlos.
+    zeige({ provider: 'anthropic', has_key: false })
     await screen.findByText('Modell')
     expect(api.listModels).not.toHaveBeenCalled()
-    await act(async () => { fireEvent.click(screen.getByTitle(/Modelle vom Anbieter laden/)) })
+    expect(screen.getByPlaceholderText('Modellname')).toBeInTheDocument()
+  })
+
+  it('fragt im Abo-Modus nicht nach Modellen', async () => {
+    // `claude -p` hat keine Modellliste; llm.list_models() gibt fuer "cli" leer zurueck.
+    zeige()
+    await screen.findByText(/Nutzt das Abo/)
+    expect(api.listModels).not.toHaveBeenCalled()
+  })
+
+  it('bleibt beim Textfeld, wenn das automatische Laden scheitert — ohne Fehlblase', async () => {
+    // Ein abgelaufener Key darf beim blossen Oeffnen der Seite nicht rot aufpoppen.
+    // Verschluckt wird nichts: das Textfeld bleibt, und der Knopf meldet weiterhin laut.
+    vi.mocked(api.listModels).mockRejectedValue(new Error('401 invalid key'))
+    zeige({ provider: 'anthropic', has_key: true })
     await waitFor(() => expect(api.listModels).toHaveBeenCalled())
+    expect(await screen.findByPlaceholderText('Modellname')).toBeInTheDocument()
+    expect(toast.error).not.toHaveBeenCalled()
+  })
+
+  it('der Knopf meldet den Fehler laut', async () => {
+    vi.mocked(api.listModels).mockRejectedValue(new Error('401 invalid key'))
+    zeige({ provider: 'anthropic', has_key: true })
+    await waitFor(() => expect(api.listModels).toHaveBeenCalled())
+    await act(async () => { fireEvent.click(screen.getByTitle(/Modelle neu vom Anbieter laden/)) })
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('401')))
   })
 
   it('zeigt die Whisper-Qualitätsstufe und das aktive Gerät', async () => {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { KeyRound, Loader2, RefreshCw } from 'lucide-react'
 import { getHardware, getSettings, listModels, saveSettings, testSettings } from '@/lib/api'
@@ -52,13 +52,45 @@ export function SettingsPage() {
   const prov: ProviderInfo | undefined = s?.providers.find(p => p.id === s.provider)
   const istAbo = s?.provider === 'claude-cli'
 
-  // Nach jedem Speichern neu laden: die Liste haengt am Anbieter UND am Key.
-  const modelleLaden = useCallback(async () => {
+  // Anbieterwechsel und Key-Eingabe koennen sich ueberholen: wer schnell von A nach B
+  // schaltet, bekaeme sonst A's Liste in B's Auswahl — und speichert beim naechsten Klick
+  // einen Modellnamen, den B nicht kennt. Nur die juengste Anfrage darf schreiben.
+  const lauf = useRef(0)
+
+  // `leise` fuer den automatischen Weg: eine rote Blase beim Seitenaufbau, weil irgendwo
+  // ein Key fehlt, ist Laerm ueber einen Zustand, den der Nutzer gerade erst herstellt.
+  // Verschluckt wird nichts — das Textfeld bleibt als Rueckfall stehen, und der Knopf
+  // daneben meldet weiterhin laut, weil ihn nur drueckt, wer eine Antwort erwartet.
+  const modelleLaden = useCallback(async (leise = false) => {
+    const meiner = ++lauf.current
     setLaedt(true)
-    try { setModelle(await listModels()) }
-    catch (e) { setModelle([]); toast.error(`Modelle: ${(e as Error).message}`) }
-    finally { setLaedt(false) }
+    try {
+      const m = await listModels()
+      if (meiner === lauf.current) setModelle(m)
+    } catch (e) {
+      if (meiner !== lauf.current) return
+      setModelle([])
+      if (!leise) toast.error(`Modelle: ${(e as Error).message}`)
+    } finally {
+      if (meiner === lauf.current) setLaedt(false)
+    }
   }, [])
+
+  // Die Liste haengt am Anbieter UND am Key — beides steht hier erst nach dem Speichern fest.
+  // Automatisch, weil der Knopf allein nicht reichte: wer ihn nicht findet, sieht ein leeres
+  // Textfeld und muss die Modell-ID abtippen. Gefragt wird nur, wenn es ueberhaupt gehen kann
+  // (das Abo hat keine Liste, ohne Key antwortet niemand) — sonst kostet jeder Seitenaufbau
+  // einen Fehlschlag beim Anbieter.
+  // Abhaengig von den EINZELWERTEN, nicht von `s`: das ist nach jedem Speichern ein neues
+  // Objekt, und ein Wechsel der Whisper-Stufe holte sonst die Modellliste mit.
+  // `basis` steht in der Liste, obwohl der Rumpf es nicht liest — bei "custom" entscheidet
+  // es serverseitig, WEN `listModels()` fragt.
+  const { provider, has_key: hatKey, base_url: basis } = s ?? {}
+  useEffect(() => {
+    if (!provider || istAbo) { setModelle([]); return }
+    if (prov?.needs_key && !hatKey) { setModelle([]); return }
+    modelleLaden(true)
+  }, [provider, hatKey, basis, istAbo, prov?.needs_key, modelleLaden])
 
   const speichern = async (patch: Record<string, string>, danach?: () => void) => {
     try {
@@ -194,9 +226,12 @@ export function SettingsPage() {
                   <Input id="feld-modell" defaultValue={s.model} placeholder="Modellname"
                     onBlur={e => e.target.value !== s.model && speichern({ model: e.target.value })} />
                 )}
-                <Button variant="outline" onClick={modelleLaden} disabled={laedt} title="Modelle vom Anbieter laden">
+                {/* Pfeilfunktion, nicht `onClick={modelleLaden}`: sonst landet das
+                    MouseEvent im `leise`-Parameter und ist wahr — der Knopf schwiege
+                    bei genau dem Fehler, dessentwegen man ihn drueckt. */}
+                <Button variant="outline" onClick={() => modelleLaden()} disabled={laedt} title="Modelle neu vom Anbieter laden">
                   {laedt ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
-                  <span className="sr-only">Modelle vom Anbieter laden</span>
+                  <span className="sr-only">Modelle neu vom Anbieter laden</span>
                 </Button>
               </div>
             </div>
