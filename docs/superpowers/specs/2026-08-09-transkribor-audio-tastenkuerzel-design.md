@@ -26,20 +26,27 @@ Durchlauf-Modus über Segmentgrenzen, Wort-genaues Anspringen. Alles nachrüstba
 | Taste | Wirkung | im Textfeld | ausserhalb |
 |---|---|---|---|
 | `Ctrl+Space` | Play/Pause | ✓ | ✓ |
-| `Ctrl+←` | 2 s zurück | ✓ | ✓ |
-| `Ctrl+→` | 2 s vor | ✓ | ✓ |
+| `Ctrl+←` | 2 s zurück | ✗ | ✓ |
+| `Ctrl+→` | 2 s vor | ✗ | ✓ |
 
-**Eine Belegung für beide Zustände**, bewusst. Die naheliegende Alternative — blosse Leertaste
+**`Ctrl+Space` gilt für beide Zustände**, bewusst. Die naheliegende Alternative — blosse Leertaste
 ausserhalb des Textfelds, `Ctrl+Space` darin — wurde verworfen: sie kostet eine Fokus-Prüfung und
 erzeugt die Frage „warum geht das hier nicht", sobald der Fokus einmal woanders steht als vermutet.
 Die blosse Leertaste tippt also immer ein Leerzeichen, überall.
 
-**Bekannte Grenze (macOS):** `Ctrl+←/→` schaltet dort zwischen Schreibtischen (Mission Control),
-`Cmd+Space` ist Spotlight und erreicht die Seite gar nicht. Auf einem Mac werden die Kürzel damit
-teilweise nicht ankommen. Das wird als `ponytail:`-Kommentar im Code vermerkt und **nicht** durch
-eine konfigurierbare Belegung gelöst: die Mac-Seite ist laut Issue #36 noch nie gestartet worden,
-eine Einstellungsfläche für einen ungetesteten Nutzer wäre Vorbau. Upgrade-Pfad, falls es je
-jemanden stört: Belegung aus einer Konstante lesen und in den Einstellungen überschreibbar machen.
+`Ctrl+←/→` dagegen wirken **nur ausserhalb** eines Textfelds: dort ist die Kombination auf Windows
+und Linux bereits der wortweise Cursorsprung — das Standard-Werkzeug beim Korrigieren von Text, und
+Korrigieren von Text ist, wofür dieses Programm gebaut ist. Hier war die Fokus-Prüfung nicht zu
+vermeiden, die bei `Ctrl+Space` bewusst entfällt: die Pfeile sind im Textfeld bereits vergeben,
+Play/Pause nicht (Review Important 2).
+
+**Bekannte Grenzen:** Auf macOS ist der Wortsprung `Alt+←/→`, `Ctrl+←/→` daher unbetroffen —
+schaltet dort aber stattdessen zwischen Schreibtischen (Mission Control), und `Cmd+Space` ist
+Spotlight und erreicht die Seite gar nicht. Auf einem Mac werden die Kürzel damit teilweise nicht
+ankommen. Das wird als `ponytail:`-Kommentar im Code vermerkt und **nicht** durch eine
+konfigurierbare Belegung gelöst: die Mac-Seite ist laut Issue #36 noch nie gestartet worden, eine
+Einstellungsfläche für einen ungetesteten Nutzer wäre Vorbau. Upgrade-Pfad, falls es je jemanden
+stört: Belegung aus einer Konstante lesen und in den Einstellungen überschreibbar machen.
 
 ## 3 · Semantik von Play/Pause
 

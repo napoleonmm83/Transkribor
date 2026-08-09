@@ -1,6 +1,6 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react'
 import { useWavesurfer } from '@wavesurfer/react'
-import { playWindow, naechsteAktion, skipZiel, type Fenster } from '@/lib/playback'
+import { playWindow, naechsteAktion, type Fenster } from '@/lib/playback'
 import { useTheme } from '@/components/ThemeProvider'
 import type { Segment } from '@/lib/types'
 
@@ -59,6 +59,10 @@ export const Waveform = forwardRef<WaveHandle, { url: string; onTime: (t: number
       },
       toggle(seg) {
         if (!wavesurfer) return
+        // Vor dem Dekodieren liefert getDuration() 0 -> playWindow klemmt `to` auf 0 und das
+        // gemerkte Fenster waere {from, to:0}; der naechste Druck spielte dann grenzenlos
+        // ab 0 (Review Minor 4).
+        if (!wavesurfer.getDuration()) return
         const a = naechsteAktion({
           laeuft: wavesurfer.isPlaying(),
           fenster: fenster.current,
@@ -78,9 +82,13 @@ export const Waveform = forwardRef<WaveHandle, { url: string; onTime: (t: number
       },
       skip(sekunden) {
         if (!wavesurfer) return
-        // setTime loescht stopAtPosition — hier erwuenscht: wer vorspult, will ueber das
-        // Segmentende hinaus hoeren. Das Ref bleibt stehen, naechsteAktion verwirft es dann.
-        wavesurfer.setTime(skipZiel(wavesurfer.getCurrentTime(), sekunden, wavesurfer.getDuration()))
+        // wavesurfer.skip() ist bereits setTime(getCurrentTime()+sekunden) geklemmt auf
+        // [0, getDuration()] — dafuer keine eigene Klemm-Rechnung. setTime loescht
+        // stopAtPosition, hier erwuenscht: wer vorspult, will ueber das Segmentende hinaus
+        // hoeren. Das Fenster bleibt stehen, aber als `frei` markiert, damit naechsteAktion
+        // weiss: das war ein Sprung, kein natuerliches Ende (Review Important 1).
+        if (fenster.current) fenster.current = { ...fenster.current, frei: true }
+        wavesurfer.skip(sekunden)
       },
     }), [wavesurfer])
 

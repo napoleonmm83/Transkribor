@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { playWindow, naechsteAktion, skipZiel, segIdAusFokus, SKIP } from './playback'
+import { playWindow, naechsteAktion, segIdAusFokus } from './playback'
 import type { Segment } from './types'
 
 const near = (a: number, b: number) => Math.abs(a - b) < 1e-9
@@ -80,17 +80,30 @@ describe('naechsteAktion', () => {
       art: 'fenster', from: expect.closeTo(18.21, 9), to: expect.closeTo(20.41, 9), segId: 47,
     })
   })
-})
 
-describe('skipZiel', () => {
-  it.each([
-    [10, SKIP, 60, 12],
-    [10, -SKIP, 60, 8],
-    [1, -SKIP, 60, 0],       // nicht vor den Anfang
-    [59.5, SKIP, 60, 60],    // nicht hinter das Ende
-    [10, SKIP, NaN, 12],     // Dauer unbekannt -> kein oberes Clamp
-  ])('klemmt %s + %s bei Dauer %s auf %s', (zeit, s, dauer, erwartet) => {
-    expect(skipZiel(zeit, s, dauer)).toBe(erwartet)
+  // Die drei Faelle, die Important 1 gefunden haette: wavesurfer stoppt beim natuerlichen Ende
+  // exakt auf `to`, nicht knapp davor.
+  it('wiederholt, wenn die Position exakt auf dem Fensterende steht (durchgelaufen)', () => {
+    expect(naechsteAktion({
+      laeuft: false, fenster: { from: 18.21, to: 20.41, segId: 47 }, zeit: 20.41,
+      segment: seg(47, 18.36, 20.06), dauer: 60,
+    })).toEqual({
+      art: 'fenster', from: expect.closeTo(18.21, 9), to: expect.closeTo(20.41, 9), segId: 47,
+    })
+  })
+
+  it('zaehlt die untere Fenstergrenze noch als "im Fenster"', () => {
+    expect(naechsteAktion({
+      laeuft: false, fenster: { from: 18.21, to: 20.41, segId: 47 }, zeit: 18.21,
+      segment: seg(47, 18.36, 20.06), dauer: 60,
+    })).toEqual({ art: 'weiter', to: 20.41 })
+  })
+
+  it('spielt frei weiter (ohne Grenze), wenn das Fenster als frei markiert ist', () => {
+    expect(naechsteAktion({
+      laeuft: false, fenster: { from: 18.21, to: 20.41, segId: 47, frei: true }, zeit: 20.41,
+      segment: seg(47, 18.36, 20.06), dauer: 60,
+    })).toEqual({ art: 'weiter' })
   })
 })
 
