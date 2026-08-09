@@ -33,7 +33,7 @@ export function SegmentView({ seg, active, onPlay, updateSegment }: {
   const focusRing = 'focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 rounded-sm'
   return (
     <div data-seg-id={seg.id} className={`group relative rounded-md px-2 py-1 ${active ? 'bg-primary/15 ring-2 ring-inset ring-primary/60' : ''}`}>
-      <button onClick={onPlay} title="Abspielen" aria-label="Segment abspielen"
+      <button onClick={onPlay} title="Abspielen (Ctrl+Space)" aria-label="Segment abspielen"
         className={`absolute -left-5 top-1.5 text-primary opacity-60 transition-opacity group-hover:opacity-100 ${focusRing}`}>
         <Play className="size-3 fill-current" aria-hidden="true" />
       </button>

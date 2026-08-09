@@ -6,6 +6,7 @@ import { useDoc } from '@/hooks/useDoc'
 import { useJob } from '@/hooks/useJob'
 import { mergePhases, useActiveJob } from '@/hooks/useActiveJob'
 import { uploadAudio, audioUrl, startTranscribe, startCorrect, startCorrectFile } from '@/lib/api'
+import { SKIP, segIdAusFokus } from '@/lib/playback'
 import { Sidebar } from '@/components/Sidebar'
 import { Toolbar } from '@/components/Toolbar'
 import { Transcript } from '@/components/Transcript'
@@ -37,6 +38,28 @@ export function EditorView() {
     const id = doc?.segments.find(s => t >= s.start && t < s.end)?.id ?? null
     setActiveId(prev => prev === id ? prev : id)
   }, [doc])
+
+  // Eine Belegung fuer drinnen wie draussen: die blosse Leertaste tippt im Segment ein
+  // Leerzeichen und darf nicht umgedeutet werden, und zwei Belegungen je nach Fokus erzeugen
+  // nur die Frage "warum geht das hier nicht".
+  // ponytail: fest verdrahtet. Auf macOS faengt Mission Control Ctrl+←/→ ab und Cmd+Space ist
+  // Spotlight — dort kommen die Kuerzel teils nicht an. Konfigurierbar machen, wenn das je
+  // jemanden stoert (Issue #36: die Mac-Seite ist bis heute nie gestartet worden).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!e.ctrlKey || e.altKey || e.shiftKey) return
+      if (e.key === ' ') {
+        e.preventDefault()
+        const id = segIdAusFokus(document.activeElement, activeId)
+        waveRef.current?.toggle(doc?.segments.find(s => s.id === id) ?? null)
+      } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        e.preventDefault()
+        waveRef.current?.skip(e.key === 'ArrowLeft' ? -SKIP : SKIP)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [doc, activeId])
 
   useEffect(() => {
     if (!dirty) return
