@@ -39,9 +39,11 @@ export function EditorView() {
     setActiveId(prev => prev === id ? prev : id)
   }, [doc])
 
-  // Eine Belegung fuer drinnen wie draussen: die blosse Leertaste tippt im Segment ein
-  // Leerzeichen und darf nicht umgedeutet werden, und zwei Belegungen je nach Fokus erzeugen
-  // nur die Frage "warum geht das hier nicht".
+  // Ctrl+Space gilt drinnen wie draussen: die blosse Leertaste tippt im Segment ein Leerzeichen
+  // und darf nicht umgedeutet werden, und zwei Belegungen je nach Fokus erzeugen nur die Frage
+  // "warum geht das hier nicht". Ctrl+←/→ dagegen greifen NUR ausserhalb eines Textfelds: dort
+  // sind sie auf Windows/Linux bereits der wortweise Cursorsprung, und der ist beim
+  // Textkorrigieren wichtiger als das Spulen (Review Important 2).
   // ponytail: fest verdrahtet. Auf macOS faengt Mission Control Ctrl+←/→ ab und Cmd+Space ist
   // Spotlight — dort kommen die Kuerzel teils nicht an. Konfigurierbar machen, wenn das je
   // jemanden stoert (Issue #36: die Mac-Seite ist bis heute nie gestartet worden).
@@ -49,10 +51,13 @@ export function EditorView() {
     const onKey = (e: KeyboardEvent) => {
       if (!e.ctrlKey || e.altKey || e.shiftKey) return
       if (e.key === ' ') {
+        if (e.repeat) return   // gehaltene Taste sonst ein Toggle-Sturm (Review Minor 2)
         e.preventDefault()
         const id = segIdAusFokus(document.activeElement, activeId)
         waveRef.current?.toggle(doc?.segments.find(s => s.id === id) ?? null)
       } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        const el = document.activeElement
+        if (el instanceof HTMLTextAreaElement || el instanceof HTMLInputElement || (el as HTMLElement)?.isContentEditable) return
         e.preventDefault()
         waveRef.current?.skip(e.key === 'ArrowLeft' ? -SKIP : SKIP)
       }

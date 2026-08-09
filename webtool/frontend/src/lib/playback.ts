@@ -12,14 +12,16 @@ export function playWindow(seg: { start: number; end: number }, duration: number
  *  lang genug fuer ein verschlucktes Wort, kurz genug, um nicht den Satz zu verlieren. */
 export const SKIP = 2
 
-/** Das zuletzt angespielte Stueck. `segId` ist null nach einem ganzen Redebeitrag. */
-export type Fenster = { from: number; to: number; segId: number | null }
+/** Das zuletzt angespielte Stueck. `segId` ist null nach einem ganzen Redebeitrag.
+ *  `frei`: per Ctrl+←/→ aus dem Fenster herausgespult — dann soll Ctrl+Space grenzenlos
+ *  weiterspielen statt das durchgelaufene Fenster zu wiederholen (Review Important 1). */
+export type Fenster = { from: number; to: number; segId: number | null; frei?: boolean }
 
 export type Aktion =
   | { art: 'pause' }
   /** play(undefined, to) — Position bleibt, Grenze wird (falls gesetzt) neu scharf gestellt. */
   | { art: 'weiter'; to?: number }
-  /** play(from, to) — an eine andere Stelle springen. */
+  /** play(from, to) — an eine andere Stelle springen (oder ein durchgelaufenes Fenster wiederholen). */
   | { art: 'fenster'; from: number; to: number; segId: number }
 
 /** Was Ctrl+Space als Naechstes tun soll.
@@ -27,7 +29,11 @@ export type Aktion =
  *  Reihenfolge ist der ganze Witz: ein *anderes* Segment schlaegt das Fortsetzen (Regel 2 vor 3),
  *  sonst liesse sich eine Stelle nie gezielt nochmal hoeren. Verglichen wird die Segment-ID und
  *  nicht das Zeitfenster — playWindow rechnet Fliesskomma, ein Gleichheitstest darauf waere eine
- *  Wanze, die erst bei irgendeinem krummen Zeitstempel zubeisst. */
+ *  Wanze, die erst bei irgendeinem krummen Zeitstempel zubeisst.
+ *
+ *  "Ausserhalb des Fensters" heisst zweierlei, und nur `frei` unterscheidet es: durchgelaufen
+ *  (wavesurfer stoppt exakt auf `to`) soll wiederholen, herausgespult (Ctrl+→) soll frei
+ *  weiterlaufen. Ohne das Bit verschluckt der Durchlauf-Fall den Wiederhol-Fall. */
 export function naechsteAktion(z: {
   laeuft: boolean
   fenster: Fenster | null
@@ -36,21 +42,15 @@ export function naechsteAktion(z: {
   dauer: number
 }): Aktion {
   if (z.laeuft) return { art: 'pause' }
-  if (z.segment && z.segment.id !== z.fenster?.segId) {
+  const gleichesSegment = !!z.segment && z.segment.id === z.fenster?.segId
+  if (z.fenster?.frei && gleichesSegment) return { art: 'weiter' }
+  const imFenster = !!z.fenster && z.zeit >= z.fenster.from && z.zeit < z.fenster.to
+  if (z.segment && !(imFenster && gleichesSegment)) {
     const { from, to } = playWindow(z.segment, z.dauer)
     return { art: 'fenster', from, to, segId: z.segment.id }
   }
-  // Ausserhalb des Fensters heisst: jemand hat herausgespult. Dann gilt die Grenze nicht mehr,
-  // sonst hielte das Fortsetzen sofort wieder an.
-  if (z.fenster && z.zeit >= z.fenster.from && z.zeit < z.fenster.to) {
-    return { art: 'weiter', to: z.fenster.to }
-  }
+  if (imFenster) return { art: 'weiter', to: z.fenster!.to }
   return { art: 'weiter' }
-}
-
-export function skipZiel(zeit: number, sekunden: number, dauer: number) {
-  const ziel = Math.max(0, zeit + sekunden)
-  return Number.isFinite(dauer) ? Math.min(dauer, ziel) : ziel
 }
 
 /** Welches Segment gemeint ist: beim Tippen steckt die Textarea im Segment-Div, sonst gilt das
