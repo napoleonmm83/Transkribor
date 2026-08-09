@@ -580,3 +580,41 @@ def test_ohne_origin_unveraendert(client):
     """curl, die Tests und jeder Nicht-Browser schicken keinen Origin."""
     assert client.get("/api/projects").status_code == 200
     assert client.post("/api/projects/Demo/transcribe").status_code == 200
+
+
+# --- Anmeldung an den Abo-CLIs -----------------------------------------------
+
+def test_auth_endpunkt_meldet_den_zustand(client, monkeypatch):
+    from webtool import auth
+    monkeypatch.setattr(auth, "status", lambda p: {
+        "unterstuetzt": True, "angemeldet": True, "detail": "Angemeldet als a@b.c (max)"})
+    r = client.get("/api/settings/auth")
+    assert r.status_code == 200
+    assert r.json()["angemeldet"] is True
+
+
+def test_auth_zustand_ist_auf_den_eingestellten_anbieter_gefiltert(client, monkeypatch):
+    """Der Filter sitzt im Endpunkt, nicht in auth.py — ungetestet waere genau der Fehler
+    zurueck, der gemeldet wurde: waehrend einer Codex-Anmeldung auf das Claude-Abo
+    umgestellt, und die Codex-URL stand unter der Claude-Ueberschrift."""
+    from webtool import auth
+    client.put("/api/settings", json={"provider": "claude-cli"})
+    gesehen = {}
+
+    def fake(provider=""):
+        gesehen["provider"] = provider
+        return {"laeuft": False}
+    monkeypatch.setattr(auth, "zustand", fake)
+    client.get("/api/settings/auth/login")
+    assert gesehen["provider"] == "claude-cli"
+
+
+def test_login_code_ohne_laufenden_vorgang_gibt_400(client):
+    r = client.post("/api/settings/auth/login/code", json={"code": "EGAL"})
+    assert r.status_code == 400
+
+
+def test_login_start_bei_anbieter_ohne_anmeldung_gibt_400(client):
+    """OpenAI kennt keine CLI-Anmeldung — dort ist der Key die Anmeldung."""
+    client.put("/api/settings", json={"provider": "openai"})
+    assert client.post("/api/settings/auth/login").status_code == 400
