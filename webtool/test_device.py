@@ -43,16 +43,37 @@ def test_ohne_torch_kein_absturz(monkeypatch):
     monkeypatch.setitem(sys.modules, "torch", None)
     assert device.pick() == "cpu"
     assert device.describe() == {"device": "cpu", "name": "PyTorch nicht installiert",
-                                 "torch_ok": False}
+                                 "torch_ok": False, "asr": "cpu"}
 
 
 def test_describe_nennt_die_gpu(monkeypatch):
     monkeypatch.setitem(sys.modules, "torch", _torch(cuda=True, name="NVIDIA RTX 5080"))
     assert device.describe() == {"device": "cuda", "name": "NVIDIA RTX 5080",
-                                 "torch_ok": True}
+                                 "torch_ok": True, "asr": "cuda"}
 
 
 def test_describe_apple(monkeypatch):
     monkeypatch.setitem(sys.modules, "torch", _torch(mps=True))
     d = device.describe()
     assert d["device"] == "mps" and d["torch_ok"] is True
+
+
+def test_pick_asr_faellt_von_mps_auf_cpu(monkeypatch):
+    """CTranslate2 (faster-whisper) kennt nur cpu/cuda. Wuerde pick() durchgereicht,
+    lehnte es "mps" ab — auf einem Mac liefe gar keine Transkription mehr."""
+    monkeypatch.setattr(device, "pick", lambda: "mps")
+    assert device.pick_asr() == "cpu"
+
+
+def test_pick_asr_behaelt_cuda(monkeypatch):
+    monkeypatch.setattr(device, "pick", lambda: "cuda")
+    assert device.pick_asr() == "cuda"
+
+
+def test_describe_nennt_asr_getrennt(monkeypatch):
+    """Auf einem Mac meldet device "mps" (Diarisierung), die ASR laeuft aber auf der CPU.
+    Ohne dieses Feld behauptete die Oberflaeche GPU, waehrend die CPU rechnet."""
+    monkeypatch.setattr(device, "pick", lambda: "mps")
+    d = device.describe()
+    if d["torch_ok"]:                      # ohne torch (CI-Job) ist der Fall nicht pruefbar
+        assert d["device"] == "mps" and d["asr"] == "cpu"

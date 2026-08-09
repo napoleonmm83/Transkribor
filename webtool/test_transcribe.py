@@ -1,5 +1,7 @@
 """Tests fuer den only=-Filter aus dem URL-Import (kein torch/whisper noetig)."""
+import dataclasses
 import importlib
+import json
 import os
 import sys
 import types
@@ -7,18 +9,23 @@ import types
 import transcribe
 
 
-def test_opts_fp16_nur_bei_cuda():
-    """fp16 auf MPS oder CPU wuerde werfen bzw. still falsch rechnen."""
-    assert transcribe._opts("prompt", "de", "cuda")["fp16"] is True
-    assert transcribe._opts("prompt", "de", "mps")["fp16"] is False
-    assert transcribe._opts("prompt", "de", "cpu")["fp16"] is False
-
-
 def test_opts_reicht_prompt_und_sprache_durch():
-    o = transcribe._opts("Kontext hier", "en", "cpu")
+    o = transcribe._opts("Kontext hier", "en")
     assert o["initial_prompt"] == "Kontext hier"
     assert o["language"] == "en"
     assert o["word_timestamps"] is True      # Grundlage fuer die Audio-Synchronisation
+
+
+def test_opts_haelt_den_fortschrittsbalken_an():
+    """log_progress speist den tqdm-Balken, aus dem jobPhases.ts die Prozente liest —
+    ohne ihn zeigt die Oberflaeche waehrend der ganzen Transkription keinen Fortschritt."""
+    assert transcribe._opts("p", "de")["log_progress"] is True
+
+
+def test_opts_schaltet_vad_aus():
+    """VAD wuerde Stille ueberspringen und die Segmentzeiten gegen das Audio verschieben —
+    der Editor synchronisiert Text und Wiedergabe ueber genau diese Zeiten."""
+    assert transcribe._opts("p", "de")["vad_filter"] is False
 
 
 def _projekt(tmp_path, *namen):
@@ -83,102 +90,6 @@ def test_ensure_ffmpeg_kein_winget_glob_auf_posix(monkeypatch):
     assert transcribe.ensure_ffmpeg() is False
 
 
-# --- MPS-Rueckfall (Task I3) --------------------------------------------------
-
-def _whisper_attrappe(monkeypatch, kaputt=(), nur_cpu=(), laden_scheitert_bei=()):
-    """Minimales whisper/torch statt eines echten 3-GB-Modells. `kaputt` scheitert auf jedem
-    Geraet (defekte Datei), `nur_cpu` nur auf mps (echte MPS-Luecke).
-
-    `laden_scheitert_bei` nennt die NUMMERN der load_model-Aufrufe, die werfen sollen
-    (1-basig) — nicht die Geraete: dasselbe Geraet wird einmal vor der Schleife geladen und
-    spaeter womoeglich wiederhergestellt, und nur der zweite Fall ist interessant.
-
-    Liefert die Liste der Geraete, auf die load_model gerufen wurde — daran haengt der Test."""
-    geladen = []
-
-    class Modell:
-        def __init__(self, device):
-            self.device = device
-
-        def transcribe(self, f, **kw):
-            name = os.path.basename(f)
-            if name in kaputt:
-                raise RuntimeError("Datei laesst sich nicht lesen")
-            if self.device == "mps" and name in nur_cpu:
-                raise RuntimeError("aten::_index_put_impl_ fehlt auf MPS")
-            return {"text": "hallo", "segments": [{"start": 0.0, "end": 1.0, "text": "hallo"}]}
-
-    def load_model(model, device=None):
-        geladen.append(device)
-        if len(geladen) in laden_scheitert_bei:
-            raise RuntimeError(f"kein Speicher fuer {device}")
-        return Modell(device)
-
-    fake = types.ModuleType("whisper")
-    fake.load_model = load_model
-    monkeypatch.setitem(sys.modules, "whisper", fake)
-    monkeypatch.setitem(sys.modules, "torch", types.ModuleType("torch"))
-    from webtool import device as devicemod
-    monkeypatch.setattr(devicemod, "pick", lambda: "mps")
-    monkeypatch.setattr(devicemod, "describe",
-                        lambda: {"device": "mps", "name": "Apple GPU", "torch_ok": True})
-    return geladen
-
-
-def _mps_projekt(tmp_path, monkeypatch, **wie):
-    proj = tmp_path / "P"
-    (proj / "audio").mkdir(parents=True)
-    for n in ("a.mp3", "b.mp3"):
-        (proj / "audio" / n).write_bytes(b"x")
-    monkeypatch.setattr(transcribe, "PROJEKTE", str(tmp_path))
-    return proj, _whisper_attrappe(monkeypatch, **wie)
-
-
-def test_kaputte_datei_zieht_den_rest_des_laufs_nicht_auf_die_cpu(tmp_path, monkeypatch):
-    """Scheitert eine Datei AUCH auf der CPU, lag es nicht an MPS — sonst macht eine
-    kaputte Datei an Position 1 aus einem 20-Minuten-Lauf einen Stundenlauf."""
-    proj, geladen = _mps_projekt(tmp_path, monkeypatch, kaputt={"a.mp3"})
-    transcribe.transcribe_project("P", "large-v3", "de")
-    assert geladen == ["mps", "cpu", "mps"]                  # Geraet wiederhergestellt
-    assert not (proj / "transkripte" / "a.json").exists()    # die kaputte Datei bleibt liegen
-    assert (proj / "transkripte" / "b.json").exists()        # der Rest lief weiter (auf mps)
-
-
-def test_echter_mps_ausfall_bleibt_auf_der_cpu(tmp_path, monkeypatch):
-    """Klappt die CPU, war es wirklich MPS — dann nicht bei jeder Datei neu ausprobieren."""
-    proj, geladen = _mps_projekt(tmp_path, monkeypatch, nur_cpu={"a.mp3", "b.mp3"})
-    transcribe.transcribe_project("P", "large-v3", "de")
-    assert geladen == ["mps", "cpu"]                         # kein Zurueckschalten
-    assert (proj / "transkripte" / "a.json").exists()
-    assert (proj / "transkripte" / "b.json").exists()
-
-
-def test_kein_cpu_modell_ueberspringt_die_datei_statt_den_lauf(tmp_path, monkeypatch, capsys):
-    """Das load_model im except stand ungeschuetzt: wirft es, war der ganze Lauf verloren —
-    wegen EINER Datei. Ueberall sonst in der Schleife gilt "Datei ueberspringen, Rest laeuft"."""
-    # Aufruf 1 = mps vor der Schleife (klappt), Aufruf 2 = der CPU-Rueckfall (wirft).
-    proj, geladen = _mps_projekt(tmp_path, monkeypatch,
-                                 nur_cpu={"a.mp3"}, laden_scheitert_bei={2})
-    transcribe.transcribe_project("P", "large-v3", "de")
-    assert geladen == ["mps", "cpu"]                         # cpu versucht, gescheitert
-    assert not (proj / "transkripte" / "a.json").exists()    # die eine Datei bleibt liegen
-    assert (proj / "transkripte" / "b.json").exists()        # der Rest lief auf mps weiter
-    assert "CPU-Modell nicht ladbar" in capsys.readouterr().out
-
-
-def test_nicht_wiederherstellbares_mps_laesst_den_lauf_auf_der_cpu_weiterlaufen(
-        tmp_path, monkeypatch, capsys):
-    """Scheitert das Zuruecksetzen auf mps, ist der Lauf langsamer — aber nicht tot."""
-    # Aufruf 1 = mps vor der Schleife, 2 = CPU-Rueckfall, 3 = das Wiederherstellen (wirft).
-    proj, geladen = _mps_projekt(tmp_path, monkeypatch,
-                                 kaputt={"a.mp3"}, laden_scheitert_bei={3})
-    transcribe.transcribe_project("P", "large-v3", "de")
-    assert geladen == ["mps", "cpu", "mps"]                  # Wiederherstellung versucht
-    assert not (proj / "transkripte" / "a.json").exists()
-    assert (proj / "transkripte" / "b.json").exists()        # b lief auf der CPU durch
-    assert "nicht wiederherstellbar" in capsys.readouterr().out
-
-
 def test_projekte_folgt_der_umgebungsvariable(tmp_path, monkeypatch):
     """Gepackt liegen die Projekte in userData, NICHT neben dem Code: backend.js setzt
     TRANSKRIBOR_PROJEKTE, paths.py liest es — transcribe.py hatte es fest verdrahtet und
@@ -190,3 +101,148 @@ def test_projekte_folgt_der_umgebungsvariable(tmp_path, monkeypatch):
     finally:
         monkeypatch.delenv("TRANSKRIBOR_PROJEKTE")
         importlib.reload(transcribe)      # sonst sehen Folgetests den tmp_path
+
+
+# --- faster-whisper: Ergebnisform und Lauf-Robustheit ------------------------
+# Die <base>.json ist ein VERTRAG (edit_model.build_edit_doc / tag_uncertain_segments lesen
+# daraus), deshalb wird ihre Form hier gegen eine Attrappe geprueft statt gegen ein 3-GB-Modell.
+
+@dataclasses.dataclass
+class _Wort:
+    start: float
+    end: float
+    word: str
+    probability: float
+
+
+@dataclasses.dataclass
+class _Segment:
+    id: int
+    seek: int
+    start: float
+    end: float
+    text: str
+    tokens: list
+    avg_logprob: float
+    compression_ratio: float
+    no_speech_prob: float
+    words: list
+    temperature: float
+
+
+def _segment(i, text=" hallo"):
+    return _Segment(id=i, seek=0, start=float(i), end=i + 1.0, text=text, tokens=[1, 2],
+                    avg_logprob=-0.3, compression_ratio=1.1, no_speech_prob=0.01,
+                    words=[_Wort(start=float(i), end=i + 0.5, word=text, probability=0.42)],
+                    temperature=0.0)
+
+
+class _Info:
+    language = "de"
+    duration = 2.0
+
+
+def _faster_attrappe(monkeypatch, kaputt=()):
+    """Minimales faster_whisper. Liefert die Liste der transkribierten Dateinamen."""
+    gesehen = []
+
+    class WhisperModel:
+        def __init__(self, model, device=None, compute_type=None):
+            self.device, self.compute_type = device, compute_type
+
+        def transcribe(self, f, **kw):
+            name = os.path.basename(f)
+            gesehen.append(name)
+            if name in kaputt:
+                raise RuntimeError("Datei laesst sich nicht lesen")
+            return iter([_segment(0), _segment(1, " welt")]), _Info()
+
+    fake = types.ModuleType("faster_whisper")
+    fake.WhisperModel = WhisperModel
+    monkeypatch.setitem(sys.modules, "faster_whisper", fake)
+    monkeypatch.setitem(sys.modules, "torch", types.ModuleType("torch"))
+    from webtool import device as devicemod
+    monkeypatch.setattr(devicemod, "pick_asr", lambda: "cpu")
+    monkeypatch.setattr(devicemod, "describe",
+                        lambda: {"device": "cpu", "name": "CPU", "torch_ok": True, "asr": "cpu"})
+    return gesehen
+
+
+def _lauf_projekt(tmp_path, monkeypatch, **wie):
+    proj = tmp_path / "P"
+    (proj / "audio").mkdir(parents=True)
+    for n in ("a.mp3", "b.mp3"):
+        (proj / "audio" / n).write_bytes(b"x")
+    monkeypatch.setattr(transcribe, "PROJEKTE", str(tmp_path))
+    return proj, _faster_attrappe(monkeypatch, **wie)
+
+
+def test_roh_json_behaelt_die_form_die_edit_model_liest(tmp_path, monkeypatch):
+    proj, _ = _lauf_projekt(tmp_path, monkeypatch)
+    transcribe.transcribe_project("P", "large-v3", "de")
+    roh = json.loads((proj / "transkripte" / "a.json").read_text(encoding="utf-8"))
+    assert roh["language"] == "de"
+    # Segmenttexte aneinandergehaengt — mit fuehrendem Leerzeichen, genau wie openai-whispers
+    # result["text"]. transcribe_project schreibt .raw.txt ohnehin mit .strip().
+    assert roh["text"] == " hallo welt"
+    s = roh["segments"][0]
+    # Genau die Schluessel, an denen edit_model haengt — plus die, die nicht still wegfallen duerfen.
+    for k in ("id", "start", "end", "text", "avg_logprob", "compression_ratio",
+              "no_speech_prob", "words", "seek", "tokens", "temperature"):
+        assert k in s, k
+    assert s["words"][0]["probability"] == 0.42            # Grundlage des [[Wort|prob]]-Taggings
+
+    from webtool.edit_model import build_edit_doc, tag_uncertain_segments
+    doc = build_edit_doc(roh, base="a", project="P", audio="a.mp3")
+    assert doc["segments"][0]["words"][0]["probability"] == 0.42
+    assert "[[" in tag_uncertain_segments(roh)[0]["tagged_text"]   # 0.42 < 0.5 -> markiert
+
+
+def test_nebenausgaben_werden_geschrieben(tmp_path, monkeypatch):
+    proj, _ = _lauf_projekt(tmp_path, monkeypatch)
+    transcribe.transcribe_project("P", "large-v3", "de")
+    t = proj / "transkripte"
+    assert t.joinpath("a.raw.txt").read_text(encoding="utf-8").strip() == "hallo welt"
+    assert t.joinpath("a.segments.txt").read_text(encoding="utf-8").startswith("[0:00 - 0:01] hallo")
+
+
+def test_kaputte_datei_ueberspringt_nur_sich_selbst(tmp_path, monkeypatch, capsys):
+    """Die einzige Regel, die vom geloeschten MPS-Rueckfall uebrig bleibt."""
+    proj, gesehen = _lauf_projekt(tmp_path, monkeypatch, kaputt={"a.mp3"})
+    transcribe.transcribe_project("P", "large-v3", "de")
+    assert gesehen == ["a.mp3", "b.mp3"]                    # der Lauf ging weiter
+    assert not (proj / "transkripte" / "a.json").exists()
+    assert (proj / "transkripte" / "b.json").exists()
+    assert "FEHLER a" in capsys.readouterr().out
+
+
+def test_compute_type_haengt_am_geraet(monkeypatch):
+    """float16 ist auf der CPU teils nicht implementiert und sonst langsam."""
+    _faster_attrappe(monkeypatch)
+    assert transcribe._modell("tiny", "cuda").compute_type == "float16"
+    assert transcribe._modell("tiny", "cpu").compute_type == "int8"
+
+
+def test_cuda_dlls_nur_auf_windows(monkeypatch, tmp_path):
+    """CTranslate2 bringt cuBLAS nicht mit, torch schon — aber nur Windows sucht ueber PATH.
+    os.add_dll_directory() reicht dort NICHT (CTranslate2 laedt per plainem LoadLibrary)."""
+    lib = tmp_path / "torch" / "lib"
+    lib.mkdir(parents=True)
+    fake_torch = types.ModuleType("torch")
+    fake_torch.__file__ = str(tmp_path / "torch" / "__init__.py")
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
+
+    monkeypatch.setattr(transcribe.sys, "platform", "linux")
+    monkeypatch.setenv("PATH", "")
+    transcribe._cuda_dlls_auf_pfad()
+    assert str(lib) not in os.environ["PATH"]
+
+    monkeypatch.setattr(transcribe.sys, "platform", "win32")
+    transcribe._cuda_dlls_auf_pfad()
+    assert str(lib) in os.environ["PATH"]
+
+
+def test_ohne_torch_kein_absturz(monkeypatch):
+    """Der Python-CI-Job laeuft bewusst ohne torch — _cuda_dlls_auf_pfad darf das aushalten."""
+    monkeypatch.setitem(sys.modules, "torch", None)   # None -> import wirft ImportError
+    transcribe._cuda_dlls_auf_pfad()                  # kein Crash

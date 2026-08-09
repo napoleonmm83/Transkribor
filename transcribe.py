@@ -80,20 +80,66 @@ def find_audio(proj_dir, only=None):
     return files
 
 
-def _opts(prompt, language, device):
-    """Whisper-Optionen an einer Stelle — der MPS-Rueckfall ruft transcribe() ein zweites
-    Mal auf und darf die Parameter nicht auseinanderlaufen lassen."""
+def _opts(prompt, language):
+    """Decoder-Parameter an einer Stelle. Identisch zur frueheren openai-whisper-Fassung,
+    bis auf zwei Namenswechsel: `fp16` ist bei faster-whisper das `compute_type` des
+    Konstruktors (siehe _modell), und `verbose=False` heisst hier `log_progress=True` —
+    beides erzeugt denselben tqdm-Balken, aus dem das Frontend die Prozente liest.
+
+    `vad_filter=False` steht ausdruecklich da: es ist zwar der Default, wuerde aber Stille
+    ueberspringen und damit die Segmentzeiten gegen das Audio verschieben — der Editor
+    synchronisiert Text und Wiedergabe ueber genau diese Zeiten."""
     return dict(
         language=language, task="transcribe",
         word_timestamps=True, beam_size=5, best_of=5,
         temperature=(0.0, 0.2, 0.4, 0.6, 0.8, 1.0),
         condition_on_previous_text=True, initial_prompt=prompt,
-        fp16=(device == "cuda"), verbose=False,
+        vad_filter=False, log_progress=True,
     )
 
 
+def _cuda_dlls_auf_pfad():
+    """cuBLAS/cuDNN fuer CTranslate2 auffindbar machen — sonst stirbt der erste GPU-Lauf mit
+    "Library cublas64_12.dll is not found or cannot be loaded".
+
+    CTranslate2 bringt diese Bibliotheken NICHT mit, torch (cu128) schon. Gemessen:
+    `os.add_dll_directory()` reicht NICHT — CTranslate2 laedt per plainem LoadLibrary, das
+    die add_dll_directory-Liste nicht konsultiert. Nur PATH wirkt.
+    Auf POSIX loest der Lader beim Laden auf; dort genuegt, dass torch vorher importiert
+    ist (seine .so sind dann schon im Prozess)."""
+    try:
+        import torch
+    except ImportError:
+        return
+    datei = getattr(torch, "__file__", None)   # fehlt bei Namespace-/eingefrorenen Paketen
+    if not datei:
+        return
+    lib = os.path.join(os.path.dirname(datei), "lib")
+    if sys.platform == "win32" and os.path.isdir(lib):
+        os.environ["PATH"] = lib + os.pathsep + os.environ.get("PATH", "")
+
+
+def _modell(model, device):
+    _cuda_dlls_auf_pfad()                       # VOR dem Import: so lief der gepruefte Fall
+    from faster_whisper import WhisperModel
+    # int8 auf der CPU: float16 ist dort teils gar nicht implementiert und sonst langsam.
+    return WhisperModel(model, device=device,
+                        compute_type="float16" if device == "cuda" else "int8")
+
+
+def _ergebnis(segmente, info):
+    """(Segment-Generator, TranscriptionInfo) -> genau die dict-Form, die openai-whisper
+    lieferte. `<base>.json` ist das Roh-Dokument, aus dem `edit_model.build_edit_doc` und
+    `tag_uncertain_segments` lesen — die Struktur ist ein Vertrag, kein Zwischenformat.
+    `asdict` uebernimmt auch seek/tokens/temperature, damit nichts still wegfaellt."""
+    from dataclasses import asdict
+    segs = [asdict(s) for s in segmente]        # ERST hier laeuft die Transkription (lazy)
+    return {"text": "".join(s["text"] for s in segs),
+            "segments": segs,
+            "language": info.language}
+
+
 def transcribe_project(name, model, language, only=None):
-    import torch, whisper
     proj_dir = os.path.join(PROJEKTE, name)
     if not os.path.isdir(proj_dir):
         print(f"Projekt nicht gefunden: {name}", file=sys.stderr)
@@ -122,11 +168,14 @@ def transcribe_project(name, model, language, only=None):
             prompt = txt[:800]
 
     from webtool import device as devicemod
-    device = devicemod.pick()
+    device = devicemod.pick_asr()
     info = devicemod.describe()
-    print(f"[{name}] device={device} ({info['name']})", flush=True)
+    # Auf einem Mac meldet describe() "mps" (das gilt der Diarisierung), die ASR laeuft aber
+    # auf der CPU. Das gehoert ins Log, sonst sucht der Nutzer den Fehler bei sich.
+    warum = " — CTranslate2 kennt kein MPS, ASR rechnet auf der CPU" if info["device"] == "mps" else ""
+    print(f"[{name}] device={device} ({info['name']}){warum}", flush=True)
     print(f"[{name}] Modell {model}, {len(files)} Datei(en)", flush=True)
-    m = whisper.load_model(model, device=device)
+    m = _modell(model, device)
 
     for f in files:
         base = os.path.splitext(os.path.basename(f))[0]
@@ -137,43 +186,15 @@ def transcribe_project(name, model, language, only=None):
         print(f"[{name}] -> transkribiere {base} …", flush=True)
         t0 = time.time()
         try:
-            result = m.transcribe(f, **_opts(prompt, language, device))
+            # Der ganze MPS-Rueckfall stand hier: Modell auf CPU neu laden, pruefen ob es an
+            # MPS oder an der Datei lag, Geraet wiederherstellen. Mit CTranslate2 gibt es den
+            # Fall nicht mehr — pick_asr() liefert nur cuda oder cpu, und beide koennen alles.
+            # Bleibt die Regel, die davon uebrig ist: eine kaputte Datei ueberspringen, der
+            # Lauf geht weiter.
+            result = _ergebnis(*m.transcribe(f, **_opts(prompt, language)))
         except Exception as e:
-            if device == "mps":
-                # MPS deckt nicht jede Whisper-Operation ab. Einmal auf CPU wechseln und es
-                # LAUT sagen: PYTORCH_ENABLE_MPS_FALLBACK=1 wuerde einzelne Ops still auf die
-                # CPU schieben, die Anzeige behauptete weiter "mps", und der Nutzer wunderte
-                # sich nur ueber die Laufzeit.
-                # Ob es an MPS lag, weiss hier niemand — der Fehler kann auch von einer
-                # kaputten Datei kommen. Deshalb erst behaupten, wenn der CPU-Versuch klappt.
-                print(f"[{name}] {base} auf mps fehlgeschlagen ({e}) — Versuch auf CPU", flush=True)
-                # Modell UND Geraet in EINER Zuweisung: wirft load_model, wird keins von beidem
-                # gesetzt. Sonst behauptete `device` ein Geraet, auf dem `m` gar nicht liegt, und
-                # _opts() entschiede fp16 anhand dieser Luege.
-                try:
-                    m, device = whisper.load_model(model, device="cpu"), "cpu"
-                except Exception as e2:
-                    # Ohne CPU-Modell ist diese Datei verloren — der Lauf nicht. Ungeschuetzt
-                    # riss dieses load_model den ganzen Lauf mit, wegen EINER Datei.
-                    print(f"[{name}] FEHLER {base}: CPU-Modell nicht ladbar ({e2})", flush=True)
-                    continue
-                try:
-                    result = m.transcribe(f, **_opts(prompt, language, device))
-                except Exception as e2:
-                    # Auf CPU genauso kaputt -> lag nicht an MPS. Geraet zuruecksetzen, sonst
-                    # laeuft der ganze Rest des Laufs wegen EINER Datei langsam auf der CPU.
-                    print(f"[{name}] FEHLER {base}: {e2}", flush=True)
-                    try:
-                        m, device = whisper.load_model(model, device="mps"), "mps"
-                    except Exception as e3:
-                        # Kein Grund, den Lauf zu beenden — er wird nur langsamer.
-                        print(f"[{name}] mps nicht wiederherstellbar ({e3}) — Lauf bleibt auf CPU",
-                              flush=True)
-                    continue
-                print(f"[{name}] MPS deckt diese Datei nicht ab — Lauf bleibt auf CPU", flush=True)
-            else:
-                print(f"[{name}] FEHLER {base}: {e}", flush=True)
-                continue
+            print(f"[{name}] FEHLER {base}: {e}", flush=True)
+            continue
         dt = time.time() - t0
         with open(out_json, "w", encoding="utf-8") as fh:
             json.dump(result, fh, ensure_ascii=False, indent=1)

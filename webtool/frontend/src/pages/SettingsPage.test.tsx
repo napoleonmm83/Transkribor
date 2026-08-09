@@ -29,7 +29,7 @@ const BASIS: Settings = {
   ],
 }
 
-const zeige = (s: Partial<Settings> = {}, hw: Hardware = { device: 'cuda', name: 'NVIDIA RTX 5080', torch_ok: true }) => {
+const zeige = (s: Partial<Settings> = {}, hw: Hardware = { device: 'cuda', name: 'NVIDIA RTX 5080', torch_ok: true, asr: 'cuda' }) => {
   vi.mocked(api.getSettings).mockResolvedValue({ ...BASIS, ...s })
   vi.mocked(api.getHardware).mockResolvedValue(hw)
   return render(<MemoryRouter><SettingsPage /></MemoryRouter>)
@@ -84,13 +84,24 @@ describe('SettingsPage', () => {
   })
 
   it('warnt bei large-v3 auf der CPU', async () => {
-    zeige({ whisper_model: 'large-v3' }, { device: 'cpu', name: 'CPU', torch_ok: true })
+    zeige({ whisper_model: 'large-v3' }, { device: 'cpu', name: 'CPU', torch_ok: true, asr: 'cpu' })
     expect(await screen.findByText(/auf der CPU sehr lange/i)).toBeInTheDocument()
+  })
+
+  it('warnt auf Apple Silicon, obwohl device "mps" meldet', async () => {
+    // Der Hinweis hing frueher an `device`. Auf einem Mac steht dort "mps" (das gilt der
+    // Sprechertrennung), waehrend die Transkription auf der CPU rechnet — der Hinweis waere
+    // also genau dort still gewesen, wo er am noetigsten ist.
+    zeige({ whisper_model: 'large-v3' },
+          { device: 'mps', name: 'Apple Silicon (Metal)', torch_ok: true, asr: 'cpu' })
+    expect(await screen.findByText(/auf der CPU sehr lange/i)).toBeInTheDocument()
+    expect(screen.getByText(/keine GPU-Unterstützung/i)).toBeInTheDocument()
+    expect(screen.queryByText(/NVIDIA-Grafikkarte/i)).not.toBeInTheDocument()
   })
 
   it('nennt bei fehlendem PyTorch die Umgebung statt CUDA', async () => {
     // "Rechnet auf: PyTorch nicht installiert" plus CUDA-Hinweis war die falsche Fährte.
-    zeige({}, { device: 'cpu', name: 'PyTorch nicht installiert', torch_ok: false })
+    zeige({}, { device: 'cpu', name: 'PyTorch nicht installiert', torch_ok: false, asr: 'cpu' })
     expect(await screen.findByText(/Umgebung ist unvollständig/)).toBeInTheDocument()
     expect(screen.queryByText(/NVIDIA-Grafikkarte/)).not.toBeInTheDocument()
   })
@@ -108,7 +119,7 @@ function zeigeMit(zustand: UpdateZustand | null) {
   // SettingsPage zeigt bis zum Laden von getSettings nur "Lädt…" und braucht wegen <Link> einen Router —
   // beides gibt der Brief nicht her, ohne das wuerde jeder Test hier auf "Lädt…" haengen bleiben.
   vi.mocked(api.getSettings).mockResolvedValue(BASIS)
-  vi.mocked(api.getHardware).mockResolvedValue({ device: 'cuda', name: 'NVIDIA RTX 5080', torch_ok: true })
+  vi.mocked(api.getHardware).mockResolvedValue({ device: 'cuda', name: 'NVIDIA RTX 5080', torch_ok: true, asr: 'cuda' })
   return { ...render(<MemoryRouter><SettingsPage /></MemoryRouter>), spies }
 }
 

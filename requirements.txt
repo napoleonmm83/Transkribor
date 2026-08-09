@@ -3,7 +3,7 @@
 #   pip install torch --index-url https://download.pytorch.org/whl/cu128
 # Beides in eine Datei zu packen ginge nur mit --extra-index-url, und dann zieht pip je nach
 # Aufloesung das CPU-Rad von PyPI — die GPU waere still weg.
-openai-whisper
+faster-whisper
 fastapi
 uvicorn[standard]
 python-multipart

@@ -179,7 +179,10 @@ async function findePython() {
 async function venvVollstaendig() {
   const py = P.venvPython(P.venv)
   if (!P.exists(py)) return false
-  const r = await ausgabe(py, ['-c', 'import torch, whisper, fastapi, uvicorn; print("ok")'])
+  // faster_whisper statt whisper: seit dem Engine-Wechsel ist openai-whisper nicht mehr
+  // installiert — die alte Zeile haette JEDE fertige venv als unvollstaendig gemeldet und
+  // bei jedem Start eine Neuinstallation ausgeloest.
+  const r = await ausgabe(py, ['-c', 'import torch, faster_whisper, fastapi, uvicorn; print("ok")'])
   return r !== null && r.includes('ok')
 }
 

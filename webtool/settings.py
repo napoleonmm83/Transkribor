@@ -14,7 +14,8 @@ import os
 from . import paths
 
 
-# Alle Namen, die whisper.load_model akzeptiert. Ein handverdrehtes "base" soll
+# Alle Namen, die faster-whisper akzeptiert (identisch zu denen von openai-whisper — sie
+# werden auf `Systran/faster-whisper-<name>` abgebildet). Ein handverdrehtes "base" soll
 # funktionieren, ein vertipptes "larg-v3" aber nicht erst beim Modell-Laden auffallen.
 KNOWN_WHISPER_MODELS = (
     "tiny.en", "tiny", "base.en", "base", "small.en", "small", "medium.en", "medium",
