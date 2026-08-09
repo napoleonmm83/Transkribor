@@ -121,9 +121,17 @@ def available() -> tuple:
     """
     cfg, prov = _cfg()
     if prov["shape"] in ("cli", "codex"):
-        if _exe(prov):
-            return True, ""
-        return False, f"{prov['label']}: '{prov['bin']}' ist auf diesem Rechner nicht installiert."
+        if not _exe(prov):
+            return False, f"{prov['label']}: '{prov['bin']}' ist auf diesem Rechner nicht installiert."
+        # Installiert heisst nicht angemeldet. Vorher meldete die App hier gruen, und die
+        # Auto-Korrektur startete einen Lauf, der am Login scheiterte — genau das, was diese
+        # Funktion verhindern soll. Die Abfrage kostet 0,09s (codex) bzw. 0,26s (claude),
+        # gemessen; ein abgebrochener Korrekturlauf kostet Minuten.
+        from . import auth        # lazy: auth importiert llm, ein Modulimport waere zirkulaer
+        st = auth.status(cfg["provider"])
+        if st["unterstuetzt"] and not st["angemeldet"]:
+            return False, f"{prov['label']}: nicht angemeldet — in den Einstellungen anmelden."
+        return True, ""
     if prov["needs_key"] and not cfg["api_key"]:
         return False, f"Kein API-Key fuer {prov['label']} hinterlegt."
     if not _base_url(cfg, prov):
@@ -326,18 +334,32 @@ def complete_to_file(prompt: str, inputs, output: str) -> None:
 def check() -> dict:
     """Kurzer Verbindungstest fuer die Einstellungsseite."""
     cfg, prov = _cfg()
-    if prov["shape"] == "cli":
-        # Nur Vorhandensein: ein echter `claude -p`-Testlauf kostet ~8s Startzeit plus eine
-        # Abfrage vom Kontingent, und mehr als "installiert" kann er hier nicht beweisen.
-        exe = _exe(prov)
-        return {"ok": bool(exe), "detail": exe or "claude CLI nicht auf PATH (Abo-Modus braucht "
-                                                 "eine Claude-Code-Installation)"}
+    if prov["shape"] in ("cli", "codex"):
+        # Erst das Naheliegende fragen. Ohne das rannte der Testknopf bei abgemeldetem Codex
+        # in den echten Aufruf und legte dem Nutzer ein rohes "401 Unauthorized: Missing
+        # bearer … cf-ray: …" vor — richtig, aber unbrauchbar: die Antwort darauf ist
+        # "anmelden", und genau die stand nicht da.
+        ok, grund = available()
+        if not ok:
+            return {"ok": False, "detail": grund}
+        if prov["shape"] == "cli":
+            # Fuer claude bleibt es dabei: ein echter `claude -p`-Testlauf kostet ~8s
+            # Startzeit plus Kontingent und beweist nichts, was der Anmeldezustand nicht
+            # schon sagt.
+            return {"ok": True, "detail": f"{prov['label']} · {auth_detail()}"}
     # Fuer codex laeuft hier bewusst ein ECHTER Aufruf durch: anders als bei claude sagt die
     # blosse Anwesenheit des Binaers nichts ueber die Anmeldung, und ein nicht angemeldetes
     # `codex exec` scheitert erst mitten im ersten Korrekturlauf.
     antwort = complete("Antworte exakt mit dem JSON {\"ok\": true} und sonst nichts.")
     return {"ok": bool(parse_json(antwort).get("ok", True)),
             "detail": f"{prov['label']} · {cfg['model'] or 'Voreinstellung'} antwortet"}
+
+
+def auth_detail() -> str:
+    """Einzeiler zum Anmeldezustand des eingestellten Anbieters, oder "" wenn es dort keinen
+    gibt. Lazy importiert, weil auth seinerseits llm braucht."""
+    from . import auth
+    return auth.status(settings.load()["provider"])["detail"]
 
 
 def env_key_hint() -> str:
