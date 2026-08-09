@@ -118,13 +118,18 @@ export function SettingsPage() {
                   Die Python-Umgebung ist unvollständig (PyTorch fehlt) — bitte Transkribor
                   neu starten und die Einrichtung durchlaufen lassen.
                 </span>}
-          {hw?.torch_ok && hw.device === 'cpu' && (
+          {/* Auf `asr` prüfen, nicht auf `device`: seit faster-whisper gilt `device` nur noch
+              für die Sprechertrennung. Auf einem Mac steht dort „mps", während die
+              Transkription auf der CPU läuft — dieser Hinweis wäre sonst genau dort still,
+              wo er am nötigsten ist. */}
+          {hw?.torch_ok && hw.asr === 'cpu' && (
             <span className="block text-amber-600 dark:text-amber-500">
               {s.whisper_model.startsWith('large')
                 ? 'Ohne GPU braucht „Beste Qualität" auf der CPU sehr lange — für längere Interviews besser „Schnell und gut" wählen. '
                 : ''}
-              Wenn dieser Rechner eine NVIDIA-Grafikkarte hat, wurde PyTorch ohne CUDA
-              installiert — dann die Umgebung neu einrichten.
+              {hw.device === 'mps'
+                ? 'Die Sprechertrennung nutzt die Apple-GPU, die Transkription rechnet auf der CPU — dafür gibt es auf Apple Silicon keine GPU-Unterstützung.'
+                : 'Wenn dieser Rechner eine NVIDIA-Grafikkarte hat, wurde PyTorch ohne CUDA installiert — dann die Umgebung neu einrichten.'}
             </span>
           )}
         </p>

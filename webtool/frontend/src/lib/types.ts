@@ -22,7 +22,10 @@ export type ProviderInfo = {
   base: string; default_model: string; keys_url: string; hint: string;
 };
 export type WhisperChoice = { id: string; label: string; hint: string };
-export type Hardware = { device: string; name: string; torch_ok: boolean };
+// `device` gilt der torch-Welt (Sprechertrennung, kann "mps"), `asr` der Transkription
+// (faster-whisper/CTranslate2, nur "cuda"/"cpu"). Auf einem Mac laufen die beiden ausein-
+// ander — deshalb zwei Felder statt einem.
+export type Hardware = { device: string; name: string; torch_ok: boolean; asr: string };
 /** `has_key` statt des Keys: der Schluessel verlaesst den Server nie. */
 export type Settings = {
   provider: string; model: string; base_url: string; has_key: boolean;

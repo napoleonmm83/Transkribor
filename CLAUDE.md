@@ -101,7 +101,7 @@ Die Korrektur hing fest am Claude-Code-Abo; jetzt wählt der Nutzer Anbieter + M
 - `electron/setup.js` — Erstinstallation: Python/ffmpeg via winget, venv, torch **cu128 zuerst**
   (`requirements.txt` enthält torch bewusst NICHT — mit `--extra-index-url` zöge pip sonst das
   CPU-Rad und die GPU wäre still weg), dann der Rest. Die venv gilt erst als fertig, wenn
-  `import torch, whisper, fastapi, uvicorn` durchläuft — ein abgebrochener pip-Lauf sieht sonst
+  `import torch, faster_whisper, fastapi, uvicorn` durchläuft — ein abgebrochener pip-Lauf sieht sonst
   „installiert" aus.
 - `electron/paths.js` — **gepackt wird nie neben die .exe geschrieben** (Program Files ist
   schreibgeschützt und wird beim Update ersetzt): venv, `projekte/` und Einstellungen liegen in
@@ -166,23 +166,45 @@ nachziehen + verifizieren. Diese Regel ist die dauerhafte Freigabe für Push/PR/
 nie committen), unklarem Scope, oder history-verändernden Aktionen (force-push, Reset).
 
 ## Umgebung (Fakten)
-- venv: `.venv` (Python 3.13, torch cu128 + openai-whisper) — GPU: RTX 5080 / Blackwell (sm_120).
+- venv: `.venv` (Python 3.13, torch cu128 + faster-whisper) — GPU: RTX 5080 / Blackwell (sm_120).
+  torch bleibt trotz des ASR-Wechsels: **pyannote** braucht es (und liefert nebenbei die
+  cuBLAS-DLLs, die CTranslate2 fehlen).
 - ffmpeg: wird von `transcribe.py` automatisch gefunden (winget Gyan.FFmpeg) oder muss auf PATH sein.
   **Auf PATH steht es dabei nie:** winget legt für Gyan.FFmpeg *keinen* Link in `WinGet\Links`,
   also findet `where ffmpeg` es auch nach erfolgreicher Installation nicht. Wer ffmpeg sucht,
   muss zusätzlich `%LOCALAPPDATA%\Microsoft\WinGet\Packages\Gyan.FFmpeg*\ffmpeg*\bin` abklopfen —
-  `transcribe.ensure_ffmpeg()`, `diarize._ensure_ffmpeg()` und `setup.wingetFfmpeg()` tun das,
-  bewusst je gespiegelt. Eine reine PATH-Prüfung meldet dauerhaft „fehlt", obwohl alles läuft.
-- Whisper-Modell-Cache: `%USERPROFILE%\.cache\whisper` (einmaliger Download ~3 GB).
+  `transcribe.ensure_ffmpeg()` und `setup.wingetFfmpeg()` tun das, bewusst je gespiegelt.
+  **Die Transkription braucht ffmpeg nicht mehr** (faster-whisper dekodiert über PyAV) — der
+  URL-Import (yt-dlp) schon, und der ist der Grund, warum `ensure_ffmpeg` bleibt. Eine reine PATH-Prüfung meldet dauerhaft „fehlt", obwohl alles läuft.
+- Modell-Cache: `%USERPROFILE%\.cache\huggingface` (einmaliger Download ~3 GB, CTranslate2-Format
+  von `Systran/faster-whisper-<stufe>`). Ein altes `%USERPROFILE%\.cache\whisper\large-v3.pt`
+  (3 GB) wird nicht mehr gelesen und kann weg.
 - Env-Overrides: `WHISPER_MODEL` (default large-v3), `WHISPER_LANG` (default de), `TRANSKRIBOR_VERIFY` (default 1; `0`/`false`/`no` schaltet den 2b-Treue-Pass server-weit ab), `TRANSKRIBOR_DIARIZE` (default 1; `0`/`false`/`no` schaltet die akustische Sprecher-Diarisierung server-weit ab — Erzeugung UND Konsumption), `TRANSKRIBOR_PARALLEL` (default 3; gleichzeitige `claude -p`-Aufrufe), `TRANSKRIBOR_AUTOCORRECT` (default 1; `0` stoppt die automatische Korrektur nach der Transkription), `TRANSKRIBOR_SETTINGS` (Pfad der Einstellungsdatei; **Tests müssen das setzen**, sonst entscheidet die echte Datei des Entwicklers über den KI-Anbieter), `TRANSKRIBOR_PROJEKTE` (Wurzel der Projektordner; `electron/backend.js` setzt sie auf `userData/projekte` — **jeder** Zugriff auf Projektpfade muss sie lesen, sonst sucht der gepackte Lauf neben dem Code und findet nichts), `TRANSKRIBOR_ENV` (Pfad der `.env`; gepackt `userData/.env`, sonst Repo-Wurzel).
 - **Die `.env` liest der Server selbst** (`settings.load_env()`, aufgerufen ganz oben in `app.py` — vor jedem Zugriff auf `os.environ`). Vorher parsten `webtool.ps1` und `electron/backend.js` sie je selbst: derselbe Parser in zwei Sprachen, und ein von Hand gestartetes `uvicorn webtool.app:app` sah die Datei überhaupt nicht. **Die Datei gewinnt gegen eine schon gesetzte Variable** — genau so verhielten sich beide Launcher, eine Umkehr wäre eine stille Verhaltensänderung.
 - **Trust-Boundary Browser:** eine Origin-Middleware in `app.py` weist Requests mit nicht-Loopback-`Origin` mit 403 ab. Die Bindung auf `127.0.0.1` allein reicht nicht: multipart-Upload und POST ohne Body sind CORS-„simple" und lösen **keinen** Preflight aus, jede besuchte Fremdseite konnte also Audio unterschieben (`upload_audio` legt das Projekt sogar an) und GPU-Jobs starten. Nicht-Browser-Aufrufe (curl, Tests) schicken keinen `Origin` und laufen unverändert; `:5173` (Vite-Dev) ist Loopback und bleibt erlaubt.
-- **Gerätewahl liegt in `webtool/device.py`** (`pick()` → cuda | mps | cpu), genutzt von
-  `transcribe.py` und `webtool/diarize.py`. Upstream-Whisper kennt **kein MPS** — es wählt nur
-  `cuda if torch.cuda.is_available() else cpu`. Scheitert MPS mitten in der Transkription,
-  lädt `transcribe.py` das Modell **einmal** auf CPU neu und schreibt das ins Log;
-  `PYTORCH_ENABLE_MPS_FALLBACK=1` setzen wir bewusst NICHT (schöbe einzelne Ops still auf die
-  CPU, während die Anzeige weiter „mps" behauptet).
+- **Gerätewahl liegt in `webtool/device.py` — und zwar zweigeteilt.** `pick()` → cuda | mps | cpu
+  gilt der torch-Welt (`webtool/diarize.py`, pyannote). `pick_asr()` → cuda | cpu gilt der
+  Transkription: **CTranslate2 (faster-whisper) kennt kein MPS**, dokumentiert sind nur
+  cpu/cuda/auto. Auf Apple Silicon laufen die beiden also auseinander — Sprechertrennung auf der
+  GPU, ASR auf der CPU. `describe()` liefert deshalb **beides** (`device` + `asr`), und die
+  Einstellungsseite hängt ihren CPU-Hinweis an `asr`: an `device` gehängt schwiege er auf einem
+  Mac genau dort, wo er nötig wäre. `PYTORCH_ENABLE_MPS_FALLBACK=1` setzen wir weiterhin NICHT
+  (schöbe einzelne Ops still auf die CPU, während die Anzeige „mps" behauptet) — dieselbe Regel,
+  die auch das `asr`-Feld erzwingt: die Anzeige darf nicht lügen.
+- **ASR ist faster-whisper (CTranslate2), nicht mehr openai-whisper.** Gemessen an 309 s echtem
+  Interview-Audio (large-v3, RTX 5080, identische Decoder-Parameter): **557 s → 18 s, Faktor ~31**
+  (0,55× → 17× Echtzeit) bei **96 % Wortübereinstimmung** und mehr Wort-Zeitstempeln. faster-whisper
+  ist zudem lauf-zu-lauf deterministisch; openai-whisper lieferte auf derselben Datei mal 67, mal 81
+  Segmente. **Nicht** die Ursache war der Triton-/DTW-Rückfall: ohne `word_timestamps` war
+  openai-whisper mit 700 s noch langsamer, `triton-windows` hätte also nichts gebracht.
+- **`transcribe._cuda_dlls_auf_pfad()` ist Pflicht, keine Vorsichtsmassnahme.** CTranslate2 bringt
+  cuBLAS/cuDNN **nicht** mit, torch (cu128) schon — ohne den Griff stirbt der erste GPU-Lauf mit
+  `Library cublas64_12.dll is not found or cannot be loaded`. **`os.add_dll_directory()` reicht
+  nicht** (gemessen): CTranslate2 lädt per plainem `LoadLibrary`, das diese Liste nicht konsultiert
+  — nur `PATH` wirkt, und zwar gesetzt **vor** `from faster_whisper import …`.
+- **Der MPS-Rückfall in `transcribe.py` ist ersatzlos weg** (~35 Zeilen plus vier Tests): mit
+  cuda/cpu gibt es den Fall nicht. Übrig bleibt die Regel, die davon zählte — eine kaputte Datei
+  überspringen, der Lauf geht weiter.
 - **Whisper-Stufe und -Sprache stehen in den Einstellungen** (`whisper_model`, `whisper_lang`)
   und reisen über `settings.job_env()` → `jobs.py` → `transcribe.py`. Eine echte
   Umgebungsvariable `WHISPER_MODEL`/`WHISPER_LANG` gewinnt. Default bleibt
@@ -195,7 +217,7 @@ nie committen), unklarem Scope, oder history-verändernden Aktionen (force-push,
   Job zu starten, der scheitert; `GET /api/settings` liefert `ai_ready`/`ai_reason` fürs
   Frontend. Geprüft wird die Fähigkeit, nicht die Einstellung — das erspart eine Migration.
 - **`GET /api/hardware`** meldet das aktive Rechenwerk (einmal pro Serverlauf ermittelt).
-- Stufe 3 (Sprecher-Diarisierung): `webtool/diarize.py` (pyannote.audio 4.0.7, Modell `speaker-diarization-community-1`, GPU) läuft als **Prep-Schritt im `correct run`** (vor `prep`, auf den Lauf gescopt), schreibt best-effort `<base>.diar.json` (Turns + `{id, "Sprecher N"}` je Segment, idempotent). `cmd_prep` webt das `(Sprecher N)`-Präfix in `<base>.tagged.txt`; der Korrektur-Prompt lässt Claude pro akustischem Cluster einen konsistenten Namen vergeben (**Hybrid**: Akustik trennt *wer wann*, LLM benennt *wie*). Fehlt pyannote oder scheitert die GPU → kein Sidecar → Korrektur wie bisher (reines Text-Raten, keine Regression). **Windows-Gotcha:** pyannotes torchcodec-File-Decoding lädt nicht (`libtorchcodec_core*.dll`) → Audio wird in-memory via `whisper.load_audio` (ffmpeg, 16 kHz mono) geladen und als `{waveform, sample_rate}`-Dict übergeben. `jobs.py` serialisiert `transcribe`+`correct` auf der einen GPU. **Kein Einmal-Setup mehr** — siehe nächster Punkt.
+- Stufe 3 (Sprecher-Diarisierung): `webtool/diarize.py` (pyannote.audio 4.0.7, Modell `speaker-diarization-community-1`, GPU) läuft als **Prep-Schritt im `correct run`** (vor `prep`, auf den Lauf gescopt), schreibt best-effort `<base>.diar.json` (Turns + `{id, "Sprecher N"}` je Segment, idempotent). `cmd_prep` webt das `(Sprecher N)`-Präfix in `<base>.tagged.txt`; der Korrektur-Prompt lässt Claude pro akustischem Cluster einen konsistenten Namen vergeben (**Hybrid**: Akustik trennt *wer wann*, LLM benennt *wie*). Fehlt pyannote oder scheitert die GPU → kein Sidecar → Korrektur wie bisher (reines Text-Raten, keine Regression). **Windows-Gotcha:** pyannotes torchcodec-File-Decoding lädt nicht (`libtorchcodec_core*.dll`) → Audio wird in-memory via `faster_whisper.decode_audio` (PyAV, 16 kHz mono) geladen und als `{waveform, sample_rate}`-Dict übergeben. Das lief früher über `whisper.load_audio`, das ffmpeg als **Binary** per subprocess rief — daher brauchte `diarize.py` ein eigenes `_ensure_ffmpeg`; PyAV dekodiert in-process, die Funktion ist ersatzlos weg. `jobs.py` serialisiert `transcribe`+`correct` auf der einen GPU. **Kein Einmal-Setup mehr** — siehe nächster Punkt.
 - **Das Diarisierungsmodell liegt im Repo (`models/speaker-diarization-community-1/`, 31 MB)** und
   reist über `extraResources` in den Installer; `diarize.DIAR_MODEL` zeigt auf dessen `config.yaml`
   (relativ zu `webtool/`, gilt im Repo wie unter `resources/py`). **`HF_TOKEN` gibt es nicht mehr** —

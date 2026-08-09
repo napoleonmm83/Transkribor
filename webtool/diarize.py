@@ -40,36 +40,19 @@ def _pipeline():
     return _PIPELINE
 
 
-def _ensure_ffmpeg():
-    """ffmpeg auf PATH sicherstellen (whisper.load_audio ruft es via subprocess).
-    Bewusst dupliziert (mirror von transcribe.ensure_ffmpeg), um webtool nicht ans
-    Root-Skript transcribe.py zu koppeln."""
-    import glob
-    import sys
-    from shutil import which
-    if which("ffmpeg"):
-        return
-    if sys.platform == "win32":
-        for d in glob.glob(os.path.expandvars(
-                r"%LOCALAPPDATA%\Microsoft\WinGet\Packages\Gyan.FFmpeg*\ffmpeg*\bin")):
-            if os.path.exists(os.path.join(d, "ffmpeg.exe")):
-                os.environ["PATH"] = d + os.pathsep + os.environ.get("PATH", "")
-                return
-        return
-    for d in ("/opt/homebrew/bin", "/usr/local/bin", "/usr/bin"):
-        if os.path.exists(os.path.join(d, "ffmpeg")):
-            os.environ["PATH"] = d + os.pathsep + os.environ.get("PATH", "")
-            return
-
-
 def _load_waveform(audio_path: str) -> dict:
     """Audio -> {'waveform': (1,time) float32-Tensor, 'sample_rate': 16000} via
-    whisper.load_audio (ffmpeg, 16 kHz mono). Umgeht das auf Windows kaputte
-    torchcodec-Decoding von pyannote."""
+    faster_whisper.decode_audio. Umgeht das auf Windows kaputte torchcodec-Decoding
+    von pyannote.
+
+    Vorher lief das ueber whisper.load_audio, das ffmpeg als BINARY per subprocess rief —
+    weshalb hier ein eigenes _ensure_ffmpeg stand (winget legt fuer Gyan.FFmpeg keinen
+    Link in WinGet\\Links, `where ffmpeg` findet es also nie). decode_audio dekodiert
+    in-process ueber PyAV, das faster-whisper ohnehin mitbringt: kein Binary, kein
+    PATH-Gefummel, ein Prozess weniger. Rueckgabe ist wie zuvor float32 numpy, 16 kHz mono."""
     import torch
-    import whisper
-    _ensure_ffmpeg()
-    samples = whisper.load_audio(audio_path)            # float32 numpy, 16 kHz mono
+    from faster_whisper import decode_audio
+    samples = decode_audio(audio_path, sampling_rate=16000)
     return {"waveform": torch.from_numpy(samples).unsqueeze(0), "sample_rate": 16000}
 
 
