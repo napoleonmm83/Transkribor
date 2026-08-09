@@ -8,6 +8,7 @@ geschrieben ist.
 """
 import math
 import os
+import sys
 import zlib
 
 import pytest
@@ -153,6 +154,24 @@ def test_quelle_ist_das_github_release():
 def test_quelle_laesst_sich_umbiegen(monkeypatch):
     monkeypatch.setenv("TRANSKRIBOR_GGML_URL", "http://spiegel.example/{datei}")
     assert w.quelle("ggml-tiny.bin") == "http://spiegel.example/ggml-tiny.bin"
+
+
+def test_ssl_kontext_nutzt_certifi():
+    """python.org-Python nutzt auf macOS NICHT die System-Keychain — ohne eigenes
+    CA-Bundle scheitert urlopen mit CERTIFICATE_VERIFY_FAILED, und genau so ein Python
+    legt electron/setup.js die venv an. Der Fehler traf jeden Mac-Nutzer, nicht nur
+    eine Entwicklermaschine."""
+    import ssl as ssl_modul
+    k = w.ssl_kontext()
+    assert isinstance(k, ssl_modul.SSLContext)
+    assert k.verify_mode == ssl_modul.CERT_REQUIRED     # niemals ungeprueft laden
+
+
+def test_ssl_kontext_ohne_certifi_faellt_auf_die_vorgabe(monkeypatch):
+    """Fehlt certifi, ist Pythons Vorgabe immer noch besser als ein Absturz beim
+    Import — auf Linux und Windows traegt sie ohnehin."""
+    monkeypatch.setitem(sys.modules, "certifi", None)
+    assert w.ssl_kontext() is None
 
 
 def test_verfuegbar_braucht_binary_und_stufe(monkeypatch):

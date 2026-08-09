@@ -32,6 +32,7 @@ import math
 import os
 import re
 import shutil
+import ssl
 import subprocess
 import tempfile
 import urllib.error
@@ -61,6 +62,28 @@ MODELL_DATEIEN = {
 # oder drosseln kann, waere ein Rueckschritt.
 QUELLE = ("https://github.com/napoleonmm83/Transkribor/releases/download/"
           "modelle-v1/{datei}")
+
+
+def ssl_kontext():
+    """CA-Bundle fuer den Modell-Download — oder None fuer Pythons Vorgabe.
+
+    Von python.org installiertes Python nutzt auf macOS NICHT die System-Keychain,
+    sondern ein eigenes Bundle, das ohne den Schritt "Install Certificates.command"
+    fehlt. urlopen scheitert dort mit CERTIFICATE_VERIFY_FAILED — und genau so ein
+    Python legt electron/setup.js die venv an. Der Fehler traf also nicht nur eine
+    Entwicklermaschine, sondern jeden Mac-Nutzer.
+
+    Aufgefallen ist er erst beim ersten Download vom echten Release: die uebrigen
+    Downloads dieses Projekts laufen ueber requests (huggingface_hub), das certifi
+    von sich aus mitbringt. Hier gibt es kein requests — also holen wir das Bundle
+    selbst. certifi steht deshalb in requirements.txt, obwohl es ohnehin transitiv
+    hereinkaeme: eine Abhaengigkeit, auf die man sich verlaesst, gehoert benannt.
+    """
+    try:
+        import certifi
+    except ImportError:
+        return None
+    return ssl.create_default_context(cafile=certifi.where())
 
 
 def quelle(datei: str) -> str:
@@ -114,7 +137,8 @@ def modell_datei(modell: str, onLine=None) -> str:
     teil = ziel + ".teil"
     sag(f"Lade Sprachmodell {datei} …")
     try:
-        with urllib.request.urlopen(url) as antwort, open(teil, "wb") as fh:
+        with urllib.request.urlopen(url, context=ssl_kontext()) as antwort, \
+                open(teil, "wb") as fh:
             gesamt = int(antwort.headers.get("Content-Length") or 0)
             geladen = 0
             letzte = -1
