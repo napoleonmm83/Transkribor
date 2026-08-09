@@ -129,6 +129,12 @@ def modell_datei(modell: str, onLine=None) -> str:
                     if pct != letzte and pct % 5 == 0:
                         sag(f"{pct}%| Sprachmodell")   # Format wie jobPhases.ts es liest
                         letzte = pct
+        # Eine abgeschnittene Antwort beendet die Schleife regulaer — ohne diese Pruefung
+        # wanderte die halbe Datei ueber os.replace() in den Cache, und JEDER folgende
+        # Start haette sie als fertig akzeptiert. whisper-cli stirbt daran dauerhaft, und
+        # niemand kaeme auf die Idee, ein "vorhandenes" Modell zu loeschen.
+        if gesamt and geladen != gesamt:
+            raise OSError(f"Abbruch nach {geladen} von {gesamt} Bytes")
     except (urllib.error.URLError, OSError) as e:
         if os.path.exists(teil):
             os.remove(teil)

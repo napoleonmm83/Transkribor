@@ -24,10 +24,30 @@ test('Windows: winget automatisch, torch aus dem CUDA-Index', () => {
 })
 
 test('macOS: kein Automatismus, torch vom PyPI-Standardrad (bringt MPS mit)', () => {
-  const p = plan('darwin', '')
+  const p = plan('darwin', '', 'arm64')
   assert.strictEqual(p.autoInstall, false)
   assert.strictEqual(p.torchIndex, null)
   assert.match(p.hinweis, /brew install/)
+})
+
+test('macOS arm64: whisper-cpp steht im brew-Befehl (die schnelle Engine)', () => {
+  assert.match(plan('darwin', '', 'arm64').hinweis, /brew install python ffmpeg whisper-cpp/)
+})
+
+test('Intel-macOS: kein whisper-cpp — dort rechnet ohnehin faster-whisper', () => {
+  // webtool/device.py:asr_engine prueft arm64. Einem Intel-Mac `brew install whisper-cpp`
+  // zu raten waere ein Rat, der nichts bewirkt — python und ffmpeg braucht er aber weiter.
+  const p = plan('darwin', '', 'x64')
+  assert.match(p.hinweis, /brew install python ffmpeg/)
+  assert.doesNotMatch(p.hinweis, /whisper-cpp/)
+})
+
+test('nutztWhisperCpp gilt nur fuer macOS auf arm64', () => {
+  const { nutztWhisperCpp } = require('./setup')
+  assert.strictEqual(nutztWhisperCpp('darwin', 'arm64'), true)
+  assert.strictEqual(nutztWhisperCpp('darwin', 'x64'), false)
+  assert.strictEqual(nutztWhisperCpp('win32', 'x64'), false)
+  assert.strictEqual(nutztWhisperCpp('linux', 'arm64'), false)
 })
 
 test('Linux: erkannter Paketmanager steht im Hinweis', () => {

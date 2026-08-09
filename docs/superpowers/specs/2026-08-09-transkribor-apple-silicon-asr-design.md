@@ -2,7 +2,7 @@
 
 Datum: 2026-08-09
 Status: umgesetzt
-Schliesst: „Offene Messung" aus `2026-08-08-transkribor-cross-platform-design.md:228`
+Schliesst: „Offene Messung“ aus `2026-08-08-transkribor-cross-platform-design.md:228`
 
 ## Warum
 
@@ -33,7 +33,7 @@ Engine sie zulässt: `beam_size=5`, `best_of=5`, Temperatur-Rückfall `0.0…1.0
 | whisper.cpp | large-v3 fp16 +DTW | Metal | beam5 | 216 s | 2,42x | — |
 | whisper.cpp | turbo | Metal | beam5 | 37 s | 14,16x | — |
 
-„Wortähnlichkeit" ist `difflib.SequenceMatcher` über Wortlisten gegen den bisherigen
+„Wortähnlichkeit“ ist `difflib.SequenceMatcher` über Wortlisten gegen den bisherigen
 Produktionspfad. Das ist ein Abweichungs-, kein Qualitätsmaß — ohne Referenztranskript
 sagt es nicht, welche Variante *richtiger* liegt. Es taugt, um grobe Abstürze
 auszuschliessen, und dafür wird es hier benutzt.
@@ -106,7 +106,7 @@ Der naheliegendste Optimierungsgriff schadet. large-v3, 2,0 Min Audio:
 
 CTranslate2 synchronisiert je Schicht; sobald Threads auf den Effizienzkernen landen,
 wartet der ganze Block auf sie. Steht als Kommentar in `transcribe.py:_modell`, damit es
-niemand später „optimiert".
+niemand später „optimiert“.
 
 ## Wo die Plattformen auseinanderlaufen
 

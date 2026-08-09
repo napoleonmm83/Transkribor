@@ -6,8 +6,8 @@ whisper.cpps JSON in den `<base>.json`-Vertrag. Genau dort sitzt auch das Risiko
 ein Formatfehler faellt sonst erst im Editor auf, an einem Transkript, das schon
 geschrieben ist.
 """
-import json
 import math
+import os
 import zlib
 
 import pytest
@@ -183,6 +183,57 @@ def test_modell_datei_meldet_die_url_im_fehler(monkeypatch, tmp_path):
     monkeypatch.setattr(w.urllib.request, "urlopen", kaputt)
     with pytest.raises(RuntimeError, match="modelle-v1"):
         w.modell_datei("large-v3", onLine=lambda z: None)
+
+
+class _Antwort:
+    """urlopen-Attrappe, die WENIGER liefert als ihr Content-Length verspricht."""
+
+    def __init__(self, bytes_gesagt, bytes_geliefert):
+        self.headers = {"Content-Length": str(bytes_gesagt)}
+        self._rest = b"x" * bytes_geliefert
+
+    def read(self, n):
+        block, self._rest = self._rest[:n], self._rest[n:]
+        return block
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+
+def test_abgeschnittener_download_wird_verworfen(monkeypatch, tmp_path):
+    """Liefert der Server weniger als angekuendigt, endet die Leseschleife regulaer.
+    Ohne Laengenpruefung landete die halbe Datei im Cache und JEDER folgende Start
+    haette sie als fertig akzeptiert — whisper-cli waere dauerhaft kaputt, ohne dass
+    jemand auf die Idee kaeme, ein "vorhandenes" Modell zu loeschen."""
+    monkeypatch.setenv("TRANSKRIBOR_GGML", str(tmp_path))
+    monkeypatch.setattr(w.urllib.request, "urlopen",
+                        lambda *a, **k: _Antwort(1000, 400))
+    with pytest.raises(RuntimeError, match="nicht ladbar"):
+        w.modell_datei("large-v3", onLine=lambda z: None)
+    assert list(tmp_path.iterdir()) == []          # auch die .teil-Datei ist weg
+
+
+def test_vollstaendiger_download_wird_uebernommen(monkeypatch, tmp_path):
+    """Der Gegenfall — sonst prueft der Test darueber nur, dass ueberhaupt etwas wirft."""
+    monkeypatch.setenv("TRANSKRIBOR_GGML", str(tmp_path))
+    monkeypatch.setattr(w.urllib.request, "urlopen",
+                        lambda *a, **k: _Antwort(1000, 1000))
+    ziel = w.modell_datei("large-v3", onLine=lambda z: None)
+    assert os.path.getsize(ziel) == 1000
+    assert not os.path.exists(ziel + ".teil")
+
+
+def test_download_ohne_content_length_wird_uebernommen(monkeypatch, tmp_path):
+    """Ohne Content-Length gibt es nichts zu vergleichen — dann darf die Pruefung nicht
+    faelschlich anschlagen und einen gueltigen Download wegwerfen."""
+    monkeypatch.setenv("TRANSKRIBOR_GGML", str(tmp_path))
+    antwort = _Antwort(0, 500)
+    antwort.headers = {}
+    monkeypatch.setattr(w.urllib.request, "urlopen", lambda *a, **k: antwort)
+    assert os.path.getsize(w.modell_datei("large-v3", onLine=lambda z: None)) == 500
 
 
 def test_abgebrochener_download_hinterlaesst_keine_halbe_datei(monkeypatch, tmp_path):
