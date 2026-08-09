@@ -215,15 +215,19 @@ def _claude_exe() -> str:
     return exe
 
 
-def _run_claude(prompt: str) -> None:
+def _run_claude(prompt: str, workdir: str) -> None:
     """Headless claude -p; schreibt die Zieldatei selbst via Write-Tool. Erfolg wird an
     der geschriebenen Datei gemessen (nicht am Exitcode) — Fehler/Timeout nur loggen.
 
     Prompt kommt über stdin (nicht als argv): robust gegen .cmd-Shims/cmd.exe-Parsing
-    mehrzeiliger Prompts und ohne Windows-Kommandozeilen-Längenlimit. cwd = projekte_root
-    grenzt die auto-akzeptierten Schreibzugriffe (acceptEdits) auf den Projektbaum ein —
-    der eigene Quellcode (webtool/, transcribe.py) liegt ausserhalb und ist so nicht
-    beschreibbar; die Roh-Transkripte sind eine Trust-Boundary (Prompt-Injection)."""
+    mehrzeiliger Prompts und ohne Windows-Kommandozeilen-Längenlimit.
+
+    `workdir` grenzt die auto-akzeptierten Schreibzugriffe (acceptEdits) ein und ist der
+    transkripte-Ordner GENAU EINES Projekts — dort liegen alle Ein- und Ausgaben jedes
+    Aufrufs. Vorher stand hier projekte_root: die Roh-Transkripte sind eine Trust-Boundary
+    (Prompt-Injection über den Audioinhalt, z.B. aus einem URL-Import), und ein präpariertes
+    Transkript konnte damit in die Transkripte JEDES anderen Projekts schreiben. Der eigene
+    Quellcode lag schon vorher ausserhalb."""
     try:
         exe = _claude_exe()
     except FileNotFoundError as e:
@@ -235,13 +239,13 @@ def _run_claude(prompt: str) -> None:
     cmd = [exe, "-p", "--model", CLAUDE_MODEL,
            "--permission-mode", "acceptEdits", "--allowedTools", "Read,Write",
            "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}',
-           "--add-dir", paths.projekte_root()]
+           "--add-dir", workdir]
     try:
         # ponytail: subprocess.run-timeout killt nur den claude-Prozess, nicht dessen
         # Kind-Prozessbaum (MCP-Server) — für ein lokales Ein-Nutzer-Tool ok; falls je
         # relevant: claude in einem Windows-Job-Object starten und die Gruppe killen.
         with _claude_slots:      # globaler Deckel über alle parallelen Dateien UND Blöcke
-            r = subprocess.run(cmd, cwd=paths.projekte_root(), input=prompt, capture_output=True,
+            r = subprocess.run(cmd, cwd=workdir, input=prompt, capture_output=True,
                                text=True, encoding="utf-8", errors="replace", timeout=CLAUDE_TIMEOUT,
                                creationflags=_CREATE_NO_WINDOW)
         if r.returncode != 0:
@@ -259,7 +263,10 @@ def _ask_llm(prompt: str, inputs: list, output: str) -> None:
     In beiden Faellen gilt: Erfolg wird an der geschriebenen Datei gemessen, ein Fehler wird
     nur geloggt — eine Datei darf den Batch nicht abbrechen."""
     if not llm.use_api():
-        _run_claude(prompt)
+        # Ein- und Ausgaben eines Aufrufs liegen IMMER im selben transkripte-Ordner (alle
+        # Aufrufer bauen ihre Pfade aus paths.transkripte_dir) — daraus faellt die
+        # Einengung ab, ohne das Projekt durch drei Funktionen zu reichen.
+        _run_claude(prompt, os.path.dirname(output))
         return
     with _claude_slots:                      # derselbe Deckel wie im Abo-Weg
         try:

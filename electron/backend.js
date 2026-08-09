@@ -15,21 +15,6 @@ let proc = null
 let port = 0
 const log = []                    // letzte Zeilen, damit ein Absturz erklaerbar bleibt
 
-/** .env laden wie webtool.ps1: KEY=VALUE, # ignorieren, Anfuehrungszeichen abstreifen. */
-function envDatei() {
-  const out = {}
-  try {
-    for (const zeile of fs.readFileSync(P.envDatei, 'utf8').split(/\r?\n/)) {
-      const t = zeile.trim()
-      if (!t || t.startsWith('#')) continue
-      const i = t.indexOf('=')
-      if (i < 1) continue
-      out[t.slice(0, i).trim()] = t.slice(i + 1).trim().replace(/^["']|["']$/g, '')
-    }
-  } catch { /* keine .env ist der Normalfall */ }
-  return out
-}
-
 function freierPort() {
   return new Promise((resolve, reject) => {
     const s = net.createServer()
@@ -65,9 +50,11 @@ async function start(onLine) {
         // Ohne das findet llm.available()s shutil.which("claude") ein installiertes Claude
         // Code nicht und meldet dem Nutzer "nicht installiert".
         ...S.spawnEnv(),
-        ...envDatei(),
         PYTHONUNBUFFERED: '1',
         PYTHONIOENCODING: 'utf-8',
+        // Die .env parst der Server selbst (webtool/settings.py:load_env) — hier nur noch
+        // sagen, WO sie liegt: gepackt in userData, im Repo neben webtool.ps1.
+        TRANSKRIBOR_ENV: P.envDatei,
         // Nutzerdaten liegen nie neben der .exe — Program Files ist schreibgeschuetzt und
         // wird beim Update ersetzt.
         TRANSKRIBOR_PROJEKTE: P.projekte,

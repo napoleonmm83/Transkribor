@@ -1,6 +1,7 @@
 """Einstellungen — TRANSKRIBOR_SETTINGS zeigt IMMER in tmp_path, sonst entscheidet
 die echte Datei des Entwicklers ueber das Testergebnis."""
 import json
+import os
 
 import pytest
 
@@ -64,3 +65,52 @@ def test_public_zeigt_modell_aber_kein_geheimnis():
 def test_auswahlliste_ist_vollstaendig_gueltig():
     for c in settings.WHISPER_CHOICES:
         assert c["id"] in settings.KNOWN_WHISPER_MODELS
+
+# ---- .env: EIN Parser statt je einem in webtool.ps1 und electron/backend.js ----
+# Jede Variable, die load_env() schreiben wird, vorher ueber monkeypatch anfassen — nur
+# was monkeypatch kennt, raeumt es beim Teardown wieder weg. Sonst leckte ein gesetztes
+# WHISPER_MODEL in jeden folgenden Test.
+
+def _env(monkeypatch, tmp_path, inhalt, *namen):
+    p = tmp_path / ".env"
+    p.write_text(inhalt, encoding="utf-8")
+    monkeypatch.setenv("TRANSKRIBOR_ENV", str(p))
+    for n in namen:
+        monkeypatch.setenv(n, "vorher")
+    return p
+
+
+def test_load_env_setzt_variablen(monkeypatch, tmp_path):
+    _env(monkeypatch, tmp_path,
+         "# Kommentar\n\nTRANSKRIBOR_DIARIZE=0\n  WHISPER_MODEL = turbo  \n",
+         "TRANSKRIBOR_DIARIZE", "WHISPER_MODEL")
+    assert sorted(settings.load_env()) == ["TRANSKRIBOR_DIARIZE", "WHISPER_MODEL"]
+    assert os.environ["TRANSKRIBOR_DIARIZE"] == "0"
+    assert os.environ["WHISPER_MODEL"] == "turbo"          # Leerraum um Name und Wert faellt weg
+
+
+def test_load_env_teilt_nur_am_ersten_gleich(monkeypatch, tmp_path):
+    """Basis-URLs und Keys enthalten '=' — ein naiver split() zerschnitte sie."""
+    _env(monkeypatch, tmp_path, 'TR_TEST="a=b=c"\n', "TR_TEST")
+    settings.load_env()
+    assert os.environ["TR_TEST"] == "a=b=c"                # Anfuehrungszeichen aussen weg
+
+
+def test_load_env_ohne_datei_ist_kein_fehler(monkeypatch, tmp_path):
+    monkeypatch.setenv("TRANSKRIBOR_ENV", str(tmp_path / "gibtsnicht"))
+    assert settings.load_env() == []
+
+
+def test_load_env_gewinnt_gegen_gesetzte_variable(monkeypatch, tmp_path):
+    """So verhielten sich beide Launcher — webtool.ps1 setzte unbedingt, backend.js legte
+    die .env ueber die geerbte Umgebung. Ein Wechsel waere eine stille Verhaltensaenderung."""
+    _env(monkeypatch, tmp_path, "TR_TEST=ausdatei\n", "TR_TEST")
+    monkeypatch.setenv("TR_TEST", "ausshell")
+    settings.load_env()
+    assert os.environ["TR_TEST"] == "ausdatei"
+
+
+def test_env_path_folgt_der_variablen(monkeypatch):
+    """Die gepackte App legt ihre .env in userData, nicht neben den Code."""
+    monkeypatch.setenv("TRANSKRIBOR_ENV", "/wo/anders/.env")
+    assert settings.env_path() == "/wo/anders/.env"
