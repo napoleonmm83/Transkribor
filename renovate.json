@@ -12,6 +12,24 @@
   ],
   "packageRules": [
     {
+      "description": [
+        "@vitejs/plugin-react bekommt einen eigenen PR statt im Buendel mitzureisen. Grund: 6.0.5",
+        "laesst sich nicht aufloesen (ERESOLVE). Die Kette ist 6.0.5 -> peerOptional",
+        "@rolldown/plugin-babel -> peerOptional @babel/plugin-transform-runtime '^7.29.0 ||",
+        "^8.0.0-rc.1' -> npm greift zur 8.0.1 -> peer @babel/core ^8, waehrend das Paket selbst",
+        "Babel 7 faehrt. Weil group:allNonMajor alles in EINEN Branch legt, riss dieses eine Paket",
+        "die Lockfile-Erzeugung des ganzen Buendels um — und damit kam seit dem ersten Lauf kein",
+        "einziger Renovate-PR zustande, auch nicht fuer sonner oder lucide-react. Getrennt",
+        "scheitert es allein.",
+        "Wieder entfernen, sobald upstream die Peer-Kette geradezieht (dann greift group:allNonMajor",
+        "wieder). Ein npm-overrides auf @babel/plugin-transform-runtime ^7 loest den Konflikt zwar,",
+        "zwingt aber eine optionale Peer gegen den Willen des Pakets — nicht ohne Not."
+      ],
+      "matchManagers": ["npm"],
+      "matchPackageNames": ["@vitejs/plugin-react"],
+      "groupName": "vitejs-plugin-react"
+    },
+    {
       "description": "Die CI-Python-Version folgt der venv (3.13), nicht dem Neuesten. Der Python-Job laeuft bewusst OHNE torch — ein Sprung auf 3.14 bliebe also gruen, waehrend die echte Umgebung weiter 3.13 faehrt und torch cu128 dort womoeglich gar kein Rad hat. Ein CI, das eine Version testet, die niemand ausfuehrt, ist schlimmer als keines.",
       "matchManagers": ["github-actions"],
       "matchDepNames": ["python"],
