@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { playWindow } from './playback'
+import { playWindow, naechsteAktion, skipZiel, segIdAusFokus, SKIP } from './playback'
+import type { Segment } from './types'
 
 const near = (a: number, b: number) => Math.abs(a - b) < 1e-9
 
@@ -14,5 +15,98 @@ describe('playWindow', () => {
     const { from, to } = playWindow(seg as any, dur as number)
     expect(near(from, ef)).toBe(true)
     expect(near(to, et)).toBe(true)
+  })
+})
+
+/** Nur die Felder, die naechsteAktion liest — der Rest von Segment ist hier Ballast. */
+const seg = (id: number, start: number, end: number) =>
+  ({ id, start, end }) as unknown as Segment
+
+describe('naechsteAktion', () => {
+  it('pausiert, wenn etwas laeuft — egal was sonst anliegt', () => {
+    expect(naechsteAktion({
+      laeuft: true, fenster: { from: 1, to: 2, segId: 7 }, zeit: 1.5, segment: seg(9, 30, 31), dauer: 60,
+    })).toEqual({ art: 'pause' })
+  })
+
+  it('spielt das gewaehlte Segment, wenn noch nichts gespielt wurde', () => {
+    expect(naechsteAktion({
+      laeuft: false, fenster: null, zeit: 0, segment: seg(47, 18.36, 20.06), dauer: 60,
+    })).toEqual({
+      art: 'fenster', from: expect.closeTo(18.21, 9), to: expect.closeTo(20.41, 9), segId: 47,
+    })
+  })
+
+  it('setzt im gemerkten Fenster fort UND setzt die Grenze neu', () => {
+    expect(naechsteAktion({
+      laeuft: false, fenster: { from: 18.21, to: 20.41, segId: 47 }, zeit: 19.0, segment: null, dauer: 60,
+    })).toEqual({ art: 'weiter', to: 20.41 })
+  })
+
+  it('setzt auch dann fort, wenn der Cursor im selben Segment steht (Pause -> weiter)', () => {
+    expect(naechsteAktion({
+      laeuft: false, fenster: { from: 18.21, to: 20.41, segId: 47 }, zeit: 19.0,
+      segment: seg(47, 18.36, 20.06), dauer: 60,
+    })).toEqual({ art: 'weiter', to: 20.41 })
+  })
+
+  it('springt zum anderen Segment, statt fortzusetzen', () => {
+    expect(naechsteAktion({
+      laeuft: false, fenster: { from: 18.21, to: 20.41, segId: 47 }, zeit: 19.0,
+      segment: seg(48, 31.98, 42.76), dauer: 60,
+    })).toEqual({
+      // 31.98 - 0.15 ist in Fliesskomma 31.830000000000002 — darum closeTo und nicht 31.83.
+      art: 'fenster', from: expect.closeTo(31.83, 9), to: expect.closeTo(43.11, 9), segId: 48,
+    })
+  })
+
+  it('vergisst das Fenster, wenn die Position herausgespult wurde', () => {
+    expect(naechsteAktion({
+      laeuft: false, fenster: { from: 18.21, to: 20.41, segId: 47 }, zeit: 22.5, segment: null, dauer: 60,
+    })).toEqual({ art: 'weiter' })
+  })
+
+  it('spielt blank weiter, wenn es weder Fenster noch Segment gibt', () => {
+    expect(naechsteAktion({
+      laeuft: false, fenster: null, zeit: 5, segment: null, dauer: 60,
+    })).toEqual({ art: 'weiter' })
+  })
+
+  it('behandelt einen Redebeitrag (segId null) als fremdes Fenster', () => {
+    expect(naechsteAktion({
+      laeuft: false, fenster: { from: 10, to: 40, segId: null }, zeit: 20,
+      segment: seg(47, 18.36, 20.06), dauer: 60,
+    })).toEqual({
+      art: 'fenster', from: expect.closeTo(18.21, 9), to: expect.closeTo(20.41, 9), segId: 47,
+    })
+  })
+})
+
+describe('skipZiel', () => {
+  it.each([
+    [10, SKIP, 60, 12],
+    [10, -SKIP, 60, 8],
+    [1, -SKIP, 60, 0],       // nicht vor den Anfang
+    [59.5, SKIP, 60, 60],    // nicht hinter das Ende
+    [10, SKIP, NaN, 12],     // Dauer unbekannt -> kein oberes Clamp
+  ])('klemmt %s + %s bei Dauer %s auf %s', (zeit, s, dauer, erwartet) => {
+    expect(skipZiel(zeit, s, dauer)).toBe(erwartet)
+  })
+})
+
+describe('segIdAusFokus', () => {
+  it('liest die id aus dem umgebenden Segment-Div', () => {
+    document.body.innerHTML = '<div data-seg-id="47"><textarea id="t"></textarea></div>'
+    expect(segIdAusFokus(document.getElementById('t'), 3)).toBe(47)
+  })
+
+  it('faellt auf das hervorgehobene Segment zurueck, wenn der Fokus woanders steht', () => {
+    document.body.innerHTML = '<button id="b"></button>'
+    expect(segIdAusFokus(document.getElementById('b'), 3)).toBe(3)
+  })
+
+  it('faellt auch ohne Fokus zurueck', () => {
+    expect(segIdAusFokus(null, 3)).toBe(3)
+    expect(segIdAusFokus(null, null)).toBe(null)
   })
 })
