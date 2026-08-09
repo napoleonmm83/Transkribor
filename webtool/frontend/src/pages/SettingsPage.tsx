@@ -50,7 +50,10 @@ export function SettingsPage() {
   useEffect(() => { getHardware().then(setHw).catch(() => setHw(null)) }, [])
 
   const prov: ProviderInfo | undefined = s?.providers.find(p => p.id === s.provider)
-  const istAbo = s?.provider === 'claude-cli'
+  // Frueher `s.provider === 'claude-cli'`: das war die Frage "ist es DAS Abo". Seit es zwei
+  // Abo-CLIs gibt, lautet die Frage "kommt der Anbieter ohne Key aus" — und die beantwortet
+  // der Server, nicht eine Namensliste im Frontend.
+  const istCli = !!prov?.cli
 
   // Anbieterwechsel und Key-Eingabe koennen sich ueberholen: wer schnell von A nach B
   // schaltet, bekaeme sonst A's Liste in B's Auswahl — und speichert beim naechsten Klick
@@ -87,10 +90,10 @@ export function SettingsPage() {
   // es serverseitig, WEN `listModels()` fragt.
   const { provider, has_key: hatKey, base_url: basis } = s ?? {}
   useEffect(() => {
-    if (!provider || istAbo) { setModelle([]); return }
+    if (!provider) { setModelle([]); return }
     if (prov?.needs_key && !hatKey) { setModelle([]); return }
     modelleLaden(true)
-  }, [provider, hatKey, basis, istAbo, prov?.needs_key, modelleLaden])
+  }, [provider, hatKey, basis, prov?.needs_key, modelleLaden])
 
   const speichern = async (patch: Record<string, string>, danach?: () => void) => {
     try {
@@ -185,7 +188,7 @@ export function SettingsPage() {
         </Select>
         {prov?.hint && <p className="mt-1.5 text-xs text-muted-foreground">{prov.hint}</p>}
 
-        {prov && !istAbo && (
+        {prov && (
           <div className="mt-6 space-y-6">
             {prov.id === 'custom' && (
               <div>
@@ -195,6 +198,9 @@ export function SettingsPage() {
               </div>
             )}
 
+            {/* Abo-CLIs bringen ihre eigene Anmeldung mit (`claude`/`codex login`) — ein
+                Key-Feld waere dort nicht nur nutzlos, sondern eine falsche Aufforderung. */}
+            {!istCli && (
             <div>
               <label htmlFor="feld-key" className="mb-1.5 block text-sm font-medium">API-Key</label>
               <div className="flex gap-2">
@@ -211,6 +217,7 @@ export function SettingsPage() {
                 {s.env_key && <> · Umgebungsvariable {s.env_key} ist gesetzt.</>}
               </p>
             </div>
+            )}
 
             <div>
               <label id="lbl-modell" htmlFor="feld-modell" className="mb-1.5 block text-sm font-medium">Modell</label>

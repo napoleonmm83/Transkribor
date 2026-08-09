@@ -22,12 +22,13 @@ from concurrent.futures import ThreadPoolExecutor
 
 from . import llm
 from . import paths
+from . import settings
 from .edit_model import tag_uncertain_segments, apply_correction
 from .render_md import render_md
 
 AUDIO_EXT = (".mp3", ".wav", ".m4a", ".aac", ".flac", ".ogg", ".opus", ".wma", ".mp4")
 
-CLAUDE_MODEL = "opus"
+CLAUDE_MODEL = "opus"        # Rueckfall, wenn in den Einstellungen nichts steht
 CLAUDE_TIMEOUT = 900          # s pro claude-Aufruf; Hänger killen statt Job blockieren
 CHUNK_SEGMENTS = 150          # max. Segmente pro claude-Aufruf; darüber wird die Datei gestückelt.
                               # Der Engpass ist der OUTPUT: ~540 Segmente sind ~15k Tokens JSON am
@@ -236,7 +237,12 @@ def _run_claude(prompt: str, workdir: str) -> None:
     # Ohne MCP-Server: 16,3s -> 7,7s Startup je Aufruf (gemessen). Die Korrektur braucht nur
     # Read/Write — und sie verarbeitet nicht vertrauenswürdigen Transkripttext, da haben die
     # persönlichen MCP-Server (Mail, Notion, …) ohnehin nichts verloren.
-    cmd = [exe, "-p", "--model", CLAUDE_MODEL,
+    # Modell aus den Einstellungen statt fest verdrahtet: wer sein Opus-Kontingent
+    # aufgebraucht hat, soll die Korrektur auf sonnet weiterfahren koennen, statt bis zum
+    # naechsten Fenster zu warten. Frisch gelesen wie ueberall (settings.load), damit ein
+    # Wechsel im Browser ohne Server-Neustart greift.
+    modell = settings.load()["model"] or CLAUDE_MODEL
+    cmd = [exe, "-p", "--model", modell,
            "--permission-mode", "acceptEdits", "--allowedTools", "Read,Write",
            "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}',
            "--add-dir", workdir]
@@ -258,8 +264,10 @@ def _run_claude(prompt: str, workdir: str) -> None:
 def _ask_llm(prompt: str, inputs: list, output: str) -> None:
     """Eine LLM-Runde, unabhaengig vom eingestellten Anbieter.
 
-    Beim Abo schreibt `claude -p` die Zieldatei per Write-Tool selbst; mit API-Key gibt es
-    keine Werkzeuge, also wandern die Eingaben in den Prompt und die Antwort schreibt llm.py.
+    Beim Claude-Abo schreibt `claude -p` die Zieldatei per Write-Tool selbst. Sonst — API-Key
+    ODER Codex-Abo — gibt es keine Werkzeuge: die Eingaben wandern in den Prompt und die
+    Antwort schreibt llm.py. Der Unterschied ist also nicht Abo gegen Key, sondern WER die
+    Dateien anfasst; `llm.use_api()` beantwortet genau das.
     In beiden Faellen gilt: Erfolg wird an der geschriebenen Datei gemessen, ein Fehler wird
     nur geloggt — eine Datei darf den Batch nicht abbrechen."""
     if not llm.use_api():

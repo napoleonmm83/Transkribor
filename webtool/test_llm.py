@@ -195,3 +195,106 @@ def test_available_custom_ohne_basis_url(monkeypatch, tmp_path):
     settings.save({"provider": "custom", "model": "llama3", "base_url": ""})
     ok, grund = llm.available()
     assert ok is False and "Basis-URL" in grund
+
+
+# --- Abo-CLIs: Claude-Aliase und Codex ----------------------------------------
+
+def _codex(monkeypatch, tmp_path, *, antwort=None, rc=0, stderr=""):
+    """Faengt den codex-Aufruf ab. Liefert das gesehene argv zurueck und schreibt
+    `antwort` in die Datei hinter `-o` — genau wie es das echte `codex exec` tut."""
+    monkeypatch.setattr(llm.shutil, "which", lambda n: "C:/fake/codex" if "codex" in n else None)
+    gesehen = {}
+
+    class Fertig:
+        returncode = rc
+        stdout = ""
+
+    def fake_run(cmd, **kw):
+        gesehen.update(cmd=cmd, input=kw.get("input"))
+        if antwort is not None:
+            with open(cmd[cmd.index("-o") + 1], "w", encoding="utf-8") as fh:
+                fh.write(antwort)
+        f = Fertig()
+        f.stderr = stderr
+        return f
+
+    monkeypatch.setattr(llm.subprocess, "run", fake_run)
+    return gesehen
+
+
+def test_codex_laeuft_nur_im_lesemodus(cfg, monkeypatch):
+    """Der wichtigste Test der Datei: in den Prompt wandert Transkripttext, der aus einem
+    URL-Import stammen kann. Faellt `--sandbox read-only` je aus dem Aufruf, darf das nicht
+    still passieren — eine Injektion haette sonst Schreibzugriff."""
+    settings.save({"provider": "codex-cli", "model": ""})
+    gesehen = _codex(monkeypatch, cfg, antwort='{"ok": true}')
+    assert llm.complete("hallo") == '{"ok": true}'
+    cmd = gesehen["cmd"]
+    assert cmd[1] == "exec"
+    assert "--sandbox" in cmd and cmd[cmd.index("--sandbox") + 1] == "read-only"
+    assert "--dangerously-bypass-approvals-and-sandbox" not in cmd
+
+
+def test_codex_prompt_geht_ueber_stdin(cfg, monkeypatch):
+    """Mit eingebetteten Transkripten sprengt der Prompt das Windows-Laengenlimit der
+    Kommandozeile — er darf also nicht als Argument auftauchen."""
+    settings.save({"provider": "codex-cli", "model": ""})
+    gross = "x" * 40000
+    gesehen = _codex(monkeypatch, cfg, antwort="ok")
+    llm.complete(gross)
+    assert gesehen["input"] == gross
+    assert gesehen["cmd"][-1] == "-"
+    assert not any(gross in teil for teil in gesehen["cmd"])
+
+
+def test_codex_ohne_modell_laesst_die_cli_entscheiden(cfg, monkeypatch):
+    settings.save({"provider": "codex-cli", "model": ""})
+    gesehen = _codex(monkeypatch, cfg, antwort="ok")
+    llm.complete("hi")
+    assert "-m" not in gesehen["cmd"]
+
+
+def test_codex_mit_modell_reicht_es_durch(cfg, monkeypatch):
+    settings.save({"provider": "codex-cli", "model": "gpt-5"})
+    gesehen = _codex(monkeypatch, cfg, antwort="ok")
+    llm.complete("hi")
+    assert gesehen["cmd"][gesehen["cmd"].index("-m") + 1] == "gpt-5"
+
+
+def test_codex_ohne_antwort_meldet_sich_trotz_exitcode_null(cfg, monkeypatch):
+    """`codex exec` endet auch nach gescheitertem Login mit 0 — die fehlende Antwortdatei
+    ist das verlaessliche Signal, nicht der Exitcode."""
+    settings.save({"provider": "codex-cli", "model": ""})
+    _codex(monkeypatch, cfg, antwort=None, rc=0, stderr="not logged in")
+    with pytest.raises(llm.LLMError) as e:
+        llm.complete("hi")
+    assert "not logged in" in str(e.value)
+
+
+def test_codex_ohne_binaer_ist_nicht_nutzbar(cfg, monkeypatch):
+    settings.save({"provider": "codex-cli", "model": ""})
+    monkeypatch.setattr(llm.shutil, "which", lambda n: None)
+    ok, grund = llm.available()
+    assert ok is False and "codex" in grund
+
+
+def test_abo_modelle_sind_aliase_ohne_netz(cfg, monkeypatch):
+    """Fuer die Abo-CLIs gibt es keine Liste zu holen — es darf also auch keine HTTP-Anfrage
+    versucht werden."""
+    def platzt(*a, **k):
+        raise AssertionError("kein HTTP fuer eine Abo-CLI")
+    monkeypatch.setattr(llm, "_request", platzt)
+    settings.save({"provider": "claude-cli"})
+    assert [m["id"] for m in llm.list_models()] == ["opus", "sonnet", "haiku", "fable"]
+    settings.save({"provider": "codex-cli"})
+    assert llm.list_models() == []
+
+
+def test_provider_list_nennt_die_abo_clis(cfg):
+    nach_id = {p["id"]: p for p in llm.provider_list()}
+    assert nach_id["claude-cli"]["cli"] is True and nach_id["claude-cli"]["needs_key"] is False
+    assert nach_id["codex-cli"]["cli"] is True
+    assert nach_id["anthropic"]["cli"] is False
+    # Gemini bleibt als API-Anbieter, aber NICHT als Abo — der CLI-Zugang ist fuer
+    # Einzelpersonen abgeschaltet (IneligibleTierError).
+    assert "gemini-cli" not in nach_id and nach_id["google"]["cli"] is False
