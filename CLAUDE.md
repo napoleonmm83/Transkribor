@@ -116,6 +116,14 @@ Die Korrektur hing fest am Claude-Code-Abo; jetzt wählt der Nutzer Anbieter + M
   Release: Tag `v*` pushen → `.github/workflows/release.yml` baut und veröffentlicht,
   `electron-updater` zieht von dort. **Offen:** die Release-Assets müssen öffentlich sein (privates
   Repo braucht clientseitig ein Token), und der Installer ist unsigniert → SmartScreen-Warnung.
+- **Releases, die keine App sind, MÜSSEN `--prerelease` tragen** (`modelle-v1` mit den
+  GGML-Dateien ist das einzige bisher). `electron-updater` fragt `/releases/latest`, und GitHub
+  beantwortet das mit dem **zuletzt veröffentlichten** Nicht-Prerelease — nicht mit der höchsten
+  Version. `modelle-v1` erschien nach `v0.5.0` und wurde damit „Latest"; jeder Update-Check
+  starb daraufhin an `404 … modelle-v1/latest.yml`, obwohl an der App nichts falsch war.
+  Prereleases nimmt GitHub von „Latest" aus, die Asset-URLs bleiben unverändert — der
+  GGML-Download merkt nichts davon. Ein `v*`-Release darf den Riegel nicht tragen: es SOLL
+  „Latest" werden.
 - `electron/setup.js` — `plan(platform, paketmanager)` entscheidet, was die Plattform braucht:
   Windows installiert Python/ffmpeg automatisch per winget, **macOS und Linux zeigen nur den
   Befehl zum Kopieren** (beides bräuchte sudo bzw. vorhandenes Homebrew — eine GUI-App, die
@@ -179,19 +187,46 @@ nie committen), unklarem Scope, oder history-verändernden Aktionen (force-push,
 - Modell-Cache: `%USERPROFILE%\.cache\huggingface` (einmaliger Download ~3 GB, CTranslate2-Format
   von `Systran/faster-whisper-<stufe>`). Ein altes `%USERPROFILE%\.cache\whisper\large-v3.pt`
   (3 GB) wird nicht mehr gelesen und kann weg.
-- Env-Overrides: `WHISPER_MODEL` (default large-v3), `WHISPER_LANG` (default de), `TRANSKRIBOR_VERIFY` (default 1; `0`/`false`/`no` schaltet den 2b-Treue-Pass server-weit ab), `TRANSKRIBOR_DIARIZE` (default 1; `0`/`false`/`no` schaltet die akustische Sprecher-Diarisierung server-weit ab — Erzeugung UND Konsumption), `TRANSKRIBOR_PARALLEL` (default 3; gleichzeitige `claude -p`-Aufrufe), `TRANSKRIBOR_AUTOCORRECT` (default 1; `0` stoppt die automatische Korrektur nach der Transkription), `TRANSKRIBOR_SETTINGS` (Pfad der Einstellungsdatei; **Tests müssen das setzen**, sonst entscheidet die echte Datei des Entwicklers über den KI-Anbieter), `TRANSKRIBOR_PROJEKTE` (Wurzel der Projektordner; `electron/backend.js` setzt sie auf `userData/projekte` — **jeder** Zugriff auf Projektpfade muss sie lesen, sonst sucht der gepackte Lauf neben dem Code und findet nichts), `TRANSKRIBOR_ENV` (Pfad der `.env`; gepackt `userData/.env`, sonst Repo-Wurzel).
+- Env-Overrides: `WHISPER_MODEL` (default large-v3), `WHISPER_LANG` (default de), `TRANSKRIBOR_VERIFY` (default 1; `0`/`false`/`no` schaltet den 2b-Treue-Pass server-weit ab), `TRANSKRIBOR_DIARIZE` (default 1; `0`/`false`/`no` schaltet die akustische Sprecher-Diarisierung server-weit ab — Erzeugung UND Konsumption), `TRANSKRIBOR_PARALLEL` (default 3; gleichzeitige `claude -p`-Aufrufe), `TRANSKRIBOR_AUTOCORRECT` (default 1; `0` stoppt die automatische Korrektur nach der Transkription), `TRANSKRIBOR_SETTINGS` (Pfad der Einstellungsdatei; **Tests müssen das setzen**, sonst entscheidet die echte Datei des Entwicklers über den KI-Anbieter), `TRANSKRIBOR_PROJEKTE` (Wurzel der Projektordner; `electron/backend.js` setzt sie auf `userData/projekte` — **jeder** Zugriff auf Projektpfade muss sie lesen, sonst sucht der gepackte Lauf neben dem Code und findet nichts), `TRANSKRIBOR_ENV` (Pfad der `.env`; gepackt `userData/.env`, sonst Repo-Wurzel), `TRANSKRIBOR_GGML` (Verzeichnis der GGML-Modelle; gepackt `userData`, sonst `models/ggml` — dieselbe Regel wie `TRANSKRIBOR_PROJEKTE`: neben der `.app` darf nichts geschrieben werden), `TRANSKRIBOR_GGML_URL` (Vorlage mit `{datei}`-Platzhalter für den Download; gewinnt gegen das `modelle-v1`-Release — der Weg, um ein Modell zu testen, das noch nirgends hängt).
 - **Die `.env` liest der Server selbst** (`settings.load_env()`, aufgerufen ganz oben in `app.py` — vor jedem Zugriff auf `os.environ`). Vorher parsten `webtool.ps1` und `electron/backend.js` sie je selbst: derselbe Parser in zwei Sprachen, und ein von Hand gestartetes `uvicorn webtool.app:app` sah die Datei überhaupt nicht. **Die Datei gewinnt gegen eine schon gesetzte Variable** — genau so verhielten sich beide Launcher, eine Umkehr wäre eine stille Verhaltensänderung.
 - **Trust-Boundary Browser:** eine Origin-Middleware in `app.py` weist Requests mit nicht-Loopback-`Origin` mit 403 ab. Die Bindung auf `127.0.0.1` allein reicht nicht: multipart-Upload und POST ohne Body sind CORS-„simple" und lösen **keinen** Preflight aus, jede besuchte Fremdseite konnte also Audio unterschieben (`upload_audio` legt das Projekt sogar an) und GPU-Jobs starten. Nicht-Browser-Aufrufe (curl, Tests) schicken keinen `Origin` und laufen unverändert; `:5173` (Vite-Dev) ist Loopback und bleibt erlaubt.
 - **Gerätewahl liegt in `webtool/device.py` — und zwar zweigeteilt.** `pick()` → cuda | mps | cpu
   gilt der torch-Welt (`webtool/diarize.py`, pyannote). `pick_asr()` → cuda | cpu gilt der
   Transkription: **CTranslate2 (faster-whisper) kennt kein MPS**, dokumentiert sind nur
-  cpu/cuda/auto. Auf Apple Silicon laufen die beiden also auseinander — Sprechertrennung auf der
-  GPU, ASR auf der CPU. `describe()` liefert deshalb **beides** (`device` + `asr`), und die
+  cpu/cuda/auto. Seit whisper.cpp gilt `pick_asr()` nur noch für den **Rückfall** — welche
+  Engine überhaupt rechnet, beantwortet `asr_engine(modell)` (nächster Punkt). `describe()`
+  liefert deshalb **alle drei** (`device` + `asr` + `asr_engine`), und die
   Einstellungsseite hängt ihren CPU-Hinweis an `asr`: an `device` gehängt schwiege er auf einem
   Mac genau dort, wo er nötig wäre. `PYTORCH_ENABLE_MPS_FALLBACK=1` setzen wir weiterhin NICHT
   (schöbe einzelne Ops still auf die CPU, während die Anzeige „mps" behauptet) — dieselbe Regel,
   die auch das `asr`-Feld erzwingt: die Anzeige darf nicht lügen.
-- **ASR ist faster-whisper (CTranslate2), nicht mehr openai-whisper.** Gemessen an 309 s echtem
+- **Auf Apple Silicon transkribiert whisper.cpp über Metal, nicht faster-whisper.** Gemessen auf
+  M1 Pro an 8,7 Min Interview bei identischen Decoder-Einstellungen: **650 s → 99 s (0,81× →
+  5,29× Echtzeit)**. Ausschlaggebend war aber nicht der Faktor, sondern dass whisper.cpp als
+  einzige Variante schneller wird, **ohne den Decoder zu verschlechtern** — voller Beam-Search
+  statt greedy, gleiche Segmentzahl wie die Referenz. mlx-whisper fiel deshalb raus (langsamer
+  als die CPU bei `turbo`, und `beam_size` wirft `NotImplementedError`). Was dabei zu wissen ist:
+  - **Die Verzweigung sitzt an zwei Rändern** — `device.asr_engine(modell)` und `setup.js:plan()`
+    (nennt `whisper-cpp` in derselben brew-Zeile wie python/ffmpeg) — und **konvergiert vor dem
+    `<base>.json`-Vertrag**: `whispercpp.ergebnis()` baut exakt dieselbe dict-Form wie
+    `transcribe._ergebnis()`. Alles dahinter bleibt einpfadig.
+  - **An der Plattform festgemacht, nicht an `pick() == "mps"`**: whisper.cpp rechnet über Metal
+    und braucht kein torch — an MPS gehängt fiele eine Mac-Installation ohne torch grundlos auf
+    die langsame CPU zurück.
+  - **Drei Rückfälle auf faster-whisper**, damit nie etwas *ausfällt* statt nur langsam zu sein:
+    kein Apple Silicon, `whisper-cli` fehlt, oder eine Stufe ohne GGML-Datei am Release
+    (`large-v1`, die `.en`-Varianten).
+  - **q5_0 statt fp16 kostet 7 % Tempo und spart 1,9 GB** (1,01 statt 2,88 GB) — damit passt das
+    Modell unter die 2-GB-Grenze für Release-Assets und kommt aus `modelle-v1` statt von Hugging
+    Face. Der Mac-Pfad ist dadurch HF-frei (mit `HF_HUB_OFFLINE=1` verifiziert).
+  - **DTW bleibt aus** (unvereinbar mit Flash Attention, halbiert den Durchsatz), und
+    **`cpu_threads` bleibt beim Default** — mehr Threads sind *langsamer*, sobald sie auf
+    Effizienzkernen landen (4→82 s, 8→171 s).
+  - **Wort-Wahrscheinlichkeit ist das Mittel der Token-Werte**, nicht Minimum oder Produkt: die
+    hätten `UNCERTAIN_TAG_THRESHOLD = 0.5` still entkalibriert (15,6 % statt 6,5 % unter der
+    Schwelle) und den Editor mit Falschwarnungen geflutet.
+  Details und die volle Messtabelle: `docs/superpowers/specs/2026-08-09-transkribor-apple-silicon-asr-design.md`.
+- **ASR ist faster-whisper (CTranslate2), nicht mehr openai-whisper — auf Windows und Linux.** Gemessen an 309 s echtem
   Interview-Audio (large-v3, RTX 5080, identische Decoder-Parameter): **557 s → 18 s, Faktor ~31**
   (0,55× → 17× Echtzeit) bei **96 % Wortübereinstimmung** und mehr Wort-Zeitstempeln. faster-whisper
   ist zudem lauf-zu-lauf deterministisch; openai-whisper lieferte auf derselben Datei mal 67, mal 81
