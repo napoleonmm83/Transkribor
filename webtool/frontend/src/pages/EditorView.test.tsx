@@ -66,6 +66,6 @@ describe('EditorView (Stub)', () => {
     )
     await waitFor(() => expect(api.getProjectFiles).toHaveBeenCalledTimes(1))
     // j1 wird adoptiert, JobProvider pollt getJob -> 'done' -> onSettled muss refreshFiles() ausloesen.
-    await waitFor(() => expect(api.getProjectFiles.mock.calls.length).toBeGreaterThan(1))
+    await waitFor(() => expect(vi.mocked(api.getProjectFiles).mock.calls.length).toBeGreaterThan(1))
   })
 })
