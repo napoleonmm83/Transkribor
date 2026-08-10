@@ -64,3 +64,15 @@ test('setup.html findet Zeichen und Schriften neben sich', () => {
     assert.ok(fs.existsSync(path.join(__dirname, datei)), `${datei} fehlt in electron/`)
   }
 })
+
+test('nsis verweist auf vorhandene Bilder und das Skript', () => {
+  // Ein falscher Pfad faellt sonst erst im Bau auf — und electron-builder
+  // uebergeht ihn je nach Option still.
+  for (const schluessel of ['installerSidebar', 'installerHeader', 'uninstallerSidebar']) {
+    const p = konfig.nsis[schluessel]
+    assert.ok(p, `build.nsis.${schluessel} fehlt`)
+    assert.ok(fs.existsSync(path.join(__dirname, '..', p)), `${p} existiert nicht`)
+  }
+  // Standardpfad von electron-builder — kein include-Eintrag noetig, aber die Datei muss da sein.
+  assert.ok(fs.existsSync(path.join(__dirname, '..', 'build', 'installer.nsh')))
+})
