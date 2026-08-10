@@ -148,17 +148,23 @@ def test_apply_correction_empty_correction_keeps_raw():
 
 
 def test_apply_correction_empty_text_and_missing_speaker():
+    """Dieser Test hielt frueher fest, dass ein leerer Text den Rohtext stehen laesst. Das war
+    der Fehler, nicht der Schutz: die Korrektur leert Segmente absichtlich (ASR-Artefakte), und
+    genau diese Entscheidung fiel darueber unter den Tisch. Der Schutz bleibt fuer den Fall, den
+    er wirklich meinte — ein Eintrag OHNE text-Schluessel (siehe
+    test_fehlender_text_schluessel_laesst_den_rohtext_stehen)."""
     raw = {"segments": [
         {"id": 0, "start": 0, "end": 1, "text": " Roh A.", "words": []},
         {"id": 1, "start": 1, "end": 2, "text": " Roh B.", "words": []},
     ]}
     correction = {"segments": [
-        {"id": 0, "speaker": "X", "text": "   "},   # leerer Text -> Rohtext bleibt, Sprecher wird gesetzt
+        {"id": 0, "speaker": "X", "text": "   "},   # leerer Text -> gestrichen, Sprecher wird gesetzt
         {"id": 1, "text": "Neu B."},                # kein speaker-Key -> speaker ""
     ]}
     doc = em.apply_correction(raw, correction, base="B", project="P", audio="")
     s0, s1 = doc["segments"]
-    assert s0["text"] == "Roh A." and s0["speaker"] == "X"
+    assert s0["text"] == "" and s0["speaker"] == "X"
+    assert s0["raw_text"] == "Roh A."
     assert s1["text"] == "Neu B." and s1["speaker"] == ""
 
 
@@ -169,3 +175,52 @@ def test_apply_correction_strips_residual_tags_and_drops_none_annotation():
     doc = em.apply_correction(raw, correction, base="B", project="P", audio="")
     assert doc["segments"][0]["text"] == "Ich fahre nach Chur."
     assert doc["annotations"] == ["echte Notiz"]
+
+
+def _roh(*texte):
+    return {"language": "de", "segments": [
+        {"id": i, "start": float(i), "end": i + 1.0, "text": t, "words": [],
+         "compression_ratio": 1.0, "avg_logprob": -0.2}
+        for i, t in enumerate(texte)]}
+
+
+def _korr(*eintraege):
+    return {"context": "", "speakers": [], "annotations": [], "segments": list(eintraege)}
+
+
+def _bau(roh, korr):
+    return em.apply_correction(roh, korr, base="B", project="P", audio="a.m4a")
+
+
+def test_leerer_text_streicht_das_segment():
+    """Ein leerer Text ist eine Entscheidung, kein fehlender Wert. Vorher fiel sie unter den
+    Tisch: die Korrektur leerte das ASR-Artefakt 'ARD Text im Auftrag von Funk', und der
+    Rohtext stand danach trotzdem im Export."""
+    doc = _bau(_roh("ARD Text im Auftrag von Funk", "Echte Aussage."),
+               _korr({"id": 0, "speaker": "X", "text": ""},
+                     {"id": 1, "speaker": "X", "text": "Echte Aussage."}))
+    assert doc["segments"][0]["text"] == ""
+    assert doc["segments"][0]["raw_text"] == "ARD Text im Auftrag von Funk"  # Roh bleibt erhalten
+    assert doc["segments"][1]["text"] == "Echte Aussage."
+
+
+def test_fehlender_text_schluessel_laesst_den_rohtext_stehen():
+    """Nur der Sprecher wurde geliefert -> das Segment war nicht Thema, Text bleibt Roh."""
+    doc = _bau(_roh("Hallo Welt."), _korr({"id": 0, "speaker": "X"}))
+    assert doc["segments"][0]["text"] == "Hallo Welt."
+    assert doc["segments"][0]["speaker"] == "X"
+
+
+def test_musik_varianten_werden_auf_eine_schreibweise_gebracht():
+    doc = _bau(_roh("a", "b", "c", "d"),
+               _korr({"id": 0, "text": "[Musik]"}, {"id": 1, "text": "[Musik: Rocksong]"},
+                     {"id": 2, "text": "♪"}, {"id": 3, "text": "(Applaus)"}))
+    assert [s["text"] for s in doc["segments"]] == ["[Musik]"] * 4
+
+
+def test_musik_faengt_keine_echten_saetze():
+    doc = _bau(_roh("a", "b"),
+               _korr({"id": 0, "text": "Die Musik war laut."},
+                     {"id": 1, "text": "[Musik] und dann sprach er weiter."}))
+    assert [s["text"] for s in doc["segments"]] == [
+        "Die Musik war laut.", "[Musik] und dann sprach er weiter."]

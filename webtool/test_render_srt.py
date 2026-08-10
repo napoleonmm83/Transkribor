@@ -49,3 +49,33 @@ def test_lange_zeilen_werden_an_wortgrenzen_umbrochen():
 
 def test_leeres_dokument():
     assert render_srt({"segments": []}) == ""
+
+
+def _musik(start, end):
+    return _seg(start, end, "Bühnenstimme", "[Musik]")
+
+
+def test_musikblock_wird_zu_einem_cue_ueber_die_ganze_spanne():
+    """Sechs gesungene Segmente -> ein Cue. Als sechs Cues stuende sechsmal dieselbe Zeile da."""
+    doc = {"segments": [
+        _seg(0, 5, "Interviewer", "Und jetzt spielt die Band."),
+        _musik(89.5, 92.6), _musik(92.6, 95.7), _musik(95.7, 99.7),
+        _musik(99.7, 100.1), _musik(100.1, 102.0), _musik(102.0, 103.1),
+        _seg(103.1, 110.7, "Interviewer", "Das ganze Dorf ist da."),
+    ]}
+    srt = render_srt(doc)
+    assert srt.count("[Musik]") == 1
+    assert "00:01:29,500 --> 00:01:43,100\n[Musik]" in srt  # 89,5 s bis 103,1 s am Stueck
+    assert len(srt.strip().split("\n\n")) == 3  # Rede, Musik, Rede
+
+
+def test_musikcue_traegt_keinen_sprecher_und_der_name_kehrt_zurueck():
+    doc = {"segments": [
+        _seg(0, 5, "Interviewer", "Und jetzt spielt die Band."),
+        _musik(5, 20),
+        _seg(20, 25, "Interviewer", "Weiter im Text."),
+    ]}
+    zeilen = render_srt(doc).split("\n")
+    assert zeilen[2] == ">> Interviewer: Und jetzt spielt die Band."
+    assert zeilen[6] == "[Musik]"          # kein ">> Buehnenstimme:" davor
+    assert zeilen[10] == ">> Interviewer: Weiter im Text."  # nach der Musik wieder benannt

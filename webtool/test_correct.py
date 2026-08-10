@@ -715,3 +715,46 @@ def test_kaputtes_TRANSKRIBOR_PARALLEL_faellt_auf_den_default(monkeypatch):
     finally:
         monkeypatch.delenv("TRANSKRIBOR_PARALLEL")
         importlib.reload(correct)
+
+
+def test_force_ignoriert_liegengebliebene_teil_dateien(project, monkeypatch):
+    """--force galt nur der zusammengefuehrten correction.json; liegengebliebene
+    .partN.correction.json wurden weiter wiederverwendet. Ein Lauf nach einer
+    Prompt-Aenderung uebernahm damit still Bloecke nach der ALTEN Regel."""
+    _root, t = project
+    _write_raw(t, "S1", 6)
+    monkeypatch.setattr(correct, "CHUNK_SEGMENTS", 2)          # -> 3 Bloecke
+    # Block 2 liegt als Teil-Datei vor und ist neuer als die Roh-JSON
+    alt = {"base": "S1", "context": "", "speakers": [], "annotations": [], "summary": "",
+           "segments": [{"id": 2, "speaker": "Alt", "text": "ALTER PROMPT"},
+                        {"id": 3, "speaker": "Alt", "text": "ALTER PROMPT"}]}
+    (t / "S1.part2.correction.json").write_text(json.dumps(alt), encoding="utf-8")
+    calls = []
+    monkeypatch.setattr(correct, "_run_claude", _chunk_claude(t, calls))
+
+    assert correct.cmd_run("Demo", force=True, verify=False) == 1
+
+    corr = json.loads((t / "S1.correction.json").read_text(encoding="utf-8"))
+    texte = {s["id"]: s["text"] for s in corr["segments"]}
+    assert "ALTER PROMPT" not in texte.values(), "Teil-Datei trotz --force wiederverwendet"
+    assert texte[2] == "Satz 2." and texte[3] == "Satz 3."
+
+
+def test_ohne_force_bleibt_die_teil_datei_der_resume_anker(project, monkeypatch):
+    """Die Kehrseite muss erhalten bleiben: ein abgebrochener Lauf ist resumbar, ein
+    erneuter Lauf OHNE --force holt nur die fehlenden Bloecke nach."""
+    _root, t = project
+    _write_raw(t, "S1", 6)
+    monkeypatch.setattr(correct, "CHUNK_SEGMENTS", 2)
+    fertig = {"base": "S1", "context": "", "speakers": [], "annotations": [], "summary": "",
+              "segments": [{"id": 2, "speaker": "X", "text": "SCHON FERTIG"},
+                           {"id": 3, "speaker": "X", "text": "SCHON FERTIG"}]}
+    (t / "S1.part2.correction.json").write_text(json.dumps(fertig), encoding="utf-8")
+    calls = []
+    monkeypatch.setattr(correct, "_run_claude", _chunk_claude(t, calls))
+
+    assert correct.cmd_run("Demo", verify=False) == 1
+
+    corr = json.loads((t / "S1.correction.json").read_text(encoding="utf-8"))
+    texte = {s["id"]: s["text"] for s in corr["segments"]}
+    assert texte[2] == "SCHON FERTIG" and texte[3] == "SCHON FERTIG"

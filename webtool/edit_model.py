@@ -4,6 +4,14 @@ import re
 
 _TAG_RE = re.compile(r"\[\[(.+?)\|[0-9.]+\]\]")
 
+MUSIK = "[Musik]"
+# Gesungenes transkribiert Whisper zu selbstbewusstem Unsinn — gemessen an einem Open-Air-Mitschnitt:
+# "Find the Strub!" sechsmal in Folge, dabei compression_ratio 1.80 und avg_logprob -0.34, also weit
+# innerhalb aller Schwellen. Kein Zahlenfilter kann das finden; die LLM-Korrektur erkennt es dagegen
+# von selbst. Sie markiert solche Stellen mit "[Musik]" — hier auf EINE Schreibweise gebracht, damit
+# die Exporte aufeinanderfolgende Musikblöcke zusammenziehen können.
+_MUSIK_RE = re.compile(r"^[\[(]\s*(musik|music|gesang|singt|instrumental|applaus|jubel|♪+)\b[^\])]*[\])]$|^♪+$", re.I)
+
 COMPRESSION_RATIO_THRESHOLD = 2.4
 LOGPROB_THRESHOLD = -1.0
 
@@ -109,8 +117,13 @@ def apply_correction(raw: dict, correction: dict, *, base: str, project: str, au
     for seg in doc["segments"]:
         c = by_id.get(seg["id"])
         if c is not None:
-            text = _TAG_RE.sub(r"\1", (c.get("text") or "")).strip()  # evtl. uebrige [[Wort|prob]]-Marker entfernen
-            if text:
-                seg["text"] = text
+            # Ein leerer Text ist eine ENTSCHEIDUNG ("streich das"), kein fehlender Wert — aber nur,
+            # wenn der Schlüssel überhaupt dasteht. Vorher stand hier `if text:`, und damit fiel
+            # jede Streichung unter den Tisch: die Korrektur leerte vier Segmente mit dem
+            # ASR-Artefakt "ARD Text im Auftrag von Funk" (Untertitel-Floskel aus Whispers
+            # Trainingsdaten, im Ton nicht vorhanden) — im Export standen sie trotzdem alle vier.
+            if "text" in c:
+                text = _TAG_RE.sub(r"\1", (c.get("text") or "")).strip()  # evtl. uebrige [[Wort|prob]]-Marker entfernen
+                seg["text"] = MUSIK if _MUSIK_RE.match(text) else text
             seg["speaker"] = (c.get("speaker") or "").strip()
     return doc

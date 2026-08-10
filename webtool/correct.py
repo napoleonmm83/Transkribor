@@ -338,6 +338,8 @@ Gemeinsames Glossar (für konsistente Schreibweisen — nutze es, ergänze nicht
 3) PRO SEGMENT: gib für JEDE Segment-ID {scope} GENAU EINEN Eintrag {{id, speaker, text}} zurück — keine ID auslassen, keine Segmente zusammenfassen (die Redebeitrags-Bündelung passiert später).
 4) SPRECHER: Das akustische (Sprecher N)-Präfix ist die WAHRHEIT, WER spricht — vergib pro Cluster GENAU EINEN konsistenten Namen: meist „Interviewer" (stellt Fragen) und die befragte Person (Name/Betrieb falls genannt, sonst „Befragte Person"). Du DARFST zwei Cluster demselben Namen zuordnen, wenn klar dieselbe Person. Eine Cluster-Grenze nur überschreiben, wenn sie offensichtlich falsch ist (z.B. ein einzelnes Rückkanal-Wort). Fehlt das Präfix, ordne nach Inhalt zu (wie bisher). Gib JEDEM Segment einen Sprecher.
 5) UNSICHER: wirklich unklare Stellen NICHT raten — nah am Original belassen und unter annotations vermerken.
+6) MUSIK/GESANG: Whisper "hört" in gesungenen Passagen sicher klingenden Unsinn (typisch: dieselbe kurze Zeile mehrfach hintereinander, fremdsprachig wirkende Wortfetzen, Text der zum Gespräch nicht passt). Bei GESUNGENEN Stellen und bei Segmenten ohne verständliche Sprache (Musik, Jubel, Applaus) schreibe als text exakt „[Musik]" — nicht raten, was gesungen wurde. GESPROCHENE Bühnenansagen sind KEINE Musik, die bleiben Text.
+7) ASR-ARTEFAKTE: Segmente, deren Text nachweislich nicht aus dem Ton stammt, sondern aus Whispers Trainingsdaten (Untertitel-Floskeln wie „ARD Text im Auftrag von Funk", „Untertitelung des ZDF", „Vielen Dank fürs Zuschauen"), bekommen einen LEEREN text (""). Sie verschwinden damit aus dem Transkript. Regel 6 und 7 gelten nur, wenn du dir sicher bist — im Zweifel Text belassen und unter annotations vermerken.
 
 Schreibe das Ergebnis mit dem Write-Tool als JSON nach GENAU diesem Pfad:
 {cpath}
@@ -372,6 +374,7 @@ Projekt-Kontext: {context or DEFAULT_CONTEXT}
 
 Prüfe kritisch gegen das ROH — konservativ, im Zweifel näher am Original:
 - HALLUZINATION/DRIFT: Inhalt hinzugefügt/weggelassen/im Sinn verändert, der nicht im Roh steht? Übermässiges Umschreiben? → näher ans Original zurück.
+- MUSIK/ARTEFAKTE sind ERLAUBTE Entscheidungen, KEINE Auslassung: „[Musik]" steht für eine gesungene oder sprachlose Stelle, ein leerer text ("") für ein reines ASR-Artefakt aus Whispers Trainingsdaten (Untertitel-Floskeln wie „ARD Text im Auftrag von Funk"). Beides NICHT zurückdrehen — nur prüfen, ob es zutrifft: gesprochene Bühnenansagen gehören zurück in Text, und umgekehrt gehört sicher klingender Unsinn über einer gesungenen Passage (dieselbe kurze Zeile mehrfach hintereinander, Wortfetzen ohne Bezug zum Gespräch) auf „[Musik]".
 - VOLLSTÄNDIGKEIT: für JEDE Roh-Segment-ID {scope} genau ein Eintrag? Fehlende ergänzen (Text nah am Roh), zusammengefasste auftrennen.
 - SPRECHER: konsistent pro akustischem (Sprecher N)-Cluster und plausibel (Interviewer stellt Fragen; Antworten korrekt zugeordnet)? Fehlzuordnungen korrigieren.
 - RESTFEHLER: offensichtliche verbleibende ASR-Fehler nur wenn eindeutig (konservativ).
@@ -498,7 +501,8 @@ def _correct_one(base: str, tagged: str, target: str, gjson: str, context: str, 
             print(f"⚠ Verifikation ungültig — behalte unverifizierte {base}.correction.json", flush=True)
 
 
-def _correct_file(project: str, base: str, gjson: str, context: str, verify: bool) -> None:
+def _correct_file(project: str, base: str, gjson: str, context: str, verify: bool,
+                  force: bool = False) -> None:
     """Korrektur für EINE Datei -> <base>.correction.json.
 
     Bis CHUNK_SEGMENTS Segmente genau wie bisher: ein claude-Aufruf schreibt direkt die
@@ -526,7 +530,12 @@ def _correct_file(project: str, base: str, gjson: str, context: str, verify: boo
     def block(i: int, known: str):
         chunk, ppath = chunks[i - 1], parts[i - 1]
         label = f" · Block {i}/{len(chunks)}"
-        if _valid_correction(ppath) and os.path.getmtime(ppath) >= os.path.getmtime(raw_json):
+        # `force` MUSS bis hierher durchgereicht werden. Ohne das galt --force nur der
+        # zusammengeführten correction.json, während liegengebliebene Teil-Dateien weiter
+        # wiederverwendet wurden — ein Lauf nach einer Prompt-Änderung übernahm damit still
+        # Blöcke, die noch nach der ALTEN Regel entstanden waren. Genau so ist die
+        # Musik-Markierung beim ersten Test nur in Block 1 gelandet.
+        if not force and _valid_correction(ppath) and os.path.getmtime(ppath) >= os.path.getmtime(raw_json):
             print(f"  ↷ {base}{label} schon vorhanden", flush=True)
         else:
             _correct_one(base, tagged, ppath, gjson, context, verify,
@@ -602,7 +611,7 @@ def cmd_run(project: str, base: str = None, force: bool = False, verify: bool = 
             if reuse:
                 print(f"↷ nutze vorhandene {b}.correction.json", flush=True)
             else:
-                _correct_file(project, b, gjson, context, verify)
+                _correct_file(project, b, gjson, context, verify, force)
             if not _valid_correction(cpath):
                 print(f"✗ FEHLT/ungültig: {b}.correction.json — überspringe", flush=True)
                 return False
