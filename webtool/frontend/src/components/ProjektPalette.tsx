@@ -17,7 +17,11 @@ import {
  *  Tippen im Suchfeld der Galerie oder in einem Segmenttext. */
 export function ProjektPalette() {
   const [open, setOpen] = useState(false)
-  const { projects } = useProjects()
+  // Kein eigener Dauerpoll: geschlossen (praktisch immer) genuegt eine einmalige Abfrage beim
+  // Mounten, sonst waere die Palette genau die Verdopplung des Summenpolls, die die Aufteilung
+  // Zusammenfassung/Detail abschaffen soll. pollMs=0 heisst "einmal holen, nicht pollen"
+  // (useProjects.ts); beim Oeffnen wechselt pollMs, der Poll-Effekt setzt neu auf.
+  const { projects } = useProjects(open ? 4000 : 0)
   const navigate = useNavigate()
 
   useEffect(() => {
