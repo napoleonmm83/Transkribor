@@ -11,6 +11,14 @@ const datei: ProjectFile = { base: 'S1', has_audio: true, has_raw: true, has_edi
 describe('useProjectFiles', () => {
   beforeEach(() => vi.clearAllMocks())
 
+  it('leeres Projekt laedt nicht -- loading wird false, files bleibt leer, kein Aufruf', async () => {
+    const { result } = renderHook(() => useProjectFiles(''))
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(result.current.files).toEqual([])
+    expect(result.current.fehler).toBe(false)
+    expect(api.getProjectFiles).not.toHaveBeenCalled()
+  })
+
   it('laedt die Dateien ueber GET /api/projects/{project}', async () => {
     vi.mocked(api.getProjectFiles).mockResolvedValue({ name: 'Demo', files: [datei] })
     const { result } = renderHook(() => useProjectFiles('Demo'))

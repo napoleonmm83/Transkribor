@@ -25,7 +25,6 @@ export function useProjects(pollMs = 4000) {
   }, [])
   useEffect(() => {
     refresh()
-    if (!pollMs) return
     const t = setInterval(refresh, pollMs)
     return () => clearInterval(t)
   }, [refresh, pollMs])

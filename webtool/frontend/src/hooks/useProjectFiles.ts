@@ -29,8 +29,16 @@ export function useProjectFiles(project: string) {
   // bleiben nebeneinander stehen, keine ersetzt die andere.
   const kennung = useRef(0)
   const refresh = useCallback(() => {
-    if (!project) return
     angefragt.current = project
+    if (!project) {
+      // Leeres Projekt ist "nichts zu laden", nicht "laedt noch" -- sonst zeigt jede Seite ohne
+      // aufgeklapptes Projekt (Galerie, Einstellungen, kuenftig die Seitenleiste) einen ewigen
+      // Ladezustand, weil `loading` auf seinem Initialwert true haengen bliebe. `angefragt` ist
+      // trotzdem aktualisiert: eine noch fliegende Antwort des VERLASSENEN Projekts darf die
+      // (leeren) Dateien jetzt nicht mehr ueberschreiben.
+      setFiles([]); setFehler(false); setLoading(false)
+      return
+    }
     const meineKennung = ++kennung.current
     const aktuell = () => angefragt.current === project && meineKennung === kennung.current
     getProjectFiles(project)

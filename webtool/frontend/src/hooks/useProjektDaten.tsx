@@ -20,8 +20,8 @@ const Ctx = createContext<{ projekte: Projekte; dateien: Dateien } | null>(null)
  * aufgeklappte Projekt der Seitenleiste IST das geoeffnete. Ein zweiter Begriff von "offen"
  * waere eine zweite Wahrheit, die man synchron halten muss.
  */
-export function ProjektDatenProvider({ children, pollMs = 4000 }: { children: ReactNode; pollMs?: number }) {
-  const projekte = useProjects(pollMs)
+export function ProjektDatenProvider({ children }: { children: ReactNode }) {
+  const projekte = useProjects(4000)
   // Zwei Aufrufe statt eines optionalen Parameters: `useMatch('/p/:project/:base?')` waere
   // kuerzer, faellt aber je nach Router-Version auf die Nase — zwei Muster sind eindeutig.
   const mitDatei = useMatch('/p/:project/:base')

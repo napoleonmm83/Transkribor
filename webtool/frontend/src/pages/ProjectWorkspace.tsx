@@ -31,8 +31,6 @@ export function ProjectWorkspace() {
   const running = meine.length > 0
 
   useEffect(() => onSettled(() => { refresh(); refreshFiles() }), [onSettled, refresh, refreshFiles])
-  // Der Summenpoll-Waechter ueber die Dateiliste steht jetzt im ProjektDatenProvider (eine
-  // Stelle statt wortgleich hier UND in EditorView.tsx).
   // Discovery: laufende Jobs nach Reload/aus der Liste adoptieren — es koennen zwei sein
   // (Transkription + Korrektur laufen im selben Projekt nebeneinander).
   const aktiveIds = (p?.active_jobs ?? []).map(j => j.id).join(',')

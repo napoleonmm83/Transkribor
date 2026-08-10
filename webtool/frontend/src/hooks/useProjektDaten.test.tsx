@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, act, waitFor } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
+import { render, screen, act, waitFor, fireEvent } from '@testing-library/react'
+import { MemoryRouter, useNavigate } from 'react-router-dom'
 import { ProjektDatenProvider, useProjekte, useDateien } from './useProjektDaten'
 import * as api from '@/lib/api'
 
@@ -13,6 +13,10 @@ function Verbraucher({ name }: { name: string }) {
 function Dateien() {
   const { projekt, files } = useDateien()
   return <span>dateien:{projekt ?? '-'}:{files.length}</span>
+}
+function Wechsler({ to }: { to: string }) {
+  const navigate = useNavigate()
+  return <button onClick={() => navigate(to)}>wechsle</button>
 }
 
 describe('ProjektDatenProvider', () => {
@@ -74,5 +78,29 @@ describe('ProjektDatenProvider', () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(0) })
     await act(async () => { await vi.advanceTimersByTimeAsync(4000) })
     expect(api.getProjectFiles).toHaveBeenCalledTimes(1)
+  })
+
+  it('Projektwechsel loest keinen zusaetzlichen Aufruf aus ausser dem, den useProjectFiles selbst beim Wechsel macht', async () => {
+    // A und B mit UNTERSCHIEDLICHEN Zahlen: das deckt genau den Wechsel-Schutz auf
+    // (vorher.projekt === projekt in useProjektDaten.tsx). Mit gleichen Zahlen waere die
+    // Zahlen-Bedingung fuer sich allein schon falsch, und die Gegenprobe koennte nie rot werden.
+    vi.mocked(api.listProjects).mockResolvedValue([
+      { name: 'A', dateien: 2, fertig: 1, geaendert: 0 },
+      { name: 'B', dateien: 5, fertig: 3, geaendert: 0 },
+    ])
+    render(
+      <MemoryRouter initialEntries={['/p/A']}>
+        <ProjektDatenProvider><Dateien /><Wechsler to="/p/B" /></ProjektDatenProvider>
+      </MemoryRouter>,
+    )
+    await waitFor(() => expect(screen.getByText('dateien:A:1')).toBeInTheDocument())
+    const basis = vi.mocked(api.getProjectFiles).mock.calls.length
+
+    fireEvent.click(screen.getByText('wechsle'))
+    await waitFor(() => expect(screen.getByText('dateien:B:1')).toBeInTheDocument())
+    // useProjectFiles ruft wegen des project-Wechsels (eigene Dependency) selbst neu -- das ist
+    // der EINE erlaubte zusaetzliche Aufruf. Der Waechter im Provider darf keinen zweiten
+    // draufsetzen, nur weil B andere Zahlen hat als A.
+    expect(vi.mocked(api.getProjectFiles).mock.calls.length).toBe(basis + 1)
   })
 })
