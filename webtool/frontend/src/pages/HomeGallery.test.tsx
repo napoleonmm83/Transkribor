@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { HomeGallery } from './HomeGallery'
@@ -14,6 +14,12 @@ const zeigen = () =>
   render(<MemoryRouter><JobProvider><ProjektDatenProvider><HomeGallery /></ProjektDatenProvider></JobProvider></MemoryRouter>)
 
 describe('HomeGallery', () => {
+  // Der ProjektDatenProvider adoptiert laufende Jobs aus `active_jobs` und fragt sie ab --
+  // ungemockt liefert das Automock undefined, und `.then` darauf ist eine unbehandelte
+  // Ablehnung. 'running' laesst die Abfrage nach einem Durchgang stehen (kein onSettled,
+  // also keine zusaetzlichen Listenabrufe); das Aufraeumen des Effekts beendet sie.
+  beforeEach(() => vi.mocked(api.getJob).mockResolvedValue({ status: 'running', lines: [] }))
+
   it('zeigt Karten mit Dateizahl', async () => {
     vi.mocked(api.listProjects).mockResolvedValue([
       { name: 'Demo', dateien: 1, fertig: 1, geaendert: 0, active_jobs: [] },

@@ -20,6 +20,9 @@ function renderPalette(projects = demoProjects) {
   // /p/:project, ruft schon der Provider getProjectFiles -- unabhaengig davon, ob die
   // Zielseite (hier ein Stub-<div>) die Dateien je liest.
   vi.mocked(api.getProjectFiles).mockResolvedValue({ name: '', files: [] })
+  // Der Provider adoptiert laufende Jobs aus `active_jobs` und fragt sie ab -- ungemockt
+  // liefert das Automock undefined, und `.then` darauf ist eine unbehandelte Ablehnung.
+  vi.mocked(api.getJob).mockResolvedValue({ status: 'running', lines: [] })
   // Seit Task 5 haengt ProjektDatenProvider selbst an useActiveJob (onSettled fuer die
   // Zusammenlegung) -- ohne JobProvider drumherum wirft er "ausserhalb JobProvider".
   return render(
