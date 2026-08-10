@@ -99,6 +99,13 @@ export function JobProvider({ children, intervalMs = 1500 }: { children: ReactNo
       // synchron nach setJobs rufen, also vor Reacts Rerender. Identitaet (id/project/kind)
       // darf aus dem (moeglicherweise veralteten) `jobs` kommen, die aendert sich nach dem
       // Adoptieren nie mehr -- der Status kommt aus `neu`, das IST der frische Poll-Ausgang.
+      //
+      // `beendet` enthaelt nur Jobs, die in DIESEM Tick terminal wurden: die Kennungen stammen
+      // aus `neu`, und `neu` speist sich aus `ids` (oben, aus `runningIds` bei Effekt-Aufsatz
+      // eingefroren). Sobald ein Job nicht mehr laeuft, verengt sich `runningIds`, der Effekt
+      // setzt neu auf (Cleanup verwirft den geplanten Folge-Tick) und der Job faellt aus `ids` --
+      // er kann in einem SPAETEREN `neu` also nie wieder auftauchen. Deshalb braucht kein
+      // Zuhoerer einen eigenen Riegel gegen Doppelmeldungen fuer denselben Job.
       const beendet = jobs
         .filter(j => neu[j.id] && neu[j.id] !== 'running')
         .map(j => ({ ...j, status: neu[j.id] }))
