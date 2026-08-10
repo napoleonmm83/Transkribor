@@ -9,6 +9,11 @@ und braechte einen Rasterizer (cairosvg zieht auf Windows Cairo nach).
 PIL zeichnet ohne Kantenglaettung. Gerendert wird deshalb in UEBER-facher Groesse
 und mit LANCZOS heruntergerechnet — dasselbe Verfahren, das der DMG-Hintergrund
 schon benutzt hat.
+
+Pillow ist reines Entwicklerwerkzeug fuer dieses Skript und steht bewusst NICHT in
+requirements.txt: der CI-Python-Job faehrt ohne schwere Abhaengigkeiten, und
+build/test_bilder.py prueft die committeten Ausgaben deshalb ohne PIL. Installieren mit
+    .venv\\Scripts\\python.exe -m pip install Pillow
 """
 from pathlib import Path
 
@@ -136,7 +141,13 @@ SYMBOL_GROESSE = 80               # dmg.iconSize
 
 
 def _breite(d, text, font):
-    return d.textlength(text, font=font) / S
+    """Gemalte Breite in unskalierten Pixeln — ueber textbbox() statt textlength():
+    textlength() misst nur die Vorschubbreite, nicht die tatsaechlich gemalte
+    Ausdehnung, und einzelne Glyphen koennen ueber ihren Vorschub hinausragen.
+    xy=(0,0) und kein anchor-Argument spiegeln genau den d.text()-Aufruf unten
+    (der ebenfalls keinen anchor angibt, also Default "la")."""
+    links, _, rechts, _ = d.textbbox((0, 0), text, font=font)
+    return (rechts - links) / S
 
 
 def dmg_hintergrund():
@@ -178,10 +189,13 @@ def dmg_hintergrund():
         d.text((tx, ty * S), text, font=font, fill=farbe)
 
     # Der Hinweis nuetzt nichts, wenn er aus der Karte laeuft: lieber hier scheitern als im DMG.
+    # Kein assert: das verschwindet unter `python -O` / PYTHONOPTIMIZE=1 spurlos, und dies ist
+    # die EINZIGE Sicherung fuer eine Flaeche, die hier niemand ansehen kann (kein Mac vorhanden).
     platz = KARTE_X1 - KARTE_X0 - 2 * KARTE_INNEN
     for _, text, font, _ in zeilen:
         b = _breite(d, text, font)
-        assert b <= platz, f"Zeile zu breit ({b:.0f}px > {platz}px): {text!r}"
+        if b > platz:
+            raise ValueError(f"Zeile zu breit ({b:.0f}px > {platz}px): {text!r}")
 
     return bild
 
