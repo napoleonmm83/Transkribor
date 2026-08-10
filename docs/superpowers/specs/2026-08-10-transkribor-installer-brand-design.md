@@ -62,12 +62,17 @@ Ein Modul kennt das Zeichen und schreibt alle abgeleiteten Dateien:
 
 ```
 .venv\Scripts\python.exe build\marke.py
-  → build/icon.png              1024×1024
-  → build/installerSidebar.bmp   164×314   24-bit
-  → build/installerHeader.bmp    150×57    24-bit
-  → build/background.png         540×380
+  → build/icon.png              1024×1024   App-Icon
+  → build/installerSidebar.bmp   164×314    24-bit
+  → build/installerHeader.bmp    150×57     24-bit
+  → build/background.png         540×380    DMG
   → build/background@2x.png     1080×760
+  → electron/marke.png           128×128    für das Ersteinrichtungs-Fenster
 ```
+
+Die letzte Datei fällt aus derselben Regel: `setup.html` braucht das Zeichen, und ein
+danebengelegtes Inline-SVG wäre wieder ein zweiter Wahrheitsstand. Ein 128er-PNG kostet ein
+paar Kilobyte und kommt aus derselben Funktion.
 
 Die Ausgaben werden **committet** — dieselbe Begründung wie bisher: die CI-Runner haben weder PIL
 noch die Schriften. Der vorhandene Abbruch bei überlaufender Textzeile bleibt erhalten.
@@ -93,6 +98,12 @@ Zwei Verbraucher, zwei Formate:
   rendert `hintergrund.py` heute in Segoe UI. Nebeneffekt: die fest verdrahteten
   `C:/Windows/Fonts/…`-Pfade fallen weg, das Skript läuft nicht mehr nur auf Windows.
 - **`electron/fonts/*.woff2`** (59 KB): für `setup.html`, wird über `electron/**/*` mitgeliefert.
+
+Damit reisen die Schriften erstmals nachweislich mit — und legen eine bestehende Lücke offen:
+Die drei woff2 werden über `webtool/static/fonts` **heute schon** ausgeliefert, ohne dass eine
+Lizenz beiliegt. Die SIL OFL erlaubt die Weitergabe ausdrücklich, verlangt aber, dass der
+Lizenzhinweis jede Kopie begleitet. `LICENSE-SCHRIFTEN.md` kommt deshalb dazu — dasselbe Muster
+wie `LICENSE-MODELLE.md` für das CC-BY-lizenzierte pyannote-Modell.
 
 Ein `{from,to}`-Mapping in `build.files` statt der echten Kopie wäre kürzer, greift aber **nur im
 gepackten Lauf**: in der Entwicklung fiele `setup.html` still auf `system-ui` zurück und der
@@ -163,7 +174,7 @@ existieren.
 - neu `build/icon.png`, `build/installerSidebar.bmp`, `build/installerHeader.bmp`;
   `build/background.png` + `@2x` neu gerendert
 - neu `build/test_bilder.py`
-- neu `electron/fonts/*.woff2`
+- neu `electron/marke.png`, `electron/fonts/*.woff2`, `LICENSE-SCHRIFTEN.md`
 - geändert `electron/setup.html`: Zeichen im Kopf, Akzent `#7c9cff` → `#4F46E5` (dunkel `#818CF8`),
   `system-ui` → Space Grotesk (Überschriften) + DM Sans, Radius 8 px, **Hell- und Dunkelmodus**
   statt `color-scheme: dark`
