@@ -1,5 +1,5 @@
 import type {
-  Project, EditDoc, JobStatus, StartJob, Settings, ModelInfo, Hardware, AuthStatus, LoginState,
+  Project, ProjectFile, EditDoc, JobStatus, StartJob, Settings, ModelInfo, Hardware, AuthStatus, LoginState,
 } from './types'
 
 const enc = encodeURIComponent
@@ -7,12 +7,18 @@ async function jn<T>(r: Response): Promise<T> {
   if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || `HTTP ${r.status}`)
   return r.json() as Promise<T>
 }
+const get = <T>(u: string): Promise<T> => fetch(u).then(jn<T>)
 
 export function audioUrl(project: string, base: string) {
   return `/api/projects/${enc(project)}/audio/${enc(base)}`
 }
 export async function listProjects(): Promise<Project[]> {
   return (await jn<{ projects: Project[] }>(await fetch('/api/projects'))).projects
+}
+/** Dateien EINES Projekts — fuer die Arbeitsflaeche und den Editor, die nicht mehr die
+ *  ganze Projektliste (inkl. aller fremden Dateien) mitschleppen wollen. */
+export function getProjectFiles(project: string): Promise<{ name: string; files: ProjectFile[] }> {
+  return get(`/api/projects/${enc(project)}`)
 }
 export async function getDoc(project: string, base: string): Promise<EditDoc> {
   return jn(await fetch(`/api/projects/${enc(project)}/files/${enc(base)}`))
