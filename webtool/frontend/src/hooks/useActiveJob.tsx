@@ -119,7 +119,14 @@ export function JobProvider({ children, intervalMs = 1500 }: { children: ReactNo
       // roter Testlauf.
       const beendet = jobs
         .filter(j => neu[j.id] && neu[j.id] !== 'running' && zuletzt[j.id] !== neu[j.id])
-        .map(j => ({ ...j, status: neu[j.id] }))
+        // Phasen aus DIESEM Poll, nicht aus dem Closure: `jobs` ist hier zwangslaeufig der
+        // Stand vor setJobs, sein `phases` also eine Runde alt -- ein Zuhoerer bekaeme die
+        // vorletzte Phase eines gerade beendeten Laufs. Ohne Ergebnis (Netz weg) bleibt der
+        // letzte bekannte Stand die einzige Auskunft, die wir haben.
+        .map(j => {
+          const r = ergebnis.get(j.id)
+          return { ...j, status: neu[j.id], phases: r ? parseJobPhases(j.kind, r.lines) : j.phases }
+        })
       for (const id of Object.keys(neu)) zuletzt[id] = neu[id]
       if (beendet.length) listeners.current.forEach(fn => fn(beendet))
       // Nur weiterpollen, solange wirklich etwas laeuft. Bedingungslos neu zu planen liess

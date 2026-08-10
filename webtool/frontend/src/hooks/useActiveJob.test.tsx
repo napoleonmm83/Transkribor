@@ -2,12 +2,13 @@ import { StrictMode, useEffect } from 'react'
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { JobProvider, mergePhases, useActiveJob, type Job } from './useActiveJob'
+import { parseJobPhases } from '@/lib/jobPhases'
 import type { JobPhases } from '@/lib/types'
 import * as api from '@/lib/api'
 
 vi.mock('@/lib/api')
 
-function Probe({ beiSettled }: { beiSettled?: () => void } = {}) {
+function Probe({ beiSettled }: { beiSettled?: (beendet: Job[]) => void } = {}) {
   const { jobs, adopt, onSettled } = useActiveJob()
   const phases = mergePhases(jobs.filter(j => j.status === 'running'))
   // GENAU wie ProjectWorkspace.tsx: der Verbraucher registriert sich in einem Effekt.
@@ -60,6 +61,21 @@ describe('useActiveJob', () => {
     fireEvent.click(screen.getByText('go'))
     await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('done'))
     await waitFor(() => expect(settled).toHaveBeenCalled())
+  })
+
+  it('meldet die Phasen aus DEM Tick, in dem der Job terminal wird', async () => {
+    // `jobs` im Closure ist eine Runde alt -- ohne die frischen Zeilen traegt das Ereignis
+    // die vorletzte Phase eines gerade beendeten Laufs.
+    const fertig = ['apply: A -> edit.json + md (2 Segmente)']
+    vi.mocked(api.getJob)
+      .mockResolvedValueOnce({ status: 'running', lines: ['→ Korrigiere A …'] })
+      .mockResolvedValue({ status: 'done', lines: fertig })
+    const settled = vi.fn()
+    render(<JobProvider intervalMs={5}><Probe beiSettled={settled} /></JobProvider>)
+    fireEvent.click(screen.getByText('go'))
+    await waitFor(() => expect(settled).toHaveBeenCalled())
+    const beendet = settled.mock.calls.at(-1)![0] as Job[]
+    expect(beendet[0].phases).toEqual(parseJobPhases('correct', fertig))
   })
 
   it('pollt nach dem Terminal-Status nicht weiter', async () => {
