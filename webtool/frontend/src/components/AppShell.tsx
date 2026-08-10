@@ -3,6 +3,7 @@ import { useLocation, useMatch, useNavigate } from 'react-router-dom'
 import { ProjektDatenProvider, useProjekte, useDateien } from '@/hooks/useProjektDaten'
 import { mergePhases, useActiveJob } from '@/hooks/useActiveJob'
 import { useAiReady } from '@/hooks/useAiReady'
+import { useDokumentTitel } from '@/hooks/useDokumentTitel'
 import { useJob } from '@/hooks/useJob'
 import { uploadAudio, startTranscribe, startCorrect, startCorrectFile } from '@/lib/api'
 import { Sidebar } from './Sidebar'
@@ -57,8 +58,8 @@ function Leiste() {
  */
 function Rahmen({ children }: { children: ReactNode }) {
   const { pathname } = useLocation()
-  const { projekt } = useDateien()
   const inhalt = useRef<HTMLDivElement>(null)
+  const titel = useDokumentTitel()
   // Kehrseite des EINEN Bildlaufbehaelters: der Versatz ueberlebt den Routenwechsel. Aus
   // einem langen Transkript zurueck zur Uebersicht landete man sonst mitten in der Seite.
   // React Router setzt das absichtlich nicht selbst zurueck — es weiss nicht, welches
@@ -82,7 +83,7 @@ function Rahmen({ children }: { children: ReactNode }) {
           Darum hier nur ausblenden statt einer einklappbaren Leiste mit gemerktem Zustand:
           auf schmal bleiben die Uebersicht und Ctrl+K als Weg zum Projekt. */}
       <div className="grid h-screen grid-rows-[auto_1fr_auto] md:grid-cols-[260px_1fr]">
-        <TitleBar titel={projekt ?? 'Transkribor'} />
+        <TitleBar titel={titel} />
         <aside className="hidden min-h-0 border-r md:block"><Leiste /></aside>
         <div id="inhalt" tabIndex={-1} ref={inhalt}
           className="min-h-0 overflow-auto outline-none focus-visible:ring-2 focus-visible:ring-ring">{children}</div>
