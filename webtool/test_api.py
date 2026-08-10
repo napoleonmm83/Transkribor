@@ -65,6 +65,9 @@ def test_zusammenfassung_zaehlt_dasselbe_wie_die_dateiliste(tmp_path, monkeypatc
     (proj / "transkripte" / "Fertig.correction.json").write_text("{}", encoding="utf-8")
     (proj / "transkripte" / "Fertig.diar.json").write_text("{}", encoding="utf-8")
     (proj / "transkripte" / "_glossar.json").write_text("{}", encoding="utf-8")
+    # verwaist: Rohtranskript geloescht, Editordatei stehengeblieben -- darf NICHT in fertig
+    # zaehlen, sonst fertig > dateien (fertig zaehlt hier ausschliesslich existierende Basen).
+    (proj / "transkripte" / "Verwaist.edit.json").write_text("{}", encoding="utf-8")
 
     from webtool.app import get_project, list_projects
     zusammenfassung = {p["name"]: p for p in list_projects()["projects"]}
@@ -72,6 +75,7 @@ def test_zusammenfassung_zaehlt_dasselbe_wie_die_dateiliste(tmp_path, monkeypatc
         dateien = get_project(name)["files"]
         assert p["dateien"] == len(dateien)
         assert p["fertig"] == sum(1 for f in dateien if f["has_edit"])
+    assert not any(f["base"] == "Verwaist" for f in get_project("Mix")["files"])
 
 
 def test_geaendert_folgt_dem_ueberschreiben_einer_datei(tmp_path, monkeypatch):
