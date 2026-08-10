@@ -22,8 +22,14 @@ export function EditorView() {
   const sel = project && base ? { project, base } : null
   const { doc, dirty, loading: docLoading, updateSegment, renameSpeaker, save, exportDownload, reload } = useDoc(sel?.project ?? null, sel?.base ?? null)
   const { start } = useJob()
-  const { jobs, adopt } = useActiveJob()
+  const { jobs, adopt, onSettled } = useActiveJob()
   const aiReason = useAiReady()          // nicht leer -> Korrektur waere ein Leerlauf
+  // Wie ProjectWorkspace.tsx: onSettled feuert bei JEDEM Job dieses Prozesses, der terminal
+  // wird — auch bei einem, der ueber active_jobs adoptiert, aber woanders gestartet wurde (z.B.
+  // "Korrigieren" fuers ganze Projekt in der Arbeitsflaeche, waehrend der Editor offen ist). Nur
+  // die eigenen useJob()-onDone-Callbacks unten wuerden das verpassen -- die feuern nur fuer
+  // Jobs, die dieser Editor selbst gestartet hat.
+  useEffect(() => onSettled(() => { refresh(); refreshFiles() }), [onSettled, refresh, refreshFiles])
   const meine = useMemo(() => jobs.filter(j => j.project === project && j.status === 'running'),
     [jobs, project])
   const phases = useMemo(() => mergePhases(meine), [meine])   // nur eigenes Projekt, s. mergePhases
