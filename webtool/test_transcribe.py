@@ -9,23 +9,37 @@ import types
 import transcribe
 
 
-def test_opts_reicht_prompt_und_sprache_durch():
-    o = transcribe._opts("Kontext hier", "en")
-    assert o["initial_prompt"] == "Kontext hier"
+def test_opts_reicht_die_sprache_durch():
+    o = transcribe._opts("en")
     assert o["language"] == "en"
     assert o["word_timestamps"] is True      # Grundlage fuer die Audio-Synchronisation
+
+
+def test_opts_gibt_whisper_KEINEN_initial_prompt():
+    """Der Prompt beendete ein 30-Sekunden-Fenster vorzeitig; Whisper ruckte den Lesezeiger
+    daraufhin um das ganze Fenster weiter und las die restliche Sprache darin nie.
+
+    Gemessen an ganzen Dateien, sonst identische Parameter: 1226 -> 1346 Woerter (01172464),
+    454 -> 590 (C0701), 140 -> 158 (C0761). In einem Fall fehlten 18 s am Stueck. Nichts im
+    Ergebnis zeigte das an — kein Flag, keine Warnung, nur fehlender Text. 17 von 37
+    vorhandenen Aufnahmen trugen die Signatur.
+
+    Der Test steht hier, weil die Zeile zum Wiedereinbau EINLAEDT: sie sah nuetzlich aus
+    ("biast Whisper auf Eigennamen") und ihr Schaden ist unsichtbar. kontext.md gehoert in
+    die LLM-Korrektur, nicht in den Decoder."""
+    assert "initial_prompt" not in transcribe._opts("de")
 
 
 def test_opts_haelt_den_fortschrittsbalken_an():
     """log_progress speist den tqdm-Balken, aus dem jobPhases.ts die Prozente liest —
     ohne ihn zeigt die Oberflaeche waehrend der ganzen Transkription keinen Fortschritt."""
-    assert transcribe._opts("p", "de")["log_progress"] is True
+    assert transcribe._opts("de")["log_progress"] is True
 
 
 def test_opts_schaltet_vad_aus():
     """VAD wuerde Stille ueberspringen und die Segmentzeiten gegen das Audio verschieben —
     der Editor synchronisiert Text und Wiedergabe ueber genau diese Zeiten."""
-    assert transcribe._opts("p", "de")["vad_filter"] is False
+    assert transcribe._opts("de")["vad_filter"] is False
 
 
 def _projekt(tmp_path, *namen):

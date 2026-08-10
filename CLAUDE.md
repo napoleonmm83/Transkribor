@@ -382,6 +382,23 @@ nie committen), unklarem Scope, oder history-verändernden Aktionen (force-push,
   ist zudem lauf-zu-lauf deterministisch; openai-whisper lieferte auf derselben Datei mal 67, mal 81
   Segmente. **Nicht** die Ursache war der Triton-/DTW-Rückfall: ohne `word_timestamps` war
   openai-whisper mit 700 s noch langsamer, `triton-windows` hätte also nichts gebracht.
+- **Whisper bekommt KEINEN `initial_prompt` — er kostete ganze Passagen.** Er stand einmal in
+  `transcribe._opts` („Interview auf Schweizerdeutsch…", bzw. der Inhalt von `kontext.md`) und
+  brachte den Decoder dazu, ein 30-Sekunden-Fenster **vorzeitig zu beenden**; Whisper schiebt den
+  Lesezeiger daraufhin um das **ganze** Fenster weiter, und die restliche Sprache darin wird nie
+  angeschaut. Kein falsches Wort, sondern **gar keines** — und nichts im Ergebnis, woran man es
+  sähe. Gemessen an ganzen Dateien bei sonst identischen Parametern: **1226 → 1346 Wörter**
+  (`01172464`, 9:27), 454 → 590 (`C0701`), 140 → 158 (`C0761`); in einem Fall fehlten **18 s am
+  Stück**, ausgerechnet die Antwort auf die erste Interviewfrage. **17 von 37** vorhandenen
+  Aufnahmen trugen die Signatur. Seinen erklärten Zweck erfüllte er dabei nicht: Schweizerdeutsch-
+  Marker (`isch`, `nöd`, `gsi`, `öppis`) kamen in **keinem** Lauf vor, mit Prompt wie ohne — Whisper
+  normalisiert Deutsch von sich aus. Mit `kontext.md` schadete er zusätzlich, weil deren
+  Markdown-Stil abfärbte (kleingeschrieben, ohne Satzzeichen). **`condition_on_previous_text` ist
+  nicht beteiligt** (getrennt geprüft: auf `False` bleibt die Lücke). `kontext.md` bleibt erhalten
+  und geht unverändert als `context` in die **Korrektur** — dort holt das gemeinsame Glossar ein
+  falsch gehörtes Wort zurück; eine Passage, die Whisper nie gelesen hat, kann niemand mehr
+  zurückholen. Ein Wächtertest (`test_opts_gibt_whisper_KEINEN_initial_prompt`) hält die Zeile
+  draussen: sie sieht nützlich aus und ihr Schaden ist unsichtbar.
 - **`transcribe._cuda_dlls_auf_pfad()` ist Pflicht, keine Vorsichtsmassnahme.** CTranslate2 bringt
   cuBLAS/cuDNN **nicht** mit, torch (cu128) schon — ohne den Griff stirbt der erste GPU-Lauf mit
   `Library cublas64_12.dll is not found or cannot be loaded`. **`os.add_dll_directory()` reicht
