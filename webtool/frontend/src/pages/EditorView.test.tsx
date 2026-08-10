@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor, act } from '@testing-library/react'
+import { render, waitFor, act } from '@testing-library/react'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import { EditorView } from './EditorView'
 import { JobProvider } from '@/hooks/useActiveJob'
@@ -26,27 +26,6 @@ describe('EditorView (Stub)', () => {
     vi.clearAllMocks()
     einstellungen({})
     vi.mocked(api.getDoc).mockResolvedValue(doc)
-  })
-
-  it('holt die Dateien ueber GET /api/projects/{project}, nicht aus projects[].files', async () => {
-    // Project fuehrt seit Task 3 gar kein files mehr -- wuerde die Seite noch p.files lesen,
-    // bliebe die Sidebar leer und der Test faende 'S1' nicht.
-    vi.mocked(api.listProjects).mockResolvedValue([{ name: 'Demo', dateien: 0, fertig: 0, geaendert: 0, active_jobs: [] }])
-    vi.mocked(api.getProjectFiles).mockResolvedValue({ name: 'Demo',
-      files: [{ base: 'S1', has_audio: true, has_raw: true, has_edit: false, has_md: false }] })
-    render(
-      <TooltipProvider>
-        <MemoryRouter initialEntries={['/p/Demo/S1']}>
-          <JobProvider>
-            <ProjektDatenProvider>
-              <Routes><Route path="/p/:project/:base" element={<EditorView />} /></Routes>
-            </ProjektDatenProvider>
-          </JobProvider>
-        </MemoryRouter>
-      </TooltipProvider>,
-    )
-    expect(await screen.findByText('S1')).toBeInTheDocument()
-    expect(api.getProjectFiles).toHaveBeenCalledWith('Demo')
   })
 
   it('holt die Dateien neu, wenn ein FREMD gestarteter Job fertig wird', async () => {

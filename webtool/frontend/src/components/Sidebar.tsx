@@ -1,80 +1,132 @@
-import { useRef } from 'react'
-import { Link } from 'react-router-dom'
-import { ArrowLeft, Upload, Play, Pencil } from 'lucide-react'
+import { useMemo, useRef, useState } from 'react'
+import { ChevronRight, Loader2, Pencil, Play, Search, Upload } from 'lucide-react'
 import type { ActiveJob, JobPhases, ProjectFile } from '@/lib/types'
 import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 import { FileRow } from './FileRow'
 
 type Sel = { project: string; base: string } | null
-// Eigene Form statt Project aus lib/types: die Sidebar braucht die Dateiliste, die Project
-// seit Task 3 nicht mehr fuehrt (die kommt jetzt separat aus getProjectFiles, siehe EditorView).
-type SidebarProject = { name: string; files: ProjectFile[]; active_jobs?: ActiveJob[] };
-export function Sidebar({ projects, loading, active, onOpen, onUpload, onTranscribe, onCorrect, onCorrectFile, backTo, phases, jobRunning, aiReason }: {
-  projects: SidebarProject[]; loading?: boolean; active: Sel;
-  onOpen: (s: { project: string; base: string }) => void;
-  onUpload: (project: string, file: File) => void;
-  onTranscribe: (project: string) => void;
-  onCorrect: (project: string) => void;
-  onCorrectFile: (project: string, base: string, force: boolean) => void;
-  backTo?: string; phases?: JobPhases; jobRunning?: boolean;
+/** Nur die Zusammenfassung: die Leiste zeigt alle Projekte, aber Dateien nur fuer das
+ *  aufgeklappte — die Dateiliste kommt getrennt herein (GET /api/projects/{p}). */
+type SidebarProjekt = { name: string; dateien: number; active_jobs?: ActiveJob[] }
+
+export function Sidebar({
+  projekte, loading, fehler, offen, dateien, dateienLaden, onWaehlen,
+  active, onOpen, onUpload, onTranscribe, onCorrect, onCorrectFile,
+  phases, jobRunning, aiReason,
+}: {
+  projekte: SidebarProjekt[]; loading?: boolean; fehler?: boolean
+  offen: string | null
+  dateien: ProjectFile[]; dateienLaden?: boolean
+  onWaehlen: (name: string | null) => void
+  active: Sel
+  onOpen: (s: { project: string; base: string }) => void
+  onUpload: (project: string, file: File) => void
+  onTranscribe: (project: string) => void
+  onCorrect: (project: string) => void
+  onCorrectFile: (project: string, base: string, force: boolean) => void
+  phases?: JobPhases; jobRunning?: boolean
   /** Nicht leer = kein nutzbarer KI-Anbieter: Korrigieren deaktiviert, Text als Tooltip. */
-  aiReason?: string;
+  aiReason?: string
 }) {
   const fileInput = useRef<HTMLInputElement>(null)
-  const pendingProject = useRef<string>('')
+  const [suche, setSuche] = useState('')
+  const treffer = useMemo(() => {
+    const q = suche.trim().toLowerCase()
+    return q ? projekte.filter(p => p.name.toLowerCase().includes(q)) : projekte
+  }, [projekte, suche])
+
   return (
-    <div className="p-3">
-      {/* Gleiche Kopf-Reihenfolge wie PageHeader auf den anderen Seiten: erst der Rueckweg,
-          dann die Rubrik, dann der Titel. Vorher stand hier ein 'Transkribor'-H1 in einer
-          vierten Titelgroesse und darunter ein 'zurueck', waehrend jede andere Seite an
-          derselben Stelle 'Projekte' anbietet — derselbe Sprung, zwei Namen.
-          Der Produktname faellt weg: er stand nur hier und traegt im Editor nichts bei. */}
-      {backTo && (
-        <Link to={backTo}
-          className="-mx-2 mb-2 inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-sm
-                     text-muted-foreground transition-colors hover:text-foreground">
-          <ArrowLeft className="size-3.5" aria-hidden="true" /> Projekte
-        </Link>
-      )}
-      <input ref={fileInput} type="file" hidden accept="audio/*,.mp3,.wav,.m4a,.aac,.flac,.ogg,.opus,.wma,.mp4"
-        onChange={e => { const f = e.target.files?.[0]; if (f) onUpload(pendingProject.current, f); e.target.value = '' }} />
-      {projects.length === 0 && loading && (
-        <p className="text-sm text-muted-foreground">lädt…</p>
-      )}
-      {projects.length === 0 && !loading && (
-        // Die Liste ist hier auf EIN Projekt gefiltert (EditorView) — leer heisst also nicht
-        // "noch keine Projekte", sondern "dieses gibt es nicht mehr". Der alte Text erklaerte
-        // stattdessen, wie man von Hand einen Ordner anlegt; das macht man laengst im Browser.
-        <p className="text-sm text-muted-foreground">Projekt nicht gefunden.</p>
-      )}
-      {projects.map(p => (
-        <div key={p.name} className="mb-3">
-          <div className="rubrik mb-1">Projekt</div>
-          <div className="mb-2 flex items-center gap-1">
-            <h2 className="min-w-0 flex-1 truncate text-base font-semibold">{p.name}</h2>
-            <Button size="icon" variant="ghost" className="size-8" title="Audio hochladen" aria-label="Audio hochladen"
-              onClick={() => { pendingProject.current = p.name; fileInput.current?.click() }}><Upload className="size-3.5" /></Button>
-            <Button size="icon" variant="ghost" className="size-8" title="Transkribieren" aria-label="Transkribieren"
-              onClick={() => onTranscribe(p.name)}><Play className="size-3.5" /></Button>
-            {/* title am Wrapper: ein deaktivierter Knopf hat pointer-events:none und
-                zeigt seinen eigenen Tooltip nie. */}
-            <span title={aiReason || undefined} className="inline-flex">
-              <Button size="icon" variant="ghost" className="size-8" title="Korrigieren + Sprecher" aria-label="Korrigieren + Sprecher"
-                disabled={!!aiReason}
-                onClick={() => onCorrect(p.name)}><Pencil className="size-3.5" /></Button>
-            </span>
-          </div>
-          {p.files.map(f => (
-            <FileRow key={f.base} file={f}
-              active={active?.project === p.name && active?.base === f.base}
-              onOpen={() => onOpen({ project: p.name, base: f.base })}
-              onCorrectFile={force => onCorrectFile(p.name, f.base, force)}
-              phase={jobRunning ? phases?.active[f.base]?.phase : undefined}
-              state={jobRunning ? phases?.perBase[f.base] : undefined}
-              jobRunning={jobRunning} aiReason={aiReason} />
-          ))}
+    <div className="flex h-full flex-col">
+      {/* Das Suchfeld scrollt nicht mit: bei hunderten Projekten ist es sonst nach drei
+          Zeilen weg, und die Leiste hat keinen zweiten Weg zu einem Projekt. */}
+      <div className="shrink-0 p-2">
+        <label htmlFor="leiste-suche" className="sr-only">Projekte durchsuchen</label>
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+          <input id="leiste-suche" type="search" value={suche} onChange={e => setSuche(e.target.value)}
+            placeholder="Projekte durchsuchen…"
+            className="h-8 w-full rounded-md border border-input bg-transparent py-1 pl-8 pr-2 text-sm
+                       outline-none placeholder:text-muted-foreground
+                       focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50" />
         </div>
-      ))}
+      </div>
+
+      <input ref={fileInput} type="file" hidden accept="audio/*,.mp3,.wav,.m4a,.aac,.flac,.ogg,.opus,.wma,.mp4"
+        onChange={e => { const f = e.target.files?.[0]; if (f && offen) onUpload(offen, f); e.target.value = '' }} />
+
+      <nav className="min-h-0 flex-1 overflow-auto px-1 pb-2" aria-label="Projekte">
+        {projekte.length === 0 && loading && <p className="px-2 py-1 text-sm text-muted-foreground">lädt…</p>}
+        {projekte.length === 0 && !loading && fehler && (
+          <p className="px-2 py-1 text-sm text-muted-foreground">Projekte konnten nicht geladen werden.</p>
+        )}
+        {projekte.length === 0 && !loading && !fehler && (
+          <p className="px-2 py-1 text-sm text-muted-foreground">Noch keine Projekte.</p>
+        )}
+        {projekte.length > 0 && treffer.length === 0 && (
+          <p className="px-2 py-1 text-sm text-muted-foreground">Kein Projekt passt zu „{suche}".</p>
+        )}
+
+        {treffer.map(p => {
+          const auf = offen === p.name
+          return (
+            <div key={p.name}>
+              {/* Klick auf das offene Projekt klappt zu (onWaehlen(null)) — sonst gaebe es
+                  keinen Weg zurueck zur Uebersicht ausser ueber die Adresszeile. */}
+              <button type="button" onClick={() => onWaehlen(auf ? null : p.name)}
+                aria-expanded={auf}
+                className={cn('flex h-8 w-full items-center gap-1.5 rounded-md px-2 text-left text-sm outline-none',
+                  'hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring',
+                  auf && 'font-medium')}>
+                <ChevronRight className={cn('size-3.5 shrink-0 text-muted-foreground transition-transform',
+                  auf && 'rotate-90')} aria-hidden="true" />
+                <span className="min-w-0 flex-1 truncate">{p.name}</span>
+                {(p.active_jobs?.length ?? 0) > 0
+                  ? <Loader2 className="size-3 shrink-0 animate-spin text-primary" aria-label="läuft" />
+                  : <span className="shrink-0 tabular-nums text-xs text-muted-foreground">{p.dateien}</span>}
+              </button>
+
+              {auf && (
+                <div className="mb-1 pl-4">
+                  {/* Die Aktionen haengen am offenen Projekt, nicht an jeder Zeile: drei
+                      Knoepfe je Zeile machen aus einer Liste eine Werkzeugleiste. */}
+                  <div className="flex items-center gap-1 py-1">
+                    <Button size="icon" variant="ghost" className="size-7" title="Audio hochladen"
+                      aria-label="Audio hochladen" onClick={() => fileInput.current?.click()}>
+                      <Upload className="size-3.5" />
+                    </Button>
+                    <Button size="icon" variant="ghost" className="size-7" title="Transkribieren"
+                      aria-label="Transkribieren" onClick={() => onTranscribe(p.name)}>
+                      <Play className="size-3.5" />
+                    </Button>
+                    {/* title am Wrapper: ein deaktivierter Knopf hat pointer-events:none
+                        und zeigt seinen eigenen Tooltip nie. */}
+                    <span title={aiReason || undefined} className="inline-flex">
+                      <Button size="icon" variant="ghost" className="size-7" title="Korrigieren + Sprecher"
+                        aria-label="Korrigieren + Sprecher" disabled={!!aiReason}
+                        onClick={() => onCorrect(p.name)}>
+                        <Pencil className="size-3.5" />
+                      </Button>
+                    </span>
+                  </div>
+                  {dateienLaden && dateien.length === 0 && (
+                    <p className="px-2 py-1 text-sm text-muted-foreground">lädt…</p>
+                  )}
+                  {dateien.map(f => (
+                    <FileRow key={f.base} file={f}
+                      active={active?.project === p.name && active?.base === f.base}
+                      onOpen={() => onOpen({ project: p.name, base: f.base })}
+                      onCorrectFile={force => onCorrectFile(p.name, f.base, force)}
+                      phase={jobRunning ? phases?.active[f.base]?.phase : undefined}
+                      state={jobRunning ? phases?.perBase[f.base] : undefined}
+                      jobRunning={jobRunning} aiReason={aiReason} />
+                  ))}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </nav>
     </div>
   )
 }
