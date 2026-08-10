@@ -39,7 +39,10 @@ def render_srt(doc: dict) -> str:
     for seg in doc.get("segments", []):
         text = (seg.get("text") or "").strip()
         start, end = seg.get("start"), seg.get("end")
-        if not text or start is None or end is None:
+        # Ruecklaeufige Zeitspannen fliegen mit raus: YouTube weist die **ganze** Datei zurueck,
+        # wenn ein einziger Cue rueckwaerts laeuft — ein fehlender Untertitel ist der kleinere
+        # Schaden. Whisper liefert das nicht, eine von Hand bearbeitete edit.json schon.
+        if not text or start is None or end is None or end < start:
             continue  # uebersprungene Segmente duerfen keine Luecke in die Nummerierung reissen
         sprecher = (seg.get("speaker") or "").strip()
         if sprecher and sprecher != letzter_sprecher:

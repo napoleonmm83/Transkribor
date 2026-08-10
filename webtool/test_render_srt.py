@@ -30,11 +30,12 @@ def test_leere_segmente_reissen_keine_luecke_in_die_nummerierung():
         _seg(0, 1, "", "Erstes."),
         _seg(1, 2, "", "   "),            # kein Text
         _seg(None, 3, "", "Ohne Start."),  # keine Zeit
+        _seg(9, 8, "", "Rueckwaerts."),    # end < start -> YouTube wiese sonst die ganze Datei ab
         _seg(3, 4, "", "Zweites."),
     ]}
     srt = render_srt(doc)
     assert srt.startswith("1\n") and "\n2\n" in srt and "\n3\n" not in srt
-    assert "Ohne Start." not in srt
+    assert "Ohne Start." not in srt and "Rueckwaerts." not in srt
 
 
 def test_lange_zeilen_werden_an_wortgrenzen_umbrochen():
