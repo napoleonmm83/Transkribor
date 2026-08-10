@@ -24,6 +24,9 @@ export function TitleBar({ titel }: { titel: string }) {
       style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
       className={cn(
         // col-span-1: unter `md` gibt es nur eine Rasterspalte, die Leiste faellt weg.
+        // h-10 = TITELLEISTE_HOEHE in electron/fenster.js: das Betriebssystem-Overlay legt sich
+        // ueber genau diese Zeile, nicht daneben -- laufen die Zahlen auseinander, sitzen die
+        // Fensterknoepfe versetzt zum Text.
         'col-span-1 flex h-10 shrink-0 select-none items-center border-b bg-background md:col-span-2',
         // Reserve fuer die Knoepfe, die NICHT wir malen. Ohne sie liegt der Titel darunter.
         mac ? 'pl-[78px] pr-3' : 'pl-3 pr-[140px]',
