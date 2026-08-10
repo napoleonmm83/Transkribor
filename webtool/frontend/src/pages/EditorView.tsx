@@ -34,8 +34,6 @@ export function EditorView() {
   const phases = useMemo(() => mergePhases(meine), [meine])   // nur eigenes Projekt, s. mergePhases
   const running = meine.length > 0
   const activeProject = projects.find(x => x.name === project)
-  // Der Summenpoll-Waechter ueber die Dateiliste steht jetzt im ProjektDatenProvider (eine
-  // Stelle statt wortgleich hier UND in ProjectWorkspace.tsx).
   // Dateien kommen jetzt aus useDateien, nicht mehr aus useProjects — Sidebar erwartet
   // weiterhin ein `files`-Feld (SidebarProject, seit Task 3 kein Teil von Project mehr).
   const sidebarProjects = useMemo(
