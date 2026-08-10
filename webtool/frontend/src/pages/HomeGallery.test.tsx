@@ -12,7 +12,7 @@ const renderHome = () =>
 describe('HomeGallery', () => {
   it('zeigt Karten mit Dateizahl', async () => {
     vi.mocked(api.listProjects).mockResolvedValue([
-      { name: 'Demo', files: [{ base: 'S1', has_audio: true, has_raw: true, has_edit: true, has_md: true }], active_jobs: [] },
+      { name: 'Demo', dateien: 1, fertig: 1, geaendert: 0, active_jobs: [] },
     ])
     renderHome()
     expect(await screen.findByText('Demo')).toBeInTheDocument()

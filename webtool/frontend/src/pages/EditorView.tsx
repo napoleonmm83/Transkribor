@@ -35,8 +35,8 @@ export function EditorView() {
   const phases = useMemo(() => mergePhases(meine), [meine])   // nur eigenes Projekt, s. mergePhases
   const running = meine.length > 0
   const activeProject = projects.find(x => x.name === project)
-  // Dateien kommen jetzt aus useProjectFiles, nicht mehr aus useProjects — Sidebars Prop-Form
-  // (Project[]) bleibt, nur die Quelle des `files`-Felds wechselt.
+  // Dateien kommen jetzt aus useProjectFiles, nicht mehr aus useProjects — Sidebar erwartet
+  // weiterhin ein `files`-Feld (SidebarProject, seit Task 3 kein Teil von Project mehr).
   const sidebarProjects = useMemo(
     () => (activeProject ? [{ ...activeProject, files: dateien }] : []),
     [activeProject, dateien],

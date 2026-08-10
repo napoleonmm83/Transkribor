@@ -41,7 +41,7 @@ export function HomeGallery() {
       ) : (
         <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {projects.map(p => {
-            const done = p.files.filter(f => f.has_edit).length
+            const done = p.fertig
             const jobs = p.active_jobs ?? []
             return (
               // Der Loeschknopf ist ein Geschwister des Links, nicht sein Kind: ein <button>
@@ -58,19 +58,19 @@ export function HomeGallery() {
                              focus-visible:ring-2 focus-visible:ring-ring">
                   <h2 className="line-clamp-2 text-lg font-semibold leading-snug">{p.name}</h2>
                   <p className="mt-1 text-sm tabular-nums text-muted-foreground">
-                    {p.files.length} Datei{p.files.length === 1 ? '' : 'en'}
-                    {p.files.length > 0 && ` · ${done} fertig`}
+                    {p.dateien} Datei{p.dateien === 1 ? '' : 'en'}
+                    {p.dateien > 0 && ` · ${done} fertig`}
                   </p>
 
                   {/* Fortschritt des Projekts auf einen Blick: die Galerie beantwortet damit
                       "woran muss ich noch ran", ohne dass man jedes Projekt oeffnet. */}
-                  {p.files.length > 0 && (
+                  {p.dateien > 0 && (
                     <div className="mt-3 h-1 overflow-hidden rounded-full bg-muted"
                       role="progressbar" aria-valuenow={done} aria-valuemin={0}
-                      aria-valuemax={p.files.length}
-                      aria-label={`${done} von ${p.files.length} Dateien fertig`}>
+                      aria-valuemax={p.dateien}
+                      aria-label={`${done} von ${p.dateien} Dateien fertig`}>
                       <div className="h-full rounded-full bg-primary transition-all duration-300"
-                        style={{ width: `${(done / p.files.length) * 100}%` }} />
+                        style={{ width: `${(done / p.dateien) * 100}%` }} />
                     </div>
                   )}
 

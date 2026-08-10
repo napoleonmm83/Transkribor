@@ -1,13 +1,16 @@
 import { useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowLeft, Upload, Play, Pencil } from 'lucide-react'
-import type { JobPhases, Project } from '@/lib/types'
+import type { ActiveJob, JobPhases, ProjectFile } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { FileRow } from './FileRow'
 
 type Sel = { project: string; base: string } | null
+// Eigene Form statt Project aus lib/types: die Sidebar braucht die Dateiliste, die Project
+// seit Task 3 nicht mehr fuehrt (die kommt jetzt separat aus getProjectFiles, siehe EditorView).
+type SidebarProject = { name: string; files: ProjectFile[]; active_jobs?: ActiveJob[] };
 export function Sidebar({ projects, loading, active, onOpen, onUpload, onTranscribe, onCorrect, onCorrectFile, backTo, phases, jobRunning, aiReason }: {
-  projects: Project[]; loading?: boolean; active: Sel;
+  projects: SidebarProject[]; loading?: boolean; active: Sel;
   onOpen: (s: { project: string; base: string }) => void;
   onUpload: (project: string, file: File) => void;
   onTranscribe: (project: string) => void;
