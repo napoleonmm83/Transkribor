@@ -41,8 +41,13 @@ function fensterOptionen(platform, dunkel) {
  * wirft `titelleisteFarbe(null)` im Hauptprozess, und ein Anteil ueber 1 schaltet
  * Electron auf einen UNBESTIMMTEN Balken — einen, der fuer immer weiterlaeuft.
  */
+const HEX = /^#[0-9a-f]{6}$/i
+
+/** Eng auf `#rrggbb`, weil die einzigen Absender (ThemeProvider) genau das schicken und
+ *  `titleBarOverlay.color` ohnehin nur Hex nimmt. "Ist ein String" waere ein Waechter, der
+ *  wie einer aussieht und keiner ist. */
 function farbeGueltig(f) {
-  return !!f && typeof f.color === 'string' && typeof f.symbolColor === 'string'
+  return !!f && HEX.test(f.color) && HEX.test(f.symbolColor)
 }
 
 /** -1 (abraeumen) oder 0..1. Alles andere — NaN, Infinity, 2, 'x' — ist kein Fortschritt. */
