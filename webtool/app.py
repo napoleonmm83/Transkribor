@@ -136,6 +136,22 @@ def load_or_build_doc(project: str, base: str) -> dict:
                           audio=os.path.basename(audio) if audio else "")
 
 
+def _projekt_dateien(project: str):
+    """Die Dateiliste eines Projekts. Steht hier einmal, weil sie in Task 3 aus
+    list_projects verschwindet und dann nur noch dieser Endpunkt sie liefert."""
+    audio = _audio_bases(project)
+    return [
+        {
+            "base": base,
+            "has_audio": base in audio,
+            "has_raw": os.path.exists(_raw_path(project, base)),
+            "has_edit": os.path.exists(_edit_path(project, base)),
+            "has_md": os.path.exists(_md_path(project, base)),
+        }
+        for base in sorted(set(_bases(project)) | audio)
+    ]
+
+
 @app.get("/api/projects")
 def list_projects():
     root = paths.projekte_root()
@@ -145,20 +161,19 @@ def list_projects():
             if not os.path.isdir(os.path.join(root, name)):
                 continue
             try:
-                audio = _audio_bases(name)
-                files = []
-                for base in sorted(set(_bases(name)) | audio):
-                    files.append({
-                        "base": base,
-                        "has_audio": base in audio,
-                        "has_raw": os.path.exists(_raw_path(name, base)),
-                        "has_edit": os.path.exists(_edit_path(name, base)),
-                        "has_md": os.path.exists(_md_path(name, base)),
-                    })
+                files = _projekt_dateien(name)
             except ValueError:
                 continue  # ponytail: un-nennbaren Ordner überspringen statt die ganze Liste zu 500en
             out.append({"name": name, "files": files, "active_jobs": jobs.active_for(name)})
     return {"projects": out}
+
+
+@app.get("/api/projects/{project}")
+def get_project(project: str):
+    _validate(project)
+    if not os.path.isdir(os.path.join(paths.projekte_root(), project)):
+        raise HTTPException(status_code=404, detail="Projekt nicht gefunden")
+    return {"name": project, "files": _projekt_dateien(project)}
 
 
 class NewProject(BaseModel):
