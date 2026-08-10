@@ -43,6 +43,10 @@ export function useDoc(project: string | null, base: string | null) {
       const a = document.createElement('a')
       a.href = URL.createObjectURL(new Blob([text], { type: MIME[fmt] }))
       a.download = `${base}.${fmt}`; a.click()
+      // Erst im naechsten Task freigeben: click() stoesst den Download nur an, sofort
+      // widerrufen zieht ihm die URL unter den Fuessen weg. Ohne das Freigeben haelt der
+      // Editor jeden je exportierten Blob bis zum Reload fest.
+      setTimeout(() => URL.revokeObjectURL(a.href), 0)
     } catch (e) { toast.error('Export fehlgeschlagen: ' + (e as Error).message) }
   }, [project, base])
 
