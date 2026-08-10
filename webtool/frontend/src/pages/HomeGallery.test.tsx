@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { HomeGallery } from './HomeGallery'
 import * as api from '@/lib/api'
@@ -53,6 +53,20 @@ describe('HomeGallery', () => {
     expect(screen.getByText('Suche leeren')).toBeInTheDocument()
   })
 
+  it('„x anlegen" im leeren Trefferzustand belegt den Namen vor', async () => {
+    vi.mocked(api.listProjects).mockResolvedValue([
+      { name: 'Alpha', dateien: 1, fertig: 1, geaendert: 100, active_jobs: [] },
+    ])
+    vi.mocked(api.createProject).mockResolvedValue({ ok: true, name: 'Neu' })
+    renderHome()
+    await screen.findByText('Alpha')
+    fireEvent.change(screen.getByLabelText(/suche/i), { target: { value: 'Neu' } })
+    fireEvent.click(screen.getByText(/^„Neu" anlegen$/))
+    expect(screen.getByLabelText('Projektname')).toHaveValue('Neu')
+    fireEvent.click(screen.getByText('Anlegen'))
+    await waitFor(() => expect(api.createProject).toHaveBeenCalledWith('Neu'))
+  })
+
   it('laufende Projekte stehen oben und nicht zusaetzlich in der Zeilenliste', async () => {
     vi.mocked(api.listProjects).mockResolvedValue([
       { name: 'Ruhig', dateien: 2, fertig: 2, geaendert: 100, active_jobs: [] },
@@ -61,6 +75,10 @@ describe('HomeGallery', () => {
     renderHome()
     await screen.findByText('Laeuft')
     expect(screen.getAllByText('Laeuft')).toHaveLength(1)
+    // nicht nur "kommt einmal vor", sondern konkret in der "Läuft gerade"-Sektion --
+    // sonst faengt der Test nicht, wenn die Filterbedingungen vertauscht werden.
+    const sektion = screen.getByText(/Läuft gerade/).closest('section')!
+    expect(within(sektion).getByText('Laeuft')).toBeInTheDocument()
   })
 
   it('Standardsortierung ist zuletzt geaendert', async () => {
