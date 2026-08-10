@@ -18,31 +18,24 @@ function bruecke() {
 export function useOsFortschritt(): void {
   const { jobs, onSettled } = useActiveJob()
   const { projects } = useProjekte()
-  // Welche Laeufe schon gemeldet wurden. onSettled feuert bei JEDEM Tick, in dem ein Job
+  // Welche Laeufe schon gemeldet wurden. onSettled feuert bei JEDEM Tick, in dem irgendein Job
   // terminal ist -- ohne diesen Riegel meldet die App im Poll-Takt dasselbe noch einmal.
   const gemeldet = useRef(new Set<string>())
-  // JobProvider ruft die onSettled-Listener SYNCHRON direkt nach seinem eigenen setJobs auf --
-  // VOR dessen Rerender. Ein Listener, der `jobs` aus dem eigenen Render-Closure liest, saehe
-  // den Job zu diesem Zeitpunkt also noch als "running" (gemessen: ohne die Verzoegerung blieb
-  // die Meldung ganz aus, siehe Bericht). Das Ref wird waehrend des Renders synchron
-  // nachgefuehrt; `setTimeout(…, 0)` schiebt die Auswertung hinter Reacts eigenen Flush, der
-  // dieses Ref auf den neuen Stand bringt (ein Mikrotask reichte dafuer NICHT, gemessen).
-  const jobsRef = useRef(jobs)
-  jobsRef.current = jobs
 
-  useEffect(() => onSettled(() => {
-    setTimeout(() => {
-      for (const j of jobsRef.current) {
-        if (j.status === 'running' || gemeldet.current.has(j.id)) continue
-        gemeldet.current.add(j.id)
-        if (typeof Notification === 'undefined' || Notification.permission !== 'granted') continue
-        const was = KIND_LABEL[j.kind] ?? j.kind
-        new Notification(
-          j.status === 'done' ? `${j.project}: ${was} fertig` : `${j.project}: ${was} fehlgeschlagen`,
-          { body: j.status === 'done' ? 'Das Ergebnis liegt im Projekt.' : 'Details stehen im Protokoll.' },
-        )
-      }
-    })
+  // `beendet` ist die Nutzlast des Ereignisses (useActiveJob.tsx) -- schon auf die JUST terminal
+  // gewordenen Jobs gefiltert, mit frischem Status. Kein `jobs` aus dem eigenen Render-Closure
+  // noetig: das waere hier zwangslaeufig veraltet (der Aufruf kommt synchron vor dem Rerender).
+  useEffect(() => onSettled(beendet => {
+    for (const j of beendet) {
+      if (gemeldet.current.has(j.id)) continue
+      gemeldet.current.add(j.id)
+      if (typeof Notification === 'undefined' || Notification.permission !== 'granted') continue
+      const was = KIND_LABEL[j.kind] ?? j.kind
+      new Notification(
+        j.status === 'done' ? `${j.project}: ${was} fertig` : `${j.project}: ${was} fehlgeschlagen`,
+        { body: j.status === 'done' ? 'Das Ergebnis liegt im Projekt.' : 'Details stehen im Protokoll.' },
+      )
+    }
   }), [onSettled])
 
   // Erlaubnis EINMAL erfragen, nicht bei jedem Lauf: unter Electron ist sie ohnehin
