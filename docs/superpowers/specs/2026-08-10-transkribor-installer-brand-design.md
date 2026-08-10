@@ -53,8 +53,11 @@ Damit entfällt der SVG-Rasterizer — cairosvg zieht auf Windows Cairo nach —
 Quelle statt zweier, die auseinanderlaufen. Eine `zeichen.svg` daneben wäre ein zweiter
 Wahrheitsstand ohne Verbraucher: die Weboberfläche führt heute kein Logo.
 
-Gerendert wird mit dem Supersampling-Faktor `S`, den `hintergrund.py` bereits benutzt (PIL
-zeichnet ohne Kantenglättung).
+Gerendert wird im vierfachen Renderfaktor `UEBER`, gegen PILs fehlende Kantenglättung — nach
+demselben Verfahren, das der DMG-Hintergrund über seinen eigenen Retina-Faktor `S` schon kennt.
+Zwei Zahlen für zwei Zwecke: `S` (2×) bestimmt, in welcher Auflösung das DMG-Bild gespeichert
+wird (gerendert wird 2×, gespeichert werden beide Grössen), `UEBER` (4×) nur, wie glatt gerendert
+wird (gerendert wird 4×, gespeichert wird nur die kleine Zielgrösse).
 
 ### 3. `build/hintergrund.py` geht in `build/marke.py` auf
 
@@ -81,9 +84,9 @@ noch die Schriften. Der vorhandene Abbruch bei überlaufender Textzeile bleibt e
 eigenes Bild für den Deinstallationsvorgang wäre eine Datei mehr für eine Fläche, die niemand
 gestaltet sehen will.
 
-**`marke.py` wird nur einmal angefasst:** PR 1 erzeugt und committet alle fünf Dateien, auch die
-beiden BMP. PR 2 verdrahtet sie dann nur noch. Ein bis dahin unbenutztes Bild im Repo ist
-harmloser als ein Renderer, der in zwei PRs wächst.
+**`marke.py` bleibt die einzige Renderquelle:** PR 1 erzeugt und committet bereits alle sechs
+Dateien, auch die beiden BMP — verdrahtet werden sie (in `package.json`) erst in PR 2. Ein bis
+dahin unbenutztes Bild im Repo ist harmloser als ein Renderer, der in zwei PRs wächst.
 
 Für das App-Icon genügt `build/icon.png`: electron-builder findet es über die oben genannte
 Suchreihenfolge und leitet `.ico`, `.icns` und die Linux-Grössen selbst ab. Ein Eintrag in
@@ -93,7 +96,7 @@ Suchreihenfolge und leitet `.ico`, `.icns` und die Linux-Grössen selbst ab. Ein
 
 Zwei Verbraucher, zwei Formate:
 
-- **`build/fonts/*.ttf`** (Space Grotesk + DM Sans, SIL OFL, ~200 KB): nur zur Renderzeit, liegt
+- **`build/fonts/*.ttf`** (Space Grotesk + DM Sans, SIL OFL, ~129 KB): nur zur Renderzeit, liegt
   in `build/` und damit **nicht** im Installer. PIL kann `.woff2` nicht laden — genau deshalb
   rendert `hintergrund.py` heute in Segoe UI. Nebeneffekt: die fest verdrahteten
   `C:/Windows/Fonts/…`-Pfade fallen weg, das Skript läuft nicht mehr nur auf Windows.
@@ -152,7 +155,7 @@ ihren farbigen Streifen und ihre Position.
 ### 7. Geprüft werden die committeten Dateien, nicht der Renderer
 
 `build/test_bilder.py` liest die Kopfdaten mit `struct` aus der Standardbibliothek — **ohne PIL**:
-BMP-DIB-Header (Breite, Höhe, Bittiefe) und PNG-IHDR (Breite, Höhe). Erwartet werden die fünf
+BMP-DIB-Header (Breite, Höhe, Bittiefe) und PNG-IHDR (Breite, Höhe). Erwartet werden die sechs
 Dateien in exakt den Massen aus Entscheidung 3, die beiden BMP mit **24 bit**.
 
 Ein Test gegen den Renderer bräuchte PIL und liefe im CI-Python-Job nicht — der fährt bewusst
