@@ -44,3 +44,13 @@ def test_schriften_sind_echte_ttf():
         assert p.exists(), f"{name} fehlt — build/marke.py kann ohne sie nicht rendern"
         assert p.read_bytes()[:4] in (b"\x00\x01\x00\x00", b"true", b"ttcf"), \
             f"{name} ist keine TrueType-Datei (woff2 nicht umgewandelt?)"
+
+
+def test_installer_sidebar_ist_164x314_und_24bit():
+    # NSIS/MUI2 gibt beide Masse fest vor. 24 bit ist Pflicht: eine 32-bit-BMP
+    # wird angenommen und dann falsch gezeichnet.
+    assert bmp_masse(BUILD / "installerSidebar.bmp") == (164, 314, 24)
+
+
+def test_installer_header_ist_150x57_und_24bit():
+    assert bmp_masse(BUILD / "installerHeader.bmp") == (150, 57, 24)
