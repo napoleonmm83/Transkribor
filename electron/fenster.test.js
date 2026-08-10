@@ -19,3 +19,12 @@ test('macOS behaelt seine Ampelknoepfe und bekommt KEIN Overlay', () => {
   // titleBarOverlay ist auf macOS wirkungslos; gesetzt zu lassen taeuscht den Leser.
   assert.strictEqual(o.titleBarOverlay, undefined)
 })
+
+test('die Overlay-Farben folgen dem Thema', () => {
+  const hell = fensterOptionen('win32', false).titleBarOverlay
+  const dunkel = fensterOptionen('win32', true).titleBarOverlay
+  assert.notStrictEqual(hell.color, dunkel.color, 'hell und dunkel muessen sich unterscheiden')
+  // symbolColor kontrastiert zur Grundflaeche -- hier als Tausch der beiden Werte geprueft.
+  assert.strictEqual(hell.symbolColor, dunkel.color)
+  assert.strictEqual(dunkel.symbolColor, hell.color)
+})

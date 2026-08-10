@@ -7,6 +7,7 @@ import { useJob } from '@/hooks/useJob'
 import { uploadAudio, startTranscribe, startCorrect, startCorrectFile } from '@/lib/api'
 import { Sidebar } from './Sidebar'
 import { StatusBar } from './StatusBar'
+import { TitleBar } from './TitleBar'
 
 /** Getrennt von AppShell, weil sie die Hooks des Providers braucht — die stehen einem
  *  Bauteil erst zur Verfuegung, wenn es INNERHALB des Providers gerendert wird. */
@@ -56,6 +57,7 @@ function Leiste() {
  */
 function Rahmen({ children }: { children: ReactNode }) {
   const { pathname } = useLocation()
+  const { projekt } = useDateien()
   const inhalt = useRef<HTMLDivElement>(null)
   // Kehrseite des EINEN Bildlaufbehaelters: der Versatz ueberlebt den Routenwechsel. Aus
   // einem langen Transkript zurueck zur Uebersicht landete man sonst mitten in der Seite.
@@ -79,7 +81,8 @@ function Rahmen({ children }: { children: ReactNode }) {
           KEIN Fall: der Server bindet auf 127.0.0.1, von aussen erreicht ihn niemand.
           Darum hier nur ausblenden statt einer einklappbaren Leiste mit gemerktem Zustand:
           auf schmal bleiben die Uebersicht und Ctrl+K als Weg zum Projekt. */}
-      <div className="grid h-screen grid-rows-[1fr_auto] md:grid-cols-[260px_1fr]">
+      <div className="grid h-screen grid-rows-[auto_1fr_auto] md:grid-cols-[260px_1fr]">
+        <TitleBar titel={projekt ?? 'Transkribor'} />
         <aside className="hidden min-h-0 border-r md:block"><Leiste /></aside>
         <div id="inhalt" tabIndex={-1} ref={inhalt}
           className="min-h-0 overflow-auto outline-none focus-visible:ring-2 focus-visible:ring-ring">{children}</div>
