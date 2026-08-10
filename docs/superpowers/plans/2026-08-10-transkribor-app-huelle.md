@@ -291,8 +291,6 @@ import { AppShell } from '@/components/AppShell'
 export default function App() {
   // ProjektPalette hier, nicht in HomeGallery: das ist die oberste Stelle, an der der
   // Router rahmt -- Ctrl+K muss auch im Editor greifen, wo es kein Suchfeld gibt.
-  // Sie steht NEBEN der AppShell, nicht darin: ein Dialog gehoert nicht in eine Rasterzelle
-  // mit `overflow-auto`, sonst scrollt der Hintergrund unter ihm weg.
   return (
     <>
       <ProjektPalette />
@@ -549,7 +547,14 @@ Expected: PASS — 4 Tests
 
 - [ ] **Step 5: Provider in `AppShell` einziehen**
 
-`AppShell.tsx` — der Provider gehört hierher und nicht in `main.tsx`, weil er `useMatch` braucht und damit **innerhalb** des Routers stehen muss:
+`AppShell.tsx` — der Provider gehört hierher und nicht in `main.tsx`, weil er `useMatch` braucht und damit **innerhalb** des Routers stehen muss.
+
+> **Folge, die Task 2 noch nicht sehen konnte:** `ProjektPalette` ruft `useProjekte()`
+> **unbedingt** und ist auf jeder Seite gemountet. Sie muss deshalb ab hier **Kind** der
+> `AppShell` sein — als Geschwister wirft sie beim Start und reisst die ganze App mit. Der
+> ursprüngliche Grund, sie daneben zu stellen („ein Dialog gehört nicht in eine Rasterzelle
+> mit `overflow-auto`"), trägt nicht: Radix portiert den Dialoginhalt nach `document.body`,
+> die Position im Baum ist für die Darstellung folgenlos.
 
 ```tsx
 export function AppShell({ children }: { children: ReactNode }) {
@@ -1086,12 +1091,40 @@ In `Leiste()` das `active` aus der Route ziehen, statt `null` zu übergeben:
 
 und `active={active}` übergeben.
 
-- [ ] **Step 5: Alle Tests + Typen + Lint**
+- [ ] **Step 5: Die zweite Hälfte der Zusammenlegung — `onSettled` gehört auch in den Provider**
+
+*Beim Ausführen von Task 4 aufgefallen.* Nach Task 3 steht dieser Block **wortgleich** in
+`EditorView.tsx` und `ProjectWorkspace.tsx`:
+
+```tsx
+useEffect(() => onSettled(() => { refresh(); refreshFiles() }), [onSettled, refresh, refreshFiles])
+```
+
+Das ist dieselbe Kopie-in-zwei-Dateien, die Task 3 beim Summenpoll-Wächter beseitigt hat — und
+seit dem Provider frischen beide denselben **globalen** Zustand auf. Zieh den Effekt in
+`ProjektDatenProvider` (`useProjektDaten.tsx`) und entferne ihn aus beiden Seiten:
+
+```tsx
+  // Zweiter Anlass neben dem Summenpoll-Waechter: wird ein Job dieses Prozesses terminal, ist
+  // die Dateiliste veraltet (eine frisch geschriebene edit.json sieht der Summenpoll erst beim
+  // naechsten Durchlauf). Stand vorher wortgleich in EditorView UND ProjectWorkspace — seit die
+  // Daten geteilt sind, ist das eine globale Angelegenheit und keine der einzelnen Seite.
+  useEffect(() => onSettled(() => { projekte.refresh(); datei.refresh() }), [onSettled, projekte.refresh, datei.refresh])
+```
+
+Der Provider braucht dafür `useActiveJob()`. **`JobProvider` steht in `main.tsx` über dem
+`BrowserRouter`** — die Reihenfolge passt also bereits; prüfe es, bevor du baust.
+
+Die Tests in `EditorView.test.tsx` und `ProjectWorkspace.test.tsx`, die diesen Weg prüfen
+(„onSettled muss refreshFiles auslösen"), wandern nach `useProjektDaten.test.tsx` — sie prüfen
+weiterhin dasselbe Verhalten, nur an seiner neuen Stelle. **Nicht löschen.**
+
+- [ ] **Step 6: Alle Tests + Typen + Lint**
 
 Run: `npm --prefix webtool/frontend test && npm --prefix webtool/frontend run build && npm --prefix webtool/frontend run lint`
 Expected: PASS
 
-- [ ] **Step 6: Sichtprüfung**
+- [ ] **Step 7: Sichtprüfung**
 
 Run: `.\webtool.ps1`
 1. Leiste steht auf allen vier Routen, Projektwechsel räumt den Bildschirm nicht.
@@ -1102,10 +1135,10 @@ Run: `.\webtool.ps1`
    ganz unten (kein waagrechter Bildlauf).
 6. In einem langen Transkript nach unten scrollen, dann zurück zur Übersicht → sie beginnt oben.
 
-- [ ] **Step 7: Committen**
+- [ ] **Step 8: Committen**
 
 ```bash
-git add webtool/frontend/src/components/
+git add webtool/frontend/src/components/ webtool/frontend/src/hooks/ webtool/frontend/src/pages/
 git commit -m "feat(huelle): Seitenleiste dauerhaft in der Shell, Sprunglink, schmale Fenster"
 ```
 
