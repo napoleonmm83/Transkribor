@@ -157,7 +157,8 @@ def _projekt_dateien(project: str):
 def list_projects():
     """Nur die Zusammenfassung: die Galerie zeigt zwei Zahlen je Projekt, die
     Dateiliste holt sich, wer sie braucht, ueber /api/projects/{project}.
-    Gemessen an 300 Projekten: 310 -> 68 ms, 13691 -> 602 Zugriffe, 394 -> 33 KB."""
+    Gemessen an 300 Projekten (am gebauten Code, nicht am Entwurf): 310 -> ~50-115 ms
+    (streut mit der Rechnerlast), 13691 -> 902 Zugriffe, 394 -> ~30 KB."""
     root = paths.projekte_root()
     out = []
     if not os.path.isdir(root):
@@ -176,6 +177,8 @@ def list_projects():
                 # kostet keinen zusaetzlichen Zugriff (gemessen: 301 Zugriffe mit wie ohne).
                 neuste = max(neuste, f.stat().st_mtime)
                 n = f.name
+                # spiegelt paths.transcript_bases; auseinanderlaufen faengt
+                # test_zusammenfassung_zaehlt_dasselbe_wie_die_dateiliste
                 if n.startswith("_") or not n.endswith(".json"):
                     continue
                 if n.endswith(".edit.json"):

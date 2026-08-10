@@ -28,6 +28,12 @@ Umhüllen von `os.path.exists`/`listdir`/`scandir`/`stat` gezählt.
 | Dateisystem-Zugriffe | 13 691 | 602 | 22,7× |
 | JSON-Nutzlast | 393,9 KB | 33,2 KB | 11,9× |
 
+Diese Tabelle ist die Prognose aus dem Entwurf, kein Nachmass am gebauten Code — dort sind es
+**902 Zugriffe**, nicht 602: `paths.audio_dir` prueft zusaetzlich die Existenz des Ordners (drei
+Zugriffe je Projekt statt zwei). Die Dauer schwankt mit der Rechnerlast (~50-115 ms gemessen,
+CLAUDE.md). Ausschlaggebend bleibt dieselbe Grössenordnung und dieselbe Diskrepanz (Zugriffe
+fallen staerker als die Zeit).
+
 Alle vier Sekunden sind das heute **3 423 Zugriffe/s und 98,5 KB/s** im Leerlauf. Gegenprobe:
 beide Wege zählen dieselben 3 963 Aufnahmen.
 
