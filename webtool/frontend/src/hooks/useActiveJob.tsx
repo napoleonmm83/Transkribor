@@ -7,7 +7,10 @@ export type Job = { id: string; project: string; kind: string; status: string; p
 type Ctx = {
   jobs: Job[]
   adopt: (id: string, project: string, kind: string) => void
-  onSettled: (fn: () => void) => () => void
+  // Nutzlast statt leerem Aufruf: ein Zuhoerer, der wissen muss WAS terminal wurde, kann sich
+  // nicht auf `jobs` aus seinem eigenen Render-Closure verlassen -- der Aufruf unten kommt
+  // synchron vor dem eigenen Rerender, der Closure-Stand ist zu diesem Zeitpunkt noch alt.
+  onSettled: (fn: (beendet: Job[]) => void) => () => void
 }
 const EMPTY: JobPhases = { global: null, active: {}, perBase: {} }
 const JobContext = createContext<Ctx | null>(null)
@@ -39,7 +42,7 @@ export function mergePhases(jobs: Job[]): JobPhases {
 
 export function JobProvider({ children, intervalMs = 1500 }: { children: ReactNode; intervalMs?: number }) {
   const [jobs, setJobs] = useState<Job[]>([])
-  const listeners = useRef(new Set<() => void>())
+  const listeners = useRef(new Set<(beendet: Job[]) => void>())
   const failures = useRef<Record<string, number>>({})
 
   const adopt = useCallback((id: string, project: string, kind: string) => {
@@ -47,7 +50,7 @@ export function JobProvider({ children, intervalMs = 1500 }: { children: ReactNo
       : [...prev, { id, project, kind, status: 'running', phases: EMPTY }])
   }, [])
 
-  const onSettled = useCallback((fn: () => void) => {
+  const onSettled = useCallback((fn: (beendet: Job[]) => void) => {
     listeners.current.add(fn)
     return () => { listeners.current.delete(fn) }
   }, [])
@@ -91,7 +94,15 @@ export function JobProvider({ children, intervalMs = 1500 }: { children: ReactNo
       }))
 
       const stati = Object.values(neu)
-      if (stati.some(s => s !== 'running')) listeners.current.forEach(fn => fn())
+      // Das Ereignis traegt, WAS beendet wurde. Ohne Nutzlast muesste jeder Zuhoerer `jobs`
+      // aus seinem Render-Closure lesen -- und der ist hier zwangslaeufig veraltet, weil wir
+      // synchron nach setJobs rufen, also vor Reacts Rerender. Identitaet (id/project/kind)
+      // darf aus dem (moeglicherweise veralteten) `jobs` kommen, die aendert sich nach dem
+      // Adoptieren nie mehr -- der Status kommt aus `neu`, das IST der frische Poll-Ausgang.
+      const beendet = jobs
+        .filter(j => neu[j.id] && neu[j.id] !== 'running')
+        .map(j => ({ ...j, status: neu[j.id] }))
+      if (beendet.length) listeners.current.forEach(fn => fn(beendet))
       // Nur weiterpollen, solange wirklich etwas laeuft. Bedingungslos neu zu planen liess
       // nach dem letzten Job einen Timer stehen, den allein das Aufraeumen des Effekts noch
       // abfangen konnte — ein Wettlauf, den ein ausgelasteter CI-Runner verliert. Der
@@ -100,7 +111,9 @@ export function JobProvider({ children, intervalMs = 1500 }: { children: ReactNo
     }
     tick()
     return () => { alive = false; clearTimeout(timer) }
-  }, [runningIds, intervalMs])
+    // jobs bewusst nicht in den Deps: `runningIds` ist die Signatur, s.o. -- `jobs` wird nur
+    // innerhalb von tick() fuer Job-Identitaet gelesen, nie fuer den Effekt-Aufsatz selbst.
+  }, [runningIds, intervalMs])  // eslint-disable-line react-hooks/exhaustive-deps
 
   // Bewusst KEIN projektuebergreifendes `phases` im Context: das war die Falle — die Datei-Pillen
   // haetten den Status eines gleichnamigen Files aus einem anderen Projekt gezeigt.

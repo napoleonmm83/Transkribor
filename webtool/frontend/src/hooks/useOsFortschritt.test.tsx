@@ -53,6 +53,23 @@ describe('useOsFortschritt', () => {
     expect(meldungen[0]).toContain('Alpha')
   })
 
+  it('meldet einen von zwei Jobs nur einmal, obwohl der andere noch laeuft', async () => {
+    // Der Fall, gegen den der Riegel wirklich schuetzt: A wird terminal, B laeuft weiter --
+    // solange B noch laeuft, feuert onSettled bei JEDEM weiteren Tick erneut, und OHNE den
+    // Riegel wuerde A dabei jedes Mal erneut gemeldet.
+    let bTicks = 0
+    vi.mocked(api.getJob).mockImplementation(async (id: string) =>
+      id === 'j1'
+        ? { status: 'done', lines: [], kind: 'correct' }
+        : { status: (bTicks += 1) < 4 ? 'running' : 'done', lines: [], kind: 'transcribe' })
+    zeigen()
+    const adopt = (globalThis as unknown as { __adopt: (i: string, p: string, k: string) => void }).__adopt
+    await act(async () => { adopt('j1', 'Alpha', 'correct'); adopt('j2', 'Beta', 'transcribe') })
+    await act(async () => { await new Promise(r => setTimeout(r, 80)) })
+    expect(meldungen).toHaveLength(2)               // A einmal, B einmal -- nie doppelt
+    expect(meldungen.filter(m => m.includes('Alpha'))).toHaveLength(1)
+  })
+
   it('raeumt den Taskleisten-Balken ab, wenn nichts mehr laeuft', async () => {
     zeigen()
     await act(async () => { await Promise.resolve() })
