@@ -79,8 +79,11 @@ export function DateiMenue({ project, file, aiReason }: {
       jobStarten(() => startCorrectFile(project, file.base, file.has_edit), 'correct',
         `Korrigieren ${file.base}`, korrekturFertig)
     } else if (was === 'transcribe') {
-      wegVomEditor()
-      jobStarten(() => startRetranscribeFile(project, file.base), 'transcribe', `Transkribieren ${file.base}`)
+      // Erst navigieren, wenn der Lauf wirklich angenommen ist: bei 409 (ein Job laeuft schon)
+      // wurde nichts verworfen — den Editor trotzdem zu verlassen waere ein Verlust ohne Anlass.
+      jobStarten(() => startRetranscribeFile(project, file.base)
+        .then(res => { if (res.started) wegVomEditor(); return res }),
+        'transcribe', `Transkribieren ${file.base}`)
     } else {
       try { await deleteFile(project, file.base) }
       catch (e) { toast.error(`Löschen fehlgeschlagen: ${(e as Error).message}`); return }
@@ -128,16 +131,21 @@ export function DateiMenue({ project, file, aiReason }: {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            {/* title am Element, nicht am Knopf: ein gesperrter Eintrag hat pointer-events:none
-                und zeigt seinen eigenen Tooltip nie an. */}
-            <DropdownMenuItem disabled={!file.has_raw || !!aiReason} title={aiReason || undefined}
-              onSelect={() => waehlen('correct')}>
-              <Pencil /> {file.has_edit ? 'Neu korrigieren' : 'Korrigieren'}
-            </DropdownMenuItem>
-            <DropdownMenuItem disabled={!file.has_audio} onSelect={() => waehlen('transcribe')}
-              title={file.has_audio ? undefined : 'Kein Audio vorhanden'}>
-              <RotateCcw /> {file.has_raw ? 'Neu transkribieren' : 'Transkribieren'}
-            </DropdownMenuItem>
+            {/* title am UMSCHLIESSENDEN span, nicht am Eintrag: ein gesperrter Eintrag traegt
+                pointer-events:none und zeigt seinen eigenen Tooltip nie an — dieselbe Falle wie
+                bei den gesperrten Knoepfen in Arbeitsflaeche und Leiste. Genau der Grund, warum
+                der Eintrag ueberhaupt gesperrt ist, stuende sonst nirgends. */}
+            <span title={aiReason || undefined} className="block">
+              <DropdownMenuItem disabled={!file.has_raw || !!aiReason}
+                onSelect={() => waehlen('correct')}>
+                <Pencil /> {file.has_edit ? 'Neu korrigieren' : 'Korrigieren'}
+              </DropdownMenuItem>
+            </span>
+            <span title={file.has_audio ? undefined : 'Kein Audio vorhanden'} className="block">
+              <DropdownMenuItem disabled={!file.has_audio} onSelect={() => waehlen('transcribe')}>
+                <RotateCcw /> {file.has_raw ? 'Neu transkribieren' : 'Transkribieren'}
+              </DropdownMenuItem>
+            </span>
             <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" onSelect={() => waehlen('delete')}>
               <Trash2 /> Löschen
