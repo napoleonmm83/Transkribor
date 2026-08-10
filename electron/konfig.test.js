@@ -46,9 +46,10 @@ test('extraResources nimmt Modellgewichte und deren Lizenz mit', () => {
   //
   // LICENSE-MODELLE.md haengt mit dran: CC-BY-4.0 erlaubt die Weitergabe der Gewichte nur
   // gegen Namensnennung. Gewichte ohne die Lizenzdatei auszuliefern waere ein Lizenzverstoss,
-  // nicht bloss eine fehlende Datei.
+  // nicht bloss eine fehlende Datei. Dieselbe Regel gilt fuer LICENSE-SCHRIFTEN.md: OFL 1.1
+  // verlangt den Hinweis bei jeder Weitergabe der fuenf mitgepackten Schriftdateien.
   const filter = (konfig.extraResources || []).flatMap(r => r.filter || [])
-  for (const noetig of ['models/**/*', 'LICENSE-MODELLE.md']) {
+  for (const noetig of ['models/**/*', 'LICENSE-MODELLE.md', 'LICENSE-SCHRIFTEN.md']) {
     assert.ok(filter.includes(noetig), `${noetig} fehlt in extraResources: ${filter.join(', ')}`)
   }
 })

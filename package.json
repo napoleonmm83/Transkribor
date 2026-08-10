@@ -42,6 +42,7 @@
           "requirements.txt",
           "CLAUDE.md",
           "LICENSE-MODELLE.md",
+          "LICENSE-SCHRIFTEN.md",
           "models/**/*",
           "!models/ggml/**",
           "!webtool/frontend/**",
