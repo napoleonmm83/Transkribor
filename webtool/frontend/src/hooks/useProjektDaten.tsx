@@ -29,7 +29,20 @@ export function ProjektDatenProvider({ children }: { children: ReactNode }) {
   const nurProjekt = useMatch('/p/:project')
   const projekt = (mitDatei ?? nurProjekt)?.params.project ?? null
   const datei = useProjectFiles(projekt ?? '')
-  const { onSettled } = useActiveJob()
+  const { adopt, onSettled } = useActiveJob()
+
+  // ALLE laufenden Jobs adoptieren, nicht nur die des offenen Projekts. Vorher stand dieser
+  // Effekt in EditorView UND ProjectWorkspace -- wer die App auf "/" oder "/einstellungen"
+  // neu startete, waehrend ein Lauf lief, sah auf EINEM Schirm die Karte "Laeuft gerade · 1"
+  // und daneben "Bereit" in der Statuszeile, und bekam am Ende weder Systemmeldung noch
+  // Taskleistenbalken. Verbraucher filtern ohnehin auf ihr Projekt (mergePhases-Kommentar).
+  // `adopt` ist idempotent (gleiche Kennung -> unveraendertes prev), ein Aufruf zu viel
+  // schadet also nicht; einer zu wenig schon.
+  const aktive = projekte.projects.flatMap(p => (p.active_jobs ?? []).map(j => ({ ...j, project: p.name })))
+  const signatur = aktive.map(j => `${j.project}/${j.id}`).join(',')
+  useEffect(() => {
+    for (const j of aktive) adopt(j.id, j.project, j.kind)
+  }, [signatur, adopt])   // eslint-disable-line react-hooks/exhaustive-deps
 
   // Zweiter Anlass neben dem Summenpoll-Waechter: wird ein Job dieses Prozesses terminal, ist
   // die Dateiliste veraltet (eine frisch geschriebene edit.json sieht der Summenpoll erst beim
