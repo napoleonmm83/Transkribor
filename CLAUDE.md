@@ -397,13 +397,18 @@ nie committen), unklarem Scope, oder history-verändernden Aktionen (force-push,
   `cmdk` lag als Abhängigkeit bereits vor, keine neue dazugekommen. Beide Kürzel (`Ctrl+K` hier,
   `Ctrl+←/→` im Editor) greifen nicht, während in einem `<input>`/`<textarea>`/
   `contentEditable` getippt wird.
-- **`useProjectFiles` pollt nicht** (anders als `useProjects`) — die Dateiliste eines Projekts
-  ändert sich nur durch Jobs, und deren Ende kennt `useActiveJob.onSettled` bereits; ein
-  zweiter Poll wäre genau die Verdopplung, die die Aufteilung Zusammenfassung/Detail abschaffen
-  soll. Deshalb hängt sich der Editor an `onSettled` und nicht nur an seinen eigenen
-  `useJob`-Callback: ein woanders gestarteter Job (z. B. „Korrigieren" aus der Arbeitsfläche,
-  während der Editor offen ist) würde sonst nie den Anlass liefern, `refreshFiles()`
-  aufzurufen — die Dateiliste bliebe stehen, obwohl `<base>.edit.json` längst geschrieben ist.
+- **`useProjectFiles` pollt nicht** (anders als `useProjects`) — ein zweiter eigener Poll wäre
+  genau die Verdopplung, die die Aufteilung Zusammenfassung/Detail abschaffen soll. Stattdessen
+  stossen zwei billigere Signale `refreshFiles()` an: `useActiveJob.onSettled` (ein Job dieses
+  Prozesses wird terminal) UND eine Änderung von `dateien`/`fertig` im ohnehin laufenden
+  Summenpoll (`useProjects`). **Beide sind nötig, nicht nur `onSettled`:** ein Job läuft oft
+  Minuten, und `onSettled` feuert erst am Ende — ohne den zweiten Anstoss blieb eine bereits
+  fertig transkribierte Datei mitten im Lauf für den Rest des Laufs deaktiviert (`has_raw` kommt
+  nur über `refreshFiles()` rein), und eine von Hand in `audio/` kopierte Datei (kein Job, also
+  nie ein `onSettled`) blieb bis zum Reload unsichtbar. `onSettled` bleibt trotzdem nötig: ein
+  woanders gestarteter Job (z. B. „Korrigieren" aus der Arbeitsfläche, während der Editor offen
+  ist) ändert `dateien`/`fertig` erst, wenn der ganze Lauf fertig ist — dazwischen ist
+  `onSettled` der einzige Anlass, der die frisch geschriebene `<base>.edit.json` bemerkt.
 - **Untertitel-Export `<base>.srt`** (`webtool/render_srt.py`, `POST …/export/srt`, Knopf im
   Editor) — die Datei geht in YouTube Studio unter „Untertitel > Datei hochladen" und ersetzt
   das schwache Auto-Transkript. Zwilling von `render_md.py`: gleiche Eingabe, andere Ausgabe.

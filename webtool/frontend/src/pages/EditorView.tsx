@@ -35,6 +35,17 @@ export function EditorView() {
   const phases = useMemo(() => mergePhases(meine), [meine])   // nur eigenes Projekt, s. mergePhases
   const running = meine.length > 0
   const activeProject = projects.find(x => x.name === project)
+  // Wie ProjectWorkspace.tsx: der Summenpoll ist der billige Waechter ueber die Dateiliste --
+  // aendern sich dateien/fertig, neu laden, statt bis zum Laufende (onSettled) zu warten. NICHT
+  // beim allerersten Eintreffen von activeProject feuern -- den ersten Abruf erledigt
+  // useProjectFiles selbst schon, siehe ProjectWorkspace.tsx.
+  const letzteZahlen = useRef<{ dateien: number; fertig: number } | null>(null)
+  useEffect(() => {
+    if (!activeProject) return
+    const vorher = letzteZahlen.current
+    letzteZahlen.current = { dateien: activeProject.dateien, fertig: activeProject.fertig }
+    if (vorher && (vorher.dateien !== activeProject.dateien || vorher.fertig !== activeProject.fertig)) refreshFiles()
+  }, [activeProject?.dateien, activeProject?.fertig])   // eslint-disable-line react-hooks/exhaustive-deps
   // Dateien kommen jetzt aus useProjectFiles, nicht mehr aus useProjects — Sidebar erwartet
   // weiterhin ein `files`-Feld (SidebarProject, seit Task 3 kein Teil von Project mehr).
   const sidebarProjects = useMemo(

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, act } from '@testing-library/react'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import { ProjectWorkspace } from './ProjectWorkspace'
 import { JobProvider } from '@/hooks/useActiveJob'
@@ -126,5 +126,41 @@ describe('ProjectWorkspace (Stub)', () => {
     expect(await screen.findByRole('button', { name: 'Timeline 1' })).toBeInTheDocument()
     expect(screen.queryByText('Korrigieren Timeline 1…')).not.toBeInTheDocument()   // keine Job-Leiste
     expect(screen.queryByRole('button', { name: /Abbrechen/ })).not.toBeInTheDocument()
+  })
+
+  it('holt die Dateiliste neu, wenn sich dateien/fertig im Summenpoll aendern -- OHNE dass ein Job terminal wird (W1)', async () => {
+    // Vor dem Fix fror die Dateiliste ein, solange ein Job lief: refreshFiles() kam nur ueber
+    // onSettled (Lauf-ENDE). Zehn Aufnahmen zu je ~18s waeren damit erst nach dem GANZEN Lauf
+    // oeffenbar, statt Datei fuer Datei. Hier steht kein Job -- nur der Summenpoll aendert sich.
+    // Fake Timer MUESSEN vor dem render() aktiv sein, sonst legt useProjects sein setInterval
+    // schon auf den echten Timer, und advanceTimersByTimeAsync bewegt ihn nie. RTL-eigenes
+    // waitFor kennt vitest-Fake-Timer nicht (nur `jest`) -- es wuerde mit dem eingefrorenen
+    // globalen setTimeout selbst haengen bleiben. Darum hier advanceTimersByTimeAsync statt
+    // waitFor: das dreht die Uhr UND wartet die dabei ausgeloesten Promise-Ketten ab.
+    vi.useFakeTimers()
+    try {
+      vi.mocked(api.listProjects)
+        .mockResolvedValueOnce([{ name: 'Demo', dateien: 1, fertig: 0, geaendert: 0, active_jobs: [] }])
+        .mockResolvedValue([{ name: 'Demo', dateien: 2, fertig: 0, geaendert: 0, active_jobs: [] }])
+      vi.mocked(api.getProjectFiles).mockResolvedValue({ name: 'Demo',
+        files: [{ base: 'S1', has_audio: true, has_raw: true, has_edit: false, has_md: false }] })
+      render(
+        <MemoryRouter initialEntries={['/p/Demo']}>
+          <JobProvider>
+            <Routes><Route path="/p/:project" element={<ProjectWorkspace />} /></Routes>
+          </JobProvider>
+        </MemoryRouter>,
+      )
+      await act(async () => { await vi.advanceTimersByTimeAsync(0) })    // Mount + Anfangsfetches abwarten
+      // Ab hier die Basis nehmen statt eine absolute Zahl anzunehmen: der Uebergang von "p noch
+      // unbekannt" zu "p geladen" loest den neuen Effekt (dessen Deps sich dabei aendern) selbst
+      // schon einmal aus -- das ist Teil des Fixes, nicht Rauschen, das die Zaehlung verfaelschen soll.
+      const basis = vi.mocked(api.getProjectFiles).mock.calls.length
+      await act(async () => { await vi.advanceTimersByTimeAsync(4000) })  // useProjects pollt alle 4s
+      // dateien 1 -> 2 im Summenpoll muss OHNE terminalen Job eine weitere Dateiliste-Anfrage ausloesen.
+      expect(vi.mocked(api.getProjectFiles).mock.calls.length).toBeGreaterThan(basis)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
