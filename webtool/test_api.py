@@ -695,3 +695,93 @@ def test_login_start_bei_anbieter_ohne_anmeldung_gibt_400(client):
     """OpenAI kennt keine CLI-Anmeldung — dort ist der Key die Anmeldung."""
     client.put("/api/settings", json={"provider": "openai"})
     assert client.post("/api/settings/auth/login").status_code == 400
+
+
+# --- Einzelne Datei: loeschen / neu transkribieren ----------------------------
+
+def _artefakte(tmp_path, base="S1"):
+    """Legt neben der Roh-JSON aus der Fixture die abgeleiteten Dateien an."""
+    t = tmp_path / "Demo" / "transkripte"
+    for name in (f"{base}.edit.json", f"{base}.md", f"{base}.srt", f"{base}.correction.json",
+                 f"{base}.part1.correction.json", f"{base}.tagged.txt", f"{base}.diar.json",
+                 f"{base}.segments.txt"):
+        (t / name).write_text("x", encoding="utf-8")
+    return t
+
+
+def test_datei_loeschen_raeumt_audio_und_alle_artefakte_weg(client, tmp_path):
+    t = _artefakte(tmp_path)
+    r = client.delete("/api/projects/Demo/files/S1")
+    assert r.status_code == 200 and r.json()["geloescht"] == 10   # 9 Transkript-Dateien + 1 Audio
+    assert list(t.iterdir()) == []
+    assert not (tmp_path / "Demo" / "audio" / "S1.mp3").exists()
+    assert (tmp_path / "Demo").is_dir()                            # das Projekt bleibt
+
+
+def test_datei_loeschen_laesst_nachbarn_mit_gemeinsamem_praefix_stehen(client, tmp_path):
+    """glob-Muster "S1.*" darf S10 nicht mitnehmen — der literale Punkt trennt.
+    Ohne diese Probe faellt der Fehler erst an echten Projekten auf ('Timeline 1'/'Timeline 10')."""
+    t = tmp_path / "Demo" / "transkripte"
+    (t / "S10.json").write_text("{}", encoding="utf-8")
+    (tmp_path / "Demo" / "audio" / "S10.mp3").write_bytes(b"fake")
+    assert client.delete("/api/projects/Demo/files/S1").status_code == 200
+    assert (t / "S10.json").exists() and (tmp_path / "Demo" / "audio" / "S10.mp3").exists()
+
+
+def test_datei_loeschen_vertraegt_glob_sonderzeichen_im_namen(client, tmp_path):
+    """yt-dlp legt Dateien wie `Video [dQw4w9].m4a` an. Ohne glob.escape() liest glob das
+    `[` als Zeichenklasse, findet nichts — und der Endpunkt meldete faelschlich 404."""
+    base = "Video [dQw4w9]"
+    (tmp_path / "Demo" / "transkripte" / f"{base}.json").write_text("{}", encoding="utf-8")
+    (tmp_path / "Demo" / "audio" / f"{base}.m4a").write_bytes(b"fake")
+    r = client.delete(f"/api/projects/Demo/files/{base}")
+    assert r.status_code == 200 and r.json()["geloescht"] == 2
+    assert not (tmp_path / "Demo" / "transkripte" / f"{base}.json").exists()
+
+
+def test_datei_loeschen_unbekannt_gibt_404(client):
+    assert client.delete("/api/projects/Demo/files/GibtsNicht").status_code == 404
+
+
+def test_datei_loeschen_waehrend_ein_job_laeuft_gibt_409(client, monkeypatch, tmp_path):
+    import webtool.jobs as jobs_mod
+    monkeypatch.setattr(jobs_mod, "active_for", lambda name: [{"id": "j1", "kind": "correct"}])
+    assert client.delete("/api/projects/Demo/files/S1").status_code == 409
+    assert (tmp_path / "Demo" / "transkripte" / "S1.json").exists()   # nichts angefasst
+
+
+def test_neu_transkribieren_raeumt_transkripte_weg_und_startet_den_lauf(client, tmp_path):
+    t = _artefakte(tmp_path)
+    r = client.post("/api/projects/Demo/files/S1/transcribe")
+    assert r.status_code == 200 and r.json()["started"] is True
+    # Die abgeleiteten MUESSEN mit weg: load_or_build_doc bevorzugt edit.json vor der Roh-JSON.
+    assert list(t.iterdir()) == []
+    assert (tmp_path / "Demo" / "audio" / "S1.mp3").exists()          # Audio bleibt
+
+
+def test_neu_transkribieren_ohne_audio_gibt_404_und_laesst_das_transkript_stehen(client, tmp_path):
+    """Ohne Quelle waere das Wegraeumen ein reiner Datenverlust — der Lauf koennte
+    nichts wiederherstellen."""
+    (tmp_path / "Demo" / "audio" / "S1.mp3").unlink()
+    assert client.post("/api/projects/Demo/files/S1/transcribe").status_code == 404
+    assert (tmp_path / "Demo" / "transkripte" / "S1.json").exists()
+
+
+def test_neu_transkribieren_waehrend_ein_job_laeuft_gibt_409(client, monkeypatch, tmp_path):
+    import webtool.jobs as jobs_mod
+    monkeypatch.setattr(jobs_mod, "active_for", lambda name: [{"id": "j1", "kind": "transcribe"}])
+    assert client.post("/api/projects/Demo/files/S1/transcribe").status_code == 409
+    assert (tmp_path / "Demo" / "transkripte" / "S1.json").exists()
+
+
+def test_datei_endpunkte_weisen_unsichere_namen_ab(client, tmp_path):
+    """%2e%2e erreicht den Handler un-normalisiert (der Client wuerde ein rohes `..`
+    schon in der URL wegkuerzen) — genau der Weg, gegen den paths.safe_name steht.
+    Ungeprueft loeschte `_datei_weg` sonst mit einem Muster im Elternverzeichnis."""
+    assert client.delete("/api/projects/Demo/files/%2e%2e").status_code == 400
+    assert client.post("/api/projects/Demo/files/%2e%2e/transcribe").status_code == 400
+    # %2f dekodiert Starlette beim Routing -> passt auf kein einzelnes Segment mehr und
+    # landet im SPA-Catch-all (405 statt 400). Anderer Code, gleiche Wirkung: der Handler
+    # sieht die Anfrage nie. Geprueft wird darum die Wirkung, nicht die Zahl.
+    assert client.delete("/api/projects/Demo/files/%2e%2e%2fS1").status_code >= 400
+    assert (tmp_path / "Demo" / "transkripte" / "S1.json").exists()

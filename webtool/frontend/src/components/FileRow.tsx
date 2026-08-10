@@ -1,30 +1,15 @@
-import { Pencil } from 'lucide-react'
 import type { FilePhase, FileState, ProjectFile } from '@/lib/types'
-import { Button } from '@/components/ui/button'
+import { DateiMenue } from '@/components/DateiMenue'
 import { FileStatusPill } from '@/components/FileStatusPill'
-import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
-} from '@/components/ui/alert-dialog'
 import { cn } from '@/lib/utils'
 
-export function FileRow({ file, active, onOpen, onCorrectFile, phase, state, jobRunning, aiReason }: {
-  file: ProjectFile; active: boolean;
-  onOpen: () => void; onCorrectFile: (force: boolean) => void;
+export function FileRow({ project, file, active, onOpen, phase, state, jobRunning, aiReason }: {
+  project: string; file: ProjectFile; active: boolean;
+  onOpen: () => void;
   phase?: FilePhase; state?: FileState; jobRunning?: boolean;
   /** Nicht leer = kein nutzbarer KI-Anbieter: Korrigieren deaktiviert, Text als Tooltip. */
   aiReason?: string;
 }) {
-  // Gleiche Beschriftung und Symbolgroesse wie in der Arbeitsflaeche: es ist derselbe Knopf,
-  // nur in einer dichteren Umgebung. Der Dateiname im Namen macht ihn in einer Liste
-  // unterscheidbar — "Nur diese Datei" ist vorgelesen in Zeile 7 von 12 wertlos.
-  const button = (
-    <Button size="icon" variant="ghost" className="size-8" title="Nur diese Datei korrigieren"
-      aria-label={`Nur „${file.base}" korrigieren`} disabled={!!aiReason}
-      onClick={e => { e.stopPropagation(); if (!file.has_edit) onCorrectFile(false) }}>
-      <Pencil className="size-3.5" />
-    </Button>
-  )
   return (
     <div onClick={onOpen} role="button" tabIndex={0} aria-label={`Datei ${file.base} öffnen`}
       onKeyDown={e => {
@@ -36,25 +21,7 @@ export function FileRow({ file, active, onOpen, onCorrectFile, phase, state, job
         active && 'bg-accent text-accent-foreground hover:bg-accent')}>
       <span className="min-w-0 flex-1 truncate">{file.base}</span>
       <FileStatusPill file={file} active={phase} state={state} jobRunning={jobRunning} />
-      {/* title am Wrapper: ein deaktivierter Knopf hat pointer-events:none und zeigt
-          seinen eigenen Tooltip nie an. */}
-      <span title={aiReason || undefined} className="inline-flex">
-      {file.has_edit ? (
-        <AlertDialog>
-          <AlertDialogTrigger asChild>{button}</AlertDialogTrigger>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>„{file.base}" neu korrigieren?</AlertDialogTitle>
-              <AlertDialogDescription>Überschreibt die (ggf. handbearbeitete) Version.</AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Abbrechen</AlertDialogCancel>
-              <AlertDialogAction onClick={() => onCorrectFile(true)}>Neu korrigieren</AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-      ) : button}
-      </span>
+      <DateiMenue project={project} file={file} aiReason={aiReason} />
     </div>
   )
 }

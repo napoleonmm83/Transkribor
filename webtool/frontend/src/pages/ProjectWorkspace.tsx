@@ -5,12 +5,13 @@ import { Play, Pencil, X, FileAudio, Loader2 } from 'lucide-react'
 import { useProjekte, useDateien } from '@/hooks/useProjektDaten'
 import { useAiReady } from '@/hooks/useAiReady'
 import { mergePhases, useActiveJob } from '@/hooks/useActiveJob'
+import { DateiMenue } from '@/components/DateiMenue'
 import { FileStatusPill } from '@/components/FileStatusPill'
 import { UploadDropzone } from '@/components/UploadDropzone'
 import { UrlFetch } from '@/components/UrlFetch'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
-import { startTranscribe, startCorrect, startCorrectFile, cancelJob } from '@/lib/api'
+import { startTranscribe, startCorrect, cancelJob } from '@/lib/api'
 import { describePhases, KIND_LABEL } from '@/lib/jobPhases'
 import { cn } from '@/lib/utils'
 import type { StartJob } from '@/lib/types'
@@ -153,14 +154,7 @@ export function ProjectWorkspace() {
                     </button>
                     <FileStatusPill file={f} active={active?.phase} pct={active?.pct} detail={active?.detail}
                       state={state} jobRunning={running} mitText />
-                    <span title={aiReason || undefined} className="inline-flex">
-                      <Button size="icon" variant="ghost" className="size-8" title="Nur diese Datei korrigieren"
-                        aria-label={`Nur „${f.base}" korrigieren`}
-                        disabled={!f.has_raw || !!aiReason}
-                        onClick={() => startJob(() => startCorrectFile(project!, f.base, false), 'correct', `Korrigieren ${f.base}`, false)}>
-                        <Pencil className="size-3.5" />
-                      </Button>
-                    </span>
+                    <DateiMenue project={project!} file={f} aiReason={aiReason} />
                   </div>
                   {active?.pct != null && (
                     <div className="mt-2 h-1 overflow-hidden rounded-full bg-muted" role="progressbar"

@@ -50,6 +50,15 @@ export async function startCorrect(project: string): Promise<StartJob> {
 export async function startCorrectFile(project: string, base: string, force: boolean): Promise<StartJob> {
   return jn(await post(`/api/projects/${enc(project)}/files/${enc(base)}/correct${force ? '?force=true' : ''}`))
 }
+/** Transkript verwerfen und neu erzeugen. Raeumt serverseitig AUCH edit.json/md/srt weg —
+ *  ohne das zeigte der Editor weiter den alten Text (load_or_build_doc bevorzugt edit.json). */
+export async function startRetranscribeFile(project: string, base: string): Promise<StartJob> {
+  return jn(await post(`/api/projects/${enc(project)}/files/${enc(base)}/transcribe`))
+}
+/** Eine einzelne Aufnahme samt Audio loeschen; das Projekt bleibt. */
+export async function deleteFile(project: string, base: string): Promise<void> {
+  await jn(await fetch(`/api/projects/${enc(project)}/files/${enc(base)}`, { method: 'DELETE' }))
+}
 export async function fetchUrls(project: string, urls: string[]): Promise<StartJob> {
   return jn(await fetch(`/api/projects/${enc(project)}/fetch`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ urls }),

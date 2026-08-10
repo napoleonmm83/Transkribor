@@ -21,6 +21,14 @@ const ZWEI = [
   { name: 'Alpha', dateien: 2, fertig: 0, geaendert: 100 },
   { name: 'Beta', dateien: 1, fertig: 0, geaendert: 50 },
 ]
+/** Der Einzeldatei-Start sitzt seit der Zusammenlegung im ⋯-Menue (DateiMenue), nicht mehr
+ *  als eigener Knopf in der Zeile. Radix oeffnet es nur auf einen echten Zeigerklick. */
+async function korrigierenAusDemMenue() {
+  fireEvent.pointerDown(screen.getByLabelText('Aktionen für „a"'),
+    { button: 0, ctrlKey: false, pointerType: 'mouse' })
+  fireEvent.click(await screen.findByRole('menuitem', { name: 'Korrigieren' }))
+}
+
 const DATEIEN = [
   { base: 'a', has_audio: true, has_raw: true, has_edit: false, has_md: false },
   { base: 'b', has_audio: true, has_raw: true, has_edit: false, has_md: false },
@@ -187,8 +195,8 @@ describe('AppShell', () => {
       </MemoryRouter>,
     )
     const frage = vi.spyOn(window, 'confirm')
-    await waitFor(() => expect(screen.getByLabelText('Nur „a" korrigieren')).toBeInTheDocument())
-    fireEvent.click(screen.getByLabelText('Nur „a" korrigieren'))
+    await waitFor(() => expect(screen.getByLabelText('Aktionen für „a"')).toBeInTheDocument())
+    await korrigierenAusDemMenue()
     await waitFor(() => expect(reload).toHaveBeenCalled())
     expect(frage).not.toHaveBeenCalled()      // ohne Ungespeichertes keine Rueckfrage
     frage.mockRestore()
@@ -208,8 +216,8 @@ describe('AppShell', () => {
         <JobProvider><AppShell><Schreibtisch reload={reload} /></AppShell></JobProvider>
       </MemoryRouter>,
     )
-    await waitFor(() => expect(screen.getByLabelText('Nur „a" korrigieren')).toBeInTheDocument())
-    fireEvent.click(screen.getByLabelText('Nur „a" korrigieren'))
+    await waitFor(() => expect(screen.getByLabelText('Aktionen für „a"')).toBeInTheDocument())
+    await korrigierenAusDemMenue()
     await waitFor(() => expect(frage).toHaveBeenCalled())
     expect(reload).not.toHaveBeenCalled()
     frage.mockRestore()
