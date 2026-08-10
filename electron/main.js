@@ -12,7 +12,7 @@ const backend = require('./backend')
 const setup = require('./setup')
 const protokoll = require('./protokoll')
 const updater = require('./updater')
-const { fensterOptionen, TITELLEISTE_HOEHE } = require('./fenster')
+const { fensterOptionen, TITELLEISTE_HOEHE, farbeGueltig, fortschrittGueltig } = require('./fenster')
 
 let win = null
 let aktualisierer = null
@@ -96,6 +96,7 @@ ipcMain.handle('logs', () => backend.log())
 // Ohne diesen Weg stuenden im Dunkelmodus schwarze Fensterknoepfe auf dunklem Grund.
 ipcMain.handle('titelleisteFarbe', (_e, f) => {
   if (!win || win.isDestroyed() || process.platform === 'darwin') return
+  if (!farbeGueltig(f)) return          // ungeprueft wirft `f.color` bei null, s. fenster.js
   win.setTitleBarOverlay({ color: f.color, symbolColor: f.symbolColor, height: TITELLEISTE_HOEHE })
 })
 
@@ -106,9 +107,9 @@ ipcMain.handle('titelleisteFarbe', (_e, f) => {
 // die Bruecke ist die Vertrauensgrenze, und mehr braucht der Renderer nicht.
 ipcMain.handle('fortschritt', (_e, anteil, modus) => {
   if (!win || win.isDestroyed()) return
-  const a = typeof anteil === 'number' ? anteil : -1
-  if (modus === 'error') win.setProgressBar(a, { mode: 'error' })
-  else win.setProgressBar(a)
+  if (!fortschrittGueltig(anteil)) return   // >1 waere ein unbestimmter Dauerbalken, s. fenster.js
+  if (modus === 'error') win.setProgressBar(anteil, { mode: 'error' })
+  else win.setProgressBar(anteil)
 })
 
 ipcMain.handle('update:status', () => aktualisierer && aktualisierer.zustand())

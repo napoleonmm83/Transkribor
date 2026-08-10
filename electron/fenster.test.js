@@ -1,7 +1,7 @@
 'use strict'
 const test = require('node:test')
 const assert = require('node:assert')
-const { fensterOptionen, TITELLEISTE_HOEHE } = require('./fenster')
+const { fensterOptionen, TITELLEISTE_HOEHE, farbeGueltig, fortschrittGueltig } = require('./fenster')
 
 test('Windows und Linux bekommen ein Overlay mit nativen Knoepfen', () => {
   for (const p of ['win32', 'linux']) {
@@ -27,4 +27,19 @@ test('die Overlay-Farben folgen dem Thema', () => {
   // symbolColor kontrastiert zur Grundflaeche -- hier als Tausch der beiden Werte geprueft.
   assert.strictEqual(hell.symbolColor, dunkel.color)
   assert.strictEqual(dunkel.symbolColor, hell.color)
+})
+
+test('nur brauchbare Farben kommen durch die Bruecke', () => {
+  assert.ok(farbeGueltig({ color: '#000', symbolColor: '#fff' }))
+  for (const schrott of [null, undefined, 'blau', {}, { color: '#000' }, { color: 1, symbolColor: 2 }]) {
+    assert.strictEqual(farbeGueltig(schrott), false, JSON.stringify(schrott))
+  }
+})
+
+test('nur -1 oder 0..1 gilt als Fortschritt', () => {
+  for (const gut of [-1, 0, 0.5, 1]) assert.ok(fortschrittGueltig(gut), String(gut))
+  // 2 schaltet Electron auf einen unbestimmten Dauerbalken -- der Grund fuer die Obergrenze.
+  for (const schlecht of [2, -0.5, -2, NaN, Infinity, '0.5', null, undefined]) {
+    assert.strictEqual(fortschrittGueltig(schlecht), false, String(schlecht))
+  }
 })
