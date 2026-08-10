@@ -42,8 +42,8 @@ describe('useOsFortschritt', () => {
   afterEach(() => { delete (window as unknown as { transkribor?: unknown }).transkribor })
 
   it('meldet einen fertigen Lauf GENAU EINMAL', async () => {
-    // onSettled feuert bei JEDEM Poll-Tick, in dem irgendein Job terminal ist -- nicht
-    // einmal je Lauf. Ohne Riegel meldet die App im Sekundentakt dasselbe.
+    // Einfachster Fall: ein einzelner Job wird in einem Tick terminal -- onSettled liefert
+    // ihn genau einmal als Uebergang (useActiveJob.tsx), kein Poll danach, keine Wiederholung.
     vi.mocked(api.getJob).mockResolvedValue({ status: 'done', lines: [], kind: 'correct' })
     zeigen()
     const adopt = (globalThis as unknown as { __adopt: (i: string, p: string, k: string) => void }).__adopt
@@ -56,8 +56,8 @@ describe('useOsFortschritt', () => {
   it('meldet einen beendeten Lauf genau einmal, auch wenn ein zweiter weiterlaeuft', async () => {
     // A wird terminal, B laeuft weiter -- onSettled feuert bei JEDEM weiteren Tick erneut,
     // solange B noch laeuft. A darf dabei trotzdem nur EINMAL gemeldet werden: useActiveJob.tsx
-    // gibt bei jedem Tick nur die JUST beendeten Jobs weiter (beendet-Kommentar dort), A faellt
-    // nach seinem eigenen Tick aus `ids` und kann in einem spaeteren `neu` nicht mehr auftauchen.
+    // gibt bei jedem Tick nur die JUST beendeten Jobs weiter (beendet-Kommentar dort, inkl.
+    // zuletzt-Tracking als Schutz gegen einen Poll-Timing-Fall, den dieser Test nicht erzwingt).
     let bTicks = 0
     vi.mocked(api.getJob).mockImplementation(async (id: string) =>
       id === 'j1'

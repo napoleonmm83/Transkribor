@@ -63,6 +63,9 @@ export function JobProvider({ children, intervalMs = 1500 }: { children: ReactNo
     const ids = runningIds.split(',')
     let alive = true
     let timer: ReturnType<typeof setTimeout>
+    // Zuletzt gesehener Status je Kennung, ueberlebt alle Ticks DIESER Effekt-Instanz (s.
+    // Kommentar an der beendet-Berechnung unten -- der Grund, warum es das braucht).
+    const zuletzt: Record<string, string> = {}
     const tick = async () => {
       const ergebnisse = await Promise.all(ids.map(id =>
         getJob(id).then(r => [id, r] as const).catch(() => [id, null] as const)))
@@ -100,15 +103,24 @@ export function JobProvider({ children, intervalMs = 1500 }: { children: ReactNo
       // darf aus dem (moeglicherweise veralteten) `jobs` kommen, die aendert sich nach dem
       // Adoptieren nie mehr -- der Status kommt aus `neu`, das IST der frische Poll-Ausgang.
       //
-      // `beendet` enthaelt nur Jobs, die in DIESEM Tick terminal wurden: die Kennungen stammen
-      // aus `neu`, und `neu` speist sich aus `ids` (oben, aus `runningIds` bei Effekt-Aufsatz
-      // eingefroren). Sobald ein Job nicht mehr laeuft, verengt sich `runningIds`, der Effekt
-      // setzt neu auf (Cleanup verwirft den geplanten Folge-Tick) und der Job faellt aus `ids` --
-      // er kann in einem SPAETEREN `neu` also nie wieder auftauchen. Deshalb braucht kein
-      // Zuhoerer einen eigenen Riegel gegen Doppelmeldungen fuer denselben Job.
+      // Ein Job wird gemeldet, wenn er in DIESEM Tick terminal GEWORDEN ist -- nicht, wenn er
+      // terminal IST. Der Unterschied ist der Punkt: `ids` friert beim Effekt-Aufsatz ein (oben).
+      // Im Normalfall verengt sich `runningIds`, sobald ein Job nicht mehr laeuft, der Effekt
+      // setzt neu auf, und dessen Cleanup verwirft den schon geplanten Folge-Tick -- der Job
+      // faellt aus `ids` und taucht in einem spaeteren `neu` nicht mehr auf. Das ist aber ein
+      // Timing-Vorsprung, kein Garant: haengt der Hauptthread zwischen `setJobs` und Reacts
+      // Cleanup laenger als `intervalMs`, laeuft die ALTE Tick-Closure mit ihrem alten `ids`
+      // noch einmal und fragt einen bereits erledigten Job erneut ab -- der stuende dann wieder
+      // in `neu`. `zuletzt` faengt genau das ab: ein Zustand ("ist terminal") liefert bei
+      // wiederholter Abfrage zweimal dasselbe, ein Uebergang ("ist GERADE terminal geworden")
+      // nicht, weil `zuletzt[j.id]` beim zweiten Mal schon auf dem neuen Status steht. Diese
+      // Race laesst sich in keinem Test erzwingen (bräuchte einen echten Hauptthread-Stillstand
+      // im exakt richtigen Fenster) -- diese Begruendung ist das Argument dafuer, nicht ein
+      // roter Testlauf.
       const beendet = jobs
-        .filter(j => neu[j.id] && neu[j.id] !== 'running')
+        .filter(j => neu[j.id] && neu[j.id] !== 'running' && zuletzt[j.id] !== neu[j.id])
         .map(j => ({ ...j, status: neu[j.id] }))
+      for (const id of Object.keys(neu)) zuletzt[id] = neu[id]
       if (beendet.length) listeners.current.forEach(fn => fn(beendet))
       // Nur weiterpollen, solange wirklich etwas laeuft. Bedingungslos neu zu planen liess
       // nach dem letzten Job einen Timer stehen, den allein das Aufraeumen des Effekts noch
