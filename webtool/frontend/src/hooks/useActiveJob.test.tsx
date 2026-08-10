@@ -78,6 +78,23 @@ describe('useActiveJob', () => {
     expect(beendet[0].phases).toEqual(parseJobPhases('correct', fertig))
   })
 
+  it('meldet beim Aufgeben die zuletzt gelesenen Phasen, nicht die vom Adoptieren', async () => {
+    // Netz weg -> nach dreimal aufgeben. `jobs` im Closure steht auf dem Stand des
+    // Effekt-Aufsatzes, also auf den leeren Phasen von adopt() -- der Zuhoerer bekaeme
+    // damit nichts, obwohl der erste Poll laengst etwas gelesen hatte.
+    const zeilen = ['→ Korrigiere A …']
+    vi.mocked(api.getJob)
+      .mockResolvedValueOnce({ status: 'running', lines: zeilen })
+      .mockRejectedValue(new Error('net'))
+    const settled = vi.fn()
+    render(<JobProvider intervalMs={5}><Probe beiSettled={settled} /></JobProvider>)
+    fireEvent.click(screen.getByText('go'))
+    await waitFor(() => expect(settled).toHaveBeenCalled())
+    const beendet = settled.mock.calls.at(-1)![0] as Job[]
+    expect(beendet[0].status).toBe('error')
+    expect(beendet[0].phases).toEqual(parseJobPhases('correct', zeilen))
+  })
+
   it('pollt nach dem Terminal-Status nicht weiter', async () => {
     // Der Grund fuer den CI-Flake: tick() plante bedingungslos neu, und nur das Aufraeumen des
     // Effekts kam dem zuvor — ein Wettlauf, den ein langsamer Runner verliert. Der Extra-Aufruf
