@@ -95,6 +95,32 @@ describe('AppShell', () => {
     expect(sprung.compareDocumentPosition(leiste) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
+  describe('Rasterzeilen', () => {
+    // Ohne Bruecke rendert TitleBar `null` und steuert KEIN Rasterelement bei. Bleibt die
+    // Zeilenangabe trotzdem dreizeilig, rutscht alles eine Zeile hoch: der Inhalt landet in
+    // `auto`, die Statuszeile in `1fr` -- gemessen 374 px Leerraum unter ihr. jsdom rechnet
+    // kein Layout, darum ist die gesetzte Klasse die pruefbare Aussage.
+    const raster = () => document.getElementById('inhalt')!.parentElement!
+    const zeigen = () => render(
+      <MemoryRouter><JobProvider><AppShell><p>Inhalt</p></AppShell></JobProvider></MemoryRouter>,
+    )
+
+    it('hat im Browser eine Zeile weniger', () => {
+      zeigen()
+      expect(raster().className).toContain('grid-rows-[1fr_auto]')
+    })
+
+    it('macht unter Electron Platz fuer die Titelzeile', () => {
+      ;(window as unknown as { transkribor: unknown }).transkribor = { plattform: 'win32' }
+      try {
+        zeigen()
+        expect(raster().className).toContain('grid-rows-[auto_1fr_auto]')
+      } finally {
+        delete (window as unknown as { transkribor?: unknown }).transkribor
+      }
+    })
+  })
+
   describe('ungespeicherte Aenderungen', () => {
     beforeEach(() => {
       vi.mocked(api.listProjects).mockResolvedValue(ZWEI)
