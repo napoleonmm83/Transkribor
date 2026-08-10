@@ -181,4 +181,22 @@ describe('ProjectWorkspace (Stub)', () => {
     await act(async () => { loese!({ name: 'Demo', files: [] }) })
     expect(await screen.findByText(/Noch keine Dateien/)).toBeInTheDocument()
   })
+
+  it('zeigt einen Fehlerzustand statt "Noch keine Dateien", wenn die Dateiliste nicht laedt (M2)', async () => {
+    vi.mocked(api.listProjects).mockResolvedValue([{ name: 'Demo', dateien: 0, fertig: 0, geaendert: 0, active_jobs: [] }])
+    vi.mocked(api.getProjectFiles).mockRejectedValue(new Error('offline'))
+    render(
+      <MemoryRouter initialEntries={['/p/Demo']}>
+        <JobProvider>
+          <Routes><Route path="/p/:project" element={<ProjectWorkspace />} /></Routes>
+        </JobProvider>
+      </MemoryRouter>,
+    )
+    expect(await screen.findByText(/nicht geladen werden/)).toBeInTheDocument()
+    expect(screen.queryByText(/Noch keine Dateien/)).not.toBeInTheDocument()
+    // Erneut versuchen ruft den Endpunkt noch einmal.
+    const versuche = vi.mocked(api.getProjectFiles).mock.calls.length
+    screen.getByRole('button', { name: 'Erneut versuchen' }).click()
+    await waitFor(() => expect(vi.mocked(api.getProjectFiles).mock.calls.length).toBeGreaterThan(versuche))
+  })
 })

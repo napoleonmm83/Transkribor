@@ -8,6 +8,10 @@ import { getProjectFiles } from '@/lib/api'
 export function useProjectFiles(project: string) {
   const [files, setFiles] = useState<ProjectFile[]>([])
   const [loading, setLoading] = useState(true)
+  // Getrennt von "leer": ohne das Flag sah eine gescheiterte Anfrage wie ein Projekt ohne
+  // Dateien aus, und die Arbeitsflaeche zeigte "Noch keine Dateien" als Tatsache statt eines
+  // Fehlers. Gesetzt im .catch, zurueckgesetzt bei jedem erfolgreichen Laden.
+  const [fehler, setFehler] = useState(false)
   // Traegt das GERADE angefragte Projekt. useProjects nutzt fuer sowas ein simples laeuft-Ref
   // ("eine langsame Antwort darf keine Anfragen aufstauen") — das passt dort, weil es dort NUR
   // einen unparametrisierten Poll gibt, wo ein uebersprungener Aufruf folgenlos ist. Hier haengt
@@ -16,15 +20,16 @@ export function useProjectFiles(project: string) {
   // alten Anfrage) UND, kaeme die alte Antwort danach herein, die Dateien des verlassenen
   // Projekts in den State des neuen schreiben. Darum hier: nie uebersprungen, sondern jede
   // Antwort gegen das inzwischen aktuelle Projekt geprueft und verworfen, wenn sie nicht passt.
+  // Gilt fuer fehler genauso: ein Fehler des verlassenen Projekts darf den neuen nicht anfassen.
   const angefragt = useRef(project)
   const refresh = useCallback(() => {
     if (!project) return
     angefragt.current = project
     getProjectFiles(project)
-      .then(r => { if (angefragt.current === project) setFiles(r.files) })
-      .catch(() => {})
+      .then(r => { if (angefragt.current === project) { setFiles(r.files); setFehler(false) } })
+      .catch(() => { if (angefragt.current === project) setFehler(true) })
       .finally(() => { if (angefragt.current === project) setLoading(false) })
   }, [project])
   useEffect(() => { refresh() }, [refresh])
-  return { files, loading, refresh }
+  return { files, loading, fehler, refresh }
 }

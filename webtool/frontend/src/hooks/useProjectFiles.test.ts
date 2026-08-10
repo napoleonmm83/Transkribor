@@ -18,11 +18,22 @@ describe('useProjectFiles', () => {
     expect(api.getProjectFiles).toHaveBeenCalledWith('Demo')
   })
 
-  it('laesst files leer, wenn die Abfrage scheitert, statt zu werfen', async () => {
+  it('laesst files leer und setzt fehler, wenn die Abfrage scheitert, statt zu werfen', async () => {
     vi.mocked(api.getProjectFiles).mockRejectedValue(new Error('offline'))
     const { result } = renderHook(() => useProjectFiles('Demo'))
     await waitFor(() => expect(result.current.loading).toBe(false))
     expect(result.current.files).toEqual([])
+    expect(result.current.fehler).toBe(true)
+  })
+
+  it('setzt fehler bei einem erneuten erfolgreichen Laden zurueck', async () => {
+    vi.mocked(api.getProjectFiles).mockRejectedValueOnce(new Error('offline'))
+      .mockResolvedValue({ name: 'Demo', files: [datei] })
+    const { result } = renderHook(() => useProjectFiles('Demo'))
+    await waitFor(() => expect(result.current.fehler).toBe(true))
+    await act(async () => { result.current.refresh() })
+    await waitFor(() => expect(result.current.fehler).toBe(false))
+    expect(result.current.files).toEqual([datei])
   })
 
   it('refresh() ruft den Endpunkt erneut', async () => {
@@ -50,5 +61,21 @@ describe('useProjectFiles', () => {
     // Die alte Anfrage loest jetzt verspaetet auf -- darf 'Neu's Dateien nicht mehr ueberschreiben.
     await act(async () => { loeseAlt!({ name: 'Alt', files: [datei] }) })
     expect(result.current.files).toEqual([neuDatei])
+  })
+
+  it('ein Fehler des verlassenen Projekts darf den fehler-Zustand des neuen nicht setzen', async () => {
+    let verwirfAlt: ((e: Error) => void) | null = null
+    const altPromise = new Promise<{ name: string; files: ProjectFile[] }>((_, reject) => { verwirfAlt = reject })
+    vi.mocked(api.getProjectFiles).mockImplementation((p: string) =>
+      p === 'Alt' ? altPromise : Promise.resolve({ name: 'Neu', files: [datei] }))
+
+    const { result, rerender } = renderHook(({ project }) => useProjectFiles(project),
+      { initialProps: { project: 'Alt' } })
+    rerender({ project: 'Neu' })
+    await waitFor(() => expect(result.current.files).toEqual([datei]))
+
+    // 'Alt' scheitert jetzt verspaetet -- darf 'Neu's fehler-Zustand nicht setzen.
+    await act(async () => { verwirfAlt!(new Error('offline')) })
+    expect(result.current.fehler).toBe(false)
   })
 })
