@@ -1,12 +1,30 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import { MemoryRouter, useNavigate } from 'react-router-dom'
+import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom'
 import { AppShell } from './AppShell'
 import { JobProvider } from '@/hooks/useActiveJob'
+import { useEditorMelden } from '@/hooks/useEditorBruecke'
 import * as api from '@/lib/api'
 import type { Settings } from '@/lib/types'
 
 vi.mock('@/lib/api')
+
+/** Ersatz-Editor: meldet der Huelle ein offenes Dokument, ohne useDoc und ohne Server.
+ *  Geprueft wird die Huelle — dass EditorView selbst meldet, sichert EditorView.test.tsx. */
+function Schreibtisch({ dirty = true, reload = () => {} }: { dirty?: boolean; reload?: () => void }) {
+  useEditorMelden({ project: 'Alpha', base: 'a', dirty, reload })
+  const { pathname } = useLocation()
+  return <span data-testid="ort">{pathname}</span>
+}
+
+const ZWEI = [
+  { name: 'Alpha', dateien: 2, fertig: 0, geaendert: 100 },
+  { name: 'Beta', dateien: 1, fertig: 0, geaendert: 50 },
+]
+const DATEIEN = [
+  { base: 'a', has_audio: true, has_raw: true, has_edit: false, has_md: false },
+  { base: 'b', has_audio: true, has_raw: true, has_edit: false, has_md: false },
+]
 
 describe('AppShell', () => {
   beforeEach(() => {
@@ -75,5 +93,75 @@ describe('AppShell', () => {
     // wertlos, weil man ihn erst nach dreihundert Knoepfen erreicht.
     const leiste = screen.getByRole('navigation', { name: 'Projekte' })
     expect(sprung.compareDocumentPosition(leiste) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  describe('ungespeicherte Aenderungen', () => {
+    beforeEach(() => {
+      vi.mocked(api.listProjects).mockResolvedValue(ZWEI)
+      vi.mocked(api.getProjectFiles).mockResolvedValue({ name: 'Alpha', files: DATEIEN })
+    })
+    const zeigen = () => render(
+      <MemoryRouter initialEntries={['/p/Alpha/a']}>
+        <JobProvider><AppShell><Schreibtisch /></AppShell></JobProvider>
+      </MemoryRouter>,
+    )
+
+    it('navigiert NICHT, wenn die Rueckfrage abgelehnt wird', async () => {
+      // Der Kern: die Leiste ist seit dem Umbau immer sichtbar, ein Fehlklick darf die
+      // ungespeicherte Arbeit im Editor nicht stillschweigend verwerfen.
+      const frage = vi.spyOn(window, 'confirm').mockReturnValue(false)
+      zeigen()
+      await waitFor(() => expect(screen.getByText('Beta')).toBeInTheDocument())
+
+      fireEvent.click(screen.getByText('Beta'))                       // Projektwechsel
+      expect(frage).toHaveBeenCalled()
+      expect(screen.getByTestId('ort')).toHaveTextContent('/p/Alpha/a')
+
+      frage.mockClear()
+      fireEvent.click(screen.getByText('b'))                          // Dateiwechsel
+      expect(frage).toHaveBeenCalled()
+      expect(screen.getByTestId('ort')).toHaveTextContent('/p/Alpha/a')
+      frage.mockRestore()
+    })
+
+    it('navigiert nach zugestimmter Rueckfrage', async () => {
+      const frage = vi.spyOn(window, 'confirm').mockReturnValue(true)
+      zeigen()
+      await waitFor(() => expect(screen.getByText('Beta')).toBeInTheDocument())
+      fireEvent.click(screen.getByText('Beta'))
+      expect(screen.getByTestId('ort')).toHaveTextContent('/p/Beta')
+      frage.mockRestore()
+    })
+
+    it('fragt nicht ohne ungespeicherte Aenderungen', async () => {
+      const frage = vi.spyOn(window, 'confirm').mockReturnValue(true)
+      render(
+        <MemoryRouter initialEntries={['/p/Alpha/a']}>
+          <JobProvider><AppShell><Schreibtisch dirty={false} /></AppShell></JobProvider>
+        </MemoryRouter>,
+      )
+      await waitFor(() => expect(screen.getByText('Beta')).toBeInTheDocument())
+      fireEvent.click(screen.getByText('Beta'))
+      expect(frage).not.toHaveBeenCalled()
+      frage.mockRestore()
+    })
+  })
+
+  it('laedt das offene Dokument neu, wenn seine Einzeldatei-Korrektur fertig ist', async () => {
+    // Ohne das haelt der Editor den Stand VOR der Korrektur -- und "Speichern" schreibt ihn
+    // ueber die frisch erzeugte edit.json.
+    vi.mocked(api.listProjects).mockResolvedValue(ZWEI)
+    vi.mocked(api.getProjectFiles).mockResolvedValue({ name: 'Alpha', files: DATEIEN })
+    vi.mocked(api.startCorrectFile).mockResolvedValue({ started: true, job_id: 'j1' })
+    vi.mocked(api.getJob).mockResolvedValue({ status: 'done', lines: [] })
+    const reload = vi.fn()
+    render(
+      <MemoryRouter initialEntries={['/p/Alpha/a']}>
+        <JobProvider><AppShell><Schreibtisch dirty={false} reload={reload} /></AppShell></JobProvider>
+      </MemoryRouter>,
+    )
+    await waitFor(() => expect(screen.getByLabelText('Nur „a" korrigieren')).toBeInTheDocument())
+    fireEvent.click(screen.getByLabelText('Nur „a" korrigieren'))
+    await waitFor(() => expect(reload).toHaveBeenCalled())
   })
 })

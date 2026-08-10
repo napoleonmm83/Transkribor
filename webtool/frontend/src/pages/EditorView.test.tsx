@@ -3,6 +3,7 @@ import { render, act } from '@testing-library/react'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import { EditorView } from './EditorView'
 import { JobProvider } from '@/hooks/useActiveJob'
+import { EditorBrueckeProvider, useEditorBruecke } from '@/hooks/useEditorBruecke'
 import { ProjektDatenProvider } from '@/hooks/useProjektDaten'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import * as api from '@/lib/api'
@@ -21,11 +22,43 @@ const doc: EditDoc = {
   human_edited: false, context: '', speakers: [], segments: [], annotations: [],
 }
 
+/** Liest die Bruecke von aussen — so wie es die Leiste in der Huelle tut. */
+let bruecke: ReturnType<typeof useEditorBruecke>
+function Leser() { bruecke = useEditorBruecke(); return null }
+
 describe('EditorView (Stub)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     einstellungen({})
     vi.mocked(api.getDoc).mockResolvedValue(doc)
+  })
+
+  it('meldet das offene Dokument samt reload an die Huelle', async () => {
+    // Die Huelle kann `dirty` nur abfragen und nur nachladen, wenn der Editor sich meldet --
+    // ohne diese Verdrahtung sind K1 und K2 in der AppShell wirkungslos.
+    vi.mocked(api.listProjects).mockResolvedValue([])
+    vi.mocked(api.getProjectFiles).mockResolvedValue({ name: 'Demo', files: [] })
+    render(
+      <TooltipProvider>
+        <MemoryRouter initialEntries={['/p/Demo/S1']}>
+          <JobProvider>
+            <ProjektDatenProvider>
+              <EditorBrueckeProvider>
+                <Leser />
+                <Routes><Route path="/p/:project/:base" element={<EditorView />} /></Routes>
+              </EditorBrueckeProvider>
+            </ProjektDatenProvider>
+          </JobProvider>
+        </MemoryRouter>
+      </TooltipProvider>,
+    )
+    await act(async () => { await Promise.resolve() })
+    expect(bruecke.current).toMatchObject({ project: 'Demo', base: 'S1', dirty: false })
+    // reload muss das echte useDoc.reload sein, kein Platzhalter: der Beweis ist ein
+    // zweiter getDoc-Aufruf.
+    const vorher = vi.mocked(api.getDoc).mock.calls.length
+    await act(async () => { bruecke.current!.reload() })
+    expect(vi.mocked(api.getDoc).mock.calls.length).toBe(vorher + 1)
   })
 
   it('holt die Dateiliste neu, wenn sich dateien/fertig im Summenpoll aendern -- OHNE dass ein Job terminal wird (W1)', async () => {
@@ -46,7 +79,9 @@ describe('EditorView (Stub)', () => {
           <MemoryRouter initialEntries={['/p/Demo/S1']}>
             <JobProvider>
               <ProjektDatenProvider>
-                <Routes><Route path="/p/:project/:base" element={<EditorView />} /></Routes>
+                <EditorBrueckeProvider>
+                  <Routes><Route path="/p/:project/:base" element={<EditorView />} /></Routes>
+                </EditorBrueckeProvider>
               </ProjektDatenProvider>
             </JobProvider>
           </MemoryRouter>
