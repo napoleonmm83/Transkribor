@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, act } from '@testing-library/react'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import { EditorView } from './EditorView'
 import { JobProvider } from '@/hooks/useActiveJob'
@@ -67,5 +67,39 @@ describe('EditorView (Stub)', () => {
     await waitFor(() => expect(api.getProjectFiles).toHaveBeenCalledTimes(1))
     // j1 wird adoptiert, JobProvider pollt getJob -> 'done' -> onSettled muss refreshFiles() ausloesen.
     await waitFor(() => expect(vi.mocked(api.getProjectFiles).mock.calls.length).toBeGreaterThan(1))
+  })
+
+  it('holt die Dateiliste neu, wenn sich dateien/fertig im Summenpoll aendern -- OHNE dass ein Job terminal wird (W1)', async () => {
+    // Derselbe Fund wie bei ProjectWorkspace.test.tsx: onSettled feuert erst am Lauf-ENDE, eine
+    // Korrektur (CLAUDE.md: 25 Minuten) haette den Editor bis dahin auf dem alten Stand gehalten.
+    // Fake Timer vor render(): sonst legt useProjects sein setInterval auf den echten Timer,
+    // und RTLs eigenes waitFor kennt vitest-Fake-Timer nicht -- advanceTimersByTimeAsync dreht
+    // die Uhr UND wartet die dabei ausgeloesten Promise-Ketten ab.
+    vi.useFakeTimers()
+    try {
+      vi.mocked(api.listProjects)
+        .mockResolvedValueOnce([{ name: 'Demo', dateien: 1, fertig: 0, geaendert: 0, active_jobs: [] }])
+        .mockResolvedValue([{ name: 'Demo', dateien: 1, fertig: 1, geaendert: 0, active_jobs: [] }])
+      vi.mocked(api.getProjectFiles).mockResolvedValue({ name: 'Demo',
+        files: [{ base: 'S1', has_audio: true, has_raw: true, has_edit: false, has_md: false }] })
+      render(
+        <TooltipProvider>
+          <MemoryRouter initialEntries={['/p/Demo/S1']}>
+            <JobProvider>
+              <Routes><Route path="/p/:project/:base" element={<EditorView />} /></Routes>
+            </JobProvider>
+          </MemoryRouter>
+        </TooltipProvider>,
+      )
+      await act(async () => { await vi.advanceTimersByTimeAsync(0) })    // Mount + Anfangsfetches abwarten
+      // Basis statt absoluter Zahl: der Uebergang "p unbekannt" -> "p geladen" loest den neuen
+      // Effekt (dessen Deps sich dabei aendern) selbst schon einmal aus -- Teil des Fixes.
+      const basis = vi.mocked(api.getProjectFiles).mock.calls.length
+      await act(async () => { await vi.advanceTimersByTimeAsync(4000) })  // useProjects pollt alle 4s
+      // fertig 0 -> 1 im Summenpoll muss OHNE terminalen Job eine weitere Dateiliste-Anfrage ausloesen.
+      expect(vi.mocked(api.getProjectFiles).mock.calls.length).toBeGreaterThan(basis)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
