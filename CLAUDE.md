@@ -176,6 +176,44 @@ Beide Abos melden sich im Browser an; die App fragt den Zustand ab und fährt de
   ANSI-Falle und der Anbieterwechsel fielen erst im Browser auf, weil das Skript sauberen Text
   druckte. Wer hier etwas ändert, sieht sich die **Rohausgabe** der echten CLI an.
 
+## App-Hülle (Fensterraster, Seitenleiste, Titelzeile, OS-Integration)
+Vorher brachte nur der Editor ein Vollbild-Raster mit, die drei anderen Seiten waren zentrierte
+Lesespalten — bei 1280 px Fenster blieben rund 500 px leer, und das liest das Auge als Artikel im
+Fensterrahmen. Vier Dinge, die man nicht aus dem Diff liest:
+- **`h-screen` gibt es genau EINMAL**, in `components/AppShell.tsx`. `AppShell` ist der
+  Datenprovider, `Rahmen` das Raster (Titelzeile / [Leiste | Inhalt] / Statuszeile). Jede Seite
+  füllt ihre Zelle; wer irgendwo ein zweites `h-screen` setzt, hat die zweite Stelle, an der das
+  Fenster aufgeteilt wird — genau den Zustand, den dieser Umbau abgeschafft hat.
+- **`window.transkribor` ist die Weiche zwischen App- und Browser-Betrieb**, nicht der Plattform.
+  Dieselbe Oberfläche läuft unter `webtool.ps1` (:8000) und Vite (:5173); dort fehlt die Brücke,
+  und jede Electron-Funktion muss ein **No-Op** sein statt zu werfen. Das ist der Betriebsmodus,
+  den beim Entwickeln niemand öffnet — eine Regression dort fällt erst spät auf. `TitleBar`
+  rendert deshalb `null`, `fortschritt` wird übersprungen, `titelleisteFarbe` verpufft.
+- **Die Fensterknöpfe malt das Betriebssystem, nicht wir** (`electron/fenster.js`:
+  `titleBarStyle:'hidden'` + `titleBarOverlay` auf Windows/Linux, `hiddenInset` auf macOS). Das
+  war der Grund, die rahmenlose Variante überhaupt zu wagen: selbst gezeichnete Knöpfe wären das
+  Stück, das auf jeder Plattform anders bricht — und macOS/Linux sind ungeprüft (Issue #36).
+  `fensterOptionen(platform, dunkel)` ist eine **reine Funktion** (Muster wie `setup.plan`), weil
+  sie das Einzige daran ist, was sich ohne die fremde Hardware prüfen lässt. `TITELLEISTE_HOEHE`
+  (40) hat ein Gegenstück im `h-10` der `TitleBar` — zwei Zahlen in zwei Laufzeiten, beide Seiten
+  tragen einen Kommentar auf die andere.
+- **`onSettled` meldet Übergänge, keine Zustände** (`hooks/useActiveJob.tsx`). Der Rückruf trägt
+  `beendet: Job[]` — nur die Jobs, die in **diesem** Tick terminal wurden. Ein Zuhörer, der
+  stattdessen `jobs` aus seinem Render-Closure liest, sieht dort veralteten Stand (wir rufen
+  synchron nach `setJobs`), und wer das mit einer Zeitschaltung umgeht, verlässt sich auf Reacts
+  Batching-Zeitpunkt statt auf Daten. Der `zuletzt`-Stand je Kennung ist **nicht** überflüssig:
+  `ids` friert beim Effekt-Aufsatz ein, und holt die Effekt-Bereinigung den geplanten
+  `setTimeout` nicht ein, feuert die alte Tick-Closure erneut. Diese Race lässt sich in keinem
+  Test erzwingen — die Begründung ist das Argument, nicht ein roter Lauf.
+- **Ein Abruf, egal wie viele Leser:** `hooks/useProjektDaten.tsx` hält Projektliste und
+  Dateiliste für die ganze App (`useProjekte`, `useDateien`). Vorher rief jede Seite `useProjects`
+  selbst; mit der dauerhaften Seitenleiste wären es zwei parallele Polls geworden — also genau
+  die Last, die PR #67 gemessen abgebaut hat. Das aufgeklappte Projekt der Leiste **ist** das aus
+  der URL; ein zweiter Begriff von „offen" wäre eine zweite Wahrheit.
+- **Die Projektliste sortiert das Frontend, nicht das Backend** (`list_projects` liefert
+  `os.scandir`-Reihenfolge). Beim Umzug der Liste in die Leiste ging diese Sortierung einmal
+  still verloren — wer die Liste anfasst, prüft die Reihenfolge mit.
+
 ## Desktop-App (Electron)
 `.\webtool.ps1` bleibt der Entwickler-Weg; für Nutzer gibt es einen Installer.
 - `electron/main.js` — Fenster **zuerst** (die Ersteinrichtung dauert Minuten; wer auf nichts schaut,
