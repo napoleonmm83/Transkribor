@@ -35,8 +35,13 @@ export function ProjektDatenProvider({ children }: { children: ReactNode }) {
   // die Dateiliste veraltet (eine frisch geschriebene edit.json sieht der Summenpoll erst beim
   // naechsten Durchlauf). Stand vorher wortgleich in EditorView UND ProjectWorkspace — seit die
   // Daten geteilt sind, ist das eine globale Angelegenheit und keine der einzelnen Seite.
-  useEffect(() => onSettled(() => { projekte.refresh(); datei.refresh() }),
-    [onSettled, projekte.refresh, datei.refresh])  // eslint-disable-line react-hooks/exhaustive-deps
+  // Lokale Konstanten statt projekte.refresh/datei.refresh direkt im Dep-Array: sonst meldet
+  // exhaustive-deps "projekte"/"datei" fehlen -- mit den Konstanten sieht die Regel echte,
+  // stabile Referenzen und bleibt ein echtes Netz gegen kuenftig instabile refresh-Funktionen.
+  const projekteRefresh = projekte.refresh
+  const dateiRefresh = datei.refresh
+  useEffect(() => onSettled(() => { projekteRefresh(); dateiRefresh() }),
+    [onSettled, projekteRefresh, dateiRefresh])
 
   // Der billige Waechter ueber die Dateiliste: aendern sich `dateien`/`fertig` in der
   // Zusammenfassung, hat sich auf der Platte etwas getan (ein Job mittendrin, oder eine von
