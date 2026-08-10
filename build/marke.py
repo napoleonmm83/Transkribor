@@ -61,7 +61,52 @@ def zeichen(kante):
     return _zeichen_roh(kante * UEBER).resize((kante, kante), Image.LANCZOS)
 
 
+def sidebar():
+    """164x314 — steht auf der Willkommens- und der Abschlussseite des Assistenten."""
+    b, h, u = 164, 314, UEBER
+    bild = Image.new("RGBA", (b * u, h * u), INDIGO)
+    d = ImageDraw.Draw(bild)
+
+    z = zeichen(46 * u)
+    bild.paste(z, (18 * u, 24 * u), z)
+
+    f_titel = schrift("SpaceGrotesk.ttf", 19 * u, HALBFETT)
+    f_text = schrift("DMSans.ttf", 10 * u)
+    d.text((18 * u, 82 * u), "Transkribor", font=f_titel, fill=WEISS)
+    for i, zeile in enumerate(("Interviews transkribieren —", "lokal auf deinem Rechner")):
+        d.text((18 * u, (108 + i * 15) * u), zeile, font=f_text, fill=(255, 255, 255, 200))
+
+    # Angedeutete Tonspur als Textur am Fuss. Halbdurchsichtig, deshalb ueber
+    # alpha_composite statt direkt gezeichnet.
+    schleier = Image.new("RGBA", bild.size, (0, 0, 0, 0))
+    ds = ImageDraw.Draw(schleier)
+    for i, hoch in enumerate((9, 18, 26, 14, 21, 8, 16, 24, 11, 19, 27, 13)):
+        x = (18 + i * 10) * u
+        ds.rounded_rectangle([x, (278 - hoch) * u, x + 4 * u, 278 * u],
+                             radius=2 * u, fill=(255, 255, 255, 90))
+    bild = Image.alpha_composite(bild, schleier)
+
+    return bild.resize((b, h), Image.LANCZOS).convert("RGB")
+
+
+def header():
+    """150x57 — die Kopfzeile der inneren Seiten. Heller Grund, damit der
+    Streifen nicht als Fremdkoerper ueber dem weissen Dialog schwebt."""
+    b, h, u = 150, 57, UEBER
+    bild = Image.new("RGBA", (b * u, h * u), "#FFFFFF")
+    d = ImageDraw.Draw(bild)
+
+    z = zeichen(30 * u)
+    bild.paste(z, (12 * u, 13 * u), z)
+    d.text((50 * u, 19 * u), "Transkribor",
+           font=schrift("SpaceGrotesk.ttf", 14 * u, HALBFETT), fill=INDIGO)
+
+    return bild.resize((b, h), Image.LANCZOS).convert("RGB")
+
+
 if __name__ == "__main__":
     zeichen(1024).save(BUILD / "icon.png")
     zeichen(128).save(WURZEL / "electron" / "marke.png")
-    print("geschrieben: build/icon.png (1024), electron/marke.png (128)")
+    sidebar().save(BUILD / "installerSidebar.bmp", "BMP")
+    header().save(BUILD / "installerHeader.bmp", "BMP")
+    print("geschrieben: icon.png, electron/marke.png, installerSidebar.bmp, installerHeader.bmp")
