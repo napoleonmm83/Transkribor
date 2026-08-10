@@ -56,3 +56,8 @@ test('titelleisteFarbe reicht Farbe an den Hauptprozess weiter', async () => {
   await freigegeben.titelleisteFarbe(f)
   assert.deepStrictEqual(aufrufe.at(-1), ['titelleisteFarbe', f])
 })
+
+test('fortschritt reicht den Anteil an den Hauptprozess weiter', async () => {
+  await freigegeben.fortschritt(0.5)
+  assert.deepStrictEqual(aufrufe.at(-1), ['fortschritt', 0.5])
+})
