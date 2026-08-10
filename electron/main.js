@@ -12,7 +12,7 @@ const backend = require('./backend')
 const setup = require('./setup')
 const protokoll = require('./protokoll')
 const updater = require('./updater')
-const { fensterOptionen } = require('./fenster')
+const { fensterOptionen, TITELLEISTE_HOEHE } = require('./fenster')
 
 let win = null
 let aktualisierer = null
@@ -34,13 +34,9 @@ function senden(kanal, nutzlast) {
 
 function fenster() {
   const dunkel = nativeTheme.shouldUseDarkColors
-  const opt = fensterOptionen(process.platform)
-  // Feste Startfarben aus fenster.js durch die tatsaechliche Systemfarbe ersetzen —
-  // dieselbe Quelle wie backgroundColor unten, sonst weichen Fenster und Overlay beim Start voneinander ab.
-  if (opt.titleBarOverlay) {
-    opt.titleBarOverlay.color = dunkel ? '#0B0B0F' : '#FAFAFA'
-    opt.titleBarOverlay.symbolColor = dunkel ? '#FAFAFA' : '#0B0B0F'
-  }
+  // fensterOptionen entscheidet die Startfarbe selbst -- dieselbe Quelle wie backgroundColor
+  // unten, sonst weichen Fenster und Overlay beim Start voneinander ab.
+  const opt = fensterOptionen(process.platform, dunkel)
   win = new BrowserWindow({
     width: 1280, height: 860, minWidth: 900, minHeight: 600,
     // Electron malt diese Farbe VOR dem ersten Dokument-Zeichnen und an den Raendern beim
@@ -95,6 +91,13 @@ ipcMain.handle('einrichten', async () => {
 })
 
 ipcMain.handle('logs', () => backend.log())
+
+// Das Overlay ist eine feste Farbe im Hauptprozess und weiss nichts vom Thema der Seite.
+// Ohne diesen Weg stuenden im Dunkelmodus schwarze Fensterknoepfe auf dunklem Grund.
+ipcMain.handle('titelleisteFarbe', (_e, f) => {
+  if (!win || win.isDestroyed() || process.platform === 'darwin') return
+  win.setTitleBarOverlay({ color: f.color, symbolColor: f.symbolColor, height: TITELLEISTE_HOEHE })
+})
 
 ipcMain.handle('update:status', () => aktualisierer && aktualisierer.zustand())
 ipcMain.handle('update:pruefen', () => aktualisierer && aktualisierer.pruefen())

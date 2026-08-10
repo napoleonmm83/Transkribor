@@ -21,4 +21,8 @@ contextBridge.exposeInMainWorld('transkribor', {
     ipcRenderer.on(kanal, hoerer)
     return () => ipcRenderer.removeListener(kanal, hoerer)
   },
+  // Fuer die Rand-Reserven der eigenen Titelzeile: die Fensterknoepfe stehen auf macOS
+  // links, sonst rechts. process.platform gibt es im Renderer nicht (contextIsolation).
+  plattform: process.platform,
+  titelleisteFarbe: f => ipcRenderer.invoke('titelleisteFarbe', f),
 })
