@@ -186,8 +186,32 @@ describe('AppShell', () => {
         <JobProvider><AppShell><Schreibtisch dirty={false} reload={reload} /></AppShell></JobProvider>
       </MemoryRouter>,
     )
+    const frage = vi.spyOn(window, 'confirm')
     await waitFor(() => expect(screen.getByLabelText('Nur „a" korrigieren')).toBeInTheDocument())
     fireEvent.click(screen.getByLabelText('Nur „a" korrigieren'))
     await waitFor(() => expect(reload).toHaveBeenCalled())
+    expect(frage).not.toHaveBeenCalled()      // ohne Ungespeichertes keine Rueckfrage
+    frage.mockRestore()
+  })
+
+  it('laedt NICHT nach, wenn Ungespeichertes offen ist und die Rueckfrage abgelehnt wird', async () => {
+    // Sonst verwirft ausgerechnet der Nachlade-Fix die Arbeit, die K1 schuetzt: man startet
+    // die Korrektur einer Datei und tippt weiter, waehrend sie laeuft.
+    vi.mocked(api.listProjects).mockResolvedValue(ZWEI)
+    vi.mocked(api.getProjectFiles).mockResolvedValue({ name: 'Alpha', files: DATEIEN })
+    vi.mocked(api.startCorrectFile).mockResolvedValue({ started: true, job_id: 'j1' })
+    vi.mocked(api.getJob).mockResolvedValue({ status: 'done', lines: [] })
+    const frage = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    const reload = vi.fn()
+    render(
+      <MemoryRouter initialEntries={['/p/Alpha/a']}>
+        <JobProvider><AppShell><Schreibtisch reload={reload} /></AppShell></JobProvider>
+      </MemoryRouter>,
+    )
+    await waitFor(() => expect(screen.getByLabelText('Nur „a" korrigieren')).toBeInTheDocument())
+    fireEvent.click(screen.getByLabelText('Nur „a" korrigieren'))
+    await waitFor(() => expect(frage).toHaveBeenCalled())
+    expect(reload).not.toHaveBeenCalled()
+    frage.mockRestore()
   })
 })

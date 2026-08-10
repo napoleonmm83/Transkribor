@@ -59,7 +59,19 @@ function Leiste() {
         `Korrigieren ${b}`,
         // Listen allein reichen nicht: der Editor haelt weiter das Dokument von VOR der
         // Korrektur, und "Speichern" schriebe es ueber die frisch erzeugte edit.json.
-        () => { nachladen(); const e = editor.current; if (e?.project === p && e.base === b) e.reload() })}
+        () => {
+          nachladen()
+          const e = editor.current
+          if (e?.project !== p || e.base !== b) return
+          // Ungespeichertes Nachladen waere derselbe stille Datenverlust wie beim Wechsel,
+          // nur andersherum: man startet die Korrektur und tippt weiter, waehrend sie laeuft.
+          // Darum die Wahl -- und beide Ausgaenge kosten etwas, also stehen beide im Text.
+          if (e.dirty && !window.confirm(
+            `Die Korrektur von „${b}" ist fertig.\n\n` +
+            'OK: korrigierte Fassung laden — deine ungespeicherten Änderungen gehen verloren.\n' +
+            'Abbrechen: deine Fassung behalten — beim Speichern überschreibst du die Korrektur.')) return
+          e.reload()
+        })}
       // Weg von der Seite des geloeschten Projekts -- sonst steht dort "Projekt nicht
       // gefunden". Keine zweite Rueckfrage: der Dialog hat den Namen abtippen lassen.
       onGeloescht={() => { navigate('/'); refresh() }}
