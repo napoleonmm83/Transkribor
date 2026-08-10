@@ -53,10 +53,11 @@ describe('useOsFortschritt', () => {
     expect(meldungen[0]).toContain('Alpha')
   })
 
-  it('meldet einen von zwei Jobs nur einmal, obwohl der andere noch laeuft', async () => {
-    // Der Fall, gegen den der Riegel wirklich schuetzt: A wird terminal, B laeuft weiter --
-    // solange B noch laeuft, feuert onSettled bei JEDEM weiteren Tick erneut, und OHNE den
-    // Riegel wuerde A dabei jedes Mal erneut gemeldet.
+  it('meldet einen beendeten Lauf genau einmal, auch wenn ein zweiter weiterlaeuft', async () => {
+    // A wird terminal, B laeuft weiter -- onSettled feuert bei JEDEM weiteren Tick erneut,
+    // solange B noch laeuft. A darf dabei trotzdem nur EINMAL gemeldet werden: useActiveJob.tsx
+    // gibt bei jedem Tick nur die JUST beendeten Jobs weiter (beendet-Kommentar dort), A faellt
+    // nach seinem eigenen Tick aus `ids` und kann in einem spaeteren `neu` nicht mehr auftauchen.
     let bTicks = 0
     vi.mocked(api.getJob).mockImplementation(async (id: string) =>
       id === 'j1'

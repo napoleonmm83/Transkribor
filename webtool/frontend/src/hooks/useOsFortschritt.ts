@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect } from 'react'
 import { useActiveJob } from './useActiveJob'
 import { useProjekte } from './useProjektDaten'
 import { KIND_LABEL } from '@/lib/jobPhases'
@@ -18,17 +18,12 @@ function bruecke() {
 export function useOsFortschritt(): void {
   const { jobs, onSettled } = useActiveJob()
   const { projects } = useProjekte()
-  // Welche Laeufe schon gemeldet wurden. onSettled feuert bei JEDEM Tick, in dem irgendein Job
-  // terminal ist -- ohne diesen Riegel meldet die App im Poll-Takt dasselbe noch einmal.
-  const gemeldet = useRef(new Set<string>())
 
   // `beendet` ist die Nutzlast des Ereignisses (useActiveJob.tsx) -- schon auf die JUST terminal
-  // gewordenen Jobs gefiltert, mit frischem Status. Kein `jobs` aus dem eigenen Render-Closure
-  // noetig: das waere hier zwangslaeufig veraltet (der Aufruf kommt synchron vor dem Rerender).
+  // gewordenen Jobs dieses Ticks beschraenkt. Kein eigener Riegel noetig: useActiveJob.tsx
+  // garantiert, dass ein Job dort nie zweimal auftaucht (siehe Kommentar an der beendet-Stelle).
   useEffect(() => onSettled(beendet => {
     for (const j of beendet) {
-      if (gemeldet.current.has(j.id)) continue
-      gemeldet.current.add(j.id)
       if (typeof Notification === 'undefined' || Notification.permission !== 'granted') continue
       const was = KIND_LABEL[j.kind] ?? j.kind
       new Notification(
