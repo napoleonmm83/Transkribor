@@ -293,6 +293,28 @@ Fensterrahmen. Vier Dinge, die man nicht aus dem Diff liest:
 `projekte\<NAME>\audio\` erstellen, Audio hineinlegen, optional `projekte\<NAME>\kontext.md`
 mit Projektbeschreibung + bekannten Namen (verbessert Whisper und die Korrektur).
 
+## Offene Punkte werden Issues — automatisch, ohne Rückfrage
+**Was am Ende einer Arbeit offen bleibt, wird ein GitHub-Issue.** Nicht eine Zeile im Bericht,
+nicht ein Eintrag in einem Ledger, das mit dem Arbeitsverzeichnis stirbt — ein Issue. Der Grund
+ist gemessen: PR #68 produzierte neun geparkte Befunde, und ohne Issues hätte sie nach dem Merge
+niemand mehr gefunden, weil der Ledger git-ignoriert ist und der PR-Text im Archiv verschwindet.
+
+**Issue-würdig ist**, was jemand später tun könnte: ein bewusst nicht behobener Befund, eine
+benannte Testlücke, eine aufgeschobene Entscheidung, ein Fund eines Reviewers, den man geparkt
+hat. **Nicht** issue-würdig: was in derselben Arbeit behoben wurde, reine Zwischenstände, und
+Dinge, die schon woanders stehen (CLAUDE.md-Fakten, bestehende Issues — vorher `gh issue list`
+prüfen).
+
+**Wann:** direkt bevor die Arbeit als fertig gemeldet wird — vor dem PR-Merge, spätestens vor dem
+Release. Nicht auf eine Aufforderung warten, nicht sammeln.
+
+**Jedes Issue trägt drei Dinge**, sonst ist es in drei Monaten wertlos: die **Fundstelle**
+(`Datei` bzw. `Datei:Zeile`), **warum es zählt** (welche Wirkung, für wen), und **wie es gefunden
+wurde** (welcher Review, welche Messung, welche Sichtprüfung) — Letzteres, weil daran hängt, wie
+belastbar der Befund ist. Labels: `bug` für falsches Verhalten und Testlücken, `enhancement` für
+Geschmacks- und Ausbaufragen. Ist ein Punkt bewusst so entschieden, gehört die Entscheidung samt
+Begründung ins Issue, nicht nur der Mangel.
+
 ## GitHub-Management (Claude übernimmt das autonom)
 Code-Änderungen landen ohne Rückfrage über den Standard-Flow — nicht direkt auf master:
 Feature-Branch → Commit → `gh pr create --base master` → CI/Mergeability prüfen →
