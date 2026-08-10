@@ -4,7 +4,7 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import { ProjectWorkspace } from './ProjectWorkspace'
 import { JobProvider } from '@/hooks/useActiveJob'
 import * as api from '@/lib/api'
-import type { Settings } from '@/lib/types'
+import type { Settings, ProjectFile } from '@/lib/types'
 
 vi.mock('@/lib/api')
 
@@ -162,5 +162,23 @@ describe('ProjectWorkspace (Stub)', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  it('zeigt "Noch keine Dateien" nicht, solange die Dateiliste noch unterwegs ist (M2)', async () => {
+    vi.mocked(api.listProjects).mockResolvedValue([{ name: 'Demo', dateien: 0, fertig: 0, geaendert: 0, active_jobs: [] }])
+    let loese: ((v: { name: string; files: ProjectFile[] }) => void) | null = null
+    vi.mocked(api.getProjectFiles).mockReturnValue(new Promise(r => { loese = r }))
+    render(
+      <MemoryRouter initialEntries={['/p/Demo']}>
+        <JobProvider>
+          <Routes><Route path="/p/:project" element={<ProjectWorkspace />} /></Routes>
+        </JobProvider>
+      </MemoryRouter>,
+    )
+    // Zusammenfassung ist da (Projektname im Titel), die Dateiliste haengt noch.
+    expect(await screen.findByRole('heading', { name: 'Demo' })).toBeInTheDocument()
+    expect(screen.queryByText(/Noch keine Dateien/)).not.toBeInTheDocument()
+    await act(async () => { loese!({ name: 'Demo', files: [] }) })
+    expect(await screen.findByText(/Noch keine Dateien/)).toBeInTheDocument()
   })
 })

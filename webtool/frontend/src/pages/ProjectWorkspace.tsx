@@ -20,7 +20,7 @@ export function ProjectWorkspace() {
   const { project } = useParams<{ project: string }>()
   const navigate = useNavigate()
   const { projects, refresh } = useProjects()
-  const { files: dateien, refresh: refreshFiles } = useProjectFiles(project!)
+  const { files: dateien, refresh: refreshFiles, loading: dateienLaden } = useProjectFiles(project!)
   const { jobs, adopt, onSettled } = useActiveJob()
   const aiReason = useAiReady()          // nicht leer -> Korrektur waere ein Leerlauf
   const p = projects.find(x => x.name === project)
@@ -129,7 +129,10 @@ export function ProjectWorkspace() {
           Dateien{dateien.length > 0 && <span className="ziffern ml-2 normal-case">{dateien.length}</span>}
         </h2>
 
-        {p && dateien.length === 0 && (
+        {/* An useProjectFiles.loading haengen, nicht nur an p (Zusammenfassung): die Dateiliste
+            ist eine eigene Anfrage, die laenger laufen kann als die Zusammenfassung -- sonst
+            blitzt "Noch keine Dateien" auf, waehrend sie noch unterwegs ist. */}
+        {p && !dateienLaden && dateien.length === 0 && (
           <div className="blatt flex flex-col items-center px-6 py-12 text-center">
             <FileAudio className="size-7 text-muted-foreground" aria-hidden="true" />
             <p className="mt-3 max-w-sm text-sm text-muted-foreground">
