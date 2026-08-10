@@ -113,7 +113,10 @@ export function EditorView() {
       () => { refresh(); refreshFiles(); if (sel?.project === p && sel?.base === b) reload() })
 
   return (
-    <div className="grid h-screen grid-rows-[auto_1fr_auto] grid-cols-[260px_1fr]">
+    // h-full, nicht h-screen: das Fenster teilt seit der AppShell nur noch EINE Stelle auf.
+    // Mit h-screen waere der Editor so hoch wie das Fenster PLUS Statuszeile — die Zeile
+    // stuende dann unter dem unteren Rand, und die Shell-Zelle bekaeme eine zweite Bildlaufleiste.
+    <div className="grid h-full grid-rows-[auto_1fr_auto] grid-cols-[260px_1fr]">
       <aside className="row-span-3 border-r overflow-auto">
         <Sidebar projects={sidebarProjects} loading={projectsLoading}
           active={sel} onOpen={openFile} onUpload={onUpload}

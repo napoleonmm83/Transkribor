@@ -71,7 +71,7 @@ export function ProjectWorkspace() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl p-6 sm:p-8">
+    <div className="p-6 sm:p-8">
       <PageHeader rubrik="Projekt" titel={project ?? ''} zurueck="/" zurueckText="Projekte">
         <Button variant="outline" size="sm"
           onClick={() => startJob(() => startTranscribe(project!), 'transcribe', 'Transkribieren')}>

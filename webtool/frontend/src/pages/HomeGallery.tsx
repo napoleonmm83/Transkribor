@@ -51,7 +51,7 @@ export function HomeGallery() {
     [treffer, sort])
 
   return (
-    <div className="mx-auto max-w-5xl p-6 sm:p-8">
+    <div className="p-6 sm:p-8">
       <PageHeader rubrik="Transkribor" titel="Projekte">
         <Button variant="ghost" size="sm" asChild>
           <Link to="/einstellungen"><Settings className="size-4" /> Einstellungen</Link>
