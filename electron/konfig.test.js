@@ -9,6 +9,8 @@
  */
 const test = require('node:test')
 const assert = require('node:assert')
+const fs = require('node:fs')
+const path = require('node:path')
 const Ajv = require('ajv')
 
 const schema = require('app-builder-lib/scheme.json')
@@ -48,5 +50,16 @@ test('extraResources nimmt Modellgewichte und deren Lizenz mit', () => {
   const filter = (konfig.extraResources || []).flatMap(r => r.filter || [])
   for (const noetig of ['models/**/*', 'LICENSE-MODELLE.md']) {
     assert.ok(filter.includes(noetig), `${noetig} fehlt in extraResources: ${filter.join(', ')}`)
+  }
+})
+
+test('setup.html findet Zeichen und Schriften neben sich', () => {
+  // Das Einrichtungsfenster laedt per file:// aus electron/. Fehlt eine dieser
+  // Dateien, faellt es still auf system-ui bzw. ein leeres Bild zurueck — im
+  // gepackten Lauf sieht das niemand mehr.
+  const html = fs.readFileSync(path.join(__dirname, 'setup.html'), 'utf8')
+  for (const datei of ['marke.png', 'fonts/space-grotesk.woff2', 'fonts/dm-sans.woff2']) {
+    assert.ok(html.includes(datei), `setup.html verweist nicht auf ${datei}`)
+    assert.ok(fs.existsSync(path.join(__dirname, datei)), `${datei} fehlt in electron/`)
   }
 })
