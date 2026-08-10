@@ -242,11 +242,14 @@ Beide Abos melden sich im Browser an; die App fragt den Zustand ab und fährt de
   einer alten Version stehen). Mit Developer ID + Notarisierung läuft es ohne Codeänderung an.
 - **DMG-Hintergrund erklärt die Gatekeeper-Warnung, bevor sie kommt.** Ankündigen kann die App
   sie nicht — vor dem erlaubten Start läuft kein Code von uns, das DMG-Fenster ist die einzige
-  Fläche davor. `build/hintergrund.py` (PIL, Segoe UI) rendert `background.png` + `@2x`; die
-  **PNG sind committet**, weil die CI-Runner weder PIL noch die Schriften haben. Die
-  Symbolpositionen stehen doppelt — `dmg.contents` in `package.json` und `SYMBOL_*` im Skript
-  (nur für den Pfeil) — die muss man **zusammen** ändern. Das Skript bricht ab, wenn eine
-  Textzeile aus der Hinweiskarte läuft.
+  Fläche davor. `build/marke.py` rendert ihn (PIL, Brand-Schriften aus `build/fonts`) zusammen
+  mit dem App-Icon und den beiden NSIS-Bildern; die **Ausgaben sind committet**, weil die
+  CI-Runner weder PIL noch die Schriften haben. Die Symbolpositionen stehen doppelt —
+  `dmg.contents` in `package.json` und `SYMBOL_*` im Skript (nur für den Pfeil) — die muss man
+  **zusammen** ändern. Das Skript bricht ab, wenn eine Textzeile aus der Hinweiskarte läuft.
+  Geprüft wird nicht der Renderer, sondern die fertige Datei: `build/test_bilder.py` liest die
+  Kopfdaten mit `struct` und kommt **ohne PIL** aus — sonst liefe der Test im CI-Python-Job nicht,
+  der bewusst ohne schwere Abhängigkeiten fährt.
 
 ## Neues Projekt anlegen
 `projekte\<NAME>\audio\` erstellen, Audio hineinlegen, optional `projekte\<NAME>\kontext.md`
