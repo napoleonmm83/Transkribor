@@ -6,13 +6,15 @@ import * as api from '@/lib/api'
 
 vi.mock('@/lib/api')
 
-const projects = [{ name: 'P', files: [{ base: 'a', has_audio: true, has_raw: true, has_edit: true, has_md: true }] }]
+const projekte = [{ name: 'P', dateien: 1 }]
+const dateien = [{ base: 'a', has_audio: true, has_raw: true, has_edit: true, has_md: true }]
 
 function Harness() {
   const { start } = useJob()
   const onCorrectFile = (project: string, base: string, force: boolean) =>
     start(() => api.startCorrectFile(project, base, force), `Korrigieren ${base}`)
-  return <Sidebar projects={projects} active={null} onOpen={vi.fn()} onUpload={vi.fn()}
+  return <Sidebar projekte={projekte} offen="P" dateien={dateien} onWaehlen={vi.fn()}
+    active={null} onOpen={vi.fn()} onUpload={vi.fn()}
     onTranscribe={vi.fn()} onCorrect={vi.fn()} onCorrectFile={onCorrectFile} />
 }
 

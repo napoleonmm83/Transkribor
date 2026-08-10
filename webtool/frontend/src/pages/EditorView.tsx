@@ -1,13 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import { useProjekte, useDateien } from '@/hooks/useProjektDaten'
-import { useAiReady } from '@/hooks/useAiReady'
 import { useDoc } from '@/hooks/useDoc'
-import { useJob } from '@/hooks/useJob'
-import { mergePhases, useActiveJob } from '@/hooks/useActiveJob'
-import { uploadAudio, audioUrl, startTranscribe, startCorrect, startCorrectFile } from '@/lib/api'
+import { useActiveJob } from '@/hooks/useActiveJob'
+import { audioUrl } from '@/lib/api'
 import { SKIP, segIdAusFokus } from '@/lib/playback'
-import { Sidebar } from '@/components/Sidebar'
 import { Toolbar } from '@/components/Toolbar'
 import { Transcript } from '@/components/Transcript'
 import { PlayerDock } from '@/components/PlayerDock'
@@ -15,31 +12,19 @@ import type { WaveHandle } from '@/components/Waveform'
 
 export function EditorView() {
   const { project, base } = useParams<{ project: string; base: string }>()
-  const navigate = useNavigate()
-  const { projects, loading: projectsLoading, refresh } = useProjekte()
-  const { files: dateien, refresh: refreshFiles } = useDateien()
+  const { projects, refresh } = useProjekte()
+  const { refresh: refreshFiles } = useDateien()
   const sel = project && base ? { project, base } : null
-  const { doc, dirty, loading: docLoading, updateSegment, renameSpeaker, save, exportDownload, reload } = useDoc(sel?.project ?? null, sel?.base ?? null)
-  const { start } = useJob()
-  const { jobs, adopt, onSettled } = useActiveJob()
-  const aiReason = useAiReady()          // nicht leer -> Korrektur waere ein Leerlauf
+  const { doc, dirty, loading: docLoading, updateSegment, renameSpeaker, save, exportDownload } = useDoc(sel?.project ?? null, sel?.base ?? null)
+  const { adopt, onSettled } = useActiveJob()
   // Wie ProjectWorkspace.tsx: onSettled feuert bei JEDEM Job dieses Prozesses, der terminal
   // wird — auch bei einem, der ueber active_jobs adoptiert, aber woanders gestartet wurde (z.B.
-  // "Korrigieren" fuers ganze Projekt in der Arbeitsflaeche, waehrend der Editor offen ist). Nur
-  // die eigenen useJob()-onDone-Callbacks unten wuerden das verpassen -- die feuern nur fuer
-  // Jobs, die dieser Editor selbst gestartet hat.
+  // "Korrigieren" fuers ganze Projekt in der Arbeitsflaeche, waehrend der Editor offen ist). Die
+  // Seitenleiste zeigt den Fortschritt nicht mehr hier an (die zieht in die AppShell, Task 5),
+  // aber die Dateiliste/Projektliste bleiben global geteilt (ProjektDatenProvider) und muessen
+  // trotzdem frisch bleiben, sobald ein Job dieses Projekts fertig wird.
   useEffect(() => onSettled(() => { refresh(); refreshFiles() }), [onSettled, refresh, refreshFiles])
-  const meine = useMemo(() => jobs.filter(j => j.project === project && j.status === 'running'),
-    [jobs, project])
-  const phases = useMemo(() => mergePhases(meine), [meine])   // nur eigenes Projekt, s. mergePhases
-  const running = meine.length > 0
   const activeProject = projects.find(x => x.name === project)
-  // Dateien kommen jetzt aus useDateien, nicht mehr aus useProjects — Sidebar erwartet
-  // weiterhin ein `files`-Feld (SidebarProject, seit Task 3 kein Teil von Project mehr).
-  const sidebarProjects = useMemo(
-    () => (activeProject ? [{ ...activeProject, files: dateien }] : []),
-    [activeProject, dateien],
-  )
   const aktiveIds = (activeProject?.active_jobs ?? []).map(j => j.id).join(',')
   useEffect(() => {
     for (const aj of activeProject?.active_jobs ?? []) adopt(aj.id, project!, aj.kind)
@@ -86,43 +71,17 @@ export function EditorView() {
     return () => window.removeEventListener('beforeunload', onBeforeUnload)
   }, [dirty])
 
-  const openFile = (s: { project: string; base: string }) => {
-    const same = sel?.project === s.project && sel?.base === s.base
-    if (!same && dirty && !window.confirm('Ungespeicherte Änderungen verwerfen?')) return
-    navigate(`/p/${encodeURIComponent(s.project)}/${encodeURIComponent(s.base)}`)
-  }
-
-  const onUpload = async (p: string, file: File) => { await uploadAudio(p, file); refresh(); refreshFiles() }
-  const onTranscribe = (p: string) => start(() => startTranscribe(p), `Transkribieren ${p}`, () => { refresh(); refreshFiles() })
-  const onCorrect = (p: string) => start(() => startCorrect(p), `Korrigieren ${p}`, () => { refresh(); refreshFiles() })
-  const onCorrectFile = (p: string, b: string, force: boolean) =>
-    start(() => startCorrectFile(p, b, force).then(res => { if (res.started) adopt(res.job_id, p, 'correct'); return res }),
-      `Korrigieren ${b}`,
-      () => { refresh(); refreshFiles(); if (sel?.project === p && sel?.base === b) reload() })
-
   return (
-    // h-full, nicht h-screen: das Fenster teilt seit der AppShell nur noch EINE Stelle auf.
-    // Mit h-screen waere der Editor so hoch wie das Fenster PLUS Statuszeile — die Zeile
-    // stuende dann unter dem unteren Rand, und die Shell-Zelle bekaeme eine zweite Bildlaufleiste.
-    <div className="grid h-full grid-rows-[auto_1fr_auto] grid-cols-[260px_1fr]">
-      <aside className="row-span-3 border-r overflow-auto">
-        <Sidebar projects={sidebarProjects} loading={projectsLoading}
-          active={sel} onOpen={openFile} onUpload={onUpload}
-          onTranscribe={onTranscribe} onCorrect={onCorrect} onCorrectFile={onCorrectFile}
-          backTo={project ? `/p/${encodeURIComponent(project)}` : '/'} phases={phases} jobRunning={running}
-          aiReason={aiReason} />
-      </aside>
-      <div className="col-start-2"><Toolbar title={title} dirty={dirty} canSave={!!doc}
-        onSave={save} onExport={exportDownload} /></div>
-      <main className="col-start-2 overflow-auto">
+    // Nur noch der Inhalt: die Projektnavigation zieht in die AppShell (Task 5).
+    <div className="grid h-full grid-rows-[auto_1fr_auto]">
+      <Toolbar title={title} dirty={dirty} canSave={!!doc} onSave={save} onExport={exportDownload} />
+      <main className="min-h-0 overflow-auto">
         <Transcript doc={doc} loading={docLoading} activeId={activeId}
           onPlaySeg={s => waveRef.current?.playSegment(s)}
           onPlayTurn={segs => waveRef.current?.playTurn(segs)}
           updateSegment={updateSegment} renameSpeaker={renameSpeaker} />
       </main>
-      <div className="col-start-2">
-        <PlayerDock url={sel ? audioUrl(sel.project, sel.base) : undefined} onTime={onTime} waveRef={waveRef} />
-      </div>
+      <PlayerDock url={sel ? audioUrl(sel.project, sel.base) : undefined} onTime={onTime} waveRef={waveRef} />
     </div>
   )
 }
