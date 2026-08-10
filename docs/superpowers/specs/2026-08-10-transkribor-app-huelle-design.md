@@ -185,11 +185,36 @@ Anteil = fertige Dateien / alle Dateien des Laufs. `mode: 'error'` bei gescheite
 `titelleisteFarbe({color, symbolColor})`. Sie ist die Vertrauensgrenze — jede Zeile dort ist etwas,
 das Renderer-Code darf, und dieser Renderer verarbeitet Transkripttext aus URL-Importen.
 
+### 8. Projektliste und Dateiliste gehören der Hülle, nicht den Seiten
+
+*Beim Schreiben des Umsetzungsplans aufgefallen, nicht vorher.*
+
+`useProjects` wird heute an **vier** Stellen instanziiert (`HomeGallery`, `ProjectWorkspace`,
+`EditorView`, `ProjektPalette`), `useProjectFiles` an zweien. Solange nur eine Seite zur Zeit
+gerendert wird, ist das je ein Abruf. Eine **dauerhafte** Seitenleiste ist die fünfte Instanz und
+läuft gleichzeitig mit der Seite — `GET /api/projects` liefe damit doppelt so oft wie in PR #67
+gemessen. Der Umbau darf die Ersparnis nicht wieder ausgeben.
+
+Deshalb: ein `ProjektDatenProvider` in der `AppShell`, zwei Hooks (`useProjekte`, `useDateien`).
+Zwei Nebenwirkungen, die für sich schon zählen:
+
+- Der **Summenpoll-Wächter** (lade die Dateiliste nach, wenn sich `dateien`/`fertig` ändern) steht
+  heute **wortgleich** in `EditorView.tsx:42-48` und `ProjectWorkspace.tsx:43-49`. Er wandert an
+  eine Stelle.
+- Das **aufgeklappte Projekt der Seitenleiste ist das Projekt aus der URL** — kein eigener
+  Zustand. Ein zweiter Begriff von „offen" wäre eine zweite Wahrheit, die synchron zu halten wäre.
+  Ein Klick auf ein anderes Projekt navigiert; ein Klick auf das offene klappt zu und landet
+  auf `/`.
+
+Der Provider steht **in** der `AppShell` und nicht in `main.tsx`, weil er `useMatch` braucht und
+damit innerhalb des Routers liegen muss.
+
 ## Was sich ändert
 
 | Datei | Änderung |
 |---|---|
 | `webtool/frontend/src/components/AppShell.tsx` | **neu** — Raster, Titelzeile, Statuszeile |
+| `webtool/frontend/src/hooks/useProjektDaten.tsx` | **neu** — ein Provider für Projektliste + Dateien (Entscheidung 8) |
 | `webtool/frontend/src/components/TitleBar.tsx` | **neu** — nur unter Electron gerendert |
 | `webtool/frontend/src/components/StatusBar.tsx` | **neu** |
 | `webtool/frontend/src/hooks/useDokumentTitel.ts` | **neu** |
@@ -208,7 +233,8 @@ das Renderer-Code darf, und dieser Renderer verarbeitet Transkripttext aus URL-I
 |---|---|
 | `AppShell` rendert `TitleBar` mit `window.transkribor` — und **nicht** ohne | Der Browser-Betrieb ist die Regressionsgefahr |
 | `fensterOptionen('win32'\|'linux'\|'darwin')` (`node --test`) | Ohne Electron prüfbar; macOS/Linux sind ungeprüfte Plattformen (Issue #36) |
-| Sidebar: Suche filtert, Aufklappen lädt Dateien, erneutes Aufklappen lädt **nicht** nach | Sonst kehrt die Zugriffslast aus PR #67 zurück |
+| Sidebar: Suche filtert, Aufklappen lädt Dateien; die Leiste fragt Dateien **nur für ein** Projekt ab | Sonst kehrt die Zugriffslast aus PR #67 zurück |
+| Zwei Leser der Projektliste → **ein** `GET /api/projects` (Entscheidung 8) | Der Kern des Provider-Umbaus; ohne Gegenprobe misst der Test nichts |
 | Zwei Ticks mit demselben terminalen Job → **eine** Meldung | Die Falle aus Entscheidung 7 |
 | `setProgressBar(-1)`, wenn kein Lauf mehr aktiv ist | Sonst bleibt der Balken stehen |
 
