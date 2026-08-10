@@ -38,6 +38,8 @@
 | `src/pages/HomeGallery.tsx` | Liste raus, Übersicht bleibt | 6 |
 | `src/pages/ProjectWorkspace.tsx`, `SettingsPage.tsx` | `mx-auto max-w-*` raus | 2 |
 | `src/components/ProjektPalette.tsx` | liest die geteilte Liste | 3 |
+| `src/components/Toolbar.tsx` | gibt den Dateinamen ab (steht in Titelzeile bzw. Tab-Titel) | 9 |
+| `src/components/ThemeProvider.tsx` | schiebt die Overlay-Farbe an den Hauptprozess | 8 |
 | `electron/main.js` | `fensterOptionen(platform)`, IPC `fortschritt` + `titelleisteFarbe` | 7, 8, 10 |
 | `electron/preload.js` | `plattform`, `fortschritt`, `titelleisteFarbe` | 8, 10 |
 
@@ -208,8 +210,29 @@ describe('AppShell', () => {
     // contentinfo = <footer>. Zwei davon hiesse: eine Seite bringt ihre eigene mit.
     expect(screen.getAllByRole('contentinfo')).toHaveLength(1)
   })
+
+  it('setzt den Bildlauf beim Routenwechsel zurueck', () => {
+    // jsdom implementiert Element.scrollTo nicht — die Attrappe am Prototyp ist der einzige
+    // Weg, den Aufruf hier zu sehen. Gemessen wird der Aufruf, nicht die Wirkung.
+    const scrollTo = vi.fn()
+    Object.defineProperty(HTMLElement.prototype, 'scrollTo', { value: scrollTo, configurable: true, writable: true })
+    function Springen() {
+      const navigate = useNavigate()
+      return <button onClick={() => navigate('/einstellungen')}>weiter</button>
+    }
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <JobProvider><AppShell><Springen /></AppShell></JobProvider>
+      </MemoryRouter>,
+    )
+    scrollTo.mockClear()                  // der erste Lauf des Effekts zaehlt nicht
+    fireEvent.click(screen.getByText('weiter'))
+    expect(scrollTo).toHaveBeenCalledWith({ top: 0 })
+  })
 })
 ```
+
+Importe im Testkopf ergänzen: `fireEvent` aus `@testing-library/react`, `useNavigate` aus `react-router-dom`.
 
 - [ ] **Step 2: Test laufen lassen, Fehlschlag bestätigen**
 
@@ -221,7 +244,8 @@ Expected: FAIL — `Failed to resolve import "./AppShell"`
 `webtool/frontend/src/components/AppShell.tsx`:
 
 ```tsx
-import type { ReactNode } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
+import { useLocation } from 'react-router-dom'
 import { StatusBar } from './StatusBar'
 
 /**
@@ -235,9 +259,16 @@ import { StatusBar } from './StatusBar'
  * Statuszeile wandert dann unter den unteren Fensterrand.
  */
 export function AppShell({ children }: { children: ReactNode }) {
+  const { pathname } = useLocation()
+  const inhalt = useRef<HTMLDivElement>(null)
+  // Kehrseite des EINEN Bildlaufbehaelters: der Versatz ueberlebt den Routenwechsel. Aus
+  // einem langen Transkript zurueck zur Uebersicht landete man sonst mitten in der Seite.
+  // React Router setzt das absichtlich nicht selbst zurueck — es weiss nicht, welches
+  // Element scrollt. `?.` an scrollTo, weil jsdom Element.scrollTo nicht kennt.
+  useEffect(() => { inhalt.current?.scrollTo?.({ top: 0 }) }, [pathname])
   return (
     <div className="grid h-screen grid-rows-[1fr_auto]">
-      <div className="min-h-0 overflow-auto">{children}</div>
+      <div ref={inhalt} className="min-h-0 overflow-auto">{children}</div>
       <StatusBar />
     </div>
   )
@@ -521,18 +552,29 @@ Expected: PASS — 4 Tests
 `AppShell.tsx` — der Provider gehört hierher und nicht in `main.tsx`, weil er `useMatch` braucht und damit **innerhalb** des Routers stehen muss:
 
 ```tsx
-import type { ReactNode } from 'react'
-import { ProjektDatenProvider } from '@/hooks/useProjektDaten'
-import { StatusBar } from './StatusBar'
-
 export function AppShell({ children }: { children: ReactNode }) {
   return (
     <ProjektDatenProvider>
-      <div className="grid h-screen grid-rows-[1fr_auto]">
-        <div className="min-h-0 overflow-auto">{children}</div>
-        <StatusBar />
-      </div>
+      <Rahmen>{children}</Rahmen>
     </ProjektDatenProvider>
+  )
+}
+```
+
+Das bisherige Raster wandert dabei in ein `Rahmen`-Bauteil **innerhalb** des Providers — Hooks
+wie `useDateien()` stehen einem Bauteil erst zur Verfügung, wenn es unter dem Provider gerendert
+wird. Ab Task 5 braucht `Rahmen` das:
+
+```tsx
+function Rahmen({ children }: { children: ReactNode }) {
+  const { pathname } = useLocation()
+  const inhalt = useRef<HTMLDivElement>(null)
+  useEffect(() => { inhalt.current?.scrollTo?.({ top: 0 }) }, [pathname])
+  return (
+    <div className="grid h-screen grid-rows-[1fr_auto]">
+      <div ref={inhalt} className="min-h-0 overflow-auto">{children}</div>
+      <StatusBar />
+    </div>
   )
 }
 ```
@@ -888,6 +930,20 @@ In `AppShell.test.tsx` ergänzen:
     await waitFor(() => expect(screen.getByRole('navigation', { name: 'Projekte' })).toBeInTheDocument())
     expect(screen.getByText('Alpha')).toBeInTheDocument()
   })
+
+  it('bietet einen Sprunglink VOR der Leiste', () => {
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <JobProvider><AppShell><p>Inhalt</p></AppShell></JobProvider>
+      </MemoryRouter>,
+    )
+    const sprung = screen.getByRole('link', { name: 'Zum Inhalt' })
+    expect(sprung).toHaveAttribute('href', '#inhalt')
+    // Reihenfolge im DOM ist hier die ganze Aussage: hinter der Leiste waere der Link
+    // wertlos, weil man ihn erst nach dreihundert Knoepfen erreicht.
+    const leiste = screen.getByRole('navigation', { name: 'Projekte' })
+    expect(sprung.compareDocumentPosition(leiste) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
 ```
 
 `waitFor` und die übrigen `api`-Mocks (`listProjects`, `getProjectFiles`, `getAiReady` falls von `useAiReady` benutzt) im `beforeEach` ergänzen.
@@ -900,8 +956,8 @@ Expected: FAIL — `Unable to find role="navigation"`
 - [ ] **Step 3: `AppShell` um die Spalte erweitern**
 
 ```tsx
-import type { ReactNode } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useRef, type ReactNode } from 'react'
+import { useLocation, useMatch, useNavigate } from 'react-router-dom'
 import { ProjektDatenProvider, useProjekte, useDateien } from '@/hooks/useProjektDaten'
 import { mergePhases, useActiveJob } from '@/hooks/useActiveJob'
 import { useAiReady } from '@/hooks/useAiReady'
@@ -941,20 +997,43 @@ function Leiste() {
   )
 }
 
-export function AppShell({ children }: { children: ReactNode }) {
+function Rahmen({ children }: { children: ReactNode }) {
+  const { pathname } = useLocation()
+  const inhalt = useRef<HTMLDivElement>(null)
+  useEffect(() => { inhalt.current?.scrollTo?.({ top: 0 }) }, [pathname])
   return (
-    <ProjektDatenProvider>
-      <div className="grid h-screen grid-rows-[1fr_auto] grid-cols-[260px_1fr]">
-        <aside className="min-h-0 border-r"><Leiste /></aside>
-        <div className="min-h-0 overflow-auto">{children}</div>
+    <>
+      {/* Erstes fokussierbares Element der Seite. Die Leiste steht seit dieser Aenderung VOR
+          dem Inhalt im DOM — ohne Sprunglink laeuft Tab bei dreihundert Projekten durch
+          dreihundert Knoepfe, bevor es im Transkript ankommt. `tabIndex={-1}` am Ziel, damit
+          der Sprung den Fokus wirklich mitnimmt und nicht nur die Bildlaufposition. */}
+      <a href="#inhalt"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-50
+                   focus:rounded-md focus:border focus:bg-background focus:px-3 focus:py-2
+                   focus:text-sm focus:ring-2 focus:ring-ring">
+        Zum Inhalt
+      </a>
+      {/* Unter `md` faellt die Leiste weg. Das Electron-Fenster wird nie so schmal
+          (minWidth: 900) — gemeint ist ein verkleinertes Browser-Fenster. Ein Telefon ist
+          KEIN Fall: der Server bindet auf 127.0.0.1, von aussen erreicht ihn niemand.
+          Darum hier nur ausblenden statt einer einklappbaren Leiste mit gemerktem Zustand:
+          auf schmal bleiben die Uebersicht und Ctrl+K als Weg zum Projekt. */}
+      <div className="grid h-screen grid-rows-[1fr_auto] md:grid-cols-[260px_1fr]">
+        <aside className="hidden min-h-0 border-r md:block"><Leiste /></aside>
+        <div id="inhalt" tabIndex={-1} ref={inhalt}
+          className="min-h-0 overflow-auto outline-none">{children}</div>
         <StatusBar />
       </div>
-    </ProjektDatenProvider>
+    </>
   )
+}
+
+export function AppShell({ children }: { children: ReactNode }) {
+  return <ProjektDatenProvider><Rahmen>{children}</Rahmen></ProjektDatenProvider>
 }
 ```
 
-**Achtung `StatusBar`:** sie muss beide Spalten überspannen. In `StatusBar.tsx` das `<footer>` um `col-span-2` ergänzen — sonst steht sie nur unter der Leiste und die Inhaltsspalte reicht bis zum Fensterrand.
+**Achtung `StatusBar`:** sie muss auf breiten Fenstern beide Spalten überspannen, auf schmalen die eine. In `StatusBar.tsx` das `<footer>` um `col-span-1 md:col-span-2` ergänzen — sonst steht sie nur unter der Leiste und die Inhaltsspalte reicht bis zum Fensterrand.
 
 - [ ] **Step 4: `EditorView` gibt seine Leiste ab**
 
@@ -1003,6 +1082,10 @@ Run: `.\webtool.ps1`
 1. Leiste steht auf allen vier Routen, Projektwechsel räumt den Bildschirm nicht.
 2. Ein Projekt aufklappen → Dateien erscheinen; erneuter Klick klappt zu und landet auf `/`.
 3. Ein Lauf starten → Phasenpille erscheint in der Leiste **und** in der Arbeitsfläche.
+4. **Tab von ganz oben** → erstes Ziel ist „Zum Inhalt"; Eingabe springt ins Transkript.
+5. **Fenster auf ~600 px verkleinern** → Leiste weg, Inhalt füllt die Breite, Statuszeile bleibt
+   ganz unten (kein waagrechter Bildlauf).
+6. In einem langen Transkript nach unten scrollen, dann zurück zur Übersicht → sie beginnt oben.
 
 - [ ] **Step 8: Committen**
 
@@ -1387,16 +1470,23 @@ ipcMain.handle('titelleisteFarbe', (_e, f) => {
 
 - [ ] **Step 7: In `AppShell` einhängen**
 
-Die Zeile ist die erste Rasterreihe und überspannt beide Spalten; der Titel kommt aus `useDokumentTitel` (Task 9) — bis dahin genügt das Projekt aus `useDateien()`:
+Die Zeile ist die erste Rasterreihe und überspannt die Spalten. In `Rahmen` (Task 5):
 
 ```tsx
-      <div className="grid h-screen grid-rows-[auto_1fr_auto] grid-cols-[260px_1fr]">
-        <TitleBar titel={document.title} />
-        <aside className="min-h-0 border-r"><Leiste /></aside>
-        ...
+      <div className="grid h-screen grid-rows-[auto_1fr_auto] md:grid-cols-[260px_1fr]">
+        <TitleBar titel={projekt ?? 'Transkribor'} />
+        <aside className="hidden min-h-0 border-r md:block"><Leiste /></aside>
+        <div id="inhalt" tabIndex={-1} ref={inhalt}
+          className="min-h-0 overflow-auto outline-none">{children}</div>
+        <StatusBar />
+      </div>
 ```
 
-> `document.title` ist hier bewusst nur der Zwischenstand — Task 9 ersetzt ihn durch den Hook, der bei Routenwechseln auch neu rendert. `document.title` allein löst kein Rerender aus.
+`projekt` kommt aus `useDateien()`; `Rahmen` liegt bereits im Provider. Die `col-span-2` in
+`TitleBar.tsx` gilt nur ab `md` — auf schmalen Fenstern gibt es nur eine Spalte. Die Klasse dort
+entsprechend als `col-span-1 md:col-span-2` schreiben.
+
+> Der Titel ist hier bewusst nur ein Zwischenstand — Task 9 ersetzt ihn durch `useDokumentTitel()`, das zusätzlich Datei und Laufzustand trägt.
 
 - [ ] **Step 8: Alle Tests + Electron-Tests + Typen**
 
@@ -1428,10 +1518,13 @@ git commit -m "feat(huelle): eigene Titelzeile, Farbe folgt dem Thema"
 - Create: `webtool/frontend/src/hooks/useDokumentTitel.ts`
 - Test: `webtool/frontend/src/hooks/useDokumentTitel.test.tsx`
 - Modify: `webtool/frontend/src/components/AppShell.tsx`
+- Modify: `webtool/frontend/src/components/Toolbar.tsx:8-16`, `webtool/frontend/src/pages/EditorView.tsx:59`
 
 **Interfaces:**
-- Consumes: `useDateien()` (Projekt), `useMatch('/p/:project/:base')` (Datei), `useActiveJob()` + `describePhases` aus `@/lib/jobPhases`.
-- Produces: `useDokumentTitel(): string` — setzt `document.title` als Seiteneffekt **und** gibt ihn zurück, damit `TitleBar` denselben Text ohne zweite Quelle zeigt.
+- Consumes: `useDateien()` (Projekt), `useMatch('/p/:project/:base')` (Datei), `useActiveJob()` → `{jobs}`, `mergePhases` aus `@/hooks/useActiveJob`, `describePhases(p: JobPhases): string` aus `@/lib/jobPhases`.
+- Produces:
+  - `fensterTitel(ort: string, lauf: string): string` — reine Funktion, für sich testbar
+  - `useDokumentTitel(): string` — setzt `document.title` als Seiteneffekt **und** gibt ihn zurück, damit `TitleBar` denselben Text ohne zweite Quelle zeigt
 
 - [ ] **Step 1: Test schreiben**
 
@@ -1478,7 +1571,22 @@ describe('useDokumentTitel', () => {
     await waitFor(() => expect(document.title).toBe('Alpha · audio_02 — Transkribor'))
   })
 })
+
+describe('fensterTitel', () => {
+  it('stellt den Laufzustand VOR den Ort', () => {
+    // Taskleiste und Alt-Tab zeigen nur die ersten Zeichen -- "laeuft es noch?" muss
+    // dort stehen, nicht der Projektname.
+    expect(fensterTitel('Alpha · audio_02', 'Korrigiere audio_02 · 38%'))
+      .toBe('Korrigiere audio_02 · 38% — Alpha · audio_02 — Transkribor')
+  })
+  it('laesst leere Teile weg statt Trennzeichen zu haeufen', () => {
+    expect(fensterTitel('Alpha', '')).toBe('Alpha — Transkribor')
+    expect(fensterTitel('', '')).toBe('Transkribor')
+  })
+})
 ```
+
+Import im Testkopf: `import { fensterTitel, useDokumentTitel } from './useDokumentTitel'`.
 
 - [ ] **Step 2: Test laufen lassen, Fehlschlag bestätigen**
 
@@ -1491,8 +1599,24 @@ Expected: FAIL — `Failed to resolve import "./useDokumentTitel"`
 import { useEffect } from 'react'
 import { useMatch } from 'react-router-dom'
 import { useDateien } from './useProjektDaten'
+import { mergePhases, useActiveJob } from './useActiveJob'
+import { describePhases } from '@/lib/jobPhases'
 
 const APP = 'Transkribor'
+
+/**
+ * Der Laufzustand steht VORNE, der Ort dahinter: in der Taskleiste und im Alt-Tab-Umschalter
+ * sieht man nur die ersten Zeichen — und genau die Frage ("laeuft es noch?") ist der Grund,
+ * warum diese App ueberhaupt einen sprechenden Fenstertitel braucht. Ihre Laeufe dauern
+ * Minuten bis eine halbe Stunde; wer waehrenddessen etwas anderes tut, soll nicht das
+ * Fenster hervorholen muessen.
+ *
+ * Rein und exportiert, damit die Zusammensetzung ohne Job-Verdrahtung pruefbar ist.
+ */
+export function fensterTitel(ort: string, lauf: string): string {
+  const vorn = [lauf, ort].filter(Boolean).join(' · ')
+  return vorn ? `${vorn} — ${APP}` : APP
+}
 
 /**
  * Setzt `document.title` — und damit unter Electron auch den Fenstertitel: BrowserWindow
@@ -1500,17 +1624,21 @@ const APP = 'Transkribor'
  * preventDefault() ruft. Ein IPC-Kanal dafuer waere ueberfluessig.
  *
  * Der Titel ist gleichzeitig der Text der eigenen Titelzeile — darum gibt der Hook ihn
- * zurueck: `document.title` zu lesen loest kein Rerender aus, ein State-Wert schon.
+ * zurueck: `document.title` zu lesen loest kein Rerender aus, ein Rueckgabewert schon.
  */
 export function useDokumentTitel(): string {
   const { projekt } = useDateien()
+  const { jobs } = useActiveJob()
   const imEditor = useMatch('/p/:project/:base')
   const datei = imEditor?.params.base ?? null
 
-  const titel = !projekt ? APP
-    : datei ? `${projekt} · ${datei} — ${APP}`
-    : `${projekt} — ${APP}`
+  // NUR die Jobs dieses Projekts: Basisnamen wiederholen sich ueber Projekte hinweg, und
+  // mergePhases ist nach Basisnamen indiziert (siehe dessen Kommentar).
+  const meine = jobs.filter(j => j.project === projekt && j.status === 'running')
+  const lauf = meine.length ? describePhases(mergePhases(meine)) : ''
+  const ort = !projekt ? '' : datei ? `${projekt} · ${datei}` : projekt
 
+  const titel = fensterTitel(ort, lauf)
   useEffect(() => { document.title = titel }, [titel])
   return titel
 }
@@ -1521,39 +1649,59 @@ export function useDokumentTitel(): string {
 Run: `npm --prefix webtool/frontend test -- useDokumentTitel`
 Expected: PASS — 3 Tests
 
-- [ ] **Step 5: In `AppShell` verdrahten**
+- [ ] **Step 5: In `Rahmen` verdrahten**
 
-`Leiste()` und `AppShell` teilen sich den Wert nicht — der Hook gehört in eine Komponente **innerhalb** des Providers. Dafür eine schmale Hülle:
+In `AppShell.tsx` ersetzt der Hook den Zwischenstand aus Task 8:
 
 ```tsx
 function Rahmen({ children }: { children: ReactNode }) {
+  const { pathname } = useLocation()
+  const inhalt = useRef<HTMLDivElement>(null)
   const titel = useDokumentTitel()
+  useEffect(() => { inhalt.current?.scrollTo?.({ top: 0 }) }, [pathname])
   return (
-    <div className="grid h-screen grid-rows-[auto_1fr_auto] grid-cols-[260px_1fr]">
-      <TitleBar titel={titel} />
-      <aside className="min-h-0 border-r"><Leiste /></aside>
-      <div className="min-h-0 overflow-auto">{children}</div>
-      <StatusBar />
-    </div>
+    <>
+      <a href="#inhalt" className="sr-only focus:not-sr-only …">Zum Inhalt</a>
+      <div className="grid h-screen grid-rows-[auto_1fr_auto] md:grid-cols-[260px_1fr]">
+        <TitleBar titel={titel} />
+        <aside className="hidden min-h-0 border-r md:block"><Leiste /></aside>
+        <div id="inhalt" tabIndex={-1} ref={inhalt}
+          className="min-h-0 overflow-auto outline-none">{children}</div>
+        <StatusBar />
+      </div>
+    </>
   )
-}
-
-export function AppShell({ children }: { children: ReactNode }) {
-  return <ProjektDatenProvider><Rahmen>{children}</Rahmen></ProjektDatenProvider>
 }
 ```
 
-- [ ] **Step 6: Alle Tests + Typen**
+- [ ] **Step 6: Der Dateiname steht nur noch einmal**
+
+`Toolbar` und `TitleBar` zeigten beide `Projekt / Datei` bzw. `Projekt · Datei` — direkt
+übereinander, in zwei Schreibweisen. Die Toolbar gibt ihn ab:
+
+- `Toolbar.tsx:8-16`: `title` aus den Props streichen und die Zeile
+  `<span className="min-w-0 truncate text-sm font-medium">{title}</span>` entfernen. Das
+  `dirty`-Abzeichen rückt damit an den linken Rand — dort gehört es hin, es ist der Zustand
+  **dieser** Datei.
+- `EditorView.tsx:59`: das `title`-Memo löschen und die Prop nicht mehr übergeben.
+- Falls `Toolbar.test.tsx` den Titel prüft: den Fall entfernen.
+
+> **Warum das auch im Browser trägt:** ohne Electron gibt es keine `TitleBar` — dort zeigt der
+> **Tab-Titel** dieselbe Angabe, weil `useDokumentTitel` `document.title` setzt. Beide
+> Betriebsarten nennen die Datei also weiterhin, nur nie zweimal auf einmal.
+
+- [ ] **Step 7: Alle Tests + Typen**
 
 Run: `npm --prefix webtool/frontend test && npm --prefix webtool/frontend run build`
 Expected: PASS
 
-- [ ] **Step 7: Committen**
+- [ ] **Step 8: Committen**
 
 ```bash
 git add webtool/frontend/src/hooks/useDokumentTitel.ts webtool/frontend/src/hooks/useDokumentTitel.test.tsx \
-        webtool/frontend/src/components/AppShell.tsx
-git commit -m "feat(os): Fenstertitel folgt Projekt und Datei"
+        webtool/frontend/src/components/AppShell.tsx webtool/frontend/src/components/Toolbar.tsx \
+        webtool/frontend/src/pages/EditorView.tsx
+git commit -m "feat(os): Fenstertitel traegt Lauf, Projekt und Datei -- Toolbar gibt ihn ab"
 ```
 
 ---
@@ -1775,7 +1923,14 @@ git commit -m "feat(os): Systemmeldung am Laufende und Fortschritt in der Taskle
 
 ## Nicht in diesem Plan
 
+- **Die Arbeitsfläche `/p/:project` eindampfen.** Ihre Dateiliste und ihre Projekt-Aktionen stehen
+  ab Task 5 auch in der Leiste. Falsch wird die Seite dadurch nicht, teilweise doppelt schon.
+  Sie auf Hochladen + URL-Import + Laufsteuerung zu reduzieren wäre folgerichtig — ist aber eine
+  eigene Entscheidung, die man besser trifft, nachdem man die Leiste eine Weile benutzt hat.
+- **Anklickbare Systemmeldung** (`notification.onclick` → Fenster nach vorn, zum Projekt
+  springen). Naheliegend, aber die Fokus-Übernahme verhält sich je Plattform anders — und
+  macOS/Linux sind hier ungeprüft (Issue #36).
 - Menü, „zuletzt geöffnet", Tabs.
-- Einklappbare Seitenleiste (`Ctrl+B`) — bewusst verworfen, kostet einen persistenten Zustand ohne belegten Nutzen.
+- Einklappbare Seitenleiste (`Ctrl+B`) — bewusst verworfen, kostet einen persistenten Zustand ohne belegten Nutzen. Unter `md` verschwindet sie ohnehin ohne Schalter.
 - Virtualisierung der Seitenleiste. Bei 300 Projekten war die Liste in PR #67 gemessen unkritisch.
 - macOS/Linux aus dem gebauten Paket starten — das ist Issue #36 und bleibt offen.
