@@ -182,10 +182,14 @@ export function HomeGallery() {
             ) : alle.length > 0 && (
               <ul className="blatt divide-y divide-border overflow-hidden">
                 {alle.map(p => (
-                  <li key={p.name}>
+                  // group + hover/focus-within hier statt auf dem Link: der Loeschknopf ist
+                  // dessen Geschwister (ein <button> in einem <a> waere ungueltiges HTML und
+                  // der Klick landete zusaetzlich im Link), soll die Zeile aber trotzdem
+                  // ueber die volle Breite einfaerben.
+                  <li key={p.name} className="group flex items-center hover:bg-muted/60">
                     <Link to={`/p/${encodeURIComponent(p.name)}`}
-                      className="flex h-11 items-center gap-3 px-3 outline-none transition-colors
-                                 hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring">
+                      className="flex h-11 min-w-0 flex-1 items-center gap-3 px-3 outline-none
+                                 focus-visible:ring-2 focus-visible:ring-ring">
                       <span className="min-w-0 flex-1 truncate text-sm font-medium">{p.name}</span>
                       <span className="shrink-0 tabular-nums text-sm text-muted-foreground">
                         {p.dateien} Datei{p.dateien === 1 ? '' : 'en'}
@@ -196,6 +200,10 @@ export function HomeGallery() {
                         {relativeTime(p.geaendert)}
                       </time>
                     </Link>
+                    <div className="shrink-0 px-3 opacity-0 transition-opacity
+                                    group-hover:opacity-100 focus-within:opacity-100">
+                      <DeleteProjectDialog project={p.name} onDeleted={refresh} />
+                    </div>
                   </li>
                 ))}
               </ul>

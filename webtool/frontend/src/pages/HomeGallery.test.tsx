@@ -76,6 +76,19 @@ describe('HomeGallery', () => {
     expect(text.indexOf('Mittel')).toBeLessThan(text.indexOf('Alt'))
   })
 
+  it('laesst sich aus der Zeilenliste loeschen', async () => {
+    vi.mocked(api.listProjects).mockResolvedValue([
+      { name: 'Alt', dateien: 1, fertig: 1, geaendert: 100, active_jobs: [] },
+    ])
+    vi.mocked(api.deleteProject).mockResolvedValue(undefined)
+    renderHome()
+    await screen.findByText('Alt')
+    fireEvent.click(screen.getByLabelText(/Projekt Alt l/))
+    fireEvent.change(screen.getByLabelText(/Projektname best/), { target: { value: 'Alt' } })
+    fireEvent.click(screen.getByRole('button', { name: /^L/ }))
+    await waitFor(() => expect(api.deleteProject).toHaveBeenCalledWith('Alt'))
+  })
+
   it('Suchfeld hat ein zugaengliches Label', async () => {
     vi.mocked(api.listProjects).mockResolvedValue([
       { name: 'Alpha', dateien: 1, fertig: 1, geaendert: 100, active_jobs: [] },
