@@ -51,7 +51,7 @@ export function ProjectWorkspace() {
 
   return (
     <div className="p-6 sm:p-8">
-      <PageHeader rubrik="Projekt" titel={project ?? ''} zurueck="/" zurueckText="Projekte">
+      <PageHeader rubrik="Projekt" titel={project ?? ''} zurueck="/" zurueckText="Übersicht">
         <Button variant="outline" size="sm"
           onClick={() => startJob(() => startTranscribe(project!), 'transcribe', 'Transkribieren')}>
           <Play className="size-4" /> Transkribieren

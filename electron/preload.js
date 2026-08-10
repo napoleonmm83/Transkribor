@@ -25,5 +25,5 @@ contextBridge.exposeInMainWorld('transkribor', {
   // links, sonst rechts. process.platform gibt es im Renderer nicht (contextIsolation).
   plattform: process.platform,
   titelleisteFarbe: f => ipcRenderer.invoke('titelleisteFarbe', f),
-  fortschritt: a => ipcRenderer.invoke('fortschritt', a),
+  fortschritt: (a, modus) => ipcRenderer.invoke('fortschritt', a, modus),
 })

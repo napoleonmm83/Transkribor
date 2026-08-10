@@ -16,10 +16,9 @@ const TITELLEISTE_HOEHE = 40
  * bleiben nativ, nur eingerueckt). Selbst gezeichnete Knoepfe waeren das eine Stueck,
  * das auf jeder Plattform anders bricht — und macOS/Linux sind hier ungeprueft.
  *
- * `dunkel` entscheidet die Startfarbe hier und nirgends sonst — main.js reichte sie frueher
- * per Nachpatchen rein (ein totes Erstbelegungs-Geruest, weil das Patchen jede Vorgabe
- * ohnehin ueberschrieb). Der Renderer schiebt beim Themenwechsel zur Laufzeit per
- * 'titelleisteFarbe' nach, sonst stuenden im Dunkelmodus schwarze Symbole auf dunklem Grund.
+ * `dunkel` entscheidet die Startfarbe hier und nirgends sonst. Der Renderer schiebt beim
+ * Themenwechsel zur Laufzeit per 'titelleisteFarbe' nach, sonst stuenden im Dunkelmodus
+ * schwarze Symbole auf dunklem Grund.
  */
 function fensterOptionen(platform, dunkel) {
   if (platform === 'darwin') return { titleBarStyle: 'hiddenInset' }

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { Sidebar } from './Sidebar'
 import * as api from '@/lib/api'
 
@@ -35,10 +35,14 @@ describe('Sidebar', () => {
 
   it('zeigt die Dateien NUR des offenen Projekts', () => {
     zeigen({ offen: 'Alpha', dateien: DATEIEN })
-    expect(screen.getByText(/^a/)).toBeInTheDocument()
-    // Beta ist zu -- seine Dateien duerfen nicht erscheinen, und die Leiste fragt sie
-    // auch nicht ab (die Dateiliste kommt fuer genau EIN Projekt herein).
-    expect(screen.getByText('Beta')).toBeInTheDocument()
+    // Beide Projektzeilen mitsamt allem, was darunter haengt: unter Alpha muessen die
+    // Dateien stehen, unter dem zugeklappten Beta darf nichts davon auftauchen. Die
+    // Dateiliste kommt fuer genau EIN Projekt herein -- an jede Zeile gehaengt zeigte sie
+    // unter Beta die Dateien von Alpha.
+    const zeile = (name: string) => screen.getByText(name).closest('button')!.parentElement!
+    expect(within(zeile('Alpha')).getByText('a')).toBeInTheDocument()
+    expect(within(zeile('Beta')).queryByText('a')).not.toBeInTheDocument()
+    expect(within(zeile('Beta')).queryByLabelText(/^Datei /)).not.toBeInTheDocument()
   })
 
   it('waehlt bei Klick auf eine geschlossene Zeile das Projekt', () => {
@@ -72,7 +76,7 @@ describe('Sidebar', () => {
     // waehrend des Ladens behaupten, es gaebe nichts.
     render(<Sidebar projekte={[]} loading offen={null} dateien={[]} onWaehlen={vi.fn()}
       active={null} onOpen={vi.fn()} onUpload={vi.fn()} onTranscribe={vi.fn()}
-      onCorrect={vi.fn()} onCorrectFile={vi.fn()} />)
+      onCorrect={vi.fn()} onCorrectFile={vi.fn()} onGeloescht={vi.fn()} />)
     expect(screen.queryByText(/Noch keine Projekte/)).not.toBeInTheDocument()
   })
 

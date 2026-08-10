@@ -15,7 +15,7 @@ function Harness() {
     start(() => api.startCorrectFile(project, base, force), `Korrigieren ${base}`)
   return <Sidebar projekte={projekte} offen="P" dateien={dateien} onWaehlen={vi.fn()}
     active={null} onOpen={vi.fn()} onUpload={vi.fn()}
-    onTranscribe={vi.fn()} onCorrect={vi.fn()} onCorrectFile={onCorrectFile} />
+    onTranscribe={vi.fn()} onCorrect={vi.fn()} onCorrectFile={onCorrectFile} onGeloescht={vi.fn()} />
 }
 
 describe('Force-Bestätigung bei has_edit', () => {

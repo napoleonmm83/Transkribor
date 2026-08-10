@@ -27,7 +27,7 @@ describe('HomeGallery', () => {
     vi.mocked(api.listProjects).mockResolvedValue([])
     vi.mocked(api.createProject).mockResolvedValue({ ok: true, name: 'Neu' })
     zeigen()
-    fireEvent.click(await screen.findByText('+ Projekt'))
+    fireEvent.click(await screen.findByText('+ Neues Projekt'))
     fireEvent.change(screen.getByLabelText('Projektname'), { target: { value: 'Neu' } })
     fireEvent.click(screen.getByText('Anlegen'))
     await waitFor(() => expect(api.createProject).toHaveBeenCalledWith('Neu'))

@@ -9,7 +9,7 @@ import {
 
 export function NewProjectDialog({ onCreated, trigger, vorbelegung }: {
   onCreated: (name: string) => void
-  /** Eigener Ausloeser. Der Leerzustand der Galerie braucht einen einladenderen als '+ Projekt'. */
+  /** Eigener Ausloeser. Der Leerzustand der Uebersicht braucht einen einladenderen. */
   trigger?: React.ReactNode
   /** Name, mit dem das Feld beim Oeffnen startet (z.B. der Suchbegriff aus der leeren
    *  Trefferliste) -- der Knopf "»x« anlegen" waere sonst ein leeres Versprechen. */
@@ -29,7 +29,7 @@ export function NewProjectDialog({ onCreated, trigger, vorbelegung }: {
   const setOpenState = (o: boolean) => { setOpen(o); if (o) setName(vorbelegung ?? '') }
   return (
     <Dialog open={open} onOpenChange={setOpenState}>
-      <DialogTrigger asChild>{trigger ?? <Button size="sm">+ Projekt</Button>}</DialogTrigger>
+      <DialogTrigger asChild>{trigger ?? <Button size="sm">+ Neues Projekt</Button>}</DialogTrigger>
       <DialogContent>
         <DialogHeader><DialogTitle>Neues Projekt</DialogTitle></DialogHeader>
         <label className="text-sm" htmlFor="np-name">Projektname</label>
