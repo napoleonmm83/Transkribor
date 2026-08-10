@@ -46,10 +46,24 @@ describe('ProjektPalette', () => {
     await waitFor(() => expect(screen.getByText('Projekt-Seite')).toBeInTheDocument())
   })
 
-  it('greift nicht, waehrend in einem Textfeld getippt wird', async () => {
+  // Alle drei Faelle aus dem Guard (ProjektPalette.tsx) einzeln -- ein Test, der nur
+  // <input> prueft, liesse eine geloeschte textarea- oder contenteditable-Abfrage durch.
+  it.each([
+    ['input', () => document.createElement('input')],
+    ['textarea', () => document.createElement('textarea')],
+    // jsdom berechnet isContentEditable nicht (bekannte Luecke, jsdom/jsdom#1670) -- die
+    // Eigenschaft wird darum direkt gesetzt. Das prueft den Codepfad in ProjektPalette.tsx,
+    // nicht jsdoms contentEditable-Verhalten (das gibt es dort schlicht nicht).
+    ['contenteditable', () => {
+      const d = document.createElement('div')
+      Object.defineProperty(d, 'isContentEditable', { value: true, configurable: true })
+      d.tabIndex = 0
+      return d
+    }],
+  ] as const)('greift nicht, waehrend in %s getippt wird', async (_art, bauen) => {
     renderPalette()
     await waitFor(() => expect(api.listProjects).toHaveBeenCalled())
-    const feld = document.createElement('input')
+    const feld = bauen()
     document.body.appendChild(feld)
     feld.focus()
     fireEvent.keyDown(feld, { key: 'k', ctrlKey: true })
