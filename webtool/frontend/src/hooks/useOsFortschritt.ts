@@ -4,7 +4,9 @@ import { useProjekte } from './useProjektDaten'
 import { KIND_LABEL } from '@/lib/jobPhases'
 
 function bruecke() {
-  const w = window as unknown as { transkribor?: { fortschritt?: (a: number) => Promise<void> } }
+  const w = window as unknown as {
+    transkribor?: { fortschritt?: (a: number, modus?: string) => Promise<void> }
+  }
   return w.transkribor?.fortschritt ?? null
 }
 
@@ -46,5 +48,10 @@ export function useOsFortschritt(): void {
   // -1 raeumt den Balken ab. Ohne das bleibt er nach dem letzten Lauf fuer immer stehen.
   const anteil = laufend.length === 0 || !projekt || projekt.dateien === 0
     ? -1 : projekt.fertig / projekt.dateien
-  useEffect(() => { bruecke()?.(anteil)?.catch?.(() => {}) }, [anteil])
+  // Ist im selben Projekt schon ein Lauf gescheitert, waehrend ein anderer weiterlaeuft,
+  // faerbt 'error' den Balken rot statt ihn stumm weiterzaehlen zu lassen. Kein Nachhall
+  // ueber das Laufende hinaus: sobald nichts mehr laeuft, raeumt -1 ihn ohnehin ab.
+  const modus = anteil >= 0 && jobs.some(j =>
+    j.project === projekt?.name && j.status !== 'running' && j.status !== 'done') ? 'error' : undefined
+  useEffect(() => { bruecke()?.(anteil, modus)?.catch?.(() => {}) }, [anteil, modus])
 }

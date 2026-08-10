@@ -227,7 +227,7 @@ export function SettingsPage() {
     // selbst (max-w an den Eingabefeldern) — eine Lesespalte um die ganze Seite wuerde
     // stattdessen wieder den Fensterrand leer lassen.
     <div className="p-6 sm:p-8">
-      <PageHeader rubrik="Transkribor" titel="Einstellungen" zurueck="/" zurueckText="Projekte" />
+      <PageHeader rubrik="Transkribor" titel="Einstellungen" zurueck="/" zurueckText="Übersicht" />
       <p className="mb-8 max-w-prose text-sm text-muted-foreground">
         Womit korrigiert Transkribor die Transkripte? Die Transkription selbst läuft immer lokal
         mit Whisper auf deiner GPU — nur die Korrektur und Sprecher-Zuordnung braucht ein Sprachmodell.

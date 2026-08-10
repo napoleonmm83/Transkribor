@@ -103,7 +103,8 @@ function Rahmen({ children }: { children: ReactNode }) {
           (minWidth: 900) — gemeint ist ein verkleinertes Browser-Fenster. Ein Telefon ist
           KEIN Fall: der Server bindet auf 127.0.0.1, von aussen erreicht ihn niemand.
           Darum hier nur ausblenden statt einer einklappbaren Leiste mit gemerktem Zustand:
-          auf schmal bleiben die Uebersicht und Ctrl+K als Weg zum Projekt. */}
+          auf schmal bleibt Ctrl+K der Weg zu JEDEM Projekt — die Uebersicht listet nur die
+          fuenf juengsten, ist also kein vollwertiger Ersatz. */}
       {/* Zeilenzahl NACH der Titelzeile: im Browser rendert sie `null` und steuert kein
           Rasterelement bei -- mit drei festen Zeilen rutscht dann alles hoch, der Inhalt in
           `auto`, die Statuszeile in `1fr` (gemessen 374 px Leerraum unter ihr). */}

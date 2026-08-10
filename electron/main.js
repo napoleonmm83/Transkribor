@@ -102,8 +102,13 @@ ipcMain.handle('titelleisteFarbe', (_e, f) => {
 // Anteil 0..1 zeigt den Balken, <0 raeumt ihn ab, >1 waere unbestimmt. Der Renderer
 // schickt -1, sobald nichts mehr laeuft — sonst bleibt der Balken nach dem letzten
 // Lauf am Symbol stehen und behauptet Arbeit, die es nicht gibt.
-ipcMain.handle('fortschritt', (_e, anteil) => {
-  if (win && !win.isDestroyed()) win.setProgressBar(typeof anteil === 'number' ? anteil : -1)
+// 'error' faerbt ihn rot (Spec-Entscheidung 7). Nur dieser eine Modus wird durchgelassen:
+// die Bruecke ist die Vertrauensgrenze, und mehr braucht der Renderer nicht.
+ipcMain.handle('fortschritt', (_e, anteil, modus) => {
+  if (!win || win.isDestroyed()) return
+  const a = typeof anteil === 'number' ? anteil : -1
+  if (modus === 'error') win.setProgressBar(a, { mode: 'error' })
+  else win.setProgressBar(a)
 })
 
 ipcMain.handle('update:status', () => aktualisierer && aktualisierer.zustand())

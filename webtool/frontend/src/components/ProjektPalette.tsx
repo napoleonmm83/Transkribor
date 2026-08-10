@@ -10,11 +10,10 @@ import {
   CommandList,
 } from '@/components/ui/command'
 
-/** Ctrl+K oeffnet die Projektsuche von ueberall -- auch im Editor, wo es kein eigenes
- *  Suchfeld gibt (deshalb steht diese Komponente in App.tsx neben den Routen, nicht in
- *  der Galerie). Das Kuerzel greift NICHT, waehrend in einem Textfeld getippt wird --
- *  dieselbe Regel wie bei Ctrl+←/→ in EditorView.tsx, sonst kapert die Palette das
- *  Tippen im Suchfeld der Galerie oder in einem Segmenttext. */
+/** Ctrl+K oeffnet die Projektsuche von ueberall (deshalb steht diese Komponente in App.tsx
+ *  neben den Routen). Das Kuerzel greift NICHT, waehrend in einem Textfeld getippt wird --
+ *  dieselbe Regel wie bei Ctrl+←/→ in EditorView.tsx, sonst kapert die Palette das Tippen im
+ *  Suchfeld der Seitenleiste (das ist immer auf dem Schirm) oder in einem Segmenttext. */
 export function ProjektPalette() {
   const [open, setOpen] = useState(false)
   // Die geteilte Liste (ProjektDatenProvider) pollt ohnehin fuer die Seitenleiste -- ein

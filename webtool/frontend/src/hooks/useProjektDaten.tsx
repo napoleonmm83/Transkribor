@@ -22,7 +22,7 @@ const Ctx = createContext<{ projekte: Projekte; dateien: Dateien } | null>(null)
  * waere eine zweite Wahrheit, die man synchron halten muss.
  */
 export function ProjektDatenProvider({ children }: { children: ReactNode }) {
-  const projekte = useProjects(4000)
+  const projekte = useProjects()
   // Zwei Aufrufe statt eines optionalen Parameters: `useMatch('/p/:project/:base?')` waere
   // kuerzer, faellt aber je nach Router-Version auf die Nase — zwei Muster sind eindeutig.
   const mitDatei = useMatch('/p/:project/:base')

@@ -12,7 +12,9 @@ const echt = Module._load
 Module._load = (req, ...rest) => req === 'electron' ? {
   contextBridge: { exposeInMainWorld: (_name, api) => { freigegeben = api } },
   ipcRenderer: {
-    invoke: (kanal, nutzlast) => { aufrufe.push([kanal, nutzlast]); return Promise.resolve() },
+    // ALLE Argumente merken, nicht nur das erste: sonst sieht der Test einen zweiten Wert
+    // (den Fortschritts-Modus) nicht, und eine verlorene Weitergabe faellt nicht auf.
+    invoke: (...args) => { aufrufe.push(args); return Promise.resolve() },
     on: (k) => kanaele.push(k),
     removeListener: (k) => abmeldungen.push(k),
   },
@@ -57,7 +59,10 @@ test('titelleisteFarbe reicht Farbe an den Hauptprozess weiter', async () => {
   assert.deepStrictEqual(aufrufe.at(-1), ['titelleisteFarbe', f])
 })
 
-test('fortschritt reicht den Anteil an den Hauptprozess weiter', async () => {
+test('fortschritt reicht Anteil und Modus an den Hauptprozess weiter', async () => {
   await freigegeben.fortschritt(0.5)
-  assert.deepStrictEqual(aufrufe.at(-1), ['fortschritt', 0.5])
+  assert.deepStrictEqual(aufrufe.at(-1), ['fortschritt', 0.5, undefined])
+  // Ohne den zweiten Wert kaeme der gescheiterte Lauf als normaler Balken an.
+  await freigegeben.fortschritt(0.5, 'error')
+  assert.deepStrictEqual(aufrufe.at(-1), ['fortschritt', 0.5, 'error'])
 })

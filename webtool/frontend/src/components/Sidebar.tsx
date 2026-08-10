@@ -50,7 +50,7 @@ export function Sidebar({
           Zeilen weg, und die Leiste hat keinen zweiten Weg zu einem Projekt. */}
       <div className="shrink-0 space-y-2 p-2">
         {/* Einziger Weg, ohne Umweg ueber die Uebersicht ein Projekt anzulegen -- die Leiste
-            ist seit Task 5 auf jeder Seite sichtbar, "+ Projekt" stand vorher nur dort. */}
+            ist auf jeder Seite sichtbar, der Knopf stand vorher nur in der Uebersicht. */}
         <NewProjectDialog onCreated={onWaehlen}
           trigger={<Button variant="outline" size="sm" className="w-full">+ Neues Projekt</Button>} />
         <label htmlFor="leiste-suche" className="sr-only">Projekte durchsuchen</label>
