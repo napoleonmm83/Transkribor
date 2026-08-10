@@ -63,6 +63,27 @@ describe('useProjectFiles', () => {
     expect(result.current.files).toEqual([neuDatei])
   })
 
+  it('verwirft eine aeltere Antwort, wenn zwei Anfragen fuers SELBE Projekt ueberlappen', async () => {
+    // Seit W1 koennen der Summenpoll-Waechter und onSettled im selben Zyklus feuern -- beide
+    // rufen refresh() fuers gleiche Projekt auf. Kommt die aeltere Antwort zuletzt an, darf sie
+    // die juengere nicht mehr ueberschreiben (angefragt allein schuetzt das NICHT, das prueft nur
+    // den Projektwechsel).
+    let loeseErste: ((v: { name: string; files: ProjectFile[] }) => void) | null = null
+    const erstePromise = new Promise<{ name: string; files: ProjectFile[] }>(r => { loeseErste = r })
+    const neuDatei: ProjectFile = { ...datei, base: 'S2' }
+    vi.mocked(api.getProjectFiles)
+      .mockImplementationOnce(() => erstePromise)              // die erste (Mount-)Anfrage haengt
+      .mockResolvedValueOnce({ name: 'Demo', files: [neuDatei] })   // die zweite antwortet zuerst
+
+    const { result } = renderHook(() => useProjectFiles('Demo'))
+    await act(async () => { result.current.refresh() })            // ueberlappende zweite Anfrage
+    await waitFor(() => expect(result.current.files).toEqual([neuDatei]))
+
+    // Die aeltere Anfrage loest jetzt verspaetet auf -- darf die juengeren Dateien nicht mehr ueberschreiben.
+    await act(async () => { loeseErste!({ name: 'Demo', files: [datei] }) })
+    expect(result.current.files).toEqual([neuDatei])
+  })
+
   it('ein Fehler des verlassenen Projekts darf den fehler-Zustand des neuen nicht setzen', async () => {
     let verwirfAlt: ((e: Error) => void) | null = null
     const altPromise = new Promise<{ name: string; files: ProjectFile[] }>((_, reject) => { verwirfAlt = reject })
