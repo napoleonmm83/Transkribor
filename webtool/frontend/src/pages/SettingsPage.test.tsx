@@ -162,8 +162,13 @@ describe('SettingsPage', () => {
   it('der Knopf meldet den Fehler laut', async () => {
     vi.mocked(api.listModels).mockRejectedValue(new Error('401 invalid key'))
     zeige({ provider: 'anthropic', has_key: true })
-    await waitFor(() => expect(api.listModels).toHaveBeenCalled())
-    await act(async () => { fireEvent.click(screen.getByTitle(/Modelle neu vom Anbieter laden/)) })
+    // Auf das ENDE des automatischen Ladelaufs warten, nicht nur auf seinen Start: der Knopf
+    // ist `disabled={laedt}`, ein Klick waehrenddessen verpufft. "Aufgerufen" tritt sofort ein,
+    // "fertig" erst mit der Antwort — auf langsamer CI lag der Klick dazwischen und der Test
+    // wartete danach 1 s auf einen Toast, den niemand mehr ausloeste.
+    const knopf = await screen.findByTitle(/Modelle neu vom Anbieter laden/)
+    await waitFor(() => expect(knopf).not.toBeDisabled())
+    await act(async () => { fireEvent.click(knopf) })
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('401')))
   })
 
