@@ -79,6 +79,39 @@ describe('Neu transkribieren', () => {
     await menueOeffnen()
     expect(await screen.findByText('Neu transkribieren')).toHaveAttribute('data-disabled')
   })
+
+  it('hängt den Grund der Sperre an ein hoverbares Element, nicht an den gesperrten Eintrag', async () => {
+    // Ein gesperrter Eintrag traegt pointer-events:none und zeigt seinen eigenen Tooltip nie
+    // an — der Hinweis waere unsichtbar. Der Test faellt, sobald jemand den title zurueck an
+    // den Eintrag schiebt.
+    zeigen(datei({ has_audio: false }))
+    await menueOeffnen()
+    const hinweis = await screen.findByTitle('Kein Audio vorhanden')
+    expect(hinweis).not.toHaveAttribute('data-disabled')
+    expect(hinweis).toContainElement(screen.getByRole('menuitem', { name: 'Neu transkribieren' }))
+  })
+
+  it('verlässt den Editor nicht, wenn der Start abgelehnt wird', async () => {
+    // 409 heisst: es wurde nichts verworfen. Wer trotzdem aus dem Editor fliegt, verliert
+    // seinen Platz im Transkript fuer nichts.
+    vi.mocked(api.startRetranscribeFile).mockRejectedValue(new Error('Job läuft — erst abbrechen'))
+    render(<Huelle pfad="/p/P/a"><DateiMenue project="P" file={datei()} /></Huelle>)
+    await menueOeffnen()
+    fireEvent.click(await screen.findByText('Neu transkribieren'))
+    fireEvent.click(screen.getByRole('button', { name: 'Neu transkribieren' }))
+    await waitFor(() => expect(api.startRetranscribeFile).toHaveBeenCalled())
+    expect(screen.getByTestId('ort')).toHaveTextContent('/p/P/a')
+  })
+
+  it('verlässt den Editor, wenn der Lauf angenommen wurde', async () => {
+    // Gegenprobe zum Test darueber: hier IST das Transkript verworfen, der Editor haelt ein
+    // Dokument, das es nicht mehr gibt — und "Speichern" schriebe es zurueck.
+    render(<Huelle pfad="/p/P/a"><DateiMenue project="P" file={datei()} /></Huelle>)
+    await menueOeffnen()
+    fireEvent.click(await screen.findByText('Neu transkribieren'))
+    fireEvent.click(screen.getByRole('button', { name: 'Neu transkribieren' }))
+    await waitFor(() => expect(screen.getByTestId('ort')).toHaveTextContent('/p/P'))
+  })
 })
 
 describe('Löschen', () => {
