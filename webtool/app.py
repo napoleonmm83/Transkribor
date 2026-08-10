@@ -170,7 +170,12 @@ def list_projects():
             _validate(eintrag.name)
         except (ValueError, HTTPException):
             continue          # un-nennbaren Ordner ueberspringen, nicht die Liste 500en
-        basen, fertig, neuste = set(), 0, 0.0
+        # edit_basen separat sammeln statt fertig direkt hochzuzaehlen: eine verwaiste
+        # <base>.edit.json (Rohtranskript geloescht, Editordatei stehengeblieben) darf nicht in
+        # fertig zaehlen, ohne auch in dateien mitzuzaehlen -- sonst fertig > dateien, im
+        # Widerspruch zu _projekt_dateien (die pruefen has_edit nur fuer tatsaechlich
+        # existierende Basen). Erst nach beiden Durchlaeufen die Schnittmenge bilden.
+        basen, edit_basen, neuste = set(), set(), 0.0
         try:
             for f in os.scandir(paths.transkripte_dir(eintrag.name)):
                 # DirEntry.stat() kommt auf Windows aus dem Verzeichnislisting und
@@ -182,7 +187,7 @@ def list_projects():
                 if n.startswith("_") or not n.endswith(".json"):
                     continue
                 if n.endswith(".edit.json"):
-                    fertig += 1
+                    edit_basen.add(n[:-len(".edit.json")])
                     continue
                 if n.endswith((".correction.json", ".diar.json")):
                     continue
@@ -200,7 +205,7 @@ def list_projects():
         out.append({
             "name": eintrag.name,
             "dateien": len(basen),
-            "fertig": fertig,
+            "fertig": len(edit_basen & basen),
             # Ordner-mtime nur als Rueckfall: sie bewegt sich NICHT, wenn eine
             # vorhandene Datei ueberschrieben wird (gemessen) — und genau das tut
             # der Editor. Fuer ein leeres Projekt ist sie aber das Einzige, was es gibt.
