@@ -12,6 +12,7 @@ const backend = require('./backend')
 const setup = require('./setup')
 const protokoll = require('./protokoll')
 const updater = require('./updater')
+const { fensterOptionen } = require('./fenster')
 
 let win = null
 let aktualisierer = null
@@ -32,12 +33,21 @@ function senden(kanal, nutzlast) {
 }
 
 function fenster() {
+  const dunkel = nativeTheme.shouldUseDarkColors
+  const opt = fensterOptionen(process.platform)
+  // Feste Startfarben aus fenster.js durch die tatsaechliche Systemfarbe ersetzen —
+  // dieselbe Quelle wie backgroundColor unten, sonst weichen Fenster und Overlay beim Start voneinander ab.
+  if (opt.titleBarOverlay) {
+    opt.titleBarOverlay.color = dunkel ? '#0B0B0F' : '#FAFAFA'
+    opt.titleBarOverlay.symbolColor = dunkel ? '#FAFAFA' : '#0B0B0F'
+  }
   win = new BrowserWindow({
     width: 1280, height: 860, minWidth: 900, minHeight: 600,
     // Electron malt diese Farbe VOR dem ersten Dokument-Zeichnen und an den Raendern beim
     // Vergroessern — ein fester Dunkelwert blitzt seit setup.html hell kann im Hellmodus auf.
-    backgroundColor: nativeTheme.shouldUseDarkColors ? '#0B0B0F' : '#FAFAFA',
+    backgroundColor: dunkel ? '#0B0B0F' : '#FAFAFA',
     show: true,
+    ...opt,
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true },
   })
   win.setMenuBarVisibility(false)
