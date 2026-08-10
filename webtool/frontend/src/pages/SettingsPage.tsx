@@ -220,12 +220,13 @@ export function SettingsPage() {
     r.ok ? toast.success(r.detail || 'Verbindung steht') : toast.error(r.detail || 'Fehlgeschlagen')
   }
 
-  if (!s) return <div className="mx-auto max-w-3xl p-6 sm:p-8 text-sm text-muted-foreground">Lädt…</div>
+  if (!s) return <div className="p-6 sm:p-8 text-sm text-muted-foreground">Lädt…</div>
 
   return (
-    // max-w-3xl wie die Arbeitsflaeche. Vorher 2xl — beim Wechsel zwischen den Seiten
-    // sprang der Satzspiegel um 96px, was als "andere Seite, andere Regeln" liest.
-    <div className="mx-auto max-w-3xl p-6 sm:p-8">
+    // Volle Breite wie alle Seiten seit der AppShell. Die Formularreihen begrenzen sich
+    // selbst (max-w an den Eingabefeldern) — eine Lesespalte um die ganze Seite wuerde
+    // stattdessen wieder den Fensterrand leer lassen.
+    <div className="p-6 sm:p-8">
       <PageHeader rubrik="Transkribor" titel="Einstellungen" zurueck="/" zurueckText="Projekte" />
       <p className="mb-8 max-w-prose text-sm text-muted-foreground">
         Womit korrigiert Transkribor die Transkripte? Die Transkription selbst läuft immer lokal
