@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, within, act } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { HomeGallery } from './HomeGallery'
 import * as api from '@/lib/api'
@@ -114,5 +114,26 @@ describe('HomeGallery', () => {
     renderHome()
     await screen.findByText('Alpha')
     expect(screen.getByLabelText(/suche/i)).toBeInTheDocument()
+  })
+
+  it('zeigt einen Ladezustand statt "Noch keine Projekte", solange die Liste unterwegs ist', async () => {
+    let loese: ((p: []) => void) | null = null
+    vi.mocked(api.listProjects).mockReturnValue(new Promise(r => { loese = r }))
+    renderHome()
+    expect(await screen.findByText(/werden geladen/)).toBeInTheDocument()
+    expect(screen.queryByText('Noch keine Projekte')).not.toBeInTheDocument()
+    await act(async () => { loese!([]) })
+    expect(await screen.findByText('Noch keine Projekte')).toBeInTheDocument()
+  })
+
+  it('zeigt einen Fehlerzustand statt "Noch keine Projekte", wenn das Laden scheitert', async () => {
+    vi.mocked(api.listProjects).mockRejectedValue(new Error('offline'))
+    renderHome()
+    expect(await screen.findByText(/konnten nicht geladen werden/)).toBeInTheDocument()
+    expect(screen.queryByText('Noch keine Projekte')).not.toBeInTheDocument()
+    // Erneut versuchen ruft den Endpunkt noch einmal.
+    const versuche = vi.mocked(api.listProjects).mock.calls.length
+    fireEvent.click(screen.getByRole('button', { name: 'Erneut versuchen' }))
+    await waitFor(() => expect(vi.mocked(api.listProjects).mock.calls.length).toBeGreaterThan(versuche))
   })
 })

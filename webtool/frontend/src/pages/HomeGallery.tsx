@@ -33,7 +33,7 @@ function vergleichen(a: Project, b: Project, sort: SortKey): number {
 export function HomeGallery() {
   // Der Poll steckt in useProjects — Jobs starten inzwischen auch ohne Klick (Upload -> Transkription
   // -> Korrektur), die Galerie muss sie also sehen, ohne dass hier vorher schon einer lief.
-  const { projects, refresh } = useProjects()
+  const { projects, refresh, loading, fehler } = useProjects()
   const navigate = useNavigate()
   const oeffnen = (name: string) => navigate(`/p/${encodeURIComponent(name)}`)
   const [suche, setSuche] = useState('')
@@ -60,20 +60,40 @@ export function HomeGallery() {
       </PageHeader>
 
       {projects.length === 0 ? (
-        // Vorher stand hier ein grauer Halbsatz. Ein Leerzustand ist der erste Eindruck der
-        // App — er muss sagen, was das hier ist und wie man anfaengt, nicht bloss, dass
-        // nichts da ist.
-        <div className="blatt flex flex-col items-center px-6 py-16 text-center">
-          <FolderOpen className="size-8 text-muted-foreground" aria-hidden="true" />
-          <h2 className="mt-4 text-lg font-semibold">Noch keine Projekte</h2>
-          <p className="mt-2 max-w-sm text-sm text-muted-foreground">
-            Ein Projekt bündelt die Aufnahmen eines Themas. Lege eines an, lade Audio hinein —
-            Transkription und Korrektur laufen dann von selbst.
-          </p>
-          <div className="mt-6">
-            <NewProjectDialog onCreated={oeffnen} trigger={<Button>Erstes Projekt anlegen</Button>} />
+        // Drei verschiedene Gruende fuer eine leere Liste, drei verschiedene Aussagen -- sonst
+        // behauptet "Noch keine Projekte" auch waehrend des ersten Ladens oder nach einer
+        // gescheiterten Anfrage etwas, das schlicht nicht stimmt (dieselbe Regel wie beim
+        // Leerzustand der Arbeitsflaeche, siehe useProjectFiles.fehler).
+        loading ? (
+          <div className="blatt flex flex-col items-center px-6 py-16 text-center">
+            <Loader2 className="size-8 animate-spin text-muted-foreground" aria-hidden="true" />
+            <p className="mt-4 text-sm text-muted-foreground">Projekte werden geladen…</p>
           </div>
-        </div>
+        ) : fehler ? (
+          <div className="blatt flex flex-col items-center px-6 py-16 text-center">
+            <FolderOpen className="size-8 text-muted-foreground" aria-hidden="true" />
+            <h2 className="mt-4 text-lg font-semibold">Projekte konnten nicht geladen werden</h2>
+            <p className="mt-2 max-w-sm text-sm text-muted-foreground">
+              Der Server antwortet nicht. Prüfe die Verbindung und versuche es erneut.
+            </p>
+            <Button className="mt-6" variant="outline" onClick={refresh}>Erneut versuchen</Button>
+          </div>
+        ) : (
+          // Vorher stand hier ein grauer Halbsatz. Ein Leerzustand ist der erste Eindruck der
+          // App — er muss sagen, was das hier ist und wie man anfaengt, nicht bloss, dass
+          // nichts da ist.
+          <div className="blatt flex flex-col items-center px-6 py-16 text-center">
+            <FolderOpen className="size-8 text-muted-foreground" aria-hidden="true" />
+            <h2 className="mt-4 text-lg font-semibold">Noch keine Projekte</h2>
+            <p className="mt-2 max-w-sm text-sm text-muted-foreground">
+              Ein Projekt bündelt die Aufnahmen eines Themas. Lege eines an, lade Audio hinein —
+              Transkription und Korrektur laufen dann von selbst.
+            </p>
+            <div className="mt-6">
+              <NewProjectDialog onCreated={oeffnen} trigger={<Button>Erstes Projekt anlegen</Button>} />
+            </div>
+          </div>
+        )
       ) : (
         <>
           {/* sticky: bei hunderten Projekten scrollt die Zeilenliste unter dem Suchfeld weg,
