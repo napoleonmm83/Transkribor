@@ -8,7 +8,8 @@ Nutzung:
 
 Audio liegt in  projekte/<projekt>/audio/  (oder direkt in projekte/<projekt>/).
 Ergebnis in     projekte/<projekt>/transkripte/  als .json / .raw.txt / .segments.txt
-Optionaler Kontext: projekte/<projekt>/kontext.md  (biast Whisper auf Eigennamen).
+Optionaler Kontext: projekte/<projekt>/kontext.md — geht NICHT mehr an Whisper (als
+initial_prompt kostete er ganze Passagen, siehe _opts), sondern nur in die LLM-Korrektur.
 
 Umgebungsvariablen: WHISPER_MODEL (default large-v3), WHISPER_LANG (default de).
 """
@@ -80,7 +81,7 @@ def find_audio(proj_dir, only=None):
     return files
 
 
-def _opts(prompt, language):
+def _opts(language):
     """Decoder-Parameter an einer Stelle. Identisch zur frueheren openai-whisper-Fassung,
     bis auf zwei Namenswechsel: `fp16` ist bei faster-whisper das `compute_type` des
     Konstruktors (siehe _modell), und `verbose=False` heisst hier `log_progress=True` —
@@ -88,12 +89,36 @@ def _opts(prompt, language):
 
     `vad_filter=False` steht ausdruecklich da: es ist zwar der Default, wuerde aber Stille
     ueberspringen und damit die Segmentzeiten gegen das Audio verschieben — der Editor
-    synchronisiert Text und Wiedergabe ueber genau diese Zeiten."""
+    synchronisiert Text und Wiedergabe ueber genau diese Zeiten.
+
+    KEIN `initial_prompt`, und das ist die wichtigste Zeile hier. Er stand einmal darin
+    ("Interview auf Schweizerdeutsch …", bzw. der Inhalt von kontext.md) und brachte den
+    Decoder dazu, ein 30-Sekunden-Fenster VORZEITIG zu beenden; Whisper schiebt den
+    Lesezeiger daraufhin um das ganze Fenster weiter, und die restliche Sprache darin wird
+    nie angeschaut. Kein falsches Wort, sondern gar keines — und nichts im Ergebnis, woran
+    man es saehe. Gemessen am selben Audio, ganze Dateien, sonst identische Parameter:
+
+        01172464 (9:27)   mit Prompt 1226 Woerter / 492s   ohne 1346 / 528s
+        C0701    (3:26)   mit Prompt  454 Woerter / 156s   ohne  590 / 163s
+        C0761    (0:52)   mit Prompt  140 Woerter /  45s   ohne  158 /  45s
+
+    In deinem Beispielfall fehlten damit 18 s am Stueck — ausgerechnet die Antwort auf die
+    erste Frage. 17 von 37 vorhandenen Aufnahmen trugen die Signatur.
+
+    Seinen erklaerten Zweck erfuellte er dabei nicht: Schweizerdeutsch-Marker (isch, nöd,
+    gsi, öppis, …) kamen in KEINEM der Laeufe vor, mit Prompt wie ohne — Whisper normalisiert
+    Deutsch von sich aus. Mit kontext.md schadete er zusaetzlich, weil deren Markdown-Stil
+    abfaerbte (kleingeschrieben, ohne Satzzeichen). `condition_on_previous_text` ist NICHT
+    beteiligt, das wurde getrennt geprueft (auf False bleibt die Luecke bestehen).
+
+    Ein falsch gehoertes Wort holt die LLM-Korrektur mit dem gemeinsamen Glossar zurueck;
+    eine Passage, die Whisper nie gelesen hat, kann niemand mehr zurueckholen. kontext.md
+    bleibt erhalten und geht unveraendert als `context` in die Korrektur (webtool/correct.py)."""
     return dict(
         language=language, task="transcribe",
         word_timestamps=True, beam_size=5, best_of=5,
         temperature=(0.0, 0.2, 0.4, 0.6, 0.8, 1.0),
-        condition_on_previous_text=True, initial_prompt=prompt,
+        condition_on_previous_text=True,
         vad_filter=False, log_progress=True,
     )
 
@@ -166,16 +191,8 @@ def transcribe_project(name, model, language, only=None):
         print(f"[{name}] nichts zu tun — {len(files)} Datei(en) bereits transkribiert", flush=True)
         return
 
-    # optionaler Kontext -> Whisper initial_prompt
-    prompt = ("Interview auf Schweizerdeutsch, transkribiert nach Standarddeutsch. "
-              "Frage und Antwort.")
-    kpath = os.path.join(proj_dir, "kontext.md")
-    if os.path.exists(kpath):
-        with open(kpath, encoding="utf-8") as fh:
-            txt = fh.read().strip()
-        if txt:
-            prompt = txt[:800]
-
+    # kontext.md wird hier NICHT mehr gelesen: als Whisper-Prompt kostete sie Inhalt
+    # (Begruendung samt Messung in _opts). Fuer die Korrektur liest correct.py sie selbst.
     from webtool import device as devicemod
     engine = devicemod.asr_engine(model)
     if engine == "whisper.cpp":
@@ -212,9 +229,9 @@ def transcribe_project(name, model, language, only=None):
             # Lauf geht weiter. Fuer whisper.cpp gilt sie genauso.
             if engine == "whisper.cpp":
                 from webtool import whispercpp
-                result = whispercpp.transkribiere(f, model, language, prompt)
+                result = whispercpp.transkribiere(f, model, language)
             else:
-                result = _ergebnis(*m.transcribe(f, **_opts(prompt, language)))
+                result = _ergebnis(*m.transcribe(f, **_opts(language)))
         except Exception as e:
             print(f"[{name}] FEHLER {base}: {e}", flush=True)
             continue

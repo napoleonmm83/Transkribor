@@ -265,14 +265,19 @@ def ergebnis(roh: dict, sprache: str) -> dict:
             "language": sprache}
 
 
-def transkribiere(audio: str, modell: str, sprache: str, prompt: str,
-                  onLine=None) -> dict:
+def transkribiere(audio: str, modell: str, sprache: str, onLine=None) -> dict:
     """Transkribiert eine Datei ueber whisper.cpp und liefert das `<base>.json`-Dokument.
 
     Die Decoder-Parameter spiegeln transcribe._opts(): beam_size 5, best_of 5,
-    Temperatur-Rueckfall (whisper.cpps Default 0.0 mit Schritt 0.2) und derselbe
-    initial_prompt. Kein VAD — es wuerde Stille ueberspringen und die Segmentzeiten
-    gegen das Audio verschieben, ueber die der Editor synchronisiert.
+    Temperatur-Rueckfall (whisper.cpps Default 0.0 mit Schritt 0.2). Kein VAD — es wuerde
+    Stille ueberspringen und die Segmentzeiten gegen das Audio verschieben, ueber die der
+    Editor synchronisiert.
+
+    Und kein `--prompt`: er beendet ein 30-Sekunden-Fenster vorzeitig, worauf der Lesezeiger
+    um das ganze Fenster weiterrueckt und die restliche Sprache darin nie gelesen wird
+    (Messung in transcribe._opts). whisper.cpp implementiert denselben Algorithmus, die
+    Messung selbst stammt aber vom faster-whisper-Pfad — hier ist es mitgezogen, nicht
+    nachgemessen: fuer Apple Silicon fehlt die Hardware (Issue #36).
     """
     sag = onLine or (lambda z: print(z, flush=True))
     gguf = modell_datei(modell, sag)
@@ -281,7 +286,7 @@ def transkribiere(audio: str, modell: str, sprache: str, prompt: str,
         _wav(audio, wav)
         praefix = os.path.join(tmp, "out")
         cmd = [binaer(), "-m", gguf, "-f", wav, "-l", sprache,
-               "-bs", "5", "-bo", "5", "--prompt", prompt,
+               "-bs", "5", "-bo", "5",
                "-pp", "-ojf", "-of", praefix]
         proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL,
                                 stderr=subprocess.PIPE, text=True,
