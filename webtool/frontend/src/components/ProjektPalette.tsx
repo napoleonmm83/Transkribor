@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useProjects } from '@/hooks/useProjects'
+import { useProjekte } from '@/hooks/useProjektDaten'
 import {
   CommandDialog,
   CommandEmpty,
@@ -17,11 +17,10 @@ import {
  *  Tippen im Suchfeld der Galerie oder in einem Segmenttext. */
 export function ProjektPalette() {
   const [open, setOpen] = useState(false)
-  // Kein eigener Dauerpoll: geschlossen (praktisch immer) genuegt eine einmalige Abfrage beim
-  // Mounten, sonst waere die Palette genau die Verdopplung des Summenpolls, die die Aufteilung
-  // Zusammenfassung/Detail abschaffen soll. pollMs=0 heisst "einmal holen, nicht pollen"
-  // (useProjects.ts); beim Oeffnen wechselt pollMs, der Poll-Effekt setzt neu auf.
-  const { projects } = useProjects(open ? 4000 : 0)
+  // Die geteilte Liste (ProjektDatenProvider) pollt ohnehin fuer die Seitenleiste -- ein
+  // eigener Schalter je nach Offen-Zustand waere hier wirkungslos, seit Task 3 gibt es nur
+  // noch EINEN Poll fuer die ganze App.
+  const { projects } = useProjekte()
   const navigate = useNavigate()
 
   useEffect(() => {

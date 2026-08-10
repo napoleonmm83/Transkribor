@@ -2,12 +2,13 @@ import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent, waitFor, within, act } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { HomeGallery } from './HomeGallery'
+import { ProjektDatenProvider } from '@/hooks/useProjektDaten'
 import * as api from '@/lib/api'
 
 vi.mock('@/lib/api')
 
 const renderHome = () =>
-  render(<MemoryRouter><HomeGallery /></MemoryRouter>)
+  render(<MemoryRouter><ProjektDatenProvider><HomeGallery /></ProjektDatenProvider></MemoryRouter>)
 
 describe('HomeGallery', () => {
   it('zeigt Karten mit Dateizahl', async () => {

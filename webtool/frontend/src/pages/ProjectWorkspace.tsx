@@ -1,9 +1,8 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { Play, Pencil, X, FileAudio, Loader2 } from 'lucide-react'
-import { useProjects } from '@/hooks/useProjects'
-import { useProjectFiles } from '@/hooks/useProjectFiles'
+import { useProjekte, useDateien } from '@/hooks/useProjektDaten'
 import { useAiReady } from '@/hooks/useAiReady'
 import { mergePhases, useActiveJob } from '@/hooks/useActiveJob'
 import { FileStatusPill } from '@/components/FileStatusPill'
@@ -19,8 +18,8 @@ import type { StartJob } from '@/lib/types'
 export function ProjectWorkspace() {
   const { project } = useParams<{ project: string }>()
   const navigate = useNavigate()
-  const { projects, refresh } = useProjects()
-  const { files: dateien, refresh: refreshFiles, loading: dateienLaden, fehler: dateienFehler } = useProjectFiles(project!)
+  const { projects, refresh } = useProjekte()
+  const { files: dateien, refresh: refreshFiles, loading: dateienLaden, fehler: dateienFehler } = useDateien()
   const { jobs, adopt, onSettled } = useActiveJob()
   const aiReason = useAiReady()          // nicht leer -> Korrektur waere ein Leerlauf
   const p = projects.find(x => x.name === project)
@@ -32,21 +31,8 @@ export function ProjectWorkspace() {
   const running = meine.length > 0
 
   useEffect(() => onSettled(() => { refresh(); refreshFiles() }), [onSettled, refresh, refreshFiles])
-  // Der Summenpoll ist der billige Waechter ueber die Dateiliste: aendert sich die Zahl der
-  // Dateien oder der fertigen, hat sich auf der Platte etwas getan (Job mittendrin, oder eine
-  // von Hand hineinkopierte Datei) — dann und nur dann neu laden. Ohne das blieb eine fertige
-  // Datei bis zum Laufende deaktiviert (has_raw kommt nur ueber refreshFiles rein), weil
-  // onSettled erst feuert, wenn der GANZE Job terminal wird.
-  // NICHT beim allerersten Eintreffen von p feuern: der Sprung von "p unbekannt" auf die erste
-  // Zahl ist keine Aenderung auf der Platte, nur die Ankunft der Zusammenfassung -- den ersten
-  // Abruf erledigt useProjectFiles selbst schon.
-  const letzteZahlen = useRef<{ dateien: number; fertig: number } | null>(null)
-  useEffect(() => {
-    if (!p) return
-    const vorher = letzteZahlen.current
-    letzteZahlen.current = { dateien: p.dateien, fertig: p.fertig }
-    if (vorher && (vorher.dateien !== p.dateien || vorher.fertig !== p.fertig)) refreshFiles()
-  }, [p?.dateien, p?.fertig])   // eslint-disable-line react-hooks/exhaustive-deps
+  // Der Summenpoll-Waechter ueber die Dateiliste steht jetzt im ProjektDatenProvider (eine
+  // Stelle statt wortgleich hier UND in EditorView.tsx).
   // Discovery: laufende Jobs nach Reload/aus der Liste adoptieren — es koennen zwei sein
   // (Transkription + Korrektur laufen im selben Projekt nebeneinander).
   const aktiveIds = (p?.active_jobs ?? []).map(j => j.id).join(',')

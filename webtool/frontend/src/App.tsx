@@ -9,19 +9,19 @@ import { AppShell } from '@/components/AppShell'
 export default function App() {
   // ProjektPalette hier, nicht in HomeGallery: das ist die oberste Stelle, an der der
   // Router rahmt -- Ctrl+K muss auch im Editor greifen, wo es kein Suchfeld gibt.
-  // Sie steht NEBEN der AppShell, nicht darin: ein Dialog gehoert nicht in eine Rasterzelle
-  // mit `overflow-auto`, sonst scrollt der Hintergrund unter ihm weg.
+  // Innerhalb der AppShell, seit die den ProjektDatenProvider mitbringt (Task 3): die Palette
+  // liest jetzt useProjekte() und braucht dessen Kontext. Das schadet der Rasterzelle nicht --
+  // ein Radix-Dialog portalt seinen Inhalt ohnehin nach document.body, unabhaengig davon, wo
+  // er im Baum haengt.
   return (
-    <>
+    <AppShell>
       <ProjektPalette />
-      <AppShell>
-        <Routes>
-          <Route path="/" element={<HomeGallery />} />
-          <Route path="/einstellungen" element={<SettingsPage />} />
-          <Route path="/p/:project" element={<ProjectWorkspace />} />
-          <Route path="/p/:project/:base" element={<EditorView />} />
-        </Routes>
-      </AppShell>
-    </>
+      <Routes>
+        <Route path="/" element={<HomeGallery />} />
+        <Route path="/einstellungen" element={<SettingsPage />} />
+        <Route path="/p/:project" element={<ProjectWorkspace />} />
+        <Route path="/p/:project/:base" element={<EditorView />} />
+      </Routes>
+    </AppShell>
   )
 }

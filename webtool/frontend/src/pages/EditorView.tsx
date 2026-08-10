@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { useProjects } from '@/hooks/useProjects'
-import { useProjectFiles } from '@/hooks/useProjectFiles'
+import { useProjekte, useDateien } from '@/hooks/useProjektDaten'
 import { useAiReady } from '@/hooks/useAiReady'
 import { useDoc } from '@/hooks/useDoc'
 import { useJob } from '@/hooks/useJob'
@@ -17,8 +16,8 @@ import type { WaveHandle } from '@/components/Waveform'
 export function EditorView() {
   const { project, base } = useParams<{ project: string; base: string }>()
   const navigate = useNavigate()
-  const { projects, loading: projectsLoading, refresh } = useProjects()
-  const { files: dateien, refresh: refreshFiles } = useProjectFiles(project!)
+  const { projects, loading: projectsLoading, refresh } = useProjekte()
+  const { files: dateien, refresh: refreshFiles } = useDateien()
   const sel = project && base ? { project, base } : null
   const { doc, dirty, loading: docLoading, updateSegment, renameSpeaker, save, exportDownload, reload } = useDoc(sel?.project ?? null, sel?.base ?? null)
   const { start } = useJob()
@@ -35,18 +34,9 @@ export function EditorView() {
   const phases = useMemo(() => mergePhases(meine), [meine])   // nur eigenes Projekt, s. mergePhases
   const running = meine.length > 0
   const activeProject = projects.find(x => x.name === project)
-  // Wie ProjectWorkspace.tsx: der Summenpoll ist der billige Waechter ueber die Dateiliste --
-  // aendern sich dateien/fertig, neu laden, statt bis zum Laufende (onSettled) zu warten. NICHT
-  // beim allerersten Eintreffen von activeProject feuern -- den ersten Abruf erledigt
-  // useProjectFiles selbst schon, siehe ProjectWorkspace.tsx.
-  const letzteZahlen = useRef<{ dateien: number; fertig: number } | null>(null)
-  useEffect(() => {
-    if (!activeProject) return
-    const vorher = letzteZahlen.current
-    letzteZahlen.current = { dateien: activeProject.dateien, fertig: activeProject.fertig }
-    if (vorher && (vorher.dateien !== activeProject.dateien || vorher.fertig !== activeProject.fertig)) refreshFiles()
-  }, [activeProject?.dateien, activeProject?.fertig])   // eslint-disable-line react-hooks/exhaustive-deps
-  // Dateien kommen jetzt aus useProjectFiles, nicht mehr aus useProjects — Sidebar erwartet
+  // Der Summenpoll-Waechter ueber die Dateiliste steht jetzt im ProjektDatenProvider (eine
+  // Stelle statt wortgleich hier UND in ProjectWorkspace.tsx).
+  // Dateien kommen jetzt aus useDateien, nicht mehr aus useProjects — Sidebar erwartet
   // weiterhin ein `files`-Feld (SidebarProject, seit Task 3 kein Teil von Project mehr).
   const sidebarProjects = useMemo(
     () => (activeProject ? [{ ...activeProject, files: dateien }] : []),

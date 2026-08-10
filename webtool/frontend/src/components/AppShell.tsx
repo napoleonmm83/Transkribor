@@ -1,6 +1,19 @@
 import { useEffect, useRef, type ReactNode } from 'react'
 import { useLocation } from 'react-router-dom'
 import { StatusBar } from './StatusBar'
+import { ProjektDatenProvider } from '@/hooks/useProjektDaten'
+
+/**
+ * Rahmt die App EIN: der Datenprovider aussen (braucht `useMatch`, muss also innerhalb des
+ * Routers stehen — und `AppShell` steht dort, `main.tsx` nicht), das Fensterraster innen.
+ */
+export function AppShell({ children }: { children: ReactNode }) {
+  return (
+    <ProjektDatenProvider>
+      <Rahmen>{children}</Rahmen>
+    </ProjektDatenProvider>
+  )
+}
 
 /**
  * Das Fensterraster der App. Es gibt GENAU eine Stelle, an der das Fenster aufgeteilt wird,
@@ -12,7 +25,7 @@ import { StatusBar } from './StatusBar'
  * womit `1fr` von ihrem Inhalt aufgeblaeht wird und das `overflow-auto` nie greift — die
  * Statuszeile wandert dann unter den unteren Fensterrand.
  */
-export function AppShell({ children }: { children: ReactNode }) {
+function Rahmen({ children }: { children: ReactNode }) {
   const { pathname } = useLocation()
   const inhalt = useRef<HTMLDivElement>(null)
   // Kehrseite des EINEN Bildlaufbehaelters: der Versatz ueberlebt den Routenwechsel. Aus
