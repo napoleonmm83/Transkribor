@@ -8,9 +8,10 @@ import { useDokumentTitel } from '@/hooks/useDokumentTitel'
 import { useJob } from '@/hooks/useJob'
 import { useOsFortschritt } from '@/hooks/useOsFortschritt'
 import { uploadAudio, startTranscribe, startCorrect, startCorrectFile } from '@/lib/api'
+import { cn } from '@/lib/utils'
 import { Sidebar } from './Sidebar'
 import { StatusBar } from './StatusBar'
-import { TitleBar } from './TitleBar'
+import { TitleBar, hatTitelzeile } from './TitleBar'
 
 /** Getrennt von AppShell, weil sie die Hooks des Providers braucht — die stehen einem
  *  Bauteil erst zur Verfuegung, wenn es INNERHALB des Providers gerendert wird. */
@@ -100,7 +101,11 @@ function Rahmen({ children }: { children: ReactNode }) {
           KEIN Fall: der Server bindet auf 127.0.0.1, von aussen erreicht ihn niemand.
           Darum hier nur ausblenden statt einer einklappbaren Leiste mit gemerktem Zustand:
           auf schmal bleiben die Uebersicht und Ctrl+K als Weg zum Projekt. */}
-      <div className="grid h-screen grid-rows-[auto_1fr_auto] md:grid-cols-[260px_1fr]">
+      {/* Zeilenzahl NACH der Titelzeile: im Browser rendert sie `null` und steuert kein
+          Rasterelement bei -- mit drei festen Zeilen rutscht dann alles hoch, der Inhalt in
+          `auto`, die Statuszeile in `1fr` (gemessen 374 px Leerraum unter ihr). */}
+      <div className={cn('grid h-screen md:grid-cols-[260px_1fr]',
+        hatTitelzeile() ? 'grid-rows-[auto_1fr_auto]' : 'grid-rows-[1fr_auto]')}>
         <TitleBar titel={titel} />
         <aside className="hidden min-h-0 border-r md:block"><Leiste /></aside>
         <div id="inhalt" tabIndex={-1} ref={inhalt}

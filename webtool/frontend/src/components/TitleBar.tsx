@@ -7,6 +7,10 @@ function plattform(): string | null {
   return w.transkribor?.plattform ?? null
 }
 
+/** Steuert diese Zeile ein Rasterelement bei? Das Raster der AppShell muss dieselbe Antwort
+ *  kennen wie die Komponente selbst — sonst hat es im Browser eine Zeile zu viel. */
+export function hatTitelzeile(): boolean { return plattform() !== null }
+
 /**
  * Die eigene Titelzeile. Sie zeichnet NUR Text — Minimieren/Maximieren/Schliessen legt das
  * Betriebssystem als Overlay darueber (Windows/Linux) bzw. laesst seine Ampelknoepfe stehen
