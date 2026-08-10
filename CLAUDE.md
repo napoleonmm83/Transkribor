@@ -469,6 +469,29 @@ nie committen), unklarem Scope, oder history-verändernden Aktionen (force-push,
   woanders gestarteter Job (z. B. „Korrigieren" aus der Arbeitsfläche, während der Editor offen
   ist) ändert `dateien`/`fertig` erst, wenn der ganze Lauf fertig ist — dazwischen ist
   `onSettled` der einzige Anlass, der die frisch geschriebene `<base>.edit.json` bemerkt.
+- **Einzelne Aufnahme neu anstossen oder löschen:** `DELETE /api/projects/{p}/files/{base}`
+  (Audio **und** alle Transkripte) und `POST /api/projects/{p}/files/{base}/transcribe`
+  (Transkripte weg, dann der normale Projektlauf). Drei Dinge, die man nicht aus dem Diff liest:
+  **Die abgeleiteten Dateien müssen beim Neu-Transkribieren mit weg** — `load_or_build_doc`
+  bevorzugt `<base>.edit.json` vor der Roh-JSON, sonst zeigt der Editor nach dem Neulauf
+  weiter den alten Text. **Kein eigener CLI-Schalter**: `transcribe.py` überspringt vorhandene
+  `<base>.json`, also macht der Projektlauf genau die eine fehlende Datei und zieht per `then=`
+  die Autokorrektur nach. **`glob.escape(base)` ist Pflicht**, nicht Vorsicht: `safe_name` lässt
+  `[` und `*` durch, und der URL-Import legt Dateien wie `Video [dQw4w9].m4a` an — ungeschützt
+  liest glob das `[` als Zeichenklasse und findet nichts. Beide Endpunkte antworten mit 409,
+  solange **irgendein** Job des Projekts läuft (Dateien wegzuräumen, während ein Lauf sie
+  schreibt, ist ein Datenrennen; eine Job-zu-Datei-Zuordnung gibt es im Backend nicht).
+- **Die Datei-Aktionen liegen in EINEM Bauteil** (`components/DateiMenue.tsx`, das `⋯`-Menü in
+  Arbeitsfläche *und* Seitenleiste). Vorher standen Korrigieren-Knopf und Überschreib-Rückfrage
+  zweimal getrennt im Code, und die Fassungen liefen auseinander: die Arbeitsfläche schickte
+  immer `force=false`, womit der Server eine handbearbeitete Datei **still übersprang** — von
+  aussen sah das aus wie „die Korrektur lässt sich nicht neu anstossen". `DateiMenue` holt sich
+  Nachladen, Job-Adoption und die Editor-Brücke aus den Kontexten statt über durchgereichte
+  Requisiten; die dreistufige `onCorrectFile`-Kette (AppShell → Sidebar → FileRow) ist damit weg.
+  **Löschen und Neu-Transkribieren verlassen den Editor, Korrigieren nicht:** dort bleibt das
+  offene Dokument gültig und wird nach dem Lauf nachgeladen (mit Rückfrage bei Ungespeichertem),
+  während ein verworfenes Transkript im Editor stehen bliebe und beim Speichern die gelöschte
+  Datei neu anlegte.
 - **Untertitel-Export `<base>.srt`** (`webtool/render_srt.py`, `POST …/export/srt`, Knopf im
   Editor) — die Datei geht in YouTube Studio unter „Untertitel > Datei hochladen" und ersetzt
   das schwache Auto-Transkript. Zwilling von `render_md.py`: gleiche Eingabe, andere Ausgabe.

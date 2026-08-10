@@ -1,6 +1,7 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { Sidebar } from './Sidebar'
+import { Huelle } from '@/lib/testHuelle'
 import * as api from '@/lib/api'
 
 vi.mock('@/lib/api')
@@ -20,11 +21,18 @@ function zeigen(extra: Partial<Parameters<typeof Sidebar>[0]> = {}) {
   const props = {
     projekte: PROJEKTE, offen: null, dateien: [], onWaehlen: vi.fn(),
     active: null, onOpen: vi.fn(), onUpload: vi.fn(), onTranscribe: vi.fn(),
-    onCorrect: vi.fn(), onCorrectFile: vi.fn(), onGeloescht: vi.fn(), ...extra,
+    onCorrect: vi.fn(), onGeloescht: vi.fn(), ...extra,
   }
-  const { container } = render(<Sidebar {...props} />)
+  const { container } = render(<Huelle><Sidebar {...props} /></Huelle>)
   return { ...props, container }
 }
+
+// Die Huelle bringt den echten ProjektDatenProvider mit — der pollt beim Aufsetzen, und ein
+// automock-`undefined` statt eines Promise reisst jeden Test um.
+beforeEach(() => {
+  vi.mocked(api.listProjects).mockResolvedValue([])
+  vi.mocked(api.getProjectFiles).mockResolvedValue({ name: '', files: [] })
+})
 
 describe('Sidebar', () => {
   it('listet alle Projekte', () => {
@@ -74,18 +82,21 @@ describe('Sidebar', () => {
   it('unterscheidet "laedt" von "keine Projekte"', () => {
     // Dieselbe Regel wie in der Galerie: eine leere Liste hat drei Gruende und darf nicht
     // waehrend des Ladens behaupten, es gaebe nichts.
-    render(<Sidebar projekte={[]} loading offen={null} dateien={[]} onWaehlen={vi.fn()}
+    render(<Huelle><Sidebar projekte={[]} loading offen={null} dateien={[]} onWaehlen={vi.fn()}
       active={null} onOpen={vi.fn()} onUpload={vi.fn()} onTranscribe={vi.fn()}
-      onCorrect={vi.fn()} onCorrectFile={vi.fn()} onGeloescht={vi.fn()} />)
+      onCorrect={vi.fn()} onGeloescht={vi.fn()} /></Huelle>)
     expect(screen.queryByText(/Noch keine Projekte/)).not.toBeInTheDocument()
   })
 
-  it('sperrt Korrigieren ohne KI-Anbieter und nennt den Grund', () => {
+  it('sperrt Korrigieren ohne KI-Anbieter und nennt den Grund', async () => {
     const grund = 'Claude Code ist nicht installiert. Unter „Einstellungen" einrichten.'
     zeigen({ offen: 'Alpha', dateien: DATEIEN, aiReason: grund })
     expect(screen.getByLabelText('Korrigieren + Sprecher')).toBeDisabled()
-    expect(screen.getByLabelText('Nur „a" korrigieren')).toBeDisabled()
     expect(screen.getByLabelText('Transkribieren')).not.toBeDisabled()   // nur die Korrektur
+    // Die Datei-Seite steckt im ⋯-Menue (DateiMenue) und muss dort ebenso gesperrt sein.
+    fireEvent.pointerDown(screen.getByLabelText('Aktionen für „a"'),
+      { button: 0, ctrlKey: false, pointerType: 'mouse' })
+    expect(await screen.findByRole('menuitem', { name: 'Korrigieren' })).toHaveAttribute('data-disabled')
   })
 
   it('öffnet eine Datei bei Klick', () => {

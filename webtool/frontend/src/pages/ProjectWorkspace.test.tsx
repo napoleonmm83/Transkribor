@@ -1,9 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor, act } from '@testing-library/react'
+import { render, screen, waitFor, act, fireEvent } from '@testing-library/react'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import { ProjectWorkspace } from './ProjectWorkspace'
 import { JobProvider } from '@/hooks/useActiveJob'
 import { ProjektDatenProvider } from '@/hooks/useProjektDaten'
+import { EditorBrueckeProvider } from '@/hooks/useEditorBruecke'
 import * as api from '@/lib/api'
 import type { Settings, ProjectFile } from '@/lib/types'
 
@@ -29,14 +30,21 @@ describe('ProjectWorkspace (Stub)', () => {
       <MemoryRouter initialEntries={['/p/Demo']}>
         <JobProvider>
           <ProjektDatenProvider>
+            <EditorBrueckeProvider>
             <Routes><Route path="/p/:project" element={<ProjectWorkspace />} /></Routes>
+            </EditorBrueckeProvider>
           </ProjektDatenProvider>
         </JobProvider>
       </MemoryRouter>,
     )
     await waitFor(() => expect(screen.getByRole('button', { name: 'Korrigieren' })).toBeDisabled())
-    expect(screen.getAllByTitle(/Kein API-Key hinterlegt/)).toHaveLength(2)   // Projekt + Datei
+    expect(screen.getAllByTitle(/Kein API-Key hinterlegt/)).toHaveLength(1)   // Projektknopf
     expect(screen.getByRole('button', { name: 'Transkribieren' })).not.toBeDisabled()
+    // Die Datei-Seite steckt seit der Zusammenlegung im ⋯-Menue und muss dort ebenso gesperrt
+    // sein — sonst startet ein Klick dort den Job, den der Projektknopf gerade verweigert.
+    fireEvent.pointerDown(screen.getByRole('button', { name: /Aktionen für/ }),
+      { button: 0, ctrlKey: false, pointerType: 'mouse' })
+    expect(await screen.findByRole('menuitem', { name: 'Korrigieren' })).toHaveAttribute('data-disabled')
   })
 
   it('lässt Korrigieren zu, wenn ein Anbieter eingerichtet ist', async () => {
@@ -45,7 +53,9 @@ describe('ProjectWorkspace (Stub)', () => {
       <MemoryRouter initialEntries={['/p/Demo']}>
         <JobProvider>
           <ProjektDatenProvider>
+            <EditorBrueckeProvider>
             <Routes><Route path="/p/:project" element={<ProjectWorkspace />} /></Routes>
+            </EditorBrueckeProvider>
           </ProjektDatenProvider>
         </JobProvider>
       </MemoryRouter>,
@@ -61,7 +71,9 @@ describe('ProjectWorkspace (Stub)', () => {
       <MemoryRouter initialEntries={['/p/Demo']}>
         <JobProvider>
           <ProjektDatenProvider>
+            <EditorBrueckeProvider>
             <Routes><Route path="/p/:project" element={<ProjectWorkspace />} /></Routes>
+            </EditorBrueckeProvider>
           </ProjektDatenProvider>
         </JobProvider>
       </MemoryRouter>,
@@ -81,7 +93,9 @@ describe('ProjectWorkspace (Stub)', () => {
       <MemoryRouter initialEntries={['/p/Demo']}>
         <JobProvider intervalMs={5}>
           <ProjektDatenProvider>
+            <EditorBrueckeProvider>
             <Routes><Route path="/p/:project" element={<ProjectWorkspace />} /></Routes>
+            </EditorBrueckeProvider>
           </ProjektDatenProvider>
         </JobProvider>
       </MemoryRouter>,
@@ -106,7 +120,9 @@ describe('ProjectWorkspace (Stub)', () => {
       <MemoryRouter initialEntries={['/p/Demo']}>
         <JobProvider intervalMs={5}>
           <ProjektDatenProvider>
+            <EditorBrueckeProvider>
             <Routes><Route path="/p/:project" element={<ProjectWorkspace />} /></Routes>
+            </EditorBrueckeProvider>
           </ProjektDatenProvider>
         </JobProvider>
       </MemoryRouter>,
@@ -131,7 +147,9 @@ describe('ProjectWorkspace (Stub)', () => {
       <MemoryRouter initialEntries={['/p/Demo']}>
         <JobProvider intervalMs={5}>
           <ProjektDatenProvider>
+            <EditorBrueckeProvider>
             <Routes><Route path="/p/:project" element={<ProjectWorkspace />} /></Routes>
+            </EditorBrueckeProvider>
           </ProjektDatenProvider>
         </JobProvider>
       </MemoryRouter>,
@@ -161,8 +179,10 @@ describe('ProjectWorkspace (Stub)', () => {
         <MemoryRouter initialEntries={['/p/Demo']}>
           <JobProvider>
             <ProjektDatenProvider>
+            <EditorBrueckeProvider>
               <Routes><Route path="/p/:project" element={<ProjectWorkspace />} /></Routes>
-            </ProjektDatenProvider>
+              </EditorBrueckeProvider>
+          </ProjektDatenProvider>
           </JobProvider>
         </MemoryRouter>,
       )
@@ -187,7 +207,9 @@ describe('ProjectWorkspace (Stub)', () => {
       <MemoryRouter initialEntries={['/p/Demo']}>
         <JobProvider>
           <ProjektDatenProvider>
+            <EditorBrueckeProvider>
             <Routes><Route path="/p/:project" element={<ProjectWorkspace />} /></Routes>
+            </EditorBrueckeProvider>
           </ProjektDatenProvider>
         </JobProvider>
       </MemoryRouter>,
@@ -206,7 +228,9 @@ describe('ProjectWorkspace (Stub)', () => {
       <MemoryRouter initialEntries={['/p/Demo']}>
         <JobProvider>
           <ProjektDatenProvider>
+            <EditorBrueckeProvider>
             <Routes><Route path="/p/:project" element={<ProjectWorkspace />} /></Routes>
+            </EditorBrueckeProvider>
           </ProjektDatenProvider>
         </JobProvider>
       </MemoryRouter>,

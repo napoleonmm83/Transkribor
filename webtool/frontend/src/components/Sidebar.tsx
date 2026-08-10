@@ -14,7 +14,7 @@ type SidebarProjekt = { name: string; dateien: number; geaendert: number; active
 
 export function Sidebar({
   projekte, loading, fehler, offen, dateien, dateienLaden, onWaehlen,
-  active, onOpen, onUpload, onTranscribe, onCorrect, onCorrectFile, onGeloescht,
+  active, onOpen, onUpload, onTranscribe, onCorrect, onGeloescht,
   phases, jobRunning, aiReason,
 }: {
   projekte: SidebarProjekt[]; loading?: boolean; fehler?: boolean
@@ -26,7 +26,6 @@ export function Sidebar({
   onUpload: (project: string, file: File) => void
   onTranscribe: (project: string) => void
   onCorrect: (project: string) => void
-  onCorrectFile: (project: string, base: string, force: boolean) => void
   /** Nach dem Loeschen: die Liste ist veraltet, und das geloeschte Projekt war das offene. */
   onGeloescht: (project: string) => void
   phases?: JobPhases; jobRunning?: boolean
@@ -138,10 +137,9 @@ export function Sidebar({
                     <p className="px-2 py-1 text-sm text-muted-foreground">lädt…</p>
                   )}
                   {dateien.map(f => (
-                    <FileRow key={f.base} file={f}
+                    <FileRow key={f.base} project={p.name} file={f}
                       active={active?.project === p.name && active?.base === f.base}
                       onOpen={() => onOpen({ project: p.name, base: f.base })}
-                      onCorrectFile={force => onCorrectFile(p.name, f.base, force)}
                       phase={jobRunning ? phases?.active[f.base]?.phase : undefined}
                       state={jobRunning ? phases?.perBase[f.base] : undefined}
                       jobRunning={jobRunning} aiReason={aiReason} />

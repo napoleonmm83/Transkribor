@@ -1,4 +1,5 @@
 """FastAPI-Backend für den Transkribor-Editor (Stufe 1)."""
+import glob
 import json
 import os
 import shutil
@@ -250,6 +251,66 @@ def delete_project(project: str):
         raise HTTPException(status_code=404, detail="kein Projekt")
     shutil.rmtree(pdir)
     return {"ok": True}
+
+
+def _datei_weg(project: str, base: str, mit_audio: bool) -> int:
+    """Alle Dateien EINER Aufnahme entfernen; gibt zurueck, wie viele es waren.
+
+    `transkripte/<base>.*` deckt raw/edit/md/srt/correction/tagged/diar/segments und die
+    `.partN.correction.json`-Zwischenstaende in einem Rutsch ab — eine Aufzaehlung waere
+    beim naechsten neuen Artefakt still unvollstaendig.
+
+    glob.escape() ist Pflicht, nicht Vorsicht: paths.safe_name laesst `[` und `*` durch, und
+    der URL-Import legt Dateien wie `Video [dQw4w9].m4a` an — ohne Escape liest glob das `[`
+    als Zeichenklasse und findet die Datei nicht. Der literale Punkt im Muster trennt
+    sauber: "Timeline 1.*" trifft `Timeline 1.json`, aber nicht `Timeline 10.json`."""
+    muster = os.path.join(paths.transkripte_dir(project), glob.escape(base) + ".*")
+    treffer = glob.glob(muster)
+    if mit_audio:
+        adir = paths.audio_dir(project)
+        treffer += [os.path.join(adir, base + ext) for ext in AUDIO_EXT
+                    if os.path.exists(os.path.join(adir, base + ext))]
+    for p in treffer:
+        os.remove(p)
+    return len(treffer)
+
+
+def _keine_jobs(project: str) -> None:
+    """Dateien wegzuraeumen, waehrend ein Lauf sie schreibt, ist ein Datenrennen: die
+    Korrektur haelt Pfade ueber Minuten offen und schriebe die geloeschte edit.json neu.
+    ponytail: sperrt das ganze Projekt, nicht die einzelne Datei — eine Job-zu-Datei-
+    Zuordnung gibt es im Backend nicht (jobs kennt nur Projekt+Art). Feiner erst, wenn
+    das Warten bei langen Laeufen tatsaechlich stoert."""
+    if jobs.active_for(project):
+        raise HTTPException(status_code=409, detail="Job läuft — erst abbrechen")
+
+
+@app.delete("/api/projects/{project}/files/{base}")
+def delete_file(project: str, base: str):
+    """Eine einzelne Aufnahme samt Audio loeschen (das Projekt bleibt)."""
+    _validate(project, base)
+    _keine_jobs(project)
+    n = _datei_weg(project, base, mit_audio=True)
+    if not n:
+        raise HTTPException(status_code=404, detail=f"keine Datei: {base}")
+    return {"ok": True, "geloescht": n}
+
+
+@app.post("/api/projects/{project}/files/{base}/transcribe")
+def retranscribe_file(project: str, base: str):
+    """Transkript neu erzeugen: Artefakte weg, dann der normale Projektlauf.
+
+    Kein eigener CLI-Schalter noetig — transcribe.py ueberspringt vorhandene <base>.json,
+    macht also genau die eine fehlende Datei und zieht per then= die Autokorrektur nach.
+    Die abgeleiteten Dateien MUESSEN mit weg: load_or_build_doc bevorzugt <base>.edit.json
+    vor der Roh-JSON, ein Neu-Transkribieren zeigte sonst weiter den alten Text."""
+    _validate(project, base)
+    if not find_audio(project, base):
+        raise HTTPException(status_code=404, detail=f"kein Audio: {base}")
+    _keine_jobs(project)
+    _datei_weg(project, base, mit_audio=False)
+    job_id, started = _start_transcribe(project)
+    return {"job_id": job_id, "started": started}
 
 
 @app.get("/api/projects/{project}/files/{base}")
