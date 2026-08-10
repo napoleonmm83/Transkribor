@@ -101,6 +101,30 @@ def test_export_srt_schreibt_datei(client, tmp_path):
     assert (tmp_path / "Demo" / "transkripte" / "S1.srt").read_text(encoding="utf-8") == srt
 
 
+def test_get_projekt_einzeln_zeigt_dateien(client, tmp_path):
+    tdir = tmp_path / "Demo" / "transkripte"
+    (tdir / "S2.json").write_text(json.dumps({"language": "de", "text": "", "segments": []}),
+                                   encoding="utf-8")
+    (tdir / "S2.edit.json").write_text("{}", encoding="utf-8")
+    r = client.get("/api/projects/Demo")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["name"] == "Demo"
+    bases = {f["base"]: f for f in body["files"]}
+    assert set(bases) == {"S1", "S2"}
+    assert bases["S1"]["has_raw"] and not bases["S1"]["has_edit"]
+    assert bases["S2"]["has_raw"] and bases["S2"]["has_edit"]
+
+
+def test_get_projekt_einzeln_unbekanntes_projekt_404(client):
+    assert client.get("/api/projects/Nichtvorhanden").status_code == 404
+
+
+def test_get_projekt_einzeln_ungueltiger_name_400(client):
+    r = client.get("/api/projects/a..b")
+    assert r.status_code == 400
+
+
 def test_invalid_project_name_400(client):
     # ':' triggers safe_name rejection -> _validate -> HTTP 400 at the endpoint layer
     r = client.get("/api/projects/a:b/files/x")
