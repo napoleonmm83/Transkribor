@@ -54,8 +54,15 @@ export function useOsFortschritt(): void {
   // die bereits gescheiterten Kennungen bei jedem Leerlauf beiseitegelegt.
   // NUR 'error': ein Abbruch ist eine Entscheidung des Nutzers und darf nicht wie ein
   // Fehler aussehen (useActiveJob setzt 'error' auch selbst, nach dreimal weg).
+  // Der Schnappschuss wird im LEERLAUF genommen, gebraucht wird er erst beim naechsten Lauf --
+  // dazwischen liegt mindestens ein Commit, der Effekt ist also rechtzeitig durch. Darum darf
+  // er hier stehen und muss NICHT in die Renderphase (React verbietet das Schreiben von Refs
+  // dort ausdruecklich, und unter Concurrent Rendering liefe es auch fuer Durchlaeufe, die nie
+  // committen).
   const alteFehler = useRef(new Set<string>())
-  if (anteil < 0) alteFehler.current = new Set(jobs.filter(j => j.status === 'error').map(j => j.id))
+  useEffect(() => {
+    if (anteil < 0) alteFehler.current = new Set(jobs.filter(j => j.status === 'error').map(j => j.id))
+  }, [anteil, jobs])
   const modus = anteil >= 0 && jobs.some(j =>
     j.project === projekt?.name && j.status === 'error' && !alteFehler.current.has(j.id))
     ? 'error' : undefined
