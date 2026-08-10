@@ -28,9 +28,9 @@ describe('EditorView (Stub)', () => {
   })
 
   it('holt die Dateien ueber GET /api/projects/{project}, nicht aus projects[].files', async () => {
-    // listProjects liefert bewusst files:[] -- wuerde die Seite noch p.files lesen, bliebe die
-    // Sidebar leer und der Test faende 'S1' nicht.
-    vi.mocked(api.listProjects).mockResolvedValue([{ name: 'Demo', files: [], active_jobs: [] }])
+    // Project fuehrt seit Task 3 gar kein files mehr -- wuerde die Seite noch p.files lesen,
+    // bliebe die Sidebar leer und der Test faende 'S1' nicht.
+    vi.mocked(api.listProjects).mockResolvedValue([{ name: 'Demo', dateien: 0, fertig: 0, geaendert: 0, active_jobs: [] }])
     vi.mocked(api.getProjectFiles).mockResolvedValue({ name: 'Demo',
       files: [{ base: 'S1', has_audio: true, has_raw: true, has_edit: false, has_md: false }] })
     render(
@@ -50,7 +50,7 @@ describe('EditorView (Stub)', () => {
     // Der Job kommt ueber active_jobs (Discovery), nicht ueber einen Editor-Knopf -- genau der
     // Fall, den EditorViews eigene onDone-Callbacks (useJob) nicht abdecken.
     vi.mocked(api.listProjects).mockResolvedValue([
-      { name: 'Demo', files: [], active_jobs: [{ id: 'j1', kind: 'correct' }] },
+      { name: 'Demo', dateien: 0, fertig: 0, geaendert: 0, active_jobs: [{ id: 'j1', kind: 'correct' }] },
     ])
     vi.mocked(api.getProjectFiles).mockResolvedValue({ name: 'Demo',
       files: [{ base: 'S1', has_audio: true, has_raw: true, has_edit: false, has_md: false }] })

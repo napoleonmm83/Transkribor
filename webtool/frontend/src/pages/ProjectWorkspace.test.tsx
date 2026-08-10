@@ -15,7 +15,7 @@ describe('ProjectWorkspace (Stub)', () => {
   beforeEach(() => einstellungen({}))          // Korrektur-Gate: eingerichtet, sofern nicht anders gesagt
 
   const nurDemo = () => {
-    vi.mocked(api.listProjects).mockResolvedValue([{ name: 'Demo', files: [], active_jobs: [] }])
+    vi.mocked(api.listProjects).mockResolvedValue([{ name: 'Demo', dateien: 0, fertig: 0, geaendert: 0, active_jobs: [] }])
     vi.mocked(api.getProjectFiles).mockResolvedValue({ name: 'Demo',
       files: [{ base: 'S1', has_audio: true, has_raw: true, has_edit: false, has_md: false }] })
   }
@@ -49,7 +49,7 @@ describe('ProjectWorkspace (Stub)', () => {
   })
 
   it('listet Dateien des Projekts mit Links', async () => {
-    vi.mocked(api.listProjects).mockResolvedValue([{ name: 'Demo', files: [], active_jobs: [] }])
+    vi.mocked(api.listProjects).mockResolvedValue([{ name: 'Demo', dateien: 0, fertig: 0, geaendert: 0, active_jobs: [] }])
     vi.mocked(api.getProjectFiles).mockResolvedValue({ name: 'Demo',
       files: [{ base: 'S1', has_audio: true, has_raw: true, has_edit: false, has_md: false }] })
     render(
@@ -64,7 +64,7 @@ describe('ProjectWorkspace (Stub)', () => {
 
   it('zeigt Live-Phase, wenn ein Job fuer das Projekt laeuft', async () => {
     vi.mocked(api.listProjects).mockResolvedValue([
-      { name: 'Demo', files: [], active_jobs: [{ id: 'j1', kind: 'correct' }] },
+      { name: 'Demo', dateien: 0, fertig: 0, geaendert: 0, active_jobs: [{ id: 'j1', kind: 'correct' }] },
     ])
     vi.mocked(api.getProjectFiles).mockResolvedValue({ name: 'Demo',
       files: [{ base: 'S1', has_audio: true, has_raw: true, has_edit: false, has_md: false }] })
@@ -84,7 +84,7 @@ describe('ProjectWorkspace (Stub)', () => {
 
   it('verfolgt Transkription und Korrektur desselben Projekts nebeneinander', async () => {
     vi.mocked(api.listProjects).mockResolvedValue([
-      { name: 'Demo', files: [],
+      { name: 'Demo', dateien: 0, fertig: 0, geaendert: 0,
         active_jobs: [{ id: 'j1', kind: 'correct' }, { id: 'j2', kind: 'transcribe' }] },
     ])
     vi.mocked(api.getProjectFiles).mockResolvedValue({ name: 'Demo', files: [
@@ -110,8 +110,8 @@ describe('ProjectWorkspace (Stub)', () => {
     // 'Timeline 1' liegt real in mehreren Projekten — ohne Projekt-Filter wuerde die Pille
     // den Fortschritt des fremden Jobs anzeigen.
     vi.mocked(api.listProjects).mockResolvedValue([
-      { name: 'Demo', files: [], active_jobs: [] },
-      { name: 'Anderes', files: [], active_jobs: [{ id: 'fremd', kind: 'correct' }] },
+      { name: 'Demo', dateien: 0, fertig: 0, geaendert: 0, active_jobs: [] },
+      { name: 'Anderes', dateien: 0, fertig: 0, geaendert: 0, active_jobs: [{ id: 'fremd', kind: 'correct' }] },
     ])
     vi.mocked(api.getProjectFiles).mockResolvedValue({ name: 'Demo',
       files: [{ base: 'Timeline 1', has_audio: true, has_raw: true, has_edit: false, has_md: false }] })

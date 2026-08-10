@@ -13,8 +13,9 @@ export type EditDoc = {
 };
 export type ProjectFile = { base: string; has_audio: boolean; has_raw: boolean; has_edit: boolean; has_md: boolean };
 export type ActiveJob = { id: string; kind: string };
-/** Mehrere, weil Transkription und Korrektur eines Projekts gleichzeitig laufen duerfen. */
-export type Project = { name: string; files: ProjectFile[]; active_jobs?: ActiveJob[] };
+/** Nur die Zusammenfassung fuer die Galerie -- die Dateiliste kommt seit Task 3 nur noch
+ *  ueber getProjectFiles (GET /api/projects/{project}), nicht mehr mit hier drin. */
+export type Project = { name: string; dateien: number; fertig: number; geaendert: number; active_jobs?: ActiveJob[] };
 export type JobStatus = { status: 'running' | 'done' | 'error' | 'cancelled'; lines: string[]; kind?: string };
 export type StartJob = { job_id: string; started: boolean };
 /** `cli`: laeuft ueber ein lokales Programm mit eigener Anmeldung (Claude-Code- oder

@@ -31,8 +31,8 @@ def test_list_projects(client):
     assert r.status_code == 200
     projs = r.json()["projects"]
     demo = next(p for p in projs if p["name"] == "Demo")
-    f = next(x for x in demo["files"] if x["base"] == "S1")
-    assert f["has_raw"] and f["has_audio"] and not f["has_edit"]
+    # S1 hat Roh+Audio, aber noch kein edit.json -> ein Datei, keine fertig.
+    assert demo["dateien"] == 1 and demo["fertig"] == 0
 
 
 def test_list_projects_zeigt_audio_ohne_transkript(client, tmp_path):
@@ -40,15 +40,56 @@ def test_list_projects_zeigt_audio_ohne_transkript(client, tmp_path):
     wenn Whisper die Roh-JSON geschrieben hat (sonst zeigt der Workspace '0 Dateien')."""
     (tmp_path / "Demo" / "audio" / "Neu.m4a").write_bytes(b"fake")
     demo = next(p for p in client.get("/api/projects").json()["projects"] if p["name"] == "Demo")
-    neu = next(x for x in demo["files"] if x["base"] == "Neu")
-    assert neu["has_audio"] and not neu["has_raw"]
-    assert [x["base"] for x in demo["files"]] == ["Neu", "S1"]
+    assert demo["dateien"] == 2   # S1 (Roh+Audio) + Neu (nur Audio)
 
 
 def test_list_projects_ignoriert_nicht_audio_dateien(client, tmp_path):
     (tmp_path / "Demo" / "audio" / "notizen.txt").write_text("kein Audio", encoding="utf-8")
     demo = next(p for p in client.get("/api/projects").json()["projects"] if p["name"] == "Demo")
-    assert [x["base"] for x in demo["files"]] == ["S1"]
+    assert demo["dateien"] == 1
+
+
+def test_zusammenfassung_zaehlt_dasselbe_wie_die_dateiliste(tmp_path, monkeypatch):
+    """Die Zusammenfassung darf nicht anders zaehlen als der Einzelendpunkt.
+    Genau diese Gegenprobe hat bei der Messung belegt, dass der schlanke Weg
+    dasselbe misst (3963 == 3963)."""
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    proj = tmp_path / "Mix"
+    (proj / "audio").mkdir(parents=True)
+    (proj / "transkripte").mkdir()
+    (proj / "audio" / "NurAudio.m4a").write_bytes(b"fake")            # nur Audio
+    (proj / "transkripte" / "NurRoh.json").write_text("{}", encoding="utf-8")   # nur roh
+    (proj / "transkripte" / "Fertig.json").write_text("{}", encoding="utf-8")   # fertig korrigiert
+    (proj / "transkripte" / "Fertig.edit.json").write_text("{}", encoding="utf-8")
+    # Ausschlussregel wirklich pruefen, nicht nur den einfachen Fall:
+    (proj / "transkripte" / "Fertig.correction.json").write_text("{}", encoding="utf-8")
+    (proj / "transkripte" / "Fertig.diar.json").write_text("{}", encoding="utf-8")
+    (proj / "transkripte" / "_glossar.json").write_text("{}", encoding="utf-8")
+
+    from webtool.app import get_project, list_projects
+    zusammenfassung = {p["name"]: p for p in list_projects()["projects"]}
+    for name, p in zusammenfassung.items():
+        dateien = get_project(name)["files"]
+        assert p["dateien"] == len(dateien)
+        assert p["fertig"] == sum(1 for f in dateien if f["has_edit"])
+
+
+def test_geaendert_folgt_dem_ueberschreiben_einer_datei(tmp_path, monkeypatch):
+    """Verzeichnis-mtime bewegt sich NICHT, wenn eine vorhandene Datei ueberschrieben
+    wird — der Editor tut aber genau das mit <base>.edit.json. Deshalb max(Datei-mtime)."""
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    proj = tmp_path / "Mix"
+    (proj / "transkripte").mkdir(parents=True)
+    epath = proj / "transkripte" / "S1.edit.json"
+    epath.write_text("{}", encoding="utf-8")
+
+    from webtool.app import list_projects
+    vorher = next(p for p in list_projects()["projects"] if p["name"] == "Mix")["geaendert"]
+    # os.utime statt sleep: deterministisch, unabhaengig von der mtime-Aufloesung des Dateisystems.
+    epath.write_text('{"human_edited": true}', encoding="utf-8")
+    os.utime(epath, (vorher + 10, vorher + 10))
+    nachher = next(p for p in list_projects()["projects"] if p["name"] == "Mix")["geaendert"]
+    assert nachher > vorher
 
 
 def test_get_file_builds_doc(client):
