@@ -3,12 +3,15 @@ import { render, screen, fireEvent, waitFor, within, act } from '@testing-librar
 import { MemoryRouter } from 'react-router-dom'
 import { HomeGallery } from './HomeGallery'
 import { ProjektDatenProvider } from '@/hooks/useProjektDaten'
+import { JobProvider } from '@/hooks/useActiveJob'
 import * as api from '@/lib/api'
 
 vi.mock('@/lib/api')
 
+// Seit Task 5 haengt ProjektDatenProvider selbst an useActiveJob (onSettled fuer die
+// Zusammenlegung) -- ohne JobProvider drumherum wirft er "ausserhalb JobProvider".
 const renderHome = () =>
-  render(<MemoryRouter><ProjektDatenProvider><HomeGallery /></ProjektDatenProvider></MemoryRouter>)
+  render(<MemoryRouter><JobProvider><ProjektDatenProvider><HomeGallery /></ProjektDatenProvider></JobProvider></MemoryRouter>)
 
 describe('HomeGallery', () => {
   it('zeigt Karten mit Dateizahl', async () => {

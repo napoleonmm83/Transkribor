@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useRef, type ReactNode } from 're
 import { useMatch } from 'react-router-dom'
 import { useProjects } from './useProjects'
 import { useProjectFiles } from './useProjectFiles'
+import { useActiveJob } from './useActiveJob'
 import type { Project, ProjectFile } from '@/lib/types'
 
 type Projekte = { projects: Project[]; loading: boolean; fehler: boolean; refresh: () => void }
@@ -28,6 +29,14 @@ export function ProjektDatenProvider({ children }: { children: ReactNode }) {
   const nurProjekt = useMatch('/p/:project')
   const projekt = (mitDatei ?? nurProjekt)?.params.project ?? null
   const datei = useProjectFiles(projekt ?? '')
+  const { onSettled } = useActiveJob()
+
+  // Zweiter Anlass neben dem Summenpoll-Waechter: wird ein Job dieses Prozesses terminal, ist
+  // die Dateiliste veraltet (eine frisch geschriebene edit.json sieht der Summenpoll erst beim
+  // naechsten Durchlauf). Stand vorher wortgleich in EditorView UND ProjectWorkspace — seit die
+  // Daten geteilt sind, ist das eine globale Angelegenheit und keine der einzelnen Seite.
+  useEffect(() => onSettled(() => { projekte.refresh(); datei.refresh() }),
+    [onSettled, projekte.refresh, datei.refresh])  // eslint-disable-line react-hooks/exhaustive-deps
 
   // Der billige Waechter ueber die Dateiliste: aendern sich `dateien`/`fertig` in der
   // Zusammenfassung, hat sich auf der Platte etwas getan (ein Job mittendrin, oder eine von
