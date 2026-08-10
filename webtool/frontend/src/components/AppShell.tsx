@@ -82,7 +82,7 @@ function Rahmen({ children }: { children: ReactNode }) {
       <div className="grid h-screen grid-rows-[1fr_auto] md:grid-cols-[260px_1fr]">
         <aside className="hidden min-h-0 border-r md:block"><Leiste /></aside>
         <div id="inhalt" tabIndex={-1} ref={inhalt}
-          className="min-h-0 overflow-auto outline-none">{children}</div>
+          className="min-h-0 overflow-auto outline-none focus-visible:ring-2 focus-visible:ring-ring">{children}</div>
         <StatusBar />
       </div>
     </>
