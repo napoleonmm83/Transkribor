@@ -22,13 +22,21 @@ export function useProjectFiles(project: string) {
   // Antwort gegen das inzwischen aktuelle Projekt geprueft und verworfen, wenn sie nicht passt.
   // Gilt fuer fehler genauso: ein Fehler des verlassenen Projekts darf den neuen nicht anfassen.
   const angefragt = useRef(project)
+  // Zusaetzlich zum Projektbezug: eine monoton steigende Kennung je Aufruf. angefragt allein
+  // schuetzt nur gegen den Projektwechsel, nicht gegen ZWEI ueberlappende Anfragen fuers SELBE
+  // Projekt (seit W1 koennen der Summenpoll-Waechter und onSettled im selben Zyklus feuern) --
+  // kommt die aeltere Antwort zuletzt an, ueberschriebe sie sonst die juengere. Beide Pruefungen
+  // bleiben nebeneinander stehen, keine ersetzt die andere.
+  const kennung = useRef(0)
   const refresh = useCallback(() => {
     if (!project) return
     angefragt.current = project
+    const meineKennung = ++kennung.current
+    const aktuell = () => angefragt.current === project && meineKennung === kennung.current
     getProjectFiles(project)
-      .then(r => { if (angefragt.current === project) { setFiles(r.files); setFehler(false) } })
-      .catch(() => { if (angefragt.current === project) setFehler(true) })
-      .finally(() => { if (angefragt.current === project) setLoading(false) })
+      .then(r => { if (aktuell()) { setFiles(r.files); setFehler(false) } })
+      .catch(() => { if (aktuell()) setFehler(true) })
+      .finally(() => { if (aktuell()) setLoading(false) })
   }, [project])
   useEffect(() => { refresh() }, [refresh])
   return { files, loading, fehler, refresh }
