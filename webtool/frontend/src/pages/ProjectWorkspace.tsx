@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { Play, Pencil, X, FileAudio, Loader2 } from 'lucide-react'
 import { useProjects } from '@/hooks/useProjects'
+import { useProjectFiles } from '@/hooks/useProjectFiles'
 import { useAiReady } from '@/hooks/useAiReady'
 import { mergePhases, useActiveJob } from '@/hooks/useActiveJob'
 import { FileStatusPill } from '@/components/FileStatusPill'
@@ -19,6 +20,7 @@ export function ProjectWorkspace() {
   const { project } = useParams<{ project: string }>()
   const navigate = useNavigate()
   const { projects, refresh } = useProjects()
+  const { files: dateien, refresh: refreshFiles } = useProjectFiles(project!)
   const { jobs, adopt, onSettled } = useActiveJob()
   const aiReason = useAiReady()          // nicht leer -> Korrektur waere ein Leerlauf
   const p = projects.find(x => x.name === project)
@@ -29,7 +31,7 @@ export function ProjectWorkspace() {
   const phases = useMemo(() => mergePhases(meine), [meine])
   const running = meine.length > 0
 
-  useEffect(() => onSettled(() => refresh()), [onSettled, refresh])
+  useEffect(() => onSettled(() => { refresh(); refreshFiles() }), [onSettled, refresh, refreshFiles])
   // Discovery: laufende Jobs nach Reload/aus der Liste adoptieren — es koennen zwei sein
   // (Transkription + Korrektur laufen im selben Projekt nebeneinander).
   const aktiveIds = (p?.active_jobs ?? []).map(j => j.id).join(',')
@@ -52,8 +54,6 @@ export function ProjectWorkspace() {
     adopt(res.job_id, project!, kind)
     toast.success(`${label} gestartet`)
   }
-
-  const dateien = p?.files ?? []
 
   return (
     <div className="mx-auto max-w-3xl p-6 sm:p-8">
@@ -96,7 +96,7 @@ export function ProjectWorkspace() {
         <h2 className="rubrik mb-3">Material hinzufügen</h2>
         <div className="space-y-3">
           <UploadDropzone project={project!} onDone={job => {
-            refresh()
+            refresh(); refreshFiles()
             // Sofort adoptieren statt auf den naechsten Poll zu warten — der Balken soll direkt stehen.
             if (job?.started) { adopt(job.job_id, project!, 'transcribe'); toast.success('Transkription gestartet') }
             else if (job) toast.info('Transkription läuft schon — die neuen Dateien kommen danach dran.')

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useProjects } from '@/hooks/useProjects'
+import { useProjectFiles } from '@/hooks/useProjectFiles'
 import { useAiReady } from '@/hooks/useAiReady'
 import { useDoc } from '@/hooks/useDoc'
 import { useJob } from '@/hooks/useJob'
@@ -17,6 +18,7 @@ export function EditorView() {
   const { project, base } = useParams<{ project: string; base: string }>()
   const navigate = useNavigate()
   const { projects, loading: projectsLoading, refresh } = useProjects()
+  const { files: dateien, refresh: refreshFiles } = useProjectFiles(project!)
   const sel = project && base ? { project, base } : null
   const { doc, dirty, loading: docLoading, updateSegment, renameSpeaker, save, exportDownload, reload } = useDoc(sel?.project ?? null, sel?.base ?? null)
   const { start } = useJob()
@@ -27,6 +29,12 @@ export function EditorView() {
   const phases = useMemo(() => mergePhases(meine), [meine])   // nur eigenes Projekt, s. mergePhases
   const running = meine.length > 0
   const activeProject = projects.find(x => x.name === project)
+  // Dateien kommen jetzt aus useProjectFiles, nicht mehr aus useProjects — Sidebars Prop-Form
+  // (Project[]) bleibt, nur die Quelle des `files`-Felds wechselt.
+  const sidebarProjects = useMemo(
+    () => (activeProject ? [{ ...activeProject, files: dateien }] : []),
+    [activeProject, dateien],
+  )
   const aktiveIds = (activeProject?.active_jobs ?? []).map(j => j.id).join(',')
   useEffect(() => {
     for (const aj of activeProject?.active_jobs ?? []) adopt(aj.id, project!, aj.kind)
@@ -79,18 +87,18 @@ export function EditorView() {
     navigate(`/p/${encodeURIComponent(s.project)}/${encodeURIComponent(s.base)}`)
   }
 
-  const onUpload = async (p: string, file: File) => { await uploadAudio(p, file); refresh() }
-  const onTranscribe = (p: string) => start(() => startTranscribe(p), `Transkribieren ${p}`, refresh)
-  const onCorrect = (p: string) => start(() => startCorrect(p), `Korrigieren ${p}`, refresh)
+  const onUpload = async (p: string, file: File) => { await uploadAudio(p, file); refresh(); refreshFiles() }
+  const onTranscribe = (p: string) => start(() => startTranscribe(p), `Transkribieren ${p}`, () => { refresh(); refreshFiles() })
+  const onCorrect = (p: string) => start(() => startCorrect(p), `Korrigieren ${p}`, () => { refresh(); refreshFiles() })
   const onCorrectFile = (p: string, b: string, force: boolean) =>
     start(() => startCorrectFile(p, b, force).then(res => { if (res.started) adopt(res.job_id, p, 'correct'); return res }),
       `Korrigieren ${b}`,
-      () => { refresh(); if (sel?.project === p && sel?.base === b) reload() })
+      () => { refresh(); refreshFiles(); if (sel?.project === p && sel?.base === b) reload() })
 
   return (
     <div className="grid h-screen grid-rows-[auto_1fr_auto] grid-cols-[260px_1fr]">
       <aside className="row-span-3 border-r overflow-auto">
-        <Sidebar projects={projects.filter(p => p.name === project)} loading={projectsLoading}
+        <Sidebar projects={sidebarProjects} loading={projectsLoading}
           active={sel} onOpen={openFile} onUpload={onUpload}
           onTranscribe={onTranscribe} onCorrect={onCorrect} onCorrectFile={onCorrectFile}
           backTo={project ? `/p/${encodeURIComponent(project)}` : '/'} phases={phases} jobRunning={running}

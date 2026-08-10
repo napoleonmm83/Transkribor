@@ -14,9 +14,11 @@ const einstellungen = (s: Partial<Settings>) =>
 describe('ProjectWorkspace (Stub)', () => {
   beforeEach(() => einstellungen({}))          // Korrektur-Gate: eingerichtet, sofern nicht anders gesagt
 
-  const nurDemo = () => vi.mocked(api.listProjects).mockResolvedValue([
-    { name: 'Demo', files: [{ base: 'S1', has_audio: true, has_raw: true, has_edit: false, has_md: false }], active_jobs: [] },
-  ])
+  const nurDemo = () => {
+    vi.mocked(api.listProjects).mockResolvedValue([{ name: 'Demo', files: [], active_jobs: [] }])
+    vi.mocked(api.getProjectFiles).mockResolvedValue({ name: 'Demo',
+      files: [{ base: 'S1', has_audio: true, has_raw: true, has_edit: false, has_md: false }] })
+  }
 
   it('sperrt Korrigieren, solange kein KI-Anbieter eingerichtet ist', async () => {
     // Sonst startet der Job, überspringt jede Datei und endet grün — sieht aus wie Erfolg.
@@ -47,9 +49,9 @@ describe('ProjectWorkspace (Stub)', () => {
   })
 
   it('listet Dateien des Projekts mit Links', async () => {
-    vi.mocked(api.listProjects).mockResolvedValue([
-      { name: 'Demo', files: [{ base: 'S1', has_audio: true, has_raw: true, has_edit: false, has_md: false }], active_jobs: [] },
-    ])
+    vi.mocked(api.listProjects).mockResolvedValue([{ name: 'Demo', files: [], active_jobs: [] }])
+    vi.mocked(api.getProjectFiles).mockResolvedValue({ name: 'Demo',
+      files: [{ base: 'S1', has_audio: true, has_raw: true, has_edit: false, has_md: false }] })
     render(
       <MemoryRouter initialEntries={['/p/Demo']}>
         <JobProvider>
@@ -62,9 +64,10 @@ describe('ProjectWorkspace (Stub)', () => {
 
   it('zeigt Live-Phase, wenn ein Job fuer das Projekt laeuft', async () => {
     vi.mocked(api.listProjects).mockResolvedValue([
-      { name: 'Demo', files: [{ base: 'S1', has_audio: true, has_raw: true, has_edit: false, has_md: false }],
-        active_jobs: [{ id: 'j1', kind: 'correct' }] },
+      { name: 'Demo', files: [], active_jobs: [{ id: 'j1', kind: 'correct' }] },
     ])
+    vi.mocked(api.getProjectFiles).mockResolvedValue({ name: 'Demo',
+      files: [{ base: 'S1', has_audio: true, has_raw: true, has_edit: false, has_md: false }] })
     vi.mocked(api.getJob).mockResolvedValue({ status: 'running', lines: ['→ Verifiziere S1 (Treue gegen Roh) …'] })
     const { JobProvider } = await import('@/hooks/useActiveJob')
     render(
@@ -81,11 +84,12 @@ describe('ProjectWorkspace (Stub)', () => {
 
   it('verfolgt Transkription und Korrektur desselben Projekts nebeneinander', async () => {
     vi.mocked(api.listProjects).mockResolvedValue([
-      { name: 'Demo', files: [
-        { base: 'S1', has_audio: true, has_raw: true, has_edit: false, has_md: false },
-        { base: 'S2', has_audio: true, has_raw: false, has_edit: false, has_md: false }],
+      { name: 'Demo', files: [],
         active_jobs: [{ id: 'j1', kind: 'correct' }, { id: 'j2', kind: 'transcribe' }] },
     ])
+    vi.mocked(api.getProjectFiles).mockResolvedValue({ name: 'Demo', files: [
+      { base: 'S1', has_audio: true, has_raw: true, has_edit: false, has_md: false },
+      { base: 'S2', has_audio: true, has_raw: false, has_edit: false, has_md: false }] })
     vi.mocked(api.getJob).mockImplementation(async (id: string) => id === 'j1'
       ? { status: 'running', lines: ['→ Korrigiere S1 …'] }
       : { status: 'running', lines: ['[Demo] -> transkribiere S2 …', ' 40%|##| 40/100'] })
@@ -106,11 +110,11 @@ describe('ProjectWorkspace (Stub)', () => {
     // 'Timeline 1' liegt real in mehreren Projekten — ohne Projekt-Filter wuerde die Pille
     // den Fortschritt des fremden Jobs anzeigen.
     vi.mocked(api.listProjects).mockResolvedValue([
-      { name: 'Demo', files: [{ base: 'Timeline 1', has_audio: true, has_raw: true, has_edit: false, has_md: false }],
-        active_jobs: [] },
-      { name: 'Anderes', files: [{ base: 'Timeline 1', has_audio: true, has_raw: true, has_edit: false, has_md: false }],
-        active_jobs: [{ id: 'fremd', kind: 'correct' }] },
+      { name: 'Demo', files: [], active_jobs: [] },
+      { name: 'Anderes', files: [], active_jobs: [{ id: 'fremd', kind: 'correct' }] },
     ])
+    vi.mocked(api.getProjectFiles).mockResolvedValue({ name: 'Demo',
+      files: [{ base: 'Timeline 1', has_audio: true, has_raw: true, has_edit: false, has_md: false }] })
     vi.mocked(api.getJob).mockResolvedValue({ status: 'running', lines: ['→ Korrigiere Timeline 1 …'] })
     render(
       <MemoryRouter initialEntries={['/p/Demo']}>
