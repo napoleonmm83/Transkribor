@@ -30,8 +30,13 @@ test('die Overlay-Farben folgen dem Thema', () => {
 })
 
 test('nur brauchbare Farben kommen durch die Bruecke', () => {
-  assert.ok(farbeGueltig({ color: '#000', symbolColor: '#fff' }))
-  for (const schrott of [null, undefined, 'blau', {}, { color: '#000' }, { color: 1, symbolColor: 2 }]) {
+  assert.ok(farbeGueltig({ color: '#0B0B0F', symbolColor: '#FAFAFA' }))   // was ThemeProvider schickt
+  const schlecht = [null, undefined, 'blau', {}, { color: '#000' }, { color: 1, symbolColor: 2 },
+    { color: '', symbolColor: '' },                        // leer ist kein Wert
+    { color: '#FAFAFA', symbolColor: 'javascript:alert(1)' },
+    { color: '#fff', symbolColor: '#000' },                // Kurzform nimmt das Overlay nicht
+  ]
+  for (const schrott of schlecht) {
     assert.strictEqual(farbeGueltig(schrott), false, JSON.stringify(schrott))
   }
 })
