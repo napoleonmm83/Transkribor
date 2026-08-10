@@ -32,4 +32,22 @@ function fensterOptionen(platform, dunkel) {
   }
 }
 
-module.exports = { fensterOptionen, TITELLEISTE_HOEHE }
+/**
+ * Nutzlast-Pruefungen fuer die beiden Fenster-Kanaele. Sie stehen hier statt in main.js,
+ * weil sie ohne Electron pruefbar sind — dieselbe Aufteilung wie bei `fensterOptionen`.
+ *
+ * Geprueft wird ueberhaupt, weil `preload.js` die Vertrauensgrenze ist und der Renderer
+ * Transkripttext verarbeitet, der aus einem URL-Import stammen kann. Ohne die Pruefung
+ * wirft `titelleisteFarbe(null)` im Hauptprozess, und ein Anteil ueber 1 schaltet
+ * Electron auf einen UNBESTIMMTEN Balken — einen, der fuer immer weiterlaeuft.
+ */
+function farbeGueltig(f) {
+  return !!f && typeof f.color === 'string' && typeof f.symbolColor === 'string'
+}
+
+/** -1 (abraeumen) oder 0..1. Alles andere — NaN, Infinity, 2, 'x' — ist kein Fortschritt. */
+function fortschrittGueltig(anteil) {
+  return anteil === -1 || (Number.isFinite(anteil) && anteil >= 0 && anteil <= 1)
+}
+
+module.exports = { fensterOptionen, TITELLEISTE_HOEHE, farbeGueltig, fortschrittGueltig }
