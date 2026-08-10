@@ -1,0 +1,62 @@
+import { useEffect, useRef } from 'react'
+import { useActiveJob } from './useActiveJob'
+import { useProjekte } from './useProjektDaten'
+import { KIND_LABEL } from '@/lib/jobPhases'
+
+function bruecke() {
+  const w = window as unknown as { transkribor?: { fortschritt?: (a: number) => Promise<void> } }
+  return w.transkribor?.fortschritt ?? null
+}
+
+/**
+ * Die zwei Dinge, die eine App tut und eine Webseite nicht: Bescheid geben, wenn eine
+ * halbe Stunde Rechnen vorbei ist, und den Fortschritt am Symbol in der Taskleiste zeigen.
+ *
+ * Beide sind im Browser wirkungslos, aber nicht kaputt: `Notification` gibt es dort auch
+ * (nur mit Erlaubnisfrage), `fortschritt` fehlt und wird uebersprungen.
+ */
+export function useOsFortschritt(): void {
+  const { jobs, onSettled } = useActiveJob()
+  const { projects } = useProjekte()
+  // Welche Laeufe schon gemeldet wurden. onSettled feuert bei JEDEM Tick, in dem ein Job
+  // terminal ist -- ohne diesen Riegel meldet die App im Poll-Takt dasselbe noch einmal.
+  const gemeldet = useRef(new Set<string>())
+  // JobProvider ruft die onSettled-Listener SYNCHRON direkt nach seinem eigenen setJobs auf --
+  // VOR dessen Rerender. Ein Listener, der `jobs` aus dem eigenen Render-Closure liest, saehe
+  // den Job zu diesem Zeitpunkt also noch als "running" (gemessen: ohne die Verzoegerung blieb
+  // die Meldung ganz aus, siehe Bericht). Das Ref wird waehrend des Renders synchron
+  // nachgefuehrt; `setTimeout(…, 0)` schiebt die Auswertung hinter Reacts eigenen Flush, der
+  // dieses Ref auf den neuen Stand bringt (ein Mikrotask reichte dafuer NICHT, gemessen).
+  const jobsRef = useRef(jobs)
+  jobsRef.current = jobs
+
+  useEffect(() => onSettled(() => {
+    setTimeout(() => {
+      for (const j of jobsRef.current) {
+        if (j.status === 'running' || gemeldet.current.has(j.id)) continue
+        gemeldet.current.add(j.id)
+        if (typeof Notification === 'undefined' || Notification.permission !== 'granted') continue
+        const was = KIND_LABEL[j.kind] ?? j.kind
+        new Notification(
+          j.status === 'done' ? `${j.project}: ${was} fertig` : `${j.project}: ${was} fehlgeschlagen`,
+          { body: j.status === 'done' ? 'Das Ergebnis liegt im Projekt.' : 'Details stehen im Protokoll.' },
+        )
+      }
+    })
+  }), [onSettled])
+
+  // Erlaubnis EINMAL erfragen, nicht bei jedem Lauf: unter Electron ist sie ohnehin
+  // erteilt, im Browser waere eine wiederholte Frage aufdringlich.
+  useEffect(() => {
+    if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+      Notification.requestPermission().catch(() => {})
+    }
+  }, [])
+
+  const laufend = jobs.filter(j => j.status === 'running')
+  const projekt = projects.find(p => p.name === laufend[0]?.project)
+  // -1 raeumt den Balken ab. Ohne das bleibt er nach dem letzten Lauf fuer immer stehen.
+  const anteil = laufend.length === 0 || !projekt || projekt.dateien === 0
+    ? -1 : projekt.fertig / projekt.dateien
+  useEffect(() => { bruecke()?.(anteil)?.catch?.(() => {}) }, [anteil])
+}

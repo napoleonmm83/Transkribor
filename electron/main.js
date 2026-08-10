@@ -99,6 +99,13 @@ ipcMain.handle('titelleisteFarbe', (_e, f) => {
   win.setTitleBarOverlay({ color: f.color, symbolColor: f.symbolColor, height: TITELLEISTE_HOEHE })
 })
 
+// Anteil 0..1 zeigt den Balken, <0 raeumt ihn ab, >1 waere unbestimmt. Der Renderer
+// schickt -1, sobald nichts mehr laeuft — sonst bleibt der Balken nach dem letzten
+// Lauf am Symbol stehen und behauptet Arbeit, die es nicht gibt.
+ipcMain.handle('fortschritt', (_e, anteil) => {
+  if (win && !win.isDestroyed()) win.setProgressBar(typeof anteil === 'number' ? anteil : -1)
+})
+
 ipcMain.handle('update:status', () => aktualisierer && aktualisierer.zustand())
 ipcMain.handle('update:pruefen', () => aktualisierer && aktualisierer.pruefen())
 ipcMain.handle('update:laden', () => aktualisierer && aktualisierer.laden())

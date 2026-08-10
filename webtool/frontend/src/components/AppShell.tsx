@@ -5,6 +5,7 @@ import { mergePhases, useActiveJob } from '@/hooks/useActiveJob'
 import { useAiReady } from '@/hooks/useAiReady'
 import { useDokumentTitel } from '@/hooks/useDokumentTitel'
 import { useJob } from '@/hooks/useJob'
+import { useOsFortschritt } from '@/hooks/useOsFortschritt'
 import { uploadAudio, startTranscribe, startCorrect, startCorrectFile } from '@/lib/api'
 import { Sidebar } from './Sidebar'
 import { StatusBar } from './StatusBar'
@@ -60,6 +61,7 @@ function Rahmen({ children }: { children: ReactNode }) {
   const { pathname } = useLocation()
   const inhalt = useRef<HTMLDivElement>(null)
   const titel = useDokumentTitel()
+  useOsFortschritt()
   // Kehrseite des EINEN Bildlaufbehaelters: der Versatz ueberlebt den Routenwechsel. Aus
   // einem langen Transkript zurueck zur Uebersicht landete man sonst mitten in der Seite.
   // React Router setzt das absichtlich nicht selbst zurueck — es weiss nicht, welches
