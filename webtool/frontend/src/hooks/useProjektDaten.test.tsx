@@ -19,13 +19,16 @@ function Wechsler({ to }: { to: string }) {
   const navigate = useNavigate()
   return <button onClick={() => navigate(to)}>wechsle</button>
 }
-/** Simuliert die Discovery aus EditorView/Leiste: ein Job wird adoptiert, der NICHT ueber
- *  diesen Provider gestartet wurde (z.B. "Korrigieren" in der Arbeitsflaeche, waehrend hier
- *  eine andere Seite haengt). Der Provider selbst adoptiert nichts -- das bleibt Sache der
- *  Seiten -- aber sein onSettled-Effekt muss trotzdem feuern. */
+/** Ein von aussen gestarteter Job (z.B. "Korrigieren" in einem zweiten Tab), den der Provider
+ *  hier von Hand hereingereicht bekommt statt aus `active_jobs` -- sein onSettled-Effekt muss
+ *  auch dann feuern. */
 function Adoptieren() {
   const { adopt } = useActiveJob()
   return <button onClick={() => adopt('j1', 'P', 'correct')}>adopt</button>
+}
+function Laufende() {
+  const { jobs } = useActiveJob()
+  return <span>jobs:{jobs.map(j => `${j.project}/${j.id}`).join(',')}</span>
 }
 
 describe('ProjektDatenProvider', () => {
@@ -56,6 +59,24 @@ describe('ProjektDatenProvider', () => {
     // JobProvider pollt getJob -> 'done' -> onSettled im Provider muss beide neu laden.
     await waitFor(() => expect(vi.mocked(api.getProjectFiles).mock.calls.length).toBeGreaterThan(1))
     await waitFor(() => expect(vi.mocked(api.listProjects).mock.calls.length).toBeGreaterThan(1))
+  })
+
+  it('adoptiert laufende Jobs ALLER Projekte, ohne dass eine Projektseite gerendert wird', async () => {
+    // Adoptiert wurde vorher nur in EditorView und ProjectWorkspace. Auf "/" und
+    // "/einstellungen" kannte die App darum keinen Lauf: Statuszeile "Bereit" neben der Karte
+    // "Laeuft gerade · 1", keine Systemmeldung, kein Taskleistenbalken. Hier steht keine der
+    // beiden Seiten -- nur der Provider.
+    vi.mocked(api.listProjects).mockResolvedValue([
+      { name: 'P', dateien: 2, fertig: 1, geaendert: 0, active_jobs: [{ id: 'j1', kind: 'correct' }] },
+      { name: 'Q', dateien: 1, fertig: 0, geaendert: 0, active_jobs: [{ id: 'j2', kind: 'transcribe' }] },
+    ])
+    vi.mocked(api.getJob).mockResolvedValue({ status: 'running', lines: [] })
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <JobProvider intervalMs={5}><ProjektDatenProvider><Laufende /></ProjektDatenProvider></JobProvider>
+      </MemoryRouter>,
+    )
+    await waitFor(() => expect(screen.getByText('jobs:P/j1,Q/j2')).toBeInTheDocument())
   })
 
   it('ruft /api/projects EINMAL, egal wie viele Verbraucher lesen', async () => {

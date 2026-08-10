@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react'
+import { useMemo } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { Play, Pencil, X, FileAudio, Loader2 } from 'lucide-react'
@@ -30,12 +30,8 @@ export function ProjectWorkspace() {
   const phases = useMemo(() => mergePhases(meine), [meine])
   const running = meine.length > 0
 
-  // Discovery: laufende Jobs nach Reload/aus der Liste adoptieren — es koennen zwei sein
-  // (Transkription + Korrektur laufen im selben Projekt nebeneinander).
-  const aktiveIds = (p?.active_jobs ?? []).map(j => j.id).join(',')
-  useEffect(() => {
-    for (const aj of p?.active_jobs ?? []) adopt(aj.id, project!, aj.kind)
-  }, [aktiveIds, project, adopt])  // eslint-disable-line react-hooks/exhaustive-deps
+  // Discovery laufender Jobs steht im ProjektDatenProvider — sie gilt fuer ALLE Projekte,
+  // nicht nur fuer das offene. `adopt` bleibt hier fuer die selbst gestarteten Jobs.
 
   // `started === false` heisst bei transcribe/correct NICHT "abgelehnt": das Backend haengt den
   // Lauf hinten an (jobs.request). Nur der Einzel-Datei-Lauf wird wirklich abgewiesen.
