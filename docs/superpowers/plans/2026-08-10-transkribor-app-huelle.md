@@ -34,7 +34,7 @@
 | `src/hooks/useDokumentTitel.ts` | **neu** — `document.title` aus Route + Laufzustand | 9 |
 | `src/hooks/useOsFortschritt.ts` | **neu** — Systemmeldung + Taskleisten-Fortschritt | 10 |
 | `src/App.tsx` | `AppShell` um die Routen | 2 |
-| `src/pages/EditorView.tsx` | gibt Raster (T2) und `<aside>` (T5) ab | 2, 5 |
+| `src/pages/EditorView.tsx` | gibt Raster (T2), `<aside>` (T4) und Titel (T9) ab | 2, 4, 9 |
 | `src/pages/HomeGallery.tsx` | Liste raus, Übersicht bleibt | 6 |
 | `src/pages/ProjectWorkspace.tsx`, `SettingsPage.tsx` | `mx-auto max-w-*` raus | 2 |
 | `src/components/ProjektPalette.tsx` | liest die geteilte Liste | 3 |
@@ -892,22 +892,59 @@ export function Sidebar({
 Run: `npm --prefix webtool/frontend test -- Sidebar`
 Expected: PASS — 9 Tests
 
-- [ ] **Step 5: Committen**
+- [ ] **Step 5: `EditorView` gibt seine Leiste ab — im selben Commit**
 
-Die `Sidebar` hat in diesem Zustand noch keinen Aufrufer mit den neuen Props (`EditorView` folgt in Task 5) — der TypeScript-Build ist deshalb **erwartbar rot** und wird in Task 5 grün. Darum hier nur die Testsuite als Tor:
+Die neuen Props passen nicht mehr zum alten Aufruf in `EditorView`. Ein Commit mit rotem
+TypeScript-Build ist keine Option, also geht die alte Verdrahtung hier weg statt erst in Task 5.
+
+In `EditorView.tsx` entfernen: den `Sidebar`-Import, das `sidebarProjects`-Memo (`:51-54`), die
+`<aside>`-Zelle (`:117-123`), die Handler `openFile`, `onUpload`, `onTranscribe`, `onCorrect`,
+`onCorrectFile` (`:101-113`) und die dadurch ungenutzten Importe (`uploadAudio`,
+`startTranscribe`, `startCorrect`, `startCorrectFile`, `useJob`, `useNavigate`). Das Raster wird
+einspaltig:
+
+```tsx
+    // Nur noch der Inhalt: die Projektnavigation zieht in die AppShell (Task 5).
+    <div className="grid h-full grid-rows-[auto_1fr_auto]">
+      <Toolbar title={title} dirty={dirty} canSave={!!doc} onSave={save} onExport={exportDownload} />
+      <main className="min-h-0 overflow-auto">
+        <Transcript doc={doc} loading={docLoading} activeId={activeId}
+          onPlaySeg={s => waveRef.current?.playSegment(s)}
+          onPlayTurn={segs => waveRef.current?.playTurn(segs)}
+          updateSegment={updateSegment} renameSpeaker={renameSpeaker} />
+      </main>
+      <PlayerDock url={sel ? audioUrl(sel.project, sel.base) : undefined} onTime={onTime} waveRef={waveRef} />
+    </div>
+```
+
+In `EditorView.test.tsx` die Fälle entfernen, die die Leiste prüfen — sie ist nicht mehr Teil des
+Editors; `Sidebar.test.tsx` deckt sie ab.
+
+> **Bewusster Zwischenzustand für genau einen Commit:** nach diesem Schritt hat der Editor keine
+> Projektnavigation mehr (Task 5 hängt sie in die Shell). Build und Tests sind grün, die App
+> läuft — sie kann eine Weile nur nicht aus dem Editor heraus die Datei wechseln. Die Alternative
+> wäre ein roter Build über zwei Commits, und die ist schlechter.
+
+- [ ] **Step 6: Tests + Typen + Lint**
+
+Run: `npm --prefix webtool/frontend test && npm --prefix webtool/frontend run build && npm --prefix webtool/frontend run lint`
+Expected: PASS — alles grün, kein „wird in Task 5 grün".
+
+- [ ] **Step 7: Committen**
 
 ```bash
-git add webtool/frontend/src/components/Sidebar.tsx webtool/frontend/src/components/Sidebar.test.tsx
+git add webtool/frontend/src/components/Sidebar.tsx webtool/frontend/src/components/Sidebar.test.tsx \
+        webtool/frontend/src/pages/EditorView.tsx webtool/frontend/src/pages/EditorView.test.tsx
 git commit -m "feat(huelle): Seitenleiste zeigt alle Projekte mit Suche und klappt auf"
 ```
 
 ---
 
-### Task 5: Die Leiste zieht in die Shell, der Editor gibt seine ab
+### Task 5: Die Leiste zieht in die Shell
 
 **Files:**
 - Modify: `webtool/frontend/src/components/AppShell.tsx`
-- Modify: `webtool/frontend/src/pages/EditorView.tsx` (`<aside>` + `Sidebar`-Import + Aktions-Handler raus)
+- Modify: `webtool/frontend/src/components/StatusBar.tsx` (`col-span-1 md:col-span-2`)
 - Modify: `webtool/frontend/src/components/AppShell.test.tsx`
 
 **Interfaces:**
@@ -1035,29 +1072,10 @@ export function AppShell({ children }: { children: ReactNode }) {
 
 **Achtung `StatusBar`:** sie muss auf breiten Fenstern beide Spalten überspannen, auf schmalen die eine. In `StatusBar.tsx` das `<footer>` um `col-span-1 md:col-span-2` ergänzen — sonst steht sie nur unter der Leiste und die Inhaltsspalte reicht bis zum Fensterrand.
 
-- [ ] **Step 4: `EditorView` gibt seine Leiste ab**
+- [ ] **Step 4: Aktive Datei markieren**
 
-In `EditorView.tsx` entfernen: `Sidebar`-Import, `sidebarProjects`-Memo, die `<aside>`-Zelle, die Handler `onUpload`/`onTranscribe`/`onCorrect`/`onCorrectFile`, `openFile`, sowie die dadurch ungenutzt gewordenen Importe (`uploadAudio`, `startTranscribe`, `startCorrect`, `startCorrectFile`, `useJob`, ggf. `useProjekte`). Das Raster wird einspaltig:
-
-```tsx
-    // Nur noch der Inhalt: Fensteraufteilung und Projektnavigation liegen in der AppShell.
-    <div className="grid h-full grid-rows-[auto_1fr_auto]">
-      <Toolbar title={title} dirty={dirty} canSave={!!doc} onSave={save} onExport={exportDownload} />
-      <main className="min-h-0 overflow-auto">
-        <Transcript doc={doc} loading={docLoading} activeId={activeId}
-          onPlaySeg={s => waveRef.current?.playSegment(s)}
-          onPlayTurn={segs => waveRef.current?.playTurn(segs)}
-          updateSegment={updateSegment} renameSpeaker={renameSpeaker} />
-      </main>
-      <PlayerDock url={sel ? audioUrl(sel.project, sel.base) : undefined} onTime={onTime} waveRef={waveRef} />
-    </div>
-```
-
-> **Bekannter Verlust, bewusst in Kauf genommen:** die `Sidebar` in der Shell kennt `active` nicht (sie weiss nichts von der geöffneten Datei) und markiert die aktive Zeile deshalb nicht. Das holt Step 5 nach.
-
-- [ ] **Step 5: Aktive Datei markieren**
-
-In `Leiste()` das `active` aus der Route ziehen, statt `null` zu übergeben — dieselben zwei `useMatch`-Aufrufe wie im Provider wären eine dritte Wahrheit; stattdessen liefert `useDateien()` das Projekt, und die Datei kommt aus `useParams` des Editors … die steht hier nicht zur Verfügung. Darum: `useMatch('/p/:project/:base')` **hier** einmal, direkt:
+`EditorView` hat seine Leiste bereits in Task 4 abgegeben — hier kommt sie in der Shell wieder an.
+In `Leiste()` das `active` aus der Route ziehen, statt `null` zu übergeben:
 
 ```tsx
   const imEditor = useMatch('/p/:project/:base')
@@ -1068,15 +1086,12 @@ In `Leiste()` das `active` aus der Route ziehen, statt `null` zu übergeben — 
 
 und `active={active}` übergeben.
 
-- [ ] **Step 6: Alle Tests + Typen + Lint**
+- [ ] **Step 5: Alle Tests + Typen + Lint**
 
-Run: `npm --prefix webtool/frontend test`
-Expected: PASS. `EditorView.test.tsx` verliert die Erwartungen an die Leiste (sie ist nicht mehr Teil des Editors) — diese Fälle wandern nach `AppShell.test.tsx` oder entfallen, wenn `Sidebar.test.tsx` sie schon abdeckt.
+Run: `npm --prefix webtool/frontend test && npm --prefix webtool/frontend run build && npm --prefix webtool/frontend run lint`
+Expected: PASS
 
-Run: `npm --prefix webtool/frontend run build && npm --prefix webtool/frontend run lint`
-Expected: PASS — hier wird auch Task 4 grün.
-
-- [ ] **Step 7: Sichtprüfung**
+- [ ] **Step 6: Sichtprüfung**
 
 Run: `.\webtool.ps1`
 1. Leiste steht auf allen vier Routen, Projektwechsel räumt den Bildschirm nicht.
@@ -1087,11 +1102,11 @@ Run: `.\webtool.ps1`
    ganz unten (kein waagrechter Bildlauf).
 6. In einem langen Transkript nach unten scrollen, dann zurück zur Übersicht → sie beginnt oben.
 
-- [ ] **Step 8: Committen**
+- [ ] **Step 7: Committen**
 
 ```bash
-git add webtool/frontend/src/components/ webtool/frontend/src/pages/EditorView.tsx
-git commit -m "feat(huelle): Seitenleiste dauerhaft in der Shell, Editor gibt seine ab"
+git add webtool/frontend/src/components/
+git commit -m "feat(huelle): Seitenleiste dauerhaft in der Shell, Sprunglink, schmale Fenster"
 ```
 
 ---
