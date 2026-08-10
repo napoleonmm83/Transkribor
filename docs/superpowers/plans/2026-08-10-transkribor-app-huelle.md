@@ -1848,6 +1848,14 @@ Expected: FAIL — `Failed to resolve import "./useOsFortschritt"`
 
 - [ ] **Step 3: Hook schreiben**
 
+> **Der Code unten ist der Entwurf, nicht der Endstand.** Umgesetzt wurde der `Set`-Riegel
+> gegen Doppelmeldungen NICHT: `onSettled` traegt seit Task 10 seine Nutzlast (`beendet: Job[]`,
+> nur die in DIESEM Tick terminal gewordenen Laeufe), womit die Einmaligkeit aus der Quelle
+> kommt statt aus einem Merkzettel im Verbraucher — der Riegel war danach tot und ist raus.
+> Der Stand von heute steht in `webtool/frontend/src/hooks/useOsFortschritt.ts` und
+> `useActiveJob.tsx`.
+
+
 ```ts
 import { useEffect, useRef } from 'react'
 import { useActiveJob } from './useActiveJob'
