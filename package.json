@@ -125,7 +125,10 @@
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
-      "shortcutName": "Transkribor"
+      "shortcutName": "Transkribor",
+      "installerSidebar": "build/installerSidebar.bmp",
+      "installerHeader": "build/installerHeader.bmp",
+      "uninstallerSidebar": "build/installerSidebar.bmp"
     },
     "publish": [
       {
