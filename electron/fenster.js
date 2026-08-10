@@ -44,8 +44,9 @@ function fensterOptionen(platform, dunkel) {
 const HEX = /^#[0-9a-f]{6}$/i
 
 /** Eng auf `#rrggbb`, weil die einzigen Absender (ThemeProvider) genau das schicken und
- *  `titleBarOverlay.color` ohnehin nur Hex nimmt. "Ist ein String" waere ein Waechter, der
- *  wie einer aussieht und keiner ist. */
+ *  dies eine Vertrauensgrenze ist: durchgelassen wird, was die App tatsaechlich schickt, nicht
+ *  alles, was drueben ankaeme (`setTitleBarOverlay` naehme laut Doku jede CSS-Farbe). "Ist ein
+ *  String" waere ein Waechter, der wie einer aussieht und keiner ist. */
 function farbeGueltig(f) {
   return !!f && HEX.test(f.color) && HEX.test(f.symbolColor)
 }

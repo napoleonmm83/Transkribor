@@ -120,6 +120,19 @@ describe('useOsFortschritt', () => {
     expect(fortschritt).toHaveBeenLastCalledWith(0.5, undefined)
   })
 
+  it('meldet einen Abbruch als Abbruch, nicht als Fehlschlag', async () => {
+    // Dieselbe Praemisse wie beim Balken: eine Entscheidung des Nutzers ist kein Unfall.
+    vi.mocked(api.listProjects).mockResolvedValue([])
+    vi.mocked(api.getJob).mockResolvedValue({ status: 'cancelled', lines: [] })
+    zeigen()
+    const adopt = (globalThis as unknown as { __adopt: (i: string, p: string, k: string) => void }).__adopt
+    await act(async () => { adopt('j1', 'Alpha', 'correct') })
+    await act(async () => { await new Promise(r => setTimeout(r, 40)) })
+    expect(meldungen).toHaveLength(1)
+    expect(meldungen[0]).toContain('abgebrochen')
+    expect(meldungen[0]).not.toContain('fehlgeschlagen')
+  })
+
   it('faellt im Browser ohne Bruecke nicht um', async () => {
     delete (window as unknown as { transkribor?: unknown }).transkribor
     zeigen()

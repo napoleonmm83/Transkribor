@@ -28,10 +28,16 @@ export function useOsFortschritt(): void {
     for (const j of beendet) {
       if (typeof Notification === 'undefined' || Notification.permission !== 'granted') continue
       const was = KIND_LABEL[j.kind] ?? j.kind
-      new Notification(
-        j.status === 'done' ? `${j.project}: ${was} fertig` : `${j.project}: ${was} fehlgeschlagen`,
-        { body: j.status === 'done' ? 'Das Ergebnis liegt im Projekt.' : 'Details stehen im Protokoll.' },
-      )
+      // Drei Ausgaenge, drei Texte. Ein Abbruch ist eine Entscheidung des Nutzers und darf
+      // nicht wie ein Unfall klingen -- und nachzulesen gibt es dort nichts, er weiss ja,
+      // was er getan hat. Wortlaut wie in useJob.ts, damit dieselbe Sache nicht zwei
+      // Namen hat.
+      const [ausgang, body] = j.status === 'done'
+        ? ['fertig', 'Das Ergebnis liegt im Projekt.']
+        : j.status === 'cancelled'
+          ? ['abgebrochen', 'Der Lauf wurde auf deinen Wunsch beendet.']
+          : ['fehlgeschlagen', 'Details stehen im Protokoll.']
+      new Notification(`${j.project}: ${was} ${ausgang}`, { body })
     }
   }), [onSettled])
 

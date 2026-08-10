@@ -34,7 +34,7 @@ test('nur brauchbare Farben kommen durch die Bruecke', () => {
   const schlecht = [null, undefined, 'blau', {}, { color: '#000' }, { color: 1, symbolColor: 2 },
     { color: '', symbolColor: '' },                        // leer ist kein Wert
     { color: '#FAFAFA', symbolColor: 'javascript:alert(1)' },
-    { color: '#fff', symbolColor: '#000' },                // Kurzform nimmt das Overlay nicht
+    { color: '#fff', symbolColor: '#000' },                // Kurzform schickt niemand von uns
   ]
   for (const schrott of schlecht) {
     assert.strictEqual(farbeGueltig(schrott), false, JSON.stringify(schrott))
