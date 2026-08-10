@@ -68,6 +68,27 @@ Ergebnis: `projekte\<NAME>\transkripte\<base>.edit.json` (Editor-Dokument, im We
   Aufeinanderfolgende Segmente pro Sprecher zu Redebeiträgen bündeln.
 - **Unsicheres offenlegen:** wirklich unklare Stellen nicht raten, sondern unter
   „## Anmerkungen" am Dateiende vermerken.
+- **Musik/Gesang → `[Musik]`, ASR-Artefakte → leerer Text.** Über Gesungenem erfindet Whisper
+  *selbstbewussten* Unsinn, und genau daran scheitert jeder Zahlenfilter: an einem Open-Air-
+  Mitschnitt (198 Segmente) stand „Find the Strub!" sechsmal in Folge bei
+  `compression_ratio` 1,80 und `avg_logprob` −0,34 — **0 von 198** Segmenten überschritten
+  *irgendeine* der beiden Schwellen aus `compute_flags`. Die LLM-Korrektur erkennt es dagegen
+  ungefragt (sie vergab von sich aus den Sprecher „Bühnenstimme" und schrieb „scheinen Liedtext
+  zu enthalten" in die Anmerkungen) — darum liegt die Erkennung im Prompt, nicht in einer
+  Heuristik. **Die Regel muss in BEIDEN Prompts stehen:** der Treue-Pass prüft auf
+  „Inhalt weggelassen" und drehte `[Musik]` sonst als Untreue zurück.
+- **Ein leerer `text` in der `correction.json` ist eine Entscheidung, kein fehlender Wert.**
+  `apply_correction` hatte dort ein `if text:` — womit jede Streichung verfiel: die Korrektur
+  leerte vier Segmente mit „ARD Text im Auftrag von Funk" (eine Untertitel-Floskel aus Whispers
+  Trainingsdaten, im Ton nicht vorhanden), und alle vier standen danach trotzdem im Export.
+  Unterschieden wird jetzt am **Schlüssel**: `"text": ""` streicht, ein Eintrag *ohne*
+  `text`-Schlüssel lässt den Rohtext stehen. Der Rohtext bleibt in `raw_text` ohnehin erhalten.
+- **`--force` muss bis in den Block-Cache durchgereicht werden.** Es galt nur der
+  zusammengeführten `correction.json`; liegengebliebene `<base>.partN.correction.json` wurden
+  weiter nach Existenz + Zeitstempel wiederverwendet. Ein Lauf nach einer **Prompt-Änderung**
+  übernahm damit still Blöcke nach der alten Regel — genau so landete die Musik-Markierung beim
+  ersten Test nur in Block 1 von 2. Die Kehrseite bleibt bestehen und ist getestet: **ohne**
+  `--force` sind die Teil-Dateien weiterhin der Resume-Anker eines abgebrochenen Laufs.
 
 ## KI-Anbieter (Einstellungsseite `/einstellungen`)
 Die Korrektur hing fest am Claude-Code-Abo; jetzt wählt der Nutzer Anbieter + Modell im Browser.
@@ -352,6 +373,9 @@ nie committen), unklarem Scope, oder history-verändernden Aktionen (force-push,
   Zeichen an Wortgrenzen — ohne das schiebt YouTube ein langes Segment als eine einzige Zeile
   quer über das Bild. **Kein `?fmt=` am `/export`-Zwilling**: der müsste dafür seinen
   Rückgabeschlüssel `md` aufgeben. Läuft nur auf Knopfdruck, die Pipeline schreibt keine `.srt`.
+  Aufeinanderfolgende `[Musik]`-Segmente ziehen **beide** Exporte zusammen — im SRT zu EINEM Cue
+  über die ganze Spanne (sonst stünde sechsmal dieselbe Zeile da), im Markdown zu einer Zeile.
+  Der Musik-Cue trägt **keinen** Sprechernamen, und danach wird der Name wieder genannt.
   **Router-basiert** (`react-router-dom`): `/` Projekt-Galerie (Projekt anlegen via
   `POST /api/projects`, löschen via `DELETE /api/projects/{p}` hinter einer
   Namen-eintippen-Bestätigung), `/p/:project` Arbeitsfläche (Drag&Drop-Multi-Upload,

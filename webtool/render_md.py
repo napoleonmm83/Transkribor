@@ -5,6 +5,9 @@ Datei oeffnet, fragt zuerst "worum geht es hier" — nicht nach 400 Segmenten.
 """
 
 
+from .edit_model import MUSIK
+
+
 def render_md(doc: dict) -> str:
     segs = doc.get("segments", [])
     lines = [f"# Interview {doc.get('base', '')}", ""]
@@ -23,7 +26,8 @@ def render_md(doc: dict) -> str:
         j = i
         while j < len(segs) and ((segs[j].get("speaker") or "").strip() or "Befragte Person") == speaker:
             t = (segs[j].get("text") or "").strip()
-            if t:
+            # Sechs "[Musik]" hintereinander sind sechsmal dieselbe Information.
+            if t and not (t == MUSIK and texts[-1:] == [MUSIK]):
                 texts.append(t)
             j += 1
         if texts:

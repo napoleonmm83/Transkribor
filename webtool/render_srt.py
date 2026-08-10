@@ -8,6 +8,8 @@ jeder Zeile frisst er den halben Schirm, ganz weggelassen verliert man bei zwei 
 Faden.
 """
 
+from .edit_model import MUSIK
+
 MAX_ZEILE = 42  # Untertitel-Konvention; laengere Zeilen laufen quer ueber das Bild
 
 
@@ -33,25 +35,39 @@ def _umbrechen(text: str) -> list[str]:
     return zeilen
 
 
+def _brauchbar(seg: dict) -> bool:
+    """Ruecklaeufige Zeitspannen fliegen mit raus: `end < start` ist ungueltiges SRT. Ob
+    YouTube dann nur den Cue oder die ganze Datei verwirft, haben wir nicht gemessen —
+    beides ist schlimmer als ein fehlender Untertitel. Whisper liefert so etwas nicht,
+    eine von Hand bearbeitete edit.json schon."""
+    start, end = seg.get("start"), seg.get("end")
+    return bool((seg.get("text") or "").strip()) and start is not None and end is not None and end >= start
+
+
 def render_srt(doc: dict) -> str:
+    segs = [s for s in doc.get("segments", []) if _brauchbar(s)]
     bloecke: list[str] = []
     letzter_sprecher = None
-    for seg in doc.get("segments", []):
-        text = (seg.get("text") or "").strip()
-        start, end = seg.get("start"), seg.get("end")
-        # Ruecklaeufige Zeitspannen fliegen mit raus: `end < start` ist ungueltiges SRT. Ob
-        # YouTube dann nur den Cue oder die ganze Datei verwirft, haben wir nicht gemessen —
-        # beides ist schlimmer als ein fehlender Untertitel. Whisper liefert so etwas nicht,
-        # eine von Hand bearbeitete edit.json schon.
-        if not text or start is None or end is None or end < start:
-            continue  # uebersprungene Segmente duerfen keine Luecke in die Nummerierung reissen
-        sprecher = (seg.get("speaker") or "").strip()
-        if sprecher and sprecher != letzter_sprecher:
-            text = f">> {sprecher}: {text}"
-        letzter_sprecher = sprecher
+    i = 0
+    while i < len(segs):
+        text = (segs[i].get("text") or "").strip()
+        start, end = segs[i]["start"], segs[i]["end"]
+        if text == MUSIK:
+            # Ein Gesangsblock sind schnell sechs Segmente — als sechs Cues stünde sechsmal
+            # dieselbe Zeile da. Zu EINEM Cue über die ganze Spanne zusammenziehen.
+            while i + 1 < len(segs) and (segs[i + 1].get("text") or "").strip() == MUSIK:
+                i += 1
+                end = segs[i]["end"]
+            letzter_sprecher = None  # nach der Musik den Namen wieder nennen
+        else:
+            sprecher = (segs[i].get("speaker") or "").strip()
+            if sprecher and sprecher != letzter_sprecher:
+                text = f">> {sprecher}: {text}"
+            letzter_sprecher = sprecher
         bloecke.append("\n".join([
             str(len(bloecke) + 1),
             f"{_zeit(start)} --> {_zeit(end)}",
             *_umbrechen(text),
         ]))
+        i += 1
     return "\n\n".join(bloecke) + ("\n" if bloecke else "")

@@ -81,3 +81,13 @@ def test_empty_segments_and_speaker_none():
 def test_whitespace_context_omitted():
     doc = {"base": "B", "context": "   ", "annotations": [], "segments": [_seg(0, "A", "x")]}
     assert "**Kontext:**" not in render_md(doc)
+
+
+def test_aufeinanderfolgende_musik_steht_nur_einmal():
+    doc = {"base": "B", "context": "", "annotations": [], "segments": [
+        _seg(0, "Bühnenstimme", "[Musik]"), _seg(1, "Bühnenstimme", "[Musik]"),
+        _seg(2, "Bühnenstimme", "[Musik]"), _seg(3, "Interviewer", "Und weiter."),
+    ]}
+    md = render_md(doc)
+    assert md.count("[Musik]") == 1
+    assert "**Bühnenstimme:** [Musik]" in md
