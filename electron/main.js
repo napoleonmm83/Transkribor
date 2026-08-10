@@ -6,7 +6,7 @@
  * Das Fenster kommt ZUERST, nicht der Server: die Einrichtung dauert beim ersten Mal Minuten,
  * und ein Nutzer, der so lange auf nichts schaut, haelt die App fuer kaputt.
  */
-const { app, BrowserWindow, ipcMain, shell } = require('electron')
+const { app, BrowserWindow, ipcMain, shell, nativeTheme } = require('electron')
 const path = require('path')
 const backend = require('./backend')
 const setup = require('./setup')
@@ -34,7 +34,9 @@ function senden(kanal, nutzlast) {
 function fenster() {
   win = new BrowserWindow({
     width: 1280, height: 860, minWidth: 900, minHeight: 600,
-    backgroundColor: '#0b0b0c',
+    // Electron malt diese Farbe VOR dem ersten Dokument-Zeichnen und an den Raendern beim
+    // Vergroessern — ein fester Dunkelwert blitzt seit setup.html hell kann im Hellmodus auf.
+    backgroundColor: nativeTheme.shouldUseDarkColors ? '#0B0B0F' : '#FAFAFA',
     show: true,
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true },
   })
