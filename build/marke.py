@@ -104,9 +104,97 @@ def header():
     return bild.resize((b, h), Image.LANCZOS).convert("RGB")
 
 
+# --- DMG-Fensterhintergrund -------------------------------------------------
+# Warum ueberhaupt ein Bild: die Gatekeeper-Warnung beim ersten Start laesst sich von innen
+# heraus nicht ankuendigen — vor dem erlaubten Start laeuft kein Code von uns. Das DMG-Fenster
+# ist die einzige Flaeche, die der Nutzer davor sieht.
+#
+# Gerendert wird in 2x und fuer 1x heruntergerechnet — identisches Layout, scharfe Schrift auf
+# Retina (und arm64-Macs sind alle Retina).
+BREITE, HOEHE = 540, 380          # muss zu dmg.window in package.json passen
+S = 2                             # Retina-Faktor des DMG (gerendert 2x, gespeichert beide Groessen)
+
+GRUND = "#FAFAFA"     # war #f5f5f7 (Apple-Grau)
+TITEL = "#18181B"     # war #1d1d1f
+GRAU = "#52525B"      # war #6e6e73 — 7,4:1 auf #FAFAFA, nicht blasser setzen
+TEXT = "#3F3F46"
+KARTE = "#ffffff"
+RAND = "#e3e3e8"
+# Indigo statt des frueheren gedeckten Orange: Bernstein und Rot markieren im Editor
+# unsichere Woerter und bleiben dafuer frei. Die Gatekeeper-Meldung ist ausserdem ein
+# Hinweis, kein Fehler.
+AKZENT = INDIGO
+PFEIL = "#c7c7cc"
+
+KARTE_X0, KARTE_X1 = 32, 508
+KARTE_INNEN = 20                  # Abstand Kartenrand -> Text
+
+# Die beiden Symbole setzt der Finder aus dmg.contents (package.json), nicht dieses Skript.
+# Hier stehen sie nur, damit der Pfeil zwischen ihnen landet — beides zusammen aendern.
+SYMBOL_L, SYMBOL_R, SYMBOL_Y = 140, 400, 170
+SYMBOL_GROESSE = 80               # dmg.iconSize
+
+
+def _breite(d, text, font):
+    return d.textlength(text, font=font) / S
+
+
+def dmg_hintergrund():
+    """Der DMG-Fensterhintergrund als RGB-Bild in `S`-facher Groesse."""
+    bild = Image.new("RGB", (BREITE * S, HOEHE * S), GRUND)
+    d = ImageDraw.Draw(bild)
+
+    f_titel = schrift("SpaceGrotesk.ttf", 26 * S, HALBFETT)
+    f_unter = schrift("DMSans.ttf", 13 * S)
+    f_kopf = schrift("SpaceGrotesk.ttf", 14 * S, HALBFETT)
+    f_text = schrift("DMSans.ttf", 13 * S)
+
+    # Kopf
+    d.text((BREITE / 2 * S, 30 * S), "Transkribor", font=f_titel, fill=TITEL, anchor="ma")
+    d.text((BREITE / 2 * S, 70 * S), "Zum Installieren ins Programme-Verzeichnis ziehen",
+           font=f_unter, fill=GRAU, anchor="ma")
+
+    # Pfeil in die Luecke zwischen den beiden Symbolen, mit etwas Abstand zu beiden
+    y = (SYMBOL_Y - 2) * S
+    von = (SYMBOL_L + SYMBOL_GROESSE / 2 + 42) * S
+    bis = (SYMBOL_R - SYMBOL_GROESSE / 2 - 38) * S
+    d.line([(von, y), (bis, y)], fill=PFEIL, width=int(2.5 * S))
+    d.polygon([(bis + 10 * S, y), (bis - 2 * S, y - 6 * S), (bis - 2 * S, y + 6 * S)], fill=PFEIL)
+
+    # Hinweiskarte
+    k_y0, k_y1 = 248, 342
+    d.rounded_rectangle([(KARTE_X0 * S, k_y0 * S), (KARTE_X1 * S, k_y1 * S)],
+                        radius=12 * S, fill=KARTE, outline=RAND, width=max(1, S // 2))
+    d.rounded_rectangle([(KARTE_X0 * S, k_y0 * S), ((KARTE_X0 + 4) * S, k_y1 * S)],
+                        radius=2 * S, fill=AKZENT)
+
+    tx = (KARTE_X0 + KARTE_INNEN) * S
+    zeilen = [
+        (268, "Beim allerersten Start blockiert macOS die App.", f_kopf, TITEL),
+        (293, "Systemeinstellungen › Datenschutz & Sicherheit › „Dennoch öffnen“", f_text, TEXT),
+        (315, "Nur dieses eine Mal — danach startet Transkribor ganz normal.", f_text, GRAU),
+    ]
+    for ty, text, font, farbe in zeilen:
+        d.text((tx, ty * S), text, font=font, fill=farbe)
+
+    # Der Hinweis nuetzt nichts, wenn er aus der Karte laeuft: lieber hier scheitern als im DMG.
+    platz = KARTE_X1 - KARTE_X0 - 2 * KARTE_INNEN
+    for _, text, font, _ in zeilen:
+        b = _breite(d, text, font)
+        assert b <= platz, f"Zeile zu breit ({b:.0f}px > {platz}px): {text!r}"
+
+    return bild
+
+
 if __name__ == "__main__":
     zeichen(1024).save(BUILD / "icon.png")
     zeichen(128).save(WURZEL / "electron" / "marke.png")
     sidebar().save(BUILD / "installerSidebar.bmp", "BMP")
     header().save(BUILD / "installerHeader.bmp", "BMP")
-    print("geschrieben: icon.png, electron/marke.png, installerSidebar.bmp, installerHeader.bmp")
+
+    gross = dmg_hintergrund()
+    gross.save(BUILD / "background@2x.png")
+    gross.resize((BREITE, HOEHE), Image.LANCZOS).save(BUILD / "background.png")
+
+    print("geschrieben: icon.png, electron/marke.png, installerSidebar.bmp, installerHeader.bmp, "
+          "background.png, background@2x.png")

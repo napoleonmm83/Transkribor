@@ -54,3 +54,9 @@ def test_installer_sidebar_ist_164x314_und_24bit():
 
 def test_installer_header_ist_150x57_und_24bit():
     assert bmp_masse(BUILD / "installerHeader.bmp") == (150, 57, 24)
+
+
+def test_dmg_hintergrund_passt_zum_fenster():
+    # Muss zu dmg.window in package.json passen (540x380), sonst kachelt der Finder.
+    assert png_masse(BUILD / "background.png") == (540, 380)
+    assert png_masse(BUILD / "background@2x.png") == (1080, 760)
