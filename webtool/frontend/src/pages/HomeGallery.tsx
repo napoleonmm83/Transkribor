@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { FolderOpen, Loader2, Search, Settings, X } from 'lucide-react'
-import { useProjects } from '@/hooks/useProjects'
+import { useProjekte } from '@/hooks/useProjektDaten'
 import { KIND_LABEL } from '@/lib/jobPhases'
 import { NewProjectDialog } from '@/components/NewProjectDialog'
 import { DeleteProjectDialog } from '@/components/DeleteProjectDialog'
@@ -31,9 +31,10 @@ function vergleichen(a: Project, b: Project, sort: SortKey): number {
 }
 
 export function HomeGallery() {
-  // Der Poll steckt in useProjects — Jobs starten inzwischen auch ohne Klick (Upload -> Transkription
-  // -> Korrektur), die Galerie muss sie also sehen, ohne dass hier vorher schon einer lief.
-  const { projects, refresh, loading, fehler } = useProjects()
+  // Der Poll steckt im ProjektDatenProvider — Jobs starten inzwischen auch ohne Klick (Upload
+  // -> Transkription -> Korrektur), die Galerie muss sie also sehen, ohne dass hier vorher
+  // schon einer lief.
+  const { projects, refresh, loading, fehler } = useProjekte()
   const navigate = useNavigate()
   const oeffnen = (name: string) => navigate(`/p/${encodeURIComponent(name)}`)
   const [suche, setSuche] = useState('')

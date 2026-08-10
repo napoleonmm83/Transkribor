@@ -1,7 +1,8 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import { ProjektPalette } from './ProjektPalette'
+import { ProjektDatenProvider } from '@/hooks/useProjektDaten'
 import * as api from '@/lib/api'
 import type { Project } from '@/lib/types'
 
@@ -14,13 +15,19 @@ const demoProjects: Project[] = [
 
 function renderPalette(projects = demoProjects) {
   vi.mocked(api.listProjects).mockResolvedValue(projects)
+  // Seit Task 3 sitzt der ProjektDatenProvider ueber den Routen: navigiert ein Test nach
+  // /p/:project, ruft schon der Provider getProjectFiles -- unabhaengig davon, ob die
+  // Zielseite (hier ein Stub-<div>) die Dateien je liest.
+  vi.mocked(api.getProjectFiles).mockResolvedValue({ name: '', files: [] })
   return render(
     <MemoryRouter initialEntries={['/']}>
-      <ProjektPalette />
-      <Routes>
-        <Route path="/" element={<div>Galerie</div>} />
-        <Route path="/p/:project" element={<div>Projekt-Seite</div>} />
-      </Routes>
+      <ProjektDatenProvider>
+        <ProjektPalette />
+        <Routes>
+          <Route path="/" element={<div>Galerie</div>} />
+          <Route path="/p/:project" element={<div>Projekt-Seite</div>} />
+        </Routes>
+      </ProjektDatenProvider>
     </MemoryRouter>,
   )
 }
@@ -71,26 +78,9 @@ describe('ProjektPalette', () => {
     document.body.removeChild(feld)
   })
 
-  it('pollt nur, waehrend die Palette offen ist (W2)', async () => {
-    // Die Palette sitzt als Geschwister der Routen in App.tsx -- also auf JEDER Seite gemountet.
-    // Ein eigener Dauerpoll waere genau die Verdopplung des Summenpolls, die die Aufteilung
-    // Zusammenfassung/Detail abschaffen soll. Fake Timer vor render(): sonst legt useProjects
-    // sein setInterval auf den echten Timer, und RTLs waitFor kennt vitest-Fake-Timer nicht.
-    vi.useFakeTimers()
-    try {
-      renderPalette()
-      await act(async () => { await vi.advanceTimersByTimeAsync(0) })   // initialer Fetch beim Mount
-      // Basis statt absoluter Zahl: vorherige Tests in dieser Datei haben denselben Mock schon
-      // gerufen (kein clearAllMocks noetig fuer deren eigene Assertions), die Zaehlung hier soll
-      // aber unabhaengig davon sein.
-      const basis = vi.mocked(api.listProjects).mock.calls.length
-      await act(async () => { await vi.advanceTimersByTimeAsync(8000) })
-      expect(vi.mocked(api.listProjects).mock.calls.length).toBe(basis)   // geschlossen: kein zweiter Poll
-      await act(async () => { fireEvent.keyDown(window, { key: 'k', ctrlKey: true }) })
-      await act(async () => { await vi.advanceTimersByTimeAsync(0) })   // Oeffnen -> pollMs wechselt -> sofort neu geholt
-      expect(vi.mocked(api.listProjects).mock.calls.length).toBeGreaterThan(basis)
-    } finally {
-      vi.useRealTimers()
-    }
-  })
+  // Das W2-Kuerzel ("pollt nur, waehrend die Palette offen ist") ist mit Task 3 hinfaellig:
+  // die Palette hat gar keinen eigenen Poll-Schalter mehr, sie liest aus der geteilten Liste
+  // im ProjektDatenProvider, die ohnehin fuer die Seitenleiste laeuft (unabhaengig vom
+  // Offen-Zustand der Palette). Das Poll-Intervall selbst ist in useProjektDaten.test.tsx
+  // geprueft, nicht mehr hier.
 })

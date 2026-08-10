@@ -11,6 +11,9 @@ describe('AppShell', () => {
   beforeEach(() => {
     vi.resetAllMocks()
     vi.mocked(api.getHardware).mockResolvedValue({ device: 'cpu', name: 'CPU', torch_ok: false, asr: 'cpu' })
+    // Seit Task 3 traegt AppShell den ProjektDatenProvider -- der ruft beim Mounten selbst.
+    vi.mocked(api.listProjects).mockResolvedValue([])
+    vi.mocked(api.getProjectFiles).mockResolvedValue({ name: '', files: [] })
   })
 
   it('zeigt den Inhalt und GENAU eine Statuszeile', () => {

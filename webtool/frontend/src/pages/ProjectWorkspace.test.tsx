@@ -3,6 +3,7 @@ import { render, screen, waitFor, act } from '@testing-library/react'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import { ProjectWorkspace } from './ProjectWorkspace'
 import { JobProvider } from '@/hooks/useActiveJob'
+import { ProjektDatenProvider } from '@/hooks/useProjektDaten'
 import * as api from '@/lib/api'
 import type { Settings, ProjectFile } from '@/lib/types'
 
@@ -27,7 +28,9 @@ describe('ProjectWorkspace (Stub)', () => {
     render(
       <MemoryRouter initialEntries={['/p/Demo']}>
         <JobProvider>
-          <Routes><Route path="/p/:project" element={<ProjectWorkspace />} /></Routes>
+          <ProjektDatenProvider>
+            <Routes><Route path="/p/:project" element={<ProjectWorkspace />} /></Routes>
+          </ProjektDatenProvider>
         </JobProvider>
       </MemoryRouter>,
     )
@@ -41,7 +44,9 @@ describe('ProjectWorkspace (Stub)', () => {
     render(
       <MemoryRouter initialEntries={['/p/Demo']}>
         <JobProvider>
-          <Routes><Route path="/p/:project" element={<ProjectWorkspace />} /></Routes>
+          <ProjektDatenProvider>
+            <Routes><Route path="/p/:project" element={<ProjectWorkspace />} /></Routes>
+          </ProjektDatenProvider>
         </JobProvider>
       </MemoryRouter>,
     )
@@ -55,7 +60,9 @@ describe('ProjectWorkspace (Stub)', () => {
     render(
       <MemoryRouter initialEntries={['/p/Demo']}>
         <JobProvider>
-          <Routes><Route path="/p/:project" element={<ProjectWorkspace />} /></Routes>
+          <ProjektDatenProvider>
+            <Routes><Route path="/p/:project" element={<ProjectWorkspace />} /></Routes>
+          </ProjektDatenProvider>
         </JobProvider>
       </MemoryRouter>,
     )
@@ -73,7 +80,9 @@ describe('ProjectWorkspace (Stub)', () => {
     render(
       <MemoryRouter initialEntries={['/p/Demo']}>
         <JobProvider intervalMs={5}>
-          <Routes><Route path="/p/:project" element={<ProjectWorkspace />} /></Routes>
+          <ProjektDatenProvider>
+            <Routes><Route path="/p/:project" element={<ProjectWorkspace />} /></Routes>
+          </ProjektDatenProvider>
         </JobProvider>
       </MemoryRouter>,
     )
@@ -96,7 +105,9 @@ describe('ProjectWorkspace (Stub)', () => {
     render(
       <MemoryRouter initialEntries={['/p/Demo']}>
         <JobProvider intervalMs={5}>
-          <Routes><Route path="/p/:project" element={<ProjectWorkspace />} /></Routes>
+          <ProjektDatenProvider>
+            <Routes><Route path="/p/:project" element={<ProjectWorkspace />} /></Routes>
+          </ProjektDatenProvider>
         </JobProvider>
       </MemoryRouter>,
     )
@@ -119,7 +130,9 @@ describe('ProjectWorkspace (Stub)', () => {
     render(
       <MemoryRouter initialEntries={['/p/Demo']}>
         <JobProvider intervalMs={5}>
-          <Routes><Route path="/p/:project" element={<ProjectWorkspace />} /></Routes>
+          <ProjektDatenProvider>
+            <Routes><Route path="/p/:project" element={<ProjectWorkspace />} /></Routes>
+          </ProjektDatenProvider>
         </JobProvider>
       </MemoryRouter>,
     )
@@ -147,7 +160,9 @@ describe('ProjectWorkspace (Stub)', () => {
       render(
         <MemoryRouter initialEntries={['/p/Demo']}>
           <JobProvider>
-            <Routes><Route path="/p/:project" element={<ProjectWorkspace />} /></Routes>
+            <ProjektDatenProvider>
+              <Routes><Route path="/p/:project" element={<ProjectWorkspace />} /></Routes>
+            </ProjektDatenProvider>
           </JobProvider>
         </MemoryRouter>,
       )
@@ -171,7 +186,9 @@ describe('ProjectWorkspace (Stub)', () => {
     render(
       <MemoryRouter initialEntries={['/p/Demo']}>
         <JobProvider>
-          <Routes><Route path="/p/:project" element={<ProjectWorkspace />} /></Routes>
+          <ProjektDatenProvider>
+            <Routes><Route path="/p/:project" element={<ProjectWorkspace />} /></Routes>
+          </ProjektDatenProvider>
         </JobProvider>
       </MemoryRouter>,
     )
@@ -188,7 +205,9 @@ describe('ProjectWorkspace (Stub)', () => {
     render(
       <MemoryRouter initialEntries={['/p/Demo']}>
         <JobProvider>
-          <Routes><Route path="/p/:project" element={<ProjectWorkspace />} /></Routes>
+          <ProjektDatenProvider>
+            <Routes><Route path="/p/:project" element={<ProjectWorkspace />} /></Routes>
+          </ProjektDatenProvider>
         </JobProvider>
       </MemoryRouter>,
     )

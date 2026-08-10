@@ -3,6 +3,7 @@ import { render, screen, waitFor, act } from '@testing-library/react'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import { EditorView } from './EditorView'
 import { JobProvider } from '@/hooks/useActiveJob'
+import { ProjektDatenProvider } from '@/hooks/useProjektDaten'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import * as api from '@/lib/api'
 import type { Settings, EditDoc } from '@/lib/types'
@@ -37,7 +38,9 @@ describe('EditorView (Stub)', () => {
       <TooltipProvider>
         <MemoryRouter initialEntries={['/p/Demo/S1']}>
           <JobProvider>
-            <Routes><Route path="/p/:project/:base" element={<EditorView />} /></Routes>
+            <ProjektDatenProvider>
+              <Routes><Route path="/p/:project/:base" element={<EditorView />} /></Routes>
+            </ProjektDatenProvider>
           </JobProvider>
         </MemoryRouter>
       </TooltipProvider>,
@@ -59,7 +62,9 @@ describe('EditorView (Stub)', () => {
       <TooltipProvider>
         <MemoryRouter initialEntries={['/p/Demo/S1']}>
           <JobProvider intervalMs={5}>
-            <Routes><Route path="/p/:project/:base" element={<EditorView />} /></Routes>
+            <ProjektDatenProvider>
+              <Routes><Route path="/p/:project/:base" element={<EditorView />} /></Routes>
+            </ProjektDatenProvider>
           </JobProvider>
         </MemoryRouter>
       </TooltipProvider>,
@@ -86,7 +91,9 @@ describe('EditorView (Stub)', () => {
         <TooltipProvider>
           <MemoryRouter initialEntries={['/p/Demo/S1']}>
             <JobProvider>
-              <Routes><Route path="/p/:project/:base" element={<EditorView />} /></Routes>
+              <ProjektDatenProvider>
+                <Routes><Route path="/p/:project/:base" element={<EditorView />} /></Routes>
+              </ProjektDatenProvider>
             </JobProvider>
           </MemoryRouter>
         </TooltipProvider>,
