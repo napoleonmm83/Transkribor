@@ -367,6 +367,43 @@ nie committen), unklarem Scope, oder history-verändernden Aktionen (force-push,
   Hot-Reload: `npm --prefix webtool/frontend run dev` (Vite :5173, proxied `/api` zu :8000).
   Kanonisches Editier-Dokument bleibt `<base>.edit.json` (aus Roh-`<base>.json`), Export
   `<base>.md`. Spec: `docs/superpowers/specs/2026-07-06-transkribor-webtool-design.md`.
+- **`GET /api/projects` liefert nur die Zusammenfassung, `GET /api/projects/{project}` die
+  Dateiliste.** Grund: drei Seiten (Galerie, Arbeitsfläche, Editor) teilten sich EINEN
+  Endpunkt mit voller Dateiliste + drei `os.path.exists` je Datei, obwohl die Galerie aus dem
+  ganzen Block nur zwei Zahlen zieht (`files.length`, wie viele `has_edit`). Zusammenfassung ist
+  `{name, dateien, fertig, geaendert, active_jobs}`, pro Projekt ein `os.scandir` über
+  `transkripte/` und eines über `audio/` statt 3N Einzelabfragen. **Gemessen** (300
+  Attrappen-Projekte, ~3900 Aufnahmen, `list_projects()` direkt ohne HTTP-Server, Minimum aus
+  fünf Läufen): **902 Dateisystem-Zugriffe** (300 Projekte × drei — `scandir` Transkripte,
+  `scandir` Audio, plus das `isdir` aus `paths.audio_dir`, das dessen Existenz prüft — plus
+  zwei für den Wurzelordner) und **~30 KB JSON-Nutzlast**, gegenüber vorher 13 691 Zugriffen
+  und ~394 KB bei derselben Datenmenge. Die Dauer je Aufruf lag zwischen ~50 und ~115 ms
+  (schwankt mit der Rechnerlast) — deutlich unter den 310 ms vorher, aber weniger dramatisch
+  verbessert als die Zugriffszahl: die Zeit steckt im Lesen der Verzeichnisse selbst, nicht in
+  der Zahl der Python-Aufrufe. Spec inkl. Methode:
+  `docs/superpowers/specs/2026-08-10-transkribor-galerie-skalierung-design.md`.
+- **`geaendert` ist `max(Datei-mtime)`, NICHT die mtime eines Ordners.** Verzeichnis-mtime
+  bewegt sich nicht, wenn eine vorhandene Datei überschrieben wird — der Editor tut aber genau
+  das mit `<base>.edit.json`. Eine Sortierung nach Ordner-mtime würde also die Arbeit nicht
+  abbilden, um die es bei „zuletzt geändert" geht. `DirEntry.stat()` kostet dafür auf Windows
+  keinen zusätzlichen Zugriff (kommt mit dem Verzeichnislisting mit).
+- **Galerie (`HomeGallery.tsx`) für hunderte statt zehn Projekte:** klebendes Suchfeld über dem
+  Namen (kein Enter nötig), laufende Projekte oben angeheftet als Karten (der einzige
+  zeitkritische Zustand), der Rest als dichte 44px-Zeilen statt Dreispalten-Raster (das zwingt
+  das Auge bei dreihundert Projekten in ein Z über hundert Reihen), Standardsortierung „zuletzt
+  geändert" (umschaltbar auf Name). Dazu `Ctrl+K`/`Cmd+K` als Befehlspalette
+  (`components/ProjektPalette.tsx`) über shadcns `Command` — von überall erreichbar, auch aus
+  dem Editor, weil sie als Geschwister der `<Routes>` in `App.tsx` sitzt, nicht in der Galerie.
+  `cmdk` lag als Abhängigkeit bereits vor, keine neue dazugekommen. Beide Kürzel (`Ctrl+K` hier,
+  `Ctrl+←/→` im Editor) greifen nicht, während in einem `<input>`/`<textarea>`/
+  `contentEditable` getippt wird.
+- **`useProjectFiles` pollt nicht** (anders als `useProjects`) — die Dateiliste eines Projekts
+  ändert sich nur durch Jobs, und deren Ende kennt `useActiveJob.onSettled` bereits; ein
+  zweiter Poll wäre genau die Verdopplung, die die Aufteilung Zusammenfassung/Detail abschaffen
+  soll. Deshalb hängt sich der Editor an `onSettled` und nicht nur an seinen eigenen
+  `useJob`-Callback: ein woanders gestarteter Job (z. B. „Korrigieren" aus der Arbeitsfläche,
+  während der Editor offen ist) würde sonst nie den Anlass liefern, `refreshFiles()`
+  aufzurufen — die Dateiliste bliebe stehen, obwohl `<base>.edit.json` längst geschrieben ist.
 - **Untertitel-Export `<base>.srt`** (`webtool/render_srt.py`, `POST …/export/srt`, Knopf im
   Editor) — die Datei geht in YouTube Studio unter „Untertitel > Datei hochladen" und ersetzt
   das schwache Auto-Transkript. Zwilling von `render_md.py`: gleiche Eingabe, andere Ausgabe.
