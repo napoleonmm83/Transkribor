@@ -92,6 +92,34 @@ describe('useOsFortschritt', () => {
     expect(fortschritt).toHaveBeenLastCalledWith(0.5, 'error')
   })
 
+  it('faerbt den Balken NICHT rot, wenn ein Lauf abgebrochen wurde', async () => {
+    // Ein Abbruch ist eine Entscheidung des Nutzers, kein Fehler.
+    vi.mocked(api.listProjects).mockResolvedValue([{ name: 'Alpha', dateien: 2, fertig: 1, geaendert: 0 }])
+    vi.mocked(api.getJob).mockImplementation(async (id: string) =>
+      id === 'j2' ? { status: 'cancelled', lines: [] } : { status: 'running', lines: [] })
+    zeigen()
+    const adopt = (globalThis as unknown as { __adopt: (i: string, p: string, k: string) => void }).__adopt
+    await act(async () => { adopt('j1', 'Alpha', 'transcribe'); adopt('j2', 'Alpha', 'correct') })
+    await act(async () => { await new Promise(r => setTimeout(r, 40)) })
+    expect(fortschritt).toHaveBeenLastCalledWith(0.5, undefined)
+  })
+
+  it('vererbt einen Fehlschlag nicht an den naechsten Lauf', async () => {
+    // `jobs` gibt keinen adoptierten Job wieder her -- ohne Ruecksetzung bliebe der Balken
+    // fuer den Rest der Sitzung rot.
+    vi.mocked(api.listProjects).mockResolvedValue([{ name: 'Alpha', dateien: 2, fertig: 1, geaendert: 0 }])
+    vi.mocked(api.getJob).mockImplementation(async (id: string) =>
+      id === 'j1' ? { status: 'error', lines: [] } : { status: 'running', lines: [] })
+    zeigen()
+    const adopt = (globalThis as unknown as { __adopt: (i: string, p: string, k: string) => void }).__adopt
+    await act(async () => { adopt('j1', 'Alpha', 'correct') })
+    await act(async () => { await new Promise(r => setTimeout(r, 40)) })
+    expect(fortschritt.mock.lastCall?.[0]).toBe(-1)          // nichts laeuft, Balken weg
+    await act(async () => { adopt('j2', 'Alpha', 'transcribe') })
+    await act(async () => { await new Promise(r => setTimeout(r, 40)) })
+    expect(fortschritt).toHaveBeenLastCalledWith(0.5, undefined)
+  })
+
   it('faellt im Browser ohne Bruecke nicht um', async () => {
     delete (window as unknown as { transkribor?: unknown }).transkribor
     zeigen()

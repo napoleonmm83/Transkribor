@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useActiveJob } from './useActiveJob'
 import { useProjekte } from './useProjektDaten'
 import { KIND_LABEL } from '@/lib/jobPhases'
@@ -48,10 +48,16 @@ export function useOsFortschritt(): void {
   // -1 raeumt den Balken ab. Ohne das bleibt er nach dem letzten Lauf fuer immer stehen.
   const anteil = laufend.length === 0 || !projekt || projekt.dateien === 0
     ? -1 : projekt.fertig / projekt.dateien
-  // Ist im selben Projekt schon ein Lauf gescheitert, waehrend ein anderer weiterlaeuft,
-  // faerbt 'error' den Balken rot statt ihn stumm weiterzaehlen zu lassen. Kein Nachhall
-  // ueber das Laufende hinaus: sobald nichts mehr laeuft, raeumt -1 ihn ohnehin ab.
+  // Rot heisst "etwas ist schiefgegangen, waehrend noch etwas laeuft" -- und zwar SEIT der
+  // Balken zuletzt leer war. `jobs` gibt keinen je adoptierten Job wieder her, ein
+  // Fehlschlag von vor einer Stunde faerbte sonst jeden spaeteren Lauf mit; darum werden
+  // die bereits gescheiterten Kennungen bei jedem Leerlauf beiseitegelegt.
+  // NUR 'error': ein Abbruch ist eine Entscheidung des Nutzers und darf nicht wie ein
+  // Fehler aussehen (useActiveJob setzt 'error' auch selbst, nach dreimal weg).
+  const alteFehler = useRef(new Set<string>())
+  if (anteil < 0) alteFehler.current = new Set(jobs.filter(j => j.status === 'error').map(j => j.id))
   const modus = anteil >= 0 && jobs.some(j =>
-    j.project === projekt?.name && j.status !== 'running' && j.status !== 'done') ? 'error' : undefined
+    j.project === projekt?.name && j.status === 'error' && !alteFehler.current.has(j.id))
+    ? 'error' : undefined
   useEffect(() => { bruecke()?.(anteil, modus)?.catch?.(() => {}) }, [anteil, modus])
 }
