@@ -35,9 +35,9 @@ jobs:
       - run: pip install fastapi python-multipart pytest httpx
 
       # `build` muss explizit dastehen: der Ordnername steht in pytests
-      # norecursedirs, ein blankes `pytest` sammelt build/test_bilder.py NIE
-      # (gemessen: 0 Tests). Als Pfadangabe wird die Regel ausgehebelt
-      # (gemessen: 354 statt 349). Genau dafuer kommt der Test ohne PIL aus.
+      # norecursedirs, ein blankes `pytest` sammelt build/test_bilder.py NIE.
+      # Als Pfadangabe wird die Regel ausgehebelt. Genau dafuer kommt der Test
+      # ohne PIL aus.
       - run: python -m pytest webtool build -q
 
   frontend:
