@@ -60,6 +60,9 @@ function Leiste() {
         // Listen allein reichen nicht: der Editor haelt weiter das Dokument von VOR der
         // Korrektur, und "Speichern" schriebe es ueber die frisch erzeugte edit.json.
         () => { nachladen(); const e = editor.current; if (e?.project === p && e.base === b) e.reload() })}
+      // Weg von der Seite des geloeschten Projekts -- sonst steht dort "Projekt nicht
+      // gefunden". Keine zweite Rueckfrage: der Dialog hat den Namen abtippen lassen.
+      onGeloescht={() => { navigate('/'); refresh() }}
       phases={phases} jobRunning={meine.length > 0} aiReason={aiReason} />
   )
 }
