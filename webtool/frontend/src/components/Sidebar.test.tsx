@@ -20,7 +20,7 @@ function zeigen(extra: Partial<Parameters<typeof Sidebar>[0]> = {}) {
   const props = {
     projekte: PROJEKTE, offen: null, dateien: [], onWaehlen: vi.fn(),
     active: null, onOpen: vi.fn(), onUpload: vi.fn(), onTranscribe: vi.fn(),
-    onCorrect: vi.fn(), onCorrectFile: vi.fn(), ...extra,
+    onCorrect: vi.fn(), onCorrectFile: vi.fn(), onGeloescht: vi.fn(), ...extra,
   }
   const { container } = render(<Sidebar {...props} />)
   return { ...props, container }
@@ -103,6 +103,20 @@ describe('Sidebar', () => {
     fireEvent.change(screen.getByLabelText('Projektname'), { target: { value: 'Neu' } })
     fireEvent.click(screen.getByText('Anlegen'))
     await waitFor(() => expect(onWaehlen).toHaveBeenCalledWith('Neu'))
+  })
+
+  it('loescht das aufgeklappte Projekt', async () => {
+    // Die Uebersicht zeigt nur die fuenf juengsten -- ohne diesen Weg waere ein aelteres
+    // Projekt ueber die Oberflaeche gar nicht mehr loeschbar.
+    vi.mocked(api.deleteProject).mockResolvedValue(undefined)
+    const { onGeloescht } = zeigen({ offen: 'Alpha', dateien: DATEIEN })
+    // Nur am offenen Projekt, nicht an jeder Zeile: sonst ist die Liste eine Werkzeugleiste.
+    expect(screen.queryByLabelText('Projekt Beta löschen')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByLabelText('Projekt Alpha löschen'))
+    fireEvent.change(await screen.findByLabelText(/Projektname best/), { target: { value: 'Alpha' } })
+    fireEvent.click(screen.getByRole('button', { name: /^Löschen$/ }))
+    await waitFor(() => expect(api.deleteProject).toHaveBeenCalledWith('Alpha'))
+    await waitFor(() => expect(onGeloescht).toHaveBeenCalledWith('Alpha'))
   })
 
   it('„x anlegen" im leeren Suchtreffer belegt den Namen vor', () => {
