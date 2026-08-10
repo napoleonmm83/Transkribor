@@ -44,6 +44,10 @@ export function JobProvider({ children, intervalMs = 1500 }: { children: ReactNo
   const [jobs, setJobs] = useState<Job[]>([])
   const listeners = useRef(new Set<(beendet: Job[]) => void>())
   const failures = useRef<Record<string, number>>({})
+  // Zuletzt ERFOLGREICH gelesene Phasen je Job. Der Rueckfall unten braucht sie: `jobs` aus
+  // dem Effekt-Closure steht auf dem Stand des Aufsatzes und darf dort auch nicht rein (mit
+  // `jobs` in den Deps setzte der Poll bei jeder Phasenaenderung neu auf).
+  const letztePhasen = useRef<Record<string, JobPhases>>({})
 
   const adopt = useCallback((id: string, project: string, kind: string) => {
     setJobs(prev => prev.some(j => j.id === id) ? prev
@@ -88,6 +92,10 @@ export function JobProvider({ children, intervalMs = 1500 }: { children: ReactNo
         }
       }
       const ergebnis = new Map(ergebnisse)
+      for (const j of jobs) {
+        const r = ergebnis.get(j.id)
+        if (r) letztePhasen.current[j.id] = parseJobPhases(j.kind, r.lines)
+      }
       setJobs(prev => prev.map(j => {
         if (!(j.id in neu)) return j
         const r = ergebnis.get(j.id)
@@ -119,14 +127,10 @@ export function JobProvider({ children, intervalMs = 1500 }: { children: ReactNo
       // roter Testlauf.
       const beendet = jobs
         .filter(j => neu[j.id] && neu[j.id] !== 'running' && zuletzt[j.id] !== neu[j.id])
-        // Phasen aus DIESEM Poll, nicht aus dem Closure: `jobs` ist hier zwangslaeufig der
-        // Stand vor setJobs, sein `phases` also eine Runde alt -- ein Zuhoerer bekaeme die
-        // vorletzte Phase eines gerade beendeten Laufs. Ohne Ergebnis (Netz weg) bleibt der
-        // letzte bekannte Stand die einzige Auskunft, die wir haben.
-        .map(j => {
-          const r = ergebnis.get(j.id)
-          return { ...j, status: neu[j.id], phases: r ? parseJobPhases(j.kind, r.lines) : j.phases }
-        })
+        // Phasen aus dem Merker, nicht aus dem Closure: `jobs.phases` steht dort auf dem
+        // Stand des Effekt-Aufsatzes -- ein Zuhoerer bekaeme bei einem Netzfehler nicht die
+        // zuletzt gelesene Phase, sondern die vom Adoptieren (leer).
+        .map(j => ({ ...j, status: neu[j.id], phases: letztePhasen.current[j.id] ?? j.phases }))
       for (const id of Object.keys(neu)) zuletzt[id] = neu[id]
       if (beendet.length) listeners.current.forEach(fn => fn(beendet))
       // Nur weiterpollen, solange wirklich etwas laeuft. Bedingungslos neu zu planen liess
