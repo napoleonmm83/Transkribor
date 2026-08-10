@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { useProjekte } from '@/hooks/useProjektDaten'
 import { useDoc } from '@/hooks/useDoc'
@@ -21,7 +21,6 @@ export function EditorView() {
   useEffect(() => {
     for (const aj of activeProject?.active_jobs ?? []) adopt(aj.id, project!, aj.kind)
   }, [aktiveIds, project, adopt])  // eslint-disable-line react-hooks/exhaustive-deps
-  const title = useMemo(() => (sel ? `${sel.project} / ${sel.base}` : '— keine Datei —'), [sel])
   const waveRef = useRef<WaveHandle>(null)
   const [activeId, setActiveId] = useState<number | null>(null)
   const onTime = useCallback((t: number) => {
@@ -66,7 +65,7 @@ export function EditorView() {
   return (
     // Nur noch der Inhalt: die Projektnavigation zieht in die AppShell (Task 5).
     <div className="grid h-full grid-rows-[auto_1fr_auto]">
-      <Toolbar title={title} dirty={dirty} canSave={!!doc} onSave={save} onExport={exportDownload} />
+      <Toolbar dirty={dirty} canSave={!!doc} onSave={save} onExport={exportDownload} />
       <main className="min-h-0 overflow-auto">
         <Transcript doc={doc} loading={docLoading} activeId={activeId}
           onPlaySeg={s => waveRef.current?.playSegment(s)}
