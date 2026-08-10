@@ -21,7 +21,7 @@ export function useOsFortschritt(): void {
 
   // `beendet` ist die Nutzlast des Ereignisses (useActiveJob.tsx) -- schon auf die JUST terminal
   // gewordenen Jobs dieses Ticks beschraenkt. Kein eigener Riegel noetig: useActiveJob.tsx
-  // garantiert, dass ein Job dort nie zweimal auftaucht (siehe Kommentar an der beendet-Stelle).
+  // dedupliziert selbst (zuletzt-Tracking, siehe Kommentar an der beendet-Stelle dort).
   useEffect(() => onSettled(beendet => {
     for (const j of beendet) {
       if (typeof Notification === 'undefined' || Notification.permission !== 'granted') continue
