@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import { ProjektPalette } from './ProjektPalette'
 import { ProjektDatenProvider } from '@/hooks/useProjektDaten'
+import { JobProvider } from '@/hooks/useActiveJob'
 import * as api from '@/lib/api'
 import type { Project } from '@/lib/types'
 
@@ -19,15 +20,19 @@ function renderPalette(projects = demoProjects) {
   // /p/:project, ruft schon der Provider getProjectFiles -- unabhaengig davon, ob die
   // Zielseite (hier ein Stub-<div>) die Dateien je liest.
   vi.mocked(api.getProjectFiles).mockResolvedValue({ name: '', files: [] })
+  // Seit Task 5 haengt ProjektDatenProvider selbst an useActiveJob (onSettled fuer die
+  // Zusammenlegung) -- ohne JobProvider drumherum wirft er "ausserhalb JobProvider".
   return render(
     <MemoryRouter initialEntries={['/']}>
-      <ProjektDatenProvider>
-        <ProjektPalette />
-        <Routes>
-          <Route path="/" element={<div>Galerie</div>} />
-          <Route path="/p/:project" element={<div>Projekt-Seite</div>} />
-        </Routes>
-      </ProjektDatenProvider>
+      <JobProvider>
+        <ProjektDatenProvider>
+          <ProjektPalette />
+          <Routes>
+            <Route path="/" element={<div>Galerie</div>} />
+            <Route path="/p/:project" element={<div>Projekt-Seite</div>} />
+          </Routes>
+        </ProjektDatenProvider>
+      </JobProvider>
     </MemoryRouter>,
   )
 }

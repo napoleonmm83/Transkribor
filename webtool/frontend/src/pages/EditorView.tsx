@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { useProjekte, useDateien } from '@/hooks/useProjektDaten'
+import { useProjekte } from '@/hooks/useProjektDaten'
 import { useDoc } from '@/hooks/useDoc'
 import { useActiveJob } from '@/hooks/useActiveJob'
 import { audioUrl } from '@/lib/api'
@@ -12,18 +12,10 @@ import type { WaveHandle } from '@/components/Waveform'
 
 export function EditorView() {
   const { project, base } = useParams<{ project: string; base: string }>()
-  const { projects, refresh } = useProjekte()
-  const { refresh: refreshFiles } = useDateien()
+  const { projects } = useProjekte()
   const sel = project && base ? { project, base } : null
   const { doc, dirty, loading: docLoading, updateSegment, renameSpeaker, save, exportDownload } = useDoc(sel?.project ?? null, sel?.base ?? null)
-  const { adopt, onSettled } = useActiveJob()
-  // Wie ProjectWorkspace.tsx: onSettled feuert bei JEDEM Job dieses Prozesses, der terminal
-  // wird — auch bei einem, der ueber active_jobs adoptiert, aber woanders gestartet wurde (z.B.
-  // "Korrigieren" fuers ganze Projekt in der Arbeitsflaeche, waehrend der Editor offen ist). Die
-  // Seitenleiste zeigt den Fortschritt nicht mehr hier an (die zieht in die AppShell, Task 5),
-  // aber die Dateiliste/Projektliste bleiben global geteilt (ProjektDatenProvider) und muessen
-  // trotzdem frisch bleiben, sobald ein Job dieses Projekts fertig wird.
-  useEffect(() => onSettled(() => { refresh(); refreshFiles() }), [onSettled, refresh, refreshFiles])
+  const { adopt } = useActiveJob()
   const activeProject = projects.find(x => x.name === project)
   const aktiveIds = (activeProject?.active_jobs ?? []).map(j => j.id).join(',')
   useEffect(() => {

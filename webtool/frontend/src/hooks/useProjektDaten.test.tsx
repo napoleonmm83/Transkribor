@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, act, waitFor, fireEvent } from '@testing-library/react'
 import { MemoryRouter, useNavigate } from 'react-router-dom'
 import { ProjektDatenProvider, useProjekte, useDateien } from './useProjektDaten'
+import { JobProvider, useActiveJob } from './useActiveJob'
 import * as api from '@/lib/api'
 
 vi.mock('@/lib/api')
@@ -18,6 +19,14 @@ function Wechsler({ to }: { to: string }) {
   const navigate = useNavigate()
   return <button onClick={() => navigate(to)}>wechsle</button>
 }
+/** Simuliert die Discovery aus EditorView/Leiste: ein Job wird adoptiert, der NICHT ueber
+ *  diesen Provider gestartet wurde (z.B. "Korrigieren" in der Arbeitsflaeche, waehrend hier
+ *  eine andere Seite haengt). Der Provider selbst adoptiert nichts -- das bleibt Sache der
+ *  Seiten -- aber sein onSettled-Effekt muss trotzdem feuern. */
+function Adoptieren() {
+  const { adopt } = useActiveJob()
+  return <button onClick={() => adopt('j1', 'P', 'correct')}>adopt</button>
+}
 
 describe('ProjektDatenProvider', () => {
   beforeEach(() => {
@@ -29,10 +38,30 @@ describe('ProjektDatenProvider', () => {
   })
   afterEach(() => vi.useRealTimers())
 
+  it('holt Projekte und Dateien neu, wenn ein FREMD gestarteter Job fertig wird', async () => {
+    // Verschoben aus EditorView.test.tsx (Task 5): der Effekt stand vorher wortgleich in
+    // EditorView UND ProjectWorkspace und zieht jetzt hier in den Provider -- der Job kommt
+    // ueber adopt() herein (Discovery einer Seite), nicht ueber einen hier gestarteten Aufruf.
+    vi.mocked(api.getJob).mockResolvedValue({ status: 'done', lines: [] })
+    render(
+      <MemoryRouter initialEntries={['/p/P']}>
+        <JobProvider intervalMs={5}>
+          <ProjektDatenProvider><Dateien /><Adoptieren /></ProjektDatenProvider>
+        </JobProvider>
+      </MemoryRouter>,
+    )
+    await waitFor(() => expect(api.getProjectFiles).toHaveBeenCalledTimes(1))
+    expect(api.listProjects).toHaveBeenCalledTimes(1)
+    fireEvent.click(screen.getByText('adopt'))
+    // JobProvider pollt getJob -> 'done' -> onSettled im Provider muss beide neu laden.
+    await waitFor(() => expect(vi.mocked(api.getProjectFiles).mock.calls.length).toBeGreaterThan(1))
+    await waitFor(() => expect(vi.mocked(api.listProjects).mock.calls.length).toBeGreaterThan(1))
+  })
+
   it('ruft /api/projects EINMAL, egal wie viele Verbraucher lesen', async () => {
     render(
       <MemoryRouter initialEntries={['/']}>
-        <ProjektDatenProvider><Verbraucher name="a" /><Verbraucher name="b" /></ProjektDatenProvider>
+        <JobProvider><ProjektDatenProvider><Verbraucher name="a" /><Verbraucher name="b" /></ProjektDatenProvider></JobProvider>
       </MemoryRouter>,
     )
     await waitFor(() => expect(screen.getByText('a:1')).toBeInTheDocument())
@@ -44,7 +73,7 @@ describe('ProjektDatenProvider', () => {
   it('laedt die Dateien des Projekts aus der URL', async () => {
     render(
       <MemoryRouter initialEntries={['/p/P/a']}>
-        <ProjektDatenProvider><Dateien /></ProjektDatenProvider>
+        <JobProvider><ProjektDatenProvider><Dateien /></ProjektDatenProvider></JobProvider>
       </MemoryRouter>,
     )
     await waitFor(() => expect(screen.getByText('dateien:P:1')).toBeInTheDocument())
@@ -57,7 +86,7 @@ describe('ProjektDatenProvider', () => {
     vi.useFakeTimers()
     render(
       <MemoryRouter initialEntries={['/p/P']}>
-        <ProjektDatenProvider><Dateien /></ProjektDatenProvider>
+        <JobProvider><ProjektDatenProvider><Dateien /></ProjektDatenProvider></JobProvider>
       </MemoryRouter>,
     )
     await act(async () => { await vi.advanceTimersByTimeAsync(0) })
@@ -72,7 +101,7 @@ describe('ProjektDatenProvider', () => {
     vi.useFakeTimers()
     render(
       <MemoryRouter initialEntries={['/p/P']}>
-        <ProjektDatenProvider><Dateien /></ProjektDatenProvider>
+        <JobProvider><ProjektDatenProvider><Dateien /></ProjektDatenProvider></JobProvider>
       </MemoryRouter>,
     )
     await act(async () => { await vi.advanceTimersByTimeAsync(0) })
@@ -90,7 +119,7 @@ describe('ProjektDatenProvider', () => {
     ])
     render(
       <MemoryRouter initialEntries={['/p/A']}>
-        <ProjektDatenProvider><Dateien /><Wechsler to="/p/B" /></ProjektDatenProvider>
+        <JobProvider><ProjektDatenProvider><Dateien /><Wechsler to="/p/B" /></ProjektDatenProvider></JobProvider>
       </MemoryRouter>,
     )
     await waitFor(() => expect(screen.getByText('dateien:A:1')).toBeInTheDocument())

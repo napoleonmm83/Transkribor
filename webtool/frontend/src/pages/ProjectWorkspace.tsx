@@ -20,7 +20,7 @@ export function ProjectWorkspace() {
   const navigate = useNavigate()
   const { projects, refresh } = useProjekte()
   const { files: dateien, refresh: refreshFiles, loading: dateienLaden, fehler: dateienFehler } = useDateien()
-  const { jobs, adopt, onSettled } = useActiveJob()
+  const { jobs, adopt } = useActiveJob()
   const aiReason = useAiReady()          // nicht leer -> Korrektur waere ein Leerlauf
   const p = projects.find(x => x.name === project)
   const meine = useMemo(() => jobs.filter(j => j.project === project && j.status === 'running'),
@@ -30,7 +30,6 @@ export function ProjectWorkspace() {
   const phases = useMemo(() => mergePhases(meine), [meine])
   const running = meine.length > 0
 
-  useEffect(() => onSettled(() => { refresh(); refreshFiles() }), [onSettled, refresh, refreshFiles])
   // Discovery: laufende Jobs nach Reload/aus der Liste adoptieren — es koennen zwei sein
   // (Transkription + Korrektur laufen im selben Projekt nebeneinander).
   const aktiveIds = (p?.active_jobs ?? []).map(j => j.id).join(',')

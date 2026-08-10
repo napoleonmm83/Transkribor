@@ -28,7 +28,9 @@ export function StatusBar() {
       laufend.map(j => `${j.project}: ${KIND_LABEL[j.kind] ?? j.kind}`).join(' · ')
 
   return (
-    <footer className="flex h-6 shrink-0 items-center gap-4 border-t bg-background px-3 text-xs text-muted-foreground">
+    // col-span-1 md:col-span-2: auf breiten Fenstern steht sie neben der Leiste in einer
+    // eigenen Spalte -- ohne den Span reichte sie nur unter die Inhaltsspalte.
+    <footer className="col-span-1 flex h-6 shrink-0 items-center gap-4 border-t bg-background px-3 text-xs text-muted-foreground md:col-span-2">
       <span className="min-w-0 flex-1 truncate" aria-live="polite">{text}</span>
       {rechenwerk && <span className="shrink-0">{rechenwerk}</span>}
       {zustand && (
