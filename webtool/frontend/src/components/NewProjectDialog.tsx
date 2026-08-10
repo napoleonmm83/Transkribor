@@ -7,10 +7,13 @@ import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog'
 
-export function NewProjectDialog({ onCreated, trigger }: {
+export function NewProjectDialog({ onCreated, trigger, vorbelegung }: {
   onCreated: (name: string) => void
   /** Eigener Ausloeser. Der Leerzustand der Galerie braucht einen einladenderen als '+ Projekt'. */
   trigger?: React.ReactNode
+  /** Name, mit dem das Feld beim Oeffnen startet (z.B. der Suchbegriff aus der leeren
+   *  Trefferliste) -- der Knopf "»x« anlegen" waere sonst ein leeres Versprechen. */
+  vorbelegung?: string
 }) {
   const [open, setOpen] = useState(false)
   const [name, setName] = useState('')
@@ -20,8 +23,12 @@ export function NewProjectDialog({ onCreated, trigger }: {
     try { await createProject(n) } catch (e) { toast.error(`Anlegen fehlgeschlagen: ${(e as Error).message}`); return }
     setOpen(false); setName(''); onCreated(n)
   }
+  // Feld ist kontrolliert -- ein defaultValue wuerde beim Wiederoeffnen mit anderem
+  // Suchbegriff den alten Wert behalten (dieselbe Falle wie beim Modellfeld der
+  // Einstellungsseite), darum wird beim Oeffnen aktiv auf die Vorbelegung zurueckgesetzt.
+  const setOpenState = (o: boolean) => { setOpen(o); if (o) setName(vorbelegung ?? '') }
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={setOpenState}>
       <DialogTrigger asChild>{trigger ?? <Button size="sm">+ Projekt</Button>}</DialogTrigger>
       <DialogContent>
         <DialogHeader><DialogTitle>Neues Projekt</DialogTitle></DialogHeader>

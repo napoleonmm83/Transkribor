@@ -175,7 +175,7 @@ export function HomeGallery() {
                   <Button variant="outline" size="sm" onClick={() => setSuche('')}>
                     <X className="size-3.5" /> Suche leeren
                   </Button>
-                  <NewProjectDialog onCreated={oeffnen}
+                  <NewProjectDialog onCreated={oeffnen} vorbelegung={suche}
                     trigger={<Button size="sm">„{suche}" anlegen</Button>} />
                 </div>
               </div>
