@@ -27,11 +27,11 @@ describe('useDoc Speichern/Export-Fehler', () => {
 
   it('zeigt einen Toast statt einen unhandled rejection bei fehlgeschlagenem exportDownload()', async () => {
     vi.mocked(api.getDoc).mockResolvedValue(doc)
-    vi.mocked(api.exportMd).mockRejectedValue(new Error('boom'))
+    vi.mocked(api.exportText).mockRejectedValue(new Error('boom'))
     const { result } = renderHook(() => useDoc('P', 'b'))
     await waitFor(() => expect(result.current.doc).toEqual(doc))
 
-    await act(async () => { await result.current.exportDownload() })
+    await act(async () => { await result.current.exportDownload('srt') })
 
     expect(toast.error).toHaveBeenCalledWith('Export fehlgeschlagen: boom')
   })

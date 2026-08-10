@@ -93,6 +93,14 @@ def test_export_returns_md(client):
     assert r.status_code == 200 and r.json()["md"].startswith("# Interview S1")
 
 
+def test_export_srt_schreibt_datei(client, tmp_path):
+    r = client.post("/api/projects/Demo/files/S1/export/srt")
+    assert r.status_code == 200
+    srt = r.json()["srt"]
+    assert srt.startswith("1\n00:00:")
+    assert (tmp_path / "Demo" / "transkripte" / "S1.srt").read_text(encoding="utf-8") == srt
+
+
 def test_invalid_project_name_400(client):
     # ':' triggers safe_name rejection -> _validate -> HTTP 400 at the endpoint layer
     r = client.get("/api/projects/a:b/files/x")

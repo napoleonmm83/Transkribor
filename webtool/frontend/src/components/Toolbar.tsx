@@ -1,12 +1,13 @@
-import { CircleHelp, Download, Save } from 'lucide-react'
+import { CircleHelp, Download, Save, Subtitles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import type { ExportFmt } from '@/lib/api'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { FLAGS } from './SegmentView'
 import { ThemeToggle } from './ThemeToggle'
 
 export function Toolbar({ title, dirty, canSave, onSave, onExport }: {
   title: string; dirty: boolean; canSave: boolean;
-  onSave: () => void; onExport: () => void;
+  onSave: () => void; onExport: (fmt: ExportFmt) => void;
 }) {
   return (
     // Kein sticky noetig: EditorView setzt die Leiste als eigene Grid-Zeile, gescrollt wird
@@ -47,9 +48,18 @@ export function Toolbar({ title, dirty, canSave, onSave, onExport }: {
       <Button size="sm" variant="secondary" disabled={!canSave} onClick={onSave}>
         <Save className="size-4" /> Speichern
       </Button>
-      <Button size="sm" variant="secondary" disabled={!canSave} onClick={onExport}>
+      <Button size="sm" variant="secondary" disabled={!canSave} onClick={() => onExport('md')}>
         <Download className="size-4" /> Export .md
       </Button>
+      {/* .srt laedt man bei YouTube unter "Untertitel > Datei hochladen" hoch. */}
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button size="sm" variant="secondary" disabled={!canSave} onClick={() => onExport('srt')}>
+            <Subtitles className="size-4" /> Untertitel .srt
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>Zeitcodierte Untertitel für den YouTube-Upload</TooltipContent>
+      </Tooltip>
       <ThemeToggle />
     </header>
   )
