@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { FolderOpen, Loader2, Search, Settings, X } from 'lucide-react'
+import { FolderOpen, Loader2, Settings } from 'lucide-react'
 import { useProjekte } from '@/hooks/useProjektDaten'
 import { KIND_LABEL } from '@/lib/jobPhases'
 import { NewProjectDialog } from '@/components/NewProjectDialog'
@@ -32,28 +32,26 @@ function vergleichen(a: Project, b: Project, sort: SortKey): number {
 
 export function HomeGallery() {
   // Der Poll steckt im ProjektDatenProvider — Jobs starten inzwischen auch ohne Klick (Upload
-  // -> Transkription -> Korrektur), die Galerie muss sie also sehen, ohne dass hier vorher
+  // -> Transkription -> Korrektur), die Uebersicht muss sie also sehen, ohne dass hier vorher
   // schon einer lief.
   const { projects, refresh, loading, fehler } = useProjekte()
   const navigate = useNavigate()
   const oeffnen = (name: string) => navigate(`/p/${encodeURIComponent(name)}`)
-  const [suche, setSuche] = useState('')
-  const [sort, setSort] = useState<SortKey>('geaendert')
 
-  const treffer = useMemo(() => {
-    const q = suche.trim().toLowerCase()
-    return q ? projects.filter(p => p.name.toLowerCase().includes(q)) : projects
-  }, [projects, suche])
   const laufende = useMemo(
-    () => treffer.filter(p => (p.active_jobs?.length ?? 0) > 0).sort((a, b) => vergleichen(a, b, 'geaendert')),
-    [treffer])
-  const alle = useMemo(
-    () => treffer.filter(p => (p.active_jobs?.length ?? 0) === 0).sort((a, b) => vergleichen(a, b, sort)),
-    [treffer, sort])
+    () => projects.filter(p => (p.active_jobs?.length ?? 0) > 0).sort((a, b) => vergleichen(a, b, 'geaendert')),
+    [projects])
+  // Fuenf, nicht alle: die vollstaendige Liste steht in der Seitenleiste. Diese Seite
+  // beantwortet "woran war ich dran", nicht "was gibt es alles". Laufende Projekte stehen
+  // schon als Karte oben -- ohne den Ausschluss stuende ein aktives Projekt doppelt da.
+  const juengste = useMemo(
+    () => projects.filter(p => (p.active_jobs?.length ?? 0) === 0)
+      .sort((a, b) => vergleichen(a, b, 'geaendert')).slice(0, 5),
+    [projects])
 
   return (
     <div className="p-6 sm:p-8">
-      <PageHeader rubrik="Transkribor" titel="Projekte">
+      <PageHeader rubrik="Transkribor" titel="Übersicht">
         <Button variant="ghost" size="sm" asChild>
           <Link to="/einstellungen"><Settings className="size-4" /> Einstellungen</Link>
         </Button>
@@ -97,23 +95,6 @@ export function HomeGallery() {
         )
       ) : (
         <>
-          {/* sticky: bei hunderten Projekten scrollt die Zeilenliste unter dem Suchfeld weg,
-              nicht das Suchfeld mit. bg-background deckt die durchscrollenden Zeilen ab. */}
-          <div className="sticky top-0 z-10 -mx-6 mb-6 bg-background px-6 py-3 sm:-mx-8 sm:px-8">
-            <label htmlFor="projekt-suche" className="sr-only">Projekte durchsuchen</label>
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-              <input id="projekt-suche" type="search" value={suche} onChange={e => setSuche(e.target.value)}
-                placeholder="Projekte durchsuchen…"
-                className="h-9 w-full rounded-md border border-input bg-transparent py-1 pl-9 pr-16 text-sm
-                           shadow-xs outline-none placeholder:text-muted-foreground
-                           focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50" />
-              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
-                Strg+K
-              </span>
-            </div>
-          </div>
-
           {laufende.length > 0 && (
             <section className="mb-8">
               <h2 className="rubrik mb-3">Läuft gerade · {laufende.length}</h2>
@@ -140,7 +121,7 @@ export function HomeGallery() {
                           {p.dateien > 0 && ` · ${done} fertig`}
                         </p>
 
-                        {/* Fortschritt des Projekts auf einen Blick: die Galerie beantwortet damit
+                        {/* Fortschritt des Projekts auf einen Blick: die Uebersicht beantwortet damit
                             "woran muss ich noch ran", ohne dass man jedes Projekt oeffnet. */}
                         {p.dateien > 0 && (
                           <div className="mt-3 h-1 overflow-hidden rounded-full bg-muted"
@@ -172,63 +153,32 @@ export function HomeGallery() {
           )}
 
           <section>
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-              <h2 className="rubrik" aria-live="polite">Alle · {alle.length}</h2>
-              <label className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                Sortierung
-                <select value={sort} onChange={e => setSort(e.target.value as SortKey)}
-                  className="rounded-md border border-input bg-transparent px-2 py-1 text-sm outline-none
-                             focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50">
-                  <option value="geaendert">Zuletzt geändert</option>
-                  <option value="name">Name</option>
-                </select>
-              </label>
-            </div>
-
-            {treffer.length === 0 ? (
-              // Kein leerer Bildschirm: der Suchbegriff steht drin, und es gibt zwei Wege zurueck.
-              <div className="blatt flex flex-col items-center px-6 py-12 text-center">
-                <Search className="size-7 text-muted-foreground" aria-hidden="true" />
-                <p className="mt-3 max-w-sm text-sm text-muted-foreground">
-                  Kein Projekt passt zu „{suche}".
-                </p>
-                <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
-                  <Button variant="outline" size="sm" onClick={() => setSuche('')}>
-                    <X className="size-3.5" /> Suche leeren
-                  </Button>
-                  <NewProjectDialog onCreated={oeffnen} vorbelegung={suche}
-                    trigger={<Button size="sm">„{suche}" anlegen</Button>} />
-                </div>
-              </div>
-            ) : alle.length > 0 && (
-              <ul className="blatt divide-y divide-border overflow-hidden">
-                {alle.map(p => (
-                  // group + hover/focus-within hier statt auf dem Link: der Loeschknopf ist
-                  // dessen Geschwister (ein <button> in einem <a> waere ungueltiges HTML und
-                  // der Klick landete zusaetzlich im Link), soll die Zeile aber trotzdem
-                  // ueber die volle Breite einfaerben.
-                  <li key={p.name} className="group flex items-center hover:bg-muted/60">
-                    <Link to={`/p/${encodeURIComponent(p.name)}`}
-                      className="flex h-11 min-w-0 flex-1 items-center gap-3 px-3 outline-none
-                                 focus-visible:ring-2 focus-visible:ring-ring">
-                      <span className="min-w-0 flex-1 truncate text-sm font-medium">{p.name}</span>
-                      <span className="shrink-0 tabular-nums text-sm text-muted-foreground">
-                        {p.dateien} Datei{p.dateien === 1 ? '' : 'en'}
-                        {p.dateien > 0 && ` · ${p.fertig} fertig`}
-                      </span>
-                      <time dateTime={new Date(p.geaendert * 1000).toISOString()}
-                        className="w-24 shrink-0 text-right text-sm text-muted-foreground">
-                        {relativeTime(p.geaendert)}
-                      </time>
-                    </Link>
-                    <div className="shrink-0 px-3 opacity-0 transition-opacity
-                                    group-hover:opacity-100 focus-within:opacity-100">
-                      <DeleteProjectDialog project={p.name} onDeleted={refresh} />
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
+            <h2 className="rubrik mb-3">Zuletzt geändert</h2>
+            <ul className="blatt divide-y divide-border overflow-hidden">
+              {juengste.map(p => (
+                <li key={p.name} className="group flex items-center hover:bg-muted/60">
+                  <Link to={`/p/${encodeURIComponent(p.name)}`}
+                    className="flex h-11 min-w-0 flex-1 items-center gap-3 px-3 outline-none
+                               focus-visible:ring-2 focus-visible:ring-ring">
+                    <span className="min-w-0 flex-1 truncate text-sm font-medium">{p.name}</span>
+                    <span className="shrink-0 tabular-nums text-sm text-muted-foreground">
+                      {p.dateien} Datei{p.dateien === 1 ? '' : 'en'}
+                      {p.dateien > 0 && ` · ${p.fertig} fertig`}
+                    </span>
+                    <time dateTime={new Date(p.geaendert * 1000).toISOString()}
+                      className="w-24 shrink-0 text-right text-sm text-muted-foreground">
+                      {relativeTime(p.geaendert)}
+                    </time>
+                  </Link>
+                  {/* Geschwister des Links, nicht sein Kind: ein <button> in einem <a> ist
+                      ungueltiges HTML und der Klick landete zusaetzlich im Link. */}
+                  <div className="shrink-0 px-3 opacity-0 transition-opacity
+                                  group-hover:opacity-100 focus-within:opacity-100">
+                    <DeleteProjectDialog project={p.name} onDeleted={refresh} />
+                  </div>
+                </li>
+              ))}
+            </ul>
           </section>
         </>
       )}
