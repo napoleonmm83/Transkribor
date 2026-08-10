@@ -9,8 +9,6 @@ import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
 import type { Project } from '@/lib/types'
 
-type SortKey = 'geaendert' | 'name'
-
 // numeric:'auto' liefert 'heute'/'gestern' schon selbst -- kein manueller Sonderfall noetig.
 const rtf = new Intl.RelativeTimeFormat('de', { numeric: 'auto' })
 const dtf = new Intl.DateTimeFormat('de-CH', { day: 'numeric', month: 'short', year: 'numeric' })
@@ -23,10 +21,11 @@ function relativeTime(sekunden: number): string {
   return dtf.format(sekunden * 1000)
 }
 
-function vergleichen(a: Project, b: Project, sort: SortKey): number {
-  if (sort === 'name') return a.name.localeCompare(b.name, 'de')
-  // juengstes zuerst; Name als stabiler Zweitschluessel -- sonst springen Zeilen bei
-  // gleichem geaendert (zwei Projekte in derselben Sekunde angelegt) bei jedem Poll.
+// Juengstes zuerst; Name als stabiler Zweitschluessel -- sonst springen Zeilen bei gleichem
+// geaendert (zwei Projekte in derselben Sekunde angelegt) bei jedem Poll. Eine Sortierauswahl
+// (auch nach Name) gibt es hier nicht mehr -- das Suchfeld der Seitenleiste loest "nach Name
+// finden" bereits, ein zweiter Weg dorthin waere eine Bedienoberflaeche fuers selbe Problem.
+function vergleichen(a: Project, b: Project): number {
   return b.geaendert - a.geaendert || a.name.localeCompare(b.name, 'de')
 }
 
@@ -39,14 +38,13 @@ export function HomeGallery() {
   const oeffnen = (name: string) => navigate(`/p/${encodeURIComponent(name)}`)
 
   const laufende = useMemo(
-    () => projects.filter(p => (p.active_jobs?.length ?? 0) > 0).sort((a, b) => vergleichen(a, b, 'geaendert')),
+    () => projects.filter(p => (p.active_jobs?.length ?? 0) > 0).sort(vergleichen),
     [projects])
   // Fuenf, nicht alle: die vollstaendige Liste steht in der Seitenleiste. Diese Seite
   // beantwortet "woran war ich dran", nicht "was gibt es alles". Laufende Projekte stehen
   // schon als Karte oben -- ohne den Ausschluss stuende ein aktives Projekt doppelt da.
   const juengste = useMemo(
-    () => projects.filter(p => (p.active_jobs?.length ?? 0) === 0)
-      .sort((a, b) => vergleichen(a, b, 'geaendert')).slice(0, 5),
+    () => projects.filter(p => (p.active_jobs?.length ?? 0) === 0).sort(vergleichen).slice(0, 5),
     [projects])
 
   return (
@@ -152,34 +150,38 @@ export function HomeGallery() {
             </section>
           )}
 
-          <section>
-            <h2 className="rubrik mb-3">Zuletzt geändert</h2>
-            <ul className="blatt divide-y divide-border overflow-hidden">
-              {juengste.map(p => (
-                <li key={p.name} className="group flex items-center hover:bg-muted/60">
-                  <Link to={`/p/${encodeURIComponent(p.name)}`}
-                    className="flex h-11 min-w-0 flex-1 items-center gap-3 px-3 outline-none
-                               focus-visible:ring-2 focus-visible:ring-ring">
-                    <span className="min-w-0 flex-1 truncate text-sm font-medium">{p.name}</span>
-                    <span className="shrink-0 tabular-nums text-sm text-muted-foreground">
-                      {p.dateien} Datei{p.dateien === 1 ? '' : 'en'}
-                      {p.dateien > 0 && ` · ${p.fertig} fertig`}
-                    </span>
-                    <time dateTime={new Date(p.geaendert * 1000).toISOString()}
-                      className="w-24 shrink-0 text-right text-sm text-muted-foreground">
-                      {relativeTime(p.geaendert)}
-                    </time>
-                  </Link>
-                  {/* Geschwister des Links, nicht sein Kind: ein <button> in einem <a> ist
-                      ungueltiges HTML und der Klick landete zusaetzlich im Link. */}
-                  <div className="shrink-0 px-3 opacity-0 transition-opacity
-                                  group-hover:opacity-100 focus-within:opacity-100">
-                    <DeleteProjectDialog project={p.name} onDeleted={refresh} />
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </section>
+          {/* Ausgeblendet statt einer leeren Liste: nur moeglich, wenn ausnahmslos jedes
+              Projekt gerade laeuft (steht dann schon oben als Karte). */}
+          {juengste.length > 0 && (
+            <section>
+              <h2 className="rubrik mb-3">Zuletzt geändert</h2>
+              <ul className="blatt divide-y divide-border overflow-hidden">
+                {juengste.map(p => (
+                  <li key={p.name} className="group flex items-center hover:bg-muted/60">
+                    <Link to={`/p/${encodeURIComponent(p.name)}`}
+                      className="flex h-11 min-w-0 flex-1 items-center gap-3 px-3 outline-none
+                                 focus-visible:ring-2 focus-visible:ring-ring">
+                      <span className="min-w-0 flex-1 truncate text-sm font-medium">{p.name}</span>
+                      <span className="shrink-0 tabular-nums text-sm text-muted-foreground">
+                        {p.dateien} Datei{p.dateien === 1 ? '' : 'en'}
+                        {p.dateien > 0 && ` · ${p.fertig} fertig`}
+                      </span>
+                      <time dateTime={new Date(p.geaendert * 1000).toISOString()}
+                        className="w-24 shrink-0 text-right text-sm text-muted-foreground">
+                        {relativeTime(p.geaendert)}
+                      </time>
+                    </Link>
+                    {/* Geschwister des Links, nicht sein Kind: ein <button> in einem <a> ist
+                        ungueltiges HTML und der Klick landete zusaetzlich im Link. */}
+                    <div className="shrink-0 px-3 opacity-0 transition-opacity
+                                    group-hover:opacity-100 focus-within:opacity-100">
+                      <DeleteProjectDialog project={p.name} onDeleted={refresh} />
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
         </>
       )}
     </div>

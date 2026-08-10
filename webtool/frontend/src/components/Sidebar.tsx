@@ -3,12 +3,13 @@ import { ChevronRight, Loader2, Pencil, Play, Search, Upload } from 'lucide-reac
 import type { ActiveJob, JobPhases, ProjectFile } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { NewProjectDialog } from './NewProjectDialog'
 import { FileRow } from './FileRow'
 
 type Sel = { project: string; base: string } | null
 /** Nur die Zusammenfassung: die Leiste zeigt alle Projekte, aber Dateien nur fuer das
  *  aufgeklappte — die Dateiliste kommt getrennt herein (GET /api/projects/{p}). */
-type SidebarProjekt = { name: string; dateien: number; active_jobs?: ActiveJob[] }
+type SidebarProjekt = { name: string; dateien: number; geaendert: number; active_jobs?: ActiveJob[] }
 
 export function Sidebar({
   projekte, loading, fehler, offen, dateien, dateienLaden, onWaehlen,
@@ -33,14 +34,22 @@ export function Sidebar({
   const [suche, setSuche] = useState('')
   const treffer = useMemo(() => {
     const q = suche.trim().toLowerCase()
-    return q ? projekte.filter(p => p.name.toLowerCase().includes(q)) : projekte
+    const gefiltert = q ? projekte.filter(p => p.name.toLowerCase().includes(q)) : projekte
+    // Juengstes zuerst, Name als stabiler Zweitschluessel: ohne den zweiten springen Zeilen
+    // bei gleichem `geaendert` (zwei Projekte in derselben Sekunde angelegt) bei jedem Poll.
+    // Das Backend sichert keine Reihenfolge zu -- es liefert os.scandir-Reihenfolge.
+    return [...gefiltert].sort((a, b) => b.geaendert - a.geaendert || a.name.localeCompare(b.name, 'de'))
   }, [projekte, suche])
 
   return (
     <div className="flex h-full flex-col">
       {/* Das Suchfeld scrollt nicht mit: bei hunderten Projekten ist es sonst nach drei
           Zeilen weg, und die Leiste hat keinen zweiten Weg zu einem Projekt. */}
-      <div className="shrink-0 p-2">
+      <div className="shrink-0 space-y-2 p-2">
+        {/* Einziger Weg, ohne Umweg ueber die Uebersicht ein Projekt anzulegen -- die Leiste
+            ist seit Task 5 auf jeder Seite sichtbar, "+ Projekt" stand vorher nur dort. */}
+        <NewProjectDialog onCreated={onWaehlen}
+          trigger={<Button variant="outline" size="sm" className="w-full">+ Neues Projekt</Button>} />
         <label htmlFor="leiste-suche" className="sr-only">Projekte durchsuchen</label>
         <div className="relative">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
@@ -64,7 +73,13 @@ export function Sidebar({
           <p className="px-2 py-1 text-sm text-muted-foreground">Noch keine Projekte.</p>
         )}
         {projekte.length > 0 && treffer.length === 0 && (
-          <p className="px-2 py-1 text-sm text-muted-foreground">Kein Projekt passt zu „{suche}".</p>
+          // Kein eigener "Suche leeren"-Knopf: type="search" zeichnet das native × im Feld
+          // selbst -- ein zweiter Weg fuers selbe waere doppelt gemoppelt.
+          <div className="px-2 py-1">
+            <p className="text-sm text-muted-foreground">Kein Projekt passt zu „{suche}".</p>
+            <NewProjectDialog onCreated={onWaehlen} vorbelegung={suche}
+              trigger={<Button variant="outline" size="sm" className="mt-2">„{suche}" anlegen</Button>} />
+          </div>
         )}
 
         {treffer.map(p => {

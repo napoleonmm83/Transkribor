@@ -6,7 +6,7 @@ import * as api from '@/lib/api'
 
 vi.mock('@/lib/api')
 
-const projekte = [{ name: 'P', dateien: 1 }]
+const projekte = [{ name: 'P', dateien: 1, geaendert: 0 }]
 const dateien = [{ base: 'a', has_audio: true, has_raw: true, has_edit: true, has_md: true }]
 
 function Harness() {
