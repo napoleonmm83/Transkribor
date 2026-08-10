@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { useProjekte } from '@/hooks/useProjektDaten'
 import { useDoc } from '@/hooks/useDoc'
+import { useEditorMelden } from '@/hooks/useEditorBruecke'
 import { useActiveJob } from '@/hooks/useActiveJob'
 import { audioUrl } from '@/lib/api'
 import { SKIP, segIdAusFokus } from '@/lib/playback'
@@ -14,7 +15,11 @@ export function EditorView() {
   const { project, base } = useParams<{ project: string; base: string }>()
   const { projects } = useProjekte()
   const sel = project && base ? { project, base } : null
-  const { doc, dirty, loading: docLoading, updateSegment, renameSpeaker, save, exportDownload } = useDoc(sel?.project ?? null, sel?.base ?? null)
+  const { doc, dirty, loading: docLoading, updateSegment, renameSpeaker, save, exportDownload, reload } = useDoc(sel?.project ?? null, sel?.base ?? null)
+  // Die Leiste in der Huelle navigiert und startet Einzeldatei-Korrekturen — beides braucht
+  // Dinge, die nur hier existieren. Ohne diese Meldung wechselt ein Klick ohne Rueckfrage
+  // ueber ungespeicherte Aenderungen hinweg, und ein Korrekturlauf bleibt unsichtbar.
+  useEditorMelden(sel ? { ...sel, dirty, reload } : null)
   const { adopt } = useActiveJob()
   const activeProject = projects.find(x => x.name === project)
   const aktiveIds = (activeProject?.active_jobs ?? []).map(j => j.id).join(',')

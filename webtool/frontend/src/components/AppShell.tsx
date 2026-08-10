@@ -3,6 +3,7 @@ import { useLocation, useMatch, useNavigate } from 'react-router-dom'
 import { ProjektDatenProvider, useProjekte, useDateien } from '@/hooks/useProjektDaten'
 import { mergePhases, useActiveJob } from '@/hooks/useActiveJob'
 import { useAiReady } from '@/hooks/useAiReady'
+import { EditorBrueckeProvider, useEditorBruecke } from '@/hooks/useEditorBruecke'
 import { useDokumentTitel } from '@/hooks/useDokumentTitel'
 import { useJob } from '@/hooks/useJob'
 import { useOsFortschritt } from '@/hooks/useOsFortschritt'
@@ -29,20 +30,35 @@ function Leiste() {
     ? { project: imEditor.params.project, base: imEditor.params.base }
     : null
 
+  const editor = useEditorBruecke()
+  // Jeder Klick hier verlaesst den Editor. Ohne die Rueckfrage ist die ungespeicherte Arbeit
+  // weg — es gibt kein Autosave, und `beforeunload` greift nur beim Schliessen des Tabs, nicht
+  // bei Router-Navigation. Stand vor dem Umzug der Navigation in EditorView.openFile; seitdem
+  // ist die Leiste dauerhaft sichtbar, die Auslaeseflaeche also groesser als damals.
+  const wechselErlaubt = (ziel: { project: string; base: string } | null) => {
+    const e = editor.current
+    if (!e?.dirty) return true
+    if (ziel && ziel.project === e.project && ziel.base === e.base) return true   // dieselbe Datei
+    return window.confirm('Ungespeicherte Änderungen verwerfen?')
+  }
+
   const nachladen = () => { refresh(); refreshFiles() }
   return (
     <Sidebar
       projekte={projects} loading={loading} fehler={fehler}
       offen={projekt} dateien={files} dateienLaden={dateienLaden}
-      onWaehlen={n => navigate(n ? `/p/${encodeURIComponent(n)}` : '/')}
+      onWaehlen={n => { if (wechselErlaubt(null)) navigate(n ? `/p/${encodeURIComponent(n)}` : '/') }}
       active={active}
-      onOpen={s => navigate(`/p/${encodeURIComponent(s.project)}/${encodeURIComponent(s.base)}`)}
+      onOpen={s => { if (wechselErlaubt(s)) navigate(`/p/${encodeURIComponent(s.project)}/${encodeURIComponent(s.base)}`) }}
       onUpload={(p, f) => uploadAudio(p, f).then(nachladen)}
       onTranscribe={p => start(() => startTranscribe(p), `Transkribieren ${p}`, nachladen)}
       onCorrect={p => start(() => startCorrect(p), `Korrigieren ${p}`, nachladen)}
       onCorrectFile={(p, b, force) => start(
         () => startCorrectFile(p, b, force).then(res => { if (res.started) adopt(res.job_id, p, 'correct'); return res }),
-        `Korrigieren ${b}`, nachladen)}
+        `Korrigieren ${b}`,
+        // Listen allein reichen nicht: der Editor haelt weiter das Dokument von VOR der
+        // Korrektur, und "Speichern" schriebe es ueber die frisch erzeugte edit.json.
+        () => { nachladen(); const e = editor.current; if (e?.project === p && e.base === b) e.reload() })}
       phases={phases} jobRunning={meine.length > 0} aiReason={aiReason} />
   )
 }
@@ -97,12 +113,15 @@ function Rahmen({ children }: { children: ReactNode }) {
 
 /**
  * Rahmt die App EIN: der Datenprovider aussen (braucht `useMatch`, muss also innerhalb des
- * Routers stehen — und `AppShell` steht dort, `main.tsx` nicht), das Fensterraster innen.
+ * Routers stehen — und `AppShell` steht dort, `main.tsx` nicht), die Editor-Bruecke darin
+ * (Leiste UND Editor liegen darunter), das Fensterraster innen.
  */
 export function AppShell({ children }: { children: ReactNode }) {
   return (
     <ProjektDatenProvider>
-      <Rahmen>{children}</Rahmen>
+      <EditorBrueckeProvider>
+        <Rahmen>{children}</Rahmen>
+      </EditorBrueckeProvider>
     </ProjektDatenProvider>
   )
 }
