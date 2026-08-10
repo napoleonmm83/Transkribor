@@ -343,6 +343,15 @@ nie committen), unklarem Scope, oder history-verändernden Aktionen (force-push,
   Hot-Reload: `npm --prefix webtool/frontend run dev` (Vite :5173, proxied `/api` zu :8000).
   Kanonisches Editier-Dokument bleibt `<base>.edit.json` (aus Roh-`<base>.json`), Export
   `<base>.md`. Spec: `docs/superpowers/specs/2026-07-06-transkribor-webtool-design.md`.
+- **Untertitel-Export `<base>.srt`** (`webtool/render_srt.py`, `POST …/export/srt`, Knopf im
+  Editor) — die Datei geht in YouTube Studio unter „Untertitel > Datei hochladen" und ersetzt
+  das schwache Auto-Transkript. Zwilling von `render_md.py`: gleiche Eingabe, andere Ausgabe.
+  Zwei Entscheidungen, die man nicht umdrehen sollte, ohne den Grund zu kennen: der
+  Sprechername steht **nur beim Wechsel** und mit `>>` davor (in jeder Zeile frisst er den
+  halben Schirm, ganz weg verliert man bei zwei Stimmen den Faden), und Zeilen brechen bei 42
+  Zeichen an Wortgrenzen — ohne das schiebt YouTube ein langes Segment als eine einzige Zeile
+  quer über das Bild. **Kein `?fmt=` am `/export`-Zwilling**: der müsste dafür seinen
+  Rückgabeschlüssel `md` aufgeben. Läuft nur auf Knopfdruck, die Pipeline schreibt keine `.srt`.
   **Router-basiert** (`react-router-dom`): `/` Projekt-Galerie (Projekt anlegen via
   `POST /api/projects`, löschen via `DELETE /api/projects/{p}` hinter einer
   Namen-eintippen-Bestätigung), `/p/:project` Arbeitsfläche (Drag&Drop-Multi-Upload,

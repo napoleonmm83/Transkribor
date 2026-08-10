@@ -21,9 +21,12 @@ export async function saveDoc(project: string, base: string, doc: EditDoc): Prom
   await jn(await fetch(`/api/projects/${enc(project)}/files/${enc(base)}`, {
     method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(doc) }))
 }
-export async function exportMd(project: string, base: string): Promise<string> {
-  return (await jn<{ md: string }>(await fetch(
-    `/api/projects/${enc(project)}/files/${enc(base)}/export`, { method: 'POST' }))).md
+export type ExportFmt = 'md' | 'srt'
+/** md -> /export, srt -> /export/srt; die Antwort traegt das Format als Schluessel. */
+export async function exportText(project: string, base: string, fmt: ExportFmt): Promise<string> {
+  return (await jn<Record<ExportFmt, string>>(await fetch(
+    `/api/projects/${enc(project)}/files/${enc(base)}/export${fmt === 'md' ? '' : `/${fmt}`}`,
+    { method: 'POST' })))[fmt]
 }
 /** Body ist optional: fast alle POSTs hier sind reine Auslöser ohne Nutzlast. */
 const post = (u: string, body?: unknown) => fetch(u, {

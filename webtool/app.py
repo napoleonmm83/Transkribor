@@ -19,6 +19,7 @@ from . import paths
 from . import settings
 from .edit_model import build_edit_doc
 from .render_md import render_md
+from .render_srt import render_srt
 
 # Vor allem anderen: die .env kann TRANSKRIBOR_PROJEKTE & Co. setzen, und die liest
 # jeder folgende Zugriff aus os.environ. Frueher taten das die Launcher (webtool.ps1,
@@ -103,6 +104,10 @@ def _edit_path(project, base):
 
 def _md_path(project, base):
     return os.path.join(paths.transkripte_dir(project), base + ".md")
+
+
+def _srt_path(project, base):
+    return os.path.join(paths.transkripte_dir(project), base + ".srt")
 
 
 def _validate(*names: str) -> None:
@@ -220,6 +225,16 @@ def export_file(project: str, base: str):
     with open(_md_path(project, base), "w", encoding="utf-8") as fh:
         fh.write(md)
     return {"md": md}
+
+
+@app.post("/api/projects/{project}/files/{base}/export/srt")
+def export_srt(project: str, base: str):
+    """Untertitel fuer den YouTube-Upload. Eigener Endpoint statt ?fmt= am Zwilling darueber:
+    der muesste dafuer seinen Rueckgabeschluessel `md` aufgeben."""
+    _validate(project, base)
+    srt = render_srt(load_or_build_doc(project, base))
+    paths.atomic_write(_srt_path(project, base), srt)
+    return {"srt": srt}
 
 
 def _autocorrect_enabled() -> bool:

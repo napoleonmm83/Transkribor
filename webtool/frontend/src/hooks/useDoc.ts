@@ -2,7 +2,9 @@ import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import type { EditDoc, Segment } from '@/lib/types'
 import { renameSpeaker as renameInDoc } from '@/lib/grouping'
-import { getDoc, saveDoc, exportMd } from '@/lib/api'
+import { getDoc, saveDoc, exportText, type ExportFmt } from '@/lib/api'
+
+const MIME: Record<ExportFmt, string> = { md: 'text/markdown', srt: 'application/x-subrip' }
 
 export function useDoc(project: string | null, base: string | null) {
   const [doc, setDoc] = useState<EditDoc | null>(null)
@@ -34,13 +36,13 @@ export function useDoc(project: string | null, base: string | null) {
     catch (e) { toast.error('Speichern fehlgeschlagen: ' + (e as Error).message) }
   }, [doc, project, base])
 
-  const exportDownload = useCallback(async () => {
+  const exportDownload = useCallback(async (fmt: ExportFmt) => {
     if (!project || !base) return
     try {
-      const md = await exportMd(project, base)
+      const text = await exportText(project, base, fmt)
       const a = document.createElement('a')
-      a.href = URL.createObjectURL(new Blob([md], { type: 'text/markdown' }))
-      a.download = `${base}.md`; a.click()
+      a.href = URL.createObjectURL(new Blob([text], { type: MIME[fmt] }))
+      a.download = `${base}.${fmt}`; a.click()
     } catch (e) { toast.error('Export fehlgeschlagen: ' + (e as Error).message) }
   }, [project, base])
 
