@@ -89,6 +89,25 @@ describe('useDoc Autosave', () => {
   })
 })
 
+describe('useDoc updateDoc', () => {
+  it('schreibt das Kopffeld und laeuft ueber dieselbe Entprellung wie ein Segment', async () => {
+    // Kontext und Zusammenfassung duerfen keinen zweiten Speicherweg bekommen: sonst gibt es
+    // zwei Wahrheiten darueber, wann ein Dokument als gesichert gilt.
+    vi.mocked(api.saveDoc).mockResolvedValue(undefined as never)
+    const { result } = await geladen()
+
+    await act(async () => { result.current.updateDoc({ context: 'Interview am Deuce Day.' }) })
+    expect(result.current.dirty).toBe(true)
+    expect(api.saveDoc).not.toHaveBeenCalled()
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(800) })
+    expect(api.saveDoc).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(api.saveDoc).mock.calls[0][2].context).toBe('Interview am Deuce Day.')
+    // Das Uebrige bleibt unangetastet — ein Patch ist kein Ersatz des Dokuments.
+    expect(vi.mocked(api.saveDoc).mock.calls[0][2].segments[0].text).toBe('roh')
+  })
+})
+
 describe('useDoc Export-Fehler', () => {
   it('zeigt einen Toast statt einen unhandled rejection bei fehlgeschlagenem exportDownload()', async () => {
     vi.mocked(api.getDoc).mockResolvedValue(doc)

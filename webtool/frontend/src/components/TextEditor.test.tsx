@@ -1,11 +1,11 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
-import { SegmentEditor } from './SegmentEditor'
+import { TextEditor } from './TextEditor'
 
-describe('SegmentEditor', () => {
+describe('TextEditor', () => {
   it('committet den geänderten Text bei Blur', () => {
     const onCommit = vi.fn()
-    render(<SegmentEditor initial="hallo" onCommit={onCommit} onCancel={vi.fn()} />)
+    render(<TextEditor initial="hallo" onCommit={onCommit} onCancel={vi.fn()} />)
     const ta = screen.getByDisplayValue('hallo')
     fireEvent.change(ta, { target: { value: 'hallo welt' } })
     fireEvent.blur(ta)
@@ -14,7 +14,7 @@ describe('SegmentEditor', () => {
 
   it('committet bei ⌘Enter/Ctrl+Enter', () => {
     const onCommit = vi.fn()
-    render(<SegmentEditor initial="hallo" onCommit={onCommit} onCancel={vi.fn()} />)
+    render(<TextEditor initial="hallo" onCommit={onCommit} onCancel={vi.fn()} />)
     const ta = screen.getByDisplayValue('hallo')
     fireEvent.change(ta, { target: { value: 'hallo welt' } })
     fireEvent.keyDown(ta, { key: 'Enter', metaKey: true })
@@ -24,7 +24,7 @@ describe('SegmentEditor', () => {
   it('bricht bei Escape ab, ohne zu committen', () => {
     const onCommit = vi.fn()
     const onCancel = vi.fn()
-    render(<SegmentEditor initial="hallo" onCommit={onCommit} onCancel={onCancel} />)
+    render(<TextEditor initial="hallo" onCommit={onCommit} onCancel={onCancel} />)
     fireEvent.keyDown(screen.getByDisplayValue('hallo'), { key: 'Escape' })
     expect(onCancel).toHaveBeenCalled()
     expect(onCommit).not.toHaveBeenCalled()

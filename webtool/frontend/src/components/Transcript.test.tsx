@@ -22,7 +22,7 @@ const doc: EditDoc = {
 describe('Transcript', () => {
   it('rendert Sprecher-Labels und markiert unkorrigierte unsichere Wörter', () => {
     render(<TooltipProvider><Transcript doc={doc} activeId={null}
-      onPlaySeg={vi.fn()} onPlayTurn={vi.fn()} updateSegment={vi.fn()} renameSpeaker={vi.fn()} /></TooltipProvider>)
+      onPlaySeg={vi.fn()} onPlayTurn={vi.fn()} updateSegment={vi.fn()} renameSpeaker={vi.fn()} updateDoc={vi.fn()} /></TooltipProvider>)
     // Sprecher-Name erscheint sowohl im Block-Kopf als auch in der Per-Segment-Combobox.
     expect(screen.getAllByText(/Interviewer/).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/Befragte Person/).length).toBeGreaterThan(0)
@@ -32,7 +32,8 @@ describe('Transcript', () => {
   it('Name im Block-Kopf benennt global um, nicht nur das Segment', () => {
     const renameSpeaker = vi.fn(), updateSegment = vi.fn()
     render(<TooltipProvider><Transcript doc={doc} activeId={null}
-      onPlaySeg={vi.fn()} onPlayTurn={vi.fn()} updateSegment={updateSegment} renameSpeaker={renameSpeaker} /></TooltipProvider>)
+      onPlaySeg={vi.fn()} onPlayTurn={vi.fn()} updateSegment={updateSegment} renameSpeaker={renameSpeaker}
+      updateDoc={vi.fn()} /></TooltipProvider>)
     fireEvent.click(screen.getAllByTitle('Sprecher im ganzen Transkript umbenennen')[0])
     const input = screen.getByPlaceholderText('Sprecher…')
     fireEvent.change(input, { target: { value: 'Beni Dürr' } })
@@ -44,7 +45,7 @@ describe('Transcript', () => {
   it('zeigt die Zusammenfassung vor dem Gespräch', () => {
     render(<TooltipProvider><Transcript doc={{ ...doc, summary: 'Es geht um Brot.' }}
       activeId={null}
-      onPlaySeg={vi.fn()} onPlayTurn={vi.fn()} updateSegment={vi.fn()} renameSpeaker={vi.fn()} /></TooltipProvider>)
+      onPlaySeg={vi.fn()} onPlayTurn={vi.fn()} updateSegment={vi.fn()} renameSpeaker={vi.fn()} updateDoc={vi.fn()} /></TooltipProvider>)
     const zus = screen.getByText('Es geht um Brot.')
     expect(zus).toBeInTheDocument()
     // Vor dem ersten Segment: die Frage "worum geht es hier" stellt man beim Oeffnen.
@@ -56,12 +57,63 @@ describe('Transcript', () => {
       & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
-  it('ohne Zusammenfassung keine leere Rubrik', () => {
-    // Vor diesem Feature geschriebene edit.json haben den Schluessel gar nicht.
+  it('zeigt beide Rubriken auch leer — sonst gibt es keinen Weg, sie zu fuellen', () => {
+    // Frisch transkribiert und noch nicht korrigiert sind beide Felder leer. Blieben sie
+    // dann unsichtbar, koennte man einem Dokument nie einen Kontext geben.
     render(<TooltipProvider><Transcript doc={doc} activeId={null}
-      onPlaySeg={vi.fn()} onPlayTurn={vi.fn()} updateSegment={vi.fn()} renameSpeaker={vi.fn()} /></TooltipProvider>)
-    expect(screen.queryByText('Zusammenfassung')).not.toBeInTheDocument()
-    expect(screen.queryByText('Kontext')).not.toBeInTheDocument()
+      onPlaySeg={vi.fn()} onPlayTurn={vi.fn()} updateSegment={vi.fn()} renameSpeaker={vi.fn()} updateDoc={vi.fn()} /></TooltipProvider>)
+    expect(screen.getByText('Kontext')).toBeInTheDocument()
+    expect(screen.getByText('Zusammenfassung')).toBeInTheDocument()
+    expect(screen.getByText('Kontext hinzufügen …')).toBeInTheDocument()
+  })
+
+  it('Klick auf den Kontext oeffnet ein Feld, das ins Dokument zurueckschreibt', () => {
+    const updateDoc = vi.fn()
+    render(<TooltipProvider><Transcript doc={{ ...doc, context: 'Interview am Deuce Day.' }}
+      activeId={null} onPlaySeg={vi.fn()} onPlayTurn={vi.fn()}
+      updateSegment={vi.fn()} renameSpeaker={vi.fn()} updateDoc={updateDoc} /></TooltipProvider>)
+    fireEvent.click(screen.getByText('Interview am Deuce Day.'))
+    const feld = screen.getByRole('textbox')
+    fireEvent.change(feld, { target: { value: 'Interview am Deuce Day mit Fuhat Aras.' } })
+    fireEvent.keyDown(feld, { key: 'Enter', ctrlKey: true })
+    expect(updateDoc).toHaveBeenCalledWith({ context: 'Interview am Deuce Day mit Fuhat Aras.' })
+  })
+
+  it('ein leeres Feld laesst sich ueber den Platzhalter anlegen', () => {
+    const updateDoc = vi.fn()
+    render(<TooltipProvider><Transcript doc={doc} activeId={null}
+      onPlaySeg={vi.fn()} onPlayTurn={vi.fn()}
+      updateSegment={vi.fn()} renameSpeaker={vi.fn()} updateDoc={updateDoc} /></TooltipProvider>)
+    fireEvent.click(screen.getByText('Zusammenfassung hinzufügen …'))
+    const feld = screen.getByRole('textbox')
+    fireEvent.change(feld, { target: { value: 'Es geht um Brot.' } })
+    fireEvent.blur(feld)
+    expect(updateDoc).toHaveBeenCalledWith({ summary: 'Es geht um Brot.' })
+  })
+
+  it('unveraendert wieder zugeklickt schreibt gar nichts', () => {
+    // Sonst macht ein Fehlklick das Dokument schmutzig, der Autosave laeuft, und der Server
+    // setzt human_edited=true — womit `correct.py` die Datei ab dann DAUERHAFT ueberspringt.
+    const updateDoc = vi.fn()
+    render(<TooltipProvider><Transcript doc={{ ...doc, context: 'Interview am Deuce Day.' }}
+      activeId={null} onPlaySeg={vi.fn()} onPlayTurn={vi.fn()}
+      updateSegment={vi.fn()} renameSpeaker={vi.fn()} updateDoc={updateDoc} /></TooltipProvider>)
+    fireEvent.click(screen.getByText('Interview am Deuce Day.'))
+    fireEvent.blur(screen.getByRole('textbox'))
+    expect(updateDoc).not.toHaveBeenCalled()
+  })
+
+  it('Escape verwirft, statt zu schreiben', () => {
+    const updateDoc = vi.fn()
+    render(<TooltipProvider><Transcript doc={{ ...doc, summary: 'Es geht um Brot.' }}
+      activeId={null} onPlaySeg={vi.fn()} onPlayTurn={vi.fn()}
+      updateSegment={vi.fn()} renameSpeaker={vi.fn()} updateDoc={updateDoc} /></TooltipProvider>)
+    fireEvent.click(screen.getByText('Es geht um Brot.'))
+    const feld = screen.getByRole('textbox')
+    fireEvent.change(feld, { target: { value: 'Unsinn' } })
+    fireEvent.keyDown(feld, { key: 'Escape' })
+    expect(updateDoc).not.toHaveBeenCalled()
+    expect(screen.getByText('Es geht um Brot.')).toBeInTheDocument()
   })
 
   it('zeigt den Kontext — er steht im Export, also muss er auch im Editor stehen', () => {
@@ -69,13 +121,13 @@ describe('Transcript', () => {
     // mit hinausgehen: im Editor war das Feld unsichtbar.
     render(<TooltipProvider><Transcript doc={{ ...doc, context: 'Interview am Deuce Day.' }}
       activeId={null}
-      onPlaySeg={vi.fn()} onPlayTurn={vi.fn()} updateSegment={vi.fn()} renameSpeaker={vi.fn()} /></TooltipProvider>)
+      onPlaySeg={vi.fn()} onPlayTurn={vi.fn()} updateSegment={vi.fn()} renameSpeaker={vi.fn()} updateDoc={vi.fn()} /></TooltipProvider>)
     expect(screen.getByText('Interview am Deuce Day.')).toBeInTheDocument()
   })
 
   it('zeigt "Keine Datei geöffnet" nicht während des Ladens', () => {
     render(<Transcript doc={null} loading activeId={null}
-      onPlaySeg={vi.fn()} onPlayTurn={vi.fn()} updateSegment={vi.fn()} renameSpeaker={vi.fn()} />)
+      onPlaySeg={vi.fn()} onPlayTurn={vi.fn()} updateSegment={vi.fn()} renameSpeaker={vi.fn()} updateDoc={vi.fn()} />)
     expect(screen.queryByText(/Keine Datei geöffnet/)).not.toBeInTheDocument()
   })
 })

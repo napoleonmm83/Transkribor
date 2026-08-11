@@ -41,6 +41,14 @@ export function useDoc(project: string | null, base: string | null) {
     beruehrt()
   }, [beruehrt])
 
+  // Kopffelder des Dokuments (Kontext, Zusammenfassung). Bewusst ueber dasselbe `beruehrt()`
+  // wie eine Segmentaenderung: ein zweiter Speicherweg waere eine zweite Wahrheit darueber,
+  // wann ein Dokument als gesichert gilt.
+  const updateDoc = useCallback((patch: Partial<EditDoc>) => {
+    setDoc(d => d && ({ ...d, ...patch }))
+    beruehrt()
+  }, [beruehrt])
+
   const renameSpeaker = useCallback((from: string, to: string) => {
     if (!from || !to || from === to) return   // Guard hier, nicht im setDoc-Updater: der muss rein bleiben
     setDoc(d => d && renameInDoc(d, from, to))
@@ -91,5 +99,5 @@ export function useDoc(project: string | null, base: string | null) {
 
   // `save` wandert bewusst NICHT nach draussen: es gibt keinen Speichern-Knopf mehr, und eine
   // zweite Ausloesestelle waere eine, die neben der Entprellung herlaeuft.
-  return { doc, dirty, stand, loading, updateSegment, renameSpeaker, exportDownload, reload }
+  return { doc, dirty, stand, loading, updateSegment, updateDoc, renameSpeaker, exportDownload, reload }
 }
