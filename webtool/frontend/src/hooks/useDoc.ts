@@ -32,7 +32,19 @@ export function useDoc(project: string | null, base: string | null) {
     getDoc(project, base).then(d => { setDoc(d); setDirty(false); setStand('ruhig') })
       .catch(() => setDoc(null)).finally(() => setLoading(false))
   }, [project, base])
-  useEffect(() => { reload() }, [reload])
+  // `setDirty(false)` VOR dem Laden, und zwar hier: der ungespeicherte Stand gehoert der Datei,
+  // die man verlaesst — mit ihr faellt er weg. `reload()` ersetzt das Dokument erst, wenn
+  // `getDoc` zurueckkommt; bis dahin gilt `doc` = A, `project`/`base` = B, `dirty` = true (aus
+  // A). Der Entprellungs-Timer wird durch den `base`-Wechsel neu gesetzt und feuerte dann
+  // `saveDoc(B-Pfad, A-Dokument)`: Bs `edit.json` wird durch A ersetzt, `b.md` daraus neu
+  // gerendert, und `human_edited=true` landet auf B — Bs Editierarbeit ist weg, nur das
+  // Rohtranskript ueberlebt. `meins()` faengt das NICHT: der Lauf traegt Bs Pfad und gilt damit
+  // als „seiner“; die Ungleichheit liegt innerhalb der Closure, zwischen `doc` und dem Pfad.
+  // Ein Waechter (`doc.base !== base`) waere die schlechtere Wahl: laufen die Felder je
+  // auseinander (Umbenennen schreibt sie), speicherte der Editor still gar nicht mehr.
+  // Der Effekt haengt an der Identitaet von `reload`, laeuft also nur beim Wechsel — das
+  // `reload()` nach einem Korrekturlauf fuer dieselbe Datei geht nicht durch ihn.
+  useEffect(() => { setDirty(false); reload() }, [reload])
 
   const beruehrt = useCallback(() => { fassung.current++; setDirty(true); setStand('offen') }, [])
 
@@ -142,7 +154,10 @@ export function useDoc(project: string | null, base: string | null) {
     // `.catch` an der Kette, nicht am Rueckgabewert: lehnte `kette.current` je ab, reichte
     // jedes weitere `.then()` die Ablehnung durch und ALLE folgenden Speicherlaeufe der Sitzung
     // fielen still aus. Der `catch` oben deckt das nicht ab — er dereferenziert `e` selbst und
-    // kann damit seinerseits werfen (ein Reject mit `null` genuegt). Darum auch `String(e)`.
+    // kann damit seinerseits werfen (ein Reject mit `null` genuegt). Darum auch die
+    // `instanceof`-Pruefung oben. **Die beiden Haertungen verdecken einander:** jede allein
+    // rettet den Fall, der Test wird also erst rot, wenn BEIDE fehlen. Wer eine davon anfasst,
+    // bekommt kein rotes Signal — der Schutz ist die Kombination, nicht die einzelne Zeile.
     kette.current = lauf.catch(() => {})
     return lauf
   }, [doc, project, base])
