@@ -24,7 +24,7 @@ const ZWEI = [
 /** Der Einzeldatei-Start sitzt seit der Zusammenlegung im ⋯-Menue (DateiMenue), nicht mehr
  *  als eigener Knopf in der Zeile. Radix oeffnet es nur auf einen echten Zeigerklick. */
 async function korrigierenAusDemMenue() {
-  fireEvent.pointerDown(screen.getByLabelText('Aktionen für „a"'),
+  fireEvent.pointerDown(screen.getByLabelText('Aktionen für „a“'),
     { button: 0, ctrlKey: false, pointerType: 'mouse' })
   fireEvent.click(await screen.findByRole('menuitem', { name: 'Korrigieren' }))
 }
@@ -195,7 +195,7 @@ describe('AppShell', () => {
       </MemoryRouter>,
     )
     const frage = vi.spyOn(window, 'confirm')
-    await waitFor(() => expect(screen.getByLabelText('Aktionen für „a"')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByLabelText('Aktionen für „a“')).toBeInTheDocument())
     await korrigierenAusDemMenue()
     await waitFor(() => expect(reload).toHaveBeenCalled())
     expect(frage).not.toHaveBeenCalled()      // ohne Ungespeichertes keine Rueckfrage
@@ -216,7 +216,7 @@ describe('AppShell', () => {
         <JobProvider><AppShell><Schreibtisch reload={reload} /></AppShell></JobProvider>
       </MemoryRouter>,
     )
-    await waitFor(() => expect(screen.getByLabelText('Aktionen für „a"')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByLabelText('Aktionen für „a“')).toBeInTheDocument())
     await korrigierenAusDemMenue()
     await waitFor(() => expect(frage).toHaveBeenCalled())
     expect(reload).not.toHaveBeenCalled()

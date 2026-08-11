@@ -258,13 +258,13 @@ export function SettingsPage() {
                   neu starten und die Einrichtung durchlaufen lassen.
                 </span>}
           {/* Auf `asr` prüfen, nicht auf `device`: seit faster-whisper gilt `device` nur noch
-              für die Sprechertrennung. Auf einem Mac steht dort „mps", während die
+              für die Sprechertrennung. Auf einem Mac steht dort „mps“, während die
               Transkription auf der CPU läuft — dieser Hinweis wäre sonst genau dort still,
               wo er am nötigsten ist. */}
           {hw?.torch_ok && hw.asr === 'cpu' && (
             <span className="block text-amber-600 dark:text-amber-500">
               {s.whisper_model.startsWith('large')
-                ? 'Ohne GPU braucht „Beste Qualität" auf der CPU sehr lange — für längere Interviews besser „Schnell und gut" wählen. '
+                ? 'Ohne GPU braucht „Beste Qualität“ auf der CPU sehr lange — für längere Interviews besser „Schnell und gut“ wählen. '
                 : ''}
               {hw.device === 'mps'
                 ? 'Die Transkription könnte hier die Apple-GPU nutzen und wäre damit rund sechsmal schneller. Dafür fehlt whisper-cpp — einmalig „brew install whisper-cpp“ im Terminal, dann Transkribor neu starten.'
@@ -347,7 +347,7 @@ export function SettingsPage() {
                 ) : (
                   /* `key` erzwingt einen Neuaufbau, wenn Anbieter oder Modell wechseln.
                      Ohne ihn behält das unkontrollierte Feld seinen `defaultValue`: beim
-                     Wechsel von Claude zu Codex stand dort weiter „opus", und der nächste
+                     Wechsel von Claude zu Codex stand dort weiter „opus“, und der nächste
                      Klick schrieb es über `onBlur` als Codex-Modell ZURÜCK — ein
                      Claude-Alias, an dem `codex exec -m opus` scheitert. Während des
                      Tippens ändert sich `s.model` nicht (gespeichert wird erst bei

@@ -46,7 +46,7 @@ describe('SettingsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(api.listModels).mockResolvedValue([])
-    // Vorgabe „kein Anmeldezustand" — der Anmeldeblock bleibt damit aus allen Tests
+    // Vorgabe „kein Anmeldezustand“ — der Anmeldeblock bleibt damit aus allen Tests
     // heraus, die ihn nicht meinen. Ohne die Vorgabe liefert der Automock `undefined`,
     // und `.then` darauf reisst jeden Test um.
     vi.mocked(api.getAuth).mockResolvedValue({ unterstuetzt: false, angemeldet: false, detail: '' })

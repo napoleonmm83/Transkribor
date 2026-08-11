@@ -81,9 +81,9 @@ export function Sidebar({
           // Kein eigener "Suche leeren"-Knopf: type="search" zeichnet das native × im Feld
           // selbst -- ein zweiter Weg fuers selbe waere doppelt gemoppelt.
           <div className="px-2 py-1">
-            <p className="text-sm text-muted-foreground">Kein Projekt passt zu „{suche}".</p>
+            <p className="text-sm text-muted-foreground">Kein Projekt passt zu „{suche}“.</p>
             <NewProjectDialog onCreated={onWaehlen} vorbelegung={suche}
-              trigger={<Button variant="outline" size="sm" className="mt-2">„{suche}" anlegen</Button>} />
+              trigger={<Button variant="outline" size="sm" className="mt-2">„{suche}“ anlegen</Button>} />
           </div>
         )}
 

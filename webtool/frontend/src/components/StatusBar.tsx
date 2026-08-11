@@ -11,7 +11,7 @@ import type { UpdateZustand } from '@/lib/types'
 /**
  * Was in der Fusszeile ueber ein Update steht — `null`, solange es nichts zu tun gibt.
  *
- * Bewusst nur die Zustaende, die eine Handlung nach sich ziehen: „aktuell" und „prueft"
+ * Bewusst nur die Zustaende, die eine Handlung nach sich ziehen: „aktuell“ und „prueft“
  * sind Rauschen in einer Zeile, die man dauernd im Blick hat. Der Text fuehrt in die
  * Einstellungen, wo die vollstaendige Steuerung steht — die sechs Zustaende samt
  * Fortschrittsbalken und Protokoll-Link ein zweites Mal in 24 px Hoehe nachzubauen,

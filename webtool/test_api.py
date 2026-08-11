@@ -881,7 +881,7 @@ def test_projekt_umbenennen_auf_bestehenden_namen_gibt_409(client, tmp_path):
 
 def test_projekt_umbenennen_darf_nur_die_schreibweise_aendern(client, tmp_path):
     """Auf Windows ist das Dateisystem case-insensitiv: `exists()` allein meldete hier
-    „gibt es schon" und der Nutzer koennte einen Tippfehler in der Gross-/Kleinschreibung
+    „gibt es schon“ und der Nutzer koennte einen Tippfehler in der Gross-/Kleinschreibung
     nie korrigieren."""
     r = client.post("/api/projects/Demo/rename", json={"name": "DEMO"})
     assert r.status_code == 200

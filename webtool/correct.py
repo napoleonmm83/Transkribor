@@ -334,12 +334,12 @@ Projekt-Kontext: {context or DEFAULT_CONTEXT}
 Gemeinsames Glossar (für konsistente Schreibweisen — nutze es, ergänze nichts Erfundenes):
 {gjson or "(keins)"}
 
-2) KORRIGIEREN: klare ASR-Fehler mit Kontext + Glossar verbessern, zu lesbarem Standarddeutsch normalisieren (Schweizer „ss"). BLEIB TREU: nichts erfinden, den Sinn nicht verändern, nicht über das Nötige hinaus glätten (Füllwörter wie „äh"/„ähm" dürfen dezent weg). Entferne die [[...]]-Markierungen im Ausgabetext.
+2) KORRIGIEREN: klare ASR-Fehler mit Kontext + Glossar verbessern, zu lesbarem Standarddeutsch normalisieren (Schweizer „ss“). BLEIB TREU: nichts erfinden, den Sinn nicht verändern, nicht über das Nötige hinaus glätten (Füllwörter wie „äh“/„ähm“ dürfen dezent weg). Entferne die [[...]]-Markierungen im Ausgabetext.
 3) PRO SEGMENT: gib für JEDE Segment-ID {scope} GENAU EINEN Eintrag {{id, speaker, text}} zurück — keine ID auslassen, keine Segmente zusammenfassen (die Redebeitrags-Bündelung passiert später).
-4) SPRECHER: Das akustische (Sprecher N)-Präfix ist die WAHRHEIT, WER spricht — vergib pro Cluster GENAU EINEN konsistenten Namen: meist „Interviewer" (stellt Fragen) und die befragte Person (Name/Betrieb falls genannt, sonst „Befragte Person"). Du DARFST zwei Cluster demselben Namen zuordnen, wenn klar dieselbe Person. Eine Cluster-Grenze nur überschreiben, wenn sie offensichtlich falsch ist (z.B. ein einzelnes Rückkanal-Wort). Fehlt das Präfix, ordne nach Inhalt zu (wie bisher). Gib JEDEM Segment einen Sprecher.
+4) SPRECHER: Das akustische (Sprecher N)-Präfix ist die WAHRHEIT, WER spricht — vergib pro Cluster GENAU EINEN konsistenten Namen: meist „Interviewer“ (stellt Fragen) und die befragte Person (Name/Betrieb falls genannt, sonst „Befragte Person“). Du DARFST zwei Cluster demselben Namen zuordnen, wenn klar dieselbe Person. Eine Cluster-Grenze nur überschreiben, wenn sie offensichtlich falsch ist (z.B. ein einzelnes Rückkanal-Wort). Fehlt das Präfix, ordne nach Inhalt zu (wie bisher). Gib JEDEM Segment einen Sprecher.
 5) UNSICHER: wirklich unklare Stellen NICHT raten — nah am Original belassen und unter annotations vermerken.
-6) MUSIK/GESANG: Whisper "hört" in gesungenen Passagen sicher klingenden Unsinn (typisch: dieselbe kurze Zeile mehrfach hintereinander, fremdsprachig wirkende Wortfetzen, Text der zum Gespräch nicht passt). Bei GESUNGENEN Stellen und bei Segmenten ohne verständliche Sprache (Musik, Jubel, Applaus) schreibe als text exakt „[Musik]" — nicht raten, was gesungen wurde. GESPROCHENE Bühnenansagen sind KEINE Musik, die bleiben Text.
-7) ASR-ARTEFAKTE: Segmente, deren Text nachweislich nicht aus dem Ton stammt, sondern aus Whispers Trainingsdaten (Untertitel-Floskeln wie „ARD Text im Auftrag von Funk", „Untertitelung des ZDF", „Vielen Dank fürs Zuschauen"), bekommen einen LEEREN text (""). Sie verschwinden damit aus dem Transkript. Regel 6 und 7 gelten nur, wenn du dir sicher bist — im Zweifel Text belassen und unter annotations vermerken.
+6) MUSIK/GESANG: Whisper "hört" in gesungenen Passagen sicher klingenden Unsinn (typisch: dieselbe kurze Zeile mehrfach hintereinander, fremdsprachig wirkende Wortfetzen, Text der zum Gespräch nicht passt). Bei GESUNGENEN Stellen und bei Segmenten ohne verständliche Sprache (Musik, Jubel, Applaus) schreibe als text exakt „[Musik]“ — nicht raten, was gesungen wurde. GESPROCHENE Bühnenansagen sind KEINE Musik, die bleiben Text.
+7) ASR-ARTEFAKTE: Segmente, deren Text nachweislich nicht aus dem Ton stammt, sondern aus Whispers Trainingsdaten (Untertitel-Floskeln wie „ARD Text im Auftrag von Funk“, „Untertitelung des ZDF“, „Vielen Dank fürs Zuschauen“), bekommen einen LEEREN text (""). Sie verschwinden damit aus dem Transkript. Regel 6 und 7 gelten nur, wenn du dir sicher bist — im Zweifel Text belassen und unter annotations vermerken.
 
 Schreibe das Ergebnis mit dem Write-Tool als JSON nach GENAU diesem Pfad:
 {cpath}
@@ -374,7 +374,7 @@ Projekt-Kontext: {context or DEFAULT_CONTEXT}
 
 Prüfe kritisch gegen das ROH — konservativ, im Zweifel näher am Original:
 - HALLUZINATION/DRIFT: Inhalt hinzugefügt/weggelassen/im Sinn verändert, der nicht im Roh steht? Übermässiges Umschreiben? → näher ans Original zurück.
-- MUSIK/ARTEFAKTE sind ERLAUBTE Entscheidungen, KEINE Auslassung: „[Musik]" steht für eine gesungene oder sprachlose Stelle, ein leerer text ("") für ein reines ASR-Artefakt aus Whispers Trainingsdaten (Untertitel-Floskeln wie „ARD Text im Auftrag von Funk"). Beides NICHT zurückdrehen — nur prüfen, ob es zutrifft: gesprochene Bühnenansagen gehören zurück in Text, und umgekehrt gehört sicher klingender Unsinn über einer gesungenen Passage (dieselbe kurze Zeile mehrfach hintereinander, Wortfetzen ohne Bezug zum Gespräch) auf „[Musik]".
+- MUSIK/ARTEFAKTE sind ERLAUBTE Entscheidungen, KEINE Auslassung: „[Musik]“ steht für eine gesungene oder sprachlose Stelle, ein leerer text ("") für ein reines ASR-Artefakt aus Whispers Trainingsdaten (Untertitel-Floskeln wie „ARD Text im Auftrag von Funk“). Beides NICHT zurückdrehen — nur prüfen, ob es zutrifft: gesprochene Bühnenansagen gehören zurück in Text, und umgekehrt gehört sicher klingender Unsinn über einer gesungenen Passage (dieselbe kurze Zeile mehrfach hintereinander, Wortfetzen ohne Bezug zum Gespräch) auf „[Musik]“.
 - VOLLSTÄNDIGKEIT: für JEDE Roh-Segment-ID {scope} genau ein Eintrag? Fehlende ergänzen (Text nah am Roh), zusammengefasste auftrennen.
 - SPRECHER: konsistent pro akustischem (Sprecher N)-Cluster und plausibel (Interviewer stellt Fragen; Antworten korrekt zugeordnet)? Fehlzuordnungen korrigieren.
 - RESTFEHLER: offensichtliche verbleibende ASR-Fehler nur wenn eindeutig (konservativ).
@@ -458,7 +458,7 @@ def _merge_parts(docs: list, base: str) -> dict:
     vereinigt, Anmerkungen aneinandergehängt).
 
     `summary` und `verification` werden ANEINANDERGEHÄNGT, nicht vom ersten Block genommen:
-    jeder Block sieht nur seinen eigenen ID-Bereich, und „erster nicht-leerer" hiesse bei einer
+    jeder Block sieht nur seinen eigenen ID-Bereich, und „erster nicht-leerer“ hiesse bei einer
     390-Segment-Datei, dass die Zusammenfassung des ganzen Gesprächs in Wahrheit das erste
     Drittel beschreibt — ohne dass man es der Datei ansieht.
     """
@@ -517,7 +517,7 @@ def _correct_file(project: str, base: str, gjson: str, context: str, verify: boo
     tagged = os.path.abspath(os.path.join(tdir, base + ".tagged.txt"))
     raw_json = os.path.join(tdir, base + ".json")   # Frische-Anker der Blöcke: die Roh-JSON, NICHT
     ids = _tagged_ids(tagged)                       # tagged.txt — das schreibt cmd_prep bei JEDEM Lauf neu,
-                                                    # womit kein Block je „neuer" wäre und der Resume tot.
+                                                    # womit kein Block je „neuer“ wäre und der Resume tot.
     if len(ids) <= CHUNK_SEGMENTS:
         _correct_one(base, tagged, cpath, gjson, context, verify)
         return
@@ -658,8 +658,8 @@ def main(argv=None):
                   not in ("0", "false", "no")) and not args.no_verify
         done = cmd_run(args.project, args.base, args.force, verify)
         # Exitcode fürs Job-Signal: Fehler nur, wenn Dateien VERSUCHT wurden aber KEINE gelang —
-        # sonst wäre der Job „done" trotz Totalausfall (z.B. claude fehlt auf PATH). Scope = eine
-        # Datei (Per-Datei-Lauf) oder alle; „nichts zu tun" (human_edited ohne --force / keine bzw.
+        # sonst wäre der Job „done“ trotz Totalausfall (z.B. claude fehlt auf PATH). Scope = eine
+        # Datei (Per-Datei-Lauf) oder alle; „nichts zu tun“ (human_edited ohne --force / keine bzw.
         # unbekannte Datei) ist kein Fehler.
         tdir = paths.transkripte_dir(args.project)
         present = bases(args.project)

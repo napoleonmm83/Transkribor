@@ -346,7 +346,7 @@ def _ziel_frei(alt: str, neu: str) -> bool:
     `not os.path.exists(neu)` allein reicht auf Windows NICHT: das Dateisystem ist dort
     case-insensitiv, beim reinen Gross-/Kleinschreibungswechsel ("weistannen" ->
     "Weisstannen") zeigt exists() also auf genau den Ordner, den man gerade umbenennt —
-    und die Aktion scheiterte mit „gibt es schon". samefile() trennt die beiden Faelle."""
+    und die Aktion scheiterte mit „gibt es schon“. samefile() trennt die beiden Faelle."""
     if not os.path.exists(neu):
         return True
     return os.path.exists(alt) and os.path.samefile(alt, neu)

@@ -11,7 +11,7 @@ import {
  *
  * `vorschlaege` sind die Sprechernamen der Aufnahme: eine Aufnahme heisst nach dem Ueberspielen
  * `01172464`, und wer sie spaeter sucht, sucht nach dem Menschen, der darin spricht. Ein Klick
- * setzt den Namen ins Feld, geschickt wird er trotzdem erst mit „Umbenennen" — der Vorschlag
+ * setzt den Namen ins Feld, geschickt wird er trotzdem erst mit „Umbenennen“ — der Vorschlag
  * ist eine Abkuerzung, keine Entscheidung.
  */
 export function UmbenennenDialog({ offen, onOpenChange, titel, beschreibung, wert, vorschlaege, onSpeichern }: {
@@ -73,7 +73,7 @@ export function UmbenennenDialog({ offen, onOpenChange, titel, beschreibung, wer
 
 /** Die Sprechernamen eines Dokuments in der Reihenfolge ihres ersten Auftretens.
  *  Ohne Filter: welcher Name als Dateiname taugt, weiss nur der Mensch davor — eine
- *  Heuristik („nimm den, der nicht Interviewer heisst") liegt beim ersten Sonderfall falsch. */
+ *  Heuristik („nimm den, der nicht Interviewer heisst“) liegt beim ersten Sonderfall falsch. */
 export function sprecherNamen(doc: { segments?: { speaker?: string }[] } | null): string[] {
   const gesehen: string[] = []
   for (const s of doc?.segments ?? []) {
