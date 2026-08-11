@@ -64,7 +64,8 @@ dazuerfunden oder weggelassen wurde.
 
 **Du behältst das letzte Wort.** Im eingebauten Editor hörst du jeden Abschnitt per Tastendruck
 nach und änderst, was nicht stimmt. Unsichere Stellen sind farbig markiert — du siehst sofort,
-wo sich das Nachhören lohnt.
+wo sich das Nachhören lohnt. **Speichern musst du nichts:** kurz nach jeder Änderung sichert
+Transkribor von selbst, oben links steht, woran es gerade ist.
 
 **Untertitel für YouTube.** Ein Klick erzeugt eine `.srt`-Datei, die du bei YouTube hochlädst;
 sie ersetzt die schwachen Automatik-Untertitel. Die Sprechernamen kannst du dabei ein- oder

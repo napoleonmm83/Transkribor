@@ -509,6 +509,28 @@ nie committen), unklarem Scope, oder history-verändernden Aktionen (force-push,
   Hot-Reload: `npm --prefix webtool/frontend run dev` (Vite :5173, proxied `/api` zu :8000).
   Kanonisches Editier-Dokument bleibt `<base>.edit.json` (aus Roh-`<base>.json`), Export
   `<base>.md`. Spec: `docs/superpowers/specs/2026-07-06-transkribor-webtool-design.md`.
+- **Der Editor speichert selbst; einen Speichern-Knopf gibt es nicht mehr** (`useDoc.ts`,
+  800 ms nach der letzten Änderung). Vier Dinge, die man nicht aus dem Diff liest:
+  **Die Entprellung IST der Effekt** — `save` hängt an `doc`, wechselt also bei jeder Änderung
+  die Identität; der Effekt räumt seinen alten Timer ab und legt einen neuen. Ein zweiter
+  Zeitgeber daneben wäre eine zweite Wahrheit über denselben Vorgang.
+  **`fassung` (ein Zähler) ist gegen einen stillen Verlust da, nicht Zierde:** wird während
+  eines laufenden `saveDoc` weitergetippt, ist das Geschriebene beim Eintreffen der Antwort
+  schon wieder alt — ein blindes `setDirty(false)` (der Stand vorher) hätte das Dokument als
+  gesichert markiert, und die Rückfragen beim Verlassen hätten für genau diese Änderung nicht
+  mehr gegriffen. Ein Mutationstest hält den Fall fest (Guard entfernen → Test rot).
+  **Nach einem Fehlschlag wird NICHT nachgetreten:** die Effekt-Abhängigkeiten ändern sich
+  dabei nicht, es bleibt bei dem einen Versuch plus Toast, `dirty` bleibt oben. Eine
+  Wiederholschleife gegen einen abgestürzten Server wäre ein Dauerfeuer aus Toasts.
+  **`dirty` bleibt trotz Autosave nötig** — `beforeunload` und die drei Rückfragen
+  (`AppShell`, `DateiMenue` ×2, `ProjektUmbenennen`) decken die 800-ms-Pause und den
+  Fehlerfall ab. Ein Autosave macht ungespeicherte Arbeit selten, nicht unmöglich.
+  Anzeige: `Toolbar` links, vier Zustände; „offen“ und „speichert“ tragen **denselben** Text
+  (dazwischen liegen 800 ms — zwei Wechsel je Tipppause wären Flackern), und der Ausgangs-
+  zustand `ruhig` zeigt **gar nichts**: liegt noch keine `edit.json` vor, baut der Server das
+  Dokument beim Öffnen aus dem Rohtranskript, „gespeichert“ wäre dort schlicht falsch.
+  Geprüft wurden alle drei sichtbaren Zustände im Browser (der Fehlerfall über eine
+  abgewiesene POST-Route), nicht nur in jsdom.
 - **`GET /api/projects` liefert nur die Zusammenfassung, `GET /api/projects/{project}` die
   Dateiliste.** Grund: drei Seiten (Galerie, Arbeitsfläche, Editor) teilten sich EINEN
   Endpunkt mit voller Dateiliste + drei `os.path.exists` je Datei, obwohl die Galerie aus dem

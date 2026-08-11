@@ -32,9 +32,11 @@ function Leiste() {
     : null
 
   const editor = useEditorBruecke()
-  // Jeder Klick hier verlaesst den Editor. Ohne die Rueckfrage ist die ungespeicherte Arbeit
-  // weg — es gibt kein Autosave, und `beforeunload` greift nur beim Schliessen des Tabs, nicht
-  // bei Router-Navigation. Stand vor dem Umzug der Navigation in EditorView.openFile; seitdem
+  // Jeder Klick hier verlaesst den Editor. Der Editor speichert seit dem Autosave von selbst,
+  // aber `dirty` ist damit nicht erledigt: es steht in der Entprellungspause (800 ms nach dem
+  // letzten Tastendruck) und dauerhaft nach einem fehlgeschlagenen Lauf. Genau diese Faelle
+  // faengt die Rueckfrage — `beforeunload` greift nur beim Schliessen des Tabs, nicht bei
+  // Router-Navigation. Stand vor dem Umzug der Navigation in EditorView.openFile; seitdem
   // ist die Leiste dauerhaft sichtbar, die Auslaeseflaeche also groesser als damals.
   const wechselErlaubt = (ziel: { project: string; base: string } | null) => {
     const e = editor.current
