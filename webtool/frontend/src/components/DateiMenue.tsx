@@ -109,7 +109,7 @@ export function DateiMenue({ project, file, aiReason }: {
     // Der Editor laedt beim Pfadwechsel neu — ungespeichertes waere sonst still weg.
     if (offen && editor.current?.dirty && !window.confirm(
       `„${file.base}" hat ungespeicherte Änderungen.\n\n`
-      + 'Beim Umbenennen wird die Datei neu geladen — die Änderungen gehen verloren.')) return
+      + 'Beim Umbenennen wird die Datei neu geladen — die Änderungen gehen verloren.')) return false
     const res = await renameFile(project, file.base, neu)
     if (offen) navigate(`/p/${encodeURIComponent(project)}/${encodeURIComponent(res.name)}`, { replace: true })
     toast.success(`„${file.base}" heisst jetzt „${res.name}"`)

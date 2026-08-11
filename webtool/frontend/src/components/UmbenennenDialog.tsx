@@ -21,7 +21,10 @@ export function UmbenennenDialog({ offen, onOpenChange, titel, beschreibung, wer
   beschreibung: string
   wert: string
   vorschlaege?: string[]
-  onSpeichern: (name: string) => Promise<void>
+  /** `false` heisst: nicht umbenannt, Dialog offen lassen. Die Aufrufer fragen bei
+   *  ungespeicherten Aenderungen nach — wer dort abbricht, hat NICHT umbenannt, und ein
+   *  Dialog, der sich trotzdem schliesst, behauptet das Gegenteil. */
+  onSpeichern: (name: string) => Promise<boolean | void>
 }) {
   const [name, setName] = useState(wert)
   const [laeuft, setLaeuft] = useState(false)
@@ -33,7 +36,10 @@ export function UmbenennenDialog({ offen, onOpenChange, titel, beschreibung, wer
     const n = name.trim()
     if (!n || n === wert) { onOpenChange(false); return }
     setLaeuft(true)
-    try { await onSpeichern(n); onOpenChange(false) }
+    try {
+      if (await onSpeichern(n) === false) { setLaeuft(false); return }
+      onOpenChange(false)
+    }
     catch (e) { toast.error(`Umbenennen fehlgeschlagen: ${(e as Error).message}`); setLaeuft(false) }
   }
 

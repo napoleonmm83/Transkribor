@@ -22,7 +22,7 @@ export function ProjektUmbenennen({ project, onUmbenannt }: {
     const e = editor.current
     if (e?.project === project && e.dirty && !window.confirm(
       'Im Editor stehen ungespeicherte Änderungen.\n\n'
-      + 'Beim Umbenennen wird das Dokument neu geladen — sie gehen verloren.')) return
+      + 'Beim Umbenennen wird das Dokument neu geladen — sie gehen verloren.')) return false
     onUmbenannt((await renameProject(project, neu)).name)
   }
 
