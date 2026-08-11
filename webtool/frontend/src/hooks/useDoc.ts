@@ -201,6 +201,12 @@ export function useDoc(project: string | null, base: string | null) {
   // immer dem offenen Dokument; ein Wechsel setzt stand zurueck und bricht den Effekt ab.
   useEffect(() => {
     if (stand !== 'fehler') { finalToastGezeigt.current = false; return }
+    // #116-Achse unter #107: doc gehoert noch zum alten Dokument, waehrend base schon neu ist
+    // (getDoc fuer mehrere MB kann laenger als der Backoff dauern). Ohne diesen Guard wuerde ein
+    // Retry saveDoc(neuer-Pfad, alter-Inhalt) schreiben. CLAUDE.md warnt vor `doc.base !== base`
+    // im AUTOSAVE (Umbenennen legt ihn still) — hier ist er richtig, weil der Retry NUR laufen
+    // soll, wenn doc zum offenen base passt, und ein gleichzeitiger Fehler+Umbenenn-Fall nicht real ist.
+    if (doc?.base !== base) return
     if (fehlerZaehler > RETRY_BACKOFF_MS.length) {
       // Alle Retries aufgebraucht: ein finaler Toast, dann Schluss (kein weiterer Timer).
       if (!finalToastGezeigt.current) {
@@ -211,7 +217,7 @@ export function useDoc(project: string | null, base: string | null) {
     }
     const t = setTimeout(() => { void save() }, RETRY_BACKOFF_MS[fehlerZaehler - 1])
     return () => clearTimeout(t)
-  }, [stand, fehlerZaehler, save])
+  }, [stand, fehlerZaehler, save, doc, base])
 
   const exportDownload = useCallback(async (fmt: ExportFmt, sprecher = true) => {
     if (!project || !base) return

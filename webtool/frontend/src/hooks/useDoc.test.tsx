@@ -145,6 +145,38 @@ describe('useDoc: Retry greift nicht quer zum Dokumentwechsel (#107 × #116)', (
     const bRufe = vi.mocked(api.saveDoc).mock.calls.filter(c => c[1] === 'b2')
     expect(bRufe).toEqual([])   // kein saveDoc fuer B aus dem A-Retry
   })
+
+  it('bei langsamem getDoc feuert der Retry nicht auf das noch nicht geladene Dokument', async () => {
+    // #107 × #116: getDoc fuer mehrere MB kann laenger als der Backoff dauern. Waehrend doc noch
+    // zum ALTEN Dokument gehoert (base aber schon neu), duerfen Retries weder den alten noch den
+    // neuen Pfad beschreiben — sonst saveDoc(neuer-Pfad, alter-Inhalt). Guard: doc?.base === base.
+    const docB: EditDoc = { ...doc, base: 'b2' }
+    vi.mocked(api.saveDoc).mockRejectedValue(new Error('A hin'))
+    vi.useFakeTimers()
+    vi.mocked(api.getDoc).mockResolvedValue(doc)
+    const h = renderHook(({ b }) => useDoc('P', b), { initialProps: { b: 'b' } })
+    await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+
+    await act(async () => { h.result.current.updateSegment(0, { text: 'A' }) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(800) })   // save A fail → Retry bei +2s
+
+    // Wechsel zu B, aber getDoc(B) haengt bewusst (langsames Laden / MB-Doc)
+    let fertigB: (d: EditDoc) => void = () => {}
+    vi.mocked(api.getDoc).mockReturnValue(new Promise<EditDoc>(r => { fertigB = r }))
+    h.rerender({ b: 'b2' })
+    // KEIN advance 0 — getDoc(B) bleibt ungeloest, doc ist noch A, base ist B
+
+    // A's Retry (+2s) wuerde hier feuern, mit doc=A und base=B
+    await act(async () => { await vi.advanceTimersByTimeAsync(3000) })
+
+    // Weder B-Pfad noch A-Pfad duerfen aus diesem Fenster geschrieben worden sein
+    const bRufe = vi.mocked(api.saveDoc).mock.calls.filter(c => c[1] === 'b2')
+    expect(bRufe).toEqual([])
+
+    // jetzt getDoc(B) loesen — danach ist alles konsistent
+    await act(async () => { fertigB(docB); await vi.advanceTimersByTimeAsync(0) })
+    expect(h.result.current.doc?.base).toBe('b2')
+  })
 })
 
 describe('useDoc updateDoc', () => {
