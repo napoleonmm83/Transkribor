@@ -249,11 +249,17 @@ Fensterrahmen. Vier Dinge, die man nicht aus dem Diff liest:
   Prereleases nimmt GitHub von „Latest" aus, die Asset-URLs bleiben unverändert — der
   GGML-Download merkt nichts davon. Ein `v*`-Release darf den Riegel nicht tragen: es SOLL
   „Latest" werden.
-- `electron/setup.js` — `plan(platform, paketmanager)` entscheidet, was die Plattform braucht:
-  Windows installiert Python/ffmpeg automatisch per winget, **macOS und Linux zeigen nur den
-  Befehl zum Kopieren** (beides bräuchte sudo bzw. vorhandenes Homebrew — eine GUI-App, die
-  dafür einen Passwort-Prompt öffnet, ist zu viel Magie). torch: cu128 auf Windows/Linux,
-  PyPI-Standardrad auf macOS (bringt MPS mit; einen CUDA-Index gibt es dort nicht).
+- `electron/setup.js` — `plan(platform, paketmanager, arch, brew)` entscheidet, was die
+  Plattform braucht: Windows per winget, **macOS per `brew install`, sobald Homebrew da ist**,
+  **Linux zeigt nur den Befehl** (`apt`/`dnf`/`pacman` brauchen echtes sudo). Die frühere
+  Begründung „macOS bräuchte sudo" **vermischte zwei Fälle**: Homebrew *selbst* zu
+  installieren legt `/opt/homebrew` an und fragt nach dem Kennwort — `brew install <paket>`
+  danach nicht, der Ordner gehört dem Nutzer. Fehlt Homebrew, nennt der Hinweis jetzt den
+  **brew.sh-Einzeiler**; vorher stand dort ein `brew install …`, das ohne brew mit „command
+  not found" endet — ein Rat, der genau dem nicht hilft, der ihn braucht. `whisper-cpp` wird
+  auf Apple Silicon **mitinstalliert** (Fehlschlag bricht nicht ab: langsam ist besser als
+  gar nicht). torch: cu128 auf Windows/Linux, PyPI-Standardrad auf macOS (bringt MPS mit;
+  einen CUDA-Index gibt es dort nicht).
   Tests: `npm run test:electron` (`node --test`, keine Framework-Abhängigkeit).
 - Build-Ziele: `nsis` (Windows), `dmg` arm64 (macOS), `AppImage`+`deb` (Linux).
 - **`linux.depends` ist vollständig aufzuzählen, nicht zu ergänzen** — die Angabe *ersetzt*
