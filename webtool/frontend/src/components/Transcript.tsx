@@ -9,7 +9,7 @@ export function Transcript({ doc, loading, activeId, onPlaySeg, onPlayTurn, upda
   doc: EditDoc | null; loading?: boolean; activeId: number | null;
   onPlaySeg: (s: Segment) => void; onPlayTurn: (segs: Segment[]) => void;
   updateSegment: (id: number, patch: Partial<Segment>) => void;
-  updateDoc: (patch: Partial<EditDoc>) => void;
+  updateDoc: (patch: Partial<Pick<EditDoc, 'context' | 'summary'>>) => void;
   renameSpeaker: (from: string, to: string) => void;
 }) {
   const turns = useMemo(() => (doc ? groupIntoTurns(doc.segments) : []), [doc])

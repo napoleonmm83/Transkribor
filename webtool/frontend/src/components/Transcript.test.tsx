@@ -93,7 +93,9 @@ describe('Transcript', () => {
 
   it('unveraendert wieder zugeklickt schreibt gar nichts', () => {
     // Sonst macht ein Fehlklick das Dokument schmutzig, der Autosave laeuft, und der Server
-    // setzt human_edited=true — womit `correct.py` die Datei ab dann DAUERHAFT ueberspringt.
+    // setzt human_edited=true — womit `correct.py` die Datei aus der AUTOMATISCHEN Korrektur
+    // nimmt; zurueck nur ueber „Neu korrigieren“ (force) mit Rueckfrage. Der Guard selbst
+    // sitzt in `TextEditor`, hier wird nur die Verdrahtung geprueft.
     const updateDoc = vi.fn()
     render(<TooltipProvider><Transcript doc={{ ...doc, context: 'Interview am Deuce Day.' }}
       activeId={null} onPlaySeg={vi.fn()} onPlayTurn={vi.fn()}

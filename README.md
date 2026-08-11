@@ -70,7 +70,7 @@ Anmerkungen, und steht so auch im Export richtig da. **Speichern musst du nichts
 jeder Änderung sichert Transkribor von selbst, oben links steht, woran es gerade ist.
 
 **Auch Kontext und Zusammenfassung sind deine.** Die beiden Absätze über dem Gespräch schreibt
-die KI — und sie stehen in jedem Export ganz oben, also liest sie jeder zuerst. Ein Klick
+die KI — und sie stehen im Text-Export ganz oben, also liest sie jeder zuerst. Ein Klick
 darauf öffnet sie zum Bearbeiten; ist noch nichts da, legst du sie an derselben Stelle selbst
 an. Damit lässt sich auch ein älteres Transkript geradeziehen, in dem noch ein falsch
 verstandener Name steht.
