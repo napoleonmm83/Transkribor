@@ -1,0 +1,4 @@
+# Schaltet den "Sponsor"-Knopf oben im Repo frei. Voraussetzung ist ein eingerichtetes
+# GitHub-Sponsors-Profil (github.com/sponsors) — ohne das zeigt GitHub den Knopf nicht an,
+# und der Link in der README landet auf einer Seite ohne Spendenmöglichkeit.
+github: napoleonmm83
