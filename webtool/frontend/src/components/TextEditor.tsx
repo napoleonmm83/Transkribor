@@ -5,7 +5,15 @@ import { Textarea } from '@/components/ui/textarea'
 
 /** Hinweis, wenn eine nicht uebernommene Eingabe durch einen neuen Ausgangswert verworfen wurde
  *  (#118). Zentral hier, damit beide Konsumenten (DokumentFeld, SegmentView) dieselbe Stimme
- *  tragen — und eine Anpassung nicht an zwei Stellen vergeigt wird. */
+ *  tragen — und eine Anpassung nicht an zwei Stellen vergeigt wird.
+ *
+ *  Bewusst OHNE Dateinamen, anders als der Speichern-Fehler-Toast (`useDoc.ts`): dieser nennt die
+ *  Datei, weil sein Fehler ASYNCHRON ist — ein Hintergrund-Lauf fuer Datei X, waehrend Y offen
+ *  steht, kann lange nach dem Verlassen feuern und waere ohne Namen „ohne Bezug ueber einem
+ *  fremden Dokument". Der Verwurf hier ist SYNCHRON zum Klick/Reload: er feuert im selben
+ *  React-Commit wie der Wechsel, der Nutzer war gerade in dem Feld. Zusaetzlich waere der Name
+ *  beim Wechsel A→B schlicht FALSCH: `doc.base` ist im Feueraugenblick schon B, die verworfene
+ *  Eingabe stand aber in A. Eine generische Aussage ist fuer beide Faelle wahr. */
 export const EINGABE_VERWORFEN = 'Nicht übernommene Eingabe verworfen.'
 
 export function TextEditor({ initial, onCommit, onCancel, onVerworfen }: {
@@ -31,13 +39,16 @@ export function TextEditor({ initial, onCommit, onCancel, onVerworfen }: {
     // Verglichen wird getrimmt: `render_md` strippt ohnehin, ein Leerzeichen mehr aendert am
     // Ergebnis nichts — waere aber ein Schreibvorgang mit genau dieser Nebenwirkung.
     // Der Guard sitzt HIER und nicht bei den Aufrufern: sonst hat ihn einer von beiden nicht.
-    t.trim() === initial.trim() ? onCancel() : onCommit(t)
+    if (t.trim() === initial.trim()) onCancel()
+    else onCommit(t)
   }
   const abbrechen = () => { erledigt.current = true; onCancel() }
 
   // Cleanup bei JEDEM initial-Wechsel (die Textarea baut sich neu auf, s. `key`) UND beim
   // Unmount — beides Verwurf-Pfade. `veraendert` wird danach zurueckgesetzt, damit ein neues
   // Tippen im ersetzten Feld ein eigenes Ereignis ausloest und nicht das alte doppelt meldet.
+  // `erledigt` bewusst NICHT zurueckgesetzt: kein aktueller Parent oeffnet das Feld ohne neuen
+  // Mount (beide setzen `editing=false`), und der Reset waere Geruest fuer einen Fall, der nie eintritt.
   useEffect(() => {
     return () => {
       if (veraendert.current && !erledigt.current) {
