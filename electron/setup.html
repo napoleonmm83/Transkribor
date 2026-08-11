@@ -11,12 +11,14 @@
   :root { color-scheme: light dark;
           --bg:#FAFAFA; --fg:#18181B; --dim:#52525B; --line:#E4E4E7; --akzent:#4F46E5;
           --akzent-fg:#FFFFFF; --log-bg:#F4F4F5; --fehler-rand:#FCA5A5;
-          --fehler-bg:#FEF2F2; --fehler-fg:#B91C1C; --ok:#15803D; --fehlt:#B45309; }
+          --fehler-bg:#FEF2F2; --fehler-fg:#B91C1C; --ok:#15803D; --fehlt:#B45309;
+          --skel:#EDEDF0; }
   @media (prefers-color-scheme: dark) {
     /* #4F46E5 erreicht auf #0B0B0F keine 3:1 — der dunkle Akzent MUSS aufgehellt sein. */
     :root { --bg:#0B0B0F; --fg:#FAFAFA; --dim:#A1A1AA; --line:#26262B; --akzent:#818CF8;
             --akzent-fg:#0B0B0F; --log-bg:#08080A; --fehler-rand:#7A3B3B;
-            --fehler-bg:#1D1113; --fehler-fg:#FFB4B4; --ok:#66D19E; --fehlt:#E0B341; }
+            --fehler-bg:#1D1113; --fehler-fg:#FFB4B4; --ok:#66D19E; --fehlt:#E0B341;
+            --skel:#33333B; }
   }
   * { box-sizing: border-box; }
   body { margin:0; background:var(--bg); color:var(--fg);
@@ -26,7 +28,27 @@
   h1 { margin:0 0 4px; font-size:22px; font-weight:600;
        font-family:"Space Grotesk", ui-sans-serif, system-ui, sans-serif; letter-spacing:-.01em; }
   p.sub { margin:0 0 24px; color:var(--dim); }
+  /* Der Balken laeuft NUR, solange die App arbeitet — nicht, waehrend sie auf einen Klick
+     wartet. Eine Anzeige, die immer laeuft, sagt nichts mehr aus. */
+  #balken { display:none; height:3px; margin:0 0 20px; border-radius:3px;
+            background:var(--line); overflow:hidden; }
+  #balken.an { display:block; }
+  #balken::after { content:""; display:block; height:100%; width:30%; border-radius:3px;
+                   background:var(--akzent); animation:gleiten 1.5s cubic-bezier(.65,0,.35,1) infinite; }
+  @keyframes gleiten { from { transform:translateX(-100%) } to { transform:translateX(333%) } }
   ul.check { list-style:none; margin:0 0 20px; padding:0; border:1px solid var(--line); border-radius:8px; }
+  /* Platzhalter in der Geometrie der echten Zeilen: der Wechsel darf nichts verschieben.
+     Ohne sie stand hier ein leerer 2px-Rahmen — der liest sich wie eine kaputte Seite. */
+  li.skel { display:block; padding:14px; }
+  li.skel span { display:block; height:10px; border-radius:5px;
+                 background:linear-gradient(90deg, var(--line) 25%, var(--skel) 37%, var(--line) 63%);
+                 background-size:400% 100%; animation:schimmer 1.6s linear infinite; }
+  @keyframes schimmer { from { background-position:100% 0 } to { background-position:0 0 } }
+  @media (prefers-reduced-motion: reduce) {
+    /* Bewegung aus, Aussage bleibt: der Balken steht dann als ruhige Linie. */
+    #balken::after { animation:none; width:100%; opacity:.45; }
+    li.skel span { animation:none; background:var(--line); }
+  }
   ul.check li { display:flex; gap:10px; align-items:baseline; padding:10px 14px; border-bottom:1px solid var(--line); }
   ul.check li:last-child { border-bottom:0; }
   .mark { width:1.2em; flex:0 0 auto; }
@@ -58,7 +80,13 @@
   <h1>Transkribor</h1>
   <p class="sub" id="sub">Prüfe die Umgebung …</p>
 
-  <ul class="check" id="check"></ul>
+  <div id="balken" class="an" role="progressbar" aria-label="Vorgang läuft"></div>
+
+  <ul class="check" id="check">
+    <li class="skel"><span style="width:42%"></span></li>
+    <li class="skel"><span style="width:30%"></span></li>
+    <li class="skel"><span style="width:58%"></span></li>
+  </ul>
 
   <div class="zeile">
     <button id="los" style="display:none">Jetzt einrichten</button>
@@ -76,6 +104,10 @@
 <script>
 const $ = id => document.getElementById(id)
 const log = $('log'), check = $('check')
+
+/** Der Fortschrittsbalken. `an` heisst: die App arbeitet gerade. Wartet sie auf einen Klick,
+ *  muss er aus sein — sonst behauptet die Seite Arbeit, die niemand tut. */
+const laeuft = an => $('balken').classList.toggle('an', an)
 
 function zeile(was, ok, wert) {
   const li = document.createElement('li')
@@ -102,6 +134,7 @@ function zeigeStatus(s) {
   // Einzige, was weiterhilft — er gehört vor den Klick, nicht in eine rote Box danach.
   $('befehl').textContent = s.hinweis || ''
   $('befehl').style.display = s.hinweis ? 'block' : 'none'
+  laeuft(!!s.venv)   // fertig eingerichtet -> der Server faehrt hoch; sonst wartet sie auf den Klick
   if (s.venv) {
     $('sub').textContent = 'Alles bereit — starte …'
     $('los').style.display = 'none'
@@ -124,8 +157,11 @@ function anhaengen(z) {
 
 window.transkribor.on('status', zeigeStatus)
 window.transkribor.on('log', anhaengen)
-window.transkribor.on('phase', p => { $('phase').textContent = p.schritt + ' …' })
+// Phasen kommen auch, wenn main.js von sich aus einrichtet — dann hat niemand geklickt und
+// der Balken stuende sonst still, waehrend Minuten Arbeit laufen.
+window.transkribor.on('phase', p => { $('phase').textContent = p.schritt + ' …'; laeuft(true) })
 window.transkribor.on('fehler', t => {
+  laeuft(false)
   $('fehler').style.display = 'block'
   $('fehler').textContent = t
   $('phase').textContent = ''
@@ -143,6 +179,7 @@ $('datei').onclick = async () => {
 }
 $('los').onclick = async () => {
   $('los').disabled = true
+  laeuft(true)
   $('fehler').style.display = 'none'
   log.style.display = 'block'
   await window.transkribor.einrichten()
