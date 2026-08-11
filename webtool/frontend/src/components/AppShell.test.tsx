@@ -4,15 +4,19 @@ import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom'
 import { AppShell } from './AppShell'
 import { JobProvider } from '@/hooks/useActiveJob'
 import { useEditorMelden } from '@/hooks/useEditorBruecke'
+import type { SpeicherStand } from '@/hooks/useDoc'
 import * as api from '@/lib/api'
 import type { Settings } from '@/lib/types'
 
 vi.mock('@/lib/api')
 
 /** Ersatz-Editor: meldet der Huelle ein offenes Dokument, ohne useDoc und ohne Server.
- *  Geprueft wird die Huelle — dass EditorView selbst meldet, sichert EditorView.test.tsx. */
-function Schreibtisch({ dirty = true, reload = () => {} }: { dirty?: boolean; reload?: () => void }) {
-  useEditorMelden({ project: 'Alpha', base: 'a', dirty, reload })
+ *  Geprueft wird die Huelle — dass EditorView selbst meldet, sichert EditorView.test.tsx.
+ *  `stand` (Default 'ruhig'): seit #106 fragt die Leiste vor dem Verlassen nur bei 'fehler'. */
+function Schreibtisch({ dirty = true, stand = 'ruhig', reload = () => {} }: {
+  dirty?: boolean; stand?: SpeicherStand; reload?: () => void
+}) {
+  useEditorMelden({ project: 'Alpha', base: 'a', dirty, stand, reload })
   const { pathname } = useLocation()
   return <span data-testid="ort">{pathname}</span>
 }

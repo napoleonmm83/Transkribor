@@ -16,7 +16,7 @@ export function EditorView() {
   // Die Leiste in der Huelle navigiert und startet Einzeldatei-Korrekturen — beides braucht
   // Dinge, die nur hier existieren. Ohne diese Meldung wechselt ein Klick ohne Rueckfrage
   // ueber ungespeicherte Aenderungen hinweg, und ein Korrekturlauf bleibt unsichtbar.
-  useEditorMelden(sel ? { ...sel, dirty, reload } : null)
+  useEditorMelden(sel ? { ...sel, dirty, stand, reload } : null)
   const waveRef = useRef<WaveHandle>(null)
   const [activeId, setActiveId] = useState<number | null>(null)
   const onTime = useCallback((t: number) => {

@@ -1,10 +1,14 @@
 import { createContext, useContext, useEffect, useRef, type ReactNode } from 'react'
+import type { SpeicherStand } from './useDoc'
 
 /** Was der Editor der Huelle ueber sein offenes Dokument verraet — mehr braucht die Leiste nicht. */
 export type OffenesDokument = {
   project: string
   base: string
   dirty: boolean
+  /** #106: 'fehler' ist der einzige Stand, in dem die Leiste vor dem Verlassen fragt — in der
+   *  Tipppause ('offen') spült useDoc den Stand beim Verlassen selbst (useEffect-Cleanup). */
+  stand: SpeicherStand
   /** `useDoc.reload` — laedt das Dokument vom Server neu. */
   reload: () => void
 }
