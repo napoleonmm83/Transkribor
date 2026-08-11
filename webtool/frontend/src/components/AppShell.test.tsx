@@ -138,17 +138,17 @@ describe('AppShell', () => {
       vi.mocked(api.listProjects).mockResolvedValue(ZWEI)
       vi.mocked(api.getProjectFiles).mockResolvedValue({ name: 'Alpha', files: DATEIEN })
     })
-    const zeigen = () => render(
+    const zeigen = (stand?: Parameters<typeof Schreibtisch>[0]['stand']) => render(
       <MemoryRouter initialEntries={['/p/Alpha/a']}>
-        <JobProvider><AppShell><Schreibtisch /></AppShell></JobProvider>
+        <JobProvider><AppShell><Schreibtisch stand={stand} /></AppShell></JobProvider>
       </MemoryRouter>,
     )
 
     it('navigiert NICHT, wenn die Rueckfrage abgelehnt wird', async () => {
-      // Der Kern: die Leiste ist seit dem Umbau immer sichtbar, ein Fehlklick darf die
-      // ungespeicherte Arbeit im Editor nicht stillschweigend verwerfen.
+      // Seit #106 fragt die Leiste nur noch bei stand='fehler' (in der Tipppause spült useDoc
+      // selbst). Der Kern bleibt: ein Fehlklick darf ungespeicherte Arbeit nicht still verwerfen.
       const frage = vi.spyOn(window, 'confirm').mockReturnValue(false)
-      zeigen()
+      zeigen('fehler')
       await waitFor(() => expect(screen.getByText('Beta')).toBeInTheDocument())
 
       fireEvent.click(screen.getByText('Beta'))                       // Projektwechsel
@@ -164,7 +164,7 @@ describe('AppShell', () => {
 
     it('navigiert nach zugestimmter Rueckfrage', async () => {
       const frage = vi.spyOn(window, 'confirm').mockReturnValue(true)
-      zeigen()
+      zeigen('fehler')
       await waitFor(() => expect(screen.getByText('Beta')).toBeInTheDocument())
       fireEvent.click(screen.getByText('Beta'))
       expect(screen.getByTestId('ort')).toHaveTextContent('/p/Beta')
@@ -175,11 +175,23 @@ describe('AppShell', () => {
       const frage = vi.spyOn(window, 'confirm').mockReturnValue(true)
       render(
         <MemoryRouter initialEntries={['/p/Alpha/a']}>
-          <JobProvider><AppShell><Schreibtisch dirty={false} /></AppShell></JobProvider>
+          <JobProvider><AppShell><Schreibtisch dirty={false} stand="ruhig" /></AppShell></JobProvider>
         </MemoryRouter>,
       )
       await waitFor(() => expect(screen.getByText('Beta')).toBeInTheDocument())
       fireEvent.click(screen.getByText('Beta'))
+      expect(frage).not.toHaveBeenCalled()
+      frage.mockRestore()
+    })
+
+    it('navigiert in der Tipppause (stand="offen") ohne Rueckfrage (#106)', async () => {
+      // Kern von #106: die Oberflaeche hatte "wird gespeichert" versprochen — in der Pause darf
+      // die Leiste nicht widersprechen. useDoc spült den neuesten Stand beim Verlassen selbst.
+      const frage = vi.spyOn(window, 'confirm').mockReturnValue(false)   // duerfte nie gefragt werden
+      zeigen('offen')
+      await waitFor(() => expect(screen.getByText('Beta')).toBeInTheDocument())
+      fireEvent.click(screen.getByText('Beta'))
+      await waitFor(() => expect(screen.getByTestId('ort')).toHaveTextContent('/p/Beta'))
       expect(frage).not.toHaveBeenCalled()
       frage.mockRestore()
     })

@@ -32,15 +32,16 @@ function Leiste() {
     : null
 
   const editor = useEditorBruecke()
-  // Jeder Klick hier verlaesst den Editor. Der Editor speichert seit dem Autosave von selbst,
-  // aber `dirty` ist damit nicht erledigt: es steht in der Entprellungspause (800 ms nach dem
-  // letzten Tastendruck) und dauerhaft nach einem fehlgeschlagenen Lauf. Genau diese Faelle
-  // faengt die Rueckfrage — `beforeunload` greift nur beim Schliessen des Tabs, nicht bei
-  // Router-Navigation. Stand vor dem Umzug der Navigation in EditorView.openFile; seitdem
-  // ist die Leiste dauerhaft sichtbar, die Auslaeseflaeche also groesser als damals.
+  // Jeder Klick hier verlaesst den Editor. Seit #106 fragt die Leiste nur noch bei stand='fehler':
+  // in der Tipppause ('offen') hatte die Oberflaeche "wird gespeichert" versprochen, und useDoc
+  // spült den neuesten Stand beim Verlassen selbst (useEffect-Cleanup an der Speicher-Kette). Auf
+  // 'fehler' dagegen stand der nie beim Server — dort muss die Rueckfrage bleiben. `beforeunload`
+  // greift nur beim Schliessen des Tabs, nicht bei Router-Navigation.
+  // Die drei Server-Prozess-Rueckfragen (DateiMenue ×2, ProjektUmbenennen) pruefen weiter `dirty`
+  // — dort laeuft ein Server-Prozess ueber dieselbe Datei, den der Browser-Flush nicht einholt.
   const wechselErlaubt = (ziel: { project: string; base: string } | null) => {
     const e = editor.current
-    if (!e?.dirty) return true
+    if (!e || e.stand !== 'fehler') return true
     if (ziel && ziel.project === e.project && ziel.base === e.base) return true   // dieselbe Datei
     return window.confirm('Ungespeicherte Änderungen verwerfen?')
   }
