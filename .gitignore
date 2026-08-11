@@ -30,3 +30,6 @@ dist/
 
 # Playwright-MCP: Konsolenprotokolle und Snapshots aus Dogfood-Sitzungen
 .playwright-mcp/
+
+# Arbeitsanleitung fuer Claude: bleibt lokal, nicht im Repo
+CLAUDE.md
