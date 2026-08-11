@@ -417,14 +417,15 @@ export function SettingsPage() {
 
           {upd.art === 'verfuegbar_manuell' && (
             // Mac: Auto-Update ohne Notarisierung nicht moeglich, aber die Pruefung lief. Statt des
-            // Auto-Download-Knopfs ein Link zur Release-Seite — dort laedt der Nutzer das dmg selbst.
-            <p className="mt-3 text-sm">
-              Update {upd.neue} verfügbar{upd.groesse != null && ` (${mb(upd.groesse)} MB)`}.{' '}
-              Auf macOS ist Auto-Update ohne Notarisierung nicht möglich.{' '}
-              <a className="underline underline-offset-2 hover:text-foreground" href={RELEASES} target="_blank" rel="noreferrer">
-                Manuell herunterladen
-              </a>
-            </p>
+            // Auto-Download-Knopfs (der downloadUpdate riefe, das auf Mac scheitert) ein Knopf, der
+            // ueber denselben `laden`-IPC geht — der Mac-Automat oeffnet darin die Release-Seite.
+            <div className="mt-3">
+              <p className="text-sm">
+                Update {upd.neue} verfügbar{upd.groesse != null && ` (${mb(upd.groesse)} MB)`}.{' '}
+                Auf macOS ist Auto-Update ohne Notarisierung nicht möglich.
+              </p>
+              <Button className="mt-2" onClick={laden}>Manuell herunterladen</Button>
+            </div>
           )}
 
           {upd.art === 'laedt' && (

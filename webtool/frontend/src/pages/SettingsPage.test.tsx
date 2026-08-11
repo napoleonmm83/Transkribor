@@ -331,13 +331,15 @@ describe('Abschnitt Version und Updates', () => {
     expect(await screen.findByRole('button', { name: /Neu starten und installieren/ })).toBeTruthy()
   })
 
-  it('Mac (verfuegbar_manuell): Manuell-Download-Link statt Auto-Download-Knopf', async () => {
+  it('Mac (verfuegbar_manuell): Manuelldownload-Knopf statt Auto-Download', async () => {
     // Mac kann nicht auto-aktualisieren (Squirrel.Mac ohne Notarisierung), prueft aber manuell.
-    // Der Zustand zeigt einen Link zur Release-Seite, NICHT den "Herunterladen"-Knopf aus 'verfuegbar'.
-    zeigeMit({ version: '0.16.0', art: 'verfuegbar_manuell', neue: '0.17.0', groesse: 149843177 })
+    // Der Zustand zeigt einen "Manuell herunterladen"-Knopf (geht ueber den laden-IPC, der auf Mac
+    // die Release-Seite oeffnet), NICHT den "Herunterladen"-Auto-Knopf aus 'verfuegbar'.
+    const { spies } = zeigeMit({ version: '0.16.0', art: 'verfuegbar_manuell', neue: '0.17.0', groesse: 149843177 })
     expect(await screen.findByText(/0\.17\.0/)).toBeTruthy()
-    expect(screen.getByText(/Auto-Update.*nicht möglich/)).toBeTruthy()   // Begründung steht da
-    expect(screen.getByRole('link', { name: /Manuell herunterladen/ })).toBeTruthy()
+    expect(screen.getByText(/Auto-Update.*nicht möglich/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /Manuell herunterladen/ }))
+    expect(spies.laden).toHaveBeenCalled()
     expect(screen.queryByRole('button', { name: /^Herunterladen/ })).toBeNull()   // kein Auto-Knopf
   })
 

@@ -27,7 +27,7 @@ test('die Hintergrund-Pruefung ruht, sobald es etwas zu tun gibt', () => {
   // in der das gefundene Update steht.
   for (const art of ['unbekannt', 'aktuell', 'fehler'])
     assert.strictEqual(sollPruefen({ art }), true, art)
-  for (const art of ['prueft', 'verfuegbar', 'laedt', 'bereit', 'nicht_moeglich', 'neuartig'])
+  for (const art of ['prueft', 'verfuegbar', 'verfuegbar_manuell', 'laedt', 'bereit', 'nicht_moeglich', 'neuartig'])
     assert.strictEqual(sollPruefen({ art }), false, art)
   assert.strictEqual(sollPruefen(null), false, 'kein Automat gebaut')
 })
@@ -168,7 +168,7 @@ function bauenMac({ yml, fehler, version = '0.16.0' } = {}) {
   const openExternal = (...a) => ereignisse.push(['openExternal', ...a])
   const hole = async () => {
     if (fehler) throw new Error(fehler)
-    return { text: async () => yml }
+    return { ok: true, text: async () => yml }
   }
   const u = erstellen({
     autoUpdater: attrappe(), version, plattform: 'darwin', gepackt: true, appimage: false,
@@ -220,15 +220,29 @@ test('Mac: kaputte YAML (keine Version) -> fehler', async () => {
   assert.strictEqual(u.zustand().art, 'fehler')
 })
 
+test('Mac: HTTP-Fehler (z. B. 404) -> fehler mit Status, nicht "ohne Version"', async () => {
+  const u = erstellen({
+    autoUpdater: attrappe(), version: '0.16.0', plattform: 'darwin', gepackt: true, appimage: false,
+    hole: async () => ({ ok: false, status: 404, text: async () => 'Not Found' }),
+    openExternal: () => {}, feedUrl: 'f', releaseUrl: 'r', aendert: () => {},
+  })
+  u.pruefen()
+  await settles()
+  assert.strictEqual(u.zustand().art, 'fehler')
+  assert.match(u.zustand().text, /HTTP 404/)
+})
+
 test('Mac: laden oeffnet den Browser, nicht downloadUpdate', () => {
   const au = attrappe()
+  const auf = []   // openExternal-Aufrufe
   const u = erstellen({
     autoUpdater: au, version: '0.16.0', plattform: 'darwin', gepackt: true, appimage: false,
     hole: async () => ({ text: async () => 'version: 0.17.0\n' }),
-    openExternal: () => {},
+    openExternal: (url) => auf.push(url),
     feedUrl: 'f', releaseUrl: 'https://x/releases/latest',
     aendert: () => {},
   })
   u.laden()
   assert.deepStrictEqual(au.aufrufe, [], 'kein downloadUpdate auf Mac')
+  assert.deepStrictEqual(auf, ['https://x/releases/latest'], 'oeffnet die Release-Seite')
 })

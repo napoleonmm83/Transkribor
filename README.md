@@ -123,9 +123,11 @@ arbeitet das Transkribieren offline.
 
 **Wie komme ich an Updates?** Die App sieht beim Start und danach alle sechs Stunden von
 selbst nach. Gibt es eine neue Fassung, steht das unten in der Fusszeile — heruntergeladen und
-installiert wird sie erst, wenn du in den Einstellungen darauf klickst. Auf dem Mac und in der
-Linux-`.deb`-Fassung geht das nicht automatisch; dort lädst du die neue Fassung von der
-[Releases-Seite](https://github.com/napoleonmm83/Transkribor/releases/latest).
+installiert wird sie erst, wenn du in den Einstellungen darauf klickst. Auf dem Mac benachrichtigt
+dich die App genauso und führt dich zur Release-Seite; auto-heruntergeladen wird dort nichts
+(ohne Apple-Notarisierung nicht möglich). In der Linux-`.deb`-Fassung prüft sie nicht selbst —
+dort schaust du auf der
+[Releases-Seite](https://github.com/napoleonmm83/Transkribor/releases/latest) nach.
 
 **Welche Sprachen?** Voreingestellt ist Deutsch (inklusive Schweizerdeutsch, das als
 Hochdeutsch verschriftet wird). In den Einstellungen lässt sich jede andere von Whisper

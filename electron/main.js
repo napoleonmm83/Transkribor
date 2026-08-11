@@ -132,7 +132,6 @@ app.whenReady().then(async () => {
   // nicht wiederfindet, gibt es bewusst nicht mehr.
   try {
     const { autoUpdater } = require('electron-updater')
-    const { shell } = require('electron')
     const paket = require('../package.json')
     const macUrls = updater.macUrls(paket)
     autoUpdater.logger = null
