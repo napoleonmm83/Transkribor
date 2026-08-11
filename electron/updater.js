@@ -81,7 +81,10 @@ function erstellen({ autoUpdater, version, plattform, gepackt, appimage, aendert
       zustand: () => stand,
       pruefen: () => {
         setzen({ art: 'prueft' })
-        hole(feedUrl).then(r => r.text()).then(parseLatestMac).then(gelesen => {
+        hole(feedUrl).then(r => {
+          if (!r.ok) throw new Error(`latest-mac.yml HTTP ${r.status}`)
+          return r.text()
+        }).then(parseLatestMac).then(gelesen => {
           if (!gelesen) return setzen({ art: 'fehler', text: 'latest-mac.yml ohne Version' })
           const neu = istNeuer(gelesen.version, version)
           if (neu === null) return setzen({ art: 'fehler', text: `Version nicht lesbar: ${gelesen.version}` })
