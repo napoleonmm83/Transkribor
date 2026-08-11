@@ -19,10 +19,7 @@ export function DokumentFeld({ titel, wert, platzhalter, onCommit }: {
       <h2 className="rubrik mb-3">{titel}</h2>
       {editing
         ? <TextEditor initial={wert}
-            // Nur bei echter Aenderung schreiben: `onBlur` committet auch den Fehlklick, und
-            // ein Speicherlauf setzt serverseitig human_edited=true — was die Datei
-            // DAUERHAFT von der KI-Korrektur ausschliesst (correct.py ueberspringt sie).
-            onCommit={t => { if (t !== wert) onCommit(t); setEditing(false) }}
+            onCommit={t => { onCommit(t); setEditing(false) }}
             onCancel={() => setEditing(false)} />
         : <button type="button" onClick={() => setEditing(true)} title={`${titel} bearbeiten`}
             className="lesebreite w-full cursor-text whitespace-pre-wrap rounded-sm text-left text-sm leading-relaxed text-muted-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">

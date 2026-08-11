@@ -39,4 +39,28 @@ describe('SegmentView', () => {
     render(<TooltipProvider><SegmentView seg={seg} active={false} onPlay={vi.fn()} updateSegment={vi.fn()} /></TooltipProvider>)
     expect(screen.queryByTitle('Roh-Wörter anzeigen')).toBeNull()
   })
+  it('unveraendert wieder zugeklickt schreibt gar nichts', () => {
+    // Der haeufigere Weg als die Kopffelder: bei 400 Segmenten passiert der Fehlklick staendig.
+    // Ein Schreibvorgang setzt serverseitig human_edited=true, und `correct.py` nimmt die Datei
+    // damit aus der AUTOMATISCHEN Korrektur (zurueck nur ueber „Neu korrigieren“ mit Rueckfrage).
+    const updateSegment = vi.fn()
+    const seg = mkSeg({ text: 'korrigierter Text' })
+    render(<TooltipProvider><SegmentView seg={seg} active={false} onPlay={vi.fn()} updateSegment={updateSegment} /></TooltipProvider>)
+    fireEvent.click(screen.getByText('korrigierter Text'))
+    fireEvent.blur(screen.getByRole('textbox'))
+    expect(updateSegment).not.toHaveBeenCalled()
+  })
+
+  it('nur Leerraum dazu ist keine Aenderung', () => {
+    // Der Vergleich muss trimmen: `"text " !== "text"` waere sonst ein Schreibvorgang, der im
+    // Export (render_md strippt) nichts aendert — aber human_edited=true setzt.
+    const updateSegment = vi.fn()
+    const seg = mkSeg({ text: 'korrigierter Text' })
+    render(<TooltipProvider><SegmentView seg={seg} active={false} onPlay={vi.fn()} updateSegment={updateSegment} /></TooltipProvider>)
+    fireEvent.click(screen.getByText('korrigierter Text'))
+    const feld = screen.getByRole('textbox')
+    fireEvent.change(feld, { target: { value: 'korrigierter Text  ' } })
+    fireEvent.blur(feld)
+    expect(updateSegment).not.toHaveBeenCalled()
+  })
 })

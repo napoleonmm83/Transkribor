@@ -44,7 +44,10 @@ export function useDoc(project: string | null, base: string | null) {
   // Kopffelder des Dokuments (Kontext, Zusammenfassung). Bewusst ueber dasselbe `beruehrt()`
   // wie eine Segmentaenderung: ein zweiter Speicherweg waere eine zweite Wahrheit darueber,
   // wann ein Dokument als gesichert gilt.
-  const updateDoc = useCallback((patch: Partial<EditDoc>) => {
+  // Absichtlich auf die beiden Kopffelder eingeengt statt `Partial<EditDoc>`: durch eine
+  // weitere Tuer liessen sich sonst `segments` oder `human_edited` schieben und der
+  // Segment-Pfad umgehen. Kommt ein Feld dazu (Issue #112), wird der Typ erweitert.
+  const updateDoc = useCallback((patch: Partial<Pick<EditDoc, 'context' | 'summary'>>) => {
     setDoc(d => d && ({ ...d, ...patch }))
     beruehrt()
   }, [beruehrt])
