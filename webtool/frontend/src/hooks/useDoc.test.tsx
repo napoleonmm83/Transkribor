@@ -180,6 +180,28 @@ describe('useDoc: gleichzeitige Speicherlaeufe', () => {
 
     expect(h.result.current.stand).toBe('ruhig')     // ohne `meins()`: 'gespeichert'
   })
+
+  it('der Dokumentschluessel verwechselt „A B“/„C“ nicht mit „A“/„B C“', async () => {
+    // Projektnamen enthalten Leerzeichen („US Car Treff Rthi“). Mit einem Leerzeichen als
+    // Trenner ergaeben beide Paare denselben Schluessel — `meins()` haelte den Lauf der einen
+    // Datei fuer den der anderen und meldete „gespeichert“ fuer ein ungeschriebenes Dokument.
+    const docB: EditDoc = { ...doc, project: 'A', base: 'B C' }
+    let fertigA: () => void = () => {}
+    vi.mocked(api.saveDoc).mockReturnValueOnce(new Promise<void>(r => { fertigA = r }) as never)
+    vi.useFakeTimers()
+    vi.mocked(api.getDoc).mockResolvedValue({ ...doc, project: 'A B', base: 'C' })
+    const h = renderHook(({ p, b }) => useDoc(p, b), { initialProps: { p: 'A B', b: 'C' } })
+    await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+    await act(async () => { h.result.current.updateSegment(0, { text: 'A-Text' }) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(800) })   // Lauf haengt
+
+    vi.mocked(api.getDoc).mockResolvedValue(docB)
+    h.rerender({ p: 'A', b: 'B C' })
+    await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+    await act(async () => { fertigA(); await vi.advanceTimersByTimeAsync(0) })
+
+    expect(h.result.current.stand).toBe('ruhig')     // mit Leerzeichen-Trenner: 'gespeichert'
+  })
 })
 
 describe('useDoc: Dateiwechsel mitten im Speichern', () => {
@@ -274,6 +296,38 @@ describe('useDoc: wartender Lauf liest den falschen Zaehlerstand', () => {
     expect(rufe[rufe.length - 1][2].segments[0].text).toBe('drei')
     expect(result.current.dirty).toBe(false)
     expect(result.current.stand).toBe('gespeichert')
+  })
+})
+
+describe('useDoc: Dokument A darf nie in Datei B landen', () => {
+  it('nach einem Dateiwechsel schreibt die Entprellung nicht das alte Dokument unter den neuen Pfad', async () => {
+    // Befund aus Review-Runde 2, VORBESTEHEND (auch ohne die Verkettung). `reload()` ersetzt das
+    // Dokument erst, wenn `getDoc` zurueckkommt. Bis dahin gilt: doc = A, project/base = B,
+    // dirty = true (aus A). Der Entprellungs-Timer wird durch den base-Wechsel neu gesetzt und
+    // feuert mit saveDoc(B-Pfad, A-Dokument). `meins()` greift nicht: der Lauf traegt Bs Pfad,
+    // die Ungleichheit liegt INNERHALB der Closure.
+    // Auf der Platte: b2.edit.json wird durch A ersetzt, b2.md neu gerendert, human_edited=true.
+    const docB: EditDoc = { ...doc, base: 'b2' }
+    vi.mocked(api.saveDoc).mockResolvedValue(undefined as never)
+    vi.useFakeTimers()
+    vi.mocked(api.getDoc).mockResolvedValue(doc)
+    const h = renderHook(({ b }) => useDoc('P', b), { initialProps: { b: 'b' } })
+    await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+
+    await act(async () => { h.result.current.updateSegment(0, { text: 'A-Text' }) })
+
+    // Wechsel, waehrend getDoc(B) noch haengt
+    let fertigB: (d: EditDoc) => void = () => {}
+    vi.mocked(api.getDoc).mockReturnValue(new Promise<EditDoc>(r => { fertigB = r }))
+    h.rerender({ b: 'b2' })
+    await act(async () => { await vi.advanceTimersByTimeAsync(900) })   // Entprellung feuert hier
+
+    const falsch = vi.mocked(api.saveDoc).mock.calls
+      .filter(c => c[1] !== c[2].base)
+      .map(c => `${c[1]} <- ${c[2].base}`)
+    expect(falsch).toEqual([])
+
+    await act(async () => { fertigB(docB); await vi.advanceTimersByTimeAsync(0) })
   })
 })
 
