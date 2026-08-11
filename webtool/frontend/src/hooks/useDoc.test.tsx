@@ -135,10 +135,50 @@ describe('useDoc: gleichzeitige Speicherlaeufe', () => {
     await act(async () => { warteschlange.shift()?.(); await vi.advanceTimersByTimeAsync(0) })
     await act(async () => { warteschlange.shift()?.(); await vi.advanceTimersByTimeAsync(0) })
 
-    const rufe = vi.mocked(api.saveDoc).mock.calls
-    expect(rufe[rufe.length - 1][2].segments[0].text).toBe('zwei')   // der neuere Stand zuletzt
-    expect(result.current.dirty).toBe(false)
-    expect(result.current.stand).toBe('gespeichert')                 // nicht "offen" ohne Nachfassen
+    // Mehr prueft dieser Test bewusst NICHT: die Reihenfolge beim Server ist von hier aus nicht
+    // sichtbar, und die Warteschlange arbeitet er selbst in der Reihenfolge A->B ab — jede
+    // Zusicherung darueber waere auch ohne die Verkettung gruen. Den Inhalt sichert der Test
+    // „der zuletzt getippte Stand geht nicht verloren“ weiter unten.
+  })
+
+  it('eine Ablehnung ohne Error-Objekt legt den Autosave nicht lahm', async () => {
+    // Der catch-Block dereferenzierte `e` (`(e as Error).message`) und konnte damit SELBST
+    // werfen. Dann lehnt `kette.current` ab, jedes weitere `.then()` reicht die Ablehnung
+    // durch — und ALLE folgenden Speicherlaeufe der Sitzung fallen still aus.
+    vi.mocked(api.saveDoc).mockRejectedValueOnce(null as never)
+    vi.mocked(api.saveDoc).mockResolvedValue(undefined as never)
+    const { result } = await geladen()
+
+    await act(async () => { result.current.updateSegment(0, { text: 'eins' }) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(800) })
+    expect(result.current.stand).toBe('fehler')
+
+    await act(async () => { result.current.updateSegment(0, { text: 'zwei' }) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(800) })
+    expect(api.saveDoc).toHaveBeenCalledTimes(2)     // der zweite Lauf kommt ueberhaupt dran
+    expect(result.current.stand).toBe('gespeichert')
+  })
+
+  it('nach einem Dateiwechsel OHNE Tastendruck meldet B nicht "gespeichert"', async () => {
+    // Was `meins()` allein traegt: ohne Tastendruck in B passt `fassung` weiterhin, der
+    // Zaehler-Waechter greift also nicht. Ohne den Guard meldete die Leiste „gespeichert“ fuer
+    // ein Dokument, das nie geschrieben wurde.
+    const docB: EditDoc = { ...doc, base: 'b2' }
+    let fertigA: () => void = () => {}
+    vi.mocked(api.saveDoc).mockReturnValueOnce(new Promise<void>(r => { fertigA = r }) as never)
+    vi.useFakeTimers()
+    vi.mocked(api.getDoc).mockResolvedValue(doc)
+    const h = renderHook(({ b }) => useDoc('P', b), { initialProps: { b: 'b' } })
+    await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+    await act(async () => { h.result.current.updateSegment(0, { text: 'A-Text' }) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(800) })   // Lauf fuer A haengt
+
+    vi.mocked(api.getDoc).mockResolvedValue(docB)
+    h.rerender({ b: 'b2' })
+    await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+    await act(async () => { fertigA(); await vi.advanceTimersByTimeAsync(0) })
+
+    expect(h.result.current.stand).toBe('ruhig')     // ohne `meins()`: 'gespeichert'
   })
 })
 
@@ -207,6 +247,33 @@ describe('useDoc: Dateiwechsel mitten im Speichern', () => {
     await act(async () => { fertigA1(); await vi.advanceTimersByTimeAsync(0) })
 
     expect(h.result.current.dirty).toBe(true)   // Bs Tastendruck ist NICHT gesichert
+  })
+})
+
+describe('useDoc: wartender Lauf liest den falschen Zaehlerstand', () => {
+  it('der zuletzt getippte Stand geht nicht verloren — auch ohne Dateiwechsel', async () => {
+    // Befund aus dem Review von PR #116. `doc` wird beim ANHAENGEN eingefangen, `fassung` aber
+    // erst beim START gelesen. Ein wartender Lauf sieht damit Tastendruecke, die nach seinem
+    // Anhaengen kamen, als seinen eigenen Stand — und meldet sie als gesichert.
+    const dauern = [1400, 300, 300, 300, 300]
+    let i = 0
+    vi.mocked(api.saveDoc).mockImplementation((() =>
+      new Promise<void>(r => { setTimeout(r, dauern[i++] ?? 300) })) as never)
+
+    const { result } = await geladen()
+    await act(async () => { result.current.updateSegment(0, { text: 'eins' }) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(850) })
+    await act(async () => { result.current.updateSegment(0, { text: 'zwei' }) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(1050) })
+    await act(async () => { result.current.updateSegment(0, { text: 'drei' }) })
+    // In kleinen Schritten: ein Vorlauf am Stueck fuehrte die Effekt-Bereinigung erst nach
+    // allen Timern aus und definierte den Fall weg.
+    for (let t = 0; t < 560; t++) await act(async () => { await vi.advanceTimersByTimeAsync(50) })
+
+    const rufe = vi.mocked(api.saveDoc).mock.calls
+    expect(rufe[rufe.length - 1][2].segments[0].text).toBe('drei')
+    expect(result.current.dirty).toBe(false)
+    expect(result.current.stand).toBe('gespeichert')
   })
 })
 

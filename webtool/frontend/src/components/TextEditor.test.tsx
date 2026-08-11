@@ -73,4 +73,16 @@ describe('TextEditor', () => {
     fireEvent.blur(screen.getByRole('textbox'))
     expect(onCommit).not.toHaveBeenCalled()   // Feld == Dokument, es gibt nichts zu schreiben
   })
+  it('verwirft dabei Getipptes — bewusst, aber es ist eine Entscheidung', () => {
+    // Issue #114 liess die Frage offen. Entschieden zugunsten des Verwerfens: eine fertige
+    // Korrektur wiegt schwerer als nicht uebernommene Tastendruecke. Dieser Test haelt die
+    // Entscheidung fest, damit sie beim naechsten Lesen nicht wie ein Fehler aussieht.
+    const onCommit = vi.fn(), onCancel = vi.fn()
+    const { rerender } = render(<TextEditor initial="alt" onCommit={onCommit} onCancel={onCancel} />)
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'meine Handarbeit' } })
+    rerender(<TextEditor initial="neu" onCommit={onCommit} onCancel={onCancel} />)
+    expect(screen.getByRole('textbox')).toHaveValue('neu')
+    expect(onCommit).not.toHaveBeenCalled()   // still verworfen, nicht geschrieben
+    expect(onCancel).not.toHaveBeenCalled()
+  })
 })

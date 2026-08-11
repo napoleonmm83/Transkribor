@@ -20,6 +20,14 @@ export function TextEditor({ initial, onCommit, onCancel }: {
     // Rueckfrage in `DateiMenue` haengt an `dirty`), und selbst wer bewusst „korrigierte Fassung
     // laden“ waehlt, verlor sie so wieder. Der Schluessel baut das Feld beim Wechsel des
     // Ausgangswerts neu auf; `autoFocus` setzt den Fokus dabei zurueck.
+    //
+    // BEWUSST IN KAUF GENOMMEN: hatte der Nutzer im Feld schon getippt und noch nicht
+    // uebernommen, ist das Getippte damit weg — ohne Meldung. Issue #114 hat die Frage
+    // ausdruecklich offengelassen („ein stilles Verwerfen waere genauso falsch wie ein stilles
+    // Ueberschreiben“); entschieden ist sie hier zugunsten des Verwerfens, weil eine fertige
+    // Korrektur schwerer wiegt als ein paar nicht uebernommene Tastendruecke. Der Test
+    // „verwirft Getipptes“ haelt die Entscheidung fest, damit sie niemand fuer einen Fehler
+    // haelt. Was fehlt, ist der Hinweis an den Nutzer — Issue dazu ist gefilt.
     <Textarea key={initial} defaultValue={initial} autoFocus
       className="min-h-0 resize-none leading-relaxed"
       onBlur={e => fertig(e.target.value)}
