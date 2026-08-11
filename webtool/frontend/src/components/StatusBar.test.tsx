@@ -3,6 +3,7 @@ import { render, screen, waitFor, act } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { StatusBar } from './StatusBar'
 import { JobProvider } from '@/hooks/useActiveJob'
+import { ThemeProvider } from './ThemeProvider'
 import * as api from '@/lib/api'
 import type { UpdateZustand } from '@/lib/types'
 
@@ -56,6 +57,18 @@ describe('StatusBar', () => {
     vi.mocked(api.getHardware).mockRejectedValue(new Error('weg'))
     zeigen()
     expect(screen.getByRole('link', { name: /Einstellungen/ })).toHaveAttribute('href', '/einstellungen')
+  })
+
+  it('haelt den Theme-Umschalter auf jeder Seite bereit und schaltet ihn um', async () => {
+    // Vorher hing er in der Editor-Werkzeugleiste — auf der Uebersicht kam man nicht heran.
+    vi.mocked(api.getHardware).mockRejectedValue(new Error('weg'))
+    localStorage.setItem('theme', 'dark')   // sonst fragt der Provider matchMedia, das jsdom nicht hat
+    render(<MemoryRouter><ThemeProvider><JobProvider><StatusBar /></JobProvider></ThemeProvider></MemoryRouter>)
+    const knopf = screen.getByRole('button', { name: /hellem Design/ })
+    expect(document.documentElement.classList.contains('dark')).toBe(true)
+    await act(async () => { knopf.click() })
+    expect(document.documentElement.classList.contains('dark')).toBe(false)
+    expect(screen.getByRole('button', { name: /dunklem Design/ })).toBeInTheDocument()
   })
 
   it('zeigt die Version auch ohne Electron-Bruecke', async () => {
