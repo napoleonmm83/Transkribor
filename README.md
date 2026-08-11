@@ -69,6 +69,10 @@ richtig — er wird im ganzen Dokument nachgezogen, auch in Kontext, Zusammenfas
 Anmerkungen, und steht so auch im Export richtig da. **Speichern musst du nichts:** kurz nach
 jeder Änderung sichert Transkribor von selbst, oben links steht, woran es gerade ist.
 
+**Stellen wiederfinden.** Das Suchfeld oben im Editor durchsucht das ganze Transkript: Treffer
+bleiben hell, alles andere tritt in den Hintergrund, und mit `▲` `▼` springst du von Fundstelle
+zu Fundstelle — bei mehreren tausend Wörtern die schnellste Art, „wo hat er genau das gesagt?".
+
 **Auch Kontext und Zusammenfassung sind deine.** Die beiden Absätze über dem Gespräch schreibt
 die KI — und sie stehen im Text-Export ganz oben, also liest sie jeder zuerst. Ein Klick
 darauf öffnet sie zum Bearbeiten; ist noch nichts da, legst du sie an derselben Stelle selbst
