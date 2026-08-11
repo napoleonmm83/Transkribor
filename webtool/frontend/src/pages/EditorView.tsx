@@ -12,11 +12,11 @@ import type { WaveHandle } from '@/components/Waveform'
 export function EditorView() {
   const { project, base } = useParams<{ project: string; base: string }>()
   const sel = project && base ? { project, base } : null
-  const { doc, dirty, stand, loading: docLoading, updateSegment, updateDoc, renameSpeaker, exportDownload, reload } = useDoc(sel?.project ?? null, sel?.base ?? null)
+  const { doc, dirty, stand, loading: docLoading, updateSegment, updateDoc, renameSpeaker, exportDownload, reload, vergiss } = useDoc(sel?.project ?? null, sel?.base ?? null)
   // Die Leiste in der Huelle navigiert und startet Einzeldatei-Korrekturen — beides braucht
   // Dinge, die nur hier existieren. Ohne diese Meldung wechselt ein Klick ohne Rueckfrage
   // ueber ungespeicherte Aenderungen hinweg, und ein Korrekturlauf bleibt unsichtbar.
-  useEditorMelden(sel ? { ...sel, dirty, stand, reload } : null)
+  useEditorMelden(sel ? { ...sel, dirty, stand, reload, vergiss } : null)
   const waveRef = useRef<WaveHandle>(null)
   const [activeId, setActiveId] = useState<number | null>(null)
   const onTime = useCallback((t: number) => {
