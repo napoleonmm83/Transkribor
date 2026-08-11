@@ -23,23 +23,43 @@ test('Windows: winget automatisch, torch aus dem CUDA-Index', () => {
   assert.match(p.torchIndex, /cu128/)
 })
 
-test('macOS: kein Automatismus, torch vom PyPI-Standardrad (bringt MPS mit)', () => {
-  const p = plan('darwin', '', 'arm64')
+test('macOS OHNE Homebrew: kein Automatismus, torch vom PyPI-Standardrad (bringt MPS mit)', () => {
+  const p = plan('darwin', '', 'arm64', false)
   assert.strictEqual(p.autoInstall, false)
+  assert.strictEqual(p.installer, null)
   assert.strictEqual(p.torchIndex, null)
-  assert.match(p.hinweis, /brew install/)
 })
 
-test('macOS arm64: whisper-cpp steht im brew-Befehl (die schnelle Engine)', () => {
-  assert.match(plan('darwin', '', 'arm64').hinweis, /brew install python ffmpeg whisper-cpp/)
+test('macOS ohne Homebrew nennt den Befehl, der Homebrew installiert — nicht `brew install`', () => {
+  // Vorher stand hier `brew install python ffmpeg whisper-cpp`. Ohne Homebrew endet das mit
+  // "command not found: brew" — ein Rat, der genau dem nicht hilft, der ihn braucht.
+  const p = plan('darwin', '', 'arm64', false)
+  assert.match(p.hinweis, /Homebrew/)
+  assert.match(p.hinweis, /install\.sh/)
+})
+
+test('macOS MIT Homebrew installiert die App selbst (brew install braucht kein sudo)', () => {
+  const p = plan('darwin', '', 'arm64', true)
+  assert.strictEqual(p.autoInstall, true)
+  assert.strictEqual(p.installer, 'brew')
+  assert.strictEqual(p.hinweis, '')
+  assert.strictEqual(p.torchIndex, null)
+})
+
+test('macOS arm64: whisper-cpp gehoert zu den Paketen (die schnelle Engine)', () => {
+  assert.deepStrictEqual(plan('darwin', '', 'arm64', true).brewPakete,
+    ['python', 'ffmpeg', 'whisper-cpp'])
 })
 
 test('Intel-macOS: kein whisper-cpp — dort rechnet ohnehin faster-whisper', () => {
-  // webtool/device.py:asr_engine prueft arm64. Einem Intel-Mac `brew install whisper-cpp`
-  // zu raten waere ein Rat, der nichts bewirkt — python und ffmpeg braucht er aber weiter.
-  const p = plan('darwin', '', 'x64')
-  assert.match(p.hinweis, /brew install python ffmpeg/)
-  assert.doesNotMatch(p.hinweis, /whisper-cpp/)
+  // webtool/device.py:asr_engine prueft arm64. Auf einem Intel-Mac waere das Paket ein
+  // Download, der nichts bewirkt — python und ffmpeg braucht er aber weiter.
+  assert.deepStrictEqual(plan('darwin', '', 'x64', true).brewPakete, ['python', 'ffmpeg'])
+})
+
+test('Linux bleibt beim Hinweis — apt/dnf/pacman brauchen echtes sudo', () => {
+  assert.strictEqual(plan('linux', 'apt').installer, null)
+  assert.match(plan('linux', 'apt').hinweis, /sudo/)
 })
 
 test('nutztWhisperCpp gilt nur fuer macOS auf arm64', () => {

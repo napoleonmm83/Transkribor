@@ -66,8 +66,8 @@ parallel — du kannst weiterarbeiten oder das Fenster zumachen.
 
 - **Windows oder Linux:** am besten eine NVIDIA-Grafikkarte. Damit ist ein einstündiges
   Interview in wenigen Minuten fertig.
-- **macOS:** Apple Silicon (M1 oder neuer). Dazu einmalig im Terminal:
-  `brew install python ffmpeg whisper-cpp`
+- **macOS:** Apple Silicon (M1 oder neuer). Falls du **Homebrew** noch nicht hast, einmalig
+  von [brew.sh](https://brew.sh) installieren — den Rest holt sich Transkribor selbst.
 - **Ohne passende Grafikkarte** läuft ebenfalls alles, nur langsamer — dann in den
   Einstellungen eine kleinere Qualitätsstufe wählen.
 

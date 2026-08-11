@@ -48,42 +48,66 @@ const LINUX_PAKETE = {
   pacman: 'sudo pacman -S python ffmpeg',
 }
 
+/** Der Einzeiler von brew.sh — der einzige Schritt auf macOS, den die App nicht abnehmen
+ *  kann: Homebrew legt /opt/homebrew an und fragt dabei nach dem Administratorkennwort. */
+const BREW_INSTALL =
+  '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"'
+
 /**
  * Was auf dieser Plattform zu tun ist — reine Funktion, damit die Entscheidung ohne
  * laufendes Electron pruefbar ist.
  *
- * Auf macOS/Linux installieren wir NICHT selbst: beides braeuchte sudo bzw. ein
- * vorhandenes Homebrew, und eine GUI-App, die dafuer einen Passwort-Prompt aufmacht,
- * ist zu viel Magie. Stattdessen zeigt die Statusseite den Befehl zum Kopieren.
+ * **macOS installiert die App selbst, sobald Homebrew da ist.** Frueher zeigte sie hier nur
+ * den Befehl zum Kopieren, mit der Begruendung „braeuchte sudo". Das stimmt fuer Homebrew
+ * SELBST (es legt /opt/homebrew an) — aber nicht fuer `brew install <paket>`: der Ordner
+ * gehoert danach dem Nutzer, und brew verlangt dort kein Kennwort. Die beiden Faelle waren
+ * vermischt, und der Nutzer tippte einen Befehl ab, den die App genauso gut ausfuehren kann.
+ * Ohne Homebrew bleibt es beim Hinweis — dann aber inklusive der Zeile, die Homebrew
+ * ueberhaupt erst installiert (vorher stand dort ein `brew install …`, das ohne brew mit
+ * „command not found" endet).
+ *
+ * Linux bleibt beim Hinweis: `apt`/`dnf`/`pacman` brauchen echtes sudo.
  *
  * torch: macOS bekommt das normale PyPI-Rad — es bringt MPS mit, ein CUDA-Index
  * existiert dort gar nicht. Linux zieht cu128 ohne vorherige NVIDIA-Erkennung: die
  * Raeder installieren auch ohne Karte und fallen zur Laufzeit auf CPU zurueck.
  */
-function plan(platform, paketmanager, arch = process.arch) {
+function plan(platform, paketmanager, arch = process.arch, brew = false) {
   if (platform === 'win32') {
-    return { torchIndex: TORCH_INDEX, autoInstall: true, hinweis: '' }
+    return { torchIndex: TORCH_INDEX, autoInstall: true, installer: 'winget', hinweis: '' }
   }
   if (platform === 'darwin') {
+    // whisper-cpp ist die ASR-Engine auf Apple Silicon (gemessen 5.29x statt 0.81x realtime,
+    // siehe webtool/whispercpp.py). Fehlt es, laeuft die Transkription weiter — nur langsam
+    // ueber faster-whisper auf der CPU. NUR auf arm64: webtool/device.py:asr_engine prueft
+    // die Architektur, ein Intel-Mac bekommt dort immer faster-whisper; ihn trotzdem
+    // `brew install whisper-cpp` tippen zu lassen waere ein Rat, der nichts bewirkt.
+    const pakete = arch === 'arm64' ? ['python', 'ffmpeg', 'whisper-cpp'] : ['python', 'ffmpeg']
+    if (brew) {
+      return { torchIndex: null, autoInstall: true, installer: 'brew', brewPakete: pakete, hinweis: '' }
+    }
     return {
       torchIndex: null,
       autoInstall: false,
-      // whisper-cpp ist die ASR-Engine auf Apple Silicon (gemessen 5.29x statt 0.81x
-      // realtime, siehe webtool/whispercpp.py). Fehlt es, laeuft die Transkription
-      // weiter — nur langsam ueber faster-whisper auf der CPU. Darum steht es in
-      // derselben Zeile wie python und ffmpeg und nicht in einem eigenen Schritt.
-      //
-      // NUR auf arm64: webtool/device.py:asr_engine prueft die Architektur, ein
-      // Intel-Mac bekommt dort immer faster-whisper. Ihn trotzdem `brew install
-      // whisper-cpp` tippen zu lassen waere ein Rat, der nichts bewirkt.
-      hinweis: arch === 'arm64'
-        ? 'Bitte einmalig installieren:  brew install python ffmpeg whisper-cpp'
-        : 'Bitte einmalig installieren:  brew install python ffmpeg',
+      installer: null,
+      brewPakete: pakete,
+      hinweis: `Bitte einmalig Homebrew installieren:  ${BREW_INSTALL}\n`
+        + 'Danach „Erneut versuchen" — den Rest erledigt Transkribor selbst.',
     }
   }
   const befehl = LINUX_PAKETE[paketmanager]
     || 'Bitte python3 (>= 3.10), python3-venv und ffmpeg ueber die Paketverwaltung installieren.'
-  return { torchIndex: TORCH_INDEX, autoInstall: false, hinweis: `Bitte einmalig installieren:  ${befehl}` }
+  return {
+    torchIndex: TORCH_INDEX, autoInstall: false, installer: null,
+    hinweis: `Bitte einmalig installieren:  ${befehl}`,
+  }
+}
+
+/** Liegt Homebrew auf dieser Maschine? Nur auf macOS gefragt — `ausgabe` sucht ueber
+ *  spawnEnv() auch in /opt/homebrew/bin, das eine aus dem Finder gestartete .app nicht erbt. */
+async function brewDa() {
+  if (process.platform !== 'darwin') return false
+  return !!(await ausgabe('brew', ['--version']))
 }
 
 /** Welcher Paketmanager liegt auf diesem Linux? Leerstring, wenn keiner erkannt wird. */
@@ -217,7 +241,7 @@ async function status() {
   const py = await findePython()
   const ff = await findeFfmpeg()
   const wcpp = await findeWhisperCpp()
-  const pl = plan(process.platform, await paketmanager())
+  const pl = plan(process.platform, await paketmanager(), process.arch, await brewDa())
   const macFehlt = nutztWhisperCpp() && !wcpp
   return {
     python: py ? `Python ${py.version}` : '',
@@ -243,13 +267,21 @@ async function einrichten(onLine, onSchritt) {
   const schritte = []
   let py = await findePython()
   const pm = await paketmanager()
-  const pl = plan(process.platform, pm)
+  const pl = plan(process.platform, pm, process.arch, await brewDa())
+  /** Ein Paket ueber den Installer dieser Plattform. `null` = hier installiert die App nicht. */
+  const holen = (winget, brewPaket) => {
+    if (pl.installer === 'winget') {
+      return lauf('winget', ['install', '-e', '--id', winget,
+        '--accept-package-agreements', '--accept-source-agreements'], onLine)
+    }
+    if (pl.installer === 'brew') return lauf('brew', ['install', brewPaket], onLine)
+    return null
+  }
 
-  if (!py && pl.autoInstall) {
+  if (!py && pl.installer) {
     onSchritt('Python installieren')
-    onLine('Python nicht gefunden — installiere Python 3.13 ueber winget …')
-    const code = await lauf('winget', ['install', '-e', '--id', 'Python.Python.3.13',
-      '--accept-package-agreements', '--accept-source-agreements'], onLine)
+    onLine('Python nicht gefunden — installiere es …')
+    const code = await holen('Python.Python.3.13', 'python')
     if (code !== 0) return { ok: false, fehler: 'Python konnte nicht installiert werden. Bitte von python.org installieren und Transkribor neu starten.' }
     py = await findePython()
     if (!py) return { ok: false, fehler: 'Python wurde installiert, ist aber noch nicht im PATH. Bitte Transkribor neu starten.' }
@@ -258,16 +290,23 @@ async function einrichten(onLine, onSchritt) {
   schritte.push(`Python: ${py.version}`)
 
   if (!(await findeFfmpeg())) {
-    if (pl.autoInstall) {
+    if (pl.installer) {
       onSchritt('ffmpeg installieren')
-      onLine('ffmpeg nicht gefunden — installiere ueber winget …')
+      onLine('ffmpeg nicht gefunden — installiere es …')
       // Nicht abbrechen wenn es scheitert: ohne ffmpeg laeuft immerhin noch das Bearbeiten
       // vorhandener Transkripte.
-      await lauf('winget', ['install', '-e', '--id', 'Gyan.FFmpeg',
-        '--accept-package-agreements', '--accept-source-agreements'], onLine)
+      await holen('Gyan.FFmpeg', 'ffmpeg')
     } else {
       onLine(`ffmpeg nicht gefunden. ${pl.hinweis}`)
     }
+  }
+
+  // whisper-cpp gibt es nur auf Apple Silicon und nur ueber brew. Es fehlt sonst STILL —
+  // die Transkription laeuft dann sechsmal langsamer, ohne dass jemand den Grund erfaehrt.
+  // Kein Abbruch bei Fehlschlag: langsam ist besser als gar nicht.
+  if (pl.installer === 'brew' && pl.brewPakete.includes('whisper-cpp') && !(await findeWhisperCpp())) {
+    onSchritt('Schnelle Spracherkennung (whisper-cpp) installieren')
+    await lauf('brew', ['install', 'whisper-cpp'], onLine)
   }
 
   if (!P.exists(P.venvPython(P.venv))) {
