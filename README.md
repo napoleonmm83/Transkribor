@@ -1,6 +1,24 @@
+<div align="center">
+
+<img src="docs/bilder/marke.png" width="76" alt="">
+
 # Transkribor
 
 **Aus Interview-Aufnahmen werden lesbare Transkripte — auf deinem eigenen Rechner.**
+
+<a href="https://github.com/napoleonmm83/Transkribor/releases/latest"><img alt="Neueste Version" src="https://img.shields.io/github/v/release/napoleonmm83/Transkribor?style=flat-square&color=4F46E5&label=Version"></a>
+<a href="https://github.com/napoleonmm83/Transkribor/releases"><img alt="Downloads" src="https://img.shields.io/github/downloads/napoleonmm83/Transkribor/total?style=flat-square&color=4F46E5&label=Downloads"></a>
+<img alt="Windows, macOS, Linux" src="https://img.shields.io/badge/Windows%20·%20macOS%20·%20Linux-4F46E5?style=flat-square">
+<a href="LICENSE"><img alt="MIT-Lizenz" src="https://img.shields.io/badge/Lizenz-MIT-4F46E5?style=flat-square"></a>
+
+**<a href="https://github.com/napoleonmm83/Transkribor/releases/latest">Herunterladen</a>** ·
+<a href="#in-drei-schritten-loslegen">Loslegen</a> ·
+<a href="#was-du-davon-hast">Funktionen</a> ·
+<a href="#gefällt-es-dir">Unterstützen</a>
+
+<img src="docs/bilder/editor-abspielen.gif" width="880" alt="Der Editor spielt einen Redebeitrag ab: das aktive Segment ist hervorgehoben, die Wellenform läuft mit, unsichere Wörter sind farbig markiert.">
+
+</div>
 
 Du ziehst deine Audiodatei ins Fenster, der Rest passiert von selbst: Transkribor schreibt
 mit, erkennt, **wer gerade spricht**, korrigiert falsch verstandene Wörter im Zusammenhang
@@ -13,16 +31,19 @@ Vereins- und Firmenarchive. Auch mit **Schweizerdeutsch** kommt es zurecht.
 
 ## In drei Schritten loslegen
 
-1. **[Transkribor herunterladen](https://github.com/napoleonmm83/Transkribor/releases)** und
-   installieren (Windows, macOS oder Linux).
+1. **[Transkribor herunterladen](https://github.com/napoleonmm83/Transkribor/releases/latest)**
+   und installieren.
 2. Beim ersten Start richtet sich die App selbst ein. Das dauert einmalig 10–30 Minuten und
    lädt mehrere Gigabyte — danach nie wieder.
 3. Projekt anlegen, Audiodatei hineinziehen. **Fertig** — die Arbeit startet von allein, und
    du siehst live, wie weit sie ist.
 
-> Der Installer ist nicht bei Microsoft bzw. Apple registriert (das kostet Jahresgebühren).
-> Windows zeigt darum „Computer geschützt" → *Weitere Informationen* → *Trotzdem ausführen*.
-> Auf dem Mac: Rechtsklick auf die App → *Öffnen*.
+> **Beim ersten Öffnen warnt das Betriebssystem.** Der Installer ist nicht bei Microsoft bzw.
+> Apple registriert — das kostet Jahresgebühren, die ein kostenloses Projekt nicht trägt.
+> Windows: *Weitere Informationen* → *Trotzdem ausführen*. macOS: Rechtsklick auf die App →
+> *Öffnen*.
+
+<img src="docs/bilder/arbeitsflaeche.png" alt="Die Arbeitsfläche eines Projekts: eine Fläche zum Hineinziehen von Audio, ein Feld für Video-Links und die Dateiliste mit dem Stand jeder Aufnahme.">
 
 ---
 
@@ -60,16 +81,19 @@ holt sich die Tonspur selbst.
 **Es wartet nicht auf dich.** Aufnahmen werden nacheinander abgearbeitet, mehrere Projekte
 parallel — du kannst weiterarbeiten oder das Fenster zumachen.
 
+<img src="docs/bilder/editor-hell.png" alt="Derselbe Editor im hellen Design: Zusammenfassung des Gesprächs, Redebeiträge mit Sprechernamen und Zeitmarken, unten die Wellenform mit Wiedergabe.">
+
+<div align="center"><sub>Hell oder dunkel — umschaltbar unten rechts, auf jeder Seite.</sub></div>
+
 ---
 
 ## Was du brauchst
 
-- **Windows oder Linux:** am besten eine NVIDIA-Grafikkarte. Damit ist ein einstündiges
-  Interview in wenigen Minuten fertig.
-- **macOS:** Apple Silicon (M1 oder neuer). Falls du **Homebrew** noch nicht hast, einmalig
-  von [brew.sh](https://brew.sh) installieren — den Rest holt sich Transkribor selbst.
-- **Ohne passende Grafikkarte** läuft ebenfalls alles, nur langsamer — dann in den
-  Einstellungen eine kleinere Qualitätsstufe wählen.
+| Dein Rechner | Was du vorbereiten musst | Eine Stunde Audio dauert dann |
+|---|---|---|
+| **Windows/Linux** mit NVIDIA-Grafikkarte | nichts | wenige Minuten |
+| **Mac** mit Apple Silicon (M1+) | [Homebrew](https://brew.sh), falls noch nicht da | gut zehn Minuten |
+| ohne Grafikbeschleunigung | nichts — kleinere Qualitätsstufe wählen | deutlich länger |
 
 Für die Korrektur und die Sprechernamen braucht es zusätzlich ein Sprachmodell: entweder ein
 Abo, das du vielleicht schon hast (Claude Code oder ChatGPT/Codex), ein eigener Schlüssel bei
@@ -81,15 +105,12 @@ entfällt nur die Korrektur.
 
 ## Häufige Fragen
 
-**Kostet es etwas?** Nein. Transkribor ist freie Software (Open Source). Kosten entstehen nur,
+**Kostet es etwas?** Nein. Transkribor ist freie Software (MIT-Lizenz). Kosten entstehen nur,
 wenn du für die Korrektur einen kostenpflichtigen KI-Dienst wählst — mit einem vorhandenen
 Abo oder einem lokalen Modell entfällt auch das.
 
 **Brauche ich Internet?** Nur zum Herunterladen und für die einmalige Einrichtung. Danach
 arbeitet das Transkribieren offline.
-
-**Wie lange dauert eine Stunde Audio?** Mit NVIDIA-Grafikkarte wenige Minuten, auf einem
-Apple-Silicon-Mac gut zehn, ohne Grafikbeschleunigung deutlich länger.
 
 **Welche Sprachen?** Voreingestellt ist Deutsch (inklusive Schweizerdeutsch, das als
 Hochdeutsch verschriftet wird). In den Einstellungen lässt sich jede andere von Whisper
@@ -107,7 +128,11 @@ Transkribor ist kostenlos und bleibt es. Wenn es dir Arbeit abnimmt, freue ich m
 Unterstützung — sie fliesst in Entwicklungszeit und die Signatur-Zertifikate, die den
 Installer künftig ohne Warnmeldung durchgehen lassen.
 
+<div align="center">
+
 **[❤ Transkribor unterstützen](https://github.com/sponsors/napoleonmm83)**
+
+</div>
 
 Genauso hilfreich und kostenlos: einen [Fehler melden oder eine Idee
 vorschlagen](https://github.com/napoleonmm83/Transkribor/issues) — oder dem Projekt einen
@@ -115,7 +140,10 @@ Stern geben.
 
 ---
 
-## Für Entwickler
+<details>
+<summary><strong>Für Entwickler</strong> — aus dem Repo starten, CLI, Aufbau</summary>
+
+<br>
 
 Die Desktop-App ist der empfohlene Weg; alles darin läuft aber auch direkt aus dem Repo.
 
@@ -159,3 +187,8 @@ Messungen dahinter — steht in [`CLAUDE.md`](CLAUDE.md), Entwürfe in
 Sprechertrennung mit pyannote, Korrektur über einen frei wählbaren LLM-Anbieter, Oberfläche
 als React 19 + Vite + TypeScript + Tailwind v4 + shadcn/ui, Backend FastAPI, Desktop-Hülle
 Electron mit Auto-Update.
+
+Die Bilder oben zeigen ein **erfundenes** Beispielprojekt — echte Interviewdaten liegen nie
+im Repo.
+
+</details>
