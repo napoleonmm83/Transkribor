@@ -213,6 +213,23 @@ Fensterrahmen. Vier Dinge, die man nicht aus dem Diff liest:
 - **Die Projektliste sortiert das Frontend, nicht das Backend** (`list_projects` liefert
   `os.scandir`-Reihenfolge). Beim Umzug der Liste in die Leiste ging diese Sortierung einmal
   still verloren — wer die Liste anfasst, prüft die Reihenfolge mit.
+- **Eine Aktion, überall dasselbe Symbol.** `Pencil` = **Umbenennen**, `Sparkles` =
+  **Korrigieren**, `ScanText` = **Transkribieren**, `RotateCcw` = **neu** transkribieren,
+  `Trash2` = löschen. Vorher trug `Pencil` die Korrektur (ein Stift verspricht, dass sich ein
+  *Name* ändert) und `Play` die Transkription — dasselbe Dreieck, mit dem `Waveform`,
+  `SegmentView` und `SpeakerTurn` **Ton abspielen**. Beide Fehlbelegungen standen an je zwei
+  Stellen; wer eines dieser Symbole ändert, greift `Sidebar`, `ProjectWorkspace`,
+  `DateiMenue` und `ProjektUmbenennen` **zusammen** ab.
+- **`ProjektMenue` ist der Zwilling von `DateiMenue`, eine Ebene höher** — bewusst nur
+  Umbenennen und Löschen: die Übersicht ist zum Finden da, einen GPU-Lauf startet man auf der
+  Projektseite, wo man sieht, was läuft. `ProjektUmbenennen` und `DeleteProjectDialog` haben
+  dafür einen **gesteuerten Modus** (`offen`/`onOpenChange`, dann ohne eigenen Knopf) statt
+  einer zweiten Lösch-Implementierung; die Dialoge stehen **neben** dem Menü, weil ein Dialog
+  *im* Menü beim Schliessen mit ausgehängt wird (dieselbe Falle wie in `DateiMenue`).
+- **Ein Menüknopf, der auf Hover erscheint, braucht `has-[[data-state=open]]:opacity-100`.**
+  `focus-within` reicht nicht: Radix schiebt den Fokus in den **portalierten** Menüinhalt
+  ausserhalb der Zeile — der Knopf verschwand also genau dann, wenn sein eigenes Menü offen
+  stand. Kein Test hätte das gezeigt (das Menü funktionierte); gefunden im Screenshot.
 
 ## Desktop-App (Electron)
 `.\webtool.ps1` bleibt der Entwickler-Weg; für Nutzer gibt es einen Installer.

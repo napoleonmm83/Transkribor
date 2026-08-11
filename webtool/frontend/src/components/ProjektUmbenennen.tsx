@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { TextCursorInput } from 'lucide-react'
+import { Pencil } from 'lucide-react'
 import { renameProject } from '@/lib/api'
 import { useEditorBruecke } from '@/hooks/useEditorBruecke'
 import { Button } from '@/components/ui/button'
@@ -12,10 +12,16 @@ import { UmbenennenDialog } from './UmbenennenDialog'
  * Die Rueckfrage bei Ungespeichertem holt er sich aus der Editor-Bruecke (wie DateiMenue):
  * das Projekt umzubenennen aendert den Pfad des offenen Dokuments, der Editor laedt darauf neu.
  */
-export function ProjektUmbenennen({ project, onUmbenannt }: {
+export function ProjektUmbenennen({ project, onUmbenannt, offen: von_aussen, onOpenChange }: {
   project: string; onUmbenannt: (neu: string) => void
+  /** Von aussen gesteuert (ProjektMenue): dann OHNE eigenen Knopf — Begruendung wie in
+   *  DeleteProjectDialog. */
+  offen?: boolean; onOpenChange?: (o: boolean) => void
 }) {
-  const [offen, setOffen] = useState(false)
+  const gesteuert = von_aussen !== undefined
+  const [eigen, setEigen] = useState(false)
+  const offen = gesteuert ? von_aussen : eigen
+  const setOffen = (o: boolean) => { if (gesteuert) onOpenChange?.(o); else setEigen(o) }
   const editor = useEditorBruecke()
 
   const speichern = async (neu: string) => {
@@ -28,10 +34,12 @@ export function ProjektUmbenennen({ project, onUmbenannt }: {
 
   return (
     <>
-      <Button size="icon" variant="ghost" className="size-7" title="Projekt umbenennen"
-        aria-label={`Projekt ${project} umbenennen`} onClick={() => setOffen(true)}>
-        <TextCursorInput className="size-3.5" />
-      </Button>
+      {!gesteuert && (
+        <Button size="icon" variant="ghost" className="size-7" title="Projekt umbenennen"
+          aria-label={`Projekt ${project} umbenennen`} onClick={() => setOffen(true)}>
+          <Pencil className="size-3.5" />
+        </Button>
+      )}
       <UmbenennenDialog offen={offen} onOpenChange={setOffen} wert={project}
         titel="Projekt umbenennen"
         beschreibung="Der Ordner wird umbenannt, alle Aufnahmen wandern mit. Nichts wird neu gerechnet."
