@@ -20,16 +20,20 @@ kleinste, isolierbarste Fixes zuerst; jeder PR einzeln prüfbar; voller Review-Z
 `reload()` das Dokument tauscht (fertige Korrektur trifft ein). Weder `onCommit` noch
 `onCancel` feuern; der Nutzer tippt bruchlos im ersetzten Text weiter.
 
-**Lösung:** `TextEditor` trackt lokal (Ref beim `change`), ob der Feldinhalt vom Ausgangswert
-abwich. Der `useEffect`-Cleanup beim Unmount (= Key-Wechsel) feuert eine neue optionale Prop
-`onVerworfen` — **nur** wenn verändert **und** weder `onCommit` noch `onCancel` in diesem
-Render- Zyklus griffen. Der Parent reicht `onVerworfen` an `useDoc` weiter; `useDoc` zeigt
-`toast.info` („korrigierte Fassung geladen, dein nicht übernommener Text wurde ersetzt").
+**Lösung:** `TextEditor` trackt lokal (Ref beim `change`), ob der Feldinhalt aktuell vom
+Ausgangswert abweicht. Der `useEffect`-Cleanup — der bei **jedem** Key-Wechsel der Textarea
+(`initial` ändert sich) **und** beim Unmount läuft — feuert eine neue optionale Prop
+`onVerworfen`, **nur** wenn der Feldwert abweicht **und** weder `onCommit` noch `onCancel` in
+diesem Render-Zyklus griffen. `DokumentFeld` und `SegmentView` (die Blätter, die `TextEditor`
+nutzen) verkabeln `onVerworfen` direkt mit `toast.info(EINGABE_VERWORFEN)`; `useDoc` bleibt
+unangetastet. Bewusst **kein Dateiname** im Toast (s. TextEditor-Kommentar): der Verwurf ist
+synchron zum Klick, und `doc.base` ist beim Wechsel A→B im Feueraugenblick schon B.
 
-**Heikelste Stelle:** Cleanup läuft auch beim echten Commit/Cancel-Unmount. `onVerworfen`
-darf **nur** feuern beim Key-Wechsel-mit-Veränderung. Tests decken alle vier Pfade:
-(1) unverändert → weder toast noch Verwurf, (2) commit → onCommit, kein Verwurf,
-(3) cancel → onCancel, kein Verwurf, (4) key-Wechsel mit Veränderung → onVerworfen.
+**Heikelste Stellen:** Cleanup läuft auch beim echten Commit/Cancel-Unmount. `onVerworfen`
+darf **nur** feuern bei Abweichung-ohne-Commit/Cancel. Tests decken alle Pfade:
+(1) unverändert → kein Verwurf, (2) Abweichung auf Ursprungswert zurückgenommen → kein Verwurf,
+(3) commit → `onCommit`, kein Verwurf, (4) cancel → `onCancel`, kein Verwurf,
+(5) Key-Wechsel/Unmount mit Abweichung → `onVerworfen`.
 
 ## #107 — Begrenztes Retry nach Fehlschlag
 
