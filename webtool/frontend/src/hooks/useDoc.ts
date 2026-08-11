@@ -10,7 +10,11 @@ const MIME: Record<ExportFmt, string> = { md: 'text/markdown', srt: 'application
 const AUTOSAVE_MS = 800
 /** Wann der Autosave es nach einem Fehlschlag erneut versucht (#107). Wachsender Abstand,
  *  damit ein kurzer Serverneustart Zeit zum Abklingen hat; nach dem letzten Versuch kommt der
- *  finale Toast, nicht bei jedem einzelnen. */
+ *  finale Toast, nicht bei jedem einzelnen.
+ *
+ *  Gesamt-Budget ~14 s. Bei einem KALTEN Serverneustart (uvicorn importiert torch, laedt die
+ *  Diarisierung) kann das laenger dauern — dann steht der finale Toast, und der Nutzer stoesst
+ *  per frischem Tastendruck eine neue Episode an (beruehrt setzt den Zaehler zurueck). */
 const RETRY_BACKOFF_MS = [2000, 4000, 8000]
 
 /**
@@ -209,6 +213,12 @@ export function useDoc(project: string | null, base: string | null) {
     if (doc?.base !== base) return
     if (fehlerZaehler > RETRY_BACKOFF_MS.length) {
       // Alle Retries aufgebraucht: ein finaler Toast, dann Schluss (kein weiterer Timer).
+      // Bewusst OHNE Dateinamen (anders als der alte, sofortige Fehler-Toast): stand='fehler'
+      // wird nur bei meins() gesetzt, gehoert also immer zum offenen Dokument. Kehrseite: wechselt
+      // der Nutzer im ~14-s-Fenster auf eine andere Datei, unterdrueckt der doc?.base-Guard den
+      // finalen Toast — A's ungespeicherter Stand bleibt unbemerkt. Das ist dieselbe Luecke, die
+      // der Wechsel schon immer aufreisst (reload setzt dirty=false), nur verzögert. Issue #107
+      // verbietet den Ausweg „Toast bei jedem Versuch" (Dauerfeuer) ausdruecklich.
       if (!finalToastGezeigt.current) {
         finalToastGezeigt.current = true
         toast.error(`Speichern fehlgeschlagen: ${letzterFehler.current}`)

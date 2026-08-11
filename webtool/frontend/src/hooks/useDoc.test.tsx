@@ -116,6 +116,26 @@ describe('useDoc Autosave', () => {
     expect(result.current.dirty).toBe(false)
     expect(toast.error).not.toHaveBeenCalled()
   })
+
+  it('ein Edit waehrend der Retry-Episode bricht den ausstehenden Retry ab', async () => {
+    // M2: der Cleanup-Pfad (Edit → stand='offen' → Retry-Effekt raeumt seinen Timer). Ohne ihn
+    // feuerte ein veralteter Retry auf einen Stand, den der Nutzer schon uebernommen hat.
+    // „Ablehnung ohne Error-Objekt" streift diesen Pfad nur inzidentell (assert keine calls).
+    vi.mocked(api.saveDoc)
+      .mockRejectedValueOnce(new Error('kurz weg'))
+      .mockResolvedValue(undefined as never)
+    const { result } = await geladen()
+    await act(async () => { result.current.updateSegment(0, { text: 'eins' }) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(800) })   // save 1 fail → retry bei +2s
+    expect(result.current.stand).toBe('fehler')
+
+    // Edit VOR dem ersten Retry-Fenster bricht die Episode, der Retry-Timer wird abgeraeumt
+    await act(async () => { result.current.updateSegment(0, { text: 'zwei' }) })
+    // Vorbei am urspruenglichen Retry-Zeitpunkt: kein zusaetzlicher save aus dem stale Retry
+    await act(async () => { await vi.advanceTimersByTimeAsync(2500) })
+    expect(api.saveDoc).toHaveBeenCalledTimes(2)   // 1 fail + 1 autosave-success, kein dritter
+    expect(result.current.stand).toBe('gespeichert')
+  })
 })
 
 describe('useDoc: Retry greift nicht quer zum Dokumentwechsel (#107 × #116)', () => {
@@ -124,6 +144,9 @@ describe('useDoc: Retry greift nicht quer zum Dokumentwechsel (#107 × #116)', (
     // #107s Retry-Effekt haengt an der save-Identitaet — bei einem Wechsel aendert sie sich,
     // der Cleanup raeumt den Retry-Timer ab, BEVOR das (langsame) getDoc(B) den stand auf
     // 'ruhig' setzt. So kann kein saveDoc(B-Pfad, A-Dokument) aus einem altem A-Retry entstehen.
+    // ACHTUNG: dieser Test deckt den CLEANUP-Pfad (save-Identitaet), nicht den doc?.base-Guard —
+    // das schnelle getDoc(B) loest sofort und stand geht auf 'ruhig', bevor der Effekt den Guard
+    // erreicht. Den Guard sichert ausschliesslich der naechste Test („bei langsamem getDoc ...").
     const docB: EditDoc = { ...doc, base: 'b2' }
     vi.mocked(api.saveDoc).mockRejectedValue(new Error('A hin'))
     vi.useFakeTimers()
@@ -150,6 +173,8 @@ describe('useDoc: Retry greift nicht quer zum Dokumentwechsel (#107 × #116)', (
     // #107 × #116: getDoc fuer mehrere MB kann laenger als der Backoff dauern. Waehrend doc noch
     // zum ALTEN Dokument gehoert (base aber schon neu), duerfen Retries weder den alten noch den
     // neuen Pfad beschreiben — sonst saveDoc(neuer-Pfad, alter-Inhalt). Guard: doc?.base === base.
+    // DIESER Test ist der EINZIGE, der den doc?.base-Guard absichert (ohne ihn: saveDoc('b2',
+    // A-doc)). Nicht als redundant zum vorigen loeschen — der vorige deckt den Cleanup, nicht den Guard.
     const docB: EditDoc = { ...doc, base: 'b2' }
     vi.mocked(api.saveDoc).mockRejectedValue(new Error('A hin'))
     vi.useFakeTimers()
