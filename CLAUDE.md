@@ -213,9 +213,13 @@ Fensterrahmen. Vier Dinge, die man nicht aus dem Diff liest:
 - **Die Projektliste sortiert das Frontend, nicht das Backend** (`list_projects` liefert
   `os.scandir`-Reihenfolge). Beim Umzug der Liste in die Leiste ging diese Sortierung einmal
   still verloren — wer die Liste anfasst, prüft die Reihenfolge mit.
-- **Eine Aktion, überall dasselbe Symbol.** `Pencil` = **Umbenennen**, `Sparkles` =
+- **Eine Aktion, überall dasselbe Symbol.** `Pencil` = **Umbenennen**, `Bot` =
   **Korrigieren**, `ScanText` = **Transkribieren**, `RotateCcw` = **neu** transkribieren,
-  `Trash2` = löschen. Vorher trug `Pencil` die Korrektur (ein Stift verspricht, dass sich ein
+  `Trash2` = löschen. Die Kandidaten für die Korrektur wurden bei **14 px im echten
+  Zeilenkontext** verglichen, nicht nach Namen gewählt: `BrainCircuit` wird dort zum Fleck,
+  `Atom` liest sich als Ladekringel, und `PencilSparkles` — semantisch das beste — steht neben
+  dem `Pencil` für Umbenennen und ist von ihm nicht zu unterscheiden. `Bot` gewinnt über die
+  Silhouette: eckig, einzigartig, auch klein eindeutig. Vorher trug `Pencil` die Korrektur (ein Stift verspricht, dass sich ein
   *Name* ändert) und `Play` die Transkription — dasselbe Dreieck, mit dem `Waveform`,
   `SegmentView` und `SpeakerTurn` **Ton abspielen**. Beide Fehlbelegungen standen an je zwei
   Stellen; wer eines dieser Symbole ändert, greift `Sidebar`, `ProjectWorkspace`,
