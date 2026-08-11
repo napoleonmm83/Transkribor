@@ -146,13 +146,15 @@ def test_export_srt_schreibt_datei(client, tmp_path):
     assert (tmp_path / "Demo" / "transkripte" / "S1.srt").read_text(encoding="utf-8") == srt
 
 
-def test_export_srt_ohne_sprecher(client):
+def test_export_srt_ohne_sprecher(client, tmp_path):
     doc = client.get("/api/projects/Demo/files/S1").json()
     doc["segments"][0]["speaker"] = "Interviewer"
     client.put("/api/projects/Demo/files/S1", json=doc)
     assert ">> Interviewer:" in client.post("/api/projects/Demo/files/S1/export/srt").json()["srt"]
     ohne = client.post("/api/projects/Demo/files/S1/export/srt?sprecher=false").json()["srt"]
     assert ">>" not in ohne
+    # Beide Varianten schreiben dieselbe Datei — der zweite Lauf muss den ersten ueberschreiben.
+    assert (tmp_path / "Demo" / "transkripte" / "S1.srt").read_text(encoding="utf-8") == ohne
 
 
 def test_get_projekt_einzeln_zeigt_dateien(client, tmp_path):
