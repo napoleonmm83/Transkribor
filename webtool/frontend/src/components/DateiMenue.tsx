@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { useMatch, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
-import { MoreHorizontal, Pencil, RotateCcw, Trash2 } from 'lucide-react'
+import { MoreHorizontal, Pencil, RotateCcw, TextCursorInput, Trash2 } from 'lucide-react'
 import type { ProjectFile } from '@/lib/types'
-import { deleteFile, startCorrectFile, startRetranscribeFile } from '@/lib/api'
+import { deleteFile, getDoc, renameFile, startCorrectFile, startRetranscribeFile } from '@/lib/api'
+import { UmbenennenDialog, sprecherNamen } from './UmbenennenDialog'
 import { useActiveJob } from '@/hooks/useActiveJob'
 import { useDateien, useProjekte } from '@/hooks/useProjektDaten'
 import { useEditorBruecke } from '@/hooks/useEditorBruecke'
@@ -37,6 +38,8 @@ export function DateiMenue({ project, file, aiReason }: {
   aiReason?: string;
 }) {
   const [dialog, setDialog] = useState<Aktion | null>(null)
+  const [umbenennen, setUmbenennen] = useState(false)
+  const [sprecher, setSprecher] = useState<string[]>([])
   const { refresh } = useProjekte()
   const { refresh: refreshFiles } = useDateien()
   const { adopt } = useActiveJob()
@@ -93,6 +96,26 @@ export function DateiMenue({ project, file, aiReason }: {
     }
   }
 
+  /** Beim Oeffnen des Umbenennen-Dialogs die Sprechernamen holen — EIN Request auf Klick,
+   *  nicht in der Dateiliste: die haelt sich seit PR #67 bewusst von jedem Dokumentzugriff
+   *  fern. Ohne Transkript gibt es nichts zu holen (der Endpunkt antwortete 404). */
+  const umbenennenOeffnen = () => {
+    setSprecher([])
+    setUmbenennen(true)
+    if (file.has_raw) getDoc(project, file.base).then(d => setSprecher(sprecherNamen(d))).catch(() => {})
+  }
+
+  const umbenannt = async (neu: string) => {
+    // Der Editor laedt beim Pfadwechsel neu — ungespeichertes waere sonst still weg.
+    if (offen && editor.current?.dirty && !window.confirm(
+      `„${file.base}" hat ungespeicherte Änderungen.\n\n`
+      + 'Beim Umbenennen wird die Datei neu geladen — die Änderungen gehen verloren.')) return
+    const res = await renameFile(project, file.base, neu)
+    if (offen) navigate(`/p/${encodeURIComponent(project)}/${encodeURIComponent(res.name)}`, { replace: true })
+    toast.success(`„${file.base}" heisst jetzt „${res.name}"`)
+    nachladen()
+  }
+
   // Ohne Rueckfrage nur dort, wo nichts verloren geht: eine noch nie korrigierte Datei.
   const waehlen = (was: Aktion) => {
     if (was === 'correct' && !file.has_edit) return ausfuehren('correct')
@@ -146,6 +169,9 @@ export function DateiMenue({ project, file, aiReason }: {
                 <RotateCcw /> {file.has_raw ? 'Neu transkribieren' : 'Transkribieren'}
               </DropdownMenuItem>
             </span>
+            <DropdownMenuItem onSelect={umbenennenOeffnen}>
+              <TextCursorInput /> Umbenennen
+            </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" onSelect={() => waehlen('delete')}>
               <Trash2 /> Löschen
@@ -153,6 +179,11 @@ export function DateiMenue({ project, file, aiReason }: {
           </DropdownMenuContent>
         </DropdownMenu>
       </span>
+
+      <UmbenennenDialog offen={umbenennen} onOpenChange={setUmbenennen} wert={file.base}
+        titel="Aufnahme umbenennen" vorschlaege={sprecher}
+        beschreibung="Audio und alle Transkripte dieser Aufnahme wandern mit. Nichts wird neu gerechnet."
+        onSpeichern={umbenannt} />
 
       {/* Ausserhalb des Menues: ein Dialog IM Menue wird beim Schliessen mit ausgehaengt. */}
       <AlertDialog open={dialog !== null} onOpenChange={o => { if (!o) setDialog(null) }}>

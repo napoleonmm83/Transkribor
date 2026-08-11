@@ -313,6 +313,100 @@ def retranscribe_file(project: str, base: str):
     return {"job_id": job_id, "started": started}
 
 
+class RenameBody(BaseModel):
+    name: str
+
+
+def _neuer_name(roh: str) -> str:
+    try:
+        return paths.safe_name(roh.strip())
+    except ValueError:
+        raise HTTPException(status_code=400, detail="ungültiger Name")
+
+
+def _ziel_frei(alt: str, neu: str) -> bool:
+    """Ist `neu` als Ziel frei?
+
+    `not os.path.exists(neu)` allein reicht auf Windows NICHT: das Dateisystem ist dort
+    case-insensitiv, beim reinen Gross-/Kleinschreibungswechsel ("weistannen" ->
+    "Weisstannen") zeigt exists() also auf genau den Ordner, den man gerade umbenennt —
+    und die Aktion scheiterte mit „gibt es schon". samefile() trennt die beiden Faelle."""
+    if not os.path.exists(neu):
+        return True
+    return os.path.exists(alt) and os.path.samefile(alt, neu)
+
+
+def _doc_felder(pfad: str, **felder: str) -> None:
+    """`base`/`project`/`audio` in einer edit.json nachziehen.
+
+    Die drei stehen IM Dokument (edit_model.build_edit_doc), und render_md macht aus `base`
+    den Titel — ohne das truege der naechste Markdown-Export den alten Namen. Fehlt die Datei
+    oder ist sie kaputt, bleibt sie unangetastet: ein Umbenennen soll nicht daran scheitern,
+    die Dateien auf der Platte sind der wichtigere Teil."""
+    try:
+        with open(pfad, encoding="utf-8") as fh:
+            doc = json.load(fh)
+    except (OSError, json.JSONDecodeError):
+        return
+    doc.update(felder)
+    paths.atomic_write(pfad, json.dumps(doc, ensure_ascii=False, indent=1))
+
+
+@app.post("/api/projects/{project}/rename")
+def rename_project(project: str, body: RenameBody):
+    """Projekt umbenennen = Ordner umbenennen. Die Aufnahmen wandern mit, nichts wird neu
+    gerechnet — der Projektname steht nirgends ausser im Ordnernamen und in `project` der
+    edit.json."""
+    _validate(project)
+    neu = _neuer_name(body.name)
+    _keine_jobs(project)
+    alt_dir = paths.project_dir(project)
+    if not os.path.isdir(alt_dir):
+        raise HTTPException(status_code=404, detail="kein Projekt")
+    neu_dir = paths.project_dir(neu)
+    if not _ziel_frei(alt_dir, neu_dir):
+        raise HTTPException(status_code=409, detail="Projekt existiert bereits")
+    if neu != project:
+        os.rename(alt_dir, neu_dir)
+    for b in paths.transcript_bases(neu):
+        _doc_felder(_edit_path(neu, b), project=neu)
+    return {"ok": True, "name": neu}
+
+
+@app.post("/api/projects/{project}/files/{base}/rename")
+def rename_file(project: str, base: str, body: RenameBody):
+    """Eine Aufnahme umbenennen: Audio UND alle abgeleiteten Dateien in einem Zug.
+
+    Der Basisname IST die Verbindung zwischen Ton und Transkript — eines allein umzubenennen
+    zerreisst sie. Erst wird die ganze Liste auf Kollisionen geprueft und dann umbenannt:
+    auf halbem Weg abzubrechen liesse eine Aufnahme zurueck, die es zweimal halb gibt."""
+    _validate(project, base)
+    neu = _neuer_name(body.name)
+    _keine_jobs(project)
+    tdir = paths.transkripte_dir(project)
+    # glob.escape wie in _datei_weg: safe_name laesst `[` durch, der URL-Import legt
+    # "Video [dQw4w9].m4a" an, und ungeschuetzt liest glob das `[` als Zeichenklasse.
+    treffer = glob.glob(os.path.join(tdir, glob.escape(base) + ".*"))
+    adir = paths.audio_dir(project)
+    treffer += [os.path.join(adir, base + ext) for ext in AUDIO_EXT
+                if os.path.exists(os.path.join(adir, base + ext))]
+    if not treffer:
+        raise HTTPException(status_code=404, detail=f"keine Datei: {base}")
+    paare = []
+    for p in treffer:
+        rest = os.path.basename(p)[len(base):]      # ".edit.json", ".mp3", ".part1.correction.json"
+        ziel = os.path.join(os.path.dirname(p), neu + rest)
+        if not _ziel_frei(p, ziel):
+            raise HTTPException(status_code=409, detail=f"gibt es schon: {neu + rest}")
+        paare.append((p, ziel))
+    for p, ziel in paare:
+        os.rename(p, ziel)
+    audio = find_audio(project, neu)
+    _doc_felder(_edit_path(project, neu), base=neu,
+                audio=os.path.basename(audio) if audio else "")
+    return {"ok": True, "name": neu, "umbenannt": len(paare)}
+
+
 @app.get("/api/projects/{project}/files/{base}")
 def get_file(project: str, base: str):
     _validate(project, base)

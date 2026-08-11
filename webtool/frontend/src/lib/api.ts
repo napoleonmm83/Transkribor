@@ -85,6 +85,15 @@ export async function createProject(name: string): Promise<{ ok: boolean; name: 
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }),
   }))
 }
+/** Projekt umbenennen = Ordner umbenennen; die Aufnahmen wandern mit. */
+export async function renameProject(project: string, name: string): Promise<{ name: string }> {
+  return jn(await post(`/api/projects/${enc(project)}/rename`, { name }))
+}
+/** Aufnahme umbenennen: Audio UND alle abgeleiteten Dateien in einem Zug — der Basisname
+ *  ist die Verbindung zwischen beiden. */
+export async function renameFile(project: string, base: string, name: string): Promise<{ name: string }> {
+  return jn(await post(`/api/projects/${enc(project)}/files/${enc(base)}/rename`, { name }))
+}
 export async function deleteProject(project: string): Promise<void> {
   await jn(await fetch(`/api/projects/${enc(project)}`, { method: 'DELETE' }))
 }

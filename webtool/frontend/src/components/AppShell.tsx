@@ -61,6 +61,17 @@ function Leiste() {
       // Weg von der Seite des geloeschten Projekts -- sonst steht dort "Projekt nicht
       // gefunden". Keine zweite Rueckfrage: der Dialog hat den Namen abtippen lassen.
       onGeloescht={() => { navigate('/'); refresh() }}
+      // Anders als beim Loeschen gibt es das Ziel noch — nur unter anderem Namen. Steht eine
+      // Datei dieses Projekts im Editor, muss sie MITwandern: sonst zeigt die Adresse auf ein
+      // Projekt, das es nicht mehr gibt. replace, weil der alte Pfad tot ist und der
+      // Zurueck-Knopf sonst dorthin fuehrt.
+      onUmbenannt={(alt, neu) => {
+        const ziel = active?.project === alt
+          ? `/p/${encodeURIComponent(neu)}/${encodeURIComponent(active.base)}`
+          : `/p/${encodeURIComponent(neu)}`
+        navigate(ziel, { replace: true })
+        refresh()
+      }}
       phases={phases} jobRunning={meine.length > 0} aiReason={aiReason} />
   )
 }

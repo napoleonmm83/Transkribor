@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { NewProjectDialog } from './NewProjectDialog'
 import { DeleteProjectDialog } from './DeleteProjectDialog'
+import { ProjektUmbenennen } from './ProjektUmbenennen'
 import { FileRow } from './FileRow'
 
 type Sel = { project: string; base: string } | null
@@ -14,7 +15,7 @@ type SidebarProjekt = { name: string; dateien: number; geaendert: number; active
 
 export function Sidebar({
   projekte, loading, fehler, offen, dateien, dateienLaden, onWaehlen,
-  active, onOpen, onUpload, onTranscribe, onCorrect, onGeloescht,
+  active, onOpen, onUpload, onTranscribe, onCorrect, onGeloescht, onUmbenannt,
   phases, jobRunning, aiReason,
 }: {
   projekte: SidebarProjekt[]; loading?: boolean; fehler?: boolean
@@ -28,6 +29,8 @@ export function Sidebar({
   onCorrect: (project: string) => void
   /** Nach dem Loeschen: die Liste ist veraltet, und das geloeschte Projekt war das offene. */
   onGeloescht: (project: string) => void
+  /** Nach dem Umbenennen: derselbe Grund, aber der Weg fuehrt zum neuen Namen statt zurueck. */
+  onUmbenannt: (alt: string, neu: string) => void
   phases?: JobPhases; jobRunning?: boolean
   /** Nicht leer = kein nutzbarer KI-Anbieter: Korrigieren deaktiviert, Text als Tooltip. */
   aiReason?: string
@@ -129,6 +132,7 @@ export function Sidebar({
                         ungueltiges HTML (dieselbe Falle wie beim Link in der Uebersicht).
                         Die Uebersicht zeigt nur die fuenf juengsten -- ohne diesen Weg waere
                         ein aelteres Projekt gar nicht mehr loeschbar. */}
+                    <ProjektUmbenennen project={p.name} onUmbenannt={neu => onUmbenannt(p.name, neu)} />
                     <span className="ml-auto">
                       <DeleteProjectDialog project={p.name} onDeleted={() => onGeloescht(p.name)} />
                     </span>
