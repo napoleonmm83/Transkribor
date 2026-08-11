@@ -3,11 +3,13 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import type { EditDoc, Segment } from '@/lib/types'
 import { groupIntoTurns } from '@/lib/grouping'
 import { SpeakerTurn } from './SpeakerTurn'
+import { DokumentFeld } from './DokumentFeld'
 
-export function Transcript({ doc, loading, activeId, onPlaySeg, onPlayTurn, updateSegment, renameSpeaker }: {
+export function Transcript({ doc, loading, activeId, onPlaySeg, onPlayTurn, updateSegment, updateDoc, renameSpeaker }: {
   doc: EditDoc | null; loading?: boolean; activeId: number | null;
   onPlaySeg: (s: Segment) => void; onPlayTurn: (segs: Segment[]) => void;
   updateSegment: (id: number, patch: Partial<Segment>) => void;
+  updateDoc: (patch: Partial<EditDoc>) => void;
   renameSpeaker: (from: string, to: string) => void;
 }) {
   const turns = useMemo(() => (doc ? groupIntoTurns(doc.segments) : []), [doc])
@@ -42,23 +44,15 @@ export function Transcript({ doc, loading, activeId, onPlaySeg, onPlayTurn, upda
             Der Kontext stand hier lange NICHT — obwohl `render_md` ihn als ersten Absatz
             exportiert. Ein Feld, das im Export steht und im Editor nicht, ist eines, dessen
             Fehler niemand sieht: genau so ging ein alter Sprechername mit hinaus. Reihenfolge
-            wie im Markdown, damit Bildschirm und Datei dasselbe Dokument zeigen. */}
-        {(doc.context?.trim() || doc.summary?.trim()) && (
-          <section className="mb-8 space-y-5 border-b pb-5">
-            {doc.context?.trim() && (
-              <div>
-                <h2 className="rubrik mb-3">Kontext</h2>
-                <p className="lesebreite text-sm leading-relaxed text-muted-foreground">{doc.context}</p>
-              </div>
-            )}
-            {doc.summary?.trim() && (
-              <div>
-                <h2 className="rubrik mb-3">Zusammenfassung</h2>
-                <p className="lesebreite text-sm leading-relaxed text-muted-foreground">{doc.summary}</p>
-              </div>
-            )}
-          </section>
-        )}
+            wie im Markdown, damit Bildschirm und Datei dasselbe Dokument zeigen.
+            Beide Rubriken stehen AUCH leer da: frisch transkribiert und noch nicht korrigiert
+            sind sie es immer, und ein verstecktes Feld laesst sich nie fuellen. */}
+        <section className="mb-8 space-y-5 border-b pb-5">
+          <DokumentFeld titel="Kontext" wert={doc.context ?? ''} platzhalter="Kontext hinzufügen …"
+            onCommit={t => updateDoc({ context: t })} />
+          <DokumentFeld titel="Zusammenfassung" wert={doc.summary ?? ''} platzhalter="Zusammenfassung hinzufügen …"
+            onCommit={t => updateDoc({ summary: t })} />
+        </section>
         {turns.map(t => (
           <SpeakerTurn key={t.key} turn={t} activeId={activeId}
             onPlaySeg={onPlaySeg} onPlayTurn={onPlayTurn}

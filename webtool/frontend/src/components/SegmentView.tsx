@@ -3,7 +3,7 @@ import { CircleHelp, Play, ScanSearch, TriangleAlert } from 'lucide-react'
 import type { Segment } from '@/lib/types'
 import { isCorrected, tokenizeUncertain } from '@/lib/uncertainty'
 import { UncertainWord } from './UncertainWord'
-import { SegmentEditor } from './SegmentEditor'
+import { TextEditor } from './TextEditor'
 
 function fmt(t: number) { const s = Math.max(0, t | 0); return `${(s / 60) | 0}:${String(s % 60).padStart(2, '0')}` }
 
@@ -52,7 +52,7 @@ export function SegmentView({ seg, active, onPlay, updateSegment }: {
         </span>
       )}
       {editing
-        ? <SegmentEditor initial={seg.text}
+        ? <TextEditor initial={seg.text}
             onCommit={t => { updateSegment(seg.id, { text: t }); setEditing(false) }}
             onCancel={() => setEditing(false)} />
         : <span onClick={() => setEditing(true)} className="lesesatz cursor-text">{body}</span>}

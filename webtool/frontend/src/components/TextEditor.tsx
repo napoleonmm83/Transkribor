@@ -1,7 +1,7 @@
 import { Textarea } from '@/components/ui/textarea'
 
 // ponytail: field-sizing-content (auto-grow) already ships in ui/textarea's base class, no inline style needed.
-export function SegmentEditor({ initial, onCommit, onCancel }: {
+export function TextEditor({ initial, onCommit, onCancel }: {
   initial: string; onCommit: (text: string) => void; onCancel: () => void;
 }) {
   return (

@@ -12,7 +12,7 @@ import type { WaveHandle } from '@/components/Waveform'
 export function EditorView() {
   const { project, base } = useParams<{ project: string; base: string }>()
   const sel = project && base ? { project, base } : null
-  const { doc, dirty, stand, loading: docLoading, updateSegment, renameSpeaker, exportDownload, reload } = useDoc(sel?.project ?? null, sel?.base ?? null)
+  const { doc, dirty, stand, loading: docLoading, updateSegment, updateDoc, renameSpeaker, exportDownload, reload } = useDoc(sel?.project ?? null, sel?.base ?? null)
   // Die Leiste in der Huelle navigiert und startet Einzeldatei-Korrekturen — beides braucht
   // Dinge, die nur hier existieren. Ohne diese Meldung wechselt ein Klick ohne Rueckfrage
   // ueber ungespeicherte Aenderungen hinweg, und ein Korrekturlauf bleibt unsichtbar.
@@ -68,7 +68,7 @@ export function EditorView() {
         <Transcript doc={doc} loading={docLoading} activeId={activeId}
           onPlaySeg={s => waveRef.current?.playSegment(s)}
           onPlayTurn={segs => waveRef.current?.playTurn(segs)}
-          updateSegment={updateSegment} renameSpeaker={renameSpeaker} />
+          updateSegment={updateSegment} updateDoc={updateDoc} renameSpeaker={renameSpeaker} />
       </main>
       <PlayerDock url={sel ? audioUrl(sel.project, sel.base) : undefined} onTime={onTime} waveRef={waveRef} />
     </div>
