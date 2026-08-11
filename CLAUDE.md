@@ -3,7 +3,7 @@
 Dieses Repo transkribiert Interview-Audio (oft **Schweizerdeutsch**) mit Whisper und
 erzeugt daraus kontextkorrigierte, **sprecher-markierte** Transkripte.
 
-## Ablauf, wenn der Nutzer „transkribiere Projekt <NAME>" sagt
+## Ablauf, wenn der Nutzer „transkribiere Projekt <NAME>“ sagt
 
 (bzw. wenn neue Audiodateien in `projekte\<NAME>\audio\` liegen)
 
@@ -59,27 +59,27 @@ Ergebnis: `projekte\<NAME>\transkripte\<base>.edit.json` (Editor-Dokument, im We
 
 ## Korrektur-Regeln (gelten für Workflow UND inline)
 - **Treu bleiben:** klare ASR-Fehler korrigieren (falsch gehörte Wörter, Eigennamen, im
-  Kontext sinnlose Begriffe), zu lesbarem Standarddeutsch normalisieren (Schweizer „ss").
+  Kontext sinnlose Begriffe), zu lesbarem Standarddeutsch normalisieren (Schweizer „ss“).
   **Nichts erfinden, Sinn nicht verändern, nicht über das Nötige hinaus glätten.**
 - **Kontext nutzen:** Ein gemeinsames Glossar über alle Dateien sorgt für konsistente
   Schreibweisen von Namen/Orten/Begriffen.
 - **Sprecher markieren:** meist zwei — **Interviewer** (stellt Fragen) und die befragte
-  Person (mit Namen/Betrieb labeln, falls im Gespräch genannt, sonst „Befragte Person").
+  Person (mit Namen/Betrieb labeln, falls im Gespräch genannt, sonst „Befragte Person“).
   Aufeinanderfolgende Segmente pro Sprecher zu Redebeiträgen bündeln.
 - **Unsicheres offenlegen:** wirklich unklare Stellen nicht raten, sondern unter
-  „## Anmerkungen" am Dateiende vermerken.
+  „## Anmerkungen“ am Dateiende vermerken.
 - **Musik/Gesang → `[Musik]`, ASR-Artefakte → leerer Text.** Über Gesungenem erfindet Whisper
   *selbstbewussten* Unsinn, und genau daran scheitert jeder Zahlenfilter: an einem Open-Air-
-  Mitschnitt (198 Segmente) stand „Find the Strub!" sechsmal in Folge bei
+  Mitschnitt (198 Segmente) stand „Find the Strub!“ sechsmal in Folge bei
   `compression_ratio` 1,80 und `avg_logprob` −0,34 — **0 von 198** Segmenten überschritten
   *irgendeine* der beiden Schwellen aus `compute_flags`. Die LLM-Korrektur erkennt es dagegen
-  ungefragt (sie vergab von sich aus den Sprecher „Bühnenstimme" und schrieb „scheinen Liedtext
-  zu enthalten" in die Anmerkungen) — darum liegt die Erkennung im Prompt, nicht in einer
+  ungefragt (sie vergab von sich aus den Sprecher „Bühnenstimme“ und schrieb „scheinen Liedtext
+  zu enthalten“ in die Anmerkungen) — darum liegt die Erkennung im Prompt, nicht in einer
   Heuristik. **Die Regel muss in BEIDEN Prompts stehen:** der Treue-Pass prüft auf
-  „Inhalt weggelassen" und drehte `[Musik]` sonst als Untreue zurück.
+  „Inhalt weggelassen“ und drehte `[Musik]` sonst als Untreue zurück.
 - **Ein leerer `text` in der `correction.json` ist eine Entscheidung, kein fehlender Wert.**
   `apply_correction` hatte dort ein `if text:` — womit jede Streichung verfiel: die Korrektur
-  leerte vier Segmente mit „ARD Text im Auftrag von Funk" (eine Untertitel-Floskel aus Whispers
+  leerte vier Segmente mit „ARD Text im Auftrag von Funk“ (eine Untertitel-Floskel aus Whispers
   Trainingsdaten, im Ton nicht vorhanden), und alle vier standen danach trotzdem im Export.
   Unterschieden wird jetzt am **Schlüssel**: `"text": ""` streicht, ein Eintrag *ohne*
   `text`-Schlüssel lässt den Rohtext stehen. Der Rohtext bleibt in `raw_text` ohnehin erhalten.
@@ -106,7 +106,7 @@ Die Korrektur hing fest am Claude-Code-Abo; jetzt wählt der Nutzer Anbieter + M
   auf (beides geprüft). Dort stehen **Aliase** in `PROVIDERS`: `opus`/`sonnet`/`haiku`/`fable`
   zeigen immer auf die neueste Generation, weil Anthropic den Zeiger umbiegt — der Grund gegen
   eine feste Liste (in drei Monaten falsch) trifft sie also nicht. **Leeres Modell heisst „nimm
-  deine eigene Voreinstellung"**, darum ist es bei CLIs kein Pflichtfeld. `list_models()`
+  deine eigene Voreinstellung“**, darum ist es bei CLIs kein Pflichtfeld. `list_models()`
   beantwortet beide Fälle über denselben Endpoint, damit das Frontend nicht zwei Wege kennt.
 - **Die Gemini-CLI fehlt absichtlich als Abo:** ihr Zugang ist für Einzelpersonen abgeschaltet
   (`IneligibleTierError`, gemessen — auch mit `GEMINI_CLI_TRUST_WORKSPACE`). Als API-Anbieter mit
@@ -118,7 +118,7 @@ Die Korrektur hing fest am Claude-Code-Abo; jetzt wählt der Nutzer Anbieter + M
   kennen keine Werkzeuge. Darum nimmt `correct._ask_llm(prompt, inputs, output)` Pfade —
   dieselben Prompts, zwei Zustellwege; im werkzeuglosen Weg landen die Eingaben im Prompt
   (`_with_files`) und `llm.complete_to_file` schreibt nur **gültiges** JSON (eine halbe
-  `correction.json` würde der nächste Lauf als „fertig" durchwinken). `llm.use_api()` beantwortet
+  `correction.json` würde der nächste Lauf als „fertig“ durchwinken). `llm.use_api()` beantwortet
   genau diese Frage, der `_claude_slots`-Deckel gilt für alle.
 - **`codex exec` läuft zwingend mit `--sandbox read-only`.** Im Prompt steht Transkripttext, der
   aus einem URL-Import stammen kann — eine Injektion darf höchstens Unsinn *antworten*, niemals
@@ -142,7 +142,7 @@ Beide Abos melden sich im Browser an; die App fragt den Zustand ab und fährt de
   `auth.status()` — das kostet **0,09 s (codex) bzw. 0,26 s (claude)**, gemessen, gegen einen
   abgebrochenen Korrekturlauf von Minuten. `check()` fragt zuerst `available()`: sonst legt der
   Testknopf bei abgemeldetem Codex ein rohes `401 … Missing bearer … cf-ray: …` vor — richtig,
-  aber unbrauchbar, weil die einzige sinnvolle Reaktion („anmelden") nicht darin steht.
+  aber unbrauchbar, weil die einzige sinnvolle Reaktion („anmelden“) nicht darin steht.
 - **Zwei Richtungen, eine Oberfläche:** `claude auth login --claudeai` druckt eine URL und
   **wartet auf einen Code** über stdin (`redirect_uri` zeigt auf platform.claude.com — es gibt
   keinen lokalen Callback zum Abfangen). `codex login --device-auth` druckt URL **und** Code,
@@ -209,7 +209,7 @@ Fensterrahmen. Vier Dinge, die man nicht aus dem Diff liest:
   Dateiliste für die ganze App (`useProjekte`, `useDateien`). Vorher rief jede Seite `useProjects`
   selbst; mit der dauerhaften Seitenleiste wären es zwei parallele Polls geworden — also genau
   die Last, die PR #67 gemessen abgebaut hat. Das aufgeklappte Projekt der Leiste **ist** das aus
-  der URL; ein zweiter Begriff von „offen" wäre eine zweite Wahrheit.
+  der URL; ein zweiter Begriff von „offen“ wäre eine zweite Wahrheit.
 - **Die Projektliste sortiert das Frontend, nicht das Backend** (`list_projects` liefert
   `os.scandir`-Reihenfolge). Beim Umzug der Liste in die Leiste ging diese Sortierung einmal
   still verloren — wer die Liste anfasst, prüft die Reihenfolge mit.
@@ -221,13 +221,13 @@ Fensterrahmen. Vier Dinge, die man nicht aus dem Diff liest:
   `startLaeuft` ist der Riegel gegen den Doppelstart (`whenReady` prüft, und die Statusseite fragt
   beim Laden selbst nochmal — sonst laufen zwei uvicorn auf zwei Ports).
 - `electron/backend.js` — das, was `webtool.ps1` tat, plus was ihm fehlte: freier Port statt fest
-  8000, Warten auf „antwortet" (statt den Browser ins Leere zu schicken) und `taskkill /T` beim
+  8000, Warten auf „antwortet“ (statt den Browser ins Leere zu schicken) und `taskkill /T` beim
   Beenden (sonst bleiben Whisper/claude als Waisen mit belegter GPU zurück).
 - `electron/setup.js` — Erstinstallation: Python/ffmpeg via winget, venv, torch **cu128 zuerst**
   (`requirements.txt` enthält torch bewusst NICHT — mit `--extra-index-url` zöge pip sonst das
   CPU-Rad und die GPU wäre still weg), dann der Rest. Die venv gilt erst als fertig, wenn
   `import torch, faster_whisper, fastapi, uvicorn` durchläuft — ein abgebrochener pip-Lauf sieht sonst
-  „installiert" aus.
+  „installiert“ aus.
 - `electron/paths.js` — **gepackt wird nie neben die .exe geschrieben** (Program Files ist
   schreibgeschützt und wird beim Update ersetzt): venv, `projekte/` und Einstellungen liegen in
   `userData`. Im Repo bleibt alles dort, wo `webtool.ps1` es erwartet.
@@ -241,11 +241,11 @@ Fensterrahmen. Vier Dinge, die man nicht aus dem Diff liest:
   Normalfall — erfuhr von einer neuen Fassung erst beim nächsten Start. Zwei Riegel hängen
   davor, beide gegen eine **falsche Anzeige**, nicht gegen Last (eine Runde ist ein GET auf
   `latest.yml`, ~1 KB): `net.isOnline()` — offline erzeugte sonst alle 6 h „Prüfung
-  fehlgeschlagen" in der Fusszeile plus eine Zeile im Protokoll, ungefragt — und
+  fehlgeschlagen“ in der Fusszeile plus eine Zeile im Protokoll, ungefragt — und
   `updater.sollPruefen(stand)`, das nur aus `unbekannt`/`aktuell`/`fehler` heraus erneut sucht.
   Das ist eine **Weissliste**: ein gefundenes Update (`verfuegbar`/`laedt`/`bereit`) würde vom
   nächsten Tick sonst aus der Fusszeile geschoben, und eine später dazukommende Zustandsart
-  gilt im Zweifel als „nichts zu tun".
+  gilt im Zweifel als „nichts zu tun“.
 - Bauen: `npm install && npm run dist` → `dist\Transkribor-Setup-<version>.exe` (~96 MB; die ML-Seite
   kommt beim ersten Start dazu, ein 5-GB-Setup bei jedem Update wäre unzumutbar).
   Release: Tag `v*` pushen → `.github/workflows/release.yml` baut und veröffentlicht,
@@ -254,19 +254,19 @@ Fensterrahmen. Vier Dinge, die man nicht aus dem Diff liest:
 - **Releases, die keine App sind, MÜSSEN `--prerelease` tragen** (`modelle-v1` mit den
   GGML-Dateien ist das einzige bisher). `electron-updater` fragt `/releases/latest`, und GitHub
   beantwortet das mit dem **zuletzt veröffentlichten** Nicht-Prerelease — nicht mit der höchsten
-  Version. `modelle-v1` erschien nach `v0.5.0` und wurde damit „Latest"; jeder Update-Check
+  Version. `modelle-v1` erschien nach `v0.5.0` und wurde damit „Latest“; jeder Update-Check
   starb daraufhin an `404 … modelle-v1/latest.yml`, obwohl an der App nichts falsch war.
-  Prereleases nimmt GitHub von „Latest" aus, die Asset-URLs bleiben unverändert — der
+  Prereleases nimmt GitHub von „Latest“ aus, die Asset-URLs bleiben unverändert — der
   GGML-Download merkt nichts davon. Ein `v*`-Release darf den Riegel nicht tragen: es SOLL
-  „Latest" werden.
+  „Latest“ werden.
 - `electron/setup.js` — `plan(platform, paketmanager, arch, brew)` entscheidet, was die
   Plattform braucht: Windows per winget, **macOS per `brew install`, sobald Homebrew da ist**,
   **Linux zeigt nur den Befehl** (`apt`/`dnf`/`pacman` brauchen echtes sudo). Die frühere
-  Begründung „macOS bräuchte sudo" **vermischte zwei Fälle**: Homebrew *selbst* zu
+  Begründung „macOS bräuchte sudo“ **vermischte zwei Fälle**: Homebrew *selbst* zu
   installieren legt `/opt/homebrew` an und fragt nach dem Kennwort — `brew install <paket>`
   danach nicht, der Ordner gehört dem Nutzer. Fehlt Homebrew, nennt der Hinweis jetzt den
   **brew.sh-Einzeiler**; vorher stand dort ein `brew install …`, das ohne brew mit „command
-  not found" endet — ein Rat, der genau dem nicht hilft, der ihn braucht. `whisper-cpp` wird
+  not found“ endet — ein Rat, der genau dem nicht hilft, der ihn braucht. `whisper-cpp` wird
   auf Apple Silicon **mitinstalliert** (Fehlschlag bricht nicht ab: langsam ist besser als
   gar nicht). torch: cu128 auf Windows/Linux, PyPI-Standardrad auf macOS (bringt MPS mit;
   einen CUDA-Index gibt es dort nicht).
@@ -282,13 +282,13 @@ Fensterrahmen. Vier Dinge, die man nicht aus dem Diff liest:
 - **macOS-Signatur — `mac.identity: "-"` (ad-hoc) ist Pflicht, nicht Kosmetik.** Mit
   `CSC_IDENTITY_AUTO_DISCOVERY=false` liess electron-builder das Signieren ganz aus; da das
   Umpacken die von Electron mitgebrachte Signatur ohnehin zerstört, kam die App ohne gültige
-  Signatur an und macOS meldete **„Transkribor ist beschädigt"** — mit *keinem* Weg, sie
+  Signatur an und macOS meldete **„Transkribor ist beschädigt“** — mit *keinem* Weg, sie
   trotzdem zu öffnen (Rechtsklick > Öffnen hilft nur bei gültig signierten Apps). Ad-hoc
   signiert heisst: kein Zertifikat, aber gültig → Gatekeeper zeigt die normale
-  „nicht verifiziert"-Meldung, die der Nutzer bestätigen kann. Dazu `hardenedRuntime: false`
+  „nicht verifiziert“-Meldung, die der Nutzer bestätigen kann. Dazu `hardenedRuntime: false`
   — Hardened Runtime + ad-hoc bräuchte sonst die Entitlement-Ausnahme
   `com.apple.security.cs.disable-library-validation`, und nötig ist er erst zur Notarisierung.
-  Eine bereits geladene „beschädigte" App repariert man lokal mit
+  Eine bereits geladene „beschädigte“ App repariert man lokal mit
   `xattr -dr com.apple.quarantine <App>` + `codesign --force --deep --sign - <App>`.
   **Preis der ad-hoc-Lösung: Auto-Update ist auf macOS tot** — Squirrel.Mac verlangt eine
   echte Signatur, ad-hoc reicht laut Electron-Doku ausdrücklich nicht. `main.js` schreibt den
@@ -311,7 +311,7 @@ mit Projektbeschreibung + bekannten Namen (verbessert Whisper und die Korrektur)
 
 ## Die README wird mitgepflegt — automatisch, ohne Rückfrage
 **Ändert sich, was der Nutzer sieht oder tun kann, wird die README im selben PR nachgezogen.**
-Nicht als Nachtrag „irgendwann", nicht auf Zuruf. Der Grund: CLAUDE.md wächst bei jeder
+Nicht als Nachtrag „irgendwann“, nicht auf Zuruf. Der Grund: CLAUDE.md wächst bei jeder
 Arbeit von selbst mit (sie ist die Arbeitsanleitung), die README nicht — sie war nach fünf
 Funktionen bereits veraltet, und sie ist das Einzige, was ein neuer Nutzer je liest.
 
@@ -321,9 +321,9 @@ Umbauten, Testarbeit, Abhängigkeits-Updates — dort ändert sich für den Nutz
 
 **Der Ton ist der einer Anleitung, nicht eines Changelogs.** Die README richtet sich an
 Menschen ohne technischen Hintergrund: **was es ihnen bringt**, in ihren Worten, unter dem
-passenden Abschnitt — nicht „neu in 0.12: `?sprecher=false` am SRT-Endpunkt". Wer die
+passenden Abschnitt — nicht „neu in 0.12: `?sprecher=false` am SRT-Endpunkt“. Wer die
 Fassung wissen will, liest die Releases. Technisches gehört in den Abschnitt „Für
-Entwickler" ans Ende, und was die README behauptet, muss stimmen: dass die Aufnahmen den
+Entwickler“ ans Ende, und was die README behauptet, muss stimmen: dass die Aufnahmen den
 Rechner nie verlassen, gilt fürs Transkribieren — bei der Korrektur über einen Onlinedienst
 nicht, und genau das steht auch dort.
 
@@ -367,13 +367,13 @@ nie committen), unklarem Scope, oder history-verändernden Aktionen (force-push,
   muss zusätzlich `%LOCALAPPDATA%\Microsoft\WinGet\Packages\Gyan.FFmpeg*\ffmpeg*\bin` abklopfen —
   `transcribe.ensure_ffmpeg()` und `setup.wingetFfmpeg()` tun das, bewusst je gespiegelt.
   **Die Transkription braucht ffmpeg nicht mehr** (faster-whisper dekodiert über PyAV) — der
-  URL-Import (yt-dlp) schon, und der ist der Grund, warum `ensure_ffmpeg` bleibt. Eine reine PATH-Prüfung meldet dauerhaft „fehlt", obwohl alles läuft.
+  URL-Import (yt-dlp) schon, und der ist der Grund, warum `ensure_ffmpeg` bleibt. Eine reine PATH-Prüfung meldet dauerhaft „fehlt“, obwohl alles läuft.
 - Modell-Cache: `%USERPROFILE%\.cache\huggingface` (einmaliger Download ~3 GB, CTranslate2-Format
   von `Systran/faster-whisper-<stufe>`). Ein altes `%USERPROFILE%\.cache\whisper\large-v3.pt`
   (3 GB) wird nicht mehr gelesen und kann weg.
 - Env-Overrides: `WHISPER_MODEL` (default large-v3), `WHISPER_LANG` (default de), `TRANSKRIBOR_VERIFY` (default 1; `0`/`false`/`no` schaltet den 2b-Treue-Pass server-weit ab), `TRANSKRIBOR_DIARIZE` (default 1; `0`/`false`/`no` schaltet die akustische Sprecher-Diarisierung server-weit ab — Erzeugung UND Konsumption), `TRANSKRIBOR_PARALLEL` (default 3; gleichzeitige `claude -p`-Aufrufe), `TRANSKRIBOR_AUTOCORRECT` (default 1; `0` stoppt die automatische Korrektur nach der Transkription), `TRANSKRIBOR_SETTINGS` (Pfad der Einstellungsdatei; **Tests müssen das setzen**, sonst entscheidet die echte Datei des Entwicklers über den KI-Anbieter), `TRANSKRIBOR_PROJEKTE` (Wurzel der Projektordner; `electron/backend.js` setzt sie auf `userData/projekte` — **jeder** Zugriff auf Projektpfade muss sie lesen, sonst sucht der gepackte Lauf neben dem Code und findet nichts), `TRANSKRIBOR_ENV` (Pfad der `.env`; gepackt `userData/.env`, sonst Repo-Wurzel), `TRANSKRIBOR_GGML` (Verzeichnis der GGML-Modelle; gepackt `userData`, sonst `models/ggml` — dieselbe Regel wie `TRANSKRIBOR_PROJEKTE`: neben der `.app` darf nichts geschrieben werden), `TRANSKRIBOR_GGML_URL` (Vorlage mit `{datei}`-Platzhalter für den Download; gewinnt gegen das `modelle-v1`-Release — der Weg, um ein Modell zu testen, das noch nirgends hängt).
 - **Die `.env` liest der Server selbst** (`settings.load_env()`, aufgerufen ganz oben in `app.py` — vor jedem Zugriff auf `os.environ`). Vorher parsten `webtool.ps1` und `electron/backend.js` sie je selbst: derselbe Parser in zwei Sprachen, und ein von Hand gestartetes `uvicorn webtool.app:app` sah die Datei überhaupt nicht. **Die Datei gewinnt gegen eine schon gesetzte Variable** — genau so verhielten sich beide Launcher, eine Umkehr wäre eine stille Verhaltensänderung.
-- **Trust-Boundary Browser:** eine Origin-Middleware in `app.py` weist Requests mit nicht-Loopback-`Origin` mit 403 ab. Die Bindung auf `127.0.0.1` allein reicht nicht: multipart-Upload und POST ohne Body sind CORS-„simple" und lösen **keinen** Preflight aus, jede besuchte Fremdseite konnte also Audio unterschieben (`upload_audio` legt das Projekt sogar an) und GPU-Jobs starten. Nicht-Browser-Aufrufe (curl, Tests) schicken keinen `Origin` und laufen unverändert; `:5173` (Vite-Dev) ist Loopback und bleibt erlaubt.
+- **Trust-Boundary Browser:** eine Origin-Middleware in `app.py` weist Requests mit nicht-Loopback-`Origin` mit 403 ab. Die Bindung auf `127.0.0.1` allein reicht nicht: multipart-Upload und POST ohne Body sind CORS-„simple“ und lösen **keinen** Preflight aus, jede besuchte Fremdseite konnte also Audio unterschieben (`upload_audio` legt das Projekt sogar an) und GPU-Jobs starten. Nicht-Browser-Aufrufe (curl, Tests) schicken keinen `Origin` und laufen unverändert; `:5173` (Vite-Dev) ist Loopback und bleibt erlaubt.
 - **Gerätewahl liegt in `webtool/device.py` — und zwar zweigeteilt.** `pick()` → cuda | mps | cpu
   gilt der torch-Welt (`webtool/diarize.py`, pyannote). `pick_asr()` → cuda | cpu gilt der
   Transkription: **CTranslate2 (faster-whisper) kennt kein MPS**, dokumentiert sind nur
@@ -382,7 +382,7 @@ nie committen), unklarem Scope, oder history-verändernden Aktionen (force-push,
   liefert deshalb **alle drei** (`device` + `asr` + `asr_engine`), und die
   Einstellungsseite hängt ihren CPU-Hinweis an `asr`: an `device` gehängt schwiege er auf einem
   Mac genau dort, wo er nötig wäre. `PYTORCH_ENABLE_MPS_FALLBACK=1` setzen wir weiterhin NICHT
-  (schöbe einzelne Ops still auf die CPU, während die Anzeige „mps" behauptet) — dieselbe Regel,
+  (schöbe einzelne Ops still auf die CPU, während die Anzeige „mps“ behauptet) — dieselbe Regel,
   die auch das `asr`-Feld erzwingt: die Anzeige darf nicht lügen.
 - **Auf Apple Silicon transkribiert whisper.cpp über Metal, nicht faster-whisper.** Gemessen auf
   M1 Pro an 8,7 Min Interview bei identischen Decoder-Einstellungen: **650 s → 99 s (0,81× →
@@ -417,7 +417,7 @@ nie committen), unklarem Scope, oder history-verändernden Aktionen (force-push,
   Segmente. **Nicht** die Ursache war der Triton-/DTW-Rückfall: ohne `word_timestamps` war
   openai-whisper mit 700 s noch langsamer, `triton-windows` hätte also nichts gebracht.
 - **Whisper bekommt KEINEN `initial_prompt` — er kostete ganze Passagen.** Er stand einmal in
-  `transcribe._opts` („Interview auf Schweizerdeutsch…", bzw. der Inhalt von `kontext.md`) und
+  `transcribe._opts` („Interview auf Schweizerdeutsch…“, bzw. der Inhalt von `kontext.md`) und
   brachte den Decoder dazu, ein 30-Sekunden-Fenster **vorzeitig zu beenden**; Whisper schiebt den
   Lesezeiger daraufhin um das **ganze** Fenster weiter, und die restliche Sprache darin wird nie
   angeschaut. Kein falsches Wort, sondern **gar keines** — und nichts im Ergebnis, woran man es
@@ -506,13 +506,13 @@ nie committen), unklarem Scope, oder history-verändernden Aktionen (force-push,
 - **`geaendert` ist `max(Datei-mtime)`, NICHT die mtime eines Ordners.** Verzeichnis-mtime
   bewegt sich nicht, wenn eine vorhandene Datei überschrieben wird — der Editor tut aber genau
   das mit `<base>.edit.json`. Eine Sortierung nach Ordner-mtime würde also die Arbeit nicht
-  abbilden, um die es bei „zuletzt geändert" geht. `DirEntry.stat()` kostet dafür auf Windows
+  abbilden, um die es bei „zuletzt geändert“ geht. `DirEntry.stat()` kostet dafür auf Windows
   keinen zusätzlichen Zugriff (kommt mit dem Verzeichnislisting mit).
 - **Galerie (`HomeGallery.tsx`) für hunderte statt zehn Projekte:** klebendes Suchfeld über dem
   Namen (kein Enter nötig), laufende Projekte oben angeheftet als Karten (der einzige
   zeitkritische Zustand), der Rest als dichte 44px-Zeilen statt Dreispalten-Raster (das zwingt
   das Auge bei dreihundert Projekten in ein Z über hundert Reihen), Standardsortierung „zuletzt
-  geändert" (umschaltbar auf Name). Dazu `Ctrl+K`/`Cmd+K` als Befehlspalette
+  geändert“ (umschaltbar auf Name). Dazu `Ctrl+K`/`Cmd+K` als Befehlspalette
   (`components/ProjektPalette.tsx`) über shadcns `Command` — von überall erreichbar, auch aus
   dem Editor, weil sie als Geschwister der `<Routes>` in `App.tsx` sitzt, nicht in der Galerie.
   `cmdk` lag als Abhängigkeit bereits vor, keine neue dazugekommen. Beide Kürzel (`Ctrl+K` hier,
@@ -527,7 +527,7 @@ nie committen), unklarem Scope, oder history-verändernden Aktionen (force-push,
   fertig transkribierte Datei mitten im Lauf für den Rest des Laufs deaktiviert (`has_raw` kommt
   nur über `refreshFiles()` rein), und eine von Hand in `audio/` kopierte Datei (kein Job, also
   nie ein `onSettled`) blieb bis zum Reload unsichtbar. `onSettled` bleibt trotzdem nötig: ein
-  woanders gestarteter Job (z. B. „Korrigieren" aus der Arbeitsfläche, während der Editor offen
+  woanders gestarteter Job (z. B. „Korrigieren“ aus der Arbeitsfläche, während der Editor offen
   ist) ändert `dateien`/`fertig` erst, wenn der ganze Lauf fertig ist — dazwischen ist
   `onSettled` der einzige Anlass, der die frisch geschriebene `<base>.edit.json` bemerkt.
 - **Einzelne Aufnahme neu anstossen oder löschen:** `DELETE /api/projects/{p}/files/{base}`
@@ -564,16 +564,16 @@ nie committen), unklarem Scope, oder history-verändernden Aktionen (force-push,
   wer das Präfix ändert, ändert es an vier Stellen.
 - **Umbenennen ist EIN Mechanismus für Projekt und Aufnahme** (`POST …/rename` und
   `POST …/files/{base}/rename`, im ⋯-Menü und in der Leiste). Vier Dinge, die man nicht aus
-  dem Diff liest: **`os.path.exists` allein darf nicht über „Name frei?" entscheiden** —
-  Windows' Dateisystem ist case-insensitiv, beim reinen Schreibweisenwechsel („weistannen" →
-  „Weisstannen") zeigt es auf genau den Ordner, den man umbenennt, und die Aktion scheiterte
-  mit „gibt es schon"; `_ziel_frei` trennt das per `os.path.samefile`. **Erst die ganze Liste
+  dem Diff liest: **`os.path.exists` allein darf nicht über „Name frei?“ entscheiden** —
+  Windows' Dateisystem ist case-insensitiv, beim reinen Schreibweisenwechsel („weistannen“ →
+  „Weisstannen“) zeigt es auf genau den Ordner, den man umbenennt, und die Aktion scheiterte
+  mit „gibt es schon“; `_ziel_frei` trennt das per `os.path.samefile`. **Erst die ganze Liste
   prüfen, dann umbenennen**: auf halbem Weg abzubrechen liesse eine Aufnahme zurück, die es
   zweimal halb gibt — der Basisname ist die einzige Verbindung zwischen Ton und Transkript.
   **`base`/`project`/`audio` stehen IM Dokument** (`edit_model.build_edit_doc`), und
   `render_md` macht aus `base` den Titel — ohne Nachziehen trüge der nächste Export den alten
   Namen. **Die Sprechernamen sind ein Vorschlag, kein Automatismus**: ein Klick setzt sie ins
-  Feld, geschickt wird trotzdem erst mit „Umbenennen". Sie kommen aus **einem** `getDoc` beim
+  Feld, geschickt wird trotzdem erst mit „Umbenennen“. Sie kommen aus **einem** `getDoc` beim
   Öffnen des Dialogs, nicht aus der Dateiliste — die hält sich seit PR #67 bewusst von jedem
   Dokumentzugriff fern. Ist die Datei im Editor offen, wandert die Adresse mit (`replace`,
   der alte Pfad ist tot).
@@ -581,7 +581,7 @@ nie committen), unklarem Scope, oder history-verändernden Aktionen (force-push,
   Arbeitsfläche *und* Seitenleiste). Vorher standen Korrigieren-Knopf und Überschreib-Rückfrage
   zweimal getrennt im Code, und die Fassungen liefen auseinander: die Arbeitsfläche schickte
   immer `force=false`, womit der Server eine handbearbeitete Datei **still übersprang** — von
-  aussen sah das aus wie „die Korrektur lässt sich nicht neu anstossen". `DateiMenue` holt sich
+  aussen sah das aus wie „die Korrektur lässt sich nicht neu anstossen“. `DateiMenue` holt sich
   Nachladen, Job-Adoption und die Editor-Brücke aus den Kontexten statt über durchgereichte
   Requisiten; die dreistufige `onCorrectFile`-Kette (AppShell → Sidebar → FileRow) ist damit weg.
   **Löschen und Neu-Transkribieren verlassen den Editor, Korrigieren nicht:** dort bleibt das
@@ -589,7 +589,7 @@ nie committen), unklarem Scope, oder history-verändernden Aktionen (force-push,
   während ein verworfenes Transkript im Editor stehen bliebe und beim Speichern die gelöschte
   Datei neu anlegte.
 - **Untertitel-Export `<base>.srt`** (`webtool/render_srt.py`, `POST …/export/srt`, Knopf im
-  Editor) — die Datei geht in YouTube Studio unter „Untertitel > Datei hochladen" und ersetzt
+  Editor) — die Datei geht in YouTube Studio unter „Untertitel > Datei hochladen“ und ersetzt
   das schwache Auto-Transkript. Zwilling von `render_md.py`: gleiche Eingabe, andere Ausgabe.
   Zwei Entscheidungen, die man nicht umdrehen sollte, ohne den Grund zu kennen: der
   Sprechername steht **nur beim Wechsel** und mit `>>` davor (in jeder Zeile frisst er den
@@ -619,10 +619,10 @@ nie committen), unklarem Scope, oder history-verändernden Aktionen (force-push,
 - **URL-Import ist eine eigene Job-Art `fetch`** (nicht mehr `transcribe`): der Download braucht keine GPU und wurde als GPU-Art von jeder laufenden Transkription blockiert — und die läuft seit dem Auto-Trigger ständig. `python -m webtool.fetch --download-only` lädt nur, `then=` übergibt an den normalen Transkriptions-Job; der direkte CLI-Aufruf transkribiert weiterhin selbst. `jobPhases.ts` behandelt `fetch` wie `transcribe` (gleicher Zeilen-Dialekt), `KIND_LABEL` liefert den Fallback-Text.
 - **Live-Status ohne Reload:** `useProjects` pollt `/api/projects` (Default 4s, ersetzt das alte Intervall in `HomeGallery`). Nötig, seit Jobs auch ohne Klick starten — sonst sähe ein offener Tab weder die neue Datei noch den fremd gestarteten Job. Kein `setLoading` beim Poll (sonst flackert die Liste), und ein Poll-Fehler behält die letzte bekannte Liste.
 - Stufe 2b (Browser-Korrektur): `POST /api/projects/{project}/correct` startet `python -m webtool.correct run <NAME>` als `jobs.py`-Job (kind `correct`; Dedupe je `(Projekt, "correct")` — läuft also parallel zu einer Transkription desselben Projekts). Der `run`-Driver macht `prep` → ein `claude -p` für ein gemeinsames `_glossar.json` → pro Datei ein `claude -p` (Korrektur, schreibt `<base>.correction.json`) → per Default ein zweiter `claude -p` (**Treue-Verifikation** gegen das ID-getaggte `<base>.tagged.txt`, überschreibt `correction.json` mit der geprüften Fassung; ein ungültig schreibender Verify wird auf die gültige Erst-Korrektur zurückgerollt) → `apply`. Aufruf: `claude -p "<prompt>" --model opus --permission-mode acceptEdits --allowedTools Read,Write --strict-mcp-config --mcp-config '{"mcpServers":{}}' --add-dir <transkripte-Ordner>`, `cwd`=derselbe Ordner. **Der Schreibbereich ist EIN Projekt, nicht der Projektbaum:** `_ask_llm` leitet ihn aus dem Zielpfad ab (`os.path.dirname(output)`) — alle Ein- und Ausgaben eines Aufrufs liegen ohnehin im selben `transkripte`-Ordner. Vorher stand dort `projekte_root`, womit ein präpariertes Transkript (Prompt-Injection über den Audioinhalt, z.B. aus einem URL-Import) in die Transkripte **jedes anderen Projekts** schreiben konnte. **Kein MCP-Server:** halbiert den Startup (16,3s → 7,7s gemessen) und hält die persönlichen Server aus einem Lauf raus, der nicht vertrauenswürdigen Transkripttext verarbeitet.
-  **Parallelität:** Dateien laufen nach dem Glossar parallel, Blöcke einer Datei ebenfalls — aber **Block 1 läuft allein vor**, weil aus ihm die Cluster→Name-Zuordnung kommt, an der sich alle weiteren Blöcke orientieren (`known=_speaker_hint(...)`; sonst tauft jeder Block denselben Menschen anders). Der Deckel sitzt als `threading.Semaphore` in `_run_claude` und **nicht** in den Executors — sonst wären Datei- und Block-Parallelität multiplikativ. Default 3, via `TRANSKRIBOR_PARALLEL`. **Folge fürs Log:** die stdout-Zeilen verschränken sich, deshalb trägt **jede** Fortschrittszeile ihren Basisnamen (`→ Korrigiere <base> · Block i/n …`, `✓ <base> · Block i/n fertig`) — Vertrag mit `jobPhases.ts`, das `active` als `Record<base, …>` führt. **Erfolg = geschriebene `correction.json` existiert+parst+hat `segments`** (nicht Exitcode); fehlt sie → Datei überspringen, Rest weiterlaufen. Idempotent: `human_edited=true` oder vorhandene `correction.json` → SKIP. Ein via Cancel abgebrochener Lauf ist damit **resumbar**: schon fertig geschriebene `correction.json` bleiben stehen, ein Re-Run überspringt sie und holt nur fehlende/mid-write-kaputte (parsen nicht → gelten als „nicht vorhanden") nach; `apply` läuft beim erneuten Lauf. Der Treue-Pass ist Default-an, abschaltbar via `--no-verify` bzw. `TRANSKRIBOR_VERIFY=0` (kein Browser-Toggle — die Env greift server-weit über den uvicorn-Prozess). Verdoppelt die Opus-Aufrufe pro Datei; Cancel bricht Ausreißer ab. Kein API-Key (Claude-Code-Abo). Der Workflow `tools/correct_label.mjs` (Schritt 2 unten) bleibt die Alternative (Parallelität + In-Memory-Schema-Validierung der Agent-Ausgaben).
+  **Parallelität:** Dateien laufen nach dem Glossar parallel, Blöcke einer Datei ebenfalls — aber **Block 1 läuft allein vor**, weil aus ihm die Cluster→Name-Zuordnung kommt, an der sich alle weiteren Blöcke orientieren (`known=_speaker_hint(...)`; sonst tauft jeder Block denselben Menschen anders). Der Deckel sitzt als `threading.Semaphore` in `_run_claude` und **nicht** in den Executors — sonst wären Datei- und Block-Parallelität multiplikativ. Default 3, via `TRANSKRIBOR_PARALLEL`. **Folge fürs Log:** die stdout-Zeilen verschränken sich, deshalb trägt **jede** Fortschrittszeile ihren Basisnamen (`→ Korrigiere <base> · Block i/n …`, `✓ <base> · Block i/n fertig`) — Vertrag mit `jobPhases.ts`, das `active` als `Record<base, …>` führt. **Erfolg = geschriebene `correction.json` existiert+parst+hat `segments`** (nicht Exitcode); fehlt sie → Datei überspringen, Rest weiterlaufen. Idempotent: `human_edited=true` oder vorhandene `correction.json` → SKIP. Ein via Cancel abgebrochener Lauf ist damit **resumbar**: schon fertig geschriebene `correction.json` bleiben stehen, ein Re-Run überspringt sie und holt nur fehlende/mid-write-kaputte (parsen nicht → gelten als „nicht vorhanden“) nach; `apply` läuft beim erneuten Lauf. Der Treue-Pass ist Default-an, abschaltbar via `--no-verify` bzw. `TRANSKRIBOR_VERIFY=0` (kein Browser-Toggle — die Env greift server-weit über den uvicorn-Prozess). Verdoppelt die Opus-Aufrufe pro Datei; Cancel bricht Ausreißer ab. Kein API-Key (Claude-Code-Abo). Der Workflow `tools/correct_label.mjs` (Schritt 2 unten) bleibt die Alternative (Parallelität + In-Memory-Schema-Validierung der Agent-Ausgaben).
 - URL-Import (YouTube/Instagram): `webtool/fetch.py` (yt-dlp) lädt die Tonspur als `.m4a`
   nach `projekte\<NAME>\audio\` und transkribiert anschliessend **nur** diese Dateien
-  (`transcribe.find_audio(..., only=[...])`). Start im Web-Tool über das Feld „Video-URLs"
+  (`transcribe.find_audio(..., only=[...])`). Start im Web-Tool über das Feld „Video-URLs“
   (mehrere URLs, eine pro Zeile) oder per CLI:
   `python -m webtool.fetch "<NAME>" <url> [<url> ...]` (cwd = Repo-Root).
   Endpoint: `POST /api/projects/{p}/fetch` `{urls:[...]}` → Job mit `kind="transcribe"`

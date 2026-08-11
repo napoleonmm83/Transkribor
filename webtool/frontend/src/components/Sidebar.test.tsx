@@ -89,12 +89,12 @@ describe('Sidebar', () => {
   })
 
   it('sperrt Korrigieren ohne KI-Anbieter und nennt den Grund', async () => {
-    const grund = 'Claude Code ist nicht installiert. Unter „Einstellungen" einrichten.'
+    const grund = 'Claude Code ist nicht installiert. Unter „Einstellungen“ einrichten.'
     zeigen({ offen: 'Alpha', dateien: DATEIEN, aiReason: grund })
     expect(screen.getByLabelText('Korrigieren + Sprecher')).toBeDisabled()
     expect(screen.getByLabelText('Transkribieren')).not.toBeDisabled()   // nur die Korrektur
     // Die Datei-Seite steckt im ⋯-Menue (DateiMenue) und muss dort ebenso gesperrt sein.
-    fireEvent.pointerDown(screen.getByLabelText('Aktionen für „a"'),
+    fireEvent.pointerDown(screen.getByLabelText('Aktionen für „a“'),
       { button: 0, ctrlKey: false, pointerType: 'mouse' })
     expect(await screen.findByRole('menuitem', { name: 'Korrigieren' })).toHaveAttribute('data-disabled')
   })
@@ -134,10 +134,10 @@ describe('Sidebar', () => {
     await waitFor(() => expect(onGeloescht).toHaveBeenCalledWith('Alpha'))
   })
 
-  it('„x anlegen" im leeren Suchtreffer belegt den Namen vor', () => {
+  it('„x anlegen“ im leeren Suchtreffer belegt den Namen vor', () => {
     zeigen()
     fireEvent.change(screen.getByLabelText('Projekte durchsuchen'), { target: { value: 'Neu' } })
-    fireEvent.click(screen.getByText(/^„Neu" anlegen$/))
+    fireEvent.click(screen.getByText(/^„Neu“ anlegen$/))
     expect(screen.getByLabelText('Projektname')).toHaveValue('Neu')
   })
 })

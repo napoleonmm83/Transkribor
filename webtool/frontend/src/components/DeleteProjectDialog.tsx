@@ -25,7 +25,7 @@ export function DeleteProjectDialog({ project, onDeleted }: { project: string; o
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Projekt „{project}" löschen?</AlertDialogTitle>
+          <AlertDialogTitle>Projekt „{project}“ löschen?</AlertDialogTitle>
           <AlertDialogDescription>
             Löscht alle Audio- und Transkript-Dateien unwiderruflich. Zum Bestätigen den Projektnamen eintippen.
           </AlertDialogDescription>

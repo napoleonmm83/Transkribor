@@ -5,7 +5,7 @@ export function UncertainWord({ word, cls }: { word: Word; cls: 'u-yellow' | 'u-
   return (
     <Tooltip>
       <TooltipTrigger asChild><span className={cls}>{word.word}</span></TooltipTrigger>
-      <TooltipContent>Roh: „{word.word.trim()}" · {(word.probability ?? 1).toFixed(2)}</TooltipContent>
+      <TooltipContent>Roh: „{word.word.trim()}“ · {(word.probability ?? 1).toFixed(2)}</TooltipContent>
     </Tooltip>
   )
 }

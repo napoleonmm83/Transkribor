@@ -72,7 +72,7 @@ ausblenden.
 
 **Ordnung, auch nach hundert Aufnahmen.** Projekte und Aufnahmen lassen sich jederzeit
 umbenennen — beim Umbenennen einer Aufnahme bietet dir Transkribor die Namen der Sprecher an,
-sodass aus `01172464` ein „Hans Müller, Garage Rüthi" wird. Suchfeld und `Strg+K` führen dich
+sodass aus `01172464` ein „Hans Müller, Garage Rüthi“ wird. Suchfeld und `Strg+K` führen dich
 auch in grossen Sammlungen mit einem Griff zum richtigen Projekt.
 
 **Videos direkt aus dem Netz.** YouTube- oder Instagram-Adresse einfügen genügt; Transkribor

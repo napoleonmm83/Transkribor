@@ -25,7 +25,7 @@ export function SpeakerCombobox({ value, options, onChange, className, style, ti
           <CommandList>
             <CommandGroup>
               {query.trim() && !options.includes(query.trim()) &&
-                <CommandItem value={query} onSelect={() => commit(query.trim())}>„{query.trim()}" übernehmen</CommandItem>}
+                <CommandItem value={query} onSelect={() => commit(query.trim())}>„{query.trim()}“ übernehmen</CommandItem>}
               {options.map(o => <CommandItem key={o} value={o} onSelect={() => commit(o)}>{o}</CommandItem>)}
             </CommandGroup>
           </CommandList>

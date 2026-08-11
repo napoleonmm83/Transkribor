@@ -70,7 +70,7 @@ export function DateiMenue({ project, file, aiReason }: {
     // Korrektur und tippt weiter, waehrend sie laeuft. Darum die Wahl — und weil beide
     // Ausgaenge etwas kosten, stehen beide im Text.
     if (e.dirty && !window.confirm(
-      `Die Korrektur von „${file.base}" ist fertig.\n\n`
+      `Die Korrektur von „${file.base}“ ist fertig.\n\n`
       + 'OK: korrigierte Fassung laden — deine ungespeicherten Änderungen gehen verloren.\n'
       + 'Abbrechen: deine Fassung behalten — beim Speichern überschreibst du die Korrektur.')) return
     e.reload()
@@ -91,7 +91,7 @@ export function DateiMenue({ project, file, aiReason }: {
       try { await deleteFile(project, file.base) }
       catch (e) { toast.error(`Löschen fehlgeschlagen: ${(e as Error).message}`); return }
       wegVomEditor()
-      toast.success(`„${file.base}" gelöscht`)
+      toast.success(`„${file.base}“ gelöscht`)
       nachladen()
     }
   }
@@ -108,11 +108,11 @@ export function DateiMenue({ project, file, aiReason }: {
   const umbenannt = async (neu: string) => {
     // Der Editor laedt beim Pfadwechsel neu — ungespeichertes waere sonst still weg.
     if (offen && editor.current?.dirty && !window.confirm(
-      `„${file.base}" hat ungespeicherte Änderungen.\n\n`
+      `„${file.base}“ hat ungespeicherte Änderungen.\n\n`
       + 'Beim Umbenennen wird die Datei neu geladen — die Änderungen gehen verloren.')) return false
     const res = await renameFile(project, file.base, neu)
     if (offen) navigate(`/p/${encodeURIComponent(project)}/${encodeURIComponent(res.name)}`, { replace: true })
-    toast.success(`„${file.base}" heisst jetzt „${res.name}"`)
+    toast.success(`„${file.base}“ heisst jetzt „${res.name}“`)
     nachladen()
   }
 
@@ -125,18 +125,18 @@ export function DateiMenue({ project, file, aiReason }: {
 
   const texte: Record<Aktion, { titel: string; text: string; knopf: string }> = {
     correct: {
-      titel: `„${file.base}" neu korrigieren?`,
+      titel: `„${file.base}“ neu korrigieren?`,
       text: 'Überschreibt die vorhandene — womöglich von Hand bearbeitete — Fassung.',
       knopf: 'Neu korrigieren',
     },
     transcribe: {
-      titel: `„${file.base}" neu transkribieren?`,
+      titel: `„${file.base}“ neu transkribieren?`,
       text: 'Verwirft Transkript, Korrektur und Export dieser Aufnahme und lässt Whisper neu '
         + 'laufen. Das Audio bleibt erhalten; die Korrektur läuft danach automatisch erneut.',
       knopf: 'Neu transkribieren',
     },
     delete: {
-      titel: `„${file.base}" löschen?`,
+      titel: `„${file.base}“ löschen?`,
       text: 'Löscht Audio und alle Transkripte dieser Aufnahme unwiderruflich. Das Projekt bleibt bestehen.',
       knopf: 'Löschen',
     },
@@ -149,7 +149,7 @@ export function DateiMenue({ project, file, aiReason }: {
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button size="icon" variant="ghost" className="size-8"
-              title="Aktionen" aria-label={`Aktionen für „${file.base}"`}>
+              title="Aktionen" aria-label={`Aktionen für „${file.base}“`}>
               <MoreHorizontal className="size-3.5" />
             </Button>
           </DropdownMenuTrigger>

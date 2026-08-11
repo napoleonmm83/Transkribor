@@ -58,13 +58,13 @@ const BREW_INSTALL =
  * laufendes Electron pruefbar ist.
  *
  * **macOS installiert die App selbst, sobald Homebrew da ist.** Frueher zeigte sie hier nur
- * den Befehl zum Kopieren, mit der Begruendung „braeuchte sudo". Das stimmt fuer Homebrew
+ * den Befehl zum Kopieren, mit der Begruendung „braeuchte sudo“. Das stimmt fuer Homebrew
  * SELBST (es legt /opt/homebrew an) — aber nicht fuer `brew install <paket>`: der Ordner
  * gehoert danach dem Nutzer, und brew verlangt dort kein Kennwort. Die beiden Faelle waren
  * vermischt, und der Nutzer tippte einen Befehl ab, den die App genauso gut ausfuehren kann.
  * Ohne Homebrew bleibt es beim Hinweis — dann aber inklusive der Zeile, die Homebrew
  * ueberhaupt erst installiert (vorher stand dort ein `brew install …`, das ohne brew mit
- * „command not found" endet).
+ * „command not found“ endet).
  *
  * Linux bleibt beim Hinweis: `apt`/`dnf`/`pacman` brauchen echtes sudo.
  *
@@ -92,7 +92,7 @@ function plan(platform, paketmanager, arch = process.arch, brew = false) {
       installer: null,
       brewPakete: pakete,
       hinweis: `Bitte einmalig Homebrew installieren:  ${BREW_INSTALL}\n`
-        + 'Danach „Erneut versuchen" — den Rest erledigt Transkribor selbst.',
+        + 'Danach „Erneut versuchen“ — den Rest erledigt Transkribor selbst.',
     }
   }
   const befehl = LINUX_PAKETE[paketmanager]
