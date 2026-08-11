@@ -509,6 +509,25 @@ nie committen), unklarem Scope, oder history-verändernden Aktionen (force-push,
   Hot-Reload: `npm --prefix webtool/frontend run dev` (Vite :5173, proxied `/api` zu :8000).
   Kanonisches Editier-Dokument bleibt `<base>.edit.json` (aus Roh-`<base>.json`), Export
   `<base>.md`. Spec: `docs/superpowers/specs/2026-07-06-transkribor-webtool-design.md`.
+- **Sprecher umbenennen heisst: überall, wo das Dokument den Namen NENNT** (`lib/grouping.ts`).
+  Der Knopf im Blockkopf verspricht „im ganzen Transkript“, fasste aber nur `speakers` und
+  `segments[].speaker` an. `context`, `summary`, `annotations[]` und `segments[].note` sind
+  ebenfalls Felder des Dokuments, in denen der Name als Fliesstext steht — und `render_md`
+  stellt Kontext und Zusammenfassung ganz nach OBEN. **Gefunden an einem echten Export**
+  (`01394435.md`): 67 Sprecherzeilen trugen „Fuhat Aras“, die ersten beiden Absätze „Buad
+  Aras“ — die Fassung, die die ASR gehört hatte.
+  **Der gesprochene Text bleibt unberührt** (`text`/`raw_text`): das Transkript ist das
+  Protokoll des Gesagten, kein Namensfeld. Ein Klick auf die Sprecherspalte darf nicht still
+  fünfzig Sätze umschreiben; dort korrigiert man Segment für Segment.
+  **Wortgrenzen über Lookarounds auf `\p{L}\p{N}`, nicht über `\b`.** JS' `\b` ist
+  ASCII-basiert: bei einem Namen mit Umlaut am Rand („Ürsli“) greift es an der falschen
+  Stelle. Der Name wird zusätzlich regex-maskiert — „Dr. Meier“ ist ein zulässiger Name, und
+  der Punkt wäre sonst ein Platzhalter. Ohne die Grenzen macht „Anna“ aus „Annahme“ Unsinn.
+- **Ein Feld, das im Export steht und im Editor nicht, ist eines, dessen Fehler niemand sieht.**
+  `context` ging jahrelang in jedes `.md` (erster Absatz), war im Editor aber nirgends
+  sichtbar — genau darum fiel der alte Sprechername erst in der heruntergeladenen Datei auf.
+  `Transcript.tsx` zeigt ihn jetzt über der Zusammenfassung, in der Reihenfolge des Exports.
+  Wer ein Feld in `render_md`/`render_srt` aufnimmt, zeigt es auch im Editor.
 - **Der Editor speichert selbst; einen Speichern-Knopf gibt es nicht mehr** (`useDoc.ts`,
   800 ms nach der letzten Änderung). Vier Dinge, die man nicht aus dem Diff liest:
   **Die Entprellung IST der Effekt** — `save` hängt an `doc`, wechselt also bei jeder Änderung

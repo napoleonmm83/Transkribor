@@ -38,11 +38,25 @@ export function Transcript({ doc, loading, activeId, onPlaySeg, onPlayTurn, upda
           Muss mit grid-cols in SpeakerTurn uebereinstimmen. */}
       <div ref={contentRef} className="mx-auto max-w-[calc(112px+var(--measure))] px-6 py-8">
         {/* Vor dem Transkript, nicht danach: die Zusammenfassung beantwortet "worum geht es
-            hier", und diese Frage stellt man beim Oeffnen, nicht nach 400 Segmenten. */}
-        {doc.summary?.trim() && (
-          <section className="mb-8 border-b pb-5">
-            <h2 className="rubrik mb-3">Zusammenfassung</h2>
-            <p className="lesebreite text-sm leading-relaxed text-muted-foreground">{doc.summary}</p>
+            hier", und diese Frage stellt man beim Oeffnen, nicht nach 400 Segmenten.
+            Der Kontext stand hier lange NICHT — obwohl `render_md` ihn als ersten Absatz
+            exportiert. Ein Feld, das im Export steht und im Editor nicht, ist eines, dessen
+            Fehler niemand sieht: genau so ging ein alter Sprechername mit hinaus. Reihenfolge
+            wie im Markdown, damit Bildschirm und Datei dasselbe Dokument zeigen. */}
+        {(doc.context?.trim() || doc.summary?.trim()) && (
+          <section className="mb-8 space-y-5 border-b pb-5">
+            {doc.context?.trim() && (
+              <div>
+                <h2 className="rubrik mb-3">Kontext</h2>
+                <p className="lesebreite text-sm leading-relaxed text-muted-foreground">{doc.context}</p>
+              </div>
+            )}
+            {doc.summary?.trim() && (
+              <div>
+                <h2 className="rubrik mb-3">Zusammenfassung</h2>
+                <p className="lesebreite text-sm leading-relaxed text-muted-foreground">{doc.summary}</p>
+              </div>
+            )}
           </section>
         )}
         {turns.map(t => (

@@ -55,4 +55,57 @@ describe('renameSpeaker', () => {
     expect(d.speakers).toEqual(['B'])
     expect(d.segments.map(s => s.speaker)).toEqual(['B', 'B'])
   })
+
+  // Der Befund aus dem Export "01394435.md": Sprecherzeilen trugen den neuen Namen, Kontext
+  // und Zusammenfassung den alten — beide stehen im Markdown ganz oben. Der Knopf verspricht
+  // "im ganzen Transkript", also muss der Name ueberall fallen, wo das Dokument ihn NENNT.
+  it('zieht den Namen auch durch Kontext, Zusammenfassung, Anmerkungen und Segment-Notizen', () => {
+    const doc: EditDoc = {
+      ...mkDoc(['Buad Aras'], ['Buad Aras', 'Buad Aras']),
+      context: 'Kurzinterview mit Buad Aras, Lackierer.',
+      summary: 'Buad Aras stellt seinen Dodge vor.',
+      annotations: ['Segment 5: Buad Aras nennt sich selbst anders.'],
+    }
+    doc.segments[1] = { ...doc.segments[1], note: 'Buad Aras undeutlich' }
+
+    const d = renameSpeaker(doc, 'Buad Aras', 'Fuhat Aras')
+
+    expect(d.context).toBe('Kurzinterview mit Fuhat Aras, Lackierer.')
+    expect(d.summary).toBe('Fuhat Aras stellt seinen Dodge vor.')
+    expect(d.annotations).toEqual(['Segment 5: Fuhat Aras nennt sich selbst anders.'])
+    expect(d.segments[1].note).toBe('Fuhat Aras undeutlich')
+  })
+
+  it('laesst den gesprochenen Text in Ruhe', () => {
+    // Das Transkript ist das Protokoll des Gesagten, kein Namensfeld. Wer die Sprecherspalte
+    // umbenennt, will nicht, dass sich still fuenfzig Saetze aendern.
+    const doc = mkDoc(['A'], ['A'])
+    doc.segments[0] = { ...doc.segments[0], text: 'Mein Name ist A.', raw_text: 'Mein Name ist A.' }
+    const d = renameSpeaker(doc, 'A', 'B')
+    expect(d.segments[0].text).toBe('Mein Name ist A.')
+    expect(d.segments[0].raw_text).toBe('Mein Name ist A.')
+  })
+
+  it('ersetzt nur GANZE Woerter — auch bei Umlaut am Rand und Sonderzeichen im Namen', () => {
+    // `\b` waere hier falsch: es ist in JS ASCII-basiert, ein Name mit Umlaut am Rand faellt
+    // durch. Und "Anna" darf "Annahme" nicht anfassen.
+    const doc: EditDoc = {
+      ...mkDoc(['Anna'], ['Anna']),
+      summary: 'Anna trifft eine Annahme. Ohne Anna keine Annalen.',
+    }
+    expect(renameSpeaker(doc, 'Anna', 'Ürsli').summary)
+      .toBe('Ürsli trifft eine Annahme. Ohne Ürsli keine Annalen.')
+
+    const doc2: EditDoc = { ...mkDoc(['Ürsli'], ['Ürsli']), summary: 'Ürsli und Ürslis Hut.' }
+    expect(renameSpeaker(doc2, 'Ürsli', 'Anna').summary).toBe('Anna und Ürslis Hut.')
+
+    const doc3: EditDoc = { ...mkDoc(['Dr. Meier'], ['Dr. Meier']), summary: 'Dr. Meier (Dr. Meier) spricht.' }
+    expect(renameSpeaker(doc3, 'Dr. Meier', 'Meier').summary).toBe('Meier (Meier) spricht.')
+  })
+
+  it('haelt unveraenderte Segmente identisch (kein unnoetiges Neu-Rendern)', () => {
+    const doc = mkDoc(['A', 'B'], ['A', 'B'])
+    const d = renameSpeaker(doc, 'A', 'C')
+    expect(d.segments[1]).toBe(doc.segments[1])
+  })
 })
