@@ -132,6 +132,9 @@ app.whenReady().then(async () => {
   // nicht wiederfindet, gibt es bewusst nicht mehr.
   try {
     const { autoUpdater } = require('electron-updater')
+    const { shell } = require('electron')
+    const paket = require('../package.json')
+    const macUrls = updater.macUrls(paket)
     autoUpdater.logger = null
     aktualisierer = updater.erstellen({
       autoUpdater,
@@ -139,6 +142,12 @@ app.whenReady().then(async () => {
       plattform: process.platform,
       gepackt: app.isPackaged,
       appimage: !!process.env.APPIMAGE,
+      // Mac prueft manuell per latest-mac.yml (Auto-Update ohne Notarisierung tot); Win/Linux
+      // ignorieren hole/openExternal/URLs — sie wandern nur in den Mac-Zweig von erstellen().
+      hole: fetch,
+      openExternal: shell.openExternal,
+      feedUrl: macUrls && macUrls.feed,
+      releaseUrl: macUrls && macUrls.release,
       aendert: z => {
         if (z.art === 'fehler') protokoll.schreiben(`Update-Pruefung fehlgeschlagen: ${z.text}`)
         if (win && !win.isDestroyed()) win.webContents.send('update', z)

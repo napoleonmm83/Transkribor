@@ -22,7 +22,6 @@ function mb(bytes: number, stellen = 0) {
 /** Der Grund kommt als Code aus Electron — der Satz gehoert hierher, wo Umlaute erlaubt sind. */
 const GRUENDE: Record<string, string> = {
   entwicklung: 'Entwicklungsmodus — Updates gibt es nur in der installierten App.',
-  darwin: 'Auf macOS nicht möglich, solange die App nicht notarisiert ist.',
   'kein-appimage': 'Nur die AppImage kann sich selbst aktualisieren.',
 }
 
@@ -414,6 +413,18 @@ export function SettingsPage() {
                 Herunterladen{upd.groesse != null && ` (${mb(upd.groesse)} MB)`}
               </Button>
             </div>
+          )}
+
+          {upd.art === 'verfuegbar_manuell' && (
+            // Mac: Auto-Update ohne Notarisierung nicht moeglich, aber die Pruefung lief. Statt des
+            // Auto-Download-Knopfs ein Link zur Release-Seite — dort laedt der Nutzer das dmg selbst.
+            <p className="mt-3 text-sm">
+              Update {upd.neue} verfügbar{upd.groesse != null && ` (${mb(upd.groesse)} MB)`}.{' '}
+              Auf macOS ist Auto-Update ohne Notarisierung nicht möglich.{' '}
+              <a className="underline underline-offset-2 hover:text-foreground" href={RELEASES} target="_blank" rel="noreferrer">
+                Manuell herunterladen
+              </a>
+            </p>
           )}
 
           {upd.art === 'laedt' && (
