@@ -6,7 +6,6 @@ import {
 import type { ExportFmt } from '@/lib/api'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { FLAGS } from './SegmentView'
-import { ThemeToggle } from './ThemeToggle'
 
 export function Toolbar({ dirty, canSave, onSave, onExport }: {
   dirty: boolean; canSave: boolean;
@@ -72,7 +71,8 @@ export function Toolbar({ dirty, canSave, onSave, onExport }: {
           <DropdownMenuItem onSelect={() => onExport('srt', false)}>Ohne Sprechernamen</DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-      <ThemeToggle />
+      {/* Der Theme-Umschalter stand hier und NUR hier — jetzt in der Fusszeile, die auf
+          jeder Seite da ist. Zweimal auf demselben Schirm waere er einmal zu viel. */}
     </header>
   )
 }

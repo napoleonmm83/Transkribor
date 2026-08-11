@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Settings } from 'lucide-react'
+import { ThemeToggle } from './ThemeToggle'
 import { useActiveJob } from '@/hooks/useActiveJob'
 import { useUpdate } from '@/hooks/useUpdate'
 import { getHardware } from '@/lib/api'
@@ -74,6 +75,8 @@ export function StatusBar() {
                    hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
         <Settings className="size-3" aria-hidden="true" /> Einstellungen
       </Link>
+      {/* Aus derselben Not wie der Einstellungen-Link: er stand nur in der Editor-Leiste. */}
+      <ThemeToggle />
       {rechenwerk && <span className="shrink-0">{rechenwerk}</span>}
       <span className="shrink-0 tabular-nums">v{version}</span>
     </footer>
