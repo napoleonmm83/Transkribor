@@ -132,4 +132,12 @@ describe('Transcript', () => {
       onPlaySeg={vi.fn()} onPlayTurn={vi.fn()} updateSegment={vi.fn()} renameSpeaker={vi.fn()} updateDoc={vi.fn()} />)
     expect(screen.queryByText(/Keine Datei geöffnet/)).not.toBeInTheDocument()
   })
+
+  it('Suche: graut Nicht-Treffer aus, aktiver Treffer mit Ring — wird durchgereicht', () => {
+    render(<TooltipProvider><Transcript doc={doc} activeId={null}
+      onPlaySeg={vi.fn()} onPlayTurn={vi.fn()} updateSegment={vi.fn()} renameSpeaker={vi.fn()} updateDoc={vi.fn()}
+      sucheAktiv trefferIds={new Set([2])} suchAktivId={2} /></TooltipProvider>)
+    expect(document.querySelector('[data-seg-id="1"]')).toHaveClass('opacity-40')
+    expect(document.querySelector('[data-seg-id="2"]')).toHaveClass('ring-yellow-400')
+  })
 })
