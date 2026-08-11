@@ -142,6 +142,74 @@ describe('useDoc: gleichzeitige Speicherlaeufe', () => {
   })
 })
 
+describe('useDoc: Dateiwechsel mitten im Speichern', () => {
+  it('ein Lauf fuer Datei A darf die Aenderung an Datei B nicht als gesichert melden', async () => {
+    // `fassung` und `kette` sind Refs — sie ueberleben den Dateiwechsel, `doc`/`dirty` nicht.
+    // Laeuft A noch, waehrend der Nutzer laengst in B tippt, meldet As Rueckkehr `dirty=false`
+    // fuer B. Bs Tastendruck gilt dann als gesichert, ist aber nie geschrieben worden.
+    const docB: EditDoc = { ...doc, base: 'b2' }
+    let fertigA: () => void = () => {}
+    vi.mocked(api.saveDoc).mockReturnValueOnce(new Promise<void>(r => { fertigA = r }) as never)
+    vi.mocked(api.saveDoc).mockResolvedValue(undefined as never)
+
+    vi.useFakeTimers()
+    vi.mocked(api.getDoc).mockResolvedValue(doc)
+    const h = renderHook(({ b }) => useDoc('P', b), { initialProps: { b: 'b' } })
+    await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+
+    await act(async () => { h.result.current.updateSegment(0, { text: 'A-Text' }) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(800) })   // Lauf A startet, haengt
+
+    // Nutzer wechselt die Datei
+    vi.mocked(api.getDoc).mockResolvedValue(docB)
+    h.rerender({ b: 'b2' })
+    await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+    expect(h.result.current.doc?.base).toBe('b2')
+
+    // ... und tippt dort
+    await act(async () => { h.result.current.updateSegment(0, { text: 'B-Text' }) })
+    expect(h.result.current.dirty).toBe(true)
+
+    // Jetzt kehrt der Lauf fuer die ALTE Datei zurueck
+    await act(async () => { fertigA(); await vi.advanceTimersByTimeAsync(0) })
+
+    expect(h.result.current.dirty).toBe(true)   // Bs Tastendruck ist NICHT gesichert
+  })
+
+  it('auch ein Lauf, der ERST NACH dem Wechsel startet, darf das nicht', async () => {
+    // Die Verkettung erlaubt, was es vorher nicht gab: ein zweiter Lauf fuer Datei A wartet,
+    // waehrend der Nutzer schon in B tippt — und startet danach. Er liest `fassung` erst beim
+    // Start, sieht Bs Tastendruck also als "seinen" Stand und meldet ihn als gesichert.
+    const docB: EditDoc = { ...doc, base: 'b2' }
+    let fertigA1: () => void = () => {}
+    vi.mocked(api.saveDoc)
+      .mockReturnValueOnce(new Promise<void>(r => { fertigA1 = r }) as never)
+      .mockResolvedValue(undefined as never)
+
+    vi.useFakeTimers()
+    vi.mocked(api.getDoc).mockResolvedValue(doc)
+    const h = renderHook(({ b }) => useDoc('P', b), { initialProps: { b: 'b' } })
+    await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+
+    await act(async () => { h.result.current.updateSegment(0, { text: 'A-eins' }) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(800) })    // A1 startet, haengt
+    await act(async () => { h.result.current.updateSegment(0, { text: 'A-zwei' }) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(800) })    // A2 haengt in der Kette
+
+    vi.mocked(api.getDoc).mockResolvedValue(docB)
+    h.rerender({ b: 'b2' })
+    await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+
+    await act(async () => { h.result.current.updateSegment(0, { text: 'B-Text' }) })
+    expect(h.result.current.dirty).toBe(true)
+
+    // A1 kehrt zurueck -> A2 startet JETZT, nach Bs Tastendruck
+    await act(async () => { fertigA1(); await vi.advanceTimersByTimeAsync(0) })
+
+    expect(h.result.current.dirty).toBe(true)   // Bs Tastendruck ist NICHT gesichert
+  })
+})
+
 describe('useDoc Export-Fehler', () => {
   it('zeigt einen Toast statt einen unhandled rejection bei fehlgeschlagenem exportDownload()', async () => {
     vi.mocked(api.getDoc).mockResolvedValue(doc)

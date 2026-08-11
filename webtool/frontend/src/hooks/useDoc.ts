@@ -73,6 +73,24 @@ export function useDoc(project: string | null, base: string | null) {
    */
   const kette = useRef<Promise<void>>(Promise.resolve())
 
+  /**
+   * Welches Dokument gerade offen ist. `kette` und `fassung` sind Refs — sie ueberleben einen
+   * Dateiwechsel, `doc`/`dirty` nicht. Ein wartender Lauf fuer Datei A kann deshalb erst
+   * losgehen, wenn der Editor laengst Datei B zeigt: er liest `fassung` beim Start, sieht Bs
+   * Tastendruck als seinen eigenen Stand und meldet ihn als gesichert — Bs Aenderung gaelte als
+   * geschrieben, ohne es je gewesen zu sein. Dieses Fenster hat die Verkettung selbst
+   * aufgemacht (vorher raeumte die Effekt-Bereinigung den Timer beim Wechsel ab).
+   *
+   * Im Effekt gesetzt, nicht beim Rendern: ein verworfener Render (Concurrent) wuerde den Ref
+   * sonst auf ein Dokument setzen, das nie auf dem Schirm stand. Beide Varianten bestehen die
+   * Tests gleichermassen — die Entscheidung folgt also der Regel, nicht einer Messung.
+   *
+   * Geschrieben wird trotzdem: der Lauf traegt As Inhalt und As Pfad, der gehoert in As Datei.
+   * Nur die Buchfuehrung (dirty/stand) gilt dem offenen Dokument und wird uebersprungen.
+   */
+  const offen = useRef('')
+  useEffect(() => { offen.current = `${project} ${base}` }, [project, base])
+
   const save = useCallback(async () => {
     if (!doc || !project || !base) return
     // Angehaengt, nicht nebenher gestartet — und bewusst INNERHALB von `save`: eine ausgelagerte
@@ -80,18 +98,28 @@ export function useDoc(project: string | null, base: string | null) {
     // Entprellungs-Effekt seinen Timer endlos neu setzt und nie speichert), oder ein
     // Lint-Suppress. `speichern` wirft nicht, die Kette kann also nicht vergiften.
     const lauf = kette.current.then(async () => {
+      /** Gilt dieser Lauf noch dem Dokument, das der Editor zeigt? */
+      const meins = () => offen.current === `${project} ${base}`
       const v = fassung.current
-      setStand('speichert')
+      if (meins()) setStand('speichert')
       try {
         await saveDoc(project, base, doc)
+        // Zwischen Start und Rueckkehr kann die Datei gewechselt haben — dann gehoert die
+        // Buchfuehrung einem anderen Dokument und darf hier nicht angefasst werden.
+        if (!meins()) return
         // Wurde waehrend des Laufs weitergetippt, ist das Geschriebene schon wieder alt: `dirty`
         // muss stehen bleiben, sonst faellt genau diese Aenderung lautlos unter den Tisch. Die
         // Entprellung unten hat fuer sie bereits einen neuen Lauf angesetzt.
         if (fassung.current !== v) { setStand('offen'); return }
         setDirty(false); setStand('gespeichert')
       } catch (e) {
-        setStand('fehler')   // `dirty` bleibt -> die Rueckfragen beim Verlassen greifen weiter
-        toast.error('Speichern fehlgeschlagen: ' + (e as Error).message)
+        // Der Toast kommt IMMER — ein fehlgeschlagenes Speichern zu verschweigen, weil der
+        // Nutzer inzwischen woanders ist, waere genau der stille Verlust. Er nennt dann die
+        // Datei, sonst stuende die Meldung ohne Bezug ueber einem fremden Dokument. Die
+        // Anzeige dagegen gehoert dem offenen Dokument und bleibt unberuehrt.
+        if (meins()) setStand('fehler')   // `dirty` bleibt -> Rueckfragen beim Verlassen greifen
+        toast.error(`Speichern${meins() ? '' : ` von „${base}“`} fehlgeschlagen: `
+          + (e as Error).message)
       }
     })
     kette.current = lauf
