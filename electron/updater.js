@@ -11,12 +11,45 @@
  */
 function nichtMoeglich(plattform, gepackt, appimage) {
   if (!gepackt) return 'entwicklung'
-  // Squirrel.Mac verlangt eine echte Signatur; unsere dmg ist nur ad-hoc signiert.
-  if (plattform === 'darwin') return 'darwin'
   // Die Variable setzt die AppImage-Laufzeit selbst; ein deb-Start hat sie nicht, und
   // fuer deb kennt electron-updater ohnehin keinen Weg.
   if (plattform === 'linux' && !appimage) return 'kein-appimage'
   return ''
+}
+
+/**
+ * Feed- + Release-URL fuer den Mac-Manualcheck aus build.publish ableiten. Eine Wahrheitsquelle
+ * statt hartkodiert — bei Repository-Umzug zieht das mit. null, falls kein github-Publish.
+ */
+function macUrls(paket) {
+  const p = paket && paket.build && paket.build.publish && paket.build.publish[0]
+  if (!p || p.provider !== 'github' || !p.owner || !p.repo) return null
+  const base = `https://github.com/${p.owner}/${p.repo}`
+  return { feed: `${base}/releases/latest/download/latest-mac.yml`, release: `${base}/releases/latest` }
+}
+
+/** Semver-Vergleich. true falls a > b (X.Y.Z numerisch), null bei ungueltigem Format.
+ *  Build-Suffixe absichtlich nicht behandelt: latest-mac.yml traegt reines X.Y.Z, und alles andere
+ *  ist ein Fehlerzustand (-> 'fehler'), kein Stolpern im Dunkeln. */
+function istNeuer(a, b) {
+  const pa = /^(\d+)\.(\d+)\.(\d+)$/.exec(String(a))
+  const pb = /^(\d+)\.(\d+)\.(\d+)$/.exec(String(b))
+  if (!pa || !pb) return null
+  for (let i = 1; i <= 3; i++) {
+    const d = +pa[i] - +pb[i]
+    if (d > 0) return true
+    if (d < 0) return false
+  }
+  return false
+}
+
+/** Liest {version, groesse} aus einer latest-mac.yml; null, falls keine version-Zeile.
+ *  size ist optional (groesse dann null — nicht "0 MB" erfunden, dieselbe Regel wie 'verfuegbar'). */
+function parseLatestMac(text) {
+  const v = /^version:\s*(\S+)/m.exec(text)
+  if (!v) return null
+  const s = /^[\s-]*size:\s*(\d+)/m.exec(text)
+  return { version: v[1], groesse: s ? +s[1] : null }
 }
 
 /**
@@ -33,11 +66,33 @@ function sollPruefen(stand) { return !!stand && ERNEUT_PRUEFEN.includes(stand.ar
  * Baut den Automaten. `aendert` wird bei jeder Zustandsaenderung gerufen — daran haengt
  * die Anzeige im Fenster.
  */
-function erstellen({ autoUpdater, version, plattform, gepackt, appimage, aendert }) {
+function erstellen({ autoUpdater, version, plattform, gepackt, appimage, aendert, hole, openExternal, feedUrl, releaseUrl }) {
   const grund = nichtMoeglich(plattform, gepackt, appimage)
   let stand = grund ? { version, art: 'nicht_moeglich', grund } : { version, art: 'unbekannt' }
 
   const setzen = neu => { stand = { version, ...neu }; aendert(stand) }
+
+  // Mac: Auto-Update ist ohne Notarisierung tot (Squirrel.Mac will echte Signatur), aber die
+  // Pruefung laeuft am autoUpdater vorbei — ein HTTP-Vergleich gegen latest-mac.yml. Bei
+  // verfuegbar -> 'verfuegbar_manuell' (manueller Download), laden oeffnet den Browser, nicht
+  // downloadUpdate. hole/openExternal werden hereingereicht (wie autoUpdater) -> ohne Mac testbar.
+  if (plattform === 'darwin' && gepackt) {
+    return {
+      zustand: () => stand,
+      pruefen: () => {
+        setzen({ art: 'prueft' })
+        hole(feedUrl).then(r => r.text()).then(parseLatestMac).then(gelesen => {
+          if (!gelesen) return setzen({ art: 'fehler', text: 'latest-mac.yml ohne Version' })
+          const neu = istNeuer(gelesen.version, version)
+          if (neu === null) return setzen({ art: 'fehler', text: `Version nicht lesbar: ${gelesen.version}` })
+          if (neu) return setzen({ art: 'verfuegbar_manuell', neue: gelesen.version, groesse: gelesen.groesse })
+          setzen({ art: 'aktuell' })
+        }).catch(e => setzen({ art: 'fehler', text: (e && e.message) || String(e) }))
+      },
+      laden: () => { openExternal(releaseUrl) },
+      installieren: () => {},
+    }
+  }
 
   if (!grund) {
     // Ohne das laedt electron-updater beim Pruefen sofort los und "erst auf Klick"
@@ -79,4 +134,4 @@ function erstellen({ autoUpdater, version, plattform, gepackt, appimage, aendert
   }
 }
 
-module.exports = { nichtMoeglich, sollPruefen, erstellen }
+module.exports = { nichtMoeglich, sollPruefen, erstellen, macUrls, istNeuer, parseLatestMac }

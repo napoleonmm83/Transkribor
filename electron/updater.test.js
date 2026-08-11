@@ -1,14 +1,15 @@
 'use strict'
 const test = require('node:test')
 const assert = require('node:assert')
-const { nichtMoeglich, sollPruefen, erstellen } = require('./updater')
+const { nichtMoeglich, sollPruefen, erstellen, macUrls, istNeuer, parseLatestMac } = require('./updater')
 
 test('Entwicklungsmodus kann sich nicht selbst aktualisieren', () => {
   assert.strictEqual(nichtMoeglich('win32', false, false), 'entwicklung')
 })
 
-test('macOS kann es nicht, solange die App nicht notarisiert ist', () => {
-  assert.strictEqual(nichtMoeglich('darwin', true, false), 'darwin')
+test('macOS prüft jetzt manuell — kein nicht_moeglich mehr (Spec 2026-08-11)', () => {
+  assert.strictEqual(nichtMoeglich('darwin', true, false), '')
+  assert.strictEqual(nichtMoeglich('darwin', false, false), 'entwicklung')
 })
 
 test('Linux nur als AppImage — ein deb-Start hat die Variable nicht', () => {
@@ -115,8 +116,119 @@ test('fehlende Groesse wird nicht zu "0 MB" erfunden', () => {
 })
 
 test('wo Updates unmoeglich sind, wird gar nicht erst geprueft', () => {
-  const { au, u } = bauen({ plattform: 'darwin' })
+  // Mac prüft jetzt manuell (eigener Zweig); dieser Test sichert das generelle
+  // nicht_moeglich-Verhalten am Linux-deb-Fall (kein-appimage).
+  const au = attrappe()
+  const u = erstellen({ autoUpdater: au, version: '0.2.1', plattform: 'linux', gepackt: true, appimage: false, aendert: () => {} })
   assert.strictEqual(u.zustand().art, 'nicht_moeglich')
   u.pruefen()
   assert.deepStrictEqual(au.aufrufe, [], 'kein Aufruf, der ohnehin scheitern wuerde')
+})
+
+// --- Mac: manuelle Pruefung am autoUpdater vorbei (Spec 2026-08-11) ---
+
+test('macUrls leitet Feed + Release aus build.publish ab', () => {
+  const urls = macUrls({ build: { publish: [{ provider: 'github', owner: 'napoleonmm83', repo: 'Transkribor' }] } })
+  assert.strictEqual(urls.feed, 'https://github.com/napoleonmm83/Transkribor/releases/latest/download/latest-mac.yml')
+  assert.strictEqual(urls.release, 'https://github.com/napoleonmm83/Transkribor/releases/latest')
+})
+
+test('macUrls ohne github-publish -> null', () => {
+  assert.strictEqual(macUrls({}), null)
+  assert.strictEqual(macUrls({ build: { publish: [{ provider: 's3' }] } }), null)
+})
+
+test('istNeuer erkennt semver-Gefaelle', () => {
+  assert.strictEqual(istNeuer('0.17.0', '0.16.0'), true)
+  assert.strictEqual(istNeuer('0.16.0', '0.17.0'), false)
+  assert.strictEqual(istNeuer('0.17.0', '0.17.0'), false)
+  assert.strictEqual(istNeuer('1.0.0', '0.99.99'), true)
+})
+
+test('istNeuer liefert null bei ungueltigem Format', () => {
+  assert.strictEqual(istNeuer('x.y.z', '0.17.0'), null)
+  assert.strictEqual(istNeuer('0.17.0', 'kaputt'), null)
+})
+
+test('parseLatestMac liest Version und size', () => {
+  const yml = 'version: 0.17.0\nfiles:\n  - url: X.dmg\n    size: 149843177\npath: X.dmg\n'
+  assert.deepStrictEqual(parseLatestMac(yml), { version: '0.17.0', groesse: 149843177 })
+})
+
+test('parseLatestMac ohne Version -> null, size optional', () => {
+  assert.strictEqual(parseLatestMac('path: X.dmg\n'), null)
+  assert.strictEqual(parseLatestMac('version: 0.17.0\n').groesse, null)
+})
+
+// --- Mac-Automat: manuelle Pruefung am autoUpdater vorbei ---
+
+/** Attrappe fuer den Mac-Pfad: `hole` als Fake-fetch, `openExternal` protokolliert. */
+function bauenMac({ yml, fehler, version = '0.16.0' } = {}) {
+  const ereignisse = []
+  const openExternal = (...a) => ereignisse.push(['openExternal', ...a])
+  const hole = async () => {
+    if (fehler) throw new Error(fehler)
+    return { text: async () => yml }
+  }
+  const u = erstellen({
+    autoUpdater: attrappe(), version, plattform: 'darwin', gepackt: true, appimage: false,
+    hole, openExternal,
+    feedUrl: 'https://x/latest-mac.yml', releaseUrl: 'https://x/releases/latest',
+    aendert: z => ereignisse.push([z]),
+  })
+  return { u, ereignisse }
+}
+
+/** Ein Macrotask-Schritt: laesst die fetch-Kette (Microtasks) ablaufen. */
+const settles = () => new Promise(r => setImmediate(r))
+
+test('Mac: startet unbekannt (nicht nicht_moeglich)', () => {
+  const { u } = bauenMac()
+  assert.strictEqual(u.zustand().art, 'unbekannt')
+  assert.strictEqual(u.zustand().version, '0.16.0')
+})
+
+test('Mac: neuere Version -> verfuegbar_manuell mit Groesse', async () => {
+  const { u } = bauenMac({ version: '0.16.0', yml: 'version: 0.17.0\n  size: 149843177\n' })
+  u.pruefen()
+  assert.strictEqual(u.zustand().art, 'prueft')
+  await settles()
+  assert.strictEqual(u.zustand().art, 'verfuegbar_manuell')
+  assert.strictEqual(u.zustand().neue, '0.17.0')
+  assert.strictEqual(u.zustand().groesse, 149843177)
+})
+
+test('Mac: gleiche Version -> aktuell', async () => {
+  const { u } = bauenMac({ version: '0.17.0', yml: 'version: 0.17.0\n' })
+  u.pruefen()
+  await settles()
+  assert.strictEqual(u.zustand().art, 'aktuell')
+})
+
+test('Mac: Fetch-Fehler -> fehler (kein throw, kein Haengen)', async () => {
+  const { u } = bauenMac({ fehler: 'netz weg' })
+  u.pruefen()
+  await settles()
+  assert.strictEqual(u.zustand().art, 'fehler')
+  assert.match(u.zustand().text, /netz weg/)
+})
+
+test('Mac: kaputte YAML (keine Version) -> fehler', async () => {
+  const { u } = bauenMac({ yml: 'path: X.dmg\n' })
+  u.pruefen()
+  await settles()
+  assert.strictEqual(u.zustand().art, 'fehler')
+})
+
+test('Mac: laden oeffnet den Browser, nicht downloadUpdate', () => {
+  const au = attrappe()
+  const u = erstellen({
+    autoUpdater: au, version: '0.16.0', plattform: 'darwin', gepackt: true, appimage: false,
+    hole: async () => ({ text: async () => 'version: 0.17.0\n' }),
+    openExternal: () => {},
+    feedUrl: 'f', releaseUrl: 'https://x/releases/latest',
+    aendert: () => {},
+  })
+  u.laden()
+  assert.deepStrictEqual(au.aufrufe, [], 'kein downloadUpdate auf Mac')
 })
