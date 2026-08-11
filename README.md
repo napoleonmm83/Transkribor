@@ -112,6 +112,12 @@ Abo oder einem lokalen Modell entfällt auch das.
 **Brauche ich Internet?** Nur zum Herunterladen und für die einmalige Einrichtung. Danach
 arbeitet das Transkribieren offline.
 
+**Wie komme ich an Updates?** Die App sieht beim Start und danach alle sechs Stunden von
+selbst nach. Gibt es eine neue Fassung, steht das unten in der Fusszeile — heruntergeladen und
+installiert wird sie erst, wenn du in den Einstellungen darauf klickst. Auf dem Mac und in der
+Linux-`.deb`-Fassung geht das nicht automatisch; dort lädst du die neue Fassung von der
+[Releases-Seite](https://github.com/napoleonmm83/Transkribor/releases/latest).
+
 **Welche Sprachen?** Voreingestellt ist Deutsch (inklusive Schweizerdeutsch, das als
 Hochdeutsch verschriftet wird). In den Einstellungen lässt sich jede andere von Whisper
 unterstützte Sprache wählen.

@@ -236,6 +236,16 @@ Fensterrahmen. Vier Dinge, die man nicht aus dem Diff liest:
   **aus** — sonst zöge das Prüfen sofort 100 MB, ungefragt. Die Oberfläche dazu steht in den
   Einstellungen (`useUpdate` + `SettingsPage`) und erscheint im reinen Browser gar nicht,
   weil `window.transkribor` dort fehlt.
+- **Geprüft wird beim Start UND alle 6 h** (`main.js`, `setInterval` + `unref()`). Der Start
+  allein reichte nicht: eine App, die tagelang offen bleibt — bei langen Transkriptionen der
+  Normalfall — erfuhr von einer neuen Fassung erst beim nächsten Start. Zwei Riegel hängen
+  davor, beide gegen eine **falsche Anzeige**, nicht gegen Last (eine Runde ist ein GET auf
+  `latest.yml`, ~1 KB): `net.isOnline()` — offline erzeugte sonst alle 6 h „Prüfung
+  fehlgeschlagen" in der Fusszeile plus eine Zeile im Protokoll, ungefragt — und
+  `updater.sollPruefen(stand)`, das nur aus `unbekannt`/`aktuell`/`fehler` heraus erneut sucht.
+  Das ist eine **Weissliste**: ein gefundenes Update (`verfuegbar`/`laedt`/`bereit`) würde vom
+  nächsten Tick sonst aus der Fusszeile geschoben, und eine später dazukommende Zustandsart
+  gilt im Zweifel als „nichts zu tun".
 - Bauen: `npm install && npm run dist` → `dist\Transkribor-Setup-<version>.exe` (~96 MB; die ML-Seite
   kommt beim ersten Start dazu, ein 5-GB-Setup bei jedem Update wäre unzumutbar).
   Release: Tag `v*` pushen → `.github/workflows/release.yml` baut und veröffentlicht,

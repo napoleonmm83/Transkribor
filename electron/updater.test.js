@@ -1,7 +1,7 @@
 'use strict'
 const test = require('node:test')
 const assert = require('node:assert')
-const { nichtMoeglich, erstellen } = require('./updater')
+const { nichtMoeglich, sollPruefen, erstellen } = require('./updater')
 
 test('Entwicklungsmodus kann sich nicht selbst aktualisieren', () => {
   assert.strictEqual(nichtMoeglich('win32', false, false), 'entwicklung')
@@ -18,6 +18,17 @@ test('Linux nur als AppImage — ein deb-Start hat die Variable nicht', () => {
 
 test('Windows kann es', () => {
   assert.strictEqual(nichtMoeglich('win32', true, false), '')
+})
+
+test('die Hintergrund-Pruefung ruht, sobald es etwas zu tun gibt', () => {
+  // Erneut suchen darf nur, wer nichts gefunden hat. 'fehler' zaehlt dazu (Netzaussetzer),
+  // 'verfuegbar'/'laedt'/'bereit' nicht — sonst ueberschreibt der Zeitgeber die Anzeige,
+  // in der das gefundene Update steht.
+  for (const art of ['unbekannt', 'aktuell', 'fehler'])
+    assert.strictEqual(sollPruefen({ art }), true, art)
+  for (const art of ['prueft', 'verfuegbar', 'laedt', 'bereit', 'nicht_moeglich', 'neuartig'])
+    assert.strictEqual(sollPruefen({ art }), false, art)
+  assert.strictEqual(sollPruefen(null), false, 'kein Automat gebaut')
 })
 
 /** Attrappe des autoUpdater: merkt sich Hoerer und protokolliert Aufrufe. */

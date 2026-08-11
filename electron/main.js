@@ -6,7 +6,7 @@
  * Das Fenster kommt ZUERST, nicht der Server: die Einrichtung dauert beim ersten Mal Minuten,
  * und ein Nutzer, der so lange auf nichts schaut, haelt die App fuer kaputt.
  */
-const { app, BrowserWindow, ipcMain, shell, nativeTheme } = require('electron')
+const { app, BrowserWindow, ipcMain, shell, nativeTheme, net } = require('electron')
 const path = require('path')
 const backend = require('./backend')
 const setup = require('./setup')
@@ -145,6 +145,19 @@ app.whenReady().then(async () => {
       },
     })
     aktualisierer.pruefen()
+    // Danach alle 6 h leise nachsehen. Ohne das erfaehrt eine App, die tagelang offen bleibt
+    // (bei langen Transkriptionen der Normalfall), erst beim naechsten Start von einer neuen
+    // Version. Eine Runde kostet einen GET auf latest.yml (~1 KB); geladen wird weiterhin
+    // erst auf Klick (autoDownload=false).
+    const zeitgeber = setInterval(() => {
+      // Offline ergaebe nur eine Fehlerzeile im Protokoll und "Pruefung fehlgeschlagen" in
+      // der Fusszeile — beides falsch, solange niemand danach gefragt hat.
+      if (!net.isOnline()) return
+      if (!updater.sollPruefen(aktualisierer.zustand())) return
+      aktualisierer.pruefen()
+    }, 6 * 60 * 60 * 1000)
+    // Ein Hintergrund-Zeitgeber darf die App nie am Leben halten.
+    zeitgeber.unref()
   } catch (e) {
     protokoll.schreiben(`Update-Pruefung nicht moeglich: ${e && e.message || e}`)
   }
