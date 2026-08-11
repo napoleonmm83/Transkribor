@@ -780,9 +780,38 @@ def test_datei_loeschen_unbekannt_gibt_404(client):
 
 def test_datei_loeschen_waehrend_ein_job_laeuft_gibt_409(client, monkeypatch, tmp_path):
     import webtool.jobs as jobs_mod
-    monkeypatch.setattr(jobs_mod, "active_for", lambda name: [{"id": "j1", "kind": "correct"}])
-    assert client.delete("/api/projects/Demo/files/S1").status_code == 409
+    monkeypatch.setattr(jobs_mod, "betrifft", lambda name, base: {"id": "j1", "kind": "correct"})
+    r = client.delete("/api/projects/Demo/files/S1")
+    assert r.status_code == 409
+    # Der Text nennt Aufnahme und Grund und raet NICHT zum Abbrechen: bei einem Lauf, der
+    # die Datei gerade schreibt, ist Warten die richtige Reaktion.
+    assert "S1" in r.json()["detail"] and "Korrektur" in r.json()["detail"]
+    assert "abbrechen" not in r.json()["detail"].lower()
     assert (tmp_path / "Demo" / "transkripte" / "S1.json").exists()   # nichts angefasst
+
+
+def test_ein_lauf_ohne_diese_aufnahme_sperrt_sie_nicht(client, monkeypatch, tmp_path):
+    """Der Kern von #80: eine 20-Minuten-Korrektur ueber andere Aufnahmen darf DIESE nicht
+    blockieren. Frueher sperrte jeder Job des Projekts jede Datei."""
+    import webtool.jobs as jobs_mod
+    gefragt = []
+    def nur_S9(name, base):
+        gefragt.append((name, base))
+        return {"id": "j1", "kind": "correct"} if base == "S9" else None
+    monkeypatch.setattr(jobs_mod, "betrifft", nur_S9)
+    assert client.delete("/api/projects/Demo/files/S1").status_code == 200
+    assert not (tmp_path / "Demo" / "transkripte" / "S1.json").exists()
+    assert gefragt == [("Demo", "S1")], "die Sperre fragt nach der Aufnahme, nicht nach dem Projekt"
+
+
+def test_projekt_umbenennen_bleibt_grob_gesperrt(client, monkeypatch):
+    """Ohne `base` bleibt die alte Sperre richtig: beim Umbenennen wandert der ganze Ordner,
+    da hilft es nicht, dass der Lauf nur eine einzelne Aufnahme anfasst."""
+    import webtool.jobs as jobs_mod
+    monkeypatch.setattr(jobs_mod, "betrifft", lambda name, base: None)   # keine Datei betroffen
+    monkeypatch.setattr(jobs_mod, "active_for", lambda name: [{"id": "j1", "kind": "transcribe"}])
+    r = client.post("/api/projects/Demo/rename", json={"name": "Neu"})
+    assert r.status_code == 409 and "Transkription" in r.json()["detail"]
 
 
 def test_neu_transkribieren_raeumt_transkripte_weg_und_startet_den_lauf(client, tmp_path):
@@ -804,7 +833,7 @@ def test_neu_transkribieren_ohne_audio_gibt_404_und_laesst_das_transkript_stehen
 
 def test_neu_transkribieren_waehrend_ein_job_laeuft_gibt_409(client, monkeypatch, tmp_path):
     import webtool.jobs as jobs_mod
-    monkeypatch.setattr(jobs_mod, "active_for", lambda name: [{"id": "j1", "kind": "transcribe"}])
+    monkeypatch.setattr(jobs_mod, "betrifft", lambda name, base: {"id": "j1", "kind": "transcribe"})
     assert client.post("/api/projects/Demo/files/S1/transcribe").status_code == 409
     assert (tmp_path / "Demo" / "transkripte" / "S1.json").exists()
 
@@ -912,5 +941,5 @@ def test_datei_umbenennen_unbekannt_gibt_404_und_prueft_namen(client, monkeypatc
     assert client.post("/api/projects/Demo/files/S1/rename", json={"name": "../weg"}).status_code == 400
     assert client.post("/api/projects/Demo/files/%2e%2e/rename", json={"name": "X"}).status_code == 400
     import webtool.jobs as jobs_mod
-    monkeypatch.setattr(jobs_mod, "active_for", lambda name: [{"id": "j1", "kind": "transcribe"}])
+    monkeypatch.setattr(jobs_mod, "betrifft", lambda name, base: {"id": "j1", "kind": "transcribe"})
     assert client.post("/api/projects/Demo/files/S1/rename", json={"name": "X"}).status_code == 409

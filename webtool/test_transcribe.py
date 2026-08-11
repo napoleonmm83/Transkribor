@@ -264,3 +264,32 @@ def test_ohne_torch_kein_absturz(monkeypatch):
     """Der Python-CI-Job laeuft bewusst ohne torch — _cuda_dlls_auf_pfad darf das aushalten."""
     monkeypatch.setitem(sys.modules, "torch", None)   # None -> import wirft ImportError
     transcribe._cuda_dlls_auf_pfad()                  # kein Crash
+
+
+def test_lauf_meldet_nur_die_noch_offenen_aufnahmen(tmp_path, monkeypatch, capsys):
+    """Vertrag mit jobs.py (Issue #80): gemeldet wird, was der Lauf ANFASSEN wird — bereits
+    transkribierte Aufnahmen bleiben damit loesch- und umbenennbar. Das Praefix steht hier
+    als Literal (transcribe.py laeuft ohne die Job-Registry), dieser Test haelt beide Seiten
+    zusammen."""
+    from webtool import jobs
+    proj, _ = _lauf_projekt(tmp_path, monkeypatch)
+    (proj / "transkripte").mkdir(parents=True, exist_ok=True)
+    (proj / "transkripte" / "a.json").write_text("{}", encoding="utf-8")   # a ist fertig
+    transcribe.transcribe_project("P", "large-v3", "de")
+    zeilen = [z for z in capsys.readouterr().out.splitlines() if z.startswith(jobs.SCOPE_PREFIX)]
+    assert len(zeilen) == 1
+    assert set(zeilen[0][len(jobs.SCOPE_PREFIX):].split("\t")) == {"b"}
+
+
+def test_lauf_ohne_offene_aufnahme_meldet_einen_leeren_bereich(tmp_path, monkeypatch, capsys):
+    """Der Leerlauf-Fall nach dem Auto-Trigger: nichts zu tun heisst auch nichts gesperrt."""
+    from webtool import jobs
+    proj, _ = _lauf_projekt(tmp_path, monkeypatch)
+    (proj / "transkripte").mkdir(parents=True, exist_ok=True)
+    for n in ("a", "b"):
+        (proj / "transkripte" / f"{n}.json").write_text("{}", encoding="utf-8")
+    transcribe.transcribe_project("P", "large-v3", "de")
+    aus = capsys.readouterr().out
+    assert jobs.SCOPE_PREFIX in aus and "nichts zu tun" in aus
+    zeile = [z for z in aus.splitlines() if z.startswith(jobs.SCOPE_PREFIX)][0]
+    assert zeile[len(jobs.SCOPE_PREFIX):].strip() == ""

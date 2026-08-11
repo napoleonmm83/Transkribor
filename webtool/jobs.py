@@ -21,6 +21,13 @@ _lock = threading.Lock()
 _CREATE_NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 _PRUNE_AGE = 3600          # fertige Jobs nach 1h vergessen
 
+# Womit ein Lauf seinen Wirkungsbereich meldet: eine tab-getrennte Liste von Basisnamen,
+# gedruckt BEVOR er arbeitet (transcribe.py, correct.py, fetch.py). Eine eigene Zeile statt
+# eines Nachbaus von jobPhases.ts: der Fortschritts-Dialekt sagt, wo ein Lauf GERADE steht —
+# gebraucht wird, was er noch anfassen WIRD. Tab als Trenner, weil Dateinamen alles andere
+# enthalten dürfen (der URL-Import legt "Video [dQw4w9].m4a" an), aber keinen Tabulator.
+SCOPE_PREFIX = "[scope] "
+
 
 def _popen_kwargs() -> dict:
     """Auf POSIX eine eigene Prozessgruppe — nur so erreicht der Abbruch spaeter auch die
@@ -55,6 +62,9 @@ def start(project: str, cmd: list, cwd, kind: str, then=None):
                 return busy, False  # Einzel-GPU: nur ein Whisper-Lauf zugleich
         jid = uuid.uuid4().hex[:12]
         _jobs[jid] = {"id": jid, "project": project, "kind": kind, "status": "running",
+                      # None = Wirkungsbereich noch unbekannt (Zeile noch nicht gedruckt)
+                      # -> gilt als "faesst alles an". Siehe SCOPE_PREFIX.
+                      "bases": None,
                       "lines": [], "returncode": None, "started": time.time(),
                       "ended": None, "pid": None, "cancelled": False,
                       "then": [then] if then else []}
@@ -142,8 +152,13 @@ def _run_proc(jid, cmd, cwd):
         if cancelled:                            # cancel() kam an, bevor die pid gesetzt war -> selbst killen
             _kill_tree(proc)
         for line in proc.stdout:
+            line = line.rstrip("\n")
             with _lock:
-                _jobs[jid]["lines"].append(line.rstrip("\n"))
+                _jobs[jid]["lines"].append(line)
+                # Nur die ERSTE Zeile zaehlt: der Lauf druckt sie, bevor er arbeitet, und
+                # spaeter kaeme sie hoechstens aus Transkripttext, der so beginnt.
+                if _jobs[jid]["bases"] is None and line.startswith(SCOPE_PREFIX):
+                    _jobs[jid]["bases"] = {b for b in line[len(SCOPE_PREFIX):].split("\t") if b}
         proc.wait()
         with _lock:
             _jobs[jid]["returncode"] = proc.returncode
@@ -216,6 +231,29 @@ def get(job_id: str):
         snap.pop("proc", None)                # Popen-Handle ist nicht JSON-serialisierbar
         snap.pop("then", None)                # Callables sind nicht JSON-serialisierbar
         return snap
+
+
+def betrifft(project: str, base: str) -> dict | None:
+    """Der laufende Job, der GENAU DIESE Aufnahme anfasst — sonst None.
+
+    Ein Lauf druckt seinen Wirkungsbereich als erste Zeile (`SCOPE_PREFIX`), bevor er
+    arbeitet: `transcribe` die noch nicht transkribierten Aufnahmen, `correct` die des
+    Laufs, `fetch` gar keine (er legt neue an). Damit darf gelöscht/umbenannt werden, was
+    der Lauf nachweislich nicht anfasst — vorher sperrte jeder Job das ganze Projekt.
+
+    Solange die Zeile fehlt (`bases is None`), gilt der Job als allumfassend. Das ist die
+    sichere Richtung: die ersten Sekunden eines Laufs kosten eine Rückfrage, ein zu früh
+    freigegebenes Löschen kostet die Datei."""
+    with _lock:
+        for (proj, _kind), jid in _active.items():
+            if proj != project:
+                continue
+            r = _jobs.get(jid)
+            if r is None or r["status"] != "running":
+                continue
+            if r["bases"] is None or base in r["bases"]:
+                return {"id": r["id"], "kind": r["kind"]}
+    return None
 
 
 def active_for(project: str) -> list:

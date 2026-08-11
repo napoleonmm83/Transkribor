@@ -275,21 +275,37 @@ def _datei_weg(project: str, base: str, mit_audio: bool) -> int:
     return len(treffer)
 
 
-def _keine_jobs(project: str) -> None:
+_KIND_TEXT = {"transcribe": "Transkription", "correct": "Korrektur", "fetch": "Import"}
+
+
+def _keine_jobs(project: str, base: str = None) -> None:
     """Dateien wegzuraeumen, waehrend ein Lauf sie schreibt, ist ein Datenrennen: die
     Korrektur haelt Pfade ueber Minuten offen und schriebe die geloeschte edit.json neu.
-    ponytail: sperrt das ganze Projekt, nicht die einzelne Datei — eine Job-zu-Datei-
-    Zuordnung gibt es im Backend nicht (jobs kennt nur Projekt+Art). Feiner erst, wenn
-    das Warten bei langen Laeufen tatsaechlich stoert."""
-    if jobs.active_for(project):
-        raise HTTPException(status_code=409, detail="Job läuft — erst abbrechen")
+
+    Mit `base` gilt die Sperre nur fuer diese Aufnahme — die uebrigen bleiben bedienbar,
+    auch waehrend eine Korrektur ueber ein grosses Projekt zwanzig Minuten laeuft. Welche
+    Aufnahmen ein Lauf anfasst, meldet er selbst (`jobs.SCOPE_PREFIX`); ohne diese Meldung
+    gilt er weiterhin als allumfassend. Ohne `base` (Projekt umbenennen) bleibt die grobe
+    Sperre richtig: dort wandert der ganze Ordner.
+
+    Der Text nennt den Grund und rät NICHT zum Abbrechen — bei einem Lauf, der die Aufnahme
+    gerade schreibt, ist Warten fast immer die richtige Reaktion."""
+    if base is None:
+        offen = jobs.active_for(project)
+        laufend, wen = (offen[0] if offen else None), "Im Projekt wird"
+    else:
+        laufend, wen = jobs.betrifft(project, base), f"„{base}“ wird"
+    if laufend:
+        was = _KIND_TEXT.get(laufend["kind"], laufend["kind"])
+        raise HTTPException(status_code=409,
+                            detail=f"{wen} gerade bearbeitet ({was} läuft) — bitte warten")
 
 
 @app.delete("/api/projects/{project}/files/{base}")
 def delete_file(project: str, base: str):
     """Eine einzelne Aufnahme samt Audio loeschen (das Projekt bleibt)."""
     _validate(project, base)
-    _keine_jobs(project)
+    _keine_jobs(project, base)
     n = _datei_weg(project, base, mit_audio=True)
     if not n:
         raise HTTPException(status_code=404, detail=f"keine Datei: {base}")
@@ -307,7 +323,7 @@ def retranscribe_file(project: str, base: str):
     _validate(project, base)
     if not find_audio(project, base):
         raise HTTPException(status_code=404, detail=f"kein Audio: {base}")
-    _keine_jobs(project)
+    _keine_jobs(project, base)
     _datei_weg(project, base, mit_audio=False)
     job_id, started = _start_transcribe(project)
     return {"job_id": job_id, "started": started}
@@ -382,7 +398,7 @@ def rename_file(project: str, base: str, body: RenameBody):
     auf halbem Weg abzubrechen liesse eine Aufnahme zurueck, die es zweimal halb gibt."""
     _validate(project, base)
     neu = _neuer_name(body.name)
-    _keine_jobs(project)
+    _keine_jobs(project, base)
     tdir = paths.transkripte_dir(project)
     # glob.escape wie in _datei_weg: safe_name laesst `[` durch, der URL-Import legt
     # "Video [dQw4w9].m4a" an, und ungeschuetzt liest glob das `[` als Zeichenklasse.

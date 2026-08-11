@@ -590,6 +590,9 @@ def cmd_run(project: str, base: str = None, force: bool = False, verify: bool = 
     if not all_bases:
         print("run: keine Roh-Transkripte — erst transkribieren", flush=True)
         return 0
+    # Wirkungsbereich melden, bevor die erste lange Arbeit (Diarisierung) beginnt — jobs.py
+    # gibt danach alle uebrigen Aufnahmen zum Loeschen/Umbenennen frei (Issue #80).
+    print("[scope] " + "\t".join(all_bases), flush=True)
     print(f"run: {len(all_bases)} Datei(en) in Projekt {project!r}", flush=True)
     cmd_diarize(project, all_bases)                    # -> <base>.diar.json (best-effort, GPU); scoped auf all_bases
     cmd_prep(project)                                  # -> <base>.tagged.txt (Cluster-Präfix falls diarisiert)

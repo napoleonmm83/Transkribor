@@ -758,3 +758,17 @@ def test_ohne_force_bleibt_die_teil_datei_der_resume_anker(project, monkeypatch)
     corr = json.loads((t / "S1.correction.json").read_text(encoding="utf-8"))
     texte = {s["id"]: s["text"] for s in corr["segments"]}
     assert texte[2] == "SCHON FERTIG" and texte[3] == "SCHON FERTIG"
+
+
+def test_run_meldet_seinen_wirkungsbereich(project, monkeypatch, capsys):
+    """Die Zeile ist ein Vertrag mit jobs.py: sie sagt, welche Aufnahmen dieser Lauf anfasst,
+    und nur die bleiben fuers Loeschen/Umbenennen gesperrt (Issue #80). Geprueft wird gegen
+    jobs.SCOPE_PREFIX, weil das Praefix hier als Literal steht — correct.py darf die
+    Job-Registry nicht importieren, also muss ein Test die beiden Seiten zusammenhalten."""
+    from webtool import jobs
+    _root, t = project
+    monkeypatch.setattr(correct, "_run_claude", _fake_claude(t, []))
+    correct.cmd_run("Demo", verify=False)
+    zeilen = [z for z in capsys.readouterr().out.splitlines() if z.startswith(jobs.SCOPE_PREFIX)]
+    assert len(zeilen) == 1, "genau eine Meldung, und zwar vor der Arbeit"
+    assert set(zeilen[0][len(jobs.SCOPE_PREFIX):].split("\t")) == {"S1"}

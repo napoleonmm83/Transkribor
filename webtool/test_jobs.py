@@ -325,3 +325,70 @@ def test_kill_tree_posix_faellt_auf_terminate_zurueck(monkeypatch):
     monkeypatch.setattr(jobs.os, "killpg", lambda pgid, sig: None, raising=False)
     jobs._kill_tree(FakeProc())
     assert getoetet == [("getpgid-versucht", 4711), "terminate"]
+
+
+# ---- Wirkungsbereich (Issue #80): welche Aufnahmen ein Lauf anfasst ----
+
+def _scope_cmd(zeilen):
+    """Ein Lauf, der `zeilen` druckt und dann wartet — so laesst sich `betrifft` befragen,
+    solange er laeuft."""
+    code = "import sys, time\n" + "".join(f"print({z!r}, flush=True)\n" for z in zeilen) + "time.sleep(30)\n"
+    return [sys.executable, "-c", code]
+
+
+def _warte_auf_zeilen(jid, n, timeout=10):
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if len(jobs.get(jid)["lines"]) >= n:
+            return
+        time.sleep(0.02)
+    raise AssertionError(f"Job druckte keine {n} Zeilen: {jobs.get(jid)['lines']}")
+
+
+def test_betrifft_liest_den_gemeldeten_wirkungsbereich():
+    jid, _ = jobs.start("P_scope", _scope_cmd(["[scope] S1\tS2", "los"]), cwd=None, kind="correct")
+    try:
+        _warte_auf_zeilen(jid, 2)
+        assert jobs.betrifft("P_scope", "S1")["kind"] == "correct"
+        assert jobs.betrifft("P_scope", "S2") is not None
+        assert jobs.betrifft("P_scope", "S3") is None, "nicht gemeldet -> nicht gesperrt"
+        assert jobs.betrifft("AnderesProjekt", "S1") is None
+    finally:
+        jobs.cancel(jid)
+        _wait(jid)
+
+
+def test_ohne_meldung_gilt_ein_job_als_allumfassend():
+    """Die sichere Richtung: die ersten Sekunden eines Laufs kosten eine Rueckfrage, ein zu
+    frueh freigegebenes Loeschen kostet die Datei."""
+    jid, _ = jobs.start("P_stumm", _scope_cmd(["arbeite"]), cwd=None, kind="transcribe")
+    try:
+        _warte_auf_zeilen(jid, 1)
+        assert jobs.betrifft("P_stumm", "egal") is not None
+    finally:
+        jobs.cancel(jid)
+        _wait(jid)
+
+
+def test_ein_leerer_bereich_sperrt_nichts():
+    """Der URL-Import legt neue Aufnahmen an und fasst keine vorhandene an."""
+    jid, _ = jobs.start("P_leer", _scope_cmd(["[scope] ", "lade"]), cwd=None, kind="fetch")
+    try:
+        _warte_auf_zeilen(jid, 2)
+        assert jobs.betrifft("P_leer", "S1") is None
+    finally:
+        jobs.cancel(jid)
+        _wait(jid)
+
+
+def test_eine_spaetere_scope_zeile_aendert_den_bereich_nicht():
+    """Nur die erste zaehlt — sonst koennte Transkripttext, der zufaellig so beginnt, die
+    Sperre aufweichen."""
+    jid, _ = jobs.start("P_zwei", _scope_cmd(["[scope] S1", "[scope] S1\tS2"]), cwd=None, kind="correct")
+    try:
+        _warte_auf_zeilen(jid, 2)
+        assert jobs.betrifft("P_zwei", "S1") is not None
+        assert jobs.betrifft("P_zwei", "S2") is None
+    finally:
+        jobs.cancel(jid)
+        _wait(jid)
