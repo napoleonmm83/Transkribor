@@ -19,9 +19,10 @@ export const FLAGS = [
     erklaerung: 'Whisper war im ganzen Segment unsicher, nicht nur bei einzelnen Wörtern.' },
 ] as const
 
-export function SegmentView({ seg, active, onPlay, updateSegment }: {
+export function SegmentView({ seg, active, onPlay, updateSegment, dimmen = false, aktiverTreffer = false }: {
   seg: Segment; active: boolean; onPlay: () => void;
   updateSegment: (id: number, patch: Partial<Segment>) => void;
+  dimmen?: boolean; aktiverTreffer?: boolean;
 }) {
   const [editing, setEditing] = useState(false)
   const [showRaw, setShowRaw] = useState(false)
@@ -32,8 +33,11 @@ export function SegmentView({ seg, active, onPlay, updateSegment }: {
     : <span key={i}>{t.text}</span>)
   const body = corrected ? seg.text : rawTokens
   const focusRing = 'focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 rounded-sm'
+  const ring = aktiverTreffer ? 'ring-2 ring-inset ring-yellow-400 dark:ring-yellow-500'
+    : active ? 'ring-2 ring-inset ring-primary/60' : ''
   return (
-    <div data-seg-id={seg.id} className={`group relative rounded-md px-2 py-1 ${active ? 'bg-primary/15 ring-2 ring-inset ring-primary/60' : ''}`}>
+    <div data-seg-id={seg.id}
+      className={`group relative rounded-md px-2 py-1 transition-opacity ${active ? 'bg-primary/15 ' : ''}${ring}${dimmen ? ' opacity-40' : ''}`}>
       <button onClick={onPlay} title="Abspielen (Ctrl+Space)" aria-label="Segment abspielen"
         className={`absolute -left-5 top-1.5 text-primary opacity-60 transition-opacity group-hover:opacity-100 ${focusRing}`}>
         <Play className="size-3 fill-current" aria-hidden="true" />

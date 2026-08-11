@@ -63,4 +63,24 @@ describe('SegmentView', () => {
     fireEvent.blur(feld)
     expect(updateSegment).not.toHaveBeenCalled()
   })
+
+  it('graut das Segment aus, wenn dimmen gesetzt ist', () => {
+    const seg = mkSeg({ text: 'Text' })
+    render(<TooltipProvider><SegmentView seg={seg} active={false} dimmen onPlay={vi.fn()} updateSegment={vi.fn()} /></TooltipProvider>)
+    expect(document.querySelector('[data-seg-id="1"]')).toHaveClass('opacity-40')
+  })
+
+  it('setzt einen gelben Rahmen am aktiven Treffer', () => {
+    const seg = mkSeg({ text: 'Text' })
+    render(<TooltipProvider><SegmentView seg={seg} active={false} aktiverTreffer onPlay={vi.fn()} updateSegment={vi.fn()} /></TooltipProvider>)
+    expect(document.querySelector('[data-seg-id="1"]')).toHaveClass('ring-yellow-400')
+  })
+
+  it('ohne Such-Props weder Ausgrauen noch gelber Ring (Default)', () => {
+    const seg = mkSeg({ text: 'Text' })
+    render(<TooltipProvider><SegmentView seg={seg} active={false} onPlay={vi.fn()} updateSegment={vi.fn()} /></TooltipProvider>)
+    const root = document.querySelector('[data-seg-id="1"]')!
+    expect(root).not.toHaveClass('opacity-40')
+    expect(root).not.toHaveClass('ring-yellow-400')
+  })
 })
