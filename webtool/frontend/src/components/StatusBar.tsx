@@ -19,7 +19,7 @@ import type { UpdateZustand } from '@/lib/types'
  */
 function updateHinweis(z: UpdateZustand | null): string | null {
   if (!z) return null
-  if (z.art === 'verfuegbar') return `Update ${z.neue} verfügbar`
+  if (z.art === 'verfuegbar' || z.art === 'verfuegbar_manuell') return `Update ${z.neue} verfügbar`
   if (z.art === 'laedt') return `Update lädt · ${Math.round(z.prozent)} %`
   if (z.art === 'bereit') return `Update ${z.neue} bereit`
   if (z.art === 'fehler') return 'Update-Prüfung fehlgeschlagen'

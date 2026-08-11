@@ -331,11 +331,14 @@ describe('Abschnitt Version und Updates', () => {
     expect(await screen.findByRole('button', { name: /Neu starten und installieren/ })).toBeTruthy()
   })
 
-  it('macht aus dem Code einen deutschen Satz, samt Link', async () => {
-    zeigeMit({ version: '0.2.1', art: 'nicht_moeglich', grund: 'darwin' })
-    expect(await screen.findByText(/nicht notarisiert/)).toBeTruthy()
-    expect(screen.getByText(/möglich/)).toBeTruthy()          // mit Umlaut, nicht "moeglich"
-    expect(screen.getByRole('link', { name: /Versionen/ })).toBeTruthy()
+  it('Mac (verfuegbar_manuell): Manuell-Download-Link statt Auto-Download-Knopf', async () => {
+    // Mac kann nicht auto-aktualisieren (Squirrel.Mac ohne Notarisierung), prueft aber manuell.
+    // Der Zustand zeigt einen Link zur Release-Seite, NICHT den "Herunterladen"-Knopf aus 'verfuegbar'.
+    zeigeMit({ version: '0.16.0', art: 'verfuegbar_manuell', neue: '0.17.0', groesse: 149843177 })
+    expect(await screen.findByText(/0\.17\.0/)).toBeTruthy()
+    expect(screen.getByText(/Auto-Update.*nicht möglich/)).toBeTruthy()   // Begründung steht da
+    expect(screen.getByRole('link', { name: /Manuell herunterladen/ })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /^Herunterladen/ })).toBeNull()   // kein Auto-Knopf
   })
 
   it('kennt auch die beiden anderen Gruende', async () => {
