@@ -86,3 +86,44 @@ describe('TextEditor', () => {
     expect(onCancel).not.toHaveBeenCalled()
   })
 })
+
+describe('TextEditor Verwurf-Hinweis (#118)', () => {
+  it('meldet Verwurf, wenn ein veraendertes Feld durch einen neuen Ausgangswert ersetzt wird', () => {
+    // #118: reload() tauscht das Dokument, key={initial} baut das Feld neu — der nicht
+    // uebernommene Text ist still weg. onVerworfen gibt dem Parent die Chance, den Nutzer
+    // zu informieren (z.B. per toast.info).
+    const onVerworfen = vi.fn()
+    const { rerender } = render(<TextEditor initial="alt" onCommit={vi.fn()} onCancel={vi.fn()} onVerworfen={onVerworfen} />)
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'meine Handarbeit' } })
+    rerender(<TextEditor initial="neu" onCommit={vi.fn()} onCancel={vi.fn()} onVerworfen={onVerworfen} />)
+    expect(onVerworfen).toHaveBeenCalledTimes(1)
+  })
+
+  it('meldet KEINEN Verwurf, wenn das Feld nie veraendert wurde', () => {
+    // Sonst toastet es bei jedem Dokumentwechsel — der Issue nennt das ausdruecklich Laerm.
+    const onVerworfen = vi.fn()
+    const { rerender } = render(<TextEditor initial="alt" onCommit={vi.fn()} onCancel={vi.fn()} onVerworfen={onVerworfen} />)
+    rerender(<TextEditor initial="neu" onCommit={vi.fn()} onCancel={vi.fn()} onVerworfen={onVerworfen} />)
+    expect(onVerworfen).not.toHaveBeenCalled()
+  })
+
+  it('meldet KEINEN Verwurf nach einem Commit', () => {
+    // Wer bewusst uebernommen hat, hat nichts verworfen. Der Cleanup beim Unmount darf
+    // nicht zusaetzlich feuern.
+    const onVerworfen = vi.fn()
+    const { unmount } = render(<TextEditor initial="alt" onCommit={vi.fn()} onCancel={vi.fn()} onVerworfen={onVerworfen} />)
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'neu-wirklich' } })
+    fireEvent.blur(screen.getByRole('textbox'))   // Commit
+    unmount()
+    expect(onVerworfen).not.toHaveBeenCalled()
+  })
+
+  it('meldet KEINEN Verwurf nach einem Cancel', () => {
+    const onVerworfen = vi.fn()
+    const { unmount } = render(<TextEditor initial="alt" onCommit={vi.fn()} onCancel={vi.fn()} onVerworfen={onVerworfen} />)
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'meine Handarbeit' } })
+    fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Escape' })   // Cancel
+    unmount()
+    expect(onVerworfen).not.toHaveBeenCalled()
+  })
+})

@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { TextEditor } from './TextEditor'
+import { toast } from 'sonner'
+import { TextEditor, EINGABE_VERWORFEN } from './TextEditor'
 
 /**
  * Ein Kopffeld des Dokuments (Kontext, Zusammenfassung) — Klick oeffnet das Textfeld.
@@ -20,7 +21,8 @@ export function DokumentFeld({ titel, wert, platzhalter, onCommit }: {
       {editing
         ? <TextEditor initial={wert}
             onCommit={t => { onCommit(t); setEditing(false) }}
-            onCancel={() => setEditing(false)} />
+            onCancel={() => setEditing(false)}
+            onVerworfen={() => toast.info(EINGABE_VERWORFEN)} />
         : <button type="button" onClick={() => setEditing(true)} title={`${titel} bearbeiten`}
             className="lesebreite w-full cursor-text whitespace-pre-wrap rounded-sm text-left text-sm leading-relaxed text-muted-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
             {wert.trim() || <span className="italic opacity-60">{platzhalter}</span>}
