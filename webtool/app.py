@@ -490,9 +490,27 @@ def transcribe(project: str):
     return {"job_id": job_id, "started": started}
 
 
+def _require_ai():
+    """Kein Korrektur-Job ohne nutzbaren Anbieter — derselbe Riegel, den `_autocorrect` hat.
+
+    Ohne ihn laeuft erst `cmd_diarize` (pyannote, GPU, Minuten) und `cmd_prep` durch, bevor
+    der erste LLM-Aufruf scheitert: Rechenzeit fuer ein Ergebnis, das nach der ersten Zeile
+    feststand. Der Lauf endet dann zwar ehrlich rot (`correct.main` -> SystemExit(1)), aber
+    eben spaet und mit dem Grund irgendwo mitten im Job-Protokoll.
+
+    Das Gate im Frontend (`useAiReady`) ersetzt das nicht: es fragt genau einmal beim Laden
+    und laesst die Knoepfe bei einem Fehler der Abfrage bewusst aktiv.
+
+    409, nicht 400: die Anfrage ist in Ordnung, der Serverzustand nicht."""
+    ok, grund = llm.available()
+    if not ok:
+        raise HTTPException(status_code=409, detail=grund)
+
+
 @app.post("/api/projects/{project}/correct")
 def correct(project: str):
     _validate(project)
+    _require_ai()
     job_id, started = jobs.request(project, [sys.executable, "-m", "webtool.correct", "run", project],
                                    paths.ROOT, "correct")
     return {"job_id": job_id, "started": started}
@@ -503,6 +521,7 @@ def correct_file(project: str, base: str, force: bool = False):
     _validate(project, base)
     if not os.path.exists(_raw_path(project, base)):
         raise HTTPException(status_code=404, detail=f"kein Roh-Transkript: {base}")
+    _require_ai()
     cmd = [sys.executable, "-m", "webtool.correct", "run", project, base]
     if force:
         cmd.append("--force")                     # nur nach expliziter UI-Bestätigung (human_edited)

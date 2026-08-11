@@ -207,7 +207,7 @@ def test_transcribe_invalid_name_400(client):
     assert client.post("/api/projects/a:b/transcribe").status_code == 400
 
 
-def test_correct_starts_job(client, monkeypatch):
+def test_correct_starts_job(client, monkeypatch, mit_anbieter):
     calls = {}
     def fake_start(project, cmd, cwd, kind, then=None):
         calls["project"] = project; calls["kind"] = kind; calls["cmd"] = cmd
@@ -225,7 +225,7 @@ def test_correct_invalid_name_400(client):
     assert client.post("/api/projects/a:b/correct").status_code == 400
 
 
-def test_correct_file_starts_scoped_job(client, monkeypatch):
+def test_correct_file_starts_scoped_job(client, monkeypatch, mit_anbieter):
     calls = {}
     def fake_start(project, cmd, cwd, kind):
         calls["cmd"] = cmd; calls["kind"] = kind; calls["project"] = project
@@ -248,6 +248,30 @@ def test_correct_file_unknown_base_404(client):
 
 def test_correct_file_invalid_name_400(client):
     assert client.post("/api/projects/Demo/files/a:b/correct").status_code == 400
+
+
+def test_korrektur_ohne_anbieter_409_statt_job(client, monkeypatch):
+    """Ohne nutzbaren Anbieter darf KEIN Job entstehen: sonst laeuft erst die Diarisierung
+    (GPU, Minuten) durch, bevor der erste LLM-Aufruf scheitert."""
+    import webtool.app as app_mod, webtool.jobs as jobs_mod
+    monkeypatch.setattr(app_mod.llm, "available", lambda: (False, "Kein API-Key fuer OpenAI hinterlegt"))
+    gestartet = []
+    monkeypatch.setattr(jobs_mod, "start", lambda *a, **k: gestartet.append(a) or ("x", True))
+
+    for pfad in ("/api/projects/Demo/correct", "/api/projects/Demo/files/S1/correct"):
+        r = client.post(pfad)
+        assert r.status_code == 409, pfad
+        # Der Grund muss durchkommen — im Frontend wird genau `detail` zur Fehlermeldung.
+        assert "OpenAI" in r.json()["detail"], pfad
+    assert gestartet == [], "kein Job trotz fehlendem Anbieter"
+
+
+def test_unbekannte_datei_gewinnt_gegen_den_anbieter_riegel(client, monkeypatch):
+    """404 vor 409: dass die Datei gar nicht existiert, ist die genauere Auskunft — und sie
+    gilt unabhaengig davon, ob gerade ein Anbieter eingerichtet ist."""
+    import webtool.app as app_mod
+    monkeypatch.setattr(app_mod.llm, "available", lambda: (False, "kein Anbieter"))
+    assert client.post("/api/projects/Demo/files/nope/correct").status_code == 404
 
 
 def test_job_status_and_404(client, monkeypatch):

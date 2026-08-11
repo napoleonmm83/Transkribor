@@ -452,6 +452,16 @@ nie committen), unklarem Scope, oder history-verändernden Aktionen (force-push,
   Key + Modell). Die Auto-Korrektur startet ohne nutzbaren Anbieter **gar nicht**, statt einen
   Job zu starten, der scheitert; `GET /api/settings` liefert `ai_ready`/`ai_reason` fürs
   Frontend. Geprüft wird die Fähigkeit, nicht die Einstellung — das erspart eine Migration.
+- **Derselbe Riegel hängt an den manuellen Endpunkten** (`_require_ai()` → **409**, in
+  `POST …/correct` und `POST …/files/{base}/correct`). Ohne ihn lief erst `cmd_diarize`
+  (pyannote, GPU, Minuten) und `cmd_prep` durch, bevor der erste LLM-Aufruf scheiterte —
+  Rechenzeit für ein Ergebnis, das nach der ersten Zeile feststand. **Der Lauf endete dabei
+  ehrlich rot**, nicht grün: `correct.main` wirft `SystemExit(1)`, sobald Dateien versucht
+  wurden und keine gelang, und `jobs.py` bildet das auf Status `error` ab. Das Gate im
+  Frontend (`useAiReady`) ist kein Ersatz: es fragt **einmal beim Laden** und lässt die
+  Knöpfe bei einem Fehler der Abfrage bewusst aktiv. **404 vor 409** bei der Einzeldatei —
+  dass die Datei fehlt, ist die genauere Auskunft und gilt ohne jeden Anbieter.
+  `detail` trägt `ai_reason`; `api.ts` macht daraus die Fehlermeldung im Toast.
 - **`GET /api/hardware`** meldet das aktive Rechenwerk (einmal pro Serverlauf ermittelt).
 - Stufe 3 (Sprecher-Diarisierung): `webtool/diarize.py` (pyannote.audio 4.0.7, Modell `speaker-diarization-community-1`, GPU) läuft als **Prep-Schritt im `correct run`** (vor `prep`, auf den Lauf gescopt), schreibt best-effort `<base>.diar.json` (Turns + `{id, "Sprecher N"}` je Segment, idempotent). `cmd_prep` webt das `(Sprecher N)`-Präfix in `<base>.tagged.txt`; der Korrektur-Prompt lässt Claude pro akustischem Cluster einen konsistenten Namen vergeben (**Hybrid**: Akustik trennt *wer wann*, LLM benennt *wie*). Fehlt pyannote oder scheitert die GPU → kein Sidecar → Korrektur wie bisher (reines Text-Raten, keine Regression). **Windows-Gotcha:** pyannotes torchcodec-File-Decoding lädt nicht (`libtorchcodec_core*.dll`) → Audio wird in-memory via `faster_whisper.decode_audio` (PyAV, 16 kHz mono) geladen und als `{waveform, sample_rate}`-Dict übergeben. Das lief früher über `whisper.load_audio`, das ffmpeg als **Binary** per subprocess rief — daher brauchte `diarize.py` ein eigenes `_ensure_ffmpeg`; PyAV dekodiert in-process, die Funktion ist ersatzlos weg. `jobs.py` serialisiert `transcribe`+`correct` auf der einen GPU. **Kein Einmal-Setup mehr** — siehe nächster Punkt.
 - **Das Diarisierungsmodell liegt im Repo (`models/speaker-diarization-community-1/`, 31 MB)** und
