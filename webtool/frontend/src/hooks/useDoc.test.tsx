@@ -487,6 +487,84 @@ describe('useDoc: ueberholte Kettenglaeufe fallenlassen (#117)', () => {
   })
 })
 
+describe('useDoc: Flush beim Verlassen (#106)', () => {
+  it('spült beim Dateiwechsel in der Tipppause den neuesten Stand', async () => {
+    // #106: stand='offen' in der 800-ms-Pause darf beim Wechseln nicht zu "Verwerfen?" fuehren.
+    // Der Flush schreibt den neuesten Stand von A, noch waehrend der Editor schon B laedt — ueber
+    // die Kette, nie daneben. project/base im Cleanup-Schluss stammen vom Effekt-Setup (Datei A);
+    // docRef gehoert beim Cleanup noch zu A (reload()s setDoc(B) greift erst in einem spaeteren Effekt).
+    const docB: EditDoc = { ...doc, base: 'b2' }
+    vi.mocked(api.saveDoc).mockResolvedValue(undefined as never)
+    vi.useFakeTimers()
+    vi.mocked(api.getDoc).mockResolvedValue(doc)
+    const h = renderHook(({ b }) => useDoc('P', b), { initialProps: { b: 'b' } })
+    await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+
+    await act(async () => { h.result.current.updateSegment(0, { text: 'A-Text' }) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(500) })   // Pause, save NOCH nicht gefeuert
+    expect(api.saveDoc).not.toHaveBeenCalled()
+
+    vi.mocked(api.getDoc).mockResolvedValue(docB)
+    h.rerender({ b: 'b2' })
+    await act(async () => { await vi.advanceTimersByTimeAsync(0) })     // Cleanup laeuft, Flush faeuert
+
+    const aRufe = vi.mocked(api.saveDoc).mock.calls.filter(c => c[1] === 'b')
+    expect(aRufe.map(c => c[2].segments[0].text)).toEqual(['A-Text'])
+  })
+
+  it('spült nicht doppelt, wenn der Autosave den Stand schon in die Kette gestellt hat', async () => {
+    // haengt-Diskriminator: nur solange der debounce-Timer laeuft, muss der Flush uebernehmen. Ist
+    // save() schon gerufen (haengt=false), traegt die Kette den Stand — ein zusaetzlicher Flush beim
+    // Wechsel waere ein Doppel-Schreib. Treibt den Fall mit einem HAEANGENDEN save: dirty bleibt
+    // oben, der in-flight-Lauf haelt die Kette offen, und erst wenn er loest, wuerde ein dahinter
+    // gereihter Flush schlagen. (Den Diskriminator sichert zusaetzlich der #117-Cross-Doc-Test.)
+    const docB: EditDoc = { ...doc, base: 'b2' }
+    let fertigA: () => void = () => {}
+    vi.mocked(api.saveDoc).mockReturnValue(new Promise<void>(r => { fertigA = r }) as never)
+    vi.useFakeTimers()
+    vi.mocked(api.getDoc).mockResolvedValue(doc)
+    const h = renderHook(({ b }) => useDoc('P', b), { initialProps: { b: 'b' } })
+    await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+
+    await act(async () => { h.result.current.updateSegment(0, { text: 'A-Text' }) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(800) })   // save FEUERT, saveDoc haengt
+    expect(api.saveDoc).toHaveBeenCalledTimes(1)
+
+    vi.mocked(api.getDoc).mockResolvedValue(docB)
+    h.rerender({ b: 'b2' })
+    await act(async () => { await vi.advanceTimersByTimeAsync(0) })     // Cleanup, Flush reiht hinter A
+
+    // A-Lauf loesen → waere der Flush dahinter ein Doppel-Schreiber? haengt=false verneint.
+    await act(async () => { fertigA(); await vi.advanceTimersByTimeAsync(0) })
+
+    const aRufe = vi.mocked(api.saveDoc).mock.calls.filter(c => c[1] === 'b')
+    expect(aRufe.map(c => c[2].segments[0].text)).toEqual(['A-Text'])   // genau EIN A-Schreib
+  })
+
+  it('spült bei stand=fehler nicht — der Nutzer verwirft bewusst', async () => {
+    // Auf 'fehler' fragt die Leiste explizit; ein bestaetigtes Verwerfen darf der Flush nicht
+    // wieder undercutten. Zudem hat der Retry-Effekt (#107) die Verantwortung fuer diese Episode.
+    const docB: EditDoc = { ...doc, base: 'b2' }
+    vi.mocked(api.saveDoc).mockRejectedValue(new Error('boom'))
+    vi.useFakeTimers()
+    vi.mocked(api.getDoc).mockResolvedValue(doc)
+    const h = renderHook(({ b }) => useDoc('P', b), { initialProps: { b: 'b' } })
+    await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+
+    await act(async () => { h.result.current.updateSegment(0, { text: 'A' }) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(800) })   // save 1 fehlschlag → stand='fehler'
+    expect(h.result.current.stand).toBe('fehler')
+    const vorWechsel = vi.mocked(api.saveDoc).mock.calls.filter(c => c[1] === 'b').length
+
+    vi.mocked(api.getDoc).mockResolvedValue(docB)
+    h.rerender({ b: 'b2' })
+    await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+
+    const nachWechsel = vi.mocked(api.saveDoc).mock.calls.filter(c => c[1] === 'b').length
+    expect(nachWechsel).toBe(vorWechsel)   // kein zusaetzlicher Flush
+  })
+})
+
 describe('useDoc: Dokument A darf nie in Datei B landen', () => {
   it('nach einem Dateiwechsel schreibt die Entprellung nicht das alte Dokument unter den neuen Pfad', async () => {
     // Befund aus Review-Runde 2, VORBESTEHEND (auch ohne die Verkettung). `reload()` ersetzt das

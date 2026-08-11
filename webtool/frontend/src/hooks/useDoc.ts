@@ -43,6 +43,7 @@ export function useDoc(project: string | null, base: string | null) {
 
   const reload = useCallback(() => {
     if (!project || !base) { setDoc(null); setDirty(false); setStand('ruhig'); return }
+    haengt.current = false   // neue Datei → nichts baumelt in der Tipppause
     setLoading(true)
     getDoc(project, base).then(d => { setDoc(d); setDirty(false); setStand('ruhig') })
       .catch(() => setDoc(null)).finally(() => setLoading(false))
@@ -62,6 +63,7 @@ export function useDoc(project: string | null, base: string | null) {
   useEffect(() => { setDirty(false); reload() }, [reload])
 
   const beruehrt = useCallback(() => {
+    haengt.current = true
     fassung.current++; setDirty(true); setStand('offen')
     // Ein neuer Tastendruck beginnt eine neue Episode (#107): alter Zaehler und ein vielleicht
     // noch ausstehender finaler Toast sind hinfällig. Der Retry-Effekt räumt seinen Timer über
@@ -150,9 +152,20 @@ export function useDoc(project: string | null, base: string | null) {
    * Dokument-IDs wuerde das zaehlen — dann beim Schliessen praegen.
    */
   const neuester = useRef<Record<string, number>>({})
+  /** Juengste Werte zum Lesen im Flush-Cleanup (#106). Im Render-Koerper zugewiesen: der passive
+   *  Effekt-Cleanup laeuft NACH dem Render, bekommt also den Stand von JUST DIESER Datei —
+   *  reload()s setDoc/setDirty greifen erst in einem spaeteren Effekt / asynchron. */
+  const docRef = useRef(doc); docRef.current = doc
+  const dirtyRef = useRef(dirty); dirtyRef.current = dirty
+  const standRef = useRef(stand); standRef.current = stand
+  /** Laeuft die Tipppause noch (save noch nicht gerufen)? Nur dann muss der Verlassens-Flush
+   *  etwas uebernehmen — ist der debounce-Timer abgelaufen, traegt die Kette den Stand schon,
+   *  und ein zusaetzlicher Flush waere eine Doppelung, die #117s Zaehler-Erwartung bricht. */
+  const haengt = useRef(false)
 
   const save = useCallback(async () => {
     if (!doc || !project || !base) return
+    haengt.current = false   // #106: debounce abgelaufen — dieser Aufruf traegt den Stand in die Kette
     // Angehaengt, nicht nebenher gestartet — und bewusst INNERHALB von `save`: eine ausgelagerte
     // Hilfsfunktion waere entweder eine Abhaengigkeit, die bei jedem Render wechselt (womit der
     // Entprellungs-Effekt seinen Timer endlos neu setzt und nie speichert), oder ein
@@ -209,6 +222,31 @@ export function useDoc(project: string | null, base: string | null) {
     kette.current = lauf.catch(() => {})
     return lauf
   }, [doc, project, base])
+
+  // Flush beim Verlassen einer Datei (#106). In der 800-ms-Pause hatte die Oberflaeche "wird
+  // gespeichert" versprochen; eine "Verwerfen?"-Rueckfrage beim Wechseln widerspricht dem. Der
+  // Cleanup dieses Effekts laeuft beim Dateiwechsel (Key [project, base]) UND beim Unmount und
+  // schreibt den neuesten Stand der VERLASSENEN Datei — ueber die Kette, damit ein noch
+  // laufender Autosave VOR dem Flush steht und der juengste Stand zuletzt gewinnt.
+  //
+  // project/base als CLOSURE (nicht aus Ref): der Cleanup-Schluss stammt vom Effekt-SETUP
+  // (Render, als diese Datei aktuell wurde) — er traegt die VERLASSENE Datei. Ein Ref wuerde beim
+  // Cleanup schon die NEUE Datei tragen, denn der passive Effekt-Cleanup laeuft erst NACH Render
+  // N+1. docRef/dirtyRef/standRef hingegen gehoeren beim Cleanup noch zur ALTEN Datei: reload()s
+  // setDoc/setDirty greifen erst in einem spaeteren Effekt / asynchron, stehen also beim Cleanup
+  // noch nicht. `haengt` schliesst den Doppel-Fire aus, wenn die Kette den Stand schon traegt;
+  // stand!=='fehler', weil der Nutzer auf 'fehler' an der Leiste explizit verwirft (#106-Review).
+  useEffect(() => {
+    return () => {
+      if (!project || !base) return
+      if (!dirtyRef.current || standRef.current === 'fehler' || !haengt.current) return
+      const dokument = docRef.current
+      if (!dokument) return
+      kette.current = kette.current
+        .then(() => saveDoc(project, base, dokument))
+        .catch(() => {})
+    }
+  }, [project, base])
 
   // Autosave. `save` haengt an `doc`, wechselt also mit jedem Tastendruck die Identitaet — der
   // Effekt raeumt den alten Timer ab und legt einen neuen. Genau das IST die Entprellung, ein
