@@ -184,10 +184,15 @@ def transcribe_project(name, model, language, only=None):
     if not files:
         print(f"[{name}] keine Audiodateien in {audio_dir(proj_dir)}")
         return
+    # Angefasst werden nur die Aufnahmen OHNE .json — die uebrigen ueberspringt die Schleife
+    # unten ohnehin. Genau diese Liste meldet der Lauf als seinen Wirkungsbereich, bevor er
+    # anfaengt: jobs.py laesst danach das Loeschen/Umbenennen aller anderen zu (Issue #80).
+    offen = [b for b in (os.path.splitext(os.path.basename(f))[0] for f in files)
+             if not os.path.exists(os.path.join(out_dir, b + ".json"))]
+    print("[scope] " + "\t".join(offen), flush=True)
     # Vor dem Modell pruefen, ob ueberhaupt etwas offen ist: seit ein Upload die Transkription
     # selbst ausloest, laufen Leerlauf-Runden regelmaessig, und load_model kostet ~30s + 3 GB.
-    if not any(not os.path.exists(os.path.join(out_dir, os.path.splitext(os.path.basename(f))[0] + ".json"))
-               for f in files):
+    if not offen:
         print(f"[{name}] nichts zu tun — {len(files)} Datei(en) bereits transkribiert", flush=True)
         return
 

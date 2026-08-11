@@ -140,6 +140,12 @@ def main(argv=None):
     args = ap.parse_args(argv)
     paths.safe_name(args.project)
 
+    # Leerer Wirkungsbereich: der Import legt NEUE Aufnahmen an und fasst keine vorhandene
+    # an. Ohne die Zeile gaelte der Job als allumfassend und sperrte waehrend des Downloads
+    # das ganze Projekt (Issue #80). Transkribiert wird danach im eigenen Job, der seinen
+    # Bereich selbst meldet; beim direkten CLI-Lauf (--download-only fehlt) tut das
+    # transcribe_project unten.
+    print("[scope] ", flush=True)
     geladen = []
     for url in args.urls:
         try:

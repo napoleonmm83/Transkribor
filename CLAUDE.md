@@ -540,8 +540,28 @@ nie committen), unklarem Scope, oder history-verändernden Aktionen (force-push,
   die Autokorrektur nach. **`glob.escape(base)` ist Pflicht**, nicht Vorsicht: `safe_name` lässt
   `[` und `*` durch, und der URL-Import legt Dateien wie `Video [dQw4w9].m4a` an — ungeschützt
   liest glob das `[` als Zeichenklasse und findet nichts. Beide Endpunkte antworten mit 409,
-  solange **irgendein** Job des Projekts läuft (Dateien wegzuräumen, während ein Lauf sie
-  schreibt, ist ein Datenrennen; eine Job-zu-Datei-Zuordnung gibt es im Backend nicht).
+  solange ein Job **genau diese Aufnahme** anfasst (Dateien wegzuräumen, während ein Lauf sie
+  schreibt, ist ein Datenrennen) — welche das sind, sagt der Wirkungsbereich unten.
+- **Ein Lauf meldet seinen Wirkungsbereich selbst** (`jobs.SCOPE_PREFIX`: eine tab-getrennte
+  Zeile `[scope] …`, gedruckt **bevor** er arbeitet): `transcribe` die Aufnahmen ohne `.json`,
+  `correct` die des Laufs, `fetch` **keine** (er legt neue an). `jobs.betrifft(projekt, base)`
+  beantwortet daraus die einzige Frage, die die Endpunkte stellen. Vorher sperrte jeder Job
+  das ganze Projekt — und seit dem Auto-Trigger läuft nach jedem Upload eine Kette, wer in
+  einem grösseren Projekt arbeitete, traf die Sperre also ständig für Dateien, die niemand
+  anfasste. Vier Dinge, die man nicht aus dem Diff liest:
+  **Der Bereich ist keine Live-Position.** `jobPhases.ts` weiss, wo ein Lauf *gerade* steht;
+  gebraucht wird, was er noch anfassen **wird** — sonst gibt man eine Datei frei, die der Lauf
+  zehn Minuten später schreibt. Darum eine eigene Zeile statt eines Nachbaus des
+  Fortschritts-Dialekts.
+  **Nur die ERSTE `[scope]`-Zeile zählt**; später käme sie höchstens aus Transkripttext, der
+  zufällig so beginnt — also aus dem Inhalt einer Aufnahme.
+  **Fehlt die Zeile, gilt der Job als allumfassend** (`bases is None`). Die ersten Sekunden
+  eines Laufs kosten so eine Rückfrage; die Gegenrichtung kostet eine Datei.
+  **Ohne `base` bleibt die grobe Sperre** (`rename_project`): dort wandert der ganze Ordner.
+  Das Präfix steht in `transcribe.py`/`correct.py`/`fetch.py` als **Literal** — die Läufe
+  dürfen die Job-Registry nicht importieren. Zwei Tests halten die Seiten zusammen
+  (`test_run_meldet_seinen_wirkungsbereich`, `test_lauf_meldet_nur_die_noch_offenen_aufnahmen`);
+  wer das Präfix ändert, ändert es an vier Stellen.
 - **Umbenennen ist EIN Mechanismus für Projekt und Aufnahme** (`POST …/rename` und
   `POST …/files/{base}/rename`, im ⋯-Menü und in der Leiste). Vier Dinge, die man nicht aus
   dem Diff liest: **`os.path.exists` allein darf nicht über „Name frei?" entscheiden** —
