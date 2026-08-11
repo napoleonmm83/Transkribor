@@ -55,4 +55,22 @@ describe('EditorView Suche', () => {
     expect(document.querySelector('[data-seg-id="2"]')).not.toHaveClass('opacity-40')
     expect(screen.queryByLabelText('Nächster Treffer')).not.toBeInTheDocument()
   })
+
+  it('Such-Sprung berührt die Wiedergabe-Position nicht', () => {
+    // Regression: der Such-Automat darf activeId (Playback) nicht anstasten — eigene Spur.
+    view()
+    fireEvent.change(screen.getByPlaceholderText('Im Transkript suchen …'), { target: { value: 's' } })
+    // aktiver Treffer = seg 1 (erster Treffer in Dokumentreihenfolge): gelber Such-Ring, nicht Playback.
+    const aktiver = document.querySelector('[data-seg-id="1"]')!
+    expect(aktiver).toHaveClass('ring-yellow-400')
+    expect(aktiver).not.toHaveClass('ring-primary/60')
+    // Navigation bewegt nur den gelben Ring; kein Segment kommt in den Playback-Zustand:
+    fireEvent.click(screen.getByLabelText('Nächster Treffer'))
+    for (const id of [1, 2]) {
+      const el = document.querySelector(`[data-seg-id="${id}"]`)!
+      expect(el).not.toHaveClass('bg-primary/15')
+      expect(el).not.toHaveClass('ring-primary/60')
+    }
+    expect(document.querySelector('[data-seg-id="2"]')).toHaveClass('ring-yellow-400')
+  })
 })

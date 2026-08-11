@@ -26,7 +26,7 @@ describe('Suchfeld', () => {
     expect(screen.getByLabelText('Voriger Treffer')).toBeDisabled()
   })
 
-  it('▲ ruft onNext, ▽ ruft onPrev, ✕ leert', () => {
+  it('▲ ruft onPrev, ▽ ruft onNext, ✕ leert', () => {
     const onPrev = vi.fn(), onNext = vi.fn(), onChange = vi.fn()
     render(<Suchfeld value="a" onChange={onChange} count={3} index={0} onPrev={onPrev} onNext={onNext} />)
     fireEvent.click(screen.getByLabelText('Nächster Treffer'))
