@@ -12,7 +12,7 @@ import type { WaveHandle } from '@/components/Waveform'
 export function EditorView() {
   const { project, base } = useParams<{ project: string; base: string }>()
   const sel = project && base ? { project, base } : null
-  const { doc, dirty, loading: docLoading, updateSegment, renameSpeaker, save, exportDownload, reload } = useDoc(sel?.project ?? null, sel?.base ?? null)
+  const { doc, dirty, stand, loading: docLoading, updateSegment, renameSpeaker, exportDownload, reload } = useDoc(sel?.project ?? null, sel?.base ?? null)
   // Die Leiste in der Huelle navigiert und startet Einzeldatei-Korrekturen — beides braucht
   // Dinge, die nur hier existieren. Ohne diese Meldung wechselt ein Klick ohne Rueckfrage
   // ueber ungespeicherte Aenderungen hinweg, und ein Korrekturlauf bleibt unsichtbar.
@@ -51,6 +51,8 @@ export function EditorView() {
     return () => window.removeEventListener('keydown', onKey)
   }, [doc, activeId])
 
+  // Bleibt trotz Autosave: zwischen dem letzten Tastendruck und dem Schreiben liegen 800 ms, und
+  // ein fehlgeschlagener Lauf haelt `dirty` dauerhaft oben.
   useEffect(() => {
     if (!dirty) return
     const onBeforeUnload = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = '' }
@@ -61,7 +63,7 @@ export function EditorView() {
   return (
     // Nur noch der Inhalt: die Projektnavigation zieht in die AppShell (Task 5).
     <div className="grid h-full grid-rows-[auto_1fr_auto]">
-      <Toolbar dirty={dirty} canSave={!!doc} onSave={save} onExport={exportDownload} />
+      <Toolbar stand={stand} bereit={!!doc} onExport={exportDownload} />
       <main className="min-h-0 overflow-auto">
         <Transcript doc={doc} loading={docLoading} activeId={activeId}
           onPlaySeg={s => waveRef.current?.playSegment(s)}

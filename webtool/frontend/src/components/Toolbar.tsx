@@ -1,24 +1,43 @@
-import { CircleHelp, Download, Save, Subtitles } from 'lucide-react'
+import { Check, CircleHelp, Download, Subtitles, TriangleAlert } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import type { ExportFmt } from '@/lib/api'
+import type { SpeicherStand } from '@/hooks/useDoc'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { FLAGS } from './SegmentView'
 
-export function Toolbar({ dirty, canSave, onSave, onExport }: {
-  dirty: boolean; canSave: boolean;
-  onSave: () => void; onExport: (fmt: ExportFmt, sprecher?: boolean) => void;
+/**
+ * Der Speicherstand in Worten. `offen` und `speichert` tragen denselben Text: dazwischen liegen
+ * 800 ms, und zwei Wechsel je Tipppause waeren ein Flackern an einer Stelle, die man im
+ * Augenwinkel hat — „wird gespeichert“ stimmt fuer beide (die Aenderung ist angesetzt bzw. laeuft).
+ */
+const STAND: Record<Exclude<SpeicherStand, 'ruhig'>, { text: string; punkt: 'warten' | 'gut' | 'fehler' }> = {
+  offen: { text: 'wird gespeichert …', punkt: 'warten' },
+  speichert: { text: 'wird gespeichert …', punkt: 'warten' },
+  gespeichert: { text: 'gespeichert', punkt: 'gut' },
+  fehler: { text: 'nicht gespeichert', punkt: 'fehler' },
+}
+
+export function Toolbar({ stand, bereit, onExport }: {
+  stand: SpeicherStand; bereit: boolean;
+  onExport: (fmt: ExportFmt, sprecher?: boolean) => void;
 }) {
+  const anzeige = stand === 'ruhig' ? null : STAND[stand]
   return (
     // Kein sticky noetig: EditorView setzt die Leiste als eigene Grid-Zeile, gescrollt wird
     // nur das <main> darunter.
     <header className="flex items-center gap-2 border-b px-3 py-2">
-      {dirty && (
-        <span className="inline-flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
-          <span className="size-1.5 rounded-full bg-amber-500" aria-hidden="true" />
-          ungespeichert
+      {/* aria-live: es speichert von selbst, es klickt also niemand und schaut hin. */}
+      {anzeige && (
+        <span aria-live="polite"
+          className={'inline-flex shrink-0 items-center gap-1.5 text-xs '
+            + (anzeige.punkt === 'fehler' ? 'text-destructive' : 'text-muted-foreground')}>
+          {anzeige.punkt === 'gut' ? <Check className="size-3" aria-hidden="true" />
+            : anzeige.punkt === 'fehler' ? <TriangleAlert className="size-3" aria-hidden="true" />
+            : <span className="size-1.5 rounded-full bg-amber-500" aria-hidden="true" />}
+          {anzeige.text}
         </span>
       )}
       <div className="flex-1" />
@@ -46,10 +65,7 @@ export function Toolbar({ dirty, canSave, onSave, onExport }: {
           </span>
         </TooltipContent>
       </Tooltip>
-      <Button size="sm" variant="secondary" disabled={!canSave} onClick={onSave}>
-        <Save className="size-4" /> Speichern
-      </Button>
-      <Button size="sm" variant="secondary" disabled={!canSave} onClick={() => onExport('md')}>
+      <Button size="sm" variant="secondary" disabled={!bereit} onClick={() => onExport('md')}>
         <Download className="size-4" /> Export .md
       </Button>
       {/* .srt laedt man bei YouTube unter "Untertitel > Datei hochladen" hoch. Zwei Eintraege
@@ -59,7 +75,7 @@ export function Toolbar({ dirty, canSave, onSave, onExport }: {
         <Tooltip>
           <TooltipTrigger asChild>
             <DropdownMenuTrigger asChild>
-              <Button size="sm" variant="secondary" disabled={!canSave}>
+              <Button size="sm" variant="secondary" disabled={!bereit}>
                 <Subtitles className="size-4" /> Untertitel .srt
               </Button>
             </DropdownMenuTrigger>
