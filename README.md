@@ -1,122 +1,161 @@
 # Transkribor
 
-Interview-Audio → kontextkorrigierte, **sprecher-markierte** Transkripte.
-Schweizerdeutsch (oder andere Sprachen) mit **Whisper large-v3** (GPU), danach ein
-LLM-Korrekturlauf (via Claude Code) für Kontextfehler und Sprecher-Labels.
+**Aus Interview-Aufnahmen werden lesbare Transkripte — auf deinem eigenen Rechner.**
 
-## Systemvoraussetzungen
+Du ziehst deine Audiodatei ins Fenster, der Rest passiert von selbst: Transkribor schreibt
+mit, erkennt, **wer gerade spricht**, korrigiert falsch verstandene Wörter im Zusammenhang
+und legt dir einen fertigen Text hin, den du direkt weiterverwenden kannst.
 
-Die Transkription läuft lokal auf deinem Rechner. Empfohlen:
+Gemacht für alle, die viel mit Gesprächen arbeiten: Journalismus, Forschung, Podcast,
+Vereins- und Firmenarchive. Auch mit **Schweizerdeutsch** kommt es zurecht.
 
-- **Windows / Linux:** NVIDIA-GPU mit aktuellem Treiber
-- **macOS:** Apple Silicon (M1 oder neuer), dazu einmalig
+---
+
+## In drei Schritten loslegen
+
+1. **[Transkribor herunterladen](https://github.com/napoleonmm83/Transkribor/releases)** und
+   installieren (Windows, macOS oder Linux).
+2. Beim ersten Start richtet sich die App selbst ein. Das dauert einmalig 10–30 Minuten und
+   lädt mehrere Gigabyte — danach nie wieder.
+3. Projekt anlegen, Audiodatei hineinziehen. **Fertig** — die Arbeit startet von allein, und
+   du siehst live, wie weit sie ist.
+
+> Der Installer ist nicht bei Microsoft bzw. Apple registriert (das kostet Jahresgebühren).
+> Windows zeigt darum „Computer geschützt" → *Weitere Informationen* → *Trotzdem ausführen*.
+> Auf dem Mac: Rechtsklick auf die App → *Öffnen*.
+
+---
+
+## Was du davon hast
+
+**Deine Aufnahmen bleiben bei dir.** Das Zuhören und Mitschreiben passiert vollständig auf
+deinem Rechner — ohne Konto, ohne Cloud, ohne Upload. (Die anschliessende Textkorrektur nutzt
+ein KI-Modell deiner Wahl; wählst du dafür einen Onlinedienst, geht der *Text* dorthin. Wer
+das nicht will, nimmt ein lokales Modell oder lässt die Korrektur weg.)
+
+**Es erkennt, wer spricht.** Interviewer und Befragte werden getrennt und mit Namen versehen —
+das Transkript liest sich wie ein Gespräch, nicht wie eine Textwand.
+
+**Es korrigiert mitdenkend.** Ein Sprachmodell geht den Text im Zusammenhang durch: falsch
+gehörte Ortsnamen, Fachbegriffe und Eigennamen werden geradegezogen, über alle Aufnahmen
+eines Projekts hinweg einheitlich. Anschliessend prüft ein zweiter Durchgang, dass nichts
+dazuerfunden oder weggelassen wurde.
+
+**Du behältst das letzte Wort.** Im eingebauten Editor hörst du jeden Abschnitt per Tastendruck
+nach und änderst, was nicht stimmt. Unsichere Stellen sind farbig markiert — du siehst sofort,
+wo sich das Nachhören lohnt.
+
+**Untertitel für YouTube.** Ein Klick erzeugt eine `.srt`-Datei, die du bei YouTube hochlädst;
+sie ersetzt die schwachen Automatik-Untertitel. Die Sprechernamen kannst du dabei ein- oder
+ausblenden.
+
+**Ordnung, auch nach hundert Aufnahmen.** Projekte und Aufnahmen lassen sich jederzeit
+umbenennen — beim Umbenennen einer Aufnahme bietet dir Transkribor die Namen der Sprecher an,
+sodass aus `01172464` ein „Hans Müller, Garage Rüthi" wird. Suchfeld und `Strg+K` führen dich
+auch in grossen Sammlungen mit einem Griff zum richtigen Projekt.
+
+**Videos direkt aus dem Netz.** YouTube- oder Instagram-Adresse einfügen genügt; Transkribor
+holt sich die Tonspur selbst.
+
+**Es wartet nicht auf dich.** Aufnahmen werden nacheinander abgearbeitet, mehrere Projekte
+parallel — du kannst weiterarbeiten oder das Fenster zumachen.
+
+---
+
+## Was du brauchst
+
+- **Windows oder Linux:** am besten eine NVIDIA-Grafikkarte. Damit ist ein einstündiges
+  Interview in wenigen Minuten fertig.
+- **macOS:** Apple Silicon (M1 oder neuer). Dazu einmalig im Terminal:
   `brew install python ffmpeg whisper-cpp`
-- **Ohne GPU** läuft alles ebenfalls, aber deutlich langsamer — dann in den Einstellungen
-  eine kleinere Qualitätsstufe als „Beste Qualität" wählen.
+- **Ohne passende Grafikkarte** läuft ebenfalls alles, nur langsamer — dann in den
+  Einstellungen eine kleinere Qualitätsstufe wählen.
 
-Auf Apple Silicon transkribiert **whisper.cpp über Metal**, auf Windows und Linux
-**faster-whisper über CUDA**. Fehlt `whisper-cpp`, rechnet der Mac weiter — nur rund
-sechsmal langsamer auf der CPU; die Einstellungsseite sagt es dann und nennt den Befehl.
-Gemessen auf einem M1 Pro mit `large-v3`: 5,3x Echtzeit über Metal gegen 0,8x auf der CPU.
-Die Zahlen und die Begründung stehen in
-[`docs/superpowers/specs/2026-08-09-transkribor-apple-silicon-asr-design.md`](docs/superpowers/specs/2026-08-09-transkribor-apple-silicon-asr-design.md).
+Für die Korrektur und die Sprechernamen braucht es zusätzlich ein Sprachmodell: entweder ein
+Abo, das du vielleicht schon hast (Claude Code oder ChatGPT/Codex), ein eigener Schlüssel bei
+Anthropic, OpenAI, Google oder OpenRouter — oder ein Modell, das lokal auf deinem Rechner
+läuft (z. B. Ollama). **Ohne Sprachmodell funktioniert das Transkribieren vollständig**, es
+entfällt nur die Korrektur.
 
-Die Korrektur und Sprecher-Zuordnung brauchen zusätzlich ein Sprachmodell (eigener API-Key,
-lokales Modell über einen OpenAI-kompatiblen Endpunkt wie Ollama, oder ein Claude-Code-Abo).
-**Ohne Sprachmodell funktioniert die Transkription vollständig** — nur die Korrektur entfällt.
+---
 
-## Desktop-App (empfohlen)
+## Häufige Fragen
 
-`Transkribor-Setup-<version>.exe` aus den [Releases](https://github.com/napoleonmm83/Transkribor/releases)
-installieren und starten. Beim ersten Start richtet die App die Spracherkennung selbst ein
-(Python, ffmpeg, PyTorch, Whisper — mehrere GB, 10–30 Minuten, mit Fortschrittsanzeige).
-Danach läuft alles offline auf dem eigenen Rechner. Updates meldet die App selbst.
+**Kostet es etwas?** Nein. Transkribor ist freie Software (Open Source). Kosten entstehen nur,
+wenn du für die Korrektur einen kostenpflichtigen KI-Dienst wählst — mit einem vorhandenen
+Abo oder einem lokalen Modell entfällt auch das.
 
-Audio hineinziehen genügt: **Transkription und Korrektur starten automatisch**, der Status
-aktualisiert sich live. Unter *Einstellungen* wird hinterlegt, womit korrigiert wird — Claude-Code-Abo
-(kein Key) oder ein API-Key von Anthropic, OpenAI, Google, OpenRouter oder einem beliebigen
-OpenAI-kompatiblen Dienst (auch lokal, z.B. Ollama).
+**Brauche ich Internet?** Nur zum Herunterladen und für die einmalige Einrichtung. Danach
+arbeitet das Transkribieren offline.
 
-Selbst bauen: `npm install && npm run dist` → Installer für die aktuelle Plattform in `dist\`
-(Windows: `Transkribor-Setup-<version>.exe`, macOS: `.dmg`, Linux: `AppImage`/`.deb`).
+**Wie lange dauert eine Stunde Audio?** Mit NVIDIA-Grafikkarte wenige Minuten, auf einem
+Apple-Silicon-Mac gut zehn, ohne Grafikbeschleunigung deutlich länger.
 
-## Projektstruktur
+**Welche Sprachen?** Voreingestellt ist Deutsch (inklusive Schweizerdeutsch, das als
+Hochdeutsch verschriftet wird). In den Einstellungen lässt sich jede andere von Whisper
+unterstützte Sprache wählen.
+
+**Was passiert mit meinen Dateien?** Sie bleiben in deinem Benutzerordner. Transkribor löscht
+nichts von allein, und das Original-Transkript bleibt immer erhalten — deine Korrekturen
+liegen daneben, nicht darüber.
+
+---
+
+## Gefällt es dir?
+
+Transkribor ist kostenlos und bleibt es. Wenn es dir Arbeit abnimmt, freue ich mich über eine
+Unterstützung — sie fliesst in Entwicklungszeit und die Signatur-Zertifikate, die den
+Installer künftig ohne Warnmeldung durchgehen lassen.
+
+**[❤ Transkribor unterstützen](https://github.com/sponsors/napoleonmm83)**
+
+Genauso hilfreich und kostenlos: einen [Fehler melden oder eine Idee
+vorschlagen](https://github.com/napoleonmm83/Transkribor/issues) — oder dem Projekt einen
+Stern geben.
+
+---
+
+## Für Entwickler
+
+Die Desktop-App ist der empfohlene Weg; alles darin läuft aber auch direkt aus dem Repo.
+
+```powershell
+.\webtool.ps1    # baut das Frontend bei Bedarf, startet http://127.0.0.1:8000/ und den Browser
+```
+
+Frontend mit Hot-Reload: `npm --prefix webtool/frontend run dev` (Vite auf :5173, `/api` wird
+zum FastAPI-Backend auf :8000 durchgereicht). Installer selbst bauen:
+`npm install && npm run dist` → `dist\` (Windows `.exe`, macOS `.dmg`, Linux `AppImage`/`.deb`).
+
+**Ohne Oberfläche, direkt auf der Kommandozeile:**
+
+```powershell
+.\transkribieren.ps1 <Name>              # ein Projekt transkribieren (--all, --list)
+python -m webtool.correct run <Name>     # korrigieren + Sprecher benennen
+python -m webtool.fetch <Name> <url>     # Tonspur aus YouTube/Instagram holen
+```
+
+**Aufbau:**
 
 ```
 Transkribor/
-├── transcribe.py          # Whisper-Transkription (projekt-aware)
-├── transkribieren.ps1     # Starter für PowerShell
-├── webtool/               # FastAPI-Backend + React-Editor (webtool.ps1 startet beides)
-├── electron/              # Desktop-Hülle: Ersteinrichtung, Server-Start, Auto-Update
-├── requirements.txt       # Python-Pakete ohne torch (wird plattformabhängig installiert)
-├── tools/correct_label.mjs# Claude-Workflow: Kontextkorrektur + Sprecher
-├── CLAUDE.md              # Anleitung für Claude (Korrektur-Schritt)
-├── .venv/                 # Python-Umgebung (nicht in Git)
-└── projekte/
-    └── <Projektname>/
-        ├── audio/          # hier Audio hineinlegen
-        ├── transkripte/    # Ergebnisse (.md = fertig, .json/.txt = Roh)
-        └── kontext.md      # optional: Beschreibung + bekannte Namen
+├── transcribe.py        # Transkription (faster-whisper auf CUDA, whisper.cpp auf Apple Silicon)
+├── webtool/             # FastAPI-Backend + React-Editor (Frontend in webtool/frontend/)
+├── electron/            # Desktop-Hülle: Ersteinrichtung, Server-Start, Auto-Update
+├── models/              # mitgeliefertes Sprechertrennungs-Modell (CC-BY-4.0)
+├── CLAUDE.md            # Arbeitsanleitung + das gesammelte Warum hinter den Entscheidungen
+└── projekte/<Name>/
+    ├── audio/           # Aufnahmen
+    ├── transkripte/     # .md fertig, .edit.json editierbar, .json roh
+    └── kontext.md       # optional: Beschreibung + bekannte Namen, verbessert die Korrektur
 ```
 
-## Neues Projekt
+Die Roh-Transkription bleibt unangetastet: Korrekturen liegen in `<base>.edit.json`, Exporte
+(`.md`, `.srt`) werden daraus erzeugt. Warum die Dinge so sind, wie sie sind — inklusive der
+Messungen dahinter — steht in [`CLAUDE.md`](CLAUDE.md), Entwürfe in
+[`docs/superpowers/specs/`](docs/superpowers/specs/).
 
-1. Ordner `projekte\<Name>\audio\` anlegen und Audiodateien (mp3/wav/m4a/…) hineinlegen.
-2. Optional `projekte\<Name>\kontext.md` mit kurzer Beschreibung + bekannten Eigennamen —
-   das verbessert sowohl Whisper als auch die Korrektur spürbar.
-
-## Transkribieren (Schritt 1 — läuft allein)
-
-```powershell
-.\transkribieren.ps1 <Name>      # ein Projekt
-.\transkribieren.ps1 --all       # alle Projekte
-.\transkribieren.ps1 --list      # Projekte anzeigen
-```
-
-Erzeugt pro Datei `<base>.json`, `<base>.raw.txt`, `<base>.segments.txt` in `transkripte\`.
-Bereits transkribierte Dateien werden übersprungen.
-
-## Korrigieren + Sprecher markieren (Schritt 2 — mit Claude Code)
-
-Claude Code in diesem Ordner öffnen und sagen: **„transkribiere Projekt \<Name\>"** bzw.
-**„korrigiere Projekt \<Name\>"**. Claude liest `CLAUDE.md`, baut ein gemeinsames Glossar,
-korrigiert jede Datei im Kontext, markiert die Sprecher und verifiziert gegen das
-Rohtranskript. Ergebnis: `transkripte\<base>.md`.
-
-## Manuelle Einrichtung (Windows, CLI)
-
-Nur relevant, wenn du **nicht** die Desktop-App nutzt, sondern die Python-Umgebung selbst
-aufsetzt (bislang nur für Windows dokumentiert — siehe „Systemvoraussetzungen" oben für die
-allgemeine Geräteunterstützung).
-
-- NVIDIA-GPU (getestet: RTX 5080 / Blackwell), Treiber mit CUDA 12.8+.
-- Python-Umgebung liegt in `.venv` (torch cu128 + openai-whisper). Neu aufsetzen:
-  ```powershell
-  uv venv --python 3.13 .venv
-  uv pip install --python .venv\Scripts\python.exe torch --index-url https://download.pytorch.org/whl/cu128
-  uv pip install --python .venv\Scripts\python.exe openai-whisper
-  ```
-- ffmpeg (`winget install Gyan.FFmpeg`) — `transcribe.py` findet es automatisch.
-- Modell `large-v3` lädt beim ersten Lauf einmalig (~3 GB) nach `~\.cache\whisper`.
-
-## Editieren im Browser (Web-Tool, Stufe 1)
-
-Lokaler Editor zum abschnittweisen Prüfen/Korrigieren mit Klick-zum-Abspielen. Frontend ist
-React 19 + Vite + TypeScript + Tailwind v4 + shadcn/ui (`webtool/frontend/`), gebaut nach
-`webtool/static/` (git-ignoriert) und von FastAPI ausgeliefert:
-
-```powershell
-.\webtool.ps1        # baut das Frontend bei Bedarf, startet http://127.0.0.1:8000/, öffnet den Browser
-```
-
-Frontend-Entwicklung mit Hot-Reload: `npm --prefix webtool/frontend run dev` (Vite auf :5173,
-proxied `/api` zum FastAPI-Backend auf :8000).
-
-- Zeigt vorhandene Transkripte pro Projekt, spielt je Abschnitt das Audio-Snippet,
-  hebt unsichere Wörter hervor (Whisper-`probability`, Schwellen verstellbar).
-- Korrektionen werden **nicht-destruktiv** in `<base>.edit.json` gespeichert; die
-  Roh-`<base>.json` bleibt unangetastet; `<base>.md` wird als Export daraus erzeugt.
-
-**Transkribieren im Browser (Stufe 2a):** In der Projektliste lädt ⬆ Audio in `projekte\<NAME>\audio\` hoch und ▶ startet `transcribe.py` als Hintergrundjob; der Fortschritt erscheint live im Panel; **Abbrechen** stoppt einen laufenden Job samt Prozessbaum. Hinweis: **nicht mit `uvicorn --reload` starten, während Jobs laufen** — ein Reload killt laufende Jobs und die Job-Liste.
-
-**Korrigieren im Browser (Stufe 2b):** ✎ startet den Korrektur-Ablauf als Hintergrundjob (gleiches Live-Panel). Läuft über headless `claude -p` (Claude-Code-Abo, **kein API-Key**): erst ein gemeinsames Glossar über alle Roh-Transkripte, dann pro Datei eine segment-genaue Kontext-Korrektur + Sprecher-Labeling, das direkt `<base>.correction.json` schreibt, anschließend ein **Treue-Verifikations-Pass** gegen das Rohtranskript (Default an; abschaltbar per `--no-verify` bzw. Env `TRANSKRIBOR_VERIFY=0`), gefolgt vom deterministischen Assemble zu `<base>.edit.json` + `<base>.md`. Idempotent: Dateien mit `human_edited=true` oder bereits vorhandener `correction.json` werden übersprungen; eine fehlgeschlagene Datei bricht den Lauf nicht ab. Dasselbe auch per CLI: `python -m webtool.correct run <NAME>`.
+**Technisch drunter:** Whisper `large-v3` über faster-whisper (CUDA) bzw. whisper.cpp (Metal),
+Sprechertrennung mit pyannote, Korrektur über einen frei wählbaren LLM-Anbieter, Oberfläche
+als React 19 + Vite + TypeScript + Tailwind v4 + shadcn/ui, Backend FastAPI, Desktop-Hülle
+Electron mit Auto-Update.

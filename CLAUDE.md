@@ -293,6 +293,24 @@ Fensterrahmen. Vier Dinge, die man nicht aus dem Diff liest:
 `projekte\<NAME>\audio\` erstellen, Audio hineinlegen, optional `projekte\<NAME>\kontext.md`
 mit Projektbeschreibung + bekannten Namen (verbessert Whisper und die Korrektur).
 
+## Die README wird mitgepflegt — automatisch, ohne Rückfrage
+**Ändert sich, was der Nutzer sieht oder tun kann, wird die README im selben PR nachgezogen.**
+Nicht als Nachtrag „irgendwann", nicht auf Zuruf. Der Grund: CLAUDE.md wächst bei jeder
+Arbeit von selbst mit (sie ist die Arbeitsanleitung), die README nicht — sie war nach fünf
+Funktionen bereits veraltet, und sie ist das Einzige, was ein neuer Nutzer je liest.
+
+**Nachzuziehen ist**, was jemand ohne Quellcode merkt: eine neue Funktion, eine geänderte
+Bedienung, andere Voraussetzungen, ein weggefallener Schritt. **Nicht** nachzuziehen: interne
+Umbauten, Testarbeit, Abhängigkeits-Updates — dort ändert sich für den Nutzer nichts.
+
+**Der Ton ist der einer Anleitung, nicht eines Changelogs.** Die README richtet sich an
+Menschen ohne technischen Hintergrund: **was es ihnen bringt**, in ihren Worten, unter dem
+passenden Abschnitt — nicht „neu in 0.12: `?sprecher=false` am SRT-Endpunkt". Wer die
+Fassung wissen will, liest die Releases. Technisches gehört in den Abschnitt „Für
+Entwickler" ans Ende, und was die README behauptet, muss stimmen: dass die Aufnahmen den
+Rechner nie verlassen, gilt fürs Transkribieren — bei der Korrektur über einen Onlinedienst
+nicht, und genau das steht auch dort.
+
 ## Offene Punkte werden Issues — automatisch, ohne Rückfrage
 **Was am Ende einer Arbeit offen bleibt, wird ein GitHub-Issue.** Nicht eine Zeile im Bericht,
 nicht ein Eintrag in einem Ledger, das mit dem Arbeitsverzeichnis stirbt — ein Issue. Der Grund
