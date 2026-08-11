@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import type { EditDoc, Segment } from '@/lib/types'
 import { renameSpeaker as renameInDoc } from '@/lib/grouping'
@@ -81,15 +81,23 @@ export function useDoc(project: string | null, base: string | null) {
    * geschrieben, ohne es je gewesen zu sein. Dieses Fenster hat die Verkettung selbst
    * aufgemacht (vorher raeumte die Effekt-Bereinigung den Timer beim Wechsel ab).
    *
-   * Im Effekt gesetzt, nicht beim Rendern: ein verworfener Render (Concurrent) wuerde den Ref
-   * sonst auf ein Dokument setzen, das nie auf dem Schirm stand. Beide Varianten bestehen die
-   * Tests gleichermassen — die Entscheidung folgt also der Regel, nicht einer Messung.
-   *
    * Geschrieben wird trotzdem: der Lauf traegt As Inhalt und As Pfad, der gehoert in As Datei.
    * Nur die Buchfuehrung (dirty/stand) gilt dem offenen Dokument und wird uebersprungen.
+   *
+   * `useLayoutEffect`, nicht `useEffect`: der laeuft synchron im Commit. Ein passiver Effekt
+   * laeuft in einem eigenen Scheduler-Durchlauf — dazwischen liegt ein Fenster, in dem React
+   * schon B zeigt, dieser Ref aber noch A sagt, und ein wartender A-Lauf die Buchfuehrung von B
+   * doch anfasst. Gegen einen verworfenen Concurrent-Render ist er genauso sicher wie ein
+   * passiver (der Einwand gilt nur dem Setzen WAEHREND des Renderns), und er kostet hier nichts
+   * — eine Ref-Zuweisung, kein Layout-Lesen. **Nicht reproduziert:** `act()` flusht passive
+   * Effekte vor jedem Timer-Rueckruf, das Fenster laesst sich in dieser Testumgebung nicht
+   * aufziehen. Hergeleitet aus der Ausfuehrungsreihenfolge, nicht gemessen.
+   *
+   * `\n` als Trenner, nicht das Leerzeichen: Projektnamen enthalten Leerzeichen („US Car Treff
+   * Rthi“), womit „A B“/„C“ und „A“/„B C“ denselben Schluessel ergaeben.
    */
   const offen = useRef('')
-  useEffect(() => { offen.current = `${project} ${base}` }, [project, base])
+  useLayoutEffect(() => { offen.current = `${project}\n${base}` }, [project, base])
 
   const save = useCallback(async () => {
     if (!doc || !project || !base) return
@@ -97,10 +105,17 @@ export function useDoc(project: string | null, base: string | null) {
     // Hilfsfunktion waere entweder eine Abhaengigkeit, die bei jedem Render wechselt (womit der
     // Entprellungs-Effekt seinen Timer endlos neu setzt und nie speichert), oder ein
     // Lint-Suppress. `speichern` wirft nicht, die Kette kann also nicht vergiften.
+    // HIER gelesen, nicht im Rueckruf: `v` gehoert zu dem `doc`, das dieser Aufruf einfaengt.
+    // Im Rueckruf waere es der Zaehlerstand der STARTZEIT — ein wartender Lauf saehe damit
+    // Tastendruecke, die nach seinem Anhaengen kamen, als seinen eigenen Stand und meldete sie
+    // als gesichert. Genau die Zeile unten (`fassung.current !== v`) waere dann wirkungslos,
+    // und der zuletzt getippte Stand ginge verloren — mit „gespeichert“ in der Leiste. Vor der
+    // Verkettung lagen beide im selben Tick; der Fehler entstand durch das Verschieben der
+    // Zeile und ist deshalb in keinem Diff zu sehen.
+    const v = fassung.current
     const lauf = kette.current.then(async () => {
       /** Gilt dieser Lauf noch dem Dokument, das der Editor zeigt? */
-      const meins = () => offen.current === `${project} ${base}`
-      const v = fassung.current
+      const meins = () => offen.current === `${project}\n${base}`
       if (meins()) setStand('speichert')
       try {
         await saveDoc(project, base, doc)
@@ -118,11 +133,17 @@ export function useDoc(project: string | null, base: string | null) {
         // Datei, sonst stuende die Meldung ohne Bezug ueber einem fremden Dokument. Die
         // Anzeige dagegen gehoert dem offenen Dokument und bleibt unberuehrt.
         if (meins()) setStand('fehler')   // `dirty` bleibt -> Rueckfragen beim Verlassen greifen
+        // `instanceof`-Pruefung statt blossem `.message`: der Catch-Block darf nicht selbst
+        // werfen — ein Reject mit `null` liesse sonst die Kette ablehnen (siehe unten).
         toast.error(`Speichern${meins() ? '' : ` von „${base}“`} fehlgeschlagen: `
-          + (e as Error).message)
+          + (e instanceof Error ? e.message : String(e)))
       }
     })
-    kette.current = lauf
+    // `.catch` an der Kette, nicht am Rueckgabewert: lehnte `kette.current` je ab, reichte
+    // jedes weitere `.then()` die Ablehnung durch und ALLE folgenden Speicherlaeufe der Sitzung
+    // fielen still aus. Der `catch` oben deckt das nicht ab — er dereferenziert `e` selbst und
+    // kann damit seinerseits werfen (ein Reject mit `null` genuegt). Darum auch `String(e)`.
+    kette.current = lauf.catch(() => {})
     return lauf
   }, [doc, project, base])
 
