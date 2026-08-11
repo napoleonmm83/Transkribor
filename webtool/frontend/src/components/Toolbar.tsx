@@ -7,6 +7,7 @@ import type { ExportFmt } from '@/lib/api'
 import type { SpeicherStand } from '@/hooks/useDoc'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { FLAGS } from './SegmentView'
+import { Suchfeld } from './Suchfeld'
 
 /**
  * Der Speicherstand in Worten. `offen` und `speichert` tragen denselben Text: dazwischen liegen
@@ -20,11 +21,14 @@ const STAND: Record<Exclude<SpeicherStand, 'ruhig'>, { text: string; punkt: 'war
   fehler: { text: 'nicht gespeichert', punkt: 'fehler' },
 }
 
-export function Toolbar({ stand, bereit, onExport }: {
+export function Toolbar({ stand, bereit, onExport, suchQuery, onSuchChange, suchCount = 0, suchIndex = 0, onSuchPrev, onSuchNext }: {
   stand: SpeicherStand; bereit: boolean;
   onExport: (fmt: ExportFmt, sprecher?: boolean) => void;
+  suchQuery?: string; onSuchChange?: (v: string) => void;
+  suchCount?: number; suchIndex?: number; onSuchPrev?: () => void; onSuchNext?: () => void;
 }) {
   const anzeige = stand === 'ruhig' ? null : STAND[stand]
+  const sucht = onSuchChange !== undefined
   return (
     // Kein sticky noetig: EditorView setzt die Leiste als eigene Grid-Zeile, gescrollt wird
     // nur das <main> darunter.
@@ -41,6 +45,10 @@ export function Toolbar({ stand, bereit, onExport }: {
         </span>
       )}
       <div className="flex-1" />
+      {sucht && (
+        <Suchfeld value={suchQuery ?? ''} onChange={onSuchChange!} count={suchCount} index={suchIndex}
+          onPrev={onSuchPrev ?? (() => {})} onNext={onSuchNext ?? (() => {})} />
+      )}
       <Tooltip>
         <TooltipTrigger asChild>
           <Button size="icon" variant="ghost" aria-label="Legende"><CircleHelp className="size-4" /></Button>
