@@ -25,6 +25,16 @@ def test_sprecher_nur_beim_wechsel():
     assert srt.count(">> Interviewer:") == 2  # nach dem Wechsel wieder benannt
 
 
+def test_sprecher_abschaltbar():
+    doc = {"segments": [
+        _seg(0, 1, "Interviewer", "Frage eins?"),
+        _seg(1, 2, "Hans", "Antwort A."),
+    ]}
+    srt = render_srt(doc, sprecher=False)
+    assert ">>" not in srt
+    assert "Frage eins?" in srt and "Antwort A." in srt  # nur das Praefix faellt weg
+
+
 def test_leere_segmente_reissen_keine_luecke_in_die_nummerierung():
     doc = {"segments": [
         _seg(0, 1, "", "Erstes."),

@@ -351,11 +351,14 @@ def export_file(project: str, base: str):
 
 
 @app.post("/api/projects/{project}/files/{base}/export/srt")
-def export_srt(project: str, base: str):
+def export_srt(project: str, base: str, sprecher: bool = True):
     """Untertitel fuer den YouTube-Upload. Eigener Endpoint statt ?fmt= am Zwilling darueber:
-    der muesste dafuer seinen Rueckgabeschluessel `md` aufgeben."""
+    der muesste dafuer seinen Rueckgabeschluessel `md` aufgeben.
+
+    `?sprecher=false` blendet die Sprechernamen aus. Beide Fassungen schreiben dieselbe
+    `<base>.srt` — die Datei ist eine Kopie des Downloads, kein zweites Artefakt."""
     _validate(project, base)
-    srt = render_srt(load_or_build_doc(project, base))
+    srt = render_srt(load_or_build_doc(project, base), sprecher)
     paths.atomic_write(_srt_path(project, base), srt)
     return {"srt": srt}
 
