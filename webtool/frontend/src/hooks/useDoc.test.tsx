@@ -414,6 +414,79 @@ describe('useDoc: wartender Lauf liest den falschen Zaehlerstand', () => {
   })
 })
 
+describe('useDoc: ueberholte Kettenglaeufe fallenlassen (#117)', () => {
+  it('ein staunender Schwanz wartender Laeufe schreibt nur noch den neuesten Stand', async () => {
+    // Bei einem langsamen Server staut sich die Kette: der erste PUT haengt, jede weitere
+    // Tipppause reiht einen Lauf an. Ohne diese Faellung rufen alle fuenf Laeufe saveDoc auf
+    // (vier davon veraltet, jeder loest render_md aus) — fuer den Nutzer minutenlang „speichert",
+    // obwohl nur der letzte Stand zaehlt. Kein Datenverlust (der juengste schreibt zuletzt),
+    // darum enhancement, nicht bug. Der erste PUT laeuft bereits (then-Body lief, bevor #2
+    // existierte) — er ist nicht „ueberholt", sondern „schon unterwegs". Uebersprungen werden
+    // nur die MITTLEREN wartenden Laeufe, fuer die ein juengerer in der Kette steht.
+    let erster: () => void = () => {}
+    vi.mocked(api.saveDoc)
+      .mockReturnValueOnce(new Promise<void>(r => { erster = r }) as never)   // #1 haengt
+      .mockResolvedValue(undefined as never)                                    // Rest loest sofort
+    const { result } = await geladen()
+
+    await act(async () => { result.current.updateSegment(0, { text: 'eins' }) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(800) })   // save() #1, saveDoc haengt
+    expect(api.saveDoc).toHaveBeenCalledTimes(1)
+
+    // Vier weitere Tipppausen, waehrend der erste PUT noch in der Luft ist
+    for (const t of ['zwei', 'drei', 'vier', 'fuenf']) {
+      await act(async () => { result.current.updateSegment(0, { text: t }) })
+      await act(async () => { await vi.advanceTimersByTimeAsync(800) })   // save() #2..#5 reiht an
+    }
+    // Noch immer nur #1 in der Luft — die anderen warten hinter dem haengenden Lauf
+    expect(api.saveDoc).toHaveBeenCalledTimes(1)
+
+    // Erster PUT loest sich → Kette arbeitet ab: #2,#3,#4 sind ueberholt, nur #5 (juengster) schreibt
+    await act(async () => { erster(); await vi.advanceTimersByTimeAsync(0) })
+
+    const texte = vi.mocked(api.saveDoc).mock.calls.map(c => c[2].segments[0].text)
+    expect(texte).toEqual(['eins', 'fuenf'])   // ohne Fix: ['eins','zwei','drei','vier','fuenf']
+    expect(result.current.dirty).toBe(false)
+    expect(result.current.stand).toBe('gespeichert')
+  })
+
+  it('ein juengerer Lauf fuer Datei B sticht A nicht aus — der Zaehler gilt je Dokument', async () => {
+    // Heikelste Stelle des Fixes: ein GLOBALER Zaehler wuerde den wartenden A-Lauf #2 ueberspringen,
+    // weil B-Lauf den Zaehler weiter hochtrieb — As juengster Stand waere nie geschrieben
+    // (Datenverlust, dieselbe Achse wie #116). Der Zaehler schluesselt deshalb je Dokument.
+    const docB: EditDoc = { ...doc, base: 'b2' }
+    let fertigA1: () => void = () => {}
+    vi.mocked(api.saveDoc)
+      .mockReturnValueOnce(new Promise<void>(r => { fertigA1 = r }) as never)
+      .mockResolvedValue(undefined as never)
+
+    vi.useFakeTimers()
+    vi.mocked(api.getDoc).mockResolvedValue(doc)
+    const h = renderHook(({ b }) => useDoc('P', b), { initialProps: { b: 'b' } })
+    await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+
+    await act(async () => { h.result.current.updateSegment(0, { text: 'A-eins' }) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(800) })    // A1 startet, haengt
+    await act(async () => { h.result.current.updateSegment(0, { text: 'A-zwei' }) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(800) })    // A2 reiht an (juengster fuer A)
+
+    vi.mocked(api.getDoc).mockResolvedValue(docB)
+    h.rerender({ b: 'b2' })
+    await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+    await act(async () => { h.result.current.updateSegment(0, { text: 'B-text' }) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(800) })    // B1 reiht an (juengster fuer B)
+
+    // A1 loest sich → Kette arbeitet A2 und B1 ab. Beide muessen schreiben: A2, weil es fuer A
+    // der juengste ist (B lief auf einem ANDEREN Zaehler); B1, weil es fuer B der juengste ist.
+    await act(async () => { fertigA1(); await vi.advanceTimersByTimeAsync(0) })
+
+    const nachB = vi.mocked(api.saveDoc).mock.calls.filter(c => c[1] === 'b')
+    expect(nachB.map(c => c[2].segments[0].text)).toEqual(['A-eins', 'A-zwei'])   // A-zwei darf nicht fehlen
+    const nachB2 = vi.mocked(api.saveDoc).mock.calls.filter(c => c[1] === 'b2')
+    expect(nachB2.map(c => c[2].segments[0].text)).toEqual(['B-text'])
+  })
+})
+
 describe('useDoc: Dokument A darf nie in Datei B landen', () => {
   it('nach einem Dateiwechsel schreibt die Entprellung nicht das alte Dokument unter den neuen Pfad', async () => {
     // Befund aus Review-Runde 2, VORBESTEHEND (auch ohne die Verkettung). `reload()` ersetzt das

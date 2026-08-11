@@ -132,6 +132,25 @@ export function useDoc(project: string | null, base: string | null) {
   const offen = useRef('')
   useLayoutEffect(() => { offen.current = `${project}\n${base}` }, [project, base])
 
+  /**
+   * Juengster save()-Aufruf JE DOKUMENT (#117). Bei einem langsamen Server staut sich die Kette:
+   * der erste PUT haengt, jede weitere Tipppause reiht einen Lauf an. Ohne diese Faellung riefen
+   * alle fuenf Laeufe saveDoc auf (vier veraltet, jeder loest render_md aus) — fuer den Nutzer
+   * minutenlang „speichert", obwohl nur der letzte Stand zaehlt. Ein wartender Lauf, fuer den ein
+   * juengerer in der Kette steht, ueberspringt saveDoc also.
+   *
+   * JE DOKUMENT (Schluessel wie `offen`/`meins`): ein globaler Zaehler wuerde einen wartenden
+   * A-Lauf uebersprungen, weil ein B-Lauf ihn hochtrieb — As Inhalt waere nie geschrieben
+   * (Datenverlust, dasselbe wie die #116-Achse). Der Schluessel im Lauf ist der EIGENE
+   * project/base, nicht `offen.current` — so bleibt der Vergleich unbeeindruckt davon, welche
+   * Datei gerade offen ist.
+   *
+   * ponytail: die Map wird nie ausgeraeumt (ein Eintrag je (project,base) je Sitzung). Bei
+   * dutzenden geoeffneten Dateien sind das wenige KB; erst bei nicht-menschlichen
+   * Dokument-IDs wuerde das zaehlen — dann beim Schliessen praegen.
+   */
+  const neuester = useRef<Record<string, number>>({})
+
   const save = useCallback(async () => {
     if (!doc || !project || !base) return
     // Angehaengt, nicht nebenher gestartet — und bewusst INNERHALB von `save`: eine ausgelagerte
@@ -146,9 +165,17 @@ export function useDoc(project: string | null, base: string | null) {
     // Verkettung lagen beide im selben Tick; der Fehler entstand durch das Verschieben der
     // Zeile und ist deshalb in keinem Diff zu sehen.
     const v = fassung.current
+    const meinKey = `${project}\n${base}`   // derselbe Schluessel wie `offen`/`meins`
+    const meine = (neuester.current[meinKey] ?? 0) + 1
+    neuester.current[meinKey] = meine
     const lauf = kette.current.then(async () => {
+      // Ueberholt? Ein juengerer Lauf fuer DASSELBE Dokument wartet bereits in der Kette — dann
+      // zaehlt dieser hier nicht mehr, saveDoc und Buchfuehrung entfallen (der juengste schreibt
+      // denselben Inhalt ohnehin zuletzt). Der AKTIVE Lauf besteht den Check: sein then-Body lief
+      // als Microtask, sobald er angehaengt wurde — bevor ein weiterer save() den Zaehler trieb.
+      if (meine !== neuester.current[meinKey]) return
       /** Gilt dieser Lauf noch dem Dokument, das der Editor zeigt? */
-      const meins = () => offen.current === `${project}\n${base}`
+      const meins = () => offen.current === meinKey
       if (meins()) setStand('speichert')
       try {
         await saveDoc(project, base, doc)
