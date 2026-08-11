@@ -61,6 +61,16 @@ describe('Transcript', () => {
     render(<TooltipProvider><Transcript doc={doc} activeId={null}
       onPlaySeg={vi.fn()} onPlayTurn={vi.fn()} updateSegment={vi.fn()} renameSpeaker={vi.fn()} /></TooltipProvider>)
     expect(screen.queryByText('Zusammenfassung')).not.toBeInTheDocument()
+    expect(screen.queryByText('Kontext')).not.toBeInTheDocument()
+  })
+
+  it('zeigt den Kontext — er steht im Export, also muss er auch im Editor stehen', () => {
+    // Solange er nur im Markdown auftauchte, konnte ein alter Sprechername unbemerkt
+    // mit hinausgehen: im Editor war das Feld unsichtbar.
+    render(<TooltipProvider><Transcript doc={{ ...doc, context: 'Interview am Deuce Day.' }}
+      activeId={null}
+      onPlaySeg={vi.fn()} onPlayTurn={vi.fn()} updateSegment={vi.fn()} renameSpeaker={vi.fn()} /></TooltipProvider>)
+    expect(screen.getByText('Interview am Deuce Day.')).toBeInTheDocument()
   })
 
   it('zeigt "Keine Datei geöffnet" nicht während des Ladens', () => {
