@@ -4,7 +4,7 @@ import { FolderOpen, Loader2, Settings } from 'lucide-react'
 import { useProjekte } from '@/hooks/useProjektDaten'
 import { KIND_LABEL } from '@/lib/jobPhases'
 import { NewProjectDialog } from '@/components/NewProjectDialog'
-import { DeleteProjectDialog } from '@/components/DeleteProjectDialog'
+import { ProjektMenue } from '@/components/ProjektMenue'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
 import type { Project } from '@/lib/types'
@@ -104,9 +104,14 @@ export function HomeGallery() {
                     // Der Loeschknopf ist ein Geschwister des Links, nicht sein Kind: ein <button>
                     // in einem <a> ist ungueltiges HTML und der Klick landete im Falschen.
                     <li key={p.name} className="blatt blatt-klickbar group relative">
+                      {/* has-[[data-state=open]]: waehrend das Menue offen steht, muss sein
+                          Knopf sichtbar bleiben. focus-within reicht NICHT — Radix schiebt den
+                          Fokus in den portalierten Inhalt ausserhalb dieser Zeile, der Anker
+                          verschwand also genau dann, wenn er gebraucht wird (im Bild geprueft). */}
                       <div className="absolute right-2 top-2 z-10 opacity-0 transition-opacity
-                                      group-hover:opacity-100 focus-within:opacity-100">
-                        <DeleteProjectDialog project={p.name} onDeleted={refresh} />
+                                      group-hover:opacity-100 focus-within:opacity-100
+                                      has-[[data-state=open]]:opacity-100">
+                        <ProjektMenue project={p.name} onUmbenannt={refresh} onGeloescht={refresh} />
                       </div>
                       {/* Der Link fuellt die Karte (absolute inset-0 waere die Alternative, kostet
                           aber die Textauswahl) — so ist die ganze Flaeche Ziel, nicht nur der Titel. */}
@@ -173,9 +178,11 @@ export function HomeGallery() {
                     </Link>
                     {/* Geschwister des Links, nicht sein Kind: ein <button> in einem <a> ist
                         ungueltiges HTML und der Klick landete zusaetzlich im Link. */}
+                    {/* has-[[data-state=open]]: Begruendung wie bei den Karten oben. */}
                     <div className="shrink-0 px-3 opacity-0 transition-opacity
-                                    group-hover:opacity-100 focus-within:opacity-100">
-                      <DeleteProjectDialog project={p.name} onDeleted={refresh} />
+                                    group-hover:opacity-100 focus-within:opacity-100
+                                    has-[[data-state=open]]:opacity-100">
+                      <ProjektMenue project={p.name} onUmbenannt={refresh} onGeloescht={refresh} />
                     </div>
                   </li>
                 ))}

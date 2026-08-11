@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { HomeGallery } from './HomeGallery'
 import { ProjektDatenProvider } from '@/hooks/useProjektDaten'
 import { JobProvider } from '@/hooks/useActiveJob'
+import { EditorBrueckeProvider } from '@/hooks/useEditorBruecke'
 import * as api from '@/lib/api'
 
 vi.mock('@/lib/api')
@@ -11,7 +12,9 @@ vi.mock('@/lib/api')
 // Seit Task 5 haengt ProjektDatenProvider selbst an useActiveJob (onSettled fuer die
 // Zusammenlegung) -- ohne JobProvider drumherum wirft er "ausserhalb JobProvider".
 const zeigen = () =>
-  render(<MemoryRouter><JobProvider><ProjektDatenProvider><HomeGallery /></ProjektDatenProvider></JobProvider></MemoryRouter>)
+  render(<MemoryRouter><JobProvider><ProjektDatenProvider><EditorBrueckeProvider>
+    <HomeGallery />
+  </EditorBrueckeProvider></ProjektDatenProvider></JobProvider></MemoryRouter>)
 
 describe('HomeGallery', () => {
   // Der ProjektDatenProvider adoptiert laufende Jobs aus `active_jobs` und fragt sie ab --
@@ -64,10 +67,31 @@ describe('HomeGallery', () => {
     vi.mocked(api.deleteProject).mockResolvedValue(undefined)
     zeigen()
     await screen.findByText('Alt')
-    fireEvent.click(screen.getByLabelText(/Projekt Alt l/))
-    fireEvent.change(screen.getByLabelText(/Projektname best/), { target: { value: 'Alt' } })
+    // Seit dem ProjektMenue liegt Loeschen hinter dem ⋯ — pointerDown, weil Radix darauf
+    // oeffnet und nicht auf click (dasselbe Muster wie in Sidebar.test/AppShell.test).
+    fireEvent.pointerDown(screen.getByLabelText('Aktionen für „Alt“'),
+      new PointerEvent('pointerdown', { bubbles: true, ctrlKey: false, button: 0 }))
+    fireEvent.click(await screen.findByText('Löschen'))
+    fireEvent.change(await screen.findByLabelText(/Projektname best/), { target: { value: 'Alt' } })
     fireEvent.click(screen.getByRole('button', { name: /^L/ }))
     await waitFor(() => expect(api.deleteProject).toHaveBeenCalledWith('Alt'))
+  })
+
+  it('laesst sich aus der Zeilenliste umbenennen', async () => {
+    // Der Punkt des ProjektMenues: vorher gab es in der Uebersicht NUR den Papierkorb —
+    // umbenennen konnte man ein Projekt ausschliesslich in der Seitenleiste.
+    vi.mocked(api.listProjects).mockResolvedValue([
+      { name: 'Alt', dateien: 1, fertig: 1, geaendert: 100, active_jobs: [] },
+    ])
+    vi.mocked(api.renameProject).mockResolvedValue({ name: 'Neu' })
+    zeigen()
+    await screen.findByText('Alt')
+    fireEvent.pointerDown(screen.getByLabelText('Aktionen für „Alt“'),
+      new PointerEvent('pointerdown', { bubbles: true, ctrlKey: false, button: 0 }))
+    fireEvent.click(await screen.findByText('Umbenennen'))
+    fireEvent.change(await screen.findByLabelText('Neuer Name'), { target: { value: 'Neu' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Umbenennen' }))
+    await waitFor(() => expect(api.renameProject).toHaveBeenCalledWith('Alt', 'Neu'))
   })
 
   it('zeigt einen Ladezustand statt "Noch keine Projekte", solange die Liste unterwegs ist', async () => {

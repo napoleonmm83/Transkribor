@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useMatch, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
-import { MoreHorizontal, Pencil, RotateCcw, TextCursorInput, Trash2 } from 'lucide-react'
+import { MoreHorizontal, Pencil, RotateCcw, Sparkles, Trash2 } from 'lucide-react'
 import type { ProjectFile } from '@/lib/types'
 import { deleteFile, getDoc, renameFile, startCorrectFile, startRetranscribeFile } from '@/lib/api'
 import { UmbenennenDialog, sprecherNamen } from './UmbenennenDialog'
@@ -161,7 +161,7 @@ export function DateiMenue({ project, file, aiReason }: {
             <span title={aiReason || undefined} className="block">
               <DropdownMenuItem disabled={!file.has_raw || !!aiReason}
                 onSelect={() => waehlen('correct')}>
-                <Pencil /> {file.has_edit ? 'Neu korrigieren' : 'Korrigieren'}
+                <Sparkles /> {file.has_edit ? 'Neu korrigieren' : 'Korrigieren'}
               </DropdownMenuItem>
             </span>
             <span title={file.has_audio ? undefined : 'Kein Audio vorhanden'} className="block">
@@ -170,7 +170,7 @@ export function DateiMenue({ project, file, aiReason }: {
               </DropdownMenuItem>
             </span>
             <DropdownMenuItem onSelect={umbenennenOeffnen}>
-              <TextCursorInput /> Umbenennen
+              <Pencil /> Umbenennen
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" onSelect={() => waehlen('delete')}>
