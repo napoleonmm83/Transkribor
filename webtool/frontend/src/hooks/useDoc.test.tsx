@@ -72,20 +72,78 @@ describe('useDoc Autosave', () => {
     expect(vi.mocked(api.saveDoc).mock.calls[1][2].segments[0].text).toBe('zwei')
   })
 
-  it('zeigt Fehler an, statt ihn zu verschlucken — und laesst dirty stehen', async () => {
+  it('begrenzt Nachtreten nach Fehlschlag, dann finaler Toast — dirty bleibt oben', async () => {
+    // #107: ein einziger Versuch liess die Arbeit nur im Browser stehen, wenn der Nutzer nicht
+    // hinsah (Haeufigster Fall: Serverneustart). Jetzt: bis zu drei Retries mit wachsendem
+    // Abstand, Toast erst beim letzten. Die Anzeige 'fehler' gilt den Versuchen dazwischen.
     vi.mocked(api.saveDoc).mockRejectedValue(new Error('boom'))
     const { result } = await geladen()
 
     await act(async () => { result.current.updateSegment(0, { text: 'eins' }) })
-    await act(async () => { await vi.advanceTimersByTimeAsync(800) })
-
-    expect(toast.error).toHaveBeenCalledWith('Speichern fehlgeschlagen: boom')
+    await act(async () => { await vi.advanceTimersByTimeAsync(800) })   // save 1 (fehlschlag)
     expect(result.current.stand).toBe('fehler')
     expect(result.current.dirty).toBe(true)
+    expect(toast.error).not.toHaveBeenCalled()   // kein Toast beim ERSTEN Fehlschlag
 
-    // Kein Nachtreten in Schleife: ohne neue Eingabe bleibt es bei dem einen Versuch.
-    await act(async () => { await vi.advanceTimersByTimeAsync(5000) })
-    expect(api.saveDoc).toHaveBeenCalledTimes(1)
+    await act(async () => { await vi.advanceTimersByTimeAsync(2000) })  // retry 1 (fehlschlag)
+    await act(async () => { await vi.advanceTimersByTimeAsync(4000) })  // retry 2 (fehlschlag)
+    expect(toast.error).not.toHaveBeenCalled()   // auch nicht beim zweiten
+    await act(async () => { await vi.advanceTimersByTimeAsync(8000) })  // retry 3 (fehlschlag, final)
+    expect(api.saveDoc).toHaveBeenCalledTimes(4)   // 1 initial + 3 retries
+    expect(toast.error).toHaveBeenCalledTimes(1)
+    expect(toast.error).toHaveBeenCalledWith('Speichern fehlgeschlagen: boom')
+    expect(result.current.dirty).toBe(true)        // dirty bleibt — Rueckfragen beim Verlassen greifen
+
+    // Nach dem finalen Fehlschlag wird nicht weiter nachgetreten (keine Endlosschleife)
+    await act(async () => { await vi.advanceTimersByTimeAsync(60000) })
+    expect(api.saveDoc).toHaveBeenCalledTimes(4)
+  })
+
+  it('ein gelingender Retry beendet die Episode — kein finaler Toast, dirty sinkt', async () => {
+    // Der Retry ist kein Selbstzweck: gelingt einer, ist die Episode vorbei (counter zurueck),
+    // und es gibt KEINEN finalen Toast — die Anzeige geht auf 'gespeichert'.
+    vi.mocked(api.saveDoc)
+      .mockRejectedValueOnce(new Error('kurz weg'))
+      .mockResolvedValue(undefined as never)
+    const { result } = await geladen()
+
+    await act(async () => { result.current.updateSegment(0, { text: 'eins' }) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(800) })   // save 1 fehlschlag
+    expect(result.current.stand).toBe('fehler')
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(2000) })  // retry 1 gelingt
+    expect(result.current.stand).toBe('gespeichert')
+    expect(result.current.dirty).toBe(false)
+    expect(toast.error).not.toHaveBeenCalled()
+  })
+})
+
+describe('useDoc: Retry greift nicht quer zum Dokumentwechsel (#107 × #116)', () => {
+  it('ein wartender Retry fuer A schreibt nach Wechsel zu B nicht in B', async () => {
+    // PR-#116-Lehre: jeder Fix am Speicherpfad oeffnet den naechsten Weg zum selben Schaden.
+    // #107s Retry-Effekt haengt an der save-Identitaet — bei einem Wechsel aendert sie sich,
+    // der Cleanup raeumt den Retry-Timer ab, BEVOR das (langsame) getDoc(B) den stand auf
+    // 'ruhig' setzt. So kann kein saveDoc(B-Pfad, A-Dokument) aus einem altem A-Retry entstehen.
+    const docB: EditDoc = { ...doc, base: 'b2' }
+    vi.mocked(api.saveDoc).mockRejectedValue(new Error('A hin'))
+    vi.useFakeTimers()
+    vi.mocked(api.getDoc).mockResolvedValue(doc)
+    const h = renderHook(({ b }) => useDoc('P', b), { initialProps: { b: 'b' } })
+    await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+
+    await act(async () => { h.result.current.updateSegment(0, { text: 'A' }) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(800) })   // save A fehlschlag → stand='fehler', Retry bei +2s
+
+    vi.mocked(api.getDoc).mockResolvedValue(docB)
+    h.rerender({ b: 'b2' })
+    await act(async () => { await vi.advanceTimersByTimeAsync(0) })     // getDoc(B) loest, stand='ruhig'
+
+    // A's Retry wuerde hier feuern (+2s), falls der Cleanup ihn nicht abgeraeumt haette.
+    await act(async () => { await vi.advanceTimersByTimeAsync(4000) })
+
+    expect(h.result.current.stand).toBe('ruhig')   // nicht 'fehler' (das war A's Zustand)
+    const bRufe = vi.mocked(api.saveDoc).mock.calls.filter(c => c[1] === 'b2')
+    expect(bRufe).toEqual([])   // kein saveDoc fuer B aus dem A-Retry
   })
 })
 

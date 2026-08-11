@@ -8,6 +8,10 @@ const MIME: Record<ExportFmt, string> = { md: 'text/markdown', srt: 'application
 
 /** Ruhe nach der letzten Aenderung, bevor gespeichert wird. */
 const AUTOSAVE_MS = 800
+/** Wann der Autosave es nach einem Fehlschlag erneut versucht (#107). Wachsender Abstand,
+ *  damit ein kurzer Serverneustart Zeit zum Abklingen hat; nach dem letzten Versuch kommt der
+ *  finale Toast, nicht bei jedem einzelnen. */
+const RETRY_BACKOFF_MS = [2000, 4000, 8000]
 
 /**
  * Was die Anzeige ueber den Speicherstand sagen darf.
@@ -25,6 +29,13 @@ export function useDoc(project: string | null, base: string | null) {
   const [stand, setStand] = useState<SpeicherStand>('ruhig')
   /** Zaehlt Aenderungen. Nur so laesst sich erkennen, ob waehrend eines Speicherlaufs getippt wurde. */
   const fassung = useRef(0)
+  /** Zaehlt aufeinanderfolgende Fehlschlaege dieser Episode (#107). State (nicht Ref), damit der
+   *  Retry-Effekt pro Fehlschlag neu ansetzt und seinen Timer mit dem jeweils groesseren Abstand legt. */
+  const [fehlerZaehler, setFehlerZaehler] = useState(0)
+  /** Letzte Fehlermeldung — fuer den finalen Toast, der erst nach erschoepftem Retry kommt. */
+  const letzterFehler = useRef('')
+  /** Verhindert den finalen Toast zweimal (StrictMode double-invoke in dev). */
+  const finalToastGezeigt = useRef(false)
 
   const reload = useCallback(() => {
     if (!project || !base) { setDoc(null); setDirty(false); setStand('ruhig'); return }
@@ -46,7 +57,13 @@ export function useDoc(project: string | null, base: string | null) {
   // `reload()` nach einem Korrekturlauf fuer dieselbe Datei geht nicht durch ihn.
   useEffect(() => { setDirty(false); reload() }, [reload])
 
-  const beruehrt = useCallback(() => { fassung.current++; setDirty(true); setStand('offen') }, [])
+  const beruehrt = useCallback(() => {
+    fassung.current++; setDirty(true); setStand('offen')
+    // Ein neuer Tastendruck beginnt eine neue Episode (#107): alter Zaehler und ein vielleicht
+    // noch ausstehender finaler Toast sind hinfällig. Der Retry-Effekt räumt seinen Timer über
+    // die stand-Aenderung selbst ab.
+    setFehlerZaehler(0); finalToastGezeigt.current = false
+  }, [])
 
   const updateSegment = useCallback((id: number, patch: Partial<Segment>) => {
     setDoc(d => d && ({ ...d, segments: d.segments.map(s => s.id === id ? { ...s, ...patch } : s) }))
@@ -139,16 +156,16 @@ export function useDoc(project: string | null, base: string | null) {
         // Entprellung unten hat fuer sie bereits einen neuen Lauf angesetzt.
         if (fassung.current !== v) { setStand('offen'); return }
         setDirty(false); setStand('gespeichert')
+        setFehlerZaehler(0); finalToastGezeigt.current = false   // Erfolg beendet die Fehler-Episode
       } catch (e) {
-        // Der Toast kommt IMMER — ein fehlgeschlagenes Speichern zu verschweigen, weil der
-        // Nutzer inzwischen woanders ist, waere genau der stille Verlust. Er nennt dann die
-        // Datei, sonst stuende die Meldung ohne Bezug ueber einem fremden Dokument. Die
-        // Anzeige dagegen gehoert dem offenen Dokument und bleibt unberuehrt.
-        if (meins()) setStand('fehler')   // `dirty` bleibt -> Rueckfragen beim Verlassen greifen
-        // `instanceof`-Pruefung statt blossem `.message`: der Catch-Block darf nicht selbst
-        // werfen — ein Reject mit `null` liesse sonst die Kette ablehnen (siehe unten).
-        toast.error(`Speichern${meins() ? '' : ` von „${base}“`} fehlgeschlagen: `
-          + (e instanceof Error ? e.message : String(e)))
+        // Fehlerzaehler und Meldung nur fuer das offene Dokument (#107): ein Lauf fuer A, der nach
+        // einem Wechsel zu B fehlschlaegt, ist fuer B ohne Belang. Der finale Toast kommt im
+        // Retry-Effekt, nicht hier — sonst Dauerfeuer bei jedem der bis zu drei Versuche.
+        if (meins()) {
+          setStand('fehler')   // dirty bleibt -> Rueckfragen beim Verlassen greifen
+          letzterFehler.current = e instanceof Error ? e.message : String(e)
+          setFehlerZaehler(n => n + 1)
+        }
       }
     })
     // `.catch` an der Kette, nicht am Rueckgabewert: lehnte `kette.current` je ab, reichte
@@ -172,6 +189,29 @@ export function useDoc(project: string | null, base: string | null) {
     const t = setTimeout(() => { void save() }, AUTOSAVE_MS)
     return () => clearTimeout(t)
   }, [dirty, save])
+
+  // Retry nach Fehlschlag (#107). Separater Effekt (nicht self-scheduling im catch): der
+  // Effekt-Cleanup loest drei Dinge automatisch — (1) ein Wechsel des Dokuments aendert die
+  // save-Identitaet und setzt stand zurueck → der Timer des alten Dokuments wird abgeraeumt,
+  // keine Retries fuer ein Dokument, das gar nicht mehr offen ist; (2) ein neuer Tastendruck
+  // (beruehrt) setzt stand='offen' → derselbe Abraeum-Effekt; (3) ein gelingender Retry setzt
+  // fehlerZaehler=0 → der Effekt kehrt frueh zurueck. `fehlerZaehler` ist State, damit jeder
+  // Fehlschlag den Effekt neu ansetzt und den naechsten Timer mit groesserem Abstand legt.
+  // `meins()` braucht es hier nicht: stand='fehler' wird nur bei meins() gesetzt, gilt also
+  // immer dem offenen Dokument; ein Wechsel setzt stand zurueck und bricht den Effekt ab.
+  useEffect(() => {
+    if (stand !== 'fehler') { finalToastGezeigt.current = false; return }
+    if (fehlerZaehler > RETRY_BACKOFF_MS.length) {
+      // Alle Retries aufgebraucht: ein finaler Toast, dann Schluss (kein weiterer Timer).
+      if (!finalToastGezeigt.current) {
+        finalToastGezeigt.current = true
+        toast.error(`Speichern fehlgeschlagen: ${letzterFehler.current}`)
+      }
+      return
+    }
+    const t = setTimeout(() => { void save() }, RETRY_BACKOFF_MS[fehlerZaehler - 1])
+    return () => clearTimeout(t)
+  }, [stand, fehlerZaehler, save])
 
   const exportDownload = useCallback(async (fmt: ExportFmt, sprecher = true) => {
     if (!project || !base) return
