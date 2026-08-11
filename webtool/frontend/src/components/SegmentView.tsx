@@ -1,9 +1,10 @@
 import { useState } from 'react'
+import { toast } from 'sonner'
 import { CircleHelp, Play, ScanSearch, TriangleAlert } from 'lucide-react'
 import type { Segment } from '@/lib/types'
 import { isCorrected, tokenizeUncertain } from '@/lib/uncertainty'
 import { UncertainWord } from './UncertainWord'
-import { TextEditor } from './TextEditor'
+import { TextEditor, EINGABE_VERWORFEN } from './TextEditor'
 
 function fmt(t: number) { const s = Math.max(0, t | 0); return `${(s / 60) | 0}:${String(s % 60).padStart(2, '0')}` }
 
@@ -54,7 +55,8 @@ export function SegmentView({ seg, active, onPlay, updateSegment }: {
       {editing
         ? <TextEditor initial={seg.text}
             onCommit={t => { updateSegment(seg.id, { text: t }); setEditing(false) }}
-            onCancel={() => setEditing(false)} />
+            onCancel={() => setEditing(false)}
+            onVerworfen={() => toast.info(EINGABE_VERWORFEN)} />
         : <span onClick={() => setEditing(true)} className="lesesatz cursor-text">{body}</span>}
       {corrected &&
         <button onClick={() => setShowRaw(v => !v)} title="Roh-Wörter anzeigen" aria-pressed={showRaw}
