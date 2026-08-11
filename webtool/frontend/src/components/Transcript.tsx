@@ -1,16 +1,32 @@
 import { useEffect, useMemo, useRef } from 'react'
+import type { RefObject } from 'react'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import type { EditDoc, Segment } from '@/lib/types'
 import { groupIntoTurns } from '@/lib/grouping'
 import { SpeakerTurn } from './SpeakerTurn'
 import { DokumentFeld } from './DokumentFeld'
 
-export function Transcript({ doc, loading, activeId, onPlaySeg, onPlayTurn, updateSegment, updateDoc, renameSpeaker }: {
+/** Holt ein Segment anhand seiner data-seg-id in den ScrollArea-Viewport — sanft, nur wenn
+ *  es nicht schon sichtbar ist. Wird von Wiedergabe (activeId) und Suche (suchAktivId)
+ *  genutzt; zwei Effekte, je eigener Trigger, keine Race. */
+function scrollSegInView(contentRef: RefObject<HTMLDivElement | null>, id: number) {
+  const el = contentRef.current?.querySelector<HTMLElement>(`[data-seg-id="${id}"]`)
+  if (!el) return
+  const vp = el.closest<HTMLElement>('[data-radix-scroll-area-viewport]')
+  if (!vp) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); return }
+  const r = el.getBoundingClientRect(), vr = vp.getBoundingClientRect()
+  if (r.top < vr.top || r.bottom > vr.bottom) {
+    vp.scrollTo({ top: vp.scrollTop + (r.top - vr.top) - (vr.height - r.height) / 2, behavior: 'smooth' })
+  }
+}
+
+export function Transcript({ doc, loading, activeId, onPlaySeg, onPlayTurn, updateSegment, updateDoc, renameSpeaker, sucheAktiv = false, trefferIds, suchAktivId = null }: {
   doc: EditDoc | null; loading?: boolean; activeId: number | null;
   onPlaySeg: (s: Segment) => void; onPlayTurn: (segs: Segment[]) => void;
   updateSegment: (id: number, patch: Partial<Segment>) => void;
   updateDoc: (patch: Partial<Pick<EditDoc, 'context' | 'summary'>>) => void;
   renameSpeaker: (from: string, to: string) => void;
+  sucheAktiv?: boolean; trefferIds?: Set<number>; suchAktivId?: number | null;
 }) {
   const turns = useMemo(() => (doc ? groupIntoTurns(doc.segments) : []), [doc])
   const speakerOptions = useMemo(() =>
@@ -19,17 +35,10 @@ export function Transcript({ doc, loading, activeId, onPlaySeg, onPlayTurn, upda
   const contentRef = useRef<HTMLDivElement>(null)
   // Aktives Segment bei Wechsel (z.B. Waveform-Klick) smooth in den Viewport holen —
   // nur wenn es nicht ohnehin sichtbar ist, sonst ruckelt es während der Wiedergabe.
-  useEffect(() => {
-    if (activeId == null) return
-    const el = contentRef.current?.querySelector<HTMLElement>(`[data-seg-id="${activeId}"]`)
-    if (!el) return
-    const vp = el.closest<HTMLElement>('[data-radix-scroll-area-viewport]')
-    if (!vp) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); return }
-    const r = el.getBoundingClientRect(), vr = vp.getBoundingClientRect()
-    if (r.top < vr.top || r.bottom > vr.bottom) {
-      vp.scrollTo({ top: vp.scrollTop + (r.top - vr.top) - (vr.height - r.height) / 2, behavior: 'smooth' })
-    }
-  }, [activeId])
+  useEffect(() => { if (activeId != null) scrollSegInView(contentRef, activeId) }, [activeId])
+  // Zweiter, unabhängiger Trigger: der aktive Suchtreffer springt beim ▲▽-Blättern —
+  // eigene Abhängigkeit, kein gemeinsamer Zustand mit der Wiedergabe (keine Race).
+  useEffect(() => { if (suchAktivId != null) scrollSegInView(contentRef, suchAktivId) }, [suchAktivId])
   if (!doc) return loading
     ? <div className="p-8 text-center text-muted-foreground text-sm">lädt…</div>
     : <div className="p-8 text-center text-muted-foreground">Keine Datei geöffnet.</div>
@@ -56,7 +65,8 @@ export function Transcript({ doc, loading, activeId, onPlaySeg, onPlayTurn, upda
         {turns.map(t => (
           <SpeakerTurn key={t.key} turn={t} activeId={activeId}
             onPlaySeg={onPlaySeg} onPlayTurn={onPlayTurn}
-            updateSegment={updateSegment} renameSpeaker={renameSpeaker} speakerOptions={speakerOptions} />
+            updateSegment={updateSegment} renameSpeaker={renameSpeaker} speakerOptions={speakerOptions}
+            sucheAktiv={sucheAktiv} trefferIds={trefferIds} suchAktivId={suchAktivId} />
         ))}
         {doc.annotations.length > 0 && (
           <section className="mt-12 border-t pt-5">
