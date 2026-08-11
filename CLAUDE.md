@@ -514,7 +514,10 @@ nie committen), unklarem Scope, oder history-verändernden Aktionen (force-push,
   das schwache Auto-Transkript. Zwilling von `render_md.py`: gleiche Eingabe, andere Ausgabe.
   Zwei Entscheidungen, die man nicht umdrehen sollte, ohne den Grund zu kennen: der
   Sprechername steht **nur beim Wechsel** und mit `>>` davor (in jeder Zeile frisst er den
-  halben Schirm, ganz weg verliert man bei zwei Stimmen den Faden), und Zeilen brechen bei 42
+  halben Schirm, ganz weg verliert man bei zwei Stimmen den Faden) — abschaltbar über
+  `?sprecher=false` bzw. den zweiten Eintrag im `.srt`-Menü der Editor-Leiste (zwei Menüpunkte
+  statt eines Schalters: ein Schalter bräuchte einen Zustand, den man beim nächsten Export
+  wieder raten müsste), und Zeilen brechen bei 42
   Zeichen an Wortgrenzen — ohne das schiebt YouTube ein langes Segment als eine einzige Zeile
   quer über das Bild. **Kein `?fmt=` am `/export`-Zwilling**: der müsste dafür seinen
   Rückgabeschlüssel `md` aufgeben. Läuft nur auf Knopfdruck, die Pipeline schreibt keine `.srt`.

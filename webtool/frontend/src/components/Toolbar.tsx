@@ -1,5 +1,8 @@
 import { CircleHelp, Download, Save, Subtitles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import type { ExportFmt } from '@/lib/api'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { FLAGS } from './SegmentView'
@@ -7,7 +10,7 @@ import { ThemeToggle } from './ThemeToggle'
 
 export function Toolbar({ dirty, canSave, onSave, onExport }: {
   dirty: boolean; canSave: boolean;
-  onSave: () => void; onExport: (fmt: ExportFmt) => void;
+  onSave: () => void; onExport: (fmt: ExportFmt, sprecher?: boolean) => void;
 }) {
   return (
     // Kein sticky noetig: EditorView setzt die Leiste als eigene Grid-Zeile, gescrollt wird
@@ -50,15 +53,25 @@ export function Toolbar({ dirty, canSave, onSave, onExport }: {
       <Button size="sm" variant="secondary" disabled={!canSave} onClick={() => onExport('md')}>
         <Download className="size-4" /> Export .md
       </Button>
-      {/* .srt laedt man bei YouTube unter "Untertitel > Datei hochladen" hoch. */}
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button size="sm" variant="secondary" disabled={!canSave} onClick={() => onExport('srt')}>
-            <Subtitles className="size-4" /> Untertitel .srt
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>Zeitcodierte Untertitel für den YouTube-Upload</TooltipContent>
-      </Tooltip>
+      {/* .srt laedt man bei YouTube unter "Untertitel > Datei hochladen" hoch. Zwei Eintraege
+          statt eines Schalters: der Zustand muesste sonst irgendwo leben und waere beim
+          naechsten Export wieder zu raten. */}
+      <DropdownMenu>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <DropdownMenuTrigger asChild>
+              <Button size="sm" variant="secondary" disabled={!canSave}>
+                <Subtitles className="size-4" /> Untertitel .srt
+              </Button>
+            </DropdownMenuTrigger>
+          </TooltipTrigger>
+          <TooltipContent>Zeitcodierte Untertitel für den YouTube-Upload</TooltipContent>
+        </Tooltip>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onSelect={() => onExport('srt')}>Mit Sprechernamen</DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => onExport('srt', false)}>Ohne Sprechernamen</DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
       <ThemeToggle />
     </header>
   )

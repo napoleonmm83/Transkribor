@@ -44,7 +44,9 @@ def _brauchbar(seg: dict) -> bool:
     return bool((seg.get("text") or "").strip()) and start is not None and end is not None and end >= start
 
 
-def render_srt(doc: dict) -> str:
+def render_srt(doc: dict, sprecher: bool = True) -> str:
+    """`sprecher=False` laesst die ">> Name:"-Praefixe weg — bei einem Monolog tragen sie
+    nichts bei, und wer den Namen im Bild nicht haben will, soll ihn abschalten koennen."""
     segs = [s for s in doc.get("segments", []) if _brauchbar(s)]
     bloecke: list[str] = []
     letzter_sprecher = None
@@ -60,10 +62,10 @@ def render_srt(doc: dict) -> str:
                 end = segs[i]["end"]
             letzter_sprecher = None  # nach der Musik den Namen wieder nennen
         else:
-            sprecher = (segs[i].get("speaker") or "").strip()
-            if sprecher and sprecher != letzter_sprecher:
-                text = f">> {sprecher}: {text}"
-            letzter_sprecher = sprecher
+            name = (segs[i].get("speaker") or "").strip()
+            if sprecher and name and name != letzter_sprecher:
+                text = f">> {name}: {text}"
+            letzter_sprecher = name
         bloecke.append("\n".join([
             str(len(bloecke) + 1),
             f"{_zeit(start)} --> {_zeit(end)}",

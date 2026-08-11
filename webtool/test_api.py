@@ -146,6 +146,15 @@ def test_export_srt_schreibt_datei(client, tmp_path):
     assert (tmp_path / "Demo" / "transkripte" / "S1.srt").read_text(encoding="utf-8") == srt
 
 
+def test_export_srt_ohne_sprecher(client):
+    doc = client.get("/api/projects/Demo/files/S1").json()
+    doc["segments"][0]["speaker"] = "Interviewer"
+    client.put("/api/projects/Demo/files/S1", json=doc)
+    assert ">> Interviewer:" in client.post("/api/projects/Demo/files/S1/export/srt").json()["srt"]
+    ohne = client.post("/api/projects/Demo/files/S1/export/srt?sprecher=false").json()["srt"]
+    assert ">>" not in ohne
+
+
 def test_get_projekt_einzeln_zeigt_dateien(client, tmp_path):
     tdir = tmp_path / "Demo" / "transkripte"
     (tdir / "S2.json").write_text(json.dumps({"language": "de", "text": "", "segments": []}),

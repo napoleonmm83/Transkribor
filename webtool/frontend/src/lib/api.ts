@@ -28,10 +28,14 @@ export async function saveDoc(project: string, base: string, doc: EditDoc): Prom
     method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(doc) }))
 }
 export type ExportFmt = 'md' | 'srt'
-/** md -> /export, srt -> /export/srt; die Antwort traegt das Format als Schluessel. */
-export async function exportText(project: string, base: string, fmt: ExportFmt): Promise<string> {
+/** md -> /export, srt -> /export/srt; die Antwort traegt das Format als Schluessel.
+ *  `sprecher=false` gilt nur fuer .srt (blendet die ">> Name:"-Praefixe aus). */
+export async function exportText(
+  project: string, base: string, fmt: ExportFmt, sprecher = true,
+): Promise<string> {
+  const pfad = fmt === 'md' ? '' : `/${fmt}${sprecher ? '' : '?sprecher=false'}`
   return (await jn<Record<ExportFmt, string>>(await fetch(
-    `/api/projects/${enc(project)}/files/${enc(base)}/export${fmt === 'md' ? '' : `/${fmt}`}`,
+    `/api/projects/${enc(project)}/files/${enc(base)}/export${pfad}`,
     { method: 'POST' })))[fmt]
 }
 /** Body ist optional: fast alle POSTs hier sind reine Auslöser ohne Nutzlast. */

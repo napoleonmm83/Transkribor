@@ -36,10 +36,10 @@ export function useDoc(project: string | null, base: string | null) {
     catch (e) { toast.error('Speichern fehlgeschlagen: ' + (e as Error).message) }
   }, [doc, project, base])
 
-  const exportDownload = useCallback(async (fmt: ExportFmt) => {
+  const exportDownload = useCallback(async (fmt: ExportFmt, sprecher = true) => {
     if (!project || !base) return
     try {
-      const text = await exportText(project, base, fmt)
+      const text = await exportText(project, base, fmt, sprecher)
       const a = document.createElement('a')
       a.href = URL.createObjectURL(new Blob([text], { type: MIME[fmt] }))
       a.download = `${base}.${fmt}`; a.click()
