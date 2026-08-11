@@ -664,8 +664,12 @@ def main(argv=None):
         attempted = sum(1 for b in scope if b in present
                         and (args.force or not _is_human_edited(os.path.join(tdir, b + ".edit.json"))))
         if attempted and not done:
+            # Anbieterneutral: beim API-Weg heisst der Anbieter vielleicht OpenAI, und wer nur
+            # die letzte Zeile liest, sucht sonst bei claude. Der echte Grund steht als
+            # "KI-Anbieter: …" weiter oben — dorthin zeigen, statt ihn zu erraten.
             print(f"run: FEHLER — 0 von {attempted} versuchten Datei(en) korrigiert "
-                  f"(claude nicht erreichbar oder ohne Ausgabe?)", flush=True)
+                  f"(KI-Anbieter nicht erreichbar oder ohne Ausgabe — siehe die Zeilen oben)",
+                  flush=True)
             raise SystemExit(1)
     else:
         paths.safe_name(args.base)
