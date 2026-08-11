@@ -61,4 +61,16 @@ describe('TextEditor', () => {
     fireEvent.blur(ta)
     expect(onCommit).toHaveBeenCalledWith('')
   })
+  it('ein neu geladener Ausgangswert ersetzt den offenen Feldinhalt', () => {
+    // #114: `reload()` tauscht das Dokument aus (fertige Korrektur), schliesst aber keinen
+    // offenen Editor. Die Textarea ist unkontrolliert (`defaultValue`) und hielt den ALTEN
+    // Stand — der naechste Blur schrieb ihn ueber die frische Korrektur, bei `dirty === false`
+    // ohne jede Rueckfrage. Ein `key` am Textfeld baut es beim Wechsel des Ausgangswerts neu auf.
+    const onCommit = vi.fn()
+    const { rerender } = render(<TextEditor initial="alt" onCommit={onCommit} onCancel={vi.fn()} />)
+    rerender(<TextEditor initial="neu" onCommit={onCommit} onCancel={vi.fn()} />)
+    expect(screen.getByRole('textbox')).toHaveValue('neu')
+    fireEvent.blur(screen.getByRole('textbox'))
+    expect(onCommit).not.toHaveBeenCalled()   // Feld == Dokument, es gibt nichts zu schreiben
+  })
 })

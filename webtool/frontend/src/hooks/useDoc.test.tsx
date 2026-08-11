@@ -108,6 +108,40 @@ describe('useDoc updateDoc', () => {
   })
 })
 
+describe('useDoc: gleichzeitige Speicherlaeufe', () => {
+  it('laeuft nie zweimal gleichzeitig — sonst kann der aeltere Stand gewinnen', async () => {
+    // #115: nichts serialisierte die Laeufe. Lauf A unterwegs, 800 ms spaeter startet Lauf B
+    // mit dem neueren Dokument — trifft A DANACH beim Server ein, steht der aeltere Stand auf
+    // der Platte. Schlimmer als der Verlust ist der Zustand danach: B setzt `dirty` auf false
+    // ("gespeichert"), A meldet anschliessend "offen" — und der Autosave-Effekt kehrt bei
+    // !dirty sofort zurueck. Es fasst also nie wieder etwas nach.
+    let laufend = 0, gleichzeitig = 0
+    const warteschlange: Array<() => void> = []
+    vi.mocked(api.saveDoc).mockImplementation((() => {
+      laufend++
+      gleichzeitig = Math.max(gleichzeitig, laufend)
+      return new Promise<void>(r => warteschlange.push(() => { laufend--; r() }))
+    }) as never)
+    const { result } = await geladen()
+
+    await act(async () => { result.current.updateSegment(0, { text: 'eins' }) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(800) })     // Lauf A startet
+    await act(async () => { result.current.updateSegment(0, { text: 'zwei' }) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(800) })     // Lauf B will starten
+
+    expect(gleichzeitig).toBe(1)
+
+    // Beide abarbeiten (A zuerst, dann darf B ueberhaupt erst losgehen)
+    await act(async () => { warteschlange.shift()?.(); await vi.advanceTimersByTimeAsync(0) })
+    await act(async () => { warteschlange.shift()?.(); await vi.advanceTimersByTimeAsync(0) })
+
+    const rufe = vi.mocked(api.saveDoc).mock.calls
+    expect(rufe[rufe.length - 1][2].segments[0].text).toBe('zwei')   // der neuere Stand zuletzt
+    expect(result.current.dirty).toBe(false)
+    expect(result.current.stand).toBe('gespeichert')                 // nicht "offen" ohne Nachfassen
+  })
+})
+
 describe('useDoc Export-Fehler', () => {
   it('zeigt einen Toast statt einen unhandled rejection bei fehlgeschlagenem exportDownload()', async () => {
     vi.mocked(api.getDoc).mockResolvedValue(doc)

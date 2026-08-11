@@ -58,21 +58,44 @@ export function useDoc(project: string | null, base: string | null) {
     beruehrt()
   }, [beruehrt])
 
+  /**
+   * Die Kette der Speicherlaeufe. Ohne sie konnten zwei `PUT` gleichzeitig unterwegs sein: Lauf
+   * A startet, 800 ms spaeter Lauf B mit dem neueren Dokument — traf A DANACH beim Server ein,
+   * stand der aeltere Stand auf der Platte. Schlimmer als der Verlust war der Zustand danach: B
+   * kehrt zurueck, `fassung` stimmt, also `dirty = false` und „gespeichert“; dann kehrt A zurueck
+   * und meldet „offen“. Der Autosave-Effekt kehrt bei `!dirty` sofort zurueck — es fasst also nie
+   * wieder etwas nach, und die Rueckfrage beim Verlassen greift nicht, weil das Dokument als
+   * sauber gilt.
+   *
+   * Verkettet statt per Riegel abgewiesen: ein abgewiesener Lauf muesste neu angesetzt werden,
+   * und dafuer gibt es keinen Ausloeser — die Abhaengigkeiten des Effekts (`dirty`, `save`)
+   * aendern sich dabei nicht. Ein wartender Lauf braucht keinen.
+   */
+  const kette = useRef<Promise<void>>(Promise.resolve())
+
   const save = useCallback(async () => {
     if (!doc || !project || !base) return
-    const v = fassung.current
-    setStand('speichert')
-    try {
-      await saveDoc(project, base, doc)
-      // Wurde waehrend des Laufs weitergetippt, ist das Geschriebene schon wieder alt: `dirty`
-      // muss stehen bleiben, sonst faellt genau diese Aenderung lautlos unter den Tisch. Die
-      // Entprellung unten hat fuer sie bereits einen neuen Lauf angesetzt.
-      if (fassung.current !== v) { setStand('offen'); return }
-      setDirty(false); setStand('gespeichert')
-    } catch (e) {
-      setStand('fehler')   // `dirty` bleibt -> die Rueckfragen beim Verlassen greifen weiter
-      toast.error('Speichern fehlgeschlagen: ' + (e as Error).message)
-    }
+    // Angehaengt, nicht nebenher gestartet — und bewusst INNERHALB von `save`: eine ausgelagerte
+    // Hilfsfunktion waere entweder eine Abhaengigkeit, die bei jedem Render wechselt (womit der
+    // Entprellungs-Effekt seinen Timer endlos neu setzt und nie speichert), oder ein
+    // Lint-Suppress. `speichern` wirft nicht, die Kette kann also nicht vergiften.
+    const lauf = kette.current.then(async () => {
+      const v = fassung.current
+      setStand('speichert')
+      try {
+        await saveDoc(project, base, doc)
+        // Wurde waehrend des Laufs weitergetippt, ist das Geschriebene schon wieder alt: `dirty`
+        // muss stehen bleiben, sonst faellt genau diese Aenderung lautlos unter den Tisch. Die
+        // Entprellung unten hat fuer sie bereits einen neuen Lauf angesetzt.
+        if (fassung.current !== v) { setStand('offen'); return }
+        setDirty(false); setStand('gespeichert')
+      } catch (e) {
+        setStand('fehler')   // `dirty` bleibt -> die Rueckfragen beim Verlassen greifen weiter
+        toast.error('Speichern fehlgeschlagen: ' + (e as Error).message)
+      }
+    })
+    kette.current = lauf
+    return lauf
   }, [doc, project, base])
 
   // Autosave. `save` haengt an `doc`, wechselt also mit jedem Tastendruck die Identitaet — der
