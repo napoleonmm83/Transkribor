@@ -16,11 +16,14 @@ function color(speaker: string) { // stabil je Name (Interviewer/Befragte unters
   let h = 0; for (const c of speaker) h = (h * 31 + c.charCodeAt(0)) % 997
   return SPRECHERFARBEN[h % SPRECHERFARBEN.length]
 }
-export function SpeakerTurn({ turn, activeId, onPlaySeg, onPlayTurn, updateSegment, renameSpeaker, speakerOptions }: {
+/** Default für trefferIds: "keine Treffer" — surfriert nur, solange die Suche aus ist. */
+const KEINE_TREFFER = new Set<number>()
+export function SpeakerTurn({ turn, activeId, onPlaySeg, onPlayTurn, updateSegment, renameSpeaker, speakerOptions, sucheAktiv = false, trefferIds = KEINE_TREFFER, suchAktivId = null }: {
   turn: Turn; activeId: number | null;
   onPlaySeg: (s: Segment) => void; onPlayTurn: (segs: Segment[]) => void;
   updateSegment: (id: number, patch: Partial<Segment>) => void;
   renameSpeaker: (from: string, to: string) => void; speakerOptions: string[];
+  sucheAktiv?: boolean; trefferIds?: Set<number>; suchAktivId?: number | null;
 }) {
   return (
     // 112px statt 150px: die Spalte traegt eine 11px-Versalzeile ("INTERVIEWER" misst gut
@@ -53,6 +56,7 @@ export function SpeakerTurn({ turn, activeId, onPlaySeg, onPlayTurn, updateSegme
               onChange={v => updateSegment(s.id, { speaker: v })}
               className="opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100" />
             <SegmentView seg={s} active={activeId === s.id}
+              dimmen={sucheAktiv && !trefferIds.has(s.id)} aktiverTreffer={suchAktivId === s.id}
               onPlay={() => onPlaySeg(s)} updateSegment={updateSegment} />
           </div>
         ))}
