@@ -20,6 +20,16 @@ function nichtMoeglich(plattform, gepackt, appimage) {
 }
 
 /**
+ * Darf die Hintergrund-Pruefung laufen? Weissliste statt Ausschlussliste: eine spaeter
+ * dazukommende Zustandsart gilt im Zweifel als "nichts zu tun".
+ * Wer schon ein Update gefunden hat (verfuegbar/laedt/bereit), sucht nicht weiter — der
+ * Zeitgeber wuerde sonst genau die Fusszeile ueberschreiben, in der das Update steht.
+ * 'fehler' wird erneut versucht: ein Netzaussetzer ist kein Dauerzustand.
+ */
+const ERNEUT_PRUEFEN = ['unbekannt', 'aktuell', 'fehler']
+function sollPruefen(stand) { return !!stand && ERNEUT_PRUEFEN.includes(stand.art) }
+
+/**
  * Baut den Automaten. `aendert` wird bei jeder Zustandsaenderung gerufen — daran haengt
  * die Anzeige im Fenster.
  */
@@ -69,4 +79,4 @@ function erstellen({ autoUpdater, version, plattform, gepackt, appimage, aendert
   }
 }
 
-module.exports = { nichtMoeglich, erstellen }
+module.exports = { nichtMoeglich, sollPruefen, erstellen }
