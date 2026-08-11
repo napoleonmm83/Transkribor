@@ -29,7 +29,11 @@ export function ProjektUmbenennen({ project, onUmbenannt, offen: von_aussen, onO
     if (e?.project === project && e.dirty && !window.confirm(
       'Im Editor stehen ungespeicherte Änderungen.\n\n'
       + 'Beim Umbenennen wird das Dokument neu geladen — sie gehen verloren.')) return false
-    onUmbenannt((await renameProject(project, neu)).name)
+    const nameNeu = (await renameProject(project, neu)).name
+    // #106-Review C2: bevor onUmbenannt den Pfad (und damit den Editor) wandert, verwirft der
+    // Editor seine Fassung — sonst spuelte der Verlassens-Flush eine Waise in den alten Projektordner.
+    if (e?.project === project) e.vergiss()
+    onUmbenannt(nameNeu)
   }
 
   return (

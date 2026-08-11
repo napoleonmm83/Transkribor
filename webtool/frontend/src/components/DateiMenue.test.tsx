@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { DateiMenue } from './DateiMenue'
 import { Huelle } from '@/lib/testHuelle'
+import { useEditorMelden } from '@/hooks/useEditorBruecke'
 import * as api from '@/lib/api'
 import type { ProjectFile } from '@/lib/types'
 
@@ -9,6 +10,13 @@ vi.mock('@/lib/api')
 
 const datei = (p: Partial<ProjectFile> = {}): ProjectFile =>
   ({ base: 'a', has_audio: true, has_raw: true, has_edit: false, has_md: false, ...p })
+
+/** Setzt editor.current auf „Datei a ist offen" — mit einem vergiss-Spy. Spielt den Editor, ohne
+ *  useDoc und Server (die Huelle bringt den EditorBrueckeProvider mit). */
+function OffeneDatei({ vergiss }: { vergiss: () => void }) {
+  useEditorMelden({ project: 'P', base: 'a', dirty: true, stand: 'offen', reload: () => {}, vergiss })
+  return null
+}
 
 /** Radix oeffnet das Menue nur auf einen echten Zeigerklick — `click` allein reicht nicht. */
 const menueOeffnen = async () => {
@@ -133,5 +141,18 @@ describe('Löschen', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Abbrechen' }))
     await waitFor(() => expect(screen.queryByText(/unwiderruflich/)).not.toBeInTheDocument())
     expect(api.deleteFile).not.toHaveBeenCalled()
+  })
+
+  it('verwirft die offene Fassung VOR dem Löschen — sonst spült der Verlassens-Flush sie zurück (#106)', async () => {
+    // C1: ist DIESE Datei im Editor offen, muss vergiss laufen, BEVOR der Editor sie verlaesst.
+    // Sonst legt der Backend-Save die geloeschte Datei neu an. Eine ANDERE offene Datei darf
+    // nicht angestastet werden (dafür sitzt die `offen`-Pruefung in editorVergessen).
+    const vergiss = vi.fn()
+    render(<Huelle pfad="/p/P/a"><OffeneDatei vergiss={vergiss} /><DateiMenue project="P" file={datei()} /></Huelle>)
+    await menueOeffnen()
+    fireEvent.click(await screen.findByText('Löschen'))
+    fireEvent.click(screen.getByRole('button', { name: 'Löschen' }))
+    await waitFor(() => expect(api.deleteFile).toHaveBeenCalledWith('P', 'a'))
+    expect(vergiss).toHaveBeenCalledTimes(1)
   })
 })

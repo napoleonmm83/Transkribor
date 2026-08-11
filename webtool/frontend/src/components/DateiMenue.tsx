@@ -55,6 +55,11 @@ export function DateiMenue({ project, file, aiReason }: {
   // an. Fuer die Korrektur gilt das NICHT: dort bleibt das Dokument gueltig, und der Editor
   // laedt es nach dem Lauf nach (s. korrekturFertig).
   const wegVomEditor = () => { if (offen) navigate(`/p/${encodeURIComponent(project)}`) }
+  /** #106-Review C1/C2: bevor der Editor eine Datei verlaesst, die der Server gerade zerstoert
+   *  oder verschiebt, verwirft er seine ungespeicherte Fassung — sonst spuelte der Verlassens-
+   *  Flush sie als Waise ans alte Ziel zurueck (Backend save_file legt sie bedingungslos neu an).
+   *  Nur wenn DIESE Datei offen ist: eine andere offene Datei darf nicht angestastet werden. */
+  const editorVergessen = () => { if (offen) editor.current?.vergiss() }
 
   const jobStarten = (fn: () => Promise<{ job_id: string; started: boolean }>, kind: string,
                       label: string, fertig?: () => void) =>
@@ -85,11 +90,12 @@ export function DateiMenue({ project, file, aiReason }: {
       // Erst navigieren, wenn der Lauf wirklich angenommen ist: bei 409 (ein Job laeuft schon)
       // wurde nichts verworfen — den Editor trotzdem zu verlassen waere ein Verlust ohne Anlass.
       jobStarten(() => startRetranscribeFile(project, file.base)
-        .then(res => { if (res.started) wegVomEditor(); return res }),
+        .then(res => { if (res.started) { editorVergessen(); wegVomEditor() }; return res }),
         'transcribe', `Transkribieren ${file.base}`)
     } else {
       try { await deleteFile(project, file.base) }
       catch (e) { toast.error(`Löschen fehlgeschlagen: ${(e as Error).message}`); return }
+      editorVergessen()
       wegVomEditor()
       toast.success(`„${file.base}“ gelöscht`)
       nachladen()
@@ -111,6 +117,7 @@ export function DateiMenue({ project, file, aiReason }: {
       `„${file.base}“ hat ungespeicherte Änderungen.\n\n`
       + 'Beim Umbenennen wird die Datei neu geladen — die Änderungen gehen verloren.')) return false
     const res = await renameFile(project, file.base, neu)
+    editorVergessen()   // sonst spuelte der Flush die alte Fassung als Waise ans alte Base
     if (offen) navigate(`/p/${encodeURIComponent(project)}/${encodeURIComponent(res.name)}`, { replace: true })
     toast.success(`„${file.base}“ heisst jetzt „${res.name}“`)
     nachladen()

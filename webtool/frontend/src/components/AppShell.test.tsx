@@ -13,10 +13,10 @@ vi.mock('@/lib/api')
 /** Ersatz-Editor: meldet der Huelle ein offenes Dokument, ohne useDoc und ohne Server.
  *  Geprueft wird die Huelle — dass EditorView selbst meldet, sichert EditorView.test.tsx.
  *  `stand` (Default 'ruhig'): seit #106 fragt die Leiste vor dem Verlassen nur bei 'fehler'. */
-function Schreibtisch({ dirty = true, stand = 'ruhig', reload = () => {} }: {
-  dirty?: boolean; stand?: SpeicherStand; reload?: () => void
+function Schreibtisch({ dirty = true, stand = 'ruhig', reload = () => {}, vergiss = () => {} }: {
+  dirty?: boolean; stand?: SpeicherStand; reload?: () => void; vergiss?: () => void
 }) {
-  useEditorMelden({ project: 'Alpha', base: 'a', dirty, stand, reload })
+  useEditorMelden({ project: 'Alpha', base: 'a', dirty, stand, reload, vergiss })
   const { pathname } = useLocation()
   return <span data-testid="ort">{pathname}</span>
 }

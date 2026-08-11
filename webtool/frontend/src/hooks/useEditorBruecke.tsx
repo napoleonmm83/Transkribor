@@ -11,6 +11,9 @@ export type OffenesDokument = {
   stand: SpeicherStand
   /** `useDoc.reload` — laedt das Dokument vom Server neu. */
   reload: () => void
+  /** #106-Review C1/C2: destruktive Aktionen (Loeschen/Neu transkribieren/Umbenennen) rufen das
+   *  VOR dem Server-Aufruf, damit der Verlassens-Flush die Datei nicht als Waise wieder aufleben laesst. */
+  vergiss: () => void
 }
 type Bruecke = { current: OffenesDokument | null }
 

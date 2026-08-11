@@ -244,7 +244,9 @@ export function useDoc(project: string | null, base: string | null) {
       if (!dokument) return
       kette.current = kette.current
         .then(() => saveDoc(project, base, dokument))
-        .catch(() => {})
+        .catch((e) => {
+          toast.error(`Speichern beim Verlassen fehlgeschlagen (${base}): ${e instanceof Error ? e.message : String(e)}`)
+        })
     }
   }, [project, base])
 
@@ -308,7 +310,14 @@ export function useDoc(project: string | null, base: string | null) {
     } catch (e) { toast.error('Export fehlgeschlagen: ' + (e as Error).message) }
   }, [project, base])
 
+  /** #106-Review C1/C2: destruktive Aktionen (Loeschen / Neu transkribieren / Umbenennen) rufen
+   *  das VOR dem Server-Aufruf, der die Datei zerstoert oder verschiebt. Ohne das spuelte der
+   *  Verlassens-Flush die Datei als Waise wieder auf — der Backend-Save legt eine geloeschte
+   *  Datei bedingungslos neu an (`makedirs exist_ok` + `atomic_write`). `setDirty(false)` bricht
+   *  auch den haengenden Autosave-Timer ab; der Flush-Guard greift danach ueber dirtyRef. */
+  const vergiss = useCallback(() => { setDirty(false); haengt.current = false }, [])
+
   // `save` wandert bewusst NICHT nach draussen: es gibt keinen Speichern-Knopf mehr, und eine
   // zweite Ausloesestelle waere eine, die neben der Entprellung herlaeuft.
-  return { doc, dirty, stand, loading, updateSegment, updateDoc, renameSpeaker, exportDownload, reload }
+  return { doc, dirty, stand, loading, updateSegment, updateDoc, renameSpeaker, exportDownload, reload, vergiss }
 }

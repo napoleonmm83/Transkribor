@@ -563,6 +563,52 @@ describe('useDoc: Flush beim Verlassen (#106)', () => {
     const nachWechsel = vi.mocked(api.saveDoc).mock.calls.filter(c => c[1] === 'b').length
     expect(nachWechsel).toBe(vorWechsel)   // kein zusaetzlicher Flush
   })
+
+  it('vergiss unterdrückt den Verlassens-Flush — destruktive Aktionen rufen es vorher', async () => {
+    // #106-Review C1/C2: ohne vergiss wuerde der Flush eine geloeschte/umbenannte Datei als Waise
+    // wieder aufleben lassen (Backend save_file legt sie bedingungslos neu an: makedirs exist_ok).
+    // vergiss setzt dirty false → Autosave-Timer bricht ab UND Flush-Guard greift (dirtyRef false).
+    const docB: EditDoc = { ...doc, base: 'b2' }
+    vi.mocked(api.saveDoc).mockResolvedValue(undefined as never)
+    vi.useFakeTimers()
+    vi.mocked(api.getDoc).mockResolvedValue(doc)
+    const h = renderHook(({ b }) => useDoc('P', b), { initialProps: { b: 'b' } })
+    await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+
+    await act(async () => { h.result.current.updateSegment(0, { text: 'A-Text' }) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(500) })   // Pause, save noch nicht gefeuert
+    expect(h.result.current.dirty).toBe(true)
+
+    await act(async () => { h.result.current.vergiss() })               // destruktive Aktion kuendigt an
+    expect(h.result.current.dirty).toBe(false)
+
+    vi.mocked(api.getDoc).mockResolvedValue(docB)
+    h.rerender({ b: 'b2' })
+    await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+
+    expect(api.saveDoc).not.toHaveBeenCalled()   // weder Flush noch Autosave
+  })
+
+  it('zeigt einen Toast, wenn der Verlassens-Flush scheitert', async () => {
+    // #106-Review I1: der Flush ist der einzige Speicherpfad, der bei der ersten Beruehrung einer
+    // Episode ohne Retry/Toast dastand — der Nutzer ist schon auf B und wuesste sonst von nichts.
+    const docB: EditDoc = { ...doc, base: 'b2' }
+    vi.mocked(api.saveDoc).mockRejectedValue(new Error('server weg'))
+    vi.useFakeTimers()
+    vi.mocked(api.getDoc).mockResolvedValue(doc)
+    const h = renderHook(({ b }) => useDoc('P', b), { initialProps: { b: 'b' } })
+    await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+
+    await act(async () => { h.result.current.updateSegment(0, { text: 'A-Text' }) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(500) })
+
+    vi.mocked(api.getDoc).mockResolvedValue(docB)
+    h.rerender({ b: 'b2' })
+    await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+
+    expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('server weg'))
+    expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('b'))   // Dateiname der verlorenen Datei
+  })
 })
 
 describe('useDoc: Dokument A darf nie in Datei B landen', () => {
