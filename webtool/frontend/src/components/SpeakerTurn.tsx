@@ -16,7 +16,7 @@ function color(speaker: string) { // stabil je Name (Interviewer/Befragte unters
   let h = 0; for (const c of speaker) h = (h * 31 + c.charCodeAt(0)) % 997
   return SPRECHERFARBEN[h % SPRECHERFARBEN.length]
 }
-/** Default für trefferIds: "keine Treffer" — surfriert nur, solange die Suche aus ist. */
+/** Default für trefferIds: "keine Treffer" — greift nur, solange die Suche aus ist. */
 const KEINE_TREFFER = new Set<number>()
 export function SpeakerTurn({ turn, activeId, onPlaySeg, onPlayTurn, updateSegment, renameSpeaker, speakerOptions, sucheAktiv = false, trefferIds = KEINE_TREFFER, suchAktivId = null }: {
   turn: Turn; activeId: number | null;
