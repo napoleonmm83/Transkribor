@@ -107,6 +107,19 @@ describe('TextEditor Verwurf-Hinweis (#118)', () => {
     expect(onVerworfen).not.toHaveBeenCalled()
   })
 
+  it('meldet KEINEN Verwurf, wenn die Aenderung auf den Ausgangswert zurueckgenommen wurde', () => {
+    // CodeRabbit-Fund: tippen und wieder aufheben — der Feldwert entspricht dann wieder dem
+    // Ausgangswert, es ist nichts verworfen. Ein Boolean „jemals getippt" (veraendert=true)
+    // wuerde hier falsch feuern; verglichen wird der aktuelle Feldwert gegen initial.
+    const onVerworfen = vi.fn()
+    const { rerender } = render(<TextEditor initial="alt" onCommit={vi.fn()} onCancel={vi.fn()} onVerworfen={onVerworfen} />)
+    const ta = screen.getByRole('textbox')
+    fireEvent.change(ta, { target: { value: 'meine Handarbeit' } })
+    fireEvent.change(ta, { target: { value: 'alt' } })   // zurueckgenommen
+    rerender(<TextEditor initial="neu" onCommit={vi.fn()} onCancel={vi.fn()} onVerworfen={onVerworfen} />)
+    expect(onVerworfen).not.toHaveBeenCalled()
+  })
+
   it('meldet KEINEN Verwurf nach einem Commit', () => {
     // Wer bewusst uebernommen hat, hat nichts verworfen. Der Cleanup beim Unmount darf
     // nicht zusaetzlich feuern.

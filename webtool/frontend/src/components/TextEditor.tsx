@@ -23,6 +23,8 @@ export function TextEditor({ initial, onCommit, onCancel, onVerworfen }: {
   // (reload() tauscht das Dokument — #114) oder das Feld verschwindet (Dateiwechsel), waere
   // die Eingabe still verworfen. `onVerworfen` gibt dem Parent die Chance, den Nutzer zu
   // informieren (#118). Unveraenderte Felder feuern nicht — sonst Laerm bei jedem Wechsel.
+  // `veraendert` ist „aktuell vom Ausgangswert abweichend", nicht „jemals getippt": stellt der
+  // Nutzer den Ursprungswert wieder her, ist nichts verworfen, und ein Wechsel feuert nicht.
   const veraendert = useRef(false)
   const erledigt = useRef(false)
   // `onVerworfen` als latest-ref: der Cleanup laeuft beim initial-Wechsel bzw. Unmount, nicht
@@ -75,7 +77,7 @@ export function TextEditor({ initial, onCommit, onCancel, onVerworfen }: {
     // (`onVerworfen`), statt es still zu tun. Der Test „verwirft dabei Getipptes“ haelt die
     // Entscheidung fest, damit sie niemand fuer einen Fehler haelt.
     <Textarea key={initial} defaultValue={initial} autoFocus
-      onChange={() => { veraendert.current = true }}
+      onChange={e => { veraendert.current = e.target.value.trim() !== initial.trim() }}
       className="min-h-0 resize-none leading-relaxed"
       onBlur={e => fertig(e.target.value)}
       onKeyDown={e => {
