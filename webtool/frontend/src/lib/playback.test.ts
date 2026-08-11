@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { playWindow, naechsteAktion, segIdAusFokus } from './playback'
+import { playWindow, naechsteAktion, segIdAusFokus, zeitText } from './playback'
 import type { Segment } from './types'
 
 const near = (a: number, b: number) => Math.abs(a - b) < 1e-9
@@ -16,6 +16,14 @@ describe('playWindow', () => {
     expect(near(from, ef)).toBe(true)
     expect(near(to, et)).toBe(true)
   })
+})
+
+describe('zeitText', () => {
+  it.each([
+    [0, '0:00'], [7, '0:07'], [63.9, '1:03'], [599, '9:59'],
+    [3600, '1:00:00'], [3725, '1:02:05'],  // Stundenstelle erst, wenn es sie gibt
+    [-1, '0:00'], [NaN, '0:00'],           // vor dem Dekodieren liefert wavesurfer NaN/0
+  ])('%s s -> %s', (sek, text) => expect(zeitText(sek)).toBe(text))
 })
 
 /** Nur die Felder, die naechsteAktion liest — der Rest von Segment ist hier Ballast. */

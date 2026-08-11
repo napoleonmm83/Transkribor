@@ -1,6 +1,8 @@
-import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from 'react'
 import { useWavesurfer } from '@wavesurfer/react'
-import { playWindow, naechsteAktion, type Fenster } from '@/lib/playback'
+import { Pause, Play, Square } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { playWindow, naechsteAktion, zeitText, type Fenster } from '@/lib/playback'
 import { useTheme } from '@/components/ThemeProvider'
 import type { Segment } from '@/lib/types'
 
@@ -10,6 +12,8 @@ export type WaveHandle = {
   /** Play/Pause. `seg` = das Segment unter dem Cursor, falls es eines gibt. */
   toggle: (seg?: Segment | null) => void
   skip: (sekunden: number) => void
+  /** Anhalten und an den Anfang zurueck. */
+  stop: () => void
 }
 
 // Wavesurfer malt auf Canvas und kann keine CSS-Variablen lesen — die Werte muessen hier
@@ -24,7 +28,9 @@ export const Waveform = forwardRef<WaveHandle, { url: string; onTime: (t: number
   function Waveform({ url, onTime }, ref) {
     const container = useRef<HTMLDivElement>(null)
     const { theme } = useTheme()
-    const { wavesurfer } = useWavesurfer({
+    // isPlaying/currentTime/isReady bringt der Hook ohnehin mit und rendert ohnehin bei jedem
+    // timeupdate neu — eigener State dafuer waere ein zweiter, langsamerer Zaehler.
+    const { wavesurfer, isPlaying, currentTime, isReady } = useWavesurfer({
       container, url, height: 72, barWidth: 2, barGap: 1,
       ...colors(theme === 'dark'),
     })
@@ -42,7 +48,9 @@ export const Waveform = forwardRef<WaveHandle, { url: string; onTime: (t: number
 
     useEffect(() => { wavesurfer?.setOptions(colors(theme === 'dark')) }, [theme, wavesurfer])
 
-    useImperativeHandle(ref, () => ({
+    // useMemo statt direkt im useImperativeHandle: die Knoepfe unter der Welle brauchen
+    // dieselben Aktionen wie die Tastenkuerzel — zweimal geschrieben liefen sie auseinander.
+    const steuerung = useMemo<WaveHandle>(() => ({
       playSegment(s) {
         if (!wavesurfer) return
         const { from, to } = playWindow(s, wavesurfer.getDuration())
@@ -90,7 +98,33 @@ export const Waveform = forwardRef<WaveHandle, { url: string; onTime: (t: number
         if (fenster.current) fenster.current = { ...fenster.current, frei: true }
         wavesurfer.skip(sekunden)
       },
+      stop() {
+        if (!wavesurfer) return
+        // Das gemerkte Fenster muss mit: nach dem Ruecksprung auf 0 stimmt es nicht mehr, und
+        // naechsteAktion wuerde sonst ein Segment wiederholen, das gerade verworfen wurde.
+        fenster.current = null
+        wavesurfer.stop()   // pause + setTime(0)
+      },
     }), [wavesurfer])
+    useImperativeHandle(ref, () => steuerung, [steuerung])
 
-    return <div ref={container} />
+    return (
+      <>
+        <div ref={container} />
+        <div className="mt-1.5 flex items-center gap-1">
+          <Button size="icon" variant="ghost" disabled={!isReady}
+            aria-label={isPlaying ? 'Pause' : 'Abspielen'} onClick={() => steuerung.toggle(null)}>
+            {isPlaying ? <Pause className="size-4" /> : <Play className="size-4" />}
+          </Button>
+          <Button size="icon" variant="ghost" disabled={!isReady}
+            aria-label="Stopp" onClick={() => steuerung.stop()}>
+            <Square className="size-4" />
+          </Button>
+          {/* tabular-nums: sonst zappelt die Zeile bei jeder Sekunde in der Breite. */}
+          <span className="ml-1 text-xs tabular-nums text-muted-foreground">
+            {zeitText(currentTime)} / {zeitText(isReady ? wavesurfer?.getDuration() ?? 0 : 0)}
+          </span>
+        </div>
+      </>
+    )
   })

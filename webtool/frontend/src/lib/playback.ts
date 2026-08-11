@@ -12,6 +12,18 @@ export function playWindow(seg: { start: number; end: number }, duration: number
  *  lang genug fuer ein verschlucktes Wort, kurz genug, um nicht den Satz zu verlieren. */
 export const SKIP = 2
 
+/** Sekunden -> Anzeige unter der Welle. Stunden nur, wenn die Aufnahme welche hat: "4:07" ist
+ *  bei einem Interview lesbarer als "00:04:07", und die Stundenstelle taucht bei den langen
+ *  Aufnahmen von selbst auf. Sekunden werden abgeschnitten, nicht gerundet — sonst zeigte die
+ *  Anzeige die Gesamtdauer, bevor die Datei zu Ende ist. */
+export function zeitText(sek: number): string {
+  const s = Math.max(0, Math.floor(Number.isFinite(sek) ? sek : 0))
+  const ss = String(s % 60).padStart(2, '0')
+  const std = Math.floor(s / 3600)
+  const mm = Math.floor(s / 60) % 60
+  return std ? `${std}:${String(mm).padStart(2, '0')}:${ss}` : `${mm}:${ss}`
+}
+
 /** Das zuletzt angespielte Stueck. `segId` ist null nach einem ganzen Redebeitrag.
  *  `frei`: per Ctrl+←/→ aus dem Fenster herausgespult — dann soll Ctrl+Space grenzenlos
  *  weiterspielen statt das durchgelaufene Fenster zu wiederholen (Review Important 1). */
