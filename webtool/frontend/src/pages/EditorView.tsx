@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { useDoc } from '@/hooks/useDoc'
 import { useEditorMelden } from '@/hooks/useEditorBruecke'
+import { useSuche } from '@/hooks/useSuche'
 import { audioUrl } from '@/lib/api'
 import { SKIP, segIdAusFokus } from '@/lib/playback'
 import { Toolbar } from '@/components/Toolbar'
@@ -17,6 +18,21 @@ export function EditorView() {
   // Dinge, die nur hier existieren. Ohne diese Meldung wechselt ein Klick ohne Rueckfrage
   // ueber ungespeicherte Aenderungen hinweg, und ein Korrekturlauf bleibt unsichtbar.
   useEditorMelden(sel ? { ...sel, dirty, stand, reload, vergiss } : null)
+  const [suchQuery, setSuchQuery] = useState('')
+  const [suchIndex, setSuchIndex] = useState(0)
+  const treffer = useSuche(doc?.segments, suchQuery)
+  const trefferIds = useMemo(() => new Set(treffer.ids), [treffer.ids])
+  const suchAktiv = suchQuery.trim() !== ''
+  // Index clamp beim Lesen: schrumpft die Trefferliste (neuer Query), kann suchIndex
+  // einen Tick überholen, bevor der Reset-Effekt greift — hier defensiv begrenzen.
+  const idx = treffer.ids.length ? Math.min(suchIndex, treffer.ids.length - 1) : 0
+  const suchAktivId = suchAktiv && treffer.ids.length ? (treffer.ids[idx] ?? null) : null
+  // Neuer Suchbegriff -> am ersten Treffer beginnen.
+  useEffect(() => { setSuchIndex(0) }, [suchQuery])
+  // Dateiwechsel -> altes Transkript ist hinfällig.
+  useEffect(() => { setSuchQuery(''); setSuchIndex(0) }, [sel?.base])
+  const suchNext = () => setSuchIndex(i => treffer.ids.length ? (i + 1) % treffer.ids.length : 0)
+  const suchPrev = () => setSuchIndex(i => treffer.ids.length ? (i - 1 + treffer.ids.length) % treffer.ids.length : 0)
   const waveRef = useRef<WaveHandle>(null)
   const [activeId, setActiveId] = useState<number | null>(null)
   const onTime = useCallback((t: number) => {
@@ -63,12 +79,15 @@ export function EditorView() {
   return (
     // Nur noch der Inhalt: die Projektnavigation zieht in die AppShell (Task 5).
     <div className="grid h-full grid-rows-[auto_1fr_auto]">
-      <Toolbar stand={stand} bereit={!!doc} onExport={exportDownload} />
+      <Toolbar stand={stand} bereit={!!doc} onExport={exportDownload}
+        suchQuery={suchQuery} onSuchChange={setSuchQuery} suchCount={treffer.ids.length} suchIndex={idx}
+        onSuchPrev={suchPrev} onSuchNext={suchNext} />
       <main className="min-h-0 overflow-auto">
         <Transcript doc={doc} loading={docLoading} activeId={activeId}
           onPlaySeg={s => waveRef.current?.playSegment(s)}
           onPlayTurn={segs => waveRef.current?.playTurn(segs)}
-          updateSegment={updateSegment} updateDoc={updateDoc} renameSpeaker={renameSpeaker} />
+          updateSegment={updateSegment} updateDoc={updateDoc} renameSpeaker={renameSpeaker}
+          sucheAktiv={suchAktiv} trefferIds={trefferIds} suchAktivId={suchAktivId} />
       </main>
       <PlayerDock url={sel ? audioUrl(sel.project, sel.base) : undefined} onTime={onTime} waveRef={waveRef} />
     </div>
