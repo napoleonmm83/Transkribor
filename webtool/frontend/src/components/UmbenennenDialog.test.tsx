@@ -39,6 +39,22 @@ describe('UmbenennenDialog', () => {
     expect(onSpeichern).toHaveBeenCalledWith('Hans Müller')
   })
 
+  it('bleibt offen, wenn der Aufrufer abbricht (false)', async () => {
+    // Wer die Ungespeichert-Rueckfrage ablehnt, hat NICHT umbenannt — ein Dialog, der sich
+    // trotzdem schliesst, behauptet das Gegenteil (CodeRabbit-Fund, PR #90).
+    const onOpenChange = vi.fn()
+    render(<UmbenennenDialog offen onOpenChange={onOpenChange} titel="t" beschreibung="b"
+      wert="alt" onSpeichern={vi.fn().mockResolvedValue(false)} />)
+    const feld = screen.getByLabelText('Neuer Name') as HTMLInputElement
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!
+        .set!.call(feld, 'neu')
+      feld.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    await act(async () => { screen.getByRole('button', { name: 'Umbenennen' }).click() })
+    expect(onOpenChange).not.toHaveBeenCalledWith(false)
+  })
+
   it('ruft den Server nicht, wenn sich nichts geaendert hat', async () => {
     const { onSpeichern } = zeigen()
     await act(async () => { screen.getByRole('button', { name: 'Umbenennen' }).click() })
