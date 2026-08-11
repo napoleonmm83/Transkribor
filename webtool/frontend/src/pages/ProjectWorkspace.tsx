@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
-import { ScanText, Sparkles, X, FileAudio, Loader2 } from 'lucide-react'
+import { Bot, ScanText, X, FileAudio, Loader2 } from 'lucide-react'
 import { useProjekte, useDateien } from '@/hooks/useProjektDaten'
 import { useAiReady } from '@/hooks/useAiReady'
 import { mergePhases, useActiveJob } from '@/hooks/useActiveJob'
@@ -62,7 +62,7 @@ export function ProjectWorkspace() {
         <span title={aiReason || undefined} className="inline-flex">
           <Button variant="outline" size="sm" disabled={!!aiReason}
             onClick={() => startJob(() => startCorrect(project!), 'correct', 'Korrigieren')}>
-            <Sparkles className="size-4" /> Korrigieren
+            <Bot className="size-4" /> Korrigieren
           </Button>
         </span>
       </PageHeader>

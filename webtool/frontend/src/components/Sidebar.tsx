@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
-import { ChevronRight, Loader2, ScanText, Search, Sparkles, Upload } from 'lucide-react'
+import { Bot, ChevronRight, Loader2, ScanText, Search, Upload } from 'lucide-react'
 import type { ActiveJob, JobPhases, ProjectFile } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -125,7 +125,7 @@ export function Sidebar({
                       <Button size="icon" variant="ghost" className="size-7" title="Korrigieren + Sprecher"
                         aria-label="Korrigieren + Sprecher" disabled={!!aiReason}
                         onClick={() => onCorrect(p.name)}>
-                        <Sparkles className="size-3.5" />
+                        <Bot className="size-3.5" />
                       </Button>
                     </span>
                     {/* Hier und nicht in der Projektzeile: ein <button> in einem <button> ist
