@@ -796,3 +796,97 @@ def test_datei_endpunkte_weisen_unsichere_namen_ab(client, tmp_path):
     # sieht die Anfrage nie. Geprueft wird darum die Wirkung, nicht die Zahl.
     assert client.delete("/api/projects/Demo/files/%2e%2e%2fS1").status_code >= 400
     assert (tmp_path / "Demo" / "transkripte" / "S1.json").exists()
+
+
+# --- Umbenennen: Projekt und einzelne Aufnahme -------------------------------
+
+def test_projekt_umbenennen_nimmt_die_aufnahmen_mit(client, tmp_path):
+    r = client.post("/api/projects/Demo/rename", json={"name": "US Car Treff Rüthi"})
+    assert r.status_code == 200 and r.json()["name"] == "US Car Treff Rüthi"
+    neu = tmp_path / "US Car Treff Rüthi"
+    assert neu.is_dir() and not (tmp_path / "Demo").exists()
+    assert (neu / "transkripte" / "S1.json").exists()
+    assert (neu / "audio" / "S1.mp3").exists()
+
+
+def test_projekt_umbenennen_zieht_project_in_der_edit_json_nach(client, tmp_path):
+    """`project` steht IM Dokument. Bleibt es stehen, zeigt es auf ein Projekt, das es
+    nicht mehr gibt."""
+    client.get("/api/projects/Demo/files/S1")
+    doc = client.get("/api/projects/Demo/files/S1").json()
+    client.put("/api/projects/Demo/files/S1", json=doc)       # legt die edit.json an
+    client.post("/api/projects/Demo/rename", json={"name": "Neu"})
+    gespeichert = json.loads((tmp_path / "Neu" / "transkripte" / "S1.edit.json").read_text(encoding="utf-8"))
+    assert gespeichert["project"] == "Neu"
+
+
+def test_projekt_umbenennen_auf_bestehenden_namen_gibt_409(client, tmp_path):
+    (tmp_path / "Zweit").mkdir()
+    assert client.post("/api/projects/Demo/rename", json={"name": "Zweit"}).status_code == 409
+    assert (tmp_path / "Demo").is_dir()
+
+
+def test_projekt_umbenennen_darf_nur_die_schreibweise_aendern(client, tmp_path):
+    """Auf Windows ist das Dateisystem case-insensitiv: `exists()` allein meldete hier
+    „gibt es schon" und der Nutzer koennte einen Tippfehler in der Gross-/Kleinschreibung
+    nie korrigieren."""
+    r = client.post("/api/projects/Demo/rename", json={"name": "DEMO"})
+    assert r.status_code == 200
+    assert client.get("/api/projects/DEMO").status_code == 200
+
+
+def test_projekt_umbenennen_prueft_namen_und_jobs(client, monkeypatch, tmp_path):
+    assert client.post("/api/projects/Demo/rename", json={"name": ".."}).status_code == 400
+    assert client.post("/api/projects/Demo/rename", json={"name": "  "}).status_code == 400
+    import webtool.jobs as jobs_mod
+    monkeypatch.setattr(jobs_mod, "active_for", lambda name: [{"id": "j1", "kind": "correct"}])
+    assert client.post("/api/projects/Demo/rename", json={"name": "Egal"}).status_code == 409
+    assert (tmp_path / "Demo").is_dir()
+
+
+def test_datei_umbenennen_nimmt_audio_und_alle_artefakte_mit(client, tmp_path):
+    t = _artefakte(tmp_path)
+    r = client.post("/api/projects/Demo/files/S1/rename", json={"name": "Hans Müller"})
+    assert r.status_code == 200 and r.json()["umbenannt"] == 10
+    assert (t / "Hans Müller.json").exists() and (t / "Hans Müller.part1.correction.json").exists()
+    assert (tmp_path / "Demo" / "audio" / "Hans Müller.mp3").exists()
+    assert not list(t.glob("S1.*")) and not (tmp_path / "Demo" / "audio" / "S1.mp3").exists()
+
+
+def test_datei_umbenennen_zieht_base_und_audio_im_dokument_nach(client, tmp_path):
+    """render_md macht aus `base` den Titel — bliebe er stehen, truege der naechste
+    Export den alten Namen."""
+    doc = client.get("/api/projects/Demo/files/S1").json()
+    client.put("/api/projects/Demo/files/S1", json=doc)
+    client.post("/api/projects/Demo/files/S1/rename", json={"name": "Hans"})
+    neu = json.loads((tmp_path / "Demo" / "transkripte" / "Hans.edit.json").read_text(encoding="utf-8"))
+    assert neu["base"] == "Hans" and neu["audio"] == "Hans.mp3"
+
+
+def test_datei_umbenennen_laesst_nachbarn_mit_gemeinsamem_praefix_stehen(client, tmp_path):
+    t = tmp_path / "Demo" / "transkripte"
+    (t / "S10.json").write_text("{}", encoding="utf-8")
+    assert client.post("/api/projects/Demo/files/S1/rename", json={"name": "Neu"}).status_code == 200
+    assert (t / "S10.json").exists()
+
+
+def test_datei_umbenennen_bricht_ab_BEVOR_etwas_wandert(client, tmp_path):
+    """Der wichtige Teil ist nicht der 409, sondern dass NICHTS umbenannt wurde: eine halb
+    umbenannte Aufnahme gibt es zweimal halb, und der Basisname ist die einzige Verbindung
+    zwischen Ton und Transkript."""
+    t = _artefakte(tmp_path)
+    (t / "Ziel.md").write_text("belegt", encoding="utf-8")     # nur EIN Name kollidiert
+    r = client.post("/api/projects/Demo/files/S1/rename", json={"name": "Ziel"})
+    assert r.status_code == 409
+    assert (t / "S1.json").exists() and (t / "S1.edit.json").exists()
+    assert (tmp_path / "Demo" / "audio" / "S1.mp3").exists()
+    assert (t / "Ziel.md").read_text(encoding="utf-8") == "belegt"
+
+
+def test_datei_umbenennen_unbekannt_gibt_404_und_prueft_namen(client, monkeypatch):
+    assert client.post("/api/projects/Demo/files/GibtsNicht/rename", json={"name": "X"}).status_code == 404
+    assert client.post("/api/projects/Demo/files/S1/rename", json={"name": "../weg"}).status_code == 400
+    assert client.post("/api/projects/Demo/files/%2e%2e/rename", json={"name": "X"}).status_code == 400
+    import webtool.jobs as jobs_mod
+    monkeypatch.setattr(jobs_mod, "active_for", lambda name: [{"id": "j1", "kind": "transcribe"}])
+    assert client.post("/api/projects/Demo/files/S1/rename", json={"name": "X"}).status_code == 409

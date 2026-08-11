@@ -498,6 +498,21 @@ nie committen), unklarem Scope, oder history-verändernden Aktionen (force-push,
   liest glob das `[` als Zeichenklasse und findet nichts. Beide Endpunkte antworten mit 409,
   solange **irgendein** Job des Projekts läuft (Dateien wegzuräumen, während ein Lauf sie
   schreibt, ist ein Datenrennen; eine Job-zu-Datei-Zuordnung gibt es im Backend nicht).
+- **Umbenennen ist EIN Mechanismus für Projekt und Aufnahme** (`POST …/rename` und
+  `POST …/files/{base}/rename`, im ⋯-Menü und in der Leiste). Vier Dinge, die man nicht aus
+  dem Diff liest: **`os.path.exists` allein darf nicht über „Name frei?" entscheiden** —
+  Windows' Dateisystem ist case-insensitiv, beim reinen Schreibweisenwechsel („weistannen" →
+  „Weisstannen") zeigt es auf genau den Ordner, den man umbenennt, und die Aktion scheiterte
+  mit „gibt es schon"; `_ziel_frei` trennt das per `os.path.samefile`. **Erst die ganze Liste
+  prüfen, dann umbenennen**: auf halbem Weg abzubrechen liesse eine Aufnahme zurück, die es
+  zweimal halb gibt — der Basisname ist die einzige Verbindung zwischen Ton und Transkript.
+  **`base`/`project`/`audio` stehen IM Dokument** (`edit_model.build_edit_doc`), und
+  `render_md` macht aus `base` den Titel — ohne Nachziehen trüge der nächste Export den alten
+  Namen. **Die Sprechernamen sind ein Vorschlag, kein Automatismus**: ein Klick setzt sie ins
+  Feld, geschickt wird trotzdem erst mit „Umbenennen". Sie kommen aus **einem** `getDoc` beim
+  Öffnen des Dialogs, nicht aus der Dateiliste — die hält sich seit PR #67 bewusst von jedem
+  Dokumentzugriff fern. Ist die Datei im Editor offen, wandert die Adresse mit (`replace`,
+  der alte Pfad ist tot).
 - **Die Datei-Aktionen liegen in EINEM Bauteil** (`components/DateiMenue.tsx`, das `⋯`-Menü in
   Arbeitsfläche *und* Seitenleiste). Vorher standen Korrigieren-Knopf und Überschreib-Rückfrage
   zweimal getrennt im Code, und die Fassungen liefen auseinander: die Arbeitsfläche schickte

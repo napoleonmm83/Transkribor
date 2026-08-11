@@ -21,7 +21,7 @@ function zeigen(extra: Partial<Parameters<typeof Sidebar>[0]> = {}) {
   const props = {
     projekte: PROJEKTE, offen: null, dateien: [], onWaehlen: vi.fn(),
     active: null, onOpen: vi.fn(), onUpload: vi.fn(), onTranscribe: vi.fn(),
-    onCorrect: vi.fn(), onGeloescht: vi.fn(), ...extra,
+    onCorrect: vi.fn(), onGeloescht: vi.fn(), onUmbenannt: vi.fn(), ...extra,
   }
   const { container } = render(<Huelle><Sidebar {...props} /></Huelle>)
   return { ...props, container }
@@ -84,7 +84,7 @@ describe('Sidebar', () => {
     // waehrend des Ladens behaupten, es gaebe nichts.
     render(<Huelle><Sidebar projekte={[]} loading offen={null} dateien={[]} onWaehlen={vi.fn()}
       active={null} onOpen={vi.fn()} onUpload={vi.fn()} onTranscribe={vi.fn()}
-      onCorrect={vi.fn()} onGeloescht={vi.fn()} /></Huelle>)
+      onCorrect={vi.fn()} onGeloescht={vi.fn()} onUmbenannt={vi.fn()} /></Huelle>)
     expect(screen.queryByText(/Noch keine Projekte/)).not.toBeInTheDocument()
   })
 
