@@ -26,6 +26,18 @@ def client(monkeypatch, tmp_path):
     return TestClient(app)
 
 
+# "Demo" wird von der client-Fixture angelegt (TRANSKRIBOR_PROJEKTE=tmp_path).
+# tmp_projekt ist nur der Name als String; audio_datei das httpx-Tupel fuer files=.
+@pytest.fixture
+def tmp_projekt():
+    return "Demo"
+
+
+@pytest.fixture
+def audio_datei():
+    return ("Neu.mp3", b"ID3audio", "audio/mpeg")
+
+
 def test_list_projects(client):
     r = client.get("/api/projects")
     assert r.status_code == 200
@@ -398,7 +410,7 @@ def test_fetch_startet_job(client, monkeypatch):
     from webtool import jobs
     gestartet = {}
     monkeypatch.setattr(jobs, "start",
-                        lambda project, cmd, cwd, kind, then=None:
+                        lambda project, cmd, cwd, kind, then=None, env=None:
                         gestartet.update(cmd=cmd, kind=kind, then=then) or ("j1", True))
     r = client.post("/api/projects/Demo/fetch", json={"urls": ["https://youtu.be/abc123"]})
     assert r.status_code == 200 and r.json() == {"job_id": "j1", "started": True}
@@ -943,3 +955,27 @@ def test_datei_umbenennen_unbekannt_gibt_404_und_prueft_namen(client, monkeypatc
     import webtool.jobs as jobs_mod
     monkeypatch.setattr(jobs_mod, "betrifft", lambda name, base: {"id": "j1", "kind": "transcribe"})
     assert client.post("/api/projects/Demo/files/S1/rename", json={"name": "X"}).status_code == 409
+
+
+# --- Projekteinstellungen: Sprache + Korrektur-Tiefe (Task 6) -----------------
+
+def test_einstellungen_default_fuer_neues_projjekt(client, tmp_projekt):
+    r = client.get(f"/api/projects/{tmp_projekt}/einstellungen")
+    assert r.status_code == 200
+    d = r.json()
+    assert d["sprache"] == "ch" and d["korrektur"] == "auto"
+    assert {e["id"] for e in d["sprach_choices"]} >= {"ch", "de", "en", "auto"}
+
+
+def test_einstellungen_speichern(client, tmp_projekt):
+    r = client.put(f"/api/projects/{tmp_projekt}/einstellungen", json={"sprache": "en"})
+    assert r.status_code == 200
+    assert client.get(f"/api/projects/{tmp_projekt}/einstellungen").json()["sprache"] == "en"
+
+
+def test_upload_schreibt_datei_sprache(client, tmp_projekt, audio_datei):
+    r = client.post(f"/api/projects/{tmp_projekt}/audio",
+                    files={"file": audio_datei}, data={"sprache": "en"})
+    assert r.status_code == 200
+    from webtool import projekt
+    assert projekt.datei_sprache(tmp_projekt, r.json()["base"]) == "en"

@@ -15,7 +15,7 @@ from urllib.parse import urlparse
 
 import transcribe
 
-from . import paths
+from . import paths, projekt
 
 # Trust-Boundary: die URL kommt aus dem Browser. Gleichzeitig der Feature-Scope.
 ALLOWED_HOSTS = {
@@ -122,6 +122,11 @@ def download_one(project: str, url: str) -> str:
     with yt_dlp.YoutubeDL(_ydl_opts(os.path.join(adir, base + ".%(ext)s"))) as ydl:
         ydl.extract_info(url, download=True)
     print(f"[fetch] fertig {base}", flush=True)
+    # Sprache pro geladene Base eintragen (vom Web-Tool per Env durchgereicht). Fehlt die
+    # Variable, greift der Projekt-Default — Legacy-Verhalten bleibt unveraendert.
+    sprache = os.environ.get("TRANSKRIBOR_FETCH_SPRACHE")
+    if sprache:
+        projekt.setze_datei(project, base, sprache=sprache)
     return base
 
 
