@@ -34,7 +34,7 @@ describe('ProjektEinstellungen', () => {
   })
 
   it('saveProjektEinstellungen PUTt JSON und gibt die Antwort zurück', async () => {
-    const fm = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ sprache: 'en', korrektur: 'auto', sprach_choices: [], tiefen: [] }) })
+    const fm = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ sprache: 'en', korrektur: 'auto' }) })
     vi.stubGlobal('fetch', fm)
     const r = await api.saveProjektEinstellungen('p', { sprache: 'en' })
     expect(fm).toHaveBeenCalledWith('/api/projects/p/einstellungen',
@@ -76,7 +76,7 @@ describe('DateiEinstellungen', () => {
   })
 
   it('saveFileEinstellungen PUTt JSON und gibt die Antwort zurück', async () => {
-    const fm = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ sprache: 'en', korrektur: 'auto', sprach_choices: [], tiefen: [] }) })
+    const fm = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ sprache: 'en', korrektur: 'auto' }) })
     vi.stubGlobal('fetch', fm)
     const r = await api.saveFileEinstellungen('p', 'a', { sprache: 'en' })
     expect(fm).toHaveBeenCalledWith('/api/projects/p/files/a/einstellungen',

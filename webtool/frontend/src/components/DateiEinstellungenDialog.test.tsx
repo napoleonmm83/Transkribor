@@ -69,7 +69,7 @@ describe('DateiEinstellungenDialog', () => {
 
   it('ruft onGespeichert mit den richtigen Flags und speichert nur bei Änderung', async () => {
     const saveSpy = vi.spyOn(api, 'saveFileEinstellungen')
-      .mockResolvedValue({ ...BASIS, sprache: 'en' })
+      .mockResolvedValue({ sprache: 'en', korrektur: 'auto' })
     const onGespeichert = vi.fn()
     const onOpenChange = vi.fn()
     vi.spyOn(api, 'getFileEinstellungen').mockResolvedValue(BASIS)

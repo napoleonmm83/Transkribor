@@ -16,7 +16,7 @@ describe('ProjektEinstellungenDialog', () => {
   it('lädt beim Öffnen und speichert die Sprache', async () => {
     const getSpy = vi.spyOn(api, 'getProjektEinstellungen').mockResolvedValue(BASIS)
     const saveSpy = vi.spyOn(api, 'saveProjektEinstellungen')
-      .mockResolvedValue({ ...BASIS, sprache: 'en' })
+      .mockResolvedValue({ sprache: 'en', korrektur: 'auto' })
     const onGeaendert = vi.fn()
     const onOpenChange = vi.fn()
     render(

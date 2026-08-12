@@ -1,6 +1,7 @@
 import type {
   Project, ProjectFile, EditDoc, JobStatus, StartJob, Settings, ModelInfo, Hardware, AuthStatus, LoginState,
   ProjectEinstellungen,
+  EinstellungenWerte,
 } from './types'
 
 const enc = encodeURIComponent
@@ -25,10 +26,11 @@ export function getProjectFiles(project: string): Promise<{ name: string; files:
 export async function getProjektEinstellungen(project: string): Promise<ProjectEinstellungen> {
   return get(`/api/projects/${enc(project)}/einstellungen`)
 }
-/** Nur gesetzte Felder senden (Partial) — wie bei saveSettings. */
+/** Nur gesetzte Felder senden (Partial). Der PUT echo't {sprache, korrektur} — ohne die
+ *  Wahlmoeglichkeiten, die nur der GET liefert (siehe EinstellungenWerte). */
 export async function saveProjektEinstellungen(
-  project: string, patch: Partial<ProjectEinstellungen>,
-): Promise<ProjectEinstellungen> {
+  project: string, patch: Partial<EinstellungenWerte>,
+): Promise<EinstellungenWerte> {
   return jn(await fetch(`/api/projects/${enc(project)}/einstellungen`,
     { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch) }))
 }
@@ -40,8 +42,8 @@ export async function getFileEinstellungen(project: string, base: string): Promi
 /** Schreibt den Datei-Override; nur gesetzte Felder senden (Partial) — wie saveProjektEinstellungen.
  *  Reiner Schreibpfad; die Trigger (retranscribe/correct) stößt der Aufrufer separat an. */
 export async function saveFileEinstellungen(
-  project: string, base: string, patch: Partial<ProjectEinstellungen>,
-): Promise<ProjectEinstellungen> {
+  project: string, base: string, patch: Partial<EinstellungenWerte>,
+): Promise<EinstellungenWerte> {
   return jn(await fetch(`/api/projects/${enc(project)}/files/${enc(base)}/einstellungen`,
     { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch) }))
 }

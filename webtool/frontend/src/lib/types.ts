@@ -36,6 +36,9 @@ export type ProjectEinstellungen = {
   sprach_choices: SprachChoice[]
   tiefen: TiefeChoice[]
 };
+/** Nur die gesetzten Werte (sprache/korrektur). Der PUT echo't genau diese beiden Felder;
+ *  die Wahlmoeglichkeiten (sprach_choices/tiefen) liefert nur der GET. */
+export type EinstellungenWerte = { sprache: string; korrektur: string };
 // `device` gilt der torch-Welt (Sprechertrennung, kann "mps"), `asr` der Transkription
 // (faster-whisper/CTranslate2, nur "cuda"/"cpu"). Auf einem Mac laufen die beiden ausein-
 // ander — deshalb zwei Felder statt einem.
