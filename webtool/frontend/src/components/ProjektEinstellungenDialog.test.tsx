@@ -35,4 +35,12 @@ describe('ProjektEinstellungenDialog', () => {
     expect(onOpenChange).toHaveBeenCalledWith(false)
     getSpy.mockRestore(); saveSpy.mockRestore()
   })
+
+  it('legt Speichern bei Lade-Fehler still (keine leeren Strings speichern)', async () => {
+    const getSpy = vi.spyOn(api, 'getProjektEinstellungen').mockRejectedValue(new Error('boom'))
+    render(<ProjektEinstellungenDialog project="p" offen />)
+    const save = await screen.findByText('Speichern')
+    expect(save).toBeDisabled()
+    getSpy.mockRestore()
+  })
 })

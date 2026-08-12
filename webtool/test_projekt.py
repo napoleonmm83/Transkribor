@@ -48,3 +48,46 @@ def test_laden_tolerant_bei_kaputtem_json(tmp_path, monkeypatch):
     with open(os.path.join(paths.project_dir("p"), "projekt.json"), "w") as fh:
         fh.write("{ nicht json")
     assert projekt.laden("p")["sprache"] == "ch"        # kein Crash, Default
+
+
+def _schreibe_projekt_json(project, tmp_path, payload_obj):
+    os.makedirs(paths.project_dir(project), exist_ok=True)
+    with open(os.path.join(paths.project_dir(project), "projekt.json"), "w") as fh:
+        json.dump(payload_obj, fh)
+
+
+def test_laden_dateien_als_liste_statt_dict(tmp_path, monkeypatch):
+    # gueltiges JSON, falsches Schema: dateien als nicht-leere Liste wuerde
+    # frueher .items() auf einer Liste aufrufen -> AttributeError.
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    _schreibe_projekt_json("p", tmp_path, {"dateien": [{"x": 1}]})
+    d = projekt.laden("p")
+    assert d["dateien"] == {}
+    assert d["sprache"] == sprachen.SPRACH_DEFAULT
+    assert d["korrektur"] == sprachen.TIEFE_DEFAULT
+
+
+def test_laden_dateien_leere_liste(tmp_path, monkeypatch):
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    _schreibe_projekt_json("p", tmp_path, {"dateien": []})
+    assert projekt.laden("p")["dateien"] == {}
+
+
+def test_laden_sprache_falscher_typ_faellt_zurueck(tmp_path, monkeypatch):
+    # sprache als Zahl (5) und korrektur als null duerfen nicht durchgereicht werden.
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    _schreibe_projekt_json("p", tmp_path, {"sprache": 5, "korrektur": None})
+    d = projekt.laden("p")
+    assert d["sprache"] == sprachen.SPRACH_DEFAULT
+    assert d["korrektur"] == sprachen.TIEFE_DEFAULT
+
+
+def test_laden_typisierte_werte_bleiben_erhalten(tmp_path, monkeypatch):
+    # Regressionsschutz: gueltige String-Werte werden weiterhin durchgereicht.
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    _schreibe_projekt_json("p", tmp_path, {"sprache": "en", "korrektur": "leicht",
+                                           "dateien": {"v1": {"sprache": "de"}}})
+    d = projekt.laden("p")
+    assert d["sprache"] == "en"
+    assert d["korrektur"] == "leicht"
+    assert d["dateien"] == {"v1": {"sprache": "de"}}
