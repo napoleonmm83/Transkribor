@@ -315,7 +315,13 @@ def test_datei_whisper_code_auto_ist_none(tmp_path, monkeypatch):
     assert transcribe._datei_whisper_code(os.path.join(tmp_path, "p"), "v1", "de") is None
 
 
-def test_datei_whisper_code_fallback_ohne_projektjson(tmp_path):
-    os.makedirs(os.path.join(tmp_path, "p"), exist_ok=True)
-    # keine projekt.json -> Legacy: globale Vorgabe ('de') bleibt stehen
-    assert transcribe._datei_whisper_code(os.path.join(tmp_path, "p"), "v1", "de") == "de"
+def test_datei_whisper_code_fallback_wenn_import_scheitert(tmp_path, monkeypatch):
+    # Der Fallback-Zweig (except Exception: return fallback) ist der Wächter, der das
+    # Skript ohne webtool-Paket lauffaehig haelt. Nur dieser Weg darf hier durchkommen:
+    # datei_sprache zum Werfen zwingen, dann MUSS der Helfer auf 'fallback' zurueckfallen.
+    # Mutationstest: ohne die except-Klausel wirft der Helfer selbst -> Test rot.
+    import webtool.projekt
+    def _boom(*a, **k):
+        raise RuntimeError("simulated")
+    monkeypatch.setattr(webtool.projekt, "datei_sprache", _boom)
+    assert transcribe._datei_whisper_code(str(tmp_path), "v1", "de") == "de"
