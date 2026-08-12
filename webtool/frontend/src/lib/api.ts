@@ -1,5 +1,6 @@
 import type {
   Project, ProjectFile, EditDoc, JobStatus, StartJob, Settings, ModelInfo, Hardware, AuthStatus, LoginState,
+  ProjectEinstellungen,
 } from './types'
 
 const enc = encodeURIComponent
@@ -19,6 +20,17 @@ export async function listProjects(): Promise<Project[]> {
  *  ganze Projektliste (inkl. aller fremden Dateien) mitschleppen wollen. */
 export function getProjectFiles(project: string): Promise<{ name: string; files: ProjectFile[] }> {
   return get(`/api/projects/${enc(project)}`)
+}
+/** Per-Projekt-Einstellungen (Sprache, Korrekturtiefe) + die zur Verfuegung stehenden Auswahlen. */
+export async function getProjektEinstellungen(project: string): Promise<ProjectEinstellungen> {
+  return get(`/api/projects/${enc(project)}/einstellungen`)
+}
+/** Nur gesetzte Felder senden (Partial) — wie bei saveSettings. */
+export async function saveProjektEinstellungen(
+  project: string, patch: Partial<ProjectEinstellungen>,
+): Promise<ProjectEinstellungen> {
+  return jn(await fetch(`/api/projects/${enc(project)}/einstellungen`,
+    { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch) }))
 }
 export async function getDoc(project: string, base: string): Promise<EditDoc> {
   return jn(await fetch(`/api/projects/${enc(project)}/files/${enc(base)}`))
@@ -63,9 +75,10 @@ export async function startRetranscribeFile(project: string, base: string): Prom
 export async function deleteFile(project: string, base: string): Promise<void> {
   await jn(await fetch(`/api/projects/${enc(project)}/files/${enc(base)}`, { method: 'DELETE' }))
 }
-export async function fetchUrls(project: string, urls: string[]): Promise<StartJob> {
+export async function fetchUrls(project: string, urls: string[], sprache?: string): Promise<StartJob> {
   return jn(await fetch(`/api/projects/${enc(project)}/fetch`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ urls }),
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ urls, ...(sprache ? { sprache } : {}) }),
   }))
 }
 export async function getJob(jobId: string): Promise<JobStatus> {
@@ -74,10 +87,12 @@ export async function getJob(jobId: string): Promise<JobStatus> {
 export async function cancelJob(jobId: string): Promise<void> {
   await post(`/api/jobs/${enc(jobId)}/cancel`)
 }
-/** Der Upload stoesst serverseitig direkt die Transkription an -> job_id/started kommen mit zurueck. */
-export async function uploadAudio(project: string, file: File):
+/** Der Upload stoesst serverseitig direkt die Transkription an -> job_id/started kommen mit zurueck.
+ *  `sprache` ist optional: nur gesetzt, wenn das Projekt eine abweichende Sprache vorgibt. */
+export async function uploadAudio(project: string, file: File, sprache?: string):
   Promise<{ base: string; file: string; job_id?: string; started?: boolean }> {
   const fd = new FormData(); fd.append('file', file)
+  if (sprache) fd.append('sprache', sprache)
   return jn(await fetch(`/api/projects/${enc(project)}/audio`, { method: 'POST', body: fd }))
 }
 export async function createProject(name: string): Promise<{ ok: boolean; name: string }> {
