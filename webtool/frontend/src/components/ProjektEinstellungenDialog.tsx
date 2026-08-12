@@ -98,7 +98,7 @@ export function ProjektEinstellungenDialog({ project, offen, onOpenChange, onGea
         )}
         <DialogFooter>
           <Button variant="outline" onClick={() => setOpen(false)} disabled={speichert}>Abbrechen</Button>
-          <Button onClick={speichern} disabled={laedt || speichert}>Speichern</Button>
+          <Button onClick={speichern} disabled={!data || speichert}>Speichern</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

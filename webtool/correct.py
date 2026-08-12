@@ -440,7 +440,7 @@ def _light_prompt(base: str, tagged_path: str, cpath: str, context: str,
 
 Projekt-Kontext: {context or _default_context(ziel, dialekt)}
 1) Lies die Rohsegmente (Read-Tool): {tagged_path}
-2) KORRIGIERE NUR offensichtliche ASR-Fehler und Eigennamen, zu {ziel}. KEIN Umschreiben, keine Dialekt-Glättung. Entferne [[...]]-Markierungen.
+2) KORRIGIERE NUR offensichtliche ASR-Fehler und Eigennamen (Sprache: {ziel}). KEIN Umschreiben, keine Dialekt-Glättung, keine Normalisierung. Entferne [[...]]-Markierungen.
 3) SPRECHER: vergib pro (Sprecher N)-Cluster einen konsistenten Namen (meist „Interviewer" und die befragte Person). Gib JEDEM Segment einen speaker.
 4) SUMMARY: eine Inhalts-Zusammenfassung (3-5 Sätze).
 

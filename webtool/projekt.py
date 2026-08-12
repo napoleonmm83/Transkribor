@@ -27,10 +27,15 @@ def laden(project: str) -> dict:
         data = {}
     if not isinstance(data, dict):
         data = {}
+    sprache = data.get("sprache")
+    korrektur = data.get("korrektur")
+    dateien = data.get("dateien")
     return {
-        "sprache": data.get("sprache", sprachen.SPRACH_DEFAULT),
-        "korrektur": data.get("korrektur", sprachen.TIEFE_DEFAULT),
-        "dateien": {k: v for k, v in (data.get("dateien") or {}).items() if isinstance(v, dict)},
+        # Tolerant gegenueber falschem Schema (z.B. dateien als Liste, sprache
+        # als Zahl): nur akzeptieren, was den richtigen Typ hat, sonst Default.
+        "sprache": sprache if isinstance(sprache, str) else sprachen.SPRACH_DEFAULT,
+        "korrektur": korrektur if isinstance(korrektur, str) else sprachen.TIEFE_DEFAULT,
+        "dateien": {k: v for k, v in dateien.items() if isinstance(v, dict)} if isinstance(dateien, dict) else {},
     }
 
 
