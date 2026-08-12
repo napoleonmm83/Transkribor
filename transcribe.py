@@ -173,6 +173,20 @@ def _ergebnis(segmente, info):
             "language": info.language}
 
 
+def _datei_whisper_code(proj_dir, base, fallback):
+    """Whisper-Sprach-Code fuer EINE Datei: projekt.json (Datei -> Projekt) -> Default.
+
+    Lazy import wie schon `from webtool import device`: das Grund-Skript laeuft ohne
+    das Paket, nur die Sprach-Aufloesung braucht es. Fehlt projekt.json, gilt `fallback`
+    (= WHISPER_LANG, Legacy-Verhalten). 'auto' -> None (Whisper erkennt selbst)."""
+    try:
+        from webtool import projekt as _p, sprachen as _s
+        sid = _p.datei_sprache(os.path.basename(proj_dir), base)
+        return _s.whisper_code(sid)
+    except Exception:
+        return fallback
+
+
 def transcribe_project(name, model, language, only=None):
     proj_dir = os.path.join(PROJEKTE, name)
     if not os.path.isdir(proj_dir):
@@ -232,11 +246,12 @@ def transcribe_project(name, model, language, only=None):
             # Fall nicht mehr — pick_asr() liefert nur cuda oder cpu, und beide koennen alles.
             # Bleibt die Regel, die davon uebrig ist: eine kaputte Datei ueberspringen, der
             # Lauf geht weiter. Fuer whisper.cpp gilt sie genauso.
+            sprache = _datei_whisper_code(proj_dir, base, language)
             if engine == "whisper.cpp":
                 from webtool import whispercpp
-                result = whispercpp.transkribiere(f, model, language)
+                result = whispercpp.transkribiere(f, model, sprache)
             else:
-                result = _ergebnis(*m.transcribe(f, **_opts(language)))
+                result = _ergebnis(*m.transcribe(f, **_opts(sprache)))
         except Exception as e:
             print(f"[{name}] FEHLER {base}: {e}", flush=True)
             continue
