@@ -140,7 +140,11 @@ korrigiert — der Dialekt wird zu lesbarem Standarddeutsch, dazu kommen die Spr
 allen anderen Sprachen bleibt die Originalsprache erhalten, nichts wird übersetzt: ein
 englisches Video kommt als englisches Transkript heraus. In den Projekt-Einstellungen
 (⋯-Menü des Projekts) legst du die Standard-Sprache und die Korrektur-Tiefe fest; der Wähler
-am Upload nimmt die Standard-Sprache vorweg und lässt sich pro Datei abändern.
+am Upload nimmt die Standard-Sprache vorweg und lässt sich pro Datei abändern. Und solltest du
+dich später anders entscheiden: im ⋯-Menü der jeweiligen Aufnahme („Sprache & Korrektur-Tiefe")
+lässt sich beides nachträglich ändern. Eine andere Sprache bedeutet Neu-Transkription — das
+alte Transkript wird verworfen, das Audio bleibt erhalten; eine andere Korrektur-Tiefe startet
+nur die Korrektur neu.
 
 **Was passiert mit meinen Dateien?** Sie bleiben in deinem Benutzerordner. Transkribor löscht
 nichts von allein, und das Original-Transkript bleibt immer erhalten — deine Korrekturen
