@@ -979,3 +979,42 @@ def test_upload_schreibt_datei_sprache(client, tmp_projekt, audio_datei):
     assert r.status_code == 200
     from webtool import projekt
     assert projekt.datei_sprache(tmp_projekt, r.json()["base"]) == "en"
+
+
+# --- Datei-Einstellungen: Sprache + Tiefe pro einzelne Datei (#135) -------------
+
+def test_dateieinstellungen_liefert_effektive_werte(client, tmp_projekt):
+    r = client.get(f"/api/projects/{tmp_projekt}/files/S1/einstellungen")
+    assert r.status_code == 200
+    d = r.json()
+    assert d["sprache"] == "ch"          # System-Default, kein Override gesetzt
+    assert d["korrektur"] == "auto"
+    assert isinstance(d["sprach_choices"], list) and d["sprach_choices"]
+    assert isinstance(d["tiefen"], list) and d["tiefen"]
+
+
+def test_dateieinstellungen_unbekannte_datei_404(client, tmp_projekt):
+    # Weder Audio noch Roh-JSON -> die Datei existiert fuer die API nicht.
+    assert client.get(f"/api/projects/{tmp_projekt}/files/nope/einstellungen").status_code == 404
+
+
+def test_dateieinstellungen_invalid_name_400(client, tmp_projekt):
+    assert client.get(f"/api/projects/{tmp_projekt}/files/a:b/einstellungen").status_code == 400
+
+
+def test_dateieinstellungen_speichern_schreibt_override(client, tmp_projekt):
+    import webtool.projekt as projekt
+    r = client.put(f"/api/projects/{tmp_projekt}/files/S1/einstellungen", json={"sprache": "en"})
+    assert r.status_code == 200
+    assert r.json()["sprache"] == "en"
+    # Override tatsächlich in projekt.json gelandet (datei_sprache siegt über Projekt-Default):
+    assert projekt.datei_sprache(tmp_projekt, "S1") == "en"
+    # GET liefert den neuen effektiven Wert:
+    assert client.get(f"/api/projects/{tmp_projekt}/files/S1/einstellungen").json()["sprache"] == "en"
+
+
+def test_dateieinstellungen_speichern_ignoriert_none(client, tmp_projekt):
+    # Leerer Body -> nichts ändert sich, kein Fehler (EinstellungenBody ist komplett optional).
+    r = client.put(f"/api/projects/{tmp_projekt}/files/S1/einstellungen", json={})
+    assert r.status_code == 200
+    assert r.json()["korrektur"] == "auto"
