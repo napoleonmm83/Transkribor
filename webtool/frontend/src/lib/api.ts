@@ -32,6 +32,19 @@ export async function saveProjektEinstellungen(
   return jn(await fetch(`/api/projects/${enc(project)}/einstellungen`,
     { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch) }))
 }
+/** Per-Datei-Einstellungen (Override, sonst Projekt-Standard) — Datei-Pendant von
+ *  getProjektEinstellungen. Liefert dieselben Auswahlen (sprach_choices/tiefen). */
+export async function getFileEinstellungen(project: string, base: string): Promise<ProjectEinstellungen> {
+  return get(`/api/projects/${enc(project)}/files/${enc(base)}/einstellungen`)
+}
+/** Schreibt den Datei-Override; nur gesetzte Felder senden (Partial) — wie saveProjektEinstellungen.
+ *  Reiner Schreibpfad; die Trigger (retranscribe/correct) stößt der Aufrufer separat an. */
+export async function saveFileEinstellungen(
+  project: string, base: string, patch: Partial<ProjectEinstellungen>,
+): Promise<ProjectEinstellungen> {
+  return jn(await fetch(`/api/projects/${enc(project)}/files/${enc(base)}/einstellungen`,
+    { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch) }))
+}
 export async function getDoc(project: string, base: string): Promise<EditDoc> {
   return jn(await fetch(`/api/projects/${enc(project)}/files/${enc(base)}`))
 }
