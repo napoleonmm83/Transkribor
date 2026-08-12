@@ -133,9 +133,14 @@ dich die App genauso und führt dich zur Release-Seite; auto-heruntergeladen wir
 dort schaust du auf der
 [Releases-Seite](https://github.com/napoleonmm83/Transkribor/releases/latest) nach.
 
-**Welche Sprachen?** Voreingestellt ist Deutsch (inklusive Schweizerdeutsch, das als
-Hochdeutsch verschriftet wird). In den Einstellungen lässt sich jede andere von Whisper
-unterstützte Sprache wählen.
+**Welche Sprachen?** Beim Hochladen (Drag&Drop) oder beim Import einer Video-URL wählst
+du pro Datei: Schweizerdeutsch, Deutsch, Englisch, Französisch, Italienisch oder Automatisch
+(dann erkennt Whisper die Sprache selbst). Schweizerdeutsch wird wie gehabt vollständig
+korrigiert — der Dialekt wird zu lesbarem Standarddeutsch, dazu kommen die Sprechernamen. Bei
+allen anderen Sprachen bleibt die Originalsprache erhalten, nichts wird übersetzt: ein
+englisches Video kommt als englisches Transkript heraus. In den Projekt-Einstellungen
+(⋯-Menü des Projekts) legst du die Standard-Sprache und die Korrektur-Tiefe fest; der Wähler
+am Upload nimmt die Standard-Sprache vorweg und lässt sich pro Datei abändern.
 
 **Was passiert mit meinen Dateien?** Sie bleiben in deinem Benutzerordner. Transkribor löscht
 nichts von allein, und das Original-Transkript bleibt immer erhalten — deine Korrekturen
