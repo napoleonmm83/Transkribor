@@ -20,19 +20,33 @@ export function EditorView() {
   useEditorMelden(sel ? { ...sel, dirty, stand, reload, vergiss } : null)
   const [suchQuery, setSuchQuery] = useState('')
   const [suchIndex, setSuchIndex] = useState(0)
-  const treffer = useSuche(doc?.segments, suchQuery)
-  const trefferIds = useMemo(() => new Set(treffer.ids), [treffer.ids])
+  // useSuche durchsucht seit #128 Kontext, Zusammenfassung, Segmente und Anmerkungen — die
+  // Trefferliste vereinigt alle Arten in Dokumentreihenfolge (Kopf, Segmente, Anmerkungen).
+  const treffer = useSuche(doc, suchQuery)
   const suchAktiv = suchQuery.trim() !== ''
+  const anzahl = treffer.treffer.length
   // Index clamp beim Lesen: schrumpft die Trefferliste (neuer Query), kann suchIndex
   // einen Tick überholen, bevor der Reset-Effekt greift — hier defensiv begrenzen.
-  const idx = treffer.ids.length ? Math.min(suchIndex, treffer.ids.length - 1) : 0
-  const suchAktivId = suchAktiv && treffer.ids.length ? (treffer.ids[idx] ?? null) : null
+  const idx = anzahl ? Math.min(suchIndex, anzahl - 1) : 0
+  const aktivOrt = suchAktiv && anzahl ? (treffer.treffer[idx] ?? null) : null
+  const suchAktivId = aktivOrt?.kind === 'segment' ? aktivOrt.id : null
+  // Grey-out-Mengen je Treffer-Art; Memo ueber dem stabilen treffer-Objekt (useSuche memt selbst).
+  const kopfTreffer = useMemo(() => {
+    const s = new Set<'context' | 'summary'>()
+    for (const t of treffer.treffer) if (t.kind === 'kopf') s.add(t.field)
+    return s
+  }, [treffer])
+  const annotTreffer = useMemo(() => {
+    const s = new Set<number>()
+    for (const t of treffer.treffer) if (t.kind === 'annotation') s.add(t.index)
+    return s
+  }, [treffer])
   // Neuer Suchbegriff -> am ersten Treffer beginnen.
   useEffect(() => { setSuchIndex(0) }, [suchQuery])
   // Dateiwechsel -> altes Transkript ist hinfällig.
   useEffect(() => { setSuchQuery(''); setSuchIndex(0) }, [sel?.base])
-  const suchNext = () => setSuchIndex(i => treffer.ids.length ? (i + 1) % treffer.ids.length : 0)
-  const suchPrev = () => setSuchIndex(i => treffer.ids.length ? (i - 1 + treffer.ids.length) % treffer.ids.length : 0)
+  const suchNext = () => setSuchIndex(i => anzahl ? (i + 1) % anzahl : 0)
+  const suchPrev = () => setSuchIndex(i => anzahl ? (i - 1 + anzahl) % anzahl : 0)
   const waveRef = useRef<WaveHandle>(null)
   const [activeId, setActiveId] = useState<number | null>(null)
   const onTime = useCallback((t: number) => {
@@ -80,14 +94,15 @@ export function EditorView() {
     // Nur noch der Inhalt: die Projektnavigation zieht in die AppShell (Task 5).
     <div className="grid h-full grid-rows-[auto_1fr_auto]">
       <Toolbar stand={stand} bereit={!!doc} onExport={exportDownload}
-        suchQuery={suchQuery} onSuchChange={setSuchQuery} suchCount={treffer.ids.length} suchIndex={idx}
+        suchQuery={suchQuery} onSuchChange={setSuchQuery} suchCount={anzahl} suchIndex={idx}
         onSuchPrev={suchPrev} onSuchNext={suchNext} />
       <main className="min-h-0 overflow-auto">
         <Transcript doc={doc} loading={docLoading} activeId={activeId}
           onPlaySeg={s => waveRef.current?.playSegment(s)}
           onPlayTurn={segs => waveRef.current?.playTurn(segs)}
           updateSegment={updateSegment} updateDoc={updateDoc} renameSpeaker={renameSpeaker}
-          sucheAktiv={suchAktiv} trefferIds={trefferIds} suchAktivId={suchAktivId} />
+          sucheAktiv={suchAktiv} trefferIds={treffer.segmentTreffer} suchAktivId={suchAktivId}
+          kopfTreffer={kopfTreffer} annotTreffer={annotTreffer} aktivOrt={aktivOrt} />
       </main>
       <PlayerDock url={sel ? audioUrl(sel.project, sel.base) : undefined} onTime={onTime} waveRef={waveRef} />
     </div>

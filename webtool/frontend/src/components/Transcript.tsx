@@ -3,15 +3,13 @@ import type { RefObject } from 'react'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import type { EditDoc, Segment } from '@/lib/types'
 import { groupIntoTurns } from '@/lib/grouping'
+import type { TrefferOrt } from '@/hooks/useSuche'
 import { SpeakerTurn } from './SpeakerTurn'
 import { DokumentFeld } from './DokumentFeld'
 
-/** Holt ein Segment anhand seiner data-seg-id in den ScrollArea-Viewport — sanft, nur wenn
- *  es nicht schon sichtbar ist. Wird von Wiedergabe (activeId) und Suche (suchAktivId)
- *  genutzt; zwei Effekte, je eigener Trigger, keine Race. */
-function scrollSegInView(contentRef: RefObject<HTMLDivElement | null>, id: number) {
-  const el = contentRef.current?.querySelector<HTMLElement>(`[data-seg-id="${id}"]`)
-  if (!el) return
+/** Zentriert ein Element im ScrollArea-Viewport — sanft, nur wenn es nicht schon sichtbar ist.
+ *  Wird von Wiedergabe (activeId) und Suche (aktivOrt) genutzt. */
+function scrollElInView(el: HTMLElement) {
   const vp = el.closest<HTMLElement>('[data-radix-scroll-area-viewport]')
   if (!vp) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); return }
   const r = el.getBoundingClientRect(), vr = vp.getBoundingClientRect()
@@ -20,47 +18,56 @@ function scrollSegInView(contentRef: RefObject<HTMLDivElement | null>, id: numbe
   }
 }
 
-export function Transcript({ doc, loading, activeId, onPlaySeg, onPlayTurn, updateSegment, updateDoc, renameSpeaker, sucheAktiv = false, trefferIds, suchAktivId = null }: {
+function scrollSegInView(contentRef: RefObject<HTMLDivElement | null>, id: number) {
+  const el = contentRef.current?.querySelector<HTMLElement>(`[data-seg-id="${id}"]`)
+  if (el) scrollElInView(el)
+}
+
+/** Suchtreffer anspringen — Segment per data-seg-id, Kopf-/Anmerkungsfelder grob am Abschnitt
+ *  (Kopf oben, Anmerkungen unten); der gelbe Ring zeigt das genaue Feld. */
+function scrollOrtInView(contentRef: RefObject<HTMLDivElement | null>, ort: TrefferOrt) {
+  if (ort.kind === 'segment') { scrollSegInView(contentRef, ort.id); return }
+  const sel = ort.kind === 'kopf' ? '[data-such-ziel="kopf"]' : '[data-such-ziel="annotation"]'
+  const el = contentRef.current?.querySelector<HTMLElement>(sel)
+  if (el) scrollElInView(el)
+}
+
+const KEINE_KOPF = new Set<'context' | 'summary'>()
+const KEINE_ANNOT = new Set<number>()
+
+export function Transcript({ doc, loading, activeId, onPlaySeg, onPlayTurn, updateSegment, updateDoc, renameSpeaker, sucheAktiv = false, trefferIds, suchAktivId = null, kopfTreffer = KEINE_KOPF, annotTreffer = KEINE_ANNOT, aktivOrt = null }: {
   doc: EditDoc | null; loading?: boolean; activeId: number | null;
   onPlaySeg: (s: Segment) => void; onPlayTurn: (segs: Segment[]) => void;
   updateSegment: (id: number, patch: Partial<Segment>) => void;
   updateDoc: (patch: Partial<Pick<EditDoc, 'context' | 'summary'>>) => void;
   renameSpeaker: (from: string, to: string) => void;
   sucheAktiv?: boolean; trefferIds?: Set<number>; suchAktivId?: number | null;
+  kopfTreffer?: Set<'context' | 'summary'>; annotTreffer?: Set<number>; aktivOrt?: TrefferOrt | null;
 }) {
   const turns = useMemo(() => (doc ? groupIntoTurns(doc.segments) : []), [doc])
   const speakerOptions = useMemo(() =>
     doc ? [...new Set([...doc.speakers, ...doc.segments.map(s => s.speaker)])].filter(Boolean) : [],
     [doc])
   const contentRef = useRef<HTMLDivElement>(null)
-  // Aktives Segment bei Wechsel (z.B. Waveform-Klick) smooth in den Viewport holen —
-  // nur wenn es nicht ohnehin sichtbar ist, sonst ruckelt es während der Wiedergabe.
   useEffect(() => { if (activeId != null) scrollSegInView(contentRef, activeId) }, [activeId])
-  // Zweiter, unabhängiger Trigger: der aktive Suchtreffer springt beim ▲▽-Blättern —
-  // eigene Abhängigkeit, kein gemeinsamer Zustand mit der Wiedergabe (keine Race).
-  useEffect(() => { if (suchAktivId != null) scrollSegInView(contentRef, suchAktivId) }, [suchAktivId])
+  // Ein Such-Effekt fuer alle Treffer-Arten; eigene Abhaengigkeit, kein gemeinsamer Zustand mit
+  // der Wiedergabe (keine Race) — siehe EditorView.suche.test.tsx.
+  useEffect(() => { if (aktivOrt) scrollOrtInView(contentRef, aktivOrt) }, [aktivOrt])
   if (!doc) return loading
     ? <div className="p-8 text-center text-muted-foreground text-sm">lädt…</div>
     : <div className="p-8 text-center text-muted-foreground">Keine Datei geöffnet.</div>
   return (
     <ScrollArea className="h-full">
-      {/* Lesebreite statt Fensterbreite: die Sprecherspalte ist 112px breit, der Rest bleibt
-          fuer den Satz — auf einem breiten Monitor liefen die Zeilen sonst auf 120 Zeichen.
-          Muss mit grid-cols in SpeakerTurn uebereinstimmen. */}
       <div ref={contentRef} className="mx-auto max-w-[calc(112px+var(--measure))] px-6 py-8">
-        {/* Vor dem Transkript, nicht danach: die Zusammenfassung beantwortet "worum geht es
-            hier", und diese Frage stellt man beim Oeffnen, nicht nach 400 Segmenten.
-            Der Kontext stand hier lange NICHT — obwohl `render_md` ihn als ersten Absatz
-            exportiert. Ein Feld, das im Export steht und im Editor nicht, ist eines, dessen
-            Fehler niemand sieht: genau so ging ein alter Sprechername mit hinaus. Reihenfolge
-            wie im Markdown, damit Bildschirm und Datei dasselbe Dokument zeigen.
-            Beide Rubriken stehen AUCH leer da: frisch transkribiert und noch nicht korrigiert
-            sind sie es immer, und ein verstecktes Feld laesst sich nie fuellen. */}
-        <section className="mb-8 space-y-5 border-b pb-5">
+        <section data-such-ziel="kopf" className="mb-8 space-y-5 border-b pb-5">
           <DokumentFeld titel="Kontext" wert={doc.context ?? ''} platzhalter="Kontext hinzufügen …"
-            onCommit={t => updateDoc({ context: t })} />
+            onCommit={t => updateDoc({ context: t })}
+            aktiv={aktivOrt?.kind === 'kopf' && aktivOrt.field === 'context'}
+            dimmen={sucheAktiv && !kopfTreffer.has('context')} />
           <DokumentFeld titel="Zusammenfassung" wert={doc.summary ?? ''} platzhalter="Zusammenfassung hinzufügen …"
-            onCommit={t => updateDoc({ summary: t })} />
+            onCommit={t => updateDoc({ summary: t })}
+            aktiv={aktivOrt?.kind === 'kopf' && aktivOrt.field === 'summary'}
+            dimmen={sucheAktiv && !kopfTreffer.has('summary')} />
         </section>
         {turns.map(t => (
           <SpeakerTurn key={t.key} turn={t} activeId={activeId}
@@ -69,9 +76,16 @@ export function Transcript({ doc, loading, activeId, onPlaySeg, onPlayTurn, upda
             sucheAktiv={sucheAktiv} trefferIds={trefferIds} suchAktivId={suchAktivId} />
         ))}
         {doc.annotations.length > 0 && (
-          <section className="mt-12 border-t pt-5">
+          <section data-such-ziel="annotation" className="mt-12 border-t pt-5">
             <h2 className="rubrik mb-3">Anmerkungen</h2>
-            <ul className="lesebreite list-disc space-y-1.5 pl-5 text-sm leading-relaxed text-muted-foreground">{doc.annotations.map((a, i) => <li key={i}>{a}</li>)}</ul>
+            <ul className="lesebreite list-disc space-y-1.5 pl-5 text-sm leading-relaxed text-muted-foreground">
+              {doc.annotations.map((a, i) => {
+                const aktiv = aktivOrt?.kind === 'annotation' && aktivOrt.index === i
+                const dimmen = sucheAktiv && !annotTreffer.has(i)
+                return <li key={i} data-annot={i}
+                  className={`rounded-sm${aktiv ? ' ring-2 ring-inset ring-yellow-400 dark:ring-yellow-500' : ''}${dimmen ? ' opacity-40' : ''}`}>{a}</li>
+              })}
+            </ul>
           </section>
         )}
       </div>

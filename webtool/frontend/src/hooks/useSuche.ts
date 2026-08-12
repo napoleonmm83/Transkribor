@@ -1,22 +1,43 @@
 import { useMemo } from 'react'
-import type { Segment } from '@/lib/types'
+import type { EditDoc } from '@/lib/types'
 import { isCorrected } from '@/lib/uncertainty'
+
+/** Ein Ort im Dokument, an dem ein Suchtreffer liegen kann. Reihenfolge wie im Editor:
+ *  Kontext, Zusammenfassung (die Kopffelder oben), dann die Segmente, dann Anmerkungen. */
+export type TrefferOrt =
+  | { kind: 'kopf'; field: 'context' | 'summary' }
+  | { kind: 'segment'; id: number }
+  | { kind: 'annotation'; index: number }
 
 /**
  * Reine Match-Logik fuer die Editor-Suche. Keine eigene State — die liegt im EditorView,
- * der Hook beantwortet nur: welche Segmente (in Dokumentreihenfolge) enthalten den Treffer?
+ * der Hook beantwortet nur: welche Orte (in Dokumentreihenfolge) enthalten den Treffer?
  *
  * Gesucht wird der *angezeigte* Text: korrigierte Segmente in seg.text (die bereinigte
- * Fassung, die der Nutzer vor Augen hat), unkorrigierte in seg.raw_text (Klartext, der
- * denselben Wortlaut ergibt wie die farbigen Token-Spans). Case-insensitiv, Substring.
+ * Fassung, die der Nutzer vor Augen hat), unkorrigierte in seg.raw_text. Kontext,
+ * Zusammenfassung und Anmerkungen sind ohnehin Klartext (Issue #128). Case-insensitiv,
+ * Substring; jeder Ort zaehlt einfach (nicht pro Vorkommen), genau wie ein Segment.
+ *
+ * `segmentTreffer` ist die Teilmenge der Segment-Ids fuer den Grey-out-Filter; die Treffer
+ * im EditorView steuern dazu, welche Kopf-Felder / Anmerkungen markiert werden.
  */
-export function useSuche(segments: Segment[] | undefined, query: string): { ids: number[]; count: number } {
+export function useSuche(doc: EditDoc | null | undefined, query: string): {
+  treffer: TrefferOrt[]; segmentTreffer: Set<number>
+} {
   const q = query.trim().toLowerCase()
   return useMemo(() => {
-    if (!q || !segments) return { ids: [], count: 0 }
-    const ids = segments
-      .filter(s => (isCorrected(s) ? s.text : s.raw_text).toLowerCase().includes(q))
-      .map(s => s.id)
-    return { ids, count: ids.length }
-  }, [segments, q])
+    if (!q || !doc) return { treffer: [], segmentTreffer: new Set<number>() }
+    const treffer: TrefferOrt[] = []
+    if (doc.context?.toLowerCase().includes(q)) treffer.push({ kind: 'kopf', field: 'context' })
+    if (doc.summary?.toLowerCase().includes(q)) treffer.push({ kind: 'kopf', field: 'summary' })
+    const segmentTreffer = new Set<number>()
+    for (const s of doc.segments) {
+      const txt = (isCorrected(s) ? s.text : s.raw_text).toLowerCase()
+      if (txt.includes(q)) { treffer.push({ kind: 'segment', id: s.id }); segmentTreffer.add(s.id) }
+    }
+    doc.annotations.forEach((a, i) => {
+      if (a?.toLowerCase().includes(q)) treffer.push({ kind: 'annotation', index: i })
+    })
+    return { treffer, segmentTreffer }
+  }, [doc, q])
 }
