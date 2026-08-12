@@ -258,11 +258,28 @@ def _segment(nr: int, seg: dict) -> dict:
 
 def ergebnis(roh: dict, sprache: str) -> dict:
     """whisper.cpp-JSON -> exakt das Dokument, das transcribe._ergebnis() sonst aus
-    faster-whisper baut. Reine Funktion, damit der Adapter ohne Binary pruefbar ist."""
+    faster-whisper baut. Reine Funktion, damit der Adapter ohne Binary pruefbar ist.
+
+    sprache=None ('auto'): dann hat whisper-cli selbst erkannt, das Ergebnis steht in
+    roh["result"]["language"]. Ueber build_edit_doc wandert es ins Dokument und damit in
+    die Prompt-Zielsprache der Korrektur — fehlt es (oder result), gilt 'de' als
+    Fallback, wie edit_model es bei fehlender Sprache ohnehin tun wuerde."""
     segmente = [_segment(i, s) for i, s in enumerate(roh.get("transcription", []))]
+    sprache = sprache or (roh.get("result") or {}).get("language") or "de"
     return {"text": "".join(s["text"] for s in segmente),
             "segments": segmente,
             "language": sprache}
+
+
+def _cmd(binaer_pfad: str, gguf: str, wav: str, praefix: str, sprache) -> list:
+    """whisper-cli-Argumente. -l nur bei konkreter Sprache: bei None ('auto') erkennt
+    whisper-cli selbst, und None in der Arg-Liste wuerde subprocess.Popen werfen lassen.
+    Reine Funktion, damit der cmd-Bau ohne Binary pruefbar ist."""
+    cmd = [binaer_pfad, "-m", gguf, "-f", wav]
+    if sprache:
+        cmd += ["-l", sprache]
+    cmd += ["-bs", "5", "-bo", "5", "-pp", "-ojf", "-of", praefix]
+    return cmd
 
 
 def transkribiere(audio: str, modell: str, sprache: str, onLine=None) -> dict:
@@ -285,10 +302,8 @@ def transkribiere(audio: str, modell: str, sprache: str, onLine=None) -> dict:
         wav = os.path.join(tmp, "audio.wav")
         _wav(audio, wav)
         praefix = os.path.join(tmp, "out")
-        cmd = [binaer(), "-m", gguf, "-f", wav, "-l", sprache,
-               "-bs", "5", "-bo", "5",
-               "-pp", "-ojf", "-of", praefix]
-        proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL,
+        proc = subprocess.Popen(_cmd(binaer(), gguf, wav, praefix, sprache),
+                                stdout=subprocess.DEVNULL,
                                 stderr=subprocess.PIPE, text=True,
                                 encoding="utf-8", errors="replace")
         letzte = []

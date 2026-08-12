@@ -127,6 +127,42 @@ def test_ergebnis_passt_durch_edit_model():
     assert "[[" in tag_uncertain_segments(roh)[0]["tagged_text"]   # 0.3 < 0.5
 
 
+# --- Sprache: -l nur bei konkreter Vorgabe, auto -> erkannte Sprache ----------
+# transcribe._datei_whisper_code liefert None fuer 'auto'. Das darf den cmd-Bau
+# (subprocess.Popen wirft bei None in der Arg-Liste) ebenso wenig kaputtmachen wie
+# das ergebnis-Dokument (seine 'language' wandert ins edit-Dokument).
+
+def test_cmd_ohne_sprache_laesst_l_weg():
+    """sprache=None (auto): whisper-cli erkennt selbst. -l None wuerde Popen werfen."""
+    cmd = w._cmd("/p/whisper-cli", "ggml.bin", "a.wav", "/tmp/out", None)
+    assert "-l" not in cmd
+    assert cmd[0] == "/p/whisper-cli"
+
+
+def test_cmd_mit_sprache_setzt_l():
+    cmd = w._cmd("/p/whisper-cli", "ggml.bin", "a.wav", "/tmp/out", "en")
+    assert "-l" in cmd
+    assert cmd[cmd.index("-l") + 1] == "en"
+
+
+def test_ergebnis_liest_sprache_aus_result_bei_auto():
+    """sprache=None -> whisper.cpp hat erkannt, steht in result.language. Sie wandert
+    ueber build_edit_doc ins Dokument und damit in die Prompt-Zielsprache der Korrektur."""
+    roh = {"transcription": [], "result": {"language": "fr"}}
+    assert w.ergebnis(roh, None)["language"] == "fr"
+
+
+def test_ergebnis_behaelt_vorgegebene_sprache():
+    """Vorgegeben schlaegt Detektion: sprache='de' bleibt 'de', auch wenn result anders."""
+    roh = {"transcription": [], "result": {"language": "fr"}}
+    assert w.ergebnis(roh, "de")["language"] == "de"
+
+
+def test_ergebnis_fallback_de_wenn_sprache_und_result_fehlen():
+    roh = {"transcription": []}
+    assert w.ergebnis(roh, None)["language"] == "de"
+
+
 # --- Modellwahl und Quelle ---
 
 def test_unterstuetzt_nur_die_angebotenen_stufen():
