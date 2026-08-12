@@ -2,6 +2,48 @@ import json, os
 from webtool import projekt, paths, sprachen
 
 
+def test_setze_datei_ueberlebt_parallele_schreiber(tmp_path, monkeypatch):
+    """Read-Modify-Write auf projekt.json muss atomar sein: zwei parallele Schreiber
+    (z.B. Mehrfach-Upload) duerfen sich nicht gegenseitig den Datei-Eintrag verdraengen
+    (#134). Deterministisch forciert ueber eine Pause im _write, die das Fenster aufreisst —
+    beide haben gelesen, bevor einer schreibt. Ohne Lock gewinnt der letzte _write und der
+    andere Eintrag ist verloren; das Lock serialisiert die RMW-Sequenzen."""
+    import threading, time
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    echt = projekt._write
+    def langsam(project, data):
+        time.sleep(0.05)            # Fenster auf: beide haben denselben Stand gelesen
+        echt(project, data)
+    monkeypatch.setattr(projekt, "_write", langsam)
+    fehler = []
+    def schreibe(base):
+        try:
+            projekt.setze_datei("p", base, sprache="en")
+        except Exception as e:      # pragma: no cover
+            fehler.append(e)
+    ts = [threading.Thread(target=schreibe, args=(b,)) for b in ("a", "b")]
+    for t in ts: t.start()
+    for t in ts: t.join()
+    assert not fehler
+    dateien = projekt.laden("p")["dateien"]
+    assert set(dateien) == {"a", "b"}      # beide Eintraege ueberleben, keiner verdraengt
+
+
+def test_lock_raumt_verwaistes_lock_auf(tmp_path, monkeypatch):
+    """Ein liegengebliebenes Lock (Prozess im kritischen Abschnitt abgestuerzt) darf
+    Schreiben nicht dauerhaft blockieren — es wird nach Alter aufgeraeumt (#134)."""
+    import time
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    lockdir = projekt._pfad("p") + ".lock"
+    os.makedirs(paths.project_dir("p"), exist_ok=True)
+    os.mkdir(lockdir)
+    alt = time.time() - projekt._LOCK_STALTES_ALTER - 10      # eindeutig verwaist
+    os.utime(lockdir, (alt, alt))
+    projekt.speichern("p", {"sprache": "en"})                # raeumt auf + schreibt
+    assert projekt.laden("p")["sprache"] == "en"
+    assert not os.path.exists(lockdir)                         # Lock nach Gebrauch weg
+
+
 def test_laden_default_wenn_fehlt(tmp_path, monkeypatch):
     monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
     d = projekt.laden("x")

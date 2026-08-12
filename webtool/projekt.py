@@ -2,12 +2,55 @@
 
 Liegt im Projektordner neben kontext.md. Fehlt die Datei oder ein Wert, gilt der
 Projekt-Standard bzw. der System-Default (ch/auto) -> Legacy-Verhalten bleibt erhalten."""
-import json, os
+import contextlib, json, os, time
 from . import paths, sprachen
 
 
 def _pfad(project: str) -> str:
     return os.path.join(paths.project_dir(project), "projekt.json")
+
+
+# Ab wann ein liegengebliebenes Lock als verwaist gilt (Prozess im kritischen
+# Abschnitt abgestorben). Die RMW-Sequenz selbst dauert Mikrosekunden — wer hier
+# landet, ist ein Crash-Hinterlassenschaft.
+_LOCK_STALTES_ALTER = 60.0
+
+
+@contextlib.contextmanager
+def _gesperrt(project: str):
+    """Projekt-weites Lock um den Read-Modify-Write auf projekt.json.
+
+    Zwei Schreiber (parallele Uploads im FastAPI-Threadpool, oder der fetch-
+    Subprozess, der setze_datei aus einem *eigenen* OS-Prozess ruft) duerfen
+    laden+modify+_write nicht verschränken: der letzte _write gewinnt, des
+    anderen Datei-Eintrag ist verloren (#134). Ein prozess-lokales threading.Lock
+    reicht nicht — der fetch-Subprozess hat ein eigenes. os.mkdir ist auf POSIX
+    wie Windows atomar (im Gegensatz zu fcntl/msvcrt), darum ein Verzeichnis als
+    Lock, ohne fremde Abhaengigkeit.
+    """
+    paths.safe_name(project)
+    os.makedirs(paths.project_dir(project), exist_ok=True)
+    lockdir = _pfad(project) + ".lock"
+    while True:
+        try:
+            os.mkdir(lockdir)             # atomar auf allen Plattformen -> Lock erworben
+            break
+        except FileExistsError:
+            # Verwaist? (Crash waehrend des kritischen Abschnitts.) Dann aufräumen
+            # und erneut versuchen. Ein lebender Halter wird hier nicht weggerissen.
+            try:
+                if time.time() - os.stat(lockdir).st_mtime > _LOCK_STALTES_ALTER:
+                    os.rmdir(lockdir)
+            except OSError:
+                pass
+            time.sleep(0.01)
+    try:
+        yield
+    finally:
+        try:
+            os.rmdir(lockdir)
+        except OSError:
+            pass
 
 
 def _write(project: str, data: dict) -> None:
@@ -40,24 +83,28 @@ def laden(project: str) -> dict:
 
 
 def speichern(project: str, patch: dict) -> dict:
-    cur = laden(project)
-    for k in ("sprache", "korrektur"):
-        if k in patch and isinstance(patch[k], str):
-            cur[k] = patch[k]
-    _write(project, cur)
-    return cur
+    # RMW unter dem projekt-weiten Lock: laden+modify+_write sind atomar gegen
+    # parallele Schreiber (Threads wie fetch-Subprozess).
+    with _gesperrt(project):
+        cur = laden(project)
+        for k in ("sprache", "korrektur"):
+            if k in patch and isinstance(patch[k], str):
+                cur[k] = patch[k]
+        _write(project, cur)
+        return cur
 
 
 def setze_datei(project: str, base: str, sprache=None, korrektur=None) -> dict:
-    cur = laden(project)
-    eintrag = dict(cur["dateien"].get(base, {}))
-    if sprache is not None:
-        eintrag["sprache"] = sprache
-    if korrektur is not None:
-        eintrag["korrektur"] = korrektur
-    cur["dateien"][base] = eintrag
-    _write(project, cur)
-    return cur
+    with _gesperrt(project):
+        cur = laden(project)
+        eintrag = dict(cur["dateien"].get(base, {}))
+        if sprache is not None:
+            eintrag["sprache"] = sprache
+        if korrektur is not None:
+            eintrag["korrektur"] = korrektur
+        cur["dateien"][base] = eintrag
+        _write(project, cur)
+        return cur
 
 
 def datei_sprache(project: str, base: str) -> str:
