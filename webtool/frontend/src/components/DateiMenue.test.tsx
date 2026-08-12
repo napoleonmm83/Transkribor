@@ -43,7 +43,7 @@ beforeEach(() => {
   vi.mocked(api.getFileEinstellungen).mockResolvedValue({
     sprache: 'ch', korrektur: 'auto',
     sprach_choices: [{ id: 'ch', label: 'Schweizerdeutsch', hint: '' }, { id: 'en', label: 'Englisch', hint: '' }],
-    tiefen: [{ id: 'voll_dialekt', label: 'Voll' }, { id: 'leicht', label: 'Leicht' }],
+    tiefen: [{ id: 'auto', label: 'Automatisch (aus Sprache)' }, { id: 'voll_dialekt', label: 'Voll' }, { id: 'leicht', label: 'Leicht' }],
   })
   vi.mocked(api.saveFileEinstellungen).mockResolvedValue({
     sprache: 'ch', korrektur: 'auto', sprach_choices: [], tiefen: [],
@@ -188,8 +188,8 @@ describe('Sprache & Korrektur-Tiefe', () => {
     render(<Huelle pfad="/p/P/a"><DateiMenue project="P" file={datei()} /></Huelle>)
     await menueOeffnen()
     fireEvent.click(await screen.findByText('Sprache & Korrektur-Tiefe'))
-    // Readiness über den Sprache-Trigger; der Tiefe-Trigger bleibt leer (korrektur='auto'
-    // nicht in TIEFEN — dasselbe wie beim Projekt-Dialog).
+    // Readiness über den Sprache-Trigger; der Tiefe-Trigger zeigt bei korrektur='auto' das
+    // Auto-Label (seit #141 in TIEFEN enthalten — dasselbe wie beim Projekt-Dialog).
     await screen.findByText('Schweizerdeutsch')
     // Tiefe-Select ist der letzte combobox im Dialog.
     const comboboxes = document.body.querySelectorAll('[role="combobox"]')

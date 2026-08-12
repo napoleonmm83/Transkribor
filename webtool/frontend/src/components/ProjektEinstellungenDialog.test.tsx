@@ -9,7 +9,7 @@ const BASIS = {
     { id: 'ch', label: 'Schweizerdeutsch', hint: '' },
     { id: 'en', label: 'Englisch', hint: '' },
   ],
-  tiefen: [{ id: 'voll_dialekt', label: 'Voll' }, { id: 'leicht', label: 'Leicht' }],
+  tiefen: [{ id: 'auto', label: 'Automatisch (aus Sprache)' }, { id: 'voll_dialekt', label: 'Voll' }, { id: 'leicht', label: 'Leicht' }],
 }
 
 describe('ProjektEinstellungenDialog', () => {

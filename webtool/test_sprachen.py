@@ -40,9 +40,11 @@ def test_fuer_frontend_enthaelt_alle_sechs():
     assert ids == {"ch", "de", "en", "fr", "it", "auto"}
 
 
-def test_tiefen_liste_vier_stufen():
+def test_tiefen_liste_enthaelt_auto_default():
+    # "auto" (TIEFE_DEFAULT) ist als waehlbare Option enthalten — sonst bliebe der
+    # Tiefe-Select-Trigger im Einstellungs-Dialog leer (#141). Die vier echten Tiefen bleiben.
     ids = {t["id"] for t in sprachen.TIEFEN}
-    assert ids == {"voll_dialekt", "voll", "leicht", "zusammenfassung"}
+    assert ids == {"auto", "voll_dialekt", "voll", "leicht", "zusammenfassung"}
 
 
 def test_pruef_fehler_gueltig():
