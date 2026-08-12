@@ -46,7 +46,7 @@ beforeEach(() => {
     tiefen: [{ id: 'auto', label: 'Automatisch (aus Sprache)' }, { id: 'voll_dialekt', label: 'Voll' }, { id: 'leicht', label: 'Leicht' }],
   })
   vi.mocked(api.saveFileEinstellungen).mockResolvedValue({
-    sprache: 'ch', korrektur: 'auto', sprach_choices: [], tiefen: [],
+    sprache: 'ch', korrektur: 'auto',
   })
 })
 
