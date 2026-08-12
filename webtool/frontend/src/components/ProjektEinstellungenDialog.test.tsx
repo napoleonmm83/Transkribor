@@ -30,7 +30,7 @@ describe('ProjektEinstellungenDialog', () => {
     fireEvent.click(await screen.findByText('Englisch'))
     fireEvent.click(screen.getByText('Speichern'))
     await waitFor(() =>
-      expect(saveSpy).toHaveBeenCalledWith('p', expect.objectContaining({ sprache: 'en' })))
+      expect(saveSpy).toHaveBeenCalledWith('p', expect.objectContaining({ sprache: 'en', korrektur: 'auto' })))
     expect(onGeaendert).toHaveBeenCalled()
     expect(onOpenChange).toHaveBeenCalledWith(false)
     getSpy.mockRestore(); saveSpy.mockRestore()
