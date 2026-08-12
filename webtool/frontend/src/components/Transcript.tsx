@@ -23,11 +23,11 @@ function scrollSegInView(contentRef: RefObject<HTMLDivElement | null>, id: numbe
   if (el) scrollElInView(el)
 }
 
-/** Suchtreffer anspringen — Segment per data-seg-id, Kopf-/Anmerkungsfelder grob am Abschnitt
- *  (Kopf oben, Anmerkungen unten); der gelbe Ring zeigt das genaue Feld. */
+/** Suchtreffer anspringen — ans jeweilige Treffer-Element: Segment per data-seg-id, Kopf-
+ *  feld per data-kopf, Anmerkung per data-annot. Der gelbe Ring markiert es zusätzlich. */
 function scrollOrtInView(contentRef: RefObject<HTMLDivElement | null>, ort: TrefferOrt) {
   if (ort.kind === 'segment') { scrollSegInView(contentRef, ort.id); return }
-  const sel = ort.kind === 'kopf' ? '[data-such-ziel="kopf"]' : '[data-such-ziel="annotation"]'
+  const sel = ort.kind === 'kopf' ? `[data-kopf="${ort.field}"]` : `[data-annot="${ort.index}"]`
   const el = contentRef.current?.querySelector<HTMLElement>(sel)
   if (el) scrollElInView(el)
 }
@@ -59,15 +59,19 @@ export function Transcript({ doc, loading, activeId, onPlaySeg, onPlayTurn, upda
   return (
     <ScrollArea className="h-full">
       <div ref={contentRef} className="mx-auto max-w-[calc(112px+var(--measure))] px-6 py-8">
-        <section data-such-ziel="kopf" className="mb-8 space-y-5 border-b pb-5">
-          <DokumentFeld titel="Kontext" wert={doc.context ?? ''} platzhalter="Kontext hinzufügen …"
-            onCommit={t => updateDoc({ context: t })}
-            aktiv={aktivOrt?.kind === 'kopf' && aktivOrt.field === 'context'}
-            dimmen={sucheAktiv && !kopfTreffer.has('context')} />
-          <DokumentFeld titel="Zusammenfassung" wert={doc.summary ?? ''} platzhalter="Zusammenfassung hinzufügen …"
-            onCommit={t => updateDoc({ summary: t })}
-            aktiv={aktivOrt?.kind === 'kopf' && aktivOrt.field === 'summary'}
-            dimmen={sucheAktiv && !kopfTreffer.has('summary')} />
+        <section className="mb-8 space-y-5 border-b pb-5">
+          <div data-kopf="context">
+            <DokumentFeld titel="Kontext" wert={doc.context ?? ''} platzhalter="Kontext hinzufügen …"
+              onCommit={t => updateDoc({ context: t })}
+              aktiv={aktivOrt?.kind === 'kopf' && aktivOrt.field === 'context'}
+              dimmen={sucheAktiv && !kopfTreffer.has('context')} />
+          </div>
+          <div data-kopf="summary">
+            <DokumentFeld titel="Zusammenfassung" wert={doc.summary ?? ''} platzhalter="Zusammenfassung hinzufügen …"
+              onCommit={t => updateDoc({ summary: t })}
+              aktiv={aktivOrt?.kind === 'kopf' && aktivOrt.field === 'summary'}
+              dimmen={sucheAktiv && !kopfTreffer.has('summary')} />
+          </div>
         </section>
         {turns.map(t => (
           <SpeakerTurn key={t.key} turn={t} activeId={activeId}
@@ -76,7 +80,7 @@ export function Transcript({ doc, loading, activeId, onPlaySeg, onPlayTurn, upda
             sucheAktiv={sucheAktiv} trefferIds={trefferIds} suchAktivId={suchAktivId} />
         ))}
         {doc.annotations.length > 0 && (
-          <section data-such-ziel="annotation" className="mt-12 border-t pt-5">
+          <section className="mt-12 border-t pt-5">
             <h2 className="rubrik mb-3">Anmerkungen</h2>
             <ul className="lesebreite list-disc space-y-1.5 pl-5 text-sm leading-relaxed text-muted-foreground">
               {doc.annotations.map((a, i) => {
