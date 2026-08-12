@@ -2,13 +2,22 @@ import { useRef, useState } from 'react'
 import { Check, Loader2, TriangleAlert, Upload } from 'lucide-react'
 import { uploadAudio } from '@/lib/api'
 import { cn } from '@/lib/utils'
-import type { StartJob } from '@/lib/types'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import type { StartJob, SprachChoice } from '@/lib/types'
 
 const AUDIO_RE = /\.(mp3|wav|m4a|aac|flac|ogg|opus|wma|mp4)$/i
 type Status = 'uploading' | 'done' | 'exists' | 'error'
 type Item = { name: string; status: Status; msg?: string }
 
-export function UploadDropzone({ project, onDone }: { project: string; onDone?: (job?: StartJob) => void }) {
+export function UploadDropzone({ project, onDone, sprache = '', sprachChoices = [], onSpracheChange = () => {} }: {
+  project: string
+  onDone?: (job?: StartJob) => void
+  // Optional bis Task 5 (ProjectWorkspace) die Werte durchreicht. sprache='' wirkt wie
+  // „nicht gesetzt": die API-Funktionen ignorieren einen leeren String (if sprache).
+  sprache?: string
+  sprachChoices?: SprachChoice[]
+  onSpracheChange?: (id: string) => void
+}) {
   const [items, setItems] = useState<Item[]>([])
   const [over, setOver] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -26,7 +35,7 @@ export function UploadDropzone({ project, onDone }: { project: string; onDone?: 
     // ponytail: sequentiell statt Pool — lokale Uploads sind quasi instant; Pool nachruesten bei Bedarf
     for (const f of audio) {
       try {
-        const r = await uploadAudio(project, f)
+        const r = await uploadAudio(project, f, sprache)
         if (r.job_id) job = { job_id: r.job_id, started: !!r.started }
         patch(f.name, { status: 'done' })
       }
@@ -65,6 +74,22 @@ export function UploadDropzone({ project, onDone }: { project: string; onDone?: 
       <input ref={inputRef} data-testid="upload-input" type="file" hidden multiple
         accept="audio/*,.mp3,.wav,.m4a,.aac,.flac,.ogg,.opus,.wma,.mp4"
         onChange={e => { upload(Array.from(e.target.files ?? [])); e.target.value = '' }} />
+      {/* Sprachwaehler wie in den Einstellungen: shadcn-Select ist ein <button>, kein <select>,
+          darum aria-labelledby statt htmlFor. Gleicher Stil wie SettingsPage-Modellauswahl.
+          Erst gerendert, wenn sprachChoices da sind — Task 5 reicht sie aus ProjectWorkspace durch. */}
+      {sprachChoices.length > 0 && (
+        <div className="mt-2">
+          <label id="lbl-upload-sprache" className="mb-1.5 block text-sm font-medium">Sprache</label>
+          <Select value={sprache} onValueChange={onSpracheChange}>
+            <SelectTrigger className="w-full" aria-labelledby="lbl-upload-sprache"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {sprachChoices.map(c => (
+                <SelectItem key={c.id} value={c.id}>{c.label}{c.hint && ` — ${c.hint}`}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
       {items.length > 0 && (
         <ul className="mt-2 space-y-0.5 text-xs">
           {items.map(it => (
