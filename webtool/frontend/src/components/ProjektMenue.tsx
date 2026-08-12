@@ -1,29 +1,34 @@
 import { useState } from 'react'
-import { MoreHorizontal, Pencil, Trash2 } from 'lucide-react'
+import { Languages, MoreHorizontal, Pencil, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { ProjektUmbenennen } from './ProjektUmbenennen'
 import { DeleteProjectDialog } from './DeleteProjectDialog'
+import { ProjektEinstellungenDialog } from './ProjektEinstellungenDialog'
 
 /**
  * Die Projekt-Aktionen der Uebersicht — Zwilling von DateiMenue, eine Ebene hoeher.
  *
- * Bewusst NUR Umbenennen und Loeschen: die Uebersicht ist zum Finden da. Transkribieren und
- * Korrigieren gehoeren auf die Projektseite, wo man sieht, WAS gerade laeuft — in einer Liste
- * von dreihundert Zeilen einen GPU-Lauf zu starten, ist zu leicht danebengegriffen.
+ * Bewusst kein Transkribieren/Korrigieren: die Uebersicht ist zum Finden da — in einer Liste
+ * von dreihundert Zeilen einen GPU-Lauf zu starten, ist zu leicht danebengegriffen. Diese Läufe
+ * gehören auf die Projektseite, wo man sieht, WAS gerade läuft. Umbenennen, Löschen und die
+ * Per-Projekt-Einstellungen (Sprache + Korrektur-Tiefe) starten hingegen keinen Lauf.
  *
  * Vorher stand hier nur ein Papierkorb; Umbenennen gab es ausschliesslich in der Seitenleiste.
  * Das Menue bringt die zerstoererische und die harmlose Aktion an EINE Stelle, statt eine
  * davon zu verstecken.
  */
-export function ProjektMenue({ project, onUmbenannt, onGeloescht }: {
+export function ProjektMenue({ project, onUmbenannt, onGeloescht, onEinstellungenGeaendert }: {
   project: string
   onUmbenannt: (neu: string) => void
   onGeloescht: () => void
+  /** Nach dem Speichern der Einstellungen: Projekt-Daten im Workspace neu laden. Optional —
+   *  Aufrufer ohne Workspace (z. B. die Galerie) geben nichts mit und es ist ein No-Op. */
+  onEinstellungenGeaendert?: () => void
 }) {
-  const [zeige, setZeige] = useState<'umbenennen' | 'loeschen' | null>(null)
+  const [zeige, setZeige] = useState<'umbenennen' | 'loeschen' | 'einstellungen' | null>(null)
 
   return (
     <>
@@ -41,6 +46,9 @@ export function ProjektMenue({ project, onUmbenannt, onGeloescht }: {
             <DropdownMenuItem onSelect={() => setZeige('umbenennen')}>
               <Pencil /> Umbenennen
             </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => setZeige('einstellungen')}>
+              <Languages /> Sprache &amp; Korrektur
+            </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" onSelect={() => setZeige('loeschen')}>
               <Trash2 /> Löschen
@@ -50,9 +58,12 @@ export function ProjektMenue({ project, onUmbenannt, onGeloescht }: {
       </span>
 
       {/* Ausserhalb des Menues: ein Dialog IM Menue wird beim Schliessen mit ausgehaengt.
-          Beide Bauteile laufen hier im gesteuerten Modus und zeichnen darum keinen Knopf. */}
+          Alle drei Bauteile laufen hier im gesteuerten Modus und zeichnen darum keinen Knopf. */}
       <ProjektUmbenennen project={project} onUmbenannt={onUmbenannt}
         offen={zeige === 'umbenennen'} onOpenChange={o => setZeige(o ? 'umbenennen' : null)} />
+      <ProjektEinstellungenDialog project={project}
+        offen={zeige === 'einstellungen'} onOpenChange={o => setZeige(o ? 'einstellungen' : null)}
+        onGeaendert={onEinstellungenGeaendert} />
       <DeleteProjectDialog project={project} onDeleted={onGeloescht}
         offen={zeige === 'loeschen'} onOpenChange={o => setZeige(o ? 'loeschen' : null)} />
     </>
