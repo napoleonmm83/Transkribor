@@ -1050,3 +1050,29 @@ def test_einstellungen_auto_tiefe_bleibt_gueltig(client, tmp_projekt):
     # "auto" ist TIEFE_DEFAULT und muss am PUT akzeptiert bleiben (Regressionsschutz).
     r = client.put(f"/api/projects/{tmp_projekt}/einstellungen", json={"korrektur": "auto"})
     assert r.status_code == 200
+
+
+# --- Sprache-Validierung an Upload + Fetch (#143, gleiche Klasse wie #139) -----
+
+def test_upload_lehnt_unbekannte_sprache_ab(client, tmp_projekt, audio_datei, tmp_path):
+    # Ungueltige Sprache muss 400 sein, *bevor* die Datei geschrieben wird — sonst liegt
+    # bei der Zurueckweisung eine orphan-Audiodatei auf der Platte.
+    r = client.post(f"/api/projects/{tmp_projekt}/audio",
+                    files={"file": audio_datei}, data={"sprache": "enm"})
+    assert r.status_code == 400
+    assert "Sprache" in r.json()["detail"]
+    assert not (tmp_path / tmp_projekt / "audio" / "Neu.mp3").exists()   # kein orphan
+
+
+def test_fetch_lehnt_unbekannte_sprache_ab(client, monkeypatch):
+    # fetch.py traegt die Sprache erst im Subprozess ein — am Endpoint geprueft, startet der
+    # Download-Job bei ungueltigem Wert gar nicht erst.
+    from webtool import jobs
+    gestartet = []
+    monkeypatch.setattr(jobs, "start",
+                        lambda *a, **k: gestartet.append(1) or ("j1", True))
+    r = client.post("/api/projects/Demo/fetch",
+                    json={"urls": ["https://youtu.be/abc123"], "sprache": "enm"})
+    assert r.status_code == 400
+    assert "Sprache" in r.json()["detail"]
+    assert gestartet == []                      # kein Job angestossen
