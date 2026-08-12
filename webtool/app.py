@@ -242,6 +242,9 @@ def projekteinstellungen(project: str):
 @app.put("/api/projects/{project}/einstellungen")
 def projekteinstellungen_speichern(project: str, body: EinstellungenBody):
     _validate(project)
+    fehler = _sprachen.pruef_fehler(sprache=body.sprache, korrektur=body.korrektur)
+    if fehler:
+        raise HTTPException(status_code=400, detail=fehler)
     # speichern() ueberspringt None-Werte (isinstance-Check auf str) -> leerer Body ist sicher.
     d = _projekt.speichern(project, {"sprache": body.sprache, "korrektur": body.korrektur})
     return {"sprache": d["sprache"], "korrektur": d["korrektur"]}
@@ -268,6 +271,9 @@ def dateieinstellungen_speichern(project: str, base: str, body: EinstellungenBod
     bestehenden ``…/transcribe``/``…/correct``-Endpunkte an — die ihrerseits ``_keine_jobs``
     prüfen. Siehe Spec #135."""
     _validate(project, base)
+    fehler = _sprachen.pruef_fehler(sprache=body.sprache, korrektur=body.korrektur)
+    if fehler:
+        raise HTTPException(status_code=400, detail=fehler)
     _projekt.setze_datei(project, base, sprache=body.sprache, korrektur=body.korrektur)
     return {"sprache": _projekt.datei_sprache(project, base),
             "korrektur": _projekt.datei_korrektur(project, base)}

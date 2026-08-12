@@ -1018,3 +1018,35 @@ def test_dateieinstellungen_speichern_ignoriert_none(client, tmp_projekt):
     r = client.put(f"/api/projects/{tmp_projekt}/files/S1/einstellungen", json={})
     assert r.status_code == 200
     assert r.json()["korrektur"] == "auto"
+
+
+# --- Einstellungs-Validierung: unbekannte Werte sofort 400 (#139) ------------
+
+def test_projekteinstellungen_lehnt_unbekannte_sprache_ab(client, tmp_projekt):
+    r = client.put(f"/api/projects/{tmp_projekt}/einstellungen", json={"sprache": "enm"})
+    assert r.status_code == 400
+    assert "Sprache" in r.json()["detail"]
+
+
+def test_projekteinstellungen_lehnt_unbekannte_tiefe_ab(client, tmp_projekt):
+    r = client.put(f"/api/projects/{tmp_projekt}/einstellungen", json={"korrektur": "galaktisch"})
+    assert r.status_code == 400
+    assert "Tiefe" in r.json()["detail"]
+
+
+def test_dateieinstellungen_lehnt_unbekannte_sprache_ab(client, tmp_projekt):
+    r = client.put(f"/api/projects/{tmp_projekt}/files/S1/einstellungen", json={"sprache": "enm"})
+    assert r.status_code == 400
+    assert "Sprache" in r.json()["detail"]
+
+
+def test_dateieinstellungen_lehnt_unbekannte_tiefe_ab(client, tmp_projekt):
+    r = client.put(f"/api/projects/{tmp_projekt}/files/S1/einstellungen", json={"korrektur": "galaktisch"})
+    assert r.status_code == 400
+    assert "Tiefe" in r.json()["detail"]
+
+
+def test_einstellungen_auto_tiefe_bleibt_gueltig(client, tmp_projekt):
+    # "auto" ist TIEFE_DEFAULT und muss am PUT akzeptiert bleiben (Regressionsschutz).
+    r = client.put(f"/api/projects/{tmp_projekt}/einstellungen", json={"korrektur": "auto"})
+    assert r.status_code == 200
