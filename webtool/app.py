@@ -247,6 +247,32 @@ def projekteinstellungen_speichern(project: str, body: EinstellungenBody):
     return {"sprache": d["sprache"], "korrektur": d["korrektur"]}
 
 
+@app.get("/api/projects/{project}/files/{base}/einstellungen")
+def dateieinstellungen(project: str, base: str):
+    """Effektive Sprache + Korrektur-Tiefe EINER Datei (Override, sonst Projekt-Standard) plus
+    die Auswahlen — das Datei-Pendant des Projekt-Endpunkts (s. projekteinstellungen)."""
+    _validate(project, base)
+    if not find_audio(project, base) and not os.path.exists(_raw_path(project, base)):
+        raise HTTPException(status_code=404, detail=f"keine Datei: {base}")
+    return {"sprache": _projekt.datei_sprache(project, base),
+            "korrektur": _projekt.datei_korrektur(project, base),
+            "sprach_choices": _sprachen.fuer_frontend(), "tiefen": _sprachen.TIEFEN}
+
+
+@app.put("/api/projects/{project}/files/{base}/einstellungen")
+def dateieinstellungen_speichern(project: str, base: str, body: EinstellungenBody):
+    """Schreibt den Datei-Override (sprache/korrektur). Reiner Schreibpfad — kein Job-Start,
+    keine 409-Sperre: derselbe sperrfreie Weg wie ``upload_audio`` (``setze_datei``), denn ein
+    laufender Job hat seine Sprache beim Start bereits gelesen. Die Trigger (Neu-Transkription
+    bei Sprache-Wechsel, Neu-Korrektur bei Tiefe-Wechsel) stößt das Frontend über die
+    bestehenden ``…/transcribe``/``…/correct``-Endpunkte an — die ihrerseits ``_keine_jobs``
+    prüfen. Siehe Spec #135."""
+    _validate(project, base)
+    _projekt.setze_datei(project, base, sprache=body.sprache, korrektur=body.korrektur)
+    return {"sprache": _projekt.datei_sprache(project, base),
+            "korrektur": _projekt.datei_korrektur(project, base)}
+
+
 class NewProject(BaseModel):
     name: str
 
