@@ -40,6 +40,14 @@ beforeEach(() => {
   vi.mocked(api.startCorrectFile).mockResolvedValue({ job_id: '1', started: true })
   vi.mocked(api.startRetranscribeFile).mockResolvedValue({ job_id: '2', started: true })
   vi.mocked(api.deleteFile).mockResolvedValue(undefined)
+  vi.mocked(api.getFileEinstellungen).mockResolvedValue({
+    sprache: 'ch', korrektur: 'auto',
+    sprach_choices: [{ id: 'ch', label: 'Schweizerdeutsch', hint: '' }, { id: 'en', label: 'Englisch', hint: '' }],
+    tiefen: [{ id: 'voll_dialekt', label: 'Voll' }, { id: 'leicht', label: 'Leicht' }],
+  })
+  vi.mocked(api.saveFileEinstellungen).mockResolvedValue({
+    sprache: 'ch', korrektur: 'auto', sprach_choices: [], tiefen: [],
+  })
 })
 
 describe('Korrigieren', () => {
@@ -154,5 +162,50 @@ describe('Löschen', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Löschen' }))
     await waitFor(() => expect(api.deleteFile).toHaveBeenCalledWith('P', 'a'))
     expect(vergiss).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('Sprache & Korrektur-Tiefe', () => {
+  const spracheAendern = async () => {
+    await menueOeffnen()
+    fireEvent.click(await screen.findByText('Sprache & Korrektur-Tiefe'))
+    // Der Dialog portalt nach document.body; der sprache-Select ist der erste combobox darin.
+    await screen.findByText('Schweizerdeutsch')
+    fireEvent.click(document.body.querySelector('[role="combobox"]')!)
+    fireEvent.click(await screen.findByText('Englisch'))
+  }
+
+  it('änderte Sprache stößt Neu-Transkription an (und verlässt den Editor)', async () => {
+    render(<Huelle pfad="/p/P/a"><DateiMenue project="P" file={datei()} /></Huelle>)
+    await spracheAendern()
+    fireEvent.click(screen.getByRole('button', { name: 'Speichern & neu transkribieren' }))
+    await waitFor(() => expect(api.saveFileEinstellungen).toHaveBeenCalledWith('P', 'a', expect.objectContaining({ sprache: 'en' })))
+    await waitFor(() => expect(api.startRetranscribeFile).toHaveBeenCalledWith('P', 'a'))
+    expect(screen.getByTestId('ort')).toHaveTextContent('/p/P')   // Editor verlassen
+  })
+
+  it('nur geänderte Tiefe stößt Neu-Korrektur mit force=true an (Editor bleibt)', async () => {
+    render(<Huelle pfad="/p/P/a"><DateiMenue project="P" file={datei()} /></Huelle>)
+    await menueOeffnen()
+    fireEvent.click(await screen.findByText('Sprache & Korrektur-Tiefe'))
+    // Readiness über den Sprache-Trigger; der Tiefe-Trigger bleibt leer (korrektur='auto'
+    // nicht in TIEFEN — dasselbe wie beim Projekt-Dialog).
+    await screen.findByText('Schweizerdeutsch')
+    // Tiefe-Select ist der letzte combobox im Dialog.
+    const comboboxes = document.body.querySelectorAll('[role="combobox"]')
+    fireEvent.click(comboboxes[comboboxes.length - 1])
+    fireEvent.click(await screen.findByText('Leicht'))
+    fireEvent.click(screen.getByRole('button', { name: 'Speichern & neu korrigieren' }))
+    await waitFor(() => expect(api.startCorrectFile).toHaveBeenCalledWith('P', 'a', true))
+    expect(screen.getByTestId('ort')).toHaveTextContent('/p/P/a')  // Editor bleibt (Korrektur)
+  })
+
+  it('ohne has_raw wird nur gespeichert (kein Trigger)', async () => {
+    render(<Huelle><DateiMenue project="P" file={datei({ has_raw: false })} /></Huelle>)
+    await spracheAendern()
+    fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
+    await waitFor(() => expect(api.saveFileEinstellungen).toHaveBeenCalled())
+    expect(api.startRetranscribeFile).not.toHaveBeenCalled()
+    expect(api.startCorrectFile).not.toHaveBeenCalled()
   })
 })
