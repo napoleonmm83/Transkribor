@@ -424,6 +424,45 @@ Schema:
 Ändere NUR, was wirklich nötig ist; unproblematische Segmente unverändert übernehmen. Gib ausser der geschriebenen Datei nichts weiter aus."""
 
 
+def _light_prompt(base: str, tagged_path: str, cpath: str, context: str,
+                  ziel: str = "lesbarem Standarddeutsch") -> str:
+    """Leichte Korrektur: EIN LLM-Lauf, kein Glossar, kein Treue-Pass.
+    Korrigiert nur offensichtliche ASR-Fehler + Eigennamen, labelt Sprecher,
+    schreibt eine Inhalts-Zusammenfassung. Keine Dialekt-Glättung."""
+    return f"""Du bearbeitest EIN Transkript in EINEM Lauf (leichte Korrektur) und labelst die Sprecher.
+
+Projekt-Kontext: {context or _default_context(ziel)}
+1) Lies die Rohsegmente (Read-Tool): {tagged_path}
+2) KORRIGIERE NUR offensichtliche ASR-Fehler und Eigennamen, zu {ziel}. KEIN Umschreiben, keine Dialekt-Glättung. Entferne [[...]]-Markierungen.
+3) SPRECHER: vergib pro (Sprecher N)-Cluster einen konsistenten Namen (meist „Interviewer" und die befragte Person). Gib JEDEM Segment einen speaker.
+4) SUMMARY: eine Inhalts-Zusammenfassung (3-5 Sätze).
+
+Schema (Write-Tool nach {cpath}):
+{{"base":"{base}","context":"1-2 Sätze","speakers":["…"],
+ "segments":[{{"id":<zahl>,"speaker":"…","text":"…"}}],
+ "annotations":["…"],"summary":"3-5 Sätze Inhalt"}}
+Gib ausser der Datei nichts aus."""
+
+
+def _summary_prompt(base: str, tagged_path: str, cpath: str, context: str,
+                    ziel: str = "lesbarem Standarddeutsch") -> str:
+    """Nur Zusammenfassung + Sprecher-Namen, EIN LLM-Lauf. Den Segment-Inhalt lässt
+    der Prompt UNANGETASTET — das Schema verlangt pro Segment nur {id, speaker} (kein
+    text-Feld), womit apply_correction den Roh-Text behaelt (CLAUDE.md-Regel)."""
+    return f"""Du bearbeitest EIN Transkript NUR fuer Zusammenfassung + Sprecher-Namen. Den Inhalt lässt du UNANGETASTET.
+
+Projekt-Kontext: {context or _default_context(ziel)}
+1) Lies die Rohsegmente (Read-Tool): {tagged_path}
+2) SPRECHER: vergib pro (Sprecher N)-Cluster einen konsistenten Namen. JEDES Segment bekommt einen speaker — KEIN Text-Feld (der Roh-Inhalt bleibt unveraendert, uebernimm nur id und speaker).
+3) SUMMARY: eine Inhalts-Zusammenfassung (3-5 Sätze) in {ziel or 'der Originalsprache'}.
+
+Schema (Write-Tool nach {cpath}):
+{{"base":"{base}","context":"1-2 Sätze","speakers":["…"],
+ "segments":[{{"id":<zahl>,"speaker":"…"}}],
+ "annotations":["…"],"summary":"3-5 Sätze Inhalt"}}
+Gib ausser der Datei nichts aus."""
+
+
 def _glossary(project: str, context: str) -> str:
     """Ein claude-Aufruf über alle .raw.txt -> _glossar.json. Gibt das Glossar als
     JSON-Text zurück (leer, wenn es fehlschlägt -> Korrektur läuft ohne Glossar weiter)."""
@@ -610,6 +649,28 @@ def _correct_file(project: str, base: str, gjson: str, context: str, verify: boo
             pass
 
 
+def _light_correct_file(project: str, base: str, ziel: str, dialekt: bool,
+                        context: str) -> None:
+    """Leichte Korrektur fuer EINE Datei -> <base>.correction.json (EIN LLM-Aufruf,
+    kein Glossar, kein Treue-Pass). Schema wie die Voll-Korrektur (mit text)."""
+    tdir = paths.transkripte_dir(project)
+    target = os.path.abspath(os.path.join(tdir, base + ".correction.json"))
+    tagged = os.path.abspath(os.path.join(tdir, base + ".tagged.txt"))
+    print(f"→ Leichte Korrektur {base} …", flush=True)
+    _ask_llm(_light_prompt(base, tagged, target, context, ziel), [tagged], target)
+
+
+def _summary_only_file(project: str, base: str, ziel: str, context: str) -> None:
+    """Nur Zusammenfassung + Sprecher -> <base>.correction.json (EIN LLM-Aufruf).
+    Das Schema verlangt {id, speaker} OHNE text-Schluessel, sodass apply_correction
+    den Roh-Text jedes Segments unveraendert laesst."""
+    tdir = paths.transkripte_dir(project)
+    target = os.path.abspath(os.path.join(tdir, base + ".correction.json"))
+    tagged = os.path.abspath(os.path.join(tdir, base + ".tagged.txt"))
+    print(f"→ Nur Zusammenfassung {base} …", flush=True)
+    _ask_llm(_summary_prompt(base, tagged, target, context, ziel), [tagged], target)
+
+
 def cmd_run(project: str, base: str = None, force: bool = False, verify: bool = True) -> int:
     tdir = paths.transkripte_dir(project)
     all_bases = bases(project)
@@ -627,8 +688,12 @@ def cmd_run(project: str, base: str = None, force: bool = False, verify: bool = 
     print(f"run: {len(all_bases)} Datei(en) in Projekt {project!r}", flush=True)
     cmd_diarize(project, all_bases)                    # -> <base>.diar.json (best-effort, GPU); scoped auf all_bases
     cmd_prep(project)                                  # -> <base>.tagged.txt (Cluster-Präfix falls diarisiert)
+    from . import projekt as _pj
     context = _context(project)
-    gjson = _glossary(project, context)                # Glossar bleibt korpus-weit (über bases(project))
+    # Glossar nur bauen, wenn mind. eine Datei im Voll-Modus laeuft -- leicht/zusammenfassung
+    # sind Einzeldatei-Laeufe ohne korpus-weites Glossar (spart den Glossar-Aufruf).
+    hat_voll = any(_pj.tiefe_effektiv(project, b) in ("voll", "voll_dialekt") for b in all_bases)
+    gjson = _glossary(project, context) if hat_voll else ""
     def one(b: str) -> bool:
         try:  # eine kaputte Datei darf den Batch nicht abbrechen
             epath = os.path.join(tdir, b + ".edit.json")
@@ -645,7 +710,17 @@ def cmd_run(project: str, base: str = None, force: bool = False, verify: bool = 
             if reuse:
                 print(f"↷ nutze vorhandene {b}.correction.json", flush=True)
             else:
-                _correct_file(project, b, gjson, context, verify, force)
+                # Tiefe pro Datei: voll-Dateien laufen wie bisher (Glossar + Verify),
+                # leicht/zusammenfassung sind einzelne LLM-Aufrufe ohne Treue-Pass.
+                tiefe = _pj.tiefe_effektiv(project, b)
+                ziel, dialekt = _ziel_dialekt(project, b)
+                if tiefe in ("voll", "voll_dialekt"):
+                    _correct_file(project, b, gjson, context, verify, force,
+                                  ziel=ziel, dialekt=dialekt)
+                elif tiefe == "leicht":
+                    _light_correct_file(project, b, ziel, dialekt, context)
+                else:  # zusammenfassung
+                    _summary_only_file(project, b, ziel, context)
             if not _valid_correction(cpath):
                 print(f"✗ FEHLT/ungültig: {b}.correction.json — überspringe", flush=True)
                 return False

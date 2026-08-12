@@ -2,7 +2,7 @@ import json
 import os
 import re
 import pytest
-from webtool import correct
+from webtool import correct, paths
 
 
 @pytest.fixture
@@ -822,3 +822,65 @@ def test_ziel_dialekt_auto_nie_dialekt(tmp_path, monkeypatch):
     projekt.speichern("p", {"sprache": "auto"})
     ziel, dialekt = correct._ziel_dialekt("p", "x")
     assert "English" in ziel and dialekt is False
+
+
+# ---- Leichte Modi: Prompt-Builder + Tiefen-Verzweigung in cmd_run ----
+
+def test_light_prompt_produziert_zusammenfassung_und_sprecher(monkeypatch):
+    p = correct._light_prompt("b", "t.txt", "c.json", "", ziel="clear English")
+    assert "clear English" in p
+    assert "Zusammenfassung" in p or "summary" in p.lower()
+    assert "Sprecher" in p
+
+
+def test_summary_prompt_ohne_text_korrektur():
+    p = correct._summary_prompt("b", "t.txt", "c.json", "", ziel="clear English")
+    # verlangt pro Segment NUR id+speaker, KEIN text-Feld
+    assert '"id"' in p and "speaker" in p
+    # "context"/"Kontext" enthalten den Teilstring "text" -- sie streifen, bevor geprueft wird,
+    # ob ein echoes "text"-Feld im Schema steht (nur id+speaker erlaubt).
+    stripped = p.replace("Zusammenfassung", "").replace("Kontext", "").replace("context", "")
+    assert "text" not in stripped
+
+
+def test_cmd_run_verzweigt_nach_tiefe(tmp_path, monkeypatch):
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    from webtool import projekt
+    tdir = os.path.join(tmp_path, "p", "transkripte"); os.makedirs(tdir)
+    # zwei Roh-Dateien, eine leicht, eine voll
+    for b in ("a", "b"):
+        with open(os.path.join(tdir, f"{b}.json"), "w") as fh:
+            json.dump({"language": "de", "segments": [{"id": 0, "text": "x"}], "text": "x"}, fh)
+        with open(os.path.join(tdir, f"{b}.tagged.txt"), "w") as fh:
+            fh.write("[0] x\n")
+    projekt.speichern("p", {"sprache": "de"})
+    projekt.setze_datei("p", "a", korrektur="leicht")
+    # b bleibt auto -> voll
+    calls = []
+    monkeypatch.setattr(correct, "_ask_llm", lambda prompt, inputs, output: calls.append(output) or
+                        paths.atomic_write(output, '{"base":"x","speakers":[],"segments":[{"id":0,"speaker":"I","text":"x"}],"summary":"s"}'))
+    monkeypatch.setattr(correct, "cmd_apply", lambda *a, **k: "written")
+    correct.cmd_run("p")
+    # a (leicht) darf KEINEN verify-Aufruf starten; calls enthaelt fuer a genau 1, fuer b 2 (korrektur+verify)
+    assert any("a" in c for c in calls) and any("b" in c for c in calls)
+
+
+def test_glossar_nur_wenn_voll_datei(tmp_path, monkeypatch):
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    from webtool import projekt
+    tdir = os.path.join(tmp_path, "p", "transkripte"); os.makedirs(tdir)
+    for b in ("a",):
+        with open(os.path.join(tdir, f"{b}.json"), "w") as fh:
+            json.dump({"language": "de", "segments": [{"id": 0, "text": "x"}], "text": "x"}, fh)
+        open(os.path.join(tdir, f"{b}.raw.txt"), "w").write("x")
+        open(os.path.join(tdir, f"{b}.tagged.txt"), "w").write("[0] x\n")
+    projekt.speichern("p", {"sprache": "de", "korrektur": "zusammenfassung"})  # nichts voll
+    glossar_calls = []
+    # Der Testfunktionsname enthaelt "_glossar" und steht im tmp_path -- darum auf den
+    # tatsaechlichen Dateinamen pruefen, nicht auf den Teilstring.
+    monkeypatch.setattr(correct, "_ask_llm",
+                        lambda prompt, inputs, output: (glossar_calls.append(output) if output.endswith("_glossar.json") else None,
+                         paths.atomic_write(output, '{"speakers":[],"segments":[{"id":0,"speaker":"I","text":"x"}],"summary":"s","base":"x"}')))
+    monkeypatch.setattr(correct, "cmd_apply", lambda *a, **k: "written")
+    correct.cmd_run("p")
+    assert not glossar_calls   # kein Glossar bei nur-zusammenfassung
