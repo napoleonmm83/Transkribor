@@ -775,10 +775,11 @@ def test_run_meldet_seinen_wirkungsbereich(project, monkeypatch, capsys):
 
 
 # ---- Sprachbewusste Prompts (ziel + dialekt) ----
-# Die Quotes im Dialekt-Hinweis sind Deutsche Typografen-Anfuehrung: „ss«
-# (U+201E ... U+201C). Literale hier in Ascii-Schreibweise („/“),
-# damit ein Editor mit falschem Encoding sie nicht still verbiegt.
-_DIALEKT_HINT = "Schweizer „ss“"        # (Schweizer „ss«)
+# Die Anfuehrungszeichen im Dialekt-Hinweis sind deutsche Typografen-Quotes
+# (U+201E low-9 ... U+201C high-9). Der _DIALEKT_HINT-String fuehrt sie als
+# echte Unicode-Zeichen (Prompt-Literal, Unicode erlaubt); dieser Kommentar
+# bleibt in Ascii, damit ein Editor mit falschem Encoding sie nicht still verbiegt.
+_DIALEKT_HINT = "Schweizer „ss“"        # U+201E ss U+201C (Prompt-Literal, Unicode ok)
 _EINLEITUNG_CH = "Schweizerdeutsch ->"            # (oft Schweizerdeutsch -> ...)
 
 
@@ -791,11 +792,15 @@ def test_correct_prompt_englisch_ohne_dialekt():
 
 
 def test_correct_prompt_ch_mit_dialekt():
-    # Defaults = Schweizerdeutsch: muss byte-identisch mit dem alten Prompt sein.
+    # Defaults = Schweizerdeutsch: der Dialekt-Fallback-Kontext (kein kontext.md)
+    # muss die urspruengliche dialektsignalisierende Prosa tragen (Constraint 4).
     p = correct._correct_prompt("b", "t.txt", "c.json", "g.json", "")
     assert "Standarddeutsch" in p
     assert _DIALEKT_HINT in p                       # CH: Dialekt-Hinweis steht
     assert _EINLEITUNG_CH in p
+    # F1-Regressionsschutz: _default_context(dialekt=True) darf nicht zur neutralen
+    # ziel-Prosa verkommen -- sonst geht die Dialekt-Signalisierung verloren.
+    assert "Schweizerdeutsch/Dialekt" in p and "Dialektbegriffen" in p
 
 
 def test_verify_prompt_nimmt_ziel_an():
@@ -861,8 +866,13 @@ def test_cmd_run_verzweigt_nach_tiefe(tmp_path, monkeypatch):
                         paths.atomic_write(output, '{"base":"x","speakers":[],"segments":[{"id":0,"speaker":"I","text":"x"}],"summary":"s"}'))
     monkeypatch.setattr(correct, "cmd_apply", lambda *a, **k: "written")
     correct.cmd_run("p")
-    # a (leicht) darf KEINEN verify-Aufruf starten; calls enthaelt fuer a genau 1, fuer b 2 (korrektur+verify)
-    assert any("a" in c for c in calls) and any("b" in c for c in calls)
+    # a (leicht) -> genau 1 LLM-Aufruf auf a.correction.json (kein Verify);
+    # b (voll)   -> 2 Aufrufe auf b.correction.json (Korrektur + Treue-Pass).
+    # Auf den .correction.json-Basisnamen geprueft, nicht auf Einzelbuchstaben
+    # (die im tmp_path ueberall stehen -- Windows \AppData, Laufwerksbuchstabe).
+    bn = lambda p: os.path.basename(p)
+    assert sum(1 for c in calls if bn(c) == "a.correction.json") == 1
+    assert sum(1 for c in calls if bn(c) == "b.correction.json") == 2
 
 
 def test_glossar_nur_wenn_voll_datei(tmp_path, monkeypatch):

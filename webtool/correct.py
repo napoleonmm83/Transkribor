@@ -44,12 +44,19 @@ _claude_slots = threading.Semaphore(CLAUDE_PARALLEL)
 _CREATE_NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 
 
-def _default_context(ziel: str) -> str:
-    """Sprachneutraler Fallback-Kontext; `ziel` macht die Zielsprache explizit.
+def _default_context(ziel: str, dialekt: bool = True) -> str:
+    """Fallback-Kontext, wenn kein kontext.md vorliegt.
 
-    Ersetzt das alte feste `DEFAULT_CONTEXT`, das "oft Schweizerdeutsch/Dialekt"
-    einbrannte — falsch fuer jede nicht-schweizerdeutsche Aufnahme (z.B. ein
-    englischsprachiges Video kam als deutsches Transkript zurueck)."""
+    `dialekt=True` (Default -- Repo-Hauptfall Schweizerdeutsch) liefert die
+    urspruengliche dialektsignalisierende Prosa (ohne ziel-Phrase, da sie
+    Schweizerdeutsch fest annimmt). `dialekt=False` gibt einen sprachneutralen,
+    ziel-gerichteten Fallback. Letzteres ersetzt das alte feste `DEFAULT_CONTEXT`,
+    das "oft Schweizerdeutsch/Dialekt" einbrannte -- falsch fuer jede
+    nicht-schweizerdeutsche Aufnahme (z.B. ein englischsprachiges Video kam als
+    deutsches Transkript zurueck)."""
+    if dialekt:
+        return ("Interviews (gesprochene Sprache oft Schweizerdeutsch/Dialekt), "
+                "von Whisper transkribiert. ASR-Fehler v.a. bei Eigennamen und Dialektbegriffen.")
     return (f"Interviews (gesprochene Sprache), von Whisper transkribiert. "
             f"ASR-Fehler v.a. bei Eigennamen. Ziel: normalisieren zu {ziel or 'klarem Text'}.")
 
@@ -310,7 +317,7 @@ def _glossary_prompt(gpath: str, raw_files: list, context: str,
     files = "\n".join(raw_files)
     return f"""Du erstellst ein GEMEINSAMES Glossar, mit dem anschliessend mehrere Interview-Transkripte KONSISTENT korrigiert werden.
 
-Projekt-Kontext: {context or _default_context(ziel)}
+Projekt-Kontext: {context or _default_context(ziel, dialekt=False)}
 
 Lies ALLE folgenden Roh-Transkripte vollständig (Read-Tool):
 {files}
@@ -352,7 +359,7 @@ def _correct_prompt(base: str, tagged_path: str, cpath: str, gjson: str, context
     dialekt_hinweis = " (Schweizer „ss“)" if dialekt else ""
     return f"""Du korrigierst EIN Interview-Transkript SEGMENT FÜR SEGMENT ({einleitung}) und labelst die Sprecher.
 
-Projekt-Kontext: {context or _default_context(ziel)}
+Projekt-Kontext: {context or _default_context(ziel, dialekt)}
 {block}
 1) Lies die Rohsegmente vollständig (Read-Tool) aus:
 {tagged_path}
@@ -392,7 +399,7 @@ def _verify_prompt(base: str, tagged_path: str, cpath: str, context: str, id_ran
     block, scope = _scope(id_range, known)
     return f"""Du prüfst eine bereits erstellte SEGMENT-GENAUE Korrektur auf TREUE gegen das Rohtranskript (TREUE-CHECK) und schreibst die geprüfte Fassung zurück.
 
-Projekt-Kontext: {context or _default_context(ziel)}
+Projekt-Kontext: {context or _default_context(ziel, dialekt)}
 {block}
 1) Lies das ROH vollständig (Read-Tool) aus:
 {tagged_path}
@@ -425,13 +432,13 @@ Schema:
 
 
 def _light_prompt(base: str, tagged_path: str, cpath: str, context: str,
-                  ziel: str = "lesbarem Standarddeutsch") -> str:
+                  ziel: str = "lesbarem Standarddeutsch", dialekt: bool = True) -> str:
     """Leichte Korrektur: EIN LLM-Lauf, kein Glossar, kein Treue-Pass.
     Korrigiert nur offensichtliche ASR-Fehler + Eigennamen, labelt Sprecher,
     schreibt eine Inhalts-Zusammenfassung. Keine Dialekt-Glättung."""
     return f"""Du bearbeitest EIN Transkript in EINEM Lauf (leichte Korrektur) und labelst die Sprecher.
 
-Projekt-Kontext: {context or _default_context(ziel)}
+Projekt-Kontext: {context or _default_context(ziel, dialekt)}
 1) Lies die Rohsegmente (Read-Tool): {tagged_path}
 2) KORRIGIERE NUR offensichtliche ASR-Fehler und Eigennamen, zu {ziel}. KEIN Umschreiben, keine Dialekt-Glättung. Entferne [[...]]-Markierungen.
 3) SPRECHER: vergib pro (Sprecher N)-Cluster einen konsistenten Namen (meist „Interviewer" und die befragte Person). Gib JEDEM Segment einen speaker.
@@ -445,13 +452,13 @@ Gib ausser der Datei nichts aus."""
 
 
 def _summary_prompt(base: str, tagged_path: str, cpath: str, context: str,
-                    ziel: str = "lesbarem Standarddeutsch") -> str:
+                    ziel: str = "lesbarem Standarddeutsch", dialekt: bool = True) -> str:
     """Nur Zusammenfassung + Sprecher-Namen, EIN LLM-Lauf. Den Segment-Inhalt lässt
     der Prompt UNANGETASTET — das Schema verlangt pro Segment nur {id, speaker} (kein
     text-Feld), womit apply_correction den Roh-Text behaelt (CLAUDE.md-Regel)."""
     return f"""Du bearbeitest EIN Transkript NUR fuer Zusammenfassung + Sprecher-Namen. Den Inhalt lässt du UNANGETASTET.
 
-Projekt-Kontext: {context or _default_context(ziel)}
+Projekt-Kontext: {context or _default_context(ziel, dialekt)}
 1) Lies die Rohsegmente (Read-Tool): {tagged_path}
 2) SPRECHER: vergib pro (Sprecher N)-Cluster einen konsistenten Namen. JEDES Segment bekommt einen speaker — KEIN Text-Feld (der Roh-Inhalt bleibt unveraendert, uebernimm nur id und speaker).
 3) SUMMARY: eine Inhalts-Zusammenfassung (3-5 Sätze) in {ziel or 'der Originalsprache'}.
@@ -479,7 +486,9 @@ def _glossary(project: str, context: str) -> str:
         print("↷ nutze vorhandenes _glossar.json", flush=True)
     else:
         print("→ Glossar (gemeinsame Namen/Begriffe) …", flush=True)
-        _ask_llm(_glossary_prompt(gpath, raw_files, context), raw_files, gpath)
+        # ziel="" + dialekt=False: das Glossar ist sprachneutral (Spec F2) -- sonst
+        # leaked der Default "lesbarem Standarddeutsch" in jedes Projekt, auch Englisches.
+        _ask_llm(_glossary_prompt(gpath, raw_files, context, ziel=""), raw_files, gpath)
     try:
         g = _load(gpath)
     except (OSError, json.JSONDecodeError):
@@ -657,10 +666,11 @@ def _light_correct_file(project: str, base: str, ziel: str, dialekt: bool,
     target = os.path.abspath(os.path.join(tdir, base + ".correction.json"))
     tagged = os.path.abspath(os.path.join(tdir, base + ".tagged.txt"))
     print(f"→ Leichte Korrektur {base} …", flush=True)
-    _ask_llm(_light_prompt(base, tagged, target, context, ziel), [tagged], target)
+    _ask_llm(_light_prompt(base, tagged, target, context, ziel, dialekt), [tagged], target)
 
 
-def _summary_only_file(project: str, base: str, ziel: str, context: str) -> None:
+def _summary_only_file(project: str, base: str, ziel: str, context: str,
+                       dialekt: bool = True) -> None:
     """Nur Zusammenfassung + Sprecher -> <base>.correction.json (EIN LLM-Aufruf).
     Das Schema verlangt {id, speaker} OHNE text-Schluessel, sodass apply_correction
     den Roh-Text jedes Segments unveraendert laesst."""
@@ -668,7 +678,7 @@ def _summary_only_file(project: str, base: str, ziel: str, context: str) -> None
     target = os.path.abspath(os.path.join(tdir, base + ".correction.json"))
     tagged = os.path.abspath(os.path.join(tdir, base + ".tagged.txt"))
     print(f"→ Nur Zusammenfassung {base} …", flush=True)
-    _ask_llm(_summary_prompt(base, tagged, target, context, ziel), [tagged], target)
+    _ask_llm(_summary_prompt(base, tagged, target, context, ziel, dialekt), [tagged], target)
 
 
 def cmd_run(project: str, base: str = None, force: bool = False, verify: bool = True) -> int:
@@ -720,7 +730,7 @@ def cmd_run(project: str, base: str = None, force: bool = False, verify: bool = 
                 elif tiefe == "leicht":
                     _light_correct_file(project, b, ziel, dialekt, context)
                 else:  # zusammenfassung
-                    _summary_only_file(project, b, ziel, context)
+                    _summary_only_file(project, b, ziel, context, dialekt)
             if not _valid_correction(cpath):
                 print(f"✗ FEHLT/ungültig: {b}.correction.json — überspringe", flush=True)
                 return False

@@ -242,7 +242,7 @@ def projekteinstellungen(project: str):
 @app.put("/api/projects/{project}/einstellungen")
 def projekteinstellungen_speichern(project: str, body: EinstellungenBody):
     _validate(project)
-    # speichern() überspringt None-Werte (isinstance-Check auf str) -> leerer Body ist sicher.
+    # speichern() ueberspringt None-Werte (isinstance-Check auf str) -> leerer Body ist sicher.
     d = _projekt.speichern(project, {"sprache": body.sprache, "korrektur": body.korrektur})
     return {"sprache": d["sprache"], "korrektur": d["korrektur"]}
 

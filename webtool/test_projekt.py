@@ -2,11 +2,6 @@ import json, os
 from webtool import projekt, paths, sprachen
 
 
-def _neues_projekt(tmp_path, name="p"):
-    os.makedirs(paths.project_dir(name), exist_ok=True)  # nutzt TRANSKRIBOR_PROJEKTE-Testumgebung
-    return name
-
-
 def test_laden_default_wenn_fehlt(tmp_path, monkeypatch):
     monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
     d = projekt.laden("x")
