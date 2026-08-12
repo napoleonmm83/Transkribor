@@ -70,3 +70,18 @@ def depth_label(tiefe: str) -> str:
         if t["id"] == tiefe:
             return t["label"]
     return tiefe
+
+
+def pruef_fehler(sprache: str | None = None, korrektur: str | None = None) -> str | None:
+    """Liefert eine Fehlermeldung, wenn ``sprache``/``korrektur`` kein bekannter Wert ist, sonst None.
+
+    None-Argumente (nicht gesendete Felder) sind erlaubt — ein PUT ist ein Partial-Update.
+    Die EINE Quelle fuer Gueltigkeit, konsumiert von beiden Einstellungs-Endpunkten (s. app.py);
+    eine zweite Pruefung dort wuerde von dieser Tabelle wegdriften.
+    """
+    if sprache is not None and sprache not in SPRACHEN:
+        return f"unbekannte Sprache: {sprache!r} (erlaubt: {', '.join(SPRACHEN)})"
+    gueltige_tiefen = {TIEFE_DEFAULT} | {t["id"] for t in TIEFEN}
+    if korrektur is not None and korrektur not in gueltige_tiefen:
+        return f"unbekannte Korrektur-Tiefe: {korrektur!r} (erlaubt: {', '.join(sorted(gueltige_tiefen))})"
+    return None

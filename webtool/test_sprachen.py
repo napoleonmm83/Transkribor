@@ -43,3 +43,23 @@ def test_fuer_frontend_enthaelt_alle_sechs():
 def test_tiefen_liste_vier_stufen():
     ids = {t["id"] for t in sprachen.TIEFEN}
     assert ids == {"voll_dialekt", "voll", "leicht", "zusammenfassung"}
+
+
+def test_pruef_fehler_gueltig():
+    # None-Argumente (Partial-Update) sind erlaubt — ändern nichts.
+    assert sprachen.pruef_fehler() is None
+    assert sprachen.pruef_fehler(sprache="ch") is None
+    assert sprachen.pruef_fehler(sprache="auto") is None
+    assert sprachen.pruef_fehler(korrektur="voll") is None
+    assert sprachen.pruef_fehler(korrektur="auto") is None      # TIEFE_DEFAULT bleibt erlaubt
+    assert sprachen.pruef_fehler(sprache="en", korrektur="leicht") is None
+
+
+def test_pruef_fehler_unbekannte_sprache():
+    msg = sprachen.pruef_fehler(sprache="enm")
+    assert msg is not None and "enm" in msg and "Sprache" in msg
+
+
+def test_pruef_fehler_unbekannte_tiefe():
+    msg = sprachen.pruef_fehler(korrektur="galaktisch")
+    assert msg is not None and "galaktisch" in msg and "Tiefe" in msg
