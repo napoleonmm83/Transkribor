@@ -66,3 +66,21 @@ describe('ProjektEinstellungen', () => {
     expect(body).toEqual({ urls: ['https://youtu.be/x'], sprache: 'en' })
   })
 })
+
+describe('DateiEinstellungen', () => {
+  it('getFileEinstellungen GETt den codierten Datei-Pfad', async () => {
+    const fm = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ sprache: 'ch', korrektur: 'auto', sprach_choices: [], tiefen: [] }) })
+    vi.stubGlobal('fetch', fm)
+    await api.getFileEinstellungen('Food Festival', 'A B')
+    expect(fm).toHaveBeenCalledWith('/api/projects/Food%20Festival/files/A%20B/einstellungen')
+  })
+
+  it('saveFileEinstellungen PUTt JSON und gibt die Antwort zurück', async () => {
+    const fm = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ sprache: 'en', korrektur: 'auto', sprach_choices: [], tiefen: [] }) })
+    vi.stubGlobal('fetch', fm)
+    const r = await api.saveFileEinstellungen('p', 'a', { sprache: 'en' })
+    expect(fm).toHaveBeenCalledWith('/api/projects/p/files/a/einstellungen',
+      expect.objectContaining({ method: 'PUT', headers: { 'Content-Type': 'application/json' } }))
+    expect(r.sprache).toBe('en')
+  })
+})
