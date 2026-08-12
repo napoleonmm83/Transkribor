@@ -293,3 +293,29 @@ def test_lauf_ohne_offene_aufnahme_meldet_einen_leeren_bereich(tmp_path, monkeyp
     assert jobs.SCOPE_PREFIX in aus and "nichts zu tun" in aus
     zeile = [z for z in aus.splitlines() if z.startswith(jobs.SCOPE_PREFIX)][0]
     assert zeile[len(jobs.SCOPE_PREFIX):].strip() == ""
+
+
+# --- Sprache pro Datei aus projekt.json -------------------------------------
+# Eine projekt.json mitsprache=de ueberschreibt WHISPER_LANG nicht mehr fuer alle
+# Dateien gleich, sondern pro Datei. 'auto' -> None (Whisper erkennt selbst).
+
+def test_datei_whisper_code_liefert_projektdefault(tmp_path, monkeypatch):
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    os.makedirs(os.path.join(tmp_path, "p"), exist_ok=True)
+    with open(os.path.join(tmp_path, "p", "projekt.json"), "w") as fh:
+        json.dump({"sprache": "en", "korrektur": "auto", "dateien": {}}, fh)
+    assert transcribe._datei_whisper_code(os.path.join(tmp_path, "p"), "v1", "de") == "en"
+
+
+def test_datei_whisper_code_auto_ist_none(tmp_path, monkeypatch):
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    os.makedirs(os.path.join(tmp_path, "p"), exist_ok=True)
+    with open(os.path.join(tmp_path, "p", "projekt.json"), "w") as fh:
+        json.dump({"sprache": "auto", "korrektur": "auto", "dateien": {}}, fh)
+    assert transcribe._datei_whisper_code(os.path.join(tmp_path, "p"), "v1", "de") is None
+
+
+def test_datei_whisper_code_fallback_ohne_projektjson(tmp_path):
+    os.makedirs(os.path.join(tmp_path, "p"), exist_ok=True)
+    # keine projekt.json -> Legacy: globale Vorgabe ('de') bleibt stehen
+    assert transcribe._datei_whisper_code(os.path.join(tmp_path, "p"), "v1", "de") == "de"
