@@ -25,6 +25,17 @@ export type ProviderInfo = {
   base: string; default_model: string; keys_url: string; hint: string;
 };
 export type WhisperChoice = { id: string; label: string; hint: string };
+/** Sprach-Auswahl pro Projekt (Backend liefert die zur Verfuegung stehenden Ids + Labels). */
+export type SprachChoice = { id: string; label: string; hint: string };
+export type TiefeChoice = { id: string; label: string };
+/** Per-Projekt-Einstellungen: gewaehlte Sprache + Korrekturtiefe, plus die Wahlmoeglichkeiten,
+ *  die der Backend anbietet (fuer Select/Dropdown in der Arbeitsflaeche). */
+export type ProjectEinstellungen = {
+  sprache: string
+  korrektur: string
+  sprach_choices: SprachChoice[]
+  tiefen: TiefeChoice[]
+};
 // `device` gilt der torch-Welt (Sprechertrennung, kann "mps"), `asr` der Transkription
 // (faster-whisper/CTranslate2, nur "cuda"/"cpu"). Auf einem Mac laufen die beiden ausein-
 // ander — deshalb zwei Felder statt einem.
