@@ -290,8 +290,10 @@ describe('DateiEinstellungenDialog', () => {
   it('zeigt bei nur-Tiefe-Änderung den Korrektur-Knopf', async () => {
     vi.spyOn(api, 'getFileEinstellungen').mockResolvedValue(BASIS)
     render(<DateiEinstellungenDialog project="p" base="a" file={datei()} offen />)
-    await screen.findByText('Voll (mit Dialekt)')   // SelectTrigger zeigt die Tiefen-Auswahl
-    // Tiefe-Select (zweiter combobox) auf "Leicht" stellen:
+    // Readiness-Signal ist der Sprache-Trigger; der Tiefe-Trigger bleibt leer, weil
+    // korrektur='auto' in TIEFEN nicht vorkommt (gleiches Verhalten wie der Projekt-Dialog).
+    await screen.findByText('Schweizerdeutsch')
+    // Tiefe-Select (letzter combobox im Dialog) auf "Leicht" stellen:
     const comboboxes = document.body.querySelectorAll('[role="combobox"]')
     fireEvent.click(comboboxes[comboboxes.length - 1])
     fireEvent.click(await screen.findByText('Leicht'))
@@ -533,7 +535,9 @@ describe('Sprache & Korrektur-Tiefe', () => {
     render(<Huelle pfad="/p/P/a"><DateiMenue project="P" file={datei()} /></Huelle>)
     await menueOeffnen()
     fireEvent.click(await screen.findByText('Sprache & Korrektur-Tiefe'))
-    await screen.findByText('Voll')
+    // Readiness über den Sprache-Trigger; der Tiefe-Trigger bleibt leer (korrektur='auto'
+    // nicht in TIEFEN — dasselbe wie beim Projekt-Dialog).
+    await screen.findByText('Schweizerdeutsch')
     // Tiefe-Select ist der letzte combobox im Dialog.
     const comboboxes = document.body.querySelectorAll('[role="combobox"]')
     fireEvent.click(comboboxes[comboboxes.length - 1])
