@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { Bot, ScanText, X, FileAudio, Loader2 } from 'lucide-react'
@@ -54,10 +54,15 @@ export function ProjectWorkspace() {
   const sprachLabel = einstellungen
     ? (einstellungen.sprach_choices.find(c => c.id === einstellungen.sprache)?.label ?? einstellungen.sprache)
     : ''
+  // projektRef hält den aktuellen Projekt-Namen fuer reloadEinstellungen — die Antwort
+  // von Projekt A darf nicht landen, nachdem auf Projekt B gewechselt wurde (dasselbe
+  // Muster wie der `aktiv`-Riegel oben, nur fuer den Speichern-Reload-Pfad).
+  const projectRef = useRef(project)
+  projectRef.current = project
   const reloadEinstellungen = () => {
     if (!project) return
     getProjektEinstellungen(project)
-      .then(d => { setEinstellungen(d); setSprache(d.sprache) })
+      .then(d => { if (projectRef.current === project) { setEinstellungen(d); setSprache(d.sprache) } })
       .catch(() => {})
   }
 
