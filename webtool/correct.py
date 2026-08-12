@@ -42,11 +42,33 @@ except ValueError:                # Tippfehler in der .env darf den Korrekturlau
     CLAUDE_PARALLEL = 3
 _claude_slots = threading.Semaphore(CLAUDE_PARALLEL)
 _CREATE_NO_WINDOW = 0x08000000 if os.name == "nt" else 0
-DEFAULT_CONTEXT = (
-    "Interviews (gesprochene Sprache oft Schweizerdeutsch/Dialekt), von Whisper "
-    "large-v3 nach Standarddeutsch transkribiert. ASR-Fehler v.a. bei Eigennamen "
-    "und Dialektbegriffen."
-)
+
+
+def _default_context(ziel: str) -> str:
+    """Sprachneutraler Fallback-Kontext; `ziel` macht die Zielsprache explizit.
+
+    Ersetzt das alte feste `DEFAULT_CONTEXT`, das "oft Schweizerdeutsch/Dialekt"
+    einbrannte — falsch fuer jede nicht-schweizerdeutsche Aufnahme (z.B. ein
+    englischsprachiges Video kam als deutsches Transkript zurueck)."""
+    return (f"Interviews (gesprochene Sprache), von Whisper transkribiert. "
+            f"ASR-Fehler v.a. bei Eigennamen. Ziel: normalisieren zu {ziel or 'klarem Text'}.")
+
+
+def _ziel_dialekt(project: str, base: str) -> tuple:
+    """(ziel-Phrase, dialekt-Flag) fuer den Korrektur-Prompt einer Datei.
+
+    'auto' wird an der ROH-JSON aufgeloest (Whispers detektierter language-Code);
+    Dialekt ist dabei stets aus (ch wird nie auto-detektiert). Eine explizite
+    Nutzerauswahl von 'ch' ist der einzige Weg, dialekt=True zu bekommen."""
+    from . import projekt as _pj, sprachen as _s
+    sid = _pj.datei_sprache(project, base)
+    if sid == "auto":
+        try:
+            code = _load(os.path.join(paths.transkripte_dir(project), base + ".json")).get("language")
+        except (OSError, json.JSONDecodeError):
+            code = None
+        sid = _s.von_whisper_code(code) if code else "de"
+    return _s.ziel_phrase(sid), _s.ist_dialekt(sid)
 
 
 def bases(project: str) -> list:
@@ -283,11 +305,12 @@ def _ask_llm(prompt: str, inputs: list, output: str) -> None:
             print(f"  KI-Anbieter: {e}", flush=True)
 
 
-def _glossary_prompt(gpath: str, raw_files: list, context: str) -> str:
+def _glossary_prompt(gpath: str, raw_files: list, context: str,
+                     ziel: str = "lesbarem Standarddeutsch") -> str:
     files = "\n".join(raw_files)
     return f"""Du erstellst ein GEMEINSAMES Glossar, mit dem anschliessend mehrere Interview-Transkripte KONSISTENT korrigiert werden.
 
-Projekt-Kontext: {context or DEFAULT_CONTEXT}
+Projekt-Kontext: {context or _default_context(ziel)}
 
 Lies ALLE folgenden Roh-Transkripte vollständig (Read-Tool):
 {files}
@@ -321,11 +344,15 @@ def _scope(id_range, known: str = "") -> tuple:
 
 
 def _correct_prompt(base: str, tagged_path: str, cpath: str, gjson: str, context: str,
-                    id_range=None, known: str = "") -> str:
+                    id_range=None, known: str = "",
+                    ziel: str = "lesbarem Standarddeutsch", dialekt: bool = True) -> str:
     block, scope = _scope(id_range, known)
-    return f"""Du korrigierst EIN Interview-Transkript SEGMENT FÜR SEGMENT (oft Schweizerdeutsch -> lesbares Standarddeutsch) und labelst die Sprecher.
+    einleitung = ("oft Schweizerdeutsch -> lesbares Standarddeutsch" if dialekt
+                  else f"in {ziel}")
+    dialekt_hinweis = " (Schweizer „ss“)" if dialekt else ""
+    return f"""Du korrigierst EIN Interview-Transkript SEGMENT FÜR SEGMENT ({einleitung}) und labelst die Sprecher.
 
-Projekt-Kontext: {context or DEFAULT_CONTEXT}
+Projekt-Kontext: {context or _default_context(ziel)}
 {block}
 1) Lies die Rohsegmente vollständig (Read-Tool) aus:
 {tagged_path}
@@ -334,7 +361,7 @@ Projekt-Kontext: {context or DEFAULT_CONTEXT}
 Gemeinsames Glossar (für konsistente Schreibweisen — nutze es, ergänze nichts Erfundenes):
 {gjson or "(keins)"}
 
-2) KORRIGIEREN: klare ASR-Fehler mit Kontext + Glossar verbessern, zu lesbarem Standarddeutsch normalisieren (Schweizer „ss“). BLEIB TREU: nichts erfinden, den Sinn nicht verändern, nicht über das Nötige hinaus glätten (Füllwörter wie „äh“/„ähm“ dürfen dezent weg). Entferne die [[...]]-Markierungen im Ausgabetext.
+2) KORRIGIEREN: klare ASR-Fehler mit Kontext + Glossar verbessern, zu {ziel} normalisieren{dialekt_hinweis}. BLEIB TREU: nichts erfinden, den Sinn nicht verändern, nicht über das Nötige hinaus glätten (Füllwörter wie „äh“/„ähm“ dürfen dezent weg). Entferne die [[...]]-Markierungen im Ausgabetext.
 3) PRO SEGMENT: gib für JEDE Segment-ID {scope} GENAU EINEN Eintrag {{id, speaker, text}} zurück — keine ID auslassen, keine Segmente zusammenfassen (die Redebeitrags-Bündelung passiert später).
 4) SPRECHER: Das akustische (Sprecher N)-Präfix ist die WAHRHEIT, WER spricht — vergib pro Cluster GENAU EINEN konsistenten Namen: meist „Interviewer“ (stellt Fragen) und die befragte Person (Name/Betrieb falls genannt, sonst „Befragte Person“). Du DARFST zwei Cluster demselben Namen zuordnen, wenn klar dieselbe Person. Eine Cluster-Grenze nur überschreiben, wenn sie offensichtlich falsch ist (z.B. ein einzelnes Rückkanal-Wort). Fehlt das Präfix, ordne nach Inhalt zu (wie bisher). Gib JEDEM Segment einen Sprecher.
 5) UNSICHER: wirklich unklare Stellen NICHT raten — nah am Original belassen und unter annotations vermerken.
@@ -357,14 +384,15 @@ Gib ausser der geschriebenen Datei nichts weiter aus."""
 
 
 def _verify_prompt(base: str, tagged_path: str, cpath: str, context: str, id_range=None,
-                   known: str = "") -> str:
+                   known: str = "",
+                   ziel: str = "lesbarem Standarddeutsch", dialekt: bool = True) -> str:
     # `known` MUSS mit: der Treue-Pass prueft ausdruecklich die Sprecherzuordnung und schreibt
     # die Datei neu. Ohne die schon vergebenen Namen taufte er Block 2..n um und haette den
     # Anker aus Block 1 wieder zunichte gemacht.
     block, scope = _scope(id_range, known)
     return f"""Du prüfst eine bereits erstellte SEGMENT-GENAUE Korrektur auf TREUE gegen das Rohtranskript (TREUE-CHECK) und schreibst die geprüfte Fassung zurück.
 
-Projekt-Kontext: {context or DEFAULT_CONTEXT}
+Projekt-Kontext: {context or _default_context(ziel)}
 {block}
 1) Lies das ROH vollständig (Read-Tool) aus:
 {tagged_path}
@@ -481,20 +509,21 @@ def _merge_parts(docs: list, base: str) -> dict:
 
 
 def _correct_one(base: str, tagged: str, target: str, gjson: str, context: str, verify: bool,
-                 id_range=None, known: str = "", part: str = "") -> None:
+                 id_range=None, known: str = "", part: str = "",
+                 ziel: str = "lesbarem Standarddeutsch", dialekt: bool = True) -> None:
     """Ein claude-Korrekturlauf (+ optionaler Treue-Pass) mit Ziel `target` — ganze Datei
     oder ein ID-Block. Die Fortschritts-Zeilen sind Vertrag mit dem Frontend-Job-Parser
     (webtool/frontend/src/lib/jobPhases.ts) — Format nicht ändern. `part` (z.B. ' · Block 2/3')
     gehört in JEDE Zeile: bei parallelen Läufen verschränken sich die Ausgaben, eine Zeile
     ohne Basisnamen liesse sich keinem Lauf mehr zuordnen."""
     print(f"→ Korrigiere {base}{part} …", flush=True)
-    _ask_llm(_correct_prompt(base, tagged, target, gjson, context, id_range, known),
+    _ask_llm(_correct_prompt(base, tagged, target, gjson, context, id_range, known, ziel, dialekt),
              [tagged], target)
     if verify and _valid_correction(target):    # Treue-Pass nur auf eine GÜLTIGE Erst-Korrektur
         print(f"→ Verifiziere {base}{part} (Treue gegen Roh) …", flush=True)
         good = _load(target)                    # Snapshot: darf nicht durch einen kaputten Verify verloren gehen
         # Der Treue-Pass prueft die Korrektur GEGEN das Roh -> ohne API-Werkzeuge braucht er beide Dateien.
-        _ask_llm(_verify_prompt(base, tagged, target, context, id_range, known),
+        _ask_llm(_verify_prompt(base, tagged, target, context, id_range, known, ziel, dialekt),
                  [tagged, target], target)
         if not _valid_correction(target):       # Verify hat die gültige Korrektur zerstört -> zurückrollen
             paths.atomic_write(target, json.dumps(good, ensure_ascii=False, indent=1))
@@ -502,7 +531,8 @@ def _correct_one(base: str, tagged: str, target: str, gjson: str, context: str, 
 
 
 def _correct_file(project: str, base: str, gjson: str, context: str, verify: bool,
-                  force: bool = False) -> None:
+                  force: bool = False,
+                  ziel: str = "lesbarem Standarddeutsch", dialekt: bool = True) -> None:
     """Korrektur für EINE Datei -> <base>.correction.json.
 
     Bis CHUNK_SEGMENTS Segmente genau wie bisher: ein claude-Aufruf schreibt direkt die
@@ -519,7 +549,7 @@ def _correct_file(project: str, base: str, gjson: str, context: str, verify: boo
     ids = _tagged_ids(tagged)                       # tagged.txt — das schreibt cmd_prep bei JEDEM Lauf neu,
                                                     # womit kein Block je „neuer“ wäre und der Resume tot.
     if len(ids) <= CHUNK_SEGMENTS:
-        _correct_one(base, tagged, cpath, gjson, context, verify)
+        _correct_one(base, tagged, cpath, gjson, context, verify, ziel=ziel, dialekt=dialekt)
         return
     chunks = [ids[i:i + CHUNK_SEGMENTS] for i in range(0, len(ids), CHUNK_SEGMENTS)]
     clusters = _load_diar_clusters(tdir, base) if _diarize_enabled() else {}
@@ -539,7 +569,8 @@ def _correct_file(project: str, base: str, gjson: str, context: str, verify: boo
             print(f"  ↷ {base}{label} schon vorhanden", flush=True)
         else:
             _correct_one(base, tagged, ppath, gjson, context, verify,
-                         id_range=(chunk[0], chunk[-1]), known=known, part=label)
+                         id_range=(chunk[0], chunk[-1]), known=known, part=label,
+                         ziel=ziel, dialekt=dialekt)
         if _valid_correction(ppath):
             print(f"  ✓ {base}{label} fertig", flush=True)
             return _load(ppath)

@@ -772,3 +772,53 @@ def test_run_meldet_seinen_wirkungsbereich(project, monkeypatch, capsys):
     zeilen = [z for z in capsys.readouterr().out.splitlines() if z.startswith(jobs.SCOPE_PREFIX)]
     assert len(zeilen) == 1, "genau eine Meldung, und zwar vor der Arbeit"
     assert set(zeilen[0][len(jobs.SCOPE_PREFIX):].split("\t")) == {"S1"}
+
+
+# ---- Sprachbewusste Prompts (ziel + dialekt) ----
+# Die Quotes im Dialekt-Hinweis sind Deutsche Typografen-Anfuehrung: „ss«
+# (U+201E ... U+201C). Literale hier in Ascii-Schreibweise („/“),
+# damit ein Editor mit falschem Encoding sie nicht still verbiegt.
+_DIALEKT_HINT = "Schweizer „ss“"        # (Schweizer „ss«)
+_EINLEITUNG_CH = "Schweizerdeutsch ->"            # (oft Schweizerdeutsch -> ...)
+
+
+def test_correct_prompt_englisch_ohne_dialekt():
+    p = correct._correct_prompt("b", "t.txt", "c.json", "g.json", "",
+                                ziel="clear English", dialekt=False)
+    assert "clear English" in p
+    assert _DIALEKT_HINT not in p                  # Dialekt-Hinweis nur bei dialekt
+    assert _EINLEITUNG_CH not in p
+
+
+def test_correct_prompt_ch_mit_dialekt():
+    # Defaults = Schweizerdeutsch: muss byte-identisch mit dem alten Prompt sein.
+    p = correct._correct_prompt("b", "t.txt", "c.json", "g.json", "")
+    assert "Standarddeutsch" in p
+    assert _DIALEKT_HINT in p                       # CH: Dialekt-Hinweis steht
+    assert _EINLEITUNG_CH in p
+
+
+def test_verify_prompt_nimmt_ziel_an():
+    p = correct._verify_prompt("b", "t.txt", "c.json", "", ziel="clear English", dialekt=False)
+    assert "clear English" in p
+
+
+def test_ziel_dialekt_explicit_ch(tmp_path, monkeypatch):
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    os.makedirs(os.path.join(tmp_path, "p"), exist_ok=True)
+    from webtool import projekt
+    projekt.speichern("p", {"sprache": "ch"})
+    ziel, dialekt = correct._ziel_dialekt("p", "x")
+    assert "Standarddeutsch" in ziel and dialekt is True
+
+
+def test_ziel_dialekt_auto_nie_dialekt(tmp_path, monkeypatch):
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    tdir = os.path.join(tmp_path, "p", "transkripte")
+    os.makedirs(tdir, exist_ok=True)
+    with open(os.path.join(tdir, "x.json"), "w") as fh:
+        json.dump({"language": "en"}, fh)          # Whisper detektierte Englisch
+    from webtool import projekt
+    projekt.speichern("p", {"sprache": "auto"})
+    ziel, dialekt = correct._ziel_dialekt("p", "x")
+    assert "English" in ziel and dialekt is False
