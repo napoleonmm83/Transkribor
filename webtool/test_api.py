@@ -959,7 +959,7 @@ def test_datei_umbenennen_unbekannt_gibt_404_und_prueft_namen(client, monkeypatc
 
 # --- Projekteinstellungen: Sprache + Korrektur-Tiefe (Task 6) -----------------
 
-def test_einstellungen_default_fuer_neues_projjekt(client, tmp_projekt):
+def test_einstellungen_default_fuer_neues_projekt(client, tmp_projekt):
     r = client.get(f"/api/projects/{tmp_projekt}/einstellungen")
     assert r.status_code == 200
     d = r.json()
