@@ -36,7 +36,7 @@
 
 ---
 
-## Task F1: Typen + API-Client
+## Task 1: Typen + API-Client
 
 **Files:** Modify `lib/types.ts`, `lib/api.ts`, `lib/api.test.ts`.
 
@@ -129,7 +129,7 @@ export async function saveProjektEinstellungen(project: string, patch: Partial<P
 
 ---
 
-## Task F2: `ProjektEinstellungenDialog`
+## Task 2: `ProjektEinstellungenDialog`
 
 **Files:** Create `components/ProjektEinstellungenDialog.tsx` (+ `.test.tsx`).
 
@@ -176,7 +176,7 @@ describe('ProjektEinstellungenDialog', () => {
 
 ---
 
-## Task F3: `ProjektMenue` — Eintrag + Dialog-Hosting
+## Task 3: `ProjektMenue` — Eintrag + Dialog-Hosting
 
 **Files:** Modify `components/ProjektMenue.tsx`.
 
@@ -194,7 +194,7 @@ describe('ProjektEinstellungenDialog', () => {
 
 ---
 
-## Task F4: Sprach-`<Select>` am Upload und URL-Import
+## Task 4: Sprach-`<Select>` am Upload und URL-Import
 
 **Files:** Modify `components/UploadDropzone.tsx` (+ test), `components/UrlFetch.tsx` (+ test).
 
@@ -212,7 +212,7 @@ describe('ProjektEinstellungenDialog', () => {
 
 ---
 
-## Task F5: `ProjectWorkspace` — Einstellungen laden, reichen, Badge
+## Task 5: `ProjectWorkspace` — Einstellungen laden, reichen, Badge
 
 **Files:** Modify `pages/ProjectWorkspace.tsx` (+ ggf. Test).
 
@@ -230,7 +230,7 @@ describe('ProjektEinstellungenDialog', () => {
 
 ---
 
-## Task F6: README korrekt machen
+## Task 6: README korrekt machen
 
 **Files:** Modify `README.md` (kein Code, kein Test).
 
