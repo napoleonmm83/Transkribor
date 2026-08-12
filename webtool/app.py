@@ -619,6 +619,11 @@ def fetch_urls(project: str, body: FetchBody):
         urls = [fetch_mod.check_url(u) for u in urls]   # zweite Instanz: fetch.py prueft erneut
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    # Sprache am Endpoint pruefen: fetch.py traegt sie erst im Subprozess ein, ein spaetes
+    # Scheitern liesse den Download erst laufen. gleiche Quelle wie die PUT-Endpunkte (#139).
+    fehler = _sprachen.pruef_fehler(sprache=body.sprache)
+    if fehler:
+        raise HTTPException(status_code=400, detail=fehler)
     # Eigene Job-Art: der Download braucht keine GPU. Als "transcribe" gefuehrt wuerde er von
     # jeder laufenden Transkription blockiert — und die laeuft seit dem Auto-Trigger oft.
     # Sprache pro geladener Base: fetch.py liest TRANSKRIBOR_FETCH_SPRACHE und traegt sie ein,
@@ -757,6 +762,10 @@ def upload_audio(project: str, file: UploadFile = File(...), sprache: str = Form
     _validate(base)
     if ext not in AUDIO_EXT:
         raise HTTPException(status_code=400, detail=f"nicht unterstützte Endung: {ext or '(keine)'}")
+    # Sprache VOR dem Datei-Schreiben pruefen — sonst laege bei 400 eine orphan-Audiodatei.
+    fehler = _sprachen.pruef_fehler(sprache=sprache)
+    if fehler:
+        raise HTTPException(status_code=400, detail=fehler)
     adir = os.path.join(paths.project_dir(project), "audio")
     os.makedirs(adir, exist_ok=True)
     dest = os.path.join(adir, base + ext)
