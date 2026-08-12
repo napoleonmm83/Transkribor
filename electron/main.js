@@ -14,6 +14,14 @@ const protokoll = require('./protokoll')
 const updater = require('./updater')
 const { fensterOptionen, TITELLEISTE_HOEHE, farbeGueltig, fortschrittGueltig } = require('./fenster')
 
+// Vor app.whenReady: HTTP/2 abschalten. autoUpdater.checkForUpdates() nutzt Electrons
+// net = HTTP/2, und GitHub/Fastly verweigert dessen Stream sporadisch/persistent mit
+// net::ERR_HTTP2_SERVER_REFUSED_STREAM — der Check scheitert vor jedem Versionsabgleich,
+// Betroffene sehen nie ein Update (#150). HTTP/1.1 umgeht das (gh holt latest.yml so
+// problemlos). Muss VOR dem ready-Event stehen. Einziger externer Chromium-Net-Zugriff
+// der App ist dieser Check (uvicorn=localhost, yt-dlp=eigener Subprozess) → risikolos.
+app.commandLine.appendSwitch('disable-http2')
+
 let win = null
 let aktualisierer = null
 let bereit = false
