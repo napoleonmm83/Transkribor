@@ -1,0 +1,72 @@
+"""projekt.json: Sprache + Korrektur-Tiefe pro Projekt und pro Datei.
+
+Liegt im Projektordner neben kontext.md. Fehlt die Datei oder ein Wert, gilt der
+Projekt-Standard bzw. der System-Default (ch/auto) -> Legacy-Verhalten bleibt erhalten."""
+import json, os
+from . import paths, sprachen
+
+
+def _pfad(project: str) -> str:
+    return os.path.join(paths.project_dir(project), "projekt.json")
+
+
+def _write(project: str, data: dict) -> None:
+    # Trust-Boundary: project kommt aus der URL -> validieren, dann Ordner
+    # anlegen (atomic_write macht keine Eltern). Ein zentraler Schreibpfad
+    # fuer speichern + setze_datei -> keine Divergenz (siehe useDoc.ts-Regel).
+    paths.safe_name(project)
+    os.makedirs(paths.project_dir(project), exist_ok=True)
+    paths.atomic_write(_pfad(project), json.dumps(data, ensure_ascii=False, indent=1))
+
+
+def laden(project: str) -> dict:
+    try:
+        with open(_pfad(project), encoding="utf-8") as fh:
+            data = json.load(fh)
+    except (OSError, json.JSONDecodeError):
+        data = {}
+    if not isinstance(data, dict):
+        data = {}
+    return {
+        "sprache": data.get("sprache", sprachen.SPRACH_DEFAULT),
+        "korrektur": data.get("korrektur", sprachen.TIEFE_DEFAULT),
+        "dateien": {k: v for k, v in (data.get("dateien") or {}).items() if isinstance(v, dict)},
+    }
+
+
+def speichern(project: str, patch: dict) -> dict:
+    cur = laden(project)
+    for k in ("sprache", "korrektur"):
+        if k in patch and isinstance(patch[k], str):
+            cur[k] = patch[k]
+    _write(project, cur)
+    return cur
+
+
+def setze_datei(project: str, base: str, sprache=None, korrektur=None) -> dict:
+    cur = laden(project)
+    eintrag = dict(cur["dateien"].get(base, {}))
+    if sprache is not None:
+        eintrag["sprache"] = sprache
+    if korrektur is not None:
+        eintrag["korrektur"] = korrektur
+    cur["dateien"][base] = eintrag
+    _write(project, cur)
+    return cur
+
+
+def datei_sprache(project: str, base: str) -> str:
+    d = laden(project)
+    return d["dateien"].get(base, {}).get("sprache") or d["sprache"]
+
+
+def datei_korrektur(project: str, base: str) -> str:
+    d = laden(project)
+    return d["dateien"].get(base, {}).get("korrektur") or d["korrektur"]
+
+
+def tiefe_effektiv(project: str, base: str) -> str:
+    tiefe = datei_korrektur(project, base)
+    if tiefe != "auto":
+        return tiefe
+    return "voll_dialekt" if datei_sprache(project, base) == "ch" else "voll"
