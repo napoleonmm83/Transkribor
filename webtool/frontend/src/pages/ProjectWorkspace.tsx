@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { Bot, ScanText, X, FileAudio, Loader2 } from 'lucide-react'
@@ -9,12 +9,14 @@ import { DateiMenue } from '@/components/DateiMenue'
 import { FileStatusPill } from '@/components/FileStatusPill'
 import { UploadDropzone } from '@/components/UploadDropzone'
 import { UrlFetch } from '@/components/UrlFetch'
+import { ProjektMenue } from '@/components/ProjektMenue'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
-import { startTranscribe, startCorrect, cancelJob } from '@/lib/api'
+import { Badge } from '@/components/ui/badge'
+import { startTranscribe, startCorrect, cancelJob, getProjektEinstellungen } from '@/lib/api'
 import { describePhases, KIND_LABEL } from '@/lib/jobPhases'
 import { cn } from '@/lib/utils'
-import type { StartJob } from '@/lib/types'
+import type { ProjectEinstellungen, StartJob } from '@/lib/types'
 
 export function ProjectWorkspace() {
   const { project } = useParams<{ project: string }>()
@@ -30,6 +32,34 @@ export function ProjectWorkspace() {
   // ('Timeline 1' liegt in mehreren), sonst zeigt die Pille den fremden Status.
   const phases = useMemo(() => mergePhases(meine), [meine])
   const running = meine.length > 0
+
+  // Per-Projekt-Einstellungen (Sprache, Korrektur-Tiefe) — fuer Badge + Sprachwaehler am
+  // Upload/URL-Import. Die Vorgabe kommt aus projekt.json (Backend-Default: Schweizerdeutsch),
+  // der Wähler am Upload ist ein Override fuer genau diese Datei und schreibt nicht zurueck.
+  const [einstellungen, setEinstellungen] = useState<ProjectEinstellungen | null>(null)
+  const [sprache, setSprache] = useState('')
+  useEffect(() => {
+    if (!project) return
+    let aktiv = true
+    setEinstellungen(null)         // Projektwechsel: Badge/Select verschwinden bis neu geladen
+    getProjektEinstellungen(project)
+      .then(d => { if (aktiv) { setEinstellungen(d); setSprache(d.sprache) } })
+      .catch(() => { /* Badge/Select bleiben aus — Upload/Korrektur laufen unverändert */ })
+    return () => { aktiv = false }
+  }, [project])
+
+  // F4-Handoff: sprachChoices erst durchreichen, wenn einstellungen+sprache da sind — sonst
+  // wuerde der Select mit value="" gerendert (Radix warnt bei leerem Wert).
+  const sprachChoices = einstellungen && sprache ? einstellungen.sprach_choices : []
+  const sprachLabel = einstellungen
+    ? (einstellungen.sprach_choices.find(c => c.id === einstellungen.sprache)?.label ?? einstellungen.sprache)
+    : ''
+  const reloadEinstellungen = () => {
+    if (!project) return
+    getProjektEinstellungen(project)
+      .then(d => { setEinstellungen(d); setSprache(d.sprache) })
+      .catch(() => {})
+  }
 
   // Discovery laufender Jobs steht im ProjektDatenProvider — sie gilt fuer ALLE Projekte,
   // nicht nur fuer das offene. `adopt` bleibt hier fuer die selbst gestarteten Jobs.
@@ -53,6 +83,7 @@ export function ProjectWorkspace() {
   return (
     <div className="p-6 sm:p-8">
       <PageHeader rubrik="Projekt" titel={project ?? ''} zurueck="/" zurueckText="Übersicht">
+        {sprachLabel && <Badge variant="outline">{sprachLabel}</Badge>}
         <Button variant="outline" size="sm"
           onClick={() => startJob(() => startTranscribe(project!), 'transcribe', 'Transkribieren')}>
           <ScanText className="size-4" /> Transkribieren
@@ -65,6 +96,10 @@ export function ProjectWorkspace() {
             <Bot className="size-4" /> Korrigieren
           </Button>
         </span>
+        <ProjektMenue project={project!}
+          onUmbenannt={neu => navigate(`/p/${encodeURIComponent(neu)}`)}
+          onGeloescht={() => navigate('/')}
+          onEinstellungenGeaendert={reloadEinstellungen} />
       </PageHeader>
 
       {/* Eine Leiste je laufendem Job — Transkription und Korrektur laufen nebeneinander,
@@ -90,13 +125,17 @@ export function ProjectWorkspace() {
       <section className="mb-8">
         <h2 className="rubrik mb-3">Material hinzufügen</h2>
         <div className="space-y-3">
-          <UploadDropzone project={project!} onDone={job => {
+          <UploadDropzone project={project!}
+            sprache={sprache} sprachChoices={sprachChoices} onSpracheChange={setSprache}
+            onDone={job => {
             refresh(); refreshFiles()
             // Sofort adoptieren statt auf den naechsten Poll zu warten — der Balken soll direkt stehen.
             if (job?.started) { adopt(job.job_id, project!, 'transcribe'); toast.success('Transkription gestartet') }
             else if (job) toast.info('Transkription läuft schon — die neuen Dateien kommen danach dran.')
           }} />
-          <UrlFetch project={project!} onStart={res => {
+          <UrlFetch project={project!}
+            sprache={sprache} sprachChoices={sprachChoices} onSpracheChange={setSprache}
+            onStart={res => {
             if (!res.started) { toast.warning('Es läuft bereits ein Import für dieses Projekt.'); return }
             adopt(res.job_id, project!, 'fetch')
             toast.success('Herunterladen gestartet — Transkription folgt automatisch')
