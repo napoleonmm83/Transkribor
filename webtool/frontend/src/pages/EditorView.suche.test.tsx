@@ -25,6 +25,7 @@ vi.mock('@/hooks/useDoc', () => ({
     exportDownload: vi.fn(), reload: vi.fn(), vergiss: vi.fn() }),
 }))
 vi.mock('@/hooks/useEditorBruecke', () => ({ useEditorMelden: () => {} }))
+vi.mock('@/hooks/useActiveJob', () => ({ useActiveJob: () => ({ onSettled: () => () => {} }) }))
 vi.mock('@/components/PlayerDock', () => ({ PlayerDock: () => null }))
 
 function view() {

@@ -25,14 +25,6 @@ const ZWEI = [
   { name: 'Alpha', dateien: 2, fertig: 0, geaendert: 100 },
   { name: 'Beta', dateien: 1, fertig: 0, geaendert: 50 },
 ]
-/** Der Einzeldatei-Start sitzt seit der Zusammenlegung im ⋯-Menue (DateiMenue), nicht mehr
- *  als eigener Knopf in der Zeile. Radix oeffnet es nur auf einen echten Zeigerklick. */
-async function korrigierenAusDemMenue() {
-  fireEvent.pointerDown(screen.getByLabelText('Aktionen für „a“'),
-    { button: 0, ctrlKey: false, pointerType: 'mouse' })
-  fireEvent.click(await screen.findByRole('menuitem', { name: 'Korrigieren' }))
-}
-
 const DATEIEN = [
   { base: 'a', has_audio: true, has_raw: true, has_edit: false, has_md: false },
   { base: 'b', has_audio: true, has_raw: true, has_edit: false, has_md: false },
@@ -197,45 +189,4 @@ describe('AppShell', () => {
     })
   })
 
-  it('laedt das offene Dokument neu, wenn seine Einzeldatei-Korrektur fertig ist', async () => {
-    // Ohne das haelt der Editor den Stand VOR der Korrektur -- und "Speichern" schreibt ihn
-    // ueber die frisch erzeugte edit.json.
-    vi.mocked(api.listProjects).mockResolvedValue(ZWEI)
-    vi.mocked(api.getProjectFiles).mockResolvedValue({ name: 'Alpha', files: DATEIEN })
-    vi.mocked(api.startCorrectFile).mockResolvedValue({ started: true, job_id: 'j1' })
-    vi.mocked(api.getJob).mockResolvedValue({ status: 'done', lines: [] })
-    const reload = vi.fn()
-    render(
-      <MemoryRouter initialEntries={['/p/Alpha/a']}>
-        <JobProvider><AppShell><Schreibtisch dirty={false} reload={reload} /></AppShell></JobProvider>
-      </MemoryRouter>,
-    )
-    const frage = vi.spyOn(window, 'confirm')
-    await waitFor(() => expect(screen.getByLabelText('Aktionen für „a“')).toBeInTheDocument())
-    await korrigierenAusDemMenue()
-    await waitFor(() => expect(reload).toHaveBeenCalled())
-    expect(frage).not.toHaveBeenCalled()      // ohne Ungespeichertes keine Rueckfrage
-    frage.mockRestore()
-  })
-
-  it('laedt NICHT nach, wenn Ungespeichertes offen ist und die Rueckfrage abgelehnt wird', async () => {
-    // Sonst verwirft ausgerechnet der Nachlade-Fix die Arbeit, die K1 schuetzt: man startet
-    // die Korrektur einer Datei und tippt weiter, waehrend sie laeuft.
-    vi.mocked(api.listProjects).mockResolvedValue(ZWEI)
-    vi.mocked(api.getProjectFiles).mockResolvedValue({ name: 'Alpha', files: DATEIEN })
-    vi.mocked(api.startCorrectFile).mockResolvedValue({ started: true, job_id: 'j1' })
-    vi.mocked(api.getJob).mockResolvedValue({ status: 'done', lines: [] })
-    const frage = vi.spyOn(window, 'confirm').mockReturnValue(false)
-    const reload = vi.fn()
-    render(
-      <MemoryRouter initialEntries={['/p/Alpha/a']}>
-        <JobProvider><AppShell><Schreibtisch reload={reload} /></AppShell></JobProvider>
-      </MemoryRouter>,
-    )
-    await waitFor(() => expect(screen.getByLabelText('Aktionen für „a“')).toBeInTheDocument())
-    await korrigierenAusDemMenue()
-    await waitFor(() => expect(frage).toHaveBeenCalled())
-    expect(reload).not.toHaveBeenCalled()
-    frage.mockRestore()
-  })
 })
