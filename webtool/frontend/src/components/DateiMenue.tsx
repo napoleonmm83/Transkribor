@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { useMatch, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
-import { Bot, MoreHorizontal, Pencil, RotateCcw, Trash2 } from 'lucide-react'
+import { Bot, Languages, MoreHorizontal, Pencil, RotateCcw, Trash2 } from 'lucide-react'
 import type { ProjectFile } from '@/lib/types'
 import { deleteFile, getDoc, renameFile, startCorrectFile, startRetranscribeFile } from '@/lib/api'
 import { UmbenennenDialog, sprecherNamen } from './UmbenennenDialog'
+import { DateiEinstellungenDialog } from './DateiEinstellungenDialog'
 import { useActiveJob } from '@/hooks/useActiveJob'
 import { useDateien, useProjekte } from '@/hooks/useProjektDaten'
 import { useEditorBruecke } from '@/hooks/useEditorBruecke'
@@ -39,6 +40,7 @@ export function DateiMenue({ project, file, aiReason }: {
 }) {
   const [dialog, setDialog] = useState<Aktion | null>(null)
   const [umbenennen, setUmbenennen] = useState(false)
+  const [einstellungen, setEinstellungen] = useState(false)
   const [sprecher, setSprecher] = useState<string[]>([])
   const { refresh } = useProjekte()
   const { refresh: refreshFiles } = useDateien()
@@ -123,6 +125,24 @@ export function DateiMenue({ project, file, aiReason }: {
     nachladen()
   }
 
+  /** Sprache/Tiefe geändert und gespeichert -> die nötige Neuberechnung anstossen. Sprache-Wechsel
+   *  dominiert (Neu-Transkription, die Kette zieht die Korrektur nach); nur Tiefe -> Neu-Korrektur
+   *  mit force=true (sonst überspränge correct.py eine human_edited-Datei still). Ohne has_raw
+   *  bleibt es beim Override — die nächste Transkription übernimmt ihn. */
+  const einstellungenGespeichert = ({ spracheGeaendert, tiefeGeaendert }: {
+    spracheGeaendert: boolean; tiefeGeaendert: boolean }) => {
+    toast.success(`Einstellungen für „${file.base}“ gespeichert`)
+    if (!file.has_raw) return
+    if (spracheGeaendert) {
+      jobStarten(() => startRetranscribeFile(project, file.base)
+        .then(res => { if (res.started) { editorVergessen(); wegVomEditor() }; return res }),
+        'transcribe', `Neu transkribieren ${file.base}`)
+    } else if (tiefeGeaendert) {
+      jobStarten(() => startCorrectFile(project, file.base, true), 'correct',
+        `Neu korrigieren ${file.base}`, korrekturFertig)
+    }
+  }
+
   // Ohne Rueckfrage nur dort, wo nichts verloren geht: eine noch nie korrigierte Datei.
   const waehlen = (was: Aktion) => {
     if (was === 'correct' && !file.has_edit) return ausfuehren('correct')
@@ -179,6 +199,9 @@ export function DateiMenue({ project, file, aiReason }: {
             <DropdownMenuItem onSelect={umbenennenOeffnen}>
               <Pencil /> Umbenennen
             </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => setEinstellungen(true)}>
+              <Languages /> Sprache &amp; Korrektur-Tiefe
+            </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" onSelect={() => waehlen('delete')}>
               <Trash2 /> Löschen
@@ -191,6 +214,10 @@ export function DateiMenue({ project, file, aiReason }: {
         titel="Aufnahme umbenennen" vorschlaege={sprecher}
         beschreibung="Audio und alle Transkripte dieser Aufnahme wandern mit. Nichts wird neu gerechnet."
         onSpeichern={umbenannt} />
+
+      <DateiEinstellungenDialog project={project} base={file.base} file={file}
+        offen={einstellungen} onOpenChange={setEinstellungen}
+        onGespeichert={einstellungenGespeichert} />
 
       {/* Ausserhalb des Menues: ein Dialog IM Menue wird beim Schliessen mit ausgehaengt. */}
       <AlertDialog open={dialog !== null} onOpenChange={o => { if (!o) setDialog(null) }}>
