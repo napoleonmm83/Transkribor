@@ -146,9 +146,11 @@ lässt sich beides nachträglich ändern. Eine andere Sprache bedeutet Neu-Trans
 alte Transkript wird verworfen, das Audio bleibt erhalten; eine andere Korrektur-Tiefe startet
 nur die Korrektur neu.
 
-**Was passiert mit meinen Dateien?** Sie bleiben in deinem Benutzerordner. Transkribor löscht
-nichts von allein, und das Original-Transkript bleibt immer erhalten — deine Korrekturen
-liegen daneben, nicht darüber.
+**Was passiert mit meinen Dateien?** Sie bleiben in deinem Benutzerordner — Transkribor löscht
+nichts von allein. Transkript und Korrekturen bleiben erhalten, bis du eine Aufnahme **neu
+transkribierst** oder ihre **Sprache änderst**: dann wird das Transkript aus dem Audio neu
+erstellt, das bisherige Transkript samt Korrekturen fällt dabei weg (das Audio bleibt).
+Löschen kannst du nur du selbst, bewusst über das ⋯-Menü.
 
 ---
 
