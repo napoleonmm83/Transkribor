@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, act } from '@testing-library/react'
+import { render, act, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import { EditorView } from './EditorView'
 import { JobProvider } from '@/hooks/useActiveJob'
@@ -96,6 +96,81 @@ describe('EditorView (Stub)', () => {
       expect(vi.mocked(api.getProjectFiles).mock.calls.length).toBeGreaterThan(basis)
     } finally {
       vi.useRealTimers()
+    }
+  })
+})
+
+describe('#123 — Editor lädt nach ferngestarteter Korrektur neu', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    einstellungen({})
+    vi.mocked(api.getDoc).mockResolvedValue(doc)
+    vi.mocked(api.getProjectFiles).mockResolvedValue({ name: 'Demo',
+      files: [{ base: 'S1', has_audio: true, has_raw: true, has_edit: true, has_md: false }] })
+  })
+
+  /** Job laeuft erst und wird dann terminal — so laesst sich der Reload-getDoc sauber vom Mount-
+   *  getDoc trennen, und der dirty-Fall kann das Feld anpassen, BEVOR die Korrektur fertig wird. */
+  const richten = (lines: string[]) => {
+    let done = false
+    vi.mocked(api.listProjects).mockResolvedValue([
+      { name: 'Demo', dateien: 1, fertig: 0, geaendert: 0, active_jobs: [{ id: 'j1', kind: 'correct' }] },
+    ])
+    vi.mocked(api.getJob).mockImplementation(() =>
+      Promise.resolve(done ? { status: 'done', lines } : { status: 'running', lines: [] }))
+    const r = render(
+      <TooltipProvider>
+        <MemoryRouter initialEntries={['/p/Demo/S1']}>
+          <JobProvider intervalMs={10}>
+            <ProjektDatenProvider>
+              <EditorBrueckeProvider>
+                <Routes><Route path="/p/:project/:base" element={<EditorView />} /></Routes>
+              </EditorBrueckeProvider>
+            </ProjektDatenProvider>
+          </JobProvider>
+        </MemoryRouter>
+      </TooltipProvider>,
+    )
+    return { container: r.container, fertig: () => { done = true } }
+  }
+
+  it('lädt das offene Dokument nach, wenn die Korrektur fertig wird (auch ferngestartet)', async () => {
+    // perBase['S1']==='done' via 'apply: S1 -> edit.json' — der Wirkungsbereich dieses Laufs.
+    const { fertig } = richten(['apply: S1 -> edit.json'])
+    await waitFor(() => expect(api.getDoc).toHaveBeenCalledTimes(1))   // Mount
+    fertig()
+    await waitFor(() => expect(api.getDoc).toHaveBeenCalledTimes(2), { timeout: 3000 })
+  })
+
+  it('lädt NICHT nach, wenn die Datei übersprungen wurde (perBase skipped ändert nichts)', async () => {
+    const { fertig } = richten(['apply: SKIP S1 (human_edited=true)'])  // perBase['S1']='skipped'
+    await waitFor(() => expect(api.getDoc).toHaveBeenCalledTimes(1))
+    const basis = vi.mocked(api.getProjectFiles).mock.calls.length
+    fertig()
+    // onSettled ist gelaufen (Dateiliste aktualisiert) -> der Editor-Listener hatte seinen Tick,
+    // entschied aber 'skipped' und lud nicht nach.
+    await waitFor(() => expect(vi.mocked(api.getProjectFiles).mock.calls.length).toBeGreaterThan(basis), { timeout: 3000 })
+    expect(api.getDoc).toHaveBeenCalledTimes(1)
+  })
+
+  it('fragt bei ungespeicherten Änderungen nach und behält ohne Bestätigung die eigene Fassung', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    try {
+      const { container, fertig } = richten(['apply: S1 -> edit.json'])
+      await waitFor(() => expect(api.getDoc).toHaveBeenCalledTimes(1))
+      // Dirty machen: Kontextfeld öffnen, ändern, übernehmen (updateDoc -> beruehrt -> dirty).
+      await act(async () => { fireEvent.click(screen.getByTitle('Kontext bearbeiten')) })
+      const feld = container.querySelector('textarea')!
+      await act(async () => {
+        fireEvent.change(feld, { target: { value: 'meine Notiz' } })
+        fireEvent.blur(feld)
+      })
+      fertig()
+      await waitFor(() => expect(confirm).toHaveBeenCalled(), { timeout: 3000 })
+      // Abbrechen -> eigene Fassung behalten: kein Reload (weiterhin nur der Mount-getDoc).
+      expect(api.getDoc).toHaveBeenCalledTimes(1)
+    } finally {
+      confirm.mockRestore()
     }
   })
 })

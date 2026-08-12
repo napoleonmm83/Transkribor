@@ -55,7 +55,7 @@ export function DateiMenue({ project, file, aiReason }: {
   // Wer die offene Datei VERWIRFT, muss den Editor verlassen: der haelt das alte Dokument im
   // Speicher, und "Speichern" schriebe es zurueck — beim Loeschen legt es die Datei sogar neu
   // an. Fuer die Korrektur gilt das NICHT: dort bleibt das Dokument gueltig, und der Editor
-  // laedt es nach dem Lauf nach (s. korrekturFertig).
+  // laedt es nach dem Lauf nach (EditorView lauscht auf onSettled, #123).
   const wegVomEditor = () => { if (offen) navigate(`/p/${encodeURIComponent(project)}`) }
   /** #106-Review C1/C2: bevor der Editor eine Datei verlaesst, die der Server gerade zerstoert
    *  oder verschiebt, verwirft er seine ungespeicherte Fassung — sonst spuelte der Verlassens-
@@ -64,30 +64,15 @@ export function DateiMenue({ project, file, aiReason }: {
   const editorVergessen = () => { if (offen) editor.current?.vergiss() }
 
   const jobStarten = (fn: () => Promise<{ job_id: string; started: boolean }>, kind: string,
-                      label: string, fertig?: () => void) =>
+                      label: string) =>
     start(() => fn().then(res => { if (res.started) adopt(res.job_id, project, kind); return res }),
-      label, () => { nachladen(); fertig?.() })
-
-  /** Listen allein reichen nicht: der Editor haelt weiter das Dokument von VOR der Korrektur,
-   *  und "Speichern" schriebe es ueber die frisch erzeugte edit.json. */
-  const korrekturFertig = () => {
-    const e = editor.current
-    if (e?.project !== project || e.base !== file.base) return
-    // Ungespeichertes Nachladen waere stiller Datenverlust andersherum: man startet die
-    // Korrektur und tippt weiter, waehrend sie laeuft. Darum die Wahl — und weil beide
-    // Ausgaenge etwas kosten, stehen beide im Text.
-    if (e.dirty && !window.confirm(
-      `Die Korrektur von „${file.base}“ ist fertig.\n\n`
-      + 'OK: korrigierte Fassung laden — deine ungespeicherten Änderungen gehen verloren.\n'
-      + 'Abbrechen: deine Fassung behalten — beim Speichern überschreibst du die Korrektur.')) return
-    e.reload()
-  }
+      label, nachladen)
 
   const ausfuehren = async (was: Aktion) => {
     setDialog(null)
     if (was === 'correct') {
       jobStarten(() => startCorrectFile(project, file.base, file.has_edit), 'correct',
-        `Korrigieren ${file.base}`, korrekturFertig)
+        `Korrigieren ${file.base}`)
     } else if (was === 'transcribe') {
       // Erst navigieren, wenn der Lauf wirklich angenommen ist: bei 409 (ein Job laeuft schon)
       // wurde nichts verworfen — den Editor trotzdem zu verlassen waere ein Verlust ohne Anlass.
@@ -139,7 +124,7 @@ export function DateiMenue({ project, file, aiReason }: {
         'transcribe', `Neu transkribieren ${file.base}`)
     } else if (tiefeGeaendert) {
       jobStarten(() => startCorrectFile(project, file.base, true), 'correct',
-        `Neu korrigieren ${file.base}`, korrekturFertig)
+        `Neu korrigieren ${file.base}`)
     }
   }
 

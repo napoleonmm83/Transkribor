@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { useDoc } from '@/hooks/useDoc'
 import { useEditorMelden } from '@/hooks/useEditorBruecke'
+import { useActiveJob } from '@/hooks/useActiveJob'
 import { useSuche } from '@/hooks/useSuche'
 import { audioUrl } from '@/lib/api'
 import { SKIP, segIdAusFokus } from '@/lib/playback'
@@ -18,6 +19,33 @@ export function EditorView() {
   // Dinge, die nur hier existieren. Ohne diese Meldung wechselt ein Klick ohne Rueckfrage
   // ueber ungespeicherte Aenderungen hinweg, und ein Korrekturlauf bleibt unsichtbar.
   useEditorMelden(sel ? { ...sel, dirty, stand, reload, vergiss } : null)
+
+  // #123: Eine ferngestartete Korrektur (Workspace „Korrigieren" oder laeuft schon beim Oeffnen)
+  // sieht der Editor sonst nicht — useJob.onDone erreicht nur das ⋯-Menue derselben Datei. Der
+  // JobProvider adoptiert JEDE Korrektur (useProjektDaten aus active_jobs plus explizite adopt),
+  // also ist onSettled die eine zuverlaessige Quelle und hat korrekturFertig im DateiMenue
+  // ersetzt (sonst Doppel-Reload/Prompt bei ⋯-Menue-Korrekturen — useJob und JobProvider sind
+  // zwei unabhaengige Polls). Base-Match per perBase[base]==='done': skip/failed aendern die
+  // edit.json nicht, eine Rueckfrage waere dort irrefuehrend. Gleiche Dirty-Abfrage wie das alte
+  // korrekturFertig; reload() beruehrt project/base nicht -> kein #106-Verlassens-Flush, der
+  // haengende Autosave laeuft weiter (derselbe Pfad wie bisher). dirtyRef statt dirty in den Deps:
+  // sonst neu abonniert bei jedem Tastendruck; der Ref ist im Render fresh.
+  const { onSettled } = useActiveJob()
+  const dirtyRef = useRef(dirty); dirtyRef.current = dirty
+  useEffect(() => {
+    if (!project || !base) return
+    const p = project, b = base
+    return onSettled(beendet => {
+      const j = beendet.find(j => j.kind === 'correct' && j.project === p && j.phases.perBase[b] === 'done')
+      if (!j) return
+      if (dirtyRef.current && !window.confirm(
+        `Die Korrektur von „${b}“ ist fertig.\n\n`
+        + 'OK: korrigierte Fassung laden — deine ungespeicherten Änderungen gehen verloren.\n'
+        + 'Abbrechen: deine Fassung behalten — beim Speichern überschreibst du die Korrektur.')) return
+      reload()
+    })
+  }, [project, base, reload, onSettled])
+
   const [suchQuery, setSuchQuery] = useState('')
   const [suchIndex, setSuchIndex] = useState(0)
   // useSuche durchsucht seit #128 Kontext, Zusammenfassung, Segmente und Anmerkungen — die
