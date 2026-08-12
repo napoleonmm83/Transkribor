@@ -14,7 +14,12 @@ const einstellungen = (s: Partial<Settings>) =>
   vi.mocked(api.getSettings).mockResolvedValue({ ai_ready: true, ai_reason: '', ...s } as Settings)
 
 describe('ProjectWorkspace (Stub)', () => {
-  beforeEach(() => einstellungen({}))          // Korrektur-Gate: eingerichtet, sofern nicht anders gesagt
+  beforeEach(() => {
+    einstellungen({})
+    // Projekt-Einstellungen default: leer — bestehende Tests sehen keine Sprach-Selects.
+    vi.mocked(api.getProjektEinstellungen).mockResolvedValue(
+      { sprache: 'de', korrektur: 'auto', sprach_choices: [], tiefen: [] })
+  })
 
   const nurDemo = () => {
     vi.mocked(api.listProjects).mockResolvedValue([{ name: 'Demo', dateien: 0, fertig: 0, geaendert: 0, active_jobs: [] }])
@@ -42,7 +47,9 @@ describe('ProjectWorkspace (Stub)', () => {
     expect(screen.getByRole('button', { name: 'Transkribieren' })).not.toBeDisabled()
     // Die Datei-Seite steckt seit der Zusammenlegung im ⋯-Menue und muss dort ebenso gesperrt
     // sein — sonst startet ein Klick dort den Job, den der Projektknopf gerade verweigert.
-    fireEvent.pointerDown(screen.getByRole('button', { name: /Aktionen für/ }),
+    // Seit Task 5 gibt es ZWEI ⋯-Menues im Workspace (das Projekt-Menue im Kopf + das Datei-Menue
+    // je Zeile) — die Datei-spezifische Ansprache trennt sie.
+    fireEvent.pointerDown(screen.getByRole('button', { name: /Aktionen für „S1/ }),
       { button: 0, ctrlKey: false, pointerType: 'mouse' })
     expect(await screen.findByRole('menuitem', { name: 'Korrigieren' })).toHaveAttribute('data-disabled')
   })
@@ -241,5 +248,31 @@ describe('ProjectWorkspace (Stub)', () => {
     const versuche = vi.mocked(api.getProjectFiles).mock.calls.length
     screen.getByRole('button', { name: 'Erneut versuchen' }).click()
     await waitFor(() => expect(vi.mocked(api.getProjectFiles).mock.calls.length).toBeGreaterThan(versuche))
+  })
+
+  it('zeigt Sprach-Badge und reicht die Sprache an beide Picker durch', async () => {
+    vi.mocked(api.listProjects).mockResolvedValue([{ name: 'Demo', dateien: 0, fertig: 0, geaendert: 0, active_jobs: [] }])
+    vi.mocked(api.getProjectFiles).mockResolvedValue({ name: 'Demo', files: [] })
+    vi.mocked(api.getProjektEinstellungen).mockResolvedValue({
+      sprache: 'ch', korrektur: 'auto',
+      sprach_choices: [{ id: 'ch', label: 'Schweizerdeutsch', hint: '' }],
+      tiefen: [{ id: 'auto', label: 'Auto' }],
+    })
+    render(
+      <MemoryRouter initialEntries={['/p/Demo']}>
+        <JobProvider>
+          <ProjektDatenProvider>
+            <EditorBrueckeProvider>
+              <Routes><Route path="/p/:project" element={<ProjectWorkspace />} /></Routes>
+            </EditorBrueckeProvider>
+          </ProjektDatenProvider>
+        </JobProvider>
+      </MemoryRouter>,
+    )
+    // Badge + zwei Select-Triggers zeigen alle das Sprach-Label — beweist: Einstellungen
+    // geladen, sprache gesetzt, sprachChoices durchgereicht (nicht nur an einen Picker).
+    const treffer = await screen.findAllByText('Schweizerdeutsch')
+    expect(treffer).toHaveLength(3)
+    expect(screen.getAllByRole('combobox')).toHaveLength(2)
   })
 })
