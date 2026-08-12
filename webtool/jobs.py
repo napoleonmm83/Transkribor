@@ -48,9 +48,10 @@ def _prune_locked():
         _jobs.pop(jid, None)
 
 
-def start(project: str, cmd: list, cwd, kind: str, then=None):
+def start(project: str, cmd: list, cwd, kind: str, then=None, env=None):
     """Startet den Job. `then` laeuft NACH erfolgreichem Abschluss (status 'done') im
-    Job-Thread — damit haengt die Auto-Korrektur nach der Transkription nicht am Browser."""
+    Job-Thread — damit haengt die Auto-Korrektur nach der Transkription nicht am Browser.
+    `env` (dict) wird in die Subprozess-Umgebung gemischt; default None aendert nichts."""
     with _lock:
         _prune_locked()
         if (project, kind) in _active:
@@ -69,7 +70,7 @@ def start(project: str, cmd: list, cwd, kind: str, then=None):
                       "ended": None, "pid": None, "cancelled": False,
                       "then": [then] if then else []}
         _active[(project, kind)] = jid
-    threading.Thread(target=_run, args=(jid, cmd, cwd), daemon=True).start()
+    threading.Thread(target=_run, args=(jid, cmd, cwd, env), daemon=True).start()
     return jid, True
 
 
@@ -116,8 +117,8 @@ def when_done(job_id: str, fn) -> bool:
         return True
 
 
-def _run(jid, cmd, cwd):
-    _run_proc(jid, cmd, cwd)
+def _run(jid, cmd, cwd, env):
+    _run_proc(jid, cmd, cwd, env)
     # Nachlauf AUSSERHALB von _run_proc: dessen finally hat den Slot in _active schon
     # freigegeben, sonst wuerde ein `then`, das denselben Projekt-Job startet, sich selbst
     # aussperren. Und ausserhalb von _lock, sonst blockiert es jobs.start() im Callback.
@@ -134,16 +135,18 @@ def _run(jid, cmd, cwd):
                     r["lines"].append(f"NACHLAUF-FEHLER: {e}")
 
 
-def _run_proc(jid, cmd, cwd):
+def _run_proc(jid, cmd, cwd, env=None):
     try:
         # settings.job_env() reicht die Whisper-Einstellungen durch: die .env laedt nur
-        # webtool.ps1, in der Desktop-App gibt es keine.
-        env = {**os.environ, **settings.job_env(),
-               "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8"}
+        # webtool.ps1, in der Desktop-App gibt es keine. `env` (z.B. TRANSKRIBOR_FETCH_SPRACHE)
+        # gewinnt gegen beide — der pro-Job-Wert ist spezifischer als der systemweite.
+        full_env = {**os.environ, **settings.job_env(),
+                    "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8",
+                    **(env or {})}
         proc = subprocess.Popen(
             cmd, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             text=True, encoding="utf-8", errors="replace", bufsize=1,
-            creationflags=_CREATE_NO_WINDOW, env=env, **_popen_kwargs(),
+            creationflags=_CREATE_NO_WINDOW, env=full_env, **_popen_kwargs(),
         )
         with _lock:
             _jobs[jid]["pid"] = proc.pid

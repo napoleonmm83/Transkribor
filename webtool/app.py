@@ -7,7 +7,7 @@ import sys
 from contextlib import asynccontextmanager
 from urllib.parse import urlparse
 
-from fastapi import FastAPI, File, HTTPException, Request, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
@@ -17,7 +17,9 @@ from . import fetch as fetch_mod
 from . import jobs
 from . import llm
 from . import paths
+from . import projekt as _projekt
 from . import settings
+from . import sprachen as _sprachen
 from .edit_model import build_edit_doc
 from .render_md import render_md
 from .render_srt import render_srt
@@ -222,6 +224,27 @@ def get_project(project: str):
     if not os.path.isdir(os.path.join(paths.projekte_root(), project)):
         raise HTTPException(status_code=404, detail="Projekt nicht gefunden")
     return {"name": project, "files": _projekt_dateien(project)}
+
+
+class EinstellungenBody(BaseModel):
+    sprache: str | None = None
+    korrektur: str | None = None
+
+
+@app.get("/api/projects/{project}/einstellungen")
+def projekteinstellungen(project: str):
+    _validate(project)
+    d = _projekt.laden(project)
+    return {"sprache": d["sprache"], "korrektur": d["korrektur"],
+            "sprach_choices": _sprachen.fuer_frontend(), "tiefen": _sprachen.TIEFEN}
+
+
+@app.put("/api/projects/{project}/einstellungen")
+def projekteinstellungen_speichern(project: str, body: EinstellungenBody):
+    _validate(project)
+    # speichern() überspringt None-Werte (isinstance-Check auf str) -> leerer Body ist sicher.
+    d = _projekt.speichern(project, {"sprache": body.sprache, "korrektur": body.korrektur})
+    return {"sprache": d["sprache"], "korrektur": d["korrektur"]}
 
 
 class NewProject(BaseModel):
@@ -547,6 +570,7 @@ def correct_file(project: str, base: str, force: bool = False):
 
 class FetchBody(BaseModel):
     urls: list[str]
+    sprache: str | None = None
 
 
 @app.post("/api/projects/{project}/fetch")
@@ -565,9 +589,12 @@ def fetch_urls(project: str, body: FetchBody):
         raise HTTPException(status_code=400, detail=str(e))
     # Eigene Job-Art: der Download braucht keine GPU. Als "transcribe" gefuehrt wuerde er von
     # jeder laufenden Transkription blockiert — und die laeuft seit dem Auto-Trigger oft.
+    # Sprache pro geladener Base: fetch.py liest TRANSKRIBOR_FETCH_SPRACHE und traegt sie ein,
+    # sobald der Basisname feststeht (die Basen kennen wir hier noch nicht).
     cmd = [sys.executable, "-m", "webtool.fetch", "--download-only", project, *urls]
+    env_sprache = {"TRANSKRIBOR_FETCH_SPRACHE": body.sprache} if body.sprache else {}
     job_id, started = jobs.start(project, cmd, paths.ROOT, "fetch",
-                                 then=lambda: _start_transcribe(project))
+                                 then=lambda: _start_transcribe(project), env=env_sprache)
     return {"job_id": job_id, "started": started}
 
 
@@ -690,7 +717,7 @@ def cancel_job(job_id: str):
 
 
 @app.post("/api/projects/{project}/audio")
-def upload_audio(project: str, file: UploadFile = File(...)):
+def upload_audio(project: str, file: UploadFile = File(...), sprache: str = Form(None)):
     _validate(project)
     name = os.path.basename(file.filename or "")           # vom Browser mitgesendete Pfade entfernen
     base, ext = os.path.splitext(name)
@@ -706,6 +733,10 @@ def upload_audio(project: str, file: UploadFile = File(...)):
             shutil.copyfileobj(file.file, out)
     except FileExistsError:
         raise HTTPException(status_code=409, detail="Datei existiert bereits")
+    # Sprache fuer diese Datei eintragen, BEVOR der Job laeuft — sonst transkribiert er auf
+    # Projekt-Standard. Fehlt das Feld, greift der Projekt-Default (Legacy-Verhalten).
+    if sprache:
+        _projekt.setze_datei(project, base, sprache=sprache)
     # Hochladen IST der Startschuss: Transkription (und danach Korrektur) laufen von selbst an.
     # jobs.request() sorgt dafuer, dass ein Mehrfach-Upload hoechstens EINEN Nachlauf anhaengt.
     job_id, started = _start_transcribe(project)
