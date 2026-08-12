@@ -10,7 +10,7 @@ const BASIS = {
     { id: 'ch', label: 'Schweizerdeutsch', hint: '' },
     { id: 'en', label: 'Englisch', hint: '' },
   ],
-  tiefen: [{ id: 'voll_dialekt', label: 'Voll (mit Dialekt)' }, { id: 'leicht', label: 'Leicht' }],
+  tiefen: [{ id: 'auto', label: 'Automatisch (aus Sprache)' }, { id: 'voll_dialekt', label: 'Voll (mit Dialekt)' }, { id: 'leicht', label: 'Leicht' }],
 }
 const datei = (p: Partial<ProjectFile> = {}): ProjectFile =>
   ({ base: 'a', has_audio: true, has_raw: true, has_edit: false, has_md: false, ...p })
@@ -27,6 +27,15 @@ describe('DateiEinstellungenDialog', () => {
     render(<DateiEinstellungenDialog project="p" base="a" file={datei()} offen />)
     await waitFor(() => expect(screen.getByText('Schweizerdeutsch')).toBeInTheDocument())
     getSpy.mockRestore()
+  })
+
+  it('zeigt bei korrektur="auto" das Auto-Label im Tiefe-Trigger (nicht leer, #141)', async () => {
+    vi.spyOn(api, 'getFileEinstellungen').mockResolvedValue(BASIS)
+    render(<DateiEinstellungenDialog project="p" base="a" file={datei()} offen />)
+    await screen.findByText('Schweizerdeutsch')              // Sprache-Trigger = Readiness-Signal
+    // Tiefe-Select ist der zweite combobox; seit #141 ist "auto" in TIEFEN, darum steht das
+    // Label im Trigger statt leer. Deckt das geteilte tiefen.map-Muster beider Dialoge.
+    expect(screen.getAllByRole('combobox')[1]).toHaveTextContent('Automatisch')
   })
 
   it('deaktiviert Speichern, solange nichts geändert ist', async () => {
@@ -48,8 +57,8 @@ describe('DateiEinstellungenDialog', () => {
   it('zeigt bei nur-Tiefe-Änderung den Korrektur-Knopf', async () => {
     vi.spyOn(api, 'getFileEinstellungen').mockResolvedValue(BASIS)
     render(<DateiEinstellungenDialog project="p" base="a" file={datei()} offen />)
-    // Readiness-Signal ist der Sprache-Trigger; der Tiefe-Trigger bleibt leer, weil
-    // korrektur='auto' in TIEFEN nicht vorkommt (gleiches Verhalten wie der Projekt-Dialog).
+    // Readiness-Signal ist der Sprache-Trigger (stabil vorhanden); der Tiefe-Trigger zeigt
+    // bei korrektur='auto' mittlerweile das Auto-Label (seit #141 in TIEFEN enthalten).
     await screen.findByText('Schweizerdeutsch')
     // Tiefe-Select (letzter combobox im Dialog) auf "Leicht" stellen:
     const comboboxes = document.body.querySelectorAll('[role="combobox"]')

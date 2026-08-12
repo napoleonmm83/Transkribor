@@ -22,6 +22,11 @@ SPRACHEN = {
 }
 
 TIEFEN = [
+    # "auto" zuerst: es ist der Default (TIEFE_DEFAULT) und muss im Einstellungs-Dialog
+    # als waehlbare Option sichtbar sein — sonst bleibt der Select-Trigger bei korrektur='auto'
+    # leer (beide Dialoge mappen ueber diese Liste). correct.py fragt tiefe_effektiv ab, nicht
+    # TIEFEN, darum faellt die Meta-Option im Resolver nicht auf.
+    {"id": "auto",            "label": "Automatisch (aus Sprache)"},
     {"id": "voll_dialekt",    "label": "Voll (mit Dialekt-Glättung)"},
     {"id": "voll",            "label": "Voll (ohne Dialekt)"},
     {"id": "leicht",          "label": "Leicht (Zusammenfassung + Sprecher + Namen)"},
