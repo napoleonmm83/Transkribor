@@ -142,6 +142,20 @@ def datei_mehrsprachig(project: str, base: str) -> bool:
     return bool(d["mehrsprachig"])
 
 
+def datei_einstellungen(project: str, base: str) -> tuple:
+    """(sprache, mehrsprachig) EINER Datei aus EINEM Lesevorgang.
+
+    datei_sprache + datei_mehrsprachig einzeln zu rufen laedt projekt.json zweimal — pro
+    Datei, in einer Schleife ueber ein ganzes Projekt. Die Aufloesungsregeln stehen absichtlich
+    weiterhin nur in den Einzelfunktionen; hier wird der geladene Stand nur geteilt.
+    """
+    d = laden(project)
+    e = d["dateien"].get(base, {})
+    sprache = e.get("sprache") or d["sprache"]
+    mehr = bool(e["mehrsprachig"]) if "mehrsprachig" in e else bool(d["mehrsprachig"])
+    return sprache, mehr
+
+
 def tiefe_effektiv(project: str, base: str) -> str:
     tiefe = datei_korrektur(project, base)
     if tiefe != "auto":

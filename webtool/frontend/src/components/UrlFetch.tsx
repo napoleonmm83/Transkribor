@@ -27,7 +27,7 @@ export function UrlFetch({ project, onStart, sprache = '', sprachChoices = [], o
   const submit = async () => {
     setBusy(true); setErr('')
     try {
-      const res = await fetchUrls(project, urls, sprache, mehrsprachig)
+      const res = await fetchUrls(project, urls, sprache, mehrWert)
       if (res.started) setText('')   // nicht gestartet -> Eingabe stehen lassen
       onStart(res)
     } catch (e) {
@@ -36,6 +36,13 @@ export function UrlFetch({ project, onStart, sprache = '', sprachChoices = [], o
       setBusy(false)
     }
   }
+
+  // `sprache` wird von den API-Funktionen bei leerem String weggelassen; der Haken muss
+  // GENAUSO degradieren. Sonst schickt ein Bereich, dessen Einstellungen gar nicht geladen
+  // sind (Fehler beim GET -> keine Auswahl gerendert), ein hartes `false` mit und schlaegt
+  // damit einen auf true stehenden Projekt-Standard — der Nutzer sieht kein Kaestchen und
+  // bekommt trotzdem einen Datei-Override. undefined = kein Override.
+  const mehrWert = sprachChoices.length > 0 ? mehrsprachig : undefined
 
   return (
     <div className="blatt p-4">

@@ -391,14 +391,26 @@ def test_schwelle_klemmt_nicht_bei_gleicher_sprache():
     assert p.fenster == [["de", 0.4, "de"]]
 
 
-def test_schwelle_ohne_anker_nimmt_die_erste_sichere_erkennung():
-    """Sprache 'auto': der Anker steht beim Start nicht fest. Die erste SICHERE Erkennung
-    wird er; alles davor laeuft ungeklemmt durch, weil es noch nichts gibt, worauf man
-    klemmen koennte."""
+def test_schwelle_ohne_anker_nimmt_die_erste_erkennung():
+    """Sprache 'auto': die ERSTE Erkennung wird zum Anker, auch eine unsichere.
+
+    Nicht „die erste sichere": faster-whisper legt `info.language` an genau diesem ersten
+    Fenster fest, und zwar mit der LOCKEREREN Schwelle 0.5. Wartete der Anker auf 0.7, koennte
+    ein Video mit englischem Vorspann als `de` in die Roh-JSON gehen, waehrend der Anker auf
+    `en` einrastet — ab da klemmte jedes unsichere deutsche Fenster auf Englisch, und
+    correct._ziel_dialekt (das 'auto' aus der Roh-JSON aufloest) widerspraeche dem Anker."""
     p = transcribe._Sprachschwelle(_FakeCt2([("fr", 0.3), ("en", 0.95), ("de", 0.2)]), None, 0.7)
-    assert _erkannt(p.detect_language(None)) == "fr"     # noch kein Anker
-    assert _erkannt(p.detect_language(None)) == "en"     # wird zum Anker
-    assert _erkannt(p.detect_language(None)) == "en"     # unsicheres de -> geklemmt
+    assert _erkannt(p.detect_language(None)) == "fr"     # unsicher, aber Anker
+    assert _erkannt(p.detect_language(None)) == "en"     # sicher -> echter Wechsel
+    assert _erkannt(p.detect_language(None)) == "fr"     # unsicheres de -> auf den Anker
+
+
+def test_schwelle_ohne_anker_klemmt_ab_dem_zweiten_fenster():
+    """Gegenprobe zum vorigen: der Anker aus Fenster 1 wirkt sofort, nicht erst nach einer
+    sicheren Erkennung."""
+    p = transcribe._Sprachschwelle(_FakeCt2([("de", 0.55), ("en", 0.29)]), None, 0.7)
+    assert _erkannt(p.detect_language(None)) == "de"
+    assert _erkannt(p.detect_language(None)) == "de"     # 0.29 wird geklemmt, nicht uebernommen
 
 
 def test_schwelle_protokolliert_jedes_fenster():
@@ -507,3 +519,28 @@ def test_einsprachige_datei_bleibt_bei_whispercpp(monkeypatch):
                         lambda *a, **k: gerufen.append(a) or {"segments": []})
     transcribe._transkribiere_datei(None, "whisper.cpp", "a.m4a", "de", False, "large-v3")
     assert len(gerufen) == 1
+
+
+def test_projektlauf_auf_whispercpp_stuerzt_nicht_ab(tmp_path, monkeypatch):
+    """Regression: `mehr` ist eine Schleifen-Variable und darf in der Engine-Entscheidung
+    VOR der Schleife nicht vorkommen — sonst stirbt jeder Apple-Silicon-Lauf mit
+    UnboundLocalError, und zwar VOR der Schleife, also ausserhalb des try/except, das eine
+    kaputte Datei abfaengt: kein Transkript, nicht eine Datei.
+
+    Auf Windows/Linux ist der Fehler unsichtbar, weil `engine != "whisper.cpp"` das `and`
+    kurzschliesst — 482 gruene Tests haben ihn deshalb nicht gesehen. Der Fix pro Datei
+    liegt in _transkribiere_datei und wird davon nicht beruehrt."""
+    proj = tmp_path / "P"
+    (proj / "audio").mkdir(parents=True)
+    (proj / "audio" / "a.mp3").write_bytes(b"x")
+    monkeypatch.setattr(transcribe, "PROJEKTE", str(tmp_path))
+    monkeypatch.setitem(sys.modules, "torch", types.ModuleType("torch"))
+    from webtool import device as devicemod, whispercpp
+    monkeypatch.setattr(devicemod, "asr_engine", lambda m: "whisper.cpp")
+    gerufen = []
+    monkeypatch.setattr(whispercpp, "transkribiere",
+                        lambda *a, **k: (gerufen.append(a), {"text": "hallo", "segments": [],
+                                                             "language": "de"})[1])
+    transcribe.transcribe_project("P", "large-v3", "de")
+    assert len(gerufen) == 1                      # die Datei lief ueber whisper.cpp
+    assert (proj / "transkripte" / "a.json").exists()
