@@ -104,10 +104,12 @@ export async function startRetranscribeFile(project: string, base: string): Prom
 export async function deleteFile(project: string, base: string): Promise<void> {
   await jn(await fetch(`/api/projects/${enc(project)}/files/${enc(base)}`, { method: 'DELETE' }))
 }
-export async function fetchUrls(project: string, urls: string[], sprache?: string): Promise<StartJob> {
+export async function fetchUrls(project: string, urls: string[], sprache?: string,
+                                mehrsprachig?: boolean): Promise<StartJob> {
   return jn(await fetch(`/api/projects/${enc(project)}/fetch`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ urls, ...(sprache ? { sprache } : {}) }),
+    body: JSON.stringify({ urls, ...(sprache ? { sprache } : {}),
+                           ...(mehrsprachig === undefined ? {} : { mehrsprachig }) }),
   }))
 }
 export async function getJob(jobId: string): Promise<JobStatus> {
@@ -117,11 +119,14 @@ export async function cancelJob(jobId: string): Promise<void> {
   await post(`/api/jobs/${enc(jobId)}/cancel`)
 }
 /** Der Upload stoesst serverseitig direkt die Transkription an -> job_id/started kommen mit zurueck.
- *  `sprache` ist optional: nur gesetzt, wenn das Projekt eine abweichende Sprache vorgibt. */
-export async function uploadAudio(project: string, file: File, sprache?: string):
+ *  `sprache` ist optional: nur gesetzt, wenn das Projekt eine abweichende Sprache vorgibt.
+ *  `mehrsprachig` ebenso — undefined heisst „kein Datei-Override“, der Projektwert gilt. */
+export async function uploadAudio(project: string, file: File, sprache?: string,
+                                  mehrsprachig?: boolean):
   Promise<{ base: string; file: string; job_id?: string; started?: boolean }> {
   const fd = new FormData(); fd.append('file', file)
   if (sprache) fd.append('sprache', sprache)
+  if (mehrsprachig !== undefined) fd.append('mehrsprachig', String(mehrsprachig))
   return jn(await fetch(`/api/projects/${enc(project)}/audio`, { method: 'POST', body: fd }))
 }
 export async function createProject(name: string): Promise<{ ok: boolean; name: string }> {

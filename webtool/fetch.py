@@ -125,8 +125,10 @@ def download_one(project: str, url: str) -> str:
     # Sprache pro geladene Base eintragen (vom Web-Tool per Env durchgereicht). Fehlt die
     # Variable, greift der Projekt-Default — Legacy-Verhalten bleibt unveraendert.
     sprache = os.environ.get("TRANSKRIBOR_FETCH_SPRACHE")
-    if sprache:
-        projekt.setze_datei(project, base, sprache=sprache)
+    mehr_env = os.environ.get("TRANSKRIBOR_FETCH_MEHRSPRACHIG")
+    mehr = None if mehr_env is None else mehr_env.strip().lower() in ("1", "true", "yes")
+    if sprache or mehr is not None:
+        projekt.setze_datei(project, base, sprache=sprache, mehrsprachig=mehr)
     return base
 
 

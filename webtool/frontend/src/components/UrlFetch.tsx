@@ -2,15 +2,20 @@ import { useState } from 'react'
 import { Link2 } from 'lucide-react'
 import { fetchUrls } from '@/lib/api'
 import { Button } from '@/components/ui/button'
+import { MehrsprachigKasten } from '@/components/MehrsprachigKasten'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import type { StartJob, SprachChoice } from '@/lib/types'
 
-export function UrlFetch({ project, onStart, sprache = '', sprachChoices = [], onSpracheChange = () => {} }: {
+export function UrlFetch({ project, onStart, sprache = '', sprachChoices = [], onSpracheChange = () => {},
+  mehrsprachig = false, onMehrsprachigChange = () => {} }: {
   project: string
   onStart: (res: StartJob) => void
   // Optional bis Task 5 (ProjectWorkspace) die Werte durchreicht. sprache='' wirkt wie
   // „nicht gesetzt": fetchUrls ignoriert einen leeren String (sprache ? { sprache } : {}).
   sprache?: string
+  /** Wie `sprache` aus den Projekt-Einstellungen vorbelegt und hier pro Upload aenderbar. */
+  mehrsprachig?: boolean
+  onMehrsprachigChange?: (w: boolean) => void
   sprachChoices?: SprachChoice[]
   onSpracheChange?: (id: string) => void
 }) {
@@ -22,7 +27,7 @@ export function UrlFetch({ project, onStart, sprache = '', sprachChoices = [], o
   const submit = async () => {
     setBusy(true); setErr('')
     try {
-      const res = await fetchUrls(project, urls, sprache)
+      const res = await fetchUrls(project, urls, sprache, mehrsprachig)
       if (res.started) setText('')   // nicht gestartet -> Eingabe stehen lassen
       onStart(res)
     } catch (e) {
@@ -60,6 +65,11 @@ export function UrlFetch({ project, onStart, sprache = '', sprachChoices = [], o
               ))}
             </SelectContent>
           </Select>
+          {/* Direkt unter der Sprache, weil er sie zur HAUPTsprache macht — und VOR dem Upload,
+              denn der Job startet sofort; nachtraeglich kostet es einen kompletten zweiten Lauf. */}
+          <div className="mt-2">
+            <MehrsprachigKasten wert={mehrsprachig} setzen={onMehrsprachigChange} />
+          </div>
         </div>
       )}
       <div className="mt-2 flex items-center gap-3">

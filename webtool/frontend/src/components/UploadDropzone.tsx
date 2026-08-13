@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import { Check, Loader2, TriangleAlert, Upload } from 'lucide-react'
 import { uploadAudio } from '@/lib/api'
 import { cn } from '@/lib/utils'
+import { MehrsprachigKasten } from '@/components/MehrsprachigKasten'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import type { StartJob, SprachChoice } from '@/lib/types'
 
@@ -9,12 +10,16 @@ const AUDIO_RE = /\.(mp3|wav|m4a|aac|flac|ogg|opus|wma|mp4)$/i
 type Status = 'uploading' | 'done' | 'exists' | 'error'
 type Item = { name: string; status: Status; msg?: string }
 
-export function UploadDropzone({ project, onDone, sprache = '', sprachChoices = [], onSpracheChange = () => {} }: {
+export function UploadDropzone({ project, onDone, sprache = '', sprachChoices = [], onSpracheChange = () => {},
+  mehrsprachig = false, onMehrsprachigChange = () => {} }: {
   project: string
   onDone?: (job?: StartJob) => void
   // Optional bis Task 5 (ProjectWorkspace) die Werte durchreicht. sprache='' wirkt wie
   // „nicht gesetzt": die API-Funktionen ignorieren einen leeren String (if sprache).
   sprache?: string
+  /** Wie `sprache` aus den Projekt-Einstellungen vorbelegt und hier pro Upload aenderbar. */
+  mehrsprachig?: boolean
+  onMehrsprachigChange?: (w: boolean) => void
   sprachChoices?: SprachChoice[]
   onSpracheChange?: (id: string) => void
 }) {
@@ -35,7 +40,7 @@ export function UploadDropzone({ project, onDone, sprache = '', sprachChoices = 
     // ponytail: sequentiell statt Pool — lokale Uploads sind quasi instant; Pool nachruesten bei Bedarf
     for (const f of audio) {
       try {
-        const r = await uploadAudio(project, f, sprache)
+        const r = await uploadAudio(project, f, sprache, mehrsprachig)
         if (r.job_id) job = { job_id: r.job_id, started: !!r.started }
         patch(f.name, { status: 'done' })
       }
@@ -88,6 +93,11 @@ export function UploadDropzone({ project, onDone, sprache = '', sprachChoices = 
               ))}
             </SelectContent>
           </Select>
+          {/* Direkt unter der Sprache, weil er sie zur HAUPTsprache macht — und VOR dem Upload,
+              denn der Job startet sofort; nachtraeglich kostet es einen kompletten zweiten Lauf. */}
+          <div className="mt-2">
+            <MehrsprachigKasten wert={mehrsprachig} setzen={onMehrsprachigChange} />
+          </div>
         </div>
       )}
       {items.length > 0 && (

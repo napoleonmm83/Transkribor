@@ -22,7 +22,7 @@ describe('UrlFetch', () => {
     })
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: /holen/i })) })
     await waitFor(() => expect(api.fetchUrls).toHaveBeenCalledWith(
-      'Demo', ['https://youtu.be/a', 'https://www.instagram.com/reel/b/'], 'de'))  // Leerzeilen raus, getrimmt
+      'Demo', ['https://youtu.be/a', 'https://www.instagram.com/reel/b/'], 'de', false))  // Leerzeilen raus, getrimmt
     await waitFor(() => expect(onStart).toHaveBeenCalledWith({ job_id: 'j1', started: true }))
   })
 
@@ -70,6 +70,6 @@ describe('UrlFetch', () => {
       sprache="en" sprachChoices={SPRACH_CHOICES} onSpracheChange={vi.fn()} />)
     fireEvent.change(screen.getByLabelText('Video-URLs'), { target: { value: 'https://youtu.be/a' } })
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: /holen/i })) })
-    await waitFor(() => expect(api.fetchUrls).toHaveBeenCalledWith('Demo', ['https://youtu.be/a'], 'en'))
+    await waitFor(() => expect(api.fetchUrls).toHaveBeenCalledWith('Demo', ['https://youtu.be/a'], 'en', false))
   })
 })

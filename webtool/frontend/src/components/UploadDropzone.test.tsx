@@ -71,6 +71,19 @@ describe('UploadDropzone', () => {
     await act(async () => {
       fireEvent.change(input, { target: { files: [new File(['x'], 'a.mp3')] } })
     })
-    await waitFor(() => expect(api.uploadAudio).toHaveBeenCalledWith('Demo', expect.any(File), 'en'))
+    await waitFor(() => expect(api.uploadAudio).toHaveBeenCalledWith('Demo', expect.any(File), 'en', false))
+  })
+
+  it('reicht den Mehrsprachig-Haken ans uploadAudio weiter', async () => {
+    /* VOR dem Upload, nicht danach: der Transkriptions-Job startet serverseitig sofort mit
+       dem Upload. Nachtraeglich gesetzt kostet der Haken einen kompletten zweiten Lauf. */
+    vi.spyOn(api, 'uploadAudio').mockResolvedValue({ base: 'a', file: 'a.mp3' })
+    render(<UploadDropzone project="Demo" onDone={() => {}}
+      sprache="en" sprachChoices={[{ id: 'en', label: 'Englisch', hint: '' }]}
+      mehrsprachig />)
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement
+    fireEvent.change(input, { target: { files: [new File(['x'], 'a.mp3', { type: 'audio/mpeg' })] } })
+    await waitFor(() => expect(api.uploadAudio).toHaveBeenCalledWith(
+      'Demo', expect.any(File), 'en', true))
   })
 })
