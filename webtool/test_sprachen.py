@@ -65,3 +65,15 @@ def test_pruef_fehler_unbekannte_sprache():
 def test_pruef_fehler_unbekannte_tiefe():
     msg = sprachen.pruef_fehler(korrektur="galaktisch")
     assert msg is not None and "galaktisch" in msg and "Tiefe" in msg
+
+
+def test_pruef_fehler_lehnt_nicht_bool_ab():
+    msg = sprachen.pruef_fehler(mehrsprachig="ja")
+    assert msg is not None and "mehrsprachig" in msg
+
+
+def test_pruef_fehler_erlaubt_bool_und_none():
+    # None = Feld nicht gesendet (Partial-Update), bleibt frei — wie sprache/korrektur.
+    assert sprachen.pruef_fehler(mehrsprachig=True) is None
+    assert sprachen.pruef_fehler(mehrsprachig=False) is None
+    assert sprachen.pruef_fehler(mehrsprachig=None) is None

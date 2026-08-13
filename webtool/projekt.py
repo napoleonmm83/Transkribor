@@ -72,12 +72,15 @@ def laden(project: str) -> dict:
         data = {}
     sprache = data.get("sprache")
     korrektur = data.get("korrektur")
+    mehrsprachig = data.get("mehrsprachig")
     dateien = data.get("dateien")
     return {
         # Tolerant gegenueber falschem Schema (z.B. dateien als Liste, sprache
         # als Zahl): nur akzeptieren, was den richtigen Typ hat, sonst Default.
         "sprache": sprache if isinstance(sprache, str) else sprachen.SPRACH_DEFAULT,
         "korrektur": korrektur if isinstance(korrektur, str) else sprachen.TIEFE_DEFAULT,
+        # Vorgabe False: bestehende Projekte ohne den Schluessel behalten ihr Verhalten.
+        "mehrsprachig": mehrsprachig if isinstance(mehrsprachig, bool) else False,
         "dateien": {k: v for k, v in dateien.items() if isinstance(v, dict)} if isinstance(dateien, dict) else {},
     }
 
@@ -90,11 +93,16 @@ def speichern(project: str, patch: dict) -> dict:
         for k in ("sprache", "korrektur"):
             if k in patch and isinstance(patch[k], str):
                 cur[k] = patch[k]
+        # Eigener Zweig: die Schleife darueber filtert auf isinstance(str) — ein bool faellt
+        # dort durch und waere still verworfen worden (das Kaestchen liesse sich setzen,
+        # ohne dass etwas passiert).
+        if isinstance(patch.get("mehrsprachig"), bool):
+            cur["mehrsprachig"] = patch["mehrsprachig"]
         _write(project, cur)
         return cur
 
 
-def setze_datei(project: str, base: str, sprache=None, korrektur=None) -> dict:
+def setze_datei(project: str, base: str, sprache=None, korrektur=None, mehrsprachig=None) -> dict:
     with _gesperrt(project):
         cur = laden(project)
         eintrag = dict(cur["dateien"].get(base, {}))
@@ -102,6 +110,8 @@ def setze_datei(project: str, base: str, sprache=None, korrektur=None) -> dict:
             eintrag["sprache"] = sprache
         if korrektur is not None:
             eintrag["korrektur"] = korrektur
+        if mehrsprachig is not None:
+            eintrag["mehrsprachig"] = bool(mehrsprachig)
         cur["dateien"][base] = eintrag
         _write(project, cur)
         return cur
@@ -115,6 +125,21 @@ def datei_sprache(project: str, base: str) -> str:
 def datei_korrektur(project: str, base: str) -> str:
     d = laden(project)
     return d["dateien"].get(base, {}).get("korrektur") or d["korrektur"]
+
+
+def datei_mehrsprachig(project: str, base: str) -> bool:
+    """Enthaelt die Datei mehrere Sprachen? Datei-Override, sonst Projekt-Standard.
+
+    Der Rueckfall geht ueber die ANWESENHEIT des Schluessels, nicht ueber `or` wie bei
+    datei_sprache: ein bewusst gesetztes False ist falsy — mit `or` gewaenne der Projektwert,
+    und der Haken liesse sich pro Datei nie wieder abwaehlen. Dasselbe Prinzip wie
+    `"text": ""` in apply_correction: der Schluessel entscheidet, nicht der Wert.
+    """
+    d = laden(project)
+    e = d["dateien"].get(base, {})
+    if "mehrsprachig" in e:
+        return bool(e["mehrsprachig"])
+    return bool(d["mehrsprachig"])
 
 
 def tiefe_effektiv(project: str, base: str) -> str:
