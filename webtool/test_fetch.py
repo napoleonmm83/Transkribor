@@ -101,6 +101,7 @@ class _FakeYDL:
     video_id = "vid123"
     fehler = None          # Exception-Instanz -> wird beim Download geworfen
     gesehen = []           # Optionen JEDER Runde (Metadaten + Download), fuer #162
+    node_modus = []        # ELECTRON_RUN_AS_NODE WAEHREND jeder Runde, fuer #171
 
     def __init__(self, opts):
         self.opts = opts
@@ -113,6 +114,9 @@ class _FakeYDL:
         return False
 
     def extract_info(self, url, download=False):
+        # Der Zeitpunkt ist der ganze Punkt: yt-dlp startet die Laufzeit WAEHREND dieses
+        # Aufrufs. Ein Blick auf die Umgebung davor oder danach sagt darueber nichts.
+        _FakeYDL.node_modus.append(os.environ.get("ELECTRON_RUN_AS_NODE"))
         if download:
             if _FakeYDL.fehler is not None:
                 raise _FakeYDL.fehler
@@ -146,6 +150,7 @@ def projekt(monkeypatch, tmp_path):
     monkeypatch.setattr(transcribe_mod, "ensure_ffmpeg", lambda: True)
     _FakeYDL.title, _FakeYDL.video_id, _FakeYDL.fehler = "Mein Interview", "vid123", None
     _FakeYDL.gesehen = []
+    _FakeYDL.node_modus = []
     return tmp_path
 
 
@@ -286,17 +291,33 @@ def test_ydl_opts_reicht_die_mitgelieferte_laufzeit_an_yt_dlp_durch(tmp_path, mo
         assert "deno" in opts["js_runtimes"]
 
 
-def test_download_one_schaltet_electron_in_den_node_modus(projekt, monkeypatch):
+def test_beide_yt_dlp_runden_laufen_im_node_modus(projekt, monkeypatch):
     """Ohne `ELECTRON_RUN_AS_NODE` startet Electrons Binary das GUI, statt das Loeserskript zu
     rechnen — der Pfad allein nuetzt also nichts. Gesetzt wird es hier und nicht in
     `backend.js`: dort landete es in der Server-Umgebung, die `jobs.py` an JEDEN Subprozess
     weitergibt (transcribe, correct, `claude`/`codex`), gebraucht wird es aber nur von dem
-    einen node-Aufruf aus DIESEM Prozess."""
+    einen node-Aufruf aus DIESEM Prozess.
+
+    Gemessen wird WAEHREND der Aufrufe, in beiden Runden: dann startet yt-dlp die Laufzeit.
+    Und danach ist es wieder weg — der direkte CLI-Aufruf transkribiert im selben Prozess
+    weiter, und schon der ffmpeg-Postprocessor ist ein Kindprozess."""
     monkeypatch.delenv("ELECTRON_RUN_AS_NODE", raising=False)
     monkeypatch.setenv("TRANSKRIBOR_JS_RUNTIME", str(projekt / "electron.exe"))
     (projekt / "electron.exe").write_bytes(b"")
     fetch.download_one("Demo", "https://youtu.be/vid123")
-    assert os.environ.get("ELECTRON_RUN_AS_NODE") == "1"
+    assert _FakeYDL.node_modus == ["1", "1"]
+    assert "ELECTRON_RUN_AS_NODE" not in os.environ
+
+
+def test_ein_vorhandener_node_modus_wird_zurueckgegeben(projekt, monkeypatch):
+    """Der Wiederherstell-Zweig, den ein blosses `pop` verfehlt haette: wer die Variable selbst
+    gesetzt hat (.env, CI), behaelt sie — dieselbe Regel wie ueberall hier."""
+    monkeypatch.setenv("ELECTRON_RUN_AS_NODE", "0")
+    monkeypatch.setenv("TRANSKRIBOR_JS_RUNTIME", str(projekt / "electron.exe"))
+    (projekt / "electron.exe").write_bytes(b"")
+    fetch.download_one("Demo", "https://youtu.be/vid123")
+    assert _FakeYDL.node_modus == ["1", "1"]
+    assert os.environ["ELECTRON_RUN_AS_NODE"] == "0"
 
 
 def test_ohne_laufzeit_bleibt_der_electron_modus_aus(projekt, monkeypatch):
@@ -305,6 +326,7 @@ def test_ohne_laufzeit_bleibt_der_electron_modus_aus(projekt, monkeypatch):
     monkeypatch.delenv("ELECTRON_RUN_AS_NODE", raising=False)
     monkeypatch.delenv("TRANSKRIBOR_JS_RUNTIME", raising=False)
     fetch.download_one("Demo", "https://youtu.be/vid123")
+    assert _FakeYDL.node_modus == [None, None]
     assert "ELECTRON_RUN_AS_NODE" not in os.environ
 
 

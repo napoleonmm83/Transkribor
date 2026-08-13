@@ -7,6 +7,7 @@ transkribiert anschliessend GENAU diese Dateien (transcribe.py, only=).
 `cwd` muss das Repo-Root sein (wie bei webtool.correct) -> `import transcribe`.
 """
 import argparse
+import contextlib
 import os
 import re
 import shutil
@@ -148,6 +149,35 @@ def _js_laufzeit_da() -> bool:
     return bool(_js_runtime_pfad()) or any(shutil.which(x) for x in ("deno", "node"))
 
 
+@contextlib.contextmanager
+def _node_modus():
+    """`ELECTRON_RUN_AS_NODE=1` fuer die Dauer der yt-dlp-Aufrufe — und nur dafuer.
+
+    Die mitgereichte Laufzeit ist Electrons eigenes Binary; ohne dieses Flag startet es das
+    GUI, statt das Loeserskript zu rechnen. Gesetzt wird es HIER und nicht in `backend.js`:
+    dort landete es in der Umgebung des Servers, und `jobs.py` gibt die an JEDEN Subprozess
+    weiter (transcribe, correct, `claude`/`codex` samt Anmelde-Flow).
+
+    **Und danach wieder weg**, aus demselben Grund eine Ebene tiefer: der direkte CLI-Aufruf
+    transkribiert im SELBEN Prozess weiter (`main` ohne `--download-only`), und schon der
+    ffmpeg-Postprocessor laeuft als Kindprozess. Eine Umgebungsvariable, die nur zwei Aufrufe
+    braucht, hat danach im Prozess nichts mehr verloren. `finally`, nicht am Blockende: ein
+    fehlgeschlagener Download ist der Normalfall, nicht die Ausnahme.
+    """
+    if not _js_runtime_pfad():
+        yield
+        return
+    alt = os.environ.get("ELECTRON_RUN_AS_NODE")
+    os.environ["ELECTRON_RUN_AS_NODE"] = "1"
+    try:
+        yield
+    finally:
+        if alt is None:
+            os.environ.pop("ELECTRON_RUN_AS_NODE", None)
+        else:
+            os.environ["ELECTRON_RUN_AS_NODE"] = alt
+
+
 def _human_error(exc: Exception) -> str:
     """yt-dlp-Rauschen -> ein Satz, der Marcus sagt, was zu tun ist."""
     roh = str(exc).strip()
@@ -258,29 +288,21 @@ def download_one(project: str, url: str) -> str:
     ydl_modul = _hole_yt_dlp()
     if ydl_modul is None:
         raise RuntimeError(f"yt-dlp ist nicht installiert — {_PIP_HINWEIS}")
-    # Die mitgereichte Laufzeit ist Electrons eigenes Binary — ohne dieses Flag startet es das
-    # GUI, statt das Loeserskript zu rechnen. Gesetzt wird es HIER und nicht in backend.js:
-    # dort landete es in der Umgebung des Servers, und `jobs.py` gibt die an JEDEN Subprozess
-    # weiter (transcribe, correct, `claude`/`codex` samt Anmelde-Flow). Nur der eine
-    # node-Aufruf braucht es, den yt-dlp aus DIESEM Prozess startet — also gehoert es auch nur
-    # in diesen. Nebenbei liegen die beiden zusammengehoerenden Zeilen damit in einer Sprache
-    # statt in zweien.
-    if _js_runtime_pfad():
-        os.environ["ELECTRON_RUN_AS_NODE"] = "1"
     adir = os.path.join(paths.project_dir(project), "audio")
     os.makedirs(adir, exist_ok=True)
 
     # ponytail: zwei yt-dlp-Aufrufe (Metadaten, dann Download) — kostet einen Roundtrip,
     # dafuer steht der Dateiname VOR dem Download fest und Kollisionen sind sauber loesbar.
-    with ydl_modul.YoutubeDL(_ydl_opts()) as ydl:
-        info = ydl.extract_info(url, download=False) or {}
-    plattform = "youtube" if "youtu" in (urlparse(url).hostname or "") else "instagram"
-    base = unique_base(adir, safe_base(info.get("title") or "",
-                                       f"{plattform}-{info.get('id') or 'video'}"))
+    with _node_modus():
+        with ydl_modul.YoutubeDL(_ydl_opts()) as ydl:
+            info = ydl.extract_info(url, download=False) or {}
+        plattform = "youtube" if "youtu" in (urlparse(url).hostname or "") else "instagram"
+        base = unique_base(adir, safe_base(info.get("title") or "",
+                                           f"{plattform}-{info.get('id') or 'video'}"))
 
-    print(f"[fetch] lade {base} …", flush=True)
-    with ydl_modul.YoutubeDL(_ydl_opts(os.path.join(adir, base + ".%(ext)s"))) as ydl:
-        ydl.extract_info(url, download=True)
+        print(f"[fetch] lade {base} …", flush=True)
+        with ydl_modul.YoutubeDL(_ydl_opts(os.path.join(adir, base + ".%(ext)s"))) as ydl:
+            ydl.extract_info(url, download=True)
     print(f"[fetch] fertig {base}", flush=True)
     # Sprache pro geladene Base eintragen (vom Web-Tool per Env durchgereicht). Fehlt die
     # Variable, greift der Projekt-Default — Legacy-Verhalten bleibt unveraendert.
