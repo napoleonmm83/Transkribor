@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, act } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { JobProvider, useActiveJob } from './useActiveJob'
-import { ProjektDatenProvider } from './useProjektDaten'
+import { ProjektDatenProvider, useProjekte } from './useProjektDaten'
 import { useOsFortschritt } from './useOsFortschritt'
 import * as api from '@/lib/api'
 
@@ -18,7 +18,12 @@ class MeldungAttrappe {
 function Probe() {
   useOsFortschritt()
   const { adopt } = useActiveJob()
+  // `refresh` nach draussen, weil der Projekt-Poll mit 4 s bewusst eine Konstante ist
+  // (useProjects.ts) — ein Test, der darauf wartet, waere hundertmal langsamer als alle
+  // anderen hier zusammen.
+  const { refresh } = useProjekte()
   ;(globalThis as unknown as { __adopt: typeof adopt }).__adopt = adopt
+  ;(globalThis as unknown as { __refresh: typeof refresh }).__refresh = refresh
   return null
 }
 
@@ -118,6 +123,29 @@ describe('useOsFortschritt', () => {
     await act(async () => { adopt('j2', 'Alpha', 'transcribe') })
     await act(async () => { await new Promise(r => setTimeout(r, 40)) })
     expect(fortschritt).toHaveBeenLastCalledWith(0.5, undefined)
+  })
+
+  it('begnadigt einen Fehlschlag NICHT, solange etwas laeuft (#76)', async () => {
+    // `anteil` wird auch dann negativ, waehrend etwas laeuft: naemlich solange das Projekt
+    // noch nicht in der Zusammenfassung steht (der Poll ist bis zu 4 s alt) oder dateien === 0
+    // meldet. Haengt der Schnappschuss an `anteil < 0` statt an „nichts laeuft“, wird ein
+    // Fehlschlag in genau diesem Fenster beiseitegelegt — und der Balken bleibt gruen, obwohl
+    // etwas schiefging. Ein FEHLENDES Rot bemerkt niemand, darum dieser Test.
+    vi.mocked(api.listProjects).mockResolvedValue([])          // Projekt noch nicht in der Liste
+    vi.mocked(api.getJob).mockImplementation(async (id: string) =>
+      id === 'j2' ? { status: 'error', lines: [] } : { status: 'running', lines: [] })
+    zeigen()
+    const adopt = (globalThis as unknown as { __adopt: (i: string, p: string, k: string) => void }).__adopt
+    await act(async () => { adopt('j1', 'Alpha', 'transcribe'); adopt('j2', 'Alpha', 'correct') })
+    await act(async () => { await new Promise(r => setTimeout(r, 40)) })
+    expect(fortschritt.mock.lastCall?.[0]).toBe(-1)            // kein Balken, aber j1 laeuft
+
+    // Jetzt taucht das Projekt in der Zusammenfassung auf — der Balken kann gezeichnet werden.
+    vi.mocked(api.listProjects).mockResolvedValue([{ name: 'Alpha', dateien: 2, fertig: 1, geaendert: 0 }])
+    const refresh = (globalThis as unknown as { __refresh: () => void }).__refresh
+    await act(async () => { refresh() })
+    await act(async () => { await new Promise(r => setTimeout(r, 40)) })
+    expect(fortschritt).toHaveBeenLastCalledWith(0.5, 'error')
   })
 
   it('meldet einen Abbruch als Abbruch, nicht als Fehlschlag', async () => {
