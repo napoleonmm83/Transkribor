@@ -31,5 +31,11 @@ pyannote.audio==4.0.7
 # die `no_warnings` schluckt). yt-dlp deklariert `yt-dlp-ejs==0.8.0` und zieht den Pin mit
 # jeder Fassung nach; ein freies `yt-dlp-ejs` daneben driftet frueher oder spaeter davon.
 # `[pin]` waere die falsche Wahl: es nagelt auch certifi/requests/urllib3 fest und kollidiert
-# damit mit dem uebrigen Baum. Neu dazu kommen nur mutagen und pycryptodomex.
+# damit mit dem uebrigen Baum. Neu in eine frische venv kommen mutagen, pycryptodomex UND
+# brotli — letzteres verlangt im ganzen Baum kein Paket unbedingt, es haengt ueberall nur an
+# einem Extra (geprueft ueber `importlib.metadata`, Zeilen ohne `extra ==`-Marker).
 yt-dlp[default]>=2026.7.4
+# Untergrenze wegen CVE-2023-52323 (Seitenkanal im OCB-Modus, behoben in 3.19.1).
+# pycryptodomex kommt neu ueber `[default]` herein und wird von yt-dlp ohne jede Grenze
+# deklariert — ein Pin ist das hier NICHT (die fuehrt yt-dlp, siehe oben), nur ein Boden.
+pycryptodomex>=3.19.1

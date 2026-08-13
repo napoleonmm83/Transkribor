@@ -1,3 +1,4 @@
+import os
 import pathlib
 import sys
 
@@ -272,15 +273,52 @@ def test_403_mit_js_laufzeit_raet_NICHT_zur_laufzeit(monkeypatch):
 
 # --- Mitgereichte JS-Laufzeit (#171) -----------------------------------------
 
-def test_ydl_opts_reicht_die_mitgelieferte_laufzeit_an_yt_dlp_durch(monkeypatch):
+def test_ydl_opts_reicht_die_mitgelieferte_laufzeit_an_yt_dlp_durch(tmp_path, monkeypatch):
     """#171: die gepackte App hat weder node noch deno auf dem PATH — aber Electrons eigenes
     Binary IST ein Node. Der Pfad muss als `path` bei `node` ankommen, sonst sucht yt-dlp
     weiter nur den PATH ab (`_determine_runtime_path` nimmt `path` nur, wenn es gesetzt ist).
     `deno` bleibt daneben stehen: liegt eines auf dem PATH, hat es hoehere Prioritaet."""
-    monkeypatch.setenv("TRANSKRIBOR_JS_RUNTIME", r"C:\App\Transkribor.exe")
+    exe = tmp_path / "Transkribor.exe"
+    exe.write_bytes(b"")
+    monkeypatch.setenv("TRANSKRIBOR_JS_RUNTIME", str(exe))
     for opts in (fetch._ydl_opts(), fetch._ydl_opts("ziel.%(ext)s")):
-        assert opts["js_runtimes"]["node"] == {"path": r"C:\App\Transkribor.exe"}
+        assert opts["js_runtimes"]["node"] == {"path": str(exe)}
         assert "deno" in opts["js_runtimes"]
+
+
+def test_download_one_schaltet_electron_in_den_node_modus(projekt, monkeypatch):
+    """Ohne `ELECTRON_RUN_AS_NODE` startet Electrons Binary das GUI, statt das Loeserskript zu
+    rechnen — der Pfad allein nuetzt also nichts. Gesetzt wird es hier und nicht in
+    `backend.js`: dort landete es in der Server-Umgebung, die `jobs.py` an JEDEN Subprozess
+    weitergibt (transcribe, correct, `claude`/`codex`), gebraucht wird es aber nur von dem
+    einen node-Aufruf aus DIESEM Prozess."""
+    monkeypatch.delenv("ELECTRON_RUN_AS_NODE", raising=False)
+    monkeypatch.setenv("TRANSKRIBOR_JS_RUNTIME", str(projekt / "electron.exe"))
+    (projekt / "electron.exe").write_bytes(b"")
+    fetch.download_one("Demo", "https://youtu.be/vid123")
+    assert os.environ.get("ELECTRON_RUN_AS_NODE") == "1"
+
+
+def test_ohne_laufzeit_bleibt_der_electron_modus_aus(projekt, monkeypatch):
+    """Gegenrichtung: ohne mitgereichte Laufzeit hat der fetch-Prozess keinen Grund, das Flag
+    zu setzen — ein Rechner ohne die gepackte App bekommt es also nicht untergeschoben."""
+    monkeypatch.delenv("ELECTRON_RUN_AS_NODE", raising=False)
+    monkeypatch.delenv("TRANSKRIBOR_JS_RUNTIME", raising=False)
+    fetch.download_one("Demo", "https://youtu.be/vid123")
+    assert "ELECTRON_RUN_AS_NODE" not in os.environ
+
+
+def test_ein_toter_laufzeitpfad_gilt_als_keine_laufzeit(monkeypatch):
+    """Ein blosser String genuegt nicht. Sonst ginge dreierlei still schief: yt-dlp meldet die
+    Laufzeit als nicht vorhanden, sucht wegen des gesetzten `path` aber NICHT mehr auf dem
+    PATH — ein echtes node faellt also weg —, und `_js_laufzeit_da()` unterdrueckte dazu den
+    403-Hinweis, der als einziger die Ursache nennt. Erreichbar ueber die `.env`: eine Zeile
+    dort gewinnt bewusst gegen eine bereits gesetzte Variable (`settings.load_env`)."""
+    monkeypatch.setenv("TRANSKRIBOR_JS_RUNTIME", r"C:\gibt\es\nicht\node.exe")
+    monkeypatch.setattr(fetch.shutil, "which", lambda _: None)
+    assert fetch._ydl_opts()["js_runtimes"]["node"] == {}
+    assert fetch._js_laufzeit_da() is False
+    assert "JavaScript-Laufzeit" in fetch._human_error(_403)
 
 
 def test_ohne_mitgelieferte_laufzeit_bleiben_die_optionen_die_alten(monkeypatch):
@@ -291,13 +329,22 @@ def test_ohne_mitgelieferte_laufzeit_bleiben_die_optionen_die_alten(monkeypatch)
     assert fetch._ydl_opts()["js_runtimes"] == {"deno": {}, "node": {}}
 
 
-def test_403_mit_mitgelieferter_laufzeit_raet_NICHT_zur_installation(monkeypatch):
+def test_403_mit_mitgelieferter_laufzeit_raet_NICHT_zur_installation(tmp_path, monkeypatch):
     """Sonst riete die Meldung ausgerechnet im gepackten Lauf zu einer Node-Installation —
     dort, wo bereits eine benutzt wird. PATH ist hier leer, die Laufzeit kommt allein aus
     der Umgebung."""
-    monkeypatch.setenv("TRANSKRIBOR_JS_RUNTIME", r"C:\App\Transkribor.exe")
+    exe = tmp_path / "Transkribor.exe"
+    exe.write_bytes(b"")
+    monkeypatch.setenv("TRANSKRIBOR_JS_RUNTIME", str(exe))
     monkeypatch.setattr(fetch.shutil, "which", lambda _: None)
     assert "JavaScript-Laufzeit" not in fetch._human_error(_403)
+
+
+def test_der_pip_rat_nennt_das_extra_mit():
+    """Der Hinweis wird dem Nutzer zweimal gezeigt (nach jedem nicht-403-Fehlschlag und wenn
+    yt-dlp fehlt) — ohne `[default]` fuehrt genau dieses Abtippen zurueck in #170: yt-dlp
+    steigt ueber die Fassung, zu der seine Loeserskripte passen, und verwirft sie dann still."""
+    assert "yt-dlp[default]" in fetch._PIP_HINWEIS
 
 
 def test_requirements_nennt_yt_dlp_ejs():

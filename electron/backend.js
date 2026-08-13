@@ -57,11 +57,9 @@ function serverEnv(exe = process.execPath) {
     // Binary ein gewoehnliches Node (gemessen: v24, und yt-dlps Aufruf `--permission -`
     // mit dem Skript auf stdin liefert sauberes JSON). Kein Download, alle drei Plattformen.
     //
-    // **Die beiden Zeilen gehoeren zusammen.** Ohne das Flag startet der Pfad, auf den
-    // TRANSKRIBOR_JS_RUNTIME zeigt, ein zweites GUI-Fenster statt zu rechnen; ohne den Pfad
-    // sucht yt-dlp weiter nur auf dem PATH und findet nichts. Der Riegel dagegen ist der
-    // Test ueber diese Funktion — im Betrieb kann nur ein Editiervorgang sie trennen.
-    ELECTRON_RUN_AS_NODE: '1',
+    // Das Flag selbst steht bewusst NICHT hier, sondern in `fetch.download_one`: hier landete
+    // es in der Umgebung des Servers, und `jobs.py` reicht die an jeden Subprozess weiter —
+    // gebraucht wird es nur von dem einen node-Aufruf, den yt-dlp startet.
     TRANSKRIBOR_JS_RUNTIME: exe,
   }
 }
