@@ -13,7 +13,7 @@ initial_prompt kostete er ganze Passagen, siehe _opts), sondern nur in die LLM-K
 
 Umgebungsvariablen: WHISPER_MODEL (default large-v3), WHISPER_LANG (default de).
 """
-import sys, os, json, glob, time, argparse
+import sys, os, json, glob, math, time, argparse
 from shutil import which
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -106,7 +106,13 @@ try:
     # Auf [0,1] geklemmt, nicht nur ValueError abgefangen: TRANSKRIBOR_MIX_SCHWELLE=2 haette
     # JEDEN Sprachwechsel still abgeschaltet (nichts erreicht je die Schwelle), =0 die
     # Klemmung — und window_languages saehe in beiden Faellen unauffaellig aus.
-    MIX_SCHWELLE = min(1.0, max(0.0, float(os.environ.get("TRANSKRIBOR_MIX_SCHWELLE") or 0.5)))
+    #
+    # isfinite ZUSAETZLICH, weil `float("nan")` KEIN ValueError wirft: nan faellt durch beide
+    # Vergleiche (jeder Vergleich mit nan ist falsch), `max(0.0, nan)` liefert 0.0, und damit
+    # waere die Klemmung genau so still abgeschaltet, wie der Absatz darueber es als Fehler
+    # beschreibt. Gleiches gilt fuer inf/-inf.
+    _roh = float(os.environ.get("TRANSKRIBOR_MIX_SCHWELLE") or 0.5)
+    MIX_SCHWELLE = min(1.0, max(0.0, _roh)) if math.isfinite(_roh) else 0.5
 except ValueError:
     MIX_SCHWELLE = 0.5
 
@@ -118,8 +124,10 @@ class _Sprachschwelle:
     faster-whisper nimmt bei multilingual=True die beste Erkennung UNGEPRUEFT
     (faster_whisper/transcribe.py:1192) — eine Schwelle gibt es dort nicht.
     `language_detection_threshold` gilt nur der einmaligen Erkennung am Anfang, nicht der
-    pro Fenster. Auf einem rein deutschen Video schaltete es dadurch bei p=0.289 auf
-    Englisch um und schob einen Satz ein, den niemand gesagt hat.
+    pro Fenster. Gemessen an einem echten Beitrag meldete die Erkennung ueber dem Abspann
+    (keine Sprache) „Englisch" mit p=0.289 — dort ist ein Sprachwechsel sinnlos. Die Schwelle
+    haelt solche Faelle heraus, ohne echte Wechsel zu verschlucken; wo sie liegen darf, steht
+    bei MIX_SCHWELLE.
 
     Anker None (Sprache 'auto'): die ERSTE Erkennung wird zum Anker, ungeachtet ihrer
     Konfidenz — bewusst nicht „die erste sichere".
