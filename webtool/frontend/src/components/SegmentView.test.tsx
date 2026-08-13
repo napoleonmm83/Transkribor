@@ -76,6 +76,34 @@ describe('SegmentView', () => {
     expect(document.querySelector('[data-seg-id="1"]')).toHaveClass('ring-yellow-400')
   })
 
+  // Issue #112: `segments[].note` ging seit je in den Export, hatte aber keinen Eingang —
+  // die Korrektur schreibt nur die Dokument-Anmerkungen, das Feld war leer und unsichtbar.
+  it('legt ueber das Notiz-Symbol eine Notiz am Segment an', () => {
+    const updateSegment = vi.fn()
+    render(<TooltipProvider><SegmentView seg={mkSeg({})} active={false} onPlay={vi.fn()} updateSegment={updateSegment} /></TooltipProvider>)
+    fireEvent.click(screen.getByTitle('Notiz hinzufügen'))
+    const feld = screen.getByRole('textbox')
+    fireEvent.change(feld, { target: { value: 'Hier nachfragen.' } })
+    fireEvent.blur(feld)
+    expect(updateSegment).toHaveBeenCalledWith(1, { note: 'Hier nachfragen.' })
+  })
+
+  it('zeigt eine vorhandene Notiz an; das Anlege-Symbol tritt dann ab', () => {
+    render(<TooltipProvider><SegmentView seg={mkSeg({ note: 'Name unsicher.' })} active={false} onPlay={vi.fn()} updateSegment={vi.fn()} /></TooltipProvider>)
+    expect(screen.getByText('Name unsicher.')).toBeInTheDocument()
+    expect(screen.queryByTitle('Notiz hinzufügen')).toBeNull()
+  })
+
+  it('leeren streicht die Notiz', () => {
+    const updateSegment = vi.fn()
+    render(<TooltipProvider><SegmentView seg={mkSeg({ note: 'erledigt' })} active={false} onPlay={vi.fn()} updateSegment={updateSegment} /></TooltipProvider>)
+    fireEvent.click(screen.getByText('erledigt'))
+    const feld = screen.getByRole('textbox')
+    fireEvent.change(feld, { target: { value: '' } })
+    fireEvent.blur(feld)
+    expect(updateSegment).toHaveBeenCalledWith(1, { note: '' })
+  })
+
   it('ohne Such-Props weder Ausgrauen noch gelber Ring (Default)', () => {
     const seg = mkSeg({ text: 'Text' })
     render(<TooltipProvider><SegmentView seg={seg} active={false} onPlay={vi.fn()} updateSegment={vi.fn()} /></TooltipProvider>)
