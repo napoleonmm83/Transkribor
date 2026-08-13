@@ -81,6 +81,54 @@ def find_audio(proj_dir, only=None):
     return files
 
 
+try:
+    # ponytail: 0.7 ist GERATEN, nicht kalibriert — drei Messpunkte (0.289 und 0.432 waren
+    # Falschmeldungen auf rein deutschem Material, 0.938 die einzige echte Erkennung).
+    # Darum eine Stellschraube. Tippfehler in der .env darf den Lauf nicht killen.
+    MIX_SCHWELLE = float(os.environ.get("TRANSKRIBOR_MIX_SCHWELLE") or 0.7)
+except ValueError:
+    MIX_SCHWELLE = 0.7
+
+
+class _Sprachschwelle:
+    """Delegierender Proxy um das ct2-Modell: klemmt unsichere Sprachwechsel auf die
+    Ankersprache.
+
+    faster-whisper nimmt bei multilingual=True die beste Erkennung UNGEPRUEFT
+    (faster_whisper/transcribe.py:1192) — eine Schwelle gibt es dort nicht.
+    `language_detection_threshold` gilt nur der einmaligen Erkennung am Anfang, nicht der
+    pro Fenster. Auf einem rein deutschen Video schaltete es dadurch bei p=0.289 auf
+    Englisch um und schob einen Satz ein, den niemand gesagt hat.
+
+    Anker None (Sprache 'auto'): die erste SICHERE Erkennung wird zum Anker; davor wird
+    nichts geklemmt, weil es noch nichts gibt, worauf man klemmen koennte.
+
+    `fenster` protokolliert [erkannt, p, benutzt] je Aufruf — reine Diagnose. Eine strenge
+    Zuordnung Fenster -> Segment ist damit NICHT moeglich: ein stilles Fenster verbraucht
+    eine Erkennung, ohne ein Segment zu erzeugen, und Segment hat kein language-Feld.
+    """
+
+    def __init__(self, echt, anker, schwelle):
+        self._echt, self._anker, self._schwelle = echt, anker, schwelle
+        self.fenster = []
+
+    def detect_language(self, enc):
+        r = self._echt.detect_language(enc)
+        tok, p = r[0][0]
+        code = tok[2:-2]
+        if self._anker is None:
+            if p >= self._schwelle:
+                self._anker = code
+        elif code != self._anker and p < self._schwelle:
+            self.fenster.append([code, round(p, 3), self._anker])
+            return [[(f"<|{self._anker}|>", 1.0)]]
+        self.fenster.append([code, round(p, 3), code])
+        return r
+
+    def __getattr__(self, name):
+        return getattr(self._echt, name)
+
+
 def _opts(language, mehrsprachig=False):
     """Decoder-Parameter an einer Stelle. Identisch zur frueheren openai-whisper-Fassung,
     bis auf zwei Namenswechsel: `fp16` ist bei faster-whisper das `compute_type` des
