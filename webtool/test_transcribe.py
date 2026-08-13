@@ -545,3 +545,21 @@ def test_projektlauf_auf_whispercpp_stuerzt_nicht_ab(tmp_path, monkeypatch):
     transcribe.transcribe_project("P", "large-v3", "de")
     assert len(gerufen) == 1                      # die Datei lief ueber whisper.cpp
     assert (proj / "transkripte" / "a.json").exists()
+
+
+def test_vorgabeschwelle_laesst_echtes_interview_englisch_durch(monkeypatch):
+    """Regressionswaechter fuer den Wert selbst — er stand auf 0.7 und war falsch.
+
+    An echtem Material (12:24-Beitrag, deutscher Sprecherton, englisches Interview bei 4:00)
+    erkennt faster-whisper die englische Passage mit p=0.565; deutsche Fenster liegen bei
+    0.980-1.000, Stille bei 0.289. Mit 0.7 wurde die Passage zurueckgeklemmt — die Funktion
+    versagte an genau dem Video, fuer das sie gebaut wurde. Die Zahl 0.565 stammt aus einer
+    Messung, nicht aus einer Schaetzung; ein hoeherer Default macht das Feature wieder kaputt.
+
+    Kalibriert war 0.7 an TTS-Englisch (p=0.938) — sauberer Studioton. Genau diese Luecke
+    zwischen synthetischem und echtem Material haelt dieser Test offen."""
+    importlib.reload(transcribe)          # Vorgabe frisch, unabhaengig von der Umgebung
+    assert transcribe.MIX_SCHWELLE <= 0.565
+    assert transcribe.MIX_SCHWELLE > 0.289          # Stille wird weiterhin geklemmt
+    p = transcribe._Sprachschwelle(_FakeCt2([("en", 0.565)]), "de", transcribe.MIX_SCHWELLE)
+    assert _erkannt(p.detect_language(None)) == "en"

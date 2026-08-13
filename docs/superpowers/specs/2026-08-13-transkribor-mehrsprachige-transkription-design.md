@@ -97,10 +97,33 @@ Dateien, die der Nutzer als gemischt markiert hat.
 
 ### 1.4 Die Schwelle
 
-Falsch erkannt bei `p = 0,289` und `p = 0,432`, richtig erkannt bei `p = 0,938`.
-Dazwischen liegt viel Luft. **Vorgabe 0,7 ist geraten**, nicht gemessen — drei
-Messpunkte tragen keine Kalibrierung. Sie ist deshalb eine Stellschraube
-(`TRANSKRIBOR_MIX_SCHWELLE`), keine Konstante.
+> **Nachtrag 2026-08-13, nach dem Merge — diese Kalibrierung war falsch.**
+> Der Hinweis des Nutzers, sein Video enthalte ab ca. 3:50 eine englische Passage, hat sich
+> bestätigt: bei 4:00–4:30 interviewt der Beitrag eine belgische Läuferin auf Englisch. Der
+> deutsche Lauf gab sie **übersetzt** wieder („einen guten *Zeitpunkt*" für *a good time*),
+> weshalb sie im Text nicht auffiel — genau der Fehlermodus, den Abschnitt 1.2(b) beschreibt.
+> Damit war die 0,432 aus 1.1 **kein Fehlalarm, sondern diese Passage**.
+>
+> Neu gemessen, Erkennung je 30-s-Fenster über die ganze Datei:
+>
+> | | p |
+> |---|---|
+> | echtes Deutsch, 26 Fenster | 0,980 – 1,000 |
+> | echtes Englisch (Interview, mit Publikum) | **0,565** |
+> | Stille / Abspann | 0,289 |
+>
+> Brauchbare Spanne also `(0,29 … 0,57]`. **Die Vorgabe 0,7 klemmte die echte Passage
+> zurück** — die Funktion versagte an genau dem Video, für das sie gebaut wurde. Vorgabe
+> jetzt **0,5**.
+>
+> Die Lehre ist nicht die Zahl, sondern woran kalibriert wurde: 0,938 stammte aus
+> **synthetischem** TTS-Englisch. Sauberer Studioton ist für den Detektor leicht, echtes
+> Interviewaudio knapp (0,565 gegen 0,327 für Deutsch). Die Positivkontrolle war richtig und
+> nötig — sie durfte nur nicht die einzige Quelle für einen Schwellwert sein.
+
+Falsch erkannt bei `p = 0,289`, richtig erkannt bei `p = 0,565` (echt) bzw. `p = 0,938`
+(synthetisch). **Die Vorgabe ist eine Stellschraube** (`TRANSKRIBOR_MIX_SCHWELLE`), keine
+Kalibrierung — zwei echte Messpunkte tragen keine.
 
 ---
 

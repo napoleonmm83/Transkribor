@@ -82,15 +82,33 @@ def find_audio(proj_dir, only=None):
 
 
 try:
-    # ponytail: 0.7 ist GERATEN, nicht kalibriert — drei Messpunkte (0.289 und 0.432 waren
-    # Falschmeldungen auf rein deutschem Material, 0.938 die einzige echte Erkennung).
-    # Darum eine Stellschraube. Tippfehler in der .env darf den Lauf nicht killen.
+    # 0.5, und dieser Wert hat eine Geschichte, die man kennen muss.
+    #
+    # Zuerst stand hier 0.7, kalibriert an SYNTHETISCHEM Testaudio (TTS-Englisch, sauberer
+    # Studioton): dort wird Englisch mit p=0.938 erkannt. An echtem Material stimmt das
+    # nicht. Gemessen an einem echten Beitrag (12:24, deutscher Sprecherton mit einem
+    # englischen Interview bei 4:00), Erkennung je 30-s-Fenster:
+    #
+    #     echtes Deutsch, 26 Fenster    p = 0.980 … 1.000
+    #     echtes Englisch (mit Publikum) p = 0.565      <- die Passage, um die es geht
+    #     Stille / Abspann               p = 0.289
+    #
+    # Mit 0.7 wurde die englische Passage zurueck auf Deutsch geklemmt — die Funktion
+    # versagte an genau dem Video, fuer das sie gebaut wurde. Die brauchbare Spanne ist
+    # (0.29 … 0.57]; 0.5 liegt darin.
+    #
+    # Die eigentliche Lehre steht nicht in der Zahl: die Trennung laeuft NICHT zwischen
+    # "sichere" und "unsichere" Erkennung, sondern zwischen "sicherem Deutsch" (>=0.98) und
+    # allem anderen. Echtes fremdsprachiges Interviewaudio ist fuer den Detektor knapp —
+    # 0.565 gegen 0.327 fuer Deutsch. Wer diesen Wert anfasst, misst an ECHTEM Material,
+    # nicht an TTS.
+    #
     # Auf [0,1] geklemmt, nicht nur ValueError abgefangen: TRANSKRIBOR_MIX_SCHWELLE=2 haette
-    # JEDEN Sprachwechsel still abgeschaltet (nichts erreicht je die Schwelle), =0 die Klemmung
-    # — und window_languages saehe in beiden Faellen unauffaellig aus.
-    MIX_SCHWELLE = min(1.0, max(0.0, float(os.environ.get("TRANSKRIBOR_MIX_SCHWELLE") or 0.7)))
+    # JEDEN Sprachwechsel still abgeschaltet (nichts erreicht je die Schwelle), =0 die
+    # Klemmung — und window_languages saehe in beiden Faellen unauffaellig aus.
+    MIX_SCHWELLE = min(1.0, max(0.0, float(os.environ.get("TRANSKRIBOR_MIX_SCHWELLE") or 0.5)))
 except ValueError:
-    MIX_SCHWELLE = 0.7
+    MIX_SCHWELLE = 0.5
 
 
 class _Sprachschwelle:
