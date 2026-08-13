@@ -544,7 +544,56 @@ def test_settings_modellwechsel_behaelt_den_key(client):
     r = client.put("/api/settings", json={"model": "claude-sonnet-5"})
     assert r.json() == {"provider": "anthropic", "model": "claude-sonnet-5",
                         "base_url": "", "has_key": True,
-                        "whisper_model": "large-v3", "whisper_lang": "de"}
+                        "whisper_model": "large-v3", "whisper_lang": "de",
+                        "ytdlp_auto": "1"}
+
+
+def test_settings_meldet_den_ytdlp_zustand(client, monkeypatch):
+    """Ohne Anzeige waere der Automatismus unsichtbar — und ein unsichtbarer Automatismus
+    ist genau dann nicht zu durchschauen, wenn er danebengeht."""
+    from webtool import ytdlp_update
+    monkeypatch.setattr(ytdlp_update, "fassung", lambda: "2026.8.12")
+    body = client.get("/api/settings").json()
+    assert body["ytdlp"]["version"] == "2026.8.12"
+    assert body["ytdlp"]["auto"] is True and body["ytdlp_auto"] == "1"
+
+
+def test_settings_ytdlp_schalter_wird_gespeichert(client):
+    assert client.put("/api/settings", json={"ytdlp_auto": "0"}).json()["ytdlp_auto"] == "0"
+    assert client.get("/api/settings").json()["ytdlp"]["auto"] is False
+
+
+def test_settings_lehnt_ungueltigen_ytdlp_schalter_ab(client):
+    """`auto_an()` prueft auf "0"/"false"/"no" — ein durchgereichtes "nein" waere still
+    ein JA. Der Schreibpfad ist die Stelle, an der das auffallen muss."""
+    assert client.put("/api/settings", json={"ytdlp_auto": "nein"}).status_code == 400
+    assert client.get("/api/settings").json()["ytdlp_auto"] == "1"
+
+
+def test_settings_ytdlp_merker_kommt_nicht_aus_dem_browser(client):
+    """Der Merker ist Buchhaltung des Servers. Ein vom Browser gesetztes Datum in der
+    Zukunft legte die Aktualisierung auf Jahre still."""
+    client.put("/api/settings", json={"ytdlp_geprueft": "2099-01-01"})
+    from webtool import settings as s
+    assert s.load()["ytdlp_geprueft"] == ""
+
+
+def test_ytdlp_update_knopf_ruft_pip_und_meldet_das_ergebnis(client, monkeypatch):
+    from webtool import ytdlp_update
+    monkeypatch.setattr(ytdlp_update, "aktualisiere", lambda: True)
+    monkeypatch.setattr(ytdlp_update, "fassung", lambda: "2026.8.12")
+    r = client.post("/api/settings/ytdlp/update")
+    assert r.status_code == 200
+    assert r.json()["ok"] is True and r.json()["version"] == "2026.8.12"
+
+
+def test_ytdlp_update_knopf_meldet_fehlschlag_statt_zu_500en(client, monkeypatch):
+    """Offline ist ein Normalfall, kein Serverfehler — der Nutzer soll 'hat nicht
+    geklappt' lesen, nicht einen roten Stacktrace."""
+    from webtool import ytdlp_update
+    monkeypatch.setattr(ytdlp_update, "aktualisiere", lambda: False)
+    r = client.post("/api/settings/ytdlp/update")
+    assert r.status_code == 200 and r.json()["ok"] is False
 
 
 def test_settings_unbekannter_anbieter_400(client):

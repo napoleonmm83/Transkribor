@@ -56,7 +56,14 @@ export type Settings = {
   providers: ProviderInfo[]; env_key: string;
   whisper_model: string; whisper_lang: string; whisper_choices: WhisperChoice[];
   ai_ready: boolean; ai_reason: string;
+  /** Der GESPEICHERTE Schalter ("1"/"0"). Was tatsächlich gilt, steht in `ytdlp.auto` —
+   *  eine gesetzte Umgebungsvariable überstimmt die Datei. */
+  ytdlp_auto: string;
+  ytdlp: YtdlpStand;
 };
+/** `version` ist null, wenn yt-dlp gar nicht installiert ist; `geprueft` leer, solange nie
+ *  aktualisiert wurde. `auto` ist der WIRKSAME Schalter (Env schlägt Einstellung). */
+export type YtdlpStand = { version: string | null; geprueft: string; auto: boolean };
 export type ModelInfo = { id: string; label: string };
 /** Anmeldezustand einer Abo-CLI. `unterstuetzt: false` heisst: der Anbieter kennt so etwas
  *  nicht — bei den API-Anbietern IST der Key die Anmeldung. */

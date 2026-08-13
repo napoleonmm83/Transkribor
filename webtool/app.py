@@ -20,6 +20,7 @@ from . import paths
 from . import projekt as _projekt
 from . import settings
 from . import sprachen as _sprachen
+from . import ytdlp_update
 from .edit_model import build_edit_doc
 from .render_md import render_md
 from .render_srt import render_srt
@@ -661,9 +662,12 @@ class SettingsBody(BaseModel):
     base_url: str | None = None
     api_key: str | None = None          # weggelassen = gespeicherten Key behalten
     whisper_model: str | None = None    # Qualitaetsstufe der Transkription
+    ytdlp_auto: str | None = None        # "1"/"0" — yt-dlp automatisch aktualisieren
     # whisper_lang fehlt hier bewusst: es hat keine UI, und ein ueber die API gesetztes
     # "Deutsch" statt "de" liesse jeden kuenftigen Lauf scheitern, ohne dass der Browser
     # eine Moeglichkeit haette, das zurueckzunehmen. Env und Handbearbeitung bleiben.
+    # `ytdlp_geprueft` fehlt aus demselben Grund: der Merker ist Buchhaltung des Servers,
+    # ein vom Browser gesetztes Datum koennte die Aktualisierung auf Jahre stilllegen.
 
 
 @app.get("/api/settings")
@@ -673,6 +677,10 @@ def get_settings():
     return {**settings.public(), "providers": llm.provider_list(),
             "env_key": llm.env_key_hint(),
             "whisper_choices": list(settings.WHISPER_CHOICES),
+            # Installierte yt-dlp-Fassung + Merker + WIRKSAMER Schalter. Letzterer kann von
+            # `ytdlp_auto` abweichen, wenn TRANSKRIBOR_YTDLP_UPDATE gesetzt ist — das Frontend
+            # vergleicht beides und sagt es, statt einen Haken zu zeigen, der nichts tut.
+            "ytdlp": ytdlp_update.zustand(),
             "ai_ready": ai_ready, "ai_reason": ai_reason}
 
 
@@ -684,7 +692,23 @@ def put_settings(body: SettingsBody):
     if "whisper_model" in patch and patch["whisper_model"] not in settings.KNOWN_WHISPER_MODELS:
         raise HTTPException(status_code=400,
                             detail=f"unbekanntes Whisper-Modell: {patch['whisper_model']}")
+    if "ytdlp_auto" in patch and patch["ytdlp_auto"] not in ("0", "1"):
+        raise HTTPException(status_code=400,
+                            detail=f"ytdlp_auto muss '0' oder '1' sein: {patch['ytdlp_auto']!r}")
     return settings.public(settings.save(patch))
+
+
+@app.post("/api/settings/ytdlp/update")
+def settings_ytdlp_update():
+    """Der Knopf 'Jetzt aktualisieren'. Laeuft SYNCHRON im Request (bis PIP_TIMEOUT).
+
+    ponytail: haengt den Browser im schlimmsten Fall 120 s an einem Spinner. Ein eigener
+    Job-Typ waere sauberer, kostete aber ein neues `kind` samt Label in `_KIND_TEXT`,
+    `jobPhases.ts` und der Fusszeile — fuer zehn Sekunden Hintergrundarbeit. Anders als beim
+    Import hat hier jemand geklickt und schaut hin. Wenn das je stoert: `jobs.request()`.
+    """
+    ok = ytdlp_update.aktualisiere()
+    return {"ok": ok, **ytdlp_update.zustand()}
 
 
 @app.get("/api/hardware")

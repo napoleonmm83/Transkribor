@@ -98,7 +98,12 @@ sodass aus `01172464` ein „Hans Müller, Garage Rüthi“ wird. Suchfeld und `
 auch in grossen Sammlungen mit einem Griff zum richtigen Projekt.
 
 **Videos direkt aus dem Netz.** YouTube- oder Instagram-Adresse einfügen genügt; Transkribor
-holt sich die Tonspur selbst.
+holt sich die Tonspur selbst. **Und hält sich dafür selbst instand:** YouTube und Instagram
+bauen ihre Seiten ständig um, wovon der Downloader jedes Mal aus dem Tritt kommt — Transkribor
+frischt ihn deshalb von sich aus auf. Geht ein Download trotzdem schief, weil die Seite sich
+gerade wieder geändert hat, aktualisiert es sofort und versucht es gleich noch einmal. Du
+merkst davon im Normalfall nichts; nachsehen (und abschalten) kannst du es unter
+**Einstellungen › Video-Import**.
 
 **Es wartet nicht auf dich.** Aufnahmen werden nacheinander abgearbeitet, mehrere Projekte
 parallel — du kannst weiterarbeiten oder das Fenster zumachen.
@@ -141,6 +146,13 @@ dich die App genauso und führt dich zur Release-Seite; auto-heruntergeladen wir
 (ohne Apple-Notarisierung nicht möglich). In der Linux-`.deb`-Fassung prüft sie nicht selbst —
 dort schaust du auf der
 [Releases-Seite](https://github.com/napoleonmm83/Transkribor/releases/latest) nach.
+
+**Ein Video-Import schlägt fehl — was nun?** Meistens hat die Plattform etwas umgebaut. Warte
+kurz und versuche es noch einmal: Transkribor frischt den Downloader beim ersten Fehlversuch
+selbst auf und lädt dann gleich weiter. Klappt es danach immer noch nicht, hilft der Knopf
+**„Jetzt aktualisieren"** unter *Einstellungen › Video-Import* — dort steht auch, welche
+Fassung gerade läuft. Bleibt es dabei, ist das Video vermutlich nicht öffentlich abrufbar
+(private Videos und solche, die eine Anmeldung verlangen, unterstützt Transkribor nicht).
 
 **Welche Sprachen?** Beim Hochladen (Drag&Drop) oder beim Import einer Video-URL wählst
 du pro Datei: Schweizerdeutsch, Deutsch, Englisch, Französisch, Italienisch oder Automatisch
