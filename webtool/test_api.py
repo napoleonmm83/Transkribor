@@ -1113,9 +1113,20 @@ def test_leerer_put_laesst_mehrsprachig_stehen(client, tmp_projekt):
 
 
 def test_put_lehnt_ungueltiges_mehrsprachig_ab(client, tmp_projekt):
-    """Wie sprache/korrektur (#139): 400 mit Feldnamen, geprueft ueber sprachen.pruef_fehler."""
+    """422 von pydantic, NICHT 400 von sprachen.pruef_fehler — und das ist der Punkt.
+
+    Anders als bei sprache/korrektur (#139, Werte gegen eine Liste) ist `mehrsprachig` ein
+    bool: pydantic wandelt bzw. lehnt ab, BEVOR pruef_fehler den Wert je sieht. Die
+    Typpruefung dort ist damit ueber HTTP unerreichbar; sie bleibt fuer direkte
+    Python-Aufrufer (dafuer gibt es den ehrlichen Unit-Test in test_sprachen.py).
+
+    Der Test stand vorher auf `in (400, 422)` und behauptete im Docstring eine 400 — er traf
+    immer die 422 und blieb gruen, auch wenn man die Pruefung ganz entfernte (Mutationsprobe
+    des Reviews: 8/8 weiter gruen). Ein Test, der Schutz behauptet, den es nicht gibt, ist
+    schlimmer als keiner; deshalb steht jetzt exakt da, was der Endpunkt wirklich tut."""
     r = client.put(f"/api/projects/{tmp_projekt}/einstellungen", json={"mehrsprachig": "ja"})
-    assert r.status_code in (400, 422)
+    assert r.status_code == 422
+    assert r.json()["detail"][0]["type"] == "bool_parsing"
 
 
 def test_upload_schreibt_mehrsprachig(client, tmp_projekt, audio_datei):
@@ -1147,3 +1158,15 @@ def test_fetch_reicht_mehrsprachig_als_env_durch(client, tmp_projekt, monkeypatc
     client.post(f"/api/projects/{tmp_projekt}/fetch",
                 json={"urls": ["https://youtu.be/x"], "mehrsprachig": True})
     assert gesehen.get("TRANSKRIBOR_FETCH_MEHRSPRACHIG") == "1"
+
+
+def test_fetch_env_kennt_auch_den_ausgeschalteten_haken(client, tmp_projekt, monkeypatch):
+    """Nur der true-Fall war geprueft. Ein Datei-Override auf FALSE ist aber genau der Fall,
+    den es geben muss: eine einsprachige Datei in einem Projekt, dessen Standard true ist."""
+    gesehen = {}
+    from webtool import jobs
+    monkeypatch.setattr(jobs, "start",
+                        lambda *a, **k: (gesehen.update(k.get("env") or {}), ("j1", True))[1])
+    client.post(f"/api/projects/{tmp_projekt}/fetch",
+                json={"urls": ["https://youtu.be/x"], "mehrsprachig": False})
+    assert gesehen.get("TRANSKRIBOR_FETCH_MEHRSPRACHIG") == "0"

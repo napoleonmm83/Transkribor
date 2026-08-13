@@ -85,7 +85,10 @@ try:
     # ponytail: 0.7 ist GERATEN, nicht kalibriert — drei Messpunkte (0.289 und 0.432 waren
     # Falschmeldungen auf rein deutschem Material, 0.938 die einzige echte Erkennung).
     # Darum eine Stellschraube. Tippfehler in der .env darf den Lauf nicht killen.
-    MIX_SCHWELLE = float(os.environ.get("TRANSKRIBOR_MIX_SCHWELLE") or 0.7)
+    # Auf [0,1] geklemmt, nicht nur ValueError abgefangen: TRANSKRIBOR_MIX_SCHWELLE=2 haette
+    # JEDEN Sprachwechsel still abgeschaltet (nichts erreicht je die Schwelle), =0 die Klemmung
+    # — und window_languages saehe in beiden Faellen unauffaellig aus.
+    MIX_SCHWELLE = min(1.0, max(0.0, float(os.environ.get("TRANSKRIBOR_MIX_SCHWELLE") or 0.7)))
 except ValueError:
     MIX_SCHWELLE = 0.7
 
@@ -296,6 +299,13 @@ def _transkribiere_datei(m, engine, f, sprache, mehr, model):
             m.model = proxy._echt
     if proxy is not None:
         result["window_languages"] = proxy.fenster
+        # Der einzige Fehlermodus des Features sind grundlose Sprachwechsel — ohne diese Zeile
+        # hat er keine sichtbare Ausgabe: window_languages liest sonst niemand.
+        fremde = sorted({f[2] for f in proxy.fenster} - {sprache})
+        geklemmt = sum(1 for f in proxy.fenster if f[0] != f[2])
+        print(f"  {os.path.splitext(os.path.basename(f))[0]}: {len(proxy.fenster)} Fenster, "
+              f"Fremdsprachen: {', '.join(fremde) or 'keine'}, {geklemmt} unsicher geklemmt",
+              flush=True)
     return result, m
 
 

@@ -97,7 +97,7 @@ export function ProjektEinstellungenDialog({ project, offen, onOpenChange, onGea
                 </SelectContent>
               </Select>
             </div>
-            <MehrsprachigKasten wert={mehrsprachig} setzen={setMehrsprachig} />
+            <MehrsprachigKasten wert={mehrsprachig} setzen={setMehrsprachig} id="mehr-projekt" />
           </div>
         )}
         <DialogFooter>

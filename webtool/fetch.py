@@ -97,6 +97,18 @@ def _ydl_opts(outtmpl: str) -> dict:
     }
 
 
+def _mehrsprachig_aus_env():
+    """TRANSKRIBOR_FETCH_MEHRSPRACHIG -> True/False/None (nicht gesetzt = kein Override).
+
+    Eigene Funktion, damit der Test sie ruft statt die Logik nachzubauen — ein Test, der den
+    Parser dupliziert, prueft sich selbst. Wichtig ist die Null-Richtung: der Wert ist ein
+    STRING, und "0" ist truthy. Ein blosses `bool(env)` gaebe einer bewusst einsprachig
+    markierten Datei den Haken doch.
+    """
+    roh = os.environ.get("TRANSKRIBOR_FETCH_MEHRSPRACHIG")
+    return None if roh is None else roh.strip().lower() in ("1", "true", "yes")
+
+
 def download_one(project: str, url: str) -> str:
     """Laedt die Tonspur nach projekte/<project>/audio/. Liefert den Basisnamen."""
     if yt_dlp is None:
@@ -125,8 +137,7 @@ def download_one(project: str, url: str) -> str:
     # Sprache pro geladene Base eintragen (vom Web-Tool per Env durchgereicht). Fehlt die
     # Variable, greift der Projekt-Default — Legacy-Verhalten bleibt unveraendert.
     sprache = os.environ.get("TRANSKRIBOR_FETCH_SPRACHE")
-    mehr_env = os.environ.get("TRANSKRIBOR_FETCH_MEHRSPRACHIG")
-    mehr = None if mehr_env is None else mehr_env.strip().lower() in ("1", "true", "yes")
+    mehr = _mehrsprachig_aus_env()
     if sprache or mehr is not None:
         projekt.setze_datei(project, base, sprache=sprache, mehrsprachig=mehr)
     return base

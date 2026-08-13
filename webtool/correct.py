@@ -45,7 +45,7 @@ _claude_slots = threading.Semaphore(CLAUDE_PARALLEL)
 _CREATE_NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 
 
-def _default_context(ziel: str, dialekt: bool = True) -> str:
+def _default_context(ziel: str, dialekt: bool = True, mehrsprachig: bool = False) -> str:
     """Fallback-Kontext, wenn kein kontext.md vorliegt.
 
     `dialekt=True` (Default -- Repo-Hauptfall Schweizerdeutsch) liefert die
@@ -54,7 +54,16 @@ def _default_context(ziel: str, dialekt: bool = True) -> str:
     ziel-gerichteten Fallback. Letzteres ersetzt das alte feste `DEFAULT_CONTEXT`,
     das "oft Schweizerdeutsch/Dialekt" einbrannte -- falsch fuer jede
     nicht-schweizerdeutsche Aufnahme (z.B. ein englischsprachiges Video kam als
-    deutsches Transkript zurueck)."""
+    deutsches Transkript zurueck).
+
+    `mehrsprachig` gewinnt gegen `dialekt`: der Dialekt-Text behauptet EINE gesprochene
+    Sprache und stuende sonst als erste Zeile ueber einem Prompt, dessen Regel 2 das
+    Gegenteil sagt. Ein Kontext, der der Regel widerspricht, ist genau die Form, an der
+    die [Musik]-Regel schon einmal haengengeblieben ist."""
+    if mehrsprachig:
+        return ("Interviews mit MEHREREN gesprochenen Sprachen (Hauptsprache: "
+                f"{ziel or 'siehe unten'}), von Whisper transkribiert. ASR-Fehler v.a. bei "
+                "Eigennamen und an den Sprachwechseln.")
     if dialekt:
         return ("Interviews (gesprochene Sprache oft Schweizerdeutsch/Dialekt), "
                 "von Whisper transkribiert. ASR-Fehler v.a. bei Eigennamen und Dialektbegriffen.")
@@ -359,16 +368,23 @@ def _correct_prompt(base: str, tagged_path: str, cpath: str, gjson: str, context
                     ziel: str = "lesbarem Standarddeutsch", dialekt: bool = True,
                     mehrsprachig: bool = False) -> str:
     block, scope = _scope(id_range, known)
-    einleitung = ("oft Schweizerdeutsch -> lesbares Standarddeutsch" if dialekt
-                  else f"in {ziel}")
     dialekt_hinweis = " (Schweizer „ss“)" if dialekt else ""
-    # Eigene Regelzeile statt einer anderen `ziel`-Phrase: `ziel` steht unten mitten im Satz
-    # ("zu {ziel} normalisieren"), eine Phrase wie "jede Passage in ihrer Sprache belassen"
-    # ergaebe dort Kauderwelsch.
-    mehr_regel = f"\n8) MEHRSPRACHIG: {sprachen.ZIEL_MEHRSPRACHIG}" if mehrsprachig else ""
+    # Die Mehrsprachig-Regel ersetzt die Normalisierungs-Anweisung, sie steht NICHT daneben.
+    # Zuerst hing sie als achte Regel hinten dran — dann sagten Ueberschrift, Projekt-Kontext
+    # und Regel 2 weiterhin "zu EINER Zielsprache normalisieren", und die Ausnahme kam erst
+    # danach. Ein Prompt mit zwei sich widersprechenden Anweisungen ist genau die Form, an der
+    # die [Musik]-Regel schon einmal haengengeblieben ist; deshalb ist hier JEDE der drei
+    # Stellen sprachbewusst, statt eine Gegenregel anzuhaengen.
+    einleitung = ("mehrere Sprachen — jede Passage bleibt in ihrer eigenen" if mehrsprachig
+                  else "oft Schweizerdeutsch -> lesbares Standarddeutsch" if dialekt
+                  else f"in {ziel}")
+    # Der einsprachige Zweig behaelt die URSPRUENGLICHE Wortstellung inklusive fuehrendem
+    # Komma — die Schweizerdeutsch-Pipeline soll byte-identisch bleiben (Constraint-Test).
+    norm_satz = (f". {sprachen.ZIEL_MEHRSPRACHIG}" if mehrsprachig
+                 else f", zu {ziel} normalisieren{dialekt_hinweis}.")
     return f"""Du korrigierst EIN Interview-Transkript SEGMENT FÜR SEGMENT ({einleitung}) und labelst die Sprecher.
 
-Projekt-Kontext: {context or _default_context(ziel, dialekt)}
+Projekt-Kontext: {context or _default_context(ziel, dialekt, mehrsprachig)}
 {block}
 1) Lies die Rohsegmente vollständig (Read-Tool) aus:
 {tagged_path}
@@ -377,12 +393,12 @@ Projekt-Kontext: {context or _default_context(ziel, dialekt)}
 Gemeinsames Glossar (für konsistente Schreibweisen — nutze es, ergänze nichts Erfundenes):
 {gjson or "(keins)"}
 
-2) KORRIGIEREN: klare ASR-Fehler mit Kontext + Glossar verbessern, zu {ziel} normalisieren{dialekt_hinweis}. BLEIB TREU: nichts erfinden, den Sinn nicht verändern, nicht über das Nötige hinaus glätten (Füllwörter wie „äh“/„ähm“ dürfen dezent weg). Entferne die [[...]]-Markierungen im Ausgabetext.
+2) KORRIGIEREN: klare ASR-Fehler mit Kontext + Glossar verbessern{norm_satz} BLEIB TREU: nichts erfinden, den Sinn nicht verändern, nicht über das Nötige hinaus glätten (Füllwörter wie „äh“/„ähm“ dürfen dezent weg). Entferne die [[...]]-Markierungen im Ausgabetext.
 3) PRO SEGMENT: gib für JEDE Segment-ID {scope} GENAU EINEN Eintrag {{id, speaker, text}} zurück — keine ID auslassen, keine Segmente zusammenfassen (die Redebeitrags-Bündelung passiert später).
 4) SPRECHER: Das akustische (Sprecher N)-Präfix ist die WAHRHEIT, WER spricht — vergib pro Cluster GENAU EINEN konsistenten Namen: meist „Interviewer“ (stellt Fragen) und die befragte Person (Name/Betrieb falls genannt, sonst „Befragte Person“). Du DARFST zwei Cluster demselben Namen zuordnen, wenn klar dieselbe Person. Eine Cluster-Grenze nur überschreiben, wenn sie offensichtlich falsch ist (z.B. ein einzelnes Rückkanal-Wort). Fehlt das Präfix, ordne nach Inhalt zu (wie bisher). Gib JEDEM Segment einen Sprecher.
 5) UNSICHER: wirklich unklare Stellen NICHT raten — nah am Original belassen und unter annotations vermerken.
 6) MUSIK/GESANG: Whisper "hört" in gesungenen Passagen sicher klingenden Unsinn (typisch: dieselbe kurze Zeile mehrfach hintereinander, fremdsprachig wirkende Wortfetzen, Text der zum Gespräch nicht passt). Bei GESUNGENEN Stellen und bei Segmenten ohne verständliche Sprache (Musik, Jubel, Applaus) schreibe als text exakt „[Musik]“ — nicht raten, was gesungen wurde. GESPROCHENE Bühnenansagen sind KEINE Musik, die bleiben Text.
-7) ASR-ARTEFAKTE: Segmente, deren Text nachweislich nicht aus dem Ton stammt, sondern aus Whispers Trainingsdaten (Untertitel-Floskeln wie „ARD Text im Auftrag von Funk“, „Untertitelung des ZDF“, „Vielen Dank fürs Zuschauen“), bekommen einen LEEREN text (""). Sie verschwinden damit aus dem Transkript. Regel 6 und 7 gelten nur, wenn du dir sicher bist — im Zweifel Text belassen und unter annotations vermerken.{mehr_regel}
+7) ASR-ARTEFAKTE: Segmente, deren Text nachweislich nicht aus dem Ton stammt, sondern aus Whispers Trainingsdaten (Untertitel-Floskeln wie „ARD Text im Auftrag von Funk“, „Untertitelung des ZDF“, „Vielen Dank fürs Zuschauen“), bekommen einen LEEREN text (""). Sie verschwinden damit aus dem Transkript. Regel 6 und 7 gelten nur, wenn du dir sicher bist — im Zweifel Text belassen und unter annotations vermerken.
 
 Schreibe das Ergebnis mit dem Write-Tool als JSON nach GENAU diesem Pfad:
 {cpath}
@@ -459,14 +475,17 @@ def _light_prompt(base: str, tagged_path: str, cpath: str, context: str,
     Braucht die Mehrsprachig-Regel genauso wie _correct_prompt: Schritt 2 schreibt Text um
     und nennt dabei `ziel` als Sprache — ohne die Regel uebersetzt eine gemischte Datei bei
     Tiefe 'leicht' nach Standarddeutsch. Derselbe Fehler ueber einen anderen Weg."""
-    mehr_regel = f"\n5) MEHRSPRACHIG: {sprachen.ZIEL_MEHRSPRACHIG}" if mehrsprachig else ""
+    # Wie in _correct_prompt: die Regel ERSETZT die Sprachangabe in Schritt 2, sie steht nicht
+    # daneben. "(Sprache: lesbarem Standarddeutsch)" neben "belasse jede Passage in ihrer
+    # eigenen" waeren zwei Anweisungen, die einander widersprechen.
+    norm_satz = (f". {sprachen.ZIEL_MEHRSPRACHIG}" if mehrsprachig else f" (Sprache: {ziel}).")
     return f"""Du bearbeitest EIN Transkript in EINEM Lauf (leichte Korrektur) und labelst die Sprecher.
 
-Projekt-Kontext: {context or _default_context(ziel, dialekt)}
+Projekt-Kontext: {context or _default_context(ziel, dialekt, mehrsprachig)}
 1) Lies die Rohsegmente (Read-Tool): {tagged_path}
-2) KORRIGIERE NUR offensichtliche ASR-Fehler und Eigennamen (Sprache: {ziel}). KEIN Umschreiben, keine Dialekt-Glättung, keine Normalisierung. Entferne [[...]]-Markierungen.
+2) KORRIGIERE NUR offensichtliche ASR-Fehler und Eigennamen{norm_satz} KEIN Umschreiben, keine Dialekt-Glättung, keine Normalisierung. Entferne [[...]]-Markierungen.
 3) SPRECHER: vergib pro (Sprecher N)-Cluster einen konsistenten Namen (meist „Interviewer" und die befragte Person). Gib JEDEM Segment einen speaker.
-4) SUMMARY: eine Inhalts-Zusammenfassung (3-5 Sätze).{mehr_regel}
+4) SUMMARY: eine Inhalts-Zusammenfassung (3-5 Sätze).
 
 Schema (Write-Tool nach {cpath}):
 {{"base":"{base}","context":"1-2 Sätze","speakers":["…"],
@@ -687,10 +706,14 @@ def _correct_file(project: str, base: str, gjson: str, context: str, verify: boo
             pass
 
 
-def _light_correct_file(project: str, base: str, ziel: str, dialekt: bool, mehrsprachig: bool,
-                        context: str) -> None:
+def _light_correct_file(project: str, base: str, ziel: str, dialekt: bool,
+                        context: str, mehrsprachig: bool = False) -> None:
     """Leichte Korrektur fuer EINE Datei -> <base>.correction.json (EIN LLM-Aufruf,
-    kein Glossar, kein Treue-Pass). Schema wie die Voll-Korrektur (mit text)."""
+    kein Glossar, kein Treue-Pass). Schema wie die Voll-Korrektur (mit text).
+
+    `mehrsprachig` steht am ENDE der Signatur, nicht zwischen `dialekt` und `context`:
+    dort haette ein zweiter, positional rufender Aufrufer still `context` an das Flag
+    gebunden. Ein neuer Parameter gehoert ans Ende oder ist keyword-only."""
     tdir = paths.transkripte_dir(project)
     target = os.path.abspath(os.path.join(tdir, base + ".correction.json"))
     tagged = os.path.abspath(os.path.join(tdir, base + ".tagged.txt"))
@@ -758,7 +781,7 @@ def cmd_run(project: str, base: str = None, force: bool = False, verify: bool = 
                     _correct_file(project, b, gjson, context, verify, force,
                                   ziel=ziel, dialekt=dialekt, mehrsprachig=mehr)
                 elif tiefe == "leicht":
-                    _light_correct_file(project, b, ziel, dialekt, mehr, context)
+                    _light_correct_file(project, b, ziel, dialekt, context, mehrsprachig=mehr)
                 else:  # zusammenfassung
                     _summary_only_file(project, b, ziel, context, dialekt)
             if not _valid_correction(cpath):

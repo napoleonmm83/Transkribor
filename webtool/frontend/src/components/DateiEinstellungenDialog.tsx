@@ -122,7 +122,7 @@ export function DateiEinstellungenDialog({ project, base, file, offen, onOpenCha
                 </SelectContent>
               </Select>
             </div>
-            <MehrsprachigKasten wert={mehrsprachig} setzen={setMehrsprachig} />
+            <MehrsprachigKasten wert={mehrsprachig} setzen={setMehrsprachig} id="mehr-datei" />
             {hinweis && <p className="text-sm text-muted-foreground">{hinweis}</p>}
           </div>
         )}
