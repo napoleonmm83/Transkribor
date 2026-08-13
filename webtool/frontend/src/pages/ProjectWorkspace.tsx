@@ -38,12 +38,13 @@ export function ProjectWorkspace() {
   // der Wähler am Upload ist ein Override fuer genau diese Datei und schreibt nicht zurueck.
   const [einstellungen, setEinstellungen] = useState<ProjectEinstellungen | null>(null)
   const [sprache, setSprache] = useState('')
+  const [mehrsprachig, setMehrsprachig] = useState(false)
   useEffect(() => {
     if (!project) return
     let aktiv = true
     setEinstellungen(null)         // Projektwechsel: Badge/Select verschwinden bis neu geladen
     getProjektEinstellungen(project)
-      .then(d => { if (aktiv) { setEinstellungen(d); setSprache(d.sprache) } })
+      .then(d => { if (aktiv) { setEinstellungen(d); setSprache(d.sprache); setMehrsprachig(d.mehrsprachig) } })
       .catch(() => { /* Badge/Select bleiben aus — Upload/Korrektur laufen unverändert */ })
     return () => { aktiv = false }
   }, [project])
@@ -62,7 +63,7 @@ export function ProjectWorkspace() {
   const reloadEinstellungen = () => {
     if (!project) return
     getProjektEinstellungen(project)
-      .then(d => { if (projectRef.current === project) { setEinstellungen(d); setSprache(d.sprache) } })
+      .then(d => { if (projectRef.current === project) { setEinstellungen(d); setSprache(d.sprache); setMehrsprachig(d.mehrsprachig) } })
       .catch(() => {})
   }
 
@@ -132,6 +133,7 @@ export function ProjectWorkspace() {
         <div className="space-y-3">
           <UploadDropzone project={project!}
             sprache={sprache} sprachChoices={sprachChoices} onSpracheChange={setSprache}
+            mehrsprachig={mehrsprachig} onMehrsprachigChange={setMehrsprachig}
             onDone={job => {
             refresh(); refreshFiles()
             // Sofort adoptieren statt auf den naechsten Poll zu warten — der Balken soll direkt stehen.
@@ -140,6 +142,7 @@ export function ProjectWorkspace() {
           }} />
           <UrlFetch project={project!}
             sprache={sprache} sprachChoices={sprachChoices} onSpracheChange={setSprache}
+            mehrsprachig={mehrsprachig} onMehrsprachigChange={setMehrsprachig}
             onStart={res => {
             if (!res.started) { toast.warning('Es läuft bereits ein Import für dieses Projekt.'); return }
             adopt(res.job_id, project!, 'fetch')

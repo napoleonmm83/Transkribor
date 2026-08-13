@@ -1116,3 +1116,34 @@ def test_put_lehnt_ungueltiges_mehrsprachig_ab(client, tmp_projekt):
     """Wie sprache/korrektur (#139): 400 mit Feldnamen, geprueft ueber sprachen.pruef_fehler."""
     r = client.put(f"/api/projects/{tmp_projekt}/einstellungen", json={"mehrsprachig": "ja"})
     assert r.status_code in (400, 422)
+
+
+def test_upload_schreibt_mehrsprachig(client, tmp_projekt, audio_datei):
+    """Der Haken muss VOR dem Job in projekt.json stehen — sonst transkribiert der
+    automatisch gestartete Lauf auf Projekt-Standard, und die Datei muesste danach noch
+    einmal komplett durch (Minuten GPU)."""
+    r = client.post(f"/api/projects/{tmp_projekt}/audio",
+                    files={"file": audio_datei}, data={"mehrsprachig": "true"})
+    assert r.status_code == 200
+    from webtool import projekt
+    assert projekt.datei_mehrsprachig(tmp_projekt, r.json()["base"]) is True
+
+
+def test_upload_ohne_feld_erbt_das_projekt(client, tmp_projekt, audio_datei):
+    """Kein Feld = kein Datei-Override -> der Projektwert gilt (Legacy-Verhalten)."""
+    client.put(f"/api/projects/{tmp_projekt}/einstellungen", json={"mehrsprachig": True})
+    r = client.post(f"/api/projects/{tmp_projekt}/audio", files={"file": audio_datei})
+    from webtool import projekt
+    assert projekt.datei_mehrsprachig(tmp_projekt, r.json()["base"]) is True
+
+
+def test_fetch_reicht_mehrsprachig_als_env_durch(client, tmp_projekt, monkeypatch):
+    """fetch.py kennt den Basisnamen erst nach dem Download — die Einstellung reist deshalb
+    als Env mit, wie schon TRANSKRIBOR_FETCH_SPRACHE."""
+    gesehen = {}
+    from webtool import jobs
+    monkeypatch.setattr(jobs, "start",
+                        lambda *a, **k: (gesehen.update(k.get("env") or {}), ("j1", True))[1])
+    client.post(f"/api/projects/{tmp_projekt}/fetch",
+                json={"urls": ["https://youtu.be/x"], "mehrsprachig": True})
+    assert gesehen.get("TRANSKRIBOR_FETCH_MEHRSPRACHIG") == "1"

@@ -615,6 +615,7 @@ def correct_file(project: str, base: str, force: bool = False):
 class FetchBody(BaseModel):
     urls: list[str]
     sprache: str | None = None
+    mehrsprachig: bool | None = None
 
 
 @app.post("/api/projects/{project}/fetch")
@@ -642,6 +643,9 @@ def fetch_urls(project: str, body: FetchBody):
     # sobald der Basisname feststeht (die Basen kennen wir hier noch nicht).
     cmd = [sys.executable, "-m", "webtool.fetch", "--download-only", project, *urls]
     env_sprache = {"TRANSKRIBOR_FETCH_SPRACHE": body.sprache} if body.sprache else {}
+    # Als "1"/"0", weil eine Env-Variable nur Strings kennt; fetch.py liest sie zurueck.
+    if body.mehrsprachig is not None:
+        env_sprache["TRANSKRIBOR_FETCH_MEHRSPRACHIG"] = "1" if body.mehrsprachig else "0"
     job_id, started = jobs.start(project, cmd, paths.ROOT, "fetch",
                                  then=lambda: _start_transcribe(project), env=env_sprache)
     return {"job_id": job_id, "started": started}
@@ -766,7 +770,8 @@ def cancel_job(job_id: str):
 
 
 @app.post("/api/projects/{project}/audio")
-def upload_audio(project: str, file: UploadFile = File(...), sprache: str = Form(None)):
+def upload_audio(project: str, file: UploadFile = File(...), sprache: str = Form(None),
+                 mehrsprachig: bool = Form(None)):
     _validate(project)
     name = os.path.basename(file.filename or "")           # vom Browser mitgesendete Pfade entfernen
     base, ext = os.path.splitext(name)
@@ -775,7 +780,7 @@ def upload_audio(project: str, file: UploadFile = File(...), sprache: str = Form
     if ext not in AUDIO_EXT:
         raise HTTPException(status_code=400, detail=f"nicht unterstützte Endung: {ext or '(keine)'}")
     # Sprache VOR dem Datei-Schreiben pruefen — sonst laege bei 400 eine orphan-Audiodatei.
-    fehler = _sprachen.pruef_fehler(sprache=sprache)
+    fehler = _sprachen.pruef_fehler(sprache=sprache, mehrsprachig=mehrsprachig)
     if fehler:
         raise HTTPException(status_code=400, detail=fehler)
     adir = os.path.join(paths.project_dir(project), "audio")
@@ -788,8 +793,8 @@ def upload_audio(project: str, file: UploadFile = File(...), sprache: str = Form
         raise HTTPException(status_code=409, detail="Datei existiert bereits")
     # Sprache fuer diese Datei eintragen, BEVOR der Job laeuft — sonst transkribiert er auf
     # Projekt-Standard. Fehlt das Feld, greift der Projekt-Default (Legacy-Verhalten).
-    if sprache:
-        _projekt.setze_datei(project, base, sprache=sprache)
+    if sprache or mehrsprachig is not None:
+        _projekt.setze_datei(project, base, sprache=sprache, mehrsprachig=mehrsprachig)
     # Hochladen IST der Startschuss: Transkription (und danach Korrektur) laufen von selbst an.
     # jobs.request() sorgt dafuer, dass ein Mehrfach-Upload hoechstens EINEN Nachlauf anhaengt.
     job_id, started = _start_transcribe(project)
