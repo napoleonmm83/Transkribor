@@ -345,6 +345,10 @@ describe('useDoc updateDoc', () => {
     expect(h.result.current.doc).toBeNull()
     expect(h.result.current.stand).toBe('ruhig')
     expect(h.result.current.dirty).toBe(false)
+    // Und der Nutzer erfaehrt davon: ohne Meldung wird der Editor leer und behauptet
+    // „Keine Datei geoeffnet." — seit `getDoc` ein Zeitlimit hat, ist das auch bei einer
+    // gesunden, nur langsamen Verbindung erreichbar (Reviewer-Befund an PR #159).
+    expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('Laden fehlgeschlagen (c)'))
   })
 
   it('schreibt das Kopffeld und laeuft ueber dieselbe Entprellung wie ein Segment', async () => {

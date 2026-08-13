@@ -73,7 +73,17 @@ export function useDoc(project: string | null, base: string | null) {
       // Episode der VORHERIGEN Datei ueber einem leeren Editor stehen — eine Speicher-Warnung
       // fuer ein Dokument, das gar nicht mehr da ist. Der Stand gilt dem Speichern; ohne
       // geladenes Dokument gibt es nichts zu speichern.
-      .catch(() => { if (juengster()) { setDoc(null); setDirty(false); setStand('ruhig') } })
+      // Mit Meldung, seit `getDoc` ein Zeitlimit hat: ohne sie wird der Editor nach 30 s leer
+      // und behauptet „Keine Datei geöffnet." (`Transcript.tsx`) — obwohl eine offen ist und
+      // der Nutzer nichts falsch gemacht hat. Vorher drehte dieselbe Anfrage endlos weiter,
+      // was schlecht war, aber wenigstens nicht log. `setDoc(null)` bleibt (#121s bewusste
+      // Wahl); es fehlte nur das Signal. Abbruch und 500 landen beide hier — eine gemeinsame
+      // Meldung reicht, eine Sonderbehandlung waere Ausbau ohne Gegenwert.
+      .catch(e => {
+        if (!juengster()) return
+        setDoc(null); setDirty(false); setStand('ruhig')
+        toast.error(`Laden fehlgeschlagen (${base}): ${e instanceof Error ? e.message : String(e)}`)
+      })
       // Der Schutz faellt erst mit dem JUENGSTEN Lauf — bis dahin ist jedes Schreiben aus der
       // alten Fassung falsch.
       .finally(() => { if (juengster()) { fertig.current = meiner; setLoading(false) } })
@@ -298,8 +308,15 @@ export function useDoc(project: string | null, base: string | null) {
       // soll, nur ueber den Nachbarpfad; und der Ausgang haenge davon ab, ob der Nutzer
       // wegnavigiert oder bleibt. `haengt.current = false` in `save` waere die Alternative,
       // behauptete aber „die Kette traegt den Stand jetzt“ — was gerade nicht stimmt.
+      // ZWEITER, unabhaengiger Grund fuer dieselbe Zeile (damit sie niemand als redundant
+      // wegnimmt): Wechsel A→B, Bs Ladelauf noch offen, der Nutzer tippt — gepatcht wird dabei
+      // As `doc`, denn B ist noch nicht da. Wechselt er nun B→C, schriebe der Cleanup
+      // `docRef.current` = A-Dokument unter B-Pfad. Das ist die #116-Katastrophe, nur ueber den
+      // Flush statt ueber den Autosave.
       // Die Zaehler zeigen hier noch auf die VERLASSENE Datei: React fuehrt erst alle
-      // Cleanups aus, dann die Setups (und erst das Setup ruft `reload()` fuer die neue).
+      // Cleanups aus, dann die Setups (und erst das Setup ruft `reload()` fuer die neue) —
+      // belegt durch den bestehenden Test „spuelt beim Dateiwechsel in der Tipppause den
+      // neuesten Stand", der genau diese Reihenfolge faehrt und gruen bleibt.
       //
       // Die Lint-Regel warnt, ein Ref koenne sich bis zum Cleanup geaendert haben. Genau
       // darauf beruht diese Zeile: gebraucht wird der Stand ZUM ZEITPUNKT des Verlassens,

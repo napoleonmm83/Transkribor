@@ -62,13 +62,13 @@ export function useSuche(doc: EditDoc | null | undefined, query: string): {
     // Die Notiz zaehlt zum Segment, nicht als eigener Ort: sie steht direkt darunter und wird
     // mit ihm markiert. Seit #112 ist sie sichtbar — sichtbarer Text, den die Suche nicht
     // findet, ist genau die Luecke, die #128 fuer die Kopffelder geschlossen hat.
-    // `s.note ?? ''` — und zwar NUR hier, nicht auch auf `text`/`raw_text`: `note` ist das
-    // einzige Feld, das eine liegende edit.json wirklich nicht haben kann. Bis #112 schrieb es
-    // niemand, und `load_or_build_doc` gibt eine vorhandene Datei unveraendert zurueck (kein
-    // Nachfuellen fehlender Schluessel) — jede vor #112 gespeicherte Datei kommt also ohne an.
-    // `text`/`raw_text` standen von der ersten Fassung an im Schema. Ohne den Rueckfall stuende
-    // das Wort „undefined“ im Suchtext JEDES Segments, und eine Suche nach „undef“ faerbte das
-    // ganze Transkript als Treffer.
+    // `s.note ?? ''` rein defensiv: `save_file` schreibt jedes JSON, das ankommt — eine von
+    // Hand oder fremd erzeugte edit.json darf jedes Feld weglassen. Fuer `text`/`raw_text`
+    // gilt dasselbe, dort steht der Rueckfall schon in `isCorrected`.
+    // (KEINE Schema-Historie: `build_edit_doc` schreibt `"note": ""` seit dem ersten Commit,
+    // genau wie `text` — ein frueherer Kommentar behauptete hier das Gegenteil.)
+    // Ohne den Rueckfall stuende das Wort „undefined“ im Suchtext JEDES Segments, und eine
+    // Suche nach „undef“ faerbte das ganze Transkript als Treffer.
     segmente: doc.segments.map(s => ({ id: s.id, txt: falte(`${isCorrected(s) ? s.text : s.raw_text} ${s.note ?? ''}`) })),
     annotationen: doc.annotations.map(a => falte(a ?? '')),
   }, [doc])
