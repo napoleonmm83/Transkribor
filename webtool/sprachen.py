@@ -34,6 +34,16 @@ TIEFEN = [
 ]
 
 
+# Regeltext fuer die Korrektur-Prompts bei mehrsprachigen Aufnahmen. Steht HIER und nicht in
+# correct.py: sprachbezogene Prompt-Phrasen haben eine Quelle (wie `ziel`), sonst driften
+# Korrektur- und Treue-Prompt auseinander — genau der Fehler, an dem die [Musik]-Regel hing.
+ZIEL_MEHRSPRACHIG = (
+    "Die Aufnahme enthält mehrere Sprachen. Belasse jede Passage in der Sprache, in der sie "
+    "gesprochen wurde — übersetze nichts. Innerhalb einer Passage gelten die Korrekturregeln "
+    "ihrer eigenen Sprache."
+)
+
+
 def _eintrag(sprach_id: str) -> dict:
     return SPRACHEN.get(sprach_id, SPRACHEN[SPRACH_DEFAULT])
 
@@ -77,16 +87,22 @@ def depth_label(tiefe: str) -> str:
     return tiefe
 
 
-def pruef_fehler(sprache: str | None = None, korrektur: str | None = None) -> str | None:
-    """Liefert eine Fehlermeldung, wenn ``sprache``/``korrektur`` kein bekannter Wert ist, sonst None.
+def pruef_fehler(sprache: str | None = None, korrektur: str | None = None,
+                 mehrsprachig=None) -> str | None:
+    """Liefert eine Fehlermeldung, wenn ein Wert unbekannt bzw. vom falschen Typ ist, sonst None.
 
     None-Argumente (nicht gesendete Felder) sind erlaubt — ein PUT ist ein Partial-Update.
     Die EINE Quelle fuer Gueltigkeit, konsumiert von beiden Einstellungs-Endpunkten (s. app.py);
     eine zweite Pruefung dort wuerde von dieser Tabelle wegdriften.
+
+    ``mehrsprachig`` ist ein bool und wird auf den TYP geprueft, nicht gegen eine Liste —
+    es gibt nur zwei gueltige Werte, und die kennt Python schon.
     """
     if sprache is not None and sprache not in SPRACHEN:
         return f"unbekannte Sprache: {sprache!r} (erlaubt: {', '.join(SPRACHEN)})"
     gueltige_tiefen = {TIEFE_DEFAULT} | {t["id"] for t in TIEFEN}
     if korrektur is not None and korrektur not in gueltige_tiefen:
         return f"unbekannte Korrektur-Tiefe: {korrektur!r} (erlaubt: {', '.join(sorted(gueltige_tiefen))})"
+    if mehrsprachig is not None and not isinstance(mehrsprachig, bool):
+        return f"mehrsprachig muss true oder false sein, nicht {mehrsprachig!r}"
     return None

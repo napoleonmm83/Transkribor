@@ -133,3 +133,46 @@ def test_laden_typisierte_werte_bleiben_erhalten(tmp_path, monkeypatch):
     assert d["sprache"] == "en"
     assert d["korrektur"] == "leicht"
     assert d["dateien"] == {"v1": {"sprache": "de"}}
+
+
+def test_laden_setzt_mehrsprachig_auf_false(tmp_path, monkeypatch):
+    # Bestehende Projekte ohne den Schluessel duerfen ihr Verhalten nicht aendern.
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    assert projekt.laden("p")["mehrsprachig"] is False
+
+
+def test_laden_ignoriert_falschen_typ_bei_mehrsprachig(tmp_path, monkeypatch):
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    _schreibe_projekt_json("p", tmp_path, {"mehrsprachig": "ja"})
+    assert projekt.laden("p")["mehrsprachig"] is False
+
+
+def test_speichern_nimmt_bool_auf(tmp_path, monkeypatch):
+    """Die String-Schleife in speichern() filtert auf isinstance(str) — ein bool faellt
+    dort durch und waere still verworfen: das Kaestchen liesse sich auf Projektebene
+    setzen, ohne dass etwas passiert."""
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    assert projekt.speichern("p", {"mehrsprachig": True})["mehrsprachig"] is True
+    assert projekt.laden("p")["mehrsprachig"] is True
+
+
+def test_setze_datei_schreibt_mehrsprachig(tmp_path, monkeypatch):
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    projekt.setze_datei("p", "a", mehrsprachig=True)
+    assert projekt.datei_mehrsprachig("p", "a") is True
+
+
+def test_datei_mehrsprachig_faellt_auf_projekt_zurueck(tmp_path, monkeypatch):
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    projekt.speichern("p", {"mehrsprachig": True})
+    assert projekt.datei_mehrsprachig("p", "unbekannt") is True
+
+
+def test_datei_false_schlaegt_projekt_true(tmp_path, monkeypatch):
+    """Der Kern: ein bewusst abgewaehltes False ist falsy. Loest der Rueckfall wie
+    datei_sprache ueber `or` auf, gewinnt der Projektwert — und der Haken liesse sich
+    pro Datei nie wieder abwaehlen. Entscheidend ist die ANWESENHEIT des Schluessels."""
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    projekt.speichern("p", {"mehrsprachig": True})
+    projekt.setze_datei("p", "a", mehrsprachig=False)
+    assert projekt.datei_mehrsprachig("p", "a") is False
