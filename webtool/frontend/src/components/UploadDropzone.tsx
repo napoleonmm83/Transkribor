@@ -40,7 +40,7 @@ export function UploadDropzone({ project, onDone, sprache = '', sprachChoices = 
     // ponytail: sequentiell statt Pool — lokale Uploads sind quasi instant; Pool nachruesten bei Bedarf
     for (const f of audio) {
       try {
-        const r = await uploadAudio(project, f, sprache, mehrsprachig)
+        const r = await uploadAudio(project, f, sprache, mehrWert)
         if (r.job_id) job = { job_id: r.job_id, started: !!r.started }
         patch(f.name, { status: 'done' })
       }
@@ -51,6 +51,13 @@ export function UploadDropzone({ project, onDone, sprache = '', sprachChoices = 
     }
     onDone?.(job)
   }
+
+  // `sprache` wird von den API-Funktionen bei leerem String weggelassen; der Haken muss
+  // GENAUSO degradieren. Sonst schickt ein Bereich, dessen Einstellungen gar nicht geladen
+  // sind (Fehler beim GET -> keine Auswahl gerendert), ein hartes `false` mit und schlaegt
+  // damit einen auf true stehenden Projekt-Standard — der Nutzer sieht kein Kaestchen und
+  // bekommt trotzdem einen Datei-Override. undefined = kein Override.
+  const mehrWert = sprachChoices.length > 0 ? mehrsprachig : undefined
 
   return (
     <div>

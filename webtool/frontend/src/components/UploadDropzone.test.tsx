@@ -87,3 +87,18 @@ describe('UploadDropzone', () => {
       'Demo', expect.any(File), 'en', true))
   })
 })
+
+describe('UploadDropzone — Degradierung ohne geladene Einstellungen', () => {
+  it('schickt ohne sprachChoices KEIN mehrsprachig mit', async () => {
+    /* Der GET auf die Projekt-Einstellungen kann fehlschlagen (ProjectWorkspace schluckt den
+       Fehler). Dann wird weder Auswahl noch Kaestchen gerendert — ein hartes `false` wuerde
+       einen auf true stehenden Projekt-Standard ueberschreiben, ohne dass der Nutzer je ein
+       Kaestchen gesehen haette. undefined heisst „kein Datei-Override". */
+    vi.spyOn(api, 'uploadAudio').mockResolvedValue({ base: 'a', file: 'a.mp3' })
+    render(<UploadDropzone project="Demo" onDone={() => {}} />)
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement
+    fireEvent.change(input, { target: { files: [new File(['x'], 'a.mp3', { type: 'audio/mpeg' })] } })
+    await waitFor(() => expect(api.uploadAudio).toHaveBeenCalledWith(
+      'Demo', expect.any(File), '', undefined))
+  })
+})

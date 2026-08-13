@@ -100,8 +100,13 @@ class _Sprachschwelle:
     pro Fenster. Auf einem rein deutschen Video schaltete es dadurch bei p=0.289 auf
     Englisch um und schob einen Satz ein, den niemand gesagt hat.
 
-    Anker None (Sprache 'auto'): die erste SICHERE Erkennung wird zum Anker; davor wird
-    nichts geklemmt, weil es noch nichts gibt, worauf man klemmen koennte.
+    Anker None (Sprache 'auto'): die ERSTE Erkennung wird zum Anker, ungeachtet ihrer
+    Konfidenz. Das ist bewusst nicht „die erste sichere": faster-whisper legt `info.language`
+    an genau diesem ersten Fenster fest (Schwelle 0.5, also LOCKERER als unsere 0.7), und
+    `correct._ziel_dialekt` loest 'auto' spaeter aus eben diesem `info.language` auf. Wuerden
+    wir auf 0.7 warten, koennte ein Video mit englischem Vorspann als `de` in die Datei
+    geschrieben werden, waehrend der Anker auf `en` einrastet — ab da klemmte jedes unsichere
+    deutsche Fenster auf Englisch, und Roh-JSON und Anker widersprechen sich.
 
     `fenster` protokolliert [erkannt, p, benutzt] je Aufruf — reine Diagnose. Eine strenge
     Zuordnung Fenster -> Segment ist damit NICHT moeglich: ein stilles Fenster verbraucht
@@ -117,8 +122,7 @@ class _Sprachschwelle:
         tok, p = r[0][0]
         code = tok[2:-2]
         if self._anker is None:
-            if p >= self._schwelle:
-                self._anker = code
+            self._anker = code          # erste Erkennung = Anker, wie faster-whispers info.language
         elif code != self._anker and p < self._schwelle:
             self.fenster.append([code, round(p, 3), self._anker])
             return [[(f"<|{self._anker}|>", 1.0)]]
@@ -243,15 +247,16 @@ def _ergebnis(segmente, info):
 def _datei_sprachwahl(proj_dir, base, fallback):
     """(Whisper-Sprach-Code, mehrsprachig) fuer EINE Datei aus projekt.json.
 
-    EIN Lesevorgang fuer beide Werte — zwei Aufrufe waeren zwei projekt.json-Lesungen pro
-    Datei. Lazy import wie schon `from webtool import device`: das Grund-Skript laeuft ohne
-    das Paket, nur die Aufloesung braucht es. Fehlt projekt.json, gilt `fallback`
+    EIN Lesevorgang fuer beide Werte (projekt.datei_einstellungen) — zwei Einzelaufrufe
+    laden projekt.json zweimal, pro Datei, in einer Schleife ueber ein ganzes Projekt.
+    Lazy import wie schon `from webtool import device`: das Grund-Skript laeuft ohne das
+    Paket, nur die Aufloesung braucht es. Fehlt projekt.json, gilt `fallback`
     (= WHISPER_LANG, Legacy-Verhalten) und nicht mehrsprachig. 'auto' -> None (Whisper
     erkennt selbst)."""
     try:
         from webtool import projekt as _p, sprachen as _s
-        name = os.path.basename(proj_dir)
-        return _s.whisper_code(_p.datei_sprache(name, base)), _p.datei_mehrsprachig(name, base)
+        sprache, mehr = _p.datei_einstellungen(os.path.basename(proj_dir), base)
+        return _s.whisper_code(sprache), mehr
     except Exception:
         return fallback, False
 
@@ -321,9 +326,16 @@ def transcribe_project(name, model, language, only=None):
     # (Begruendung samt Messung in _opts). Fuer die Korrektur liest correct.py sie selbst.
     from webtool import device as devicemod
     engine = devicemod.asr_engine(model)
-    if engine == "whisper.cpp" and not mehr:
+    if engine == "whisper.cpp":
         # Apple Silicon: Metal statt CPU. Gemessen 5.29x gegen 0.81x realtime — die
         # Begruendung steht in webtool/whispercpp.py.
+        #
+        # KEIN `and not mehr` hier: die Engine-Entscheidung faellt VOR der Schleife, `mehr`
+        # gibt es erst pro Datei. Der Rueckfall gemischter Dateien auf faster-whisper liegt
+        # in _transkribiere_datei und gehoert genau dorthin. Eine Bedingung mit `mehr` an
+        # dieser Stelle stirbt mit UnboundLocalError — und zwar VOR dem try/except der
+        # Schleife, also ohne ein einziges Transkript. Auf Windows/Linux faellt das nie auf,
+        # weil `engine != "whisper.cpp"` das `and` kurzschliesst.
         print(f"[{name}] engine=whisper.cpp (Metal)", flush=True)
     else:
         device = devicemod.pick_asr()
