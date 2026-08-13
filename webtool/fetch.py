@@ -86,15 +86,31 @@ def unique_base(adir: str, base: str) -> str:
     return cand
 
 
-def _ydl_opts(outtmpl: str) -> dict:
-    return {
-        "format": "bestaudio[ext=m4a]/bestaudio/best",
-        "outtmpl": outtmpl,
-        # m4a steht in AUDIO_EXT und spielt im Browser; YouTubes Default waere Opus-in-.webm
-        "postprocessors": [{"key": "FFmpegExtractAudio", "preferredcodec": "m4a"}],
+def _ydl_opts(outtmpl: str = "") -> dict:
+    """Gemeinsame yt-dlp-Optionen; mit `outtmpl` zusaetzlich die Download-Seite.
+
+    EINE Stelle fuer beide Aufrufe: die Metadaten-Runde extrahiert genauso wie der
+    Download, eine Option nur an einem der beiden Orte wirkt also nur halb.
+    """
+    opts = {
         "noplaylist": True,        # ?list=… nicht als ganze Playlist auffassen
-        "quiet": True, "no_warnings": True, "noprogress": True, "retries": 3,
+        "quiet": True, "no_warnings": True, "noprogress": True,
+        # Ohne JS-Laufzeit antwortet YouTube mit 403 (#162); die Ursache steht nur in einer
+        # Warnung darueber. deno ist yt-dlps Vorgabe, node liegt fuer den Frontend-Build
+        # ohnehin vor. Fehlt beides (gepackter Lauf), bleibt es beim alten Verhalten statt
+        # eines neuen Fehlers: eine nicht gefundene Laufzeit ist fuer yt-dlp kein Fehler
+        # (JsRuntime.info -> None); gewarnt wird nur bei einem unbekannten NAMEN.
+        "js_runtimes": {"deno": {}, "node": {}},
     }
+    if outtmpl:
+        opts |= {
+            "format": "bestaudio[ext=m4a]/bestaudio/best",
+            "outtmpl": outtmpl,
+            # m4a steht in AUDIO_EXT und spielt im Browser; YouTubes Default waere Opus-in-.webm
+            "postprocessors": [{"key": "FFmpegExtractAudio", "preferredcodec": "m4a"}],
+            "retries": 3,
+        }
+    return opts
 
 
 def _mehrsprachig_aus_env():
@@ -124,7 +140,7 @@ def download_one(project: str, url: str) -> str:
 
     # ponytail: zwei yt-dlp-Aufrufe (Metadaten, dann Download) — kostet einen Roundtrip,
     # dafuer steht der Dateiname VOR dem Download fest und Kollisionen sind sauber loesbar.
-    with yt_dlp.YoutubeDL({"quiet": True, "no_warnings": True, "noplaylist": True}) as ydl:
+    with yt_dlp.YoutubeDL(_ydl_opts()) as ydl:
         info = ydl.extract_info(url, download=False) or {}
     plattform = "youtube" if "youtu" in (urlparse(url).hostname or "") else "instagram"
     base = unique_base(adir, safe_base(info.get("title") or "",
