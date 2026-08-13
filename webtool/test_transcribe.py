@@ -345,3 +345,72 @@ def test_opts_mehrsprachig_schaltet_kontext_ab():
     multilingual: Whisper erkennt Englisch korrekt (p=0.938 gemessen) und gibt es
     trotzdem auf Deutsch zurueck, weil der deutsche Vorlauf als Prompt mitreist."""
     assert transcribe._opts("de", mehrsprachig=True)["condition_on_previous_text"] is False
+
+
+class _FakeCt2:
+    """Nachbau des ct2-Modells: liefert vorgegebene Erkennungen der Reihe nach. Gegen das
+    echte Modell zu testen hiesse, 3 GB zu laden und Audio zu brauchen — geprueft wird hier
+    die Klemm-Logik, nicht Whisper."""
+
+    def __init__(self, folge):
+        self.folge = list(folge)
+
+    def detect_language(self, enc):
+        code, p = self.folge.pop(0)
+        return [[(f"<|{code}|>", p)]]
+
+
+def _erkannt(ergebnis):
+    return ergebnis[0][0][0][2:-2]
+
+
+def test_schwelle_klemmt_unsicheren_wechsel_auf_den_anker():
+    """Gemessen: 0.289 und 0.432 waren Falschmeldungen auf einem rein deutschen Video,
+    0.938 war die einzige echte Erkennung."""
+    p = transcribe._Sprachschwelle(_FakeCt2([("en", 0.29)]), "de", 0.7)
+    assert _erkannt(p.detect_language(None)) == "de"
+
+
+def test_schwelle_laesst_sicheren_wechsel_durch():
+    p = transcribe._Sprachschwelle(_FakeCt2([("en", 0.938)]), "de", 0.7)
+    assert _erkannt(p.detect_language(None)) == "en"
+
+
+def test_schwelle_klemmt_nicht_bei_gleicher_sprache():
+    """Unsicheres Deutsch bleibt Deutsch — es gibt nichts zu klemmen.
+
+    Geprueft wird die WAHRSCHEINLICHKEIT, nicht der Sprachcode: klemmt der Proxy, erfindet
+    er ein glattes 1.0; laesst er durch, steht der echte Wert da. Der Code allein ist hier
+    blind, weil geklemmt und durchgelassen beide 'de' ergeben — mit einer Zusicherung auf
+    den Code blieb dieser Test gruen, obwohl die halbe Bedingung entfernt war
+    (Mutationsprobe, genau dafuer ist sie da)."""
+    p = transcribe._Sprachschwelle(_FakeCt2([("de", 0.4)]), "de", 0.7)
+    ergebnis = p.detect_language(None)
+    assert _erkannt(ergebnis) == "de"
+    assert ergebnis[0][0][1] == 0.4              # durchgereicht, nicht erfunden
+    assert p.fenster == [["de", 0.4, "de"]]
+
+
+def test_schwelle_ohne_anker_nimmt_die_erste_sichere_erkennung():
+    """Sprache 'auto': der Anker steht beim Start nicht fest. Die erste SICHERE Erkennung
+    wird er; alles davor laeuft ungeklemmt durch, weil es noch nichts gibt, worauf man
+    klemmen koennte."""
+    p = transcribe._Sprachschwelle(_FakeCt2([("fr", 0.3), ("en", 0.95), ("de", 0.2)]), None, 0.7)
+    assert _erkannt(p.detect_language(None)) == "fr"     # noch kein Anker
+    assert _erkannt(p.detect_language(None)) == "en"     # wird zum Anker
+    assert _erkannt(p.detect_language(None)) == "en"     # unsicheres de -> geklemmt
+
+
+def test_schwelle_protokolliert_jedes_fenster():
+    p = transcribe._Sprachschwelle(_FakeCt2([("en", 0.29), ("de", 0.99)]), "de", 0.7)
+    p.detect_language(None)
+    p.detect_language(None)
+    assert p.fenster == [["en", 0.29, "de"], ["de", 0.99, "de"]]
+
+
+def test_schwelle_reicht_unbekannte_attribute_durch():
+    """Der Proxy haengt am Platz des ct2-Modells — alles, was faster-whisper sonst
+    daran ruft, muss weiter ankommen."""
+    echt = _FakeCt2([])
+    echt.is_multilingual = True
+    assert transcribe._Sprachschwelle(echt, "de", 0.7).is_multilingual is True
