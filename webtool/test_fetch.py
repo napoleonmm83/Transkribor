@@ -309,11 +309,27 @@ def test_selbstheilung_NICHT_bei_login_pflicht(projekt, monkeypatch):
         fetch.main(["Demo", "https://www.instagram.com/reel/C8xY2pQr/"])
 
 
+def test_login_veto_schlaegt_den_extraktor_verdacht(projekt):
+    """Der einzige Test, der das `and not _LOGIN_RE` wirklich ausuebt.
+
+    Die beiden Tests darunter treffen `_EXTRAKTOR_RE` gar nicht (nachgemessen) — sie waeren
+    auch ohne das Veto gruen, es liess sich ersatzlos loeschen. Diese Meldung trifft BEIDE
+    Muster: `nsig` steht in der Positivliste, `cookies` im Veto. Ein Update repariert eine
+    fehlende Anmeldung nie, also darf sie keine Selbstheilung ausloesen.
+    """
+    e = RuntimeError("ERROR: Unable to extract nsig; use --cookies-from-browser")
+    assert fetch._EXTRAKTOR_RE.search(str(e))      # Positivliste trifft …
+    assert fetch._LOGIN_RE.search(str(e))          # … und das Veto auch
+    assert fetch._extraktor_verdacht(e) is False   # … das Veto gewinnt
+
+
 def test_formatfehler_wird_nicht_als_extraktor_verdacht_geraten(projekt):
     """`requested format is not available` stand in _EXTRAKTOR_RE und war TOTER CODE:
-    `_LOGIN_RE` enthaelt `not available` und schlaegt die Positivliste. Der Test haelt fest,
-    was daraus folgt — die Meldung gilt als Login-Fall, nicht als Extraktor-Verdacht —,
-    damit niemand den Zweig in dem Glauben wieder einbaut, er wirke (#173).
+    `_LOGIN_RE` enthaelt `not available` und schlug die Positivliste. Der Zweig ist raus;
+    dieser Test haelt fest, was daraus folgt — die Meldung gilt als Login-Fall (#173).
+
+    **Er prueft NICHT das Veto**: seit der Streichung trifft die Meldung `_EXTRAKTOR_RE` gar
+    nicht mehr, er waere also auch ohne das Veto gruen. Dafuer gibt es den Test darueber.
     """
     e = RuntimeError("ERROR: [youtube] abc: Requested format is not available. Use --list-formats")
     assert fetch._extraktor_verdacht(e) is False

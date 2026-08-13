@@ -304,11 +304,10 @@ export function SettingsPage() {
             className="mt-0.5 size-4 accent-primary"
             checked={s.ytdlp_auto === '1'}
             disabled={ytLaeuft}
-            onChange={e => speichern({ ytdlp_auto: e.target.checked ? '1' : '0' },
-              // Nachladen, weil die PUT-Antwort nur `ytdlp_auto` trägt, nicht den ganzen
-              // `ytdlp`-Block. `.catch`, damit ein Fehlschlag nicht als unbehandelte
-              // Rejection endet — die Anzeige ist dann eben einen Klick alt.
-              () => { getSettings().then(setS).catch(() => {}) })}
+            // Kein Nachladen: die PUT-Antwort trägt den `ytdlp`-Block seit dem Fix selbst.
+            // Vorher stand hier ein zweiter Aufruf, dessen Fehlschlag die Anzeige stehen
+            // liess — ein Weg weniger, der schiefgehen kann.
+            onChange={e => speichern({ ytdlp_auto: e.target.checked ? '1' : '0' })}
           />
           <span>
             <span className="font-medium">Videodownloader aktuell halten</span>

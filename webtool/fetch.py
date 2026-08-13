@@ -89,7 +89,16 @@ def _neu_laden() -> None:
 
 
 def _extraktor_verdacht(exc: Exception) -> bool:
-    """Sieht der Fehlschlag nach einem veralteten Extraktor aus — lohnt sich also ein Update?"""
+    """Sieht der Fehlschlag nach einem veralteten Extraktor aus — lohnt sich also ein Update?
+
+    Das Veto zaehlt: eine Meldung kann BEIDE Muster treffen ("Unable to extract nsig; use
+    --cookies-from-browser"), und dann gilt der Login-Verdacht — ein Update repariert eine
+    fehlende Anmeldung nie.
+
+    `\\b40[13]\\b` trifft auch in fremdgesteuertem Text (Videotitel, Fehlertext der Plattform).
+    Erzwingbar ist damit **ein** pip-Lauf pro Job, mit fester Argumentliste und Zeitdeckel —
+    Wartezeit, kein Hebel: der Befehl haengt an keiner Eingabe.
+    """
     msg = str(exc)
     return bool(_EXTRAKTOR_RE.search(msg)) and not _LOGIN_RE.search(msg)
 

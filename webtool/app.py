@@ -695,17 +695,23 @@ def put_settings(body: SettingsBody):
     if "ytdlp_auto" in patch and patch["ytdlp_auto"] not in ("0", "1"):
         raise HTTPException(status_code=400,
                             detail=f"ytdlp_auto muss '0' oder '1' sein: {patch['ytdlp_auto']!r}")
-    return settings.public(settings.save(patch))
+    # `ytdlp` gehoert MIT in die Antwort, obwohl es keine Einstellung ist: das Frontend tippt
+    # den Rueckgabewert als vollstaendige `Settings`. Ohne den Block war der Typ eine
+    # Falschaussage — und der Aufrufer brauchte ein Nachladen, dessen Fehlschlag wieder
+    # eigenes Zutun verlangte. Ein Aufruf, eine Wahrheit.
+    return {**settings.public(settings.save(patch)), "ytdlp": ytdlp_update.zustand()}
 
 
 @app.post("/api/settings/ytdlp/update")
 def settings_ytdlp_update():
-    """Der Knopf 'Jetzt aktualisieren'. Laeuft SYNCHRON im Request (bis PIP_TIMEOUT).
+    """Der Knopf 'Jetzt aktualisieren'. Laeuft SYNCHRON im Request.
 
-    ponytail: haengt den Browser im schlimmsten Fall 120 s an einem Spinner. Ein eigener
-    Job-Typ waere sauberer, kostete aber ein neues `kind` samt Label in `_KIND_TEXT`,
-    `jobPhases.ts` und der Fusszeile — fuer zehn Sekunden Hintergrundarbeit. Anders als beim
-    Import hat hier jemand geklickt und schaut hin. Wenn das je stoert: `jobs.request()`.
+    ponytail: haengt den Browser im schlimmsten Fall rund **250 s** an einem Spinner —
+    PIP_TIMEOUT (120 s) Warten auf die Sperre eines fremden pip-Laufs, dann der eigene mit
+    demselben Deckel. Ein eigener Job-Typ waere sauberer, kostete aber ein neues `kind` samt
+    Label in `_KIND_TEXT`, `jobPhases.ts` und der Fusszeile — fuer zehn Sekunden
+    Hintergrundarbeit. Anders als beim Import hat hier jemand geklickt und schaut hin.
+    Wenn das je stoert: `jobs.request()` (#174).
     """
     ok = ytdlp_update.aktualisiere()
     return {"ok": ok, **ytdlp_update.zustand()}

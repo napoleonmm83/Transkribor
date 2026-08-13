@@ -542,10 +542,14 @@ def test_settings_speichern_und_key_bleibt_geheim(client):
 def test_settings_modellwechsel_behaelt_den_key(client):
     client.put("/api/settings", json={"provider": "anthropic", "api_key": "sk-a"})
     r = client.put("/api/settings", json={"model": "claude-sonnet-5"})
-    assert r.json() == {"provider": "anthropic", "model": "claude-sonnet-5",
-                        "base_url": "", "has_key": True,
-                        "whisper_model": "large-v3", "whisper_lang": "de",
-                        "ytdlp_auto": "1"}
+    body = r.json()
+    # `ytdlp` haengt an der Umgebung (installierte Fassung), nicht an den Einstellungen —
+    # separat geprueft, damit dieser Vergleich nicht bei jedem yt-dlp-Update umfaellt.
+    assert body.pop("ytdlp").keys() == {"version", "geprueft", "auto", "env"}
+    assert body == {"provider": "anthropic", "model": "claude-sonnet-5",
+                    "base_url": "", "has_key": True,
+                    "whisper_model": "large-v3", "whisper_lang": "de",
+                    "ytdlp_auto": "1"}
 
 
 def test_settings_meldet_den_ytdlp_zustand(client, monkeypatch):
@@ -559,7 +563,12 @@ def test_settings_meldet_den_ytdlp_zustand(client, monkeypatch):
 
 
 def test_settings_ytdlp_schalter_wird_gespeichert(client):
-    assert client.put("/api/settings", json={"ytdlp_auto": "0"}).json()["ytdlp_auto"] == "0"
+    r = client.put("/api/settings", json={"ytdlp_auto": "0"}).json()
+    assert r["ytdlp_auto"] == "0"
+    # Der PUT liefert den ganzen `ytdlp`-Block mit: das Frontend tippt die Antwort als
+    # vollstaendige `Settings`, und ohne ihn brauchte es ein zweites Laden, dessen
+    # Fehlschlag die Anzeige auf dem Stand von vor dem Klick stehen liess.
+    assert r["ytdlp"]["auto"] is False
     assert client.get("/api/settings").json()["ytdlp"]["auto"] is False
 
 

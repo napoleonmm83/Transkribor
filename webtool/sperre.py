@@ -21,6 +21,17 @@ import time
 # Ab wann ein liegengebliebenes Lock als verwaist gilt (Prozess im kritischen Abschnitt
 # abgestorben). Die RMW-Sequenz selbst dauert Mikrosekunden — wer hier landet, ist eine
 # Crash-Hinterlassenschaft.
+#
+# **Bekannte Decke, bewusst so:** die Frist zaehlt ab dem `mkdir`, nicht ab der letzten
+# Regung. Ein LEBENDER Halter, der laenger braucht als `stale`, bekommt sein Lock also
+# weggeraeumt — erreichbar etwa, wenn der Rechner mitten im kritischen Abschnitt in den
+# Ruhezustand geht. Die Alternative (ein vom Betriebssystem gehaltenes Lock, das beim
+# Prozessende von selbst faellt) verliert genau die Eigenschaft, fuer die diese Frist da
+# ist: `jobs.cancel` beendet den Job-Prozessbaum mit `taskkill /F /T`, dort laeuft kein
+# `finally` — ohne Aufraeumen nach Alter blockierte ein abgebrochener Lauf fuer immer.
+# Dazu braeuchte sie Plattformzweige (`fcntl` gibt es auf Windows nicht, `msvcrt.locking`
+# arbeitet anders). Die Marge ist stattdessen breit gewaehlt: Mikrosekunden gegen 60 s
+# beim Schreiben, <=120 s (PIP_TIMEOUT) gegen 150 s beim pip-Lauf. Siehe #175.
 STALTES_ALTER = 60.0
 
 

@@ -89,6 +89,17 @@ def test_kaputter_merker_blockiert_nicht(monkeypatch):
     assert yu.faellig() is True
 
 
+def test_merker_in_der_ZUKUNFT_blockiert_nicht(monkeypatch):
+    """`(heute - g).days` wird bei einem Zukunftsdatum negativ — `faellig()` waere damit
+    dauerhaft False und der Kalenderweg **still und fuer immer** abgeschaltet. Erreichbar
+    per Handbearbeitung oder einer vorgehenden Rechneruhr; der API-Pfad ist verteidigt
+    (`SettingsBody` kennt den Schluessel nicht), diese beiden nicht."""
+    monkeypatch.setattr(yu, "fassung", lambda: "2026.7.4")
+    settings.save({"ytdlp_geprueft": "2099-01-01"})
+    assert yu.geprueft() is None
+    assert yu.faellig() is True
+
+
 def test_ohne_installiertes_yt_dlp_kein_update(monkeypatch):
     """`pip install -U` wuerde yt-dlp NEU installieren. Das ist Sache des Setups; hier
     bliebe sonst die ehrliche Meldung 'yt-dlp ist nicht installiert' aus."""
@@ -208,6 +219,21 @@ def test_fehlschlag_wirft_nicht_und_wird_protokolliert(monkeypatch, capsys):
     assert "ytdlp" in capsys.readouterr().out
 
 
+def test_unanlegbares_sperrverzeichnis_bricht_nicht_ab(monkeypatch, capsys):
+    """Der einzige Aufruf in diesem Modul, der frueher ungeschuetzt werfen konnte. Ein
+    schreibgeschuetztes Profil (oder ein TRANSKRIBOR_SETTINGS ohne Verzeichnisanteil) haette
+    den Import mitgerissen — genau das, was 'best effort, nie blockierend' ausschliesst."""
+    gerufen, run = _pip()
+    monkeypatch.setattr(yu.subprocess, "run", run)
+
+    def nein(*a, **k):
+        raise OSError(13, "Permission denied")
+    monkeypatch.setattr(yu.os, "makedirs", nein)
+    assert yu.aktualisiere() is True            # pip laeuft trotzdem …
+    assert len(gerufen) == 1
+    assert "Sperrverzeichnis" in capsys.readouterr().out   # … und sagt es
+
+
 def test_unschreibbare_einstellungsdatei_bricht_nicht_ab(monkeypatch):
     """Der Merker ist Buchhaltung, kein Ergebnis. Scheitert sein Schreiben, war das
     Update trotzdem erfolgreich — ein Fehler hier wuerde den Import mitreissen."""
@@ -276,5 +302,7 @@ def test_merker_und_pip_nehmen_VERSCHIEDENE_locks(monkeypatch):
     _, run = _pip()
     monkeypatch.setattr(yu.subprocess, "run", run)
     fertig = threading.Event()
-    threading.Thread(target=lambda: (yu.aktualisiere(), fertig.set())).start()
+    # daemon: haengt es doch, soll der Faden den Testlauf nicht am Beenden hindern — sonst
+    # steht statt eines roten Tests ein haengender pytest da.
+    threading.Thread(target=lambda: (yu.aktualisiere(), fertig.set()), daemon=True).start()
     assert fertig.wait(5), "aktualisiere() haengt — vermutlich Selbst-Deadlock der Sperren"
