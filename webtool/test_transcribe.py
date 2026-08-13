@@ -365,8 +365,14 @@ def _erkannt(ergebnis):
 
 
 def test_schwelle_klemmt_unsicheren_wechsel_auf_den_anker():
-    """Gemessen: 0.289 und 0.432 waren Falschmeldungen auf einem rein deutschen Video,
-    0.938 war die einzige echte Erkennung."""
+    """Unter der Schwelle gilt der Anker.
+
+    Die Zahl 0.29 stammt aus einer Messung an echtem Material: so sicher war sich der
+    Detektor ueber dem Abspann (keine Sprache). Echtes Deutsch liegt dort bei 0.98-1.00,
+    eine echte englische Interviewpassage bei 0.565 — siehe
+    test_vorgabeschwelle_laesst_echtes_interview_englisch_durch. Frueher stand hier, 0.289
+    UND 0.432 seien Falschmeldungen auf einem einsprachigen Video gewesen; das war falsch
+    (0.432 war die englische Passage, das Video nicht einsprachig)."""
     p = transcribe._Sprachschwelle(_FakeCt2([("en", 0.29)]), "de", 0.7)
     assert _erkannt(p.detect_language(None)) == "de"
 
@@ -394,11 +400,11 @@ def test_schwelle_klemmt_nicht_bei_gleicher_sprache():
 def test_schwelle_ohne_anker_nimmt_die_erste_erkennung():
     """Sprache 'auto': die ERSTE Erkennung wird zum Anker, auch eine unsichere.
 
-    Nicht „die erste sichere": faster-whisper legt `info.language` an genau diesem ersten
-    Fenster fest, und zwar mit der LOCKEREREN Schwelle 0.5. Wartete der Anker auf 0.7, koennte
-    ein Video mit englischem Vorspann als `de` in die Roh-JSON gehen, waehrend der Anker auf
-    `en` einrastet — ab da klemmte jedes unsichere deutsche Fenster auf Englisch, und
-    correct._ziel_dialekt (das 'auto' aus der Roh-JSON aufloest) widerspraeche dem Anker."""
+    Nicht „die erste sichere": faster-whisper legt `info.language` am ERSTEN Fenster fest,
+    und `correct._ziel_dialekt` loest 'auto' spaeter daraus auf. Wartete der Anker auf ein
+    besonders sicheres Fenster, koennte er auf einer spaeteren Sprache einrasten als der in
+    der Roh-JSON — ab da klemmte jedes unsichere Fenster auf die falsche. Gilt unabhaengig
+    davon, wo MIX_SCHWELLE steht."""
     p = transcribe._Sprachschwelle(_FakeCt2([("fr", 0.3), ("en", 0.95), ("de", 0.2)]), None, 0.7)
     assert _erkannt(p.detect_language(None)) == "fr"     # unsicher, aber Anker
     assert _erkannt(p.detect_language(None)) == "en"     # sicher -> echter Wechsel
@@ -557,9 +563,20 @@ def test_vorgabeschwelle_laesst_echtes_interview_englisch_durch(monkeypatch):
     Messung, nicht aus einer Schaetzung; ein hoeherer Default macht das Feature wieder kaputt.
 
     Kalibriert war 0.7 an TTS-Englisch (p=0.938) — sauberer Studioton. Genau diese Luecke
-    zwischen synthetischem und echtem Material haelt dieser Test offen."""
-    importlib.reload(transcribe)          # Vorgabe frisch, unabhaengig von der Umgebung
-    assert transcribe.MIX_SCHWELLE <= 0.565
-    assert transcribe.MIX_SCHWELLE > 0.289          # Stille wird weiterhin geklemmt
-    p = transcribe._Sprachschwelle(_FakeCt2([("en", 0.565)]), "de", transcribe.MIX_SCHWELLE)
-    assert _erkannt(p.detect_language(None)) == "en"
+    zwischen synthetischem und echtem Material haelt dieser Test offen.
+
+    `delenv` VOR dem reload, und das ist der Punkt: reload fuehrt die Modulzeile neu aus und
+    liest die Umgebungsvariable damit ERNEUT. Ohne das Loeschen prueft der Test, was in der
+    Umgebung steht, nicht die ausgelieferte Vorgabe — und die .env des Repos landet ueber
+    settings.load_env() in os.environ, sobald irgendein Test webtool.app importiert. Ein
+    Entwickler mit TRANSKRIBOR_MIX_SCHWELLE=0.8 saehe einen roten Test, der die Vorgabe
+    beschuldigt; mit 0.55 einen gruenen, der nichts beweist."""
+    monkeypatch.delenv("TRANSKRIBOR_MIX_SCHWELLE", raising=False)
+    importlib.reload(transcribe)
+    try:
+        assert transcribe.MIX_SCHWELLE <= 0.565     # echtes Interview-Englisch kommt durch
+        assert transcribe.MIX_SCHWELLE > 0.289      # Stille wird weiterhin geklemmt
+        p = transcribe._Sprachschwelle(_FakeCt2([("en", 0.565)]), "de", transcribe.MIX_SCHWELLE)
+        assert _erkannt(p.detect_language(None)) == "en"
+    finally:
+        importlib.reload(transcribe)   # sonst sehen Folgetests das geloeschte Env-Bild

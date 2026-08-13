@@ -122,12 +122,17 @@ class _Sprachschwelle:
     Englisch um und schob einen Satz ein, den niemand gesagt hat.
 
     Anker None (Sprache 'auto'): die ERSTE Erkennung wird zum Anker, ungeachtet ihrer
-    Konfidenz. Das ist bewusst nicht „die erste sichere": faster-whisper legt `info.language`
-    an genau diesem ersten Fenster fest (Schwelle 0.5, also LOCKERER als unsere 0.7), und
-    `correct._ziel_dialekt` loest 'auto' spaeter aus eben diesem `info.language` auf. Wuerden
-    wir auf 0.7 warten, koennte ein Video mit englischem Vorspann als `de` in die Datei
-    geschrieben werden, waehrend der Anker auf `en` einrastet — ab da klemmte jedes unsichere
-    deutsche Fenster auf Englisch, und Roh-JSON und Anker widersprechen sich.
+    Konfidenz — bewusst nicht „die erste sichere".
+
+    Der Grund ist die Uebereinstimmung mit der Roh-JSON: faster-whisper legt `info.language`
+    am ersten Fenster fest und nimmt dort die beste Erkennung, sobald sie
+    `language_detection_threshold` (0.5) erreicht. `correct._ziel_dialekt` loest 'auto'
+    spaeter aus eben diesem `info.language` auf. Wartete der Anker stattdessen auf ein
+    besonders sicheres Fenster, koennte er auf einer SPAETEREN Sprache einrasten als der,
+    die in der Datei steht — bei einem Video mit fremdsprachigem Vorspann liefen Anker und
+    Roh-JSON auseinander, und ab da klemmte jedes unsichere Fenster auf die falsche Sprache.
+    Die erste Erkennung zu nehmen haelt beide zusammen, unabhaengig davon, wo MIX_SCHWELLE
+    gerade steht.
 
     `fenster` protokolliert [erkannt, p, benutzt] je Aufruf — reine Diagnose. Eine strenge
     Zuordnung Fenster -> Segment ist damit NICHT moeglich: ein stilles Fenster verbraucht
