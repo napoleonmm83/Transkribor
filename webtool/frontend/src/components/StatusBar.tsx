@@ -68,6 +68,19 @@ export function StatusBar() {
           {hinweis}
         </Link>
       )}
+      {/* Unter `md` ist die Seitenleiste ausgeblendet (AppShell) — dann ist die Palette der
+          EINZIGE vollstaendige Weg zu den Projekten, und ihr Hinweis war mit dem Suchfeld der
+          alten Galerie verschwunden (#73). Genau da, wo die Leiste fehlt, steht er jetzt: die
+          Fusszeile ist auf jeder Route sichtbar. Kein Knopf, sondern der Text — die Palette
+          oeffnet sich ueber ihren eigenen Tastatur-Zuhoerer (ProjektPalette.tsx); ein zweiter
+          Ausloeser braeuchte einen gehobenen Zustand fuer einen Fall, den es nur unter `md`
+          gibt. Reiner Browser-Betrieb im schmalen Fenster; das Electron-Fenster hat
+          `minWidth: 900` und kommt hier nie an. */}
+      <span className="shrink-0 md:hidden">
+        <kbd className="rounded border px-1 font-sans">Strg</kbd>
+        <span aria-hidden="true"> + </span>
+        <kbd className="rounded border px-1 font-sans">K</kbd> für alle Projekte
+      </span>
       {/* Der einzige Weg zu den Einstellungen stand bisher auf der Uebersicht -- aus dem
           Editor musste man erst dorthin zurueck. Die Fusszeile ist auf JEDER Seite da. */}
       <Link to="/einstellungen"
