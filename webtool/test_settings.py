@@ -145,3 +145,21 @@ def test_zwei_schreiber_verlieren_einander_nicht(monkeypatch):
     cfg = orig()
     assert cfg["api_key"] == "sk-geheim"
     assert cfg["ytdlp_geprueft"] == "2026-08-13"
+
+
+def test_pfad_ohne_verzeichnisanteil_laesst_sich_speichern(tmp_path, monkeypatch):
+    """`TRANSKRIBOR_SETTINGS=settings.json` (ohne Ordner) ergibt einen leeren dirname, und
+    `os.makedirs("")` wirft FileNotFoundError — womit JEDES Speichern scheiterte: der PUT
+    mit 500, und der yt-dlp-Merker still (`_merken()` faengt den OSError ab, das Datum wurde
+    also nie gesetzt und jeder Import lief in ein pip).
+
+    Der cwd-Wechsel gehoert zum Fall: ein relativer Pfad ist nur zusammen mit dem
+    Arbeitsverzeichnis eine Angabe, und die Datei soll in tmp_path landen, nicht im Repo.
+    """
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("TRANSKRIBOR_SETTINGS", "settings.json")
+    settings.save({"model": "claude-opus-5", "ytdlp_geprueft": "2026-08-13"})
+    assert (tmp_path / "settings.json").exists()
+    cfg = settings.load()
+    assert cfg["model"] == "claude-opus-5"
+    assert cfg["ytdlp_geprueft"] == "2026-08-13"      # der Merker haelt, nicht nur der Aufruf

@@ -121,7 +121,13 @@ def save(patch: dict) -> dict:
     liegt HIER statt bei den Aufrufern: sie ist nur wirksam, wenn ALLE sie nehmen.
     """
     p = path()
-    os.makedirs(os.path.dirname(p), exist_ok=True)
+    # `or "."`: ein TRANSKRIBOR_SETTINGS ohne Verzeichnisanteil ("settings.json") liefert
+    # einen leeren dirname, und `os.makedirs("")` wirft FileNotFoundError — womit JEDES
+    # Speichern scheiterte: der PUT mit 500, und der yt-dlp-Merker still (dort faengt
+    # `_merken()` den OSError ab, das Datum wurde also nie gesetzt und jeder Import lief in
+    # ein pip). Der Fix gehoert HIERHER, wo alle Schreiber durchgehen — nicht in die
+    # einzelnen Aufrufer.
+    os.makedirs(os.path.dirname(p) or ".", exist_ok=True)
     with sperre.datei(p):
         cur = load()
         for k in DEFAULTS:
