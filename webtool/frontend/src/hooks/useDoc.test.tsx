@@ -205,6 +205,36 @@ describe('useDoc: Retry greift nicht quer zum Dokumentwechsel (#107 × #116)', (
 })
 
 describe('useDoc updateDoc', () => {
+  it('ein faelliger Autosave schreibt NICHT mehr, sobald reload() laeuft', async () => {
+    // Der Alltagsfall von #123: waehrend der Rueckfrage „korrigierte Fassung laden?“ blockiert
+    // `window.confirm` den Hauptfaden; der 800-ms-Timer des letzten Tastendrucks laeuft dabei
+    // ab und ist beim Zurueckkommen faellig. Er traegt in seiner Closure die Fassung VOR der
+    // Korrektur — und alle bestehenden Waechter lassen ihn durch (fassung unveraendert,
+    // meins() wahr, dieselbe Datei). Ohne den Ladelauf-Waechter stuende danach die alte
+    // Fassung auf der Platte, waehrend der Editor die frische anzeigt und „gespeichert“ meldet.
+    vi.mocked(api.saveDoc).mockResolvedValue({ ok: true } as never)
+    const { result } = await geladen()
+    await act(async () => { result.current.updateSegment(0, { text: 'meine Fassung' }) })
+
+    // Die Korrektur ist fertig: reload() geholt, Antwort noch unterwegs (langsames getDoc).
+    const korrigiert = { ...doc, segments: [{ ...seg, text: 'korrigierte Fassung' }] }
+    let loesen: (d: EditDoc) => void = () => {}
+    vi.mocked(api.getDoc).mockReturnValue(new Promise<EditDoc>(r => { loesen = r }))
+    await act(async () => { result.current.reload() })
+
+    // Jetzt wird der waehrend des Dialogs faellig gewordene Timer abgearbeitet.
+    await act(async () => { await vi.advanceTimersByTimeAsync(800) })
+    expect(api.saveDoc).not.toHaveBeenCalled()
+
+    await act(async () => { loesen(korrigiert); await vi.advanceTimersByTimeAsync(0) })
+    expect(result.current.doc?.segments[0].text).toBe('korrigierte Fassung')
+    expect(result.current.dirty).toBe(false)
+    // Und danach schreibt der Editor wieder ganz normal.
+    await act(async () => { result.current.updateSegment(0, { text: 'danach' }) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(800) })
+    expect(api.saveDoc).toHaveBeenCalledTimes(1)
+  })
+
   it('ein gescheitertes Laden setzt den Speicher-Stand zurueck (#121)', async () => {
     // Sonst bleibt ein 'fehler' aus der Episode der VORHERIGEN Datei ueber einem leeren
     // Editor stehen: doc=null, loading=false, und die Leiste warnt vor ungespeicherten

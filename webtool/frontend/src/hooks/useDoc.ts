@@ -44,6 +44,23 @@ export function useDoc(project: string | null, base: string | null) {
   const reload = useCallback(() => {
     if (!project || !base) { setDoc(null); setDirty(false); setStand('ruhig'); return }
     haengt.current = false   // neue Datei → nichts baumelt in der Tipppause
+    // SYNCHRON gesetzt, und `save` liest ihn synchron: ein faelliger Autosave traegt in seiner
+    // Closure die Fassung, die dieser Lauf gerade ersetzt — schriebe er noch, ginge die frisch
+    // geholte Fassung auf der Platte verloren, waehrend der Editor sie anzeigt.
+    //
+    // Der Fall ist nicht theoretisch, er ist der Alltagsfall von #123: die Rueckfrage
+    // („korrigierte Fassung laden?“) ist ein `window.confirm` und blockiert den Hauptfaden.
+    // Waehrenddessen laeuft der 800-ms-Timer des letzten Tastendrucks ab; beim Zurueckkommen
+    // ist er IMMER faellig und feuert unmittelbar nach `reload()`. Alle bestehenden Waechter in
+    // `save` lassen ihn durch: `fassung` ist unveraendert (niemand tippt in einen Dialog),
+    // `meins()` stimmt (dieselbe Datei), `neuester` auch. Ergebnis waere: Editor zeigt die
+    // Korrektur und meldet „gespeichert“, auf der Platte steht die Fassung davor.
+    //
+    // Ein blosses `setDirty(false)` hier reicht NICHT: es raeumt den Timer erst ueber den
+    // Effekt-Cleanup ab, und React flusht passive Effekte ueber den Scheduler (MessageChannel)
+    // — also ebenfalls als Makrotask. Gegen einen bereits abgelaufenen Timer ist die
+    // Reihenfolge damit nicht zugesichert. Nur ein Ref, den `save` selbst liest, ist es.
+    laedt.current = true
     setLoading(true)
     getDoc(project, base).then(d => { setDoc(d); setDirty(false); setStand('ruhig') })
       // `setStand('ruhig')` auch im Fehlerfall (#121): sonst bleibt ein 'fehler' aus der
@@ -51,7 +68,8 @@ export function useDoc(project: string | null, base: string | null) {
       // fuer ein Dokument, das gar nicht mehr da ist. Der Stand gilt dem Speichern; ohne
       // geladenes Dokument gibt es nichts zu speichern.
       .catch(() => { setDoc(null); setDirty(false); setStand('ruhig') })
-      .finally(() => setLoading(false))
+      // `laedt` faellt erst hier — bis dahin ist jedes Schreiben aus der alten Fassung falsch.
+      .finally(() => { laedt.current = false; setLoading(false) })
   }, [project, base])
   // `setDirty(false)` VOR dem Laden, und zwar hier: der ungespeicherte Stand gehoert der Datei,
   // die man verlaesst — mit ihr faellt er weg. `reload()` ersetzt das Dokument erst, wenn
@@ -168,9 +186,17 @@ export function useDoc(project: string | null, base: string | null) {
    *  etwas uebernehmen — ist der debounce-Timer abgelaufen, traegt die Kette den Stand schon,
    *  und ein zusaetzlicher Flush waere eine Doppelung, die #117s Zaehler-Erwartung bricht. */
   const haengt = useRef(false)
+  /** Laeuft gerade ein `reload()`? Siehe die Begruendung dort — der Wert entscheidet, ob ein
+   *  faelliger Autosave noch schreiben darf. Ref und nicht State, weil `save` ihn im selben
+   *  Tick lesen muss, in dem `reload` ihn setzt. */
+  const laedt = useRef(false)
 
   const save = useCallback(async () => {
     if (!doc || !project || !base) return
+    // Ein Ladelauf ersetzt das Dokument gerade — was diese Closure traegt, ist die Fassung
+    // davor. `dirty` bleibt oben; entweder setzt `reload` es beim Eintreffen zurueck (der
+    // Normalfall), oder der Fehlerzweig tut es (#121). Es bleibt also nichts haengen.
+    if (laedt.current) return
     haengt.current = false   // #106: debounce abgelaufen — dieser Aufruf traegt den Stand in die Kette
     // Angehaengt, nicht nebenher gestartet — und bewusst INNERHALB von `save`: eine ausgelagerte
     // Hilfsfunktion waere entweder eine Abhaengigkeit, die bei jedem Render wechselt (womit der
