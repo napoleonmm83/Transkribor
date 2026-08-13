@@ -309,6 +309,30 @@ def test_selbstheilung_NICHT_bei_login_pflicht(projekt, monkeypatch):
         fetch.main(["Demo", "https://www.instagram.com/reel/C8xY2pQr/"])
 
 
+def test_formatfehler_wird_nicht_als_extraktor_verdacht_geraten(projekt):
+    """`requested format is not available` stand in _EXTRAKTOR_RE und war TOTER CODE:
+    `_LOGIN_RE` enthaelt `not available` und schlaegt die Positivliste. Der Test haelt fest,
+    was daraus folgt — die Meldung gilt als Login-Fall, nicht als Extraktor-Verdacht —,
+    damit niemand den Zweig in dem Glauben wieder einbaut, er wirke (#173).
+    """
+    e = RuntimeError("ERROR: [youtube] abc: Requested format is not available. Use --list-formats")
+    assert fetch._extraktor_verdacht(e) is False
+    assert "nicht öffentlich abrufbar" in fetch._human_error(e)
+
+
+def test_kein_update_versprechen_im_log_wenn_nichts_passiert(projekt, monkeypatch, capsys):
+    """Bei abgeschaltetem Automatismus stand frueher 'aktualisiere yt-dlp und versuche es
+    noch einmal' im Job-Log — eine Zusage, die niemand einloest, ausgerechnet in dem
+    Protokoll, das der Nutzer liest, wenn ein Import fehlschlaegt."""
+    _FakeYDL.fehler = _403
+    monkeypatch.setattr(fetch.ytdlp_update, "automatisch", lambda *a, **k: False)
+    with pytest.raises(SystemExit):
+        fetch.main(["Demo", "https://youtu.be/vid123"])
+    out = capsys.readouterr().out
+    assert "noch einmal" not in out
+    assert "FEHLER" in out
+
+
 def test_selbstheilung_NICHT_bei_fremder_plattform(projekt, monkeypatch):
     """check_url wirft ValueError, bevor yt-dlp ueberhaupt gefragt wird — auch das ist kein
     Extraktor-Problem. Die Positivliste haelt beide Faelle draussen."""
