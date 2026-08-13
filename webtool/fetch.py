@@ -9,6 +9,7 @@ transkribiert anschliessend GENAU diese Dateien (transcribe.py, only=).
 import argparse
 import os
 import re
+import shutil
 import sys
 import unicodedata
 from urllib.parse import urlparse
@@ -39,12 +40,28 @@ _PIP_HINWEIS = r".venv\Scripts\python.exe -m pip install -U yt-dlp"
 _LOGIN_RE = re.compile(r"login|log in|sign in|private|not available|rate.?limit|cookies|bot", re.I)
 
 
+def _js_laufzeit_da() -> bool:
+    """Liegt eine JS-Laufzeit auf dem PATH? Nur fuer die FEHLERMELDUNG, nicht fuer die Optionen.
+
+    yt-dlp sucht selbst (und zusaetzlich im Scripts-Ordner) — deshalb steht `node` in
+    `_ydl_opts` bedingungslos. Hier geht es allein darum, den 403 richtig zu deuten.
+    """
+    return any(shutil.which(x) for x in ("deno", "node"))
+
+
 def _human_error(exc: Exception) -> str:
     """yt-dlp-Rauschen -> ein Satz, der Marcus sagt, was zu tun ist."""
     roh = str(exc).strip()
     msg = roh.splitlines()[-1] if roh else exc.__class__.__name__
     if _LOGIN_RE.search(msg):
         return "Video ist nicht öffentlich abrufbar (Login nötig)"
+    # Ohne JS-Laufzeit loest yt-dlp YouTubes Signatur nicht und bekommt 403 (#162). Die
+    # Meldung liest sich wie ein gesperrtes Video; die Ursache steht nur in einer Warnung,
+    # die `no_warnings` obendrein schluckt. Im gepackten Lauf ist das der Normalfall — der
+    # Installer bringt weder node noch deno mit (#171).
+    if "403" in msg and not _js_laufzeit_da():
+        return (f"{msg} — YouTube braucht eine JavaScript-Laufzeit; "
+                f"installiere Node (https://nodejs.org) oder Deno und versuche es erneut")
     return f"{msg} — bei Instagram hilft oft: {_PIP_HINWEIS}"
 
 

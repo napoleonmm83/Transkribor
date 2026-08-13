@@ -13,4 +13,7 @@ fastapi
 uvicorn[standard]
 python-multipart
 pyannote.audio==4.0.7
-yt-dlp
+# Untergrenze wegen `js_runtimes` in webtool/fetch.py (#162): eine aeltere Fassung kennt die
+# Option nicht und verwirft sie STILL (params ist ein blosses dict) — der Fix waere weg, ohne
+# dass irgendetwas davon berichtet. 2026.7.4 ist die Fassung, gegen die gemessen wurde.
+yt-dlp>=2026.7.4

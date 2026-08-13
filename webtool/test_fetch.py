@@ -237,6 +237,24 @@ def test_login_fehler_wird_uebersetzt(projekt, capsys):
     assert "nicht öffentlich abrufbar" in capsys.readouterr().out
 
 
+_403 = RuntimeError("ERROR: unable to download video data: HTTP Error 403: Forbidden")
+
+
+def test_403_ohne_js_laufzeit_nennt_die_echte_ursache(monkeypatch):
+    """#162: der 403 liest sich wie ein gesperrtes Video, kommt aber von der fehlenden
+    JS-Laufzeit — und die Warnung, die das erklaert, schluckt `no_warnings`. Genau das ist
+    im gepackten Lauf der Normalfall (weder node noch deno werden mitinstalliert)."""
+    monkeypatch.setattr(fetch.shutil, "which", lambda _: None)
+    assert "JavaScript-Laufzeit" in fetch._human_error(_403)
+
+
+def test_403_mit_js_laufzeit_raet_NICHT_zur_laufzeit(monkeypatch):
+    """Gegenrichtung: liegt node vor, hat der 403 eine andere Ursache — dann waere der Rat
+    ('installiere Node') ein Irrweg. Ohne diesen Test bliebe die Bedingung ungeprueft."""
+    monkeypatch.setattr(fetch.shutil, "which", lambda name: r"C:\node\node.exe")
+    assert "JavaScript-Laufzeit" not in fetch._human_error(_403)
+
+
 def test_env_parser_liest_beide_richtungen(monkeypatch):
     """Der Env-Wert ist ein STRING, und "0" ist truthy — ein blosses bool(env) gaebe einer
     bewusst einsprachig markierten Datei den Haken doch. Nicht gesetzt = None = kein
