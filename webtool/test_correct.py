@@ -813,7 +813,7 @@ def test_ziel_dialekt_explicit_ch(tmp_path, monkeypatch):
     os.makedirs(os.path.join(tmp_path, "p"), exist_ok=True)
     from webtool import projekt
     projekt.speichern("p", {"sprache": "ch"})
-    ziel, dialekt = correct._ziel_dialekt("p", "x")
+    ziel, dialekt, _ = correct._ziel_dialekt("p", "x")
     assert "Standarddeutsch" in ziel and dialekt is True
 
 
@@ -825,7 +825,7 @@ def test_ziel_dialekt_auto_nie_dialekt(tmp_path, monkeypatch):
         json.dump({"language": "en"}, fh)          # Whisper detektierte Englisch
     from webtool import projekt
     projekt.speichern("p", {"sprache": "auto"})
-    ziel, dialekt = correct._ziel_dialekt("p", "x")
+    ziel, dialekt, _ = correct._ziel_dialekt("p", "x")
     assert "English" in ziel and dialekt is False
 
 
@@ -894,3 +894,59 @@ def test_glossar_nur_wenn_voll_datei(tmp_path, monkeypatch):
     monkeypatch.setattr(correct, "cmd_apply", lambda *a, **k: "written")
     correct.cmd_run("p")
     assert not glossar_calls   # kein Glossar bei nur-zusammenfassung
+
+
+# --- Mehrsprachige Aufnahmen: die Regel muss in JEDEN Prompt, der Text umschreibt ---
+
+def test_korrektur_prompt_ohne_mehrsprachig_unveraendert():
+    """Constraint: die einsprachige Pipeline laeuft byte-identisch weiter."""
+    p = correct._correct_prompt("b", "t.txt", "c.json", "", "kontext")
+    assert "MEHRSPRACHIG" not in p
+
+
+def test_korrektur_prompt_traegt_die_mehrsprachig_regel():
+    p = correct._correct_prompt("b", "t.txt", "c.json", "", "kontext", mehrsprachig=True)
+    assert "übersetze nichts" in p
+
+
+def test_verify_prompt_traegt_die_mehrsprachig_regel():
+    """DER eigentliche Test dieser Aufgabe. Der Treue-Pass prueft gegen das Roh und
+    schreibt ZULETZT — ohne diese Zeile dreht er eine englische Passage neben deutschem
+    Kontext als Untreue zurueck. Exakt die Falle, in die die [Musik]-Regel gelaufen ist."""
+    p = correct._verify_prompt("b", "t.txt", "c.json", "kontext", mehrsprachig=True)
+    assert "FREMDSPRACHE" in p
+
+
+def test_verify_regel_haengt_nicht_an_kontext_md():
+    """`ziel` erreicht _verify_prompt NUR ueber _default_context, und der greift nur ohne
+    kontext.md. Ein Projekt MIT Kontextdatei saehe die Regel sonst nie — deshalb ein
+    eigenes Flag statt einer ziel-Phrase."""
+    p = correct._verify_prompt("b", "t.txt", "c.json", "ein ausfuehrlicher Projektkontext",
+                               mehrsprachig=True)
+    assert "FREMDSPRACHE" in p
+
+
+def test_light_prompt_traegt_die_regel():
+    """Die leichte Tiefe schreibt ebenfalls Text um ("KORRIGIERE ... (Sprache: {ziel})") —
+    ohne die Regel uebersetzt eine gemischte Datei bei Tiefe 'leicht' genauso nach
+    Standarddeutsch. Derselbe Fehler ueber einen anderen Weg."""
+    p = correct._light_prompt("b", "t.txt", "c.json", "kontext", mehrsprachig=True)
+    assert "übersetze nichts" in p
+
+
+def test_summary_prompt_bleibt_ohne_regel():
+    """Bewusst NICHT: _summary_prompt liefert Segmente ohne text-Schluessel, apply_correction
+    behaelt dort den Rohtext — es gibt nichts zu uebersetzen. Eine Regel gegen einen Schaden,
+    den das Schema schon ausschliesst, waere Prompt-Ballast."""
+    import inspect
+    assert "mehrsprachig" not in inspect.signature(correct._summary_prompt).parameters
+
+
+def test_ziel_dialekt_meldet_mehrsprachig(tmp_path, monkeypatch):
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    from webtool import projekt
+    projekt.setze_datei("p", "a", sprache="ch", mehrsprachig=True)
+    ziel, dialekt, mehr = correct._ziel_dialekt("p", "a")
+    assert mehr is True
+    assert dialekt is True                      # Anker bleibt Schweizerdeutsch
+    assert ziel == "lesbarem Standarddeutsch"   # ziel folgt UNVERAENDERT der Ankersprache
