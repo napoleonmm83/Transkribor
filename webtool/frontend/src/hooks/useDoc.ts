@@ -46,7 +46,12 @@ export function useDoc(project: string | null, base: string | null) {
     haengt.current = false   // neue Datei → nichts baumelt in der Tipppause
     setLoading(true)
     getDoc(project, base).then(d => { setDoc(d); setDirty(false); setStand('ruhig') })
-      .catch(() => setDoc(null)).finally(() => setLoading(false))
+      // `setStand('ruhig')` auch im Fehlerfall (#121): sonst bleibt ein 'fehler' aus der
+      // Episode der VORHERIGEN Datei ueber einem leeren Editor stehen — eine Speicher-Warnung
+      // fuer ein Dokument, das gar nicht mehr da ist. Der Stand gilt dem Speichern; ohne
+      // geladenes Dokument gibt es nichts zu speichern.
+      .catch(() => { setDoc(null); setDirty(false); setStand('ruhig') })
+      .finally(() => setLoading(false))
   }, [project, base])
   // `setDirty(false)` VOR dem Laden, und zwar hier: der ungespeicherte Stand gehoert der Datei,
   // die man verlaesst — mit ihr faellt er weg. `reload()` ersetzt das Dokument erst, wenn
