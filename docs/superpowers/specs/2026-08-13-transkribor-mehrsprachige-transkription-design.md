@@ -217,18 +217,35 @@ nicht, weil die Korrektur und die Übersetzung den Text ohnehin lesen. Bleibt of
 
 ### 3.5 Korrektur (`webtool/correct.py`)
 
-`_ziel_dialekt(project, base)` liefert für gemischte Dateien eine andere `ziel`-Phrase:
+`_correct_prompt` und `_verify_prompt` bekommen ein **eigenes Flag**
+`mehrsprachig: bool = False`, das je **eine zusätzliche Regelzeile** einsetzt.
 
-> „jede Passage in der Sprache belassen, in der sie gesprochen wurde — **nicht
-> übersetzen**; schweizerdeutsche Passagen zu lesbarem Standarddeutsch normalisieren"
+Nicht über die `ziel`-Phrase, obwohl das zunächst naheliegt: `ziel` steht in
+`_correct_prompt` mitten im Satz („zu {ziel} normalisieren"), eine Phrase wie „jede
+Passage in ihrer Sprache belassen" ergäbe dort Kauderwelsch. Schwerer wiegt der zweite
+Grund — in `_verify_prompt` wird `ziel` **ausschliesslich** über
+`_default_context(ziel, dialekt)` verwendet, und der greift nur, wenn **kein**
+`kontext.md` vorliegt. Ein Projekt mit Kontextdatei sähe die Regel also nie. `ziel` und
+`dialekt` folgen weiterhin unverändert der Ankersprache.
 
-Das Dialekt-Flag folgt weiterhin der Ankersprache (`ch` ⇒ `True`).
+Die Zeile in `_correct_prompt` wird Regel 8 (neben 6 MUSIK und 7 ASR-ARTEFAKTE):
 
-**Die Regel muss in BEIDE Prompts** — `_correct_prompt` *und* `_verify_prompt`. Der
-Treue-Pass prüft gegen das Rohtranskript und würde eine englische Passage neben
-deutschem Kontext sonst als Untreue zurückdrehen. Das ist exakt die Falle, in die
-schon die `[Musik]`-Markierung gelaufen ist; sie ist dokumentiert und wiederholt sich
-hier ohne Warnung.
+> **8) MEHRSPRACHIG:** Die Aufnahme enthält mehrere Sprachen. Belasse jede Passage in
+> der Sprache, in der sie gesprochen wurde — **übersetze nichts**. Innerhalb einer
+> Passage gelten die Korrekturregeln ihrer eigenen Sprache.
+
+Die Zeile in `_verify_prompt` ist ein weiterer Aufzählungspunkt in „Prüfe kritisch
+gegen das ROH", unmittelbar nach MUSIK/ARTEFAKTE und nach demselben Muster gebaut:
+
+> **- FREMDSPRACHE ist eine ERLAUBTE Entscheidung, KEINE Untreue:** Eine Passage in
+> einer anderen Sprache als der Rest ist nicht zurückzuübersetzen. Prüfe nur, ob sie
+> zum Roh passt.
+
+**Diese zweite Zeile ist der ganze Punkt.** Der Treue-Pass prüft gegen das
+Rohtranskript und würde eine englische Passage neben deutschem Kontext sonst als
+Untreue zurückdrehen — exakt die Falle, in die schon die `[Musik]`-Markierung gelaufen
+ist. Dass es dieselbe Falle ist, ist der Grund, den Text hier wörtlich hinzuschreiben
+statt „analog zu Regel 6".
 
 `_glossary_prompt` bleibt unangetastet (läuft mit `ziel=""`, sprachneutral).
 
