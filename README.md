@@ -72,6 +72,8 @@ jeder Änderung sichert Transkribor von selbst, oben links steht, woran es gerad
 **Stellen wiederfinden.** Das Suchfeld oben im Editor durchsucht das ganze Transkript: Treffer
 bleiben hell, alles andere tritt in den Hintergrund, und mit `▲` `▼` springst du von Fundstelle
 zu Fundstelle — bei mehreren tausend Wörtern die schnellste Art, „wo hat er genau das gesagt?".
+Die Schreibweise der Umlaute ist dabei egal: „Buehler“ findet „Bühler“ und umgekehrt, „Strasse“
+auch „Straße“ — praktisch, weil in Transkripten beides durcheinander vorkommt.
 
 **Auch Kontext und Zusammenfassung sind deine.** Die beiden Absätze über dem Gespräch schreibt
 die KI — und sie stehen im Text-Export ganz oben, also liest sie jeder zuerst. Ein Klick
