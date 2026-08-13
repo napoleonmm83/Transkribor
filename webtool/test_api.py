@@ -1076,3 +1076,43 @@ def test_fetch_lehnt_unbekannte_sprache_ab(client, monkeypatch):
     assert r.status_code == 400
     assert "Sprache" in r.json()["detail"]
     assert gestartet == []                      # kein Job angestossen
+
+
+# --- mehrsprachig: Haken neben der Sprachauswahl -------------------------------
+
+def test_projekteinstellungen_liefern_mehrsprachig(client, tmp_projekt):
+    assert client.get(f"/api/projects/{tmp_projekt}/einstellungen").json()["mehrsprachig"] is False
+
+
+def test_projekt_put_setzt_mehrsprachig(client, tmp_projekt):
+    r = client.put(f"/api/projects/{tmp_projekt}/einstellungen", json={"mehrsprachig": True})
+    assert r.status_code == 200 and r.json()["mehrsprachig"] is True
+    assert client.get(f"/api/projects/{tmp_projekt}/einstellungen").json()["mehrsprachig"] is True
+
+
+def test_dateieinstellungen_liefern_mehrsprachig(client, tmp_projekt):
+    assert client.get(
+        f"/api/projects/{tmp_projekt}/files/S1/einstellungen").json()["mehrsprachig"] is False
+
+
+def test_datei_put_setzt_mehrsprachig(client, tmp_projekt):
+    r = client.put(f"/api/projects/{tmp_projekt}/files/S1/einstellungen",
+                   json={"mehrsprachig": True})
+    assert r.status_code == 200 and r.json()["mehrsprachig"] is True
+    from webtool import projekt
+    assert projekt.datei_mehrsprachig(tmp_projekt, "S1") is True
+
+
+def test_leerer_put_laesst_mehrsprachig_stehen(client, tmp_projekt):
+    """Partial-Update: ein PUT ohne das Feld darf den Haken nicht loeschen — sonst raeumt
+    ein Sprachwechsel im Dialog die Mehrsprachigkeit still ab."""
+    client.put(f"/api/projects/{tmp_projekt}/einstellungen", json={"mehrsprachig": True})
+    client.put(f"/api/projects/{tmp_projekt}/einstellungen", json={"sprache": "en"})
+    d = client.get(f"/api/projects/{tmp_projekt}/einstellungen").json()
+    assert d["mehrsprachig"] is True and d["sprache"] == "en"
+
+
+def test_put_lehnt_ungueltiges_mehrsprachig_ab(client, tmp_projekt):
+    """Wie sprache/korrektur (#139): 400 mit Feldnamen, geprueft ueber sprachen.pruef_fehler."""
+    r = client.put(f"/api/projects/{tmp_projekt}/einstellungen", json={"mehrsprachig": "ja"})
+    assert r.status_code in (400, 422)
