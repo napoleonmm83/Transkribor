@@ -235,6 +235,37 @@ describe('useDoc updateDoc', () => {
     expect(api.saveDoc).toHaveBeenCalledTimes(1)
   })
 
+  it('zwei ueberlappende Ladelaeufe: der aeltere raeumt weder Schutz noch Inhalt weg', async () => {
+    // CodeRabbit an PR #159: mit EINEM Bool raeumte der zuerst zurueckkehrende Lauf den Schutz
+    // weg — auch wenn er der aeltere ist und ein juengerer noch unterwegs. Ein faelliger
+    // Autosave duerfte dann wieder schreiben, und die aeltere Antwort setzte obendrein ihren
+    // Inhalt ueber den neueren. Zwei fertige Korrekturen kurz hintereinander reichen dafuer.
+    vi.mocked(api.saveDoc).mockResolvedValue({ ok: true } as never)
+    const { result } = await geladen()
+    await act(async () => { result.current.updateSegment(0, { text: 'meine Fassung' }) })
+
+    const alt = { ...doc, segments: [{ ...seg, text: 'erste Korrektur' }] }
+    const neu = { ...doc, segments: [{ ...seg, text: 'zweite Korrektur' }] }
+    let loeseAlt: (d: EditDoc) => void = () => {}
+    let loeseNeu: (d: EditDoc) => void = () => {}
+    vi.mocked(api.getDoc)
+      .mockReturnValueOnce(new Promise<EditDoc>(r => { loeseAlt = r }))
+      .mockReturnValueOnce(new Promise<EditDoc>(r => { loeseNeu = r }))
+    await act(async () => { result.current.reload() })   // Lauf A
+    await act(async () => { result.current.reload() })   // Lauf B, waehrend A noch laeuft
+
+    // A kommt zuerst zurueck — er ist der aeltere und darf nichts anfassen.
+    await act(async () => { loeseAlt(alt); await vi.advanceTimersByTimeAsync(0) })
+    expect(result.current.doc?.segments[0].text).toBe('meine Fassung')   // NICHT 'erste Korrektur'
+    // Und der Schutz steht noch: der faellige Autosave schreibt weiterhin nicht.
+    await act(async () => { await vi.advanceTimersByTimeAsync(800) })
+    expect(api.saveDoc).not.toHaveBeenCalled()
+
+    await act(async () => { loeseNeu(neu); await vi.advanceTimersByTimeAsync(0) })
+    expect(result.current.doc?.segments[0].text).toBe('zweite Korrektur')
+    expect(result.current.dirty).toBe(false)
+  })
+
   it('ein gescheitertes Laden setzt den Speicher-Stand zurueck (#121)', async () => {
     // Sonst bleibt ein 'fehler' aus der Episode der VORHERIGEN Datei ueber einem leeren
     // Editor stehen: doc=null, loading=false, und die Leiste warnt vor ungespeicherten
