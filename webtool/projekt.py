@@ -2,55 +2,27 @@
 
 Liegt im Projektordner neben kontext.md. Fehlt die Datei oder ein Wert, gilt der
 Projekt-Standard bzw. der System-Default (ch/auto) -> Legacy-Verhalten bleibt erhalten."""
-import contextlib, json, os, time
-from . import paths, sprachen
+import contextlib, json, os
+from . import paths, sperre, sprachen
 
 
 def _pfad(project: str) -> str:
     return os.path.join(paths.project_dir(project), "projekt.json")
 
 
-# Ab wann ein liegengebliebenes Lock als verwaist gilt (Prozess im kritischen
-# Abschnitt abgestorben). Die RMW-Sequenz selbst dauert Mikrosekunden — wer hier
-# landet, ist ein Crash-Hinterlassenschaft.
-_LOCK_STALTES_ALTER = 60.0
-
-
 @contextlib.contextmanager
 def _gesperrt(project: str):
-    """Projekt-weites Lock um den Read-Modify-Write auf projekt.json.
+    """Projekt-weites Lock um den Read-Modify-Write auf projekt.json (#134).
 
-    Zwei Schreiber (parallele Uploads im FastAPI-Threadpool, oder der fetch-
-    Subprozess, der setze_datei aus einem *eigenen* OS-Prozess ruft) duerfen
-    laden+modify+_write nicht verschränken: der letzte _write gewinnt, des
-    anderen Datei-Eintrag ist verloren (#134). Ein prozess-lokales threading.Lock
-    reicht nicht — der fetch-Subprozess hat ein eigenes. os.mkdir ist auf POSIX
-    wie Windows atomar (im Gegensatz zu fcntl/msvcrt), darum ein Verzeichnis als
-    Lock, ohne fremde Abhaengigkeit.
+    Zwei Schreiber (parallele Uploads im FastAPI-Threadpool, oder der fetch-Subprozess,
+    der setze_datei aus einem *eigenen* OS-Prozess ruft) duerfen laden+modify+_write nicht
+    verschraenken: der letzte _write gewinnt, des anderen Datei-Eintrag ist verloren.
+    Die Mechanik steht seit derselben Race auf settings.json in `sperre.py`.
     """
     paths.safe_name(project)
     os.makedirs(paths.project_dir(project), exist_ok=True)
-    lockdir = _pfad(project) + ".lock"
-    while True:
-        try:
-            os.mkdir(lockdir)             # atomar auf allen Plattformen -> Lock erworben
-            break
-        except FileExistsError:
-            # Verwaist? (Crash waehrend des kritischen Abschnitts.) Dann aufräumen
-            # und erneut versuchen. Ein lebender Halter wird hier nicht weggerissen.
-            try:
-                if time.time() - os.stat(lockdir).st_mtime > _LOCK_STALTES_ALTER:
-                    os.rmdir(lockdir)
-            except OSError:
-                pass
-            time.sleep(0.01)
-    try:
+    with sperre.datei(_pfad(project)):
         yield
-    finally:
-        try:
-            os.rmdir(lockdir)
-        except OSError:
-            pass
 
 
 def _write(project: str, data: dict) -> None:

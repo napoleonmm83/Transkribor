@@ -7,6 +7,8 @@ der echtes pip startet, aendert die venv des Entwicklers waehrend der Lauf laeuf
 """
 import datetime as dt
 import subprocess
+import threading
+import time
 
 import pytest
 
@@ -216,3 +218,39 @@ def test_erzwingen_uebergeht_den_schalter_NICHT(monkeypatch):
     """Wer seine venv selbst verwaltet, will auch keine Selbstheilung darin."""
     monkeypatch.setenv("TRANSKRIBOR_YTDLP_UPDATE", "0")
     assert yu.automatisch(erzwingen=True) is False
+
+
+# --- Nebenlaeufigkeit --------------------------------------------------------
+
+def test_zwei_pip_laeufe_ueberschneiden_sich_nicht(monkeypatch):
+    """Zwei pip auf DIESELBE venv schreiben in dasselbe site-packages und koennen die
+    Installation zerlegen. Erreichbar, seit es zwei Ausloeser gibt: der Import-Job und der
+    Knopf in den Einstellungen. Gemessen wird die GLEICHZEITIGKEIT, nicht die Reihenfolge —
+    welcher zuerst drankommt, ist egal."""
+    laufend, hoechstens = [0], [0]
+
+    def run(cmd, **kwargs):
+        laufend[0] += 1
+        hoechstens[0] = max(hoechstens[0], laufend[0])
+        time.sleep(0.05)                  # Fenster, in dem sich der andere hineindraengen kann
+        laufend[0] -= 1
+        return subprocess.CompletedProcess(cmd, 0, "ok", "")
+
+    monkeypatch.setattr(yu.subprocess, "run", run)
+    faeden = [threading.Thread(target=yu.aktualisiere) for _ in range(3)]
+    for f in faeden:
+        f.start()
+    for f in faeden:
+        f.join()
+    assert hoechstens[0] == 1
+
+
+def test_merker_und_pip_nehmen_VERSCHIEDENE_locks(monkeypatch):
+    """`_merken()` laeuft, waehrend die pip-Sperre noch haelt. Trueg sie denselben Namen wie
+    die von `settings.save()`, stuende der Lauf hier fuer immer — deshalb der Test, nicht
+    nur der Kommentar."""
+    _, run = _pip()
+    monkeypatch.setattr(yu.subprocess, "run", run)
+    fertig = threading.Event()
+    threading.Thread(target=lambda: (yu.aktualisiere(), fertig.set())).start()
+    assert fertig.wait(5), "aktualisiere() haengt — vermutlich Selbst-Deadlock der Sperren"

@@ -114,3 +114,34 @@ def test_env_path_folgt_der_variablen(monkeypatch):
     """Die gepackte App legt ihre .env in userData, nicht neben den Code."""
     monkeypatch.setenv("TRANSKRIBOR_ENV", "/wo/anders/.env")
     assert settings.env_path() == "/wo/anders/.env"
+
+
+def test_zwei_schreiber_verlieren_einander_nicht(monkeypatch):
+    """Seit der yt-dlp-Selbstaktualisierung schreibt auch der fetch-Subprozess in diese
+    Datei (den Pruef-Merker) — waehrend der Server einen API-Key aus dem Browser sichert.
+    Ohne Sperre verschraenken sich load+merge+replace, der letzte gewinnt, und der Key ist
+    weg (dieselbe Race wie #134 auf projekt.json).
+
+    Das `load` wird kuenstlich verlangsamt: die echte Sequenz dauert Mikrosekunden und
+    liefe auch ungesperrt fast immer durch — ein Test, der die Race nicht oeffnet, ist
+    gruen aus Zufall und beweist nichts.
+    """
+    import threading
+    import time
+    orig = settings.load
+
+    def langsam():
+        d = orig()
+        time.sleep(0.05)
+        return d
+
+    monkeypatch.setattr(settings, "load", langsam)
+    faeden = [threading.Thread(target=settings.save, args=({"api_key": "sk-geheim"},)),
+              threading.Thread(target=settings.save, args=({"ytdlp_geprueft": "2026-08-13"},))]
+    for f in faeden:
+        f.start()
+    for f in faeden:
+        f.join()
+    cfg = orig()
+    assert cfg["api_key"] == "sk-geheim"
+    assert cfg["ytdlp_geprueft"] == "2026-08-13"
