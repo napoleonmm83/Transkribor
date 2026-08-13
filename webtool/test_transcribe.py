@@ -460,8 +460,7 @@ def test_datei_lauf_haengt_den_proxy_wieder_aus():
     Klemmung auf eine fremde Ankersprache ab."""
     m = _FakeModell()
     echt = m.model
-    _, zurueck = transcribe._transkribiere_datei(m, "faster-whisper", "a.m4a", "de", True, "large-v3")
-    assert zurueck is m
+    transcribe._transkribiere_datei(m, "faster-whisper", "a.m4a", "de", True, "large-v3")
     assert m.model is echt
     assert m.gesehen[0]["multilingual"] is True
 
@@ -484,13 +483,13 @@ def test_datei_lauf_haengt_auch_nach_fehler_wieder_aus():
 
 def test_datei_lauf_schreibt_window_languages():
     m = _FakeModell()
-    result, _ = transcribe._transkribiere_datei(m, "faster-whisper", "a.m4a", "de", True, "large-v3")
+    result = transcribe._transkribiere_datei(m, "faster-whisper", "a.m4a", "de", True, "large-v3")
     assert "window_languages" in result
 
 
 def test_einsprachige_datei_bekommt_keine_window_languages():
     m = _FakeModell()
-    result, _ = transcribe._transkribiere_datei(m, "faster-whisper", "a.m4a", "de", False, "large-v3")
+    result = transcribe._transkribiere_datei(m, "faster-whisper", "a.m4a", "de", False, "large-v3")
     assert "window_languages" not in result
     assert "multilingual" not in m.gesehen[0]
 
@@ -501,11 +500,13 @@ def test_gemischte_datei_faellt_von_whispercpp_auf_faster_whisper(monkeypatch):
     Transkript, ohne dass irgendwo etwas fehlschlaegt."""
     from webtool import whispercpp
     m = _FakeModell()
-    monkeypatch.setattr(transcribe, "_modell", lambda *a, **k: m)
     gerufen = []
     monkeypatch.setattr(whispercpp, "transkribiere",
                         lambda *a, **k: gerufen.append(a) or {"segments": []})
-    transcribe._transkribiere_datei(None, "whisper.cpp", "a.m4a", "de", True, "large-v3")
+    # Der Aufrufer laedt das Modell, sobald _braucht_faster_whisper True sagt; dieser Test
+    # bildet das nach — m wird hineingereicht, nicht in der Funktion erzeugt.
+    assert transcribe._braucht_faster_whisper("whisper.cpp", True) is True
+    transcribe._transkribiere_datei(m, "whisper.cpp", "a.m4a", "de", True, "large-v3")
     assert gerufen == []                          # whisper.cpp NICHT gerufen
     assert m.gesehen[0]["multilingual"] is True
 

@@ -264,27 +264,36 @@ def _datei_sprachwahl(proj_dir, base, fallback):
         return fallback, False
 
 
-def _transkribiere_datei(m, engine, f, sprache, mehr, model):
-    """EINE Aufnahme transkribieren -> (Ergebnis-dict, Modell).
+def _braucht_faster_whisper(engine, mehr):
+    """Laeuft DIESE Datei ueber faster-whisper statt whisper.cpp?
 
-    Das Modell kommt zurueck, weil es hier ERST ENTSTEHEN kann: auf einem whisper.cpp-Lauf
-    haelt der Aufrufer keines vor (m is None), und eine gemischte Datei braucht trotzdem
-    faster-whisper.
+    whisper.cpp ruft whisper-cli mit einem FESTEN -l und kennt keine Erkennung pro Fenster.
+    Eine gemischte Datei faellt deshalb auf faster-whisper zurueck — der VIERTE dokumentierte
+    Rueckfall (neben: kein Apple Silicon, whisper-cli fehlt, keine GGML-Datei). Langsamer,
+    aber richtig; ein einsprachiges Transkript ohne jede Fehlermeldung waere schlechter.
+
+    Eigene Funktion, weil zwei Stellen dieselbe Frage stellen: der Aufrufer, um das Modell
+    rechtzeitig zu laden, und _transkribiere_datei, um den Weg zu waehlen. Zweimal
+    ausgeschrieben waeren es zwei Wahrheiten.
+    """
+    return engine != "whisper.cpp" or mehr
+
+
+def _transkribiere_datei(m, engine, f, sprache, mehr, model):
+    """EINE Aufnahme transkribieren -> Ergebnis-dict.
+
+    Das Modell wird hier NICHT erzeugt, sondern vom Aufrufer erwartet. Zuerst tat es das und
+    gab `m` zurueck — dann ging das Modell bei jeder Ausnahme verloren, weil die
+    Tupel-Zuweisung beim Aufrufer ausfiel: auf einem Mac mit mehreren fehlerhaften gemischten
+    Dateien laed jeder Versuch erneut ~3 GB.
 
     Eigene Funktion und nicht inline in transcribe_project: die Schleife dort ist schon lang,
     und dies ist die einzige Stelle, an der ein Mac ein anderes Ergebnis bekommt als ein PC —
     die will man am Stueck lesen und einzeln pruefen koennen, ohne echtes Audio und 3 GB Modell.
     """
-    if engine == "whisper.cpp" and not mehr:
+    if not _braucht_faster_whisper(engine, mehr):
         from webtool import whispercpp
-        return whispercpp.transkribiere(f, model, sprache), m
-    # whisper.cpp ruft whisper-cli mit einem FESTEN -l und kennt keine Erkennung pro Fenster.
-    # Eine gemischte Datei faellt deshalb auf faster-whisper zurueck — der VIERTE dokumentierte
-    # Rueckfall (neben: kein Apple Silicon, whisper-cli fehlt, keine GGML-Datei). Langsamer,
-    # aber richtig; ein einsprachiges Transkript ohne jede Fehlermeldung waere schlechter.
-    if m is None:
-        from webtool import device as devicemod
-        m = _modell(model, devicemod.pick_asr())
+        return whispercpp.transkribiere(f, model, sprache)
     proxy = _Sprachschwelle(m.model, sprache, MIX_SCHWELLE) if mehr else None
     if proxy is not None:
         m.model = proxy
@@ -306,7 +315,7 @@ def _transkribiere_datei(m, engine, f, sprache, mehr, model):
         print(f"  {os.path.splitext(os.path.basename(f))[0]}: {len(proxy.fenster)} Fenster, "
               f"Fremdsprachen: {', '.join(fremde) or 'keine'}, {geklemmt} unsicher geklemmt",
               flush=True)
-    return result, m
+    return result
 
 
 def transcribe_project(name, model, language, only=None):
@@ -376,7 +385,13 @@ def transcribe_project(name, model, language, only=None):
             # Bleibt die Regel, die davon uebrig ist: eine kaputte Datei ueberspringen, der
             # Lauf geht weiter. Fuer whisper.cpp gilt sie genauso.
             sprache, mehr = _datei_sprachwahl(proj_dir, base, language)
-            result, m = _transkribiere_datei(m, engine, f, sprache, mehr, model)
+            # Das Modell hier laden, nicht in _transkribiere_datei: geht der Lauf dort schief,
+            # ginge es sonst mit der ausgefallenen Tupel-Zuweisung verloren und die naechste
+            # Datei laed erneut ~3 GB. Auf einem whisper.cpp-Lauf entsteht es genau dann, wenn
+            # die erste gemischte Datei kommt.
+            if m is None and _braucht_faster_whisper(engine, mehr):
+                m = _modell(model, devicemod.pick_asr())
+            result = _transkribiere_datei(m, engine, f, sprache, mehr, model)
         except Exception as e:
             print(f"[{name}] FEHLER {base}: {e}", flush=True)
             continue
