@@ -94,14 +94,20 @@ describe('SegmentView', () => {
     expect(screen.queryByTitle('Notiz hinzufügen')).toBeNull()
   })
 
-  it('leeren streicht die Notiz', () => {
-    const updateSegment = vi.fn()
-    render(<TooltipProvider><SegmentView seg={mkSeg({ note: 'erledigt' })} active={false} onPlay={vi.fn()} updateSegment={updateSegment} /></TooltipProvider>)
-    fireEvent.click(screen.getByText('erledigt'))
-    const feld = screen.getByRole('textbox')
-    fireEvent.change(feld, { target: { value: '' } })
-    fireEvent.blur(feld)
-    expect(updateSegment).toHaveBeenCalledWith(1, { note: '' })
+  it('leeren streicht die Notiz — auch, wenn nur Leerraum stehen bleibt', () => {
+    // Nur-Leerraum ungefiltert durchzulassen waere die schlimmere Haelfte: "   " ist truthy,
+    // also faellt das Anlege-Symbol weg UND die Notizzeile zeigt nichts — eine unsichtbare
+    // Notiz, die `render_md` ohnehin wegstrippt. (CodeRabbit an PR #153.)
+    for (const eingabe of ['', '   ']) {
+      const updateSegment = vi.fn()
+      const { unmount } = render(<TooltipProvider><SegmentView seg={mkSeg({ note: 'erledigt' })} active={false} onPlay={vi.fn()} updateSegment={updateSegment} /></TooltipProvider>)
+      fireEvent.click(screen.getByText('erledigt'))
+      const feld = screen.getByRole('textbox')
+      fireEvent.change(feld, { target: { value: eingabe } })
+      fireEvent.blur(feld)
+      expect(updateSegment).toHaveBeenCalledWith(1, { note: '' })
+      unmount()
+    }
   })
 
   it('ohne Such-Props weder Ausgrauen noch gelber Ring (Default)', () => {
