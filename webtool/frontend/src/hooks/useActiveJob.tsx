@@ -92,15 +92,23 @@ export function JobProvider({ children, intervalMs = 1500 }: { children: ReactNo
         }
       }
       const ergebnis = new Map(ergebnisse)
+      // EINMAL je Job und Tick geparst (#77). Vorher lief `parseJobPhases` zweimal ueber
+      // dieselben Zeilen — hier fuer den Ref und gleich nochmal im setJobs-Updater. Reine
+      // Rechenzeit ohne Wirkung, aber sie waechst mit der Log-Laenge, und ein Korrekturlauf
+      // ueber ein grosses Projekt schreibt viele tausend Zeilen. Der Updater bedient sich
+      // jetzt aus derselben Map; `kind` aendert sich nach dem Adoptieren nie, die Ergebnisse
+      // sind also identisch.
+      const phasen: Record<string, JobPhases> = {}
       for (const j of jobs) {
         const r = ergebnis.get(j.id)
-        if (r) letztePhasen.current[j.id] = parseJobPhases(j.kind, r.lines)
+        if (r) letztePhasen.current[j.id] = phasen[j.id] = parseJobPhases(j.kind, r.lines)
       }
       setJobs(prev => prev.map(j => {
         if (!(j.id in neu)) return j
         const r = ergebnis.get(j.id)
-        // parseJobPhases darf hier stehen: reine Funktion von (kind, lines).
-        if (r) return { ...j, status: r.status, phases: parseJobPhases(j.kind, r.lines) }
+        // `phasen[j.id]` ist gesetzt, wann immer `r` existiert: `neu` und `phasen` entstehen
+        // beide aus DERSELBEN Poll-Runde ueber dieselben Kennungen.
+        if (r) return { ...j, status: r.status, phases: phasen[j.id] }
         return neu[j.id] === 'error' ? { ...j, status: 'error' } : j
       }))
 
