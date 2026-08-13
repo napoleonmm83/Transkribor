@@ -229,6 +229,9 @@ def get_project(project: str):
 class EinstellungenBody(BaseModel):
     sprache: str | None = None
     korrektur: str | None = None
+    # `mehrsprachig` ist die Ankersprach-Ergaenzung: die gewaehlte Sprache bleibt die
+    # Hauptsprache, weitere werden im Verlauf erkannt. None = Feld nicht gesendet.
+    mehrsprachig: bool | None = None
 
 
 @app.get("/api/projects/{project}/einstellungen")
@@ -236,18 +239,23 @@ def projekteinstellungen(project: str):
     _validate(project)
     d = _projekt.laden(project)
     return {"sprache": d["sprache"], "korrektur": d["korrektur"],
+            "mehrsprachig": d["mehrsprachig"],
             "sprach_choices": _sprachen.fuer_frontend(), "tiefen": _sprachen.TIEFEN}
 
 
 @app.put("/api/projects/{project}/einstellungen")
 def projekteinstellungen_speichern(project: str, body: EinstellungenBody):
     _validate(project)
-    fehler = _sprachen.pruef_fehler(sprache=body.sprache, korrektur=body.korrektur)
+    fehler = _sprachen.pruef_fehler(sprache=body.sprache, korrektur=body.korrektur,
+                                    mehrsprachig=body.mehrsprachig)
     if fehler:
         raise HTTPException(status_code=400, detail=fehler)
-    # speichern() ueberspringt None-Werte (isinstance-Check auf str) -> leerer Body ist sicher.
-    d = _projekt.speichern(project, {"sprache": body.sprache, "korrektur": body.korrektur})
-    return {"sprache": d["sprache"], "korrektur": d["korrektur"]}
+    # speichern() ueberspringt None-Werte (isinstance-Pruefung je Feld) -> leerer Body ist
+    # sicher, und ein PUT ohne `mehrsprachig` laesst den Haken stehen (Partial-Update).
+    d = _projekt.speichern(project, {"sprache": body.sprache, "korrektur": body.korrektur,
+                                     "mehrsprachig": body.mehrsprachig})
+    return {"sprache": d["sprache"], "korrektur": d["korrektur"],
+            "mehrsprachig": d["mehrsprachig"]}
 
 
 @app.get("/api/projects/{project}/files/{base}/einstellungen")
@@ -259,6 +267,7 @@ def dateieinstellungen(project: str, base: str):
         raise HTTPException(status_code=404, detail=f"keine Datei: {base}")
     return {"sprache": _projekt.datei_sprache(project, base),
             "korrektur": _projekt.datei_korrektur(project, base),
+            "mehrsprachig": _projekt.datei_mehrsprachig(project, base),
             "sprach_choices": _sprachen.fuer_frontend(), "tiefen": _sprachen.TIEFEN}
 
 
@@ -271,12 +280,15 @@ def dateieinstellungen_speichern(project: str, base: str, body: EinstellungenBod
     bestehenden ``…/transcribe``/``…/correct``-Endpunkte an — die ihrerseits ``_keine_jobs``
     prüfen. Siehe Spec #135."""
     _validate(project, base)
-    fehler = _sprachen.pruef_fehler(sprache=body.sprache, korrektur=body.korrektur)
+    fehler = _sprachen.pruef_fehler(sprache=body.sprache, korrektur=body.korrektur,
+                                    mehrsprachig=body.mehrsprachig)
     if fehler:
         raise HTTPException(status_code=400, detail=fehler)
-    _projekt.setze_datei(project, base, sprache=body.sprache, korrektur=body.korrektur)
+    _projekt.setze_datei(project, base, sprache=body.sprache, korrektur=body.korrektur,
+                         mehrsprachig=body.mehrsprachig)
     return {"sprache": _projekt.datei_sprache(project, base),
-            "korrektur": _projekt.datei_korrektur(project, base)}
+            "korrektur": _projekt.datei_korrektur(project, base),
+            "mehrsprachig": _projekt.datei_mehrsprachig(project, base)}
 
 
 class NewProject(BaseModel):
