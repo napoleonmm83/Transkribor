@@ -325,3 +325,23 @@ def test_datei_whisper_code_fallback_wenn_import_scheitert(tmp_path, monkeypatch
         raise RuntimeError("simulated")
     monkeypatch.setattr(webtool.projekt, "datei_sprache", _boom)
     assert transcribe._datei_whisper_code(str(tmp_path), "v1", "de") == "de"
+
+
+def test_opts_vorgabe_ist_unveraendert():
+    """Constraint-Test: die einsprachige Pipeline muss byte-identisch bleiben. Ohne ihn
+    faellt eine versehentliche Umstellung niemandem auf — das Ergebnis waere weiterhin
+    plausibler Text, nur schlechter (gemessen: 206 -> 89 identische Segmenttexte)."""
+    o = transcribe._opts("de")
+    assert o["condition_on_previous_text"] is True
+    assert "multilingual" not in o
+
+
+def test_opts_mehrsprachig_setzt_multilingual():
+    assert transcribe._opts("de", mehrsprachig=True)["multilingual"] is True
+
+
+def test_opts_mehrsprachig_schaltet_kontext_ab():
+    """Zwei getrennte Tests, weil es zwei getrennte Fehlermoeglichkeiten sind. Nur
+    multilingual: Whisper erkennt Englisch korrekt (p=0.938 gemessen) und gibt es
+    trotzdem auf Deutsch zurueck, weil der deutsche Vorlauf als Prompt mitreist."""
+    assert transcribe._opts("de", mehrsprachig=True)["condition_on_previous_text"] is False

@@ -81,7 +81,7 @@ def find_audio(proj_dir, only=None):
     return files
 
 
-def _opts(language):
+def _opts(language, mehrsprachig=False):
     """Decoder-Parameter an einer Stelle. Identisch zur frueheren openai-whisper-Fassung,
     bis auf zwei Namenswechsel: `fp16` ist bei faster-whisper das `compute_type` des
     Konstruktors (siehe _modell), und `verbose=False` heisst hier `log_progress=True` —
@@ -113,14 +113,33 @@ def _opts(language):
 
     Ein falsch gehoertes Wort holt die LLM-Korrektur mit dem gemeinsamen Glossar zurueck;
     eine Passage, die Whisper nie gelesen hat, kann niemand mehr zurueckholen. kontext.md
-    bleibt erhalten und geht unveraendert als `context` in die Korrektur (webtool/correct.py)."""
-    return dict(
+    bleibt erhalten und geht unveraendert als `context` in die Korrektur (webtool/correct.py).
+
+    `mehrsprachig=True` setzt ZWEI Parameter, und die gehoeren untrennbar zusammen:
+    `multilingual=True` laesst faster-whisper die Sprache pro 30-s-Fenster neu erkennen —
+    aber ohne `condition_on_previous_text=False` bleibt das WIRKUNGSLOS. faster-whisper
+    setzt zwar den Tokenizer pro Fenster um (faster_whisper/transcribe.py:1197), setzt aber
+    `prompt_reset_since` nicht zurueck; der deutsche Vorlauf reist als Prompt mit und
+    schlaegt das <|en|>-Token, worauf Whisper uebersetzt statt zu transkribieren.
+    Gemessen an echtem Audio mit 40 s englischem Einschub, sonst gleiche Parameter:
+
+        nur multilingual   "Ich kam hier aus Manchester mit meinem Klub."
+        beides             "I came here from Manchester with my club."
+
+    Nur fuer als mehrsprachig markierte Dateien: auf einsprachigem Material ist es messbar
+    schlechter (dort blieben von 206 Segmenttexten nur 89 identisch, und ein Fenster mit
+    p=0.289 kippte auf Englisch samt eingeschobenem Satz)."""
+    o = dict(
         language=language, task="transcribe",
         word_timestamps=True, beam_size=5, best_of=5,
         temperature=(0.0, 0.2, 0.4, 0.6, 0.8, 1.0),
         condition_on_previous_text=True,
         vad_filter=False, log_progress=True,
     )
+    if mehrsprachig:
+        o["multilingual"] = True
+        o["condition_on_previous_text"] = False
+    return o
 
 
 def _cuda_dlls_auf_pfad():
