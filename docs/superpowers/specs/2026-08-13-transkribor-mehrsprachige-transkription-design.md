@@ -100,7 +100,7 @@ Dateien, die der Nutzer als gemischt markiert hat.
 > **Nachtrag 2026-08-13, nach dem Merge — diese Kalibrierung war falsch.**
 > Der Hinweis des Nutzers, sein Video enthalte ab ca. 3:50 eine englische Passage, hat sich
 > bestätigt: bei 4:00–4:30 interviewt der Beitrag eine belgische Läuferin auf Englisch. Der
-> deutsche Lauf gab sie **übersetzt** wieder („einen guten *Zeitpunkt*" für *a good time*),
+> deutsche Lauf gab sie **übersetzt** wieder („einen guten *Zeitpunkt*“ für *a good time*),
 > weshalb sie im Text nicht auffiel — genau der Fehlermodus, den Abschnitt 1.2(b) beschreibt.
 > Damit war die 0,432 aus 1.1 **kein Fehlalarm, sondern diese Passage**.
 >

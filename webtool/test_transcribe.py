@@ -579,4 +579,33 @@ def test_vorgabeschwelle_laesst_echtes_interview_englisch_durch(monkeypatch):
         p = transcribe._Sprachschwelle(_FakeCt2([("en", 0.565)]), "de", transcribe.MIX_SCHWELLE)
         assert _erkannt(p.detect_language(None)) == "en"
     finally:
-        importlib.reload(transcribe)   # sonst sehen Folgetests das geloeschte Env-Bild
+        # `undo()` VOR dem reload: monkeypatch stellt die Variable erst NACH dem Testkoerper
+        # wieder her. Ein reload hier ohne undo laedt das Modul mit noch geloeschter
+        # Umgebung — Folgetests saehen dann die Vorgabe statt des Werts, den der Entwickler
+        # gesetzt hat. Genau das, was diese Zeile verhindern soll.
+        monkeypatch.undo()
+        importlib.reload(transcribe)
+
+
+def test_schwelle_lehnt_nicht_endliche_werte_ab(monkeypatch):
+    """`float("nan")` wirft KEIN ValueError, und jeder Vergleich mit nan ist falsch:
+    `max(0.0, nan)` liefert 0.0. Ohne die isfinite-Pruefung waere die Klemmung damit still
+    ganz abgeschaltet — genau der Zustand, den der Kommentar an der Konstante als Fehler
+    beschreibt. Gefunden von CodeRabbit."""
+    for wert in ("nan", "inf", "-inf"):
+        monkeypatch.setenv("TRANSKRIBOR_MIX_SCHWELLE", wert)
+        importlib.reload(transcribe)
+        assert transcribe.MIX_SCHWELLE == 0.5, wert
+    monkeypatch.undo()
+    importlib.reload(transcribe)
+
+
+def test_schwelle_klemmt_werte_ausserhalb_der_spanne(monkeypatch):
+    """Gegenprobe: gueltige, aber unsinnige Zahlen werden geklemmt statt verworfen —
+    =2 haette jeden Sprachwechsel abgeschaltet, =-1 die Klemmung."""
+    for wert, erwartet in (("2", 1.0), ("-1", 0.0), ("0.42", 0.42)):
+        monkeypatch.setenv("TRANSKRIBOR_MIX_SCHWELLE", wert)
+        importlib.reload(transcribe)
+        assert transcribe.MIX_SCHWELLE == erwartet, wert
+    monkeypatch.undo()
+    importlib.reload(transcribe)
