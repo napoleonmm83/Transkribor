@@ -75,7 +75,7 @@ export function UrlFetch({ project, onStart, sprache = '', sprachChoices = [], o
           {/* Direkt unter der Sprache, weil er sie zur HAUPTsprache macht — und VOR dem Upload,
               denn der Job startet sofort; nachtraeglich kostet es einen kompletten zweiten Lauf. */}
           <div className="mt-2">
-            <MehrsprachigKasten wert={mehrsprachig} setzen={onMehrsprachigChange} />
+            <MehrsprachigKasten wert={mehrsprachig} setzen={onMehrsprachigChange} id="mehr-url" />
           </div>
         </div>
       )}

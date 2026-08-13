@@ -103,7 +103,7 @@ export function UploadDropzone({ project, onDone, sprache = '', sprachChoices = 
           {/* Direkt unter der Sprache, weil er sie zur HAUPTsprache macht — und VOR dem Upload,
               denn der Job startet sofort; nachtraeglich kostet es einen kompletten zweiten Lauf. */}
           <div className="mt-2">
-            <MehrsprachigKasten wert={mehrsprachig} setzen={onMehrsprachigChange} />
+            <MehrsprachigKasten wert={mehrsprachig} setzen={onMehrsprachigChange} id="mehr-upload" />
           </div>
         </div>
       )}

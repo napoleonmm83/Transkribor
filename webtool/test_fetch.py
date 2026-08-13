@@ -221,3 +221,15 @@ def test_login_fehler_wird_uebersetzt(projekt, capsys):
     with pytest.raises(SystemExit):
         fetch.main(["Demo", "https://www.instagram.com/reel/C8xY2pQr/"])
     assert "nicht öffentlich abrufbar" in capsys.readouterr().out
+
+
+def test_env_parser_liest_beide_richtungen(monkeypatch):
+    """Der Env-Wert ist ein STRING, und "0" ist truthy — ein blosses bool(env) gaebe einer
+    bewusst einsprachig markierten Datei den Haken doch. Nicht gesetzt = None = kein
+    Datei-Override (dann gilt der Projekt-Standard)."""
+    monkeypatch.delenv("TRANSKRIBOR_FETCH_MEHRSPRACHIG", raising=False)
+    assert fetch._mehrsprachig_aus_env() is None
+    for wert, erwartet in (("1", True), ("true", True), ("YES", True),
+                           ("0", False), ("no", False), ("", False)):
+        monkeypatch.setenv("TRANSKRIBOR_FETCH_MEHRSPRACHIG", wert)
+        assert fetch._mehrsprachig_aus_env() is erwartet, wert

@@ -157,7 +157,7 @@ nur die Korrektur neu.
 
 **Und wenn in einem Video mehrere Sprachen vorkommen?** Etwa ein Anlass, bei dem eine Person
 Schweizerdeutsch spricht, die nächste Englisch. Dafür gibt es unter der Sprachauswahl das
-Kästchen **„Enthält weitere Sprachen"**. Die gewählte Sprache gilt dann als *Hauptsprache*, und
+Kästchen **„Enthält weitere Sprachen“**. Die gewählte Sprache gilt dann als *Hauptsprache*, und
 Transkribor achtet im Verlauf der Aufnahme darauf, wann jemand in einer anderen Sprache spricht.
 Im Transkript steht danach jede Passage so da, wie sie gesprochen wurde: der Schweizer auf
 Standarddeutsch, der Engländer auf Englisch. Übersetzt wird nichts — das Transkript ist das

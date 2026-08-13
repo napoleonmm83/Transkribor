@@ -899,9 +899,36 @@ def test_glossar_nur_wenn_voll_datei(tmp_path, monkeypatch):
 # --- Mehrsprachige Aufnahmen: die Regel muss in JEDEN Prompt, der Text umschreibt ---
 
 def test_korrektur_prompt_ohne_mehrsprachig_unveraendert():
-    """Constraint: die einsprachige Pipeline laeuft byte-identisch weiter."""
+    """Constraint: die einsprachige Pipeline laeuft WOERTLICH weiter.
+
+    Nicht nur "MEHRSPRACHIG kommt nicht vor" — das bliebe gruen, wenn die Umstellung auf
+    `norm_satz` die Wortstellung von Regel 2 aendert. Genau das ist beim Umbau einmal
+    passiert (aus "…verbessern, zu X normalisieren." wurde "…verbessern. Normalisiere zu
+    X."). Der Schweizerdeutsch-Prompt ist ueber Monate erprobt; er bleibt Zeichen fuer
+    Zeichen, wie er war."""
     p = correct._correct_prompt("b", "t.txt", "c.json", "", "kontext")
     assert "MEHRSPRACHIG" not in p
+    assert ("2) KORRIGIEREN: klare ASR-Fehler mit Kontext + Glossar verbessern, zu lesbarem "
+            "Standarddeutsch normalisieren (Schweizer „ss“). BLEIB TREU:") in p
+    assert "SEGMENT FÜR SEGMENT (oft Schweizerdeutsch -> lesbares Standarddeutsch)" in p
+
+
+def test_leicht_prompt_ohne_mehrsprachig_unveraendert():
+    """Dasselbe fuer die leichte Tiefe — auch sie hat eine `norm_satz`-Umstellung bekommen."""
+    p = correct._light_prompt("b", "t.txt", "c.json", "kontext")
+    assert "2) KORRIGIERE NUR offensichtliche ASR-Fehler und Eigennamen (Sprache: lesbarem Standarddeutsch)." in p
+
+
+def test_mehrsprachig_prompt_widerspricht_sich_nicht():
+    """Der eigentliche Befund aus dem Review: die Regel darf nicht NEBEN einer Anweisung
+    stehen, die weiter EINE Zielsprache verlangt. Ueberschrift, Projekt-Kontext und Regel 2
+    muessen alle drei mitziehen — sonst enthaelt der Prompt zwei Anweisungen, die sich fuer
+    eine englische Passage widersprechen (dieselbe Form, an der die [Musik]-Regel hing)."""
+    p = correct._correct_prompt("b", "t.txt", "c.json", "", "", mehrsprachig=True)
+    assert "normalisieren" not in p.split("BLEIB TREU")[0]       # Regel 2 verlangt es nicht mehr
+    assert "Schweizerdeutsch -> lesbares Standarddeutsch" not in p   # Ueberschrift zieht mit
+    assert "oft Schweizerdeutsch/Dialekt" not in p                   # _default_context zieht mit
+    assert "übersetze nichts" in p
 
 
 def test_korrektur_prompt_traegt_die_mehrsprachig_regel():
@@ -937,9 +964,14 @@ def test_light_prompt_traegt_die_regel():
 def test_summary_prompt_bleibt_ohne_regel():
     """Bewusst NICHT: _summary_prompt liefert Segmente ohne text-Schluessel, apply_correction
     behaelt dort den Rohtext — es gibt nichts zu uebersetzen. Eine Regel gegen einen Schaden,
-    den das Schema schon ausschliesst, waere Prompt-Ballast."""
+    den das Schema schon ausschliesst, waere Prompt-Ballast.
+
+    Geprueft wird der GERENDERTE Prompt, nicht nur die Signatur: wer den Text direkt in den
+    Rumpf schriebe, bliebe bei einer reinen Signaturpruefung gruen."""
     import inspect
     assert "mehrsprachig" not in inspect.signature(correct._summary_prompt).parameters
+    p = correct._summary_prompt("b", "t.txt", "c.json", "kontext")
+    assert "MEHRSPRACHIG" not in p and "übersetze nichts" not in p
 
 
 def test_ziel_dialekt_meldet_mehrsprachig(tmp_path, monkeypatch):
