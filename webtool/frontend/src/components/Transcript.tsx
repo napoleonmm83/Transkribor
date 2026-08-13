@@ -6,6 +6,7 @@ import { groupIntoTurns } from '@/lib/grouping'
 import type { TrefferOrt } from '@/hooks/useSuche'
 import { SpeakerTurn } from './SpeakerTurn'
 import { DokumentFeld } from './DokumentFeld'
+import { Anmerkungen } from './Anmerkungen'
 
 /** Zentriert ein Element im ScrollArea-Viewport — sanft, nur wenn es nicht schon sichtbar ist.
  *  Wird von Wiedergabe (activeId) und Suche (aktivOrt) genutzt. */
@@ -39,7 +40,7 @@ export function Transcript({ doc, loading, activeId, onPlaySeg, onPlayTurn, upda
   doc: EditDoc | null; loading?: boolean; activeId: number | null;
   onPlaySeg: (s: Segment) => void; onPlayTurn: (segs: Segment[]) => void;
   updateSegment: (id: number, patch: Partial<Segment>) => void;
-  updateDoc: (patch: Partial<Pick<EditDoc, 'context' | 'summary'>>) => void;
+  updateDoc: (patch: Partial<Pick<EditDoc, 'context' | 'summary' | 'annotations'>>) => void;
   renameSpeaker: (from: string, to: string) => void;
   sucheAktiv?: boolean; trefferIds?: Set<number>; suchAktivId?: number | null;
   kopfTreffer?: Set<'context' | 'summary'>; annotTreffer?: Set<number>; aktivOrt?: TrefferOrt | null;
@@ -79,19 +80,9 @@ export function Transcript({ doc, loading, activeId, onPlaySeg, onPlayTurn, upda
             updateSegment={updateSegment} renameSpeaker={renameSpeaker} speakerOptions={speakerOptions}
             sucheAktiv={sucheAktiv} trefferIds={trefferIds} suchAktivId={suchAktivId} />
         ))}
-        {doc.annotations.length > 0 && (
-          <section className="mt-12 border-t pt-5">
-            <h2 className="rubrik mb-3">Anmerkungen</h2>
-            <ul className="lesebreite list-disc space-y-1.5 pl-5 text-sm leading-relaxed text-muted-foreground">
-              {doc.annotations.map((a, i) => {
-                const aktiv = aktivOrt?.kind === 'annotation' && aktivOrt.index === i
-                const dimmen = sucheAktiv && !annotTreffer.has(i)
-                return <li key={i} data-annot={i}
-                  className={`rounded-sm${aktiv ? ' ring-2 ring-inset ring-yellow-400 dark:ring-yellow-500' : ''}${dimmen ? ' opacity-40' : ''}`}>{a}</li>
-              })}
-            </ul>
-          </section>
-        )}
+        <Anmerkungen items={doc.annotations} onChange={annotations => updateDoc({ annotations })}
+          aktivIndex={aktivOrt?.kind === 'annotation' ? aktivOrt.index : null}
+          sucheAktiv={sucheAktiv} treffer={annotTreffer} />
       </div>
     </ScrollArea>
   )

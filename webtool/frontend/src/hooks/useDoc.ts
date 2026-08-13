@@ -76,13 +76,14 @@ export function useDoc(project: string | null, base: string | null) {
     beruehrt()
   }, [beruehrt])
 
-  // Kopffelder des Dokuments (Kontext, Zusammenfassung). Bewusst ueber dasselbe `beruehrt()`
-  // wie eine Segmentaenderung: ein zweiter Speicherweg waere eine zweite Wahrheit darueber,
-  // wann ein Dokument als gesichert gilt.
-  // Absichtlich auf die beiden Kopffelder eingeengt statt `Partial<EditDoc>`: durch eine
-  // weitere Tuer liessen sich sonst `segments` oder `human_edited` schieben und der
-  // Segment-Pfad umgehen. Kommt ein Feld dazu (Issue #112), wird der Typ erweitert.
-  const updateDoc = useCallback((patch: Partial<Pick<EditDoc, 'context' | 'summary'>>) => {
+  // Dokumentfelder ausserhalb der Segmente (Kontext, Zusammenfassung, Anmerkungen). Bewusst
+  // ueber dasselbe `beruehrt()` wie eine Segmentaenderung: ein zweiter Speicherweg waere eine
+  // zweite Wahrheit darueber, wann ein Dokument als gesichert gilt.
+  // Absichtlich aufgezaehlt statt `Partial<EditDoc>`: durch eine weitere Tuer liessen sich
+  // sonst `segments` oder `human_edited` schieben und der Segment-Pfad umgehen. `annotations`
+  // kam mit #112 dazu (die Liste ist editierbar); `segments[].note` NICHT — die haengt am
+  // Segment und geht ueber `updateSegment`.
+  const updateDoc = useCallback((patch: Partial<Pick<EditDoc, 'context' | 'summary' | 'annotations'>>) => {
     setDoc(d => d && ({ ...d, ...patch }))
     beruehrt()
   }, [beruehrt])

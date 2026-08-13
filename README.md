@@ -79,6 +79,13 @@ darauf öffnet sie zum Bearbeiten; ist noch nichts da, legst du sie an derselben
 an. Damit lässt sich auch ein älteres Transkript geradeziehen, in dem noch ein falsch
 verstandener Name steht.
 
+**Offene Punkte abhaken.** Ganz unten unter „Anmerkungen“ sammelt die KI, was sie *nicht* raten
+wollte — also genau die Stellen, an denen sich Nachhören lohnt. Die Liste gehört dir: eine
+Anmerkung geradeziehen, eine erledigte streichen (Text löschen genügt) oder eine eigene
+ergänzen. Und zu einem einzelnen Satz im Gespräch legst du über das Sprechblasen-Symbol eine
+Notiz an — „hier nachfragen“ steht dann direkt bei der Stelle und im Export mit unter den
+Anmerkungen.
+
 **Untertitel für YouTube.** Ein Klick erzeugt eine `.srt`-Datei, die du bei YouTube hochlädst;
 sie ersetzt die schwachen Automatik-Untertitel. Die Sprechernamen kannst du dabei ein- oder
 ausblenden.

@@ -70,6 +70,15 @@ describe('useSuche', () => {
     expect(result.current.treffer).toEqual([{ kind: 'annotation', index: 1 }])
   })
 
+  it('findet die Notiz am Segment — als Treffer des Segments, nicht als eigener Ort', () => {
+    // Seit #112 steht die Notiz sichtbar unter dem Segment. Sichtbarer Text, den die Suche
+    // nicht findet, ist genau die Luecke, die #128 fuer die Kopffelder geschlossen hat.
+    const d = doc([{ ...mkSeg(1, 'harmlos'), note: 'Zahl gegen die Aufnahme pruefen' }, mkSeg(2, 'nichts')])
+    const { result } = renderHook(() => useSuche(d, 'aufnahme'))
+    expect(result.current.treffer).toEqual([{ kind: 'segment', id: 1 }])
+    expect(result.current.segmentTreffer).toEqual(new Set([1]))
+  })
+
   it('ein Feld/Segment/Annotation = ein Treffer, auch bei mehrfachem Vorkommen', () => {
     const d = doc([mkSeg(1, 'aras aras aras')], { summary: 'aras aras' })
     const { result } = renderHook(() => useSuche(d, 'aras'))

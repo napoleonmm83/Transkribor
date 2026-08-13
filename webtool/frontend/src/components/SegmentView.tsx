@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { toast } from 'sonner'
-import { CircleHelp, Play, ScanSearch, TriangleAlert } from 'lucide-react'
+import { CircleHelp, MessageSquare, MessageSquarePlus, Play, ScanSearch, TriangleAlert } from 'lucide-react'
 import type { Segment } from '@/lib/types'
 import { isCorrected, tokenizeUncertain } from '@/lib/uncertainty'
 import { UncertainWord } from './UncertainWord'
@@ -26,6 +26,10 @@ export function SegmentView({ seg, active, onPlay, updateSegment, dimmen = false
 }) {
   const [editing, setEditing] = useState(false)
   const [showRaw, setShowRaw] = useState(false)
+  // EIN Zustand fuer die Notiz, obwohl zwei Knoepfe hineinfuehren (das Symbol, solange keine
+  // Notiz da ist; die Notizzeile selbst, sobald eine steht). Zwei Zustaende waeren zwei
+  // Wahrheiten darueber, ob das Feld offen ist.
+  const [notiz, setNotiz] = useState(false)
   const corrected = isCorrected(seg)
   const flags = FLAGS.filter(f => seg.flags[f.key])
   const rawTokens = tokenizeUncertain(seg).map((t, i) => t.cls
@@ -67,8 +71,37 @@ export function SegmentView({ seg, active, onPlay, updateSegment, dimmen = false
           className={`ml-1.5 align-top opacity-30 transition-opacity hover:opacity-100 ${showRaw ? 'opacity-100' : ''} ${focusRing}`}>
           <ScanSearch className="inline size-3.5" aria-hidden="true" />
         </button>}
+      {/* Die Notiz am Segment (#112). `segments[].note` ging seit je in den Export („##
+          Anmerkungen“, `render_md.py`), hatte aber keinen Eingang: die Korrektur schreibt nur
+          die Dokument-Liste, das Feld blieb leer und unsichtbar. Das Symbol steht nur, solange
+          nichts drinsteht — danach ist die Notizzeile selbst der Weg hinein. Leeren streicht
+          sie, wie bei den Anmerkungen. */}
+      {!seg.note && !notiz &&
+        <button onClick={() => setNotiz(true)} title="Notiz hinzufügen" aria-label="Notiz hinzufügen"
+          className={`ml-1.5 align-top opacity-30 transition-opacity hover:opacity-100 ${focusRing}`}>
+          {/* Bei 14 px im echten Zeilenkontext gegen StickyNote, Asterisk, NotebookPen und die
+              blosse MessageSquare verglichen (nicht nach Namen gewaehlt): StickyNote ist dort
+              eine Seite mit Eselsohr — dasselbe Bild wie das Datei-Symbol der Seitenleiste;
+              NotebookPen wird zum Fleck, Asterisk liest sich als Pflichtfeld-Sternchen. Die
+              Blase traegt hier ein Plus, weil dieser Knopf NUR steht, solange keine Notiz da
+              ist; die Notizzeile darunter fuehrt dieselbe Blase ohne Plus. */}
+          <MessageSquarePlus className="inline size-3.5" aria-hidden="true" />
+        </button>}
       {corrected && showRaw &&
         <div className="mt-0.5 pl-1 text-xs leading-relaxed text-muted-foreground">{rawTokens}</div>}
+      {(seg.note || notiz) &&
+        <div className="mt-0.5 flex items-start gap-1 pl-1 text-muted-foreground">
+          <MessageSquare className="mt-0.5 size-3 shrink-0" aria-hidden="true" />
+          {notiz
+            ? <div className="flex-1"><TextEditor initial={seg.note}
+                onCommit={t => { updateSegment(seg.id, { note: t }); setNotiz(false) }}
+                onCancel={() => setNotiz(false)}
+                onVerworfen={() => toast.info(EINGABE_VERWORFEN)} /></div>
+            : <button type="button" onClick={() => setNotiz(true)} title="Notiz bearbeiten (leeren streicht sie)"
+                className={`flex-1 cursor-text whitespace-pre-wrap text-left text-xs italic leading-relaxed ${focusRing}`}>
+                {seg.note}
+              </button>}
+        </div>}
     </div>
   )
 }
