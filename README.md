@@ -155,6 +155,20 @@ lässt sich beides nachträglich ändern. Eine andere Sprache bedeutet Neu-Trans
 alte Transkript wird verworfen, das Audio bleibt erhalten; eine andere Korrektur-Tiefe startet
 nur die Korrektur neu.
 
+**Und wenn in einem Video mehrere Sprachen vorkommen?** Etwa ein Anlass, bei dem eine Person
+Schweizerdeutsch spricht, die nächste Englisch. Dafür gibt es unter der Sprachauswahl das
+Kästchen **„Enthält weitere Sprachen"**. Die gewählte Sprache gilt dann als *Hauptsprache*, und
+Transkribor achtet im Verlauf der Aufnahme darauf, wann jemand in einer anderen Sprache spricht.
+Im Transkript steht danach jede Passage so da, wie sie gesprochen wurde: der Schweizer auf
+Standarddeutsch, der Engländer auf Englisch. Übersetzt wird nichts — das Transkript ist das
+Protokoll des Gesagten.
+
+Lass das Kästchen aus, wenn nur eine Sprache vorkommt. Es ändert, wie genau zugehört wird, und
+bei einsprachigen Aufnahmen schadet das mehr, als es nützt: die Erkennung springt dann
+gelegentlich grundlos auf eine fremde Sprache und verschlechtert die betroffene Stelle. Wie bei
+einem Sprachwechsel gilt auch hier — kreuzt du es bei einer schon transkribierten Aufnahme an,
+wird sie neu transkribiert.
+
 **Was passiert mit meinen Dateien?** Sie bleiben in deinem Benutzerordner — Transkribor löscht
 nichts von allein. Transkript und Korrekturen bleiben erhalten, bis du eine Aufnahme **neu
 transkribierst** oder ihre **Sprache änderst**: dann wird das Transkript aus dem Audio neu
