@@ -23,6 +23,7 @@ from concurrent.futures import ThreadPoolExecutor
 from . import llm
 from . import paths
 from . import settings
+from . import sprachen           # importiert selbst nichts -> kein Zirkel
 from .edit_model import tag_uncertain_segments, apply_correction
 from .render_md import render_md
 
@@ -62,11 +63,14 @@ def _default_context(ziel: str, dialekt: bool = True) -> str:
 
 
 def _ziel_dialekt(project: str, base: str) -> tuple:
-    """(ziel-Phrase, dialekt-Flag) fuer den Korrektur-Prompt einer Datei.
+    """(ziel-Phrase, dialekt-Flag, mehrsprachig-Flag) fuer die Prompts einer Datei.
 
     'auto' wird an der ROH-JSON aufgeloest (Whispers detektierter language-Code);
     Dialekt ist dabei stets aus (ch wird nie auto-detektiert). Eine explizite
-    Nutzerauswahl von 'ch' ist der einzige Weg, dialekt=True zu bekommen."""
+    Nutzerauswahl von 'ch' ist der einzige Weg, dialekt=True zu bekommen.
+
+    `ziel` und `dialekt` folgen auch bei gemischten Aufnahmen UNVERAENDERT der
+    Ankersprache — das mehrsprachig-Flag kommt zusaetzlich, es ersetzt nichts."""
     from . import projekt as _pj, sprachen as _s
     sid = _pj.datei_sprache(project, base)
     if sid == "auto":
@@ -75,7 +79,7 @@ def _ziel_dialekt(project: str, base: str) -> tuple:
         except (OSError, json.JSONDecodeError):
             code = None
         sid = _s.von_whisper_code(code) if code else "de"
-    return _s.ziel_phrase(sid), _s.ist_dialekt(sid)
+    return _s.ziel_phrase(sid), _s.ist_dialekt(sid), _pj.datei_mehrsprachig(project, base)
 
 
 def bases(project: str) -> list:
@@ -352,11 +356,16 @@ def _scope(id_range, known: str = "") -> tuple:
 
 def _correct_prompt(base: str, tagged_path: str, cpath: str, gjson: str, context: str,
                     id_range=None, known: str = "",
-                    ziel: str = "lesbarem Standarddeutsch", dialekt: bool = True) -> str:
+                    ziel: str = "lesbarem Standarddeutsch", dialekt: bool = True,
+                    mehrsprachig: bool = False) -> str:
     block, scope = _scope(id_range, known)
     einleitung = ("oft Schweizerdeutsch -> lesbares Standarddeutsch" if dialekt
                   else f"in {ziel}")
     dialekt_hinweis = " (Schweizer „ss“)" if dialekt else ""
+    # Eigene Regelzeile statt einer anderen `ziel`-Phrase: `ziel` steht unten mitten im Satz
+    # ("zu {ziel} normalisieren"), eine Phrase wie "jede Passage in ihrer Sprache belassen"
+    # ergaebe dort Kauderwelsch.
+    mehr_regel = f"\n8) MEHRSPRACHIG: {sprachen.ZIEL_MEHRSPRACHIG}" if mehrsprachig else ""
     return f"""Du korrigierst EIN Interview-Transkript SEGMENT FÜR SEGMENT ({einleitung}) und labelst die Sprecher.
 
 Projekt-Kontext: {context or _default_context(ziel, dialekt)}
@@ -373,7 +382,7 @@ Gemeinsames Glossar (für konsistente Schreibweisen — nutze es, ergänze nicht
 4) SPRECHER: Das akustische (Sprecher N)-Präfix ist die WAHRHEIT, WER spricht — vergib pro Cluster GENAU EINEN konsistenten Namen: meist „Interviewer“ (stellt Fragen) und die befragte Person (Name/Betrieb falls genannt, sonst „Befragte Person“). Du DARFST zwei Cluster demselben Namen zuordnen, wenn klar dieselbe Person. Eine Cluster-Grenze nur überschreiben, wenn sie offensichtlich falsch ist (z.B. ein einzelnes Rückkanal-Wort). Fehlt das Präfix, ordne nach Inhalt zu (wie bisher). Gib JEDEM Segment einen Sprecher.
 5) UNSICHER: wirklich unklare Stellen NICHT raten — nah am Original belassen und unter annotations vermerken.
 6) MUSIK/GESANG: Whisper "hört" in gesungenen Passagen sicher klingenden Unsinn (typisch: dieselbe kurze Zeile mehrfach hintereinander, fremdsprachig wirkende Wortfetzen, Text der zum Gespräch nicht passt). Bei GESUNGENEN Stellen und bei Segmenten ohne verständliche Sprache (Musik, Jubel, Applaus) schreibe als text exakt „[Musik]“ — nicht raten, was gesungen wurde. GESPROCHENE Bühnenansagen sind KEINE Musik, die bleiben Text.
-7) ASR-ARTEFAKTE: Segmente, deren Text nachweislich nicht aus dem Ton stammt, sondern aus Whispers Trainingsdaten (Untertitel-Floskeln wie „ARD Text im Auftrag von Funk“, „Untertitelung des ZDF“, „Vielen Dank fürs Zuschauen“), bekommen einen LEEREN text (""). Sie verschwinden damit aus dem Transkript. Regel 6 und 7 gelten nur, wenn du dir sicher bist — im Zweifel Text belassen und unter annotations vermerken.
+7) ASR-ARTEFAKTE: Segmente, deren Text nachweislich nicht aus dem Ton stammt, sondern aus Whispers Trainingsdaten (Untertitel-Floskeln wie „ARD Text im Auftrag von Funk“, „Untertitelung des ZDF“, „Vielen Dank fürs Zuschauen“), bekommen einen LEEREN text (""). Sie verschwinden damit aus dem Transkript. Regel 6 und 7 gelten nur, wenn du dir sicher bist — im Zweifel Text belassen und unter annotations vermerken.{mehr_regel}
 
 Schreibe das Ergebnis mit dem Write-Tool als JSON nach GENAU diesem Pfad:
 {cpath}
@@ -392,11 +401,20 @@ Gib ausser der geschriebenen Datei nichts weiter aus."""
 
 def _verify_prompt(base: str, tagged_path: str, cpath: str, context: str, id_range=None,
                    known: str = "",
-                   ziel: str = "lesbarem Standarddeutsch", dialekt: bool = True) -> str:
+                   ziel: str = "lesbarem Standarddeutsch", dialekt: bool = True,
+                   mehrsprachig: bool = False) -> str:
     # `known` MUSS mit: der Treue-Pass prueft ausdruecklich die Sprecherzuordnung und schreibt
     # die Datei neu. Ohne die schon vergebenen Namen taufte er Block 2..n um und haette den
     # Anker aus Block 1 wieder zunichte gemacht.
     block, scope = _scope(id_range, known)
+    # Eigener Text, NICHT ZIEL_MEHRSPRACHIG: hier geht es nicht darum, was zu tun ist, sondern
+    # dass eine Fremdsprache KEIN Befund ist. Nach dem Muster der MUSIK-Zeile darunter gebaut —
+    # dieselbe Falle, derselbe Satzbau. Und ein eigenes Flag statt einer `ziel`-Phrase, weil
+    # `ziel` diesen Prompt nur ueber _default_context erreicht: der greift nur OHNE kontext.md,
+    # ein Projekt mit Kontextdatei saehe die Regel also nie.
+    mehr_regel = ("\n- FREMDSPRACHE ist eine ERLAUBTE Entscheidung, KEINE Untreue: Eine Passage in "
+                  "einer anderen Sprache als der Rest ist NICHT zurückzuübersetzen. Prüfe nur, "
+                  "ob sie zum Roh passt." if mehrsprachig else "")
     return f"""Du prüfst eine bereits erstellte SEGMENT-GENAUE Korrektur auf TREUE gegen das Rohtranskript (TREUE-CHECK) und schreibst die geprüfte Fassung zurück.
 
 Projekt-Kontext: {context or _default_context(ziel, dialekt)}
@@ -409,7 +427,7 @@ Projekt-Kontext: {context or _default_context(ziel, dialekt)}
 
 Prüfe kritisch gegen das ROH — konservativ, im Zweifel näher am Original:
 - HALLUZINATION/DRIFT: Inhalt hinzugefügt/weggelassen/im Sinn verändert, der nicht im Roh steht? Übermässiges Umschreiben? → näher ans Original zurück.
-- MUSIK/ARTEFAKTE sind ERLAUBTE Entscheidungen, KEINE Auslassung: „[Musik]“ steht für eine gesungene oder sprachlose Stelle, ein leerer text ("") für ein reines ASR-Artefakt aus Whispers Trainingsdaten (Untertitel-Floskeln wie „ARD Text im Auftrag von Funk“). Beides NICHT zurückdrehen — nur prüfen, ob es zutrifft: gesprochene Bühnenansagen gehören zurück in Text, und umgekehrt gehört sicher klingender Unsinn über einer gesungenen Passage (dieselbe kurze Zeile mehrfach hintereinander, Wortfetzen ohne Bezug zum Gespräch) auf „[Musik]“.
+- MUSIK/ARTEFAKTE sind ERLAUBTE Entscheidungen, KEINE Auslassung: „[Musik]“ steht für eine gesungene oder sprachlose Stelle, ein leerer text ("") für ein reines ASR-Artefakt aus Whispers Trainingsdaten (Untertitel-Floskeln wie „ARD Text im Auftrag von Funk“). Beides NICHT zurückdrehen — nur prüfen, ob es zutrifft: gesprochene Bühnenansagen gehören zurück in Text, und umgekehrt gehört sicher klingender Unsinn über einer gesungenen Passage (dieselbe kurze Zeile mehrfach hintereinander, Wortfetzen ohne Bezug zum Gespräch) auf „[Musik]“.{mehr_regel}
 - VOLLSTÄNDIGKEIT: für JEDE Roh-Segment-ID {scope} genau ein Eintrag? Fehlende ergänzen (Text nah am Roh), zusammengefasste auftrennen.
 - SPRECHER: konsistent pro akustischem (Sprecher N)-Cluster und plausibel (Interviewer stellt Fragen; Antworten korrekt zugeordnet)? Fehlzuordnungen korrigieren.
 - RESTFEHLER: offensichtliche verbleibende ASR-Fehler nur wenn eindeutig (konservativ).
@@ -432,17 +450,23 @@ Schema:
 
 
 def _light_prompt(base: str, tagged_path: str, cpath: str, context: str,
-                  ziel: str = "lesbarem Standarddeutsch", dialekt: bool = True) -> str:
+                  ziel: str = "lesbarem Standarddeutsch", dialekt: bool = True,
+                  mehrsprachig: bool = False) -> str:
     """Leichte Korrektur: EIN LLM-Lauf, kein Glossar, kein Treue-Pass.
     Korrigiert nur offensichtliche ASR-Fehler + Eigennamen, labelt Sprecher,
-    schreibt eine Inhalts-Zusammenfassung. Keine Dialekt-Glättung."""
+    schreibt eine Inhalts-Zusammenfassung. Keine Dialekt-Glättung.
+
+    Braucht die Mehrsprachig-Regel genauso wie _correct_prompt: Schritt 2 schreibt Text um
+    und nennt dabei `ziel` als Sprache — ohne die Regel uebersetzt eine gemischte Datei bei
+    Tiefe 'leicht' nach Standarddeutsch. Derselbe Fehler ueber einen anderen Weg."""
+    mehr_regel = f"\n5) MEHRSPRACHIG: {sprachen.ZIEL_MEHRSPRACHIG}" if mehrsprachig else ""
     return f"""Du bearbeitest EIN Transkript in EINEM Lauf (leichte Korrektur) und labelst die Sprecher.
 
 Projekt-Kontext: {context or _default_context(ziel, dialekt)}
 1) Lies die Rohsegmente (Read-Tool): {tagged_path}
 2) KORRIGIERE NUR offensichtliche ASR-Fehler und Eigennamen (Sprache: {ziel}). KEIN Umschreiben, keine Dialekt-Glättung, keine Normalisierung. Entferne [[...]]-Markierungen.
 3) SPRECHER: vergib pro (Sprecher N)-Cluster einen konsistenten Namen (meist „Interviewer" und die befragte Person). Gib JEDEM Segment einen speaker.
-4) SUMMARY: eine Inhalts-Zusammenfassung (3-5 Sätze).
+4) SUMMARY: eine Inhalts-Zusammenfassung (3-5 Sätze).{mehr_regel}
 
 Schema (Write-Tool nach {cpath}):
 {{"base":"{base}","context":"1-2 Sätze","speakers":["…"],
@@ -558,20 +582,23 @@ def _merge_parts(docs: list, base: str) -> dict:
 
 def _correct_one(base: str, tagged: str, target: str, gjson: str, context: str, verify: bool,
                  id_range=None, known: str = "", part: str = "",
-                 ziel: str = "lesbarem Standarddeutsch", dialekt: bool = True) -> None:
+                 ziel: str = "lesbarem Standarddeutsch", dialekt: bool = True,
+                 mehrsprachig: bool = False) -> None:
     """Ein claude-Korrekturlauf (+ optionaler Treue-Pass) mit Ziel `target` — ganze Datei
     oder ein ID-Block. Die Fortschritts-Zeilen sind Vertrag mit dem Frontend-Job-Parser
     (webtool/frontend/src/lib/jobPhases.ts) — Format nicht ändern. `part` (z.B. ' · Block 2/3')
     gehört in JEDE Zeile: bei parallelen Läufen verschränken sich die Ausgaben, eine Zeile
     ohne Basisnamen liesse sich keinem Lauf mehr zuordnen."""
     print(f"→ Korrigiere {base}{part} …", flush=True)
-    _ask_llm(_correct_prompt(base, tagged, target, gjson, context, id_range, known, ziel, dialekt),
+    _ask_llm(_correct_prompt(base, tagged, target, gjson, context, id_range, known, ziel, dialekt,
+                             mehrsprachig),
              [tagged], target)
     if verify and _valid_correction(target):    # Treue-Pass nur auf eine GÜLTIGE Erst-Korrektur
         print(f"→ Verifiziere {base}{part} (Treue gegen Roh) …", flush=True)
         good = _load(target)                    # Snapshot: darf nicht durch einen kaputten Verify verloren gehen
         # Der Treue-Pass prueft die Korrektur GEGEN das Roh -> ohne API-Werkzeuge braucht er beide Dateien.
-        _ask_llm(_verify_prompt(base, tagged, target, context, id_range, known, ziel, dialekt),
+        _ask_llm(_verify_prompt(base, tagged, target, context, id_range, known, ziel, dialekt,
+                                mehrsprachig),
                  [tagged, target], target)
         if not _valid_correction(target):       # Verify hat die gültige Korrektur zerstört -> zurückrollen
             paths.atomic_write(target, json.dumps(good, ensure_ascii=False, indent=1))
@@ -580,7 +607,8 @@ def _correct_one(base: str, tagged: str, target: str, gjson: str, context: str, 
 
 def _correct_file(project: str, base: str, gjson: str, context: str, verify: bool,
                   force: bool = False,
-                  ziel: str = "lesbarem Standarddeutsch", dialekt: bool = True) -> None:
+                  ziel: str = "lesbarem Standarddeutsch", dialekt: bool = True,
+                  mehrsprachig: bool = False) -> None:
     """Korrektur für EINE Datei -> <base>.correction.json.
 
     Bis CHUNK_SEGMENTS Segmente genau wie bisher: ein claude-Aufruf schreibt direkt die
@@ -597,7 +625,8 @@ def _correct_file(project: str, base: str, gjson: str, context: str, verify: boo
     ids = _tagged_ids(tagged)                       # tagged.txt — das schreibt cmd_prep bei JEDEM Lauf neu,
                                                     # womit kein Block je „neuer“ wäre und der Resume tot.
     if len(ids) <= CHUNK_SEGMENTS:
-        _correct_one(base, tagged, cpath, gjson, context, verify, ziel=ziel, dialekt=dialekt)
+        _correct_one(base, tagged, cpath, gjson, context, verify, ziel=ziel, dialekt=dialekt,
+                     mehrsprachig=mehrsprachig)
         return
     chunks = [ids[i:i + CHUNK_SEGMENTS] for i in range(0, len(ids), CHUNK_SEGMENTS)]
     clusters = _load_diar_clusters(tdir, base) if _diarize_enabled() else {}
@@ -618,7 +647,7 @@ def _correct_file(project: str, base: str, gjson: str, context: str, verify: boo
         else:
             _correct_one(base, tagged, ppath, gjson, context, verify,
                          id_range=(chunk[0], chunk[-1]), known=known, part=label,
-                         ziel=ziel, dialekt=dialekt)
+                         ziel=ziel, dialekt=dialekt, mehrsprachig=mehrsprachig)
         if _valid_correction(ppath):
             print(f"  ✓ {base}{label} fertig", flush=True)
             return _load(ppath)
@@ -658,7 +687,7 @@ def _correct_file(project: str, base: str, gjson: str, context: str, verify: boo
             pass
 
 
-def _light_correct_file(project: str, base: str, ziel: str, dialekt: bool,
+def _light_correct_file(project: str, base: str, ziel: str, dialekt: bool, mehrsprachig: bool,
                         context: str) -> None:
     """Leichte Korrektur fuer EINE Datei -> <base>.correction.json (EIN LLM-Aufruf,
     kein Glossar, kein Treue-Pass). Schema wie die Voll-Korrektur (mit text)."""
@@ -666,7 +695,8 @@ def _light_correct_file(project: str, base: str, ziel: str, dialekt: bool,
     target = os.path.abspath(os.path.join(tdir, base + ".correction.json"))
     tagged = os.path.abspath(os.path.join(tdir, base + ".tagged.txt"))
     print(f"→ Leichte Korrektur {base} …", flush=True)
-    _ask_llm(_light_prompt(base, tagged, target, context, ziel, dialekt), [tagged], target)
+    _ask_llm(_light_prompt(base, tagged, target, context, ziel, dialekt, mehrsprachig),
+             [tagged], target)
 
 
 def _summary_only_file(project: str, base: str, ziel: str, context: str,
@@ -723,12 +753,12 @@ def cmd_run(project: str, base: str = None, force: bool = False, verify: bool = 
                 # Tiefe pro Datei: voll-Dateien laufen wie bisher (Glossar + Verify),
                 # leicht/zusammenfassung sind einzelne LLM-Aufrufe ohne Treue-Pass.
                 tiefe = _pj.tiefe_effektiv(project, b)
-                ziel, dialekt = _ziel_dialekt(project, b)
+                ziel, dialekt, mehr = _ziel_dialekt(project, b)
                 if tiefe in ("voll", "voll_dialekt"):
                     _correct_file(project, b, gjson, context, verify, force,
-                                  ziel=ziel, dialekt=dialekt)
+                                  ziel=ziel, dialekt=dialekt, mehrsprachig=mehr)
                 elif tiefe == "leicht":
-                    _light_correct_file(project, b, ziel, dialekt, context)
+                    _light_correct_file(project, b, ziel, dialekt, mehr, context)
                 else:  # zusammenfassung
                     _summary_only_file(project, b, ziel, context, dialekt)
             if not _valid_correction(cpath):
