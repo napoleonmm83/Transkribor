@@ -84,12 +84,20 @@ def auto_an() -> bool:
 
 
 def geprueft() -> dt.date | None:
-    """Wann zuletzt geprueft wurde. Ein von Hand verdrehtes Datum gilt als 'nie' — es darf
-    die Aktualisierung nicht fuer immer abschalten."""
+    """Wann zuletzt geprueft wurde. Ein verdrehtes Datum gilt als 'nie' — es darf die
+    Aktualisierung nicht fuer immer abschalten.
+
+    Das gilt fuer unlesbare Werte UND fuer Daten in der Zukunft. Letzteres stand zuerst nur
+    im Docstring: `(heute - g).days` wird bei einem Zukunftsdatum negativ, `faellig()` also
+    dauerhaft False — `ytdlp_geprueft: "2099-01-01"` schaltete den Kalenderweg **still und
+    fuer immer** ab. Der API-Pfad ist dagegen verteidigt (`SettingsBody` kennt den Schluessel
+    nicht), Handbearbeitung und eine vorgehende Rechneruhr aber nicht.
+    """
     try:
-        return dt.date.fromisoformat((settings.load().get(MERKER) or "").strip())
+        d = dt.date.fromisoformat((settings.load().get(MERKER) or "").strip())
     except ValueError:
         return None
+    return None if d > _heute() else d
 
 
 def faellig() -> bool:
@@ -137,8 +145,14 @@ def aktualisiere() -> bool:
     # dasselbe site-packages und koennen die Installation zerlegen. Erreichbar, seit es zwei
     # Ausloeser aus zwei Prozessen gibt: der Import-Job und der Knopf in den Einstellungen.
     # Eigener Lock-Name (…ytdlp.lock), damit er sich nicht mit dem von `settings.save()`
-    # ueberschneidet — der wird im `_merken()` unten genommen, waehrend dieser noch haelt.
-    os.makedirs(os.path.dirname(settings.path()), exist_ok=True)
+    # ueberschneidet — der wird im `_merken()` genommen, waehrend dieser noch haelt.
+    try:
+        # `or "."` fuer ein TRANSKRIBOR_SETTINGS ohne Verzeichnisanteil (`os.makedirs("")`
+        # wuerde werfen). Und best effort wie alles hier: ein nicht anlegbares Verzeichnis
+        # darf den Aufrufer nicht mitreissen — dann laeuft es eben ohne Sperre.
+        os.makedirs(os.path.dirname(settings.path()) or ".", exist_ok=True)
+    except OSError as e:
+        print(f"[ytdlp] Sperrverzeichnis nicht anlegbar: {e}", flush=True)
     with sperre.datei(settings.path() + ".ytdlp", stale=PIP_TIMEOUT + 30):
         try:
             p = subprocess.run(cmd, capture_output=True, text=True, errors="replace",
@@ -149,7 +163,10 @@ def aktualisiere() -> bool:
                   flush=True)
         except (OSError, subprocess.SubprocessError) as e:
             print(f"[ytdlp] Update fehlgeschlagen: {e}", flush=True)
-    _merken()
+        # INNERHALB der Sperre: der Kommentar oben behauptete das, der Aufruf stand aber eine
+        # Zeile darunter — womit der Test auf die verschiedenen Lock-Namen nichts pruefte
+        # (mit demselben Namen blieb er gruen). Jetzt ist die verschachtelte Sperre echt.
+        _merken()
     return ok
 
 

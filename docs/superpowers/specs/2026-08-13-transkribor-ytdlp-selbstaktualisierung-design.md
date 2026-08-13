@@ -9,7 +9,7 @@
 > ausgeschlossen, hoechstens ein pip pro Lauf). Dazu noetig: `fetch._neu_laden()` raeumt
 > `sys.modules`, weil yt-dlp an dieser Stelle bereits importiert ist. (2) **Anzeige** unter
 > *Einstellungen › Video-Import*: installierte Fassung, Pruefdatum, Haken `ytdlp_auto` und ein
-> Knopf „Jetzt aktualisieren" (`POST /api/settings/ytdlp/update`, synchron im Request).
+> Knopf „Jetzt aktualisieren“ (`POST /api/settings/ytdlp/update`, synchron im Request).
 > Der Rest des Entwurfs steht unveraendert; die Logik liegt in `webtool/ytdlp_update.py`
 > statt in `fetch.py` (drei Konsumenten).
 

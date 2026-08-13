@@ -150,7 +150,7 @@ dort schaust du auf der
 **Ein Video-Import schlägt fehl — was nun?** Meistens hat die Plattform etwas umgebaut. Warte
 kurz und versuche es noch einmal: Transkribor frischt den Downloader beim ersten Fehlversuch
 selbst auf und lädt dann gleich weiter. Klappt es danach immer noch nicht, hilft der Knopf
-**„Jetzt aktualisieren"** unter *Einstellungen › Video-Import* — dort steht auch, welche
+**„Jetzt aktualisieren“** unter *Einstellungen › Video-Import* — dort steht auch, welche
 Fassung gerade läuft. Bleibt es dabei, ist das Video vermutlich nicht öffentlich abrufbar
 (private Videos und solche, die eine Anmeldung verlangen, unterstützt Transkribor nicht).
 
