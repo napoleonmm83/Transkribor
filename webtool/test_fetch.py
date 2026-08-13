@@ -1,3 +1,4 @@
+import pathlib
 import sys
 
 import pytest
@@ -252,8 +253,11 @@ _403 = RuntimeError("ERROR: unable to download video data: HTTP Error 403: Forbi
 
 def test_403_ohne_js_laufzeit_nennt_die_echte_ursache(monkeypatch):
     """#162: der 403 liest sich wie ein gesperrtes Video, kommt aber von der fehlenden
-    JS-Laufzeit — und die Warnung, die das erklaert, schluckt `no_warnings`. Genau das ist
-    im gepackten Lauf der Normalfall (weder node noch deno werden mitinstalliert)."""
+    JS-Laufzeit — und die Warnung, die das erklaert, schluckt `no_warnings`."""
+    # Ohne delenv entschiede die Umgebung des Entwicklers mit: seit #171 zaehlt eine
+    # mitgereichte Laufzeit als vorhanden (dieselbe Leck-Klasse wie beim `client`-Fixture
+    # in test_api.py).
+    monkeypatch.delenv("TRANSKRIBOR_JS_RUNTIME", raising=False)
     monkeypatch.setattr(fetch.shutil, "which", lambda _: None)
     assert "JavaScript-Laufzeit" in fetch._human_error(_403)
 
@@ -261,8 +265,51 @@ def test_403_ohne_js_laufzeit_nennt_die_echte_ursache(monkeypatch):
 def test_403_mit_js_laufzeit_raet_NICHT_zur_laufzeit(monkeypatch):
     """Gegenrichtung: liegt node vor, hat der 403 eine andere Ursache — dann waere der Rat
     ('installiere Node') ein Irrweg. Ohne diesen Test bliebe die Bedingung ungeprueft."""
+    monkeypatch.delenv("TRANSKRIBOR_JS_RUNTIME", raising=False)
     monkeypatch.setattr(fetch.shutil, "which", lambda name: r"C:\node\node.exe")
     assert "JavaScript-Laufzeit" not in fetch._human_error(_403)
+
+
+# --- Mitgereichte JS-Laufzeit (#171) -----------------------------------------
+
+def test_ydl_opts_reicht_die_mitgelieferte_laufzeit_an_yt_dlp_durch(monkeypatch):
+    """#171: die gepackte App hat weder node noch deno auf dem PATH — aber Electrons eigenes
+    Binary IST ein Node. Der Pfad muss als `path` bei `node` ankommen, sonst sucht yt-dlp
+    weiter nur den PATH ab (`_determine_runtime_path` nimmt `path` nur, wenn es gesetzt ist).
+    `deno` bleibt daneben stehen: liegt eines auf dem PATH, hat es hoehere Prioritaet."""
+    monkeypatch.setenv("TRANSKRIBOR_JS_RUNTIME", r"C:\App\Transkribor.exe")
+    for opts in (fetch._ydl_opts(), fetch._ydl_opts("ziel.%(ext)s")):
+        assert opts["js_runtimes"]["node"] == {"path": r"C:\App\Transkribor.exe"}
+        assert "deno" in opts["js_runtimes"]
+
+
+def test_ohne_mitgelieferte_laufzeit_bleiben_die_optionen_die_alten(monkeypatch):
+    """Constraint: im Entwickler-Checkout (Variable nicht gesetzt) muss es byte-identisch
+    beim Verhalten von #162 bleiben — ein leeres `path` waere ein Pfad "" und damit ein
+    Laufzeitfund, den es nicht gibt."""
+    monkeypatch.delenv("TRANSKRIBOR_JS_RUNTIME", raising=False)
+    assert fetch._ydl_opts()["js_runtimes"] == {"deno": {}, "node": {}}
+
+
+def test_403_mit_mitgelieferter_laufzeit_raet_NICHT_zur_installation(monkeypatch):
+    """Sonst riete die Meldung ausgerechnet im gepackten Lauf zu einer Node-Installation —
+    dort, wo bereits eine benutzt wird. PATH ist hier leer, die Laufzeit kommt allein aus
+    der Umgebung."""
+    monkeypatch.setenv("TRANSKRIBOR_JS_RUNTIME", r"C:\App\Transkribor.exe")
+    monkeypatch.setattr(fetch.shutil, "which", lambda _: None)
+    assert "JavaScript-Laufzeit" not in fetch._human_error(_403)
+
+
+def test_requirements_nennt_yt_dlp_ejs():
+    """#170: ohne dieses Paket hat yt-dlps Challenge-Loeser OFFLINE keine Quelle — die
+    Reihenfolge in `jsc/_builtin/ejs.py:_iter_script_sources` ist PyPI-Paket -> Cache ->
+    mitgeliefert -> GitHub, und die letzte ist per Default gesperrt (`remote_components`
+    ist leer). Mitgeliefert ist nur `yt.solver.core.js`; `yt.solver.lib.js`, das die
+    node-Laufzeit braucht, fehlt im yt-dlp-Paket. Faellt die Zeile heraus, ist die
+    JS-Laufzeit aus #162 wieder wirkungslos — und zwar lautlos, weil der Download auf
+    Player-Clients ohne Signatur ausweicht und meistens trotzdem klappt."""
+    req = (pathlib.Path(__file__).resolve().parent.parent / "requirements.txt").read_text("utf-8")
+    assert any(z.strip().startswith("yt-dlp-ejs") for z in req.splitlines())
 
 
 # --- Selbstaktualisierung ----------------------------------------------------
