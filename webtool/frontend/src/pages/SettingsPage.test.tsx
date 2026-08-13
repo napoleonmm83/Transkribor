@@ -236,7 +236,9 @@ describe('SettingsPage', () => {
   it('zeigt die yt-dlp-Fassung und das Prüfdatum', async () => {
     zeige()
     expect(await screen.findByText(/2026\.8\.12/)).toBeInTheDocument()
-    expect(screen.getByText(/zuletzt geprüft am 2026-08-13/)).toBeInTheDocument()
+    // Deutsches Datum, nicht das ISO des Servers — im Browser-Screenshot sah `2026-08-13`
+    // in einer sonst durchgehend deutschen Seite wie eine Fehlermeldung aus.
+    expect(screen.getByText(/zuletzt geprüft am 13\.08\.2026/)).toBeInTheDocument()
   })
 
   it('sagt es, wenn yt-dlp gar nicht installiert ist', async () => {

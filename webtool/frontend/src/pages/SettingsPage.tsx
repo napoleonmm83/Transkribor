@@ -14,6 +14,14 @@ import type { AuthStatus, Hardware, LoginState, ModelInfo, ProviderInfo, Setting
 
 const RELEASES = 'https://github.com/napoleonmm83/Transkribor/releases'
 
+/** ISO-Datum vom Server als deutsches Datum. Von Hand umgedreht statt per
+ *  `toLocaleDateString`: dessen Ausgabe hängt an der ICU-Fassung der Laufzeit, wäre also im
+ *  Test eine andere als im Browser. Im Screenshot fiel auf, dass `2026-08-13` in einer sonst
+ *  durchgehend deutschen Seite wie eine Fehlermeldung aussieht. */
+function tag(iso: string) {
+  return iso.split('-').reverse().join('.')
+}
+
 /** Bytes als MB mit einer Nachkommastelle, deutsches Dezimalkomma. */
 function mb(bytes: number, stellen = 0) {
   return (bytes / 1048576).toFixed(stellen).replace('.', ',')
@@ -320,7 +328,7 @@ export function SettingsPage() {
           <span className="text-xs text-muted-foreground">
             {s.ytdlp.version
               ? <>Fassung <span className="font-medium text-foreground">{s.ytdlp.version}</span>
-                {s.ytdlp.geprueft && ` · zuletzt geprüft am ${s.ytdlp.geprueft}`}</>
+                {s.ytdlp.geprueft && ` · zuletzt geprüft am ${tag(s.ytdlp.geprueft)}`}</>
               : 'Nicht installiert — der Import von Video-URLs steht damit nicht zur Verfügung.'}
           </span>
         </div>
