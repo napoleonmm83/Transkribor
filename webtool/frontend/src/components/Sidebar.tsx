@@ -14,7 +14,7 @@ type Sel = { project: string; base: string } | null
 type SidebarProjekt = { name: string; dateien: number; geaendert: number; active_jobs?: ActiveJob[] }
 
 export function Sidebar({
-  projekte, loading, fehler, offen, dateien, dateienLaden, onWaehlen,
+  projekte, loading, fehler, offen, dateien, dateienLaden, onWaehlen, onAngelegt,
   active, onOpen, onUpload, onTranscribe, onCorrect, onGeloescht, onUmbenannt,
   phases, jobRunning, aiReason,
 }: {
@@ -22,6 +22,9 @@ export function Sidebar({
   offen: string | null
   dateien: ProjectFile[]; dateienLaden?: boolean
   onWaehlen: (name: string | null) => void
+  /** Ein Projekt wurde ANGELEGT (#74). Frueher lief das ueber `onWaehlen` — der traegt
+   *  aber Nebenbedeutung (`null` = zuklappen) und passte hier nur zufaellig. */
+  onAngelegt: (name: string) => void
   active: Sel
   onOpen: (s: { project: string; base: string }) => void
   onUpload: (project: string, file: File) => void
@@ -53,7 +56,7 @@ export function Sidebar({
       <div className="shrink-0 space-y-2 p-2">
         {/* Einziger Weg, ohne Umweg ueber die Uebersicht ein Projekt anzulegen -- die Leiste
             ist auf jeder Seite sichtbar, der Knopf stand vorher nur in der Uebersicht. */}
-        <NewProjectDialog onCreated={onWaehlen}
+        <NewProjectDialog onCreated={onAngelegt}
           trigger={<Button variant="outline" size="sm" className="w-full">+ Neues Projekt</Button>} />
         <label htmlFor="leiste-suche" className="sr-only">Projekte durchsuchen</label>
         <div className="relative">
@@ -82,7 +85,7 @@ export function Sidebar({
           // selbst -- ein zweiter Weg fuers selbe waere doppelt gemoppelt.
           <div className="px-2 py-1">
             <p className="text-sm text-muted-foreground">Kein Projekt passt zu „{suche}“.</p>
-            <NewProjectDialog onCreated={onWaehlen} vorbelegung={suche}
+            <NewProjectDialog onCreated={onAngelegt} vorbelegung={suche}
               trigger={<Button variant="outline" size="sm" className="mt-2">„{suche}“ anlegen</Button>} />
           </div>
         )}

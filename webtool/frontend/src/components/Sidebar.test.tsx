@@ -19,7 +19,7 @@ const DATEIEN = [
 
 function zeigen(extra: Partial<Parameters<typeof Sidebar>[0]> = {}) {
   const props = {
-    projekte: PROJEKTE, offen: null, dateien: [], onWaehlen: vi.fn(),
+    projekte: PROJEKTE, offen: null, dateien: [], onWaehlen: vi.fn(), onAngelegt: vi.fn(),
     active: null, onOpen: vi.fn(), onUpload: vi.fn(), onTranscribe: vi.fn(),
     onCorrect: vi.fn(), onGeloescht: vi.fn(), onUmbenannt: vi.fn(), ...extra,
   }
@@ -82,7 +82,7 @@ describe('Sidebar', () => {
   it('unterscheidet "laedt" von "keine Projekte"', () => {
     // Dieselbe Regel wie in der Galerie: eine leere Liste hat drei Gruende und darf nicht
     // waehrend des Ladens behaupten, es gaebe nichts.
-    render(<Huelle><Sidebar projekte={[]} loading offen={null} dateien={[]} onWaehlen={vi.fn()}
+    render(<Huelle><Sidebar projekte={[]} loading offen={null} dateien={[]} onWaehlen={vi.fn()} onAngelegt={vi.fn()}
       active={null} onOpen={vi.fn()} onUpload={vi.fn()} onTranscribe={vi.fn()}
       onCorrect={vi.fn()} onGeloescht={vi.fn()} onUmbenannt={vi.fn()} /></Huelle>)
     expect(screen.queryByText(/Noch keine Projekte/)).not.toBeInTheDocument()
@@ -113,11 +113,14 @@ describe('Sidebar', () => {
 
   it('legt über "+ Neues Projekt" ein Projekt an', async () => {
     vi.mocked(api.createProject).mockResolvedValue({ ok: true, name: 'Neu' })
-    const { onWaehlen } = zeigen()
+    const { onAngelegt, onWaehlen } = zeigen()
     fireEvent.click(screen.getByText('+ Neues Projekt'))
     fireEvent.change(screen.getByLabelText('Projektname'), { target: { value: 'Neu' } })
     fireEvent.click(screen.getByText('Anlegen'))
-    await waitFor(() => expect(onWaehlen).toHaveBeenCalledWith('Neu'))
+    await waitFor(() => expect(onAngelegt).toHaveBeenCalledWith('Neu'))
+    // #74: NICHT ueber onWaehlen — dort heisst `null` „zuklappen", ein Anlegen
+    // kennt das nicht. Beide Bedeutungen auf einem Rueckruf war nur zufaellig richtig.
+    expect(onWaehlen).not.toHaveBeenCalled()
   })
 
   it('loescht das aufgeklappte Projekt', async () => {

@@ -52,6 +52,10 @@ function Leiste() {
       projekte={projects} loading={loading} fehler={fehler}
       offen={projekt} dateien={files} dateienLaden={dateienLaden}
       onWaehlen={n => { if (wechselErlaubt(null)) navigate(n ? `/p/${encodeURIComponent(n)}` : '/') }}
+      // Getrennt von onWaehlen (#74): dort heisst `null` „zuklappen", ein Anlegen kennt das
+      // nicht. Der Wechsel-Waechter bleibt — auch ein frisch angelegtes Projekt navigiert
+      // vom Editor weg und darf Ungespeichertes nicht stillschweigend hinter sich lassen.
+      onAngelegt={n => { if (wechselErlaubt(null)) navigate(`/p/${encodeURIComponent(n)}`) }}
       active={active}
       onOpen={s => { if (wechselErlaubt(s)) navigate(`/p/${encodeURIComponent(s.project)}/${encodeURIComponent(s.base)}`) }}
       onUpload={(p, f) => uploadAudio(p, f).then(nachladen)}
