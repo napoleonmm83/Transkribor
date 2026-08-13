@@ -99,7 +99,11 @@ export function SegmentView({ seg, active, onPlay, updateSegment, dimmen = false
             // wegstrippt. (Beim ANLEGEN kann das nicht passieren: dort ist der Ausgangswert ""
             // und `TextEditor` wertet unveraendert als Abbruch — die Luecke gab es nur beim
             // Leeren einer bestehenden Notiz.)
-            ? <div className="flex-1"><TextEditor initial={seg.note}
+            // `?? ''`: fehlt der Schluessel in einer edit.json (der Typ verspricht ihn, die
+            // Platte haelt sich nicht daran), liefe `initial.trim()` in `TextEditor.fertig`
+            // beim Blur auf `undefined` und riss das ganze Transkript mit. `render_md.py`
+            // liest das Feld aus demselben Grund mit `(s.get("note") or "")`.
+            ? <div className="flex-1"><TextEditor initial={seg.note ?? ''}
                 onCommit={t => { updateSegment(seg.id, { note: t.trim() ? t : '' }); setNotiz(false) }}
                 onCancel={() => setNotiz(false)}
                 onVerworfen={() => toast.info(EINGABE_VERWORFEN)} /></div>

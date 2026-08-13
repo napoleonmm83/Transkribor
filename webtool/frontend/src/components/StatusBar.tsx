@@ -77,7 +77,10 @@ export function StatusBar() {
           gibt. Reiner Browser-Betrieb im schmalen Fenster; das Electron-Fenster hat
           `minWidth: 900` und kommt hier nie an. */}
       <span className="shrink-0 md:hidden">
-        <kbd className="rounded border px-1 font-sans">Strg</kbd>
+        {/* „Ctrl“, nicht „Strg“: die Palette nimmt `ctrlKey || metaKey`, und macOS ist ein
+            ausgeliefertes Ziel (dmg) — dort steht auf der Taste „ctrl“, ein „Strg“ gibt es
+            nicht. Die App schreibt es anderswo schon so (`Abspielen (Ctrl+Space)`). */}
+        <kbd className="rounded border px-1 font-sans">Ctrl</kbd>
         <span aria-hidden="true"> + </span>
         <kbd className="rounded border px-1 font-sans">K</kbd> für alle Projekte
       </span>
