@@ -50,10 +50,14 @@ export function HomeGallery() {
   return (
     <div className="p-6 sm:p-8">
       <PageHeader rubrik="Transkribor" titel="Übersicht">
+        {/* Kein „+ Neues Projekt" mehr hier (#69): der Knopf steht seit PR #68 in der
+            Seitenleiste — dort ist er auf JEDER Route sichtbar, hier war er es nur auf der
+            Übersicht. Zwei wortgleiche Knöpfe auf demselben Schirm sind kein zweiter Weg,
+            sondern die Frage, ob sie dasselbe tun. Der Knopf im Leerzustand unten bleibt:
+            der beantwortet „hier ist noch nichts", nicht „lege noch eines an". */}
         <Button variant="ghost" size="sm" asChild>
           <Link to="/einstellungen"><Settings className="size-4" /> Einstellungen</Link>
         </Button>
-        <NewProjectDialog onCreated={oeffnen} />
       </PageHeader>
 
       {projects.length === 0 ? (

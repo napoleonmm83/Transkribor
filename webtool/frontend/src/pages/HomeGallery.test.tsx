@@ -32,14 +32,26 @@ describe('HomeGallery', () => {
     expect(screen.getByText(/1 Datei/)).toBeInTheDocument()
   })
 
-  it('legt ein Projekt an und navigiert (createProject aufgerufen)', async () => {
+  it('legt aus dem Leerzustand ein Projekt an (createProject aufgerufen)', async () => {
+    // #69: „+ Neues Projekt" steht nicht mehr im Seitenkopf — der Knopf der Seitenleiste
+    // ist auf JEDER Route sichtbar. Im Leerzustand bleibt ein eigener Knopf: der
+    // beantwortet „hier ist noch nichts", nicht „lege noch eines an".
     vi.mocked(api.listProjects).mockResolvedValue([])
     vi.mocked(api.createProject).mockResolvedValue({ ok: true, name: 'Neu' })
     zeigen()
-    fireEvent.click(await screen.findByText('+ Neues Projekt'))
+    fireEvent.click(await screen.findByText('Erstes Projekt anlegen'))
     fireEvent.change(screen.getByLabelText('Projektname'), { target: { value: 'Neu' } })
     fireEvent.click(screen.getByText('Anlegen'))
     await waitFor(() => expect(api.createProject).toHaveBeenCalledWith('Neu'))
+  })
+
+  it('traegt den Anlege-Knopf NICHT ein zweites Mal, sobald es Projekte gibt (#69)', async () => {
+    // Der Knopf steht seit PR #68 in der Seitenleiste — auf JEDER Route. Wortgleich noch
+    // einmal im Seitenkopf ist kein zweiter Weg, sondern die Frage, ob beide dasselbe tun.
+    vi.mocked(api.listProjects).mockResolvedValue([{ name: 'Alpha', dateien: 1, fertig: 1, geaendert: 0 }])
+    zeigen()
+    expect(await screen.findByText('Alpha')).toBeInTheDocument()
+    expect(screen.queryByText('+ Neues Projekt')).toBeNull()
   })
 
   it('zeigt laufende Projekte als Karten', async () => {
