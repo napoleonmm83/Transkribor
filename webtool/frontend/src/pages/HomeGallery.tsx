@@ -54,7 +54,7 @@ export function HomeGallery() {
             #69 galt dem Doppel auf EINEM Schirm — zwei wortgleiche Knöpfe sind kein zweiter
             Weg, sondern die Frage, ob sie dasselbe tun. Unter `md` blendet die Hülle die
             Leiste aber aus (AppShell), und mit ihr verschwand der einzige verbliebene Weg:
-            der Knopf im Leerzustand erscheint nur ohne Projekte, und die Palette (`Strg+K`)
+            der Knopf im Leerzustand erscheint nur ohne Projekte, und die Palette (`Ctrl+K`)
             kann Projekte nur ÖFFNEN, nicht anlegen. Wer also im schmalen Fenster schon ein
             Projekt hatte, konnte kein zweites mehr anlegen — im Browser gemessen (700 px:
             `aside` display:none, Knopf 0×0).

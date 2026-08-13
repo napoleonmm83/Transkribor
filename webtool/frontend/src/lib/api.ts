@@ -47,8 +47,22 @@ export async function saveFileEinstellungen(
   return jn(await fetch(`/api/projects/${enc(project)}/files/${enc(base)}/einstellungen`,
     { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch) }))
 }
+/** Zeitlimit fuers Laden des Editor-Dokuments.
+ *
+ *  Ein `fetch` ohne Limit kann unbegrenzt offen bleiben (Verbindung steht, Antwort kommt nie —
+ *  uvicorn mitten im Neustart, abgerissene WLAN-Strecke). Fuer `useDoc` ist das kein blosser
+ *  Spinner: solange der Ladelauf offen ist, schreibt der Autosave nicht (sonst ginge die frisch
+ *  geholte Fassung verloren), und die Leiste zeigt weiter „wird gespeichert“. Ohne Limit gaebe
+ *  es aus diesem Zustand keinen Rueckweg. Mit ihm laeuft der `.catch`-Zweig, und #121 raeumt auf.
+ *
+ *  30 s, nicht knapper: ein kalter Serverstart importiert torch und laedt die Diarisierung.
+ *  **Nur am GET** — ein Limit am `saveDoc`-PUT wuerde die Fehler-Episode aus #107 (drei Retries,
+ *  finaler Toast) neu takten, und dort ist ein Fehlschlag bereits behandelt. */
+const LADE_ZEITLIMIT_MS = 30_000
+
 export async function getDoc(project: string, base: string): Promise<EditDoc> {
-  return jn(await fetch(`/api/projects/${enc(project)}/files/${enc(base)}`))
+  return jn(await fetch(`/api/projects/${enc(project)}/files/${enc(base)}`,
+    { signal: AbortSignal.timeout(LADE_ZEITLIMIT_MS) }))
 }
 export async function saveDoc(project: string, base: string, doc: EditDoc): Promise<void> {
   await jn(await fetch(`/api/projects/${enc(project)}/files/${enc(base)}`, {
