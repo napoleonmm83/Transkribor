@@ -45,13 +45,25 @@ describe('HomeGallery', () => {
     await waitFor(() => expect(api.createProject).toHaveBeenCalledWith('Neu'))
   })
 
-  it('traegt den Anlege-Knopf NICHT ein zweites Mal, sobald es Projekte gibt (#69)', async () => {
-    // Der Knopf steht seit PR #68 in der Seitenleiste — auf JEDER Route. Wortgleich noch
-    // einmal im Seitenkopf ist kein zweiter Weg, sondern die Frage, ob beide dasselbe tun.
+  it('zeigt den Anlege-Knopf im Kopf NUR, wo die Seitenleiste fehlt (#69)', async () => {
+    // #69 galt dem Doppel auf EINEM Schirm: ab `md` traegt den Knopf die Leiste (auf jeder
+    // Route), hier waere er der zweite wortgleiche. UNTER `md` blendet die Huelle die Leiste
+    // aus — dann ist dieser hier der einzige Weg, denn der Leerzustands-Knopf erscheint nur
+    // ohne Projekte und die Palette kann Projekte nur oeffnen, nicht anlegen.
+    //
+    // Geprueft wird die KLASSE, nicht die Sichtbarkeit: jsdom rechnet keine Media Queries,
+    // `toBeVisible()` waere hier blind fuer genau die Regel, um die es geht (dieselbe Falle
+    // wie bei den ARIA-Landmarken in AppShell.test.tsx).
     vi.mocked(api.listProjects).mockResolvedValue([{ name: 'Alpha', dateien: 1, fertig: 1, geaendert: 0 }])
     zeigen()
     expect(await screen.findByText('Alpha')).toBeInTheDocument()
-    expect(screen.queryByText('+ Neues Projekt')).toBeNull()
+    // Aufsteigend nach der Klasse suchen statt per CSS-Selektor: der Doppelpunkt in
+    // `md:hidden` muesste dort maskiert werden, und ein falsch maskierter Selektor
+    // findet schlicht nichts — ein Test, der aus dem falschen Grund rot wird.
+    let el: HTMLElement | null = screen.getByText('+ Neues Projekt')
+    let nurSchmal = false
+    while (el && !nurSchmal) { nurSchmal = el.classList.contains('md:hidden'); el = el.parentElement }
+    expect(nurSchmal).toBe(true)
   })
 
   it('zeigt laufende Projekte als Karten', async () => {
