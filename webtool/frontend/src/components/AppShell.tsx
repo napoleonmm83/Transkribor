@@ -95,7 +95,7 @@ function Leiste() {
  */
 function Rahmen({ children }: { children: ReactNode }) {
   const { pathname } = useLocation()
-  const inhalt = useRef<HTMLDivElement>(null)
+  const inhalt = useRef<HTMLElement>(null)   // seit #72 ein <main>, kein <div>
   const titel = useDokumentTitel()
   useOsFortschritt()
   // Kehrseite des EINEN Bildlaufbehaelters: der Versatz ueberlebt den Routenwechsel. Aus
@@ -128,8 +128,20 @@ function Rahmen({ children }: { children: ReactNode }) {
         hatTitelzeile() ? 'grid-rows-[auto_1fr_auto]' : 'grid-rows-[1fr_auto]')}>
         <TitleBar titel={titel} />
         <aside className="hidden min-h-0 border-r md:block"><Leiste /></aside>
-        <div id="inhalt" tabIndex={-1} ref={inhalt}
-          className="min-h-0 overflow-auto outline-none focus-visible:ring-2 focus-visible:ring-ring">{children}</div>
+        {/* `<main>`, nicht `<div>` (#72) — und zwar an DIESER Stelle, weil hier der Sprunglink
+            landet: ein Sprungziel ohne Landmarke ist fuer eine Vorlesehilfe eine Stelle ohne
+            Namen. Der Umbau erledigt zugleich die zweite Haelfte des Issues: `<header>` gilt
+            nur dann als `banner`, wenn es NICHT in `main`/`article`/`section`/`aside`/`nav`
+            steckt. Vorher hingen `PageHeader` und `Toolbar` in einem blossen `div`, waren also
+            beide `banner` — unter Electron zusammen mit der `TitleBar` gleich zwei davon auf
+            einem Schirm. Seit sie in `main` liegen, bleibt genau EINE: die Titelzeile.
+            Preis, bewusst bezahlt: im Browser (dort rendert `TitleBar` `null`) gibt es damit
+            gar keinen `banner` mehr. Das ist erlaubt und ehrlicher — der Seitenkopf einer
+            Unterseite ist kein seitenweiter Kopf.
+            **`EditorView` musste dafuer sein eigenes `<main>` abgeben** (zwei ineinander sind
+            ungueltig); die Huelle traegt es jetzt fuer alle Seiten. */}
+        <main id="inhalt" tabIndex={-1} ref={inhalt}
+          className="min-h-0 overflow-auto outline-none focus-visible:ring-2 focus-visible:ring-ring">{children}</main>
         <StatusBar />
       </div>
     </>

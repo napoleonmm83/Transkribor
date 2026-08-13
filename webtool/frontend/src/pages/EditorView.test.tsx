@@ -33,6 +33,25 @@ describe('EditorView (Stub)', () => {
     vi.mocked(api.getDoc).mockResolvedValue(doc)
   })
 
+  it('bringt KEIN eigenes main mit — das traegt die Huelle (#72)', () => {
+    // Zwei `<main>` ineinander sind ungueltig. Seit `AppShell` das Sprungziel `#inhalt` als
+    // `main` fuehrt, ist der Scroll-Behaelter hier ein schlichtes `div`. Dieser Test ist die
+    // zweite Haelfte des Paars in AppShell.test.tsx: wer eines der beiden zurueckdreht,
+    // bekommt hier oder dort ein rotes Signal.
+    vi.mocked(api.listProjects).mockResolvedValue([])
+    vi.mocked(api.getProjectFiles).mockResolvedValue({ name: 'Demo', files: [] })
+    render(
+      <TooltipProvider>
+        <MemoryRouter initialEntries={['/p/Demo/S1']}>
+          <JobProvider><ProjektDatenProvider><EditorBrueckeProvider>
+            <Routes><Route path="/p/:project/:base" element={<EditorView />} /></Routes>
+          </EditorBrueckeProvider></ProjektDatenProvider></JobProvider>
+        </MemoryRouter>
+      </TooltipProvider>,
+    )
+    expect(document.querySelectorAll('main')).toHaveLength(0)
+  })
+
   it('meldet das offene Dokument samt reload an die Huelle', async () => {
     // Die Huelle kann `dirty` nur abfragen und nur nachladen, wenn der Editor sich meldet --
     // ohne diese Verdrahtung sind K1 und K2 in der AppShell wirkungslos.

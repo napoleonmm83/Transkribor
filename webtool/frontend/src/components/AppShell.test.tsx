@@ -99,6 +99,35 @@ describe('AppShell', () => {
     expect(sprung.compareDocumentPosition(leiste) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
+  it('macht das Sprungziel zur main-Landmarke — und laesst GENAU eine banner uebrig (#72)', () => {
+    // Zwei Haelften desselben Befunds: `#inhalt` war ein `div` (Sprungziel ohne Landmarke),
+    // und weil `PageHeader`/`Toolbar` damit in keinem `main` steckten, galten ihre `<header>`
+    // als `banner` — unter Electron also zwei auf einem Schirm. Beides haengt an DIESEM
+    // Element, darum ein Test.
+    ;(window as unknown as { transkribor: unknown }).transkribor = { plattform: 'win32' }
+    try {
+      render(
+        <MemoryRouter initialEntries={['/']}>
+          <JobProvider><AppShell><header>Seitenkopf</header><p>Inhalt</p></AppShell></JobProvider>
+        </MemoryRouter>,
+      )
+      const main = document.getElementById('inhalt')!
+      expect(main.tagName).toBe('MAIN')
+      expect(screen.getAllByRole('main')).toHaveLength(1)
+      // Geprueft wird die STRUKTUR, nicht die berechnete Rolle: jsdom (dom-accessibility-api)
+      // bildet jedes `<header>` auf `banner` ab und kennt die Vorfahren-Regel aus HTML-AAM
+      // nicht — `getAllByRole('banner')` zaehlt hier also auch den Seitenkopf IM main und
+      // waere gruen wie rot aus dem falschen Grund. Die pruefbare Aussage ist: ausserhalb des
+      // `main` steht genau EIN `<header>`, die Titelzeile. Im Browser gegengeprueft (die
+      // Rollenberechnung dort ist die echte).
+      const ausserhalb = [...document.querySelectorAll('header')].filter(h => !main.contains(h))
+      expect(ausserhalb).toHaveLength(1)
+      expect(ausserhalb[0]).toHaveAttribute('role', 'banner')
+    } finally {
+      delete (window as unknown as { transkribor?: unknown }).transkribor
+    }
+  })
+
   describe('Rasterzeilen', () => {
     // Ohne Bruecke rendert TitleBar `null` und steuert KEIN Rasterelement bei. Bleibt die
     // Zeilenangabe trotzdem dreizeilig, rutscht alles eine Zeile hoch: der Inhalt landet in
