@@ -96,9 +96,11 @@ class _FakeYDL:
     title = "Mein Interview"
     video_id = "vid123"
     fehler = None          # Exception-Instanz -> wird beim Download geworfen
+    gesehen = []           # Optionen JEDER Runde (Metadaten + Download), fuer #162
 
     def __init__(self, opts):
         self.opts = opts
+        _FakeYDL.gesehen.append(opts)
 
     def __enter__(self):
         return self
@@ -135,6 +137,7 @@ def projekt(monkeypatch, tmp_path):
     monkeypatch.setattr(fetch, "yt_dlp", _FakeYtDlp)
     monkeypatch.setattr(transcribe_mod, "ensure_ffmpeg", lambda: True)
     _FakeYDL.title, _FakeYDL.video_id, _FakeYDL.fehler = "Mein Interview", "vid123", None
+    _FakeYDL.gesehen = []
     return tmp_path
 
 
@@ -142,6 +145,17 @@ def test_download_one_legt_m4a_unter_titelnamen_ab(projekt):
     base = fetch.download_one("Demo", "https://youtu.be/vid123")
     assert base == "Mein Interview"
     assert (projekt / "Demo" / "audio" / "Mein Interview.m4a").exists()
+
+
+def test_download_one_gibt_beiden_runden_eine_js_laufzeit(projekt):
+    """#162: ohne JS-Laufzeit antwortet YouTube mit 403.
+
+    Beide yt-dlp-Runden extrahieren (Metadaten UND Download), die Option muss also in
+    beiden stehen — nur in `_ydl_opts(outtmpl)` waere sie an der falschen Haelfte.
+    """
+    fetch.download_one("Demo", "https://youtu.be/vid123")
+    assert len(_FakeYDL.gesehen) == 2
+    assert all("node" in o.get("js_runtimes", {}) for o in _FakeYDL.gesehen)
 
 
 def test_download_one_weicht_bei_kollision_aus(projekt):
