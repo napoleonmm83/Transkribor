@@ -203,8 +203,17 @@ export function useDoc(project: string | null, base: string | null) {
   const save = useCallback(async () => {
     if (!doc || !project || !base) return
     // Ein Ladelauf ersetzt das Dokument gerade — was diese Closure traegt, ist die Fassung
-    // davor. `dirty` bleibt oben; entweder setzt `reload` es beim Eintreffen zurueck (der
-    // Normalfall), oder der Fehlerzweig tut es (#121). Es bleibt also nichts haengen.
+    // davor. `dirty` bleibt oben; `reload` setzt es beim Eintreffen zurueck (der Normalfall)
+    // oder im Fehlerzweig (#121). Ein `getDoc`, das NIE zurueckkommt, gaebe es als dritten
+    // Fall — dagegen steht das Zeitlimit in `api.getDoc`, sonst bliebe der Autosave fuer den
+    // Rest der Sitzung aus, waehrend die Leiste weiter „wird gespeichert“ zeigt.
+    //
+    // BEWUSST IN KAUF GENOMMEN: was der Nutzer WAEHREND des Ladelaufs tippt, ist beim
+    // Eintreffen weg — `setDoc` ersetzt das Dokument als Ganzes, und dieser Lauf hat es nicht
+    // mehr geschrieben. Das galt fuer den Inhalt schon immer (das Ersetzen ist der Zweck von
+    // `reload`); neu ist nur, dass es auch nicht mehr auf die Platte kommt. Der Confirm-Text
+    // deckt es nicht ab — er spricht von dem, was VOR dem OK stand. Bewusst kein zweiter
+    // Hinweis: das Fenster ist die Antwortzeit eines lokalen GET.
     if (ladeLauf.current !== fertig.current) return
     haengt.current = false   // #106: debounce abgelaufen — dieser Aufruf traegt den Stand in die Kette
     // Angehaengt, nicht nebenher gestartet — und bewusst INNERHALB von `save`: eine ausgelagerte
@@ -281,6 +290,25 @@ export function useDoc(project: string | null, base: string | null) {
     return () => {
       if (!project || !base) return
       if (!dirtyRef.current || standRef.current === 'fehler' || !haengt.current) return
+      // Und nicht, solange ein Ladelauf offen ist. Ohne diese Zeile umgeht der Flush den
+      // Waechter in `save` genau dort, wo er am meisten weh tut: ein uebersprungener Lauf
+      // laesst `haengt` oben (der Guard steht VOR `haengt.current = false`), und beim
+      // Dateiwechsel schriebe der Cleanup `docRef.current` — die Fassung VOR der Korrektur —
+      // ueber die frische `edit.json`. Derselbe Schaden, den dieser Wachposten verhindern
+      // soll, nur ueber den Nachbarpfad; und der Ausgang haenge davon ab, ob der Nutzer
+      // wegnavigiert oder bleibt. `haengt.current = false` in `save` waere die Alternative,
+      // behauptete aber „die Kette traegt den Stand jetzt“ — was gerade nicht stimmt.
+      // Die Zaehler zeigen hier noch auf die VERLASSENE Datei: React fuehrt erst alle
+      // Cleanups aus, dann die Setups (und erst das Setup ruft `reload()` fuer die neue).
+      //
+      // Die Lint-Regel warnt, ein Ref koenne sich bis zum Cleanup geaendert haben. Genau
+      // darauf beruht diese Zeile: gebraucht wird der Stand ZUM ZEITPUNKT des Verlassens,
+      // nicht der beim Aufsetzen des Effekts. Ihn oben in eine lokale Variable zu kopieren —
+      // was die Regel vorschlaegt — machte den Waechter wirkungslos, weil der Effekt-Koerper
+      // lief, bevor es den Ladelauf gab. Dieselbe Ueberlegung wie bei `dirtyRef`/`standRef`
+      // zwei Zeilen weiter unten, die aus demselben Grund hier gelesen werden.
+      // oxlint-disable-next-line react-hooks/exhaustive-deps
+      if (ladeLauf.current !== fertig.current) return
       const dokument = docRef.current
       if (!dokument) return
       kette.current = kette.current

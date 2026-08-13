@@ -266,6 +266,64 @@ describe('useDoc updateDoc', () => {
     expect(result.current.dirty).toBe(false)
   })
 
+  it('kehrt der JUENGERE Ladelauf zuerst zurueck, bleibt der Schutz trotzdem korrekt', async () => {
+    // Die andere Reihenfolge — und die einzige, die den Waechter im `.finally` ausuebt: kaeme
+    // A danach ungattet durch, setzte es `fertig` von 2 auf 1 ZURUECK, und nichts hoebe es je
+    // wieder an — der Autosave waere fuer den Rest der Sitzung aus (Reviewer-Befund an PR #159:
+    // der `.finally`-Guard war der ungetestete Teil, seine Entfernung liess alle Tests gruen).
+    vi.mocked(api.saveDoc).mockResolvedValue({ ok: true } as never)
+    const { result } = await geladen()
+    await act(async () => { result.current.updateSegment(0, { text: 'meine Fassung' }) })
+
+    const alt = { ...doc, segments: [{ ...seg, text: 'erste Korrektur' }] }
+    const neu = { ...doc, segments: [{ ...seg, text: 'zweite Korrektur' }] }
+    let loeseAlt: (d: EditDoc) => void = () => {}
+    let loeseNeu: (d: EditDoc) => void = () => {}
+    vi.mocked(api.getDoc)
+      .mockReturnValueOnce(new Promise<EditDoc>(r => { loeseAlt = r }))
+      .mockReturnValueOnce(new Promise<EditDoc>(r => { loeseNeu = r }))
+    await act(async () => { result.current.reload() })   // Lauf A
+    await act(async () => { result.current.reload() })   // Lauf B
+
+    // B (der juengere) zuerst, A danach.
+    await act(async () => { loeseNeu(neu); await vi.advanceTimersByTimeAsync(0) })
+    expect(result.current.doc?.segments[0].text).toBe('zweite Korrektur')
+    await act(async () => { loeseAlt(alt); await vi.advanceTimersByTimeAsync(0) })
+    expect(result.current.doc?.segments[0].text).toBe('zweite Korrektur')   // A schreibt nicht mehr
+
+    // Und der Autosave lebt: eine neue Aenderung wird ganz normal gespeichert.
+    await act(async () => { result.current.updateSegment(0, { text: 'danach' }) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(800) })
+    expect(api.saveDoc).toHaveBeenCalledTimes(1)
+  })
+
+  it('der Verlassens-Flush schreibt NICHT, solange ein Ladelauf offen ist', async () => {
+    // Reviewer-Befund an PR #159: der Waechter in `save` steht VOR `haengt.current = false`,
+    // ein uebersprungener Lauf laesst `haengt` also oben — und der #106-Flush fragt genau
+    // danach. Beim Dateiwechsel schriebe er `docRef.current`, die Fassung VOR der Korrektur,
+    // ueber die frische edit.json: derselbe Schaden ueber den Nachbarpfad, und der Ausgang
+    // haenge davon ab, ob der Nutzer wegnavigiert oder bleibt.
+    vi.mocked(api.saveDoc).mockResolvedValue({ ok: true } as never)
+    vi.useFakeTimers()
+    vi.mocked(api.getDoc).mockResolvedValue(doc)
+    const h = renderHook(({ b }) => useDoc('P', b), { initialProps: { b: 'b' } })
+    await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+    await act(async () => { h.result.current.updateSegment(0, { text: 'meine Fassung' }) })
+
+    // Korrektur fertig -> reload(), Antwort bleibt aus (haengendes getDoc).
+    vi.mocked(api.getDoc).mockReturnValue(new Promise<EditDoc>(() => {}))
+    await act(async () => { h.result.current.reload() })
+    // Weitergetippt, waehrend der Ladelauf offen ist -> haengt steht wieder oben.
+    await act(async () => { h.result.current.updateSegment(0, { text: 'noch was' }) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(800) })
+    expect(api.saveDoc).not.toHaveBeenCalled()          // save() uebersprungen (Ladelauf offen)
+
+    // Dateiwechsel -> Flush-Cleanup der verlassenen Datei.
+    vi.mocked(api.getDoc).mockResolvedValue({ ...doc, base: 'c' })
+    await act(async () => { h.rerender({ b: 'c' }); await vi.advanceTimersByTimeAsync(0) })
+    expect(api.saveDoc).not.toHaveBeenCalled()          // und der Flush auch nicht
+  })
+
   it('ein gescheitertes Laden setzt den Speicher-Stand zurueck (#121)', async () => {
     // Sonst bleibt ein 'fehler' aus der Episode der VORHERIGEN Datei ueber einem leeren
     // Editor stehen: doc=null, loading=false, und die Leiste warnt vor ungespeicherten

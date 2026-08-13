@@ -62,11 +62,13 @@ export function useSuche(doc: EditDoc | null | undefined, query: string): {
     // Die Notiz zaehlt zum Segment, nicht als eigener Ort: sie steht direkt darunter und wird
     // mit ihm markiert. Seit #112 ist sie sichtbar — sichtbarer Text, den die Suche nicht
     // findet, ist genau die Luecke, die #128 fuer die Kopffelder geschlossen hat.
-    // `s.note ?? ''`: der Typ verspricht einen String, die Platte haelt sich nicht daran —
-    // `save_file` schreibt jedes JSON, das ankommt, und `render_md.py` liest das Feld
-    // seinerseits mit `(s.get("note") or "")`. Ohne den Rueckfall stuende bei fehlendem
-    // Schluessel das Wort „undefined“ im Suchtext JEDES Segments, und eine Suche nach „undef“
-    // faerbte das ganze Transkript als Treffer.
+    // `s.note ?? ''` — und zwar NUR hier, nicht auch auf `text`/`raw_text`: `note` ist das
+    // einzige Feld, das eine liegende edit.json wirklich nicht haben kann. Bis #112 schrieb es
+    // niemand, und `load_or_build_doc` gibt eine vorhandene Datei unveraendert zurueck (kein
+    // Nachfuellen fehlender Schluessel) — jede vor #112 gespeicherte Datei kommt also ohne an.
+    // `text`/`raw_text` standen von der ersten Fassung an im Schema. Ohne den Rueckfall stuende
+    // das Wort „undefined“ im Suchtext JEDES Segments, und eine Suche nach „undef“ faerbte das
+    // ganze Transkript als Treffer.
     segmente: doc.segments.map(s => ({ id: s.id, txt: falte(`${isCorrected(s) ? s.text : s.raw_text} ${s.note ?? ''}`) })),
     annotationen: doc.annotations.map(a => falte(a ?? '')),
   }, [doc])
