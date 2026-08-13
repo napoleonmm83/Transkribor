@@ -124,14 +124,16 @@ export function EditorView() {
       <Toolbar stand={stand} bereit={!!doc} onExport={exportDownload}
         suchQuery={suchQuery} onSuchChange={setSuchQuery} suchCount={anzahl} suchIndex={idx}
         onSuchPrev={suchPrev} onSuchNext={suchNext} />
-      <main className="min-h-0 overflow-auto">
+      {/* Kein eigenes <main> mehr (#72): die Huelle traegt es fuer alle Seiten (`#inhalt`),
+          und zwei ineinander sind ungueltig. Hier bleibt der reine Scroll-Behaelter. */}
+      <div className="min-h-0 overflow-auto">
         <Transcript doc={doc} loading={docLoading} activeId={activeId}
           onPlaySeg={s => waveRef.current?.playSegment(s)}
           onPlayTurn={segs => waveRef.current?.playTurn(segs)}
           updateSegment={updateSegment} updateDoc={updateDoc} renameSpeaker={renameSpeaker}
           sucheAktiv={suchAktiv} trefferIds={treffer.segmentTreffer} suchAktivId={suchAktivId}
           kopfTreffer={kopfTreffer} annotTreffer={annotTreffer} aktivOrt={aktivOrt} />
-      </main>
+      </div>
       <PlayerDock url={sel ? audioUrl(sel.project, sel.base) : undefined} onTime={onTime} waveRef={waveRef} />
     </div>
   )
