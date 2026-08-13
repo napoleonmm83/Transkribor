@@ -42,8 +42,14 @@ _LOGIN_RE = re.compile(r"login|log in|sign in|private|not available|rate.?limit|
 # Wonach ein VERALTETER Extraktor aussieht. Bewusst eine Positivliste: eine fremde Plattform,
 # fehlendes ffmpeg oder ein privates Video loesen damit KEINE Aktualisierung aus — ein pip bis
 # 120 s fuer einen Fehler, den es nicht reparieren kann, waere reine Wartezeit.
-_EXTRAKTOR_RE = re.compile(r"\b40[13]\b|unable to extract|failed to extract|nsig|signature|"
-                           r"requested format is not available", re.I)
+# `requested format is not available` stand hier und war TOTER CODE: `_LOGIN_RE` enthaelt
+# `not available`, und das Veto unten schlaegt die Positivliste. Nachgemessen an der echten
+# yt-dlp-Meldung. Die Alternative — `_LOGIN_RE` auf `content is not available` schaerfen —
+# waere die schlechtere: `This video is not available` (entfernt/geosperrt) verloere damit
+# seine richtige Meldung "nicht oeffentlich abrufbar" UND loeste ein pip fuer nichts aus.
+# Formatfehler heilen sich deshalb nicht selbst; das steht in #173.
+_EXTRAKTOR_RE = re.compile(r"\b40[13]\b|unable to extract|failed to extract|nsig|signature",
+                           re.I)
 
 
 def _importiere_yt_dlp():
@@ -267,9 +273,13 @@ def main(argv=None):
         # deshalb den Merker; der Schalter bleibt unberuehrt.
         if fehler is not None and not geheilt and _extraktor_verdacht(fehler):
             geheilt = True
-            print(f"[fetch] {url}: sieht nach einem veralteten Extraktor aus — "
-                  f"aktualisiere yt-dlp und versuche es noch einmal", flush=True)
+            # Die Meldung steht NACH dem Aufruf: bei abgeschaltetem Automatismus passiert
+            # nichts, und ein "versuche es noch einmal" im Job-Log waere dann eine Zusage,
+            # die niemand einloest — ausgerechnet in dem Protokoll, das der Nutzer liest,
+            # wenn ein Import fehlschlaegt. `automatisch()` meldet sich selbst, waehrend es
+            # laeuft ("[ytdlp] aktualisiere …"), die Pause bleibt also erklaert.
             if ytdlp_update.automatisch(erzwingen=True):
+                print(f"[fetch] yt-dlp aktualisiert — versuche {url} noch einmal", flush=True)
                 _neu_laden()
                 base, fehler = _lade(args.project, url)
         if fehler is not None:

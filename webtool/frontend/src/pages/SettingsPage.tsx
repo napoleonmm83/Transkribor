@@ -297,7 +297,10 @@ export function SettingsPage() {
             checked={s.ytdlp_auto === '1'}
             disabled={ytLaeuft}
             onChange={e => speichern({ ytdlp_auto: e.target.checked ? '1' : '0' },
-              () => getSettings().then(setS))}
+              // Nachladen, weil die PUT-Antwort nur `ytdlp_auto` trägt, nicht den ganzen
+              // `ytdlp`-Block. `.catch`, damit ein Fehlschlag nicht als unbehandelte
+              // Rejection endet — die Anzeige ist dann eben einen Klick alt.
+              () => { getSettings().then(setS).catch(() => {}) })}
           />
           <span>
             <span className="font-medium">Videodownloader aktuell halten</span>
@@ -323,8 +326,11 @@ export function SettingsPage() {
         </div>
 
         {/* Ein Haken, der nichts tut, ist schlimmer als keiner: die Umgebungsvariable
-            gewinnt gegen die Einstellung, und ohne diesen Satz sähe man nur den Haken. */}
-        {s.ytdlp.auto !== (s.ytdlp_auto === '1') && (
+            gewinnt gegen die Einstellung, und ohne diesen Satz sähe man nur den Haken.
+            Der Server sagt `env` — ein Vergleich `ytdlp.auto !== (ytdlp_auto === '1')` stand
+            hier zuerst und behauptete zwischen PUT-Antwort und Nachladen ein Override, das
+            es nicht gab (die PUT-Antwort trägt `ytdlp_auto`, aber keinen `ytdlp`-Block). */}
+        {s.ytdlp.env && (
           <p className="mt-3 text-xs text-amber-600 dark:text-amber-500">
             Diese Einstellung ist gerade wirkungslos: <code>TRANSKRIBOR_YTDLP_UPDATE</code> in
             der Umgebung überstimmt sie und schaltet die automatische Aktualisierung

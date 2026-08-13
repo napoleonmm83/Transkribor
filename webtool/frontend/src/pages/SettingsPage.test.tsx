@@ -28,7 +28,7 @@ const BASIS: Settings = {
   ],
   ai_ready: true, ai_reason: '',
   ytdlp_auto: '1',
-  ytdlp: { version: '2026.8.12', geprueft: '2026-08-13', auto: true },
+  ytdlp: { version: '2026.8.12', geprueft: '2026-08-13', auto: true, env: false },
   providers: [
     { id: 'claude-cli', label: 'Claude Code Abo (kein Key)', needs_key: false, cli: true, base: '', default_model: 'opus', keys_url: '', hint: 'Nutzt das Abo.' },
     { id: 'codex-cli', label: 'ChatGPT-Abo (Codex CLI, kein Key)', needs_key: false, cli: true, base: '', default_model: '', keys_url: '', hint: 'Nutzt das ChatGPT-Abo.' },
@@ -240,7 +240,7 @@ describe('SettingsPage', () => {
   })
 
   it('sagt es, wenn yt-dlp gar nicht installiert ist', async () => {
-    zeige({ ytdlp: { version: null, geprueft: '', auto: true } })
+    zeige({ ytdlp: { version: null, geprueft: '', auto: true, env: false } })
     expect(await screen.findByText(/Nicht installiert/)).toBeInTheDocument()
   })
 
@@ -255,19 +255,34 @@ describe('SettingsPage', () => {
   it('warnt, wenn die Umgebungsvariable den Haken überstimmt', async () => {
     // Ein Haken, der nichts tut, ist schlimmer als keiner. Der WIRKSAME Wert kommt aus
     // `ytdlp.auto`, der gespeicherte aus `ytdlp_auto` — nur die Differenz ist die Warnung.
-    zeige({ ytdlp_auto: '1', ytdlp: { version: '2026.8.12', geprueft: '', auto: false } })
+    zeige({ ytdlp_auto: '1', ytdlp: { version: '2026.8.12', geprueft: '', auto: false, env: true } })
     expect(await screen.findByText(/wirkungslos/)).toBeInTheDocument()
   })
 
-  it('warnt NICHT, solange Einstellung und Wirkung übereinstimmen', async () => {
+  it('warnt NICHT, solange keine Umgebungsvariable gesetzt ist', async () => {
     // Gegenrichtung: ohne sie bliebe unbemerkt, wenn die Warnung immer stünde.
     zeige()
     await screen.findByText(/2026\.8\.12/)
     expect(screen.queryByText(/wirkungslos/)).not.toBeInTheDocument()
   })
 
+  it('das Umschalten blitzt keine falsche Override-Warnung auf', async () => {
+    // Die Warnung hing zuerst an `ytdlp.auto !== (ytdlp_auto === '1')`. Die PUT-Antwort
+    // trägt `ytdlp_auto`, aber KEINEN `ytdlp`-Block — zwischen Merge und Nachladen behauptete
+    // der Vergleich also ein Override, das es gar nicht gibt; schlug das Nachladen fehl,
+    // blieb die Falschaussage stehen. Seitdem sagt der Server es selbst (`ytdlp.env`).
+    vi.mocked(api.saveSettings).mockResolvedValue({ ...BASIS, ytdlp_auto: '0' })
+    zeige()
+    const haken = await screen.findByRole('checkbox', { name: /aktuell halten/i })
+    // Erst NACH dem Laden scheitern lassen — ein `…Once` davor träfe den Aufbau der Seite,
+    // und der Test prüfte dann nur noch „Lädt…“.
+    vi.mocked(api.getSettings).mockRejectedValue(new Error('weg'))
+    await act(async () => { fireEvent.click(haken) })
+    expect(screen.queryByText(/wirkungslos/)).not.toBeInTheDocument()
+  })
+
   it('meldet einen fehlgeschlagenen Update-Versuch, statt ihn zu verschlucken', async () => {
-    vi.mocked(api.updateYtdlp).mockResolvedValue({ ok: false, version: '2026.7.4', geprueft: '2026-08-13', auto: true })
+    vi.mocked(api.updateYtdlp).mockResolvedValue({ ok: false, version: '2026.7.4', geprueft: '2026-08-13', auto: true, env: false })
     zeige()
     fireEvent.click(await screen.findByRole('button', { name: /Jetzt aktualisieren/i }))
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/fehlgeschlagen/)))

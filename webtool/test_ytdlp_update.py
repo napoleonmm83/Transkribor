@@ -122,6 +122,30 @@ def test_env_gewinnt_gegen_die_einstellung(monkeypatch):
     assert yu.auto_an() is False
 
 
+def test_leere_env_variable_ist_KEIN_override(monkeypatch):
+    """`settings.load_env()` schreibt eine Zeile `TRANSKRIBOR_YTDLP_UPDATE=` als LEEREN
+    String in die Umgebung. `os.environ.get` liefert dann "" statt None — ein `is None`-Test
+    haelt das faelschlich fuer ein gesetztes JA, und wer den Haken im Browser abwaehlt,
+    bekaeme weiter Updates plus die Meldung, eine leer gelassene Variable sei schuld."""
+    settings.save({"ytdlp_auto": "0"})
+    for leer in ("", "   "):
+        monkeypatch.setenv("TRANSKRIBOR_YTDLP_UPDATE", leer)
+        assert yu.env_override() is None, repr(leer)
+        assert yu.auto_an() is False, repr(leer)
+        assert yu.zustand()["env"] is False, repr(leer)
+
+
+def test_zustand_meldet_das_override_selbst(monkeypatch):
+    """Der Server sagt es, statt das Frontend `ytdlp_auto` gegen `auto` vergleichen zu
+    lassen: die beiden kommen aus zwei Antworten, und dazwischen behauptete der Vergleich
+    ein Override, das es nicht gibt."""
+    settings.save({"ytdlp_auto": "1"})
+    assert yu.zustand()["env"] is False
+    monkeypatch.setenv("TRANSKRIBOR_YTDLP_UPDATE", "0")
+    z = yu.zustand()
+    assert z["env"] is True and z["auto"] is False
+
+
 def test_abgeschaltet_laeuft_kein_pip(monkeypatch):
     monkeypatch.setenv("TRANSKRIBOR_YTDLP_UPDATE", "0")
     monkeypatch.setattr(yu, "fassung", lambda: "2026.7.4")        # waere faellig

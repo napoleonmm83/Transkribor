@@ -62,13 +62,24 @@ def _als_datum(v: str | None) -> dt.date | None:
         return None
 
 
+def env_override() -> str | None:
+    """Der Wert von TRANSKRIBOR_YTDLP_UPDATE, wenn er die Einstellung ueberstimmt — sonst None.
+
+    **Leer ist kein Override.** `settings.load_env()` schreibt eine Zeile `TRANSKRIBOR_YTDLP_UPDATE=`
+    als leeren String in die Umgebung; `os.environ.get` liefert dann `""` statt `None`, und
+    `"" not in ("0","false","no")` waere ein stilles JA — wer den Haken im Browser abwaehlt,
+    bekaeme weiter Updates und dazu die Meldung, eine Variable sei schuld, die er leer gelassen
+    hat. (Dieselbe Null-Richtung wie in `fetch._mehrsprachig_aus_env`.)
+    """
+    roh = os.environ.get("TRANSKRIBOR_YTDLP_UPDATE")
+    return roh if roh and roh.strip() else None
+
+
 def auto_an() -> bool:
-    """Darf automatisch aktualisiert werden? Eine echte Env-Variable gewinnt gegen die
+    """Darf automatisch aktualisiert werden? Eine gesetzte Env-Variable gewinnt gegen die
     Einstellung — dieselbe Regel wie in `settings.job_env()`: wer sie gesetzt hat (.env, CI),
     soll sie behalten."""
-    roh = os.environ.get("TRANSKRIBOR_YTDLP_UPDATE")
-    if roh is None:
-        roh = settings.load().get("ytdlp_auto") or "1"
+    roh = env_override() or settings.load().get("ytdlp_auto") or "1"
     return roh.strip().lower() not in ("0", "false", "no")
 
 
@@ -158,6 +169,13 @@ def automatisch(erzwingen: bool = False) -> bool:
 
 def zustand() -> dict:
     """Fuer die Einstellungsseite: was installiert ist, wann zuletzt geprueft wurde,
-    ob der Automatismus laeuft."""
+    ob der Automatismus laeuft — und ob die Umgebung den Haken ueberstimmt.
+
+    `env` sagt der Server, statt das Frontend `ytdlp_auto` gegen `auto` vergleichen zu lassen:
+    die beiden Werte kommen aus zwei Antworten (PUT liefert nur `ytdlp_auto`), und dazwischen
+    behauptete der Vergleich fuer einen Moment ein Override, das es gar nicht gibt. Eine
+    Wahrheit statt einer abgeleiteten.
+    """
     g = geprueft()
-    return {"version": fassung(), "geprueft": g.isoformat() if g else "", "auto": auto_an()}
+    return {"version": fassung(), "geprueft": g.isoformat() if g else "",
+            "auto": auto_an(), "env": env_override() is not None}
