@@ -205,6 +205,29 @@ describe('useDoc: Retry greift nicht quer zum Dokumentwechsel (#107 × #116)', (
 })
 
 describe('useDoc updateDoc', () => {
+  it('ein gescheitertes Laden setzt den Speicher-Stand zurueck (#121)', async () => {
+    // Sonst bleibt ein 'fehler' aus der Episode der VORHERIGEN Datei ueber einem leeren
+    // Editor stehen: doc=null, loading=false, und die Leiste warnt vor ungespeicherten
+    // Aenderungen an einem Dokument, das gar nicht mehr da ist. Kein Datenverlust (der
+    // Retry-Guard aus #107 haelt), aber eine Anzeige, die luegt.
+    vi.mocked(api.saveDoc).mockRejectedValue(new Error('boom'))
+    vi.useFakeTimers()
+    vi.mocked(api.getDoc).mockResolvedValue(doc)
+    const h = renderHook(({ b }) => useDoc('P', b), { initialProps: { b: 'b' } })
+    await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+    await act(async () => { h.result.current.updateSegment(0, { text: 'eins' }) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(800) })
+    expect(h.result.current.stand).toBe('fehler')
+
+    // Wechsel auf eine Datei, deren getDoc scheitert (z.B. 500 nach einem Serverneustart).
+    vi.mocked(api.getDoc).mockRejectedValue(new Error('500'))
+    h.rerender({ b: 'c' })
+    await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+    expect(h.result.current.doc).toBeNull()
+    expect(h.result.current.stand).toBe('ruhig')
+    expect(h.result.current.dirty).toBe(false)
+  })
+
   it('schreibt das Kopffeld und laeuft ueber dieselbe Entprellung wie ein Segment', async () => {
     // Kontext und Zusammenfassung duerfen keinen zweiten Speicherweg bekommen: sonst gibt es
     // zwei Wahrheiten darueber, wann ein Dokument als gesichert gilt.
