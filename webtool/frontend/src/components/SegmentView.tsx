@@ -93,8 +93,14 @@ export function SegmentView({ seg, active, onPlay, updateSegment, dimmen = false
         <div className="mt-0.5 flex items-start gap-1 pl-1 text-muted-foreground">
           <MessageSquare className="mt-0.5 size-3 shrink-0" aria-hidden="true" />
           {notiz
+            // `t.trim() ? t : ''` — nur Leerraum IST ein Streichen, so wie in `Anmerkungen.setze`.
+            // Ungefiltert bliebe "   " stehen: truthy, also faellt der Anlege-Knopf weg und die
+            // Notizzeile zeigt nichts an — eine unsichtbare Notiz, die `render_md` ohnehin
+            // wegstrippt. (Beim ANLEGEN kann das nicht passieren: dort ist der Ausgangswert ""
+            // und `TextEditor` wertet unveraendert als Abbruch — die Luecke gab es nur beim
+            // Leeren einer bestehenden Notiz.)
             ? <div className="flex-1"><TextEditor initial={seg.note}
-                onCommit={t => { updateSegment(seg.id, { note: t }); setNotiz(false) }}
+                onCommit={t => { updateSegment(seg.id, { note: t.trim() ? t : '' }); setNotiz(false) }}
                 onCancel={() => setNotiz(false)}
                 onVerworfen={() => toast.info(EINGABE_VERWORFEN)} /></div>
             : <button type="button" onClick={() => setNotiz(true)} title="Notiz bearbeiten (leeren streicht sie)"
