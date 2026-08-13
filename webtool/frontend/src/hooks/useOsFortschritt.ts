@@ -51,8 +51,10 @@ export function useOsFortschritt(): void {
 
   const laufend = jobs.filter(j => j.status === 'running')
   const projekt = projects.find(p => p.name === laufend[0]?.project)
+  /** Laeuft gerade nichts? DAS ist der Leerlauf — nicht „kein Balken zu zeichnen" (#76). */
+  const leerlauf = laufend.length === 0
   // -1 raeumt den Balken ab. Ohne das bleibt er nach dem letzten Lauf fuer immer stehen.
-  const anteil = laufend.length === 0 || !projekt || projekt.dateien === 0
+  const anteil = leerlauf || !projekt || projekt.dateien === 0
     ? -1 : projekt.fertig / projekt.dateien
   // Rot heisst "etwas ist schiefgegangen, waehrend noch etwas laeuft" -- und zwar SEIT der
   // Balken zuletzt leer war. `jobs` gibt keinen je adoptierten Job wieder her, ein
@@ -65,10 +67,17 @@ export function useOsFortschritt(): void {
   // er hier stehen und muss NICHT in die Renderphase (React verbietet das Schreiben von Refs
   // dort ausdruecklich, und unter Concurrent Rendering liefe es auch fuer Durchlaeufe, die nie
   // committen).
+  //
+  // Der Schnappschuss haengt an `leerlauf`, NICHT an `anteil < 0` (#76): `anteil` wird auch
+  // negativ, waehrend etwas laeuft — naemlich solange das Projekt noch nicht in der
+  // Zusammenfassung steht (der Poll ist bis zu 4 s alt) oder `dateien === 0` meldet. In genau
+  // diesem Fenster wurde ein frischer Fehlschlag beiseitegelegt und blieb es: er faerbte den
+  // laufenden Balken nie rot. Folge war ein FEHLENDES Rot — die Richtung, die man nicht
+  // bemerkt, weil nichts passiert.
   const alteFehler = useRef(new Set<string>())
   useEffect(() => {
-    if (anteil < 0) alteFehler.current = new Set(jobs.filter(j => j.status === 'error').map(j => j.id))
-  }, [anteil, jobs])
+    if (leerlauf) alteFehler.current = new Set(jobs.filter(j => j.status === 'error').map(j => j.id))
+  }, [leerlauf, jobs])
   const modus = anteil >= 0 && jobs.some(j =>
     j.project === projekt?.name && j.status === 'error' && !alteFehler.current.has(j.id))
     ? 'error' : undefined
