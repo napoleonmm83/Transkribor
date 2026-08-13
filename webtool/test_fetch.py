@@ -305,11 +305,15 @@ def test_requirements_nennt_yt_dlp_ejs():
     Reihenfolge in `jsc/_builtin/ejs.py:_iter_script_sources` ist PyPI-Paket -> Cache ->
     mitgeliefert -> GitHub, und die letzte ist per Default gesperrt (`remote_components`
     ist leer). Mitgeliefert ist nur `yt.solver.core.js`; `yt.solver.lib.js`, das die
-    node-Laufzeit braucht, fehlt im yt-dlp-Paket. Faellt die Zeile heraus, ist die
+    node-Laufzeit braucht, fehlt im yt-dlp-Paket. Faellt das Extra heraus, ist die
     JS-Laufzeit aus #162 wieder wirkungslos — und zwar lautlos, weil der Download auf
-    Player-Clients ohne Signatur ausweicht und meistens trotzdem klappt."""
+    Player-Clients ohne Signatur ausweicht und meistens trotzdem klappt.
+
+    Geprueft wird das EXTRA, nicht eine eigene `yt-dlp-ejs`-Zeile: die Fassung muss exakt zu
+    `jsc/_builtin/vendor/_info.py:VERSION` passen, und diesen Pin fuehrt yt-dlp selbst
+    (`yt-dlp-ejs==0.8.0` in `[default]`). Eine freie Zeile daneben driftet davon."""
     req = (pathlib.Path(__file__).resolve().parent.parent / "requirements.txt").read_text("utf-8")
-    assert any(z.strip().startswith("yt-dlp-ejs") for z in req.splitlines())
+    assert any(z.strip().startswith("yt-dlp[default]") for z in req.splitlines())
 
 
 # --- Selbstaktualisierung ----------------------------------------------------
