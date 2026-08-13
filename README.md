@@ -103,7 +103,9 @@ bauen ihre Seiten ständig um, wovon der Downloader jedes Mal aus dem Tritt komm
 frischt ihn deshalb von sich aus auf. Geht ein Download trotzdem schief, weil die Seite sich
 gerade wieder geändert hat, aktualisiert es sofort und versucht es gleich noch einmal. Du
 merkst davon im Normalfall nichts; nachsehen (und abschalten) kannst du es unter
-**Einstellungen › Video-Import**.
+**Einstellungen › Video-Import**. Zusätzliche Programme brauchst du dafür keine — YouTube
+verlangt beim Herunterladen inzwischen, dass ein kleines Stück Javascript ausgeführt wird,
+und Transkribor bringt alles Nötige dafür mit.
 
 **Es wartet nicht auf dich.** Aufnahmen werden nacheinander abgearbeitet, mehrere Projekte
 parallel — du kannst weiterarbeiten oder das Fenster zumachen.

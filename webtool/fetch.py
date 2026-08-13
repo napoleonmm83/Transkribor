@@ -103,13 +103,36 @@ def _extraktor_verdacht(exc: Exception) -> bool:
     return bool(_EXTRAKTOR_RE.search(msg)) and not _LOGIN_RE.search(msg)
 
 
-def _js_laufzeit_da() -> bool:
-    """Liegt eine JS-Laufzeit auf dem PATH? Nur fuer die FEHLERMELDUNG, nicht fuer die Optionen.
+def _js_runtime_pfad() -> str:
+    """Pfad einer node-kompatiblen Laufzeit aus der Umgebung — oder Leerstring.
 
-    yt-dlp sucht selbst (und zusaetzlich im Scripts-Ordner) — deshalb steht `node` in
-    `_ydl_opts` bedingungslos. Hier geht es allein darum, den 403 richtig zu deuten.
+    Gesetzt von `electron/backend.js`: die gepackte App hat weder node noch deno auf dem PATH
+    (#171), bringt aber selbst eine mit — Electrons Binary IST ein Node, sobald
+    `ELECTRON_RUN_AS_NODE=1` in der Umgebung steht. Gemessen mit genau dem Aufruf, den
+    `NodeJCP._run_js_runtime` macht (`--permission -`, Skript auf stdin): Node 24, sauberes
+    JSON auf stdout, Exitcode 0.
+
+    **Die beiden Variablen sind untrennbar**, und das Paar wird in backend.js gesetzt, nicht
+    hier: ohne `ELECTRON_RUN_AS_NODE` startet dasselbe Binary das GUI statt zu rechnen — wer
+    dagegen von Hand auf ein echtes node zeigt, will die Electron-Variable gerade NICHT.
+    Ein Test ueber `serverEnv()` haelt sie in backend.js zusammen.
+
+    Die Alternative waere ein Deno-Download bei der Ersteinrichtung gewesen: derselbe Zweck
+    fuer 40 MB mehr — und auf Linux, wo `setup.js:plan()` nichts selbst installiert, ein
+    Handgriff, den der Nutzer von Hand machen muesste.
     """
-    return any(shutil.which(x) for x in ("deno", "node"))
+    return (os.environ.get("TRANSKRIBOR_JS_RUNTIME") or "").strip()
+
+
+def _js_laufzeit_da() -> bool:
+    """Gibt es ueberhaupt eine JS-Laufzeit? Nur fuer die FEHLERMELDUNG, nicht fuer die Optionen.
+
+    yt-dlp sucht selbst auf dem PATH (und zusaetzlich im Scripts-Ordner) — deshalb stehen
+    `deno`/`node` in `_ydl_opts` bedingungslos. Hier geht es allein darum, den 403 richtig zu
+    deuten. Die mitgereichte Laufzeit zaehlt mit: sonst riete die Meldung im gepackten Lauf
+    ausgerechnet dort zu einer Node-Installation, wo bereits eine benutzt wird.
+    """
+    return bool(_js_runtime_pfad()) or any(shutil.which(x) for x in ("deno", "node"))
 
 
 def _human_error(exc: Exception) -> str:
@@ -120,8 +143,8 @@ def _human_error(exc: Exception) -> str:
         return "Video ist nicht öffentlich abrufbar (Login nötig)"
     # Ohne JS-Laufzeit loest yt-dlp YouTubes Signatur nicht und bekommt 403 (#162). Die
     # Meldung liest sich wie ein gesperrtes Video; die Ursache steht nur in einer Warnung,
-    # die `no_warnings` obendrein schluckt. Im gepackten Lauf ist das der Normalfall — der
-    # Installer bringt weder node noch deno mit (#171).
+    # die `no_warnings` obendrein schluckt. Der gepackte Lauf bringt seit #171 Electrons
+    # eigenes Node mit — der Rat gilt also nur noch, wo wirklich keine Laufzeit da ist.
     if "403" in msg and not _js_laufzeit_da():
         return (f"{msg} — YouTube braucht eine JavaScript-Laufzeit; "
                 f"installiere Node (https://nodejs.org) oder Deno und versuche es erneut")
@@ -172,15 +195,19 @@ def _ydl_opts(outtmpl: str = "") -> dict:
     EINE Stelle fuer beide Aufrufe: die Metadaten-Runde extrahiert genauso wie der
     Download, eine Option nur an einem der beiden Orte wirkt also nur halb.
     """
+    # Ohne JS-Laufzeit antwortet YouTube mit 403 (#162); die Ursache steht nur in einer
+    # Warnung darueber. deno ist yt-dlps Vorgabe, node liegt fuer den Frontend-Build ohnehin
+    # vor. Beide bleiben stehen, auch wenn eine Laufzeit mitgereicht wird: eine nicht
+    # gefundene ist fuer yt-dlp kein Fehler (JsRuntime.info -> None), gewarnt wird nur bei
+    # einem unbekannten NAMEN — und ein auf dem PATH liegendes deno hat hoehere Prioritaet.
+    # `path` ueberspringt yt-dlps PATH-Suche fuer `node` (YoutubeDL._js_runtimes ->
+    # NodeJsRuntime(path=…)); im Entwickler-Checkout ist die Variable leer und es bleibt
+    # byte-identisch beim alten Verhalten.
+    pfad = _js_runtime_pfad()
     opts = {
         "noplaylist": True,        # ?list=… nicht als ganze Playlist auffassen
         "quiet": True, "no_warnings": True, "noprogress": True,
-        # Ohne JS-Laufzeit antwortet YouTube mit 403 (#162); die Ursache steht nur in einer
-        # Warnung darueber. deno ist yt-dlps Vorgabe, node liegt fuer den Frontend-Build
-        # ohnehin vor. Fehlt beides (gepackter Lauf), bleibt es beim alten Verhalten statt
-        # eines neuen Fehlers: eine nicht gefundene Laufzeit ist fuer yt-dlp kein Fehler
-        # (JsRuntime.info -> None); gewarnt wird nur bei einem unbekannten NAMEN.
-        "js_runtimes": {"deno": {}, "node": {}},
+        "js_runtimes": {"deno": {}, "node": {"path": pfad} if pfad else {}},
     }
     if outtmpl:
         opts |= {

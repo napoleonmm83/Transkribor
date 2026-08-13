@@ -17,3 +17,14 @@ pyannote.audio==4.0.7
 # Option nicht und verwirft sie STILL (params ist ein blosses dict) — der Fix waere weg, ohne
 # dass irgendetwas davon berichtet. 2026.7.4 ist die Fassung, gegen die gemessen wurde.
 yt-dlp>=2026.7.4
+# Die Loeserskripte fuer YouTubes JS-Challenge — 53 KB, und OHNE sie war die JS-Laufzeit aus
+# #162 ueberall wirkungslos, auch im Entwickler-Checkout (#170). Gemessen an der installierten
+# yt-dlp-Quelle: `_iter_script_sources` fragt PyPI-Paket -> Cache -> mitgeliefert -> GitHub,
+# und die letzte Quelle ist per Default GESPERRT (`remote_components` ist leer). Mitgeliefert
+# ist `yt.solver.core.js`, aber `yt.solver.lib.js` — das Skript, das die node-Laufzeit
+# braucht — gar nicht; die Deno-Fassung im Paket ist ein 245-Zeichen-Stub, der npm nachlaedt.
+# Ohne dieses Paket hat der Loeser also OFFLINE KEINE Quelle und lehnt ab; dass Downloads
+# trotzdem meist klappen, liegt am Ausweichen auf Player-Clients ohne Signatur (#170: 2 von 3
+# Laeufen scheiterten). Die Fassung muss zu `jsc/_builtin/vendor/_info.py:VERSION` passen —
+# yt-dlp prueft Major+Minor und den Hash und verwirft sonst mit Warnung.
+yt-dlp-ejs

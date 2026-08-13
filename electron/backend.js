@@ -26,6 +26,46 @@ function freierPort() {
   })
 }
 
+/**
+ * Die Umgebung des Servers — reine Funktion, damit die Entscheidung ohne laufendes Electron
+ * pruefbar ist (Muster wie `setup.plan` und `fenster.fensterOptionen`).
+ *
+ * `exe` ist das Electron-Binary (`process.execPath`, gepackt also Transkribor.exe bzw.
+ * Transkribor.app/Contents/MacOS/Transkribor).
+ */
+function serverEnv(exe = process.execPath) {
+  return {
+    // spawnEnv statt process.env: auf macOS steht Homebrew sonst nicht im PATH des
+    // Servers — und jeder Job erbt diese Umgebung (jobs.py startet mit {**os.environ}).
+    // Ohne das findet llm.available()s shutil.which("claude") ein installiertes Claude
+    // Code nicht und meldet dem Nutzer "nicht installiert".
+    ...S.spawnEnv(),
+    PYTHONUNBUFFERED: '1',
+    PYTHONIOENCODING: 'utf-8',
+    // Die .env parst der Server selbst (webtool/settings.py:load_env) — hier nur noch
+    // sagen, WO sie liegt: gepackt in userData, im Repo neben webtool.ps1.
+    TRANSKRIBOR_ENV: P.envDatei,
+    // Nutzerdaten liegen nie neben der .exe — Program Files ist schreibgeschuetzt und
+    // wird beim Update ersetzt.
+    TRANSKRIBOR_PROJEKTE: P.projekte,
+    // Dasselbe fuer die GGML-Modelle der Apple-Silicon-Engine (webtool/whispercpp.py):
+    // sie werden zur Laufzeit geladen, gehoeren also zu den Nutzerdaten, nicht zum Paket.
+    TRANSKRIBOR_GGML: P.ggml,
+    // YouTube verlangt eine geloeste Signatur, dafuer braucht yt-dlp eine JS-Laufzeit —
+    // und die gepackte App hatte weder node noch deno (#171), womit der URL-Import dort
+    // bei 403 blieb. Sie bringt aber eine MIT: mit ELECTRON_RUN_AS_NODE=1 ist dasselbe
+    // Binary ein gewoehnliches Node (gemessen: v24, und yt-dlps Aufruf `--permission -`
+    // mit dem Skript auf stdin liefert sauberes JSON). Kein Download, alle drei Plattformen.
+    //
+    // **Die beiden Zeilen gehoeren zusammen.** Ohne das Flag startet der Pfad, auf den
+    // TRANSKRIBOR_JS_RUNTIME zeigt, ein zweites GUI-Fenster statt zu rechnen; ohne den Pfad
+    // sucht yt-dlp weiter nur auf dem PATH und findet nichts. Der Riegel dagegen ist der
+    // Test ueber diese Funktion — im Betrieb kann nur ein Editiervorgang sie trennen.
+    ELECTRON_RUN_AS_NODE: '1',
+    TRANSKRIBOR_JS_RUNTIME: exe,
+  }
+}
+
 function erreichbar(p) {
   return new Promise(resolve => {
     const req = http.get({ host: '127.0.0.1', port: p, path: '/api/projects', timeout: 1000 },
@@ -44,24 +84,7 @@ async function start(onLine) {
     {
       cwd: P.pyRoot,
       windowsHide: true,
-      env: {
-        // spawnEnv statt process.env: auf macOS steht Homebrew sonst nicht im PATH des
-        // Servers — und jeder Job erbt diese Umgebung (jobs.py startet mit {**os.environ}).
-        // Ohne das findet llm.available()s shutil.which("claude") ein installiertes Claude
-        // Code nicht und meldet dem Nutzer "nicht installiert".
-        ...S.spawnEnv(),
-        PYTHONUNBUFFERED: '1',
-        PYTHONIOENCODING: 'utf-8',
-        // Die .env parst der Server selbst (webtool/settings.py:load_env) — hier nur noch
-        // sagen, WO sie liegt: gepackt in userData, im Repo neben webtool.ps1.
-        TRANSKRIBOR_ENV: P.envDatei,
-        // Nutzerdaten liegen nie neben der .exe — Program Files ist schreibgeschuetzt und
-        // wird beim Update ersetzt.
-        TRANSKRIBOR_PROJEKTE: P.projekte,
-        // Dasselbe fuer die GGML-Modelle der Apple-Silicon-Engine (webtool/whispercpp.py):
-        // sie werden zur Laufzeit geladen, gehoeren also zu den Nutzerdaten, nicht zum Paket.
-        TRANSKRIBOR_GGML: P.ggml,
-      },
+      env: serverEnv(),
     })
   proc.stdout.on('data', b => String(b).split(/\r?\n/).filter(Boolean).forEach(merke))
   proc.stderr.on('data', b => String(b).split(/\r?\n/).filter(Boolean).forEach(merke))
@@ -88,4 +111,5 @@ function stop() {
   proc = null
 }
 
-module.exports = { start, stop, url: () => `http://127.0.0.1:${port}/`, log: () => log.slice() }
+module.exports = { start, stop, serverEnv,
+                   url: () => `http://127.0.0.1:${port}/`, log: () => log.slice() }
