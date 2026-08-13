@@ -23,7 +23,7 @@ import subprocess
 import sys
 from importlib import metadata
 
-from . import settings
+from . import settings, sperre
 
 # yt-dlp veroeffentlicht stabil etwa monatlich: kuerzer bringt selten etwas Neues, laenger
 # liesse einen kaputten Extraktor monatelang kaputt. Eine Zahl, an einer Stelle.
@@ -122,15 +122,22 @@ def aktualisiere() -> bool:
            "--retries", "1", "--timeout", "10", "yt-dlp"]
     print(f"[ytdlp] aktualisiere (installiert: {fassung() or 'nichts'}) …", flush=True)
     ok = False
-    try:
-        p = subprocess.run(cmd, capture_output=True, text=True, errors="replace",
-                           timeout=PIP_TIMEOUT)
-        ok = p.returncode == 0
-        letzte = (p.stdout or "").strip().splitlines()[-1:] or (p.stderr or "").strip().splitlines()[-1:]
-        print(f"[ytdlp] {'ok' if ok else 'fehlgeschlagen'}: {letzte[0] if letzte else ''}",
-              flush=True)
-    except (OSError, subprocess.SubprocessError) as e:
-        print(f"[ytdlp] Update fehlgeschlagen: {e}", flush=True)
+    # Zwei pip-Laeufe auf DIESELBE venv duerfen sich nicht ueberschneiden — sie schreiben in
+    # dasselbe site-packages und koennen die Installation zerlegen. Erreichbar, seit es zwei
+    # Ausloeser aus zwei Prozessen gibt: der Import-Job und der Knopf in den Einstellungen.
+    # Eigener Lock-Name (…ytdlp.lock), damit er sich nicht mit dem von `settings.save()`
+    # ueberschneidet — der wird im `_merken()` unten genommen, waehrend dieser noch haelt.
+    os.makedirs(os.path.dirname(settings.path()), exist_ok=True)
+    with sperre.datei(settings.path() + ".ytdlp", stale=PIP_TIMEOUT + 30):
+        try:
+            p = subprocess.run(cmd, capture_output=True, text=True, errors="replace",
+                               timeout=PIP_TIMEOUT)
+            ok = p.returncode == 0
+            zeilen = (p.stdout or "").strip().splitlines() or (p.stderr or "").strip().splitlines()
+            print(f"[ytdlp] {'ok' if ok else 'fehlgeschlagen'}: {zeilen[-1] if zeilen else ''}",
+                  flush=True)
+        except (OSError, subprocess.SubprocessError) as e:
+            print(f"[ytdlp] Update fehlgeschlagen: {e}", flush=True)
     _merken()
     return ok
 

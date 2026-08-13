@@ -37,7 +37,11 @@ def test_lock_raumt_verwaistes_lock_auf(tmp_path, monkeypatch):
     lockdir = projekt._pfad("p") + ".lock"
     os.makedirs(paths.project_dir("p"), exist_ok=True)
     os.mkdir(lockdir)
-    alt = time.time() - projekt._LOCK_STALTES_ALTER - 10      # eindeutig verwaist
+    # Die Mechanik liegt seit der zweiten Race (settings.json, yt-dlp-Merker) in sperre.py;
+    # geprueft wird trotzdem hier durch `projekt.speichern` — die Frage ist, ob PROJEKT.JSON
+    # weiter schreibbar bleibt, nicht ob eine Hilfsfunktion tut, was sie soll.
+    from webtool import sperre
+    alt = time.time() - sperre.STALTES_ALTER - 10             # eindeutig verwaist
     os.utime(lockdir, (alt, alt))
     projekt.speichern("p", {"sprache": "en"})                # raeumt auf + schreibt
     assert projekt.laden("p")["sprache"] == "en"

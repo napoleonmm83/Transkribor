@@ -11,7 +11,7 @@ Frontend mit `has_key` statt dem Schluessel selbst.
 import json
 import os
 
-from . import paths
+from . import paths, sperre
 
 
 # Alle Namen, die faster-whisper akzeptiert (identisch zu denen von openai-whisper — sie
@@ -112,17 +112,25 @@ def load() -> dict:
 
 def save(patch: dict) -> dict:
     """Merge-Speichern. Ein fehlendes 'api_key' laesst den gespeicherten Key stehen — das
-    Frontend bekommt ihn nie zu sehen und koennte ihn sonst beim Modellwechsel loeschen."""
-    cur = load()
-    for k in DEFAULTS:
-        if k in patch and isinstance(patch[k], str):
-            cur[k] = patch[k].strip()
+    Frontend bekommt ihn nie zu sehen und koennte ihn sonst beim Modellwechsel loeschen.
+
+    Gesperrt, weil es seit der yt-dlp-Selbstaktualisierung ZWEI Schreiber gibt: den Server
+    (Einstellungen aus dem Browser) und den fetch-Subprozess (den Pruef-Merker). Ohne die
+    Sperre verschraenken sich load+merge+replace, der letzte gewinnt — und ein gerade
+    eingetragener API-Key waere weg (dieselbe Race wie #134 auf projekt.json). Die Sperre
+    liegt HIER statt bei den Aufrufern: sie ist nur wirksam, wenn ALLE sie nehmen.
+    """
     p = path()
     os.makedirs(os.path.dirname(p), exist_ok=True)
-    tmp = p + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as fh:
-        json.dump(cur, fh, ensure_ascii=False, indent=1)
-    os.replace(tmp, p)
+    with sperre.datei(p):
+        cur = load()
+        for k in DEFAULTS:
+            if k in patch and isinstance(patch[k], str):
+                cur[k] = patch[k].strip()
+        tmp = p + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump(cur, fh, ensure_ascii=False, indent=1)
+        os.replace(tmp, p)
     try:                       # nur der Besitzer darf lesen; auf Windows no-op, dort schuetzt das Profil
         os.chmod(p, 0o600)
     except OSError:
