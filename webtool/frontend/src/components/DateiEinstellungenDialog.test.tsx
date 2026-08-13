@@ -5,7 +5,7 @@ import { DateiEinstellungenDialog } from './DateiEinstellungenDialog'
 import type { ProjectFile } from '@/lib/types'
 
 const BASIS = {
-  sprache: 'ch', korrektur: 'auto',
+  sprache: 'ch', korrektur: 'auto', mehrsprachig: false,
   sprach_choices: [
     { id: 'ch', label: 'Schweizerdeutsch', hint: '' },
     { id: 'en', label: 'Englisch', hint: '' },
@@ -49,7 +49,7 @@ describe('DateiEinstellungenDialog', () => {
     render(<DateiEinstellungenDialog project="p" base="a" file={datei({ has_edit: true })} offen />)
     await screen.findByText('Schweizerdeutsch')
     await spracheWaehlen('Englisch')
-    expect(screen.getByText(/erfordert Neu-Transkription/)).toBeInTheDocument()
+    expect(screen.getByText(/erfordert eine Neu-Transkription/)).toBeInTheDocument()
     expect(screen.getByText(/handbearbeiteten Fassung/)).toBeInTheDocument()   // has_edit
     expect(screen.getByRole('button', { name: 'Speichern & neu transkribieren' })).toBeEnabled()
   })
@@ -69,7 +69,7 @@ describe('DateiEinstellungenDialog', () => {
 
   it('ruft onGespeichert mit den richtigen Flags und speichert nur bei Änderung', async () => {
     const saveSpy = vi.spyOn(api, 'saveFileEinstellungen')
-      .mockResolvedValue({ sprache: 'en', korrektur: 'auto' })
+      .mockResolvedValue({ sprache: 'en', korrektur: 'auto', mehrsprachig: false })
     const onGespeichert = vi.fn()
     const onOpenChange = vi.fn()
     vi.spyOn(api, 'getFileEinstellungen').mockResolvedValue(BASIS)
@@ -79,7 +79,7 @@ describe('DateiEinstellungenDialog', () => {
     await spracheWaehlen('Englisch')
     fireEvent.click(screen.getByRole('button', { name: 'Speichern & neu transkribieren' }))
     await waitFor(() => expect(saveSpy).toHaveBeenCalledWith('p', 'a', expect.objectContaining({ sprache: 'en' })))
-    expect(onGespeichert).toHaveBeenCalledWith({ spracheGeaendert: true, tiefeGeaendert: false })
+    expect(onGespeichert).toHaveBeenCalledWith({ neuTranskribieren: true, tiefeGeaendert: false })
     expect(onOpenChange).toHaveBeenCalledWith(false)
     saveSpy.mockRestore()
   })
@@ -92,5 +92,49 @@ describe('DateiEinstellungenDialog', () => {
     expect(screen.getByText(/nächsten Transkription/)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /neu transkribieren/ })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Speichern' })).toBeEnabled()
+  })
+})
+
+describe('DateiEinstellungenDialog — mehrsprachig', () => {
+  const kaestchen = () => screen.getByLabelText(/enthält weitere sprachen/i)
+
+  it('schickt den Haken mit', async () => {
+    vi.spyOn(api, 'getFileEinstellungen').mockResolvedValue(BASIS)
+    const saveSpy = vi.spyOn(api, 'saveFileEinstellungen')
+      .mockResolvedValue({ sprache: 'ch', korrektur: 'auto', mehrsprachig: true })
+    render(<DateiEinstellungenDialog project="p" base="a" file={datei()} offen />)
+    await screen.findByText('Schweizerdeutsch')
+    fireEvent.click(kaestchen())
+    fireEvent.click(screen.getByRole('button', { name: /speichern/i }))
+    await waitFor(() => expect(saveSpy).toHaveBeenCalledWith(
+      'p', 'a', expect.objectContaining({ mehrsprachig: true })))
+    saveSpy.mockRestore()
+  })
+
+  it('behandelt eine Haken-Änderung wie einen Sprachwechsel', async () => {
+    /* Der Haken aendert, WIE Whisper dekodiert (multilingual + Kontext aus) — ein vorhandenes
+       Transkript ist danach falsch. Ohne diese Verzweigung bliebe der Haken eine Einstellung
+       ohne Wirkung auf bereits transkribierte Dateien. */
+    vi.spyOn(api, 'getFileEinstellungen').mockResolvedValue(BASIS)
+    const saveSpy = vi.spyOn(api, 'saveFileEinstellungen')
+      .mockResolvedValue({ sprache: 'ch', korrektur: 'auto', mehrsprachig: true })
+    const onGespeichert = vi.fn()
+    render(<DateiEinstellungenDialog project="p" base="a" file={datei({ has_raw: true })} offen
+      onGespeichert={onGespeichert} />)
+    await screen.findByText('Schweizerdeutsch')
+    fireEvent.click(kaestchen())
+    const knopf = screen.getByRole('button', { name: 'Speichern & neu transkribieren' })
+    fireEvent.click(knopf)
+    await waitFor(() => expect(onGespeichert).toHaveBeenCalledWith(
+      { neuTranskribieren: true, tiefeGeaendert: false }))
+    saveSpy.mockRestore()
+  })
+
+  it('ohne Änderung bleibt der Speichern-Knopf gesperrt', async () => {
+    vi.spyOn(api, 'getFileEinstellungen').mockResolvedValue({ ...BASIS, mehrsprachig: true })
+    render(<DateiEinstellungenDialog project="p" base="a" file={datei()} offen />)
+    await screen.findByText('Schweizerdeutsch')
+    expect(kaestchen()).toBeChecked()                     // Serverwert kommt an
+    expect(screen.getByRole('button', { name: /speichern/i })).toBeDisabled()
   })
 })

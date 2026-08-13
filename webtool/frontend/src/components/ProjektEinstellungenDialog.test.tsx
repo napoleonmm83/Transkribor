@@ -4,7 +4,7 @@ import * as api from '@/lib/api'
 import { ProjektEinstellungenDialog } from './ProjektEinstellungenDialog'
 
 const BASIS = {
-  sprache: 'ch', korrektur: 'auto',
+  sprache: 'ch', korrektur: 'auto', mehrsprachig: false,
   sprach_choices: [
     { id: 'ch', label: 'Schweizerdeutsch', hint: '' },
     { id: 'en', label: 'Englisch', hint: '' },
@@ -16,7 +16,7 @@ describe('ProjektEinstellungenDialog', () => {
   it('lädt beim Öffnen und speichert die Sprache', async () => {
     const getSpy = vi.spyOn(api, 'getProjektEinstellungen').mockResolvedValue(BASIS)
     const saveSpy = vi.spyOn(api, 'saveProjektEinstellungen')
-      .mockResolvedValue({ sprache: 'en', korrektur: 'auto' })
+      .mockResolvedValue({ sprache: 'en', korrektur: 'auto', mehrsprachig: false })
     const onGeaendert = vi.fn()
     const onOpenChange = vi.fn()
     render(
@@ -42,5 +42,21 @@ describe('ProjektEinstellungenDialog', () => {
     const save = await screen.findByText('Speichern')
     expect(save).toBeDisabled()
     getSpy.mockRestore()
+  })
+})
+
+describe('ProjektEinstellungenDialog — mehrsprachig', () => {
+  it('lädt den Haken und schickt ihn mit', async () => {
+    vi.spyOn(api, 'getProjektEinstellungen').mockResolvedValue({ ...BASIS, mehrsprachig: true })
+    const saveSpy = vi.spyOn(api, 'saveProjektEinstellungen')
+      .mockResolvedValue({ sprache: 'ch', korrektur: 'auto', mehrsprachig: false })
+    render(<ProjektEinstellungenDialog project="p" offen />)
+    const kasten = await screen.findByLabelText(/enthält weitere sprachen/i)
+    expect(kasten).toBeChecked()                       // Serverwert kommt an
+    fireEvent.click(kasten)                            // wieder abwählen
+    fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
+    await waitFor(() => expect(saveSpy).toHaveBeenCalledWith(
+      'p', expect.objectContaining({ mehrsprachig: false })))
+    saveSpy.mockRestore()
   })
 })

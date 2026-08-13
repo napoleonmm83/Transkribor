@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { getProjektEinstellungen, saveProjektEinstellungen } from '@/lib/api'
 import type { ProjectEinstellungen } from '@/lib/types'
+import { MehrsprachigKasten } from '@/components/MehrsprachigKasten'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import {
@@ -25,6 +26,7 @@ export function ProjektEinstellungenDialog({ project, offen, onOpenChange, onGea
   const [data, setData] = useState<ProjectEinstellungen | null>(null)
   const [sprache, setSprache] = useState('')
   const [korrektur, setKorrektur] = useState('')
+  const [mehrsprachig, setMehrsprachig] = useState(false)
   const [laedt, setLaedt] = useState(false)
   const [speichert, setSpeichert] = useState(false)
 
@@ -40,6 +42,7 @@ export function ProjektEinstellungenDialog({ project, offen, onOpenChange, onGea
         setData(d)
         setSprache(d.sprache)
         setKorrektur(d.korrektur)
+        setMehrsprachig(d.mehrsprachig)
       })
       .catch(e => { if (aktiv) toast.error(`Einstellungen laden fehlgeschlagen: ${(e as Error).message}`) })
       .finally(() => { if (aktiv) setLaedt(false) })
@@ -49,7 +52,7 @@ export function ProjektEinstellungenDialog({ project, offen, onOpenChange, onGea
   const speichern = async () => {
     setSpeichert(true)
     try {
-      await saveProjektEinstellungen(project, { sprache, korrektur })
+      await saveProjektEinstellungen(project, { sprache, korrektur, mehrsprachig })
       onGeaendert?.()
       setOpen(false)
     } catch (e) {
@@ -94,6 +97,7 @@ export function ProjektEinstellungenDialog({ project, offen, onOpenChange, onGea
                 </SelectContent>
               </Select>
             </div>
+            <MehrsprachigKasten wert={mehrsprachig} setzen={setMehrsprachig} />
           </div>
         )}
         <DialogFooter>

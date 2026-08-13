@@ -114,11 +114,13 @@ export function DateiMenue({ project, file, aiReason }: {
    *  dominiert (Neu-Transkription, die Kette zieht die Korrektur nach); nur Tiefe -> Neu-Korrektur
    *  mit force=true (sonst überspränge correct.py eine human_edited-Datei still). Ohne has_raw
    *  bleibt es beim Override — die nächste Transkription übernimmt ihn. */
-  const einstellungenGespeichert = ({ spracheGeaendert, tiefeGeaendert }: {
-    spracheGeaendert: boolean; tiefeGeaendert: boolean }) => {
+  const einstellungenGespeichert = ({ neuTranskribieren, tiefeGeaendert }: {
+    neuTranskribieren: boolean; tiefeGeaendert: boolean }) => {
     toast.success(`Einstellungen für „${file.base}“ gespeichert`)
     if (!file.has_raw) return
-    if (spracheGeaendert) {
+    // neuTranskribieren deckt Sprachwechsel UND den Mehrsprachig-Haken ab — beide aendern,
+    // wie der Decoder laeuft, ein vorhandenes Transkript ist danach nach anderen Regeln entstanden.
+    if (neuTranskribieren) {
       jobStarten(() => startRetranscribeFile(project, file.base)
         .then(res => { if (res.started) { editorVergessen(); wegVomEditor() }; return res }),
         'transcribe', `Neu transkribieren ${file.base}`)

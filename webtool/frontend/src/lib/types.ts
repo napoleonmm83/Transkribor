@@ -33,12 +33,15 @@ export type TiefeChoice = { id: string; label: string };
 export type ProjectEinstellungen = {
   sprache: string
   korrektur: string
+  /** Enthaelt die Aufnahme weitere Sprachen? `sprache` ist dann die ANKERSPRACHE:
+   *  dorthin faellt jedes unsicher erkannte 30-s-Fenster zurueck. */
+  mehrsprachig: boolean
   sprach_choices: SprachChoice[]
   tiefen: TiefeChoice[]
 };
 /** Nur die gesetzten Werte (sprache/korrektur). Der PUT echo't genau diese beiden Felder;
  *  die Wahlmoeglichkeiten (sprach_choices/tiefen) liefert nur der GET. */
-export type EinstellungenWerte = { sprache: string; korrektur: string };
+export type EinstellungenWerte = { sprache: string; korrektur: string; mehrsprachig: boolean };
 // `device` gilt der torch-Welt (Sprechertrennung, kann "mps"), `asr` der Transkription
 // (faster-whisper/CTranslate2, nur "cuda"/"cpu"). Auf einem Mac laufen die beiden ausein-
 // ander — deshalb zwei Felder statt einem.

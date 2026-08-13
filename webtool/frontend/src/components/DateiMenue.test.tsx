@@ -41,12 +41,12 @@ beforeEach(() => {
   vi.mocked(api.startRetranscribeFile).mockResolvedValue({ job_id: '2', started: true })
   vi.mocked(api.deleteFile).mockResolvedValue(undefined)
   vi.mocked(api.getFileEinstellungen).mockResolvedValue({
-    sprache: 'ch', korrektur: 'auto',
+    sprache: 'ch', korrektur: 'auto', mehrsprachig: false,
     sprach_choices: [{ id: 'ch', label: 'Schweizerdeutsch', hint: '' }, { id: 'en', label: 'Englisch', hint: '' }],
     tiefen: [{ id: 'auto', label: 'Automatisch (aus Sprache)' }, { id: 'voll_dialekt', label: 'Voll' }, { id: 'leicht', label: 'Leicht' }],
   })
   vi.mocked(api.saveFileEinstellungen).mockResolvedValue({
-    sprache: 'ch', korrektur: 'auto',
+    sprache: 'ch', korrektur: 'auto', mehrsprachig: false,
   })
 })
 

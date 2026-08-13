@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { getFileEinstellungen, saveFileEinstellungen } from '@/lib/api'
 import type { ProjectEinstellungen, ProjectFile } from '@/lib/types'
+import { MehrsprachigKasten } from '@/components/MehrsprachigKasten'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import {
@@ -22,11 +23,15 @@ export function DateiEinstellungenDialog({ project, base, file, offen, onOpenCha
   file: ProjectFile
   offen?: boolean
   onOpenChange?: (o: boolean) => void
-  onGespeichert?: (a: { spracheGeaendert: boolean; tiefeGeaendert: boolean }) => void
+  /** `neuTranskribieren` heisst nicht mehr „Sprache geändert“: auch der Mehrsprachig-Haken
+   *  landet hier, weil er dieselbe Folge hat (der Decoder läuft anders, das alte Transkript
+   *  ist hin). Ein Feld, das nur die halbe Ursache benennt, führt den nächsten Leser in die Irre. */
+  onGespeichert?: (a: { neuTranskribieren: boolean; tiefeGeaendert: boolean }) => void
 }) {
   const [data, setData] = useState<ProjectEinstellungen | null>(null)
   const [sprache, setSprache] = useState('')
   const [korrektur, setKorrektur] = useState('')
+  const [mehrsprachig, setMehrsprachig] = useState(false)
   const [laedt, setLaedt] = useState(false)
   const [speichert, setSpeichert] = useState(false)
 
@@ -35,18 +40,23 @@ export function DateiEinstellungenDialog({ project, base, file, offen, onOpenCha
     let aktiv = true
     setLaedt(true)
     getFileEinstellungen(project, base)
-      .then(d => { if (aktiv) { setData(d); setSprache(d.sprache); setKorrektur(d.korrektur) } })
+      .then(d => {
+        if (!aktiv) return
+        setData(d); setSprache(d.sprache); setKorrektur(d.korrektur); setMehrsprachig(d.mehrsprachig)
+      })
       .catch(e => { if (aktiv) toast.error(`Einstellungen laden fehlgeschlagen: ${(e as Error).message}`) })
       .finally(() => { if (aktiv) setLaedt(false) })
     return () => { aktiv = false }
   }, [offen, project, base])
 
-  const spracheGeaendert = !!data && sprache !== data.sprache
   const tiefeGeaendert = !!data && korrektur !== data.korrektur
-  const geaendert = spracheGeaendert || tiefeGeaendert
-  // Sprache-Wechsel dominiert (Neu-Transkription deckt die Tiefe über die Autokorrektur-Kette ab).
+  // Der Haken zaehlt wie ein Sprachwechsel: er schaltet multilingual + condition_on_previous_text
+  // um, ein vorhandenes Transkript ist danach nach anderen Regeln entstanden.
+  const neuTranskribieren = !!data && (sprache !== data.sprache || mehrsprachig !== data.mehrsprachig)
+  const geaendert = neuTranskribieren || tiefeGeaendert
+  // Neu-Transkription dominiert (sie deckt die Tiefe über die Autokorrektur-Kette ab).
   const trigger = file.has_raw && geaendert
-    ? (spracheGeaendert ? 'transcribe' : 'correct')
+    ? (neuTranskribieren ? 'transcribe' : 'correct')
     : 'none'
 
   const knopf =
@@ -57,7 +67,8 @@ export function DateiEinstellungenDialog({ project, base, file, offen, onOpenCha
   const hinweis =
     !file.has_raw ? 'Wird bei der nächsten Transkription verwendet.'
     : trigger === 'transcribe'
-      ? `Neue Sprache erfordert Neu-Transkription: Transkript, Korrektur und Export werden verworfen (Audio bleibt)${file.has_edit ? ', inkl. der handbearbeiteten Fassung' : ''}.`
+      // „Die Änderung“, nicht „Neue Sprache“: der Mehrsprachig-Haken loest denselben Zweig aus.
+      ? `Die Änderung erfordert eine Neu-Transkription: Transkript, Korrektur und Export werden verworfen (Audio bleibt)${file.has_edit ? ', inkl. der handbearbeiteten Fassung' : ''}.`
     : trigger === 'correct'
       ? (file.has_edit ? 'Die handbearbeitete Fassung wird überschrieben.'
                        : 'Die Korrektur wird mit der neuen Tiefe neu erstellt.')
@@ -67,8 +78,8 @@ export function DateiEinstellungenDialog({ project, base, file, offen, onOpenCha
     if (!geaendert) return
     setSpeichert(true)
     try {
-      await saveFileEinstellungen(project, base, { sprache, korrektur })
-      onGespeichert?.({ spracheGeaendert, tiefeGeaendert })
+      await saveFileEinstellungen(project, base, { sprache, korrektur, mehrsprachig })
+      onGespeichert?.({ neuTranskribieren, tiefeGeaendert })
       onOpenChange?.(false)
     } catch (e) {
       toast.error(`Speichern fehlgeschlagen: ${(e as Error).message}`)
@@ -111,6 +122,7 @@ export function DateiEinstellungenDialog({ project, base, file, offen, onOpenCha
                 </SelectContent>
               </Select>
             </div>
+            <MehrsprachigKasten wert={mehrsprachig} setzen={setMehrsprachig} />
             {hinweis && <p className="text-sm text-muted-foreground">{hinweis}</p>}
           </div>
         )}
