@@ -299,23 +299,23 @@ def test_lauf_ohne_offene_aufnahme_meldet_einen_leeren_bereich(tmp_path, monkeyp
 # Eine projekt.json mitsprache=de ueberschreibt WHISPER_LANG nicht mehr fuer alle
 # Dateien gleich, sondern pro Datei. 'auto' -> None (Whisper erkennt selbst).
 
-def test_datei_whisper_code_liefert_projektdefault(tmp_path, monkeypatch):
+def test_datei_sprachwahl_liefert_projektdefault(tmp_path, monkeypatch):
     monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
     os.makedirs(os.path.join(tmp_path, "p"), exist_ok=True)
     with open(os.path.join(tmp_path, "p", "projekt.json"), "w") as fh:
         json.dump({"sprache": "en", "korrektur": "auto", "dateien": {}}, fh)
-    assert transcribe._datei_whisper_code(os.path.join(tmp_path, "p"), "v1", "de") == "en"
+    assert transcribe._datei_sprachwahl(os.path.join(tmp_path, "p"), "v1", "de") == ("en", False)
 
 
-def test_datei_whisper_code_auto_ist_none(tmp_path, monkeypatch):
+def test_datei_sprachwahl_auto_ist_none(tmp_path, monkeypatch):
     monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
     os.makedirs(os.path.join(tmp_path, "p"), exist_ok=True)
     with open(os.path.join(tmp_path, "p", "projekt.json"), "w") as fh:
         json.dump({"sprache": "auto", "korrektur": "auto", "dateien": {}}, fh)
-    assert transcribe._datei_whisper_code(os.path.join(tmp_path, "p"), "v1", "de") is None
+    assert transcribe._datei_sprachwahl(os.path.join(tmp_path, "p"), "v1", "de") == (None, False)
 
 
-def test_datei_whisper_code_fallback_wenn_import_scheitert(tmp_path, monkeypatch):
+def test_datei_sprachwahl_fallback_wenn_import_scheitert(tmp_path, monkeypatch):
     # Der Fallback-Zweig (except Exception: return fallback) ist der Wächter, der das
     # Skript ohne webtool-Paket lauffaehig haelt. Nur dieser Weg darf hier durchkommen:
     # datei_sprache zum Werfen zwingen, dann MUSS der Helfer auf 'fallback' zurueckfallen.
@@ -324,7 +324,7 @@ def test_datei_whisper_code_fallback_wenn_import_scheitert(tmp_path, monkeypatch
     def _boom(*a, **k):
         raise RuntimeError("simulated")
     monkeypatch.setattr(webtool.projekt, "datei_sprache", _boom)
-    assert transcribe._datei_whisper_code(str(tmp_path), "v1", "de") == "de"
+    assert transcribe._datei_sprachwahl(str(tmp_path), "v1", "de") == ("de", False)
 
 
 def test_opts_vorgabe_ist_unveraendert():
@@ -414,3 +414,96 @@ def test_schwelle_reicht_unbekannte_attribute_durch():
     echt = _FakeCt2([])
     echt.is_multilingual = True
     assert transcribe._Sprachschwelle(echt, "de", 0.7).is_multilingual is True
+
+
+def test_sprachwahl_liefert_code_und_flag(tmp_path, monkeypatch):
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    from webtool import projekt
+    projekt.setze_datei("p", "a", sprache="en", mehrsprachig=True)
+    assert transcribe._datei_sprachwahl(str(tmp_path / "p"), "a", "de") == ("en", True)
+
+
+def test_sprachwahl_faellt_ohne_projektdatei_zurueck(tmp_path, monkeypatch):
+    """Das Grund-Skript laeuft ohne projekt.json — dann gilt das globale --language
+    und nicht mehrsprachig (Legacy-Verhalten)."""
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    assert transcribe._datei_sprachwahl(str(tmp_path / "fehlt"), "a", "de") == ("de", False)
+
+
+class _FakeModell:
+    """Nachbau von WhisperModel: merkt sich die Optionen, liefert ein leeres Ergebnis."""
+
+    def __init__(self):
+        self.model = types.SimpleNamespace(name="ct2")
+        self.gesehen = []
+
+    def transcribe(self, f, **opts):
+        self.gesehen.append(opts)
+        return iter(()), types.SimpleNamespace(language="de")
+
+
+def test_datei_lauf_haengt_den_proxy_wieder_aus():
+    """Der Proxy darf NICHT haengen bleiben: das Modell wird pro Projektlauf einmal geladen
+    und von allen Dateien geteilt — die naechste, einsprachige Datei bekaeme sonst die
+    Klemmung auf eine fremde Ankersprache ab."""
+    m = _FakeModell()
+    echt = m.model
+    _, zurueck = transcribe._transkribiere_datei(m, "faster-whisper", "a.m4a", "de", True, "large-v3")
+    assert zurueck is m
+    assert m.model is echt
+    assert m.gesehen[0]["multilingual"] is True
+
+
+def test_datei_lauf_haengt_auch_nach_fehler_wieder_aus():
+    """Rueckbau im finally, nicht am Ende: eine kaputte Datei ueberspringt der Lauf und
+    macht weiter — mit einem haengengebliebenen Proxy am geteilten Modell."""
+    import pytest
+    m = _FakeModell()
+    echt = m.model
+
+    def kaputt(f, **opts):
+        raise RuntimeError("kaputte Datei")
+
+    m.transcribe = kaputt
+    with pytest.raises(RuntimeError):
+        transcribe._transkribiere_datei(m, "faster-whisper", "a.m4a", "de", True, "large-v3")
+    assert m.model is echt
+
+
+def test_datei_lauf_schreibt_window_languages():
+    m = _FakeModell()
+    result, _ = transcribe._transkribiere_datei(m, "faster-whisper", "a.m4a", "de", True, "large-v3")
+    assert "window_languages" in result
+
+
+def test_einsprachige_datei_bekommt_keine_window_languages():
+    m = _FakeModell()
+    result, _ = transcribe._transkribiere_datei(m, "faster-whisper", "a.m4a", "de", False, "large-v3")
+    assert "window_languages" not in result
+    assert "multilingual" not in m.gesehen[0]
+
+
+def test_gemischte_datei_faellt_von_whispercpp_auf_faster_whisper(monkeypatch):
+    """DER Mac-Test. whisper.cpp ruft whisper-cli mit einem festen -l und kann keine
+    Erkennung pro Fenster. Ohne diesen Rueckfall bekaeme ein Mac-Nutzer ein einsprachiges
+    Transkript, ohne dass irgendwo etwas fehlschlaegt."""
+    from webtool import whispercpp
+    m = _FakeModell()
+    monkeypatch.setattr(transcribe, "_modell", lambda *a, **k: m)
+    gerufen = []
+    monkeypatch.setattr(whispercpp, "transkribiere",
+                        lambda *a, **k: gerufen.append(a) or {"segments": []})
+    transcribe._transkribiere_datei(None, "whisper.cpp", "a.m4a", "de", True, "large-v3")
+    assert gerufen == []                          # whisper.cpp NICHT gerufen
+    assert m.gesehen[0]["multilingual"] is True
+
+
+def test_einsprachige_datei_bleibt_bei_whispercpp(monkeypatch):
+    """Positivkontrolle zum vorigen Test: ohne sie koennte der Rueckfall auch ALLE Dateien
+    von whisper.cpp wegziehen und der Test oben bliebe trotzdem gruen."""
+    from webtool import whispercpp
+    gerufen = []
+    monkeypatch.setattr(whispercpp, "transkribiere",
+                        lambda *a, **k: gerufen.append(a) or {"segments": []})
+    transcribe._transkribiere_datei(None, "whisper.cpp", "a.m4a", "de", False, "large-v3")
+    assert len(gerufen) == 1

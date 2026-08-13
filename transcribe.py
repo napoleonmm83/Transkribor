@@ -240,18 +240,58 @@ def _ergebnis(segmente, info):
             "language": info.language}
 
 
-def _datei_whisper_code(proj_dir, base, fallback):
-    """Whisper-Sprach-Code fuer EINE Datei: projekt.json (Datei -> Projekt) -> Default.
+def _datei_sprachwahl(proj_dir, base, fallback):
+    """(Whisper-Sprach-Code, mehrsprachig) fuer EINE Datei aus projekt.json.
 
-    Lazy import wie schon `from webtool import device`: das Grund-Skript laeuft ohne
-    das Paket, nur die Sprach-Aufloesung braucht es. Fehlt projekt.json, gilt `fallback`
-    (= WHISPER_LANG, Legacy-Verhalten). 'auto' -> None (Whisper erkennt selbst)."""
+    EIN Lesevorgang fuer beide Werte — zwei Aufrufe waeren zwei projekt.json-Lesungen pro
+    Datei. Lazy import wie schon `from webtool import device`: das Grund-Skript laeuft ohne
+    das Paket, nur die Aufloesung braucht es. Fehlt projekt.json, gilt `fallback`
+    (= WHISPER_LANG, Legacy-Verhalten) und nicht mehrsprachig. 'auto' -> None (Whisper
+    erkennt selbst)."""
     try:
         from webtool import projekt as _p, sprachen as _s
-        sid = _p.datei_sprache(os.path.basename(proj_dir), base)
-        return _s.whisper_code(sid)
+        name = os.path.basename(proj_dir)
+        return _s.whisper_code(_p.datei_sprache(name, base)), _p.datei_mehrsprachig(name, base)
     except Exception:
-        return fallback
+        return fallback, False
+
+
+def _transkribiere_datei(m, engine, f, sprache, mehr, model):
+    """EINE Aufnahme transkribieren -> (Ergebnis-dict, Modell).
+
+    Das Modell kommt zurueck, weil es hier ERST ENTSTEHEN kann: auf einem whisper.cpp-Lauf
+    haelt der Aufrufer keines vor (m is None), und eine gemischte Datei braucht trotzdem
+    faster-whisper.
+
+    Eigene Funktion und nicht inline in transcribe_project: die Schleife dort ist schon lang,
+    und dies ist die einzige Stelle, an der ein Mac ein anderes Ergebnis bekommt als ein PC —
+    die will man am Stueck lesen und einzeln pruefen koennen, ohne echtes Audio und 3 GB Modell.
+    """
+    if engine == "whisper.cpp" and not mehr:
+        from webtool import whispercpp
+        return whispercpp.transkribiere(f, model, sprache), m
+    # whisper.cpp ruft whisper-cli mit einem FESTEN -l und kennt keine Erkennung pro Fenster.
+    # Eine gemischte Datei faellt deshalb auf faster-whisper zurueck — der VIERTE dokumentierte
+    # Rueckfall (neben: kein Apple Silicon, whisper-cli fehlt, keine GGML-Datei). Langsamer,
+    # aber richtig; ein einsprachiges Transkript ohne jede Fehlermeldung waere schlechter.
+    if m is None:
+        from webtool import device as devicemod
+        m = _modell(model, devicemod.pick_asr())
+    proxy = _Sprachschwelle(m.model, sprache, MIX_SCHWELLE) if mehr else None
+    if proxy is not None:
+        m.model = proxy
+    try:
+        result = _ergebnis(*m.transcribe(f, **_opts(sprache, mehr)))
+    finally:
+        # Zwingend im finally: eine kaputte Datei ueberspringt der Lauf und macht weiter
+        # (die Regel steht im Aufrufer). Das Modell wird von allen Dateien geteilt — ein
+        # haengengebliebener Proxy klemmte die naechste, einsprachige Datei auf eine
+        # fremde Ankersprache.
+        if proxy is not None:
+            m.model = proxy._echt
+    if proxy is not None:
+        result["window_languages"] = proxy.fenster
+    return result, m
 
 
 def transcribe_project(name, model, language, only=None):
@@ -281,7 +321,7 @@ def transcribe_project(name, model, language, only=None):
     # (Begruendung samt Messung in _opts). Fuer die Korrektur liest correct.py sie selbst.
     from webtool import device as devicemod
     engine = devicemod.asr_engine(model)
-    if engine == "whisper.cpp":
+    if engine == "whisper.cpp" and not mehr:
         # Apple Silicon: Metal statt CPU. Gemessen 5.29x gegen 0.81x realtime — die
         # Begruendung steht in webtool/whispercpp.py.
         print(f"[{name}] engine=whisper.cpp (Metal)", flush=True)
@@ -313,12 +353,8 @@ def transcribe_project(name, model, language, only=None):
             # Fall nicht mehr — pick_asr() liefert nur cuda oder cpu, und beide koennen alles.
             # Bleibt die Regel, die davon uebrig ist: eine kaputte Datei ueberspringen, der
             # Lauf geht weiter. Fuer whisper.cpp gilt sie genauso.
-            sprache = _datei_whisper_code(proj_dir, base, language)
-            if engine == "whisper.cpp":
-                from webtool import whispercpp
-                result = whispercpp.transkribiere(f, model, sprache)
-            else:
-                result = _ergebnis(*m.transcribe(f, **_opts(sprache)))
+            sprache, mehr = _datei_sprachwahl(proj_dir, base, language)
+            result, m = _transkribiere_datei(m, engine, f, sprache, mehr, model)
         except Exception as e:
             print(f"[{name}] FEHLER {base}: {e}", flush=True)
             continue
