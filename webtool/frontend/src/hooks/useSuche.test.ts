@@ -70,6 +70,38 @@ describe('useSuche', () => {
     expect(result.current.treffer).toEqual([{ kind: 'annotation', index: 1 }])
   })
 
+  // Issue #127: CH-Transkripte wechseln die Schreibweise („Bühler"/„Buehler"); wer das eine
+  // tippt, meint das andere.
+  it('findet über die Umlaut-Schreibweise hinweg, in beide Richtungen', () => {
+    const mitUmlaut = doc([mkSeg(1, 'Beat Bühler aus Grüsch')])
+    expect(renderHook(() => useSuche(mitUmlaut, 'buehler')).result.current.treffer)
+      .toEqual([{ kind: 'segment', id: 1 }])
+    const mitDigraph = doc([mkSeg(1, 'Beat Buehler aus Gruesch')])
+    expect(renderHook(() => useSuche(mitDigraph, 'Bühler')).result.current.treffer)
+      .toEqual([{ kind: 'segment', id: 1 }])
+  })
+
+  it('faltet auch ß und fremde Akzente — gemischtsprachige Projekte', () => {
+    const d = doc([mkSeg(1, 'Über die Straße nach Genève')], { annotations: ['Café am Öhrli'] })
+    for (const [q, ort] of [['strasse', { kind: 'segment', id: 1 }], ['geneve', { kind: 'segment', id: 1 }],
+                            ['ueber', { kind: 'segment', id: 1 }], ['cafe', { kind: 'annotation', index: 0 }],
+                            ['oehrli', { kind: 'annotation', index: 0 }]] as const) {
+      expect(renderHook(() => useSuche(d, q as string)).result.current.treffer).toEqual([ort])
+    }
+  })
+
+  it('zerlegt angeliefertes u+Trema wird wie ü behandelt (NFC vor der Faltung)', () => {
+    // ZERLEGT gebaut (u + U+0308), nicht als Umlaut-Literal: sonst pruefte der Test
+    // dasselbe wie der vorige, und das fuehrende normalize('NFC') liesse sich spurlos
+    // entfernen. Ohne NFC zerfaellt das Zeichen erst im NFD-Schritt zu blossem u — die
+    // Digraphen-Ersetzung liefe daran vorbei, und 'buehler' faende es nicht.
+    const zerlegt = 'Beat Bühler'
+    expect(zerlegt).not.toBe('Beat Bühler')   // Positivkontrolle: wirklich zwei Formen
+    const d = doc([mkSeg(1, zerlegt)])
+    expect(renderHook(() => useSuche(d, 'buehler')).result.current.treffer)
+      .toEqual([{ kind: 'segment', id: 1 }])
+  })
+
   it('findet die Notiz am Segment — als Treffer des Segments, nicht als eigener Ort', () => {
     // Seit #112 steht die Notiz sichtbar unter dem Segment. Sichtbarer Text, den die Suche
     // nicht findet, ist genau die Luecke, die #128 fuer die Kopffelder geschlossen hat.
