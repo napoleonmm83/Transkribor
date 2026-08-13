@@ -18,7 +18,7 @@ describe('ProjectWorkspace (Stub)', () => {
     einstellungen({})
     // Projekt-Einstellungen default: leer — bestehende Tests sehen keine Sprach-Selects.
     vi.mocked(api.getProjektEinstellungen).mockResolvedValue(
-      { sprache: 'de', korrektur: 'auto', sprach_choices: [], tiefen: [] })
+      { sprache: 'de', korrektur: 'auto', mehrsprachig: false, sprach_choices: [], tiefen: [] })
   })
 
   const nurDemo = () => {
@@ -254,7 +254,7 @@ describe('ProjectWorkspace (Stub)', () => {
     vi.mocked(api.listProjects).mockResolvedValue([{ name: 'Demo', dateien: 0, fertig: 0, geaendert: 0, active_jobs: [] }])
     vi.mocked(api.getProjectFiles).mockResolvedValue({ name: 'Demo', files: [] })
     vi.mocked(api.getProjektEinstellungen).mockResolvedValue({
-      sprache: 'ch', korrektur: 'auto',
+      sprache: 'ch', korrektur: 'auto', mehrsprachig: false,
       sprach_choices: [{ id: 'ch', label: 'Schweizerdeutsch', hint: '' }],
       tiefen: [{ id: 'auto', label: 'Auto' }],
     })

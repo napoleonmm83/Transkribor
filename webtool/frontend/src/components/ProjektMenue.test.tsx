@@ -7,7 +7,7 @@ import * as api from '@/lib/api'
 vi.mock('@/lib/api')
 
 const BASIS = {
-  sprache: 'ch', korrektur: 'auto',
+  sprache: 'ch', korrektur: 'auto', mehrsprachig: false,
   sprach_choices: [
     { id: 'ch', label: 'Schweizerdeutsch', hint: '' },
     { id: 'en', label: 'Englisch', hint: '' },
