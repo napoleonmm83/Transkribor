@@ -173,8 +173,20 @@ def test_pip_aktualisiert_NUR_yt_dlp(monkeypatch):
     assert yu.aktualisiere() is True
     cmd = gerufen[0][0]
     assert cmd[:5] == [yu.sys.executable, "-m", "pip", "install", "-U"]
-    assert [x for x in cmd if not x.startswith("-")][-1] == "yt-dlp"
+    assert [x for x in cmd if not x.startswith("-")][-1].startswith("yt-dlp")
     assert "-r" not in cmd and not any("requirement" in x for x in cmd)
+
+
+def test_pip_hebt_die_loeserskripte_mit(monkeypatch):
+    """#170: `pip install -U yt-dlp` OHNE das Extra haette yt-dlp gehoben und `yt-dlp-ejs` auf
+    der alten Fassung stehenlassen — pip merkt sich Extras nicht. yt-dlp prueft Fassung und
+    Hash der Loeserskripte gegen sein eigenes `vendor/_info.py` und verwirft die alten; die
+    Warnung darueber schluckt `no_warnings` in fetch.py. Die Selbstaktualisierung haette den
+    URL-Import damit STILL wieder auf den Stand vor diesem Fix gesetzt."""
+    gerufen, run = _pip()
+    monkeypatch.setattr(yu.subprocess, "run", run)
+    yu.aktualisiere()
+    assert "yt-dlp[default]" in gerufen[0][0]
 
 
 def test_pip_bekommt_kurze_zeitlimits(monkeypatch):

@@ -130,15 +130,25 @@ def _merken() -> None:
         print(f"[ytdlp] Merker nicht schreibbar: {e}", flush=True)
 
 
+# `[default]` ist Pflicht, nicht Kosmetik: darin steckt `yt-dlp-ejs==0.8.0`, das Paket mit den
+# Loeserskripten fuer YouTubes JS-Challenge (#170). pip merkt sich Extras NICHT — ein blosses
+# `pip install -U yt-dlp` haette yt-dlp gehoben und das Skript-Paket auf der alten Fassung
+# stehenlassen. Genau die Kombination verwirft yt-dlp dann (es prueft Fassung UND Hash gegen
+# sein `vendor/_info.py`), und zwar mit einer Warnung, die `no_warnings` in fetch.py schluckt:
+# die Selbstaktualisierung haette den URL-Import STILL wieder auf den Stand vor #170 gesetzt —
+# dieselbe Sorte Fehler, gegen die dieses Modul gebaut wurde.
+_PAKET = "yt-dlp[default]"
+
+
 def aktualisiere() -> bool:
-    """`pip install -U yt-dlp`, bedingungslos. Liefert True, wenn pip sauber durchlief.
+    """`pip install -U yt-dlp[default]`, bedingungslos. True, wenn pip sauber durchlief.
 
     NUR yt-dlp: ein `-U` ueber alle requirements erwischt irgendwann torch, und die GPU
     waere still weg (dieselbe Falle wie beim CPU-Rad in setup.js).
     """
     cmd = [sys.executable, "-m", "pip", "install", "-U",
            # Kurze Deckel: ohne sie haengt pip offline minutenlang, und der Import wartet mit.
-           "--retries", "1", "--timeout", "10", "yt-dlp"]
+           "--retries", "1", "--timeout", "10", _PAKET]
     print(f"[ytdlp] aktualisiere (installiert: {fassung() or 'nichts'}) …", flush=True)
     ok = False
     # Zwei pip-Laeufe auf DIESELBE venv duerfen sich nicht ueberschneiden — sie schreiben in
