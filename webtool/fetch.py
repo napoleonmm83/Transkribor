@@ -36,7 +36,14 @@ _UMLAUTE = str.maketrans({"ä": "ae", "ö": "oe", "ü": "ue", "ß": "ss",
 # importiert der Server yt-dlp gar nicht mehr (aus fetch.py braucht app.py nur `check_url`).
 yt_dlp = None
 
-_PIP_HINWEIS = r".venv\Scripts\python.exe -m pip install -U yt-dlp"
+# `[default]` gehoert in den Rat hinein, nicht nur in requirements.txt: darin steckt der Pin
+# auf `yt-dlp-ejs`, und wer diese Zeile ohne das Extra abtippt, hebt yt-dlp ueber die Fassung
+# hinaus, zu der seine Loeserskripte passen — yt-dlp verwirft sie dann, `no_warnings` schluckt
+# die Warnung, und YouTube antwortet wieder sporadisch mit 403 (#170). Der zweite Fundort
+# (`yt-dlp ist nicht installiert`) waere sogar schlimmer: dort entstuende eine venv voellig
+# ohne die Skripte. In Anfuehrungszeichen, weil zsh und PowerShell die eckigen Klammern sonst
+# als Muster lesen.
+_PIP_HINWEIS = r'.venv\Scripts\python.exe -m pip install -U "yt-dlp[default]"'
 # Instagram/YouTube melden Login-Zwang in vielen Formulierungen; hier grob abgedeckt.
 _LOGIN_RE = re.compile(r"login|log in|sign in|private|not available|rate.?limit|cookies|bot", re.I)
 # Wonach ein VERALTETER Extraktor aussieht. Bewusst eine Positivliste: eine fremde Plattform,
@@ -108,20 +115,26 @@ def _js_runtime_pfad() -> str:
 
     Gesetzt von `electron/backend.js`: die gepackte App hat weder node noch deno auf dem PATH
     (#171), bringt aber selbst eine mit — Electrons Binary IST ein Node, sobald
-    `ELECTRON_RUN_AS_NODE=1` in der Umgebung steht. Gemessen mit genau dem Aufruf, den
-    `NodeJCP._run_js_runtime` macht (`--permission -`, Skript auf stdin): Node 24, sauberes
-    JSON auf stdout, Exitcode 0.
-
-    **Die beiden Variablen sind untrennbar**, und das Paar wird in backend.js gesetzt, nicht
-    hier: ohne `ELECTRON_RUN_AS_NODE` startet dasselbe Binary das GUI statt zu rechnen — wer
-    dagegen von Hand auf ein echtes node zeigt, will die Electron-Variable gerade NICHT.
-    Ein Test ueber `serverEnv()` haelt sie in backend.js zusammen.
+    `ELECTRON_RUN_AS_NODE=1` in der Umgebung steht (das setzt `download_one`, siehe dort).
+    Gemessen mit genau dem Aufruf, den `NodeJCP._run_js_runtime` macht (`--permission -`,
+    Skript auf stdin): Node 24, sauberes JSON auf stdout, Exitcode 0.
 
     Die Alternative waere ein Deno-Download bei der Ersteinrichtung gewesen: derselbe Zweck
     fuer 40 MB mehr — und auf Linux, wo `setup.js:plan()` nichts selbst installiert, ein
     Handgriff, den der Nutzer von Hand machen muesste.
+
+    **Ein blosser String genuegt nicht, die Datei muss da sein.** Drei Dinge gingen sonst auf
+    einmal schief, und zwar alle drei still: `NodeJsRuntime._info()` bekommt von
+    `_get_exe_version_output` ein False und meldet die Laufzeit als nicht vorhanden; yt-dlp
+    sucht wegen des gesetzten `path` NICHT mehr auf dem PATH (`_determine_runtime_path` nimmt
+    ihn ungeprueft) — ein echtes node, das vor diesem Fix gefunden worden waere, faellt also
+    weg; und `_js_laufzeit_da()` haette den 403-Hinweis unterdrueckt, der als einziger die
+    Ursache nennt. Erreichbar ist ein veralteter Wert ueber die `.env`: `settings.load_env()`
+    laesst eine Zeile dort bewusst gegen eine bereits gesetzte Variable gewinnen, sie
+    ueberstimmt also auch den Pfad, den backend.js gerade errechnet hat.
     """
-    return (os.environ.get("TRANSKRIBOR_JS_RUNTIME") or "").strip()
+    pfad = (os.environ.get("TRANSKRIBOR_JS_RUNTIME") or "").strip()
+    return pfad if pfad and os.path.isfile(pfad) else ""
 
 
 def _js_laufzeit_da() -> bool:
@@ -245,6 +258,15 @@ def download_one(project: str, url: str) -> str:
     ydl_modul = _hole_yt_dlp()
     if ydl_modul is None:
         raise RuntimeError(f"yt-dlp ist nicht installiert — {_PIP_HINWEIS}")
+    # Die mitgereichte Laufzeit ist Electrons eigenes Binary — ohne dieses Flag startet es das
+    # GUI, statt das Loeserskript zu rechnen. Gesetzt wird es HIER und nicht in backend.js:
+    # dort landete es in der Umgebung des Servers, und `jobs.py` gibt die an JEDEN Subprozess
+    # weiter (transcribe, correct, `claude`/`codex` samt Anmelde-Flow). Nur der eine
+    # node-Aufruf braucht es, den yt-dlp aus DIESEM Prozess startet — also gehoert es auch nur
+    # in diesen. Nebenbei liegen die beiden zusammengehoerenden Zeilen damit in einer Sprache
+    # statt in zweien.
+    if _js_runtime_pfad():
+        os.environ["ELECTRON_RUN_AS_NODE"] = "1"
     adir = os.path.join(paths.project_dir(project), "audio")
     os.makedirs(adir, exist_ok=True)
 

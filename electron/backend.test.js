@@ -18,15 +18,12 @@ test('die gepackte App reicht ihr eigenes Binary als JS-Laufzeit durch (#171)', 
   assert.strictEqual(env.TRANSKRIBOR_JS_RUNTIME, 'C:\\Program Files\\Transkribor\\Transkribor.exe')
 })
 
-test('die beiden Variablen der JS-Laufzeit bleiben zusammen', () => {
-  // DER Riegel dieses Fixes. Ohne ELECTRON_RUN_AS_NODE startet der Pfad, auf den
-  // TRANSKRIBOR_JS_RUNTIME zeigt, ein zweites GUI-Fenster statt zu rechnen — und weil
-  // yt-dlp danach ohnehin auf Player-Clients ohne Signatur ausweicht, faellt es meistens
-  // nicht einmal auf. Die Kombination laesst sich im Betrieb nur durch ein Editieren
-  // trennen; genau davor steht dieser Test.
-  const env = serverEnv('/Applications/Transkribor.app/Contents/MacOS/Transkribor')
-  assert.ok(env.TRANSKRIBOR_JS_RUNTIME, 'Pfad fehlt')
-  assert.strictEqual(env.ELECTRON_RUN_AS_NODE, '1')
+test('ELECTRON_RUN_AS_NODE steht NICHT in der Server-Umgebung', () => {
+  // Gegenrichtung, Review-Befund: jobs.py gibt diese Umgebung an JEDEN Subprozess weiter
+  // (transcribe, correct, `claude`/`codex` samt Anmelde-Flow). Gebraucht wird das Flag nur
+  // von dem einen node-Aufruf, den yt-dlp startet — deshalb setzt es `fetch.download_one`
+  // in seinem eigenen Prozess (webtool/test_fetch.py haelt das fest).
+  assert.strictEqual(serverEnv('exe').ELECTRON_RUN_AS_NODE, undefined)
 })
 
 test('die uebrigen Pfade des Servers bleiben gesetzt', () => {
