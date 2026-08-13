@@ -222,7 +222,14 @@ def test_fehlschlag_wirft_nicht_und_wird_protokolliert(monkeypatch, capsys):
 def test_unanlegbares_sperrverzeichnis_bricht_nicht_ab(monkeypatch, capsys):
     """Der einzige Aufruf in diesem Modul, der frueher ungeschuetzt werfen konnte. Ein
     schreibgeschuetztes Profil (oder ein TRANSKRIBOR_SETTINGS ohne Verzeichnisanteil) haette
-    den Import mitgerissen — genau das, was 'best effort, nie blockierend' ausschliesst."""
+    den Import mitgerissen — genau das, was 'best effort, nie blockierend' ausschliesst.
+
+    `yu.os` IST das `os`-Modul, der Patch wirkt also global: auch `settings.save()` im
+    `_merken()` faellt damit aus. Das ist Absicht und macht die Probe haerter — geprueft wird,
+    dass `aktualisiere()` **beide** Fehlschlaege ueberlebt und trotzdem True meldet. Die
+    Sperre selbst braucht `os.mkdir`, nicht `makedirs`, wird hier also nicht angefasst; ihr
+    eigener Fehlerpfad steht in `test_sperre.py`.
+    """
     gerufen, run = _pip()
     monkeypatch.setattr(yu.subprocess, "run", run)
 

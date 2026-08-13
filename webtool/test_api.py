@@ -8,6 +8,11 @@ from fastapi.testclient import TestClient
 def client(monkeypatch, tmp_path):
     monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
     monkeypatch.setenv("TRANSKRIBOR_SETTINGS", str(tmp_path / "settings.json"))
+    # Dieselbe Regel wie bei TRANSKRIBOR_SETTINGS: die Variable GEWINNT gegen die
+    # Einstellungsdatei (`ytdlp_update.auto_an`), also entschiede sonst die Shell des
+    # Entwicklers ueber das Testergebnis. Reproduziert: mit `TRANSKRIBOR_YTDLP_UPDATE=1`
+    # faellt `test_settings_ytdlp_schalter_wird_gespeichert` um.
+    monkeypatch.delenv("TRANSKRIBOR_YTDLP_UPDATE", raising=False)
     proj = tmp_path / "Demo"
     (proj / "audio").mkdir(parents=True)
     (proj / "transkripte").mkdir()
