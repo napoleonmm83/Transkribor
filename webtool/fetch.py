@@ -16,7 +16,7 @@ from urllib.parse import urlparse
 
 import transcribe
 
-from . import paths, projekt
+from . import paths, projekt, ytdlp_update
 
 # Trust-Boundary: die URL kommt aus dem Browser. Gleichzeitig der Feature-Scope.
 ALLOWED_HOSTS = {
@@ -30,14 +30,62 @@ _BAD = re.compile(r'[\\/:*?"<>|\x00-\x1f]')
 _UMLAUTE = str.maketrans({"ä": "ae", "ö": "oe", "ü": "ue", "ß": "ss",
                           "Ä": "Ae", "Ö": "Oe", "Ü": "Ue"})
 
-try:
-    import yt_dlp
-except ImportError:            # Feature ist optional -> Server und Tests laufen trotzdem
-    yt_dlp = None
+# yt-dlp wird NICHT am Modulkopf importiert, sondern erst in `_hole_yt_dlp()`. Der Grund ist
+# die Selbstaktualisierung: pip tauscht die Dateien auf der PLATTE aus — ein hier importiertes
+# Modul laege bereits im Speicher, und das Update wirkte erst beim naechsten Lauf. Nebenbei
+# importiert der Server yt-dlp gar nicht mehr (aus fetch.py braucht app.py nur `check_url`).
+yt_dlp = None
 
 _PIP_HINWEIS = r".venv\Scripts\python.exe -m pip install -U yt-dlp"
 # Instagram/YouTube melden Login-Zwang in vielen Formulierungen; hier grob abgedeckt.
 _LOGIN_RE = re.compile(r"login|log in|sign in|private|not available|rate.?limit|cookies|bot", re.I)
+# Wonach ein VERALTETER Extraktor aussieht. Bewusst eine Positivliste: eine fremde Plattform,
+# fehlendes ffmpeg oder ein privates Video loesen damit KEINE Aktualisierung aus — ein pip bis
+# 120 s fuer einen Fehler, den es nicht reparieren kann, waere reine Wartezeit.
+_EXTRAKTOR_RE = re.compile(r"\b40[13]\b|unable to extract|failed to extract|nsig|signature|"
+                           r"requested format is not available", re.I)
+
+
+def _importiere_yt_dlp():
+    """Der eigentliche Import — eigene Funktion, damit der Test die Reihenfolge
+    (erst aktualisieren, dann importieren) beobachten kann, ohne echtes pip zu starten."""
+    try:
+        import yt_dlp as modul
+    except ImportError:        # Feature ist optional -> Server und Tests laufen trotzdem
+        return None
+    return modul
+
+
+def _hole_yt_dlp():
+    """yt-dlp beim ersten Bedarf importieren — davor die faellige Aktualisierung."""
+    global yt_dlp
+    if yt_dlp is None:
+        ytdlp_update.automatisch()
+        yt_dlp = _importiere_yt_dlp()
+    return yt_dlp
+
+
+def _neu_laden() -> None:
+    """Das im Speicher liegende yt-dlp wegwerfen und frisch von der Platte laden.
+
+    Nur nach einer Selbstheilung noetig: dort ist yt-dlp bereits importiert, wenn pip die
+    Dateien tauscht — `import` allein bekaeme weiter den Eintrag aus `sys.modules`. Sicher,
+    weil `download_one` der einzige Nutzer ist und ueber Aufrufe hinweg nichts festhaelt:
+    jede `YoutubeDL` entsteht neu und wird im `with` wieder geschlossen.
+
+    Geladen wird HIER, nicht ueber `_hole_yt_dlp()`: das fragte sonst ein zweites Mal nach
+    einer Aktualisierung, die gerade eben gelaufen ist.
+    """
+    global yt_dlp
+    for name in [n for n in sys.modules if n == "yt_dlp" or n.startswith("yt_dlp.")]:
+        del sys.modules[name]
+    yt_dlp = _importiere_yt_dlp()
+
+
+def _extraktor_verdacht(exc: Exception) -> bool:
+    """Sieht der Fehlschlag nach einem veralteten Extraktor aus — lohnt sich also ein Update?"""
+    msg = str(exc)
+    return bool(_EXTRAKTOR_RE.search(msg)) and not _LOGIN_RE.search(msg)
 
 
 def _js_laufzeit_da() -> bool:
@@ -144,27 +192,30 @@ def _mehrsprachig_aus_env():
 
 def download_one(project: str, url: str) -> str:
     """Laedt die Tonspur nach projekte/<project>/audio/. Liefert den Basisnamen."""
-    if yt_dlp is None:
-        raise RuntimeError(f"yt-dlp ist nicht installiert — {_PIP_HINWEIS}")
     # Der FFmpegExtractAudio-Postprocessor laeuft im extract_info(download=True) unten und
     # sucht ffmpeg auf PATH. ensure_ffmpeg() legt den winget-Pfad dorthin — muss also HIER
     # stehen, nicht erst vor dem Whisper-Lauf in main(). Findet es nichts, lieber sofort
     # abbrechen als hinterher am kryptischen "ffprobe and ffmpeg not found" scheitern.
+    # Steht VOR _hole_yt_dlp(): der Griff kann ein pip von bis zu 120 s ausloesen, und diese
+    # Vorbedingung steht ohne jede Wartezeit fest.
     if not transcribe.ensure_ffmpeg():
         raise RuntimeError("ffmpeg nicht gefunden — installiere: winget install Gyan.FFmpeg")
+    ydl_modul = _hole_yt_dlp()
+    if ydl_modul is None:
+        raise RuntimeError(f"yt-dlp ist nicht installiert — {_PIP_HINWEIS}")
     adir = os.path.join(paths.project_dir(project), "audio")
     os.makedirs(adir, exist_ok=True)
 
     # ponytail: zwei yt-dlp-Aufrufe (Metadaten, dann Download) — kostet einen Roundtrip,
     # dafuer steht der Dateiname VOR dem Download fest und Kollisionen sind sauber loesbar.
-    with yt_dlp.YoutubeDL(_ydl_opts()) as ydl:
+    with ydl_modul.YoutubeDL(_ydl_opts()) as ydl:
         info = ydl.extract_info(url, download=False) or {}
     plattform = "youtube" if "youtu" in (urlparse(url).hostname or "") else "instagram"
     base = unique_base(adir, safe_base(info.get("title") or "",
                                        f"{plattform}-{info.get('id') or 'video'}"))
 
     print(f"[fetch] lade {base} …", flush=True)
-    with yt_dlp.YoutubeDL(_ydl_opts(os.path.join(adir, base + ".%(ext)s"))) as ydl:
+    with ydl_modul.YoutubeDL(_ydl_opts(os.path.join(adir, base + ".%(ext)s"))) as ydl:
         ydl.extract_info(url, download=True)
     print(f"[fetch] fertig {base}", flush=True)
     # Sprache pro geladene Base eintragen (vom Web-Tool per Env durchgereicht). Fehlt die
@@ -174,6 +225,16 @@ def download_one(project: str, url: str) -> str:
     if sprache or mehr is not None:
         projekt.setze_datei(project, base, sprache=sprache, mehrsprachig=mehr)
     return base
+
+
+def _lade(project: str, url: str):
+    """(base, None) bei Erfolg, (None, exception) sonst — damit `main` denselben Versuch
+    zweimal machen kann (einmal, und nach einer Aktualisierung noch einmal), ohne den
+    try/except-Block zu verdoppeln."""
+    try:
+        return download_one(project, check_url(url)), None
+    except Exception as e:
+        return None, e
 
 
 def main(argv=None):
@@ -198,11 +259,23 @@ def main(argv=None):
     # transcribe_project unten.
     print("[scope] ", flush=True)
     geladen = []
+    geheilt = False        # hoechstens EIN pip pro Lauf, egal wie viele URLs brechen
     for url in args.urls:
-        try:
-            geladen.append(download_one(args.project, check_url(url)))
-        except Exception as e:
-            print(f"[fetch] FEHLER {url}: {_human_error(e)}", flush=True)
+        base, fehler = _lade(args.project, url)
+        # Selbstheilung: ein veralteter Extraktor bricht nicht nach Kalender, sondern wenn
+        # YouTube etwas umstellt — der 14-Tage-Takt kaeme dafuer zu spaet. `erzwingen` uebergeht
+        # deshalb den Merker; der Schalter bleibt unberuehrt.
+        if fehler is not None and not geheilt and _extraktor_verdacht(fehler):
+            geheilt = True
+            print(f"[fetch] {url}: sieht nach einem veralteten Extraktor aus — "
+                  f"aktualisiere yt-dlp und versuche es noch einmal", flush=True)
+            if ytdlp_update.automatisch(erzwingen=True):
+                _neu_laden()
+                base, fehler = _lade(args.project, url)
+        if fehler is not None:
+            print(f"[fetch] FEHLER {url}: {_human_error(fehler)}", flush=True)
+        else:
+            geladen.append(base)
     print(f"[fetch] {len(geladen)} von {len(args.urls)} geladen", flush=True)
     if not geladen:
         raise SystemExit(1)      # Job-Status 'error'; Whisper wird gar nicht erst geladen

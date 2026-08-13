@@ -1,5 +1,5 @@
 import type {
-  Project, ProjectFile, EditDoc, JobStatus, StartJob, Settings, ModelInfo, Hardware, AuthStatus, LoginState,
+  Project, ProjectFile, EditDoc, JobStatus, StartJob, Settings, ModelInfo, Hardware, AuthStatus, LoginState, YtdlpStand,
   ProjectEinstellungen,
   EinstellungenWerte,
 } from './types'
@@ -157,6 +157,10 @@ export async function saveSettings(patch: Record<string, string>): Promise<Setti
   return jn(await fetch('/api/settings', {
     method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch),
   }))
+}
+/** Läuft synchron bis zu zwei Minuten (pip). Der Aufrufer zeigt solange einen Spinner. */
+export async function updateYtdlp(): Promise<{ ok: boolean } & YtdlpStand> {
+  return jn(await post('/api/settings/ytdlp/update'))
 }
 export async function listModels(): Promise<ModelInfo[]> {
   return (await jn<{ models: ModelInfo[] }>(await fetch('/api/settings/models'))).models

@@ -3,7 +3,7 @@ import { toast } from 'sonner'
 import { KeyRound, Loader2, LogIn, RefreshCw } from 'lucide-react'
 import {
   cancelLogin, getAuth, getHardware, getSettings, listModels, loginState,
-  saveSettings, startLogin, submitLoginCode, testSettings,
+  saveSettings, startLogin, submitLoginCode, testSettings, updateYtdlp,
 } from '@/lib/api'
 import { useUpdate } from '@/hooks/useUpdate'
 import { PageHeader } from '@/components/PageHeader'
@@ -136,6 +136,7 @@ export function SettingsPage() {
   const [key, setKey] = useState('')
   const [laedt, setLaedt] = useState(false)
   const [testet, setTestet] = useState(false)
+  const [ytLaeuft, setYtLaeuft] = useState(false)
   const [hw, setHw] = useState<Hardware | null>(null)
   const { zustand: upd, pruefen, laden, installieren, protokollOeffnen } = useUpdate()
 
@@ -219,6 +220,18 @@ export function SettingsPage() {
     r.ok ? toast.success(r.detail || 'Verbindung steht') : toast.error(r.detail || 'Fehlgeschlagen')
   }
 
+  // Der Knopf holt die Einstellungen danach neu: Fassung und Prüfdatum stehen dort, und ohne
+  // das Nachladen bliebe die Anzeige auf dem Stand von vor dem Klick.
+  const ytJetzt = async () => {
+    setYtLaeuft(true)
+    try {
+      const r = await updateYtdlp()
+      r.ok ? toast.success(`yt-dlp ist jetzt auf ${r.version}`)
+        : toast.error('Aktualisierung fehlgeschlagen — bist du online?')
+      await getSettings().then(setS)
+    } catch (e) { toast.error(String(e)) } finally { setYtLaeuft(false) }
+  }
+
   if (!s) return <div className="p-6 sm:p-8 text-sm text-muted-foreground">Lädt…</div>
 
   return (
@@ -271,6 +284,53 @@ export function SettingsPage() {
             </span>
           )}
         </p>
+      </Abschnitt>
+
+      <Abschnitt titel="Video-Import">
+        {/* Natives <input type="checkbox"> wie im MehrsprachigKasten — components/ui/ hat
+            kein Checkbox-Bauteil, und eines dafür zu ziehen waere eine Abhaengigkeit fuer
+            einen Haken. */}
+        <label className="flex cursor-pointer items-start gap-2.5 text-sm">
+          <input
+            type="checkbox"
+            className="mt-0.5 size-4 accent-primary"
+            checked={s.ytdlp_auto === '1'}
+            disabled={ytLaeuft}
+            onChange={e => speichern({ ytdlp_auto: e.target.checked ? '1' : '0' },
+              () => getSettings().then(setS))}
+          />
+          <span>
+            <span className="font-medium">Videodownloader aktuell halten</span>
+            <span className="mt-1 block text-xs text-muted-foreground">
+              YouTube und Instagram ändern ihre Seiten ständig — ohne Aktualisierung schlägt
+              der Import irgendwann fehl. Transkribor prüft das beim Importieren selbst und
+              versucht es sofort, wenn ein Download nach einem veralteten Downloader aussieht.
+            </span>
+          </span>
+        </label>
+
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <Button variant="outline" size="sm" onClick={ytJetzt} disabled={ytLaeuft}>
+            {ytLaeuft ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
+            {ytLaeuft ? 'Aktualisiere …' : 'Jetzt aktualisieren'}
+          </Button>
+          <span className="text-xs text-muted-foreground">
+            {s.ytdlp.version
+              ? <>Fassung <span className="font-medium text-foreground">{s.ytdlp.version}</span>
+                {s.ytdlp.geprueft && ` · zuletzt geprüft am ${s.ytdlp.geprueft}`}</>
+              : 'Nicht installiert — der Import von Video-URLs steht damit nicht zur Verfügung.'}
+          </span>
+        </div>
+
+        {/* Ein Haken, der nichts tut, ist schlimmer als keiner: die Umgebungsvariable
+            gewinnt gegen die Einstellung, und ohne diesen Satz sähe man nur den Haken. */}
+        {s.ytdlp.auto !== (s.ytdlp_auto === '1') && (
+          <p className="mt-3 text-xs text-amber-600 dark:text-amber-500">
+            Diese Einstellung ist gerade wirkungslos: <code>TRANSKRIBOR_YTDLP_UPDATE</code> in
+            der Umgebung überstimmt sie und schaltet die automatische Aktualisierung
+            {s.ytdlp.auto ? ' ein' : ' aus'}.
+          </p>
+        )}
       </Abschnitt>
 
       {!s.ai_ready && (

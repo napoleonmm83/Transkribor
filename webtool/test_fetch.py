@@ -1,3 +1,5 @@
+import sys
+
 import pytest
 
 import transcribe as transcribe_mod
@@ -133,6 +135,10 @@ def projekt(monkeypatch, tmp_path):
     Wer ffmpeg selbst zum Thema hat, patcht spaeter im Testkoerper und gewinnt damit.
     """
     monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    # Kein echtes pip aus einem Test: der Selbstaktualisierer wuerde sonst die venv des
+    # Entwicklers waehrend des Laufs anfassen. Wer die Aktualisierung selbst zum Thema hat,
+    # patcht `ytdlp_update.automatisch` spaeter im Testkoerper und gewinnt damit.
+    monkeypatch.setenv("TRANSKRIBOR_YTDLP_UPDATE", "0")
     (tmp_path / "Demo" / "audio").mkdir(parents=True)
     monkeypatch.setattr(fetch, "yt_dlp", _FakeYtDlp)
     monkeypatch.setattr(transcribe_mod, "ensure_ffmpeg", lambda: True)
@@ -195,7 +201,11 @@ def test_download_one_ohne_ffmpeg_bricht_vor_dem_download_ab(projekt, monkeypatc
 
 
 def test_download_one_ohne_yt_dlp_meldet_klar(projekt, monkeypatch):
+    # Seit dem faulen Import reicht `yt_dlp = None` nicht mehr: _hole_yt_dlp() wuerde das
+    # echte, auf diesem Rechner installierte yt-dlp nachladen. Der Import selbst muss leer
+    # ausgehen — genau das tut er auf einem Rechner ohne das Paket.
     monkeypatch.setattr(fetch, "yt_dlp", None)
+    monkeypatch.setattr(fetch, "_importiere_yt_dlp", lambda: None)
     with pytest.raises(RuntimeError, match="yt-dlp"):
         fetch.download_one("Demo", "https://youtu.be/vid123")
 
@@ -253,6 +263,97 @@ def test_403_mit_js_laufzeit_raet_NICHT_zur_laufzeit(monkeypatch):
     ('installiere Node') ein Irrweg. Ohne diesen Test bliebe die Bedingung ungeprueft."""
     monkeypatch.setattr(fetch.shutil, "which", lambda name: r"C:\node\node.exe")
     assert "JavaScript-Laufzeit" not in fetch._human_error(_403)
+
+
+# --- Selbstaktualisierung ----------------------------------------------------
+
+def test_import_laeuft_erst_NACH_dem_update(projekt, monkeypatch):
+    """Der Kern des Mechanismus: pip tauscht die Dateien auf der PLATTE aus. Ein am
+    Modulkopf importiertes yt-dlp laege bereits im Speicher — die Aktualisierung wirkte
+    dann erst beim naechsten Lauf, also nie fuer den Import, der sie ausgeloest hat."""
+    reihenfolge = []
+    monkeypatch.setattr(fetch, "yt_dlp", None)
+    monkeypatch.setattr(fetch.ytdlp_update, "automatisch",
+                        lambda *a, **k: reihenfolge.append("update"))
+    monkeypatch.setattr(fetch, "_importiere_yt_dlp",
+                        lambda: reihenfolge.append("import") or _FakeYtDlp)
+    fetch.download_one("Demo", "https://youtu.be/vid123")
+    assert reihenfolge == ["update", "import"]
+
+
+def test_selbstheilung_aktualisiert_und_laedt_doch_noch(projekt, monkeypatch):
+    """403 -> yt-dlp aktualisieren -> denselben Download noch einmal. Genau der Fall, der
+    am 13.8. eine Stunde gekostet hat (#162); der 14-Tage-Takt kaeme dafuer zu spaet."""
+    _FakeYDL.fehler = _403
+    versuche = []
+
+    def heilen(erzwingen=False):
+        versuche.append(erzwingen)
+        _FakeYDL.fehler = None          # das Update repariert den Extraktor
+        return True
+
+    monkeypatch.setattr(fetch.ytdlp_update, "automatisch", heilen)
+    monkeypatch.setattr(fetch, "_importiere_yt_dlp", lambda: _FakeYtDlp)   # _neu_laden()
+    fetch.main(["Demo", "https://youtu.be/vid123", "--download-only"])
+    assert versuche == [True]           # erzwungen: der Merker darf nicht bremsen
+    assert (projekt / "Demo" / "audio" / "Mein Interview.m4a").exists()
+
+
+def test_selbstheilung_NICHT_bei_login_pflicht(projekt, monkeypatch):
+    """Ein privates Video schlaegt auch fehl — ein Update repariert das nie. Ohne diese
+    Bedingung kostete jeder solche Versuch ein pip von bis zu 120 s fuer nichts."""
+    _FakeYDL.fehler = RuntimeError("ERROR: Requested content is not available, login required")
+    monkeypatch.setattr(fetch.ytdlp_update, "automatisch",
+                        lambda *a, **k: pytest.fail("kein Update bei Login-Pflicht"))
+    with pytest.raises(SystemExit):
+        fetch.main(["Demo", "https://www.instagram.com/reel/C8xY2pQr/"])
+
+
+def test_selbstheilung_NICHT_bei_fremder_plattform(projekt, monkeypatch):
+    """check_url wirft ValueError, bevor yt-dlp ueberhaupt gefragt wird — auch das ist kein
+    Extraktor-Problem. Die Positivliste haelt beide Faelle draussen."""
+    monkeypatch.setattr(fetch.ytdlp_update, "automatisch",
+                        lambda *a, **k: pytest.fail("kein Update bei fremder Plattform"))
+    with pytest.raises(SystemExit):
+        fetch.main(["Demo", "https://vimeo.com/12345"])
+
+
+def test_selbstheilung_hoechstens_einmal_pro_lauf(projekt, monkeypatch):
+    """Drei URLs mit demselben kaputten Extraktor loesen EIN pip aus, nicht drei."""
+    _FakeYDL.fehler = _403
+    rufe = []
+    monkeypatch.setattr(fetch.ytdlp_update, "automatisch",
+                        lambda *a, **k: rufe.append(1) or False)
+    with pytest.raises(SystemExit):
+        fetch.main(["Demo", "https://youtu.be/a", "https://youtu.be/b", "https://youtu.be/c"])
+    assert len(rufe) == 1
+
+
+def test_ohne_update_kein_zweiter_versuch(projekt, monkeypatch):
+    """Hat pip nichts ausgerichtet (offline), waere ein erneuter Download derselbe Fehler
+    ein zweites Mal — plus die Wartezeit."""
+    _FakeYDL.fehler = _403
+    downloads = []
+    orig = fetch.download_one
+    monkeypatch.setattr(fetch, "download_one",
+                        lambda p, u: downloads.append(u) or orig(p, u))
+    monkeypatch.setattr(fetch.ytdlp_update, "automatisch", lambda *a, **k: False)
+    with pytest.raises(SystemExit):
+        fetch.main(["Demo", "https://youtu.be/vid123"])
+    assert len(downloads) == 1
+
+
+def test_neu_laden_raeumt_sys_modules_und_importiert_frisch(monkeypatch):
+    """Nach dem pip liegt das ALTE Modul noch im Speicher; ein blosses `import` bekaeme
+    weiter den Eintrag aus sys.modules und der zweite Versuch liefe mit dem alten Extraktor.
+    Auch die Untermodule muessen weg — sie halten sonst Verweise auf den alten Code."""
+    monkeypatch.setitem(sys.modules, "yt_dlp", _FakeYtDlp)
+    monkeypatch.setitem(sys.modules, "yt_dlp.utils", _FakeYtDlp)
+    monkeypatch.setattr(fetch, "yt_dlp", _FakeYtDlp)
+    monkeypatch.setattr(fetch, "_importiere_yt_dlp", lambda: "frisch")
+    fetch._neu_laden()
+    assert "yt_dlp" not in sys.modules and "yt_dlp.utils" not in sys.modules
+    assert fetch.yt_dlp == "frisch"
 
 
 def test_env_parser_liest_beide_richtungen(monkeypatch):

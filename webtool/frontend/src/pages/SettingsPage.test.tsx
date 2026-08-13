@@ -27,6 +27,8 @@ const BASIS: Settings = {
     { id: 'large-v3', label: 'Beste Qualität', hint: 'bester Dialekt' },
   ],
   ai_ready: true, ai_reason: '',
+  ytdlp_auto: '1',
+  ytdlp: { version: '2026.8.12', geprueft: '2026-08-13', auto: true },
   providers: [
     { id: 'claude-cli', label: 'Claude Code Abo (kein Key)', needs_key: false, cli: true, base: '', default_model: 'opus', keys_url: '', hint: 'Nutzt das Abo.' },
     { id: 'codex-cli', label: 'ChatGPT-Abo (Codex CLI, kein Key)', needs_key: false, cli: true, base: '', default_model: '', keys_url: '', hint: 'Nutzt das ChatGPT-Abo.' },
@@ -231,6 +233,46 @@ describe('SettingsPage', () => {
     expect(await screen.findByText(/nicht installiert/)).toBeInTheDocument()
   })
 
+  it('zeigt die yt-dlp-Fassung und das Prüfdatum', async () => {
+    zeige()
+    expect(await screen.findByText(/2026\.8\.12/)).toBeInTheDocument()
+    expect(screen.getByText(/zuletzt geprüft am 2026-08-13/)).toBeInTheDocument()
+  })
+
+  it('sagt es, wenn yt-dlp gar nicht installiert ist', async () => {
+    zeige({ ytdlp: { version: null, geprueft: '', auto: true } })
+    expect(await screen.findByText(/Nicht installiert/)).toBeInTheDocument()
+  })
+
+  it('speichert den Haken als "0"/"1"', async () => {
+    vi.mocked(api.saveSettings).mockResolvedValue({ ...BASIS, ytdlp_auto: '0' })
+    zeige()
+    const haken = await screen.findByRole('checkbox', { name: /aktuell halten/i })
+    fireEvent.click(haken)
+    await waitFor(() => expect(api.saveSettings).toHaveBeenCalledWith({ ytdlp_auto: '0' }))
+  })
+
+  it('warnt, wenn die Umgebungsvariable den Haken überstimmt', async () => {
+    // Ein Haken, der nichts tut, ist schlimmer als keiner. Der WIRKSAME Wert kommt aus
+    // `ytdlp.auto`, der gespeicherte aus `ytdlp_auto` — nur die Differenz ist die Warnung.
+    zeige({ ytdlp_auto: '1', ytdlp: { version: '2026.8.12', geprueft: '', auto: false } })
+    expect(await screen.findByText(/wirkungslos/)).toBeInTheDocument()
+  })
+
+  it('warnt NICHT, solange Einstellung und Wirkung übereinstimmen', async () => {
+    // Gegenrichtung: ohne sie bliebe unbemerkt, wenn die Warnung immer stünde.
+    zeige()
+    await screen.findByText(/2026\.8\.12/)
+    expect(screen.queryByText(/wirkungslos/)).not.toBeInTheDocument()
+  })
+
+  it('meldet einen fehlgeschlagenen Update-Versuch, statt ihn zu verschlucken', async () => {
+    vi.mocked(api.updateYtdlp).mockResolvedValue({ ok: false, version: '2026.7.4', geprueft: '2026-08-13', auto: true })
+    zeige()
+    fireEvent.click(await screen.findByRole('button', { name: /Jetzt aktualisieren/i }))
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/fehlgeschlagen/)))
+  })
+
   it('warnt bei large-v3 auf der CPU', async () => {
     zeige({ whisper_model: 'large-v3' }, { device: 'cpu', name: 'CPU', torch_ok: true, asr: 'cpu' })
     expect(await screen.findByText(/auf der CPU sehr lange/i)).toBeInTheDocument()
@@ -294,16 +336,19 @@ describe('Abschnitt Version und Updates', () => {
     expect(screen.queryByText(/Version und Updates/)).toBeNull()
   })
 
+  // `/aktuell/` allein reichte, solange das Wort nur einmal auf der Seite stand. Seit dem
+  // Abschnitt "Video-Import" ("Videodownloader aktuell halten") trifft es zwei Stellen —
+  // gesucht wird deshalb der tatsaechlich gerenderte Text " · aktuell" des Update-Blocks.
   it('zeigt die laufende Version', async () => {
     zeigeMit({ version: '0.2.1', art: 'aktuell' })
     expect(await screen.findByText(/0\.2\.1/)).toBeTruthy()
-    expect(screen.getByText(/aktuell/)).toBeTruthy()
+    expect(screen.getByText(/· aktuell/)).toBeTruthy()
   })
 
   it('vor der ersten Pruefung nur Version und Knopf, kein "aktuell"', async () => {
     zeigeMit({ version: '0.2.1', art: 'unbekannt' })
     expect(await screen.findByRole('button', { name: /Nach Updates suchen/ })).toBeTruthy()
-    expect(screen.queryByText(/aktuell/)).toBeNull()   // sonst behauptet die Seite Wissen, das sie nicht hat
+    expect(screen.queryByText(/· aktuell/)).toBeNull()   // sonst behauptet die Seite Wissen, das sie nicht hat
   })
 
   it('bietet den Download mit Groesse an', async () => {

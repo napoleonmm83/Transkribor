@@ -86,7 +86,11 @@ DEFAULTS = {"provider": "claude-cli", "model": "", "base_url": "", "api_key": ""
             # naechsten load() heraus (der Filter kennt nur DEFAULTS) — keine Migration noetig.
             # Whisper-Stufe und -Sprache. large-v3/de ist das bisherige Verhalten —
             # eine Verhaltensaenderung fuer Bestandsnutzer waere unnoetig.
-            "whisper_model": "large-v3", "whisper_lang": "de"}
+            "whisper_model": "large-v3", "whisper_lang": "de",
+            # yt-dlp-Selbstaktualisierung: Schalter + Merker der letzten Pruefung (ISO-Datum).
+            # STRINGS, nicht bool/date — `save()` filtert auf isinstance(str) und wuerde alles
+            # andere still verwerfen (dieselbe Falle wie `mehrsprachig` in projekt.py).
+            "ytdlp_auto": "1", "ytdlp_geprueft": ""}
 
 
 def load() -> dict:
@@ -131,7 +135,11 @@ def public(cfg: dict = None) -> dict:
     cfg = cfg if cfg is not None else load()
     return {"provider": cfg["provider"], "model": cfg["model"],
             "base_url": cfg["base_url"], "has_key": bool(cfg["api_key"]),
-            "whisper_model": cfg["whisper_model"], "whisper_lang": cfg["whisper_lang"]}
+            "whisper_model": cfg["whisper_model"], "whisper_lang": cfg["whisper_lang"],
+            # Der gespeicherte Wert, nicht der wirksame: der Haken im Browser soll zeigen,
+            # was IN der Datei steht. Ob eine Env-Variable ihn ueberstimmt, sagt
+            # `ytdlp_update.zustand()["auto"]` — das Frontend vergleicht beides.
+            "ytdlp_auto": cfg["ytdlp_auto"]}
 
 
 def job_env() -> dict:
