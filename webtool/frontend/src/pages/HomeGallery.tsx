@@ -50,11 +50,17 @@ export function HomeGallery() {
   return (
     <div className="p-6 sm:p-8">
       <PageHeader rubrik="Transkribor" titel="Übersicht">
-        {/* Kein „+ Neues Projekt" mehr hier (#69): der Knopf steht seit PR #68 in der
-            Seitenleiste — dort ist er auf JEDER Route sichtbar, hier war er es nur auf der
-            Übersicht. Zwei wortgleiche Knöpfe auf demselben Schirm sind kein zweiter Weg,
-            sondern die Frage, ob sie dasselbe tun. Der Knopf im Leerzustand unten bleibt:
-            der beantwortet „hier ist noch nichts", nicht „lege noch eines an". */}
+        {/* „+ Neues Projekt" steht hier NUR, solange die Seitenleiste fehlt (#69 + Nachtrag).
+            #69 galt dem Doppel auf EINEM Schirm — zwei wortgleiche Knöpfe sind kein zweiter
+            Weg, sondern die Frage, ob sie dasselbe tun. Unter `md` blendet die Hülle die
+            Leiste aber aus (AppShell), und mit ihr verschwand der einzige verbliebene Weg:
+            der Knopf im Leerzustand erscheint nur ohne Projekte, und die Palette (`Strg+K`)
+            kann Projekte nur ÖFFNEN, nicht anlegen. Wer also im schmalen Fenster schon ein
+            Projekt hatte, konnte kein zweites mehr anlegen — im Browser gemessen (700 px:
+            `aside` display:none, Knopf 0×0).
+            `md:hidden` ist der Punkt, an dem die beiden sich ablösen: ab `md` trägt ihn die
+            Leiste, darunter dieser hier. Nie beide zugleich. */}
+        <span className="md:hidden"><NewProjectDialog onCreated={oeffnen} /></span>
         <Button variant="ghost" size="sm" asChild>
           <Link to="/einstellungen"><Settings className="size-4" /> Einstellungen</Link>
         </Button>
