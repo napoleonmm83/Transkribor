@@ -27,6 +27,7 @@ const BASIS: Settings = {
     { id: 'large-v3', label: 'Beste Qualität', hint: 'bester Dialekt' },
   ],
   ai_ready: true, ai_reason: '',
+  kaputt: '',
   ytdlp_auto: '1',
   ytdlp: { version: '2026.8.12', unlesbar: false, geprueft: '2026-08-13', auto: true, env: false },
   providers: [
@@ -63,6 +64,22 @@ describe('SettingsPage', () => {
     expect(await screen.findByText(/Nutzt das Abo/)).toBeInTheDocument()
     expect(screen.queryByText('API-Key')).not.toBeInTheDocument()
     expect(await screen.findByText('Modell')).toBeInTheDocument()
+  })
+
+  it('nennt die beiseitegelegte Einstellungsdatei und laesst sie entfernen', async () => {
+    // #192: der Server ersetzt eine unlesbare Einstellungsdatei nicht mehr still durch
+    // Standardwerte, sondern legt sie als .kaputt beiseite — dort steht meist noch der
+    // API-Key. Eine Rettung, die niemand erwaehnt, ist so gut wie keine; und der Hinweis
+    // braucht ein Ende, sonst steht er fuer immer da.
+    vi.mocked(api.verwerfeKaputt).mockResolvedValue(undefined)
+    zeige({ kaputt: 'C:\\Users\\m\\AppData\\Roaming\\Transkribor\\settings.json.kaputt' })
+    expect(await screen.findByText(/settings\.json\.kaputt/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /Datei entfernen/ }))
+    await waitFor(() => expect(api.verwerfeKaputt).toHaveBeenCalled())
+    // Kein Nachladen: der Hinweis verschwindet aus dem lokalen Stand — ein zweiter Aufruf
+    // waere ein weiterer Weg, der schiefgehen kann (dieselbe Regel wie beim ytdlp-Haken).
+    await waitFor(() => expect(screen.queryByText(/settings\.json\.kaputt/)).toBeNull())
+    expect(toast.error).not.toHaveBeenCalled()
   })
 
   it('bietet im Abo die Modell-Aliase zur Auswahl an', async () => {

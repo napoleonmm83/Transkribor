@@ -70,6 +70,41 @@ def test_nicht_dekodierbare_datei_faellt_auf_defaults(tmp_path, capsys):
     assert "unlesbar" in capsys.readouterr().out
 
 
+def test_save_legt_die_unlesbare_datei_beiseite_statt_sie_zu_ersetzen(tmp_path):
+    """#192: `save()` ist ein Read-Modify-Write ueber `load()`, und `load()` faellt seit #185
+    auch bei kaputten BYTES auf Defaults zurueck — der naechste Schreiber ersetzte die Datei
+    damit samt Key. Geschrieben wird das vom yt-dlp-Merker aus dem fetch-Subprozess, also
+    unbeaufsichtigt; genau dieser Schreiber steht deshalb hier im Test.
+
+    Der Key ist mit blossem Auge noch lesbar — das ist der Punkt: kaputt fuer `json.load`
+    heisst nicht kaputt fuer den Menschen."""
+    p = tmp_path / "settings.json"
+    p.write_bytes(b'{"api_key": "sk-GEHEIM-\xff\xfe", "provider": "openai"}')
+    settings.save({"ytdlp_geprueft": "2026-08-14"})
+    assert b"sk-GEHEIM" in (tmp_path / "settings.json.kaputt").read_bytes()
+    assert json.loads(p.read_text(encoding="utf-8"))["ytdlp_geprueft"] == "2026-08-14"
+
+
+def test_public_nennt_die_beiseitegelegte_datei(tmp_path):
+    """Eine stille Rettung ist so gut wie keine: das Frontend muss den Pfad nennen koennen,
+    sonst holt niemand den Key zurueck. Gefragt wird die Platte, nicht ein Merker aus dem
+    letzten `save()` — die Rettung ueberlebt den Serverneustart."""
+    assert settings.public()["kaputt"] == ""
+    (tmp_path / "settings.json.kaputt").write_text("{}", encoding="utf-8")
+    assert settings.public()["kaputt"] == str(tmp_path / "settings.json.kaputt")
+
+
+def test_gueltiges_aber_objektloses_json_wird_nicht_gerettet(tmp_path):
+    """`[]` ist lesbar, nur keine Einstellung — darin steht nichts, was jemand zurueckholen
+    wollte. Es zu retten kostete den einen Platz, auf dem sonst der API-Key liegt (die erste
+    Rettung gewinnt)."""
+    p = tmp_path / "settings.json"
+    p.write_text("[]", encoding="utf-8")
+    settings.save({"whisper_model": "turbo"})
+    assert not (tmp_path / "settings.json.kaputt").exists()
+    assert settings.load()["whisper_model"] == "turbo"
+
+
 def test_job_env_exportiert_die_einstellung():
     settings.save({"whisper_model": "medium", "whisper_lang": "en"})
     env = settings.job_env()

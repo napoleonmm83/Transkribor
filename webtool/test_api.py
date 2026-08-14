@@ -554,7 +554,8 @@ def test_settings_modellwechsel_behaelt_den_key(client):
     assert body == {"provider": "anthropic", "model": "claude-sonnet-5",
                     "base_url": "", "has_key": True,
                     "whisper_model": "large-v3", "whisper_lang": "de",
-                    "ytdlp_auto": "1"}
+                    # "" = es liegt keine beiseitegelegte Einstellungsdatei (#192)
+                    "ytdlp_auto": "1", "kaputt": ""}
 
 
 def test_settings_meldet_den_ytdlp_zustand(client, monkeypatch):
@@ -586,6 +587,20 @@ def test_settings_lehnt_ungueltigen_ytdlp_schalter_ab(client):
     ein JA. Der Schreibpfad ist die Stelle, an der das auffallen muss."""
     assert client.put("/api/settings", json={"ytdlp_auto": "nein"}).status_code == 400
     assert client.get("/api/settings").json()["ytdlp_auto"] == "1"
+
+
+def test_settings_meldet_und_entfernt_die_beiseitegelegte_datei(client, tmp_path):
+    """#192: die gerettete Fassung nuetzt nur, wenn die Oberflaeche sie erwaehnt — und der
+    Hinweis braucht ein Ende, sonst steht er fuer immer da (der Pfad liegt im Benutzerprofil,
+    und wer die App benutzt, raeumt dort nicht selbst auf)."""
+    k = tmp_path / "settings.json.kaputt"
+    k.write_bytes(b'{"api_key": "sk-GEHEIM-\xff"}')
+    assert client.get("/api/settings").json()["kaputt"] == str(k)
+    assert client.delete("/api/settings/kaputt").json() == {"ok": True, "kaputt": ""}
+    assert not k.exists()
+    assert client.get("/api/settings").json()["kaputt"] == ""
+    # Zweimal geklickt (oder zwei Tabs offen) ist kein Serverfehler, sondern nichts zu tun.
+    assert client.delete("/api/settings/kaputt").status_code == 404
 
 
 def test_settings_ytdlp_merker_kommt_nicht_aus_dem_browser(client):

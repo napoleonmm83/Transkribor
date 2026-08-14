@@ -101,6 +101,29 @@ DEFAULTS = {"provider": "claude-cli", "model": "", "base_url": "", "api_key": ""
 def load() -> dict:
     """Einstellungen inkl. Key. Fehlend/kaputt -> Defaults (Abo-Modus), nie ein Fehler:
     eine unlesbare Einstellungsdatei darf die Transkription nicht blockieren."""
+    return _lesen()[0]
+
+
+def kaputt_pfad() -> str:
+    """Pfad einer beiseitegelegten Fassung, falls eine liegt — sonst "".
+
+    Gefragt wird die PLATTE, nicht ein Merker aus dem letzten `save()`: die Rettung ueberlebt
+    den Serverneustart, und der Nutzer soll sie auch dann noch angeboten bekommen, wenn der
+    Schreiber ein Subprozess war, den nie jemand gesehen hat.
+    """
+    p = path() + ".kaputt"
+    return p if os.path.exists(p) else ""
+
+
+def _lesen() -> tuple:
+    """(Einstellungen, kaputt). `load()` ist der reine Lesepfad und verschluckt `kaputt`
+    bewusst — `save()` braucht es, weil es die Datei sonst ungefragt ersetzt (#192).
+
+    Der Zustand wird HIER durchgereicht statt in `load()` selbst zu handeln: `load()` laeuft
+    bei jedem Request, ein Umbenennen von dort waere ein Seiteneffekt im GET und liefe
+    ausserhalb der Sperre — es koennte sich also mit einem gleichzeitigen `save()`
+    verschraenken.
+    """
     try:
         with open(path(), encoding="utf-8") as fh:
             data = json.load(fh)
@@ -119,17 +142,21 @@ def load() -> dict:
         # lesbarer API-Key waere danach weg. Die Richtung bleibt trotzdem richtig (dauerhaft
         # 500 und im Browser nicht reparierbar waere schlechter) — sie darf nur nicht STILL
         # sein. Ein FileNotFoundError ist dabei der Normalfall (erster Start) und schweigt.
-        if not isinstance(e, FileNotFoundError):
-            print(f"[settings] {path()} unlesbar ({type(e).__name__}: {e}) — nehme Defaults; "
-                  f"der naechste Schreibvorgang ersetzt die Datei", flush=True)
-        return dict(DEFAULTS)
+        if isinstance(e, FileNotFoundError):
+            return dict(DEFAULTS), False
+        print(f"[settings] {path()} unlesbar ({type(e).__name__}: {e}) — nehme Defaults; "
+              f"der naechste Schreibvorgang legt die Datei als .kaputt beiseite", flush=True)
+        return dict(DEFAULTS), True
     if not isinstance(data, dict):
-        return dict(DEFAULTS)
+        # Lesbar, nur kein Objekt (`[]`, `null`). Bewusst NICHT als "kaputt" gerettet: darin
+        # stehen keine Einstellungen, die jemand zurueckholen wollte — und jede Rettung
+        # verbraucht den einen Platz, auf dem sonst der API-Key liegt.
+        return dict(DEFAULTS), False
     cfg = {**DEFAULTS, **{k: v for k, v in data.items()
                           if k in DEFAULTS and isinstance(v, str)}}
     if cfg["whisper_model"] not in KNOWN_WHISPER_MODELS:
         cfg["whisper_model"] = DEFAULTS["whisper_model"]
-    return cfg
+    return cfg, False
 
 
 def save(patch: dict) -> dict:
@@ -151,7 +178,12 @@ def save(patch: dict) -> dict:
     # einzelnen Aufrufer.
     os.makedirs(os.path.dirname(p) or ".", exist_ok=True)
     with sperre.datei(p):
-        cur = load()
+        cur, kaputt = _lesen()
+        if kaputt:
+            # INNERHALB der Sperre und VOR dem Schreiben: sonst raenge das Umbenennen mit
+            # einem gleichzeitigen Schreiber um dieselbe Datei, und das `os.replace` unten
+            # haette den Inhalt ohnehin schon verworfen.
+            paths.beiseitelegen(p)
         for k in DEFAULTS:
             if k in patch and isinstance(patch[k], str):
                 cur[k] = patch[k].strip()
@@ -171,6 +203,9 @@ def public(cfg: dict = None) -> dict:
     cfg = cfg if cfg is not None else load()
     return {"provider": cfg["provider"], "model": cfg["model"],
             "base_url": cfg["base_url"], "has_key": bool(cfg["api_key"]),
+            # Eine stille Rettung ist so gut wie keine (#192): das Frontend nennt den Pfad,
+            # sonst holt niemand den Key zurueck, der dort noch drinsteht.
+            "kaputt": kaputt_pfad(),
             "whisper_model": cfg["whisper_model"], "whisper_lang": cfg["whisper_lang"],
             # Der gespeicherte Wert, nicht der wirksame: der Haken im Browser soll zeigen,
             # was IN der Datei steht. Ob eine Env-Variable ihn ueberstimmt, sagt

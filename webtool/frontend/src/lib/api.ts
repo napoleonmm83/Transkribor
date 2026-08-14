@@ -158,6 +158,10 @@ export async function saveSettings(patch: Record<string, string>): Promise<Setti
     method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch),
   }))
 }
+/** Die beiseitegelegte Einstellungsdatei entfernen, wenn der Nutzer sie ausgewertet hat. */
+export async function verwerfeKaputt(): Promise<void> {
+  await jn(await fetch('/api/settings/kaputt', { method: 'DELETE' }))
+}
 /** Läuft synchron bis zu zwei Minuten (pip). Der Aufrufer zeigt solange einen Spinner. */
 export async function updateYtdlp(): Promise<{ ok: boolean } & YtdlpStand> {
   return jn(await post('/api/settings/ytdlp/update'))

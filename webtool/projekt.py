@@ -35,10 +35,19 @@ def _write(project: str, data: dict) -> None:
 
 
 def laden(project: str) -> dict:
+    return _lesen(project)[0]
+
+
+def _lesen(project: str) -> tuple:
+    """(Einstellungen, kaputt). `laden()` ist der reine Lesepfad und verschluckt `kaputt`
+    bewusst; `speichern`/`setze_datei` brauchen es, sonst ersetzen sie die Datei ungefragt
+    durch Defaults (#196) — und ihre Schreiber sind unbeaufsichtigt (jeder Upload, jeder
+    URL-Import aus dem fetch-Subprozess)."""
     # Pfad VOR dem try: `paths.safe_name` wirft ValueError fuer unsichere Namen, und seit
     # der Erweiterung auf ValueError (#190) verschluckte der Rueckfall genau diese
     # Vertrauensgrenze — `laden("..")` gab Defaults zurueck statt zu werfen (gemessen).
     pfad = _pfad(project)
+    kaputt = False
     try:
         with open(pfad, encoding="utf-8") as fh:
             data = json.load(fh)
@@ -49,16 +58,18 @@ def laden(project: str) -> dict:
         # und `setze_datei` sind Read-Modify-Write ueber genau diese Funktion, der naechste
         # Upload ueberbuegelt die Datei also mit Defaults. Gemessen: Sprache und Tiefe ALLER
         # Dateien waren danach weg, englische Aufnahmen liefen wieder auf Schweizerdeutsch.
+        # Seit #196 bleibt der Inhalt erhalten: der Schreiber legt sie als .kaputt beiseite.
         print(f"⚠ {pfad} nicht lesbar ({type(e).__name__}: {e}) — Projekt- und "
               f"Datei-Einstellungen fallen auf Standard (ch/auto)", flush=True)
         data = {}
+        kaputt = True
     if not isinstance(data, dict):
         data = {}
     sprache = data.get("sprache")
     korrektur = data.get("korrektur")
     mehrsprachig = data.get("mehrsprachig")
     dateien = data.get("dateien")
-    return {
+    return ({
         # Tolerant gegenueber falschem Schema (z.B. dateien als Liste, sprache
         # als Zahl): nur akzeptieren, was den richtigen Typ hat, sonst Default.
         "sprache": sprache if isinstance(sprache, str) else sprachen.SPRACH_DEFAULT,
@@ -66,14 +77,18 @@ def laden(project: str) -> dict:
         # Vorgabe False: bestehende Projekte ohne den Schluessel behalten ihr Verhalten.
         "mehrsprachig": mehrsprachig if isinstance(mehrsprachig, bool) else False,
         "dateien": {k: v for k, v in dateien.items() if isinstance(v, dict)} if isinstance(dateien, dict) else {},
-    }
+    }, kaputt)
 
 
 def speichern(project: str, patch: dict) -> dict:
     # RMW unter dem projekt-weiten Lock: laden+modify+_write sind atomar gegen
     # parallele Schreiber (Threads wie fetch-Subprozess).
     with _gesperrt(project):
-        cur = laden(project)
+        cur, kaputt = _lesen(project)
+        # INNERHALB der Sperre und VOR `_write`: dessen `os.replace` verwirft den Inhalt
+        # sonst, und ausserhalb der Sperre raenge das Umbenennen mit dem zweiten Schreiber.
+        if kaputt:
+            paths.beiseitelegen(_pfad(project))
         for k in ("sprache", "korrektur"):
             if k in patch and isinstance(patch[k], str):
                 cur[k] = patch[k]
@@ -88,7 +103,9 @@ def speichern(project: str, patch: dict) -> dict:
 
 def setze_datei(project: str, base: str, sprache=None, korrektur=None, mehrsprachig=None) -> dict:
     with _gesperrt(project):
-        cur = laden(project)
+        cur, kaputt = _lesen(project)
+        if kaputt:                      # siehe `speichern`
+            paths.beiseitelegen(_pfad(project))
         eintrag = dict(cur["dateien"].get(base, {}))
         if sprache is not None:
             eintrag["sprache"] = sprache
