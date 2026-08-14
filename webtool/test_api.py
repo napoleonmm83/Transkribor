@@ -1288,10 +1288,15 @@ def test_umbenennen_ueberlebt_ein_nicht_schreibbares_dokument(client, tmp_path, 
     ValueError). Diese Stelle laeuft NACH dem `os.rename`, ein Wurf meldete dem Aufrufer
     also einen Fehler fuer ein bereits erledigtes Umbenennen."""
     t = tmp_path / "Demo" / "transkripte"
-    (t / "S1.edit.json").write_text('{"base": "S1", "summary": "\\ud800"}', encoding="utf-8")
+    roh = b'{"base": "S1", "summary": "\\ud800"}'
+    (t / "S1.edit.json").write_bytes(roh)
     r = client.post("/api/projects/Demo/files/S1/rename", json={"name": "Neu"})
     assert r.status_code == 200, r.text
     assert (t / "Neu.edit.json").exists()
+    # Nicht nur "existiert": ein `atomic_write`, das die Datei vor dem Fehler anfasst oder
+    # kuerzt, bliebe sonst unbemerkt. Heute stirbt `json.dumps` VOR jedem Schreibvorgang —
+    # genau das nagelt diese Zeile fest (CodeRabbit an PR #195).
+    assert (t / "Neu.edit.json").read_bytes() == roh
     assert "nicht nachgezogen" in capsys.readouterr().out
 
 
