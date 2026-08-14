@@ -54,6 +54,29 @@ _LAUT_AB_S = 1.0
 # nie hinein: bis dahin hat der Verwaist-Zweig ein abgelaufenes Lock laengst abgeraeumt.
 _AUFGEBEN_PUFFER_S = 5.0
 
+# Wie oft `os.rmdir` beim Freigeben wiederholt wird, und wie lange dazwischen gewartet wird.
+#
+# **Windows loescht eine geoeffnete Datei nicht sofort.** `os.remove` gelingt, der Eintrag
+# bleibt aber als "delete pending" im Verzeichnis stehen, bis der letzte Leser schliesst —
+# `os.rmdir` scheitert solange mit `[WinError 145] Das Verzeichnis ist nicht leer`. Genau das
+# passiert hier im Normalbetrieb: der Halter entfernt seinen Merker, waehrend ein Warter ihn
+# gerade liest (`_merker_lesen`). Nachgemessen wurde es an einem Prueftstand, der den echten
+# Ablauf nachbaut (3 Faeden, je EIN Zugriff, verschachteltes settings-Lock wie in `_merken`),
+# 250 Runden: **3 von 1500** Freigaben scheiterten so — und dieselben **3** Runden hatten eine
+# Wartezeit von exakt `stale + _AUFGEBEN_PUFFER_S`. Eins zu eins, das ist die Kette.
+#
+# Was der geschluckte Fehler anrichtet: das Lock bleibt liegen, und im Merker steht die PID des
+# **noch lebenden** Prozesses — womit `_lebt_laut` "unantastbar" sagt und die Uhr gar nicht
+# mehr zum Zug kommt. Der naechste Warter sitzt die volle Frist ab (pip-Lock: 155 s) und
+# greift dann erzwungen zu; treffen sich dort zwei, sind beide gleichzeitig im kritischen
+# Abschnitt. Das ist #205 — inklusive der 155,07 s, die im Testlauf gemessen wurden.
+#
+# Der Leser schliesst in Mikrosekunden, ein kurzes Wiederholen genuegt also. Mit diesen Werten
+# im selben Prueftstand: **0 von 1500**, keine langen Wartezeiten mehr. Knapp gehalten, weil es
+# auf dem Freigabepfad liegt (hoechstens 160 ms, und nur im Fehlerfall).
+_RMDIR_VERSUCHE = 8
+_RMDIR_PAUSE_S = 0.02
+
 
 def _prozess_lebt(pid: int):
     """Laeuft dieser Prozess noch? True | False | None (nicht beantwortbar).
@@ -156,10 +179,27 @@ def _wegraeumen(lockdir: str, erwartet) -> None:
     """
     if _merker_lesen(lockdir) != erwartet:
         return                                    # gehoert inzwischen jemand anderem
-    if erwartet is not None:
-        with contextlib.suppress(OSError):
-            os.remove(os.path.join(lockdir, _HALTER))
-    os.rmdir(lockdir)
+    for versuch in range(_RMDIR_VERSUCHE):
+        # BEIDES in der Schleife, nicht nur das `rmdir`: haelt ein Warter den Merker offen,
+        # kann schon das `os.remove` scheitern (Windows gibt dann PermissionError statt eines
+        # delete-pending-Eintrags — welches von beidem, haengt daran, wie der Leser die Datei
+        # geoeffnet hat). Nur das `rmdir` zu wiederholen half in dem Fall nie: die Datei liegt
+        # ja noch da. Erst mit dem Umbau bestand der Windows-Test darunter.
+        if erwartet is not None:
+            with contextlib.suppress(OSError):
+                os.remove(os.path.join(lockdir, _HALTER))
+        try:
+            os.rmdir(lockdir)
+            return
+        except (FileNotFoundError, NotADirectoryError):
+            raise            # weg bzw. gar kein Verzeichnis — Wiederholen aendert daran nichts
+        except OSError:
+            # „Nicht leer" (delete pending) und „Zugriff verweigert" (Handle eines Scanners)
+            # sind VORUEBERGEHEND, siehe _RMDIR_VERSUCHE. Beim letzten Versuch durchreichen:
+            # der Aufrufer entscheidet, ob er das schluckt.
+            if versuch == _RMDIR_VERSUCHE - 1:
+                raise
+            time.sleep(_RMDIR_PAUSE_S)
 
 
 @contextlib.contextmanager

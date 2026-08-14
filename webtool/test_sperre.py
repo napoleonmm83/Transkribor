@@ -486,3 +486,74 @@ def test_merker_von_einem_anderen_rechner_gilt_nicht(tmp_path, monkeypatch, caps
     finally:
         halter.kill()
         halter.wait()
+
+
+def test_freigabe_wiederholt_ein_gescheitertes_rmdir(tmp_path, monkeypatch):
+    """#205: `os.rmdir` scheitert beim Freigeben VORUEBERGEHEND, und der Fehler wird beim
+    Aufrufer geschluckt — das Lock bleibt liegen. Weil in seinem Merker die PID des noch
+    LEBENDEN Prozesses steht, sagt `_lebt_laut` danach "unantastbar": die Uhr kommt gar nicht
+    mehr zum Zug, und der naechste Warter sitzt die volle Frist ab (beim pip-Lock 155 s).
+
+    Der Ausloeser ist Windows-eigen (eine geoeffnete Datei wird erst beim Schliessen wirklich
+    geloescht, `os.rmdir` meldet solange WinError 145) — die WIEDERHOLUNG laesst sich aber
+    plattformunabhaengig pruefen, und genau darum geht es hier. Der echte Ablauf steht im
+    Test darunter.
+    """
+    versuche = []
+    echt = os.rmdir
+
+    def hakelig(pfad):
+        versuche.append(pfad)
+        if len(versuche) < 3:                     # die ersten beiden scheitern, dann geht es
+            raise OSError(41, "Das Verzeichnis ist nicht leer")
+        echt(pfad)
+
+    monkeypatch.setattr(sperre, "_RMDIR_PAUSE_S", 0.001)
+    monkeypatch.setattr(os, "rmdir", hakelig)
+    ziel = str(tmp_path / "x.json")
+    with sperre.datei(ziel):
+        pass
+    assert len(versuche) == 3                     # zweimal daneben, beim dritten Mal weg
+    assert not os.path.exists(ziel + ".lock")     # und das Lock ist wirklich fort
+
+
+def test_freigabe_gibt_bei_dauerhaftem_fehler_auf(tmp_path, monkeypatch):
+    """Die Gegenprobe: die Wiederholung darf nicht zur Endlosschleife werden. Ein dauerhaft
+    scheiterndes `rmdir` (Datei am Lock-Pfad, schreibgeschuetzter Ordner) muss nach
+    `_RMDIR_VERSUCHE` durchgereicht werden — der Aufrufer entscheidet dann (im `finally` von
+    `datei` wird es geschluckt, das Lock bleibt liegen und die Frist raeumt es spaeter ab).
+    """
+    monkeypatch.setattr(sperre, "_RMDIR_PAUSE_S", 0.001)
+    monkeypatch.setattr(os, "rmdir", lambda p: (_ for _ in ()).throw(OSError(41, "nicht leer")))
+    lock = str(tmp_path / "x.json") + ".lock"
+    os.mkdir(lock)
+    with pytest.raises(OSError):
+        sperre._wegraeumen(lock, None)
+
+
+@pytest.mark.skipif(os.name != "nt", reason="delete-pending gibt es nur auf Windows; auf POSIX "
+                                            "loescht os.remove den Eintrag sofort")
+def test_freigabe_ueberlebt_einen_lesenden_warter(tmp_path):
+    """Der ECHTE Ablauf aus #205, ohne Attrappe: ein Warter liest den Merker (`_merker_lesen`
+    macht genau das), waehrend der Halter freigibt. Windows entfernt den Eintrag dann erst
+    beim Schliessen — `os.rmdir` scheitert, und ohne die Wiederholung bleibt das Lock liegen.
+
+    Auf POSIX ist der Fall nicht herstellbar (dort verschwindet der Eintrag sofort), deshalb
+    der `skipif` — die CI faehrt Ubuntu und sieht diesen Test also NIE (dieselbe Luecke wie
+    #201). Der Test darueber deckt die Wiederholung plattformunabhaengig ab.
+    """
+    ziel = str(tmp_path / "x.json")
+    lock = ziel + ".lock"
+    os.mkdir(lock)
+    with open(os.path.join(lock, sperre._HALTER), "wb") as f:
+        f.write(f"{os.getpid()} {platform.node()}".encode())
+    merker = sperre._merker_lesen(lock)
+    offen = open(os.path.join(lock, sperre._HALTER), "rb")   # der lesende Warter
+    try:
+        t = threading.Timer(0.05, offen.close)               # er schliesst gleich
+        t.start()
+        sperre._wegraeumen(lock, merker)                     # darf nicht werfen
+    finally:
+        t.cancel()
+        offen.close()
+    assert not os.path.exists(lock)
