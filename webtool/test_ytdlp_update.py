@@ -321,6 +321,32 @@ def test_pin_aus_einem_FREMDEN_extra_zaehlt_nicht(monkeypatch):
     assert _ECHTES_EJS_UNTAUGLICH() is False
 
 
+def test_pin_kommt_aus_YT_DLPS_metadaten(monkeypatch):
+    """Gefragt wird `requires("yt-dlp")` — wer hier `_EJS` einsetzt, liest ejs' EIGENE
+    Anforderungen, faende nichts, bekaeme None, und die ganze #182-Pruefung fiele STILL
+    nach fail-open aus. Ohne diese Zusicherung blieben alle 47 Tests dabei gruen (gemessen);
+    dieselbe Luecke wie beim Distributionsnamen in `_ejs_untauglich` an PR #180."""
+    gerufen = []
+    monkeypatch.setattr(yu.metadata, "requires",
+                        lambda name: gerufen.append(name) or ["yt-dlp-ejs==0.8.0; extra == 'default'"])
+    assert yu._ejs_pin() == "0.8.0"
+    assert gerufen == ["yt-dlp"]
+
+
+def test_zeile_mit_WEITEREN_markern_gilt_nicht(monkeypatch):
+    """`extra == 'default'` allein ist auswertbar — alles daneben nicht.
+
+    Schriebe yt-dlp `extra == 'default' and python_version >= "3.14"`, installierte pip auf
+    3.13 weiter 0.8.0, waehrend wir 0.9.0 als gefordert laesen: Dauer-True, und
+    `pip install -U yt-dlp[default]` KANN daran nichts aendern — taegliches pip ohne Ende,
+    genau das Verbot aus `_ejs_untauglich`. Der Marker wird nicht ausgewertet (das braeuchte
+    `packaging.markers`), sondern die Zeile faellt nach fail-open."""
+    _metadaten(monkeypatch, "0.8.0",
+               ['yt-dlp-ejs==0.9.0; extra == \'default\' and python_version >= "3.14"'])
+    assert yu._ejs_pin() is None
+    assert _ECHTES_EJS_UNTAUGLICH() is False
+
+
 def test_pin_ohne_extra_marker_gilt(monkeypatch):
     """Gegenprobe zur Zeile darueber — sonst waere die Wache zu scharf: eine Anforderung
     ganz OHNE `extra`-Marker ist eine harte Abhaengigkeit von yt-dlp und gilt fuer jede

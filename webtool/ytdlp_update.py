@@ -11,7 +11,10 @@ kaputtgehen MUSS: ihre Extraktoren laufen YouTube und Instagram hinterher (#162)
 **Dasselbe trifft jedes Paket, das NACH der Installation in requirements.txt dazukommt** —
 `yt-dlp-ejs` (ueber `yt-dlp[default]`, #178) war der erste Fall: die Fassung ist frisch, der
 Loeser hat trotzdem keine Skripte, und der Kalenderweg sieht davon nichts (#179). `faellig()`
-fragt deshalb nicht nur nach dem Datum, sondern auch danach, ob das Paket ueberhaupt da ist.
+fragt deshalb nicht nur nach dem Datum, sondern auch danach, ob der Loeser ueberhaupt
+arbeiten kann — und zwar in ZWEI Richtungen: das Paket fehlt (#179), oder es ist da, passt
+aber nicht zu diesem yt-dlp (#182, ueber ein `pip install -U yt-dlp` ohne das Extra). Beides
+beantwortet `_ejs_untauglich()`; dort steht auch, warum im Zweifel NICHT geflaggt wird.
 
 Zwei Wege hier hinein:
 - `automatisch()` — der Kalenderweg, gerufen vor dem ersten Zugriff auf yt-dlp.
@@ -52,8 +55,10 @@ _EJS = "yt-dlp-ejs"
 # NUR `==`: bei `>=` waere jede Antwort geraten, und Raten kostet hier ein taegliches pip
 # ohne Ende — siehe `_ejs_untauglich`.
 _EJS_PIN_RE = re.compile(r"yt[-_]dlp[-_]ejs\s*==\s*([^\s;,()]+)", re.IGNORECASE)
-# Der Umgebungsmarker derselben Zeile — `; extra == 'default'`. Siehe `_gilt_fuer_uns`.
-_EXTRA_RE = re.compile(r"extra\s*==\s*['\"]([^'\"]+)['\"]", re.IGNORECASE)
+# Der Umgebungsmarker derselben Zeile. `fullmatch` gegen GENAU `extra == 'default'` — alles
+# andere (`extra == 'pin'`, zusaetzliches `and python_version …`) faellt nach fail-open.
+# Siehe `_gilt_fuer_uns`.
+_NUR_DEFAULT_RE = re.compile(r"extra\s*==\s*['\"]default['\"]", re.IGNORECASE)
 
 
 def _heute() -> dt.date:
@@ -83,10 +88,17 @@ def _gilt_fuer_uns(zeile: str) -> bool:
     Wert aus `pin`. Ein Nutzer mit dem regelkonformen 0.8.1 gaelte dann als untauglich, und
     `pip install -U yt-dlp[default]` liesse ihn dort: der Flag ginge nie weg.
 
-    Ohne `extra`-Marker ist es eine harte Abhaengigkeit und gilt fuer jede Installation.
+    Ohne Marker ist es eine harte Abhaengigkeit und gilt fuer jede Installation.
+
+    Der Marker muss **genau** `extra == 'default'` sein, nichts daneben. Ein
+    `extra == 'default' and python_version >= "3.14"` waere sonst „gilt fuer uns", waehrend
+    pip auf 3.13 weiter die alte Fassung installiert: wir laesen einen Pin, den pip nie
+    erfuellt, und der Flag ginge nie weg. Marker richtig auszuwerten braeuchte
+    `packaging.markers` — hier reicht der Rueckfall, weil ein nicht gelesener Pin nur den
+    Kalenderweg entscheiden laesst, ein falsch gelesener aber ein taegliches pip erzeugt.
     """
-    m = _EXTRA_RE.search(zeile)
-    return m is None or m.group(1).lower() == "default"
+    marker = zeile.partition(";")[2].strip()
+    return not marker or bool(_NUR_DEFAULT_RE.fullmatch(marker))
 
 
 def _ejs_pin() -> str | None:
@@ -228,7 +240,8 @@ def geprueft() -> dt.date | None:
 
 def faellig() -> bool:
     """Fassung aelter als INTERVALL_TAGE **und** letzte Pruefung laenger her — ODER die
-    Loeserskripte fehlen ganz (#179, dann zaehlt nur der Merker des Tages).
+    Loeserskripte sind untauglich (#179 fehlend / #182 unpassend; dann zaehlt nur der
+    Merker des Tages).
 
     Der Merker ist noetig, nicht Zierde: yt-dlp veroeffentlicht etwa monatlich, allein an der
     Fassung gemessen waere sie nach 14 Tagen DAUERHAFT faellig — und jeder Import liefe in
@@ -248,7 +261,11 @@ def faellig() -> bool:
         # faellt das nie auf: die Fassung kann taufrisch sein, der Loeser hat trotzdem keine
         # Skripte — also der Stand vor #170, samt demselben sporadischen 403.
         #
-        # Ein FEHLENDES Paket ist keine Frage des Kalenders: pip hat hier etwas zu holen,
+        # Dasselbe gilt fuer eine ejs-Fassung, die NICHT zu diesem yt-dlp passt (#182):
+        # das Paket ist da, yt-dlp verwirft es trotzdem, und `no_warnings` schluckt die
+        # Warnung. Beide Faelle beantwortet `_ejs_untauglich()`.
+        #
+        # Ein untauglicher Loeser ist keine Frage des Kalenders: pip hat hier etwas zu holen,
         # der 14-Tage-Takt waere die falsche Bremse. Ganz ohne Bremse zahlte dafuer ein
         # Rechner ohne Netz den pip-Fehlschlag bei JEDEM Import — deshalb greift der Merker
         # auf TAGES-, nicht auf Intervallbasis.
