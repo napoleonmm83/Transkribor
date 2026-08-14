@@ -45,9 +45,15 @@ _EJS = "yt-dlp-ejs"
 # nach PEP 503 normalisiert, schriebe aber `yt_dlp_ejs` — und dann faende die Regex nichts,
 # `_ejs_pin()` gaebe None zurueck und die Pruefung fiele nach fail-open, also STILL, genau
 # in den Fehler zurueck, gegen den sie gebaut ist. Sechs Zeichen gegen ein stummes Versagen.
+# `IGNORECASE` aus demselben Grund und mit demselben Stand: PEP 503 vergleicht Paketnamen
+# ohne Ruecksicht auf Gross-/Kleinschreibung, `YT-DLP-EJS` waere also gueltige Metadaten.
+# Gemessen steht dort Kleinschreibung — aber falsch liegt die Regex hier immer nach derselben
+# stillen Seite, und mehr Namen als das ejs-Paket kann sie dadurch nicht treffen.
 # NUR `==`: bei `>=` waere jede Antwort geraten, und Raten kostet hier ein taegliches pip
 # ohne Ende — siehe `_ejs_untauglich`.
-_EJS_PIN_RE = re.compile(r"yt[-_]dlp[-_]ejs\s*==\s*([^\s;,()]+)")
+_EJS_PIN_RE = re.compile(r"yt[-_]dlp[-_]ejs\s*==\s*([^\s;,()]+)", re.IGNORECASE)
+# Der Umgebungsmarker derselben Zeile — `; extra == 'default'`. Siehe `_gilt_fuer_uns`.
+_EXTRA_RE = re.compile(r"extra\s*==\s*['\"]([^'\"]+)['\"]", re.IGNORECASE)
 
 
 def _heute() -> dt.date:
@@ -67,6 +73,22 @@ def fassung() -> str | None:
         return None
 
 
+def _gilt_fuer_uns(zeile: str) -> bool:
+    """Gilt diese Anforderungszeile fuer das, was wir installieren — `yt-dlp[default]`?
+
+    yt-dlp fuehrt neben `default` ein `pin`-Extra (seine Sperrliste, die JEDE Abhaengigkeit
+    exakt nagelt). Heute sagen beide `yt-dlp-ejs==0.8.0`, der Unterschied ist folgenlos.
+    Lockert yt-dlp aber irgendwann nur `default` (`>=0.8.0,<0.9`), hat dessen Zeile kein `==`
+    mehr, `_EJS_PIN_RE` ueberspringt sie — und ohne diese Pruefung naehmen wir den exakten
+    Wert aus `pin`. Ein Nutzer mit dem regelkonformen 0.8.1 gaelte dann als untauglich, und
+    `pip install -U yt-dlp[default]` liesse ihn dort: der Flag ginge nie weg.
+
+    Ohne `extra`-Marker ist es eine harte Abhaengigkeit und gilt fuer jede Installation.
+    """
+    m = _EXTRA_RE.search(zeile)
+    return m is None or m.group(1).lower() == "default"
+
+
 def _ejs_pin() -> str | None:
     """Welche ejs-Fassung verlangt das installierte yt-dlp? `None` = keine Aussage.
 
@@ -80,7 +102,7 @@ def _ejs_pin() -> str | None:
         return None
     for z in zeilen:
         m = _EJS_PIN_RE.search(z)
-        if m:
+        if m and _gilt_fuer_uns(z):
             return m.group(1)
     return None
 
@@ -96,7 +118,10 @@ def _release(v: str | None) -> tuple[int, ...] | None:
     naemlich fuer erfuellt. Gemessen an der echten Regex, alle drei Formen.
     """
     teile = (v or "").split(".")
-    if not v or not all(t.isdigit() for t in teile):
+    # `isdecimal()`, NICHT `isdigit()`: letzteres sagt bei hochgestellten Ziffern ja ("8²"),
+    # `int()` wirft dort aber — und dieses Modul darf nirgends werfen (`_hole_yt_dlp` hat
+    # keinen Schutz, ein URL-Import braeche ganz ab statt best effort weiterzulaufen).
+    if not v or not all(t.isdecimal() for t in teile):
         return None
     return tuple(int(t) for t in teile)
 

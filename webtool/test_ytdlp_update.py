@@ -260,13 +260,18 @@ def test_pin_ohne_exakte_bindung_wird_NICHT_geflaggt(monkeypatch):
     assert _ECHTES_EJS_UNTAUGLICH() is False
 
 
-def test_pin_auch_in_der_unterstrich_schreibweise(monkeypatch):
+@pytest.mark.parametrize("name", ["yt_dlp_ejs", "YT-DLP-EJS", "Yt_Dlp_Ejs"])
+def test_pin_auch_in_abweichender_schreibweise(monkeypatch, name):
     """Vorsorge, kein beobachteter Fall — und deshalb hier festgehalten statt ungetestet
-    im Code: gemessen steht in yt-dlps METADATA die Bindestrich-Form, ein Build-Backend,
-    das nach PEP 503 normalisiert, schriebe aber `yt_dlp_ejs`. Ohne die Toleranz faende die
-    Regex nichts, `_ejs_pin()` gaebe None, und die Pruefung fiele nach fail-open — also
-    STILL — in genau den Fehler zurueck, gegen den sie gebaut ist."""
-    _metadaten(monkeypatch, "0.8.0", ["yt_dlp_ejs==0.9.0; extra == 'default'"])
+    im Code: gemessen steht in yt-dlps METADATA die kleingeschriebene Bindestrich-Form.
+    PEP 503 vergleicht Paketnamen aber ohne Ruecksicht auf Trennzeichen UND Schreibung, ein
+    anderes Build-Backend duerfte also `yt_dlp_ejs` oder `YT-DLP-EJS` schreiben.
+
+    Ohne die Toleranz faende die Regex nichts, `_ejs_pin()` gaebe None, und die Pruefung
+    fiele nach fail-open — also STILL — in genau den Fehler zurueck, gegen den sie gebaut
+    ist. Die Regex liegt hier immer nach derselben stillen Seite falsch; das ist der Grund,
+    beide Toleranzen zu behalten statt sie als spekulativ zu streichen."""
+    _metadaten(monkeypatch, "0.8.0", [f"{name}==0.9.0; extra == 'default'"])
     assert _ECHTES_EJS_UNTAUGLICH() is True
 
 
@@ -274,6 +279,7 @@ def test_pin_auch_in_der_unterstrich_schreibweise(monkeypatch):
     ("0.8.*", "Praefix-Bindung — pip erfuellt sie mit 0.8.0, der Vergleich nie"),
     ("=0.8.0", "aus `===0.8.0` (willkuerliche Gleichheit), fuehrendes ="),
     ("0.8.0.post1", "keine reine Zahlenfolge"),
+    ("0.8²", "hochgestellte Ziffer: isdigit() sagt JA, int() wirft"),
 ])
 def test_nicht_vergleichbarer_pin_wird_NICHT_geflaggt(monkeypatch, pin, warum):
     """Ein Pin, dessen Text nie mit einer installierten Fassung uebereinstimmen KANN, ist
@@ -295,6 +301,33 @@ def test_kurzer_pin_ist_gleichwertig(monkeypatch):
     Leere (pip haelt `==0.8` mit 0.8.0 fuer erfuellt)."""
     _metadaten(monkeypatch, "0.8.0", ["yt-dlp-ejs==0.8; extra == 'default'"])
     assert _ECHTES_EJS_UNTAUGLICH() is False
+
+
+def test_pin_aus_einem_FREMDEN_extra_zaehlt_nicht(monkeypatch):
+    """Wir installieren `yt-dlp[default]` — also gilt der Pin aus `extra == 'default'`.
+    yt-dlp fuehrt daneben ein `pin`-Extra (seine Sperrliste, die JEDE Abhaengigkeit exakt
+    nagelt). Heute sagen beide 0.8.0, der Unterschied ist also folgenlos.
+
+    Lockert yt-dlp aber irgendwann nur `default`, wird er es: die gelockerte Zeile hat kein
+    `==`, die Regex ueberspringt sie, und ohne diese Pruefung naehme `_ejs_pin()` den exakten
+    Wert aus `pin`. Ein Nutzer mit dem voellig regelkonformen 0.8.1 gaelte dann als
+    untauglich — und `pip install -U yt-dlp[default]` loest `>=0.8.0,<0.9` auf und LAESST
+    0.8.1 stehen. Der Flag ginge nie weg: taegliches pip ohne Ende, genau das Verbot aus
+    `_ejs_untauglich`. (Nachgemessen an der echten Regex mit genau diesen zwei Zeilen.)
+    """
+    _metadaten(monkeypatch, "0.8.1", ["yt-dlp-ejs>=0.8.0,<0.9; extra == 'default'",
+                                      "yt-dlp-ejs==0.8.0; extra == 'pin'"])
+    assert yu._ejs_pin() is None
+    assert _ECHTES_EJS_UNTAUGLICH() is False
+
+
+def test_pin_ohne_extra_marker_gilt(monkeypatch):
+    """Gegenprobe zur Zeile darueber — sonst waere die Wache zu scharf: eine Anforderung
+    ganz OHNE `extra`-Marker ist eine harte Abhaengigkeit von yt-dlp und gilt fuer jede
+    Installation, also auch fuer unsere."""
+    _metadaten(monkeypatch, "0.8.0", ["yt-dlp-ejs==0.9.0"])
+    assert yu._ejs_pin() == "0.9.0"
+    assert _ECHTES_EJS_UNTAUGLICH() is True
 
 
 def test_fehlendes_ejs_schlaegt_den_pin(monkeypatch):
