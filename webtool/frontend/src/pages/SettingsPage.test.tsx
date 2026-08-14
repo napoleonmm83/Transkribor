@@ -82,6 +82,20 @@ describe('SettingsPage', () => {
     expect(toast.error).not.toHaveBeenCalled()
   })
 
+  it('schickt den zweiten Klick eines Doppelklicks nicht hinterher', async () => {
+    // Die Datei ist nach dem ersten DELETE weg, der zweite bekaeme 404 — der Nutzer saehe
+    // fuer eine geglueckte Aktion einen Fehler-Toast. Der Knopf sperrt sich deshalb, solange
+    // die Anfrage laeuft (CodeRabbit-CLI an PR #203).
+    let loesen: () => void = () => {}
+    vi.mocked(api.verwerfeKaputt).mockReturnValue(new Promise<void>(r => { loesen = r }))
+    zeige({ kaputt: 'C:\\x\\settings.json.kaputt' })
+    const knopf = await screen.findByRole('button', { name: /Datei entfernen/ })
+    fireEvent.click(knopf)
+    fireEvent.click(knopf)
+    expect(api.verwerfeKaputt).toHaveBeenCalledTimes(1)
+    await act(async () => { loesen() })
+  })
+
   it('bietet im Abo die Modell-Aliase zur Auswahl an', async () => {
     // Aliase, nicht konkrete IDs: 'opus' zeigt immer auf die neueste Generation.
     vi.mocked(api.listModels).mockResolvedValue([{ id: 'opus', label: 'opus' }, { id: 'sonnet', label: 'sonnet' }])
