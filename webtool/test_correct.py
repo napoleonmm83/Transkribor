@@ -1052,3 +1052,43 @@ def test_glossar_faellt_bei_nicht_dekodierbarer_datei_auf_leer(project, capsys):
         fh.write(b'{"proper_nouns": ["\xe9"]}')      # neuer als S1.raw.txt -> kein LLM-Aufruf
     assert correct._glossary("Demo", "") == ""
     assert "ohne gemeinsames Glossar" in capsys.readouterr().out
+
+
+def test_kontext_md_nicht_lesbar_stoppt_den_lauf_nicht(project, capsys):
+    """`kontext.md` schreibt der Nutzer von Hand — im Editor als ANSI gespeichert ist sie mit
+    Umlaut nicht als UTF-8 lesbar. `_context` steht in `cmd_run` NACH diarize + prep: ein Wurf
+    verwirft GPU-Minuten und den ganzen Lauf. Weiter ohne Kontext, aber LAUT — ohne ihn faellt
+    die Korrektur messbar schlechter aus, das darf nicht still passieren."""
+    root, _t = project
+    with open(root / "Demo" / "kontext.md", "wb") as fh:
+        fh.write(b"Interview mit Gr\xfcnder")          # ANSI/CP1252, kein UTF-8
+    assert correct._context("Demo") == ""
+    assert "kontext.md nicht lesbar" in capsys.readouterr().out
+
+
+def test_load_meldet_ein_nicht_objekt_als_valuerror(tmp_path):
+    """Gueltiges JSON, aber kein Objekt (ein Modell antwortet auch mal mit einer Liste). Alle
+    Aufrufer fangen ValueError und fallen zurueck; das `.get` daneben wuerfe AttributeError
+    glatt an ihnen vorbei — dieselbe gebrochene Zusage wie #190 ueber einen anderen Typ.
+    Gemessen: `_glossary` starb mit AttributeError, eine Zeile ueber der Meldung
+    'Glossar fehlt/ungültig'."""
+    p = tmp_path / "g.json"
+    p.write_text('["Mathias"]', encoding="utf-8")
+    with pytest.raises(ValueError):
+        correct._load(str(p))
+    assert correct._valid_correction(str(p)) is False      # Rueckfall greift jetzt wirklich
+
+
+def test_ziel_dialekt_verschluckt_den_unsicheren_namen_nicht(tmp_path, monkeypatch):
+    """`paths.safe_name` wirft ValueError fuer unsichere Namen — eine Vertrauensgrenze, kein
+    kaputter Dateiinhalt, und der #190-Rueckfall darf sie nicht verschlucken (gemessen: er
+    tat es, die Funktion lieferte klaglos Defaults).
+
+    Der Riegel liegt NICHT hier, sondern in `projekt.laden` (ueber `datei_sprache` eine Zeile
+    vor dem try). Dieser Test misst die Zusage am Ende der Kette; rot wird er, wenn dort der
+    Pfadbau zurueck in den try wandert."""
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    from webtool import projekt
+    projekt.speichern("p", {"sprache": "auto"})
+    with pytest.raises(ValueError):
+        correct._ziel_dialekt("..", "x")
