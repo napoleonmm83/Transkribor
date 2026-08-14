@@ -72,7 +72,14 @@ export function Sidebar({
       <input ref={fileInput} type="file" hidden accept="audio/*,.mp3,.wav,.m4a,.aac,.flac,.ogg,.opus,.wma,.mp4"
         onChange={e => { const f = e.target.files?.[0]; if (f && offen) onUpload(offen, f); e.target.value = '' }} />
 
-      <nav className="min-h-0 flex-1 overflow-auto px-1 pb-2" aria-label="Projekte">
+      {/* `relative` aus demselben Grund wie am Inhaltsbereich (AppShell.tsx): ein
+          Bildlaufbehaelter klemmt absolut positionierte Nachfahren NUR, wenn er ihr Bezugsrahmen
+          ist — sonst haengen sie am Viewport und blaehen das DOKUMENT auf. Heute steht hier kein
+          solches Kind (das einzige `sr-only` der Leiste sitzt im nicht scrollenden Kopf), es ist
+          also nachweislich ein No-op: keine Kandidaten, kein `z-index`, kein Versatz. Der
+          Unterschied zum Inhaltsbereich ist die LAENGE — die Leiste listet ALLE Projekte, ein
+          entkommenes Kind in Zeile 300 waere kein 68-px-Ueberlauf mehr. */}
+      <nav className="relative min-h-0 flex-1 overflow-auto px-1 pb-2" aria-label="Projekte">
         {projekte.length === 0 && loading && <p className="px-2 py-1 text-sm text-muted-foreground">lädt…</p>}
         {projekte.length === 0 && !loading && fehler && (
           <p className="px-2 py-1 text-sm text-muted-foreground">Projekte konnten nicht geladen werden.</p>

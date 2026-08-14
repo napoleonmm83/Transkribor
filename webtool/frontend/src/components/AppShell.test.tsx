@@ -25,6 +25,8 @@ const ZWEI = [
   { name: 'Alpha', dateien: 2, fertig: 0, geaendert: 100 },
   { name: 'Beta', dateien: 1, fertig: 0, geaendert: 50 },
 ]
+/** Was einen Behaelter zum Bezugsrahmen fuer absolut positionierte Nachfahren macht. */
+const ANKER = ['relative', 'absolute', 'fixed', 'sticky']
 const DATEIEN = [
   { base: 'a', has_audio: true, has_raw: true, has_edit: false, has_md: false },
   { base: 'b', has_audio: true, has_raw: true, has_edit: false, has_md: false },
@@ -154,25 +156,36 @@ describe('AppShell', () => {
     })
   })
 
-  it('macht den Inhaltsbereich zum Bezugsrahmen — sonst waechst das DOKUMENT', () => {
-    // `overflow-auto` klemmt absolut positionierte Nachfahren NUR, wenn der Behaelter selbst ein
-    // Bezugsrahmen ist. Ohne `relative` sucht sich ein `position:absolute`-Kind den Viewport,
-    // sitzt an seiner Flussposition weit unten im Inhalt — und macht damit das DOKUMENT
-    // scrollbar. Ausgeloest hat es das `sr-only` (das IST absolut positioniert) im
-    // Modell-Neuladen-Knopf der Einstellungen; sichtbar wurde es als wandernde Titel- UND
-    // Statuszeile beim Scrollen ueber der Leiste, die bei vier Projekten selbst nichts zu
-    // scrollen hat und das Mausrad deshalb an das Dokument weiterreicht.
+  it('gibt JEDEM Bildlaufbehaelter der Huelle einen Bezugsrahmen', () => {
+    // Die Regel, nicht der Einzelfall: `overflow-auto` klemmt absolut positionierte Nachfahren
+    // NUR, wenn der Behaelter selbst ihr Bezugsrahmen ist. Sonst haengen sie am Viewport, sitzen
+    // an ihrer Flussposition weit unten im Inhalt und machen das DOKUMENT scrollbar — und wer
+    // dann ueber der Leiste scrollt (die bei vier Projekten selbst nichts zu scrollen hat und
+    // das Mausrad ans Dokument weiterreicht), schiebt die ganze Huelle samt Titel- und
+    // Statuszeile. Ausgeloest hat es ein `sr-only` (das IST absolut positioniert).
+    //
     // jsdom rechnet kein Layout — wie bei den Rasterzeilen oben ist die gesetzte Klasse die
-    // pruefbare Aussage. Im echten Browser gemessen (Einstellungsseite, 858 px Fenster): ohne
-    // `relative` documentElement.scrollHeight 926 gegen clientHeight 858, mit `relative` beide
-    // 858, waehrend `main` weiter selbst scrollt (1242 gegen 834) — der Inhalt geht also nicht
-    // verloren, er wird nur wieder IM Inhaltsbereich gescrollt.
+    // pruefbare Aussage; die Wirkung ist im Browser gemessen (Einstellungsseite, 858 px Fenster:
+    // ohne `relative` documentElement.scrollHeight 926 gegen clientHeight 858, mit `relative`
+    // beide 858, waehrend `main` weiter selbst scrollt — der Inhalt geht also nicht verloren).
+    // Belastbar ist dabei die Bisektion: NUR dieses eine Element auszublenden brachte 926 → 858.
+    //
+    // Zwei Grenzen, damit der Test nicht mehr verspricht, als er sieht: er kennt nur, was die
+    // HUELLE rendert (`main` ist hier leer) — also `main` und die Leiste, nicht die Bildlauf-
+    // behaelter einzelner Seiten. Und er sieht nur `auto`/`scroll`: `overflow-hidden` hat
+    // dieselbe Luecke, steht aber ueberall als Zierrat und waere hier nur Rauschen.
     render(
       <MemoryRouter><JobProvider><AppShell><p>Inhalt</p></AppShell></JobProvider></MemoryRouter>,
     )
-    const main = document.getElementById('inhalt')!
-    expect(main.className).toContain('overflow-auto')
-    expect(main.className).toContain('relative')
+    const scroller = [...document.querySelectorAll<HTMLElement>('*')]
+      .filter(el => [...el.classList].some(c => /^overflow-(x-|y-)?(auto|scroll)$/.test(c)))
+    // Positivkontrolle: benennt Tailwind die Utility um, liefe die Schleife sonst still leer.
+    expect(scroller.length).toBeGreaterThan(1)
+    // Erst sammeln, dann pruefen — eine Zusicherung in der Schleife nennt den Fundort nicht.
+    const ohneAnker = scroller
+      .filter(el => ![...el.classList].some(c => ANKER.includes(c)))
+      .map(el => `${el.tagName}.${el.className}`)
+    expect(ohneAnker).toEqual([])
   })
 
   describe('ungespeicherte Aenderungen', () => {
