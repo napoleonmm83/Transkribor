@@ -205,6 +205,19 @@ def test_lebendpruefung_toetet_den_geprueften_prozess_nicht():
     assert sperre._prozess_lebt(os.getpid()) is True
 
 
+def test_unplausible_pid_gilt_als_keine_auskunft():
+    """Eine kaputte Zahl im Merker darf nicht als "tot" durchgehen — dann raeumte der Warter
+    das Lock SOFORT weg, und zwar an der Frist vorbei. ctypes wirft dabei nicht, es schneidet
+    auf `c_uint32` ab: gemessen kam `10**25` als False zurueck (weggeraeumt) und `2**32+7`
+    als True ueber die fremde PID 7. `<= 0` deckt zusaetzlich `os.kill(0, …)` auf POSIX ab —
+    das traefe die ganze Prozessgruppe.
+    """
+    assert sperre._prozess_lebt(10 ** 25) is None
+    assert sperre._prozess_lebt(2 ** 32 + 7) is None
+    assert sperre._prozess_lebt(0) is None
+    assert sperre._prozess_lebt(-1) is None
+
+
 def test_das_gehaltene_lock_nennt_seinen_halter(tmp_path):
     """Schreiber und Leser des Merkers muessen dasselbe Format sprechen — tun sie es nicht,
     faellt die ganze Pruefung auf 'keine Auskunft' zurueck, und zwar STILL: das Lock
