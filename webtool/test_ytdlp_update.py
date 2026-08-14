@@ -908,6 +908,7 @@ def test_zustand_trennt_unlesbar_von_nicht_installiert(monkeypatch):
     monkeypatch.setattr(yu.metadata, "version", _unlesbar(gerufen))
     z = yu.zustand()
     assert z["version"] is None and z["unlesbar"] is True
+    assert gerufen == ["yt-dlp"]      # nicht irgendein Paket, DAS richtige (siehe _unlesbar)
 
     def fehlt(name):
         raise yu.metadata.PackageNotFoundError(name)
@@ -919,3 +920,19 @@ def test_zustand_trennt_unlesbar_von_nicht_installiert(monkeypatch):
     monkeypatch.setattr(yu.metadata, "version", lambda name: "2026.7.4")
     z = yu.zustand()
     assert z["version"] == "2026.7.4" and z["unlesbar"] is False
+
+
+def test_dist_info_ohne_lesbare_metadata_gilt_als_unlesbar(monkeypatch):
+    """`importlib.metadata.version()` WIRFT NICHT IMMER: an einer dist-info ohne (lesbare)
+    METADATA gibt es `None` zurueck — gemessen an einer praeparierten dist-info ohne METADATA
+    und an einer mit METADATA ohne `Version:`-Kopfzeile, beide Male ohne Ausnahme.
+
+    Ohne diesen Zweig faellt genau dieser Zustand in `(None, False)` = "wirklich nicht
+    installiert", und die Einstellungsseite schriebe wieder "der Import steht nicht zur
+    Verfuegung", waehrend yt-dlp importierbar daliegt — die Luege aus #189 ueber den
+    Geschwisterpfad. Erreichbar nach einem abgebrochenen `pip install -U yt-dlp[default]`,
+    also nach genau dem Lauf, den dieses Modul selbst anstoesst."""
+    monkeypatch.setattr(yu.metadata, "version", lambda name: None)
+    z = yu.zustand()
+    assert z["version"] is None and z["unlesbar"] is True
+    assert yu.fassung() is None          # die ENTSCHEIDUNG bleibt: kein pip auf Verdacht
