@@ -102,28 +102,50 @@ def _prozess_lebt(pid: int):
     return True
 
 
-def _halter_lebt(lockdir: str):
-    """Lebt der Prozess, der dieses Lock haelt? None = keine Auskunft -> die Frist entscheidet.
+def _merker_lesen(lockdir: str):
+    """Der Merker als ROHE Bytes, oder None. Er ist zugleich der Ausweis dieses Locks: nur
+    wer denselben Inhalt wiederfindet, darf es wegraeumen (siehe `_wegraeumen`)."""
+    try:
+        with open(os.path.join(lockdir, _HALTER), "rb") as f:
+            return f.read(200)
+    except OSError:
+        return None
+
+
+def _lebt_laut(merker):
+    """Lebt der Prozess, den dieser Merker nennt? None = keine Auskunft -> die Frist entscheidet.
 
     Keine Auskunft heisst hier immer "wie vor #175", nie "ist tot": ein Merker, der fehlt
     (altes Lock, oder der Halter kam zwischen `mkdir` und Schreiben nicht weiter), halb
     geschrieben ist oder von einem ANDEREN Rechner stammt (geteilter Ordner — dort gehoert
     die Zahl hier einem beliebigen fremden Prozess), darf kein Lock abraeumen.
     """
+    if merker is None:
+        return None
     try:
-        with open(os.path.join(lockdir, _HALTER), encoding="utf-8") as f:
-            pid_text, _, wirt = f.read(200).strip().partition(" ")
+        pid_text, _, wirt = merker.decode("utf-8").strip().partition(" ")
         pid = int(pid_text)
-    except (OSError, ValueError):
+    except (UnicodeDecodeError, ValueError):
         return None
     return _prozess_lebt(pid) if wirt == platform.node() else None
 
 
-def _wegraeumen(lockdir: str) -> None:
-    """Lock samt Merker entfernen. Der Merker MUSS zuerst weg — sonst scheitert `os.rmdir`
-    an einem nicht leeren Verzeichnis, und das Lock waere gar nicht mehr abzuraeumen."""
-    with contextlib.suppress(OSError):
-        os.remove(os.path.join(lockdir, _HALTER))
+def _wegraeumen(lockdir: str, erwartet) -> None:
+    """Lock samt Merker entfernen — aber NUR, wenn es noch dasselbe Lock ist.
+
+    Zwischen der Entscheidung ("der Halter ist tot") und dieser Zeile liegen Systemaufrufe,
+    und in dieser Luecke kann ein anderer Warter das Lock laengst abgeraeumt, neu angelegt
+    und den kritischen Abschnitt betreten haben. Ohne den Vergleich raeumte man ihm sein
+    frisches Lock weg — und sein eigenes `finally` traefe danach einen Dritten: aus der
+    Sperre wuerde eine Kaskade. Deshalb ist der Merker-Inhalt der Ausweis, `erwartet=None`
+    heisst "es lag keiner da". Der Merker MUSS vor dem `rmdir` weg (nicht leeres
+    Verzeichnis) — ein Lock von einem fremden Rechner waere sonst gar nicht mehr raeumbar.
+    """
+    if _merker_lesen(lockdir) != erwartet:
+        return                                    # gehoert inzwischen jemand anderem
+    if erwartet is not None:
+        with contextlib.suppress(OSError):
+            os.remove(os.path.join(lockdir, _HALTER))
     os.rmdir(lockdir)
 
 
@@ -136,19 +158,21 @@ def datei(pfad: str, stale: float = STALTES_ALTER):
     laeuft der Block ungeschuetzt weiter — aber mit einer Zeile im Protokoll, nicht still:
     ein lautlos uebersprungenes Lock ist von einem gehaltenen nicht zu unterscheiden.
 
-    **Was #175 NICHT aufhebt:** haelt ein nachweislich lebender Halter laenger als
-    `stale + _AUFGEBEN_PUFFER_S` durch, laeuft der Warter ebenfalls ungeschuetzt weiter — er
-    nimmt ihm das Lock nur nicht mehr weg (kein Kaskadeneffekt: der Halter raeumt danach sein
-    eigenes Verzeichnis ab, nicht das eines Dritten). Auf die Obergrenze zu verzichten hiesse,
-    auf eine wiederverwendete PID unbegrenzt zu warten, und ein Haenger ist schlimmer als eine
-    ungeschuetzte Sequenz (#191) — erst recht auf dem Request-Pfad (`settings.save`).
+    **Die Lebendpruefung schaltet die Uhr nicht ab, sie stellt sie nur hintan** (#175): wer
+    sich als lebend meldet, wird nicht angetastet — bis der Warter laenger gewartet hat, als
+    ein kritischer Abschnitt ueberhaupt dauern kann. Dann greift er EINMAL erzwungen zu und
+    laeuft erst danach ungeschuetzt weiter. Das ist der Preis fuer die wiederverwendete PID:
+    ohne diesen Griff koennte ein verwaistes Lock mit einer neu vergebenen PID **dauerhaft**
+    jeden Aufruf die volle Frist kosten und ihn danach ungeschuetzt laufen lassen — schlimmer
+    als der Fall, den die Pruefung verhindert.
     """
     lockdir = pfad + ".lock"
-    merker = os.path.join(lockdir, _HALTER)
+    mein_merker = None                # was in UNSEREM Lock steht (None = nichts geschrieben)
     gehalten = False
     seit = time.time()
     hakelig_seit = None
     gemeldet = False
+    erzwungen = False
     while True:
         try:
             os.mkdir(lockdir)             # atomar auf allen Plattformen -> Lock erworben
@@ -156,9 +180,11 @@ def datei(pfad: str, stale: float = STALTES_ALTER):
             # Best effort: scheitert das Schreiben, verhaelt sich das Lock wie vor #175
             # (keine Auskunft -> die Frist entscheidet). Die Sperre darf am Merker nicht
             # haengen, sie ist auch ohne ihn gueltig.
+            inhalt = f"{os.getpid()} {platform.node()}".encode("utf-8", "replace")
             with contextlib.suppress(OSError):
-                with open(merker, "w", encoding="utf-8") as f:
-                    f.write(f"{os.getpid()} {platform.node()}")
+                with open(os.path.join(lockdir, _HALTER), "wb") as f:
+                    f.write(inhalt)
+                mein_merker = inhalt
             break
         except FileExistsError:
             hakelig_seit = None
@@ -189,11 +215,12 @@ def datei(pfad: str, stale: float = STALTES_ALTER):
                 # da ist. Umgekehrt ist ein `taskkill /F /T`-Opfer SOFORT erkennbar und muss
                 # seine Frist nicht absitzen (beim pip-Lock 150 s). Nur "keine Auskunft"
                 # entscheidet noch die Uhr.
-                lebt = _halter_lebt(lockdir)
+                fremd = _merker_lesen(lockdir)
+                lebt = _lebt_laut(fremd)
                 if lebt is False or (lebt is None
                                      and time.time() - zustand.st_mtime > stale):
                     with contextlib.suppress(OSError):
-                        _wegraeumen(lockdir)
+                        _wegraeumen(lockdir, fremd)
         except OSError as e:
             # NICHT sofort aufgeben: sonst faellt die Sperre genau unter Konkurrenz aus.
             jetzt = time.time()
@@ -207,15 +234,33 @@ def datei(pfad: str, stale: float = STALTES_ALTER):
             print(f"[sperre] warte auf {lockdir} (raeume nach {stale:.0f}s auf, falls "
                   f"verwaist) …", flush=True)
         if time.time() - seit > stale + _AUFGEBEN_PUFFER_S:
-            print(f"[sperre] {lockdir} laesst sich nicht uebernehmen — ungeschuetzt weiter",
-                  flush=True)
-            break
+            if erzwungen:
+                print(f"[sperre] {lockdir} laesst sich nicht uebernehmen — ungeschuetzt "
+                      f"weiter", flush=True)
+                break
+            # Ein Halter, der sich als lebend MELDET und dabei laenger haelt, als ein
+            # kritischer Abschnitt ueberhaupt dauern kann (Mikrosekunden bei settings/projekt,
+            # hoechstens PIP_TIMEOUT beim pip-Lauf), ist wahrscheinlicher eine
+            # WIEDERVERWENDETE PID als ein langsamer Prozess. Ohne diesen einen erzwungenen
+            # Griff kostete so ein Lock danach JEDEN Aufruf dauerhaft diese Frist und liesse
+            # ihn anschliessend ungeschuetzt laufen — die Uhr ist der Rueckfall der
+            # Lebendpruefung, nicht durch sie abgeschaltet.
+            erzwungen = True
+            print(f"[sperre] {lockdir} wird uebernommen (der gemeldete Halter haelt laenger, "
+                  f"als ein Abschnitt dauern kann) …", flush=True)
+            with contextlib.suppress(OSError):
+                _wegraeumen(lockdir, _merker_lesen(lockdir))
+            continue
         time.sleep(0.01)
     try:
         yield
     finally:
         if gehalten:
+            # Auch hier zaehlt der Ausweis: wurde uns das Lock zwischendurch weggenommen und
+            # neu vergeben, raeumten wir sonst das Lock des NACHFOLGERS ab — der naechste
+            # Warter spaziert in dessen kritischen Abschnitt hinein, und dessen `finally`
+            # trifft wieder einen anderen. Genau diese Kaskade ist reproduziert worden.
             try:
-                _wegraeumen(lockdir)
+                _wegraeumen(lockdir, mein_merker)
             except OSError:
                 pass
