@@ -197,7 +197,10 @@ def test_ejs_wird_an_den_metadaten_gemessen(monkeypatch):
     # yt-dlp zufaellig `yt-dlp-ejs==0.8.0` verlangt — und fiele um, sobald yt-dlp den Pin
     # anhebt (im CI faellt es nie auf, dort gibt es gar kein yt-dlp). Dieselbe
     # Umgebungs-Kopplung, gegen die oben schon die Fixture geschrieben wurde.
-    monkeypatch.setattr(yu.metadata, "requires", lambda name: [])
+    # Die Zeile deklariert ejs, damit der „fehlt"-Zweig unten ueberhaupt flaggt (#184: ohne
+    # Anforderung gibt es nichts auszurichten).
+    monkeypatch.setattr(yu.metadata, "requires",
+                        lambda name: ["yt-dlp-ejs==0.8.0; extra == 'default'"])
     assert _ECHTES_EJS_UNTAUGLICH() is False
 
     def fehlt(name):
@@ -418,6 +421,73 @@ def test_fehlendes_ejs_schlaegt_den_pin(monkeypatch):
 
     monkeypatch.setattr(yu.metadata, "version", fehlt)
     monkeypatch.setattr(yu.metadata, "requires", lambda name: ["yt-dlp-ejs==0.8.0"])
+    assert _ECHTES_EJS_UNTAUGLICH() is True
+
+
+# --- Fehlt es, muss yt-dlp es ueberhaupt verlangen (#184) --------------------
+
+def _ohne_ejs(monkeypatch, requires):
+    """ejs ist NICHT installiert; yt-dlp deklariert `requires`."""
+    def fehlt(name):
+        if name == "yt-dlp-ejs":
+            raise yu.metadata.PackageNotFoundError(name)
+        return "2026.8.12"
+
+    monkeypatch.setattr(yu.metadata, "version", fehlt)
+    monkeypatch.setattr(yu.metadata, "requires", lambda name: requires)
+
+
+def test_ohne_ejs_anforderung_kein_flag(monkeypatch):
+    """#184: verlangt das installierte yt-dlp gar kein ejs, gibt es nichts auszurichten.
+
+    Vorher flaggte der „gar nicht da"-Zweig bedingungslos — als einziger Zweig umging er die
+    Regel, die der Rest der Funktion durchsetzt. Die Folge war der Dauerlauf, den dieses Modul
+    ueberall sonst vermeidet: `pip install -U yt-dlp[default]` warnt bei einem yt-dlp ohne
+    dieses Extra nur („does not provide the extra") und endet mit 0 — ejs kommt nie, der Flag
+    ginge nie weg."""
+    _ohne_ejs(monkeypatch, ["requests; extra == 'default'"])
+    assert _ECHTES_EJS_UNTAUGLICH() is False
+    _ohne_ejs(monkeypatch, None)
+    assert _ECHTES_EJS_UNTAUGLICH() is False
+
+
+@pytest.mark.parametrize("spec", ["==0.8.0", ">=0.8.0", ">=0.8.0,<0.9", "~=0.8.0", ""])
+def test_fehlendes_ejs_bleibt_geflaggt_bei_JEDEM_specifier(monkeypatch, spec):
+    """Der Kern von #184 und zugleich seine Falle. Der naheliegende Einzeiler
+    (`_ejs_pin() is not None` als Vorbedingung) haette #179 an die bewusst enge `==`-Regel
+    aus #182 gekoppelt — bei einem gelockerten Pin faende `_ejs_pin()` nichts, und ein
+    WIRKLICH fehlendes ejs waere still nicht mehr erkannt worden.
+
+    Deshalb eine zweite, schwaechere Frage: „verlangt yt-dlp ejs ueberhaupt?" — Name und
+    Extra-Marker, ohne jede Bedingung an den Specifier."""
+    _ohne_ejs(monkeypatch, [f"yt-dlp-ejs{spec}; extra == 'default'"])
+    assert _ECHTES_EJS_UNTAUGLICH() is True
+
+
+def test_fehlendes_ejs_nur_in_FREMDEM_extra_zaehlt_nicht(monkeypatch):
+    """Steht die Anforderung nur unter einem Extra, das wir nicht installieren, holt unser
+    `pip install -U yt-dlp[default]` das Paket auch nicht — flaggen waere wieder ein Flag
+    ohne Ende. Dieselbe Regel wie beim Pin."""
+    _ohne_ejs(monkeypatch, ["yt-dlp-ejs==0.8.0; extra == 'pin'"])
+    assert _ECHTES_EJS_UNTAUGLICH() is False
+
+
+def test_fremdes_paket_zaehlt_auch_beim_FEHLEN_nicht(monkeypatch):
+    """`my-yt-dlp-ejs` ist nicht unser Paket — auch nicht in der schwaecheren Frage."""
+    _ohne_ejs(monkeypatch, ["my-yt-dlp-ejs==0.8.0; extra == 'default'"])
+    assert _ECHTES_EJS_UNTAUGLICH() is False
+
+
+def test_paketname_mit_ANHANG_zaehlt_nicht(monkeypatch):
+    """Der Anker schuetzt den Zeilenanfang, die Wortgrenze das Ende: `yt-dlp-ejs2` waere
+    ohne `\\b` unser Paket. Auch das ist die stille Fehlrichtung — ein fremdes Paket setzte
+    dann einen Flag, den `pip install -U yt-dlp[default]` nie loeschen kann.
+
+    Die eckige Klammer muss dagegen durchkommen (`yt-dlp-ejs[deno]` ist dasselbe Paket mit
+    Extra), deshalb `\\b` und nicht `$` oder `\\s`."""
+    _ohne_ejs(monkeypatch, ["yt-dlp-ejs2==0.9.0; extra == 'default'"])
+    assert _ECHTES_EJS_UNTAUGLICH() is False
+    _ohne_ejs(monkeypatch, ["yt-dlp-ejs[deno]==0.9.0; extra == 'default'"])
     assert _ECHTES_EJS_UNTAUGLICH() is True
 
 
