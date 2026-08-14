@@ -46,6 +46,16 @@ _HAKELIG_S = 0.5
 # Ab wann ein Warten so lang ist, dass es erklaert gehoert (verwaistes Lock nach einem
 # `taskkill /F /T` auf den Job-Prozessbaum — das `finally` unten laeuft dann nie).
 _LAUT_AB_S = 1.0
+# Wie lange UEBER `stale` hinaus gewartet wird, bevor die Schleife aufgibt. Wer laenger
+# wartet, als das Lock ueberhaupt gelten kann, kommt an das Aufraeumen nicht mehr heran:
+# `os.rmdir` scheitert an einem nicht leeren Lock-Verzeichnis (Sync-Konfliktdatei,
+# `desktop.ini`, Virenscanner-Handle) genauso wie an einer Datei am Lock-Pfad, und die
+# Schleife hatte sonst keine Obergrenze — derselbe Haenger wie #191 ueber den zweiten Weg,
+# nachgemessen. Diese Frist deckt die ganze KLASSE; der Typ-Test unten deckt nur die
+# gemeldete Form, dafuer aber sofort, und das zaehlt auf dem Request-Pfad
+# (`settings.save`, `POST /api/settings/ytdlp/update`). Ein legitimer Warter laeuft hier
+# nie hinein: bis dahin hat der Verwaist-Zweig ein abgelaufenes Lock laengst abgeraeumt.
+_AUFGEBEN_PUFFER_S = 5.0
 
 
 @contextlib.contextmanager
@@ -103,6 +113,10 @@ def datei(pfad: str, stale: float = STALTES_ALTER):
             gemeldet = True
             print(f"[sperre] warte auf {lockdir} (raeume nach {stale:.0f}s auf, falls "
                   f"verwaist) …", flush=True)
+        if time.time() - seit > stale + _AUFGEBEN_PUFFER_S:
+            print(f"[sperre] {lockdir} laesst sich nicht uebernehmen — ungeschuetzt weiter",
+                  flush=True)
+            break
         time.sleep(0.01)
     try:
         yield
