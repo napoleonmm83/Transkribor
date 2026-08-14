@@ -280,6 +280,8 @@ def test_pin_auch_in_abweichender_schreibweise(monkeypatch, name):
     ("=0.8.0", "aus `===0.8.0` (willkuerliche Gleichheit), fuehrendes ="),
     ("0.8.0.post1", "keine reine Zahlenfolge"),
     ("0.8²", "hochgestellte Ziffer: isdigit() sagt JA, int() wirft"),
+    ("0.-8", "int() nimmt '-8' KLAGLOS — ohne isdecimal() waere das (0, -8)"),
+    ("0.+8", "dito fuer '+8'"),
 ])
 def test_nicht_vergleichbarer_pin_wird_NICHT_geflaggt(monkeypatch, pin, warum):
     """Ein Pin, dessen Text nie mit einer installierten Fassung uebereinstimmen KANN, ist
@@ -345,6 +347,44 @@ def test_zeile_mit_WEITEREN_markern_gilt_nicht(monkeypatch):
                ['yt-dlp-ejs==0.9.0; extra == \'default\' and python_version >= "3.14"'])
     assert yu._ejs_pin() is None
     assert _ECHTES_EJS_UNTAUGLICH() is False
+
+
+@pytest.mark.parametrize("marker", ['extra == "default"', "EXTRA == 'DEFAULT'",
+                                    "extra=='default'"])
+def test_marker_auch_in_abweichender_schreibweise(monkeypatch, marker):
+    """Dieselbe Vorsorge wie beim Paketnamen — und aus demselben Grund getestet statt nur
+    behauptet: `_NUR_DEFAULT_RE` traegt `['\\"]` und `IGNORECASE`, beide hatten NULL
+    Abdeckung. Gemessen: die Regex auf einfache Anfuehrungszeichen verengt liess alle 50
+    Tests gruen, `IGNORECASE` entfernt ebenfalls.
+
+    Die Fehlrichtung ist die stille: schriebe ein Build-Backend `extra == "default"`, gaebe
+    `_gilt_fuer_uns` False, `_ejs_pin()` None, und die ganze #182-Pruefung fiele lautlos aus
+    — ohne Logzeile, ohne roten Test. Beim Paketnamen zwei Zeilen darueber steht genau dieses
+    Argument; bei der Schwesterregex war es nicht mitgezogen worden.
+    """
+    _metadaten(monkeypatch, "0.8.0", [f"yt-dlp-ejs==0.9.0; {marker}"])
+    assert _ECHTES_EJS_UNTAUGLICH() is True
+
+
+def test_release_wirft_nicht_bei_absurd_langer_zahl():
+    """`isdecimal()` garantiert KEIN gelingendes `int()`: ab `sys.get_int_max_str_digits()`
+    (Default 4300) wirft `int()` auch bei lauter Dezimalziffern — gemessen mit 5000 Ziffern,
+    „Exceeds the limit (4300 digits)". Der Kommentar im Code behauptete das Gegenteil.
+
+    Ohne das `try/except` riss die Ausnahme den ganzen URL-Import ab: `_release` ->
+    `_ejs_untauglich` -> `faellig` -> `automatisch` -> `fetch._hole_yt_dlp()`, und dort gibt
+    es keinen Schutz. Best effort heisst, dass hier nichts fliegt.
+    """
+    assert yu._release("0." + "1" * 5000) is None
+
+
+def test_das_gepruefte_extra_ist_das_installierte():
+    """`_PAKET` bestimmt, welches Extra pip installiert; `_NUR_DEFAULT_RE` bestimmt, welchem
+    Extra-Pin wir glauben. Beide muessen dasselbe Extra nennen — verbunden ist da nichts.
+    Wer `_PAKET` aendert, laese sonst still den falschen Pin: fail-open, also weder Test noch
+    Logzeile. Ein Waechter statt einer Abstraktion, die sich hier nicht lohnt."""
+    assert "default" in yu._PAKET
+    assert yu._NUR_DEFAULT_RE.fullmatch("extra == 'default'")
 
 
 def test_fremdes_paket_mit_passendem_namensende_zaehlt_nicht(monkeypatch):
