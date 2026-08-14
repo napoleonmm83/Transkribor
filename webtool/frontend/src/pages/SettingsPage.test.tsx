@@ -246,6 +246,15 @@ describe('SettingsPage', () => {
     expect(await screen.findByText(/Nicht installiert/)).toBeInTheDocument()
   })
 
+  it('unterscheidet unlesbare Metadaten von "nicht installiert"', async () => {
+    // Beide Zustände liefern `version: null`. Vor #189 stand hier "steht damit nicht zur
+    // Verfügung" — das Gegenteil dessen, was der Nutzer tun kann: der Import läuft, nur die
+    // Selbstaktualisierung ist ausgesetzt. Die Anzeige darf nicht lügen.
+    zeige({ ytdlp: { version: null, unlesbar: true, geprueft: '', auto: true, env: false } })
+    expect(await screen.findByText(/Fassung nicht lesbar/)).toBeInTheDocument()
+    expect(screen.queryByText(/Nicht installiert/)).not.toBeInTheDocument()
+  })
+
   it('speichert den Haken als "0"/"1"', async () => {
     vi.mocked(api.saveSettings).mockResolvedValue({ ...BASIS, ytdlp_auto: '0' })
     zeige()
