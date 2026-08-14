@@ -67,8 +67,9 @@ export function Transcript({ doc, loading, activeId, onPlaySeg, onPlayTurn, upda
         {doc.selbstgeheilt && (
           <div className="mb-8 rounded-lg border border-amber-500/50 bg-amber-500/10 p-4 text-sm">
             <span className="font-medium">Deine gespeicherte Fassung war nicht lesbar.</span>{' '}
-            Du siehst das Rohtranskript — Korrekturen, Sprechernamen und Anmerkungen daraus
-            fehlen. Überschrieben wird die beschädigte Datei nicht: sie liegt als{' '}
+            Du siehst das Rohtranskript — alles, was daran bearbeitet war, fehlt darin:
+            Korrekturen, Sprechernamen, Kontext, Zusammenfassung und Anmerkungen.
+            Überschrieben wird die beschädigte Datei nicht: sie liegt als{' '}
             <code className="rounded bg-muted px-1.5 py-0.5 font-mono break-all">{doc.base}.edit.json.kaputt</code>{' '}
             im Transkripte-Ordner, sobald du hier etwas speicherst.
           </div>
