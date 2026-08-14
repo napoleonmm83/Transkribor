@@ -8,6 +8,11 @@ App-Update ersetzt die .exe, nicht die venv (die liegt in `userData` und ueberle
 kaputtgehen MUSS: ihre Extraktoren laufen YouTube und Instagram hinterher (#162).
 `yt-dlp>=…` in requirements.txt schuetzt nur Neuinstallationen, Renovate nur das Repo.
 
+**Dasselbe trifft jedes Paket, das NACH der Installation in requirements.txt dazukommt** —
+`yt-dlp-ejs` (ueber `yt-dlp[default]`, #178) war der erste Fall: die Fassung ist frisch, der
+Loeser hat trotzdem keine Skripte, und der Kalenderweg sieht davon nichts (#179). `faellig()`
+fragt deshalb nicht nur nach dem Datum, sondern auch danach, ob das Paket ueberhaupt da ist.
+
 Zwei Wege hier hinein:
 - `automatisch()` — der Kalenderweg, gerufen vor dem ersten Zugriff auf yt-dlp.
 - `automatisch(erzwingen=True)` — die Selbstheilung, gerufen wenn ein Download so
@@ -30,6 +35,8 @@ from . import settings, sperre
 INTERVALL_TAGE = 14
 PIP_TIMEOUT = 120
 MERKER = "ytdlp_geprueft"
+# Das Paket mit den Loeserskripten fuer YouTubes JS-Challenge; kommt ueber `yt-dlp[default]`.
+_EJS = "yt-dlp-ejs"
 
 
 def _heute() -> dt.date:
@@ -47,6 +54,19 @@ def fassung() -> str | None:
         return metadata.version("yt-dlp")
     except metadata.PackageNotFoundError:
         return None
+
+
+def _ejs_fehlt() -> bool:
+    """Fehlen die Loeserskripte (`yt-dlp-ejs`) in dieser Umgebung?
+
+    Wie `fassung()` von der PLATTE gelesen, nicht importiert — aus demselben Grund: ein
+    geladenes Modul laege beim pip-Lauf danach schon im Speicher.
+    """
+    try:
+        metadata.version(_EJS)
+    except metadata.PackageNotFoundError:
+        return True
+    return False
 
 
 def _als_datum(v: str | None) -> dt.date | None:
@@ -101,7 +121,8 @@ def geprueft() -> dt.date | None:
 
 
 def faellig() -> bool:
-    """Fassung aelter als INTERVALL_TAGE **und** letzte Pruefung laenger her.
+    """Fassung aelter als INTERVALL_TAGE **und** letzte Pruefung laenger her — ODER die
+    Loeserskripte fehlen ganz (#179, dann zaehlt nur der Merker des Tages).
 
     Der Merker ist noetig, nicht Zierde: yt-dlp veroeffentlicht etwa monatlich, allein an der
     Fassung gemessen waere sie nach 14 Tagen DAUERHAFT faellig — und jeder Import liefe in
@@ -113,10 +134,22 @@ def faellig() -> bool:
         # der Import meldet dann ehrlich "yt-dlp ist nicht installiert".
         return False
     heute = _heute()
+    g = geprueft()
+    if _ejs_fehlt():
+        # #179: `yt-dlp[default]` kam erst mit #178 in die requirements.txt, und die liest
+        # eine installierte App nie wieder (`setup.js:venvVollstaendig()` winkt die venv
+        # durch, ein App-Update ersetzt die .exe, nicht die venv). Am Kalender gemessen
+        # faellt das nie auf: die Fassung kann taufrisch sein, der Loeser hat trotzdem keine
+        # Skripte — also der Stand vor #170, samt demselben sporadischen 403.
+        #
+        # Ein FEHLENDES Paket ist keine Frage des Kalenders: pip hat hier etwas zu holen,
+        # der 14-Tage-Takt waere die falsche Bremse. Ganz ohne Bremse zahlte dafuer ein
+        # Rechner ohne Netz den pip-Fehlschlag bei JEDEM Import — deshalb greift der Merker
+        # auf TAGES-, nicht auf Intervallbasis.
+        return g is None or g < heute
     d = _als_datum(v)
     if d is not None and (heute - d).days < INTERVALL_TAGE:
         return False
-    g = geprueft()
     return g is None or (heute - g).days >= INTERVALL_TAGE
 
 
