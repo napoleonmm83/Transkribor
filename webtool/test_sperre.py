@@ -5,6 +5,7 @@ gemessen). Hier geht es um die Raender, die dort nicht auftauchen — und die al
 gemeinsam haben, dass ein Fehler in ihnen die Sperre **still** ausser Kraft setzt.
 """
 import builtins
+import contextlib
 import os
 import platform
 import subprocess
@@ -575,7 +576,12 @@ def test_freigabe_faesst_ein_inzwischen_FREMDES_lock_nicht_an(tmp_path, monkeypa
 
     monkeypatch.setattr(sperre, "_RMDIR_PAUSE_S", 0.001)
     monkeypatch.setattr(os, "rmdir", tauscht)
-    sperre._wegraeumen(lock, meiner)
+    # Die beiden Plattformen kommen unterschiedlich zum selben Ergebnis, und beide sind
+    # richtig: Windows kehrt frueh zurueck (die Inode hat gewechselt), POSIX gibt nach
+    # `_RMDIR_VERSUCHE` mit OSError auf (der fremde Merker liegt noch da, also wird das
+    # Verzeichnis nie leer). Der Aufrufer schluckt das ohnehin — hier zaehlt das ERGEBNIS.
+    with contextlib.suppress(OSError):
+        sperre._wegraeumen(lock, meiner)
     assert os.path.isdir(lock)            # das fremde Lock steht noch
     assert os.path.exists(os.path.join(lock, sperre._HALTER))   # samt seinem Merker
 
