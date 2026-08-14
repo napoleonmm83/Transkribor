@@ -1312,3 +1312,18 @@ def test_edit_json_ohne_objekt_heilt_sich_ebenfalls(client, tmp_path, capsys):
     assert r.status_code == 200, r.text                       # kein 500 nach dem Umbenennen
     assert (t / "Neu.edit.json").exists()
     assert "nicht nachgezogen" in capsys.readouterr().out
+
+
+def test_verschwundene_edit_json_faellt_auf_die_roh_json(client, tmp_path, monkeypatch):
+    """Zwischen `os.path.exists` und dem `open` liegt ein Fenster: `_datei_weg` (Loeschen,
+    Neu-Transkribieren) raeumt die edit.json weg, waehrend ein offener Editor pollt. Der
+    `FileNotFoundError` ist ein OSError, kein ValueError — er fiel also an der Selbstheilung
+    vorbei und gab 500. Das Rennen wird hier deterministisch gestellt: `exists` sagt ja, die
+    Datei ist trotzdem nicht da (CodeRabbit-CLI an PR #195)."""
+    from webtool import app as app_mod
+    echt = app_mod.os.path.exists
+    monkeypatch.setattr(app_mod.os.path, "exists",
+                        lambda p: True if p.endswith("S1.edit.json") else echt(p))
+    r = client.get("/api/projects/Demo/files/S1")
+    assert r.status_code == 200, r.text
+    assert r.json()["segments"][0]["text"].strip() == "Hallo Welt."

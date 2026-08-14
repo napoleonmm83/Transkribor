@@ -143,7 +143,11 @@ def load_or_build_doc(project: str, base: str) -> dict:
     if os.path.exists(epath):
         try:
             return _json_objekt(epath)
-        except ValueError:
+        except (OSError, ValueError):
+            # OSError deckt das Fenster zwischen `os.path.exists` und dem `open`: `_datei_weg`
+            # (Loeschen, Neu-Transkribieren) raeumt die edit.json weg, waehrend ein offener
+            # Editor pollt. Der Rueckfall unten ist fuer "keine edit.json" ohnehin der
+            # richtige Weg — vorher gab genau dieses Rennen 500.
             # ValueError, nicht JSONDecodeError: sind die BYTES nicht als UTF-8 dekodierbar,
             # wirft schon das Lesen im Textmodus einen UnicodeDecodeError — ebenfalls ein
             # ValueError, aber KEIN JSONDecodeError (#190, gemessen). Vorher gab genau diese
