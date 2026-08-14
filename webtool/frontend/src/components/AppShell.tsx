@@ -140,8 +140,20 @@ function Rahmen({ children }: { children: ReactNode }) {
             Unterseite ist kein seitenweiter Kopf.
             **`EditorView` musste dafuer sein eigenes `<main>` abgeben** (zwei ineinander sind
             ungueltig); die Huelle traegt es jetzt fuer alle Seiten. */}
+        {/* `relative` ist kein Schmuck, sondern die zweite Haelfte von `overflow-auto`: `main`
+            ist der EINE Bildlaufbehaelter des Inhalts, ohne Positionierung aber kein
+            Bezugsrahmen — ein absolut positioniertes Kind sucht sich dann den Viewport und wird
+            von `overflow-auto` NICHT geklemmt, weil das Klemmen nur fuer Nachfahren gilt, deren
+            Bezugsrahmen INNERHALB liegt. Genau daran hing die verschobene Huelle: `sr-only` IST
+            `position:absolute`, und das `sr-only` im Modell-Neuladen-Knopf der Einstellungen sass
+            an seiner Flussposition bei y=925 in einem 858 px hohen Fenster. Damit wurde das
+            DOKUMENT scrollbar (`documentElement.scrollHeight` 926 gegen `clientHeight` 858,
+            gemessen) — und ein Mausrad ueber der Leiste, die bei vier Projekten selbst nichts zu
+            scrollen hat, schob die ganze Huelle hoch: Titelzeile UND Statuszeile wanderten mit.
+            Ein Kasten am Knopf haette nur diese eine Stelle geheilt; `sr-only` in einem Knopf ist
+            das Normalmuster, der naechste Fall kaeme von selbst. */}
         <main id="inhalt" tabIndex={-1} ref={inhalt}
-          className="min-h-0 overflow-auto outline-none focus-visible:ring-2 focus-visible:ring-ring">{children}</main>
+          className="relative min-h-0 overflow-auto outline-none focus-visible:ring-2 focus-visible:ring-ring">{children}</main>
         <StatusBar />
       </div>
     </>
