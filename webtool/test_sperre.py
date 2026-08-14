@@ -5,10 +5,25 @@ gemessen). Hier geht es um die Raender, die dort nicht auftauchen — und die al
 gemeinsam haben, dass ein Fehler in ihnen die Sperre **still** ausser Kraft setzt.
 """
 import os
+import platform
+import subprocess
+import sys
 import threading
 import time
 
 from webtool import sperre
+
+
+def _merker(lockdir: str, pid: int, wirt: str | None = None) -> None:
+    """Schreibt den Halter-Merker von Hand — so, wie ihn ein FREMDER Prozess hinterliesse."""
+    with open(os.path.join(lockdir, sperre._HALTER), "w", encoding="utf-8") as f:
+        f.write(f"{pid} {platform.node() if wirt is None else wirt}")
+
+
+def _lebender_prozess() -> subprocess.Popen:
+    """Lange genug, dass er keinen Test rettet, indem er mittendrin von selbst endet — mit
+    30 s blieb die Wirt-Pruefung unten gruen, obwohl sie entfernt war (nachgemessen)."""
+    return subprocess.Popen([sys.executable, "-c", "import time; time.sleep(300)"])
 
 
 def test_lock_wird_gehalten_und_wieder_freigegeben(tmp_path):
@@ -165,3 +180,127 @@ def test_weggeraeumtes_lock_faellt_nicht_ungeschuetzt_durch(tmp_path, monkeypatc
     with sperre.datei(ziel, stale=60):
         assert os.path.isdir(ziel + ".lock")      # doch noch erworben, nicht uebersprungen
     assert "ungeschuetzt" not in capsys.readouterr().out
+
+
+# --- Lebendpruefung des Halters (#175) -------------------------------------------------
+
+def test_lebendpruefung_toetet_den_geprueften_prozess_nicht():
+    """Die Lebendpruefung darf den Halter nicht anfassen — sonst erschiesst ausgerechnet der
+    Warter den Prozess, dessen kritischen Abschnitt er schuetzen soll.
+
+    Deshalb steht auf Windows ctypes/OpenProcess und NICHT `os.kill(pid, 0)`: 0 und 1 sind
+    dort `CTRL_C_EVENT`/`CTRL_BREAK_EVENT`, `os.kill` ist also eine Konsolen-Signal-API und
+    kein Lebendtest. Gemessen auf 3.11.15/3.13.15/3.14.7: `sig 0` liess den Kindprozess zwar
+    laufen, `sig 1` riss die aufrufende Shell mit (Exit 58), und die Doku sagt fuer alles
+    ausser CTRL_* weiterhin TerminateProcess zu. Auf diese Zusage stuetzt sich hier nichts.
+    """
+    p = _lebender_prozess()
+    try:
+        assert sperre._prozess_lebt(p.pid) is True
+        assert p.poll() is None, "die Lebendpruefung hat den geprueften Prozess beendet"
+    finally:
+        p.kill()
+        p.wait()
+    assert sperre._prozess_lebt(p.pid) is False
+    assert sperre._prozess_lebt(os.getpid()) is True
+
+
+def test_das_gehaltene_lock_nennt_seinen_halter(tmp_path):
+    """Schreiber und Leser des Merkers muessen dasselbe Format sprechen — tun sie es nicht,
+    faellt die ganze Pruefung auf 'keine Auskunft' zurueck, und zwar STILL: das Lock
+    verhielte sich exakt wie vor #175."""
+    ziel = str(tmp_path / "x.json")
+    with sperre.datei(ziel):
+        assert sperre._halter_lebt(ziel + ".lock") is True
+
+
+def test_lebender_halter_wird_nicht_weggeraeumt(tmp_path, monkeypatch, capsys):
+    """#175: die Frist zaehlt ab dem `mkdir`, nicht ab der letzten Regung des Halters — geht
+    der Rechner mitten im kritischen Abschnitt schlafen, laeuft die Wanduhr weiter und er
+    nicht. Vorher nahm der Warter dem LEBENDEN Halter daraufhin das Lock weg, und beide
+    schrieben gleichzeitig (genau die Race, gegen die die Sperre da ist).
+
+    Gemessen an einem echten Prozess, nicht an einer Attrappe: die Lebendpruefung ist der
+    einzige Teil dieses Moduls, der ueberhaupt aus Python heraussieht.
+    """
+    monkeypatch.setattr(sperre, "_AUFGEBEN_PUFFER_S", 0.05)
+    ziel = str(tmp_path / "x.json")
+    lock = ziel + ".lock"
+    os.mkdir(lock)
+    halter = _lebender_prozess()
+    try:
+        _merker(lock, halter.pid)
+        alt = time.time() - 100
+        os.utime(lock, (alt, alt))                # laengst "verwaist" nach der Frist
+        gelaufen = []
+
+        def lauf():
+            with sperre.datei(ziel, stale=0.0):
+                gelaufen.append(1)
+
+        faden = threading.Thread(target=lauf, daemon=True)
+        faden.start()
+        faden.join(5)
+        assert not faden.is_alive(), "sperre.datei() haengt am lebenden Halter"
+        assert gelaufen == [1]                    # fail-open bleibt die Regel (#191)
+        assert os.path.isdir(lock), "dem lebenden Halter wurde das Lock weggenommen"
+        assert os.path.exists(os.path.join(lock, sperre._HALTER))
+        assert "laesst sich nicht uebernehmen" in capsys.readouterr().out
+    finally:
+        halter.kill()
+        halter.wait()
+
+
+def test_toter_halter_muss_die_frist_nicht_absitzen(tmp_path):
+    """Die Kehrseite derselben Auskunft: ein `taskkill /F /T`-Opfer ist sofort erkennbar —
+    dort auf die Frist zu warten (beim pip-Lock 150 s) heisst, einem Prozess nachzutrauern,
+    den es nachweislich nicht mehr gibt. Die mtime ist hier FRISCH, die Frist also nicht
+    abgelaufen; ohne die Lebendpruefung wartet dieser Lauf volle 60 s.
+
+    Im Faden mit `join`, weil ein zu langes Warten sonst keinen Test rot macht (#191).
+    """
+    tot = subprocess.Popen([sys.executable, "-c", "pass"])
+    tot.wait()                                    # Popen haelt das Handle -> PID bleibt gueltig
+    ziel = str(tmp_path / "x.json")
+    lock = ziel + ".lock"
+    os.mkdir(lock)
+    _merker(lock, tot.pid)
+    gehalten = []
+
+    def lauf():
+        with sperre.datei(ziel, stale=60):
+            gehalten.append(os.path.isdir(lock))
+
+    faden = threading.Thread(target=lauf, daemon=True)
+    faden.start()
+    faden.join(5)
+    assert not faden.is_alive(), "wartet die Frist auf einen Halter ab, den es nicht mehr gibt"
+    assert gehalten == [True]                     # erworben, nicht bloss ungeschuetzt weiter
+    assert not os.path.exists(lock)
+
+
+def test_merker_von_einem_anderen_rechner_gilt_nicht(tmp_path, monkeypatch):
+    """Liegt das Lock auf einem geteilten Ordner, kann der Merker von einem ANDEREN Rechner
+    stammen — dort sagt eine lokale PID nichts, im schlimmsten Fall das Gegenteil (die Zahl
+    gehoert hier einem beliebigen fremden Prozess). Dann entscheidet die Frist wie vor #175.
+
+    `stale=0` + kurzer Puffer sind hier keine Beschleunigung, sondern der Wirkungsnachweis:
+    ohne die Wirt-Pruefung gilt der fremde Merker als lebender Halter, das abgelaufene Lock
+    bleibt liegen, und der Lauf faellt in den ungeschuetzten Ausstieg — dann ist das
+    Verzeichnis danach noch da.
+    """
+    monkeypatch.setattr(sperre, "_AUFGEBEN_PUFFER_S", 0.05)
+    ziel = str(tmp_path / "x.json")
+    lock = ziel + ".lock"
+    os.mkdir(lock)
+    halter = _lebender_prozess()
+    try:
+        _merker(lock, halter.pid, wirt="ein-anderer-rechner")
+        alt = time.time() - 100
+        os.utime(lock, (alt, alt))
+        with sperre.datei(ziel, stale=0.0):
+            assert os.path.isdir(lock)            # erworben, nicht vom fremden Merker gehalten
+        assert not os.path.exists(lock)
+    finally:
+        halter.kill()
+        halter.wait()
