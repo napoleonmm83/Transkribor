@@ -16,6 +16,7 @@ zweimal zu fuehren heisst, sie beim naechsten Mal an einer Stelle falsch zu aend
 """
 import contextlib
 import os
+import stat
 import time
 
 # Ab wann ein liegengebliebenes Lock als verwaist gilt (Prozess im kritischen Abschnitt
@@ -72,10 +73,24 @@ def datei(pfad: str, stale: float = STALTES_ALTER):
             # einen Job — dort laeuft kein `finally`.) Dann aufraeumen und erneut versuchen.
             # Ein lebender Halter wird hier nicht weggerissen.
             try:
-                if time.time() - os.stat(lockdir).st_mtime > stale:
-                    os.rmdir(lockdir)
+                zustand = os.lstat(lockdir)
             except OSError:
-                pass
+                zustand = None            # inzwischen weg -> naechster mkdir-Versuch
+            if zustand is not None and not stat.S_ISDIR(zustand.st_mode):
+                # Am Lock-Pfad liegt eine DATEI (Sync-Client, Backup, Quarantaene) statt
+                # unseres Verzeichnisses: `os.mkdir` meldet dauerhaft FileExistsError,
+                # `os.rmdir` scheitert mit NotADirectoryError — den schluckte das `except
+                # OSError` hier, und die Schleife drehte ENDLOS (#191). Ein Haenger ist
+                # schlimmer als eine Ausnahme: kein `except` beim Aufrufer faengt ihn. Der
+                # Zustand ist nicht voruebergehend, also ohne _HAKELIG_S-Frist wie "nicht
+                # anlegbar" behandeln. Geprueft wird der Typ statt der rmdir-Ausnahme, sonst
+                # haenge es bis `stale` (beim pip-Lock 150 s), bevor rmdir ueberhaupt laeuft.
+                print(f"[sperre] {lockdir} ist kein Verzeichnis — ungeschuetzt weiter",
+                      flush=True)
+                break
+            if zustand is not None and time.time() - zustand.st_mtime > stale:
+                with contextlib.suppress(OSError):
+                    os.rmdir(lockdir)
         except OSError as e:
             # NICHT sofort aufgeben: sonst faellt die Sperre genau unter Konkurrenz aus.
             jetzt = time.time()
