@@ -38,7 +38,7 @@ def laden(project: str) -> dict:
     try:
         with open(_pfad(project), encoding="utf-8") as fh:
             data = json.load(fh)
-    except (OSError, json.JSONDecodeError):
+    except (OSError, ValueError):     # ValueError deckt auch UnicodeDecodeError (#190)
         data = {}
     if not isinstance(data, dict):
         data = {}

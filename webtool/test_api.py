@@ -1244,3 +1244,35 @@ def test_fetch_env_kennt_auch_den_ausgeschalteten_haken(client, tmp_projekt, mon
     client.post(f"/api/projects/{tmp_projekt}/fetch",
                 json={"urls": ["https://youtu.be/x"], "mehrsprachig": False})
     assert gesehen.get("TRANSKRIBOR_FETCH_MEHRSPRACHIG") == "0"
+
+
+# ---- #190: nicht dekodierbare Bytes sind KEIN JSONDecodeError ----
+
+def test_nicht_dekodierbare_edit_json_heilt_sich_aus_der_roh_json(client, tmp_path):
+    """`load_or_build_doc` faengt eine korrupte `edit.json` ab und baut aus der Roh-JSON neu
+    auf. Das galt aber nur fuers PARSEN: sind die BYTES nicht als UTF-8 dekodierbar, wirft
+    schon das Lesen einen `UnicodeDecodeError` — auch ein `ValueError`, aber kein
+    `JSONDecodeError` (#190). Der Editor bekam dann 500 statt der Selbstheilung, und die
+    Aufnahme war ueber die Oberflaeche nicht mehr zu oeffnen.
+
+    `write_bytes`, nicht `write_text`: anders ist der Fall nicht herzustellen.
+    """
+    (tmp_path / "Demo" / "transkripte" / "S1.edit.json").write_bytes(b'{"summary": "\xe9"}')
+    r = client.get("/api/projects/Demo/files/S1")
+    assert r.status_code == 200
+    assert r.json()["segments"][0]["text"].strip() == "Hallo Welt."   # aus der Roh-JSON
+
+
+def test_umbenennen_ueberlebt_eine_nicht_dekodierbare_edit_json(client, tmp_path):
+    """`_patch_json_felder` zieht `base`/`audio` im Dokument nach. Ist die Datei kaputt,
+    bleibt sie unangetastet — das Umbenennen der Dateien auf der Platte ist der wichtigere
+    Teil und darf daran nicht scheitern. Auch das galt nur fuers Parsen (#190): ein
+    `UnicodeDecodeError` machte aus dem Umbenennen einen 500 — und zwar NACH dem
+    `os.rename`, die Dateien waeren also schon umbenannt und der Aufrufer saehe einen Fehler.
+    """
+    t = tmp_path / "Demo" / "transkripte"
+    (t / "S1.edit.json").write_bytes(b'{"base": "S1", "summary": "\xe9"}')
+    r = client.post("/api/projects/Demo/files/S1/rename", json={"name": "Neu"})
+    assert r.status_code == 200, r.text
+    assert (t / "Neu.edit.json").exists() and not (t / "S1.edit.json").exists()
+    assert (tmp_path / "Demo" / "audio" / "Neu.mp3").exists()
