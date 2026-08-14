@@ -548,6 +548,13 @@ def test_freigabe_faesst_ein_inzwischen_FREMDES_lock_nicht_an(tmp_path, monkeypa
     Kaskade, gegen die der Merker gebaut ist. Der Merker-INHALT taugt dafuer nicht — zwei
     Faeden eines Prozesses schreiben denselben (#207), und nach dem `os.remove` ist er weg.
 
+    **Dieser Test wird auf den beiden Plattformen von VERSCHIEDENEN Haelften getragen** — wer
+    eine davon entfernt, weil "der Test ja gruen bleibt", macht die andere Plattform auf:
+    auf Windows greift `_ist_noch` (die Inode wechselt), auf ext4 `entfernt` (die Inode wird
+    wiederverwendet — 200 von 200, gemessen; dort ist der Schutz, dass wir den FREMDEN Merker
+    nicht mehr anfassen und sein Verzeichnis darum nicht leer bekommen). Beide Mutationen
+    einzeln nachgefahren, je auf der Plattform, auf der sie zaehlen.
+
     (CodeRabbit-CLI an PR #206, als kritisch gemeldet — zu Recht.)
     """
     lock = str(tmp_path / "x.json") + ".lock"
@@ -645,3 +652,38 @@ def test_ohne_verzeichnis_kennung_wird_trotzdem_freigegeben(tmp_path, monkeypatc
     assert sperre._ist_noch(lock, None) is True
     sperre._wegraeumen(lock, meiner)      # und die Freigabe laeuft trotzdem durch
     assert not os.path.exists(lock)
+
+
+@pytest.mark.skipif(os.name != "nt", reason="auf ext4 wird die Inode nach rmdir+mkdir SOFORT "
+                                            "wiederverwendet (in WSL gemessen) — dort ist der "
+                                            "Fall nicht erkennbar, siehe Docstring")
+def test_freigabe_erkennt_ein_fremdes_lock_auch_OHNE_merker(tmp_path, monkeypatch):
+    """Das zweite Merkmal (`st_ino`) deckt das Fenster ab, das die Merker-Anwesenheit offen
+    laesst: der fremde Halter hat sein Verzeichnis schon angelegt, den Merker aber noch nicht
+    geschrieben (zwischen `mkdir` und `write` liegen Mikrosekunden).
+
+    **Nur auf Windows pruefbar.** Auf ext4 vergibt das Dateisystem dieselbe Inode sofort wieder
+    — in WSL nachgemessen: `_verzeichnis_kennung` liefert vor und nach `rmdir`+`mkdir`
+    denselben Wert. Dort bleibt dieses Fenster also offen; die Merker-Anwesenheit deckt den
+    Normalfall (fremder Halter MIT Merker) auf beiden Plattformen ab. Genau diese Lage gehoert
+    hingeschrieben, statt sie hinter einem gruenen Test verschwinden zu lassen.
+    """
+    lock = str(tmp_path / "x.json") + ".lock"
+    os.mkdir(lock)
+    _merker(lock, os.getpid())
+    meiner = sperre._merker_lesen(lock)
+    echt = os.rmdir
+    getan = []
+
+    def tauscht(pfad):
+        if not getan:
+            getan.append(True)
+            echt(pfad)
+            os.mkdir(pfad)                # fremdes Lock, Merker noch NICHT geschrieben
+            raise OSError(41, "nicht leer")
+        echt(pfad)                        # pragma: no cover — darf nie drankommen
+
+    monkeypatch.setattr(sperre, "_RMDIR_PAUSE_S", 0.001)
+    monkeypatch.setattr(os, "rmdir", tauscht)
+    sperre._wegraeumen(lock, meiner)
+    assert os.path.isdir(lock)            # das fremde (noch leere) Lock steht
