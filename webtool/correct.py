@@ -83,6 +83,10 @@ def _ziel_dialekt(project: str, base: str) -> tuple:
     from . import projekt as _pj, sprachen as _s
     sid = _pj.datei_sprache(project, base)
     if sid == "auto":
+        # Der Pfadbau darf hier IM try stehen: `_pj.datei_sprache` eine Zeile hoeher geht
+        # ueber `projekt.laden`, das unsichere Namen bereits wirft (dort steht der Pfadbau
+        # deshalb ausserhalb). Ein zweiter Riegel waere hier unerreichbar — und damit ein
+        # Waechter, den kein Test rot bekommt (gemessen: Mutation liess alle 623 gruen).
         try:
             code = _load(os.path.join(paths.transkripte_dir(project), base + ".json")).get("language")
         except (OSError, ValueError):     # ValueError deckt auch UnicodeDecodeError (#190)
@@ -111,7 +115,14 @@ def _audio_name(project: str, base: str) -> str:
 
 def _load(path: str) -> dict:
     with open(path, encoding="utf-8") as fh:
-        return json.load(fh)
+        daten = json.load(fh)
+    if not isinstance(daten, dict):
+        # Gueltiges JSON, aber kein Objekt (ein Modell antwortet auch mal mit einer Liste).
+        # Die Aufrufer fangen alle ValueError und fallen zurueck; das `.get` daneben wuerfe
+        # stattdessen AttributeError glatt an ihnen vorbei — dieselbe gebrochene Zusage wie
+        # bei #190, nur ueber einen anderen Ausnahmetyp.
+        raise ValueError(f"{path}: JSON-Objekt erwartet, {type(daten).__name__} gelesen")
+    return daten
 
 
 def _load_diar_clusters(tdir: str, base: str) -> dict:
@@ -237,8 +248,18 @@ def cmd_apply(project: str, base: str, force: bool = False) -> str:
 def _context(project: str) -> str:
     p = os.path.join(paths.project_dir(project), "kontext.md")
     if os.path.exists(p):
-        with open(p, encoding="utf-8") as fh:
-            return fh.read().strip()
+        try:
+            with open(p, encoding="utf-8") as fh:
+                return fh.read().strip()
+        except (OSError, ValueError) as e:
+            # `kontext.md` schreibt der NUTZER von Hand — im Editor als ANSI gespeichert ist
+            # sie mit Umlaut nicht als UTF-8 lesbar (#190-Klasse, hier sogar wahrscheinlicher
+            # als bei einer von der App geschriebenen JSON). Der Aufruf steht in `cmd_run`
+            # NACH diarize + prep: ein Wurf verwirft GPU-Minuten und den ganzen Lauf, statt
+            # eine Datei zu ueberspringen. Also weiter ohne Kontext — aber laut, denn ohne
+            # ihn faellt die Korrektur messbar schlechter aus.
+            print(f"⚠ kontext.md nicht lesbar ({type(e).__name__}: {e}) — fahre ohne "
+                  f"Projektkontext fort", flush=True)
     return ""
 
 

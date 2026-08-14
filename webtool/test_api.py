@@ -1264,7 +1264,7 @@ def test_nicht_dekodierbare_edit_json_heilt_sich_aus_der_roh_json(client, tmp_pa
 
 
 def test_umbenennen_ueberlebt_eine_nicht_dekodierbare_edit_json(client, tmp_path):
-    """`_patch_json_felder` zieht `base`/`audio` im Dokument nach. Ist die Datei kaputt,
+    """`_doc_felder` zieht `base`/`audio` im Dokument nach. Ist die Datei kaputt,
     bleibt sie unangetastet — das Umbenennen der Dateien auf der Platte ist der wichtigere
     Teil und darf daran nicht scheitern. Auch das galt nur fuers Parsen (#190): ein
     `UnicodeDecodeError` machte aus dem Umbenennen einen 500 — und zwar NACH dem

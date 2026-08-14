@@ -35,8 +35,12 @@ def _write(project: str, data: dict) -> None:
 
 
 def laden(project: str) -> dict:
+    # Pfad VOR dem try: `paths.safe_name` wirft ValueError fuer unsichere Namen, und seit
+    # der Erweiterung auf ValueError (#190) verschluckte der Rueckfall genau diese
+    # Vertrauensgrenze — `laden("..")` gab Defaults zurueck statt zu werfen (gemessen).
+    pfad = _pfad(project)
     try:
-        with open(_pfad(project), encoding="utf-8") as fh:
+        with open(pfad, encoding="utf-8") as fh:
             data = json.load(fh)
     except (OSError, ValueError):     # ValueError deckt auch UnicodeDecodeError (#190)
         data = {}

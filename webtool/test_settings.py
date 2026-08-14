@@ -193,3 +193,16 @@ def test_pfad_ohne_verzeichnisanteil_laesst_sich_speichern(tmp_path, monkeypatch
     cfg = settings.load()
     assert cfg["model"] == "claude-opus-5"
     assert cfg["ytdlp_geprueft"] == "2026-08-13"      # der Merker haelt, nicht nur der Aufruf
+
+
+def test_nicht_dekodierbare_env_stoppt_den_serverstart_nicht(tmp_path, monkeypatch):
+    """`load_env` faengt nur OSError — eine im Editor als ANSI gespeicherte `.env` mit Umlaut
+    ist nicht als UTF-8 lesbar und warf `UnicodeDecodeError`. `app.py` ruft das beim IMPORT:
+    ungefangen startet der Server gar nicht erst, ohne Fehlerseite, und die Electron-App
+    zeigt nichts. Dieselbe Klasse wie #190/#185 — `settings.load()` zwanzig Zeilen weiter hat
+    die Erweiterung dort schon bekommen, hier fehlte sie."""
+    env = tmp_path / ".env"
+    env.write_bytes(b"WHISPER_MODEL=gr\xdfoss\n")        # CP1252, kein UTF-8
+    monkeypatch.setenv("TRANSKRIBOR_ENV", str(env))
+    monkeypatch.delenv("WHISPER_MODEL", raising=False)
+    assert settings.load_env() == []                     # kein Wurf, nichts gesetzt

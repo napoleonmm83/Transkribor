@@ -55,7 +55,12 @@ def load_env() -> list:
     try:
         with open(env_path(), encoding="utf-8-sig") as fh:
             zeilen = fh.readlines()
-    except OSError:
+    except (OSError, ValueError):
+        # ValueError deckt auch UnicodeDecodeError (#190): eine im Editor als ANSI
+        # gespeicherte `.env` mit Umlaut ist nicht als UTF-8 lesbar. `app.py` ruft das beim
+        # IMPORT — ungefangen startet der Server gar nicht erst, ohne Fehlerseite, und die
+        # Electron-App zeigt nichts. `settings.load()` zwanzig Zeilen weiter hat genau diese
+        # Erweiterung in #185 bekommen; hier fehlte sie.
         return gesetzt
     for zeile in zeilen:
         t = zeile.strip()

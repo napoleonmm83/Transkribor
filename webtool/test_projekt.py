@@ -1,4 +1,5 @@
 import json, os
+import pytest
 from webtool import projekt, paths, sprachen
 
 
@@ -200,3 +201,13 @@ def test_nicht_dekodierbare_projekt_json_faellt_auf_defaults(tmp_path, monkeypat
     assert daten["sprache"] == sprachen.SPRACH_DEFAULT      # ch
     assert daten["korrektur"] == sprachen.TIEFE_DEFAULT     # auto
     assert daten["dateien"] == {}
+
+
+def test_laden_verschluckt_den_unsicheren_namen_nicht(tmp_path, monkeypatch):
+    """`paths.safe_name` wirft ValueError fuer unsichere Namen. Seit der Erweiterung auf
+    ValueError (#190) lag dieser Wurf im Rueckfall-Bereich, wenn der Pfadbau IM try steht —
+    `laden("..")` gab dann Defaults zurueck statt zu werfen (gemessen). Eine Vertrauensgrenze
+    darf nicht wie eine kaputte Datei aussehen."""
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    with pytest.raises(ValueError):
+        projekt.laden("..")
