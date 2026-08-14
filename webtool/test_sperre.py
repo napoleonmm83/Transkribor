@@ -431,7 +431,11 @@ def test_toter_halter_muss_die_frist_nicht_absitzen(tmp_path):
     Im Faden mit `join`, weil ein zu langes Warten sonst keinen Test rot macht (#191).
     """
     tot = subprocess.Popen([sys.executable, "-c", "pass"])
-    tot.wait()                                    # Popen haelt das Handle -> PID bleibt gueltig
+    # Auf Windows haelt `Popen` das Prozess-Handle, die PID bleibt also reserviert und
+    # `OpenProcess` beantwortet sie als beendet. Auf POSIX gibt `wait()` den Prozess frei und
+    # die PID darf neu vergeben werden — dort traegt der Test die sequenzielle Vergabe von
+    # Linux, keine Zusicherung.
+    tot.wait()
     ziel = str(tmp_path / "x.json")
     lock = ziel + ".lock"
     os.mkdir(lock)
