@@ -5,6 +5,7 @@ gemessen). Hier geht es um die Raender, die dort nicht auftauchen — und die al
 gemeinsam haben, dass ein Fehler in ihnen die Sperre **still** ausser Kraft setzt.
 """
 import os
+import threading
 import time
 
 from webtool import sperre
@@ -79,3 +80,30 @@ def test_dauerhaft_unmoeglich_haelt_den_aufrufer_nicht_auf(tmp_path, monkeypatch
         gelaufen.append(1)
     assert gelaufen == [1]
     assert "ungeschuetzt" in capsys.readouterr().out
+
+
+def test_datei_am_lock_pfad_haelt_den_aufrufer_nicht_auf(tmp_path, capsys):
+    """Liegt am Lock-Pfad eine DATEI statt unseres Verzeichnisses (Sync-Client, Backup,
+    Quarantaene), meldet `os.mkdir` dauerhaft FileExistsError und `os.rmdir` scheitert mit
+    NotADirectoryError — den schluckte das `except OSError`, und die Schleife drehte ENDLOS
+    (#191). `stale` ist hier NICHT abgelaufen, `rmdir` laeuft also gar nicht erst: geprueft
+    werden muss der Dateityp, nicht die Ausnahme.
+
+    Gemessen im Faden mit `join`: ein Haenger macht keinen Test rot, er laesst die ganze
+    Suite auslaufen — das ist genau der Grund, warum es niemandem aufgefallen ist.
+    """
+    ziel = str(tmp_path / "x.json")
+    (tmp_path / "x.json.lock").write_text("keine Sperre, sondern eine Datei")
+    gelaufen = []
+
+    def lauf():
+        with sperre.datei(ziel, stale=60):
+            gelaufen.append(1)
+
+    faden = threading.Thread(target=lauf, daemon=True)
+    faden.start()
+    faden.join(5)
+    assert not faden.is_alive(), "sperre.datei() haengt an einer Datei am Lock-Pfad"
+    assert gelaufen == [1]
+    assert "ungeschuetzt" in capsys.readouterr().out
+    assert (tmp_path / "x.json.lock").is_file()   # fremde Datei bleibt unangetastet
