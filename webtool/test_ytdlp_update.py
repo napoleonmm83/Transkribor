@@ -112,8 +112,19 @@ def test_merker_in_der_ZUKUNFT_blockiert_nicht(monkeypatch):
 
 def test_ohne_installiertes_yt_dlp_kein_update(monkeypatch):
     """`pip install -U` wuerde yt-dlp NEU installieren. Das ist Sache des Setups; hier
-    bliebe sonst die ehrliche Meldung 'yt-dlp ist nicht installiert' aus."""
+    bliebe sonst die ehrliche Meldung 'yt-dlp ist nicht installiert' aus.
+
+    **`_ejs_fehlt` steht hier bewusst auf True** — ohne yt-dlp fehlt auch dessen Extra, das
+    ist der ECHTE Zustand dieser Maschine. Mit dem `False` aus der Fixture prueft der Test
+    die Reihenfolge nicht: der ejs-Zweig ist dann neutralisiert, und ob er vor oder hinter
+    dem `v is None`-Riegel steht, sieht niemand. Gemessen (an PR #180 vom Review gefunden):
+    den Zweig VOR den Riegel zu schieben liess vorher ALLE 32 Tests gruen — und genau das
+    waere der Fall, in dem ein URL-Import yt-dlp per pip **installiert**, statt ehrlich zu
+    melden, dass es fehlt. Die Regel dahinter: bei einem Abwesenheitstest alle frueheren
+    Waechter umschiffen, damit der gepruefte der EINZIGE ist.
+    """
     monkeypatch.setattr(yu, "fassung", lambda: None)
+    monkeypatch.setattr(yu, "_ejs_fehlt", lambda: True)
     assert yu.faellig() is False
 
 
