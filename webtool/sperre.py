@@ -65,7 +65,12 @@ def _prozess_lebt(pid: int):
     aufrufende Shell mit. Eine Pruefung, die ihren Gegenstand beschaedigen KANN, hat an
     dieser Stelle nichts zu suchen — sie liefe gegen den Prozess, der gerade schreibt.
     """
-    if pid <= 0:
+    # Nur plausible PIDs werden beantwortet, und Unplausibles heisst "keine Auskunft", nie
+    # "tot": ctypes schneidet den Wert auf c_uint32 ab, statt zu werfen — gemessen ergab
+    # `10**25` ein **False** (das Lock waere sofort weggeraeumt worden) und `2**32+7` ein
+    # True ueber PID 7. Auf POSIX faengt dieselbe Grenze `os.kill(0, …)` (das traefe die
+    # ganze Prozessgruppe) und den OverflowError grosser Zahlen ab.
+    if not 0 < pid < 2**31:
         return None
     if os.name == "nt":
         import ctypes
