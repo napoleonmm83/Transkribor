@@ -531,29 +531,107 @@ def test_freigabe_gibt_bei_dauerhaftem_fehler_auf(tmp_path, monkeypatch):
         sperre._wegraeumen(lock, None)
 
 
+def test_freigabe_faesst_ein_inzwischen_FREMDES_lock_nicht_an(tmp_path, monkeypatch):
+    """Die Wiederholung streckt das Fenster von Mikrosekunden auf bis zu 160 ms — und darin
+    kann ein Warter das Lock uebernommen haben (Notgriff). Dann steht an diesem Pfad ein
+    FREMDES Verzeichnis, und die naechste Runde loeschte dessen frisches Lock: genau die
+    Kaskade, gegen die der Merker gebaut ist. Der Merker-INHALT taugt dafuer nicht — zwei
+    Faeden eines Prozesses schreiben denselben (#207), und nach dem `os.remove` ist er weg.
+
+    (CodeRabbit-CLI an PR #206, als kritisch gemeldet — zu Recht.)
+    """
+    lock = str(tmp_path / "x.json") + ".lock"
+    os.mkdir(lock)
+    _merker(lock, os.getpid())
+    meiner = sperre._merker_lesen(lock)
+    echt = os.rmdir
+    getan = []
+
+    def tauscht(pfad):
+        if not getan:                     # erster Versuch: scheitert — und der Pfad wechselt
+            getan.append(True)
+            echt(pfad)                    # unser Verzeichnis ist weg …
+            os.mkdir(pfad)                # … und ein FREMDES steht am selben Pfad,
+            _merker(pfad, os.getpid())    # mit BYTEGLEICHEM Merker (derselbe Prozess)
+            raise OSError(41, "nicht leer")
+        echt(pfad)                        # pragma: no cover — darf nie drankommen
+
+    monkeypatch.setattr(sperre, "_RMDIR_PAUSE_S", 0.001)
+    monkeypatch.setattr(os, "rmdir", tauscht)
+    sperre._wegraeumen(lock, meiner)
+    assert os.path.isdir(lock)            # das fremde Lock steht noch
+    assert os.path.exists(os.path.join(lock, sperre._HALTER))   # samt seinem Merker
+
+
 @pytest.mark.skipif(os.name != "nt", reason="delete-pending gibt es nur auf Windows; auf POSIX "
                                             "loescht os.remove den Eintrag sofort")
-def test_freigabe_ueberlebt_einen_lesenden_warter(tmp_path):
+def test_freigabe_ueberlebt_einen_lesenden_warter(tmp_path, monkeypatch):
     """Der ECHTE Ablauf aus #205, ohne Attrappe: ein Warter liest den Merker (`_merker_lesen`
-    macht genau das), waehrend der Halter freigibt. Windows entfernt den Eintrag dann erst
-    beim Schliessen — `os.rmdir` scheitert, und ohne die Wiederholung bleibt das Lock liegen.
+    macht genau das), waehrend der Halter freigibt. Auf dieser Maschine gemessen scheitert dann
+    schon `os.remove` mit `[WinError 32]`, und `os.rmdir` mit `[WinError 145]` — ohne die
+    Wiederholung bleibt das Lock liegen.
 
-    Auf POSIX ist der Fall nicht herstellbar (dort verschwindet der Eintrag sofort), deshalb
-    der `skipif` — die CI faehrt Ubuntu und sieht diesen Test also NIE (dieselbe Luecke wie
-    #201). Der Test darueber deckt die Wiederholung plattformunabhaengig ab.
+    **Kein fester Zeitgeber**: der Warter schliesst, sobald das `rmdir` WIRKLICH gescheitert
+    ist, und am Ende steht die Positivkontrolle (`gescheitert.is_set()`). Ohne sie liefe der
+    Test auch dann gruen durch, wenn der Fall gar nicht eingetreten waere — eine Suche, deren
+    Ergebnis "nicht gefunden" sein darf, braucht eine Probe, die gefunden werden MUSS.
+    (CodeRabbit-CLI an PR #206.)
+
+    Auf POSIX ist der Fall nicht herstellbar, deshalb der `skipif` — die CI faehrt Ubuntu und
+    sieht diesen Test also NIE (dieselbe Luecke wie #201). Der plattformunabhaengige Test
+    darueber deckt die Wiederholung ab.
     """
-    ziel = str(tmp_path / "x.json")
-    lock = ziel + ".lock"
+    lock = str(tmp_path / "x.json") + ".lock"
     os.mkdir(lock)
-    with open(os.path.join(lock, sperre._HALTER), "wb") as f:
-        f.write(f"{os.getpid()} {platform.node()}".encode())
+    _merker(lock, os.getpid())
     merker = sperre._merker_lesen(lock)
     offen = open(os.path.join(lock, sperre._HALTER), "rb")   # der lesende Warter
+    gescheitert = threading.Event()
+    echt = os.rmdir
+
+    def beobachtet(pfad):
+        try:
+            echt(pfad)
+        except OSError:
+            gescheitert.set()                                # jetzt darf der Warter schliessen
+            raise
+
+    monkeypatch.setattr(os, "rmdir", beobachtet)
+    schliesser = threading.Thread(target=lambda: (gescheitert.wait(5), offen.close()))
+    schliesser.start()
     try:
-        t = threading.Timer(0.05, offen.close)               # er schliesst gleich
-        t.start()
         sperre._wegraeumen(lock, merker)                     # darf nicht werfen
     finally:
-        t.cancel()
+        gescheitert.set()                                    # kein haengender Faden im Fehlerfall
+        schliesser.join(5)
         offen.close()
+    assert gescheitert.is_set()          # Positivkontrolle: der Fall ist wirklich eingetreten
+    assert not os.path.exists(lock)
+
+
+def test_ohne_verzeichnis_kennung_wird_trotzdem_freigegeben(tmp_path, monkeypatch):
+    """Die Identitaetspruefung braucht `st_ino` — auf manchen Netz- und FAT-Pfaden ist der 0,
+    also keine Auskunft. Dann gilt hier wie ueberall: nicht raten. Beide Haelften einzeln
+    geprueft, weil beide ohne Test gruen blieben (Mutationsprobe an PR #206):
+
+    - `_verzeichnis_kennung` muss bei `st_ino == 0` **None** liefern, nicht `(dev, 0)` — sonst
+      verglichen zwei verschiedene Verzeichnisse als "dasselbe", und die Wache waere schlimmer
+      als keine.
+    - `_ist_noch` muss ohne Auskunft **True** sagen. Die falsche Richtung waere teuer: die
+      Freigabe braeche sofort ab, JEDES Lock bliebe liegen, und nur noch die Frist raeumte auf
+      — genau der Zustand, gegen den #205 gebaut ist.
+    """
+    lock = str(tmp_path / "x.json") + ".lock"
+    os.mkdir(lock)
+    _merker(lock, os.getpid())
+    meiner = sperre._merker_lesen(lock)
+
+    class _OhneIno:                       # was ein FAT-/Netzpfad liefert
+        st_dev, st_ino = 1, 0
+
+    echt = os.lstat
+    monkeypatch.setattr(os, "lstat", lambda p: _OhneIno() if p == lock else echt(p))
+    assert sperre._verzeichnis_kennung(lock) is None
+    assert sperre._ist_noch(lock, None) is True
+    sperre._wegraeumen(lock, meiner)      # und die Freigabe laeuft trotzdem durch
     assert not os.path.exists(lock)
