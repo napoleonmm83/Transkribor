@@ -203,24 +203,45 @@ def _wegraeumen(lockdir: str, erwartet) -> None:
         return                                    # gehoert inzwischen jemand anderem
     kennung = _verzeichnis_kennung(lockdir)
     merkerpfad = os.path.join(lockdir, _HALTER)
+    entfernt = erwartet is None          # kein Merker zu entfernen -> gilt als erledigt
     for versuch in range(_RMDIR_VERSUCHE):
         # Der Ausweis wird bei JEDEM Versuch neu geprueft, nicht nur einmal vorher: die
         # Wiederholung streckt das Fenster von Mikrosekunden auf bis zu 160 ms, und darin kann
         # ein Warter das Lock uebernommen haben (Notgriff) — dann steht an diesem Pfad ein
         # FREMDES Verzeichnis, und die naechste Runde loeschte dessen frisches Lock. Genau die
-        # Kaskade, gegen die der Merker da ist. Geprueft wird ueber `st_ino`, nicht ueber den
-        # Merker-Inhalt: den haben zwei Faeden EINES Prozesses gemeinsam (#207), und nach einem
-        # geglueckten `os.remove` ist er ohnehin weg. (CodeRabbit-CLI an PR #206, kritisch.)
+        # Kaskade, gegen die der Merker da ist. (CodeRabbit-CLI an PR #206, kritisch.)
+        #
+        # **`st_ino` traegt das auf Windows, auf ext4 NICHT** — gemessen: nach `rmdir`+`mkdir`
+        # am selben Pfad ist die Inode dort in **200 von 200** Faellen dieselbe, auf dem
+        # Windows-Dateisystem in **0 von 200**. Genau daran ist der erste Anlauf in der
+        # Linux-CI umgefallen. Auf POSIX schuetzt stattdessen `entfernt` (siehe unten): dort
+        # gelingt das `os.remove` immer, wir fassen den fremden Merker also nicht mehr an, und
+        # ohne ihn wegzuraeumen bekommen wir das fremde Verzeichnis nicht leer. Was auf ext4
+        # OFFEN bleibt: ein fremdes Lock, dessen Merker noch nicht geschrieben ist — dieses
+        # Fenster ist dort nicht erkennbar, und das gehoert hier hingeschrieben statt hinter
+        # einem gruenen Test versteckt.
         if versuch and not _ist_noch(lockdir, kennung):
             return
-        # BEIDES in der Schleife, nicht nur das `rmdir`: haelt ein Warter den Merker offen,
-        # kann schon das `os.remove` scheitern. Auf dieser Maschine gemessen: `os.remove` gibt
-        # dann `PermissionError [WinError 32]` (die Datei ist in Benutzung) und `os.rmdir`
-        # `[WinError 145]`. Nur das `rmdir` zu wiederholen half deshalb NIE — die Datei liegt
-        # ja noch da. Erst mit dem Umbau bestand der Windows-Test darunter.
-        if erwartet is not None:
-            with contextlib.suppress(OSError):
+        # Das Entfernen gehoert MIT in die Schleife, nicht nur das `rmdir`: haelt ein Warter den
+        # Merker offen, scheitert schon `os.remove`. Auf dieser Maschine gemessen: `os.remove`
+        # gibt dann `PermissionError [WinError 32]` (die Datei ist in Benutzung), `os.rmdir`
+        # `[WinError 145]`. Nur das `rmdir` zu wiederholen half deshalb NIE — die Datei liegt ja
+        # noch da. Erst mit dem Umbau bestand der Windows-Test darunter.
+        #
+        # `entfernt` ist nicht Buchhaltung, sondern die zweite Haelfte der Wache: ist UNSER
+        # Merker einmal weg, wird nicht noch einmal geloescht — ein Merker, der danach an
+        # diesem Pfad auftaucht, gehoert einem ANDEREN. Auf POSIX ist das der einzige Schutz
+        # (die Inode taugt dort nicht, s. o.): ohne seinen Merker bekommen wir sein
+        # Verzeichnis nicht leer, `rmdir` scheitert, wir geben auf — statt ihm sein frisches
+        # Lock wegzuraeumen. In WSL gegengeprueft.
+        if not entfernt:
+            try:
                 os.remove(merkerpfad)
+                entfernt = True
+            except FileNotFoundError:
+                entfernt = True          # schon weg — nichts mehr zu tun
+            except OSError:
+                pass                     # noch offen -> naechste Runde
         try:
             os.rmdir(lockdir)
             return
