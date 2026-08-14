@@ -85,6 +85,27 @@ def _ejs_pin() -> str | None:
     return None
 
 
+def _release(v: str | None) -> tuple[int, ...] | None:
+    """'0.8.0' -> (0, 8, 0). `None`, sobald es keine reine Zahlenfolge ist.
+
+    Der Rueckfall auf None ist der eigentliche Zweck. PEP 440 laesst Formen zu, deren Text
+    mit einer installierten Fassung **nie** uebereinstimmen kann — `==0.8.*` (Praefix),
+    `===0.8.0` (willkuerliche Gleichheit, die Regex faengt daraus `=0.8.0`), dazu alles mit
+    `.post1`/`rc1`. Ein Zeichenkettenvergleich waere dort dauerhaft ungleich: `faellig()`
+    jeden Tag True und ein pip, das den Flag NIE loescht — pip haelt `==0.8.*` mit 0.8.0
+    naemlich fuer erfuellt. Gemessen an der echten Regex, alle drei Formen.
+    """
+    teile = (v or "").split(".")
+    if not v or not all(t.isdigit() for t in teile):
+        return None
+    return tuple(int(t) for t in teile)
+
+
+def _fuellen(t: tuple[int, ...], n: int) -> tuple[int, ...]:
+    """Mit Nullen auf n Stellen bringen — `0.8` und `0.8.0` sind dieselbe Fassung."""
+    return t + (0,) * (n - len(t))
+
+
 def _ejs_untauglich() -> bool:
     """Kann der Loeser mit dem, was hier installiert ist, ueberhaupt arbeiten?
 
@@ -104,20 +125,29 @@ def _ejs_untauglich() -> bool:
     **Im Zweifel NICHT flaggen.** Ein faelschlich gesetztes True liefe in ein pip, das den
     Zustand nicht aendert — also jeden Tag aufs Neue, dauerhaft. Die Tagesbremse aus #179
     deckelt das, sie beendet es nicht. Deshalb gilt „untauglich" nur bei einem Pin, der
-    wirklich dasteht und wirklich `==` sagt; alles andere (kein Pin, `>=`, unlesbar) laesst
-    den Kalenderweg entscheiden wie bisher.
+    wirklich dasteht, wirklich `==` sagt und sich wirklich vergleichen laesst; alles andere
+    (kein Pin, `>=`, `==0.8.*`, `===0.8.0`, `.post1`) laesst den Kalenderweg entscheiden wie
+    bisher. Siehe `_release` — dort steht, warum gerade diese Formen gefaehrlich sind.
 
-    Verglichen wird die **exakte** Fassung, nicht nur Major+Minor wie yt-dlps Versionsgatter:
-    ein Unterschied in der dritten Stelle kommt dort zwar durch, faellt aber danach durch die
-    Hash-Pruefung. Strenger zu sein kostet hoechstens EIN pip, das die Fassungen ausrichtet —
-    laxer zu sein liesse genau den Fall stehen, um den es hier geht.
+    Verglichen werden **aufgefuellte Zahlenfolgen**, nicht Zeichenketten: `0.8` und `0.8.0`
+    sind dieselbe Fassung, als Text aber verschieden — ein Textvergleich haette genau den
+    Dauerlauf erzeugt, den der Absatz darueber ausschliesst.
+
+    Der Vergleich ist damit **auf die volle Fassung** genau, strenger als yt-dlps
+    Versionsgatter (das nur Major+Minor prueft): ein Unterschied in der dritten Stelle kommt
+    dort durch, faellt aber danach durch die Hash-Pruefung. Strenger zu sein kostet hoechstens
+    EIN pip, das die Fassungen ausrichtet — laxer zu sein liesse genau den Fall stehen, um den
+    es hier geht.
     """
     try:
         da = metadata.version(_EJS)
     except metadata.PackageNotFoundError:
         return True                       # #179: gar nicht da
-    pin = _ejs_pin()
-    return pin is not None and pin != da   # #182: da, aber unpassend
+    gefordert, installiert = _release(_ejs_pin()), _release(da)
+    if gefordert is None or installiert is None:
+        return False                      # nicht vergleichbar -> Kalenderweg entscheidet
+    n = max(len(gefordert), len(installiert))
+    return _fuellen(gefordert, n) != _fuellen(installiert, n)   # #182: da, aber unpassend
 
 
 def _als_datum(v: str | None) -> dt.date | None:

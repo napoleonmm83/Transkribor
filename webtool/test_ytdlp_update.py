@@ -192,6 +192,12 @@ def test_ejs_wird_an_den_metadaten_gemessen(monkeypatch):
     """
     gerufen = []
     monkeypatch.setattr(yu.metadata, "version", lambda name: gerufen.append(name) or "0.8.0")
+    # `requires` MUSS mitgefaelscht werden, sonst liest `_ejs_pin()` die ECHTEN Metadaten
+    # dieser Maschine. Der Test liefe dann nur deshalb gruen, weil das hier installierte
+    # yt-dlp zufaellig `yt-dlp-ejs==0.8.0` verlangt — und fiele um, sobald yt-dlp den Pin
+    # anhebt (im CI faellt es nie auf, dort gibt es gar kein yt-dlp). Dieselbe
+    # Umgebungs-Kopplung, gegen die oben schon die Fixture geschrieben wurde.
+    monkeypatch.setattr(yu.metadata, "requires", lambda name: [])
     assert _ECHTES_EJS_UNTAUGLICH() is False
 
     def fehlt(name):
@@ -262,6 +268,33 @@ def test_pin_auch_in_der_unterstrich_schreibweise(monkeypatch):
     STILL — in genau den Fehler zurueck, gegen den sie gebaut ist."""
     _metadaten(monkeypatch, "0.8.0", ["yt_dlp_ejs==0.9.0; extra == 'default'"])
     assert _ECHTES_EJS_UNTAUGLICH() is True
+
+
+@pytest.mark.parametrize("pin, warum", [
+    ("0.8.*", "Praefix-Bindung — pip erfuellt sie mit 0.8.0, der Vergleich nie"),
+    ("=0.8.0", "aus `===0.8.0` (willkuerliche Gleichheit), fuehrendes ="),
+    ("0.8.0.post1", "keine reine Zahlenfolge"),
+])
+def test_nicht_vergleichbarer_pin_wird_NICHT_geflaggt(monkeypatch, pin, warum):
+    """Ein Pin, dessen Text nie mit einer installierten Fassung uebereinstimmen KANN, ist
+    schlimmer als gar keiner: `pin != da` waere dauerhaft wahr, `faellig()` jeden Tag True,
+    und pip liefe taeglich, ohne den Flag je zu loeschen. Genau der nicht-konvergierende
+    Dauerlauf, den `_ejs_untauglich` im Docstring ausschliesst.
+
+    PEP 440 erlaubt diese Formen — gemessen an der echten Regex ergaben alle drei einen
+    dauerhaften Unterschied gegen ein installiertes `0.8.0`. Also: nur eine reine
+    Zahlenfolge ist eine vergleichbare Aussage, alles andere faellt nach fail-open.
+    """
+    _metadaten(monkeypatch, "0.8.0", [f"yt-dlp-ejs=={pin}; extra == 'default'"])
+    assert _ECHTES_EJS_UNTAUGLICH() is False, warum
+
+
+def test_kurzer_pin_ist_gleichwertig(monkeypatch):
+    """`0.8` und `0.8.0` sind dieselbe Fassung — als Zeichenketten aber nicht. Verglichen
+    werden deshalb aufgefuellte Zahlenfolgen, sonst liefe auch hier ein pip taeglich ins
+    Leere (pip haelt `==0.8` mit 0.8.0 fuer erfuellt)."""
+    _metadaten(monkeypatch, "0.8.0", ["yt-dlp-ejs==0.8; extra == 'default'"])
+    assert _ECHTES_EJS_UNTAUGLICH() is False
 
 
 def test_fehlendes_ejs_schlaegt_den_pin(monkeypatch):
