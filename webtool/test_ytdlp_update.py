@@ -585,10 +585,22 @@ def test_klammerformen_liefern_bewusst_KEINEN_pin():
 
 # --- Kaputte Metadaten reissen den Aufrufer nicht mit (#185) -----------------
 
-def _unlesbar(name):
-    """Was `importlib.metadata` bei einer nicht als UTF-8 dekodierbaren METADATA wirft.
-    KEIN PackageNotFoundError — genau darum ging es: die drei Lesestellen fingen nur den."""
-    raise UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid start byte")
+def _unlesbar(gerufen):
+    """Attrappe, die wirft, was `importlib.metadata` bei einer nicht als UTF-8 dekodierbaren
+    METADATA wirft — KEIN PackageNotFoundError, genau darum ging es.
+
+    Der Distributionsname wird **gesammelt und danach geprueft**, nicht per `assert` IM Stub
+    (Konvention aus 4c3abbd, aber in dieser anderen Form). Ein `assert` liefe hier ins Leere:
+    er stuende INNERHALB des `try`, um das dieser PR gerade `except Exception` legt — der
+    AssertionError wuerde also von der gepruefteten Wache selbst geschluckt. Gemessen: mit einem
+    `assert` im Stub blieb der Test gruen, obwohl `fassung()` mutiert das falsche Paket
+    abfragte, und rot wurde nur ein entfernter Alt-Test.
+    """
+    def lesen(name):
+        gerufen.append(name)
+        raise UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid start byte")
+
+    return lesen
 
 
 def test_unlesbare_fassung_wirft_nicht(monkeypatch, capsys):
@@ -598,20 +610,25 @@ def test_unlesbare_fassung_wirft_nicht(monkeypatch, capsys):
 
     Unbekannt heisst „nicht installiert", und damit NICHT faellig: ein pip auf Verdacht
     liefe hier taeglich, ohne den Zustand zu aendern."""
-    monkeypatch.setattr(yu.metadata, "version", _unlesbar)
+    gerufen = []
+    monkeypatch.setattr(yu.metadata, "version", _unlesbar(gerufen))
     assert yu.fassung() is None
     assert yu.faellig() is False
     assert "unlesbar" in capsys.readouterr().out
+    assert gerufen and set(gerufen) == {"yt-dlp"}     # nicht irgendein Paket, DAS richtige
 
 
 def test_unlesbare_anforderungen_werfen_nicht(monkeypatch):
     """Zweite Lesestelle (`metadata.requires`). Fail-open wie beim fehlenden Pin: keine
     Zeilen heisst kein #182 und kein #184, der Kalenderweg entscheidet wie bisher."""
-    monkeypatch.setattr(yu.metadata, "version", lambda name: "0.8.0")
-    monkeypatch.setattr(yu.metadata, "requires", _unlesbar)
+    gefragt, gerufen = [], []
+    monkeypatch.setattr(yu.metadata, "version",
+                        lambda name: gefragt.append(name) or "0.8.0")
+    monkeypatch.setattr(yu.metadata, "requires", _unlesbar(gerufen))
     assert _ECHTES_EJS_UNTAUGLICH() is False
     assert yu._ejs_pin() is None
     assert yu._ejs_verlangt() is False
+    assert gefragt == [yu._EJS] and set(gerufen) == {"yt-dlp"}
 
 
 def test_unlesbares_ejs_wird_NICHT_geflaggt(monkeypatch):
@@ -624,12 +641,21 @@ def test_unlesbares_ejs_wird_NICHT_geflaggt(monkeypatch):
 
     yt-dlp verlangt hier ausdruecklich ejs, `_ejs_verlangt()` waere also True. Wer den neuen
     Zweig auf `return _ejs_verlangt()` umschreibt, macht genau diesen Test rot."""
-    monkeypatch.setattr(yu.metadata, "version",
-                        lambda name: _unlesbar(name) if name == yu._EJS else "2026.7.4")
+    gefragt, gerufen = [], []
+
+    def fassung(name):
+        if name == yu._EJS:
+            return _unlesbar(gerufen)(name)
+        gefragt.append(name)
+        return "2026.7.4"
+
+    monkeypatch.setattr(yu.metadata, "version", fassung)
     monkeypatch.setattr(yu.metadata, "requires",
-                        lambda name: ["yt-dlp-ejs==0.8.0; extra == 'default'"])
+                        lambda name: gefragt.append(name) or
+                        ["yt-dlp-ejs==0.8.0; extra == 'default'"])
     assert yu._ejs_verlangt() is True          # Positivkontrolle: der Flag WAERE erreichbar
     assert _ECHTES_EJS_UNTAUGLICH() is False
+    assert gerufen == [yu._EJS] and set(gefragt) == {"yt-dlp"}
 
 
 # --- Schalter ----------------------------------------------------------------
