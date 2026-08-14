@@ -24,6 +24,7 @@ dieses Feature nicht schlechter dastehen als vorher.
 """
 import datetime as dt
 import os
+import re
 import subprocess
 import sys
 from importlib import metadata
@@ -37,6 +38,11 @@ PIP_TIMEOUT = 120
 MERKER = "ytdlp_geprueft"
 # Das Paket mit den Loeserskripten fuer YouTubes JS-Challenge; kommt ueber `yt-dlp[default]`.
 _EJS = "yt-dlp-ejs"
+# Der Pin aus yt-dlps eigenen Metadaten. `[-_]` tolerant, weil Paketnamen in Metadaten in
+# beiden Schreibweisen auftreten duerfen (PEP 503 normalisiert erst beim Vergleich).
+# NUR `==`: bei `>=` waere jede Antwort geraten, und Raten kostet hier ein taegliches pip
+# ohne Ende — siehe `_ejs_untauglich`.
+_EJS_PIN_RE = re.compile(r"yt[-_]dlp[-_]ejs\s*==\s*([^\s;,()]+)")
 
 
 def _heute() -> dt.date:
@@ -56,17 +62,57 @@ def fassung() -> str | None:
         return None
 
 
-def _ejs_fehlt() -> bool:
-    """Fehlen die Loeserskripte (`yt-dlp-ejs`) in dieser Umgebung?
+def _ejs_pin() -> str | None:
+    """Welche ejs-Fassung verlangt das installierte yt-dlp? `None` = keine Aussage.
+
+    yt-dlp deklariert das Extra als `yt-dlp-ejs==0.8.0; extra == 'default'` (gemessen in
+    dieser venv, zweimal — einmal fuer `default`, einmal fuer `pin`). Auch das steht in den
+    Metadaten auf der Platte, kostet also keinen Import.
+    """
+    try:
+        zeilen = metadata.requires("yt-dlp") or []
+    except metadata.PackageNotFoundError:
+        return None
+    for z in zeilen:
+        m = _EJS_PIN_RE.search(z)
+        if m:
+            return m.group(1)
+    return None
+
+
+def _ejs_untauglich() -> bool:
+    """Kann der Loeser mit dem, was hier installiert ist, ueberhaupt arbeiten?
+
+    Zwei Arten von Nein, und die zweite sieht man dem Paketordner nicht an:
+    - es ist **gar nicht da** (#179 — `yt-dlp[default]` kam erst mit #178 dazu), oder
+    - es ist da, aber in einer Fassung, die **nicht zu diesem yt-dlp passt** (#182).
+
+    Der zweite Fall entsteht durch ein `pip install -U yt-dlp` **ohne** das Extra: pip hat
+    dann keine Anforderung an ejs, hebt yt-dlp und laesst die Skripte stehen. yt-dlp
+    verwirft sie daraufhin (`jsc/_builtin/ejs.py` vergleicht Major+Minor gegen
+    `vendor/_info.py:VERSION` und danach die Hashes) — und die Warnung darueber schluckt
+    `no_warnings` in `fetch.py`. Sichtbar wird davon nur der sporadische 403.
 
     Wie `fassung()` von der PLATTE gelesen, nicht importiert — aus demselben Grund: ein
     geladenes Modul laege beim pip-Lauf danach schon im Speicher.
+
+    **Im Zweifel NICHT flaggen.** Ein faelschlich gesetztes True liefe in ein pip, das den
+    Zustand nicht aendert — also jeden Tag aufs Neue, dauerhaft. Die Tagesbremse aus #179
+    deckelt das, sie beendet es nicht. Deshalb gilt „untauglich" nur bei einem Pin, der
+    wirklich dasteht und wirklich `==` sagt; alles andere (kein Pin, `>=`, unlesbar) laesst
+    den Kalenderweg entscheiden wie bisher.
+
+    Verglichen wird die **exakte** Fassung, nicht nur Major+Minor wie yt-dlps Versionsgatter:
+    ein Unterschied in der dritten Stelle kommt dort zwar durch, faellt aber danach durch die
+    Hash-Pruefung. Strenger zu sein kostet hoechstens EIN pip, das die Fassungen ausrichtet —
+    laxer zu sein liesse genau den Fall stehen, um den es hier geht.
     """
     try:
-        metadata.version(_EJS)
+        da = metadata.version(_EJS)
     except metadata.PackageNotFoundError:
-        return True
-    return False
+        return True                       # #179: gar nicht da
+    pin = _ejs_pin()
+    return pin is not None and pin != da   # #182: da, aber unpassend
 
 
 def _als_datum(v: str | None) -> dt.date | None:
@@ -135,7 +181,7 @@ def faellig() -> bool:
         return False
     heute = _heute()
     g = geprueft()
-    if _ejs_fehlt():
+    if _ejs_untauglich():
         # #179: `yt-dlp[default]` kam erst mit #178 in die requirements.txt, und die liest
         # eine installierte App nie wieder (`setup.js:venvVollstaendig()` winkt die venv
         # durch, ein App-Update ersetzt die .exe, nicht die venv). Am Kalender gemessen
