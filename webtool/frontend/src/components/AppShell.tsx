@@ -144,14 +144,18 @@ function Rahmen({ children }: { children: ReactNode }) {
             ist der EINE Bildlaufbehaelter des Inhalts, ohne Positionierung aber kein
             Bezugsrahmen — ein absolut positioniertes Kind sucht sich dann den Viewport und wird
             von `overflow-auto` NICHT geklemmt, weil das Klemmen nur fuer Nachfahren gilt, deren
-            Bezugsrahmen INNERHALB liegt. Genau daran hing die verschobene Huelle: `sr-only` IST
-            `position:absolute`, und das `sr-only` im Modell-Neuladen-Knopf der Einstellungen sass
-            an seiner Flussposition bei y=925 in einem 858 px hohen Fenster. Damit wurde das
-            DOKUMENT scrollbar (`documentElement.scrollHeight` 926 gegen `clientHeight` 858,
-            gemessen) — und ein Mausrad ueber der Leiste, die bei vier Projekten selbst nichts zu
-            scrollen hat, schob die ganze Huelle hoch: Titelzeile UND Statuszeile wanderten mit.
-            Ein Kasten am Knopf haette nur diese eine Stelle geheilt; `sr-only` in einem Knopf ist
-            das Normalmuster, der naechste Fall kaeme von selbst. */}
+            Bezugsrahmen INNERHALB liegt. Es blaeht damit das DOKUMENT auf, und ein Mausrad ueber
+            der Leiste — die bei vier Projekten selbst nichts zu scrollen hat — schiebt die ganze
+            Huelle: Titelzeile UND Statuszeile wandern mit.
+            Ausgeloest hat es ein `sr-only` (das IST `position:absolute`) im Modell-Neuladen-Knopf
+            der Einstellungen. Ein Kasten am Knopf haette nur diese eine Stelle geheilt; `sr-only`
+            in einem Knopf ist das Normalmuster, der naechste Fall kaeme von selbst.
+            Was daran gemessen ist und was nur gefolgert, steht in `webtool/frontend/CLAUDE.md` —
+            die Zahlen hier ein zweites Mal zu fuehren hiesse, sie beim naechsten Nachmessen an
+            einer Stelle zu vergessen. Kehrseite, die man kennen muss: ein
+            `focus:not-sr-only focus:absolute`-Muster (unsichtbar bis fokussiert) wird INNERHALB
+            von `main` jetzt an dessen Raendern geklemmt — der Sprunglink oben liegt bewusst
+            ausserhalb. */}
         <main id="inhalt" tabIndex={-1} ref={inhalt}
           className="relative min-h-0 overflow-auto outline-none focus-visible:ring-2 focus-visible:ring-ring">{children}</main>
         <StatusBar />
