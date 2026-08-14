@@ -254,6 +254,16 @@ def test_pin_ohne_exakte_bindung_wird_NICHT_geflaggt(monkeypatch):
     assert _ECHTES_EJS_UNTAUGLICH() is False
 
 
+def test_pin_auch_in_der_unterstrich_schreibweise(monkeypatch):
+    """Vorsorge, kein beobachteter Fall — und deshalb hier festgehalten statt ungetestet
+    im Code: gemessen steht in yt-dlps METADATA die Bindestrich-Form, ein Build-Backend,
+    das nach PEP 503 normalisiert, schriebe aber `yt_dlp_ejs`. Ohne die Toleranz faende die
+    Regex nichts, `_ejs_pin()` gaebe None, und die Pruefung fiele nach fail-open — also
+    STILL — in genau den Fehler zurueck, gegen den sie gebaut ist."""
+    _metadaten(monkeypatch, "0.8.0", ["yt_dlp_ejs==0.9.0; extra == 'default'"])
+    assert _ECHTES_EJS_UNTAUGLICH() is True
+
+
 def test_fehlendes_ejs_schlaegt_den_pin(monkeypatch):
     """#179 bleibt gueltig: ist das Paket gar nicht da, zaehlt kein Pin mehr."""
     def fehlt(name):
