@@ -17,9 +17,9 @@ from webtool import ytdlp_update as yu
 
 HEUTE = dt.date(2026, 8, 13)
 
-# VOR jeder Fixture-Faelschung festgehalten: die Fixture pinnt `_ejs_fehlt` (s. unten),
+# VOR jeder Fixture-Faelschung festgehalten: die Fixture pinnt `_ejs_untauglich` (s. unten),
 # und der Test der Funktion selbst braucht trotzdem das Original.
-_ECHTES_EJS_FEHLT = yu._ejs_fehlt
+_ECHTES_EJS_UNTAUGLICH = yu._ejs_untauglich
 
 
 @pytest.fixture(autouse=True)
@@ -32,9 +32,9 @@ def isoliert(monkeypatch, tmp_path):
     # Die Suite laeuft bewusst ohne yt-dlp (und damit ohne yt-dlp-ejs) — im CI-Job steht
     # `pip install fastapi python-multipart pytest httpx`, sonst nichts. Ungepinnt haengen
     # damit VIER Faelligkeitstests daran, ob die Umgebung des Laeufers das Paket zufaellig
-    # mitbringt: gemessen, indem `_ejs_fehlt` einmal fest auf True gesetzt wurde — dann
+    # mitbringt: gemessen, indem `_ejs_untauglich` einmal fest auf True gesetzt wurde — dann
     # fallen `frische_fassung`, `merker_bremst`, `nightly` und `automatisch_ueberspringt` um.
-    monkeypatch.setattr(yu, "_ejs_fehlt", lambda: False)
+    monkeypatch.setattr(yu, "_ejs_untauglich", lambda: False)
     return tmp_path
 
 
@@ -114,7 +114,7 @@ def test_ohne_installiertes_yt_dlp_kein_update(monkeypatch):
     """`pip install -U` wuerde yt-dlp NEU installieren. Das ist Sache des Setups; hier
     bliebe sonst die ehrliche Meldung 'yt-dlp ist nicht installiert' aus.
 
-    **`_ejs_fehlt` steht hier bewusst auf True** — ohne yt-dlp fehlt auch dessen Extra, das
+    **`_ejs_untauglich` steht hier bewusst auf True** — ohne yt-dlp fehlt auch dessen Extra, das
     ist der ECHTE Zustand dieser Maschine. Mit dem `False` aus der Fixture prueft der Test
     die Reihenfolge nicht: der ejs-Zweig ist dann neutralisiert, und ob er vor oder hinter
     dem `v is None`-Riegel steht, sieht niemand. Gemessen (an PR #180 vom Review gefunden):
@@ -124,7 +124,7 @@ def test_ohne_installiertes_yt_dlp_kein_update(monkeypatch):
     Waechter umschiffen, damit der gepruefte der EINZIGE ist.
     """
     monkeypatch.setattr(yu, "fassung", lambda: None)
-    monkeypatch.setattr(yu, "_ejs_fehlt", lambda: True)
+    monkeypatch.setattr(yu, "_ejs_untauglich", lambda: True)
     assert yu.faellig() is False
 
 
@@ -146,7 +146,7 @@ def test_fehlende_loeserskripte_machen_faellig(monkeypatch):
     die .exe, nicht die venv). Am Kalender gemessen faellt das NIE auf: die Fassung ist
     frisch, der Loeser hat trotzdem keine Skripte — und YouTube antwortet mit 403."""
     monkeypatch.setattr(yu, "fassung", lambda: "2026.8.12")       # gestern erschienen
-    monkeypatch.setattr(yu, "_ejs_fehlt", lambda: True)
+    monkeypatch.setattr(yu, "_ejs_untauglich", lambda: True)
     assert yu.faellig() is True
 
 
@@ -158,7 +158,7 @@ def test_fehlende_loeserskripte_bremst_der_merker_nur_einen_TAG(monkeypatch):
     Import; deshalb hoechstens einmal am Tag statt gar nicht.
     """
     monkeypatch.setattr(yu, "fassung", lambda: "2026.8.12")
-    monkeypatch.setattr(yu, "_ejs_fehlt", lambda: True)
+    monkeypatch.setattr(yu, "_ejs_untauglich", lambda: True)
     settings.save({"ytdlp_geprueft": HEUTE.isoformat()})
     assert yu.faellig() is False
     settings.save({"ytdlp_geprueft": (HEUTE - dt.timedelta(days=1)).isoformat()})
@@ -177,30 +177,96 @@ def test_ejs_wird_an_den_metadaten_gemessen(monkeypatch):
     gepinnte Fixture-Fassung. Deshalb an zwei echten Wegwerf-venvs nachgemessen, gleiche
     yt-dlp-Fassung (2026.7.4) und gleicher Merker (gestern), nur das Paket unterschiedlich:
 
-        ohne yt-dlp-ejs -> _ejs_fehlt() True,  faellig() True
-        mit  yt-dlp-ejs -> _ejs_fehlt() False, faellig() False
+        ohne yt-dlp-ejs -> _ejs_untauglich() True,  faellig() True
+        mit  yt-dlp-ejs -> _ejs_untauglich() False, faellig() False
 
     Dass `pip install -U "yt-dlp[default]"` das Paket ueberhaupt nachzieht, wenn yt-dlp
     schon die neueste Fassung ist, haengt der ganze Fix daran — im selben Lauf gemessen:
     yt-dlp blieb bei 2026.7.4, `yt-dlp-ejs-0.8.0` kam neu dazu.
 
     **Der Distributionsname wird mitgeprueft** (wie in `test_fassung_laedt_yt_dlp_nicht`):
-    ein Stub, der jeden Namen annimmt, bleibt auch dann gruen, wenn `_ejs_fehlt()` aus
+    ein Stub, der jeden Namen annimmt, bleibt auch dann gruen, wenn `_ejs_untauglich()` aus
     Versehen `yt-dlp` abfragt — und das ist immer installiert, die Funktion antwortete also
     dauerhaft "da ist es". Nachgemessen: mit `_EJS = "yt-dlp"` liefen vorher ALLE 32 Tests
     durch (CodeRabbit an PR #180).
     """
     gerufen = []
     monkeypatch.setattr(yu.metadata, "version", lambda name: gerufen.append(name) or "0.8.0")
-    assert _ECHTES_EJS_FEHLT() is False
+    assert _ECHTES_EJS_UNTAUGLICH() is False
 
     def fehlt(name):
         gerufen.append(name)
         raise yu.metadata.PackageNotFoundError(name)
 
     monkeypatch.setattr(yu.metadata, "version", fehlt)
-    assert _ECHTES_EJS_FEHLT() is True
+    assert _ECHTES_EJS_UNTAUGLICH() is True
     assert gerufen == ["yt-dlp-ejs", "yt-dlp-ejs"]
+
+
+# --- Untauglich ist auch eine UNPASSENDE Fassung (#182) ----------------------
+
+def _metadaten(monkeypatch, installiert, requires):
+    """yt-dlps Metadaten faelschen — beides von der Platte, ohne Import."""
+    monkeypatch.setattr(yu.metadata, "version", lambda name: installiert)
+    monkeypatch.setattr(yu.metadata, "requires", lambda name: requires)
+
+
+def test_unpassende_loeserskripte_sind_untauglich(monkeypatch):
+    """#182: `pip install -U yt-dlp` OHNE `[default]` hebt yt-dlp und laesst ejs stehen.
+    Das Paket ist dann DA — `_ejs_untauglich` haette nach #179 also False gesagt — aber
+    yt-dlp verwirft es (Major+Minor, dann Hash) und `no_warnings` schluckt die Warnung.
+    Ergebnis waere still der Stand vor #170, samt sporadischem 403."""
+    _metadaten(monkeypatch, "0.8.0", ["yt-dlp-ejs==0.9.0; extra == 'default'"])
+    assert _ECHTES_EJS_UNTAUGLICH() is True
+
+
+def test_passende_loeserskripte_sind_tauglich(monkeypatch):
+    """Negativkontrolle — sonst waere eine Fassung, die immer True liefert, nicht zu
+    unterscheiden. Die Zeichenkette ist die echte aus dieser venv (gemessen)."""
+    _metadaten(monkeypatch, "0.8.0", ["yt-dlp-ejs==0.8.0; extra == 'default'",
+                                      "yt-dlp-ejs==0.8.0; extra == 'pin'"])
+    assert _ECHTES_EJS_UNTAUGLICH() is False
+
+
+def test_ohne_pin_wird_NICHT_geflaggt(monkeypatch):
+    """Verlangt das installierte yt-dlp gar kein ejs, gibt es nichts auszurichten.
+
+    Der Rueckfall muss hier nach FALSE gehen, und das ist die wichtigste Zeile dieses
+    Blocks: ein faelschlich gesetztes True liefe in ein pip, das den Zustand nicht aendert
+    — also jeden Tag aufs Neue, dauerhaft und ohne dass es je gruen wird. Die Bremse aus
+    #179 deckelt das auf einmal taeglich, sie beendet es nicht."""
+    _metadaten(monkeypatch, "0.8.0", ["requests; extra == 'default'"])
+    assert _ECHTES_EJS_UNTAUGLICH() is False
+    _metadaten(monkeypatch, "0.8.0", None)          # yt-dlp deklariert gar nichts
+    assert _ECHTES_EJS_UNTAUGLICH() is False
+
+
+def test_pin_ohne_exakte_bindung_wird_NICHT_geflaggt(monkeypatch):
+    """Nur `==` ist eine Aussage, die sich billig vergleichen laesst. Bei `>=` waere jede
+    Antwort geraten — und Raten kostet hier ein taegliches pip ohne Ende (s. o.).
+
+    Die Fassungen muessen hier AUSEINANDERGEHEN (0.8.0 installiert, 0.9.0 gefordert): mit
+    `>=0.8.0` war der Test vacuous — beide Seiten gleich, also lieferte auch eine Regex, die
+    `>=` faelschlich frisst, brav False. Die Mutationsprobe fand genau das (die gelockerte
+    Regex liess alle 37 Tests gruen). Jetzt ist die `==`-Bindung das EINZIGE, was hier noch
+    False erzeugen kann."""
+    _metadaten(monkeypatch, "0.8.0", ["yt-dlp-ejs>=0.9.0; extra == 'default'"])
+    assert _ECHTES_EJS_UNTAUGLICH() is False
+
+
+def test_fehlendes_ejs_schlaegt_den_pin(monkeypatch):
+    """#179 bleibt gueltig: ist das Paket gar nicht da, zaehlt kein Pin mehr."""
+    def fehlt(name):
+        raise yu.metadata.PackageNotFoundError(name)
+
+    monkeypatch.setattr(yu.metadata, "version", fehlt)
+    monkeypatch.setattr(yu.metadata, "requires", lambda name: ["yt-dlp-ejs==0.8.0"])
+    assert _ECHTES_EJS_UNTAUGLICH() is True
+
+
+# Die Kette „untauglich -> faellig, trotz frischer yt-dlp-Fassung" steht bereits in
+# `test_fehlende_loeserskripte_machen_faellig` — sie haengt an `_ejs_untauglich`, nicht am
+# GRUND der Untauglichkeit. Ein zweiter Test mit identischer Zusicherung waere Deko.
 
 
 # --- Schalter ----------------------------------------------------------------
