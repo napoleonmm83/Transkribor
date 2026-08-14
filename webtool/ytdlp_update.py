@@ -42,7 +42,7 @@ MERKER = "ytdlp_geprueft"
 # Das Paket mit den Loeserskripten fuer YouTubes JS-Challenge; kommt ueber `yt-dlp[default]`.
 _EJS = "yt-dlp-ejs"
 # --- Wie der Paketname in beiden Regexes geschrieben steht -------------------
-# `[-_.]` und `IGNORECASE` sind VORSORGE, kein beobachteter Fall: gemessen steht in yt-dlps
+# `[-_.]+` und `IGNORECASE` sind VORSORGE, kein beobachteter Fall: gemessen steht in yt-dlps
 # METADATA die kleingeschriebene Bindestrich-Form (`Requires-Dist: yt-dlp-ejs==0.8.0;
 # extra == 'default'`), und `metadata.requires()` reicht die Zeile unveraendert durch. PEP 503
 # normalisiert LAEUFE aus `-`, `_` und `.` auf ein einzelnes `-` und vergleicht ohne Ruecksicht auf
