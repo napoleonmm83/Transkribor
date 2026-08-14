@@ -166,6 +166,28 @@ def _lebt_laut(merker):
     return _prozess_lebt(pid) if wirt and wirt == platform.node() else None
 
 
+def _verzeichnis_kennung(pfad: str):
+    """`(st_dev, st_ino)` des Verzeichnisses, oder None wenn es dazu keine Auskunft gibt.
+
+    Das ist die Identitaet des Verzeichnisses SELBST — ein gleichnamiger Nachfolger hat eine
+    andere. Auf Windows gemessen: nach `rmdir` + `mkdir` am selben Pfad unterscheiden sich die
+    Werte (NTFS-Dateiindex). Wo `st_ino` 0 ist (manche Netz-/FAT-Pfade), gibt es keine
+    Auskunft — dann gilt wie ueberall hier: nicht raten, sondern den Fall behandeln wie vorher.
+    """
+    try:
+        z = os.lstat(pfad)
+    except OSError:
+        return None
+    return (z.st_dev, z.st_ino) if z.st_ino else None
+
+
+def _ist_noch(pfad: str, kennung) -> bool:
+    """Liegt an `pfad` noch DASSELBE Verzeichnis wie bei `kennung`? Ohne Auskunft: ja (wie bisher)."""
+    if kennung is None:
+        return True
+    return _verzeichnis_kennung(pfad) == kennung
+
+
 def _wegraeumen(lockdir: str, erwartet) -> None:
     """Lock samt Merker entfernen — aber NUR, wenn es noch dasselbe Lock ist.
 
@@ -179,15 +201,26 @@ def _wegraeumen(lockdir: str, erwartet) -> None:
     """
     if _merker_lesen(lockdir) != erwartet:
         return                                    # gehoert inzwischen jemand anderem
+    kennung = _verzeichnis_kennung(lockdir)
+    merkerpfad = os.path.join(lockdir, _HALTER)
     for versuch in range(_RMDIR_VERSUCHE):
+        # Der Ausweis wird bei JEDEM Versuch neu geprueft, nicht nur einmal vorher: die
+        # Wiederholung streckt das Fenster von Mikrosekunden auf bis zu 160 ms, und darin kann
+        # ein Warter das Lock uebernommen haben (Notgriff) — dann steht an diesem Pfad ein
+        # FREMDES Verzeichnis, und die naechste Runde loeschte dessen frisches Lock. Genau die
+        # Kaskade, gegen die der Merker da ist. Geprueft wird ueber `st_ino`, nicht ueber den
+        # Merker-Inhalt: den haben zwei Faeden EINES Prozesses gemeinsam (#207), und nach einem
+        # geglueckten `os.remove` ist er ohnehin weg. (CodeRabbit-CLI an PR #206, kritisch.)
+        if versuch and not _ist_noch(lockdir, kennung):
+            return
         # BEIDES in der Schleife, nicht nur das `rmdir`: haelt ein Warter den Merker offen,
-        # kann schon das `os.remove` scheitern (Windows gibt dann PermissionError statt eines
-        # delete-pending-Eintrags — welches von beidem, haengt daran, wie der Leser die Datei
-        # geoeffnet hat). Nur das `rmdir` zu wiederholen half in dem Fall nie: die Datei liegt
+        # kann schon das `os.remove` scheitern. Auf dieser Maschine gemessen: `os.remove` gibt
+        # dann `PermissionError [WinError 32]` (die Datei ist in Benutzung) und `os.rmdir`
+        # `[WinError 145]`. Nur das `rmdir` zu wiederholen half deshalb NIE — die Datei liegt
         # ja noch da. Erst mit dem Umbau bestand der Windows-Test darunter.
         if erwartet is not None:
             with contextlib.suppress(OSError):
-                os.remove(os.path.join(lockdir, _HALTER))
+                os.remove(merkerpfad)
         try:
             os.rmdir(lockdir)
             return
