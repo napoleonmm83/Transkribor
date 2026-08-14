@@ -478,17 +478,62 @@ def test_fremdes_paket_zaehlt_auch_beim_FEHLEN_nicht(monkeypatch):
     assert _ECHTES_EJS_UNTAUGLICH() is False
 
 
-def test_paketname_mit_ANHANG_zaehlt_nicht(monkeypatch):
-    """Der Anker schuetzt den Zeilenanfang, die Wortgrenze das Ende: `yt-dlp-ejs2` waere
-    ohne `\\b` unser Paket. Auch das ist die stille Fehlrichtung — ein fremdes Paket setzte
-    dann einen Flag, den `pip install -U yt-dlp[default]` nie loeschen kann.
+@pytest.mark.parametrize("name", ["yt-dlp-ejs2", "yt-dlp-ejs-extra", "yt-dlp-ejs.deno"])
+def test_geschwisterpaket_zaehlt_nicht(monkeypatch, name):
+    """Der Anker schuetzt den Zeilenanfang, `(?![\\w.-])` das Ende.
 
-    Die eckige Klammer muss dagegen durchkommen (`yt-dlp-ejs[deno]` ist dasselbe Paket mit
-    Extra), deshalb `\\b` und nicht `$` oder `\\s`."""
-    _ohne_ejs(monkeypatch, ["yt-dlp-ejs2==0.9.0; extra == 'default'"])
+    Mit `\\b` — dem ersten Versuch — kamen `yt-dlp-ejs-extra` und `yt-dlp-ejs.deno` als
+    „unser Paket" durch (gemessen): `\\b` trennt nur gegen WORTzeichen, `-` und `.` sind
+    keine. Verlangte ein kuenftiges yt-dlp so ein Geschwisterpaket statt `yt-dlp-ejs`, holte
+    `pip install -U yt-dlp[default]` das Geschwister und nie ejs — ein Flag ohne Ende, also
+    die verbotene Richtung. Nur der Ziffernfall (`…ejs2`) war schon vorher richtig.
+    """
+    _ohne_ejs(monkeypatch, [f"{name}==0.9.0; extra == 'default'"])
     assert _ECHTES_EJS_UNTAUGLICH() is False
+
+
+def test_paket_mit_extra_in_klammern_zaehlt_MIT(monkeypatch):
+    """Gegenprobe zur Zeile darueber — sonst waere die Wache zu scharf: `yt-dlp-ejs[deno]`
+    ist dasselbe Paket mit Extra und muss durchkommen. Deshalb steht `[` nicht in der
+    verbotenen Zeichenklasse."""
     _ohne_ejs(monkeypatch, ["yt-dlp-ejs[deno]==0.9.0; extra == 'default'"])
     assert _ECHTES_EJS_UNTAUGLICH() is True
+
+
+def test_punkt_schreibweise_zaehlt_MIT(monkeypatch):
+    """PEP 503 normalisiert `-`, `_` UND `.` gleich — `yt.dlp.ejs` ist derselbe Projektname.
+    Die Begruendung im Code fuehrte PEP 503 an, liess den Punkt aber weg; ohne ihn fielen
+    beide Fragen bei dieser Schreibweise STILL nach fail-open."""
+    _ohne_ejs(monkeypatch, ["yt.dlp.ejs==0.9.0; extra == 'default'"])
+    assert _ECHTES_EJS_UNTAUGLICH() is True
+
+
+def test_weitere_marker_gelten_auch_beim_FEHLEN_nicht(monkeypatch):
+    """Der geteilte `_gilt_fuer_uns` wirkt auch hier — und die Kosten sind hier UMGEKEHRT
+    zum Pin-Pfad: dort heisst fail-open „der Kalender entscheidet", hier faellt #179 fuer
+    diese Datei bis zum 14-Tage-Takt still aus, obwohl pip auf einer passenden
+    Python-Fassung sehr wohl installierte.
+
+    Bewusst so gelassen (yt-dlp schreibt heute einen blanken Marker; zwei verschiedene
+    Marker-Regeln fuer zwei Fragen waeren die teurere Verwechslungsquelle) — und deshalb
+    hier festgehalten statt stillschweigend hingenommen."""
+    _ohne_ejs(monkeypatch,
+              ['yt-dlp-ejs==0.8.0; extra == \'default\' and python_version >= "3.9"'])
+    assert _ECHTES_EJS_UNTAUGLICH() is False
+
+
+def test_pin_regex_bindet_an_den_zeilenanfang():
+    """`_EJS_PIN_RE` DIREKT geprueft, nicht ueber `_ejs_pin()` — dort filtert `_ejs_zeilen()`
+    vorher an `_EJS_NAME_RE`, der Anker waere ueber `_ejs_pin()` also nicht erreichbar und
+    bliebe eine Wache ohne roten Test (gemessen: mit beiden Ankern bleibt alles gruen).
+
+    Er kann etwas, was die Namensfilterung nicht abdeckt — den Pin an den ZEILENANFANG binden
+    statt nur an die richtige Zeile. Beide Formen unten lieferten ohne ihn einen Pin."""
+    assert yu._EJS_PIN_RE.search(
+        "yt-dlp-ejs@ file:///pkgs/yt-dlp-ejs==0.8.1; extra == 'default'") is None
+    assert yu._EJS_PIN_RE.search(
+        "yt-dlp-ejs; extra == 'default' or yt-dlp-ejs==0.9.0") is None
+    assert yu._EJS_PIN_RE.search("yt-dlp-ejs==0.8.0; extra == 'default'").group(1) == "0.8.0"
 
 
 # Die Kette „untauglich -> faellig, trotz frischer yt-dlp-Fassung" steht bereits in

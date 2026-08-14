@@ -41,29 +41,46 @@ PIP_TIMEOUT = 120
 MERKER = "ytdlp_geprueft"
 # Das Paket mit den Loeserskripten fuer YouTubes JS-Challenge; kommt ueber `yt-dlp[default]`.
 _EJS = "yt-dlp-ejs"
-# Der Pin aus yt-dlps eigenen Metadaten.
-# `[-_]` ist VORSORGE, kein beobachteter Fall: gemessen steht in yt-dlps METADATA die
-# Bindestrich-Form (`Requires-Dist: yt-dlp-ejs==0.8.0; extra == 'default'`), und
-# `metadata.requires()` reicht die Zeile unveraendert durch. Ein Build-Backend, das Namen
-# nach PEP 503 normalisiert, schriebe aber `yt_dlp_ejs` — und dann faende die Regex nichts,
-# `_ejs_pin()` gaebe None zurueck und die Pruefung fiele nach fail-open, also STILL, genau
-# in den Fehler zurueck, gegen den sie gebaut ist. Sechs Zeichen gegen ein stummes Versagen.
-# `IGNORECASE` aus demselben Grund und mit demselben Stand: PEP 503 vergleicht Paketnamen
-# ohne Ruecksicht auf Gross-/Kleinschreibung, `YT-DLP-EJS` waere also gueltige Metadaten.
-# Gemessen steht dort Kleinschreibung — aber falsch liegt die Regex hier immer nach derselben
-# stillen Seite, und mehr Namen als das ejs-Paket kann sie dadurch nicht treffen.
-# NUR `==`: bei `>=` waere jede Antwort geraten, und Raten kostet hier ein taegliches pip
-# ohne Ende — siehe `_ejs_untauglich`.
+# --- Wie der Paketname in beiden Regexes geschrieben steht -------------------
+# `[-_.]` und `IGNORECASE` sind VORSORGE, kein beobachteter Fall: gemessen steht in yt-dlps
+# METADATA die kleingeschriebene Bindestrich-Form (`Requires-Dist: yt-dlp-ejs==0.8.0;
+# extra == 'default'`), und `metadata.requires()` reicht die Zeile unveraendert durch. PEP 503
+# normalisiert Laeufe aus `-`, `_` UND `.` gleich und vergleicht ohne Ruecksicht auf
+# Gross-/Kleinschreibung — ein anderes Build-Backend duerfte also `yt_dlp_ejs`, `yt.dlp.ejs`
+# oder `YT-DLP-EJS` schreiben. Faende die Regex das nicht, fielen beide Fragen nach fail-open,
+# also STILL, genau in den Fehler zurueck, gegen den sie gebaut sind.
+#
+# `^\s*` in BEIDEN: eine Anforderungszeile FAENGT mit dem Paketnamen an. Ungeankert las
+# `search` aus `my-yt-dlp-ejs==0.9.0` brav `0.9.0` als geforderten ejs-Pin (gemessen).
+#
+# `(?![\w.-])` statt `\b` am Namensende. `\b` trennt nur gegen Wortzeichen und liess
+# `yt-dlp-ejs-extra` und `yt-dlp-ejs.deno` als „unser Paket" durch (gemessen) — Geschwister-
+# pakete, die pip statt ejs installierte, waeren damit ein Flag ohne Ende gewesen. `[deno]`
+# muss dagegen durchkommen (dasselbe Paket mit Extra), deshalb steht `[` nicht in der Klasse.
+
 # Der NAME allein, ohne Bedingung an den Specifier — die schwaechere Frage aus #184
-# („verlangt yt-dlp ejs ueberhaupt?"). Verankert (`^\s*`), weil eine Anforderungszeile mit dem
-# Paketnamen ANFAENGT: ungeankert las `search` aus `my-yt-dlp-ejs==0.9.0` brav `0.9.0` als
-# geforderten ejs-Pin (gemessen) — ein fremdes Paket haette den Flag gesetzt, den pip nie
-# loeschen kann. `\b` am Ende trennt sauber gegen ein `yt-dlp-ejs2` und laesst `[deno]` durch.
-_EJS_NAME_RE = re.compile(r"^\s*yt[-_]dlp[-_]ejs\b", re.IGNORECASE)
-# Der Pin aus derselben Zeile. Bewusst OHNE Anker: diese Regex laeuft nur noch ueber Zeilen,
-# die `_ejs_zeilen()` bereits an `_EJS_NAME_RE` gefiltert hat — ein zweiter Anker waere hier
-# nicht Redundanz, sondern eine Wache, die den Test der ersten vacuous machte.
-_EJS_PIN_RE = re.compile(r"yt[-_]dlp[-_]ejs\s*==\s*([^\s;,()]+)", re.IGNORECASE)
+# („verlangt yt-dlp ejs ueberhaupt?").
+_EJS_NAME_RE = re.compile(r"^\s*yt[-_.]dlp[-_.]ejs(?![\w.-])", re.IGNORECASE)
+# Derselbe Name, aber NUR mit `==`: bei `>=` waere jede Antwort geraten, und Raten kostet hier
+# ein taegliches pip ohne Ende (siehe `_ejs_untauglich`).
+#
+# Der Anker ist hier **Tiefenstaffelung ohne eigenen roten Test** — und das ist eine bewusste
+# Ausnahme von der Hausregel, keine Nachlaessigkeit: `_ejs_zeilen()` filtert vorher an
+# `_EJS_NAME_RE`, ein Aufruf mit einer nicht gefilterten Zeile kommt hier also nicht an.
+# Gemessen: mit beiden Ankern bleiben alle Tests gruen. Er bleibt trotzdem stehen, weil er
+# etwas kann, was die Namensfilterung NICHT abdeckt — den Pin an den ZEILENANFANG binden
+# statt nur an die richtige Zeile:
+#   "yt-dlp-ejs@ file:///pkgs/yt-dlp-ejs==0.8.1; extra == 'default'" -> ohne Anker 0.8.1
+#   "yt-dlp-ejs; extra == 'default' or yt-dlp-ejs==0.9.0"            -> ohne Anker 0.9.0
+# Damit er nicht doch unbewacht bleibt, prueft ein Test die Regex DIREKT statt ueber
+# `_ejs_pin()` (`test_pin_regex_bindet_an_den_zeilenanfang`).
+#
+# Was hier bewusst NICHT abgedeckt ist: `yt-dlp-ejs[deno]==0.9.0` und die geklammerte Form
+# `yt-dlp-ejs (==0.9.0)` aelterer setuptools liefern KEINEN Pin (fail-open) — waehrend
+# `_EJS_NAME_RE` sie als unser Paket zaehlt. Die Asymmetrie ist sicher (fail-open kostet
+# hoechstens eine verspaetete Erkennung) und billiger als eine Regex, die beide Klammerformen
+# mitfuehrt, solange yt-dlp keine davon schreibt.
+_EJS_PIN_RE = re.compile(r"^\s*yt[-_.]dlp[-_.]ejs\s*==\s*([^\s;,()]+)", re.IGNORECASE)
 # Der Umgebungsmarker derselben Zeile. `fullmatch` gegen GENAU `extra == 'default'` — alles
 # andere (`extra == 'pin'`, zusaetzliches `and python_version …`) faellt nach fail-open.
 # Siehe `_gilt_fuer_uns`.
@@ -153,6 +170,15 @@ def _ejs_verlangt() -> bool:
     die bewusst enge `==`-Regel gekoppelt — bei einem gelockerten Pin (`>=0.8.0,<0.9`) faende
     `_ejs_pin()` nichts, und ein WIRKLICH fehlendes ejs waere still nicht mehr erkannt worden.
     Still ist hier das teure Wort.
+
+    **Die Kosten von fail-open sind hier umgekehrt zum Pin.** Bei `_ejs_pin()` heisst „nicht
+    lesbar" nur „der Kalenderweg entscheidet" — hier heisst es, dass #179 fuer diese Datei
+    **still ausfaellt**, bis der 14-Tage-Takt greift. Der geteilte `_gilt_fuer_uns` bringt das
+    mit: eine Zeile mit zusaetzlichem Marker (`extra == 'default' and python_version >= "3.9"`)
+    zaehlt hier nicht, obwohl pip ejs auf einer passenden Python-Fassung sehr wohl
+    installierte. Bewusst so gelassen — yt-dlp schreibt heute einen blanken Marker, und zwei
+    verschiedene Marker-Regeln fuer zwei Fragen waeren die teurere Verwechslungsquelle.
+    Festgehalten in `test_weitere_marker_gelten_auch_beim_FEHLEN_nicht`.
     """
     return bool(_ejs_zeilen())
 
@@ -234,8 +260,16 @@ def _ejs_untauglich() -> bool:
         da = metadata.version(_EJS)
     except metadata.PackageNotFoundError:
         # #179 fehlt — aber nur, wenn yt-dlp es ueberhaupt verlangt (#184). Sonst holt es
-        # auch `pip install -U yt-dlp[default]` nicht (es warnt „does not provide the extra"
-        # und endet mit 0), und der Flag ginge nie weg.
+        # auch `pip install -U yt-dlp[default]` nicht: es warnt „does not provide the extra"
+        # und endet mit **0** (gemessen mit `--dry-run` an einem erfundenen Extra).
+        #
+        # Dauerhaft waere der Flag dabei nur, wenn die NEUESTE installierbare Fassung das
+        # Extra nicht fuehrt — liegt auf PyPI eine neuere mit `default`, hebt `-U` yt-dlp mit
+        # und ejs kommt beim ersten Lauf. Erreichbar ist der Dauerfall also nur, wenn pip an
+        # der alten Fassung festhaengt (Python-Version). Fuer genau diesen Nutzer verschiebt
+        # #184 die #179-Erkennung vom Tagesrhythmus auf den 14-Tage-Kalenderweg — das ist die
+        # Entscheidung, nicht eine Nebenwirkung: ein taegliches pip, das nichts holen kann,
+        # ist teurer als eine um Tage spaetere Erkennung.
         return _ejs_verlangt()
     gefordert, installiert = _release(_ejs_pin()), _release(da)
     if gefordert is None or installiert is None:
