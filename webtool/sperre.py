@@ -22,7 +22,7 @@ import time
 
 # Ab wann ein liegengebliebenes Lock als verwaist gilt — aber NUR, wenn sein Halter keine
 # Auskunft gibt (altes Lock ohne Merker, fremder Rechner, halb geschriebene Datei). Wer sich
-# meldet, wird nach seinem Zustand behandelt, nicht nach der Uhr: siehe `_halter_lebt`.
+# meldet, wird nach seinem Zustand behandelt, nicht nach der Uhr: siehe `_lebt_laut`.
 STALTES_ALTER = 60.0
 
 # Der Merker mit der PID des Halters. Er liegt IM Lock-Verzeichnis, damit er es nicht
@@ -104,7 +104,15 @@ def _prozess_lebt(pid: int):
 
 def _merker_lesen(lockdir: str):
     """Der Merker als ROHE Bytes, oder None. Er ist zugleich der Ausweis dieses Locks: nur
-    wer denselben Inhalt wiederfindet, darf es wegraeumen (siehe `_wegraeumen`)."""
+    wer denselben Inhalt wiederfindet, darf es wegraeumen (siehe `_wegraeumen`).
+
+    **Der einzige Aufruf in der Warteschleife, der BLOCKIEREN kann**: `mkdir`/`lstat`/`rmdir`
+    kehren zurueck, ein `open()` auf einer nicht mehr erreichbaren Netzfreigabe haengt bis zum
+    Netz-Timeout (und `TRANSKRIBOR_PROJEKTE` darf dorthin zeigen). Die Obergrenze deckt das
+    NICHT — sie wird zwischen den Runden geprueft, nicht innerhalb eines Systemaufrufs. Bewusst
+    nicht behoben (ein Timeout um einen Dateizugriff hiesse Faden oder `O_NONBLOCK`), aber
+    benannt: die Schleife ist seitdem nicht mehr beweisbar haengerfrei.
+    """
     try:
         with open(os.path.join(lockdir, _HALTER), "rb") as f:
             return f.read(200)
@@ -125,9 +133,14 @@ def _lebt_laut(merker):
     try:
         pid_text, _, wirt = merker.decode("utf-8").strip().partition(" ")
         pid = int(pid_text)
-    except (UnicodeDecodeError, ValueError):
+    except ValueError:                            # UnicodeDecodeError IST einer (#185/#190)
         return None
-    return _prozess_lebt(pid) if wirt == platform.node() else None
+    # `wirt and`, nicht bloss der Vergleich: `platform.node()` schluckt `OSError` intern und
+    # liefert dann `""` — beide Haelften degradierten konsistent, `"" == ""` waere wahr, und
+    # auf einem geteilten Ordner beantwortete eine LOKALE PID einen fremden Merker. Sagt sie
+    # dann "tot", nimmt der Warter einem Lebenden das Lock weg: genau der Fehler, gegen den
+    # das hier gebaut ist, durch eine neue Tuer.
+    return _prozess_lebt(pid) if wirt and wirt == platform.node() else None
 
 
 def _wegraeumen(lockdir: str, erwartet) -> None:
@@ -184,7 +197,12 @@ def datei(pfad: str, stale: float = STALTES_ALTER):
             with contextlib.suppress(OSError):
                 with open(os.path.join(lockdir, _HALTER), "wb") as f:
                     f.write(inhalt)
-                mein_merker = inhalt
+            # Der Ausweis ist, was WIRKLICH auf der Platte steht — nicht, was wir schreiben
+            # wollten. Bricht das Schreiben halb ab (gepuffertes IO meldet einen kurzen
+            # Schreibvorgang typisch erst beim Schliessen), laege dort ein Teilinhalt, unser
+            # eigenes `finally` erkennte sein Lock nicht wieder und liesse es liegen —
+            # gemessen mit einem `close()`, das ENOSPC wirft.
+            mein_merker = _merker_lesen(lockdir)
             break
         except FileExistsError:
             hakelig_seit = None
@@ -240,8 +258,10 @@ def datei(pfad: str, stale: float = STALTES_ALTER):
                 break
             # Ein Halter, der sich als lebend MELDET und dabei laenger haelt, als ein
             # kritischer Abschnitt dauern sollte (Mikrosekunden bei settings/projekt; der
-            # pip-Lauf ist mit `timeout=PIP_TIMEOUT` gedeckelt, 120 s gegen 155 s), ist
-            # wahrscheinlicher eine
+            # pip-Lauf ist mit `timeout=PIP_TIMEOUT` gedeckelt, 120 s gegen 155 s — der
+            # darin verschachtelte settings-Lock aus `_merken()` ist in dieser Rechnung NICHT
+            # enthalten, und `subprocess.run`s Nach-Kill-`communicate()` laeuft auf Windows
+            # ohne Frist; siehe webtool/CLAUDE.md), ist wahrscheinlicher eine
             # WIEDERVERWENDETE PID als ein langsamer Prozess. Ohne diesen einen erzwungenen
             # Griff kostete so ein Lock danach JEDEN Aufruf dauerhaft diese Frist und liesse
             # ihn anschliessend ungeschuetzt laufen — die Uhr ist der Rueckfall der
@@ -249,6 +269,10 @@ def datei(pfad: str, stale: float = STALTES_ALTER):
             erzwungen = True
             print(f"[sperre] {lockdir} wird uebernommen (der gemeldete Halter haelt laenger, "
                   f"als ein Abschnitt dauern kann) …", flush=True)
+            # Der Ausweis ist hier pro forma (der Griff SOLL zugreifen) — er kostet nichts
+            # und haelt die eine Zeile ein. Trifft er das Zeitfenster zwischen `mkdir` und
+            # Merker eines frischen Halters, raeumt er dessen Lock ab; das ist der Preis des
+            # Griffs, nicht ein zweiter Mechanismus.
             with contextlib.suppress(OSError):
                 _wegraeumen(lockdir, _merker_lesen(lockdir))
             continue

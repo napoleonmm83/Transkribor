@@ -4,12 +4,15 @@ Die Nutzung steht in test_settings.py und test_ytdlp_update.py (zwei Faeden, Gle
 gemessen). Hier geht es um die Raender, die dort nicht auftauchen — und die alle drei
 gemeinsam haben, dass ein Fehler in ihnen die Sperre **still** ausser Kraft setzt.
 """
+import builtins
 import os
 import platform
 import subprocess
 import sys
 import threading
 import time
+
+import pytest
 
 from webtool import sperre
 
@@ -205,6 +208,88 @@ def test_lebendpruefung_toetet_den_geprueften_prozess_nicht():
     assert sperre._prozess_lebt(os.getpid()) is True
 
 
+@pytest.mark.skipif(os.name != "nt", reason="der ctypes-Zweig existiert nur auf Windows")
+def test_windows_beantwortet_beide_openprocess_ausgaenge():
+    """Der 87-Zweig ist auf Windows der HAUPT-Entscheider — er beantwortet das
+    `taskkill /F /T`-Opfer, dessen Handles alle zu sind — und hatte null Abdeckung: die
+    beiden anderen Tests halten ueber `Popen` absichtlich ein Handle offen und laufen
+    deshalb durch `WaitForSingleObject`, nicht durch den `OpenProcess`-Fehler.
+
+    Beide Richtungen, sonst ist die Zusicherung halb: `!= 87` → `False` (alles tot) faellt
+    sonst nicht auf, `!= 87` → `True` (alles lebt) nur ueber die erste Zeile.
+    """
+    assert sperre._prozess_lebt(2 ** 31 - 4) is False      # diese PID gibt es nicht
+    assert sperre._prozess_lebt(4) is True                 # System-Prozess: Zugriff verweigert
+
+
+def test_halb_geschriebener_merker_ist_keine_auskunft():
+    """Der dritte Zustand ("keine Auskunft") traegt die ganze Sicherheit dieses Moduls, und
+    der halb geschriebene Merker war der einzige seiner Faelle ohne Test. Ohne das `except`
+    fliegt ein `ValueError` bis zum Aufrufer — `settings.save()` sitzt auf
+    `PUT /api/settings`, `fetch._hole_yt_dlp()` hat gar keinen Schutz.
+    """
+    assert sperre._lebt_laut(b"12") is None                # mitten im Schreiben abgebrochen
+    assert sperre._lebt_laut(b"abc workstation") is None   # keine Zahl
+    assert sperre._lebt_laut(b"\xff\xfe kaputt") is None   # nicht als UTF-8 dekodierbar
+    assert sperre._lebt_laut(b"") is None
+
+
+def test_ohne_rechnernamen_gibt_es_keine_auskunft(monkeypatch):
+    """`platform.node()` schluckt `OSError` intern und liefert dann `""`. Beide Haelften
+    degradieren dann konsistent — und genau das ist die Falle: `"" == ""` ist wahr, die
+    Wirt-Pruefung waere wirkungslos, und auf einem geteilten Ordner beantwortete eine LOKALE
+    PID einen fremden Merker. Sagt sie "tot", ist der Fehler aus #175 wieder da.
+    """
+    monkeypatch.setattr(sperre.platform, "node", lambda: "")
+    p = _lebender_prozess()
+    try:
+        assert sperre._lebt_laut(f"{p.pid} ".encode()) is None
+    finally:
+        p.kill()
+        p.wait()
+
+
+def test_halb_geschriebener_eigener_merker_haelt_das_lock_nicht_fest(tmp_path, monkeypatch):
+    """Scheitert erst das `close()` (der Normalfall bei vollem Datentraeger — gepuffertes IO
+    meldet einen kurzen Schreibvorgang beim Schliessen), liegt der Merker mit TEILINHALT da.
+    Merkte sich der Halter dann, was er schreiben WOLLTE, passte sein Ausweis nicht mehr auf
+    das, was auf der Platte steht — und er raeumte sein EIGENES Lock nicht mehr weg. Der
+    Nachweis gehoert zugleich zur Zusage "scheitert das Schreiben, verhaelt sich das Lock wie
+    vor #175": ohne diesen Test uebte sie kein Lauf aus.
+    """
+    echt = builtins.open
+
+    class Halb:
+        """Schreibt nur die Haelfte und meldet den Fehler beim Schliessen."""
+
+        def __init__(self, f):
+            self._f = f
+
+        def write(self, daten):
+            return self._f.write(daten[:3])
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            self._f.close()
+            raise OSError(28, "No space left on device")
+
+    def hakelig(pfad, *a, **k):
+        f = echt(pfad, *a, **k)
+        schreibend = "w" in (a[0] if a else k.get("mode", "r"))
+        return Halb(f) if schreibend and str(pfad).endswith(sperre._HALTER) else f
+
+    monkeypatch.setattr(builtins, "open", hakelig)
+    ziel = str(tmp_path / "x.json")
+    lock = ziel + ".lock"
+    with sperre.datei(ziel):
+        assert os.path.isdir(lock)
+        halb = sperre._merker_lesen(lock)                  # halb, wie gebaut
+        assert halb == f"{os.getpid()} {platform.node()}".encode()[:3]
+    assert not os.path.exists(lock), "das eigene Lock blieb liegen"
+
+
 def test_unplausible_pid_gilt_als_keine_auskunft():
     """Eine kaputte Zahl im Merker darf nicht als "tot" durchgehen — dann raeumte der Warter
     das Lock SOFORT weg, und zwar an der Frist vorbei. ctypes wirft dabei nicht, es schneidet
@@ -377,7 +462,11 @@ def test_merker_von_einem_anderen_rechner_gilt_nicht(tmp_path, monkeypatch, caps
     einmal vacuous (davor rettete ihn der Halter-Subprozess, der mittendrin von selbst
     endete).
     """
-    monkeypatch.setattr(sperre, "_AUFGEBEN_PUFFER_S", 0.05)
+    # 0,5 s statt 0,05: die erste Schleifenrunde muss darunter bleiben, sonst feuert der
+    # erzwungene Griff ZUSAETZLICH und die Ausgabe-Zusicherung unten scheitert — auf einer
+    # belasteten Kiste mit Virenscanner erreichbar. Falsch-rot ist hier besonders teuer, weil
+    # genau dieser Test schon zweimal vacuous war und als Flake abgetan wuerde.
+    monkeypatch.setattr(sperre, "_AUFGEBEN_PUFFER_S", 0.5)
     ziel = str(tmp_path / "x.json")
     lock = ziel + ".lock"
     os.mkdir(lock)
