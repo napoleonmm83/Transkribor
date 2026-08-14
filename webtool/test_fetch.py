@@ -503,6 +503,28 @@ def test_ohne_update_kein_zweiter_versuch(projekt, monkeypatch):
     assert len(downloads) == 1
 
 
+def test_kaputte_metadaten_reissen_den_url_import_nicht_mit(monkeypatch, tmp_path):
+    """#185 end-to-end: `_hole_yt_dlp()` hat KEIN try/except um `automatisch()`, ein Wurf
+    aus dem Selbstaktualisierer riss also den ganzen URL-Import ab — gegen die Zusage im
+    Modul-Docstring („der Aufrufer macht mit der vorhandenen Fassung weiter").
+
+    Bewusst OHNE die `projekt`-Fixture: die schaltet den Automatismus per
+    `TRANSKRIBOR_YTDLP_UPDATE=0` ab, und `automatisch()` kaeme dann gar nicht bis zum
+    Metadaten-Zugriff. Der Riegel gegen echtes pip ist hier `aktualisiere`, nicht die Env."""
+    monkeypatch.setenv("TRANSKRIBOR_SETTINGS", str(tmp_path / "settings.json"))
+    monkeypatch.delenv("TRANSKRIBOR_YTDLP_UPDATE", raising=False)
+
+    def unlesbar(name):
+        raise UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid start byte")
+
+    monkeypatch.setattr(fetch.ytdlp_update.metadata, "version", unlesbar)
+    monkeypatch.setattr(fetch.ytdlp_update, "aktualisiere",
+                        lambda *a, **k: pytest.fail("kein pip auf unlesbare Metadaten"))
+    monkeypatch.setattr(fetch, "yt_dlp", None)
+    monkeypatch.setattr(fetch, "_importiere_yt_dlp", lambda: "modul")
+    assert fetch._hole_yt_dlp() == "modul"
+
+
 def test_neu_laden_raeumt_sys_modules_und_importiert_frisch(monkeypatch):
     """Nach dem pip liegt das ALTE Modul noch im Speicher; ein blosses `import` bekaeme
     weiter den Eintrag aus sys.modules und der zweite Versuch liefe mit dem alten Extraktor.

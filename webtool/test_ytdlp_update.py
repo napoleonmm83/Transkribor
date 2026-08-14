@@ -583,6 +583,55 @@ def test_klammerformen_liefern_bewusst_KEINEN_pin():
 # GRUND der Untauglichkeit. Ein zweiter Test mit identischer Zusicherung waere Deko.
 
 
+# --- Kaputte Metadaten reissen den Aufrufer nicht mit (#185) -----------------
+
+def _unlesbar(name):
+    """Was `importlib.metadata` bei einer nicht als UTF-8 dekodierbaren METADATA wirft.
+    KEIN PackageNotFoundError — genau darum ging es: die drei Lesestellen fingen nur den."""
+    raise UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid start byte")
+
+
+def test_unlesbare_fassung_wirft_nicht(monkeypatch, capsys):
+    """`fassung()` haengt an DREI HTTP-Handlern (`zustand()`) und an `fetch._hole_yt_dlp()`,
+    das keinen Schutz hat. Ungefangen waere das eine 500er-Einstellungsseite bzw. ein
+    abgerissener URL-Import — statt des im Modul-Docstring zugesagten best effort.
+
+    Unbekannt heisst „nicht installiert", und damit NICHT faellig: ein pip auf Verdacht
+    liefe hier taeglich, ohne den Zustand zu aendern."""
+    monkeypatch.setattr(yu.metadata, "version", _unlesbar)
+    assert yu.fassung() is None
+    assert yu.faellig() is False
+    assert "unlesbar" in capsys.readouterr().out
+
+
+def test_unlesbare_anforderungen_werfen_nicht(monkeypatch):
+    """Zweite Lesestelle (`metadata.requires`). Fail-open wie beim fehlenden Pin: keine
+    Zeilen heisst kein #182 und kein #184, der Kalenderweg entscheidet wie bisher."""
+    monkeypatch.setattr(yu.metadata, "version", lambda name: "0.8.0")
+    monkeypatch.setattr(yu.metadata, "requires", _unlesbar)
+    assert _ECHTES_EJS_UNTAUGLICH() is False
+    assert yu._ejs_pin() is None
+    assert yu._ejs_verlangt() is False
+
+
+def test_unlesbares_ejs_wird_NICHT_geflaggt(monkeypatch):
+    """Die dritte Lesestelle faellt in die ANDERE Richtung — das ist der Kern von #185.
+
+    Der `PackageNotFoundError`-Zweig daneben flaggt (ueber `_ejs_verlangt`), weil „nicht
+    installiert" eine Tatsache ist. Eine unlesbare METADATA ist dagegen nur „unbekannt", und
+    Unbekanntes flaggt dieses Modul nicht: ob ein pip die kaputte Datei ueberhaupt ersetzt,
+    ist offen — bleibt sie liegen, laeuft das taegliche pip dauerhaft weiter.
+
+    yt-dlp verlangt hier ausdruecklich ejs, `_ejs_verlangt()` waere also True. Wer den neuen
+    Zweig auf `return _ejs_verlangt()` umschreibt, macht genau diesen Test rot."""
+    monkeypatch.setattr(yu.metadata, "version",
+                        lambda name: _unlesbar(name) if name == yu._EJS else "2026.7.4")
+    monkeypatch.setattr(yu.metadata, "requires",
+                        lambda name: ["yt-dlp-ejs==0.8.0; extra == 'default'"])
+    assert yu._ejs_verlangt() is True          # Positivkontrolle: der Flag WAERE erreichbar
+    assert _ECHTES_EJS_UNTAUGLICH() is False
+
+
 # --- Schalter ----------------------------------------------------------------
 
 def test_einstellung_schaltet_ab():
