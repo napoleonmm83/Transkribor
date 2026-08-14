@@ -53,3 +53,36 @@ def atomic_write(path: str, text: str) -> None:
     with open(tmp, "w", encoding="utf-8") as fh:
         fh.write(text)
     os.replace(tmp, path)
+
+
+def beiseitelegen(pfad: str) -> str:
+    """Eine nicht lesbare Datei retten, BEVOR ein Read-Modify-Write sie mit Defaults ersetzt.
+
+    `settings.save()` und `projekt.speichern`/`setze_datei` lesen ueber einen Leser, der bei
+    kaputten Bytes auf Defaults zurueckfaellt (#190) — und schreiben genau diese Defaults
+    zurueck. Gemessen war danach der API-Key weg (#192) bzw. Sprache und Korrektur-Tiefe ALLER
+    Dateien eines Projekts (#196). Der Inhalt war dabei mit blossem Auge noch lesbar: ein
+    einzelnes kaputtes Byte macht die Datei fuer `json.load` unbrauchbar, nicht fuer den
+    Menschen. Rueckgabe: der Pfad der Rettung, oder "" wenn nichts gerettet wurde.
+
+    **Die ERSTE Rettung gewinnt.** Nach ihr steht in der Datei nur noch Default-Inhalt — eine
+    zweite Beschaedigung ueberschriebe also ausgerechnet das, was man retten wollte. Dieselbe
+    Richtung wie ueberall in diesem Repo: ein Rueckfall darf nichts freigeben, was er schuetzen
+    soll.
+
+    Best effort: schlaegt das Umbenennen fehl, laeuft der Schreibvorgang trotzdem. Der Aufruf
+    dient dem Schutz, er ist nicht sein Zweck (dieselbe Regel wie beim Lock in `sperre.py`).
+    """
+    ziel = pfad + ".kaputt"
+    try:
+        if os.path.exists(ziel):
+            print(f"⚠ {pfad} ist erneut nicht lesbar — {ziel} bleibt die aeltere Rettung "
+                  f"und wird NICHT ueberschrieben", flush=True)
+            return ""
+        os.replace(pfad, ziel)
+    except OSError as e:
+        print(f"⚠ {pfad} liess sich nicht beiseitelegen ({type(e).__name__}: {e}) — "
+              f"der Inhalt geht beim naechsten Schreibvorgang verloren", flush=True)
+        return ""
+    print(f"⚠ {pfad} war nicht lesbar — die alte Fassung liegt jetzt als {ziel}", flush=True)
+    return ziel

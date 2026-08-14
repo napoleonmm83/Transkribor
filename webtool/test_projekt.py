@@ -221,6 +221,26 @@ def test_nicht_lesbare_projekt_json_meldet_sich(tmp_path, monkeypatch, capsys):
     assert "nicht lesbar" in capsys.readouterr().out
 
 
+def test_upload_legt_die_unlesbare_projekt_json_beiseite(tmp_path, monkeypatch):
+    """#196: `setze_datei` ist ein Read-Modify-Write ueber `laden()` und ersetzte die kaputte
+    Datei durch Defaults plus seinen einen Eintrag — Sprache und Tiefe ALLER anderen Dateien
+    waren danach weg, englische Aufnahmen liefen wieder auf Schweizerdeutsch. Die Schreiber
+    sind haeufig und unbeaufsichtigt: jeder Audio-Upload und jeder URL-Import.
+
+    Geprueft wird beides — dass der alte Inhalt erhalten bleibt UND dass der Upload trotzdem
+    durchlaeuft. Ein Schreibpfad, der bei kaputter Datei verweigert, liesse den Upload
+    scheitern; das waere die schlechtere Richtung."""
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    os.makedirs(paths.project_dir("p"), exist_ok=True)
+    with open(projekt._pfad("p"), "wb") as fh:
+        fh.write(b'{"sprache": "en", "korrektur": "leicht", '
+                 b'"dateien": {"a": {"sprache": "fr"}}, "x": "caf\xe9"}')
+    projekt.setze_datei("p", "c", sprache="de")
+    gerettet = (tmp_path / "p" / "projekt.json.kaputt").read_bytes()
+    assert b'"fr"' in gerettet and b'"leicht"' in gerettet
+    assert projekt.datei_sprache("p", "c") == "de"          # der Upload selbst ging durch
+
+
 def test_laden_verschluckt_den_unsicheren_namen_nicht(tmp_path, monkeypatch):
     """`paths.safe_name` wirft ValueError fuer unsichere Namen. Seit der Erweiterung auf
     ValueError (#190) lag dieser Wurf im Rueckfall-Bereich, wenn der Pfadbau IM try steht —

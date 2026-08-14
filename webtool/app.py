@@ -739,6 +739,25 @@ def put_settings(body: SettingsBody):
     return {**settings.public(settings.save(patch)), "ytdlp": ytdlp_update.zustand()}
 
 
+@app.delete("/api/settings/kaputt")
+def settings_kaputt_weg():
+    """Die beiseitegelegte Einstellungsdatei entfernen — der Knopf unter dem Hinweis (#192).
+
+    Ohne ihn stuende der Hinweis fuer immer: der Pfad liegt im Benutzerprofil, und wer die
+    App benutzt, um nicht mit Dateien hantieren zu muessen, faengt dafuer keinen Explorer an.
+    Der Pfad kommt aus `settings.path()`, nicht aus dem Request — es gibt hier nichts zu
+    validieren, und es darf auch nichts anderes geloescht werden koennen.
+    """
+    p = settings.kaputt_pfad()
+    if not p:
+        raise HTTPException(status_code=404, detail="keine beiseitegelegte Datei")
+    try:
+        os.remove(p)
+    except OSError as e:
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+    return {"ok": True, "kaputt": ""}
+
+
 @app.post("/api/settings/ytdlp/update")
 def settings_ytdlp_update():
     """Der Knopf 'Jetzt aktualisieren'. Laeuft SYNCHRON im Request.

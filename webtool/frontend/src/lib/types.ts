@@ -60,6 +60,10 @@ export type Settings = {
    *  eine gesetzte Umgebungsvariable überstimmt die Datei. */
   ytdlp_auto: string;
   ytdlp: YtdlpStand;
+  /** Pfad einer beiseitegelegten, nicht mehr lesbaren Einstellungsdatei — sonst "".
+   *  Der Server ersetzt so eine Datei nicht mehr stillschweigend durch Standardwerte
+   *  (#192); dort steht unter Umstaenden noch der alte API-Key. */
+  kaputt: string;
 };
 /** `version` ist null, wenn yt-dlp gar nicht installiert ist; `geprueft` leer, solange nie
  *  aktualisiert wurde. `auto` ist der WIRKSAME Schalter, `env` sagt, ob

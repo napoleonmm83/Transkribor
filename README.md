@@ -189,6 +189,16 @@ transkribierst** oder ihre **Sprache änderst**: dann wird das Transkript aus de
 erstellt, das bisherige Transkript samt Korrekturen fällt dabei weg (das Audio bleibt).
 Löschen kannst du nur du selbst, bewusst über das ⋯-Menü.
 
+**„Deine gespeicherten Einstellungen waren beschädigt“ — was tun?** Sehr selten wird die
+kleine Datei unlesbar, in der deine Einstellungen stehen: ein Absturz mitten im Speichern, ein
+Synchronisierungsdienst, ein Datenträger mit Aussetzern. Transkribor arbeitet dann mit den
+Standardwerten weiter — dein hinterlegter API-Schlüssel ist damit nicht mehr eingetragen. Die
+alte Datei wird aber **nicht** überschrieben, sondern daneben aufbewahrt; der Hinweis auf der
+Einstellungsseite nennt dir den genauen Pfad. Öffne sie mit einem Texteditor: der Schlüssel
+steht dort meistens noch lesbar drin, du kannst ihn zurück ins Feld kopieren. Danach räumt der
+Knopf unter dem Hinweis die Datei weg. Genauso ergeht es den Sprach-Einstellungen eines
+Projekts: deren alte Fassung liegt als `projekt.json.kaputt` im Projektordner.
+
 ---
 
 ## Gefällt es dir?

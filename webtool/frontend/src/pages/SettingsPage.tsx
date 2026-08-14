@@ -3,7 +3,7 @@ import { toast } from 'sonner'
 import { KeyRound, Loader2, LogIn, RefreshCw } from 'lucide-react'
 import {
   cancelLogin, getAuth, getHardware, getSettings, listModels, loginState,
-  saveSettings, startLogin, submitLoginCode, testSettings, updateYtdlp,
+  saveSettings, startLogin, submitLoginCode, testSettings, updateYtdlp, verwerfeKaputt,
 } from '@/lib/api'
 import { useUpdate } from '@/hooks/useUpdate'
 import { PageHeader } from '@/components/PageHeader'
@@ -214,6 +214,17 @@ export function SettingsPage() {
     } catch (e) { toast.error(`Speichern fehlgeschlagen: ${(e as Error).message}`) }
   }
 
+  // Der Hinweis auf die gerettete Datei haengt an ihrer EXISTENZ, nicht an einem Ereignis —
+  // geschrieben hat sie oft ein Subprozess, den nie jemand gesehen hat. Ohne diesen Knopf
+  // stuende er darum fuer immer da: der Pfad liegt im Benutzerprofil, und wer die App
+  // benutzt, um nicht mit Dateien zu hantieren, raeumt ihn dort nicht selbst weg.
+  const kaputtWeg = async () => {
+    try {
+      await verwerfeKaputt()
+      setS(cur => cur && { ...cur, kaputt: '' })
+    } catch (e) { toast.error(`Entfernen fehlgeschlagen: ${(e as Error).message}`) }
+  }
+
   const anbieterWechseln = (id: string) => {
     const p = s?.providers.find(x => x.id === id)
     setModelle([])
@@ -359,6 +370,19 @@ export function SettingsPage() {
           </p>
         )}
       </Abschnitt>
+
+      {s.kaputt && (
+        <div className="mb-6 rounded-lg border border-amber-500/50 bg-amber-500/10 p-4 text-sm">
+          <span className="font-medium">Deine gespeicherten Einstellungen waren beschädigt.</span>{' '}
+          Transkribor arbeitet seitdem mit den Standardwerten — ein hinterlegter API-Key ist
+          damit nicht mehr eingetragen. Die alte Datei wurde nicht gelöscht: sie liegt unter{' '}
+          <code className="rounded bg-muted px-1.5 py-0.5 font-mono break-all">{s.kaputt}</code>{' '}
+          und lässt sich mit einem Texteditor öffnen — der Key steht dort meist noch lesbar drin.
+          <div className="mt-3">
+            <Button variant="outline" size="sm" onClick={kaputtWeg}>Erledigt — Datei entfernen</Button>
+          </div>
+        </div>
+      )}
 
       {!s.ai_ready && (
         <div className="mb-6 rounded-lg border border-amber-500/50 bg-amber-500/10 p-4 text-sm">

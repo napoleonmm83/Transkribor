@@ -48,3 +48,33 @@ def test_transcript_bases_excludes_derived(monkeypatch, tmp_path):
     for n in ["S1.json", "S1.edit.json", "S1.correction.json", "S1.diar.json", "S2.json", "_glossar.json"]:
         (t / n).write_text("{}", encoding="utf-8")
     assert paths.transcript_bases("P") == ["S1", "S2"]  # _glossar.json ist Meta, kein Transkript
+
+
+def test_beiseitelegen_rettet_den_inhalt(tmp_path):
+    """#192/#196: der Retter fuer Dateien, die ein Read-Modify-Write sonst durch Defaults
+    ersetzt. Bytes, kein Text — der Fall, fuer den es die Funktion gibt, ist eine Datei, die
+    sich gar nicht als UTF-8 lesen laesst."""
+    p = tmp_path / "settings.json"
+    p.write_bytes(b'{"api_key": "sk-NOCH-LESBAR-\xff"}')
+    ziel = paths.beiseitelegen(str(p))
+    assert ziel == str(tmp_path / "settings.json.kaputt")
+    assert not p.exists()                                        # der Weg ist frei fuers Neuschreiben
+    assert b"sk-NOCH-LESBAR" in (tmp_path / "settings.json.kaputt").read_bytes()
+
+
+def test_beiseitelegen_haelt_die_erste_rettung_fest(tmp_path):
+    """Die ERSTE Rettung gewinnt. Nach ihr steht in der Datei nur noch Default-Inhalt — eine
+    zweite Beschaedigung ueberschriebe also genau das, was man retten wollte (den API-Key).
+    Rueckgabe "" heisst dabei „nichts gerettet", nicht „nichts da"."""
+    p = tmp_path / "settings.json"
+    (tmp_path / "settings.json.kaputt").write_bytes(b'{"api_key": "sk-DER-ECHTE"}')
+    p.write_bytes(b'{"api_key": ""}')                            # die Default-Fassung danach
+    assert paths.beiseitelegen(str(p)) == ""
+    assert b"sk-DER-ECHTE" in (tmp_path / "settings.json.kaputt").read_bytes()
+
+
+def test_beiseitelegen_haelt_den_schreiber_nicht_auf(tmp_path):
+    """Best effort: es schuetzt vor einem Verlust, es ist nicht der Zweck des Aufrufs. Eine
+    Datei, die gar nicht da ist (anderer Schreiber war schneller), darf nicht werfen —
+    `settings.save()` gaebe sonst 500 und `setze_datei` liesse einen Upload scheitern."""
+    assert paths.beiseitelegen(str(tmp_path / "gibt-es-nicht.json")) == ""
