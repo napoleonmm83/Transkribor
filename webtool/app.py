@@ -128,7 +128,11 @@ def load_or_build_doc(project: str, base: str) -> dict:
         try:
             with open(epath, encoding="utf-8") as fh:
                 return json.load(fh)
-        except json.JSONDecodeError:
+        except ValueError:
+            # ValueError, nicht JSONDecodeError: sind die BYTES nicht als UTF-8 dekodierbar,
+            # wirft schon das Lesen im Textmodus einen UnicodeDecodeError — ebenfalls ein
+            # ValueError, aber KEIN JSONDecodeError (#190, gemessen). Vorher gab genau diese
+            # Datei 500 statt der Selbstheilung, die zwei Zeilen weiter unten steht.
             pass  # korrupte edit.json -> aus Roh neu aufbauen (self-heal)
     rpath = _raw_path(project, base)
     if not os.path.exists(rpath):
@@ -430,7 +434,7 @@ def _doc_felder(pfad: str, **felder: str) -> None:
     try:
         with open(pfad, encoding="utf-8") as fh:
             doc = json.load(fh)
-    except (OSError, json.JSONDecodeError):
+    except (OSError, ValueError):     # ValueError deckt auch UnicodeDecodeError (#190)
         return
     doc.update(felder)
     paths.atomic_write(pfad, json.dumps(doc, ensure_ascii=False, indent=1))

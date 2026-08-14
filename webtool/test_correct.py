@@ -982,3 +982,73 @@ def test_ziel_dialekt_meldet_mehrsprachig(tmp_path, monkeypatch):
     assert mehr is True
     assert dialekt is True                      # Anker bleibt Schweizerdeutsch
     assert ziel == "lesbarem Standarddeutsch"   # ziel folgt UNVERAENDERT der Ankersprache
+
+
+# ---- #190: nicht dekodierbare Bytes sind KEIN JSONDecodeError ----
+# `json.JSONDecodeError` deckt nur das PARSEN. Sind die BYTES nicht als UTF-8 dekodierbar,
+# wirft schon das Lesen im Textmodus einen `UnicodeDecodeError` — ebenfalls ein `ValueError`,
+# aber KEIN `JSONDecodeError` (gemessen an einer Datei mit einem einzelnen \xe9-Byte). Jede
+# dieser Stellen verspricht "kaputt ⇒ Rueckfall" und hielt es nur fuers Parsen. `write_bytes`
+# ist Pflicht: mit `write_text` plus Encoding laesst sich der Fall gar nicht herstellen.
+
+def test_ziel_dialekt_auto_ueberlebt_nicht_dekodierbare_roh_json(tmp_path, monkeypatch):
+    """`auto` wird an der Roh-JSON aufgeloest. Ein Wurf hier reisst den ganzen Korrekturlauf
+    mit, obwohl der Rueckfall ("de") danebensteht."""
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    tdir = os.path.join(tmp_path, "p", "transkripte")
+    os.makedirs(tdir, exist_ok=True)
+    with open(os.path.join(tdir, "x.json"), "wb") as fh:
+        fh.write(b'{"language": "\xe9n"}')
+    from webtool import projekt
+    projekt.speichern("p", {"sprache": "auto"})
+    ziel, dialekt, _ = correct._ziel_dialekt("p", "x")
+    assert "Standarddeutsch" in ziel and dialekt is False   # Rueckfall "de", nie Dialekt
+
+
+def test_prep_ueberspringt_nicht_dekodierbare_roh_json(project, capsys):
+    """Eine kaputte Roh-JSON darf den Batch nicht stoppen — das galt nur fuers Parsen."""
+    _root, t = project
+    with open(t / "S2.json", "wb") as fh:
+        fh.write(b'{"segments": [{"id": 0, "text": "\xe9"}]}')
+    (t / "S2.raw.txt").write_text("x\n", encoding="utf-8")
+    assert correct.cmd_prep("Demo") == 1                   # S1 getaggt, S2 uebersprungen
+    ausgabe = capsys.readouterr().out
+    assert "SKIP S2" in ausgabe and "UnicodeDecodeError" in ausgabe
+    assert (t / "S1.tagged.txt").exists() and not (t / "S2.tagged.txt").exists()
+
+
+def test_apply_ueberschreibt_eine_nicht_dekodierbare_edit_json(project):
+    """Der `human_edited`-Riegel liest die `edit.json`. Eine kaputte darf ueberschrieben
+    werden (sie schuetzt keine Handarbeit mehr) — vorher warf sie und brach `apply` ab."""
+    _root, t = project
+    with open(t / "S1.edit.json", "wb") as fh:
+        fh.write(b'{"human_edited": true, "summary": "\xe9"}')
+    # kommt bis zur fehlenden correction.json => der Riegel hat NICHT geworfen und NICHT
+    # faelschlich auf "skipped" entschieden
+    assert correct.cmd_apply("Demo", "S1") == "missing"
+
+
+def test_is_human_edited_faellt_bei_nicht_dekodierbarer_datei_auf_false(tmp_path):
+    """False heisst "keine Handarbeit zu schuetzen" — die Korrektur laeuft weiter. Ein Wurf
+    stattdessen killte den Lauf an einer Datei, die er ueberschreiben duerfte."""
+    p = tmp_path / "x.edit.json"
+    p.write_bytes(b'{"human_edited": true, "summary": "\xe9"}')
+    assert correct._is_human_edited(str(p)) is False
+
+
+def test_valid_correction_faellt_bei_nicht_dekodierbarer_datei_auf_false(tmp_path):
+    """False heisst "keine brauchbare Korrektur" — der Lauf holt sie neu. Genau dafuer ist
+    das Erfolgsmass da: eine halb geschriebene Datei darf nicht als fertig durchgehen."""
+    p = tmp_path / "x.correction.json"
+    p.write_bytes(b'{"segments": [{"id": 0, "text": "\xe9"}]}')
+    assert correct._valid_correction(str(p)) is False
+
+
+def test_glossar_faellt_bei_nicht_dekodierbarer_datei_auf_leer(project, capsys):
+    """Ohne Glossar laeuft die Korrektur weiter (nur ohne gemeinsame Schreibweisen). Ein
+    Wurf hier beendete den Lauf, bevor die erste Datei ueberhaupt drankam."""
+    _root, t = project
+    with open(t / "_glossar.json", "wb") as fh:
+        fh.write(b'{"proper_nouns": ["\xe9"]}')      # neuer als S1.raw.txt -> kein LLM-Aufruf
+    assert correct._glossary("Demo", "") == ""
+    assert "ohne gemeinsames Glossar" in capsys.readouterr().out

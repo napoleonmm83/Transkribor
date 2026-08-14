@@ -85,7 +85,7 @@ def _ziel_dialekt(project: str, base: str) -> tuple:
     if sid == "auto":
         try:
             code = _load(os.path.join(paths.transkripte_dir(project), base + ".json")).get("language")
-        except (OSError, json.JSONDecodeError):
+        except (OSError, ValueError):     # ValueError deckt auch UnicodeDecodeError (#190)
             code = None
         sid = _s.von_whisper_code(code) if code else "de"
     return _s.ziel_phrase(sid), _s.ist_dialekt(sid), _pj.datei_mehrsprachig(project, base)
@@ -141,8 +141,11 @@ def cmd_prep(project: str) -> int:
                 lines.append(f"[{s['id']}] {prefix}{s['tagged_text']}")
             paths.atomic_write(os.path.join(tdir, base + ".tagged.txt"), "\n".join(lines) + "\n")
             n += 1
-        except (OSError, json.JSONDecodeError) as e:
-            print(f"prep: SKIP {base} (Roh-JSON unlesbar: {e})", flush=True)
+        except (OSError, ValueError) as e:     # ValueError deckt auch UnicodeDecodeError (#190)
+            # Der Typ gehoert in die Zeile: dieser `try` umspannt den ganzen Schleifenkoerper
+            # (auch den atomic_write), "Roh-JSON unlesbar" ist also schon fuer OSError eine
+            # Vermutung. `str(e)` nennt den Typ bei keiner der beiden neuen Klassen.
+            print(f"prep: SKIP {base} (Roh-JSON unlesbar? {type(e).__name__}: {e})", flush=True)
     print(f"prep: {n} Datei(en) getaggt in {tdir}")
     return n
 
@@ -191,6 +194,10 @@ def cmd_diarize(project: str, only_bases: list = None) -> int:
                    "segments": [{"id": sid, "speaker": spk} for sid, spk in seg_speakers.items()]}
             paths.atomic_write(dpath, json.dumps(doc, ensure_ascii=False, indent=1))
             n += 1
+        # BEWUSST nicht auf ValueError geweitet (#190): ein UnicodeDecodeError landet eine
+        # Zeile tiefer im Exception-Zweig und wird dort korrekt gemeldet — dieser Lauf
+        # bricht also nicht ab. Geweitet faenge dieser Zweig auch jeden ValueError aus
+        # `diarize.*` und beschriftete ihn als "Roh-JSON unlesbar", was er nicht ist.
         except json.JSONDecodeError as e:               # nur die Roh-JSON parst nicht
             print(f"diarize: SKIP {base} (Roh-JSON unlesbar: {e})", flush=True)
         except Exception as e:                          # pyannote/Token/GPU/HF-403 (erbt OSError!) — NIE den Lauf killen
@@ -207,7 +214,7 @@ def cmd_apply(project: str, base: str, force: bool = False) -> str:
             if _load(epath).get("human_edited"):
                 print(f"apply: SKIP {base} (human_edited=true; --force zum Ueberschreiben)")
                 return "skipped"
-        except json.JSONDecodeError:
+        except ValueError:     # ValueError deckt auch UnicodeDecodeError (#190)
             pass  # korrupte edit.json -> darf ueberschrieben werden
     cpath = os.path.join(tdir, base + ".correction.json")
     if not os.path.exists(cpath):
@@ -238,7 +245,7 @@ def _context(project: str) -> str:
 def _is_human_edited(epath: str) -> bool:
     try:
         return bool(_load(epath).get("human_edited"))
-    except (OSError, json.JSONDecodeError):
+    except (OSError, ValueError):     # ValueError deckt auch UnicodeDecodeError (#190)
         return False
 
 
@@ -246,7 +253,7 @@ def _valid_correction(cpath: str) -> bool:
     """Erfolgsmass für 2b: geschriebene correction.json existiert, parst, hat Segmente."""
     try:
         segs = _load(cpath).get("segments")
-    except (OSError, json.JSONDecodeError):
+    except (OSError, ValueError):     # ValueError deckt auch UnicodeDecodeError (#190)
         return False
     return isinstance(segs, list) and len(segs) > 0
 
@@ -534,7 +541,7 @@ def _glossary(project: str, context: str) -> str:
         _ask_llm(_glossary_prompt(gpath, raw_files, context, ziel=""), raw_files, gpath)
     try:
         g = _load(gpath)
-    except (OSError, json.JSONDecodeError):
+    except (OSError, ValueError):     # ValueError deckt auch UnicodeDecodeError (#190)
         print("⚠ Glossar fehlt/ungültig — fahre ohne gemeinsames Glossar fort", flush=True)
         return ""
     print(f"✓ Glossar: {len(g.get('proper_nouns') or [])} Eigennamen, "

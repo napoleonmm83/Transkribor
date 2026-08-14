@@ -180,3 +180,23 @@ def test_datei_false_schlaegt_projekt_true(tmp_path, monkeypatch):
     projekt.speichern("p", {"mehrsprachig": True})
     projekt.setze_datei("p", "a", mehrsprachig=False)
     assert projekt.datei_mehrsprachig("p", "a") is False
+
+
+def test_nicht_dekodierbare_projekt_json_faellt_auf_defaults(tmp_path, monkeypatch):
+    """`json.JSONDecodeError` deckt nur das PARSEN. Sind die BYTES nicht als UTF-8
+    dekodierbar, wirft schon das Lesen im Textmodus einen `UnicodeDecodeError` — ebenfalls
+    ein `ValueError`, aber KEIN `JSONDecodeError` (#190, an einer Datei mit einem einzelnen
+    \xe9-Byte gemessen). `laden()` ist der Weg, ueber den Sprache und Korrektur-Tiefe JEDER
+    Datei gelesen werden: ein Wurf hier reisst Transkription UND Korrektur mit.
+
+    `write_bytes` ist Pflicht — mit `write_text` plus Encoding laesst sich der Fall gar
+    nicht herstellen, und genau deshalb ist er nie jemandem aufgefallen.
+    """
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    os.makedirs(paths.project_dir("p"), exist_ok=True)
+    with open(projekt._pfad("p"), "wb") as fh:
+        fh.write(b'{"sprache": "\xe9n"}')
+    daten = projekt.laden("p")
+    assert daten["sprache"] == sprachen.SPRACH_DEFAULT      # ch
+    assert daten["korrektur"] == sprachen.TIEFE_DEFAULT     # auto
+    assert daten["dateien"] == {}
