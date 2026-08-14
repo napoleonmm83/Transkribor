@@ -29,6 +29,20 @@ describe('Transcript', () => {
     expect(screen.getByText('w1')).toHaveClass('u-red')
   })
 
+  it('sagt an, wenn die gespeicherte Fassung nicht lesbar war — und schweigt sonst', () => {
+    // #197: die Selbstheilung ist richtig (sonst waere die Aufnahme nicht mehr zu oeffnen),
+    // aber ohne Hinweis haelt der Nutzer das Rohtranskript fuer seine korrigierte Fassung.
+    // Die Gegenprobe gehoert dazu: ein Kasten, der immer steht, waere derselbe Schaden.
+    const zeige = (d: EditDoc) => render(<TooltipProvider><Transcript doc={d} activeId={null}
+      onPlaySeg={vi.fn()} onPlayTurn={vi.fn()} updateSegment={vi.fn()} renameSpeaker={vi.fn()} updateDoc={vi.fn()} /></TooltipProvider>)
+    const { unmount } = zeige(doc)
+    expect(screen.queryByText(/nicht lesbar/)).toBeNull()
+    unmount()
+    zeige({ ...doc, selbstgeheilt: 'UnicodeDecodeError' })
+    expect(screen.getByText(/Deine gespeicherte Fassung war nicht lesbar/)).toBeInTheDocument()
+    expect(screen.getByText('b.edit.json.kaputt')).toBeInTheDocument()   // wo sie liegt
+  })
+
   it('Name im Block-Kopf benennt global um, nicht nur das Segment', () => {
     const renameSpeaker = vi.fn(), updateSegment = vi.fn()
     render(<TooltipProvider><Transcript doc={doc} activeId={null}

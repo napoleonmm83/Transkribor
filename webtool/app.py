@@ -140,10 +140,11 @@ def _json_objekt(pfad: str) -> dict:
 
 def load_or_build_doc(project: str, base: str) -> dict:
     epath = _edit_path(project, base)
+    geheilt = ""
     if os.path.exists(epath):
         try:
             return _json_objekt(epath)
-        except (OSError, ValueError):
+        except (OSError, ValueError) as e:
             # OSError deckt das Fenster zwischen `os.path.exists` und dem `open`: `_datei_weg`
             # (Loeschen, Neu-Transkribieren) raeumt die edit.json weg, waehrend ein offener
             # Editor pollt. Der Rueckfall unten ist fuer "keine edit.json" ohnehin der
@@ -152,7 +153,12 @@ def load_or_build_doc(project: str, base: str) -> dict:
             # wirft schon das Lesen im Textmodus einen UnicodeDecodeError — ebenfalls ein
             # ValueError, aber KEIN JSONDecodeError (#190, gemessen). Vorher gab genau diese
             # Datei 500 statt der Selbstheilung, die zwei Zeilen weiter unten steht.
-            pass  # korrupte edit.json -> aus Roh neu aufbauen (self-heal)
+            # Selbstheilung ja, aber nicht STILL (#197): der Nutzer sieht sonst ein sauberes
+            # Transkript und haelt es fuer seines — die Korrekturen und Sprechernamen, an
+            # denen er gearbeitet hat, fehlen darin schlicht. Das Feld reist mit dem Dokument
+            # in den Editor (Hinweis) und mit dem naechsten PUT zurueck, wo es das
+            # Beiseitelegen ausloest. `pass` genuegte fuer den Rueckfall, nicht fuer die Zusage.
+            geheilt = type(e).__name__
     rpath = _raw_path(project, base)
     if not os.path.exists(rpath):
         raise HTTPException(status_code=404, detail=f"kein Roh-Transkript: {base}")
@@ -167,8 +173,11 @@ def load_or_build_doc(project: str, base: str) -> dict:
                             detail=f"Roh-Transkript unlesbar: {base} "
                                    f"({type(e).__name__})") from None
     audio = find_audio(project, base)
-    return build_edit_doc(raw, base=base, project=project,
-                          audio=os.path.basename(audio) if audio else "")
+    doc = build_edit_doc(raw, base=base, project=project,
+                         audio=os.path.basename(audio) if audio else "")
+    if geheilt:
+        doc["selbstgeheilt"] = geheilt
+    return doc
 
 
 def _projekt_dateien(project: str):
@@ -547,6 +556,26 @@ def get_audio(project: str, base: str):
 async def save_file(project: str, base: str, request: Request):
     _validate(project, base)
     doc = await request.json()
+    # Trust-Boundary: der Rumpf kommt vom Client. Ein JSON-Array kam bisher bis zum
+    # `doc["human_edited"] = True` durch und endete als 500 (TypeError) — dieselbe Wache wie
+    # `_json_objekt` beim Lesen, nur auf der Schreibseite.
+    if not isinstance(doc, dict):
+        raise HTTPException(status_code=400,
+                            detail=f"JSON-Objekt erwartet, {type(doc).__name__} bekommen")
+    # Der Editor gibt zurueck, was `load_or_build_doc` ihm mitgegeben hat: „deine gespeicherte
+    # Fassung war nicht lesbar" (#197). Dann liegt auf der Platte noch die unlesbare Datei, und
+    # der Schreibvorgang unten wuerde sie ersetzen — dieselbe Konstellation wie bei
+    # settings.json (#192), nur mit der Handarbeit eines Menschen darin. Erst beiseitelegen.
+    #
+    # Warum die Kennzeichnung vom Client kommt und nicht aus einer Pruefung hier: das PUT
+    # laeuft alle 800 ms Tipppause, und die Datei jedes Mal zu LESEN, nur um zu wissen, ob sie
+    # lesbar ist, waere ein voller JSON-Parse je Tastendruck-Pause. Ein falsch gesetztes Feld
+    # kostet hoechstens eine Sicherungskopie einer gesunden Datei, keinen Inhalt.
+    #
+    # `pop`, nicht `get`: das Feld ist eine Meldung ueber den Ladevorgang, kein Bestandteil des
+    # Dokuments — geschrieben gaelte die Datei beim naechsten Oeffnen fuer immer als geheilt.
+    if doc.pop("selbstgeheilt", None):
+        paths.beiseitelegen(_edit_path(project, base))
     doc["human_edited"] = True
     tdir = paths.transkripte_dir(project)
     os.makedirs(tdir, exist_ok=True)
@@ -754,7 +783,11 @@ def settings_kaputt_weg():
     try:
         os.remove(p)
     except OSError as e:
-        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+        # `from None` wie in `load_or_build_doc`: der Grund steht bereits im `detail`, die
+        # Kette darunter faende ohnehin niemand (Starlette protokolliert eine behandelte
+        # HTTPException ohne Traceback). Nachtrag zu PR #203, wo ich die Stelle mit dem
+        # Argument „alle Geschwister werfen bare" verteidigt hatte — das stimmte nicht.
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}") from None
     return {"ok": True, "kaputt": ""}
 
 

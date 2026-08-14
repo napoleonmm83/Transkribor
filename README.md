@@ -196,8 +196,14 @@ Standardwerten weiter — dein hinterlegter API-Schlüssel ist damit nicht mehr 
 alte Datei wird aber **nicht** überschrieben, sondern daneben aufbewahrt; der Hinweis auf der
 Einstellungsseite nennt dir den genauen Pfad. Öffne sie mit einem Texteditor: der Schlüssel
 steht dort meistens noch lesbar drin, du kannst ihn zurück ins Feld kopieren. Danach räumt der
-Knopf unter dem Hinweis die Datei weg. Genauso ergeht es den Sprach-Einstellungen eines
-Projekts: deren alte Fassung liegt als `projekt.json.kaputt` im Projektordner.
+Knopf unter dem Hinweis die Datei weg.
+
+Dasselbe gilt für die anderen Dateien, die Transkribor für dich führt: die Sprach-Einstellungen
+eines Projekts (alte Fassung als `projekt.json.kaputt` im Projektordner) und dein bearbeitetes
+Transkript. Lässt sich Letzteres nicht mehr lesen, öffnet Transkribor die Aufnahme trotzdem —
+du siehst dann aber das unkorrigierte Rohtranskript, und ein Hinweis über dem Text sagt dir
+das. Deine bisherige Fassung wird nicht überschrieben: sie bleibt als
+`<Name>.edit.json.kaputt` im Ordner `transkripte` liegen.
 
 ---
 

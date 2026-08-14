@@ -10,6 +10,11 @@ export type EditDoc = {
   // summary optional: vor diesem Feature geschriebene edit.json haben den Schluessel nicht.
   human_edited: boolean; context: string; summary?: string; speakers: string[];
   segments: Segment[]; annotations: string[];
+  /** Gesetzt, wenn die gespeicherte Fassung nicht lesbar war und der Server das Dokument aus
+   *  dem Rohtranskript neu gebaut hat (#197) — der Wert ist der Ausnahmetyp. Reist mit dem
+   *  PUT zurueck und loest dort das Beiseitelegen der unlesbaren Datei aus; gespeichert wird
+   *  es nie (der Server entfernt es vor dem Schreiben). */
+  selbstgeheilt?: string;
 };
 export type ProjectFile = { base: string; has_audio: boolean; has_raw: boolean; has_edit: boolean; has_md: boolean };
 export type ActiveJob = { id: string; kind: string };
