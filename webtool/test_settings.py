@@ -15,10 +15,15 @@ def eigene_datei(tmp_path, monkeypatch):
         monkeypatch.delenv(name, raising=False)
 
 
-def test_default_bleibt_large_v3():
-    """Bestandsnutzer duerfen von der neuen Einstellung nichts merken."""
+def test_default_bleibt_large_v3(capsys):
+    """Bestandsnutzer duerfen von der neuen Einstellung nichts merken.
+
+    Die `capsys`-Zeile haelt fest, dass die FEHLENDE Datei schweigt: der Rueckfall meldet sich
+    seit dem #185-Nachtrag, und ohne den `FileNotFoundError`-Vorbehalt beklagte sich jeder
+    erste Start ueber eine Datei, die es planmaessig noch nicht gibt."""
     assert settings.load()["whisper_model"] == "large-v3"
     assert settings.load()["whisper_lang"] == "de"
+    assert capsys.readouterr().out == ""
 
 
 def test_speichern_und_lesen():
@@ -40,7 +45,7 @@ def test_handverdrehtes_aber_echtes_modell_bleibt(tmp_path):
     assert settings.load()["whisper_model"] == "base"
 
 
-def test_nicht_dekodierbare_datei_faellt_auf_defaults(tmp_path):
+def test_nicht_dekodierbare_datei_faellt_auf_defaults(tmp_path, capsys):
     """#185, zweite Runde: `load()` fing nur `(OSError, json.JSONDecodeError)`. Sind die BYTES
     nicht als UTF-8 dekodierbar, wirft schon das Lesen einen `UnicodeDecodeError` — ein
     `ValueError`, aber kein `JSONDecodeError`, also durch.
@@ -50,10 +55,19 @@ def test_nicht_dekodierbare_datei_faellt_auf_defaults(tmp_path):
     `auto_an()` -> hier riss den URL-Import ab, und `GET /api/settings` gab 500.
 
     Bytes statt `write_text`: mit einem Encoding-Argument liesse sich der Fall gar nicht
-    herstellen, genau deshalb ist er vorher niemandem aufgefallen."""
-    (tmp_path / "settings.json").write_bytes(b'{"whisper_model": "caf\xe9"}')
+    herstellen, genau deshalb ist er vorher niemandem aufgefallen.
+
+    Die Datei traegt ABSICHTLICH einen noch lesbaren API-Key. Ein
+    `public(load())["has_key"] is False` an einer Datei ohne Key waere Deko gewesen — es folgt
+    trivial aus `load() == DEFAULTS`. Mit Key prueft dieselbe Zeile etwas Echtes: was der
+    Rueckfall den Nutzer kostet. Und weil `save()` ein Read-Modify-Write ueber `load()` ist,
+    ueberbuegelt der naechste Schreiber die Datei damit — deshalb muss der Rueckfall SAGEN,
+    dass er greift (die Protokollzeile unten; Bewahren der Datei ist als Issue erfasst)."""
+    (tmp_path / "settings.json").write_bytes(
+        b'{"api_key": "sk-NOCH-LESBAR", "provider": "openai", "x": "caf\xe9"}')
     assert settings.load() == dict(settings.DEFAULTS)
     assert settings.public(settings.load())["has_key"] is False
+    assert "unlesbar" in capsys.readouterr().out
 
 
 def test_job_env_exportiert_die_einstellung():

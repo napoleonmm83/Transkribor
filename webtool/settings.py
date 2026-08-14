@@ -99,13 +99,24 @@ def load() -> dict:
     try:
         with open(path(), encoding="utf-8") as fh:
             data = json.load(fh)
-    except (OSError, ValueError):
+    except (OSError, ValueError) as e:
         # `ValueError`, nicht `json.JSONDecodeError` (dessen Oberklasse): sind die Bytes der
         # Datei nicht als UTF-8 dekodierbar, wirft schon das LESEN einen UnicodeDecodeError,
         # und der ist ein ValueError. Dieselbe Verwechslung wie in #185 — und dieselbe
         # Aufrufkette: `fetch._hole_yt_dlp()` -> `automatisch()` -> `auto_an()` -> hier,
         # ausserdem `GET /api/settings`. Ungefangen waere die Zusage eine Zeile darueber
         # („nie ein Fehler") schlicht falsch.
+        #
+        # Und was dieser Rueckfall NEU erlaubt, gehoert protokolliert: `save()` ist ein
+        # Read-Modify-Write ueber `load()`. Vorher warf eine kaputte Datei und blieb liegen;
+        # jetzt liefert sie DEFAULTS — und der naechste Schreiber ueberbuegelt sie damit.
+        # Der yt-dlp-Merker tut das unbeaufsichtigt aus dem fetch-Subprozess, ein noch
+        # lesbarer API-Key waere danach weg. Die Richtung bleibt trotzdem richtig (dauerhaft
+        # 500 und im Browser nicht reparierbar waere schlechter) — sie darf nur nicht STILL
+        # sein. Ein FileNotFoundError ist dabei der Normalfall (erster Start) und schweigt.
+        if not isinstance(e, FileNotFoundError):
+            print(f"[settings] {path()} unlesbar ({type(e).__name__}: {e}) — nehme Defaults; "
+                  f"der naechste Schreibvorgang ersetzt die Datei", flush=True)
         return dict(DEFAULTS)
     if not isinstance(data, dict):
         return dict(DEFAULTS)

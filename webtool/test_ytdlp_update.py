@@ -618,9 +618,13 @@ def test_unlesbare_fassung_wirft_nicht(monkeypatch, capsys):
     assert gerufen and set(gerufen) == {"yt-dlp"}     # nicht irgendein Paket, DAS richtige
 
 
-def test_unlesbare_anforderungen_werfen_nicht(monkeypatch):
+def test_unlesbare_anforderungen_werfen_nicht(monkeypatch, capsys):
     """Zweite Lesestelle (`metadata.requires`). Fail-open wie beim fehlenden Pin: keine
-    Zeilen heisst kein #182 und kein #184, der Kalenderweg entscheidet wie bisher."""
+    Zeilen heisst kein #182 und kein #184, der Kalenderweg entscheidet wie bisher.
+
+    Die Protokollzeile wird MITgeprueft: die Hausregel „ein `except Exception` darf keinen
+    echten Programmierfehler ohne Protokoll verschlucken" haengt sonst an einem Waechter ohne
+    roten Test (gemessen: ohne die Zusicherung blieb das Entfernen der `print`-Zeile gruen)."""
     gefragt, gerufen = [], []
     monkeypatch.setattr(yu.metadata, "version",
                         lambda name: gefragt.append(name) or "0.8.0")
@@ -629,9 +633,32 @@ def test_unlesbare_anforderungen_werfen_nicht(monkeypatch):
     assert yu._ejs_pin() is None
     assert yu._ejs_verlangt() is False
     assert gefragt == [yu._EJS] and set(gerufen) == {"yt-dlp"}
+    assert "Anforderungen von yt-dlp unlesbar" in capsys.readouterr().out
 
 
-def test_unlesbares_ejs_wird_NICHT_geflaggt(monkeypatch):
+def test_nicht_string_anforderungen_werfen_nicht(monkeypatch):
+    """Die Filterung gehoert INS `try`. Stand sie darunter, lag sie hinter allen
+    `except`-Zweigen: `_EJS_NAME_RE.search(None)` wirft `TypeError` an der Wache vorbei, quer
+    durch `faellig()` bis aus `automatisch()` heraus — genau der Weg, den #185 schliesst.
+
+    Konstruiert, nicht beobachtet: `metadata.requires()` liefert `list[str] | None`. Der Test
+    steht trotzdem da, weil die Einrueckung sonst eine Aenderung ohne roten Test waere.
+
+    Zwei Vorkehrungen, damit `automatisch()` wirklich das prueft, was hier gemeint ist:
+    yt-dlp bekommt eine FRISCHE Fassung (`0.8.0` waere als Datum unlesbar -> faellig -> der
+    Lauf liefe in ein pip und damit in den `pytest.fail`-Riegel der Fixture), und die Fixture-
+    Attrappe fuer `_ejs_untauglich` wird zurueckgenommen — sonst kaeme `faellig()` gar nicht
+    an `_ejs_zeilen()` vorbei, und die Zeile darunter waere vacuous."""
+    monkeypatch.setattr(yu, "_ejs_untauglich", _ECHTES_EJS_UNTAUGLICH)
+    monkeypatch.setattr(yu.metadata, "version",
+                        lambda name: "0.8.0" if name == yu._EJS else HEUTE.isoformat().replace("-", "."))
+    monkeypatch.setattr(yu.metadata, "requires", lambda name: [None, 42])
+    assert yu._ejs_zeilen() == []
+    assert _ECHTES_EJS_UNTAUGLICH() is False
+    assert yu.automatisch() is False        # der Weg, um den es geht: bis nach draussen
+
+
+def test_unlesbares_ejs_wird_NICHT_geflaggt(monkeypatch, capsys):
     """Die dritte Lesestelle faellt in die ANDERE Richtung — das ist der Kern von #185.
 
     Der `PackageNotFoundError`-Zweig daneben flaggt (ueber `_ejs_verlangt`), weil „nicht
@@ -656,6 +683,8 @@ def test_unlesbares_ejs_wird_NICHT_geflaggt(monkeypatch):
     assert yu._ejs_verlangt() is True          # Positivkontrolle: der Flag WAERE erreichbar
     assert _ECHTES_EJS_UNTAUGLICH() is False
     assert gerufen == [yu._EJS] and set(gefragt) == {"yt-dlp"}
+    # Wie oben: ohne diese Zeile ist die Protokollzeile eine Wache ohne roten Test.
+    assert f"Metadaten von {yu._EJS} unlesbar" in capsys.readouterr().out
 
 
 # --- Schalter ----------------------------------------------------------------
