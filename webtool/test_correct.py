@@ -1017,23 +1017,48 @@ def test_prep_ueberspringt_nicht_dekodierbare_roh_json(project, capsys):
     assert (t / "S1.tagged.txt").exists() and not (t / "S2.tagged.txt").exists()
 
 
-def test_apply_ueberschreibt_eine_nicht_dekodierbare_edit_json(project):
-    """Der `human_edited`-Riegel liest die `edit.json`. Eine kaputte darf ueberschrieben
-    werden (sie schuetzt keine Handarbeit mehr) — vorher warf sie und brach `apply` ab."""
+def test_apply_ueberschreibt_eine_nicht_lesbare_edit_json_NICHT(project, capsys):
+    """Der schaerfste Befund des #190-Reviews, end-to-end gemessen: mit `human_edited` ⇒
+    False ersetzte `cmd_apply` die Datei und der Lauf meldete "1/1 korrigiert" — Erfolg
+    gemeldet, Handarbeit weg, keine Zeile im Protokoll.
+
+    Hier liegt eine GUELTIGE `correction.json` daneben, der Schreibvorgang wird also
+    wirklich erreicht (der erste Anlauf dieses Tests endete an einer fehlenden correction
+    und pruefte damit die Ueberschreibrichtung ueberhaupt nicht). `--force` bleibt der Weg
+    darueber hinweg — die Kehrseite gehoert mitgetestet, sonst ist die Datei fuer immer
+    blockiert."""
     _root, t = project
+    roh = b'{"human_edited": true, "summary": "\xe9von Hand"}'
     with open(t / "S1.edit.json", "wb") as fh:
-        fh.write(b'{"human_edited": true, "summary": "\xe9"}')
-    # kommt bis zur fehlenden correction.json => der Riegel hat NICHT geworfen und NICHT
-    # faelschlich auf "skipped" entschieden
-    assert correct.cmd_apply("Demo", "S1") == "missing"
+        fh.write(roh)
+    (t / "S1.correction.json").write_text(json.dumps(
+        {"segments": [{"id": 0, "text": "Maschine."}]}), encoding="utf-8")
+    assert correct.cmd_apply("Demo", "S1") == "skipped"
+    assert (t / "S1.edit.json").read_bytes() == roh          # Bytes unangetastet
+    assert "nicht lesbar" in capsys.readouterr().out         # und nicht still
+    assert correct.cmd_apply("Demo", "S1", force=True) == "written"
+    assert (t / "S1.edit.json").read_bytes() != roh          # --force kommt durch
 
 
-def test_is_human_edited_faellt_bei_nicht_dekodierbarer_datei_auf_false(tmp_path):
-    """False heisst "keine Handarbeit zu schuetzen" — die Korrektur laeuft weiter. Ein Wurf
-    stattdessen killte den Lauf an einer Datei, die er ueberschreiben duerfte."""
+def test_is_human_edited_schuetzt_eine_nicht_lesbare_datei(tmp_path, capsys):
+    """Die Fehlerrichtung ist hier umgekehrt zu allen anderen Rueckfaellen des Moduls:
+    nicht lesbar heisst NICHT "keine Handarbeit". Die Bytes koennen Handarbeit enthalten,
+    und `cmd_apply` ersetzt die Datei gleich darauf.
+
+    Vor #190 warf das hier, und der Catch-all in `one()` uebersprang die Datei — die
+    Wirkung war also schon immer "uebersprungen", nur als Fehler getarnt (gemessen; ein
+    frueherer Docstring behauptete hier "killte den Lauf", das stimmte nicht)."""
     p = tmp_path / "x.edit.json"
     p.write_bytes(b'{"human_edited": true, "summary": "\xe9"}')
-    assert correct._is_human_edited(str(p)) is False
+    assert correct._is_human_edited(str(p)) is True
+    assert "nicht lesbar" in capsys.readouterr().out
+
+
+def test_is_human_edited_schweigt_bei_fehlender_datei(tmp_path, capsys):
+    """Der Normalfall (noch nie korrigiert) darf weder schuetzen noch protokollieren —
+    sonst stuende die Warnzeile bei JEDER ersten Korrektur im Log und waere wertlos."""
+    assert correct._is_human_edited(str(tmp_path / "gibtsnicht.edit.json")) is False
+    assert capsys.readouterr().out == ""
 
 
 def test_valid_correction_faellt_bei_nicht_dekodierbarer_datei_auf_false(tmp_path):
@@ -1044,9 +1069,15 @@ def test_valid_correction_faellt_bei_nicht_dekodierbarer_datei_auf_false(tmp_pat
     assert correct._valid_correction(str(p)) is False
 
 
-def test_glossar_faellt_bei_nicht_dekodierbarer_datei_auf_leer(project, capsys):
+def test_glossar_faellt_bei_nicht_dekodierbarer_datei_auf_leer(project, monkeypatch, capsys):
     """Ohne Glossar laeuft die Korrektur weiter (nur ohne gemeinsame Schreibweisen). Ein
-    Wurf hier beendete den Lauf, bevor die erste Datei ueberhaupt drankam."""
+    Wurf hier beendete den Lauf, bevor die erste Datei ueberhaupt drankam.
+
+    `_ask_llm` ist gepinnt, obwohl die mtime-Ordnung den Aufruf ueberspringt: kippte sie je
+    (rueckwaerts laufende Uhr), ginge dieser Test in einen ECHTEN `claude -p`-Aufruf mit bis
+    zu 900 s Timeout und Kontingentverbrauch. Die Fixture pinnt Diarisierung und
+    Einstellungen ausdruecklich hermetisch — das hier fehlte."""
+    monkeypatch.setattr(correct, "_ask_llm", lambda *a, **k: None)
     _root, t = project
     with open(t / "_glossar.json", "wb") as fh:
         fh.write(b'{"proper_nouns": ["\xe9"]}')      # neuer als S1.raw.txt -> kein LLM-Aufruf

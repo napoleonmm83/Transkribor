@@ -192,7 +192,11 @@ def _run_codex(cfg: dict, prov: dict, prompt: str) -> str:
         try:
             with open(ziel, encoding="utf-8") as fh:
                 antwort = fh.read().strip()
-        except OSError:
+        except (OSError, ValueError):
+            # ValueError deckt auch UnicodeDecodeError (#190): die Antwortdatei schreibt ein
+            # FREMDES Binaerprogramm. Ungefangen entkaeme er als roher ValueError durch
+            # `complete()`/`check()` bis in den Handler, der nur `LLMError` faengt — also
+            # 500 auf der Einstellungsseite statt der Meldung "keine Antwort erhalten".
             antwort = ""
     if not antwort:
         # Der Exitcode allein taugt nicht: `codex exec` endet auch nach einem gescheiterten
@@ -313,8 +317,8 @@ def _with_files(prompt: str, inputs) -> str:
         try:
             with open(p, encoding="utf-8") as fh:
                 inhalt = fh.read()
-        except OSError as e:
-            raise LLMError(f"Eingabedatei nicht lesbar: {p} ({e})") from None
+        except (OSError, ValueError) as e:     # ValueError deckt auch UnicodeDecodeError (#190)
+            raise LLMError(f"Eingabedatei nicht lesbar: {p} ({type(e).__name__}: {e})") from None
         teile.append(f"\n=== {p} ===\n{inhalt}")
     teile.append("\n--- ENDE DATEIEN ---\n\nWICHTIG: Du hast KEINE Werkzeuge. Ignoriere die "
                  "Anweisungen zum Read-/Write-Tool: die Dateien stehen oben im Volltext, und "

@@ -1271,8 +1271,25 @@ def test_umbenennen_ueberlebt_eine_nicht_dekodierbare_edit_json(client, tmp_path
     `os.rename`, die Dateien waeren also schon umbenannt und der Aufrufer saehe einen Fehler.
     """
     t = tmp_path / "Demo" / "transkripte"
-    (t / "S1.edit.json").write_bytes(b'{"base": "S1", "summary": "\xe9"}')
+    roh = b'{"base": "S1", "summary": "\xe9"}'
+    (t / "S1.edit.json").write_bytes(roh)
     r = client.post("/api/projects/Demo/files/S1/rename", json={"name": "Neu"})
     assert r.status_code == 200, r.text
     assert (t / "Neu.edit.json").exists() and not (t / "S1.edit.json").exists()
     assert (tmp_path / "Demo" / "audio" / "Neu.mp3").exists()
+    # "unangetastet" muss auch geprueft werden: mit einer falschen Richtung (Datei mit
+    # Defaults ueberbuegeln) blieben die drei Zeilen darueber gruen.
+    assert (t / "Neu.edit.json").read_bytes() == roh
+
+
+def test_umbenennen_ueberlebt_ein_nicht_schreibbares_dokument(client, tmp_path, capsys):
+    """Die Lesehaelfte allein reicht nicht: ein einzelnes Surrogat kommt durch `json.load`
+    und stirbt erst in `json.dumps`/`atomic_write` (UnicodeEncodeError — auch ein
+    ValueError). Diese Stelle laeuft NACH dem `os.rename`, ein Wurf meldete dem Aufrufer
+    also einen Fehler fuer ein bereits erledigtes Umbenennen."""
+    t = tmp_path / "Demo" / "transkripte"
+    (t / "S1.edit.json").write_text('{"base": "S1", "summary": "\\ud800"}', encoding="utf-8")
+    r = client.post("/api/projects/Demo/files/S1/rename", json={"name": "Neu"})
+    assert r.status_code == 200, r.text
+    assert (t / "Neu.edit.json").exists()
+    assert "nicht nachgezogen" in capsys.readouterr().out

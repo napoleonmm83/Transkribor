@@ -203,6 +203,24 @@ def test_nicht_dekodierbare_projekt_json_faellt_auf_defaults(tmp_path, monkeypat
     assert daten["dateien"] == {}
 
 
+def test_nicht_lesbare_projekt_json_meldet_sich(tmp_path, monkeypatch, capsys):
+    """Der Rueckfall auf Defaults ist richtig — aber nicht still: `speichern`/`setze_datei`
+    sind Read-Modify-Write ueber `laden()`, der naechste Upload ueberbuegelt die Datei also
+    mit Defaults. Gemessen: Sprache und Tiefe ALLER Dateien waren danach weg, englische
+    Aufnahmen liefen wieder als Schweizerdeutsch. Zwilling von #192 (settings.json).
+
+    Ein fehlender Eintrag (Legacy-Projekt) schweigt weiterhin — sonst stuende die Zeile bei
+    jedem Projekt ohne projekt.json im Log und waere wertlos."""
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    os.makedirs(paths.project_dir("p"), exist_ok=True)
+    assert projekt.laden("p")["sprache"] == sprachen.SPRACH_DEFAULT
+    assert capsys.readouterr().out == ""                    # Datei fehlt -> kein Laerm
+    with open(projekt._pfad("p"), "wb") as fh:
+        fh.write(b'{"sprache": "\xe9n"}')
+    projekt.laden("p")
+    assert "nicht lesbar" in capsys.readouterr().out
+
+
 def test_laden_verschluckt_den_unsicheren_namen_nicht(tmp_path, monkeypatch):
     """`paths.safe_name` wirft ValueError fuer unsichere Namen. Seit der Erweiterung auf
     ValueError (#190) lag dieser Wurf im Rueckfall-Bereich, wenn der Pfadbau IM try steht —

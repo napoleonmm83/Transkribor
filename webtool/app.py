@@ -434,10 +434,17 @@ def _doc_felder(pfad: str, **felder: str) -> None:
     try:
         with open(pfad, encoding="utf-8") as fh:
             doc = json.load(fh)
-    except (OSError, ValueError):     # ValueError deckt auch UnicodeDecodeError (#190)
+        doc.update(felder)
+        # Der Schreibvorgang gehoert MIT in den try: `json.dumps` stirbt an einem einzelnen
+        # Surrogat im Dokument (UnicodeEncodeError, auch ein ValueError). Diese Funktion
+        # laeuft in `rename_file` NACH dem `os.rename` — ein Wurf hier meldete dem Aufrufer
+        # einen Fehler fuer ein bereits erledigtes Umbenennen. Die Zusage im Docstring gilt
+        # jetzt fuer beide Haelften, nicht nur fuers Lesen (#190-Review).
+        paths.atomic_write(pfad, json.dumps(doc, ensure_ascii=False, indent=1))
+    except (OSError, ValueError) as e:     # ValueError deckt auch UnicodeDecodeError (#190)
+        print(f"⚠ {os.path.basename(pfad)} nicht nachgezogen ({type(e).__name__}: {e})",
+              flush=True)
         return
-    doc.update(felder)
-    paths.atomic_write(pfad, json.dumps(doc, ensure_ascii=False, indent=1))
 
 
 @app.post("/api/projects/{project}/rename")
