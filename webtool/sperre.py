@@ -239,8 +239,9 @@ def datei(pfad: str, stale: float = STALTES_ALTER):
                       f"weiter", flush=True)
                 break
             # Ein Halter, der sich als lebend MELDET und dabei laenger haelt, als ein
-            # kritischer Abschnitt ueberhaupt dauern kann (Mikrosekunden bei settings/projekt,
-            # hoechstens PIP_TIMEOUT beim pip-Lauf), ist wahrscheinlicher eine
+            # kritischer Abschnitt dauern sollte (Mikrosekunden bei settings/projekt; der
+            # pip-Lauf ist mit `timeout=PIP_TIMEOUT` gedeckelt, 120 s gegen 155 s), ist
+            # wahrscheinlicher eine
             # WIEDERVERWENDETE PID als ein langsamer Prozess. Ohne diesen einen erzwungenen
             # Griff kostete so ein Lock danach JEDEN Aufruf dauerhaft diese Frist und liesse
             # ihn anschliessend ungeschuetzt laufen — die Uhr ist der Rueckfall der
