@@ -199,8 +199,11 @@ def test_ejs_wird_an_den_metadaten_gemessen(monkeypatch):
     # Umgebungs-Kopplung, gegen die oben schon die Fixture geschrieben wurde.
     # Die Zeile deklariert ejs, damit der „fehlt"-Zweig unten ueberhaupt flaggt (#184: ohne
     # Anforderung gibt es nichts auszurichten).
-    monkeypatch.setattr(yu.metadata, "requires",
-                        lambda name: ["yt-dlp-ejs==0.8.0; extra == 'default'"])
+    def gefordert(name):
+        assert name == "yt-dlp", f"unerwartet nach den Anforderungen von {name!r} gefragt"
+        return ["yt-dlp-ejs==0.8.0; extra == 'default'"]
+
+    monkeypatch.setattr(yu.metadata, "requires", gefordert)
     assert _ECHTES_EJS_UNTAUGLICH() is False
 
     def fehlt(name):
@@ -427,14 +430,24 @@ def test_fehlendes_ejs_schlaegt_den_pin(monkeypatch):
 # --- Fehlt es, muss yt-dlp es ueberhaupt verlangen (#184) --------------------
 
 def _ohne_ejs(monkeypatch, requires):
-    """ejs ist NICHT installiert; yt-dlp deklariert `requires`."""
-    def fehlt(name):
+    """ejs ist NICHT installiert; yt-dlp deklariert `requires`.
+
+    Beide Attrappen pruefen den Distributionsnamen und scheitern sonst — eine Attrappe, die
+    JEDEN Namen annimmt, bliebe auch dann gruen, wenn der Code das falsche Paket abfragt
+    (genau die Luecke, die CodeRabbit an PR #180 beim Distributionsnamen fand).
+    """
+    def fassung(name):
         if name == "yt-dlp-ejs":
             raise yu.metadata.PackageNotFoundError(name)
+        assert name == "yt-dlp", f"unerwartet nach der Fassung von {name!r} gefragt"
         return "2026.8.12"
 
-    monkeypatch.setattr(yu.metadata, "version", fehlt)
-    monkeypatch.setattr(yu.metadata, "requires", lambda name: requires)
+    def gefordert(name):
+        assert name == "yt-dlp", f"unerwartet nach den Anforderungen von {name!r} gefragt"
+        return requires
+
+    monkeypatch.setattr(yu.metadata, "version", fassung)
+    monkeypatch.setattr(yu.metadata, "requires", gefordert)
 
 
 def test_ohne_ejs_anforderung_kein_flag(monkeypatch):
