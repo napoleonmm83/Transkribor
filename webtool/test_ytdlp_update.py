@@ -382,8 +382,13 @@ def test_das_gepruefte_extra_ist_das_installierte():
     """`_PAKET` bestimmt, welches Extra pip installiert; `_NUR_DEFAULT_RE` bestimmt, welchem
     Extra-Pin wir glauben. Beide muessen dasselbe Extra nennen — verbunden ist da nichts.
     Wer `_PAKET` aendert, laese sonst still den falschen Pin: fail-open, also weder Test noch
-    Logzeile. Ein Waechter statt einer Abstraktion, die sich hier nicht lohnt."""
-    assert "default" in yu._PAKET
+    Logzeile. Ein Waechter statt einer Abstraktion, die sich hier nicht lohnt.
+
+    Auf Gleichheit, nicht auf Teilstring: `"default" in "yt-dlp[default,pin]"` waere wahr, und
+    genau dann laege der Fall vor, den der Waechter melden soll — pip installierte zwei Extras,
+    geglaubt wuerde weiterhin nur dem `default`-Pin. Ein Waechter, der bei der Aenderung
+    schweigt, fuer die es ihn gibt, ist Deko (CodeRabbit an PR #183)."""
+    assert yu._PAKET == "yt-dlp[default]"
     assert yu._NUR_DEFAULT_RE.fullmatch("extra == 'default'")
 
 
