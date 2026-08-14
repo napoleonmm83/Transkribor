@@ -54,10 +54,16 @@ _EJS = "yt-dlp-ejs"
 # stillen Seite, und mehr Namen als das ejs-Paket kann sie dadurch nicht treffen.
 # NUR `==`: bei `>=` waere jede Antwort geraten, und Raten kostet hier ein taegliches pip
 # ohne Ende — siehe `_ejs_untauglich`.
-# Verankert (`^\s*`), weil eine Anforderungszeile mit dem Paketnamen ANFAENGT: ungeankert las
-# `search` aus `my-yt-dlp-ejs==0.9.0` brav `0.9.0` als geforderten ejs-Pin (gemessen) — ein
-# fremdes Paket haette den Flag gesetzt, den pip nie loeschen kann.
-_EJS_PIN_RE = re.compile(r"^\s*yt[-_]dlp[-_]ejs\s*==\s*([^\s;,()]+)", re.IGNORECASE)
+# Der NAME allein, ohne Bedingung an den Specifier — die schwaechere Frage aus #184
+# („verlangt yt-dlp ejs ueberhaupt?"). Verankert (`^\s*`), weil eine Anforderungszeile mit dem
+# Paketnamen ANFAENGT: ungeankert las `search` aus `my-yt-dlp-ejs==0.9.0` brav `0.9.0` als
+# geforderten ejs-Pin (gemessen) — ein fremdes Paket haette den Flag gesetzt, den pip nie
+# loeschen kann. `\b` am Ende trennt sauber gegen ein `yt-dlp-ejs2` und laesst `[deno]` durch.
+_EJS_NAME_RE = re.compile(r"^\s*yt[-_]dlp[-_]ejs\b", re.IGNORECASE)
+# Der Pin aus derselben Zeile. Bewusst OHNE Anker: diese Regex laeuft nur noch ueber Zeilen,
+# die `_ejs_zeilen()` bereits an `_EJS_NAME_RE` gefiltert hat — ein zweiter Anker waere hier
+# nicht Redundanz, sondern eine Wache, die den Test der ersten vacuous machte.
+_EJS_PIN_RE = re.compile(r"yt[-_]dlp[-_]ejs\s*==\s*([^\s;,()]+)", re.IGNORECASE)
 # Der Umgebungsmarker derselben Zeile. `fullmatch` gegen GENAU `extra == 'default'` — alles
 # andere (`extra == 'pin'`, zusaetzliches `and python_version …`) faellt nach fail-open.
 # Siehe `_gilt_fuer_uns`.
@@ -104,6 +110,20 @@ def _gilt_fuer_uns(zeile: str) -> bool:
     return not marker or bool(_NUR_DEFAULT_RE.fullmatch(marker))
 
 
+def _ejs_zeilen() -> list[str]:
+    """Die Anforderungszeilen des installierten yt-dlp, die `yt-dlp-ejs` FUER UNS betreffen.
+
+    Der eine Ort, an dem die Metadaten gelesen und gefiltert werden — beide Fragen darueber
+    (`_ejs_pin`, `_ejs_verlangt`) sollen sich denselben Namensanker und denselben
+    Extra-Marker teilen, sonst driften sie auseinander.
+    """
+    try:
+        zeilen = metadata.requires("yt-dlp") or []
+    except metadata.PackageNotFoundError:
+        return []
+    return [z for z in zeilen if _EJS_NAME_RE.search(z) and _gilt_fuer_uns(z)]
+
+
 def _ejs_pin() -> str | None:
     """Welche ejs-Fassung verlangt das installierte yt-dlp? `None` = keine Aussage.
 
@@ -117,15 +137,24 @@ def _ejs_pin() -> str | None:
     Metadaten-Pin und das `VERSION`, gegen das yt-dlp spaeter prueft. Die beiden sind also
     konstruktionsbedingt gekoppelt, nicht zufaellig gleich.
     """
-    try:
-        zeilen = metadata.requires("yt-dlp") or []
-    except metadata.PackageNotFoundError:
-        return None
-    for z in zeilen:
+    for z in _ejs_zeilen():
         m = _EJS_PIN_RE.search(z)
-        if m and _gilt_fuer_uns(z):
+        if m:
             return m.group(1)
     return None
+
+
+def _ejs_verlangt() -> bool:
+    """Verlangt das installierte yt-dlp `yt-dlp-ejs` ueberhaupt — bei BELIEBIGEM Specifier?
+
+    Die schwaechere Schwester von `_ejs_pin()` und der Grund, warum es zwei Fragen sind
+    (#184): fehlt das Paket, haengt die Antwort NICHT davon ab, ob der Specifier vergleichbar
+    ist. Der naheliegende Einzeiler (`_ejs_pin() is not None`) haette die #179-Erkennung an
+    die bewusst enge `==`-Regel gekoppelt — bei einem gelockerten Pin (`>=0.8.0,<0.9`) faende
+    `_ejs_pin()` nichts, und ein WIRKLICH fehlendes ejs waere still nicht mehr erkannt worden.
+    Still ist hier das teure Wort.
+    """
+    return bool(_ejs_zeilen())
 
 
 def _release(v: str | None) -> tuple[int, ...] | None:
@@ -204,7 +233,10 @@ def _ejs_untauglich() -> bool:
     try:
         da = metadata.version(_EJS)
     except metadata.PackageNotFoundError:
-        return True                       # #179: gar nicht da
+        # #179 fehlt — aber nur, wenn yt-dlp es ueberhaupt verlangt (#184). Sonst holt es
+        # auch `pip install -U yt-dlp[default]` nicht (es warnt „does not provide the extra"
+        # und endet mit 0), und der Flag ginge nie weg.
+        return _ejs_verlangt()
     gefordert, installiert = _release(_ejs_pin()), _release(da)
     if gefordert is None or installiert is None:
         return False                      # nicht vergleichbar -> Kalenderweg entscheidet
