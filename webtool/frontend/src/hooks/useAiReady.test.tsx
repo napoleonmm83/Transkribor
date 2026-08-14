@@ -10,7 +10,7 @@ const BASIS = {
   provider: 'claude-cli', model: '', base_url: '', has_key: false,
   env_key: '', whisper_model: 'large-v3', whisper_lang: 'de', whisper_choices: [],
   providers: [], ai_ready: true, ai_reason: '',
-  ytdlp_auto: '1', ytdlp: { version: '2026.8.12', geprueft: '', auto: true, env: false },
+  ytdlp_auto: '1', ytdlp: { unlesbar: false, version: '2026.8.12', geprueft: '', auto: true, env: false },
 } as Settings
 
 describe('useAiReady', () => {

@@ -561,9 +561,11 @@ def test_settings_meldet_den_ytdlp_zustand(client, monkeypatch):
     """Ohne Anzeige waere der Automatismus unsichtbar — und ein unsichtbarer Automatismus
     ist genau dann nicht zu durchschauen, wenn er danebengeht."""
     from webtool import ytdlp_update
-    # NICHT `fassung` patchen: `zustand()` liest ueber `_fassung_und_lesbarkeit()`,
-    # weil es zwei Auskuenfte braucht (Fassung UND ob die Metadaten lesbar sind, #189).
-    monkeypatch.setattr(ytdlp_update, "_fassung_und_lesbarkeit", lambda: ("2026.8.12", False))
+    # An der ECHTEN Grenze gepatcht (`importlib.metadata`), nicht an einer Funktion des
+    # Moduls: `fassung` zu patchen lief seit #189 ins Leere (`zustand()` geht nicht mehr
+    # dadurch), und eine private Funktion zu patchen entwertet den naechsten Umbau
+    # genauso still. So wird `_fassung_und_lesbarkeit` wirklich ausgeuebt.
+    monkeypatch.setattr(ytdlp_update.metadata, "version", lambda name: "2026.8.12")
     body = client.get("/api/settings").json()
     assert body["ytdlp"]["version"] == "2026.8.12"
     assert body["ytdlp"]["auto"] is True and body["ytdlp_auto"] == "1"
@@ -597,12 +599,17 @@ def test_settings_ytdlp_merker_kommt_nicht_aus_dem_browser(client):
 def test_ytdlp_update_knopf_ruft_pip_und_meldet_das_ergebnis(client, monkeypatch):
     from webtool import ytdlp_update
     monkeypatch.setattr(ytdlp_update, "aktualisiere", lambda: True)
-    # NICHT `fassung` patchen: `zustand()` liest ueber `_fassung_und_lesbarkeit()`,
-    # weil es zwei Auskuenfte braucht (Fassung UND ob die Metadaten lesbar sind, #189).
-    monkeypatch.setattr(ytdlp_update, "_fassung_und_lesbarkeit", lambda: ("2026.8.12", False))
+    # An der ECHTEN Grenze gepatcht (`importlib.metadata`), nicht an einer Funktion des
+    # Moduls: `fassung` zu patchen lief seit #189 ins Leere (`zustand()` geht nicht mehr
+    # dadurch), und eine private Funktion zu patchen entwertet den naechsten Umbau
+    # genauso still. So wird `_fassung_und_lesbarkeit` wirklich ausgeuebt.
+    monkeypatch.setattr(ytdlp_update.metadata, "version", lambda name: "2026.8.12")
     r = client.post("/api/settings/ytdlp/update")
     assert r.status_code == 200
     assert r.json()["ok"] is True and r.json()["version"] == "2026.8.12"
+    # Der Knopf traegt denselben Zustandsblock wie GET /api/settings — das Frontend liest
+    # `unlesbar` von HIER, um bei einem Fehlschlag nicht "bist du online?" zu raten (#189).
+    assert r.json()["unlesbar"] is False
 
 
 def test_ytdlp_update_knopf_meldet_fehlschlag_statt_zu_500en(client, monkeypatch):

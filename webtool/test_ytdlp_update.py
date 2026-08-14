@@ -936,3 +936,22 @@ def test_dist_info_ohne_lesbare_metadata_gilt_als_unlesbar(monkeypatch):
     z = yu.zustand()
     assert z["version"] is None and z["unlesbar"] is True
     assert yu.fassung() is None          # die ENTSCHEIDUNG bleibt: kein pip auf Verdacht
+
+
+def test_ejs_untauglich_wird_von_unlesbar_NICHT_gedeckt(monkeypatch, capsys):
+    """Der Docstring von `_fassung_und_lesbarkeit` darf nicht mehr behaupten, als er deckt:
+    `_ejs_untauglich()` liest eine ANDERE Distribution (`yt-dlp-ejs`) und hat einen eigenen
+    stillen Rueckfall. Ist NUR die ejs-Metadatei kaputt, meldet `zustand()` nichts — und die
+    Selbstheilung ist trotzdem aus. Das ist die zweite Haelfte von #189 und steht als eigenes
+    Issue; hier festgehalten, damit sie nicht als behoben gilt."""
+    monkeypatch.setattr(yu.metadata, "version",
+                        lambda name: "2026.8.12" if name == "yt-dlp" else _werfe())
+    monkeypatch.setattr(yu, "_ejs_untauglich", _ECHTES_EJS_UNTAUGLICH)
+    z = yu.zustand()
+    assert z["version"] == "2026.8.12" and z["unlesbar"] is False   # yt-dlp: alles lesbar
+    assert yu._ejs_untauglich() is False                            # still, ohne Signal
+    assert "unlesbar" in capsys.readouterr().out                    # nur das Protokoll weiss es
+
+
+def _werfe():
+    raise UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid start byte")

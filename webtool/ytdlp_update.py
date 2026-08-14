@@ -117,10 +117,16 @@ def _fassung_und_lesbarkeit() -> tuple[str | None, bool]:
     (#189). Die Anzeige darf nicht luegen; dieselbe Regel wie beim `asr`-Feld in
     `device.describe()`.
 
-    Der zweite Wert gilt fuer die Metadaten von yt-dlp **insgesamt**, nicht nur fuer die
-    Versionszeile: `_ejs_zeilen()` liest dieselbe Distribution (`metadata.requires("yt-dlp")`)
-    und faellt bei derselben kaputten METADATA auf "unbekannt" — der stille Zustand ist EINER,
-    also braucht er auch nur EIN Signal.
+    Der zweite Wert gilt fuer die METADATA von **yt-dlp**, nicht nur fuer deren Versionszeile:
+    `_ejs_zeilen()` liest dieselbe Distribution (`metadata.requires("yt-dlp")`) und faellt bei
+    derselben kaputten Datei auf "unbekannt" — fuer diese beiden ist der stille Zustand EINER,
+    ein Signal reicht. Gemessen an einer praeparierten dist-info: nicht dekodierbare METADATA
+    ⇒ beide werfen denselben UnicodeDecodeError, `import yt_dlp` laeuft trotzdem.
+
+    **NICHT gedeckt ist `_ejs_untauglich()`**: es liest eine ANDERE Distribution
+    (`metadata.version("yt-dlp-ejs")`) und hat seit #185 einen eigenen stillen Rueckfall
+    (unlesbar ⇒ `False` ⇒ nicht faellig), den niemand melden kann. Das ist die zweite Haelfte
+    von #189 und steht als eigenes Issue — hier wird sie bewusst nicht mitbehauptet.
     """
     try:
         v = metadata.version("yt-dlp")

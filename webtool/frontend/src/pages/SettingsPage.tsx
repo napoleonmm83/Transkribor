@@ -236,8 +236,14 @@ export function SettingsPage() {
       const r = await updateYtdlp()
       // Ohne Fassung KEINE Fassung nennen: pip meldet Erfolg, die Metadaten bleiben aber
       // unlesbar — der Toast sagte dann "yt-dlp ist jetzt auf null" (#189).
+      // Der Fehlerzweig darf nicht raten: bei kaputter METADATA scheitert **pip selbst**
+      // (gemessen: `pip list` gegen eine praeparierte dist-info endet mit Exit 2 und
+      // UnicodeDecodeError). "Bist du online?" waere dann dieselbe Fehldiagnose, gegen die
+      // die Zeile darunter gebaut ist — und die Antwort trägt `unlesbar` bereits mit.
       r.ok ? toast.success(r.version ? `yt-dlp ist jetzt auf ${r.version}` : 'yt-dlp wurde aktualisiert')
-        : toast.error('Aktualisierung fehlgeschlagen — bist du online?')
+        : toast.error(r.unlesbar
+          ? 'Die Metadaten von yt-dlp sind beschädigt — pip kann sie nicht lesen. Hilft nur neu installieren.'
+          : 'Aktualisierung fehlgeschlagen — bist du online?')
       await getSettings().then(setS)
     } catch (e) { toast.error(String(e)) } finally { setYtLaeuft(false) }
   }

@@ -28,7 +28,7 @@ const BASIS: Settings = {
   ],
   ai_ready: true, ai_reason: '',
   ytdlp_auto: '1',
-  ytdlp: { version: '2026.8.12', geprueft: '2026-08-13', auto: true, env: false },
+  ytdlp: { version: '2026.8.12', unlesbar: false, geprueft: '2026-08-13', auto: true, env: false },
   providers: [
     { id: 'claude-cli', label: 'Claude Code Abo (kein Key)', needs_key: false, cli: true, base: '', default_model: 'opus', keys_url: '', hint: 'Nutzt das Abo.' },
     { id: 'codex-cli', label: 'ChatGPT-Abo (Codex CLI, kein Key)', needs_key: false, cli: true, base: '', default_model: '', keys_url: '', hint: 'Nutzt das ChatGPT-Abo.' },
@@ -242,7 +242,7 @@ describe('SettingsPage', () => {
   })
 
   it('sagt es, wenn yt-dlp gar nicht installiert ist', async () => {
-    zeige({ ytdlp: { version: null, geprueft: '', auto: true, env: false } })
+    zeige({ ytdlp: { version: null, unlesbar: false, geprueft: '', auto: true, env: false } })
     expect(await screen.findByText(/Nicht installiert/)).toBeInTheDocument()
   })
 
@@ -266,7 +266,7 @@ describe('SettingsPage', () => {
   it('warnt, wenn die Umgebungsvariable den Haken überstimmt', async () => {
     // Ein Haken, der nichts tut, ist schlimmer als keiner. Der WIRKSAME Wert kommt aus
     // `ytdlp.auto`, der gespeicherte aus `ytdlp_auto` — nur die Differenz ist die Warnung.
-    zeige({ ytdlp_auto: '1', ytdlp: { version: '2026.8.12', geprueft: '', auto: false, env: true } })
+    zeige({ ytdlp_auto: '1', ytdlp: { version: '2026.8.12', unlesbar: false, geprueft: '', auto: false, env: true } })
     expect(await screen.findByText(/wirkungslos/)).toBeInTheDocument()
   })
 
@@ -293,10 +293,22 @@ describe('SettingsPage', () => {
   })
 
   it('meldet einen fehlgeschlagenen Update-Versuch, statt ihn zu verschlucken', async () => {
-    vi.mocked(api.updateYtdlp).mockResolvedValue({ ok: false, version: '2026.7.4', geprueft: '2026-08-13', auto: true, env: false })
+    vi.mocked(api.updateYtdlp).mockResolvedValue({ ok: false, version: '2026.7.4', unlesbar: false, geprueft: '2026-08-13', auto: true, env: false })
     zeige()
     fireEvent.click(await screen.findByRole('button', { name: /Jetzt aktualisieren/i }))
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/fehlgeschlagen/)))
+  })
+
+  it('nennt beim Fehlschlag die kaputten Metadaten statt nach dem Netz zu fragen', async () => {
+    // Bei kaputter METADATA scheitert pip SELBST (gemessen: `pip list` gegen eine
+    // praeparierte dist-info endet mit Exit 2 und UnicodeDecodeError). Wer gerade "Fassung
+    // nicht lesbar" gelesen und darauf geklickt hat, bekaeme sonst "bist du online?" —
+    // dieselbe Fehldiagnose, gegen die #189 gebaut ist, drei Zeilen weiter oben.
+    vi.mocked(api.updateYtdlp).mockResolvedValue({ ok: false, version: null, unlesbar: true, geprueft: '', auto: true, env: false })
+    zeige()
+    fireEvent.click(await screen.findByRole('button', { name: /Jetzt aktualisieren/i }))
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/Metadaten/)))
+    expect(toast.error).not.toHaveBeenCalledWith(expect.stringMatching(/online/))
   })
 
   it('warnt bei large-v3 auf der CPU', async () => {

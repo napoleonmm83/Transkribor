@@ -70,7 +70,7 @@ export type Settings = {
  *  installiert (dann steht der URL-Import nicht zur Verfügung) gegen "Metadaten nicht
  *  lesbar" — dort läuft der Import weiter, nur die Selbstaktualisierung ist ausgesetzt
  *  (#189). Ohne das Feld behauptete die Seite das Gegenteil dessen, was der Nutzer tun kann. */
-export type YtdlpStand = { version: string | null; unlesbar?: boolean; geprueft: string; auto: boolean; env: boolean };
+export type YtdlpStand = { version: string | null; unlesbar: boolean; geprueft: string; auto: boolean; env: boolean };
 export type ModelInfo = { id: string; label: string };
 /** Anmeldezustand einer Abo-CLI. `unterstuetzt: false` heisst: der Anbieter kennt so etwas
  *  nicht — bei den API-Anbietern IST der Key die Anmeldung. */
