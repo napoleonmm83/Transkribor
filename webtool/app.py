@@ -138,6 +138,21 @@ def _json_objekt(pfad: str) -> dict:
     return daten
 
 
+def _ist_unlesbar(pfad: str) -> bool:
+    """Liegt dort eine Datei, die sich NICHT als JSON-Objekt lesen laesst?
+
+    Eine fehlende Datei ist nicht „unlesbar", sondern nichts zu retten (`False`) — dieselbe
+    Trennung wie beim `FileNotFoundError`-Vorbehalt in `settings.load`.
+    """
+    if not os.path.exists(pfad):
+        return False
+    try:
+        _json_objekt(pfad)
+    except (OSError, ValueError):
+        return True
+    return False
+
+
 def load_or_build_doc(project: str, base: str) -> dict:
     epath = _edit_path(project, base)
     geheilt = ""
@@ -567,14 +582,17 @@ async def save_file(project: str, base: str, request: Request):
     # der Schreibvorgang unten wuerde sie ersetzen — dieselbe Konstellation wie bei
     # settings.json (#192), nur mit der Handarbeit eines Menschen darin. Erst beiseitelegen.
     #
-    # Warum die Kennzeichnung vom Client kommt und nicht aus einer Pruefung hier: das PUT
-    # laeuft alle 800 ms Tipppause, und die Datei jedes Mal zu LESEN, nur um zu wissen, ob sie
-    # lesbar ist, waere ein voller JSON-Parse je Tastendruck-Pause. Ein falsch gesetztes Feld
-    # kostet hoechstens eine Sicherungskopie einer gesunden Datei, keinen Inhalt.
+    # Der Merker ist ein HINWEIS, keine Anweisung: nachgesehen wird auf der Platte
+    # (`_ist_unlesbar`). Das kostet einen Parse — aber nur, wenn der Merker gesetzt ist, also
+    # hoechstens einmal je geheilter Datei; unbesehen zu folgen liesse einen erfundenen Merker
+    # eine GESUNDE edit.json beiseiteschieben, und weil die erste Rettung gewinnt, waere der
+    # Platz danach belegt: eine spaetere, echte Beschaedigung liesse sich nicht mehr retten.
+    # (CodeRabbit-CLI an PR #204 — der Weg ueber die Pruefung ist billig genug, das Argument
+    # „einmal pro Tipppause waere zu teuer" galt nur fuer eine Pruefung OHNE Merker.)
     #
     # `pop`, nicht `get`: das Feld ist eine Meldung ueber den Ladevorgang, kein Bestandteil des
     # Dokuments — geschrieben gaelte die Datei beim naechsten Oeffnen fuer immer als geheilt.
-    if doc.pop("selbstgeheilt", None):
+    if doc.pop("selbstgeheilt", None) and _ist_unlesbar(_edit_path(project, base)):
         paths.beiseitelegen(_edit_path(project, base))
     doc["human_edited"] = True
     tdir = paths.transkripte_dir(project)

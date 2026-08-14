@@ -1312,6 +1312,23 @@ def test_speichern_legt_die_unlesbare_edit_json_beiseite(client, tmp_path):
     assert neu["human_edited"] is True and "selbstgeheilt" not in neu
 
 
+def test_erfundener_merker_schiebt_keine_gesunde_datei_beiseite(client, tmp_path):
+    """Der Merker ist ein HINWEIS, keine Anweisung — nachgesehen wird auf der Platte.
+
+    Ohne die Pruefung schoebe ein erfundenes `selbstgeheilt` eine gesunde `edit.json` beiseite.
+    Der Inhalt waere zwar nicht weg (die Kopie traegt ihn), aber der Platz waere belegt: die
+    ERSTE Rettung gewinnt, eine spaetere echte Beschaedigung liesse sich also nicht mehr
+    retten. Genau die Kette hat die CodeRabbit-CLI an PR #204 aufgezeigt."""
+    e = tmp_path / "Demo" / "transkripte" / "S1.edit.json"
+    doc = client.get("/api/projects/Demo/files/S1").json()
+    client.put("/api/projects/Demo/files/S1", json=doc)               # gesunde Datei anlegen
+    gesund = e.read_bytes()
+    client.put("/api/projects/Demo/files/S1", json={**doc, "selbstgeheilt": "erfunden"})
+    assert not (tmp_path / "Demo" / "transkripte" / "S1.edit.json.kaputt").exists()
+    assert e.exists() and json.loads(e.read_text(encoding="utf-8"))["base"] == "S1"
+    assert gesund                                                     # war wirklich etwas da
+
+
 def test_speichern_lehnt_ein_nicht_objekt_ab(client):
     """Trust-Boundary: ein JSON-Array kam bis zum `doc["human_edited"] = True` durch und
     endete als 500 (TypeError). Die Schreibseite braucht dieselbe Wache wie `_json_objekt`

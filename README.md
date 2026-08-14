@@ -202,8 +202,9 @@ Dasselbe gilt für die anderen Dateien, die Transkribor für dich führt: die Sp
 eines Projekts (alte Fassung als `projekt.json.kaputt` im Projektordner) und dein bearbeitetes
 Transkript. Lässt sich Letzteres nicht mehr lesen, öffnet Transkribor die Aufnahme trotzdem —
 du siehst dann aber das unkorrigierte Rohtranskript, und ein Hinweis über dem Text sagt dir
-das. Deine bisherige Fassung wird nicht überschrieben: sie bleibt als
-`<Name>.edit.json.kaputt` im Ordner `transkripte` liegen.
+das. Deine bisherige Fassung wird nicht überschrieben: sobald du das nächste Mal etwas
+speicherst, wandert sie als `<Name>.edit.json.kaputt` zur Seite und bleibt im Ordner
+`transkripte` liegen.
 
 ---
 
