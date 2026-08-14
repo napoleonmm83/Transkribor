@@ -42,7 +42,15 @@ def laden(project: str) -> dict:
     try:
         with open(pfad, encoding="utf-8") as fh:
             data = json.load(fh)
-    except (OSError, ValueError):     # ValueError deckt auch UnicodeDecodeError (#190)
+    except FileNotFoundError:         # Normalfall (Legacy-Projekt ohne Datei) -> schweigen
+        data = {}
+    except (OSError, ValueError) as e:     # ValueError deckt auch UnicodeDecodeError (#190)
+        # Laut, nicht still — dieselbe Regel wie `settings.load()` seit #188: `speichern`
+        # und `setze_datei` sind Read-Modify-Write ueber genau diese Funktion, der naechste
+        # Upload ueberbuegelt die Datei also mit Defaults. Gemessen: Sprache und Tiefe ALLER
+        # Dateien waren danach weg, englische Aufnahmen liefen wieder auf Schweizerdeutsch.
+        print(f"⚠ {pfad} nicht lesbar ({type(e).__name__}: {e}) — Projekt- und "
+              f"Datei-Einstellungen fallen auf Standard (ch/auto)", flush=True)
         data = {}
     if not isinstance(data, dict):
         data = {}

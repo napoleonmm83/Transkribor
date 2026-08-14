@@ -153,10 +153,11 @@ def cmd_prep(project: str) -> int:
             paths.atomic_write(os.path.join(tdir, base + ".tagged.txt"), "\n".join(lines) + "\n")
             n += 1
         except (OSError, ValueError) as e:     # ValueError deckt auch UnicodeDecodeError (#190)
-            # Der Typ gehoert in die Zeile: dieser `try` umspannt den ganzen Schleifenkoerper
-            # (auch den atomic_write), "Roh-JSON unlesbar" ist also schon fuer OSError eine
-            # Vermutung. `str(e)` nennt den Typ bei keiner der beiden neuen Klassen.
-            print(f"prep: SKIP {base} (Roh-JSON unlesbar? {type(e).__name__}: {e})", flush=True)
+            # Keine Ursachenbehauptung mehr, nur der Typ: dieser `try` umspannt den ganzen
+            # Schleifenkoerper — auch den `atomic_write`, der an einem einzelnen Surrogat in
+            # der Roh-JSON mit UnicodeEncodeError stirbt (gemessen). "Roh-JSON unlesbar" war
+            # dort schlicht falsch, und `str(e)` nennt den Typ bei keiner dieser Klassen.
+            print(f"prep: SKIP {base} ({type(e).__name__}: {e})", flush=True)
     print(f"prep: {n} Datei(en) getaggt in {tdir}")
     return n
 
@@ -225,8 +226,15 @@ def cmd_apply(project: str, base: str, force: bool = False) -> str:
             if _load(epath).get("human_edited"):
                 print(f"apply: SKIP {base} (human_edited=true; --force zum Ueberschreiben)")
                 return "skipped"
-        except ValueError:     # ValueError deckt auch UnicodeDecodeError (#190)
-            pass  # korrupte edit.json -> darf ueberschrieben werden
+        except (OSError, ValueError) as e:     # ValueError deckt auch UnicodeDecodeError
+            # Nicht lesbar heisst NICHT "keine Handarbeit" — dieselbe Regel wie in
+            # `_is_human_edited`. Der naechste Schritt ERSETZT diese Datei; die Zeile
+            # darunter loeschte bis #190 stillschweigend Handarbeit, sobald der Riegel
+            # nicht mehr warf (gemessen). Beide Riegel muessen dieselbe Richtung haben,
+            # sonst schuetzt der eine, was der andere gleich darauf ueberschreibt.
+            print(f"apply: SKIP {base} ({os.path.basename(epath)} nicht lesbar: "
+                  f"{type(e).__name__}: {e}; --force zum Ueberschreiben)")
+            return "skipped"
     cpath = os.path.join(tdir, base + ".correction.json")
     if not os.path.exists(cpath):
         print(f"apply: FEHLT {base}.correction.json - erst Korrektur-Workflow laufen lassen")
@@ -264,10 +272,27 @@ def _context(project: str) -> str:
 
 
 def _is_human_edited(epath: str) -> bool:
+    """Steckt in dieser `edit.json` Handarbeit? Eine NICHT LESBARE gilt als handbearbeitet.
+
+    Die Fehlerrichtung ist hier umgekehrt zu allen anderen Rueckfaellen dieses Moduls, und
+    zwar gemessen: mit `False` korrigierte der Lauf die Datei, `cmd_apply` ersetzte sie, und
+    am Ende stand `run: fertig — 1/1 korrigiert` — Erfolg gemeldet, Handarbeit weg, keine
+    Zeile im Protokoll. `human_edited=true` IST die Zusage "eine Maschine fasst das nicht
+    an"; wer sie nicht lesen kann, darf sie nicht ueberschreiben. Vor #190 warf das hier und
+    der Catch-all in `one()` uebersprang die Datei — dieselbe Wirkung, nur als Fehler
+    getarnt. `--force` bleibt der Weg darueber hinweg.
+
+    Fehlt die Datei, gibt es nichts zu schuetzen (der Normalfall, deshalb schweigend).
+    """
     try:
         return bool(_load(epath).get("human_edited"))
-    except (OSError, ValueError):     # ValueError deckt auch UnicodeDecodeError (#190)
+    except FileNotFoundError:
         return False
+    except (OSError, ValueError) as e:     # ValueError deckt auch UnicodeDecodeError (#190)
+        print(f"⚠ {os.path.basename(epath)} nicht lesbar ({type(e).__name__}: {e}) — gilt "
+              f"als handbearbeitet, wird NICHT ueberschrieben (--force erzwingt es)",
+              flush=True)
+        return True
 
 
 def _valid_correction(cpath: str) -> bool:

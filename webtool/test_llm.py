@@ -338,3 +338,38 @@ def test_check_meldet_die_fehlende_anmeldung_statt_eines_rohen_401(cfg, monkeypa
     r = llm.check()
     assert r["ok"] is False and "nicht angemeldet" in r["detail"]
     assert "cf-ray" not in r["detail"]
+
+
+# --- #190: nicht dekodierbare Bytes sind KEIN JSONDecodeError ----------------
+
+def test_nicht_dekodierbare_codex_antwort_wird_zur_llmerror(cfg, monkeypatch):
+    """Die Antwortdatei schreibt ein FREMDES Binaerprogramm. Der Rueckfall fing nur
+    `OSError`; ein `UnicodeDecodeError` entkam als roher `ValueError` durch `complete()`
+    und `check()` bis in den Handler, der nur `LLMError` faengt — also 500 auf der
+    Einstellungsseite statt der Meldung "keine Antwort erhalten" (#190)."""
+    settings.save({"provider": "codex-cli", "model": ""})
+    monkeypatch.setattr(llm.shutil, "which", lambda n: "C:/fake/codex" if "codex" in n else None)
+
+    class Fertig:
+        returncode = 0
+        stdout = ""
+        stderr = ""
+
+    def fake_run(cmd, **kw):
+        with open(cmd[cmd.index("-o") + 1], "wb") as fh:
+            fh.write(b"\xe9 keine gueltige UTF-8-Antwort")
+        return Fertig()
+
+    monkeypatch.setattr(llm.subprocess, "run", fake_run)
+    with pytest.raises(llm.LLMError):        # NICHT UnicodeDecodeError
+        llm.complete("hallo")
+
+
+def test_nicht_dekodierbare_eingabedatei_wird_zur_llmerror(tmp_path):
+    """`_with_files` verspricht "Eingabedatei nicht lesbar -> saubere Anbietermeldung".
+    Fuer die haeufigste Unlesbarkeit galt das nicht (#190)."""
+    p = tmp_path / "S1.tagged.txt"
+    p.write_bytes(b"Interview mit Gr\xfcnder")     # ANSI/CP1252
+    with pytest.raises(llm.LLMError) as e:
+        llm._with_files("prompt", [str(p)])
+    assert "UnicodeDecodeError" in str(e.value)
