@@ -17,6 +17,10 @@ from webtool import ytdlp_update as yu
 
 HEUTE = dt.date(2026, 8, 13)
 
+# VOR jeder Fixture-Faelschung festgehalten: die Fixture pinnt `_ejs_fehlt` (s. unten),
+# und der Test der Funktion selbst braucht trotzdem das Original.
+_ECHTES_EJS_FEHLT = yu._ejs_fehlt
+
 
 @pytest.fixture(autouse=True)
 def isoliert(monkeypatch, tmp_path):
@@ -25,6 +29,12 @@ def isoliert(monkeypatch, tmp_path):
     monkeypatch.setattr(yu.subprocess, "run",
                         lambda *a, **k: pytest.fail("kein echtes pip im Test"))
     monkeypatch.setattr(yu, "_heute", lambda: HEUTE)
+    # Die Suite laeuft bewusst ohne yt-dlp (und damit ohne yt-dlp-ejs) — im CI-Job steht
+    # `pip install fastapi python-multipart pytest httpx`, sonst nichts. Ungepinnt haengen
+    # damit VIER Faelligkeitstests daran, ob die Umgebung des Laeufers das Paket zufaellig
+    # mitbringt: gemessen, indem `_ejs_fehlt` einmal fest auf True gesetzt wurde — dann
+    # fallen `frische_fassung`, `merker_bremst`, `nightly` und `automatisch_ueberspringt` um.
+    monkeypatch.setattr(yu, "_ejs_fehlt", lambda: False)
     return tmp_path
 
 
@@ -114,6 +124,51 @@ def test_fassung_laedt_yt_dlp_nicht(monkeypatch):
     monkeypatch.setattr(yu.metadata, "version", lambda name: gerufen.append(name) or "2026.8.1")
     assert yu.fassung() == "2026.8.1"
     assert gerufen == ["yt-dlp"]
+
+
+# --- Faelligkeit ohne Kalender: ein FEHLENDES Paket (#179) -------------------
+
+def test_fehlende_loeserskripte_machen_faellig(monkeypatch):
+    """#179: `yt-dlp[default]` kam erst mit #178 in die requirements.txt — eine venv von
+    davor hat `yt-dlp-ejs` nicht, und die Datei wird in der installierten App nie wieder
+    gelesen (`setup.js:venvVollstaendig()` winkt die venv durch, ein App-Update ersetzt
+    die .exe, nicht die venv). Am Kalender gemessen faellt das NIE auf: die Fassung ist
+    frisch, der Loeser hat trotzdem keine Skripte — und YouTube antwortet mit 403."""
+    monkeypatch.setattr(yu, "fassung", lambda: "2026.8.12")       # gestern erschienen
+    monkeypatch.setattr(yu, "_ejs_fehlt", lambda: True)
+    assert yu.faellig() is True
+
+
+def test_fehlende_loeserskripte_bremst_der_merker_nur_einen_TAG(monkeypatch):
+    """Ein fehlendes Paket ist keine Frage des Kalenders — pip HAT hier etwas zu holen,
+    der 14-Tage-Takt waere die falsche Bremse (bis zu zwei Wochen 403 fuer nichts).
+
+    Ganz ohne Bremse zahlte dafuer ein Rechner ohne Netz den pip-Fehlschlag bei JEDEM
+    Import; deshalb hoechstens einmal am Tag statt gar nicht.
+    """
+    monkeypatch.setattr(yu, "fassung", lambda: "2026.8.12")
+    monkeypatch.setattr(yu, "_ejs_fehlt", lambda: True)
+    settings.save({"ytdlp_geprueft": HEUTE.isoformat()})
+    assert yu.faellig() is False
+    settings.save({"ytdlp_geprueft": (HEUTE - dt.timedelta(days=1)).isoformat()})
+    assert yu.faellig() is True
+
+
+def test_ejs_wird_an_den_metadaten_gemessen(monkeypatch):
+    """Dieselbe Regel wie bei `fassung()`: von der PLATTE lesen, nicht importieren — ein
+    geladenes `yt_dlp_ejs` laege beim pip-Lauf danach schon im Speicher.
+
+    Positiv- UND Negativkontrolle: eine Fassung, die immer `True` liefert, waere von der
+    richtigen Antwort nicht zu unterscheiden, solange das Paket im CI ohnehin fehlt.
+    """
+    monkeypatch.setattr(yu.metadata, "version", lambda name: "0.8.0")
+    assert _ECHTES_EJS_FEHLT() is False
+
+    def fehlt(name):
+        raise yu.metadata.PackageNotFoundError(name)
+
+    monkeypatch.setattr(yu.metadata, "version", fehlt)
+    assert _ECHTES_EJS_FEHLT() is True
 
 
 # --- Schalter ----------------------------------------------------------------
