@@ -1323,10 +1323,15 @@ def test_erfundener_merker_schiebt_keine_gesunde_datei_beiseite(client, tmp_path
     doc = client.get("/api/projects/Demo/files/S1").json()
     client.put("/api/projects/Demo/files/S1", json=doc)               # gesunde Datei anlegen
     gesund = e.read_bytes()
-    client.put("/api/projects/Demo/files/S1", json={**doc, "selbstgeheilt": "erfunden"})
-    assert not (tmp_path / "Demo" / "transkripte" / "S1.edit.json.kaputt").exists()
-    assert e.exists() and json.loads(e.read_text(encoding="utf-8"))["base"] == "S1"
     assert gesund                                                     # war wirklich etwas da
+    r = client.put("/api/projects/Demo/files/S1", json={**doc, "selbstgeheilt": "erfunden"})
+    # Der zweite PUT muss GELUNGEN sein, sonst prueft alles darunter nur die Datei aus dem
+    # ersten (CodeRabbit an PR #204) — ein 400/500 haette den Test gruen gelassen.
+    assert r.status_code == 200, r.text
+    assert not (tmp_path / "Demo" / "transkripte" / "S1.edit.json.kaputt").exists()
+    # Byte-gleich: weder verschoben noch veraendert. Der Merker faellt beim Schreiben weg,
+    # also muss dasselbe Dokument dastehen wie nach dem ersten PUT.
+    assert e.read_bytes() == gesund
 
 
 def test_speichern_lehnt_ein_nicht_objekt_ab(client):
