@@ -45,9 +45,10 @@ _EJS = "yt-dlp-ejs"
 # `[-_.]` und `IGNORECASE` sind VORSORGE, kein beobachteter Fall: gemessen steht in yt-dlps
 # METADATA die kleingeschriebene Bindestrich-Form (`Requires-Dist: yt-dlp-ejs==0.8.0;
 # extra == 'default'`), und `metadata.requires()` reicht die Zeile unveraendert durch. PEP 503
-# normalisiert Laeufe aus `-`, `_` UND `.` gleich und vergleicht ohne Ruecksicht auf
+# normalisiert LAEUFE aus `-`, `_` und `.` auf ein einzelnes `-` und vergleicht ohne Ruecksicht auf
 # Gross-/Kleinschreibung — ein anderes Build-Backend duerfte also `yt_dlp_ejs`, `yt.dlp.ejs`
-# oder `YT-DLP-EJS` schreiben. Faende die Regex das nicht, fielen beide Fragen nach fail-open,
+# oder `YT-DLP-EJS` schreiben — und `yt__dlp..ejs` ist derselbe Projektname, deshalb `+`
+# statt eines einzelnen Zeichens. Faende die Regex das nicht, fielen beide Fragen nach fail-open,
 # also STILL, genau in den Fehler zurueck, gegen den sie gebaut sind.
 #
 # `^\s*` in BEIDEN: eine Anforderungszeile FAENGT mit dem Paketnamen an. Ungeankert las
@@ -60,7 +61,7 @@ _EJS = "yt-dlp-ejs"
 
 # Der NAME allein, ohne Bedingung an den Specifier — die schwaechere Frage aus #184
 # („verlangt yt-dlp ejs ueberhaupt?").
-_EJS_NAME_RE = re.compile(r"^\s*yt[-_.]dlp[-_.]ejs(?![\w.-])", re.IGNORECASE)
+_EJS_NAME_RE = re.compile(r"^\s*yt[-_.]+dlp[-_.]+ejs(?![\w.-])", re.IGNORECASE)
 # Derselbe Name, aber NUR mit `==`: bei `>=` waere jede Antwort geraten, und Raten kostet hier
 # ein taegliches pip ohne Ende (siehe `_ejs_untauglich`).
 #
@@ -80,7 +81,7 @@ _EJS_NAME_RE = re.compile(r"^\s*yt[-_.]dlp[-_.]ejs(?![\w.-])", re.IGNORECASE)
 # `_EJS_NAME_RE` sie als unser Paket zaehlt. Die Asymmetrie ist sicher (fail-open kostet
 # hoechstens eine verspaetete Erkennung) und billiger als eine Regex, die beide Klammerformen
 # mitfuehrt, solange yt-dlp keine davon schreibt.
-_EJS_PIN_RE = re.compile(r"^\s*yt[-_.]dlp[-_.]ejs\s*==\s*([^\s;,()]+)", re.IGNORECASE)
+_EJS_PIN_RE = re.compile(r"^\s*yt[-_.]+dlp[-_.]+ejs\s*==\s*([^\s;,()]+)", re.IGNORECASE)
 # Der Umgebungsmarker derselben Zeile. `fullmatch` gegen GENAU `extra == 'default'` — alles
 # andere (`extra == 'pin'`, zusaetzliches `and python_version …`) faellt nach fail-open.
 # Siehe `_gilt_fuer_uns`.

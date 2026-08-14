@@ -500,12 +500,25 @@ def test_paket_mit_extra_in_klammern_zaehlt_MIT(monkeypatch):
     assert _ECHTES_EJS_UNTAUGLICH() is True
 
 
-def test_punkt_schreibweise_zaehlt_MIT(monkeypatch):
-    """PEP 503 normalisiert `-`, `_` UND `.` gleich — `yt.dlp.ejs` ist derselbe Projektname.
-    Die Begruendung im Code fuehrte PEP 503 an, liess den Punkt aber weg; ohne ihn fielen
-    beide Fragen bei dieser Schreibweise STILL nach fail-open."""
-    _ohne_ejs(monkeypatch, ["yt.dlp.ejs==0.9.0; extra == 'default'"])
+@pytest.mark.parametrize("name", ["yt.dlp.ejs", "yt_dlp_ejs", "yt__dlp..ejs", "yt---dlp___ejs"])
+def test_pep503_schreibweisen_zaehlen_MIT(monkeypatch, name):
+    """PEP 503 normalisiert **Laeufe** aus `-`, `_` und `.` auf ein einzelnes `-` — alle vier
+    sind derselbe Projektname wie `yt-dlp-ejs`.
+
+    Zwei Schritte, beide aus Reviews: der Punkt fehlte zuerst ganz (die Begruendung im Code
+    fuehrte PEP 503 an und liess ein Drittel davon weg), danach traf die Klasse nur EIN
+    Trennzeichen. In beiden Faellen fielen die Fragen bei diesen Schreibweisen STILL nach
+    fail-open."""
+    _ohne_ejs(monkeypatch, [f"{name}==0.9.0; extra == 'default'"])
     assert _ECHTES_EJS_UNTAUGLICH() is True
+
+
+def test_name_ohne_trennzeichen_zaehlt_NICHT(monkeypatch):
+    """Gegenprobe zum `+`: `ytdlpejs` ist NICHT derselbe Projektname — PEP 503 laesst Laeufe
+    zusammenfallen, es entfernt sie nicht. Ohne diese Zeile koennte man `[-_.]*` schreiben
+    und haette die Wache still aufgeweicht."""
+    _ohne_ejs(monkeypatch, ["ytdlpejs==0.9.0; extra == 'default'"])
+    assert _ECHTES_EJS_UNTAUGLICH() is False
 
 
 def test_weitere_marker_gelten_auch_beim_FEHLEN_nicht(monkeypatch):
