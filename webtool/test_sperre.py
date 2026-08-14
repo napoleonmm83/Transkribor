@@ -523,12 +523,22 @@ def test_freigabe_gibt_bei_dauerhaftem_fehler_auf(tmp_path, monkeypatch):
     `_RMDIR_VERSUCHE` durchgereicht werden — der Aufrufer entscheidet dann (im `finally` von
     `datei` wird es geschluckt, das Lock bleibt liegen und die Frist raeumt es spaeter ab).
     """
+    versuche = []
+
+    def immer_fehler(_pfad):
+        versuche.append(1)
+        raise OSError(41, "nicht leer")
+
     monkeypatch.setattr(sperre, "_RMDIR_PAUSE_S", 0.001)
-    monkeypatch.setattr(os, "rmdir", lambda p: (_ for _ in ()).throw(OSError(41, "nicht leer")))
+    monkeypatch.setattr(os, "rmdir", immer_fehler)
     lock = str(tmp_path / "x.json") + ".lock"
     os.mkdir(lock)
     with pytest.raises(OSError):
         sperre._wegraeumen(lock, None)
+    # Gezaehlt, nicht nur "wirft am Ende": ohne die Zahl bestuende der Test auch dann, wenn
+    # gar nicht wiederholt wuerde — er unterschiede "begrenzt" nicht von "gar nicht"
+    # (CodeRabbit-Bot an PR #206).
+    assert len(versuche) == sperre._RMDIR_VERSUCHE
 
 
 def test_freigabe_faesst_ein_inzwischen_FREMDES_lock_nicht_an(tmp_path, monkeypatch):
