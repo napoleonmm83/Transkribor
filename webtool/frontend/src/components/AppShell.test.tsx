@@ -154,6 +154,27 @@ describe('AppShell', () => {
     })
   })
 
+  it('macht den Inhaltsbereich zum Bezugsrahmen — sonst waechst das DOKUMENT', () => {
+    // `overflow-auto` klemmt absolut positionierte Nachfahren NUR, wenn der Behaelter selbst ein
+    // Bezugsrahmen ist. Ohne `relative` sucht sich ein `position:absolute`-Kind den Viewport,
+    // sitzt an seiner Flussposition weit unten im Inhalt — und macht damit das DOKUMENT
+    // scrollbar. Ausgeloest hat es das `sr-only` (das IST absolut positioniert) im
+    // Modell-Neuladen-Knopf der Einstellungen; sichtbar wurde es als wandernde Titel- UND
+    // Statuszeile beim Scrollen ueber der Leiste, die bei vier Projekten selbst nichts zu
+    // scrollen hat und das Mausrad deshalb an das Dokument weiterreicht.
+    // jsdom rechnet kein Layout — wie bei den Rasterzeilen oben ist die gesetzte Klasse die
+    // pruefbare Aussage. Im echten Browser gemessen (Einstellungsseite, 858 px Fenster): ohne
+    // `relative` documentElement.scrollHeight 926 gegen clientHeight 858, mit `relative` beide
+    // 858, waehrend `main` weiter selbst scrollt (1242 gegen 834) — der Inhalt geht also nicht
+    // verloren, er wird nur wieder IM Inhaltsbereich gescrollt.
+    render(
+      <MemoryRouter><JobProvider><AppShell><p>Inhalt</p></AppShell></JobProvider></MemoryRouter>,
+    )
+    const main = document.getElementById('inhalt')!
+    expect(main.className).toContain('overflow-auto')
+    expect(main.className).toContain('relative')
+  })
+
   describe('ungespeicherte Aenderungen', () => {
     beforeEach(() => {
       vi.mocked(api.listProjects).mockResolvedValue(ZWEI)
