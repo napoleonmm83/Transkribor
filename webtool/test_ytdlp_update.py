@@ -896,3 +896,26 @@ def test_merker_und_pip_nehmen_VERSCHIEDENE_locks(monkeypatch):
     # steht statt eines roten Tests ein haengender pytest da.
     threading.Thread(target=lambda: (yu.aktualisiere(), fertig.set()), daemon=True).start()
     assert fertig.wait(5), "aktualisiere() haengt — vermutlich Selbst-Deadlock der Sperren"
+
+
+def test_zustand_trennt_unlesbar_von_nicht_installiert(monkeypatch):
+    """`version: null` hatte zwei Bedeutungen, seit #185 auch "Metadaten nicht lesbar" — und
+    die Einstellungsseite hat nur zwei Zweige: sie schrieb "Nicht installiert — der Import
+    von Video-URLs steht damit nicht zur Verfuegung", waehrend yt-dlp lief und laden konnte
+    (#189). Die ENTSCHEIDUNG bleibt in beiden Faellen dieselbe (kein pip auf Verdacht), nur
+    die AUSKUNFT wird getrennt."""
+    gerufen = []
+    monkeypatch.setattr(yu.metadata, "version", _unlesbar(gerufen))
+    z = yu.zustand()
+    assert z["version"] is None and z["unlesbar"] is True
+
+    def fehlt(name):
+        raise yu.metadata.PackageNotFoundError(name)
+
+    monkeypatch.setattr(yu.metadata, "version", fehlt)
+    z = yu.zustand()
+    assert z["version"] is None and z["unlesbar"] is False     # wirklich nicht installiert
+
+    monkeypatch.setattr(yu.metadata, "version", lambda name: "2026.7.4")
+    z = yu.zustand()
+    assert z["version"] == "2026.7.4" and z["unlesbar"] is False

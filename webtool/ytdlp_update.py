@@ -98,11 +98,34 @@ def fassung() -> str | None:
 
     Das ist der Angelpunkt: pip tauscht Dateien aus, ein bereits importiertes Modul laege
     schon im Speicher. Erst lesen, dann aktualisieren, dann importieren.
+
+    **Fuer Tests:** `zustand()` geht NICHT hierdurch, sondern direkt ueber
+    `_fassung_und_lesbarkeit()` — es braucht zwei Auskuenfte statt einer. Wer diese Funktion
+    patcht, aendert die Einstellungsseite also nicht.
+    """
+    return _fassung_und_lesbarkeit()[0]
+
+
+def _fassung_und_lesbarkeit() -> tuple[str | None, bool]:
+    """`(Fassung, unlesbar)`. `(None, False)` = wirklich nicht installiert, `(None, True)` =
+    die Metadaten liessen sich nicht lesen.
+
+    `fassung()` wirft die Unterscheidung weg, und fuer die ENTSCHEIDUNG ist das richtig: kein
+    pip auf Verdacht, in beiden Faellen. Fuer die AUSKUNFT ist es falsch — die
+    Einstellungsseite hat nur zwei Zweige und schrieb "Nicht installiert — der Import von
+    Video-URLs steht damit nicht zur Verfuegung", waehrend yt-dlp lief und laden konnte
+    (#189). Die Anzeige darf nicht luegen; dieselbe Regel wie beim `asr`-Feld in
+    `device.describe()`.
+
+    Der zweite Wert gilt fuer die Metadaten von yt-dlp **insgesamt**, nicht nur fuer die
+    Versionszeile: `_ejs_zeilen()` liest dieselbe Distribution (`metadata.requires("yt-dlp")`)
+    und faellt bei derselben kaputten METADATA auf "unbekannt" — der stille Zustand ist EINER,
+    also braucht er auch nur EIN Signal.
     """
     try:
-        return metadata.version("yt-dlp")
+        return metadata.version("yt-dlp"), False
     except metadata.PackageNotFoundError:
-        return None
+        return None, False
     except Exception as e:
         # #185: `importlib.metadata` wirft nicht nur PackageNotFoundError — eine METADATA,
         # die sich nicht als UTF-8 dekodieren laesst, gibt einen UnicodeDecodeError. Diese
@@ -115,7 +138,7 @@ def fassung() -> str | None:
         # "unlesbar". Ein kuenftiger AttributeError aus einem Umbau erschiene sonst als
         # falsch benannte Ursache ohne jeden Hinweis darauf, was wirklich passiert ist.
         print(f"[ytdlp] Metadaten von yt-dlp unlesbar: {type(e).__name__}: {e}", flush=True)
-        return None
+        return None, True
 
 
 def _gilt_fuer_uns(zeile: str) -> bool:
@@ -480,11 +503,16 @@ def zustand() -> dict:
     """Fuer die Einstellungsseite: was installiert ist, wann zuletzt geprueft wurde,
     ob der Automatismus laeuft — und ob die Umgebung den Haken ueberstimmt.
 
+    `unlesbar` trennt "nicht installiert" von "Metadaten nicht lesbar": `version` ist in
+    beiden Faellen `null`, und die Einstellungsseite behauptete daraufhin, der URL-Import
+    stehe nicht zur Verfuegung, waehrend er lief (#189).
+
     `env` sagt der Server, statt das Frontend `ytdlp_auto` gegen `auto` vergleichen zu lassen:
     die beiden Werte kommen aus zwei Antworten (PUT liefert nur `ytdlp_auto`), und dazwischen
     behauptete der Vergleich fuer einen Moment ein Override, das es gar nicht gibt. Eine
     Wahrheit statt einer abgeleiteten.
     """
     g = geprueft()
-    return {"version": fassung(), "geprueft": g.isoformat() if g else "",
+    v, unlesbar = _fassung_und_lesbarkeit()
+    return {"version": v, "unlesbar": unlesbar, "geprueft": g.isoformat() if g else "",
             "auto": auto_an(), "env": env_override() is not None}

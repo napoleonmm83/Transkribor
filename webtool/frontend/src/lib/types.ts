@@ -64,8 +64,13 @@ export type Settings = {
 /** `version` ist null, wenn yt-dlp gar nicht installiert ist; `geprueft` leer, solange nie
  *  aktualisiert wurde. `auto` ist der WIRKSAME Schalter, `env` sagt, ob
  *  TRANSKRIBOR_YTDLP_UPDATE ihn überstimmt — beides vom Server, damit das Frontend es nicht
- *  aus zwei Antworten zusammenreimen muss. */
-export type YtdlpStand = { version: string | null; geprueft: string; auto: boolean; env: boolean };
+ *  aus zwei Antworten zusammenreimen muss.
+ *
+ *  `unlesbar` trennt zwei Zustände, die beide `version: null` liefern: wirklich nicht
+ *  installiert (dann steht der URL-Import nicht zur Verfügung) gegen "Metadaten nicht
+ *  lesbar" — dort läuft der Import weiter, nur die Selbstaktualisierung ist ausgesetzt
+ *  (#189). Ohne das Feld behauptete die Seite das Gegenteil dessen, was der Nutzer tun kann. */
+export type YtdlpStand = { version: string | null; unlesbar?: boolean; geprueft: string; auto: boolean; env: boolean };
 export type ModelInfo = { id: string; label: string };
 /** Anmeldezustand einer Abo-CLI. `unterstuetzt: false` heisst: der Anbieter kennt so etwas
  *  nicht — bei den API-Anbietern IST der Key die Anmeldung. */

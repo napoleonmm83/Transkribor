@@ -325,10 +325,16 @@ export function SettingsPage() {
             {ytLaeuft ? 'Aktualisiere …' : 'Jetzt aktualisieren'}
           </Button>
           <span className="text-xs text-muted-foreground">
+            {/* Drei Zustände, nicht zwei: `version: null` heisst seit #185 auch "Metadaten
+                nicht lesbar", und dafür war "Nicht installiert" das Gegenteil der Wahrheit —
+                der Import lief. Die Unterscheidung kommt vom Server (`unlesbar`), nicht aus
+                einer Ableitung hier. */}
             {s.ytdlp.version
               ? <>Fassung <span className="font-medium text-foreground">{s.ytdlp.version}</span>
                 {s.ytdlp.geprueft && ` · zuletzt geprüft am ${tag(s.ytdlp.geprueft)}`}</>
-              : 'Nicht installiert — der Import von Video-URLs steht damit nicht zur Verfügung.'}
+              : s.ytdlp.unlesbar
+                ? 'Fassung nicht lesbar — der Import von Video-URLs läuft weiter, nur die automatische Aktualisierung ist ausgesetzt.'
+                : 'Nicht installiert — der Import von Video-URLs steht damit nicht zur Verfügung.'}
           </span>
         </div>
 

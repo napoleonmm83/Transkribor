@@ -550,7 +550,7 @@ def test_settings_modellwechsel_behaelt_den_key(client):
     body = r.json()
     # `ytdlp` haengt an der Umgebung (installierte Fassung), nicht an den Einstellungen —
     # separat geprueft, damit dieser Vergleich nicht bei jedem yt-dlp-Update umfaellt.
-    assert body.pop("ytdlp").keys() == {"version", "geprueft", "auto", "env"}
+    assert body.pop("ytdlp").keys() == {"version", "unlesbar", "geprueft", "auto", "env"}
     assert body == {"provider": "anthropic", "model": "claude-sonnet-5",
                     "base_url": "", "has_key": True,
                     "whisper_model": "large-v3", "whisper_lang": "de",
@@ -561,7 +561,9 @@ def test_settings_meldet_den_ytdlp_zustand(client, monkeypatch):
     """Ohne Anzeige waere der Automatismus unsichtbar — und ein unsichtbarer Automatismus
     ist genau dann nicht zu durchschauen, wenn er danebengeht."""
     from webtool import ytdlp_update
-    monkeypatch.setattr(ytdlp_update, "fassung", lambda: "2026.8.12")
+    # NICHT `fassung` patchen: `zustand()` liest ueber `_fassung_und_lesbarkeit()`,
+    # weil es zwei Auskuenfte braucht (Fassung UND ob die Metadaten lesbar sind, #189).
+    monkeypatch.setattr(ytdlp_update, "_fassung_und_lesbarkeit", lambda: ("2026.8.12", False))
     body = client.get("/api/settings").json()
     assert body["ytdlp"]["version"] == "2026.8.12"
     assert body["ytdlp"]["auto"] is True and body["ytdlp_auto"] == "1"
@@ -595,7 +597,9 @@ def test_settings_ytdlp_merker_kommt_nicht_aus_dem_browser(client):
 def test_ytdlp_update_knopf_ruft_pip_und_meldet_das_ergebnis(client, monkeypatch):
     from webtool import ytdlp_update
     monkeypatch.setattr(ytdlp_update, "aktualisiere", lambda: True)
-    monkeypatch.setattr(ytdlp_update, "fassung", lambda: "2026.8.12")
+    # NICHT `fassung` patchen: `zustand()` liest ueber `_fassung_und_lesbarkeit()`,
+    # weil es zwei Auskuenfte braucht (Fassung UND ob die Metadaten lesbar sind, #189).
+    monkeypatch.setattr(ytdlp_update, "_fassung_und_lesbarkeit", lambda: ("2026.8.12", False))
     r = client.post("/api/settings/ytdlp/update")
     assert r.status_code == 200
     assert r.json()["ok"] is True and r.json()["version"] == "2026.8.12"
