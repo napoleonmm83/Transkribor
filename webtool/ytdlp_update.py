@@ -289,8 +289,9 @@ def _ejs_untauglich() -> bool:
         return _ejs_verlangt()
     except Exception as e:
         # #185 — und hier geht der Rueckfall in die ANDERE Richtung als in `fassung()` und
-        # `_ejs_zeilen()`. Der Zweig darueber flaggt, weil `PackageNotFoundError` eine
-        # TATSACHE ist ("nicht installiert"); jede andere Ausnahme heisst nur "unbekannt",
+        # `_ejs_zeilen()`. Der Zweig darueber darf flaggen (tut es seit #184 nur, wenn yt-dlp
+        # ejs ueberhaupt verlangt), weil `PackageNotFoundError` eine TATSACHE ist
+        # ("nicht installiert"); jede andere Ausnahme heisst nur "unbekannt",
         # und Unbekanntes flaggt dieses Modul nicht (s. Docstring). Es waere sonst der
         # teuerste Flag von allen: ob ein pip eine unlesbare METADATA ueberhaupt ersetzt,
         # ist offen — bleibt sie liegen, laeuft das taegliche pip dauerhaft weiter.

@@ -514,7 +514,13 @@ def test_kaputte_metadaten_reissen_den_url_import_nicht_mit(monkeypatch, tmp_pat
     monkeypatch.setenv("TRANSKRIBOR_SETTINGS", str(tmp_path / "settings.json"))
     monkeypatch.delenv("TRANSKRIBOR_YTDLP_UPDATE", raising=False)
 
+    # Der Name wird GESAMMELT und danach geprueft, nicht per `assert` im Stub: der stuende
+    # innerhalb des `try`, um das dieser Fix `except Exception` legt — der AssertionError
+    # ginge also in der gepruefteten Wache unter (gemessen).
+    gerufen = []
+
     def unlesbar(name):
+        gerufen.append(name)
         raise UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid start byte")
 
     monkeypatch.setattr(fetch.ytdlp_update.metadata, "version", unlesbar)
@@ -523,6 +529,7 @@ def test_kaputte_metadaten_reissen_den_url_import_nicht_mit(monkeypatch, tmp_pat
     monkeypatch.setattr(fetch, "yt_dlp", None)
     monkeypatch.setattr(fetch, "_importiere_yt_dlp", lambda: "modul")
     assert fetch._hole_yt_dlp() == "modul"
+    assert gerufen and set(gerufen) == {"yt-dlp"}
 
 
 def test_neu_laden_raeumt_sys_modules_und_importiert_frisch(monkeypatch):

@@ -40,6 +40,22 @@ def test_handverdrehtes_aber_echtes_modell_bleibt(tmp_path):
     assert settings.load()["whisper_model"] == "base"
 
 
+def test_nicht_dekodierbare_datei_faellt_auf_defaults(tmp_path):
+    """#185, zweite Runde: `load()` fing nur `(OSError, json.JSONDecodeError)`. Sind die BYTES
+    nicht als UTF-8 dekodierbar, wirft schon das Lesen einen `UnicodeDecodeError` — ein
+    `ValueError`, aber kein `JSONDecodeError`, also durch.
+
+    Die Zusage im Docstring („Fehlend/kaputt -> Defaults …, nie ein Fehler") war damit falsch,
+    und zwar auf zwei Wegen gleichzeitig: `fetch._hole_yt_dlp()` -> `automatisch()` ->
+    `auto_an()` -> hier riss den URL-Import ab, und `GET /api/settings` gab 500.
+
+    Bytes statt `write_text`: mit einem Encoding-Argument liesse sich der Fall gar nicht
+    herstellen, genau deshalb ist er vorher niemandem aufgefallen."""
+    (tmp_path / "settings.json").write_bytes(b'{"whisper_model": "caf\xe9"}')
+    assert settings.load() == dict(settings.DEFAULTS)
+    assert settings.public(settings.load())["has_key"] is False
+
+
 def test_job_env_exportiert_die_einstellung():
     settings.save({"whisper_model": "medium", "whisper_lang": "en"})
     env = settings.job_env()
