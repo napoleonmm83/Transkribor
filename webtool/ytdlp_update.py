@@ -111,7 +111,10 @@ def fassung() -> str | None:
         # waere das eine 500er-Einstellungsseite bzw. ein abgerissener URL-Import statt des
         # zugesagten best effort. Unbekannt heisst hier "nicht installiert" — und damit
         # `faellig() is False`, also KEIN pip auf Verdacht.
-        print(f"[ytdlp] Metadaten von yt-dlp unlesbar: {e}", flush=True)
+        # Mit Ausnahmetyp: `except Exception` faengt alles, aber die Meldung behauptet
+        # "unlesbar". Ein kuenftiger AttributeError aus einem Umbau erschiene sonst als
+        # falsch benannte Ursache ohne jeden Hinweis darauf, was wirklich passiert ist.
+        print(f"[ytdlp] Metadaten von yt-dlp unlesbar: {type(e).__name__}: {e}", flush=True)
         return None
 
 
@@ -147,14 +150,20 @@ def _ejs_zeilen() -> list[str]:
     """
     try:
         zeilen = metadata.requires("yt-dlp") or []
+        # INNERHALB des `try`: stand die Filterung darunter, lag sie hinter allen `except`-
+        # Zweigen, und ein Nicht-String in `zeilen` haette `_EJS_NAME_RE.search` mit einem
+        # TypeError quer durch `faellig()` bis aus `automatisch()` heraus geworfen — an der
+        # Wache vorbei, die genau das verhindern soll. Konstruiert, nicht beobachtet
+        # (`requires()` liefert `list[str] | None`), aber eine Zeile Einrueckung billiger als
+        # ein Waechter, der weniger deckt, als er aussieht.
+        return [z for z in zeilen if _EJS_NAME_RE.search(z) and _gilt_fuer_uns(z)]
     except metadata.PackageNotFoundError:
         return []
     except Exception as e:      # #185, s. `fassung()`
         # Keine Zeilen heisst: kein Pin (#182 faellt aus) und keine Anforderung (#184 sagt
         # "verlangt nicht"). Beides fail-open — der Kalenderweg entscheidet wie bisher.
-        print(f"[ytdlp] Anforderungen von yt-dlp unlesbar: {e}", flush=True)
+        print(f"[ytdlp] Anforderungen von yt-dlp unlesbar: {type(e).__name__}: {e}", flush=True)
         return []
-    return [z for z in zeilen if _EJS_NAME_RE.search(z) and _gilt_fuer_uns(z)]
 
 
 def _ejs_pin() -> str | None:
@@ -295,7 +304,7 @@ def _ejs_untauglich() -> bool:
         # und Unbekanntes flaggt dieses Modul nicht (s. Docstring). Es waere sonst der
         # teuerste Flag von allen: ob ein pip eine unlesbare METADATA ueberhaupt ersetzt,
         # ist offen — bleibt sie liegen, laeuft das taegliche pip dauerhaft weiter.
-        print(f"[ytdlp] Metadaten von {_EJS} unlesbar: {e}", flush=True)
+        print(f"[ytdlp] Metadaten von {_EJS} unlesbar: {type(e).__name__}: {e}", flush=True)
         return False
     gefordert, installiert = _release(_ejs_pin()), _release(da)
     if gefordert is None or installiert is None:
