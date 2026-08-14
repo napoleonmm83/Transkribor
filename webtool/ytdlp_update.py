@@ -123,7 +123,15 @@ def _fassung_und_lesbarkeit() -> tuple[str | None, bool]:
     also braucht er auch nur EIN Signal.
     """
     try:
-        return metadata.version("yt-dlp"), False
+        v = metadata.version("yt-dlp")
+        # `version()` WIRFT NICHT IMMER: an einer dist-info ohne (lesbare) METADATA gibt es
+        # `None` zurueck — gemessen an einer praeparierten dist-info ohne METADATA und an
+        # einer mit METADATA ohne `Version:`-Kopfzeile, beide Male ohne Ausnahme. Erreichbar
+        # nach einem abgebrochenen `pip install -U yt-dlp[default]`, also nach genau dem
+        # Lauf, den dieses Modul selbst anstoesst: `yt_dlp/` liegt importierbar da, die
+        # Metadaten sind Schrott. Im `try` heisst `None` deshalb "gefunden, aber unlesbar" —
+        # wirklich nicht installiert wirft PackageNotFoundError.
+        return (v, False) if v else (None, True)
     except metadata.PackageNotFoundError:
         return None, False
     except Exception as e:

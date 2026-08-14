@@ -234,7 +234,9 @@ export function SettingsPage() {
     setYtLaeuft(true)
     try {
       const r = await updateYtdlp()
-      r.ok ? toast.success(`yt-dlp ist jetzt auf ${r.version}`)
+      // Ohne Fassung KEINE Fassung nennen: pip meldet Erfolg, die Metadaten bleiben aber
+      // unlesbar — der Toast sagte dann "yt-dlp ist jetzt auf null" (#189).
+      r.ok ? toast.success(r.version ? `yt-dlp ist jetzt auf ${r.version}` : 'yt-dlp wurde aktualisiert')
         : toast.error('Aktualisierung fehlgeschlagen — bist du online?')
       await getSettings().then(setS)
     } catch (e) { toast.error(String(e)) } finally { setYtLaeuft(false) }
@@ -333,7 +335,7 @@ export function SettingsPage() {
               ? <>Fassung <span className="font-medium text-foreground">{s.ytdlp.version}</span>
                 {s.ytdlp.geprueft && ` · zuletzt geprüft am ${tag(s.ytdlp.geprueft)}`}</>
               : s.ytdlp.unlesbar
-                ? 'Fassung nicht lesbar — der Import von Video-URLs läuft weiter, nur die automatische Aktualisierung ist ausgesetzt.'
+                ? 'Fassung nicht lesbar — die automatische Aktualisierung ist ausgesetzt.'
                 : 'Nicht installiert — der Import von Video-URLs steht damit nicht zur Verfügung.'}
           </span>
         </div>
