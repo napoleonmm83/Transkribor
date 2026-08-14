@@ -122,12 +122,27 @@ def _validate(*names: str) -> None:
         raise HTTPException(status_code=400, detail="ungültiger Name")
 
 
+def _json_objekt(pfad: str) -> dict:
+    """`json.load`, aber ein Nicht-Objekt gilt als kaputt — als `ValueError`.
+
+    Gueltiges JSON ist noch lange kein Dokument: eine Liste kommt durch `json.load` und stirbt
+    erst am `.update`/`.get` des Aufrufers — mit `AttributeError`, also glatt an dessen
+    Rueckfall vorbei. Gemessen an einer `edit.json` mit `["kein Objekt"]`: `GET …/files/S1`
+    lieferte **200 mit der Liste**, und das Umbenennen endete mit **500 NACH dem `os.rename`**.
+    Dieselbe Wache wie `correct._load` (#190).
+    """
+    with open(pfad, encoding="utf-8") as fh:
+        daten = json.load(fh)
+    if not isinstance(daten, dict):
+        raise ValueError(f"{pfad}: JSON-Objekt erwartet, {type(daten).__name__} gelesen")
+    return daten
+
+
 def load_or_build_doc(project: str, base: str) -> dict:
     epath = _edit_path(project, base)
     if os.path.exists(epath):
         try:
-            with open(epath, encoding="utf-8") as fh:
-                return json.load(fh)
+            return _json_objekt(epath)
         except ValueError:
             # ValueError, nicht JSONDecodeError: sind die BYTES nicht als UTF-8 dekodierbar,
             # wirft schon das Lesen im Textmodus einen UnicodeDecodeError — ebenfalls ein
@@ -432,8 +447,7 @@ def _doc_felder(pfad: str, **felder: str) -> None:
     oder ist sie kaputt, bleibt sie unangetastet: ein Umbenennen soll nicht daran scheitern,
     die Dateien auf der Platte sind der wichtigere Teil."""
     try:
-        with open(pfad, encoding="utf-8") as fh:
-            doc = json.load(fh)
+        doc = _json_objekt(pfad)          # Nicht-Objekt = kaputt, sonst wirft `.update`
         doc.update(felder)
         # Der Schreibvorgang gehoert MIT in den try: `json.dumps` stirbt an einem einzelnen
         # Surrogat im Dokument (UnicodeEncodeError, auch ein ValueError). Diese Funktion

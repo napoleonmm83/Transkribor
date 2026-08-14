@@ -1293,3 +1293,22 @@ def test_umbenennen_ueberlebt_ein_nicht_schreibbares_dokument(client, tmp_path, 
     assert r.status_code == 200, r.text
     assert (t / "Neu.edit.json").exists()
     assert "nicht nachgezogen" in capsys.readouterr().out
+
+
+def test_edit_json_ohne_objekt_heilt_sich_ebenfalls(client, tmp_path, capsys):
+    """Gueltiges JSON ist noch lange kein Dokument. Eine Liste kam durch `json.load` und
+    starb erst am `.get`/`.update` des Aufrufers — mit AttributeError, also an den
+    #190-Rueckfaellen VORBEI. Gemessen: `GET …/files/S1` lieferte 200 mit `["kein Objekt"]`
+    (der Editor bekam eine Liste statt eines Dokuments), und das Umbenennen endete mit 500
+    NACH dem `os.rename` — die Dateien waren also schon umbenannt.
+
+    Gefunden vom CodeRabbit-Bot an PR #195 (Merge Risk), am laufenden Code nachgemessen."""
+    t = tmp_path / "Demo" / "transkripte"
+    (t / "S1.edit.json").write_text('["kein Objekt"]', encoding="utf-8")
+    doc = client.get("/api/projects/Demo/files/S1").json()
+    assert isinstance(doc, dict)                              # aus der Roh-JSON geheilt
+    assert doc["segments"][0]["text"].strip() == "Hallo Welt."
+    r = client.post("/api/projects/Demo/files/S1/rename", json={"name": "Neu"})
+    assert r.status_code == 200, r.text                       # kein 500 nach dem Umbenennen
+    assert (t / "Neu.edit.json").exists()
+    assert "nicht nachgezogen" in capsys.readouterr().out
