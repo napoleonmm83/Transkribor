@@ -1278,6 +1278,49 @@ def test_nicht_dekodierbare_edit_json_heilt_sich_aus_der_roh_json(client, tmp_pa
     assert r.json()["segments"][0]["text"].strip() == "Hallo Welt."   # aus der Roh-JSON
 
 
+def test_selbstheilung_meldet_sich_und_nur_dann(client, tmp_path):
+    """#197: die Heilung war STILL. Der Nutzer sah ein sauberes Transkript und hielt es fuer
+    seines — die Korrekturen und Sprechernamen, an denen er gearbeitet hatte, fehlten darin.
+
+    Die Gegenprobe gehoert dazu: ein Feld, das IMMER gesetzt ist, waere ein Daueralarm und
+    damit dieselbe Nutzlosigkeit von der anderen Seite. Geprueft werden beide stillen Faelle —
+    gar keine edit.json (frisch transkribiert) und eine gesunde."""
+    e = tmp_path / "Demo" / "transkripte" / "S1.edit.json"
+    assert "selbstgeheilt" not in client.get("/api/projects/Demo/files/S1").json()   # keine Datei
+    doc = client.get("/api/projects/Demo/files/S1").json()
+    client.put("/api/projects/Demo/files/S1", json=doc)                              # gesunde Datei
+    assert "selbstgeheilt" not in client.get("/api/projects/Demo/files/S1").json()
+    e.write_bytes(b'{"summary": "\xe9"}')
+    assert client.get("/api/projects/Demo/files/S1").json()["selbstgeheilt"] == "UnicodeDecodeError"
+
+
+def test_speichern_legt_die_unlesbare_edit_json_beiseite(client, tmp_path):
+    """#197: der Schutz aus dem Korrekturlauf (unlesbar ⇒ gilt als handbearbeitet, #195) war
+    nur AUFGESCHOBEN — bis zum ersten Oeffnen. Der Editor heilte still, und die naechste
+    Autosave schrieb ueber die kaputten Bytes. Jetzt wandern sie zur Seite, wie bei
+    settings.json (#192).
+
+    Der Merker darf dabei NICHT in der Datei landen: geschrieben gaelte sie beim naechsten
+    Oeffnen fuer immer als geheilt, und der Hinweis stuende dauerhaft im Editor."""
+    e = tmp_path / "Demo" / "transkripte" / "S1.edit.json"
+    roh = b'{"summary": "\xe9", "handarbeit": "eine Stunde"}'
+    e.write_bytes(roh)
+    doc = client.get("/api/projects/Demo/files/S1").json()
+    assert client.put("/api/projects/Demo/files/S1", json=doc).status_code == 200
+    assert (tmp_path / "Demo" / "transkripte" / "S1.edit.json.kaputt").read_bytes() == roh
+    neu = json.loads(e.read_text(encoding="utf-8"))
+    assert neu["human_edited"] is True and "selbstgeheilt" not in neu
+
+
+def test_speichern_lehnt_ein_nicht_objekt_ab(client):
+    """Trust-Boundary: ein JSON-Array kam bis zum `doc["human_edited"] = True` durch und
+    endete als 500 (TypeError). Die Schreibseite braucht dieselbe Wache wie `_json_objekt`
+    beim Lesen."""
+    r = client.put("/api/projects/Demo/files/S1", json=["kein Objekt"])
+    assert r.status_code == 400
+    assert "JSON-Objekt" in r.json()["detail"]
+
+
 def test_umbenennen_ueberlebt_eine_nicht_dekodierbare_edit_json(client, tmp_path):
     """`_doc_felder` zieht `base`/`audio` im Dokument nach. Ist die Datei kaputt,
     bleibt sie unangetastet — das Umbenennen der Dateien auf der Platte ist der wichtigere

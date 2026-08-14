@@ -60,6 +60,19 @@ export function Transcript({ doc, loading, activeId, onPlaySeg, onPlayTurn, upda
   return (
     <ScrollArea className="h-full">
       <div ref={contentRef} className="mx-auto max-w-[calc(112px+var(--measure))] px-6 py-8">
+        {/* Die Selbstheilung ist richtig (sonst waere die Aufnahme gar nicht mehr zu oeffnen),
+            aber sie darf nicht schweigen: was hier steht, ist das Rohtranskript — ohne die
+            Korrekturen und Sprechernamen, an denen jemand gearbeitet hat. Ohne den Hinweis
+            haelt er es fuer seine Fassung (#197). */}
+        {doc.selbstgeheilt && (
+          <div className="mb-8 rounded-lg border border-amber-500/50 bg-amber-500/10 p-4 text-sm">
+            <span className="font-medium">Deine gespeicherte Fassung war nicht lesbar.</span>{' '}
+            Du siehst das Rohtranskript — Korrekturen, Sprechernamen und Anmerkungen daraus
+            fehlen. Überschrieben wird die beschädigte Datei nicht: sie liegt als{' '}
+            <code className="rounded bg-muted px-1.5 py-0.5 font-mono break-all">{doc.base}.edit.json.kaputt</code>{' '}
+            im Transkripte-Ordner, sobald du hier etwas speicherst.
+          </div>
+        )}
         <section className="mb-8 space-y-5 border-b pb-5">
           <div data-kopf="context">
             <DokumentFeld titel="Kontext" wert={doc.context ?? ''} platzhalter="Kontext hinzufügen …"
