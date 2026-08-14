@@ -160,15 +160,36 @@ def test_ejs_wird_an_den_metadaten_gemessen(monkeypatch):
 
     Positiv- UND Negativkontrolle: eine Fassung, die immer `True` liefert, waere von der
     richtigen Antwort nicht zu unterscheiden, solange das Paket im CI ohnehin fehlt.
+
+    Was dieser Test NICHT kann: das Paket wirklich deinstallieren — es haengt an der
+    Umgebung des laufenden Interpreters, und `faellig()` sieht hier deshalb immer die
+    gepinnte Fixture-Fassung. Deshalb an zwei echten Wegwerf-venvs nachgemessen, gleiche
+    yt-dlp-Fassung (2026.7.4) und gleicher Merker (gestern), nur das Paket unterschiedlich:
+
+        ohne yt-dlp-ejs -> _ejs_fehlt() True,  faellig() True
+        mit  yt-dlp-ejs -> _ejs_fehlt() False, faellig() False
+
+    Dass `pip install -U "yt-dlp[default]"` das Paket ueberhaupt nachzieht, wenn yt-dlp
+    schon die neueste Fassung ist, haengt der ganze Fix daran — im selben Lauf gemessen:
+    yt-dlp blieb bei 2026.7.4, `yt-dlp-ejs-0.8.0` kam neu dazu.
+
+    **Der Distributionsname wird mitgeprueft** (wie in `test_fassung_laedt_yt_dlp_nicht`):
+    ein Stub, der jeden Namen annimmt, bleibt auch dann gruen, wenn `_ejs_fehlt()` aus
+    Versehen `yt-dlp` abfragt — und das ist immer installiert, die Funktion antwortete also
+    dauerhaft "da ist es". Nachgemessen: mit `_EJS = "yt-dlp"` liefen vorher ALLE 32 Tests
+    durch (CodeRabbit an PR #180).
     """
-    monkeypatch.setattr(yu.metadata, "version", lambda name: "0.8.0")
+    gerufen = []
+    monkeypatch.setattr(yu.metadata, "version", lambda name: gerufen.append(name) or "0.8.0")
     assert _ECHTES_EJS_FEHLT() is False
 
     def fehlt(name):
+        gerufen.append(name)
         raise yu.metadata.PackageNotFoundError(name)
 
     monkeypatch.setattr(yu.metadata, "version", fehlt)
     assert _ECHTES_EJS_FEHLT() is True
+    assert gerufen == ["yt-dlp-ejs", "yt-dlp-ejs"]
 
 
 # --- Schalter ----------------------------------------------------------------
