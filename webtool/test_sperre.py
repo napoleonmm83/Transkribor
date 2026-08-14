@@ -224,19 +224,25 @@ def test_das_gehaltene_lock_nennt_seinen_halter(tmp_path):
     verhielte sich exakt wie vor #175."""
     ziel = str(tmp_path / "x.json")
     with sperre.datei(ziel):
-        assert sperre._halter_lebt(ziel + ".lock") is True
+        assert sperre._lebt_laut(sperre._merker_lesen(ziel + ".lock")) is True
 
 
-def test_lebender_halter_wird_nicht_weggeraeumt(tmp_path, monkeypatch, capsys):
+def test_lebender_halter_wird_nicht_weggeraeumt(tmp_path, monkeypatch):
     """#175: die Frist zaehlt ab dem `mkdir`, nicht ab der letzten Regung des Halters — geht
     der Rechner mitten im kritischen Abschnitt schlafen, laeuft die Wanduhr weiter und er
     nicht. Vorher nahm der Warter dem LEBENDEN Halter daraufhin das Lock weg, und beide
     schrieben gleichzeitig (genau die Race, gegen die die Sperre da ist).
 
+    Der Test misst BEIDE Haelften am selben Lauf: solange der Halter lebt, wartet der Faden
+    (er darf nicht fertig sein, und das Lock muss unangetastet dastehen) — stirbt der Halter,
+    laeuft derselbe Faden von selbst weiter. Nur so ist "wartet" von "haengt" unterschieden.
+    Die Obergrenze ist dafuer hochgesetzt, sonst griffe der erzwungene Griff (siehe unten)
+    dazwischen und der Test bewiese nichts.
+
     Gemessen an einem echten Prozess, nicht an einer Attrappe: die Lebendpruefung ist der
     einzige Teil dieses Moduls, der ueberhaupt aus Python heraussieht.
     """
-    monkeypatch.setattr(sperre, "_AUFGEBEN_PUFFER_S", 0.05)
+    monkeypatch.setattr(sperre, "_AUFGEBEN_PUFFER_S", 30.0)
     ziel = str(tmp_path / "x.json")
     lock = ziel + ".lock"
     os.mkdir(lock)
@@ -253,15 +259,82 @@ def test_lebender_halter_wird_nicht_weggeraeumt(tmp_path, monkeypatch, capsys):
 
         faden = threading.Thread(target=lauf, daemon=True)
         faden.start()
-        faden.join(5)
-        assert not faden.is_alive(), "sperre.datei() haengt am lebenden Halter"
-        assert gelaufen == [1]                    # fail-open bleibt die Regel (#191)
+        faden.join(0.5)
+        assert faden.is_alive(), "der Warter ist am lebenden Halter vorbeigelaufen"
+        assert gelaufen == []
         assert os.path.isdir(lock), "dem lebenden Halter wurde das Lock weggenommen"
         assert os.path.exists(os.path.join(lock, sperre._HALTER))
-        assert "laesst sich nicht uebernehmen" in capsys.readouterr().out
     finally:
         halter.kill()
         halter.wait()
+    faden.join(5)                                 # jetzt ist der Halter tot -> geht weiter
+    assert not faden.is_alive(), "haengt, obwohl der Halter nicht mehr da ist"
+    assert gelaufen == [1]
+
+
+def test_nach_der_obergrenze_wird_doch_zugegriffen(tmp_path, monkeypatch, capsys):
+    """Die Kehrseite: eine wiederverwendete PID sieht genauso lebendig aus wie ein echter
+    Halter. Bliebe es beim Schutz, kostete ein verwaistes Lock danach JEDEN Aufruf die volle
+    Frist (beim pip-Lock 155 s) und liefe anschliessend ungeschuetzt — dauerhaft. Wer laenger
+    wartet, als ein kritischer Abschnitt dauern kann, greift deshalb EINMAL erzwungen zu; die
+    Uhr ist der Rueckfall der Lebendpruefung, nicht durch sie abgeschaltet.
+    """
+    monkeypatch.setattr(sperre, "_AUFGEBEN_PUFFER_S", 0.05)
+    ziel = str(tmp_path / "x.json")
+    lock = ziel + ".lock"
+    os.mkdir(lock)
+    halter = _lebender_prozess()                  # steht fuer die neu vergebene PID
+    try:
+        _merker(lock, halter.pid)
+        gehalten = []
+
+        def lauf():
+            with sperre.datei(ziel, stale=0.0):
+                gehalten.append(sperre._merker_lesen(lock))
+
+        faden = threading.Thread(target=lauf, daemon=True)
+        faden.start()
+        faden.join(5)
+        assert not faden.is_alive()
+        # erworben, nicht bloss ungeschuetzt weiter: im Lock steht jetzt UNSERE PID
+        assert gehalten == [f"{os.getpid()} {platform.node()}".encode()]
+        assert not os.path.exists(lock)
+        ausgabe = capsys.readouterr().out
+        assert "wird uebernommen" in ausgabe
+        assert "ungeschuetzt" not in ausgabe
+    finally:
+        halter.kill()
+        halter.wait()
+
+
+def test_wegraeumen_laesst_ein_inzwischen_fremdes_lock_stehen(tmp_path):
+    """Zwischen "der Halter ist tot" und dem `rmdir` liegen Systemaufrufe — darin kann ein
+    anderer Warter das Lock abgeraeumt, neu angelegt und den Abschnitt betreten haben. Ohne
+    den Ausweis-Vergleich raeumte man ihm sein FRISCHES Lock weg (und sein `finally` traefe
+    danach einen Dritten). Deterministisch reproduziert im /code-review-Lauf zu #175.
+    """
+    lock = str(tmp_path / "x.json.lock")
+    os.mkdir(lock)
+    _merker(lock, 4711)
+    sperre._wegraeumen(lock, b"333 irgendwer")    # Entscheidung galt einem anderen Inhalt
+    assert os.path.isdir(lock), "fremdes Lock weggeraeumt"
+    assert sperre._merker_lesen(lock) == f"4711 {platform.node()}".encode()
+
+
+def test_der_bestohlene_halter_raeumt_nicht_das_lock_des_nachfolgers(tmp_path):
+    """Die zweite Haelfte derselben Kaskade: wurde uns das Lock weggenommen und neu vergeben,
+    darf unser `finally` nicht das Verzeichnis des Nachfolgers loeschen — sonst spaziert der
+    naechste Warter in dessen kritischen Abschnitt.
+    """
+    ziel = str(tmp_path / "x.json")
+    lock = ziel + ".lock"
+    with sperre.datei(ziel):
+        os.remove(os.path.join(lock, sperre._HALTER))   # jemand nimmt uns das Lock weg
+        os.rmdir(lock)
+        os.mkdir(lock)                                  # ... und legt sein eigenes an
+        _merker(lock, 4711)
+    assert os.path.isdir(lock), "das Lock des Nachfolgers wurde abgeraeumt"
+    assert sperre._merker_lesen(lock) == f"4711 {platform.node()}".encode()
 
 
 def test_toter_halter_muss_die_frist_nicht_absitzen(tmp_path):
@@ -292,15 +365,17 @@ def test_toter_halter_muss_die_frist_nicht_absitzen(tmp_path):
     assert not os.path.exists(lock)
 
 
-def test_merker_von_einem_anderen_rechner_gilt_nicht(tmp_path, monkeypatch):
+def test_merker_von_einem_anderen_rechner_gilt_nicht(tmp_path, monkeypatch, capsys):
     """Liegt das Lock auf einem geteilten Ordner, kann der Merker von einem ANDEREN Rechner
     stammen — dort sagt eine lokale PID nichts, im schlimmsten Fall das Gegenteil (die Zahl
     gehoert hier einem beliebigen fremden Prozess). Dann entscheidet die Frist wie vor #175.
 
-    `stale=0` + kurzer Puffer sind hier keine Beschleunigung, sondern der Wirkungsnachweis:
-    ohne die Wirt-Pruefung gilt der fremde Merker als lebender Halter, das abgelaufene Lock
-    bleibt liegen, und der Lauf faellt in den ungeschuetzten Ausstieg — dann ist das
-    Verzeichnis danach noch da.
+    Geprueft wird nicht nur, DASS aufgeraeumt wurde, sondern auf welchem WEG: ohne die
+    Wirt-Pruefung gilt der fremde Merker als lebender Halter, und das Lock faellt erst dem
+    erzwungenen Griff nach der Obergrenze zum Opfer — am Ende steht dasselbe Ergebnis, mit
+    einer Zeile im Protokoll als einzigem Unterschied. Genau daran war dieser Test schon
+    einmal vacuous (davor rettete ihn der Halter-Subprozess, der mittendrin von selbst
+    endete).
     """
     monkeypatch.setattr(sperre, "_AUFGEBEN_PUFFER_S", 0.05)
     ziel = str(tmp_path / "x.json")
@@ -314,6 +389,7 @@ def test_merker_von_einem_anderen_rechner_gilt_nicht(tmp_path, monkeypatch):
         with sperre.datei(ziel, stale=0.0):
             assert os.path.isdir(lock)            # erworben, nicht vom fremden Merker gehalten
         assert not os.path.exists(lock)
+        assert capsys.readouterr().out == ""      # ueber die Frist, nicht ueber den Notgriff
     finally:
         halter.kill()
         halter.wait()
