@@ -79,9 +79,12 @@ def test_save_legt_die_unlesbare_datei_beiseite_statt_sie_zu_ersetzen(tmp_path):
     Der Key ist mit blossem Auge noch lesbar — das ist der Punkt: kaputt fuer `json.load`
     heisst nicht kaputt fuer den Menschen."""
     p = tmp_path / "settings.json"
-    p.write_bytes(b'{"api_key": "sk-GEHEIM-\xff\xfe", "provider": "openai"}')
+    roh = b'{"api_key": "sk-GEHEIM-\xff\xfe", "provider": "openai"}'
+    p.write_bytes(roh)
     settings.save({"ytdlp_geprueft": "2026-08-14"})
-    assert b"sk-GEHEIM" in (tmp_path / "settings.json.kaputt").read_bytes()
+    # BYTEGLEICH, nicht nur "der Key kommt drin vor": gerettet wird die Datei, nicht ein
+    # Teil davon — wer sie repariert, braucht auch den Rest (CodeRabbit-CLI an PR #203).
+    assert (tmp_path / "settings.json.kaputt").read_bytes() == roh
     assert json.loads(p.read_text(encoding="utf-8"))["ytdlp_geprueft"] == "2026-08-14"
 
 
@@ -102,7 +105,9 @@ def test_gueltiges_aber_objektloses_json_wird_nicht_gerettet(tmp_path):
     p.write_text("[]", encoding="utf-8")
     settings.save({"whisper_model": "turbo"})
     assert not (tmp_path / "settings.json.kaputt").exists()
-    assert settings.load()["whisper_model"] == "turbo"
+    # Von der PLATTE gelesen, nicht ueber `load()`: gefragt ist, was der Schreiber
+    # hinterlassen hat (CodeRabbit-CLI an PR #203).
+    assert json.loads(p.read_text(encoding="utf-8"))["whisper_model"] == "turbo"
 
 
 def test_job_env_exportiert_die_einstellung():

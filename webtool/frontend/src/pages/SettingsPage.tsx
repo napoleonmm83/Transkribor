@@ -145,6 +145,7 @@ export function SettingsPage() {
   const [laedt, setLaedt] = useState(false)
   const [testet, setTestet] = useState(false)
   const [ytLaeuft, setYtLaeuft] = useState(false)
+  const [kaputtLaeuft, setKaputtLaeuft] = useState(false)
   const [hw, setHw] = useState<Hardware | null>(null)
   const { zustand: upd, pruefen, laden, installieren, protokollOeffnen } = useUpdate()
 
@@ -218,11 +219,16 @@ export function SettingsPage() {
   // geschrieben hat sie oft ein Subprozess, den nie jemand gesehen hat. Ohne diesen Knopf
   // stuende er darum fuer immer da: der Pfad liegt im Benutzerprofil, und wer die App
   // benutzt, um nicht mit Dateien zu hantieren, raeumt ihn dort nicht selbst weg.
+  // `kaputtWeg` sperrt seinen Knopf, solange die Anfrage laeuft: der zweite Klick eines
+  // Doppelklicks traefe eine Datei, die es nicht mehr gibt — der Server antwortet dann
+  // richtigerweise mit 404, und der Nutzer saehe fuer eine geglueckte Aktion einen Fehler.
   const kaputtWeg = async () => {
+    setKaputtLaeuft(true)
     try {
       await verwerfeKaputt()
       setS(cur => cur && { ...cur, kaputt: '' })
     } catch (e) { toast.error(`Entfernen fehlgeschlagen: ${(e as Error).message}`) }
+    finally { setKaputtLaeuft(false) }
   }
 
   const anbieterWechseln = (id: string) => {
@@ -379,7 +385,9 @@ export function SettingsPage() {
           <code className="rounded bg-muted px-1.5 py-0.5 font-mono break-all">{s.kaputt}</code>{' '}
           und lässt sich mit einem Texteditor öffnen — der Key steht dort meist noch lesbar drin.
           <div className="mt-3">
-            <Button variant="outline" size="sm" onClick={kaputtWeg}>Erledigt — Datei entfernen</Button>
+            <Button variant="outline" size="sm" onClick={kaputtWeg} disabled={kaputtLaeuft}>
+              Erledigt — Datei entfernen
+            </Button>
           </div>
         </div>
       )}
