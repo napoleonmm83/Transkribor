@@ -82,7 +82,7 @@ def test_dauerhaft_unmoeglich_haelt_den_aufrufer_nicht_auf(tmp_path, monkeypatch
     assert "ungeschuetzt" in capsys.readouterr().out
 
 
-def test_datei_am_lock_pfad_haelt_den_aufrufer_nicht_auf(tmp_path, capsys):
+def test_datei_am_lock_pfad_haelt_den_aufrufer_nicht_auf(tmp_path, monkeypatch, capsys):
     """Liegt am Lock-Pfad eine DATEI statt unseres Verzeichnisses (Sync-Client, Backup,
     Quarantaene), meldet `os.mkdir` dauerhaft FileExistsError und `os.rmdir` scheitert mit
     NotADirectoryError — den schluckte das `except OSError`, und die Schleife drehte ENDLOS
@@ -92,6 +92,8 @@ def test_datei_am_lock_pfad_haelt_den_aufrufer_nicht_auf(tmp_path, capsys):
     Gemessen im Faden mit `join`: ein Haenger macht keinen Test rot, er laesst die ganze
     Suite auslaufen — das ist genau der Grund, warum es niemandem aufgefallen ist.
     """
+    monkeypatch.setattr(sperre, "_LAUT_AB_S", 1e9)     # ein Haenger soll nicht in fremde
+    monkeypatch.setattr(sperre, "_AUFGEBEN_PUFFER_S", 1e9)   # Tests hineinprotokollieren
     ziel = str(tmp_path / "x.json")
     (tmp_path / "x.json.lock").write_text("keine Sperre, sondern eine Datei")
     gelaufen = []
@@ -105,5 +107,61 @@ def test_datei_am_lock_pfad_haelt_den_aufrufer_nicht_auf(tmp_path, capsys):
     faden.join(5)
     assert not faden.is_alive(), "sperre.datei() haengt an einer Datei am Lock-Pfad"
     assert gelaufen == [1]
-    assert "ungeschuetzt" in capsys.readouterr().out
+    # Nicht bloss "ungeschuetzt": die Zeile muss den Grund nennen, sonst ist sie von den
+    # beiden anderen Ausstiegen nicht zu unterscheiden.
+    assert "ist kein Verzeichnis" in capsys.readouterr().out
     assert (tmp_path / "x.json.lock").is_file()   # fremde Datei bleibt unangetastet
+
+
+def test_nicht_raeumbares_lock_haelt_den_aufrufer_nicht_auf(tmp_path, monkeypatch, capsys):
+    """Dieselbe Endlosschleife ueber den ZWEITEN Weg: ein abgelaufenes Lock-VERZEICHNIS, das
+    sich nicht loeschen laesst (Sync-Konfliktdatei, `desktop.ini`, Virenscanner-Handle).
+    `os.rmdir` wirft `[WinError 145] Das Verzeichnis ist nicht leer`, der Verwaist-Zweig
+    schluckt es, und die Schleife dreht endlos — nachgemessen, und vom Typ-Test aus #191
+    NICHT gedeckt. Die Obergrenze ueber die ganze Schleife deckt die Klasse statt der
+    naechsten Form.
+
+    Wieder im Faden mit `join`: ein Haenger macht keinen Test rot, er laesst die Suite
+    auslaufen.
+    """
+    monkeypatch.setattr(sperre, "_AUFGEBEN_PUFFER_S", 0.05)
+    ziel = str(tmp_path / "x.json")
+    os.mkdir(ziel + ".lock")
+    (tmp_path / "x.json.lock" / "desktop.ini").write_text("fremd")
+    alt = time.time() - 100
+    os.utime(ziel + ".lock", (alt, alt))          # verwaist — aber nicht wegzuraeumen
+    gelaufen = []
+
+    def lauf():
+        with sperre.datei(ziel, stale=0.0):
+            gelaufen.append(1)
+
+    faden = threading.Thread(target=lauf, daemon=True)
+    faden.start()
+    faden.join(5)
+    assert not faden.is_alive(), "sperre.datei() haengt an einem nicht raeumbaren Lock"
+    assert gelaufen == [1]
+    assert "laesst sich nicht uebernehmen" in capsys.readouterr().out
+
+
+def test_weggeraeumtes_lock_faellt_nicht_ungeschuetzt_durch(tmp_path, monkeypatch, capsys):
+    """Zwei Warter raeumen dasselbe verwaiste Lock auf: einer gewinnt, der andere bekommt
+    beim `rmdir` einen FileNotFoundError. Das ist Erfolg, kein Hindernis — wer daraufhin
+    ungeschuetzt weiterlaeuft, schaltet die Sperre genau unter Konkurrenz ab (dieselbe
+    Richtung wie Befund (5) aus PR #172). Deshalb bricht die Schleife bei einem
+    gescheiterten `rmdir` NICHT sofort aus, sondern erst nach `stale + _AUFGEBEN_PUFFER_S`.
+    """
+    ziel = str(tmp_path / "x.json")
+    os.mkdir(ziel + ".lock")
+    alt = time.time() - 100
+    os.utime(ziel + ".lock", (alt, alt))
+    echt = os.rmdir
+
+    def zuvorgekommen(pfad, *a, **k):
+        echt(pfad, *a, **k)                       # der andere Warter war schneller
+        raise FileNotFoundError(2, "No such file or directory", pfad)
+
+    monkeypatch.setattr(sperre.os, "rmdir", zuvorgekommen)
+    with sperre.datei(ziel, stale=60):
+        assert os.path.isdir(ziel + ".lock")      # doch noch erworben, nicht uebersprungen
+    assert "ungeschuetzt" not in capsys.readouterr().out
