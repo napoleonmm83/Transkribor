@@ -103,6 +103,16 @@ def fassung() -> str | None:
         return metadata.version("yt-dlp")
     except metadata.PackageNotFoundError:
         return None
+    except Exception as e:
+        # #185: `importlib.metadata` wirft nicht nur PackageNotFoundError — eine METADATA,
+        # die sich nicht als UTF-8 dekodieren laesst, gibt einen UnicodeDecodeError. Diese
+        # Funktion haengt an DREI HTTP-Handlern (`zustand()` in GET/PUT /api/settings und im
+        # Update-Knopf) UND an `fetch._hole_yt_dlp()`, das keinen Schutz hat: ungefangen
+        # waere das eine 500er-Einstellungsseite bzw. ein abgerissener URL-Import statt des
+        # zugesagten best effort. Unbekannt heisst hier "nicht installiert" — und damit
+        # `faellig() is False`, also KEIN pip auf Verdacht.
+        print(f"[ytdlp] Metadaten von yt-dlp unlesbar: {e}", flush=True)
+        return None
 
 
 def _gilt_fuer_uns(zeile: str) -> bool:
@@ -138,6 +148,11 @@ def _ejs_zeilen() -> list[str]:
     try:
         zeilen = metadata.requires("yt-dlp") or []
     except metadata.PackageNotFoundError:
+        return []
+    except Exception as e:      # #185, s. `fassung()`
+        # Keine Zeilen heisst: kein Pin (#182 faellt aus) und keine Anforderung (#184 sagt
+        # "verlangt nicht"). Beides fail-open — der Kalenderweg entscheidet wie bisher.
+        print(f"[ytdlp] Anforderungen von yt-dlp unlesbar: {e}", flush=True)
         return []
     return [z for z in zeilen if _EJS_NAME_RE.search(z) and _gilt_fuer_uns(z)]
 
@@ -272,6 +287,15 @@ def _ejs_untauglich() -> bool:
         # Entscheidung, nicht eine Nebenwirkung: ein taegliches pip, das nichts holen kann,
         # ist teurer als eine um Tage spaetere Erkennung.
         return _ejs_verlangt()
+    except Exception as e:
+        # #185 — und hier geht der Rueckfall in die ANDERE Richtung als in `fassung()` und
+        # `_ejs_zeilen()`. Der Zweig darueber flaggt, weil `PackageNotFoundError` eine
+        # TATSACHE ist ("nicht installiert"); jede andere Ausnahme heisst nur "unbekannt",
+        # und Unbekanntes flaggt dieses Modul nicht (s. Docstring). Es waere sonst der
+        # teuerste Flag von allen: ob ein pip eine unlesbare METADATA ueberhaupt ersetzt,
+        # ist offen — bleibt sie liegen, laeuft das taegliche pip dauerhaft weiter.
+        print(f"[ytdlp] Metadaten von {_EJS} unlesbar: {e}", flush=True)
+        return False
     gefordert, installiert = _release(_ejs_pin()), _release(da)
     if gefordert is None or installiert is None:
         return False                      # nicht vergleichbar -> Kalenderweg entscheidet
