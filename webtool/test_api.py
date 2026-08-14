@@ -1327,3 +1327,15 @@ def test_verschwundene_edit_json_faellt_auf_die_roh_json(client, tmp_path, monke
     r = client.get("/api/projects/Demo/files/S1")
     assert r.status_code == 200, r.text
     assert r.json()["segments"][0]["text"].strip() == "Hallo Welt."
+
+
+def test_kaputte_roh_json_meldet_die_datei_statt_eines_tracebacks(client, tmp_path):
+    """Fuer die Roh-JSON gibt es KEINEN Rueckfall — sie ist die Quelle, aus der die
+    Selbstheilung baut. 500 bleibt also richtig; ohne Namen war es aber ein
+    AttributeError-Traceback aus `build_edit_doc` (gueltiges JSON, nur kein Objekt), und der
+    Nutzer las "Internal Server Error", ohne zu erfahren, welche Datei kaputt ist.
+    Gefunden ueber den Merge-Risk-Hinweis des CodeRabbit-Bots an PR #195."""
+    (tmp_path / "Demo" / "transkripte" / "S1.json").write_text('["kein Objekt"]', encoding="utf-8")
+    r = client.get("/api/projects/Demo/files/S1")
+    assert r.status_code == 500
+    assert "Roh-Transkript unlesbar: S1" in r.json()["detail"]

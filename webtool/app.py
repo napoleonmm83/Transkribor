@@ -156,8 +156,16 @@ def load_or_build_doc(project: str, base: str) -> dict:
     rpath = _raw_path(project, base)
     if not os.path.exists(rpath):
         raise HTTPException(status_code=404, detail=f"kein Roh-Transkript: {base}")
-    with open(rpath, encoding="utf-8") as fh:
-        raw = json.load(fh)
+    try:
+        raw = _json_objekt(rpath)
+    except (OSError, ValueError) as e:
+        # Hier gibt es KEINEN Rueckfall — die Roh-JSON ist die Quelle, aus der die
+        # Selbstheilung oben baut. 500 bleibt also 500, aber mit Namen statt als
+        # AttributeError-Traceback (`build_edit_doc` auf einer Liste): der Nutzer soll
+        # sehen, WELCHE Datei kaputt ist, statt "Internal Server Error" zu lesen.
+        raise HTTPException(status_code=500,
+                            detail=f"Roh-Transkript unlesbar: {base} "
+                                   f"({type(e).__name__})") from None
     audio = find_audio(project, base)
     return build_edit_doc(raw, base=base, project=project,
                           audio=os.path.basename(audio) if audio else "")
