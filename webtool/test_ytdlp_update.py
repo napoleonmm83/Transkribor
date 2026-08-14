@@ -347,6 +347,16 @@ def test_zeile_mit_WEITEREN_markern_gilt_nicht(monkeypatch):
     assert _ECHTES_EJS_UNTAUGLICH() is False
 
 
+def test_fremdes_paket_mit_passendem_namensende_zaehlt_nicht(monkeypatch):
+    """Der Name muss die Zeile ANFANGEN. Ungeankert las `search` aus
+    `my-yt-dlp-ejs==0.9.0` brav `0.9.0` als geforderten ejs-Pin (gemessen) — ein fremdes
+    Paket haette damit den Flag gesetzt, und `pip install -U yt-dlp[default]` haette ihn nie
+    geloescht. Wieder derselbe Dauerlauf."""
+    _metadaten(monkeypatch, "0.8.0", ["my-yt-dlp-ejs==0.9.0; extra == 'default'"])
+    assert yu._ejs_pin() is None
+    assert _ECHTES_EJS_UNTAUGLICH() is False
+
+
 def test_pin_ohne_extra_marker_gilt(monkeypatch):
     """Gegenprobe zur Zeile darueber — sonst waere die Wache zu scharf: eine Anforderung
     ganz OHNE `extra`-Marker ist eine harte Abhaengigkeit von yt-dlp und gilt fuer jede

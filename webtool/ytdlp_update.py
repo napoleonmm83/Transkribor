@@ -54,7 +54,10 @@ _EJS = "yt-dlp-ejs"
 # stillen Seite, und mehr Namen als das ejs-Paket kann sie dadurch nicht treffen.
 # NUR `==`: bei `>=` waere jede Antwort geraten, und Raten kostet hier ein taegliches pip
 # ohne Ende — siehe `_ejs_untauglich`.
-_EJS_PIN_RE = re.compile(r"yt[-_]dlp[-_]ejs\s*==\s*([^\s;,()]+)", re.IGNORECASE)
+# Verankert (`^\s*`), weil eine Anforderungszeile mit dem Paketnamen ANFAENGT: ungeankert las
+# `search` aus `my-yt-dlp-ejs==0.9.0` brav `0.9.0` als geforderten ejs-Pin (gemessen) — ein
+# fremdes Paket haette den Flag gesetzt, den pip nie loeschen kann.
+_EJS_PIN_RE = re.compile(r"^\s*yt[-_]dlp[-_]ejs\s*==\s*([^\s;,()]+)", re.IGNORECASE)
 # Der Umgebungsmarker derselben Zeile. `fullmatch` gegen GENAU `extra == 'default'` — alles
 # andere (`extra == 'pin'`, zusaetzliches `and python_version …`) faellt nach fail-open.
 # Siehe `_gilt_fuer_uns`.
