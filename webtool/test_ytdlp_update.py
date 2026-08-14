@@ -549,6 +549,22 @@ def test_pin_regex_bindet_an_den_zeilenanfang():
     assert yu._EJS_PIN_RE.search("yt-dlp-ejs==0.8.0; extra == 'default'").group(1) == "0.8.0"
 
 
+def test_klammerformen_liefern_bewusst_KEINEN_pin():
+    """Die dokumentierte Asymmetrie, hier festgenagelt: `yt-dlp-ejs[deno]` und die
+    geklammerte `Requires-Dist:`-Form aelterer setuptools zaehlen fuer `_EJS_NAME_RE` als
+    unser Paket (also fuer #179), liefern aber KEINEN Pin (also kein #182). Das ist sicher —
+    fail-open kostet hoechstens eine verspaetete Erkennung — und billiger als eine Regex, die
+    beide Klammerformen mitfuehrt, solange yt-dlp keine davon schreibt.
+
+    Ohne diesen Test verschoebe eine spaetere Erweiterung von `_EJS_PIN_RE` die
+    #182-Erkennung **still**, und nichts wuerde rot. Dieselbe Luecke, fuer die eine Zeile
+    weiter oben `test_pin_regex_bindet_an_den_zeilenanfang` gebaut wurde."""
+    assert yu._EJS_NAME_RE.search("yt-dlp-ejs[deno]==0.9.0; extra == 'default'")
+    assert yu._EJS_PIN_RE.search("yt-dlp-ejs[deno]==0.9.0; extra == 'default'") is None
+    assert yu._EJS_NAME_RE.search("yt-dlp-ejs (==0.9.0); extra == 'default'")
+    assert yu._EJS_PIN_RE.search("yt-dlp-ejs (==0.9.0); extra == 'default'") is None
+
+
 # Die Kette „untauglich -> faellig, trotz frischer yt-dlp-Fassung" steht bereits in
 # `test_fehlende_loeserskripte_machen_faellig` — sie haengt an `_ejs_untauglich`, nicht am
 # GRUND der Untauglichkeit. Ein zweiter Test mit identischer Zusicherung waere Deko.
