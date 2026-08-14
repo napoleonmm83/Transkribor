@@ -38,8 +38,13 @@ PIP_TIMEOUT = 120
 MERKER = "ytdlp_geprueft"
 # Das Paket mit den Loeserskripten fuer YouTubes JS-Challenge; kommt ueber `yt-dlp[default]`.
 _EJS = "yt-dlp-ejs"
-# Der Pin aus yt-dlps eigenen Metadaten. `[-_]` tolerant, weil Paketnamen in Metadaten in
-# beiden Schreibweisen auftreten duerfen (PEP 503 normalisiert erst beim Vergleich).
+# Der Pin aus yt-dlps eigenen Metadaten.
+# `[-_]` ist VORSORGE, kein beobachteter Fall: gemessen steht in yt-dlps METADATA die
+# Bindestrich-Form (`Requires-Dist: yt-dlp-ejs==0.8.0; extra == 'default'`), und
+# `metadata.requires()` reicht die Zeile unveraendert durch. Ein Build-Backend, das Namen
+# nach PEP 503 normalisiert, schriebe aber `yt_dlp_ejs` — und dann faende die Regex nichts,
+# `_ejs_pin()` gaebe None zurueck und die Pruefung fiele nach fail-open, also STILL, genau
+# in den Fehler zurueck, gegen den sie gebaut ist. Sechs Zeichen gegen ein stummes Versagen.
 # NUR `==`: bei `>=` waere jede Antwort geraten, und Raten kostet hier ein taegliches pip
 # ohne Ende — siehe `_ejs_untauglich`.
 _EJS_PIN_RE = re.compile(r"yt[-_]dlp[-_]ejs\s*==\s*([^\s;,()]+)")
