@@ -543,15 +543,35 @@ def starte_hintergrund() -> bool:
             return False
         _lauf["laeuft"] = True
         _lauf["ergebnis"] = ""
-    threading.Thread(target=_im_hintergrund, daemon=True).start()
+    # Das `finally` in `_im_hintergrund` deckt den RUMPF — nicht den Start. Wirft `start()`
+    # (`RuntimeError: can't start new thread`), laeuft es nie, und `laeuft` bliebe True:
+    # gemessen gibt der erste Klick dann 500, **jeder weitere** 200 mit
+    # `{gestartet: false, laeuft: true}` — womit die Warteschleife im Frontend endlos alle
+    # 1,5 s nachfragt und nie einen Toast zeigt. Dauerhaft, bis zum Serverneustart. Selten
+    # (Faden-Erschoepfung), aber derselbe Massstab, mit dem unten das `finally` begruendet
+    # ist: die Kosten des Fehlers, nicht seine Wahrscheinlichkeit.
+    try:
+        threading.Thread(target=_im_hintergrund, daemon=True).start()
+    except BaseException:
+        with _lauf_sperre:
+            _lauf["laeuft"], _lauf["ergebnis"] = False, "fehler"
+        raise
     return True
 
 
 def _im_hintergrund() -> None:
     """Der Faden. Setzt `laeuft` unter ALLEN Umstaenden zurueck."""
     # `ergebnis` VOR dem `try`: ein Wurf, den `except Exception` nicht faengt (SystemExit,
-    # KeyboardInterrupt), liefe im `finally` sonst in einen NameError — und `laeuft` bliebe
-    # fuer immer True, womit der Knopf bis zum Serverneustart nichts mehr taete.
+    # KeyboardInterrupt), liefe im `finally` sonst in einen UnboundLocalError.
+    #
+    # **Was das WIRKLICH kostet — nachgerechnet, nicht geraten:** `laeuft = False` steht im
+    # `finally` VOR der `ergebnis`-Zeile und gelingt immer; der Knopf bliebe also nutzbar.
+    # Uebrig bliebe `ergebnis = ""`, und das Frontend nimmt dafuer den Fehlerzweig — also
+    # dieselbe sichtbare Meldung wie mit "fehler", plus ein Traceback im Serverlog. Die
+    # Zeile bleibt trotzdem: der Zustand gehoert explizit gesetzt, nicht zufaellig richtig.
+    # (Eine erste Fassung dieses Kommentars behauptete „laeuft bliebe fuer immer True" —
+    # falsch, und genau die Sorte unnachgerechnete Kontrollfluss-Behauptung, die dieses
+    # Repo als haeufigsten Fehler fuehrt.)
     ergebnis = "fehler"
     try:
         ergebnis = "ok" if aktualisiere() else "fehler"

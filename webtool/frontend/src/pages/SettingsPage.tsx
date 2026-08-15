@@ -137,6 +137,26 @@ function AnmeldungAbo({ status, neuPruefen }: { status: AuthStatus; neuPruefen: 
   )
 }
 
+/** Der Ausgang eines yt-dlp-Laufs als Toast. Ausserhalb der Komponente, weil zwei Wege
+ *  hierher führen — der Poll-Effekt und der Sofort-fertig-Fall im Klick — und eine Kopie
+ *  beim nächsten Mal an einer der beiden Stellen falsch wäre.
+ *
+ *  Ohne Fassung KEINE Fassung nennen: pip meldet Erfolg, die Metadaten bleiben aber
+ *  unlesbar — der Toast sagte dann „yt-dlp ist jetzt auf null" (#189). Und der Fehlerzweig
+ *  darf nicht raten: bei kaputter METADATA scheitert **pip selbst** (gemessen: `pip list`
+ *  gegen eine präparierte dist-info endet mit Exit 2 und UnicodeDecodeError). „Bist du
+ *  online?" wäre dort dieselbe Fehldiagnose, gegen die #189 gebaut ist — `unlesbar`
+ *  entscheidet das, nicht eine Vermutung. */
+function ytMelden(stand: YtdlpStand) {
+  if (stand.ergebnis === 'ok') {
+    toast.success(stand.version ? `yt-dlp ist jetzt auf ${stand.version}` : 'yt-dlp wurde aktualisiert')
+    return
+  }
+  toast.error(stand.unlesbar
+    ? 'Die Metadaten von yt-dlp sind beschädigt — pip kann sie nicht lesen. Hilft nur neu installieren.'
+    : 'Aktualisierung fehlgeschlagen — bist du online?')
+}
+
 export function SettingsPage() {
   const [s, setS] = useState<Settings | null>(null)
   const [modelle, setModelle] = useState<ModelInfo[]>([])
@@ -245,40 +265,64 @@ export function SettingsPage() {
     r.ok ? toast.success(r.detail || 'Verbindung steht') : toast.error(r.detail || 'Fehlgeschlagen')
   }
 
-  // Der Knopf holt die Einstellungen danach neu: Fassung und Prüfdatum stehen dort, und ohne
-  // das Nachladen bliebe die Anzeige auf dem Stand von vor dem Klick.
-  // Der Knopf wartet seit #174 nicht mehr auf pip — er stösst an und fragt nach. Das
-  // Nachfragen ist NICHT optional: ohne es stünde ein Fehlschlag nur in der Serverkonsole,
-  // und der Umbau hätte einen hängenden Browser gegen einen stillen Ausfall getauscht.
+  // Poll, solange ein yt-dlp-Lauf verfolgt wird (#174) — dieselbe Form wie beim
+  // Anmeldevorgang oben: Effekt + `setInterval` + Cleanup.
+  useEffect(() => {
+    if (!ytLaeuft) return
+    // Obergrenze, weil die Schleife sonst unbegrenzt wäre: bleibt `laeuft` serverseitig
+    // hängen (etwa an dem blockierenden `open()` aus #200, wo die Obergrenze aus #191 nicht
+    // greift), pollte der Browser bis zum Tab-Schluss und meldete nie etwas.
+    //
+    // Gezählt werden NACHFRAGEN, nicht Wanduhrzeit. Zwei Gründe: begrenzen wollen wir das,
+    // was Last erzeugt (ein im Hintergrund gedrosselter Tab soll nicht früher aufgeben),
+    // und `Date.now()` wäre nicht prüfbar — `vi.useFakeTimers()` fälscht in dieser Fassung
+    // die Uhr NICHT mit, die Obergrenze feuerte im Test also nie und blieb ungetestet.
+    // 480 × 1,5 s ≈ 12 Min, also gut das Doppelte des gemessenen Worst Case von ~340 s.
+    let runden = 0
+    const t = setInterval(async () => {
+      if (++runden > 480) {
+        setYtLaeuft(false)
+        toast.error('Die Aktualisierung meldet sich nicht mehr — bitte im Serverprotokoll nachsehen.')
+        return
+      }
+      const neu = await getSettings().catch(() => null)
+      if (!neu) return                  // ein Aussetzer beendet den Lauf nicht
+      // Ersetzen, nicht zusammenführen — anders als in `speichern()` weiter oben, und das
+      // ist kein Versehen: dort ist die PUT-Antwort ein TEILobjekt (sie trägt etwa
+      // `ytdlp_auto`, aber keinen `ytdlp`-Block), hier liefert `GET /api/settings` das
+      // vollständige `Settings`. `{...cur, ...neu}` wäre damit buchstäblich dasselbe wie
+      // `neu` — eine Merge-Form, die nichts merged, sieht nur nach Sorgfalt aus.
+      // (Als Reviewbefund vorgeschlagen, beim Nachlesen des Endpunkts verworfen.)
+      setS(neu)
+      if (!neu.ytdlp.laeuft) { setYtLaeuft(false); ytMelden(neu.ytdlp) }
+    }, 1500)
+    return () => clearInterval(t)
+  }, [ytLaeuft])
+
+  // Der Knopf wartet seit #174 nicht mehr auf pip — er stösst an, und ein Effekt fragt nach.
+  // Das Nachfragen ist NICHT optional: ohne es stünde ein Fehlschlag nur in der
+  // Serverkonsole, und der Umbau hätte einen hängenden Browser gegen einen stillen Ausfall
+  // getauscht — die teurere Sorte.
   //
-  // `disabled` hängt bewusst nur am LOKALEN `ytLaeuft`, nicht an `s.ytdlp.laeuft`: wer die
-  // Seite mitten im Lauf neu lädt, sässe sonst vor einem dauerhaft gesperrten Knopf (nichts
-  // pollt hier von sich aus). So klickt er stattdessen nochmal, bekommt `gestartet: false`
-  // und hängt sich an den laufenden — der Fall heilt sich selbst.
+  // **Effekt mit `setInterval` + Cleanup, KEINE freilaufende `while`-Schleife.** Die stand
+  // hier zuerst und liess sich nicht abbrechen: wer die Seite während eines Laufs verliess,
+  // pollte über die volle pip-Dauer weiter, rief `setS` auf einer ausgehängten Komponente
+  // (React 18 warnt dazu nicht mehr — es ist still) und bekam am Ende einen Toast für eine
+  // Seite, auf der niemand mehr ist. Dieselbe Form wie beim Anmeldevorgang oben; sie stand
+  // in dieser Datei bereits 190 Zeilen weiter oben.
   const ytJetzt = async () => {
     setYtLaeuft(true)
     try {
       const r = await updateYtdlp()
       if (!r.gestartet) toast.info('Eine Aktualisierung läuft bereits — ich warte auf sie.')
-      let stand: YtdlpStand = r
-      while (stand.laeuft) {
-        await new Promise(f => setTimeout(f, 1500))
-        const neu = await getSettings()
-        setS(neu)                       // die Fassungszeile oben zieht dabei live nach
-        stand = neu.ytdlp
-      }
-      // Ohne Fassung KEINE Fassung nennen: pip meldet Erfolg, die Metadaten bleiben aber
-      // unlesbar — der Toast sagte dann "yt-dlp ist jetzt auf null" (#189).
-      // Der Fehlerzweig darf nicht raten: bei kaputter METADATA scheitert **pip selbst**
-      // (gemessen: `pip list` gegen eine praeparierte dist-info endet mit Exit 2 und
-      // UnicodeDecodeError). "Bist du online?" waere dann dieselbe Fehldiagnose, gegen die
-      // die Zeile darunter gebaut ist — und der Zustand trägt `unlesbar` bereits mit.
-      stand.ergebnis === 'ok'
-        ? toast.success(stand.version ? `yt-dlp ist jetzt auf ${stand.version}` : 'yt-dlp wurde aktualisiert')
-        : toast.error(stand.unlesbar
-          ? 'Die Metadaten von yt-dlp sind beschädigt — pip kann sie nicht lesen. Hilft nur neu installieren.'
-          : 'Aktualisierung fehlgeschlagen — bist du online?')
-    } catch (e) { toast.error(String(e)) } finally { setYtLaeuft(false) }
+      // Ein sehr schneller Lauf kann schon fertig sein, bevor der erste Poll greift.
+      if (!r.laeuft) { setYtLaeuft(false); ytMelden(r) }
+    } catch (e) {
+      toast.error(String(e))
+      // KEIN `finally`: bei Erfolg übernimmt der Poll-Effekt und schaltet selbst ab —
+      // ein `finally` hier würde ihn sofort wieder abwürgen.
+      setYtLaeuft(false)
+    }
   }
 
   if (!s) return <div className="p-6 sm:p-8 text-sm text-muted-foreground">Lädt…</div>
@@ -370,7 +414,15 @@ export function SettingsPage() {
                 nicht lesbar", und dafür war "Nicht installiert" das Gegenteil der Wahrheit —
                 der Import lief. Die Unterscheidung kommt vom Server (`unlesbar`), nicht aus
                 einer Ableitung hier. */}
-            {s.ytdlp.version
+            {/* Ein Lauf, der schon stand, als die Seite geladen wurde (Reload mitten in pip):
+                der Knopf bleibt bedienbar — ein Klick hängt sich per `gestartet: false` an
+                den laufenden —, aber schweigen darf die Seite darüber nicht. Übernommen wird
+                der Lauf bewusst NICHT automatisch: das setzte `ytLaeuft` sofort wieder hoch
+                und machte die Obergrenze der Warteschleife wirkungslos (der Test „gibt die
+                Nachfragerei nach einer Obergrenze auf" hat genau das aufgedeckt). */}
+            {s.ytdlp.laeuft && !ytLaeuft
+              ? 'Eine Aktualisierung läuft gerade — klicke, um ihr zuzusehen.'
+              : s.ytdlp.version
               ? <>Fassung <span className="font-medium text-foreground">{s.ytdlp.version}</span>
                 {s.ytdlp.geprueft && ` · zuletzt geprüft am ${tag(s.ytdlp.geprueft)}`}</>
               : s.ytdlp.unlesbar

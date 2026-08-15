@@ -47,7 +47,20 @@ def client(monkeypatch, tmp_path):
     monkeypatch.setitem(ytu._lauf, "laeuft", False)
     monkeypatch.setitem(ytu._lauf, "ergebnis", "")
     from webtool.app import app
-    return TestClient(app)
+    yield TestClient(app)
+    # Auf einen noch laufenden Hintergrundfaden warten — und zwar HIER, vor monkeypatchs
+    # Teardown (Fixture-Teardown laeuft in umgekehrter Setup-Reihenfolge, die Attrappe von
+    # `aktualisiere` steht also noch). Zwei Gruende, beide teurer als die vier Zeilen:
+    # scheitert ein `assert` VOR dem `_warte(...)` im Test, schriebe der ueberlebende Faden
+    # `_lauf` in den NAECHSTEN Test hinein — und `aktualisiere()` fragt `auto_an()` NICHT
+    # (nur `automatisch()` tut das), die Schutzregel `TRANSKRIBOR_YTDLP_UPDATE=0` greift auf
+    # diesem Pfad also gar nicht: ein durchgerutschter Aufruf waere ein echtes
+    # `pip install -U yt-dlp[default]` gegen die venv des Laeufers.
+    #
+    # Nicht beobachtet, sondern fehlendes Netz: 200 Runden mit Teardown unmittelbar nach
+    # `start()` ergaben 0 Ueberlaeufe (`Thread.start()` kehrt auf CPython/Windows erst
+    # zurueck, wenn der Faden im Ziel ist). Der Schaden waere eine fremde venv.
+    _warte(lambda: not ytu.hintergrund_zustand()[0], 10.0)
 
 
 # "Demo" wird von der client-Fixture angelegt (TRANSKRIBOR_PROJEKTE=tmp_path).
@@ -728,11 +741,46 @@ def test_ytdlp_hintergrundlauf_gibt_den_knopf_auch_nach_einem_BaseException_frei
     from webtool import ytdlp_update
 
     def wirft():
-        raise SystemExit(1)      # threading unterdrueckt SystemExit -> keine Testausgabe
+        # SystemExit statt KeyboardInterrupt, weil `threading` ihn im Normalbetrieb
+        # unterdrueckt. UNTER PYTEST gilt das nicht — es ersetzt `threading.excepthook`,
+        # der Lauf meldet also eine `PytestUnhandledThreadExceptionWarning`. Genau daher
+        # kommen die zwei Warnungen am Suitenende; kein Fehler, aber die urspruengliche
+        # Begruendung („keine Testausgabe") stimmte nicht.
+        raise SystemExit(1)
     monkeypatch.setattr(ytdlp_update, "aktualisiere", wirft)
     client.post("/api/settings/ytdlp/update")
     assert _warte(lambda: not ytdlp_update.hintergrund_zustand()[0])
     assert client.get("/api/settings").json()["ytdlp"]["ergebnis"] == "fehler"
+
+
+def test_ytdlp_ein_gescheiterter_fadenstart_sperrt_den_knopf_nicht_dauerhaft(
+        client, monkeypatch):
+    """Das `finally` in `_im_hintergrund` deckt den RUMPF, nicht den Start. Wirft
+    `Thread.start()` (`can't start new thread`), bliebe `laeuft` sonst True — gemessen: der
+    erste Klick 500, **jeder weitere** 200 mit `{gestartet: false, laeuft: true}`, womit die
+    Warteschleife im Frontend endlos nachfragt und nie einen Toast zeigt. Dauerhaft, bis zum
+    Serverneustart. Gefunden vom Reviewer-Subagenten an PR #223 (I2)."""
+    from webtool import ytdlp_update
+
+    class _Fadenlos:
+        """Ersetzt NUR die Modulreferenz in `ytdlp_update`, nicht `threading.Thread`
+        global — das globale Attribut zu patchen traefe auch die Faden-Verwaltung des
+        TestClients. `monkeypatch.undo()` scheidet aus demselben Grund aus: es drehte die
+        ganze Fixture mit zurueck (Projektpfad, Einstellungsdatei, Job-Attrappe)."""
+        @staticmethod
+        def Thread(*a, **k):
+            raise RuntimeError("can't start new thread")
+
+    monkeypatch.setattr(ytdlp_update, "aktualisiere", lambda: True)
+    monkeypatch.setattr(ytdlp_update, "threading", _Fadenlos)
+    with pytest.raises(RuntimeError):
+        client.post("/api/settings/ytdlp/update")
+    assert ytdlp_update.hintergrund_zustand() == (False, "fehler")
+
+    # Der entscheidende Teil: der naechste Klick geht wieder durch.
+    monkeypatch.setattr(ytdlp_update, "threading", threading)
+    assert client.post("/api/settings/ytdlp/update").json()["gestartet"] is True
+    assert _warte(lambda: not ytdlp_update.hintergrund_zustand()[0])
 
 
 def test_settings_unbekannter_anbieter_400(client):
