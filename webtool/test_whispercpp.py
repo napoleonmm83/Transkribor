@@ -301,3 +301,80 @@ def test_abgebrochener_download_hinterlaesst_keine_halbe_datei(monkeypatch, tmp_
     with pytest.raises(RuntimeError):
         w.modell_datei("large-v3", onLine=lambda z: None)
     assert list(tmp_path.iterdir()) == []
+
+
+# --- Audiodauer fuer den Abdeckungs-Waechter (#83) ---------------------------
+
+def test_wav_dauer_rechnet_aus_der_dateigroesse(tmp_path):
+    """whisper-cli liefert KEINE `duration` — anders als faster-whispers TranscriptionInfo.
+    Ohne sie bliebe auf diesem Pfad ein uebersprungenes Fenster am DATEIENDE unsichtbar.
+    Gerechnet wird aus der Groesse, weil `_wav` das Format festlegt (16 kHz, mono, s16):
+    44 Byte Kopf, 2 Byte je Abtastwert. Ein zweites Dekodieren waere Minuten fuer eine Zahl,
+    die in der Groesse steht."""
+    p = tmp_path / "a.wav"
+    p.write_bytes(b"\0" * (44 + 32000 * 3))                # 3 Sekunden
+    assert w.wav_dauer(str(p)) == 3.0
+
+
+def test_wav_dauer_raet_nicht(tmp_path):
+    """Eine geratene Dauer waere schlimmer als keine: sie erfaende eine Luecke am Dateiende
+    oder verdeckte eine. `None` heisst 'unbekannt', und `transcribe.luecken` prueft das
+    Dateiende dann gar nicht."""
+    leer = tmp_path / "leer.wav"
+    leer.write_bytes(b"\0" * 44)                           # nur der Kopf
+    assert w.wav_dauer(str(leer)) is None
+    assert w.wav_dauer(str(tmp_path / "gibt-es-nicht.wav")) is None
+
+
+def test_ergebnis_traegt_die_dauer_ins_rohdokument():
+    """Der Vertrag mit transcribe._ergebnis: beide Engines liefern denselben Schluessel,
+    damit der Waechter EINE Stelle hat statt zwei."""
+    roh = {"transcription": [_seg(" hallo", [_tok(" hallo")], 0, 1000)]}
+    assert w.ergebnis(roh, "de", 42.0)["duration"] == 42.0
+    assert w.ergebnis(roh, "de")["duration"] is None        # ohne Angabe: unbekannt, nicht 0
+
+
+def test_luecke_am_dateiende_wird_auf_dem_mac_pfad_sichtbar():
+    """Die Halbierung, die man leicht baut: Dauer da, Waechter da, aber nicht verbunden.
+    Hier laeuft das whisper.cpp-Dokument durch dieselbe Funktion wie das von faster-whisper."""
+    import transcribe
+    roh = {"transcription": [_seg(" hallo", [_tok(" hallo")], 0, 2000)]}
+    d = w.ergebnis(roh, "de", 300.0)
+    assert transcribe.luecken(d["segments"], d["duration"]) == [
+        {"start": 2.0, "end": 300.0, "dauer": 298.0}]
+
+
+def test_transkribiere_RECHNET_die_dauer_aus_und_reicht_sie_durch(monkeypatch, tmp_path):
+    """Die Mutationsprobe fand hier eine Luecke, und sie ist lehrreich: `ergebnis` mit einer
+    von Hand uebergebenen Dauer zu pruefen laesst offen, ob `transkribiere` sie ueberhaupt
+    AUSRECHNET — `wav_dauer(wav)` aus dem Aufruf zu streichen liess alle Tests gruen.
+
+    Diese eine Zeile ist auf dem Mac-Pfad die gesamte Auskunft ueber die Audiolaenge (whisper-cli
+    liefert keine), und ohne Apple-Hardware (#36) ist dieser Test die einzige Wache darueber.
+    Deshalb laeuft er durch die ECHTE Funktion und faelscht nur ihre Raender: Modell, Binary,
+    ffmpeg-Aufruf und den Unterprozess.
+    """
+    import json as _json
+    monkeypatch.setattr(w, "modell_datei", lambda m, onLine=None: "ggml.bin")
+    monkeypatch.setattr(w, "binaer", lambda: "whisper-cli")
+    # Genau das Format, das `_wav` schreibt (16 kHz, mono, s16) — 7 Sekunden davon.
+    monkeypatch.setattr(w, "_wav",
+                        lambda audio, ziel: open(ziel, "wb").write(b"\0" * (44 + 32000 * 7)))
+
+    class FakeProc:
+        def __init__(self, cmd, **kw):
+            # whisper-cli schreibt sein JSON nach `-of <praefix>.json`; die Attrappe tut dasselbe,
+            # damit der Lesepfad darunter echt bleibt.
+            with open(cmd[cmd.index("-of") + 1] + ".json", "w", encoding="utf-8") as fh:
+                _json.dump({"transcription": [_seg(" hallo", [_tok(" hallo")], 0, 2000)]}, fh)
+            self.stderr = iter(["whisper : progress =  50%\n"])
+
+        def wait(self):
+            return 0
+
+    monkeypatch.setattr(w.subprocess, "Popen", FakeProc)
+    d = w.transkribiere("a.m4a", "large-v3", "de", onLine=lambda z: None)
+    assert d["duration"] == 7.0
+    # Und die Kette bis zum Ende: 2 s Transkript in 7 s Aufnahme ist noch keine Luecke,
+    # 2 s in 300 s waere eine — geprueft wird hier die Verdrahtung, nicht die Schwelle.
+    assert d["segments"][0]["end"] == 2.0

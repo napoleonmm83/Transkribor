@@ -457,7 +457,9 @@ class _FakeModell:
 
     def transcribe(self, f, **opts):
         self.gesehen.append(opts)
-        return iter(()), types.SimpleNamespace(language="de")
+        # `duration` gehoert zu faster-whispers TranscriptionInfo und wird seit #83 gelesen —
+        # eine Attrappe ohne das Feld waere eine Attrappe der Vorgaengerfassung.
+        return iter(()), types.SimpleNamespace(language="de", duration=12.0)
 
 
 def test_datei_lauf_haengt_den_proxy_wieder_aus():
@@ -609,3 +611,90 @@ def test_schwelle_klemmt_werte_ausserhalb_der_spanne(monkeypatch):
         assert transcribe.MIX_SCHWELLE == erwartet, wert
     monkeypatch.undo()
     importlib.reload(transcribe)
+
+
+# --- Abdeckung: uebersprungene Whisper-Fenster (#83) -------------------------
+#
+# Der Wert dieser Wache liegt an den RAENDERN, und genau die sind ohne echtes Audio pruefbar:
+# ein Loch am Anfang (vor dem ersten Segment), eines am Ende (nach dem letzten — dafuer braucht
+# es die Audiodauer, sonst ist es unsichtbar) und der Extremfall, dass ueberhaupt nichts kam.
+
+def _seg(start, end):
+    return {"start": start, "end": end}
+
+
+def test_luecke_mitten_im_transkript_wird_gemeldet():
+    """Der belegte Fall aus #82: 18 s am Stueck fehlten, ausgerechnet die Antwort auf die
+    erste Interviewfrage. Kein Flag, kein auffaelliger avg_logprob — nur die Abdeckung."""
+    luecken = transcribe.luecken([_seg(0, 12), _seg(30, 40)], dauer=40)
+    assert luecken == [{"start": 12, "end": 30, "dauer": 18}]
+
+
+def test_kurze_pause_ist_keine_luecke():
+    """Die Gegenprobe, ohne die der Hinweis bei jedem Interview stuende: eine Denkpause, ein
+    Themenwechsel, das Umsetzen des Mikrofons. Ein Daueralarm ist derselbe Schaden von der
+    anderen Seite — er wird weggesehen."""
+    assert transcribe.luecken([_seg(0, 12), _seg(26, 40)], dauer=40) == []
+
+
+def test_luecke_VOR_dem_ersten_segment_wird_gemeldet():
+    """Der Anfang zaehlt ab 0, nicht ab dem ersten Segment — sonst waere ausgerechnet der
+    belegte Fall (die erste Antwort fehlt) der eine, den die Wache nicht sieht."""
+    assert transcribe.luecken([_seg(20, 30)], dauer=30)[0] == {"start": 0.0, "end": 20, "dauer": 20}
+
+
+def test_luecke_NACH_dem_letzten_segment_braucht_die_dauer():
+    """Ohne Audiodauer ist ein uebersprungenes Fenster am Dateiende nicht bemerkbar: das
+    Transkript endet einfach frueher, und nichts widerspricht. Deshalb reist `duration` aus
+    BEIDEN Engines mit."""
+    segs = [_seg(0, 10)]
+    assert transcribe.luecken(segs, dauer=60) == [{"start": 10, "end": 60, "dauer": 50}]
+    assert transcribe.luecken(segs, dauer=None) == []          # unbekannt -> nicht raten
+
+
+def test_ganz_ohne_segmente_ist_die_datei_EINE_luecke():
+    """Der Extremfall. Whisper liefert eine leere Liste, `text` ist "" — im Editor sieht das
+    aus wie eine stille Aufnahme, und ohne diese Zeile behauptet der Lauf 'fertig'."""
+    assert transcribe.luecken([], dauer=600) == [{"start": 0.0, "end": 600, "dauer": 600}]
+
+
+def test_ueberlappende_segmente_erfinden_keine_luecke():
+    """`max(stand, ende)` statt `ende`: zieht ein kuerzeres Folgesegment die Marke zurueck,
+    meldete ausgerechnet DICHTES Material eine Luecke. Whisper liefert bei Temperatur-
+    Rueckfall gelegentlich solche Ueberlappungen."""
+    assert transcribe.luecken([_seg(0, 40), _seg(5, 10), _seg(40, 50)], dauer=50) == []
+
+
+def test_segment_ohne_zeiten_verschiebt_die_marke_nicht():
+    """Ein Segment ohne start/end sagt ueber Abdeckung nichts. Es zu ueberspringen ist
+    richtig; es als `0` zu lesen zoege die Marke auf den Dateianfang zurueck."""
+    assert transcribe.luecken([_seg(0, 10), {"text": "x"}, _seg(12, 20)], dauer=20) == []
+
+
+def test_roh_json_traegt_die_luecken(tmp_path, monkeypatch):
+    """Die Verdrahtung: gerechnet wird an der Stelle, an der beide Engines zusammenlaufen und
+    geschrieben wird. Die Attrappe liefert Segmente 0-1 und 1-2 bei `duration` 2.0 — also
+    keine Luecke; der Schluessel muss trotzdem dastehen, sonst haengt der Editor an
+    `undefined` statt an einer leeren Liste."""
+    proj, _ = _lauf_projekt(tmp_path, monkeypatch)
+    transcribe.transcribe_project("P", "large-v3", "de")
+    roh = json.loads((proj / "transkripte" / "a.json").read_text(encoding="utf-8"))
+    assert roh["luecken"] == []
+    assert roh["duration"] == 2.0
+
+
+def test_lauf_meldet_die_luecke_und_die_ECHTE_audiolaenge(tmp_path, monkeypatch, capsys):
+    """Zwei Behauptungen in einer Zeile, beide vorher falsch bzw. abwesend: die Meldung nennt
+    die Luecke, und `Audio` ist die Laenge der AUFNAHME. Bis eben stand dort das Ende des
+    letzten Segments — fehlen die letzten Fenster, meldet genau das die zu kurze Zahl, die den
+    Verlust verdeckt."""
+    proj, _ = _lauf_projekt(tmp_path, monkeypatch)
+    # Die Attrappe transkribiert 2 s; hier steht eine 5 Minuten lange Aufnahme dahinter —
+    # also 298 s, zu denen Whisper nichts geliefert hat.
+    monkeypatch.setattr(_Info, "duration", 300.0)
+    transcribe.transcribe_project("P", "large-v3", "de")
+    roh = json.loads((proj / "transkripte" / "a.json").read_text(encoding="utf-8"))
+    assert roh["luecken"] == [{"start": 2.0, "end": 300.0, "dauer": 298.0}]
+    aus = capsys.readouterr().out
+    assert "Abschnitt(e) ohne Transkript" in aus
+    assert "Audio 5:00" in aus                    # nicht 0:02 — das war die verdeckende Zahl

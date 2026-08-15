@@ -275,7 +275,53 @@ def _ergebnis(segmente, info):
     segs = [asdict(s) for s in segmente]        # ERST hier laeuft die Transkription (lazy)
     return {"text": "".join(s["text"] for s in segs),
             "segments": segs,
-            "language": info.language}
+            "language": info.language,
+            # Die Laenge der AUFNAHME, nicht die des Transkripts — ohne sie ist ein
+            # uebersprungenes Fenster am DATEIENDE nicht bemerkbar (siehe `luecken`).
+            "duration": info.duration}
+
+
+# Ab welcher Laenge ein Abschnitt ohne Segment gemeldet wird. Whispers Fenster ist 30 s; der
+# belegte Verlust aus #82 war ein Stueck von 18 s. Darunter liegt der Alltag: eine Denkpause,
+# ein Themenwechsel, das Umsetzen des Mikrofons. Die Zahl soll jemanden HINSCHAUEN lassen,
+# nicht selbst entscheiden — eine Luecke ist nicht automatisch Stille (im belegten Fall war der
+# uebersprungene Abschnitt mit -30 bis -40 dB LAUTER als der transkribierte davor mit -45 dB).
+LUECKE_MIN_S = 15.0
+
+
+def luecken(segmente, dauer=None, schwelle=LUECKE_MIN_S):
+    """Abschnitte ohne Segment, die laenger als `schwelle` sind -> [{start, end, dauer}].
+
+    **Der einzige Weg, einen uebersprungenen Whisper-Block zu sehen (#83).** Whisper kann ein
+    30-Sekunden-Fenster ungelesen weiterschieben, ohne dass irgendetwas im Ergebnis darauf
+    hinweist: kein Flag, keine Warnung, kein auffaelliger `avg_logprob`. Genau das tat der
+    `initial_prompt` (#82) — **17 von 37** Aufnahmen trugen den Schaden ueber Wochen, und
+    bemerkt wurde er erst, als ein Nutzer beim Lesen die fehlende Antwort auf die erste Frage
+    vermisste. **Qualitaetsschwellen taugen dafuer nicht**: es gibt dort kein schlechtes
+    Segment, es gibt gar keines. Nur die Abdeckung sieht fehlenden Inhalt.
+
+    Der Prompt ist weg, die Klasse nicht — die no-speech-Schwelle und degenerierte
+    Decoder-Zustaende ueberspringen ebenso, und jede kuenftige Parameteraenderung kann
+    dasselbe stille Loch erzeugen.
+
+    Reine Funktion: der Wert der Wache haengt an den Raendern (Anfang vor dem ersten Segment,
+    Ende nach dem letzten, ein Ergebnis ganz OHNE Segmente), und die will man ohne 3 GB Modell
+    und echtes Audio pruefen koennen. `dauer=None` (unbekannt) heisst: das Dateiende bleibt
+    ungeprueft, alles davor nicht.
+    """
+    stand, raus = 0.0, []
+    for s in segmente:
+        start, ende = s.get("start"), s.get("end")
+        if not isinstance(start, (int, float)) or not isinstance(ende, (int, float)):
+            continue                  # ein Segment ohne Zeiten sagt ueber Abdeckung nichts
+        if start - stand > schwelle:
+            raus.append({"start": stand, "end": start, "dauer": start - stand})
+        # `max`, nicht `ende`: ueberlappende oder unsortierte Segmente duerfen die Marke nicht
+        # ZURUECKziehen — sonst meldete ausgerechnet dichtes Material Luecken.
+        stand = max(stand, ende)
+    if isinstance(dauer, (int, float)) and dauer - stand > schwelle:
+        raus.append({"start": stand, "end": dauer, "dauer": dauer - stand})
+    return raus
 
 
 def _datei_sprachwahl(proj_dir, base, fallback):
@@ -427,6 +473,10 @@ def transcribe_project(name, model, language, only=None):
             print(f"[{name}] FEHLER {base}: {e}", flush=True)
             continue
         dt = time.time() - t0
+        # EINE Stelle fuer beide Engines: hier laufen der faster-whisper- und der
+        # whisper.cpp-Pfad zusammen, und hier wird geschrieben. In `_transkribiere_datei`
+        # stuende die Wache vor der Verzweigung — oder zweimal.
+        result["luecken"] = luecken(result.get("segments") or [], result.get("duration"))
         with open(out_json, "w", encoding="utf-8") as fh:
             json.dump(result, fh, ensure_ascii=False, indent=1)
         with open(os.path.join(out_dir, base + ".raw.txt"), "w", encoding="utf-8") as fh:
@@ -434,9 +484,17 @@ def transcribe_project(name, model, language, only=None):
         with open(os.path.join(out_dir, base + ".segments.txt"), "w", encoding="utf-8") as fh:
             for seg in result["segments"]:
                 fh.write(f"[{fmt(seg['start'])} - {fmt(seg['end'])}] {seg['text'].strip()}\n")
-        dur = result["segments"][-1]["end"] if result["segments"] else 0
+        # `duration` ist die Laenge der AUFNAHME. Bis eben stand hier das Ende des letzten
+        # Segments unter der Beschriftung „Audio" — fehlen die letzten Fenster, meldet das
+        # genau die zu kurze Zahl, die den Verlust verdeckt. Der Rueckfall gilt Laeufen ohne
+        # das Feld (alte Roh-JSON, whisper.cpp ohne lesbare WAV).
+        dur = result.get("duration") or (result["segments"][-1]["end"] if result["segments"] else 0)
         print(f"[{name}] fertig {base}: {dt:.0f}s, {len(result['segments'])} Segmente, "
               f"Audio {fmt(dur)}, {dur/max(dt,1):.1f}x", flush=True)
+        if result["luecken"]:
+            orte = ", ".join(f"{fmt(l['start'])}-{fmt(l['end'])}" for l in result["luecken"])
+            print(f"[{name}] ⚠ {base}: {len(result['luecken'])} Abschnitt(e) ohne Transkript "
+                  f"({orte}) — bitte im Ton gegenhoeren", flush=True)
 
     print(f"[{name}] -> {out_dir}", flush=True)
 

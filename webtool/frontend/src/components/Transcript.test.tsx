@@ -43,6 +43,36 @@ describe('Transcript', () => {
     expect(screen.getByText('b.edit.json.kaputt')).toBeInTheDocument()   // wo sie liegt
   })
 
+  it('meldet Abschnitte ohne Transkript — und schweigt, wenn es keine gibt', () => {
+    // #83: ein uebersprungenes Whisper-Fenster hinterlaesst KEIN schlechtes Segment, sondern
+    // gar keines. Im belegten Fall (#82) stand der Verlust wochenlang in 17 von 37 Aufnahmen,
+    // weil ihn nichts anzeigte. Die Gegenprobe zaehlt genauso: ein Kasten, der immer steht,
+    // wird weggesehen — und eine leere Liste ist der Normalfall.
+    const zeige = (d: EditDoc) => render(<TooltipProvider><Transcript doc={d} activeId={null}
+      onPlaySeg={vi.fn()} onPlayTurn={vi.fn()} updateSegment={vi.fn()} renameSpeaker={vi.fn()} updateDoc={vi.fn()} /></TooltipProvider>)
+    const leer = zeige({ ...doc, luecken: [] })
+    expect(screen.queryByText(/ohne Transkript/)).toBeNull()
+    leer.unmount()
+    // Und ohne den Schluessel ueberhaupt (edit.json von vor diesem Feature).
+    const alt = zeige(doc)
+    expect(screen.queryByText(/ohne Transkript/)).toBeNull()
+    alt.unmount()
+    zeige({ ...doc, luecken: [{ start: 252, end: 270, dauer: 18 }, { start: 717, end: 751, dauer: 34 }] })
+    expect(screen.getByText(/2 Abschnitte ohne Transkript/)).toBeInTheDocument()
+    // Die Zeitmarken sind der ganze Zweck: ohne sie weiss niemand, WO er gegenhoeren soll.
+    expect(screen.getByText('4:12–4:30')).toBeInTheDocument()
+    expect(screen.getByText('11:57–12:31')).toBeInTheDocument()
+  })
+
+  it('zaehlt eine einzelne Luecke im Singular', () => {
+    // „1 Abschnitte" liest sich wie ein Fehler des Programms — und ein Hinweis, dem man die
+    // Sorgfalt nicht abnimmt, wird als Rauschen behandelt. Genau das darf er nicht werden.
+    render(<TooltipProvider><Transcript doc={{ ...doc, luecken: [{ start: 0, end: 20, dauer: 20 }] }}
+      activeId={null} onPlaySeg={vi.fn()} onPlayTurn={vi.fn()} updateSegment={vi.fn()}
+      renameSpeaker={vi.fn()} updateDoc={vi.fn()} /></TooltipProvider>)
+    expect(screen.getByText(/Ein Abschnitt ohne Transkript/)).toBeInTheDocument()
+  })
+
   it('Name im Block-Kopf benennt global um, nicht nur das Segment', () => {
     const renameSpeaker = vi.fn(), updateSegment = vi.fn()
     render(<TooltipProvider><Transcript doc={doc} activeId={null}

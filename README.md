@@ -69,6 +69,14 @@ richtig — er wird im ganzen Dokument nachgezogen, auch in Kontext, Zusammenfas
 Anmerkungen, und steht so auch im Export richtig da. **Speichern musst du nichts:** kurz nach
 jeder Änderung sichert Transkribor von selbst, oben links steht, woran es gerade ist.
 
+**Es sagt dir, wo es nichts gehört hat.** Manchmal überspringt die Spracherkennung ein Stück
+Aufnahme — nicht falsch verstanden, sondern gar nicht angefasst. Im Text ist davon nichts zu
+sehen: dort steht dann einfach nichts, wo jemand etwas gesagt hat. Transkribor hält deshalb die
+Länge der Aufnahme gegen das, was tatsächlich im Transkript steht, und meldet dir oben im
+Editor jede Stelle mit Zeitangabe, an der länger als eine Viertelminute nichts angekommen ist.
+Ob dort wirklich etwas fehlt oder einfach niemand geredet hat, hörst du in Sekunden nach — von
+allein wäre es dir kaum aufgefallen.
+
 **Stellen wiederfinden.** Das Suchfeld oben im Editor durchsucht das ganze Transkript: Treffer
 bleiben hell, alles andere tritt in den Hintergrund, und mit `▲` `▼` springst du von Fundstelle
 zu Fundstelle — bei mehreren tausend Wörtern die schnellste Art, „wo hat er genau das gesagt?".
