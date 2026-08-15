@@ -98,6 +98,25 @@ describe('DateiEinstellungenDialog', () => {
   })
 })
 
+describe('DateiEinstellungenDialog — Zustand beim Öffnen', () => {
+  it('zeigt nach einem fehlgeschlagenen GET NICHT das Formular des vorigen Aufrufs', async () => {
+    /* Ohne Rücksetzen bleibt `data` aus dem letzten erfolgreichen Laden stehen: der Dialog
+       stünde bedienbar da, mit den Werten einer ANDEREN Datei, und ein Klick auf Speichern
+       schriebe sie auf die jetzt geöffnete. Der Fall ist selten, die Folge still. */
+    const spy = vi.spyOn(api, 'getFileEinstellungen').mockResolvedValue(BASIS)
+    const { rerender } = render(
+      <DateiEinstellungenDialog project="p" base="a" file={datei()} offen />)
+    await screen.findByText('Schweizerdeutsch')          // erster Aufruf geladen
+
+    rerender(<DateiEinstellungenDialog project="p" base="a" file={datei()} offen={false} />)
+    spy.mockRejectedValue(new Error('weg'))
+    rerender(<DateiEinstellungenDialog project="p" base="b" file={datei()} offen />)
+    await waitFor(() => expect(
+      screen.queryByRole('combobox', { name: /Sprache/ })).not.toBeInTheDocument())
+    spy.mockRestore()
+  })
+})
+
 describe('DateiEinstellungenDialog — mehrsprachig', () => {
   const wahl = () => screen.getByRole('combobox', { name: /mehrere sprachen/i })
   const waehle = async (label: RegExp) => {
