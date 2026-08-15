@@ -482,7 +482,18 @@ def aktualisiere() -> bool:
         os.makedirs(os.path.dirname(settings.path()) or ".", exist_ok=True)
     except OSError as e:
         print(f"[ytdlp] Sperrverzeichnis nicht anlegbar: {e}", flush=True)
-    with sperre.datei(settings.path() + ".ytdlp", stale=PIP_TIMEOUT + 30):
+    # Die Frist muss die WIRKLICHE Haltedauer decken, nicht nur den pip-Lauf (#207): das
+    # `_merken()` unten nimmt INNERHALB dieser Sperre das settings-Lock und wartet darauf
+    # schlimmstenfalls dessen volle `sperre.frist()`. Mit `PIP_TIMEOUT + 30` stand eine
+    # Haltedauer von bis zu 185 s gegen eine Frist von 155 s — ein Warter uebernahm die
+    # Sperre also, waehrend pip noch lief, und genau die zwei gleichzeitigen `pip install`
+    # auf dieselbe venv sind der Schaden, gegen den sie gebaut ist. Die 30 s bleiben der
+    # Zuschlag fuer `subprocess.run`s Nach-Kill-`communicate()`, das auf Windows ohne Frist
+    # laeuft. Preis: ein Lock OHNE Auskunft (fremder Rechner, unschreibbarer Merker) gilt
+    # entsprechend spaeter als verwaist — ein toter lokaler Halter wird weiterhin sofort
+    # erkannt, die Uhr ist nur der Rueckfall.
+    with sperre.datei(settings.path() + ".ytdlp",
+                      stale=PIP_TIMEOUT + 30 + sperre.frist()):
         try:
             p = subprocess.run(cmd, capture_output=True, text=True, errors="replace",
                                timeout=PIP_TIMEOUT)

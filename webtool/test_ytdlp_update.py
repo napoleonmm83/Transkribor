@@ -5,6 +5,7 @@ Zwei Dinge stellt die Fixture IMMER sicher, und beide sind keine Kosmetik:
 sonst schriebe der Test in Marcus' echte), und `subprocess.run` ist gefaelscht (ein Test,
 der echtes pip startet, aendert die venv des Entwicklers waehrend der Lauf laeuft).
 """
+import contextlib
 import datetime as dt
 import subprocess
 import threading
@@ -12,7 +13,7 @@ import time
 
 import pytest
 
-from webtool import settings
+from webtool import settings, sperre
 from webtool import ytdlp_update as yu
 
 HEUTE = dt.date(2026, 8, 13)
@@ -896,6 +897,35 @@ def test_merker_und_pip_nehmen_VERSCHIEDENE_locks(monkeypatch):
     # steht statt eines roten Tests ein haengender pytest da.
     threading.Thread(target=lambda: (yu.aktualisiere(), fertig.set()), daemon=True).start()
     assert fertig.wait(5), "aktualisiere() haengt — vermutlich Selbst-Deadlock der Sperren"
+
+
+def test_pip_sperre_deckt_die_VERSCHACHTELTE_wartezeit_mit(monkeypatch):
+    """#207: die Frist der pip-Sperre muss laenger sein, als ihr Abschnitt dauern KANN — sonst
+    uebernimmt ein Warter sie, waehrend pip noch laeuft, und zwei `pip install` schreiben in
+    dasselbe site-packages.
+
+    Der Abschnitt ist nicht nur der pip-Lauf: `_merken()` nimmt DARIN das settings-Lock und
+    wartet darauf schlimmstenfalls dessen volle Frist. Genau diese Haelfte fehlte in der
+    Rechnung — `PIP_TIMEOUT + 30` ergab 155 s Frist gegen bis zu 185 s Haltedauer.
+
+    Geprueft wird die ZUSAGE an die Sperre, nicht die Wanduhr: 185 s echter Wartezeit hat kein
+    Test, und ein Nachbau mit gestauchten Konstanten pruefte die Konstanten des Nachbaus.
+    """
+    gesehen = {}
+
+    @contextlib.contextmanager
+    def datei(pfad, stale=sperre.STALTES_ALTER):
+        gesehen[pfad] = stale
+        yield
+
+    monkeypatch.setattr(yu.sperre, "datei", datei)      # trifft auch das settings-Lock in _merken
+    _, run = _pip()
+    monkeypatch.setattr(yu.subprocess, "run", run)
+    yu.aktualisiere()
+    # So lange kann der Abschnitt unter der pip-Sperre dauern …
+    haltedauer = yu.PIP_TIMEOUT + sperre.frist()
+    # … und so lange darf er es laut der Zusage, die die Sperre bekommen hat.
+    assert sperre.frist(gesehen[settings.path() + ".ytdlp"]) > haltedauer
 
 
 def test_zustand_trennt_unlesbar_von_nicht_installiert(monkeypatch):
