@@ -698,3 +698,29 @@ def test_lauf_meldet_die_luecke_und_die_ECHTE_audiolaenge(tmp_path, monkeypatch,
     aus = capsys.readouterr().out
     assert "Abschnitt(e) ohne Transkript" in aus
     assert "Audio 5:00" in aus                    # nicht 0:02 — das war die verdeckende Zahl
+
+
+def test_unsortierte_segmente_erfinden_keine_luecke():
+    """Der Kommentar behauptete das schon, der Code konnte es nicht (CodeRabbit an PR #212).
+
+    Ohne Sortieren laeuft die Marke am ersten Eintrag auf 40 und sieht das spaetere 0-12 nie:
+    gemeldet wuerde `0-30 fehlt` statt richtig `12-30`. Ein Waechter gegen stillen Verlust,
+    der selbst Falsches meldet, verbraucht genau das Vertrauen, von dem er lebt — und beim
+    naechsten echten Fund sieht jemand darueber hinweg."""
+    assert transcribe.luecken([_seg(30, 40), _seg(0, 12)], dauer=40) == [
+        {"start": 12, "end": 30, "dauer": 18}]
+
+
+def test_die_grenze_selbst_zaehlt_als_luecke():
+    """Grenzen prueft man AUF der Grenze, nicht daneben. `LUECKE_MIN_S` heisst „ab", das Issue
+    sagt „ab 15 s" — mit `>` fiele genau dieser Wert heraus (CodeRabbit an PR #212). Beide
+    Richtungen, sonst ist es nur die halbe Aussage."""
+    grenze = transcribe.LUECKE_MIN_S
+    knapp = grenze - 0.1
+    # in der Mitte …
+    assert transcribe.luecken([_seg(0, 10), _seg(10 + grenze, 40)], dauer=40)[0]["dauer"] == grenze
+    assert transcribe.luecken([_seg(0, 10), _seg(10 + knapp, 40)], dauer=40) == []
+    # … und am DATEIENDE, das ist eine eigene Vergleichszeile: die Mutationsprobe fand sie
+    # ungedeckt (`>=` dort zurueck auf `>` liess alle Tests gruen).
+    assert transcribe.luecken([_seg(0, 10)], dauer=10 + grenze)[0]["dauer"] == grenze
+    assert transcribe.luecken([_seg(0, 10)], dauer=10 + knapp) == []
