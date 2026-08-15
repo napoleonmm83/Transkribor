@@ -101,6 +101,13 @@ def speichern(project: str, patch: dict) -> dict:
         return cur
 
 
+# Sentinel fuer `setze_datei`: den Datei-Override ENTFERNEN, statt einen zu setzen. `None` heisst
+# dort bereits "nicht anfassen" (Partial-Update), `True`/`False` heissen "setzen" — fuer "folgt
+# wieder dem Projekt" braucht es einen dritten Wert. Es ist dieselbe Unterscheidung, an der
+# `datei_mehrsprachig` haengt: der SCHLUESSEL entscheidet, nicht sein Wert (#166).
+ERBEN = object()
+
+
 def setze_datei(project: str, base: str, sprache=None, korrektur=None, mehrsprachig=None) -> dict:
     with _gesperrt(project):
         cur, kaputt = _lesen(project)
@@ -111,7 +118,9 @@ def setze_datei(project: str, base: str, sprache=None, korrektur=None, mehrsprac
             eintrag["sprache"] = sprache
         if korrektur is not None:
             eintrag["korrektur"] = korrektur
-        if mehrsprachig is not None:
+        if mehrsprachig is ERBEN:
+            eintrag.pop("mehrsprachig", None)
+        elif mehrsprachig is not None:
             eintrag["mehrsprachig"] = bool(mehrsprachig)
         cur["dateien"][base] = eintrag
         _write(project, cur)
@@ -126,6 +135,18 @@ def datei_sprache(project: str, base: str) -> str:
 def datei_korrektur(project: str, base: str) -> str:
     d = laden(project)
     return d["dateien"].get(base, {}).get("korrektur") or d["korrektur"]
+
+
+def datei_override_mehrsprachig(project: str, base: str) -> bool | None:
+    """Hat die Datei einen EIGENEN Haken — und welchen? `None` heisst „folgt dem Projekt".
+
+    Getrennt von `datei_mehrsprachig` (das den effektiven Wert liefert), weil die Oberflaeche
+    beides braucht: die drei Zustaende zur Auswahl und den Projektwert als Beschriftung. Aus dem
+    effektiven Wert allein laesst sich „folgt dem Projekt" nicht ablesen — er sieht identisch
+    aus wie ein Override, der zufaellig dasselbe sagt (#166).
+    """
+    e = laden(project)["dateien"].get(base, {})
+    return bool(e["mehrsprachig"]) if "mehrsprachig" in e else None
 
 
 def datei_mehrsprachig(project: str, base: str) -> bool:

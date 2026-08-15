@@ -20,6 +20,13 @@
  *  daneben bringt sein eigenes mit. Doppelte ids wären ungültiges HTML und die Beschreibung
  *  landete am falschen Element.
  */
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+
+const ERKLAERUNG =
+  'Die oben gewählte Sprache gilt als Hauptsprache; andere werden im Verlauf erkannt. '
+  + 'Bei einsprachigen Aufnahmen ausgeschaltet lassen — dort schadet die Erkennung mehr, '
+  + 'als sie nützt.'
+
 export function MehrsprachigKasten({ wert, setzen, id = 'mehrsprachig' }: {
   wert: boolean
   setzen: (w: boolean) => void
@@ -38,11 +45,51 @@ export function MehrsprachigKasten({ wert, setzen, id = 'mehrsprachig' }: {
         />
         <span>Enthält weitere Sprachen</span>
       </label>
-      <p id={hinweisId} className="mt-1 pl-6 text-muted-foreground">
-        Die oben gewählte Sprache gilt als Hauptsprache; andere werden im Verlauf erkannt.
-        Bei einsprachigen Aufnahmen ausgeschaltet lassen — dort schadet die Erkennung mehr,
-        als sie nützt.
-      </p>
+      <p id={hinweisId} className="mt-1 pl-6 text-muted-foreground">{ERKLAERUNG}</p>
+    </div>
+  )
+}
+
+/** `null` = folgt dem Projekt. */
+export type MehrWahl = boolean | null
+
+/**
+ * Dieselbe Frage für EINE Datei — und dort braucht sie einen dritten Zustand: „folgt dem
+ * Projekt". Ein Kästchen kann das nicht, es kennt nur an und aus (#166).
+ *
+ * Warum das zählt: `projekt.datei_mehrsprachig` löst den Rückfall über die ANWESENHEIT des
+ * Schlüssels auf (ein bewusst gesetztes `false` ist falsy und fiele mit `or` auf den
+ * Projektwert zurück). Genau richtig — nur gab es danach keinen Weg zurück: sobald der
+ * Schlüssel einmal in `projekt.json` stand, zog die Datei bei einer Änderung des
+ * Projekt-Standards nicht mehr mit, und nichts in der Oberfläche sagte, warum.
+ *
+ * Der Projektwert steht IN der Beschriftung („folgt dem Projekt (aus)"), nicht daneben: die
+ * Auswahl entscheidet sonst über einen Wert, den man erst woanders nachschlagen muss.
+ */
+export function MehrsprachigWahl({ wert, setzen, projektwert, id = 'mehrwahl' }: {
+  wert: MehrWahl
+  setzen: (w: MehrWahl) => void
+  projektwert: boolean
+  id?: string
+}) {
+  const hinweisId = `${id}-hinweis`
+  const alsText = wert === null ? 'erben' : wert ? 'ja' : 'nein'
+  return (
+    <div className="text-sm">
+      <label id={`${id}-lbl`} className="mb-1.5 block font-medium">Mehrere Sprachen</label>
+      <Select
+        value={alsText}
+        onValueChange={v => setzen(v === 'erben' ? null : v === 'ja')}
+      >
+        <SelectTrigger className="w-full" aria-labelledby={`${id}-lbl`}
+          aria-describedby={hinweisId}><SelectValue /></SelectTrigger>
+        <SelectContent>
+          <SelectItem value="erben">Folgt dem Projekt ({projektwert ? 'ja' : 'nein'})</SelectItem>
+          <SelectItem value="ja">Ja — enthält weitere Sprachen</SelectItem>
+          <SelectItem value="nein">Nein — nur die gewählte Sprache</SelectItem>
+        </SelectContent>
+      </Select>
+      <p id={hinweisId} className="mt-1 text-muted-foreground">{ERKLAERUNG}</p>
     </div>
   )
 }

@@ -54,7 +54,12 @@ export function ProjectWorkspace() {
     setSprache(''); setMehrsprachig(false)
     getProjektEinstellungen(project)
       .then(d => { if (aktiv) { setEinstellungen(d); setSprache(d.sprache); setMehrsprachig(d.mehrsprachig) } })
-      .catch(() => { /* Badge/Select bleiben aus — Upload/Korrektur laufen unverändert */ })
+      // Nicht mehr still (#215): ohne Auswahl gilt stillschweigend der Projektstandard — die
+      // richtige Voreinstellung, aber wer bewusst eine andere Sprache setzen wollte, findet das
+      // Bedienelement schlicht nicht und kann „gibt es hier nicht" nicht von „ist gerade kaputt"
+      // unterscheiden. Der Upload startet die Transkription sofort, eine falsche Sprache kostet
+      // einen kompletten Lauf. Kein Wiederholversuch: ein Neuladen der Seite genügt.
+      .catch(e => { if (aktiv) toast.error(`Projekt-Einstellungen laden fehlgeschlagen: ${(e as Error).message}`) })
     return () => { aktiv = false }
   }, [project])
 
@@ -72,7 +77,15 @@ export function ProjectWorkspace() {
   // String weg): sind die Einstellungen gar nicht geladen (Fehler beim GET -> keine Auswahl
   // gerendert), schluege ein hartes `false` einen auf true stehenden Projekt-Standard — der
   // Nutzer saehe kein Kaestchen und bekaeme trotzdem einen Datei-Override. undefined = keiner.
-  const mehrWert = zeigeSprachwahl ? mehrsprachig : undefined
+  //
+  // Und er geht nur mit, wenn er vom Projektstandard ABWEICHT (#166): `datei_mehrsprachig`
+  // loest den Rueckfall ueber die Anwesenheit des Schluessels auf — ein mitgeschickter Wert,
+  // der ohnehin dem Projekt entspricht, macht daraus einen echten Override, und die Datei zieht
+  // bei einer spaeteren Aenderung des Projekt-Standards nicht mehr mit. Vorher trug damit
+  // praktisch JEDE hochgeladene Datei einen eigenen Eintrag, und der Projektwert wirkte nur noch
+  // auf Altbestand. Wer bewusst abweicht, bekommt den Override — genau dann ist er gemeint.
+  const mehrWert = zeigeSprachwahl && einstellungen && mehrsprachig !== einstellungen.mehrsprachig
+    ? mehrsprachig : undefined
   // projektRef hält den aktuellen Projekt-Namen fuer reloadEinstellungen — die Antwort
   // von Projekt A darf nicht landen, nachdem auf Projekt B gewechselt wurde (dasselbe
   // Muster wie der `aktiv`-Riegel oben, nur fuer den Speichern-Reload-Pfad).
@@ -82,7 +95,7 @@ export function ProjectWorkspace() {
     if (!project) return
     getProjektEinstellungen(project)
       .then(d => { if (projectRef.current === project) { setEinstellungen(d); setSprache(d.sprache); setMehrsprachig(d.mehrsprachig) } })
-      .catch(() => {})
+      .catch(e => { if (projectRef.current === project) toast.error(`Projekt-Einstellungen laden fehlgeschlagen: ${(e as Error).message}`) })
   }
 
   // Discovery laufender Jobs steht im ProjektDatenProvider — sie gilt fuer ALLE Projekte,

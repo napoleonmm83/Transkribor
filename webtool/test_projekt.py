@@ -183,6 +183,52 @@ def test_datei_false_schlaegt_projekt_true(tmp_path, monkeypatch):
     assert projekt.datei_mehrsprachig("p", "a") is False
 
 
+def test_ERBEN_entfernt_den_override_wieder(tmp_path, monkeypatch):
+    """Der Rueckweg aus #166. Ohne ihn war der Schluessel, einmal geschrieben, endgueltig:
+    die Datei zog bei einer Aenderung des Projekt-Standards nie wieder mit, und nichts in der
+    Oberflaeche sagte, warum. `None` kann diesen Dienst NICHT tun — es heisst bereits
+    "nicht anfassen" (Partial-Update), sonst liesse sich kein Feld einzeln setzen."""
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    projekt.speichern("p", {"mehrsprachig": True})
+    projekt.setze_datei("p", "a", mehrsprachig=False)
+    assert projekt.datei_mehrsprachig("p", "a") is False        # Override greift
+    projekt.setze_datei("p", "a", mehrsprachig=projekt.ERBEN)
+    assert projekt.datei_override_mehrsprachig("p", "a") is None
+    assert projekt.datei_mehrsprachig("p", "a") is True         # ... und folgt wieder dem Projekt
+    # Der Projektwert zieht jetzt auch nach: genau das, was vorher unmoeglich war.
+    projekt.speichern("p", {"mehrsprachig": False})
+    assert projekt.datei_mehrsprachig("p", "a") is False
+
+
+def test_ERBEN_laesst_die_ANDEREN_felder_stehen(tmp_path, monkeypatch):
+    """Ein Rueckweg, der nebenbei die Sprache verwirft, waere ein Datenverlust — und der
+    faellt erst beim naechsten Transkriptionslauf auf."""
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    projekt.setze_datei("p", "a", sprache="en", korrektur="leicht", mehrsprachig=True)
+    projekt.setze_datei("p", "a", mehrsprachig=projekt.ERBEN)
+    assert projekt.datei_sprache("p", "a") == "en"
+    assert projekt.datei_korrektur("p", "a") == "leicht"
+
+
+def test_ERBEN_auf_einer_datei_OHNE_override_wirft_nicht(tmp_path, monkeypatch):
+    """Zweimal zuruecksetzen ist kein Fehler — `pop` mit Default statt `del`."""
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    projekt.setze_datei("p", "a", mehrsprachig=projekt.ERBEN)
+    assert projekt.datei_override_mehrsprachig("p", "a") is None
+
+
+def test_override_unterscheidet_gleichlautend_von_geerbt(tmp_path, monkeypatch):
+    """`datei_mehrsprachig` allein kann das nicht: ein Override, der zufaellig dasselbe sagt
+    wie das Projekt, sieht dort identisch aus wie "folgt dem Projekt" — die Oberflaeche
+    koennte den Rueckweg also weder anzeigen noch beschriften."""
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    projekt.speichern("p", {"mehrsprachig": True})
+    projekt.setze_datei("p", "a", mehrsprachig=True)         # gleichlautender Override
+    assert projekt.datei_mehrsprachig("p", "a") is True
+    assert projekt.datei_override_mehrsprachig("p", "a") is True
+    assert projekt.datei_override_mehrsprachig("p", "b") is None   # nie angefasst
+
+
 def test_nicht_dekodierbare_projekt_json_faellt_auf_defaults(tmp_path, monkeypatch):
     """`json.JSONDecodeError` deckt nur das PARSEN. Sind die BYTES nicht als UTF-8
     dekodierbar, wirft schon das Lesen im Textmodus einen `UnicodeDecodeError` — ebenfalls

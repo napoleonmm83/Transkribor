@@ -42,6 +42,7 @@ beforeEach(() => {
   vi.mocked(api.deleteFile).mockResolvedValue(undefined)
   vi.mocked(api.getFileEinstellungen).mockResolvedValue({
     sprache: 'ch', korrektur: 'auto', mehrsprachig: false,
+    mehrsprachig_eigen: null, mehrsprachig_projekt: false,
     sprach_choices: [{ id: 'ch', label: 'Schweizerdeutsch', hint: '' }, { id: 'en', label: 'Englisch', hint: '' }],
     tiefen: [{ id: 'auto', label: 'Automatisch (aus Sprache)' }, { id: 'voll_dialekt', label: 'Voll' }, { id: 'leicht', label: 'Leicht' }],
   })
@@ -191,9 +192,9 @@ describe('Sprache & Korrektur-Tiefe', () => {
     // Readiness über den Sprache-Trigger; der Tiefe-Trigger zeigt bei korrektur='auto' das
     // Auto-Label (seit #141 in TIEFEN enthalten — dasselbe wie beim Projekt-Dialog).
     await screen.findByText('Schweizerdeutsch')
-    // Tiefe-Select ist der letzte combobox im Dialog.
-    const comboboxes = document.body.querySelectorAll('[role="combobox"]')
-    fireEvent.click(comboboxes[comboboxes.length - 1])
+    // Ueber den Namen, NICHT ueber "letzter combobox": seit #166 steht die Mehrsprachig-Auswahl
+    // dahinter, und der Index zeigte dann still auf das falsche Bedienelement.
+    fireEvent.click(screen.getByRole('combobox', { name: /korrektur-tiefe/i }))
     fireEvent.click(await screen.findByText('Leicht'))
     fireEvent.click(screen.getByRole('button', { name: 'Speichern & neu korrigieren' }))
     await waitFor(() => expect(api.startCorrectFile).toHaveBeenCalledWith('P', 'a', true))

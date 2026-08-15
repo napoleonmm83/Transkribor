@@ -321,9 +321,16 @@ def dateieinstellungen(project: str, base: str):
     _validate(project, base)
     if not find_audio(project, base) and not os.path.exists(_raw_path(project, base)):
         raise HTTPException(status_code=404, detail=f"keine Datei: {base}")
+    # Drei Werte statt einem: `mehrsprachig` ist der EFFEKTIVE Wert (was die Transkription
+    # nimmt), `mehrsprachig_eigen` der Datei-Override (`null` = folgt dem Projekt) und
+    # `mehrsprachig_projekt` der Standard, den sie dann erbt. Ohne die letzten beiden kann die
+    # Oberflaeche „folgt dem Projekt" nicht von einem gleichlautenden Override unterscheiden
+    # und den Rueckweg nicht beschriften (#166).
     return {"sprache": _projekt.datei_sprache(project, base),
             "korrektur": _projekt.datei_korrektur(project, base),
             "mehrsprachig": _projekt.datei_mehrsprachig(project, base),
+            "mehrsprachig_eigen": _projekt.datei_override_mehrsprachig(project, base),
+            "mehrsprachig_projekt": _projekt.laden(project)["mehrsprachig"],
             "sprach_choices": _sprachen.fuer_frontend(), "tiefen": _sprachen.TIEFEN}
 
 
@@ -340,11 +347,20 @@ def dateieinstellungen_speichern(project: str, base: str, body: EinstellungenBod
                                     mehrsprachig=body.mehrsprachig)
     if fehler:
         raise HTTPException(status_code=400, detail=fehler)
+    # `mehrsprachig: null` AUSDRUECKLICH gesendet heisst „Override entfernen" (die Datei folgt
+    # wieder dem Projekt, #166); das Feld GAR NICHT zu senden laesst ihn stehen (Partial-Update,
+    # der bestehende Vertrag). Beides ist `None` im Modell — unterschieden wird an
+    # `model_fields_set`, also wieder an der ANWESENHEIT des Schluessels statt an seinem Wert.
+    mehr = body.mehrsprachig
+    if mehr is None and "mehrsprachig" in body.model_fields_set:
+        mehr = _projekt.ERBEN
     _projekt.setze_datei(project, base, sprache=body.sprache, korrektur=body.korrektur,
-                         mehrsprachig=body.mehrsprachig)
+                         mehrsprachig=mehr)
     return {"sprache": _projekt.datei_sprache(project, base),
             "korrektur": _projekt.datei_korrektur(project, base),
-            "mehrsprachig": _projekt.datei_mehrsprachig(project, base)}
+            "mehrsprachig": _projekt.datei_mehrsprachig(project, base),
+            "mehrsprachig_eigen": _projekt.datei_override_mehrsprachig(project, base),
+            "mehrsprachig_projekt": _projekt.laden(project)["mehrsprachig"]}
 
 
 class NewProject(BaseModel):
