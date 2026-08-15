@@ -9,6 +9,8 @@ import * as api from '@/lib/api'
 import type { Settings, ProjectFile } from '@/lib/types'
 
 vi.mock('@/lib/api')
+const toastMock = vi.hoisted(() => Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn(), dismiss: vi.fn() }))
+vi.mock('sonner', () => ({ toast: toastMock }))
 
 const einstellungen = (s: Partial<Settings>) =>
   vi.mocked(api.getSettings).mockResolvedValue({ ai_ready: true, ai_reason: '', ...s } as Settings)
@@ -344,6 +346,23 @@ describe('ProjectWorkspace (Stub)', () => {
       fireEvent.change(screen.getByTestId('upload-input'), { target: { files: [new File(['x'], 'a.mp3')] } })
     })
     await waitFor(() => expect(api.uploadAudio).toHaveBeenCalledWith('Demo', expect.any(File), '', undefined))
+  })
+
+  it('meldet einen fehlgeschlagenen Einstellungs-GET, statt ihn zu verschlucken (#215)', async () => {
+    /* Ohne Auswahl gilt stillschweigend der Projektstandard — die richtige Voreinstellung,
+       aber ein FEHLENDES Bedienelement ist von „gibt es hier nicht" nicht zu unterscheiden.
+       Der Upload startet die Transkription sofort, eine falsche Sprache kostet einen ganzen
+       Lauf. Der Toast ist die einzige Stelle, an der das ueberhaupt auftaucht — ohne diesen
+       Test ist er Dekoration (die Mutationsprobe hat ihn genau so ueberlebt). */
+    toastMock.error.mockClear()
+    vi.mocked(api.listProjects).mockResolvedValue([{ name: 'Demo', dateien: 0, fertig: 0, geaendert: 0, active_jobs: [] }])
+    vi.mocked(api.getProjectFiles).mockResolvedValue({ name: 'Demo', files: [] })
+    vi.mocked(api.getProjektEinstellungen).mockRejectedValue(new Error('kaputt'))
+    zeigen()
+    await waitFor(() => expect(toastMock.error).toHaveBeenCalledWith(
+      expect.stringContaining('kaputt')))
+    // Der Grund gehoert dazu: „Fehler" allein sagt niemandem, was zu tun ist.
+    expect(toastMock.error).toHaveBeenCalledWith(expect.stringContaining('Einstellungen'))
   })
 
   it('traegt die Sprache eines Projekts nicht ins naechste', async () => {
