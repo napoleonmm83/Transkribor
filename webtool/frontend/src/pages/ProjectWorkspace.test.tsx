@@ -250,29 +250,73 @@ describe('ProjectWorkspace (Stub)', () => {
     await waitFor(() => expect(vi.mocked(api.getProjectFiles).mock.calls.length).toBeGreaterThan(versuche))
   })
 
-  it('zeigt Sprach-Badge und reicht die Sprache an beide Picker durch', async () => {
+  const mitSprachen = () => {
     vi.mocked(api.listProjects).mockResolvedValue([{ name: 'Demo', dateien: 0, fertig: 0, geaendert: 0, active_jobs: [] }])
     vi.mocked(api.getProjectFiles).mockResolvedValue({ name: 'Demo', files: [] })
     vi.mocked(api.getProjektEinstellungen).mockResolvedValue({
       sprache: 'ch', korrektur: 'auto', mehrsprachig: false,
-      sprach_choices: [{ id: 'ch', label: 'Schweizerdeutsch', hint: '' }],
+      sprach_choices: [{ id: 'ch', label: 'Schweizerdeutsch', hint: '' },
+                       { id: 'en', label: 'Englisch', hint: '' }],
       tiefen: [{ id: 'auto', label: 'Auto' }],
     })
-    render(
-      <MemoryRouter initialEntries={['/p/Demo']}>
-        <JobProvider>
-          <ProjektDatenProvider>
-            <EditorBrueckeProvider>
-              <Routes><Route path="/p/:project" element={<ProjectWorkspace />} /></Routes>
-            </EditorBrueckeProvider>
-          </ProjektDatenProvider>
-        </JobProvider>
-      </MemoryRouter>,
-    )
-    // Badge + zwei Select-Triggers zeigen alle das Sprach-Label — beweist: Einstellungen
-    // geladen, sprache gesetzt, sprachChoices durchgereicht (nicht nur an einen Picker).
-    const treffer = await screen.findAllByText('Schweizerdeutsch')
-    expect(treffer).toHaveLength(3)
-    expect(screen.getAllByRole('combobox')).toHaveLength(2)
+  }
+
+  const zeigen = () => render(
+    <MemoryRouter initialEntries={['/p/Demo']}>
+      <JobProvider>
+        <ProjektDatenProvider>
+          <EditorBrueckeProvider>
+            <Routes><Route path="/p/:project" element={<ProjectWorkspace />} /></Routes>
+          </EditorBrueckeProvider>
+        </ProjektDatenProvider>
+      </JobProvider>
+    </MemoryRouter>,
+  )
+
+  it('zeigt Sprach-Badge und GENAU EINE Sprachauswahl, die Upload UND URL-Import steuert', async () => {
+    /* Vorher trugen Upload und URL-Import je einen eigenen Waehler — beide an derselben
+       State, also zwei Ansichten desselben Werts. Der Test haelt beides fest: dass es nur
+       noch EINEN gibt (Anzahl), und dass er trotzdem BEIDE Wege erreicht (die Umstellung
+       auf Englisch kommt bei uploadAudio und bei fetchUrls an). Nur die Anzahl zu pruefen
+       liesse einen Waehler durchgehen, der nichts mehr bewirkt. */
+    mitSprachen()
+    vi.mocked(api.uploadAudio).mockResolvedValue({ base: 'a', file: 'a.mp3' })
+    vi.mocked(api.fetchUrls).mockResolvedValue({ job_id: 'j1', started: true })
+    zeigen()
+    // Badge (Projekt-Standard) + EIN Select-Trigger: waeren es zwei Waehler, stuende das
+    // Label dreimal da — genau so sah der doppelte Zustand aus.
+    expect(await screen.findAllByText('Schweizerdeutsch')).toHaveLength(2)
+    expect(screen.getAllByRole('combobox')).toHaveLength(1)
+    expect(screen.getAllByText(/Enthält weitere Sprachen/)).toHaveLength(1)
+
+    // shadcn Select portalt nach document.body → container-Query greift nicht, body schon.
+    fireEvent.click(document.body.querySelector('[role="combobox"]')!)
+    fireEvent.click(await screen.findByText('Englisch'))
+
+    await act(async () => {
+      fireEvent.change(screen.getByTestId('upload-input'), { target: { files: [new File(['x'], 'a.mp3')] } })
+    })
+    await waitFor(() => expect(api.uploadAudio).toHaveBeenCalledWith('Demo', expect.any(File), 'en', false))
+
+    fireEvent.change(screen.getByLabelText('Video-URLs'), { target: { value: 'https://youtu.be/a' } })
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /holen/i })) })
+    await waitFor(() => expect(api.fetchUrls).toHaveBeenCalledWith('Demo', ['https://youtu.be/a'], 'en', false))
+  })
+
+  it('schickt ohne geladene Einstellungen KEIN mehrsprachig mit', async () => {
+    /* Schlaegt der GET fehl, wird die Auswahl gar nicht gerendert. Ein hartes `false` wuerde
+       dann einen auf true stehenden Projekt-Standard ueberschreiben, ohne dass der Nutzer je
+       ein Kaestchen gesehen haette — undefined heisst „kein Datei-Override". Die Entscheidung
+       lag frueher in beiden Kindern; sie ist mit dem Waehler hierher gewandert. */
+    vi.mocked(api.listProjects).mockResolvedValue([{ name: 'Demo', dateien: 0, fertig: 0, geaendert: 0, active_jobs: [] }])
+    vi.mocked(api.getProjectFiles).mockResolvedValue({ name: 'Demo', files: [] })
+    vi.mocked(api.getProjektEinstellungen).mockRejectedValue(new Error('kaputt'))
+    vi.mocked(api.uploadAudio).mockResolvedValue({ base: 'a', file: 'a.mp3' })
+    zeigen()
+    await waitFor(() => expect(screen.queryAllByRole('combobox')).toHaveLength(0))
+    await act(async () => {
+      fireEvent.change(screen.getByTestId('upload-input'), { target: { files: [new File(['x'], 'a.mp3')] } })
+    })
+    await waitFor(() => expect(api.uploadAudio).toHaveBeenCalledWith('Demo', expect.any(File), '', undefined))
   })
 })

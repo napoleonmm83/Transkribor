@@ -15,8 +15,9 @@
  *  `getByLabelText` findet den Kasten so wie so; gehört also zu dem, was man wissen muss,
  *  nicht zu dem, was ein Test hält.
  *
- *  `id` wird von aussen gereicht, weil das Kästchen zweimal auf derselben Seite steht
- *  (Upload und URL-Import) — doppelte ids wären ungültiges HTML und die Beschreibung
+ *  `id` wird von aussen gereicht, weil zwei Kästchen gleichzeitig im DOM stehen können — die
+ *  Arbeitsfläche zeigt eines im Bereich „Material hinzufügen", und der Einstellungs-Dialog
+ *  daneben bringt sein eigenes mit. Doppelte ids wären ungültiges HTML und die Beschreibung
  *  landete am falschen Element.
  */
 export function MehrsprachigKasten({ wert, setzen, id = 'mehrsprachig' }: {
