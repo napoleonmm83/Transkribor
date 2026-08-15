@@ -45,12 +45,16 @@ export function gestrichen(was: string, inhalt: string, zurueck: () => void) {
     inhalt.trim() ? `${was} „${kurz(inhalt.trim())}“ gestrichen` : `${was} gestrichen`,
     {
       duration: 10_000,
-      action: { label: 'Rückgängig', onClick: zurueck },
-      // Ein Toast, der von selbst zugeht oder weggewischt wird, gehoert nicht mehr auf die
-      // Liste — sonst waechst sie mit jeder Streichung weiter, und `streichungenVergessen`
-      // schickt beim naechsten Dokumentwechsel ein `dismiss` an lauter Kennungen, die es
-      // nicht mehr gibt (CodeRabbit-Bot). Beide Haken, weil sonner zwei Wege kennt: Ablauf
-      // der Zeit und aktives Schliessen.
+      // Ein Toast, der zugeht, gehoert nicht mehr auf die Liste — sonst waechst sie mit jeder
+      // Streichung weiter, und `streichungenVergessen` schickt beim naechsten Dokumentwechsel
+      // lauter `dismiss` an Kennungen, die es nicht mehr gibt (CodeRabbit-Bot).
+      //
+      // Es braucht ALLE DREI Haken: sonner kennt drei Wege hinaus, und der Klick auf die
+      // Aktion — also der Normalfall dieses Toasts — meldet sich bei keinem der beiden
+      // anderen. In `sonner/dist/index.mjs:882` laeuft `action.onClick`, danach direkt
+      // `deleteToast()`, OHNE `onDismiss` oder `onAutoClose` zu rufen (nachgelesen, nicht
+      // angenommen). Wer hier aufraeumt, raeumt deshalb im Rueckruf selbst mit auf.
+      action: { label: 'Rückgängig', onClick: () => { vergiss(id); zurueck() } },
       onAutoClose: () => { vergiss(id) },
       onDismiss: () => { vergiss(id) },
     },
