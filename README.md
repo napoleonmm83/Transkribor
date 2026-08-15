@@ -94,8 +94,8 @@ wollte — also genau die Stellen, an denen sich Nachhören lohnt. Die Liste geh
 Anmerkung geradeziehen, eine erledigte streichen (Text löschen genügt) oder eine eigene
 ergänzen. Und zu einem einzelnen Satz im Gespräch legst du über das Sprechblasen-Symbol eine
 Notiz an — „hier nachfragen“ steht dann direkt bei der Stelle und im Export mit unter den
-Anmerkungen. **Versehentlich gestrichen?** Es blendet sich kurz ein Hinweis mit
-„Rückgängig“ ein — ein Klick darauf holt den Eintrag an seine Stelle zurück.
+Anmerkungen. **Versehentlich eine Anmerkung oder eine Notiz gestrichen?** Es blendet sich kurz
+ein Hinweis ein, der den gestrichenen Text nennt — ein Klick auf „Rückgängig“ holt ihn zurück.
 
 **Untertitel für YouTube.** Ein Klick erzeugt eine `.srt`-Datei, die du bei YouTube hochlädst;
 sie ersetzt die schwachen Automatik-Untertitel. Die Sprechernamen kannst du dabei ein- oder
