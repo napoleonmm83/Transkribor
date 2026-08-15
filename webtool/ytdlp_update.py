@@ -1,9 +1,11 @@
 """Selbstaktualisierung von yt-dlp.
 
-`pip install -r requirements.txt` laeuft in der installierten App genau EINMAL — beim ersten
-Start. `electron/setup.js:venvVollstaendig()` prueft danach nur noch, ob torch, faster_whisper,
-fastapi und uvicorn importierbar sind; ist das gruen, laeuft `einrichten()` nie wieder. Ein
-App-Update ersetzt die .exe, nicht die venv (die liegt in `userData` und ueberlebt bewusst).
+`pip install -r requirements.txt` laeuft in der installierten App im Regelfall genau EINMAL —
+beim ersten Start. Ein App-Update ersetzt die .exe, nicht die venv (die liegt in `userData` und
+ueberlebt bewusst). Seit #181 vergleicht `electron/setup.js` zusaetzlich einen Hash der
+requirements.txt und bietet einen Nachlauf an — der aendert hier aber nichts: er greift nur in
+der GEPACKTEN App und nur, wenn der Nutzer auf der Einrichtungsseite klickt. Ein
+Entwickler-Checkout und eine von Hand verwaltete venv sehen ihn nie.
 **yt-dlp friert damit auf dem Installationstag ein** — ausgerechnet bei der Abhaengigkeit, die
 kaputtgehen MUSS: ihre Extraktoren laufen YouTube und Instagram hinterher (#162).
 `yt-dlp>=…` in requirements.txt schuetzt nur Neuinstallationen, Renovate nur das Repo.
@@ -420,8 +422,8 @@ def faellig() -> bool:
     g = geprueft()
     if _ejs_untauglich():
         # #179: `yt-dlp[default]` kam erst mit #178 in die requirements.txt, und die liest
-        # eine installierte App nie wieder (`setup.js:venvVollstaendig()` winkt die venv
-        # durch, ein App-Update ersetzt die .exe, nicht die venv). Am Kalender gemessen
+        # eine installierte App im Regelfall nie wieder (ein App-Update ersetzt die .exe,
+        # nicht die venv; der Nachlauf aus #181 verlangt einen Klick). Am Kalender gemessen
         # faellt das nie auf: die Fassung kann taufrisch sein, der Loeser hat trotzdem keine
         # Skripte — also der Stand vor #170, samt demselben sporadischen 403.
         #

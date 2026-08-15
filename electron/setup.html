@@ -142,11 +142,14 @@ function zeigeStatus(s) {
   if (s.venv) {
     $('sub').textContent = 'Alles bereit — starte …'
     $('los').style.display = 'none'
-  } else if (s.venvVeraltet) {
+  } else if (s.venvVeraltet && !s.hinweis) {
     // Kein „mehrere GB“-Text: hier fehlen nur die Pakete, die seit der Installation
     // dazugekommen sind. PyTorch und Whisper liegen längst da.
+    // `!s.hinweis`, weil dieser Zweig VOR dem Hinweis-Zweig steht: fehlt daneben Python oder
+    // ffmpeg, ist der Terminal-Befehl die dringendere Auskunft — ein Klick endete sonst an
+    // „Kein Python >= 3.10 gefunden“.
     $('sub').textContent = 'Dieses Update bringt neue Python-Pakete mit. Ein Klick auf ' +
-      '„Jetzt einrichten“ holt sie nach — das dauert meist unter einer Minute.'
+      '„Jetzt einrichten“ holt sie nach — die grossen Sachen sind schon da.'
     $('los').style.display = ''
   } else if (s.hinweis) {
     $('sub').textContent = 'Transkribor braucht Python und ffmpeg. Bitte den Befehl unten einmal ' +
