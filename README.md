@@ -160,8 +160,8 @@ dort schaust du auf der
 
 Manche Updates bringen neue Programmteile mit — meist für den Video-Import. Dann meldet sich nach
 dem Neustart einmal die Einrichtungsseite und sagt es dir; ein Klick auf **„Jetzt einrichten“**
-holt sie nach. Die grossen Sachen (PyTorch, Whisper) bleiben liegen — es wird nichts noch einmal
-heruntergeladen, was du schon hast.
+holt sie nach. Die grossen Sachen (PyTorch, Whisper) bleiben dabei normalerweise liegen — was in
+einer passenden Fassung schon da ist, wird nicht noch einmal geholt.
 
 **Ein Video-Import schlägt fehl — was nun?** Meistens hat die Plattform etwas umgebaut. Warte
 kurz und versuche es noch einmal: Transkribor frischt den Downloader beim ersten Fehlversuch
