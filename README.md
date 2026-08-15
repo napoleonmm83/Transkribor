@@ -158,6 +158,11 @@ dich die App genauso und führt dich zur Release-Seite; auto-heruntergeladen wir
 dort schaust du auf der
 [Releases-Seite](https://github.com/napoleonmm83/Transkribor/releases/latest) nach.
 
+Manche Updates bringen neue Bausteine für die Spracherkennung mit. Dann meldet sich nach dem
+Neustart einmal die Einrichtungsseite und sagt es dir; ein Klick auf **„Jetzt einrichten“** holt
+sie nach, meist in unter einer Minute. Die grossen Sachen (PyTorch, Whisper) bleiben liegen — es
+wird nichts noch einmal heruntergeladen, was du schon hast.
+
 **Ein Video-Import schlägt fehl — was nun?** Meistens hat die Plattform etwas umgebaut. Warte
 kurz und versuche es noch einmal: Transkribor frischt den Downloader beim ersten Fehlversuch
 selbst auf und lädt dann gleich weiter. Klappt es danach immer noch nicht, hilft der Knopf
