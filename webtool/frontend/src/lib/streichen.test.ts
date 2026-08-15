@@ -57,6 +57,20 @@ describe('streichungenVergessen', () => {
     expect(toastMock.dismiss).toHaveBeenCalledWith(toastMock.mock.results[1].value)
   })
 
+  it('raeumt den Toast auch weg, wenn der Rueckweg GEKLICKT wurde', () => {
+    // Der Normalfall dieses Toasts — und der einzige Weg hinaus, den sonner weder ueber
+    // `onDismiss` noch ueber `onAutoClose` meldet: `dist/index.mjs:882` ruft `action.onClick`
+    // und danach `deleteToast()`, sonst nichts. Ohne das Aufraeumen im Rueckruf selbst waere
+    // ausgerechnet der haeufigste Fall der einzige, der die Liste wachsen laesst.
+    const zurueck = vi.fn()
+    gestrichen('Anmerkung', 'geklickt', zurueck)
+    optsVon(0).action.onClick()
+    expect(zurueck).toHaveBeenCalledTimes(1)
+
+    streichungenVergessen()
+    expect(toastMock.dismiss).not.toHaveBeenCalled()
+  })
+
   it('raeumt auch einen von Hand weggewischten Toast von der Liste', () => {
     gestrichen('Anmerkung', 'weggewischt', () => {})
     optsVon(0).onDismiss()
