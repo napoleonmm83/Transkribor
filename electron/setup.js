@@ -431,15 +431,25 @@ async function einrichten(onLine, onSchritt) {
   onSchritt('Whisper und Werkzeuge laden')
   code = await lauf(vpy, ['-m', 'pip', 'install', '-r', P.requirements], onLine)
   if (code !== 0) return { ok: false, fehler: 'Python-Pakete konnten nicht installiert werden.' }
-  await cudaZurueckholen(vpy, pl, onLine)
+  const torchOk = await cudaZurueckholen(vpy, pl, onLine)
 
   // Geprueft wird der Import, NICHT der Merker: ein misslungenes Vermerken wuerde den Nutzer
   // sonst aussperren (kein ok -> kein Serverstart), obwohl alles installiert ist.
   onSchritt('Prüfen')
   if (!(await importeDa())) return { ok: false, fehler: 'Einrichtung unvollstaendig — bitte erneut versuchen.' }
-  // Erst NACH der Pruefung: der Merker behauptet "gegen diese requirements.txt installiert",
-  // und das soll er nur ueber eine venv sagen, die sich auch importieren laesst.
-  if (!stempelSchreiben()) onLine('Hinweis: Paketstand konnte nicht vermerkt werden — die Einrichtung meldet sich beim naechsten Start erneut.')
+  // Erst NACH der Pruefung: der Merker behauptet "fertig eingerichtet gegen diese
+  // requirements.txt", und das soll er nur ueber eine venv sagen, die sich importieren laesst.
+  //
+  // Und NICHT nach einem gescheiterten CUDA-Nachlauf: sonst gilt die venv als fertig, die
+  // Einrichtung wird nie wieder angeboten — und der Hinweis auf der Einstellungsseite
+  // („PyTorch ohne CUDA installiert — dann die Umgebung neu einrichten“) zeigt auf einen Weg,
+  // den es dann gar nicht mehr gibt. Ohne Merker bietet die Seite den Lauf beim naechsten Start
+  // erneut an; die App startet trotzdem (ok), sie rechnet nur langsam.
+  if (!torchOk) {
+    onLine('Der Paketstand wird nicht vermerkt — die Einrichtungsseite bietet den Lauf beim naechsten Start erneut an.')
+  } else if (!stempelSchreiben()) {
+    onLine('Hinweis: Paketstand konnte nicht vermerkt werden — die Einrichtung meldet sich beim naechsten Start erneut.')
+  }
   onLine('Fertig. ' + schritte.join(' · '))
   return { ok: true }
 }
