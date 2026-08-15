@@ -25,10 +25,21 @@ jobs:
   # und die st_ino-Haelfte des Ausweises — auf ext4 ist die Inode nach rmdir+mkdir in
   # 200 von 200 Faellen dieselbe, der Test kann dort also gar nicht laufen.
   #
-  # Gemessen, bevor es hier stand: in einer frischen torch-freien venv auf Windows laufen
-  # 693 Tests in 18 s durch, `test_sperre.py` meldet 27 passed und NULL skips (auf Linux
-  # sind es drei Skips). Der Job kostet also rund eine Minute und deckt drei Tests, die es
-  # vorher nirgends automatisch gab.
+  # **Es sind nicht nur die drei sperre-Tests.** Der Job faehrt zwei weitere nt-Zweige
+  # erstmals ueberhaupt aus: `jobs.py:_kill_tree` (`taskkill /F /T` — dafuer gibt es NUR
+  # POSIX-Injektionstests, einen nt-Gegenpart nicht, der Zweig lief also nirgends) und
+  # `settings.py` (%APPDATA%). Das steht hier, weil ein zu billig angeschriebener Preis
+  # dieselbe Fehlerklasse ist wie ein zu teurer: wer spaeter „windows-latest raus, kostet ja
+  # nur drei sperre-Tests" entscheidet, laege nach dieser Zeile falsch.
+  #
+  # Gemessen, nicht geschaetzt — beide Jobs desselben Laufs (31892939230):
+  # ubuntu `690 passed, 3 skipped` in 22 s, windows `693 passed, 0 skipped` in 39 s.
+  # Die Differenz IST der Zweck dieser Matrix.
+  #
+  # `-rs` macht die Skips im Protokoll sichtbar. Sonst ist dieser Waechter selbst ungewacht:
+  # ein aufgeweiteter `skipif` stellte #201 wieder her, und `-q` schriebe dazu still
+  # `692 passed, 1 skipped` — gruen. Ein echter Waechter (rot, wenn einer der drei
+  # uebersprungen ist) steht als eigenes Issue.
   #
   # `fail-fast: false` ist Absicht: bricht Windows ab, soll trotzdem sichtbar sein, ob Linux
   # gruen war — die Information, WELCHE Plattform umfaellt, ist der ganze Zweck der Matrix.
@@ -58,7 +69,7 @@ jobs:
       # norecursedirs, ein blankes `pytest` sammelt build/test_bilder.py NIE.
       # Als Pfadangabe wird die Regel ausgehebelt. Genau dafuer kommt der Test
       # ohne PIL aus.
-      - run: python -m pytest webtool build -q
+      - run: python -m pytest webtool build -q -rs
 
   frontend:
     name: Frontend
