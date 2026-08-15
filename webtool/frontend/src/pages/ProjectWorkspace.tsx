@@ -20,6 +20,22 @@ import { describePhases, KIND_LABEL } from '@/lib/jobPhases'
 import { cn } from '@/lib/utils'
 import type { ProjectEinstellungen, StartJob } from '@/lib/types'
 
+/**
+ * Nicht mehr still (#215) — und an EINER Stelle, nicht in jedem `.catch`.
+ *
+ * Ohne geladene Einstellungen gilt stillschweigend der Projektstandard. Das ist die richtige
+ * Voreinstellung, aber wer bewusst eine andere Sprache setzen wollte, findet das Bedienelement
+ * schlicht nicht und kann „gibt es hier nicht" nicht von „ist gerade kaputt" unterscheiden. Der
+ * Upload startet die Transkription sofort, eine falsche Sprache kostet einen kompletten Lauf.
+ *
+ * Kein Wiederholversuch: ein Neuladen der Seite genügt. Zwei Aufrufer (Lade-Effekt und
+ * `reloadEinstellungen`) — getrennt formuliert liefen sie auseinander, und der zweite hatte
+ * beim ersten Anlauf genau deshalb keinen Test.
+ */
+function meldeLadefehler(e: unknown) {
+  toast.error(`Projekt-Einstellungen laden fehlgeschlagen: ${(e as Error).message}`)
+}
+
 export function ProjectWorkspace() {
   const { project } = useParams<{ project: string }>()
   const navigate = useNavigate()
@@ -54,12 +70,7 @@ export function ProjectWorkspace() {
     setSprache(''); setMehrsprachig(false)
     getProjektEinstellungen(project)
       .then(d => { if (aktiv) { setEinstellungen(d); setSprache(d.sprache); setMehrsprachig(d.mehrsprachig) } })
-      // Nicht mehr still (#215): ohne Auswahl gilt stillschweigend der Projektstandard — die
-      // richtige Voreinstellung, aber wer bewusst eine andere Sprache setzen wollte, findet das
-      // Bedienelement schlicht nicht und kann „gibt es hier nicht" nicht von „ist gerade kaputt"
-      // unterscheiden. Der Upload startet die Transkription sofort, eine falsche Sprache kostet
-      // einen kompletten Lauf. Kein Wiederholversuch: ein Neuladen der Seite genügt.
-      .catch(e => { if (aktiv) toast.error(`Projekt-Einstellungen laden fehlgeschlagen: ${(e as Error).message}`) })
+      .catch(e => { if (aktiv) meldeLadefehler(e) })
     return () => { aktiv = false }
   }, [project])
 
@@ -95,7 +106,7 @@ export function ProjectWorkspace() {
     if (!project) return
     getProjektEinstellungen(project)
       .then(d => { if (projectRef.current === project) { setEinstellungen(d); setSprache(d.sprache); setMehrsprachig(d.mehrsprachig) } })
-      .catch(e => { if (projectRef.current === project) toast.error(`Projekt-Einstellungen laden fehlgeschlagen: ${(e as Error).message}`) })
+      .catch(e => { if (projectRef.current === project) meldeLadefehler(e) })
   }
 
   // Discovery laufender Jobs steht im ProjektDatenProvider — sie gilt fuer ALLE Projekte,

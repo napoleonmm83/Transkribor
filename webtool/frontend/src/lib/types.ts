@@ -50,8 +50,10 @@ export type ProjectEinstellungen = {
   sprach_choices: SprachChoice[]
   tiefen: TiefeChoice[]
 };
-/** Nur die gesetzten Werte (sprache/korrektur/mehrsprachig). Der PUT echo't genau diese drei Felder;
- *  die Wahlmoeglichkeiten (sprach_choices/tiefen) liefert nur der GET. */
+/** Nur die gesetzten Werte (sprache/korrektur/mehrsprachig). Der PROJEKT-PUT echo't genau diese
+ *  drei Felder; der DATEI-PUT liefert seit #166 zusätzlich `mehrsprachig_eigen`/`_projekt` (die
+ *  Aufrufer brauchen sie dort nicht, deshalb bleibt der engere Typ stehen).
+ *  Die Wahlmoeglichkeiten (sprach_choices/tiefen) liefert nur der GET. */
 export type EinstellungenWerte = { sprache: string; korrektur: string; mehrsprachig: boolean };
 /** Der Datei-GET liefert DREI Werte statt einem: `mehrsprachig` ist der effektive (was die
  *  Transkription nimmt), `mehrsprachig_eigen` der Datei-Override (`null` = folgt dem Projekt)

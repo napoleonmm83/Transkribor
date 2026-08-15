@@ -200,10 +200,14 @@ einem Sprachwechsel gilt auch hier — kreuzt du es bei einer schon transkribier
 wird sie neu transkribiert.
 
 Im ⋯-Menü einer einzelnen Aufnahme hast du dafür drei Möglichkeiten statt eines Kästchens:
-**„Folgt dem Projekt"**, **„Ja"** oder **„Nein"**. Die erste ist die Voreinstellung — die
-Aufnahme übernimmt dann, was du im Projekt eingestellt hast, auch wenn du das später änderst.
-Sobald du bei einer Aufnahme bewusst „Ja" oder „Nein" wählst, gilt deine Wahl für sie allein;
-mit „Folgt dem Projekt" nimmst du das wieder zurück.
+**„Folgt dem Projekt"**, **„Ja"** oder **„Nein"**. Bei der ersten übernimmt die Aufnahme, was du
+im Projekt eingestellt hast — auch wenn du das später änderst. Sobald du bei einer Aufnahme
+bewusst „Ja" oder „Nein" wählst, gilt deine Wahl für sie allein; mit „Folgt dem Projekt" nimmst
+du das wieder zurück.
+
+Bei Aufnahmen, die du **vor dieser Fassung** hinzugefügt hast, steht meist „Ja" oder „Nein" —
+damals wurde die Einstellung bei jedem Hinzufügen fest an der Aufnahme vermerkt. Wenn du willst,
+dass sie wieder dem Projekt folgen, stellst du sie einmal von Hand auf „Folgt dem Projekt".
 
 **Was passiert mit meinen Dateien?** Sie bleiben in deinem Benutzerordner — Transkribor löscht
 nichts von allein. Transkript und Korrekturen bleiben erhalten, bis du eine Aufnahme **neu

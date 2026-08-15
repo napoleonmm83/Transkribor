@@ -1,4 +1,6 @@
-/** Das Kästchen „Enthält weitere Sprachen“ — geteilt von Projekt- und Datei-Dialog.
+/** Das Kästchen „Enthält weitere Sprachen“ — Projekt-Dialog und Import-Bereich.
+ *  (Der DATEI-Dialog nimmt seit #166 `MehrsprachigWahl` weiter unten: dort gibt es einen
+ *  dritten Zustand, „folgt dem Projekt", den ein Kästchen nicht darstellen kann.)
  *
  *  Eigenes Bauteil, weil Beschriftung UND Erklärtext an beiden Stellen identisch sein müssen:
  *  zweimal dasselbe Markup hiesse, es beim nächsten Mal an einer Stelle zu vergessen (dieselbe
@@ -63,7 +65,7 @@ export type MehrWahl = boolean | null
  * Schlüssel einmal in `projekt.json` stand, zog die Datei bei einer Änderung des
  * Projekt-Standards nicht mehr mit, und nichts in der Oberfläche sagte, warum.
  *
- * Der Projektwert steht IN der Beschriftung („folgt dem Projekt (aus)"), nicht daneben: die
+ * Der Projektwert steht IN der Beschriftung („Folgt dem Projekt (nein)"), nicht daneben: die
  * Auswahl entscheidet sonst über einen Wert, den man erst woanders nachschlagen muss.
  */
 export function MehrsprachigWahl({ wert, setzen, projektwert, id = 'mehrwahl' }: {

@@ -39,6 +39,10 @@ export function DateiEinstellungenDialog({ project, base, file, offen, onOpenCha
   useEffect(() => {
     if (!offen) return
     let aktiv = true
+    // Beim Öffnen zurücksetzen, nicht nur nachladen: sonst stünde nach „Abbrechen" + einem
+    // fehlgeschlagenen GET das Formular des VORIGEN Aufrufs bedienbar da — mit `data` aus dem
+    // alten Stand, aber ohne Bezug zur jetzt geöffneten Datei.
+    setData(null)
     setLaedt(true)
     getFileEinstellungen(project, base)
       .then(d => {

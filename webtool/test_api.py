@@ -1291,6 +1291,17 @@ def test_dateieinstellungen_null_entfernt_den_override(client, tmp_projekt):
     assert projekt.datei_override_mehrsprachig(tmp_projekt, "S1") is None
 
 
+def test_projekt_PUT_mit_null_ist_ein_no_op(client, tmp_projekt):
+    """Beide Endpunkte teilen sich `EinstellungenBody` — und `mehrsprachig: null` heisst dort
+    VERSCHIEDENES: beim Datei-PUT "Override entfernen", beim Projekt-PUT nichts (das Projekt hat
+    keinen zu erbenden Wert). Ein Waechter, weil ein Modell mit zwei Bedeutungen genau die Art
+    Verwechslung ist, die beim naechsten Umbau still passiert."""
+    client.put(f"/api/projects/{tmp_projekt}/einstellungen", json={"mehrsprachig": True})
+    r = client.put(f"/api/projects/{tmp_projekt}/einstellungen", json={"mehrsprachig": None})
+    assert r.status_code == 200
+    assert r.json()["mehrsprachig"] is True         # unveraendert, nicht zurueckgesetzt
+
+
 def test_dateieinstellungen_FEHLENDES_feld_laesst_den_override_stehen(client, tmp_projekt):
     """Die Gegenprobe — ohne sie waere ein `mehr = ERBEN` fuer JEDEN Aufruf gruen, und jedes
     Speichern der Sprache raeumte nebenbei den Mehrsprachig-Haken ab."""

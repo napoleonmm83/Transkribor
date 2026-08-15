@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor, act, fireEvent } from '@testing-library/react'
+import { render, screen, waitFor, act, fireEvent, within } from '@testing-library/react'
 import { MemoryRouter, Routes, Route, useNavigate } from 'react-router-dom'
 import { ProjectWorkspace } from './ProjectWorkspace'
 import { JobProvider } from '@/hooks/useActiveJob'
@@ -363,6 +363,31 @@ describe('ProjectWorkspace (Stub)', () => {
       expect.stringContaining('kaputt')))
     // Der Grund gehoert dazu: „Fehler" allein sagt niemandem, was zu tun ist.
     expect(toastMock.error).toHaveBeenCalledWith(expect.stringContaining('Einstellungen'))
+  })
+
+  it('meldet auch den NACHLADE-Fehler nach dem Einstellungs-Dialog (#215)', async () => {
+    /* Der zweite `.catch` — `reloadEinstellungen`, ausgeloest vom Projekt-Dialog. Beide Zweige
+       haengen jetzt an EINER Meldefunktion; ohne diesen Test waere trotzdem nur der Mount-Pfad
+       belegt, und ein `() => {}` an dieser Stelle faende kein Test. Der GET gelingt beim Laden
+       und scheitert beim Nachladen — genau der Fall, den der Nutzer sonst gar nicht bemerkt. */
+    toastMock.error.mockClear()
+    mitSprachen()
+    vi.mocked(api.saveProjektEinstellungen).mockResolvedValue(
+      { sprache: 'ch', korrektur: 'auto', mehrsprachig: false })
+    zeigen()
+    await screen.findByRole('combobox')
+    // Radix oeffnet das Menue nur auf einen echten Zeigerklick — `click` allein reicht nicht.
+    fireEvent.pointerDown(screen.getByRole('button', { name: /Aktionen für/ }),
+      { button: 0, ctrlKey: false, pointerType: 'mouse' })
+    fireEvent.click(await screen.findByRole('menuitem', { name: /Sprache & Korrektur/ }))
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.click(within(dialog).getAllByRole('combobox')[0])
+    fireEvent.click(await screen.findByText(/Englisch/))
+    // Erst JETZT faellt der GET aus: der Dialog hat seinen Stand, der Nachlade-Pfad nicht.
+    vi.mocked(api.getProjektEinstellungen).mockRejectedValue(new Error('weg'))
+    fireEvent.click(within(dialog).getByRole('button', { name: /^Speichern/ }))
+    await waitFor(() => expect(toastMock.error).toHaveBeenCalledWith(
+      expect.stringContaining('weg')))
   })
 
   it('traegt die Sprache eines Projekts nicht ins naechste', async () => {
