@@ -717,10 +717,15 @@ def test_die_grenze_selbst_zaehlt_als_luecke():
     Richtungen, sonst ist es nur die halbe Aussage."""
     grenze = transcribe.LUECKE_MIN_S
     knapp = grenze - 0.1
-    # in der Mitte …
-    assert transcribe.luecken([_seg(0, 10), _seg(10 + grenze, 40)], dauer=40)[0]["dauer"] == grenze
+    # Verglichen wird das GANZE Objekt, nicht nur `dauer`: die Laenge kann stimmen, waehrend
+    # die Luecke an der falschen Stelle steht — und die Zeitmarke ist der ganze Nutzen des
+    # Hinweises im Editor (CodeRabbit an PR #212).
+    # In der Mitte …
+    assert transcribe.luecken([_seg(0, 10), _seg(10 + grenze, 40)], dauer=40) == [
+        {"start": 10, "end": 10 + grenze, "dauer": grenze}]
     assert transcribe.luecken([_seg(0, 10), _seg(10 + knapp, 40)], dauer=40) == []
     # … und am DATEIENDE, das ist eine eigene Vergleichszeile: die Mutationsprobe fand sie
     # ungedeckt (`>=` dort zurueck auf `>` liess alle Tests gruen).
-    assert transcribe.luecken([_seg(0, 10)], dauer=10 + grenze)[0]["dauer"] == grenze
+    assert transcribe.luecken([_seg(0, 10)], dauer=10 + grenze) == [
+        {"start": 10, "end": 10 + grenze, "dauer": grenze}]
     assert transcribe.luecken([_seg(0, 10)], dauer=10 + knapp) == []
