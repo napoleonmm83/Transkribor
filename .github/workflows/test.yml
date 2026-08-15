@@ -16,9 +16,29 @@ concurrency:
 jobs:
   # Namen bewusst ohne Testzahlen: die erste Zahl war nach einem einzigen PR falsch (242 -> 244),
   # und ein Jobname, der luegt, ist schlechter als einer, der nichts verspricht.
+  # Zwei Plattformen, weil `webtool/sperre.py` zwei Implementierungen hat und die CI bis
+  # #201 nur EINE davon ausfuehrte. `_prozess_lebt()` verzweigt an `os.name == "nt"`:
+  # ctypes/OpenProcess gegen `os.kill`. Auf ubuntu ist der Windows-Zweig toter Code — jede
+  # Mutation darin blieb gruen, ausgerechnet in dem Zweig, den die Zielplattform als
+  # einziger je ausfuehrt. Drei Tests haengen daran (`test_sperre.py`, skipif os.name != "nt"):
+  # die 87-Auswertung von OpenProcess, das Windows-„delete pending" beim Freigeben (#205)
+  # und die st_ino-Haelfte des Ausweises — auf ext4 ist die Inode nach rmdir+mkdir in
+  # 200 von 200 Faellen dieselbe, der Test kann dort also gar nicht laufen.
+  #
+  # Gemessen, bevor es hier stand: in einer frischen torch-freien venv auf Windows laufen
+  # 693 Tests in 18 s durch, `test_sperre.py` meldet 27 passed und NULL skips (auf Linux
+  # sind es drei Skips). Der Job kostet also rund eine Minute und deckt drei Tests, die es
+  # vorher nirgends automatisch gab.
+  #
+  # `fail-fast: false` ist Absicht: bricht Windows ab, soll trotzdem sichtbar sein, ob Linux
+  # gruen war — die Information, WELCHE Plattform umfaellt, ist der ganze Zweck der Matrix.
   python:
-    name: Python
-    runs-on: ubuntu-latest
+    name: Python (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
