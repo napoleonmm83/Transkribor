@@ -54,6 +54,24 @@ _LAUT_AB_S = 1.0
 # nie hinein: bis dahin hat der Verwaist-Zweig ein abgelaufenes Lock laengst abgeraeumt.
 _AUFGEBEN_PUFFER_S = 5.0
 
+
+def frist(stale: float = STALTES_ALTER) -> float:
+    """Wie lange ein Abschnitt unter dieser Sperre dauern darf, bevor ein Warter ihn
+    erzwungen uebernimmt.
+
+    Oeffentlich, weil `stale` eine ZUSAGE des Aufrufers ist — „mein Abschnitt ist vorher
+    fertig" —, und weil diese Zusage **jede darin genommene weitere Sperre mitrechnen muss**:
+    deren Wartezeit gehoert zur Haltedauer. Genau daran war der pip-Lock verrechnet (#207):
+    120 s pip plus bis zu `frist()` = 65 s fuer das settings-Lock aus `_merken()`, gegen eine
+    eigene Frist von 155 s. Der Warter griff also zu, waehrend pip noch lief — zwei
+    `pip install` auf dieselbe venv, der Schaden, gegen den die Sperre gebaut ist.
+
+    Die EINE Quelle: die Warteschleife unten rechnet nicht selbst, sonst driften Zusage und
+    Pruefung auseinander.
+    """
+    return stale + _AUFGEBEN_PUFFER_S
+
+
 # Wie oft `os.rmdir` beim Freigeben wiederholt wird, und wie lange dazwischen gewartet wird.
 #
 # **Windows loescht eine geoeffnete Datei nicht sofort.** `os.remove` gelingt, der Eintrag
@@ -260,6 +278,9 @@ def _wegraeumen(lockdir: str, erwartet) -> None:
 def datei(pfad: str, stale: float = STALTES_ALTER):
     """Sperrt `<pfad>.lock`. Der Aufrufer sorgt dafuer, dass das Elternverzeichnis existiert.
 
+    **`stale` ist die Zusage ueber die eigene HALTEDAUER, nicht bloss eine Aufraeumfrist** —
+    inklusive jeder Sperre, die im Abschnitt noch genommen wird (`frist()` rechnet das vor).
+
     Ein dauerhaft nicht anlegbares Lock (schreibgeschuetzter Ordner) darf den Aufrufer NICHT
     aufhalten: die Sperre schuetzt vor einer Race, sie ist nicht der Zweck des Aufrufs. Dann
     laeuft der Block ungeschuetzt weiter — aber mit einer Zeile im Protokoll, nicht still:
@@ -345,21 +366,19 @@ def datei(pfad: str, stale: float = STALTES_ALTER):
             gemeldet = True
             print(f"[sperre] warte auf {lockdir} (raeume nach {stale:.0f}s auf, falls "
                   f"verwaist) …", flush=True)
-        if time.time() - seit > stale + _AUFGEBEN_PUFFER_S:
+        if time.time() - seit > frist(stale):
             if erzwungen:
                 print(f"[sperre] {lockdir} laesst sich nicht uebernehmen — ungeschuetzt "
                       f"weiter", flush=True)
                 break
-            # Ein Halter, der sich als lebend MELDET und dabei laenger haelt, als ein
-            # kritischer Abschnitt dauern sollte (Mikrosekunden bei settings/projekt; der
-            # pip-Lauf ist mit `timeout=PIP_TIMEOUT` gedeckelt, 120 s gegen 155 s — der
-            # darin verschachtelte settings-Lock aus `_merken()` ist in dieser Rechnung NICHT
-            # enthalten, und `subprocess.run`s Nach-Kill-`communicate()` laeuft auf Windows
-            # ohne Frist; siehe webtool/CLAUDE.md), ist wahrscheinlicher eine
-            # WIEDERVERWENDETE PID als ein langsamer Prozess. Ohne diesen einen erzwungenen
-            # Griff kostete so ein Lock danach JEDEN Aufruf dauerhaft diese Frist und liesse
-            # ihn anschliessend ungeschuetzt laufen — die Uhr ist der Rueckfall der
-            # Lebendpruefung, nicht durch sie abgeschaltet.
+            # Ein Halter, der sich als lebend MELDET und dabei laenger haelt, als sein
+            # Abschnitt laut `stale` dauern darf, ist wahrscheinlicher eine WIEDERVERWENDETE
+            # PID als ein langsamer Prozess. **Das steht und faellt mit der Zusage des
+            # Aufrufers** (siehe `frist`): war sie zu knapp, trifft der Griff einen Lebenden
+            # und zwei stehen im selben Abschnitt — genau so war der pip-Lock verrechnet
+            # (#207). Ohne diesen einen erzwungenen Griff kostete so ein Lock danach JEDEN
+            # Aufruf dauerhaft diese Frist und liesse ihn anschliessend ungeschuetzt laufen —
+            # die Uhr ist der Rueckfall der Lebendpruefung, nicht durch sie abgeschaltet.
             erzwungen = True
             print(f"[sperre] {lockdir} wird uebernommen (der gemeldete Halter haelt laenger, "
                   f"als ein Abschnitt dauern kann) …", flush=True)
