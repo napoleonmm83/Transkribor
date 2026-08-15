@@ -2,6 +2,15 @@ import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { Anmerkungen } from './Anmerkungen'
 
+// `toast` ist hier zugleich Funktion (der Streich-Hinweis aus `lib/streichen`) und Namensraum
+// (`toast.info` fuer den verworfenen Eingabetext) — beides muss die Attrappe koennen.
+const toastMock = vi.hoisted(() => Object.assign(vi.fn(), { info: vi.fn() }))
+vi.mock('sonner', () => ({ toast: toastMock }))
+
+/** Die Aktion aus dem zuletzt gezeigten Toast — `undefined`, wenn gar keiner kam. */
+const rueckgaengig = () =>
+  toastMock.mock.calls.at(-1)?.[1]?.action as { label: string; onClick: () => void } | undefined
+
 /** Issue #112: die Liste war nur zu lesen — weder geradeziehen noch streichen noch ergaenzen. */
 describe('Anmerkungen', () => {
   it('zeigt die Rubrik auch leer — sonst gibt es keinen Weg zur ersten Anmerkung', () => {
@@ -49,6 +58,38 @@ describe('Anmerkungen', () => {
     fireEvent.change(feld, { target: { value: '  ' } })
     fireEvent.blur(feld)
     expect(onChange).toHaveBeenCalledWith(['offen'])
+  })
+
+  // Issue #154: die Streichung hat keine Zweitschrift (anders als der Segmenttext mit `raw_text`),
+  // und der Autosave schreibt sie 800 ms spaeter weg. Ohne Rueckweg kostet ein Fehlklick genau die
+  // Notiz darueber, dass an einer Stelle nachzuarbeiten waere.
+  it('bietet nach dem Streichen einen Rueckweg an, der den Eintrag an seiner Stelle zurueckholt', () => {
+    toastMock.mockClear()
+    const onChange = vi.fn()
+    render(<Anmerkungen items={['erste', 'zweite', 'dritte']} onChange={onChange} />)
+    fireEvent.click(screen.getByText('zweite'))
+    const feld = screen.getByRole('textbox')
+    fireEvent.change(feld, { target: { value: '' } })
+    fireEvent.blur(feld)
+    expect(onChange).toHaveBeenCalledWith(['erste', 'dritte'])
+
+    const aktion = rueckgaengig()
+    expect(aktion?.label).toBe('Rückgängig')
+    aktion!.onClick()
+    // An seiner STELLE, nicht hinten angehaengt — die Liste ist die Reihenfolge des Transkripts.
+    expect(onChange).toHaveBeenLastCalledWith(['erste', 'zweite', 'dritte'])
+  })
+
+  it('meldet beim blossen Aendern keinen Streich-Toast', () => {
+    // Gegenprobe: ein Rueckweg, der IMMER angeboten wird, ist derselbe Schaden von der anderen
+    // Seite — Dauerlaerm, bis niemand mehr hinsieht.
+    toastMock.mockClear()
+    render(<Anmerkungen items={['erste']} onChange={vi.fn()} />)
+    fireEvent.click(screen.getByText('erste'))
+    const feld = screen.getByRole('textbox')
+    fireEvent.change(feld, { target: { value: 'erste, berichtigt' } })
+    fireEvent.blur(feld)
+    expect(toastMock).not.toHaveBeenCalled()
   })
 
   it('unveraendert wieder zugeklickt schreibt gar nichts', () => {

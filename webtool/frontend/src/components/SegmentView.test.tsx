@@ -1,6 +1,14 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { SegmentView } from './SegmentView'
+
+// `toast` ist zugleich Funktion (Streich-Hinweis aus `lib/streichen`) und Namensraum
+// (`toast.info` fuer verworfenen Eingabetext) — die Attrappe muss beides koennen.
+const toastMock = vi.hoisted(() => Object.assign(vi.fn(), { info: vi.fn() }))
+vi.mock('sonner', () => ({ toast: toastMock }))
+
+const rueckgaengig = () =>
+  toastMock.mock.calls.at(-1)?.[1]?.action as { label: string; onClick: () => void } | undefined
 import { TooltipProvider } from '@/components/ui/tooltip'
 import type { Segment } from '@/lib/types'
 
@@ -109,6 +117,30 @@ describe('SegmentView', () => {
       unmount()
     }
   })
+
+  // Issue #154: dieselbe Luecke wie bei den Anmerkungen — die Notiz hat keine Zweitschrift.
+  it('bietet nach dem Streichen der Notiz einen Rueckweg an', () => {
+    toastMock.mockClear()
+    const updateSegment = vi.fn()
+    render(<TooltipProvider><SegmentView seg={mkSeg({ note: 'Name unsicher.' })} active={false} onPlay={vi.fn()} updateSegment={updateSegment} /></TooltipProvider>)
+    fireEvent.click(screen.getByText('Name unsicher.'))
+    const feld = screen.getByRole('textbox')
+    fireEvent.change(feld, { target: { value: '  ' } })
+    fireEvent.blur(feld)
+    expect(updateSegment).toHaveBeenCalledWith(1, { note: '' })
+
+    const aktion = rueckgaengig()
+    expect(aktion?.label).toBe('Rückgängig')
+    aktion!.onClick()
+    // Nur dieses eine Feld — der Rueckweg geht ueber denselben `updateSegment` wie die Streichung.
+    expect(updateSegment).toHaveBeenLastCalledWith(1, { note: 'Name unsicher.' })
+  })
+
+  // Die Gegenprobe „kein Toast, wenn nichts verloren ging“ steht in `Anmerkungen.test.tsx`, nicht
+  // hier: am Segment ist sie nicht herstellbar. `TextEditor` bricht unveraendert-nach-trim ab,
+  // also kommt auf einer leeren Notiz nie ein leeres `onCommit` an — ein Test dazu bliebe auch
+  // ohne jeden Riegel gruen (gemessen) und waere damit genau die Dekoration, die er verhindern
+  // soll.
 
   it('ohne Such-Props weder Ausgrauen noch gelber Ring (Default)', () => {
     const seg = mkSeg({ text: 'Text' })

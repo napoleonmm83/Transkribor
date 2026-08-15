@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { Plus } from 'lucide-react'
+import { gestrichen } from '@/lib/streichen'
 import { TextEditor, EINGABE_VERWORFEN } from './TextEditor'
 import { EditierbarerText } from './EditierbarerText'
 
@@ -14,7 +15,9 @@ const KEINE = new Set<number>()
  *
  * **Leeren streicht den Eintrag.** Das ist derselbe Grundsatz wie bei der Korrektur
  * (`apply_correction`: ein leerer `text` ist eine Entscheidung, kein fehlender Wert) und
- * spart den Loeschknopf je Zeile. Der Tooltip sagt es an, sonst faende es niemand.
+ * spart den Loeschknopf je Zeile. Der Tooltip sagt es an, sonst faende es niemand — und seit
+ * #154 bietet ein Toast den Rueckweg an (`lib/streichen`), denn eine Anmerkung hat im
+ * Gegensatz zum Segmenttext keine Zweitschrift.
  *
  * **Der Block steht auch leer da** — ohne das gaebe es keinen Weg, die erste eigene Anmerkung
  * anzulegen (dieselbe Lehre wie bei den Kopffeldern in #109, wo `(context || summary) &&`
@@ -25,8 +28,16 @@ export function Anmerkungen({ items, onChange, aktivIndex = null, sucheAktiv = f
   aktivIndex?: number | null; sucheAktiv?: boolean; treffer?: Set<number>;
 }) {
   const [neu, setNeu] = useState(false)
-  const setze = (i: number, text: string) =>
-    onChange(text.trim() ? items.map((a, k) => (k === i ? text : a)) : items.filter((_, k) => k !== i))
+  const setze = (i: number, text: string) => {
+    if (text.trim()) { onChange(items.map((a, k) => (k === i ? text : a))); return }
+    onChange(items.filter((_, k) => k !== i))
+    // `items` ist die Liste VOR der Streichung — der Eintrag kommt damit an seiner Stelle
+    // zurueck, nicht hinten angehaengt. Preis: wird in den vier Sekunden des Toasts eine ANDERE
+    // Anmerkung geaendert, nimmt „Rueckgaengig“ die mit zurueck. Ein Updater-Rueckruf waere der
+    // saubere Weg, kostet aber eine geaenderte Signatur bis in `useDoc` — fuer ein Fenster, in
+    // dem man den Toast erst lesen und dann noch tippen muesste.
+    gestrichen('Anmerkung', () => onChange(items))
+  }
 
   return (
     <section className="mt-12 border-t pt-5">
