@@ -3,6 +3,7 @@ import { toast } from 'sonner'
 import { CircleHelp, MessageSquare, MessageSquarePlus, Play, ScanSearch, TriangleAlert } from 'lucide-react'
 import type { Segment } from '@/lib/types'
 import { isCorrected, tokenizeUncertain } from '@/lib/uncertainty'
+import { gestrichen } from '@/lib/streichen'
 import { UncertainWord } from './UncertainWord'
 import { TextEditor, EINGABE_VERWORFEN } from './TextEditor'
 
@@ -103,8 +104,20 @@ export function SegmentView({ seg, active, onPlay, updateSegment, dimmen = false
             // `TextEditor.fertig` beim Blur auf `undefined` und risse das ganze Transkript mit.
             // Fehlen kann er nur ueber eine fremd erzeugte edit.json (`save_file` schreibt
             // jedes ankommende JSON) — fuer `text` gilt dasselbe, dort faengt es `isCorrected`.
+            // Das Streichen bietet seit #154 den Rueckweg an: die Notiz hat — anders als der
+            // Segmenttext mit seinem `raw_text` — keine Zweitschrift. Zurueck geht es ueber
+            // denselben `updateSegment`, also nur dieses eine Feld.
+            // KEIN zusaetzliches `&& seg.note` davor: es waere unerreichbar (nachgemessen, der
+            // Test blieb unter der Mutation gruen). `TextEditor` bricht unveraendert-nach-trim
+            // ab — kommt hier ein leeres `t` an, war `initial.trim()` also nicht leer, und
+            // `initial` IST `seg.note`. Ein Riegel, den kein Test rot bekommt, ist Dekoration.
             ? <div className="flex-1"><TextEditor initial={seg.note ?? ''}
-                onCommit={t => { updateSegment(seg.id, { note: t.trim() ? t : '' }); setNotiz(false) }}
+                onCommit={t => {
+                  const streicht = !t.trim()
+                  updateSegment(seg.id, { note: streicht ? '' : t })
+                  if (streicht) gestrichen('Notiz', () => updateSegment(seg.id, { note: seg.note }))
+                  setNotiz(false)
+                }}
                 onCancel={() => setNotiz(false)}
                 onVerworfen={() => toast.info(EINGABE_VERWORFEN)} /></div>
             : <button type="button" onClick={() => setNotiz(true)} title="Notiz bearbeiten (leeren streicht sie)"
