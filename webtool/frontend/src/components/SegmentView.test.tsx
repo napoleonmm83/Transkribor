@@ -136,11 +136,19 @@ describe('SegmentView', () => {
     expect(updateSegment).toHaveBeenLastCalledWith(1, { note: 'Name unsicher.' })
   })
 
-  // Die Gegenprobe „kein Toast, wenn nichts verloren ging“ steht in `Anmerkungen.test.tsx`, nicht
-  // hier: am Segment ist sie nicht herstellbar. `TextEditor` bricht unveraendert-nach-trim ab,
-  // also kommt auf einer leeren Notiz nie ein leeres `onCommit` an — ein Test dazu bliebe auch
-  // ohne jeden Riegel gruen (gemessen) und waere damit genau die Dekoration, die er verhindern
-  // soll.
+  it('meldet beim blossen Aendern der Notiz keinen Streich-Toast', () => {
+    // Gegenprobe: ein Rueckweg, der IMMER angeboten wird, ist derselbe Schaden von der anderen
+    // Seite — Dauerlaerm, bis niemand mehr hinsieht. NICHT herstellbar waere die Variante
+    // „leeres Commit auf leerer Notiz“ (`TextEditor` bricht unveraendert-nach-trim ab, es kommt
+    // dort nie eines an); das blosse AENDERN ist es sehr wohl, und es haelt denselben Riegel.
+    toastMock.mockClear()
+    render(<TooltipProvider><SegmentView seg={mkSeg({ note: 'Name unsicher.' })} active={false} onPlay={vi.fn()} updateSegment={vi.fn()} /></TooltipProvider>)
+    fireEvent.click(screen.getByText('Name unsicher.'))
+    const feld = screen.getByRole('textbox')
+    fireEvent.change(feld, { target: { value: 'Name geklaert.' } })
+    fireEvent.blur(feld)
+    expect(toastMock).not.toHaveBeenCalled()
+  })
 
   it('ohne Such-Props weder Ausgrauen noch gelber Ring (Default)', () => {
     const seg = mkSeg({ text: 'Text' })

@@ -3,6 +3,7 @@ import { toast } from 'sonner'
 import type { EditDoc, Segment } from '@/lib/types'
 import { renameSpeaker as renameInDoc } from '@/lib/grouping'
 import { getDoc, saveDoc, exportText, type ExportFmt } from '@/lib/api'
+import { streichungenVergessen } from '@/lib/streichen'
 
 const MIME: Record<ExportFmt, string> = { md: 'text/markdown', srt: 'application/x-subrip' }
 
@@ -42,6 +43,12 @@ export function useDoc(project: string | null, base: string | null) {
   const finalToastGezeigt = useRef(false)
 
   const reload = useCallback(() => {
+    // ZUERST, vor jedem frühen Rückkehren: ein offener „Rückgängig“-Toast zeigt auf das
+    // Dokument, das dieser Lauf gerade ersetzt. `updateDoc`/`updateSegment` sind stabil und
+    // schreiben per Updater ins JEWEILS offene Dokument — der Rückruf träfe also die neue
+    // Datei mit dem Eintrag der alten (gemessen im Review zu #154: Dateiwechsel UND `reload()`
+    // nach einer fertigen Korrektur). Dieselbe Achse wie #116.
+    streichungenVergessen()
     if (!project || !base) { setDoc(null); setDirty(false); setStand('ruhig'); return }
     haengt.current = false   // neue Datei → nichts baumelt in der Tipppause
     // SYNCHRON gesetzt, und `save` liest ihn synchron: ein faelliger Autosave traegt in seiner
@@ -298,6 +305,13 @@ export function useDoc(project: string | null, base: string | null) {
   // stand!=='fehler', weil der Nutzer auf 'fehler' an der Leiste explizit verwirft (#106-Review).
   useEffect(() => {
     return () => {
+      // VOR allen Wächtern, und deshalb hier zusätzlich zu `reload()`: dieser Cleanup ist der
+      // einzige Weg, der auch das **Unmount** deckt (Editor verlassen, Datei gelöscht oder neu
+      // transkribiert — `DateiMenue.wegVomEditor`). Dort schriebe der Rückweg nicht falsch,
+      // sondern **gar nicht**: React verwirft `setDoc` auf einem abgebauten Hook kommentarlos.
+      // Ein Knopf, der stumm nichts tut, nimmt dem Nutzer den Anlass, den Eintrag von Hand
+      // nachzutragen — schlechter als kein Angebot.
+      streichungenVergessen()
       if (!project || !base) return
       if (!dirtyRef.current || standRef.current === 'fehler' || !haengt.current) return
       // Und nicht, solange ein Ladelauf offen ist. Ohne diese Zeile umgeht der Flush den
