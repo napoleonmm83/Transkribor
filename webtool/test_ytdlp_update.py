@@ -142,9 +142,9 @@ def test_fassung_laedt_yt_dlp_nicht(monkeypatch):
 
 def test_fehlende_loeserskripte_machen_faellig(monkeypatch):
     """#179: `yt-dlp[default]` kam erst mit #178 in die requirements.txt — eine venv von
-    davor hat `yt-dlp-ejs` nicht, und die Datei wird in der installierten App nie wieder
-    gelesen (`setup.js:venvVollstaendig()` winkt die venv durch, ein App-Update ersetzt
-    die .exe, nicht die venv). Am Kalender gemessen faellt das NIE auf: die Fassung ist
+    davor hat `yt-dlp-ejs` nicht, und die Datei wird in der installierten App im Regelfall
+    nie wieder gelesen (ein App-Update ersetzt die .exe, nicht die venv; der Nachlauf aus
+    #181 verlangt einen Klick). Am Kalender gemessen faellt das NIE auf: die Fassung ist
     frisch, der Loeser hat trotzdem keine Skripte — und YouTube antwortet mit 403."""
     monkeypatch.setattr(yu, "fassung", lambda: "2026.8.12")       # gestern erschienen
     monkeypatch.setattr(yu, "_ejs_untauglich", lambda: True)
