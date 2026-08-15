@@ -890,6 +890,26 @@ describe('useDoc: der Rueckweg einer Streichung ueberlebt den Dokumentwechsel NI
     expect(result.current.doc!.annotations).toEqual(['korrigiert-eins', 'korrigiert-zwei'])
   })
 
+  it('vergiss() entwertet den Rueckweg — sonst weckt er die geloeschte Datei wieder auf', async () => {
+    // CodeRabbit: destruktive Aktionen (Loeschen / Neu transkribieren / Umbenennen) rufen
+    // `vergiss()` VOR dem Server-Aufruf, und der Editor steht dabei noch — der Unmount-Cleanup
+    // greift erst beim Navigieren. Ein Klick in diesem Fenster ruft `updateDoc` -> `beruehrt()`
+    // -> `dirty`, und der Autosave legt die Datei 800 ms spaeter wieder an (`save_file` schreibt
+    // bedingungslos). Genau die Waise, gegen die `vergiss` gebaut ist (#106-Review C1/C2).
+    vi.mocked(api.saveDoc).mockResolvedValue(undefined as never)
+    const { result } = await geladen()
+
+    await act(async () => {
+      result.current.updateDoc({ annotations: [] })
+      gestrichen('Anmerkung', () => result.current.updateDoc({ annotations: ['A-eins'] }))
+    })
+
+    act(() => { result.current.vergiss() })
+    expect(await klickeRueckgaengig()).toBe(false)
+    await act(async () => { await vi.advanceTimersByTimeAsync(900) })
+    expect(api.saveDoc).not.toHaveBeenCalled()
+  })
+
   it('nach dem Verlassen des Editors steht kein Rueckweg mehr, der stumm ins Leere schreibt', async () => {
     // `DateiMenue.wegVomEditor()` baut den Editor ab (Loeschen / Neu transkribieren). React
     // verwirft `setDoc` auf einem abgebauten Hook kommentarlos — der Knopf saehe aus, als

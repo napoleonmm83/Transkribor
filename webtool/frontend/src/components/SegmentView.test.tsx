@@ -122,18 +122,42 @@ describe('SegmentView', () => {
   it('bietet nach dem Streichen der Notiz einen Rueckweg an', () => {
     toastMock.mockClear()
     const updateSegment = vi.fn()
-    render(<TooltipProvider><SegmentView seg={mkSeg({ note: 'Name unsicher.' })} active={false} onPlay={vi.fn()} updateSegment={updateSegment} /></TooltipProvider>)
+    const { rerender } = render(<TooltipProvider><SegmentView seg={mkSeg({ note: 'Name unsicher.' })} active={false} onPlay={vi.fn()} updateSegment={updateSegment} /></TooltipProvider>)
     fireEvent.click(screen.getByText('Name unsicher.'))
     const feld = screen.getByRole('textbox')
     fireEvent.change(feld, { target: { value: '  ' } })
     fireEvent.blur(feld)
     expect(updateSegment).toHaveBeenCalledWith(1, { note: '' })
 
+    // Den Re-Render liefert in der App `updateSegment` -> `setDoc`; hier von Hand.
+    rerender(<TooltipProvider><SegmentView seg={mkSeg({ note: '' })} active={false} onPlay={vi.fn()} updateSegment={updateSegment} /></TooltipProvider>)
     const aktion = rueckgaengig()
     expect(aktion?.label).toBe('Rückgängig')
     aktion!.onClick()
     // Nur dieses eine Feld — der Rueckweg geht ueber denselben `updateSegment` wie die Streichung.
     expect(updateSegment).toHaveBeenLastCalledWith(1, { note: 'Name unsicher.' })
+  })
+
+  it('der Rueckweg ueberschreibt eine inzwischen NEU geschriebene Notiz nicht', () => {
+    // CodeRabbit: der Rueckruf lebt zehn Sekunden. Das Segment hat genau EIN Notizfeld — anders
+    // als bei den Anmerkungen laesst sich nichts nebeneinanderlegen. Also gilt der Rueckweg nur,
+    // solange das Feld noch so dasteht, wie die Streichung es hinterlassen hat; sonst waere er
+    // ein Ueberschreiben, und der Rettungsknopf zerstoerte, was er retten soll.
+    toastMock.mockClear()
+    const updateSegment = vi.fn()
+    const { rerender } = render(<TooltipProvider><SegmentView seg={mkSeg({ note: 'alt' })} active={false} onPlay={vi.fn()} updateSegment={updateSegment} /></TooltipProvider>)
+    fireEvent.click(screen.getByText('alt'))
+    const feld = screen.getByRole('textbox')
+    fireEvent.change(feld, { target: { value: '' } })
+    fireEvent.blur(feld)
+    expect(updateSegment).toHaveBeenCalledWith(1, { note: '' })
+    updateSegment.mockClear()
+
+    rerender(<TooltipProvider><SegmentView seg={mkSeg({ note: 'inzwischen neu' })} active={false} onPlay={vi.fn()} updateSegment={updateSegment} /></TooltipProvider>)
+    rueckgaengig()!.onClick()
+
+    expect(updateSegment).not.toHaveBeenCalled()
+    expect(toastMock.info).toHaveBeenCalledWith(expect.stringContaining('neue Notiz'))
   })
 
   it('meldet beim blossen Aendern der Notiz keinen Streich-Toast', () => {

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { Plus } from 'lucide-react'
 import { gestrichen } from '@/lib/streichen'
@@ -28,15 +28,27 @@ export function Anmerkungen({ items, onChange, aktivIndex = null, sucheAktiv = f
   aktivIndex?: number | null; sucheAktiv?: boolean; treffer?: Set<number>;
 }) {
   const [neu, setNeu] = useState(false)
+  /** Die Liste, wie sie JETZT aussieht — fuer den Rueckweg, der zehn Sekunden spaeter feuert.
+   *  Ein Ref und keine Closure: `items` aus dem Render der Streichung ist beim Klick veraltet,
+   *  und die alte Fassung zurueckzuschreiben nimmt jede zwischenzeitliche Aenderung mit
+   *  (CodeRabbit an dieser Stelle). Der Ref folgt dem Prop bei jedem Render. */
+  const aktuell = useRef(items); aktuell.current = items
   const setze = (i: number, text: string) => {
     if (text.trim()) { onChange(items.map((a, k) => (k === i ? text : a))); return }
+    const gestrichener = items[i]
     onChange(items.filter((_, k) => k !== i))
-    // `items` ist die Liste VOR der Streichung — der Eintrag kommt damit an seiner Stelle
-    // zurueck, nicht hinten angehaengt. Preis: wird in den vier Sekunden des Toasts eine ANDERE
-    // Anmerkung geaendert, nimmt „Rueckgaengig“ die mit zurueck. Ein Updater-Rueckruf waere der
-    // saubere Weg, kostet aber eine geaenderte Signatur bis in `useDoc` — fuer ein Fenster, in
-    // dem man den Toast erst lesen und dann noch tippen muesste.
-    gestrichen('Anmerkung', () => onChange(items))
+    // Der Eintrag wird in die AKTUELLE Liste zurueckgeschoben, nicht die alte wiederhergestellt.
+    // Damit ueberlebt alles, was in der Zwischenzeit passiert ist — eine geaenderte Nachbarzeile
+    // ebenso wie eine neu angelegte. Der Index ist dabei die beste Schaetzung, nicht mehr: wurde
+    // davor etwas eingefuegt, sitzt er eine Zeile daneben. Eine Verschiebung kann man sehen und
+    // korrigieren, einen verlorenen Absatz nicht.
+    // KEIN `Math.min(i, jetzt.length)` davor: `slice` klemmt seine Indizes selbst, ein zu grosser
+    // `i` haengt den Eintrag also ohnehin hinten an. Nachgemessen — die Klammerung liess sich
+    // nicht rot bekommen und waere Dekoration (dieselbe Probe wie beim `&& seg.note` unten).
+    gestrichen('Anmerkung', () => {
+      const jetzt = aktuell.current
+      onChange([...jetzt.slice(0, i), gestrichener, ...jetzt.slice(i)])
+    })
   }
 
   return (
