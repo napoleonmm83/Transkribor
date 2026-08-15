@@ -47,10 +47,12 @@ describe('UrlFetch', () => {
 
   it('bringt KEINE eigene Sprachauswahl mit', () => {
     /* Die Auswahl steht genau einmal im Bereich „Material hinzufügen" (ProjectWorkspace) und
-       gilt fuer Upload UND URL-Import. Ein zweiter Waehler hier zeigte denselben Wert ein
-       zweites Mal an — genau der Zustand, den diese Aenderung abgeschafft hat. */
+       gilt fuer Upload UND URL-Import. ZWEI Einschraenkungen, damit dieser Test nicht mehr
+       verspricht, als er haelt: er faengt nur einen BEDINGUNGSLOSEN Wiedereinbau, und seine
+       Positivkontrolle liegt im Integrationstest (`getAllByRole('combobox')).toHaveLength(1)`
+       in ProjectWorkspace.test.tsx) — der haelt die Zahl, dieser hier die Zustaendigkeit. */
     render(<UrlFetch project="Demo" onStart={vi.fn()} sprache="de" />)
-    expect(document.body.querySelector('[role="combobox"]')).toBeNull()
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
     expect(screen.queryByText(/Enthält weitere Sprachen/)).not.toBeInTheDocument()
   })
 

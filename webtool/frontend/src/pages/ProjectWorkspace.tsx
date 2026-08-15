@@ -46,6 +46,12 @@ export function ProjectWorkspace() {
     if (!project) return
     let aktiv = true
     setEinstellungen(null)         // Projektwechsel: Badge/Select verschwinden bis neu geladen
+    // …und die Sprache MIT. React Router baut dieses Element bei einem Parameterwechsel nicht
+    // neu auf, der State ueberlebt also den Projektwechsel: die Ablageflaeche ist die ganze
+    // Zeit scharf, und ein Drop zwischen Wechsel und Antwort schickte sonst die Sprache des
+    // VORIGEN Projekts als Datei-Override mit — eine falsche Sprache kostet eine komplette
+    // Neu-Transkription. '' heisst „nicht gesetzt", der Projektstandard von B gilt.
+    setSprache(''); setMehrsprachig(false)
     getProjektEinstellungen(project)
       .then(d => { if (aktiv) { setEinstellungen(d); setSprache(d.sprache); setMehrsprachig(d.mehrsprachig) } })
       .catch(() => { /* Badge/Select bleiben aus — Upload/Korrektur laufen unverändert */ })
@@ -58,11 +64,15 @@ export function ProjectWorkspace() {
   const sprachLabel = einstellungen
     ? (einstellungen.sprach_choices.find(c => c.id === einstellungen.sprache)?.label ?? einstellungen.sprache)
     : ''
+  // EIN Ausdruck fuer beide Fragen — „steht der Waehler?" und „geht ein Override mit?" sind
+  // dieselbe Frage („hat der Nutzer die Auswahl ueberhaupt gesehen?"). Zweimal notiert wuerden
+  // sie beim naechsten Zusatz (`&& !running`) still auseinanderlaufen.
+  const zeigeSprachwahl = sprachChoices.length > 0
   // Der Haken muss GENAUSO degradieren wie `sprache` (die API-Funktionen lassen einen leeren
   // String weg): sind die Einstellungen gar nicht geladen (Fehler beim GET -> keine Auswahl
   // gerendert), schluege ein hartes `false` einen auf true stehenden Projekt-Standard — der
   // Nutzer saehe kein Kaestchen und bekaeme trotzdem einen Datei-Override. undefined = keiner.
-  const mehrWert = sprachChoices.length > 0 ? mehrsprachig : undefined
+  const mehrWert = zeigeSprachwahl ? mehrsprachig : undefined
   // projektRef hält den aktuellen Projekt-Namen fuer reloadEinstellungen — die Antwort
   // von Projekt A darf nicht landen, nachdem auf Projekt B gewechselt wurde (dasselbe
   // Muster wie der `aktiv`-Riegel oben, nur fuer den Speichern-Reload-Pfad).
@@ -144,15 +154,21 @@ export function ProjectWorkspace() {
               man oben umstellte, stand unten schon anders da, ohne dass es einen Unterschied
               gab. Sie steht VOR beiden Eingaben, weil sie fuer beide gilt und weil der Job mit
               dem Hinzufuegen sofort startet — nachtraeglich kostet sie einen zweiten Lauf.
-              shadcn-Select ist ein <button>, kein <select> → aria-labelledby statt htmlFor. */}
-          {sprachChoices.length > 0 && (
+              shadcn-Select ist ein <button>, kein <select> → aria-labelledby statt htmlFor.
+              Der Geltungsbereich haengt per aria-describedby am Waehler und NICHT im Label:
+              im Label gelesen hiesse das Bedienelement „Sprache Gilt für alles, was du hier
+              hinzufügst" — dieselbe Trennung wie im Kopf von MehrsprachigKasten. Und genau
+              dieser Satz IST die Aussage der Aenderung (ein Waehler fuer beide Eingaben); ohne
+              die Bindung hoert man am Kombinationsfeld nur „Sprache". */}
+          {zeigeSprachwahl && (
             <div className="blatt p-4">
               <label id="lbl-neu-sprache" className="block text-sm font-medium">Sprache</label>
-              <p className="mb-1.5 text-sm text-muted-foreground">
+              <p id="lbl-neu-sprache-hinweis" className="mb-1.5 text-sm text-muted-foreground">
                 Gilt für alles, was du hier hinzufügst.
               </p>
               <Select value={sprache} onValueChange={setSprache}>
-                <SelectTrigger className="w-full" aria-labelledby="lbl-neu-sprache"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="w-full" aria-labelledby="lbl-neu-sprache"
+                  aria-describedby="lbl-neu-sprache-hinweis"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {sprachChoices.map(c => (
                     <SelectItem key={c.id} value={c.id}>{c.label}{c.hint && ` — ${c.hint}`}</SelectItem>

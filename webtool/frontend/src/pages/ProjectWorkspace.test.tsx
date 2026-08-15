@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor, act, fireEvent } from '@testing-library/react'
-import { MemoryRouter, Routes, Route } from 'react-router-dom'
+import { MemoryRouter, Routes, Route, useNavigate } from 'react-router-dom'
 import { ProjectWorkspace } from './ProjectWorkspace'
 import { JobProvider } from '@/hooks/useActiveJob'
 import { ProjektDatenProvider } from '@/hooks/useProjektDaten'
@@ -283,15 +283,22 @@ describe('ProjectWorkspace (Stub)', () => {
     vi.mocked(api.uploadAudio).mockResolvedValue({ base: 'a', file: 'a.mp3' })
     vi.mocked(api.fetchUrls).mockResolvedValue({ job_id: 'j1', started: true })
     zeigen()
-    // Badge (Projekt-Standard) + EIN Select-Trigger: waeren es zwei Waehler, stuende das
-    // Label dreimal da — genau so sah der doppelte Zustand aus.
-    expect(await screen.findAllByText('Schweizerdeutsch')).toHaveLength(2)
-    expect(screen.getAllByRole('combobox')).toHaveLength(1)
+    // Gezaehlt wird das Bedienelement selbst, nicht sein Beschriftungstext: eine Textzaehlung
+    // braeche auch, wenn das Sprachlabel woanders auftaucht (Pille, Dateizeile) — rot aus dem
+    // falschen Grund. Zwei Waehler wuerden hier 2 und 2 ergeben.
+    await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(1))
     expect(screen.getAllByText(/Enthält weitere Sprachen/)).toHaveLength(1)
+    // Der Geltungsbereich haengt am Waehler, nicht bloss daneben — jsdom sieht die Bindung,
+    // NICHT ihre Wirkung auf den vorgelesenen Namen; die steht im Browser-Gegencheck.
+    expect(screen.getByRole('combobox'))
+      .toHaveAttribute('aria-describedby', 'lbl-neu-sprache-hinweis')
 
     // shadcn Select portalt nach document.body → container-Query greift nicht, body schon.
     fireEvent.click(document.body.querySelector('[role="combobox"]')!)
     fireEvent.click(await screen.findByText('Englisch'))
+    // Das Badge zeigt weiter den PROJEKT-Standard: die Auswahl hier ist ein Override fuer die
+    // naechsten Aufnahmen und schreibt nicht ins Projekt zurueck.
+    expect(screen.getByText('Schweizerdeutsch')).toBeInTheDocument()
 
     await act(async () => {
       fireEvent.change(screen.getByTestId('upload-input'), { target: { files: [new File(['x'], 'a.mp3')] } })
@@ -318,5 +325,49 @@ describe('ProjectWorkspace (Stub)', () => {
       fireEvent.change(screen.getByTestId('upload-input'), { target: { files: [new File(['x'], 'a.mp3')] } })
     })
     await waitFor(() => expect(api.uploadAudio).toHaveBeenCalledWith('Demo', expect.any(File), '', undefined))
+  })
+
+  it('traegt die Sprache eines Projekts nicht ins naechste', async () => {
+    /* React Router baut dieses Element bei einem Parameterwechsel NICHT neu auf — der State
+       ueberlebt den Projektwechsel. Die Ablageflaeche ist dabei durchgehend scharf: ein Drop
+       zwischen Wechsel und Antwort des GET schickte sonst die Sprache des vorigen Projekts
+       als Override an die neue Datei, und eine falsche Sprache kostet eine komplette
+       Neu-Transkription. Deshalb haengt der zweite GET hier absichtlich. */
+    vi.mocked(api.listProjects).mockResolvedValue([
+      { name: 'A', dateien: 0, fertig: 0, geaendert: 0, active_jobs: [] },
+      { name: 'B', dateien: 0, fertig: 0, geaendert: 0, active_jobs: [] }])
+    vi.mocked(api.getProjectFiles).mockResolvedValue({ name: 'A', files: [] })
+    vi.mocked(api.uploadAudio).mockResolvedValue({ base: 'a', file: 'a.mp3' })
+    vi.mocked(api.getProjektEinstellungen)
+      .mockResolvedValueOnce({
+        sprache: 'en', korrektur: 'auto', mehrsprachig: true,
+        sprach_choices: [{ id: 'en', label: 'Englisch', hint: '' }],
+        tiefen: [{ id: 'auto', label: 'Auto' }],
+      })
+      .mockReturnValueOnce(new Promise(() => {}))   // Projekt B: Antwort steht noch aus
+    const ZuB = () => {
+      const nav = useNavigate()
+      return <button onClick={() => nav('/p/B')}>zu B</button>
+    }
+    render(
+      <MemoryRouter initialEntries={['/p/A']}>
+        <JobProvider>
+          <ProjektDatenProvider>
+            <EditorBrueckeProvider>
+              <Routes>
+                <Route path="/p/:project" element={<><ZuB /><ProjectWorkspace /></>} />
+              </Routes>
+            </EditorBrueckeProvider>
+          </ProjektDatenProvider>
+        </JobProvider>
+      </MemoryRouter>,
+    )
+    await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(1))
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'zu B' })) })
+    expect(screen.queryAllByRole('combobox')).toHaveLength(0)   // Einstellungen von B unterwegs
+    await act(async () => {
+      fireEvent.change(screen.getByTestId('upload-input'), { target: { files: [new File(['x'], 'a.mp3')] } })
+    })
+    await waitFor(() => expect(api.uploadAudio).toHaveBeenCalledWith('B', expect.any(File), '', undefined))
   })
 })

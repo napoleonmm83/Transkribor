@@ -46,10 +46,13 @@ describe('UploadDropzone', () => {
 
   it('bringt KEINE eigene Sprachauswahl mit', () => {
     /* Die Auswahl steht genau einmal im Bereich „Material hinzufügen" (ProjectWorkspace).
-       Ein zweiter Waehler hier zeigte denselben Wert ein zweites Mal an — genau der Zustand,
-       den diese Aenderung abgeschafft hat. */
+       ZWEI Einschraenkungen, damit dieser Test nicht mehr verspricht, als er haelt: er faengt
+       nur einen BEDINGUNGSLOSEN Wiedereinbau (ein Waehler hinter einer neuen Requisite, die
+       hier niemand setzt, kaeme durch), und seine Positivkontrolle liegt im Integrationstest
+       (`getAllByRole('combobox')).toHaveLength(1)` in ProjectWorkspace.test.tsx) — der haelt
+       die Zahl, dieser hier die Zustaendigkeit. */
     render(<UploadDropzone project="Demo" onDone={vi.fn()} sprache="de" />)
-    expect(document.body.querySelector('[role="combobox"]')).toBeNull()
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
     expect(screen.queryByText(/Enthält weitere Sprachen/)).not.toBeInTheDocument()
   })
 
