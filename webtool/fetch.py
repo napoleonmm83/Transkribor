@@ -202,7 +202,12 @@ def _rohmeldung(exc: Exception) -> str:
     Leere Meldung -> Klassenname, sonst stuende dort gar nichts.
     """
     roh = " ".join(str(exc).split()) or exc.__class__.__name__
-    return f"{roh[:_ROH_MAX]} …" if len(roh) > _ROH_MAX else roh
+    if len(roh) <= _ROH_MAX:
+        return roh
+    # Die Marke zaehlt MIT: eine Konstante namens `_ROH_MAX`, die 502 Zeichen liefert, haelt
+    # nicht, was ihr Name zusagt (CodeRabbit an PR #223).
+    marke = " …"
+    return roh[:_ROH_MAX - len(marke)] + marke
 
 
 def _human_error(exc: Exception) -> str:

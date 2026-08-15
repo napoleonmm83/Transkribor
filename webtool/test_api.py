@@ -60,7 +60,12 @@ def client(monkeypatch, tmp_path):
     # Nicht beobachtet, sondern fehlendes Netz: 200 Runden mit Teardown unmittelbar nach
     # `start()` ergaben 0 Ueberlaeufe (`Thread.start()` kehrt auf CPython/Windows erst
     # zurueck, wenn der Faden im Ziel ist). Der Schaden waere eine fremde venv.
-    _warte(lambda: not ytu.hintergrund_zustand()[0], 10.0)
+    # Das Ergebnis auswerten, nicht wegwerfen: laeuft der Faden laenger, endete der Teardown
+    # sonst STILL und `_lauf` leckte in den naechsten Test — also genau der Fall, gegen den
+    # diese Zeilen stehen. Ein Fehlschlag hier nennt die Ursache, statt einen Folgetest ohne
+    # erkennbaren Grund umzuwerfen. (CodeRabbit an PR #223.)
+    assert _warte(lambda: not ytu.hintergrund_zustand()[0], 10.0), \
+        "yt-dlp-Hintergrundfaden lief nach 10 s noch — Modulzustand leckt in den naechsten Test"
 
 
 # "Demo" wird von der client-Fixture angelegt (TRANSKRIBOR_PROJEKTE=tmp_path).
