@@ -137,12 +137,21 @@ describe('DateiEinstellungenDialog — mehrsprachig', () => {
     saveSpy.mockRestore()
   })
 
-  it('nennt den Projektwert in der Beschriftung', async () => {
-    // Ohne ihn entscheidet der Nutzer ueber einen Wert, den er erst woanders nachschlagen muss.
+  it('nennt den Projektwert in der Beschriftung — BEIDE Faelle', async () => {
+    /* Ohne ihn entscheidet der Nutzer ueber einen Wert, den er erst woanders nachschlagen muss.
+       BEIDE Faelle, weil nur der `true`-Fall eine fest verdrahtete Beschriftung „(ja)" nicht
+       von der echten Ableitung unterscheidet — gemessen: mit hartkodiertem „(ja)" blieben
+       alle 442 Tests gruen. */
     vi.spyOn(api, 'getFileEinstellungen').mockResolvedValue(
       { ...BASIS, mehrsprachig: true, mehrsprachig_eigen: null, mehrsprachig_projekt: true })
-    render(<DateiEinstellungenDialog project="p" base="a" file={datei()} offen />)
+    const { unmount } = render(<DateiEinstellungenDialog project="p" base="a" file={datei()} offen />)
     expect(await screen.findByText(/Folgt dem Projekt \(ja\)/)).toBeInTheDocument()
+    unmount()
+
+    vi.spyOn(api, 'getFileEinstellungen').mockResolvedValue(
+      { ...BASIS, mehrsprachig: false, mehrsprachig_eigen: null, mehrsprachig_projekt: false })
+    render(<DateiEinstellungenDialog project="p" base="b" file={datei()} offen />)
+    expect(await screen.findByText(/Folgt dem Projekt \(nein\)/)).toBeInTheDocument()
   })
 
   it('behandelt eine Haken-Änderung wie einen Sprachwechsel', async () => {

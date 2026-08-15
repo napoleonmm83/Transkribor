@@ -326,11 +326,10 @@ def dateieinstellungen(project: str, base: str):
     # `mehrsprachig_projekt` der Standard, den sie dann erbt. Ohne die letzten beiden kann die
     # Oberflaeche „folgt dem Projekt" nicht von einem gleichlautenden Override unterscheiden
     # und den Rueckweg nicht beschriften (#166).
-    return {"sprache": _projekt.datei_sprache(project, base),
-            "korrektur": _projekt.datei_korrektur(project, base),
-            "mehrsprachig": _projekt.datei_mehrsprachig(project, base),
-            "mehrsprachig_eigen": _projekt.datei_override_mehrsprachig(project, base),
-            "mehrsprachig_projekt": _projekt.laden(project)["mehrsprachig"],
+    #
+    # EIN Lesevorgang (`datei_ansicht`), nicht fuenf Einzelabfragen: sonst koennen `mehrsprachig`
+    # und `mehrsprachig_eigen` aus verschiedenen Staenden stammen, wenn daneben geschrieben wird.
+    return {**_projekt.datei_ansicht(project, base),
             "sprach_choices": _sprachen.fuer_frontend(), "tiefen": _sprachen.TIEFEN}
 
 
@@ -356,11 +355,7 @@ def dateieinstellungen_speichern(project: str, base: str, body: EinstellungenBod
         mehr = _projekt.ERBEN
     _projekt.setze_datei(project, base, sprache=body.sprache, korrektur=body.korrektur,
                          mehrsprachig=mehr)
-    return {"sprache": _projekt.datei_sprache(project, base),
-            "korrektur": _projekt.datei_korrektur(project, base),
-            "mehrsprachig": _projekt.datei_mehrsprachig(project, base),
-            "mehrsprachig_eigen": _projekt.datei_override_mehrsprachig(project, base),
-            "mehrsprachig_projekt": _projekt.laden(project)["mehrsprachig"]}
+    return _projekt.datei_ansicht(project, base)      # EIN Lesevorgang, s. GET oben
 
 
 class NewProject(BaseModel):

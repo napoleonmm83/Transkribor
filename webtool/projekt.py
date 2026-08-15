@@ -164,6 +164,27 @@ def datei_mehrsprachig(project: str, base: str) -> bool:
     return bool(d["mehrsprachig"])
 
 
+def datei_ansicht(project: str, base: str) -> dict:
+    """ALLES, was die Oberflaeche ueber EINE Datei braucht — aus EINEM Lesevorgang.
+
+    Fuenf Einzelabfragen (`datei_sprache`, `datei_korrektur`, `datei_mehrsprachig`,
+    `datei_override_mehrsprachig`, `laden`) lesen projekt.json fuenfmal. Zwischen dem ersten und
+    dem letzten Lesen kann ein Upload oder ein zweiter Tab schreiben — dann stammen `mehrsprachig`
+    und `mehrsprachig_eigen` aus verschiedenen Staenden, und genau daraus rechnet der Dialog
+    aus, ob neu transkribiert werden muss. Dieselbe Begruendung wie bei `datei_einstellungen`,
+    nur fuer den Anzeigepfad.
+    """
+    d = laden(project)
+    e = d["dateien"].get(base, {})
+    return {
+        "sprache": e.get("sprache") or d["sprache"],
+        "korrektur": e.get("korrektur") or d["korrektur"],
+        "mehrsprachig": bool(e["mehrsprachig"]) if "mehrsprachig" in e else bool(d["mehrsprachig"]),
+        "mehrsprachig_eigen": bool(e["mehrsprachig"]) if "mehrsprachig" in e else None,
+        "mehrsprachig_projekt": bool(d["mehrsprachig"]),
+    }
+
+
 def datei_einstellungen(project: str, base: str) -> tuple:
     """(sprache, mehrsprachig) EINER Datei aus EINEM Lesevorgang.
 
