@@ -2,22 +2,18 @@ import { useState } from 'react'
 import { Link2 } from 'lucide-react'
 import { fetchUrls } from '@/lib/api'
 import { Button } from '@/components/ui/button'
-import { MehrsprachigKasten } from '@/components/MehrsprachigKasten'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import type { StartJob, SprachChoice } from '@/lib/types'
+import type { StartJob } from '@/lib/types'
 
-export function UrlFetch({ project, onStart, sprache = '', sprachChoices = [], onSpracheChange = () => {},
-  mehrsprachig = false, onMehrsprachigChange = () => {} }: {
+export function UrlFetch({ project, onStart, sprache = '', mehrsprachig }: {
   project: string
   onStart: (res: StartJob) => void
-  // Optional bis Task 5 (ProjectWorkspace) die Werte durchreicht. sprache='' wirkt wie
-  // „nicht gesetzt": fetchUrls ignoriert einen leeren String (sprache ? { sprache } : {}).
+  // Die Sprachauswahl steht EINMAL im Bereich „Material hinzufügen" (ProjectWorkspace) und
+  // gilt fuer Upload UND URL-Import — hier kommen nur noch die Werte an, die der Import
+  // mitschickt. sprache='' wirkt wie „nicht gesetzt": fetchUrls ignoriert einen leeren
+  // String (sprache ? { sprache } : {}).
   sprache?: string
-  /** Wie `sprache` aus den Projekt-Einstellungen vorbelegt und hier pro Upload aenderbar. */
+  /** undefined = kein Datei-Override (der Projektwert gilt); den Fall entscheidet der Aufrufer. */
   mehrsprachig?: boolean
-  onMehrsprachigChange?: (w: boolean) => void
-  sprachChoices?: SprachChoice[]
-  onSpracheChange?: (id: string) => void
 }) {
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
@@ -27,7 +23,7 @@ export function UrlFetch({ project, onStart, sprache = '', sprachChoices = [], o
   const submit = async () => {
     setBusy(true); setErr('')
     try {
-      const res = await fetchUrls(project, urls, sprache, mehrWert)
+      const res = await fetchUrls(project, urls, sprache, mehrsprachig)
       if (res.started) setText('')   // nicht gestartet -> Eingabe stehen lassen
       onStart(res)
     } catch (e) {
@@ -36,13 +32,6 @@ export function UrlFetch({ project, onStart, sprache = '', sprachChoices = [], o
       setBusy(false)
     }
   }
-
-  // `sprache` wird von den API-Funktionen bei leerem String weggelassen; der Haken muss
-  // GENAUSO degradieren. Sonst schickt ein Bereich, dessen Einstellungen gar nicht geladen
-  // sind (Fehler beim GET -> keine Auswahl gerendert), ein hartes `false` mit und schlaegt
-  // damit einen auf true stehenden Projekt-Standard — der Nutzer sieht kein Kaestchen und
-  // bekommt trotzdem einen Datei-Override. undefined = kein Override.
-  const mehrWert = sprachChoices.length > 0 ? mehrsprachig : undefined
 
   return (
     <div className="blatt p-4">
@@ -58,27 +47,6 @@ export function UrlFetch({ project, onStart, sprache = '', sprachChoices = [], o
         className="w-full resize-y rounded-md border bg-background p-2 text-sm
                    outline-none focus-visible:ring-2 focus-visible:ring-ring"
       />
-      {/* Sprachwaehler zwischen Textarea und Buttonreihe; Stil wie SettingsPage-Modellauswahl.
-          shadcn-Select ist ein <button> → aria-labelledby statt htmlFor.
-          Erst gerendert, wenn sprachChoices da sind — Task 5 reicht sie aus ProjectWorkspace durch. */}
-      {sprachChoices.length > 0 && (
-        <div className="mt-2">
-          <label id="lbl-url-sprache" className="mb-1.5 block text-sm font-medium">Sprache</label>
-          <Select value={sprache} onValueChange={onSpracheChange}>
-            <SelectTrigger className="w-full" aria-labelledby="lbl-url-sprache"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {sprachChoices.map(c => (
-                <SelectItem key={c.id} value={c.id}>{c.label}{c.hint && ` — ${c.hint}`}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {/* Direkt unter der Sprache, weil er sie zur HAUPTsprache macht — und VOR dem Upload,
-              denn der Job startet sofort; nachtraeglich kostet es einen kompletten zweiten Lauf. */}
-          <div className="mt-2">
-            <MehrsprachigKasten wert={mehrsprachig} setzen={onMehrsprachigChange} id="mehr-url" />
-          </div>
-        </div>
-      )}
       <div className="mt-2 flex items-center gap-3">
         <Button variant="outline" size="sm" disabled={!urls.length || busy} onClick={submit}>
           <Link2 className="size-4" /> {busy ? 'startet…' : 'Holen'}

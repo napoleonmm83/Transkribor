@@ -1,15 +1,9 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { UploadDropzone } from './UploadDropzone'
-import type { SprachChoice } from '@/lib/types'
 import * as api from '@/lib/api'
 
 vi.mock('@/lib/api')
-
-const SPRACH_CHOICES: SprachChoice[] = [
-  { id: 'de', label: 'Deutsch', hint: '' },
-  { id: 'en', label: 'Englisch', hint: '' },
-]
 
 describe('UploadDropzone', () => {
   it('laedt nur Audio hoch und meldet Duplikate', async () => {
@@ -17,8 +11,7 @@ describe('UploadDropzone', () => {
       .mockResolvedValueOnce({ base: 'a', file: 'a.mp3' })
       .mockRejectedValueOnce(new Error('Datei existiert bereits'))
     const onDone = vi.fn()
-    render(<UploadDropzone project="Demo" onDone={onDone}
-      sprache="de" sprachChoices={SPRACH_CHOICES} onSpracheChange={vi.fn()} />)
+    render(<UploadDropzone project="Demo" onDone={onDone} sprache="de" />)
     const input = screen.getByTestId('upload-input') as HTMLInputElement
     const files = [new File(['x'], 'a.mp3'), new File(['y'], 'b.txt'), new File(['z'], 'c.wav')]
     await act(async () => { fireEvent.change(input, { target: { files } }) })
@@ -31,8 +24,7 @@ describe('UploadDropzone', () => {
     // `?? 'Fehler'` griff hier nicht: eine leere message ist nicht null. Uebrig blieb ein
     // Warndreieck ohne Text — der Nutzer sieht, dass etwas schieflief, aber nicht was.
     vi.mocked(api.uploadAudio).mockRejectedValueOnce(new Error(''))
-    render(<UploadDropzone project="Demo" onDone={vi.fn()}
-      sprache="de" sprachChoices={SPRACH_CHOICES} onSpracheChange={vi.fn()} />)
+    render(<UploadDropzone project="Demo" onDone={vi.fn()} sprache="de" />)
     const input = screen.getByTestId('upload-input') as HTMLInputElement
     await act(async () => { fireEvent.change(input, { target: { files: [new File(['x'], 'a.mp3')] } }) })
     expect(await screen.findByText('Fehler')).toBeInTheDocument()
@@ -44,8 +36,7 @@ describe('UploadDropzone', () => {
       .mockResolvedValueOnce({ base: 'a', file: 'a.mp3', job_id: 'j7', started: true })
       .mockResolvedValueOnce({ base: 'c', file: 'c.wav', job_id: 'j7', started: false })
     const onDone = vi.fn()
-    render(<UploadDropzone project="Demo" onDone={onDone}
-      sprache="de" sprachChoices={SPRACH_CHOICES} onSpracheChange={vi.fn()} />)
+    render(<UploadDropzone project="Demo" onDone={onDone} sprache="de" />)
     const input = screen.getByTestId('upload-input') as HTMLInputElement
     const files = [new File(['x'], 'a.mp3'), new File(['z'], 'c.wav')]
     await act(async () => { fireEvent.change(input, { target: { files } }) })
@@ -53,51 +44,42 @@ describe('UploadDropzone', () => {
     await waitFor(() => expect(onDone).toHaveBeenCalledWith({ job_id: 'j7', started: false }))
   })
 
-  it('meldet einen Sprachwechsel nach oben', async () => {
-    const onSpracheChange = vi.fn()
-    render(<UploadDropzone project="Demo" onDone={vi.fn()}
-      sprache="de" sprachChoices={SPRACH_CHOICES} onSpracheChange={onSpracheChange} />)
-    // shadcn Select portalt nach document.body → container-Query greift nicht, body schon.
-    fireEvent.click(document.body.querySelector('[role="combobox"]')!)
-    fireEvent.click(await screen.findByText('Englisch'))
-    await waitFor(() => expect(onSpracheChange).toHaveBeenCalledWith('en'))
+  it('bringt KEINE eigene Sprachauswahl mit', () => {
+    /* Die Auswahl steht genau einmal im Bereich „Material hinzufügen" (ProjectWorkspace).
+       Ein zweiter Waehler hier zeigte denselben Wert ein zweites Mal an — genau der Zustand,
+       den diese Aenderung abgeschafft hat. */
+    render(<UploadDropzone project="Demo" onDone={vi.fn()} sprache="de" />)
+    expect(document.body.querySelector('[role="combobox"]')).toBeNull()
+    expect(screen.queryByText(/Enthält weitere Sprachen/)).not.toBeInTheDocument()
   })
 
-  it('reicht die gesetzte Sprache ans uploadAudio weiter', async () => {
+  it('reicht Sprache und Mehrsprachig-Haken ans uploadAudio weiter', async () => {
+    /* VOR dem Upload, nicht danach: der Transkriptions-Job startet serverseitig sofort mit
+       dem Upload. Nachtraeglich gesetzt kostet beides einen kompletten zweiten Lauf. */
     vi.mocked(api.uploadAudio).mockResolvedValue({ base: 'a', file: 'a.mp3' })
-    render(<UploadDropzone project="Demo" onDone={vi.fn()}
-      sprache="en" sprachChoices={SPRACH_CHOICES} onSpracheChange={vi.fn()} />)
+    render(<UploadDropzone project="Demo" onDone={vi.fn()} sprache="en" mehrsprachig />)
     const input = screen.getByTestId('upload-input') as HTMLInputElement
     await act(async () => {
       fireEvent.change(input, { target: { files: [new File(['x'], 'a.mp3')] } })
     })
-    await waitFor(() => expect(api.uploadAudio).toHaveBeenCalledWith('Demo', expect.any(File), 'en', false))
-  })
-
-  it('reicht den Mehrsprachig-Haken ans uploadAudio weiter', async () => {
-    /* VOR dem Upload, nicht danach: der Transkriptions-Job startet serverseitig sofort mit
-       dem Upload. Nachtraeglich gesetzt kostet der Haken einen kompletten zweiten Lauf. */
-    vi.spyOn(api, 'uploadAudio').mockResolvedValue({ base: 'a', file: 'a.mp3' })
-    render(<UploadDropzone project="Demo" onDone={() => {}}
-      sprache="en" sprachChoices={[{ id: 'en', label: 'Englisch', hint: '' }]}
-      mehrsprachig />)
-    const input = document.querySelector('input[type="file"]') as HTMLInputElement
-    fireEvent.change(input, { target: { files: [new File(['x'], 'a.mp3', { type: 'audio/mpeg' })] } })
     await waitFor(() => expect(api.uploadAudio).toHaveBeenCalledWith(
       'Demo', expect.any(File), 'en', true))
   })
 })
 
 describe('UploadDropzone — Degradierung ohne geladene Einstellungen', () => {
-  it('schickt ohne sprachChoices KEIN mehrsprachig mit', async () => {
+  it('schickt ohne mehrsprachig-Requisite KEIN mehrsprachig mit', async () => {
     /* Der GET auf die Projekt-Einstellungen kann fehlschlagen (ProjectWorkspace schluckt den
-       Fehler). Dann wird weder Auswahl noch Kaestchen gerendert — ein hartes `false` wuerde
-       einen auf true stehenden Projekt-Standard ueberschreiben, ohne dass der Nutzer je ein
-       Kaestchen gesehen haette. undefined heisst „kein Datei-Override". */
-    vi.spyOn(api, 'uploadAudio').mockResolvedValue({ base: 'a', file: 'a.mp3' })
-    render(<UploadDropzone project="Demo" onDone={() => {}} />)
-    const input = document.querySelector('input[type="file"]') as HTMLInputElement
-    fireEvent.change(input, { target: { files: [new File(['x'], 'a.mp3', { type: 'audio/mpeg' })] } })
+       Fehler). Dann wird die Auswahl gar nicht gerendert, und der Aufrufer reicht `undefined`
+       durch — ein hartes `false` wuerde einen auf true stehenden Projekt-Standard
+       ueberschreiben, ohne dass der Nutzer je ein Kaestchen gesehen haette. Hier wird nur
+       gehalten, dass nichts erfunden wird; die Entscheidung selbst prueft ProjectWorkspace. */
+    vi.mocked(api.uploadAudio).mockResolvedValue({ base: 'a', file: 'a.mp3' })
+    render(<UploadDropzone project="Demo" onDone={vi.fn()} />)
+    const input = screen.getByTestId('upload-input') as HTMLInputElement
+    await act(async () => {
+      fireEvent.change(input, { target: { files: [new File(['x'], 'a.mp3')] } })
+    })
     await waitFor(() => expect(api.uploadAudio).toHaveBeenCalledWith(
       'Demo', expect.any(File), '', undefined))
   })

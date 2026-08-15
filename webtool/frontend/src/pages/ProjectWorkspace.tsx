@@ -11,8 +11,10 @@ import { UploadDropzone } from '@/components/UploadDropzone'
 import { UrlFetch } from '@/components/UrlFetch'
 import { ProjektMenue } from '@/components/ProjektMenue'
 import { PageHeader } from '@/components/PageHeader'
+import { MehrsprachigKasten } from '@/components/MehrsprachigKasten'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { startTranscribe, startCorrect, cancelJob, getProjektEinstellungen } from '@/lib/api'
 import { describePhases, KIND_LABEL } from '@/lib/jobPhases'
 import { cn } from '@/lib/utils'
@@ -33,9 +35,10 @@ export function ProjectWorkspace() {
   const phases = useMemo(() => mergePhases(meine), [meine])
   const running = meine.length > 0
 
-  // Per-Projekt-Einstellungen (Sprache, Korrektur-Tiefe) — fuer Badge + Sprachwaehler am
-  // Upload/URL-Import. Die Vorgabe kommt aus projekt.json (Backend-Default: Schweizerdeutsch),
-  // der Wähler am Upload ist ein Override fuer genau diese Datei und schreibt nicht zurueck.
+  // Per-Projekt-Einstellungen (Sprache, Korrektur-Tiefe) — fuer Badge + die EINE Sprachauswahl
+  // im Bereich „Material hinzufügen". Die Vorgabe kommt aus projekt.json (Backend-Default:
+  // Schweizerdeutsch); die Auswahl hier ist ein Override fuer die neu hinzugefuegten Dateien
+  // und schreibt NICHT ins Projekt zurueck (dafuer der Dialog im ⋯-Menü).
   const [einstellungen, setEinstellungen] = useState<ProjectEinstellungen | null>(null)
   const [sprache, setSprache] = useState('')
   const [mehrsprachig, setMehrsprachig] = useState(false)
@@ -55,6 +58,11 @@ export function ProjectWorkspace() {
   const sprachLabel = einstellungen
     ? (einstellungen.sprach_choices.find(c => c.id === einstellungen.sprache)?.label ?? einstellungen.sprache)
     : ''
+  // Der Haken muss GENAUSO degradieren wie `sprache` (die API-Funktionen lassen einen leeren
+  // String weg): sind die Einstellungen gar nicht geladen (Fehler beim GET -> keine Auswahl
+  // gerendert), schluege ein hartes `false` einen auf true stehenden Projekt-Standard — der
+  // Nutzer saehe kein Kaestchen und bekaeme trotzdem einen Datei-Override. undefined = keiner.
+  const mehrWert = sprachChoices.length > 0 ? mehrsprachig : undefined
   // projektRef hält den aktuellen Projekt-Namen fuer reloadEinstellungen — die Antwort
   // von Projekt A darf nicht landen, nachdem auf Projekt B gewechselt wurde (dasselbe
   // Muster wie der `aktiv`-Riegel oben, nur fuer den Speichern-Reload-Pfad).
@@ -131,9 +139,33 @@ export function ProjectWorkspace() {
       <section className="mb-8">
         <h2 className="rubrik mb-3">Material hinzufügen</h2>
         <div className="space-y-3">
+          {/* EINE Sprachauswahl fuer den ganzen Bereich. Vorher trugen Upload und URL-Import je
+              eine eigene — beide an DERSELBEN State, also zwei Ansichten desselben Werts: was
+              man oben umstellte, stand unten schon anders da, ohne dass es einen Unterschied
+              gab. Sie steht VOR beiden Eingaben, weil sie fuer beide gilt und weil der Job mit
+              dem Hinzufuegen sofort startet — nachtraeglich kostet sie einen zweiten Lauf.
+              shadcn-Select ist ein <button>, kein <select> → aria-labelledby statt htmlFor. */}
+          {sprachChoices.length > 0 && (
+            <div className="blatt p-4">
+              <label id="lbl-neu-sprache" className="block text-sm font-medium">Sprache</label>
+              <p className="mb-1.5 text-sm text-muted-foreground">
+                Gilt für alles, was du hier hinzufügst.
+              </p>
+              <Select value={sprache} onValueChange={setSprache}>
+                <SelectTrigger className="w-full" aria-labelledby="lbl-neu-sprache"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {sprachChoices.map(c => (
+                    <SelectItem key={c.id} value={c.id}>{c.label}{c.hint && ` — ${c.hint}`}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <div className="mt-2">
+                <MehrsprachigKasten wert={mehrsprachig} setzen={setMehrsprachig} id="mehr-neu" />
+              </div>
+            </div>
+          )}
           <UploadDropzone project={project!}
-            sprache={sprache} sprachChoices={sprachChoices} onSpracheChange={setSprache}
-            mehrsprachig={mehrsprachig} onMehrsprachigChange={setMehrsprachig}
+            sprache={sprache} mehrsprachig={mehrWert}
             onDone={job => {
             refresh(); refreshFiles()
             // Sofort adoptieren statt auf den naechsten Poll zu warten — der Balken soll direkt stehen.
@@ -141,8 +173,7 @@ export function ProjectWorkspace() {
             else if (job) toast.info('Transkription läuft schon — die neuen Dateien kommen danach dran.')
           }} />
           <UrlFetch project={project!}
-            sprache={sprache} sprachChoices={sprachChoices} onSpracheChange={setSprache}
-            mehrsprachig={mehrsprachig} onMehrsprachigChange={setMehrsprachig}
+            sprache={sprache} mehrsprachig={mehrWert}
             onStart={res => {
             if (!res.started) { toast.warning('Es läuft bereits ein Import für dieses Projekt.'); return }
             adopt(res.job_id, project!, 'fetch')
