@@ -922,8 +922,13 @@ def test_pip_sperre_deckt_die_VERSCHACHTELTE_wartezeit_mit(monkeypatch):
     _, run = _pip()
     monkeypatch.setattr(yu.subprocess, "run", run)
     yu.aktualisiere()
-    # So lange kann der Abschnitt unter der pip-Sperre dauern …
-    haltedauer = yu.PIP_TIMEOUT + sperre.frist()
+    # So lange kann der Abschnitt unter der pip-Sperre LAENGSTENS dauern — alle drei Teile,
+    # nicht nur die verschachtelte Sperre: der gedeckelte pip-Lauf, der Zuschlag fuer
+    # `subprocess.run`s Nach-Kill-`communicate()` (auf Windows ohne Frist) und die volle Frist
+    # des settings-Locks aus `_merken()`. Ohne den mittleren Teil haette die Zusicherung
+    # Schlupf — ein `stale`, das nur ZWEI der drei deckt, kaeme durch, und die 30 s bewachte
+    # sonst nichts. (CodeRabbit-CLI an PR #211.)
+    haltedauer = yu.PIP_TIMEOUT + 30 + sperre.frist()
     # … und so lange darf er es laut der Zusage, die die Sperre bekommen hat.
     assert sperre.frist(gesehen[settings.path() + ".ytdlp"]) > haltedauer
 

@@ -475,11 +475,12 @@ def aktualisiere() -> bool:
     # Ausloeser aus zwei Prozessen gibt: der Import-Job und der Knopf in den Einstellungen.
     # Eigener Lock-Name (…ytdlp.lock), damit er sich nicht mit dem von `settings.save()`
     # ueberschneidet — der wird im `_merken()` genommen, waehrend dieser noch haelt.
+    lockziel = settings.path() + ".ytdlp"       # EIN Ausdruck: Verzeichnis und Sperre meinen denselben Pfad
     try:
         # `or "."` fuer ein TRANSKRIBOR_SETTINGS ohne Verzeichnisanteil (`os.makedirs("")`
         # wuerde werfen). Und best effort wie alles hier: ein nicht anlegbares Verzeichnis
         # darf den Aufrufer nicht mitreissen — dann laeuft es eben ohne Sperre.
-        os.makedirs(os.path.dirname(settings.path()) or ".", exist_ok=True)
+        os.makedirs(os.path.dirname(lockziel) or ".", exist_ok=True)
     except OSError as e:
         print(f"[ytdlp] Sperrverzeichnis nicht anlegbar: {e}", flush=True)
     # Die Frist muss die WIRKLICHE Haltedauer decken, nicht nur den pip-Lauf (#207): das
@@ -492,8 +493,7 @@ def aktualisiere() -> bool:
     # laeuft. Preis: ein Lock OHNE Auskunft (fremder Rechner, unschreibbarer Merker) gilt
     # entsprechend spaeter als verwaist — ein toter lokaler Halter wird weiterhin sofort
     # erkannt, die Uhr ist nur der Rueckfall.
-    with sperre.datei(settings.path() + ".ytdlp",
-                      stale=PIP_TIMEOUT + 30 + sperre.frist()):
+    with sperre.datei(lockziel, stale=PIP_TIMEOUT + 30 + sperre.frist()):
         try:
             p = subprocess.run(cmd, capture_output=True, text=True, errors="replace",
                                timeout=PIP_TIMEOUT)
