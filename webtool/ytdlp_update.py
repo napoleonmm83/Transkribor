@@ -3,9 +3,10 @@
 `pip install -r requirements.txt` laeuft in der installierten App im Regelfall genau EINMAL —
 beim ersten Start. Ein App-Update ersetzt die .exe, nicht die venv (die liegt in `userData` und
 ueberlebt bewusst). Seit #181 vergleicht `electron/setup.js` zusaetzlich einen Hash der
-requirements.txt und bietet einen Nachlauf an — der aendert hier aber nichts: er greift nur in
-der GEPACKTEN App und nur, wenn der Nutzer auf der Einrichtungsseite klickt. Ein
-Entwickler-Checkout und eine von Hand verwaltete venv sehen ihn nie.
+requirements.txt und bietet einen Nachlauf an — der aendert hier aber nichts: er laeuft nur auf
+KLICK auf der Einrichtungsseite, und die zeigt nur die Electron-Huelle. Wer ueber `webtool.ps1`
+oder direkt `uvicorn` startet, sieht ihn nie; eine von Hand verwaltete venv aktualisiert er
+ohnehin nur, wenn ihr Besitzer es anstoesst.
 **yt-dlp friert damit auf dem Installationstag ein** — ausgerechnet bei der Abhaengigkeit, die
 kaputtgehen MUSS: ihre Extraktoren laufen YouTube und Instagram hinterher (#162).
 `yt-dlp>=…` in requirements.txt schuetzt nur Neuinstallationen, Renovate nur das Repo.
@@ -421,9 +422,9 @@ def faellig() -> bool:
     heute = _heute()
     g = geprueft()
     if _ejs_untauglich():
-        # #179: `yt-dlp[default]` kam erst mit #178 in die requirements.txt, und die liest
-        # eine installierte App im Regelfall nie wieder (ein App-Update ersetzt die .exe,
-        # nicht die venv; der Nachlauf aus #181 verlangt einen Klick). Am Kalender gemessen
+        # #179: `yt-dlp[default]` kam erst mit #178 in die requirements.txt. Die Datei wird
+        # seit #181 zwar bei jeder Statuspruefung GELESEN (Hashvergleich), INSTALLIERT wird
+        # daraus aber erst nach einem Klick auf der Einrichtungsseite. Am Kalender gemessen
         # faellt das nie auf: die Fassung kann taufrisch sein, der Loeser hat trotzdem keine
         # Skripte — also der Stand vor #170, samt demselben sporadischen 403.
         #
