@@ -193,3 +193,34 @@ test('ein CPU-Rad nach dem Nachlauf wird erkannt — sonst waere die GPU still w
   // macOS hat keinen CUDA-Index; dort ist `torch.version.cuda` IMMER leer.
   assert.strictEqual(cudaVerloren({ torchIndex: null }, 'CUDA='), false)
 })
+
+/** Faehrt cudaZurueckholen mit nachgebautem Werkzeug: was torch meldet, wie pip ausgeht. */
+async function nachholen(cudaAntwort, pipCode) {
+  const { cudaZurueckholen } = require('./setup')
+  const zeilen = []
+  const rein = { ausgabe: async () => cudaAntwort, lauf: async () => pipCode }
+  const ok = await cudaZurueckholen('py', { torchIndex: 'https://x/cu128' }, z => zeilen.push(z), rein)
+  return { ok, text: zeilen.join('\n') }
+}
+
+test('heiles CUDA loest keinen Nachlauf aus — kein GB-Download auf gut Glueck', async () => {
+  const { ok, text } = await nachholen('CUDA=12.8', 0)
+  assert.strictEqual(ok, true)
+  assert.strictEqual(text, '', 'bei heilem torch darf gar nichts passieren')
+})
+
+test('ein gescheitertes Zurueckholen nennt die FOLGE, nicht nur den Fehlschlag', async () => {
+  // "pip exit 1" im Protokoll sagt niemandem, dass ab jetzt die CPU rechnet. Der Lauf bricht
+  // bewusst NICHT ab (langsam ist besser als gar nicht) — dann ist die Meldung das Einzige,
+  // woran der Nutzer den Verlust ueberhaupt bemerkt.
+  const { ok, text } = await nachholen('CUDA=', 1)
+  assert.strictEqual(ok, false)
+  assert.match(text, /CPU/)
+  assert.match(text, /Einstellungen/, 'die Meldung muss sagen, wo es zu beheben ist')
+})
+
+test('ein gegluecktes Zurueckholen meldet keinen Verlust', async () => {
+  const { ok, text } = await nachholen('CUDA=', 0)
+  assert.strictEqual(ok, true)
+  assert.doesNotMatch(text, /fehlgeschlagen/)
+})
