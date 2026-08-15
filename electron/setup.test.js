@@ -146,12 +146,22 @@ test('nach dem Vermerken gilt die venv als aktuell', () => {
   const { paketeAktuell, stempelSchreiben } = require('./setup')
   const venv = leereVenv()
   assert.strictEqual(stempelSchreiben(venv), true)
-  // Rundlauf statt zweier getrennter Behauptungen: er pinnt Dateiname UND Hashquelle
-  // zusammen. Schreibt die eine Seite woanders hin oder hasht etwas anderes, bricht er.
+  // Der Rundlauf pinnt den INHALT: schreibt stempelSchreiben etwas anderes als den heutigen
+  // Hash, bricht er. Den Dateinamen pinnt er NICHT — beide Seiten umzubenennen faellt hier
+  // nicht auf, dafuer steht der Test darunter (gemessen, nicht angenommen).
   assert.strictEqual(paketeAktuell(venv), true)
 })
 
-test('geaenderte requirements.txt entwertet den Merker — das ist der ganze Zweck', () => {
+test('venvVollstaendig fragt den Paketstand mit — sonst waere #181 still wieder offen', () => {
+  // Naht-Test wie der spawnEnv-Test oben: die Zusammensetzung selbst laesst sich nicht
+  // fahren (sie startet die echte python.exe der venv). Was er belegt, ist genau eines:
+  // dass die Pruefung nicht wieder auf den blossen Import-Check zurueckfaellt.
+  const quelle = require('fs').readFileSync(require('path').join(__dirname, 'setup.js'), 'utf8')
+  assert.match(quelle, /venvVollstaendig\(\)\s*\{\s*return \(await importeDa\(\)\) && paketeAktuell\(\)/,
+    'venvVollstaendig muss importeDa UND paketeAktuell fragen')
+})
+
+test('geaenderte requirements.txt entwertet den Merker — der Dateiname ist mitgepinnt', () => {
   const fs = require('node:fs'), path = require('node:path')
   const { paketeAktuell, stempelSchreiben } = require('./setup')
   const venv = leereVenv()
