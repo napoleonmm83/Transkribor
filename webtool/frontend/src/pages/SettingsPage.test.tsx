@@ -389,6 +389,76 @@ describe('SettingsPage', () => {
     expect(toast.success).toHaveBeenCalledWith(expect.stringMatching(/2026\.8\.12/))
   })
 
+  it('bricht die Nachfragerei ab, wenn die Seite verlassen wird', async () => {
+    // Vorher war das eine freilaufende `while`-Schleife: sie pollte über die volle pip-Dauer
+    // weiter, schrieb `setS` auf eine ausgehängte Komponente (React 18 warnt dazu nicht mehr)
+    // und feuerte am Ende einen Toast für eine Seite, auf der niemand mehr ist.
+    // Gefunden vom Reviewer-Subagenten an PR #223 (I3).
+    vi.mocked(api.updateYtdlp).mockResolvedValue({
+      gestartet: true, version: '2026.7.4', unlesbar: false, geprueft: '', auto: true,
+      env: false, laeuft: true, ergebnis: '',
+    })
+    const r = zeige()
+    const knopf = await screen.findByRole('button', { name: /Jetzt aktualisieren/i })
+    vi.mocked(api.getSettings).mockResolvedValue({
+      ...BASIS, ytdlp: { ...BASIS.ytdlp, laeuft: true, ergebnis: '' },
+    })
+
+    vi.useFakeTimers()
+    try {
+      await act(async () => { fireEvent.click(knopf) })
+      await act(async () => { await vi.advanceTimersByTimeAsync(1500) })
+      const nachEinerRunde = vi.mocked(api.getSettings).mock.calls.length
+      expect(nachEinerRunde).toBeGreaterThan(0)     // Positivkontrolle: es pollt überhaupt
+
+      r.unmount()
+      await act(async () => { await vi.advanceTimersByTimeAsync(6000) })   // vier Runden
+      expect(vi.mocked(api.getSettings).mock.calls.length).toBe(nachEinerRunde)
+    } finally {
+      vi.useRealTimers()
+    }
+    expect(toast.success).not.toHaveBeenCalled()
+    expect(toast.error).not.toHaveBeenCalled()
+  })
+
+  it('gibt die Nachfragerei nach einer Obergrenze auf, statt endlos zu pollen', async () => {
+    // Bleibt `laeuft` serverseitig hängen — etwa am blockierenden `open()` aus #200, wo die
+    // Obergrenze aus #191 nicht greift —, pollte der Browser sonst bis zum Tab-Schluss und
+    // meldete nie etwas. Die Mutation „Obergrenze raus" liess ohne diesen Test alle 47
+    // anderen grün: ein Wächter ohne roten Test ist Dekoration.
+    vi.mocked(api.updateYtdlp).mockResolvedValue({
+      gestartet: true, version: '2026.7.4', unlesbar: false, geprueft: '', auto: true,
+      env: false, laeuft: true, ergebnis: '',
+    })
+    zeige()
+    const knopf = await screen.findByRole('button', { name: /Jetzt aktualisieren/i })
+    // Der Server wird NIE fertig.
+    vi.mocked(api.getSettings).mockResolvedValue({
+      ...BASIS, ytdlp: { ...BASIS.ytdlp, laeuft: true, ergebnis: '' },
+    })
+
+    vi.useFakeTimers()
+    try {
+      await act(async () => { fireEvent.click(knopf) })
+      await act(async () => { await vi.advanceTimersByTimeAsync(13 * 60_000) })
+    } finally {
+      vi.useRealTimers()
+    }
+    expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/meldet sich nicht mehr/))
+    // Und danach ist Ruhe: der Knopf ist wieder bedienbar statt für immer zu drehen.
+    expect(await screen.findByRole('button', { name: /Jetzt aktualisieren/i })).toBeEnabled()
+  })
+
+  it('sagt an, wenn beim Laden schon eine Aktualisierung läuft', async () => {
+    // Wer die Seite mitten in pip neu lädt, sähe sonst einen gewöhnlichen Knopf und
+    // erführe nie, dass gerade etwas läuft — das Feld `laeuft` läge auf der Leitung und
+    // würde nirgends benutzt. Der Knopf bleibt dabei BEDIENBAR: ein Klick hängt sich per
+    // `gestartet: false` an den laufenden Lauf. (Reviewbefund M8 an PR #223.)
+    zeige({ ytdlp: { ...BASIS.ytdlp, laeuft: true, ergebnis: '' } })
+    expect(await screen.findByText(/Eine Aktualisierung läuft gerade/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Jetzt aktualisieren/i })).toBeEnabled()
+  })
+
   it('warnt bei large-v3 auf der CPU', async () => {
     zeige({ whisper_model: 'large-v3' }, { device: 'cpu', name: 'CPU', torch_ok: true, asr: 'cpu' })
     expect(await screen.findByText(/auf der CPU sehr lange/i)).toBeInTheDocument()

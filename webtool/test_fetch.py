@@ -263,14 +263,16 @@ def test_rohmeldung_bewahrt_was_human_error_wegwirft(projekt, capsys):
         "ERROR: unable to download video data")
     with pytest.raises(SystemExit):
         fetch.main(["Demo", "https://youtu.be/vid123"])
-    out = capsys.readouterr().out
-    menschlich, _, roh = out.partition("[fetch] roh")
-    # Die Haelfte VOR der Rohzeile ist die von `_human_error` geglaettete — dort fehlt es.
-    assert "nsig extraction failed" not in menschlich
-    assert "nsig extraction failed" in roh
+    # Zeilengenau statt per `partition`: die Rohzeile steht seit dem Reviewbefund VOR der
+    # FEHLER-Zeile, und ein „nicht enthalten" gegen den falschen Textblock waere vacuous.
+    zeilen = capsys.readouterr().out.splitlines()
+    fehlerzeile = next(z for z in zeilen if z.startswith("[fetch] FEHLER"))
+    rohzeile = next(z for z in zeilen if z.startswith("[fetch] roh"))
+    assert "nsig extraction failed" not in fehlerzeile      # `_human_error` wirft es weg
+    assert "nsig extraction failed" in rohzeile
     # Das Urteil gehoert dazu: ohne es ist die Zeile nur Text, mit ihm beantwortet sie die
     # offene Frage aus #173 (haette die Positivliste diesen Fall getroffen?).
-    assert "extraktor-verdacht=True" in roh
+    assert "extraktor-verdacht=True" in rohzeile
 
 
 def test_rohmeldung_meldet_AUCH_einen_fall_den_die_liste_NICHT_trifft(projekt, capsys):
@@ -279,9 +281,36 @@ def test_rohmeldung_meldet_AUCH_einen_fall_den_die_liste_NICHT_trifft(projekt, c
     _FakeYDL.fehler = RuntimeError("ERROR: Sorry, this content isn't available right now")
     with pytest.raises(SystemExit):
         fetch.main(["Demo", "https://www.instagram.com/reel/C8xY2pQr/"])
-    roh = capsys.readouterr().out.partition("[fetch] roh")[2]
-    assert "extraktor-verdacht=False" in roh
-    assert "isn't available right now" in roh
+    rohzeile = next(z for z in capsys.readouterr().out.splitlines()
+                    if z.startswith("[fetch] roh"))
+    assert "extraktor-verdacht=False" in rohzeile
+    assert "isn't available right now" in rohzeile
+
+
+def test_rohmeldung_der_AUSLOESENDEN_meldung_geht_nicht_verloren(projekt, monkeypatch, capsys):
+    """Loest der erste Fehlschlag die Selbstheilung aus, ueberschreibt der Wiederholversuch
+    `fehler`. Stuende die Rohzeile nur am Schleifenende, fehlte ausgerechnet die AUSLOESENDE
+    Meldung — also genau die, an der `_EXTRAKTOR_RE` nachzuziehen waere. Der Zweck von #173
+    waere damit ausgehebelt, und das Protokoll laese sich obendrein widerspruechlich:
+    „yt-dlp aktualisiert" direkt ueber einem `extraktor-verdacht=False`.
+
+    Gefunden vom Reviewer-Subagenten an PR #223 (M1), nicht von einem roten Test.
+    """
+    _FakeYDL.fehler = RuntimeError("ERROR: nsig extraction failed; player abc123")
+
+    def heilen(erzwingen=False):
+        _FakeYDL.fehler = RuntimeError("ERROR: Sorry, this content isn't available")
+        return True
+    monkeypatch.setattr(fetch.ytdlp_update, "automatisch", heilen)
+    monkeypatch.setattr(fetch, "_importiere_yt_dlp", lambda: _FakeYtDlp)   # fuer _neu_laden()
+    with pytest.raises(SystemExit):
+        fetch.main(["Demo", "https://youtu.be/vid123", "--download-only"])
+
+    rohzeilen = [z for z in capsys.readouterr().out.splitlines()
+                 if z.startswith("[fetch] roh")]
+    assert len(rohzeilen) == 2
+    assert "nsig extraction failed" in rohzeilen[0] and "verdacht=True" in rohzeilen[0]
+    assert "isn't available" in rohzeilen[1] and "verdacht=False" in rohzeilen[1]
 
 
 def test_rohmeldung_ist_einzeilig_und_gedeckelt():

@@ -178,8 +178,11 @@ def _node_modus():
             os.environ["ELECTRON_RUN_AS_NODE"] = alt
 
 
-# Wie viel Rohmeldung ins Protokoll geht. yt-dlp haengt bei manchen Fehlern eine ganze
-# HTTP-Antwort an; ungedeckelt stuende die im Job-Log, das der Nutzer im Browser liest.
+# Wie viel Rohmeldung ins Protokoll geht. Der Deckel ist VORSORGE, kein beobachteter Fall:
+# gemessen sind die yt-dlp-Meldungen dieses Projekts einzeilig und kurz. Er steht trotzdem,
+# weil der Text aus der Fremdplattform stammt (Fehlerseite, Videotitel) und im Job-Log
+# landet, das der Nutzer im Browser liest — und weil 500 Zeichen fuer den Zweck der Zeile
+# (die Formulierung erkennen, an der `_EXTRAKTOR_RE` nachzuziehen waere) reichlich sind.
 _ROH_MAX = 500
 
 
@@ -370,8 +373,27 @@ def main(argv=None):
     print("[scope] ", flush=True)
     geladen = []
     geheilt = False        # hoechstens EIN pip pro Lauf, egal wie viele URLs brechen
+    def _roh_ins_log(fehler: Exception) -> None:
+        """#173: die Rohmeldung samt Urteil der Positivliste. Erst beides nebeneinander
+        beantwortet die offene Frage — haette `_EXTRAKTOR_RE` diesen Fall getroffen?
+
+        **Gerufen bei JEDEM Fehlschlag, auch bei dem, der gleich geheilt wird.** Der
+        Wiederholversuch ueberschreibt `fehler`; stuende die Zeile nur am Schleifenende,
+        fehlte ausgerechnet die ausloesende Meldung — also genau die, an der die Liste
+        nachzuziehen waere. Nebenbei laese sich das Protokoll dann widerspruechlich:
+        „yt-dlp aktualisiert" direkt ueber einem `extraktor-verdacht=False`.
+
+        Das Praefix `[fetch] ` ist Pflicht: `jobPhases.ts:54` schluckt damit die Zeile,
+        sonst laese seine Datei-Regex `^\\[.+?\\] FEHLER (.+?): ` sie als Fehlschlag mit
+        der URL als Basisnamen.
+        """
+        print(f"[fetch] roh ({type(fehler).__name__}, extraktor-verdacht="
+              f"{_extraktor_verdacht(fehler)}): {_rohmeldung(fehler)}", flush=True)
+
     for url in args.urls:
         base, fehler = _lade(args.project, url)
+        if fehler is not None:
+            _roh_ins_log(fehler)
         # Selbstheilung: ein veralteter Extraktor bricht nicht nach Kalender, sondern wenn
         # YouTube etwas umstellt — der 14-Tage-Takt kaeme dafuer zu spaet. `erzwingen` uebergeht
         # deshalb den Merker; der Schalter bleibt unberuehrt.
@@ -386,16 +408,12 @@ def main(argv=None):
                 print(f"[fetch] yt-dlp aktualisiert — versuche {url} noch einmal", flush=True)
                 _neu_laden()
                 base, fehler = _lade(args.project, url)
+                if fehler is not None:
+                    _roh_ins_log(fehler)      # der zweite Versuch, nach der Heilung
         if fehler is not None:
+            # Der Rat an den Nutzer zuletzt: er ist die Handlungsanweisung, die Rohzeilen
+            # darueber sind die Belege.
             print(f"[fetch] FEHLER {url}: {_human_error(fehler)}", flush=True)
-            # #173: die Rohmeldung MIT ins Protokoll, samt Urteil der Positivliste. Erst
-            # beides nebeneinander beantwortet die offene Frage — haette `_EXTRAKTOR_RE`
-            # diesen Fall getroffen? Ohne das Urteil waere die Zeile nur Text, ohne die
-            # Rohmeldung gaebe es nichts zu beurteilen. Das Praefix `[fetch] ` ist Pflicht:
-            # `jobPhases.ts` schluckt damit die Zeile, sonst laese sie seine Datei-Regex
-            # `^\[.+?\] FEHLER (.+?): ` als Fehlschlag mit der URL als Basisnamen.
-            print(f"[fetch] roh ({type(fehler).__name__}, extraktor-verdacht="
-                  f"{_extraktor_verdacht(fehler)}): {_rohmeldung(fehler)}", flush=True)
         else:
             geladen.append(base)
     print(f"[fetch] {len(geladen)} von {len(args.urls)} geladen", flush=True)
