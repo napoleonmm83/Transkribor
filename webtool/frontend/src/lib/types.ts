@@ -85,7 +85,12 @@ export type Settings = {
  *  installiert (dann steht der URL-Import nicht zur Verfügung) gegen "Metadaten nicht
  *  lesbar" — dort läuft der Import weiter, nur die Selbstaktualisierung ist ausgesetzt
  *  (#189). Ohne das Feld behauptete die Seite das Gegenteil dessen, was der Nutzer tun kann. */
-export type YtdlpStand = { version: string | null; unlesbar: boolean; geprueft: string; auto: boolean; env: boolean };
+/** `laeuft`/`ergebnis` gehören zum Knopf „Jetzt aktualisieren" (#174): der POST kehrt sofort
+ *  zurück, pip läuft im Hintergrund weiter. `ergebnis` ist `''`, solange nichts gelaufen ist
+ *  oder gerade etwas läuft — sonst `'ok'` bzw. `'fehler'`. Beide sind **Pflichtfelder**: der
+ *  Server schickt sie immer, und optional wären sie eine Einladung, den Ausgang eines
+ *  Fehlschlags zu vergessen — also genau der stille Ausfall, den der Umbau vermeiden soll. */
+export type YtdlpStand = { version: string | null; unlesbar: boolean; geprueft: string; auto: boolean; env: boolean; laeuft: boolean; ergebnis: string };
 export type ModelInfo = { id: string; label: string };
 /** Anmeldezustand einer Abo-CLI. `unterstuetzt: false` heisst: der Anbieter kennt so etwas
  *  nicht — bei den API-Anbietern IST der Key die Anmeldung. */

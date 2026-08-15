@@ -811,17 +811,26 @@ def settings_kaputt_weg():
 
 @app.post("/api/settings/ytdlp/update")
 def settings_ytdlp_update():
-    """Der Knopf 'Jetzt aktualisieren'. Laeuft SYNCHRON im Request.
+    """Der Knopf 'Jetzt aktualisieren'. Stoesst pip an und kehrt SOFORT zurueck (#174).
 
-    ponytail: haengt den Browser im schlimmsten Fall rund **250 s** an einem Spinner —
-    PIP_TIMEOUT (120 s) Warten auf die Sperre eines fremden pip-Laufs, dann der eigene mit
-    demselben Deckel. Ein eigener Job-Typ waere sauberer, kostete aber ein neues `kind` samt
-    Label in `_KIND_TEXT`, `jobPhases.ts` und der Fusszeile — fuer zehn Sekunden
-    Hintergrundarbeit. Anders als beim Import hat hier jemand geklickt und schaut hin.
-    Wenn das je stoert: `jobs.request()` (#174).
+    Vorher lief pip synchron im Request. Der Docstring bezifferte den schlimmsten Fall auf
+    „rund 250 s" und begruendete das mit „PIP_TIMEOUT (120 s) Warten auf die Sperre" — beides
+    falsch (#219): gewartet wird `sperre.frist(stale)`, und `stale` ist am pip-Lock seit #207
+    `PIP_TIMEOUT + 30 + sperre.frist()` = 215 s, macht **220 s** Wartezeit plus 120 s eigenes
+    pip = **>=340 s**. Zwei Minuten ohne Lebenszeichen liest ein Nutzer als Absturz; ein
+    Proxy- oder Browser-Timeout schnitt den Request ausserdem ab, ohne dass der pip-Lauf
+    davon etwas merkte — das Ergebnis sah dann niemand.
+
+    **Kein eigener Job-Typ.** Der kostete ein neues `kind` samt Label in `_KIND_TEXT`,
+    `jobPhases.ts` und der Fusszeile — fuer eine Arbeit, die zu keiner Datei gehoert und
+    deren Fortschritt niemanden interessiert. Ein Faden plus zwei Felder in `zustand()`
+    reicht: das Frontend fragt beim naechsten `GET /api/settings` nach.
+
+    **`gestartet: false`** heisst „es laeuft schon einer" — kein Fehler, sondern die
+    Antwort auf den zweiten Klick. Das Frontend haengt sich dann an denselben Lauf.
     """
-    ok = ytdlp_update.aktualisiere()
-    return {"ok": ok, **ytdlp_update.zustand()}
+    gestartet = ytdlp_update.starte_hintergrund()
+    return {"gestartet": gestartet, **ytdlp_update.zustand()}
 
 
 @app.get("/api/hardware")

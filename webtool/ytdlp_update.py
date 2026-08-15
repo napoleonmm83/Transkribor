@@ -30,6 +30,7 @@ import os
 import re
 import subprocess
 import sys
+import threading
 from importlib import metadata
 
 from . import settings, sperre
@@ -510,6 +511,60 @@ def aktualisiere() -> bool:
     return ok
 
 
+# Zustand des Knopfes „Jetzt aktualisieren" (#174). `ergebnis`: "" = noch nichts bzw.
+# laeuft gerade, "ok" = pip sauber durch, "fehler" = nicht.
+#
+# **Modulzustand, also PRO PROZESS** — und das ist richtig so: der fetch-Subprozess
+# aktualisiert ebenfalls, aber der hat kein Frontend, das nachfragt. Dass sich die beiden
+# nicht ins Gehege kommen, regelt `sperre.datei` in `aktualisiere()`, nicht dieser Riegel;
+# hier geht es allein um den Doppelklick im selben Server.
+_lauf = {"laeuft": False, "ergebnis": ""}
+_lauf_sperre = threading.Lock()
+
+
+def hintergrund_zustand() -> tuple[bool, str]:
+    """`(laeuft, ergebnis)` — unter der Sperre gelesen, damit beide zusammenpassen."""
+    with _lauf_sperre:
+        return _lauf["laeuft"], _lauf["ergebnis"]
+
+
+def starte_hintergrund() -> bool:
+    """`aktualisiere()` in einem Faden anstossen. False = es laeuft schon einer.
+
+    Der Knopf lief bis #174 SYNCHRON im Request. Der schlimmste Fall sind nicht die im
+    alten Docstring genannten „rund 250 s", sondern **>=340 s** (#219): die Wartezeit haengt
+    an `sperre.frist(stale)` = 220 s, danach kommt das eigene pip mit 120 s obendrauf. Zwei
+    Minuten ohne Lebenszeichen liest ein Nutzer als Absturz — und ein Proxy- oder
+    Browser-Timeout schnitt den Request ab, ohne dass der pip-Lauf davon etwas merkte:
+    das Ergebnis sah dann niemand.
+    """
+    with _lauf_sperre:
+        if _lauf["laeuft"]:
+            return False
+        _lauf["laeuft"] = True
+        _lauf["ergebnis"] = ""
+    threading.Thread(target=_im_hintergrund, daemon=True).start()
+    return True
+
+
+def _im_hintergrund() -> None:
+    """Der Faden. Setzt `laeuft` unter ALLEN Umstaenden zurueck."""
+    # `ergebnis` VOR dem `try`: ein Wurf, den `except Exception` nicht faengt (SystemExit,
+    # KeyboardInterrupt), liefe im `finally` sonst in einen NameError — und `laeuft` bliebe
+    # fuer immer True, womit der Knopf bis zum Serverneustart nichts mehr taete.
+    ergebnis = "fehler"
+    try:
+        ergebnis = "ok" if aktualisiere() else "fehler"
+    except Exception as e:
+        # `aktualisiere()` faengt selbst schon OSError/SubprocessError; was hier ankommt,
+        # ist unerwartet und gehoert benannt statt verschluckt.
+        print(f"[ytdlp] Hintergrundlauf abgebrochen: {type(e).__name__}: {e}", flush=True)
+    finally:
+        with _lauf_sperre:
+            _lauf["laeuft"] = False
+            _lauf["ergebnis"] = ergebnis
+
+
 def automatisch(erzwingen: bool = False) -> bool:
     """Der automatische Weg: Schalter und Faelligkeit werden respektiert.
 
@@ -536,8 +591,15 @@ def zustand() -> dict:
     die beiden Werte kommen aus zwei Antworten (PUT liefert nur `ytdlp_auto`), und dazwischen
     behauptete der Vergleich fuer einen Moment ein Override, das es gar nicht gibt. Eine
     Wahrheit statt einer abgeleiteten.
+
+    `laeuft`/`ergebnis` gehoeren seit #174 dazu: der Knopf antwortet sofort, der Ausgang des
+    pip-Laufs kommt ueber den naechsten GET nach. Ohne die beiden Felder haette der Umbau
+    einen haengenden Browser gegen einen STILLEN Fehlschlag getauscht — und der ist die
+    teurere Sorte (dieselbe Klasse wie #189/#192).
     """
     g = geprueft()
     v, unlesbar = _fassung_und_lesbarkeit()
+    laeuft, ergebnis = hintergrund_zustand()
     return {"version": v, "unlesbar": unlesbar, "geprueft": g.isoformat() if g else "",
-            "auto": auto_an(), "env": env_override() is not None}
+            "auto": auto_an(), "env": env_override() is not None,
+            "laeuft": laeuft, "ergebnis": ergebnis}
