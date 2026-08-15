@@ -160,6 +160,34 @@ describe('SegmentView', () => {
     expect(toastMock.info).toHaveBeenCalledWith(expect.stringContaining('neue Notiz'))
   })
 
+  it('der Toast nennt die gestrichene Notiz — zwei Streichungen sind unterscheidbar', () => {
+    // CodeRabbit Runde 2, Ablauf „A streichen, B schreiben, B streichen, den ERSTEN Toast
+    // klicken". Verlorengehen kann dabei nichts (der Waechter schreibt nur ins LEERE Feld, siehe
+    // Test darueber) — aber beide Toasts lasen sich gleich, und welcher Knopf welchen Eintrag
+    // zurueckholt, war nicht zu sehen. Deshalb steht der Inhalt drin, statt dass ein
+    // Revisionszaehler den aelteren Knopf verweigert: verweigern hiesse, dem Nutzer den
+    // Rueckweg zu nehmen, den er gerade anklickt.
+    toastMock.mockClear()
+    const updateSegment = vi.fn()
+    const { rerender } = render(<TooltipProvider><SegmentView seg={mkSeg({ note: 'A' })} active={false} onPlay={vi.fn()} updateSegment={updateSegment} /></TooltipProvider>)
+    fireEvent.click(screen.getByText('A'))
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: '' } })
+    fireEvent.blur(screen.getByRole('textbox'))
+
+    rerender(<TooltipProvider><SegmentView seg={mkSeg({ note: 'B' })} active={false} onPlay={vi.fn()} updateSegment={updateSegment} /></TooltipProvider>)
+    fireEvent.click(screen.getByText('B'))
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: '' } })
+    fireEvent.blur(screen.getByRole('textbox'))
+    rerender(<TooltipProvider><SegmentView seg={mkSeg({ note: '' })} active={false} onPlay={vi.fn()} updateSegment={updateSegment} /></TooltipProvider>)
+
+    const texte = toastMock.mock.calls.map(c => c[0] as string)
+    expect(texte).toEqual(['Notiz „A“ gestrichen', 'Notiz „B“ gestrichen'])
+    // Und der erste Knopf holt weiterhin A zurueck — ins leere Feld, es geht nichts verloren.
+    updateSegment.mockClear()
+    ;(toastMock.mock.calls[0][1] as { action: { onClick: () => void } }).action.onClick()
+    expect(updateSegment).toHaveBeenCalledWith(1, { note: 'A' })
+  })
+
   it('meldet beim blossen Aendern der Notiz keinen Streich-Toast', () => {
     // Gegenprobe: ein Rueckweg, der IMMER angeboten wird, ist derselbe Schaden von der anderen
     // Seite — Dauerlaerm, bis niemand mehr hinsieht. NICHT herstellbar waere die Variante

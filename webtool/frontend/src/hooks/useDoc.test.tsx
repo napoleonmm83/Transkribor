@@ -834,7 +834,7 @@ describe('useDoc: der Rueckweg einer Streichung ueberlebt den Dokumentwechsel NI
 
     await act(async () => {
       result.current.updateDoc({ annotations: [] })
-      gestrichen('Anmerkung', () => result.current.updateDoc({ annotations: ['A-eins'] }))
+      gestrichen('Anmerkung', 'A-eins', () => result.current.updateDoc({ annotations: ['A-eins'] }))
     })
     expect(await klickeRueckgaengig()).toBe(true)
     await act(async () => { await vi.advanceTimersByTimeAsync(900) })
@@ -854,7 +854,7 @@ describe('useDoc: der Rueckweg einer Streichung ueberlebt den Dokumentwechsel NI
 
     await act(async () => {
       h.result.current.updateDoc({ annotations: [] })
-      gestrichen('Anmerkung', () => h.result.current.updateDoc({ annotations: ['A-eins'] }))
+      gestrichen('Anmerkung', 'A-eins', () => h.result.current.updateDoc({ annotations: ['A-eins'] }))
     })
 
     vi.mocked(api.getDoc).mockResolvedValue(docB)
@@ -879,7 +879,7 @@ describe('useDoc: der Rueckweg einer Streichung ueberlebt den Dokumentwechsel NI
 
     await act(async () => {
       result.current.updateDoc({ annotations: [] })
-      gestrichen('Anmerkung', () => result.current.updateDoc({ annotations: ['alt-eins'] }))
+      gestrichen('Anmerkung', 'alt-eins', () => result.current.updateDoc({ annotations: ['alt-eins'] }))
     })
 
     vi.mocked(api.getDoc).mockResolvedValue(korrigiert)
@@ -901,7 +901,7 @@ describe('useDoc: der Rueckweg einer Streichung ueberlebt den Dokumentwechsel NI
 
     await act(async () => {
       result.current.updateDoc({ annotations: [] })
-      gestrichen('Anmerkung', () => result.current.updateDoc({ annotations: ['A-eins'] }))
+      gestrichen('Anmerkung', 'A-eins', () => result.current.updateDoc({ annotations: ['A-eins'] }))
     })
 
     act(() => { result.current.vergiss() })
@@ -919,7 +919,7 @@ describe('useDoc: der Rueckweg einer Streichung ueberlebt den Dokumentwechsel NI
 
     await act(async () => {
       result.current.updateDoc({ annotations: [] })
-      gestrichen('Anmerkung', () => result.current.updateDoc({ annotations: ['A-eins'] }))
+      gestrichen('Anmerkung', 'A-eins', () => result.current.updateDoc({ annotations: ['A-eins'] }))
     })
 
     act(() => { unmount() })

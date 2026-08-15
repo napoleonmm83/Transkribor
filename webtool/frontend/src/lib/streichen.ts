@@ -25,11 +25,23 @@ import { toast } from 'sonner'
  */
 let offen: (string | number)[] = []
 
-export function gestrichen(was: string, zurueck: () => void) {
+/** Genug, um den Eintrag wiederzuerkennen, ohne den Toast zur Textwand zu machen. */
+const kurz = (t: string) => (t.length > 40 ? t.slice(0, 40).trimEnd() + '…' : t)
+
+/**
+ * @param was   Gattung („Anmerkung“, „Notiz“) — steht auch da, wenn `inhalt` leer ist.
+ * @param inhalt Was gestrichen wurde. **Der Toast MUSS es nennen:** zwei Streichungen kurz
+ *   hintereinander stehen sonst als zwei identische „Notiz gestrichen“ uebereinander, und
+ *   welcher Knopf welchen Eintrag zurueckholt, ist nicht zu sehen. Genau daran haengt der
+ *   Ablauf, den CodeRabbit in Runde 2 beschrieb (A streichen, B schreiben, B streichen, den
+ *   ERSTEN Toast klicken): Schaden entsteht dabei keiner — der Waechter schreibt nur ins leere
+ *   Feld —, aber der Nutzer bekommt einen anderen Eintrag zurueck als den, den er meinte.
+ */
+export function gestrichen(was: string, inhalt: string, zurueck: () => void) {
   // 10 s statt sonners 4: das hier ist eine Datenrettung, keine Erfolgsmeldung — vier Sekunden
   // reichen zum Lesen, nicht zum Entscheiden. Gefahrlos erst, seit der Rueckweg beim
   // Dokumentwechsel entwertet wird; ohne das vergroesserte jede laengere Standzeit den Schaden.
-  offen.push(toast(`${was} gestrichen`, {
+  offen.push(toast(inhalt.trim() ? `${was} „${kurz(inhalt.trim())}“ gestrichen` : `${was} gestrichen`, {
     duration: 10_000,
     action: { label: 'Rückgängig', onClick: zurueck },
   }))

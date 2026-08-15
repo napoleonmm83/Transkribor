@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { CircleHelp, MessageSquare, MessageSquarePlus, Play, ScanSearch, TriangleAlert } from 'lucide-react'
 import type { Segment } from '@/lib/types'
@@ -32,8 +32,15 @@ export function SegmentView({ seg, active, onPlay, updateSegment, dimmen = false
   // Wahrheiten darueber, ob das Feld offen ist.
   const [notiz, setNotiz] = useState(false)
   /** Was JETZT im Notizfeld steht — fuer den Rueckweg, der zehn Sekunden spaeter feuert.
-   *  `seg.note` aus der Closure der Streichung ist dann veraltet. */
-  const notizJetzt = useRef(seg.note); notizJetzt.current = seg.note
+   *  `seg.note` aus der Closure der Streichung ist dann veraltet.
+   *
+   *  Im `useLayoutEffect` statt im Render-Koerper: eine Zuweisung waehrend des Renderns
+   *  uebernimmt auch den Stand eines Durchlaufs, den React wieder verwirft — der Ref traege
+   *  dann einen Wert, der nie sichtbar war. Gelesen wird er ausschliesslich aus einem
+   *  Ereignis-Rueckruf, also immer nach dem Commit; synchron im Commit gesetzt ist er dort in
+   *  jedem Fall aktuell. Dieselbe Wahl und dieselbe Begruendung wie bei `offen` in `useDoc`. */
+  const notizJetzt = useRef(seg.note)
+  useLayoutEffect(() => { notizJetzt.current = seg.note }, [seg.note])
   const corrected = isCorrected(seg)
   const flags = FLAGS.filter(f => seg.flags[f.key])
   const rawTokens = tokenizeUncertain(seg).map((t, i) => t.cls
@@ -119,7 +126,7 @@ export function SegmentView({ seg, active, onPlay, updateSegment, dimmen = false
                   const streicht = !t.trim()
                   const alt = seg.note
                   updateSegment(seg.id, { note: streicht ? '' : t })
-                  if (streicht) gestrichen('Notiz', () => {
+                  if (streicht) gestrichen('Notiz', alt, () => {
                     // Nur, wenn das Feld noch so dasteht, wie die Streichung es hinterlassen hat.
                     // Steht dort inzwischen eine NEUE Notiz, waere das Zurueckholen ein
                     // Ueberschreiben — derselbe stille Verlust, gegen den der Rueckweg gebaut ist
