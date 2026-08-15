@@ -86,10 +86,18 @@ _EJS_NAME_RE = re.compile(r"^\s*yt[-_.]+dlp[-_.]+ejs(?![\w.-])", re.IGNORECASE)
 # hoechstens eine verspaetete Erkennung) und billiger als eine Regex, die beide Klammerformen
 # mitfuehrt, solange yt-dlp keine davon schreibt.
 _EJS_PIN_RE = re.compile(r"^\s*yt[-_.]+dlp[-_.]+ejs\s*==\s*([^\s;,()]+)", re.IGNORECASE)
-# Der Umgebungsmarker derselben Zeile. `fullmatch` gegen GENAU `extra == 'default'` — alles
-# andere (`extra == 'pin'`, zusaetzliches `and python_version …`) faellt nach fail-open.
-# Siehe `_gilt_fuer_uns`.
+# Der Umgebungsmarker derselben Zeile — der RUECKFALL, wenn `packaging` fehlt. `fullmatch` gegen
+# GENAU `extra == 'default'`; alles andere faellt dann nach fail-open. Siehe `_gilt_fuer_uns`.
 _NUR_DEFAULT_RE = re.compile(r"extra\s*==\s*['\"]default['\"]", re.IGNORECASE)
+
+# `packaging` steht seit #187 in der requirements.txt (vorher kam es nur zufaellig ueber
+# onnxruntime herein). Trotzdem abgesichert importiert, und mit `Exception` statt `ImportError`:
+# dieses Modul darf NIRGENDS werfen — `fetch._hole_yt_dlp()` hat keinen Schutz (#185), ein
+# Fehler beim Import zerlegte den ganzen URL-Import. Fehlt es, gilt die strikte Regel von vorher.
+try:
+    from packaging.markers import Marker as _Marker
+except Exception:                                          # pragma: no cover - siehe _ohne_packaging
+    _Marker = None
 
 
 def _heute() -> dt.date:
@@ -171,15 +179,31 @@ def _gilt_fuer_uns(zeile: str) -> bool:
 
     Ohne Marker ist es eine harte Abhaengigkeit und gilt fuer jede Installation.
 
-    Der Marker muss **genau** `extra == 'default'` sein, nichts daneben. Ein
-    `extra == 'default' and python_version >= "3.14"` waere sonst „gilt fuer uns", waehrend
-    pip auf 3.13 weiter die alte Fassung installiert: wir laesen einen Pin, den pip nie
-    erfuellt, und der Flag ginge nie weg. Marker richtig auszuwerten braeuchte
-    `packaging.markers` — hier reicht der Rueckfall, weil ein nicht gelesener Pin nur den
-    Kalenderweg entscheiden laesst, ein falsch gelesener aber ein taegliches pip erzeugt.
+    Der Marker wird seit #187 **ausgewertet** (`packaging.markers`), nicht mehr mit einer
+    Zeichenkette verglichen. Vorher galt nur exakt `extra == 'default'`; ein
+    `extra == 'default' and python_version >= "3.9"` fiel nach fail-open — obwohl pip das
+    Paket auf jedem unterstuetzten Python sehr wohl installiert. Folge waren zwei STILLE
+    Ausfaelle (`_ejs_pin()` -> None, `_ejs_verlangt()` -> False) bis zum 14-Tage-Kalender.
+
+    Gefragt wird gegen `extra="default"` — genau das, was wir installieren (`yt-dlp[default]`);
+    `python_version` und die uebrigen Variablen kommen vom laufenden Interpreter. Damit gilt
+    ein *erfuellter* Zusatzmarker, ein *unerfuellter* nicht: `extra == 'default' and
+    python_version >= "3.99"` heisst, dass pip hier eine andere Fassung installiert, und ein
+    Pin, den pip nie erfuellt, erzeugte ein taegliches pip ohne Ende.
+
+    Ohne `packaging` (oder bei einem Marker, den es nicht versteht) bleibt die alte, strikte
+    Regel. Die Richtung ist dieselbe wie vorher: ein nicht gelesener Pin laesst nur den
+    Kalenderweg entscheiden, ein falsch gelesener erzeugt taegliches pip.
     """
     marker = zeile.partition(";")[2].strip()
-    return not marker or bool(_NUR_DEFAULT_RE.fullmatch(marker))
+    if not marker:
+        return True
+    if _Marker is not None:
+        try:
+            return bool(_Marker(marker).evaluate({"extra": "default"}))
+        except Exception:
+            pass                                    # unverstaendlicher Marker -> strikte Regel
+    return bool(_NUR_DEFAULT_RE.fullmatch(marker))
 
 
 def _ejs_zeilen() -> list[str]:

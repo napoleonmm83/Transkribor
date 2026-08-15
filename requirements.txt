@@ -35,6 +35,11 @@ pyannote.audio==4.0.7
 # brotli — letzteres verlangt im ganzen Baum kein Paket unbedingt, es haengt ueberall nur an
 # einem Extra (geprueft ueber `importlib.metadata`, Zeilen ohne `extra ==`-Marker).
 yt-dlp[default]>=2026.7.4
+# Fuer `webtool/ytdlp_update.py:_gilt_fuer_uns` (#187): die Umgebungsmarker der yt-dlp-Metadaten
+# werden AUSGEWERTET statt mit einer Zeichenkette verglichen. Kaeme transitiv ueber onnxruntime
+# (pyannote-Kette) ohnehin herein — worauf man sich verlaesst, gehoert benannt; dieselbe Regel wie
+# bei certifi oben. Der Import ist trotzdem abgesichert: das Modul darf nirgends werfen (#185).
+packaging
 # Untergrenze wegen CVE-2023-52323 (Seitenkanal im OCB-Modus, behoben in 3.19.1).
 # pycryptodomex kommt neu ueber `[default]` herein und wird von yt-dlp ohne jede Grenze
 # deklariert — ein Pin ist das hier NICHT (die fuehrt yt-dlp, siehe oben), nur ein Boden.
