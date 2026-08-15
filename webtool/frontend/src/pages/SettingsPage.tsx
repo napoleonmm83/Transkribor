@@ -10,7 +10,7 @@ import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import type { AuthStatus, Hardware, LoginState, ModelInfo, ProviderInfo, Settings } from '@/lib/types'
+import type { AuthStatus, Hardware, LoginState, ModelInfo, ProviderInfo, Settings, YtdlpStand } from '@/lib/types'
 
 const RELEASES = 'https://github.com/napoleonmm83/Transkribor/releases'
 
@@ -247,21 +247,37 @@ export function SettingsPage() {
 
   // Der Knopf holt die Einstellungen danach neu: Fassung und Prüfdatum stehen dort, und ohne
   // das Nachladen bliebe die Anzeige auf dem Stand von vor dem Klick.
+  // Der Knopf wartet seit #174 nicht mehr auf pip — er stösst an und fragt nach. Das
+  // Nachfragen ist NICHT optional: ohne es stünde ein Fehlschlag nur in der Serverkonsole,
+  // und der Umbau hätte einen hängenden Browser gegen einen stillen Ausfall getauscht.
+  //
+  // `disabled` hängt bewusst nur am LOKALEN `ytLaeuft`, nicht an `s.ytdlp.laeuft`: wer die
+  // Seite mitten im Lauf neu lädt, sässe sonst vor einem dauerhaft gesperrten Knopf (nichts
+  // pollt hier von sich aus). So klickt er stattdessen nochmal, bekommt `gestartet: false`
+  // und hängt sich an den laufenden — der Fall heilt sich selbst.
   const ytJetzt = async () => {
     setYtLaeuft(true)
     try {
       const r = await updateYtdlp()
+      if (!r.gestartet) toast.info('Eine Aktualisierung läuft bereits — ich warte auf sie.')
+      let stand: YtdlpStand = r
+      while (stand.laeuft) {
+        await new Promise(f => setTimeout(f, 1500))
+        const neu = await getSettings()
+        setS(neu)                       // die Fassungszeile oben zieht dabei live nach
+        stand = neu.ytdlp
+      }
       // Ohne Fassung KEINE Fassung nennen: pip meldet Erfolg, die Metadaten bleiben aber
       // unlesbar — der Toast sagte dann "yt-dlp ist jetzt auf null" (#189).
       // Der Fehlerzweig darf nicht raten: bei kaputter METADATA scheitert **pip selbst**
       // (gemessen: `pip list` gegen eine praeparierte dist-info endet mit Exit 2 und
       // UnicodeDecodeError). "Bist du online?" waere dann dieselbe Fehldiagnose, gegen die
-      // die Zeile darunter gebaut ist — und die Antwort trägt `unlesbar` bereits mit.
-      r.ok ? toast.success(r.version ? `yt-dlp ist jetzt auf ${r.version}` : 'yt-dlp wurde aktualisiert')
-        : toast.error(r.unlesbar
+      // die Zeile darunter gebaut ist — und der Zustand trägt `unlesbar` bereits mit.
+      stand.ergebnis === 'ok'
+        ? toast.success(stand.version ? `yt-dlp ist jetzt auf ${stand.version}` : 'yt-dlp wurde aktualisiert')
+        : toast.error(stand.unlesbar
           ? 'Die Metadaten von yt-dlp sind beschädigt — pip kann sie nicht lesen. Hilft nur neu installieren.'
           : 'Aktualisierung fehlgeschlagen — bist du online?')
-      await getSettings().then(setS)
     } catch (e) { toast.error(String(e)) } finally { setYtLaeuft(false) }
   }
 

@@ -1,7 +1,20 @@
 import json
 import os
+import threading
+import time
 import pytest
 from fastapi.testclient import TestClient
+
+
+def _warte(pruef, sekunden=5.0) -> bool:
+    """Bis `pruef()` wahr ist. Ein Faden braucht eine Weile — aber kein Test darf haengen,
+    und ein festes `sleep` waere auf einem geteilten Runner entweder zu kurz oder Ballast."""
+    ende = time.monotonic() + sekunden
+    while time.monotonic() < ende:
+        if pruef():
+            return True
+        time.sleep(0.01)
+    return bool(pruef())
 
 
 @pytest.fixture
@@ -27,6 +40,12 @@ def client(monkeypatch, tmp_path):
     # Tests, die den Start pruefen, patchen `start` danach selbst.
     import webtool.jobs as jobs_mod
     monkeypatch.setattr(jobs_mod, "start", lambda *a, **k: ("job-fake", True))
+    # Der Hintergrundlauf des yt-dlp-Knopfs (#174) ist MODULZUSTAND und ueberlebt den Test.
+    # Ein liegengebliebenes `laeuft=True` sperrte den Knopf in jedem folgenden — `setitem`
+    # setzt und stellt danach wieder her.
+    import webtool.ytdlp_update as ytu
+    monkeypatch.setitem(ytu._lauf, "laeuft", False)
+    monkeypatch.setitem(ytu._lauf, "ergebnis", "")
     from webtool.app import app
     return TestClient(app)
 
@@ -550,7 +569,10 @@ def test_settings_modellwechsel_behaelt_den_key(client):
     body = r.json()
     # `ytdlp` haengt an der Umgebung (installierte Fassung), nicht an den Einstellungen —
     # separat geprueft, damit dieser Vergleich nicht bei jedem yt-dlp-Update umfaellt.
-    assert body.pop("ytdlp").keys() == {"version", "unlesbar", "geprueft", "auto", "env"}
+    assert body.pop("ytdlp").keys() == {"version", "unlesbar", "geprueft", "auto", "env",
+                                        # seit #174: der Knopf antwortet sofort, der Ausgang
+                                        # des pip-Laufs kommt ueber diese beiden nach
+                                        "laeuft", "ergebnis"}
     assert body == {"provider": "anthropic", "model": "claude-sonnet-5",
                     "base_url": "", "has_key": True,
                     "whisper_model": "large-v3", "whisper_lang": "de",
@@ -611,29 +633,106 @@ def test_settings_ytdlp_merker_kommt_nicht_aus_dem_browser(client):
     assert s.load()["ytdlp_geprueft"] == ""
 
 
-def test_ytdlp_update_knopf_ruft_pip_und_meldet_das_ergebnis(client, monkeypatch):
+def test_ytdlp_update_knopf_kehrt_zurueck_WAEHREND_pip_noch_laeuft(client, monkeypatch):
+    """#174 — der eigentliche Fix. Vorher haing der Request am pip-Lauf: >=340 s im
+    schlimmsten Fall (220 s `sperre.frist` + 120 s eigenes pip), und so lange sieht die App
+    fuer einen Nutzer aus wie abgestuerzt."""
     from webtool import ytdlp_update
-    monkeypatch.setattr(ytdlp_update, "aktualisiere", lambda: True)
+    los = threading.Event()
+
+    def langsam():
+        los.wait(5)
+        return True
+    monkeypatch.setattr(ytdlp_update, "aktualisiere", langsam)
     # An der ECHTEN Grenze gepatcht (`importlib.metadata`), nicht an einer Funktion des
     # Moduls: `fassung` zu patchen lief seit #189 ins Leere (`zustand()` geht nicht mehr
     # dadurch), und eine private Funktion zu patchen entwertet den naechsten Umbau
     # genauso still. So wird `_fassung_und_lesbarkeit` wirklich ausgeuebt.
     monkeypatch.setattr(ytdlp_update.metadata, "version", lambda name: "2026.8.12")
+
     r = client.post("/api/settings/ytdlp/update")
-    assert r.status_code == 200
-    assert r.json()["ok"] is True and r.json()["version"] == "2026.8.12"
-    # Der Knopf traegt denselben Zustandsblock wie GET /api/settings — das Frontend liest
-    # `unlesbar` von HIER, um bei einem Fehlschlag nicht "bist du online?" zu raten (#189).
-    assert r.json()["unlesbar"] is False
+    assert r.status_code == 200 and r.json()["gestartet"] is True
+    # DAS ist die Zusicherung: die Antwort ist da, waehrend der Lauf noch steht.
+    assert r.json()["laeuft"] is True and r.json()["ergebnis"] == ""
+
+    los.set()
+    assert _warte(lambda: not ytdlp_update.hintergrund_zustand()[0])
+    st = client.get("/api/settings").json()["ytdlp"]
+    # Der Ausgang geht nicht verloren, er kommt nur spaeter — sonst haette der Umbau einen
+    # haengenden Browser gegen einen stillen Fehlschlag getauscht.
+    assert st["laeuft"] is False and st["ergebnis"] == "ok" and st["version"] == "2026.8.12"
+    # Das Frontend liest `unlesbar` von hier, um bei einem Fehlschlag nicht "bist du
+    # online?" zu raten (#189).
+    assert st["unlesbar"] is False
 
 
-def test_ytdlp_update_knopf_meldet_fehlschlag_statt_zu_500en(client, monkeypatch):
+def test_ytdlp_update_zweiter_klick_startet_keinen_zweiten_lauf(client, monkeypatch):
+    """Zwei `pip install` auf dieselbe venv sind der Schaden, gegen den die Sperre gebaut
+    ist — im selben Prozess faengt ihn dieser Riegel schon vorher ab. `gestartet: false`
+    ist dabei KEIN Fehler, sondern 'haeng dich an den laufenden'."""
+    from webtool import ytdlp_update
+    los, laeufe = threading.Event(), []
+
+    def langsam():
+        laeufe.append(1)
+        los.wait(5)
+        return True
+    monkeypatch.setattr(ytdlp_update, "aktualisiere", langsam)
+
+    assert client.post("/api/settings/ytdlp/update").json()["gestartet"] is True
+    zweiter = client.post("/api/settings/ytdlp/update").json()
+    assert zweiter["gestartet"] is False and zweiter["laeuft"] is True
+    los.set()
+    assert _warte(lambda: not ytdlp_update.hintergrund_zustand()[0])
+    assert laeufe == [1]
+
+
+def test_ytdlp_update_fehlschlag_wird_gemeldet_statt_verschluckt(client, monkeypatch):
     """Offline ist ein Normalfall, kein Serverfehler — der Nutzer soll 'hat nicht
-    geklappt' lesen, nicht einen roten Stacktrace."""
+    geklappt' lesen, nicht einen roten Stacktrace und nicht: gar nichts."""
     from webtool import ytdlp_update
     monkeypatch.setattr(ytdlp_update, "aktualisiere", lambda: False)
-    r = client.post("/api/settings/ytdlp/update")
-    assert r.status_code == 200 and r.json()["ok"] is False
+    assert client.post("/api/settings/ytdlp/update").json()["gestartet"] is True
+    assert _warte(lambda: not ytdlp_update.hintergrund_zustand()[0])
+    assert client.get("/api/settings").json()["ytdlp"]["ergebnis"] == "fehler"
+
+
+def test_ytdlp_hintergrundlauf_gibt_den_knopf_auch_nach_einem_wurf_frei(client, monkeypatch):
+    """`laeuft` MUSS auch dann zurueckfallen, wenn `aktualisiere()` wirft — sonst waere der
+    Knopf bis zum Serverneustart tot, und zwar still."""
+    from webtool import ytdlp_update
+
+    def wirft():
+        raise RuntimeError("kaputt")
+    monkeypatch.setattr(ytdlp_update, "aktualisiere", wirft)
+    client.post("/api/settings/ytdlp/update")
+    assert _warte(lambda: not ytdlp_update.hintergrund_zustand()[0])
+    assert client.get("/api/settings").json()["ytdlp"]["ergebnis"] == "fehler"
+    # ... und ein neuer Klick geht wieder durch.
+    monkeypatch.setattr(ytdlp_update, "aktualisiere", lambda: True)
+    assert client.post("/api/settings/ytdlp/update").json()["gestartet"] is True
+    assert _warte(lambda: not ytdlp_update.hintergrund_zustand()[0])
+
+
+def test_ytdlp_hintergrundlauf_gibt_den_knopf_auch_nach_einem_BaseException_frei(
+        client, monkeypatch):
+    """Erst DIESER Test uebt das `finally` aus — der Test darueber nicht.
+
+    Ein `RuntimeError` wird schon von `except Exception` gefangen; danach liefe der
+    Ruecksetzcode auch als gewoehnliche Zeile darunter. Nachgemessen: die Mutation
+    „`finally` -> normaler Block" liess den Test darueber **gruen**. Tragend ist das
+    `finally` allein fuer `BaseException` — und dort haengt zugleich die Vorbelegung
+    `ergebnis = "fehler"` (ohne sie ein NameError IM `finally`, also `laeuft` fuer immer
+    True und der Knopf bis zum Serverneustart tot).
+    """
+    from webtool import ytdlp_update
+
+    def wirft():
+        raise SystemExit(1)      # threading unterdrueckt SystemExit -> keine Testausgabe
+    monkeypatch.setattr(ytdlp_update, "aktualisiere", wirft)
+    client.post("/api/settings/ytdlp/update")
+    assert _warte(lambda: not ytdlp_update.hintergrund_zustand()[0])
+    assert client.get("/api/settings").json()["ytdlp"]["ergebnis"] == "fehler"
 
 
 def test_settings_unbekannter_anbieter_400(client):

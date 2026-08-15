@@ -162,8 +162,10 @@ export async function saveSettings(patch: Record<string, string>): Promise<Setti
 export async function verwerfeKaputt(): Promise<void> {
   await jn(await fetch('/api/settings/kaputt', { method: 'DELETE' }))
 }
-/** Läuft synchron bis zu zwei Minuten (pip). Der Aufrufer zeigt solange einen Spinner. */
-export async function updateYtdlp(): Promise<{ ok: boolean } & YtdlpStand> {
+/** Stösst pip an und kehrt SOFORT zurück (#174) — vorher hing der Request bis zu 340 s.
+ *  `gestartet: false` heisst „es läuft schon einer"; in beiden Fällen fragt der Aufrufer über
+ *  `getSettings()` nach, bis `ytdlp.laeuft` false ist, und liest dann `ytdlp.ergebnis`. */
+export async function updateYtdlp(): Promise<{ gestartet: boolean } & YtdlpStand> {
   return jn(await post('/api/settings/ytdlp/update'))
 }
 export async function listModels(): Promise<ModelInfo[]> {

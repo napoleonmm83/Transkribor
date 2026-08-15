@@ -9,7 +9,9 @@ import type { Hardware, Settings } from '@/lib/types'
 vi.mock('@/lib/api')
 // Ohne diesen Mock waere `expect(toast.error).not.toHaveBeenCalled()` keine Zusicherung,
 // sondern ein Aufruf an eine echte Funktion, die immer "nicht aufgerufen" meldet.
-vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
+// `info` gehört mit hinein, seit der yt-dlp-Knopf „läuft bereits" meldet (#174) — ein
+// fehlender Schlüssel wirft hier `toast.info is not a function` statt still nichts zu tun.
+vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() } }))
 // Default: kein Electron -> Abschnitt bleibt aus, wie es SettingsPage ausserhalb dieses
 // Tests auch fuer alle SettingsPage-Tests erwartet, die zeigeMit gar nicht aufrufen.
 vi.mock('@/hooks/useUpdate', () => ({
@@ -29,7 +31,7 @@ const BASIS: Settings = {
   ai_ready: true, ai_reason: '',
   kaputt: '',
   ytdlp_auto: '1',
-  ytdlp: { version: '2026.8.12', unlesbar: false, geprueft: '2026-08-13', auto: true, env: false },
+  ytdlp: { version: '2026.8.12', unlesbar: false, geprueft: '2026-08-13', auto: true, env: false, laeuft: false, ergebnis: '' },
   providers: [
     { id: 'claude-cli', label: 'Claude Code Abo (kein Key)', needs_key: false, cli: true, base: '', default_model: 'opus', keys_url: '', hint: 'Nutzt das Abo.' },
     { id: 'codex-cli', label: 'ChatGPT-Abo (Codex CLI, kein Key)', needs_key: false, cli: true, base: '', default_model: '', keys_url: '', hint: 'Nutzt das ChatGPT-Abo.' },
@@ -273,7 +275,7 @@ describe('SettingsPage', () => {
   })
 
   it('sagt es, wenn yt-dlp gar nicht installiert ist', async () => {
-    zeige({ ytdlp: { version: null, unlesbar: false, geprueft: '', auto: true, env: false } })
+    zeige({ ytdlp: { version: null, unlesbar: false, geprueft: '', auto: true, env: false, laeuft: false, ergebnis: '' } })
     expect(await screen.findByText(/Nicht installiert/)).toBeInTheDocument()
   })
 
@@ -281,7 +283,7 @@ describe('SettingsPage', () => {
     // Beide Zustände liefern `version: null`. Vor #189 stand hier "steht damit nicht zur
     // Verfügung" — das Gegenteil dessen, was der Nutzer tun kann: der Import läuft, nur die
     // Selbstaktualisierung ist ausgesetzt. Die Anzeige darf nicht lügen.
-    zeige({ ytdlp: { version: null, unlesbar: true, geprueft: '', auto: true, env: false } })
+    zeige({ ytdlp: { version: null, unlesbar: true, geprueft: '', auto: true, env: false, laeuft: false, ergebnis: '' } })
     expect(await screen.findByText(/Fassung nicht lesbar/)).toBeInTheDocument()
     expect(screen.queryByText(/Nicht installiert/)).not.toBeInTheDocument()
   })
@@ -297,7 +299,7 @@ describe('SettingsPage', () => {
   it('warnt, wenn die Umgebungsvariable den Haken überstimmt', async () => {
     // Ein Haken, der nichts tut, ist schlimmer als keiner. Der WIRKSAME Wert kommt aus
     // `ytdlp.auto`, der gespeicherte aus `ytdlp_auto` — nur die Differenz ist die Warnung.
-    zeige({ ytdlp_auto: '1', ytdlp: { version: '2026.8.12', unlesbar: false, geprueft: '', auto: false, env: true } })
+    zeige({ ytdlp_auto: '1', ytdlp: { version: '2026.8.12', unlesbar: false, geprueft: '', auto: false, env: true, laeuft: false, ergebnis: '' } })
     expect(await screen.findByText(/wirkungslos/)).toBeInTheDocument()
   })
 
@@ -324,7 +326,7 @@ describe('SettingsPage', () => {
   })
 
   it('meldet einen fehlgeschlagenen Update-Versuch, statt ihn zu verschlucken', async () => {
-    vi.mocked(api.updateYtdlp).mockResolvedValue({ ok: false, version: '2026.7.4', unlesbar: false, geprueft: '2026-08-13', auto: true, env: false })
+    vi.mocked(api.updateYtdlp).mockResolvedValue({ gestartet: true, version: '2026.7.4', unlesbar: false, geprueft: '2026-08-13', auto: true, env: false, laeuft: false, ergebnis: 'fehler' })
     zeige()
     fireEvent.click(await screen.findByRole('button', { name: /Jetzt aktualisieren/i }))
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/fehlgeschlagen/)))
@@ -335,11 +337,56 @@ describe('SettingsPage', () => {
     // praeparierte dist-info endet mit Exit 2 und UnicodeDecodeError). Wer gerade "Fassung
     // nicht lesbar" gelesen und darauf geklickt hat, bekaeme sonst "bist du online?" —
     // dieselbe Fehldiagnose, gegen die #189 gebaut ist, drei Zeilen weiter oben.
-    vi.mocked(api.updateYtdlp).mockResolvedValue({ ok: false, version: null, unlesbar: true, geprueft: '', auto: true, env: false })
+    vi.mocked(api.updateYtdlp).mockResolvedValue({ gestartet: true, version: null, unlesbar: true, geprueft: '', auto: true, env: false, laeuft: false, ergebnis: 'fehler' })
     zeige()
     fireEvent.click(await screen.findByRole('button', { name: /Jetzt aktualisieren/i }))
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/Metadaten/)))
     expect(toast.error).not.toHaveBeenCalledWith(expect.stringMatching(/online/))
+  })
+
+  it('wartet nicht auf pip, sondern fragt nach — der Toast kommt erst am Ende (#174)', async () => {
+    // Vorher hing der Request am pip-Lauf (>=340 s im schlimmsten Fall). Jetzt antwortet er
+    // sofort mit `laeuft: true`; der Ausgang kommt über den nächsten getSettings. Geprüft
+    // wird BEIDES — dass sofort noch nichts gemeldet wird UND dass am Ende doch etwas kommt.
+    // Nur die erste Hälfte wäre erfüllt, wenn der Toast ganz verschwände: genau der stille
+    // Fehlschlag, gegen den `ergebnis` gebaut ist.
+    vi.mocked(api.updateYtdlp).mockResolvedValue({
+      gestartet: true, version: '2026.7.4', unlesbar: false, geprueft: '', auto: true,
+      env: false, laeuft: true, ergebnis: '',
+    })
+    zeige()
+    const knopf = await screen.findByRole('button', { name: /Jetzt aktualisieren/i })
+
+    // `mockImplementation` statt einer `…Once`-Kette: die Seite fragt die Einstellungen
+    // auch aus dem Anmelde-Effekt heraus ab, eine feste Reihenfolge wäre also nicht die
+    // Reihenfolge der Nachfragen.
+    let laeuftNoch = true
+    vi.mocked(api.getSettings).mockImplementation(async () => ({
+      ...BASIS,
+      ytdlp: laeuftNoch
+        ? { ...BASIS.ytdlp, laeuft: true, ergebnis: '' }
+        : { ...BASIS.ytdlp, version: '2026.8.12', laeuft: false, ergebnis: 'ok' },
+    }))
+
+    vi.useFakeTimers()
+    try {
+      await act(async () => { fireEvent.click(knopf) })
+      // Der POST ist durch, der Lauf steht noch: KEIN Toast, aber auch kein Hänger.
+      expect(toast.success).not.toHaveBeenCalled()
+      expect(toast.error).not.toHaveBeenCalled()
+
+      // Auslöser und Uhr in GETRENNTEN act-Blöcken (sonst läuft der Timer, bevor der
+      // Effekt ihn gesetzt hat) — dieselbe Regel wie beim Autosave-Test.
+      await act(async () => { await vi.advanceTimersByTimeAsync(1500) })
+      expect(toast.success).not.toHaveBeenCalled()      // eine Runde: immer noch am Laufen
+
+      laeuftNoch = false
+      await act(async () => { await vi.advanceTimersByTimeAsync(1500) })
+    } finally {
+      vi.useRealTimers()      // ins `finally`: ein Wurf oben liesse sonst die Uhr aller
+    }                         // folgenden Tests gefälscht zurück
+
+    expect(toast.success).toHaveBeenCalledWith(expect.stringMatching(/2026\.8\.12/))
   })
 
   it('warnt bei large-v3 auf der CPU', async () => {
