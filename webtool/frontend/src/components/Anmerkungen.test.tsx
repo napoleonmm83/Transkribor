@@ -66,18 +66,59 @@ describe('Anmerkungen', () => {
   it('bietet nach dem Streichen einen Rueckweg an, der den Eintrag an seiner Stelle zurueckholt', () => {
     toastMock.mockClear()
     const onChange = vi.fn()
-    render(<Anmerkungen items={['erste', 'zweite', 'dritte']} onChange={onChange} />)
+    const { rerender } = render(<Anmerkungen items={['erste', 'zweite', 'dritte']} onChange={onChange} />)
     fireEvent.click(screen.getByText('zweite'))
     const feld = screen.getByRole('textbox')
     fireEvent.change(feld, { target: { value: '' } })
     fireEvent.blur(feld)
     expect(onChange).toHaveBeenCalledWith(['erste', 'dritte'])
 
+    // Den Re-Render liefert in der App `updateDoc` -> `setDoc`; hier von Hand, sonst saehe der
+    // Rueckweg die Liste von VOR der Streichung und legte den Eintrag ein zweites Mal an.
+    rerender(<Anmerkungen items={['erste', 'dritte']} onChange={onChange} />)
     const aktion = rueckgaengig()
     expect(aktion?.label).toBe('Rückgängig')
     aktion!.onClick()
     // An seiner STELLE, nicht hinten angehaengt — die Liste ist die Reihenfolge des Transkripts.
     expect(onChange).toHaveBeenLastCalledWith(['erste', 'zweite', 'dritte'])
+  })
+
+  it('der Rueckweg nimmt zwischenzeitliche Aenderungen NICHT mit zurueck', () => {
+    // CodeRabbit: der Rueckruf lebt zehn Sekunden. Stellte er die Liste von damals wieder her,
+    // waere jede Anmerkung, die inzwischen geaendert oder angelegt wurde, weg — stiller Verlust
+    // in genau dem Feld, gegen dessen Verlust #154 geschrieben ist, ausgeloest ausgerechnet vom
+    // Rettungsknopf. Deshalb wird der Eintrag in die AKTUELLE Liste zurueckgeschoben.
+    toastMock.mockClear()
+    const onChange = vi.fn()
+    const { rerender } = render(<Anmerkungen items={['erste', 'zweite', 'dritte']} onChange={onChange} />)
+    fireEvent.click(screen.getByText('zweite'))
+    const feld = screen.getByRole('textbox')
+    fireEvent.change(feld, { target: { value: '' } })
+    fireEvent.blur(feld)
+
+    // Der Nutzer arbeitet weiter: „dritte" wird berichtigt, eine vierte kommt dazu.
+    rerender(<Anmerkungen items={['erste', 'dritte, berichtigt', 'vierte']} onChange={onChange} />)
+    rueckgaengig()!.onClick()
+
+    expect(onChange).toHaveBeenLastCalledWith(['erste', 'zweite', 'dritte, berichtigt', 'vierte'])
+  })
+
+  it('haengt den Eintrag an, wenn die Liste inzwischen kuerzer ist als sein Index', () => {
+    // Kein Waechtertest — `slice` klemmt selbst, eine zusaetzliche Klammerung liess sich nicht
+    // rot bekommen und ist deshalb draussen. Der Test haelt trotzdem, was zaehlt: der Eintrag
+    // geht in diesem Fall nicht verloren, sondern landet hinten.
+    toastMock.mockClear()
+    const onChange = vi.fn()
+    const { rerender } = render(<Anmerkungen items={['a', 'b', 'c', 'd']} onChange={onChange} />)
+    fireEvent.click(screen.getByText('d'))
+    const feld = screen.getByRole('textbox')
+    fireEvent.change(feld, { target: { value: '' } })
+    fireEvent.blur(feld)
+
+    rerender(<Anmerkungen items={['a']} onChange={onChange} />)
+    rueckgaengig()!.onClick()
+
+    expect(onChange).toHaveBeenLastCalledWith(['a', 'd'])
   })
 
   it('meldet beim blossen Aendern keinen Streich-Toast', () => {

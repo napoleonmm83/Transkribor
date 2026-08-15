@@ -415,7 +415,16 @@ export function useDoc(project: string | null, base: string | null) {
    *  Verlassens-Flush die Datei als Waise wieder auf — der Backend-Save legt eine geloeschte
    *  Datei bedingungslos neu an (`makedirs exist_ok` + `atomic_write`). `setDirty(false)` bricht
    *  auch den haengenden Autosave-Timer ab; der Flush-Guard greift danach ueber dirtyRef. */
-  const vergiss = useCallback(() => { setDirty(false); haengt.current = false }, [])
+  const vergiss = useCallback(() => {
+    // Auch die offenen Rueckwege (#154, CodeRabbit): zwischen `vergiss()` und dem Ende der
+    // Aktion liegt ein ganzer Server-Aufruf, und der Editor steht dabei noch — der Cleanup
+    // greift erst beim Navigieren bzw. beim Wechsel von `base`. Ein Klick in diesem Fenster
+    // ruft `updateDoc` -> `beruehrt()` -> `dirty` und traegt den Autosave 800 ms spaeter in
+    // eine Datei, die gerade geloescht oder verschoben wird. Genau die Waise, gegen die
+    // `vergiss` selbst gebaut ist (#106-Review C1/C2).
+    streichungenVergessen()
+    setDirty(false); haengt.current = false
+  }, [])
 
   // `save` wandert bewusst NICHT nach draussen: es gibt keinen Speichern-Knopf mehr, und eine
   // zweite Ausloesestelle waere eine, die neben der Entprellung herlaeuft.
