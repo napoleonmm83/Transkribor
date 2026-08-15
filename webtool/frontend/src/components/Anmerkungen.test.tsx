@@ -121,6 +121,21 @@ describe('Anmerkungen', () => {
     expect(onChange).toHaveBeenLastCalledWith(['a', 'd'])
   })
 
+  it('der Toast nennt den gestrichenen Eintrag und kuerzt lange Texte', () => {
+    // Zwei Streichungen kurz hintereinander standen sonst als zwei identische Zeilen
+    // uebereinander (CodeRabbit Runde 2). Gekuerzt, weil eine Anmerkung mehrere Saetze haben
+    // kann und der Toast keine Textwand werden soll.
+    toastMock.mockClear()
+    const lang = 'Ab hier ist die Aufnahme sehr leise, die Stelle unbedingt nachhoeren'
+    render(<Anmerkungen items={[lang]} onChange={vi.fn()} />)
+    fireEvent.click(screen.getByText(lang))
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: '' } })
+    fireEvent.blur(screen.getByRole('textbox'))
+
+    const text = toastMock.mock.calls.at(-1)![0] as string
+    expect(text).toBe('Anmerkung „Ab hier ist die Aufnahme sehr leise, die…“ gestrichen')
+  })
+
   it('meldet beim blossen Aendern keinen Streich-Toast', () => {
     // Gegenprobe: ein Rueckweg, der IMMER angeboten wird, ist derselbe Schaden von der anderen
     // Seite — Dauerlaerm, bis niemand mehr hinsieht.
