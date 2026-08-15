@@ -1,12 +1,41 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { renderHook, waitFor, act } from '@testing-library/react'
 import { useDoc } from './useDoc'
+import { gestrichen } from '@/lib/streichen'
 import { toast } from 'sonner'
 import * as api from '@/lib/api'
 import type { EditDoc, Segment } from '@/lib/types'
 
 vi.mock('@/lib/api')
-vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
+/**
+ * Die Attrappe FUEHRT die offenen Toasts, statt nur Aufrufe zu zaehlen (#154). Ein
+ * `dismiss: vi.fn()`, das nichts tut, liesse jeden Rueckweg fuer immer anklickbar — der Test
+ * zum Dokumentwechsel waere dann gruen, egal was `useDoc` tut. Gemessen werden soll, ob der
+ * Knopf danach noch DA ist; im Browser nimmt sonner ihn mitsamt dem Toast aus dem DOM.
+ */
+const toasts = new Map<number, { action?: { onClick: () => void } }>()
+let toastNr = 0
+const toastMock = vi.hoisted(() => {
+  const f = vi.fn()
+  return Object.assign(f, { success: vi.fn(), error: vi.fn(), dismiss: vi.fn() })
+})
+vi.mock('sonner', () => ({ toast: toastMock }))
+toastMock.mockImplementation((_text: string, opts?: { action?: { onClick: () => void } }) => {
+  const id = ++toastNr; toasts.set(id, opts ?? {}); return id
+})
+toastMock.dismiss.mockImplementation((id: number) => { toasts.delete(id) })
+
+/**
+ * Klickt den offenen „Rueckgaengig"-Knopf. `false`, wenn gar keiner (mehr) dasteht.
+ * Der Klick muss IN `act` laufen: `updateDoc` setzt State, und ohne den Flush davor feuert die
+ * Entprellung mit dem `save` aus dem Render davor — der Rueckweg saehe dann wirkungslos aus,
+ * obwohl er gewirkt hat. (Genau daran ist die Positivkontrolle beim ersten Lauf gescheitert.)
+ */
+async function klickeRueckgaengig() {
+  const offen = [...toasts.values()].filter(t => t.action)
+  await act(async () => { offen.forEach(t => t.action!.onClick()) })
+  return offen.length > 0
+}
 
 const seg: Segment = {
   id: 0, start: 0, end: 1, speaker: 'A', raw_text: 'roh', text: 'roh',
@@ -27,7 +56,7 @@ async function geladen() {
   return h
 }
 
-afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
+afterEach(() => { vi.useRealTimers(); vi.clearAllMocks(); toasts.clear() })
 
 describe('useDoc Autosave', () => {
   it('speichert erst nach der Tipppause — und mehrere Aenderungen nur EINMAL', async () => {
@@ -786,6 +815,95 @@ describe('useDoc: Dokument A darf nie in Datei B landen', () => {
     expect(falsch).toEqual([])
 
     await act(async () => { fertigB(docB); await vi.advanceTimersByTimeAsync(0) })
+  })
+})
+
+describe('useDoc: der Rueckweg einer Streichung ueberlebt den Dokumentwechsel NICHT (#154)', () => {
+  // Was erlaubt die Reparatur NEU? Genau das hier. `updateDoc`/`updateSegment` sind ueber
+  // `useCallback` stabil und schreiben per Updater in das JEWEILS offene Dokument. Der Rueckruf
+  // im Toast lebt aber so lange wie der Toast (10 s, durch Hover verlaengert) — ohne Entwertung
+  // traegt „Rueckgaengig" den Eintrag der alten Datei in die neue, und der Autosave legt ihn ab.
+  // Dieselbe Achse wie #116/#106, nur ueber einen Weg, den es vorher nicht gab.
+
+  it('POSITIVKONTROLLE: ohne Wechsel holt der Rueckweg den Eintrag zurueck', async () => {
+    // Ohne die hier waere jeder der drei Tests unten auch dann gruen, wenn `gestrichen` gar
+    // keinen Toast mehr anlegte — „nichts zu klicken" ist sonst nicht von „richtig entwertet"
+    // zu unterscheiden.
+    vi.mocked(api.saveDoc).mockResolvedValue(undefined as never)
+    const { result } = await geladen()
+
+    await act(async () => {
+      result.current.updateDoc({ annotations: [] })
+      gestrichen('Anmerkung', () => result.current.updateDoc({ annotations: ['A-eins'] }))
+    })
+    expect(await klickeRueckgaengig()).toBe(true)
+    await act(async () => { await vi.advanceTimersByTimeAsync(900) })
+
+    const letzte = vi.mocked(api.saveDoc).mock.calls.at(-1)!
+    expect(letzte[1]).toBe('b')
+    expect(letzte[2].annotations).toEqual(['A-eins'])
+  })
+
+  it('nach einem Dateiwechsel steht kein Rueckweg mehr — A landet nicht in B', async () => {
+    const docB: EditDoc = { ...doc, base: 'b2', annotations: ['B-eins'] }
+    vi.mocked(api.saveDoc).mockResolvedValue(undefined as never)
+    vi.useFakeTimers()
+    vi.mocked(api.getDoc).mockResolvedValue(doc)
+    const h = renderHook(({ b }) => useDoc('P', b), { initialProps: { b: 'b' } })
+    await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+
+    await act(async () => {
+      h.result.current.updateDoc({ annotations: [] })
+      gestrichen('Anmerkung', () => h.result.current.updateDoc({ annotations: ['A-eins'] }))
+    })
+
+    vi.mocked(api.getDoc).mockResolvedValue(docB)
+    h.rerender({ b: 'b2' })
+    await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+
+    expect(await klickeRueckgaengig()).toBe(false)
+    await act(async () => { await vi.advanceTimersByTimeAsync(900) })
+    // Nirgends darf As Anmerkung unter Bs Pfad auftauchen.
+    const verschleppt = vi.mocked(api.saveDoc).mock.calls
+      .filter(c => c[1] === 'b2' && c[2].annotations.includes('A-eins'))
+    expect(verschleppt).toEqual([])
+  })
+
+  it('nach einem reload() (fertige Korrektur) ueberschreibt der Rueckweg die frische Fassung nicht', async () => {
+    // Der Wechsel, den kein `base`-Vergleich sieht: dieselbe Datei, neuer Inhalt. `EditorView`
+    // ruft `reload()`, wenn ein Korrekturlauf fertig wird — die frisch geschriebenen
+    // Anmerkungen sind genau das, was der alte Rueckruf sonst wieder wegraeumte.
+    const korrigiert: EditDoc = { ...doc, annotations: ['korrigiert-eins', 'korrigiert-zwei'] }
+    vi.mocked(api.saveDoc).mockResolvedValue(undefined as never)
+    const { result } = await geladen()
+
+    await act(async () => {
+      result.current.updateDoc({ annotations: [] })
+      gestrichen('Anmerkung', () => result.current.updateDoc({ annotations: ['alt-eins'] }))
+    })
+
+    vi.mocked(api.getDoc).mockResolvedValue(korrigiert)
+    await act(async () => { result.current.reload(); await vi.advanceTimersByTimeAsync(0) })
+
+    expect(await klickeRueckgaengig()).toBe(false)
+    await act(async () => { await vi.advanceTimersByTimeAsync(900) })
+    expect(result.current.doc!.annotations).toEqual(['korrigiert-eins', 'korrigiert-zwei'])
+  })
+
+  it('nach dem Verlassen des Editors steht kein Rueckweg mehr, der stumm ins Leere schreibt', async () => {
+    // `DateiMenue.wegVomEditor()` baut den Editor ab (Loeschen / Neu transkribieren). React
+    // verwirft `setDoc` auf einem abgebauten Hook kommentarlos — der Knopf saehe aus, als
+    // haette er gewirkt, und der Nutzer traegt den Eintrag nicht von Hand nach.
+    vi.mocked(api.saveDoc).mockResolvedValue(undefined as never)
+    const { result, unmount } = await geladen()
+
+    await act(async () => {
+      result.current.updateDoc({ annotations: [] })
+      gestrichen('Anmerkung', () => result.current.updateDoc({ annotations: ['A-eins'] }))
+    })
+
+    act(() => { unmount() })
+    expect(await klickeRueckgaengig()).toBe(false)
   })
 })
 
