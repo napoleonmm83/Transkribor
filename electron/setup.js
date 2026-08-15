@@ -10,6 +10,7 @@
  * und die einzige Variante, die ohne Adminrechte und ohne eigenen Downloader auskommt.
  */
 const { spawn } = require('child_process')
+const crypto = require('crypto')
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
@@ -210,7 +211,7 @@ async function findePython() {
 
 /** Die venv gilt erst als fertig, wenn sie wirklich importierbar ist — ein abgebrochener
  *  pip-Lauf hinterlaesst sonst eine halbe Umgebung, die beim naechsten Start "da" aussieht. */
-async function venvVollstaendig() {
+async function importeDa() {
   const py = P.venvPython(P.venv)
   if (!P.exists(py)) return false
   // faster_whisper statt whisper: seit dem Engine-Wechsel ist openai-whisper nicht mehr
@@ -218,6 +219,46 @@ async function venvVollstaendig() {
   // bei jedem Start eine Neuinstallation ausgeloest.
   const r = await ausgabe(py, ['-c', 'import torch, faster_whisper, fastapi, uvicorn; print("ok")'])
   return r !== null && r.includes('ok')
+}
+
+/** Pfad des Merkers: gegen welchen Stand der requirements.txt wurde zuletzt installiert.
+ *  IN der venv, nicht daneben — wer sie wegwirft, wirft den Merker mit weg. */
+function stempel(venvDir = P.venv) { return path.join(venvDir, '.requirements') }
+
+/** Leerstring heisst "keine lesbare requirements.txt" — dann gibt es nichts nachzuziehen. */
+function reqHash() {
+  try { return crypto.createHash('sha256').update(fs.readFileSync(P.requirements)).digest('hex') }
+  catch { return '' }
+}
+
+/**
+ * Entspricht die venv der heutigen requirements.txt?
+ *
+ * `pip install -r` laeuft in der installierten App genau einmal — beim ersten Start. Danach
+ * ersetzt ein App-Update die .exe, aber nicht die venv (die liegt in userData und ueberlebt
+ * bewusst). Ohne diesen Vergleich erreicht JEDES Paket, das nach dem Installationstag eines
+ * Nutzers dazukommt, ihn nie: die Funktion fehlt still, die App sieht gesund aus (#181).
+ * Bisher bekam jeder Fall einen eigenen Weg (yt-dlp: webtool/ytdlp_update.py, yt-dlp-ejs:
+ * _ejs_fehlt) — das ist der eine Weg fuer alle.
+ *
+ * Fehlender Merker gilt als veraltet: JEDE heute bestehende Installation ist es auch.
+ */
+function paketeAktuell(venvDir = P.venv) {
+  const soll = reqHash()
+  if (!soll) return true
+  try { return fs.readFileSync(stempel(venvDir), 'utf8').trim() === soll } catch { return false }
+}
+
+/** Nach erfolgreichem `pip install -r`. Wirft nicht: ein misslungener Merker darf den Start
+ *  nicht verhindern — er kostet hoechstens einen zweiten Einrichtungslauf. */
+function stempelSchreiben(venvDir = P.venv) {
+  const soll = reqHash()
+  if (!soll) return false
+  try { fs.writeFileSync(stempel(venvDir), soll); return true } catch { return false }
+}
+
+async function venvVollstaendig() {
+  return (await importeDa()) && paketeAktuell()
 }
 
 /** Nutzt diese Maschine ueberhaupt whisper.cpp? Spiegelt device.apple_silicon() —
@@ -243,11 +284,17 @@ async function status() {
   const wcpp = await findeWhisperCpp()
   const pl = plan(process.platform, await paketmanager(), process.arch, await brewDa())
   const macFehlt = nutztWhisperCpp() && !wcpp
+  // Beide Haelften einzeln, damit die Seite den Unterschied nennen kann: eine veraltete venv
+  // ist installiert und funktioniert — sie ist nur nicht auf dem Stand der requirements.txt.
+  // Als blosses rotes "fehlt" gemeldet, laese der Nutzer einen Defekt daraus (#181).
+  const importe = await importeDa()
+  const aktuell = paketeAktuell()
   return {
     python: py ? `Python ${py.version}` : '',
     ffmpeg: ff,
     whispercpp: wcpp,
-    venv: await venvVollstaendig(),
+    venv: importe && aktuell,
+    venvVeraltet: importe && !aktuell,
     winget: process.platform === 'win32' ? (await ausgabe('winget', ['--version'])) || '' : '',
     venvPfad: P.venv,
     projektePfad: P.projekte,
@@ -334,12 +381,15 @@ async function einrichten(onLine, onSchritt) {
   onSchritt('Whisper und Werkzeuge laden')
   code = await lauf(vpy, ['-m', 'pip', 'install', '-r', P.requirements], onLine)
   if (code !== 0) return { ok: false, fehler: 'Python-Pakete konnten nicht installiert werden.' }
+  if (!stempelSchreiben()) onLine('Hinweis: Paketstand konnte nicht vermerkt werden — die Einrichtung meldet sich beim naechsten Start erneut.')
 
+  // Geprueft wird der Import, NICHT venvVollstaendig(): ein misslungener Merker wuerde den
+  // Nutzer sonst aussperren (kein ok -> kein Serverstart), obwohl alles installiert ist.
   onSchritt('Prüfen')
-  if (!(await venvVollstaendig())) return { ok: false, fehler: 'Einrichtung unvollstaendig — bitte erneut versuchen.' }
+  if (!(await importeDa())) return { ok: false, fehler: 'Einrichtung unvollstaendig — bitte erneut versuchen.' }
   onLine('Fertig. ' + schritte.join(' · '))
   return { ok: true }
 }
 
 module.exports = { status, einrichten, venvVollstaendig, findePython, plan, spawnEnv,
-                   wingetFfmpeg, nutztWhisperCpp }
+                   wingetFfmpeg, nutztWhisperCpp, paketeAktuell, stempelSchreiben }

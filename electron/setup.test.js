@@ -130,3 +130,34 @@ test('ffmpeg wird im winget-Paketordner gefunden — dort steht es nie auf dem P
 test('fehlendes winget-Verzeichnis liefert Leerstring statt zu werfen', () => {
   assert.strictEqual(wingetFfmpeg('C:\gibt-es-nicht-42'), '')
 })
+
+/** Eine venv-Attrappe in einem Wegwerf-Ordner — NIE die echte .venv des Entwicklers. */
+function leereVenv() {
+  const fs = require('node:fs'), os = require('node:os'), path = require('node:path')
+  return fs.mkdtempSync(path.join(os.tmpdir(), 'venv-'))
+}
+
+test('venv ohne Merker gilt als veraltet — jede heute bestehende Installation ist es (#181)', () => {
+  const { paketeAktuell } = require('./setup')
+  assert.strictEqual(paketeAktuell(leereVenv()), false)
+})
+
+test('nach dem Vermerken gilt die venv als aktuell', () => {
+  const { paketeAktuell, stempelSchreiben } = require('./setup')
+  const venv = leereVenv()
+  assert.strictEqual(stempelSchreiben(venv), true)
+  // Rundlauf statt zweier getrennter Behauptungen: er pinnt Dateiname UND Hashquelle
+  // zusammen. Schreibt die eine Seite woanders hin oder hasht etwas anderes, bricht er.
+  assert.strictEqual(paketeAktuell(venv), true)
+})
+
+test('geaenderte requirements.txt entwertet den Merker — das ist der ganze Zweck', () => {
+  const fs = require('node:fs'), path = require('node:path')
+  const { paketeAktuell, stempelSchreiben } = require('./setup')
+  const venv = leereVenv()
+  stempelSchreiben(venv)
+  // Den Merker verbiegen statt die echte requirements.txt anzufassen: dieselbe Wirkung
+  // (Merker != heutiger Stand), ohne eine Datei des Repos im Test zu veraendern.
+  fs.writeFileSync(path.join(venv, '.requirements'), 'stand-von-gestern')
+  assert.strictEqual(paketeAktuell(venv), false)
+})

@@ -128,7 +128,11 @@ function zeigeStatus(s) {
   if (s.whispercpp !== undefined && navigator.platform.startsWith('Mac')) {
     zeile('whisper-cpp (Apple-GPU)', !!s.whispercpp, s.whispercpp || 'fehlt — Transkription läuft langsam auf der CPU')
   }
-  zeile('Python-Umgebung (Whisper, PyTorch)', s.venv, s.venv ? s.venvPfad : '')
+  // Veraltet ist nicht kaputt: die Umgebung läuft, ihr fehlen nur Pakete, die nach der
+  // Installation dazugekommen sind. Ohne den Zusatz stünde hier ein rotes „fehlt“ neben
+  // einer Umgebung, die der Nutzer seit Monaten benutzt.
+  zeile('Python-Umgebung (Whisper, PyTorch)', s.venv,
+        s.venv ? s.venvPfad : (s.venvVeraltet ? 'vorhanden, aber nicht auf dem neuesten Stand' : ''))
   $('hinweis').textContent = 'Projekte liegen in ' + s.projektePfad
   // Auf macOS/Linux installiert die App Python/ffmpeg nicht selbst. Dann ist dieser Befehl das
   // Einzige, was weiterhilft — er gehört vor den Klick, nicht in eine rote Box danach.
@@ -138,6 +142,12 @@ function zeigeStatus(s) {
   if (s.venv) {
     $('sub').textContent = 'Alles bereit — starte …'
     $('los').style.display = 'none'
+  } else if (s.venvVeraltet) {
+    // Kein „mehrere GB“-Text: hier fehlen nur die Pakete, die seit der Installation
+    // dazugekommen sind. PyTorch und Whisper liegen längst da.
+    $('sub').textContent = 'Dieses Update bringt neue Python-Pakete mit. Ein Klick auf ' +
+      '„Jetzt einrichten“ holt sie nach — das dauert meist unter einer Minute.'
+    $('los').style.display = ''
   } else if (s.hinweis) {
     $('sub').textContent = 'Transkribor braucht Python und ffmpeg. Bitte den Befehl unten einmal ' +
       'im Terminal ausführen, dann „Jetzt einrichten“ — den Rest (Spracherkennung, mehrere GB) ' +
