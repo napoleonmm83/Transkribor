@@ -337,12 +337,23 @@ function cudaVerloren(pl, antwort) {
   return !!treffer && !treffer[1]
 }
 
-async function cudaZurueckholen(vpy, pl, onLine) {
-  const antwort = await ausgabe(vpy, ['-c', 'import torch; print("CUDA=" + (torch.version.cuda or ""))'])
-  if (!cudaVerloren(pl, antwort)) return false
+// `werkzeug` wird hereingereicht wie `hole`/`openExternal` in updater.js — sonst liesse sich
+// der Fehlschlag nur mit einem echten, kaputten pip-Lauf pruefen, und genau der Zweig traegt
+// die Meldung, an der der Nutzer den Verlust ueberhaupt bemerkt.
+async function cudaZurueckholen(vpy, pl, onLine, werkzeug = { ausgabe, lauf }) {
+  const antwort = await werkzeug.ausgabe(vpy, ['-c', 'import torch; print("CUDA=" + (torch.version.cuda or ""))'])
+  if (!cudaVerloren(pl, antwort)) return true
   onLine('torch hat seine CUDA-Fassung verloren — hole sie zurueck (sonst rechnet alles auf der CPU).')
-  await lauf(vpy, ['-m', 'pip', 'install', '-U', 'torch', '--index-url', pl.torchIndex], onLine)
-  return true
+  const code = await werkzeug.lauf(vpy, ['-m', 'pip', 'install', '-U', 'torch', '--index-url', pl.torchIndex], onLine)
+  // Scheitert das Zurueckholen, laeuft die App auf der CPU weiter — dieselbe Linie wie der
+  // CPU-Rueckfall im torch-Schritt und wie whisper-cpp: langsam ist besser als gar nicht.
+  // Der Merker wird trotzdem geschrieben: er sagt "gegen DIESE requirements.txt installiert",
+  // und das stimmt weiterhin. Ihn hier zu verweigern gaebe ihm eine zweite Bedeutung ("und
+  // torch ist gesund") — und brockte dem Nutzer bei dauerhaft unerreichbarem Index eine
+  // Einrichtungsseite bei jedem Start ein, jedes Mal mit GB-Download. Sichtbar bleibt der
+  // Zustand ueber die Einstellungsseite, die CPU-torch von sich aus benennt (`GET /api/hardware`).
+  if (code !== 0) onLine('Zurueckholen fehlgeschlagen — die Transkription rechnet auf der CPU und ist damit deutlich langsamer. Unter „Einstellungen“ steht, wie sich das beheben laesst.')
+  return code === 0
 }
 
 /**
@@ -436,4 +447,5 @@ async function einrichten(onLine, onSchritt) {
 // venvVollstaendig() ist ersatzlos weg: status() beantwortet dieselbe Frage ueber venvZustand(),
 // und ein zweiter Weg dorthin waere genau der, den kein Test bewacht (er hatte keinen Aufrufer).
 module.exports = { status, einrichten, findePython, plan, spawnEnv, wingetFfmpeg,
-                   nutztWhisperCpp, paketeAktuell, stempelSchreiben, venvZustand, cudaVerloren }
+                   nutztWhisperCpp, paketeAktuell, stempelSchreiben, venvZustand, cudaVerloren,
+                   cudaZurueckholen }
