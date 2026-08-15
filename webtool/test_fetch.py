@@ -254,6 +254,47 @@ def test_login_fehler_wird_uebersetzt(projekt, capsys):
     assert "nicht öffentlich abrufbar" in capsys.readouterr().out
 
 
+def test_rohmeldung_bewahrt_was_human_error_wegwirft(projekt, capsys):
+    """#173: `_human_error` nimmt nur die LETZTE Zeile — die Formulierung, an der
+    `_EXTRAKTOR_RE` nachzuziehen waere, steht bei yt-dlp aber oft davor. Ohne die Rohzeile
+    gibt es bei einem echten Bruch keine Evidenz, und die Liste bleibt fuer immer geraten."""
+    _FakeYDL.fehler = RuntimeError(
+        "WARNING: [youtube] nsig extraction failed: Some formats may be missing\n"
+        "ERROR: unable to download video data")
+    with pytest.raises(SystemExit):
+        fetch.main(["Demo", "https://youtu.be/vid123"])
+    out = capsys.readouterr().out
+    menschlich, _, roh = out.partition("[fetch] roh")
+    # Die Haelfte VOR der Rohzeile ist die von `_human_error` geglaettete — dort fehlt es.
+    assert "nsig extraction failed" not in menschlich
+    assert "nsig extraction failed" in roh
+    # Das Urteil gehoert dazu: ohne es ist die Zeile nur Text, mit ihm beantwortet sie die
+    # offene Frage aus #173 (haette die Positivliste diesen Fall getroffen?).
+    assert "extraktor-verdacht=True" in roh
+
+
+def test_rohmeldung_meldet_AUCH_einen_fall_den_die_liste_NICHT_trifft(projekt, capsys):
+    """Der eigentliche Ertrag: ein Fehlschlag, den `_EXTRAKTOR_RE` verfehlt, ist der Fall,
+    den #173 sucht — er loest keine Selbstheilung aus und war bisher unsichtbar."""
+    _FakeYDL.fehler = RuntimeError("ERROR: Sorry, this content isn't available right now")
+    with pytest.raises(SystemExit):
+        fetch.main(["Demo", "https://www.instagram.com/reel/C8xY2pQr/"])
+    roh = capsys.readouterr().out.partition("[fetch] roh")[2]
+    assert "extraktor-verdacht=False" in roh
+    assert "isn't available right now" in roh
+
+
+def test_rohmeldung_ist_einzeilig_und_gedeckelt():
+    """Zeilenweise gelesen (`jobPhases.ts`) und im Browser angezeigt — beides vertraegt
+    weder Umbrueche noch eine ganze HTTP-Antwort."""
+    assert "\n" not in fetch._rohmeldung(RuntimeError("a\nb\n  c"))
+    assert fetch._rohmeldung(RuntimeError("a\nb\n  c")) == "a b c"
+    lang = fetch._rohmeldung(RuntimeError("x" * 5000))
+    assert len(lang) == fetch._ROH_MAX + 2 and lang.endswith(" …")
+    # Leere Meldung: der Klassenname, sonst stuende dort gar nichts.
+    assert fetch._rohmeldung(ValueError("")) == "ValueError"
+
+
 _403 = RuntimeError("ERROR: unable to download video data: HTTP Error 403: Forbidden")
 
 

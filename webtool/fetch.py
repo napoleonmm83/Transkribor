@@ -178,6 +178,30 @@ def _node_modus():
             os.environ["ELECTRON_RUN_AS_NODE"] = alt
 
 
+# Wie viel Rohmeldung ins Protokoll geht. yt-dlp haengt bei manchen Fehlern eine ganze
+# HTTP-Antwort an; ungedeckelt stuende die im Job-Log, das der Nutzer im Browser liest.
+_ROH_MAX = 500
+
+
+def _rohmeldung(exc: Exception) -> str:
+    """Die ORIGINALmeldung, einzeilig und gedeckelt — die Messgrundlage fuer #173.
+
+    `_human_error` glaettet auf einen von drei Saetzen und nimmt vorher nur die **letzte**
+    Zeile (`roh.splitlines()[-1]`). Damit ist nach dem Protokollieren nicht mehr
+    rekonstruierbar, welche Formulierung yt-dlp wirklich benutzt hat — und genau daran
+    haengt `_EXTRAKTOR_RE`: seine Positivliste stammt aus EINEM gemessenen Fall (#162)
+    plus plausiblen Formulierungen. Ohne die Rohmeldung im Log gibt es bei einem echten
+    Instagram-Bruch keine Evidenz, an der die Liste nachzuziehen waere; „warten auf echte
+    Fehlschlaege" ist dann ein Plan ohne Endpunkt.
+
+    **Einzeilig**, weil `jobPhases.ts` das Protokoll zeilenweise liest und jede Zeile ohne
+    `[fetch] `-Praefix in seine Datei-Regexes fiele. **Gedeckelt**, siehe `_ROH_MAX`.
+    Leere Meldung -> Klassenname, sonst stuende dort gar nichts.
+    """
+    roh = " ".join(str(exc).split()) or exc.__class__.__name__
+    return f"{roh[:_ROH_MAX]} …" if len(roh) > _ROH_MAX else roh
+
+
 def _human_error(exc: Exception) -> str:
     """yt-dlp-Rauschen -> ein Satz, der Marcus sagt, was zu tun ist."""
     roh = str(exc).strip()
@@ -364,6 +388,14 @@ def main(argv=None):
                 base, fehler = _lade(args.project, url)
         if fehler is not None:
             print(f"[fetch] FEHLER {url}: {_human_error(fehler)}", flush=True)
+            # #173: die Rohmeldung MIT ins Protokoll, samt Urteil der Positivliste. Erst
+            # beides nebeneinander beantwortet die offene Frage — haette `_EXTRAKTOR_RE`
+            # diesen Fall getroffen? Ohne das Urteil waere die Zeile nur Text, ohne die
+            # Rohmeldung gaebe es nichts zu beurteilen. Das Praefix `[fetch] ` ist Pflicht:
+            # `jobPhases.ts` schluckt damit die Zeile, sonst laese sie seine Datei-Regex
+            # `^\[.+?\] FEHLER (.+?): ` als Fehlschlag mit der URL als Basisnamen.
+            print(f"[fetch] roh ({type(fehler).__name__}, extraktor-verdacht="
+                  f"{_extraktor_verdacht(fehler)}): {_rohmeldung(fehler)}", flush=True)
         else:
             geladen.append(base)
     print(f"[fetch] {len(geladen)} von {len(args.urls)} geladen", flush=True)
