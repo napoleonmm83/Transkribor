@@ -86,8 +86,13 @@ _EJS_NAME_RE = re.compile(r"^\s*yt[-_.]+dlp[-_.]+ejs(?![\w.-])", re.IGNORECASE)
 # hoechstens eine verspaetete Erkennung) und billiger als eine Regex, die beide Klammerformen
 # mitfuehrt, solange yt-dlp keine davon schreibt.
 _EJS_PIN_RE = re.compile(r"^\s*yt[-_.]+dlp[-_.]+ejs\s*==\s*([^\s;,()]+)", re.IGNORECASE)
-# Der Umgebungsmarker derselben Zeile — der RUECKFALL, wenn `packaging` fehlt. `fullmatch` gegen
-# GENAU `extra == 'default'`; alles andere faellt dann nach fail-open. Siehe `_gilt_fuer_uns`.
+# Das Extra, das wir installieren — EINE Quelle fuer beide Seiten: das Kommando an pip und die
+# Frage an den Marker. Zwei Literale muessten sonst dasselbe Wort sagen, ohne dass etwas es prueft.
+_UNSER_EXTRA = "default"
+
+# Der Umgebungsmarker derselben Zeile — der RUECKFALL: wenn `packaging` fehlt ODER den Marker
+# nicht versteht (der haeufigere Fall). `fullmatch` gegen GENAU `extra == 'default'`; alles
+# andere faellt dann nach fail-open. Siehe `_gilt_fuer_uns`.
 _NUR_DEFAULT_RE = re.compile(r"extra\s*==\s*['\"]default['\"]", re.IGNORECASE)
 
 # `packaging` steht seit #187 in der requirements.txt (vorher kam es nur zufaellig ueber
@@ -200,9 +205,20 @@ def _gilt_fuer_uns(zeile: str) -> bool:
         return True
     if _Marker is not None:
         try:
-            return bool(_Marker(marker).evaluate({"extra": "default"}))
-        except Exception:
-            pass                                    # unverstaendlicher Marker -> strikte Regel
+            return bool(_Marker(marker).evaluate({"extra": _UNSER_EXTRA}))
+        except Exception as e:
+            # `except Exception` ist die noetige Weite, nicht Bequemlichkeit: `extras == "x"`
+            # und `dependency_groups == "x"` sind GUELTIGE Marker-Variablen, im Kontext
+            # "metadata" aber nicht gesetzt — packaging wirft dort einen blanken `KeyError`
+            # (gemessen, 26.2). Ein `except InvalidMarker` faenge sie NICHT, und dieses Modul
+            # darf nirgends werfen (#185).
+            #
+            # Gemeldet wird es, weil es die Nachricht "unser Lesen der yt-dlp-Metadaten passt
+            # nicht mehr zur Wirklichkeit" ist — genau die Klasse, fuer die #179/#182/#184
+            # gebaut wurden. Still faellt sie sonst bis zum 14-Tage-Kalender durch. Kein
+            # Log-Regen: `_ejs_zeilen` filtert vorher auf den Paketnamen, hier kommen
+            # hoechstens die zwei ejs-Zeilen an.
+            print(f"[ytdlp] Marker unlesbar ({marker!r}): {type(e).__name__}: {e}", flush=True)
     return bool(_NUR_DEFAULT_RE.fullmatch(marker))
 
 
@@ -263,12 +279,12 @@ def _ejs_verlangt() -> bool:
 
     **Die Kosten von fail-open sind hier umgekehrt zum Pin.** Bei `_ejs_pin()` heisst „nicht
     lesbar" nur „der Kalenderweg entscheidet" — hier heisst es, dass #179 fuer diese Datei
-    **still ausfaellt**, bis der 14-Tage-Takt greift. Der geteilte `_gilt_fuer_uns` bringt das
-    mit: eine Zeile mit zusaetzlichem Marker (`extra == 'default' and python_version >= "3.9"`)
-    zaehlt hier nicht, obwohl pip ejs auf einer passenden Python-Fassung sehr wohl
-    installierte. Bewusst so gelassen — yt-dlp schreibt heute einen blanken Marker, und zwei
-    verschiedene Marker-Regeln fuer zwei Fragen waeren die teurere Verwechslungsquelle.
-    Festgehalten in `test_weitere_marker_gelten_auch_beim_FEHLEN_nicht`.
+    **still ausfaellt**, bis der 14-Tage-Takt greift. Genau daran hing #187: eine Zeile mit
+    zusaetzlichem, aber ERFUELLTEM Marker (`extra == 'default' and python_version >= "3.9"`)
+    zaehlte hier frueher nicht, obwohl pip ejs sehr wohl installiert. Seit der Marker
+    ausgewertet wird, zaehlt sie — und ein UNerfuellter weiterhin nicht. Beide Richtungen
+    festgehalten in `test_erfuellter_zusatzmarker_macht_auch_das_FEHLEN_faellig` und
+    `test_unerfuellter_zusatzmarker_macht_das_FEHLEN_nicht_faellig`.
     """
     return bool(_ejs_zeilen())
 
@@ -484,7 +500,9 @@ def _merken() -> None:
 # sein `vendor/_info.py`), und zwar mit einer Warnung, die `no_warnings` in fetch.py schluckt:
 # die Selbstaktualisierung haette den URL-Import STILL wieder auf den Stand vor #170 gesetzt —
 # dieselbe Sorte Fehler, gegen die dieses Modul gebaut wurde.
-_PAKET = "yt-dlp[default]"
+# Aus `_UNSER_EXTRA` zusammengesetzt, nicht danebengeschrieben: die Frage an den Marker
+# (`evaluate({"extra": _UNSER_EXTRA})`) und das Kommando an pip muessen dasselbe Extra meinen.
+_PAKET = f"yt-dlp[{_UNSER_EXTRA}]"
 
 
 def aktualisiere() -> bool:

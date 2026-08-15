@@ -376,16 +376,34 @@ def test_ohne_packaging_bleibt_die_strikte_regel(monkeypatch):
 
     Der Zweig ist sonst unerreichbar (packaging liegt in der requirements.txt UND bringt pytest
     selbst mit), also hier ausdruecklich gefahren: ein Rueckfall, den kein Test je ausuebt,
-    ist eine Behauptung."""
+    ist eine Behauptung.
+
+    **Die doppelten Anfuehrungszeichen gehoeren HIERHIN**, seit der Marker ausgewertet wird:
+    `extra == "default"` beantwortet `evaluate()` jetzt selbst, die Regex sieht es nie mehr —
+    die `['\"]`-Alternative in `_NUR_DEFAULT_RE` haette sonst wieder null Abdeckung
+    (mutationsgeprueft: `['\"]` -> `[']` liess vorher ALLE 88 Tests gruen). Genau dieselbe
+    Regex stand schon einmal ungewacht da, PR #183 hat ihr den Test gegeben."""
     monkeypatch.setattr(yu, "_Marker", None)
     assert yu._gilt_fuer_uns("yt-dlp-ejs==0.9.0; extra == 'default'") is True
+    assert yu._gilt_fuer_uns('yt-dlp-ejs==0.9.0; extra == "default"') is True
     assert yu._gilt_fuer_uns('yt-dlp-ejs==0.9.0; extra == \'default\' and python_version >= "3.0"') is False
     assert yu._gilt_fuer_uns("yt-dlp-ejs==0.9.0") is True
 
 
-def test_unverstaendlicher_marker_faellt_auf_die_strikte_regel(monkeypatch):
+def test_unverstaendlicher_marker_faellt_auf_die_strikte_regel():
     """`packaging` wirft bei kaputter Syntax — das darf nicht aus `faellig()` herausfliegen."""
     assert yu._gilt_fuer_uns("yt-dlp-ejs==0.9.0; extra == = 'default'") is False
+
+
+def test_gueltiger_aber_UNGESETZTER_marker_wirft_nicht():
+    """Der zweite Wurfweg, und der wahrscheinlichere — er begruendet die Weite des `except`.
+
+    `extras` und `dependency_groups` sind GUELTIGE PEP-508-Variablen, im Kontext "metadata"
+    aber nicht gesetzt: packaging wirft dort einen blanken `KeyError` (gemessen an 26.2), also
+    KEINEN `InvalidMarker`. Wer das `except Exception` spaeter auf die Marker-Ausnahmen
+    verengt, zerlegt damit `fetch._hole_yt_dlp()` (#185) — dieser Test haelt das fest."""
+    assert yu._gilt_fuer_uns('yt-dlp-ejs==0.9.0; extras == "default"') is False
+    assert yu._gilt_fuer_uns('yt-dlp-ejs==0.9.0; dependency_groups == "default"') is False
 
 
 @pytest.mark.parametrize("marker", ['extra == "default"', "EXTRA == 'DEFAULT'",
@@ -395,6 +413,12 @@ def test_marker_auch_in_abweichender_schreibweise(monkeypatch, marker):
     behauptet: `_NUR_DEFAULT_RE` traegt `['\\"]` und `IGNORECASE`, beide hatten NULL
     Abdeckung. Gemessen: die Regex auf einfache Anfuehrungszeichen verengt liess alle 50
     Tests gruen, `IGNORECASE` entfernt ebenfalls.
+
+    **Seit #187 deckt dieser Test nur noch `IGNORECASE`.** `extra == "default"` beantwortet
+    `evaluate()` selbst, die Regex sieht es hier nicht mehr — die `['\\"]`-Alternative haengt
+    seitdem allein an `test_ohne_packaging_bleibt_die_strikte_regel` (auch das gemessen: die
+    Alternative verengt, 88 Tests gruen). Die grossgeschriebene Fassung kommt weiter hier an,
+    weil packaging sie als `InvalidMarker` ablehnt und der Rueckfall greift.
 
     Die Fehlrichtung ist die stille: schriebe ein Build-Backend `extra == "default"`, gaebe
     `_gilt_fuer_uns` False, `_ejs_pin()` None, und die ganze #182-Pruefung fiele lautlos aus
@@ -418,17 +442,23 @@ def test_release_wirft_nicht_bei_absurd_langer_zahl():
 
 
 def test_das_gepruefte_extra_ist_das_installierte():
-    """`_PAKET` bestimmt, welches Extra pip installiert; `_NUR_DEFAULT_RE` bestimmt, welchem
-    Extra-Pin wir glauben. Beide muessen dasselbe Extra nennen — verbunden ist da nichts.
-    Wer `_PAKET` aendert, laese sonst still den falschen Pin: fail-open, also weder Test noch
-    Logzeile. Ein Waechter statt einer Abstraktion, die sich hier nicht lohnt.
+    """`_PAKET` bestimmt, welches Extra pip installiert; die Frage an den Marker bestimmt,
+    welchem Extra-Pin wir glauben. Beide muessen dasselbe Extra nennen.
+
+    **Seit #187 ist das keine Behauptung mehr, sondern gebaut:** beide kommen aus
+    `_UNSER_EXTRA`. Der Waechter prueft deshalb jetzt die ZUSAMMENSETZUNG — vorher stand hier
+    `_NUR_DEFAULT_RE`, das auf dem lebenden Pfad gar nicht mehr entscheidet (der Vergleich
+    liegt im `evaluate`-Aufruf). Ein Waechter, der auf die falsche Stelle zeigt, ist Deko.
 
     Auf Gleichheit, nicht auf Teilstring: `"default" in "yt-dlp[default,pin]"` waere wahr, und
     genau dann laege der Fall vor, den der Waechter melden soll — pip installierte zwei Extras,
     geglaubt wuerde weiterhin nur dem `default`-Pin. Ein Waechter, der bei der Aenderung
     schweigt, fuer die es ihn gibt, ist Deko (CodeRabbit an PR #183)."""
+    assert yu._PAKET == f"yt-dlp[{yu._UNSER_EXTRA}]"
     assert yu._PAKET == "yt-dlp[default]"
-    assert yu._NUR_DEFAULT_RE.fullmatch("extra == 'default'")
+    # Die Frage an den Marker nimmt DASSELBE Extra — sonst laege der Pin einer anderen
+    # Variante zugrunde als der, die pip installiert.
+    assert yu._gilt_fuer_uns(f"yt-dlp-ejs==0.9.0; extra == '{yu._UNSER_EXTRA}'") is True
 
 
 def test_fremdes_paket_mit_passendem_namensende_zaehlt_nicht(monkeypatch):
@@ -564,6 +594,18 @@ def test_name_ohne_trennzeichen_zaehlt_NICHT(monkeypatch):
     zusammenfallen, es entfernt sie nicht. Ohne diese Zeile koennte man `[-_.]*` schreiben
     und haette die Wache still aufgeweicht."""
     _ohne_ejs(monkeypatch, ["ytdlpejs==0.9.0; extra == 'default'"])
+    assert _ECHTES_EJS_UNTAUGLICH() is False
+
+
+def test_unerfuellter_zusatzmarker_macht_das_FEHLEN_nicht_faellig(monkeypatch):
+    """Die teure Richtung auf dem `_ejs_verlangt`-Pfad, mit eigenem Anker.
+
+    Ein Marker, den DIESE Installation nicht erfuellt, darf das Fehlen nicht faellig machen:
+    pip installierte das Paket hier nie, das Flag ginge also nie wieder weg — taegliches pip
+    ohne Ende. Steht als eigener Test da, obwohl `_gilt_fuer_uns` geteilt ist: dieser Pfad ist
+    der mit den umgekehrten Kosten, und ein geteilter Helfer kann aufgeteilt werden."""
+    _ohne_ejs(monkeypatch,
+              ['yt-dlp-ejs==0.8.0; extra == \'default\' and python_version >= "3.99"'])
     assert _ECHTES_EJS_UNTAUGLICH() is False
 
 
