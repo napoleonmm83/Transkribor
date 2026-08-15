@@ -395,6 +395,22 @@ def test_unverstaendlicher_marker_faellt_auf_die_strikte_regel():
     assert yu._gilt_fuer_uns("yt-dlp-ejs==0.9.0; extra == = 'default'") is False
 
 
+def test_unlesbarer_marker_wird_GEMELDET(capsys):
+    """Der Rueckfall ist richtig, aber er darf nicht still sein.
+
+    Was hier durchfaellt, ist die Nachricht „unser Lesen der yt-dlp-Metadaten passt nicht mehr
+    zur Wirklichkeit" — die Klasse, fuer die #179/#182/#184 gebaut wurden. Ohne Zeile faellt
+    sie bis zum 14-Tage-Kalender durch, ohne dass irgendwo etwas davon steht.
+
+    Der Test steht hier, weil die Mutationsprobe ihn eingefordert hat: die Meldung zu
+    entfernen liess vorher alle 90 Tests gruen."""
+    yu._gilt_fuer_uns("yt-dlp-ejs==0.9.0; extra == = 'default'")
+    aus = capsys.readouterr().out
+    assert "Marker unlesbar" in aus
+    assert "extra == = 'default'" in aus, "der Marker selbst gehoert hinein, sonst ist er nicht auffindbar"
+    assert "InvalidMarker" in aus, "der Ausnahmetyp gehoert hinein — er nennt die Ursache"
+
+
 def test_gueltiger_aber_UNGESETZTER_marker_wirft_nicht():
     """Der zweite Wurfweg, und der wahrscheinlichere — er begruendet die Weite des `except`.
 
