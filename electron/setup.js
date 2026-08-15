@@ -225,9 +225,11 @@ async function importeDa() {
  *  IN der venv, nicht daneben — wer sie wegwirft, wirft den Merker mit weg. */
 function stempel(venvDir = P.venv) { return path.join(venvDir, '.requirements') }
 
-/** Leerstring heisst "keine lesbare requirements.txt" — dann gibt es nichts nachzuziehen. */
-function reqHash() {
-  try { return crypto.createHash('sha256').update(fs.readFileSync(P.requirements)).digest('hex') }
+/** Leerstring heisst "keine lesbare requirements.txt" — dann gibt es nichts nachzuziehen.
+ *  `reqDatei` ist der Testzugang: ohne ihn liesse sich nicht pruefen, dass der Merker
+ *  ueberhaupt AN DIESER DATEI haengt (ein Test, der nur den Merker verbiegt, belegt das nicht). */
+function reqHash(reqDatei = P.requirements) {
+  try { return crypto.createHash('sha256').update(fs.readFileSync(reqDatei)).digest('hex') }
   catch { return '' }
 }
 
@@ -239,26 +241,35 @@ function reqHash() {
  * bewusst). Ohne diesen Vergleich erreicht JEDES Paket, das nach dem Installationstag eines
  * Nutzers dazukommt, ihn nie: die Funktion fehlt still, die App sieht gesund aus (#181).
  * Bisher bekam jeder Fall einen eigenen Weg (yt-dlp: webtool/ytdlp_update.py, yt-dlp-ejs:
- * _ejs_fehlt) — das ist der eine Weg fuer alle.
+ * `_ejs_untauglich`) — das ist der eine Weg fuer alle. Sie bleiben trotzdem noetig: dieser
+ * hier greift nur in der gepackten App und nur, wenn der Nutzer klickt.
  *
  * Fehlender Merker gilt als veraltet: JEDE heute bestehende Installation ist es auch.
+ * Was er NICHT weiss: ob die Pakete noch da sind. Er sagt "gegen diese Datei installiert",
+ * nicht "diese Pakete liegen vor" — ein von Hand entferntes Paket faellt ihm nicht auf.
  */
-function paketeAktuell(venvDir = P.venv) {
-  const soll = reqHash()
+function paketeAktuell(venvDir = P.venv, reqDatei = P.requirements) {
+  const soll = reqHash(reqDatei)
   if (!soll) return true
   try { return fs.readFileSync(stempel(venvDir), 'utf8').trim() === soll } catch { return false }
 }
 
 /** Nach erfolgreichem `pip install -r`. Wirft nicht: ein misslungener Merker darf den Start
  *  nicht verhindern — er kostet hoechstens einen zweiten Einrichtungslauf. */
-function stempelSchreiben(venvDir = P.venv) {
-  const soll = reqHash()
+function stempelSchreiben(venvDir = P.venv, reqDatei = P.requirements) {
+  const soll = reqHash(reqDatei)
   if (!soll) return false
   try { fs.writeFileSync(stempel(venvDir), soll); return true } catch { return false }
 }
 
-async function venvVollstaendig() {
-  return (await importeDa()) && paketeAktuell()
+/**
+ * Die zwei Haelften zu dem, was die Oberflaeche braucht — als reine Funktion, weil hier die
+ * Entscheidung faellt, die main.js liest (`if (s.venv) serverStarten()`). Stuende sie nur
+ * inline in status(), waere genau der Riegel ungetestet: `venv: importe` allein liesse einen
+ * veralteten Stand durch, und keine Attrappe der Welt merkt das.
+ */
+function venvZustand(importe, aktuell) {
+  return { venv: importe && aktuell, venvVeraltet: importe && !aktuell }
 }
 
 /** Nutzt diese Maschine ueberhaupt whisper.cpp? Spiegelt device.apple_silicon() —
@@ -287,14 +298,11 @@ async function status() {
   // Beide Haelften einzeln, damit die Seite den Unterschied nennen kann: eine veraltete venv
   // ist installiert und funktioniert — sie ist nur nicht auf dem Stand der requirements.txt.
   // Als blosses rotes "fehlt" gemeldet, laese der Nutzer einen Defekt daraus (#181).
-  const importe = await importeDa()
-  const aktuell = paketeAktuell()
   return {
     python: py ? `Python ${py.version}` : '',
     ffmpeg: ff,
     whispercpp: wcpp,
-    venv: importe && aktuell,
-    venvVeraltet: importe && !aktuell,
+    ...venvZustand(await importeDa(), paketeAktuell()),
     winget: process.platform === 'win32' ? (await ausgabe('winget', ['--version'])) || '' : '',
     venvPfad: P.venv,
     projektePfad: P.projekte,
@@ -304,6 +312,37 @@ async function status() {
     // ohne zu erfahren, dass ein `brew install` das behebt.
     hinweis: (py && ff && !macFehlt) ? '' : pl.hinweis,
   }
+}
+
+/**
+ * Hat der `-r`-Lauf torch gegen ein Rad vom Standardindex getauscht? Auf Windows/Linux ist das
+ * das CPU-Rad, und die GPU waere STILL weg — genau der Tausch, wegen dem torch bewusst NICHT in
+ * der requirements.txt steht.
+ *
+ * Erreichbar ist er erst, seit die Einrichtung nachlaeuft (#181): frueher folgte `-r` immer
+ * unmittelbar auf eine frische torch-Installation, die Untergrenze war also nie zu heben. Jetzt
+ * trifft `-r` ein Monate altes torch — zieht eine Abhaengigkeit ihre Grenze an (pyannote.audio
+ * verlangt heute torch>=2.8.0), holt pip die Ersatzfassung dort, wo sie steht: bei PyPI.
+ *
+ * Die Marke im print ist noetig, weil `ausgabe` stderr mitliest — eine Warnung beim Import
+ * machte einen blossen Leerstring-Vergleich blind. Keine verwertbare Antwort heisst NICHTS tun:
+ * die Pruefung danach meldet eine kaputte venv ohnehin, und ein mehrere GB grosser Download
+ * auf ein unklares Signal hin waere teuer geraten.
+ */
+function cudaVerloren(pl, antwort) {
+  // Ohne CUDA-Index (macOS) gibt es nichts zurueckzuholen — dort ist `torch.version.cuda`
+  // IMMER leer, ein Nachlauf zoege das PyPI-Rad ein zweites Mal.
+  if (!pl.torchIndex) return false
+  const treffer = (antwort || '').match(/CUDA=(\S*)/)
+  return !!treffer && !treffer[1]
+}
+
+async function cudaZurueckholen(vpy, pl, onLine) {
+  const antwort = await ausgabe(vpy, ['-c', 'import torch; print("CUDA=" + (torch.version.cuda or ""))'])
+  if (!cudaVerloren(pl, antwort)) return false
+  onLine('torch hat seine CUDA-Fassung verloren — hole sie zurueck (sonst rechnet alles auf der CPU).')
+  await lauf(vpy, ['-m', 'pip', 'install', '-U', 'torch', '--index-url', pl.torchIndex], onLine)
+  return true
 }
 
 /**
@@ -381,15 +420,20 @@ async function einrichten(onLine, onSchritt) {
   onSchritt('Whisper und Werkzeuge laden')
   code = await lauf(vpy, ['-m', 'pip', 'install', '-r', P.requirements], onLine)
   if (code !== 0) return { ok: false, fehler: 'Python-Pakete konnten nicht installiert werden.' }
-  if (!stempelSchreiben()) onLine('Hinweis: Paketstand konnte nicht vermerkt werden — die Einrichtung meldet sich beim naechsten Start erneut.')
+  await cudaZurueckholen(vpy, pl, onLine)
 
-  // Geprueft wird der Import, NICHT venvVollstaendig(): ein misslungener Merker wuerde den
-  // Nutzer sonst aussperren (kein ok -> kein Serverstart), obwohl alles installiert ist.
+  // Geprueft wird der Import, NICHT der Merker: ein misslungenes Vermerken wuerde den Nutzer
+  // sonst aussperren (kein ok -> kein Serverstart), obwohl alles installiert ist.
   onSchritt('Prüfen')
   if (!(await importeDa())) return { ok: false, fehler: 'Einrichtung unvollstaendig — bitte erneut versuchen.' }
+  // Erst NACH der Pruefung: der Merker behauptet "gegen diese requirements.txt installiert",
+  // und das soll er nur ueber eine venv sagen, die sich auch importieren laesst.
+  if (!stempelSchreiben()) onLine('Hinweis: Paketstand konnte nicht vermerkt werden — die Einrichtung meldet sich beim naechsten Start erneut.')
   onLine('Fertig. ' + schritte.join(' · '))
   return { ok: true }
 }
 
-module.exports = { status, einrichten, venvVollstaendig, findePython, plan, spawnEnv,
-                   wingetFfmpeg, nutztWhisperCpp, paketeAktuell, stempelSchreiben }
+// venvVollstaendig() ist ersatzlos weg: status() beantwortet dieselbe Frage ueber venvZustand(),
+// und ein zweiter Weg dorthin waere genau der, den kein Test bewacht (er hatte keinen Aufrufer).
+module.exports = { status, einrichten, findePython, plan, spawnEnv, wingetFfmpeg,
+                   nutztWhisperCpp, paketeAktuell, stempelSchreiben, venvZustand, cudaVerloren }

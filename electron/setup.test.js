@@ -137,37 +137,59 @@ function leereVenv() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'venv-'))
 }
 
+/** Eine requirements.txt zum Anfassen — die echte darf ein Test nicht veraendern. */
+function reqDatei(inhalt) {
+  const fs = require('node:fs'), os = require('node:os'), path = require('node:path')
+  const p = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'req-')), 'requirements.txt')
+  fs.writeFileSync(p, inhalt)
+  return p
+}
+
 test('venv ohne Merker gilt als veraltet — jede heute bestehende Installation ist es (#181)', () => {
   const { paketeAktuell } = require('./setup')
-  assert.strictEqual(paketeAktuell(leereVenv()), false)
+  assert.strictEqual(paketeAktuell(leereVenv(), reqDatei('faster-whisper\n')), false)
 })
 
-test('nach dem Vermerken gilt die venv als aktuell', () => {
+test('eine GEAENDERTE requirements.txt entwertet den Merker — daran haengt der ganze Zweck', () => {
   const { paketeAktuell, stempelSchreiben } = require('./setup')
   const venv = leereVenv()
-  assert.strictEqual(stempelSchreiben(venv), true)
-  // Der Rundlauf pinnt den INHALT: schreibt stempelSchreiben etwas anderes als den heutigen
-  // Hash, bricht er. Den Dateinamen pinnt er NICHT — beide Seiten umzubenennen faellt hier
-  // nicht auf, dafuer steht der Test darunter (gemessen, nicht angenommen).
-  assert.strictEqual(paketeAktuell(venv), true)
+  const alt = reqDatei('faster-whisper\n'), neu = reqDatei('faster-whisper\npackaging\n')
+  assert.strictEqual(stempelSchreiben(venv, alt), true)
+  assert.strictEqual(paketeAktuell(venv, alt), true)
+  // Der Kern: der Merker muss AN DER DATEI haengen. Einen Test, der nur den Merker verbiegt,
+  // ueberlebt ein reqHash(), das eine Konstante liefert — und damit #181 unbemerkt wieder oeffnet.
+  assert.strictEqual(paketeAktuell(venv, neu), false)
 })
 
-test('venvVollstaendig fragt den Paketstand mit — sonst waere #181 still wieder offen', () => {
-  // Naht-Test wie der spawnEnv-Test oben: die Zusammensetzung selbst laesst sich nicht
-  // fahren (sie startet die echte python.exe der venv). Was er belegt, ist genau eines:
-  // dass die Pruefung nicht wieder auf den blossen Import-Check zurueckfaellt.
-  const quelle = require('fs').readFileSync(require('path').join(__dirname, 'setup.js'), 'utf8')
-  assert.match(quelle, /venvVollstaendig\(\)\s*\{\s*return \(await importeDa\(\)\) && paketeAktuell\(\)/,
-    'venvVollstaendig muss importeDa UND paketeAktuell fragen')
+test('unlesbare requirements.txt heisst "nichts nachzuziehen", nicht "veraltet"', () => {
+  const { paketeAktuell } = require('./setup')
+  // Die Gegenrichtung waere eine Einrichtung, die bei jedem Start erscheint und nie gelingen kann.
+  assert.strictEqual(paketeAktuell(leereVenv(), 'C:\gibt-es-nicht-42\requirements.txt'), true)
 })
 
-test('geaenderte requirements.txt entwertet den Merker — der Dateiname ist mitgepinnt', () => {
-  const fs = require('node:fs'), path = require('node:path')
-  const { paketeAktuell, stempelSchreiben } = require('./setup')
-  const venv = leereVenv()
-  stempelSchreiben(venv)
-  // Den Merker verbiegen statt die echte requirements.txt anzufassen: dieselbe Wirkung
-  // (Merker != heutiger Stand), ohne eine Datei des Repos im Test zu veraendern.
-  fs.writeFileSync(path.join(venv, '.requirements'), 'stand-von-gestern')
-  assert.strictEqual(paketeAktuell(venv), false)
+test('nur importierbar UND aktuell startet den Server — beides einzeln reicht nicht', () => {
+  const { venvZustand } = require('./setup')
+  // Diese Entscheidung liest main.js (`if (s.venv) serverStarten()`). Stuende sie nur inline
+  // in status(), liesse `venv: importe` einen veralteten Stand durch, ohne dass ein Test murrt.
+  assert.deepStrictEqual(venvZustand(true, true), { venv: true, venvVeraltet: false })
+  assert.deepStrictEqual(venvZustand(true, false), { venv: false, venvVeraltet: true })
+  // Ohne Importe ist die venv nicht "veraltet", sondern gar nicht da — sonst stuende auf der
+  // Seite "vorhanden, aber nicht auf dem neuesten Stand" ueber einem leeren Ordner.
+  assert.deepStrictEqual(venvZustand(false, false), { venv: false, venvVeraltet: false })
+  assert.deepStrictEqual(venvZustand(false, true), { venv: false, venvVeraltet: false })
+})
+
+test('ein CPU-Rad nach dem Nachlauf wird erkannt — sonst waere die GPU still weg', () => {
+  const { cudaVerloren } = require('./setup')
+  const mitIndex = { torchIndex: 'https://download.pytorch.org/whl/cu128' }
+  assert.strictEqual(cudaVerloren(mitIndex, 'CUDA=12.8'), false)
+  assert.strictEqual(cudaVerloren(mitIndex, 'CUDA='), true)
+  // Die Marke ist noetig, weil `ausgabe` stderr mitliest: eine Warnung beim Import macht
+  // einen blossen Leerstring-Vergleich blind.
+  assert.strictEqual(cudaVerloren(mitIndex, 'UserWarning: irgendwas\nCUDA='), true)
+  // Keine verwertbare Antwort (torch laesst sich gar nicht importieren, `ausgabe` -> null):
+  // nichts tun. Die Pruefung danach meldet die kaputte venv, ein GB-Download waere geraten.
+  assert.strictEqual(cudaVerloren(mitIndex, null), false)
+  // macOS hat keinen CUDA-Index; dort ist `torch.version.cuda` IMMER leer.
+  assert.strictEqual(cudaVerloren({ torchIndex: null }, 'CUDA='), false)
 })
