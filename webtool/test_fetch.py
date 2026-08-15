@@ -287,6 +287,11 @@ def test_rohmeldung_meldet_AUCH_einen_fall_den_die_liste_NICHT_trifft(projekt, c
     assert "isn't available right now" in rohzeile
 
 
+# Zeitmarke im Protokoll, gegen die die Reihenfolge geprueft wird. Bewusst OHNE
+# `[fetch] `-Praefix: sie soll sich von den echten Zeilen unterscheiden lassen.
+_MARKE = "[test] heilungsversuch startet"
+
+
 def test_rohmeldung_der_AUSLOESENDEN_meldung_geht_nicht_verloren(projekt, monkeypatch, capsys):
     """Loest der erste Fehlschlag die Selbstheilung aus, ueberschreibt der Wiederholversuch
     `fehler`. Stuende die Rohzeile nur am Schleifenende, fehlte ausgerechnet die AUSLOESENDE
@@ -299,6 +304,7 @@ def test_rohmeldung_der_AUSLOESENDEN_meldung_geht_nicht_verloren(projekt, monkey
     _FakeYDL.fehler = RuntimeError("ERROR: nsig extraction failed; player abc123")
 
     def heilen(erzwingen=False):
+        print(_MARKE, flush=True)      # Zeitmarke: ab hier laeuft der Heilungsversuch
         _FakeYDL.fehler = RuntimeError("ERROR: Sorry, this content isn't available")
         return True
     monkeypatch.setattr(fetch.ytdlp_update, "automatisch", heilen)
@@ -306,9 +312,15 @@ def test_rohmeldung_der_AUSLOESENDEN_meldung_geht_nicht_verloren(projekt, monkey
     with pytest.raises(SystemExit):
         fetch.main(["Demo", "https://youtu.be/vid123", "--download-only"])
 
-    rohzeilen = [z for z in capsys.readouterr().out.splitlines()
-                 if z.startswith("[fetch] roh")]
+    zeilen = capsys.readouterr().out.splitlines()
+    rohzeilen = [z for z in zeilen if z.startswith("[fetch] roh")]
     assert len(rohzeilen) == 2
+    # Die ERSTE Rohzeile muss VOR dem Heilungsversuch stehen. Ohne diese Zusicherung bestuende
+    # der Test auch, wenn die Ausnahme bloss zwischengespeichert und spaeter protokolliert
+    # wuerde — dann waere die Zeile aber keine Diagnose des Augenblicks mehr, sondern eine
+    # Rekonstruktion, und der naechste Umbau duerfte sie beliebig verschieben.
+    # (CodeRabbit an PR #223.)
+    assert zeilen.index(rohzeilen[0]) < zeilen.index(_MARKE)
     assert "nsig extraction failed" in rohzeilen[0] and "verdacht=True" in rohzeilen[0]
     assert "isn't available" in rohzeilen[1] and "verdacht=False" in rohzeilen[1]
 
@@ -319,7 +331,8 @@ def test_rohmeldung_ist_einzeilig_und_gedeckelt():
     assert "\n" not in fetch._rohmeldung(RuntimeError("a\nb\n  c"))
     assert fetch._rohmeldung(RuntimeError("a\nb\n  c")) == "a b c"
     lang = fetch._rohmeldung(RuntimeError("x" * 5000))
-    assert len(lang) == fetch._ROH_MAX + 2 and lang.endswith(" …")
+    # Die Kuerzungsmarke zaehlt MIT in die Grenze — sonst waere `_ROH_MAX` nicht das Maximum.
+    assert len(lang) == fetch._ROH_MAX and lang.endswith(" …")
     # Leere Meldung: der Klassenname, sonst stuende dort gar nichts.
     assert fetch._rohmeldung(ValueError("")) == "ValueError"
 
