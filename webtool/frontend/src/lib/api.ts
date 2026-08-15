@@ -2,6 +2,8 @@ import type {
   Project, ProjectFile, EditDoc, JobStatus, StartJob, Settings, ModelInfo, Hardware, AuthStatus, LoginState, YtdlpStand,
   ProjectEinstellungen,
   EinstellungenWerte,
+  DateiEinstellungen,
+  DateiEinstellungenPatch,
 } from './types'
 
 const enc = encodeURIComponent
@@ -36,13 +38,13 @@ export async function saveProjektEinstellungen(
 }
 /** Per-Datei-Einstellungen (Override, sonst Projekt-Standard) — Datei-Pendant von
  *  getProjektEinstellungen. Liefert dieselben Auswahlen (sprach_choices/tiefen). */
-export async function getFileEinstellungen(project: string, base: string): Promise<ProjectEinstellungen> {
+export async function getFileEinstellungen(project: string, base: string): Promise<DateiEinstellungen> {
   return get(`/api/projects/${enc(project)}/files/${enc(base)}/einstellungen`)
 }
 /** Schreibt den Datei-Override; nur gesetzte Felder senden (Partial) — wie saveProjektEinstellungen.
  *  Reiner Schreibpfad; die Trigger (retranscribe/correct) stößt der Aufrufer separat an. */
 export async function saveFileEinstellungen(
-  project: string, base: string, patch: Partial<EinstellungenWerte>,
+  project: string, base: string, patch: DateiEinstellungenPatch,
 ): Promise<EinstellungenWerte> {
   return jn(await fetch(`/api/projects/${enc(project)}/files/${enc(base)}/einstellungen`,
     { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch) }))

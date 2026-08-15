@@ -1261,6 +1261,45 @@ def test_dateieinstellungen_speichern_ignoriert_none(client, tmp_projekt):
     assert r.json()["korrektur"] == "auto"
 
 
+# --- Rueckweg auf "folgt dem Projekt" (#166) ---------------------------------
+
+def test_dateieinstellungen_nennt_override_und_projektwert(client, tmp_projekt):
+    """Drei Werte statt einem: aus dem effektiven allein ist "folgt dem Projekt" nicht von
+    einem gleichlautenden Override zu unterscheiden — die Oberflaeche koennte den Rueckweg
+    also weder anzeigen noch beschriften."""
+    d = client.get(f"/api/projects/{tmp_projekt}/files/S1/einstellungen").json()
+    assert d["mehrsprachig"] is False
+    assert d["mehrsprachig_eigen"] is None          # nie angefasst -> folgt dem Projekt
+    assert d["mehrsprachig_projekt"] is False
+
+
+def test_dateieinstellungen_null_entfernt_den_override(client, tmp_projekt):
+    """Der Kern von #166: `mehrsprachig: null` AUSDRUECKLICH gesendet heisst "Override weg".
+
+    Unterschieden wird an `model_fields_set` — an der ANWESENHEIT des Schluessels im Rumpf,
+    nicht an seinem Wert; im Modell sind beide Faelle `None`. Dasselbe Prinzip wie
+    `"text": ""` in apply_correction."""
+    import webtool.projekt as projekt
+    client.put(f"/api/projects/{tmp_projekt}/einstellungen", json={"mehrsprachig": True})
+    client.put(f"/api/projects/{tmp_projekt}/files/S1/einstellungen", json={"mehrsprachig": False})
+    assert projekt.datei_mehrsprachig(tmp_projekt, "S1") is False
+
+    r = client.put(f"/api/projects/{tmp_projekt}/files/S1/einstellungen", json={"mehrsprachig": None})
+    assert r.status_code == 200
+    assert r.json()["mehrsprachig_eigen"] is None
+    assert r.json()["mehrsprachig"] is True         # erbt jetzt wieder vom Projekt
+    assert projekt.datei_override_mehrsprachig(tmp_projekt, "S1") is None
+
+
+def test_dateieinstellungen_FEHLENDES_feld_laesst_den_override_stehen(client, tmp_projekt):
+    """Die Gegenprobe — ohne sie waere ein `mehr = ERBEN` fuer JEDEN Aufruf gruen, und jedes
+    Speichern der Sprache raeumte nebenbei den Mehrsprachig-Haken ab."""
+    import webtool.projekt as projekt
+    client.put(f"/api/projects/{tmp_projekt}/files/S1/einstellungen", json={"mehrsprachig": True})
+    client.put(f"/api/projects/{tmp_projekt}/files/S1/einstellungen", json={"sprache": "en"})
+    assert projekt.datei_override_mehrsprachig(tmp_projekt, "S1") is True
+
+
 # --- Einstellungs-Validierung: unbekannte Werte sofort 400 (#139) ------------
 
 def test_projekteinstellungen_lehnt_unbekannte_sprache_ab(client, tmp_projekt):

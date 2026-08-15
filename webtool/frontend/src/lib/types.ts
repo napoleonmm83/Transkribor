@@ -53,6 +53,19 @@ export type ProjectEinstellungen = {
 /** Nur die gesetzten Werte (sprache/korrektur/mehrsprachig). Der PUT echo't genau diese drei Felder;
  *  die Wahlmoeglichkeiten (sprach_choices/tiefen) liefert nur der GET. */
 export type EinstellungenWerte = { sprache: string; korrektur: string; mehrsprachig: boolean };
+/** Der Datei-GET liefert DREI Werte statt einem: `mehrsprachig` ist der effektive (was die
+ *  Transkription nimmt), `mehrsprachig_eigen` der Datei-Override (`null` = folgt dem Projekt)
+ *  und `mehrsprachig_projekt` der Standard, den sie dann erbt. Aus dem effektiven Wert allein
+ *  ist „folgt dem Projekt" nicht von einem gleichlautenden Override zu unterscheiden (#166). */
+export type DateiEinstellungen = ProjectEinstellungen & {
+  mehrsprachig_eigen: boolean | null
+  mehrsprachig_projekt: boolean
+};
+/** `mehrsprachig: null` heisst AUSDRUECKLICH „Override entfernen" — das Feld wegzulassen laesst
+ *  ihn stehen (Partial-Update). Unterschieden wird serverseitig an `model_fields_set`, also an
+ *  der Anwesenheit des Schluessels; `JSON.stringify` wirft nur `undefined` weg, `null` bleibt. */
+export type DateiEinstellungenPatch =
+  Partial<Omit<EinstellungenWerte, 'mehrsprachig'>> & { mehrsprachig?: boolean | null };
 // `device` gilt der torch-Welt (Sprechertrennung, kann "mps"), `asr` der Transkription
 // (faster-whisper/CTranslate2, nur "cuda"/"cpu"). Auf einem Mac laufen die beiden ausein-
 // ander — deshalb zwei Felder statt einem.

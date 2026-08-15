@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { getFileEinstellungen, saveFileEinstellungen } from '@/lib/api'
-import type { ProjectEinstellungen, ProjectFile } from '@/lib/types'
-import { MehrsprachigKasten } from '@/components/MehrsprachigKasten'
+import type { DateiEinstellungen, ProjectFile } from '@/lib/types'
+import { MehrsprachigWahl, type MehrWahl } from '@/components/MehrsprachigKasten'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import {
@@ -28,10 +28,11 @@ export function DateiEinstellungenDialog({ project, base, file, offen, onOpenCha
    *  ist hin). Ein Feld, das nur die halbe Ursache benennt, führt den nächsten Leser in die Irre. */
   onGespeichert?: (a: { neuTranskribieren: boolean; tiefeGeaendert: boolean }) => void
 }) {
-  const [data, setData] = useState<ProjectEinstellungen | null>(null)
+  const [data, setData] = useState<DateiEinstellungen | null>(null)
   const [sprache, setSprache] = useState('')
   const [korrektur, setKorrektur] = useState('')
-  const [mehrsprachig, setMehrsprachig] = useState(false)
+  // Der Datei-Override, NICHT der effektive Wert: `null` heisst „folgt dem Projekt" (#166).
+  const [mehrWahl, setMehrWahl] = useState<MehrWahl>(null)
   const [laedt, setLaedt] = useState(false)
   const [speichert, setSpeichert] = useState(false)
 
@@ -42,7 +43,7 @@ export function DateiEinstellungenDialog({ project, base, file, offen, onOpenCha
     getFileEinstellungen(project, base)
       .then(d => {
         if (!aktiv) return
-        setData(d); setSprache(d.sprache); setKorrektur(d.korrektur); setMehrsprachig(d.mehrsprachig)
+        setData(d); setSprache(d.sprache); setKorrektur(d.korrektur); setMehrWahl(d.mehrsprachig_eigen)
       })
       .catch(e => { if (aktiv) toast.error(`Einstellungen laden fehlgeschlagen: ${(e as Error).message}`) })
       .finally(() => { if (aktiv) setLaedt(false) })
@@ -50,12 +51,24 @@ export function DateiEinstellungenDialog({ project, base, file, offen, onOpenCha
   }, [offen, project, base])
 
   const tiefeGeaendert = !!data && korrektur !== data.korrektur
+  // Was die Transkription TATSAECHLICH nehmen wuerde — „folgt dem Projekt" ist der Projektwert.
+  const mehrEffektiv = !data ? false : mehrWahl === null ? data.mehrsprachig_projekt : mehrWahl
   // Der Haken zaehlt wie ein Sprachwechsel: er schaltet multilingual + condition_on_previous_text
-  // um, ein vorhandenes Transkript ist danach nach anderen Regeln entstanden.
-  const neuTranskribieren = !!data && (sprache !== data.sprache || mehrsprachig !== data.mehrsprachig)
-  const geaendert = neuTranskribieren || tiefeGeaendert
+  // um, ein vorhandenes Transkript ist danach nach anderen Regeln entstanden. Verglichen wird
+  // deshalb der EFFEKTIVE Wert: von „ja" auf „folgt dem Projekt (ja)" umzustellen aendert den
+  // Override, aber nicht das Ergebnis — eine Neu-Transkription waere dort reine Rechenzeit.
+  const neuTranskribieren = !!data && (sprache !== data.sprache || mehrEffektiv !== data.mehrsprachig)
+  // ... gespeichert werden muss so ein Wechsel trotzdem, sonst faende der Nutzer den Rueckweg
+  // vor und der Knopf bliebe grau.
+  const overrideGeaendert = !!data && mehrWahl !== data.mehrsprachig_eigen
+  const geaendert = neuTranskribieren || tiefeGeaendert || overrideGeaendert
   // Neu-Transkription dominiert (sie deckt die Tiefe über die Autokorrektur-Kette ab).
-  const trigger = file.has_raw && geaendert
+  //
+  // Geprüft wird hier NICHT `geaendert`: seit #166 zählt auch ein reiner Override-Wechsel als
+  // Änderung (von „ja" auf „folgt dem Projekt (ja)"), und der ändert weder Transkript noch
+  // Korrektur. Über `geaendert` liefe dieser Fall in den `correct`-Zweig — eine Neu-Korrektur
+  // mit `force`, also quer über eine handbearbeitete Fassung, für eine Aufräumaktion.
+  const trigger = file.has_raw && (neuTranskribieren || tiefeGeaendert)
     ? (neuTranskribieren ? 'transcribe' : 'correct')
     : 'none'
 
@@ -78,7 +91,10 @@ export function DateiEinstellungenDialog({ project, base, file, offen, onOpenCha
     if (!geaendert) return
     setSpeichert(true)
     try {
-      await saveFileEinstellungen(project, base, { sprache, korrektur, mehrsprachig })
+      // `mehrsprachig: null` ist hier AUSDRUECKLICH gemeint (Override entfernen) und muss im
+      // JSON landen — `undefined` wuerde von JSON.stringify weggeworfen und hiesse „nicht
+      // anfassen". Genau dieser Unterschied ist der Rueckweg (#166).
+      await saveFileEinstellungen(project, base, { sprache, korrektur, mehrsprachig: mehrWahl })
       onGespeichert?.({ neuTranskribieren, tiefeGeaendert })
       onOpenChange?.(false)
     } catch (e) {
@@ -122,7 +138,8 @@ export function DateiEinstellungenDialog({ project, base, file, offen, onOpenCha
                 </SelectContent>
               </Select>
             </div>
-            <MehrsprachigKasten wert={mehrsprachig} setzen={setMehrsprachig} id="mehr-datei" />
+            <MehrsprachigWahl wert={mehrWahl} setzen={setMehrWahl}
+              projektwert={data.mehrsprachig_projekt} id="mehr-datei" />
             {hinweis && <p className="text-sm text-muted-foreground">{hinweis}</p>}
           </div>
         )}

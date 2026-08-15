@@ -300,14 +300,33 @@ describe('ProjectWorkspace (Stub)', () => {
     // naechsten Aufnahmen und schreibt nicht ins Projekt zurueck.
     expect(screen.getByText('Schweizerdeutsch')).toBeInTheDocument()
 
+    // `undefined`, NICHT `false` (#166): der Haken steht unveraendert auf dem Projektwert, also
+    // geht kein Datei-Override mit — sonst traege jede hochgeladene Datei einen eigenen Eintrag
+    // und zoege bei einer spaeteren Aenderung des Projekt-Standards nicht mehr mit.
     await act(async () => {
       fireEvent.change(screen.getByTestId('upload-input'), { target: { files: [new File(['x'], 'a.mp3')] } })
     })
-    await waitFor(() => expect(api.uploadAudio).toHaveBeenCalledWith('Demo', expect.any(File), 'en', false))
+    await waitFor(() => expect(api.uploadAudio).toHaveBeenCalledWith('Demo', expect.any(File), 'en', undefined))
 
     fireEvent.change(screen.getByLabelText('Video-URLs'), { target: { value: 'https://youtu.be/a' } })
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: /holen/i })) })
-    await waitFor(() => expect(api.fetchUrls).toHaveBeenCalledWith('Demo', ['https://youtu.be/a'], 'en', false))
+    await waitFor(() => expect(api.fetchUrls).toHaveBeenCalledWith('Demo', ['https://youtu.be/a'], 'en', undefined))
+  })
+
+  it('ein vom Projekt ABWEICHENDER Haken geht sehr wohl mit (#166)', async () => {
+    /* Die Gegenprobe zum Test darueber — ohne sie waere „schickt nichts mit" auch dann gruen,
+       wenn der Haken ueberhaupt nie ankommt. Genau dann waere die Mehrsprachigkeit pro Datei
+       unbedienbar geworden. */
+    mitSprachen()
+    vi.mocked(api.uploadAudio).mockResolvedValue({ base: 'a', file: 'a.mp3' })
+    zeigen()
+    await screen.findByRole('combobox')
+    fireEvent.click(screen.getByLabelText(/Enthält weitere Sprachen/))   // false -> true
+    await act(async () => {
+      fireEvent.change(screen.getByTestId('upload-input'), { target: { files: [new File(['x'], 'a.mp3')] } })
+    })
+    await waitFor(() => expect(api.uploadAudio).toHaveBeenCalledWith(
+      'Demo', expect.any(File), 'ch', true))
   })
 
   it('schickt ohne geladene Einstellungen KEIN mehrsprachig mit', async () => {

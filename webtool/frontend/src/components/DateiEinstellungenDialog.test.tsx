@@ -5,7 +5,10 @@ import { DateiEinstellungenDialog } from './DateiEinstellungenDialog'
 import type { ProjectFile } from '@/lib/types'
 
 const BASIS = {
+  // `mehrsprachig` = effektiv, `_eigen` = Datei-Override (null: folgt dem Projekt),
+  // `_projekt` = der Standard, den sie dann erbt (#166).
   sprache: 'ch', korrektur: 'auto', mehrsprachig: false,
+  mehrsprachig_eigen: null, mehrsprachig_projekt: false,
   sprach_choices: [
     { id: 'ch', label: 'Schweizerdeutsch', hint: '' },
     { id: 'en', label: 'Englisch', hint: '' },
@@ -60,9 +63,9 @@ describe('DateiEinstellungenDialog', () => {
     // Readiness-Signal ist der Sprache-Trigger (stabil vorhanden); der Tiefe-Trigger zeigt
     // bei korrektur='auto' mittlerweile das Auto-Label (seit #141 in TIEFEN enthalten).
     await screen.findByText('Schweizerdeutsch')
-    // Tiefe-Select (letzter combobox im Dialog) auf "Leicht" stellen:
-    const comboboxes = document.body.querySelectorAll('[role="combobox"]')
-    fireEvent.click(comboboxes[comboboxes.length - 1])
+    // Ueber den Namen, NICHT ueber "letzte combobox": seit #166 steht die Mehrsprachig-Auswahl
+    // dahinter, und der Index zeigte dann still auf das falsche Bedienelement.
+    fireEvent.click(screen.getByRole('combobox', { name: /korrektur-tiefe/i }))
     fireEvent.click(await screen.findByText('Leicht'))
     expect(screen.getByRole('button', { name: 'Speichern & neu korrigieren' })).toBeEnabled()
   })
@@ -96,19 +99,50 @@ describe('DateiEinstellungenDialog', () => {
 })
 
 describe('DateiEinstellungenDialog — mehrsprachig', () => {
-  const kaestchen = () => screen.getByLabelText(/enthält weitere sprachen/i)
+  const wahl = () => screen.getByRole('combobox', { name: /mehrere sprachen/i })
+  const waehle = async (label: RegExp) => {
+    fireEvent.click(wahl())
+    fireEvent.click(await screen.findByText(label))
+  }
+  const speichern = (r: Partial<{ mehrsprachig: boolean }> = {}) =>
+    vi.spyOn(api, 'saveFileEinstellungen')
+      .mockResolvedValue({ sprache: 'ch', korrektur: 'auto', mehrsprachig: true, ...r })
 
-  it('schickt den Haken mit', async () => {
+  it('schickt einen gesetzten Haken mit', async () => {
     vi.spyOn(api, 'getFileEinstellungen').mockResolvedValue(BASIS)
-    const saveSpy = vi.spyOn(api, 'saveFileEinstellungen')
-      .mockResolvedValue({ sprache: 'ch', korrektur: 'auto', mehrsprachig: true })
+    const saveSpy = speichern()
     render(<DateiEinstellungenDialog project="p" base="a" file={datei()} offen />)
     await screen.findByText('Schweizerdeutsch')
-    fireEvent.click(kaestchen())
+    await waehle(/^Ja —/)
     fireEvent.click(screen.getByRole('button', { name: /speichern/i }))
     await waitFor(() => expect(saveSpy).toHaveBeenCalledWith(
       'p', 'a', expect.objectContaining({ mehrsprachig: true })))
     saveSpy.mockRestore()
+  })
+
+  it('„folgt dem Projekt" schickt NULL — der Rückweg aus #166', async () => {
+    /* Der Kern des Issues: `datei_mehrsprachig` loest den Rueckfall ueber die ANWESENHEIT des
+       Schluessels auf. `undefined` wuerde von JSON.stringify weggeworfen und hiesse „nicht
+       anfassen" — dann bliebe der Override stehen und die Datei zoege bei einer Aenderung des
+       Projekt-Standards nie wieder mit. Nur ein ausdrueckliches `null` entfernt ihn. */
+    vi.spyOn(api, 'getFileEinstellungen').mockResolvedValue(
+      { ...BASIS, mehrsprachig: true, mehrsprachig_eigen: true, mehrsprachig_projekt: false })
+    const saveSpy = speichern()
+    render(<DateiEinstellungenDialog project="p" base="a" file={datei()} offen />)
+    await screen.findByText('Schweizerdeutsch')
+    await waehle(/Folgt dem Projekt/)
+    fireEvent.click(screen.getByRole('button', { name: /speichern/i }))
+    await waitFor(() => expect(saveSpy).toHaveBeenCalledWith(
+      'p', 'a', expect.objectContaining({ mehrsprachig: null })))
+    saveSpy.mockRestore()
+  })
+
+  it('nennt den Projektwert in der Beschriftung', async () => {
+    // Ohne ihn entscheidet der Nutzer ueber einen Wert, den er erst woanders nachschlagen muss.
+    vi.spyOn(api, 'getFileEinstellungen').mockResolvedValue(
+      { ...BASIS, mehrsprachig: true, mehrsprachig_eigen: null, mehrsprachig_projekt: true })
+    render(<DateiEinstellungenDialog project="p" base="a" file={datei()} offen />)
+    expect(await screen.findByText(/Folgt dem Projekt \(ja\)/)).toBeInTheDocument()
   })
 
   it('behandelt eine Haken-Änderung wie einen Sprachwechsel', async () => {
@@ -116,25 +150,43 @@ describe('DateiEinstellungenDialog — mehrsprachig', () => {
        Transkript ist danach falsch. Ohne diese Verzweigung bliebe der Haken eine Einstellung
        ohne Wirkung auf bereits transkribierte Dateien. */
     vi.spyOn(api, 'getFileEinstellungen').mockResolvedValue(BASIS)
-    const saveSpy = vi.spyOn(api, 'saveFileEinstellungen')
-      .mockResolvedValue({ sprache: 'ch', korrektur: 'auto', mehrsprachig: true })
+    const saveSpy = speichern()
     const onGespeichert = vi.fn()
     render(<DateiEinstellungenDialog project="p" base="a" file={datei({ has_raw: true })} offen
       onGespeichert={onGespeichert} />)
     await screen.findByText('Schweizerdeutsch')
-    fireEvent.click(kaestchen())
-    const knopf = screen.getByRole('button', { name: 'Speichern & neu transkribieren' })
-    fireEvent.click(knopf)
+    await waehle(/^Ja —/)
+    fireEvent.click(screen.getByRole('button', { name: 'Speichern & neu transkribieren' }))
     await waitFor(() => expect(onGespeichert).toHaveBeenCalledWith(
       { neuTranskribieren: true, tiefeGeaendert: false }))
     saveSpy.mockRestore()
   })
 
+  it('ein Wechsel OHNE Wirkung wird gespeichert, loest aber keine Neu-Transkription aus', async () => {
+    /* Von „ja" auf „folgt dem Projekt (ja)": der Override verschwindet, das Ergebnis bleibt
+       gleich. Wuerde hier neu transkribiert, kostete eine reine Aufraeumaktion einen kompletten
+       GPU-Lauf; waere der Knopf grau, gaebe es den Rueckweg nicht. Beides zusammen ist der
+       Grund fuer die zwei getrennten Bedingungen im Dialog. */
+    vi.spyOn(api, 'getFileEinstellungen').mockResolvedValue(
+      { ...BASIS, mehrsprachig: true, mehrsprachig_eigen: true, mehrsprachig_projekt: true })
+    const saveSpy = speichern()
+    render(<DateiEinstellungenDialog project="p" base="a" file={datei({ has_raw: true })} offen />)
+    await screen.findByText('Schweizerdeutsch')
+    await waehle(/Folgt dem Projekt/)
+    const knopf = screen.getByRole('button', { name: 'Speichern' })   // NICHT „& neu transkribieren"
+    expect(knopf).toBeEnabled()
+    fireEvent.click(knopf)
+    await waitFor(() => expect(saveSpy).toHaveBeenCalledWith(
+      'p', 'a', expect.objectContaining({ mehrsprachig: null })))
+    saveSpy.mockRestore()
+  })
+
   it('ohne Änderung bleibt der Speichern-Knopf gesperrt', async () => {
-    vi.spyOn(api, 'getFileEinstellungen').mockResolvedValue({ ...BASIS, mehrsprachig: true })
+    vi.spyOn(api, 'getFileEinstellungen').mockResolvedValue(
+      { ...BASIS, mehrsprachig: true, mehrsprachig_eigen: true, mehrsprachig_projekt: false })
     render(<DateiEinstellungenDialog project="p" base="a" file={datei()} offen />)
     await screen.findByText('Schweizerdeutsch')
-    expect(kaestchen()).toBeChecked()                     // Serverwert kommt an
+    expect(await screen.findByText(/^Ja —/)).toBeInTheDocument()   // Serverwert kommt an
     expect(screen.getByRole('button', { name: /speichern/i })).toBeDisabled()
   })
 })
