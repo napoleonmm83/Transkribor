@@ -290,7 +290,13 @@ LUECKE_MIN_S = 15.0
 
 
 def luecken(segmente, dauer=None, schwelle=LUECKE_MIN_S):
-    """Abschnitte ohne Segment, die laenger als `schwelle` sind -> [{start, end, dauer}].
+    """Abschnitte ohne Segment, die MINDESTENS `schwelle` lang sind -> [{start, end, dauer}].
+
+    `>=`, nicht `>`: die Konstante heisst `LUECKE_MIN_S`, das Issue sagt „ab 15 s" und die
+    README „laenger als eine Viertelminute" — mit `>` faellt genau die Grenze heraus, und
+    eine Wache, deren Beschriftung schaerfer ist als ihr Code, ist der haeufigste Fehler in
+    diesem Repo (CodeRabbit an PR #212). Praktisch entscheidet es nichts (exakt 15,000 s ist
+    bei Fliesskomma-Zeiten ein Sonderfall) — die Uebereinstimmung entscheidet es.
 
     **Der einzige Weg, einen uebersprungenen Whisper-Block zu sehen (#83).** Whisper kann ein
     30-Sekunden-Fenster ungelesen weiterschieben, ohne dass irgendetwas im Ergebnis darauf
@@ -309,17 +315,27 @@ def luecken(segmente, dauer=None, schwelle=LUECKE_MIN_S):
     und echtes Audio pruefen koennen. `dauer=None` (unbekannt) heisst: das Dateiende bleibt
     ungeprueft, alles davor nicht.
     """
+    # **Sortiert, und das ist kein Vorsichtsmassnahme-`sorted`.** Beide Engines liefern ihre
+    # Segmente heute der Reihe nach; kommt trotzdem etwas Unsortiertes an (von Hand
+    # bearbeitete `<base>.json`, eine kuenftige Engine), meldete die Schleife eine Luecke, die
+    # es nicht gibt: bei [30-40, 0-12] laeuft die Marke erst auf 40 und sieht das spaetere
+    # 0-12 nie — Ergebnis waere „0-30 fehlt" statt richtig „12-30". Ein Waechter gegen stillen
+    # Verlust, der selbst Falsches meldet, verbraucht genau das Vertrauen, von dem er lebt.
+    # (Der Kommentar hier behauptete das vorher schon, ohne dass der Code es konnte —
+    # CodeRabbit-CLI an PR #212.)
+    paare = sorted((s["start"], s["end"]) for s in segmente
+                   # ein Segment ohne Zeiten sagt ueber Abdeckung nichts
+                   if isinstance(s.get("start"), (int, float))
+                   and isinstance(s.get("end"), (int, float)))
     stand, raus = 0.0, []
-    for s in segmente:
-        start, ende = s.get("start"), s.get("end")
-        if not isinstance(start, (int, float)) or not isinstance(ende, (int, float)):
-            continue                  # ein Segment ohne Zeiten sagt ueber Abdeckung nichts
-        if start - stand > schwelle:
+    for start, ende in paare:
+        if start - stand >= schwelle:
             raus.append({"start": stand, "end": start, "dauer": start - stand})
-        # `max`, nicht `ende`: ueberlappende oder unsortierte Segmente duerfen die Marke nicht
-        # ZURUECKziehen — sonst meldete ausgerechnet dichtes Material Luecken.
+        # `max`, nicht `ende`: ein KUERZERES Segment innerhalb eines laengeren (Whisper
+        # liefert das beim Temperatur-Rueckfall) darf die Marke nicht ZURUECKziehen — sonst
+        # meldete ausgerechnet dichtes Material Luecken.
         stand = max(stand, ende)
-    if isinstance(dauer, (int, float)) and dauer - stand > schwelle:
+    if isinstance(dauer, (int, float)) and dauer - stand >= schwelle:
         raus.append({"start": stand, "end": dauer, "dauer": dauer - stand})
     return raus
 
@@ -492,7 +508,7 @@ def transcribe_project(name, model, language, only=None):
         print(f"[{name}] fertig {base}: {dt:.0f}s, {len(result['segments'])} Segmente, "
               f"Audio {fmt(dur)}, {dur/max(dt,1):.1f}x", flush=True)
         if result["luecken"]:
-            orte = ", ".join(f"{fmt(l['start'])}-{fmt(l['end'])}" for l in result["luecken"])
+            orte = ", ".join(f"{fmt(x['start'])}-{fmt(x['end'])}" for x in result["luecken"])
             print(f"[{name}] ⚠ {base}: {len(result['luecken'])} Abschnitt(e) ohne Transkript "
                   f"({orte}) — bitte im Ton gegenhoeren", flush=True)
 
