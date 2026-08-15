@@ -342,18 +342,50 @@ def test_pin_kommt_aus_YT_DLPS_metadaten(monkeypatch):
     assert gerufen == ["yt-dlp"]
 
 
-def test_zeile_mit_WEITEREN_markern_gilt_nicht(monkeypatch):
-    """`extra == 'default'` allein ist auswertbar — alles daneben nicht.
+def test_UNERFUELLTER_zusatzmarker_gilt_nicht(monkeypatch):
+    """Ein Zusatzmarker, den DIESE Installation nicht erfuellt, darf nicht zaehlen.
 
-    Schriebe yt-dlp `extra == 'default' and python_version >= "3.14"`, installierte pip auf
-    3.13 weiter 0.8.0, waehrend wir 0.9.0 als gefordert laesen: Dauer-True, und
+    Schriebe yt-dlp `extra == 'default' and python_version >= "3.99"`, installierte pip hier
+    weiter 0.8.0, waehrend wir 0.9.0 als gefordert laesen: Dauer-True, und
     `pip install -U yt-dlp[default]` KANN daran nichts aendern — taegliches pip ohne Ende,
-    genau das Verbot aus `_ejs_untauglich`. Der Marker wird nicht ausgewertet (das braeuchte
-    `packaging.markers`), sondern die Zeile faellt nach fail-open."""
+    genau das Verbot aus `_ejs_untauglich`.
+
+    `>= "3.99"` statt des naheliegenden `>= "3.14"`: der Marker muss auf JEDEM Laeufer
+    unerfuellt sein. Mit 3.14 pruefte dieser Test auf einem 3.14-Interpreter still das
+    Gegenteil — dieselbe Falle wie ein Schwellwert, der an der Attrappe kalibriert wurde."""
     _metadaten(monkeypatch, "0.8.0",
-               ['yt-dlp-ejs==0.9.0; extra == \'default\' and python_version >= "3.14"'])
+               ['yt-dlp-ejs==0.9.0; extra == \'default\' and python_version >= "3.99"'])
     assert yu._ejs_pin() is None
     assert _ECHTES_EJS_UNTAUGLICH() is False
+
+
+def test_ERFUELLTER_zusatzmarker_gilt(monkeypatch):
+    """#187: `extra == 'default' and python_version >= "3.0"` installiert pip hier sehr wohl.
+
+    Vor der Marker-Auswertung fiel diese Zeile nach fail-open — und damit fielen BEIDE Fragen
+    still aus: `_ejs_pin()` lieferte None (#182 aus) und `_ejs_verlangt()` False (#179 aus),
+    bis der 14-Tage-Kalender griff. `>= "3.0"` ist auf jedem Python 3 erfuellt, der Test haengt
+    also nicht am Laeufer."""
+    _metadaten(monkeypatch, "0.8.0",
+               ['yt-dlp-ejs==0.9.0; extra == \'default\' and python_version >= "3.0"'])
+    assert yu._ejs_pin() == "0.9.0"
+
+
+def test_ohne_packaging_bleibt_die_strikte_regel(monkeypatch):
+    """Faellt der Import weg, gilt wieder genau `extra == 'default'` — und nichts daneben.
+
+    Der Zweig ist sonst unerreichbar (packaging liegt in der requirements.txt UND bringt pytest
+    selbst mit), also hier ausdruecklich gefahren: ein Rueckfall, den kein Test je ausuebt,
+    ist eine Behauptung."""
+    monkeypatch.setattr(yu, "_Marker", None)
+    assert yu._gilt_fuer_uns("yt-dlp-ejs==0.9.0; extra == 'default'") is True
+    assert yu._gilt_fuer_uns('yt-dlp-ejs==0.9.0; extra == \'default\' and python_version >= "3.0"') is False
+    assert yu._gilt_fuer_uns("yt-dlp-ejs==0.9.0") is True
+
+
+def test_unverstaendlicher_marker_faellt_auf_die_strikte_regel(monkeypatch):
+    """`packaging` wirft bei kaputter Syntax — das darf nicht aus `faellig()` herausfliegen."""
+    assert yu._gilt_fuer_uns("yt-dlp-ejs==0.9.0; extra == = 'default'") is False
 
 
 @pytest.mark.parametrize("marker", ['extra == "default"', "EXTRA == 'DEFAULT'",
@@ -535,18 +567,15 @@ def test_name_ohne_trennzeichen_zaehlt_NICHT(monkeypatch):
     assert _ECHTES_EJS_UNTAUGLICH() is False
 
 
-def test_weitere_marker_gelten_auch_beim_FEHLEN_nicht(monkeypatch):
-    """Der geteilte `_gilt_fuer_uns` wirkt auch hier — und die Kosten sind hier UMGEKEHRT
-    zum Pin-Pfad: dort heisst fail-open „der Kalender entscheidet", hier faellt #179 fuer
-    diese Datei bis zum 14-Tage-Takt still aus, obwohl pip auf einer passenden
-    Python-Fassung sehr wohl installierte.
+def test_erfuellter_zusatzmarker_macht_auch_das_FEHLEN_faellig(monkeypatch):
+    """Die Gegenrichtung von #187, auf dem zweiten Pfad: `_ejs_verlangt`.
 
-    Bewusst so gelassen (yt-dlp schreibt heute einen blanken Marker; zwei verschiedene
-    Marker-Regeln fuer zwei Fragen waeren die teurere Verwechslungsquelle) — und deshalb
-    hier festgehalten statt stillschweigend hingenommen."""
+    Bis #187 fiel diese Zeile nach fail-open, und #179 blieb fuer die betroffene
+    Installation still aus — obwohl pip `yt-dlp-ejs` auf jedem unterstuetzten Python
+    installiert haette. Der geteilte `_gilt_fuer_uns` dreht jetzt beide Pfade gemeinsam."""
     _ohne_ejs(monkeypatch,
-              ['yt-dlp-ejs==0.8.0; extra == \'default\' and python_version >= "3.9"'])
-    assert _ECHTES_EJS_UNTAUGLICH() is False
+              ['yt-dlp-ejs==0.8.0; extra == \'default\' and python_version >= "3.0"'])
+    assert _ECHTES_EJS_UNTAUGLICH() is True
 
 
 def test_pin_regex_bindet_an_den_zeilenanfang():
