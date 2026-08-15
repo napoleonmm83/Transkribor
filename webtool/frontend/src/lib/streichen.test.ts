@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { gestrichen, streichungenVergessen } from './streichen'
 
 type Opts = {
+  duration: number
   action: { label: string; onClick: () => void }
   onAutoClose: () => void
   onDismiss: () => void
@@ -26,6 +27,16 @@ describe('gestrichen', () => {
     gestrichen('Anmerkung', 'x'.repeat(60), () => {})
     expect(toastMock.mock.calls[0][0]).toBe('Anmerkung „kurz“ gestrichen')
     expect(toastMock.mock.calls[1][0]).toBe(`Anmerkung „${'x'.repeat(40)}…“ gestrichen`)
+  })
+
+  it('steht 10 Sekunden und traegt den Rueckgaengig-Knopf', () => {
+    // Beides sind Entscheidungen, keine Vorgaben: sonners Default sind 4 s, und die reichen zum
+    // Lesen, nicht zum Entscheiden — das hier ist eine Datenrettung. Gefahrlos wurde die
+    // laengere Standzeit erst dadurch, dass der Rueckweg beim Dokumentwechsel entwertet wird;
+    // wer sie anfasst, soll den Zusammenhang sehen statt eine Zahl zu drehen.
+    const zurueck = vi.fn()
+    gestrichen('Anmerkung', 'egal', zurueck)
+    expect(optsVon(0)).toMatchObject({ duration: 10_000, action: { label: 'Rückgängig' } })
   })
 
   it('faellt ohne Inhalt auf die blosse Gattung zurueck', () => {
