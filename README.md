@@ -164,7 +164,7 @@ selbst auf und lädt dann gleich weiter. Klappt es danach immer noch nicht, hilf
 Fassung gerade läuft. Bleibt es dabei, ist das Video vermutlich nicht öffentlich abrufbar
 (private Videos und solche, die eine Anmeldung verlangen, unterstützt Transkribor nicht).
 
-**Welche Sprachen?** Im Projekt steht über dem Bereich zum Hinzufügen **eine** Sprachauswahl:
+**Welche Sprachen?** Ganz oben im Bereich **„Material hinzufügen"** steht **eine** Sprachauswahl:
 Schweizerdeutsch, Deutsch, Englisch, Französisch, Italienisch oder Automatisch (dann erkennt
 Whisper die Sprache selbst). Was du dort einstellst, gilt für alles, was du anschliessend
 hinzufügst — hochgeladene Dateien wie importierte Video-URLs. Schweizerdeutsch wird wie gehabt
