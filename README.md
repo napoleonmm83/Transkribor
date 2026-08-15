@@ -199,6 +199,12 @@ gelegentlich grundlos auf eine fremde Sprache und verschlechtert die betroffene 
 einem Sprachwechsel gilt auch hier — kreuzt du es bei einer schon transkribierten Aufnahme an,
 wird sie neu transkribiert.
 
+Im ⋯-Menü einer einzelnen Aufnahme hast du dafür drei Möglichkeiten statt eines Kästchens:
+**„Folgt dem Projekt"**, **„Ja"** oder **„Nein"**. Die erste ist die Voreinstellung — die
+Aufnahme übernimmt dann, was du im Projekt eingestellt hast, auch wenn du das später änderst.
+Sobald du bei einer Aufnahme bewusst „Ja" oder „Nein" wählst, gilt deine Wahl für sie allein;
+mit „Folgt dem Projekt" nimmst du das wieder zurück.
+
 **Was passiert mit meinen Dateien?** Sie bleiben in deinem Benutzerordner — Transkribor löscht
 nichts von allein. Transkript und Korrekturen bleiben erhalten, bis du eine Aufnahme **neu
 transkribierst** oder ihre **Sprache änderst**: dann wird das Transkript aus dem Audio neu
