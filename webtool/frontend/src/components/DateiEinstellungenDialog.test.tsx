@@ -111,8 +111,11 @@ describe('DateiEinstellungenDialog — Zustand beim Öffnen', () => {
     rerender(<DateiEinstellungenDialog project="p" base="a" file={datei()} offen={false} />)
     spy.mockRejectedValue(new Error('weg'))
     rerender(<DateiEinstellungenDialog project="p" base="b" file={datei()} offen />)
-    await waitFor(() => expect(
-      screen.queryByRole('combobox', { name: /Sprache/ })).not.toBeInTheDocument())
+    // ZUERST belegen, dass der Dialog wirklich offen und der zweite GET durch ist — sonst ist
+    // „kein Wähler da" schon wahr, bevor Radix seinen Inhalt einhängt, und der Test bestünde
+    // aus dem falschen Grund (genau so ueberlebte er beim ersten Anlauf seine Mutation).
+    await screen.findByRole('heading', { name: /„b“/ })
+    expect(screen.queryByRole('combobox', { name: 'Sprache' })).not.toBeInTheDocument()
     spy.mockRestore()
   })
 })
