@@ -15,7 +15,13 @@ export type EditDoc = {
    *  PUT zurueck und loest dort das Beiseitelegen der unlesbaren Datei aus; gespeichert wird
    *  es nie (der Server entfernt es vor dem Schreiben). */
   selbstgeheilt?: string;
+  /** Abschnitte der Aufnahme, zu denen es KEIN Segment gibt (#83). Whisper kann ein
+   *  30-Sekunden-Fenster ueberspringen, ohne dass irgendetwas im Ergebnis darauf hinweist —
+   *  nur die Abdeckung sieht das. Optional: vor diesem Feature geschriebene edit.json haben
+   *  den Schluessel nicht. */
+  luecken?: Luecke[];
 };
+export type Luecke = { start: number; end: number; dauer: number };
 export type ProjectFile = { base: string; has_audio: boolean; has_raw: boolean; has_edit: boolean; has_md: boolean };
 export type ActiveJob = { id: string; kind: string };
 /** Nur die Zusammenfassung fuer die Galerie -- die Dateiliste kommt seit Task 3 nur noch

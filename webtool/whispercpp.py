@@ -256,7 +256,26 @@ def _segment(nr: int, seg: dict) -> dict:
     }
 
 
-def ergebnis(roh: dict, sprache: str) -> dict:
+def wav_dauer(pfad: str):
+    """Sekunden eines von `_wav` geschriebenen 16-kHz-Mono-s16-WAV, oder None.
+
+    Aus der DATEIGROESSE, nicht durch ein zweites Dekodieren: das Format steht fest (siehe
+    `_wav`), also 44 Byte Kopf und 2 Byte je Abtastwert bei 16000 Hz. Gebraucht wird sie fuer
+    `transcribe.luecken` — ohne Dauer bliebe ausgerechnet ein uebersprungenes Fenster am
+    DATEIENDE unbemerkt, und das ist auf diesem Pfad die einzige Auskunft darueber (anders als
+    faster-whisper liefert whisper-cli keine `duration`).
+
+    None bei einer nicht lesbaren oder zu kleinen Datei: eine geratene Dauer waere schlimmer
+    als keine — sie erfaende eine Luecke oder verdeckte eine.
+    """
+    try:
+        roh = os.path.getsize(pfad) - 44
+    except OSError:
+        return None
+    return roh / 32000 if roh > 0 else None
+
+
+def ergebnis(roh: dict, sprache: str, dauer=None) -> dict:
     """whisper.cpp-JSON -> exakt das Dokument, das transcribe._ergebnis() sonst aus
     faster-whisper baut. Reine Funktion, damit der Adapter ohne Binary pruefbar ist.
 
@@ -268,7 +287,8 @@ def ergebnis(roh: dict, sprache: str) -> dict:
     sprache = sprache or (roh.get("result") or {}).get("language") or "de"
     return {"text": "".join(s["text"] for s in segmente),
             "segments": segmente,
-            "language": sprache}
+            "language": sprache,
+            "duration": dauer}
 
 
 def _cmd(binaer_pfad: str, gguf: str, wav: str, praefix: str, sprache) -> list:
@@ -319,4 +339,7 @@ def transkribiere(audio: str, modell: str, sprache: str, onLine=None) -> dict:
         if proc.wait() != 0:
             raise RuntimeError("whisper.cpp fehlgeschlagen:\n" + "\n".join(letzte))
         with open(praefix + ".json", encoding="utf-8") as fh:
-            return ergebnis(json.load(fh), sprache)
+            # Die Dauer HIER, nicht in `ergebnis`: nur dieser Block kennt die WAV, und
+            # `ergebnis` soll rein bleiben (es ist der Vertrag mit transcribe._ergebnis).
+            # Noch im `with`, sonst ist das Temporaerverzeichnis samt WAV schon weg.
+            return ergebnis(json.load(fh), sprache, wav_dauer(wav))

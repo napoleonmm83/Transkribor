@@ -67,6 +67,12 @@ def build_edit_doc(raw: dict, *, base: str, project: str, audio: str) -> dict:
         "speakers": [],
         "segments": segments,
         "annotations": [],
+        # Aus dem Rohtranskript durchgereicht (#83), NICHT hier berechnet: die Dauer der
+        # Aufnahme steht nur dort, und ohne sie waere ein uebersprungenes Fenster am Dateiende
+        # unsichtbar. Ein eigenes Feld und nicht `annotations` — die ersetzt
+        # `apply_correction` vollstaendig durch die Liste des LLM, der Hinweis waere nach dem
+        # ersten Korrekturlauf weg. Alte Roh-JSON haben es nicht: dann leer.
+        "luecken": raw.get("luecken") or [],
     }
 
 

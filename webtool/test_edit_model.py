@@ -224,3 +224,30 @@ def test_musik_faengt_keine_echten_saetze():
                      {"id": 1, "text": "[Musik] und dann sprach er weiter."}))
     assert [s["text"] for s in doc["segments"]] == [
         "Die Musik war laut.", "[Musik] und dann sprach er weiter."]
+
+
+def test_luecken_reisen_ins_editor_dokument():
+    """#83: Das Mittelstueck der Kette. Gerechnet wird beim Transkribieren (nur dort ist die
+    Audiodauer bekannt), gezeigt wird im Editor — faellt diese eine Zeile weg, ist der
+    Waechter still abgeschaltet, ohne dass an einem der beiden Enden etwas fehlt.
+
+    Ein EIGENES Feld und nicht `annotations`: die ersetzt `apply_correction` vollstaendig
+    durch die Liste des LLM (siehe unten), der Hinweis waere nach dem ersten Korrekturlauf
+    weg — also genau dann, wenn jemand das Transkript zum ersten Mal liest."""
+    roh = {"segments": [], "language": "de",
+           "luecken": [{"start": 12.0, "end": 30.0, "dauer": 18.0}]}
+    doc = em.build_edit_doc(roh, base="a", project="P", audio="a.mp3")
+    assert doc["luecken"] == [{"start": 12.0, "end": 30.0, "dauer": 18.0}]
+    # Und der Korrekturlauf darf sie nicht wegraeumen — er ersetzt `annotations` vollstaendig.
+    nach = em.apply_correction(roh, {"annotations": ["etwas ganz anderes"], "segments": []},
+                               base="a", project="P", audio="a.mp3")
+    assert nach["annotations"] == ["etwas ganz anderes"]      # die Liste IST ersetzt …
+    assert nach["luecken"] == [{"start": 12.0, "end": 30.0, "dauer": 18.0}]   # … der Hinweis nicht
+
+
+def test_altes_rohtranskript_bekommt_eine_leere_liste():
+    """Vor diesem Feature geschriebene `<base>.json` haben den Schluessel nicht. `None` waere
+    im Frontend nicht falsch (der Kasten prueft auf Laenge), aber das Dokument soll ueberall
+    dieselbe Form haben — `annotations` macht es genauso."""
+    doc = em.build_edit_doc({"segments": [], "language": "de"}, base="a", project="P", audio="a.mp3")
+    assert doc["luecken"] == []

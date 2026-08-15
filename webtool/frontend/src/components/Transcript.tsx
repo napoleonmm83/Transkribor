@@ -3,6 +3,7 @@ import type { RefObject } from 'react'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import type { EditDoc, Segment } from '@/lib/types'
 import { groupIntoTurns } from '@/lib/grouping'
+import { zeitText } from '@/lib/playback'
 import type { TrefferOrt } from '@/hooks/useSuche'
 import { SpeakerTurn } from './SpeakerTurn'
 import { DokumentFeld } from './DokumentFeld'
@@ -72,6 +73,32 @@ export function Transcript({ doc, loading, activeId, onPlaySeg, onPlayTurn, upda
             Überschrieben wird die beschädigte Datei nicht: sie liegt als{' '}
             <code className="rounded bg-muted px-1.5 py-0.5 font-mono break-all">{doc.base}.edit.json.kaputt</code>{' '}
             im Transkripte-Ordner, sobald du hier etwas speicherst.
+          </div>
+        )}
+        {/* Ein uebersprungenes Whisper-Fenster hinterlaesst KEIN schlechtes Segment, sondern
+            gar keines — kein Flag, keine Warnung, nichts, was beim Lesen auffiele. Genau so
+            blieb der Verlust aus #82 wochenlang in 17 von 37 Aufnahmen stehen. Der Hinweis
+            gehoert deshalb dorthin, wo gelesen wird: eine Zeile im Job-Log erreicht nur die
+            Server-Konsole, und dort sieht der Nutzer „fertig" (#83, dieselbe Lehre wie #194). */}
+        {!!doc.luecken?.length && (
+          <div className="mb-8 rounded-lg border border-amber-500/50 bg-amber-500/10 p-4 text-sm">
+            <span className="font-medium">
+              {doc.luecken.length === 1
+                ? 'Ein Abschnitt ohne Transkript.'
+                : `${doc.luecken.length} Abschnitte ohne Transkript.`}
+            </span>{' '}
+            Whisper kann Stellen überspringen, ohne das zu melden — hier steht deshalb nichts,
+            wo möglicherweise etwas gesagt wurde. Bitte im Ton gegenhören:{' '}
+            {doc.luecken.map((l, i) => (
+              <span key={`${l.start}-${l.end}`}>
+                {i > 0 && ', '}
+                <span className="font-mono whitespace-nowrap">
+                  {zeitText(l.start)}–{zeitText(l.end)}
+                </span>{' '}
+                ({Math.round(l.dauer)} s)
+              </span>
+            ))}
+            .
           </div>
         )}
         <section className="mb-8 space-y-5 border-b pb-5">
