@@ -41,11 +41,24 @@ export function gestrichen(was: string, inhalt: string, zurueck: () => void) {
   // 10 s statt sonners 4: das hier ist eine Datenrettung, keine Erfolgsmeldung — vier Sekunden
   // reichen zum Lesen, nicht zum Entscheiden. Gefahrlos erst, seit der Rueckweg beim
   // Dokumentwechsel entwertet wird; ohne das vergroesserte jede laengere Standzeit den Schaden.
-  offen.push(toast(inhalt.trim() ? `${was} „${kurz(inhalt.trim())}“ gestrichen` : `${was} gestrichen`, {
-    duration: 10_000,
-    action: { label: 'Rückgängig', onClick: zurueck },
-  }))
+  const id: string | number = toast(
+    inhalt.trim() ? `${was} „${kurz(inhalt.trim())}“ gestrichen` : `${was} gestrichen`,
+    {
+      duration: 10_000,
+      action: { label: 'Rückgängig', onClick: zurueck },
+      // Ein Toast, der von selbst zugeht oder weggewischt wird, gehoert nicht mehr auf die
+      // Liste — sonst waechst sie mit jeder Streichung weiter, und `streichungenVergessen`
+      // schickt beim naechsten Dokumentwechsel ein `dismiss` an lauter Kennungen, die es
+      // nicht mehr gibt (CodeRabbit-Bot). Beide Haken, weil sonner zwei Wege kennt: Ablauf
+      // der Zeit und aktives Schliessen.
+      onAutoClose: () => { vergiss(id) },
+      onDismiss: () => { vergiss(id) },
+    },
+  )
+  offen.push(id)
 }
+
+const vergiss = (id: string | number) => { offen = offen.filter(o => o !== id) }
 
 /**
  * Entwertet alle offenen Rueckwege. Gerufen bei **jedem** Dokumentwechsel (`useDoc.reload` und
