@@ -79,7 +79,7 @@ allein wäre es dir kaum aufgefallen.
 
 **Stellen wiederfinden.** Das Suchfeld oben im Editor durchsucht das ganze Transkript: Treffer
 bleiben hell, alles andere tritt in den Hintergrund, und mit `▲` `▼` springst du von Fundstelle
-zu Fundstelle — bei mehreren tausend Wörtern die schnellste Art, „wo hat er genau das gesagt?".
+zu Fundstelle — bei mehreren tausend Wörtern die schnellste Art, „wo hat er genau das gesagt?“.
 Die Schreibweise der Umlaute ist dabei egal: „Buehler“ findet „Bühler“ und umgekehrt, „Strasse“
 auch „Straße“ — praktisch, weil in Transkripten beides durcheinander vorkommt.
 
@@ -180,7 +180,7 @@ Sprechernamen. Bei allen anderen Sprachen bleibt die Originalsprache erhalten, n
 Projekt-Einstellungen (⋯-Menü des Projekts) legst du die Standard-Sprache und die
 Korrektur-Tiefe fest; die Auswahl beim Hinzufügen nimmt die Standard-Sprache vorweg und lässt
 sich für die nächsten Aufnahmen abändern, ohne den Standard zu verstellen. Und solltest du
-dich später anders entscheiden: im ⋯-Menü der jeweiligen Aufnahme („Sprache & Korrektur-Tiefe")
+dich später anders entscheiden: im ⋯-Menü der jeweiligen Aufnahme („Sprache & Korrektur-Tiefe“)
 lässt sich beides nachträglich ändern. Eine andere Sprache bedeutet Neu-Transkription — das
 alte Transkript wird verworfen, das Audio bleibt erhalten; eine andere Korrektur-Tiefe startet
 nur die Korrektur neu.
@@ -200,14 +200,14 @@ einem Sprachwechsel gilt auch hier — kreuzt du es bei einer schon transkribier
 wird sie neu transkribiert.
 
 Im ⋯-Menü einer einzelnen Aufnahme hast du dafür drei Möglichkeiten statt eines Kästchens:
-**„Folgt dem Projekt"**, **„Ja"** oder **„Nein"**. Bei der ersten übernimmt die Aufnahme, was du
+**„Folgt dem Projekt“**, **„Ja“** oder **„Nein“**. Bei der ersten übernimmt die Aufnahme, was du
 im Projekt eingestellt hast — auch wenn du das später änderst. Sobald du bei einer Aufnahme
-bewusst „Ja" oder „Nein" wählst, gilt deine Wahl für sie allein; mit „Folgt dem Projekt" nimmst
+bewusst „Ja“ oder „Nein“ wählst, gilt deine Wahl für sie allein; mit „Folgt dem Projekt“ nimmst
 du das wieder zurück.
 
-Bei Aufnahmen, die du **vor dieser Fassung** hinzugefügt hast, steht meist „Ja" oder „Nein" —
+Bei Aufnahmen, die du **vor dieser Fassung** hinzugefügt hast, steht meist „Ja“ oder „Nein“ —
 damals wurde die Einstellung bei jedem Hinzufügen fest an der Aufnahme vermerkt. Wenn du willst,
-dass sie wieder dem Projekt folgen, stellst du sie einmal von Hand auf „Folgt dem Projekt".
+dass sie wieder dem Projekt folgen, stellst du sie einmal von Hand auf „Folgt dem Projekt“.
 
 **Was passiert mit meinen Dateien?** Sie bleiben in deinem Benutzerordner — Transkribor löscht
 nichts von allein. Transkript und Korrekturen bleiben erhalten, bis du eine Aufnahme **neu
