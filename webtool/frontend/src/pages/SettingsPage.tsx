@@ -153,6 +153,14 @@ function ytMelden(stand: YtdlpStand) {
   } else {
     toast.error(stand.unlesbar
       ? 'Die Metadaten von yt-dlp sind beschädigt — pip kann sie nicht lesen. Hilft nur neu installieren.'
+      // Derselbe Grund, andere Distribution — und ohne diesen Zweig lief der Nutzer in genau
+      // die Fehldiagnose, gegen die #189 gebaut ist: `unlesbar` gilt yt-dlp, bei kaputten
+      // ejs-Paketdaten ist es `false`, und dann stand hier „bist du online?“. **Gemessen**,
+      // nicht vermutet: `pip install -U --dry-run yt-dlp[default]` gegen eine präparierte
+      // `yt_dlp_ejs-0.8.0.dist-info` endet mit Exit 2 und UnicodeDecodeError — pip
+      // enumeriert vor dem Installieren, es scheitert also an derselben Datei.
+      : stand.ejs_unlesbar
+      ? 'Die Paketdaten der YouTube-Hilfsskripte sind beschädigt — daran scheitert auch die Aktualisierung selbst. Hilft nur neu installieren.'
       : 'Aktualisierung fehlgeschlagen — bist du online?')
   }
   // Zusätzlich, nicht statt dessen (#236): ob pip durchlief und ob es dabei allein war, sind
@@ -304,11 +312,15 @@ export function SettingsPage() {
       const neu = await getSettings().catch(() => null)
       if (!neu) return                  // ein Aussetzer beendet den Lauf nicht
       // Ersetzen, nicht zusammenführen — anders als in `speichern()` weiter oben, und das
-      // ist kein Versehen: dort ist die PUT-Antwort ein TEILobjekt (sie trägt etwa
-      // `ytdlp_auto`, aber keinen `ytdlp`-Block), hier liefert `GET /api/settings` das
-      // vollständige `Settings`. `{...cur, ...neu}` wäre damit buchstäblich dasselbe wie
-      // `neu` — eine Merge-Form, die nichts merged, sieht nur nach Sorgfalt aus.
-      // (Als Reviewbefund vorgeschlagen, beim Nachlesen des Endpunkts verworfen.)
+      // ist kein Versehen: dort ist die PUT-Antwort ein TEILobjekt (der Server baut sie aus
+      // `settings.public()`, das etwa `providers`, `whisper_choices` und `ai_ready` nicht
+      // kennt — siehe #239), hier liefert `GET /api/settings` das vollständige `Settings`.
+      // `{...cur, ...neu}` wäre damit buchstäblich dasselbe wie `neu` — eine Merge-Form, die
+      // nichts merged, sieht nur nach Sorgfalt aus.
+      // (Als Reviewbefund vorgeschlagen, beim Nachlesen des Endpunkts verworfen. Die frühere
+      // Begründung nannte den fehlenden `ytdlp`-Block — die stimmt seit #174 nicht mehr,
+      // `app.py` legt ihn der PUT-Antwort bei; das Argument trägt trotzdem, nur über andere
+      // Felder.)
       setS(neu)
       if (!neu.ytdlp.laeuft) { setYtLaeuft(false); ytMelden(neu.ytdlp) }
     }, 1500)
@@ -331,6 +343,12 @@ export function SettingsPage() {
     try {
       const r = await updateYtdlp()
       if (!r.gestartet) toast.info('Eine Aktualisierung läuft bereits — ich warte auf sie.')
+      // Seit #243 kann `laeuft` von einem FREMDEN Prozess kommen (ein Video-Import frischt
+      // selbst auf). `starte_hintergrund()` sieht nur `_lauf` und meldet deshalb brav
+      // `gestartet: true` — der eigene Lauf blockiert dann bis zu 215 s an der pip-Sperre.
+      // Ohne diese Zeile sähe der Nutzer einen Spinner und sonst nichts, obwohl die Zeile
+      // über dem Knopf gerade noch „klicke, um ihr zuzusehen" versprochen hat.
+      else if (s?.ytdlp.laeuft) toast.info('Ein Video-Import frischt den Downloader gerade selbst auf — ich warte, bis er fertig ist.')
       // Ein sehr schneller Lauf kann schon fertig sein, bevor der erste Poll greift.
       if (!r.laeuft) { setYtLaeuft(false); ytMelden(r) }
     } catch (e) {
@@ -476,8 +494,9 @@ export function SettingsPage() {
         {s.ytdlp.ejs_unlesbar && (
           <p className="mt-3 text-xs text-amber-600 dark:text-amber-500">
             Die Hilfsskripte für YouTube lassen sich nicht prüfen — ihre Paketdaten sind
-            beschädigt. Transkribor merkt dadurch nicht mehr von selbst, wenn sie nicht mehr
-            passen; schlägt ein Video-Import fehl, hilft „Jetzt aktualisieren“.
+            beschädigt. Importieren geht weiter, Transkribor merkt nur nicht mehr von selbst,
+            wenn die Skripte nicht mehr passen. „Jetzt aktualisieren“ hilft hier nicht (die
+            Installation stolpert über dieselbe Datei) — nötig ist eine Neueinrichtung.
           </p>
         )}
 

@@ -707,10 +707,16 @@ def test_ytdlp_update_knopf_kehrt_zurueck_WAEHREND_pip_noch_laeuft(client, monke
     # genauso still. So wird `_fassung_und_lesbarkeit` wirklich ausgeuebt.
     monkeypatch.setattr(ytdlp_update.metadata, "version", lambda name: "2026.8.12")
 
+    # Ein Ergebnis des VORIGEN Laufs — der neue Klick muss beides loeschen, sonst zeigt die
+    # Seite waehrend des laufenden Laufs eine Warnung ueber einen Vorgang, den der Nutzer
+    # gerade wiederholt. (`ergebnis` deckte das schon ab, `ungeschuetzt` war ungewacht.)
+    ytdlp_update._lauf["ungeschuetzt"] = True
+
     r = client.post("/api/settings/ytdlp/update")
     assert r.status_code == 200 and r.json()["gestartet"] is True
     # DAS ist die Zusicherung: die Antwort ist da, waehrend der Lauf noch steht.
     assert r.json()["laeuft"] is True and r.json()["ergebnis"] == ""
+    assert r.json()["ungeschuetzt"] is False
 
     los.set()
     assert _warte(lambda: not ytdlp_update.hintergrund_zustand()[0])
