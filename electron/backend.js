@@ -132,12 +132,35 @@ function url() {
  * `basis` ist der Testsaum (Muster wie `serverEnv(exe)`): der Port ist Modulzustand, den ein
  * Test nicht setzen kann, ohne einen echten uvicorn zu starten.
  */
+// Absolute Obergrenze fuer die Abfrage. **Grosszuegiger als sie aussieht, und das ist noetig:**
+// `GET /api/settings` ruft `llm.available()`, das bei den Abo-CLIs einen Subprozess startet —
+// gedeckelt durch `auth.STATUS_TIMEOUT` von 30 s. Eine kuerzere Frist (5 s waeren naheliegend)
+// wuerde den Knopf ausgerechnet dann abwuergen, wenn der Endpunkt legitim langsam ist, und der
+// Nutzer saehe einen Fehler, obwohl nichts kaputt ist. 35 s liegen darueber; alles jenseits
+// davon ist ein echter Haenger.
+const PFAD_TIMEOUT_MS = 35_000
+
 function projektePfad(basis = url()) {
   return new Promise((resolve, reject) => {
+    // `http.get` hat KEINE Frist — antwortet der Server gar nicht oder nur halb, bliebe das
+    // Promise fuer immer offen und der Knopf drehte ohne Toast. Ein Haenger ist schlimmer als
+    // eine Ausnahme: kein `catch` beim Aufrufer faengt ihn (dieselbe Regel wie in sperre.py).
+    // Die `timeout`-Option deckte nur Leerlauf auf der Verbindung, nicht die Gesamtdauer.
+    let fertig = false
+    const uhr = setTimeout(() => {
+      anfrage.destroy(new Error(`keine Antwort binnen ${PFAD_TIMEOUT_MS / 1000} s`))
+    }, PFAD_TIMEOUT_MS)
+    const beenden = (fn, wert) => {
+      if (fertig) return
+      fertig = true
+      clearTimeout(uhr)
+      fn(wert)
+    }
+
     const anfrage = http.get(new URL('api/settings', basis), res => {
       if (res.statusCode !== 200) {
         res.resume()
-        return reject(new Error(`Der Server antwortet mit ${res.statusCode}.`))
+        return beenden(reject, new Error(`Der Server antwortet mit ${res.statusCode}.`))
       }
       let roh = ''
       res.setEncoding('utf8')
@@ -147,12 +170,14 @@ function projektePfad(basis = url()) {
         try {
           pfad = JSON.parse(roh).projekte_pfad
         } catch (e) {
-          return reject(new Error(`Antwort des Servers nicht lesbar: ${e.message}`))
+          return beenden(reject, new Error(`Antwort des Servers nicht lesbar: ${e.message}`))
         }
-        pfad ? resolve(pfad) : reject(new Error('Der Server nennt keinen Projektordner.'))
+        pfad
+          ? beenden(resolve, pfad)
+          : beenden(reject, new Error('Der Server nennt keinen Projektordner.'))
       })
     })
-    anfrage.on('error', e => reject(new Error(`Server nicht erreichbar: ${e.message}`)))
+    anfrage.on('error', e => beenden(reject, new Error(`Server nicht erreichbar: ${e.message}`)))
   })
 }
 

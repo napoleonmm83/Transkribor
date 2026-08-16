@@ -687,6 +687,45 @@ describe('SettingsPage', () => {
     expect(toast.success).toHaveBeenCalledTimes(1)
   })
 
+  it('eine verspätete Antwort aus Lauf 1 gilt nicht als Ausgang von Lauf 2 (#247)', async () => {
+    // Der Grund, warum der Merker eine KENNUNG trägt und nicht bloss ein Bool ist
+    // (CodeRabbit-CLI, Major): `clearInterval` hält künftige Runden auf, eine Runde IN ihrem
+    // `await` läuft weiter. Trifft ihre Antwort nach dem `neuerLauf()` des nächsten Laufs ein,
+    // würde ein Bool sie als dessen Ausgang durchwinken — mit den Zahlen des vorigen.
+    vi.mocked(api.updateYtdlp).mockResolvedValue({
+      gestartet: true, version: '2026.7.4', unlesbar: false, geprueft: '', auto: true,
+      env: false, laeuft: true, ergebnis: '', ungeschuetzt: false, ejs_unlesbar: false,
+    })
+    zeige()
+    const knopf = await screen.findByRole('button', { name: /Jetzt aktualisieren/i })
+    const offen: Array<(s: Settings) => void> = []
+    vi.mocked(api.getSettings).mockImplementation(() => new Promise(res => { offen.push(res) }))
+    const fertig = (v: string) => ({
+      ...BASIS, ytdlp: { ...BASIS.ytdlp, version: v, laeuft: false, ergebnis: 'ok' },
+    })
+
+    vi.useFakeTimers()
+    try {
+      await act(async () => { fireEvent.click(knopf) })                   // Lauf 1
+      await act(async () => { await vi.advanceTimersByTimeAsync(1500) })  // Runde A
+      await act(async () => { await vi.advanceTimersByTimeAsync(1500) })  // Runde B
+      expect(offen).toHaveLength(2)
+      // Runde A beendet Lauf 1 — Runde B bleibt unterwegs.
+      await act(async () => { offen[0](fertig('2026.8.12')) })
+      expect(toast.success).toHaveBeenCalledTimes(1)
+
+      // Lauf 2 beginnt, WÄHREND Runde A… äh, Runde B noch hängt.
+      await act(async () => { fireEvent.click(knopf) })
+      // Und jetzt kommt die alte Antwort. Sie gehört Lauf 1 und darf nichts mehr melden.
+      await act(async () => { offen[1](fertig('URALT')) })
+    } finally {
+      vi.useRealTimers()
+    }
+
+    expect(toast.success).toHaveBeenCalledTimes(1)
+    expect(toast.success).not.toHaveBeenCalledWith(expect.stringMatching(/URALT/))
+  })
+
   it('meldet einen ZWEITEN Lauf wieder — der Merker gilt je Lauf, nicht je Sitzung (#247)', async () => {
     // Die Gegenrichtung, und sie ist die gefährlichere: ein Merker ohne Rücksetzen macht aus
     // „zu viele Meldungen" ein „gar keine", und zwar still. Ohne diesen Test wäre der Fix

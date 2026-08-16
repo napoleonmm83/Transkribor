@@ -83,16 +83,29 @@ function projekteOeffnenBruecke(): (() => Promise<string>) | null {
  * **`neuerLauf()` ist Pflicht, nicht Kür.** Ohne das Zurücksetzen meldete der Merker den
  * ersten Lauf und danach nie wieder etwas — aus „zu viele Meldungen" würde „gar keine", und
  * zwar still. Dafür gibt es einen eigenen Test.
+ *
+ * **Und deshalb reicht ein blosser Bool nicht** (CodeRabbit-CLI, Major): `clearInterval` hält
+ * künftige Runden auf, aber eine Runde, die schon in ihrem `await` steht, läuft weiter. Ihre
+ * Antwort kann also NACH dem `neuerLauf()` des nächsten Laufs eintreffen — und würde dann als
+ * dessen Ausgang gemeldet, mit den Zahlen des vorigen. Ein Bool kann „gemeldet" und „gehört zu
+ * einem anderen Lauf" nicht unterscheiden, eine Kennung schon: `melde` nimmt die Kennung
+ * entgegen, unter der ihr Aufrufer gestartet ist, und verwirft alles Ältere.
  */
 function useEinmalJeLauf() {
-  const gemeldet = useRef(false)
-  const neuerLauf = useCallback(() => { gemeldet.current = false }, [])
-  const melde = useCallback((fn: () => void) => {
-    if (gemeldet.current) return
-    gemeldet.current = true
+  const lauf = useRef(0)
+  const gemeldet = useRef(0)
+  /** Beginnt einen Lauf und liefert seine Kennung — die gehört in die Closure des Aufrufers. */
+  const neuerLauf = useCallback(() => ++lauf.current, [])
+  /** Die Kennung des laufenden Vorgangs, für Zuhörer, die ihn nicht selbst gestartet haben
+   *  (der Poll-Effekt). Beim Aufsatz des Effekts gelesen, nicht bei jedem Tick — sonst hätte
+   *  eine verspätete Runde wieder die Kennung des NÄCHSTEN Laufs und der Riegel wäre umsonst. */
+  const kennung = useCallback(() => lauf.current, [])
+  const melde = useCallback((fuer: number, fn: () => void) => {
+    if (fuer !== lauf.current || gemeldet.current === fuer) return
+    gemeldet.current = fuer
     fn()
   }, [])
-  return { neuerLauf, melde }
+  return { neuerLauf, kennung, melde }
 }
 
 /** Anmeldung an einer Abo-CLI. Zwei Wege, eine Oberflaeche:
@@ -106,24 +119,27 @@ function AnmeldungAbo({ status, neuPruefen }: { status: AuthStatus; neuPruefen: 
   // Dieselbe Klasse wie beim yt-dlp-Poll (#247): zwei überholende Runden meldeten hier doppelt
   // UND riefen `neuPruefen()` zweimal. Nicht gemeldet worden, aber dieselbe Ursache — wer nur
   // die eine Stelle repariert, lässt den Nachbarn stehen.
-  const { neuerLauf, melde } = useEinmalJeLauf()
+  const { neuerLauf, kennung, melde } = useEinmalJeLauf()
 
   // Nur solange etwas laeuft gepollt — ein Dauerintervall auf einer Einstellungsseite,
   // auf der meistens nichts passiert, ist reine Last.
   useEffect(() => {
     if (!lauf?.laeuft) return
+    // Kennung beim AUFSATZ festhalten, nicht je Tick — sonst traegt eine verspaetete Runde
+    // die Kennung des naechsten Anmeldeversuchs und meldet dessen Ausgang mit alten Zahlen.
+    const meine = kennung()
     const t = setInterval(async () => {
       const z = await loginState().catch(() => null)
       if (!z) return
       setLauf(z)
-      if (!z.laeuft) melde(() => {
+      if (!z.laeuft) melde(meine, () => {
         neuPruefen()
         if (z.ok) toast.success('Angemeldet')
         else toast.error(z.fehler || 'Anmeldung fehlgeschlagen')
       })
     }, 1500)
     return () => clearInterval(t)
-  }, [lauf?.laeuft, neuPruefen, melde])
+  }, [lauf?.laeuft, neuPruefen, melde, kennung])
 
   const starten = async () => {
     setBusy(true); setCode('')
@@ -240,7 +256,7 @@ export function SettingsPage() {
   // `ytJetzt` und die Obergrenze. Seit #236 erzeugt jeder Durchlauf bis zu ZWEI Toasts
   // (Erfolg und die Warnung „ohne Sperre") — doppelt gemeldet wären das vier für einen
   // Vorgang, und die Warnung sähe wichtiger aus, als sie ist. Siehe `useEinmalJeLauf`.
-  const { neuerLauf: ytNeuerLauf, melde: ytMeldeEinmal } = useEinmalJeLauf()
+  const { neuerLauf: ytNeuerLauf, kennung: ytKennung, melde: ytMeldeEinmal } = useEinmalJeLauf()
   const [kaputtLaeuft, setKaputtLaeuft] = useState(false)
   const [hw, setHw] = useState<Hardware | null>(null)
   const { zustand: upd, pruefen, laden, installieren, protokollOeffnen } = useUpdate()
@@ -366,10 +382,11 @@ export function SettingsPage() {
     // die Uhr NICHT mit, die Obergrenze feuerte im Test also nie und blieb ungetestet.
     // 480 × 1,5 s ≈ 12 Min, also gut das Doppelte des gemessenen Worst Case von ~340 s.
     let runden = 0
+    const meine = ytKennung()      // siehe `kennung` in useEinmalJeLauf
     const t = setInterval(async () => {
       if (++runden > 480) {
         setYtLaeuft(false)
-        ytMeldeEinmal(() => toast.error(
+        ytMeldeEinmal(meine, () => toast.error(
           'Die Aktualisierung meldet sich nicht mehr — bitte im Serverprotokoll nachsehen.'))
         return
       }
@@ -381,10 +398,10 @@ export function SettingsPage() {
       // PUT nur ein Teilobjekt liefere. Das ist behoben: beide Endpunkte bauen ihren Rumpf
       // jetzt aus `app._settings_body`, und beide Stellen ersetzen.)
       setS(neu)
-      if (!neu.ytdlp.laeuft) { setYtLaeuft(false); ytMeldeEinmal(() => ytMelden(neu.ytdlp)) }
+      if (!neu.ytdlp.laeuft) { setYtLaeuft(false); ytMeldeEinmal(meine, () => ytMelden(neu.ytdlp)) }
     }, 1500)
     return () => clearInterval(t)
-  }, [ytLaeuft, ytMeldeEinmal])
+  }, [ytLaeuft, ytMeldeEinmal, ytKennung])
 
   // Der Knopf wartet seit #174 nicht mehr auf pip — er stösst an, und ein Effekt fragt nach.
   // Das Nachfragen ist NICHT optional: ohne es stünde ein Fehlschlag nur in der
@@ -399,7 +416,7 @@ export function SettingsPage() {
   // in dieser Datei bereits 190 Zeilen weiter oben.
   const ytJetzt = async () => {
     setYtLaeuft(true)
-    ytNeuerLauf()
+    const meine = ytNeuerLauf()
     try {
       const r = await updateYtdlp()
       if (!r.gestartet) toast.info('Eine Aktualisierung läuft bereits — ich warte auf sie.')
@@ -413,7 +430,7 @@ export function SettingsPage() {
       // Über denselben Merker wie der Poll (#247): braucht `updateYtdlp()` länger als 1,5 s
       // und ist der Lauf da schon fertig, meldet der Poll zuerst — und diese Zeile hier ein
       // zweites Mal. Ein In-Flight-Riegel um `getSettings()` hätte genau das nicht gedeckt.
-      if (!r.laeuft) { setYtLaeuft(false); ytMeldeEinmal(() => ytMelden(r)) }
+      if (!r.laeuft) { setYtLaeuft(false); ytMeldeEinmal(meine, () => ytMelden(r)) }
     } catch (e) {
       // BEWUSST ausserhalb von `ytMeldeEinmal` (#247, Reviewbefund M3): „das Anstossen ist
       // fehlgeschlagen" und „der Lauf ist beendet" sind zwei verschiedene Tatsachen, nicht

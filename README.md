@@ -244,7 +244,7 @@ damals wurde die Einstellung bei jedem Hinzufügen fest an der Aufnahme vermerkt
 dass sie wieder dem Projekt folgen, stellst du sie einmal von Hand auf „Folgt dem Projekt“.
 
 **Wo liegen meine Dateien — und wie sichere ich sie?** Alles liegt in einem Ordner auf deinem
-Rechner. Wo genau, steht in den **Einstellungen** unter „Deine Dateien"; in der App bringt dich
+Rechner. Wo genau, steht in den **Einstellungen** unter „Deine Dateien“; in der App bringt dich
 ein Klick auf **Ordner öffnen** direkt dorthin. Weil nichts davon in einer Cloud liegt, gibt es
 auch keine Sicherung ausser deiner eigenen: Kopiere diesen Ordner ab und zu auf eine externe
 Platte — darin stecken Aufnahmen, Transkripte und Korrekturen vollständig. Auf einen neuen

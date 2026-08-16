@@ -768,7 +768,7 @@ class SettingsBody(BaseModel):
     # ein vom Browser gesetztes Datum koennte die Aktualisierung auf Jahre stilllegen.
 
 
-def _settings_body(cfg: dict = None) -> dict:
+def _settings_body(cfg: dict | None = None) -> dict:
     """Der EINE Bauweg fuer beide Einstellungs-Endpunkte (#239).
 
     Vorher baute jeder Handler seinen Rumpf selbst, und der PUT lieferte fuenf Felder
