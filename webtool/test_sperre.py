@@ -101,6 +101,29 @@ def test_dauerhaft_unmoeglich_haelt_den_aufrufer_nicht_auf(tmp_path, monkeypatch
     assert "ungeschuetzt" in capsys.readouterr().out
 
 
+def test_der_aufrufer_erfaehrt_ob_die_sperre_wirklich_haelt(tmp_path, monkeypatch):
+    """#194: die Protokollzeile von oben erreicht nur eine Konsole. Am anderen Ende von
+    `settings.save()` sitzt aber ein Mensch im Browser, dem bisher unbesehen Erfolg gemeldet
+    wurde — waehrend ein gleichzeitiger Schreiber seinen gerade eingetragenen API-Key
+    ueberbuegeln konnte (#192), und den kann niemand rekonstruieren.
+
+    BEIDE Richtungen an einem Test: ein fest verdrahtetes True waere derselbe Schaden wie
+    heute (Erfolg gemeldet, obwohl ungeschuetzt), ein fest verdrahtetes False ein Daueralarm,
+    der die Warnung wertlos macht.
+    """
+    ziel = str(tmp_path / "x.json")
+    with sperre.datei(ziel) as gehalten:
+        assert gehalten is True, "haelt, meldet es aber nicht"
+
+    def nie(*a, **k):
+        raise PermissionError(5, "Access is denied")
+
+    monkeypatch.setattr(sperre, "_HAKELIG_S", 0.02)
+    monkeypatch.setattr(sperre.os, "mkdir", nie)
+    with sperre.datei(ziel) as gehalten:
+        assert gehalten is False, "laeuft ungeschuetzt und meldet trotzdem Erfolg"
+
+
 def test_datei_am_lock_pfad_haelt_den_aufrufer_nicht_auf(tmp_path, monkeypatch, capsys):
     """Liegt am Lock-Pfad eine DATEI statt unseres Verzeichnisses (Sync-Client, Backup,
     Quarantaene), meldet `os.mkdir` dauerhaft FileExistsError und `os.rmdir` scheitert mit
@@ -221,6 +244,31 @@ def test_windows_beantwortet_beide_openprocess_ausgaenge():
     """
     assert sperre._prozess_lebt(2 ** 31 - 4) is False      # diese PID gibt es nicht
     assert sperre._prozess_lebt(4) is True                 # System-Prozess: Zugriff verweigert
+
+
+@pytest.mark.skipif(not hasattr(os, "mkfifo"),
+                    reason="FIFOs gibt es auf Windows nicht; der unbegrenzte Fall ist dort "
+                           "nicht herstellbar")
+def test_ein_fifo_am_merker_pfad_haelt_die_warteschleife_nicht_auf(tmp_path):
+    """#200: `_merker_lesen` ist der einzige Aufruf der Warteschleife, der blockieren kann —
+    `mkdir`/`lstat`/`rmdir` kehren zurueck, ein `open()` auf einen FIFO wartet auf einen
+    Schreiber, der nie kommt. Die Obergrenze aus #191 deckt das NICHT: sie wird zwischen den
+    Runden geprueft, nicht innerhalb eines Systemaufrufs.
+
+    Gemessen wird im FADEN mit `join`, nie mit einem normalen Aufruf: ein Haenger macht keinen
+    Test rot, er laesst die ganze Suite auslaufen — genau darum blieb die Klasse in #191 so
+    lange unbemerkt.
+    """
+    lock = str(tmp_path / "x.json.lock")
+    os.mkdir(lock)
+    os.mkfifo(os.path.join(lock, sperre._HALTER))     # niemand schreibt je hinein
+    ergebnis = []
+    faden = threading.Thread(target=lambda: ergebnis.append(sperre._merker_lesen(lock)),
+                             daemon=True)
+    faden.start()
+    faden.join(5)
+    assert not faden.is_alive(), "haengt am FIFO — die Warteschleife ist nicht haengerfrei"
+    assert ergebnis == [None], "ein FIFO ist keine Auskunft, kein Merker"
 
 
 def test_halb_geschriebener_merker_ist_keine_auskunft():
@@ -388,6 +436,62 @@ def test_nach_der_obergrenze_wird_doch_zugegriffen(tmp_path, monkeypatch, capsys
         ausgabe = capsys.readouterr().out
         assert "wird uebernommen" in ausgabe
         assert "ungeschuetzt" not in ausgabe
+    finally:
+        halter.kill()
+        halter.wait()
+
+
+def test_ein_hakeliger_mkdir_nach_dem_griff_gibt_nicht_sofort_auf(tmp_path, monkeypatch, capsys):
+    """#221: nach dem erzwungenen Griff galt die Nachsicht des Erwerbspfads (`_HAKELIG_S`)
+    nicht mehr — EIN voruebergehender `PermissionError` beim naechsten `mkdir` fuehrte direkt
+    auf "laesst sich nicht uebernehmen — ungeschuetzt weiter". Genau dieser Fehler ist auf
+    Windows der Normalfall unter Konkurrenz (Loeschung noch ausstehend, Virenscanner-Handle),
+    also ausgerechnet dort, wo die Sperre zaehlt.
+
+    Der Fehler wird UNMITTELBAR nach dem Griff eingeschleust, weil nur dann `erzwungen` schon
+    gesetzt und die Frist schon ueberschritten ist — beides zusammen ist die Kante.
+    `hakelte == [1]` ist die Positivkontrolle: ohne sie bewiese ein gruener Lauf nur, dass
+    der Fehler nie gefeuert hat.
+    """
+    monkeypatch.setattr(sperre, "_AUFGEBEN_PUFFER_S", 0.05)
+    ziel = str(tmp_path / "x.json")
+    lock = ziel + ".lock"
+    os.mkdir(lock)
+    halter = _lebender_prozess()                  # steht fuer die neu vergebene PID
+    echt_mkdir, echt_weg = os.mkdir, sperre._wegraeumen
+    # Zwei Marker, nicht einer: `_wegraeumen` laeuft auch beim FREIGEBEN, ein gemeinsamer
+    # Zaehler traege danach einen dritten Eintrag und die Zusicherung waere eine ueber den
+    # Aufraeumpfad statt ueber den Griff.
+    griff, hakelte = [], []
+
+    def weg(*a, **k):
+        echt_weg(*a, **k)
+        griff.append(1)                           # der Griff ist durch -> ab jetzt EINMAL hakeln
+
+    def hakelig(pfad, *a, **k):
+        if griff and not hakelte:
+            hakelte.append(1)
+            raise PermissionError(5, "Access is denied")
+        return echt_mkdir(pfad, *a, **k)
+
+    try:
+        _merker(lock, halter.pid)
+        monkeypatch.setattr(sperre, "_wegraeumen", weg)
+        monkeypatch.setattr(sperre.os, "mkdir", hakelig)
+        gehalten = []
+
+        def lauf():
+            with sperre.datei(ziel, stale=0.0):
+                gehalten.append(sperre._merker_lesen(lock))
+
+        faden = threading.Thread(target=lauf, daemon=True)
+        faden.start()
+        faden.join(5)
+        assert not faden.is_alive()
+        assert hakelte == [1], "der voruebergehende Fehler kam nie an — der Test bewiese nichts"
+        # Erworben, nicht ungeschuetzt weiter: im Lock steht UNSERE PID.
+        assert gehalten == [f"{os.getpid()} {platform.node()}".encode()]
+        assert "laesst sich nicht uebernehmen" not in capsys.readouterr().out
     finally:
         halter.kill()
         halter.wait()

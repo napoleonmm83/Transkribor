@@ -147,18 +147,36 @@ def _merker_lesen(lockdir: str):
     """Der Merker als ROHE Bytes, oder None. Er ist zugleich der Ausweis dieses Locks: nur
     wer denselben Inhalt wiederfindet, darf es wegraeumen (siehe `_wegraeumen`).
 
-    **Der einzige Aufruf in der Warteschleife, der BLOCKIEREN kann**: `mkdir`/`lstat`/`rmdir`
-    kehren zurueck, ein `open()` auf einer nicht mehr erreichbaren Netzfreigabe haengt bis zum
-    Netz-Timeout (und `TRANSKRIBOR_PROJEKTE` darf dorthin zeigen). Die Obergrenze deckt das
-    NICHT — sie wird zwischen den Runden geprueft, nicht innerhalb eines Systemaufrufs. Bewusst
-    nicht behoben (ein Timeout um einen Dateizugriff hiesse Faden oder `O_NONBLOCK`), aber
-    benannt: die Schleife ist seitdem nicht mehr beweisbar haengerfrei.
+    **Der einzige Aufruf in der Warteschleife, der BLOCKIEREN kann** (#200): `mkdir`/`lstat`/
+    `rmdir` kehren zurueck, ein `open()` nicht zwangslaeufig. Die Obergrenze deckt das NICHT —
+    sie wird zwischen den Runden geprueft, nicht innerhalb eines Systemaufrufs.
+
+    **`O_NONBLOCK` schliesst davon den UNBEGRENZTEN Fall**: liegt am Merker-Pfad ein FIFO
+    (POSIX), wartet ein normales `open()` auf einen Schreiber, der nie kommt — ohne Frist, und
+    kein `except` beim Aufrufer faengt das (dieselbe Klasse wie #191: ein Haenger ist schlimmer
+    als eine Ausnahme). Mit dem Flag kehrt `open` sofort zurueck und `os.read` meldet
+    `BlockingIOError` ⇒ "keine Auskunft", der Rueckfall dieses Moduls.
+
+    **Was OFFEN bleibt, und das gehoert hierhin statt hinter einen gruenen Test:** auf einer
+    nicht mehr erreichbaren Netzfreigabe haengt der Zugriff weiter bis zum Netz-Timeout
+    (zehner Sekunden) — fuer eine REGULAERE Datei tut `O_NONBLOCK` nichts, und
+    `TRANSKRIBOR_PROJEKTE` darf dorthin zeigen. Das ist begrenzt, aber nicht kurz; wirklich
+    deckeln liesse es sich nur mit einem Faden je Leseversuch, und der stuende auf dem
+    Request-Pfad (`settings.save`).
     """
+    # `getattr`, weil beide Flags plattformgebunden sind: `O_NONBLOCK` gibt es auf Windows
+    # nicht, `O_BINARY` nur dort. 0 ist in beiden Faellen das neutrale Element.
+    flags = os.O_RDONLY | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_BINARY", 0)
     try:
-        with open(os.path.join(lockdir, _HALTER), "rb") as f:
-            return f.read(200)
+        fd = os.open(os.path.join(lockdir, _HALTER), flags)
     except OSError:
         return None
+    try:
+        return os.read(fd, 200)
+    except OSError:               # BlockingIOError am leeren FIFO ist einer
+        return None
+    finally:
+        os.close(fd)
 
 
 def _lebt_laut(merker):
@@ -286,6 +304,14 @@ def datei(pfad: str, stale: float = STALTES_ALTER):
     laeuft der Block ungeschuetzt weiter — aber mit einer Zeile im Protokoll, nicht still:
     ein lautlos uebersprungenes Lock ist von einem gehaltenen nicht zu unterscheiden.
 
+    **Der Kontextmanager liefert, OB er haelt** (`with datei(p) as gehalten:`) — `False` heisst
+    "der Abschnitt lief ungeschuetzt". Die Protokollzeile allein loest die Zusage oben nur fuer
+    den BETREIBER ein (#194): am anderen Ende von `settings.save()` sitzt ein Mensch im
+    Browser, und der bekam bisher unbesehen Erfolg gemeldet, waehrend ein gleichzeitiger
+    Schreiber seinen gerade eingetragenen API-Key ueberbuegeln konnte (#192). Wer einem
+    Menschen Erfolg meldet, sagt das also dazu; die gepackte App hat keine Konsole, die jemand
+    liest.
+
     **Die Lebendpruefung schaltet die Uhr nicht ab, sie stellt sie nur hintan** (#175): wer
     sich als lebend meldet, wird nicht angetastet — bis der Warter laenger gewartet hat, als
     ein kritischer Abschnitt ueberhaupt dauern kann. Dann greift er EINMAL erzwungen zu und
@@ -366,7 +392,17 @@ def datei(pfad: str, stale: float = STALTES_ALTER):
             gemeldet = True
             print(f"[sperre] warte auf {lockdir} (raeume nach {stale:.0f}s auf, falls "
                   f"verwaist) …", flush=True)
-        if time.time() - seit > frist(stale):
+        # `hakelig_seit is None` heisst: der letzte `mkdir` scheiterte nicht VORUEBERGEHEND.
+        # Laeuft die Nachsicht des Erwerbspfads gerade (`_HAKELIG_S`), wird hier gar nicht
+        # entschieden — weder gegriffen noch aufgegeben (#221). Beides waere falsch: ein
+        # transienter `PermissionError` ist auf Windows der NORMALFALL unter Konkurrenz (siehe
+        # `_HAKELIG_S`), also genau dann, wenn die Sperre zaehlt. Ohne diese Zeile kippte ein
+        # einziger solcher Fehler nach dem erzwungenen Griff sofort in "ungeschuetzt weiter",
+        # und der Griff selbst raeumte ein Lock weg, das 10 ms spaeter regulaer frei gewesen
+        # waere. Die Obergrenze aus #191 bleibt: der `except OSError`-Zweig oben bricht nach
+        # `_HAKELIG_S` von sich aus ab, und ein `FileExistsError` setzt den Merker zurueck —
+        # aufgeschoben wird also hoechstens eine halbe Sekunde, nie unbegrenzt.
+        if hakelig_seit is None and time.time() - seit > frist(stale):
             if erzwungen:
                 print(f"[sperre] {lockdir} laesst sich nicht uebernehmen — ungeschuetzt "
                       f"weiter", flush=True)
@@ -391,7 +427,7 @@ def datei(pfad: str, stale: float = STALTES_ALTER):
             continue
         time.sleep(0.01)
     try:
-        yield
+        yield gehalten
     finally:
         if gehalten:
             # Auch hier zaehlt der Ausweis: wurde uns das Lock zwischendurch weggenommen und

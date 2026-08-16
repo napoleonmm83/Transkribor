@@ -794,7 +794,15 @@ def put_settings(body: SettingsBody):
     # den Rueckgabewert als vollstaendige `Settings`. Ohne den Block war der Typ eine
     # Falschaussage — und der Aufrufer brauchte ein Nachladen, dessen Fehlschlag wieder
     # eigenes Zutun verlangte. Ein Aufruf, eine Wahrheit.
-    return {**settings.public(settings.save(patch)), "ytdlp": ytdlp_update.zustand()}
+    #
+    # `ungeschuetzt` ist aus demselben Holz (#194): geschrieben wurde, aber ohne Sperre — ein
+    # gleichzeitiger Schreiber kann den gerade eingetragenen Key ueberbuegelt haben (#192).
+    # Der Server WEISS das und meldete bisher trotzdem blanken Erfolg; die Protokollzeile aus
+    # `sperre.py` erreicht nur eine Konsole, und die gepackte App hat keine, die jemand liest.
+    # Kein 5xx: geschrieben IST worden, und ein Fehler waere die zweite Unwahrheit.
+    cfg, gehalten = settings.save(patch)
+    return {**settings.public(cfg), "ytdlp": ytdlp_update.zustand(),
+            "ungeschuetzt": not gehalten}
 
 
 @app.delete("/api/settings/kaputt")

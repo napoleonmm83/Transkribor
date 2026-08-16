@@ -159,8 +159,12 @@ export async function getSettings(): Promise<Settings> {
 export async function getHardware(): Promise<Hardware> {
   return jn(await fetch('/api/hardware'))
 }
-/** Nur gesetzte Felder senden — ein ausgelassenes api_key laesst den gespeicherten Key stehen. */
-export async function saveSettings(patch: Record<string, string>): Promise<Settings> {
+/** Nur gesetzte Felder senden — ein ausgelassenes api_key laesst den gespeicherten Key stehen.
+ *  `ungeschuetzt: true` heisst „geschrieben, aber ohne Schreibsperre" (#194) — es gehört NICHT
+ *  in `Settings`: es beschreibt diesen einen Schreibvorgang, nicht den Zustand des Servers, und
+ *  in den Zustand gemischt bliebe die Warnung für immer stehen. */
+export async function saveSettings(patch: Record<string, string>):
+    Promise<Settings & { ungeschuetzt?: boolean }> {
   return jn(await fetch('/api/settings', {
     method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch),
   }))

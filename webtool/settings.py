@@ -159,9 +159,17 @@ def _lesen() -> tuple:
     return cfg, False
 
 
-def save(patch: dict) -> dict:
-    """Merge-Speichern. Ein fehlendes 'api_key' laesst den gespeicherten Key stehen — das
-    Frontend bekommt ihn nie zu sehen und koennte ihn sonst beim Modellwechsel loeschen.
+def save(patch: dict) -> tuple:
+    """Merge-Speichern → `(Einstellungen, gehalten)`. Ein fehlendes 'api_key' laesst den
+    gespeicherten Key stehen — das Frontend bekommt ihn nie zu sehen und koennte ihn sonst
+    beim Modellwechsel loeschen.
+
+    **`gehalten=False` heisst: der Read-Modify-Write lief OHNE Sperre** (#194). Dieselbe
+    Tupel-Form wie `_lesen()`, und aus demselben Grund: der Zustand geht den Aufrufer etwas an,
+    weil er sonst unbesehen Erfolg meldet. Der PUT reicht ihn an den Browser weiter — ein
+    gleichzeitiger Schreiber kann in diesem Fall einen gerade eingetragenen API-Key
+    ueberbuegeln (#192), und den kann niemand rekonstruieren. Wer die Antwort nicht braucht
+    (`_merken()` im fetch-Subprozess), ignoriert sie wie bisher.
 
     Gesperrt, weil es seit der yt-dlp-Selbstaktualisierung ZWEI Schreiber gibt: den Server
     (Einstellungen aus dem Browser) und den fetch-Subprozess (den Pruef-Merker). Ohne die
@@ -177,7 +185,7 @@ def save(patch: dict) -> dict:
     # ein pip). Der Fix gehoert HIERHER, wo alle Schreiber durchgehen — nicht in die
     # einzelnen Aufrufer.
     os.makedirs(os.path.dirname(p) or ".", exist_ok=True)
-    with sperre.datei(p):
+    with sperre.datei(p) as gehalten:
         cur, kaputt = _lesen()
         if kaputt:
             # INNERHALB der Sperre und VOR dem Schreiben: sonst raenge das Umbenennen mit
@@ -195,7 +203,7 @@ def save(patch: dict) -> dict:
         os.chmod(p, 0o600)
     except OSError:
         pass
-    return cur
+    return cur, gehalten
 
 
 def public(cfg: dict = None) -> dict:
