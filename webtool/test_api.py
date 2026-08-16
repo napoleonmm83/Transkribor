@@ -595,7 +595,32 @@ def test_settings_modellwechsel_behaelt_den_key(client):
                     "base_url": "", "has_key": True,
                     "whisper_model": "large-v3", "whisper_lang": "de",
                     # "" = es liegt keine beiseitegelegte Einstellungsdatei (#192)
-                    "ytdlp_auto": "1", "kaputt": ""}
+                    "ytdlp_auto": "1", "kaputt": "",
+                    # Der Normalfall (#194) — und zugleich die Gegenprobe zum Test unten:
+                    # ein dauerhaft gesetztes Flag waere ein Daueralarm und faellt hier auf.
+                    "ungeschuetzt": False}
+
+
+def test_settings_put_sagt_es_wenn_ungeschuetzt_geschrieben_wurde(client, monkeypatch):
+    """#194: die Sperre darf fail-open gehen (sie schuetzt vor einer Race, sie ist nicht der
+    Zweck des Aufrufs) — aber dann ist `save()` ein Read-Modify-Write ohne Schutz, und ein
+    gleichzeitiger Schreiber kann den gerade eingetragenen API-Key ueberbuegeln (#192). Der
+    Server weiss das und meldete bisher blanken Erfolg; die Protokollzeile aus `sperre.py`
+    erreicht nur eine Konsole, und die gepackte App hat keine, die jemand liest.
+
+    **200, nicht 5xx**: geschrieben IST worden. Ein Fehler waere die zweite Unwahrheit.
+    """
+    from webtool import sperre
+
+    def nie(*a, **k):
+        raise PermissionError(5, "Access is denied")
+
+    monkeypatch.setattr(sperre, "_HAKELIG_S", 0.02)
+    monkeypatch.setattr(sperre.os, "mkdir", nie)
+    r = client.put("/api/settings", json={"model": "claude-sonnet-5"})
+    assert r.status_code == 200
+    assert r.json()["ungeschuetzt"] is True
+    assert r.json()["model"] == "claude-sonnet-5", "geschrieben wurde trotzdem"
 
 
 def test_settings_meldet_den_ytdlp_zustand(client, monkeypatch):

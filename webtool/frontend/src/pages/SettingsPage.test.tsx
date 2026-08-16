@@ -11,7 +11,10 @@ vi.mock('@/lib/api')
 // sondern ein Aufruf an eine echte Funktion, die immer "nicht aufgerufen" meldet.
 // `info` gehört mit hinein, seit der yt-dlp-Knopf „läuft bereits" meldet (#174) — ein
 // fehlender Schlüssel wirft hier `toast.info is not a function` statt still nichts zu tun.
-vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() } }))
+// `warning` seit #194 (ungeschützt geschrieben), aus demselben Grund.
+vi.mock('sonner', () => ({
+  toast: { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() },
+}))
 // Default: kein Electron -> Abschnitt bleibt aus, wie es SettingsPage ausserhalb dieses
 // Tests auch fuer alle SettingsPage-Tests erwartet, die zeigeMit gar nicht aufrufen.
 vi.mock('@/hooks/useUpdate', () => ({
@@ -294,6 +297,23 @@ describe('SettingsPage', () => {
     const haken = await screen.findByRole('checkbox', { name: /aktuell halten/i })
     fireEvent.click(haken)
     await waitFor(() => expect(api.saveSettings).toHaveBeenCalledWith({ ytdlp_auto: '0' }))
+  })
+
+  it('sagt es, wenn ohne Schreibsperre gespeichert wurde — und schweigt sonst', async () => {
+    // #194: die Sperre darf fail-open gehen, aber dann kann ein gleichzeitiger Schreiber die
+    // Änderung überbügelt haben (#192) — bisher sah der Nutzer blanken Erfolg, weil die
+    // Meldung nur in die Serverkonsole ging. BEIDE Richtungen an einem Test: eine Warnung,
+    // die immer kommt, ist als Daueralarm derselbe Schaden von der anderen Seite.
+    vi.mocked(api.saveSettings).mockResolvedValue({ ...BASIS, ytdlp_auto: '0' })
+    zeige()
+    fireEvent.click(await screen.findByRole('checkbox', { name: /aktuell halten/i }))
+    await waitFor(() => expect(api.saveSettings).toHaveBeenCalled())
+    expect(toast.warning).not.toHaveBeenCalled()
+
+    vi.mocked(api.saveSettings).mockResolvedValue({ ...BASIS, ytdlp_auto: '1', ungeschuetzt: true })
+    fireEvent.click(screen.getByRole('checkbox', { name: /aktuell halten/i }))
+    await waitFor(() => expect(toast.warning).toHaveBeenCalledWith(
+      expect.stringContaining('ohne Schreibsperre')))
   })
 
   it('warnt, wenn die Umgebungsvariable den Haken überstimmt', async () => {

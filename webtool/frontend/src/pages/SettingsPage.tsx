@@ -227,11 +227,18 @@ export function SettingsPage() {
     modelleLaden(true)
   }, [provider, hatKey, basis, prov?.needs_key, modelleLaden])
 
+  // `ungeschuetzt` wird ABGETRENNT, nicht mitgemischt (#194): es gilt diesem einen Schreiben,
+  // nicht dem Zustand — im State bliebe die Warnung stehen, bis die Seite neu laedt. Und sie
+  // kommt NACH `danach?.()`, damit sie nicht unter dessen Erfolgsmeldung („Key gespeichert")
+  // liegt: gespeichert wurde ja wirklich, die Einschraenkung ist die neue Nachricht.
   const speichern = async (patch: Record<string, string>, danach?: () => void) => {
     try {
-      const neu = await saveSettings(patch)
+      const { ungeschuetzt, ...neu } = await saveSettings(patch)
       setS(cur => cur && { ...cur, ...neu })
       danach?.()
+      if (ungeschuetzt) toast.warning(
+        'Gespeichert — aber ohne Schreibsperre. Hat in derselben Sekunde etwas anderes '
+        + 'geschrieben, kann die Änderung überschrieben worden sein. Bitte kurz nachsehen.')
     } catch (e) { toast.error(`Speichern fehlgeschlagen: ${(e as Error).message}`) }
   }
 
