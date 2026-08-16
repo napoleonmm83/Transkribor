@@ -97,10 +97,11 @@ export type Settings = {
    *  Der Server ersetzt so eine Datei nicht mehr stillschweigend durch Standardwerte
    *  (#192); dort steht unter Umstaenden noch der alte API-Key. */
   kaputt: string;
-  /** Verzeichnis, in dem die Projekte des Nutzers liegen (#218). Kommt vom SERVER, nicht aus
-   *  der Electron-Brücke: in der gepackten App setzt `backend.js` `TRANSKRIBOR_PROJEKTE`, und
-   *  `paths.projekte_root()` liest genau das — Anzeige und „Ordner öffnen" können damit gar
-   *  nicht auseinanderlaufen. Im Browser gibt es keinen Knopf, der Pfad steht trotzdem da. */
+  /** Verzeichnis, in dem die Projekte des Nutzers liegen (#218). Kommt vom SERVER, und der
+   *  ist die einzige Stelle, die den wirksamen Wert kennt: `backend.js` reicht zwar
+   *  `TRANSKRIBOR_PROJEKTE` herein, aber die `.env` des Servers darf es überschreiben.
+   *  Der „Ordner öffnen"-Knopf fragt deshalb denselben Endpunkt, statt in Electron zu
+   *  rechnen. Im Browser gibt es keinen Knopf, der Pfad steht trotzdem da. */
   projekte_pfad: string;
 };
 /** `version` ist null, wenn yt-dlp gar nicht installiert ist; `geprueft` leer, solange nie

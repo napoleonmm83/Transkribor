@@ -36,3 +36,65 @@ test('die uebrigen Pfade des Servers bleiben gesetzt', () => {
     assert.ok(env[k], `${k} fehlt`)
   }
 })
+
+// ── projektePfad (#218) ────────────────────────────────────────────────────────
+// Gegen einen ECHTEN lokalen HTTP-Server, nicht gegen eine Attrappe von `http`: die
+// Zusicherung ist „wir fragen den Server und glauben ihm", und dazu gehoert der Weg durch
+// Statuscode, Body und JSON.
+const http = require('node:http')
+const { projektePfad } = require('./backend')
+
+function server(antwort) {
+  return new Promise(res => {
+    const s = http.createServer((req, r) => antwort(req, r))
+    s.listen(0, '127.0.0.1', () => res({ s, basis: `http://127.0.0.1:${s.address().port}/` }))
+  })
+}
+
+test('projektePfad nimmt den Pfad des SERVERS, nicht P.projekte (#218)', async () => {
+  // Der Kern des Befunds: `serverEnv()` reicht `TRANSKRIBOR_PROJEKTE` zwar hinein, aber die
+  // `.env` des Servers darf es ueberschreiben. Wer hier `P.projekte` nimmt, oeffnet still
+  // einen anderen Ordner als die Seite anzeigt — und weil `start()` `P.projekte` anlegt,
+  // gibt `shell.openPath` dazu keinen Fehler.
+  let gefragt = null
+  const { s, basis } = await server((req, r) => {
+    gefragt = req.url
+    r.writeHead(200, { 'Content-Type': 'application/json' })
+    r.end(JSON.stringify({ projekte_pfad: 'D:\Daten\MeineTranskripte', provider: 'claude-cli' }))
+  })
+  try {
+    assert.strictEqual(await projektePfad(basis), 'D:\Daten\MeineTranskripte')
+    assert.strictEqual(gefragt, '/api/settings')
+  } finally { s.close() }
+})
+
+test('projektePfad faellt NICHT auf einen geratenen Pfad zurueck, wenn der Server schweigt', async () => {
+  // Ein Rueckfall waere genau die stille Divergenz, gegen die die Funktion gebaut ist —
+  // dann lieber eine Fehlermeldung, die der Nutzer sieht.
+  const { s, basis } = await server((_req, r) => { r.writeHead(500); r.end('kaputt') })
+  try {
+    await assert.rejects(projektePfad(basis), /antwortet mit 500/)
+  } finally { s.close() }
+})
+
+test('projektePfad meldet eine Antwort ohne Projektordner, statt "undefined" zu oeffnen', async () => {
+  const { s, basis } = await server((_req, r) => {
+    r.writeHead(200, { 'Content-Type': 'application/json' })
+    r.end(JSON.stringify({ provider: 'claude-cli' }))     // Feld fehlt
+  })
+  try {
+    await assert.rejects(projektePfad(basis), /keinen Projektordner/)
+  } finally { s.close() }
+})
+
+test('projektePfad meldet unlesbares JSON als solches', async () => {
+  const { s, basis } = await server((_req, r) => { r.writeHead(200); r.end('<html>kein JSON') })
+  try {
+    await assert.rejects(projektePfad(basis), /nicht lesbar/)
+  } finally { s.close() }
+})
+
+test('projektePfad meldet einen nicht erreichbaren Server', async () => {
+  // Port, auf dem nichts lauscht: der `error`-Zweig der Anfrage, nicht der der Antwort.
+  await assert.rejects(projektePfad('http://127.0.0.1:1/'), /nicht erreichbar/)
+})

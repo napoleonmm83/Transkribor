@@ -109,5 +109,51 @@ function stop() {
   proc = null
 }
 
-module.exports = { start, stop, serverEnv,
-                   url: () => `http://127.0.0.1:${port}/`, log: () => log.slice() }
+function url() {
+  return `http://127.0.0.1:${port}/`
+}
+
+/**
+ * Wo die Projekte WIRKLICH liegen — gefragt wird der Server, nicht `P.projekte` (#218).
+ *
+ * Der naheliegende Weg waere `P.projekte`, und er ist falsch: `serverEnv()` reicht den Wert
+ * zwar als `TRANSKRIBOR_PROJEKTE` hinein, aber `settings.load_env()` darf ihn aus der `.env`
+ * **ueberschreiben** — die Datei gewinnt dort ausdruecklich gegen eine gesetzte Variable
+ * (`webtool/settings.py`, unbedingtes `os.environ[k] = …`). Mit einer `.env`, die den
+ * Schluessel setzt, oeffnete „Ordner oeffnen" also einen ANDEREN Ordner als die Seite nennt,
+ * und zwar **still**: `start()` legt `P.projekte` bei jedem Lauf an (Zeile 91), `shell.openPath`
+ * findet ihn also vor und meldet keinen Fehler. Bei einer Funktion, deren Zweck „hier liegen
+ * deine Dateien, sichere sie" ist, ist das der schlimmstmoegliche Ausgang.
+ *
+ * **Kein Rueckfall auf `P.projekte` im Fehlerfall** — der waere genau diese stille Divergenz.
+ * Wer den Knopf sieht, hat die Seite von diesem Server bekommen; antwortet er nicht mehr, ist
+ * eine Fehlermeldung die ehrliche Auskunft.
+ *
+ * `basis` ist der Testsaum (Muster wie `serverEnv(exe)`): der Port ist Modulzustand, den ein
+ * Test nicht setzen kann, ohne einen echten uvicorn zu starten.
+ */
+function projektePfad(basis = url()) {
+  return new Promise((resolve, reject) => {
+    const anfrage = http.get(new URL('api/settings', basis), res => {
+      if (res.statusCode !== 200) {
+        res.resume()
+        return reject(new Error(`Der Server antwortet mit ${res.statusCode}.`))
+      }
+      let roh = ''
+      res.setEncoding('utf8')
+      res.on('data', d => { roh += d })
+      res.on('end', () => {
+        let pfad
+        try {
+          pfad = JSON.parse(roh).projekte_pfad
+        } catch (e) {
+          return reject(new Error(`Antwort des Servers nicht lesbar: ${e.message}`))
+        }
+        pfad ? resolve(pfad) : reject(new Error('Der Server nennt keinen Projektordner.'))
+      })
+    })
+    anfrage.on('error', e => reject(new Error(`Server nicht erreichbar: ${e.message}`)))
+  })
+}
+
+module.exports = { start, stop, serverEnv, url, projektePfad, log: () => log.slice() }

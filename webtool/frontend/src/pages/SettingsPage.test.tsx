@@ -254,9 +254,11 @@ describe('SettingsPage', () => {
 
   it('meldet EINEN Anmeldevorgang genau einmal, auch wenn zwei Polls sich überholen (#247)', async () => {
     // Dieselbe Klasse wie beim yt-dlp-Poll, andere Schleife: nicht gemeldet worden, aber
-    // dieselbe Ursache — die Meldung hängt am Zustand, nicht am Übergang. Doppelt heisst hier
-    // zwei Toasts UND zwei `getAuth`-Aufrufe über `neuPruefen`. Wer nur die eine Stelle
-    // repariert, lässt den Nachbarn stehen.
+    // dieselbe Ursache — die Meldung hängt am Zustand, nicht am Übergang. Wer nur die eine
+    // Stelle repariert, lässt den Nachbarn stehen.
+    // Zugesichert wird hier der TOAST. Der doppelte `neuPruefen()`-Aufruf im selben Block
+    // wäre die zweite Folge, ist aber nicht mitgeprüft (`getAuth` läuft schon beim Mount, es
+    // bräuchte eine Basislinie) — deshalb steht er nicht als Zusage da.
     vi.mocked(api.getAuth).mockResolvedValue({
       unterstuetzt: true, angemeldet: false, detail: 'Nicht angemeldet.' })
     vi.mocked(api.startLogin).mockResolvedValue({ laeuft: true, braucht_code: false })
