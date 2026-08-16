@@ -154,8 +154,16 @@ def _merker_lesen(lockdir: str):
     **`O_NONBLOCK` schliesst davon den UNBEGRENZTEN Fall**: liegt am Merker-Pfad ein FIFO
     (POSIX), wartet ein normales `open()` auf einen Schreiber, der nie kommt — ohne Frist, und
     kein `except` beim Aufrufer faengt das (dieselbe Klasse wie #191: ein Haenger ist schlimmer
-    als eine Ausnahme). Mit dem Flag kehrt `open` sofort zurueck und `os.read` meldet
-    `BlockingIOError` ⇒ "keine Auskunft", der Rueckfall dieses Moduls.
+    als eine Ausnahme). Mit dem Flag kehrt `open` sofort zurueck.
+
+    **Was dann herauskommt, ist `b""` — NICHT `None`**, in WSL/ext4 nachgemessen: ohne Schreiber
+    meldet `os.read` das Dateiende, keinen `BlockingIOError` (den gibt es erst, wenn ein
+    Schreiber haengt, ohne etwas geschickt zu haben — daher bleibt das `except`). Fuer die
+    Aufrufer ist das dasselbe: `_lebt_laut(b"")` faellt ueber den `int("")`-ValueError nach
+    "keine Auskunft". Auf `None` zu normalisieren waere sogar **falsch** — `_wegraeumen` liest
+    `erwartet is None` als "es lag kein Merker da" und ruehrte die Datei dann nicht an, womit
+    ein Lock mit leerem Merker (Halter zwischen `mkdir` und Schreiben gestorben) nie wieder
+    leer und damit nie wieder raeumbar waere.
 
     **Was OFFEN bleibt, und das gehoert hierhin statt hinter einen gruenen Test:** auf einer
     nicht mehr erreichbaren Netzfreigabe haengt der Zugriff weiter bis zum Netz-Timeout
