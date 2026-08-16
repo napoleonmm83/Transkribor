@@ -163,6 +163,11 @@ dem Neustart einmal die Einrichtungsseite und sagt es dir; ein Klick auf **„Je
 holt sie nach. Die grossen Sachen (PyTorch, Whisper) bleiben dabei normalerweise liegen — was in
 einer passenden Fassung schon da ist, wird nicht noch einmal geholt.
 
+Kommt diese Seite bei **jedem** Start wieder, obwohl der Klick jedes Mal durchläuft, kann sich
+Transkribor nicht merken, dass es fertig ist. Die Seite nennt dann die Datei, um die es geht —
+meistens hält ein Virenscanner sie fest, oder die Festplatte ist voll. Benutzen lässt sich die
+App in der Zwischenzeit ganz normal.
+
 **Ein Video-Import schlägt fehl — was nun?** Meistens hat die Plattform etwas umgebaut. Warte
 kurz und versuche es noch einmal: Transkribor frischt den Downloader beim ersten Fehlversuch
 selbst auf und lädt dann gleich weiter. Klappt es danach immer noch nicht, hilft der Knopf
