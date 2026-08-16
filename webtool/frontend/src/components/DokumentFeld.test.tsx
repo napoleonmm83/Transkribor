@@ -28,11 +28,16 @@ describe('DokumentFeld', () => {
   it('bietet nach dem Leeren einen Rueckweg an, der den Absatz zurueckschreibt', () => {
     toastMock.mockClear()
     const onCommit = vi.fn()
-    render(<DokumentFeld titel="Kontext" wert="Interview im Stall, Juni" platzhalter="…"
-      onCommit={onCommit} />)
+    const { rerender } = render(
+      <DokumentFeld titel="Kontext" wert="Interview im Stall, Juni" platzhalter="…" onCommit={onCommit} />)
     leeren('Interview im Stall, Juni')
 
     expect(onCommit).toHaveBeenCalledWith('')
+    // Der geleerte Wert kommt im Editor ueber `updateDoc` -> `doc.context` zurueck; die
+    // Attrappe tut das nicht von selbst. Ohne dieses Nachziehen prueft der Test einen Zustand,
+    // den es im Programm nicht gibt — und der Waechter unten haette nie das leere Feld gesehen.
+    rerender(<DokumentFeld titel="Kontext" wert="" platzhalter="…" onCommit={onCommit} />)
+
     const aktion = rueckgaengig()
     expect(aktion?.label).toBe('Rückgängig')
     aktion!.onClick()
@@ -79,6 +84,27 @@ describe('DokumentFeld', () => {
 
     expect(onCommit).toHaveBeenCalledWith('')
     expect(rueckgaengig()?.label).toBe('Rückgängig')
+  })
+
+  it('ueberschreibt einen inzwischen NEU getippten Absatz nicht (CodeRabbit, Major)', () => {
+    // Der Ablauf ist zehn Sekunden lang erreichbar: streichen → neu tippen → auf den alten
+    // Toast klicken. Ein unbedingtes `onCommit(wert)` warf den NEUEN Absatz weg — genau der
+    // Verlust, gegen den #154 geschrieben ist, ausgeloest vom Rettungsknopf selbst.
+    toastMock.mockClear()
+    const onCommit = vi.fn()
+    const { rerender } = render(
+      <DokumentFeld titel="Kontext" wert="der alte Absatz" platzhalter="…" onCommit={onCommit} />)
+    leeren('der alte Absatz')
+    const aktion = rueckgaengig()!
+
+    // Das Dokument traegt jetzt etwas Neues — im Editor kommt das ueber `updateDoc` zurueck.
+    rerender(<DokumentFeld titel="Kontext" wert="frisch getippt" platzhalter="…" onCommit={onCommit} />)
+    onCommit.mockClear()
+    aktion.onClick()
+
+    expect(onCommit).not.toHaveBeenCalled()
+    // Und nicht stumm: ein Knopf, der nichts tut, sieht aus wie ein Fehlschlag.
+    expect(toastMock.info).toHaveBeenCalledWith(expect.stringContaining('neu geschrieben'))
   })
 
   it('sagt im Titel an, dass Leeren streicht — ohne Pronomen', () => {
