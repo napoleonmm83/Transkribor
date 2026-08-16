@@ -18,6 +18,11 @@ def _gesperrt(project: str):
     der setze_datei aus einem *eigenen* OS-Prozess ruft) duerfen laden+modify+_write nicht
     verschraenken: der letzte _write gewinnt, des anderen Datei-Eintrag ist verloren.
     Die Mechanik steht seit derselben Race auf settings.json in `sperre.py`.
+
+    **Das `gehalten`-Flag von `sperre.datei` wird hier bewusst nicht abgeholt** (#194): eine
+    ungeschuetzt geschriebene `projekt.json` bekommt der Nutzer nicht angezeigt. Dieselbe
+    Abwaegung wie bei der geretteten Datei in #192 — Sprache und Tiefe tippt man in zehn
+    Sekunden neu, einen API-Key nicht. Das fehlende `as` ist also kein Versehen.
     """
     paths.safe_name(project)
     os.makedirs(paths.project_dir(project), exist_ok=True)
