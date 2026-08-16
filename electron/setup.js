@@ -239,14 +239,20 @@ function stempel(venvDir = P.venv) { return path.join(venvDir, '.requirements') 
  * Harmlos im Einzelfall (ein Klick) — nur nutzt es genau die Aufmerksamkeit ab, auf die #181
  * baut: wer die Seite dreimal grundlos gesehen hat, liest sie beim vierten Mal nicht mehr.
  *
- * `#` schneidet bis zum Zeilenende. In dieser Datei steht kein `#` INNERHALB einer
- * Anforderungszeile (geprueft; PEP 508 trennt Umgebungsmarker mit `;`, nicht mit `#`).
- * Kaeme je eine URL mit Fragment dazu (`paket @ https://…#egg=x`), ist das hier nachzuziehen.
+ * **`(^|\s)#` schneidet, nicht blosses `#`** — dieselbe Regel wie pips Parser: ein Kommentar
+ * beginnt am Zeilenanfang oder nach Leerraum. Mit blossem `#` faellt auch ein URL-Fragment
+ * weg, und dann normalisieren `…/torch.whl#sha256=aaa` und `…#sha256=bbb` auf **denselben**
+ * Hash: zwei verschiedene Paketstaende, ein Merker, „aktuell" — die Einrichtung wird nicht
+ * angeboten und das neue Pin erreicht den Nutzer nie. Der rohe Byte-Hash konnte das nicht;
+ * es waere also genau der Schaden, gegen den #181 gebaut ist, neu aufgemacht von seiner
+ * eigenen Reparatur. Heute steht kein solches Fragment in der Datei — der Vorbehalt haette
+ * an einer Aufmerksamkeit gehangen, die in sechs Monaten niemand hat, und kostet so ein
+ * Zeichenpaar.
  */
 function reqHash(reqDatei = P.requirements) {
   try {
     const zeilen = fs.readFileSync(reqDatei, 'utf8')
-      .split(/\r?\n/).map(z => z.replace(/#.*/, '').trim()).filter(Boolean).sort()
+      .split(/\r?\n/).map(z => z.replace(/(^|\s)#.*/, '').trim()).filter(Boolean).sort()
     return crypto.createHash('sha256').update(zeilen.join('\n')).digest('hex')
   } catch { return '' }
 }
@@ -282,24 +288,27 @@ function paketeAktuell(venvDir = P.venv, reqDatei = P.requirements) {
  * onLine-Hinweis, und der landet im zugeklappten Protokollbereich, waehrend die Seite selbst
  * weiter dieselbe Aussage wiederholt, die der Nutzer gerade abgearbeitet hat.
  *
- * Geprueft wird die DATEI, wenn es sie gibt, sonst das Verzeichnis ueber eine Probedatei: ein
- * schreibgeschuetzter Merker (read-only-Attribut, Virenscanner) liegt in einem sonst
- * schreibbaren Ordner, eine Verzeichnisprobe beantwortete dort die falsche Frage.
+ * **Angehaengt wird NICHTS** — und das ist der ganze Trick. `fs.accessSync(p, W_OK)` stand hier
+ * zuerst und beantwortet die falsche Frage: es fragt Metadaten ab, **oeffnet die Datei aber
+ * nicht**. Ein Virenscanner (oder irgendein anderer Prozess), der sie mit exklusivem Handle
+ * festhaelt, ist davon nicht zu unterscheiden — die Sperre entsteht erst beim Oeffnen, das dort
+ * nie stattfindet; auf Windows wertet `access()` ausserdem laut Node-Doku keine ACLs aus.
+ * Nachgemessen (Windows, Wegwerf-Ordner): `appendFileSync(p, '')` wirft auf einer 444-Datei
+ * EPERM und laesst den Inhalt unveraeendert.
  *
- * **Kein Ersatz waere der echte Schreibversuch:** der schriebe den heutigen Hash und
- * erklaerte damit eine venv fuer fertig, der Pakete fehlen.
+ * Damit faellt auch der zweite Zweig weg: fehlt die Datei, legt das Anhaengen eine **leere** an
+ * — und die liest `paketeAktuell()` genauso als „veraltet" wie gar keine (`''` !== Hash).
+ * Fehlt das Verzeichnis, wirft es ENOENT.
  *
- * Was er nicht sieht: eine Datei, die im Moment der Probe schreibbar ist und im Moment des
- * Schreibens gesperrt (ein Scanner, der genau dazwischen greift). Dann bleibt es beim
- * bisherigen Zustand — die Auskunft fehlt, die App laeuft.
+ * **Kein Ersatz waere `stempelSchreiben()`:** das schriebe den heutigen Hash und erklaerte
+ * damit eine venv fuer fertig, der Pakete fehlen.
+ *
+ * Was er nicht sieht: eine **volle Platte** (null Bytes brauchen keinen Platz) und eine Datei,
+ * die erst zwischen Probe und Schreibversuch gesperrt wird. Deshalb nennt weder die Seite noch
+ * die README eine Ursachenliste — nur die Datei.
  */
 function stempelSchreibbar(venvDir = P.venv) {
-  const p = stempel(venvDir)
-  try {
-    if (fs.existsSync(p)) fs.accessSync(p, fs.constants.W_OK)
-    else { fs.writeFileSync(p + '.probe', ''); fs.unlinkSync(p + '.probe') }
-    return true
-  } catch { return false }
+  try { fs.appendFileSync(stempel(venvDir), ''); return true } catch { return false }
 }
 
 /** Nach erfolgreichem `pip install -r`. Wirft nicht: ein misslungener Merker darf den Start
@@ -423,7 +432,7 @@ async function cudaZurueckholen(vpy, pl, onLine, werkzeug = { ausgabe, lauf }) {
  * kostet den Nutzer die GPU oder sperrt ihn aus, ohne dass ein Test murrt.
  *
  * **Teilweise Ueberschreibung** (`...werkzeug` ueber den Vorgaben): ein Test nennt die zwei
- * bis drei Schluessel, um die es ihm geht. Muesste er alle neun stellen, stuende in jedem
+ * bis drei Schluessel, um die es ihm geht. Muesste er alle zehn stellen, stuende in jedem
  * Test eine vollstaendige Attrappe — und die naechste hinzukommende Abhaengigkeit fiele in
  * allen gleichzeitig auf die echte Funktion zurueck, weil niemand sie nachtraegt.
  *
