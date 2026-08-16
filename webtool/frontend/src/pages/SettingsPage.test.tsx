@@ -770,6 +770,42 @@ describe('SettingsPage', () => {
     expect(toast.success).not.toHaveBeenCalled()
   })
 
+  it('eine überholte Poll-Antwort lässt die Zeile „läuft gerade" nicht dauerhaft stehen (#247)', async () => {
+    // Der Merker deckt die MELDUNG, nicht `setS`. Trifft eine ältere Runde (`laeuft: true`)
+    // NACH der jüngeren (`laeuft: false`) ein, schreibt sie den überholten Zustand zurück —
+    // und weil `ytLaeuft` da schon aus ist, ist das Intervall abgeräumt und niemand holt das
+    // je wieder ein. Die Seite behauptet dann bis zum Neuladen, es laufe eine Aktualisierung:
+    // genau die Lüge, gegen die #225 gebaut wurde, nur aus der anderen Richtung.
+    vi.mocked(api.updateYtdlp).mockResolvedValue({
+      gestartet: true, version: '2026.7.4', unlesbar: false, geprueft: '', auto: true,
+      env: false, laeuft: true, ergebnis: '', ungeschuetzt: false, ejs_unlesbar: false,
+    })
+    zeige()
+    const knopf = await screen.findByRole('button', { name: /Jetzt aktualisieren/i })
+    const offen: Array<(s: Settings) => void> = []
+    vi.mocked(api.getSettings).mockImplementation(() => new Promise(res => { offen.push(res) }))
+
+    vi.useFakeTimers()
+    try {
+      await act(async () => { fireEvent.click(knopf) })
+      await act(async () => { await vi.advanceTimersByTimeAsync(1500) })   // Runde A (alt)
+      await act(async () => { await vi.advanceTimersByTimeAsync(1500) })   // Runde B (neu)
+      expect(offen).toHaveLength(2)
+      // Die JÜNGERE zuerst: der Lauf ist fertig.
+      await act(async () => {
+        offen[1]({ ...BASIS, ytdlp: { ...BASIS.ytdlp, version: '2026.8.12', laeuft: false, ergebnis: 'ok' } })
+      })
+      // Und jetzt die ÄLTERE, die den Lauf noch als laufend gesehen hat.
+      await act(async () => {
+        offen[0]({ ...BASIS, ytdlp: { ...BASIS.ytdlp, version: null, laeuft: true, ergebnis: '' } })
+      })
+    } finally {
+      vi.useRealTimers()
+    }
+
+    expect(screen.queryByText(/Eine Aktualisierung läuft gerade/i)).not.toBeInTheDocument()
+  })
+
   it('meldet einen ZWEITEN Lauf wieder — der Merker gilt je Lauf, nicht je Sitzung (#247)', async () => {
     // Die Gegenrichtung, und sie ist die gefährlichere: ein Merker ohne Rücksetzen macht aus
     // „zu viele Meldungen" ein „gar keine", und zwar still. Ohne diesen Test wäre der Fix
