@@ -119,7 +119,11 @@ def setze_datei(project: str, base: str, sprache=None, korrektur=None, mehrsprac
         if kaputt:                      # siehe `speichern`
             paths.beiseitelegen(_pfad(project))
         eintrag = dict(cur["dateien"].get(base, {}))
-        if sprache is not None:
+        # `ERBEN` ZUERST — es ist nicht `None` und liefe sonst in den `is not None`-Zweig, der
+        # das Sentinel-Objekt als Wert in die Datei schriebe (`json.dumps` wirft daran, #234).
+        if sprache is ERBEN:
+            eintrag.pop("sprache", None)
+        elif sprache is not None:
             eintrag["sprache"] = sprache
         if korrektur is not None:
             eintrag["korrektur"] = korrektur
@@ -183,6 +187,13 @@ def datei_ansicht(project: str, base: str) -> dict:
     e = d["dateien"].get(base, {})
     return {
         "sprache": e.get("sprache") or d["sprache"],
+        # Dieselben drei Werte wie bei `mehrsprachig` (#234): der effektive Wert allein sagt
+        # nicht, OB die Datei erbt — ein Override, der zufaellig dasselbe sagt, sieht identisch
+        # aus. `sprache_eigen` wird ueber die ANWESENHEIT des Schluessels beantwortet, nicht
+        # ueber Wahrheit: ein gespeichertes `""` ist ein Eintrag, den es zu entfernen gibt,
+        # auch wenn `sprache` daneben schon den Projektwert zeigt.
+        "sprache_eigen": e["sprache"] if "sprache" in e else None,
+        "sprache_projekt": d["sprache"],
         "korrektur": e.get("korrektur") or d["korrektur"],
         "mehrsprachig": bool(e["mehrsprachig"]) if "mehrsprachig" in e else bool(d["mehrsprachig"]),
         "mehrsprachig_eigen": bool(e["mehrsprachig"]) if "mehrsprachig" in e else None,

@@ -185,6 +185,14 @@ lässt sich beides nachträglich ändern. Eine andere Sprache bedeutet Neu-Trans
 alte Transkript wird verworfen, das Audio bleibt erhalten; eine andere Korrektur-Tiefe startet
 nur die Korrektur neu.
 
+Auch bei der Sprache gilt dort die Wahl **„Folgt dem Projekt“** (mit der geerbten Sprache in
+Klammern, damit du siehst, worauf sie hinausläuft). Solange die steht, zieht die Aufnahme mit,
+wenn du den Standard des Projekts später änderst; sobald du eine Sprache ausdrücklich wählst,
+gilt sie für diese Aufnahme allein. Beim Hinzufügen wird nur festgehalten, was von deinem
+Projekt-Standard **abweicht** — hast du die Auswahl gar nicht angefasst, bleibt die Aufnahme
+an den Standard gekoppelt. (Aufnahmen, die du vor dieser Fassung hinzugefügt hast, tragen meist
+eine feste Sprache; einmal auf „Folgt dem Projekt“ gestellt, folgen sie wieder mit.)
+
 **Und wenn in einem Video mehrere Sprachen vorkommen?** Etwa ein Anlass, bei dem eine Person
 Schweizerdeutsch spricht, die nächste Englisch. Dafür gibt es unter der Sprachauswahl das
 Kästchen **„Enthält weitere Sprachen“**. Die gewählte Sprache gilt dann als *Hauptsprache*, und

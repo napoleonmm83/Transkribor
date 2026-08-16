@@ -315,10 +315,17 @@ describe('ProjectWorkspace (Stub)', () => {
     await waitFor(() => expect(api.fetchUrls).toHaveBeenCalledWith('Demo', ['https://youtu.be/a'], 'en', undefined))
   })
 
-  it('ein vom Projekt ABWEICHENDER Haken geht sehr wohl mit (#166)', async () => {
+  it('ein vom Projekt ABWEICHENDER Haken geht sehr wohl mit — die Sprache daneben NICHT (#166/#234)', async () => {
     /* Die Gegenprobe zum Test darueber — ohne sie waere „schickt nichts mit" auch dann gruen,
        wenn der Haken ueberhaupt nie ankommt. Genau dann waere die Mehrsprachigkeit pro Datei
-       unbedienbar geworden. */
+       unbedienbar geworden.
+
+       Und derselbe Aufruf traegt beide Richtungen: der Haken weicht ab und geht mit, die
+       Sprache steht unveraendert auf dem Projektwert und bleibt weg (#234). Vorher stand hier
+       `'ch'` — also genau die Einbahnstrasse: jede hochgeladene Datei bekam einen
+       Sprach-Eintrag, auch wenn niemand die Auswahl angefasst hatte, und zog bei einer
+       spaeteren Aenderung des Projekt-Standards nie wieder mit. Eine falsche Sprache kostet
+       eine komplette Neu-Transkription. */
     mitSprachen()
     vi.mocked(api.uploadAudio).mockResolvedValue({ base: 'a', file: 'a.mp3' })
     zeigen()
@@ -328,7 +335,9 @@ describe('ProjectWorkspace (Stub)', () => {
       fireEvent.change(screen.getByTestId('upload-input'), { target: { files: [new File(['x'], 'a.mp3')] } })
     })
     await waitFor(() => expect(api.uploadAudio).toHaveBeenCalledWith(
-      'Demo', expect.any(File), 'ch', true))
+      // `''` ist bei der Sprache die Schreibweise fuer „nicht gesetzt" (uploadAudio laesst das
+      // Feld dann weg) — beim Haken ist es `undefined`, weil `false` dort ein Wert waere.
+      'Demo', expect.any(File), '', true))
   })
 
   it('schickt ohne geladene Einstellungen KEIN mehrsprachig mit', async () => {

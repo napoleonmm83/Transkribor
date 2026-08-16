@@ -17,6 +17,12 @@ import {
  *
  *  Verzweigung (Spec #135): Sprache-Änderung + has_raw -> Neu-Transkription (dominiert, zieht
  *  die Korrektur nach); nur Tiefe + has_raw -> Neu-Korrektur; !has_raw -> nur Override. */
+
+/** Der Platzhalter für „kein eigener Wert" in der Sprachauswahl. Radix' `Select` verlangt einen
+ *  nicht-leeren `value` und kennt kein `null`; die Übersetzung in beide Richtungen passiert an
+ *  genau zwei Stellen (Anzeige und `onValueChange`). Ein doppelter Unterstrich, damit er nie mit
+ *  einem echten Sprach-Kürzel kollidiert (`ch`/`de`/`en`/`fr`/`it`/`auto`, siehe `sprachen.py`). */
+const ERBT = '__projekt'
 export function DateiEinstellungenDialog({ project, base, file, offen, onOpenChange, onGespeichert }: {
   project: string
   base: string
@@ -29,7 +35,9 @@ export function DateiEinstellungenDialog({ project, base, file, offen, onOpenCha
   onGespeichert?: (a: { neuTranskribieren: boolean; tiefeGeaendert: boolean }) => void
 }) {
   const [data, setData] = useState<DateiEinstellungen | null>(null)
-  const [sprache, setSprache] = useState('')
+  // Der Datei-Override, NICHT der effektive Wert — `null` heisst „folgt dem Projekt" (#234),
+  // genau wie bei `mehrWahl` darunter.
+  const [sprachWahl, setSprachWahl] = useState<string | null>(null)
   const [korrektur, setKorrektur] = useState('')
   // Der Datei-Override, NICHT der effektive Wert: `null` heisst „folgt dem Projekt" (#166).
   const [mehrWahl, setMehrWahl] = useState<MehrWahl>(null)
@@ -47,7 +55,8 @@ export function DateiEinstellungenDialog({ project, base, file, offen, onOpenCha
     getFileEinstellungen(project, base)
       .then(d => {
         if (!aktiv) return
-        setData(d); setSprache(d.sprache); setKorrektur(d.korrektur); setMehrWahl(d.mehrsprachig_eigen)
+        setData(d); setSprachWahl(d.sprache_eigen); setKorrektur(d.korrektur)
+        setMehrWahl(d.mehrsprachig_eigen)
       })
       .catch(e => { if (aktiv) toast.error(`Einstellungen laden fehlgeschlagen: ${(e as Error).message}`) })
       .finally(() => { if (aktiv) setLaedt(false) })
@@ -57,14 +66,23 @@ export function DateiEinstellungenDialog({ project, base, file, offen, onOpenCha
   const tiefeGeaendert = !!data && korrektur !== data.korrektur
   // Was die Transkription TATSAECHLICH nehmen wuerde — „folgt dem Projekt" ist der Projektwert.
   const mehrEffektiv = !data ? false : mehrWahl === null ? data.mehrsprachig_projekt : mehrWahl
+  const sprachEffektiv = !data ? '' : sprachWahl ?? data.sprache_projekt
   // Der Haken zaehlt wie ein Sprachwechsel: er schaltet multilingual + condition_on_previous_text
   // um, ein vorhandenes Transkript ist danach nach anderen Regeln entstanden. Verglichen wird
-  // deshalb der EFFEKTIVE Wert: von „ja" auf „folgt dem Projekt (ja)" umzustellen aendert den
-  // Override, aber nicht das Ergebnis — eine Neu-Transkription waere dort reine Rechenzeit.
-  const neuTranskribieren = !!data && (sprache !== data.sprache || mehrEffektiv !== data.mehrsprachig)
+  // deshalb bei BEIDEN der EFFEKTIVE Wert: von „Deutsch" auf „folgt dem Projekt (Deutsch)"
+  // umzustellen aendert den Override, aber nicht das Ergebnis — eine Neu-Transkription waere
+  // dort reine Rechenzeit (bei der Sprache ein kompletter Whisper-Lauf, #234).
+  const neuTranskribieren = !!data
+    && (sprachEffektiv !== data.sprache || mehrEffektiv !== data.mehrsprachig)
   // ... gespeichert werden muss so ein Wechsel trotzdem, sonst faende der Nutzer den Rueckweg
   // vor und der Knopf bliebe grau.
-  const overrideGeaendert = !!data && mehrWahl !== data.mehrsprachig_eigen
+  const overrideGeaendert = !!data
+    && (mehrWahl !== data.mehrsprachig_eigen || sprachWahl !== data.sprache_eigen)
+  // Der Projektwert AUSGESCHRIEBEN, nicht als Kuerzel: „Folgt dem Projekt (ch)" beantwortet die
+  // Frage nicht, die jemand hier stellt. Faellt auf das Kuerzel zurueck, falls die Liste den
+  // Wert nicht kennt (eine vor einer Validierung geschriebene Altlast, #139).
+  const projektSprachLabel = !data ? ''
+    : data.sprach_choices.find(c => c.id === data.sprache_projekt)?.label ?? data.sprache_projekt
   const geaendert = neuTranskribieren || tiefeGeaendert || overrideGeaendert
   // Neu-Transkription dominiert (sie deckt die Tiefe über die Autokorrektur-Kette ab).
   //
@@ -95,10 +113,12 @@ export function DateiEinstellungenDialog({ project, base, file, offen, onOpenCha
     if (!geaendert) return
     setSpeichert(true)
     try {
-      // `mehrsprachig: null` ist hier AUSDRUECKLICH gemeint (Override entfernen) und muss im
-      // JSON landen — `undefined` wuerde von JSON.stringify weggeworfen und hiesse „nicht
-      // anfassen". Genau dieser Unterschied ist der Rueckweg (#166).
-      await saveFileEinstellungen(project, base, { sprache, korrektur, mehrsprachig: mehrWahl })
+      // `sprache: null` / `mehrsprachig: null` sind hier AUSDRUECKLICH gemeint (Override
+      // entfernen) und muessen im JSON landen — `undefined` wuerde von JSON.stringify
+      // weggeworfen und hiesse „nicht anfassen". Genau dieser Unterschied ist der Rueckweg
+      // (#166 fuer den Haken, #234 fuer die Sprache).
+      await saveFileEinstellungen(project, base,
+        { sprache: sprachWahl, korrektur, mehrsprachig: mehrWahl })
       onGespeichert?.({ neuTranskribieren, tiefeGeaendert })
       onOpenChange?.(false)
     } catch (e) {
@@ -120,9 +140,15 @@ export function DateiEinstellungenDialog({ project, base, file, offen, onOpenCha
           <div className="grid gap-4">
             <div>
               <label id="lbl-fs-sprache" className="mb-1.5 block text-sm font-medium">Sprache</label>
-              <Select value={sprache} onValueChange={setSprache}>
+              {/* `ERBT` ist ein Platzhalterwert, kein Sprach-Kuerzel: Radix laesst einen leeren
+                  `value` nicht zu, und `null` kann ein Select nicht tragen. Er wird beim Lesen
+                  und beim Schreiben wieder in `null` uebersetzt — im Zustand steht nie etwas
+                  anderes als „ein Kuerzel oder null". */}
+              <Select value={sprachWahl ?? ERBT}
+                      onValueChange={v => setSprachWahl(v === ERBT ? null : v)}>
                 <SelectTrigger className="w-full" aria-labelledby="lbl-fs-sprache"><SelectValue /></SelectTrigger>
                 <SelectContent>
+                  <SelectItem value={ERBT}>Folgt dem Projekt ({projektSprachLabel})</SelectItem>
                   {data.sprach_choices.map(c => (
                     <SelectItem key={c.id} value={c.id}>
                       {c.label}{c.hint && ` — ${c.hint}`}

@@ -97,6 +97,18 @@ export function ProjectWorkspace() {
   // auf Altbestand. Wer bewusst abweicht, bekommt den Override — genau dann ist er gemeint.
   const mehrWert = zeigeSprachwahl && einstellungen && mehrsprachig !== einstellungen.mehrsprachig
     ? mehrsprachig : undefined
+  // Dieselbe Regel fuer die Sprache (#234) — und sie wiegt hier SCHWERER als beim Haken: eine
+  // falsche Sprache kostet eine komplette Neu-Transkription, kein blosses Umschalten des
+  // Decoders. Der Waehler steht mit dem Projektwert vorbelegt da; wer ihn nie anfasst, meint
+  // „wie das Projekt" und darf nicht stillschweigend einen Override bekommen, der die Datei von
+  // jeder spaeteren Aenderung des Projekt-Standards abschneidet.
+  //
+  // `''` und nicht `undefined`: bei einer Zeichenkette ist der leere String hier die
+  // eingefuehrte Schreibweise fuer „nicht gesetzt" (`uploadAudio`/`fetchUrls` lassen das Feld
+  // dann weg, und beide Kinder tragen `sprache = ''` als Vorgabe). Beim Haken geht das nicht —
+  // dort waere `false` ein Wert — deshalb steht dort `undefined`.
+  const sprachWert = zeigeSprachwahl && einstellungen && sprache !== einstellungen.sprache
+    ? sprache : ''
   // projektRef hält den aktuellen Projekt-Namen fuer reloadEinstellungen — die Antwort
   // von Projekt A darf nicht landen, nachdem auf Projekt B gewechselt wurde (dasselbe
   // Muster wie der `aktiv`-Riegel oben, nur fuer den Speichern-Reload-Pfad).
@@ -205,7 +217,7 @@ export function ProjectWorkspace() {
             </div>
           )}
           <UploadDropzone project={project!}
-            sprache={sprache} mehrsprachig={mehrWert}
+            sprache={sprachWert} mehrsprachig={mehrWert}
             onDone={job => {
             refresh(); refreshFiles()
             // Sofort adoptieren statt auf den naechsten Poll zu warten — der Balken soll direkt stehen.
@@ -213,7 +225,7 @@ export function ProjectWorkspace() {
             else if (job) toast.info('Transkription läuft schon — die neuen Dateien kommen danach dran.')
           }} />
           <UrlFetch project={project!}
-            sprache={sprache} mehrsprachig={mehrWert}
+            sprache={sprachWert} mehrsprachig={mehrWert}
             onStart={res => {
             if (!res.started) { toast.warning('Es läuft bereits ein Import für dieses Projekt.'); return }
             adopt(res.job_id, project!, 'fetch')

@@ -1342,6 +1342,39 @@ def test_dateieinstellungen_FEHLENDES_feld_laesst_den_override_stehen(client, tm
     assert projekt.datei_override_mehrsprachig(tmp_projekt, "S1") is True
 
 
+def test_dateieinstellungen_sprache_null_entfernt_den_override(client, tmp_projekt):
+    """#234: derselbe Rueckweg fuer die Sprache. `sprache: null` AUSDRUECKLICH gesendet heisst
+    „Override entfernen"; das Feld GAR NICHT zu senden laesst ihn stehen (der Test darunter).
+    Unterschieden wird an `model_fields_set` — an der ANWESENHEIT des Schluessels, nicht an
+    seinem Wert.
+
+    Ohne diesen Weg war ein einmal geschriebener Sprach-Eintrag endgueltig, und der entstand
+    beim Upload auch dann, wenn niemand die Auswahl angefasst hatte.
+    """
+    import webtool.projekt as projekt
+    client.put(f"/api/projects/{tmp_projekt}/einstellungen", json={"sprache": "ch"})
+    client.put(f"/api/projects/{tmp_projekt}/files/S1/einstellungen", json={"sprache": "en"})
+    assert projekt.datei_sprache(tmp_projekt, "S1") == "en"
+
+    r = client.put(f"/api/projects/{tmp_projekt}/files/S1/einstellungen", json={"sprache": None})
+    assert r.status_code == 200
+    assert r.json()["sprache_eigen"] is None
+    assert r.json()["sprache"] == "ch"              # erbt jetzt wieder vom Projekt
+    # Und zieht mit — das ist die Eigenschaft, um die es geht, nicht der Momentanwert.
+    client.put(f"/api/projects/{tmp_projekt}/einstellungen", json={"sprache": "fr"})
+    assert projekt.datei_sprache(tmp_projekt, "S1") == "fr"
+
+
+def test_dateieinstellungen_OHNE_sprache_laesst_den_sprach_override_stehen(client, tmp_projekt):
+    """Die Gegenprobe zum Test darueber: waere `sprache = ERBEN` fuer JEDEN Aufruf gesetzt,
+    raeumte jedes Speichern der Tiefe nebenbei die Sprache ab — und das faellt erst beim
+    naechsten Transkriptionslauf auf."""
+    import webtool.projekt as projekt
+    client.put(f"/api/projects/{tmp_projekt}/files/S1/einstellungen", json={"sprache": "en"})
+    client.put(f"/api/projects/{tmp_projekt}/files/S1/einstellungen", json={"korrektur": "leicht"})
+    assert projekt.datei_ansicht(tmp_projekt, "S1")["sprache_eigen"] == "en"
+
+
 # --- Einstellungs-Validierung: unbekannte Werte sofort 400 (#139) ------------
 
 def test_projekteinstellungen_lehnt_unbekannte_sprache_ab(client, tmp_projekt):
