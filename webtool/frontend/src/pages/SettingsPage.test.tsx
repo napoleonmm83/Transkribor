@@ -726,6 +726,50 @@ describe('SettingsPage', () => {
     expect(toast.success).not.toHaveBeenCalledWith(expect.stringMatching(/URALT/))
   })
 
+  it('eine verspätete Antwort aus einem NIE gemeldeten Lauf 1 meldet nichts (#247)', async () => {
+    // Der Test darüber übt nur den einen Wächter („derselbe Lauf schon gemeldet"). Dieser übt
+    // den anderen („die Antwort gehört einem fremden Lauf") — und der greift nur, wenn Lauf 1
+    // NIE durch `melde` gegangen ist. Erreichbar über den `catch`-Zweig von `ytJetzt`: der
+    // meldet bewusst ausserhalb des Merkers (zwei verschiedene Tatsachen) und schaltet
+    // `ytLaeuft` ab, während eine Poll-Runde noch unterwegs ist.
+    // Ohne diesen Test wäre `fuer !== lauf.current` eine Zeile, die keine Mutation rot macht.
+    // Die Ablehnung muss VERZÖGERT kommen: lehnt `updateYtdlp` sofort ab, liegen
+    // `setYtLaeuft(true)` und `(false)` im selben Batch, der Effekt sieht das `true` nie und
+    // es startet gar kein Poll. (Erst gemessen, dann so gebaut.)
+    let lauf1Ablehnen: (e: Error) => void = () => {}
+    vi.mocked(api.updateYtdlp).mockImplementationOnce(
+      () => new Promise((_res, rej) => { lauf1Ablehnen = rej }))
+    zeige()
+    const knopf = await screen.findByRole('button', { name: /Jetzt aktualisieren/i })
+    const offen: Array<(s: Settings) => void> = []
+    vi.mocked(api.getSettings).mockImplementation(() => new Promise(res => { offen.push(res) }))
+
+    vi.useFakeTimers()
+    try {
+      await act(async () => { fireEvent.click(knopf) })                   // Lauf 1 beginnt
+      await act(async () => { await vi.advanceTimersByTimeAsync(1500) })  // Runde A hängt
+      expect(offen).toHaveLength(1)
+      // Jetzt scheitert das Anstossen — `ytLaeuft` geht aus, OHNE dass `melde` je lief.
+      await act(async () => { lauf1Ablehnen(new Error('Anstossen ging schief')) })
+      expect(toast.success).not.toHaveBeenCalled()                        // Lauf 1 nie gemeldet
+
+      // Lauf 2 — der Knopf ist wieder frei, weil der Fehlschlag `ytLaeuft` abgeschaltet hat.
+      vi.mocked(api.updateYtdlp).mockResolvedValue({
+        gestartet: true, version: '2026.7.4', unlesbar: false, geprueft: '', auto: true,
+        env: false, laeuft: true, ergebnis: '', ungeschuetzt: false, ejs_unlesbar: false,
+      })
+      await act(async () => { fireEvent.click(knopf) })
+      // Runde A aus Lauf 1 trifft jetzt ein.
+      await act(async () => {
+        offen[0]({ ...BASIS, ytdlp: { ...BASIS.ytdlp, version: 'AUS-LAUF-1', laeuft: false, ergebnis: 'ok' } })
+      })
+    } finally {
+      vi.useRealTimers()
+    }
+
+    expect(toast.success).not.toHaveBeenCalled()
+  })
+
   it('meldet einen ZWEITEN Lauf wieder — der Merker gilt je Lauf, nicht je Sitzung (#247)', async () => {
     // Die Gegenrichtung, und sie ist die gefährlichere: ein Merker ohne Rücksetzen macht aus
     // „zu viele Meldungen" ein „gar keine", und zwar still. Ohne diesen Test wäre der Fix
