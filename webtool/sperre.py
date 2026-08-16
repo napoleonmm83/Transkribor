@@ -441,7 +441,7 @@ def datei(pfad: str, stale: float = STALTES_ALTER):
         # ab und ueberspringt sie. `hakelig_seit` wird ausser bei der Initialisierung **nur** von
         # (B) geloescht, und (B) erreicht diese Pruefung immer; nach der Frist setzt das erste
         # (B) `erzwungen`, das zweite bricht ab — `erzwungen` ist ein Einmal-Riegel. Aufgeschoben
-        # wird damit hoechstens **2 × `_HAKELIG_S`** (ein Nachsichtsfenster kann vor dem Griff
+        # wird damit hoechstens **zweimal `_HAKELIG_S`** (ein Nachsichtsfenster kann vor dem Griff
         # verbrennen und eines danach); im Review gemessen: 0,704 s Ueberhang ueber `frist`.
         # **Wer ein `continue` in den `FileExistsError`-Zweig setzt oder `erzwungen` wieder
         # scharf macht, oeffnet die unbegrenzte Schleife aus #191 durch genau diese Tuer.**
