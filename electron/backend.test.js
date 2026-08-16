@@ -60,10 +60,10 @@ test('projektePfad nimmt den Pfad des SERVERS, nicht P.projekte (#218)', async (
   const { s, basis } = await server((req, r) => {
     gefragt = req.url
     r.writeHead(200, { 'Content-Type': 'application/json' })
-    r.end(JSON.stringify({ projekte_pfad: 'D:\Daten\MeineTranskripte', provider: 'claude-cli' }))
+    r.end(JSON.stringify({ projekte_pfad: 'D:\\Daten\\MeineTranskripte', provider: 'claude-cli' }))
   })
   try {
-    assert.strictEqual(await projektePfad(basis), 'D:\Daten\MeineTranskripte')
+    assert.strictEqual(await projektePfad(basis), 'D:\\Daten\\MeineTranskripte')
     assert.strictEqual(gefragt, '/api/settings')
   } finally { s.close() }
 })
