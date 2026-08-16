@@ -1,3 +1,5 @@
+import { useLayoutEffect, useRef } from 'react'
+import { toast } from 'sonner'
 import { gestrichen } from '@/lib/streichen'
 import { EditierbarerText } from './EditierbarerText'
 
@@ -16,6 +18,16 @@ export function DokumentFeld({ titel, wert, platzhalter, onCommit, aktiv = false
   titel: string; wert: string; platzhalter: string; onCommit: (text: string) => void;
   aktiv?: boolean; dimmen?: boolean;
 }) {
+  /** Der Feldinhalt, wie er JETZT ist — fuer den Rueckweg, der zehn Sekunden spaeter feuert.
+   *  Ein Ref und keine Closure, aus demselben Grund wie `aktuell` in `Anmerkungen`: `wert` aus
+   *  dem Render der Streichung ist beim Klick veraltet.
+   *
+   *  Im `useLayoutEffect` statt im Render-Koerper: eine Zuweisung waehrend des Renderns
+   *  uebernimmt auch den Stand eines verworfenen Durchlaufs. Gelesen wird der Ref nur aus einem
+   *  Ereignis-Rueckruf, also nach dem Commit. */
+  const aktuell = useRef(wert)
+  useLayoutEffect(() => { aktuell.current = wert }, [wert])
+
   const setze = (text: string) => {
     if (text.trim()) { onCommit(text); return }
     // Auf `''` normalisiert, nicht der Leerraum durchgereicht: `TextEditor` vergleicht
@@ -31,12 +43,24 @@ export function DokumentFeld({ titel, wert, platzhalter, onCommit, aktiv = false
     // erreichen — `TextEditor` wertet unveraendert (getrimmt) als Abbruch und ruft `onCommit`
     // dann nie. Ein Waechter, den kein Test rot bekommt, waere Dekoration.
     //
-    // Zurueckgeschrieben wird `wert` **unbedingt**. Wer in den zehn Sekunden bis zum Toast
-    // schon neu getippt hat, verliert das damit — anders als bei den Anmerkungen gibt es hier
-    // keine Liste, in die man den Eintrag zurueckschieben koennte, ohne etwas zu ersetzen.
-    // Der Toast nennt den gestrichenen Text, ein Fehlgriff ist also sichtbar; der Absatz, den
-    // man ohne Rueckweg verliert, ist es nicht.
-    gestrichen(titel, wert, () => onCommit(wert))
+    // **Der Rueckweg schreibt NUR in ein weiterhin leeres Feld** (CodeRabbit-Bot, Major). Ein
+    // unbedingtes `onCommit(wert)` stand hier zuerst, mit der Begruendung, es gebe — anders als
+    // bei den Anmerkungen — keine Liste, in die sich der Eintrag zurueckschieben liesse. Das
+    // stimmt, entschuldigt aber nichts: der Ablauf „streichen → neu tippen → auf den alten
+    // Toast klicken" ist zehn Sekunden lang erreichbar und wirft den NEUEN Absatz weg. Genau
+    // der Verlust, gegen den #154 geschrieben ist, ausgeloest vom Rettungsknopf selbst.
+    //
+    // **Und nicht stumm aussteigen:** ein Knopf, der nichts tut, sieht aus wie ein Fehlschlag,
+    // und der Nutzer traegt den Absatz nicht von Hand nach (dieselbe Regel wie bei
+    // `streichungenVergessen`, das den Knopf lieber WEGNIMMT als ihn falsch feuern zu lassen —
+    // wegnehmen kann dieser Rueckruf ihn nicht mehr, er laeuft ja gerade). Also sagen, warum.
+    gestrichen(titel, wert, () => {
+      if (aktuell.current.trim()) {
+        toast.info(`${titel} wurde inzwischen neu geschrieben — der alte Text bleibt gestrichen.`)
+        return
+      }
+      onCommit(wert)
+    })
   }
 
   return (
