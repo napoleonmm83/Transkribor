@@ -42,6 +42,12 @@ const BASIS: Settings = {
   ],
 }
 
+// Die PUT-Antwort ist `Settings` PLUS `ungeschuetzt` (#194) — ein Feld, das nur diesem einen
+// Schreibvorgang gilt und deshalb nicht in `Settings` steht. Es ist Pflicht, nicht optional:
+// müsste keine Attrappe es nennen, verschwände die Warnung still, wenn der Server aufhörte, es
+// zu schicken. Der Normalfall steht hier einmal statt fünfmal.
+const GESPEICHERT = { ...BASIS, ungeschuetzt: false }
+
 const zeige = (s: Partial<Settings> = {}, hw: Hardware = { device: 'cuda', name: 'NVIDIA RTX 5080', torch_ok: true, asr: 'cuda' }) => {
   vi.mocked(api.getSettings).mockResolvedValue({ ...BASIS, ...s })
   vi.mocked(api.getHardware).mockResolvedValue(hw)
@@ -129,7 +135,7 @@ describe('SettingsPage', () => {
   })
 
   it('speichert einen neuen Key und leert danach das Feld', async () => {
-    vi.mocked(api.saveSettings).mockResolvedValue({ ...BASIS, provider: 'anthropic', has_key: true })
+    vi.mocked(api.saveSettings).mockResolvedValue({ ...GESPEICHERT, provider: 'anthropic', has_key: true })
     zeige({ provider: 'anthropic' })
     const feld = await screen.findByPlaceholderText('sk-…')
     await act(async () => { fireEvent.change(feld, { target: { value: 'sk-neu' } }) })
@@ -163,7 +169,7 @@ describe('SettingsPage', () => {
     // Codex-Modell ZURÜCK. `codex exec -m opus` scheitert daran.
     // Hier über das Key-Speichern ausgelöst, weil das denselben Weg nimmt: `s` ändert sich,
     // während die Komponente montiert bleibt — genau die Lage, in der `defaultValue` klebt.
-    vi.mocked(api.saveSettings).mockResolvedValue({ ...BASIS, provider: 'anthropic', has_key: true, model: '' })
+    vi.mocked(api.saveSettings).mockResolvedValue({ ...GESPEICHERT, provider: 'anthropic', has_key: true, model: '' })
     zeige({ provider: 'anthropic', has_key: true, model: 'opus' })
     const feld = await screen.findByPlaceholderText('Modellname')
     expect((feld as HTMLInputElement).value).toBe('opus')
@@ -292,7 +298,7 @@ describe('SettingsPage', () => {
   })
 
   it('speichert den Haken als "0"/"1"', async () => {
-    vi.mocked(api.saveSettings).mockResolvedValue({ ...BASIS, ytdlp_auto: '0' })
+    vi.mocked(api.saveSettings).mockResolvedValue({ ...GESPEICHERT, ytdlp_auto: '0' })
     zeige()
     const haken = await screen.findByRole('checkbox', { name: /aktuell halten/i })
     fireEvent.click(haken)
@@ -304,13 +310,13 @@ describe('SettingsPage', () => {
     // Änderung überbügelt haben (#192) — bisher sah der Nutzer blanken Erfolg, weil die
     // Meldung nur in die Serverkonsole ging. BEIDE Richtungen an einem Test: eine Warnung,
     // die immer kommt, ist als Daueralarm derselbe Schaden von der anderen Seite.
-    vi.mocked(api.saveSettings).mockResolvedValue({ ...BASIS, ytdlp_auto: '0' })
+    vi.mocked(api.saveSettings).mockResolvedValue({ ...GESPEICHERT, ytdlp_auto: '0' })
     zeige()
     fireEvent.click(await screen.findByRole('checkbox', { name: /aktuell halten/i }))
     await waitFor(() => expect(api.saveSettings).toHaveBeenCalled())
     expect(toast.warning).not.toHaveBeenCalled()
 
-    vi.mocked(api.saveSettings).mockResolvedValue({ ...BASIS, ytdlp_auto: '1', ungeschuetzt: true })
+    vi.mocked(api.saveSettings).mockResolvedValue({ ...GESPEICHERT, ytdlp_auto: '1', ungeschuetzt: true })
     fireEvent.click(screen.getByRole('checkbox', { name: /aktuell halten/i }))
     await waitFor(() => expect(toast.warning).toHaveBeenCalledWith(
       expect.stringContaining('ohne Schreibsperre')))
@@ -335,7 +341,7 @@ describe('SettingsPage', () => {
     // trägt `ytdlp_auto`, aber KEINEN `ytdlp`-Block — zwischen Merge und Nachladen behauptete
     // der Vergleich also ein Override, das es gar nicht gibt; schlug das Nachladen fehl,
     // blieb die Falschaussage stehen. Seitdem sagt der Server es selbst (`ytdlp.env`).
-    vi.mocked(api.saveSettings).mockResolvedValue({ ...BASIS, ytdlp_auto: '0' })
+    vi.mocked(api.saveSettings).mockResolvedValue({ ...GESPEICHERT, ytdlp_auto: '0' })
     zeige()
     const haken = await screen.findByRole('checkbox', { name: /aktuell halten/i })
     // Erst NACH dem Laden scheitern lassen — ein `…Once` davor träfe den Aufbau der Seite,

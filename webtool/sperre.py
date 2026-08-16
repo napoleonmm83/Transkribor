@@ -171,7 +171,7 @@ def _merker_lesen(lockdir: str):
     (zehner Sekunden) — fuer eine REGULAERE Datei tut `O_NONBLOCK` nichts, und
     `TRANSKRIBOR_PROJEKTE` darf dorthin zeigen. Das ist begrenzt, aber nicht kurz; wirklich
     deckeln liesse es sich nur mit einem Faden je Leseversuch, und der stuende auf dem
-    Request-Pfad (`settings.save`).
+    Request-Pfad (`settings.save`). **Als #237 festgehalten** — ein Docstring ist kein Tracker.
     """
     # `getattr`, weil beide Flags plattformgebunden sind: `O_NONBLOCK` gibt es auf Windows
     # nicht, `O_BINARY` nur dort. 0 ist in beiden Faellen das neutrale Element. **Nur das
