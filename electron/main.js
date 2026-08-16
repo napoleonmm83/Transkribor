@@ -131,6 +131,37 @@ ipcMain.handle('update:installieren', () => {
   aktualisierer.installieren()
 })
 
+/**
+ * Nur EINE Instanz — und zwar wegen der venv, nicht wegen des Fensters (#231).
+ *
+ * Zwei Electron-Prozesse teilen sich dasselbe `userData` und damit dieselbe venv. Ein Klick
+ * auf „Jetzt einrichten" in beiden Fenstern schickt zwei `pip install -r` in dasselbe
+ * `site-packages`; pip hat dafuer keinen Schutz (das Lock in webtool/sperre.py deckt die
+ * yt-dlp-Selbstaktualisierung ab, nicht diesen Weg). `startLaeuft` weiter unten ist KEIN
+ * Ersatz: es gilt innerhalb eines Prozesses.
+ *
+ * Der Fall existierte vorher schon, war aber nur im allerersten Start erreichbar — ein
+ * Zeitfenster von Minuten, einmal pro Installation. Seit dem requirements-Merker (#181)
+ * erscheint die Einrichtungsseite nach JEDEM Update, das Pakete bringt; das Fenster geht
+ * damit regelmaessig wieder auf. Das ist die Frage „was erlaubt die Reparatur NEU?":
+ * kein neuer Fehler, aber eine deutlich groessere Trefferflaeche fuer einen alten.
+ *
+ * Nebenbei geschlossen: zwei uvicorn auf zwei Ports.
+ *
+ * VOR whenReady, weil die Zweitinstanz sich beenden soll, bevor sie ein Fenster baut.
+ */
+if (!app.requestSingleInstanceLock()) {
+  app.quit()
+} else {
+  app.on('second-instance', () => {
+    // Der zweite Doppelklick ist keine Fehlbedienung, sondern die Suche nach dem Fenster —
+    // kommentarlos zu sterben laese ihn wie eine kaputte App aussehen.
+    if (!win || win.isDestroyed()) return
+    if (win.isMinimized()) win.restore()
+    win.focus()
+  })
+}
+
 app.whenReady().then(async () => {
   protokoll.kopf()
   fenster()
