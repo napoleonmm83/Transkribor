@@ -288,6 +288,16 @@ describe('SettingsPage', () => {
     expect(await screen.findByText(/Nicht installiert/)).toBeInTheDocument()
   })
 
+  it('behauptet waehrend eines Laufs NICHT "Nicht installiert" (#225)', async () => {
+    // Der Poll aus #174 fragt alle 1,5 s `GET /api/settings` — also WAEHREND pip site-packages
+    // umschreibt. Landet eine Runde in pips Deinstallations-/Installationsluecke, wirft
+    // `metadata.version` und der Server liefert `version: null, unlesbar: false`: exakt dieser
+    // Zustand. Vor #174 gab es das Fenster nicht (ein einziger GET, nach pip).
+    zeige({ ytdlp: { version: null, unlesbar: false, geprueft: '', auto: true, env: false, laeuft: true, ergebnis: '' } })
+    expect(await screen.findByText(/Eine Aktualisierung läuft gerade/)).toBeInTheDocument()
+    expect(screen.queryByText(/Nicht installiert/)).not.toBeInTheDocument()
+  })
+
   it('unterscheidet unlesbare Metadaten von "nicht installiert"', async () => {
     // Beide Zustände liefern `version: null`. Vor #189 stand hier "steht damit nicht zur
     // Verfügung" — das Gegenteil dessen, was der Nutzer tun kann: der Import läuft, nur die
@@ -413,6 +423,33 @@ describe('SettingsPage', () => {
     }                         // folgenden Tests gefälscht zurück
 
     expect(toast.success).toHaveBeenCalledWith(expect.stringMatching(/2026\.8\.12/))
+  })
+
+  it('sagt waehrend des EIGENEN Laufs nichts ueber die Fassung (#225)', async () => {
+    // Die zweite Haelfte von #225: waehrend dieser Tab zusieht (`ytLaeuft`), traf die
+    // Poll-Antwort mitten aus pips Umschreiben die Fassungszeile. Genau dann schaut der
+    // Nutzer hin — er hat eben geklickt.
+    vi.mocked(api.updateYtdlp).mockResolvedValue({
+      gestartet: true, version: '2026.7.4', unlesbar: false, geprueft: '', auto: true,
+      env: false, laeuft: true, ergebnis: '',
+    })
+    zeige()
+    const knopf = await screen.findByRole('button', { name: /Jetzt aktualisieren/i })
+    // Die Antwort AUS pips Luecke: gefunden hat der Server nichts, kaputt ist auch nichts.
+    vi.mocked(api.getSettings).mockResolvedValue({
+      ...BASIS,
+      ytdlp: { ...BASIS.ytdlp, version: null, unlesbar: false, laeuft: true, ergebnis: '' },
+    })
+
+    vi.useFakeTimers()
+    try {
+      await act(async () => { fireEvent.click(knopf) })
+      await act(async () => { await vi.advanceTimersByTimeAsync(1500) })
+      expect(screen.queryByText(/Nicht installiert/)).not.toBeInTheDocument()
+      expect(screen.getByText(/steht fest, sobald der Lauf fertig ist/)).toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('bricht die Nachfragerei ab, wenn die Seite verlassen wird', async () => {
