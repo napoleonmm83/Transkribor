@@ -251,6 +251,18 @@ def test_die_ansicht_trennt_geerbte_von_gleichlautender_sprache(tmp_path, monkey
     b = projekt.datei_ansicht("p", "b")                # nie angefasst -> erbt
     assert (b["sprache"], b["sprache_eigen"], b["sprache_projekt"]) == ("ch", None, "ch")
 
+    # **Ein LEERER Eintrag ist ein Eintrag** — `""` bleibt `""`, es wird NICHT zu `None`
+    # normalisiert (CodeRabbit schlug das an PR #240 vor). Gemessen, warum nicht: der Dialog
+    # macht daraus `null` und haelt damit `sprachWahl !== sprache_eigen` — der Speichern-Knopf
+    # bleibt scharf und raeumt den Alt-Eintrag beim ersten Oeffnen weg. Normalisiert der Server,
+    # sind beide `null`, der Knopf ist grau, und der Eintrag steht fuer immer unsichtbar in der
+    # Datei. `sprache_eigen` sagt, was WIRKLICH dort steht; das Aufraeumen ist der Dialog.
+    # Ohne diese Zeile blieben ALLE Backend-Tests unter der Aenderung gruen (nachgemessen).
+    projekt.setze_datei("p", "c", sprache="")
+    c = projekt.datei_ansicht("p", "c")
+    assert c["sprache_eigen"] == "", "leerer Eintrag darf nicht zu None normalisiert werden"
+    assert c["sprache"] == "ch", "... wirkt aber wie geerbt, solange er dasteht"
+
 
 def test_ERBEN_auf_einer_datei_OHNE_override_wirft_nicht(tmp_path, monkeypatch):
     """Zweimal zuruecksetzen ist kein Fehler — `pop` mit Default statt `del`.

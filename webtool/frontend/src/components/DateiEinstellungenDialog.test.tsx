@@ -54,13 +54,24 @@ describe('DateiEinstellungenDialog', () => {
        erschiene — und ein Klick darauf schickte `{sprache: ""}` in ein 400. Erzeugt wurde so
        ein Eintrag vom URL-Import mit leerer `TRANSKRIBOR_FETCH_SPRACHE` (dort jetzt ebenfalls
        geschlossen). */
+    const saveSpy = vi.spyOn(api, 'saveFileEinstellungen')
+      .mockResolvedValue({ sprache: 'ch', korrektur: 'auto', mehrsprachig: false })
     vi.spyOn(api, 'getFileEinstellungen').mockResolvedValue({ ...BASIS, sprache_eigen: '' })
     render(<DateiEinstellungenDialog project="p" base="a" file={datei()} offen />)
     expect(await sprachWaehlerDa()).toHaveTextContent('Folgt dem Projekt (Schweizerdeutsch)')
     // Kein Phantom-Trigger: die Sprache ist effektiv unveraendert.
     expect(screen.queryByRole('button', { name: /neu transkribieren/ })).not.toBeInTheDocument()
-    // Aufzuraeumen gibt es trotzdem etwas — der Knopf ist scharf und schickt `null`.
-    expect(screen.getByRole('button', { name: 'Speichern' })).toBeEnabled()
+    // Aufzuraeumen gibt es trotzdem etwas — der Knopf ist scharf und raeumt den Eintrag beim
+    // ersten Oeffnen weg. **Genau deshalb normalisiert der SERVER `""` nicht zu `null`**
+    // (CodeRabbit an PR #240 schlug das vor, gemessen): dann waere `sprachWahl === sprache_eigen`,
+    // der Knopf grau — und der Alt-Eintrag bliebe fuer immer in projekt.json stehen, unsichtbar.
+    // `sprache_eigen` sagt, was WIRKLICH in der Datei steht; das Aufraeumen ist der Dialog.
+    const knopf = screen.getByRole('button', { name: 'Speichern' })
+    expect(knopf).toBeEnabled()
+    fireEvent.click(knopf)
+    await waitFor(() => expect(saveSpy).toHaveBeenCalledWith('p', 'a',
+      expect.objectContaining({ sprache: null })))
+    saveSpy.mockRestore()
   })
 
   it('zeigt einen eigenen Wert als solchen an, nicht als geerbten', async () => {
