@@ -178,7 +178,7 @@ describe('#123 — Editor lädt nach ferngestarteter Korrektur neu', () => {
       const { container, fertig } = richten(['apply: S1 -> edit.json'])
       await waitFor(() => expect(api.getDoc).toHaveBeenCalledTimes(1))
       // Dirty machen: Kontextfeld öffnen, ändern, übernehmen (updateDoc -> beruehrt -> dirty).
-      await act(async () => { fireEvent.click(screen.getByTitle('Kontext bearbeiten')) })
+      await act(async () => { fireEvent.click(screen.getByTitle(/^Kontext bearbeiten/)) })
       const feld = container.querySelector('textarea')!
       await act(async () => {
         fireEvent.change(feld, { target: { value: 'meine Notiz' } })
