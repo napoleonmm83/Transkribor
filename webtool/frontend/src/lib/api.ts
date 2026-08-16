@@ -42,12 +42,13 @@ export async function getFileEinstellungen(project: string, base: string): Promi
   return get(`/api/projects/${enc(project)}/files/${enc(base)}/einstellungen`)
 }
 /** Schreibt den Datei-Override; nur gesetzte Felder senden (Partial).
- *  ANDERS als `saveProjektEinstellungen`: `mehrsprachig: null` ist hier ein eigener Befehl
- *  („Override entfernen", #166), kein „nicht anfassen" — das Feld einfach wegzulassen bedeutet
- *  Letzteres. Am Projekt-Endpunkt ist `null` dagegen ein No-op (dort gibt es nichts zu erben).
+ *  ANDERS als `saveProjektEinstellungen`: `sprache: null` und `mehrsprachig: null` sind hier
+ *  eigene Befehle („Override entfernen", #166/#234), kein „nicht anfassen" — das Feld einfach
+ *  wegzulassen bedeutet Letzteres. Am Projekt-Endpunkt ist `null` dagegen ein No-op (dort gibt
+ *  es nichts zu erben). `korrektur` hat den Weg nicht: dort ist `auto` der Rueckweg.
  *  Reiner Schreibpfad; die Trigger (retranscribe/correct) stößt der Aufrufer separat an.
- *  Die Antwort trägt zusätzlich `mehrsprachig_eigen`/`_projekt`; der engere Rückgabetyp
- *  genügt den Aufrufern und bleibt damit gleich. */
+ *  Die Antwort trägt zusätzlich `sprache_eigen`/`_projekt` und `mehrsprachig_eigen`/`_projekt`;
+ *  der engere Rückgabetyp genügt den Aufrufern und bleibt damit gleich. */
 export async function saveFileEinstellungen(
   project: string, base: string, patch: DateiEinstellungenPatch,
 ): Promise<EinstellungenWerte> {

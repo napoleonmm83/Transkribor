@@ -67,6 +67,14 @@ export function ProjectWorkspace() {
     // Zeit scharf, und ein Drop zwischen Wechsel und Antwort schickte sonst die Sprache des
     // VORIGEN Projekts als Datei-Override mit — eine falsche Sprache kostet eine komplette
     // Neu-Transkription. '' heisst „nicht gesetzt", der Projektstandard von B gilt.
+    //
+    // **Seit #234 ist das hier Redundanz, kein Wall mehr** — nachgerechnet: solange die
+    // Antwort aussteht, ist `einstellungen` null, damit `sprachChoices` leer, damit
+    // `zeigeSprachwahl` falsch, und `sprachWert` kuerzt schon am ersten Konjunkt auf `''` ab.
+    // Der Reset bleibt trotzdem stehen (ein State, der einem fremden Projekt gehoert, soll
+    // nicht liegenbleiben) — aber wer den Schutz sucht, findet ihn bei `sprachWert`, und
+    // sobald B geantwortet hat, traegt ihn `setSprache(d.sprache)` unten. Beide Fenster haben
+    // je einen eigenen Test.
     setSprache(''); setMehrsprachig(false)
     getProjektEinstellungen(project)
       .then(d => { if (aktiv) { setEinstellungen(d); setSprache(d.sprache); setMehrsprachig(d.mehrsprachig) } })
@@ -107,6 +115,13 @@ export function ProjectWorkspace() {
   // eingefuehrte Schreibweise fuer „nicht gesetzt" (`uploadAudio`/`fetchUrls` lassen das Feld
   // dann weg, und beide Kinder tragen `sprache = ''` als Vorgabe). Beim Haken geht das nicht —
   // dort waere `false` ein Wert — deshalb steht dort `undefined`.
+  //
+  // **Die Kehrseite, damit sie niemand neu entdecken muss:** verglichen wird gegen ein
+  // `einstellungen`, das aus einem GET stammt und veraltet sein KANN. Aendert ein zweiter Tab
+  // den Projekt-Standard von `ch` auf `en`, sieht der Nutzer hier weiter „Schweizerdeutsch",
+  // laedt hoch — und die Datei bekommt `en`. Das ist nicht schlimmer als vorher, sondern
+  // andersherum falsch (vorher waere `ch` festgeschrieben worden), und `mehrWert` hat dieselbe
+  // Form seit #166. Im selben Tab ist der Fall zu: `reloadEinstellungen` zieht beides nach.
   const sprachWert = zeigeSprachwahl && einstellungen && sprache !== einstellungen.sprache
     ? sprache : ''
   // projektRef hält den aktuellen Projekt-Namen fuer reloadEinstellungen — die Antwort

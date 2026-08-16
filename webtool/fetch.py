@@ -341,7 +341,13 @@ def download_one(project: str, url: str) -> str:
     sprache = os.environ.get("TRANSKRIBOR_FETCH_SPRACHE")
     mehr = _mehrsprachig_aus_env()
     if sprache or mehr is not None:
-        projekt.setze_datei(project, base, sprache=sprache, mehrsprachig=mehr)
+        # `or None`, weil eine leere `.env`-Zeile `""` liefert und nicht `None` (dieselbe
+        # Null-Richtung wie bei `TRANSKRIBOR_YTDLP_UPDATE=`). Ist gleichzeitig
+        # `TRANSKRIBOR_FETCH_MEHRSPRACHIG` gesetzt, traegt der ZWEITE Konjunkt oben den
+        # Aufruf — und `""` landete dann als Sprach-Eintrag in projekt.json, vorbei an
+        # `pruef_fehler` (das auf diesem Weg nicht laeuft). Der Datei-Dialog legte so einen
+        # Eintrag als LEEREN Waehler vor, samt „neu transkribieren", das mit 400 endete (#234).
+        projekt.setze_datei(project, base, sprache=sprache or None, mehrsprachig=mehr)
     return base
 
 

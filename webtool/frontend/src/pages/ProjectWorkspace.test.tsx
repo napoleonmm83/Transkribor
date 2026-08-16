@@ -328,6 +328,7 @@ describe('ProjectWorkspace (Stub)', () => {
        eine komplette Neu-Transkription. */
     mitSprachen()
     vi.mocked(api.uploadAudio).mockResolvedValue({ base: 'a', file: 'a.mp3' })
+    vi.mocked(api.fetchUrls).mockResolvedValue({ job_id: 'j1', started: true })
     zeigen()
     await screen.findByRole('combobox')
     fireEvent.click(screen.getByLabelText(/Enthält weitere Sprachen/))   // false -> true
@@ -338,6 +339,14 @@ describe('ProjectWorkspace (Stub)', () => {
       // `''` ist bei der Sprache die Schreibweise fuer „nicht gesetzt" (uploadAudio laesst das
       // Feld dann weg) — beim Haken ist es `undefined`, weil `false` dort ein Wert waere.
       'Demo', expect.any(File), '', true))
+
+    // BEIDE Kinder, nicht nur eines: `sprachWert` wird an `UploadDropzone` UND `UrlFetch`
+    // gereicht, und ein zurueckgebliebenes `sprache={sprache}` an einem von beiden bliebe sonst
+    // gruen. Der Test darueber prueft am URL-Import nur den ABWEICHENDEN Wert.
+    fireEvent.change(screen.getByLabelText('Video-URLs'), { target: { value: 'https://youtu.be/a' } })
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /holen/i })) })
+    await waitFor(() => expect(api.fetchUrls).toHaveBeenCalledWith(
+      'Demo', ['https://youtu.be/a'], '', true))
   })
 
   it('schickt ohne geladene Einstellungen KEIN mehrsprachig mit', async () => {
@@ -441,5 +450,57 @@ describe('ProjectWorkspace (Stub)', () => {
       fireEvent.change(screen.getByTestId('upload-input'), { target: { files: [new File(['x'], 'a.mp3')] } })
     })
     await waitFor(() => expect(api.uploadAudio).toHaveBeenCalledWith('B', expect.any(File), '', undefined))
+  })
+
+  it('nimmt nach dem Wechsel den Standard von B — nicht die Auswahl aus A (#234)', async () => {
+    /* Die andere Haelfte des Tests darueber: dort haengt Bs GET, hier ANTWORTET er. Beide
+       Fenster brauchen einen eigenen Fall, weil sie an verschiedenen Zeilen haengen.
+
+       Solange Bs Antwort aussteht, traegt `zeigeSprachwahl === false` den Schutz — der
+       `setSprache('')`-Reset im Effekt ist dafuer inzwischen Redundanz (nachgerechnet: bei
+       `einstellungen === null` ist `sprachChoices` leer, `sprachWert` kuerzt schon am ersten
+       Konjunkt ab). Ist Bs Antwort DA, haengt alles an `setSprache(d.sprache)`: bliebe die
+       Auswahl auf As `en` stehen, waeche sie von Bs `fr` ab und ginge als Datei-Override mit —
+       eine falsche Sprache kostet eine komplette Neu-Transkription. Genau diese Zeile hatte
+       keinen roten Lauf. */
+    vi.mocked(api.listProjects).mockResolvedValue([
+      { name: 'A', dateien: 0, fertig: 0, geaendert: 0, active_jobs: [] },
+      { name: 'B', dateien: 0, fertig: 0, geaendert: 0, active_jobs: [] }])
+    vi.mocked(api.getProjectFiles).mockResolvedValue({ name: 'A', files: [] })
+    vi.mocked(api.uploadAudio).mockResolvedValue({ base: 'a', file: 'a.mp3' })
+    const wahl = [{ id: 'en', label: 'Englisch', hint: '' }, { id: 'fr', label: 'Französisch', hint: '' }]
+    vi.mocked(api.getProjektEinstellungen)
+      .mockResolvedValueOnce({ sprache: 'en', korrektur: 'auto', mehrsprachig: false,
+                               sprach_choices: wahl, tiefen: [{ id: 'auto', label: 'Auto' }] })
+      .mockResolvedValueOnce({ sprache: 'fr', korrektur: 'auto', mehrsprachig: false,
+                               sprach_choices: wahl, tiefen: [{ id: 'auto', label: 'Auto' }] })
+    const ZuB = () => {
+      const nav = useNavigate()
+      return <button onClick={() => nav('/p/B')}>zu B</button>
+    }
+    render(
+      <MemoryRouter initialEntries={['/p/A']}>
+        <JobProvider>
+          <ProjektDatenProvider>
+            <EditorBrueckeProvider>
+              <Routes>
+                <Route path="/p/:project" element={<><ZuB /><ProjectWorkspace /></>} />
+              </Routes>
+            </EditorBrueckeProvider>
+          </ProjektDatenProvider>
+        </JobProvider>
+      </MemoryRouter>,
+    )
+    await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(1))
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'zu B' })) })
+    // Warten, bis Bs Auswahl wirklich steht — sonst prueft der Test nur das Fenster oben.
+    await waitFor(() => expect(screen.getByRole('combobox')).toHaveTextContent('Französisch'))
+    await act(async () => {
+      fireEvent.change(screen.getByTestId('upload-input'), { target: { files: [new File(['x'], 'a.mp3')] } })
+    })
+    // `''` heisst „kein Override" — die Datei folgt Bs Standard. Ein mitgereistes `en` waere
+    // der Fehler, den dieser Test fangen soll.
+    await waitFor(() => expect(api.uploadAudio).toHaveBeenCalledWith('B', expect.any(File), '', undefined))
+    expect(api.uploadAudio).not.toHaveBeenCalledWith('B', expect.any(File), 'en', expect.anything())
   })
 })

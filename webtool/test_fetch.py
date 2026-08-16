@@ -638,3 +638,28 @@ def test_env_parser_liest_beide_richtungen(monkeypatch):
                            ("0", False), ("no", False), ("", False)):
         monkeypatch.setenv("TRANSKRIBOR_FETCH_MEHRSPRACHIG", wert)
         assert fetch._mehrsprachig_aus_env() is erwartet, wert
+
+
+def test_leere_fetch_sprache_schreibt_KEINEN_eintrag(projekt, monkeypatch):
+    """`os.environ.get` liefert bei einer leeren `.env`-Zeile `""`, nicht `None` — dieselbe
+    Null-Richtung wie bei `TRANSKRIBOR_YTDLP_UPDATE=`. Steht daneben der Mehrsprachig-Schalter,
+    traegt der ZWEITE Konjunkt den `setze_datei`-Aufruf, und `""` landete als Sprach-Eintrag in
+    projekt.json — vorbei an `pruef_fehler`, das auf diesem Weg nicht laeuft.
+
+    Der Schaden ist nicht der Eintrag selbst, sondern was der Datei-Dialog daraus machte: einen
+    LEEREN Waehler samt „Speichern & neu transkribieren", das mit 400 endete (#234).
+
+    Gefahren wird der ECHTE Weg (`download_one` mit gefaelschtem yt-dlp), nicht die Zeile
+    nachgebaut: ein Test, der `sprache or None` selbst schreibt, prueft seinen eigenen Nachbau
+    und bliebe gruen, wenn jemand es in `fetch.py` entfernt.
+    """
+    # Lokaler Import unter anderem Namen: dieses Modul definiert eine FIXTURE `projekt`, die
+    # den Modulnamen auf Dateiebene ueberschattet.
+    from webtool import projekt as _p
+    monkeypatch.setenv("TRANSKRIBOR_FETCH_SPRACHE", "")
+    monkeypatch.setenv("TRANSKRIBOR_FETCH_MEHRSPRACHIG", "1")
+    base = fetch.download_one("Demo", "https://youtu.be/vid123")
+    assert _p.datei_ansicht("Demo", base)["sprache_eigen"] is None, "leerer String eingetragen"
+    # Die Gegenprobe im selben Lauf: der Haken MUSS ankommen — sonst waere die Zusicherung
+    # oben auch dann gruen, wenn `setze_datei` gar nicht gerufen wuerde.
+    assert _p.datei_mehrsprachig("Demo", base) is True

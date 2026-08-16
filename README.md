@@ -186,12 +186,15 @@ alte Transkript wird verworfen, das Audio bleibt erhalten; eine andere Korrektur
 nur die Korrektur neu.
 
 Auch bei der Sprache gilt dort die Wahl **„Folgt dem Projekt“** (mit der geerbten Sprache in
-Klammern, damit du siehst, worauf sie hinausläuft). Solange die steht, zieht die Aufnahme mit,
-wenn du den Standard des Projekts später änderst; sobald du eine Sprache ausdrücklich wählst,
-gilt sie für diese Aufnahme allein. Beim Hinzufügen wird nur festgehalten, was von deinem
-Projekt-Standard **abweicht** — hast du die Auswahl gar nicht angefasst, bleibt die Aufnahme
-an den Standard gekoppelt. (Aufnahmen, die du vor dieser Fassung hinzugefügt hast, tragen meist
-eine feste Sprache; einmal auf „Folgt dem Projekt“ gestellt, folgen sie wieder mit.)
+Klammern, damit du siehst, worauf sie hinausläuft). Solange die steht, gilt für die Aufnahme
+immer der aktuelle Standard des Projekts — änderst du ihn später, nimmt ihn **die nächste
+Transkription** dieser Aufnahme. Ein bereits fertiges Transkript bleibt dabei, wie es ist; wenn
+du es in der neuen Sprache willst, stösst du es über das ⋯-Menü der Aufnahme neu an. Sobald du
+eine Sprache ausdrücklich wählst, gilt sie für diese Aufnahme allein. Beim Hinzufügen wird nur
+festgehalten, was von deinem Projekt-Standard **abweicht** — hast du die Auswahl gar nicht
+angefasst, bleibt die Aufnahme an den Standard gekoppelt. (Aufnahmen, die du vor dieser Fassung
+hinzugefügt hast, tragen meist eine feste Sprache; einmal auf „Folgt dem Projekt“ gestellt,
+folgen sie wieder mit.)
 
 **Und wenn in einem Video mehrere Sprachen vorkommen?** Etwa ein Anlass, bei dem eine Person
 Schweizerdeutsch spricht, die nächste Englisch. Dafür gibt es unter der Sprachauswahl das

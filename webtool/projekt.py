@@ -114,6 +114,14 @@ ERBEN = object()
 
 
 def setze_datei(project: str, base: str, sprache=None, korrektur=None, mehrsprachig=None) -> dict:
+    """Datei-Override setzen. `None` heisst „nicht anfassen" (Partial-Update).
+
+    **`sprache` und `mehrsprachig` verstehen zusaetzlich `ERBEN`, `korrektur` bewusst NICHT:**
+    dort ist `auto` schon der Rueckweg, ein zweiter Weg zum selben Ziel waere eine zweite
+    Wahrheit (siehe `app.py:_erben`). Wer hier einen Parameter anfuegt, entscheidet das mit —
+    `ERBEN` ist ein `object()` und landete ueber einen blossen `is not None`-Zweig in der Datei,
+    wo `json.dumps` daran wirft.
+    """
     with _gesperrt(project):
         cur, kaputt = _lesen(project)
         if kaputt:                      # siehe `speichern`
