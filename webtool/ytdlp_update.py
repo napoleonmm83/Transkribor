@@ -142,8 +142,9 @@ def _fassung_und_lesbarkeit() -> tuple[str | None, bool]:
 
     **NICHT gedeckt ist `_ejs_untauglich()`**: es liest eine ANDERE Distribution
     (`metadata.version("yt-dlp-ejs")`) und hat seit #185 einen eigenen stillen Rueckfall
-    (unlesbar ⇒ `False` ⇒ nicht faellig), den niemand melden kann. Das ist die zweite Haelfte
-    von #189 und steht als eigenes Issue — hier wird sie bewusst nicht mitbehauptet.
+    (unlesbar ⇒ `False` ⇒ nicht faellig). Das war die zweite Haelfte von #189; sie hat seit
+    #198 ein EIGENES Signal (`_ejs_untauglich_und_lesbarkeit()` → `zustand()["ejs_unlesbar"]`)
+    und wird hier weiterhin nicht mitbehauptet — zwei Distributionen, zwei Auskuenfte.
     """
     try:
         v = metadata.version("yt-dlp")
@@ -330,7 +331,30 @@ def _fuellen(t: tuple[int, ...], n: int) -> tuple[int, ...]:
 
 
 def _ejs_untauglich() -> bool:
-    """Kann der Loeser mit dem, was hier installiert ist, ueberhaupt arbeiten?
+    """Kann der Loeser mit dem, was hier installiert ist, ueberhaupt arbeiten? Die
+    ENTSCHEIDUNG allein — die Auskunft daneben liefert `_ejs_untauglich_und_lesbarkeit()`.
+
+    Bleibt der Einstieg fuer `faellig()`, damit die Frage im Code so heisst, wie sie gestellt
+    wird; dieselbe Aufteilung wie `fassung()` / `_fassung_und_lesbarkeit()` eine Ebene hoeher.
+    """
+    return _ejs_untauglich_und_lesbarkeit()[0]
+
+
+def _ejs_untauglich_und_lesbarkeit() -> tuple[bool, bool]:
+    """`(untauglich, unlesbar)`. Kann der Loeser mit dem, was hier installiert ist,
+    ueberhaupt arbeiten?
+
+    **Der zweite Wert ist #198.** Der stille Rueckfall unten (`unlesbar ⇒ False`) ist
+    richtig und bleibt — aber er schaltet die Erkennung aus #179/#182 ab, und bis hierher
+    konnte das niemand melden: `zustand()` sagte "alles in Ordnung" (`version` da,
+    `unlesbar: false`), waehrend der URL-Import auf dem Stand vor #170 stand. Die
+    ENTSCHEIDUNG bleibt unveraendert, nur die AUSKUNFT wird davon getrennt — dieselbe
+    Trennung wie bei `_fassung_und_lesbarkeit()` (#189), und aus demselben Grund: die
+    Anzeige darf nicht luegen.
+
+    `unlesbar` gilt NUR fuer die Metadaten von `yt-dlp-ejs`. "Nicht installiert"
+    (`PackageNotFoundError`) ist keine Unlesbarkeit, sondern eine Tatsache — die flaggt der
+    Zweig unten von sich aus, dort ist nichts stillzulegen.
 
     Zwei Arten von Nein, und die zweite sieht man dem Paketordner nicht an:
     - es ist **gar nicht da** (#179 — `yt-dlp[default]` kam erst mit #178 dazu), oder
@@ -376,7 +400,7 @@ def _ejs_untauglich() -> bool:
         # #184 die #179-Erkennung vom Tagesrhythmus auf den 14-Tage-Kalenderweg — das ist die
         # Entscheidung, nicht eine Nebenwirkung: ein taegliches pip, das nichts holen kann,
         # ist teurer als eine um Tage spaetere Erkennung.
-        return _ejs_verlangt()
+        return _ejs_verlangt(), False
     except Exception as e:
         # #185 — und hier geht der Rueckfall in die ANDERE Richtung als in `fassung()` und
         # `_ejs_zeilen()`. Der Zweig darueber darf flaggen (tut es seit #184 nur, wenn yt-dlp
@@ -386,12 +410,16 @@ def _ejs_untauglich() -> bool:
         # teuerste Flag von allen: ob ein pip eine unlesbare METADATA ueberhaupt ersetzt,
         # ist offen — bleibt sie liegen, laeuft das taegliche pip dauerhaft weiter.
         print(f"[ytdlp] Metadaten von {_EJS} unlesbar: {type(e).__name__}: {e}", flush=True)
-        return False
+        return False, True
     gefordert, installiert = _release(_ejs_pin()), _release(da)
     if gefordert is None or installiert is None:
-        return False                      # nicht vergleichbar -> Kalenderweg entscheidet
+        # Nicht vergleichbar -> Kalenderweg entscheidet. **Kein `unlesbar`**: die Metadaten
+        # LIESSEN sich lesen, sie sagen nur nichts Vergleichbares (kein Pin, `>=`, `==0.8.*`).
+        # Das ist der dokumentierte Normalfall aus `_release`, kein Schaden — ein Hinweis
+        # darauf waere ein Daueralarm bei jedem Nutzer mit gelockertem Pin.
+        return False, False
     n = max(len(gefordert), len(installiert))
-    return _fuellen(gefordert, n) != _fuellen(installiert, n)   # #182: da, aber unpassend
+    return _fuellen(gefordert, n) != _fuellen(installiert, n), False   # #182: da, unpassend
 
 
 def _als_datum(v: str | None) -> dt.date | None:
@@ -505,11 +533,46 @@ def _merken() -> None:
 _PAKET = f"yt-dlp[{_UNSER_EXTRA}]"
 
 
-def aktualisiere() -> bool:
-    """`pip install -U yt-dlp[default]`, bedingungslos. True, wenn pip sauber durchlief.
+def _lockziel() -> str:
+    """Der Pfad, um den die pip-Sperre liegt. EIN Ausdruck: `aktualisiere()` NIMMT sie,
+    `zustand()` FRAGT sie ab (#243) — zwei Literale liefen beim naechsten Umbau auseinander,
+    und die Anzeige saehe dann dauerhaft ein Lock, das niemand haelt (oder keines, obwohl
+    eines liegt)."""
+    return settings.path() + ".ytdlp"
+
+
+def _lock_stale() -> float:
+    """Die Zusage ueber die Haltedauer der pip-Sperre (#207) — eine Funktion, weil
+    `sperre.frist()` selbst eine ist und eine Modulkonstante sie beim Import einfrieren
+    wuerde.
+
+    Die Frist muss die WIRKLICHE Haltedauer decken, nicht nur den pip-Lauf: das `_merken()`
+    in `aktualisiere()` nimmt INNERHALB dieser Sperre das settings-Lock und wartet darauf
+    schlimmstenfalls dessen volle `sperre.frist()`. Mit `PIP_TIMEOUT + 30` stand eine
+    Haltedauer von bis zu 185 s gegen eine Frist von 155 s — ein Warter uebernahm die Sperre
+    also, waehrend pip noch lief, und genau die zwei gleichzeitigen `pip install` auf
+    dieselbe venv sind der Schaden, gegen den sie gebaut ist. Die 30 s bleiben der Zuschlag
+    fuer `subprocess.run`s Nach-Kill-`communicate()`, das auf Windows ohne Frist laeuft.
+    Preis: ein Lock OHNE Auskunft (fremder Rechner, unschreibbarer Merker) gilt entsprechend
+    spaeter als verwaist — ein toter lokaler Halter wird weiterhin sofort erkannt, die Uhr
+    ist nur der Rueckfall.
+    """
+    return PIP_TIMEOUT + 30 + sperre.frist()
+
+
+def aktualisiere() -> tuple[bool, bool]:
+    """`pip install -U yt-dlp[default]`, bedingungslos. `(ok, gehalten)`.
 
     NUR yt-dlp: ein `-U` ueber alle requirements erwischt irgendwann torch, und die GPU
     waere still weg (dieselbe Falle wie beim CPU-Rad in setup.js).
+
+    **`gehalten` ist die zweite Haelfte von #194** (dieselbe Tupel-Form und derselbe Name wie
+    bei `settings.save()`, aus demselben Grund): `False` heisst, dass pip **ohne Sperre**
+    lief. Dort ist fail-open kein verlorener Einstellungswert, sondern die Moeglichkeit
+    zweier `pip install` in dieselbe venv — genau der Schaden, gegen den diese Sperre gebaut
+    ist, und der zweite Ausloeser kommt aus einem eigenen Prozess (der fetch-Subprozess).
+    Wer einem Menschen Erfolg meldet, sagt das also dazu; die Protokollzeile aus `sperre.py`
+    erreicht nur eine Konsole, und die gepackte App hat keine, die jemand liest (#236).
     """
     cmd = [sys.executable, "-m", "pip", "install", "-U",
            # Kurze Deckel: ohne sie haengt pip offline minutenlang, und der Import wartet mit.
@@ -521,7 +584,7 @@ def aktualisiere() -> bool:
     # Ausloeser aus zwei Prozessen gibt: der Import-Job und der Knopf in den Einstellungen.
     # Eigener Lock-Name (…ytdlp.lock), damit er sich nicht mit dem von `settings.save()`
     # ueberschneidet — der wird im `_merken()` genommen, waehrend dieser noch haelt.
-    lockziel = settings.path() + ".ytdlp"       # EIN Ausdruck: Verzeichnis und Sperre meinen denselben Pfad
+    lockziel = _lockziel()      # EIN Ausdruck: Verzeichnis, Sperre und Anzeige denselben Pfad
     try:
         # `or "."` fuer ein TRANSKRIBOR_SETTINGS ohne Verzeichnisanteil (`os.makedirs("")`
         # wuerde werfen). Und best effort wie alles hier: ein nicht anlegbares Verzeichnis
@@ -529,17 +592,8 @@ def aktualisiere() -> bool:
         os.makedirs(os.path.dirname(lockziel) or ".", exist_ok=True)
     except OSError as e:
         print(f"[ytdlp] Sperrverzeichnis nicht anlegbar: {e}", flush=True)
-    # Die Frist muss die WIRKLICHE Haltedauer decken, nicht nur den pip-Lauf (#207): das
-    # `_merken()` unten nimmt INNERHALB dieser Sperre das settings-Lock und wartet darauf
-    # schlimmstenfalls dessen volle `sperre.frist()`. Mit `PIP_TIMEOUT + 30` stand eine
-    # Haltedauer von bis zu 185 s gegen eine Frist von 155 s — ein Warter uebernahm die
-    # Sperre also, waehrend pip noch lief, und genau die zwei gleichzeitigen `pip install`
-    # auf dieselbe venv sind der Schaden, gegen den sie gebaut ist. Die 30 s bleiben der
-    # Zuschlag fuer `subprocess.run`s Nach-Kill-`communicate()`, das auf Windows ohne Frist
-    # laeuft. Preis: ein Lock OHNE Auskunft (fremder Rechner, unschreibbarer Merker) gilt
-    # entsprechend spaeter als verwaist — ein toter lokaler Halter wird weiterhin sofort
-    # erkannt, die Uhr ist nur der Rueckfall.
-    with sperre.datei(lockziel, stale=PIP_TIMEOUT + 30 + sperre.frist()):
+    # Die Frist deckt die WIRKLICHE Haltedauer, nicht nur den pip-Lauf — siehe `_lock_stale`.
+    with sperre.datei(lockziel, stale=_lock_stale()) as gehalten:
         try:
             p = subprocess.run(cmd, capture_output=True, text=True, errors="replace",
                                timeout=PIP_TIMEOUT)
@@ -553,7 +607,7 @@ def aktualisiere() -> bool:
         # Zeile darunter — womit der Test auf die verschiedenen Lock-Namen nichts pruefte
         # (mit demselben Namen blieb er gruen). Jetzt ist die verschachtelte Sperre echt.
         _merken()
-    return ok
+    return ok, gehalten
 
 
 # Zustand des Knopfes „Jetzt aktualisieren" (#174). `ergebnis`: "" = noch nichts bzw.
@@ -563,14 +617,19 @@ def aktualisiere() -> bool:
 # aktualisiert ebenfalls, aber der hat kein Frontend, das nachfragt. Dass sich die beiden
 # nicht ins Gehege kommen, regelt `sperre.datei` in `aktualisiere()`, nicht dieser Riegel;
 # hier geht es allein um den Doppelklick im selben Server.
-_lauf = {"laeuft": False, "ergebnis": ""}
+#
+# `ungeschuetzt` gehoert zum ERGEBNIS, nicht zum Lauf (#236): es beschreibt, ob der letzte
+# abgeschlossene pip-Lauf die Sperre wirklich hielt. Ein eigenes Feld statt eines dritten
+# `ergebnis`-Wertes, weil die beiden unabhaengig sind — ein Lauf kann ungeschuetzt UND
+# fehlgeschlagen sein, und ein Wert kann nur eines von beidem sagen.
+_lauf = {"laeuft": False, "ergebnis": "", "ungeschuetzt": False}
 _lauf_sperre = threading.Lock()
 
 
-def hintergrund_zustand() -> tuple[bool, str]:
-    """`(laeuft, ergebnis)` — unter der Sperre gelesen, damit beide zusammenpassen."""
+def hintergrund_zustand() -> tuple[bool, str, bool]:
+    """`(laeuft, ergebnis, ungeschuetzt)` — unter der Sperre gelesen, damit sie zusammenpassen."""
     with _lauf_sperre:
-        return _lauf["laeuft"], _lauf["ergebnis"]
+        return _lauf["laeuft"], _lauf["ergebnis"], _lauf["ungeschuetzt"]
 
 
 def starte_hintergrund() -> bool:
@@ -588,6 +647,9 @@ def starte_hintergrund() -> bool:
             return False
         _lauf["laeuft"] = True
         _lauf["ergebnis"] = ""
+        # Mit zuruecksetzen: ein stehengebliebenes `ungeschuetzt` des VORIGEN Laufs waere
+        # eine Warnung ueber einen Vorgang, den der Nutzer gerade wiederholt hat.
+        _lauf["ungeschuetzt"] = False
     # Das `finally` in `_im_hintergrund` deckt den RUMPF — nicht den Start. Wirft `start()`
     # (`RuntimeError: can't start new thread`), laeuft es nie, und `laeuft` bliebe True:
     # gemessen gibt der erste Klick dann 500, **jeder weitere** 200 mit
@@ -600,6 +662,9 @@ def starte_hintergrund() -> bool:
     except BaseException:
         with _lauf_sperre:
             _lauf["laeuft"], _lauf["ergebnis"] = False, "fehler"
+            # Nicht gelaufen heisst nicht ungeschuetzt gelaufen — eine Warnung hier waere
+            # ein Alarm ueber einen pip-Lauf, den es nie gab.
+            _lauf["ungeschuetzt"] = False
         raise
     return True
 
@@ -617,9 +682,14 @@ def _im_hintergrund() -> None:
     # (Eine erste Fassung dieses Kommentars behauptete „laeuft bliebe fuer immer True" —
     # falsch, und genau die Sorte unnachgerechnete Kontrollfluss-Behauptung, die dieses
     # Repo als haeufigsten Fehler fuehrt.)
-    ergebnis = "fehler"
+    #
+    # `ungeschuetzt` bleibt bei einem Wurf auf `False`: dann ist unbekannt, ob die Sperre
+    # hielt, und Unbekanntes wird hier nicht gemeldet (dieselbe Richtung wie bei
+    # `_ejs_untauglich` — eine Warnung auf Verdacht ist ein Daueralarm).
+    ergebnis, ungeschuetzt = "fehler", False
     try:
-        ergebnis = "ok" if aktualisiere() else "fehler"
+        ok, gehalten = aktualisiere()
+        ergebnis, ungeschuetzt = ("ok" if ok else "fehler"), not gehalten
     except Exception as e:
         # `aktualisiere()` faengt selbst schon OSError/SubprocessError; was hier ankommt,
         # ist unerwartet und gehoert benannt statt verschluckt.
@@ -628,6 +698,7 @@ def _im_hintergrund() -> None:
         with _lauf_sperre:
             _lauf["laeuft"] = False
             _lauf["ergebnis"] = ergebnis
+            _lauf["ungeschuetzt"] = ungeschuetzt
 
 
 def automatisch(erzwingen: bool = False) -> bool:
@@ -641,7 +712,11 @@ def automatisch(erzwingen: bool = False) -> bool:
         return False
     if not erzwingen and not faellig():
         return False
-    return aktualisiere()
+    # Nur der Ausgang: `fetch.py` fragt "hat es sich gelohnt, es noch einmal zu versuchen".
+    # Die Sperr-Auskunft (#236) gilt dem Menschen vor der Einstellungsseite, und den gibt es
+    # auf diesem Weg nicht — der laeuft im fetch-Subprozess, wo sie in `sperre`s
+    # Protokollzeile steht und sonst nirgends.
+    return aktualisiere()[0]
 
 
 def zustand() -> dict:
@@ -661,10 +736,28 @@ def zustand() -> dict:
     pip-Laufs kommt ueber den naechsten GET nach. Ohne die beiden Felder haette der Umbau
     einen haengenden Browser gegen einen STILLEN Fehlschlag getauscht — und der ist die
     teurere Sorte (dieselbe Klasse wie #189/#192).
+
+    **`laeuft` fragt seit #243 auch die SPERRE, nicht nur `_lauf`.** Das ist Modulzustand je
+    Prozess, und der fetch-Subprozess aktualisiert ebenfalls (`automatisch()`, samt
+    Selbstheilung nach einem gescheiterten Download). Waehrend dessen pip-Lauf schrieb ein
+    fremder Prozess `site-packages` um, hier stand `laeuft: False` — und ein GET, das in pips
+    Deinstallations-/Installationsluecke faellt, liess die Einstellungsseite „Nicht
+    installiert" behaupten. Also dieselbe Luege, die #225 fuer den eigenen Lauf geschlossen
+    hat, durch die andere Tuer; die README schickt den Nutzer sogar genau dann auf diese
+    Seite. `sperre.wird_gehalten` nimmt die Lebendpruefung mit — ein blosses `isdir` liesse
+    ein liegengebliebenes Lock dauerhaft „laeuft gerade" melden.
+
+    **`ungeschuetzt`** ist der Ausgang des letzten eigenen Laufs, nicht der Sperrzustand
+    jetzt (#236) — es gehoert zu `ergebnis`, nicht zu `laeuft`.
+
+    **`ejs_unlesbar`** meldet, dass die Metadaten von `yt-dlp-ejs` nicht lesbar sind und die
+    Erkennung untauglicher Loeserskripte (#179/#182) deshalb ausgesetzt ist (#198).
     """
     g = geprueft()
     v, unlesbar = _fassung_und_lesbarkeit()
-    laeuft, ergebnis = hintergrund_zustand()
+    laeuft, ergebnis, ungeschuetzt = hintergrund_zustand()
     return {"version": v, "unlesbar": unlesbar, "geprueft": g.isoformat() if g else "",
             "auto": auto_an(), "env": env_override() is not None,
-            "laeuft": laeuft, "ergebnis": ergebnis}
+            "laeuft": laeuft or sperre.wird_gehalten(_lockziel(), _lock_stale()),
+            "ergebnis": ergebnis, "ungeschuetzt": ungeschuetzt,
+            "ejs_unlesbar": _ejs_untauglich_und_lesbarkeit()[1]}

@@ -802,3 +802,70 @@ def test_freigabe_erkennt_ein_fremdes_lock_auch_OHNE_merker(tmp_path, monkeypatc
     monkeypatch.setattr(os, "rmdir", tauscht)
     sperre._wegraeumen(lock, meiner)
     assert os.path.isdir(lock)            # das fremde (noch leere) Lock steht
+
+
+# --- wird_gehalten: die Sperre als ANZEIGE (#243) ----------------------------
+
+def test_wird_gehalten_sieht_ein_lock_aus_einem_FREMDEN_prozess(tmp_path):
+    """Die Frage, die `zustand()` stellt (#243): haelt gerade *irgendwer* diese Sperre?
+
+    Ein Modulzustand beantwortet sie nicht — der yt-dlp-Merker liegt je Prozess, und der
+    fetch-Subprozess aktualisiert aus einem eigenen. Also wird die Platte gefragt.
+    """
+    ziel = str(tmp_path / "x.json")
+    assert sperre.wird_gehalten(ziel) is False        # nichts da, niemand haelt etwas
+    lock = ziel + ".lock"
+    os.mkdir(lock)
+    p = _lebender_prozess()
+    try:
+        _merker(lock, p.pid)                          # ein FREMDER, lebender Halter
+        assert sperre.wird_gehalten(ziel) is True
+    finally:
+        p.kill()
+        p.wait()
+
+
+def test_ein_liegengebliebenes_lock_ist_KEIN_laufender_abschnitt(tmp_path):
+    """Der Grund, warum `wird_gehalten` die Lebendpruefung mitnimmt statt `os.path.isdir` zu
+    sein — der Einzeiler aus #243 und seine gemessene Kehrseite.
+
+    Ein Lock, dessen Halter tot ist (Absturz, `taskkill /F /T`), liegt bis zum naechsten
+    Warter herum. Ein blosses `isdir` behauptete solange „eine Aktualisierung laeuft gerade";
+    das waere dieselbe Anzeige-Luege wie #225/#243, nur in der anderen Richtung — und
+    dauerhaft statt fuer die Dauer eines pip-Laufs.
+    """
+    ziel = str(tmp_path / "x.json")
+    lock = ziel + ".lock"
+    os.mkdir(lock)
+    p = _lebender_prozess()
+    p.kill()
+    p.wait()
+    _merker(lock, p.pid)                              # der Halter ist nachweislich tot …
+    assert os.path.isdir(lock)                        # … und sein Lock liegt noch da
+    assert sperre.wird_gehalten(ziel) is False
+
+
+def test_ohne_auskunft_entscheidet_die_uhr(tmp_path):
+    """Dieselbe Staffelung wie in der Warteschleife: keine Auskunft (Lock ohne Merker, halb
+    geschrieben, fremder Rechner) heisst nicht 'tot', sondern 'die Frist entscheidet'.
+
+    Beide Richtungen, sonst prueft der Test nur die halbe Regel — und die Uhr-Haelfte ist
+    genau die, die ein `return False` still ueberlebte.
+    """
+    ziel = str(tmp_path / "x.json")
+    lock = ziel + ".lock"
+    os.mkdir(lock)                                    # kein Merker -> keine Auskunft
+    assert sperre.wird_gehalten(ziel, stale=60) is True        # frisch -> gilt als laufend
+    alt = time.time() - 100
+    os.utime(lock, (alt, alt))
+    assert sperre.wird_gehalten(ziel, stale=60) is False       # abgelaufen -> verwaist
+
+
+def test_eine_datei_am_lock_pfad_haelt_niemand(tmp_path):
+    """#191 ueber die Anzeige-Tuer: liegt am Lock-Pfad eine DATEI (Sync-Client, Backup,
+    Quarantaene), kann dort niemand einen Abschnitt halten — `datei()` laeuft in genau dem
+    Fall ungeschuetzt weiter. Ohne den Typ-Test sagte `wird_gehalten` dauerhaft 'laeuft'."""
+    ziel = str(tmp_path / "x.json")
+    with open(ziel + ".lock", "w", encoding="utf-8") as f:
+        f.write("kein Verzeichnis")
+    assert sperre.wird_gehalten(ziel) is False

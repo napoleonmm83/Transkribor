@@ -46,6 +46,7 @@ def client(monkeypatch, tmp_path):
     import webtool.ytdlp_update as ytu
     monkeypatch.setitem(ytu._lauf, "laeuft", False)
     monkeypatch.setitem(ytu._lauf, "ergebnis", "")
+    monkeypatch.setitem(ytu._lauf, "ungeschuetzt", False)
     from webtool.app import app
     yield TestClient(app)
     # Auf einen noch laufenden Hintergrundfaden warten — und zwar HIER, vor monkeypatchs
@@ -590,7 +591,11 @@ def test_settings_modellwechsel_behaelt_den_key(client):
     assert body.pop("ytdlp").keys() == {"version", "unlesbar", "geprueft", "auto", "env",
                                         # seit #174: der Knopf antwortet sofort, der Ausgang
                                         # des pip-Laufs kommt ueber diese beiden nach
-                                        "laeuft", "ergebnis"}
+                                        "laeuft", "ergebnis",
+                                        # #236: der Lauf lief ohne Sperre — gehoert zu
+                                        # `ergebnis`. #198: die Metadaten der Loeserskripte
+                                        # sind kaputt, ihre Pruefung ist ausgesetzt.
+                                        "ungeschuetzt", "ejs_unlesbar"}
     assert body == {"provider": "anthropic", "model": "claude-sonnet-5",
                     "base_url": "", "has_key": True,
                     "whisper_model": "large-v3", "whisper_lang": "de",
@@ -691,7 +696,10 @@ def test_ytdlp_update_knopf_kehrt_zurueck_WAEHREND_pip_noch_laeuft(client, monke
 
     def langsam():
         los.wait(5)
-        return True
+        # `aktualisiere()` liefert seit #236 `(ok, gehalten)` — die Attrappe auch, sonst
+        # scheitert das Auspacken in `_im_hintergrund` und der Test waere gruen ueber einen
+        # Fehler, den es im Programm nicht gibt.
+        return True, True
     monkeypatch.setattr(ytdlp_update, "aktualisiere", langsam)
     # An der ECHTEN Grenze gepatcht (`importlib.metadata`), nicht an einer Funktion des
     # Moduls: `fassung` zu patchen lief seit #189 ins Leere (`zustand()` geht nicht mehr
@@ -713,6 +721,9 @@ def test_ytdlp_update_knopf_kehrt_zurueck_WAEHREND_pip_noch_laeuft(client, monke
     # Das Frontend liest `unlesbar` von hier, um bei einem Fehlschlag nicht "bist du
     # online?" zu raten (#189).
     assert st["unlesbar"] is False
+    # Und der Normalfall von #236 — zugleich die Gegenprobe zum Test unten: eine Warnung, die
+    # IMMER kommt, ist als Daueralarm derselbe Schaden von der anderen Seite.
+    assert st["ungeschuetzt"] is False
 
 
 def test_ytdlp_update_zweiter_klick_startet_keinen_zweiten_lauf(client, monkeypatch):
@@ -725,7 +736,7 @@ def test_ytdlp_update_zweiter_klick_startet_keinen_zweiten_lauf(client, monkeypa
     def langsam():
         laeufe.append(1)
         los.wait(5)
-        return True
+        return True, True
     monkeypatch.setattr(ytdlp_update, "aktualisiere", langsam)
 
     assert client.post("/api/settings/ytdlp/update").json()["gestartet"] is True
@@ -740,10 +751,42 @@ def test_ytdlp_update_fehlschlag_wird_gemeldet_statt_verschluckt(client, monkeyp
     """Offline ist ein Normalfall, kein Serverfehler — der Nutzer soll 'hat nicht
     geklappt' lesen, nicht einen roten Stacktrace und nicht: gar nichts."""
     from webtool import ytdlp_update
-    monkeypatch.setattr(ytdlp_update, "aktualisiere", lambda: False)
+    monkeypatch.setattr(ytdlp_update, "aktualisiere", lambda: (False, True))
     assert client.post("/api/settings/ytdlp/update").json()["gestartet"] is True
     assert _warte(lambda: not ytdlp_update.hintergrund_zustand()[0])
     assert client.get("/api/settings").json()["ytdlp"]["ergebnis"] == "fehler"
+
+
+def test_ytdlp_update_meldet_einen_ungeschuetzten_lauf_bis_ins_frontend(client, monkeypatch):
+    """#236: fail-open ist hier kein verlorener Einstellungswert (#192), sondern die
+    Moeglichkeit zweier `pip install` in dieselbe venv — und der zweite Ausloeser sitzt im
+    fetch-Subprozess. Die Protokollzeile aus `sperre.py` erreicht nur eine Konsole; die
+    gepackte App hat keine, die jemand liest. Also traegt `zustand()` es mit.
+
+    Erfolg UND Warnung zugleich, nicht statt dessen: ob pip durchlief und ob es dabei allein
+    war, sind zwei Fragen — deshalb ein eigenes Feld statt eines dritten `ergebnis`-Wertes.
+    """
+    from webtool import ytdlp_update
+    monkeypatch.setattr(ytdlp_update, "aktualisiere", lambda: (True, False))
+    assert client.post("/api/settings/ytdlp/update").json()["gestartet"] is True
+    assert _warte(lambda: not ytdlp_update.hintergrund_zustand()[0])
+    st = client.get("/api/settings").json()["ytdlp"]
+    assert st["ergebnis"] == "ok" and st["ungeschuetzt"] is True
+
+
+def test_ytdlp_ein_wurf_behauptet_NICHT_ungeschuetzt(client, monkeypatch):
+    """Bei einem Wurf ist unbekannt, ob die Sperre hielt — und Unbekanntes meldet dieses
+    Modul nicht (dieselbe Richtung wie `_ejs_untauglich`). Ein `ungeschuetzt: true` auf
+    Verdacht schickte den Nutzer in eine Fehlersuche, fuer die es keinen Anlass gibt."""
+    from webtool import ytdlp_update
+
+    def wirft():
+        raise RuntimeError("kaputt")
+    monkeypatch.setattr(ytdlp_update, "aktualisiere", wirft)
+    client.post("/api/settings/ytdlp/update")
+    assert _warte(lambda: not ytdlp_update.hintergrund_zustand()[0])
+    st = client.get("/api/settings").json()["ytdlp"]
+    assert st["ergebnis"] == "fehler" and st["ungeschuetzt"] is False
 
 
 def test_ytdlp_hintergrundlauf_gibt_den_knopf_auch_nach_einem_wurf_frei(client, monkeypatch):
@@ -758,7 +801,7 @@ def test_ytdlp_hintergrundlauf_gibt_den_knopf_auch_nach_einem_wurf_frei(client, 
     assert _warte(lambda: not ytdlp_update.hintergrund_zustand()[0])
     assert client.get("/api/settings").json()["ytdlp"]["ergebnis"] == "fehler"
     # ... und ein neuer Klick geht wieder durch.
-    monkeypatch.setattr(ytdlp_update, "aktualisiere", lambda: True)
+    monkeypatch.setattr(ytdlp_update, "aktualisiere", lambda: (True, True))
     assert client.post("/api/settings/ytdlp/update").json()["gestartet"] is True
     assert _warte(lambda: not ytdlp_update.hintergrund_zustand()[0])
 
@@ -807,11 +850,11 @@ def test_ytdlp_ein_gescheiterter_fadenstart_sperrt_den_knopf_nicht_dauerhaft(
         def Thread(*a, **k):
             raise RuntimeError("can't start new thread")
 
-    monkeypatch.setattr(ytdlp_update, "aktualisiere", lambda: True)
+    monkeypatch.setattr(ytdlp_update, "aktualisiere", lambda: (True, True))
     monkeypatch.setattr(ytdlp_update, "threading", _Fadenlos)
     with pytest.raises(RuntimeError):
         client.post("/api/settings/ytdlp/update")
-    assert ytdlp_update.hintergrund_zustand() == (False, "fehler")
+    assert ytdlp_update.hintergrund_zustand() == (False, "fehler", False)
 
     # Der entscheidende Teil: der naechste Klick geht wieder durch.
     monkeypatch.setattr(ytdlp_update, "threading", threading)

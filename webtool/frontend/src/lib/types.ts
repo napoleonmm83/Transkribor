@@ -112,7 +112,11 @@ export type Settings = {
  *  oder gerade etwas läuft — sonst `'ok'` bzw. `'fehler'`. Beide sind **Pflichtfelder**: der
  *  Server schickt sie immer, und optional wären sie eine Einladung, den Ausgang eines
  *  Fehlschlags zu vergessen — also genau der stille Ausfall, den der Umbau vermeiden soll. */
-export type YtdlpStand = { version: string | null; unlesbar: boolean; geprueft: string; auto: boolean; env: boolean; laeuft: boolean; ergebnis: string };
+/** `laeuft` deckt seit #243 auch einen Lauf im fetch-Subprozess (der Server fragt die
+ *  pip-Sperre, nicht nur seinen eigenen Modulzustand). `ungeschuetzt` gehört zu `ergebnis`:
+ *  der letzte Lauf lief ohne Sperre (#236). `ejs_unlesbar`: die Metadaten der Löserskripte
+ *  sind kaputt, die Erkennung untauglicher Skripte ist ausgesetzt (#198). */
+export type YtdlpStand = { version: string | null; unlesbar: boolean; geprueft: string; auto: boolean; env: boolean; laeuft: boolean; ergebnis: string; ungeschuetzt: boolean; ejs_unlesbar: boolean };
 export type ModelInfo = { id: string; label: string };
 /** Anmeldezustand einer Abo-CLI. `unterstuetzt: false` heisst: der Anbieter kennt so etwas
  *  nicht — bei den API-Anbietern IST der Key die Anmeldung. */

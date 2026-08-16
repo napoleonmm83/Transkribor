@@ -7,6 +7,8 @@ der echtes pip startet, aendert die venv des Entwicklers waehrend der Lauf laeuf
 """
 import contextlib
 import datetime as dt
+import os
+import platform
 import subprocess
 import threading
 import time
@@ -829,7 +831,9 @@ def test_pip_aktualisiert_NUR_yt_dlp(monkeypatch):
     weg (dieselbe Falle wie beim CPU-Rad in setup.js)."""
     gerufen, run = _pip()
     monkeypatch.setattr(yu.subprocess, "run", run)
-    assert yu.aktualisiere() is True
+    # `(ok, gehalten)` seit #236 — und `gehalten` gehoert in die Zusicherung: das Lock
+    # liegt hier wirklich (tmp_path ist beschreibbar), ein `False` waere ein Befund.
+    assert yu.aktualisiere() == (True, True)
     cmd = gerufen[0][0]
     assert cmd[:5] == [yu.sys.executable, "-m", "pip", "install", "-U"]
     assert [x for x in cmd if not x.startswith("-")][-1].startswith("yt-dlp")
@@ -870,14 +874,14 @@ def test_merker_auch_nach_fehlschlag(monkeypatch):
     def kaputt(*a, **k):
         raise subprocess.TimeoutExpired("pip", 120)
     monkeypatch.setattr(yu.subprocess, "run", kaputt)
-    assert yu.aktualisiere() is False
+    assert yu.aktualisiere() == (False, True)
     assert settings.load()["ytdlp_geprueft"] == "2026-08-13"
 
 
 def test_pip_exitcode_ungleich_null_ist_kein_erfolg(monkeypatch):
     _, run = _pip(returncode=1, ausgabe="ERROR: Could not find a version")
     monkeypatch.setattr(yu.subprocess, "run", run)
-    assert yu.aktualisiere() is False
+    assert yu.aktualisiere() == (False, True)
 
 
 def test_fehlschlag_wirft_nicht_und_wird_protokolliert(monkeypatch, capsys):
@@ -886,7 +890,7 @@ def test_fehlschlag_wirft_nicht_und_wird_protokolliert(monkeypatch, capsys):
     def kaputt(*a, **k):
         raise OSError("kein Netz")
     monkeypatch.setattr(yu.subprocess, "run", kaputt)
-    assert yu.aktualisiere() is False
+    assert yu.aktualisiere() == (False, True)
     assert "ytdlp" in capsys.readouterr().out
 
 
@@ -907,7 +911,7 @@ def test_unanlegbares_sperrverzeichnis_bricht_nicht_ab(monkeypatch, capsys):
     def nein(*a, **k):
         raise OSError(13, "Permission denied")
     monkeypatch.setattr(yu.os, "makedirs", nein)
-    assert yu.aktualisiere() is True            # pip laeuft trotzdem …
+    assert yu.aktualisiere() == (True, True)    # pip laeuft trotzdem …
     assert len(gerufen) == 1
     assert "Sperrverzeichnis" in capsys.readouterr().out   # … und sagt es
 
@@ -921,7 +925,7 @@ def test_unschreibbare_einstellungsdatei_bricht_nicht_ab(monkeypatch):
     def nein(*a, **k):
         raise OSError("read-only")
     monkeypatch.setattr(yu.settings, "save", nein)
-    assert yu.aktualisiere() is True
+    assert yu.aktualisiere() == (True, True)
 
 
 # --- automatisch (der Weg, den fetch.py geht) --------------------------------
@@ -1003,7 +1007,7 @@ def test_pip_sperre_deckt_die_VERSCHACHTELTE_wartezeit_mit(monkeypatch):
     @contextlib.contextmanager
     def datei(pfad, stale=sperre.STALTES_ALTER):
         gesehen[pfad] = stale
-        yield
+        yield True          # wie die echte: der Kontextmanager liefert, OB er haelt
 
     monkeypatch.setattr(yu.sperre, "datei", datei)      # trifft auch das settings-Lock in _merken
     _, run = _pip()
@@ -1020,6 +1024,48 @@ def test_pip_sperre_deckt_die_VERSCHACHTELTE_wartezeit_mit(monkeypatch):
     assert sperre.frist(gesehen[settings.path() + ".ytdlp"]) > haltedauer
 
 
+def test_aktualisiere_sagt_es_wenn_pip_OHNE_sperre_lief(monkeypatch, tmp_path):
+    """#236 — die zweite Haelfte von #194. `aktualisiere()` nahm die Sperre mit blankem `with`
+    und meldete allein den Ausgang des pip-Laufs; die Einstellungsseite schrieb daraufhin
+    „yt-dlp ist jetzt auf …", obwohl der Lauf ungeschuetzt war.
+
+    Hier ist das kein verlorener Einstellungswert wie in #192, sondern die Moeglichkeit
+    zweier `pip install` in dieselbe venv — genau der Schaden, gegen den diese Sperre gebaut
+    ist, und der zweite Ausloeser sitzt im fetch-Subprozess.
+
+    Ausgeuebt wird die ECHTE `sperre.datei` ueber eine DATEI am Lock-Pfad (#191: `os.mkdir`
+    meldet dort dauerhaft `FileExistsError`) — eine Attrappe prueefte nur, dass wir ein
+    `yield` weiterreichen, nicht dass der Fall auch wirklich so herauskommt.
+    """
+    gerufen, run = _pip()
+    monkeypatch.setattr(yu.subprocess, "run", run)
+    with open(tmp_path / "settings.json.ytdlp.lock", "w", encoding="utf-8") as f:
+        f.write("kein Verzeichnis")
+    assert yu.aktualisiere() == (True, False)
+    assert len(gerufen) == 1           # pip laeuft trotzdem — die Sperre ist nicht der Zweck
+
+
+def test_zustand_meldet_auch_einen_lauf_aus_einem_FREMDEN_prozess(tmp_path):
+    """#243 — dieselbe Anzeige-Luege wie #225, durch die andere Tuer. `laeuft` kam aus `_lauf`,
+    und das ist Modulzustand JE PROZESS: waehrend der fetch-Subprozess pippt, schreibt ein
+    fremder Prozess `site-packages` um, hier stand aber `laeuft: False`. Ein `GET
+    /api/settings` in pips Deinstallations-/Installationsluecke meldete dann „Nicht
+    installiert — der Import steht nicht zur Verfuegung" — und die README schickt den Nutzer
+    ausgerechnet dann auf diese Seite.
+
+    Der Merker traegt hier die EIGENE PID: gebraucht wird ein nachweislich lebender Halter,
+    und der Punkt des Tests ist, dass `_lauf` und die Sperre zwei verschiedene Quellen sind —
+    `aktualisiere()` aus einem fremden Prozess fasst `_lauf` ebensowenig an.
+    """
+    assert yu.zustand()["laeuft"] is False           # Gegenprobe: ohne Lock laeuft nichts
+    lock = settings.path() + ".ytdlp.lock"
+    os.mkdir(lock)
+    with open(os.path.join(lock, sperre._HALTER), "w", encoding="utf-8") as f:
+        f.write(f"{os.getpid()} {platform.node()}")
+    assert yu.hintergrund_zustand()[0] is False      # der eigene Faden laeuft NICHT …
+    assert yu.zustand()["laeuft"] is True            # … die Sperre sagt trotzdem: da ist wer
+
+
 def test_zustand_trennt_unlesbar_von_nicht_installiert(monkeypatch):
     """`version: null` hatte zwei Bedeutungen, seit #185 auch "Metadaten nicht lesbar" — und
     die Einstellungsseite hat nur zwei Zweige: sie schrieb "Nicht installiert — der Import
@@ -1030,7 +1076,12 @@ def test_zustand_trennt_unlesbar_von_nicht_installiert(monkeypatch):
     monkeypatch.setattr(yu.metadata, "version", _unlesbar(gerufen))
     z = yu.zustand()
     assert z["version"] is None and z["unlesbar"] is True
-    assert gerufen == ["yt-dlp"]      # nicht irgendein Paket, DAS richtige (siehe _unlesbar)
+    # Nicht irgendein Paket, DAS richtige (siehe `_unlesbar`) — und seit #198 fragt `zustand()`
+    # daneben die ZWEITE Distribution, weil `ejs_unlesbar` eine eigene Auskunft ist. Die
+    # Reihenfolge bleibt in der Zusicherung: `version`/`unlesbar` gelten yt-dlp, und ein
+    # vertauschter Name faellt hier weiterhin auf.
+    assert gerufen[0] == "yt-dlp" and set(gerufen) == {"yt-dlp", "yt-dlp-ejs"}
+    assert z["ejs_unlesbar"] is True   # dieselbe kaputte Datei trifft beide (#198)
 
     def fehlt(name):
         raise yu.metadata.PackageNotFoundError(name)
@@ -1060,19 +1111,43 @@ def test_dist_info_ohne_lesbare_metadata_gilt_als_unlesbar(monkeypatch):
     assert yu.fassung() is None          # die ENTSCHEIDUNG bleibt: kein pip auf Verdacht
 
 
-def test_ejs_untauglich_wird_von_unlesbar_NICHT_gedeckt(monkeypatch, capsys):
-    """Der Docstring von `_fassung_und_lesbarkeit` darf nicht mehr behaupten, als er deckt:
-    `_ejs_untauglich()` liest eine ANDERE Distribution (`yt-dlp-ejs`) und hat einen eigenen
-    stillen Rueckfall. Ist NUR die ejs-Metadatei kaputt, meldet `zustand()` nichts — und die
-    Selbstheilung ist trotzdem aus. Das ist die zweite Haelfte von #189 und steht als eigenes
-    Issue; hier festgehalten, damit sie nicht als behoben gilt."""
+def test_unlesbare_ejs_metadaten_bekommen_ein_EIGENES_signal(monkeypatch, capsys):
+    """#198 — die zweite Haelfte von #189. `_ejs_untauglich()` liest eine ANDERE Distribution
+    (`yt-dlp-ejs`) und hat einen eigenen stillen Rueckfall: unlesbar ⇒ `False` ⇒ nicht
+    faellig. Ist NUR die ejs-Metadatei kaputt, war yt-dlps eigenes `unlesbar` **False**, die
+    Einstellungsseite meldete einen kerngesunden Stand — und die Erkennung untauglicher
+    Loeserskripte (#179/#182) war trotzdem aus. Die einzige Spur war eine stdout-Zeile.
+
+    Die ENTSCHEIDUNG bleibt unveraendert (`_ejs_untauglich() is False` — ein Flag, den pip
+    nicht loeschen kann, waere ein taegliches pip ohne Ende); getrennt wird nur die AUSKUNFT.
+    """
     monkeypatch.setattr(yu.metadata, "version",
                         lambda name: "2026.8.12" if name == "yt-dlp" else _werfe())
     monkeypatch.setattr(yu, "_ejs_untauglich", _ECHTES_EJS_UNTAUGLICH)
     z = yu.zustand()
     assert z["version"] == "2026.8.12" and z["unlesbar"] is False   # yt-dlp: alles lesbar
-    assert yu._ejs_untauglich() is False                            # still, ohne Signal
-    assert "unlesbar" in capsys.readouterr().out                    # nur das Protokoll weiss es
+    assert z["ejs_unlesbar"] is True                                # … und trotzdem ein Signal
+    assert yu._ejs_untauglich() is False                            # die Entscheidung: wie vorher
+    assert "unlesbar" in capsys.readouterr().out
+
+
+def test_lesbare_ejs_metadaten_melden_NICHTS(monkeypatch):
+    """Die Gegenprobe, und ohne sie waere der Test darueber die halbe Wahrheit: ein Signal,
+    das IMMER steht, ist als Daueralarm derselbe Schaden von der anderen Seite. Geprueft
+    werden beide stillen Normalfaelle — das Paket ist da und passt, und es ist gar nicht
+    installiert (`PackageNotFoundError` ist eine Tatsache, keine Unlesbarkeit)."""
+    monkeypatch.setattr(yu, "_ejs_zeilen", lambda: ["yt-dlp-ejs==0.8.0; extra == 'default'"])
+    monkeypatch.setattr(yu.metadata, "version",
+                        lambda name: "2026.8.12" if name == "yt-dlp" else "0.8.0")
+    assert yu.zustand()["ejs_unlesbar"] is False
+
+    def fehlt(name):
+        if name == "yt-dlp":
+            return "2026.8.12"
+        raise yu.metadata.PackageNotFoundError(name)
+
+    monkeypatch.setattr(yu.metadata, "version", fehlt)
+    assert yu.zustand()["ejs_unlesbar"] is False
 
 
 def _werfe():
