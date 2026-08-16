@@ -258,6 +258,11 @@ def test_ein_fifo_am_merker_pfad_haelt_die_warteschleife_nicht_auf(tmp_path):
     Gemessen wird im FADEN mit `join`, nie mit einem normalen Aufruf: ein Haenger macht keinen
     Test rot, er laesst die ganze Suite auslaufen — genau darum blieb die Klasse in #191 so
     lange unbemerkt.
+
+    Geprueft wird die EIGENSCHAFT ("keine Auskunft"), nicht ein bestimmter Rueckgabewert: ohne
+    Schreiber liefert `os.read` in WSL/ext4 `b""`, nicht `None` (nachgemessen). Beides faellt
+    bei `_lebt_laut` nach None, und genau das ist die Zusicherung — ein Vergleich auf `None`
+    waere hier nur die Beschreibung EINER Plattform.
     """
     lock = str(tmp_path / "x.json.lock")
     os.mkdir(lock)
@@ -268,7 +273,7 @@ def test_ein_fifo_am_merker_pfad_haelt_die_warteschleife_nicht_auf(tmp_path):
     faden.start()
     faden.join(5)
     assert not faden.is_alive(), "haengt am FIFO — die Warteschleife ist nicht haengerfrei"
-    assert ergebnis == [None], "ein FIFO ist keine Auskunft, kein Merker"
+    assert sperre._lebt_laut(ergebnis[0]) is None, "ein FIFO ist keine Auskunft, kein Merker"
 
 
 def test_halb_geschriebener_merker_ist_keine_auskunft():
