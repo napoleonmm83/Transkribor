@@ -210,6 +210,48 @@ def test_ERBEN_laesst_die_ANDEREN_felder_stehen(tmp_path, monkeypatch):
     assert projekt.datei_korrektur("p", "a") == "leicht"
 
 
+def test_ERBEN_entfernt_auch_den_SPRACH_override(tmp_path, monkeypatch):
+    """Derselbe Rueckweg fuer die Sprache (#234) — und er wiegt schwerer als beim Haken: eine
+    falsche Sprache kostet eine komplette Neu-Transkription, kein blosses Umschalten des
+    Decoders. Der `or`-Rueckfall in `datei_sprache` ist fuer Zeichenketten richtig (ein leerer
+    String faellt durch), die Einbahnstrasse war trotzdem dieselbe: ein einmal geschriebener
+    Eintrag zog bei einer Aenderung des Projekt-Standards nie wieder mit.
+    """
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    projekt.speichern("p", {"sprache": "ch"})
+    projekt.setze_datei("p", "a", sprache="en")
+    assert projekt.datei_sprache("p", "a") == "en"              # Override greift
+    projekt.setze_datei("p", "a", sprache=projekt.ERBEN)
+    assert projekt.datei_ansicht("p", "a")["sprache_eigen"] is None
+    assert projekt.datei_sprache("p", "a") == "ch"              # ... folgt wieder dem Projekt
+    # Und zieht jetzt mit: genau das, was vorher unmoeglich war.
+    projekt.speichern("p", {"sprache": "fr"})
+    assert projekt.datei_sprache("p", "a") == "fr"
+
+
+def test_SPRACH_ERBEN_laesst_die_anderen_felder_stehen(tmp_path, monkeypatch):
+    """Spiegelbild zum Test oben: der Rueckweg der Sprache darf Tiefe und Haken nicht mitnehmen."""
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    projekt.setze_datei("p", "a", sprache="en", korrektur="leicht", mehrsprachig=True)
+    projekt.setze_datei("p", "a", sprache=projekt.ERBEN)
+    assert projekt.datei_korrektur("p", "a") == "leicht"
+    assert projekt.datei_mehrsprachig("p", "a") is True
+
+
+def test_die_ansicht_trennt_geerbte_von_gleichlautender_sprache(tmp_path, monkeypatch):
+    """`sprache` allein kann das nicht: ein Override, der zufaellig dasselbe sagt, sieht
+    identisch aus wie eine Erbschaft — und nur der eine haelt die Datei fest, wenn sich der
+    Projekt-Standard aendert. Genau daran haengt die Beschriftung im Dialog (#234).
+    """
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    projekt.speichern("p", {"sprache": "ch"})
+    projekt.setze_datei("p", "a", sprache="ch")        # gleichlautend, aber EIGEN
+    a = projekt.datei_ansicht("p", "a")
+    assert (a["sprache"], a["sprache_eigen"], a["sprache_projekt"]) == ("ch", "ch", "ch")
+    b = projekt.datei_ansicht("p", "b")                # nie angefasst -> erbt
+    assert (b["sprache"], b["sprache_eigen"], b["sprache_projekt"]) == ("ch", None, "ch")
+
+
 def test_ERBEN_auf_einer_datei_OHNE_override_wirft_nicht(tmp_path, monkeypatch):
     """Zweimal zuruecksetzen ist kein Fehler — `pop` mit Default statt `del`."""
     monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))

@@ -346,15 +346,18 @@ def dateieinstellungen_speichern(project: str, base: str, body: EinstellungenBod
                                     mehrsprachig=body.mehrsprachig)
     if fehler:
         raise HTTPException(status_code=400, detail=fehler)
-    # `mehrsprachig: null` AUSDRUECKLICH gesendet heisst „Override entfernen" (die Datei folgt
-    # wieder dem Projekt, #166); das Feld GAR NICHT zu senden laesst ihn stehen (Partial-Update,
-    # der bestehende Vertrag). Beides ist `None` im Modell — unterschieden wird an
-    # `model_fields_set`, also wieder an der ANWESENHEIT des Schluessels statt an seinem Wert.
-    mehr = body.mehrsprachig
-    if mehr is None and "mehrsprachig" in body.model_fields_set:
-        mehr = _projekt.ERBEN
-    _projekt.setze_datei(project, base, sprache=body.sprache, korrektur=body.korrektur,
-                         mehrsprachig=mehr)
+    # `sprache: null` / `mehrsprachig: null` AUSDRUECKLICH gesendet heisst „Override entfernen"
+    # (die Datei folgt wieder dem Projekt, #166/#234); das Feld GAR NICHT zu senden laesst ihn
+    # stehen (Partial-Update, der bestehende Vertrag). Beides ist `None` im Modell —
+    # unterschieden wird an `model_fields_set`, also wieder an der ANWESENHEIT des Schluessels
+    # statt an seinem Wert. **`korrektur` bleibt bewusst aussen vor:** dort gibt es den Rueckweg
+    # schon als echten Wert (`auto`), ein zweiter Weg zum selben Ziel waere eine zweite Wahrheit.
+    def _erben(wert, feld):
+        return _projekt.ERBEN if wert is None and feld in body.model_fields_set else wert
+
+    _projekt.setze_datei(project, base, sprache=_erben(body.sprache, "sprache"),
+                         korrektur=body.korrektur,
+                         mehrsprachig=_erben(body.mehrsprachig, "mehrsprachig"))
     return _projekt.datei_ansicht(project, base)      # EIN Lesevorgang, s. GET oben
 
 

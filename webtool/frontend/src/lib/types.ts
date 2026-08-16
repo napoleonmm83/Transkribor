@@ -60,14 +60,21 @@ export type EinstellungenWerte = { sprache: string; korrektur: string; mehrsprac
  *  und `mehrsprachig_projekt` der Standard, den sie dann erbt. Aus dem effektiven Wert allein
  *  ist „folgt dem Projekt" nicht von einem gleichlautenden Override zu unterscheiden (#166). */
 export type DateiEinstellungen = ProjectEinstellungen & {
+  /** `null` = folgt dem Projekt. Aus dem effektiven Wert allein nicht ablesbar — ein Override,
+   *  der zufaellig dasselbe sagt, sieht identisch aus (#166 fuer den Haken, #234 fuer die Sprache). */
+  sprache_eigen: string | null
+  sprache_projekt: string
   mehrsprachig_eigen: boolean | null
   mehrsprachig_projekt: boolean
 };
-/** `mehrsprachig: null` heisst AUSDRUECKLICH „Override entfernen" — das Feld wegzulassen laesst
- *  ihn stehen (Partial-Update). Unterschieden wird serverseitig an `model_fields_set`, also an
- *  der Anwesenheit des Schluessels; `JSON.stringify` wirft nur `undefined` weg, `null` bleibt. */
+/** `sprache: null` / `mehrsprachig: null` heisst AUSDRUECKLICH „Override entfernen" — das Feld
+ *  wegzulassen laesst ihn stehen (Partial-Update). Unterschieden wird serverseitig an
+ *  `model_fields_set`, also an der Anwesenheit des Schluessels; `JSON.stringify` wirft nur
+ *  `undefined` weg, `null` bleibt. `korrektur` hat KEIN `null`: dort ist `auto` der Rueckweg,
+ *  ein zweiter Weg zum selben Ziel waere eine zweite Wahrheit. */
 export type DateiEinstellungenPatch =
-  Partial<Omit<EinstellungenWerte, 'mehrsprachig'>> & { mehrsprachig?: boolean | null };
+  Partial<Omit<EinstellungenWerte, 'mehrsprachig' | 'sprache'>>
+  & { sprache?: string | null; mehrsprachig?: boolean | null };
 // `device` gilt der torch-Welt (Sprechertrennung, kann "mps"), `asr` der Transkription
 // (faster-whisper/CTranslate2, nur "cuda"/"cpu"). Auf einem Mac laufen die beiden ausein-
 // ander — deshalb zwei Felder statt einem.
