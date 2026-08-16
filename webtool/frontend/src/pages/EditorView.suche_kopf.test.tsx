@@ -40,10 +40,10 @@ describe('EditorView Suche in Kopf/Anmerkungen (#128)', () => {
     view()
     fireEvent.change(screen.getByPlaceholderText('Im Transkript suchen …'), { target: { value: 'brioche' } })
     expect(screen.getByText('1 / 1')).toBeInTheDocument()
-    const summary = document.querySelector('[title="Zusammenfassung bearbeiten"]')!
+    const summary = document.querySelector('[title^="Zusammenfassung bearbeiten"]')!
     expect(summary).toHaveClass('ring-yellow-400')
     // Kontext trifft nicht -> ausgegraut; Segment ebenfalls.
-    expect(document.querySelector('[title="Kontext bearbeiten"]')).toHaveClass('opacity-40')
+    expect(document.querySelector('[title^="Kontext bearbeiten"]')).toHaveClass('opacity-40')
     expect(document.querySelector('[data-seg-id="1"]')).toHaveClass('opacity-40')
   })
 
