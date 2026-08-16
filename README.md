@@ -226,11 +226,13 @@ Knopf unter dem Hinweis die Datei weg.
 
 **„Gespeichert — aber ohne Schreibsperre“ — muss ich etwas tun?** Kurz nachsehen, mehr nicht.
 Normalerweise sorgt Transkribor dafür, dass immer nur *eine* Stelle gleichzeitig an deinen
-Einstellungen schreibt. Klappt das einmal nicht — ein Virenscanner hält die Datei fest, der
-Ordner ist schreibgeschützt —, wird trotzdem gespeichert, aber ohne diesen Schutz. Hat in
-derselben Sekunde etwas anderes geschrieben (etwa die automatische Aktualisierung im
-Hintergrund), kann deine Eingabe dabei verlorengegangen sein. Deshalb die Meldung: schau, ob
-dein Wert wirklich im Feld steht, und trage ihn sonst noch einmal ein.
+Einstellungen schreibt; dafür legt es kurz eine Markierung daneben an. Klappt das einmal nicht —
+ein Virenscanner hält sie fest, oder es liegt noch eine alte herum —, wird der Wert trotzdem
+gespeichert, aber ohne diesen Schutz. Hat in derselben Sekunde etwas anderes geschrieben (etwa die
+automatische Aktualisierung im Hintergrund), kann deine Eingabe dabei verlorengegangen sein.
+Deshalb die Meldung: schau, ob dein Wert wirklich im Feld steht, und trage ihn sonst noch einmal
+ein. (Lässt sich gar nichts schreiben, siehst du stattdessen eine Fehlermeldung — dann ist auch
+nichts gespeichert.)
 
 Dasselbe gilt für die anderen Dateien, die Transkribor für dich führt: die Sprach-Einstellungen
 eines Projekts (alte Fassung als `projekt.json.kaputt` im Projektordner) und dein bearbeitetes

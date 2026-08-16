@@ -162,9 +162,14 @@ export async function getHardware(): Promise<Hardware> {
 /** Nur gesetzte Felder senden — ein ausgelassenes api_key laesst den gespeicherten Key stehen.
  *  `ungeschuetzt: true` heisst „geschrieben, aber ohne Schreibsperre" (#194) — es gehört NICHT
  *  in `Settings`: es beschreibt diesen einen Schreibvorgang, nicht den Zustand des Servers, und
- *  in den Zustand gemischt bliebe die Warnung für immer stehen. */
+ *  in den Zustand gemischt bliebe die Warnung für immer stehen.
+ *
+ *  **Pflichtfeld, nicht `?`:** der Server schickt es bei jedem PUT. Als optional getippt müsste
+ *  keine Attrappe es nennen — hörte der Server eines Tages auf, es zu schicken, verschwände die
+ *  Warnung still und kein Test würde rot. Der Preis ist, dass jede Attrappe es setzen muss, und
+ *  genau das ist der Zweck. */
 export async function saveSettings(patch: Record<string, string>):
-    Promise<Settings & { ungeschuetzt?: boolean }> {
+    Promise<Settings & { ungeschuetzt: boolean }> {
   return jn(await fetch('/api/settings', {
     method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch),
   }))
