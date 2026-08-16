@@ -175,8 +175,17 @@ kurz und versuche es noch einmal: Transkribor frischt den Downloader beim ersten
 selbst auf und lädt dann gleich weiter. Klappt es danach immer noch nicht, hilft der Knopf
 **„Jetzt aktualisieren“** unter *Einstellungen › Video-Import* — dort steht auch, welche
 Fassung gerade läuft (während einer Aktualisierung erst wieder, wenn sie fertig ist: solange
-sie läuft, wäre jede Angabe geraten). Bleibt es dabei, ist das Video vermutlich nicht öffentlich abrufbar
+sie läuft, wäre jede Angabe geraten — das gilt auch, wenn ein Import im Hintergrund gerade
+selbst auffrischt). Bleibt es dabei, ist das Video vermutlich nicht öffentlich abrufbar
 (private Videos und solche, die eine Anmeldung verlangen, unterstützt Transkribor nicht).
+
+Zwei Meldungen können dabei auftauchen, und beide sind harmlos gemeint. Steht unter dem Knopf,
+dass sich die **Hilfsskripte für YouTube nicht prüfen lassen**, ist eine Paketdatei auf deinem
+Rechner beschädigt: der Import läuft weiter, Transkribor merkt nur nicht mehr von selbst, wenn
+die Skripte nicht mehr passen — ein Klick auf „Jetzt aktualisieren“ repariert das meistens.
+Und meldet Transkribor nach einer Aktualisierung, sie sei **ohne Sperre gelaufen**, hat es
+gerade nicht sicherstellen können, dass nicht zeitgleich ein Video-Import dasselbe tat; klicke
+dann bei Gelegenheit noch einmal auf „Jetzt aktualisieren“, wenn nichts anderes läuft.
 
 **Welche Sprachen?** Ganz oben im Bereich **„Material hinzufügen“** steht **eine** Sprachauswahl:
 Schweizerdeutsch, Deutsch, Englisch, Französisch, Italienisch oder Automatisch (dann erkennt
