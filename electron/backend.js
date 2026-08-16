@@ -113,6 +113,14 @@ function url() {
   return `http://127.0.0.1:${port}/`
 }
 
+// Absolute Obergrenze fuer die Abfrage. **Grosszuegiger als sie aussieht, und das ist noetig:**
+// `GET /api/settings` ruft `llm.available()`, das bei den Abo-CLIs einen Subprozess startet —
+// gedeckelt durch `auth.STATUS_TIMEOUT` von 30 s. Eine kuerzere Frist (5 s waeren naheliegend)
+// wuerde den Knopf ausgerechnet dann abwuergen, wenn der Endpunkt legitim langsam ist, und der
+// Nutzer saehe einen Fehler, obwohl nichts kaputt ist. 35 s liegen darueber; alles jenseits
+// davon ist ein echter Haenger.
+const PFAD_TIMEOUT_MS = 35_000
+
 /**
  * Wo die Projekte WIRKLICH liegen — gefragt wird der Server, nicht `P.projekte` (#218).
  *
@@ -132,24 +140,22 @@ function url() {
  * `basis` ist der Testsaum (Muster wie `serverEnv(exe)`): der Port ist Modulzustand, den ein
  * Test nicht setzen kann, ohne einen echten uvicorn zu starten.
  */
-// Absolute Obergrenze fuer die Abfrage. **Grosszuegiger als sie aussieht, und das ist noetig:**
-// `GET /api/settings` ruft `llm.available()`, das bei den Abo-CLIs einen Subprozess startet —
-// gedeckelt durch `auth.STATUS_TIMEOUT` von 30 s. Eine kuerzere Frist (5 s waeren naheliegend)
-// wuerde den Knopf ausgerechnet dann abwuergen, wenn der Endpunkt legitim langsam ist, und der
-// Nutzer saehe einen Fehler, obwohl nichts kaputt ist. 35 s liegen darueber; alles jenseits
-// davon ist ein echter Haenger.
-const PFAD_TIMEOUT_MS = 35_000
-
-function projektePfad(basis = url()) {
+function projektePfad(basis = url(), fristMs = PFAD_TIMEOUT_MS) {
   return new Promise((resolve, reject) => {
     // `http.get` hat KEINE Frist — antwortet der Server gar nicht oder nur halb, bliebe das
     // Promise fuer immer offen und der Knopf drehte ohne Toast. Ein Haenger ist schlimmer als
     // eine Ausnahme: kein `catch` beim Aufrufer faengt ihn (dieselbe Regel wie in sperre.py).
     // Die `timeout`-Option deckte nur Leerlauf auf der Verbindung, nicht die Gesamtdauer.
+    //
+    // `fristMs` ist ein Testsaum wie `basis`: ein Test, der 35 s wartet, ist keiner.
     let fertig = false
     const uhr = setTimeout(() => {
-      anfrage.destroy(new Error(`keine Antwort binnen ${PFAD_TIMEOUT_MS / 1000} s`))
-    }, PFAD_TIMEOUT_MS)
+      // ZUERST ablehnen, dann abreissen: `destroy(fehler)` loeste sonst den `error`-Handler
+      // aus, und der Nutzer laese „Server nicht erreichbar" fuer einen Server, der sehr wohl
+      // erreichbar ist und nur schweigt.
+      beenden(reject, new Error(`Der Server antwortet nicht (${fristMs / 1000} s).`))
+      anfrage.destroy()
+    }, fristMs)
     const beenden = (fn, wert) => {
       if (fertig) return
       fertig = true

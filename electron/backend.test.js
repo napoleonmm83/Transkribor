@@ -98,3 +98,17 @@ test('projektePfad meldet einen nicht erreichbaren Server', async () => {
   // Port, auf dem nichts lauscht: der `error`-Zweig der Anfrage, nicht der der Antwort.
   await assert.rejects(projektePfad('http://127.0.0.1:1/'), /nicht erreichbar/)
 })
+
+test('projektePfad haengt nicht, wenn der Server annimmt und dann schweigt (#218)', async () => {
+  // Der gefaehrlichste Ausgang: die Verbindung steht, es kommt nur nie eine Antwort. `http.get`
+  // bringt dafuer KEINE Frist mit — ohne sie bliebe das Promise fuer immer offen, der Knopf
+  // drehte, und kein Toast erschiene. Ein Haenger ist schlimmer als eine Ausnahme: beim
+  // Aufrufer faengt ihn kein `catch`.
+  const { s, basis } = await server(() => { /* absichtlich keine Antwort */ })
+  try {
+    await assert.rejects(projektePfad(basis, 60), /antwortet nicht/)
+  } finally {
+    s.closeAllConnections()
+    s.close()
+  }
+})
