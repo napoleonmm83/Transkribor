@@ -54,8 +54,11 @@ function Abschnitt({ titel, children }: { titel: string; children: React.ReactNo
  * dort ein No-Op sein statt zu werfen. Der Pfad daneben steht in BEIDEN Fällen — er ist die
  * eigentliche Auskunft, der Knopf nur die Bequemlichkeit.
  */
-function projekteOeffnenBruecke(): (() => Promise<void>) | null {
-  const w = window as unknown as { transkribor?: { projekteOeffnen?: () => Promise<void> } }
+function projekteOeffnenBruecke(): (() => Promise<string>) | null {
+  // `Promise<string>`, nicht `void`: der Hauptprozess gibt den Pfad zurueck, den er WIRKLICH
+  // geoeffnet hat. Niemand liest ihn heute — aber ihn als `void` zu tippen waere eine zweite
+  // Unwahrheit im selben PR, in dem eine erste gerade behoben wird.
+  const w = window as unknown as { transkribor?: { projekteOeffnen?: () => Promise<string> } }
   return w.transkribor?.projekteOeffnen ?? null
 }
 
@@ -412,6 +415,10 @@ export function SettingsPage() {
       // zweites Mal. Ein In-Flight-Riegel um `getSettings()` hätte genau das nicht gedeckt.
       if (!r.laeuft) { setYtLaeuft(false); ytMeldeEinmal(() => ytMelden(r)) }
     } catch (e) {
+      // BEWUSST ausserhalb von `ytMeldeEinmal` (#247, Reviewbefund M3): „das Anstossen ist
+      // fehlgeschlagen" und „der Lauf ist beendet" sind zwei verschiedene Tatsachen, nicht
+      // dieselbe zweimal. Lehnt der POST ab, NACHDEM ein Poll den Ausgang gemeldet hat, sieht
+      // der Nutzer also beides — und beides stimmt.
       toast.error(String(e))
       // KEIN `finally`: bei Erfolg übernimmt der Poll-Effekt und schaltet selbst ab —
       // ein `finally` hier würde ihn sofort wieder abwürgen.
@@ -726,11 +733,15 @@ export function SettingsPage() {
           Der Pfad steht deshalb AUCH im Browser (er beantwortet die Frage ohne Klick); der
           Knopf gibt es nur in der App, wo eine Shell dahinterliegt. */}
       <Abschnitt titel="Deine Dateien">
+        {/* „legt Transkribor ab" statt „liegen": ausserhalb der App wird der Ordner erst beim
+            ersten Projekt angelegt (`electron/backend.js` tut es beim Start, `webtool.ps1`
+            nicht) — „hier liegen deine Dateien" wäre dort vor dem ersten Projekt falsch. */}
         <p className="max-w-prose text-sm">
-          Aufnahmen und Transkripte liegen in diesem Ordner. Transkribor löscht dort nichts von
-          allein — und weil nichts davon in einer Cloud liegt, gibt es auch keine Sicherung
-          ausser deiner eigenen: kopiere den Ordner auf eine externe Platte, dann hast du alles.
-          Auf einen neuen Rechner nimmst du deine Arbeit mit, indem du ihn dorthin kopierst.
+          Aufnahmen und Transkripte legt Transkribor in diesem Ordner ab. Gelöscht wird dort
+          nichts von allein — und weil nichts davon in einer Cloud liegt, gibt es auch keine
+          Sicherung ausser deiner eigenen: kopiere den Ordner auf eine externe Platte, dann hast
+          du alles. Auf einen neuen Rechner nimmst du deine Arbeit mit, indem du ihn dorthin
+          kopierst.
         </p>
         <p className="mt-2 break-all rounded bg-muted px-2 py-1.5 font-mono text-xs text-muted-foreground">
           {s.projekte_pfad}

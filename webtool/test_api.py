@@ -632,6 +632,20 @@ def test_settings_rumpf_traegt_alle_felder_die_das_frontend_tippt(client):
         "ytdlp"}
 
 
+def test_settings_nennt_die_WIRKSAME_projektwurzel(client, monkeypatch, tmp_path):
+    """#218: der Pfad muss der sein, unter dem der Server wirklich arbeitet.
+
+    Der Wert ist nicht statisch — `TRANSKRIBOR_PROJEKTE` setzt ihn, und in der gepackten App
+    tut das `electron/backend.js`. Entscheidend ist aber, dass `settings.load_env()` ihn
+    danach noch aus der `.env` ueberschreiben darf: der Server kennt den wirksamen Wert also
+    als EINZIGER. Genau daran haengt, dass „Ordner oeffnen" denselben Ordner oeffnet, den die
+    Seite nennt — dieser Test ist der Grund, warum der Electron-Handler den Server fragt,
+    statt `P.projekte` selbst zu benutzen (Reviewbefund I1).
+    """
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path / "woanders"))
+    assert client.get("/api/settings").json()["projekte_pfad"] == str(tmp_path / "woanders")
+
+
 def test_settings_put_liefert_denselben_rumpf_wie_der_get(client):
     """#239: `api.saveSettings` verspricht eine vollstaendige `Settings` — der PUT lieferte
     aber `providers`, `env_key`, `whisper_choices`, `ai_ready` und `ai_reason` nicht.
