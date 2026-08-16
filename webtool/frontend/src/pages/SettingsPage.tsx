@@ -427,8 +427,22 @@ export function SettingsPage() {
                 der Lauf bewusst NICHT automatisch: das setzte `ytLaeuft` sofort wieder hoch
                 und machte die Obergrenze der Warteschleife wirkungslos (der Test „gibt die
                 Nachfragerei nach einer Obergrenze auf" hat genau das aufgedeckt). */}
-            {s.ytdlp.laeuft && !ytLaeuft
-              ? 'Eine Aktualisierung läuft gerade — klicke, um ihr zuzusehen.'
+            {/* **Waehrend eines Laufs wird die Fassung gar nicht erst bewertet (#225).** Der
+                Poll fragt alle 1,5 s `GET /api/settings`, und das geht durch
+                `_fassung_und_lesbarkeit()` → `metadata.version("yt-dlp")` — also **waehrend pip
+                site-packages umschreibt**. Landet eine Runde in pips Deinstallations-/
+                Installationsluecke, wirft das `PackageNotFoundError`, ergibt `(None, False)`,
+                und hier stand dann „Nicht installiert — der Import steht nicht zur Verfuegung":
+                dieselbe Luege, gegen die #189 gebaut wurde, ausgerechnet mitten in einer
+                Aktualisierung, die gerade dabei ist, es zu installieren — und in dem Moment,
+                in dem der Nutzer ausdruecklich hinschaut, weil er eben geklickt hat.
+                Vorher gab es das Fenster nicht: `getSettings()` lief genau EINMAL, nach pip.
+                `|| ytLaeuft` deckt zusaetzlich die bis zu 1,5 s zwischen Klick und erstem
+                Poll — dort ist `s` noch der Stand von vorher. */}
+            {s.ytdlp.laeuft || ytLaeuft
+              ? ytLaeuft
+                ? 'Die Fassung steht fest, sobald der Lauf fertig ist.'
+                : 'Eine Aktualisierung läuft gerade — klicke, um ihr zuzusehen.'
               : s.ytdlp.version
               ? <>Fassung <span className="font-medium text-foreground">{s.ytdlp.version}</span>
                 {s.ytdlp.geprueft && ` · zuletzt geprüft am ${tag(s.ytdlp.geprueft)}`}</>
