@@ -174,27 +174,35 @@ ipcMain.handle('update:installieren', () => {
  * und sagt NICHT zu, dass `ready` danach ausbleibt. Kaeme es doch, taete die sterbende Instanz
  * genau das, was die Sperre verhindern soll: `fenster()`, `pruefen()` → `setup.status()`
  * (spawnt Python und winget) und bei fertiger venv `serverStarten()` — ein zweiter uvicorn.
- * Der Rumpf darunter registriert dann gar nicht erst; in CommonJS ist ein `return` auf
- * Modulebene gueltig (der Modulrumpf IST eine Funktion). Die Zusage ist damit baulich
- * gedeckt statt zeitlich gehofft — der lokale Nachweis „ein Fenster statt zwei" haette ein
- * Fenster, das 200 ms lebt, ohnehin nicht gesehen.
+ * Deshalb haengt `starten` im `else`, nicht am Modulrumpf: die Zusage ist baulich gedeckt
+ * statt zeitlich gehofft — der lokale Nachweis „ein Fenster statt zwei" haette ein Fenster,
+ * das 200 ms lebt, ohnehin nicht gesehen.
+ *
+ * Hier stand kurz `app.quit(); return` auf Modulebene. Node nimmt das in CommonJS an (der
+ * Modulrumpf IST eine Funktion, nachgemessen), aber **Biome bricht die Datei damit GANZ ab**
+ * („Illegal return statement outside of a function" → „formatting aborted due to parsing
+ * errors", selbst nachgefahren). Nicht die eine Zeile faellt dann aus der statischen Analyse,
+ * sondern `main.js` vollstaendig — und still. Zu teuer fuer ein gespartes Einruecken; die
+ * benannte Funktion kostet dasselbe und liest sich besser.
  */
 if (!app.requestSingleInstanceLock()) {
   app.quit()
-  return
+} else {
+  app.on('second-instance', () => {
+    // Der zweite Doppelklick ist keine Fehlbedienung, sondern die Suche nach dem Fenster —
+    // kommentarlos zu sterben laese ihn wie eine kaputte App aussehen. Steht noch kein Fenster
+    // (die Millisekunden zwischen Sperre und `fenster()`), bleibt es dabei: `app.focus()`
+    // haette dann nichts zu holen.
+    if (!win || win.isDestroyed()) return
+    if (win.isMinimized()) win.restore()
+    win.focus()
+  })
+  app.whenReady().then(starten)
 }
 
-app.on('second-instance', () => {
-  // Der zweite Doppelklick ist keine Fehlbedienung, sondern die Suche nach dem Fenster —
-  // kommentarlos zu sterben laese ihn wie eine kaputte App aussehen. Steht noch kein Fenster
-  // (die Millisekunden zwischen Sperre und `fenster()`), bleibt es dabei: `app.focus()` haette
-  // dann nichts zu holen.
-  if (!win || win.isDestroyed()) return
-  if (win.isMinimized()) win.restore()
-  win.focus()
-})
-
-app.whenReady().then(async () => {
+/** Der eigentliche Start — nur die Instanz, die die Sperre haelt, ruft ihn (Funktion statt
+ *  Rueckgabe an Ort und Stelle, damit der Rumpf seine Einrueckung behaelt). */
+async function starten() {
   protokoll.kopf()
   fenster()
   await pruefen()
@@ -240,7 +248,7 @@ app.whenReady().then(async () => {
   } catch (e) {
     protokoll.schreiben(`Update-Pruefung nicht moeglich: ${e && e.message || e}`)
   }
-})
+}
 
 app.on('window-all-closed', () => { backend.stop(); app.quit() })
 app.on('before-quit', () => backend.stop())
