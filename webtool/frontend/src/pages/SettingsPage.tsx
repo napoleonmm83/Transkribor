@@ -382,6 +382,17 @@ export function SettingsPage() {
     // die Uhr NICHT mit, die Obergrenze feuerte im Test also nie und blieb ungetestet.
     // 480 × 1,5 s ≈ 12 Min, also gut das Doppelte des gemessenen Worst Case von ~340 s.
     let runden = 0
+    // Die höchste Rundennummer, deren Antwort schon angewandt wurde. Überholte Antworten
+    // werden verworfen (CodeRabbit-Bot an PR #248): der Merker deckt die MELDUNG, nicht
+    // `setS`. Trifft eine ältere Runde (`laeuft: true`) NACH der jüngeren (`laeuft: false`)
+    // ein, schriebe sie den überholten Zustand zurück — und weil `ytLaeuft` dann schon aus
+    // ist, ist das Intervall abgeräumt und niemand holt das je wieder ein. Die Seite behauptet
+    // bis zum Neuladen, es laufe eine Aktualisierung: die Lüge aus #225, aus der Gegenrichtung.
+    // Gemessen, nicht vermutet — der Test dazu war rot, bevor diese drei Zeilen standen.
+    // `runden` reicht als Kennung: er zählt ohnehin je Tick hoch.
+    // Der Anmelde-Poll braucht das NICHT: dort setzt eine überholte Antwort `lauf.laeuft`
+    // zurück auf true, womit der Effekt neu aufsetzt und sich selbst einholt.
+    let angewandt = 0
     const meine = ytKennung()      // siehe `kennung` in useEinmalJeLauf
     const t = setInterval(async () => {
       if (++runden > 480) {
@@ -390,8 +401,11 @@ export function SettingsPage() {
           'Die Aktualisierung meldet sich nicht mehr — bitte im Serverprotokoll nachsehen.'))
         return
       }
+      const meineRunde = runden
       const neu = await getSettings().catch(() => null)
       if (!neu) return                  // ein Aussetzer beendet den Lauf nicht
+      if (meineRunde < angewandt) return // überholt — siehe `angewandt` oben
+      angewandt = meineRunde
       // Ersetzen, nicht zusammenführen — `GET /api/settings` liefert das vollständige
       // `Settings`, ein `{...cur, ...neu}` wäre buchstäblich dasselbe wie `neu`.
       // (Hier stand bis #239 der Hinweis, `speichern()` weiter oben MÜSSE mischen, weil der
