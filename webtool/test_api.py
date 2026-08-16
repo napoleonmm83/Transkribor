@@ -616,6 +616,12 @@ def test_settings_put_sagt_es_wenn_ungeschuetzt_geschrieben_wurde(client, monkey
         raise PermissionError(5, "Access is denied")
 
     monkeypatch.setattr(sperre, "_HAKELIG_S", 0.02)
+    # `sperre.os` IST `os` — das hier legt `os.mkdir` prozessweit lahm, also auch das
+    # `os.makedirs` in `settings.save()` eine Zeile darueber. Das ueberlebt nur, weil
+    # `makedirs` den Fehler bei `exist_ok=True` und bereits vorhandenem Verzeichnis schluckt:
+    # die `client`-Fixture legt `settings.json` nach `tmp_path`, und das gibt es. Wer die
+    # Fixture in ein noch nicht angelegtes Verzeichnis umzieht, bekommt hier einen 500er,
+    # dessen Ursache drei Schichten entfernt liegt.
     monkeypatch.setattr(sperre.os, "mkdir", nie)
     r = client.put("/api/settings", json={"model": "claude-sonnet-5"})
     assert r.status_code == 200

@@ -49,8 +49,9 @@ _LAUT_AB_S = 1.0
 # `desktop.ini`, Virenscanner-Handle) genauso wie an einer Datei am Lock-Pfad, und die
 # Schleife hatte sonst keine Obergrenze — derselbe Haenger wie #191 ueber den zweiten Weg,
 # nachgemessen. Diese Frist deckt die ganze KLASSE; der Typ-Test unten deckt nur die
-# gemeldete Form, dafuer aber sofort, und das zaehlt auf dem Request-Pfad
-# (`settings.save`, `POST /api/settings/ytdlp/update`). Ein legitimer Warter laeuft hier
+# gemeldete Form, dafuer aber sofort, und das zaehlt auf dem Request-Pfad — das ist
+# `settings.save`; `POST /api/settings/ytdlp/update` stand hier ebenfalls und laeuft seit
+# #174 in einem Hintergrundfaden (die Wartezeit sieht dort niemand). Ein legitimer Warter laeuft hier
 # nie hinein: bis dahin hat der Verwaist-Zweig ein abgelaufenes Lock laengst abgeraeumt.
 _AUFGEBEN_PUFFER_S = 5.0
 
@@ -173,18 +174,42 @@ def _merker_lesen(lockdir: str):
     Request-Pfad (`settings.save`).
     """
     # `getattr`, weil beide Flags plattformgebunden sind: `O_NONBLOCK` gibt es auf Windows
-    # nicht, `O_BINARY` nur dort. 0 ist in beiden Faellen das neutrale Element.
+    # nicht, `O_BINARY` nur dort. 0 ist in beiden Faellen das neutrale Element. **Nur das
+    # erste ist gemessen** (#200); `O_BINARY` ist Vorsorge und hat bewusst keinen Test, der rot
+    # werden koennte: der Merker ist `"<pid> <rechner>"`, darin gibt es kein `\r\n` und kein
+    # `\x1a`, der Windows-Textmodus liefert also dieselben Bytes. Es bleibt trotzdem stehen —
+    # `os.open` reicht die Flags an `_wopen` durch, die Vorgabe folgt dem CRT-`_fmode`, und ein
+    # Merker mit anderem Inhalt waere sonst ein Windows-only-Fehler.
     flags = os.O_RDONLY | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_BINARY", 0)
     try:
         fd = os.open(os.path.join(lockdir, _HALTER), flags)
     except OSError:
         return None
     try:
-        return os.read(fd, 200)
-    except OSError:               # BlockingIOError am leeren FIFO ist einer
+        # **Die Schleife ersetzt, was `f.read(200)` von selbst tat.** Ein Dateiobjekt liest bis
+        # zur Menge oder zum Ende, `os.read` ist EIN Systemaufruf und darf kuerzer liefern.
+        # Genau das traefe hier den schlimmsten Punkt: `mein_merker` entsteht aus dem Lesen
+        # direkt NACH dem Schreiben — ein kurzer Lesevorgang dort, und der Halter erkennt sein
+        # eigenes Lock im `finally` nicht wieder und laesst es liegen. Das ist der Einstieg in
+        # #205 (die PID im Merker lebt ja, also kommt die Uhr nicht mehr zum Zug). Auf einer
+        # lokalen Datei praktisch unerreichbar — aber dieses Modul richtet sich ausdruecklich
+        # auf Netzpfade ein, und die Garantie wieder herzustellen kostet fuenf Zeilen.
+        daten = b""
+        while len(daten) < 200:
+            teil = os.read(fd, 200 - len(daten))
+            if not teil:                  # Dateiende (am schreiberlosen FIFO sofort)
+                break
+            daten += teil
+        return daten
+    except OSError:               # BlockingIOError am haengenden Schreiber ist einer
         return None
     finally:
-        os.close(fd)
+        # `suppress`, weil der Vertrag dieser Funktion "Bytes oder None, wirft nie" lautet und
+        # der Aufrufer im `FileExistsError`-Zweig von `datei()` KEINEN Schutz hat — darunter
+        # `settings.save()` (Request-Pfad) und `fetch._hole_yt_dlp()`. Das alte `with open(...)`
+        # schloss innerhalb des `try`, ein blankes `os.close` verengte den Vertrag still.
+        with contextlib.suppress(OSError):
+            os.close(fd)
 
 
 def _lebt_laut(merker):
@@ -407,9 +432,19 @@ def datei(pfad: str, stale: float = STALTES_ALTER):
         # `_HAKELIG_S`), also genau dann, wenn die Sperre zaehlt. Ohne diese Zeile kippte ein
         # einziger solcher Fehler nach dem erzwungenen Griff sofort in "ungeschuetzt weiter",
         # und der Griff selbst raeumte ein Lock weg, das 10 ms spaeter regulaer frei gewesen
-        # waere. Die Obergrenze aus #191 bleibt: der `except OSError`-Zweig oben bricht nach
-        # `_HAKELIG_S` von sich aus ab, und ein `FileExistsError` setzt den Merker zurueck —
-        # aufgeschoben wird also hoechstens eine halbe Sekunde, nie unbegrenzt.
+        # waere.
+        #
+        # **Warum die Obergrenze aus #191 dabei stehen bleibt — die Form des Arguments, denn
+        # sie steht in keiner einzelnen Zeile:** es gibt genau drei Rundenarten. (A) `mkdir`
+        # gelingt → `break`. (B) `FileExistsError` → setzt `hakelig_seit` auf `None` UND faellt
+        # in diese Pruefung durch. (C) anderer `OSError` → bricht nach `_HAKELIG_S` von sich aus
+        # ab und ueberspringt sie. `hakelig_seit` wird ausser bei der Initialisierung **nur** von
+        # (B) geloescht, und (B) erreicht diese Pruefung immer; nach der Frist setzt das erste
+        # (B) `erzwungen`, das zweite bricht ab — `erzwungen` ist ein Einmal-Riegel. Aufgeschoben
+        # wird damit hoechstens **2 × `_HAKELIG_S`** (ein Nachsichtsfenster kann vor dem Griff
+        # verbrennen und eines danach); im Review gemessen: 0,704 s Ueberhang ueber `frist`.
+        # **Wer ein `continue` in den `FileExistsError`-Zweig setzt oder `erzwungen` wieder
+        # scharf macht, oeffnet die unbegrenzte Schleife aus #191 durch genau diese Tuer.**
         if hakelig_seit is None and time.time() - seit > frist(stale):
             if erzwungen:
                 print(f"[sperre] {lockdir} laesst sich nicht uebernehmen — ungeschuetzt "
