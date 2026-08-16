@@ -946,6 +946,25 @@ def test_erzwingen_uebergeht_den_merker(monkeypatch):
     assert len(gerufen) == 1
 
 
+def test_automatisch_meldet_den_PIP_ausgang_nicht_den_sperrzustand(monkeypatch):
+    """`automatisch()` gibt seit #236 `aktualisiere()[0]` zurueck — und der Index war
+    ungewacht: kein Test unterschied ihn von `[1]`.
+
+    Die vorhandenen Tests kommen alle nicht dorthin (zwei kehren an `auto_an()` um, zwei an
+    `faellig()`, `test_fetch.py` faelscht `automatisch` selbst) — und der eine, der pip
+    wirklich laufen laesst, liefert `(True, True)`, wo **beide** Indizes dasselbe sagen.
+    Hier laufen sie auseinander: das Lock haelt, pip nicht.
+
+    Was `[1]` kostete: `fetch.py` entscheidet an diesem Wert, ob es yt-dlp neu laedt und den
+    Download wiederholt. Mit dem Sperrzustand statt dem pip-Ausgang uebersprungen es die
+    Wiederholung ausgerechnet dann, wenn pip GELUNGEN ist — also im Normalfall.
+    """
+    _, run = _pip(returncode=1, ausgabe="ERROR: Could not find a version")
+    monkeypatch.setattr(yu.subprocess, "run", run)
+    assert yu.aktualisiere() == (False, True)      # Positivkontrolle: die Indizes SIND ungleich
+    assert yu.automatisch(erzwingen=True) is False
+
+
 def test_erzwingen_uebergeht_den_schalter_NICHT(monkeypatch):
     """Wer seine venv selbst verwaltet, will auch keine Selbstheilung darin."""
     monkeypatch.setenv("TRANSKRIBOR_YTDLP_UPDATE", "0")
@@ -1021,6 +1040,11 @@ def test_pip_sperre_deckt_die_VERSCHACHTELTE_wartezeit_mit(monkeypatch):
     # sonst nichts. (CodeRabbit-CLI an PR #211.)
     haltedauer = yu.PIP_TIMEOUT + 30 + sperre.frist()
     # … und so lange darf er es laut der Zusage, die die Sperre bekommen hat.
+    #
+    # Der Pfad steht hier als LITERAL, obwohl es seit #243 `_lockziel()` gibt — mit Absicht:
+    # so pinnt der Test den Pfad selbst. Ginge er durch dieselbe Funktion wie der Code, wuerde
+    # eine Umbenennung des Locks stillschweigend mitwandern, und die Anzeige aus #243 fragte
+    # danach eine andere Sperre als die, die `aktualisiere()` nimmt.
     assert sperre.frist(gesehen[settings.path() + ".ytdlp"]) > haltedauer
 
 
@@ -1134,11 +1158,22 @@ def test_unlesbare_ejs_metadaten_bekommen_ein_EIGENES_signal(monkeypatch, capsys
 def test_lesbare_ejs_metadaten_melden_NICHTS(monkeypatch):
     """Die Gegenprobe, und ohne sie waere der Test darueber die halbe Wahrheit: ein Signal,
     das IMMER steht, ist als Daueralarm derselbe Schaden von der anderen Seite. Geprueft
-    werden beide stillen Normalfaelle — das Paket ist da und passt, und es ist gar nicht
-    installiert (`PackageNotFoundError` ist eine Tatsache, keine Unlesbarkeit)."""
+    werden DREI stille Normalfaelle — das Paket ist da und passt, sein Pin ist gelockert und
+    damit gar nicht vergleichbar, und es ist gar nicht installiert
+    (`PackageNotFoundError` ist eine Tatsache, keine Unlesbarkeit)."""
     monkeypatch.setattr(yu, "_ejs_zeilen", lambda: ["yt-dlp-ejs==0.8.0; extra == 'default'"])
     monkeypatch.setattr(yu.metadata, "version",
                         lambda name: "2026.8.12" if name == "yt-dlp" else "0.8.0")
+    assert yu.zustand()["ejs_unlesbar"] is False
+
+    # Der teuerste der drei, und er hatte als einziger gar keine Zusicherung: ein GELOCKERTER
+    # Pin ist nicht vergleichbar (`_release` -> None), der Kalenderweg entscheidet dann wie
+    # bisher — das ist der dokumentierte Normalfall, kein Schaden. Wer ihn als `unlesbar`
+    # meldete, haengte JEDEM Nutzer mit `>=`-Pin dauerhaft eine bernsteinfarbene Warnung an
+    # die Einstellungsseite. Die Mutation dazu (`return False, True` in diesem Zweig) liess
+    # vorher die ganze Suite gruen.
+    monkeypatch.setattr(yu, "_ejs_zeilen", lambda: ["yt-dlp-ejs>=0.8.0; extra == 'default'"])
+    assert yu._ejs_untauglich_und_lesbarkeit() == (False, False)
     assert yu.zustand()["ejs_unlesbar"] is False
 
     def fehlt(name):

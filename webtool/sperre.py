@@ -243,24 +243,46 @@ def wird_gehalten(pfad: str, stale: float = STALTES_ALTER) -> bool:
     veralten; daraus einen Sprung in den kritischen Abschnitt abzuleiten waere genau die
     Race, gegen die dieses Modul gebaut ist.
 
-    **Die Regel ist dieselbe wie in der Warteschleife**, und das ist der Grund, warum sie
-    hier steht statt beim Aufrufer (#243): ein `os.path.isdir` allein wuerde ein
-    LIEGENGEBLIEBENES Lock (abgestuerzter Halter, `taskkill /F /T`) dauerhaft als „laeuft
-    gerade" melden — dieselbe Anzeige-Luege in der anderen Richtung. Also: meldet sich der
-    Halter als lebend, laeuft er; meldet er sich als tot, laeuft er nicht; **keine Auskunft**
-    (fehlender/halber Merker, fremder Rechner) entscheidet die Uhr, wie ueberall hier.
+    **Dieselbe VIERSTUFIGE Regel wie in der Warteschleife** — und die vierte Stufe ist der
+    Grund, warum die Funktion hier steht statt beim Aufrufer (#243). Ein `os.path.isdir`
+    allein wuerde ein LIEGENGEBLIEBENES Lock (abgestuerzter Halter, `taskkill /F /T`)
+    dauerhaft als „laeuft gerade" melden — dieselbe Anzeige-Luege in der anderen Richtung.
+    Also der Reihe nach: **zu alt** ⇒ nein (siehe unten); **lebt** ⇒ ja; **tot** ⇒ nein;
+    **keine Auskunft** (fehlender/halber Merker, fremder Rechner) ⇒ die Uhr entscheidet.
+
+    **Die Obergrenze zuerst, und sie ist nicht Vorsicht.** „Lebt ⇒ ja" ohne sie war
+    unbegrenzt, und dieses Modul hat GEMESSEN zwei Wege in genau den Zustand: eine
+    geschluckte Freigabe laesst das Lock mit der PID des **noch lebenden** Prozesses liegen
+    (#205, 3 von 1500 — durch die Wiederholung selten, nicht unmoeglich), und eine
+    **wiederverwendete** PID sieht wie ein Halter aus (#175). `datei()` beantwortet beide mit
+    dem erzwungenen Griff nach `frist(stale)`; ohne das Gegenstueck hier behauptete die Seite
+    fuer die Lebensdauer des Serverprozesses „eine Aktualisierung laeuft gerade" — und weil
+    der Toast des Frontends am Uebergang nach `False` haengt, verschluckte dieser Zustand
+    ausserdem die Warnung aus #236. Der Fix reisst also seinen eigenen Schaden wieder auf,
+    wenn diese Zeile fehlt.
+
+    **`frist(stale)`, nicht `stale`**: der Griff in `datei()` zaehlt ab der Ankunft des
+    WARTERS, hier gibt es nur die mtime des Locks — ein exaktes Spiegelbild gibt es nicht.
+    Die groessere der beiden Fristen ist die konservative Wahl: sie meldet „laeuft nicht"
+    nie frueher, als ein Warter das Lock ohnehin uebernommen haette.
     """
     lockdir = pfad + ".lock"
     try:
         z = os.lstat(lockdir)
-    except OSError:
+    except (OSError, ValueError):
+        # `ValueError` nicht aus Vorsicht: `os.lstat` wirft ihn (KEINEN OSError) bei einem
+        # eingebetteten NUL im Pfad, und diese Funktion haengt seit #243 am Request-Pfad von
+        # `GET/PUT /api/settings`. Dieselbe Weite wie `_lebt_laut` und `settings._lesen`.
         return False
     if not stat.S_ISDIR(z.st_mode):
         # Am Lock-Pfad liegt eine DATEI (Sync-Client, Backup, Quarantaene) — dort haelt
         # niemand etwas. `datei()` behandelt denselben Fall als "nicht anlegbar" (#191).
         return False
+    alter = time.time() - z.st_mtime
+    if alter > frist(stale):
+        return False                  # laenger, als ein Abschnitt dauern kann — s. o.
     lebt = _lebt_laut(_merker_lesen(lockdir))
-    return lebt if lebt is not None else time.time() - z.st_mtime <= stale
+    return lebt if lebt is not None else alter <= stale
 
 
 def _verzeichnis_kennung(pfad: str):

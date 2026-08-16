@@ -179,13 +179,19 @@ sie läuft, wäre jede Angabe geraten — das gilt auch, wenn ein Import im Hint
 selbst auffrischt). Bleibt es dabei, ist das Video vermutlich nicht öffentlich abrufbar
 (private Videos und solche, die eine Anmeldung verlangen, unterstützt Transkribor nicht).
 
-Zwei Meldungen können dabei auftauchen, und beide sind harmlos gemeint. Steht unter dem Knopf,
-dass sich die **Hilfsskripte für YouTube nicht prüfen lassen**, ist eine Paketdatei auf deinem
-Rechner beschädigt: der Import läuft weiter, Transkribor merkt nur nicht mehr von selbst, wenn
-die Skripte nicht mehr passen — ein Klick auf „Jetzt aktualisieren“ repariert das meistens.
-Und meldet Transkribor nach einer Aktualisierung, sie sei **ohne Sperre gelaufen**, hat es
-gerade nicht sicherstellen können, dass nicht zeitgleich ein Video-Import dasselbe tat; klicke
-dann bei Gelegenheit noch einmal auf „Jetzt aktualisieren“, wenn nichts anderes läuft.
+Zwei Meldungen können dabei auftauchen. Steht unter dem Knopf, dass sich die **Hilfsskripte für
+YouTube nicht prüfen lassen**, ist eine Paketdatei auf deinem Rechner beschädigt. Importieren
+kannst du weiterhin — Transkribor merkt nur nicht mehr von selbst, wenn diese Skripte nicht mehr
+zur Downloader-Fassung passen. „Jetzt aktualisieren“ hilft hier allerdings **nicht**: das
+Installationsprogramm stolpert über dieselbe kaputte Datei und bricht ab. Wieder heil wird es
+über die Einrichtungsseite („Jetzt einrichten“) oder, wenn du Transkribor selbst installiert
+hast, mit einer Neuinstallation der Python-Umgebung.
+
+Und meldet Transkribor nach einer Aktualisierung, sie sei **ohne Sperre gelaufen**, konnte es
+gerade nicht sicherstellen, dass nicht zeitgleich ein Video-Import dasselbe tat. Das Ergebnis
+stimmt vermutlich trotzdem. Sicher gehst du, indem du den Knopf noch einmal drückst, wenn
+nichts anderes läuft; kommt die Meldung wieder, steht der Grund im Serverprotokoll (meistens
+liegt am Sperr-Pfad etwas im Weg, was dort nicht hingehört).
 
 **Welche Sprachen?** Ganz oben im Bereich **„Material hinzufügen“** steht **eine** Sprachauswahl:
 Schweizerdeutsch, Deutsch, Englisch, Französisch, Italienisch oder Automatisch (dann erkennt

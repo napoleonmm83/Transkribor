@@ -661,10 +661,13 @@ def starte_hintergrund() -> bool:
         threading.Thread(target=_im_hintergrund, daemon=True).start()
     except BaseException:
         with _lauf_sperre:
+            # `ungeschuetzt` NICHT noch einmal: der Block oben hat es unter derselben Sperre
+            # schon geloescht, und dazwischen kann es niemand gesetzt haben — ein frueherer
+            # Faden waere am Riegel abgewiesen worden, ein neuer ist nie gestartet. Die Zeile
+            # stand hier und war damit ein Waechter, den keine Mutation rot bekommt
+            # (Reviewbefund M1). `laeuft`/`ergebnis` brauchen sie sehr wohl: `laeuft` steht
+            # seit dem Block oben auf True.
             _lauf["laeuft"], _lauf["ergebnis"] = False, "fehler"
-            # Nicht gelaufen heisst nicht ungeschuetzt gelaufen — eine Warnung hier waere
-            # ein Alarm ueber einen pip-Lauf, den es nie gab.
-            _lauf["ungeschuetzt"] = False
         raise
     return True
 

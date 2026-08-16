@@ -845,6 +845,31 @@ def test_ein_liegengebliebenes_lock_ist_KEIN_laufender_abschnitt(tmp_path):
     assert sperre.wird_gehalten(ziel) is False
 
 
+def test_ein_LEBENDER_halter_gilt_nicht_unbegrenzt(tmp_path):
+    """Die vierte Stufe — und ohne sie riss dieser Fix seinen eigenen Schaden wieder auf.
+
+    „Lebt ⇒ laeuft" war unbegrenzt, und in genau diesen Zustand fuehren ZWEI in diesem Modul
+    gemessene Wege: eine geschluckte Freigabe laesst das Lock mit der PID des **noch
+    lebenden** Prozesses liegen (#205), und eine **wiederverwendete** PID sieht wie ein
+    Halter aus (#175). `datei()` beantwortet beide mit dem erzwungenen Griff nach
+    `frist(stale)`; ohne das Gegenstueck hier meldete die Einstellungsseite fuer die
+    Lebensdauer des Serverprozesses „eine Aktualisierung laeuft gerade" — und weil der Toast
+    am Uebergang nach `False` haengt, verschluckte dieser Zustand zugleich die Warnung aus
+    #236, die im selben PR entstanden ist.
+
+    Der Halter ist hier der EIGENE Prozess: gebraucht wird eine PID, die nachweislich lebt —
+    ohne die Obergrenze waere die Antwort damit `True`, und genau das ist die Mutation.
+    """
+    ziel = str(tmp_path / "x.json")
+    lock = ziel + ".lock"
+    os.mkdir(lock)
+    _merker(lock, os.getpid())
+    assert sperre.wird_gehalten(ziel, stale=60) is True         # frisch: der Halter zaehlt
+    alt = time.time() - (sperre.frist(60) + 10)
+    os.utime(lock, (alt, alt))
+    assert sperre.wird_gehalten(ziel, stale=60) is False        # ueberfaellig: er zaehlt nicht
+
+
 def test_ohne_auskunft_entscheidet_die_uhr(tmp_path):
     """Dieselbe Staffelung wie in der Warteschleife: keine Auskunft (Lock ohne Merker, halb
     geschrieben, fremder Rechner) heisst nicht 'tot', sondern 'die Frist entscheidet'.

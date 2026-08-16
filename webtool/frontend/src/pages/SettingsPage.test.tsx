@@ -423,6 +423,55 @@ describe('SettingsPage', () => {
     expect(toast.success).toHaveBeenCalledTimes(2)
   })
 
+  it('rät bei kaputten ejs-Paketdaten nicht nach dem Netz', async () => {
+    // Der Zwilling zum Test darüber, durch die andere Tür: `unlesbar` gilt yt-dlp, bei
+    // kaputten Paketdaten von `yt-dlp-ejs` ist es `false` — und dann stand hier „bist du
+    // online?", also genau die Fehldiagnose, gegen die #189 gebaut ist. GEMESSEN, dass es
+    // eine ist: `pip install -U --dry-run yt-dlp[default]` gegen eine präparierte
+    // `yt_dlp_ejs-0.8.0.dist-info` endet mit Exit 2 und UnicodeDecodeError — pip enumeriert
+    // vor dem Installieren und scheitert an derselben Datei. Es liegt also nicht am Netz.
+    vi.mocked(api.updateYtdlp).mockResolvedValue({
+      gestartet: true, version: '2026.8.12', unlesbar: false, geprueft: '', auto: true,
+      env: false, laeuft: false, ergebnis: 'fehler', ungeschuetzt: false, ejs_unlesbar: true,
+    })
+    zeige()
+    fireEvent.click(await screen.findByRole('button', { name: /Jetzt aktualisieren/i }))
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(
+      expect.stringContaining('Hilfsskripte')))
+    expect(toast.error).not.toHaveBeenCalledWith(expect.stringMatching(/online/))
+  })
+
+  it('erklärt den Spinner, wenn ein FREMDER Lauf die Sperre hält', async () => {
+    // Seit #243 kann `ytdlp.laeuft` von einem anderen Prozess kommen. `starte_hintergrund()`
+    // sieht nur seinen eigenen Modulzustand und meldet `gestartet: true` — der eigene Lauf
+    // blockiert dann bis zu 215 s an der pip-Sperre, und ohne diesen Hinweis sähe der Nutzer
+    // einen Spinner und sonst nichts, obwohl die Zeile darüber gerade „klicke, um ihr
+    // zuzusehen" versprochen hat.
+    vi.mocked(api.updateYtdlp).mockResolvedValue({
+      gestartet: true, version: '2026.8.12', unlesbar: false, geprueft: '', auto: true,
+      env: false, laeuft: true, ergebnis: '', ungeschuetzt: false, ejs_unlesbar: false,
+    })
+    const { unmount } = zeige({ ytdlp: { ...BASIS.ytdlp, laeuft: true } })
+    fireEvent.click(await screen.findByRole('button', { name: /Jetzt aktualisieren/i }))
+    await waitFor(() => expect(toast.info).toHaveBeenCalledWith(
+      expect.stringContaining('Video-Import')))
+    unmount()
+
+    // Gegenprobe: lief vorher NICHTS, gibt es auch keinen Hinweis — sonst käme er bei jedem
+    // Klick, und ein Hinweis, der immer steht, sagt nichts mehr.
+    vi.clearAllMocks()
+    vi.mocked(api.getAuth).mockResolvedValue({ unterstuetzt: false, angemeldet: false, detail: '' })
+    vi.mocked(api.listModels).mockResolvedValue([])
+    vi.mocked(api.updateYtdlp).mockResolvedValue({
+      gestartet: true, version: '2026.8.12', unlesbar: false, geprueft: '', auto: true,
+      env: false, laeuft: true, ergebnis: '', ungeschuetzt: false, ejs_unlesbar: false,
+    })
+    zeige()
+    fireEvent.click(await screen.findByRole('button', { name: /Jetzt aktualisieren/i }))
+    await waitFor(() => expect(api.updateYtdlp).toHaveBeenCalled())
+    expect(toast.info).not.toHaveBeenCalled()
+  })
+
   it('wartet nicht auf pip, sondern fragt nach — der Toast kommt erst am Ende (#174)', async () => {
     // Vorher hing der Request am pip-Lauf (>=340 s im schlimmsten Fall). Jetzt antwortet er
     // sofort mit `laeuft: true`; der Ausgang kommt über den nächsten getSettings. Geprüft
