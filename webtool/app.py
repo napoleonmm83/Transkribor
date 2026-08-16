@@ -795,7 +795,15 @@ def _settings_body(cfg: dict | None = None) -> dict:
     Umgebung. In `public()` gelegt reiste sie ausserdem in jede Antwort, die Einstellungen
     meint.
     """
-    ai_ready, ai_reason = llm.available()
+    # EIN Lesevorgang fuer die ganze Antwort. Vorher las `settings.public()` den uebergebenen
+    # Snapshot und `llm.available()` die Datei neu — unter zwei gleichzeitigen Schreibern trug
+    # dieselbe Antwort dann `provider` aus dem einen und `ai_reason` aus dem anderen, und der
+    # Nutzer las „Anbieter: Anthropic" neben „claude ist nicht installiert".
+    # (`ytdlp_update.zustand()` liest weiterhin selbst — es beantwortet eine Frage an die
+    # UMGEBUNG, nicht an die Einstellungen, und dass `ytdlp_auto` und `ytdlp.auto` auseinander
+    # liegen koennen, sagt die Antwort ohnehin ausdruecklich.)
+    cfg = cfg if cfg is not None else settings.load()
+    ai_ready, ai_reason = llm.available(cfg)
     return {**settings.public(cfg), "providers": llm.provider_list(),
             "env_key": llm.env_key_hint(),
             "whisper_choices": list(settings.WHISPER_CHOICES),

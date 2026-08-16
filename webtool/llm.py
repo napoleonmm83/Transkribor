@@ -97,8 +97,16 @@ def provider_list() -> list:
             for pid, p in PROVIDERS.items()]
 
 
-def _cfg() -> tuple:
-    cfg = settings.load()
+def _cfg(cfg: dict | None = None) -> tuple:
+    """Einstellungen + Anbieter-Steckbrief. `cfg` uebergeben heisst „nimm DIESEN Stand".
+
+    Gebraucht wird das von `app._settings_body`: dort steht der gerade geschriebene Snapshot
+    schon fest, und ihn NICHT durchzureichen erzeugte eine Antwort mit zwei Wahrheiten —
+    `provider` aus dem eigenen Schreibvorgang, `ai_reason` aus dem eines gleichzeitigen
+    Konkurrenten. Der Nutzer laese dann „Anbieter: Anthropic" neben „claude ist auf diesem
+    Rechner nicht installiert" (CodeRabbit-Bot an PR #248, Major).
+    """
+    cfg = cfg if cfg is not None else settings.load()
     p = PROVIDERS.get(cfg["provider"]) or PROVIDERS["claude-cli"]
     return cfg, p
 
@@ -110,7 +118,7 @@ def use_api() -> bool:
     return _cfg()[1]["shape"] != "cli"
 
 
-def available() -> tuple:
+def available(cfg: dict | None = None) -> tuple:
     """(nutzbar, Begruendung) — prueft die FAEHIGKEIT zu korrigieren, nicht die Absicht.
 
     Ein frisch installierter Nutzer hat "claude-cli" als Voreinstellung und kein
@@ -118,8 +126,11 @@ def available() -> tuple:
     Korrektur, die scheitert — das waere der erste Eindruck der App. Ueber die
     Faehigkeit statt ueber einen anderen Default zu gehen erspart eine Migration:
     wer claude installiert hat, merkt nichts.
+
+    `cfg` uebergeben heisst „beurteile DIESEN Stand" — siehe `_cfg`. Ohne den Parameter las
+    diese Funktion die Datei neu, und eine Einstellungs-Antwort trug zwei Wahrheiten.
     """
-    cfg, prov = _cfg()
+    cfg, prov = _cfg(cfg)
     if prov["shape"] in ("cli", "codex"):
         if not _exe(prov):
             return False, f"{prov['label']}: '{prov['bin']}' ist auf diesem Rechner nicht installiert."

@@ -309,7 +309,7 @@ def test_korrektur_ohne_anbieter_409_statt_job(client, monkeypatch):
     """Ohne nutzbaren Anbieter darf KEIN Job entstehen: sonst laeuft erst die Diarisierung
     (GPU, Minuten) durch, bevor der erste LLM-Aufruf scheitert."""
     import webtool.app as app_mod, webtool.jobs as jobs_mod
-    monkeypatch.setattr(app_mod.llm, "available", lambda: (False, "Kein API-Key fuer OpenAI hinterlegt"))
+    monkeypatch.setattr(app_mod.llm, "available", lambda *_a: (False, "Kein API-Key fuer OpenAI hinterlegt"))
     gestartet = []
     monkeypatch.setattr(jobs_mod, "start", lambda *a, **k: gestartet.append(a) or ("x", True))
 
@@ -325,7 +325,7 @@ def test_unbekannte_datei_gewinnt_gegen_den_anbieter_riegel(client, monkeypatch)
     """404 vor 409: dass die Datei gar nicht existiert, ist die genauere Auskunft — und sie
     gilt unabhaengig davon, ob gerade ein Anbieter eingerichtet ist."""
     import webtool.app as app_mod
-    monkeypatch.setattr(app_mod.llm, "available", lambda: (False, "kein Anbieter"))
+    monkeypatch.setattr(app_mod.llm, "available", lambda *_a: (False, "kein Anbieter"))
     assert client.post("/api/projects/Demo/files/nope/correct").status_code == 404
 
 
@@ -508,7 +508,7 @@ def mit_anbieter(monkeypatch):
     _autocorrect ab und pruefte keiner mehr, was er behauptet — gruen aus dem falschen Grund.
     """
     from webtool import app as app_mod
-    monkeypatch.setattr(app_mod.llm, "available", lambda: (True, ""))
+    monkeypatch.setattr(app_mod.llm, "available", lambda *_a: (True, ""))
 
 
 def test_autocorrect_startet_correct_run(client, monkeypatch, mit_anbieter):
@@ -644,6 +644,34 @@ def test_settings_nennt_die_WIRKSAME_projektwurzel(client, monkeypatch, tmp_path
     """
     monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path / "woanders"))
     assert client.get("/api/settings").json()["projekte_pfad"] == str(tmp_path / "woanders")
+
+
+def test_settings_antwort_beurteilt_DENSELBEN_stand_den_sie_meldet(client, monkeypatch):
+    """Eine Antwort, eine Wahrheit (CodeRabbit-Bot an PR #248).
+
+    `settings.public(cfg)` bekam den geschriebenen Snapshot, `llm.available()` las die Datei
+    neu. Unter zwei gleichzeitigen Schreibern trug dieselbe Antwort dann `provider` aus dem
+    einen Schreibvorgang und `ai_reason` aus dem anderen — der Nutzer laese „Anbieter:
+    Anthropic" neben „claude ist auf diesem Rechner nicht installiert".
+
+    Gemessen wird das ohne Nebenlaeufigkeit: die Datei sagt etwas ANDERES als der uebergebene
+    Stand. Liest `available()` selbst nach, gewinnt die Datei und der Test faellt.
+    """
+    from webtool import llm
+
+    # Was auf der PLATTE steht, wenn `available()` selbst laese: ein Abo ohne Binary.
+    monkeypatch.setattr(llm.settings, "load",
+                        lambda: {"provider": "claude-cli", "model": "opus", "base_url": "",
+                                 "api_key": "", "whisper_model": "large-v3",
+                                 "whisper_lang": "de", "ytdlp_auto": "1"})
+    monkeypatch.setattr(llm, "_exe", lambda prov: "")      # kein claude-Binary
+
+    # Der PUT stellt auf einen API-Anbieter OHNE Key um — die Begruendung muss DEN nennen.
+    body = client.put("/api/settings", json={"provider": "openai"}).json()
+    assert body["provider"] == "openai"
+    assert body["ai_ready"] is False
+    assert "OpenAI" in body["ai_reason"], \
+        f"die Begruendung gilt einem anderen Stand als `provider`: {body['ai_reason']!r}"
 
 
 def test_settings_put_liefert_denselben_rumpf_wie_der_get(client):
@@ -1014,7 +1042,7 @@ def test_autocorrect_startet_nicht_ohne_anbieter(client, monkeypatch):
     # Ohne das Setzen waere der Test auf einem Rechner mit TRANSKRIBOR_AUTOCORRECT=0
     # gruen, ohne das Anbieter-Gate ueberhaupt zu erreichen.
     monkeypatch.setenv("TRANSKRIBOR_AUTOCORRECT", "1")
-    monkeypatch.setattr(appmod.llm, "available", lambda: (False, "kein claude"))
+    monkeypatch.setattr(appmod.llm, "available", lambda *_a: (False, "kein claude"))
     monkeypatch.setattr(appmod.jobs, "request",
                         lambda *a, **k: gestartet.append(a) or ("id", True))
     appmod._autocorrect("Testprojekt")
@@ -1025,7 +1053,7 @@ def test_autocorrect_startet_mit_anbieter(client, monkeypatch):
     from webtool import app as appmod
     gestartet = []
     monkeypatch.setenv("TRANSKRIBOR_AUTOCORRECT", "1")
-    monkeypatch.setattr(appmod.llm, "available", lambda: (True, ""))
+    monkeypatch.setattr(appmod.llm, "available", lambda *_a: (True, ""))
     monkeypatch.setattr(appmod.jobs, "request",
                         lambda *a, **k: gestartet.append(a) or ("id", True))
     appmod._autocorrect("Testprojekt")
@@ -1045,7 +1073,7 @@ def test_shutdown_bricht_laufende_jobs_ab(client, monkeypatch):
 
 def test_settings_meldet_ai_ready(client, monkeypatch):
     from webtool import app as appmod
-    monkeypatch.setattr(appmod.llm, "available", lambda: (False, "kein claude"))
+    monkeypatch.setattr(appmod.llm, "available", lambda *_a: (False, "kein claude"))
     body = client.get("/api/settings").json()
     assert body["ai_ready"] is False
     assert body["ai_reason"] == "kein claude"
