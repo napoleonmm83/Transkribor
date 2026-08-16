@@ -157,9 +157,12 @@ function zeigeStatus(s) {
     // abgearbeitet hat — mit ihm ist es eine Auskunft statt einer Endlosschleife.
     // Nur hier, nicht im Normalfall: der Satz stünde sonst nach jedem Update vor jedem Nutzer.
     $('sub').textContent = s.stempelSchreibbar === false
+      // Keine Ursachenliste: die Probe sieht ein gesperrtes Handle und fehlende Schreibrechte,
+      // aber KEINE volle Platte (null Bytes brauchen keinen Platz). Eine Aufzählung wäre hier
+      // wieder eine Behauptung, die schärfer ist als die Prüfung darunter.
       ? 'Der Paketstand lässt sich nicht vermerken (' + s.stempelPfad + ') — deshalb fragt diese ' +
         'Seite bei jedem Start erneut. „Jetzt einrichten“ funktioniert trotzdem; damit die Frage ' +
-        'aufhört, braucht diese Datei Schreibrechte (Virenscanner, volle Festplatte).'
+        'aufhört, muss sich diese Datei schreiben lassen.'
       : 'Dieses Update bringt neue Python-Pakete mit. Ein Klick auf ' +
         '„Jetzt einrichten“ holt sie nach — die grossen Sachen sind schon da.'
     $('los').style.display = ''

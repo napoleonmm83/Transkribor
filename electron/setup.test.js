@@ -128,7 +128,7 @@ test('ffmpeg wird im winget-Paketordner gefunden — dort steht es nie auf dem P
 })
 
 test('fehlendes winget-Verzeichnis liefert Leerstring statt zu werfen', () => {
-  assert.strictEqual(wingetFfmpeg('C:\gibt-es-nicht-42'), '')
+  assert.strictEqual(wingetFfmpeg(String.raw`C:\gibt-es-nicht-42`), '')
 })
 
 /** Eine venv-Attrappe in einem Wegwerf-Ordner — NIE die echte .venv des Entwicklers. */
@@ -175,34 +175,64 @@ test('Kommentare, Zeilenenden und Reihenfolge entwerten den Merker NICHT (#229)'
   assert.strictEqual(paketeAktuell(venv, reqDatei('faster-whisper\n')), false)
 })
 
+test('ein URL-Fragment ist KEIN Kommentar — zwei Pins duerfen nicht gleich hashen (#229)', () => {
+  // pip schneidet einen Kommentar nur am Zeilenanfang oder nach Leerraum. Mit blossem `#`
+  // normalisierten diese beiden Zeilen auf denselben Text: zwei verschiedene Paketstaende,
+  // ein Merker, "aktuell" — die Einrichtung wird nicht angeboten, das neue Pin erreicht den
+  // Nutzer NIE. Der rohe Byte-Hash konnte das nicht; es waere der Schaden aus #181, neu
+  // aufgemacht von seiner eigenen Reparatur.
+  const { paketeAktuell, stempelSchreiben } = require('./setup')
+  const venv = leereVenv()
+  const a = reqDatei('torch @ https://h/t-2.8.0.whl#sha256=aaa\n')
+  const b = reqDatei('torch @ https://h/t-2.8.0.whl#sha256=bbb\n')
+  assert.strictEqual(stempelSchreiben(venv, a), true)
+  assert.strictEqual(paketeAktuell(venv, a), true)
+  assert.strictEqual(paketeAktuell(venv, b), false)
+})
+
 test('unlesbare requirements.txt heisst "nichts nachzuziehen", nicht "veraltet"', () => {
   const { paketeAktuell } = require('./setup')
   // Die Gegenrichtung waere eine Einrichtung, die bei jedem Start erscheint und nie gelingen kann.
-  assert.strictEqual(paketeAktuell(leereVenv(), 'C:\gibt-es-nicht-42\requirements.txt'), true)
+  assert.strictEqual(paketeAktuell(leereVenv(), String.raw`C:\gibt-es-nicht-42\requirements.txt`), true)
 })
 
 test('ein nicht anlegbarer Merker meldet sich als nicht schreibbar (#230)', () => {
   const { stempelSchreibbar } = require('./setup')
   assert.strictEqual(stempelSchreibbar(leereVenv()), true, 'ein normaler Ordner ist schreibbar')
-  assert.strictEqual(stempelSchreibbar('C:\gibt-es-nicht-42'), false)
+  assert.strictEqual(stempelSchreibbar(String.raw`C:\gibt-es-nicht-42`), false)
 })
 
-test('ein schreibgeschuetzter Merker zaehlt auch — nicht nur ein gesperrter Ordner (#230)', () => {
-  // Der Grund fuer die zwei Zweige: ein per Attribut oder Virenscanner gesperrter Merker liegt
-  // in einem sonst voellig schreibbaren Ordner. Ohne diesen Test liesse sich der Dateizweig
-  // ersatzlos streichen und die Suite bliebe gruen — ein Waechter, der nur im Namen einer ist.
+test('ein schreibgeschuetzter Merker zaehlt auch — nicht nur ein fehlender Ordner (#230)', (t) => {
+  // Der Fall, um den es geht: ein per Attribut oder fremdem Handle gesperrter Merker liegt in
+  // einem sonst voellig schreibbaren Ordner. `accessSync(W_OK)` stand hier zuerst und sieht ihn
+  // NICHT — es fragt Metadaten ab und oeffnet die Datei nie.
   const fs = require('node:fs'), path = require('node:path')
   const { stempelSchreibbar } = require('./setup')
   const venv = leereVenv()
   const p = path.join(venv, '.requirements')
-  fs.writeFileSync(p, 'x')
+  fs.writeFileSync(p, 'HASH')
   fs.chmodSync(p, 0o444)
   // Nachgemessen statt angenommen: als root (Container-CI) laesst sich eine Datei so nicht
-  // sperren, und dann belegte die Behauptung darunter nichts. Geprobt wird mit einem ECHTEN
-  // Schreibversuch, nicht mit derselben Frage, die die Funktion stellt — sonst prueft der
-  // Test seine eigene Implementierung.
-  try { fs.appendFileSync(p, 'y'); return } catch { /* wirklich gesperrt — weiter */ }
+  // sperren, und dann belegte die Behauptung darunter nichts. `t.skip` statt `return` — ein
+  // blosses return waere ein BESTANDENER Test, und der Schutz bliebe unsichtbar.
+  try { fs.appendFileSync(p, 'y'); return t.skip('als root laesst sich die Datei nicht sperren') }
+  catch { /* wirklich gesperrt — weiter */ }
   assert.strictEqual(stempelSchreibbar(venv), false)
+  assert.strictEqual(fs.readFileSync(p, 'utf8'), 'HASH', 'die Probe darf den Merker nicht anfassen')
+})
+
+test('die Probe laesst einen schreibbaren Merker unveraendert (#230)', () => {
+  // Sie haengt NICHTS an. Wuerde sie den heutigen Hash schreiben (der naheliegende Reflex),
+  // erklaerte sie eine venv fuer fertig, der Pakete fehlen — und die Einrichtungsseite
+  // verschwaende, statt zu erklaeren.
+  const fs = require('node:fs'), path = require('node:path')
+  const { stempelSchreibbar, paketeAktuell } = require('./setup')
+  const venv = leereVenv()
+  const req = reqDatei('faster-whisper\n')
+  fs.writeFileSync(path.join(venv, '.requirements'), 'EIN-ALTER-HASH')
+  assert.strictEqual(stempelSchreibbar(venv), true)
+  assert.strictEqual(fs.readFileSync(path.join(venv, '.requirements'), 'utf8'), 'EIN-ALTER-HASH')
+  assert.strictEqual(paketeAktuell(venv, req), false, 'und der Stand bleibt "veraltet"')
 })
 
 test('nur importierbar UND aktuell startet den Server — beides einzeln reicht nicht', () => {
@@ -318,6 +348,42 @@ async function einrichtenMit(ueber = {}) {
 
 /** Die Aufrufe an Python/pip — alles ausser den Paketmanagern der Plattform. */
 const pipZeilen = spur => spur.rufe.filter(([c]) => c !== 'winget' && c !== 'brew').map(([, a]) => a)
+
+test('der glatte Lauf VERMERKT den Paketstand — sonst kommt die Seite bei jedem Start wieder', async () => {
+  // Die Positivrichtung. Ohne sie sind alle uebrigen Merker-Tests `merker === 0`, und ein
+  // `else if (false)` an der Schreibstelle bliebe unsichtbar (nachgefahren: 83 pass, 0 fail) —
+  // ausgerechnet der Zustand, den #230 nur noch ERKLAEREN, nicht verhindern kann.
+  const spur = await einrichtenMit()
+  assert.strictEqual(spur.r.ok, true)
+  assert.strictEqual(spur.merker, 1)
+})
+
+test('scheitert das Anlegen der venv, bricht der Lauf ab und vermerkt nichts', async () => {
+  const spur = await einrichtenMit({
+    exists: () => false,                                    // keine venv da -> anlegen
+    lauf: async (cmd, args) => (args.join(' ').includes('-m venv') ? 1 : 0),
+  })
+  assert.strictEqual(spur.r.ok, false)
+  assert.match(spur.r.fehler, /venv/)
+  assert.strictEqual(spur.merker, 0)
+})
+
+test('fehlendes Python holt der Installer nach — und meldet, wenn es danach nicht im PATH steht', async () => {
+  let n = 0
+  const nachInstall = await einrichtenMit({
+    findePython: async () => (++n > 1 ? { cmd: 'py', args: ['-3'], version: '3.13' } : null),
+  })
+  assert.strictEqual(nachInstall.r.ok, true)
+  assert.ok(nachInstall.rufe.some(([c, a]) => c === 'winget' && a.includes('Python.Python.3.13')),
+    'der Installer muss ueberhaupt gerufen werden')
+
+  // Der Fall, den winget hinterlaesst, ohne dass er scheitert: installiert, aber noch nicht im
+  // PATH dieses Prozesses. Ohne eigene Meldung stuende dort "Kein Python >= 3.10 gefunden" —
+  // und der Nutzer suchte einen Fehler, den ein Neustart behebt.
+  const nie = await einrichtenMit({ findePython: async () => null })
+  assert.strictEqual(nie.r.ok, false)
+  assert.match(nie.r.fehler, /PATH/)
+})
 
 test('nach einem gescheiterten CUDA-Nachlauf wird der Merker NICHT geschrieben (#232)', async () => {
   // Genau die Zeile, die #232 als unpruefbar benannt hat: sie steckt zwischen zwei echten

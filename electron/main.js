@@ -91,11 +91,33 @@ ipcMain.handle('protokollOeffnen', () => {
   return protokoll.pfad()
 })
 
-ipcMain.handle('einrichten', async () => {
-  const r = await setup.einrichten(z => senden('log', z), s => senden('phase', { schritt: s }))
-  if (r.ok) await serverStarten()
-  else senden('fehler', r.fehler)
-  return r
+/**
+ * Genau wie `startLaeuft`, und aus demselben Grund — nur ist der Schaden hier groesser:
+ * ZWEI `pip install -r` in dasselbe `site-packages`. Die Instanzsperre unten deckt nur den Weg
+ * ueber zwei Prozesse; ueber EINEN Prozess bleibt er sonst offen, und zwar alltaeglich: das
+ * Standardmenue ist nur versteckt (`setMenuBarVisibility(false)`), seine Accelerators leben —
+ * **Ctrl+R laedt `setup.html` mitten im Lauf neu**. Danach fragt die Seite `status()`, sieht
+ * (Sondierungsimporte da, Merker noch nicht geschrieben) `venvVeraltet: true` und zeigt den
+ * Knopf wieder aktiv. „Es passiert nichts, ich lade mal neu" waehrend eines 10–30-Minuten-
+ * Downloads ist genau der Nutzer, fuer den diese Seite gebaut ist. Dasselbe erreicht der
+ * `fehler`-Zweig im Renderer, der den Knopf wieder freigibt.
+ *
+ * Der Riegel gehoert deshalb in den Hauptprozess, nicht in den Renderer: `disabled` am Knopf
+ * ueberlebt kein Neuladen.
+ */
+let einrichtungLaeuft = null
+ipcMain.handle('einrichten', () => {
+  if (einrichtungLaeuft) return einrichtungLaeuft
+  einrichtungLaeuft = setup.einrichten(z => senden('log', z), s => senden('phase', { schritt: s }))
+    .then(async r => {
+      if (r.ok) await serverStarten()
+      else senden('fehler', r.fehler)
+      return r
+    })
+    // Erst danach freigeben — und in BEIDE Richtungen: bliebe der Merker nach einem Wurf
+    // stehen, waere die Einrichtung fuer den Rest der Sitzung tot.
+    .finally(() => { einrichtungLaeuft = null })
+  return einrichtungLaeuft
 })
 
 ipcMain.handle('logs', () => backend.log())
@@ -148,19 +170,29 @@ ipcMain.handle('update:installieren', () => {
  *
  * Nebenbei geschlossen: zwei uvicorn auf zwei Ports.
  *
- * VOR whenReady, weil die Zweitinstanz sich beenden soll, bevor sie ein Fenster baut.
+ * **`return`, nicht `else`.** `app.quit()` ist asynchron — es feuert `before-quit`/`will-quit`
+ * und sagt NICHT zu, dass `ready` danach ausbleibt. Kaeme es doch, taete die sterbende Instanz
+ * genau das, was die Sperre verhindern soll: `fenster()`, `pruefen()` → `setup.status()`
+ * (spawnt Python und winget) und bei fertiger venv `serverStarten()` — ein zweiter uvicorn.
+ * Der Rumpf darunter registriert dann gar nicht erst; in CommonJS ist ein `return` auf
+ * Modulebene gueltig (der Modulrumpf IST eine Funktion). Die Zusage ist damit baulich
+ * gedeckt statt zeitlich gehofft — der lokale Nachweis „ein Fenster statt zwei" haette ein
+ * Fenster, das 200 ms lebt, ohnehin nicht gesehen.
  */
 if (!app.requestSingleInstanceLock()) {
   app.quit()
-} else {
-  app.on('second-instance', () => {
-    // Der zweite Doppelklick ist keine Fehlbedienung, sondern die Suche nach dem Fenster —
-    // kommentarlos zu sterben laese ihn wie eine kaputte App aussehen.
-    if (!win || win.isDestroyed()) return
-    if (win.isMinimized()) win.restore()
-    win.focus()
-  })
+  return
 }
+
+app.on('second-instance', () => {
+  // Der zweite Doppelklick ist keine Fehlbedienung, sondern die Suche nach dem Fenster —
+  // kommentarlos zu sterben laese ihn wie eine kaputte App aussehen. Steht noch kein Fenster
+  // (die Millisekunden zwischen Sperre und `fenster()`), bleibt es dabei: `app.focus()` haette
+  // dann nichts zu holen.
+  if (!win || win.isDestroyed()) return
+  if (win.isMinimized()) win.restore()
+  win.focus()
+})
 
 app.whenReady().then(async () => {
   protokoll.kopf()
