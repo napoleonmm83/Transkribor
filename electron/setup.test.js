@@ -240,3 +240,99 @@ test('ein gegluecktes Zurueckholen meldet keinen Verlust', async () => {
   assert.strictEqual(pip.length, 1)
   assert.ok(!zeilen.some(z => z.includes('fehlgeschlagen')))
 })
+
+/**
+ * Faehrt `einrichten()` mit nachgebautem Werkzeug (#232). Die Vorgabe ist der glatte Fall:
+ * alles gefunden, jeder Aufruf gelingt. Jeder Test setzt NUR die Stelle um, die er beweisen
+ * will — sonst steht in jedem Test eine vollstaendige Attrappe, und die naechste
+ * hinzukommende Abhaengigkeit faellt in allen gleichzeitig auf die echte Funktion zurueck.
+ *
+ * Aufgezeichnet werden die AUFRUFE, nicht nur der Ausgang: „schreibt keinen Merker" bliebe
+ * sonst gruen, solange der Merker nur nichts zurueckmeldet.
+ */
+async function einrichtenMit(ueber = {}) {
+  const { einrichten } = require('./setup')
+  const spur = { zeilen: [], schritte: [], rufe: [], merker: 0 }
+  const roh = {
+    planen: async () => ({ installer: 'winget', autoInstall: true, brewPakete: [], hinweis: '',
+                           torchIndex: 'https://x/cu128' }),
+    findePython: async () => ({ cmd: 'py', args: ['-3'], version: '3.13' }),
+    findeFfmpeg: async () => 'C:\\ffmpeg.exe',
+    findeWhisperCpp: async () => '',
+    exists: () => true,
+    mkdir: () => {},
+    lauf: async () => 0,
+    cudaZurueckholen: async () => true,
+    importeDa: async () => true,
+    stempelSchreiben: () => true,
+    ...ueber,
+  }
+  // Mitgeschrieben wird UM die Ueberschreibung herum, nicht in ihr: sonst muesste jeder Test,
+  // der nur einen Rueckgabewert umbiegen will, die Buchfuehrung mitschleppen — und der erste,
+  // der es vergisst, prueft still nichts mehr.
+  spur.r = await einrichten(z => spur.zeilen.push(z), s => spur.schritte.push(s), {
+    ...roh,
+    lauf: async (cmd, args) => { spur.rufe.push([cmd, args.join(' ')]); return roh.lauf(cmd, args) },
+    stempelSchreiben: (...a) => { spur.merker++; return roh.stempelSchreiben(...a) },
+  })
+  return spur
+}
+
+/** Die Aufrufe an Python/pip — alles ausser den Paketmanagern der Plattform. */
+const pipZeilen = spur => spur.rufe.filter(([c]) => c !== 'winget' && c !== 'brew').map(([, a]) => a)
+
+test('nach einem gescheiterten CUDA-Nachlauf wird der Merker NICHT geschrieben (#232)', async () => {
+  // Genau die Zeile, die #232 als unpruefbar benannt hat: sie steckt zwischen zwei echten
+  // pip-Laeufen. Wuerde der Merker hier geschrieben, gaelte die venv als fertig, die
+  // Einrichtung wuerde nie wieder angeboten — und der Hinweis auf der Einstellungsseite
+  // („dann die Umgebung neu einrichten") zeigte auf einen Weg, den es nicht mehr gibt.
+  const spur = await einrichtenMit({ cudaZurueckholen: async () => false })
+  assert.strictEqual(spur.r.ok, true, 'der Lauf bricht bewusst NICHT ab — langsam ist besser als gar nicht')
+  assert.strictEqual(spur.merker, 0, 'ohne heiles torch darf der Paketstand nicht vermerkt werden')
+  assert.ok(spur.zeilen.some(z => z.includes('nicht vermerkt')),
+    'und der Nutzer muss erfahren, warum die Seite wiederkommt')
+})
+
+test('eine gescheiterte Importpruefung meldet ok:false und schreibt keinen Merker', async () => {
+  // Der Merker behauptet „fertig eingerichtet gegen diese requirements.txt". Ueber eine venv,
+  // die sich nicht importieren laesst, darf er das nicht sagen.
+  const spur = await einrichtenMit({ importeDa: async () => false })
+  assert.strictEqual(spur.r.ok, false)
+  assert.match(spur.r.fehler, /unvollstaendig/)
+  assert.strictEqual(spur.merker, 0)
+})
+
+test('faellt das CUDA-Rad aus, laeuft torch vom Standardindex nach — der Lauf geht weiter', async () => {
+  // Die teuerste Verzweigung der Datei: hier entscheidet sich, ob der Nutzer die GPU behaelt
+  // oder still auf der CPU landet. Ein Abbruch waere die falsche Richtung.
+  const spur = await einrichtenMit({
+    lauf: async (cmd, args) => {
+      const z = args.join(' ')
+      return z.includes('install torch') && z.includes('--index-url') ? 1 : 0
+    },
+  })
+  assert.strictEqual(spur.r.ok, true)
+  const torch = pipZeilen(spur).filter(z => z.includes('install torch'))
+  assert.strictEqual(torch.length, 2, `erst mit Index, dann ohne: ${torch.join(' | ')}`)
+  assert.ok(torch[0].includes('--index-url'))
+  assert.ok(!torch[1].includes('--index-url'), 'der zweite Versuch muss das Standardrad nehmen')
+  assert.ok(pipZeilen(spur).some(z => z.includes('-r ')), 'und danach laeuft der Rest weiter')
+})
+
+test('ein gescheitertes ffmpeg bricht NICHT ab, ein gescheitertes `-r` schon', async () => {
+  // Die Asymmetrie ist die Entscheidung: ohne ffmpeg laesst sich immerhin noch bearbeiten,
+  // ohne die Python-Pakete gar nichts. Beide Richtungen zusammen, sonst belegt der Test nur
+  // eine Haelfte und die andere darf unbemerkt kippen.
+  const ohneFfmpeg = await einrichtenMit({
+    findeFfmpeg: async () => '',
+    lauf: async (cmd, args) => (cmd === 'winget' ? 1 : 0),
+  })
+  assert.strictEqual(ohneFfmpeg.r.ok, true, 'ffmpeg-Fehlschlag darf die Einrichtung nicht kippen')
+
+  const ohnePakete = await einrichtenMit({
+    lauf: async (cmd, args) => (args.join(' ').includes('-r ') ? 1 : 0),
+  })
+  assert.strictEqual(ohnePakete.r.ok, false)
+  assert.match(ohnePakete.r.fehler, /Python-Pakete/)
+  assert.strictEqual(ohnePakete.merker, 0, 'nach einem Abbruch darf kein Merker liegenbleiben')
+})

@@ -359,19 +359,41 @@ async function cudaZurueckholen(vpy, pl, onLine, werkzeug = { ausgabe, lauf }) {
 /**
  * Richtet alles Fehlende ein. `onLine` bekommt jede Log-Zeile, `onSchritt` den Fortschritt.
  * Gibt `{ok, fehler}` zurueck; wirft nicht, damit das Fenster den Fehler anzeigen kann.
+ *
+ * `werkzeug` wird hereingereicht wie bei `cudaZurueckholen` — aus demselben Grund, nur eine
+ * Ebene groesser (#232): hier faellt JEDE teure Entscheidung dieser Datei — torch aus dem
+ * CUDA-Index oder vom Standardindex, nach welchem Fehlschlag abgebrochen und nach welchem
+ * weitergelaufen wird, ob der Merker geschrieben wird. Ohne Seam ist keine davon anders
+ * pruefbar als mit einem echten, mehrere Gigabyte grossen pip-Lauf, und ein Fehler darin
+ * kostet den Nutzer die GPU oder sperrt ihn aus, ohne dass ein Test murrt.
+ *
+ * **Teilweise Ueberschreibung** (`...werkzeug` ueber den Vorgaben): ein Test nennt die zwei
+ * bis drei Schluessel, um die es ihm geht. Muesste er alle neun stellen, stuende in jedem
+ * Test eine vollstaendige Attrappe — und die naechste hinzukommende Abhaengigkeit fiele in
+ * allen gleichzeitig auf die echte Funktion zurueck, weil niemand sie nachtraegt.
+ *
+ * `planen` fasst `paketmanager()` + `brewDa()` + `plan()` zusammen, statt drei Schluessel zu
+ * kosten: `plan` ist eine reine Funktion mit eigenen Tests, gebraucht wird hier nur ihr
+ * Ergebnis — und die beiden Sondierungen dahinter starten je einen echten Prozess.
  */
-async function einrichten(onLine, onSchritt) {
+async function einrichten(onLine, onSchritt, werkzeug = {}) {
+  const w = {
+    planen: async () => plan(process.platform, await paketmanager(), process.arch, await brewDa()),
+    lauf, findePython, findeFfmpeg, findeWhisperCpp, importeDa, stempelSchreiben,
+    cudaZurueckholen, exists: P.exists,
+    mkdir: d => fs.mkdirSync(d, { recursive: true }),
+    ...werkzeug,
+  }
   const schritte = []
-  let py = await findePython()
-  const pm = await paketmanager()
-  const pl = plan(process.platform, pm, process.arch, await brewDa())
+  let py = await w.findePython()
+  const pl = await w.planen()
   /** Ein Paket ueber den Installer dieser Plattform. `null` = hier installiert die App nicht. */
   const holen = (winget, brewPaket) => {
     if (pl.installer === 'winget') {
-      return lauf('winget', ['install', '-e', '--id', winget,
+      return w.lauf('winget', ['install', '-e', '--id', winget,
         '--accept-package-agreements', '--accept-source-agreements'], onLine)
     }
-    if (pl.installer === 'brew') return lauf('brew', ['install', brewPaket], onLine)
+    if (pl.installer === 'brew') return w.lauf('brew', ['install', brewPaket], onLine)
     return null
   }
 
@@ -380,13 +402,13 @@ async function einrichten(onLine, onSchritt) {
     onLine('Python nicht gefunden — installiere es …')
     const code = await holen('Python.Python.3.13', 'python')
     if (code !== 0) return { ok: false, fehler: 'Python konnte nicht installiert werden. Bitte von python.org installieren und Transkribor neu starten.' }
-    py = await findePython()
+    py = await w.findePython()
     if (!py) return { ok: false, fehler: 'Python wurde installiert, ist aber noch nicht im PATH. Bitte Transkribor neu starten.' }
   }
   if (!py) return { ok: false, fehler: `Kein Python >= 3.10 gefunden. ${pl.hinweis}` }
   schritte.push(`Python: ${py.version}`)
 
-  if (!(await findeFfmpeg())) {
+  if (!(await w.findeFfmpeg())) {
     if (pl.installer) {
       onSchritt('ffmpeg installieren')
       onLine('ffmpeg nicht gefunden — installiere es …')
@@ -401,42 +423,42 @@ async function einrichten(onLine, onSchritt) {
   // whisper-cpp gibt es nur auf Apple Silicon und nur ueber brew. Es fehlt sonst STILL —
   // die Transkription laeuft dann sechsmal langsamer, ohne dass jemand den Grund erfaehrt.
   // Kein Abbruch bei Fehlschlag: langsam ist besser als gar nicht.
-  if (pl.installer === 'brew' && pl.brewPakete.includes('whisper-cpp') && !(await findeWhisperCpp())) {
+  if (pl.installer === 'brew' && pl.brewPakete.includes('whisper-cpp') && !(await w.findeWhisperCpp())) {
     onSchritt('Schnelle Spracherkennung (whisper-cpp) installieren')
-    await lauf('brew', ['install', 'whisper-cpp'], onLine)
+    await w.lauf('brew', ['install', 'whisper-cpp'], onLine)
   }
 
-  if (!P.exists(P.venvPython(P.venv))) {
+  if (!w.exists(P.venvPython(P.venv))) {
     onSchritt('Umgebung anlegen')
-    fs.mkdirSync(path.dirname(P.venv), { recursive: true })
-    const code = await lauf(py.cmd, [...py.args, '-m', 'venv', P.venv], onLine)
+    w.mkdir(path.dirname(P.venv))
+    const code = await w.lauf(py.cmd, [...py.args, '-m', 'venv', P.venv], onLine)
     if (code !== 0) return { ok: false, fehler: 'venv konnte nicht angelegt werden.' }
   }
   const vpy = P.venvPython(P.venv)
 
   onSchritt('pip aktualisieren')
-  await lauf(vpy, ['-m', 'pip', 'install', '-U', 'pip'], onLine)
+  await w.lauf(vpy, ['-m', 'pip', 'install', '-U', 'pip'], onLine)
 
   onSchritt(pl.torchIndex ? 'PyTorch mit CUDA laden (mehrere GB, dauert)'
                           : 'PyTorch laden (mehrere GB, dauert)')
   const torchArgs = ['-m', 'pip', 'install', 'torch']
   if (pl.torchIndex) torchArgs.push('--index-url', pl.torchIndex)
-  let code = await lauf(vpy, torchArgs, onLine)
+  let code = await w.lauf(vpy, torchArgs, onLine)
   if (code !== 0 && pl.torchIndex) {
     onLine('CUDA-Variante fehlgeschlagen — versuche die CPU-Variante (Transkription wird dann langsam).')
-    code = await lauf(vpy, ['-m', 'pip', 'install', 'torch'], onLine)
+    code = await w.lauf(vpy, ['-m', 'pip', 'install', 'torch'], onLine)
   }
   if (code !== 0) return { ok: false, fehler: 'PyTorch konnte nicht installiert werden.' }
 
   onSchritt('Whisper und Werkzeuge laden')
-  code = await lauf(vpy, ['-m', 'pip', 'install', '-r', P.requirements], onLine)
+  code = await w.lauf(vpy, ['-m', 'pip', 'install', '-r', P.requirements], onLine)
   if (code !== 0) return { ok: false, fehler: 'Python-Pakete konnten nicht installiert werden.' }
-  const torchOk = await cudaZurueckholen(vpy, pl, onLine)
+  const torchOk = await w.cudaZurueckholen(vpy, pl, onLine)
 
   // Geprueft wird der Import, NICHT der Merker: ein misslungenes Vermerken wuerde den Nutzer
   // sonst aussperren (kein ok -> kein Serverstart), obwohl alles installiert ist.
   onSchritt('Prüfen')
-  if (!(await importeDa())) return { ok: false, fehler: 'Einrichtung unvollstaendig — bitte erneut versuchen.' }
+  if (!(await w.importeDa())) return { ok: false, fehler: 'Einrichtung unvollstaendig — bitte erneut versuchen.' }
   // Erst NACH der Pruefung: der Merker behauptet "fertig eingerichtet gegen diese
   // requirements.txt", und das soll er nur ueber eine venv sagen, die sich importieren laesst.
   //
@@ -447,7 +469,7 @@ async function einrichten(onLine, onSchritt) {
   // erneut an; die App startet trotzdem (ok), sie rechnet nur langsam.
   if (!torchOk) {
     onLine('Der Paketstand wird nicht vermerkt — die Einrichtungsseite bietet den Lauf beim naechsten Start erneut an.')
-  } else if (!stempelSchreiben()) {
+  } else if (!w.stempelSchreiben()) {
     onLine('Hinweis: Paketstand konnte nicht vermerkt werden — die Einrichtung meldet sich beim naechsten Start erneut.')
   }
   onLine('Fertig. ' + schritte.join(' · '))
