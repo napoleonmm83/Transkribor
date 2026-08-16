@@ -34,7 +34,7 @@ const BASIS: Settings = {
   ai_ready: true, ai_reason: '',
   kaputt: '',
   ytdlp_auto: '1',
-  ytdlp: { version: '2026.8.12', unlesbar: false, geprueft: '2026-08-13', auto: true, env: false, laeuft: false, ergebnis: '' },
+  ytdlp: { version: '2026.8.12', unlesbar: false, geprueft: '2026-08-13', auto: true, env: false, laeuft: false, ergebnis: '', ungeschuetzt: false, ejs_unlesbar: false },
   providers: [
     { id: 'claude-cli', label: 'Claude Code Abo (kein Key)', needs_key: false, cli: true, base: '', default_model: 'opus', keys_url: '', hint: 'Nutzt das Abo.' },
     { id: 'codex-cli', label: 'ChatGPT-Abo (Codex CLI, kein Key)', needs_key: false, cli: true, base: '', default_model: '', keys_url: '', hint: 'Nutzt das ChatGPT-Abo.' },
@@ -284,7 +284,7 @@ describe('SettingsPage', () => {
   })
 
   it('sagt es, wenn yt-dlp gar nicht installiert ist', async () => {
-    zeige({ ytdlp: { version: null, unlesbar: false, geprueft: '', auto: true, env: false, laeuft: false, ergebnis: '' } })
+    zeige({ ytdlp: { version: null, unlesbar: false, geprueft: '', auto: true, env: false, laeuft: false, ergebnis: '', ungeschuetzt: false, ejs_unlesbar: false } })
     expect(await screen.findByText(/Nicht installiert/)).toBeInTheDocument()
   })
 
@@ -294,7 +294,7 @@ describe('SettingsPage', () => {
     // master genauso gruen gewesen. Er sichert den Nachbarfall aus #174 (Reload mitten in einem
     // fremden Lauf) und dass es das Gate ueberhaupt gibt — nimmt man es ganz weg, wird er rot.
     // Den Fix selbst sichert der Test „sagt waehrend des EIGENEN Laufs …" weiter unten ab.
-    zeige({ ytdlp: { version: null, unlesbar: false, geprueft: '', auto: true, env: false, laeuft: true, ergebnis: '' } })
+    zeige({ ytdlp: { version: null, unlesbar: false, geprueft: '', auto: true, env: false, laeuft: true, ergebnis: '', ungeschuetzt: false, ejs_unlesbar: false } })
     expect(await screen.findByText(/Eine Aktualisierung läuft gerade/)).toBeInTheDocument()
     expect(screen.queryByText(/Nicht installiert/)).not.toBeInTheDocument()
   })
@@ -303,9 +303,27 @@ describe('SettingsPage', () => {
     // Beide Zustände liefern `version: null`. Vor #189 stand hier "steht damit nicht zur
     // Verfügung" — das Gegenteil dessen, was der Nutzer tun kann: der Import läuft, nur die
     // Selbstaktualisierung ist ausgesetzt. Die Anzeige darf nicht lügen.
-    zeige({ ytdlp: { version: null, unlesbar: true, geprueft: '', auto: true, env: false, laeuft: false, ergebnis: '' } })
+    zeige({ ytdlp: { version: null, unlesbar: true, geprueft: '', auto: true, env: false, laeuft: false, ergebnis: '', ungeschuetzt: false, ejs_unlesbar: false } })
     expect(await screen.findByText(/Fassung nicht lesbar/)).toBeInTheDocument()
     expect(screen.queryByText(/Nicht installiert/)).not.toBeInTheDocument()
+  })
+
+  it('sagt es, wenn die Löserskripte nicht prüfbar sind — und schweigt sonst', async () => {
+    // #198: sind die Metadaten von `yt-dlp-ejs` kaputt, fällt die Erkennung untauglicher
+    // Löserskripte STILL aus (`_ejs_untauglich()` → „unbekannt ⇒ nicht flaggen"), und der
+    // Server meldete daneben einen kerngesunden Stand — `version` da, `unlesbar: false`.
+    // Was blieb, war ein sporadischer 403 beim Import mit einer Meldung, die in die falsche
+    // Richtung zeigt. BEIDE Richtungen an einem Test: ein Hinweis, der immer steht, ist als
+    // Daueralarm derselbe Schaden von der anderen Seite.
+    const { unmount } = zeige()
+    expect(await screen.findByText(/2026\.8\.12/)).toBeInTheDocument()
+    expect(screen.queryByText(/lassen sich nicht prüfen/)).not.toBeInTheDocument()
+    unmount()
+
+    zeige({ ytdlp: { ...BASIS.ytdlp, ejs_unlesbar: true } })
+    expect(await screen.findByText(/lassen sich nicht prüfen/)).toBeInTheDocument()
+    // Die Fassungszeile bleibt, was sie ist: yt-dlp selbst ist ja in Ordnung.
+    expect(screen.getByText(/2026\.8\.12/)).toBeInTheDocument()
   })
 
   it('speichert den Haken als "0"/"1"', async () => {
@@ -336,7 +354,7 @@ describe('SettingsPage', () => {
   it('warnt, wenn die Umgebungsvariable den Haken überstimmt', async () => {
     // Ein Haken, der nichts tut, ist schlimmer als keiner. Der WIRKSAME Wert kommt aus
     // `ytdlp.auto`, der gespeicherte aus `ytdlp_auto` — nur die Differenz ist die Warnung.
-    zeige({ ytdlp_auto: '1', ytdlp: { version: '2026.8.12', unlesbar: false, geprueft: '', auto: false, env: true, laeuft: false, ergebnis: '' } })
+    zeige({ ytdlp_auto: '1', ytdlp: { version: '2026.8.12', unlesbar: false, geprueft: '', auto: false, env: true, laeuft: false, ergebnis: '', ungeschuetzt: false, ejs_unlesbar: false } })
     expect(await screen.findByText(/wirkungslos/)).toBeInTheDocument()
   })
 
@@ -363,7 +381,7 @@ describe('SettingsPage', () => {
   })
 
   it('meldet einen fehlgeschlagenen Update-Versuch, statt ihn zu verschlucken', async () => {
-    vi.mocked(api.updateYtdlp).mockResolvedValue({ gestartet: true, version: '2026.7.4', unlesbar: false, geprueft: '2026-08-13', auto: true, env: false, laeuft: false, ergebnis: 'fehler' })
+    vi.mocked(api.updateYtdlp).mockResolvedValue({ gestartet: true, version: '2026.7.4', unlesbar: false, geprueft: '2026-08-13', auto: true, env: false, laeuft: false, ergebnis: 'fehler', ungeschuetzt: false, ejs_unlesbar: false })
     zeige()
     fireEvent.click(await screen.findByRole('button', { name: /Jetzt aktualisieren/i }))
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/fehlgeschlagen/)))
@@ -374,11 +392,35 @@ describe('SettingsPage', () => {
     // praeparierte dist-info endet mit Exit 2 und UnicodeDecodeError). Wer gerade "Fassung
     // nicht lesbar" gelesen und darauf geklickt hat, bekaeme sonst "bist du online?" —
     // dieselbe Fehldiagnose, gegen die #189 gebaut ist, drei Zeilen weiter oben.
-    vi.mocked(api.updateYtdlp).mockResolvedValue({ gestartet: true, version: null, unlesbar: true, geprueft: '', auto: true, env: false, laeuft: false, ergebnis: 'fehler' })
+    vi.mocked(api.updateYtdlp).mockResolvedValue({ gestartet: true, version: null, unlesbar: true, geprueft: '', auto: true, env: false, laeuft: false, ergebnis: 'fehler', ungeschuetzt: false, ejs_unlesbar: false })
     zeige()
     fireEvent.click(await screen.findByRole('button', { name: /Jetzt aktualisieren/i }))
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/Metadaten/)))
     expect(toast.error).not.toHaveBeenCalledWith(expect.stringMatching(/online/))
+  })
+
+  it('meldet einen ungeschützten pip-Lauf ZUSÄTZLICH zum Erfolg — und schweigt sonst', async () => {
+    // #236: ob pip durchlief und ob es dabei allein war, sind zwei Fragen. Ungeschützt heisst
+    // hier nicht „ein Einstellungswert kann überbügelt sein" (#194/#192), sondern „zwei
+    // `pip install` können in dieselbe venv geschrieben haben" — der zweite Auslöser sitzt im
+    // fetch-Subprozess. Der Erfolgs-Toast darf deshalb nicht ersetzt, sondern muss ergänzt
+    // werden. Beide Richtungen, sonst wäre ein Daueralarm nicht zu sehen.
+    const fertig = { gestartet: true, version: '2026.8.12', unlesbar: false, geprueft: '',
+                     auto: true, env: false, laeuft: false, ergebnis: 'ok', ejs_unlesbar: false }
+    vi.mocked(api.updateYtdlp).mockResolvedValue({ ...fertig, ungeschuetzt: false })
+    const { unmount } = zeige()
+    fireEvent.click(await screen.findByRole('button', { name: /Jetzt aktualisieren/i }))
+    await waitFor(() => expect(toast.success).toHaveBeenCalled())
+    expect(toast.warning).not.toHaveBeenCalled()
+    unmount()
+
+    vi.mocked(api.updateYtdlp).mockResolvedValue({ ...fertig, ungeschuetzt: true })
+    zeige()
+    fireEvent.click(await screen.findByRole('button', { name: /Jetzt aktualisieren/i }))
+    await waitFor(() => expect(toast.warning).toHaveBeenCalledWith(
+      expect.stringContaining('ohne Sperre')))
+    // Der Erfolg geht dabei NICHT verloren — das war der Fehler des naheliegenden `return`.
+    expect(toast.success).toHaveBeenCalledTimes(2)
   })
 
   it('wartet nicht auf pip, sondern fragt nach — der Toast kommt erst am Ende (#174)', async () => {
@@ -389,7 +431,7 @@ describe('SettingsPage', () => {
     // Fehlschlag, gegen den `ergebnis` gebaut ist.
     vi.mocked(api.updateYtdlp).mockResolvedValue({
       gestartet: true, version: '2026.7.4', unlesbar: false, geprueft: '', auto: true,
-      env: false, laeuft: true, ergebnis: '',
+      env: false, laeuft: true, ergebnis: '', ungeschuetzt: false, ejs_unlesbar: false,
     })
     zeige()
     const knopf = await screen.findByRole('button', { name: /Jetzt aktualisieren/i })
@@ -432,7 +474,7 @@ describe('SettingsPage', () => {
     // Nutzer hin — er hat eben geklickt.
     vi.mocked(api.updateYtdlp).mockResolvedValue({
       gestartet: true, version: '2026.7.4', unlesbar: false, geprueft: '', auto: true,
-      env: false, laeuft: true, ergebnis: '',
+      env: false, laeuft: true, ergebnis: '', ungeschuetzt: false, ejs_unlesbar: false,
     })
     zeige()
     const knopf = await screen.findByRole('button', { name: /Jetzt aktualisieren/i })
@@ -460,7 +502,7 @@ describe('SettingsPage', () => {
     // Gefunden vom Reviewer-Subagenten an PR #223 (I3).
     vi.mocked(api.updateYtdlp).mockResolvedValue({
       gestartet: true, version: '2026.7.4', unlesbar: false, geprueft: '', auto: true,
-      env: false, laeuft: true, ergebnis: '',
+      env: false, laeuft: true, ergebnis: '', ungeschuetzt: false, ejs_unlesbar: false,
     })
     const r = zeige()
     const knopf = await screen.findByRole('button', { name: /Jetzt aktualisieren/i })
@@ -492,7 +534,7 @@ describe('SettingsPage', () => {
     // anderen grün: ein Wächter ohne roten Test ist Dekoration.
     vi.mocked(api.updateYtdlp).mockResolvedValue({
       gestartet: true, version: '2026.7.4', unlesbar: false, geprueft: '', auto: true,
-      env: false, laeuft: true, ergebnis: '',
+      env: false, laeuft: true, ergebnis: '', ungeschuetzt: false, ejs_unlesbar: false,
     })
     zeige()
     const knopf = await screen.findByRole('button', { name: /Jetzt aktualisieren/i })

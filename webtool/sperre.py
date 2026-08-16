@@ -235,6 +235,34 @@ def _lebt_laut(merker):
     return _prozess_lebt(pid) if wirt and wirt == platform.node() else None
 
 
+def wird_gehalten(pfad: str, stale: float = STALTES_ALTER) -> bool:
+    """Haelt gerade jemand `<pfad>.lock` — auch aus einem FREMDEN Prozess?
+
+    Fuer eine **Anzeige**, nicht fuer eine Entscheidung: wer den Abschnitt betreten will,
+    nimmt `datei()`. Die Antwort ist eine Momentaufnahme und kann in derselben Millisekunde
+    veralten; daraus einen Sprung in den kritischen Abschnitt abzuleiten waere genau die
+    Race, gegen die dieses Modul gebaut ist.
+
+    **Die Regel ist dieselbe wie in der Warteschleife**, und das ist der Grund, warum sie
+    hier steht statt beim Aufrufer (#243): ein `os.path.isdir` allein wuerde ein
+    LIEGENGEBLIEBENES Lock (abgestuerzter Halter, `taskkill /F /T`) dauerhaft als „laeuft
+    gerade" melden — dieselbe Anzeige-Luege in der anderen Richtung. Also: meldet sich der
+    Halter als lebend, laeuft er; meldet er sich als tot, laeuft er nicht; **keine Auskunft**
+    (fehlender/halber Merker, fremder Rechner) entscheidet die Uhr, wie ueberall hier.
+    """
+    lockdir = pfad + ".lock"
+    try:
+        z = os.lstat(lockdir)
+    except OSError:
+        return False
+    if not stat.S_ISDIR(z.st_mode):
+        # Am Lock-Pfad liegt eine DATEI (Sync-Client, Backup, Quarantaene) — dort haelt
+        # niemand etwas. `datei()` behandelt denselben Fall als "nicht anlegbar" (#191).
+        return False
+    lebt = _lebt_laut(_merker_lesen(lockdir))
+    return lebt if lebt is not None else time.time() - z.st_mtime <= stale
+
+
 def _verzeichnis_kennung(pfad: str):
     """`(st_dev, st_ino)` des Verzeichnisses, oder None wenn es dazu keine Auskunft gibt.
 

@@ -150,11 +150,20 @@ function AnmeldungAbo({ status, neuPruefen }: { status: AuthStatus; neuPruefen: 
 function ytMelden(stand: YtdlpStand) {
   if (stand.ergebnis === 'ok') {
     toast.success(stand.version ? `yt-dlp ist jetzt auf ${stand.version}` : 'yt-dlp wurde aktualisiert')
-    return
+  } else {
+    toast.error(stand.unlesbar
+      ? 'Die Metadaten von yt-dlp sind beschädigt — pip kann sie nicht lesen. Hilft nur neu installieren.'
+      : 'Aktualisierung fehlgeschlagen — bist du online?')
   }
-  toast.error(stand.unlesbar
-    ? 'Die Metadaten von yt-dlp sind beschädigt — pip kann sie nicht lesen. Hilft nur neu installieren.'
-    : 'Aktualisierung fehlgeschlagen — bist du online?')
+  // Zusätzlich, nicht statt dessen (#236): ob pip durchlief und ob es dabei allein war, sind
+  // zwei Fragen. Der Schaden ist hier ein anderer als bei #194 — nicht ein überbügelter
+  // Einstellungswert, sondern zwei `pip install` in dieselbe venv, und der zweite Auslöser
+  // sitzt in einem anderen Prozess (der Video-Import aktualisiert selbst). Auch bei einem
+  // Fehlschlag, denn das Zerlegen der Installation hängt nicht am eigenen Exitcode.
+  if (stand.ungeschuetzt) {
+    toast.warning('Die Aktualisierung lief ohne Sperre — lief zeitgleich ein Video-Import, '
+      + 'kann die Installation unvollständig sein. Im Zweifel noch einmal aktualisieren.')
+  }
 }
 
 export function SettingsPage() {
@@ -440,11 +449,11 @@ export function SettingsPage() {
                 genau EINMAL, nach pip.
                 `ytLaeuft` steht vorn, weil es dominiert und weil es die bis zu 1,5 s zwischen
                 Klick und erstem Poll deckt — dort ist `s` noch der Stand von vorher.
-                **Was das NICHT deckt:** `laeuft` kommt aus `_lauf`, und das ist Modulzustand
-                je PROZESS. Aktualisiert der fetch-Subprozess (`fetch.py` → `automatisch()`,
-                auch die Selbstheilung nach einem Fehlversuch), meldet der Server `laeuft:
-                false`, und dieselbe Luege ist wieder erreichbar — auf einem Weg, den die README
-                sogar empfiehlt. Steht als #243. */}
+                **Der fetch-Subprozess zählt seit #243 mit.** `laeuft` kam aus `_lauf`, und das
+                ist Modulzustand je PROZESS: aktualisierte der Import (`fetch.py` →
+                `automatisch()`, auch die Selbstheilung nach einem Fehlversuch), meldete der
+                Server `laeuft: false` und dieselbe Lüge war wieder erreichbar — auf einem Weg,
+                den die README sogar empfiehlt. `zustand()` fragt dafür die pip-Sperre mit. */}
             {ytLaeuft
               ? 'Die Fassung steht fest, sobald der Lauf fertig ist.'
               : s.ytdlp.laeuft
@@ -457,6 +466,20 @@ export function SettingsPage() {
                 : 'Nicht installiert — der Import von Video-URLs steht damit nicht zur Verfügung.'}
           </span>
         </div>
+
+        {/* #198: sind die Metadaten von `yt-dlp-ejs` kaputt, fällt die Erkennung untauglicher
+            Löserskripte STILL aus — `_ejs_untauglich()` sagt dann „unbekannt ⇒ nicht flaggen"
+            (richtig: ein Flag, den pip nicht löschen kann, wäre ein tägliches pip ohne Ende),
+            und der Server meldete daneben einen kerngesunden Stand. Was übrig bleibt, ist ein
+            sporadischer 403 beim Import, dessen Meldung in die falsche Richtung zeigt.
+            Nur die AUSKUNFT, nicht die Entscheidung — deshalb ein Hinweis und kein Fehler. */}
+        {s.ytdlp.ejs_unlesbar && (
+          <p className="mt-3 text-xs text-amber-600 dark:text-amber-500">
+            Die Hilfsskripte für YouTube lassen sich nicht prüfen — ihre Paketdaten sind
+            beschädigt. Transkribor merkt dadurch nicht mehr von selbst, wenn sie nicht mehr
+            passen; schlägt ein Video-Import fehl, hilft „Jetzt aktualisieren“.
+          </p>
+        )}
 
         {/* Ein Haken, der nichts tut, ist schlimmer als keiner: die Umgebungsvariable
             gewinnt gegen die Einstellung, und ohne diesen Satz sähe man nur den Haken.
