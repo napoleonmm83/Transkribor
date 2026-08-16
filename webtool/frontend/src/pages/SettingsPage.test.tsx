@@ -315,15 +315,27 @@ describe('SettingsPage', () => {
     // Was blieb, war ein sporadischer 403 beim Import mit einer Meldung, die in die falsche
     // Richtung zeigt. BEIDE Richtungen an einem Test: ein Hinweis, der immer steht, ist als
     // Daueralarm derselbe Schaden von der anderen Seite.
-    const { unmount } = zeige()
+    // JEDE Ansicht bekommt ihr eigenes `unmount` — mit einem einzigen (aus dem ersten
+    // `zeige()`) bleiben die späteren Renders stehen, und `queryByText(...).not` findet den
+    // Hinweis der VORIGEN Ansicht. Genau daran ist die dritte Stufe zuerst umgefallen.
+    const ohne = zeige()
     expect(await screen.findByText(/2026\.8\.12/)).toBeInTheDocument()
     expect(screen.queryByText(/lassen sich nicht prüfen/)).not.toBeInTheDocument()
-    unmount()
+    ohne.unmount()
 
-    zeige({ ytdlp: { ...BASIS.ytdlp, ejs_unlesbar: true } })
+    const kaputt = zeige({ ytdlp: { ...BASIS.ytdlp, ejs_unlesbar: true } })
     expect(await screen.findByText(/lassen sich nicht prüfen/)).toBeInTheDocument()
     // Die Fassungszeile bleibt, was sie ist: yt-dlp selbst ist ja in Ordnung.
     expect(screen.getByText(/2026\.8\.12/)).toBeInTheDocument()
+    kaputt.unmount()
+
+    // Und er schweigt WÄHREND eines Laufs — dieselbe Regel wie bei der Fassungszeile (#225),
+    // aus derselben Quelle: `zustand()` liest die ejs-Metadaten bei jedem Poll, also auch
+    // mitten in pips Schreibfenster. Der Hinweis rät zu einer Neueinrichtung, und genau
+    // dieser Rat ist während einer laufenden Aktualisierung falsch.
+    zeige({ ytdlp: { ...BASIS.ytdlp, ejs_unlesbar: true, laeuft: true } })
+    expect(await screen.findByText(/Eine Aktualisierung läuft gerade/)).toBeInTheDocument()
+    expect(screen.queryByText(/lassen sich nicht prüfen/)).not.toBeInTheDocument()
   })
 
   it('speichert den Haken als "0"/"1"', async () => {

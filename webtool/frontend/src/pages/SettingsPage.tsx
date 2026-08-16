@@ -490,8 +490,18 @@ export function SettingsPage() {
             (richtig: ein Flag, den pip nicht löschen kann, wäre ein tägliches pip ohne Ende),
             und der Server meldete daneben einen kerngesunden Stand. Was übrig bleibt, ist ein
             sporadischer 403 beim Import, dessen Meldung in die falsche Richtung zeigt.
-            Nur die AUSKUNFT, nicht die Entscheidung — deshalb ein Hinweis und kein Fehler. */}
-        {s.ytdlp.ejs_unlesbar && (
+            Nur die AUSKUNFT, nicht die Entscheidung — deshalb ein Hinweis und kein Fehler.
+
+            **Während eines Laufs schweigt der Hinweis — dieselbe Regel wie bei der
+            Fassungszeile (#225), und aus derselben Quelle:** `zustand()` liest die
+            ejs-Metadaten bei JEDEM Poll, also auch, während pip `site-packages` umschreibt.
+            Eine halb geschriebene `METADATA` trifft dort die Ausnahme-Stufe und ergibt
+            `ejs_unlesbar: true`. Der Hinweis rät zu einer Neueinrichtung — mitten in einer
+            laufenden Aktualisierung ist genau das der falsche Rat.
+            Gate auf BEIDE Läufe, nicht nur `ytLaeuft`: seit #243 kann auch ein fremder
+            Prozess pippen, und dessen Fenster ist dasselbe. (CodeRabbit-Bot an PR #246;
+            der Vorschlag nannte nur `ytLaeuft` — die zweite Hälfte gehört dazu.) */}
+        {!ytLaeuft && !s.ytdlp.laeuft && s.ytdlp.ejs_unlesbar && (
           <p className="mt-3 text-xs text-amber-600 dark:text-amber-500">
             Die Hilfsskripte für YouTube lassen sich nicht prüfen — ihre Paketdaten sind
             beschädigt. Importieren geht weiter, Transkribor merkt nur nicht mehr von selbst,
