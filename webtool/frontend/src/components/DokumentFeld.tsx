@@ -19,9 +19,13 @@ export function DokumentFeld({ titel, wert, platzhalter, onCommit, aktiv = false
   const setze = (text: string) => {
     if (text.trim()) { onCommit(text); return }
     // Auf `''` normalisiert, nicht der Leerraum durchgereicht: `TextEditor` vergleicht
-    // GETRIMMT und schreibt UNGETRIMMT, ein geleertes Feld kann also als "   " ankommen —
-    // truthy genug, um als Inhalt zu gelten, zu leer, um irgendwo zu erscheinen (`render_md`
-    // strippt). Dieselbe Falle wie bei der Segment-Notiz an PR #153.
+    // GETRIMMT und schreibt UNGETRIMMT, ein geleertes Feld kann also als "   " ankommen.
+    // **Sichtbar waere das hier nichts** — `EditierbarerText` rendert `wert.trim() ||
+    // Platzhalter`, `render_md` strippt, Suche und Umbenennen sehen keinen Unterschied
+    // (alle vier nachgesehen, nicht angenommen). Der Grund ist ein anderer als bei der
+    // Segment-Notiz (PR #153, wo `"   "` den Anlege-Knopf verdraengte): ein gestrichenes Feld
+    // soll **denselben** Zustand haben wie ein nie gesetztes aus `build_edit_doc`, sonst
+    // haengt an einem Vergleich irgendwann ein Unterschied, den niemand sehen kann.
     onCommit('')
     // Kein `wert.trim()`-Vorbehalt davor: ein leeres Feld kann diesen Zweig gar nicht
     // erreichen — `TextEditor` wertet unveraendert (getrimmt) als Abbruch und ruft `onCommit`

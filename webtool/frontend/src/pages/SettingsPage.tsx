@@ -436,13 +436,19 @@ export function SettingsPage() {
                 dieselbe Luege, gegen die #189 gebaut wurde, ausgerechnet mitten in einer
                 Aktualisierung, die gerade dabei ist, es zu installieren — und in dem Moment,
                 in dem der Nutzer ausdruecklich hinschaut, weil er eben geklickt hat.
-                Vorher gab es das Fenster nicht: `getSettings()` lief genau EINMAL, nach pip.
-                `|| ytLaeuft` deckt zusaetzlich die bis zu 1,5 s zwischen Klick und erstem
-                Poll — dort ist `s` noch der Stand von vorher. */}
-            {s.ytdlp.laeuft || ytLaeuft
-              ? ytLaeuft
-                ? 'Die Fassung steht fest, sobald der Lauf fertig ist.'
-                : 'Eine Aktualisierung läuft gerade — klicke, um ihr zuzusehen.'
+                Fuer den **Knopf-Lauf** gab es das Fenster vorher nicht: `getSettings()` lief
+                genau EINMAL, nach pip.
+                `ytLaeuft` steht vorn, weil es dominiert und weil es die bis zu 1,5 s zwischen
+                Klick und erstem Poll deckt — dort ist `s` noch der Stand von vorher.
+                **Was das NICHT deckt:** `laeuft` kommt aus `_lauf`, und das ist Modulzustand
+                je PROZESS. Aktualisiert der fetch-Subprozess (`fetch.py` → `automatisch()`,
+                auch die Selbstheilung nach einem Fehlversuch), meldet der Server `laeuft:
+                false`, und dieselbe Luege ist wieder erreichbar — auf einem Weg, den die README
+                sogar empfiehlt. Steht als #243. */}
+            {ytLaeuft
+              ? 'Die Fassung steht fest, sobald der Lauf fertig ist.'
+              : s.ytdlp.laeuft
+              ? 'Eine Aktualisierung läuft gerade — klicke, um ihr zuzusehen.'
               : s.ytdlp.version
               ? <>Fassung <span className="font-medium text-foreground">{s.ytdlp.version}</span>
                 {s.ytdlp.geprueft && ` · zuletzt geprüft am ${tag(s.ytdlp.geprueft)}`}</>
