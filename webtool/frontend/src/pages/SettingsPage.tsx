@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { KeyRound, Loader2, LogIn, RefreshCw } from 'lucide-react'
+import { FolderOpen, KeyRound, Loader2, LogIn, RefreshCw } from 'lucide-react'
 import {
   cancelLogin, getAuth, getHardware, getSettings, listModels, loginState,
   saveSettings, startLogin, submitLoginCode, testSettings, updateYtdlp, verwerfeKaputt,
@@ -46,6 +46,52 @@ function Abschnitt({ titel, children }: { titel: string; children: React.ReactNo
   )
 }
 
+/**
+ * Der „Ordner öffnen"-Griff der Electron-Brücke, oder `null` im Browser (#218).
+ *
+ * `window.transkribor` ist die Weiche App/Browser, nicht die Plattform: dieselbe Oberfläche
+ * läuft unter `webtool.ps1` und Vite, dort fehlt die Brücke, und jede Electron-Funktion muss
+ * dort ein No-Op sein statt zu werfen. Der Pfad daneben steht in BEIDEN Fällen — er ist die
+ * eigentliche Auskunft, der Knopf nur die Bequemlichkeit.
+ */
+function projekteOeffnenBruecke(): (() => Promise<void>) | null {
+  const w = window as unknown as { transkribor?: { projekteOeffnen?: () => Promise<void> } }
+  return w.transkribor?.projekteOeffnen ?? null
+}
+
+/**
+ * Eine Meldung je LAUF, nicht je Bedingung (#247).
+ *
+ * Beide Poll-Schleifen dieser Seite hängen ihre Meldung an einen Zustand („läuft nicht mehr")
+ * statt an den Übergang dorthin. Braucht die Abfrage länger als das Intervall von 1,5 s
+ * (langsame Platte, ein pip, das gerade `site-packages` umschreibt), sind zwei Runden
+ * gleichzeitig unterwegs, sehen beide denselben fertigen Lauf und melden ihn beide.
+ * `setYtLaeuft(false)` schützt davor nicht: das ist ein State-Update, die zweite Runde liest
+ * ihren Wert aus der eigenen Closure, und abgeräumt wird das Intervall erst beim nächsten
+ * Effektlauf.
+ *
+ * **Warum ein Merker statt eines In-Flight-Riegels** (der erste Vorschlag im Issue): der
+ * Riegel deckt nur die überholenden Polls. Bei yt-dlp gibt es aber ZWEI Aufrufer — den Poll
+ * und den Direktstart in `ytJetzt` —, und zwischen denen hilft er nicht. Ausserdem fasst er
+ * die Obergrenze an: der Zähler dort zählt ausdrücklich Nachfragen und nicht Wanduhrzeit
+ * (weil `vi.useFakeTimers()` `Date.now()` nicht mitfälscht), und ein Riegel, der Runden
+ * überspringt, entkoppelt Ticks von Nachfragen und verschiebt die Frist still.
+ *
+ * **`neuerLauf()` ist Pflicht, nicht Kür.** Ohne das Zurücksetzen meldete der Merker den
+ * ersten Lauf und danach nie wieder etwas — aus „zu viele Meldungen" würde „gar keine", und
+ * zwar still. Dafür gibt es einen eigenen Test.
+ */
+function useEinmalJeLauf() {
+  const gemeldet = useRef(false)
+  const neuerLauf = useCallback(() => { gemeldet.current = false }, [])
+  const melde = useCallback((fn: () => void) => {
+    if (gemeldet.current) return
+    gemeldet.current = true
+    fn()
+  }, [])
+  return { neuerLauf, melde }
+}
+
 /** Anmeldung an einer Abo-CLI. Zwei Wege, eine Oberflaeche:
  *  - Claude gibt eine URL aus und WARTET auf einen Code aus dem Browser (`braucht_code`).
  *  - Codex zeigt URL und Code an, der Nutzer tippt sie dort ein, die CLI merkt es selbst.
@@ -54,6 +100,10 @@ function AnmeldungAbo({ status, neuPruefen }: { status: AuthStatus; neuPruefen: 
   const [lauf, setLauf] = useState<LoginState | null>(null)
   const [code, setCode] = useState('')
   const [busy, setBusy] = useState(false)
+  // Dieselbe Klasse wie beim yt-dlp-Poll (#247): zwei überholende Runden meldeten hier doppelt
+  // UND riefen `neuPruefen()` zweimal. Nicht gemeldet worden, aber dieselbe Ursache — wer nur
+  // die eine Stelle repariert, lässt den Nachbarn stehen.
+  const { neuerLauf, melde } = useEinmalJeLauf()
 
   // Nur solange etwas laeuft gepollt — ein Dauerintervall auf einer Einstellungsseite,
   // auf der meistens nichts passiert, ist reine Last.
@@ -63,17 +113,18 @@ function AnmeldungAbo({ status, neuPruefen }: { status: AuthStatus; neuPruefen: 
       const z = await loginState().catch(() => null)
       if (!z) return
       setLauf(z)
-      if (!z.laeuft) {
+      if (!z.laeuft) melde(() => {
         neuPruefen()
         if (z.ok) toast.success('Angemeldet')
         else toast.error(z.fehler || 'Anmeldung fehlgeschlagen')
-      }
+      })
     }, 1500)
     return () => clearInterval(t)
-  }, [lauf?.laeuft, neuPruefen])
+  }, [lauf?.laeuft, neuPruefen, melde])
 
   const starten = async () => {
     setBusy(true); setCode('')
+    neuerLauf()   // sonst bliebe der zweite Anmeldeversuch einer Sitzung stumm
     try { setLauf(await startLogin()) }
     catch (e) { toast.error(`Anmeldung: ${(e as Error).message}`) }
     finally { setBusy(false) }
@@ -182,6 +233,11 @@ export function SettingsPage() {
   const [laedt, setLaedt] = useState(false)
   const [testet, setTestet] = useState(false)
   const [ytLaeuft, setYtLaeuft] = useState(false)
+  // Drei Wege enden in einer Meldung über denselben Lauf: der Poll, der Direktstart in
+  // `ytJetzt` und die Obergrenze. Seit #236 erzeugt jeder Durchlauf bis zu ZWEI Toasts
+  // (Erfolg und die Warnung „ohne Sperre") — doppelt gemeldet wären das vier für einen
+  // Vorgang, und die Warnung sähe wichtiger aus, als sie ist. Siehe `useEinmalJeLauf`.
+  const { neuerLauf: ytNeuerLauf, melde: ytMeldeEinmal } = useEinmalJeLauf()
   const [kaputtLaeuft, setKaputtLaeuft] = useState(false)
   const [hw, setHw] = useState<Hardware | null>(null)
   const { zustand: upd, pruefen, laden, installieren, protokollOeffnen } = useUpdate()
@@ -250,8 +306,12 @@ export function SettingsPage() {
   // liegt: gespeichert wurde ja wirklich, die Einschraenkung ist die neue Nachricht.
   const speichern = async (patch: Record<string, string>, danach?: () => void) => {
     try {
+      // Ersetzen, nicht zusammenführen — seit #239 liefert der PUT denselben vollständigen
+      // Rumpf wie der GET. Vorher stand hier ein `{...cur, ...neu}`, das die fünf fehlenden
+      // Felder aus dem vorigen Stand retten musste; genau dieser Merge hat die Falschaussage
+      // im Typ verdeckt. Eine Merge-Form, die nichts merged, sieht nur nach Sorgfalt aus.
       const { ungeschuetzt, ...neu } = await saveSettings(patch)
-      setS(cur => cur && { ...cur, ...neu })
+      setS(neu)
       danach?.()
       if (ungeschuetzt) toast.warning(
         'Gespeichert — aber ohne Schreibsperre. Hat in derselben Sekunde etwas anderes '
@@ -306,26 +366,22 @@ export function SettingsPage() {
     const t = setInterval(async () => {
       if (++runden > 480) {
         setYtLaeuft(false)
-        toast.error('Die Aktualisierung meldet sich nicht mehr — bitte im Serverprotokoll nachsehen.')
+        ytMeldeEinmal(() => toast.error(
+          'Die Aktualisierung meldet sich nicht mehr — bitte im Serverprotokoll nachsehen.'))
         return
       }
       const neu = await getSettings().catch(() => null)
       if (!neu) return                  // ein Aussetzer beendet den Lauf nicht
-      // Ersetzen, nicht zusammenführen — anders als in `speichern()` weiter oben, und das
-      // ist kein Versehen: dort ist die PUT-Antwort ein TEILobjekt (der Server baut sie aus
-      // `settings.public()`, das etwa `providers`, `whisper_choices` und `ai_ready` nicht
-      // kennt — siehe #239), hier liefert `GET /api/settings` das vollständige `Settings`.
-      // `{...cur, ...neu}` wäre damit buchstäblich dasselbe wie `neu` — eine Merge-Form, die
-      // nichts merged, sieht nur nach Sorgfalt aus.
-      // (Als Reviewbefund vorgeschlagen, beim Nachlesen des Endpunkts verworfen. Die frühere
-      // Begründung nannte den fehlenden `ytdlp`-Block — die stimmt seit #174 nicht mehr,
-      // `app.py` legt ihn der PUT-Antwort bei; das Argument trägt trotzdem, nur über andere
-      // Felder.)
+      // Ersetzen, nicht zusammenführen — `GET /api/settings` liefert das vollständige
+      // `Settings`, ein `{...cur, ...neu}` wäre buchstäblich dasselbe wie `neu`.
+      // (Hier stand bis #239 der Hinweis, `speichern()` weiter oben MÜSSE mischen, weil der
+      // PUT nur ein Teilobjekt liefere. Das ist behoben: beide Endpunkte bauen ihren Rumpf
+      // jetzt aus `app._settings_body`, und beide Stellen ersetzen.)
       setS(neu)
-      if (!neu.ytdlp.laeuft) { setYtLaeuft(false); ytMelden(neu.ytdlp) }
+      if (!neu.ytdlp.laeuft) { setYtLaeuft(false); ytMeldeEinmal(() => ytMelden(neu.ytdlp)) }
     }, 1500)
     return () => clearInterval(t)
-  }, [ytLaeuft])
+  }, [ytLaeuft, ytMeldeEinmal])
 
   // Der Knopf wartet seit #174 nicht mehr auf pip — er stösst an, und ein Effekt fragt nach.
   // Das Nachfragen ist NICHT optional: ohne es stünde ein Fehlschlag nur in der
@@ -340,6 +396,7 @@ export function SettingsPage() {
   // in dieser Datei bereits 190 Zeilen weiter oben.
   const ytJetzt = async () => {
     setYtLaeuft(true)
+    ytNeuerLauf()
     try {
       const r = await updateYtdlp()
       if (!r.gestartet) toast.info('Eine Aktualisierung läuft bereits — ich warte auf sie.')
@@ -350,7 +407,10 @@ export function SettingsPage() {
       // über dem Knopf gerade noch „klicke, um ihr zuzusehen" versprochen hat.
       else if (s?.ytdlp.laeuft) toast.info('Ein Video-Import frischt den Downloader gerade selbst auf — ich warte, bis er fertig ist.')
       // Ein sehr schneller Lauf kann schon fertig sein, bevor der erste Poll greift.
-      if (!r.laeuft) { setYtLaeuft(false); ytMelden(r) }
+      // Über denselben Merker wie der Poll (#247): braucht `updateYtdlp()` länger als 1,5 s
+      // und ist der Lauf da schon fertig, meldet der Poll zuerst — und diese Zeile hier ein
+      // zweites Mal. Ein In-Flight-Riegel um `getSettings()` hätte genau das nicht gedeckt.
+      if (!r.laeuft) { setYtLaeuft(false); ytMeldeEinmal(() => ytMelden(r)) }
     } catch (e) {
       toast.error(String(e))
       // KEIN `finally`: bei Erfolg übernimmt der Poll-Effekt und schaltet selbst ab —
@@ -358,6 +418,8 @@ export function SettingsPage() {
       setYtLaeuft(false)
     }
   }
+
+  const ordnerOeffnen = projekteOeffnenBruecke()
 
   if (!s) return <div className="p-6 sm:p-8 text-sm text-muted-foreground">Lädt…</div>
 
@@ -655,6 +717,36 @@ export function SettingsPage() {
             pyannote speaker-diarization-community-1</a>, mitgeliefert unter&nbsp;
           <a className="underline underline-offset-2 hover:text-foreground" href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">CC BY 4.0</a>.
         </p>
+      </Abschnitt>
+
+      {/* #218: Das Versprechen der App ist „deine Aufnahmen bleiben bei dir". Die Kehrseite —
+          *und du allein bist dafür verantwortlich* — stand nirgends: der Pfad war genau einmal
+          zu sehen, im Einrichtungsfenster, und danach nie wieder. „Benutzerordner" heisst für
+          einen nicht-technischen Menschen *Dokumente*, nicht `%APPDATA%\Transkribor`.
+          Der Pfad steht deshalb AUCH im Browser (er beantwortet die Frage ohne Klick); der
+          Knopf gibt es nur in der App, wo eine Shell dahinterliegt. */}
+      <Abschnitt titel="Deine Dateien">
+        <p className="max-w-prose text-sm">
+          Aufnahmen und Transkripte liegen in diesem Ordner. Transkribor löscht dort nichts von
+          allein — und weil nichts davon in einer Cloud liegt, gibt es auch keine Sicherung
+          ausser deiner eigenen: kopiere den Ordner auf eine externe Platte, dann hast du alles.
+          Auf einen neuen Rechner nimmst du deine Arbeit mit, indem du ihn dorthin kopierst.
+        </p>
+        <p className="mt-2 break-all rounded bg-muted px-2 py-1.5 font-mono text-xs text-muted-foreground">
+          {s.projekte_pfad}
+        </p>
+        {ordnerOeffnen && (
+          <Button className="mt-3" variant="outline" onClick={async () => {
+            // Der Handler nimmt bewusst KEINEN Pfad entgegen — er kennt ihn selbst. Ein
+            // Parameter machte aus der schmalen Brücke ein „öffne beliebiges Verzeichnis"
+            // für alles, was in diesem Fenster läuft, und dort läuft Transkripttext, der aus
+            // einem URL-Import stammen kann.
+            try { await ordnerOeffnen() }
+            catch (e) { toast.error(`Ordner öffnen fehlgeschlagen: ${(e as Error).message}`) }
+          }}>
+            <FolderOpen className="size-4" /> Ordner öffnen
+          </Button>
+        )}
       </Abschnitt>
 
       {upd && (

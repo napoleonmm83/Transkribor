@@ -7,6 +7,11 @@ contextBridge.exposeInMainWorld('transkribor', {
   einrichten: () => ipcRenderer.invoke('einrichten'),
   logs: () => ipcRenderer.invoke('logs'),
   protokollOeffnen: () => ipcRenderer.invoke('protokollOeffnen'),
+  // Ohne Argument, und das ist der Punkt (#218): der Hauptprozess kennt das Verzeichnis
+  // selbst. Naehme der Kanal einen Pfad entgegen, waere aus der schmalen Bruecke ein
+  // „oeffne beliebiges Verzeichnis" geworden — fuer alles, was in diesem Fenster laeuft,
+  // und dort laeuft Transkripttext, der aus einem URL-Import stammen kann.
+  projekteOeffnen: () => ipcRenderer.invoke('projekteOeffnen'),
   update: {
     status: () => ipcRenderer.invoke('update:status'),
     pruefen: () => ipcRenderer.invoke('update:pruefen'),

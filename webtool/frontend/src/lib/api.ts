@@ -165,6 +165,13 @@ export async function getHardware(): Promise<Hardware> {
  *  in `Settings`: es beschreibt diesen einen Schreibvorgang, nicht den Zustand des Servers, und
  *  in den Zustand gemischt bliebe die Warnung für immer stehen.
  *
+ *  **Der Rückgabetyp ist seit #239 wahr.** Vorher lieferte der PUT `providers`, `env_key`,
+ *  `whisper_choices`, `ai_ready` und `ai_reason` NICHT — es fiel nur nicht auf, weil
+ *  `SettingsPage.speichern` zusammenmischte und die fehlenden Felder aus dem vorigen Stand
+ *  überlebten. Beide Endpunkte bauen ihren Rumpf jetzt aus `app._settings_body`; der Wächter
+ *  dagegen steht im pytest (`test_settings_put_liefert_denselben_rumpf_wie_der_get`), weil eine
+ *  Attrappe hier den Vertrag gar nicht prüfen kann — sie behauptet ihn.
+ *
  *  **Pflichtfeld, nicht `?`:** der Server schickt es bei jedem PUT. Als optional getippt müsste
  *  keine Attrappe es nennen — hörte der Server eines Tages auf, es zu schicken, verschwände die
  *  Warnung still und kein Test würde rot. Der Preis ist, dass jede Attrappe es setzen muss, und

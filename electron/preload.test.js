@@ -47,6 +47,15 @@ test('ein erfundener Kanal liefert trotzdem eine (wirkungslose) Abmeldefunktion'
   assert.doesNotThrow(() => ab())
 })
 
+test('projekteOeffnen ruft den Hauptprozess OHNE Argument (#218)', async () => {
+  // Das fehlende Argument ist die Zusicherung, nicht ein Detail: naehme der Kanal einen Pfad
+  // entgegen, koennte alles, was in diesem Fenster laeuft, ein beliebiges Verzeichnis
+  // oeffnen lassen — und dort laeuft Transkripttext, der aus einem URL-Import stammen kann.
+  // Der Hauptprozess kennt `P.projekte` selbst.
+  await freigegeben.projekteOeffnen()
+  assert.deepStrictEqual(aufrufe.at(-1), ['projekteOeffnen'])
+})
+
 test('plattform ist die process.platform des Hauptprozesses', () => {
   // Der Renderer kennt process.platform wegen contextIsolation nicht selbst -- die
   // Bruecke muss ihn deshalb als Wert (nicht als Funktion) mitgeben.
