@@ -876,12 +876,24 @@ def test_ohne_auskunft_entscheidet_die_uhr(tmp_path):
 
     Beide Richtungen, sonst prueft der Test nur die halbe Regel — und die Uhr-Haelfte ist
     genau die, die ein `return False` still ueberlebte.
+
+    **Das Alter muss ZWISCHEN `stale` und `frist(stale)` liegen.** Zuerst standen hier 100 s
+    gegen `stale=60` — damit beantwortete die **Obergrenze** (die Stufe darueber, aus
+    demselben PR) die Frage, bevor die Uhr-Zeile ueberhaupt erreicht wurde: der Test hiess
+    weiter „Uhr" und pruefte „verwaist". Nachgemessen, nicht geschlossen: unter der Mutation
+    „Uhr sagt immer laeuft" blieb die alte Fassung **gruen**, die hiesige wird rot. Das ist
+    der Fall, den dieses Repo als „der Fix nimmt dem NACHBARN die Abdeckung" fuehrt — hier
+    hat die eigene Reparatur den Test entwertet, kein fremder Umbau. (CodeRabbit-Bot an
+    PR #246.) Die Invariante steht als `assert` daneben, damit eine Aenderung an
+    `_AUFGEBEN_PUFFER_S` sie nicht still wieder aufloest.
     """
     ziel = str(tmp_path / "x.json")
     lock = ziel + ".lock"
     os.mkdir(lock)                                    # kein Merker -> keine Auskunft
     assert sperre.wird_gehalten(ziel, stale=60) is True        # frisch -> gilt als laufend
-    alt = time.time() - 100
+    dazwischen = 60 + 1
+    assert 60 < dazwischen < sperre.frist(60), "sonst antwortet die Obergrenze statt der Uhr"
+    alt = time.time() - dazwischen
     os.utime(lock, (alt, alt))
     assert sperre.wird_gehalten(ziel, stale=60) is False       # abgelaufen -> verwaist
 
