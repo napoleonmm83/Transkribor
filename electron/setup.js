@@ -225,12 +225,30 @@ async function importeDa() {
  *  IN der venv, nicht daneben — wer sie wegwirft, wirft den Merker mit weg. */
 function stempel(venvDir = P.venv) { return path.join(venvDir, '.requirements') }
 
-/** Leerstring heisst "keine lesbare requirements.txt" — dann gibt es nichts nachzuziehen.
- *  `reqDatei` ist der Testzugang: ohne ihn liesse sich nicht pruefen, dass der Merker
- *  ueberhaupt AN DIESER DATEI haengt (ein Test, der nur den Merker verbiegt, belegt das nicht). */
+/**
+ * Leerstring heisst "keine lesbare requirements.txt" — dann gibt es nichts nachzuziehen.
+ * `reqDatei` ist der Testzugang: ohne ihn liesse sich nicht pruefen, dass der Merker
+ * ueberhaupt AN DIESER DATEI haengt (ein Test, der nur den Merker verbiegt, belegt das nicht).
+ *
+ * Gehasht wird der INHALT, nicht die Bytes (#229): Kommentare, Leerzeilen, Zeilenenden und
+ * die Reihenfolge gehen nicht mit ein. Die Datei besteht zu grob zwei Dritteln aus Prosa —
+ * drei der letzten vier Commits, die sie beruehrt haben, haben ausschliesslich
+ * Kommentarbloecke umgeschrieben. Roh gehasht erklaert jede solche Aenderung bei JEDEM
+ * Nutzer die venv fuer veraltet und kostet ihn eine Einrichtungsrunde, die inhaltlich nichts
+ * tut; dasselbe gilt fuer einen Checkout, dessen core.autocrlf die Datei umschreibt.
+ * Harmlos im Einzelfall (ein Klick) — nur nutzt es genau die Aufmerksamkeit ab, auf die #181
+ * baut: wer die Seite dreimal grundlos gesehen hat, liest sie beim vierten Mal nicht mehr.
+ *
+ * `#` schneidet bis zum Zeilenende. In dieser Datei steht kein `#` INNERHALB einer
+ * Anforderungszeile (geprueft; PEP 508 trennt Umgebungsmarker mit `;`, nicht mit `#`).
+ * Kaeme je eine URL mit Fragment dazu (`paket @ https://…#egg=x`), ist das hier nachzuziehen.
+ */
 function reqHash(reqDatei = P.requirements) {
-  try { return crypto.createHash('sha256').update(fs.readFileSync(reqDatei)).digest('hex') }
-  catch { return '' }
+  try {
+    const zeilen = fs.readFileSync(reqDatei, 'utf8')
+      .split(/\r?\n/).map(z => z.replace(/#.*/, '').trim()).filter(Boolean).sort()
+    return crypto.createHash('sha256').update(zeilen.join('\n')).digest('hex')
+  } catch { return '' }
 }
 
 /**
@@ -252,6 +270,36 @@ function paketeAktuell(venvDir = P.venv, reqDatei = P.requirements) {
   const soll = reqHash(reqDatei)
   if (!soll) return true
   try { return fs.readFileSync(stempel(venvDir), 'utf8').trim() === soll } catch { return false }
+}
+
+/**
+ * Laesst sich der Merker hier ueberhaupt schreiben? Gefragt wird das NUR, wenn die venv als
+ * veraltet gilt — also genau dann, wenn die Einrichtungsseite erscheint (#230).
+ *
+ * Ohne diese Auskunft ist ein nicht schreibbarer Merker eine Endlosschleife ohne Grund: die
+ * Seite erscheint bei JEDEM Start, ein Klick laeuft jedes Mal erfolgreich durch und aendert
+ * nichts an der Wiederkehr. Sichtbar stand der Zustand nirgends — es gibt genau einen
+ * onLine-Hinweis, und der landet im zugeklappten Protokollbereich, waehrend die Seite selbst
+ * weiter dieselbe Aussage wiederholt, die der Nutzer gerade abgearbeitet hat.
+ *
+ * Geprueft wird die DATEI, wenn es sie gibt, sonst das Verzeichnis ueber eine Probedatei: ein
+ * schreibgeschuetzter Merker (read-only-Attribut, Virenscanner) liegt in einem sonst
+ * schreibbaren Ordner, eine Verzeichnisprobe beantwortete dort die falsche Frage.
+ *
+ * **Kein Ersatz waere der echte Schreibversuch:** der schriebe den heutigen Hash und
+ * erklaerte damit eine venv fuer fertig, der Pakete fehlen.
+ *
+ * Was er nicht sieht: eine Datei, die im Moment der Probe schreibbar ist und im Moment des
+ * Schreibens gesperrt (ein Scanner, der genau dazwischen greift). Dann bleibt es beim
+ * bisherigen Zustand — die Auskunft fehlt, die App laeuft.
+ */
+function stempelSchreibbar(venvDir = P.venv) {
+  const p = stempel(venvDir)
+  try {
+    if (fs.existsSync(p)) fs.accessSync(p, fs.constants.W_OK)
+    else { fs.writeFileSync(p + '.probe', ''); fs.unlinkSync(p + '.probe') }
+    return true
+  } catch { return false }
 }
 
 /** Nach erfolgreichem `pip install -r`. Wirft nicht: ein misslungener Merker darf den Start
@@ -295,6 +343,8 @@ async function status() {
   const wcpp = await findeWhisperCpp()
   const pl = plan(process.platform, await paketmanager(), process.arch, await brewDa())
   const macFehlt = nutztWhisperCpp() && !wcpp
+  const importe = await importeDa()
+  const aktuell = paketeAktuell()
   // Beide Haelften einzeln, damit die Seite den Unterschied nennen kann: eine veraltete venv
   // ist installiert und funktioniert — sie ist nur nicht auf dem Stand der requirements.txt.
   // Als blosses rotes "fehlt" gemeldet, laese der Nutzer einen Defekt daraus (#181).
@@ -302,7 +352,12 @@ async function status() {
     python: py ? `Python ${py.version}` : '',
     ffmpeg: ff,
     whispercpp: wcpp,
-    ...venvZustand(await importeDa(), paketeAktuell()),
+    ...venvZustand(importe, aktuell),
+    stempelPfad: stempel(P.venv),
+    // Nur im degradierten Fall gefragt (#230): sonst kostet jeder Start zwei Systemaufrufe
+    // fuer eine Auskunft, die niemand sieht. `true` heisst hier "kein Grund zur Meldung" —
+    // die Seite erscheint dann ohnehin nicht.
+    stempelSchreibbar: (importe && !aktuell) ? stempelSchreibbar() : true,
     winget: process.platform === 'win32' ? (await ausgabe('winget', ['--version'])) || '' : '',
     venvPfad: P.venv,
     projektePfad: P.projekte,
@@ -470,7 +525,11 @@ async function einrichten(onLine, onSchritt, werkzeug = {}) {
   if (!torchOk) {
     onLine('Der Paketstand wird nicht vermerkt — die Einrichtungsseite bietet den Lauf beim naechsten Start erneut an.')
   } else if (!w.stempelSchreiben()) {
-    onLine('Hinweis: Paketstand konnte nicht vermerkt werden — die Einrichtung meldet sich beim naechsten Start erneut.')
+    // Mit PFAD (#230): ohne ihn ist die Meldung eine Feststellung, mit ihm eine Anleitung —
+    // die Seite kommt beim naechsten Start wieder, und dies ist die einzige Stelle, an der
+    // ueberhaupt jemand erfaehrt, an welcher Datei es liegt.
+    onLine(`Hinweis: Paketstand konnte nicht vermerkt werden (${stempel(P.venv)}) — ` +
+           'die Einrichtung meldet sich deshalb beim naechsten Start erneut.')
   }
   onLine('Fertig. ' + schritte.join(' · '))
   return { ok: true }
@@ -479,5 +538,5 @@ async function einrichten(onLine, onSchritt, werkzeug = {}) {
 // venvVollstaendig() ist ersatzlos weg: status() beantwortet dieselbe Frage ueber venvZustand(),
 // und ein zweiter Weg dorthin waere genau der, den kein Test bewacht (er hatte keinen Aufrufer).
 module.exports = { status, einrichten, findePython, plan, spawnEnv, wingetFfmpeg,
-                   nutztWhisperCpp, paketeAktuell, stempelSchreiben, venvZustand, cudaVerloren,
-                   cudaZurueckholen }
+                   nutztWhisperCpp, paketeAktuell, stempelSchreiben, stempelSchreibbar,
+                   venvZustand, cudaVerloren, cudaZurueckholen }

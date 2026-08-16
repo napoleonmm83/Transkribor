@@ -161,10 +161,48 @@ test('eine GEAENDERTE requirements.txt entwertet den Merker — daran haengt der
   assert.strictEqual(paketeAktuell(venv, neu), false)
 })
 
+test('Kommentare, Zeilenenden und Reihenfolge entwerten den Merker NICHT (#229)', () => {
+  const { paketeAktuell, stempelSchreiben } = require('./setup')
+  const venv = leereVenv()
+  assert.strictEqual(stempelSchreiben(venv, reqDatei('# warum das hier steht\nfaster-whisper\npackaging\n')), true)
+  // Dieselben zwei Anforderungen, andere Prosa + CRLF + andere Reihenfolge. Roh gehasht war
+  // das drei getrennte Gruende, jedem Nutzer eine Einrichtungsrunde aufzuerlegen, die nichts tut.
+  assert.strictEqual(
+    paketeAktuell(venv, reqDatei('# eine voellig andere, laengere Erklaerung\r\npackaging\r\n\r\nfaster-whisper\r\n')),
+    true)
+  // Die Gegenrichtung MUSS weiter greifen — ohne sie haengt der Merker an nichts mehr, und
+  // #181 waere still wieder offen. Ein `reqHash`, das eine Konstante liefert, faellt hier durch.
+  assert.strictEqual(paketeAktuell(venv, reqDatei('faster-whisper\n')), false)
+})
+
 test('unlesbare requirements.txt heisst "nichts nachzuziehen", nicht "veraltet"', () => {
   const { paketeAktuell } = require('./setup')
   // Die Gegenrichtung waere eine Einrichtung, die bei jedem Start erscheint und nie gelingen kann.
   assert.strictEqual(paketeAktuell(leereVenv(), 'C:\gibt-es-nicht-42\requirements.txt'), true)
+})
+
+test('ein nicht anlegbarer Merker meldet sich als nicht schreibbar (#230)', () => {
+  const { stempelSchreibbar } = require('./setup')
+  assert.strictEqual(stempelSchreibbar(leereVenv()), true, 'ein normaler Ordner ist schreibbar')
+  assert.strictEqual(stempelSchreibbar('C:\gibt-es-nicht-42'), false)
+})
+
+test('ein schreibgeschuetzter Merker zaehlt auch — nicht nur ein gesperrter Ordner (#230)', () => {
+  // Der Grund fuer die zwei Zweige: ein per Attribut oder Virenscanner gesperrter Merker liegt
+  // in einem sonst voellig schreibbaren Ordner. Ohne diesen Test liesse sich der Dateizweig
+  // ersatzlos streichen und die Suite bliebe gruen — ein Waechter, der nur im Namen einer ist.
+  const fs = require('node:fs'), path = require('node:path')
+  const { stempelSchreibbar } = require('./setup')
+  const venv = leereVenv()
+  const p = path.join(venv, '.requirements')
+  fs.writeFileSync(p, 'x')
+  fs.chmodSync(p, 0o444)
+  // Nachgemessen statt angenommen: als root (Container-CI) laesst sich eine Datei so nicht
+  // sperren, und dann belegte die Behauptung darunter nichts. Geprobt wird mit einem ECHTEN
+  // Schreibversuch, nicht mit derselben Frage, die die Funktion stellt — sonst prueft der
+  // Test seine eigene Implementierung.
+  try { fs.appendFileSync(p, 'y'); return } catch { /* wirklich gesperrt — weiter */ }
+  assert.strictEqual(stempelSchreibbar(venv), false)
 })
 
 test('nur importierbar UND aktuell startet den Server — beides einzeln reicht nicht', () => {
