@@ -4,7 +4,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { toast } from 'sonner'
 import { SettingsPage } from './SettingsPage'
 import * as api from '@/lib/api'
-import type { Hardware, Settings } from '@/lib/types'
+import type { Hardware, LoginState, Settings } from '@/lib/types'
 
 vi.mock('@/lib/api')
 // Ohne diesen Mock waere `expect(toast.error).not.toHaveBeenCalled()` keine Zusicherung,
@@ -33,6 +33,7 @@ const BASIS: Settings = {
   ],
   ai_ready: true, ai_reason: '',
   kaputt: '',
+  projekte_pfad: 'C:\\Users\\test\\AppData\\Roaming\\Transkribor\\projekte',
   ytdlp_auto: '1',
   ytdlp: { version: '2026.8.12', unlesbar: false, geprueft: '2026-08-13', auto: true, env: false, laeuft: false, ergebnis: '', ungeschuetzt: false, ejs_unlesbar: false },
   providers: [
@@ -249,6 +250,36 @@ describe('SettingsPage', () => {
     await act(async () => { fireEvent.change(feld, { target: { value: 'abc123' } }) })
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Bestätigen' })) })
     await waitFor(() => expect(api.submitLoginCode).toHaveBeenCalledWith('abc123'))
+  })
+
+  it('meldet EINEN Anmeldevorgang genau einmal, auch wenn zwei Polls sich überholen (#247)', async () => {
+    // Dieselbe Klasse wie beim yt-dlp-Poll, andere Schleife: nicht gemeldet worden, aber
+    // dieselbe Ursache — die Meldung hängt am Zustand, nicht am Übergang. Doppelt heisst hier
+    // zwei Toasts UND zwei `getAuth`-Aufrufe über `neuPruefen`. Wer nur die eine Stelle
+    // repariert, lässt den Nachbarn stehen.
+    vi.mocked(api.getAuth).mockResolvedValue({
+      unterstuetzt: true, angemeldet: false, detail: 'Nicht angemeldet.' })
+    vi.mocked(api.startLogin).mockResolvedValue({ laeuft: true, braucht_code: false })
+    zeige()
+    const knopf = await screen.findByRole('button', { name: /^Anmelden/ })
+
+    const offen: Array<(z: LoginState) => void> = []
+    vi.mocked(api.loginState).mockImplementation(() => new Promise(res => { offen.push(res) }))
+
+    vi.useFakeTimers()
+    try {
+      await act(async () => { fireEvent.click(knopf) })
+      await act(async () => { await vi.advanceTimersByTimeAsync(1500) })
+      await act(async () => { await vi.advanceTimersByTimeAsync(1500) })
+      expect(offen).toHaveLength(2)          // Positivkontrolle: das Rennen fand statt
+      await act(async () => {
+        offen.forEach(aufloesen => aufloesen({ laeuft: false, fertig: true, ok: true }))
+      })
+    } finally {
+      vi.useRealTimers()
+    }
+
+    expect(toast.success).toHaveBeenCalledTimes(1)
   })
 
   it('zeigt beim Geräte-Flow den Code an und verlangt keine Eingabe (Codex-Weg)', async () => {
@@ -616,6 +647,59 @@ describe('SettingsPage', () => {
     expect(await screen.findByRole('button', { name: /Jetzt aktualisieren/i })).toBeEnabled()
   })
 
+  it('meldet EINEN Lauf genau einmal, auch wenn zwei Polls sich überholen (#247)', async () => {
+    // Der Poll hängt seine Meldung an einen ZUSTAND („läuft nicht mehr"), nicht an den
+    // Übergang dorthin. Braucht `getSettings()` länger als die 1,5 s des Intervalls, sind
+    // zwei Runden gleichzeitig unterwegs und sehen beide denselben fertigen Lauf.
+    // `setYtLaeuft(false)` schützt davor nicht — die zweite Runde liest ihren Wert aus der
+    // eigenen Closure, und das Intervall wird erst beim nächsten Effektlauf abgeräumt.
+    // Seit #236 sind das nicht zwei Toasts, sondern bis zu vier für EINEN Vorgang.
+    vi.mocked(api.updateYtdlp).mockResolvedValue({
+      gestartet: true, version: '2026.7.4', unlesbar: false, geprueft: '', auto: true,
+      env: false, laeuft: true, ergebnis: '', ungeschuetzt: false, ejs_unlesbar: false,
+    })
+    zeige()
+    const knopf = await screen.findByRole('button', { name: /Jetzt aktualisieren/i })
+
+    // Antworten offen halten statt sofort aufzulösen — genau so entsteht die Überholung.
+    const offen: Array<(s: Settings) => void> = []
+    vi.mocked(api.getSettings).mockImplementation(() => new Promise(res => { offen.push(res) }))
+
+    vi.useFakeTimers()
+    try {
+      await act(async () => { fireEvent.click(knopf) })
+      await act(async () => { await vi.advanceTimersByTimeAsync(1500) })   // Runde 1 startet
+      await act(async () => { await vi.advanceTimersByTimeAsync(1500) })   // Runde 2 startet
+      // Positivkontrolle: ohne sie prüfte der Test bei nur EINER Runde nichts — er wäre
+      // grün, weil das Rennen nie stattgefunden hat.
+      expect(offen).toHaveLength(2)
+      const fertig = {
+        ...BASIS,
+        ytdlp: { ...BASIS.ytdlp, version: '2026.8.12', laeuft: false, ergebnis: 'ok' },
+      }
+      await act(async () => { offen.forEach(aufloesen => aufloesen(fertig)) })
+    } finally {
+      vi.useRealTimers()
+    }
+
+    expect(toast.success).toHaveBeenCalledTimes(1)
+  })
+
+  it('meldet einen ZWEITEN Lauf wieder — der Merker gilt je Lauf, nicht je Sitzung (#247)', async () => {
+    // Die Gegenrichtung, und sie ist die gefährlichere: ein Merker ohne Rücksetzen macht aus
+    // „zu viele Meldungen" ein „gar keine", und zwar still. Ohne diesen Test wäre der Fix
+    // gegen einen Lärmfehler ein Ausfall der Rückmeldung überhaupt.
+    vi.mocked(api.updateYtdlp).mockResolvedValue({
+      gestartet: true, version: '2026.8.12', unlesbar: false, geprueft: '', auto: true,
+      env: false, laeuft: false, ergebnis: 'ok', ungeschuetzt: false, ejs_unlesbar: false,
+    })
+    zeige()
+    const knopf = await screen.findByRole('button', { name: /Jetzt aktualisieren/i })
+    await act(async () => { fireEvent.click(knopf) })
+    await act(async () => { fireEvent.click(knopf) })
+    expect(toast.success).toHaveBeenCalledTimes(2)
+  })
+
   it('sagt an, wenn beim Laden schon eine Aktualisierung läuft', async () => {
     // Wer die Seite mitten in pip neu lädt, sähe sonst einen gewöhnlichen Knopf und
     // erführe nie, dass gerade etwas läuft — das Feld `laeuft` läge auf der Leitung und
@@ -624,6 +708,50 @@ describe('SettingsPage', () => {
     zeige({ ytdlp: { ...BASIS.ytdlp, laeuft: true, ergebnis: '' } })
     expect(await screen.findByText(/Eine Aktualisierung läuft gerade/i)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Jetzt aktualisieren/i })).toBeEnabled()
+  })
+
+  it('nennt den Ordner der eigenen Dateien — auch ohne Electron (#218)', async () => {
+    // Das Hauptversprechen der App ist „deine Aufnahmen bleiben bei dir". Die Kehrseite —
+    // und du allein sicherst sie — war unadressiert: der Pfad stand genau einmal im
+    // Einrichtungsfenster und danach nirgends. Er kommt vom SERVER, gilt also auch im
+    // Browser, wo es keinen Knopf gibt.
+    zeige()
+    expect(await screen.findByText(BASIS.projekte_pfad)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Ordner öffnen/i })).not.toBeInTheDocument()
+  })
+
+  it('zeigt „Ordner öffnen" nur in der App und ruft die Brücke OHNE Pfad (#218)', async () => {
+    // `window.transkribor` ist die Weiche App/Browser, nicht die Plattform. Und der Aufruf
+    // ohne Argument ist die eigentliche Zusicherung: nähme der Kanal einen Pfad entgegen,
+    // könnte alles, was in diesem Fenster läuft, ein beliebiges Verzeichnis öffnen lassen.
+    const projekteOeffnen = vi.fn(async () => {})
+    ;(window as unknown as { transkribor: unknown }).transkribor = { projekteOeffnen }
+    try {
+      zeige()
+      const knopf = await screen.findByRole('button', { name: /Ordner öffnen/i })
+      await act(async () => { fireEvent.click(knopf) })
+      expect(projekteOeffnen).toHaveBeenCalledWith()
+      expect(projekteOeffnen.mock.calls[0]).toHaveLength(0)
+    } finally {
+      delete (window as unknown as { transkribor?: unknown }).transkribor
+    }
+  })
+
+  it('meldet einen Fehlschlag beim Öffnen, statt still nichts zu tun (#218)', async () => {
+    // `shell.openPath` gibt im Fehlerfall die Meldung des Systems zurück; der Hauptprozess
+    // wirft sie. Ohne Toast sähe der Nutzer einen Knopf, der nichts tut — die schlechteste
+    // Sorte Fehlschlag.
+    ;(window as unknown as { transkribor: unknown }).transkribor = {
+      projekteOeffnen: vi.fn(async () => { throw new Error('Pfad gibt es nicht') }),
+    }
+    try {
+      zeige()
+      const knopf = await screen.findByRole('button', { name: /Ordner öffnen/i })
+      await act(async () => { fireEvent.click(knopf) })
+      expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/Pfad gibt es nicht/))
+    } finally {
+      delete (window as unknown as { transkribor?: unknown }).transkribor
+    }
   })
 
   it('warnt bei large-v3 auf der CPU', async () => {

@@ -243,11 +243,18 @@ Bei Aufnahmen, die du **vor dieser Fassung** hinzugefügt hast, steht meist „J
 damals wurde die Einstellung bei jedem Hinzufügen fest an der Aufnahme vermerkt. Wenn du willst,
 dass sie wieder dem Projekt folgen, stellst du sie einmal von Hand auf „Folgt dem Projekt“.
 
-**Was passiert mit meinen Dateien?** Sie bleiben in deinem Benutzerordner — Transkribor löscht
-nichts von allein. Transkript und Korrekturen bleiben erhalten, bis du eine Aufnahme **neu
-transkribierst** oder ihre **Sprache änderst**: dann wird das Transkript aus dem Audio neu
-erstellt, das bisherige Transkript samt Korrekturen fällt dabei weg (das Audio bleibt).
-Löschen kannst du nur du selbst, bewusst über das ⋯-Menü.
+**Wo liegen meine Dateien — und wie sichere ich sie?** Alles liegt in einem Ordner auf deinem
+Rechner. Wo genau, steht in den **Einstellungen** unter „Deine Dateien"; in der App bringt dich
+ein Klick auf **Ordner öffnen** direkt dorthin. Weil nichts davon in einer Cloud liegt, gibt es
+auch keine Sicherung ausser deiner eigenen: Kopiere diesen Ordner ab und zu auf eine externe
+Platte — darin stecken Aufnahmen, Transkripte und Korrekturen vollständig. Auf einen neuen
+Rechner nimmst du deine Arbeit mit, indem du den Ordner dorthin kopierst.
+
+**Was passiert mit meinen Dateien?** Transkribor löscht nichts von allein. Transkript und
+Korrekturen bleiben erhalten, bis du eine Aufnahme **neu transkribierst** oder ihre **Sprache
+änderst**: dann wird das Transkript aus dem Audio neu erstellt, das bisherige Transkript samt
+Korrekturen fällt dabei weg (das Audio bleibt). Löschen kannst du nur du selbst, bewusst über
+das ⋯-Menü.
 
 **„Deine gespeicherten Einstellungen waren beschädigt“ — was tun?** Sehr selten wird die
 kleine Datei unlesbar, in der deine Einstellungen stehen: ein Absturz mitten im Speichern, ein

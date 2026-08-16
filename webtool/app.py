@@ -768,18 +768,53 @@ class SettingsBody(BaseModel):
     # ein vom Browser gesetztes Datum koennte die Aktualisierung auf Jahre stilllegen.
 
 
-@app.get("/api/settings")
-def get_settings():
-    """Nie den Key ausliefern — nur, OB einer hinterlegt ist."""
+def _settings_body(cfg: dict = None) -> dict:
+    """Der EINE Bauweg fuer beide Einstellungs-Endpunkte (#239).
+
+    Vorher baute jeder Handler seinen Rumpf selbst, und der PUT lieferte fuenf Felder
+    weniger (`providers`, `env_key`, `whisper_choices`, `ai_ready`, `ai_reason`) — waehrend
+    das Frontend beide als vollstaendige `Settings` tippt. Es knallte nur deshalb nicht, weil
+    `SettingsPage.speichern` zusammenmischte und die fehlenden Felder aus dem vorigen Stand
+    ueberlebten. Der Typ war trotzdem eine Falschaussage, und sie laedt zu genau dem Fehler
+    ein, den der Merge verdeckt: `(await saveSettings(...)).providers` ist `undefined` mit
+    einem Typ, der Sicherheit behauptet.
+
+    Ein handgeschriebenes `Pick<Settings, …>` im Frontend waere die falsche Richtung gewesen —
+    eine zweite Feldliste neben `settings.public()`, die beim naechsten neuen Feld
+    auseinanderlaeuft. Dieselbe Regel wie bei den Anbieter-Modellen und den Sprachen: eine
+    fest verdrahtete Liste waere in drei Monaten falsch.
+
+    Der Preis ist benannt, nicht uebersehen: der PUT zahlt jetzt `llm.available()`, und das
+    startet bei den Abo-CLIs einen Subprozess (0,09 s codex / 0,26 s claude, gemessen). Die
+    Seite speichert bei `onBlur`, das ist also einmal je Feldwechsel. Vertretbar, weil der
+    GET denselben Aufruf laengst macht — und ihn waehrend einer yt-dlp-Aktualisierung alle
+    1,5 s zahlt (der Poll der Einstellungsseite).
+
+    `projekte_pfad` gehoert HIER hin und nicht in `settings.public()`: `public()` ist „die
+    Einstellungen ohne die Geheimnisse", die Projektwurzel ist keine Einstellung, sondern
+    Umgebung. In `public()` gelegt reiste sie ausserdem in jede Antwort, die Einstellungen
+    meint.
+    """
     ai_ready, ai_reason = llm.available()
-    return {**settings.public(), "providers": llm.provider_list(),
+    return {**settings.public(cfg), "providers": llm.provider_list(),
             "env_key": llm.env_key_hint(),
             "whisper_choices": list(settings.WHISPER_CHOICES),
+            # Wo die Arbeit des Nutzers liegt (#218). Der Server ist die richtige Quelle: in
+            # der gepackten App setzt `electron/backend.js` `TRANSKRIBOR_PROJEKTE` aus
+            # `P.projekte`, und `paths.projekte_root()` liest genau das — Anzeige und
+            # „Ordner oeffnen" zeigen damit per Konstruktion auf dasselbe Verzeichnis.
+            "projekte_pfad": paths.projekte_root(),
             # Installierte yt-dlp-Fassung + Merker + WIRKSAMER Schalter. Letzterer kann von
             # `ytdlp_auto` abweichen, wenn TRANSKRIBOR_YTDLP_UPDATE gesetzt ist — das Frontend
             # vergleicht beides und sagt es, statt einen Haken zu zeigen, der nichts tut.
             "ytdlp": ytdlp_update.zustand(),
             "ai_ready": ai_ready, "ai_reason": ai_reason}
+
+
+@app.get("/api/settings")
+def get_settings():
+    """Nie den Key ausliefern — nur, OB einer hinterlegt ist."""
+    return _settings_body()
 
 
 @app.put("/api/settings")
@@ -793,19 +828,19 @@ def put_settings(body: SettingsBody):
     if "ytdlp_auto" in patch and patch["ytdlp_auto"] not in ("0", "1"):
         raise HTTPException(status_code=400,
                             detail=f"ytdlp_auto muss '0' oder '1' sein: {patch['ytdlp_auto']!r}")
-    # `ytdlp` gehoert MIT in die Antwort, obwohl es keine Einstellung ist: das Frontend tippt
-    # den Rueckgabewert als vollstaendige `Settings`. Ohne den Block war der Typ eine
-    # Falschaussage — und der Aufrufer brauchte ein Nachladen, dessen Fehlschlag wieder
-    # eigenes Zutun verlangte. Ein Aufruf, eine Wahrheit.
+    # Derselbe Rumpf wie der GET (#239) — „ein Aufruf, eine Wahrheit". Der Gedanke stand hier
+    # schon fuer den `ytdlp`-Block, galt aber nur fuer ihn; fuenf weitere Felder fehlten
+    # weiterhin. Jetzt entscheidet EIN Bauweg, was in einer Einstellungs-Antwort steht, und
+    # der Typ im Frontend ist fuer beide Endpunkte wahr. Warum das die 0,26 s wert ist, steht
+    # bei `_settings_body`.
     #
-    # `ungeschuetzt` ist aus demselben Holz (#194): geschrieben wurde, aber ohne Sperre — ein
-    # gleichzeitiger Schreiber kann den gerade eingetragenen Key ueberbuegelt haben (#192).
-    # Der Server WEISS das und meldete bisher trotzdem blanken Erfolg; die Protokollzeile aus
-    # `sperre.py` erreicht nur eine Konsole, und die gepackte App hat keine, die jemand liest.
-    # Kein 5xx: geschrieben IST worden, und ein Fehler waere die zweite Unwahrheit.
+    # `ungeschuetzt` bleibt der einzige Zusatz, und bewusst NUR hier (#194): geschrieben wurde,
+    # aber ohne Sperre — ein gleichzeitiger Schreiber kann den gerade eingetragenen Key
+    # ueberbuegelt haben (#192). Es beschreibt diesen einen Schreibvorgang, nicht den Zustand
+    # des Servers; im GET waere es sinnlos, und im `Settings`-Typ bliebe die Warnung bis zum
+    # Neuladen stehen. Kein 5xx: geschrieben IST worden, ein Fehler waere die zweite Unwahrheit.
     cfg, gehalten = settings.save(patch)
-    return {**settings.public(cfg), "ytdlp": ytdlp_update.zustand(),
-            "ungeschuetzt": not gehalten}
+    return {**_settings_body(cfg), "ungeschuetzt": not gehalten}
 
 
 @app.delete("/api/settings/kaputt")

@@ -10,6 +10,7 @@ const { app, BrowserWindow, ipcMain, shell, nativeTheme, net } = require('electr
 const path = require('path')
 const backend = require('./backend')
 const setup = require('./setup')
+const P = require('./paths')
 const protokoll = require('./protokoll')
 const updater = require('./updater')
 const { fensterOptionen, TITELLEISTE_HOEHE, farbeGueltig, fortschrittGueltig } = require('./fenster')
@@ -89,6 +90,25 @@ ipcMain.handle('protokollOeffnen', () => {
   protokoll.schreiben('— Protokoll vom Nutzer geoeffnet —')
   shell.showItemInFolder(protokoll.pfad())
   return protokoll.pfad()
+})
+
+/**
+ * Der Weg zu den eigenen Daten (#218) — bis hierher gab es `showItemInFolder` genau einmal,
+ * fuer die PROTOKOLLdatei, und keinen fuer die Arbeit des Nutzers.
+ *
+ * `P.projekte` ist dieselbe Quelle, aus der `backend.js` `TRANSKRIBOR_PROJEKTE` an den Server
+ * reicht — die angezeigte Zeile (die vom Server kommt) und dieser Knopf koennen also nicht
+ * auseinanderlaufen. **Kein Argument vom Renderer**, siehe preload.js.
+ *
+ * `openPath`, nicht `showItemInFolder`: letzteres zeigt eine DATEI in ihrem Elternordner: auf
+ * ein Verzeichnis angewandt oeffnete es dessen Elternverzeichnis mit markiertem `projekte`.
+ * Der leere String heisst Erfolg; alles andere ist die Fehlermeldung des Systems und wird
+ * geworfen, damit der Toast im Browserfenster sie nennt statt still nichts zu tun.
+ */
+ipcMain.handle('projekteOeffnen', async () => {
+  const fehler = await shell.openPath(P.projekte)
+  if (fehler) throw new Error(fehler)
+  return P.projekte
 })
 
 /**

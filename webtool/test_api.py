@@ -596,6 +596,13 @@ def test_settings_modellwechsel_behaelt_den_key(client):
                                         # `ergebnis`. #198: die Metadaten der Loeserskripte
                                         # sind kaputt, ihre Pruefung ist ausgesetzt.
                                         "ungeschuetzt", "ejs_unlesbar"}
+    # Seit #239 baut der PUT denselben Rumpf wie der GET. Diese sechs haengen an der Umgebung
+    # (installierte Abo-CLIs, Projektwurzel) und kommen deshalb hier heraus — sonst fiele der
+    # Vergleich unten auf jedem zweiten Rechner um. Fehlt eines, wirft schon das `pop`.
+    # DASS es dieselben sind wie im GET, prueft `test_settings_put_liefert_denselben_rumpf…`.
+    umgebung = {k: body.pop(k) for k in ("providers", "env_key", "whisper_choices",
+                                         "projekte_pfad", "ai_ready", "ai_reason")}
+    assert umgebung["providers"], "die Anbieterliste kommt live und darf nicht leer sein"
     assert body == {"provider": "anthropic", "model": "claude-sonnet-5",
                     "base_url": "", "has_key": True,
                     "whisper_model": "large-v3", "whisper_lang": "de",
@@ -604,6 +611,44 @@ def test_settings_modellwechsel_behaelt_den_key(client):
                     # Der Normalfall (#194) — und zugleich die Gegenprobe zum Test unten:
                     # ein dauerhaft gesetztes Flag waere ein Daueralarm und faellt hier auf.
                     "ungeschuetzt": False}
+
+
+def test_settings_rumpf_traegt_alle_felder_die_das_frontend_tippt(client):
+    """Die Gegenstuecke stehen in `webtool/frontend/src/lib/types.ts` als `Settings`.
+
+    Der Paritaetstest darunter allein reicht dafuer NICHT: seit #239 bauen beide Endpunkte
+    ihren Rumpf aus derselben Funktion, ein dort entferntes Feld verschwaende also auf beiden
+    Seiten gleichzeitig und die Paritaet bliebe bestehen. Dieser Test haelt die Menge selbst
+    fest — er wird rot, wenn ein Feld wegfaellt, das der Typ verspricht.
+    """
+    assert set(client.get("/api/settings").json()) == {
+        # aus settings.public()
+        "provider", "model", "base_url", "has_key", "kaputt",
+        "whisper_model", "whisper_lang", "ytdlp_auto",
+        # Umgebung, die das Frontend braucht
+        "providers", "env_key", "whisper_choices", "ai_ready", "ai_reason",
+        # wo die Arbeit des Nutzers liegt (#218)
+        "projekte_pfad",
+        "ytdlp"}
+
+
+def test_settings_put_liefert_denselben_rumpf_wie_der_get(client):
+    """#239: `api.saveSettings` verspricht eine vollstaendige `Settings` — der PUT lieferte
+    aber `providers`, `env_key`, `whisper_choices`, `ai_ready` und `ai_reason` nicht.
+
+    Aufgefallen ist es nie, weil `SettingsPage.speichern` zusammenmischt und die fehlenden
+    Felder aus dem vorigen Stand ueberleben; die Frontend-Tests koennen es strukturell nicht
+    finden, weil ihre `saveSettings`-Attrappe ein VOLLSTAENDIGES Objekt liefert und damit die
+    Falschaussage selbst behauptet. Deshalb steht der Waechter hier.
+
+    Die Mutation, die er faengt: der PUT baut seinen Rumpf wieder selbst.
+    """
+    get = set(client.get("/api/settings").json())
+    put = set(client.put("/api/settings", json={"model": "claude-sonnet-5"}).json())
+    assert put - {"ungeschuetzt"} == get
+    # Beide Richtungen: `ungeschuetzt` beschreibt EINEN Schreibvorgang (#194) — im GET waere
+    # es sinnlos, und im `Settings`-Typ bliebe die Warnung bis zum Neuladen stehen.
+    assert "ungeschuetzt" in put and "ungeschuetzt" not in get
 
 
 def test_settings_put_sagt_es_wenn_ungeschuetzt_geschrieben_wurde(client, monkeypatch):
