@@ -46,6 +46,23 @@ describe('DateiEinstellungenDialog', () => {
     getSpy.mockRestore()
   })
 
+  it('macht aus einem Alt-Eintrag „sprache: \'\'" keinen leeren Wähler', async () => {
+    /* Ein leerer String ist ein Eintrag, den es zu entfernen gibt — `datei_ansicht` reicht ihn
+       deshalb bewusst durch. Im Dialog richtete er drei Schäden an: Radix zeigt bei `value=""`
+       seinen Platzhalter (der Wähler stünde LEER da), `"" ?? projekt` bleibt `""` (`??` greift
+       nur bei null/undefined), womit ohne jede Nutzeraktion „Speichern & neu transkribieren"
+       erschiene — und ein Klick darauf schickte `{sprache: ""}` in ein 400. Erzeugt wurde so
+       ein Eintrag vom URL-Import mit leerer `TRANSKRIBOR_FETCH_SPRACHE` (dort jetzt ebenfalls
+       geschlossen). */
+    vi.spyOn(api, 'getFileEinstellungen').mockResolvedValue({ ...BASIS, sprache_eigen: '' })
+    render(<DateiEinstellungenDialog project="p" base="a" file={datei()} offen />)
+    expect(await sprachWaehlerDa()).toHaveTextContent('Folgt dem Projekt (Schweizerdeutsch)')
+    // Kein Phantom-Trigger: die Sprache ist effektiv unveraendert.
+    expect(screen.queryByRole('button', { name: /neu transkribieren/ })).not.toBeInTheDocument()
+    // Aufzuraeumen gibt es trotzdem etwas — der Knopf ist scharf und schickt `null`.
+    expect(screen.getByRole('button', { name: 'Speichern' })).toBeEnabled()
+  })
+
   it('zeigt einen eigenen Wert als solchen an, nicht als geerbten', async () => {
     // Die Gegenprobe: ein Override sieht anders aus als eine Erbschaft. Ohne sie bliebe der
     // Test oben auch dann gruen, wenn der Dialog IMMER „folgt dem Projekt" anzeigte.

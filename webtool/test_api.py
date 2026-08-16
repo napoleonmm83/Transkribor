@@ -1302,6 +1302,11 @@ def test_dateieinstellungen_nennt_override_und_projektwert(client, tmp_projekt):
     assert d["mehrsprachig"] is False
     assert d["mehrsprachig_eigen"] is None          # nie angefasst -> folgt dem Projekt
     assert d["mehrsprachig_projekt"] is False
+    # Dieselben drei Werte fuer die Sprache (#234). AM ENDPUNKT geprueft, nicht nur an
+    # `datei_ansicht`: das Frontend haengt am Endpunkt, und ein vergessenes Feld im Handler
+    # faellt an der Funktion darunter nicht auf.
+    assert d["sprache_eigen"] is None
+    assert d["sprache_projekt"] == d["sprache"] == "ch"
 
 
 def test_dateieinstellungen_null_entfernt_den_override(client, tmp_projekt):
@@ -1323,14 +1328,20 @@ def test_dateieinstellungen_null_entfernt_den_override(client, tmp_projekt):
 
 
 def test_projekt_PUT_mit_null_ist_ein_no_op(client, tmp_projekt):
-    """Beide Endpunkte teilen sich `EinstellungenBody` — und `mehrsprachig: null` heisst dort
-    VERSCHIEDENES: beim Datei-PUT "Override entfernen", beim Projekt-PUT nichts (das Projekt hat
-    keinen zu erbenden Wert). Ein Waechter, weil ein Modell mit zwei Bedeutungen genau die Art
-    Verwechslung ist, die beim naechsten Umbau still passiert."""
-    client.put(f"/api/projects/{tmp_projekt}/einstellungen", json={"mehrsprachig": True})
-    r = client.put(f"/api/projects/{tmp_projekt}/einstellungen", json={"mehrsprachig": None})
+    """Beide Endpunkte teilen sich `EinstellungenBody` — und `null` heisst dort VERSCHIEDENES:
+    beim Datei-PUT "Override entfernen", beim Projekt-PUT nichts (das Projekt hat keinen zu
+    erbenden Wert). Ein Waechter, weil ein Modell mit zwei Bedeutungen genau die Art
+    Verwechslung ist, die beim naechsten Umbau still passiert.
+
+    Seit #234 gilt das fuer ZWEI Felder — die Flaeche hat sich verdoppelt, der Waechter auch.
+    """
+    client.put(f"/api/projects/{tmp_projekt}/einstellungen",
+               json={"mehrsprachig": True, "sprache": "en"})
+    r = client.put(f"/api/projects/{tmp_projekt}/einstellungen",
+                   json={"mehrsprachig": None, "sprache": None})
     assert r.status_code == 200
     assert r.json()["mehrsprachig"] is True         # unveraendert, nicht zurueckgesetzt
+    assert r.json()["sprache"] == "en"
 
 
 def test_dateieinstellungen_FEHLENDES_feld_laesst_den_override_stehen(client, tmp_projekt):

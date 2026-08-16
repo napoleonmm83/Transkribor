@@ -18,10 +18,16 @@ import {
  *  Verzweigung (Spec #135): Sprache-Änderung + has_raw -> Neu-Transkription (dominiert, zieht
  *  die Korrektur nach); nur Tiefe + has_raw -> Neu-Korrektur; !has_raw -> nur Override. */
 
-/** Der Platzhalter für „kein eigener Wert" in der Sprachauswahl. Radix' `Select` verlangt einen
- *  nicht-leeren `value` und kennt kein `null`; die Übersetzung in beide Richtungen passiert an
- *  genau zwei Stellen (Anzeige und `onValueChange`). Ein doppelter Unterstrich, damit er nie mit
- *  einem echten Sprach-Kürzel kollidiert (`ch`/`de`/`en`/`fr`/`it`/`auto`, siehe `sprachen.py`). */
+/** Der Platzhalter für „kein eigener Wert" in der Sprachauswahl.
+ *
+ *  **Nicht, weil Radix etwas erzwingt** — `@radix-ui/react-select@2.3.7` wirft nirgends (in der
+ *  installierten Fassung nachgesehen: kein einziges `throw`). Sondern weil `""` dort schon
+ *  BELEGT ist: `shouldShowPlaceholder(value)` behandelt es als „keine Auswahl" und zeigt den
+ *  Platzhalter, der Trigger stünde also leer da statt „Folgt dem Projekt (…)" zu sagen. Und
+ *  `onValueChange` liefert grundsätzlich einen String, `null` kann gar nicht zurückkommen.
+ *  Die Übersetzung in beide Richtungen passiert deshalb an genau zwei Stellen (Anzeige und
+ *  `onValueChange`). Ein doppelter Unterstrich, damit er nie mit einem echten Sprach-Kürzel
+ *  kollidiert (`ch`/`de`/`en`/`fr`/`it`/`auto`, siehe `sprachen.py`). */
 const ERBT = '__projekt'
 export function DateiEinstellungenDialog({ project, base, file, offen, onOpenChange, onGespeichert }: {
   project: string
@@ -55,7 +61,15 @@ export function DateiEinstellungenDialog({ project, base, file, offen, onOpenCha
     getFileEinstellungen(project, base)
       .then(d => {
         if (!aktiv) return
-        setData(d); setSprachWahl(d.sprache_eigen); setKorrektur(d.korrektur)
+        // `|| null`, nicht bloss zuweisen: ein Alt-Eintrag `"sprache": ""` kommt als leerer
+        // String an (`datei_ansicht` reicht ihn bewusst durch — es IST ein Eintrag, den es zu
+        // entfernen gibt). Im Dialog machte er drei Dinge kaputt: Radix zeigt bei `value=""`
+        // seinen Platzhalter, der Waehler stuende also LEER da; `"" ?? projekt` bleibt `""`
+        // (`??` greift nur bei null/undefined), womit `neuTranskribieren` ohne jede Nutzeraktion
+        // wahr waere; und ein Klick schickte `{sprache: ""}` in ein 400 von `pruef_fehler`.
+        // Mit `null` zeigt er „Folgt dem Projekt (…)", der Speichern-Knopf ist scharf (es gibt
+        // ja etwas aufzuraeumen) und raeumt den Eintrag beim Speichern weg.
+        setData(d); setSprachWahl(d.sprache_eigen || null); setKorrektur(d.korrektur)
         setMehrWahl(d.mehrsprachig_eigen)
       })
       .catch(e => { if (aktiv) toast.error(`Einstellungen laden fehlgeschlagen: ${(e as Error).message}`) })

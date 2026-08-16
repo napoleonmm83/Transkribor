@@ -253,10 +253,18 @@ def test_die_ansicht_trennt_geerbte_von_gleichlautender_sprache(tmp_path, monkey
 
 
 def test_ERBEN_auf_einer_datei_OHNE_override_wirft_nicht(tmp_path, monkeypatch):
-    """Zweimal zuruecksetzen ist kein Fehler — `pop` mit Default statt `del`."""
+    """Zweimal zuruecksetzen ist kein Fehler — `pop` mit Default statt `del`.
+
+    Beide Felder, nicht nur der Haken: ueber HTTP ist der Fall erreichbar
+    (`PUT {"sprache": null}` auf eine nie angefasste Datei), und ein `del` gaebe dort 500.
+    Ohne die zweite Zeile bliebe die Mutation `pop` -> `del` fuer `sprache` gruen — der einzige
+    andere Test, der `sprache=ERBEN` faehrt, setzt vorher einen Override.
+    """
     monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
     projekt.setze_datei("p", "a", mehrsprachig=projekt.ERBEN)
     assert projekt.datei_override_mehrsprachig("p", "a") is None
+    projekt.setze_datei("p", "a", sprache=projekt.ERBEN)
+    assert projekt.datei_ansicht("p", "a")["sprache_eigen"] is None
 
 
 def test_override_unterscheidet_gleichlautend_von_geerbt(tmp_path, monkeypatch):
