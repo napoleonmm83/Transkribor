@@ -288,11 +288,12 @@ describe('SettingsPage', () => {
     expect(await screen.findByText(/Nicht installiert/)).toBeInTheDocument()
   })
 
-  it('behauptet waehrend eines Laufs NICHT "Nicht installiert" (#225)', async () => {
-    // Der Poll aus #174 fragt alle 1,5 s `GET /api/settings` — also WAEHREND pip site-packages
-    // umschreibt. Landet eine Runde in pips Deinstallations-/Installationsluecke, wirft
-    // `metadata.version` und der Server liefert `version: null, unlesbar: false`: exakt dieser
-    // Zustand. Vor #174 gab es das Fenster nicht (ein einziger GET, nach pip).
+  it('ein FREMDER Lauf verdraengt die Fassungszeile — auch ohne Fassung', async () => {
+    // **Kein Regressionstest fuer #225**, und das gehoert in den Namen: die alte Bedingung
+    // `s.ytdlp.laeuft && !ytLaeuft` war hier ebenfalls wahr (nie geklickt), der Test waere auf
+    // master genauso gruen gewesen. Er sichert den Nachbarfall aus #174 (Reload mitten in einem
+    // fremden Lauf) und dass es das Gate ueberhaupt gibt — nimmt man es ganz weg, wird er rot.
+    // Den Fix selbst sichert der Test „sagt waehrend des EIGENEN Laufs …" weiter unten ab.
     zeige({ ytdlp: { version: null, unlesbar: false, geprueft: '', auto: true, env: false, laeuft: true, ergebnis: '' } })
     expect(await screen.findByText(/Eine Aktualisierung läuft gerade/)).toBeInTheDocument()
     expect(screen.queryByText(/Nicht installiert/)).not.toBeInTheDocument()

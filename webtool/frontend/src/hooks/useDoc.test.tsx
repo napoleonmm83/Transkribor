@@ -910,6 +910,26 @@ describe('useDoc: der Rueckweg einer Streichung ueberlebt den Dokumentwechsel NI
     expect(api.saveDoc).not.toHaveBeenCalled()
   })
 
+  it('Sprecher umbenennen entwertet den Rueckweg — sonst kehrt der ALTE Name zurueck', async () => {
+    // #226-Review M2. `renameInDoc` schreibt `context`/`summary` MIT um — dafuer wurde #90
+    // ueberhaupt gebaut (gemessen an `01394435.md`: 67 Sprecherzeilen „Fuhat Aras", die ersten
+    // beiden Absaetze „Buad Aras"). Ein gestrichener Absatz liegt zu dem Zeitpunkt nicht mehr im
+    // Dokument, die Umbenennung erreicht ihn also nicht — und ein Klick auf „Rueckgaengig"
+    // danach setzte den alten Namen wieder oben ins Dokument und in den Export.
+    vi.mocked(api.saveDoc).mockResolvedValue(undefined as never)
+    const { result } = await geladen()
+    const alt = 'Gespraech mit Fuhat Aras im Stall.'
+
+    await act(async () => {
+      result.current.updateDoc({ context: '' })
+      gestrichen('Kontext', alt, () => result.current.updateDoc({ context: alt }))
+    })
+
+    act(() => { result.current.renameSpeaker('Fuhat Aras', 'Furkan Aras') })
+    expect(await klickeRueckgaengig()).toBe(false)
+    expect(result.current.doc!.context).toBe('')
+  })
+
   it('nach dem Verlassen des Editors steht kein Rueckweg mehr, der stumm ins Leere schreibt', async () => {
     // `DateiMenue.wegVomEditor()` baut den Editor ab (Loeschen / Neu transkribieren). React
     // verwirft `setDoc` auf einem abgebauten Hook kommentarlos — der Knopf saehe aus, als

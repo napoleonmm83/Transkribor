@@ -87,15 +87,17 @@ auch „Straße“ — praktisch, weil in Transkripten beides durcheinander vork
 die KI — und sie stehen im Text-Export ganz oben, also liest sie jeder zuerst. Ein Klick
 darauf öffnet sie zum Bearbeiten; ist noch nichts da, legst du sie an derselben Stelle selbst
 an. Damit lässt sich auch ein älteres Transkript geradeziehen, in dem noch ein falsch
-verstandener Name steht.
+verstandener Name steht. Willst du einen der beiden Absätze ganz loswerden, löschst du einfach
+den Text — leer heisst gestrichen.
 
 **Offene Punkte abhaken.** Ganz unten unter „Anmerkungen“ sammelt die KI, was sie *nicht* raten
 wollte — also genau die Stellen, an denen sich Nachhören lohnt. Die Liste gehört dir: eine
 Anmerkung geradeziehen, eine erledigte streichen (Text löschen genügt) oder eine eigene
 ergänzen. Und zu einem einzelnen Satz im Gespräch legst du über das Sprechblasen-Symbol eine
 Notiz an — „hier nachfragen“ steht dann direkt bei der Stelle und im Export mit unter den
-Anmerkungen. **Versehentlich eine Anmerkung oder eine Notiz gestrichen?** Es blendet sich kurz
-ein Hinweis ein, der den gestrichenen Text nennt — ein Klick auf „Rückgängig“ holt ihn zurück.
+Anmerkungen. **Versehentlich etwas gestrichen?** Ob Anmerkung, Notiz, Kontext oder
+Zusammenfassung: es blendet sich kurz ein Hinweis ein, der den gestrichenen Text nennt — ein
+Klick auf „Rückgängig“ holt ihn zurück.
 
 **Untertitel für YouTube.** Ein Klick erzeugt eine `.srt`-Datei, die du bei YouTube hochlädst;
 sie ersetzt die schwachen Automatik-Untertitel. Die Sprechernamen kannst du dabei ein- oder
@@ -172,7 +174,8 @@ lässt sich die App in der Zwischenzeit ganz normal.
 kurz und versuche es noch einmal: Transkribor frischt den Downloader beim ersten Fehlversuch
 selbst auf und lädt dann gleich weiter. Klappt es danach immer noch nicht, hilft der Knopf
 **„Jetzt aktualisieren“** unter *Einstellungen › Video-Import* — dort steht auch, welche
-Fassung gerade läuft. Bleibt es dabei, ist das Video vermutlich nicht öffentlich abrufbar
+Fassung gerade läuft (während einer Aktualisierung erst wieder, wenn sie fertig ist: solange
+sie läuft, wäre jede Angabe geraten). Bleibt es dabei, ist das Video vermutlich nicht öffentlich abrufbar
 (private Videos und solche, die eine Anmeldung verlangen, unterstützt Transkribor nicht).
 
 **Welche Sprachen?** Ganz oben im Bereich **„Material hinzufügen“** steht **eine** Sprachauswahl:

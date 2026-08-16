@@ -137,6 +137,17 @@ export function useDoc(project: string | null, base: string | null) {
 
   const renameSpeaker = useCallback((from: string, to: string) => {
     if (!from || !to || from === to) return   // Guard hier, nicht im setDoc-Updater: der muss rein bleiben
+    // Offene Rueckwege entwerten (#226-Review M2). `renameInDoc` schreibt `context`/`summary`
+    // MIT um — das ist der ganze Zweck von #90. Ein gestrichener Absatz liegt zu dem Zeitpunkt
+    // aber nicht mehr im Dokument, die Umbenennung erreicht ihn also nicht; ein Klick auf
+    // „Rueckgaengig" danach setzte den ALTEN Namen wieder oben ins Dokument und in den Export —
+    // genau der Zustand, der in `01394435.md` gemessen wurde (67 Zeilen „Fuhat Aras", die ersten
+    // beiden Absaetze „Buad Aras").
+    //
+    // Der Preis ist bewusst: der Rueckweg faellt auch dann weg, wenn die Umbenennung das
+    // gestrichene Feld gar nicht betroffen haette. Ein verlorener Rueckweg ist sichtbar (das
+    // Feld steht leer da), ein falscher Name im Export ist es nicht.
+    streichungenVergessen()
     setDoc(d => d && renameInDoc(d, from, to))
     beruehrt()
   }, [beruehrt])
