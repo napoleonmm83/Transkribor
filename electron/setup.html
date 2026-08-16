@@ -131,8 +131,11 @@ function zeigeStatus(s) {
   // Veraltet ist nicht kaputt: die Umgebung läuft, ihr fehlen nur Pakete, die nach der
   // Installation dazugekommen sind. Ohne den Zusatz stünde hier ein rotes „fehlt“ neben
   // einer Umgebung, die der Nutzer seit Monaten benutzt.
+  // „auf dem Stand der Paketliste“, nicht „auf dem neuesten Stand“: derselbe Zustand entsteht
+  // auch, wenn ein pip-Lauf auf halber Strecke abgebrochen ist (#217). Beide Male ist die
+  // Umgebung da, beide Male fehlen Pakete, beide Male hilft derselbe Klick.
   zeile('Python-Umgebung (Whisper, PyTorch)', s.venv,
-        s.venv ? s.venvPfad : (s.venvVeraltet ? 'vorhanden, aber nicht auf dem neuesten Stand' : ''))
+        s.venv ? s.venvPfad : (s.venvVeraltet ? 'vorhanden, aber nicht auf dem Stand der Paketliste' : ''))
   $('hinweis').textContent = 'Projekte liegen in ' + s.projektePfad
   // Auf macOS/Linux installiert die App Python/ffmpeg nicht selbst. Dann ist dieser Befehl das
   // Einzige, was weiterhilft — er gehört vor den Klick, nicht in eine rote Box danach.
@@ -148,8 +151,17 @@ function zeigeStatus(s) {
     // `!s.hinweis`, weil dieser Zweig VOR dem Hinweis-Zweig steht: fehlt daneben Python oder
     // ffmpeg, ist der Terminal-Befehl die dringendere Auskunft — ein Klick endete sonst an
     // „Kein Python >= 3.10 gefunden“.
-    $('sub').textContent = 'Dieses Update bringt neue Python-Pakete mit. Ein Klick auf ' +
-      '„Jetzt einrichten“ holt sie nach — die grossen Sachen sind schon da.'
+    // Der Sonderfall ZUERST (#230): lässt sich der Paketstand nicht vermerken, erscheint diese
+    // Seite bei jedem Start, ein Klick läuft jedes Mal erfolgreich durch und ändert nichts an
+    // der Wiederkehr. Ohne diesen Satz wiederholt die Seite eine Aussage, die der Nutzer gerade
+    // abgearbeitet hat — mit ihm ist es eine Auskunft statt einer Endlosschleife.
+    // Nur hier, nicht im Normalfall: der Satz stünde sonst nach jedem Update vor jedem Nutzer.
+    $('sub').textContent = s.stempelSchreibbar === false
+      ? 'Der Paketstand lässt sich nicht vermerken (' + s.stempelPfad + ') — deshalb fragt diese ' +
+        'Seite bei jedem Start erneut. „Jetzt einrichten“ funktioniert trotzdem; damit die Frage ' +
+        'aufhört, braucht diese Datei Schreibrechte (Virenscanner, volle Festplatte).'
+      : 'Dieses Update bringt neue Python-Pakete mit. Ein Klick auf ' +
+        '„Jetzt einrichten“ holt sie nach — die grossen Sachen sind schon da.'
     $('los').style.display = ''
   } else if (s.hinweis) {
     $('sub').textContent = 'Transkribor braucht Python und ffmpeg. Bitte den Befehl unten einmal ' +
