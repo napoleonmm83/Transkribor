@@ -109,8 +109,12 @@ def test_diarize_file_waehlt_num_speakers_ODER_min_speakers(monkeypatch):
 
     **Beide Richtungen**, weil ein fest verdrahtetes `num_speakers` derselbe Schaden von der
     anderen Seite waere: es klemmte jede Datei OHNE Einstellung auf eine erfundene Zahl.
-    Und `num_speakers` steht ALLEIN — zusammen mit `min_speakers` weist pyannote die Angabe
-    als widerspruechlich zurueck, das waere ein Wurf mitten im GPU-Lauf."""
+
+    Dass `num_speakers` ALLEIN steht, ist eine Klarheits-Entscheidung, keine Notwendigkeit:
+    pyannote wirft dabei NICHT (nachgemessen an 4.0.7 — `utils/diarization.py:58` ueberschreibt
+    `min_speakers` mit `num_speakers`), ein mitgeschicktes `min_speakers` waere schlicht
+    wirkungslos. Der Test nagelt es trotzdem fest, damit am Aufrufort keine Grenze steht, die
+    nichts tut."""
     gesehen = {}
 
     class _Ann:                       # was pyannote zurueckgibt; leer reicht, geprueft werden die kwargs

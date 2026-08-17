@@ -260,7 +260,8 @@ Trennung, bei der die Fragen wieder beim Fragenden standen.
 Lass das Feld leer, wenn du es nicht sicher weisst — dann schätzt Transkribor wie bisher.
 Eine falsche Zahl ist schlechter als keine, denn sie wird genau eingehalten. Die Änderung
 kostet keine neue Transkription, nur einen neuen Korrekturlauf; hast du die Aufnahme im Editor
-schon von Hand überarbeitet, wird diese Fassung dabei überschrieben (Transkribor fragt vorher).
+schon von Hand überarbeitet, wird diese Fassung dabei überschrieben — der Dialog sagt es dir
+an, bevor du speicherst.
 
 Bei Aufnahmen, die du **vor dieser Fassung** hinzugefügt hast, steht meist „Ja“ oder „Nein“ —
 damals wurde die Einstellung bei jedem Hinzufügen fest an der Aufnahme vermerkt. Wenn du willst,

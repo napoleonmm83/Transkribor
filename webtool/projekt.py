@@ -172,9 +172,21 @@ def _sprecher_wert(eintrag: dict) -> int | None:
 
     `bool` muss ausdruecklich ausgeschlossen werden: `isinstance(True, int)` ist in Python
     wahr, ein versehentlich gesetzter Haken ginge sonst als „1 Sprecher" durch.
+
+    **Die Obergrenze gehoert HIERHIN, nicht nur in `sprachen.pruef_fehler`.** Dessen Docstring
+    nennt sie eine Trust-Boundary („der Wert geht ungefiltert an pyannote") — die sass aber nur
+    im HTTP-Schreibpfad, und diese Funktion ist die einzige Wache zwischen `projekt.json` und
+    dem GPU-Lauf. Im Review gemessen: ein von Hand geschriebenes `"sprecher": 1000000` kam hier
+    unveraendert heraus, waehrend derselbe Wert am PUT ein 400 bekam. `VBxClustering.__call__`
+    klemmt nicht auf die Zahl der Embeddings, der Wert geht roh in `KMeans(n_clusters=…)` und
+    wirft dort (`n_samples=5 should be >= n_clusters=8`) — mitten im Lauf. Handeditieren ist
+    genau der Fall, fuer den es diese Funktion gibt; dazu jeder Nicht-HTTP-Aufrufer von
+    `setze_datei` (`upload_audio`, `fetch.py`).
     """
     wert = eintrag.get("sprecher")
-    if isinstance(wert, bool) or not isinstance(wert, int) or wert < 1:
+    if isinstance(wert, bool) or not isinstance(wert, int):
+        return None
+    if not 1 <= wert <= sprachen.SPRECHER_MAX:
         return None
     return wert
 

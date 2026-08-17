@@ -391,10 +391,15 @@ def test_sprecher_ueberlebt_kaputte_werte_in_der_datei(tmp_path, monkeypatch):
     """Schema-Toleranz wie bei `sprache`/`mehrsprachig`: ein Nicht-int (von Hand editiert, aus
     einer aelteren Fassung) darf nicht bis in `diarize_file` durchreisen — dort waere er ein
     Wurf mitten im GPU-Lauf. `True` ist dabei der fiese Fall: `isinstance(True, int)` ist in
-    Python wahr, ein Haken wuerde also als „1 Sprecher" durchgehen."""
+    Python wahr, ein Haken wuerde also als „1 Sprecher" durchgehen.
+
+    Die OBERGRENZE gehoert mitgeprueft: sie sass zuerst nur in `sprachen.pruef_fehler`, also im
+    HTTP-Schreibpfad — ein von Hand geschriebenes `1000000` kam hier unveraendert heraus
+    (im Review gemessen) und wirft erst in `KMeans(n_clusters=…)` mitten im GPU-Lauf.
+    Handeditieren ist genau der Fall, fuer den es diesen Test gibt."""
     monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
     os.makedirs(paths.project_dir("p"), exist_ok=True)
-    for wert in ('"fuenf"', "0", "-1", "true", "2.5", "null"):
+    for wert in ('"fuenf"', "0", "-1", "true", "2.5", "null", "21", "1000000"):
         with open(projekt._pfad("p"), "w", encoding="utf-8") as fh:
             fh.write('{"dateien": {"a": {"sprecher": %s}}}' % wert)
         assert projekt.datei_sprecher("p", "a") is None, f"{wert} haette abgewiesen werden muessen"
@@ -408,3 +413,9 @@ def test_datei_ansicht_liefert_sprecher_aus_demselben_lesevorgang(tmp_path, monk
     projekt.setze_datei("p", "a", sprecher=3)
     assert projekt.datei_ansicht("p", "a")["sprecher"] == 3
     assert projekt.datei_ansicht("p", "b")["sprecher"] is None
+    # Die Typwache gilt HIER genauso — im Review gemessen, dass ein blosses `e.get("sprecher")`
+    # 279 Tests gruen liess: der Dialog machte aus `true` ein `String(true)` == "true", sperrte
+    # sich damit selbst (ungueltige Eingabe) und liess sich nicht mehr leeren.
+    with open(projekt._pfad("p"), "w", encoding="utf-8") as fh:
+        fh.write('{"dateien": {"a": {"sprecher": true}}}')
+    assert projekt.datei_ansicht("p", "a")["sprecher"] is None
