@@ -165,6 +165,21 @@ def cmd_prep(project: str) -> int:
 DIARIZE_MIN_SPEAKERS = 2      # pyannote-Untergrenze; das Sidecar zeichnet denselben Wert auf (kein Drift)
 
 
+def _sidecar_sprecher(dpath: str):
+    """Mit welcher Sprecherzahl wurde ein vorhandenes `<base>.diar.json` gerechnet?
+
+    `None` heisst „automatisch" — und deckt drei Faelle zusammen: kein Eintrag (Sidecar aus
+    der Zeit vor diesem Feld), ausdruecklich `null`, und eine unlesbare Datei. Die letzte
+    Gleichsetzung ist die interessante: ein kaputtes Sidecar meldet damit „automatisch" und
+    wird neu erzeugt, sobald eine Zahl eingestellt ist — und bleibt sonst liegen wie bisher.
+    Werfen darf die Funktion nicht, sie sitzt in der Skip-Entscheidung eines Batch-Laufs.
+    """
+    try:
+        return _load(dpath).get("sprecher")
+    except Exception:
+        return None
+
+
 def _diarize_enabled() -> bool:
     return os.environ.get("TRANSKRIBOR_DIARIZE", "1").strip().lower() not in ("0", "false", "no")
 
@@ -183,10 +198,21 @@ def cmd_diarize(project: str, only_bases: list = None) -> int:
     for base in (only_bases if only_bases is not None else bases(project)):
         dpath = os.path.join(tdir, base + ".diar.json")
         raw_json = os.path.join(tdir, base + ".json")
+        from . import projekt as _pj          # lazy wie in `_ziel_dialekt` (s. dort)
+        sprecher = _pj.datei_sprecher(project, base)
         try:
             # >= (nicht >): das Sidecar wird stets NACH der Roh-JSON geschrieben; ein Skip bei exakt
             # gleicher Sekunde ist unrealistisch (Transkription dauert Minuten). Neu-Diarisieren = Sidecar löschen.
-            if os.path.exists(dpath) and os.path.getmtime(dpath) >= os.path.getmtime(raw_json):
+            #
+            # Die mtime allein reicht seit der Sprecherzahl NICHT mehr: das Sidecar ist nach
+            # jedem Lauf neuer als die Roh-JSON, wer die Zahl also nachtraeglich eintraegt und
+            # neu korrigieren laesst, bekaeme die ALTE Clusterung — der Schalter waere tot, und
+            # der Lauf meldete dazu Erfolg. Deshalb zaehlt zusaetzlich, WOMIT gerechnet wurde.
+            # `_sidecar_sprecher` liest den aufgezeichneten Wert; ein Sidecar aus der Zeit vor
+            # diesem Feld hat keinen und gilt als „automatisch" (= None) — hat der Nutzer nichts
+            # eingestellt, aendert sich damit nichts, und genau das ist gewollt.
+            if (os.path.exists(dpath) and os.path.getmtime(dpath) >= os.path.getmtime(raw_json)
+                    and _sidecar_sprecher(dpath) == sprecher):
                 print(f"↷ nutze vorhandene {base}.diar.json", flush=True)
                 continue
             audio = _audio_path(project, base)
@@ -195,13 +221,16 @@ def cmd_diarize(project: str, only_bases: list = None) -> int:
                 continue
             from . import diarize                       # lazy: zieht torch/pyannote erst hier
             raw = _load(raw_json)
-            print(f"→ Diarisiere {base} …", flush=True)
-            turns = diarize.diarize_file(audio, min_speakers=DIARIZE_MIN_SPEAKERS)
+            wieviele = f" ({sprecher} Sprecher)" if sprecher else ""
+            print(f"→ Diarisiere {base}{wieviele} …", flush=True)
+            turns = diarize.diarize_file(audio, min_speakers=DIARIZE_MIN_SPEAKERS,
+                                         num_speakers=sprecher)
             if not turns:
                 print(f"diarize: SKIP {base} (keine Sprecher erkannt)", flush=True)
                 continue
             seg_speakers = diarize.assign_clusters(raw, turns)
             doc = {"base": base, "audio": os.path.basename(audio), "min_speakers": DIARIZE_MIN_SPEAKERS,
+                   "sprecher": sprecher,          # womit gerechnet wurde -> Skip-Entscheidung oben
                    "turns": turns,
                    "segments": [{"id": sid, "speaker": spk} for sid, spk in seg_speakers.items()]}
             paths.atomic_write(dpath, json.dumps(doc, ensure_ascii=False, indent=1))

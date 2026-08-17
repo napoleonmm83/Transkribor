@@ -66,6 +66,14 @@ export type DateiEinstellungen = ProjectEinstellungen & {
   sprache_projekt: string
   mehrsprachig_eigen: boolean | null
   mehrsprachig_projekt: boolean
+  /** Wie viele Personen sprechen in der Aufnahme? `null` = automatisch schaetzen lassen
+   *  (Verhalten wie bisher). EIN Wert statt des Dreiklangs oben: es gibt bewusst keinen
+   *  Projekt-Standard, von dem eine Datei erben koennte — die Sprecherzahl gehoert der
+   *  Aufnahme, nicht dem Projekt. */
+  sprecher: number | null
+  /** Obergrenze fuer `sprecher`, vom Server (`sprachen.SPRECHER_MAX`). Kommt mit, damit das
+   *  Eingabefeld den Bereich selbst pruefen kann, ohne die Zahl ein zweites Mal zu kennen. */
+  sprecher_max: number
 };
 /** `sprache: null` / `mehrsprachig: null` heisst AUSDRUECKLICH „Override entfernen" — das Feld
  *  wegzulassen laesst ihn stehen (Partial-Update). Unterschieden wird serverseitig an
@@ -74,7 +82,7 @@ export type DateiEinstellungen = ProjectEinstellungen & {
  *  ein zweiter Weg zum selben Ziel waere eine zweite Wahrheit. */
 export type DateiEinstellungenPatch =
   Partial<Omit<EinstellungenWerte, 'mehrsprachig' | 'sprache'>>
-  & { sprache?: string | null; mehrsprachig?: boolean | null };
+  & { sprache?: string | null; mehrsprachig?: boolean | null; sprecher?: number | null };
 // `device` gilt der torch-Welt (Sprechertrennung, kann "mps"), `asr` der Transkription
 // (faster-whisper/CTranslate2, nur "cuda"/"cpu"). Auf einem Mac laufen die beiden ausein-
 // ander — deshalb zwei Felder statt einem.

@@ -12,6 +12,9 @@ const BASIS = {
   sprache: 'ch', korrektur: 'auto', mehrsprachig: false,
   sprache_eigen: null, sprache_projekt: 'ch',
   mehrsprachig_eigen: null, mehrsprachig_projekt: false,
+  // Vorgabe `null` = automatisch schaetzen (Verhalten wie vor #264); `sprecher_max` kommt
+  // vom Server, damit das Eingabefeld den Bereich nicht ein zweites Mal kennen muss.
+  sprecher: null, sprecher_max: 20,
   sprach_choices: [
     { id: 'ch', label: 'Schweizerdeutsch', hint: '' },
     { id: 'en', label: 'Englisch', hint: '' },
@@ -135,7 +138,7 @@ describe('DateiEinstellungenDialog', () => {
     await spracheWaehlen('Englisch')
     fireEvent.click(screen.getByRole('button', { name: 'Speichern & neu transkribieren' }))
     await waitFor(() => expect(saveSpy).toHaveBeenCalledWith('p', 'a', expect.objectContaining({ sprache: 'en' })))
-    expect(onGespeichert).toHaveBeenCalledWith({ neuTranskribieren: true, tiefeGeaendert: false })
+    expect(onGespeichert).toHaveBeenCalledWith({ neuTranskribieren: true, neuKorrigieren: false })
     expect(onOpenChange).toHaveBeenCalledWith(false)
     saveSpy.mockRestore()
   })
@@ -179,7 +182,7 @@ describe('DateiEinstellungenDialog', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
     await waitFor(() => expect(saveSpy).toHaveBeenCalledWith('p', 'a',
       expect.objectContaining({ sprache: null })))
-    expect(onGespeichert).toHaveBeenCalledWith({ neuTranskribieren: false, tiefeGeaendert: false })
+    expect(onGespeichert).toHaveBeenCalledWith({ neuTranskribieren: false, neuKorrigieren: false })
     saveSpy.mockRestore()
   })
 
@@ -287,7 +290,7 @@ describe('DateiEinstellungenDialog — mehrsprachig', () => {
     await waehle(/^Ja —/)
     fireEvent.click(screen.getByRole('button', { name: 'Speichern & neu transkribieren' }))
     await waitFor(() => expect(onGespeichert).toHaveBeenCalledWith(
-      { neuTranskribieren: true, tiefeGeaendert: false }))
+      { neuTranskribieren: true, neuKorrigieren: false }))
     saveSpy.mockRestore()
   })
 
@@ -317,5 +320,76 @@ describe('DateiEinstellungenDialog — mehrsprachig', () => {
     await sprachWaehlerDa()
     expect(await screen.findByText(/^Ja —/)).toBeInTheDocument()   // Serverwert kommt an
     expect(screen.getByRole('button', { name: /speichern/i })).toBeDisabled()
+  })
+})
+
+describe('DateiEinstellungenDialog — Sprecherzahl (#264)', () => {
+  const feld = () => screen.getByLabelText('Anzahl Sprecher')
+  const knopf = () => screen.getByRole('button', { name: /Speichern/ })
+
+  it('schickt die eingetragene Zahl und meldet sie als Neu-Korrektur', async () => {
+    // Der Weg, für den das Feld existiert: pyannote fand an Marcus' Kameramikrofon-Aufnahme
+    // 2 statt 4 Sprecher. Die Zahl muss beim Server ankommen UND den correct-Lauf auslösen —
+    // die Diarisierung ist dessen Prep-Schritt. Ein `transcribe` wäre hier falsch und teuer.
+    vi.spyOn(api, 'getFileEinstellungen').mockResolvedValue(BASIS)
+    const save = vi.spyOn(api, 'saveFileEinstellungen').mockResolvedValue(
+      { sprache: 'ch', korrektur: 'auto', mehrsprachig: false })
+    const onGespeichert = vi.fn()
+    render(<DateiEinstellungenDialog project="p" base="a" file={datei()} offen
+                                     onGespeichert={onGespeichert} />)
+    await sprachWaehlerDa()
+    fireEvent.change(feld(), { target: { value: '4' } })
+    fireEvent.click(knopf())
+    await waitFor(() => expect(save).toHaveBeenCalledWith('p', 'a',
+      expect.objectContaining({ sprecher: 4 })))
+    expect(onGespeichert).toHaveBeenCalledWith({ neuTranskribieren: false, neuKorrigieren: true })
+    save.mockRestore()
+  })
+
+  it('leeren heisst „automatisch" und schickt null', async () => {
+    // Ohne Rückweg bliebe eine einmal getippte Zahl für immer stehen. `null` ist der Befehl
+    // „Override entfernen" (dieselbe Mechanik wie bei sprache/mehrsprachig) — `undefined`
+    // würde von JSON.stringify weggeworfen und hiesse „nicht anfassen".
+    vi.spyOn(api, 'getFileEinstellungen').mockResolvedValue({ ...BASIS, sprecher: 5 })
+    const save = vi.spyOn(api, 'saveFileEinstellungen').mockResolvedValue(
+      { sprache: 'ch', korrektur: 'auto', mehrsprachig: false })
+    render(<DateiEinstellungenDialog project="p" base="a" file={datei()} offen />)
+    await waitFor(() => expect(feld()).toHaveValue(5))
+    fireEvent.change(feld(), { target: { value: '' } })
+    fireEvent.click(knopf())
+    await waitFor(() => expect(save).toHaveBeenCalledWith('p', 'a',
+      expect.objectContaining({ sprecher: null })))
+    save.mockRestore()
+  })
+
+  it('eine ungültige Zahl sperrt den Knopf GANZ — auch bei einer anderen Änderung', async () => {
+    /* Der Datenverlust-Pfad: bei ungültiger Eingabe ist `sprecherWahl` undefined, und das
+       `?? null` im Speicher-Rumpf schriebe daraus eine LÖSCHUNG. Wäre nur der eigene Zweig
+       gesperrt, liesse sich über eine Tiefe-Änderung trotzdem speichern — und die vorhandene
+       Zahl wäre still weg, während der Nutzer sie gerade korrigieren wollte. */
+    vi.spyOn(api, 'getFileEinstellungen').mockResolvedValue({ ...BASIS, sprecher: 5 })
+    const save = vi.spyOn(api, 'saveFileEinstellungen').mockResolvedValue(
+      { sprache: 'ch', korrektur: 'auto', mehrsprachig: false })
+    render(<DateiEinstellungenDialog project="p" base="a" file={datei()} offen />)
+    await waitFor(() => expect(feld()).toHaveValue(5))
+    fireEvent.change(feld(), { target: { value: '99' } })          // über sprecher_max
+    expect(knopf()).toBeDisabled()
+    expect(feld()).toHaveAttribute('aria-invalid', 'true')
+    // ... und auch eine gleichzeitige, für sich gültige Änderung hebt die Sperre nicht auf
+    await spracheWaehlen('Englisch')
+    expect(knopf()).toBeDisabled()
+    fireEvent.change(feld(), { target: { value: '6' } })           // korrigiert -> wieder frei
+    expect(knopf()).toBeEnabled()
+    expect(save).not.toHaveBeenCalled()
+    save.mockRestore()
+  })
+
+  it('eine unveränderte Zahl loest keinen Lauf aus', async () => {
+    // Sonst liefe nach jedem Öffnen-und-Speichern eine Neu-Korrektur mit `force` quer über
+    // eine handbearbeitete Fassung — für eine Einstellung, die niemand angefasst hat.
+    vi.spyOn(api, 'getFileEinstellungen').mockResolvedValue({ ...BASIS, sprecher: 3 })
+    render(<DateiEinstellungenDialog project="p" base="a" file={datei()} offen />)
+    await waitFor(() => expect(feld()).toHaveValue(3))
+    expect(knopf()).toBeDisabled()
   })
 })

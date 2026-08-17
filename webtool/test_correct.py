@@ -481,7 +481,7 @@ def test_cmd_diarize_writes_sidecar(project, monkeypatch):
     _root, t = project
     monkeypatch.setenv("TRANSKRIBOR_DIARIZE", "1")
     import webtool.diarize as diar
-    monkeypatch.setattr(diar, "diarize_file", lambda audio, min_speakers=2: _fake_turns())
+    monkeypatch.setattr(diar, "diarize_file", lambda audio, min_speakers=2, num_speakers=None: _fake_turns())
     assert correct.cmd_diarize("Demo") == 1
     side = json.loads((t / "S1.diar.json").read_text(encoding="utf-8"))
     assert side["segments"] == [{"id": 0, "speaker": "Sprecher 1"}]
@@ -530,7 +530,7 @@ def test_run_single_base_diarizes_only_that_file(project, monkeypatch):
     monkeypatch.setenv("TRANSKRIBOR_DIARIZE", "1")
     import webtool.diarize as diar
     calls = {"n": 0}
-    def fake_diarize(audio, min_speakers=2):
+    def fake_diarize(audio, min_speakers=2, num_speakers=None):
         calls["n"] += 1
         return [{"start": 0.0, "end": 1.0, "cluster": "SPEAKER_00"}]
     monkeypatch.setattr(diar, "diarize_file", fake_diarize)
@@ -546,7 +546,7 @@ def test_run_diarizes_before_prep_and_injects(project, monkeypatch):
     monkeypatch.setenv("TRANSKRIBOR_DIARIZE", "1")
     import webtool.diarize as diar
     monkeypatch.setattr(diar, "diarize_file",
-                        lambda audio, min_speakers=2: [{"start": 0.0, "end": 1.0, "cluster": "SPEAKER_00"}])
+                        lambda audio, min_speakers=2, num_speakers=None: [{"start": 0.0, "end": 1.0, "cluster": "SPEAKER_00"}])
     calls = []
     monkeypatch.setattr(correct, "_run_claude", _fake_claude(t, calls))
     assert correct.cmd_run("Demo") == 1
@@ -1123,3 +1123,65 @@ def test_ziel_dialekt_verschluckt_den_unsicheren_namen_nicht(tmp_path, monkeypat
     projekt.speichern("p", {"sprache": "auto"})
     with pytest.raises(ValueError):
         correct._ziel_dialekt("..", "x")
+
+
+# ---- Sprecheranzahl aus projekt.json -> pyannote (#264) ----
+
+def test_diarize_reicht_die_eingestellte_sprecherzahl_durch(project, monkeypatch):
+    """Ohne Durchreichung ist das Eingabefeld ein toter Schalter. Gemessen an Marcus'
+    Rhyathlon-Material: pyannote fand von sich aus 2 statt 4 bzw. 3 statt 5 Sprecher, und die
+    Clustering-Parameter halfen nicht (threshold 0.60→0.50 identisch, Fb=0.3 sprengte eine
+    5-Personen-Aufnahme auf 9 Cluster). Die vorgegebene Zahl ist die einzige Stellschraube,
+    die trifft."""
+    _root, t = project
+    monkeypatch.setenv("TRANSKRIBOR_DIARIZE", "1")
+    import webtool.diarize as diar
+    from webtool import projekt
+    gesehen = {}
+    monkeypatch.setattr(diar, "diarize_file",
+                        lambda audio, min_speakers=2, num_speakers=None:
+                        gesehen.update(min=min_speakers, num=num_speakers) or _fake_turns())
+    projekt.setze_datei("Demo", "S1", sprecher=5)
+    assert correct.cmd_diarize("Demo") == 1
+    assert gesehen["num"] == 5
+    side = json.loads((t / "S1.diar.json").read_text(encoding="utf-8"))
+    assert side["sprecher"] == 5          # das Sidecar haelt fest, WOMIT es gerechnet wurde
+
+
+def test_diarize_ohne_einstellung_bleibt_beim_alten_verhalten(project, monkeypatch):
+    """Die Vorgabe darf sich nicht aendern: wer nichts eintraegt, bekommt exakt den Lauf von
+    vorher (min_speakers=2, kein num_speakers). Sonst waere das hier eine stille
+    Verhaltensaenderung fuer jedes bestehende Projekt."""
+    _root, t = project
+    monkeypatch.setenv("TRANSKRIBOR_DIARIZE", "1")
+    import webtool.diarize as diar
+    gesehen = {}
+    monkeypatch.setattr(diar, "diarize_file",
+                        lambda audio, min_speakers=2, num_speakers=None:
+                        gesehen.update(min=min_speakers, num=num_speakers) or _fake_turns())
+    assert correct.cmd_diarize("Demo") == 1
+    assert gesehen == {"min": 2, "num": None}
+    assert json.loads((t / "S1.diar.json").read_text(encoding="utf-8"))["sprecher"] is None
+
+
+def test_geaenderte_sprecherzahl_erzwingt_neue_diarisierung(project, monkeypatch):
+    """DIE Falle dieses Features. `cmd_diarize` ueberspringt ein Sidecar, das neuer ist als die
+    Roh-JSON — und genau das ist es nach jedem Lauf. Ohne diese Pruefung traegt der Nutzer die
+    Zahl ein, laesst neu korrigieren, und es passiert NICHTS: die alte Clusterung wird
+    weiterverwendet, der Fehler bleibt, und nichts sagt es ihm. Ein toter Schalter mit
+    Bestaetigungston."""
+    _root, t = project
+    monkeypatch.setenv("TRANSKRIBOR_DIARIZE", "1")
+    import webtool.diarize as diar
+    from webtool import projekt
+    laeufe = {"n": 0}
+    monkeypatch.setattr(diar, "diarize_file",
+                        lambda audio, min_speakers=2, num_speakers=None:
+                        laeufe.__setitem__("n", laeufe["n"] + 1) or _fake_turns())
+    assert correct.cmd_diarize("Demo") == 1 and laeufe["n"] == 1
+    assert correct.cmd_diarize("Demo") == 0 and laeufe["n"] == 1     # unveraendert -> Skip
+    projekt.setze_datei("Demo", "S1", sprecher=4)
+    assert correct.cmd_diarize("Demo") == 1 and laeufe["n"] == 2     # geaendert -> neu
+    assert correct.cmd_diarize("Demo") == 0 and laeufe["n"] == 2     # jetzt wieder Skip
+    projekt.setze_datei("Demo", "S1", sprecher=projekt.ERBEN)
+    assert correct.cmd_diarize("Demo") == 1 and laeufe["n"] == 3     # zurueck auf auto -> neu

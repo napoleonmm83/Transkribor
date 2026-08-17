@@ -56,11 +56,25 @@ def _load_waveform(audio_path: str) -> dict:
     return {"waveform": torch.from_numpy(samples).unsqueeze(0), "sample_rate": 16000}
 
 
-def diarize_file(audio_path: str, min_speakers: int = 2) -> list:
+def diarize_file(audio_path: str, min_speakers: int = 2, num_speakers: int = None) -> list:
     """Diarisiert eine Audiodatei -> [{'start','end','cluster'}] (zeitlich sortiert).
     'cluster' ist das rohe pyannote-Label (z.B. 'SPEAKER_00'). Audio wird in-memory
-    geladen (torchcodec-Bypass, siehe _load_waveform)."""
-    output = _pipeline()(_load_waveform(audio_path), min_speakers=min_speakers)
+    geladen (torchcodec-Bypass, siehe _load_waveform).
+
+    `num_speakers` ist die vom Nutzer angegebene EXAKTE Sprecherzahl; `None` laesst pyannote
+    schaetzen (Verhalten wie bisher). Sie schliesst `min_speakers` aus — beides zusammen
+    weist pyannote als widerspruechlich zurueck.
+
+    **Warum die Zahl und nicht die Clustering-Parameter**, an Marcus' Rhyathlon-Material
+    gemessen (Kameramikrofon, Schweizerdeutsch, 2 Dateien, Ground Truth 4 bzw. 5 Sprecher):
+    `threshold` 0.60 → 0.55 → 0.50 lieferte **identische** Cluster — AHC ist bei VBxClustering
+    nur die Initialisierung, die VB-Iteration zieht danach wieder zusammen. `Fb` wirkt, aber
+    als Zerstaeuber: 0.3 ergab 4 bzw. **9**, 0.1 ergab 7 bzw. **13** Cluster. Nur die
+    vorgegebene Zahl trifft, und zwar exakt — sie ist ausserdem die einzige Information, die
+    ohnehin nur der Mensch hat, der dabei war.
+    """
+    grenzen = {"num_speakers": num_speakers} if num_speakers else {"min_speakers": min_speakers}
+    output = _pipeline()(_load_waveform(audio_path), **grenzen)
     # pyannote 4.x/community-1 liefert ein DiarizeOutput-Objekt; die Annotation (mit
     # itertracks) steckt in .speaker_diarization. Ältere Versionen geben die Annotation
     # direkt zurück -> getattr-Fallback macht diarize_file robust gegen beide APIs.

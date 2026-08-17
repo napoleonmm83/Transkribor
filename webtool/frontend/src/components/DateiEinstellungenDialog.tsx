@@ -9,14 +9,15 @@ import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
 
-/** Sprache + Korrektur-Tiefe EINER bereits liegenden Datei. Spiegelt
+/** Sprache, Korrektur-Tiefe und Sprecherzahl EINER bereits liegenden Datei. Spiegelt
  *  `ProjektEinstellungenDialog`, ergänzt den kontext-abhängigen Hinweis und den dynamischen
  *  Knopf-Text. Der Dialog schreibt NUR den Override (`saveFileEinstellungen`); welche
  *  Neuberechnung nötig ist, entscheidet der Aufrufer via `onGespeichert` — denn die Job-Hooks
  *  (Adoption, Editor-Reload) hängen in `DateiMenue`.
  *
  *  Verzweigung (Spec #135): Sprache-Änderung + has_raw -> Neu-Transkription (dominiert, zieht
- *  die Korrektur nach); nur Tiefe + has_raw -> Neu-Korrektur; !has_raw -> nur Override. */
+ *  die Korrektur nach); nur Tiefe ODER Sprecherzahl + has_raw -> Neu-Korrektur (die Diarisierung
+ *  ist ein Prep-Schritt von `correct run`); !has_raw -> nur Override. */
 
 /** Der Platzhalter für „kein eigener Wert" in der Sprachauswahl.
  *
@@ -37,8 +38,10 @@ export function DateiEinstellungenDialog({ project, base, file, offen, onOpenCha
   onOpenChange?: (o: boolean) => void
   /** `neuTranskribieren` heisst nicht mehr „Sprache geändert“: auch der Mehrsprachig-Haken
    *  landet hier, weil er dieselbe Folge hat (der Decoder läuft anders, das alte Transkript
-   *  ist hin). Ein Feld, das nur die halbe Ursache benennt, führt den nächsten Leser in die Irre. */
-  onGespeichert?: (a: { neuTranskribieren: boolean; tiefeGeaendert: boolean }) => void
+   *  ist hin). Ein Feld, das nur die halbe Ursache benennt, führt den nächsten Leser in die Irre.
+   *  Aus demselben Grund heisst `neuKorrigieren` nicht mehr `tiefeGeaendert`: die Sprecherzahl
+   *  loest denselben Zweig aus (die Diarisierung ist ein Prep-Schritt des `correct`-Laufs). */
+  onGespeichert?: (a: { neuTranskribieren: boolean; neuKorrigieren: boolean }) => void
 }) {
   const [data, setData] = useState<DateiEinstellungen | null>(null)
   // Der Datei-Override, NICHT der effektive Wert — `null` heisst „folgt dem Projekt" (#234),
@@ -47,6 +50,11 @@ export function DateiEinstellungenDialog({ project, base, file, offen, onOpenCha
   const [korrektur, setKorrektur] = useState('')
   // Der Datei-Override, NICHT der effektive Wert: `null` heisst „folgt dem Projekt" (#166).
   const [mehrWahl, setMehrWahl] = useState<MehrWahl>(null)
+  // Als STRING, nicht als Zahl: ein `<input type="number">` hat Zwischenzustaende, die keine
+  // Zahl sind („" beim Leeren, "-" beim Tippen). Ueber `Number()` gefuehrt wuerde das Feld
+  // beim Leeren auf 0 springen und liesse sich nicht mehr zuruecksetzen. Die Uebersetzung
+  // passiert an genau einer Stelle (`sprecherWahl`) — dieselbe Trennung wie bei `ERBT`.
+  const [sprecherText, setSprecherText] = useState('')
   const [laedt, setLaedt] = useState(false)
   const [speichert, setSpeichert] = useState(false)
 
@@ -71,13 +79,29 @@ export function DateiEinstellungenDialog({ project, base, file, offen, onOpenCha
         // ja etwas aufzuraeumen) und raeumt den Eintrag beim Speichern weg.
         setData(d); setSprachWahl(d.sprache_eigen || null); setKorrektur(d.korrektur)
         setMehrWahl(d.mehrsprachig_eigen)
+        setSprecherText(d.sprecher === null ? '' : String(d.sprecher))
       })
       .catch(e => { if (aktiv) toast.error(`Einstellungen laden fehlgeschlagen: ${(e as Error).message}`) })
       .finally(() => { if (aktiv) setLaedt(false) })
     return () => { aktiv = false }
   }, [offen, project, base])
 
+  // Leer -> `null` („automatisch schaetzen lassen"). Alles andere muss eine ganze Zahl im
+  // erlaubten Bereich sein, sonst gilt die Eingabe als ungueltig (`undefined`) und der
+  // Speichern-Knopf bleibt grau — sie ungeprueft zu schicken hiesse, den Nutzer den 400er
+  // des Servers lesen zu lassen, obwohl das Feld die Regel kennt.
+  const sprecherMax = data?.sprecher_max ?? 20
+  const sprecherWahl: number | null | undefined =
+    sprecherText.trim() === '' ? null
+    : /^\d+$/.test(sprecherText.trim())
+      && +sprecherText >= 1 && +sprecherText <= sprecherMax ? +sprecherText
+    : undefined
+  const sprecherGeaendert = !!data && sprecherWahl !== undefined && sprecherWahl !== data.sprecher
   const tiefeGeaendert = !!data && korrektur !== data.korrektur
+  // Beides zieht denselben Lauf nach sich: die Diarisierung ist ein Prep-Schritt von
+  // `correct run`, eine neue Sprecherzahl wirkt also ueber genau denselben Weg wie eine
+  // neue Tiefe. Ein zweiter Zweig waere ein zweiter Name fuer denselben Job.
+  const neuKorrigieren = tiefeGeaendert || sprecherGeaendert
   // Was die Transkription TATSAECHLICH nehmen wuerde — „folgt dem Projekt" ist der Projektwert.
   const mehrEffektiv = !data ? false : mehrWahl === null ? data.mehrsprachig_projekt : mehrWahl
   const sprachEffektiv = !data ? '' : sprachWahl ?? data.sprache_projekt
@@ -97,14 +121,19 @@ export function DateiEinstellungenDialog({ project, base, file, offen, onOpenCha
   // Wert nicht kennt (eine vor einer Validierung geschriebene Altlast, #139).
   const projektSprachLabel = !data ? ''
     : data.sprach_choices.find(c => c.id === data.sprache_projekt)?.label ?? data.sprache_projekt
-  const geaendert = neuTranskribieren || tiefeGeaendert || overrideGeaendert
+  // Eine ungueltige Sprecherzahl sperrt den GANZEN Knopf, nicht nur ihren eigenen Zweig.
+  // Sonst liesse sich ueber eine andere Aenderung (Sprache, Tiefe) speichern, und das
+  // `sprecherWahl ?? null` im Rumpf loeschte dabei STILL die vorhandene Zahl — der Nutzer
+  // wollte sie korrigieren und haette sie verloren.
+  const geaendert = (neuTranskribieren || neuKorrigieren || overrideGeaendert)
+    && sprecherWahl !== undefined
   // Neu-Transkription dominiert (sie deckt die Tiefe über die Autokorrektur-Kette ab).
   //
   // Geprüft wird hier NICHT `geaendert`: seit #166 zählt auch ein reiner Override-Wechsel als
   // Änderung (von „ja" auf „folgt dem Projekt (ja)"), und der ändert weder Transkript noch
   // Korrektur. Über `geaendert` liefe dieser Fall in den `correct`-Zweig — eine Neu-Korrektur
   // mit `force`, also quer über eine handbearbeitete Fassung, für eine Aufräumaktion.
-  const trigger = file.has_raw && (neuTranskribieren || tiefeGeaendert)
+  const trigger = file.has_raw && (neuTranskribieren || neuKorrigieren)
     ? (neuTranskribieren ? 'transcribe' : 'correct')
     : 'none'
 
@@ -120,7 +149,9 @@ export function DateiEinstellungenDialog({ project, base, file, offen, onOpenCha
       ? `Die Änderung erfordert eine Neu-Transkription: Transkript, Korrektur und Export werden verworfen (Audio bleibt)${file.has_edit ? ', inkl. der handbearbeiteten Fassung' : ''}.`
     : trigger === 'correct'
       ? (file.has_edit ? 'Die handbearbeitete Fassung wird überschrieben.'
-                       : 'Die Korrektur wird mit der neuen Tiefe neu erstellt.')
+                       // „Die Korrektur“, nicht „mit der neuen Tiefe“: der Zweig traegt seit
+                       // der Sprecherzahl zwei Ursachen, und die Zeile nannte nur eine.
+                       : 'Die Korrektur wird neu erstellt.')
     : ''
 
   const speichernFn = async () => {
@@ -132,8 +163,8 @@ export function DateiEinstellungenDialog({ project, base, file, offen, onOpenCha
       // weggeworfen und hiesse „nicht anfassen". Genau dieser Unterschied ist der Rueckweg
       // (#166 fuer den Haken, #234 fuer die Sprache).
       await saveFileEinstellungen(project, base,
-        { sprache: sprachWahl, korrektur, mehrsprachig: mehrWahl })
-      onGespeichert?.({ neuTranskribieren, tiefeGeaendert })
+        { sprache: sprachWahl, korrektur, mehrsprachig: mehrWahl, sprecher: sprecherWahl ?? null })
+      onGespeichert?.({ neuTranskribieren, neuKorrigieren })
       onOpenChange?.(false)
     } catch (e) {
       toast.error(`Speichern fehlgeschlagen: ${(e as Error).message}`)
@@ -146,7 +177,7 @@ export function DateiEinstellungenDialog({ project, base, file, offen, onOpenCha
     <Dialog open={offen} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Sprache &amp; Korrektur-Tiefe — „{base}“</DialogTitle>
+          <DialogTitle>Sprache, Korrektur &amp; Sprecher — „{base}“</DialogTitle>
         </DialogHeader>
         {laedt ? (
           <p className="text-sm text-muted-foreground">Laden …</p>
@@ -184,6 +215,33 @@ export function DateiEinstellungenDialog({ project, base, file, offen, onOpenCha
             </div>
             <MehrsprachigWahl wert={mehrWahl} setzen={setMehrWahl}
               projektwert={data.mehrsprachig_projekt} id="mehr-datei" />
+            <div>
+              <label htmlFor="fs-sprecher" className="mb-1.5 block text-sm font-medium">
+                Anzahl Sprecher
+              </label>
+              {/* Natives Zahlenfeld statt eines Wählers: die Zahl ist frei, und ein Select mit
+                  zwanzig Einträgen wäre eine Liste, in der man sucht statt tippt. `min`/`max`
+                  kommen vom Server (s. `sprecherMax`) — die Prüfung liegt trotzdem zusätzlich
+                  in `sprecherWahl`: Browser erzwingen die Attribute nur bei Formularabsendung,
+                  und dieser Dialog sendet kein Formular. */}
+              <input id="fs-sprecher" type="number" inputMode="numeric"
+                min={1} max={sprecherMax} step={1}
+                value={sprecherText}
+                onChange={e => setSprecherText(e.target.value)}
+                aria-describedby="fs-sprecher-hilfe"
+                aria-invalid={sprecherWahl === undefined || undefined}
+                placeholder="automatisch"
+                className="h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm
+                           shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px]
+                           focus-visible:ring-ring/50 aria-invalid:border-destructive" />
+              <p id="fs-sprecher-hilfe" className="mt-1.5 text-sm text-muted-foreground">
+                {sprecherWahl === undefined
+                  ? `Bitte eine ganze Zahl von 1 bis ${sprecherMax} eintragen — oder leer lassen.`
+                  : 'Leer lassen heisst automatisch erkennen. Wer weiss, wie viele Personen '
+                    + 'gesprochen haben, trägt es hier ein — das trennt die Stimmen deutlich '
+                    + 'zuverlässiger, vor allem bei Aufnahmen mit einem Kameramikrofon.'}
+              </p>
+            </div>
             {hinweis && <p className="text-sm text-muted-foreground">{hinweis}</p>}
           </div>
         )}

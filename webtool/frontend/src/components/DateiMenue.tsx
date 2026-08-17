@@ -114,8 +114,8 @@ export function DateiMenue({ project, file, aiReason }: {
    *  dominiert (Neu-Transkription, die Kette zieht die Korrektur nach); nur Tiefe -> Neu-Korrektur
    *  mit force=true (sonst überspränge correct.py eine human_edited-Datei still). Ohne has_raw
    *  bleibt es beim Override — die nächste Transkription übernimmt ihn. */
-  const einstellungenGespeichert = ({ neuTranskribieren, tiefeGeaendert }: {
-    neuTranskribieren: boolean; tiefeGeaendert: boolean }) => {
+  const einstellungenGespeichert = ({ neuTranskribieren, neuKorrigieren }: {
+    neuTranskribieren: boolean; neuKorrigieren: boolean }) => {
     toast.success(`Einstellungen für „${file.base}“ gespeichert`)
     if (!file.has_raw) return
     // neuTranskribieren deckt Sprachwechsel UND den Mehrsprachig-Haken ab — beide aendern,
@@ -124,7 +124,10 @@ export function DateiMenue({ project, file, aiReason }: {
       jobStarten(() => startRetranscribeFile(project, file.base)
         .then(res => { if (res.started) { editorVergessen(); wegVomEditor() }; return res }),
         'transcribe', `Neu transkribieren ${file.base}`)
-    } else if (tiefeGeaendert) {
+    // neuKorrigieren deckt die Korrektur-Tiefe UND die Sprecherzahl ab: die akustische
+    // Diarisierung laeuft als Prep-Schritt von `correct run`, eine neue Sprecherzahl wirkt
+    // also ueber genau diesen Job (und ueber keinen anderen).
+    } else if (neuKorrigieren) {
       jobStarten(() => startCorrectFile(project, file.base, true), 'correct',
         `Neu korrigieren ${file.base}`)
     }
