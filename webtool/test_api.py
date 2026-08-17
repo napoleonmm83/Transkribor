@@ -1459,6 +1459,22 @@ def test_dateieinstellungen_liefert_effektive_werte(client, tmp_projekt):
     assert isinstance(d["tiefen"], list) and d["tiefen"]
 
 
+def test_dateieinstellungen_meldet_ob_diarisierung_laeuft(client, tmp_projekt, monkeypatch):
+    """Ohne diese Auskunft zeigt der Dialog ein Feld an, das nichts tut (#266).
+
+    BEIDE Richtungen, nicht nur die interessante: ein Feld, das IMMER „aus" meldet, ist
+    derselbe Schaden von der anderen Seite — der Nutzer koennte die Sprecherzahl dann nie
+    mehr setzen. Die Mutation „fest auf False" macht die erste Zusicherung rot.
+    """
+    monkeypatch.delenv("TRANSKRIBOR_DIARIZE", raising=False)
+    r = client.get(f"/api/projects/{tmp_projekt}/files/S1/einstellungen")
+    assert r.json()["diarisierung_aktiv"] is True
+
+    monkeypatch.setenv("TRANSKRIBOR_DIARIZE", "0")
+    r = client.get(f"/api/projects/{tmp_projekt}/files/S1/einstellungen")
+    assert r.json()["diarisierung_aktiv"] is False
+
+
 def test_dateieinstellungen_unbekannte_datei_404(client, tmp_projekt):
     # Weder Audio noch Roh-JSON -> die Datei existiert fuer die API nicht.
     assert client.get(f"/api/projects/{tmp_projekt}/files/nope/einstellungen").status_code == 404
