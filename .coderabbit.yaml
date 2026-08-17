@@ -39,6 +39,13 @@ reviews:
   auto_review:
     enabled: true
     auto_incremental_review: true   # jeder Push wird nachgeprueft, nicht nur der erste
+    # ... und zwar OHNE Pause. Der Default ist 5 (am schema.v2.json nachgelesen, nicht
+    # geraten): danach setzt der Bot die automatischen Reviews aus. Genau die falscheste
+    # Stelle zum Aufhoeren — PR #265 hatte an dieser Zeile bereits 7 Commits, und die
+    # spaeteren sind die, die Reviewbefunde beheben. Kontingent ist unter Pro Plus nicht der
+    # Engpass, ein uebersehener Befund schon. (Gefunden vom Bot selbst, in genau dieser
+    # Datei: der Kommentar darueber behauptete „jeder Push" und stimmte deshalb nicht.)
+    auto_pause_after_reviewed_commits: 0
     drafts: false
 
   path_filters:
