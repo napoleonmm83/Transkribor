@@ -354,7 +354,7 @@ describe('DateiEinstellungenDialog — Sprecherzahl (#264)', () => {
     const save = vi.spyOn(api, 'saveFileEinstellungen').mockResolvedValue(
       { sprache: 'ch', korrektur: 'auto', mehrsprachig: false })
     render(<DateiEinstellungenDialog project="p" base="a" file={datei()} offen />)
-    await waitFor(() => expect(feld()).toHaveValue(5))
+    await waitFor(() => expect(feld()).toHaveValue('5'))
     fireEvent.change(feld(), { target: { value: '' } })
     fireEvent.click(knopf())
     await waitFor(() => expect(save).toHaveBeenCalledWith('p', 'a',
@@ -371,7 +371,7 @@ describe('DateiEinstellungenDialog — Sprecherzahl (#264)', () => {
     const save = vi.spyOn(api, 'saveFileEinstellungen').mockResolvedValue(
       { sprache: 'ch', korrektur: 'auto', mehrsprachig: false })
     render(<DateiEinstellungenDialog project="p" base="a" file={datei()} offen />)
-    await waitFor(() => expect(feld()).toHaveValue(5))
+    await waitFor(() => expect(feld()).toHaveValue('5'))
     fireEvent.change(feld(), { target: { value: '99' } })          // über sprecher_max
     expect(knopf()).toBeDisabled()
     expect(feld()).toHaveAttribute('aria-invalid', 'true')
@@ -389,7 +389,38 @@ describe('DateiEinstellungenDialog — Sprecherzahl (#264)', () => {
     // eine handbearbeitete Fassung — für eine Einstellung, die niemand angefasst hat.
     vi.spyOn(api, 'getFileEinstellungen').mockResolvedValue({ ...BASIS, sprecher: 3 })
     render(<DateiEinstellungenDialog project="p" base="a" file={datei()} offen />)
-    await waitFor(() => expect(feld()).toHaveValue(3))
+    await waitFor(() => expect(feld()).toHaveValue('3'))
     expect(knopf()).toBeDisabled()
+  })
+})
+
+describe('DateiEinstellungenDialog — Sprecherzahl, ungültige Zwischeneingabe (CodeRabbit)', () => {
+  it('eine Fehleingabe löscht die gesetzte Zahl NICHT', async () => {
+    /* Der Grund für `type="text"`. Bei `type="number"` liefert der Browser für „5e" einen
+       LEEREN value (`validity.badInput`) und zeigt dem Nutzer trotzdem „5e" an — im Browser
+       gemessen: `{value: "", badInput: true}`. Dieser Dialog liest leer als „automatisch":
+       der Knopf wäre scharf geworden und hätte die vorhandene 5 STILL gelöscht, beim blossen
+       Vertippen, mit „Speichern & neu korrigieren" auf dem Knopf.
+
+       jsdom bildet `badInput` NICHT nach (es reicht jeden String durch), der Test kann den
+       Zahlenfeld-Fall also gar nicht herstellen — er prüft stattdessen die Eigenschaft, die
+       den Fix trägt: ein nicht-numerischer Text kommt im Zustand AN und gilt als ungültig.
+       Genau das ist bei `type="number"` unmöglich, und deshalb ist der Feldtyp Teil der
+       Zusicherung. */
+    vi.spyOn(api, 'getFileEinstellungen').mockResolvedValue({ ...BASIS, sprecher: 5 })
+    const save = vi.spyOn(api, 'saveFileEinstellungen').mockResolvedValue(
+      { sprache: 'ch', korrektur: 'auto', mehrsprachig: false })
+    render(<DateiEinstellungenDialog project="p" base="a" file={datei()} offen />)
+    const feld = () => screen.getByLabelText('Anzahl Sprecher')
+    await waitFor(() => expect(feld()).toHaveValue('5'))
+    expect(feld()).toHaveAttribute('type', 'text')     // der Fix selbst
+    for (const kaputt of ['5e', '-', '1.5', '1e3']) {
+      fireEvent.change(feld(), { target: { value: kaputt } })
+      expect(feld(), `${kaputt}: der Text muss stehen bleiben`).toHaveValue(kaputt)
+      expect(screen.getByRole('button', { name: /Speichern/ }),
+             `${kaputt}: haette sperren muessen`).toBeDisabled()
+    }
+    expect(save).not.toHaveBeenCalled()
+    save.mockRestore()
   })
 })

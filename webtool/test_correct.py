@@ -1170,7 +1170,7 @@ def test_geaenderte_sprecherzahl_erzwingt_neue_diarisierung(project, monkeypatch
     Zahl ein, laesst neu korrigieren, und es passiert NICHTS: die alte Clusterung wird
     weiterverwendet, der Fehler bleibt, und nichts sagt es ihm. Ein toter Schalter mit
     Bestaetigungston."""
-    _root, t = project
+    _root, _t = project
     monkeypatch.setenv("TRANSKRIBOR_DIARIZE", "1")
     import webtool.diarize as diar
     from webtool import projekt
