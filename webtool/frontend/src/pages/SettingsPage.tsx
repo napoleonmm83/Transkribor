@@ -568,9 +568,14 @@ export function SettingsPage() {
           <span>
             <span className="font-medium">Videodownloader aktuell halten</span>
             <span className="mt-1 block text-xs text-muted-foreground">
+              {/* Bis #253 stand hier „prüft das beim Importieren selbst" — das stimmte für
+                  BEIDE Wege und stimmt jetzt nur noch für den zweiten. Die Kalenderprüfung
+                  läuft beim Start, damit niemand vor einem Import auf pip wartet. Ein Satz,
+                  den der Umbau still falsch gemacht hätte; aufgefallen erst im Browser. */}
               YouTube und Instagram ändern ihre Seiten ständig — ohne Aktualisierung schlägt
-              der Import irgendwann fehl. Transkribor prüft das beim Importieren selbst und
-              versucht es sofort, wenn ein Download nach einem veralteten Downloader aussieht.
+              der Import irgendwann fehl. Transkribor prüft das beim Start im Hintergrund und
+              versucht es ausserdem sofort, wenn ein Download nach einem veralteten
+              Downloader aussieht.
             </span>
           </span>
         </label>
