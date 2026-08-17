@@ -837,6 +837,12 @@ def beim_ende(eigener: bool | None = None) -> bool:
     ein zweites Mal ab; hier steht er, weil ein Lock, das uns nie gehoerte, gar nicht erst
     angefasst werden soll.
 
+    **`_lauf` kennt nur den FADEN-Weg**, und das ist eine Falle fuer den naechsten Umbau:
+    `automatisch()` ruft `aktualisiere()` **synchron** (fetch-Subprozess), dort steht
+    `_lauf["laeuft"]` nie auf True. Heute folgenlos — jenen Prozess raeumt `jobs.cancel_all()`
+    per SIGKILL ab, es laeuft ohnehin kein Handler. Wer ihm einen gibt, bekommt `beim_ende()`
+    als stillen No-op, der abgedeckt aussieht.
+
     `eigener` ist derselbe Saum wie bei `laeuft_gerade` — und hier zusaetzlich der einzige
     Weg, den Fall im Test ohne echten Faden zu stellen.
     """
