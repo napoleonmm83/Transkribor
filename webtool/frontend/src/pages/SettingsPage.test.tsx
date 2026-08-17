@@ -910,27 +910,47 @@ describe('SettingsPage', () => {
     // dieser Poll läuft UNAUFGEFORDERT bis zu zwölf Minuten, während jemand auf der Seite
     // tippt. Eine überholte Runde schriebe `s` auf den Stand von VOR einem `speichern()`
     // zurück — die Anzeige widerriefe, was der Nutzer gerade gespeichert hat.
-    const spaet: Array<(w: Settings) => void> = []
+    // **Zwei Anlaeufe waren Dekoration — beide blieben unter der Mutation gruen.** Warum,
+    // gehoert hierhin, weil es beim naechsten Test wieder zuschlaegt:
+    //
+    // 1. `mockImplementationOnce` wurde von `autzLaden` (SettingsPage:272) verbraucht, nicht
+    //    von der Poll-Runde. Die Positivkontrolle `spaet.toHaveLength(1)` merkte es nicht:
+    //    sie prueft, dass IRGENDETWAS haengt, nicht dass die RUNDE haengt.
+    // 2. Danach zeigte die Zusicherung auf das Modell-Eingabefeld — und das blieb auch OHNE
+    //    Riegel auf dem neuen Wert stehen (gemessen: `[["feld-modell","sonnet"]]` in beiden
+    //    Faellen). Ein unkontrolliertes Feld mit `key`-Neuaufbau ist kein verlaesslicher
+    //    Spiegel des States.
+    //
+    // Geprueft wird deshalb, was der Nutzer WIRKLICH sieht und was direkt aus `s` gerendert
+    // wird: die Zeile. Runde 2 meldet „fertig", die ueberholte Runde 1 danach „laeuft noch" —
+    // ohne Riegel steht die Zeile „laeuft gerade" wieder da, obwohl der Lauf vorbei ist.
+    const warten: Array<(w: Settings) => void> = []
     vi.useFakeTimers()
     try {
       zeige({ ytdlp: { ...BASIS.ytdlp, laeuft: true, ergebnis: '' } })
       await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+      // JEDE Abfrage haengt, aufgeloest wird von Hand — so gehoert jede Zusage eindeutig
+      // ihrer Runde.
+      vi.mocked(api.getSettings).mockImplementation(
+        () => new Promise<Settings>(res => warten.push(res)))
+      const vorher = warten.length
 
-      // Runde 1 haengt, Runde 2 antwortet zuerst mit dem NEUEN Modell.
-      vi.mocked(api.getSettings).mockImplementationOnce(
-        () => new Promise<Settings>(res => spaet.push(res)))
-      vi.mocked(api.getSettings).mockResolvedValue({
-        ...BASIS, model: 'sonnet', ytdlp: { ...BASIS.ytdlp, laeuft: true, ergebnis: '' },
-      })
-      await act(async () => { await vi.advanceTimersByTimeAsync(6000) })   // zwei Runden
-      expect(spaet).toHaveLength(1)          // Positivkontrolle: Runde 1 haengt wirklich
+      await act(async () => { await vi.advanceTimersByTimeAsync(3000) })   // Runde 1
+      await act(async () => { await vi.advanceTimersByTimeAsync(3000) })   // Runde 2
+      // Genau zwei neue, beide vom Poll: `autzLaden` feuert nur bei einem Anbieterwechsel,
+      // und der findet hier nicht statt. DAS ist die belastbare Positivkontrolle.
+      expect(warten.length - vorher).toBe(2)
 
-      // Jetzt trifft die ALTE Runde ein, mit dem alten Modell.
-      await act(async () => {
-        spaet[0]({ ...BASIS, model: 'opus', ytdlp: { ...BASIS.ytdlp, laeuft: true, ergebnis: '' } })
+      await act(async () => {                       // Runde 2 zuerst: der Lauf ist fertig
+        warten[vorher + 1]({ ...BASIS, ytdlp: { ...BASIS.ytdlp, laeuft: false, ergebnis: 'ok' } })
       })
-      const feld = screen.getByRole('textbox', { name: /Modell/i }) as HTMLInputElement
-      expect(feld.value).toBe('sonnet')      // NICHT zurueck auf 'opus'
+      expect(screen.queryByText(/läuft gerade/i)).not.toBeInTheDocument()
+
+      await act(async () => {                       // und jetzt die ueberholte Runde 1
+        warten[vorher]({ ...BASIS, ytdlp: { ...BASIS.ytdlp, laeuft: true, ergebnis: '' } })
+      })
+      expect(screen.queryByText(/läuft gerade/i)).not.toBeInTheDocument()
+      expect(screen.getByText('2026.8.12')).toBeInTheDocument()
     } finally {
       vi.useRealTimers()
     }
