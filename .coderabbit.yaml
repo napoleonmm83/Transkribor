@@ -1,0 +1,204 @@
+# CodeRabbit — Konfiguration fuer Transkribor
+#
+# WARUM ES DIESE DATEI GIBT: der PR-Bot kannte die Regeln dieses Repos nicht. `CLAUDE.md` ist
+# bewusst gitignoriert (#110), die CLI bekommt sie deshalb per `-c CLAUDE.md` gefuettert — der
+# Bot hatte gar keinen Weg dorthin. Gemessen an PR #265: die CLI (mit Regeln) und der
+# Reviewer-Subagent (mit eigens gebautem Kontext) fanden echte Befunde, der Bot nur Nitpicks.
+# `path_instructions` unten ist der einzige Kanal, ueber den die Fehlerklassen dieses Repos
+# beim Bot ankommen — und diese Datei liegt IM Repo, wandert also mit.
+#
+# Bewusst NICHT gesetzt, damit die Begruendung nicht fehlt:
+#   - `reviews.finishing_touches.autofix` / `.simplify`: sie schreiben Code. In diesem Repo
+#     gilt „Befund ist ein Hinweis, kein Patch" — jeder uebernommene Vorschlag wird
+#     nachgelesen und mutationsgeprueft, ein automatischer Commit umginge genau das.
+#   - `reviews.finishing_touches.fix_ci` / `.resolve_merge_conflict` (Pro-Plus-exklusiv): sie
+#     greifen selbstaendig in Branch bzw. CI ein. Ein rotes CI ist hier ein Befund, kein
+#     Hindernis — siehe „Testlaeufe nie ueber eine Pipe in einen &&-Vertrag haengen".
+#   - `code_generation.unit_tests`: generierte Tests waeren per Konstruktion Dekoration —
+#     dieses Repo verlangt fuer jeden Test eine Mutationsprobe (Logik raus -> genau dieser
+#     Test rot). Was eine Maschine schreibt, ohne den Fix zu kennen, besteht sie nicht.
+
+inheritance: true          # Organization-UI-Einstellungen bleiben, dies ergaenzt nur
+
+# Die Codebasis ist durchgehend deutsch kommentiert (Fachbegriffe, Nutzertexte, CLAUDE.md).
+# Ohne das raet der Bot die Sprache pro PR neu.
+language: de-DE
+
+tone_instructions: >-
+  Schreibe knapp und sachlich auf Deutsch. Nenne bei jedem Befund, ob er GEMESSEN oder
+  hergeleitet ist. Belege Behauptungen ueber Fremdcode mit Datei und Zeile.
+
+reviews:
+  # `chill` war der Stand bis PR #265 und lieferte dort ausschliesslich Nitpicks, waehrend
+  # zwei andere Reviewer echte Fehler fanden. Der teuerste Befund dieses Repos ist ein
+  # UEBERSEHENER, nicht ein ueberfluessiger.
+  profile: assertive
+
+  request_changes_workflow: false   # ein Befund soll gelesen werden, nicht den Merge sperren
+  high_level_summary: true
+  auto_review:
+    enabled: true
+    auto_incremental_review: true   # jeder Push wird nachgeprueft, nicht nur der erste
+    drafts: false
+
+  path_filters:
+    - "!webtool/static/**"          # Build-Ausgabe (gitignoriert, aber sicherheitshalber)
+    - "!projekte/**"                # Interviewdaten — duerfen dieses Repo nie verlassen
+    - "!docs/bilder/**"
+    - "!**/package-lock.json"
+
+  # ---------------------------------------------------------------------------------------
+  # Die Fehlerklassen, an denen dieses Repo WIEDERHOLT haing. Jede Zeile steht fuer mindestens
+  # einen echten Vorfall; die Nummern sind die Issues/PRs, in denen er dokumentiert ist.
+  # ---------------------------------------------------------------------------------------
+  path_instructions:
+    - path: "webtool/**/*.py"
+      instructions: |
+        Frage bei JEDER Reparatur zusaetzlich: **Was erlaubt sie NEU?** In diesem Repo hat
+        zweimal ein richtiger Fix denselben Schaden an anderer Stelle aufgerissen. Melde
+        einen neu erreichbaren Zustand auch dann, wenn der Fix selbst korrekt ist.
+
+        Konkrete Muster, die hier schon geknallt haben:
+        - **Ausnahmebreite:** `json.JSONDecodeError` deckt nur das PARSEN. Nicht als UTF-8
+          dekodierbare Bytes werfen `UnicodeDecodeError` — ein `ValueError`, aber KEIN
+          `JSONDecodeError`. Wer „kaputt ⇒ Rueckfall" verspricht, faengt `ValueError`.
+        - **Rueckfallrichtung bei Schutzflaggen:** „nicht lesbar" darf nicht „nicht
+          geschuetzt" heissen. Ein unlesbares `human_edited=true` muss als handbearbeitet
+          gelten, sonst ueberschreibt der Lauf Handarbeit und meldet Erfolg.
+        - **Der Pfadbau gehoert VOR den `try`.** `paths.safe_name` wirft fuer unsichere Namen;
+          im `try` verschluckt eine geweitete Ausnahme eine Vertrauensgrenze.
+        - **Schluessel statt Wahrheitswert.** Ein bewusst gesetztes `False`/`""` ist eine
+          ENTSCHEIDUNG, kein fehlender Wert — `or`-Rueckfaelle machen sie unwaehlbar
+          (`"text": ""` streicht; `mehrsprachig=False` liesse sich sonst nie abwaehlen).
+        - **`isinstance(True, int)` ist wahr.** Wo eine Zahl erwartet wird, muss `bool`
+          ausdruecklich ausgeschlossen werden.
+        - **Stille Ausfaelle:** ein `except Exception`, das einen Rueckfall beschriftet, den
+          es nicht gibt. Und: ein Catch-all entwertet JEDE Zusicherung, die innerhalb des
+          geschuetzten Blocks scharf werden soll.
+        - **Nebenlaeufigkeit:** `settings.json` und `projekt.json` haben mehrere Schreiber,
+          darunter eigene OS-Prozesse (`fetch.py`). Read-Modify-Write ohne `sperre.datei` ist
+          ein Befund. Eine Frist (`stale`) ist zugleich die Zusage „mein Abschnitt ist vorher
+          fertig" — wer darin eine weitere Sperre nimmt, muss deren Frist mitrechnen.
+        - **Hard-codierte Pfade:** `TRANSKRIBOR_PROJEKTE`/`_SETTINGS`/`_GGML`/`_ENV` muessen
+          gelesen werden, sonst schreibt die gepackte App neben die .exe.
+
+    - path: "webtool/test_*.py"
+      instructions: |
+        Beurteile Tests danach, ob sie ihren Fix WIRKLICH absichern — nicht danach, ob sie
+        gruen sind. Melde:
+        - **Vacuous Guards:** ein Test, der auch ohne die gepruefte Logik gruen bliebe. Frage
+          bei jeder Zusicherung: welche Mutation macht genau DIESEN Test rot?
+        - **Fehlende Gegenrichtung:** ein Merker, der IMMER gesetzt wird, ist derselbe Schaden
+          von der anderen Seite (Daueralarm). Beide Richtungen gehoeren geprueft.
+        - **`assert` in einer Attrappe innerhalb eines `try`** — der `AssertionError` wird von
+          der geprueften Wache selbst geschluckt. Werte sammeln und AUSSERHALB pruefen.
+        - **Umgebungsabhaengigkeit:** Tests duerfen nicht davon abhaengen, ob der Laeufer
+          yt-dlp/pyannote/eine GPU mitbringt. `TRANSKRIBOR_SETTINGS` und
+          `TRANSKRIBOR_PROJEKTE` MUESSEN gesetzt sein, sonst entscheidet die echte Datei des
+          Entwicklers mit — und `TRANSKRIBOR_YTDLP_UPDATE=0`, sonst startet ein Testlauf
+          echtes pip gegen dessen venv (in der CI faellt das nie auf).
+        - **`monkeypatch.undo()`** nimmt autouse-Fixtures mit zurueck (dieselbe Instanz);
+          richtig ist `pytest.MonkeyPatch.context()`.
+
+    - path: "webtool/frontend/src/**/*.{ts,tsx}"
+      instructions: |
+        Der Editor speichert automatisch (`useDoc.ts`); JEDE Reparatur an diesem Pfad hat
+        bisher eine neue Luecke aufgemacht. Achte besonders auf:
+        - **Verlustwege:** welcher Weg endet ohne den Rueckruf? Ein wartender Speicherlauf
+          muss pruefen, ob er noch dem offenen Dokument gilt (Dateiwechsel waehrend eines
+          laufenden PUT schreibt Dokument A in Datei B).
+        - **Unkontrollierte Felder brauchen `key=`**, sonst ueberleben sie einen
+          Dokumentwechsel unter sich und schreiben alten Text ueber eine frische Korrektur.
+        - **`<input type="number">` liefert bei ungueltiger Eingabe einen LEEREN `value`**
+          (`validity.badInput`) und zeigt dem Nutzer den Text trotzdem an. Wer leer als „kein
+          Wert" liest, macht aus einem Vertipper eine stille Loeschung.
+        - **`onBlur` committet den Fehlklick** — ein unveraendert verlassenes Feld ist ein
+          Abbruch, kein Commit (ein Speicherlauf setzt serverseitig `human_edited=true`).
+        - **Tote Schalter:** eine Einstellung, die gespeichert wird, aber nichts ausloest.
+        - **Geteilte Typen:** wer ein Pflichtfeld ergaenzt, zieht ALLE Attrappen nach —
+          `tsc --noEmit` prueft hier NICHTS (die tsconfig ist eine reine Solution-Datei), nur
+          `npm run build` / `tsc -b`.
+        - **Reihenfolge-Annahmen ueber React-Effekte** sind kein Beweis; verlangte
+          Zusicherungen gehoeren an Daten, nicht an Timing.
+
+    - path: "**/*.md"
+      instructions: |
+        Pruefe, ob die README noch stimmt, was die Aenderung fuer den NUTZER bedeutet. Sie
+        richtet sich an Menschen ohne technischen Hintergrund: kein Changelog-Ton, keine
+        API-Namen. Melde jede Zusage, die der Code nicht einloest (z.B. eine versprochene
+        Rueckfrage, die es auf diesem Weg nicht gibt) — das ist hier schon vorgekommen.
+
+    - path: "electron/**"
+      instructions: |
+        Gepackt darf NIE neben die .exe geschrieben werden (`userData`). Pfade und
+        Umgebungsvariablen muessen im gepackten Lauf geprueft sein, nicht nur im Checkout.
+
+  # Quality Gates. `warning`, nicht `error`: ein Gate, das merged blockiert, wird umgangen —
+  # ein Hinweis wird gelesen. `request_changes_workflow` steht aus demselben Grund auf false.
+  pre_merge_checks:
+    title:
+      mode: warning
+      requirements: >-
+        Praefix nach Conventional Commits (feat/fix/test/docs/refactor/chore) mit Bereich in
+        Klammern. Deutsch, aussagekraeftig — nicht „Fixes" oder „Updates".
+    description:
+      mode: warning
+    issue_assessment:
+      mode: warning
+    custom_checks:
+      # Genau die Regel, die dieses Repo lokal per git-Hook erzwingt — der greift aber nur auf
+      # dem Rechner, auf dem er installiert ist. Am PR ist sie bisher ungeprueft.
+      - name: "README bei Nutzer-sichtbarer Aenderung"
+        mode: warning
+        instructions: >-
+          Beruehrt der Diff Oberflaeche, HTTP-Endpunkte, CLI-Aufrufe oder die App-Huelle, muss
+          README.md im selben PR nachgezogen sein — es sei denn, die Commit-Message oder die
+          PR-Beschreibung begruendet ausdruecklich, dass sich fuer den Nutzer nichts aendert
+          (Marker: "[intern]"). Reine Testarbeit, interne Umbauten und
+          Abhaengigkeits-Updates sind ausgenommen.
+      - name: "Jeder Fix hat einen Test"
+        mode: warning
+        instructions: >-
+          Aendert der PR Verhalten (nicht nur Kommentare, Formatierung oder Dokumentation),
+          muss mindestens ein Test mitkommen oder angepasst sein. Laesst sich die Aenderung
+          nicht testen (Media Queries, ARIA-Rollen, Plattform-Verhalten), muss die
+          PR-Beschreibung sagen, WARUM und wie stattdessen geprueft wurde.
+      - name: "Behauptung oder Messung"
+        mode: warning
+        instructions: >-
+          Melde Kommentare und PR-Text, die eine Messung BEHAUPTEN, ohne sie zu belegen —
+          Formulierungen wie "gemessen", "kostet X ms", "tritt nie auf", "wirft" ohne Zahl,
+          Datei:Zeile oder Reproduktion. Das ist die haeufigste Fehlerklasse dieses Repos:
+          eine Aussage, die schaerfer ist als der Code, den sie beschreibt.
+
+  tools:
+    ruff: { enabled: true }          # laeuft ohnehin; hier explizit, damit es sichtbar ist
+    eslint: { enabled: true }
+    markdownlint: { enabled: true }
+    shellcheck: { enabled: true }
+    actionlint: { enabled: true }    # .github/workflows/
+    gitleaks: { enabled: true }      # Keys gehoeren nie ins Repo (settings.json liegt im Profil)
+    semgrep: { enabled: true }
+    biome: { enabled: false }        # kollidiert mit eslint, hier nicht im Einsatz
+
+knowledge_base:
+  # Abgewehrte Befunde sollen nicht wiederkommen. In PR #265 wurde ein als „Major" gemeldeter
+  # Punkt mit Messung widerlegt (`tsc -b` gruen, das Feld existiert im Typ gar nicht) — genau
+  # so etwas gehoert gelernt statt in jedem Folge-PR neu diskutiert.
+  learnings:
+    scope: local
+  issues:
+    scope: local
+  pull_requests:
+    scope: local
+  # Die Entscheidungen dieses Repos stehen in den Issues und PR-Texten, nicht in Tickets.
+  jira: { usage: disabled }
+  linear: { usage: disabled }
+  # Fremdverhalten (pyannote, faster-whisper, yt-dlp) wird hier an der installierten Fassung
+  # gemessen, nicht aus dem Netz geraten. Trotzdem an: es hilft bei CVEs und API-Bruechen.
+  web_search: { enabled: true }
+  code_guidelines:
+    enabled: true
+    filePatterns:
+      - "**/CLAUDE.md"              # liegt zwar nicht im Repo, aber falls sie je mitwandert
+      - "**/AGENTS.md"
