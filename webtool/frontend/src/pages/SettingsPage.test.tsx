@@ -831,6 +831,80 @@ describe('SettingsPage', () => {
     expect(screen.getByRole('button', { name: /Jetzt aktualisieren/i })).toBeEnabled()
   })
 
+  it('holt die Zeile eines FREMDEN Laufs nach, statt sie einzufrieren (#252)', async () => {
+    // Bis #252 war die Zeile eine MOMENTAUFNAHME: `s` wird nur beim Laden, nach `speichern()`
+    // und im `ytLaeuft`-Poll aufgefrischt. Wer die Seite waehrend eines fremden Laufs offen
+    // hatte — seit #253 der Regelfall, weil die Kalenderpruefung beim Serverstart laeuft —
+    // sah „Eine Aktualisierung laeuft gerade" und danach fuer immer dasselbe.
+    // „Ehrlich anzeigen" (Weg 2 aus #252) funktioniert nur, wenn die Zeile auch endet.
+    // Die Uhr wird VOR dem Rendern gefälscht: der Effekt legt sein `setInterval` beim
+    // Aufsetzen an, nicht auf Klick. Nachträglich installierte Fake-Timer sehen das schon
+    // laufende Intervall nicht — der erste Anlauf dieses Tests blieb genau daran hängen und
+    // meldete „0 Nachfragen", was wie ein fehlender Poll aussah statt wie eine falsche Uhr.
+    vi.useFakeTimers()
+    try {
+      zeige({ ytdlp: { ...BASIS.ytdlp, laeuft: true, ergebnis: '' } })
+      await act(async () => { await vi.advanceTimersByTimeAsync(0) })   // Laden auflösen
+      expect(screen.getByText(/Eine Aktualisierung läuft gerade/i)).toBeInTheDocument()
+
+      vi.mocked(api.getSettings).mockResolvedValue({
+        ...BASIS, ytdlp: { ...BASIS.ytdlp, laeuft: false, ergebnis: 'ok', version: '2026.8.17' },
+      })
+      await act(async () => { await vi.advanceTimersByTimeAsync(3000) })
+      expect(screen.getByText('2026.8.17')).toBeInTheDocument()
+      expect(screen.queryByText(/Eine Aktualisierung läuft gerade/i)).not.toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('der Nachhol-Poll fasst `ytLaeuft` NICHT an (#252 Weg 2)', async () => {
+    // Die Zusicherung dieses Tests ist eine ENTSCHEIDUNG, die im Code steht (SettingsPage:551):
+    // ein fremder Lauf wird bewusst NICHT uebernommen, denn `ytLaeuft` besitzt die
+    // 480-Runden-Obergrenze samt ihrem `runden`-Zaehler im Effektrumpf. Haengt der Poll
+    // zusaetzlich an `s.ytdlp.laeuft`, setzt jede Runde die Abhaengigkeiten neu, der Effekt
+    // setzt auf, `runden` faellt auf 0 — und die Obergrenze ist wirkungslos, waehrend der
+    // vorhandene Test dafuer GRUEN bleibt (er prueft den Toast, nicht das Aufhoeren).
+    //
+    // Sichtbar wird `ytLaeuft` am Knopf: gesetzt, dreht er und ist gesperrt.
+    vi.useFakeTimers()
+    try {
+      zeige({ ytdlp: { ...BASIS.ytdlp, laeuft: true, ergebnis: '' } })
+      await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+      expect(screen.getByText(/Eine Aktualisierung läuft gerade/i)).toBeInTheDocument()
+      await act(async () => { await vi.advanceTimersByTimeAsync(9000) })   // drei Runden
+      expect(screen.getByRole('button', { name: /Jetzt aktualisieren/i })).toBeEnabled()
+    } finally {
+      vi.useRealTimers()
+    }
+    // Und kein Toast: Weg 2 heisst ANZEIGEN statt MELDEN. Ein Toast braeuchte einen zweiten
+    // Besitzer der `useEinmalJeLauf`-Kennung — genau die Klasse, an der #247 zweimal kippte.
+    expect(toast.success).not.toHaveBeenCalled()
+    expect(toast.error).not.toHaveBeenCalled()
+    expect(toast.info).not.toHaveBeenCalled()
+  })
+
+  it('gibt auch der Nachhol-Poll nach einer Obergrenze auf (#252)', async () => {
+    // Dieselbe Begruendung wie beim Lauf-Poll (#191/#223): bleibt `laeuft` serverseitig
+    // haengen, pollte der Tab sonst bis zum Schluss. Eigener Zaehler, weil es ein eigener
+    // Effekt ist — die Obergrenze des anderen deckt ihn nicht.
+    vi.useFakeTimers()
+    try {
+      zeige({ ytdlp: { ...BASIS.ytdlp, laeuft: true, ergebnis: '' } })
+      await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+      expect(screen.getByText(/Eine Aktualisierung läuft gerade/i)).toBeInTheDocument()
+      await act(async () => { await vi.advanceTimersByTimeAsync(3000) })
+      const nachEinerRunde = vi.mocked(api.getSettings).mock.calls.length
+      await act(async () => { await vi.advanceTimersByTimeAsync(20 * 60_000) })
+      const spaeter = vi.mocked(api.getSettings).mock.calls.length
+      expect(spaeter).toBeGreaterThan(nachEinerRunde)      // Positivkontrolle: es pollte
+      await act(async () => { await vi.advanceTimersByTimeAsync(20 * 60_000) })
+      expect(vi.mocked(api.getSettings).mock.calls.length).toBe(spaeter)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('nennt den Ordner der eigenen Dateien — auch ohne Electron (#218)', async () => {
     // Das Hauptversprechen der App ist „deine Aufnahmen bleiben bei dir". Die Kehrseite —
     // und du allein sicherst sie — war unadressiert: der Pfad stand genau einmal im
