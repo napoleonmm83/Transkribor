@@ -99,6 +99,11 @@ export function DateiEinstellungenDialog({ project, base, file, offen, onOpenCha
     : /^\d+$/.test(sprecherText.trim())
       && +sprecherText >= 1 && +sprecherText <= sprecherMax ? +sprecherText
     : undefined
+  // `=== false` statt `!…`: der Typ sagt „Pflichtfeld", aber der Typ ist der VERTRAG, nicht
+  // die Garantie — Server und Bundle sind getrennt, ein aelterer Server liefert `undefined`.
+  // Das muss „laeuft" heissen: der Rueckfall geht zum bisherigen Verhalten, nicht in eine
+  // Sperre, die niemand aufheben kann.
+  const diarAus = data?.diarisierung_aktiv === false
   const sprecherGeaendert = !!data && sprecherWahl !== undefined && sprecherWahl !== data.sprecher
   const tiefeGeaendert = !!data && korrektur !== data.korrektur
   // Beides zieht denselben Lauf nach sich: die Diarisierung ist ein Prep-Schritt von
@@ -239,14 +244,22 @@ export function DateiEinstellungenDialog({ project, base, file, offen, onOpenCha
               <input id="fs-sprecher" type="text" inputMode="numeric"
                 value={sprecherText}
                 onChange={e => setSprecherText(e.target.value)}
+                disabled={diarAus}
                 aria-describedby="fs-sprecher-hilfe"
                 aria-invalid={sprecherWahl === undefined || undefined}
                 placeholder="automatisch"
                 className="h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm
                            shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px]
-                           focus-visible:ring-ring/50 aria-invalid:border-destructive" />
+                           focus-visible:ring-ring/50 aria-invalid:border-destructive
+                           disabled:cursor-not-allowed disabled:opacity-50" />
               <p id="fs-sprecher-hilfe" className="mt-1.5 text-sm text-muted-foreground">
-                {sprecherWahl === undefined
+                {diarAus
+                  // Die Zeile nennt die Variable beim Namen, statt „die Sprechertrennung
+                  // funktioniert nicht" zu behaupten: der Server weiss nur, dass der
+                  // Kill-Switch gesetzt ist — ob pyannote laufen WUERDE, sagt er nicht.
+                  ? 'Die Sprechertrennung ist auf diesem Server abgeschaltet '
+                    + '(TRANSKRIBOR_DIARIZE=0) — die Zahl hätte hier keine Wirkung.'
+                  : sprecherWahl === undefined
                   ? `Bitte eine ganze Zahl von 1 bis ${sprecherMax} eintragen — oder leer lassen.`
                   : 'Leer lassen heisst automatisch erkennen. Wer weiss, wie viele Personen '
                     + 'gesprochen haben, trägt es hier ein — das trennt die Stimmen deutlich '

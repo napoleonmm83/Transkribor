@@ -44,7 +44,7 @@ beforeEach(() => {
     sprache: 'ch', korrektur: 'auto', mehrsprachig: false,
     sprache_eigen: null, sprache_projekt: 'ch',       // erbt beides (#234)
     mehrsprachig_eigen: null, mehrsprachig_projekt: false,
-    sprecher: null, sprecher_max: 20,
+    sprecher: null, sprecher_max: 20, diarisierung_aktiv: true,   // Kill-Switch an (#266)
     sprach_choices: [{ id: 'ch', label: 'Schweizerdeutsch', hint: '' }, { id: 'en', label: 'Englisch', hint: '' }],
     tiefen: [{ id: 'auto', label: 'Automatisch (aus Sprache)' }, { id: 'voll_dialekt', label: 'Voll' }, { id: 'leicht', label: 'Leicht' }],
   })

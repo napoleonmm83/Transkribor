@@ -15,6 +15,9 @@ const BASIS = {
   // Vorgabe `null` = automatisch schaetzen (Verhalten wie vor #264); `sprecher_max` kommt
   // vom Server, damit das Eingabefeld den Bereich nicht ein zweites Mal kennen muss.
   sprecher: null, sprecher_max: 20,
+  // Der Kill-Switch TRANSKRIBOR_DIARIZE ist an (Normalfall) — sonst waere das Feld
+  // „Anzahl Sprecher" ein Schalter, der gespeichert wird und nichts tut (#266).
+  diarisierung_aktiv: true,
   sprach_choices: [
     { id: 'ch', label: 'Schweizerdeutsch', hint: '' },
     { id: 'en', label: 'Englisch', hint: '' },
@@ -391,6 +394,32 @@ describe('DateiEinstellungenDialog — Sprecherzahl (#264)', () => {
     render(<DateiEinstellungenDialog project="p" base="a" file={datei()} offen />)
     await waitFor(() => expect(feld()).toHaveValue('3'))
     expect(knopf()).toBeDisabled()
+  })
+
+  it('sperrt das Feld und sagt es an, wenn die Diarisierung aus ist (#266)', async () => {
+    // Vorher: der Dialog nahm die Zahl entgegen, speicherte sie, meldete „Speichern & neu
+    // korrigieren" und startete einen Lauf, der die Sprechertrennung nie anfasst — während
+    // der Hilfetext ausdrücklich versprach, es „trennt die Stimmen deutlich zuverlässiger".
+    vi.spyOn(api, 'getFileEinstellungen')
+      .mockResolvedValue({ ...BASIS, diarisierung_aktiv: false, sprecher: 4 })
+    render(<DateiEinstellungenDialog project="p" base="a" file={datei()} offen />)
+    await sprachWaehlerDa()
+    expect(feld()).toBeDisabled()
+    // Der gespeicherte Wert bleibt SICHTBAR — verstecken hiesse, ihn kommentarlos zu
+    // verschlucken; der Nutzer soll sehen, was dasteht und warum es nicht wirkt.
+    expect(feld()).toHaveValue('4')
+    expect(screen.getByText(/auf diesem Server abgeschaltet/)).toBeInTheDocument()
+    expect(screen.queryByText(/zuverlässiger/)).not.toBeInTheDocument()
+  })
+
+  it('laesst das Feld bedienbar, solange die Diarisierung laeuft (#266)', async () => {
+    // Gegenprobe: ein Feld, das IMMER gesperrt ist, ist derselbe Schaden von der anderen
+    // Seite. Ohne diese Zusicherung bliebe die Mutation „disabled fest auf true" grün.
+    vi.spyOn(api, 'getFileEinstellungen').mockResolvedValue(BASIS)
+    render(<DateiEinstellungenDialog project="p" base="a" file={datei()} offen />)
+    await sprachWaehlerDa()
+    expect(feld()).not.toBeDisabled()
+    expect(screen.getByText(/zuverlässiger/)).toBeInTheDocument()
   })
 })
 

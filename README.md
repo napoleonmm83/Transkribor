@@ -263,6 +263,10 @@ echten Aufnahme mit vier Personen wurde aus „Interviewer plus eine Person“ e
 Trennung, bei der die Fragen wieder beim Fragenden standen.
 
 Lass das Feld leer, wenn du es nicht sicher weisst — dann schätzt Transkribor wie bisher.
+
+Steht das Feld grau und meldet, die Sprechertrennung sei abgeschaltet, dann läuft Transkribor
+mit `TRANSKRIBOR_DIARIZE=0`. Die Sprecher werden dann allein aus dem Gesprächsverlauf
+erschlossen, und die Zahl ändert daran nichts.
 Eine falsche Zahl ist schlechter als keine, denn sie wird genau eingehalten. Die Änderung
 kostet keine neue Transkription, nur einen neuen Korrekturlauf; hast du die Aufnahme im Editor
 schon von Hand überarbeitet, wird diese Fassung dabei überschrieben — der Dialog sagt es dir
