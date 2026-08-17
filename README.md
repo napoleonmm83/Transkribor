@@ -119,7 +119,7 @@ zu versuchen — statt zu behaupten, der Downloader fehle. Geht ein
 Download trotzdem schief, weil die Seite sich gerade wieder geändert hat, aktualisiert es
 sofort und versucht es gleich noch einmal. Machst du das Fenster mitten in einer Auffrischung
 zu, ist das nicht schlimm — Transkribor merkt sich den abgebrochenen Versuch und holt ihn beim
-nächsten Start nach. Du
+nächsten Start nach, solange die automatische Auffrischung eingeschaltet ist. Du
 merkst davon im Normalfall nichts; nachsehen (und abschalten) kannst du es unter
 **Einstellungen › Video-Import**. Zusätzliche Programme brauchst du dafür keine — YouTube
 verlangt beim Herunterladen inzwischen, dass ein kleines Stück Javascript ausgeführt wird,

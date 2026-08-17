@@ -41,6 +41,7 @@ Beide sind **best effort**: scheitert pip (offline, PyPI zickt), wird das protok
 der Aufrufer macht mit der vorhandenen Fassung weiter. Ein Rechner ohne Netz darf durch
 dieses Feature nicht schlechter dastehen als vorher.
 """
+import contextlib
 import datetime as dt
 import hashlib
 import os
@@ -509,7 +510,21 @@ def faellig() -> bool:
         # normalen Fehlschlag (offline) — eine Reparatur fuer einen Schaden, den es nicht
         # gibt. `fassung() is None` allein ist der Riegel eine Zeile tiefer, und der ist
         # richtig: ohne Merker heisst „keine Fassung" wirklich „nie installiert, Sache des
-        # Setups". Erst zusammen sagen sie „WIR haben es zerlegt".
+        # Setups".
+        #
+        # **Dass die beiden zusammen „WIR haben es zerlegt" heissen, traegt aber erst durch
+        # die dritte Bedingung in `aktualisiere()`:** der Merker entsteht nur, wenn vor dem
+        # Lauf eine Fassung da war. Ohne sie war die Aussage hier schlicht falsch — ein
+        # gescheitertes pip auf einer Maschine ohne yt-dlp erfuellt sonst beide Haelften.
+        # (Reviewbefund M1, mit gefaelschtem pip gemessen.)
+        #
+        # **Was das NICHT trennt:** `fassung()` gibt auch bei unlesbarer METADATA `None`
+        # (#189), und fuer diesen Zustand ist gemessen, dass pip SELBST mit Exit 2 scheitert
+        # (#198) — die Reparatur kann dort also nicht greifen. Bewusst nicht getrennt: der
+        # Fall ist in fuenf Kill-Messungen nicht aufgetreten (alle lieferten
+        # PackageNotFoundError), und die Kosten sind durch die Frist gedeckelt — hoechstens
+        # 14 Tage lang je ein schnell scheiternder Hintergrundlauf. Eine Trennung kostete
+        # einen zweiten Metadaten-Zugriff und einen Zweig auf dem selteneren Pfad.
         #
         # **VOR dem Riegel darunter**, denn genau der hielt die Reparatur bisher auf. Ein
         # Test haelt die Reihenfolge fest.
@@ -615,7 +630,13 @@ def _venv_kennung() -> str:
     Reparatur, kein Schaden.
     """
     roh = os.path.normcase(os.path.abspath(sys.prefix)).encode("utf-8", "replace")
-    return hashlib.sha1(roh).hexdigest()[:8]
+    # `blake2b`, nicht `sha1`: letzteres geht durch OpenSSL und wirft unter einem
+    # FIPS-erzwingenden Provider einen `ValueError` — und dieses Modul darf nirgends werfen
+    # (#185; `_pip_merker_setzen` faengt nur `OSError`, der Wurf verliesse `aktualisiere()`
+    # und landete in `fetch.py`, das keinen Schutz hat). blake2b kommt aus CPythons eigenem
+    # `_blake2` und kennt keinen Provider. Gelesen, nicht gemessen — hier steht kein
+    # FIPS-Rechner; die Zeile kostet nichts, der Wurf koennte den URL-Import abreissen.
+    return hashlib.blake2b(roh, digest_size=4).hexdigest()
 
 
 def _pip_merker() -> str:
@@ -649,10 +670,32 @@ def _merker_datum() -> dt.date | None:
     liesse es sich weder auswerten noch ueberschreiben (`_pip_merker_setzen` schont einen
     datierten Merker) und schaltete die Erkennung dauerhaft still ab.
     """
+    # **`O_NONBLOCK` wie in `sperre._merker_lesen` (#200), und aus demselben Grund.** Liegt am
+    # Merker-Pfad ein FIFO, wartet ein normales `open()` auf einen Schreiber, der nie kommt —
+    # ohne Frist. Hier waere das eine Stufe schlimmer als bei #200: der Aufrufer ist ueber
+    # `faellig()` -> `beim_start()` der Lifespan VOR dem `yield`, dessen `except Exception`
+    # keinen Haenger faengt — der Server kaeme gar nicht hoch, ohne Fehlerseite und ohne Log.
+    # In WSL/ext4 gemessen: blankes `open()` kehrt binnen 3 s nicht zurueck, mit dem Flag
+    # sofort. Was OFFEN bleibt, ist dasselbe wie dort: eine regulaere Datei auf einer nicht
+    # erreichbaren Netzfreigabe (das Flag tut da nichts) — steht als #237.
+    #
+    # `O_BINARY` nur auf Windows, `O_NONBLOCK` nur auf POSIX; `getattr(..., 0)` ist in beiden
+    # Faellen das neutrale Element.
+    flags = os.O_RDONLY | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_BINARY", 0)
     try:
-        with open(_pip_merker(), encoding="utf-8") as f:
-            d = dt.date.fromisoformat(f.read(64).strip())
-    except (OSError, ValueError):     # UnicodeDecodeError IST ein ValueError (#185/#190)
+        fd = os.open(_pip_merker(), flags)
+    except (OSError, ValueError):     # ValueError: eingebettetes NUL im Pfad
+        return None
+    try:
+        roh = os.read(fd, 64)
+    except OSError:                   # BlockingIOError am haengenden Schreiber ist einer
+        return None
+    finally:
+        with contextlib.suppress(OSError):
+            os.close(fd)
+    try:
+        d = dt.date.fromisoformat(roh.decode("utf-8").strip())
+    except ValueError:                # UnicodeDecodeError IST einer (#185/#190)
         return None
     return None if d > _heute() else d
 
@@ -756,7 +799,10 @@ def aktualisiere() -> tuple[bool, bool]:
     cmd = [sys.executable, "-m", "pip", "install", "-U",
            # Kurze Deckel: ohne sie haengt pip offline minutenlang, und der Import wartet mit.
            "--retries", "1", "--timeout", "10", _PAKET]
-    print(f"[ytdlp] aktualisiere (installiert: {fassung() or 'nichts'}) …", flush=True)
+    # EIN Lesevorgang, zwei Verwender: die Protokollzeile und der Merker unten. Getrennt
+    # gelesen koennten die beiden Auskuenfte auseinanderfallen (pip laeuft dazwischen).
+    vorher = fassung()
+    print(f"[ytdlp] aktualisiere (installiert: {vorher or 'nichts'}) …", flush=True)
     ok = False
     # Zwei pip-Laeufe auf DIESELBE venv duerfen sich nicht ueberschneiden — sie schreiben in
     # dasselbe site-packages und koennen die Installation zerlegen. Erreichbar, seit es zwei
@@ -783,7 +829,23 @@ def aktualisiere() -> tuple[bool, bool]:
         # #254 auch zwei Server). Ein `settings.save()` an dieser Stelle waere dagegen teuer
         # (zweite verschachtelte Sperre ⇒ `_lock_stale()` muesste um `frist()` wachsen, #207);
         # ein einfacher Dateischreibvorgang nimmt keine Sperre.
-        _pip_merker_setzen()
+        #
+        # **Nur, wenn hier ueberhaupt etwas zu zerlegen war.** Der Merker bedeutet „wir haben
+        # eine LAUFENDE Installation angefasst und nicht sauber beendet" — ohne diese Frage
+        # bedeutete er bloss „ein pip ist gelaufen", und dann feuerte `faellig()` auch nach
+        # einem ganz gewoehnlich gescheiterten Lauf auf einer Maschine, auf der yt-dlp nie
+        # installiert war (Knopf „Jetzt aktualisieren" ohne Netz). Genau den Zustand schuetzt
+        # der Riegel in `faellig()` als „Sache des Setups"; der Merker haette ihn ausgehebelt
+        # und 14 Tage lang bei jedem Start einen Hintergrund-pip freigeschaltet. Gemessen im
+        # Review, mit gefaelschtem pip.
+        #
+        # Der Preis, und er ist der richtige: wird die ERSTE Installation abgewuergt, gibt es
+        # keinen Merker und keine Reparatur — das ist der Zustand von heute, und „yt-dlp war
+        # nie da" ist wirklich Sache des Setups. Ein Reparaturlauf ist davon nicht betroffen:
+        # der Merker des abgewuergten Laufs liegt ja noch (geloescht wird nur bei Erfolg), und
+        # `_pip_merker_setzen` frischt einen datierten Merker ohnehin nicht auf.
+        if vorher is not None:
+            _pip_merker_setzen()
         try:
             p = subprocess.run(cmd, capture_output=True, text=True, errors="replace",
                                timeout=PIP_TIMEOUT)
