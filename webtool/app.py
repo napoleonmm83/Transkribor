@@ -54,6 +54,13 @@ async def _lifespan(app: FastAPI):
     # eigenen Sitzungen und blieben sonst als Waisen mit belegter GPU zurueck.
     for jid in jobs.cancel_all():
         print(f"[shutdown] Job {jid} abgebrochen", flush=True)
+    # #224: laeuft die Selbstaktualisierung noch, ueberlebt ihr pip-Kind uns (POSIX: SIGTERM
+    # erreicht nur uvicorn) — der `daemon=True`-Faden stirbt dabei ohne sein `finally`. Nach
+    # `cancel_all()`, weil ein Wurf hier sonst die Jobs verwaisen liesse; `beim_ende()` selbst
+    # ist best effort und wirft nicht.
+    if ytdlp_update.beim_ende():
+        print("[ytdlp] pip laeuft weiter — Sperre bleibt, bis die Frist sie freigibt",
+              flush=True)
 
 
 app = FastAPI(title="Transkribor Editor", lifespan=_lifespan)

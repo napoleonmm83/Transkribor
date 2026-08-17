@@ -816,6 +816,35 @@ def beim_start() -> bool:
         return False
 
 
+def beim_ende(eigener: bool | None = None) -> bool:
+    """Der Serverprozess endet, waehrend der eigene Update-Faden noch pip haelt (#224).
+    True = der Merker wurde aufgegeben.
+
+    Das Gegenstueck zu `beim_start()`, und es steht aus demselben Grund hier: seit #253 laeuft
+    das pip **im Serverprozess**, in den ersten Sekunden nach dem Start — also genau in dem
+    Fenster, in dem jemand die frisch geoeffnete App wieder zumacht. Bei einer Neuinstallation
+    ist die Pruefung garantiert faellig.
+
+    Der Faden ist `daemon=True`, sein `finally` laeuft beim Interpreter-Ende also nicht, und
+    das pip-Kind ueberlebt uns (in WSL gemessen, siehe `sperre.merker_aufgeben`). Wir koennen
+    das Lock deshalb nicht freigeben — wir wollen es auch nicht: es soll halten, bis das Kind
+    fertig ist. Aufgegeben wird nur die **Auskunft**, damit der naechste Start die Uhr
+    befragt statt eine tote PID.
+
+    **Nur der EIGENE Lauf** (`hintergrund_zustand`, nicht `laeuft_gerade`): ein fremder Halter
+    — der fetch-Subprozess mit seiner Selbstheilung, oder ein zweiter Serverprozess (#254) —
+    lebt weiter und braucht seine Auskunft. Der Ausweis in `merker_aufgeben` faengt den Fall
+    ein zweites Mal ab; hier steht er, weil ein Lock, das uns nie gehoerte, gar nicht erst
+    angefasst werden soll.
+
+    `eigener` ist derselbe Saum wie bei `laeuft_gerade` — und hier zusaetzlich der einzige
+    Weg, den Fall im Test ohne echten Faden zu stellen.
+    """
+    if eigener is None:
+        eigener = hintergrund_zustand()[0]
+    return eigener and sperre.merker_aufgeben(_lockziel())
+
+
 def zustand() -> dict:
     """Fuer die Einstellungsseite: was installiert ist, wann zuletzt geprueft wurde,
     ob der Automatismus laeuft — und ob die Umgebung den Haken ueberstimmt.

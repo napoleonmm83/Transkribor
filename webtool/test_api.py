@@ -1102,6 +1102,23 @@ def test_shutdown_bricht_laufende_jobs_ab(client, monkeypatch):
     assert gerufen == [True]
 
 
+def test_shutdown_gibt_den_ytdlp_merker_auf(client, monkeypatch):
+    """#224: laeuft die Selbstaktualisierung noch, ueberlebt ihr pip-Kind den Server (POSIX:
+    SIGTERM erreicht nur uvicorn; in WSL gemessen). Ohne diesen Haken bleibt das Lock mit der
+    PID des toten Halters liegen, der naechste Start raeumt es sofort ab und legt ein zweites
+    `pip install` in dieselbe venv.
+
+    Der Gegenpart ist `test_lifespan_stoesst_die_kalenderpruefung_an`: Start und Ende sind
+    zwei Haelften desselben Vertrags, und nur die zweite kostet Datenintegritaet."""
+    from webtool import app as appmod
+    gerufen = []
+    monkeypatch.setattr(appmod.ytdlp_update, "beim_ende",
+                        lambda: gerufen.append(True) or False)
+    with TestClient(appmod.app):
+        pass                                   # Kontext verlassen -> lifespan-Shutdown
+    assert gerufen == [True]
+
+
 def test_settings_meldet_ai_ready(client, monkeypatch):
     from webtool import app as appmod
     monkeypatch.setattr(appmod.llm, "available", lambda *_a: (False, "kein claude"))

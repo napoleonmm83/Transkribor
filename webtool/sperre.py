@@ -235,6 +235,13 @@ def _lebt_laut(merker):
     return _prozess_lebt(pid) if wirt and wirt == platform.node() else None
 
 
+def _mein_merker() -> bytes:
+    """Was in UNSEREM Lock steht. EIN Ausdruck, weil `merker_aufgeben` genau diesen Inhalt als
+    Ausweis wiedererkennen muss: zwei Literale liefen beim naechsten Umbau auseinander, und
+    dann entwertete der Aufgebende entweder sein eigenes Lock nicht — oder ein fremdes."""
+    return f"{os.getpid()} {platform.node()}".encode("utf-8", "replace")
+
+
 def wird_gehalten(pfad: str, stale: float = STALTES_ALTER) -> bool:
     """Haelt gerade jemand `<pfad>.lock` — auch aus einem FREMDEN Prozess?
 
@@ -283,6 +290,47 @@ def wird_gehalten(pfad: str, stale: float = STALTES_ALTER) -> bool:
         return False                  # laenger, als ein Abschnitt dauern kann — s. o.
     lebt = _lebt_laut(_merker_lesen(lockdir))
     return lebt if lebt is not None else alter <= stale
+
+
+def merker_aufgeben(pfad: str) -> bool:
+    """Den EIGENEN Merker entfernen, das Lock aber HALTEN lassen: „ich bin gleich weg, ueber
+    mein Werk gibt es keine Auskunft mehr — entscheide nach der Uhr." True = entfernt.
+
+    **Fuer einen Prozess, der stirbt, waehrend sein KIND weiterarbeitet** (#224). Gemessen in
+    WSL an genau dem Ablauf, den `electron/backend.js` beim Beenden ausloest: SIGTERM an
+    uvicorn, der `daemon=True`-Faden aus `ytdlp_update.starte_hintergrund` stirbt ohne sein
+    `finally`, das pip-Kind wird auf init umgehaengt und **laeuft weiter**. Zurueck bleibt ein
+    Lock mit der PID des toten Halters — `_lebt_laut` sagt „tot", der naechste Erwerber raeumt
+    **sofort** ab (0,01 s gemessen) und startet ein zweites `pip install` neben dem ersten:
+    genau der Schaden, gegen den diese Sperre gebaut ist.
+
+    **Warum nicht das Kind mitnehmen.** Ein abgewuergtes pip laesst yt-dlp halb installiert
+    zurueck ⇒ `metadata.version` wirft ⇒ `fassung()` None ⇒ `faellig()` gibt bewusst False
+    ⇒ die Selbstaktualisierung ist **dauerhaft** aus, und der URL-Import meldet „nicht
+    installiert". Der Schaden heilt sich nicht selbst. **Warum nicht warten:** bis zu
+    `PIP_TIMEOUT` beim Schliessen des Fensters — das ist #219, nur andersherum.
+
+    **Der Ausweis ist Pflicht, nicht Vorsicht** (dieselbe Regel wie in `_wegraeumen`): war das
+    Lock zwischenzeitlich frei und gehoert jetzt einem anderen, entwertete ein blindes
+    `os.remove` dessen **frischen** Merker — und der koennte sein eigenes Lock im `finally`
+    nicht mehr wiedererkennen.
+
+    **Dass die mtime dabei hochspringt, ist gewollt.** `os.remove` im Verzeichnis erneuert
+    sie, die Uhr zaehlt also ab dem Aufgeben statt ab dem `mkdir` — und ab genau diesem
+    Zeitpunkt kann das verwaiste Kind noch hoechstens seinen eigenen Deckel lang laufen. Der
+    Aufrufer sagt mit `stale` zu, dass seine Frist das abdeckt (siehe `frist`).
+    """
+    lockdir = pfad + ".lock"
+    if _merker_lesen(lockdir) != _mein_merker():
+        return False                              # gehoert uns nicht (mehr) — s. o.
+    try:
+        os.remove(os.path.join(lockdir, _HALTER))
+    except OSError:
+        # Best effort wie alles hier: der einzige Aufrufer ist ein Shutdown-Pfad, und der darf
+        # an einer Vorsichtsmassnahme nicht scheitern. Bleibt der Merker liegen, ist der
+        # Zustand der von vor diesem Fix — schlechter wird es nicht.
+        return False
+    return True
 
 
 def _verzeichnis_kennung(pfad: str):
@@ -417,10 +465,9 @@ def datei(pfad: str, stale: float = STALTES_ALTER):
             # Best effort: scheitert das Schreiben, verhaelt sich das Lock wie vor #175
             # (keine Auskunft -> die Frist entscheidet). Die Sperre darf am Merker nicht
             # haengen, sie ist auch ohne ihn gueltig.
-            inhalt = f"{os.getpid()} {platform.node()}".encode("utf-8", "replace")
             with contextlib.suppress(OSError):
                 with open(os.path.join(lockdir, _HALTER), "wb") as f:
-                    f.write(inhalt)
+                    f.write(_mein_merker())
             # Der Ausweis ist, was WIRKLICH auf der Platte steht — nicht, was wir schreiben
             # wollten. Bricht das Schreiben halb ab (gepuffertes IO meldet einen kurzen
             # Schreibvorgang typisch erst beim Schliessen), laege dort ein Teilinhalt, unser

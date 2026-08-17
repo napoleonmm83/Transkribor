@@ -906,3 +906,96 @@ def test_eine_datei_am_lock_pfad_haelt_niemand(tmp_path):
     with open(ziel + ".lock", "w", encoding="utf-8") as f:
         f.write("kein Verzeichnis")
     assert sperre.wird_gehalten(ziel) is False
+
+
+# --- #224: der Halter stirbt, sein Kind arbeitet weiter -----------------------------------
+#
+# Gemessen in WSL an genau dem Ablauf, den `electron/backend.js` beim Beenden ausloest —
+# SIGTERM an uvicorn, `daemon=True`-Faden ohne `finally`, pip-Kind auf init umgehaengt und
+# weiterlaufend. Der Merker verriet danach nur den TOTEN Halter, und der naechste Erwerber
+# griff nach 0,01 s zu: zwei `pip install` in dieselbe venv.
+
+
+def test_aufgegebener_merker_meldet_weiter_ein_laufendes_lock(tmp_path, monkeypatch):
+    """Der Weg, den `ytdlp_update.beim_start()` geht (`laeuft_gerade` -> `wird_gehalten`).
+
+    **Der Halter muss tot sein, sonst ist der Test vacuous.** Aufgegeben wird, waehrend der
+    Prozess noch lebt — eine Sekunde spaeter gibt es ihn nicht mehr, und GENAU dieser Zustand
+    ist der Gegenstand. Ohne das gefaelschte `_prozess_lebt` antwortet die Lebendpruefung mit
+    „unsere eigene PID lebt ja", und die Zusicherung waere in beide Richtungen gruen: die
+    Mutation „`os.remove` weglassen" bliebe unentdeckt.
+
+    Die Gegenprobe steht als eigener Test daneben
+    (`test_ohne_aufgeben_gilt_das_lock_des_toten_halters_sofort_als_verwaist`) und benutzt
+    einen echten toten Prozess statt der Attrappe.
+    """
+    ziel = str(tmp_path / "x.json")
+    lock = ziel + ".lock"
+    os.mkdir(lock)
+    _merker(lock, os.getpid())                        # so, wie `datei()` ihn schreibt
+    assert sperre.merker_aufgeben(ziel) is True
+    monkeypatch.setattr(sperre, "_prozess_lebt", lambda pid: False)     # der Halter ist weg
+    assert sperre.wird_gehalten(ziel, stale=60) is True
+
+
+def test_ohne_aufgeben_gilt_das_lock_des_toten_halters_sofort_als_verwaist(tmp_path):
+    """Die Gegenprobe — und zugleich der Beleg, dass der Test oben nicht ohnehin gruen waere.
+
+    Derselbe Zustand, nur mit der PID des toten Halters statt ohne Merker. Genau hier liegt
+    #224: die Auskunft ist RICHTIG (den Halter gibt es nicht mehr) und trotzdem irrefuehrend,
+    weil sein pip weiterlaeuft.
+    """
+    tot = subprocess.Popen([sys.executable, "-c", "pass"])
+    tot.wait()
+    ziel = str(tmp_path / "x.json")
+    lock = ziel + ".lock"
+    os.mkdir(lock)
+    _merker(lock, tot.pid)
+    assert sperre.wird_gehalten(ziel, stale=60) is False
+
+
+def test_aufgegebener_merker_haelt_den_naechsten_erwerber_ab(tmp_path):
+    """Die andere Tuer: `aktualisiere()` nimmt die Sperre selbst.
+
+    Im Faden mit `join`, weil ein zu langes Warten sonst keinen Test rot macht (#191) — hier
+    ist es umgekehrt, gemessen wird, dass er WARTET. Die Frist ist mit 60 s so weit weg, dass
+    der Test nichts von der Uhr abhaengt; ohne das Aufgeben ist der Faden in Millisekunden
+    durch (`test_toter_halter_muss_die_frist_nicht_absitzen` misst genau das).
+    """
+    ziel = str(tmp_path / "x.json")
+    lock = ziel + ".lock"
+    os.mkdir(lock)
+    _merker(lock, os.getpid())
+    assert sperre.merker_aufgeben(ziel)
+    erworben = threading.Event()
+
+    def lauf():
+        with sperre.datei(ziel, stale=60):
+            erworben.set()
+
+    threading.Thread(target=lauf, daemon=True).start()
+    assert not erworben.wait(1), "das Lock wurde uebernommen, waehrend das Kind noch laeuft"
+    # Den Faden nicht in der Suite stehen lassen: er saesse sonst 60 s weiter da, druckte
+    # seine `[sperre] warte auf …`-Zeile in das `capsys` eines FREMDEN Tests und liefe danach
+    # gegen ein `tmp_path`, das es nicht mehr gibt. Das Freigeben ist zugleich die zweite
+    # Haelfte der Zusicherung: er wartete wirklich, statt schon gescheitert zu sein.
+    os.rmdir(lock)
+    assert erworben.wait(5), "der Erwerber wartete gar nicht, er war schon tot"
+
+
+def test_merker_aufgeben_fasst_ein_FREMDES_lock_nicht_an(tmp_path):
+    """Der Ausweis, dieselbe Regel wie in `_wegraeumen`: war das Lock zwischenzeitlich frei
+    und gehoert jetzt einem anderen, entwertete ein blindes `os.remove` dessen FRISCHEN
+    Merker — und der koennte sein eigenes Lock im `finally` nicht mehr wiedererkennen."""
+    ziel = str(tmp_path / "x.json")
+    lock = ziel + ".lock"
+    os.mkdir(lock)
+    _merker(lock, os.getpid() + 1)
+    assert sperre.merker_aufgeben(ziel) is False
+    assert sperre._merker_lesen(lock) is not None, "der fremde Merker wurde entwertet"
+
+
+def test_merker_aufgeben_ohne_lock_wirft_nicht(tmp_path):
+    """Der einzige Aufrufer ist ein Shutdown-Pfad — er darf an einer Vorsichtsmassnahme nicht
+    scheitern. Kein Lock (der Faden war schneller als das Signal) ist der Normalfall."""
+    assert sperre.merker_aufgeben(str(tmp_path / "gibtsnicht.json")) is False
