@@ -789,6 +789,23 @@ def beim_start() -> bool:
     try:
         if not auto_an() or not faellig():
             return False
+        # **Drittes Tor, nur fuer diesen Weg** (CodeRabbit-Bot an PR #255, Major): starten zwei
+        # Serverprozesse gleichzeitig — gepackte App neben Entwickler-Checkout teilen sich
+        # Sperre und Merker (#254) —, sehen beide `faellig()` und starten je einen Lauf. Der
+        # zweite sitzt bis zu `sperre.frist()` ≈ 220 s an der Sperre ab und macht danach ein
+        # pip, das „Requirement already satisfied" meldet. Dieselbe Klasse wie #176, auf dem
+        # neuen Weg.
+        #
+        # **Advisory, nicht Entscheidung im kritischen Abschnitt** — und das ist hier zulaessig,
+        # anders als bei einem Sprung IN den Abschnitt: wir lassen eine freiwillige Vorsorge
+        # aus. Verliert die Pruefung ihr Rennen, laufen beide — also genau das heutige
+        # Verhalten, kein neuer Schaden. Ein Riegel INNERHALB der Sperre waere die vollstaendige
+        # Antwort und braeuchte `aktualisiere()`s bedingungslosen Vertrag anzufassen, an dem
+        # der Knopf „Jetzt aktualisieren" haengt; das gehoert zu #176s Neuzuschnitt.
+        if laeuft_gerade():
+            print("[ytdlp] Kalenderpruefung uebersprungen — es aktualisiert schon jemand",
+                  flush=True)
+            return False
         return starte_hintergrund()
     except Exception as e:
         # Nicht still: eine uebersprungene Vorsorge sieht man sonst erst daran, dass Monate
