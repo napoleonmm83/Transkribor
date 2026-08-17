@@ -3,7 +3,7 @@
 **Stand:** 2026-08-17, master `1ab4c70`. Wellenplan 1 ist durch (PR #248).
 **Fassung 2** — nach einem adversarialen Gegenlauf, der **drei tragende Behauptungen der
 ersten Fassung widerlegt** hat. Was davon übrig ist, steht unten unter „Was der Review
-umgeworfen hat"; die Wellen sind entsprechend umgebaut.
+umgeworfen hat“; die Wellen sind entsprechend umgebaut.
 
 ## Die Gruppierungsregel
 
@@ -12,7 +12,7 @@ Funktionstest kostet pro Umgebung einen Aufbau).
 **Zweites Kriterium:** Issues, deren Fixes einander bedingen, gehören zusammen.
 
 **Dritte Regel, aus dem Gegenlauf gelernt:** *Wenn ein Issue mehrere Wege nennt und
-ausdrücklich „nicht entschieden" ist, wählt der Plan nicht still den teuren.* Genau das war
+ausdrücklich „nicht entschieden“ ist, wählt der Plan nicht still den teuren.* Genau das war
 der schwerste Fehler der ersten Fassung.
 
 ---
@@ -21,12 +21,12 @@ der schwerste Fehler der ersten Fassung.
 
 | Behauptung Fassung 1 | Befund | Beleg |
 |---|---|---|
-| „Poll adoptiert fremden Lauf" ist der Weg für #252 | **Kehrt eine dokumentierte Entscheidung um.** Im Code steht: „Übernommen wird der Lauf bewusst NICHT automatisch: das setzte `ytLaeuft` sofort wieder hoch und machte die Obergrenze der Warteschleife wirkungslos (der Test … hat genau das aufgedeckt)." | `SettingsPage.tsx:551-556` |
+| „Poll adoptiert fremden Lauf“ ist der Weg für #252 | **Kehrt eine dokumentierte Entscheidung um.** Im Code steht: „Übernommen wird der Lauf bewusst NICHT automatisch: das setzte `ytLaeuft` sofort wieder hoch und machte die Obergrenze der Warteschleife wirkungslos (der Test … hat genau das aufgedeckt).“ | `SettingsPage.tsx:551-556` |
 | Cache-Invalidierung sitzt bei `auth.py:221` | **Richtung falsch.** Der Login misst seinen Erfolg *selbst* per `status(provider)` — **vor** `laeuft = False`. Dieser eine Aufruf muss den Cache **umgehen**, nicht ihn stürzen. | `auth.py:219-221` |
-| #242s Abbruch ist „auf POSIX exakt #224" | **Widerlegt.** #224 ist ein Python-Daemon-Faden mit `sperre.py`-Lock; #242 ist ein `spawn()` im Electron-Hauptprozess **ohne** Lock. Gemeinsam ist nur die Einsicht, nicht der Code. | `setup.js:123-129`, `main.js:133-145` |
-| #244 sind „~10 Zeilen in `EditierbarerText.tsx`" | **Zwei Stellen.** `SegmentView.tsx:142` hat einen **eigenen** `<button title="Notiz bearbeiten (leeren streicht sie)">`, der `EditierbarerText` nicht benutzt. | `SegmentView.tsx:142` gegen `EditierbarerText.tsx:32` |
-| #160 ist „grösser als mtime prüfen" | **Unbegründet — und der wahre Grund ist ein anderer.** Es gibt **drei** Schreiber der `edit.json`, einer davon in einem **eigenen Prozess**. Ein Token aus einer Registry im Serverprozess kann darum nicht funktionieren; es muss aus dem **Dateizustand** abgeleitet sein. | `app.py:614`, `app.py:507`, `correct.py:246` (via `jobs.request([sys.executable, …])`) |
-| #251-Wächter: „jeder Handler ist eine Weiterleitung" | **Am ersten Tag rot.** Vier Handler tragen bewusste Entscheidungen, je mit Begründung im Kommentar. | `main.js:134, 152-154, 164-166, 175` |
+| #242s Abbruch ist „auf POSIX exakt #224“ | **Widerlegt.** #224 ist ein Python-Daemon-Faden mit `sperre.py`-Lock; #242 ist ein `spawn()` im Electron-Hauptprozess **ohne** Lock. Gemeinsam ist nur die Einsicht, nicht der Code. | `setup.js:123-129`, `main.js:133-145` |
+| #244 sind „~10 Zeilen in `EditierbarerText.tsx`“ | **Zwei Stellen.** `SegmentView.tsx:142` hat einen **eigenen** `<button title="Notiz bearbeiten (leeren streicht sie)">`, der `EditierbarerText` nicht benutzt. | `SegmentView.tsx:142` gegen `EditierbarerText.tsx:32` |
+| #160 ist „grösser als mtime prüfen“ | **Unbegründet — und der wahre Grund ist ein anderer.** Es gibt **drei** Schreiber der `edit.json`, einer davon in einem **eigenen Prozess**. Ein Token aus einer Registry im Serverprozess kann darum nicht funktionieren; es muss aus dem **Dateizustand** abgeleitet sein. | `app.py:614`, `app.py:507`, `correct.py:246` (via `jobs.request([sys.executable, …])`) |
+| #251-Wächter: „jeder Handler ist eine Weiterleitung“ | **Am ersten Tag rot.** Vier Handler tragen bewusste Entscheidungen, je mit Begründung im Kommentar. | `main.js:134, 152-154, 164-166, 175` |
 
 Zusätzlich: die Zahl **0,26 s** für `auth.status()` ist in diesem Repo **nicht gemessen** —
 #250 verlangt ausdrücklich, dass zuerst gemessen wird. Fassung 1 hat sie als Tatsache geführt.
@@ -57,7 +57,7 @@ App-Start, nicht vor jeden Import. Das teilt Welle A entlang der Linse:
 gehört `AnmeldungAbo`. Vorbild ist `ytJetzt` (`:542`) und `kaputtWeg`.
 
 **Die Wurzel bleibt und wird benannt, nicht behoben:** `auth.STATUS_TIMEOUT = 30`
-(`auth.py:66`) mit dem Kommentar „ein lokaler Aufruf, der sofort antwortet" daneben. Mit
+(`auth.py:66`) mit dem Kommentar „ein lokaler Aufruf, der sofort antwortet“ daneben. Mit
 `busy` sieht der Nutzer künftig ein *gesperrtes* Formular 30 s lang statt eines toten. Die
 Zahl hängt an drei Stellen (#249, #250, und der 35-s-Frist von `backend.projektePfad()`,
 die laut `electron/CLAUDE.md` nur wegen dieser 30 s so hoch ist) — sie anzufassen ist eine
@@ -69,7 +69,7 @@ eigene Arbeit, kein Nebensatz.
 
 Das Issue verlangt es wörtlich: „**Nicht gemessen**, sondern aus dem Aufrufbaum gelesen —
 wer das angeht, misst zuerst, wie lange `GET /api/settings` auf diesem Rechner wirklich
-braucht." Der Poll zahlt daneben `ytdlp_update.zustand()` (~6,4 ms laut `webtool/CLAUDE.md`);
+braucht.“ Der Poll zahlt daneben `ytdlp_update.zustand()` (~6,4 ms laut `webtool/CLAUDE.md`);
 wie gross der Subprozess-Anteil wirklich ist, weiss niemand.
 
 **Erst messen. Dann** entscheiden zwischen kurzlebigem Cache und einer kleineren Decke.
@@ -77,7 +77,7 @@ wie gross der Subprozess-Anteil wirklich ist, weiss niemand.
 **Falls Cache — die Falle, die Fassung 1 übersehen hat:** `_fahre` misst den Erfolg des
 Logins mit `st = status(provider)` (`auth.py:219`), **bevor** `lauf["laeuft"] = False` fällt.
 Ein Cache, der diesen Aufruf bedient, lässt den Login sich an einem Zustand von **vor** dem
-Login messen — ein geglückter Login meldete „fehlgeschlagen". Dieser eine Aufruf muss den
+Login messen — ein geglückter Login meldete „fehlgeschlagen“. Dieser eine Aufruf muss den
 Cache **umgehen** (`status(provider, frisch=True)` o. ä.).
 Mitbetroffen über `available()`: `llm.check()` (`llm.py:357`) und `_require_ai()`
 (`app.py:675`) — der Testknopf antwortete sonst aus dem Cache.
@@ -89,7 +89,7 @@ Mitbetroffen über `available()`: `llm.check()` (`llm.py:357`) und `_require_ai(
 **#253 ist der grössere Gewinn und der kleinere Diff.** In `fetch.py` hängen zwei
 Aktualisierungswege, und nur einer gehört dorthin:
 
-```
+```text
 fetch.download_one(:310)
   ├─ ensure_ffmpeg()                          Vorbedingung, ohne Wartezeit
   ├─ _hole_yt_dlp() (:320)
@@ -105,12 +105,15 @@ fetch.download_one(:310)
 
 **Die Mechanik existiert vollständig** — `faellig()` (14 Tage + Merker) ist die Bremse,
 `starte_hintergrund()` (`ytdlp_update.py:635`) der Faden, heute nur vom „Jetzt
-aktualisieren"-Knopf gerufen (`app.py:897`). Es wandert der **Auslöser**, nicht die Logik.
+aktualisieren“-Knopf gerufen (`app.py:897`). Es wandert der **Auslöser**, nicht die Logik.
 
 **Was #253 an anderen Issues tut:**
-- **#176 wird gegenstandslos** — ohne Auslöser im Import können zwei Import-Jobs keine zwei
-  pip-Läufe mehr anstossen. Aufgelöst, nicht gefixt. → **aus Welle B streichen**, nach dem
-  Merge von #253 als obsolet schliessen.
+- **#176 verliert seine Kalender-Hälfte — mehr nicht.** *(Korrigiert nach dem Review von
+  PR #255; hier stand „wird gegenstandslos", und das war zu stark.)* Der im Issue beschriebene
+  Mechanismus — zwei Jobs prüfen `faellig()`, beide True — ist weg. Der **Selbstheilungspfad**
+  bleibt: `automatisch(erzwingen=True)` überspringt `faellig()` absichtlich, zwei Import-Jobs
+  mit je einem Extraktor-Fehler doppeln weiterhin. → **aus Welle B streichen**, aber
+  **nicht schliessen**; #176 braucht einen neuen Zuschnitt.
 - **#252 schrumpft** auf die eine ehrliche Anzeigezeile (Weg 2).
 - **#224 wird wichtiger** — pip beim Start liegt genau im Fenster, in dem jemand die frisch
   geöffnete App wieder schliesst.
@@ -124,7 +127,7 @@ dass nicht bei jedem Start pip läuft.
 
 ### Lokaler Funktionstest — mit Sicherung
 
-**Nicht** einfach „echten yt-dlp-Lauf anstossen": das schriebe `pip install -U yt-dlp[default]`
+**Nicht** einfach „echten yt-dlp-Lauf anstossen“: das schriebe `pip install -U yt-dlp[default]`
 in Marcus' Entwickler-venv, also genau die venv, in der alle folgenden Wellen gemessen werden.
 `webtool/CLAUDE.md` hält den Präzedenzfall fest. Gefahren wird mit `TRANSKRIBOR_YTDLP_UPDATE=0`
 plus gefälschtem `subprocess.run`, oder in einer Wegwerf-venv.
@@ -147,7 +150,7 @@ Alternative ist ein Lock-Merker mit der **Kind-PID**, damit `_lebt_laut()` den r
 Prozess prüft.
 
 **Vorbehalt aus dem Issue selbst:** #224 ist „aus dem Code hergeleitet, auf einem Mac NICHT
-verifiziert". Der WSL-Lauf ist die erste echte Messung — er kann den Befund auch widerlegen.
+verifiziert“. Der WSL-Lauf ist die erste echte Messung — er kann den Befund auch widerlegen.
 
 ### #176 fällt weg — und das ist die zweitbeste Nachricht dieses Plans
 
@@ -155,7 +158,7 @@ Fassung 1 plante, die Sperre von `aktualisiere()` nach `automatisch()` zu verlag
 Gegenlauf zeigte, dass das **zwei** Verträge aus PR #246 ändert (`aktualisiere() -> (ok,
 gehalten)` speist `ungeschuetzt`/#236; `zustand()["laeuft"]` fragt `sperre.wird_gehalten`,
 `:764`/#243) — und damit ausgerechnet das Signal berührt, das die Einstellungsseite liest.
-Ein „15-Zeilen-Fix", der einen frisch gebauten Vertrag umschreibt.
+Ein „15-Zeilen-Fix“, der einen frisch gebauten Vertrag umschreibt.
 
 **Mit #253 stellt sich die Frage nicht mehr:** ohne Auslöser im Import gibt es die zwei
 gleichzeitigen Läufe nicht. Das Issue wird nach dem Merge von #253 als obsolet geschlossen,
@@ -193,23 +196,23 @@ Durchreichen durch drei Ebenen.
 **Gute Nachricht:** die Werkzeug-Naht ist da (`einrichten(…, werkzeug = {})`, `setup.js:443-450`,
 aus #229) — der Abbruch ist **ohne echtes pip** testbar.
 
-**Gestrichen: „das ist exakt #224".** Zwei Laufzeiten, zwei Sprachen, kein gemeinsames Lock,
+**Gestrichen: „das ist exakt #224“.** Zwei Laufzeiten, zwei Sprachen, kein gemeinsames Lock,
 kein gemeinsamer Code. B vor C ist damit **nicht erzwungen** — nur bequem, weil die Einsicht
-„ein Kill nimmt den Baum auf POSIX nicht mit" dann schon frisch ist.
+„ein Kill nimmt den Baum auf POSIX nicht mit“ dann schon frisch ist.
 
 **Fehlende Prüfung, jetzt benannt:** der POSIX-Teil von #242b ist auf diesem Rechner **nicht**
 verifizierbar (gepacktes macOS/Linux steht selbst unter #36; auf Windows existiert der Fall
-nicht). Das geht als *ungeprüft* raus und wird so berichtet, nicht als „läuft".
+nicht). Das geht als *ungeprüft* raus und wird so berichtet, nicht als „läuft“.
 
 ### #251 braucht einen anderen Weg als Fassung 1 vorschlug
 
-Der Quelltext-Wächter „jeder `ipcMain.handle`-Rumpf ist eine Weiterleitung" wäre **am ersten
+Der Quelltext-Wächter „jeder `ipcMain.handle`-Rumpf ist eine Weiterleitung“ wäre **am ersten
 Tag rot**: `einrichten` (`:134`), `titelleisteFarbe` (`:152-154`), `fortschritt` (`:164-166`),
 `update:installieren` (`:175`) tragen alle bewusste Entscheidungen, je mit Begründung im
 Kommentar. Ein Wächter mit Ausnahmeliste *ist* die Konvention, die er ersetzen sollte.
 
 Issue #251 sagt das selbst und nennt den Ausweg: „**Weg 3** [`main.js` ladbar machen] ist der
-einzige, der die Frage wirklich beantwortet." Das ist eine eigene Arbeit. **Empfehlung:** #251
+einzige, der die Frage wirklich beantwortet.“ Das ist eine eigene Arbeit. **Empfehlung:** #251
 nicht mit #242 bündeln, sondern eigenständig entscheiden — oder zunächst auf Weg 1 des Issues
 zurückfallen (eine Zeile in `electron/CLAUDE.md`) und das Issue ehrlich als *nicht gelöst*
 offenhalten.
@@ -238,9 +241,9 @@ offenhalten.
 
 **Issue:** #160
 
-**Der wahre Grund, warum das gross ist** — nicht „mtime reicht nicht", sondern **wer schreibt**:
+**Der wahre Grund, warum das gross ist** — nicht „mtime reicht nicht“, sondern **wer schreibt**:
 
-```
+```text
 edit.json wird geschrieben von …
   app.py:614      save_file          ← der Editor (PUT, alle 800 ms Tipppause)
   app.py:507      _doc_felder        ← Umbenennen (gerufen aus :531, :564)
@@ -251,7 +254,7 @@ edit.json wird geschrieben von …
 `correct.py` läuft als Subprozess und mintet keine Token. Ein Token aus einer Registry **im
 Serverprozess** kann darum nicht funktionieren — es muss aus dem **Dateizustand** abgeleitet
 sein (mtime oder Hash). Damit ist der Vorschlag aus dem Issue („die `mtime` prüfen, die der
-Client beim Laden gesehen hat") **die naheliegende Lösung**, nicht die zu kleine; Fassung 1
+Client beim Laden gesehen hat“) **die naheliegende Lösung**, nicht die zu kleine; Fassung 1
 hat ihn ohne Begründung abgetan.
 
 Offen bleibt die Erneuerung: nach jedem erfolgreichen PUT muss der Client das neue Token
@@ -267,8 +270,8 @@ Dieser PR bekommt einen ungeteilten Reviewer und einen eigenen
 Die README auf `master` beschreibt dauerhaft mehr, als der Herunterladen-Knopf liefert.
 
 **Begründung korrigiert:** Fassung 1 schrieb „tut niemandem weh, solange die Releases dicht
-folgen". Das ist genau die Position, die der Issue-Titel zurückweist („die Drift ist
-**strukturell**"). Zurückgestellt wird es wegen geringerer Dringlichkeit, nicht weil es
+folgen“. Das ist genau die Position, die der Issue-Titel zurückweist („die Drift ist
+**strukturell**“). Zurückgestellt wird es wegen geringerer Dringlichkeit, nicht weil es
 harmlos wäre.
 
 ---
@@ -291,7 +294,7 @@ braucht einen Entwurf) · #95 (Certum-Kauf) · #45 (Renovate-Anzeige, kein Vorga
 
 ## Reihenfolge
 
-```
+```text
 A2 (yt-dlp-Auslöser) → A1 (Einstellungskosten) → B (POSIX) → C (Electron) → D → E → F
    #253 #252             #249 #250                 #224        #242 (#251)   …
    Browser + App-Start   Browser                    WSL         gepackt
@@ -302,14 +305,14 @@ A2 (yt-dlp-Auslöser) → A1 (Einstellungskosten) → B (POSIX) → C (Electron)
 
 **Harte Kanten: keine.** Mit #252-Weg 2 wird nichts adoptiert, also gibt es das geteilte
 `zustand()["laeuft"]`-Signal-Problem nicht. B→C ist **nicht** erzwungen (die „exakt
-#224"-Begründung ist gestrichen), nur bequem.
+#224“-Begründung ist gestrichen), nur bequem.
 
 **Warum A2 zuerst:** es ist der einzige Punkt im ganzen Plan, an dem ein Issue **verschwindet**
 statt bearbeitet zu werden (#176), und der einzige, den ein Nutzer als Tempogewinn merkt —
 der Import wartet nicht mehr auf einen Paketmanager.
 
 **Warum A1 danach und nicht zuerst — Begründung korrigiert.** Fassung 1 schrieb „Nachwehen des
-letzten PRs". Das trägt nur für **#249**: #252 ist im Issue ausdrücklich als **vorbestehend**
+letzten PRs“. Das trägt nur für **#249**: #252 ist im Issue ausdrücklich als **vorbestehend**
 markiert (Ursache #243/PR #246), und #250 entstand mit dem Poll aus #174. #249 bleibt trotzdem
 weit vorn, weil es den Nutzer sichtbar beim Speichern trifft.
 
@@ -337,7 +340,7 @@ weit vorn, weil es den Nutzer sichtbar beim Speichern trifft.
   **keinen** Toast für fremde Läufe; der Anzeige-Poll fasst `ytLaeuft` nicht an. Wer Weg 1
   später doch will, fängt bei der 480-Runden-Obergrenze an, nicht beim Toast.
   (Die Frage stand hier bis zur Entscheidung offen — das Issue selbst sagte „Nicht
-  entschieden", und die Wahl änderte die Form der ganzen Welle.)
+  entschieden“, und die Wahl änderte die Form der ganzen Welle.)
 
 ## Offene Prüflücken (benannt, nicht verschwiegen)
 
