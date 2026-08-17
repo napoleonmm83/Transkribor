@@ -12,6 +12,11 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, StrictInt
 
 from . import auth
+# `as _correct` ist PFLICHT, nicht Stil: weiter unten steht `def correct(project)` (der
+# Endpunkt). Ein unaliasiertes `from . import correct` wuerde davon ueberschrieben, und
+# `correct.diarize_enabled()` liefe erst zur REQUEST-Zeit in einen AttributeError — kein
+# Fehler beim Import, kein roter Test beim Start, ein 500er im Betrieb. Nicht "aufraeumen".
+from . import correct as _correct
 from . import device
 from . import fetch as fetch_mod
 from . import jobs
@@ -374,9 +379,19 @@ def dateieinstellungen(project: str, base: str):
     # `sprecher_max` reist mit den uebrigen Auswahlen: das Eingabefeld prueft den Bereich
     # selbst (sonst laese der Nutzer den 400er des Servers), und eine zweite Zahl im Frontend
     # waere genau die Divergenz, gegen die `pruef_fehler` die EINE Quelle ist.
+    # `diarisierung_aktiv` reist wie `sprecher_max` als reiner Server-Wert mit: das Feld
+    # „Anzahl Sprecher" ist ohne Diarisierung ein toter Schalter (#266). Die Auskunft ist
+    # belastbar, weil `settings.job_env()` nur WHISPER_MODEL/WHISPER_LANG setzt — der
+    # correct-Subprozess liest exakt denselben Wert wie dieser Server.
+    #
+    # Sie beantwortet AUSDRUECKLICH nur den Kill-Switch, nicht „laeuft pyannote wirklich":
+    # fehlt das Paket oder ist die GPU voll, steht hier True und es passiert trotzdem nichts.
+    # Dieselbe Trennung wie „Installiert != angemeldet" bei llm.available(); als Issue
+    # festgehalten statt hier mit einem Import von torch im Request-Pfad erkauft.
     return {**_projekt.datei_ansicht(project, base),
             "sprach_choices": _sprachen.fuer_frontend(), "tiefen": _sprachen.TIEFEN,
-            "sprecher_max": _sprachen.SPRECHER_MAX}
+            "sprecher_max": _sprachen.SPRECHER_MAX,
+            "diarisierung_aktiv": _correct.diarize_enabled()}
 
 
 @app.put("/api/projects/{project}/files/{base}/einstellungen")
