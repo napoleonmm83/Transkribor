@@ -1413,9 +1413,15 @@ def test_ein_unschreibbarer_merker_reisst_niemanden_mit(monkeypatch, capsys):
     (dieselbe Regel wie bei `sperre.datei`s fail-open)."""
     def kaputt(*a, **k):
         raise OSError("kein Platz")
-    monkeypatch.setattr("builtins.open", kaputt)
-    yu._pip_merker_setzen()
-    monkeypatch.undo()
+
+    # `monkeypatch.context()`, NICHT `monkeypatch.undo()`: Fixture und Test teilen sich
+    # dieselbe MonkeyPatch-Instanz, `undo()` nahm also die ganze `isoliert`-Fixture mit
+    # zurueck — danach zeigte `TRANSKRIBOR_SETTINGS` wieder auf Marcus' echtes Profil, die
+    # Zusicherung darunter las die falsche Datei (also vacuous), und `subprocess.run` war
+    # wieder echt. Gemessen im Review; der Modul-Docstring warnt in genau diesen Worten.
+    with pytest.MonkeyPatch.context() as m:
+        m.setattr("builtins.open", kaputt)
+        yu._pip_merker_setzen()
     assert yu._pip_unterbrochen() is False
     assert "Merker" in capsys.readouterr().out
 
@@ -1434,6 +1440,7 @@ def test_der_merker_liegt_WAEHREND_des_pip_laufs(monkeypatch):
     innerhalb des `try`, um das `aktualisiere()` seine Ausnahmen legt, und der AssertionError
     wuerde von der geprueften Stelle selbst geschluckt (dieselbe Falle wie bei #185)."""
     gesehen = []
+    monkeypatch.setattr(yu, "fassung", lambda: "2025.9.5")   # sonst legt aktualisiere() gar keinen Merker an
 
     def run(cmd, **kwargs):
         gesehen.append(yu._pip_unterbrochen())
@@ -1457,6 +1464,7 @@ def test_der_merker_wird_INNERHALB_der_sperre_gesetzt(monkeypatch):
     aus #207 (`_lock_stale()` = PIP_TIMEOUT + 30 + `frist()`) — sie gehoert festgenagelt, nicht
     weggefiltert."""
     folge = []
+    monkeypatch.setattr(yu, "fassung", lambda: "2025.9.5")   # sonst legt aktualisiere() gar keinen Merker an
     echte_sperre = yu.sperre.datei
 
     @contextlib.contextmanager
@@ -1473,10 +1481,14 @@ def test_der_merker_wird_INNERHALB_der_sperre_gesetzt(monkeypatch):
     monkeypatch.setattr(yu.sperre, "datei", datei)
     monkeypatch.setattr(yu.subprocess, "run", run)
     monkeypatch.setattr(yu, "_pip_merker_setzen", lambda: folge.append("merker gesetzt"))
+    monkeypatch.setattr(yu, "_pip_merker_loeschen", lambda: folge.append("merker weg"))
     yu.aktualisiere()
     pip_lock, settings_lock = (os.path.basename(yu._lockziel()),
                                os.path.basename(settings.path()))
-    assert folge == ["auf:" + pip_lock, "merker gesetzt", "pip",
+    # „merker weg" VOR „auf:<settings>": `_merken()` faengt nur `OSError`, ein anderer Wurf
+    # dort liesse den Merker sonst liegen, obwohl pip sauber durchgelaufen ist. Ohne diese
+    # Marke war die Reihenfolge unbewacht (Reviewbefund m7).
+    assert folge == ["auf:" + pip_lock, "merker gesetzt", "pip", "merker weg",
                      "auf:" + settings_lock, "zu:" + settings_lock, "zu:" + pip_lock]
 
 
@@ -1488,6 +1500,7 @@ def test_nur_ein_GELUNGENER_lauf_raeumt_den_merker_weg(monkeypatch):
 
     Dass der Merker nach einem ECHTEN Fehlschlag (offline) liegen bleibt, kostet nichts:
     `faellig()` verlangt zusaetzlich `fassung() is None`, und die Fassung ist dann lesbar."""
+    monkeypatch.setattr(yu, "fassung", lambda: "2025.9.5")   # sonst legt aktualisiere() gar keinen Merker an
     monkeypatch.setattr(yu.subprocess, "run",
                         lambda cmd, **k: subprocess.CompletedProcess(cmd, 0, "ok", ""))
     yu.aktualisiere()
@@ -1507,6 +1520,7 @@ def test_ein_wurf_den_niemand_faengt_laesst_den_merker_liegen(monkeypatch):
     SIGINT an die ganze Vordergrund-Prozessgruppe, pip inklusive, also ist die Installation
     genauso halb wie nach einem `taskkill /F /T`. `except (OSError, SubprocessError)` faengt
     das bewusst nicht, und genau deshalb ueberlebt der Merker."""
+    monkeypatch.setattr(yu, "fassung", lambda: "2025.9.5")   # sonst legt aktualisiere() gar keinen Merker an
     monkeypatch.setattr(yu.subprocess, "run", _wirft(KeyboardInterrupt()))
     with pytest.raises(KeyboardInterrupt):
         yu.aktualisiere()
@@ -1565,8 +1579,37 @@ def test_ein_liegender_merker_wird_nicht_aufgefrischt():
     with open(yu._pip_merker(), encoding="utf-8") as f:
         assert f.read().strip() == alt
 
-    with open(yu._pip_merker(), "w", encoding="utf-8") as f:
-        f.write("kein datum")
-    yu._pip_merker_setzen()                       # Gegenprobe: unlesbar wird ersetzt
-    with open(yu._pip_merker(), encoding="utf-8") as f:
-        assert f.read().strip() == HEUTE.isoformat()
+    # Zwei Gegenproben, und beide pruefen den INHALT statt nur das Ergebnis: ein Test auf
+    # `_pip_unterbrochen() is False` bliebe gruen, wenn die Wache aus `_merker_datum` nach
+    # `_pip_unterbrochen` wanderte — dort liefert sie dasselbe False, verhindert aber das
+    # Ueberschreiben nicht mehr, und ein Zukunftsdatum schaltete die Erkennung fuer immer ab
+    # (Reviewbefund m4, als Mutation gemessen).
+    for unbrauchbar in ("kein datum", "2099-01-01"):
+        with open(yu._pip_merker(), "w", encoding="utf-8") as f:
+            f.write(unbrauchbar)
+        yu._pip_merker_setzen()
+        with open(yu._pip_merker(), encoding="utf-8") as f:
+            assert f.read().strip() == HEUTE.isoformat(), unbrauchbar
+
+
+def test_ohne_vorhandene_fassung_entsteht_GAR_KEIN_merker(monkeypatch):
+    """Reviewbefund M1, im Review mit gefaelschtem pip gemessen. Der Merker bedeutet „wir
+    haben eine LAUFENDE Installation angefasst und nicht sauber beendet". Ohne diese
+    Bedingung bedeutete er bloss „ein pip ist gelaufen" — und dann feuerte `faellig()` auch
+    nach einem ganz gewoehnlich gescheiterten Lauf auf einer Maschine, auf der yt-dlp NIE
+    installiert war (Knopf „Jetzt aktualisieren" ohne Netz). Genau den Zustand schuetzt der
+    Riegel in `faellig()` als „Sache des Setups"; der Merker haette ihn ausgehebelt und
+    14 Tage lang bei jedem Serverstart einen Hintergrund-pip freigeschaltet.
+
+    Die Positivkontrolle steht daneben, sonst waere die Zusicherung von einem generell
+    kaputten Merker nicht zu unterscheiden."""
+    monkeypatch.setattr(yu, "fassung", lambda: None)
+    _, run = _pip(returncode=1, ausgabe="ERROR: No matching distribution found")
+    monkeypatch.setattr(yu.subprocess, "run", run)
+    yu.aktualisiere()
+    assert yu._pip_unterbrochen() is False
+    assert yu.faellig() is False
+
+    monkeypatch.setattr(yu, "fassung", lambda: "2025.9.5")      # Positivkontrolle
+    yu.aktualisiere()
+    assert yu._pip_unterbrochen() is True
