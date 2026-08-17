@@ -413,7 +413,11 @@ describe('DateiEinstellungenDialog — Sprecherzahl, ungültige Zwischeneingabe 
     render(<DateiEinstellungenDialog project="p" base="a" file={datei()} offen />)
     const feld = () => screen.getByLabelText('Anzahl Sprecher')
     await waitFor(() => expect(feld()).toHaveValue('5'))
-    expect(feld()).toHaveAttribute('type', 'text')     // der Fix selbst
+    expect(feld()).toHaveAttribute('type', 'text')          // der Fix selbst
+    // ... und `inputMode` gehoert dazu: `type="text"` allein holte auf dem Telefon die
+    // Buchstaben-Tastatur zurueck, waere also eine Verschlechterung gegenueber dem
+    // Zahlenfeld. Ohne diese Zeile koennte sie jemand entfernen, ohne dass etwas rot wird.
+    expect(feld()).toHaveAttribute('inputmode', 'numeric')
     for (const kaputt of ['5e', '-', '1.5', '1e3']) {
       fireEvent.change(feld(), { target: { value: kaputt } })
       expect(feld(), `${kaputt}: der Text muss stehen bleiben`).toHaveValue(kaputt)
