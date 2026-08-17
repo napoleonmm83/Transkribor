@@ -686,6 +686,16 @@ def aktualisiere() -> tuple[bool, bool]:
     ist, und der zweite Ausloeser kommt aus einem eigenen Prozess (der fetch-Subprozess).
     Wer einem Menschen Erfolg meldet, sagt das also dazu; die Protokollzeile aus `sperre.py`
     erreicht nur eine Konsole, und die gepackte App hat keine, die jemand liest (#236).
+
+    **Der Merker `_pip_merker()` deckt das Abwuergen von aussen** (#257/#258): gesetzt
+    unmittelbar vor `subprocess.run`, geloescht unmittelbar danach, beides innerhalb der
+    Sperre. Er ueberlebt damit genau dann, wenn DIESER Prozess dazwischen stirbt —
+    `taskkill /F /T` beim Schliessen der Desktop-App, `jobs.cancel_all()` → SIGKILL auf die
+    Prozessgruppe des fetch-Jobs beim Herunterfahren, oder ein Ctrl+C. `faellig()` holt
+    daraufhin genau EINEN Reparaturlauf nach. Ohne ihn blieb yt-dlp halb installiert zurueck
+    (gemessen: `metadata.version` wirft PackageNotFoundError, die Paketdateien liegen noch da,
+    `import yt_dlp` wirft ModuleNotFoundError) ⇒ `fassung()` None ⇒ `faellig()` bewusst False
+    ⇒ die Selbstaktualisierung war DAUERHAFT aus und heilte sich nicht selbst.
     """
     cmd = [sys.executable, "-m", "pip", "install", "-U",
            # Kurze Deckel: ohne sie haengt pip offline minutenlang, und der Import wartet mit.
@@ -707,6 +717,17 @@ def aktualisiere() -> tuple[bool, bool]:
         print(f"[ytdlp] Sperrverzeichnis nicht anlegbar: {e}", flush=True)
     # Die Frist deckt die WIRKLICHE Haltedauer, nicht nur den pip-Lauf — siehe `_lock_stale`.
     with sperre.datei(lockziel, stale=_lock_stale()) as gehalten:
+        # INNERHALB der Sperre und unmittelbar um `subprocess.run` herum — beide Zeilen. Das
+        # ist die ganze Erkennung: der Merker ueberlebt GENAU DANN, wenn dieser Prozess
+        # zwischen ihnen stirbt, und das ist #257/#258.
+        #
+        # Nicht VOR die Sperre: dann setzte ihn auch, wer nur WARTET, und der Fertigwerdende
+        # loeschte den Merker des Wartenden — dessen pip liefe danach ungedeckt. Zwei
+        # Aktualisierer gleichzeitig sind hier der Normalfall (Server + fetch-Subprozess, seit
+        # #254 auch zwei Server). Ein `settings.save()` an dieser Stelle waere dagegen teuer
+        # (zweite verschachtelte Sperre ⇒ `_lock_stale()` muesste um `frist()` wachsen, #207);
+        # ein einfacher Dateischreibvorgang nimmt keine Sperre.
+        _pip_merker_setzen()
         try:
             p = subprocess.run(cmd, capture_output=True, text=True, errors="replace",
                                timeout=PIP_TIMEOUT)
@@ -716,6 +737,17 @@ def aktualisiere() -> tuple[bool, bool]:
                   flush=True)
         except (OSError, subprocess.SubprocessError) as e:
             print(f"[ytdlp] Update fehlgeschlagen: {e}", flush=True)
+        # Nach JEDEM behandelten Ausgang, ohne Fallunterscheidung: wer hier ankommt, hat
+        # ueberlebt und raeumt hinter sich auf. Eine Sonderbehandlung fuer `TimeoutExpired`
+        # („pip wurde ja abgewuergt") stand hier einmal und war die einzige Quelle eines
+        # Dauerlaufs, den die Uhr nicht deckt — auf einer langsamen Leitung ueberschreitet pip
+        # die 120 s bei JEDEM Start. Was das kostet, steht als Issue: ein selbst verursachter
+        # Timeout MITTEN in der Installation bleibt unerkannt; heute ist das genauso, also
+        # kein Rueckschritt.
+        #
+        # VOR `_merken()`: das faengt nur `OSError`, ein anderer Wurf dort liesse den Merker
+        # sonst liegen, obwohl pip sauber durchgelaufen ist.
+        _pip_merker_loeschen()
         # INNERHALB der Sperre: der Kommentar oben behauptete das, der Aufruf stand aber eine
         # Zeile darunter — womit der Test auf die verschiedenen Lock-Namen nichts pruefte
         # (mit demselben Namen blieb er gruen). Jetzt ist die verschachtelte Sperre echt.

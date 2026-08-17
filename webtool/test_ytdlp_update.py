@@ -1411,3 +1411,89 @@ def test_ein_unschreibbarer_merker_reisst_niemanden_mit(monkeypatch, capsys):
     monkeypatch.undo()
     assert yu._pip_unterbrochen() is False
     assert "Merker" in capsys.readouterr().out
+
+
+def _wirft(fehler):
+    """Ein `subprocess.run`-Ersatz, der wirft. Eigene Funktion, weil ein `lambda` nicht
+    `raise` kann und vier Faelle dieselbe Form brauchen."""
+    def run(cmd, **kwargs):
+        raise fehler
+    return run
+
+
+def test_der_merker_liegt_WAEHREND_des_pip_laufs(monkeypatch):
+    """Er muss VOR pip gesetzt sein — das Fenster, um das es geht, ist der Kill mitten im
+    Umschreiben. Gemessen wird IM Spion und danach ausgewertet: ein `assert` im Stub stuende
+    innerhalb des `try`, um das `aktualisiere()` seine Ausnahmen legt, und der AssertionError
+    wuerde von der geprueften Stelle selbst geschluckt (dieselbe Falle wie bei #185)."""
+    gesehen = []
+
+    def run(cmd, **kwargs):
+        gesehen.append(yu._pip_unterbrochen())
+        return subprocess.CompletedProcess(cmd, 0, "Successfully installed yt-dlp", "")
+
+    monkeypatch.setattr(yu.subprocess, "run", run)
+    yu.aktualisiere()
+    assert gesehen == [True]
+
+
+def test_der_merker_wird_INNERHALB_der_sperre_gesetzt(monkeypatch):
+    """Nicht davor — sonst setzt ihn auch, wer nur WARTET, und ein zweiter Aktualisierer
+    loescht beim Fertigwerden den Merker des ersten. Dessen pip laeuft danach ungedeckt: wird
+    es abgewuergt, bleibt KEIN Merker zurueck und der Schaden wird nie erkannt. Zwei
+    Aktualisierer gleichzeitig sind hier der Normalfall (Server + fetch-Subprozess, seit #254
+    auch zwei Server).
+
+    Die Sperren tragen ihren Pfad, statt nur „auf"/„zu" zu zaehlen: `_merken()` nimmt
+    INNERHALB der pip-Sperre zusaetzlich die settings-Sperre, und die laeuft durch dieselbe
+    gefaelschte Funktion. Diese Verschachtelung ist kein Rauschen, sondern genau die Rechnung
+    aus #207 (`_lock_stale()` = PIP_TIMEOUT + 30 + `frist()`) — sie gehoert festgenagelt, nicht
+    weggefiltert."""
+    folge = []
+    echte_sperre = yu.sperre.datei
+
+    @contextlib.contextmanager
+    def datei(pfad, stale=None):
+        folge.append("auf:" + os.path.basename(pfad))
+        with echte_sperre(pfad, stale=stale) as gehalten:
+            yield gehalten
+        folge.append("zu:" + os.path.basename(pfad))
+
+    def run(cmd, **kwargs):
+        folge.append("pip")
+        return subprocess.CompletedProcess(cmd, 0, "ok", "")
+
+    monkeypatch.setattr(yu.sperre, "datei", datei)
+    monkeypatch.setattr(yu.subprocess, "run", run)
+    monkeypatch.setattr(yu, "_pip_merker_setzen", lambda: folge.append("merker gesetzt"))
+    yu.aktualisiere()
+    pip_lock, settings_lock = (os.path.basename(yu._lockziel()),
+                               os.path.basename(settings.path()))
+    assert folge == ["auf:" + pip_lock, "merker gesetzt", "pip",
+                     "auf:" + settings_lock, "zu:" + settings_lock, "zu:" + pip_lock]
+
+
+def test_jeder_zurueckgekehrte_lauf_raeumt_den_merker_weg(monkeypatch):
+    """Auch bei returncode != 0 und auch bei einer Zeitueberschreitung: in allen vier Faellen
+    hat der Prozess UEBERLEBT und raeumt hinter sich auf. Bliebe der Merker bei einem Timeout
+    liegen, liefe auf einer langsamen Leitung bei JEDEM Start ein 120-s-pip — genau der
+    Dauerlauf, den dieses Modul ausschliesst. Der Preis steht als Issue: ein selbst
+    verursachter Timeout MITTEN in der Installation bleibt unerkannt (heute genauso)."""
+    for stub in (lambda cmd, **k: subprocess.CompletedProcess(cmd, 0, "ok", ""),
+                 lambda cmd, **k: subprocess.CompletedProcess(cmd, 1, "ERROR", ""),
+                 _wirft(subprocess.TimeoutExpired("pip", yu.PIP_TIMEOUT)),
+                 _wirft(OSError("kein Interpreter"))):
+        monkeypatch.setattr(yu.subprocess, "run", stub)
+        yu.aktualisiere()
+        assert yu._pip_unterbrochen() is False
+
+
+def test_ein_wurf_den_niemand_faengt_laesst_den_merker_liegen(monkeypatch):
+    """Der Fall, um den es geht — hier stellvertretend als `KeyboardInterrupt`: Ctrl+C schickt
+    SIGINT an die ganze Vordergrund-Prozessgruppe, pip inklusive, also ist die Installation
+    genauso halb wie nach einem `taskkill /F /T`. `except (OSError, SubprocessError)` faengt
+    das bewusst nicht, und genau deshalb ueberlebt der Merker."""
+    monkeypatch.setattr(yu.subprocess, "run", _wirft(KeyboardInterrupt()))
+    with pytest.raises(KeyboardInterrupt):
+        yu.aktualisiere()
+    assert yu._pip_unterbrochen() is True
