@@ -1047,7 +1047,8 @@ Expected: drei Dateien mit **ausgeschriebenen Sprechernamen** in der Ausgabe (da
 
 Zusätzlich die Abbruchpfade einmal auslösen, sie sind die eigentlichen Wächter:
 - eine nicht existierende Zeile in die Liste ⇒ `FEHLT:` und Rückgabewert 1
-- `run … --projekte <leerer Ordner>` ⇒ **Abbruch** bei der ersten Datei, kein stiller Nullpunkt über eine kleinere Menge
+- `run … --projekte <leerer Ordner>` ⇒ **sofortiger Abbruch mit Fehlerstatus, kein Laufartefakt unter `eval/laeufe/`, kein stiller Nullpunkt über eine kleinere Menge**
+- `run … --name ../../projekte/x` ⇒ abgewiesen, bevor irgendetwas geschrieben wird
 
 - [ ] **Step 5: Prüfen, dass nichts nach `projekte\` geschrieben wurde**
 

@@ -437,8 +437,11 @@ describe('DateiEinstellungenDialog — Sprecherzahl (#264)', () => {
     // irgendwo stuende, warum. Der Rueckfall muss zum bisherigen Verhalten gehen.
     //
     // Die beiden Tests darueber setzen das Feld beide explizit und koennen den Unterschied
-    // zwischen `=== false` und `!…` deshalb gar nicht sehen (im Review gemessen: die
-    // Mutation blieb gruen). Diesen einen Fall gibt es nur hier.
+    // zwischen `=== false` und `!…` deshalb gar nicht sehen. Nachstellbar so: in
+    // DateiEinstellungenDialog.tsx `const diarAus = data?.diarisierung_aktiv === false` durch
+    // `const diarAus = !data?.diarisierung_aktiv` ersetzen und
+    // `npm --prefix webtool/frontend run test -- DateiEinstellungenDialog --run` fahren.
+    // Ohne DIESEN Test: 25 passed. Mit ihm: genau er wird rot. Beides ausgefuehrt.
     const { diarisierung_aktiv: _weg, ...ALT } = BASIS
     vi.spyOn(api, 'getFileEinstellungen')
       .mockResolvedValue(ALT as unknown as typeof BASIS)
