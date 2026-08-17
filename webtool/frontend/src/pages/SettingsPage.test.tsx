@@ -905,6 +905,55 @@ describe('SettingsPage', () => {
     }
   })
 
+  it('der Nachhol-Poll verwirft überholte Antworten (#252)', async () => {
+    // Derselbe Riegel wie im Lauf-Poll (CodeRabbit-Bot an PR #248), hier sogar nötiger:
+    // dieser Poll läuft UNAUFGEFORDERT bis zu zwölf Minuten, während jemand auf der Seite
+    // tippt. Eine überholte Runde schriebe `s` auf den Stand von VOR einem `speichern()`
+    // zurück — die Anzeige widerriefe, was der Nutzer gerade gespeichert hat.
+    const spaet: Array<(w: Settings) => void> = []
+    vi.useFakeTimers()
+    try {
+      zeige({ ytdlp: { ...BASIS.ytdlp, laeuft: true, ergebnis: '' } })
+      await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+
+      // Runde 1 haengt, Runde 2 antwortet zuerst mit dem NEUEN Modell.
+      vi.mocked(api.getSettings).mockImplementationOnce(
+        () => new Promise<Settings>(res => spaet.push(res)))
+      vi.mocked(api.getSettings).mockResolvedValue({
+        ...BASIS, model: 'sonnet', ytdlp: { ...BASIS.ytdlp, laeuft: true, ergebnis: '' },
+      })
+      await act(async () => { await vi.advanceTimersByTimeAsync(6000) })   // zwei Runden
+      expect(spaet).toHaveLength(1)          // Positivkontrolle: Runde 1 haengt wirklich
+
+      // Jetzt trifft die ALTE Runde ein, mit dem alten Modell.
+      await act(async () => {
+        spaet[0]({ ...BASIS, model: 'opus', ytdlp: { ...BASIS.ytdlp, laeuft: true, ergebnis: '' } })
+      })
+      const feld = screen.getByRole('textbox', { name: /Modell/i }) as HTMLInputElement
+      expect(feld.value).toBe('sonnet')      // NICHT zurueck auf 'opus'
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('sagt es, wenn der Nachhol-Poll aufgibt, statt die Zeile einzufrieren (#252)', async () => {
+    // Ohne diesen Merker wäre nach zwölf Minuten wieder #252s Symptom da — die Zeile stünde
+    // für immer. Ein Fehler-Toast wie beim Lauf-Poll wäre hier falsch: niemand hat etwas
+    // angestossen, es ist kein Fehlschlag, nur eine aufgegebene Beobachtung.
+    vi.useFakeTimers()
+    try {
+      zeige({ ytdlp: { ...BASIS.ytdlp, laeuft: true, ergebnis: '' } })
+      await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+      expect(screen.getByText(/läuft gerade/i)).toBeInTheDocument()   // Positivkontrolle
+      await act(async () => { await vi.advanceTimersByTimeAsync(13 * 60_000) })
+      expect(screen.getByText(/fragt nicht mehr von selbst nach/i)).toBeInTheDocument()
+      expect(screen.queryByText(/läuft gerade/i)).not.toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
+    expect(toast.error).not.toHaveBeenCalled()
+  })
+
   it('nennt den Ordner der eigenen Dateien — auch ohne Electron (#218)', async () => {
     // Das Hauptversprechen der App ist „deine Aufnahmen bleiben bei dir". Die Kehrseite —
     // und du allein sicherst sie — war unadressiert: der Pfad stand genau einmal im
