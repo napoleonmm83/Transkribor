@@ -314,9 +314,21 @@ def merker_aufgeben(pfad: str) -> bool:
     Lock zwischenzeitlich frei und gehoert jetzt einem anderen, entwertete ein blindes
     `os.remove` dessen **frischen** Merker — und der koennte sein eigenes Lock im `finally`
     nicht mehr wiedererkennen. **Lueckenlos ist er nicht**, dieselbe Restluecke wie dort:
-    zwischen Vergleich und `os.remove` liegen Systemaufrufe. Sie zu treffen setzt voraus, dass
-    ein Dritter in diesem Fenster unser Lock uebernimmt — und dazu muesste er erst den
-    erzwungenen Griff nach `frist()` abwarten, weil unser Merker eine LEBENDE PID nennt.
+    zwischen Vergleich und `os.remove` liegen Systemaufrufe.
+
+    **Die CodeRabbit-CLI verlangte dafuer ein „atomisches Uebergabeprotokoll" — das gibt es
+    hier nicht, und der Weg dorthin waere schlechter als die Luecke.** `os.mkdir` ist die
+    einzige atomare Operation dieses Moduls (steht so in `_wegraeumen`), ein Prueflauf
+    davor verkleinert jedes Fenster und schliesst keines; `_verzeichnis_kennung` traegt auf
+    ext4 nachweislich nichts (200 von 200 Inodes wiederverwendet). Nachgerechnet, warum es
+    trotzdem haelt: **die Vorbedingung ist streng** — ein Dritter kann unser Lock nur
+    uebernehmen, nachdem er den erzwungenen Griff nach `frist()` abgesessen hat, denn unser
+    Merker nennt eine LEBENDE PID (wir sind noch da, wir sterben gleich erst). Und **der
+    Treffer kostet wenig**: sein Lock stuende dann ohne Merker da, also „keine Auskunft" —
+    derselbe Zustand wie bei einem unschreibbaren Merker, den dieses Modul seit jeher
+    behandelt. Er haelt es weiter, niemand startet ein zweites pip; nur sein eigenes
+    `finally` erkennt es nicht wieder, und die Uhr entsorgt es. Das Fenster ist ausserdem
+    ein einzelner Syscall-Abstand statt der 160-ms-Schleife in `_wegraeumen`.
 
     **Umgekehrt raeumt der eigene Faden sein Lock danach nicht mehr ab**, falls er doch noch
     fertig wird: sein `finally` vergleicht `mein_merker` gegen die Platte, findet `None` und
