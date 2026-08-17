@@ -1895,3 +1895,58 @@ def test_kaputte_roh_json_meldet_die_datei_statt_eines_tracebacks(client, tmp_pa
     r = client.get("/api/projects/Demo/files/S1")
     assert r.status_code == 500
     assert "Roh-Transkript unlesbar: S1" in r.json()["detail"]
+
+
+# ---- Sprecheranzahl fuer die Diarisierung (#264) ----
+
+def test_datei_einstellungen_speichern_und_zuruecksetzen_der_sprecherzahl(client, tmp_projekt):
+    """Der Weg, den Marcus geht: Zahl eintragen, sie steht im GET, und sie laesst sich wieder
+    auf automatisch stellen. `null` ist der Rueckweg — ohne ihn bliebe eine einmal getippte
+    Zahl fuer immer stehen."""
+    r = client.put(f"/api/projects/{tmp_projekt}/files/S1/einstellungen", json={"sprecher": 5})
+    assert r.status_code == 200 and r.json()["sprecher"] == 5
+    assert client.get(f"/api/projects/{tmp_projekt}/files/S1/einstellungen").json()["sprecher"] == 5
+    # Partial-Update: ein PUT ohne das Feld laesst die Zahl stehen
+    client.put(f"/api/projects/{tmp_projekt}/files/S1/einstellungen", json={"sprache": "de"})
+    assert client.get(f"/api/projects/{tmp_projekt}/files/S1/einstellungen").json()["sprecher"] == 5
+    # ausdrueckliches null -> wieder automatisch
+    r = client.put(f"/api/projects/{tmp_projekt}/files/S1/einstellungen", json={"sprecher": None})
+    assert r.status_code == 200 and r.json()["sprecher"] is None
+
+
+@pytest.mark.parametrize("wert", [0, -1, 21])
+def test_sprecherzahl_ausserhalb_des_bereichs_wird_mit_400_abgewiesen(client, tmp_projekt, wert):
+    """Der Wert geht ungefiltert an pyannote — eine dreistellige Zahl kostet GPU-Zeit fuer ein
+    Ergebnis, das niemand wollte. 400 (nicht 422) wie die uebrigen Wertfehler in denselben
+    Handlern; die Meldung nennt das Feld."""
+    r = client.put(f"/api/projects/{tmp_projekt}/files/S1/einstellungen", json={"sprecher": wert})
+    assert r.status_code == 400, f"{wert!r} haette abgewiesen werden muessen"
+    assert "sprecher" in str(r.json()["detail"])
+
+
+@pytest.mark.parametrize("wert", [2.5, "vier", True, "5"])
+def test_sprecherzahl_vom_falschen_TYP_wird_mit_422_abgewiesen(client, tmp_projekt, wert):
+    """Zwei Schichten, zwei Codes: den TYP weist Pydantic ab (422), bevor `pruef_fehler`
+    ueberhaupt laeuft — den WERTEBEREICH danach der Handler (400). Der Test haelt die
+    Aufteilung fest, damit sie nicht fuer einen Fehler gehalten wird.
+
+    `True` ist der Grund fuer `StrictInt`: mit dem blossen `int` wandelt Pydantic es nach `1`
+    um (bool ist eine int-Subklasse), der Haken landete als "1 Sprecher" in der Datei — und
+    `projekt._sprecher_wert` verwirft denselben Wert. Gemessen: ohne StrictInt antwortet
+    dieser Fall mit 200."""
+    r = client.put(f"/api/projects/{tmp_projekt}/files/S1/einstellungen", json={"sprecher": wert})
+    assert r.status_code == 422, f"{wert!r} haette abgewiesen werden muessen"
+    # und nichts davon ist in der Datei gelandet
+    assert client.get(f"/api/projects/{tmp_projekt}/files/S1/einstellungen").json()["sprecher"] is None
+
+
+def test_projekt_endpunkt_kennt_die_sprecherzahl_NICHT(client, tmp_projekt):
+    """Die Sprecherzahl ist eine Eigenschaft der Aufnahme, nicht des Projekts (2er-Interviews
+    stehen neben einem 5er-Team). Ein Projekt-Standard waere fuer fast jede Datei falsch und
+    erzwaenge dort STILL eine falsche Zahl — `num_speakers` ist exakt, nicht eine Obergrenze.
+    Der Waechter haelt fest, dass das Feld nicht durch die Hintertuer des geteilten
+    Body-Modells doch noch auf Projektebene landet und dort schweigend wirkungslos ist."""
+    r = client.put(f"/api/projects/{tmp_projekt}/einstellungen", json={"sprache": "de", "sprecher": 5})
+    assert r.status_code == 200                     # unbekanntes Feld: ignoriert wie jedes andere
+    assert "sprecher" not in r.json()
+    assert client.get(f"/api/projects/{tmp_projekt}/files/S1/einstellungen").json()["sprecher"] is None

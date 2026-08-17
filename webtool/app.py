@@ -9,7 +9,7 @@ from urllib.parse import urlparse
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, StrictInt
 
 from . import auth
 from . import device
@@ -315,6 +315,23 @@ class EinstellungenBody(BaseModel):
     mehrsprachig: bool | None = None
 
 
+class DateiEinstellungenBody(EinstellungenBody):
+    """Der Datei-PUT kann eines mehr als der Projekt-PUT: die Sprecherzahl.
+
+    Eigenes Modell, statt das Feld ins geteilte zu legen — dort naehme der Projekt-Endpunkt es
+    entgegen und wuerfe es weg, also ein Schalter, der nichts tut und nichts sagt. So faellt es
+    dort unter die normale Behandlung unbekannter Felder (Pydantic ignoriert sie), und es gibt
+    nur EINE Stelle, an der `sprecher` ueberhaupt vorkommt.
+    """
+    # StrictInt, nicht int: Pydantic wandelt `true` sonst nach `1` um (bool ist eine
+    # int-Subklasse) — ein versehentlich gesendeter Haken landete als „1 Sprecher" in der
+    # Datei, waehrend `projekt._sprecher_wert` denselben Wert VERWIRFT. Zwei Schichten mit
+    # verschiedener Auffassung davon, was gueltig ist, ist die Divergenz-Falle; strikt
+    # gelesen sagen beide dasselbe. Kostet ausserdem `"5"` als String — richtig so, das
+    # Frontend schickt eine Zahl.
+    sprecher: StrictInt | None = None
+
+
 @app.get("/api/projects/{project}/einstellungen")
 def projekteinstellungen(project: str):
     _validate(project)
@@ -354,12 +371,16 @@ def dateieinstellungen(project: str, base: str):
     #
     # EIN Lesevorgang (`datei_ansicht`), nicht fuenf Einzelabfragen: sonst koennen `mehrsprachig`
     # und `mehrsprachig_eigen` aus verschiedenen Staenden stammen, wenn daneben geschrieben wird.
+    # `sprecher_max` reist mit den uebrigen Auswahlen: das Eingabefeld prueft den Bereich
+    # selbst (sonst laese der Nutzer den 400er des Servers), und eine zweite Zahl im Frontend
+    # waere genau die Divergenz, gegen die `pruef_fehler` die EINE Quelle ist.
     return {**_projekt.datei_ansicht(project, base),
-            "sprach_choices": _sprachen.fuer_frontend(), "tiefen": _sprachen.TIEFEN}
+            "sprach_choices": _sprachen.fuer_frontend(), "tiefen": _sprachen.TIEFEN,
+            "sprecher_max": _sprachen.SPRECHER_MAX}
 
 
 @app.put("/api/projects/{project}/files/{base}/einstellungen")
-def dateieinstellungen_speichern(project: str, base: str, body: EinstellungenBody):
+def dateieinstellungen_speichern(project: str, base: str, body: DateiEinstellungenBody):
     """Schreibt den Datei-Override (sprache/korrektur). Reiner Schreibpfad — kein Job-Start,
     keine 409-Sperre: derselbe sperrfreie Weg wie ``upload_audio`` (``setze_datei``), denn ein
     laufender Job hat seine Sprache beim Start bereits gelesen. Die Trigger (Neu-Transkription
@@ -368,7 +389,7 @@ def dateieinstellungen_speichern(project: str, base: str, body: EinstellungenBod
     prüfen. Siehe Spec #135."""
     _validate(project, base)
     fehler = _sprachen.pruef_fehler(sprache=body.sprache, korrektur=body.korrektur,
-                                    mehrsprachig=body.mehrsprachig)
+                                    mehrsprachig=body.mehrsprachig, sprecher=body.sprecher)
     if fehler:
         raise HTTPException(status_code=400, detail=fehler)
     # `sprache: null` / `mehrsprachig: null` AUSDRUECKLICH gesendet heisst „Override entfernen"
@@ -380,9 +401,12 @@ def dateieinstellungen_speichern(project: str, base: str, body: EinstellungenBod
     def _erben(wert, feld):
         return _projekt.ERBEN if wert is None and feld in body.model_fields_set else wert
 
+    # `sprecher: null` heisst hier nicht „folgt dem Projekt" (den Standard gibt es bewusst
+    # nicht), sondern „wieder automatisch" — derselbe Mechanismus, s. `projekt.setze_datei`.
     _projekt.setze_datei(project, base, sprache=_erben(body.sprache, "sprache"),
                          korrektur=body.korrektur,
-                         mehrsprachig=_erben(body.mehrsprachig, "mehrsprachig"))
+                         mehrsprachig=_erben(body.mehrsprachig, "mehrsprachig"),
+                         sprecher=_erben(body.sprecher, "sprecher"))
     return _projekt.datei_ansicht(project, base)      # EIN Lesevorgang, s. GET oben
 
 

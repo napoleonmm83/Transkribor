@@ -87,8 +87,11 @@ def depth_label(tiefe: str) -> str:
     return tiefe
 
 
+SPRECHER_MAX = 20     # s. pruef_fehler
+
+
 def pruef_fehler(sprache: str | None = None, korrektur: str | None = None,
-                 mehrsprachig=None) -> str | None:
+                 mehrsprachig=None, sprecher=None) -> str | None:
     """Liefert eine Fehlermeldung, wenn ein Wert unbekannt bzw. vom falschen Typ ist, sonst None.
 
     None-Argumente (nicht gesendete Felder) sind erlaubt — ein PUT ist ein Partial-Update.
@@ -97,7 +100,17 @@ def pruef_fehler(sprache: str | None = None, korrektur: str | None = None,
 
     ``mehrsprachig`` ist ein bool und wird auf den TYP geprueft, nicht gegen eine Liste —
     es gibt nur zwei gueltige Werte, und die kennt Python schon.
+
+    ``sprecher`` ist die exakte Sprecherzahl fuer die Diarisierung (nur pro Datei, s.
+    ``projekt.datei_sprecher``). Die Obergrenze ist keine fachliche Grenze, sondern eine
+    Trust-Boundary: der Wert geht ungefiltert an pyannote, und eine dreistellige Zahl kostet
+    GPU-Zeit fuer ein Ergebnis, das niemand wollte. 20 ist fuer Interviewmaterial reichlich.
+    Untergrenze 1, nicht 2 — eine Ansprache mit genau einer Stimme ist ein gueltiger Fall,
+    und die heutige feste Untergrenze von 2 erfindet dort einen zweiten Sprecher.
     """
+    if sprecher is not None and (isinstance(sprecher, bool) or not isinstance(sprecher, int)
+                                 or not 1 <= sprecher <= SPRECHER_MAX):
+        return f"sprecher muss eine ganze Zahl von 1 bis {SPRECHER_MAX} sein, nicht {sprecher!r}"
     if sprache is not None and sprache not in SPRACHEN:
         return f"unbekannte Sprache: {sprache!r} (erlaubt: {', '.join(SPRACHEN)})"
     gueltige_tiefen = {TIEFE_DEFAULT} | {t["id"] for t in TIEFEN}

@@ -77,3 +77,16 @@ def test_pruef_fehler_erlaubt_bool_und_none():
     assert sprachen.pruef_fehler(mehrsprachig=True) is None
     assert sprachen.pruef_fehler(mehrsprachig=False) is None
     assert sprachen.pruef_fehler(mehrsprachig=None) is None
+
+
+def test_pruef_fehler_sprecher():
+    """Die Funktion ist „die EINE Quelle fuer Gueltigkeit" und wird deshalb DIREKT geprueft,
+    nicht nur ueber den Endpunkt: dort faengt Pydantic (`StrictInt`) die Typfehler schon ab,
+    die Typwache hier bekaeme also kein Test rot und waere Dekoration. Der Bereich dagegen
+    ist ausschliesslich hier zuhause."""
+    assert sprachen.pruef_fehler(sprecher=None) is None          # nicht gesendet
+    assert sprachen.pruef_fehler(sprecher=1) is None             # Monolog ist gueltig
+    assert sprachen.pruef_fehler(sprecher=sprachen.SPRECHER_MAX) is None
+    for schlecht in (0, -1, sprachen.SPRECHER_MAX + 1, True, 2.5, "vier"):
+        msg = sprachen.pruef_fehler(sprecher=schlecht)
+        assert msg and "sprecher" in msg, f"{schlecht!r} haette abgewiesen werden muessen"

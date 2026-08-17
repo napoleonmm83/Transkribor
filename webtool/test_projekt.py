@@ -357,3 +357,54 @@ def test_laden_verschluckt_den_unsicheren_namen_nicht(tmp_path, monkeypatch):
     monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
     with pytest.raises(ValueError):
         projekt.laden("..")
+
+
+# ---- Sprecheranzahl fuer die Diarisierung (#264) ----
+
+def test_sprecher_wird_pro_datei_gespeichert_und_gelesen(tmp_path, monkeypatch):
+    """pyannote findet an Kameramikrofon-Aufnahmen zu wenige Sprecher (gemessen: 2 statt 4,
+    3 statt 5). Die einzige Stellschraube, die kontrolliert wirkt, ist die vorgegebene Anzahl —
+    die Clustering-Parameter tun es NICHT (threshold 0.60/0.55/0.50 lieferte identische Cluster,
+    Fb=0.3 sprengte eine 5-Personen-Aufnahme auf 9)."""
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    assert projekt.datei_sprecher("p", "a") is None          # Vorgabe: automatisch wie bisher
+    projekt.setze_datei("p", "a", sprecher=5)
+    assert projekt.datei_sprecher("p", "a") == 5
+    assert projekt.datei_sprecher("p", "b") is None          # streng pro Datei, kein Uebertrag
+
+
+def test_sprecher_laesst_sich_wieder_auf_automatisch_stellen(tmp_path, monkeypatch):
+    """`ERBEN` entfernt den Schluessel — hier heisst das nicht „folgt dem Projekt" (es gibt
+    bewusst keinen Projekt-Standard), sondern „wieder automatisch". Ohne den Rueckweg bliebe
+    eine einmal getippte Zahl fuer immer stehen; ueber `None` geht es nicht, das ist das
+    Partial-Update-Signal."""
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    projekt.setze_datei("p", "a", sprecher=4)
+    projekt.setze_datei("p", "a", sprache="de")               # Partial-Update fasst es nicht an
+    assert projekt.datei_sprecher("p", "a") == 4
+    projekt.setze_datei("p", "a", sprecher=projekt.ERBEN)
+    assert projekt.datei_sprecher("p", "a") is None
+    assert projekt.datei_sprache("p", "a") == "de"            # nur der eine Schluessel ist weg
+
+
+def test_sprecher_ueberlebt_kaputte_werte_in_der_datei(tmp_path, monkeypatch):
+    """Schema-Toleranz wie bei `sprache`/`mehrsprachig`: ein Nicht-int (von Hand editiert, aus
+    einer aelteren Fassung) darf nicht bis in `diarize_file` durchreisen — dort waere er ein
+    Wurf mitten im GPU-Lauf. `True` ist dabei der fiese Fall: `isinstance(True, int)` ist in
+    Python wahr, ein Haken wuerde also als „1 Sprecher" durchgehen."""
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    os.makedirs(paths.project_dir("p"), exist_ok=True)
+    for wert in ('"fuenf"', "0", "-1", "true", "2.5", "null"):
+        with open(projekt._pfad("p"), "w", encoding="utf-8") as fh:
+            fh.write('{"dateien": {"a": {"sprecher": %s}}}' % wert)
+        assert projekt.datei_sprecher("p", "a") is None, f"{wert} haette abgewiesen werden muessen"
+
+
+def test_datei_ansicht_liefert_sprecher_aus_demselben_lesevorgang(tmp_path, monkeypatch):
+    """Der Dialog liest ALLES ueber eine Datei aus EINEM `laden()` — ein separater Aufruf
+    koennte zwischen den Werten einen fremden Schreiber erwischen (dieselbe Begruendung wie
+    bei `mehrsprachig_eigen`, #234)."""
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    projekt.setze_datei("p", "a", sprecher=3)
+    assert projekt.datei_ansicht("p", "a")["sprecher"] == 3
+    assert projekt.datei_ansicht("p", "b")["sprecher"] is None

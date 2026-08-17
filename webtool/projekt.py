@@ -113,14 +113,19 @@ def speichern(project: str, patch: dict) -> dict:
 ERBEN = object()
 
 
-def setze_datei(project: str, base: str, sprache=None, korrektur=None, mehrsprachig=None) -> dict:
+def setze_datei(project: str, base: str, sprache=None, korrektur=None, mehrsprachig=None,
+                sprecher=None) -> dict:
     """Datei-Override setzen. `None` heisst „nicht anfassen" (Partial-Update).
 
-    **`sprache` und `mehrsprachig` verstehen zusaetzlich `ERBEN`, `korrektur` bewusst NICHT:**
-    dort ist `auto` schon der Rueckweg, ein zweiter Weg zum selben Ziel waere eine zweite
-    Wahrheit (siehe `app.py:_erben`). Wer hier einen Parameter anfuegt, entscheidet das mit —
-    `ERBEN` ist ein `object()` und landete ueber einen blossen `is not None`-Zweig in der Datei,
-    wo `json.dumps` daran wirft.
+    **`sprache`, `mehrsprachig` und `sprecher` verstehen zusaetzlich `ERBEN`, `korrektur`
+    bewusst NICHT:** dort ist `auto` schon der Rueckweg, ein zweiter Weg zum selben Ziel waere
+    eine zweite Wahrheit (siehe `app.py:_erben`). Wer hier einen Parameter anfuegt, entscheidet
+    das mit — `ERBEN` ist ein `object()` und landete ueber einen blossen `is not None`-Zweig in
+    der Datei, wo `json.dumps` daran wirft.
+
+    Bei `sprecher` heisst `ERBEN` nicht „folgt dem Projekt" (es gibt bewusst keinen
+    Projekt-Standard, s. `datei_sprecher`), sondern „wieder automatisch" — derselbe
+    Mechanismus, andere Bedeutung.
     """
     with _gesperrt(project):
         cur, kaputt = _lesen(project)
@@ -139,6 +144,10 @@ def setze_datei(project: str, base: str, sprache=None, korrektur=None, mehrsprac
             eintrag.pop("mehrsprachig", None)
         elif mehrsprachig is not None:
             eintrag["mehrsprachig"] = bool(mehrsprachig)
+        if sprecher is ERBEN:
+            eintrag.pop("sprecher", None)
+        elif sprecher is not None:
+            eintrag["sprecher"] = int(sprecher)
         cur["dateien"][base] = eintrag
         _write(project, cur)
         return cur
@@ -152,6 +161,36 @@ def datei_sprache(project: str, base: str) -> str:
 def datei_korrektur(project: str, base: str) -> str:
     d = laden(project)
     return d["dateien"].get(base, {}).get("korrektur") or d["korrektur"]
+
+
+def _sprecher_wert(eintrag: dict) -> int | None:
+    """Typwache fuer `sprecher` auf einem bereits geladenen Eintrag.
+
+    Getrennt von `datei_sprecher`, damit `datei_ansicht` sie mitbenutzen kann, ohne ein
+    zweites Mal zu laden — dessen Zusage „alles aus EINEM Lesevorgang" ist der Grund, aus dem
+    es die Funktion ueberhaupt gibt.
+
+    `bool` muss ausdruecklich ausgeschlossen werden: `isinstance(True, int)` ist in Python
+    wahr, ein versehentlich gesetzter Haken ginge sonst als „1 Sprecher" durch.
+    """
+    wert = eintrag.get("sprecher")
+    if isinstance(wert, bool) or not isinstance(wert, int) or wert < 1:
+        return None
+    return wert
+
+
+def datei_sprecher(project: str, base: str) -> int | None:
+    """Wie viele Sprecher enthaelt die Aufnahme? `None` = automatisch (Verhalten wie bisher).
+
+    **Bewusst NUR pro Datei, ohne Projekt-Standard.** Die Sprecherzahl ist eine Eigenschaft der
+    Aufnahme, nicht des Projekts: in „Rhyathlon" stehen 2er-Interviews neben einem 5er-Team.
+    Ein Projekt-Standard waere fuer fast jede Datei falsch und erzwaenge dort STILL eine falsche
+    Zahl — schlechter als gar kein Wert, denn `num_speakers` ist exakt, nicht eine Obergrenze.
+
+    Der Typ wird geprueft (`_sprecher_wert`), nicht erst beim Verbraucher: der Wert reist bis
+    in `diarize.diarize_file` und waere dort ein Wurf mitten im GPU-Lauf.
+    """
+    return _sprecher_wert(laden(project)["dateien"].get(base, {}))
 
 
 def datei_override_mehrsprachig(project: str, base: str) -> bool | None:
@@ -206,6 +245,12 @@ def datei_ansicht(project: str, base: str) -> dict:
         "mehrsprachig": bool(e["mehrsprachig"]) if "mehrsprachig" in e else bool(d["mehrsprachig"]),
         "mehrsprachig_eigen": bool(e["mehrsprachig"]) if "mehrsprachig" in e else None,
         "mehrsprachig_projekt": bool(d["mehrsprachig"]),
+        # EIN Wert statt des Dreiklangs bei `sprache`/`mehrsprachig`: es gibt keinen
+        # Projekt-Standard, von dem eine Datei erben koennte (s. `datei_sprecher`) — „eigen"
+        # und „effektiv" sind hier dasselbe, und `None` heisst schlicht „automatisch".
+        # Ueber dieselbe Typwache wie `datei_sprecher` (aber auf dem SCHON geladenen Stand):
+        # eine zweite Lesart lieferte dem Dialog einen Wert, den die Diarisierung verwirft.
+        "sprecher": _sprecher_wert(e),
     }
 
 

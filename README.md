@@ -208,7 +208,7 @@ Sprechernamen. Bei allen anderen Sprachen bleibt die Originalsprache erhalten, n
 Projekt-Einstellungen (⋯-Menü des Projekts) legst du die Standard-Sprache und die
 Korrektur-Tiefe fest; die Auswahl beim Hinzufügen nimmt die Standard-Sprache vorweg und lässt
 sich für die nächsten Aufnahmen abändern, ohne den Standard zu verstellen. Und solltest du
-dich später anders entscheiden: im ⋯-Menü der jeweiligen Aufnahme („Sprache & Korrektur-Tiefe“)
+dich später anders entscheiden: im ⋯-Menü der jeweiligen Aufnahme („Sprache, Korrektur & Sprecher“)
 lässt sich beides nachträglich ändern. Eine andere Sprache bedeutet Neu-Transkription — das
 alte Transkript wird verworfen, das Audio bleibt erhalten; eine andere Korrektur-Tiefe startet
 nur die Korrektur neu.
@@ -243,6 +243,24 @@ Im ⋯-Menü einer einzelnen Aufnahme hast du dafür drei Möglichkeiten statt e
 im Projekt eingestellt hast — auch wenn du das später änderst. Sobald du bei einer Aufnahme
 bewusst „Ja“ oder „Nein“ wählst, gilt deine Wahl für sie allein; mit „Folgt dem Projekt“ nimmst
 du das wieder zurück.
+
+**Es hat zu wenige Sprecher erkannt — was tun?** Das passiert vor allem, wenn du mit dem
+Mikrofon der Kamera aufnimmst statt mit Ansteckmikrofonen: alle Stimmen kommen aus derselben
+Richtung, klingen ähnlich weit weg, und Transkribor wirft dann zwei Personen in einen Topf.
+Typisch sieht man es daran, dass Antworten beim Interviewer stehen oder mehrere Leute unter
+einem Namen laufen.
+
+Dagegen hilft das Feld **„Anzahl Sprecher“** im ⋯-Menü der Aufnahme. Trag dort ein, wie viele
+Personen tatsächlich gesprochen haben — **dich als fragende Person mitgezählt**. Waren es du
+und drei Teammitglieder, ist die Antwort *vier*. Transkribor trennt die Stimmen danach genau
+in so viele auf, statt zu raten, und das ist der mit Abstand wirksamste Hebel: an einer
+echten Aufnahme mit vier Personen wurde aus „Interviewer plus eine Person“ eine saubere
+Trennung, bei der die Fragen wieder beim Fragenden standen.
+
+Lass das Feld leer, wenn du es nicht sicher weisst — dann schätzt Transkribor wie bisher.
+Eine falsche Zahl ist schlechter als keine, denn sie wird genau eingehalten. Die Änderung
+kostet keine neue Transkription, nur einen neuen Korrekturlauf; hast du die Aufnahme im Editor
+schon von Hand überarbeitet, wird diese Fassung dabei überschrieben (Transkribor fragt vorher).
 
 Bei Aufnahmen, die du **vor dieser Fassung** hinzugefügt hast, steht meist „Ja“ oder „Nein“ —
 damals wurde die Einstellung bei jedem Hinzufügen fest an der Aufnahme vermerkt. Wenn du willst,
