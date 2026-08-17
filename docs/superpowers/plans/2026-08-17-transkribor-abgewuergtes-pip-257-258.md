@@ -94,8 +94,15 @@ herum. Damit gibt es keinen fremden Merker zu treffen, und ein Merker, der beim 
 `subprocess.TimeoutExpired` gesondert (Merker bleibt liegen) — mit einer Begründung, die für
 `returncode != 0` obendrein **geraten** war. Das war die einzige Quelle eines Dauerlaufs, den
 die Uhr nicht deckt: auf einer langsamen Leitung überschreitet pip die 120 s bei **jedem**
-Start, und der Merker bliebe jedes Mal liegen. Weg damit — der Merker wird jetzt nach **jedem**
-behandelten Ausgang gelöscht. Er überlebt damit **genau dann**, wenn der Prozess selbst stirbt.
+Start, und der Merker bliebe jedes Mal liegen. Weg damit — der Deckel-Sonderfall entfällt.
+
+> **Nachtrag (CodeRabbit-Bot, Minor):** Die urspruengliche Fassung dieses Absatzes schrieb
+> „der Merker wird jetzt nach **jedem** behandelten Ausgang geloescht" und widersprach damit
+> Regel 1 oben. Gebaut ist die Regel oben: **geloescht wird nur bei `returncode == 0`.** Der
+> lokale Funktionstest hat gezeigt, warum — `taskkill /F /T` toetet das pip-Kind zuerst und
+> laesst dem Elternprozess ein Fenster, in dem er „fehlgeschlagen" sah und aufraeumte. Ein
+> regulaer gescheiterter Lauf laesst den Merker also liegen; die Uhr (`INTERVALL_TAGE`)
+> beendet den Zustand, nicht das Loeschen.
 Der Preis ist benannt und wird ein eigenes Issue: ein selbst verursachter Timeout **mitten in
 der Installation** bleibt unerkannt — das ist heute genauso, also kein Rückschritt.
 

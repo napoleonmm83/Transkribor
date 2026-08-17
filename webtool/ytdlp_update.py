@@ -718,6 +718,13 @@ def _pip_merker_setzen() -> None:
     Merker `faellig()` ueberhaupt ausloest, muss `fassung()` None sein — und dann gibt es ohne
     ihn gar keinen Lauf mehr, der ihn auffrischen koennte. (CodeRabbit-CLI, Major.)
 
+    **Bekannter Restfall (#268, gemessen):** weil das Datum geschont wird, ERBT ein spaeterer
+    Abbruch die Restfrist eines frueheren, regulaeren Fehlschlags. Faellt der Fristablauf in
+    ein Fenster ohne Serverstart, bleibt der Schaden dauerhaft. Der naheliegende Fix
+    (auffrischen) reisst genau die Richtung wieder auf, gegen die der Absatz oben steht — es
+    braucht zwei getrennte Zeitpunkte („wann fing es an" gegen „wann zuletzt abgebrochen"),
+    also einen eigenen Entwurf. Nicht hier stillschweigend halb reparieren.
+
     Best effort: ein nicht schreibbarer Merker macht den Zustand nur so schlecht, wie er vor
     diesem Fix war. Aber nicht STILL, sonst ist er von einem gesetzten nicht zu unterscheiden
     (dieselbe Regel wie bei `sperre.datei`s fail-open).
