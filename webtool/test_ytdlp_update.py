@@ -1271,3 +1271,45 @@ def test_lesbare_ejs_metadaten_melden_NICHTS(monkeypatch):
 
 def _werfe():
     raise UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid start byte")
+
+
+# --- beim_ende: der Server stirbt, das pip-Kind arbeitet weiter (#224) --------------------
+
+
+def test_beim_ende_gibt_den_merker_auf_wenn_der_eigene_lauf_noch_haelt(monkeypatch, tmp_path):
+    """Der ganze Zweck: nach dem Aufgeben meldet dieselbe Frage, die `beim_start()` stellt,
+    weiter „es aktualisiert schon jemand" — statt eine tote PID zu zeigen, hinter der ein
+    laufendes pip steht.
+
+    `_prozess_lebt` auf False, weil der Halter eine Sekunde nach dem Aufgeben nicht mehr da
+    ist und genau dieser Zustand der Gegenstand ist. Ohne das antwortet die Lebendpruefung
+    mit „unsere eigene PID lebt", und der Test bliebe auch ohne den Fix gruen."""
+    ziel = yu._lockziel()
+    os.makedirs(os.path.dirname(ziel), exist_ok=True)
+    os.mkdir(ziel + ".lock")
+    with open(os.path.join(ziel + ".lock", sperre._HALTER), "wb") as f:
+        f.write(sperre._mein_merker())
+
+    assert yu.beim_ende(eigener=True) is True
+    monkeypatch.setattr(sperre, "_prozess_lebt", lambda pid: False)
+    assert yu.laeuft_gerade(eigener=False) is True, "der naechste Start wuerde ein zweites pip starten"
+
+
+def test_beim_ende_fasst_ein_FREMDES_lock_nicht_an(monkeypatch):
+    """Laeuft kein EIGENER Faden, gehoert ein liegendes Lock jemand anderem — dem
+    fetch-Subprozess mit seiner Selbstheilung oder einem zweiten Serverprozess (#254). Der
+    lebt weiter und braucht seine Auskunft; ohne diese Frage naehme unser Herunterfahren sie
+    ihm weg."""
+    monkeypatch.setattr(sperre, "merker_aufgeben",
+                        lambda *a: pytest.fail("kein eigener Lauf — nichts aufzugeben"))
+    assert yu.beim_ende(eigener=False) is False
+
+
+def test_beim_ende_fragt_den_eigenen_lauf_selbst(monkeypatch):
+    """Ohne Argument kommt die Antwort aus `hintergrund_zustand()` — der Lifespan reicht
+    nichts hinein."""
+    monkeypatch.setattr(yu, "hintergrund_zustand", lambda: (True, "", False))
+    gerufen = []
+    monkeypatch.setattr(sperre, "merker_aufgeben", lambda p: gerufen.append(p) or True)
+    assert yu.beim_ende() is True
+    assert gerufen == [yu._lockziel()]
