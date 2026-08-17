@@ -333,6 +333,23 @@ def download_one(project: str, url: str) -> str:
         raise RuntimeError("ffmpeg nicht gefunden — installiere: winget install Gyan.FFmpeg")
     ydl_modul = _hole_yt_dlp()
     if ydl_modul is None:
+        # **Das ist, was #253 NEU aufmacht.** Der Kalenderlauf liegt jetzt im Serverprozess
+        # und kann laufen, waehrend hier importiert wird — faellt der Import in pips
+        # Deinstallations-/Installationsluecke, ist yt-dlp fuer einen Moment weg. Vorher gab
+        # es das nicht: der Import wartete das pip ja gerade ab.
+        #
+        # Ohne diese Abfrage saehe der Nutzer drei falsche Dinge auf einmal: eine Meldung, die
+        # „nicht installiert" behauptet, obwohl gerade INSTALLIERT wird; keine Selbstheilung
+        # (`_EXTRAKTOR_RE` trifft diesen Text nicht); und einen Rat, der ein DRITTES pip auf
+        # dieselbe venv startet.
+        #
+        # Gefragt wird die Sperre, nicht `_lauf`: der Lauf sitzt in einem anderen Prozess —
+        # dieselbe Begruendung wie bei `zustand()["laeuft"]` (#243). `wird_gehalten` ist eine
+        # Momentaufnahme und taugt nur fuer die AUSKUNFT; eine Entscheidung daraus abzuleiten
+        # baute genau die Race nach, gegen die die Sperre steht.
+        if ytdlp_update.laeuft_gerade():
+            raise RuntimeError("yt-dlp wird gerade aktualisiert — bitte gleich noch einmal "
+                               "versuchen (der Import braucht den Downloader).")
         raise RuntimeError(f"yt-dlp ist nicht installiert — {_PIP_HINWEIS}")
     adir = os.path.join(paths.project_dir(project), "audio")
     os.makedirs(adir, exist_ok=True)
