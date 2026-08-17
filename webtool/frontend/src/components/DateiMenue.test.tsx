@@ -168,10 +168,10 @@ describe('Löschen', () => {
   })
 })
 
-describe('Sprache & Korrektur-Tiefe', () => {
+describe('Sprache, Korrektur & Sprecher', () => {
   const spracheAendern = async () => {
     await menueOeffnen()
-    fireEvent.click(await screen.findByText('Sprache & Korrektur-Tiefe'))
+    fireEvent.click(await screen.findByText('Sprache, Korrektur & Sprecher'))
     // Der Dialog portalt nach document.body; der sprache-Select ist der erste combobox darin.
     // Gewartet wird auf die ROLLE, nicht auf einen Sprachnamen: seit #234 zeigt der Trigger
     // „Folgt dem Projekt (…)", solange die Datei keinen eigenen Wert hat.
@@ -192,7 +192,7 @@ describe('Sprache & Korrektur-Tiefe', () => {
   it('nur geänderte Tiefe stößt Neu-Korrektur mit force=true an (Editor bleibt)', async () => {
     render(<Huelle pfad="/p/P/a"><DateiMenue project="P" file={datei()} /></Huelle>)
     await menueOeffnen()
-    fireEvent.click(await screen.findByText('Sprache & Korrektur-Tiefe'))
+    fireEvent.click(await screen.findByText('Sprache, Korrektur & Sprecher'))
     // Readiness über den Sprache-Trigger; der Tiefe-Trigger zeigt bei korrektur='auto' das
     // Auto-Label (seit #141 in TIEFEN enthalten — dasselbe wie beim Projekt-Dialog). Ueber die
     // ROLLE statt ueber den Sprachnamen, siehe `spracheAendern` (#234).
