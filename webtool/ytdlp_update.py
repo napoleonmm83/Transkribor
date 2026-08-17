@@ -19,10 +19,23 @@ arbeiten kann — und zwar in ZWEI Richtungen: das Paket fehlt (#179), oder es i
 aber nicht zu diesem yt-dlp (#182, ueber ein `pip install -U yt-dlp` ohne das Extra). Beides
 beantwortet `_ejs_untauglich()`; dort steht auch, warum im Zweifel NICHT geflaggt wird.
 
-Zwei Wege hier hinein:
-- `automatisch()` — der Kalenderweg, gerufen vor dem ersten Zugriff auf yt-dlp.
+Drei Wege hier hinein:
+- `beim_start()` — der Kalenderweg, gerufen aus `app._lifespan` beim Serverstart. Bis #253
+  hing er an `fetch._hole_yt_dlp()` und lief vor jedem URL-Import; dort wartete der Nutzer
+  bis zu 120 s auf pip, nachdem er gerade eine Adresse eingefuegt hatte.
+  **Er feuert einmal pro PROZESS.** Aus „alle 14 Tage" ist damit „bei jedem Start, sofern
+  faellig" geworden — ein Server, der wochenlang durchlaeuft (`webtool.ps1`, ein
+  Entwickler-uvicorn, eine offen stehende App), holt die Auffrischung NICHT nach. Fuer die
+  gepackte App folgenlos (sie wird geschlossen und wieder geoeffnet); wer das aendern will,
+  legt in `_im_hintergrund` einen Nachlauf ab, nicht hier.
 - `automatisch(erzwingen=True)` — die Selbstheilung, gerufen wenn ein Download so
-  abgebrochen ist, wie es ein veralteter Extraktor tut.
+  abgebrochen ist, wie es ein veralteter Extraktor tut. **Der einzige Weg, der noch aus
+  `fetch.py` kommt.**
+- `starte_hintergrund()` — der Knopf „Jetzt aktualisieren", bedingungslos.
+
+`automatisch()` **ohne** `erzwingen` hat seit #253 keinen Produktivaufrufer mehr; die
+Funktion bleibt, weil `beim_start()` dieselben zwei Tore aus derselben Quelle braucht und
+eine Aufteilung sie verdoppelte.
 
 Beide sind **best effort**: scheitert pip (offline, PyPI zickt), wird das protokolliert und
 der Aufrufer macht mit der vorhandenen Fassung weiter. Ein Rechner ohne Netz darf durch
