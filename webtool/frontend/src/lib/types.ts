@@ -74,6 +74,14 @@ export type DateiEinstellungen = ProjectEinstellungen & {
   /** Obergrenze fuer `sprecher`, vom Server (`sprachen.SPRECHER_MAX`). Kommt mit, damit das
    *  Eingabefeld den Bereich selbst pruefen kann, ohne die Zahl ein zweites Mal zu kennen. */
   sprecher_max: number
+  /** Ist der Kill-Switch `TRANSKRIBOR_DIARIZE` AN? Sonst kehrt `cmd_diarize` sofort zurueck,
+   *  und „Anzahl Sprecher" waere ein Schalter, der gespeichert wird und nichts tut (#266).
+   *
+   *  Beantwortet AUSDRUECKLICH nicht „laeuft die Sprechertrennung wirklich": fehlt pyannote
+   *  oder ist die GPU voll, steht hier `true` und es passiert trotzdem nichts. Dieselbe
+   *  Trennung wie bei `llm.available()` („Installiert != angemeldet"). Der Hilfetext im
+   *  Dialog nennt deshalb `TRANSKRIBOR_DIARIZE` beim Namen und behauptet nichts Weiteres. */
+  diarisierung_aktiv: boolean
 };
 /** `sprache: null` / `mehrsprachig: null` heisst AUSDRUECKLICH „Override entfernen" — das Feld
  *  wegzulassen laesst ihn stehen (Partial-Update). Unterschieden wird serverseitig an
