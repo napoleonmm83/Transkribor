@@ -118,9 +118,9 @@ Hintergrund noch aufgefrischt wird, sagt Transkribor das und bittet dich, es gle
 zu versuchen — statt zu behaupten, der Downloader fehle. Geht ein
 Download trotzdem schief, weil die Seite sich gerade wieder geändert hat, aktualisiert es
 sofort und versucht es gleich noch einmal. Machst du das Fenster mitten in einer Auffrischung
-zu, ist das meistens folgenlos — und wenn dabei doch etwas zerbricht, sodass der Downloader
-danach gar nicht mehr läuft, merkt sich Transkribor den abgebrochenen Versuch und setzt ihn
-beim nächsten Start fort (solange die automatische Auffrischung eingeschaltet ist). Bricht
+zu, ist das meistens folgenlos — und wenn der Downloader dabei so zerbricht, dass Transkribor
+ihn danach gar nicht mehr findet, merkt es sich den abgebrochenen Versuch und setzt ihn beim
+nächsten Start fort (solange die automatische Auffrischung eingeschaltet ist). Bricht
 dagegen die allererste Installation ab, ist das Sache der Einrichtung — dann hilft
 **Einstellungen › Video-Import › Jetzt aktualisieren**. Du
 merkst davon im Normalfall nichts; nachsehen (und abschalten) kannst du es unter
