@@ -971,6 +971,63 @@ def test_erzwingen_uebergeht_den_schalter_NICHT(monkeypatch):
     assert yu.automatisch(erzwingen=True) is False
 
 
+# --- beim_start (der Weg, den app._lifespan geht — seit #253) -----------------
+
+def test_beim_start_stoesst_einen_HINTERGRUND_lauf_an(monkeypatch):
+    """Geprueft wird der WEG, nicht nur die Wirkung.
+
+    `starte_hintergrund()` setzt `_lauf`, und daran haengt die Ausgangsmeldung der
+    Einstellungsseite (#174/#243). Ein direktes `aktualisiere()` haette dieselbe Wirkung auf
+    die venv, KEINE auf die Anzeige — und haette den Serverstart blockiert, was der ganze
+    Grund fuer diesen Weg ist. Der `aktualisiere`-Riegel ist deshalb Teil der Zusicherung,
+    nicht Deko.
+    """
+    gerufen = []
+    monkeypatch.setattr(yu, "faellig", lambda: True)
+    monkeypatch.setattr(yu, "starte_hintergrund", lambda: gerufen.append(1) or True)
+    monkeypatch.setattr(yu, "aktualisiere",
+                        lambda *a, **k: pytest.fail("beim Start laeuft pip im Faden, nicht hier"))
+    assert yu.beim_start() is True
+    assert len(gerufen) == 1
+
+
+def test_beim_start_respektiert_den_schalter(monkeypatch):
+    """Wer seine venv selbst verwaltet, will auch beim Start kein pip."""
+    monkeypatch.setenv("TRANSKRIBOR_YTDLP_UPDATE", "0")
+    monkeypatch.setattr(yu, "faellig", lambda: True)      # Positivkontrolle: es waere faellig
+    monkeypatch.setattr(yu, "starte_hintergrund",
+                        lambda: pytest.fail("Schalter aus — kein Lauf beim Start"))
+    assert yu.beim_start() is False
+
+
+def test_beim_start_respektiert_die_faelligkeit(monkeypatch):
+    """Sonst liefe bei JEDEM Serverstart ein pip — und die App startet oefter als alle
+    14 Tage. Der Merker ist die Bremse, nicht die Gelegenheit."""
+    monkeypatch.setattr(yu, "faellig", lambda: False)
+    monkeypatch.setattr(yu, "starte_hintergrund",
+                        lambda: pytest.fail("nicht faellig — kein Lauf beim Start"))
+    assert yu.beim_start() is False
+
+
+@pytest.mark.parametrize("wo", ["auto_an", "faellig", "starte_hintergrund"])
+def test_beim_start_wirft_NIE(monkeypatch, capsys, wo):
+    """Der Aufrufer ist `app._lifespan` — ein Wurf hier liesse den Server GAR NICHT ERST
+    hochkommen. Das ist dieselbe Zusage wie in #185 (`fetch._hole_yt_dlp()` hatte kein
+    try/except und riss den URL-Import mit), nur mit hoeherem Einsatz: dort fiel eine
+    Funktion aus, hier die ganze App.
+
+    Alle drei Stufen einzeln, weil jede eine eigene Wurfquelle hat: `auto_an` liest die
+    Einstellungsdatei (unlesbare Bytes → ValueError, #190), `faellig` die Paket-Metadaten
+    (#185), und `starte_hintergrund` wirft bei Faden-Erschoepfung ausdruecklich weiter.
+    """
+    def wirft(*a, **k):
+        raise RuntimeError("kaputt")
+    monkeypatch.setattr(yu, "faellig", lambda: True)      # damit Stufe 3 erreichbar ist
+    monkeypatch.setattr(yu, wo, wirft)
+    assert yu.beim_start() is False
+    assert "kaputt" in capsys.readouterr().out            # still darf es nicht sein
+
+
 # --- Nebenlaeufigkeit --------------------------------------------------------
 
 def test_zwei_pip_laeufe_ueberschneiden_sich_nicht(monkeypatch):

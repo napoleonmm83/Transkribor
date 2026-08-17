@@ -71,10 +71,23 @@ def _importiere_yt_dlp():
 
 
 def _hole_yt_dlp():
-    """yt-dlp beim ersten Bedarf importieren — davor die faellige Aktualisierung."""
+    """yt-dlp beim ersten Bedarf importieren.
+
+    **Ohne Kalenderpruefung, seit #253.** Hier stand `ytdlp_update.automatisch()` — und damit
+    lag ein pip von bis zu 120 s (mit Sperrwartezeit >=340 s) zwischen „Adresse eingefuegt"
+    und „Download beginnt", an der einzigen Stelle der App, an der jemand aktiv wartet. Die
+    Vorsorge macht jetzt `ytdlp_update.beim_start()` am Serverstart.
+
+    **Die Selbstheilung unten in `main()` bleibt** (`automatisch(erzwingen=True)` nach einem
+    gescheiterten Download): die repariert einen Fehler, den der Nutzer gerade vor sich hat,
+    und ein Extraktor bricht nicht nach Kalender.
+
+    Folge fuer den Weg ohne Server (`python -m webtool.fetch` von Hand): dort gibt es kein
+    `_lifespan`, also auch keine Kalenderpruefung mehr. Bewusst — der Weg ist der des
+    Entwicklers, und die Selbstheilung greift dort weiterhin.
+    """
     global yt_dlp
     if yt_dlp is None:
-        ytdlp_update.automatisch()
         yt_dlp = _importiere_yt_dlp()
     return yt_dlp
 
@@ -313,8 +326,9 @@ def download_one(project: str, url: str) -> str:
     # sucht ffmpeg auf PATH. ensure_ffmpeg() legt den winget-Pfad dorthin — muss also HIER
     # stehen, nicht erst vor dem Whisper-Lauf in main(). Findet es nichts, lieber sofort
     # abbrechen als hinterher am kryptischen "ffprobe and ffmpeg not found" scheitern.
-    # Steht VOR _hole_yt_dlp(): der Griff kann ein pip von bis zu 120 s ausloesen, und diese
-    # Vorbedingung steht ohne jede Wartezeit fest.
+    # Steht VOR _hole_yt_dlp(): eine Vorbedingung, die ohne jede Wartezeit feststeht, gehoert
+    # vor die, die es nicht tut. (Bis #253 war das dringlicher — damals konnte der Griff ein
+    # pip von bis zu 120 s ausloesen; die Kalenderpruefung liegt jetzt am Serverstart.)
     if not transcribe.ensure_ffmpeg():
         raise RuntimeError("ffmpeg nicht gefunden — installiere: winget install Gyan.FFmpeg")
     ydl_modul = _hole_yt_dlp()

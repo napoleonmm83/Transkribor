@@ -34,6 +34,13 @@ for _name in settings.load_env():
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
+    # #253: die faellige yt-dlp-Kalenderpruefung gehoert HIERHER, nicht vor jeden URL-Import.
+    # Dort (`fetch._hole_yt_dlp()`) lag sie zwischen „Adresse eingefuegt" und „Download
+    # beginnt" und kostete den Wartenden bis zu 120 s pip. `beim_start()` laeuft im Faden und
+    # wirft nie — beides Bedingung dafuer, dass das hier stehen darf: der Start haelt nicht an,
+    # und ein kaputter Selbstaktualisierer laesst den Server trotzdem hochkommen.
+    if ytdlp_update.beim_start():
+        print("[ytdlp] Kalenderpruefung faellig — aktualisiere im Hintergrund", flush=True)
     yield
     # Beim Herunterfahren die Kinder mitnehmen. Die Desktop-App schickt dem Server beim
     # Beenden ein SIGTERM — das erreicht auf POSIX nur uvicorn, whisper/claude sitzen in

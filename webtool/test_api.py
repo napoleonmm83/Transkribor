@@ -1060,6 +1060,23 @@ def test_autocorrect_startet_mit_anbieter(client, monkeypatch):
     assert len(gestartet) == 1
 
 
+def test_start_stoesst_die_ytdlp_kalenderpruefung_an(monkeypatch):
+    """#253: die Vorsorge haengt am Serverstart, nicht mehr an `fetch._hole_yt_dlp()`.
+
+    Der Gegenpart steht in `test_fetch.py`
+    (`test_url_import_wartet_NICHT_mehr_auf_die_kalenderpruefung`): dort darf sie NICHT mehr
+    laufen, hier MUSS sie. Ohne dieses Paar waere „verschoben" nicht von „ersatzlos entfernt"
+    zu unterscheiden — und die Selbstaktualisierung waere still tot.
+    """
+    from webtool import app as appmod
+    gerufen = []
+    monkeypatch.setattr(appmod.ytdlp_update, "beim_start",
+                        lambda: gerufen.append(True) or False)
+    with TestClient(appmod.app):
+        pass
+    assert gerufen == [True]
+
+
 def test_shutdown_bricht_laufende_jobs_ab(client, monkeypatch):
     """Beim Beenden der App bekommt uvicorn ein SIGTERM — auf POSIX erreicht das die
     Job-Kinder nicht (eigene Sitzungen). Ohne diesen Haken laeuft whisper weiter."""
