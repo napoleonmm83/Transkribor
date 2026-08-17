@@ -222,13 +222,21 @@ export function DateiEinstellungenDialog({ project, base, file, offen, onOpenCha
               <label htmlFor="fs-sprecher" className="mb-1.5 block text-sm font-medium">
                 Anzahl Sprecher
               </label>
-              {/* Natives Zahlenfeld statt eines Wählers: die Zahl ist frei, und ein Select mit
-                  zwanzig Einträgen wäre eine Liste, in der man sucht statt tippt. `min`/`max`
-                  kommen vom Server (s. `sprecherMax`) — die Prüfung liegt trotzdem zusätzlich
-                  in `sprecherWahl`: Browser erzwingen die Attribute nur bei Formularabsendung,
-                  und dieser Dialog sendet kein Formular. */}
-              <input id="fs-sprecher" type="number" inputMode="numeric"
-                min={1} max={sprecherMax} step={1}
+              {/* Freies Feld statt eines Wählers: ein Select mit zwanzig Einträgen wäre eine
+                  Liste, in der man sucht statt tippt.
+
+                  **`type="text"`, NICHT `type="number"` — und das ist ein Datenverlust-Fix,
+                  keine Geschmacksfrage.** Bei einem Zahlenfeld liefert der Browser für eine
+                  ungültige Zwischeneingabe einen LEEREN `value` (`validity.badInput`), während
+                  er dem Nutzer den getippten Text weiter anzeigt. Gemessen: „5" dann „e" ⇒
+                  `{value: "", badInput: true}`. Dieser Dialog liest leer als „automatisch",
+                  hätte den Speichern-Knopf also scharf gemacht und die vorhandene Sprecherzahl
+                  STILL gelöscht — beim blossen Vertippen, mit „Speichern & neu korrigieren"
+                  auf dem Knopf. Als Textfeld kommt „5e" durch, `sprecherWahl` erkennt es als
+                  ungültig und sperrt. `inputMode` holt die Ziffern-Tastatur zurück; die
+                  Spinner-Pfeile entfallen bewusst — sie sind der Preis dafür, dass die
+                  Eingabe des Nutzers nicht hinter seinem Rücken verschwindet. */}
+              <input id="fs-sprecher" type="text" inputMode="numeric"
                 value={sprecherText}
                 onChange={e => setSprecherText(e.target.value)}
                 aria-describedby="fs-sprecher-hilfe"
