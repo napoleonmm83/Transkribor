@@ -725,10 +725,27 @@ def _pip_merker_setzen() -> None:
     d = _merker_datum()
     if d is not None and (_heute() - d).days <= INTERVALL_TAGE:
         return
+    # **`O_NONBLOCK` auch beim SCHREIBEN**, nicht nur beim Lesen. Ein `open(..., "w")` auf
+    # einen FIFO wartet auf einen LESER, der nie kommt — und diese Zeile laeuft INNERHALB der
+    # pip-Sperre im Hintergrundfaden: der Haenger hielte die Sperre fuer immer, die
+    # Einstellungsseite meldete dauerhaft „eine Aktualisierung laeuft gerade" (#243), und der
+    # Knopf saesse bei jedem Klick die volle Frist ab. Mit dem Flag wirft `os.open` dort ENXIO,
+    # das der Zweig unten als „nicht schreibbar" behandelt — best effort wie gehabt.
+    # (CodeRabbit-CLI, Major; dieselbe Klasse wie #200, dort nur die Leseseite.)
+    #
+    # Auf Windows gibt es diesen Fall an einem gewoehnlichen Pfad nicht (benannte Pipes leben
+    # unter `\.\pipe\`), `O_NONBLOCK` fehlt dort ohnehin — deshalb KEINE zusaetzliche
+    # Sonderdatei-Pruefung: sie waere ein Waechter ohne roten Test fuer einen Fall, den dieses
+    # Repo nicht herstellen kann.
+    flags = (os.O_WRONLY | os.O_CREAT | os.O_TRUNC
+             | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_BINARY", 0))
     try:
-        with open(_pip_merker(), "w", encoding="utf-8") as f:
-            f.write(_heute().isoformat())
-    except OSError as e:
+        fd = os.open(_pip_merker(), flags, 0o600)
+        try:
+            os.write(fd, _heute().isoformat().encode("utf-8"))
+        finally:
+            os.close(fd)
+    except (OSError, ValueError) as e:     # ValueError: eingebettetes NUL im Pfad
         print(f"[ytdlp] Merker fuer den pip-Lauf nicht schreibbar: {e}", flush=True)
 
 
@@ -808,10 +825,7 @@ def aktualisiere() -> tuple[bool, bool]:
     cmd = [sys.executable, "-m", "pip", "install", "-U",
            # Kurze Deckel: ohne sie haengt pip offline minutenlang, und der Import wartet mit.
            "--retries", "1", "--timeout", "10", _PAKET]
-    # EIN Lesevorgang, zwei Verwender: die Protokollzeile und der Merker unten. Getrennt
-    # gelesen koennten die beiden Auskuenfte auseinanderfallen (pip laeuft dazwischen).
-    vorher = fassung()
-    print(f"[ytdlp] aktualisiere (installiert: {vorher or 'nichts'}) …", flush=True)
+    print(f"[ytdlp] aktualisiere (installiert: {fassung() or 'nichts'}) …", flush=True)
     ok = False
     # Zwei pip-Laeufe auf DIESELBE venv duerfen sich nicht ueberschneiden — sie schreiben in
     # dasselbe site-packages und koennen die Installation zerlegen. Erreichbar, seit es zwei
@@ -853,7 +867,14 @@ def aktualisiere() -> tuple[bool, bool]:
         # nie da" ist wirklich Sache des Setups. Ein Reparaturlauf ist davon nicht betroffen:
         # der Merker des abgewuergten Laufs liegt ja noch (geloescht wird nur bei Erfolg), und
         # `_pip_merker_setzen` frischt einen datierten Merker ohnehin nicht auf.
-        if vorher is not None:
+        # **`fassung()` NOCH EINMAL, hier drin.** Der Wert von der Protokollzeile stammt von
+        # VOR dem Sperrerwerb, und dazwischen kann ein anderer Prozess seinen ganzen pip-Lauf
+        # gefahren haben (#254: gepackte App neben Entwickler-uvicorn). Die gefaehrliche
+        # Richtung ist „vorher nichts, jetzt da": wir setzten dann keinen Merker, obwohl wir
+        # gleich eine vorhandene Installation anfassen — und ein Kill mittendrin bliebe
+        # unerkannt. Zwei Fragen zu zwei Zeitpunkten, also zwei Lesevorgaenge; der zweite
+        # kostet ~4 ms und nur auf dem pip-Pfad. (CodeRabbit-CLI, Major.)
+        if fassung() is not None:
             _pip_merker_setzen()
         try:
             p = subprocess.run(cmd, capture_output=True, text=True, errors="replace",

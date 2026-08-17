@@ -1419,13 +1419,17 @@ def test_ein_unschreibbarer_merker_reisst_niemanden_mit(monkeypatch, capsys):
     def kaputt(*a, **k):
         raise OSError("kein Platz")
 
+    # `os.open`, nicht `builtins.open`: der Schreibpfad nimmt seit dem O_NONBLOCK-Umbau den
+    # Deskriptor-Weg. Der Test hat den Umbau von selbst gemeldet (er wurde rot) — waere er
+    # auf `builtins.open` stehengeblieben, haette er ab da nichts mehr geprueft.
+
     # `monkeypatch.context()`, NICHT `monkeypatch.undo()`: Fixture und Test teilen sich
     # dieselbe MonkeyPatch-Instanz, `undo()` nahm also die ganze `isoliert`-Fixture mit
     # zurueck — danach zeigte `TRANSKRIBOR_SETTINGS` wieder auf Marcus' echtes Profil, die
     # Zusicherung darunter las die falsche Datei (also vacuous), und `subprocess.run` war
     # wieder echt. Gemessen im Review; der Modul-Docstring warnt in genau diesen Worten.
     with pytest.MonkeyPatch.context() as m:
-        m.setattr("builtins.open", kaputt)
+        m.setattr(os, "open", kaputt)
         yu._pip_merker_setzen()
     assert yu._pip_unterbrochen() is False
     assert "Merker" in capsys.readouterr().out
@@ -1679,3 +1683,20 @@ def test_ein_ABGELAUFENER_merker_wird_sehr_wohl_aufgefrischt(monkeypatch):
     with pytest.raises(KeyboardInterrupt):
         yu.aktualisiere()                                   # neue Unterbrechung
     assert yu._pip_unterbrochen() is True, "der abgelaufene Merker wurde nicht aufgefrischt"
+
+
+def test_die_merker_entscheidung_liest_den_zustand_NACH_dem_sperrerwerb(monkeypatch):
+    """Der Wert aus der Protokollzeile stammt von VOR dem Sperrerwerb, und dazwischen kann ein
+    anderer Prozess seinen ganzen pip-Lauf gefahren haben (#254: gepackte App neben
+    Entwickler-uvicorn). Die gefaehrliche Richtung ist „vorher nichts, jetzt da": ohne die
+    zweite Lesung setzten wir keinen Merker, obwohl wir gleich eine vorhandene Installation
+    anfassen — und ein Kill mittendrin bliebe unerkannt. (CodeRabbit-CLI, Major.)
+
+    Gebaut als Zustandswechsel zwischen den beiden Aufrufen, nicht als Zeitmessung: eine
+    konstante Attrappe koennte den Unterschied gar nicht zeigen."""
+    antworten = [None, "2025.9.5"]      # erst die Protokollzeile, dann die Entscheidung
+    monkeypatch.setattr(yu, "fassung", lambda: antworten.pop(0) if antworten else "2025.9.5")
+    monkeypatch.setattr(yu.subprocess, "run", _wirft(KeyboardInterrupt()))
+    with pytest.raises(KeyboardInterrupt):
+        yu.aktualisiere()
+    assert yu._pip_unterbrochen() is True, "die Entscheidung hing am veralteten Wert"

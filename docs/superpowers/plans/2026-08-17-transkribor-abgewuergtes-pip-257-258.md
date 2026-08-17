@@ -273,6 +273,8 @@ wsl -d Ubuntu-22.04 -- bash -lc 'rm -rf /tmp/v258'
 
 ## Aufgabe 1: Der Merker
 
+> ⚠️ **Der Code in dieser Aufgabe ist der PLANSTAND, nicht die Umsetzung.** Drei Regeln kamen erst beim Bauen dazu — siehe den Kasten ganz oben. Wer diese Blöcke abtippt, baut die Fassung, die der lokale Funktionstest und zwei Reviews widerlegt haben.
+
 **Dateien:** Ändern `webtool/ytdlp_update.py` (neue Funktionen direkt nach `_lock_stale()`),
 Test `webtool/test_ytdlp_update.py`.
 
@@ -518,6 +520,8 @@ git commit -m "feat(ytdlp): venv-gebundener Merker fuer einen unterbrochenen pip
 
 ## Aufgabe 2: `aktualisiere()` setzt und räumt ihn — innerhalb der Sperre
 
+> ⚠️ **Der Code in dieser Aufgabe ist der PLANSTAND, nicht die Umsetzung.** Drei Regeln kamen erst beim Bauen dazu — siehe den Kasten ganz oben. Wer diese Blöcke abtippt, baut die Fassung, die der lokale Funktionstest und zwei Reviews widerlegt haben.
+
 **Dateien:** Ändern `webtool/ytdlp_update.py` (`aktualisiere()`), Test
 `webtool/test_ytdlp_update.py`.
 
@@ -705,6 +709,8 @@ git commit -m "fix(ytdlp): ein abgewuergtes pip hinterlaesst seinen Merker (#257
 ---
 
 ## Aufgabe 3: `faellig()` holt den unterbrochenen Lauf nach
+
+> ⚠️ **Der Code in dieser Aufgabe ist der PLANSTAND, nicht die Umsetzung.** Drei Regeln kamen erst beim Bauen dazu — siehe den Kasten ganz oben. Wer diese Blöcke abtippt, baut die Fassung, die der lokale Funktionstest und zwei Reviews widerlegt haben.
 
 **Dateien:** Ändern `webtool/ytdlp_update.py` (`faellig()`), Test `webtool/test_ytdlp_update.py`.
 
