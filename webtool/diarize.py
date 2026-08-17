@@ -56,7 +56,7 @@ def _load_waveform(audio_path: str) -> dict:
     return {"waveform": torch.from_numpy(samples).unsqueeze(0), "sample_rate": 16000}
 
 
-def diarize_file(audio_path: str, min_speakers: int = 2, num_speakers: int = None) -> list:
+def diarize_file(audio_path: str, min_speakers: int = 2, num_speakers: int | None = None) -> list:
     """Diarisiert eine Audiodatei -> [{'start','end','cluster'}] (zeitlich sortiert).
     'cluster' ist das rohe pyannote-Label (z.B. 'SPEAKER_00'). Audio wird in-memory
     geladen (torchcodec-Bypass, siehe _load_waveform).

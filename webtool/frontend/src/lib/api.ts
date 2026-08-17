@@ -47,8 +47,11 @@ export async function getFileEinstellungen(project: string, base: string): Promi
  *  wegzulassen bedeutet Letzteres. Am Projekt-Endpunkt ist `null` dagegen ein No-op (dort gibt
  *  es nichts zu erben). `korrektur` hat den Weg nicht: dort ist `auto` der Rueckweg.
  *  Reiner Schreibpfad; die Trigger (retranscribe/correct) stößt der Aufrufer separat an.
- *  Die Antwort trägt zusätzlich `sprache_eigen`/`_projekt` und `mehrsprachig_eigen`/`_projekt`;
- *  der engere Rückgabetyp genügt den Aufrufern und bleibt damit gleich. */
+ *  Die Antwort trägt zusätzlich `sprache_eigen`/`_projekt`, `mehrsprachig_eigen`/`_projekt`
+ *  und `sprecher`; der engere Rückgabetyp genügt den Aufrufern und bleibt damit gleich.
+ *  **Das ist die harmlose Richtung von #239:** dort log der Typ (der PUT lieferte WENIGER als
+ *  er behauptete), hier verschweigt er nur. Wer die Antwort auswertet statt bloss auf ihr
+ *  Gelingen zu warten, weitet vorher den Typ — sonst ist das Feld unsichtbar da. */
 export async function saveFileEinstellungen(
   project: string, base: string, patch: DateiEinstellungenPatch,
 ): Promise<EinstellungenWerte> {
