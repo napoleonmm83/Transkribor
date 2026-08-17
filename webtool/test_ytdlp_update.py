@@ -4,6 +4,13 @@ Zwei Dinge stellt die Fixture IMMER sicher, und beide sind keine Kosmetik:
 `TRANSKRIBOR_SETTINGS` zeigt in tmp_path (der Merker landet in der Einstellungsdatei —
 sonst schriebe der Test in Marcus' echte), und `subprocess.run` ist gefaelscht (ein Test,
 der echtes pip startet, aendert die venv des Entwicklers waehrend der Lauf laeuft).
+
+**Seit #257/#258 haengt `faellig()` zusaetzlich an einer DATEI auf der Platte**
+(`_pip_merker()`, ueber `_lockziel()` ebenfalls an `TRANSKRIBOR_SETTINGS`). Wer kuenftig
+einen Test schreibt, der `faellig()`/`beim_start()` OHNE diese Fixture anfasst, bekommt auf
+einem Entwicklerrechner ein True, sobald dort einmal ein pip abgewuergt wurde — und damit
+einen echten pip-Lauf gegen dessen venv. Die CI sieht das nie: dort lief nie ein
+`aktualisiere()`, also liegt auch nie ein Merker.
 """
 import contextlib
 import datetime as dt
@@ -1497,3 +1504,40 @@ def test_ein_wurf_den_niemand_faengt_laesst_den_merker_liegen(monkeypatch):
     with pytest.raises(KeyboardInterrupt):
         yu.aktualisiere()
     assert yu._pip_unterbrochen() is True
+
+
+def test_ein_unterbrochener_lauf_macht_faellig(monkeypatch):
+    """#257/#258, der Kern. Fassung taufrisch, heute schon geprueft: nach jeder anderen Regel
+    dieses Moduls waere das NICHT faellig. Der Merker schlaegt sie alle, weil eine halbe
+    Installation im Kalender nicht vorkommt."""
+    monkeypatch.setattr(yu, "fassung", lambda: "2026.8.12")
+    settings.save({"ytdlp_geprueft": HEUTE.isoformat()})
+    assert yu.faellig() is False                       # Negativkontrolle
+    yu._pip_merker_setzen()
+    assert yu.faellig() is True
+
+
+def test_der_merker_schlaegt_auch_den_nicht_installiert_riegel(monkeypatch):
+    """Ohne Merker heisst `fassung() is None` „nicht installiert — Sache des Setups" und
+    verbietet jedes pip (`test_ohne_installiertes_yt_dlp_kein_update`). Genau dieser Riegel
+    machte den Schaden dauerhaft: ein abgewuergtes pip LOESCHT die Metadaten (gemessen:
+    `metadata.version` wirft PackageNotFoundError, die Paketdateien liegen noch da), und
+    danach hielt der Riegel die Reparatur auf. Der Merker muss deshalb VOR ihm stehen."""
+    monkeypatch.setattr(yu, "fassung", lambda: None)
+    assert yu.faellig() is False                       # Negativkontrolle
+    yu._pip_merker_setzen()
+    assert yu.faellig() is True
+
+
+def test_beim_start_holt_einen_unterbrochenen_lauf_nach(monkeypatch):
+    """Die Kette, an der beide Issues haengen: der naechste Serverstart repariert.
+    `starte_hintergrund` gefaelscht, sonst liefe ein echter Faden mit echtem pip."""
+    monkeypatch.setattr(yu, "fassung", lambda: "2026.8.12")
+    settings.save({"ytdlp_geprueft": HEUTE.isoformat()})
+    monkeypatch.setattr(yu, "laeuft_gerade", lambda *a: False)
+    gestartet = []
+    monkeypatch.setattr(yu, "starte_hintergrund", lambda: gestartet.append(1) or True)
+    assert yu.beim_start() is False                    # Negativkontrolle
+    yu._pip_merker_setzen()
+    assert yu.beim_start() is True
+    assert gestartet == [1]
