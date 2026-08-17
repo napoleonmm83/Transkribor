@@ -131,7 +131,8 @@ def _lesen() -> tuple:
         # `ValueError`, nicht `json.JSONDecodeError` (dessen Oberklasse): sind die Bytes der
         # Datei nicht als UTF-8 dekodierbar, wirft schon das LESEN einen UnicodeDecodeError,
         # und der ist ein ValueError. Dieselbe Verwechslung wie in #185 — und dieselbe
-        # Aufrufkette: `fetch._hole_yt_dlp()` -> `automatisch()` -> `auto_an()` -> hier,
+        # Aufrufkette: `app._lifespan` -> `ytdlp_update.beim_start()` -> `auto_an()` -> hier
+        # (bis #253 lief sie ueber `fetch._hole_yt_dlp()` -> `automatisch()`),
         # ausserdem `GET /api/settings`. Ungefangen waere die Zusage eine Zeile darueber
         # („nie ein Fehler") schlicht falsch.
         #

@@ -36,9 +36,16 @@ for _name in settings.load_env():
 async def _lifespan(app: FastAPI):
     # #253: die faellige yt-dlp-Kalenderpruefung gehoert HIERHER, nicht vor jeden URL-Import.
     # Dort (`fetch._hole_yt_dlp()`) lag sie zwischen „Adresse eingefuegt" und „Download
-    # beginnt" und kostete den Wartenden bis zu 120 s pip. `beim_start()` laeuft im Faden und
-    # wirft nie — beides Bedingung dafuer, dass das hier stehen darf: der Start haelt nicht an,
-    # und ein kaputter Selbstaktualisierer laesst den Server trotzdem hochkommen.
+    # beginnt" und kostete den Wartenden bis zu 120 s pip.
+    #
+    # **Im Faden laeuft nur das pip.** `auto_an()` und `faellig()` laufen HIER, auf dem
+    # Event-Loop, vor dem `yield` — gemessen 54,7 ms kalt, danach ~6 ms (zwei
+    # Metadaten-Zugriffe von der Platte). Folgenlos, aber „laeuft im Faden" waere eine
+    # Behauptung, die der Kontrollfluss nicht deckt; wer hier ein drittes Tor dazunimmt,
+    # misst wieder.
+    #
+    # `beim_start()` wirft nie — Bedingung dafuer, dass das hier stehen darf: ein kaputter
+    # Selbstaktualisierer laesst den Server trotzdem hochkommen.
     if ytdlp_update.beim_start():
         print("[ytdlp] Kalenderpruefung faellig — aktualisiere im Hintergrund", flush=True)
     yield
