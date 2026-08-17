@@ -496,6 +496,25 @@ def faellig() -> bool:
     Fassung gemessen waere sie nach 14 Tagen DAUERHAFT faellig — und jeder Import liefe in
     ein pip, das nichts aendert.
     """
+    if _pip_unterbrochen():
+        # #257/#258: ein pip-Lauf ist abgewuergt worden — Windows `taskkill /F /T` auf den
+        # Prozessbaum beim Schliessen der App, POSIX `jobs.cancel_all()` → SIGKILL auf die
+        # Prozessgruppe des fetch-Jobs beim Herunterfahren. Was er hinterlaesst, sieht KEINE
+        # der Regeln unten: gemessen wirft `metadata.version` danach PackageNotFoundError,
+        # waehrend die Paketdateien noch daliegen — `fassung()` gibt None, und der Riegel
+        # eine Zeile weiter unten haelt die Reparatur auf. Der Schaden heilte sich bis hierher
+        # NICHT selbst.
+        #
+        # **VOR `fassung()`**, nicht danach: dieser Riegel ist genau der, der die Reparatur
+        # verhinderte. Ein Test haelt die Reihenfolge fest.
+        #
+        # **Keine Tagesbremse.** Sie waere hier schaedlich: lief heute schon ein regulaeres
+        # pip durch (`geprueft` = heute) und wurde DANACH eines abgewuergt — das ist #258s
+        # Ablauf —, verschoebe sie die Reparatur auf morgen, also einen ganzen Tag ohne
+        # URL-Import. Gedeckelt ist der Fall stattdessen am Merker selbst: `aktualisiere()`
+        # loescht ihn nach jedem zurueckgekehrten Lauf, und `_pip_unterbrochen()` laesst ihn
+        # nach INTERVALL_TAGE verfallen — falls `os.remove` ihn dauerhaft nicht wegbekommt.
+        return True
     v = fassung()
     if v is None:
         # `pip install -U` wuerde yt-dlp hier NEU installieren. Das ist Sache des Setups;
