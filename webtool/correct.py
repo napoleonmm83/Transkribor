@@ -178,7 +178,7 @@ DIARIZE_MIN_SPEAKERS = 2      # pyannote-Untergrenze; das Sidecar zeichnet dense
 CLUSTER_REGEL = (
     "Ein Cluster-Wechsel heisst: die STIMME wechselt — nicht zwingend die PERSON. Bei "
     "Aufnahmen mit einem Kameramikrofon verteilt die Diarisierung denselben Menschen "
-    "regelmaessig auf mehrere Cluster; sprechen zwei Cluster durchweg in Frageform, ist das "
+    "regelmässig auf mehrere Cluster; sprechen zwei Cluster durchweg in Frageform, ist das "
     "derselbe Interviewer. Zwei Cluster denselben Namen zu geben ist deshalb eine ERLAUBTE "
     "Entscheidung, KEINE Fehlzuordnung."
 )
@@ -570,7 +570,7 @@ Prüfe kritisch gegen das ROH — konservativ, im Zweifel näher am Original:
 - HALLUZINATION/DRIFT: Inhalt hinzugefügt/weggelassen/im Sinn verändert, der nicht im Roh steht? Übermässiges Umschreiben? → näher ans Original zurück.
 - MUSIK/ARTEFAKTE sind ERLAUBTE Entscheidungen, KEINE Auslassung: „[Musik]“ steht für eine gesungene oder sprachlose Stelle, ein leerer text ("") für ein reines ASR-Artefakt aus Whispers Trainingsdaten (Untertitel-Floskeln wie „ARD Text im Auftrag von Funk“). Beides NICHT zurückdrehen — nur prüfen, ob es zutrifft: gesprochene Bühnenansagen gehören zurück in Text, und umgekehrt gehört sicher klingender Unsinn über einer gesungenen Passage (dieselbe kurze Zeile mehrfach hintereinander, Wortfetzen ohne Bezug zum Gespräch) auf „[Musik]“.{mehr_regel}
 - VOLLSTÄNDIGKEIT: für JEDE Roh-Segment-ID {scope} genau ein Eintrag? Fehlende ergänzen (Text nah am Roh), zusammengefasste auftrennen.
-- SPRECHER: konsistent pro akustischem (Sprecher N)-Cluster und plausibel (Interviewer stellt Fragen; Antworten korrekt zugeordnet)? {CLUSTER_REGEL} Falsch zugeordnete EINZELNE Segmente korrigieren, aber zwei Cluster mit demselben Namen NICHT auseinanderziehen — nur prüfen, ob es zutrifft.
+- SPRECHER: konsistent pro akustischem (Sprecher N)-Cluster und plausibel (Interviewer stellt Fragen; Antworten korrekt zugeordnet)? {CLUSTER_REGEL} Fehlzuordnungen korrigieren — einzelne Segmente ebenso wie einen durchgehend falsch benannten Cluster; zwei Cluster mit demselben Namen aber NICHT auseinanderziehen.
 - RESTFEHLER: offensichtliche verbleibende ASR-Fehler nur wenn eindeutig (konservativ).
 - UNSICHER: wirklich unklare Stellen NICHT raten — nah am Original belassen und unter annotations vermerken. Entferne evtl. übrige [[...]]-Markierungen im Text.
 

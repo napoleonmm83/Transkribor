@@ -404,7 +404,13 @@ describe('DateiEinstellungenDialog — Sprecherzahl (#264)', () => {
       .mockResolvedValue({ ...BASIS, diarisierung_aktiv: false, sprecher: 4 })
     render(<DateiEinstellungenDialog project="p" base="a" file={datei()} offen />)
     await sprachWaehlerDa()
-    expect(feld()).toBeDisabled()
+    // `readOnly` + `aria-disabled`, NICHT `disabled`: ein disabled-Feld ist nicht
+    // fokussierbar, und dann wird `aria-describedby` — also die Zeile, die #266 ausmacht —
+    // per Tastatur nie erreicht. jsdom bildet die Tab-Reihenfolge nicht belastbar ab;
+    // geprüft wird deshalb der Vertrag, aus dem sie folgt.
+    expect(feld()).toHaveAttribute('readonly')
+    expect(feld()).toHaveAttribute('aria-disabled', 'true')
+    expect(feld()).toHaveAttribute('aria-describedby', 'fs-sprecher-hilfe')
     // Der gespeicherte Wert bleibt SICHTBAR — verstecken hiesse, ihn kommentarlos zu
     // verschlucken; der Nutzer soll sehen, was dasteht und warum es nicht wirkt.
     expect(feld()).toHaveValue('4')
@@ -414,11 +420,31 @@ describe('DateiEinstellungenDialog — Sprecherzahl (#264)', () => {
 
   it('laesst das Feld bedienbar, solange die Diarisierung laeuft (#266)', async () => {
     // Gegenprobe: ein Feld, das IMMER gesperrt ist, ist derselbe Schaden von der anderen
-    // Seite. Ohne diese Zusicherung bliebe die Mutation „disabled fest auf true" grün.
+    // Seite. Ohne diese Zusicherung bliebe die Mutation „readOnly fest auf true" grün.
     vi.spyOn(api, 'getFileEinstellungen').mockResolvedValue(BASIS)
     render(<DateiEinstellungenDialog project="p" base="a" file={datei()} offen />)
     await sprachWaehlerDa()
-    expect(feld()).not.toBeDisabled()
+    expect(feld()).not.toHaveAttribute('readonly')
+    expect(feld()).not.toHaveAttribute('aria-disabled')
+    expect(screen.getByText(/zuverlässiger/)).toBeInTheDocument()
+  })
+
+  it('ein Server OHNE das Feld laesst die Zahl bedienbar (#266)', async () => {
+    // Der Grund für `=== false` statt `!…`, und ohne diesen Test eine reine Behauptung:
+    // Server und Bundle sind getrennt: nach einem App-Update kann ein aelterer Server
+    // antworten, dem `diarisierung_aktiv` fehlt. `!undefined` waere `true` — das Feld waere
+    // dauerhaft gesperrt, und die Sprecherzahl liesse sich NIE WIEDER setzen, ohne dass
+    // irgendwo stuende, warum. Der Rueckfall muss zum bisherigen Verhalten gehen.
+    //
+    // Die beiden Tests darueber setzen das Feld beide explizit und koennen den Unterschied
+    // zwischen `=== false` und `!…` deshalb gar nicht sehen (im Review gemessen: die
+    // Mutation blieb gruen). Diesen einen Fall gibt es nur hier.
+    const { diarisierung_aktiv: _weg, ...ALT } = BASIS
+    vi.spyOn(api, 'getFileEinstellungen')
+      .mockResolvedValue(ALT as unknown as typeof BASIS)
+    render(<DateiEinstellungenDialog project="p" base="a" file={datei()} offen />)
+    await sprachWaehlerDa()
+    expect(feld()).not.toHaveAttribute('readonly')
     expect(screen.getByText(/zuverlässiger/)).toBeInTheDocument()
   })
 })

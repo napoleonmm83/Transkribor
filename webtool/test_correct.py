@@ -1014,13 +1014,19 @@ def test_correct_prompt_nennt_das_cluster_praefix_nicht_mehr_die_wahrheit():
     assert "WAHRHEIT, WER spricht" not in p
 
 
-def test_verify_prompt_beauftragt_keine_pauschale_fehlzuordnungs_korrektur():
-    """Der Gegenpart im Treue-Pass: „Fehlzuordnungen korrigieren" als pauschaler Auftrag ist
-    genau der Satz, der zwei Cluster mit demselben Namen als Fehler liest — und der Pass
-    schreibt zuletzt. Er ist eingeschraenkt, nicht bloss ergaenzt.
+def test_verify_prompt_verbietet_das_auseinanderziehen_gleich_benannter_cluster():
+    """Der Gegenpart im Treue-Pass: „Fehlzuordnungen korrigieren" stand dort als PAUSCHALER
+    Auftrag — und der Pass schreibt ZULETZT. Ungeschraenkt liest er zwei Cluster mit demselben
+    Namen als Fehler und dreht sie zurueck.
+
+    Der Auftrag selbst BLEIBT. Ein erster Anlauf hatte ihn durch „falsch zugeordnete EINZELNE
+    Segmente korrigieren" ersetzt und dem Pass damit eine Faehigkeit genommen, die er braucht:
+    einen Cluster, der DURCHGEHEND den falschen Namen traegt, umzubenennen (Reviewbefund M1).
+    Eingeschraenkt ist nur die eine Richtung — auseinanderziehen.
     """
     p = correct._verify_prompt("b", "t.txt", "c.json", "kontext")
-    assert "Fehlzuordnungen korrigieren" not in p
+    assert "NICHT auseinanderziehen" in p
+    assert "durchgehend falsch benannten Cluster" in p
 
 
 def test_ziel_dialekt_meldet_mehrsprachig(tmp_path, monkeypatch):

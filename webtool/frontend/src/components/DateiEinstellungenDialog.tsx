@@ -240,18 +240,27 @@ export function DateiEinstellungenDialog({ project, base, file, offen, onOpenCha
                   auf dem Knopf. Als Textfeld kommt „5e" durch, `sprecherWahl` erkennt es als
                   ungültig und sperrt. `inputMode` holt die Ziffern-Tastatur zurück; die
                   Spinner-Pfeile entfallen bewusst — sie sind der Preis dafür, dass die
-                  Eingabe des Nutzers nicht hinter seinem Rücken verschwindet. */}
+                  Eingabe des Nutzers nicht hinter seinem Rücken verschwindet.
+
+                  **`readOnly` + `aria-disabled` statt `disabled`** — der Unterschied zwischen
+                  halb und ganz behoben (#266). Ein `disabled`-Feld ist NICHT fokussierbar: wer
+                  den Dialog mit Tab durchgeht, springt daran vorbei, und `aria-describedby`
+                  wird nie vorgelesen — ausgerechnet die Zeile, die #266 überhaupt ausmacht
+                  („warum kann ich die Zahl nicht setzen?"). So bleibt das Feld erreichbar, die
+                  Begründung hörbar, und Eingaben sind trotzdem gesperrt. Die Ausgrauung hängt
+                  deshalb an `aria-disabled:`, nicht an `disabled:`. */}
               <input id="fs-sprecher" type="text" inputMode="numeric"
                 value={sprecherText}
                 onChange={e => setSprecherText(e.target.value)}
-                disabled={diarAus}
+                readOnly={diarAus}
+                aria-disabled={diarAus || undefined}
                 aria-describedby="fs-sprecher-hilfe"
                 aria-invalid={sprecherWahl === undefined || undefined}
                 placeholder="automatisch"
                 className="h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm
                            shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px]
                            focus-visible:ring-ring/50 aria-invalid:border-destructive
-                           disabled:cursor-not-allowed disabled:opacity-50" />
+                           aria-disabled:cursor-not-allowed aria-disabled:opacity-50" />
               <p id="fs-sprecher-hilfe" className="mt-1.5 text-sm text-muted-foreground">
                 {diarAus
                   // Die Zeile nennt die Variable beim Namen, statt „die Sprechertrennung

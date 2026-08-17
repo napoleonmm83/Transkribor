@@ -16,6 +16,14 @@ from . import auth
 # Endpunkt). Ein unaliasiertes `from . import correct` wuerde davon ueberschrieben, und
 # `correct.diarize_enabled()` liefe erst zur REQUEST-Zeit in einen AttributeError — kein
 # Fehler beim Import, kein roter Test beim Start, ein 500er im Betrieb. Nicht "aufraeumen".
+#
+# Was dieser Import NEU aufmacht: `correct.py` wurde bisher NUR im Subprozess geladen — ein
+# Import- oder Syntaxfehler dort kostete einen fehlgeschlagenen Korrekturjob. Jetzt haengt der
+# SERVERSTART daran (Editor, Upload, Einstellungen inklusive). Gemessen und deshalb vertretbar:
+# 8,2 ms marginal (llm/paths/settings/edit_model/render_md sind ohnehin geladen), kein Faden,
+# kein Dateizugriff beim Import. Eine Falle bleibt: `CLAUDE_PARALLEL` liest
+# `TRANSKRIBOR_PARALLEL` beim Import, also VOR `settings.load_env()` weiter unten — der Wert
+# wird im Serverprozess nirgends benutzt, wer ihn hier je liest, liest an der `.env` vorbei.
 from . import correct as _correct
 from . import device
 from . import fetch as fetch_mod
