@@ -95,3 +95,33 @@ def test_pipeline_nutzt_geraetewahl_und_lokales_modell(monkeypatch):
     assert gewaehlt == ["torchdevice:mps"]
     assert geladen == [((diarize.DIAR_MODEL,), {})]     # lokaler Pfad, kein token=
     monkeypatch.setattr(diarize, "_PIPELINE", None)      # Singleton nicht vergiften
+
+
+def test_diarize_file_waehlt_num_speakers_ODER_min_speakers(monkeypatch):
+    """Die Zeile, an der die vorgegebene Zahl bei pyannote ANKOMMT (#264).
+
+    Sie hatte null Abdeckung, in der Mutationsprobe nachgemessen: fest auf
+    `{"min_speakers": min_speakers}` verdrahtet blieben ALLE 771 Tests gruen. Grund ist die
+    Arbeitsteilung der uebrigen Tests — `test_correct.py` faelscht `diarize_file` weg und
+    misst damit nur die Durchreichung BIS zur Funktionsgrenze, und in dieser Datei rief bis
+    hierher kein einziger Test `diarize_file`. Die Kette war also auf ihrem letzten Meter
+    ungedeckt: genau der tote Schalter, den die Sidecar-Pruefung eine Ebene hoeher verhindert.
+
+    **Beide Richtungen**, weil ein fest verdrahtetes `num_speakers` derselbe Schaden von der
+    anderen Seite waere: es klemmte jede Datei OHNE Einstellung auf eine erfundene Zahl.
+    Und `num_speakers` steht ALLEIN — zusammen mit `min_speakers` weist pyannote die Angabe
+    als widerspruechlich zurueck, das waere ein Wurf mitten im GPU-Lauf."""
+    gesehen = {}
+
+    class _Ann:                       # was pyannote zurueckgibt; leer reicht, geprueft werden die kwargs
+        def itertracks(self, yield_label=True):
+            return []
+
+    monkeypatch.setattr(diarize, "_load_waveform", lambda p: "audio")
+    monkeypatch.setattr(diarize, "_pipeline",
+                        lambda: lambda wave, **kw: gesehen.update(kw) or _Ann())
+    diarize.diarize_file("x.m4a", min_speakers=2, num_speakers=5)
+    assert gesehen == {"num_speakers": 5}          # exakt, und kein min_speakers daneben
+    gesehen.clear()
+    diarize.diarize_file("x.m4a", min_speakers=2, num_speakers=None)
+    assert gesehen == {"min_speakers": 2}          # ohne Einstellung unveraendert wie vor #264
