@@ -417,6 +417,43 @@ export function SettingsPage() {
     return () => clearInterval(t)
   }, [ytLaeuft, ytMeldeEinmal, ytKennung])
 
+  // #252: ein FREMDER Lauf — seit #253 der Regelfall, weil die Kalenderprüfung beim
+  // Serverstart läuft — wird ANGEZEIGT, nicht übernommen. Dieser Effekt frischt allein `s`
+  // auf, damit die Zeile „Eine Aktualisierung läuft gerade" auch wieder ENDET.
+  //
+  // Ohne ihn war sie eine Momentaufnahme: `s` wird sonst nur beim Laden, nach `speichern()`
+  // und im Lauf-Poll oben gesetzt. Wer die Seite während eines fremden Laufs offen hatte, sah
+  // die Zeile und danach für immer dieselbe — „ehrlich anzeigen" hätte nicht funktioniert.
+  //
+  // **Er fasst `ytLaeuft` bewusst NICHT an**, und das ist die eigentliche Zusicherung.
+  // `ytLaeuft` besitzt die 480-Runden-Obergrenze des Polls oben samt ihrem `runden`-Zähler im
+  // Effektrumpf; hinge JENER Effekt zusätzlich an `s.ytdlp.laeuft`, setzte er bei jeder Runde
+  // neu auf, `runden` fiele auf 0, und die Obergrenze wäre wirkungslos — während ihr Test
+  // grün bliebe, denn der prüft den Toast, nicht das Aufhören. Die Entscheidung steht seit
+  // PR #223 an der Fassungszeile weiter unten; dieser Effekt hält sie ein, statt sie zu kippen.
+  //
+  // **Kein Toast** (Weg 2 aus #252, Entscheidung Marcus 2026-08-17): ein Toast für einen
+  // fremden Lauf bräuchte einen zweiten Besitzer der `useEinmalJeLauf`-Kennung — zieht der
+  // Effekt bei jedem Aufsatz `neuerLauf()`, entwertet er die des Knopfs; zieht nur der Knopf,
+  // teilt sich der Fremdlauf `gemeldet` mit dem letzten eigenen. #247 ist an genau dieser
+  // Klasse zweimal gekippt. Wer den Ausgang wissen will, klickt — die Zeile lädt dazu ein.
+  //
+  // **3 s statt 1,5 s:** hier wartet niemand auf eine Meldung, und jede Runde kostet den
+  // Server einen `llm.available()`-Subprozess (#250, noch ungemessen).
+  useEffect(() => {
+    if (!s?.ytdlp.laeuft || ytLaeuft) return
+    // Eigene Obergrenze, eigener Zähler: es ist ein eigener Effekt, die des Polls oben deckt
+    // ihn nicht. Gezählt werden NACHFRAGEN, nicht Wanduhrzeit — derselbe Grund wie dort
+    // (ein gedrosselter Hintergrund-Tab soll nicht früher aufgeben). 240 x 3 s = 12 Min.
+    let runden = 0
+    const t = setInterval(async () => {
+      if (++runden > 240) { clearInterval(t); return }
+      const neu = await getSettings().catch(() => null)
+      if (neu) setS(neu)          // ein Aussetzer beendet die Beobachtung nicht
+    }, 3000)
+    return () => clearInterval(t)
+  }, [s?.ytdlp.laeuft, ytLaeuft])
+
   // Der Knopf wartet seit #174 nicht mehr auf pip — er stösst an, und ein Effekt fragt nach.
   // Das Nachfragen ist NICHT optional: ohne es stünde ein Fehlschlag nur in der
   // Serverkonsole, und der Umbau hätte einen hängenden Browser gegen einen stillen Ausfall
