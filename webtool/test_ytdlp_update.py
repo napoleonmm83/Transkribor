@@ -1662,3 +1662,20 @@ def test_die_venv_kennung_ueberlebt_den_prozess():
         capture_output=True, text=True, cwd=os.path.dirname(os.path.dirname(yu.__file__)))
     assert fremd.returncode == 0, fremd.stderr
     assert fremd.stdout.strip() == yu._venv_kennung()
+
+
+def test_ein_ABGELAUFENER_merker_wird_sehr_wohl_aufgefrischt(monkeypatch):
+    """Die Grenze zum Test darueber, und sie ist der Unterschied zwischen „geschont" und
+    „eingefroren": geschont wird nur, was noch GILT. Ohne sie bliebe ein einmal
+    liegengebliebener Merker fuer immer auf seinem alten Datum stehen — eine NEUE
+    Unterbrechung Wochen spaeter faende ihn abgelaufen vor, frischte ihn nicht auf, und die
+    Reparatur unterbliebe dauerhaft. (CodeRabbit-CLI, Major.)"""
+    with open(yu._pip_merker(), "w", encoding="utf-8") as f:
+        f.write((HEUTE - dt.timedelta(days=yu.INTERVALL_TAGE + 1)).isoformat())
+    assert yu._pip_unterbrochen() is False                  # abgelaufen
+
+    monkeypatch.setattr(yu, "fassung", lambda: "2025.9.5")
+    monkeypatch.setattr(yu.subprocess, "run", _wirft(KeyboardInterrupt()))
+    with pytest.raises(KeyboardInterrupt):
+        yu.aktualisiere()                                   # neue Unterbrechung
+    assert yu._pip_unterbrochen() is True, "der abgelaufene Merker wurde nicht aufgefrischt"

@@ -703,18 +703,27 @@ def _merker_datum() -> dt.date | None:
 def _pip_merker_setzen() -> None:
     """Unmittelbar VOR `subprocess.run`, INNERHALB der Sperre — siehe `aktualisiere`.
 
-    **Ein bereits datierter Merker wird NICHT aufgefrischt.** Sein Datum ist der Anker der
+    **Ein noch GUELTIGER Merker wird NICHT aufgefrischt.** Sein Datum ist der Anker der
     Verfallsfrist, und genau daran endet der einzige verbliebene Dauerlauf: scheitert pip
     dauerhaft (offline, kein Netz, kaputte venv), setzte ein aufgefrischtes Datum die Frist
     bei jedem Lauf zurueck und die Faelligkeit liefe ewig. So friert sie ein und laeuft nach
     `INTERVALL_TAGE` aus. Unlesbar zaehlt dabei als „keiner" und wird ueberschrieben — sonst
     bliebe eine halb geschriebene Datei fuer immer liegen und schaltete die Erkennung ab.
 
+    **Ein ABGELAUFENER wird sehr wohl ueberschrieben**, und das ist der Unterschied zwischen
+    „geschont" und „eingefroren": geschont wird nur, was gerade noch gilt. Ohne diese Grenze
+    bliebe ein einmal liegengebliebener Merker fuer immer auf seinem alten Datum stehen — eine
+    NEUE Unterbrechung Wochen spaeter faende ihn abgelaufen vor, frischte ihn nicht auf, und
+    die Reparatur unterbliebe dauerhaft. Ein Dauerlauf entsteht dadurch nicht: damit der
+    Merker `faellig()` ueberhaupt ausloest, muss `fassung()` None sein — und dann gibt es ohne
+    ihn gar keinen Lauf mehr, der ihn auffrischen koennte. (CodeRabbit-CLI, Major.)
+
     Best effort: ein nicht schreibbarer Merker macht den Zustand nur so schlecht, wie er vor
     diesem Fix war. Aber nicht STILL, sonst ist er von einem gesetzten nicht zu unterscheiden
     (dieselbe Regel wie bei `sperre.datei`s fail-open).
     """
-    if _merker_datum() is not None:
+    d = _merker_datum()
+    if d is not None and (_heute() - d).days <= INTERVALL_TAGE:
         return
     try:
         with open(_pip_merker(), "w", encoding="utf-8") as f:
