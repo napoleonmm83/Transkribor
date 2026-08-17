@@ -332,8 +332,12 @@ weit vorn, weil es den Nutzer sichtbar beim Speichern trifft.
   eine Ausnahmeliste.
 - **Kein Vorgriff auf #250s Lösung** — erst messen. Das Issue verlangt es, und die 0,26 s
   sind in diesem Repo nie gemessen worden.
-- **Kein #252-Weg festgelegt** — das Issue sagt „Nicht entschieden", und die Wahl ändert die
-  Form der ganzen Welle. Das ist Marcus' Entscheidung, nicht meine.
+- **Kein Vorgriff auf einen anderen #252-Weg** — Weg 2 ist entschieden (Marcus, 2026-08-17).
+  Die Umsetzung übernimmt deshalb **keinen** zweiten Besitzer der `useEinmalJeLauf`-Kennung und
+  **keinen** Toast für fremde Läufe; der Anzeige-Poll fasst `ytLaeuft` nicht an. Wer Weg 1
+  später doch will, fängt bei der 480-Runden-Obergrenze an, nicht beim Toast.
+  (Die Frage stand hier bis zur Entscheidung offen — das Issue selbst sagte „Nicht
+  entschieden", und die Wahl änderte die Form der ganzen Welle.)
 
 ## Offene Prüflücken (benannt, nicht verschwiegen)
 
