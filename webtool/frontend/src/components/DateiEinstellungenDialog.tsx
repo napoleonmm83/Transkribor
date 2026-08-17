@@ -265,9 +265,12 @@ export function DateiEinstellungenDialog({ project, base, file, offen, onOpenCha
                 {diarAus
                   // Die Zeile nennt die Variable beim Namen, statt „die Sprechertrennung
                   // funktioniert nicht" zu behaupten: der Server weiss nur, dass der
-                  // Kill-Switch gesetzt ist — ob pyannote laufen WUERDE, sagt er nicht.
+                  // Kill-Switch gesetzt ist — ob pyannote laufen WUERDE, sagt er nicht (#270).
+                  // Ohne `=0`: `diarize_enabled` akzeptiert auch `false` und `no`, ein
+                  // konkreter Wert waere also fuer zwei von drei Faellen falsch.
                   ? 'Die Sprechertrennung ist auf diesem Server abgeschaltet '
-                    + '(TRANSKRIBOR_DIARIZE=0) — die Zahl hätte hier keine Wirkung.'
+                    + '(Umgebungsvariable TRANSKRIBOR_DIARIZE) — die Zahl hätte hier '
+                    + 'keine Wirkung.'
                   : sprecherWahl === undefined
                   ? `Bitte eine ganze Zahl von 1 bis ${sprecherMax} eintragen — oder leer lassen.`
                   : 'Leer lassen heisst automatisch erkennen. Wer weiss, wie viele Personen '

@@ -268,8 +268,8 @@ kostet keine neue Transkription, nur einen neuen Korrekturlauf; hast du die Aufn
 schon von Hand überarbeitet, wird diese Fassung dabei überschrieben — der Dialog sagt es dir
 an, bevor du speicherst.
 
-Steht das Feld grau und meldet, die Sprechertrennung sei abgeschaltet, dann läuft Transkribor
-mit `TRANSKRIBOR_DIARIZE=0`. Die Sprecher werden dann allein aus dem Gesprächsverlauf
+Steht das Feld grau und meldet, die Sprechertrennung sei abgeschaltet, dann wurde sie auf
+diesem Rechner ausgeschaltet. Die Sprecher werden dann allein aus dem Gesprächsverlauf
 erschlossen, und die Zahl ändert daran nichts.
 
 Bei Aufnahmen, die du **vor dieser Fassung** hinzugefügt hast, steht meist „Ja“ oder „Nein“ —
