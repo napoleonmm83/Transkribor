@@ -1950,3 +1950,10 @@ def test_projekt_endpunkt_kennt_die_sprecherzahl_NICHT(client, tmp_projekt):
     assert r.status_code == 200                     # unbekanntes Feld: ignoriert wie jedes andere
     assert "sprecher" not in r.json()
     assert client.get(f"/api/projects/{tmp_projekt}/files/S1/einstellungen").json()["sprecher"] is None
+    # DAS ist die beobachtbare Differenz — und ohne sie war der Test Dekoration: dass das Feld
+    # nicht in `projekt.json` landet, gilt AUCH mit `sprecher` im geteilten Modell (der Handler
+    # baut sein Dict explizit, `speichern` filtert nach Schluesseln). Im Review gemessen: die
+    # Mutation liess 215 Tests gruen. Woran man sie sieht, ist die VALIDIERUNG — ein Modell mit
+    # dem Feld antwortete hier 422 statt 200.
+    assert client.put(f"/api/projects/{tmp_projekt}/einstellungen",
+                      json={"sprecher": "keine Zahl"}).status_code == 200

@@ -62,8 +62,16 @@ def diarize_file(audio_path: str, min_speakers: int = 2, num_speakers: int = Non
     geladen (torchcodec-Bypass, siehe _load_waveform).
 
     `num_speakers` ist die vom Nutzer angegebene EXAKTE Sprecherzahl; `None` laesst pyannote
-    schaetzen (Verhalten wie bisher). Sie schliesst `min_speakers` aus — beides zusammen
-    weist pyannote als widerspruechlich zurueck.
+    schaetzen (Verhalten wie bisher).
+
+    **Warum entweder-oder statt beides:** NICHT, weil pyannote das zurueckweisen wuerde — das
+    stand hier und ist nachgemessen falsch. `pipelines/utils/diarization.py:58` macht
+    `min_speakers = num_speakers or min_speakers or 1`, ueberschreibt die Untergrenze also
+    kommentarlos („override {min|max}_num_speakers by num_speakers when available"), und
+    pyannotes eigener Docstring sagt „Has no effect when `num_speakers` is provided". Beides
+    zu schicken waere also wirkungslos, nicht fatal — und genau deshalb geht es nicht mit:
+    ein mitgeschicktes `min_speakers` behauptete am Aufrufort eine Wirkung, die es nicht hat,
+    und der naechste Leser suchte den Fehler dann in der falschen Zeile.
 
     **Warum die Zahl und nicht die Clustering-Parameter**, an Marcus' Rhyathlon-Material
     gemessen (Kameramikrofon, Schweizerdeutsch, 2 Dateien, Ground Truth 4 bzw. 5 Sprecher):

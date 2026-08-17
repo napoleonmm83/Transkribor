@@ -79,7 +79,10 @@ export function DateiEinstellungenDialog({ project, base, file, offen, onOpenCha
         // ja etwas aufzuraeumen) und raeumt den Eintrag beim Speichern weg.
         setData(d); setSprachWahl(d.sprache_eigen || null); setKorrektur(d.korrektur)
         setMehrWahl(d.mehrsprachig_eigen)
-        setSprecherText(d.sprecher === null ? '' : String(d.sprecher))
+        // `?? ''` statt nur der null-Pruefung: fehlt das Feld in der Antwort, stuende sonst
+        // der String "undefined" im Zustand — das Feld saehe leer aus, waere aber ungueltig,
+        // der Knopf dauerhaft grau und Leeren unmoeglich (kein onChange raeumt es weg).
+        setSprecherText(d.sprecher == null ? '' : String(d.sprecher))
       })
       .catch(e => { if (aktiv) toast.error(`Einstellungen laden fehlgeschlagen: ${(e as Error).message}`) })
       .finally(() => { if (aktiv) setLaedt(false) })

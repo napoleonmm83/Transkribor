@@ -11,6 +11,7 @@ API-Key). `prep`/`apply` sind deterministisches Python; der LLM-Schritt liegt da
 (entweder `run` hier oder der Workflow tools/correct_label.mjs).
 """
 import argparse
+import contextlib
 import json
 import os
 import re
@@ -221,6 +222,20 @@ def cmd_diarize(project: str, only_bases: list = None) -> int:
                 continue
             from . import diarize                       # lazy: zieht torch/pyannote erst hier
             raw = _load(raw_json)
+            # Das ueberholte Sidecar geht VOR dem Rechnen weg, nicht erst durch das
+            # Ueberschreiben danach — das ist die Antwort auf „was erlaubt die Reparatur NEU?".
+            # Scheitert `diarize_file` (GPU-OOM, pyannote fehlt), wird `atomic_write` nie
+            # erreicht: das alte Sidecar bliebe liegen, die Ungleichheit bestuende fort, und
+            # JEDER weitere Lauf rechnete erneut — bei einem dauerhaften Fehler endlos. Zudem
+            # laese `cmd_prep` weiter die ALTE Clusterung ein, waehrend das Protokoll
+            # „Korrektur ohne Cluster" behauptet: eine stille Falschzuordnung ausgerechnet fuer
+            # den Nutzer, der die Zahl gerade gesetzt hat. Nach dem Loeschen ist der Fehlerfall
+            # exakt der dokumentierte „kein Sidecar"-Zustand (Korrektur ohne Cluster, wie vor
+            # Stufe 3). Erst NACH der Audio-Pruefung: fehlt die Tonspur, kann nie wieder
+            # diarisiert werden — dann ist das alte Sidecar besser als keines.
+            if os.path.exists(dpath):
+                with contextlib.suppress(OSError):   # best effort; sonst ueberschreibt unten ohnehin
+                    os.remove(dpath)
             wieviele = f" ({sprecher} Sprecher)" if sprecher else ""
             print(f"→ Diarisiere {base}{wieviele} …", flush=True)
             turns = diarize.diarize_file(audio, min_speakers=DIARIZE_MIN_SPEAKERS,
@@ -229,7 +244,11 @@ def cmd_diarize(project: str, only_bases: list = None) -> int:
                 print(f"diarize: SKIP {base} (keine Sprecher erkannt)", flush=True)
                 continue
             seg_speakers = diarize.assign_clusters(raw, turns)
-            doc = {"base": base, "audio": os.path.basename(audio), "min_speakers": DIARIZE_MIN_SPEAKERS,
+            # `min_speakers` nur, wenn es auch gewirkt hat: bei gesetzter Sprecherzahl geht
+            # ausschliesslich `num_speakers` an pyannote, und eine Grenze im Sidecar, die der
+            # Lauf nie gesehen hat, schickt den naechsten Debugger auf die falsche Faehrte.
+            doc = {"base": base, "audio": os.path.basename(audio),
+                   "min_speakers": None if sprecher else DIARIZE_MIN_SPEAKERS,
                    "sprecher": sprecher,          # womit gerechnet wurde -> Skip-Entscheidung oben
                    "turns": turns,
                    "segments": [{"id": sid, "speaker": spk} for sid, spk in seg_speakers.items()]}

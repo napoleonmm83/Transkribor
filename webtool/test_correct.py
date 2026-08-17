@@ -1185,3 +1185,44 @@ def test_geaenderte_sprecherzahl_erzwingt_neue_diarisierung(project, monkeypatch
     assert correct.cmd_diarize("Demo") == 0 and laeufe["n"] == 2     # jetzt wieder Skip
     projekt.setze_datei("Demo", "S1", sprecher=projekt.ERBEN)
     assert correct.cmd_diarize("Demo") == 1 and laeufe["n"] == 3     # zurueck auf auto -> neu
+
+
+def test_scheiternde_diarisierung_laesst_kein_veraltetes_sidecar_zurueck(project, monkeypatch):
+    """Was die Sidecar-Invalidierung NEU erlaubt hat (Reviewbefund, gemessen).
+
+    Der Skip faellt jetzt auch bei Zahl-Ungleichheit aus — geschrieben wird das Sidecar aber
+    nur bei ERFOLG. Wirft `diarize_file` (GPU-OOM, pyannote fehlt), blieb das ALTE Sidecar
+    liegen, die Ungleichheit bestand fort, und JEDER weitere Lauf rechnete erneut: bei einem
+    dauerhaften Fehler endlos, jedes Mal GPU-Minuten. Schlimmer als die Kosten war die Luege:
+    `cmd_prep` webt danach weiter die ALTE Clusterung in die tagged.txt, waehrend das
+    Protokoll „Korrektur ohne Cluster" behauptet — eine stille Falschzuordnung ausgerechnet
+    fuer den Nutzer, der die Zahl gerade gesetzt hat. Vor diesem Feld war der Zustand
+    unerreichbar (ein gueltiges Sidecar wurde nie erneut versucht).
+
+    Geprueft werden BEIDE Folgen: dass die Datei weg ist (sonst luege `cmd_prep`) und dass ein
+    zweiter Lauf nicht schon wieder rechnet — die zweite ist die eigentliche Zusicherung, die
+    erste allein bekaeme man auch mit einem `atomic_write` am Ende hin."""
+    _root, t = project
+    monkeypatch.setenv("TRANSKRIBOR_DIARIZE", "1")
+    import webtool.diarize as diar
+    from webtool import projekt
+    monkeypatch.setattr(diar, "diarize_file",
+                        lambda audio, min_speakers=2, num_speakers=None: _fake_turns())
+    assert correct.cmd_diarize("Demo") == 1                    # Sidecar aus dem Auto-Lauf
+    assert (t / "S1.diar.json").exists()
+
+    laeufe = {"n": 0}
+    def boom(audio, min_speakers=2, num_speakers=None):
+        laeufe["n"] += 1
+        raise RuntimeError("CUDA out of memory")
+    monkeypatch.setattr(diar, "diarize_file", boom)
+    projekt.setze_datei("Demo", "S1", sprecher=4)
+    assert correct.cmd_diarize("Demo") == 0 and laeufe["n"] == 1
+    assert not (t / "S1.diar.json").exists()                   # sonst nutzt cmd_prep die ALTE Clusterung
+    # ... und der naechste Lauf faengt nicht wieder von vorn an zu rechnen? Doch — aber jetzt
+    # aus dem dokumentierten „kein Sidecar"-Zustand heraus, nicht aus einer Ungleichheit, die
+    # sich selbst am Leben haelt. Der Unterschied zeigt sich, sobald die GPU wieder da ist:
+    monkeypatch.setattr(diar, "diarize_file",
+                        lambda audio, min_speakers=2, num_speakers=None: _fake_turns())
+    assert correct.cmd_diarize("Demo") == 1
+    assert correct.cmd_diarize("Demo") == 0                    # konvergiert, kein Dauerlauf
