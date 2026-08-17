@@ -145,7 +145,7 @@ def cmd_prep(project: str) -> int:
             # Kill-Switch muss auch die KONSUMPTION eines evtl. liegen gebliebenen Sidecars
             # unterdrücken, nicht nur dessen Erzeugung — sonst injiziert ein altes
             # <base>.diar.json trotz TRANSKRIBOR_DIARIZE=0 weiterhin das (Sprecher N)-Präfix.
-            clusters = _load_diar_clusters(tdir, base) if _diarize_enabled() else {}
+            clusters = _load_diar_clusters(tdir, base) if diarize_enabled() else {}
             lines = []
             for s in segs:
                 spk = clusters.get(s["id"])
@@ -181,7 +181,13 @@ def _sidecar_sprecher(dpath: str):
         return None
 
 
-def _diarize_enabled() -> bool:
+def diarize_enabled() -> bool:
+    """Ist die akustische Sprechertrennung eingeschaltet? (`TRANSKRIBOR_DIARIZE`)
+
+    Oeffentlich, weil `app.py` sie beantwortet: der Datei-Einstellungs-Dialog zeigt sonst ein
+    Feld an, das nichts tut (#266). Eine zweite Kopie der Regel dort waere die Divergenzfalle —
+    dieselbe Regel an zwei Orten laeuft beim naechsten Umbau auseinander.
+    """
     return os.environ.get("TRANSKRIBOR_DIARIZE", "1").strip().lower() not in ("0", "false", "no")
 
 
@@ -191,7 +197,7 @@ def cmd_diarize(project: str, only_bases: list = None) -> int:
     (kein Sidecar) — die Korrektur läuft dann ohne Cluster (Text-Raten wie bisher).
     only_bases scopt auf einen Einzel-Datei-Lauf (✎) — sonst wäre ein Ein-Datei-run GPU-teuer
     fürs ganze Projekt, obwohl Diarisierung pro Datei unabhängig ist."""
-    if not _diarize_enabled():
+    if not diarize_enabled():
         print("↷ Diarisierung deaktiviert (TRANSKRIBOR_DIARIZE=0)", flush=True)
         return 0
     tdir = paths.transkripte_dir(project)
@@ -749,7 +755,7 @@ def _correct_file(project: str, base: str, gjson: str, context: str, verify: boo
                      mehrsprachig=mehrsprachig)
         return
     chunks = [ids[i:i + CHUNK_SEGMENTS] for i in range(0, len(ids), CHUNK_SEGMENTS)]
-    clusters = _load_diar_clusters(tdir, base) if _diarize_enabled() else {}
+    clusters = _load_diar_clusters(tdir, base) if diarize_enabled() else {}
     parts = [os.path.abspath(os.path.join(tdir, f"{base}.part{i}.correction.json"))
              for i in range(1, len(chunks) + 1)]
     print(f"  {base}: {len(ids)} Segmente → {len(chunks)} Blöcke à max. {CHUNK_SEGMENTS}", flush=True)
