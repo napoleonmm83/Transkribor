@@ -47,6 +47,20 @@ def client(monkeypatch, tmp_path):
     monkeypatch.setitem(ytu._lauf, "laeuft", False)
     monkeypatch.setitem(ytu._lauf, "ergebnis", "")
     monkeypatch.setitem(ytu._lauf, "ungeschuetzt", False)
+    # Seit #253 haengt die Kalenderpruefung am LIFESPAN, und jedes `with TestClient(app)`
+    # betritt ihn. Diese Fixture loescht `TRANSKRIBOR_YTDLP_UPDATE` (oben, mit Begruendung)
+    # und legt eine leere Einstellungsdatei an — also `auto_an() True` und `geprueft() None`.
+    # Gemessen mit blockiertem `subprocess.run`: `faellig()` ist auf einem Entwicklerrechner
+    # mit installiertem yt-dlp **True**, und `test_shutdown_bricht_laufende_jobs_ab` startete
+    # damit ein echtes `pip install -U "yt-dlp[default]"` gegen die venv des Laeufers.
+    #
+    # **Die CI sieht das nie:** ihr Job installiert kein yt-dlp, also `fassung() None` ⇒
+    # `faellig() False` ⇒ kein pip. Der Schaden trifft ausschliesslich den Entwickler — und
+    # deshalb steht der Riegel hier in der Fixture und nicht in dem einen Test: das naechste
+    # `with TestClient(...)` macht die Tuer sonst wieder auf. Wer den Startlauf PRUEFEN will,
+    # baut seinen TestClient ohne diese Fixture (siehe
+    # `test_start_stoesst_die_ytdlp_kalenderpruefung_an`).
+    monkeypatch.setattr(ytu, "beim_start", lambda: False)
     from webtool.app import app
     yield TestClient(app)
     # Auf einen noch laufenden Hintergrundfaden warten — und zwar HIER, vor monkeypatchs

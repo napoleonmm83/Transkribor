@@ -252,6 +252,11 @@ export function SettingsPage() {
   const [laedt, setLaedt] = useState(false)
   const [testet, setTestet] = useState(false)
   const [ytLaeuft, setYtLaeuft] = useState(false)
+  // Der Nachhol-Poll (#252) hat seine Obergrenze erreicht. Ohne diesen Merker fröre die Zeile
+  // „läuft gerade" danach WIEDER ein — also #252s Symptom, nur um zwölf Minuten verschoben.
+  // Der Poll oben zeigt an derselben Stelle einen Fehler-Toast; hier wäre der falsch (niemand
+  // hat etwas angestossen, es ist kein Fehlschlag), also sagt es die Zeile selbst.
+  const [ytAufgegeben, setYtAufgegeben] = useState(false)
   // Drei Wege enden in einer Meldung über denselben Lauf: der Poll, der Direktstart in
   // `ytJetzt` und die Obergrenze. Seit #236 erzeugt jeder Durchlauf bis zu ZWEI Toasts
   // (Erfolg und die Warnung „ohne Sperre") — doppelt gemeldet wären das vier für einen
@@ -445,11 +450,27 @@ export function SettingsPage() {
     // Eigene Obergrenze, eigener Zähler: es ist ein eigener Effekt, die des Polls oben deckt
     // ihn nicht. Gezählt werden NACHFRAGEN, nicht Wanduhrzeit — derselbe Grund wie dort
     // (ein gedrosselter Hintergrund-Tab soll nicht früher aufgeben). 240 x 3 s = 12 Min.
+    // Eine neue Beobachtung fängt ohne Vorgeschichte an. `setYtAufgegeben` ist stabil und
+    // gehört deshalb NICHT in die Abhängigkeiten — läge `ytAufgegeben` dort, setzte der Effekt
+    // bei jeder Änderung neu auf und `runden` fiele auf 0: exakt der Mechanismus, wegen dessen
+    // der Poll oben nicht an `s.ytdlp.laeuft` hängen darf. Ist der Wert schon `false`, verwirft
+    // React das Update (`Object.is`), es kostet also nichts.
+    setYtAufgegeben(false)
     let runden = 0
+    // Überholte Antworten verwerfen — derselbe Riegel wie im Poll oben (CodeRabbit-Bot an
+    // PR #248), hier sogar nötiger: dieser Poll läuft **unaufgefordert** bis zu zwölf Minuten,
+    // während jemand auf der Seite tippt. Eine überholte Runde schriebe `s` auf den Stand von
+    // VOR einem `speichern()` zurück; das Modellfeld hängt an `key={provider|model}` und zeigte
+    // dann wieder den ALTEN Namen — eine Anzeige, die widerruft, was gerade gespeichert wurde.
+    let angewandt = 0
     const t = setInterval(async () => {
-      if (++runden > 240) { clearInterval(t); return }
+      if (++runden > 240) { clearInterval(t); setYtAufgegeben(true); return }
+      const meineRunde = runden
       const neu = await getSettings().catch(() => null)
-      if (neu) setS(neu)          // ein Aussetzer beendet die Beobachtung nicht
+      if (!neu) return            // ein Aussetzer beendet die Beobachtung nicht
+      if (meineRunde < angewandt) return
+      angewandt = meineRunde
+      setS(neu)
     }, 3000)
     return () => clearInterval(t)
   }, [s?.ytdlp.laeuft, ytLaeuft])
@@ -617,7 +638,10 @@ export function SettingsPage() {
             {ytLaeuft
               ? 'Die Fassung steht fest, sobald der Lauf fertig ist.'
               : s.ytdlp.laeuft
-              ? 'Eine Aktualisierung läuft gerade — klicke, um ihr zuzusehen.'
+              ? ytAufgegeben
+                ? 'Eine Aktualisierung läuft ungewöhnlich lange — Transkribor fragt nicht '
+                  + 'mehr von selbst nach. Klicke, um wieder zuzusehen.'
+                : 'Eine Aktualisierung läuft gerade — klicke, um ihr zuzusehen.'
               : s.ytdlp.version
               ? <>Fassung <span className="font-medium text-foreground">{s.ytdlp.version}</span>
                 {s.ytdlp.geprueft && ` · zuletzt geprüft am ${tag(s.ytdlp.geprueft)}`}</>
