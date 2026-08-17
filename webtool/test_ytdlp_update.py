@@ -17,6 +17,7 @@ import datetime as dt
 import os
 import platform
 import subprocess
+import sys
 import threading
 import time
 
@@ -30,6 +31,10 @@ HEUTE = dt.date(2026, 8, 13)
 # VOR jeder Fixture-Faelschung festgehalten: die Fixture pinnt `_ejs_untauglich` (s. unten),
 # und der Test der Funktion selbst braucht trotzdem das Original.
 _ECHTES_EJS_UNTAUGLICH = yu._ejs_untauglich
+# Dasselbe fuer `subprocess.run`: die Fixture verdrahtet es auf `pytest.fail`, und weil
+# `yu.subprocess` DASSELBE Modulobjekt ist wie das hier importierte, trifft das jeden Aufruf
+# in dieser Datei — auch einen, der gar kein pip startet.
+_ECHTES_RUN = subprocess.run
 
 
 @pytest.fixture(autouse=True)
@@ -1613,3 +1618,47 @@ def test_ohne_vorhandene_fassung_entsteht_GAR_KEIN_merker(monkeypatch):
     monkeypatch.setattr(yu, "fassung", lambda: "2025.9.5")      # Positivkontrolle
     yu.aktualisiere()
     assert yu._pip_unterbrochen() is True
+
+
+@pytest.mark.skipif(not hasattr(os, "mkfifo"),
+                    reason="FIFOs gibt es auf Windows nicht; der unbegrenzte Fall ist dort "
+                           "nicht herstellbar")
+def test_ein_fifo_am_merker_pfad_haelt_den_serverstart_nicht_auf():
+    """Dieselbe Klasse wie #200 in `sperre._merker_lesen`, nur eine Stufe teurer: der Aufrufer
+    ist ueber `faellig()` -> `beim_start()` der Lifespan VOR dem `yield`, und dessen
+    `except Exception` faengt keinen Haenger — der Server kaeme gar nicht hoch, ohne
+    Fehlerseite und ohne Log.
+
+    Gemessen wird im FADEN mit `join`, nie mit einem normalen Aufruf: ein Haenger macht keinen
+    Test rot, er laesst die ganze Suite auslaufen — genau darum blieb die Klasse in #191/#200
+    so lange unbemerkt.
+
+    Geprueft wird die EIGENSCHAFT („kehrt zurueck, ohne Auskunft"), nicht ein bestimmter
+    Rueckgabewert: ohne Schreiber liefert `os.read` in WSL/ext4 `b""`, nicht `None`.
+
+    **Dieser Test laeuft nur in der Linux-CI** — dieselbe Luecke wie bei #200/#201/#222. Der
+    Windows-Zweig bleibt damit unbewacht; das ist benannt, nicht uebersehen."""
+    os.mkfifo(yu._pip_merker())                       # niemand schreibt je hinein
+    ergebnis = []
+    faden = threading.Thread(target=lambda: ergebnis.append(yu._merker_datum()), daemon=True)
+    faden.start()
+    faden.join(5)
+    assert not faden.is_alive(), "haengt am FIFO — der Serverstart ist nicht haengerfrei"
+    assert ergebnis[0] is None, "ein FIFO ist keine Auskunft, kein Datum"
+
+
+def test_die_venv_kennung_ueberlebt_den_prozess():
+    """`hash()` waere hier falsch: es ist pro Prozess gesalzen (PYTHONHASHSEED), der Merker
+    hiesse beim naechsten Start also anders und keine Reparatur faende ihn je wieder. Ein
+    Vergleich innerhalb DIESES Prozesses koennte das nicht zeigen — deshalb ein zweiter.
+
+    Was das NICHT prueft: dass `blake2b` statt `sha1` genommen wird. Der Unterschied ist nur,
+    dass `sha1` durch OpenSSL geht und unter einem FIPS-Provider wirft; hier steht kein
+    FIPS-Rechner, die Wahl ist also bewusst ohne roten Test (wie `O_BINARY` in
+    `sperre._merker_lesen`)."""
+    fremd = _ECHTES_RUN(
+        [sys.executable, "-c",
+         "from webtool import ytdlp_update as yu; print(yu._venv_kennung())"],
+        capture_output=True, text=True, cwd=os.path.dirname(os.path.dirname(yu.__file__)))
+    assert fremd.returncode == 0, fremd.stderr
+    assert fremd.stdout.strip() == yu._venv_kennung()
