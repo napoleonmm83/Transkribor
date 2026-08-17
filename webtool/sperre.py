@@ -313,12 +313,37 @@ def merker_aufgeben(pfad: str) -> bool:
     **Der Ausweis ist Pflicht, nicht Vorsicht** (dieselbe Regel wie in `_wegraeumen`): war das
     Lock zwischenzeitlich frei und gehoert jetzt einem anderen, entwertete ein blindes
     `os.remove` dessen **frischen** Merker — und der koennte sein eigenes Lock im `finally`
-    nicht mehr wiedererkennen.
+    nicht mehr wiedererkennen. **Lueckenlos ist er nicht**, dieselbe Restluecke wie dort:
+    zwischen Vergleich und `os.remove` liegen Systemaufrufe. Sie zu treffen setzt voraus, dass
+    ein Dritter in diesem Fenster unser Lock uebernimmt — und dazu muesste er erst den
+    erzwungenen Griff nach `frist()` abwarten, weil unser Merker eine LEBENDE PID nennt.
 
-    **Dass die mtime dabei hochspringt, ist gewollt.** `os.remove` im Verzeichnis erneuert
-    sie, die Uhr zaehlt also ab dem Aufgeben statt ab dem `mkdir` — und ab genau diesem
-    Zeitpunkt kann das verwaiste Kind noch hoechstens seinen eigenen Deckel lang laufen. Der
-    Aufrufer sagt mit `stale` zu, dass seine Frist das abdeckt (siehe `frist`).
+    **Umgekehrt raeumt der eigene Faden sein Lock danach nicht mehr ab**, falls er doch noch
+    fertig wird: sein `finally` vergleicht `mein_merker` gegen die Platte, findet `None` und
+    laesst liegen. Harmlos (der naechste Erwerber entsorgt es nach der Frist), aber es heisst,
+    dass ein leeres Lock-Verzeichnis stehenbleiben kann, wenn nie wieder jemand die Sperre
+    nimmt.
+
+    **`_merker_lesen` faengt nur `OSError`, nicht `ValueError`** — anders als `wird_gehalten`,
+    das an einem Request-Pfad haengt. Ein eingebetteter NUL im Pfad wuerde hier also
+    durchschlagen; ueber `TRANSKRIBOR_SETTINGS` ist das nicht erreichbar (Umgebungsvariablen
+    tragen kein NUL), deshalb steht hier ein Satz statt einer Wache ohne roten Test.
+
+    **Dass die mtime dabei hochspringt, ist gewollt** — `os.remove` im Verzeichnis erneuert
+    sie, die Uhr zaehlt also ab dem Aufgeben statt ab dem `mkdir`. **Sie deckt das Kind
+    trotzdem nur typisch ab, nicht garantiert, und das gehoert hierhin statt hinter eine
+    Rechnung, die nicht aufgeht:** den `timeout=` eines `subprocess.run` setzt der ELTERN-
+    prozess durch — ist der weg, killt niemand mehr. Gemessen: Kind mit 3-s-Deckel, Elter nach
+    1 s beendet, Kind lebt nach 6 s noch. Ueberzieht es die Frist, greift der naechste
+    Erwerber erzwungen zu — also genau der Zustand von vor diesem Fix, kein neuer Schaden.
+
+    **Der Preis, und er ist nicht gemessen, sondern hergeleitet:** stirbt das Kind MIT uns
+    (Ctrl+C schickt SIGINT an die ganze Vordergrund-Prozessgruppe, pip inklusive), klemmt der
+    Merker-Verzicht die Sperre bis zur Frist, obwohl niemand mehr arbeitet — vorher war ein
+    toter Halter sofort erkennbar. Folgen: der naechste Start ueberspringt seine
+    Kalenderpruefung, und „Jetzt aktualisieren" wartet erst die Frist ab. Beides begrenzt und
+    ohne Datenverlust; wirklich vermeiden liesse es sich nur, indem der Aufrufer den
+    Kindprozess selbst haelt und `poll()` fragt — mehr Flaeche, als der Fall wert ist.
     """
     lockdir = pfad + ".lock"
     if _merker_lesen(lockdir) != _mein_merker():

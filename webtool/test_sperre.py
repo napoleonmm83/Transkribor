@@ -999,3 +999,26 @@ def test_merker_aufgeben_ohne_lock_wirft_nicht(tmp_path):
     """Der einzige Aufrufer ist ein Shutdown-Pfad — er darf an einer Vorsichtsmassnahme nicht
     scheitern. Kein Lock (der Faden war schneller als das Signal) ist der Normalfall."""
     assert sperre.merker_aufgeben(str(tmp_path / "gibtsnicht.json")) is False
+
+
+def test_merker_aufgeben_schluckt_ein_gescheitertes_loeschen(tmp_path, monkeypatch):
+    """Der Test oben kehrt schon am AUSWEIS um und erreicht das `try` nie — ohne diesen hier
+    haette der `except OSError` null Abdeckung, waehrend der Docstring daneben verspricht, der
+    Shutdown-Pfad scheitere nicht an einer Vorsichtsmassnahme.
+
+    Auf POSIX — der einzigen Plattform, auf der `beim_ende` ueberhaupt laeuft — gelingt
+    `os.remove` selbst auf eine offene Datei, der Zweig ist dort also kaum erreichbar. Auf
+    Windows ist er es sehr wohl (`[WinError 32]`, siehe `_RMDIR_VERSUCHE`), und diese Suite
+    laeuft auf beiden.
+    """
+    ziel = str(tmp_path / "x.json")
+    lock = ziel + ".lock"
+    os.mkdir(lock)
+    _merker(lock, os.getpid())
+
+    def klemmt(pfad):
+        raise PermissionError(32, "in Benutzung")
+
+    monkeypatch.setattr(sperre.os, "remove", klemmt)
+    assert sperre.merker_aufgeben(ziel) is False       # nicht: eine Ausnahme nach oben
+    assert sperre._merker_lesen(lock) is not None      # Zustand wie vor dem Fix, nicht kaputt

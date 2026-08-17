@@ -1074,15 +1074,23 @@ def test_autocorrect_startet_mit_anbieter(client, monkeypatch):
     assert len(gestartet) == 1
 
 
-def test_start_stoesst_die_ytdlp_kalenderpruefung_an(monkeypatch):
+def test_start_stoesst_die_ytdlp_kalenderpruefung_an(monkeypatch, tmp_path):
     """#253: die Vorsorge haengt am Serverstart, nicht mehr an `fetch._hole_yt_dlp()`.
 
     Der Gegenpart steht in `test_fetch.py`
     (`test_url_import_wartet_NICHT_mehr_auf_die_kalenderpruefung`): dort darf sie NICHT mehr
     laufen, hier MUSS sie. Ohne dieses Paar waere „verschoben" nicht von „ersatzlos entfernt"
     zu unterscheiden — und die Selbstaktualisierung waere still tot.
+
+    **`TRANSKRIBOR_SETTINGS` ist Pflicht, obwohl der Test die `client`-Fixture bewusst nicht
+    nimmt.** Das `with TestClient(app)` betritt seit #224 einen Lifespan-SHUTDOWN, der die
+    echte `ytdlp_update.beim_ende()` ruft — ohne Umlenkung zeigte deren `_lockziel()` auf das
+    Profil des Entwicklers. Heute folgenlos (`_lauf["laeuft"]` ist False, der Aufruf schliesst
+    kurz), aber es ist dieselbe Familie, die bei #253 einen echten pip-Lauf gegen die
+    Entwickler-venv gekostet hat: ein Test, der den Lifespan betritt, gehoert isoliert.
     """
     from webtool import app as appmod
+    monkeypatch.setenv("TRANSKRIBOR_SETTINGS", str(tmp_path / "settings.json"))
     gerufen = []
     monkeypatch.setattr(appmod.ytdlp_update, "beim_start",
                         lambda: gerufen.append(True) or False)
@@ -1112,8 +1120,10 @@ def test_shutdown_gibt_den_ytdlp_merker_auf(client, monkeypatch):
     zwei Haelften desselben Vertrags, und nur die zweite kostet Datenintegritaet."""
     from webtool import app as appmod
     gerufen = []
+    # `True`, damit der Meldezweig in `_lifespan` mitlaeuft statt unbeschrieben zu bleiben —
+    # die Attrappe liefert sonst False und der `print` waere toter Code unter diesem Test.
     monkeypatch.setattr(appmod.ytdlp_update, "beim_ende",
-                        lambda: gerufen.append(True) or False)
+                        lambda: gerufen.append(True) or True)
     with TestClient(appmod.app):
         pass                                   # Kontext verlassen -> lifespan-Shutdown
     assert gerufen == [True]
