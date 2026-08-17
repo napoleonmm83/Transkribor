@@ -19,6 +19,24 @@ pip-Sperre** gesetzt: unmittelbar vor `subprocess.run`, gelöscht unmittelbar da
 überlebt damit **nur**, wenn der Prozess selbst stirbt — genau das ist #257/#258.
 `faellig()` liest ihn und liefert True, solange er höchstens `INTERVALL_TAGE` alt ist.
 
+> **Was die Umsetzung gegenüber diesem Plan geändert hat** — der Plan bleibt als Herleitung
+> stehen, aber wer nur ihn liest, baut etwas anderes als das, was im Repo steht. Drei Regeln
+> kamen erst beim Bauen dazu, jede aus einer Messung bzw. einem Review:
+> 1. **Gelöscht wird nur bei `returncode == 0`**, nicht nach jedem zurückgekehrten Lauf. Der
+>    lokale Funktionstest hat gemessen, dass `taskkill /F /T` auf Windows das pip-**Kind
+>    zuerst** tötet und dem Elternprozess ein Zeitfenster lässt, in dem er aufräumte — der Fix
+>    hätte in genau dem Szenario von #257 nicht gefeuert. Damit entfällt auch die im Plan
+>    beschriebene Sonderbehandlung für `TimeoutExpired` ersatzlos.
+> 2. **`faellig()` verlangt zusätzlich `fassung() is None`**, und der Merker entsteht nur,
+>    wenn vor dem Lauf eine Fassung da war (Reviewbefund M1, gemessen). Ohne das feuerte er
+>    auch nach einem gewöhnlich gescheiterten pip auf einer Maschine ohne yt-dlp.
+> 3. **`_merker_datum()` liest nichtblockierend** (`O_NONBLOCK`, wie `sperre._merker_lesen`
+>    seit #200) — ein FIFO am Merkerpfad hätte den Lifespan vor dem `yield` unbegrenzt
+>    blockiert (in WSL gemessen). Und ein **abgelaufener** Merker wird sehr wohl überschrieben
+>    (CodeRabbit-CLI, Major), sonst bliebe er für immer auf seinem alten Datum stehen.
+>
+> Die vollständige, gepflegte Fassung dieser Begründungen steht in `webtool/CLAUDE.md`.
+
 **Tech-Stack:** Python 3.13, `webtool/ytdlp_update.py`, pytest. `webtool/sperre.py`,
 `webtool/jobs.py`, `webtool/app.py`, `electron/backend.js` bleiben **unangetastet**.
 
