@@ -165,6 +165,24 @@ def cmd_prep(project: str) -> int:
 
 DIARIZE_MIN_SPEAKERS = 2      # pyannote-Untergrenze; das Sidecar zeichnet denselben Wert auf (kein Drift)
 
+# Die EINE Fassung der Cluster-Regel, eingebettet in alle vier Prompts, die Sprecher vergeben.
+# Vier Kopien liefen beim naechsten Umbau auseinander — und ausgerechnet der Verify-Pass, der
+# ZULETZT schreibt, haette dann die Fassung ohne Erlaubnis (genau der Zustand vor #267).
+#
+# Der Satzbau ist Absicht: die Regel ERSETZT in _correct_prompt/_verify_prompt die
+# widersprechende Anweisung ("das Praefix ist die WAHRHEIT, WER spricht" bzw.
+# "Fehlzuordnungen korrigieren"), sie steht nicht daneben — dieselbe Entscheidung wie bei der
+# Mehrsprachig-Regel weiter unten. Eine blosse Erlaubnis stand seit 328ebf2 in
+# _correct_prompt, und die Aufspaltung passierte trotzdem; es fehlten beide Haelften: das
+# Erkennungsmerkmal UND die Abwesenheit des Gegensatzes.
+CLUSTER_REGEL = (
+    "Ein Cluster-Wechsel heisst: die STIMME wechselt — nicht zwingend die PERSON. Bei "
+    "Aufnahmen mit einem Kameramikrofon verteilt die Diarisierung denselben Menschen "
+    "regelmaessig auf mehrere Cluster; sprechen zwei Cluster durchweg in Frageform, ist das "
+    "derselbe Interviewer. Zwei Cluster denselben Namen zu geben ist deshalb eine ERLAUBTE "
+    "Entscheidung, KEINE Fehlzuordnung."
+)
+
 
 def _sidecar_sprecher(dpath: str):
     """Mit welcher Sprecherzahl wurde ein vorhandenes `<base>.diar.json` gerechnet?
@@ -502,7 +520,7 @@ Gemeinsames Glossar (für konsistente Schreibweisen — nutze es, ergänze nicht
 
 2) KORRIGIEREN: klare ASR-Fehler mit Kontext + Glossar verbessern{norm_satz} BLEIB TREU: nichts erfinden, den Sinn nicht verändern, nicht über das Nötige hinaus glätten (Füllwörter wie „äh“/„ähm“ dürfen dezent weg). Entferne die [[...]]-Markierungen im Ausgabetext.
 3) PRO SEGMENT: gib für JEDE Segment-ID {scope} GENAU EINEN Eintrag {{id, speaker, text}} zurück — keine ID auslassen, keine Segmente zusammenfassen (die Redebeitrags-Bündelung passiert später).
-4) SPRECHER: Das akustische (Sprecher N)-Präfix ist die WAHRHEIT, WER spricht — vergib pro Cluster GENAU EINEN konsistenten Namen: meist „Interviewer“ (stellt Fragen) und die befragte Person (Name/Betrieb falls genannt, sonst „Befragte Person“). Du DARFST zwei Cluster demselben Namen zuordnen, wenn klar dieselbe Person. Eine Cluster-Grenze nur überschreiben, wenn sie offensichtlich falsch ist (z.B. ein einzelnes Rückkanal-Wort). Fehlt das Präfix, ordne nach Inhalt zu (wie bisher). Gib JEDEM Segment einen Sprecher.
+4) SPRECHER: Das akustische (Sprecher N)-Präfix sagt, WANN die Stimme wechselt — vergib pro Cluster GENAU EINEN konsistenten Namen: meist „Interviewer“ (stellt Fragen) und die befragte Person (Name/Betrieb falls genannt, sonst „Befragte Person“). {CLUSTER_REGEL} Eine Cluster-Grenze nur überschreiben, wenn sie offensichtlich falsch ist (z.B. ein einzelnes Rückkanal-Wort). Fehlt das Präfix, ordne nach Inhalt zu (wie bisher). Gib JEDEM Segment einen Sprecher.
 5) UNSICHER: wirklich unklare Stellen NICHT raten — nah am Original belassen und unter annotations vermerken.
 6) MUSIK/GESANG: Whisper "hört" in gesungenen Passagen sicher klingenden Unsinn (typisch: dieselbe kurze Zeile mehrfach hintereinander, fremdsprachig wirkende Wortfetzen, Text der zum Gespräch nicht passt). Bei GESUNGENEN Stellen und bei Segmenten ohne verständliche Sprache (Musik, Jubel, Applaus) schreibe als text exakt „[Musik]“ — nicht raten, was gesungen wurde. GESPROCHENE Bühnenansagen sind KEINE Musik, die bleiben Text.
 7) ASR-ARTEFAKTE: Segmente, deren Text nachweislich nicht aus dem Ton stammt, sondern aus Whispers Trainingsdaten (Untertitel-Floskeln wie „ARD Text im Auftrag von Funk“, „Untertitelung des ZDF“, „Vielen Dank fürs Zuschauen“), bekommen einen LEEREN text (""). Sie verschwinden damit aus dem Transkript. Regel 6 und 7 gelten nur, wenn du dir sicher bist — im Zweifel Text belassen und unter annotations vermerken.
@@ -552,7 +570,7 @@ Prüfe kritisch gegen das ROH — konservativ, im Zweifel näher am Original:
 - HALLUZINATION/DRIFT: Inhalt hinzugefügt/weggelassen/im Sinn verändert, der nicht im Roh steht? Übermässiges Umschreiben? → näher ans Original zurück.
 - MUSIK/ARTEFAKTE sind ERLAUBTE Entscheidungen, KEINE Auslassung: „[Musik]“ steht für eine gesungene oder sprachlose Stelle, ein leerer text ("") für ein reines ASR-Artefakt aus Whispers Trainingsdaten (Untertitel-Floskeln wie „ARD Text im Auftrag von Funk“). Beides NICHT zurückdrehen — nur prüfen, ob es zutrifft: gesprochene Bühnenansagen gehören zurück in Text, und umgekehrt gehört sicher klingender Unsinn über einer gesungenen Passage (dieselbe kurze Zeile mehrfach hintereinander, Wortfetzen ohne Bezug zum Gespräch) auf „[Musik]“.{mehr_regel}
 - VOLLSTÄNDIGKEIT: für JEDE Roh-Segment-ID {scope} genau ein Eintrag? Fehlende ergänzen (Text nah am Roh), zusammengefasste auftrennen.
-- SPRECHER: konsistent pro akustischem (Sprecher N)-Cluster und plausibel (Interviewer stellt Fragen; Antworten korrekt zugeordnet)? Fehlzuordnungen korrigieren.
+- SPRECHER: konsistent pro akustischem (Sprecher N)-Cluster und plausibel (Interviewer stellt Fragen; Antworten korrekt zugeordnet)? {CLUSTER_REGEL} Falsch zugeordnete EINZELNE Segmente korrigieren, aber zwei Cluster mit demselben Namen NICHT auseinanderziehen — nur prüfen, ob es zutrifft.
 - RESTFEHLER: offensichtliche verbleibende ASR-Fehler nur wenn eindeutig (konservativ).
 - UNSICHER: wirklich unklare Stellen NICHT raten — nah am Original belassen und unter annotations vermerken. Entferne evtl. übrige [[...]]-Markierungen im Text.
 
@@ -591,7 +609,7 @@ def _light_prompt(base: str, tagged_path: str, cpath: str, context: str,
 Projekt-Kontext: {context or _default_context(ziel, dialekt, mehrsprachig)}
 1) Lies die Rohsegmente (Read-Tool): {tagged_path}
 2) KORRIGIERE NUR offensichtliche ASR-Fehler und Eigennamen{norm_satz} KEIN Umschreiben, keine Dialekt-Glättung, keine Normalisierung. Entferne [[...]]-Markierungen.
-3) SPRECHER: vergib pro (Sprecher N)-Cluster einen konsistenten Namen (meist „Interviewer" und die befragte Person). Gib JEDEM Segment einen speaker.
+3) SPRECHER: vergib pro (Sprecher N)-Cluster einen konsistenten Namen (meist „Interviewer" und die befragte Person). {CLUSTER_REGEL} Gib JEDEM Segment einen speaker.
 4) SUMMARY: eine Inhalts-Zusammenfassung (3-5 Sätze).
 
 Schema (Write-Tool nach {cpath}):
@@ -610,7 +628,7 @@ def _summary_prompt(base: str, tagged_path: str, cpath: str, context: str,
 
 Projekt-Kontext: {context or _default_context(ziel, dialekt)}
 1) Lies die Rohsegmente (Read-Tool): {tagged_path}
-2) SPRECHER: vergib pro (Sprecher N)-Cluster einen konsistenten Namen. JEDES Segment bekommt einen speaker — KEIN Text-Feld (der Roh-Inhalt bleibt unveraendert, uebernimm nur id und speaker).
+2) SPRECHER: vergib pro (Sprecher N)-Cluster einen konsistenten Namen. {CLUSTER_REGEL} JEDES Segment bekommt einen speaker — KEIN Text-Feld (der Roh-Inhalt bleibt unveraendert, uebernimm nur id und speaker).
 3) SUMMARY: eine Inhalts-Zusammenfassung (3-5 Sätze) in {ziel or 'der Originalsprache'}.
 
 Schema (Write-Tool nach {cpath}):
