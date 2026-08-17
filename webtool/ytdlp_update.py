@@ -496,26 +496,31 @@ def faellig() -> bool:
     Fassung gemessen waere sie nach 14 Tagen DAUERHAFT faellig — und jeder Import liefe in
     ein pip, das nichts aendert.
     """
-    if _pip_unterbrochen():
-        # #257/#258: ein pip-Lauf ist abgewuergt worden — Windows `taskkill /F /T` auf den
-        # Prozessbaum beim Schliessen der App, POSIX `jobs.cancel_all()` → SIGKILL auf die
-        # Prozessgruppe des fetch-Jobs beim Herunterfahren. Was er hinterlaesst, sieht KEINE
-        # der Regeln unten: gemessen wirft `metadata.version` danach PackageNotFoundError,
-        # waehrend die Paketdateien noch daliegen — `fassung()` gibt None, und der Riegel
-        # eine Zeile weiter unten haelt die Reparatur auf. Der Schaden heilte sich bis hierher
-        # NICHT selbst.
+    v = fassung()
+    if v is None and _pip_unterbrochen():
+        # #257/#258: ein pip-Lauf hat keinen Erfolg gemeldet, UND es gibt keine lesbare
+        # Fassung mehr. Genau das hinterlaesst ein abgewuergtes pip — Windows
+        # `taskkill /F /T` auf den Prozessbaum beim Schliessen der App, POSIX
+        # `jobs.cancel_all()` → SIGKILL auf die Prozessgruppe des fetch-Jobs. Gemessen an
+        # einer Wegwerf-venv: `metadata.version` wirft danach PackageNotFoundError, waehrend
+        # die Paketdateien noch daliegen und `import yt_dlp` mit ModuleNotFoundError bricht.
         #
-        # **VOR `fassung()`**, nicht danach: dieser Riegel ist genau der, der die Reparatur
-        # verhinderte. Ein Test haelt die Reihenfolge fest.
+        # **Beide Haelften sind noetig.** Der Merker allein feuerte auch nach einem ganz
+        # normalen Fehlschlag (offline) — eine Reparatur fuer einen Schaden, den es nicht
+        # gibt. `fassung() is None` allein ist der Riegel eine Zeile tiefer, und der ist
+        # richtig: ohne Merker heisst „keine Fassung" wirklich „nie installiert, Sache des
+        # Setups". Erst zusammen sagen sie „WIR haben es zerlegt".
+        #
+        # **VOR dem Riegel darunter**, denn genau der hielt die Reparatur bisher auf. Ein
+        # Test haelt die Reihenfolge fest.
         #
         # **Keine Tagesbremse.** Sie waere hier schaedlich: lief heute schon ein regulaeres
         # pip durch (`geprueft` = heute) und wurde DANACH eines abgewuergt — das ist #258s
         # Ablauf —, verschoebe sie die Reparatur auf morgen, also einen ganzen Tag ohne
-        # URL-Import. Gedeckelt ist der Fall stattdessen am Merker selbst: `aktualisiere()`
-        # loescht ihn nach jedem zurueckgekehrten Lauf, und `_pip_unterbrochen()` laesst ihn
-        # nach INTERVALL_TAGE verfallen — falls `os.remove` ihn dauerhaft nicht wegbekommt.
+        # URL-Import. Gedeckelt ist der Fall stattdessen am Merker selbst: ein gelungener
+        # Lauf loescht ihn, und `_pip_unterbrochen()` laesst ihn nach INTERVALL_TAGE
+        # verfallen — fuer den Fall, dass `os.remove` ihn dauerhaft nicht wegbekommt.
         return True
-    v = fassung()
     if v is None:
         # `pip install -U` wuerde yt-dlp hier NEU installieren. Das ist Sache des Setups;
         # der Import meldet dann ehrlich "yt-dlp ist nicht installiert".
@@ -636,13 +641,38 @@ def _pip_merker() -> str:
     return f"{_lockziel()}.{_venv_kennung()}.abbruch"
 
 
+def _merker_datum() -> dt.date | None:
+    """Das Datum im Merker, oder None (kein Merker, unlesbar, oder in der ZUKUNFT).
+
+    Ein Zukunftsdatum (vorgehende Rechneruhr) gilt als keines — dieselbe Richtung wie in
+    `geprueft()`. Es MUSS hier herausfallen und nicht erst in `_pip_unterbrochen()`: sonst
+    liesse es sich weder auswerten noch ueberschreiben (`_pip_merker_setzen` schont einen
+    datierten Merker) und schaltete die Erkennung dauerhaft still ab.
+    """
+    try:
+        with open(_pip_merker(), encoding="utf-8") as f:
+            d = dt.date.fromisoformat(f.read(64).strip())
+    except (OSError, ValueError):     # UnicodeDecodeError IST ein ValueError (#185/#190)
+        return None
+    return None if d > _heute() else d
+
+
 def _pip_merker_setzen() -> None:
     """Unmittelbar VOR `subprocess.run`, INNERHALB der Sperre — siehe `aktualisiere`.
+
+    **Ein bereits datierter Merker wird NICHT aufgefrischt.** Sein Datum ist der Anker der
+    Verfallsfrist, und genau daran endet der einzige verbliebene Dauerlauf: scheitert pip
+    dauerhaft (offline, kein Netz, kaputte venv), setzte ein aufgefrischtes Datum die Frist
+    bei jedem Lauf zurueck und die Faelligkeit liefe ewig. So friert sie ein und laeuft nach
+    `INTERVALL_TAGE` aus. Unlesbar zaehlt dabei als „keiner" und wird ueberschrieben — sonst
+    bliebe eine halb geschriebene Datei fuer immer liegen und schaltete die Erkennung ab.
 
     Best effort: ein nicht schreibbarer Merker macht den Zustand nur so schlecht, wie er vor
     diesem Fix war. Aber nicht STILL, sonst ist er von einem gesetzten nicht zu unterscheiden
     (dieselbe Regel wie bei `sperre.datei`s fail-open).
     """
+    if _merker_datum() is not None:
+        return
     try:
         with open(_pip_merker(), "w", encoding="utf-8") as f:
             f.write(_heute().isoformat())
@@ -651,7 +681,13 @@ def _pip_merker_setzen() -> None:
 
 
 def _pip_merker_loeschen() -> None:
-    """Unmittelbar NACH dem Lauf, noch INNERHALB derselben Sperre.
+    """NUR nach einem pip-Lauf, der mit **0** zurueckgekehrt ist — siehe `aktualisiere`.
+
+    **Gemessen, und es war der Fehler der ersten Fassung:** `taskkill /F /T` toetet auf
+    Windows das pip-KIND zuerst und laesst dem Elternprozess ein Zeitfenster. Der sah
+    `returncode != 0`, raeumte auf und kam noch bis ins `_merken()` (`settings.json.tmp` lag
+    danach da) — der Merker war weg, ausgerechnet im Szenario von #257. Deshalb entscheidet
+    nicht „hat der Prozess ueberlebt", sondern „hat pip Erfolg gemeldet".
 
     `FileNotFoundError` schweigt — das ist der Normalfall, wenn der Schreibversuch scheiterte.
     Jeder andere `OSError` gehoert ins Protokoll: er ist die einzige verbliebene Quelle eines
@@ -683,13 +719,14 @@ def _pip_unterbrochen() -> bool:
     Unlesbar oder in der ZUKUNFT (vorgehende Rechneruhr) heisst „keine Auskunft" ⇒ gilt nicht.
     Unbekanntes flaggt dieses Modul nicht — dieselbe Richtung wie in `_ejs_untauglich`. Ein
     solcher Merker bleibt nicht liegen: der naechste Lauf ueberschreibt ihn.
+
+    **Die Antwort allein macht noch nicht faellig.** `faellig()` verlangt zusaetzlich, dass
+    yt-dlp wirklich unbrauchbar ist (`fassung() is None`) — der Merker sagt „ein Lauf hat
+    keinen Erfolg gemeldet", nicht „etwas ist kaputt". Ohne diese zweite Haelfte liefe nach
+    jedem gescheiterten pip (offline) eine Reparatur fuer einen Schaden, den es nicht gibt.
     """
-    try:
-        with open(_pip_merker(), encoding="utf-8") as f:
-            d = dt.date.fromisoformat(f.read(64).strip())
-    except (OSError, ValueError):     # UnicodeDecodeError IST ein ValueError (#185/#190)
-        return False
-    return 0 <= (_heute() - d).days <= INTERVALL_TAGE
+    d = _merker_datum()
+    return d is not None and (_heute() - d).days <= INTERVALL_TAGE
 
 
 def aktualisiere() -> tuple[bool, bool]:
@@ -756,17 +793,21 @@ def aktualisiere() -> tuple[bool, bool]:
                   flush=True)
         except (OSError, subprocess.SubprocessError) as e:
             print(f"[ytdlp] Update fehlgeschlagen: {e}", flush=True)
-        # Nach JEDEM behandelten Ausgang, ohne Fallunterscheidung: wer hier ankommt, hat
-        # ueberlebt und raeumt hinter sich auf. Eine Sonderbehandlung fuer `TimeoutExpired`
-        # („pip wurde ja abgewuergt") stand hier einmal und war die einzige Quelle eines
-        # Dauerlaufs, den die Uhr nicht deckt — auf einer langsamen Leitung ueberschreitet pip
-        # die 120 s bei JEDEM Start. Was das kostet, steht als Issue: ein selbst verursachter
-        # Timeout MITTEN in der Installation bleibt unerkannt; heute ist das genauso, also
-        # kein Rueckschritt.
+        # NUR bei Erfolg. „Der Prozess hat ueberlebt" waere das falsche Mass, und das ist
+        # GEMESSEN: `taskkill /F /T` toetet auf Windows das pip-KIND zuerst und laesst dem
+        # Elternprozess ein Zeitfenster — im Versuch kam er hier vorbei und noch bis ins
+        # `_merken()`, der Merker war weg, ausgerechnet im Szenario von #257. Ein abgewuergtes
+        # pip meldet nie 0, ein gelungenes immer.
+        #
+        # Der Preis: nach einem ECHTEN Fehlschlag (offline, Aufloesung) bleibt der Merker
+        # liegen. Das kostet nichts, weil `faellig()` zusaetzlich `fassung() is None` verlangt
+        # — und die Fassung ist dann ja unveraendert lesbar. Aufgeraeumt wird er vom naechsten
+        # gelungenen Lauf, spaetestens von der Frist in `_pip_unterbrochen()`.
         #
         # VOR `_merken()`: das faengt nur `OSError`, ein anderer Wurf dort liesse den Merker
         # sonst liegen, obwohl pip sauber durchgelaufen ist.
-        _pip_merker_loeschen()
+        if ok:
+            _pip_merker_loeschen()
         # INNERHALB der Sperre: der Kommentar oben behauptete das, der Aufruf stand aber eine
         # Zeile darunter — womit der Test auf die verschiedenen Lock-Namen nichts pruefte
         # (mit demselben Namen blieb er gruen). Jetzt ist die verschachtelte Sperre echt.
