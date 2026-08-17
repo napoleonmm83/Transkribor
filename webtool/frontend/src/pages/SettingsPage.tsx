@@ -257,6 +257,12 @@ export function SettingsPage() {
   // Der Poll oben zeigt an derselben Stelle einen Fehler-Toast; hier wäre der falsch (niemand
   // hat etwas angestossen, es ist kein Fehlschlag), also sagt es die Zeile selbst.
   const [ytAufgegeben, setYtAufgegeben] = useState(false)
+  // Zaehler der NUTZER-Schreibvorgaenge an den Einstellungen (`speichern`). Der Nachhol-Poll
+  // vergleicht ihn ueber sein `await` hinweg. Ein Ref, keine State: der Poll liest ihn in
+  // seiner Closure, und eine State-Aenderung setzte den Effekt neu auf — womit `runden` auf 0
+  // fiele und die Obergrenze wirkungslos waere (derselbe Mechanismus, wegen dessen der Poll
+  // oben nicht an `s.ytdlp.laeuft` haengen darf).
+  const settingsStand = useRef(0)
   // Drei Wege enden in einer Meldung über denselben Lauf: der Poll, der Direktstart in
   // `ytJetzt` und die Obergrenze. Seit #236 erzeugt jeder Durchlauf bis zu ZWEI Toasts
   // (Erfolg und die Warnung „ohne Sperre") — doppelt gemeldet wären das vier für einen
@@ -335,6 +341,13 @@ export function SettingsPage() {
       // Felder aus dem vorigen Stand retten musste; genau dieser Merge hat die Falschaussage
       // im Typ verdeckt. Eine Merge-Form, die nichts merged, sieht nur nach Sorgfalt aus.
       const { ungeschuetzt, ...neu } = await saveSettings(patch)
+      // Ein Schreibvorgang des NUTZERS zaehlt den Stand hoch. Der Nachhol-Poll (#252) haelt
+      // seinen Stand ueber sein `await` fest und verwirft seine Antwort, wenn hier inzwischen
+      // gespeichert wurde — sonst setzte eine Runde, die VOR diesem PUT losflog, den gerade
+      // gespeicherten Wert wieder zurueck. Sein `angewandt`-Riegel deckt das NICHT: der ordnet
+      // nur Poll-Runden untereinander, und der Konkurrent ist hier `speichern`, keine Runde.
+      // (CodeRabbit-CLI an PR #255, Major.)
+      settingsStand.current += 1
       setS(neu)
       danach?.()
       if (ungeschuetzt) toast.warning(
@@ -466,8 +479,14 @@ export function SettingsPage() {
     const t = setInterval(async () => {
       if (++runden > 240) { clearInterval(t); setYtAufgegeben(true); return }
       const meineRunde = runden
+      const meinStand = settingsStand.current
       const neu = await getSettings().catch(() => null)
       if (!neu) return            // ein Aussetzer beendet die Beobachtung nicht
+      // ZWEI Riegel, zwei verschiedene Konkurrenten — keiner deckt den anderen:
+      // `settingsStand` faengt einen `speichern()`-PUT, der waehrend dieses `await` fertig
+      // wurde (meine Antwort ist dann aelter als das gerade Gespeicherte); `angewandt` faengt
+      // eine JUENGERE Poll-Runde, die mich ueberholt hat.
+      if (meinStand !== settingsStand.current) return
       if (meineRunde < angewandt) return
       angewandt = meineRunde
       setS(neu)

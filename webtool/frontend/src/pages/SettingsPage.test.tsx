@@ -956,6 +956,49 @@ describe('SettingsPage', () => {
     }
   })
 
+  it('der Nachhol-Poll ueberschreibt einen frisch gespeicherten Wert NICHT (#252)', async () => {
+    // Der Fall, den `angewandt` NICHT deckt (CodeRabbit-CLI an PR #255, Major): dieser
+    // Riegel ordnet nur Poll-Runden untereinander. Der Konkurrent ist hier `speichern()` —
+    // eine Runde, die VOR dem PUT losflog, traegt Vor-Speicher-Daten und setzte den gerade
+    // gespeicherten Wert zurueck. Erreichbar, weil dieser Poll UNAUFGEFORDERT bis zu zwoelf
+    // Minuten laeuft, waehrend jemand auf der Seite tippt.
+    const warten: Array<(w: Settings) => void> = []
+    vi.useFakeTimers()
+    try {
+      zeige({ ytdlp: { ...BASIS.ytdlp, laeuft: true, ergebnis: '' } })
+      await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+      vi.mocked(api.getSettings).mockImplementation(
+        () => new Promise<Settings>(res => warten.push(res)))
+      const vorher = warten.length
+
+      await act(async () => { await vi.advanceTimersByTimeAsync(3000) })   // Runde 1 fliegt los
+      expect(warten.length - vorher).toBe(1)          // Positivkontrolle: sie haengt wirklich
+
+      // Waehrend sie unterwegs ist, speichert der Nutzer ein neues Whisper-Modell.
+      vi.mocked(api.saveSettings).mockResolvedValue({
+        ...GESPEICHERT, whisper_model: 'turbo',
+        ytdlp: { ...BASIS.ytdlp, laeuft: true, ergebnis: '' },
+      })
+      await act(async () => {
+        fireEvent.click(screen.getByRole('combobox', { name: /Qualität|Whisper/i }))
+      })
+      await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+      await act(async () => { fireEvent.click(screen.getByRole('option', { name: /Schnell/i })) })
+      await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+      expect(vi.mocked(api.saveSettings)).toHaveBeenCalled()   // Positivkontrolle
+
+      // Und JETZT trifft die alte Runde ein — mit dem Stand von vor dem Speichern.
+      await act(async () => {
+        warten[vorher]({ ...BASIS, whisper_model: 'large-v3',
+                         ytdlp: { ...BASIS.ytdlp, laeuft: true, ergebnis: '' } })
+      })
+      expect(screen.getByRole('combobox', { name: /Qualität|Whisper/i }))
+        .toHaveTextContent(/Schnell/i)                 // NICHT zurueck auf „Beste Qualität"
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('sagt es, wenn der Nachhol-Poll aufgibt, statt die Zeile einzufrieren (#252)', async () => {
     // Ohne diesen Merker wäre nach zwölf Minuten wieder #252s Symptom da — die Zeile stünde
     // für immer. Ein Fehler-Toast wie beim Lauf-Poll wäre hier falsch: niemand hat etwas
