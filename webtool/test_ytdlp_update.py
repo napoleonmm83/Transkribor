@@ -1700,3 +1700,25 @@ def test_die_merker_entscheidung_liest_den_zustand_NACH_dem_sperrerwerb(monkeypa
     with pytest.raises(KeyboardInterrupt):
         yu.aktualisiere()
     assert yu._pip_unterbrochen() is True, "die Entscheidung hing am veralteten Wert"
+
+
+@pytest.mark.skipif(not hasattr(os, "mkfifo"),
+                    reason="FIFOs gibt es auf Windows nicht; der unbegrenzte Fall ist dort "
+                           "nicht herstellbar")
+def test_ein_fifo_am_merker_pfad_haelt_auch_das_SCHREIBEN_nicht_auf():
+    """Das Gegenstueck zum Lesetest, und der teurere Fall: `_pip_merker_setzen()` laeuft
+    INNERHALB der pip-Sperre im Hintergrundfaden. Ein `open(..., "w")` auf einen FIFO wartet
+    auf einen LESER, der nie kommt — der Haenger hielte die Sperre fuer immer, die
+    Einstellungsseite meldete dauerhaft „eine Aktualisierung laeuft gerade" (#243), und der
+    Knopf saesse bei jedem Klick die volle Frist ab.
+
+    In WSL nachgemessen: mit `O_NONBLOCK` wirft `os.open` dort `ENXIO` (Errno 6), ohne das
+    Flag kehrt der Faden binnen 5 s nicht zurueck. (CodeRabbit-CLI, Major.)"""
+    os.mkfifo(yu._pip_merker())                   # niemand liest je daraus
+    fertig = []
+    faden = threading.Thread(target=lambda: (yu._pip_merker_setzen(), fertig.append(1)),
+                             daemon=True)
+    faden.start()
+    faden.join(5)
+    assert not faden.is_alive(), "haengt am FIFO — die pip-Sperre wuerde fuer immer gehalten"
+    assert yu._pip_unterbrochen() is False, "am FIFO steht kein Datum"
