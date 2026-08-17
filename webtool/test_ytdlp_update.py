@@ -1313,3 +1313,95 @@ def test_beim_ende_fragt_den_eigenen_lauf_selbst(monkeypatch):
     monkeypatch.setattr(sperre, "merker_aufgeben", lambda p: gerufen.append(p) or True)
     assert yu.beim_ende() is True
     assert gerufen == [yu._lockziel()]
+
+
+# --- Der Merker eines unterbrochenen pip-Laufs (#257/#258) -------------------
+#
+# Gemessen, bevor irgendetwas davon gebaut wurde (Wegwerf-venv, echtes pip aus dem Cache,
+# `taskkill /F /T` bei 300/500/700/900/1400 ms, je frisch aufgesetzt): zwei von fuenf Laeufen
+# hinterliessen `metadata.version` -> PackageNotFoundError bei gleichzeitig vorhandenen
+# Paketdateien und `import yt_dlp` -> ModuleNotFoundError. Ein zweites
+# `pip install -U "yt-dlp[default]"` reparierte das (exit 0, Import laeuft) — das ist die
+# Praemisse dieses ganzen Abschnitts.
+
+def test_der_merker_haengt_an_der_VENV_nicht_nur_an_der_einstellungsdatei(monkeypatch):
+    """Der Schaden ist pro venv (`aktualisiere()` ruft `sys.executable -m pip`), die
+    Einstellungsdatei aber pro NUTZER: `settings.path()` kennt keinen Zweig fuer die gepackte
+    App, und `electron/backend.js` setzt `TRANSKRIBOR_SETTINGS` nicht. Ohne diese Kennung
+    repariert der Entwicklerserver die Repo-venv fuer einen Schaden in der App-venv — und
+    verbraucht dabei den Merker, den die App noch braucht (dieselbe Zwei-Prozess-Lage wie
+    #254)."""
+    a = yu._pip_merker()
+    monkeypatch.setattr(yu.sys, "prefix", r"C:\woanders\.venv")
+    b = yu._pip_merker()
+    assert a != b
+    assert os.path.dirname(a) == os.path.dirname(b) == os.path.dirname(yu._lockziel())
+
+
+def test_der_merker_liegt_NEBEN_der_sperre_nicht_darin():
+    """Eine Datei IM Lock-Verzeichnis bekommt `sperre._wegraeumen` nicht per `os.rmdir` weg.
+    Die Folge ist nicht „das Lock liegt herum", sondern (an echtem `sperre.py` gemessen):
+    `datei()` faellt nach `frist(stale)` offen — 220 s Wartezeit bei JEDEM Lauf und danach
+    pip OHNE Sperre, also zwei `pip install` in dieselbe venv."""
+    lockdir = yu._lockziel() + ".lock"
+    merker = yu._pip_merker()
+    assert merker != lockdir
+    assert not merker.startswith(lockdir + os.sep)
+
+
+def test_setzen_und_loeschen_beantworten_die_frage():
+    """Positiv- UND Negativkontrolle: ein Merker, der IMMER gilt, ist derselbe Schaden von
+    der anderen Seite — ein Hintergrund-pip bei jedem Serverstart."""
+    assert yu._pip_unterbrochen() is False
+    yu._pip_merker_setzen()
+    assert yu._pip_unterbrochen() is True
+    yu._pip_merker_loeschen()
+    assert yu._pip_unterbrochen() is False
+
+
+def test_ein_alter_merker_gilt_nicht_mehr():
+    """Die einzige verbliebene Quelle eines Dauerlaufs ist ein Merker, den `os.remove` nicht
+    wegbekommt — GEMESSEN erreichbar: eine Datei mit Read-only-Attribut weist auf Windows
+    `os.remove` UND `open(...,'w')` mit PermissionError ab. Dann friert sein Datum ein, und
+    genau daran endet er. Ohne diese Uhr waere `faellig()` fuer immer True: die Klasse „Flag
+    ohne Ende", gegen die dieses Modul an vier Stellen gebaut ist."""
+    with open(yu._pip_merker(), "w", encoding="utf-8") as f:
+        f.write((HEUTE - dt.timedelta(days=yu.INTERVALL_TAGE + 1)).isoformat())
+    assert yu._pip_unterbrochen() is False
+
+
+def test_ein_merker_am_rand_der_frist_gilt_noch():
+    """Die Gegenprobe zum Test darueber — auf der Grenze, nicht daneben. Ohne ihn waere ein
+    `<`-statt-`<=`-Dreher unsichtbar, und ein Merker verfiele einen Tag zu frueh."""
+    with open(yu._pip_merker(), "w", encoding="utf-8") as f:
+        f.write((HEUTE - dt.timedelta(days=yu.INTERVALL_TAGE)).isoformat())
+    assert yu._pip_unterbrochen() is True
+
+
+def test_ein_unlesbarer_oder_zukuenftiger_merker_gilt_nicht():
+    """Beides heisst „keine Auskunft", und Unbekanntes flaggt dieses Modul nicht (dieselbe
+    Richtung wie `_ejs_untauglich`). Ein Zukunftsdatum entsteht durch eine vorgehende
+    Rechneruhr — ohne diese Wache waere es dauerhaft gueltig."""
+    for inhalt in ("", "gestern", "2099-01-01"):
+        with open(yu._pip_merker(), "w", encoding="utf-8") as f:
+            f.write(inhalt)
+        assert yu._pip_unterbrochen() is False, inhalt
+
+
+def test_loeschen_ohne_merker_wirft_nicht():
+    """Dieses Modul darf nirgends werfen (#185), und der Normalfall ist der ohne Merker."""
+    yu._pip_merker_loeschen()
+    yu._pip_merker_loeschen()
+
+
+def test_ein_unschreibbarer_merker_reisst_niemanden_mit(monkeypatch, capsys):
+    """Best effort: ohne Merker ist der Zustand der von vor diesem Fix. Aber nicht STILL —
+    ein lautlos uebersprungener Merker ist von einem gesetzten nicht zu unterscheiden
+    (dieselbe Regel wie bei `sperre.datei`s fail-open)."""
+    def kaputt(*a, **k):
+        raise OSError("kein Platz")
+    monkeypatch.setattr("builtins.open", kaputt)
+    yu._pip_merker_setzen()
+    monkeypatch.undo()
+    assert yu._pip_unterbrochen() is False
+    assert "Merker" in capsys.readouterr().out

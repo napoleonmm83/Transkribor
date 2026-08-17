@@ -42,6 +42,7 @@ der Aufrufer macht mit der vorhandenen Fassung weiter. Ein Rechner ohne Netz dar
 dieses Feature nicht schlechter dastehen als vorher.
 """
 import datetime as dt
+import hashlib
 import os
 import re
 import subprocess
@@ -571,6 +572,105 @@ def _lock_stale() -> float:
     ist nur der Rueckfall.
     """
     return PIP_TIMEOUT + 30 + sperre.frist()
+
+
+def _venv_kennung() -> str:
+    """Eine kurze, stabile Kennung DIESER Umgebung.
+
+    Der Merker unten haengt an `settings.path()` — und das ist pro NUTZER, nicht pro venv:
+    `settings.path()` kennt keinen Zweig fuer die gepackte App, und `electron/backend.js`
+    setzt `TRANSKRIBOR_SETTINGS` nicht (nachgeprueft). Der SCHADEN ist aber pro venv, denn
+    `aktualisiere()` ruft `sys.executable -m pip`. Ohne diese Kennung reparierte der
+    Entwicklerserver seine Repo-venv fuer einen Schaden in der App-venv — und verbrauchte
+    dabei den Merker, den die App noch braucht (dieselbe Zwei-Prozess-Lage wie #254).
+
+    `hashlib`, nicht `hash()`: das ist pro Prozess gesalzen (PYTHONHASHSEED) und liefe beim
+    naechsten Start auf einen anderen Namen. `normcase` + `abspath`, weil Windows-Pfade
+    gross-/kleinschreibungsblind sind. Was das NICHT deckt: dieselbe venv ueber einen Symlink
+    oder eine Netzfreigabe erreicht ergibt zwei Kennungen — die Folge ist eine verpasste
+    Reparatur, kein Schaden.
+    """
+    roh = os.path.normcase(os.path.abspath(sys.prefix)).encode("utf-8", "replace")
+    return hashlib.sha1(roh).hexdigest()[:8]
+
+
+def _pip_merker() -> str:
+    """Der Pfad des Merkers „ein pip-Lauf hat begonnen und ist nie sauber geendet"
+    (#257/#258).
+
+    **NEBEN der Sperre, nicht darin.** Das Lock-Verzeichnis raeumt der naechste Erwerber weg —
+    genau das darf diesem Merker nicht passieren, sein Ueberleben IST seine Aufgabe. Eine
+    Datei IM Lock waere zusaetzlich ein Fehler mit Ansage: `sperre._wegraeumen` bekommt ein
+    nicht leeres Verzeichnis nicht per `os.rmdir` weg, `datei()` faellt dann nach
+    `frist(stale)` offen — an echtem `sperre.py` gemessen 220 s Wartezeit bei jedem Lauf und
+    danach pip OHNE Sperre.
+
+    **Eine Datei statt eines Schluessels in `settings.json`**, aus zwei Gruenden: sie kann eine
+    venv-Kennung im Namen tragen (siehe oben), und das Setzen liegt INNERHALB der pip-Sperre —
+    ein `settings.save()` dort waere eine zweite verschachtelte Sperre und zwaenge
+    `_lock_stale()` um eine weitere `sperre.frist()` nach oben (215 s -> 280 s, die Rechnung
+    aus #207). Ein einfacher Dateischreibvorgang nimmt keine Sperre. (Der dritte, naheliegende
+    Grund — „ein neuer DEFAULTS-Schluessel schluege in die API durch" — ist NACHGEPRUEFT
+    FALSCH: `settings.public()` und `app._settings_body()` haben feste Feldlisten. Er steht
+    hier, damit ihn niemand ein zweites Mal erfindet.)
+    """
+    return f"{_lockziel()}.{_venv_kennung()}.abbruch"
+
+
+def _pip_merker_setzen() -> None:
+    """Unmittelbar VOR `subprocess.run`, INNERHALB der Sperre — siehe `aktualisiere`.
+
+    Best effort: ein nicht schreibbarer Merker macht den Zustand nur so schlecht, wie er vor
+    diesem Fix war. Aber nicht STILL, sonst ist er von einem gesetzten nicht zu unterscheiden
+    (dieselbe Regel wie bei `sperre.datei`s fail-open).
+    """
+    try:
+        with open(_pip_merker(), "w", encoding="utf-8") as f:
+            f.write(_heute().isoformat())
+    except OSError as e:
+        print(f"[ytdlp] Merker fuer den pip-Lauf nicht schreibbar: {e}", flush=True)
+
+
+def _pip_merker_loeschen() -> None:
+    """Unmittelbar NACH dem Lauf, noch INNERHALB derselben Sperre.
+
+    `FileNotFoundError` schweigt — das ist der Normalfall, wenn der Schreibversuch scheiterte.
+    Jeder andere `OSError` gehoert ins Protokoll: er ist die einzige verbliebene Quelle eines
+    Dauerlaufs, und `_pip_unterbrochen()` deckelt ihn mit der Uhr, statt ihn zu verhindern.
+    """
+    try:
+        os.remove(_pip_merker())
+    except FileNotFoundError:
+        pass
+    except OSError as e:
+        print(f"[ytdlp] Merker fuer den pip-Lauf nicht loeschbar: {e} — die Faelligkeit "
+              f"bleibt bis zur Frist bestehen", flush=True)
+
+
+def _pip_unterbrochen() -> bool:
+    """Wurde ein pip-Lauf abgewuergt, und ist das noch aktuell?
+
+    Gefragt wird die PLATTE (wie bei `settings.kaputt_pfad()`): der Merker ueberlebt den
+    Prozess absichtlich, und geschrieben hat ihn oft ein Subprozess, den nie jemand gesehen
+    hat (die Selbstheilung in `fetch.py`).
+
+    **Das Datum wird GELESEN, nicht nur geschrieben** — daran haengt die Zusicherung „kein
+    Flag ohne Ende". Gelingt `os.remove` dauerhaft nicht, friert das Datum ein (dieselbe Datei
+    weist auch `open(...,"w")` ab — auf Windows an einer Datei mit Read-only-Attribut
+    gemessen), und nur die Uhr beendet den Zustand dann noch. `INTERVALL_TAGE` statt einer
+    eigenen Zahl: laenger als der Kalendertakt zu warten hiesse, auf eine Reparatur zu warten,
+    die der Kalender ohnehin anstoesst.
+
+    Unlesbar oder in der ZUKUNFT (vorgehende Rechneruhr) heisst „keine Auskunft" ⇒ gilt nicht.
+    Unbekanntes flaggt dieses Modul nicht — dieselbe Richtung wie in `_ejs_untauglich`. Ein
+    solcher Merker bleibt nicht liegen: der naechste Lauf ueberschreibt ihn.
+    """
+    try:
+        with open(_pip_merker(), encoding="utf-8") as f:
+            d = dt.date.fromisoformat(f.read(64).strip())
+    except (OSError, ValueError):     # UnicodeDecodeError IST ein ValueError (#185/#190)
+        return False
+    return 0 <= (_heute() - d).days <= INTERVALL_TAGE
 
 
 def aktualisiere() -> tuple[bool, bool]:
