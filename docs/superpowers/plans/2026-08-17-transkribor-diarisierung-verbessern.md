@@ -389,15 +389,17 @@ CLUSTER_REGEL = (
 
 In `_correct_prompt` wird Regel 4 deshalb **am Kopf** geändert — „ist die WAHRHEIT, WER spricht" fällt weg:
 
-```
+```text
 4) SPRECHER: Das akustische (Sprecher N)-Präfix sagt, WANN die Stimme wechselt — vergib pro Cluster GENAU EINEN konsistenten Namen: meist „Interviewer“ (stellt Fragen) und die befragte Person (Name/Betrieb falls genannt, sonst „Befragte Person“). {CLUSTER_REGEL} Eine Cluster-Grenze nur überschreiben, wenn sie offensichtlich falsch ist (z.B. ein einzelnes Rückkanal-Wort). Fehlt das Präfix, ordne nach Inhalt zu (wie bisher). Gib JEDEM Segment einen Sprecher.
 ```
 
-In `_verify_prompt` fällt aus derselben Erwägung „Fehlzuordnungen korrigieren" als pauschaler Auftrag weg — er ist es, der die Zusammenlegung als Fehler liest:
+In `_verify_prompt` wird „Fehlzuordnungen korrigieren" **eingeschränkt statt gestrichen**:
 
+```text
+- SPRECHER: konsistent pro akustischem (Sprecher N)-Cluster und plausibel (Interviewer stellt Fragen; Antworten korrekt zugeordnet)? {CLUSTER_REGEL} Fehlzuordnungen korrigieren — einzelne Segmente ebenso wie einen durchgehend falsch benannten Cluster; zwei Cluster mit demselben Namen aber NICHT auseinanderziehen.
 ```
-- SPRECHER: konsistent pro akustischem (Sprecher N)-Cluster und plausibel (Interviewer stellt Fragen; Antworten korrekt zugeordnet)? {CLUSTER_REGEL} Falsch zugeordnete Segmente korrigieren, aber zwei Cluster mit demselben Namen NICHT auseinanderziehen — nur pruefen, ob es zutrifft.
-```
+
+**Ein erster Anlauf hat den Auftrag ganz gestrichen** („falsch zugeordnete EINZELNE Segmente korrigieren") — und dem Treue-Pass damit die Fähigkeit genommen, einen **durchgehend** falsch benannten Cluster umzubenennen. Weil der #267-Fix nachweislich wirkungslos ist, stand diesem Verlust kein gemessener Gewinn gegenüber (Reviewbefund). Eingeschränkt wird deshalb nur die eine Richtung.
 
 In `_light_prompt` Schritt 3 und `_summary_prompt` Schritt 2 jeweils `{CLUSTER_REGEL}` an den Satz über die Namensvergabe anhängen (dort steht keine widersprechende Anweisung, die zu ersetzen wäre — nachgesehen: beide sagen nur „vergib pro Cluster einen konsistenten Namen").
 
@@ -514,7 +516,7 @@ Kann parallel zu Block A gebaut werden. Task 8 wartet auf Marcus' Referenzarbeit
 
 An `.gitignore` anhängen:
 
-```
+```gitignore
 # Referenzsatz und Messlaeufe der Sprechertrennung: das sind Interviewinhalte.
 # Dieselbe Regel wie fuer projekte/ — bleibt lokal, wird nie committet.
 eval/
@@ -833,8 +835,14 @@ def cmd_run(args) -> int:
         audio = _audio(wurzel, eintrag["projekt"], eintrag["base"])
         roh = os.path.join(wurzel, eintrag["projekt"], "transkripte", eintrag["base"] + ".json")
         if not audio or not os.path.exists(roh):
-            print(f"  SKIP {schluessel} (Audio oder Roh-JSON fehlt)")
-            continue
+            # ABBRUCH, nicht SKIP — dieselbe Regel wie beim `nan` unten. Ein uebersprungener
+            # Referenzeintrag laesst den Lauf ueber WENIGER Dateien laufen als den Nullpunkt;
+            # `_summe` mittelt dann ueber verschiedene Mengen, und `vergleich` stellt zwei
+            # Zahlen gegenueber, die nicht dasselbe messen. Der Kandidat kann so die Abnahme
+            # bestehen, ohne dass jemand es sieht. (CodeRabbit-CLI, Major.)
+            raise SystemExit(
+                f"{schluessel}: Audio oder Roh-JSON fehlt ({audio=}, {roh=}). Abbruch — ein "
+                f"unvollstaendiger Lauf ist mit dem Nullpunkt nicht vergleichbar.")
         with open(roh, encoding="utf-8") as f:
             raw = json.load(f)
         k = eintrag["sprecher_wahr"] if args.sprecher_aus_referenz else args.num_speakers
@@ -1014,7 +1022,7 @@ Expected: drei Dateien mit **ausgeschriebenen Sprechernamen** in der Ausgabe (da
 
 Zusätzlich die Abbruchpfade einmal auslösen, sie sind die eigentlichen Wächter:
 - eine nicht existierende Zeile in die Liste ⇒ `FEHLT:` und Rückgabewert 1
-- `run … --projekte <leerer Ordner>` ⇒ `SKIP` je Datei, kein stiller Nullpunkt
+- `run … --projekte <leerer Ordner>` ⇒ **Abbruch** bei der ersten Datei, kein stiller Nullpunkt über eine kleinere Menge
 
 - [ ] **Step 5: Prüfen, dass nichts nach `projekte\` geschrieben wurde**
 
