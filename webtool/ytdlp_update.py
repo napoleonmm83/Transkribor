@@ -735,6 +735,31 @@ def automatisch(erzwingen: bool = False) -> bool:
     return aktualisiere()[0]
 
 
+def laeuft_gerade(eigener: bool | None = None) -> bool:
+    """Aktualisiert IRGENDWER gerade yt-dlp? Fuer eine AUSKUNFT, nie fuer eine Entscheidung.
+
+    Zwei Quellen, weil es zwei Prozesse gibt: `_lauf` ist Modulzustand (der eigene
+    Hintergrundlauf), die Sperre deckt den fremden — den fetch-Subprozess mit seiner
+    Selbstheilung und, seit #253, jeden anderen Serverprozess mit seinem Startlauf.
+    `sperre.wird_gehalten` nimmt die Lebendpruefung mit; ein blosses `isdir` liesse ein
+    liegengebliebenes Lock dauerhaft „laeuft gerade" melden (#243).
+
+    **Die Antwort ist eine Momentaufnahme.** Wer daraus einen Sprung in den kritischen
+    Abschnitt ableitet, baut genau die Race nach, gegen die die Sperre steht.
+
+    `eigener` erspart dem Aufrufer, der `hintergrund_zustand()` ohnehin schon gelesen hat,
+    einen zweiten Zugriff — und haelt die Antwort damit in sich konsistent (dieselbe Regel
+    wie `cfg` bei `llm.available`).
+
+    Herausgezogen aus `zustand()`, weil `fetch.download_one` seit #253 dieselbe Frage stellt:
+    der Startlauf kann laufen, waehrend dort importiert wird, und „nicht installiert" waere
+    dann falsch. Zwei Orte mit derselben Regel driften auseinander.
+    """
+    if eigener is None:
+        eigener = hintergrund_zustand()[0]
+    return eigener or sperre.wird_gehalten(_lockziel(), _lock_stale())
+
+
 def beim_start() -> bool:
     """Die faellige Kalenderpruefung beim Serverstart, im Hintergrund. True = ein Lauf laeuft.
 
@@ -813,6 +838,6 @@ def zustand() -> dict:
     laeuft, ergebnis, ungeschuetzt = hintergrund_zustand()
     return {"version": v, "unlesbar": unlesbar, "geprueft": g.isoformat() if g else "",
             "auto": auto_an(), "env": env_override() is not None,
-            "laeuft": laeuft or sperre.wird_gehalten(_lockziel(), _lock_stale()),
+            "laeuft": laeuft_gerade(laeuft),
             "ergebnis": ergebnis, "ungeschuetzt": ungeschuetzt,
             "ejs_unlesbar": _ejs_untauglich_und_lesbarkeit()[1]}

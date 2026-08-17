@@ -593,6 +593,34 @@ def test_ohne_update_kein_zweiter_versuch(projekt, monkeypatch):
     assert len(downloads) == 1
 
 
+def test_import_waehrend_einer_aktualisierung_sagt_das_auch(projekt, monkeypatch):
+    """**Das ist, was #253 NEU aufmacht.** Der Kalenderlauf liegt jetzt im Serverprozess und
+    kann laufen, waehrend `download_one` importiert. Faellt der Import in pips
+    Deinstallations-/Installationsluecke, ist yt-dlp fuer einen Moment weg — vorher gab es
+    das nicht, weil der Import das pip gerade abwartete.
+
+    Ohne diese Abfrage saehe der Nutzer drei falsche Dinge auf einmal: „nicht installiert",
+    waehrend gerade INSTALLIERT wird; keine Selbstheilung (`_EXTRAKTOR_RE` trifft den Text
+    nicht); und einen Rat, der ein DRITTES pip auf dieselbe venv startet.
+    """
+    monkeypatch.setattr(fetch, "yt_dlp", None)
+    monkeypatch.setattr(fetch, "_importiere_yt_dlp", lambda: None)   # pips Luecke
+    monkeypatch.setattr(fetch.ytdlp_update, "laeuft_gerade", lambda *a: True)
+    with pytest.raises(RuntimeError, match="wird gerade aktualisiert"):
+        fetch.download_one("Demo", "https://youtu.be/vid123")
+
+
+def test_ohne_laufende_aktualisierung_bleibt_es_bei_nicht_installiert(projekt, monkeypatch):
+    """Die Gegenrichtung, und sie ist keine Formalie: eine Meldung „wird gerade
+    aktualisiert", die IMMER kommt, verdeckt den echten Fall (yt-dlp fehlt wirklich) samt
+    dem einzigen Rat, der dann hilft."""
+    monkeypatch.setattr(fetch, "yt_dlp", None)
+    monkeypatch.setattr(fetch, "_importiere_yt_dlp", lambda: None)
+    monkeypatch.setattr(fetch.ytdlp_update, "laeuft_gerade", lambda *a: False)
+    with pytest.raises(RuntimeError, match="nicht installiert"):
+        fetch.download_one("Demo", "https://youtu.be/vid123")
+
+
 def test_url_import_wartet_NICHT_mehr_auf_die_kalenderpruefung(monkeypatch, tmp_path):
     """#253: `_hole_yt_dlp()` ruft `automatisch()` nicht mehr.
 
