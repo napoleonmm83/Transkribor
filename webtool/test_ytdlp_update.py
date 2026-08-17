@@ -1009,6 +1009,33 @@ def test_beim_start_respektiert_die_faelligkeit(monkeypatch):
     assert yu.beim_start() is False
 
 
+def test_beim_start_tritt_zurueck_wenn_schon_jemand_aktualisiert(monkeypatch, capsys):
+    """Starten zwei Serverprozesse gleichzeitig (gepackte App neben Entwickler-Checkout,
+    #254), sehen beide `faellig()` und starten je einen Lauf — der zweite sitzt bis zu 220 s
+    an der Sperre ab und macht danach ein pip, das „already satisfied" meldet. Dieselbe
+    Klasse wie #176, auf dem neuen Weg (CodeRabbit-Bot an PR #255).
+
+    Advisory, keine Entscheidung im kritischen Abschnitt: verliert die Pruefung ihr Rennen,
+    laufen beide — also das heutige Verhalten, kein neuer Schaden. Deshalb darf sie hier
+    stehen, anders als bei einem Sprung IN den Abschnitt.
+    """
+    monkeypatch.setattr(yu, "faellig", lambda: True)         # Positivkontrolle: es WAERE faellig
+    monkeypatch.setattr(yu, "laeuft_gerade", lambda *a: True)
+    monkeypatch.setattr(yu, "starte_hintergrund",
+                        lambda: pytest.fail("es aktualisiert schon jemand — kein zweiter Lauf"))
+    assert yu.beim_start() is False
+    assert "schon jemand" in capsys.readouterr().out         # nicht still
+
+
+def test_beim_start_laeuft_wenn_NIEMAND_aktualisiert(monkeypatch):
+    """Die Gegenrichtung — ohne sie waere das dritte Tor ein Riegel, der IMMER schliesst, und
+    die Kalenderpruefung fiele still ganz aus."""
+    monkeypatch.setattr(yu, "faellig", lambda: True)
+    monkeypatch.setattr(yu, "laeuft_gerade", lambda *a: False)
+    monkeypatch.setattr(yu, "starte_hintergrund", lambda: True)
+    assert yu.beim_start() is True
+
+
 @pytest.mark.parametrize("wo", ["auto_an", "faellig", "starte_hintergrund"])
 def test_beim_start_wirft_NIE(monkeypatch, capsys, wo):
     """Der Aufrufer ist `app._lifespan` — ein Wurf hier liesse den Server GAR NICHT ERST
