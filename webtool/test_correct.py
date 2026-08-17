@@ -974,6 +974,55 @@ def test_summary_prompt_bleibt_ohne_regel():
     assert "MEHRSPRACHIG" not in p and "übersetze nichts" not in p
 
 
+def test_alle_umbenennenden_prompts_erlauben_zwei_cluster_pro_person():
+    """Die Erlaubnis stand seit 328ebf2 NUR in _correct_prompt — und der Treue-Pass schreibt
+    ZULETZT. Dieselbe Falle wie bei `[Musik]` und der Fremdsprachen-Regel: was der Verify-Pass
+    nicht als erlaubt kennt, dreht er als Fehlzuordnung zurueck.
+
+    `_summary_prompt` ist hier ANDERS als bei der Mehrsprachig-Regel dabei: die laesst es
+    bewusst aus (seine Segmente haben keinen text-Schluessel, es gibt nichts zu uebersetzen) —
+    Sprecher vergibt es aber sehr wohl, also gilt die Cluster-Regel dort.
+    """
+    prompts = {
+        "correct": correct._correct_prompt("b", "t.txt", "c.json", "g.json", "kontext"),
+        "verify":  correct._verify_prompt("b", "t.txt", "c.json", "kontext"),
+        "light":   correct._light_prompt("b", "t.txt", "c.json", "kontext"),
+        "summary": correct._summary_prompt("b", "t.txt", "c.json", "kontext"),
+    }
+    for name, p in prompts.items():
+        assert correct.CLUSTER_REGEL in p, f"{name}-Prompt traegt die Cluster-Regel nicht"
+
+
+def test_cluster_regel_nennt_den_gemessenen_grund():
+    """Eine blosse Erlaubnis reichte nicht — sie stand da, und die Aufspaltung passierte
+    trotzdem (#267, gemessen an Rhyathlon/00114307 mit vorgegebener Sprecherzahl 5). Die Regel
+    nennt deshalb das konkrete Erkennungsmerkmal, nicht nur die Befugnis.
+    """
+    assert "Kameramikrofon" in correct.CLUSTER_REGEL
+    assert "Frageform" in correct.CLUSTER_REGEL
+
+
+def test_correct_prompt_nennt_das_cluster_praefix_nicht_mehr_die_wahrheit():
+    """Die Erlaubnis stand seit 328ebf2 da und wirkte NICHT — weil zwei Saetze darueber
+    „das Praefix ist die WAHRHEIT, WER spricht" stand. Dieselbe Form, gegen die
+    correct.py beim Mehrsprachig-Fix ausdruecklich entschieden hat (siehe den Kommentar an
+    `_correct_prompt`): die Regel ERSETZT die widersprechende Anweisung, sie steht nicht
+    daneben. Ein Prompt mit zwei sich widersprechenden Anweisungen ist die Form, an der die
+    [Musik]-Regel schon einmal haengengeblieben ist.
+    """
+    p = correct._correct_prompt("b", "t.txt", "c.json", "g.json", "kontext")
+    assert "WAHRHEIT, WER spricht" not in p
+
+
+def test_verify_prompt_beauftragt_keine_pauschale_fehlzuordnungs_korrektur():
+    """Der Gegenpart im Treue-Pass: „Fehlzuordnungen korrigieren" als pauschaler Auftrag ist
+    genau der Satz, der zwei Cluster mit demselben Namen als Fehler liest — und der Pass
+    schreibt zuletzt. Er ist eingeschraenkt, nicht bloss ergaenzt.
+    """
+    p = correct._verify_prompt("b", "t.txt", "c.json", "kontext")
+    assert "Fehlzuordnungen korrigieren" not in p
+
+
 def test_ziel_dialekt_meldet_mehrsprachig(tmp_path, monkeypatch):
     monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
     from webtool import projekt
