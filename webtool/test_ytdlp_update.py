@@ -1388,10 +1388,16 @@ def test_ein_unlesbarer_oder_zukuenftiger_merker_gilt_nicht():
         assert yu._pip_unterbrochen() is False, inhalt
 
 
-def test_loeschen_ohne_merker_wirft_nicht():
-    """Dieses Modul darf nirgends werfen (#185), und der Normalfall ist der ohne Merker."""
+def test_loeschen_ohne_merker_wirft_nicht_und_SCHWEIGT(capsys):
+    """Dieses Modul darf nirgends werfen (#185) — aber „wirft nicht" allein macht den
+    `except FileNotFoundError`-Zweig zur Dekoration: `FileNotFoundError` IST ein `OSError`,
+    der Zweig darunter faengt ihn ebenso, und die Mutation „Zweig raus" blieb gruen
+    (gemessen). Was er wirklich leistet, ist die STILLE: ohne ihn meldete jeder Lauf, dessen
+    Merker-Schreibversuch scheiterte, hinterher „nicht loeschbar — die Faelligkeit bleibt
+    bestehen" — eine Warnung ueber einen Zustand, den es nicht gibt."""
     yu._pip_merker_loeschen()
     yu._pip_merker_loeschen()
+    assert capsys.readouterr().out == ""
 
 
 def test_ein_unschreibbarer_merker_reisst_niemanden_mit(monkeypatch, capsys):
