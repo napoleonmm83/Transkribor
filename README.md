@@ -111,8 +111,11 @@ auch in grossen Sammlungen mit einem Griff zum richtigen Projekt.
 **Videos direkt aus dem Netz.** YouTube- oder Instagram-Adresse einfügen genügt; Transkribor
 holt sich die Tonspur selbst. **Und hält sich dafür selbst instand:** YouTube und Instagram
 bauen ihre Seiten ständig um, wovon der Downloader jedes Mal aus dem Tritt kommt — Transkribor
-frischt ihn deshalb von sich aus auf. Geht ein Download trotzdem schief, weil die Seite sich
-gerade wieder geändert hat, aktualisiert es sofort und versucht es gleich noch einmal. Du
+frischt ihn deshalb von sich aus auf, und zwar **beim Start im Hintergrund**. So wartet nie
+jemand darauf: früher konnte die Auffrischung ausgerechnet dann fällig werden, wenn du gerade
+eine Adresse eingefügt hattest, und der Download begann erst ein paar Minuten später. Geht ein
+Download trotzdem schief, weil die Seite sich gerade wieder geändert hat, aktualisiert es
+sofort und versucht es gleich noch einmal. Du
 merkst davon im Normalfall nichts; nachsehen (und abschalten) kannst du es unter
 **Einstellungen › Video-Import**. Zusätzliche Programme brauchst du dafür keine — YouTube
 verlangt beim Herunterladen inzwischen, dass ein kleines Stück Javascript ausgeführt wird,
