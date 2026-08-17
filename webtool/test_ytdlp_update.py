@@ -1480,19 +1480,26 @@ def test_der_merker_wird_INNERHALB_der_sperre_gesetzt(monkeypatch):
                      "auf:" + settings_lock, "zu:" + settings_lock, "zu:" + pip_lock]
 
 
-def test_jeder_zurueckgekehrte_lauf_raeumt_den_merker_weg(monkeypatch):
-    """Auch bei returncode != 0 und auch bei einer Zeitueberschreitung: in allen vier Faellen
-    hat der Prozess UEBERLEBT und raeumt hinter sich auf. Bliebe der Merker bei einem Timeout
-    liegen, liefe auf einer langsamen Leitung bei JEDEM Start ein 120-s-pip — genau der
-    Dauerlauf, den dieses Modul ausschliesst. Der Preis steht als Issue: ein selbst
-    verursachter Timeout MITTEN in der Installation bleibt unerkannt (heute genauso)."""
-    for stub in (lambda cmd, **k: subprocess.CompletedProcess(cmd, 0, "ok", ""),
-                 lambda cmd, **k: subprocess.CompletedProcess(cmd, 1, "ERROR", ""),
+def test_nur_ein_GELUNGENER_lauf_raeumt_den_merker_weg(monkeypatch):
+    """„Der Prozess hat ueberlebt" ist das falsche Mass, und das ist GEMESSEN: `taskkill /F /T`
+    toetet auf Windows das pip-KIND zuerst und laesst dem Elternprozess ein Zeitfenster. Im
+    Versuch kam er bis ins `_merken()` — der Merker war weg, ausgerechnet im Szenario von
+    #257. Ein abgewuergtes pip meldet nie 0, ein gelungenes immer.
+
+    Dass der Merker nach einem ECHTEN Fehlschlag (offline) liegen bleibt, kostet nichts:
+    `faellig()` verlangt zusaetzlich `fassung() is None`, und die Fassung ist dann lesbar."""
+    monkeypatch.setattr(yu.subprocess, "run",
+                        lambda cmd, **k: subprocess.CompletedProcess(cmd, 0, "ok", ""))
+    yu.aktualisiere()
+    assert yu._pip_unterbrochen() is False
+
+    for stub in (lambda cmd, **k: subprocess.CompletedProcess(cmd, 1, "ERROR", ""),
                  _wirft(subprocess.TimeoutExpired("pip", yu.PIP_TIMEOUT)),
                  _wirft(OSError("kein Interpreter"))):
+        yu._pip_merker_loeschen()
         monkeypatch.setattr(yu.subprocess, "run", stub)
         yu.aktualisiere()
-        assert yu._pip_unterbrochen() is False
+        assert yu._pip_unterbrochen() is True
 
 
 def test_ein_wurf_den_niemand_faengt_laesst_den_merker_liegen(monkeypatch):
@@ -1506,15 +1513,17 @@ def test_ein_wurf_den_niemand_faengt_laesst_den_merker_liegen(monkeypatch):
     assert yu._pip_unterbrochen() is True
 
 
-def test_ein_unterbrochener_lauf_macht_faellig(monkeypatch):
-    """#257/#258, der Kern. Fassung taufrisch, heute schon geprueft: nach jeder anderen Regel
-    dieses Moduls waere das NICHT faellig. Der Merker schlaegt sie alle, weil eine halbe
-    Installation im Kalender nicht vorkommt."""
+def test_ein_unterbrochener_lauf_OHNE_schaden_macht_NICHT_faellig(monkeypatch):
+    """Die zweite Haelfte der Regel, und sie spart den ueberfluessigen Lauf: ein Merker sagt
+    „ein pip hat keinen Erfolg gemeldet", nicht „etwas ist kaputt". Nach einem gescheiterten
+    pip (offline) ist die Fassung unveraendert lesbar — dann gibt es nichts zu reparieren.
+    Ohne diese Haelfte liefe bei jedem Start eine Reparatur fuer einen Schaden, den es nicht
+    gibt."""
     monkeypatch.setattr(yu, "fassung", lambda: "2026.8.12")
     settings.save({"ytdlp_geprueft": HEUTE.isoformat()})
-    assert yu.faellig() is False                       # Negativkontrolle
     yu._pip_merker_setzen()
-    assert yu.faellig() is True
+    assert yu._pip_unterbrochen() is True
+    assert yu.faellig() is False
 
 
 def test_der_merker_schlaegt_auch_den_nicht_installiert_riegel(monkeypatch):
@@ -1532,7 +1541,7 @@ def test_der_merker_schlaegt_auch_den_nicht_installiert_riegel(monkeypatch):
 def test_beim_start_holt_einen_unterbrochenen_lauf_nach(monkeypatch):
     """Die Kette, an der beide Issues haengen: der naechste Serverstart repariert.
     `starte_hintergrund` gefaelscht, sonst liefe ein echter Faden mit echtem pip."""
-    monkeypatch.setattr(yu, "fassung", lambda: "2026.8.12")
+    monkeypatch.setattr(yu, "fassung", lambda: None)
     settings.save({"ytdlp_geprueft": HEUTE.isoformat()})
     monkeypatch.setattr(yu, "laeuft_gerade", lambda *a: False)
     gestartet = []
@@ -1541,3 +1550,23 @@ def test_beim_start_holt_einen_unterbrochenen_lauf_nach(monkeypatch):
     yu._pip_merker_setzen()
     assert yu.beim_start() is True
     assert gestartet == [1]
+
+
+def test_ein_liegender_merker_wird_nicht_aufgefrischt():
+    """Sein Datum ist der Anker der Verfallsfrist — und daran endet der einzige verbliebene
+    Dauerlauf. Scheitert pip dauerhaft (offline, kaputte venv), setzte ein aufgefrischtes
+    Datum die Frist bei JEDEM Lauf zurueck und die Faelligkeit liefe ewig. Ein unlesbarer
+    Merker zaehlt dagegen als keiner und wird ueberschrieben, sonst bliebe eine halb
+    geschriebene Datei fuer immer liegen und schaltete die Erkennung ab."""
+    alt = (HEUTE - dt.timedelta(days=3)).isoformat()
+    with open(yu._pip_merker(), "w", encoding="utf-8") as f:
+        f.write(alt)
+    yu._pip_merker_setzen()
+    with open(yu._pip_merker(), encoding="utf-8") as f:
+        assert f.read().strip() == alt
+
+    with open(yu._pip_merker(), "w", encoding="utf-8") as f:
+        f.write("kein datum")
+    yu._pip_merker_setzen()                       # Gegenprobe: unlesbar wird ersetzt
+    with open(yu._pip_merker(), encoding="utf-8") as f:
+        assert f.read().strip() == HEUTE.isoformat()
