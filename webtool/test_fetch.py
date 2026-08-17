@@ -470,18 +470,25 @@ def test_requirements_nennt_yt_dlp_ejs():
 
 # --- Selbstaktualisierung ----------------------------------------------------
 
-def test_import_laeuft_erst_NACH_dem_update(projekt, monkeypatch):
+def test_yt_dlp_wird_erst_beim_download_importiert(projekt, monkeypatch):
     """Der Kern des Mechanismus: pip tauscht die Dateien auf der PLATTE aus. Ein am
     Modulkopf importiertes yt-dlp laege bereits im Speicher — die Aktualisierung wirkte
-    dann erst beim naechsten Lauf, also nie fuer den Import, der sie ausgeloest hat."""
+    dann erst beim naechsten Lauf, also nie fuer den Import, der sie ausgeloest hat. Genau
+    darauf baut `_neu_laden()` in der Selbstheilung auf.
+
+    **Bis #253 hiess dieser Test `test_import_laeuft_erst_NACH_dem_update`** und pruefte
+    `reihenfolge == ["update", "import"]`. Die erste Haelfte ist mit der Kalenderpruefung an
+    den Serverstart gezogen (`ytdlp_update.beim_start()`); den Rest der Zusicherung — der
+    Import passiert beim DOWNLOAD, nicht beim Laden des Moduls — braucht die Selbstheilung
+    weiterhin, und ohne ihn haette der Umbau die Lazy-Regel still mitgenommen.
+    """
     reihenfolge = []
     monkeypatch.setattr(fetch, "yt_dlp", None)
-    monkeypatch.setattr(fetch.ytdlp_update, "automatisch",
-                        lambda *a, **k: reihenfolge.append("update"))
     monkeypatch.setattr(fetch, "_importiere_yt_dlp",
                         lambda: reihenfolge.append("import") or _FakeYtDlp)
+    assert reihenfolge == []                  # Modul laengst geladen — noch kein yt-dlp
     fetch.download_one("Demo", "https://youtu.be/vid123")
-    assert reihenfolge == ["update", "import"]
+    assert reihenfolge == ["import"]
 
 
 def test_selbstheilung_aktualisiert_und_laedt_doch_noch(projekt, monkeypatch):
@@ -586,33 +593,35 @@ def test_ohne_update_kein_zweiter_versuch(projekt, monkeypatch):
     assert len(downloads) == 1
 
 
-def test_kaputte_metadaten_reissen_den_url_import_nicht_mit(monkeypatch, tmp_path):
-    """#185 end-to-end: `_hole_yt_dlp()` hat KEIN try/except um `automatisch()`, ein Wurf
-    aus dem Selbstaktualisierer riss also den ganzen URL-Import ab — gegen die Zusage im
-    Modul-Docstring („der Aufrufer macht mit der vorhandenen Fassung weiter").
+def test_url_import_wartet_NICHT_mehr_auf_die_kalenderpruefung(monkeypatch, tmp_path):
+    """#253: `_hole_yt_dlp()` ruft `automatisch()` nicht mehr.
+
+    Vorher lag zwischen „Adresse eingefuegt" und „Download beginnt" ein pip von bis zu 120 s
+    (mit Sperrwartezeit >=340 s) — an der einzigen Stelle der App, an der jemand aktiv auf
+    ein Ergebnis wartet. Die Vorsorge macht jetzt `ytdlp_update.beim_start()`.
+
+    **Das ist die Negativkontrolle eines PAARES.** Der Gegenpart in `test_api.py`
+    (`test_start_stoesst_die_ytdlp_kalenderpruefung_an`) haelt fest, dass sie beim
+    Serverstart LAEUFT — und `test_selbstheilung_aktualisiert_und_laedt_doch_noch` weiter
+    unten, dass die SELBSTHEILUNG unberuehrt bleibt. Ohne diese drei zusammen waere
+    „verschoben" nicht von „ersatzlos entfernt" zu unterscheiden.
 
     Bewusst OHNE die `projekt`-Fixture: die schaltet den Automatismus per
-    `TRANSKRIBOR_YTDLP_UPDATE=0` ab, und `automatisch()` kaeme dann gar nicht bis zum
-    Metadaten-Zugriff. Der Riegel gegen echtes pip ist hier `aktualisiere`, nicht die Env."""
+    `TRANSKRIBOR_YTDLP_UPDATE=0` ab — dann bewiese der Test die Env, nicht den Umbau.
+    (Bis #253 stand hier `test_kaputte_metadaten_reissen_den_url_import_nicht_mit`, der
+    #185 auf diesem Pfad end-to-end pruefte. Sein Gegenstand ist mit dem Aufruf
+    weitergezogen: `test_ytdlp_update.py::test_beim_start_wirft_NIE` haelt dieselbe Zusage
+    jetzt dort, wo ein Wurf teurer ist — er liesse den Server nicht hochkommen. Ihn hier
+    stehen zu lassen waere ein Waechter ohne Gegenstand geworden: gruen, weil nichts mehr
+    passiert.)
+    """
     monkeypatch.setenv("TRANSKRIBOR_SETTINGS", str(tmp_path / "settings.json"))
     monkeypatch.delenv("TRANSKRIBOR_YTDLP_UPDATE", raising=False)
-
-    # Der Name wird GESAMMELT und danach geprueft, nicht per `assert` im Stub: der stuende
-    # innerhalb des `try`, um das dieser Fix `except Exception` legt — der AssertionError
-    # ginge also in der gepruefteten Wache unter (gemessen).
-    gerufen = []
-
-    def unlesbar(name):
-        gerufen.append(name)
-        raise UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid start byte")
-
-    monkeypatch.setattr(fetch.ytdlp_update.metadata, "version", unlesbar)
-    monkeypatch.setattr(fetch.ytdlp_update, "aktualisiere",
-                        lambda *a, **k: pytest.fail("kein pip auf unlesbare Metadaten"))
+    monkeypatch.setattr(fetch.ytdlp_update, "automatisch",
+                        lambda *a, **k: pytest.fail("keine Kalenderpruefung vor dem Import"))
     monkeypatch.setattr(fetch, "yt_dlp", None)
     monkeypatch.setattr(fetch, "_importiere_yt_dlp", lambda: "modul")
     assert fetch._hole_yt_dlp() == "modul"
-    assert gerufen and set(gerufen) == {"yt-dlp"}
 
 
 def test_neu_laden_raeumt_sys_modules_und_importiert_frisch(monkeypatch):

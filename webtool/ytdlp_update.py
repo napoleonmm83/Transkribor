@@ -722,6 +722,45 @@ def automatisch(erzwingen: bool = False) -> bool:
     return aktualisiere()[0]
 
 
+def beim_start() -> bool:
+    """Die faellige Kalenderpruefung beim Serverstart, im Hintergrund. True = ein Lauf laeuft.
+
+    **Bis #253 hing dieser Weg an `fetch._hole_yt_dlp()`**, lief also vor JEDEM URL-Import:
+    war yt-dlp faellig, wartete der Nutzer dort bis zu 120 s auf pip (mit Sperrwartezeit
+    >=340 s) — direkt nachdem er eine Adresse eingefuegt hatte, also an der einzigen Stelle
+    der App, an der er aktiv auf ein Ergebnis wartet. Vorsorge gehoert an den Start, wo
+    niemand wartet.
+
+    **Die SELBSTHEILUNG bleibt, wo sie ist** (`automatisch(erzwingen=True)` in `fetch.main`
+    nach einem gescheiterten Download): ein Extraktor bricht nicht nach Kalender, und dort
+    ist das pip die Reparatur eines Fehlers, den der Nutzer gerade vor sich hat — keine
+    Vorsorge. Die beiden Wege sahen im Code gleich aus und sind es nie gewesen.
+
+    Dieselben zwei Tore wie `automatisch()`, aus derselben Quelle: Schalter (`auto_an`) und
+    Faelligkeit (`faellig`). Ohne das zweite liefe bei jedem Start ein pip — die App startet
+    oefter als alle 14 Tage.
+
+    Der Lauf geht ueber `starte_hintergrund()`, nicht ueber `automatisch()`: nur der setzt
+    `_lauf`, und daran haengt die Ausgangsmeldung der Einstellungsseite (#174/#243);
+    `automatisch()` liefe ausserdem synchron und hielte den Start auf.
+
+    **Wirft nie** — der Aufrufer ist `app._lifespan`. Dieselbe Zusage wie im Modul-Docstring
+    (#185: `fetch._hole_yt_dlp()` hatte kein try/except und riss den URL-Import mit), nur mit
+    hoeherem Einsatz: dort fiel eine Funktion aus, hier kaeme der Server nicht hoch.
+    """
+    try:
+        if not auto_an() or not faellig():
+            return False
+        return starte_hintergrund()
+    except Exception as e:
+        # Nicht still: eine uebersprungene Vorsorge sieht man sonst erst daran, dass Monate
+        # spaeter ein Extraktor bricht. `BaseException` faengt der Block bewusst nicht —
+        # ein KeyboardInterrupt beim Start soll den Start abbrechen.
+        print(f"[ytdlp] Kalenderpruefung beim Start uebersprungen "
+              f"({type(e).__name__}: {e})", flush=True)
+        return False
+
+
 def zustand() -> dict:
     """Fuer die Einstellungsseite: was installiert ist, wann zuletzt geprueft wurde,
     ob der Automatismus laeuft — und ob die Umgebung den Haken ueberstimmt.
