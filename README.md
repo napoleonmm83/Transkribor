@@ -209,9 +209,9 @@ Projekt-Einstellungen (⋯-Menü des Projekts) legst du die Standard-Sprache und
 Korrektur-Tiefe fest; die Auswahl beim Hinzufügen nimmt die Standard-Sprache vorweg und lässt
 sich für die nächsten Aufnahmen abändern, ohne den Standard zu verstellen. Und solltest du
 dich später anders entscheiden: im ⋯-Menü der jeweiligen Aufnahme („Sprache, Korrektur & Sprecher“)
-lässt sich beides nachträglich ändern. Eine andere Sprache bedeutet Neu-Transkription — das
-alte Transkript wird verworfen, das Audio bleibt erhalten; eine andere Korrektur-Tiefe startet
-nur die Korrektur neu.
+lässt sich alles nachträglich ändern. Eine andere Sprache bedeutet Neu-Transkription — das
+alte Transkript wird verworfen, das Audio bleibt erhalten; eine andere Korrektur-Tiefe oder
+Sprecherzahl startet nur die Korrektur neu.
 
 Auch bei der Sprache gilt dort die Wahl **„Folgt dem Projekt“** (mit der geerbten Sprache in
 Klammern, damit du siehst, worauf sie hinausläuft). Solange die steht, gilt für die Aufnahme
