@@ -797,9 +797,10 @@ def cmd_freeze(args) -> int:
         print("\nAbbruch: ein unvollstaendiger Referenzsatz wuerde als Nullpunkt eingefroren "
               "und alle spaeteren Vergleiche verschieben.")
         return 1
-    if os.path.dirname(args.ziel):        # `--ziel referenz.json` -> dirname "" -> makedirs wirft
-        os.makedirs(os.path.dirname(args.ziel), exist_ok=True)
-    with open(args.ziel, "w", encoding="utf-8") as f:
+    ziel = _unter_eval(args.ziel)         # Schreibpfad-Wache, s. dort
+    if os.path.dirname(ziel):             # `--ziel referenz.json` -> dirname "" -> makedirs wirft
+        os.makedirs(os.path.dirname(ziel), exist_ok=True)
+    with open(ziel, "w", encoding="utf-8") as f:
         json.dump({"projekte": args.projekte, "dateien": dateien}, f, indent=1,
                   ensure_ascii=False)
     print(f"\n{len(dateien)} Datei(en) -> {args.ziel}")
@@ -875,7 +876,12 @@ def cmd_run(args) -> int:
         e = ergebnis[schluessel]
         print(f"  {schluessel:<44} {e['sprecherzahl']}({e['cluster_roh']})/{e['sprecher_wahr']} "
               f"Sprecher | V {e['v']:.3f} | Fehler {e['fehlerquote']*100:5.1f}%", flush=True)
-    ziel = os.path.join("eval", "laeufe", args.name + ".json")
+    if not ergebnis:
+        # Kein Artefakt fuer einen leeren Lauf. Sonst legt `vergleich` spaeter zwei Laeufe
+        # nebeneinander, von denen einer NICHTS gemessen hat — `_summe` teilt durch `or 1`
+        # und liefert 0,0 %, also den Bestwert. Dieselbe Klasse wie das `nan` oben.
+        raise SystemExit("kein einziger Referenzeintrag gemessen — kein Lauf geschrieben.")
+    ziel = _unter_eval(os.path.join("eval", "laeufe", args.name + ".json"))
     os.makedirs(os.path.dirname(ziel), exist_ok=True)
     # Die Einstellungen EINZELN, nicht `vars(args)`: darin steckt ueber `set_defaults` die
     # Funktion `fn`, und `json.dump` stirbt daran mit TypeError — nach dem Rechnen, also nach
@@ -965,6 +971,25 @@ def _lauf_name(wert: str) -> str:
         raise argparse.ArgumentTypeError(
             "nur Buchstaben, Ziffern, '-', '_' und '.', nicht mit '.' beginnend")
     return wert
+
+
+EVAL = os.path.abspath("eval")
+
+
+def _unter_eval(pfad: str) -> str:
+    """Jeder Schreibpfad dieses Werkzeugs muss unter `eval/` landen — geprueft am AUFGELOESTEN
+    Pfad, nicht am getippten.
+
+    `--ziel ../../projekte/Rhyathlon/transkripte/00114307.edit.json` ginge sonst ungeprueft in
+    ein `open(..., "w")` und ueberschriebe echtes Material. Der wichtigste Constraint dieses
+    Plans („nie nach projekte\\ schreiben") war damit allein durch Disziplin gesichert, und ein
+    Vertipper reicht. `os.path.realpath` auf BEIDEN Seiten, sonst kaeme ein Symlink daran vorbei.
+    """
+    ziel = os.path.realpath(pfad)
+    wurzel = os.path.realpath(EVAL)
+    if ziel != wurzel and not ziel.startswith(wurzel + os.sep):
+        raise SystemExit(f"Ziel liegt ausserhalb von eval/: {ziel}")
+    return ziel
 
 
 def main(argv=None) -> int:

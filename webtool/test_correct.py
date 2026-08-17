@@ -997,9 +997,19 @@ def test_cluster_regel_nennt_den_gemessenen_grund():
     """Eine blosse Erlaubnis reichte nicht — sie stand da, und die Aufspaltung passierte
     trotzdem (#267, gemessen an Rhyathlon/00114307 mit vorgegebener Sprecherzahl 5). Die Regel
     nennt deshalb das konkrete Erkennungsmerkmal, nicht nur die Befugnis.
+
+    Geprueft werden BEIDE Haelften. Nur das Erkennungsmerkmal zu pruefen waere eine
+    Vacuity-Luecke: eine Regel, die bloss „Kameramikrofon" und „Frageform" enthaelt, liesse
+    diesen Test UND den Einbettungstest gruen — und genau die Erlaubnis, um die es geht, waere
+    aus allen vier Prompts verschwunden (CodeRabbit-Bot an PR #269).
     """
+    # das Erkennungsmerkmal
     assert "Kameramikrofon" in correct.CLUSTER_REGEL
     assert "Frageform" in correct.CLUSTER_REGEL
+    # die Erlaubnis selbst — der eigentliche Inhalt
+    assert "nicht zwingend die PERSON" in correct.CLUSTER_REGEL
+    assert "ERLAUBTE Entscheidung" in correct.CLUSTER_REGEL
+    assert "KEINE Fehlzuordnung" in correct.CLUSTER_REGEL
 
 
 def test_correct_prompt_nennt_das_cluster_praefix_nicht_mehr_die_wahrheit():
