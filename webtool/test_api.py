@@ -1811,6 +1811,10 @@ def test_erfundener_merker_schiebt_keine_gesunde_datei_beiseite(client, tmp_path
     client.put("/api/projects/Demo/files/S1", json=doc)               # gesunde Datei anlegen
     gesund = e.read_bytes()
     assert gesund                                                     # war wirklich etwas da
+    # Seit #160 zaehlt der `dateistand`: der erste PUT hat die Datei angelegt, das Token aus
+    # dem GET oben ist damit veraltet. Ein echter Client holt hier neu — ohne das pruefte der
+    # Test unten die SPERRE (409) statt des Merkers und waere vacuous.
+    doc = client.get("/api/projects/Demo/files/S1").json()
     r = client.put("/api/projects/Demo/files/S1", json={**doc, "selbstgeheilt": "erfunden"})
     # Der zweite PUT muss GELUNGEN sein, sonst prueft alles darunter nur die Datei aus dem
     # ersten (CodeRabbit an PR #204) — ein 400/500 haette den Test gruen gelassen.
@@ -1819,6 +1823,116 @@ def test_erfundener_merker_schiebt_keine_gesunde_datei_beiseite(client, tmp_path
     # Byte-gleich: weder verschoben noch veraendert. Der Merker faellt beim Schreiben weg,
     # also muss dasselbe Dokument dastehen wie nach dem ersten PUT.
     assert e.read_bytes() == gesund
+
+
+def test_get_liefert_immer_einen_dateistand(client, tmp_path):
+    """#160: der `dateistand` ist die Grundlage des optimistischen Sperrens — fehlt er im GET,
+    schickt der Client nichts mit, und der PUT schreibt OHNE VORBEHALT. Die Sperre waere damit
+    still abgeschaltet, ohne dass irgendetwas rot wuerde.
+
+    Dieser Waechter gehoert ins pytest und NICHT ins vitest: die Frontend-Attrappe von `getDoc`
+    liefert ein Objekt, das wir selbst schreiben — sie wuerde den Vertrag also selbst behaupten.
+    Genau die Luecke aus #239.
+
+    Beide Wege muessen liefern: die gebaute Fassung (noch keine edit.json) und die gelesene."""
+    ohne = client.get("/api/projects/Demo/files/S1").json()
+    assert ohne["dateistand"] == "", "ohne edit.json ist der Stand die leere Zeichenkette"
+    client.put("/api/projects/Demo/files/S1", json=ohne)
+    mit = client.get("/api/projects/Demo/files/S1").json()
+    assert mit["dateistand"], "mit edit.json muss ein Stand geliefert werden"
+    assert (tmp_path / "Demo" / "transkripte" / "S1.edit.json").exists()
+
+
+def test_veralteter_dateistand_wird_abgelehnt(client, tmp_path):
+    """Der Kern von #160: der Editor speichert 800 ms nach dem letzten Tastendruck. Wird eine
+    Korrektur fertig, waehrend der PUT schon unterwegs ist, landet er DANACH und ersetzt die
+    frische edit.json — ein kompletter Korrekturlauf weg, ohne eine Zeile im Protokoll.
+
+    Nachgestellt wird der fremde Schreiber (`correct.cmd_apply`, eigener Prozess) durch
+    direktes Schreiben der Datei."""
+    e = tmp_path / "Demo" / "transkripte" / "S1.edit.json"
+    doc = client.get("/api/projects/Demo/files/S1").json()
+    client.put("/api/projects/Demo/files/S1", json=doc)
+    alt = client.get("/api/projects/Demo/files/S1").json()      # Stand, den der Editor haelt
+
+    korrektur = json.dumps({**doc, "summary": "frisch korrigiert, viel laengerer Text als zuvor",
+                            "human_edited": False}, ensure_ascii=False)
+    e.write_text(korrektur, encoding="utf-8")
+    # Positivkontrolle IM Test: waere der Stand unveraendert, pruefte die Zeile darunter nichts.
+    assert client.get("/api/projects/Demo/files/S1").json()["dateistand"] != alt["dateistand"]
+
+    r = client.put("/api/projects/Demo/files/S1", json=alt)
+    assert r.status_code == 409, r.text
+    # Und die Korrektur steht noch da — darum geht es, nicht um den Statuscode.
+    assert e.read_text(encoding="utf-8") == korrektur
+
+
+def test_dateistand_leer_schuetzt_die_frisch_angelegte_datei(client, tmp_path):
+    """Die andere Haelfte von #160, die eine blosse „egal wenn leer"-Regel offen liesse: der
+    Editor steht auf einer Datei OHNE edit.json (frisch transkribiert), und der Korrekturlauf
+    legt sie waehrenddessen an. Der Stand `""` ist deshalb eine ECHTE Erwartung."""
+    e = tmp_path / "Demo" / "transkripte" / "S1.edit.json"
+    doc = client.get("/api/projects/Demo/files/S1").json()
+    assert doc["dateistand"] == ""
+    e.write_text(json.dumps({**doc, "summary": "vom Korrekturlauf angelegt"}), encoding="utf-8")
+    assert client.put("/api/projects/Demo/files/S1", json=doc).status_code == 409
+
+
+def test_ohne_dateistand_schreibt_ohne_vorbehalt(client, tmp_path):
+    """Unterschieden wird am SCHLUESSEL, nicht am Wert — dieselbe Regel wie `"text": ""` in
+    `apply_correction`.
+
+    Zwei Dinge haengen daran: `curl` und jeder Nicht-Browser-Aufrufer laufen unveraendert
+    weiter, UND es ist der Weg fuers bewusste Ueberschreiben. Waehlt der Nutzer im Editor
+    „meine Fassung behalten", schickt der Client das Feld nicht mehr mit. Ein eigenes
+    Kraft-Flag waere ein zweiter Schalter fuer dieselbe Aussage — und einer, der
+    haengenbleiben kann."""
+    e = tmp_path / "Demo" / "transkripte" / "S1.edit.json"
+    doc = client.get("/api/projects/Demo/files/S1").json()
+    client.put("/api/projects/Demo/files/S1", json=doc)
+    e.write_text(json.dumps({**doc, "summary": "fremd"}), encoding="utf-8")   # Stand veraltet
+    ohne = {k: v for k, v in doc.items() if k != "dateistand"}
+    r = client.put("/api/projects/Demo/files/S1", json=ohne)
+    assert r.status_code == 200, r.text
+    assert "fremd" not in e.read_text(encoding="utf-8")       # bewusst ueberschrieben
+
+
+def test_dateistand_landet_nicht_in_der_datei(client, tmp_path):
+    """`pop`, nicht `get` — dieselbe Regel wie bei `selbstgeheilt`. Geschrieben stuende das
+    Token in der Datei, deren Zustand es beschreibt: der naechste GET liefert dann einen Stand
+    aus der Datei UND einen daneben, und welcher gilt, haengt an der Reihenfolge im dict."""
+    e = tmp_path / "Demo" / "transkripte" / "S1.edit.json"
+    doc = client.get("/api/projects/Demo/files/S1").json()
+    assert client.put("/api/projects/Demo/files/S1", json=doc).status_code == 200
+    assert "dateistand" not in json.loads(e.read_text(encoding="utf-8"))
+
+
+def test_antwort_traegt_den_neuen_dateistand(client):
+    """Ohne den Rueckgabewert liefe der NAECHSTE Autosave gegen die eigene Schreibung von
+    gerade eben: die Sperre schluege bei jedem zweiten Speichern zu, ohne dass ein fremder
+    Schreiber beteiligt waere. Zwei Speichervorgaenge hintereinander sind der Normalfall
+    (jede Tipppause einer), also wird genau das geprueft."""
+    doc = client.get("/api/projects/Demo/files/S1").json()
+    erste = client.put("/api/projects/Demo/files/S1", json=doc)
+    assert erste.status_code == 200
+    neu = erste.json()["dateistand"]
+    assert neu and neu != doc["dateistand"]
+    zweite = client.put("/api/projects/Demo/files/S1", json={**doc, "dateistand": neu})
+    assert zweite.status_code == 200, zweite.text
+
+
+def test_abgelehnter_put_legt_nichts_beiseite(client, tmp_path):
+    """Die Reihenfolge im Handler ist tragend: der `selbstgeheilt`-Zweig hat einen
+    SEITENEFFEKT (`paths.beiseitelegen`), und die erste Rettung gewinnt — ein abgelehnter
+    Schreibvorgang, der den Platz belegt, machte eine spaetere echte Beschaedigung
+    unrettbar. Steht die Stand-Pruefung hinter dem Zweig, passiert genau das."""
+    e = tmp_path / "Demo" / "transkripte" / "S1.edit.json"
+    doc = client.get("/api/projects/Demo/files/S1").json()
+    e.write_bytes(b'{"summary": "\xe9"}')                       # unlesbar UND Stand veraltet
+    r = client.put("/api/projects/Demo/files/S1",
+                   json={**doc, "selbstgeheilt": "UnicodeDecodeError"})
+    assert r.status_code == 409, r.text
+    assert not (tmp_path / "Demo" / "transkripte" / "S1.edit.json.kaputt").exists()
 
 
 def test_speichern_lehnt_ein_nicht_objekt_ab(client):
