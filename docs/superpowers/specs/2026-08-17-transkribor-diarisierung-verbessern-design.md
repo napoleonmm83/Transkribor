@@ -1,7 +1,7 @@
 # Sprechertrennung substanziell verbessern — Design
 
 **Stand:** 2026-08-17 · **Auslöser:** Issues #266, #267 sowie Marcus' Auftrag „mache alles was
-nötig ist um die Diarisierung substanziell zu verbessern" · **Vorgänger:** #264 (PR #265, Sprecherzahl pro Datei)
+nötig ist um die Diarisierung substanziell zu verbessern“ · **Vorgänger:** #264 (PR #265, Sprecherzahl pro Datei)
 
 Jede Zahl in diesem Dokument trägt eine Herkunft: **GEMESSEN** (an echtem Material, in dieser
 Arbeit), **RECHERCHIERT** (fremde Quelle, nicht nachgeprüft) oder **HERGELEITET** (aus dem Code
@@ -32,10 +32,10 @@ eindeutig widersprechen **und** die Wahrheit feststeht: ein durchgehend allein s
 Mensch kann nicht zwei Sprecher sein. Die vierte ist die Gegenprobe dazu — derselbe Fall,
 richtig gelöst. Beide Dateien sind Monologe; das war zu prüfen und nicht aus den Titeln zu
 schliessen (ein erster Entwurf dieser Spec hielt die vierte für ein gescheitertes
-Zwei-Personen-Interview, weil der Titel „with Cinematographer …" lautet).
+Zwei-Personen-Interview, weil der Titel „with Cinematographer …“ lautet).
 
 `min_speakers=2` ist der Fussboden, auf dem 9 von 10 Rhyathlon-Dateien landen. Zusammen mit
-#264 („die vorgegebene Zahl trifft, und zwar exakt") liegt die Vermutung nahe, die **Zählung**
+#264 („die vorgegebene Zahl trifft, und zwar exakt“) liegt die Vermutung nahe, die **Zählung**
 sei der Fehler und die Trennung intakt. **Diese Vermutung ist offen** — sie liess sich mit dem
 vorhandenen Material weder belegen noch widerlegen, und der Versuch ist selbst lehrreich
 (1.3).
@@ -45,10 +45,10 @@ vorhandenen Material weder belegen noch widerlegen, und der Versuch ist selbst l
 **#267 nennt als erste mögliche Richtung, dem Korrektur-Prompt beizubringen, dass zwei
 akustische Cluster derselbe Mensch sein dürfen. Diese Regel steht bereits im Code** — in
 `_correct_prompt` Regel 4, seit Commit `328ebf2` (dem ursprünglichen Stufe-3-Commit), also
-schon während der Messung, die #267 beschreibt. Die Richtung ist damit nicht „bauen", sondern
-„vervollständigen": die Erlaubnis fehlt in `_verify_prompt` (Z. 549), `_light_prompt` (588)
+schon während der Messung, die #267 beschreibt. Die Richtung ist damit nicht „bauen“, sondern
+„vervollständigen“: die Erlaubnis fehlt in `_verify_prompt` (Z. 549), `_light_prompt` (588)
 und `_summary_prompt` (607). **Der Treue-Pass schreibt zuletzt** und verlangt dort „konsistent
-pro akustischem (Sprecher N)-Cluster … Fehlzuordnungen korrigieren" — dieselbe Falle, an der
+pro akustischem (Sprecher N)-Cluster … Fehlzuordnungen korrigieren“ — dieselbe Falle, an der
 `[Musik]` und die Fremdsprachen-Regel je schon einmal hingen (beide in der Wurzel-CLAUDE.md
 festgehalten). HERGELEITET aus dem Prompttext; ob der Verify-Pass die Zusammenlegung wirklich
 zurückdreht, ist **nicht gemessen** und gehört in die Phase-1-Prüfung.
@@ -65,28 +65,28 @@ steht hier, damit niemand dieselben Wege ein zweites Mal geht.
 
 *(Sieben weitere Hebel sind am 2026-08-18 dazugekommen, sechs davon ebenfalls tot — siehe 1.6.)*
 
-**(a) „Nur die Zählung versagt, die Trennung ist intakt." — OFFEN, nicht widerlegt.** Der
+**(a) „Nur die Zählung versagt, die Trennung ist intakt.“ — OFFEN, nicht widerlegt.** Der
 naheliegende Beleg wären zwei Dateien gleicher Struktur (je 2 Cluster, je 2 Namen):
 `US Car Treff/Roger Meili` erreicht **97 %** Übereinstimmung, `Rhyathlon/00111679` nur
-**58 %** — was nach „die Trennung versagt am Kameramikrofon" aussieht. **Dieser Beleg trägt
+**58 %** — was nach „die Trennung versagt am Kameramikrofon“ aussieht. **Dieser Beleg trägt
 nicht:** genau bei `00111679` ist die Referenz kaputt (siehe d). Ein Vergleich, dessen eine
 Hälfte auf einem Sammel-Etikett steht, kann die Frage nicht beantworten. Sie bleibt offen und
 ist eine der ersten, die Phase 0 beantwortet.
 
-**(b) „Zuordnung auf Wortebene holt die 21 % Grenz-Segmente." — TOT.** Die Wort-genaue
+**(b) „Zuordnung auf Wortebene holt die 21 % Grenz-Segmente.“ — TOT.** Die Wort-genaue
 Zuordnung (Mehrheit der Wörter je Segment, Wort-Zeitstempel liegen vor) **ändert 0–3 Segmente
 je Datei** — bei 57 bis 121 Segmenten. Diese Zahl ist referenzunabhängig und damit belastbar:
 der Hebel bewegt schlicht fast nichts. Ergänzend, aber referenzabhängig und deshalb schwächer:
 das V-Measure sinkt dabei auf zwei von vier Dateien (`00114307` 0,844 → 0,693; `Roger Meili`
 0,718 → 0,676). GEMESSEN.
 
-**(c) „Der Fehler sitzt auf den Grenz-Segmenten." — TOT, zusammen mit (b).** Die
+**(c) „Der Fehler sitzt auf den Grenz-Segmenten.“ — TOT, zusammen mit (b).** Die
 Grenz-Segmente tragen absolut wenige Fehler: `00090000` 1, `00114307` 1, `Roger Meili` 2 —
 je Datei. Selbst wenn man sie alle heilte, wäre der Gewinn einstellig. Zusammen mit (b), das
 zeigt, dass die naheliegende Heilung sie gar nicht bewegt, ist die Richtung erledigt.
 
 *(Ein erster Entwurf belegte (c) mit `00111679` — „von 21 Fehlern sitzen 18 auf sauberen
-Segmenten". Diese Datei ist als Beleg unbrauchbar, siehe (d); die obige Fassung stützt sich
+Segmenten“. Diese Datei ist als Beleg unbrauchbar, siehe (d); die obige Fassung stützt sich
 nur noch auf die drei Dateien mit plausibler Referenz.)*
 
 **(d) Der Fehler in der eigenen Messung, der stellvertretend für das ganze Problem steht.**
@@ -98,9 +98,9 @@ gegen grosses k voreingenommen; die Spalten k≥4 sagen nichts.
 
 Der zweite, schwerere Fehler steckt in der Referenz selbst. `00111679` erreicht ein V-Measure
 von **0,078**, was nach Totalversagen aussieht. Der Blick in die Datei zeigt die Ursache: das
-LLM hat **eine ganze Gruppe unter ein Sammel-Etikett gelegt** — „Team Ikotec" (52 Segmente)
-sind mehrere Personen, die einander ins Wort fallen („Kommt schnell!", „Wo? Pia!", „Darf ich
-mal etwas sagen?"). Zwei akustische Cluster gegen ein Gruppen-Label zu messen erzeugt
+LLM hat **eine ganze Gruppe unter ein Sammel-Etikett gelegt** — „Team Ikotec“ (52 Segmente)
+sind mehrere Personen, die einander ins Wort fallen („Kommt schnell!“, „Wo? Pia!“, „Darf ich
+mal etwas sagen?“). Zwei akustische Cluster gegen ein Gruppen-Label zu messen erzeugt
 zwangsläufig Rauschen. **Nicht pyannote hat versagt, sondern die Referenz.**
 
 ### 1.4 Die Schlussfolgerung, auf der dieses Design steht
@@ -110,7 +110,7 @@ aus denselben Clustern abgeleitet hat, und sie kollabieren Gruppen. Eine Metrik 
 Übereinstimmung, nicht Richtigkeit.
 
 Damit ist die Reihenfolge festgelegt: **erst eine belastbare Referenz und ein Messwerkzeug,
-dann Änderungen.** Ohne das wäre jede Aussage über „besser" eine Behauptung — und dieses Repo
+dann Änderungen.** Ohne das wäre jede Aussage über „besser“ eine Behauptung — und dieses Repo
 hat für genau diese Fehlerklasse den höchsten Preis bezahlt.
 
 ### 1.5 Recherche zur Modelllandschaft
@@ -142,7 +142,7 @@ RECHERCHIERT (Herstellerangaben und Modellkarten, von mir **nicht** nachgemessen
   WavLM-Encoder ersetzt genau das schwache Frontend von community-1 — `PyanNet`: SincNet +
   4× BiLSTM); **bis zu einem Referenzlauf auf Rhyathlon bleibt C8 eine Hypothese.**
   **Drei Haken, und der erste ist der harte: die Gewichte sind CC BY-NC 4.0** (Code MIT) —
-  bei einem verteilten Installer ist „nicht kommerziell" eine Produktentscheidung, keine
+  bei einem verteilten Installer ist „nicht kommerziell“ eine Produktentscheidung, keine
   Fussnote, und sie gehört **vor** die Messung, nicht danach. Dazu: **kein `num_speakers`**
   (die Zahl fällt aus VBx) — das Feld aus #264 wäre weg. Und die Grenze von zwei
   *gleichzeitigen* Sprechern hebt es nicht. RECHERCHIERT, nicht nachgemessen.
@@ -156,10 +156,10 @@ nebenbei drei weitere Hebel erledigt, darunter den in C2 noch als ungeprüft gef
 
 Gemessen wurde an echtem Rhyathlon-Material **ohne** Referenz: verglichen wird die
 **Clusterzahl** bzw. der Anteil gewechselter Etiketten, beides referenzunabhängig. Damit
-gelten dieselben Vorbehalte wie in 1.3(b) — belastbar für „bewegt nichts", nicht für „ist
-besser".
+gelten dieselben Vorbehalte wie in 1.3(b) — belastbar für „bewegt nichts“, nicht für „ist
+besser“.
 
-**(e) „Der Dekodier-Weg hat sich mit faster-whisper geändert." — TOT.** Vor `cdb57c0` lud
+**(e) „Der Dekodier-Weg hat sich mit faster-whisper geändert.“ — TOT.** Vor `cdb57c0` lud
 `diarize._load_waveform` über `whisper.load_audio` (ffmpeg-Subprozess, s16le, also
 **int16-quantisiert**), heute über `faster_whisper.decode_audio` (PyAV, float32 ohne
 Zwischenstufe). Die Vermutung, die alte Quantisierung verändere pyannotes Eingabe, ist falsch:
@@ -168,7 +168,7 @@ Cluster und Turns folglich ebenfalls. **Negativkontrolle:** derselbe Weg zweimal
 V = 1,000 — pyannote ist auf identischer Eingabe deterministisch, der Rauschboden ist **null**,
 der Test hätte jeden echten Unterschied gesehen. GEMESSEN.
 
-**(f) „Die ASR-Engine bestimmt die Segmentgrenzen, auf die die Cluster abgebildet werden." —
+**(f) „Die ASR-Engine bestimmt die Segmentgrenzen, auf die die Cluster abgebildet werden.“ —
 TOT.** openai-whisper large-v3 mit identischen Decoder-Parametern gegen faster-whisper:
 `00097495` liefert **93 statt 61** Segmente bei **0,68 s statt 1,24 s** Median-Länge — und der
 Anteil der Redezeit in Segmenten, die eine Cluster-Grenze überspannen, bleibt **gleich**
@@ -181,7 +181,7 @@ erreichen: `CHUNK_SEGMENTS = 150` — die grösste Rhyathlon-Datei hat 122 Segme
 Block-Parallelität aus `e16a48e` war hier nie aktiv; und `compute_type="float16"` auf cuda
 entspricht dem früheren `fp16=True`, quantisiert wird nur `int8` auf der CPU.)*
 
-**(g) „Überlappendes Sprechen ist die dominante Fehlerquelle." — als Zeitanteil richtig, als
+**(g) „Überlappendes Sprechen ist die dominante Fehlerquelle.“ — als Zeitanteil richtig, als
 Etikettfehler fast folgenlos.** 0,97 %–14,90 % der Redezeit hat zwei gleichzeitig aktive
 Cluster; rechnet man den Grenzverlust ohne diese Bereiche, erklärt die Überlappung **50–91 %**
 davon. Praktisch ändert das aber fast nichts: community-1 berechnet bei **jedem** Lauf eine
@@ -192,24 +192,24 @@ trifft also frame-genau das Segmentierungsmodell). Sie statt der überlappenden 
 Sekunden-Mehrheitsregel in `assign_clusters` wählt in 97,7 % der Fälle bereits dasselbe.
 GEMESSEN.
 
-> **Die Lehre reicht über diesen Fall hinaus.** Der „Grenzverlust" misst *nicht darstellbare
+> **Die Lehre reicht über diesen Fall hinaus.** Der „Grenzverlust“ misst *nicht darstellbare
 > Zeit*, nicht *falsche Etiketten* — eine Metrik, die beides gleichsetzt, überzeichnet den
 > Fehler um mehr als eine Grössenordnung. Was der Vergleich zeigt, ist ausschliesslich, dass
 > die überlappungsfreie Annotation **fast dieselben Ausgabesegmente** liefert. **Ob** das
 > dominante Etikett das richtige ist, bleibt ohne Referenz offen — die naheliegende Annahme
-> („Whisper transkribiert die dominante Stimme, also stimmt deren Name") ist genau die Sorte
+> („Whisper transkribiert die dominante Stimme, also stimmt deren Name“) ist genau die Sorte
 > Herleitung, die dieses Design nicht mehr als Beleg gelten lässt. Beantwortbar erst nach
 > Task 8. Aufgefallen ist der Unterschied ohnehin erst durch die Gegenprobe, nicht durch
 > Nachdenken über die Metrik.
 
-**(h) „Unser eigenes `min_speakers=2` erzwingt die vielen 2er-Ergebnisse." — TOT.** Gut
+**(h) „Unser eigenes `min_speakers=2` erzwingt die vielen 2er-Ergebnisse.“ — TOT.** Gut
 begründet und falsch. `clustering.py:627-628` setzt bei `auto_num_clusters < min_clusters`
 tatsächlich `num_clusters = min_clusters` und rechnet dann KMeans; kollabierte VBx auf 1,
 wäre unser eigener Default die Ursache der 2er-Ergebnisse. Gegenprobe über sechs Dateien, mit
 und ohne das Argument: **identische Clusterzahl in allen sechs** (3/3, 2/2, 2/2, 3/3, 2/2,
 2/2). VBx kollabiert nicht auf 1, es findet wirklich 2 bzw. 3. GEMESSEN.
 
-**(i) „`Fa` ist der ungeprüfte Knopf." — GEPRÜFT, und er zerstäubt.** Auf echtem Material
+**(i) „`Fa` ist der ungeprüfte Knopf.“ — GEPRÜFT, und er zerstäubt.** Auf echtem Material
 schlimmer als `Fb`:
 
 | Datei | Fa 0,07 (heute) | 0,15 | 0,20 | 0,25 | 0,30 |
@@ -258,7 +258,7 @@ nur milder — deshalb Kandidat (C7), nicht Fix.
 
 Upstream stützt die Richtung: das Papier hinter dieser Implementierung
 ([arXiv:2510.19572](https://arxiv.org/abs/2510.19572), §3.2) schreibt zu genau diesem Filter,
-„filtering below 4 s can risk discarding most of the speech from less dominant speakers".
+„filtering below 4 s can risk discarding most of the speech from less dominant speakers“.
 
 **(k) Enthallen/Entrauschen vor der Diarisierung (C5) — externe Evidenz gemischt, lokal
 NICHT gemessen.** Der einzige Punkt in 1.6 ohne eigene Messung; er bewertet C5 deshalb auch
@@ -275,7 +275,7 @@ allerdings deutlich (71,3 → **82,2**).
 verpasster Sprache (MISS 39,4 → 11,4), erkauft mit mehr Fehlalarm (FA 7,0 → 13,9) und eben mehr
 Verwechslung. Unser gemessener Engpass ist die **Zuordnung**, nicht die Detektion — die
 Tauschrichtung passt also schlecht. Die Autoren haben Inferenz-Entrauschung verworfen
-(„denoising inadvertently suppressed children's speech segments"); leise Sprecher wegzuputzen
+(„denoising inadvertently suppressed children's speech segments“); leise Sprecher wegzuputzen
 ist bei Kameramikrofon genau das Problem.
 
 **Was die Studie NICHT abdeckt:** sie fährt eine **NeMo**-Pipeline auf **englischen
@@ -290,17 +290,17 @@ dieser Aufnahmen sind bit-identisch (Dual-Mono, in #264 gemessen) — es gibt ke
 Informationsquelle.
 
 *Nebenbefund gegen einen kursierenden Zahlenwert: „Demucs-Vokaltrennung bringt 12,41 Punkte
-DER" ist falsch zugeordnet. Im Papier ([arXiv:2602.21741](https://arxiv.org/html/2602.21741v1))
+DER“ ist falsch zugeordnet. Im Papier ([arXiv:2602.21741](https://arxiv.org/html/2602.21741v1))
 wurde Demucs **nur für ASR** eingesetzt; der Diarisierungsteil sagt wörtlich „No additional
-denoising or filtering was applied". Die Punkte stammen aus pyannote-Feinabstimmung.*
+denoising or filtering was applied“. Die Punkte stammen aus pyannote-Feinabstimmung.*
 
 **Was 1.6 an der Schlussfolgerung aus 1.4 ändert: nichts.** Die Bilanz, genau ausgezählt:
 **fünf** Hebel lokal gemessen tot (e, f, h, i — sowie g, dessen Wirkung mit 2,3 % praktisch
 verschwindet), **einer** wirksam aber unkalibrierbar (j), **einer** nur extern belegt und
 lokal ungemessen (k, deshalb offen). Alle lokalen Messungen liefen **ohne** Referenz, sind
-also nur auf „bewegt (nichts)" belastbar, nicht auf „ist besser" — dieselbe Grenze wie in
+also nur auf „bewegt (nichts)“ belastbar, nicht auf „ist besser“ — dieselbe Grenze wie in
 1.3(b). Die vorgegebene Sprecherzahl aus #264 bleibt der einzige exakte Hebel, und die
-Reihenfolge „erst Referenz, dann Änderungen" steht unverändert.
+Reihenfolge „erst Referenz, dann Änderungen“ steht unverändert.
 
 ---
 
@@ -337,7 +337,7 @@ rettet und dabei Monologe oder saubere Zwei-Personen-Aufnahmen verschlechtert, i
 Verbesserung — und ohne diese drei im Satz wäre genau das nicht zu sehen.
 
 **Eine Anweisung entscheidet über die Brauchbarkeit:** Gruppenmitglieder brauchen **einzelne**
-Namen („Ikotec 1", „Ikotec 2"), nie ein Sammel-Etikett. Genau daran ist `00111679` als
+Namen („Ikotec 1“, „Ikotec 2“), nie ein Sammel-Etikett. Genau daran ist `00111679` als
 Messgrundlage gescheitert (1.3d).
 
 **Bekannte Einschränkung, die im Bericht mitgeführt wird:** der Editor zeigt beim Korrigieren
@@ -366,7 +366,7 @@ Drei Unterbefehle:
 | zeitgewichtete Sprecher-Fehlerquote | was der Nutzer merkt | Sekunden falsch zugeordneter Rede / Gesamtsekunden |
 
 Die dritte Zahl ist **kein DER**: es fehlen der VAD- und der Overlap-Term, und die Auflösung
-ist das Whisper-Segment, nicht der Rahmen. Sie wird deshalb nirgends „DER" genannt. Der Grund
+ist das Whisper-Segment, nicht der Rahmen. Sie wird deshalb nirgends „DER“ genannt. Der Grund
 für diese Auflösung ist, dass sie die Grenze ist, an der das Ergebnis den Nutzer erreicht —
 feiner zu messen als das Produkt liefert, misst etwas, das niemand sieht.
 
@@ -376,19 +376,19 @@ feiner zu messen als das Produkt liefert, misst etwas, das niemand sieht.
    `correct.cmd_diarize` — letzteres legt Sidecars in Marcus' echtem Material an und würde
    dessen Zustand während der Messung verändern.
 2. **`eval/` ist gitignoriert.** Das sind Interviewinhalte; die Repo-Regel „`projekte\`-Inhalte
-   nie committen" gilt für ihre Kopien genauso. Das *Werkzeug* wird committet und bekommt
+   nie committen“ gilt für ihre Kopien genauso. Das *Werkzeug* wird committet und bekommt
    Unit-Tests mit **synthetischen** Daten, damit die CI es prüfen kann, ohne die Aufnahmen zu
    sehen.
 
 **Preis dieser Entscheidung, benannt statt verschwiegen:** die Referenz existiert nur auf
 Marcus' Rechner. Kein CI-Lauf und keine spätere Sitzung kann die Messungen ohne sie
-reproduzieren — dieselbe Lage wie bei allen bisherigen „an echtem Material gemessen"-Aussagen
+reproduzieren — dieselbe Lage wie bei allen bisherigen „an echtem Material gemessen“-Aussagen
 dieses Repos.
 
 ### 3.3 Ausgangswert
 
 Vor jeder Änderung wird der heutige Stand einmal vollständig vermessen. Ohne diesen Nullpunkt
-ist „besser" nicht definiert.
+ist „besser“ nicht definiert.
 
 ---
 
@@ -407,9 +407,9 @@ Unabhängig von der Messung, deshalb ein eigener PR, der nicht auf Phase 0 warte
   `settings.py:225-232`.
 - Das Feld wird **deaktiviert statt versteckt** — ein bereits gespeicherter Wert bleibt
   sichtbar, statt kommentarlos zu verschwinden. Der Hilfetext wird getauscht (die heutige
-  Zusage „trennt die Stimmen deutlich zuverlässiger" ist bei abgeschalteter Diarisierung
+  Zusage „trennt die Stimmen deutlich zuverlässiger“ ist bei abgeschalteter Diarisierung
   schlicht falsch).
-- **README:** der Abschnitt „Es hat zu wenige Sprecher erkannt" (Z. 252 ff.) verspricht dieselbe
+- **README:** der Abschnitt „Es hat zu wenige Sprecher erkannt“ (Z. 252 ff.) verspricht dieselbe
   Wirkung und bekommt den Vorbehalt.
 
 ### 4.2 #267 — die Zusammenlege-Erlaubnis fehlt in drei von vier Prompts
@@ -427,7 +427,7 @@ Unabhängig von der Messung, deshalb ein eigener PR, der nicht auf Phase 0 warte
 ### 4.3 Bewusst NICHT in Phase 1
 
 `min_speakers = 2 → 1` ist eine Zeile, und die Wurzel-CLAUDE.md führt den heutigen Wert bereits
-als falsch („erfindet dort bis heute einen zweiten Sprecher"). Er bleibt trotzdem draussen:
+als falsch („erfindet dort bis heute einen zweiten Sprecher“). Er bleibt trotzdem draussen:
 seine Wirkung ist **messbar**, also wird sie gemessen statt zugesagt. Phase 2, Kandidat C1.
 
 ---
@@ -463,7 +463,7 @@ tote Schalter aus #264 über einen neuen Weg.
 
 **Das Sidecar braucht deshalb einen Konfigurations-Fingerabdruck**, und er gehört in denselben
 PR wie die erste wirksame Änderung, nicht in einen Nachtrag. Ein Sidecar ohne den Schlüssel
-gilt als „alte Konfiguration" — bestehende Projekte werden damit einmal neu gerechnet, was die
+gilt als „alte Konfiguration“ — bestehende Projekte werden damit einmal neu gerechnet, was die
 gewollte Folge ist.
 
 ---
@@ -475,7 +475,7 @@ wieder eine Behauptung.
 
 **Phase 3 — Sprecherzahl automatisch.** Falls sich die Zählung als dominanter Fehler zeigt.
 Zweistufig: rohes Transkript → LLM schätzt die Personenzahl (die Namen stehen im Text: die
-Vorstellungsrunde „Mustafa. David. Markus." in `00114307`) → Neu-Diarisierung mit
+Vorstellungsrunde „Mustafa. David. Markus.“ in `00114307`) → Neu-Diarisierung mit
 `num_speakers`. Nutzt den einzigen Knopf, den #264 als wirksam gemessen hat, ohne dafür den
 Menschen zu brauchen. Kosten: ein zusätzlicher LLM-Aufruf und ein zweiter pyannote-Lauf je
 Datei.
