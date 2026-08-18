@@ -63,7 +63,12 @@ jobs:
       # Das ist kein Sparen, sondern ein Waechter: schleicht sich ein `import torch` auf
       # Modulebene ein, faellt dieser Job um. Genau die Regression, die man sonst erst
       # bemerkt, wenn die Einstellungsseite in einer halben Umgebung nicht mehr laedt.
-      - run: pip install fastapi python-multipart pytest httpx
+      #
+      # scipy/scikit-learn kommen fuer tools/diar_eval.py dazu (Metriken der
+      # Sprechertrennungs-Messung). Sie brechen den Waechter oben NICHT: er zielt auf
+      # torch/pyannote/whisper — die bleiben draussen, ein Modulebenen-Import davon laesst
+      # den Job weiterhin umfallen. ~60 MB, kein GB-Sprung.
+      - run: pip install fastapi python-multipart pytest httpx scipy scikit-learn
 
       # `build` muss explizit dastehen: der Ordnername steht in pytests
       # norecursedirs, ein blankes `pytest` sammelt build/test_bilder.py NIE.
