@@ -148,6 +148,32 @@ def _md_path(project, base):
     return os.path.join(paths.transkripte_dir(project), base + ".md")
 
 
+def _dateistand(pfad: str) -> str:
+    """Zustand der Datei als Zeichenkette — die Grundlage des optimistischen Sperrens (#160).
+
+    Aus dem DATEIZUSTAND, nicht aus einem Merker im Serverprozess: die `edit.json` hat drei
+    Schreiber, und einer davon (`correct.cmd_apply`) laeuft in einem EIGENEN PROZESS. Ein
+    prozessinterner Zaehler bekaeme dessen Schreibvorgang nie zu sehen — er ist aber genau
+    der, gegen den hier gesperrt wird.
+
+    `st_mtime_ns`, nicht `st_mtime`: die Sekunden-Aufloesung ist zu grob. Genau daran scheitert
+    Pythons eigene .pyc-Invalidierung — in der Wurzel-CLAUDE.md steht der Vorfall, der eine
+    halbe Stunde Suche gekostet hat. `st_size` kommt dazu, damit zwei Schreibvorgaenge im
+    selben Zeitstempel-Tick nicht doch als gleich durchgehen.
+
+    **Die leere Zeichenkette heisst „die Datei gibt es nicht" und ist eine ECHTE Erwartung,
+    kein „egal".** Sie deckt den Fall, in dem der Korrekturlauf die `edit.json` erst ANLEGT,
+    waehrend der Editor sie noch nicht kannte — ohne das bliebe genau die Haelfte von #160
+    offen (jede frisch transkribierte Datei). „Egal" ist das FEHLEN des Schluessels, siehe
+    `save_file`.
+    """
+    try:
+        st = os.stat(pfad)
+    except OSError:
+        return ""
+    return f"{st.st_mtime_ns}-{st.st_size}"
+
+
 def _srt_path(project, base):
     return os.path.join(paths.transkripte_dir(project), base + ".srt")
 
@@ -194,9 +220,16 @@ def _ist_unlesbar(pfad: str) -> bool:
 def load_or_build_doc(project: str, base: str) -> dict:
     epath = _edit_path(project, base)
     geheilt = ""
+    # VOR dem Lesen, nicht danach (#160): faellt ein fremder Schreibvorgang dazwischen, ist der
+    # Stand damit AELTER als der gelieferte Inhalt — ein spaeterer PUT bekommt 409, obwohl der
+    # Client nichts falsch gemacht hat. Andersherum (erst lesen, dann stat) waere der Stand
+    # JUENGER als der Inhalt, und derselbe PUT ginge durch: der Client ueberschriebe eine
+    # Fassung, die er nie gesehen hat. Von den beiden Fehlern ist die ueberfluessige Rueckfrage
+    # der harmlose.
+    stand = _dateistand(epath)
     if os.path.exists(epath):
         try:
-            return _json_objekt(epath)
+            return {**_json_objekt(epath), "dateistand": stand}
         except (OSError, ValueError) as e:
             # OSError deckt das Fenster zwischen `os.path.exists` und dem `open`: `_datei_weg`
             # (Loeschen, Neu-Transkribieren) raeumt die edit.json weg, waehrend ein offener
@@ -230,6 +263,7 @@ def load_or_build_doc(project: str, base: str) -> dict:
                          audio=os.path.basename(audio) if audio else "")
     if geheilt:
         doc["selbstgeheilt"] = geheilt
+    doc["dateistand"] = stand
     return doc
 
 
@@ -663,6 +697,31 @@ async def save_file(project: str, base: str, request: Request):
     if not isinstance(doc, dict):
         raise HTTPException(status_code=400,
                             detail=f"JSON-Objekt erwartet, {type(doc).__name__} bekommen")
+    # Optimistisches Sperren (#160). Der Editor speichert 800 ms nach dem letzten Tastendruck;
+    # wird eine Korrektur fertig, waehrend ein PUT schon unterwegs ist, landete er DANACH und
+    # ersetzte die frische edit.json — ein kompletter Lauf weg, ohne eine Zeile im Protokoll.
+    # Der Browser kann eine laufende Anfrage nicht zurueckholen, also muss der Server ablehnen.
+    #
+    # `pop`, nicht `get` — dieselbe Regel wie bei `selbstgeheilt`: das Feld beschreibt den
+    # ZUSTAND der Datei, geschrieben stuende es in der Datei, deren Zustand es beschreibt.
+    #
+    # **Fehlender Schluessel heisst „ohne Vorbehalt schreiben"** und ist kein Versehen: er
+    # haelt `curl` und jeden Nicht-Browser-Aufrufer unveraendert lauffaehig — und er ist
+    # zugleich der Weg fuers BEWUSSTE Ueberschreiben. Wer im Editor „meine Fassung behalten"
+    # waehlt, schickt das Feld einfach nicht mehr mit. Ein eigenes Kraft-Flag waere ein
+    # zweiter Schalter fuer dieselbe Aussage — und einer, der haengenbleiben kann.
+    # Unterschieden wird am SCHLUESSEL, nicht am Wert: `""` ist eine Erwartung („noch keine
+    # Datei"), nur das Fehlen ist der Verzicht.
+    #
+    # Vor dem `selbstgeheilt`-Zweig, denn der legt eine Datei beiseite: ein abgelehnter
+    # Schreibvorgang darf keinen Seiteneffekt hinterlassen.
+    if "dateistand" in doc:
+        erwartet = doc.pop("dateistand")
+        if erwartet != _dateistand(_edit_path(project, base)):
+            raise HTTPException(
+                status_code=409,
+                detail="Die Datei wurde inzwischen von aussen geändert "
+                       "(vermutlich ist eine Korrektur fertig geworden).")
     # Der Editor gibt zurueck, was `load_or_build_doc` ihm mitgegeben hat: „deine gespeicherte
     # Fassung war nicht lesbar" (#197). Dann liegt auf der Platte noch die unlesbare Datei, und
     # der Schreibvorgang unten wuerde sie ersetzen — dieselbe Konstellation wie bei
@@ -685,7 +744,10 @@ async def save_file(project: str, base: str, request: Request):
     os.makedirs(tdir, exist_ok=True)
     paths.atomic_write(_edit_path(project, base), json.dumps(doc, ensure_ascii=False, indent=1))
     paths.atomic_write(_md_path(project, base), render_md(doc))
-    return {"ok": True}
+    # Der neue Stand MUSS zurueck: sonst liefe der naechste Autosave gegen die eigene
+    # Schreibung von gerade eben und bekaeme 409 — die Sperre schluege bei jedem zweiten
+    # Speichern zu, ohne dass irgendein fremder Schreiber beteiligt waere.
+    return {"ok": True, "dateistand": _dateistand(_edit_path(project, base))}
 
 
 @app.post("/api/projects/{project}/files/{base}/export")
