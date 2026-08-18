@@ -118,6 +118,28 @@ def use_api() -> bool:
     return _cfg()[1]["shape"] != "cli"
 
 
+# Kurzlebiger Cache fuer `available()`s ABO-Zweig (#250). Gemessen: ein GET /api/settings
+# zahlt auf dem Poll-Pfad der Einstellungsseite 274 ms (claude-cli), und ein pip-Lauf von
+# 340 s bedeutet 226 Spawn-Vorgaenge — 62 s Prozessarbeit fuer eine Auskunft, die sich in
+# dieser Zeit praktisch nie aendert. Der Cache sitzt BEWUSST hier und nicht in auth.status:
+# available() beantwortet die FAEHIGKEIT ("kann korrigiert werden"), auth.status den
+# LIVE-Zustand (Anmeldeblock, Testknopf, und der Login misst an auth.py:219 seinen eigenen
+# Erfolg — kein einziger dieser Wege darf je einen gecachten Wert sehen, also cachen wir sie
+# gar nicht erst). Schluessel ist der Anbieter; ein Wechsel greift damit ohne Neustart.
+# Zugriffe sind GIL-atomar genug: das Schlimmste unter Nebenlaeufigkeit ist ein doppelter
+# Subprozess, kein falscher Wert.
+_VERFUEGBAR_CACHE: dict[str, tuple[float, tuple]] = {}
+_VERFUEGBAR_TTL = 5.0
+
+
+def verfuegbar_vergessen() -> None:
+    """Cache leeren — nach einer Anmeldung. `available()` kann sonst bis zur TTL lang
+    „nicht angemeldet" sagen, obwohl der Anmeldeblock daneben bereits Erfolg meldet; die
+    Warnleiste „Korrektur nicht moeglich" stünde dann sichtbar neben einer gelungenen
+    Anmeldung. Ebenso nach einem Abbruch-Vorgang, der den Zustand angefasst haben koennte."""
+    _VERFUEGBAR_CACHE.clear()
+
+
 def available(cfg: dict | None = None) -> tuple:
     """(nutzbar, Begruendung) — prueft die FAEHIGKEIT zu korrigieren, nicht die Absicht.
 
@@ -136,13 +158,22 @@ def available(cfg: dict | None = None) -> tuple:
             return False, f"{prov['label']}: '{prov['bin']}' ist auf diesem Rechner nicht installiert."
         # Installiert heisst nicht angemeldet. Vorher meldete die App hier gruen, und die
         # Auto-Korrektur startete einen Lauf, der am Login scheiterte — genau das, was diese
-        # Funktion verhindern soll. Die Abfrage kostet 0,09s (codex) bzw. 0,26s (claude),
-        # gemessen; ein abgebrochener Korrekturlauf kostet Minuten.
+        # Funktion verhindern soll. Die Abfrage kostet 0,09s (codex) bzw. 0,27s (claude),
+        # gemessen; ein abgebrochener Korrekturlauf kostet Minuten. #250 kommt der
+        # Abo-Zweig aus dem kurzlebigen Cache — die 274 ms zahlt nur die erste Anfrage je
+        # TTL-Fenster, nicht mehr jede Poll-Runde.
         from . import auth        # lazy: auth importiert llm, ein Modulimport waere zirkulaer
-        st = auth.status(cfg["provider"])
-        if st["unterstuetzt"] and not st["angemeldet"]:
-            return False, f"{prov['label']}: nicht angemeldet — in den Einstellungen anmelden."
-        return True, ""
+        import time as _t
+        schluessel = cfg["provider"]
+        jetzt = _t.monotonic()
+        getroffen = _VERFUEGBAR_CACHE.get(schluessel)
+        if getroffen and jetzt - getroffen[0] < _VERFUEGBAR_TTL:
+            ergebnis = getroffen[1]
+        else:
+            st = auth.status(schluessel)
+            ergebnis = (False, f"{prov['label']}: nicht angemeldet — in den Einstellungen anmelden.")                 if st["unterstuetzt"] and not st["angemeldet"] else (True, "")
+            _VERFUEGBAR_CACHE[schluessel] = (jetzt, ergebnis)
+        return ergebnis
     if prov["needs_key"] and not cfg["api_key"]:
         return False, f"Kein API-Key fuer {prov['label']} hinterlegt."
     if not _base_url(cfg, prov):

@@ -3,6 +3,18 @@ import pytest
 from webtool import llm, settings
 
 
+@pytest.fixture(autouse=True)
+def _cache_leeren():
+    """`available()`s kurzlebiger Cache (#250) ueberdauert Tests — ohne das Leeren
+    spezifisch die Nachbarreihen: `test_available_abo_mit_claude_binary` cacht (True, "")
+    fuer den Anbieter, und `test_available_abo_installiert_aber_nicht_angemeldet` kaeme
+    damit nie dazu, seinen eigenen (gefälschten) Status zu lesen. Der Cache gehoert zum
+    Modul, nicht zur Test-Instanz; autouse, weil KEIN available-Test ihn mitbringen darf."""
+    llm.verfuegbar_vergessen()
+    yield
+    llm.verfuegbar_vergessen()
+
+
 @pytest.fixture
 def cfg(monkeypatch, tmp_path):
     """Einstellungen ins tmp_path — nie die echte Datei des Entwicklers anfassen."""
@@ -187,6 +199,54 @@ def test_available_abo_installiert_aber_nicht_angemeldet(monkeypatch, tmp_path):
     _anmeldung(monkeypatch, False)
     ok, grund = llm.available()
     assert ok is False and "nicht angemeldet" in grund
+
+
+def test_available_cacht_den_abo_zweig_kurzlebig(monkeypatch, tmp_path):
+    """#250: der 1,5-s-Poll der Einstellungsseite startete je GET einen Subprozess (274 ms,
+    gemessen; 226 Spawn-Vorgaenge in einem 340-s-pip-Lauf). Innerhalb der TTL liest der
+    Abo-Zweig jetzt aus dem Cache — gemessen an den auth.status-AUFRUFEN, nicht an der Uhr:
+    die Zahl ist die Zusicherung, eine Dauer waere eine Nebenschauplatz."""
+    monkeypatch.setenv("TRANSKRIBOR_SETTINGS", str(tmp_path / "s.json"))
+    monkeypatch.setattr(llm.shutil, "which", lambda n: "C:/claude.cmd")
+    aufrufe = []
+    from webtool import auth
+    monkeypatch.setattr(auth, "status", lambda p: aufrufe.append(p) or {
+        "unterstuetzt": True, "angemeldet": True, "detail": "Angemeldet."})
+    assert llm.available() == (True, "")
+    assert llm.available() == (True, "")            # aus dem Cache …
+    assert llm.available() == (True, "")            # … auch ein drittes Mal
+    assert aufrufe == ["claude-cli"]                # EIN Subprozess, nicht drei
+
+    # Nach der TTL wird wieder gemessen — gefälschte Uhr, kein Sleep. Die echte Zeit wird
+    # VOR dem Patch eingefangen: die Lambda haette sich sonst selbst aufgerufen (die
+    # Rekursion sah man erst im Lauf — gruen waere der Test auch ohne die Zeile darunter).
+    import time as _echt
+    _jetzt = _echt.monotonic()
+    monkeypatch.setattr(_echt, "monotonic", lambda: _jetzt + llm._VERFUEGBAR_TTL + 1)
+    llm.available()
+    assert aufrufe == ["claude-cli", "claude-cli"]
+
+    # Und das Vergessen ist der sofortige Rueckweg — nach einer Anmeldung darf der Cache
+    # nicht bis zur TTL „nicht angemeldet" weitererzaehlen (Invalidierung in auth.py).
+    llm.verfuegbar_vergessen()
+    llm.available()
+    assert aufrufe == ["claude-cli", "claude-cli", "claude-cli"]
+
+
+def test_available_cacht_den_abo_zweig_NICHT_über_anbieter_hinweg(monkeypatch, tmp_path):
+    """Der Schluessel ist der Anbieter — ein Wechsel greift ohne Neustart, heisst es in der
+    Doku. Ohne den Schluessel waere die Zusicherung gelogen: der zweite Anbieter erbte den
+    ersten Status und die Einstellungsseite zeigte ihn als angemeldet, obwohl niemand je
+    `codex login` laufen liess."""
+    monkeypatch.setenv("TRANSKRIBOR_SETTINGS", str(tmp_path / "s.json"))
+    monkeypatch.setattr(llm.shutil, "which", lambda n: "C:/claude.cmd")
+    from webtool import auth
+    monkeypatch.setattr(auth, "status", lambda p: {
+        "unterstuetzt": True, "angemeldet": p == "claude-cli", "detail": ""})
+    assert llm.available() == (True, "")            # claude-cli: angemeldet, gecacht
+    settings.save({"provider": "codex"})
+    ok, grund = llm.available()                      # codex: anderer Schluessel …
+    assert ok is False and "nicht angemeldet" in grund   # … NICHT das gecacht (True, "")
 
 
 def test_available_api_ohne_key(monkeypatch, tmp_path):

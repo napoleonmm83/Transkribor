@@ -217,6 +217,13 @@ def _fahre(lauf: dict, exe: str, spec: dict, provider: str) -> None:
     # Erfolg an status() messen, nicht am Exitcode: ein abgebrochener Browser-Flow kann mit 0
     # enden, und die CLI weiss es selbst am besten.
     st = status(provider)
+    # Der Anmeldezustand hat sich gerade geaendert — llm.available()s kurzlebiger Cache
+    # (#250) darf ihn nicht ueber die TTL hinaus als „nicht angemeldet" weitererzaehlen,
+    # sonst stünde die Warnleiste „Korrektur nicht möglich" neben einer gelungenen
+    # Anmeldung. Lazy aus demselben Grund wie in llm.available: die Module importieren
+    # einander bewusst erst zur Laufzeit.
+    from . import llm as _llm
+    _llm.verfuegbar_vergessen()
     with _lock:
         lauf["laeuft"] = False
         lauf["ok"] = bool(st["angemeldet"])
