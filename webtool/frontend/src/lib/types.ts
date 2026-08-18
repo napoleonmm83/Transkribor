@@ -149,7 +149,12 @@ export type Settings = {
  *  `unlesbar` trennt zwei Zustände, die beide `version: null` liefern: wirklich nicht
  *  installiert (dann steht der URL-Import nicht zur Verfügung) gegen "Metadaten nicht
  *  lesbar" — dort läuft der Import weiter, nur die Selbstaktualisierung ist ausgesetzt
- *  (#189). Ohne das Feld behauptete die Seite das Gegenteil dessen, was der Nutzer tun kann. */
+ *  (#189). Ohne das Feld behauptete die Seite das Gegenteil dessen, was der Nutzer tun kann.
+ *
+ *  `unterbrochen` ist der DRITTE `version: null`-Zustand (#262): eine Aktualisierung wurde
+ *  abgewürgt, die Reparatur steht beim nächsten Serverstart an. Der Satz „Nicht installiert"
+ *  wäre dort die teuerste der drei Falschmeldungen — er schickt den Nutzer zu einer
+ *  Neuinstallation, obwohl ein Neustart genügt. */
 /** `laeuft`/`ergebnis` gehören zum Knopf „Jetzt aktualisieren" (#174): der POST kehrt sofort
  *  zurück, pip läuft im Hintergrund weiter. `ergebnis` ist `''`, solange nichts gelaufen ist
  *  oder gerade etwas läuft — sonst `'ok'`, `'fehler'` oder `'uebersprungen'`. Der dritte Wert
@@ -163,7 +168,7 @@ export type Settings = {
  *  pip-Sperre, nicht nur seinen eigenen Modulzustand). `ungeschuetzt` gehört zu `ergebnis`:
  *  der letzte Lauf lief ohne Sperre (#236). `ejs_unlesbar`: die Metadaten der Löserskripte
  *  sind kaputt, die Erkennung untauglicher Skripte ist ausgesetzt (#198). */
-export type YtdlpStand = { version: string | null; unlesbar: boolean; geprueft: string; auto: boolean; env: boolean; laeuft: boolean; ergebnis: '' | 'ok' | 'fehler' | 'uebersprungen'; ungeschuetzt: boolean; ejs_unlesbar: boolean };
+export type YtdlpStand = { version: string | null; unlesbar: boolean; geprueft: string; auto: boolean; env: boolean; laeuft: boolean; ergebnis: '' | 'ok' | 'fehler' | 'uebersprungen'; ungeschuetzt: boolean; unterbrochen: boolean; ejs_unlesbar: boolean };
 export type ModelInfo = { id: string; label: string };
 /** Anmeldezustand einer Abo-CLI. `unterstuetzt: false` heisst: der Anbieter kennt so etwas
  *  nicht — bei den API-Anbietern IST der Key die Anmeldung. */
