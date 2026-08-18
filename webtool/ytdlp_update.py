@@ -684,9 +684,15 @@ def _merker_datum() -> dt.date | None:
     """Das Datum im Merker, oder None (kein Merker, unlesbar, oder in der ZUKUNFT).
 
     Ein Zukunftsdatum (vorgehende Rechneruhr) gilt als keines — dieselbe Richtung wie in
-    `geprueft()`. Es MUSS hier herausfallen und nicht erst in `_pip_unterbrochen()`: sonst
-    liesse es sich weder auswerten noch ueberschreiben (`_pip_merker_setzen` schont einen
-    datierten Merker) und schaltete die Erkennung dauerhaft still ab.
+    `geprueft()`, sonst waere der Merker dauerhaft gueltig und die Erkennung still abgeschaltet.
+
+    **Die Begruendung fuer den ORT hat sich mit #268 geaendert.** Hier stand: es muesse in
+    dieser Funktion herausfallen, weil ein Zukunftsdatum sonst weder auswertbar noch
+    ueberschreibbar waere (`_pip_merker_setzen` schonte einen datierten Merker). Das Schonen
+    gibt es nicht mehr, geschrieben wird immer — die Wache ist jetzt allein die des LESERS,
+    und `_pip_unterbrochen()` ist ihr einziger. Verschoebe man sie dorthin, waere das kein
+    Fehler mehr; sie bleibt hier, weil das Auslegen des Datums hierher gehoert und nicht in
+    die Entscheidung.
     """
     # **`O_NONBLOCK` wie in `sperre._merker_lesen` (#200), und aus demselben Grund.** Liegt am
     # Merker-Pfad ein FIFO, wartet ein normales `open()` auf einen Schreiber, der nie kommt —
@@ -862,8 +868,10 @@ def aktualisiere(nur_wenn_faellig: bool = False) -> tuple[bool, bool]:
     # Zwei pip-Laeufe auf DIESELBE venv duerfen sich nicht ueberschneiden — sie schreiben in
     # dasselbe site-packages und koennen die Installation zerlegen. Erreichbar, seit es zwei
     # Ausloeser aus zwei Prozessen gibt: der Import-Job und der Knopf in den Einstellungen.
-    # Eigener Lock-Name (…ytdlp.lock), damit er sich nicht mit dem von `settings.save()`
-    # ueberschneidet — der wird im `_merken()` genommen, waehrend dieser noch haelt.
+    # Eigener Lock-Name (…ytdlp.<venv-kennung>.lock), damit er sich nicht mit dem von
+    # `settings.save()` ueberschneidet — der wird im `_merken()` genommen, waehrend dieser
+    # noch haelt. Die Kennung trennt zusaetzlich zwei venvs, die sich EINE settings.json
+    # teilen (#254) — siehe `_lockziel`.
     lockziel = _lockziel()      # EIN Ausdruck: Verzeichnis, Sperre und Anzeige denselben Pfad
     try:
         # `or "."` fuer ein TRANSKRIBOR_SETTINGS ohne Verzeichnisanteil (`os.makedirs("")`
