@@ -20,6 +20,9 @@ const einstellungen = (s: Partial<Settings>) =>
 const doc: EditDoc = {
   base: 'S1', project: 'Demo', audio: 'a.wav', language: 'de',
   human_edited: false, context: '', speakers: [], segments: [], annotations: [],
+  // Seit #160 liefert der Server einen Stand mit. Ohne ihn waere der Waechter unten vacuous:
+  // „kein Token gesendet" waere dann trivial wahr.
+  dateistand: 'A',
 }
 
 /** Liest die Bruecke von aussen — so wie es die Leiste in der Huelle tut. */
@@ -31,6 +34,9 @@ describe('EditorView (Stub)', () => {
     vi.clearAllMocks()
     einstellungen({})
     vi.mocked(api.getDoc).mockResolvedValue(doc)
+    // `saveDoc` liefert seit #160 den neuen Stand — die Automock-Voreinstellung `undefined`
+    // waere eine Attrappe, die den Vertrag falsch behauptet (#239).
+    vi.mocked(api.saveDoc).mockResolvedValue({ dateistand: 'B' })
   })
 
   it('bringt KEIN eigenes main mit — das traegt die Huelle (#72)', () => {
@@ -124,6 +130,9 @@ describe('#123 — Editor lädt nach ferngestarteter Korrektur neu', () => {
     vi.clearAllMocks()
     einstellungen({})
     vi.mocked(api.getDoc).mockResolvedValue(doc)
+    // `saveDoc` liefert seit #160 den neuen Stand — die Automock-Voreinstellung `undefined`
+    // waere eine Attrappe, die den Vertrag falsch behauptet (#239).
+    vi.mocked(api.saveDoc).mockResolvedValue({ dateistand: 'B' })
     vi.mocked(api.getProjectFiles).mockResolvedValue({ name: 'Demo',
       files: [{ base: 'S1', has_audio: true, has_raw: true, has_edit: true, has_md: false }] })
   })
@@ -188,6 +197,11 @@ describe('#123 — Editor lädt nach ferngestarteter Korrektur neu', () => {
       await waitFor(() => expect(confirm).toHaveBeenCalled(), { timeout: 3000 })
       // Abbrechen -> eigene Fassung behalten: kein Reload (weiterhin nur der Mount-getDoc).
       expect(api.getDoc).toHaveBeenCalledTimes(1)
+      // Und die Entscheidung wird DURCHGESETZT (#160): der Autosave danach schreibt ohne
+      // Vorbehalt. Ohne den `ueberschreiben`-Aufruf bekaeme er einen berechtigten 409 und
+      // stellte dieselbe Frage noch einmal, nur mit vertauschten Knoepfen.
+      await waitFor(() => expect(api.saveDoc).toHaveBeenCalled(), { timeout: 3000 })
+      expect('dateistand' in vi.mocked(api.saveDoc).mock.calls.at(-1)![2]).toBe(false)
     } finally {
       confirm.mockRestore()
     }

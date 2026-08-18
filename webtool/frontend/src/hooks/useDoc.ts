@@ -41,6 +41,10 @@ export function useDoc(project: string | null, base: string | null) {
   const letzterFehler = useRef('')
   /** Verhindert den finalen Toast zweimal (StrictMode double-invoke in dev). */
   const finalToastGezeigt = useRef(false)
+  /** Stoesst nach „meine Fassung behalten" (#160) einen neuen Speicherlauf an. State und nicht
+   *  Ref, weil GENAU der Identitaetswechsel von `save` gebraucht wird — er setzt den
+   *  Entprellungs-Timer neu. */
+  const [erzwingen, setErzwingen] = useState(0)
 
   const reload = useCallback(() => {
     // ZUERST, vor jedem frühen Rückkehren: ein offener „Rückgängig“-Toast zeigt auf das
@@ -75,7 +79,13 @@ export function useDoc(project: string | null, base: string | null) {
     const meiner = ++ladeLauf.current
     const juengster = () => meiner === ladeLauf.current
     setLoading(true)
-    getDoc(project, base).then(d => { if (juengster()) { setDoc(d); setDirty(false); setStand('ruhig') } })
+    getDoc(project, base).then(d => {
+      if (!juengster()) return
+      // Der frisch geholte Stand ist die Wahrheit — und er raeumt zugleich einen Verzicht
+      // weg, der aus einem frueheren „meine Fassung behalten" stammen koennte.
+      staende.current[schluessel(project, base)] = d.dateistand
+      setDoc(d); setDirty(false); setStand('ruhig')
+    })
       // `setStand('ruhig')` auch im Fehlerfall (#121): sonst bleibt ein 'fehler' aus der
       // Episode der VORHERIGEN Datei ueber einem leeren Editor stehen — eine Speicher-Warnung
       // fuer ein Dokument, das gar nicht mehr da ist. Der Stand gilt dem Speichern; ohne
@@ -165,6 +175,32 @@ export function useDoc(project: string | null, base: string | null) {
    * und dafuer gibt es keinen Ausloeser — die Abhaengigkeiten des Effekts (`dirty`, `save`)
    * aendern sich dabei nicht. Ein wartender Lauf braucht keinen.
    */
+  /**
+   * Neuester bekannter `dateistand` JE DOKUMENT (#160) — dieselbe Form wie `neuester`/`offen`,
+   * und aus demselben Grund: Refs ueberleben einen Dateiwechsel, ein Wert je Datei nicht.
+   *
+   * **Warum nicht im Dokument.** Der erste Anlauf legte das Token in `doc` und uebernahm es per
+   * `setDoc`. Das erreicht nur KUENFTIGE `save`-Closures — ein Lauf, der bereits in `kette`
+   * wartet, hat sein `doc` vorher eingefangen und traegt den alten Stand weiter. Gemessen:
+   * der Editor bekam 409 auf seine EIGENE Schreibung, ohne dass ein fremder Schreiber
+   * existierte, und die Rueckfrage beschuldigte einen, den es nicht gab.
+   *
+   * `undefined` heisst „ohne Vorbehalt schreiben" — der Weg fuers bewusste Ueberschreiben.
+   */
+  const staende = useRef<Record<string, string | undefined>>({})
+  /** Ein Schluessel fuer alle drei Refs (`staende`, `neuester`, `offen`). */
+  const schluessel = (p: string, b: string) => `${p}\n${b}`
+  /**
+   * Baut den PUT-Rumpf. Der Stand kommt aus dem Ref, NICHT aus dem Dokument — das Dokument
+   * kann beliebig alt sein (wartender Kettenlauf, Flush einer verlassenen Datei), der Ref
+   * traegt immer den zuletzt bestaetigten Stand DIESER Datei.
+   */
+  const mitStand = (d: EditDoc, key: string): EditDoc => {
+    const stand = staende.current[key]
+    const { dateistand: _ausDemDokument, ...ohne } = d
+    return stand === undefined ? (ohne as EditDoc) : { ...ohne, dateistand: stand }
+  }
+
   const kette = useRef<Promise<void>>(Promise.resolve())
 
   /**
@@ -242,7 +278,24 @@ export function useDoc(project: string | null, base: string | null) {
    * neuen Lauf an. Einmalig per Konstruktion: der naechste erfolgreiche PUT liefert wieder
    * einen Stand. Ein eigenes Flag muesste man zurueckstellen — und koennte es vergessen.
    */
-  const konflikt = useCallback((b: string) => {
+  /**
+   * „Meine Fassung behalten" — der naechste Speicherlauf schreibt OHNE Vorbehalt (#160).
+   *
+   * Herausgereicht, weil dieselbe Entscheidung an ZWEI Stellen faellt: hier bei einem 409,
+   * und in `EditorView` bei der Rueckfrage aus #123, wenn eine Korrektur fertig wird. Deren
+   * Abbrechen-Zweig verspricht „beim Speichern ueberschreibst du die Korrektur" — ohne diesen
+   * Aufruf bekaeme der Autosave 800 ms spaeter einen BERECHTIGTEN 409 und stellte dieselbe
+   * Frage noch einmal, nur mit vertauschten Knoepfen. Eine Entscheidung, ein Dialog.
+   */
+  const ueberschreiben = useCallback((p: string, b: string) => {
+    delete staende.current[schluessel(p, b)]
+    // Der Verzicht allein stoesst nichts an: `dirty` steht schon, und weder es noch die
+    // Identitaet von `save` aendert sich durch einen Ref. Der Zaehler ist der Anstoss —
+    // sichtbar als Abhaengigkeit, statt eine Zustandsaenderung dafuer zu missbrauchen.
+    setErzwingen(x => x + 1)
+  }, [])
+
+  const konflikt = useCallback((p: string, b: string) => {
     if (window.confirm(
       `„${b}“ wurde inzwischen geändert — vermutlich ist eine Korrektur fertig geworden.\n\n`
       + 'OK: die neue Fassung laden — deine ungespeicherten Änderungen gehen verloren.\n'
@@ -250,15 +303,11 @@ export function useDoc(project: string | null, base: string | null) {
       reload()
       return
     }
-    setDoc(d => {
-      if (!d || d.dateistand === undefined) return d
-      const { dateistand: _verzicht, ...ohne } = d
-      return ohne
-    })
+    ueberschreiben(p, b)
     // Weder 'gespeichert' (nichts steht auf der Platte) noch 'fehler' (das startete die
     // Wiederhol-Schleife aus #107 gegen eine Wand, die kein Netzfehler ist).
     setStand('offen')
-  }, [reload])
+  }, [reload, ueberschreiben])
 
   const save = useCallback(async () => {
     if (!doc || !project || !base) return
@@ -301,19 +350,16 @@ export function useDoc(project: string | null, base: string | null) {
       const meins = () => offen.current === meinKey
       if (meins()) setStand('speichert')
       try {
-        const antwort = await saveDoc(project, base, doc)
+        const antwort = await saveDoc(project, base, mitStand(doc, meinKey))
+        // VOR dem `meins()`-Riegel (#160): geschrieben wurde JETZT, und zwar an DIESER Datei.
+        // Dahinter gestellt bekaeme die verlassene Datei ihren neuen Stand nie zu sehen, und
+        // der Verlassens-Flush liefe mit dem alten in einen 409 — gemessen, samt Toast, der
+        // einen fremden Schreiber beschuldigt. Der Schluessel bindet die Buchung an die
+        // richtige Datei, deshalb ist sie hier ungefaehrlich.
+        if (antwort.dateistand !== undefined) staende.current[meinKey] = antwort.dateistand
         // Zwischen Start und Rueckkehr kann die Datei gewechselt haben — dann gehoert die
         // Buchfuehrung einem anderen Dokument und darf hier nicht angefasst werden.
         if (!meins()) return
-        // Der neue Stand (#160) MUSS uebernommen werden, und zwar VOR dem `fassung`-Zweig
-        // darunter: dort wurde waehrend des Laufs weitergetippt, es folgt also ein weiterer
-        // PUT — mit dem alten Token liefe der gegen unsere eigene Schreibung von gerade eben
-        // und bekaeme 409. Der Nutzer saehe eine Konflikt-Rueckfrage ohne fremden Schreiber.
-        //
-        // `setDoc` wechselt die Identitaet von `save` und setzt damit den Entprellungs-Timer
-        // neu. Ist nichts offen, greift `if (!dirty) return` im Effekt; ist etwas offen, wird
-        // der Schreibvorgang um bis zu 800 ms spaeter — waehrend der Nutzer ohnehin tippt.
-        setDoc(d => (d && antwort.dateistand ? { ...d, dateistand: antwort.dateistand } : d))
         // Wurde waehrend des Laufs weitergetippt, ist das Geschriebene schon wieder alt: `dirty`
         // muss stehen bleiben, sonst faellt genau diese Aenderung lautlos unter den Tisch. Die
         // Entprellung unten hat fuer sie bereits einen neuen Lauf angesetzt.
@@ -327,7 +373,7 @@ export function useDoc(project: string | null, base: string | null) {
         // Versuche liefen gegen dieselbe Wand und endeten im finalen Fehler-Toast.
         // `dirty` bleibt in beiden Zweigen oben, die Rueckfragen beim Verlassen greifen also.
         if (e instanceof HttpFehler && e.status === 409) {
-          if (meins()) konflikt(base)
+          if (meins()) konflikt(project, base)
           return
         }
         // Fehlerzaehler und Meldung nur fuer das offene Dokument (#107): ein Lauf fuer A, der nach
@@ -349,7 +395,7 @@ export function useDoc(project: string | null, base: string | null) {
     // bekommt kein rotes Signal — der Schutz ist die Kombination, nicht die einzelne Zeile.
     kette.current = lauf.catch(() => {})
     return lauf
-  }, [doc, project, base, konflikt])
+  }, [doc, project, base, konflikt, erzwingen])
 
   // Flush beim Verlassen einer Datei (#106). In der 800-ms-Pause hatte die Oberflaeche "wird
   // gespeichert" versprochen; eine "Verwerfen?"-Rueckfrage beim Wechseln widerspricht dem. Der
@@ -408,7 +454,9 @@ export function useDoc(project: string | null, base: string | null) {
         // Datei gerade verlassen, der Ref-Zustand des Hooks gehoert schon der naechsten.
         // Das Dokument traegt sein Token selbst mit — deshalb liegt es im Dokument und nicht
         // in einem Ref daneben, der beim Cleanup bereits umgeschwenkt waere.
-        .then(async () => { await saveDoc(project, base, dokument) })
+        .then(async () => {
+          await saveDoc(project, base, mitStand(dokument, schluessel(project, base)))
+        })
         .catch((e) => {
           toast.error(`Speichern beim Verlassen fehlgeschlagen (${base}): ${e instanceof Error ? e.message : String(e)}`)
         })
@@ -493,5 +541,5 @@ export function useDoc(project: string | null, base: string | null) {
 
   // `save` wandert bewusst NICHT nach draussen: es gibt keinen Speichern-Knopf mehr, und eine
   // zweite Ausloesestelle waere eine, die neben der Entprellung herlaeuft.
-  return { doc, dirty, stand, loading, updateSegment, updateDoc, renameSpeaker, exportDownload, reload, vergiss }
+  return { doc, dirty, stand, loading, updateSegment, updateDoc, renameSpeaker, exportDownload, reload, vergiss, ueberschreiben }
 }

@@ -22,10 +22,19 @@ export type EditDoc = {
    *  Schreiben — wie `selbstgeheilt`.
    *
    *  **Das FEHLEN des Feldes heisst „ohne Vorbehalt schreiben"** und ist der Weg fuers
-   *  bewusste Ueberschreiben: wer im Konflikt „meine Fassung behalten" waehlt, dem nimmt
-   *  `useDoc` das Feld aus dem Dokument. Ein eigenes Kraft-Flag waere ein zweiter Schalter
-   *  fuer dieselbe Aussage — und einer, der haengenbleiben kann; so ist der Verzicht
-   *  einmalig per Konstruktion, denn der naechste erfolgreiche PUT liefert wieder einen. */
+   *  bewusste Ueberschreiben (`useDoc.ueberschreiben`).
+   *
+   *  **Was hier steht, ist NICHT die Wahrheit ueber den aktuellen Stand.** Der Client fuehrt
+   *  ihn in einem geschluesselten Ref (`useDoc.staende`) und baut den PUT-Rumpf daraus
+   *  (`mitStand`) — ein Dokument kann beliebig alt sein (wartender Kettenlauf, Flush einer
+   *  verlassenen Datei), der Ref traegt immer den zuletzt bestaetigten Stand DIESER Datei.
+   *  Dieses Feld ist die Zustellung vom Server, nicht der Speicher.
+   *
+   *  Der Verzicht ist einmalig, solange der naechste PUT GELINGT — dessen Antwort liefert
+   *  wieder einen Stand. Scheitert er (Server startet neu, also dieselbe Bedingung, die den
+   *  Konflikt erzeugt hat), bleibt die Datei ungeschuetzt, bis irgendein Speichervorgang
+   *  gelingt oder ein `reload()` kommt. Als Folge einer ausdruecklichen Nutzerentscheidung
+   *  vertretbar, aber es ist keine Zusicherung. */
   dateistand?: string;
   /** Abschnitte der Aufnahme, zu denen es KEIN Segment gibt (#83). Whisper kann ein
    *  30-Sekunden-Fenster ueberspringen, ohne dass irgendetwas im Ergebnis darauf hinweist —

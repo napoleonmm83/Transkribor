@@ -156,10 +156,19 @@ def _dateistand(pfad: str) -> str:
     prozessinterner Zaehler bekaeme dessen Schreibvorgang nie zu sehen — er ist aber genau
     der, gegen den hier gesperrt wird.
 
-    `st_mtime_ns`, nicht `st_mtime`: die Sekunden-Aufloesung ist zu grob. Genau daran scheitert
-    Pythons eigene .pyc-Invalidierung — in der Wurzel-CLAUDE.md steht der Vorfall, der eine
-    halbe Stunde Suche gekostet hat. `st_size` kommt dazu, damit zwei Schreibvorgaenge im
-    selben Zeitstempel-Tick nicht doch als gleich durchgehen.
+    **`st_ino` traegt die Eindeutigkeit, nicht die Zeit — und das ist gemessen.** `_ns` ist die
+    Breite des FELDES, nicht die Aufloesung des Dateisystems: ueber `paths.atomic_write` auf
+    NTFS liegt der kleinste beobachtete Schritt bei rund einer Millisekunde. In 400 dicht
+    aufeinanderfolgenden Schreibvorgaengen gleicher Groesse ergaben `mtime_ns`+`size`
+    **237 Kollisionen**, mit `st_ino` **null**. Der Dateiindex ist exakt, weil beide Schreiber
+    ueber `os.replace` einer Temp-Datei gehen (`paths.atomic_write`, `correct.cmd_apply`) —
+    jeder Schreibvorgang bringt also einen neuen Index mit. Er kostet nichts: derselbe
+    `os.stat`.
+
+    `st_mtime_ns` und `st_size` bleiben daneben stehen. Sie erkennen den Fall, in dem ein
+    Dateisystem Indizes wiederverwendet (POSIX vergibt frei gewordene Inodes neu), und
+    `st_mtime` allein waere ohnehin zu grob — an der Sekunden-Aufloesung scheitert Pythons
+    eigene .pyc-Invalidierung, der Vorfall steht in der Wurzel-CLAUDE.md.
 
     **Die leere Zeichenkette heisst „die Datei gibt es nicht" und ist eine ECHTE Erwartung,
     kein „egal".** Sie deckt den Fall, in dem der Korrekturlauf die `edit.json` erst ANLEGT,
@@ -171,7 +180,7 @@ def _dateistand(pfad: str) -> str:
         st = os.stat(pfad)
     except OSError:
         return ""
-    return f"{st.st_mtime_ns}-{st.st_size}"
+    return f"{st.st_mtime_ns}-{st.st_size}-{st.st_ino}"
 
 
 def _srt_path(project, base):
