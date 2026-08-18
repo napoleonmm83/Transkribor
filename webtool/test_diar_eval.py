@@ -54,9 +54,16 @@ def test_v_measure_erkennt_ueber_UND_unterclustering():
     """
     ref = {1: "A", 2: "A", 3: "B", 4: "B"}
     assert de.v_measure({1: "X", 2: "X", 3: "Y", 4: "Y"}, ref)[2] == pytest.approx(1.0)
-    # alles in einen Topf (Unterclustering) und jedes fuer sich (Ueberclustering):
-    assert de.v_measure({1: "X", 2: "X", 3: "X", 4: "X"}, ref)[2] < 0.5
-    assert de.v_measure({1: "W", 2: "X", 3: "Y", 4: "Z"}, ref)[2] < 1.0
+    # Alles in einen Topf (Unterclustering): gemessen 0.0.
+    assert de.v_measure({1: "X", 2: "X", 3: "X", 4: "X"}, ref)[2] < 0.1
+    # Jedes fuer sich (Ueberclustering): gemessen 0.667. Die Schranke stand auf `< 1.0` und
+    # war damit fast wertlos — ein Vertauschen von V gegen die blosse HOMOGENITAET waere
+    # durchgekommen, und genau die belohnt Ueberclustering mit 1.0.
+    h, c, v = de.v_measure({1: "W", 2: "X", 3: "Y", 4: "Z"}, ref)
+    assert v < 0.75
+    # Die strukturelle Aussage, unabhaengig von der sklearn-Fassung: Homogenitaet allein sieht
+    # hier ein perfektes Ergebnis, V nicht. Das IST der Grund fuer V statt Reinheit.
+    assert h == pytest.approx(1.0) and v < h
 
 
 def test_metriken_ignorieren_einseitig_bekannte_segmente():
@@ -123,3 +130,45 @@ def test_gar_keine_gemeinsamen_segmente_ist_KEIN_bestwert():
     import math
     assert math.isnan(de.fehlerquote({1: "X"}, {2: "A"}, {1: 1.0}))
     assert math.isnan(de.fehlerquote({}, {}, {}))
+
+
+def test_unter_eval_weist_pfade_AUSSERHALB_ab():
+    r"""Die Wache, an der der wichtigste Constraint des ganzen Vorhabens haengt: „nie nach
+    projekte\ schreiben". Sie war nur durch Ausfuehrung geprueft, nicht durch einen Test —
+    und ein Werkzeug, das echtes Interviewmaterial liest, darf seinen Schreibpfad nicht bloss
+    durch Disziplin sichern.
+
+    Geprueft wird der AUFGELOESTE Pfad: `eval/../projekte/x` sieht harmlos aus und zeigt
+    woanders hin.
+    """
+    with pytest.raises(SystemExit):
+        de._unter_eval(os.path.join("..", "projekte", "x.json"))
+    with pytest.raises(SystemExit):
+        de._unter_eval(os.path.join(de.EVAL, "..", "projekte", "x.json"))
+    # Der erlaubte Fall muss durchkommen, sonst waere die Wache ein Totalriegel.
+    assert de._unter_eval(os.path.join(de.EVAL, "laeufe", "x.json")).startswith(de.EVAL)
+
+
+def test_eval_haengt_am_REPO_nicht_am_arbeitsverzeichnis(tmp_path, monkeypatch):
+    r"""`os.path.abspath("eval")` wurde beim Import ausgewertet und meinte `$CWD/eval` — ein
+    `cd projekte` und das Werkzeug legte `projekte\eval\` an, waehrend der Moduldocstring
+    „schreibt AUSSCHLIESSLICH nach eval/" verspricht.
+    """
+    monkeypatch.chdir(tmp_path)
+    assert de.EVAL == os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(de.__file__))), "eval")
+    assert not de.EVAL.startswith(str(tmp_path))
+
+
+def test_lauf_name_laesst_keine_pfadanteile_durch():
+    """Der Laufname geht ungeprueft in einen Dateipfad. Ohne diese Wache schriebe
+    `run ../../projekte/x` genau dorthin, wo es verboten ist."""
+    # Der Backslash MUSS doppelt stehen: `"a\b"` ist ein BACKSPACE-Zeichen, und der Test
+    # pruefte damit etwas anderes, als er behauptet — er blieb gruen, weil auch ein Backspace
+    # kein `isalnum()` ist. Sichtbar wird das nur beim Kompilieren (SyntaxWarning „invalid
+    # escape sequence"), nicht am Testergebnis.
+    for schlecht in ("../x", "a/b", "a\\b", ".versteckt", "", "a:b", "..", "x/../y"):
+        with pytest.raises(Exception):
+            de._lauf_name(schlecht)
+    for gut in ("nullpunkt", "kandidat-1", "v0.2_test"):
+        assert de._lauf_name(gut) == gut

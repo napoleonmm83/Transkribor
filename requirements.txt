@@ -40,6 +40,16 @@ yt-dlp[default]>=2026.7.4
 # (pyannote-Kette) ohnehin herein — worauf man sich verlaesst, gehoert benannt; dieselbe Regel wie
 # bei certifi oben. Der Import ist trotzdem abgesichert: das Modul darf nirgends werfen (#185).
 packaging
+# Fuer die Metriken der Sprechertrennungs-Messung (`tools/diar_eval.py`): V-Measure aus
+# scikit-learn, die ungarische Zuordnung aus scipy, die Kontingenztabelle aus numpy.
+# Alle drei kommen ueber die pyannote-Kette ohnehin herein (gemessen: scikit-learn ueber
+# pytorch-metric-learning, scipy ueber asteroid-filterbanks, numpy ueber ctranslate2) —
+# **worauf man sich verlaesst, gehoert benannt**, dieselbe Regel wie bei certifi und packaging
+# oben. Kein zusaetzlicher Download fuer den Nutzer, aber die Metriken fallen nicht mehr
+# still aus, wenn eine dieser Ketten reisst. Das Werkzeug selbst ist kein Teil der App.
+scikit-learn
+scipy
+numpy
 # Untergrenze wegen CVE-2023-52323 (Seitenkanal im OCB-Modus, behoben in 3.19.1).
 # pycryptodomex kommt neu ueber `[default]` herein und wird von yt-dlp ohne jede Grenze
 # deklariert — ein Pin ist das hier NICHT (die fuehrt yt-dlp, siehe oben), nur ein Boden.
