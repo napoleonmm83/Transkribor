@@ -1290,6 +1290,14 @@ def zustand() -> dict:
 
     **`ejs_unlesbar`** meldet, dass die Metadaten von `yt-dlp-ejs` nicht lesbar sind und die
     Erkennung untauglicher Loeserskripte (#179/#182) deshalb ausgesetzt ist (#198).
+
+    **`unterbrochen` (#262)** sagt, dass eine Reparatur beim naechsten Serverstart ansteht —
+    Abbruch-Merker liegt UND yt-dlp ist unbrauchbar (`fassung() is None`). Beide Haelften,
+    derselbe Schnitt wie in `faellig()`s Merker-Zweig; der Merker allein wuerde seit #280
+    DAUERALARM schlagen (er wird bei jedem Lauf neu datiert, auch im ejs-untauglichen Zustand,
+    in dem es nichts zu reparieren gibt — dort feuert `faellig()` ohnehin aus dem ejs-Zweig).
+    Das `v is None` steht VOR dem Merker-Zugriff: dieser Rumpf liegt auf dem 1,5-s-Poll der
+    Einstellungsseite, und eine vorhandene Fassung braucht den Dateizugriff nicht.
     """
     g = geprueft()
     v, unlesbar = _fassung_und_lesbarkeit()
@@ -1298,4 +1306,5 @@ def zustand() -> dict:
             "auto": auto_an(), "env": env_override() is not None,
             "laeuft": laeuft_gerade(laeuft),
             "ergebnis": ergebnis, "ungeschuetzt": ungeschuetzt,
+            "unterbrochen": v is None and _pip_unterbrochen(),
             "ejs_unlesbar": _ejs_untauglich_und_lesbarkeit()[1]}

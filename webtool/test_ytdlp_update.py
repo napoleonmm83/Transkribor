@@ -837,6 +837,50 @@ def test_leere_env_variable_ist_KEIN_override(monkeypatch):
         assert yu.zustand()["env"] is False, repr(leer)
 
 
+# --- zustand()["unterbrochen"] (#262) ------------------------------------------
+
+def test_zustand_meldet_einen_unterbrochenen_lauf(monkeypatch):
+    """Der DRITTE `version: null`-Zustand (#262): Abbruch-Merker liegt, yt-dlp ist
+    unbrauchbar — eine Reparatur steht beim naechsten Serverstart an. Ohne das Feld sagte
+    die Seite „Nicht installiert" und schickte den Nutzer zu einer Neuinstallation, obwohl
+    ein Neustart genuegt; die README leitet ihn bei einem fehlgeschlagenen Import
+    ausdruecklich auf diese Seite.
+
+    `_fassung_und_lesbarkeit` statt `fassung` patchen: es ist der Leser, den `zustand()`
+    wirklich aufruft (drei Tests patchten frueher `fassung` und liefen ins Leere)."""
+    monkeypatch.setattr(yu, "_fassung_und_lesbarkeit", lambda: (None, False))
+    assert yu.zustand()["unterbrochen"] is False          # Negativkontrolle: kein Merker
+    yu._pip_merker_setzen()
+    assert yu.zustand()["unterbrochen"] is True
+
+
+def test_zustand_meldet_den_MERKER_ALLEIN_nicht_als_unterbrochen(monkeypatch):
+    """Die zweite Haelfte — und die, ohne die das Feld DAUERALARM waere. Seit #280 wird der
+    Merker bei JEDEM Lauf neu datiert, auch im ejs-untauglichen Zustand (#179/#182: Fassung
+    vorhanden, pip scheitert offline taeglich). Dort liegt der Merker also regelmaessig bei
+    einer HEILEN Fassung — „eine Reparatur steht beim naechsten Start an" waere dort gelogen,
+    `faellig()` feuert aus dem ejs-Zweig, nicht aus dem Merker-Zweig. Derselbe Schnitt wie
+    dort: Beide Haelften, nicht der Merker allein."""
+    monkeypatch.setattr(yu, "_fassung_und_lesbarkeit", lambda: ("2026.7.4", False))
+    yu._pip_merker_setzen()
+    assert yu.zustand()["unterbrochen"] is False
+
+
+def test_zustand_liest_den_MERKER_NICHT_bei_vorhandener_fassung(monkeypatch):
+    """Der Kurzschluss ist Teil des Vertrags, nicht Sparsamkeit: dieser Rumpf liegt auf dem
+    1,5-s-Poll der Einstellungsseite (#262 nennt den Dateizugiff ausdruecklich), und der
+    Merker-Leser ist ein `open()` mit O_NONBLOCK. Wird die Reihenfolge gedreht, zahlt jede
+    Poll-Runde den Zugriff — dafuer steht hier ein Zaehler, nicht eine Stoppuhr."""
+    gelesen = []
+    monkeypatch.setattr(yu, "_pip_unterbrochen", lambda: gelesen.append(1) or True)
+    monkeypatch.setattr(yu, "_fassung_und_lesbarkeit", lambda: ("2026.7.4", False))
+    yu.zustand()
+    assert gelesen == []                                   # nicht gelesen: Fassung steht
+    monkeypatch.setattr(yu, "_fassung_und_lesbarkeit", lambda: (None, False))
+    yu.zustand()
+    assert gelesen == [1]                                  # gelesen, sobald es darauf ankommt
+
+
 def test_zustand_meldet_das_override_selbst(monkeypatch):
     """Der Server sagt es, statt das Frontend `ytdlp_auto` gegen `auto` vergleichen zu
     lassen: die beiden kommen aus zwei Antworten, und dazwischen behauptete der Vergleich

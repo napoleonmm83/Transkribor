@@ -347,6 +347,14 @@ export function SettingsPage() {
   // kommt NACH `danach?.()`, damit sie nicht unter dessen Erfolgsmeldung („Key gespeichert")
   // liegt: gespeichert wurde ja wirklich, die Einschraenkung ist die neue Nachricht.
   const speichern = async (patch: Record<string, string>, danach?: () => void) => {
+    // **Der Busy-Zustand gehört in `speichern` selbst (#249), nicht zu den Aufrufern.**
+    // Seit #239 zahlt auch der PUT `llm.available()`, und das startet bei den Abo-CLIs
+    // einen Subprozess: 0,09 s (codex) bzw. 0,26 s (claude) normal — die DECKE ist aber
+    // `auth.STATUS_TIMEOUT` = 30 s. Eine klemmende CLI hält das Speichern eines Feldwechsels
+    // also bis zu 30 s auf, und das Formular sah bisher aus wie eines, das nichts tut —
+    // der Nutzer klickt erneut. Die Wurzel (der Timeout) ist BENANNT, nicht behoben: ein
+    // kürzerer Timeout würde gesunde Anmeldungen abschneiden.
+    setSpeichert(n => n + 1)
     try {
       // Ersetzen, nicht zusammenführen — seit #239 liefert der PUT denselben vollständigen
       // Rumpf wie der GET. Vorher stand hier ein `{...cur, ...neu}`, das die fünf fehlenden
@@ -366,12 +374,20 @@ export function SettingsPage() {
         'Gespeichert — aber ohne Schreibsperre. Hat in derselben Sekunde etwas anderes '
         + 'geschrieben, kann die Änderung überschrieben worden sein. Bitte kurz nachsehen.')
     } catch (e) { toast.error(`Speichern fehlgeschlagen: ${(e as Error).message}`) }
+    finally { setSpeichert(n => n - 1) }
   }
 
   // Der Hinweis auf die gerettete Datei haengt an ihrer EXISTENZ, nicht an einem Ereignis —
   // geschrieben hat sie oft ein Subprozess, den nie jemand gesehen hat. Ohne diesen Knopf
   // stuende er darum fuer immer da: der Pfad liegt im Benutzerprofil, und wer die App
   // benutzt, um nicht mit Dateien zu hantieren, raeumt ihn dort nicht selbst weg.
+  // **Wie viele Speicherläufe sind unterwegs (#249).** Ein ZAEHLER, kein Bool: die Seite
+  // speichert bei `onBlur` je Feld, und zwei Felder können nacheinander verlassen werden,
+  // bevor der erste PUT zurück ist — ein Bool würde den ersten Rückkehrer als „fertig"
+  // melden, während der zweite noch läuft (dieselbe Klasse wie die überholenden
+  // Poll-Runden aus #247, nur hier gegen `speichern` selbst).
+  const [speichert, setSpeichert] = useState(0)
+
   // `kaputtWeg` sperrt seinen Knopf, solange die Anfrage laeuft: der zweite Klick eines
   // Doppelklicks traefe eine Datei, die es nicht mehr gibt — der Server antwortet dann
   // richtigerweise mit 404, und der Nutzer saehe fuer eine geglueckte Aktion einen Fehler.
@@ -555,7 +571,19 @@ export function SettingsPage() {
     // selbst (max-w an den Eingabefeldern) — eine Lesespalte um die ganze Seite wuerde
     // stattdessen wieder den Fensterrand leer lassen.
     <div className="p-6 sm:p-8">
-      <PageHeader rubrik="Transkribor" titel="Einstellungen" zurueck="/" zurueckText="Übersicht" />
+      <PageHeader rubrik="Transkribor" titel="Einstellungen" zurueck="/" zurueckText="Übersicht">
+        {/* Der Busy-Zustand von `speichern()` (#249), am Kopf statt am Auslöser: die Seite
+            speichert bei `onBlur` aus einem Dutzend Feldern, es GIBT keinen einen Knopf,
+            an dem ein Spinner hing. `role="status"` macht die Änderung auch ohne Blick
+            hörbar; `aria-live` ist darin stillschweigend enthalten. Das Feld bleibt
+            bedienbar — Sperren würde nur die EINGABE verhindern, nicht das Warten. */}
+        {speichert > 0 && (
+          <p role="status" className="flex items-center gap-1.5 text-sm text-muted-foreground">
+            <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+            Speichert{speichert > 1 ? ` (${speichert})` : ''} …
+          </p>
+        )}
+      </PageHeader>
       <p className="mb-8 max-w-prose text-sm text-muted-foreground">
         Womit korrigiert Transkribor die Transkripte? Die Transkription selbst läuft immer lokal
         mit Whisper auf deiner GPU — nur die Korrektur und Sprecher-Zuordnung braucht ein Sprachmodell.
@@ -678,6 +706,15 @@ export function SettingsPage() {
                 {s.ytdlp.geprueft && ` · zuletzt geprüft am ${tag(s.ytdlp.geprueft)}`}</>
               : s.ytdlp.unlesbar
                 ? 'Fassung nicht lesbar — die automatische Aktualisierung ist ausgesetzt.'
+              /* Der DRITTE `version: null`-Zustand (#262): eine Aktualisierung wurde
+                 abgewürgt, die Reparatur steht beim nächsten Start an. Ohne diese Zeile
+                 stünde „Nicht installiert" — und genau das schickt den Nutzer zu einer
+                 Neuinstallation, obwohl ein Neustart genügt; die README leitet ihn bei einem
+                 fehlgeschlagenen Import ausdrücklich auf diese Seite. Nach `unlesbar`, weil
+                 das die Ursache selbst nennt (kaputte Metadaten statt abgewürgtes pip). */
+              : s.ytdlp.unterbrochen
+                ? 'Eine Aktualisierung wurde abgebrochen — Transkribor setzt sie beim '
+                  + 'nächsten Start von selbst fort.'
                 : 'Nicht installiert — der Import von Video-URLs steht damit nicht zur Verfügung.'}
           </span>
         </div>

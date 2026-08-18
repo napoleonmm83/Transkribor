@@ -35,7 +35,7 @@ const BASIS: Settings = {
   kaputt: '',
   projekte_pfad: 'C:\\Users\\test\\AppData\\Roaming\\Transkribor\\projekte',
   ytdlp_auto: '1',
-  ytdlp: { version: '2026.8.12', unlesbar: false, geprueft: '2026-08-13', auto: true, env: false, laeuft: false, ergebnis: '', ungeschuetzt: false, ejs_unlesbar: false },
+  ytdlp: { version: '2026.8.12', unlesbar: false, geprueft: '2026-08-13', auto: true, env: false, laeuft: false, ergebnis: '', ungeschuetzt: false, unterbrochen: false, ejs_unlesbar: false },
   providers: [
     { id: 'claude-cli', label: 'Claude Code Abo (kein Key)', needs_key: false, cli: true, base: '', default_model: 'opus', keys_url: '', hint: 'Nutzt das Abo.' },
     { id: 'codex-cli', label: 'ChatGPT-Abo (Codex CLI, kein Key)', needs_key: false, cli: true, base: '', default_model: '', keys_url: '', hint: 'Nutzt das ChatGPT-Abo.' },
@@ -317,7 +317,7 @@ describe('SettingsPage', () => {
   })
 
   it('sagt es, wenn yt-dlp gar nicht installiert ist', async () => {
-    zeige({ ytdlp: { version: null, unlesbar: false, geprueft: '', auto: true, env: false, laeuft: false, ergebnis: '', ungeschuetzt: false, ejs_unlesbar: false } })
+    zeige({ ytdlp: { version: null, unlesbar: false, geprueft: '', auto: true, env: false, laeuft: false, ergebnis: '', ungeschuetzt: false, unterbrochen: false, ejs_unlesbar: false } })
     expect(await screen.findByText(/Nicht installiert/)).toBeInTheDocument()
   })
 
@@ -327,8 +327,21 @@ describe('SettingsPage', () => {
     // master genauso gruen gewesen. Er sichert den Nachbarfall aus #174 (Reload mitten in einem
     // fremden Lauf) und dass es das Gate ueberhaupt gibt — nimmt man es ganz weg, wird er rot.
     // Den Fix selbst sichert der Test „sagt waehrend des EIGENEN Laufs …" weiter unten ab.
-    zeige({ ytdlp: { version: null, unlesbar: false, geprueft: '', auto: true, env: false, laeuft: true, ergebnis: '', ungeschuetzt: false, ejs_unlesbar: false } })
+    zeige({ ytdlp: { version: null, unlesbar: false, geprueft: '', auto: true, env: false, laeuft: true, ergebnis: '', ungeschuetzt: false, unterbrochen: false, ejs_unlesbar: false } })
     expect(await screen.findByText(/Eine Aktualisierung läuft gerade/)).toBeInTheDocument()
+    expect(screen.queryByText(/Nicht installiert/)).not.toBeInTheDocument()
+  })
+
+  it('sagt es, wenn eine Reparatur beim nächsten Start ansteht (#262)', async () => {
+    /* Der DRITTE `version: null`-Zustand. Ohne die Zeile stand „Nicht installiert — der
+       Import steht nicht zur Verfügung" über einer Installation, die beim nächsten Start
+       von selbst weitermacht — die teuerste der drei Falschmeldungen, denn sie schickt den
+       Nutzer zu einer Neuinstallation. Die README leitet ihn bei einem fehlgeschlagenen
+       Import ausdrücklich auf diese Seite. Die Negativkontrolle steht zwei Tests weiter
+       oben („sagt es, wenn yt-dlp gar nicht installiert ist" — gleicher Zustand, nur ohne
+       `unterbrochen`); ohne sie wäre diese Zusicherung nicht von der Reihenfolge getrennt. */
+    zeige({ ytdlp: { version: null, unlesbar: false, geprueft: '', auto: true, env: false, laeuft: false, ergebnis: '', ungeschuetzt: false, unterbrochen: true, ejs_unlesbar: false } })
+    expect(await screen.findByText(/beim nächsten Start von selbst fort/)).toBeInTheDocument()
     expect(screen.queryByText(/Nicht installiert/)).not.toBeInTheDocument()
   })
 
@@ -336,7 +349,7 @@ describe('SettingsPage', () => {
     // Beide Zustände liefern `version: null`. Vor #189 stand hier "steht damit nicht zur
     // Verfügung" — das Gegenteil dessen, was der Nutzer tun kann: der Import läuft, nur die
     // Selbstaktualisierung ist ausgesetzt. Die Anzeige darf nicht lügen.
-    zeige({ ytdlp: { version: null, unlesbar: true, geprueft: '', auto: true, env: false, laeuft: false, ergebnis: '', ungeschuetzt: false, ejs_unlesbar: false } })
+    zeige({ ytdlp: { version: null, unlesbar: true, geprueft: '', auto: true, env: false, laeuft: false, ergebnis: '', ungeschuetzt: false, unterbrochen: false, ejs_unlesbar: false } })
     expect(await screen.findByText(/Fassung nicht lesbar/)).toBeInTheDocument()
     expect(screen.queryByText(/Nicht installiert/)).not.toBeInTheDocument()
   })
@@ -371,6 +384,36 @@ describe('SettingsPage', () => {
     expect(screen.queryByText(/lassen sich nicht prüfen/)).not.toBeInTheDocument()
   })
 
+  it('zeigt den Speichervorgang an — und zaehlt paralleles Speichern mit (#249)', async () => {
+    /* Seit #239 zahlt auch der PUT `llm.available()` (Subprozess, Decke 30 s —
+       `auth.STATUS_TIMEOUT`). Eine klemmende CLI hielt das Speichern bis zu 30 s auf, und
+       das Formular sah aus wie eines, das nichts tut. Der Zustand haengt am KOPF, nicht am
+       Ausloeser: die Seite speichert bei onBlur aus einem Dutzend Feldern, es gibt keinen
+       einen Knopf dafuer.
+
+       Mit verzögerter Antwort statt sofortiger Attrappe — sonst waere der Zustand zwischen
+       Klick und Rückkehr nie sichtbar und der Test prüfte ihn nur an seinem Abklingen.
+       Und mit ZWEI gleichzeitig offenen PUTs: ein Bool wuerde den ersten Rückkehrer als
+       „fertig" melden, während der zweite noch läuft. */
+    const offen: Array<(v: Settings) => void> = []
+    vi.mocked(api.saveSettings).mockImplementation(() =>
+      new Promise<Settings & { ungeschuetzt: boolean }>(aufloesen => offen.push(aufloesen)))
+    zeige()
+    const haken = await screen.findByRole('checkbox')
+    fireEvent.click(haken)                                  // erster PUT geht auf Reisen
+    expect(await screen.findByRole('status')).toHaveTextContent('Speichert …')
+    fireEvent.click(haken)                                  // zweiter, bevor der erste zurück ist
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('(2)'))
+    offen[0]({ ...GESPEICHERT, ytdlp_auto: '0' })            // erster kehrt zurück …
+    // … wieder EINER unterwegs: OHNE Zahl — der Zaehler steht im Text nur ab zweien,
+    // sonst klänge „Speichert (1)" wie ein Fehlerzähler. Die Zahl verschwindet MIT dem
+    // Parallelfall, nicht mit dem ersten Rückkehrer: genau das trennt den Zähler vom Bool.
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Speichert …'))
+    expect(screen.getByRole('status')).not.toHaveTextContent('(')
+    offen[1]({ ...GESPEICHERT, ytdlp_auto: '1' })            // … und erst der zweite räumt ab
+    await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument())
+  })
+
   it('speichert den Haken als "0"/"1"', async () => {
     vi.mocked(api.saveSettings).mockResolvedValue({ ...GESPEICHERT, ytdlp_auto: '0' })
     zeige()
@@ -399,7 +442,7 @@ describe('SettingsPage', () => {
   it('warnt, wenn die Umgebungsvariable den Haken überstimmt', async () => {
     // Ein Haken, der nichts tut, ist schlimmer als keiner. Der WIRKSAME Wert kommt aus
     // `ytdlp.auto`, der gespeicherte aus `ytdlp_auto` — nur die Differenz ist die Warnung.
-    zeige({ ytdlp_auto: '1', ytdlp: { version: '2026.8.12', unlesbar: false, geprueft: '', auto: false, env: true, laeuft: false, ergebnis: '', ungeschuetzt: false, ejs_unlesbar: false } })
+    zeige({ ytdlp_auto: '1', ytdlp: { version: '2026.8.12', unlesbar: false, geprueft: '', auto: false, env: true, laeuft: false, ergebnis: '', ungeschuetzt: false, unterbrochen: false, ejs_unlesbar: false } })
     expect(await screen.findByText(/wirkungslos/)).toBeInTheDocument()
   })
 
@@ -426,7 +469,7 @@ describe('SettingsPage', () => {
   })
 
   it('meldet einen fehlgeschlagenen Update-Versuch, statt ihn zu verschlucken', async () => {
-    vi.mocked(api.updateYtdlp).mockResolvedValue({ gestartet: true, version: '2026.7.4', unlesbar: false, geprueft: '2026-08-13', auto: true, env: false, laeuft: false, ergebnis: 'fehler', ungeschuetzt: false, ejs_unlesbar: false })
+    vi.mocked(api.updateYtdlp).mockResolvedValue({ gestartet: true, version: '2026.7.4', unlesbar: false, geprueft: '2026-08-13', auto: true, env: false, laeuft: false, ergebnis: 'fehler', ungeschuetzt: false, unterbrochen: false, ejs_unlesbar: false })
     zeige()
     fireEvent.click(await screen.findByRole('button', { name: /Jetzt aktualisieren/i }))
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/fehlgeschlagen/)))
@@ -437,7 +480,7 @@ describe('SettingsPage', () => {
     // praeparierte dist-info endet mit Exit 2 und UnicodeDecodeError). Wer gerade "Fassung
     // nicht lesbar" gelesen und darauf geklickt hat, bekaeme sonst "bist du online?" —
     // dieselbe Fehldiagnose, gegen die #189 gebaut ist, drei Zeilen weiter oben.
-    vi.mocked(api.updateYtdlp).mockResolvedValue({ gestartet: true, version: null, unlesbar: true, geprueft: '', auto: true, env: false, laeuft: false, ergebnis: 'fehler', ungeschuetzt: false, ejs_unlesbar: false })
+    vi.mocked(api.updateYtdlp).mockResolvedValue({ gestartet: true, version: null, unlesbar: true, geprueft: '', auto: true, env: false, laeuft: false, ergebnis: 'fehler', ungeschuetzt: false, unterbrochen: false, ejs_unlesbar: false })
     zeige()
     fireEvent.click(await screen.findByRole('button', { name: /Jetzt aktualisieren/i }))
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/Metadaten/)))
@@ -454,8 +497,8 @@ describe('SettingsPage', () => {
     // Zwischen-`const` weitet das Literal sonst zu `string` (CodeRabbit-Bot).
     const fertig = { gestartet: true, version: '2026.8.12', unlesbar: false, geprueft: '',
                      auto: true, env: false, laeuft: false, ergebnis: 'ok' as const,
-                     ejs_unlesbar: false }
-    vi.mocked(api.updateYtdlp).mockResolvedValue({ ...fertig, ungeschuetzt: false })
+                     ungeschuetzt: false, unterbrochen: false, ejs_unlesbar: false }
+    vi.mocked(api.updateYtdlp).mockResolvedValue(fertig)
     const { unmount } = zeige()
     fireEvent.click(await screen.findByRole('button', { name: /Jetzt aktualisieren/i }))
     await waitFor(() => expect(toast.success).toHaveBeenCalled())
@@ -484,7 +527,7 @@ describe('SettingsPage', () => {
     vi.mocked(api.updateYtdlp).mockResolvedValue({
       gestartet: true, version: '2025.9.5', unlesbar: false, geprueft: '', auto: true,
       env: false, laeuft: false, ergebnis: 'uebersprungen', ungeschuetzt: false,
-      ejs_unlesbar: false })
+      unterbrochen: false, ejs_unlesbar: false })
     const { unmount } = zeige()
     fireEvent.click(await screen.findByRole('button', { name: /Jetzt aktualisieren/i }))
     await waitFor(() => expect(toast.info).toHaveBeenCalledWith(
@@ -502,7 +545,7 @@ describe('SettingsPage', () => {
     vi.mocked(api.updateYtdlp).mockResolvedValue({
       gestartet: true, version: '2025.9.5', unlesbar: false, geprueft: '', auto: true,
       env: false, laeuft: false, ergebnis: 'uebersprungen', ungeschuetzt: true,
-      ejs_unlesbar: false })
+      unterbrochen: false, ejs_unlesbar: false })
     zeige()
     fireEvent.click(await screen.findByRole('button', { name: /Jetzt aktualisieren/i }))
     await waitFor(() => expect(toast.info).toHaveBeenCalledTimes(2))
@@ -518,7 +561,7 @@ describe('SettingsPage', () => {
     // vor dem Installieren und scheitert an derselben Datei. Es liegt also nicht am Netz.
     vi.mocked(api.updateYtdlp).mockResolvedValue({
       gestartet: true, version: '2026.8.12', unlesbar: false, geprueft: '', auto: true,
-      env: false, laeuft: false, ergebnis: 'fehler', ungeschuetzt: false, ejs_unlesbar: true,
+      env: false, laeuft: false, ergebnis: 'fehler', ungeschuetzt: false, unterbrochen: false, ejs_unlesbar: true,
     })
     zeige()
     fireEvent.click(await screen.findByRole('button', { name: /Jetzt aktualisieren/i }))
@@ -535,7 +578,7 @@ describe('SettingsPage', () => {
     // zuzusehen" versprochen hat.
     vi.mocked(api.updateYtdlp).mockResolvedValue({
       gestartet: true, version: '2026.8.12', unlesbar: false, geprueft: '', auto: true,
-      env: false, laeuft: true, ergebnis: '', ungeschuetzt: false, ejs_unlesbar: false,
+      env: false, laeuft: true, ergebnis: '', ungeschuetzt: false, unterbrochen: false, ejs_unlesbar: false,
     })
     const { unmount } = zeige({ ytdlp: { ...BASIS.ytdlp, laeuft: true } })
     fireEvent.click(await screen.findByRole('button', { name: /Jetzt aktualisieren/i }))
@@ -550,7 +593,7 @@ describe('SettingsPage', () => {
     vi.mocked(api.listModels).mockResolvedValue([])
     vi.mocked(api.updateYtdlp).mockResolvedValue({
       gestartet: true, version: '2026.8.12', unlesbar: false, geprueft: '', auto: true,
-      env: false, laeuft: true, ergebnis: '', ungeschuetzt: false, ejs_unlesbar: false,
+      env: false, laeuft: true, ergebnis: '', ungeschuetzt: false, unterbrochen: false, ejs_unlesbar: false,
     })
     zeige()
     fireEvent.click(await screen.findByRole('button', { name: /Jetzt aktualisieren/i }))
@@ -566,7 +609,7 @@ describe('SettingsPage', () => {
     // Fehlschlag, gegen den `ergebnis` gebaut ist.
     vi.mocked(api.updateYtdlp).mockResolvedValue({
       gestartet: true, version: '2026.7.4', unlesbar: false, geprueft: '', auto: true,
-      env: false, laeuft: true, ergebnis: '', ungeschuetzt: false, ejs_unlesbar: false,
+      env: false, laeuft: true, ergebnis: '', ungeschuetzt: false, unterbrochen: false, ejs_unlesbar: false,
     })
     zeige()
     const knopf = await screen.findByRole('button', { name: /Jetzt aktualisieren/i })
@@ -609,7 +652,7 @@ describe('SettingsPage', () => {
     // Nutzer hin — er hat eben geklickt.
     vi.mocked(api.updateYtdlp).mockResolvedValue({
       gestartet: true, version: '2026.7.4', unlesbar: false, geprueft: '', auto: true,
-      env: false, laeuft: true, ergebnis: '', ungeschuetzt: false, ejs_unlesbar: false,
+      env: false, laeuft: true, ergebnis: '', ungeschuetzt: false, unterbrochen: false, ejs_unlesbar: false,
     })
     zeige()
     const knopf = await screen.findByRole('button', { name: /Jetzt aktualisieren/i })
@@ -637,7 +680,7 @@ describe('SettingsPage', () => {
     // Gefunden vom Reviewer-Subagenten an PR #223 (I3).
     vi.mocked(api.updateYtdlp).mockResolvedValue({
       gestartet: true, version: '2026.7.4', unlesbar: false, geprueft: '', auto: true,
-      env: false, laeuft: true, ergebnis: '', ungeschuetzt: false, ejs_unlesbar: false,
+      env: false, laeuft: true, ergebnis: '', ungeschuetzt: false, unterbrochen: false, ejs_unlesbar: false,
     })
     const r = zeige()
     const knopf = await screen.findByRole('button', { name: /Jetzt aktualisieren/i })
@@ -669,7 +712,7 @@ describe('SettingsPage', () => {
     // anderen grün: ein Wächter ohne roten Test ist Dekoration.
     vi.mocked(api.updateYtdlp).mockResolvedValue({
       gestartet: true, version: '2026.7.4', unlesbar: false, geprueft: '', auto: true,
-      env: false, laeuft: true, ergebnis: '', ungeschuetzt: false, ejs_unlesbar: false,
+      env: false, laeuft: true, ergebnis: '', ungeschuetzt: false, unterbrochen: false, ejs_unlesbar: false,
     })
     zeige()
     const knopf = await screen.findByRole('button', { name: /Jetzt aktualisieren/i })
@@ -699,7 +742,7 @@ describe('SettingsPage', () => {
     // Seit #236 sind das nicht zwei Toasts, sondern bis zu vier für EINEN Vorgang.
     vi.mocked(api.updateYtdlp).mockResolvedValue({
       gestartet: true, version: '2026.7.4', unlesbar: false, geprueft: '', auto: true,
-      env: false, laeuft: true, ergebnis: '', ungeschuetzt: false, ejs_unlesbar: false,
+      env: false, laeuft: true, ergebnis: '', ungeschuetzt: false, unterbrochen: false, ejs_unlesbar: false,
     })
     zeige()
     const knopf = await screen.findByRole('button', { name: /Jetzt aktualisieren/i })
@@ -735,7 +778,7 @@ describe('SettingsPage', () => {
     // würde ein Bool sie als dessen Ausgang durchwinken — mit den Zahlen des vorigen.
     vi.mocked(api.updateYtdlp).mockResolvedValue({
       gestartet: true, version: '2026.7.4', unlesbar: false, geprueft: '', auto: true,
-      env: false, laeuft: true, ergebnis: '', ungeschuetzt: false, ejs_unlesbar: false,
+      env: false, laeuft: true, ergebnis: '', ungeschuetzt: false, unterbrochen: false, ejs_unlesbar: false,
     })
     zeige()
     const knopf = await screen.findByRole('button', { name: /Jetzt aktualisieren/i })
@@ -797,7 +840,7 @@ describe('SettingsPage', () => {
       // Lauf 2 — der Knopf ist wieder frei, weil der Fehlschlag `ytLaeuft` abgeschaltet hat.
       vi.mocked(api.updateYtdlp).mockResolvedValue({
         gestartet: true, version: '2026.7.4', unlesbar: false, geprueft: '', auto: true,
-        env: false, laeuft: true, ergebnis: '', ungeschuetzt: false, ejs_unlesbar: false,
+        env: false, laeuft: true, ergebnis: '', ungeschuetzt: false, unterbrochen: false, ejs_unlesbar: false,
       })
       await act(async () => { fireEvent.click(knopf) })
       // Runde A aus Lauf 1 trifft jetzt ein.
@@ -819,7 +862,7 @@ describe('SettingsPage', () => {
     // genau die Lüge, gegen die #225 gebaut wurde, nur aus der anderen Richtung.
     vi.mocked(api.updateYtdlp).mockResolvedValue({
       gestartet: true, version: '2026.7.4', unlesbar: false, geprueft: '', auto: true,
-      env: false, laeuft: true, ergebnis: '', ungeschuetzt: false, ejs_unlesbar: false,
+      env: false, laeuft: true, ergebnis: '', ungeschuetzt: false, unterbrochen: false, ejs_unlesbar: false,
     })
     zeige()
     const knopf = await screen.findByRole('button', { name: /Jetzt aktualisieren/i })
@@ -853,7 +896,7 @@ describe('SettingsPage', () => {
     // gegen einen Lärmfehler ein Ausfall der Rückmeldung überhaupt.
     vi.mocked(api.updateYtdlp).mockResolvedValue({
       gestartet: true, version: '2026.8.12', unlesbar: false, geprueft: '', auto: true,
-      env: false, laeuft: false, ergebnis: 'ok', ungeschuetzt: false, ejs_unlesbar: false,
+      env: false, laeuft: false, ergebnis: 'ok', ungeschuetzt: false, unterbrochen: false, ejs_unlesbar: false,
     })
     zeige()
     const knopf = await screen.findByRole('button', { name: /Jetzt aktualisieren/i })
