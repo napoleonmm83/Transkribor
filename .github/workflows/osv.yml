@@ -31,7 +31,8 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-# security-events: write bewusst NUR am Vollscan-Job (SARIF-Upload), nicht global.
+# security-events: write nur an den zwei Scan-Jobs (nie workflow-global): osv-voll
+# loest es ein (SARIF-Upload), osv-pr muss es deklarieren (Deckelungsregel, s. dort).
 permissions:
   contents: read
   actions: read
@@ -64,11 +65,12 @@ jobs:
     permissions:
       contents: read
       actions: read
-      # BEWUSST KEIN security-events: write hier (Aussenstimme-Fund, bestätigt an der
-      # v2.5.1-Quelle): Fork-PRs haben kein Recht dafür — der Check würde an Berechtigungen
-      # rot statt an Funden. upload-sarif: false unten macht das Recht entbehrlich; das
-      # SARIF-Artefakt bleibt trotzdem im Actions-Lauf des PRs (Upload-Step braucht kein
-      # Sonderrecht). Der Security-Tab wird vom Vollscan bedient.
+      security-events: write
+      # security-events: write ist NOETIG, obwohl upload-sarif false ist: der aufgerufene
+      # Workflow deklariert das Recht intern, und der Aufrufer darf nicht WENIGER gewaehren
+      # (Deckelungsregel; ohne die Zeile startup_failure, per Bisektion gemessen 2026-08-18).
+      # Der Fork-Schutz steckt im deaktivierten Upload — das Recht wird nie eingeloest,
+      # der SARIF-Upload-Step laeuft bei upload-sarif: false schlicht nicht.
     uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable-pr.yml@v2.5.1
     with:
       upload-sarif: false
@@ -78,7 +80,7 @@ jobs:
       scan-args: |-
         --lockfile=package-lock.json:./package-lock.json
         --lockfile=package-lock.json:./webtool/frontend/package-lock.json
-
+  
   osv-voll:
     if: github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     permissions:
@@ -89,8 +91,11 @@ jobs:
     uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@v2.5.1
     with:
       download-artifact: osv-python-freeze
+      # Dasselbe Prinzip wie im PR-Job: nur die drei Lockfiles explizit, kein
+      # --recursive ./ (das nähme requirements.txt als Manifest mit).
       scan-args: |-
         --lockfile=package-lock.json:./package-lock.json
         --lockfile=package-lock.json:./webtool/frontend/package-lock.json
         --lockfile=requirements.txt:./requirements-resolved.txt
       fail-on-vuln: false
+  # 
