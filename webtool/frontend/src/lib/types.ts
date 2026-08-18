@@ -152,7 +152,11 @@ export type Settings = {
  *  (#189). Ohne das Feld behauptete die Seite das Gegenteil dessen, was der Nutzer tun kann. */
 /** `laeuft`/`ergebnis` gehören zum Knopf „Jetzt aktualisieren" (#174): der POST kehrt sofort
  *  zurück, pip läuft im Hintergrund weiter. `ergebnis` ist `''`, solange nichts gelaufen ist
- *  oder gerade etwas läuft — sonst `'ok'` bzw. `'fehler'`. Beide sind **Pflichtfelder**: der
+ *  oder gerade etwas läuft — sonst `'ok'`, `'fehler'` oder `'uebersprungen'`. Der dritte Wert
+ *  kam mit #254: ein Lauf, der unter der pip-Sperre feststellte, dass ein anderer schneller
+ *  war, hat WEDER aktualisiert NOCH etwas versucht — „ok" behauptete eine neue Fassung,
+ *  „fehler" einen Fehlschlag, und beides ist über ein pip, das nie lief, gelogen. Beide sind
+ *  **Pflichtfelder**: der
  *  Server schickt sie immer, und optional wären sie eine Einladung, den Ausgang eines
  *  Fehlschlags zu vergessen — also genau der stille Ausfall, den der Umbau vermeiden soll. */
 /** `laeuft` deckt seit #243 auch einen Lauf im fetch-Subprozess (der Server fragt die

@@ -186,7 +186,9 @@ selbst auf und lädt dann gleich weiter. Klappt es danach immer noch nicht, hilf
 **„Jetzt aktualisieren“** unter *Einstellungen › Video-Import* — dort steht auch, welche
 Fassung gerade läuft (während einer Aktualisierung erst wieder, wenn sie fertig ist: solange
 sie läuft, wäre jede Angabe geraten — das gilt auch, wenn ein Import im Hintergrund gerade
-selbst auffrischt). Bleibt es dabei, ist das Video vermutlich nicht öffentlich abrufbar
+selbst auffrischt). Läuft schon eine Auffrischung, wartet Transkribor auf sie, statt eine
+zweite danebenzustellen; war sie schneller, sagt es dir das als Hinweis — und behauptet
+nicht, es habe selbst etwas erneuert. Bleibt es dabei, ist das Video vermutlich nicht öffentlich abrufbar
 (private Videos und solche, die eine Anmeldung verlangen, unterstützt Transkribor nicht).
 
 Zwei Meldungen können dabei auftauchen. Steht unter dem Knopf, dass sich die **Hilfsskripte für

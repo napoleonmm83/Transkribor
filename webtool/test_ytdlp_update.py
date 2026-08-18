@@ -53,6 +53,18 @@ def isoliert(monkeypatch, tmp_path):
     return tmp_path
 
 
+def _warte_bis(bedingung, frist=5.0):
+    """Der Faden setzt `_lauf` in seinem `finally`, also NACH dem Event, an dem der Test
+    haengt. Ohne dieses Warten liest der Test einen Zwischenstand — eine Rennbedingung im
+    Test selbst, und die faellt sporadisch aus."""
+    ende = time.time() + frist
+    while time.time() < ende:
+        if bedingung():
+            return True
+        time.sleep(0.01)
+    return False
+
+
 def _pip(returncode=0, ausgabe="Successfully installed yt-dlp-2026.8.12"):
     """Spion statt echtem pip. Liefert (Liste der Aufrufe, Ersatzfunktion)."""
     gerufen = []
@@ -1772,6 +1784,9 @@ def test_die_pip_sperre_haengt_an_der_VENV_nicht_nur_am_nutzer(monkeypatch):
     venvs muessen verschiedene Pfade ergeben, DIESELBE venv denselben (die Kennung ist
     stabil, nicht pro Prozess gesalzen — `hash()` waere es).
     """
+    # `yu.sys` IST das echte `sys`-Modul, `prefix` also prozess-global. Hier folgenlos
+    # (monkeypatch dreht es zurueck, und nichts liest es dazwischen), aber wer den Test
+    # erweitert, sollte es wissen: `sysconfig`/`site` lesen denselben Wert. (Reviewbefund.)
     monkeypatch.setattr(yu.sys, "prefix", r"C:\App\resources\py")
     app = yu._lockziel()
     monkeypatch.setattr(yu.sys, "prefix", r"E:\Git\Transkribor\.venv")
@@ -1779,6 +1794,46 @@ def test_die_pip_sperre_haengt_an_der_VENV_nicht_nur_am_nutzer(monkeypatch):
     assert app != checkout
     assert yu._lockziel() == checkout                     # stabil, nicht zufaellig
     assert os.path.dirname(app) == os.path.dirname(settings.path())
+
+
+def test_zwei_schreibweisen_DERSELBEN_venv_ergeben_EINE_kennung(monkeypatch, tmp_path):
+    """`realpath`, nicht `abspath` — und seit #254 ist das kein Feinschliff.
+
+    Solange die Kennung nur den Merker trug, kostete eine zweite Schreibweise derselben venv
+    eine verpasste Reparatur. Seit sie die SPERRE traegt, kostet sie zwei Sperren fuer
+    dasselbe `site-packages`, also zwei gleichzeitige `pip install` hinein — genau der
+    Schaden, gegen den es die Sperre gibt. Vor #254 war der Fall gedeckt: EINE Sperre je
+    Nutzer deckte jede Schreibweise mit ab. (Reviewbefund; die Windows-Faelle Junction und
+    `subst`-Laufwerk sind von Hand gemessen, hier steht der plattformneutrale Zwilling.)
+
+    Der Test legt eine echte Verknuepfung an. Wo das nicht geht (Windows ohne
+    Entwicklermodus), wird er uebersprungen statt still gruen zu sein.
+    """
+    echt = tmp_path / "echt"
+    echt.mkdir()
+    link = tmp_path / "verknuepft"
+    try:
+        os.symlink(echt, link, target_is_directory=True)
+    except (OSError, NotImplementedError, AttributeError) as e:
+        if os.name != "nt":
+            pytest.skip(f"keine Symlinks: {e}")
+        # Windows: eine Junction braucht keine erhoehten Rechte, ein Symlink schon.
+        # `_ECHTES_RUN`, nicht `subprocess.run`: die Fixture verdrahtet letzteres auf
+        # `pytest.fail("kein echtes pip im Test")`, und `yu.subprocess` IST dieses Modul.
+        p = _ECHTES_RUN(["cmd", "/c", "mklink", "/J", str(link), str(echt)],
+                        capture_output=True)
+        if p.returncode != 0:
+            pytest.skip("weder Symlink noch Junction moeglich")
+
+    monkeypatch.setattr(yu.sys, "prefix", str(echt))
+    direkt = yu._venv_kennung()
+    monkeypatch.setattr(yu.sys, "prefix", str(link))
+    ueber_link = yu._venv_kennung()
+    assert direkt == ueber_link, "zwei Kennungen fuer dieselbe venv = zwei Sperren"
+    # Gegenprobe: eine WIRKLICH andere venv muss weiterhin anders heissen — sonst waere die
+    # Zusicherung mit einer Konstanten zu erfuellen.
+    monkeypatch.setattr(yu.sys, "prefix", str(tmp_path / "andere"))
+    assert yu._venv_kennung() != direkt
 
 
 def test_der_abbruch_merker_traegt_die_kennung_GENAU_EINMAL():
@@ -1815,9 +1870,53 @@ def test_aktualisiere_prueft_die_faelligkeit_ERNEUT_unter_der_sperre(monkeypatch
     monkeypatch.setattr(yu, "faellig", faellig)
     gerufen, run = _pip()
     monkeypatch.setattr(yu.subprocess, "run", run)
-    assert yu.aktualisiere(nur_wenn_faellig=True) == (True, True)
+    # `None`, nicht `True`: „nicht mehr faellig" heisst NICHT „der andere hatte Erfolg" —
+    # `_merken()` laeuft auch nach einem Fehlschlag. Was `True` daraus macht, steht im Test
+    # darunter; hier wird der Wert selbst gepinnt.
+    assert yu.aktualisiere(nur_wenn_faellig=True) == (None, True)
     assert gerufen == []                   # kein pip
     assert gesehen == [True]               # … und gefragt wurde unter der Sperre
+
+
+def test_ein_uebersprungener_lauf_meldet_weder_erfolg_noch_fehler(monkeypatch):
+    """Der Reviewbefund zu #254 Weg 3, am echten Pfad gemessen: „nicht mehr faellig" belegt
+    NICHT, dass der andere Lauf geglueckt ist — `_merken()` laeuft am Ende von
+    `aktualisiere()` unbedingt, auch nach einem Fehlschlag (offline). Nach JEDEM
+    abgeschlossenen Fremdlauf desselben Tages steht `geprueft` auf heute.
+
+    Mit `ergebnis="ok"` zeigte die Einstellungsseite dann „yt-dlp ist jetzt auf <alte
+    Fassung>" — fuer einen Lauf, dessen Vorgaenger gescheitert ist und der selbst nie ein pip
+    angefasst hat. Erreichbar ueber den Knopf: `starte_hintergrund` meldet `gestartet:false`,
+    solange der Startlauf haengt, und das Frontend haengt seinen Poll an DIESEN Lauf.
+
+    **`ungeschuetzt` bleibt False, obwohl die Sperre nicht hielt** — das ist die zweite
+    Haelfte: die Warnung sagt „die Installation kann unvollstaendig sein", und ueber ein pip,
+    das nie lief, ist das eine Warnung ohne Gegenstand.
+    """
+    fertig = threading.Event()
+
+    def uebersprungen(nur_wenn_faellig=False):
+        fertig.set()
+        return None, False                 # nichts gelaufen, und die Sperre hielt NICHT
+
+    monkeypatch.setattr(yu, "aktualisiere", uebersprungen)
+    assert yu.starte_hintergrund(nur_wenn_faellig=True) is True
+    assert fertig.wait(5)
+    assert _warte_bis(lambda: yu.hintergrund_zustand()[0] is False)
+    assert yu.hintergrund_zustand() == (False, "uebersprungen", False)
+
+
+def test_ein_uebersprungener_lauf_ist_fuer_die_selbstheilung_ein_NEIN(monkeypatch):
+    """`fetch.py` fragt „hat es sich gelohnt, es noch einmal zu versuchen". Ein Lauf, der
+    nichts getan hat, gibt darauf keine Auskunft — also Nein. Ohne das `is True` waere `None`
+    truthy-falsch genug, aber die Absicht staende nirgends; mit einem `bool()`-Dreher waere
+    ein uebersprungener Lauf ein Ja, und `fetch.py` liefe in denselben Download zurueck.
+    """
+    monkeypatch.setattr(yu, "aktualisiere", lambda **k: (None, True))
+    monkeypatch.setattr(yu, "faellig", lambda: True)
+    assert yu.automatisch() is False
+    monkeypatch.setattr(yu, "aktualisiere", lambda **k: (True, True))
+    assert yu.automatisch() is True         # Gegenprobe: ein echter Erfolg bleibt ein Ja
 
 
 def test_aktualisiere_OHNE_die_bedingung_laeuft_auch_wenn_nichts_faellig_ist(monkeypatch):

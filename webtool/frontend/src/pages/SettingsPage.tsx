@@ -218,6 +218,18 @@ function AnmeldungAbo({ status, neuPruefen }: { status: AuthStatus; neuPruefen: 
  *  online?" wäre dort dieselbe Fehldiagnose, gegen die #189 gebaut ist — `unlesbar`
  *  entscheidet das, nicht eine Vermutung. */
 function ytMelden(stand: YtdlpStand) {
+  // Dritter Ausgang seit #254 Weg 3: der Lauf hat unter der Sperre festgestellt, dass ein
+  // anderer schneller war, und gar nichts getan. **Kein Erfolg** — „nicht mehr fällig" heisst
+  // nicht „der andere hatte Erfolg": der Server merkt sich das Prüfdatum auch nach einem
+  // Fehlschlag. Hier stand vorher der Erfolgszweig, und der zeigte dann „yt-dlp ist jetzt auf
+  // <alte Fassung>", nachdem der Fremdlauf offline gescheitert war. Und **kein Fehler**: es
+  // ist keiner passiert. (Reviewbefund, am echten Pfad gemessen.)
+  if (stand.ergebnis === 'uebersprungen') {
+    toast.info(stand.version
+      ? `Ein anderer Lauf war schneller — yt-dlp steht auf ${stand.version}.`
+      : 'Ein anderer Lauf war schneller — hier wurde nichts geändert.')
+    return
+  }
   if (stand.ergebnis === 'ok') {
     toast.success(stand.version ? `yt-dlp ist jetzt auf ${stand.version}` : 'yt-dlp wurde aktualisiert')
   } else {
