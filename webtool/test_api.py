@@ -1944,6 +1944,66 @@ def test_correct_apply_nimmt_dieselbe_sperre(tmp_path, monkeypatch):
     assert gehalten == [True], f"Sperre waehrend des Schreibens: {gehalten}"
 
 
+def test_apply_prueft_handarbeit_ERNEUT_unter_der_sperre(tmp_path, monkeypatch):
+    """Der Spiegel des Fensters aus #160 — und der groessere von beiden.
+
+    `cmd_apply` prueft `human_edited` am Anfang; dazwischen liegen das Laden der Korrektur,
+    `apply_correction` ueber ALLE Segmente und `render_md` — auf einem langen Transkript
+    hunderte Millisekunden. Der Editor speichert 800 ms nach der letzten Tipppause: wer
+    waehrend eines Korrekturlaufs arbeitet, setzt `human_edited` genau in dieses Fenster.
+    Ohne die zweite Pruefung loescht der Schreibvorgang seine Handarbeit — und meldet dabei
+    Erfolg.
+
+    Eingeworfen wird an `apply_correction` — der teuersten Station ZWISCHEN erster Pruefung
+    und Sperre. `render_md` waere zu spaet: es wird erst als Argument des ZWEITEN
+    Schreibvorgangs ausgewertet, die `edit.json` ist dann laengst ueberschrieben. (Der erste
+    Anlauf dieses Tests hing genau dort und wurde deshalb rot — die richtige Art, es zu
+    merken.)"""
+    from webtool import correct as correct_mod
+    tdir = tmp_path / "P" / "transkripte"
+    tdir.mkdir(parents=True)
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    (tdir / "S1.json").write_text(json.dumps(
+        {"language": "de", "segments": [{"id": 0, "start": 0.0, "end": 1.0, "text": "roh",
+                                         "words": []}]}), encoding="utf-8")
+    (tdir / "S1.correction.json").write_text(json.dumps(
+        {"segments": [{"id": 0, "text": "von der Maschine", "speaker": "A"}]}), encoding="utf-8")
+    epath = tdir / "S1.edit.json"
+    handarbeit = json.dumps({"human_edited": True, "segments": [
+        {"id": 0, "start": 0.0, "end": 1.0, "text": "VON HAND", "speaker": "Ich"}]})
+
+    echt = correct_mod.apply_correction
+
+    def dazwischen(*a, **kw):
+        # Genau hier tippt der Nutzer und der Editor speichert — nach der ersten Pruefung,
+        # vor der Sperre.
+        epath.write_text(handarbeit, encoding="utf-8")
+        return echt(*a, **kw)
+
+    monkeypatch.setattr(correct_mod, "apply_correction", dazwischen)
+    assert correct_mod.cmd_apply("P", "S1") == "skipped"
+    assert epath.read_text(encoding="utf-8") == handarbeit, "Handarbeit wurde ueberschrieben"
+    assert not (tdir / "S1.md").exists(), "der Export haette die Handarbeit ueberschrieben"
+
+
+def test_apply_mit_force_schreibt_auch_unter_der_sperre(tmp_path, monkeypatch):
+    """Gegenprobe: die zweite Pruefung darf `--force` nicht aushebeln — sonst waere
+    „Neu korrigieren" im Menue tot, sobald jemand die Datei je angefasst hat."""
+    from webtool import correct as correct_mod
+    tdir = tmp_path / "P" / "transkripte"
+    tdir.mkdir(parents=True)
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    (tdir / "S1.json").write_text(json.dumps(
+        {"language": "de", "segments": [{"id": 0, "start": 0.0, "end": 1.0, "text": "roh",
+                                         "words": []}]}), encoding="utf-8")
+    (tdir / "S1.correction.json").write_text(json.dumps(
+        {"segments": [{"id": 0, "text": "von der Maschine", "speaker": "A"}]}), encoding="utf-8")
+    (tdir / "S1.edit.json").write_text(json.dumps({"human_edited": True, "segments": []}),
+                                       encoding="utf-8")
+    assert correct_mod.cmd_apply("P", "S1", force=True) == "written"
+    assert "von der Maschine" in (tdir / "S1.edit.json").read_text(encoding="utf-8")
+
+
 def test_veralteter_dateistand_wird_abgelehnt(client, tmp_path):
     """Der Kern von #160: der Editor speichert 800 ms nach dem letzten Tastendruck. Wird eine
     Korrektur fertig, waehrend der PUT schon unterwegs ist, landet er DANACH und ersetzt die
