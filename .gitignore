@@ -38,3 +38,9 @@ CLAUDE.md
 # Referenzsatz und Messlaeufe der Sprechertrennung: das sind Interviewinhalte.
 # Dieselbe Regel wie fuer projekte/ — bleibt lokal, wird nie committet.
 eval/
+
+# Artefakte von scripts/osv_freeze.py (#284): das aufgeloeste Abbild driftet (wird je
+# Lauf in der CI neu erzeugt) und die pip-Reports sind Wegwerfzeug vom Dry-Run.
+requirements-resolved.txt
+req-report.json
+torch-report.json
