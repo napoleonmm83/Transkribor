@@ -327,6 +327,24 @@ def cmd_apply(project: str, base: str, force: bool = False) -> str:
     # denselben Pfad, die `edit.json`. Der Abschnitt ist zwei Schreibvorgaenge lang und nimmt
     # keine weitere Sperre, `stale` bleibt also beim Standard (#207-Rechnung ohne Zuschlag).
     with sperre.datei(epath):
+        # ZWEITE Pruefung, unter der Sperre — und das ist der Spiegel des Fensters oben
+        # (CodeRabbit-CLI an PR #278). Die erste steht am Anfang der Funktion; dazwischen
+        # liegen das Laden der Korrektur, `apply_correction` ueber ALLE Segmente und
+        # `render_md` — auf einem langen Transkript hunderte Millisekunden. Der Editor
+        # speichert 800 ms nach der letzten Tipppause: wer waehrend eines Korrekturlaufs
+        # arbeitet, setzt `human_edited` genau in dieses Fenster, und der Schreibvorgang
+        # darunter loeschte seine Handarbeit — mit `apply: … -> edit.json` als Erfolgsmeldung.
+        #
+        # Die erste Pruefung bleibt als billiger Ausstieg stehen: sie erspart im Normalfall
+        # `apply_correction` und `render_md`, also genau die Arbeit, die das Fenster aufmacht.
+        #
+        # `_is_human_edited` statt der ausfuehrlichen Fassung oben: es traegt dieselbe
+        # Fehlerrichtung (nicht lesbar ⇒ gilt als handbearbeitet) und meldet den unlesbaren
+        # Fall selbst. Fehlende Datei ⇒ False, der Normalfall bleibt also still.
+        if not force and _is_human_edited(epath):
+            print(f"apply: SKIP {base} (waehrend des Laufs handbearbeitet; "
+                  f"--force zum Ueberschreiben)")
+            return "skipped"
         paths.atomic_write(epath, json.dumps(doc, ensure_ascii=False, indent=1))
         paths.atomic_write(os.path.join(tdir, base + ".md"), render_md(doc))
     print(f"apply: {base} -> edit.json + md ({len(doc['segments'])} Segmente)")
