@@ -630,7 +630,9 @@ def _lock_stale() -> float:
 
 
 def _venv_kennung() -> str:
-    """Eine kurze, stabile Kennung DIESER Umgebung.
+    # `r"""`: der Docstring nennt Windows-Pfade (`…\jj`, `y:\`), und `\j`/`\e` sind
+    # ungueltige Escape-Sequenzen — heute eine SyntaxWarning, kuenftig ein SyntaxError.
+    r"""Eine kurze, stabile Kennung DIESER Umgebung.
 
     Der Merker unten haengt an `settings.path()` — und das ist pro NUTZER, nicht pro venv:
     `settings.path()` kennt keinen Zweig fuer die gepackte App, und `electron/backend.js`

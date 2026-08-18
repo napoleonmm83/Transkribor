@@ -450,8 +450,11 @@ describe('SettingsPage', () => {
     // `pip install` können in dieselbe venv geschrieben haben" — der zweite Auslöser sitzt im
     // fetch-Subprozess. Der Erfolgs-Toast darf deshalb nicht ersetzt, sondern muss ergänzt
     // werden. Beide Richtungen, sonst wäre ein Daueralarm nicht zu sehen.
+    // `as const` auf dem Ergebniswert: `ergebnis` ist seit #254 eine String-Union, und ein
+    // Zwischen-`const` weitet das Literal sonst zu `string` (CodeRabbit-Bot).
     const fertig = { gestartet: true, version: '2026.8.12', unlesbar: false, geprueft: '',
-                     auto: true, env: false, laeuft: false, ergebnis: 'ok', ejs_unlesbar: false }
+                     auto: true, env: false, laeuft: false, ergebnis: 'ok' as const,
+                     ejs_unlesbar: false }
     vi.mocked(api.updateYtdlp).mockResolvedValue({ ...fertig, ungeschuetzt: false })
     const { unmount } = zeige()
     fireEvent.click(await screen.findByRole('button', { name: /Jetzt aktualisieren/i }))
@@ -482,12 +485,28 @@ describe('SettingsPage', () => {
       gestartet: true, version: '2025.9.5', unlesbar: false, geprueft: '', auto: true,
       env: false, laeuft: false, ergebnis: 'uebersprungen', ungeschuetzt: false,
       ejs_unlesbar: false })
-    zeige()
+    const { unmount } = zeige()
     fireEvent.click(await screen.findByRole('button', { name: /Jetzt aktualisieren/i }))
     await waitFor(() => expect(toast.info).toHaveBeenCalledWith(
       expect.stringContaining('war schneller')))
     expect(toast.success).not.toHaveBeenCalled()
     expect(toast.error).not.toHaveBeenCalled()
+    unmount()
+
+    // Und die Sperrwarnung bleibt AUS. Ohne diese zweite Ansicht deckt KEINE Mutation das
+    // `return` im neuen Zweig — die Attrappe oben setzt `ungeschuetzt: false`, der
+    // Warnblock steht dahinter, und ein entferntes `return` bliebe unsichtbar. Der Server
+    // erzeugt diesen Fall heute nicht (er setzt `ungeschuetzt` beim Ueberspringen selbst
+    // auf False); geprueft wird hier die Frontend-Haelfte derselben Zusage — eine Warnung
+    // ueber ein pip, das nie lief, hat keinen Gegenstand. (CodeRabbit-Bot.)
+    vi.mocked(api.updateYtdlp).mockResolvedValue({
+      gestartet: true, version: '2025.9.5', unlesbar: false, geprueft: '', auto: true,
+      env: false, laeuft: false, ergebnis: 'uebersprungen', ungeschuetzt: true,
+      ejs_unlesbar: false })
+    zeige()
+    fireEvent.click(await screen.findByRole('button', { name: /Jetzt aktualisieren/i }))
+    await waitFor(() => expect(toast.info).toHaveBeenCalledTimes(2))
+    expect(toast.warning).not.toHaveBeenCalled()
   })
 
   it('rät bei kaputten ejs-Paketdaten nicht nach dem Netz', async () => {
@@ -699,7 +718,7 @@ describe('SettingsPage', () => {
       expect(offen).toHaveLength(2)
       const fertig = {
         ...BASIS,
-        ytdlp: { ...BASIS.ytdlp, version: '2026.8.12', laeuft: false, ergebnis: 'ok' },
+        ytdlp: { ...BASIS.ytdlp, version: '2026.8.12', laeuft: false, ergebnis: 'ok' as const },
       }
       await act(async () => { offen.forEach(aufloesen => aufloesen(fertig)) })
     } finally {
@@ -722,7 +741,7 @@ describe('SettingsPage', () => {
     const knopf = await screen.findByRole('button', { name: /Jetzt aktualisieren/i })
     const offen: Array<(s: Settings) => void> = []
     vi.mocked(api.getSettings).mockImplementation(() => new Promise(res => { offen.push(res) }))
-    const fertig = (v: string) => ({
+    const fertig = (v: string): Settings => ({
       ...BASIS, ytdlp: { ...BASIS.ytdlp, version: v, laeuft: false, ergebnis: 'ok' },
     })
 

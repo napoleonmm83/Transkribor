@@ -163,7 +163,7 @@ export type Settings = {
  *  pip-Sperre, nicht nur seinen eigenen Modulzustand). `ungeschuetzt` gehört zu `ergebnis`:
  *  der letzte Lauf lief ohne Sperre (#236). `ejs_unlesbar`: die Metadaten der Löserskripte
  *  sind kaputt, die Erkennung untauglicher Skripte ist ausgesetzt (#198). */
-export type YtdlpStand = { version: string | null; unlesbar: boolean; geprueft: string; auto: boolean; env: boolean; laeuft: boolean; ergebnis: string; ungeschuetzt: boolean; ejs_unlesbar: boolean };
+export type YtdlpStand = { version: string | null; unlesbar: boolean; geprueft: string; auto: boolean; env: boolean; laeuft: boolean; ergebnis: '' | 'ok' | 'fehler' | 'uebersprungen'; ungeschuetzt: boolean; ejs_unlesbar: boolean };
 export type ModelInfo = { id: string; label: string };
 /** Anmeldezustand einer Abo-CLI. `unterstuetzt: false` heisst: der Anbieter kennt so etwas
  *  nicht — bei den API-Anbietern IST der Key die Anmeldung. */

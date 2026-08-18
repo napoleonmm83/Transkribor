@@ -53,16 +53,22 @@ def isoliert(monkeypatch, tmp_path):
     return tmp_path
 
 
-def _warte_bis(bedingung, frist=5.0):
+def _warte_bis(bedingung, frist=5.0) -> bool:
     """Der Faden setzt `_lauf` in seinem `finally`, also NACH dem Event, an dem der Test
     haengt. Ohne dieses Warten liest der Test einen Zwischenstand — eine Rennbedingung im
-    Test selbst, und die faellt sporadisch aus."""
-    ende = time.time() + frist
-    while time.time() < ende:
+    Test selbst, und die faellt sporadisch aus.
+
+    `monotonic`, nicht `time`: die Wanduhr kann waehrend der Frist springen (NTP), und
+    `_warte` in `test_api.py` nimmt dieselbe Uhr — zwei Helfer mit derselben Aufgabe und
+    verschiedenen Uhren driften auseinander. Und die Runde AM Fristende zaehlt mit: ein
+    hartes `False` verwuerfe das Ergebnis des letzten `sleep`. (Beides CodeRabbit-Bot.)
+    """
+    ende = time.monotonic() + frist
+    while time.monotonic() < ende:
         if bedingung():
             return True
         time.sleep(0.01)
-    return False
+    return bool(bedingung())
 
 
 def _pip(returncode=0, ausgabe="Successfully installed yt-dlp-2026.8.12"):
