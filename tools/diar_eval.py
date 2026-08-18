@@ -141,7 +141,12 @@ def cmd_freeze(args) -> int:
               + ", ".join(namen))
     if fehlend:
         print("\nFEHLT:\n  " + "\n  ".join(fehlend))
-        print("\nAbbruch: ein unvollstaendiger Referenzsatz wuerde als Nullpunkt eingefroren "
+        # Die benutzte Wurzel MITNENNEN. Der Default kommt aus `paths.projekte_root()` und
+        # zeigt ohne `TRANSKRIBOR_PROJEKTE` auf das Repo — dort liegen 0 handkorrigierte
+        # Dateien, das echte Material der Desktop-App liegt unter %APPDATA%. Ohne diese Zeile
+        # ist „FileNotFoundError" nicht von „Datei noch nicht korrigiert" zu unterscheiden.
+        print(f"\nGesucht unter: {os.path.abspath(args.projekte)}")
+        print("Abbruch: ein unvollstaendiger Referenzsatz wuerde als Nullpunkt eingefroren "
               "und alle spaeteren Vergleiche verschieben.")
         return 1
     ziel = _unter_eval(args.ziel)         # Schreibpfad-Wache, s. dort
@@ -446,14 +451,19 @@ def main(argv=None) -> int:
     f = sub.add_parser("freeze", help="handkorrigierte edit.json -> eval/referenz.json")
     f.add_argument("--projekte", default=_projekte_standard(),
                    help="Wurzel der Projektordner (Standard: paths.projekte_root())")
-    f.add_argument("--liste", default=os.path.join("eval", "referenzsatz.txt"),
+    # Die Defaults gehen ueber EVAL, also ueber das REPO — nicht ueber das Arbeitsverzeichnis.
+    # Sonst zeigt `eval/referenz.json` auf `$CWD/eval/...`, waehrend `_unter_eval` gegen das
+    # Repo prueft: aus einem fremden Ordner gerufen wies `freeze` damit seinen EIGENEN Default
+    # ab (gemessen). Das war die Luecke, die der KL1-Fix aufgemacht hat — vorher waren beide
+    # gleich falsch und deshalb wenigstens konsistent. (CodeRabbit-CLI, Major.)
+    f.add_argument("--liste", default=os.path.join(EVAL, "referenzsatz.txt"),
                    help="eine Zeile <Projekt>/<Base> je Datei; '#' ist Kommentar")
-    f.add_argument("--ziel", default=os.path.join("eval", "referenz.json"))
+    f.add_argument("--ziel", default=os.path.join(EVAL, "referenz.json"))
     f.set_defaults(fn=cmd_freeze)
 
     r = sub.add_parser("run", help="Referenzsatz mit einer Konfiguration durchmessen")
     r.add_argument("name", type=_lauf_name, help="Name des Laufs (-> eval/laeufe/<name>.json)")
-    r.add_argument("--referenz", default=os.path.join("eval", "referenz.json"))
+    r.add_argument("--referenz", default=os.path.join(EVAL, "referenz.json"))
     r.add_argument("--projekte", default=None, help="ueberschreibt die Wurzel aus der Referenz")
     r.add_argument("--min-speakers", type=int, default=2)
     r.add_argument("--num-speakers", type=int, default=None)
