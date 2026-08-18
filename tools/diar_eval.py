@@ -300,8 +300,13 @@ def _schreibe_lauf(args, ergebnis: dict, wurzel: str) -> None:
     # zwischen zwei Laeufen (Task 8 IST das: Marcus korrigiert nach), mitteln sie ueber
     # verschiedene Mengen — dieselbe Fehlerklasse, gegen die der Abbruch statt SKIP oben
     # gebaut ist, nur zwischen zwei Laeufen statt innerhalb eines.
-    with open(ziel, "w", encoding="utf-8") as f:
-        json.dump({"name": args.name, "dateien": ergebnis,
+    # ATOMAR (`paths.atomic_write`: erst .tmp, dann `os.replace`), nicht `open(…, "w")`.
+    # Die Zeile darueber schreibt nach JEDER Datei — ein Abbruch mitten im Schreiben (Ctrl+C,
+    # GPU-OOM im naechsten Schritt) hinterliesse sonst eine halbe JSON-Datei, und die naechste
+    # `vergleich` faende sie vor. Die Haerte gegen SOLCHE Dateien steht daneben in
+    # `cmd_vergleich`; hier wird verhindert, dass wir sie ueberhaupt erzeugen.
+    from webtool.paths import atomic_write
+    atomic_write(ziel, json.dumps({"name": args.name, "dateien": ergebnis,
                    "einstellungen": {"min_speakers": args.min_speakers,
                                      "num_speakers": args.num_speakers,
                                      "sprecher_aus_referenz": args.sprecher_aus_referenz,
@@ -313,7 +318,7 @@ def _schreibe_lauf(args, ergebnis: dict, wurzel: str) -> None:
                                      # Vergleich konnte damit nicht sagen, welches Material
                                      # gemessen wurde.
                                      "wurzel": os.path.abspath(wurzel)}},
-                  f, indent=1, ensure_ascii=False)
+        indent=1, ensure_ascii=False))
 
 
 def _audio(wurzel: str, projekt: str, base: str):
@@ -376,11 +381,18 @@ def cmd_vergleich(args) -> int:
                                  f[:-5] for f in os.listdir(os.path.join(EVAL, "laeufe"))
                                  if f.endswith(".json")))
                                 if os.path.isdir(os.path.join(EVAL, "laeufe")) else "keine"))
-        with open(pfad, encoding="utf-8") as f:
-            lauf = json.load(f)
+        # Das LESEN muss mitgefangen werden, nicht nur die Form: `json.load` wirft bei einer
+        # halben Datei, bevor die Strukturpruefung darunter je erreicht wird — der Traceback
+        # kaeme also VOR der benannten Meldung. `ValueError` deckt dabei auch
+        # `UnicodeDecodeError` (Repo-Regel: JSONDecodeError allein deckt nur das Parsen).
+        try:
+            with open(pfad, encoding="utf-8") as f:
+                lauf = json.load(f)
+        except (OSError, ValueError) as e:
+            raise SystemExit(f"Lauf '{name}' ist nicht lesbar ({type(e).__name__}): {pfad}")
         # Form pruefen statt sich auf sie zu verlassen: die Laufdateien liegen unter eval/ und
-        # koennen von Hand entstanden oder halb geschrieben sein (der Lauf schreibt nach JEDER
-        # Datei). Ohne die Wache endet das in einem KeyError-Traceback mitten in der Tabelle.
+        # koennen von Hand entstanden sein. (Halb geschriebene erzeugen WIR seit dem atomaren
+        # Schreiben in `_schreibe_lauf` nicht mehr selbst.)
         if not isinstance(lauf, dict) or not isinstance(lauf.get("dateien"), dict):
             raise SystemExit(f"'{name}' ist keine Laufdatei ({pfad}).")
         lauf.setdefault("name", name)
