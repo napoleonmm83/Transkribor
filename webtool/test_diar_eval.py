@@ -63,11 +63,51 @@ def test_metriken_ignorieren_einseitig_bekannte_segmente():
     """Die Referenz kann Segmente auslassen (unklare Stelle), der Lauf kann welche liefern,
     die es dort nicht gibt. Beides darf die Zahl nicht verschieben, sondern muss aus der
     Rechnung fallen — sonst misst man die Vollstaendigkeit der Referenz.
+
+    `sprecherzahl` bekommt hier BEWUSST das ungefilterte Dict samt der 99 — genau so steht es
+    an der Aufrufstelle in `cmd_run`. Vorher stand hier ein vorgefiltertes `{1,2}`, womit der
+    Test seine eigene Zusicherung („beides darf die Zahl nicht verschieben") fuer
+    `sprecherzahl` nicht ausuebte: er war vacuous, und `cmd_run` zaehlte tatsaechlich einen
+    Cluster zu viel gegen `sprecher_wahr` (Review, gemessen).
     """
     ref = {1: "A", 2: "B"}
     dauer = {1: 1.0, 2: 1.0, 99: 5.0}
-    assert de.fehlerquote({1: "X", 2: "Y", 99: "Z"}, ref, dauer) == 0.0
-    assert de.sprecherzahl({1: "X", 2: "Y"}) == 2
+    vorhersage = {1: "X", 2: "Y", 99: "Z"}
+    assert de.fehlerquote(vorhersage, ref, dauer) == 0.0
+    assert de.sprecherzahl(de.nur_gemeinsame(vorhersage, ref)) == 2
+
+
+def test_sprecherzahl_zaehlt_leere_etiketten_NICHT():
+    """`assign_clusters` liefert fuer ein Segment ohne ueberlappenden Turn ein leeres Etikett.
+    Als eigener „Sprecher" gezaehlt verschoebe es die Zahl, die Abnahmekriterium 3 traegt.
+
+    Ohne diesen Test hat der `if v`-Filter NULL Abdeckung — im Review nachgemessen: entfernt
+    man ihn, bleiben alle Tests gruen. Scharf wird er, sobald in der Handkorrektur ein
+    Sprecher geleert wird (unklare Stelle, `[Musik]`).
+    """
+    assert de.sprecherzahl({1: "A", 2: "", 3: None, 4: "B"}) == 2
+
+
+def test_gemeinsam_laesst_sprecherlose_REFERENZsegmente_aus():
+    """Ein Referenzsegment ohne Sprecher ist keine Aussage, gegen die man messen kann.
+
+    Zweiter Waechter mit vorher NULL Abdeckung (`and referenz[i]`): ohne ihn zaehlte ein
+    leerer Referenz-Sprecher als eigene Klasse und verschoebe V-Measure wie Fehlerquote.
+    """
+    ref = {1: "A", 2: "", 3: "B"}
+    dauer = {1: 1.0, 2: 99.0, 3: 1.0}
+    # Segment 2 faellt raus -> perfekte Zuordnung der restlichen zwei.
+    assert de.fehlerquote({1: "X", 2: "X", 3: "Y"}, ref, dauer) == 0.0
+
+
+def test_summe_meldet_auf_einem_LEEREN_lauf_keinen_bestwert():
+    """Dieselbe Falle wie beim `nan`: `V 0.000` heisst Totalversagen, `Fehler 0.0 %` heisst
+    fehlerfrei — fuer dieselbe Eingabe. `cmd_run` schreibt zwar nie einen leeren Lauf, aber
+    `cmd_vergleich` liest seine Laeufe aus DATEIEN, und die kann jemand von Hand anlegen.
+    """
+    summe = de._summe("leer", {})
+    assert summe["fehler_zeitgewichtet"] is None
+    assert summe["v_mittel_je_datei"] is None
 
 
 def test_gar_keine_gemeinsamen_segmente_ist_KEIN_bestwert():

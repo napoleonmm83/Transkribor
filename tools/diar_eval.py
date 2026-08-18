@@ -29,6 +29,18 @@ def _gemeinsam(vorhersage: dict, referenz: dict) -> list:
     return sorted(i for i in referenz if i in vorhersage and referenz[i])
 
 
+def nur_gemeinsame(vorhersage: dict, referenz: dict) -> dict:
+    """`vorhersage`, eingeschraenkt auf die Menge, ueber die auch gerechnet wird.
+
+    Ohne das zaehlte `sprecherzahl` ueber die GANZE Aufnahme, waehrend `sprecher_wahr` nur den
+    gelabelten Teil kennt — zwei Zahlen ueber verschiedene Mengen, und Abnahmekriterium 3
+    ("die Sprecherzahl wird auf nicht weniger Dateien getroffen") verglich sie direkt. Im
+    Review gemessen: ein sprecherloses Referenzsegment ergab `sprecherzahl 3` gegen
+    `sprecher_wahr 2` bei ansonsten perfekter Zuordnung (Fehlerquote 0,0, V 1,000).
+    """
+    return {i: vorhersage[i] for i in _gemeinsam(vorhersage, referenz)}
+
+
 def sprecherzahl(zuordnung: dict) -> int:
     return len({v for v in zuordnung.values() if v})
 
@@ -95,6 +107,14 @@ def cmd_freeze(args) -> int:
         gewuenscht = [z.strip() for z in f if z.strip() and not z.startswith("#")]
     dateien, fehlend = {}, []
     for schluessel in gewuenscht:
+        # Backslashes mitnehmen: `Projekt\Base` ist auf Windows die naheliegende Schreibweise,
+        # und ein blosses `rsplit("/")` starb daran mit einem ValueError-Traceback — es umging
+        # damit ausgerechnet die FEHLT-Logik, die fuer „eine Zeile stimmt nicht" gebaut ist.
+        if "/" not in schluessel and "\\" in schluessel:
+            schluessel = schluessel.replace("\\", "/")
+        if "/" not in schluessel:
+            fehlend.append(f"{schluessel} (kein <Projekt>/<Base>)")
+            continue
         proj, base = schluessel.rsplit("/", 1)
         pfad = os.path.join(args.projekte, proj, "transkripte", base + ".edit.json")
         try:
@@ -128,7 +148,10 @@ def cmd_freeze(args) -> int:
     if os.path.dirname(ziel):             # `--ziel referenz.json` -> dirname "" -> makedirs wirft
         os.makedirs(os.path.dirname(ziel), exist_ok=True)
     with open(ziel, "w", encoding="utf-8") as f:
-        json.dump({"projekte": args.projekte, "dateien": dateien}, f, indent=1,
+        # ABSOLUT einfrieren: ein relatives `--projekte projekte` machte die Referenz nur
+        # aus demselben Arbeitsverzeichnis brauchbar, und der spaetere Fehlschlag zeigte auf
+        # die Audiodatei statt auf die Wurzel.
+        json.dump({"projekte": os.path.abspath(args.projekte), "dateien": dateien}, f, indent=1,
                   ensure_ascii=False)
     print(f"\n{len(dateien)} Datei(en) -> {args.ziel}")
     return 0
@@ -149,10 +172,27 @@ def cmd_run(args) -> int:
     from webtool import diarize
     with open(args.referenz, encoding="utf-8") as f:
         ref = json.load(f)
+    if "projekte" not in ref or "dateien" not in ref:
+        raise SystemExit(f"{args.referenz} ist keine Referenzdatei (es fehlt 'projekte' bzw. "
+                         f"'dateien'). Mit `freeze` erzeugen.")
+    wurzel = args.projekte or ref["projekte"]
+    # `_modell_zurueck` haelt den Ausgangszustand fest, das `finally` unten stellt ihn wieder
+    # her: `DIAR_MODEL`/`_PIPELINE` sind MODULZUSTAND. Zwei `run` in EINEM Prozess (ein
+    # Sweep-Skript ueber die Kandidaten aus Block C ist die naheliegende naechste Zeile)
+    # massen sonst beide mit der Konfiguration des ersten — und der zweite protokollierte
+    # `config: null` dazu. Dieselbe Begruendung wie der `finally`-Rueckbau des
+    # `_Sprachschwelle`-Proxys in `transcribe.py`.
+    _modell_zurueck = (diarize.DIAR_MODEL, diarize._PIPELINE)
     if args.config:
         diarize.DIAR_MODEL = os.path.abspath(args.config)
         diarize._PIPELINE = None
-    wurzel = args.projekte or ref["projekte"]
+    try:
+        return _run(args, diarize, ref, wurzel)
+    finally:
+        diarize.DIAR_MODEL, diarize._PIPELINE = _modell_zurueck
+
+
+def _run(args, diarize, ref: dict, wurzel: str) -> int:
     ergebnis = {}
     for schluessel, eintrag in sorted(ref["dateien"].items()):
         audio = _audio(wurzel, eintrag["projekt"], eintrag["base"])
@@ -174,11 +214,28 @@ def cmd_run(args) -> int:
         vorhersage = diarize.assign_clusters(raw, turns)
         referenz = {s["id"]: s["sprecher"] for s in eintrag["segmente"]}
         dauer = {s["id"]: (s["end"] or 0) - (s["start"] or 0) for s in eintrag["segmente"]}
-        quote = fehlerquote(vorhersage, referenz, dauer)
-        if quote != quote:                     # nan: keine gemeinsamen Segment-IDs
+        # DIESER Riegel deckt „passt nicht zusammen", nicht das `nan` weiter unten. Whisper
+        # vergibt Segment-IDs schlicht als 1..n — JEDE Referenz ueberlappt darum mit JEDEM
+        # Rohtranskript auf min(n_a, n_b) IDs, und `nan` entsteht nur bei Ueberlappung NULL.
+        # Im Review gemessen: eine Referenz gegen eine ANDERE Aufnahme lieferte 40,1 %
+        # Fehlerquote und lief durch — eine Zahl, die wie ein Messergebnis aussieht.
+        # Der Weg dorthin braucht keinen Tippfehler: eine Datei des Referenzsatzes neu
+        # transkribieren (ein Klick, #135) loescht ihre edit.json, die eingefrorene Referenz
+        # unter eval/ ueberlebt.
+        # Die Invariante ist gemessen, nicht angenommen: ueber alle 20 echten
+        # edit.json/.json-Paare sind die ID-Mengen identisch (`build_edit_doc` und
+        # `assign_clusters` lesen beide `raw["segments"][i]["id"]`).
+        if not set(referenz) <= set(vorhersage):
+            fehlt = len(set(referenz) - set(vorhersage))
             raise SystemExit(
-                f"{schluessel}: kein einziges Segment ist beiden bekannt. Die Referenz passt "
-                f"nicht zu diesem Material (neu transkribiert? falscher --projekte-Pfad?). "
+                f"{schluessel}: {fehlt} Referenz-Segment(e) fehlen im Rohtranskript — Referenz "
+                f"und Material passen nicht zusammen (neu transkribiert? falscher "
+                f"--projekte-Pfad?). Abbruch.")
+        quote = fehlerquote(vorhersage, referenz, dauer)
+        if quote != quote:                     # nan
+            raise SystemExit(
+                f"{schluessel}: kein gemeinsames Segment mit Sprecher und Dauer > 0 — entweder "
+                f"traegt kein Referenzsegment einen Sprecher, oder alle haben Dauer 0. "
                 f"Abbruch — ein Lauf, der nichts vergleichen kann, darf keine Zahl liefern.")
         h, c, v = v_measure(vorhersage, referenz)
         ergebnis[schluessel] = {
@@ -187,7 +244,7 @@ def cmd_run(args) -> int:
             # gewinnt (kurze Rueckkanaele), taucht dort nicht auf. #264 hat aber die
             # Clusterzahl von pyannote gemessen, und bei C1 (min_speakers 1 gegen 2) ist genau
             # das der interessante Unterschied.
-            "sprecherzahl": sprecherzahl(vorhersage),
+            "sprecherzahl": sprecherzahl(nur_gemeinsame(vorhersage, referenz)),
             "cluster_roh": len({t["cluster"] for t in turns}),
             "sprecher_wahr": eintrag["sprecher_wahr"],
             # Gesamtdauer je Datei: ohne sie kann `_summe` die Fehlerquote nicht ueber den Satz
@@ -199,24 +256,42 @@ def cmd_run(args) -> int:
         e = ergebnis[schluessel]
         print(f"  {schluessel:<44} {e['sprecherzahl']}({e['cluster_roh']})/{e['sprecher_wahr']} "
               f"Sprecher | V {e['v']:.3f} | Fehler {e['fehlerquote']*100:5.1f}%", flush=True)
+        # NACH JEDER Datei schreiben, nicht erst am Ende: der Referenzsatz hat 13 Dateien und
+        # pyannote kann an einer langen mit GPU-OOM sterben (in CLAUDE.md als reale Fehlerart
+        # vermerkt). Ein Abbruch bei Datei 13 verloere sonst zwoelf gerechnete Ergebnisse samt
+        # ihrer GPU-Minuten. Die Zusage „kein Artefakt fuer einen leeren Lauf" bleibt: der
+        # erste Schreibvorgang passiert erst, nachdem eine Datei durch ist.
+        _schreibe_lauf(args, ergebnis)
     if not ergebnis:
         # Kein Artefakt fuer einen leeren Lauf. Sonst legt `vergleich` spaeter zwei Laeufe
-        # nebeneinander, von denen einer NICHTS gemessen hat — `_summe` teilt durch `or 1`
-        # und liefert 0,0 %, also den Bestwert. Dieselbe Klasse wie das `nan` oben.
+        # nebeneinander, von denen einer NICHTS gemessen hat.
         raise SystemExit("kein einziger Referenzeintrag gemessen — kein Lauf geschrieben.")
-    ziel = _unter_eval(os.path.join("eval", "laeufe", args.name + ".json"))
+    _summe(args.name, ergebnis)
+    return 0
+
+
+def _schreibe_lauf(args, ergebnis: dict) -> None:
+    ziel = _unter_eval(os.path.join(EVAL, "laeufe", args.name + ".json"))
     os.makedirs(os.path.dirname(ziel), exist_ok=True)
     # Die Einstellungen EINZELN, nicht `vars(args)`: darin steckt ueber `set_defaults` die
     # Funktion `fn`, und `json.dump` stirbt daran mit TypeError — nach dem Rechnen, also nach
     # allen GPU-Minuten des Laufs.
+    #
+    # `referenz` und `wurzel` gehoeren dazu, weil `vergleich` zwei Summen gegenueberstellt und
+    # die Abnahmekriterien 1 und 3 genau diese Summenzeilen lesen. Waechst der Referenzsatz
+    # zwischen zwei Laeufen (Task 8 IST das: Marcus korrigiert nach), mitteln sie ueber
+    # verschiedene Mengen — dieselbe Fehlerklasse, gegen die der Abbruch statt SKIP oben
+    # gebaut ist, nur zwischen zwei Laeufen statt innerhalb eines.
     with open(ziel, "w", encoding="utf-8") as f:
         json.dump({"name": args.name, "dateien": ergebnis,
                    "einstellungen": {"min_speakers": args.min_speakers,
                                      "num_speakers": args.num_speakers,
                                      "sprecher_aus_referenz": args.sprecher_aus_referenz,
-                                     "config": args.config}}, f, indent=1, ensure_ascii=False)
-    _summe(args.name, ergebnis)
-    return 0
+                                     "config": args.config,
+                                     "referenz": os.path.abspath(args.referenz),
+                                     "wurzel": os.path.abspath(args.projekte)
+                                     if args.projekte else None}},
+                  f, indent=1, ensure_ascii=False)
 
 
 def _audio(wurzel: str, projekt: str, base: str):
@@ -241,11 +316,20 @@ def _summe(name: str, ergebnis: dict) -> dict:
     ein schlichtes Mittel ueber Dateien: es ist eine Struktur-, keine Mengenaussage, und eine
     Zeitgewichtung waere dort nicht definiert. Beide Zahlen tragen deshalb verschiedene Namen.
     """
-    n = len(ergebnis) or 1
     treffer = sum(1 for e in ergebnis.values() if e["sprecherzahl"] == e["sprecher_wahr"])
-    zeit = sum(e["dauer_s"] for e in ergebnis.values()) or 1.0
+    zeit = sum(e["dauer_s"] for e in ergebnis.values())
+    if not ergebnis or zeit <= 0:
+        # KEIN 0.0 hier. Frueher stand `/ (len(...) or 1)` und `/ (zeit or 1.0)` — ein leerer
+        # Lauf meldete damit `V 0.000` (Totalversagen) neben `Fehler 0.0%` (fehlerfrei), zwei
+        # entgegengesetzte Bedeutungen fuer dieselbe Eingabe. Genau die Falle, die das `nan`
+        # in `fehlerquote` ausschliesst. `cmd_run` schreibt nie einen leeren Lauf, aber
+        # `cmd_vergleich` liest aus DATEIEN, und die kann jemand von Hand anlegen.
+        print(f"\n[{name}] NICHTS GEMESSEN — keine Datei bzw. keine Redezeit. Kein Vergleich "
+              f"moeglich.")
+        return {"dateien": len(ergebnis), "zahl_getroffen": treffer,
+                "v_mittel_je_datei": None, "fehler_zeitgewichtet": None}
     summe = {"dateien": len(ergebnis), "zahl_getroffen": treffer,
-             "v_mittel_je_datei": round(sum(e["v"] for e in ergebnis.values()) / n, 4),
+             "v_mittel_je_datei": round(sum(e["v"] for e in ergebnis.values()) / len(ergebnis), 4),
              "fehler_zeitgewichtet": round(
                  sum(e["fehlerquote"] * e["dauer_s"] for e in ergebnis.values()) / zeit, 4)}
     print(f"\n[{name}] {summe['dateien']} Dateien, {zeit/60:.1f} Min | Sprecherzahl getroffen: "
@@ -263,14 +347,23 @@ def cmd_vergleich(args) -> int:
     """
     laeufe = []
     for name in (args.a, args.b):
-        with open(os.path.join("eval", "laeufe", name + ".json"), encoding="utf-8") as f:
+        pfad = os.path.join(EVAL, "laeufe", name + ".json")
+        if not os.path.exists(pfad):
+            raise SystemExit(f"Lauf '{name}' gibt es nicht ({pfad}). Vorhanden: "
+                             + (", ".join(sorted(
+                                 f[:-5] for f in os.listdir(os.path.join(EVAL, "laeufe"))
+                                 if f.endswith(".json")))
+                                if os.path.isdir(os.path.join(EVAL, "laeufe")) else "keine"))
+        with open(pfad, encoding="utf-8") as f:
             laeufe.append(json.load(f))
     a, b = laeufe
     print(f"{'Datei':<44} {'Zahl a/b/wahr':>14} {'V a->b':>16} {'Fehler a->b':>18}")
+    einseitig = 0
     for schluessel in sorted(set(a["dateien"]) | set(b["dateien"])):
         ea, eb = a["dateien"].get(schluessel), b["dateien"].get(schluessel)
         if not ea or not eb:
             print(f"{schluessel:<44} nur in einem Lauf")
+            einseitig += 1
             continue
         pfeil = "+" if eb["fehlerquote"] < ea["fehlerquote"] else (
             "-" if eb["fehlerquote"] > ea["fehlerquote"] else "=")
@@ -278,8 +371,19 @@ def cmd_vergleich(args) -> int:
               f"{ea['sprecher_wahr']:>3}   {ea['v']:.3f}->{eb['v']:.3f}   "
               f"{ea['fehlerquote']*100:5.1f}%->{eb['fehlerquote']*100:5.1f}%  {pfeil}")
     print()
-    _summe(a["name"], a["dateien"])
-    _summe(b["name"], b["dateien"])
+    if einseitig:
+        # Die Zeilen „nur in einem Lauf" stehen zwar oben — aber die Abnahmekriterien 1 und 3
+        # lesen die SUMMEN darunter, und die mitteln dann ueber verschiedene Mengen. Ein
+        # Kandidat koennte so bestehen, ohne dass jemand es sieht (derselbe Grund wie fuer
+        # ABBRUCH-statt-SKIP in `cmd_run`, nur zwischen zwei Laeufen statt innerhalb eines).
+        print(f"WARNUNG: {einseitig} Datei(en) nur in einem Lauf — die Summen unten sind NICHT "
+              f"vergleichbar.")
+    for lauf in (a, b):
+        _summe(lauf["name"], lauf["dateien"])
+    refs = {lauf.get("einstellungen", {}).get("referenz") for lauf in (a, b)}
+    if len(refs) > 1:
+        print(f"WARNUNG: die beiden Laeufe nennen verschiedene Referenzdateien: "
+              f"{sorted(str(r) for r in refs)}")
     return 0
 
 
@@ -293,7 +397,12 @@ def _lauf_name(wert: str) -> str:
     return wert
 
 
-EVAL = os.path.abspath("eval")
+# Am REPO festgemacht, nicht am Arbeitsverzeichnis. `os.path.abspath("eval")` wurde beim Import
+# ausgewertet und meinte damit `$CWD/eval` — ein `cd projekte` und das Werkzeug legte
+# `projekte\eval\` an, waehrend der Moduldocstring „schreibt AUSSCHLIESSLICH nach eval/"
+# verspricht (im Review gemessen). Ein Ausbruch nach `projekte\<echtes Projekt>` gelang auch
+# vorher nicht — die Wache pruefte nur einen anderen Ordner als den gemeinten.
+EVAL = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "eval")
 
 
 def _unter_eval(pfad: str) -> str:
@@ -312,12 +421,26 @@ def _unter_eval(pfad: str) -> str:
     return ziel
 
 
+def _projekte_standard():
+    """Die Projektwurzel kommt aus `paths.projekte_root()` — der EINEN Quelle, die auch
+    `TRANSKRIBOR_PROJEKTE` kennt (gepackte App: `userData/projekte`). Eine von Hand getippte
+    Wurzel ist genau der Fehler, den der Riegel in `cmd_run` abfaengt; ihn gar nicht erst
+    entstehen zu lassen ist billiger. Dieselbe Regel, mit der `_audio` sich `AUDIO_EXT` aus
+    `correct.py` holt statt eine zweite Liste zu fuehren."""
+    try:
+        from webtool import paths
+        return paths.projekte_root()
+    except Exception:
+        return None
+
+
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = p.add_subparsers(dest="befehl", required=True)
 
     f = sub.add_parser("freeze", help="handkorrigierte edit.json -> eval/referenz.json")
-    f.add_argument("--projekte", required=True, help="Wurzel der Projektordner")
+    f.add_argument("--projekte", default=_projekte_standard(),
+                   help="Wurzel der Projektordner (Standard: paths.projekte_root())")
     f.add_argument("--liste", default=os.path.join("eval", "referenzsatz.txt"),
                    help="eine Zeile <Projekt>/<Base> je Datei; '#' ist Kommentar")
     f.add_argument("--ziel", default=os.path.join("eval", "referenz.json"))
@@ -335,8 +458,10 @@ def main(argv=None) -> int:
     r.set_defaults(fn=cmd_run)
 
     v = sub.add_parser("vergleich", help="zwei Laeufe gegenueberstellen")
-    v.add_argument("a")
-    v.add_argument("b")
+    # Dieselbe Wache wie bei `run`: sonst las `vergleich ../../geheim/priv` aus einer Datei
+    # ausserhalb von eval/. Rein lesend, aber die Inkonsistenz zu `run` ist der Befund.
+    v.add_argument("a", type=_lauf_name)
+    v.add_argument("b", type=_lauf_name)
     v.set_defaults(fn=cmd_vergleich)
 
     args = p.parse_args(argv)
