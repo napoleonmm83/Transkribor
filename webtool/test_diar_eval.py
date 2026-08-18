@@ -167,8 +167,12 @@ def test_lauf_name_laesst_keine_pfadanteile_durch():
     # pruefte damit etwas anderes, als er behauptet — er blieb gruen, weil auch ein Backspace
     # kein `isalnum()` ist. Sichtbar wird das nur beim Kompilieren (SyntaxWarning „invalid
     # escape sequence"), nicht am Testergebnis.
+    # GEZIELT `argparse.ArgumentTypeError`, nicht `Exception`: ein Tippfehler im Testnamen
+    # (`de._lauf_nmae`) wuerfe einen AttributeError, und der Test bliebe gruen — er prueft
+    # dann, dass irgendetwas schiefgeht, nicht dass die WACHE greift.
+    import argparse
     for schlecht in ("../x", "a/b", "a\\b", ".versteckt", "", "a:b", "..", "x/../y"):
-        with pytest.raises(Exception):
+        with pytest.raises(argparse.ArgumentTypeError):
             de._lauf_name(schlecht)
     for gut in ("nullpunkt", "kandidat-1", "v0.2_test"):
         assert de._lauf_name(gut) == gut
