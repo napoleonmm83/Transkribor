@@ -345,6 +345,20 @@ describe('SettingsPage', () => {
     expect(screen.queryByText(/Nicht installiert/)).not.toBeInTheDocument()
   })
 
+  it('verweist bei ABGESCHALTETEM Automatismus auf den Knopf statt auf einen Start (#285)', async () => {
+    /* CodeRabbit-CLI an PR #285, berechtigt: `beim_start()` haengt an `auto_an()` — mit
+       ausgeschaltetem Hagen [HAKEN] läuft beim nächsten Start KEINE Reparatur, und die Zeile
+       „setzt sie beim nächsten Start fort" waere ein Versprechen, das niemand einlöst
+       (dieselbe Klasse wie der tote Schalter aus #266). Der KNOPF repariert in beiden
+       Zustaenden (er laeuft bedingungslos), also zeigt die Zeile auf ihn. Beide Werte
+       reisen in derselben Antwort — `ytdlp.auto` ist der WIRKSAME Schalter, eine setzende
+       Umgebungsvariable steht darin mit. */
+    zeige({ ytdlp: { version: null, unlesbar: false, geprueft: '', auto: false, env: false, laeuft: false, ergebnis: '', ungeschuetzt: false, unterbrochen: true, ejs_unlesbar: false } })
+    expect(await screen.findByText(/klicke auf „Jetzt aktualisieren/)).toBeInTheDocument()
+    expect(screen.queryByText(/beim nächsten Start von selbst fort/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Nicht installiert/)).not.toBeInTheDocument()
+  })
+
   it('unterscheidet unlesbare Metadaten von "nicht installiert"', async () => {
     // Beide Zustände liefern `version: null`. Vor #189 stand hier "steht damit nicht zur
     // Verfügung" — das Gegenteil dessen, was der Nutzer tun kann: der Import läuft, nur die
