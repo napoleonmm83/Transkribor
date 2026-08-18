@@ -192,7 +192,7 @@ ohnehin anfasst** — also Block A/C der Diarisierungsarbeit.
 
 ---
 
-## Entscheidungen statt Wellen — drei Issues, kein Code
+## Entscheidungen statt Wellen — vier Issues, kein Code
 
 ### #261 — schliessen, mit der Messung (NEU in Fassung 2)
 
@@ -227,7 +227,16 @@ Diarisierungsarbeit: Block B baut `v_measure`/`fehlerquote` über `{segment_id: 
 gemischter Cluster schlägt dort als Homogenitätsverlust durch. **Das ist keine Entscheidung**
 (es ändert sich nichts) und steht hier nur der Vollständigkeit halber.
 
-### #254 — Frage an Marcus, mit der Vorinformation
+### #254 — ENTSCHIEDEN am 08-18: Weg 2 + 3
+
+**Entschieden (Marcus, 2026-08-18):** `_lockziel()` bekommt die venv-Kennung (Weg 2, das
+Muster steht seit PR #259 bei `_venv_kennung()`), **plus** Neulesen nach dem Sperrerwerb
+(Weg 3, der Fix aus dem hierher geschlossenen #176). Zusammen decken sie beide Punkte des
+Issues, ohne Nutzerdaten zu verschieben. Drei Fallen dazu stehen am Issue (`_pip_merker()`
+doppelte sonst die Kennung; `test_ytdlp_update.py:1144` geht bewusst rot; alle übrigen
+Verbraucher folgen über `_lockziel()`). **Das Issue bleibt offen, bis Gruppe M es baut.**
+
+Wie die Entscheidung zustande kam — die Vorlage, nicht der stille Griff:
 
 Zwei Wege, und der naheliegende hat einen Preis, den kein Plan still wählen darf:
 `serverEnv()` auf `userData` umstellen **verschiebt die Einstellungen der gepackten App** —
@@ -270,7 +279,7 @@ offen. Das ist −2, nicht −3.
                           Füllt genau die Wartezeit, die Task 8 an Marcus abgibt.
                           Eigener ungeteilter Reviewer + eigener `was-erlaubt-der-fix-neu`.
 
-3.  M  #268 (+ #260-Messung, #263, ggf. #254-Hälfte)     Wegwerf-venv + pytest
+3.  M  #268 (+ #260-Messung, #263, #254)                 Wegwerf-venv + pytest
 
 4.  A1′ #249 + #250 + #262                                Browser + pytest
 
