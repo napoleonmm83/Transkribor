@@ -70,6 +70,10 @@ jobs:
       # den Job weiterhin umfallen. ~60 MB, kein GB-Sprung.
       - run: pip install fastapi python-multipart pytest httpx scipy scikit-learn
 
+      # osv_freeze-Tests: pytest sammelt scripts/ nicht — eigener Schritt,
+      # Vorbild scripts/versionshoehe.test.sh im Job electron.
+      - run: python scripts/test_osv_freeze.py
+
       # `build` muss explizit dastehen: der Ordnername steht in pytests
       # norecursedirs, ein blankes `pytest` sammelt build/test_bilder.py NIE.
       # Als Pfadangabe wird die Regel ausgehebelt. Genau dafuer kommt der Test
