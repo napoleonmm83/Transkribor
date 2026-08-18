@@ -458,6 +458,17 @@ export function useDoc(project: string | null, base: string | null) {
           await saveDoc(project, base, mitStand(dokument, schluessel(project, base)))
         })
         .catch((e) => {
+          // 409 ist hier KEIN Fehlschlag, sondern ein Ausgang — und er braucht eine eigene
+          // Meldung (#160). Die Datei ist verlassen, `doc` gehoert schon der naechsten: eine
+          // Rueckfrage wie in `konflikt` ginge ins Leere, und die letzte Aenderung existiert
+          // danach nirgends mehr. Was bleibt, ist es EHRLICH zu sagen — „Speichern
+          // fehlgeschlagen" liesse den Nutzer einen Serverfehler vermuten und die Aufnahme
+          // ungeprueft liegen, obwohl dort eine fertige Korrektur steht, die er behalten will.
+          if (e instanceof HttpFehler && e.status === 409) {
+            toast.error(`„${base}“: deine letzte Änderung wurde nicht mehr gespeichert — `
+              + 'inzwischen ist die Korrektur fertig geworden und trägt jetzt die Aufnahme.')
+            return
+          }
           toast.error(`Speichern beim Verlassen fehlgeschlagen (${base}): ${e instanceof Error ? e.message : String(e)}`)
         })
     }

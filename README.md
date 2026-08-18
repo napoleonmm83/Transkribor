@@ -321,7 +321,7 @@ das. Deine bisherige Fassung wird nicht überschrieben: sobald du das nächste M
 speicherst, wandert sie als `<Name>.edit.json.kaputt` zur Seite und bleibt im Ordner
 `transkripte` liegen.
 
-**„… wurde inzwischen geändert" — was ist da passiert?** Du hast im Editor etwas geschrieben,
+**„… wurde inzwischen geändert“ — was ist da passiert?** Du hast im Editor etwas geschrieben,
 und während dein Text gespeichert wurde, ist die KI-Korrektur für dieselbe Aufnahme fertig
 geworden. Beide wollen dieselbe Datei beschreiben. Früher hat dabei stillschweigend derjenige
 gewonnen, der zufällig als Letzter ankam — meist dein Text, und die fertige Korrektur war weg,
@@ -332,8 +332,10 @@ ohne dass es irgendwo stand. Jetzt fragt Transkribor lieber nach:
 - **Abbrechen** behält deine Fassung. Beim nächsten Speichern überschreibt sie die Korrektur;
   die Aufnahme lässt sich über das ⋯-Menü neu korrigieren.
 
-Dein getippter Text bleibt in beiden Fällen so lange stehen, bis du dich entschieden hast —
-die Frage allein verwirft nichts.
+Solange die Aufnahme offen ist, bleibt dein Text stehen, bis du dich entschieden hast — die
+Frage allein verwirft nichts. Wechselst du dagegen vorher zu einer anderen Aufnahme, kann die
+fertige Korrektur gewinnen; dann sagt dir eine Meldung, dass deine letzte Änderung nicht mehr
+gespeichert wurde.
 
 ---
 

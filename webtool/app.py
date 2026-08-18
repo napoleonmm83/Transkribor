@@ -175,10 +175,23 @@ def _dateistand(pfad: str) -> str:
     waehrend der Editor sie noch nicht kannte — ohne das bliebe genau die Haelfte von #160
     offen (jede frisch transkribierte Datei). „Egal" ist das FEHLEN des Schluessels, siehe
     `save_file`.
+
+    **Nur `FileNotFoundError` faellt auf `""` zurueck, jeder andere `OSError` fliegt weiter.**
+    `except OSError` deckte auch `PermissionError`, `EIO` und einen zu langen Pfad — und machte
+    daraus „die Datei gibt es nicht". Damit kippte die Sperre in die falsche Richtung: haelt
+    ein Client `""` und ist die vorhandene Datei gerade nicht abfragbar, vergleicht `save_file`
+    `"" != ""`, findet keine Abweichung und schreibt darueber. „Nicht ermittelbar" wuerde zu
+    „nicht geschuetzt" — genau die Rueckfallrichtung, die bei einer Schutzflagge nie gelten
+    darf (dieselbe Regel wie `_is_human_edited`: wer die Zusage nicht LESEN kann, darf sie
+    nicht ueberschreiben).
+
+    Der Preis ist benannt: ein Virenscanner-Handle auf der `edit.json` macht Laden und
+    Speichern zu einem 500 statt zu einem stillen Verlust. Ein Editor, der sagt „ich kann
+    gerade nicht", ist besser als einer, der eine Korrektur wegwirft.
     """
     try:
         st = os.stat(pfad)
-    except OSError:
+    except FileNotFoundError:
         return ""
     return f"{st.st_mtime_ns}-{st.st_size}-{st.st_ino}"
 
