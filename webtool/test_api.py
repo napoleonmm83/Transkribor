@@ -1858,6 +1858,38 @@ def test_zwei_schreibvorgaenge_gleicher_groesse_haben_verschiedene_staende(clien
         _paths.atomic_write(e, json.dumps({"summary": f"{i:03d}", "segments": []}))
         staende.add(app_mod._dateistand(e))
     assert len(staende) == 30, f"nur {len(staende)} verschiedene Staende aus 30 Schreibvorgaengen"
+    # UND die Zusicherung direkt am Feld. Die Zeile darueber allein waere auf einem
+    # Dateisystem mit feiner Zeitaufloesung (ext4, tmpfs — also der CI) VACUOUS: dort
+    # liefert `st_mtime_ns` schon fuer sich 30 verschiedene Werte, und die Mutation
+    # „st_ino raus" bliebe gruen. Gemessen wurde die Kollision auf NTFS; der Waechter
+    # muss auf jedem Laeufer fallen.
+    assert str(os.stat(e).st_ino) in app_mod._dateistand(e), "st_ino fehlt im Stand"
+
+
+def test_nicht_ermittelbarer_stand_gilt_nicht_als_fehlende_datei(client, tmp_path, monkeypatch):
+    """Rueckfallrichtung: „nicht ermittelbar" darf NICHT zu „nicht geschuetzt" werden.
+
+    `except OSError` deckte auch `PermissionError` und `EIO` — und machte daraus `""`, also
+    „die Datei gibt es nicht". Ein Client mit `""` haette dann gegen eine vorhandene, nur
+    gerade nicht abfragbare Datei verglichen, keine Abweichung gefunden und darueber
+    geschrieben. Dieselbe Regel wie bei `_is_human_edited`: wer die Zusage nicht LESEN kann,
+    darf sie nicht ueberschreiben."""
+    from webtool import app as app_mod
+    e = str(tmp_path / "Demo" / "transkripte" / "S1.edit.json")
+    doc = client.get("/api/projects/Demo/files/S1").json()
+    client.put("/api/projects/Demo/files/S1", json=doc)          # Datei existiert wirklich
+    assert app_mod._dateistand(e)                                 # Positivkontrolle
+
+    echt = os.stat
+
+    def sperrig(pfad, *a, **kw):
+        if str(pfad).endswith("S1.edit.json"):
+            raise PermissionError(13, "Zugriff verweigert")
+        return echt(pfad, *a, **kw)
+
+    monkeypatch.setattr(app_mod.os, "stat", sperrig)
+    with pytest.raises(PermissionError):
+        app_mod._dateistand(e)
 
 
 def test_veralteter_dateistand_wird_abgelehnt(client, tmp_path):
