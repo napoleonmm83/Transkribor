@@ -599,11 +599,13 @@ def _lockziel() -> str:
     Einstellungsseite „Eine Aktualisierung laeuft gerade" — fuer einen Lauf, der eine fremde
     venv anfasst. Dasselbe Muster, das `_venv_kennung()` beim Abbruch-Merker schon traegt.
 
-    **Die Kennung steht VOR `.abbruch`, nicht davor** — `_pip_merker()` ist
+    **Die Kennung steht ZWISCHEN `.ytdlp` und `.abbruch`** — `_pip_merker()` ist
     `f"{_lockziel()}.abbruch"`, und mit dieser Reihenfolge bleibt sein Pfad **buchstabengleich**
     zu dem vor #254 (`….ytdlp.<kennung>.abbruch`). Kein liegengebliebener Merker, keine
-    Migration. Nur das Lock-Verzeichnis wandert; ein verwaistes altes (`….ytdlp.lock`) fragt
-    danach niemand mehr, es verfaellt ungenutzt.
+    Migration. Nur das Lock-VERZEICHNIS wandert: ein altes `….ytdlp.lock` bleibt liegen, wo es
+    liegt — es „verfaellt" nicht, denn `sperre.py`s Frist raeumt nur auf, wenn jemand DENSELBEN
+    Pfad erwerben will, und den will nach diesem Umbau niemand mehr. Folgenlos, aber wer im
+    Profilordner nachsieht, findet es dort (Reviewbefund).
     """
     return f"{settings.path()}.ytdlp.{_venv_kennung()}"
 
@@ -638,12 +640,25 @@ def _venv_kennung() -> str:
     dabei den Merker, den die App noch braucht (dieselbe Zwei-Prozess-Lage wie #254).
 
     `hashlib`, nicht `hash()`: das ist pro Prozess gesalzen (PYTHONHASHSEED) und liefe beim
-    naechsten Start auf einen anderen Namen. `normcase` + `abspath`, weil Windows-Pfade
-    gross-/kleinschreibungsblind sind. Was das NICHT deckt: dieselbe venv ueber einen Symlink
-    oder eine Netzfreigabe erreicht ergibt zwei Kennungen — die Folge ist eine verpasste
-    Reparatur, kein Schaden.
+    naechsten Start auf einen anderen Namen. `normcase`, weil Windows-Pfade
+    gross-/kleinschreibungsblind sind.
+
+    **`realpath` statt `abspath`, und seit #254 ist das kein Feinschliff mehr.** Solange die
+    Kennung nur den MERKER trug, war die Folge zweier Schreibweisen derselben venv eine
+    verpasste Reparatur — so stand es hier, und so stimmte es. Seit die Kennung die SPERRE
+    traegt, ist die Folge eine andere: zwei Sperren fuer dasselbe `site-packages`, also zwei
+    gleichzeitige `pip install` hinein — genau der Schaden, gegen den es die Sperre gibt. Vor
+    #254 war der Fall gedeckt (EINE Sperre je Nutzer deckte jede Schreibweise mit ab); das ist
+    die ehrliche Antwort auf „was erlaubt der Fix NEU?", und sie kostet ein Wort.
+    **Gemessen, nicht angenommen** — `abspath` gegen `realpath` an denselben Zielen:
+    Junction (`New-Item -ItemType Junction`) → `…\jj` gegen `…\echt`; `subst`-Laufwerk →
+    `y:\` gegen `…\echt`. `realpath` legt beide zusammen, `abspath` keines von beiden.
+    Was OFFEN bleibt: eine Netzfreigabe unter zwei UNC-Namen (dafuer steht hier kein Aufbau)
+    — und Windows loest nichts auf, was gerade nicht erreichbar ist.
     """
-    roh = os.path.normcase(os.path.abspath(sys.prefix)).encode("utf-8", "replace")
+    # NICHT gecacht: `sys.prefix` ist zur Laufzeit faelschbar, und genau daran haengt der
+    # Test, der beide venvs gegeneinander stellt.
+    roh = os.path.normcase(os.path.realpath(sys.prefix)).encode("utf-8", "replace")
     # `blake2b`, nicht `sha1`: letzteres geht durch OpenSSL und wirft unter einem
     # FIPS-erzwingenden Provider einen `ValueError` — und dieses Modul darf nirgends werfen
     # (#185; `_pip_merker_setzen` faengt nur `OSError`, der Wurf verliesse `aktualisiere()`
@@ -830,8 +845,13 @@ def _pip_unterbrochen() -> bool:
     return d is not None and (_heute() - d).days <= INTERVALL_TAGE
 
 
-def aktualisiere(nur_wenn_faellig: bool = False) -> tuple[bool, bool]:
+def aktualisiere(nur_wenn_faellig: bool = False) -> tuple[bool | None, bool]:
     """`pip install -U yt-dlp[default]`, bedingungslos. `(ok, gehalten)`.
+
+    **`ok` ist DREIWERTIG:** `True` = pip hat Erfolg gemeldet, `False` = nicht, **`None` = es
+    lief gar nichts** (uebersprungen, siehe `nur_wenn_faellig`). Das ist kein Feinschliff:
+    `False` hiesse „fehlgeschlagen" und `True` hiesse „aktualisiert" — beides waere gelogen,
+    und die Luege wird dem Nutzer angezeigt (`_im_hintergrund` -> `ergebnis` -> Toast).
 
     **`nur_wenn_faellig` ist der einzige Weg, den bedingungslosen Vertrag zu brechen
     (#254 Weg 3, samt des dorthin geschlossenen #176)**, und er gilt allein dem Kalenderweg:
@@ -896,12 +916,26 @@ def aktualisiere(nur_wenn_faellig: bool = False) -> tuple[bool, bool]:
         # pip-Pfad.
         #
         # Der Riegel in `beim_start()` bleibt daneben stehen: der spart das Warten an der
-        # Sperre, dieser hier ist die vollstaendige Antwort. `ok=True`, weil nichts
-        # fehlgeschlagen ist — yt-dlp ist auf dem Stand, den dieser Lauf herstellen sollte.
+        # Sperre, dieser hier ist die vollstaendige Antwort.
+        #
+        # **`ok=None`, NICHT `True` — und das ist ein gemessener Reviewbefund, kein
+        # Geschmack.** „Nicht mehr faellig" heisst nicht „der andere hatte Erfolg":
+        # `_merken()` laeuft am Ende von `aktualisiere()` UNBEDINGT, auch nach einem
+        # Fehlschlag (dort begruendet). Nach JEDEM abgeschlossenen Fremdlauf desselben Tages
+        # steht `geprueft` auf heute, und `faellig()` ist False. Mit `ok=True` sah der Nutzer
+        # dann „yt-dlp ist jetzt auf <alte Fassung>" — fuer einen Lauf, dessen Vorgaenger
+        # offline gescheitert war und der selbst nie ein pip angefasst hat. Am echten Pfad
+        # gemessen; VORHER meldete dieselbe Lage korrekt „Aktualisierung fehlgeschlagen —
+        # bist du online?". Also eine Regression von einer wahren Fehlermeldung zu einer
+        # falschen Erfolgsmeldung, auf genau der Seite, auf die die README schickt.
+        #
+        # Erreichbar ueber den Knopf: `starte_hintergrund` meldet `gestartet:false`, solange
+        # der Startlauf noch haengt, und das Frontend haengt seinen Poll dann an DIESEN Lauf.
+        # `gehalten` bleibt unangetastet — es beschreibt die Sperre, nicht das Ergebnis (#236).
         if nur_wenn_faellig and not faellig():
             print("[ytdlp] uebersprungen — inzwischen hat ein anderer Lauf aktualisiert",
                   flush=True)
-            return True, gehalten
+            return None, gehalten
         # INNERHALB der Sperre und unmittelbar um `subprocess.run` herum — beide Zeilen. Das
         # ist die ganze Erkennung: der Merker ueberlebt GENAU DANN, wenn dieser Prozess
         # zwischen ihnen stirbt, und das ist #257/#258.
@@ -926,7 +960,10 @@ def aktualisiere(nur_wenn_faellig: bool = False) -> tuple[bool, bool]:
         # keinen Merker und keine Reparatur — das ist der Zustand von heute, und „yt-dlp war
         # nie da" ist wirklich Sache des Setups. Ein Reparaturlauf ist davon nicht betroffen:
         # der Merker des abgewuergten Laufs liegt ja noch (geloescht wird nur bei Erfolg), und
-        # `_pip_merker_setzen` frischt einen datierten Merker ohnehin nicht auf.
+        # der Zweig hier laeuft in einem Reparaturlauf ohnehin nicht — dort ist `fassung()`
+        # None. (Bis #268 stand hier „`_pip_merker_setzen` frischt einen datierten Merker
+        # ohnehin nicht auf". Das Schonen gibt es nicht mehr; der Schluss stimmt weiter, aber
+        # aus DIESEM Grund — und er ist der tragende, siehe `_pip_merker_setzen`.)
         # **`fassung()` NOCH EINMAL, hier drin.** Der Wert von der Protokollzeile stammt von
         # VOR dem Sperrerwerb, und dazwischen kann ein anderer Prozess seinen ganzen pip-Lauf
         # gefahren haben (#254: gepackte App neben Entwickler-uvicorn). Die gefaehrliche
@@ -968,7 +1005,9 @@ def aktualisiere(nur_wenn_faellig: bool = False) -> tuple[bool, bool]:
 
 
 # Zustand des Knopfes „Jetzt aktualisieren" (#174). `ergebnis`: "" = noch nichts bzw.
-# laeuft gerade, "ok" = pip sauber durch, "fehler" = nicht.
+# laeuft gerade, "ok" = pip sauber durch, "fehler" = nicht, "uebersprungen" = es lief nichts,
+# weil ein anderer Lauf schneller war (#254 Weg 3 — der dritte Ausgang, den es seit dem
+# Riegel unter der Sperre gibt; "ok" oder "fehler" waeren beide gelogen).
 #
 # **Modulzustand, also PRO PROZESS** — und das ist richtig so: der fetch-Subprozess
 # aktualisiert ebenfalls, aber der hat kein Frontend, das nachfragt. Dass sich die beiden
@@ -1054,7 +1093,12 @@ def _im_hintergrund(nur_wenn_faellig: bool = False) -> None:
     ergebnis, ungeschuetzt = "fehler", False
     try:
         ok, gehalten = aktualisiere(nur_wenn_faellig)
-        ergebnis, ungeschuetzt = ("ok" if ok else "fehler"), not gehalten
+        # `ok is None` = uebersprungen. **`ungeschuetzt` bleibt dann False**, auch wenn die
+        # Sperre nicht hielt: die Warnung sagt „die Aktualisierung lief ohne Sperre, die
+        # Installation kann unvollstaendig sein" — ueber einen Lauf, der pip nie angefasst
+        # hat, ist das eine Warnung ohne Gegenstand (Reviewbefund).
+        ergebnis = "uebersprungen" if ok is None else ("ok" if ok else "fehler")
+        ungeschuetzt = ok is not None and not gehalten
     except Exception as e:
         # `aktualisiere()` faengt selbst schon OSError/SubprocessError; was hier ankommt,
         # ist unerwartet und gehoert benannt statt verschluckt.
@@ -1083,7 +1127,10 @@ def automatisch(erzwingen: bool = False) -> bool:
     # Protokollzeile steht und sonst nirgends.
     # `nur_wenn_faellig` ist die Umkehrung von `erzwingen`: der Kalenderweg darf unter der
     # Sperre abbrechen, die Selbstheilung nie (#254 Weg 3).
-    return aktualisiere(nur_wenn_faellig=not erzwingen)[0]
+    # `is True`, nicht truthy: `ok` ist dreiwertig, und `None` (uebersprungen) ist hier
+    # richtigerweise ein Nein — `fetch.py` fragt „hat es sich gelohnt, es noch einmal zu
+    # versuchen", und darauf gibt ein Lauf, der nichts getan hat, keine Auskunft.
+    return aktualisiere(nur_wenn_faellig=not erzwingen)[0] is True
 
 
 def laeuft_gerade(eigener: bool | None = None) -> bool:
@@ -1216,6 +1263,10 @@ def zustand() -> dict:
     die beiden Werte kommen aus zwei Antworten (PUT liefert nur `ytdlp_auto`), und dazwischen
     behauptete der Vergleich fuer einen Moment ein Override, das es gar nicht gibt. Eine
     Wahrheit statt einer abgeleiteten.
+
+    `ergebnis` kennt seit #254 einen dritten Wert, `"uebersprungen"`: ein Lauf, der unter der
+    Sperre feststellte, dass ein anderer schneller war. Weder „ok" noch „fehler" — beides
+    behauptete etwas ueber ein pip, das nie lief.
 
     `laeuft`/`ergebnis` gehoeren seit #174 dazu: der Knopf antwortet sofort, der Ausgang des
     pip-Laufs kommt ueber den naechsten GET nach. Ohne die beiden Felder haette der Umbau

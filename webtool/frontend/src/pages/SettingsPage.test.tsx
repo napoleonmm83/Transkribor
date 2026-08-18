@@ -468,6 +468,28 @@ describe('SettingsPage', () => {
     expect(toast.success).toHaveBeenCalledTimes(2)
   })
 
+  it('meldet einen übersprungenen Lauf als Hinweis — nicht als Erfolg und nicht als Fehler', async () => {
+    // #254 Weg 3, Reviewbefund am echten Pfad: der Lauf stellte unter der pip-Sperre fest,
+    // dass ein anderer schneller war, und hat NICHTS getan. Vorher lief er in den
+    // Erfolgszweig und zeigte „yt-dlp ist jetzt auf <alte Fassung>" — auch dann, wenn der
+    // Fremdlauf offline gescheitert war (der Server merkt sich das Prüfdatum auch nach einem
+    // Fehlschlag, „nicht mehr fällig" belegt also keinen Erfolg).
+    //
+    // Beide Gegenrichtungen gehören dazu: KEIN `toast.success` (die Lüge, gegen die der Fix
+    // steht) und KEIN `toast.error` (es ist nichts schiefgegangen — das wäre dieselbe Lüge
+    // spiegelverkehrt und schickte den Nutzer auf Fehlersuche).
+    vi.mocked(api.updateYtdlp).mockResolvedValue({
+      gestartet: true, version: '2025.9.5', unlesbar: false, geprueft: '', auto: true,
+      env: false, laeuft: false, ergebnis: 'uebersprungen', ungeschuetzt: false,
+      ejs_unlesbar: false })
+    zeige()
+    fireEvent.click(await screen.findByRole('button', { name: /Jetzt aktualisieren/i }))
+    await waitFor(() => expect(toast.info).toHaveBeenCalledWith(
+      expect.stringContaining('war schneller')))
+    expect(toast.success).not.toHaveBeenCalled()
+    expect(toast.error).not.toHaveBeenCalled()
+  })
+
   it('rät bei kaputten ejs-Paketdaten nicht nach dem Netz', async () => {
     // Der Zwilling zum Test darüber, durch die andere Tür: `unlesbar` gilt yt-dlp, bei
     // kaputten Paketdaten von `yt-dlp-ejs` ist es `false` — und dann stand hier „bist du

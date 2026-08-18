@@ -969,6 +969,27 @@ def test_ytdlp_ein_gescheiterter_fadenstart_sperrt_den_knopf_nicht_dauerhaft(
     assert _warte(lambda: not ytdlp_update.hintergrund_zustand()[0])
 
 
+def test_ytdlp_ein_uebersprungener_lauf_meldet_der_seite_weder_ok_noch_fehler(
+        client, monkeypatch):
+    """Der Weg bis zum Nutzer, den der Reviewer an #254 Weg 3 gemessen hat: der Startlauf
+    haengt an der Sperre, der Nutzer klickt, `gestartet:false` haengt seinen Poll an DIESEN
+    Lauf — und der stellt unter der Sperre fest, dass ein anderer schneller war.
+
+    `ok` haette „yt-dlp ist jetzt auf <alte Fassung>" gezeigt, `fehler` „bist du online?".
+    Beides ist gelogen, und dieser Test ist die einzige Stelle, an der die ABBILDUNG bis zur
+    Antwort geprueft wird — `test_ytdlp_update.py` pinnt nur den Rueckgabewert.
+    """
+    from webtool import ytdlp_update
+    monkeypatch.setattr(ytdlp_update, "aktualisiere", lambda *a, **k: (None, False))
+    monkeypatch.setattr(ytdlp_update.metadata, "version", lambda name: "2026.8.12")
+    assert client.post("/api/settings/ytdlp/update").json()["gestartet"] is True
+    assert _warte(lambda: not ytdlp_update.hintergrund_zustand()[0])
+    st = client.get("/api/settings").json()["ytdlp"]
+    assert st["ergebnis"] == "uebersprungen"
+    # … und KEINE Sperrwarnung ueber ein pip, das nie lief — obwohl `gehalten` False war.
+    assert st["ungeschuetzt"] is False
+
+
 def test_settings_unbekannter_anbieter_400(client):
     assert client.put("/api/settings", json={"provider": "erfunden"}).status_code == 400
 
