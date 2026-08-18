@@ -24,9 +24,10 @@ describe('ProjektEinstellungenDialog', () => {
     )
     // Select ist gebunden an sprache='ch' → Label steht im Trigger
     await waitFor(() => expect(screen.getByText('Schweizerdeutsch')).toBeInTheDocument())
-    // shadcn Select öffnen + Englisch wählen via Trigger. Dialog+Select portalen nach
-    // document.body, darum container-Query hier wirkungslos — body trifft beide.
-    fireEvent.click(document.body.querySelector('[role="combobox"]')!)
+    // shadcn Select öffnen + Englisch wählen via Trigger. Ueber den NAMEN, nicht ueber „die
+    // erste combobox im body": dieser Dialog hat drei, und die Reihenfolge ist kein Vertrag
+    // (im Datei-Zwilling wurde sie mit #273 umgestellt).
+    fireEvent.click(await screen.findByRole('combobox', { name: 'Sprache' }))
     fireEvent.click(await screen.findByText('Englisch'))
     fireEvent.click(screen.getByText('Speichern'))
     await waitFor(() =>

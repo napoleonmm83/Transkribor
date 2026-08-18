@@ -32,9 +32,13 @@ const datei = (p: Partial<ProjectFile> = {}): ProjectFile =>
  *  der darauf zielt, misst die Beschriftung statt der Bereitschaft. */
 const sprachWaehlerDa = () => screen.findByRole('combobox', { name: 'Sprache' })
 
-/** shadcn-Select öffnen: der Trigger portalt nach document.body; container-Query greift nicht. */
+/** shadcn-Select öffnen: der Trigger portalt nach document.body; container-Query greift nicht.
+ *  Gegriffen wird ueber den NAMEN, nicht ueber „die erste combobox im body": der Dialog hat
+ *  drei davon, und welche die erste ist, entscheidet die Feldreihenfolge — die sich mit #273
+ *  geaendert hat. Ein Positionsgriff waere hier zufaellig richtig geblieben und beim naechsten
+ *  Umsortieren still auf das falsche Bedienelement gefallen. */
 const spracheWaehlen = async (label: string) => {
-  fireEvent.click(document.body.querySelector('[role="combobox"]')!)
+  fireEvent.click(await screen.findByRole('combobox', { name: 'Sprache' }))
   // IN der geoeffneten Liste suchen, nicht global: seit #234 sagt der Sprach-Trigger selbst
   // „Folgt dem Projekt (…)", und der Mehrsprachig-Trigger daneben ebenfalls — ein globales
   // findByText findet dann zwei Elemente und der Test stirbt an seinem eigenen Helfer.
@@ -456,6 +460,27 @@ describe('DateiEinstellungenDialog — Sprecherzahl (#264)', () => {
   })
 })
 
+describe('DateiEinstellungenDialog — Feldreihenfolge (#273)', () => {
+  it('stellt „Anzahl Sprecher" ueber den langen Mehrsprachig-Absatz (#273)', async () => {
+    /* Die Reihenfolge IST hier die Funktion. Das Feld stand als viertes und letztes unter dem
+       dreizeiligen Erklaerabsatz von „Mehrere Sprachen" und wurde von der einzigen Person,
+       die die App benutzt, nicht gefunden — bei dem laut #264 EINZIGEN gemessen wirksamen
+       Hebel der Sprechertrennung. Geprueft wird die DOM-Reihenfolge der Beschriftungen,
+       nicht ihre Anwesenheit: „ist da" war schon vorher wahr, und genau das war das Problem.
+
+       Was der Test NICHT sieht: ob das Feld ohne Bildlauf im Sichtfeld steht — jsdom rechnet
+       kein Layout (`getBoundingClientRect` gibt ueberall Nullen). Das ist im Browser
+       nachgesehen, hier bleibt die Reihenfolge als das, was sich halten laesst. */
+    vi.spyOn(api, 'getFileEinstellungen').mockResolvedValue(BASIS)
+    render(<DateiEinstellungenDialog project="p" base="a" file={datei()} offen />)
+    await sprachWaehlerDa()
+    const beschriftungen = [...document.body.querySelectorAll('label')]
+      .map(l => l.textContent?.trim())
+    expect(beschriftungen).toEqual(
+      ['Sprache', 'Anzahl Sprecher', 'Mehrere Sprachen', 'Korrektur-Tiefe'])
+  })
+})
+
 describe('DateiEinstellungenDialog — Sprecherzahl, ungültige Zwischeneingabe (CodeRabbit)', () => {
   it('eine Fehleingabe löscht die gesetzte Zahl NICHT', async () => {
     /* Der Grund für `type="text"`. Bei `type="number"` liefert der Browser für „5e" einen
@@ -488,24 +513,5 @@ describe('DateiEinstellungenDialog — Sprecherzahl, ungültige Zwischeneingabe 
     }
     expect(save).not.toHaveBeenCalled()
     save.mockRestore()
-  })
-
-  it('stellt „Anzahl Sprecher" ueber den langen Mehrsprachig-Absatz (#273)', async () => {
-    /* Die Reihenfolge IST hier die Funktion. Das Feld stand als viertes und letztes unter dem
-       dreizeiligen Erklaerabsatz von „Mehrere Sprachen" und wurde von der einzigen Person,
-       die die App benutzt, nicht gefunden — bei dem laut #264 EINZIGEN gemessen wirksamen
-       Hebel der Sprechertrennung. Geprueft wird die DOM-Reihenfolge der Beschriftungen,
-       nicht ihre Anwesenheit: „ist da" war schon vorher wahr, und genau das war das Problem.
-
-       Was der Test NICHT sieht: ob das Feld ohne Bildlauf im Sichtfeld steht — jsdom rechnet
-       kein Layout (`getBoundingClientRect` gibt ueberall Nullen). Das ist im Browser
-       nachgesehen, hier bleibt die Reihenfolge als das, was sich halten laesst. */
-    vi.spyOn(api, 'getFileEinstellungen').mockResolvedValue(BASIS)
-    render(<DateiEinstellungenDialog project="p" base="a" file={datei()} offen />)
-    await sprachWaehlerDa()
-    const beschriftungen = [...document.body.querySelectorAll('label')]
-      .map(l => l.textContent?.trim())
-    expect(beschriftungen).toEqual(
-      ['Sprache', 'Anzahl Sprecher', 'Mehrere Sprachen', 'Korrektur-Tiefe'])
   })
 })

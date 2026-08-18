@@ -9,9 +9,12 @@ import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
 
-/** Sprache, Korrektur-Tiefe und Sprecherzahl EINER bereits liegenden Datei. Spiegelt
- *  `ProjektEinstellungenDialog`, ergänzt den kontext-abhängigen Hinweis und den dynamischen
- *  Knopf-Text. Der Dialog schreibt NUR den Override (`saveFileEinstellungen`); welche
+/** Sprache, Korrektur-Tiefe und Sprecherzahl EINER bereits liegenden Datei. Baut auf
+ *  `ProjektEinstellungenDialog` auf, ergänzt den kontext-abhängigen Hinweis und den dynamischen
+ *  Knopf-Text — **spiegelt ihn seit #273 aber NICHT mehr in der Reihenfolge**: dort steht
+ *  Korrektur-Tiefe vor Mehrsprachig, hier dahinter, weil die Sprecherzahl nach oben musste
+ *  (Begründung unten am Raster). Wer die beiden „wieder angleicht", macht #273 rückgängig.
+ *  Der Dialog schreibt NUR den Override (`saveFileEinstellungen`); welche
  *  Neuberechnung nötig ist, entscheidet der Aufrufer via `onGespeichert` — denn die Job-Hooks
  *  (Adoption, Editor-Reload) hängen in `DateiMenue`.
  *
