@@ -15,6 +15,18 @@ export type EditDoc = {
    *  PUT zurueck und loest dort das Beiseitelegen der unlesbaren Datei aus; gespeichert wird
    *  es nie (der Server entfernt es vor dem Schreiben). */
   selbstgeheilt?: string;
+  /** Zustand der `edit.json`, aus dem der Server ihn gebaut hat (#160) — die Grundlage des
+   *  optimistischen Sperrens. Reist mit dem PUT zurueck; hat sich die Datei inzwischen
+   *  geaendert (ein Korrekturlauf ist fertig geworden), antwortet der Server mit 409 statt
+   *  zu ueberschreiben. Gespeichert wird das Feld nie, der Server entfernt es vor dem
+   *  Schreiben — wie `selbstgeheilt`.
+   *
+   *  **Das FEHLEN des Feldes heisst „ohne Vorbehalt schreiben"** und ist der Weg fuers
+   *  bewusste Ueberschreiben: wer im Konflikt „meine Fassung behalten" waehlt, dem nimmt
+   *  `useDoc` das Feld aus dem Dokument. Ein eigenes Kraft-Flag waere ein zweiter Schalter
+   *  fuer dieselbe Aussage — und einer, der haengenbleiben kann; so ist der Verzicht
+   *  einmalig per Konstruktion, denn der naechste erfolgreiche PUT liefert wieder einen. */
+  dateistand?: string;
   /** Abschnitte der Aufnahme, zu denen es KEIN Segment gibt (#83). Whisper kann ein
    *  30-Sekunden-Fenster ueberspringen, ohne dass irgendetwas im Ergebnis darauf hinweist —
    *  nur die Abdeckung sieht das. Optional: vor diesem Feature geschriebene edit.json haben

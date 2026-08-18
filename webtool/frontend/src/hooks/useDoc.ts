@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { toast } from 'sonner'
 import type { EditDoc, Segment } from '@/lib/types'
 import { renameSpeaker as renameInDoc } from '@/lib/grouping'
-import { getDoc, saveDoc, exportText, type ExportFmt } from '@/lib/api'
+import { getDoc, saveDoc, exportText, HttpFehler, type ExportFmt } from '@/lib/api'
 import { streichungenVergessen } from '@/lib/streichen'
 
 const MIME: Record<ExportFmt, string> = { md: 'text/markdown', srt: 'application/x-subrip' }
@@ -228,6 +228,38 @@ export function useDoc(project: string | null, base: string | null) {
   const ladeLauf = useRef(0)
   const fertig = useRef(0)
 
+  /**
+   * Der Server hat abgelehnt, weil die `edit.json` sich unter uns geaendert hat (#160) —
+   * fast immer, weil ein Korrekturlauf fertig geworden ist, waehrend unser PUT unterwegs war.
+   *
+   * **Getipptes bleibt stehen und der Nutzer entscheidet** (Marcus, 2026-08-18). Still neu zu
+   * laden waere in dem Fall falsch, in dem er kurz vorher „meine Fassung behalten" gewaehlt
+   * hat: der Editor zoege ihm die Arbeit unter den Haenden weg.
+   *
+   * Beim Behalten wird `dateistand` aus dem Dokument ENTFERNT — das ist die ganze
+   * Kraft-Mechanik. Ein PUT ohne den Schluessel schreibt ohne Vorbehalt (Serverseite), und
+   * weil `setDoc` die Identitaet von `save` wechselt, setzt die Entprellung von selbst einen
+   * neuen Lauf an. Einmalig per Konstruktion: der naechste erfolgreiche PUT liefert wieder
+   * einen Stand. Ein eigenes Flag muesste man zurueckstellen — und koennte es vergessen.
+   */
+  const konflikt = useCallback((b: string) => {
+    if (window.confirm(
+      `„${b}“ wurde inzwischen geändert — vermutlich ist eine Korrektur fertig geworden.\n\n`
+      + 'OK: die neue Fassung laden — deine ungespeicherten Änderungen gehen verloren.\n'
+      + 'Abbrechen: deine Fassung behalten — sie überschreibt beim nächsten Speichern die neue.')) {
+      reload()
+      return
+    }
+    setDoc(d => {
+      if (!d || d.dateistand === undefined) return d
+      const { dateistand: _verzicht, ...ohne } = d
+      return ohne
+    })
+    // Weder 'gespeichert' (nichts steht auf der Platte) noch 'fehler' (das startete die
+    // Wiederhol-Schleife aus #107 gegen eine Wand, die kein Netzfehler ist).
+    setStand('offen')
+  }, [reload])
+
   const save = useCallback(async () => {
     if (!doc || !project || !base) return
     // Ein Ladelauf ersetzt das Dokument gerade — was diese Closure traegt, ist die Fassung
@@ -269,10 +301,19 @@ export function useDoc(project: string | null, base: string | null) {
       const meins = () => offen.current === meinKey
       if (meins()) setStand('speichert')
       try {
-        await saveDoc(project, base, doc)
+        const antwort = await saveDoc(project, base, doc)
         // Zwischen Start und Rueckkehr kann die Datei gewechselt haben — dann gehoert die
         // Buchfuehrung einem anderen Dokument und darf hier nicht angefasst werden.
         if (!meins()) return
+        // Der neue Stand (#160) MUSS uebernommen werden, und zwar VOR dem `fassung`-Zweig
+        // darunter: dort wurde waehrend des Laufs weitergetippt, es folgt also ein weiterer
+        // PUT — mit dem alten Token liefe der gegen unsere eigene Schreibung von gerade eben
+        // und bekaeme 409. Der Nutzer saehe eine Konflikt-Rueckfrage ohne fremden Schreiber.
+        //
+        // `setDoc` wechselt die Identitaet von `save` und setzt damit den Entprellungs-Timer
+        // neu. Ist nichts offen, greift `if (!dirty) return` im Effekt; ist etwas offen, wird
+        // der Schreibvorgang um bis zu 800 ms spaeter — waehrend der Nutzer ohnehin tippt.
+        setDoc(d => (d && antwort.dateistand ? { ...d, dateistand: antwort.dateistand } : d))
         // Wurde waehrend des Laufs weitergetippt, ist das Geschriebene schon wieder alt: `dirty`
         // muss stehen bleiben, sonst faellt genau diese Aenderung lautlos unter den Tisch. Die
         // Entprellung unten hat fuer sie bereits einen neuen Lauf angesetzt.
@@ -280,6 +321,15 @@ export function useDoc(project: string | null, base: string | null) {
         setDirty(false); setStand('gespeichert')
         setFehlerZaehler(0); finalToastGezeigt.current = false   // Erfolg beendet die Fehler-Episode
       } catch (e) {
+        // 409 ist KEIN Fehlschlag, sondern eine Frage an den Nutzer (#160) — und darf deshalb
+        // NICHT in die Wiederhol-Schleife aus #107 geraten: die ist fuer einen Server gedacht,
+        // der gerade neu startet. Ein Konflikt loest sich nicht durch Warten, drei weitere
+        // Versuche liefen gegen dieselbe Wand und endeten im finalen Fehler-Toast.
+        // `dirty` bleibt in beiden Zweigen oben, die Rueckfragen beim Verlassen greifen also.
+        if (e instanceof HttpFehler && e.status === 409) {
+          if (meins()) konflikt(base)
+          return
+        }
         // Fehlerzaehler und Meldung nur fuer das offene Dokument (#107): ein Lauf fuer A, der nach
         // einem Wechsel zu B fehlschlaegt, ist fuer B ohne Belang. Der finale Toast kommt im
         // Retry-Effekt, nicht hier — sonst Dauerfeuer bei jedem der bis zu drei Versuche.
@@ -299,7 +349,7 @@ export function useDoc(project: string | null, base: string | null) {
     // bekommt kein rotes Signal — der Schutz ist die Kombination, nicht die einzelne Zeile.
     kette.current = lauf.catch(() => {})
     return lauf
-  }, [doc, project, base])
+  }, [doc, project, base, konflikt])
 
   // Flush beim Verlassen einer Datei (#106). In der 800-ms-Pause hatte die Oberflaeche "wird
   // gespeichert" versprochen; eine "Verwerfen?"-Rueckfrage beim Wechseln widerspricht dem. Der
@@ -354,7 +404,11 @@ export function useDoc(project: string | null, base: string | null) {
       const dokument = docRef.current
       if (!dokument) return
       kette.current = kette.current
-        .then(() => saveDoc(project, base, dokument))
+        // Der neue `dateistand` wird hier bewusst NICHT uebernommen (#160): wir haben die
+        // Datei gerade verlassen, der Ref-Zustand des Hooks gehoert schon der naechsten.
+        // Das Dokument traegt sein Token selbst mit — deshalb liegt es im Dokument und nicht
+        // in einem Ref daneben, der beim Cleanup bereits umgeschwenkt waere.
+        .then(async () => { await saveDoc(project, base, dokument) })
         .catch((e) => {
           toast.error(`Speichern beim Verlassen fehlgeschlagen (${base}): ${e instanceof Error ? e.message : String(e)}`)
         })

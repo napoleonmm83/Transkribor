@@ -6,7 +6,20 @@ import { toast } from 'sonner'
 import * as api from '@/lib/api'
 import type { EditDoc, Segment } from '@/lib/types'
 
-vi.mock('@/lib/api')
+/**
+ * Nur die drei Funktionen werden attrappiert, `HttpFehler` bleibt ECHT.
+ *
+ * Ein pauschales `vi.mock('@/lib/api')` ersetzt auch die Klasse — und `useDoc` prueft den
+ * Konflikt mit `instanceof` gegen die Klasse aus dem *gemockten* Modul. Ein im Test erzeugter
+ * echter `HttpFehler` waere dann nie `instanceof` davon, der 409-Zweig liefe nie, und die
+ * Tests darunter waeren gruen, ohne je etwas zu pruefen (sie saehen den normalen
+ * Fehlerzweig). Dieselbe Klasse von Falle wie die Attrappen, die den Vertrag selbst
+ * behaupten (#239).
+ */
+vi.mock('@/lib/api', async (echt) => ({
+  ...(await echt<typeof import('@/lib/api')>()),
+  getDoc: vi.fn(), saveDoc: vi.fn(), exportText: vi.fn(),
+}))
 /**
  * Die Attrappe FUEHRT die offenen Toasts, statt nur Aufrufe zu zaehlen (#154). Ein
  * `dismiss: vi.fn()`, das nichts tut, liesse jeden Rueckweg fuer immer anklickbar — der Test
@@ -60,7 +73,7 @@ afterEach(() => { vi.useRealTimers(); vi.clearAllMocks(); toasts.clear() })
 
 describe('useDoc Autosave', () => {
   it('speichert erst nach der Tipppause — und mehrere Aenderungen nur EINMAL', async () => {
-    vi.mocked(api.saveDoc).mockResolvedValue(undefined as never)
+    vi.mocked(api.saveDoc).mockResolvedValue({} as never)
     const { result } = await geladen()
 
     await act(async () => {
@@ -84,7 +97,9 @@ describe('useDoc Autosave', () => {
     // Sonst gilt das Dokument als gesichert, obwohl der letzte Tastendruck nie geschrieben
     // wurde — ein stiller Verlust, den keine Rueckfrage beim Verlassen mehr auffaengt.
     let fertig: () => void = () => {}
-    vi.mocked(api.saveDoc).mockReturnValue(new Promise<void>(r => { fertig = r }))
+    // Haengt bis `fertig()` — genau darum geht es hier. `saveDoc` liefert seit #160 den neuen
+    // `dateistand` zurueck, die Attrappe also ein Objekt statt `undefined`.
+    vi.mocked(api.saveDoc).mockReturnValue(new Promise<{ dateistand?: string }>(r => { fertig = () => r({}) }))
     const { result } = await geladen()
 
     // Zwei getrennte act(): der Effekt setzt den Timer erst nach dem Render, im selben Block
@@ -133,7 +148,7 @@ describe('useDoc Autosave', () => {
     // und es gibt KEINEN finalen Toast — die Anzeige geht auf 'gespeichert'.
     vi.mocked(api.saveDoc)
       .mockRejectedValueOnce(new Error('kurz weg'))
-      .mockResolvedValue(undefined as never)
+      .mockResolvedValue({} as never)
     const { result } = await geladen()
 
     await act(async () => { result.current.updateSegment(0, { text: 'eins' }) })
@@ -152,7 +167,7 @@ describe('useDoc Autosave', () => {
     // „Ablehnung ohne Error-Objekt" streift diesen Pfad nur inzidentell (assert keine calls).
     vi.mocked(api.saveDoc)
       .mockRejectedValueOnce(new Error('kurz weg'))
-      .mockResolvedValue(undefined as never)
+      .mockResolvedValue({} as never)
     const { result } = await geladen()
     await act(async () => { result.current.updateSegment(0, { text: 'eins' }) })
     await act(async () => { await vi.advanceTimersByTimeAsync(800) })   // save 1 fail → retry bei +2s
@@ -383,7 +398,7 @@ describe('useDoc updateDoc', () => {
   it('schreibt das Kopffeld und laeuft ueber dieselbe Entprellung wie ein Segment', async () => {
     // Kontext und Zusammenfassung duerfen keinen zweiten Speicherweg bekommen: sonst gibt es
     // zwei Wahrheiten darueber, wann ein Dokument als gesichert gilt.
-    vi.mocked(api.saveDoc).mockResolvedValue(undefined as never)
+    vi.mocked(api.saveDoc).mockResolvedValue({} as never)
     const { result } = await geladen()
 
     await act(async () => { result.current.updateDoc({ context: 'Interview am Deuce Day.' }) })
@@ -410,7 +425,7 @@ describe('useDoc: gleichzeitige Speicherlaeufe', () => {
     vi.mocked(api.saveDoc).mockImplementation((() => {
       laufend++
       gleichzeitig = Math.max(gleichzeitig, laufend)
-      return new Promise<void>(r => warteschlange.push(() => { laufend--; r() }))
+      return new Promise<{ dateistand?: string }>(r => warteschlange.push(() => { laufend--; r({}) }))
     }) as never)
     const { result } = await geladen()
 
@@ -436,7 +451,7 @@ describe('useDoc: gleichzeitige Speicherlaeufe', () => {
     // werfen. Dann lehnt `kette.current` ab, jedes weitere `.then()` reicht die Ablehnung
     // durch — und ALLE folgenden Speicherlaeufe der Sitzung fallen still aus.
     vi.mocked(api.saveDoc).mockRejectedValueOnce(null as never)
-    vi.mocked(api.saveDoc).mockResolvedValue(undefined as never)
+    vi.mocked(api.saveDoc).mockResolvedValue({} as never)
     const { result } = await geladen()
 
     await act(async () => { result.current.updateSegment(0, { text: 'eins' }) })
@@ -455,7 +470,7 @@ describe('useDoc: gleichzeitige Speicherlaeufe', () => {
     // ein Dokument, das nie geschrieben wurde.
     const docB: EditDoc = { ...doc, base: 'b2' }
     let fertigA: () => void = () => {}
-    vi.mocked(api.saveDoc).mockReturnValueOnce(new Promise<void>(r => { fertigA = r }) as never)
+    vi.mocked(api.saveDoc).mockReturnValueOnce(new Promise<{ dateistand?: string }>(r => { fertigA = () => r({}) }) as never)
     vi.useFakeTimers()
     vi.mocked(api.getDoc).mockResolvedValue(doc)
     const h = renderHook(({ b }) => useDoc('P', b), { initialProps: { b: 'b' } })
@@ -477,7 +492,7 @@ describe('useDoc: gleichzeitige Speicherlaeufe', () => {
     // Datei fuer den der anderen und meldete „gespeichert“ fuer ein ungeschriebenes Dokument.
     const docB: EditDoc = { ...doc, project: 'A', base: 'B C' }
     let fertigA: () => void = () => {}
-    vi.mocked(api.saveDoc).mockReturnValueOnce(new Promise<void>(r => { fertigA = r }) as never)
+    vi.mocked(api.saveDoc).mockReturnValueOnce(new Promise<{ dateistand?: string }>(r => { fertigA = () => r({}) }) as never)
     vi.useFakeTimers()
     vi.mocked(api.getDoc).mockResolvedValue({ ...doc, project: 'A B', base: 'C' })
     const h = renderHook(({ p, b }) => useDoc(p, b), { initialProps: { p: 'A B', b: 'C' } })
@@ -501,8 +516,8 @@ describe('useDoc: Dateiwechsel mitten im Speichern', () => {
     // fuer B. Bs Tastendruck gilt dann als gesichert, ist aber nie geschrieben worden.
     const docB: EditDoc = { ...doc, base: 'b2' }
     let fertigA: () => void = () => {}
-    vi.mocked(api.saveDoc).mockReturnValueOnce(new Promise<void>(r => { fertigA = r }) as never)
-    vi.mocked(api.saveDoc).mockResolvedValue(undefined as never)
+    vi.mocked(api.saveDoc).mockReturnValueOnce(new Promise<{ dateistand?: string }>(r => { fertigA = () => r({}) }) as never)
+    vi.mocked(api.saveDoc).mockResolvedValue({} as never)
 
     vi.useFakeTimers()
     vi.mocked(api.getDoc).mockResolvedValue(doc)
@@ -535,8 +550,8 @@ describe('useDoc: Dateiwechsel mitten im Speichern', () => {
     const docB: EditDoc = { ...doc, base: 'b2' }
     let fertigA1: () => void = () => {}
     vi.mocked(api.saveDoc)
-      .mockReturnValueOnce(new Promise<void>(r => { fertigA1 = r }) as never)
-      .mockResolvedValue(undefined as never)
+      .mockReturnValueOnce(new Promise<{ dateistand?: string }>(r => { fertigA1 = () => r({}) }) as never)
+      .mockResolvedValue({} as never)
 
     vi.useFakeTimers()
     vi.mocked(api.getDoc).mockResolvedValue(doc)
@@ -570,7 +585,7 @@ describe('useDoc: wartender Lauf liest den falschen Zaehlerstand', () => {
     const dauern = [1400, 300, 300, 300, 300]
     let i = 0
     vi.mocked(api.saveDoc).mockImplementation((() =>
-      new Promise<void>(r => { setTimeout(r, dauern[i++] ?? 300) })) as never)
+      new Promise<{ dateistand?: string }>(r => { setTimeout(() => r({}), dauern[i++] ?? 300) })) as never)
 
     const { result } = await geladen()
     await act(async () => { result.current.updateSegment(0, { text: 'eins' }) })
@@ -600,8 +615,8 @@ describe('useDoc: ueberholte Kettenglaeufe fallenlassen (#117)', () => {
     // nur die MITTLEREN wartenden Laeufe, fuer die ein juengerer in der Kette steht.
     let erster: () => void = () => {}
     vi.mocked(api.saveDoc)
-      .mockReturnValueOnce(new Promise<void>(r => { erster = r }) as never)   // #1 haengt
-      .mockResolvedValue(undefined as never)                                    // Rest loest sofort
+      .mockReturnValueOnce(new Promise<{ dateistand?: string }>(r => { erster = () => r({}) }) as never)   // #1 haengt
+      .mockResolvedValue({} as never)                                    // Rest loest sofort
     const { result } = await geladen()
 
     await act(async () => { result.current.updateSegment(0, { text: 'eins' }) })
@@ -632,8 +647,8 @@ describe('useDoc: ueberholte Kettenglaeufe fallenlassen (#117)', () => {
     const docB: EditDoc = { ...doc, base: 'b2' }
     let fertigA1: () => void = () => {}
     vi.mocked(api.saveDoc)
-      .mockReturnValueOnce(new Promise<void>(r => { fertigA1 = r }) as never)
-      .mockResolvedValue(undefined as never)
+      .mockReturnValueOnce(new Promise<{ dateistand?: string }>(r => { fertigA1 = () => r({}) }) as never)
+      .mockResolvedValue({} as never)
 
     vi.useFakeTimers()
     vi.mocked(api.getDoc).mockResolvedValue(doc)
@@ -669,7 +684,7 @@ describe('useDoc: Flush beim Verlassen (#106)', () => {
     // die Kette, nie daneben. project/base im Cleanup-Schluss stammen vom Effekt-Setup (Datei A);
     // docRef gehoert beim Cleanup noch zu A (reload()s setDoc(B) greift erst in einem spaeteren Effekt).
     const docB: EditDoc = { ...doc, base: 'b2' }
-    vi.mocked(api.saveDoc).mockResolvedValue(undefined as never)
+    vi.mocked(api.saveDoc).mockResolvedValue({} as never)
     vi.useFakeTimers()
     vi.mocked(api.getDoc).mockResolvedValue(doc)
     const h = renderHook(({ b }) => useDoc('P', b), { initialProps: { b: 'b' } })
@@ -695,7 +710,7 @@ describe('useDoc: Flush beim Verlassen (#106)', () => {
     // gereihter Flush schlagen. (Den Diskriminator sichert zusaetzlich der #117-Cross-Doc-Test.)
     const docB: EditDoc = { ...doc, base: 'b2' }
     let fertigA: () => void = () => {}
-    vi.mocked(api.saveDoc).mockReturnValue(new Promise<void>(r => { fertigA = r }) as never)
+    vi.mocked(api.saveDoc).mockReturnValue(new Promise<{ dateistand?: string }>(r => { fertigA = () => r({}) }) as never)
     vi.useFakeTimers()
     vi.mocked(api.getDoc).mockResolvedValue(doc)
     const h = renderHook(({ b }) => useDoc('P', b), { initialProps: { b: 'b' } })
@@ -744,7 +759,7 @@ describe('useDoc: Flush beim Verlassen (#106)', () => {
     // wieder aufleben lassen (Backend save_file legt sie bedingungslos neu an: makedirs exist_ok).
     // vergiss setzt dirty false → Autosave-Timer bricht ab UND Flush-Guard greift (dirtyRef false).
     const docB: EditDoc = { ...doc, base: 'b2' }
-    vi.mocked(api.saveDoc).mockResolvedValue(undefined as never)
+    vi.mocked(api.saveDoc).mockResolvedValue({} as never)
     vi.useFakeTimers()
     vi.mocked(api.getDoc).mockResolvedValue(doc)
     const h = renderHook(({ b }) => useDoc('P', b), { initialProps: { b: 'b' } })
@@ -795,7 +810,7 @@ describe('useDoc: Dokument A darf nie in Datei B landen', () => {
     // die Ungleichheit liegt INNERHALB der Closure.
     // Auf der Platte: b2.edit.json wird durch A ersetzt, b2.md neu gerendert, human_edited=true.
     const docB: EditDoc = { ...doc, base: 'b2' }
-    vi.mocked(api.saveDoc).mockResolvedValue(undefined as never)
+    vi.mocked(api.saveDoc).mockResolvedValue({} as never)
     vi.useFakeTimers()
     vi.mocked(api.getDoc).mockResolvedValue(doc)
     const h = renderHook(({ b }) => useDoc('P', b), { initialProps: { b: 'b' } })
@@ -829,7 +844,7 @@ describe('useDoc: der Rueckweg einer Streichung ueberlebt den Dokumentwechsel NI
     // Ohne die hier waere jeder der drei Tests unten auch dann gruen, wenn `gestrichen` gar
     // keinen Toast mehr anlegte — „nichts zu klicken" ist sonst nicht von „richtig entwertet"
     // zu unterscheiden.
-    vi.mocked(api.saveDoc).mockResolvedValue(undefined as never)
+    vi.mocked(api.saveDoc).mockResolvedValue({} as never)
     const { result } = await geladen()
 
     await act(async () => {
@@ -846,7 +861,7 @@ describe('useDoc: der Rueckweg einer Streichung ueberlebt den Dokumentwechsel NI
 
   it('nach einem Dateiwechsel steht kein Rueckweg mehr — A landet nicht in B', async () => {
     const docB: EditDoc = { ...doc, base: 'b2', annotations: ['B-eins'] }
-    vi.mocked(api.saveDoc).mockResolvedValue(undefined as never)
+    vi.mocked(api.saveDoc).mockResolvedValue({} as never)
     vi.useFakeTimers()
     vi.mocked(api.getDoc).mockResolvedValue(doc)
     const h = renderHook(({ b }) => useDoc('P', b), { initialProps: { b: 'b' } })
@@ -874,7 +889,7 @@ describe('useDoc: der Rueckweg einer Streichung ueberlebt den Dokumentwechsel NI
     // ruft `reload()`, wenn ein Korrekturlauf fertig wird — die frisch geschriebenen
     // Anmerkungen sind genau das, was der alte Rueckruf sonst wieder wegraeumte.
     const korrigiert: EditDoc = { ...doc, annotations: ['korrigiert-eins', 'korrigiert-zwei'] }
-    vi.mocked(api.saveDoc).mockResolvedValue(undefined as never)
+    vi.mocked(api.saveDoc).mockResolvedValue({} as never)
     const { result } = await geladen()
 
     await act(async () => {
@@ -896,7 +911,7 @@ describe('useDoc: der Rueckweg einer Streichung ueberlebt den Dokumentwechsel NI
     // greift erst beim Navigieren. Ein Klick in diesem Fenster ruft `updateDoc` -> `beruehrt()`
     // -> `dirty`, und der Autosave legt die Datei 800 ms spaeter wieder an (`save_file` schreibt
     // bedingungslos). Genau die Waise, gegen die `vergiss` gebaut ist (#106-Review C1/C2).
-    vi.mocked(api.saveDoc).mockResolvedValue(undefined as never)
+    vi.mocked(api.saveDoc).mockResolvedValue({} as never)
     const { result } = await geladen()
 
     await act(async () => {
@@ -916,7 +931,7 @@ describe('useDoc: der Rueckweg einer Streichung ueberlebt den Dokumentwechsel NI
     // beiden Absaetze „Buad Aras"). Ein gestrichener Absatz liegt zu dem Zeitpunkt nicht mehr im
     // Dokument, die Umbenennung erreicht ihn also nicht — und ein Klick auf „Rueckgaengig"
     // danach setzte den alten Namen wieder oben ins Dokument und in den Export.
-    vi.mocked(api.saveDoc).mockResolvedValue(undefined as never)
+    vi.mocked(api.saveDoc).mockResolvedValue({} as never)
     const { result } = await geladen()
     const alt = 'Gespraech mit Fuhat Aras im Stall.'
 
@@ -934,7 +949,7 @@ describe('useDoc: der Rueckweg einer Streichung ueberlebt den Dokumentwechsel NI
     // `DateiMenue.wegVomEditor()` baut den Editor ab (Loeschen / Neu transkribieren). React
     // verwirft `setDoc` auf einem abgebauten Hook kommentarlos — der Knopf saehe aus, als
     // haette er gewirkt, und der Nutzer traegt den Eintrag nicht von Hand nach.
-    vi.mocked(api.saveDoc).mockResolvedValue(undefined as never)
+    vi.mocked(api.saveDoc).mockResolvedValue({} as never)
     const { result, unmount } = await geladen()
 
     await act(async () => {
@@ -957,5 +972,93 @@ describe('useDoc Export-Fehler', () => {
     await act(async () => { await result.current.exportDownload('srt') })
 
     expect(toast.error).toHaveBeenCalledWith('Export fehlgeschlagen: boom')
+  })
+})
+
+describe('useDoc: Speicherkonflikt (#160)', () => {
+  /** Dokument MIT Stand — nur so ist sein Verschwinden ueberhaupt beobachtbar. */
+  async function geladenMitStand(stand = 'A') {
+    vi.useFakeTimers()
+    vi.mocked(api.getDoc).mockResolvedValue({ ...doc, dateistand: stand })
+    const h = renderHook(() => useDoc('P', 'b'))
+    await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+    return h
+  }
+
+  const konflikt = () => new api.HttpFehler('inzwischen geändert', 409)
+
+  it('uebernimmt den neuen Stand, sonst laeuft der naechste Lauf gegen die eigene Schreibung',
+    async () => {
+      // Ohne diese Uebernahme bekaeme jeder ZWEITE Autosave 409 — ohne dass ein fremder
+      // Schreiber beteiligt waere. Der Nutzer saehe eine Konflikt-Rueckfrage aus dem Nichts.
+      vi.mocked(api.saveDoc).mockResolvedValue({ dateistand: 'B' })
+      const { result } = await geladenMitStand('A')
+
+      await act(async () => { result.current.updateSegment(0, { text: 'eins' }) })
+      await act(async () => { await vi.advanceTimersByTimeAsync(800) })
+      expect(vi.mocked(api.saveDoc).mock.calls[0][2].dateistand).toBe('A')
+
+      await act(async () => { result.current.updateSegment(0, { text: 'zwei' }) })
+      await act(async () => { await vi.advanceTimersByTimeAsync(800) })
+      expect(vi.mocked(api.saveDoc).mock.calls[1][2].dateistand).toBe('B')
+    })
+
+  it('OK laedt die fremde Fassung — und tritt NICHT nach', async () => {
+    const frage = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    vi.mocked(api.saveDoc).mockRejectedValue(konflikt())
+    const { result } = await geladenMitStand()
+    const ladeRufe = vi.mocked(api.getDoc).mock.calls.length
+
+    await act(async () => { result.current.updateSegment(0, { text: 'eins' }) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(800) })
+
+    expect(frage).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(api.getDoc).mock.calls.length).toBe(ladeRufe + 1)   // reload()
+    // Ueber alle Wiederhol-Abstaende hinweg (#107: 2+4+8 s), einzeln vorgedreht — jede
+    // Wiederholung plant erst die naechste. Ein Konflikt loest sich nicht durch Warten.
+    await act(async () => { await vi.advanceTimersByTimeAsync(2000) })   // Wiederholung 1
+    await act(async () => { await vi.advanceTimersByTimeAsync(4000) })   // Wiederholung 2
+    await act(async () => { await vi.advanceTimersByTimeAsync(8000) })   // Wiederholung 3
+    expect(api.saveDoc).toHaveBeenCalledTimes(1)
+    expect(toastMock.error).not.toHaveBeenCalled()
+    frage.mockRestore()
+  })
+
+  it('Abbrechen behaelt das Getippte und schreibt beim naechsten Mal OHNE Vorbehalt',
+    async () => {
+      const frage = vi.spyOn(window, 'confirm').mockReturnValue(false)
+      vi.mocked(api.saveDoc).mockRejectedValueOnce(konflikt()).mockResolvedValue({ dateistand: 'C' })
+      const { result } = await geladenMitStand('A')
+
+      await act(async () => { result.current.updateSegment(0, { text: 'meins' }) })
+      await act(async () => { await vi.advanceTimersByTimeAsync(800) })
+      expect(vi.mocked(api.saveDoc).mock.calls[0][2].dateistand).toBe('A')
+
+      // Das Entfernen des Feldes wechselt die Identitaet von `save` — die Entprellung setzt
+      // damit von selbst einen neuen Lauf an, ohne dass jemand tippen muss.
+      await act(async () => { await vi.advanceTimersByTimeAsync(800) })
+      expect(api.saveDoc).toHaveBeenCalledTimes(2)
+      const zweite = vi.mocked(api.saveDoc).mock.calls[1][2]
+      expect('dateistand' in zweite).toBe(false)        // FEHLENDER Schluessel = ohne Vorbehalt
+      expect(zweite.segments[0].text).toBe('meins')     // und das Getippte ist noch da
+      expect(result.current.doc?.segments[0].text).toBe('meins')
+      frage.mockRestore()
+    })
+
+  it('ein gewoehnlicher Fehler geht weiterhin in die Wiederholschleife', async () => {
+    // Gegenprobe: ohne sie belegt der Test darueber nur, dass NICHTS nachtritt — er wuerde
+    // auch gruen bleiben, wenn die Wiederholung ganz kaputt waere.
+    const frage = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    vi.mocked(api.saveDoc).mockRejectedValue(new Error('server weg'))
+    const { result } = await geladenMitStand()
+
+    await act(async () => { result.current.updateSegment(0, { text: 'eins' }) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(800) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(2000) })   // Wiederholung 1
+    await act(async () => { await vi.advanceTimersByTimeAsync(4000) })   // Wiederholung 2
+    await act(async () => { await vi.advanceTimersByTimeAsync(8000) })   // Wiederholung 3
+    expect(api.saveDoc).toHaveBeenCalledTimes(4)        // 1 + 3 Wiederholungen
+    expect(frage).not.toHaveBeenCalled()                // und KEINE Konfliktfrage
+    frage.mockRestore()
   })
 })
