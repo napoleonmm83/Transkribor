@@ -127,14 +127,20 @@ RECHERCHIERT (Herstellerangaben und Modellkarten, von mir **nicht** nachgemessen
   läuft aber **als Cloud-Dienst**. Marcus hat entschieden: das Audio verlässt den Rechner
   nicht. **Ausgeschlossen.**
 - **DiariZen** (BUT Brno, EEND-VC: strukturell beschnittener WavLM-Large-Encoder +
-  Conformer-Powerset-Backend + VBx/PLDA) ist der einzige lokale Kandidat mit belegtem
-  Vorsprung auf **unserer** Bedingung. Benchmarktabelle des Repos selbst, DER %:
+  Conformer-Powerset-Backend + VBx/PLDA) ist der einzige lokale Kandidat, für den ein
+  Vorsprung **in veröffentlichten Benchmarks** auf einer *ähnlichen* Bedingung belegt ist.
+  Benchmarktabelle des Repos selbst, DER %:
   **AMI-SDM** (ein entferntes Mikrofon) 22,4 → **13,9**, **AliMeeting far** 24,4 → **10,8**,
-  DIHARD3 21,7 → 14,5 — jeweils gegen pyannote 3.1. Fremdvergleich über 196,6 h in fünf
-  Sprachen **inklusive Deutsch**: 13,3 % gegen 11,2 % des Cloud-Dienstes pyannoteAI
-  ([arXiv:2509.26177](https://arxiv.org/abs/2509.26177)). Dass ausgerechnet die beiden
-  Fernfeld-Zeilen die grössten Abstände haben, passt zum Mechanismus: der WavLM-Encoder
-  ersetzt genau das schwache Frontend von community-1 (`PyanNet`: SincNet + 4× BiLSTM).
+  DIHARD3 21,7 → 14,5. Fremdvergleich über 196,6 h in fünf Sprachen **inklusive Deutsch**:
+  13,3 % gegen 11,2 % des Cloud-Dienstes pyannoteAI
+  ([arXiv:2509.26177](https://arxiv.org/abs/2509.26177)).
+
+  **Der Vergleich läuft gegen `pyannote 3.1`, nicht gegen `community-1`** — und das verkleinert
+  den Abstand erheblich: community-1 meldet auf derselben Aufgabe **AMI-SDM 19,9 %** gegen
+  3.1s 22,4 %. Der ehrliche Abstand ist also 19,9 → 13,9, nicht 22,4 → 13,9. Auf **unserem**
+  Material ist gar nichts gemessen. HERGELEITET, dass der Mechanismus passt (der
+  WavLM-Encoder ersetzt genau das schwache Frontend von community-1 — `PyanNet`: SincNet +
+  4× BiLSTM); **bis zu einem Referenzlauf auf Rhyathlon bleibt C8 eine Hypothese.**
   **Drei Haken, und der erste ist der harte: die Gewichte sind CC BY-NC 4.0** (Code MIT) —
   bei einem verteilten Installer ist „nicht kommerziell" eine Produktentscheidung, keine
   Fussnote, und sie gehört **vor** die Messung, nicht danach. Dazu: **kein `num_speakers`**
@@ -142,11 +148,11 @@ RECHERCHIERT (Herstellerangaben und Modellkarten, von mir **nicht** nachgemessen
   *gleichzeitigen* Sprechern hebt es nicht. RECHERCHIERT, nicht nachgemessen.
 - `community-1` ist damit weiterhin das beste *lokale* Modell und bleibt die Grundlage.
 
-### 1.6 Nachtrag 2026-08-18 — sieben weitere Hebel gemessen, sechs davon tot
+### 1.6 Nachtrag 2026-08-18 — sieben weitere Hebel geprüft, fünf lokal gemessen tot
 
 Anlass war Marcus' Frage, ob die **Geschwindigkeits-Optimierungen** der letzten Wochen die
 Sprechererkennung verschlechtert haben. Die Antwort ist nein — und der Weg dorthin hat
-nebenbei vier weitere Hebel erledigt, darunter den in C2 noch als ungeprüft geführten.
+nebenbei drei weitere Hebel erledigt, darunter den in C2 noch als ungeprüft geführten.
 
 Gemessen wurde an echtem Rhyathlon-Material **ohne** Referenz: verglichen wird die
 **Clusterzahl** bzw. der Anteil gewechselter Etiketten, beides referenzunabhängig. Damit
@@ -187,11 +193,14 @@ Sekunden-Mehrheitsregel in `assign_clusters` wählt in 97,7 % der Fälle bereits
 GEMESSEN.
 
 > **Die Lehre reicht über diesen Fall hinaus.** Der „Grenzverlust" misst *nicht darstellbare
-> Zeit*, nicht *falsche Etiketten*. Reden zwei gleichzeitig, steht im Transkript ohnehin die
-> dominante Stimme — das Segment trägt dann den richtigen Namen für den Text, der dort steht.
-> Eine Metrik, die beides gleichsetzt, überzeichnet den Fehler um mehr als eine
-> Grössenordnung. Aufgefallen ist das erst durch die Gegenprobe, nicht durch Nachdenken über
-> die Metrik.
+> Zeit*, nicht *falsche Etiketten* — eine Metrik, die beides gleichsetzt, überzeichnet den
+> Fehler um mehr als eine Grössenordnung. Was der Vergleich zeigt, ist ausschliesslich, dass
+> die überlappungsfreie Annotation **fast dieselben Ausgabesegmente** liefert. **Ob** das
+> dominante Etikett das richtige ist, bleibt ohne Referenz offen — die naheliegende Annahme
+> („Whisper transkribiert die dominante Stimme, also stimmt deren Name") ist genau die Sorte
+> Herleitung, die dieses Design nicht mehr als Beleg gelten lässt. Beantwortbar erst nach
+> Task 8. Aufgefallen ist der Unterschied ohnehin erst durch die Gegenprobe, nicht durch
+> Nachdenken über die Metrik.
 
 **(h) „Unser eigenes `min_speakers=2` erzwingt die vielen 2er-Ergebnisse." — TOT.** Gut
 begründet und falsch. `clustering.py:627-628` setzt bei `auto_num_clusters < min_clusters`
@@ -240,8 +249,9 @@ Gezählt, wie viele aktive Sprecher-Fenster der Filter verwirft:
 | `00097495` | 219 | 150 | **69 (32 %)** | 2 / **3** / 3 |
 | `00090000` | 449 | 378 | **71 (16 %)** | 3 / 3 / 3 |
 
-**Rund ein Drittel aller Sprecherpräsenz kommt nie beim Clustering an.** Das ist der erste
-gemessene Mechanismus für die Unterzählung. Das Senken holt ein bis zwei Cluster zurück,
+**Über alle vier Dateien kommen 25 % aller Sprecherpräsenz nie beim Clustering an** — in drei
+von vier Dateien 29–32 %, in `00090000` nur 16 %. Das ist der erste gemessene Mechanismus für
+die Unterzählung. Das Senken holt ein bis zwei Cluster zurück,
 **überschiesst aber** (`00097495` von 2 auf 3) und schliesst die Lücke trotzdem nicht
 (`00114307` 4 statt real 5). Ohne Referenz je Aufnahme derselbe Zerstäuber-Charakter wie `Fb`,
 nur milder — deshalb Kandidat (C7), nicht Fix.
@@ -250,16 +260,30 @@ Upstream stützt die Richtung: das Papier hinter dieser Implementierung
 ([arXiv:2510.19572](https://arxiv.org/abs/2510.19572), §3.2) schreibt zu genau diesem Filter,
 „filtering below 4 s can risk discarding most of the speech from less dominant speakers".
 
-**(k) Enthallen/Entrauschen vor der Diarisierung (C5) — die Messlage spricht dagegen.**
-RECHERCHIERT, nicht selbst nachgemessen. An verrauschten Klassenzimmer-Aufnahmen
-([arXiv:2505.10879](https://arxiv.org/html/2505.10879v1), DER %) sank der Fehler bei zwei
-Sprechern (50,5 → 36,7), stieg aber bei *allen* Sprechern von 71,3 auf **82,2** — und die
-**Verwechslungsrate stieg in jeder entrauschten Bedingung**. Die Autoren haben
-Inferenz-Entrauschung deshalb verworfen: „denoising inadvertently suppressed children's speech
-segments". Entrauschen kauft Sprach*erkennung* und bezahlt mit Sprecher*zuordnung* — für uns
-die schlechtestmögliche Tauschrichtung, denn genau die Zuordnung ist der Fehler. Bestätigend,
-aber schwach: [pyannote-audio#1053](https://github.com/pyannote/pyannote-audio/issues/1053)
-(DER stieg mit `noisereduce`, keine Zahlen im Thread).
+**(k) Enthallen/Entrauschen vor der Diarisierung (C5) — externe Evidenz gemischt, lokal
+NICHT gemessen.** Der einzige Punkt in 1.6 ohne eigene Messung; er bewertet C5 deshalb auch
+nicht abschliessend.
+
+RECHERCHIERT: an verrauschten Klassenzimmer-Aufnahmen
+([arXiv:2505.10879v2](https://arxiv.org/abs/2505.10879), Tabelle 1, DER %) **senkt** Entrauschen
+den Fehler in **drei von vier** Bedingungen — ClassBank 2 Sprecher 50,5 → 36,7, ClassBank alle
+64,6 → 58,1, MPT 2 Sprecher 33,2 → 26,8 — und **hebt** ihn nur im MPT-All-Speaker-Setup, dort
+allerdings deutlich (71,3 → **82,2**).
+
+**Der für uns relevante Teil zeigt trotzdem in die falsche Richtung:** die
+**Verwechslungsrate steigt in allen vier Bedingungen**. Der DER-Gewinn kommt aus weniger
+verpasster Sprache (MISS 39,4 → 11,4), erkauft mit mehr Fehlalarm (FA 7,0 → 13,9) und eben mehr
+Verwechslung. Unser gemessener Engpass ist die **Zuordnung**, nicht die Detektion — die
+Tauschrichtung passt also schlecht. Die Autoren haben Inferenz-Entrauschung verworfen
+(„denoising inadvertently suppressed children's speech segments"); leise Sprecher wegzuputzen
+ist bei Kameramikrofon genau das Problem.
+
+**Was die Studie NICHT abdeckt:** sie fährt eine **NeMo**-Pipeline auf **englischen
+Klassenzimmerdaten** — nicht `community-1`, nicht Schweizerdeutsch, nicht unser Material.
+Schwach bestätigend:
+[pyannote-audio#1053](https://github.com/pyannote/pyannote-audio/issues/1053) (DER stieg mit
+`noisereduce`, keine Zahlen im Thread, keine Maintainer-Antwort). **Abschliessend zu bewerten
+erst nach der Referenzmessung** — bis dahin nachrangig, nicht ausgeschlossen.
 
 **WPE-Enthallung ist zusätzlich strukturell tot:** sie arbeitet mehrkanalig, und die Kanäle
 dieser Aufnahmen sind bit-identisch (Dual-Mono, in #264 gemessen) — es gibt keine zweite
@@ -270,9 +294,12 @@ DER" ist falsch zugeordnet. Im Papier ([arXiv:2602.21741](https://arxiv.org/html
 wurde Demucs **nur für ASR** eingesetzt; der Diarisierungsteil sagt wörtlich „No additional
 denoising or filtering was applied". Die Punkte stammen aus pyannote-Feinabstimmung.*
 
-**Was 1.6 an der Schlussfolgerung aus 1.4 ändert: nichts.** Sieben Hebel, sechs tot, einer
-unkalibrierbar — und alle gemessen **ohne** Referenz, also nur auf „bewegt (nichts)"
-belastbar. Die vorgegebene Sprecherzahl aus #264 bleibt der einzige exakte Hebel, und die
+**Was 1.6 an der Schlussfolgerung aus 1.4 ändert: nichts.** Die Bilanz, genau ausgezählt:
+**fünf** Hebel lokal gemessen tot (e, f, h, i — sowie g, dessen Wirkung mit 2,3 % praktisch
+verschwindet), **einer** wirksam aber unkalibrierbar (j), **einer** nur extern belegt und
+lokal ungemessen (k, deshalb offen). Alle lokalen Messungen liefen **ohne** Referenz, sind
+also nur auf „bewegt (nichts)" belastbar, nicht auf „ist besser" — dieselbe Grenze wie in
+1.3(b). Die vorgegebene Sprecherzahl aus #264 bleibt der einzige exakte Hebel, und die
 Reihenfolge „erst Referenz, dann Änderungen" steht unverändert.
 
 ---
@@ -417,9 +444,9 @@ wird mit seiner Zahl dokumentiert, damit ihn niemand erneut versucht (wie `thres
 | C2 | Clustering-Gitter `Fa`/`Fb`/`threshold` | — | **ERLEDIGT, alle drei tot.** `threshold`/`Fb` in #264, `Fa` in 1.6(i) — er zerstäubt schlimmer als `Fb` |
 | C3 | Einbettungs-Modell tauschen | ~30–100 MB | **Der Steckplatz täuscht.** Die VBx-PLDA (`plda/plda.npz`: `lda (256,128)`, `tr (128,128)`) ist an genau den 256-d-Raum von `WeSpeakerResNet34` gebunden — ein anderes Modell bildet in einen Raum ab, den `self.plda(...)` nicht kennt. Das ist ein Umbau (VBx aufgeben oder PLDA neu trainieren), kein Tausch. VERIFIZIERT an den Shapes |
 | C4 | Segmentierung (`min_duration_off`, `embedding_exclude_overlap`) | Rechenzeit | billig mitzunehmen |
-| C5 | Enthallen/Entrauschen vor `_load_waveform` | ~10 MB | **Messlage spricht dagegen**, siehe 1.6(k) — nur mit neuem Anlass anfassen |
+| C5 | Enthallen/Entrauschen vor `_load_waveform` | ~10 MB | **nachrangig, nicht ausgeschlossen** — 1.6(k): externe Evidenz gemischt (DER besser in 3 von 4 Bedingungen, Verwechslungsrate schlechter in allen vieren), lokal ungemessen |
 | C6 | Andere Pipeline (NeMo kaskadiert) | Schwergewicht | **nur** bei grosser Restlücke nach C1–C5 |
-| C7 | `min_active_ratio` 0,2 → 0,08 | 1 Funktion (Monkeypatch, **nicht** über die config erreichbar) | wirksam, aber überschiesst — 1.6(j). Nur gegen eine Referenz sinnvoll |
+| C7 | `min_active_ratio` 0,2 → niedriger (gemessen sind 0,05 und 0,00; **0,08 ist ungemessen**) | 1 Funktion (Monkeypatch, **nicht** über die config erreichbar) | wirksam, aber überschiesst — 1.6(j). Nur gegen eine Referenz sinnvoll |
 | C8 | DiariZen statt community-1 | zweites Modell | 1.5 — **erst die CC-BY-NC-Frage entscheiden**, dann messen |
 
 **Vor jedem Modellwechsel (C3, C5, C6) sind drei Dinge zu klären, nicht anzunehmen:**
