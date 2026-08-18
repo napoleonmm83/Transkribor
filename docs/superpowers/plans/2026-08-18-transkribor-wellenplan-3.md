@@ -1,6 +1,9 @@
-# Wellenplan 3 — die 30 offenen Issues, neu gruppiert
+# Wellenplan 3 — die offenen Issues, neu gruppiert
 
 **Stand:** 2026-08-18, master `b1ab70d`. **Fortschreibung von Wellenplan 2, kein Ersatz.**
+**Punkt 0 ist ausgefuehrt** (siehe Reihenfolge unten): #261 und #176 sind geschlossen, #254
+ist entschieden. Der Bestand lag beim Schreiben bei **30**, jetzt bei **28** — wo unten „30"
+steht, ist der Stand des Zuschnitts gemeint, nicht der heutige.
 **Fassung 2** — nach zwei getrennten Gegenläufen (Fakten / Gruppierung), die **eine tragende
 Behauptung gemessen widerlegt** und **die Hauptgruppe gekippt** haben. Was davon übrig ist,
 steht unten unter „Was die Reviews umgeworfen haben"; die Gruppen sind entsprechend umgebaut.
@@ -43,7 +46,7 @@ scharf.
 |---|---|
 | **Erledigt** | #253, #252 (PR #255) · #224 (PR #256) · #257, #258 (PR #259) · #264 (PR #265) · #266 (PR #269) — **fünf** PRs, alle merged, Zuordnung geprüft |
 | **Neu entstanden** | #254, #260, #261, #262, #263 · #267, #268, #270 |
-| **Unverändert offen aus Wellenplan 2** | #249, #250 (A1) · #242, #251 (C) · #222, #209, #244 (D) · #160 (E) · #216 (F) · #173 (B′) · #176 |
+| **Unverändert offen aus Wellenplan 2** | #249, #250 (A1) · #242, #251 (C) · #222, #209, #244 (D) · #160 (E) · #216 (F) · #173 (B′) · ~~#176~~ (am 08-18 an #254 geschlossen) |
 
 **Vier der acht kommen aus Reviewbefunden** (#260 CodeRabbit-CLI, #268 CodeRabbit-Bot, #254
 gegnerisches Review, #270 Reviewer-Subagent), **zwei aus dem Zuschnitt** ihres PRs (#262, #263),
@@ -102,7 +105,7 @@ und wie lange gilt diese Erkenntnis?
 
 **Alle vier Issues beschreiben denselben Satz:** *der Merker sagt etwas anderes, als der
 Zustand ist.* #260: Metadaten heil, Paket halb. #268: Merker abgelaufen, Installation zerlegt.
-#263: Merker liegt, Installation heil. #254 Punkt 2: ein Prozess verbraucht den Tagesmerker
+`#263`: Merker liegt, Installation heil. #254 Punkt 2: ein Prozess verbraucht den Tagesmerker
 für die venv des anderen.
 
 **Reihenfolge INNERHALB der Gruppe:**
@@ -328,4 +331,6 @@ kann darum nicht funktionieren; es muss aus dem **Dateizustand** abgeleitet sein
   Messung in diesem Repo.** Die gestrichene Reihenfolgekante hängt nicht daran: selbst bei
   1 ms Subprozessdauer bliebe der Abstand zu 23 µs bei Faktor 40.
 - **Die Gruppe M ist eine Kontext-Ersparnis, keine gemessene Bedingung.** Wird #260 nach der
-  Messung geschlossen und wählt Marcus bei #254 Weg 1, schrumpft sie auf #268 + #263.
+  Messung geschlossen, schrumpft sie auf #268 + #263 + #254. (Die zweite Bedingung dieses
+  Satzes — „wählt Marcus bei #254 Weg 1" — ist am 08-18 **entfallen**: entschieden wurde
+  Weg 2 + 3, und der fasst `_lockziel()` an, also genau den Merkerpfad.)

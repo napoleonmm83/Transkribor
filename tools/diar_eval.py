@@ -132,6 +132,14 @@ def cmd_freeze(args) -> int:
         if not segmente:
             fehlend.append(f"{schluessel} (keine Sprecher)")
             continue
+        # Die IDs sind der EINZIGE Bezug zwischen Referenz und Lauf (`cmd_run` prueft
+        # `set(referenz) <= set(vorhersage)`). Fehlt eine oder gibt es sie doppelt, faellt das
+        # dort nicht auf: `{s["id"]: …}` schluckt Dubletten still, und `None` als Schluessel
+        # ist einer wie jeder andere. Der Fehler zeigte sich erst als unerklaerliche Zahl.
+        ids = [s["id"] for s in segmente]
+        if any(i is None for i in ids) or len(set(ids)) != len(ids):
+            fehlend.append(f"{schluessel} (Segment-IDs fehlen oder sind doppelt)")
+            continue
         namen = sorted({s["sprecher"] for s in segmente})
         dateien[schluessel] = {"projekt": proj, "base": base, "sprecher_wahr": len(namen),
                                "segmente": segmente}
@@ -271,7 +279,7 @@ def _run(args, diarize, ref: dict, wurzel: str) -> int:
         # vermerkt). Ein Abbruch bei Datei 13 verloere sonst zwoelf gerechnete Ergebnisse samt
         # ihrer GPU-Minuten. Die Zusage „kein Artefakt fuer einen leeren Lauf" bleibt: der
         # erste Schreibvorgang passiert erst, nachdem eine Datei durch ist.
-        _schreibe_lauf(args, ergebnis)
+        _schreibe_lauf(args, ergebnis, wurzel)
     if not ergebnis:
         # Kein Artefakt fuer einen leeren Lauf. Sonst legt `vergleich` spaeter zwei Laeufe
         # nebeneinander, von denen einer NICHTS gemessen hat.
@@ -280,7 +288,7 @@ def _run(args, diarize, ref: dict, wurzel: str) -> int:
     return 0
 
 
-def _schreibe_lauf(args, ergebnis: dict) -> None:
+def _schreibe_lauf(args, ergebnis: dict, wurzel: str) -> None:
     ziel = _unter_eval(os.path.join(EVAL, "laeufe", args.name + ".json"))
     os.makedirs(os.path.dirname(ziel), exist_ok=True)
     # Die Einstellungen EINZELN, nicht `vars(args)`: darin steckt ueber `set_defaults` die
@@ -299,8 +307,12 @@ def _schreibe_lauf(args, ergebnis: dict) -> None:
                                      "sprecher_aus_referenz": args.sprecher_aus_referenz,
                                      "config": args.config,
                                      "referenz": os.path.abspath(args.referenz),
-                                     "wurzel": os.path.abspath(args.projekte)
-                                     if args.projekte else None}},
+                                     # Die TATSAECHLICH benutzte Wurzel, nicht `args.projekte`
+                                     # — ohne `--projekte` stand hier `null`, obwohl der Lauf
+                                     # ueber die Wurzel aus der Referenz ging. Ein spaeterer
+                                     # Vergleich konnte damit nicht sagen, welches Material
+                                     # gemessen wurde.
+                                     "wurzel": os.path.abspath(wurzel)}},
                   f, indent=1, ensure_ascii=False)
 
 
@@ -365,7 +377,14 @@ def cmd_vergleich(args) -> int:
                                  if f.endswith(".json")))
                                 if os.path.isdir(os.path.join(EVAL, "laeufe")) else "keine"))
         with open(pfad, encoding="utf-8") as f:
-            laeufe.append(json.load(f))
+            lauf = json.load(f)
+        # Form pruefen statt sich auf sie zu verlassen: die Laufdateien liegen unter eval/ und
+        # koennen von Hand entstanden oder halb geschrieben sein (der Lauf schreibt nach JEDER
+        # Datei). Ohne die Wache endet das in einem KeyError-Traceback mitten in der Tabelle.
+        if not isinstance(lauf, dict) or not isinstance(lauf.get("dateien"), dict):
+            raise SystemExit(f"'{name}' ist keine Laufdatei ({pfad}).")
+        lauf.setdefault("name", name)
+        laeufe.append(lauf)
     a, b = laeufe
     print(f"{'Datei':<44} {'Zahl a/b/wahr':>14} {'V a->b':>16} {'Fehler a->b':>18}")
     einseitig = 0
@@ -449,7 +468,12 @@ def main(argv=None) -> int:
     sub = p.add_subparsers(dest="befehl", required=True)
 
     f = sub.add_parser("freeze", help="handkorrigierte edit.json -> eval/referenz.json")
-    f.add_argument("--projekte", default=_projekte_standard(),
+    # `required` haengt daran, OB es einen Standard gibt. Ein stiller `None`-Rueckfall landete
+    # sonst in `os.path.join(None, …)` und damit in einem TypeError-Traceback — genau die
+    # Klasse, gegen die die FEHLT-Logik gebaut ist. Vorher stand hier `required=True`, was den
+    # Fall konstruktiv ausschloss; der Standard hat ihn aufgemacht. (CodeRabbit-Bot, Major.)
+    _standard = _projekte_standard()
+    f.add_argument("--projekte", default=_standard, required=_standard is None,
                    help="Wurzel der Projektordner (Standard: paths.projekte_root())")
     # Die Defaults gehen ueber EVAL, also ueber das REPO — nicht ueber das Arbeitsverzeichnis.
     # Sonst zeigt `eval/referenz.json` auf `$CWD/eval/...`, waehrend `_unter_eval` gegen das
