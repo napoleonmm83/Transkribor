@@ -36,6 +36,8 @@ Wer den Workflow ändert, weiss sonst nicht, dass diese drei Fakten einmal beleg
 1. **`download-artifact` landet im Wurzel-Workspace:** Die Quelle (osv-scanner-reusable.yml, Schritt „Download custom artifact") nutzt `actions/download-artifact` mit `path: "./"` — `--lockfile=requirements.txt:./requirements-resolved.txt` findet das Artifact also. Der Input existiert **nur** im Vollscan-Workflow (nicht in der PR-Variante) — der Plan nutzt ihn entsprechend nur dort.
 2. **Eigene `scan-args` ERSETZEN den Default `-r ./`:** Der Default steht als Workflow-Input-Default; wer eigene Args übergibt, hat sie substituiert — kein Verzeichnis-Lauf, `requirements.txt` wird nicht als Manifest mitgenommen. Gegenprobe am echten Lauf: Task 3, Step 2.
 3. **Das Repo ist ÖFFENTLICH** (`napoleonmm83/Transkribor`, `isPrivate: false`, gemessen 2026-08-18): SARIF-Upload in den Security-Tab ist frei verfügbar, GHAS wäre nur bei privaten Repos nötig.
+4. **Deckelungsregel (bei der Umsetzung GEMESSEN, Bisektion über 4 Läufe):** Der Aufrufer eines Reusable-Workflows muss mindestens die Rechte gewähren, die dieser intern deklariert — `google/osv-scanner-action` deklariert `security-events: write`, also braucht der PR-Job die Zeile trotz `upload-sarif: false`, sonst `startup_failure` **ohne jede Annotation**. Der erste Plan-Entwurf (und Codex) hatten das Recht gestrichen — die Messung widerlegte es.
+5. **Symlink-Risiko des PR-Workflows** ([osv-scanner-action#136](https://github.com/google/osv-scanner-action/issues/136), CodeRabbit-Major): feste Ausgabenamen + PR-steuerte Dateien. Kein gefixtes Release zum Pinnen — Abhärtung ist der Fork-Ausschluss in der `if:`-Bedingung; Fork-Beiträge laufen nach dem Merge durch den master-Vollscan.
 
 ## Global Constraints
 
@@ -357,17 +359,17 @@ jobs:
           retention-days: 7
 
   osv-pr:
-    # merge_group ist tot, bis eine Merge-Queue existiert — bewusst drin: 0 Kosten,
-    # aktiviert von selbst, wenn sie je kommt (Plan-Review 2026-08-18).
-    if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+    # Fork-PRs werden UEBERSPRUNGEN (Symlink-Risiko, osv-scanner-action#136 — s. Kommentar
+    # in der echten Workflow-Datei); merge_group feuert erst mit einer Merge-Queue.
+    if: github.event_name == 'merge_group' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false)
     permissions:
       contents: read
       actions: read
-      # BEWUSST KEIN security-events: write hier (Aussenstimme-Fund, bestätigt an der
-      # v2.5.1-Quelle): Fork-PRs haben kein Recht dafür — der Check würde an Berechtigungen
-      # rot statt an Funden. upload-sarif: false unten macht das Recht entbehrlich; das
-      # SARIF-Artefakt bleibt trotzdem im Actions-Lauf des PRs (Upload-Step braucht kein
-      # Sonderrecht). Der Security-Tab wird vom Vollscan bedient.
+      # security-events: write ist NOETIG, obwohl upload-sarif false bleibt: der aufgerufene
+      # Workflow deklariert das Recht intern, und der Aufrufer darf nicht WENIGER gewaehren
+      # (Deckelungsregel — ohne die Zeile startup_failure, per Bisektion GEMESSEN 2026-08-18;
+      # der Plan behauptete hier zuerst das Gegenteil, CodeRabbit fand den Widerspruch).
+      # Der Fork-Schutz steckt im deaktivierten Upload-Step, das Recht wird nie eingelöst.
     uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable-pr.yml@v2.5.1
     with:
       upload-sarif: false

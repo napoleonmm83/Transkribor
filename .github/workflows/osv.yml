@@ -17,6 +17,10 @@ name: OSV
 # Diff nie "neu") oder Base ohne Artifact (jeder Fund "neu"). Entscheidung 2026-08-18.
 on:
   pull_request:
+  # merge_group aktiviert sich von selbst, sobald eine Merge-Queue existiert —
+  # die Job-Bedingung unten ist darauf bereits angeschlossen (CodeRabbit-Review).
+  merge_group:
+    types: [checks_requested]
   push:
     branches: [master]
   schedule:
@@ -59,9 +63,12 @@ jobs:
           retention-days: 7
 
   osv-pr:
-    # merge_group ist tot, bis eine Merge-Queue existiert — bewusst drin: 0 Kosten,
-    # aktiviert von selbst, wenn sie je kommt (Plan-Review 2026-08-18).
-    if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+    # Fork-PRs werden UEBERSPRUNGEN: das Reusable-Workflow schreibt seine Ergebnisse
+    # unter festen workspace-relativen Namen, PR-steuerte Dateien koennten das ueber
+    # einen Symlink missbrauchen (google/osv-scanner-action#136, kein gefixtes Release
+    # zum Pinnen). Ein Fork-Beitrag laeuft nach dem Merge durch den Vollscan auf master
+    # — Abdeckung geht nicht verloren, nur die Diff-Ansicht im PR. CodeRabbit-Major.
+    if: github.event_name == 'merge_group' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false)
     permissions:
       contents: read
       actions: read
