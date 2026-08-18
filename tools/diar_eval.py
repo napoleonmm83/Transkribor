@@ -140,6 +140,15 @@ def cmd_freeze(args) -> int:
         if any(i is None for i in ids) or len(set(ids)) != len(ids):
             fehlend.append(f"{schluessel} (Segment-IDs fehlen oder sind doppelt)")
             continue
+        # `start`/`end` gehen in `cmd_run` als `(end or 0) - (start or 0)` in die Dauer ein.
+        # Fehlt eines oder stehen sie verkehrt, entsteht dort eine NEGATIVE Dauer — und die
+        # zieht die zeitgewichtete Summe nach unten, also ausgerechnet die Zahl aus
+        # Abnahmekriterium 1. Sie faellt dabei nicht auf: `sum()` nimmt sie klaglos.
+        if any(not isinstance(s["start"], (int, float))
+               or not isinstance(s["end"], (int, float))
+               or s["end"] < s["start"] for s in segmente):
+            fehlend.append(f"{schluessel} (Zeitstempel fehlen oder end < start)")
+            continue
         namen = sorted({s["sprecher"] for s in segmente})
         dateien[schluessel] = {"projekt": proj, "base": base, "sprecher_wahr": len(namen),
                                "segmente": segmente}
@@ -268,7 +277,17 @@ def _run(args, diarize, ref: dict, wurzel: str) -> int:
             # Gesamtdauer je Datei: ohne sie kann `_summe` die Fehlerquote nicht ueber den Satz
             # ZEITgewichtet mitteln, sondern nur ueber Dateien — und ein 40-Sekunden-Schnipsel
             # waege dann so viel wie ein 5-Minuten-Interview (Abnahmekriterium 1 haengt daran).
-            "dauer_s": round(sum(dauer.get(i, 0.0) for i in referenz if i in vorhersage), 2),
+            #
+            # Ueber `nur_gemeinsame`, also GENAU die Menge, ueber die `fehlerquote` und
+            # `v_measure` rechnen. Vorher stand hier `for i in referenz if i in vorhersage` —
+            # das nimmt sprecherlose Referenzsegmente mit, die `_gemeinsam` ausschliesst.
+            # `_summe` gewichtete die Fehlerquote dann mit Redezeit, die gar nicht verglichen
+            # wurde. Gemessen an einem konstruierten Fall (ein sprecherloses 60-s-Segment
+            # neben 2 s gemessener Zeit): Gewicht **31-fach** zu hoch. Dieselbe Klasse wie bei
+            # `sprecherzahl` — eine Zahl ueber eine andere Menge als die, mit der sie
+            # verglichen wird.
+            "dauer_s": round(sum(dauer.get(i, 0.0)
+                                 for i in nur_gemeinsame(vorhersage, referenz)), 2),
             "homogenitaet": round(h, 4), "vollstaendigkeit": round(c, 4), "v": round(v, 4),
             "fehlerquote": round(quote, 4)}
         e = ergebnis[schluessel]
