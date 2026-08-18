@@ -170,6 +170,11 @@ def cmd_run(args) -> int:
     Trennung gut, wenn die Zaehlung stimmte?
     """
     from webtool import diarize
+    # Meldung statt Traceback — dieselbe Klasse wie beim fehlenden Lauf in `cmd_vergleich`.
+    # Der Default zeigt auf `eval/referenz.json`, die es vor dem ersten `freeze` nicht gibt;
+    # das ist der haeufigste Erstkontakt mit diesem Werkzeug.
+    if not os.path.exists(args.referenz):
+        raise SystemExit(f"Referenz '{args.referenz}' gibt es nicht — zuerst `freeze` fahren.")
     with open(args.referenz, encoding="utf-8") as f:
         ref = json.load(f)
     if "projekte" not in ref or "dateien" not in ref:
