@@ -395,7 +395,9 @@ describe('SettingsPage', () => {
        Klick und Rückkehr nie sichtbar und der Test prüfte ihn nur an seinem Abklingen.
        Und mit ZWEI gleichzeitig offenen PUTs: ein Bool wuerde den ersten Rückkehrer als
        „fertig" melden, während der zweite noch läuft. */
-    const offen: Array<(v: Settings) => void> = []
+    // `Settings & { ungeschuetzt }`: die Fabrik `GESPEICHERT` traegt den vierten Wert
+    // bereits — derselbe Vertrag wie `api.saveSettings`, kein `any`.
+    const offen: Array<(v: Settings & { ungeschuetzt: boolean }) => void> = []
     vi.mocked(api.saveSettings).mockImplementation(() =>
       new Promise<Settings & { ungeschuetzt: boolean }>(aufloesen => offen.push(aufloesen)))
     zeige()
