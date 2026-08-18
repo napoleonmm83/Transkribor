@@ -609,7 +609,7 @@ def test_settings_modellwechsel_behaelt_den_key(client):
                                         # #236: der Lauf lief ohne Sperre — gehoert zu
                                         # `ergebnis`. #198: die Metadaten der Loeserskripte
                                         # sind kaputt, ihre Pruefung ist ausgesetzt.
-                                        "ungeschuetzt", "ejs_unlesbar"}
+                                        "ungeschuetzt", "unterbrochen", "ejs_unlesbar"}
     # Seit #239 baut der PUT denselben Rumpf wie der GET. Diese sechs haengen an der Umgebung
     # (installierte Abo-CLIs, Projektwurzel) und kommen deshalb hier heraus — sonst fiele der
     # Vergleich unten auf jedem zweiten Rechner um. Fehlt eines, wirft schon das `pop`.
