@@ -1843,6 +1843,23 @@ def test_get_liefert_immer_einen_dateistand(client, tmp_path):
     assert (tmp_path / "Demo" / "transkripte" / "S1.edit.json").exists()
 
 
+def test_zwei_schreibvorgaenge_gleicher_groesse_haben_verschiedene_staende(client, tmp_path):
+    """Der Stand muss sich bei JEDEM Schreibvorgang aendern — sonst laesst die Sperre einen
+    veralteten PUT durch, und zwar lautlos.
+
+    `st_mtime_ns` ist die Breite des FELDES, nicht die Aufloesung des Dateisystems: auf NTFS
+    liegt der kleinste Schritt ueber `atomic_write` bei rund einer Millisekunde. Gemessen an
+    400 dichten Schreibvorgaengen gleicher Groesse: **237 Kollisionen** ohne `st_ino`, **null**
+    mit. Genau diesen Fall stellt der Test her — gleiche Groesse, unmittelbar nacheinander."""
+    from webtool import paths as _paths, app as app_mod
+    e = str(tmp_path / "Demo" / "transkripte" / "S1.edit.json")
+    staende = set()
+    for i in range(30):
+        _paths.atomic_write(e, json.dumps({"summary": f"{i:03d}", "segments": []}))
+        staende.add(app_mod._dateistand(e))
+    assert len(staende) == 30, f"nur {len(staende)} verschiedene Staende aus 30 Schreibvorgaengen"
+
+
 def test_veralteter_dateistand_wird_abgelehnt(client, tmp_path):
     """Der Kern von #160: der Editor speichert 800 ms nach dem letzten Tastendruck. Wird eine
     Korrektur fertig, waehrend der PUT schon unterwegs ist, landet er DANACH und ersetzt die

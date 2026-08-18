@@ -1062,3 +1062,106 @@ describe('useDoc: Speicherkonflikt (#160)', () => {
     frage.mockRestore()
   })
 })
+
+/**
+ * Diese Gruppe fährt `saveDoc` mit einer ZUSTANDSBEHAFTETEN Attrappe: sie prüft den
+ * `dateistand` genau wie `app.save_file` und lehnt mit 409 ab, wenn er nicht passt.
+ *
+ * Der Unterschied ist der zwischen „die Verdrahtung getestet" und „den Vertrag getestet".
+ * Alle Attrappen darüber antworten mit einem FESTEN Wert — an ihnen kann kein Test rot
+ * werden, wenn der Client ein veraltetes Token schickt. Genau die Lücke aus #239.
+ */
+describe('useDoc: Token gegen einen Server, der wirklich prüft (#160)', () => {
+  /** Nachbau von `save_file`: Stand vergleichen, sonst 409; fehlender Schluessel = ohne Vorbehalt. */
+  function serverAttrappe(verzoegerung = 0) {
+    const platte = { stand: 'A', inhalt: 'roh' }
+    const gesendet: Array<{ base: string; stand?: string; text: string }> = []
+    let n = 0
+    vi.mocked(api.saveDoc).mockImplementation((async (_p: string, base: string, d: EditDoc) => {
+      gesendet.push({ base, stand: d.dateistand, text: d.segments[0].text })
+      if (verzoegerung) await new Promise(r => setTimeout(r, verzoegerung))
+      if ('dateistand' in d && d.dateistand !== platte.stand) {
+        throw new api.HttpFehler('inzwischen geändert', 409)
+      }
+      platte.stand = `S${++n}`
+      platte.inhalt = d.segments[0].text
+      return { dateistand: platte.stand }
+    }) as never)
+    return { platte, gesendet }
+  }
+
+  async function ladeMitStand(base = 'b') {
+    vi.useFakeTimers()
+    vi.mocked(api.getDoc).mockResolvedValue({ ...doc, base, dateistand: 'A' })
+    const h = renderHook(({ b }: { b: string }) => useDoc('P', b), { initialProps: { b: base } })
+    await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+    return h
+  }
+
+  it('ein WARTENDER Kettenlauf schickt kein veraltetes Token (C1)', async () => {
+    // Lauf #1 haengt; waehrenddessen wird getippt, Lauf #2 reiht sich mit dem Dokument von
+    // DAMALS ein. Uebernimmt nur `setDoc` den neuen Stand, traegt #2 weiter den alten —
+    // der Editor kollidiert mit sich selbst, ohne dass ein fremder Schreiber existiert.
+    const frage = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const { platte, gesendet } = serverAttrappe(1500)
+    const { result } = await ladeMitStand()
+
+    await act(async () => { result.current.updateSegment(0, { text: 'eins' }) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(800) })    // #1 laeuft los
+    await act(async () => { await vi.advanceTimersByTimeAsync(100) })
+    await act(async () => { result.current.updateSegment(0, { text: 'zwei' }) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(3000) })   // #1 kehrt zurueck, #2 laeuft
+
+    expect(frage).not.toHaveBeenCalled()          // keine Rueckfrage ohne fremden Schreiber
+    expect(platte.inhalt).toBe('zwei')            // und der letzte Stand steht wirklich da
+    expect(gesendet.map(g => g.stand)).not.toEqual(['A', 'A'])
+    frage.mockRestore()
+  })
+
+  it('der Verlassens-Flush schreibt den letzten Tastendruck noch (C2)', async () => {
+    // #106: in der 800-ms-Pause hat die Oberflaeche „wird gespeichert" versprochen. Wird der
+    // neue Stand hinter `meins()` uebernommen, hat die VERLASSENE Datei ihn nie gesehen und
+    // der Flush bekommt 409 — mit einem Toast, der einen fremden Schreiber beschuldigt.
+    const { platte, gesendet } = serverAttrappe(400)
+    const { result, rerender } = await ladeMitStand('b')
+
+    await act(async () => { result.current.updateSegment(0, { text: 'eins' }) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(800) })    // #1 unterwegs
+    await act(async () => { result.current.updateSegment(0, { text: 'zwei' }) })
+    vi.mocked(api.getDoc).mockResolvedValue({ ...doc, base: 'b2', dateistand: 'X' })
+    await act(async () => { rerender({ b: 'b2' }) })                     // Wechsel -> Flush
+    await act(async () => { await vi.advanceTimersByTimeAsync(3000) })
+
+    expect(platte.inhalt).toBe('zwei')                                   // nichts verloren
+    expect(toastMock.error).not.toHaveBeenCalled()                       // und keine Falschmeldung
+    expect(gesendet.filter(g => g.base === 'b').length).toBe(2)
+  })
+})
+
+describe('useDoc: ueberschreiben() als EIN Weg fuer zwei Dialoge (#160 ⨯ #123)', () => {
+  it('setzt „meine Fassung behalten" durch, ohne dass ein 409 noetig war', async () => {
+    // `EditorView` fragt schon, wenn eine Korrektur fertig wird (#123), und verspricht im
+    // Abbrechen-Zweig „beim Speichern ueberschreibst du die Korrektur". Ohne diesen Ausgang
+    // liefe der Autosave 800 ms spaeter in einen BERECHTIGTEN 409 und stellte dieselbe Frage
+    // noch einmal — mit vertauschten Knoepfen. Eine Entscheidung, ein Dialog.
+    const gesendet: Array<string | undefined> = []
+    vi.mocked(api.saveDoc).mockImplementation((async (_p: string, _b: string, d: EditDoc) => {
+      gesendet.push(d.dateistand); return { dateistand: 'neu' }
+    }) as never)
+    vi.useFakeTimers()
+    vi.mocked(api.getDoc).mockResolvedValue({ ...doc, dateistand: 'A' })
+    const { result } = renderHook(() => useDoc('P', 'b'))
+    await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+
+    await act(async () => { result.current.updateSegment(0, { text: 'meins' }) })
+    await act(async () => { result.current.ueberschreiben('P', 'b') })
+    await act(async () => { await vi.advanceTimersByTimeAsync(800) })
+
+    expect(gesendet).toEqual([undefined])           // ohne Vorbehalt geschrieben
+    // Und danach wieder geschuetzt — der Verzicht ist einmalig, weil die Antwort einen
+    // neuen Stand liefert.
+    await act(async () => { result.current.updateSegment(0, { text: 'noch eins' }) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(800) })
+    expect(gesendet).toEqual([undefined, 'neu'])
+  })
+})

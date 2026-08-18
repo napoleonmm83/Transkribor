@@ -14,7 +14,7 @@ import type { WaveHandle } from '@/components/Waveform'
 export function EditorView() {
   const { project, base } = useParams<{ project: string; base: string }>()
   const sel = project && base ? { project, base } : null
-  const { doc, dirty, stand, loading: docLoading, updateSegment, updateDoc, renameSpeaker, exportDownload, reload, vergiss } = useDoc(sel?.project ?? null, sel?.base ?? null)
+  const { doc, dirty, stand, loading: docLoading, updateSegment, updateDoc, renameSpeaker, exportDownload, reload, vergiss, ueberschreiben } = useDoc(sel?.project ?? null, sel?.base ?? null)
   // Die Leiste in der Huelle navigiert und startet Einzeldatei-Korrekturen — beides braucht
   // Dinge, die nur hier existieren. Ohne diese Meldung wechselt ein Klick ohne Rueckfrage
   // ueber ungespeicherte Aenderungen hinweg, und ein Korrekturlauf bleibt unsichtbar.
@@ -41,10 +41,18 @@ export function EditorView() {
       if (dirtyRef.current && !window.confirm(
         `Die Korrektur von „${b}“ ist fertig.\n\n`
         + 'OK: korrigierte Fassung laden — deine ungespeicherten Änderungen gehen verloren.\n'
-        + 'Abbrechen: deine Fassung behalten — beim Speichern überschreibst du die Korrektur.')) return
+        + 'Abbrechen: deine Fassung behalten — beim Speichern überschreibst du die Korrektur.')) {
+        // Die Entscheidung ist gefallen, also wird sie hier auch DURCHGESETZT (#160): seit dem
+        // optimistischen Sperren bekaeme der Autosave 800 ms spaeter einen BERECHTIGTEN 409
+        // fuer genau diese Korrektur und stellte dieselbe Frage noch einmal — mit vertauschten
+        // Knoepfen, sodass „OK" dann hiesse „wirf weg, was du gerade behalten wolltest".
+        // Ohne diese Zeile macht der Fix aus einer Zusage eine Rueckfrage.
+        ueberschreiben(p, b)
+        return
+      }
       reload()
     })
-  }, [project, base, reload, onSettled])
+  }, [project, base, reload, onSettled, ueberschreiben])
 
   const [suchQuery, setSuchQuery] = useState('')
   const [suchIndex, setSuchIndex] = useState(0)
