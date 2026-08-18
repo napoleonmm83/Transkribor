@@ -713,8 +713,19 @@ export function SettingsPage() {
                  fehlgeschlagenen Import ausdrücklich auf diese Seite. Nach `unlesbar`, weil
                  das die Ursache selbst nennt (kaputte Metadaten statt abgewürgtes pip). */
               : s.ytdlp.unterbrochen
-                ? 'Eine Aktualisierung wurde abgebrochen — Transkribor setzt sie beim '
-                  + 'nächsten Start von selbst fort.'
+                /* ZWEI Sätze, nicht einer (CodeRabbit-CLI an PR #285): die Reparatur beim
+                   nächsten Start läuft nur mit ANGESTELLTEM Automatismus (`beim_start()`
+                   hängt an `auto_an()`). Bei ausgeschaltetem Haken wäre „setzt sie beim
+                   nächsten Start fort" ein Versprechen, das niemand einlöst — dieselbe
+                   Klasse wie der tote Schalter aus #266. Der KNOPF repariert in beiden
+                   Fällen (er läuft bedingungslos), also zeigt er hier her. `ytdlp.auto`
+                   ist der WIRKSAME Schalter — eine setzende Umgebungsvariable steht
+                   ebenfalls darin, die Zeile muss nicht selbst nachrechnen. */
+                ? s.ytdlp.auto
+                  ? 'Eine Aktualisierung wurde abgebrochen — Transkribor setzt sie beim '
+                    + 'nächsten Start von selbst fort.'
+                  : 'Eine Aktualisierung wurde abgebrochen — klicke auf „Jetzt '
+                    + 'aktualisieren“, um sie abzuschließen.'
                 : 'Nicht installiert — der Import von Video-URLs steht damit nicht zur Verfügung.'}
           </span>
         </div>
