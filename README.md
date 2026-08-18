@@ -255,10 +255,15 @@ Richtung, klingen ähnlich weit weg, und Transkribor wirft dann zwei Personen in
 Typisch sieht man es daran, dass Antworten beim Interviewer stehen oder mehrere Leute unter
 einem Namen laufen.
 
-Dagegen hilft das Feld **„Anzahl Sprecher“** im ⋯-Menü der Aufnahme. Trag dort ein, wie viele
-Personen tatsächlich gesprochen haben — **dich als fragende Person mitgezählt**. Waren es du
-und drei Teammitglieder, ist die Antwort *vier*. Transkribor trennt die Stimmen danach genau
-in so viele auf, statt zu raten, und das ist der mit Abstand wirksamste Hebel: an einer
+Dagegen hilft das Feld **„Anzahl Sprecher“**. Du findest es so: in der Dateiliste auf das
+**⋯-Menü** der Aufnahme klicken, dort **„Sprache, Korrektur & Sprecher“** wählen — das Feld
+ist im Dialog das **unterste**. (Der Menüpunkt hiess früher „Sprache & Korrektur-Tiefe“; wer
+danach sucht, findet einen Dialog ohne dieses Feld.)
+
+Trag dort ein, wie viele Personen tatsächlich gesprochen haben — **dich als fragende Person
+mitgezählt**. Waren es du und drei Teammitglieder, ist die Antwort *vier*. Transkribor trennt
+die Stimmen danach genau in so viele auf, statt zu raten, und das ist der mit Abstand
+wirksamste Hebel: an einer
 echten Aufnahme mit vier Personen wurde aus „Interviewer plus eine Person“ eine saubere
 Trennung, bei der die Fragen wieder beim Fragenden standen.
 
