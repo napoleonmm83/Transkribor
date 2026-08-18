@@ -215,7 +215,7 @@ Sprechernamen. Bei allen anderen Sprachen bleibt die Originalsprache erhalten, n
 Projekt-Einstellungen (⋯-Menü des Projekts) legst du die Standard-Sprache und die
 Korrektur-Tiefe fest; die Auswahl beim Hinzufügen nimmt die Standard-Sprache vorweg und lässt
 sich für die nächsten Aufnahmen abändern, ohne den Standard zu verstellen. Und solltest du
-dich später anders entscheiden: im ⋯-Menü der jeweiligen Aufnahme („Sprache, Korrektur & Sprecher“)
+dich später anders entscheiden: im ⋯-Menü der jeweiligen Aufnahme („Sprache, Sprecher & Korrektur“)
 lässt sich alles nachträglich ändern. Eine andere Sprache bedeutet Neu-Transkription — das
 alte Transkript wird verworfen, das Audio bleibt erhalten; eine andere Korrektur-Tiefe oder
 Sprecherzahl startet nur die Korrektur neu.
@@ -258,9 +258,10 @@ Typisch sieht man es daran, dass Antworten beim Interviewer stehen oder mehrere 
 einem Namen laufen.
 
 Dagegen hilft das Feld **„Anzahl Sprecher“**. Du findest es so: in der Dateiliste auf das
-**⋯-Menü** der Aufnahme klicken, dort **„Sprache, Korrektur & Sprecher“** wählen — das Feld
-ist im Dialog das **unterste**. (Der Menüpunkt hiess früher „Sprache & Korrektur-Tiefe“; wer
-danach sucht, findet einen Dialog ohne dieses Feld.)
+**⋯-Menü** der Aufnahme klicken, dort **„Sprache, Sprecher & Korrektur“** wählen — das Feld
+steht im Dialog gleich unter der Sprache, an zweiter Stelle. (Der Menüpunkt hiess in älteren
+Fassungen „Sprache & Korrektur-Tiefe“ bzw. „Sprache, Korrektur & Sprecher“; wer danach sucht,
+findet den Eintrag unter dem neuen Namen an derselben Stelle.)
 
 Trag dort ein, wie viele Personen tatsächlich gesprochen haben — **dich als fragende Person
 mitgezählt**. Waren es du und drei Teammitglieder, ist die Antwort *vier*. Transkribor trennt

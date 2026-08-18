@@ -185,12 +185,24 @@ export function DateiEinstellungenDialog({ project, base, file, offen, onOpenCha
     <Dialog open={offen} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Sprache, Korrektur &amp; Sprecher — „{base}“</DialogTitle>
+          <DialogTitle>Sprache, Sprecher &amp; Korrektur — „{base}“</DialogTitle>
         </DialogHeader>
         {laedt ? (
           <p className="text-sm text-muted-foreground">Laden …</p>
         ) : data && (
           <div className="grid gap-4">
+            {/* Die REIHENFOLGE ist ein Fix, kein Geschmack (#273). „Anzahl Sprecher" stand als
+                VIERTES und letztes Feld, direkt unter dem dreizeiligen Erklaerabsatz von
+                „Mehrere Sprachen" — und wurde von der einzigen Person, die die App benutzt,
+                schlicht nicht gefunden (2026-08-18). Laut #264 ist die vorgegebene
+                Sprecherzahl der EINZIGE gemessen wirksame Hebel der Sprechertrennung, vier
+                andere sind gemessen wirkungslos: ein Hebel, den niemand findet, wirkt wie
+                keiner.
+                Sortiert wird deshalb nach „was ist auf der Aufnahme?" (Sprache, Sprecherzahl,
+                weitere Sprachen) vor „wie stark korrigieren?" (Tiefe) — und NICHT mehr nach
+                dem Ablauf der Pipeline, was das Feld genau wieder unter den langen Absatz
+                schoebe. Der Absatz selbst bleibt, wo er ist; „die oben gewaehlte Sprache"
+                stimmt auch mit einem Feld dazwischen. */}
             <div>
               <label id="lbl-fs-sprache" className="mb-1.5 block text-sm font-medium">Sprache</label>
               {/* `ERBT` ist ein Platzhalterwert, kein Sprach-Kuerzel: Radix laesst einen leeren
@@ -210,19 +222,6 @@ export function DateiEinstellungenDialog({ project, base, file, offen, onOpenCha
                 </SelectContent>
               </Select>
             </div>
-            <div>
-              <label id="lbl-fs-tiefe" className="mb-1.5 block text-sm font-medium">Korrektur-Tiefe</label>
-              <Select value={korrektur} onValueChange={setKorrektur}>
-                <SelectTrigger className="w-full" aria-labelledby="lbl-fs-tiefe"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {data.tiefen.map(t => (
-                    <SelectItem key={t.id} value={t.id}>{t.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <MehrsprachigWahl wert={mehrWahl} setzen={setMehrWahl}
-              projektwert={data.mehrsprachig_projekt} id="mehr-datei" />
             <div>
               <label htmlFor="fs-sprecher" className="mb-1.5 block text-sm font-medium">
                 Anzahl Sprecher
@@ -277,6 +276,19 @@ export function DateiEinstellungenDialog({ project, base, file, offen, onOpenCha
                     + 'gesprochen haben, trägt es hier ein — das trennt die Stimmen deutlich '
                     + 'zuverlässiger, vor allem bei Aufnahmen mit einem Kameramikrofon.'}
               </p>
+            </div>
+            <MehrsprachigWahl wert={mehrWahl} setzen={setMehrWahl}
+              projektwert={data.mehrsprachig_projekt} id="mehr-datei" />
+            <div>
+              <label id="lbl-fs-tiefe" className="mb-1.5 block text-sm font-medium">Korrektur-Tiefe</label>
+              <Select value={korrektur} onValueChange={setKorrektur}>
+                <SelectTrigger className="w-full" aria-labelledby="lbl-fs-tiefe"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {data.tiefen.map(t => (
+                    <SelectItem key={t.id} value={t.id}>{t.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             {hinweis && <p className="text-sm text-muted-foreground">{hinweis}</p>}
           </div>

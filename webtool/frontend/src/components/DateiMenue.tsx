@@ -190,7 +190,7 @@ export function DateiMenue({ project, file, aiReason }: {
               <Pencil /> Umbenennen
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => setEinstellungen(true)}>
-              <Languages /> Sprache, Korrektur &amp; Sprecher
+              <Languages /> Sprache, Sprecher &amp; Korrektur
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" onSelect={() => waehlen('delete')}>

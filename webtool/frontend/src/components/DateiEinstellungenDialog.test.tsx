@@ -95,9 +95,13 @@ describe('DateiEinstellungenDialog', () => {
     vi.spyOn(api, 'getFileEinstellungen').mockResolvedValue(BASIS)
     render(<DateiEinstellungenDialog project="p" base="a" file={datei()} offen />)
     await sprachWaehlerDa()              // Sprache-Trigger = Readiness-Signal
-    // Tiefe-Select ist der zweite combobox; seit #141 ist "auto" in TIEFEN, darum steht das
-    // Label im Trigger statt leer. Deckt das geteilte tiefen.map-Muster beider Dialoge.
-    expect(screen.getAllByRole('combobox')[1]).toHaveTextContent('Automatisch')
+    // Ueber den NAMEN, nicht ueber die Position: der Griff stand hier als
+    // `getAllByRole('combobox')[1]` und zeigte nach der Umsortierung von #273 auf die
+    // Mehrsprachig-Auswahl — ein Test, der eine Reihenfolge mitbehauptet, die er gar nicht
+    // meint. Seit #141 ist "auto" in TIEFEN, darum steht das Label im Trigger statt leer;
+    // deckt das geteilte tiefen.map-Muster beider Dialoge.
+    expect(screen.getByRole('combobox', { name: 'Korrektur-Tiefe' }))
+      .toHaveTextContent('Automatisch')
   })
 
   it('deaktiviert Speichern, solange nichts geändert ist', async () => {
@@ -484,5 +488,24 @@ describe('DateiEinstellungenDialog — Sprecherzahl, ungültige Zwischeneingabe 
     }
     expect(save).not.toHaveBeenCalled()
     save.mockRestore()
+  })
+
+  it('stellt „Anzahl Sprecher" ueber den langen Mehrsprachig-Absatz (#273)', async () => {
+    /* Die Reihenfolge IST hier die Funktion. Das Feld stand als viertes und letztes unter dem
+       dreizeiligen Erklaerabsatz von „Mehrere Sprachen" und wurde von der einzigen Person,
+       die die App benutzt, nicht gefunden — bei dem laut #264 EINZIGEN gemessen wirksamen
+       Hebel der Sprechertrennung. Geprueft wird die DOM-Reihenfolge der Beschriftungen,
+       nicht ihre Anwesenheit: „ist da" war schon vorher wahr, und genau das war das Problem.
+
+       Was der Test NICHT sieht: ob das Feld ohne Bildlauf im Sichtfeld steht — jsdom rechnet
+       kein Layout (`getBoundingClientRect` gibt ueberall Nullen). Das ist im Browser
+       nachgesehen, hier bleibt die Reihenfolge als das, was sich halten laesst. */
+    vi.spyOn(api, 'getFileEinstellungen').mockResolvedValue(BASIS)
+    render(<DateiEinstellungenDialog project="p" base="a" file={datei()} offen />)
+    await sprachWaehlerDa()
+    const beschriftungen = [...document.body.querySelectorAll('label')]
+      .map(l => l.textContent?.trim())
+    expect(beschriftungen).toEqual(
+      ['Sprache', 'Anzahl Sprecher', 'Mehrere Sprachen', 'Korrektur-Tiefe'])
   })
 })
