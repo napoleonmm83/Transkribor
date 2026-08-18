@@ -1,0 +1,96 @@
+name: OSV
+
+# Issue #284: Schwachstellen in Abhaengigkeiten wurden bislang VON HAND verfolgt
+# (CVE-Boden in requirements.txt). Zwei Laeufe, bewusst unterschiedlich:
+#   - PR: diff-basiert, nur die zwei npm-Lockfiles (kommittiert und exakt —
+#     ein Renovate-PR, der auf eine verwundbare Version zieht, wird sofort rot).
+#     fail-on-vuln true: NUR neue Funde; kein Merge-Zwang (keine Branch Protection).
+#   - Vollscan: master-Push + woechentlich + von Hand. ALLES inkl. des aufgeloesten
+#     Python-Abbilds (scripts/osv_freeze.py — Manifest-Scan waere eine False-Positive-
+#     Maschine, gemessen 44 Funde mit 38 Phantom-Versionen); fail-on-vuln FALSE —
+#     Altlasten (z.B. torch cu128 ohne Fixversion) gehoeren in den Security-Tab,
+#     nicht als dauerrotes master. Der woechentliche Lauf ist der Punkt: Luecken
+#     werden veroeffentlicht, ohne dass sich unser Code aendert (Renovate haelt
+#     Fassungen aktuell, sagt aber nicht, ob eine Fassung eine bekannte Luecke hat).
+# Python im PR-Scan: bewusst NEIN — das Reusable-PR-Workflow vergleicht Base gegen
+# Head; ein CI-generiertes Artifact bekäme entweder beide Seiten identisch (Python-
+# Diff nie "neu") oder Base ohne Artifact (jeder Fund "neu"). Entscheidung 2026-08-18.
+on:
+  pull_request:
+  push:
+    branches: [master]
+  schedule:
+    - cron: '37 5 * * 1'   # montags 05:37 UTC — nicht :00/:30, niemand braucht Sync-Spitzen
+  # ACHTUNG: workflow_dispatch registriert GitHub nur, sobald die Datei auf dem Default-
+  # Branch liegt — ein Dispatch vom Feature-Branch scheitert für einen NEUEN Workflow mit
+  # "workflow not found". Der erste Vollscan läuft daher über den master-Push nach dem
+  # Merge; ab dann ist Dispatch der Trockenlauf-Weg.
+  workflow_dispatch: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# security-events: write bewusst NUR am Vollscan-Job (SARIF-Upload), nicht global.
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  # Löst den Python-Baum OHNE Wheel-Download auf (PEP-658-Metadaten, gemessen
+  # ~13 s) und merged nach der Installationsordnung aus electron/setup.js.
+  # Der Wächter im Skript unterscheidet "nichts aufgeloest" von "aufgeloest"
+  # (Exit 128 des Scanners allein wuerde vom Reusable-Workflow geschluckt,
+  # google/osv-scanner-action#71).
+  resolve-python:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+      - run: python scripts/osv_freeze.py
+      - uses: actions/upload-artifact@v5
+        with:
+          name: osv-python-freeze
+          path: requirements-resolved.txt
+          retention-days: 7
+
+  osv-pr:
+    # merge_group ist tot, bis eine Merge-Queue existiert — bewusst drin: 0 Kosten,
+    # aktiviert von selbst, wenn sie je kommt (Plan-Review 2026-08-18).
+    if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+    permissions:
+      contents: read
+      actions: read
+      # BEWUSST KEIN security-events: write hier (Aussenstimme-Fund, bestätigt an der
+      # v2.5.1-Quelle): Fork-PRs haben kein Recht dafür — der Check würde an Berechtigungen
+      # rot statt an Funden. upload-sarif: false unten macht das Recht entbehrlich; das
+      # SARIF-Artefakt bleibt trotzdem im Actions-Lauf des PRs (Upload-Step braucht kein
+      # Sonderrecht). Der Security-Tab wird vom Vollscan bedient.
+    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable-pr.yml@v2.5.1
+    with:
+      upload-sarif: false
+      # BEWUSST kein --recursive ./ — das nähme requirements.txt als Manifest mit
+      # (44 Funde, 38 gegen Phantom-Versionen; Messung im Plan). Nur die zwei
+      # kommittierten Lockfiles, explizit.
+      scan-args: |-
+        --lockfile=package-lock.json:./package-lock.json
+        --lockfile=package-lock.json:./webtool/frontend/package-lock.json
+
+  osv-voll:
+    if: github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+    needs: resolve-python
+    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@v2.5.1
+    with:
+      download-artifact: osv-python-freeze
+      scan-args: |-
+        --lockfile=package-lock.json:./package-lock.json
+        --lockfile=package-lock.json:./webtool/frontend/package-lock.json
+        --lockfile=requirements.txt:./requirements-resolved.txt
+      fail-on-vuln: false
