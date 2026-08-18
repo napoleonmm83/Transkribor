@@ -795,7 +795,7 @@ def test_ytdlp_update_knopf_kehrt_zurueck_WAEHREND_pip_noch_laeuft(client, monke
     from webtool import ytdlp_update
     los = threading.Event()
 
-    def langsam():
+    def langsam(*a):
         los.wait(5)
         # `aktualisiere()` liefert seit #236 `(ok, gehalten)` — die Attrappe auch, sonst
         # scheitert das Auspacken in `_im_hintergrund` und der Test waere gruen ueber einen
@@ -840,7 +840,7 @@ def test_ytdlp_update_zweiter_klick_startet_keinen_zweiten_lauf(client, monkeypa
     from webtool import ytdlp_update
     los, laeufe = threading.Event(), []
 
-    def langsam():
+    def langsam(*a):
         laeufe.append(1)
         los.wait(5)
         return True, True
@@ -858,7 +858,7 @@ def test_ytdlp_update_fehlschlag_wird_gemeldet_statt_verschluckt(client, monkeyp
     """Offline ist ein Normalfall, kein Serverfehler — der Nutzer soll 'hat nicht
     geklappt' lesen, nicht einen roten Stacktrace und nicht: gar nichts."""
     from webtool import ytdlp_update
-    monkeypatch.setattr(ytdlp_update, "aktualisiere", lambda: (False, True))
+    monkeypatch.setattr(ytdlp_update, "aktualisiere", lambda *a: (False, True))
     assert client.post("/api/settings/ytdlp/update").json()["gestartet"] is True
     assert _warte(lambda: not ytdlp_update.hintergrund_zustand()[0])
     assert client.get("/api/settings").json()["ytdlp"]["ergebnis"] == "fehler"
@@ -874,7 +874,7 @@ def test_ytdlp_update_meldet_einen_ungeschuetzten_lauf_bis_ins_frontend(client, 
     war, sind zwei Fragen — deshalb ein eigenes Feld statt eines dritten `ergebnis`-Wertes.
     """
     from webtool import ytdlp_update
-    monkeypatch.setattr(ytdlp_update, "aktualisiere", lambda: (True, False))
+    monkeypatch.setattr(ytdlp_update, "aktualisiere", lambda *a: (True, False))
     assert client.post("/api/settings/ytdlp/update").json()["gestartet"] is True
     assert _warte(lambda: not ytdlp_update.hintergrund_zustand()[0])
     st = client.get("/api/settings").json()["ytdlp"]
@@ -887,7 +887,7 @@ def test_ytdlp_ein_wurf_behauptet_NICHT_ungeschuetzt(client, monkeypatch):
     Verdacht schickte den Nutzer in eine Fehlersuche, fuer die es keinen Anlass gibt."""
     from webtool import ytdlp_update
 
-    def wirft():
+    def wirft(*a):
         raise RuntimeError("kaputt")
     monkeypatch.setattr(ytdlp_update, "aktualisiere", wirft)
     client.post("/api/settings/ytdlp/update")
@@ -901,14 +901,14 @@ def test_ytdlp_hintergrundlauf_gibt_den_knopf_auch_nach_einem_wurf_frei(client, 
     Knopf bis zum Serverneustart tot, und zwar still."""
     from webtool import ytdlp_update
 
-    def wirft():
+    def wirft(*a):
         raise RuntimeError("kaputt")
     monkeypatch.setattr(ytdlp_update, "aktualisiere", wirft)
     client.post("/api/settings/ytdlp/update")
     assert _warte(lambda: not ytdlp_update.hintergrund_zustand()[0])
     assert client.get("/api/settings").json()["ytdlp"]["ergebnis"] == "fehler"
     # ... und ein neuer Klick geht wieder durch.
-    monkeypatch.setattr(ytdlp_update, "aktualisiere", lambda: (True, True))
+    monkeypatch.setattr(ytdlp_update, "aktualisiere", lambda *a: (True, True))
     assert client.post("/api/settings/ytdlp/update").json()["gestartet"] is True
     assert _warte(lambda: not ytdlp_update.hintergrund_zustand()[0])
 
@@ -926,7 +926,7 @@ def test_ytdlp_hintergrundlauf_gibt_den_knopf_auch_nach_einem_BaseException_frei
     """
     from webtool import ytdlp_update
 
-    def wirft():
+    def wirft(*a):
         # SystemExit statt KeyboardInterrupt, weil `threading` ihn im Normalbetrieb
         # unterdrueckt. UNTER PYTEST gilt das nicht — es ersetzt `threading.excepthook`,
         # der Lauf meldet also eine `PytestUnhandledThreadExceptionWarning`. Genau daher
@@ -957,7 +957,7 @@ def test_ytdlp_ein_gescheiterter_fadenstart_sperrt_den_knopf_nicht_dauerhaft(
         def Thread(*a, **k):
             raise RuntimeError("can't start new thread")
 
-    monkeypatch.setattr(ytdlp_update, "aktualisiere", lambda: (True, True))
+    monkeypatch.setattr(ytdlp_update, "aktualisiere", lambda *a: (True, True))
     monkeypatch.setattr(ytdlp_update, "threading", _Fadenlos)
     with pytest.raises(RuntimeError):
         client.post("/api/settings/ytdlp/update")

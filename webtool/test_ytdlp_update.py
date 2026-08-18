@@ -996,11 +996,16 @@ def test_beim_start_stoesst_einen_HINTERGRUND_lauf_an(monkeypatch):
     """
     gerufen = []
     monkeypatch.setattr(yu, "faellig", lambda: True)
-    monkeypatch.setattr(yu, "starte_hintergrund", lambda: gerufen.append(1) or True)
+    monkeypatch.setattr(yu, "starte_hintergrund", lambda **k: gerufen.append(k) or True)
     monkeypatch.setattr(yu, "aktualisiere",
                         lambda *a, **k: pytest.fail("beim Start laeuft pip im Faden, nicht hier"))
     assert yu.beim_start() is True
-    assert len(gerufen) == 1
+    # **Das Argument, nicht nur der Aufruf** (#254 Weg 3): ohne `nur_wenn_faellig` faellt die
+    # Pruefung unter der Sperre aus, und der zweite Serverprozess macht wieder sein
+    # „already satisfied"-pip. Ein Test, der nur den Aufruf zaehlt, bliebe dabei gruen — und
+    # `beim_start`s `except Exception` verschluckt sogar einen Signaturfehler still (gemessen:
+    # eine Attrappe ohne Parameter macht daraus ein stummes `False`).
+    assert gerufen == [{"nur_wenn_faellig": True}]
 
 
 def test_beim_start_respektiert_den_schalter(monkeypatch):
@@ -1008,7 +1013,7 @@ def test_beim_start_respektiert_den_schalter(monkeypatch):
     monkeypatch.setenv("TRANSKRIBOR_YTDLP_UPDATE", "0")
     monkeypatch.setattr(yu, "faellig", lambda: True)      # Positivkontrolle: es waere faellig
     monkeypatch.setattr(yu, "starte_hintergrund",
-                        lambda: pytest.fail("Schalter aus — kein Lauf beim Start"))
+                        lambda **k: pytest.fail("Schalter aus — kein Lauf beim Start"))
     assert yu.beim_start() is False
 
 
@@ -1017,7 +1022,7 @@ def test_beim_start_respektiert_die_faelligkeit(monkeypatch):
     14 Tage. Der Merker ist die Bremse, nicht die Gelegenheit."""
     monkeypatch.setattr(yu, "faellig", lambda: False)
     monkeypatch.setattr(yu, "starte_hintergrund",
-                        lambda: pytest.fail("nicht faellig — kein Lauf beim Start"))
+                        lambda **k: pytest.fail("nicht faellig — kein Lauf beim Start"))
     assert yu.beim_start() is False
 
 
@@ -1034,7 +1039,7 @@ def test_beim_start_tritt_zurueck_wenn_schon_jemand_aktualisiert(monkeypatch, ca
     monkeypatch.setattr(yu, "faellig", lambda: True)         # Positivkontrolle: es WAERE faellig
     monkeypatch.setattr(yu, "laeuft_gerade", lambda *a: True)
     monkeypatch.setattr(yu, "starte_hintergrund",
-                        lambda: pytest.fail("es aktualisiert schon jemand — kein zweiter Lauf"))
+                        lambda **k: pytest.fail("es aktualisiert schon jemand — kein zweiter Lauf"))
     assert yu.beim_start() is False
     assert "schon jemand" in capsys.readouterr().out         # nicht still
 
@@ -1044,7 +1049,7 @@ def test_beim_start_laeuft_wenn_NIEMAND_aktualisiert(monkeypatch):
     die Kalenderpruefung fiele still ganz aus."""
     monkeypatch.setattr(yu, "faellig", lambda: True)
     monkeypatch.setattr(yu, "laeuft_gerade", lambda *a: False)
-    monkeypatch.setattr(yu, "starte_hintergrund", lambda: True)
+    monkeypatch.setattr(yu, "starte_hintergrund", lambda **k: True)
     assert yu.beim_start() is True
 
 
@@ -1141,7 +1146,11 @@ def test_pip_sperre_deckt_die_VERSCHACHTELTE_wartezeit_mit(monkeypatch):
     # so pinnt der Test den Pfad selbst. Ginge er durch dieselbe Funktion wie der Code, wuerde
     # eine Umbenennung des Locks stillschweigend mitwandern, und die Anzeige aus #243 fragte
     # danach eine andere Sperre als die, die `aktualisiere()` nimmt.
-    assert sperre.frist(gesehen[settings.path() + ".ytdlp"]) > haltedauer
+    #
+    # Die venv-Kennung (#254) kommt dabei aus der Funktion — sie haengt an `sys.prefix` und
+    # laesst sich nicht hinschreiben. Gepinnt bleibt, was driften KANN: Reihenfolge und
+    # Endung. (Der eigene Test dafuer steht bei `test_die_pip_sperre_haengt_an_der_VENV`.)
+    assert sperre.frist(gesehen[f"{settings.path()}.ytdlp.{yu._venv_kennung()}"]) > haltedauer
 
 
 def test_aktualisiere_sagt_es_wenn_pip_OHNE_sperre_lief(monkeypatch, tmp_path):
@@ -1159,7 +1168,8 @@ def test_aktualisiere_sagt_es_wenn_pip_OHNE_sperre_lief(monkeypatch, tmp_path):
     """
     gerufen, run = _pip()
     monkeypatch.setattr(yu.subprocess, "run", run)
-    with open(tmp_path / "settings.json.ytdlp.lock", "w", encoding="utf-8") as f:
+    with open(tmp_path / f"settings.json.ytdlp.{yu._venv_kennung()}.lock", "w",
+              encoding="utf-8") as f:
         f.write("kein Verzeichnis")
     assert yu.aktualisiere() == (True, False)
     assert len(gerufen) == 1           # pip laeuft trotzdem — die Sperre ist nicht der Zweck
@@ -1178,7 +1188,7 @@ def test_zustand_meldet_auch_einen_lauf_aus_einem_FREMDEN_prozess(tmp_path):
     `aktualisiere()` aus einem fremden Prozess fasst `_lauf` ebensowenig an.
     """
     assert yu.zustand()["laeuft"] is False           # Gegenprobe: ohne Lock laeuft nichts
-    lock = settings.path() + ".ytdlp.lock"
+    lock = f"{settings.path()}.ytdlp.{yu._venv_kennung()}.lock"
     os.mkdir(lock)
     with open(os.path.join(lock, sperre._HALTER), "w", encoding="utf-8") as f:
         f.write(f"{os.getpid()} {platform.node()}")
@@ -1568,37 +1578,62 @@ def test_beim_start_holt_einen_unterbrochenen_lauf_nach(monkeypatch):
     settings.save({"ytdlp_geprueft": HEUTE.isoformat()})
     monkeypatch.setattr(yu, "laeuft_gerade", lambda *a: False)
     gestartet = []
-    monkeypatch.setattr(yu, "starte_hintergrund", lambda: gestartet.append(1) or True)
+    monkeypatch.setattr(yu, "starte_hintergrund", lambda **k: gestartet.append(1) or True)
     assert yu.beim_start() is False                    # Negativkontrolle
     yu._pip_merker_setzen()
     assert yu.beim_start() is True
     assert gestartet == [1]
 
 
-def test_ein_liegender_merker_wird_nicht_aufgefrischt():
-    """Sein Datum ist der Anker der Verfallsfrist — und daran endet der einzige verbliebene
-    Dauerlauf. Scheitert pip dauerhaft (offline, kaputte venv), setzte ein aufgefrischtes
-    Datum die Frist bei JEDEM Lauf zurueck und die Faelligkeit liefe ewig. Ein unlesbarer
-    Merker zaehlt dagegen als keiner und wird ueberschrieben, sonst bliebe eine halb
-    geschriebene Datei fuer immer liegen und schaltete die Erkennung ab."""
-    alt = (HEUTE - dt.timedelta(days=3)).isoformat()
+def test_ein_liegender_merker_wird_AUFGEFRISCHT(monkeypatch):
+    """#268 — die Umkehrung der frueheren Schon-Regel, und der Weg, den sie offenliess.
+
+    Bis hierher blieb ein noch gueltiger Merker auf seinem Datum stehen. Ein spaeterer
+    Abbruch ERBTE damit die Restfrist eines frueheren, ganz gewoehnlichen Fehlschlags
+    (offline): regulaerer Fehlschlag an Tag 0, Abbruch an Tag 13, kein Serverstart bis
+    Tag 15 — und `faellig()` sagte an Tag 16 `False`, obwohl die Installation zerlegt war.
+    Dauerhaft, denn `fassung()` ist dann None und der Riegel „Sache des Setups" greift.
+
+    Der ganze Ablauf steht hier, nicht nur das Auffrischen: ein Test allein auf das
+    Merkerdatum sagt nichts darueber, ob die Reparatur am Ende wirklich laeuft.
+    """
+    alt = (HEUTE - dt.timedelta(days=13)).isoformat()
     with open(yu._pip_merker(), "w", encoding="utf-8") as f:
         f.write(alt)
     yu._pip_merker_setzen()
     with open(yu._pip_merker(), encoding="utf-8") as f:
-        assert f.read().strip() == alt
+        assert f.read().strip() == HEUTE.isoformat()
 
-    # Zwei Gegenproben, und beide pruefen den INHALT statt nur das Ergebnis: ein Test auf
-    # `_pip_unterbrochen() is False` bliebe gruen, wenn die Wache aus `_merker_datum` nach
-    # `_pip_unterbrochen` wanderte — dort liefert sie dasselbe False, verhindert aber das
-    # Ueberschreiben nicht mehr, und ein Zukunftsdatum schaltete die Erkennung fuer immer ab
-    # (Reviewbefund m4, als Mutation gemessen).
-    for unbrauchbar in ("kein datum", "2099-01-01"):
-        with open(yu._pip_merker(), "w", encoding="utf-8") as f:
-            f.write(unbrauchbar)
-        yu._pip_merker_setzen()
-        with open(yu._pip_merker(), encoding="utf-8") as f:
-            assert f.read().strip() == HEUTE.isoformat(), unbrauchbar
+    # … und die Wirkung, drei Tage spaeter: ohne das Auffrischen waere der Merker jetzt
+    # abgelaufen (Tag 13 + 3 > INTERVALL_TAGE ab Tag 0) und die Reparatur unterbliebe.
+    monkeypatch.setattr(yu, "_heute", lambda: HEUTE + dt.timedelta(days=3))
+    monkeypatch.setattr(yu, "fassung", lambda: None)
+    assert yu._pip_unterbrochen() is True
+    assert yu.faellig() is True
+
+
+def test_ein_REPARATURlauf_frischt_den_merker_nicht_auf(monkeypatch):
+    """Die Gegenprobe zum Auffrischen — sonst waere #268s Fix der Dauerlauf, gegen den die
+    Schon-Regel stand: scheitert pip dauerhaft, liefe die Faelligkeit ewig.
+
+    Erreichbar ist er nicht mehr, und das haengt an einer einzigen Zeile: `aktualisiere()`
+    setzt den Merker nur bei `fassung() is not None` (Reviewbefund M1), `faellig()`s
+    Merker-Zweig verlangt `fassung() is None`. Auffrischen und Auslösen schliessen sich also
+    aus. Gemessen ueber 20 simulierte Serverstarts im zerlegten Zustand: das Merkerdatum
+    blieb auf Tag 0, die Faelligkeit fiel an Tag 15 auf False — mit und ohne Schon-Regel
+    gleich.
+
+    Faellt die `fassung()`-Bedingung in `aktualisiere()`, wird dieser Test rot.
+    """
+    alt = (HEUTE - dt.timedelta(days=5)).isoformat()
+    with open(yu._pip_merker(), "w", encoding="utf-8") as f:
+        f.write(alt)
+    monkeypatch.setattr(yu, "fassung", lambda: None)      # die Installation ist zerlegt
+    _, run = _pip(returncode=1)                                 # … und pip scheitert weiter
+    monkeypatch.setattr(yu.subprocess, "run", run)
+    yu.aktualisiere()
+    with open(yu._pip_merker(), encoding="utf-8") as f:
+        assert f.read().strip() == alt                    # unangetastet: die Frist laeuft ab
 
 
 def test_ohne_vorhandene_fassung_entsteht_GAR_KEIN_merker(monkeypatch):
@@ -1722,3 +1757,106 @@ def test_ein_fifo_am_merker_pfad_haelt_auch_das_SCHREIBEN_nicht_auf():
     faden.join(5)
     assert not faden.is_alive(), "haengt am FIFO — die pip-Sperre wuerde fuer immer gehalten"
     assert yu._pip_unterbrochen() is False, "am FIFO steht kein Datum"
+
+
+# --- #254: die Sperre gehoert der venv, nicht dem Nutzer ----------------------
+
+def test_die_pip_sperre_haengt_an_der_VENV_nicht_nur_am_nutzer(monkeypatch):
+    """#254 Weg 2. `settings.path()` ist pro NUTZER — `electron/backend.js` setzt
+    `TRANSKRIBOR_SETTINGS` nicht, gepackte App und Entwickler-Checkout teilten sich also
+    dieselbe Sperre bei VERSCHIEDENEN venvs. Geschuetzt wird aber `site-packages`: der eine
+    sass bis zu 220 s ab und meldete seiner Einstellungsseite „Eine Aktualisierung laeuft
+    gerade" — fuer einen Lauf, der eine fremde venv anfasst.
+
+    Zwei Richtungen, sonst waere der Test mit einem festen Namen zu bestehen: verschiedene
+    venvs muessen verschiedene Pfade ergeben, DIESELBE venv denselben (die Kennung ist
+    stabil, nicht pro Prozess gesalzen — `hash()` waere es).
+    """
+    monkeypatch.setattr(yu.sys, "prefix", r"C:\App\resources\py")
+    app = yu._lockziel()
+    monkeypatch.setattr(yu.sys, "prefix", r"E:\Git\Transkribor\.venv")
+    checkout = yu._lockziel()
+    assert app != checkout
+    assert yu._lockziel() == checkout                     # stabil, nicht zufaellig
+    assert os.path.dirname(app) == os.path.dirname(settings.path())
+
+
+def test_der_abbruch_merker_traegt_die_kennung_GENAU_EINMAL():
+    """Seit #254 steckt die venv-Kennung in `_lockziel()`. Stuende sie in `_pip_merker()`
+    noch einmal, ergaebe das `….ytdlp.<kennung>.<kennung>.abbruch` — kein Schaden, aber der
+    naechste Leser sucht die Erklaerung dafuer vergeblich.
+
+    Wichtiger ist die zweite Zeile: der Merkerpfad ist derselbe wie VOR #254
+    (`….ytdlp.<kennung>.abbruch`). Genau deshalb steht die Kennung dort, wo sie steht — eine
+    andere Reihenfolge haette jeden liegenden Merker verwaist und eine Migration gebraucht.
+    """
+    assert yu._pip_merker().count(yu._venv_kennung()) == 1
+    assert yu._pip_merker() == f"{settings.path()}.ytdlp.{yu._venv_kennung()}.abbruch"
+
+
+# --- #254 Weg 3: die Faelligkeit noch einmal, UNTER der Sperre ----------------
+
+def test_aktualisiere_prueft_die_faelligkeit_ERNEUT_unter_der_sperre(monkeypatch):
+    """#254 Weg 3, samt des dorthin geschlossenen #176. Zwei Serverprozesse starten
+    gleichzeitig, beide sehen `faellig()`, der zweite wartet bis zu 220 s an der Sperre und
+    macht danach ein pip, das „Requirement already satisfied" meldet — waehrend seine
+    Einstellungsseite die ganze Zeit „Eine Aktualisierung laeuft gerade" zeigt.
+
+    Der Test misst BEIDES, weil nur eines davon der Fix ist: dass abgebrochen wird, und dass
+    die Frage INNERHALB der Sperre gestellt wird. Vor der Sperre gestellt waere sie derselbe
+    Zustand wie das advisory Tor in `beim_start()` — ein Wettlauf, kein Riegel.
+    """
+    gesehen = []
+
+    def faellig():
+        gesehen.append(os.path.isdir(yu._lockziel() + ".lock"))
+        return False                       # inzwischen hat ein anderer Lauf aktualisiert
+
+    monkeypatch.setattr(yu, "faellig", faellig)
+    gerufen, run = _pip()
+    monkeypatch.setattr(yu.subprocess, "run", run)
+    assert yu.aktualisiere(nur_wenn_faellig=True) == (True, True)
+    assert gerufen == []                   # kein pip
+    assert gesehen == [True]               # … und gefragt wurde unter der Sperre
+
+
+def test_aktualisiere_OHNE_die_bedingung_laeuft_auch_wenn_nichts_faellig_ist(monkeypatch):
+    """Die Gegenprobe, und sie ist der Vertrag des Knopfes „Jetzt aktualisieren": er laeuft
+    bedingungslos. Ohne diesen Test waere ein `nur_wenn_faellig`, das IMMER gilt, gruen — und
+    der Knopf taete dann nichts, mit Erfolgsmeldung."""
+    monkeypatch.setattr(yu, "faellig", lambda: False)
+    gerufen, run = _pip()
+    monkeypatch.setattr(yu.subprocess, "run", run)
+    assert yu.aktualisiere() == (True, True)
+    assert len(gerufen) == 1
+
+
+def test_die_selbstheilung_bricht_NIE_ab(monkeypatch):
+    """`automatisch(erzwingen=True)` ist die Reparatur nach einem gescheiterten Download —
+    ein Extraktor bricht nicht nach Kalender. Sie darf die Weg-3-Bremse also nie bekommen;
+    `nur_wenn_faellig` ist genau die Umkehrung von `erzwingen`."""
+    gesehen = []
+    monkeypatch.setattr(yu, "aktualisiere",
+                        lambda nur_wenn_faellig=False: gesehen.append(nur_wenn_faellig) or (True, True))
+    monkeypatch.setattr(yu, "faellig", lambda: True)
+    yu.automatisch(erzwingen=True)
+    yu.automatisch()
+    assert gesehen == [False, True]
+
+
+def test_starte_hintergrund_reicht_die_bedingung_in_den_faden_durch(monkeypatch):
+    """Der Faden bedient BEIDE Wege — den Knopf (bedingungslos) und die Kalenderpruefung am
+    Start (#254). Bleibt das Argument hier haengen, ist der ganze Weg-3-Fix wirkungslos, und
+    zwar still: `aktualisiere()` liefe dann einfach wie bisher."""
+    gesehen = []
+    fertig = threading.Event()
+
+    def falsch(nur_wenn_faellig=False):
+        gesehen.append(nur_wenn_faellig)
+        fertig.set()
+        return True, True
+
+    monkeypatch.setattr(yu, "aktualisiere", falsch)
+    assert yu.starte_hintergrund(nur_wenn_faellig=True) is True
+    assert fertig.wait(5)
+    assert gesehen == [True]

@@ -590,8 +590,22 @@ def _lockziel() -> str:
     """Der Pfad, um den die pip-Sperre liegt. EIN Ausdruck: `aktualisiere()` NIMMT sie,
     `zustand()` FRAGT sie ab (#243) — zwei Literale liefen beim naechsten Umbau auseinander,
     und die Anzeige saehe dann dauerhaft ein Lock, das niemand haelt (oder keines, obwohl
-    eines liegt)."""
-    return settings.path() + ".ytdlp"
+    eines liegt).
+
+    **Mit der venv-Kennung (#254).** `settings.path()` ist pro NUTZER — `electron/backend.js`
+    setzt `TRANSKRIBOR_SETTINGS` nicht, gepackte App und Entwickler-Checkout teilten sich also
+    dieselbe Sperre bei VERSCHIEDENEN venvs. Geschuetzt wird aber `site-packages`, nicht
+    `settings.json`: der eine sass bis zu `sperre.frist()` ≈ 220 s ab und meldete seiner
+    Einstellungsseite „Eine Aktualisierung laeuft gerade" — fuer einen Lauf, der eine fremde
+    venv anfasst. Dasselbe Muster, das `_venv_kennung()` beim Abbruch-Merker schon traegt.
+
+    **Die Kennung steht VOR `.abbruch`, nicht davor** — `_pip_merker()` ist
+    `f"{_lockziel()}.abbruch"`, und mit dieser Reihenfolge bleibt sein Pfad **buchstabengleich**
+    zu dem vor #254 (`….ytdlp.<kennung>.abbruch`). Kein liegengebliebener Merker, keine
+    Migration. Nur das Lock-Verzeichnis wandert; ein verwaistes altes (`….ytdlp.lock`) fragt
+    danach niemand mehr, es verfaellt ungenutzt.
+    """
+    return f"{settings.path()}.ytdlp.{_venv_kennung()}"
 
 
 def _lock_stale() -> float:
@@ -658,8 +672,12 @@ def _pip_merker() -> str:
     Grund — „ein neuer DEFAULTS-Schluessel schluege in die API durch" — ist NACHGEPRUEFT
     FALSCH: `settings.public()` und `app._settings_body()` haben feste Feldlisten. Er steht
     hier, damit ihn niemand ein zweites Mal erfindet.)
+
+    Die Kennung steckt seit #254 in `_lockziel()` selbst — der Pfad ist derselbe wie vorher,
+    er wird nur eine Ebene hoeher gebildet. Stuende sie hier noch einmal, stuende sie zweimal
+    drin.
     """
-    return f"{_lockziel()}.{_venv_kennung()}.abbruch"
+    return f"{_lockziel()}.abbruch"
 
 
 def _merker_datum() -> dt.date | None:
@@ -703,35 +721,36 @@ def _merker_datum() -> dt.date | None:
 def _pip_merker_setzen() -> None:
     """Unmittelbar VOR `subprocess.run`, INNERHALB der Sperre — siehe `aktualisiere`.
 
-    **Ein noch GUELTIGER Merker wird NICHT aufgefrischt.** Sein Datum ist der Anker der
-    Verfallsfrist, und genau daran endet der einzige verbliebene Dauerlauf: scheitert pip
-    dauerhaft (offline, kein Netz, kaputte venv), setzte ein aufgefrischtes Datum die Frist
-    bei jedem Lauf zurueck und die Faelligkeit liefe ewig. So friert sie ein und laeuft nach
-    `INTERVALL_TAGE` aus. Unlesbar zaehlt dabei als „keiner" und wird ueberschrieben — sonst
-    bliebe eine halb geschriebene Datei fuer immer liegen und schaltete die Erkennung ab.
+    **Das Datum wird IMMER auf heute gesetzt (#268).** Bis hierher wurde ein noch gueltiger
+    Merker geschont: sein Datum galt als Anker der Verfallsfrist. Der Preis war der Weg aus
+    #268 — ein spaeterer Abbruch ERBTE die Restfrist eines frueheren, ganz gewoehnlichen
+    Fehlschlags (offline). Faellt der Fristablauf dann in ein Fenster ohne Serverstart, bleibt
+    die zerlegte Installation DAUERHAFT liegen: gemessen liefert `faellig()` an Tag 16 `False`
+    fuer einen Abbruch an Tag 13, dessen Merker das Datum von Tag 0 trug.
 
-    **Ein ABGELAUFENER wird sehr wohl ueberschrieben**, und das ist der Unterschied zwischen
-    „geschont" und „eingefroren": geschont wird nur, was gerade noch gilt. Ohne diese Grenze
-    bliebe ein einmal liegengebliebener Merker fuer immer auf seinem alten Datum stehen — eine
-    NEUE Unterbrechung Wochen spaeter faende ihn abgelaufen vor, frischte ihn nicht auf, und
-    die Reparatur unterbliebe dauerhaft. Ein Dauerlauf entsteht dadurch nicht: damit der
-    Merker `faellig()` ueberhaupt ausloest, muss `fassung()` None sein — und dann gibt es ohne
-    ihn gar keinen Lauf mehr, der ihn auffrischen koennte. (CodeRabbit-CLI, Major.)
+    **Der Dauerlauf, gegen den das Schonen stand, ist nicht mehr erreichbar — und das ist
+    gemessen, nicht hergeleitet.** Die Sorge war: scheitert pip dauerhaft, setzte ein
+    aufgefrischtes Datum die Frist bei jedem Lauf zurueck, und die Faelligkeit liefe ewig.
+    Dafuer muesste der Merker aufgefrischt werden, WAEHREND er `faellig()` treibt — und das
+    schliessen sich seither aus: `faellig()`s Merker-Zweig verlangt `fassung() is None`,
+    `aktualisiere()` ruft diese Funktion hier nur bei `fassung() is not None` (die dritte
+    Bedingung aus Reviewbefund M1, die es zur Zeit der Schon-Regel noch nicht gab). Gegenprobe
+    ueber 20 simulierte Serverstarts im zerlegten Zustand mit dauerhaft scheiterndem pip: das
+    Merkerdatum bleibt in BEIDEN Varianten auf Tag 0 stehen, und die Faelligkeit faellt in
+    beiden an Tag 15 auf `False`. Das Schonen war fuer diesen Fall wirkungslos geworden.
 
-    **Bekannter Restfall (#268, gemessen):** weil das Datum geschont wird, ERBT ein spaeterer
-    Abbruch die Restfrist eines frueheren, regulaeren Fehlschlags. Faellt der Fristablauf in
-    ein Fenster ohne Serverstart, bleibt der Schaden dauerhaft. Der naheliegende Fix
-    (auffrischen) reisst genau die Richtung wieder auf, gegen die der Absatz oben steht — es
-    braucht zwei getrennte Zeitpunkte („wann fing es an" gegen „wann zuletzt abgebrochen"),
-    also einen eigenen Entwurf. Nicht hier stillschweigend halb reparieren.
+    Damit erledigt sich auch der zweite Punkt von #263 (ein echter Abbruch bekam hinter einem
+    liegengebliebenen Merker eine verkuerzte Frist) — die Frist ist jetzt immer die zugesagte.
+
+    **Was das NICHT aendert:** ein Abbruch WAEHREND einer Reparatur frischt nichts auf (dort
+    ist `fassung()` None), die Frist laeuft also weiterhin ab dem ERSTEN Abbruch. Und ein
+    Merker, den `os.remove` dauerhaft nicht wegbekommt, haengt jetzt am Datum des LETZTEN
+    Laufs statt am ersten — beides bleibt durch `INTERVALL_TAGE` gedeckelt.
 
     Best effort: ein nicht schreibbarer Merker macht den Zustand nur so schlecht, wie er vor
     diesem Fix war. Aber nicht STILL, sonst ist er von einem gesetzten nicht zu unterscheiden
     (dieselbe Regel wie bei `sperre.datei`s fail-open).
     """
-    d = _merker_datum()
-    if d is not None and (_heute() - d).days <= INTERVALL_TAGE:
-        return
     # **`O_NONBLOCK` auch beim SCHREIBEN**, nicht nur beim Lesen. Ein `open(..., "w")` auf
     # einen FIFO wartet auf einen LESER, der nie kommt — und diese Zeile laeuft INNERHALB der
     # pip-Sperre im Hintergrundfaden: der Haenger hielte die Sperre fuer immer, die
@@ -805,8 +824,14 @@ def _pip_unterbrochen() -> bool:
     return d is not None and (_heute() - d).days <= INTERVALL_TAGE
 
 
-def aktualisiere() -> tuple[bool, bool]:
+def aktualisiere(nur_wenn_faellig: bool = False) -> tuple[bool, bool]:
     """`pip install -U yt-dlp[default]`, bedingungslos. `(ok, gehalten)`.
+
+    **`nur_wenn_faellig` ist der einzige Weg, den bedingungslosen Vertrag zu brechen
+    (#254 Weg 3, samt des dorthin geschlossenen #176)**, und er gilt allein dem Kalenderweg:
+    der Knopf „Jetzt aktualisieren" und die Selbstheilung nach einem gescheiterten Download
+    laufen weiter, egal was der Kalender sagt. Gesetzt, wird die Faelligkeit UNTER der Sperre
+    noch einmal gefragt — siehe dort.
 
     NUR yt-dlp: ein `-U` ueber alle requirements erwischt irgendwann torch, und die GPU
     waere still weg (dieselbe Falle wie beim CPU-Rad in setup.js).
@@ -849,6 +874,26 @@ def aktualisiere() -> tuple[bool, bool]:
         print(f"[ytdlp] Sperrverzeichnis nicht anlegbar: {e}", flush=True)
     # Die Frist deckt die WIRKLICHE Haltedauer, nicht nur den pip-Lauf — siehe `_lock_stale`.
     with sperre.datei(lockziel, stale=_lock_stale()) as gehalten:
+        # **Die Faelligkeit noch einmal, hier drin** (#254 Weg 3). Sie wurde VOR dem
+        # Sperrerwerb ausgewertet, und genau dazwischen kann der andere seinen ganzen Lauf
+        # gefahren haben: zwei Serverprozesse starten gleichzeitig (gepackte App neben
+        # Entwickler-uvicorn), beide sehen `faellig()`, der zweite sitzt bis zu
+        # `sperre.frist()` = 220 s ab und macht danach ein pip, das „Requirement already
+        # satisfied" meldet — waehrend seine Einstellungsseite die ganze Zeit „Eine
+        # Aktualisierung laeuft gerade" zeigt.
+        #
+        # `faellig()` statt eines blossen `geprueft()`-Vergleichs: es ist dieselbe Funktion,
+        # die uns hergeschickt hat — eine zweite, halb nachgebaute Bedingung liefe beim
+        # naechsten Umbau auseinander. Sie kostet ein paar Dateizugriffe, und nur auf dem
+        # pip-Pfad.
+        #
+        # Der Riegel in `beim_start()` bleibt daneben stehen: der spart das Warten an der
+        # Sperre, dieser hier ist die vollstaendige Antwort. `ok=True`, weil nichts
+        # fehlgeschlagen ist — yt-dlp ist auf dem Stand, den dieser Lauf herstellen sollte.
+        if nur_wenn_faellig and not faellig():
+            print("[ytdlp] uebersprungen — inzwischen hat ein anderer Lauf aktualisiert",
+                  flush=True)
+            return True, gehalten
         # INNERHALB der Sperre und unmittelbar um `subprocess.run` herum — beide Zeilen. Das
         # ist die ganze Erkennung: der Merker ueberlebt GENAU DANN, wenn dieser Prozess
         # zwischen ihnen stirbt, und das ist #257/#258.
@@ -936,8 +981,12 @@ def hintergrund_zustand() -> tuple[bool, str, bool]:
         return _lauf["laeuft"], _lauf["ergebnis"], _lauf["ungeschuetzt"]
 
 
-def starte_hintergrund() -> bool:
+def starte_hintergrund(nur_wenn_faellig: bool = False) -> bool:
     """`aktualisiere()` in einem Faden anstossen. False = es laeuft schon einer.
+
+    `nur_wenn_faellig` reicht bis in `aktualisiere()` durch — dieser Faden bedient den Knopf
+    (bedingungslos) UND die Kalenderpruefung am Start (#254), und nur die zweite darf unter
+    der Sperre noch einmal abbrechen.
 
     Der Knopf lief bis #174 SYNCHRON im Request. Der schlimmste Fall sind nicht die im
     alten Docstring genannten „rund 250 s", sondern **>=340 s** (#219): die Wartezeit haengt
@@ -962,7 +1011,8 @@ def starte_hintergrund() -> bool:
     # (Faden-Erschoepfung), aber derselbe Massstab, mit dem unten das `finally` begruendet
     # ist: die Kosten des Fehlers, nicht seine Wahrscheinlichkeit.
     try:
-        threading.Thread(target=_im_hintergrund, daemon=True).start()
+        threading.Thread(target=_im_hintergrund, args=(nur_wenn_faellig,),
+                         daemon=True).start()
     except BaseException:
         with _lauf_sperre:
             # `ungeschuetzt` NICHT noch einmal: der Block oben hat es unter derselben Sperre
@@ -976,7 +1026,7 @@ def starte_hintergrund() -> bool:
     return True
 
 
-def _im_hintergrund() -> None:
+def _im_hintergrund(nur_wenn_faellig: bool = False) -> None:
     """Der Faden. Setzt `laeuft` unter ALLEN Umstaenden zurueck."""
     # `ergebnis` VOR dem `try`: ein Wurf, den `except Exception` nicht faengt (SystemExit,
     # KeyboardInterrupt), liefe im `finally` sonst in einen UnboundLocalError.
@@ -995,7 +1045,7 @@ def _im_hintergrund() -> None:
     # `_ejs_untauglich` — eine Warnung auf Verdacht ist ein Daueralarm).
     ergebnis, ungeschuetzt = "fehler", False
     try:
-        ok, gehalten = aktualisiere()
+        ok, gehalten = aktualisiere(nur_wenn_faellig)
         ergebnis, ungeschuetzt = ("ok" if ok else "fehler"), not gehalten
     except Exception as e:
         # `aktualisiere()` faengt selbst schon OSError/SubprocessError; was hier ankommt,
@@ -1023,7 +1073,9 @@ def automatisch(erzwingen: bool = False) -> bool:
     # Die Sperr-Auskunft (#236) gilt dem Menschen vor der Einstellungsseite, und den gibt es
     # auf diesem Weg nicht — der laeuft im fetch-Subprozess, wo sie in `sperre`s
     # Protokollzeile steht und sonst nirgends.
-    return aktualisiere()[0]
+    # `nur_wenn_faellig` ist die Umkehrung von `erzwingen`: der Kalenderweg darf unter der
+    # Sperre abbrechen, die Selbstheilung nie (#254 Weg 3).
+    return aktualisiere(nur_wenn_faellig=not erzwingen)[0]
 
 
 def laeuft_gerade(eigener: bool | None = None) -> bool:
@@ -1097,7 +1149,9 @@ def beim_start() -> bool:
             print("[ytdlp] Kalenderpruefung uebersprungen — es aktualisiert schon jemand",
                   flush=True)
             return False
-        return starte_hintergrund()
+        # `nur_wenn_faellig=True`: das Tor oben ist advisory, dieses hier ist die Antwort im
+        # kritischen Abschnitt (#254 Weg 3).
+        return starte_hintergrund(nur_wenn_faellig=True)
     except Exception as e:
         # Nicht still: eine uebersprungene Vorsorge sieht man sonst erst daran, dass Monate
         # spaeter ein Extraktor bricht. `BaseException` faengt der Block bewusst nicht —
