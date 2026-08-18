@@ -7,8 +7,25 @@ import type {
 } from './types'
 
 const enc = encodeURIComponent
+/** Fehler mit dem HTTP-Status daran. Erbt von `Error` und traegt dieselbe `message` wie zuvor
+ *  (das `detail` des Servers) — alle bestehenden Aufrufer, die nur `e.message` lesen, bleiben
+ *  unveraendert. Gebraucht wird der Status fuer den 409 aus #160: ein Speicherkonflikt ist
+ *  kein Fehlschlag, den man wiederholen sollte, sondern eine Frage an den Nutzer. */
+export class HttpFehler extends Error {
+  // Feld und Zuweisung getrennt: `erasableSyntaxOnly` (tsconfig) verbietet
+  // Konstruktor-Parameter-Eigenschaften, weil sie beim blossen Typ-Entfernen Code
+  // hinterliessen. Faellt nur in `tsc -b` auf, nicht in `--noEmit`.
+  readonly status: number
+  constructor(message: string, status: number) {
+    super(message)
+    this.name = 'HttpFehler'
+    this.status = status
+  }
+}
 async function jn<T>(r: Response): Promise<T> {
-  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || `HTTP ${r.status}`)
+  if (!r.ok) {
+    throw new HttpFehler((await r.json().catch(() => ({}))).detail || `HTTP ${r.status}`, r.status)
+  }
   return r.json() as Promise<T>
 }
 const get = <T>(u: string): Promise<T> => fetch(u).then(jn<T>)
@@ -75,8 +92,13 @@ export async function getDoc(project: string, base: string): Promise<EditDoc> {
   return jn(await fetch(`/api/projects/${enc(project)}/files/${enc(base)}`,
     { signal: AbortSignal.timeout(LADE_ZEITLIMIT_MS) }))
 }
-export async function saveDoc(project: string, base: string, doc: EditDoc): Promise<void> {
-  await jn(await fetch(`/api/projects/${enc(project)}/files/${enc(base)}`, {
+/** Speichert und liefert den NEUEN `dateistand` zurueck (#160). Ohne den liefe der naechste
+ *  Autosave gegen die eigene Schreibung von gerade eben und bekaeme 409 — die Sperre schluege
+ *  bei jedem zweiten Speichern zu, ohne dass ein fremder Schreiber beteiligt waere. */
+export async function saveDoc(
+  project: string, base: string, doc: EditDoc,
+): Promise<{ dateistand?: string }> {
+  return jn(await fetch(`/api/projects/${enc(project)}/files/${enc(base)}`, {
     method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(doc) }))
 }
 export type ExportFmt = 'md' | 'srt'
