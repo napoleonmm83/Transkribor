@@ -63,6 +63,8 @@ zweites Mal führen). HERGELEITET aus `app.py:359-379`.
 Alles hier stammt aus dieser Arbeit und wurde vor dem Design an echtem Material geprüft. Es
 steht hier, damit niemand dieselben Wege ein zweites Mal geht.
 
+*(Sieben weitere Hebel sind am 2026-08-18 dazugekommen, sechs davon ebenfalls tot — siehe 1.6.)*
+
 **(a) „Nur die Zählung versagt, die Trennung ist intakt." — OFFEN, nicht widerlegt.** Der
 naheliegende Beleg wären zwei Dateien gleicher Struktur (je 2 Cluster, je 2 Namen):
 `US Car Treff/Roger Meili` erreicht **97 %** Übereinstimmung, `Rhyathlon/00111679` nur
@@ -124,7 +126,154 @@ RECHERCHIERT (Herstellerangaben und Modellkarten, von mir **nicht** nachgemessen
 - **pyannote `precision-2`** ist laut Hersteller im Mittel 28 % genauer als `community-1`,
   läuft aber **als Cloud-Dienst**. Marcus hat entschieden: das Audio verlässt den Rechner
   nicht. **Ausgeschlossen.**
+- **DiariZen** (BUT Brno, EEND-VC: strukturell beschnittener WavLM-Large-Encoder +
+  Conformer-Powerset-Backend + VBx/PLDA) ist der einzige lokale Kandidat mit belegtem
+  Vorsprung auf **unserer** Bedingung. Benchmarktabelle des Repos selbst, DER %:
+  **AMI-SDM** (ein entferntes Mikrofon) 22,4 → **13,9**, **AliMeeting far** 24,4 → **10,8**,
+  DIHARD3 21,7 → 14,5 — jeweils gegen pyannote 3.1. Fremdvergleich über 196,6 h in fünf
+  Sprachen **inklusive Deutsch**: 13,3 % gegen 11,2 % des Cloud-Dienstes pyannoteAI
+  ([arXiv:2509.26177](https://arxiv.org/abs/2509.26177)). Dass ausgerechnet die beiden
+  Fernfeld-Zeilen die grössten Abstände haben, passt zum Mechanismus: der WavLM-Encoder
+  ersetzt genau das schwache Frontend von community-1 (`PyanNet`: SincNet + 4× BiLSTM).
+  **Drei Haken, und der erste ist der harte: die Gewichte sind CC BY-NC 4.0** (Code MIT) —
+  bei einem verteilten Installer ist „nicht kommerziell" eine Produktentscheidung, keine
+  Fussnote, und sie gehört **vor** die Messung, nicht danach. Dazu: **kein `num_speakers`**
+  (die Zahl fällt aus VBx) — das Feld aus #264 wäre weg. Und die Grenze von zwei
+  *gleichzeitigen* Sprechern hebt es nicht. RECHERCHIERT, nicht nachgemessen.
 - `community-1` ist damit weiterhin das beste *lokale* Modell und bleibt die Grundlage.
+
+### 1.6 Nachtrag 2026-08-18 — sieben weitere Hebel gemessen, sechs davon tot
+
+Anlass war Marcus' Frage, ob die **Geschwindigkeits-Optimierungen** der letzten Wochen die
+Sprechererkennung verschlechtert haben. Die Antwort ist nein — und der Weg dorthin hat
+nebenbei vier weitere Hebel erledigt, darunter den in C2 noch als ungeprüft geführten.
+
+Gemessen wurde an echtem Rhyathlon-Material **ohne** Referenz: verglichen wird die
+**Clusterzahl** bzw. der Anteil gewechselter Etiketten, beides referenzunabhängig. Damit
+gelten dieselben Vorbehalte wie in 1.3(b) — belastbar für „bewegt nichts", nicht für „ist
+besser".
+
+**(e) „Der Dekodier-Weg hat sich mit faster-whisper geändert." — TOT.** Vor `cdb57c0` lud
+`diarize._load_waveform` über `whisper.load_audio` (ffmpeg-Subprozess, s16le, also
+**int16-quantisiert**), heute über `faster_whisper.decode_audio` (PyAV, float32 ohne
+Zwischenstufe). Die Vermutung, die alte Quantisierung verändere pyannotes Eingabe, ist falsch:
+die Samples sind **bit-identisch** (`np.array_equal` True, `max_abs_diff` 0,0, vier Dateien),
+Cluster und Turns folglich ebenfalls. **Negativkontrolle:** derselbe Weg zweimal ergibt
+V = 1,000 — pyannote ist auf identischer Eingabe deterministisch, der Rauschboden ist **null**,
+der Test hätte jeden echten Unterschied gesehen. GEMESSEN.
+
+**(f) „Die ASR-Engine bestimmt die Segmentgrenzen, auf die die Cluster abgebildet werden." —
+TOT.** openai-whisper large-v3 mit identischen Decoder-Parametern gegen faster-whisper:
+`00097495` liefert **93 statt 61** Segmente bei **0,68 s statt 1,24 s** Median-Länge — und der
+Anteil der Redezeit in Segmenten, die eine Cluster-Grenze überspannen, bleibt **gleich**
+(11,86 % gegen 11,78 %; `00111679` 9,93 % gegen 9,93 %). Fast doppelt so feine Segmente
+ändern nichts. Der Text ebenfalls: 288 gegen 285 Wörter bei 89,7 % Wortübereinstimmung.
+GEMESSEN.
+
+*(Zwei weitere Tempo-Wege scheiden ohne Messung aus, weil sie das Material gar nicht
+erreichen: `CHUNK_SEGMENTS = 150` — die grösste Rhyathlon-Datei hat 122 Segmente, die
+Block-Parallelität aus `e16a48e` war hier nie aktiv; und `compute_type="float16"` auf cuda
+entspricht dem früheren `fp16=True`, quantisiert wird nur `int8` auf der CPU.)*
+
+**(g) „Überlappendes Sprechen ist die dominante Fehlerquelle." — als Zeitanteil richtig, als
+Etikettfehler fast folgenlos.** 0,97 %–14,90 % der Redezeit hat zwei gleichzeitig aktive
+Cluster; rechnet man den Grenzverlust ohne diese Bereiche, erklärt die Überlappung **50–91 %**
+davon. Praktisch ändert das aber fast nichts: community-1 berechnet bei **jedem** Lauf eine
+zweite, überlappungsfreie Annotation (`exclusive_speaker_diarization`,
+`speaker_diarization.py:701-713` — `count` auf 1 geklemmt, dann rekonstruiert, die Auswahl
+trifft also frame-genau das Segmentierungsmodell). Sie statt der überlappenden zu nehmen
+ändert **9 von 388 Segmenten (2,3 %)** und die Clusterzahl in **keinem** der sechs Fälle. Die
+Sekunden-Mehrheitsregel in `assign_clusters` wählt in 97,7 % der Fälle bereits dasselbe.
+GEMESSEN.
+
+> **Die Lehre reicht über diesen Fall hinaus.** Der „Grenzverlust" misst *nicht darstellbare
+> Zeit*, nicht *falsche Etiketten*. Reden zwei gleichzeitig, steht im Transkript ohnehin die
+> dominante Stimme — das Segment trägt dann den richtigen Namen für den Text, der dort steht.
+> Eine Metrik, die beides gleichsetzt, überzeichnet den Fehler um mehr als eine
+> Grössenordnung. Aufgefallen ist das erst durch die Gegenprobe, nicht durch Nachdenken über
+> die Metrik.
+
+**(h) „Unser eigenes `min_speakers=2` erzwingt die vielen 2er-Ergebnisse." — TOT.** Gut
+begründet und falsch. `clustering.py:627-628` setzt bei `auto_num_clusters < min_clusters`
+tatsächlich `num_clusters = min_clusters` und rechnet dann KMeans; kollabierte VBx auf 1,
+wäre unser eigener Default die Ursache der 2er-Ergebnisse. Gegenprobe über sechs Dateien, mit
+und ohne das Argument: **identische Clusterzahl in allen sechs** (3/3, 2/2, 2/2, 3/3, 2/2,
+2/2). VBx kollabiert nicht auf 1, es findet wirklich 2 bzw. 3. GEMESSEN.
+
+**(i) „`Fa` ist der ungeprüfte Knopf." — GEPRÜFT, und er zerstäubt.** Auf echtem Material
+schlimmer als `Fb`:
+
+| Datei | Fa 0,07 (heute) | 0,15 | 0,20 | 0,25 | 0,30 |
+|---|---|---|---|---|---|
+| `00114307` (real 5 Sprecher) | **3** | 10 | 11 | 13 | 14 |
+| `00111679` | **2** | 9 | 12 | 13 | 17 |
+| `00090000` | **3** | 10 | 10 | 11 | 11 |
+| `00097495` | **2** | 5 | 7 | 9 | 9 |
+| `00104647` | **2** | 2 | 3 | 3 | 4 |
+
+Schon der mildeste Schritt auf 0,15 sprengt `00114307` von 3 auf **10** Cluster. GEMESSEN.
+
+> **Warum das hier so ausführlich steht.** Die Empfehlung `Fa = 0,25` kam aus einer Recherche
+> mit einem *synthetischen* Sweep, der überzeugend aussah: sauberes Material bleibt bei k=4,
+> degradiertes steigt von 1 auf 4 zurück. Die Daten stammten aus **VBx' eigenem
+> Generativmodell** und erfüllen damit per Konstruktion genau die Annahmen, die halliges
+> Interview-Audio verletzt. Das ist dieselbe Fehlerklasse wie die an TTS kalibrierte
+> Sprachschwelle (0,938 synthetisch gegen 0,565 an echtem Material). **Wer einen
+> Clustering-Parameter kalibriert, misst an ECHTEM Material** — synthetische Daten ordnen
+> höchstens den Mechanismus.
+
+**(j) `min_active_ratio = 0,2` — WIRKSAM, aber nicht kalibrierbar.** Der einzige neue Hebel,
+der in die richtige Richtung zeigt. `clustering.py:116`: ein Sprecher-Embedding kommt nur ins
+Clustering, wenn der Sprecher **≥ 0,2 × 589 Frames ≈ 2 s allein gesprochene Zeit** in einem
+10-s-Fenster hat — `single_active_mask` zählt nur Frames mit **genau einem** Aktiven,
+Überlappung frisst das Budget also doppelt, und `embedding_exclude_overlap: true` nullt
+dieselben Frames ein zweites Mal. Fest verdrahtet (`VBxClustering.__call__` ruft
+`filter_embeddings` ohne das Argument, `clustering.py:584`) und **nicht über die config
+erreichbar**.
+
+Gezählt, wie viele aktive Sprecher-Fenster der Filter verwirft:
+
+| Datei | aktive Slots | durchgelassen | verworfen | Cluster bei 0,20 / 0,05 / 0,00 |
+|---|---|---|---|---|
+| `00114307` (real 5) | 287 | 195 | **92 (32 %)** | 3 / 3 / **4** |
+| `00111679` | 214 | 152 | **62 (29 %)** | 2 / **3** / **4** |
+| `00097495` | 219 | 150 | **69 (32 %)** | 2 / **3** / 3 |
+| `00090000` | 449 | 378 | **71 (16 %)** | 3 / 3 / 3 |
+
+**Rund ein Drittel aller Sprecherpräsenz kommt nie beim Clustering an.** Das ist der erste
+gemessene Mechanismus für die Unterzählung. Das Senken holt ein bis zwei Cluster zurück,
+**überschiesst aber** (`00097495` von 2 auf 3) und schliesst die Lücke trotzdem nicht
+(`00114307` 4 statt real 5). Ohne Referenz je Aufnahme derselbe Zerstäuber-Charakter wie `Fb`,
+nur milder — deshalb Kandidat (C7), nicht Fix.
+
+Upstream stützt die Richtung: das Papier hinter dieser Implementierung
+([arXiv:2510.19572](https://arxiv.org/abs/2510.19572), §3.2) schreibt zu genau diesem Filter,
+„filtering below 4 s can risk discarding most of the speech from less dominant speakers".
+
+**(k) Enthallen/Entrauschen vor der Diarisierung (C5) — die Messlage spricht dagegen.**
+RECHERCHIERT, nicht selbst nachgemessen. An verrauschten Klassenzimmer-Aufnahmen
+([arXiv:2505.10879](https://arxiv.org/html/2505.10879v1), DER %) sank der Fehler bei zwei
+Sprechern (50,5 → 36,7), stieg aber bei *allen* Sprechern von 71,3 auf **82,2** — und die
+**Verwechslungsrate stieg in jeder entrauschten Bedingung**. Die Autoren haben
+Inferenz-Entrauschung deshalb verworfen: „denoising inadvertently suppressed children's speech
+segments". Entrauschen kauft Sprach*erkennung* und bezahlt mit Sprecher*zuordnung* — für uns
+die schlechtestmögliche Tauschrichtung, denn genau die Zuordnung ist der Fehler. Bestätigend,
+aber schwach: [pyannote-audio#1053](https://github.com/pyannote/pyannote-audio/issues/1053)
+(DER stieg mit `noisereduce`, keine Zahlen im Thread).
+
+**WPE-Enthallung ist zusätzlich strukturell tot:** sie arbeitet mehrkanalig, und die Kanäle
+dieser Aufnahmen sind bit-identisch (Dual-Mono, in #264 gemessen) — es gibt keine zweite
+Informationsquelle.
+
+*Nebenbefund gegen einen kursierenden Zahlenwert: „Demucs-Vokaltrennung bringt 12,41 Punkte
+DER" ist falsch zugeordnet. Im Papier ([arXiv:2602.21741](https://arxiv.org/html/2602.21741v1))
+wurde Demucs **nur für ASR** eingesetzt; der Diarisierungsteil sagt wörtlich „No additional
+denoising or filtering was applied". Die Punkte stammen aus pyannote-Feinabstimmung.*
+
+**Was 1.6 an der Schlussfolgerung aus 1.4 ändert: nichts.** Sieben Hebel, sechs tot, einer
+unkalibrierbar — und alle gemessen **ohne** Referenz, also nur auf „bewegt (nichts)"
+belastbar. Die vorgegebene Sprecherzahl aus #264 bleibt der einzige exakte Hebel, und die
+Reihenfolge „erst Referenz, dann Änderungen" steht unverändert.
 
 ---
 
@@ -265,11 +414,13 @@ wird mit seiner Zahl dokumentiert, damit ihn niemand erneut versucht (wie `thres
 | # | Kandidat | Kosten | Anmerkung |
 |---|---|---|---|
 | C1 | `min_speakers` 2 → 1 | 1 Zeile | gemessener Fehler auf Einzelsprecher-Material |
-| C2 | Clustering-Gitter `Fa`/`Fb`/`threshold` | Rechenzeit | **`Fa` ist ungeprüft** — #264 testete nur `threshold` und `Fb`, und ohne Metrik |
-| C3 | Einbettungs-Modell tauschen | ~30–100 MB | `config.yaml` hat den Steckplatz (`embedding: $model/embedding`). Kandidaten ReDimNet / CAM++ / ECAPA-TDNN |
+| C2 | Clustering-Gitter `Fa`/`Fb`/`threshold` | — | **ERLEDIGT, alle drei tot.** `threshold`/`Fb` in #264, `Fa` in 1.6(i) — er zerstäubt schlimmer als `Fb` |
+| C3 | Einbettungs-Modell tauschen | ~30–100 MB | **Der Steckplatz täuscht.** Die VBx-PLDA (`plda/plda.npz`: `lda (256,128)`, `tr (128,128)`) ist an genau den 256-d-Raum von `WeSpeakerResNet34` gebunden — ein anderes Modell bildet in einen Raum ab, den `self.plda(...)` nicht kennt. Das ist ein Umbau (VBx aufgeben oder PLDA neu trainieren), kein Tausch. VERIFIZIERT an den Shapes |
 | C4 | Segmentierung (`min_duration_off`, `embedding_exclude_overlap`) | Rechenzeit | billig mitzunehmen |
-| C5 | Enthallen/Entrauschen vor `_load_waveform` | ~10 MB | greift die Ursache an (Kameramikrofon = Nachhall), kann Einbettungen aber auch verschlechtern |
+| C5 | Enthallen/Entrauschen vor `_load_waveform` | ~10 MB | **Messlage spricht dagegen**, siehe 1.6(k) — nur mit neuem Anlass anfassen |
 | C6 | Andere Pipeline (NeMo kaskadiert) | Schwergewicht | **nur** bei grosser Restlücke nach C1–C5 |
+| C7 | `min_active_ratio` 0,2 → 0,08 | 1 Funktion (Monkeypatch, **nicht** über die config erreichbar) | wirksam, aber überschiesst — 1.6(j). Nur gegen eine Referenz sinnvoll |
+| C8 | DiariZen statt community-1 | zweites Modell | 1.5 — **erst die CC-BY-NC-Frage entscheiden**, dann messen |
 
 **Vor jedem Modellwechsel (C3, C5, C6) sind drei Dinge zu klären, nicht anzunehmen:**
 Weitergabe-Lizenz (das jetzige Modell ist CC-BY-4.0 und steht in `LICENSE-MODELLE.md`),
