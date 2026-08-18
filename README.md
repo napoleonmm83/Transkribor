@@ -199,6 +199,11 @@ Installationsprogramm stolpert über dieselbe kaputte Datei und bricht ab. Wiede
 über die Einrichtungsseite („Jetzt einrichten“) oder, wenn du Transkribor selbst installiert
 hast, mit einer Neuinstallation der Python-Umgebung.
 
+Und steht unter dem Knopf, dass eine **Aktualisierung abgebrochen** wurde, hat Transkribor
+sie beim Schliessen der App mitten im Schreiben erwischt — meistens nach einem abgewürgten
+Programm. Das ist kein Grund zur Neuinstallation: der nächste Start von Transkribor setzt die
+Reparatur von selbst fort, du musst nichts weiter tun.
+
 Und meldet Transkribor nach einer Aktualisierung, sie sei **ohne Sperre gelaufen**, konnte es
 gerade nicht sicherstellen, dass nicht zeitgleich ein Video-Import dasselbe tat. Das Ergebnis
 stimmt vermutlich trotzdem. Sicher gehst du, indem du den Knopf noch einmal drückst, wenn
