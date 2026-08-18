@@ -302,7 +302,10 @@ kann darum nicht funktionieren; es muss aus dem **Dateizustand** abgeleitet sein
   Fassung derselben Wellen wäre die Divergenzfalle.
 - **#260 nicht bauen, bevor gemessen ist.** Das Issue nennt es als einen von zwei Wegen; die
   Folgerung („ohne Messung gegen eine Vermutung gebaut") trägt sie trotzdem.
-- **#254 keinen Weg zuweisen.** Der naheliegende verschiebt Nutzereinstellungen.
+- **#254 keinen Weg STILL zuweisen.** ~~Der naheliegende verschiebt Nutzereinstellungen.~~
+  **Erledigt am 08-18:** Marcus hat Weg 2 + 3 gewählt, nachdem der Plan alle drei Wege samt
+  Preis vorgelegt hatte. Der Punkt bleibt als Regel stehen (Regel 3), nicht als offene Frage —
+  ohne diese Trennung widerspräche der Abschnitt den Zuordnungen in Gruppe M.
 - **#261 nicht reparieren.** Es ist nichts kaputt — gemessen.
 - **#270 nicht zu einer Verfügbarkeitsvorhersage ausbauen.** GPU-OOM ist nicht vorhersagbar.
 - **#251 nicht mit #242 bündeln.** Wellenplan 2s Empfehlung, die Fassung 1 in einer Klammer
