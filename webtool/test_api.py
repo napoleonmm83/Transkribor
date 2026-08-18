@@ -1988,7 +1988,16 @@ def test_apply_prueft_handarbeit_ERNEUT_unter_der_sperre(tmp_path, monkeypatch):
 
 def test_apply_mit_force_schreibt_auch_unter_der_sperre(tmp_path, monkeypatch):
     """Gegenprobe: die zweite Pruefung darf `--force` nicht aushebeln — sonst waere
-    „Neu korrigieren" im Menue tot, sobald jemand die Datei je angefasst hat."""
+    „Neu korrigieren" im Menue tot, sobald jemand die Datei je angefasst hat.
+
+    **`human_edited` steht hier VOR dem Lauf, nicht mittendrin — und das ist Absicht.** Die
+    CodeRabbit-CLI schlug vor, es wie im Nachbartest waehrend `apply_correction` zu setzen,
+    damit „die erneute Pruefung erreicht wird". Nachgemessen ist das nicht noetig: mit
+    `force=True` ueberspringt die ERSTE Pruefung die Datei ohnehin
+    (`if os.path.exists(epath) and not force`), das vorab gesetzte Flag sieht also
+    ausschliesslich die zweite. Die Mutation aus dem Befund — Force-Ausnahme nur an der
+    zweiten Pruefung entfernen — macht diesen Test bereits rot (gemessen). Der Vorschlag
+    haette den Test seinem Nachbarn aehnlicher gemacht, ohne Abdeckung zu gewinnen."""
     from webtool import correct as correct_mod
     tdir = tmp_path / "P" / "transkripte"
     tdir.mkdir(parents=True)
