@@ -128,6 +128,21 @@ Er reisst die Richtung wieder auf, gegen die die erste Regel steht — der Docst
 `_pip_merker_setzen` argumentiert es aus, und die Frist-Semantik ist bereits **zweimal** von
 Reviews geformt worden.
 
+> **Nachtrag 2026-08-18, PR #280 — diese Vorgabe ist GEMESSEN gefallen, und genau sie wurde
+> umgesetzt.** Der Dauerlauf, gegen den die Schon-Regel stand, ist nicht mehr erreichbar:
+> `faellig()`s Merker-Zweig verlangt `fassung() is None`, `aktualisiere()` ruft
+> `_pip_merker_setzen()` nur bei `fassung() is not None` — die dritte Bedingung aus
+> Reviewbefund M1, **jünger als die Schon-Regel**. Auffrischen und Auslösen schliessen sich
+> also aus. Gegenprobe über 20 simulierte Serverstarts im zerlegten Zustand mit dauerhaft
+> scheiterndem pip: Merkerdatum bleibt in BEIDEN Varianten auf Tag 0, Fälligkeit fällt in
+> beiden an Tag 15. Und über 40 Tage im ejs-untauglichen Zustand — dem EINZIGEN, in dem die
+> Regel je wiederholt gegriffen hätte: `_pip_unterbrochen()` an 40 von 40 Tagen True, mit und
+> ohne Regel gleich. Das Zwei-Zustands-Format wäre ein Feld ohne Leser gewesen.
+>
+> **#260 ist mit der Messung geschlossen, nicht gebaut**: pip räumt die `dist-info` zuerst
+> weg und schreibt sie zuletzt (`req_uninstall.py:377` `sorted(...)`, `-` sortiert vor `/`
+> und `\`), 0 von 43 627 Proben im behaupteten Zustand.
+
 **Die Gruppe ist eine Kontext-Ersparnis, keine Bedingung** (korrigiert nach dem Review): ein
 Reviewer baut die Merker-Semantik einmal auf statt viermal. Dass #260 #268s Arbeit blockiere,
 ist **nicht belegt** — #260 schreibt nichts, es liest.
