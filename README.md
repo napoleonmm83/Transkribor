@@ -259,9 +259,9 @@ einem Namen laufen.
 
 Dagegen hilft das Feld **„Anzahl Sprecher“**. Du findest es so: in der Dateiliste auf das
 **⋯-Menü** der Aufnahme klicken, dort **„Sprache, Sprecher & Korrektur“** wählen — das Feld
-steht im Dialog gleich unter der Sprache, an zweiter Stelle. (Der Menüpunkt hiess in älteren
-Fassungen „Sprache & Korrektur-Tiefe“ bzw. „Sprache, Korrektur & Sprecher“; wer danach sucht,
-findet den Eintrag unter dem neuen Namen an derselben Stelle.)
+steht im Dialog gleich unter der Sprache, an zweiter Stelle. (In Fassungen **bis
+einschliesslich `v0.22.0`** ist es das **unterste** Feld, und der Menüpunkt heisst dort
+„Sprache, Korrektur & Sprecher“ bzw. in noch älteren „Sprache & Korrektur-Tiefe“.)
 
 Trag dort ein, wie viele Personen tatsächlich gesprochen haben — **dich als fragende Person
 mitgezählt**. Waren es du und drei Teammitglieder, ist die Antwort *vier*. Transkribor trennt

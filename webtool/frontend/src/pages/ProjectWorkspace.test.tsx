@@ -295,8 +295,9 @@ describe('ProjectWorkspace (Stub)', () => {
     expect(screen.getByRole('combobox'))
       .toHaveAttribute('aria-describedby', 'lbl-neu-sprache-hinweis')
 
-    // shadcn Select portalt nach document.body → container-Query greift nicht, body schon.
-    fireEvent.click(document.body.querySelector('[role="combobox"]')!)
+    // Ueber den NAMEN: hier gibt es zwar nur EINE combobox (die Zeile darueber belegt es),
+    // aber ein Positionsgriff bleibt ein Positionsgriff — siehe #273.
+    fireEvent.click(screen.getByRole('combobox', { name: 'Sprache' }))
     fireEvent.click(await screen.findByText('Englisch'))
     // Das Badge zeigt weiter den PROJEKT-Standard: die Auswahl hier ist ein Override fuer die
     // naechsten Aufnahmen und schreibt nicht ins Projekt zurueck.
@@ -399,7 +400,7 @@ describe('ProjectWorkspace (Stub)', () => {
       { button: 0, ctrlKey: false, pointerType: 'mouse' })
     fireEvent.click(await screen.findByRole('menuitem', { name: /Sprache & Korrektur/ }))
     const dialog = await screen.findByRole('dialog')
-    fireEvent.click(within(dialog).getAllByRole('combobox')[0])
+    fireEvent.click(within(dialog).getByRole('combobox', { name: 'Sprache' }))
     fireEvent.click(await screen.findByText(/Englisch/))
     // Erst JETZT faellt der GET aus: der Dialog hat seinen Stand, der Nachlade-Pfad nicht.
     vi.mocked(api.getProjektEinstellungen).mockRejectedValue(new Error('weg'))

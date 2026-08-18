@@ -172,13 +172,33 @@ describe('Sprache, Sprecher & Korrektur', () => {
   const spracheAendern = async () => {
     await menueOeffnen()
     fireEvent.click(await screen.findByText('Sprache, Sprecher & Korrektur'))
-    // Der Dialog portalt nach document.body; der sprache-Select ist der erste combobox darin.
-    // Gewartet wird auf die ROLLE, nicht auf einen Sprachnamen: seit #234 zeigt der Trigger
-    // „Folgt dem Projekt (…)", solange die Datei keinen eigenen Wert hat.
-    await screen.findByRole('combobox', { name: 'Sprache' })
-    fireEvent.click(document.body.querySelector('[role="combobox"]')!)
+    // Ueber den NAMEN, nicht ueber „der erste combobox im body": gewartet wurde schon immer
+    // auf die Rolle (seit #234 zeigt der Trigger „Folgt dem Projekt (…)" statt des blossen
+    // Sprachnamens) — das gefundene Element wurde danach aber weggeworfen und ueber die
+    // Position neu gesucht. Welche combobox die erste ist, entscheidet die Feldreihenfolge,
+    // und die hat sich mit #273 geaendert.
+    fireEvent.click(await screen.findByRole('combobox', { name: 'Sprache' }))
     fireEvent.click(await within(await screen.findByRole('listbox')).findByText('Englisch'))
   }
+
+  it('nennt „Sprecher" an zweiter Stelle — im Menue UND in der Dialog-Ueberschrift (#273)', async () => {
+    /* Beide Zeichenketten festgenagelt, und die zweite ist der eigentliche Grund fuer diesen
+       Test: der Dialogtitel hatte GEMESSEN null Abdeckung (Mutationsprobe im Review — nur den
+       Titel zurueckgedreht, alle 496 Tests blieben gruen). Und die Abdeckung des Menuepunkts
+       war bloss beilaeufig: drei Tests werden rot, weil ihr Helfer sein Klickziel nicht mehr
+       findet — mit der Meldung „Unable to find an element with the text…", die den naechsten
+       Leser in den Helfer schickt statt in die Umbenennung.
+
+       Warum die Beschriftung ueberhaupt eine Zusicherung wert ist: #273 handelt davon, dass
+       niemand den Weg zum wirksamsten Hebel der Sprechertrennung findet. Faellt der Dialogkopf
+       still auf den alten Namen zurueck, sagen Menue und Ueberschrift wieder Verschiedenes —
+       genau die Klasse, gegen die dieser PR gebaut ist. */
+    render(<Huelle><DateiMenue project="P" file={datei()} /></Huelle>)
+    await menueOeffnen()
+    fireEvent.click(await screen.findByText('Sprache, Sprecher & Korrektur'))
+    expect(await screen.findByRole('heading', { name: /^Sprache, Sprecher & Korrektur/ }))
+      .toBeInTheDocument()
+  })
 
   it('änderte Sprache stößt Neu-Transkription an (und verlässt den Editor)', async () => {
     render(<Huelle pfad="/p/P/a"><DateiMenue project="P" file={datei()} /></Huelle>)
