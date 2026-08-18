@@ -34,3 +34,7 @@ dist/
 # Arbeitsanleitung fuer Claude: bleibt lokal, nicht im Repo
 CLAUDE.md
 .spike/
+
+# Referenzsatz und Messlaeufe der Sprechertrennung: das sind Interviewinhalte.
+# Dieselbe Regel wie fuer projekte/ — bleibt lokal, wird nie committet.
+eval/
