@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
+from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel, StrictInt
 
 from . import auth
@@ -32,6 +33,7 @@ from . import llm
 from . import paths
 from . import projekt as _projekt
 from . import settings
+from . import sperre
 from . import sprachen as _sprachen
 from . import ytdlp_update
 from .edit_model import build_edit_doc
@@ -709,6 +711,55 @@ def get_audio(project: str, base: str):
     return FileResponse(audio)  # Starlette FileResponse unterstützt HTTP-Range
 
 
+# Sentinel fuer „der Client hat gar keinen Stand mitgeschickt" — unterscheidbar von `""`
+# („noch keine Datei"), denn das ist eine echte Erwartung. Ein eigenes Objekt statt `None`,
+# damit ein durchgereichtes `None` aus einem JSON-Rumpf nicht als Verzicht durchginge.
+_KEIN_VORBEHALT = object()
+
+
+def _pruefe_und_schreibe(project: str, base: str, doc: dict, erwartet) -> str:
+    """Stand pruefen UND schreiben unter EINER Sperre — sonst bleibt #160 als schmales
+    Fenster offen (CodeRabbit an PR #278).
+
+    Zwischen `_dateistand()` und `atomic_write()` liegen `json.dumps` des ganzen Dokuments und
+    ein vollstaendiges `render_md` — bei einem langen Transkript **Millisekunden**, nicht
+    Mikrosekunden. Landet `correct.cmd_apply` genau darin, hat der Vergleich schon zugestimmt
+    und der Schreibvorgang ueberbuegelt die frische Korrektur: exakt der Schaden aus #160, nur
+    durch ein schmaleres Tor. Das Issue selbst nennt diesen Weg („der Sperrgedanke aus #134,
+    eine Ebene hoeher").
+
+    **Die Sperre wirkt nur, weil `correct.cmd_apply` dieselbe nimmt** — eine Sperre, die nicht
+    alle Schreiber nehmen, ist keine (dieselbe Regel wie bei `settings.save`). Beide sperren
+    auf denselben Pfad, die `edit.json`.
+
+    Laeuft synchron und wird vom Handler ueber `run_in_threadpool` gerufen: `sperre.datei`
+    wartet mit `sleep`, und das im Ereignisfaden zu tun hielte den ganzen Server an. Der
+    sync-`def`-Weg von `put_settings` geht denselben Weg, nur ueber FastAPIs Automatik.
+
+    `stale` bleibt beim Standard: der Abschnitt ist ein Render plus zwei Schreibvorgaenge und
+    nimmt KEINE weitere Sperre — die #207-Rechnung („`stale` ist die Zusage ueber die eigene
+    Haltedauer") geht also ohne Zuschlag auf.
+    """
+    epath = _edit_path(project, base)
+    # VOR der Sperre: `sperre.datei` verlangt ein vorhandenes Elternverzeichnis.
+    tdir = paths.transkripte_dir(project)
+    os.makedirs(tdir, exist_ok=True)
+    with sperre.datei(epath):
+        if erwartet is not _KEIN_VORBEHALT and erwartet != _dateistand(epath):
+            raise HTTPException(
+                status_code=409,
+                detail="Die Datei wurde inzwischen von aussen geändert "
+                       "(vermutlich ist eine Korrektur fertig geworden).")
+        # Hier drin, nicht davor: der Zweig legt eine Datei beiseite, und die erste Rettung
+        # gewinnt — ein abgelehnter Schreibvorgang darf keinen Seiteneffekt hinterlassen.
+        if doc.pop("selbstgeheilt", None) and _ist_unlesbar(epath):
+            paths.beiseitelegen(epath)
+        doc["human_edited"] = True
+        paths.atomic_write(epath, json.dumps(doc, ensure_ascii=False, indent=1))
+        paths.atomic_write(_md_path(project, base), render_md(doc))
+        return _dateistand(epath)
+
+
 @app.put("/api/projects/{project}/files/{base}")
 async def save_file(project: str, base: str, request: Request):
     _validate(project, base)
@@ -737,13 +788,7 @@ async def save_file(project: str, base: str, request: Request):
     #
     # Vor dem `selbstgeheilt`-Zweig, denn der legt eine Datei beiseite: ein abgelehnter
     # Schreibvorgang darf keinen Seiteneffekt hinterlassen.
-    if "dateistand" in doc:
-        erwartet = doc.pop("dateistand")
-        if erwartet != _dateistand(_edit_path(project, base)):
-            raise HTTPException(
-                status_code=409,
-                detail="Die Datei wurde inzwischen von aussen geändert "
-                       "(vermutlich ist eine Korrektur fertig geworden).")
+    erwartet = doc.pop("dateistand", _KEIN_VORBEHALT)
     # Der Editor gibt zurueck, was `load_or_build_doc` ihm mitgegeben hat: „deine gespeicherte
     # Fassung war nicht lesbar" (#197). Dann liegt auf der Platte noch die unlesbare Datei, und
     # der Schreibvorgang unten wuerde sie ersetzen — dieselbe Konstellation wie bei
@@ -759,17 +804,11 @@ async def save_file(project: str, base: str, request: Request):
     #
     # `pop`, nicht `get`: das Feld ist eine Meldung ueber den Ladevorgang, kein Bestandteil des
     # Dokuments — geschrieben gaelte die Datei beim naechsten Oeffnen fuer immer als geheilt.
-    if doc.pop("selbstgeheilt", None) and _ist_unlesbar(_edit_path(project, base)):
-        paths.beiseitelegen(_edit_path(project, base))
-    doc["human_edited"] = True
-    tdir = paths.transkripte_dir(project)
-    os.makedirs(tdir, exist_ok=True)
-    paths.atomic_write(_edit_path(project, base), json.dumps(doc, ensure_ascii=False, indent=1))
-    paths.atomic_write(_md_path(project, base), render_md(doc))
     # Der neue Stand MUSS zurueck: sonst liefe der naechste Autosave gegen die eigene
     # Schreibung von gerade eben und bekaeme 409 — die Sperre schluege bei jedem zweiten
     # Speichern zu, ohne dass irgendein fremder Schreiber beteiligt waere.
-    return {"ok": True, "dateistand": _dateistand(_edit_path(project, base))}
+    stand = await run_in_threadpool(_pruefe_und_schreibe, project, base, doc, erwartet)
+    return {"ok": True, "dateistand": stand}
 
 
 @app.post("/api/projects/{project}/files/{base}/export")

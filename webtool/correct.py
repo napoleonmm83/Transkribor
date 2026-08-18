@@ -24,6 +24,7 @@ from concurrent.futures import ThreadPoolExecutor
 from . import llm
 from . import paths
 from . import settings
+from . import sperre
 from . import sprachen           # importiert selbst nichts -> kein Zirkel
 from .edit_model import tag_uncertain_segments, apply_correction
 from .render_md import render_md
@@ -315,8 +316,19 @@ def cmd_apply(project: str, base: str, force: bool = False) -> str:
     correction = _load(cpath)
     doc = apply_correction(raw, correction, base=base, project=project,
                            audio=_audio_name(project, base))
-    paths.atomic_write(epath, json.dumps(doc, ensure_ascii=False, indent=1))
-    paths.atomic_write(os.path.join(tdir, base + ".md"), render_md(doc))
+    # Dieselbe Sperre wie `app._pruefe_und_schreibe` (#160/PR #278). Der Editor prueft dort
+    # den Dateistand und schreibt dann — dazwischen liegen ein `json.dumps` und ein
+    # vollstaendiges `render_md`. Landet DIESER Schreibvorgang in genau dem Fenster, hat der
+    # Vergleich schon zugestimmt und die frische Korrektur wird ueberbuegelt: der Schaden aus
+    # #160 durch ein schmaleres Tor.
+    #
+    # **Eine Sperre wirkt nur, wenn ALLE Schreiber sie nehmen** (dieselbe Regel wie bei
+    # `settings.save`) — deshalb steht sie hier und nicht nur im Server. Gesperrt wird auf
+    # denselben Pfad, die `edit.json`. Der Abschnitt ist zwei Schreibvorgaenge lang und nimmt
+    # keine weitere Sperre, `stale` bleibt also beim Standard (#207-Rechnung ohne Zuschlag).
+    with sperre.datei(epath):
+        paths.atomic_write(epath, json.dumps(doc, ensure_ascii=False, indent=1))
+        paths.atomic_write(os.path.join(tdir, base + ".md"), render_md(doc))
     print(f"apply: {base} -> edit.json + md ({len(doc['segments'])} Segmente)")
     return "written"
 
