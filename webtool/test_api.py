@@ -1892,6 +1892,58 @@ def test_nicht_ermittelbarer_stand_gilt_nicht_als_fehlende_datei(client, tmp_pat
         app_mod._dateistand(e)
 
 
+def test_pruefung_und_schreiben_liegen_unter_EINER_sperre(client, tmp_path, monkeypatch):
+    """Ohne die gemeinsame Sperre bleibt #160 als schmales Fenster offen.
+
+    Zwischen `_dateistand()` und `atomic_write()` liegen ein `json.dumps` des ganzen Dokuments
+    und ein vollstaendiges `render_md` — bei einem langen Transkript Millisekunden. Landet
+    `correct.cmd_apply` genau darin, hat der Vergleich schon zugestimmt und der Schreibvorgang
+    ueberbuegelt die frische Korrektur.
+
+    Geprueft wird an `render_md`, weil das die LETZTE Station vor dem zweiten Schreibvorgang
+    ist: haelt die Sperre dort noch, umschliesst sie den ganzen Abschnitt. Eine Zeitmessung
+    waere die schlechtere Probe (sie belegte Gleichzeitigkeit, nicht die Sperre)."""
+    from webtool import app as app_mod
+    epath = str(tmp_path / "Demo" / "transkripte" / "S1.edit.json")
+    gehalten = []
+    echt = app_mod.render_md
+    # Direkt am Lock-Verzeichnis, NICHT ueber `sperre.wird_gehalten`: das geht durch die
+    # vierstufige Lebendpruefung (#175/#243) und liefert im vollen Suite-Lauf `False`, weil
+    # ein anderer Test die Lebendpruefung faelscht — der Waechter haette dann gemeldet, was
+    # die Nachbartests tun, nicht was dieser Code tut. Sein eigener Docstring sagt ausserdem:
+    # „fuer eine ANZEIGE, nie fuer eine Entscheidung".
+    monkeypatch.setattr(app_mod, "render_md",
+                        lambda d: (gehalten.append(os.path.isdir(epath + ".lock")), echt(d))[1])
+    doc = client.get("/api/projects/Demo/files/S1").json()
+    assert client.put("/api/projects/Demo/files/S1", json=doc).status_code == 200
+    assert gehalten == [True], f"Sperre waehrend des Schreibens: {gehalten}"
+    # Gegenprobe: danach ist sie wieder frei — eine Sperre, die haengenbleibt, waere ein
+    # anderer Schaden (jeder weitere Schreiber wartete seine Frist ab).
+    assert not os.path.isdir(epath + ".lock")
+
+
+def test_correct_apply_nimmt_dieselbe_sperre(tmp_path, monkeypatch):
+    """Eine Sperre wirkt nur, wenn ALLE Schreiber sie nehmen (dieselbe Regel wie bei
+    `settings.save`). `correct.cmd_apply` ist der zweite Schreiber der `edit.json` — und der,
+    gegen den der Editor ueberhaupt gesperrt wird."""
+    from webtool import correct as correct_mod
+    tdir = tmp_path / "P" / "transkripte"
+    tdir.mkdir(parents=True)
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    (tdir / "S1.json").write_text(json.dumps(
+        {"language": "de", "segments": [{"id": 0, "start": 0.0, "end": 1.0, "text": "roh",
+                                         "words": []}]}), encoding="utf-8")
+    (tdir / "S1.correction.json").write_text(json.dumps(
+        {"segments": [{"id": 0, "text": "korrigiert", "speaker": "A"}]}), encoding="utf-8")
+    epath = str(tdir / "S1.edit.json")
+    gehalten = []
+    echt = correct_mod.render_md
+    monkeypatch.setattr(correct_mod, "render_md",
+                        lambda d: (gehalten.append(os.path.isdir(epath + ".lock")), echt(d))[1])
+    assert correct_mod.cmd_apply("P", "S1") == "written"
+    assert gehalten == [True], f"Sperre waehrend des Schreibens: {gehalten}"
+
+
 def test_veralteter_dateistand_wird_abgelehnt(client, tmp_path):
     """Der Kern von #160: der Editor speichert 800 ms nach dem letzten Tastendruck. Wird eine
     Korrektur fertig, waehrend der PUT schon unterwegs ist, landet er DANACH und ersetzt die
