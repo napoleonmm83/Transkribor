@@ -129,7 +129,12 @@ function lauf(cmd, args, onLine, opts = {}) {
     onLine(`> ${cmd} ${args.join(' ')}`)
     let proc
     try {
-      proc = spawn(cmd, args, { windowsHide: true, env: spawnEnv(), ...opts })
+      // POSIX: eigene Prozessgruppe (detached) — sonst toetet der Abbruch nur das direkte
+      // Kind, und Enkel (pip-Rückends, brews ruby) schrieben als Waisen weiter in die venv,
+      // während die Seite „Abgebrochen“ zeigt. Windows braucht kein detached: taskkill /T
+      // nimmt den Baum mit; detached veraendert dort nur die Konsolenzuordnung.
+      proc = spawn(cmd, args, { windowsHide: true, env: spawnEnv(), ...opts,
+        detached: process.platform !== 'win32' })
     } catch (e) {
       onLine(`FEHLER: ${e.message}`)
       return resolve(-1)
@@ -177,12 +182,13 @@ function abbrechen(toeter = _baumToeten) {
 }
 
 /** Prozessbaum toeten — /T wie jobs.py: ein Waisenkind hielte Dateien der venv offen und
- *  sieht danach "halbe Installation" aus, gegen die #181/#217 gebaut wurden. */
+ *  sieht danach "halbe Installation" aus, gegen die #181/#217 gebaut wurden. POSIX: die
+ *  negative PID signaliert die GESAMTE Gruppe (spawn detached oben); ESRCH = schon tot. */
 function _baumToeten(proc) {
   if (process.platform === 'win32') {
     spawn('taskkill', ['/pid', String(proc.pid), '/T', '/F'], { windowsHide: true })
   } else {
-    try { proc.kill('SIGTERM') } catch { /* bereits tot */ }
+    try { process.kill(-proc.pid, 'SIGTERM') } catch { /* bereits tot (ESRCH) */ }
   }
 }
 
