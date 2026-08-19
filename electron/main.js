@@ -135,13 +135,22 @@ ipcMain.handle('einrichten', () => {
   einrichtungLaeuft = setup.einrichten(z => senden('log', z), s => senden('phase', { schritt: s }))
     .then(async r => {
       if (r.ok) await serverStarten()
-      else senden('fehler', r.fehler)
+      // Ein GEWOLLTER Abbruch ist kein Fehler: die Seite zeigt ihn aus dem Rueckgabewert,
+      // nicht rot (#242). Ohne die Ausnahme stuende "Abgebrochen" als FEHLER-Zeile im
+      // Protokoll und auf der Seite.
+      else if (!r.abgebrochen) senden('fehler', r.fehler)
       return r
     })
     // Erst danach freigeben — und in BEIDE Richtungen: bliebe der Merker nach einem Wurf
     // stehen, waere die Einrichtung fuer den Rest der Sitzung tot.
     .finally(() => { einrichtungLaeuft = null })
   return einrichtungLaeuft
+})
+
+// Der Rueckweg (#242): der laengste Lauf der App war der einzige ohne Abbruch.
+// Ohne laufende Einrichtung ist der Aufruf wirkungslos — der Knopf existiert nur waehrend eines Laufs.
+ipcMain.handle('einrichten:abbrechen', () => {
+  if (einrichtungLaeuft) setup.abbrechen()
 })
 
 ipcMain.handle('logs', () => backend.log())

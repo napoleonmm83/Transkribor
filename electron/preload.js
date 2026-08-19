@@ -5,6 +5,9 @@ const { contextBridge, ipcRenderer } = require('electron')
 contextBridge.exposeInMainWorld('transkribor', {
   status: () => ipcRenderer.invoke('status'),
   einrichten: () => ipcRenderer.invoke('einrichten'),
+  // Der Rueckweg des laengsten Laufs der App (#242) — ohne Argument, die laufende
+  // Einrichtung lebt im Hauptprozess; ein Abbruch ohne Lauf ist wirkungslos.
+  abbrechen: () => ipcRenderer.invoke('einrichten:abbrechen'),
   logs: () => ipcRenderer.invoke('logs'),
   protokollOeffnen: () => ipcRenderer.invoke('protokollOeffnen'),
   // Ohne Argument, und das ist der Punkt (#218): der Hauptprozess kennt das Verzeichnis
