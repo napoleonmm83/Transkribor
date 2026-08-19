@@ -19,32 +19,27 @@
  *   (Text-Abschneiden), jeder Treffer waere Rauschen — dieselbe Abgrenzung wie im
  *   Hüllen-Test.
  */
-import { readFileSync, readdirSync, statSync } from 'node:fs'
-import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { describe, it, expect } from 'vitest'
 
 /** Was einen Behaelter zum Bezugsrahmen macht — dieselbe Liste wie im Hüllen-Test. */
 const ANKER = ['relative', 'absolute', 'fixed', 'sticky']
 /** Testdateien und Typdeklarationen gehoeren nicht zum Produktionsmarkup. */
 const KEIN_QUELLCODE = /\.(test|d)\.(ts|tsx)$/
 
-function quellDateien(ordner: string): string[] {
-  const raus: string[] = []
-  for (const name of readdirSync(ordner)) {
-    if (KEIN_QUELLCODE.test(name)) continue
-    const pfad = join(ordner, name)
-    if (statSync(pfad).isDirectory()) raus.push(...quellDateien(pfad))
-    else if (/\.(ts|tsx)$/.test(name)) raus.push(pfad)
-  }
-  return raus
+// `import.meta.glob` mit `?raw` statt `node:fs`: tsconfig.app.json schraenkt die Typen
+// bewusst auf `vite/client` ein (App-Code bleibt browser-only), und der Walk gehoert in
+// die Vite-Welt, nicht hinter eine tsconfig-Aufweichung.
+const quellDateien: Record<string, string> = {
+  ...import.meta.glob('./**/*.ts', { query: '?raw', import: 'default', eager: true }),
+  ...import.meta.glob('./**/*.tsx', { query: '?raw', import: 'default', eager: true }),
 }
 
 /** className="…" wie className={…} — siehe Grenzen im Dateikopf. */
 const CLASSNAME_RE = /className\s*=\s*(?:"([^"]*)"|\{`([^`]*)`\})/g
 
 const fundstellen: { datei: string; klassen: string }[] = []
-for (const pfad of quellDateien(dirname(fileURLToPath(import.meta.url)))) {
-  const inhalt = readFileSync(pfad, 'utf8')
+for (const [pfad, inhalt] of Object.entries(quellDateien)) {
+  if (KEIN_QUELLCODE.test(pfad)) continue
   for (const treffer of inhalt.matchAll(CLASSNAME_RE)) {
     const klassen = treffer[1] ?? treffer[2] ?? ''
     if (/overflow-(x-|y-)?(auto|scroll)/.test(klassen)) fundstellen.push({ datei: pfad, klassen })
