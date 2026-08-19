@@ -65,7 +65,8 @@ Auch mit **Schweizerdeutsch** kommt es zurecht.
 ## Was du davon hast
 
 **Deine Aufnahmen bleiben bei dir.** Das Zuhören und Mitschreiben passiert vollständig auf
-deinem Rechner — ohne Konto, ohne Cloud, ohne Upload.
+deinem Rechner — ohne Konto, ohne Cloud, ohne Upload der Aufnahme. Nur wenn du die Korrektur
+über einen Onlinedienst laufen lässt, verlässt der *Text* deinen Rechner.
 
 <details>
 <summary>Und die Textkorrektur?</summary>
@@ -216,9 +217,9 @@ lokalen Modell entfällt auch das.
 <details>
 <summary><strong>Brauche ich Internet?</strong></summary>
 
-Nur zum Herunterladen und für die einmalige Einrichtung. Die Transkription arbeitet danach
-offline; für die Korrektur über einen Onlinedienst brauchst du weiterhin Internet (ein
-lokales Modell braucht keins).
+Nur zum Herunterladen, für Video-Importe aus dem Netz und für die einmalige Einrichtung. Die
+Transkription arbeitet danach offline; für die Korrektur über einen Onlinedienst brauchst du
+weiterhin Internet (ein lokales Modell braucht keins).
 
 </details>
 
