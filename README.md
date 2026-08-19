@@ -43,16 +43,14 @@ Auch mit **Schweizerdeutsch** kommt es zurecht.
 
 1. **[Transkribor herunterladen](https://github.com/napoleonmm83/Transkribor/releases/latest)**
    und installieren.
-2. Beim ersten Start richtet sich die App selbst ein. Das dauert im Normalfall einmalig
-   10–30 Minuten und lädt mehrere Gigabyte — später kann gelegentlich ein Update
-   Nacharbeiten mitbringen, meistens kleine, manchmal auch eine neue Fassung der
-   Spracherkennung (Gigabyte). Weil das ein grosser Vorgang ist, fragt der
-   Knopf einmal nach („nochmal klicken zum Start“), und während des Vorgangs gibt es einen
-   **Abbrechen**-Knopf: Ein abgebrochener Versuch richtet sich beim nächsten Start einfach
-   wieder an, es geht nichts verloren.
+2. Beim ersten Start richtet sich die App selbst ein — einmalig, im Normalfall 10–30 Minuten,
+   und sie lädt mehrere Gigabyte. Der Knopf fragt einmal nach („nochmal klicken zum Start“);
+   während des Vorgangs gibt es einen **Abbrechen**-Knopf. Ein abgebrochener Versuch richtet
+   sich beim nächsten Start einfach wieder an, es geht nichts verloren.
 3. Projekt anlegen, Audiodatei hineinziehen. **Fertig** — die Arbeit startet von allein, und
    du siehst live, wie weit sie ist.
 
+> [!WARNING]
 > **Beim ersten Öffnen warnt das Betriebssystem.** Der Installer ist nicht bei Microsoft bzw.
 > Apple registriert — das kostet Jahresgebühren, die ein kostenloses Projekt nicht trägt.
 > Windows: *Weitere Informationen* → *Trotzdem ausführen*. macOS: Rechtsklick auf die App →
@@ -65,9 +63,16 @@ Auch mit **Schweizerdeutsch** kommt es zurecht.
 ## Was du davon hast
 
 **Deine Aufnahmen bleiben bei dir.** Das Zuhören und Mitschreiben passiert vollständig auf
-deinem Rechner — ohne Konto, ohne Cloud, ohne Upload. (Die anschliessende Textkorrektur nutzt
-ein KI-Modell deiner Wahl; wählst du dafür einen Onlinedienst, geht der *Text* dorthin. Wer
-das nicht will, nimmt ein lokales Modell oder lässt die Korrektur weg.)
+deinem Rechner — ohne Konto, ohne Cloud, ohne Upload.
+
+<details>
+<summary>Und die Textkorrektur?</summary>
+
+Die Korrektur nutzt ein KI-Modell deiner Wahl. Wählst du dafür einen Onlinedienst, geht der
+*Text* dorthin — wer das nicht will, nimmt ein lokales Modell (z. B. Ollama) oder lässt die
+Korrektur ganz weg.
+
+</details>
 
 **Es erkennt, wer spricht.** Interviewer und Befragte werden getrennt und mit Namen versehen —
 das Transkript liest sich wie ein Gespräch, nicht wie eine Textwand.
@@ -77,20 +82,13 @@ gehörte Ortsnamen, Fachbegriffe und Eigennamen werden geradegezogen, über alle
 eines Projekts hinweg einheitlich. Anschliessend prüft ein zweiter Durchgang, dass nichts
 dazuerfunden oder weggelassen wurde.
 
-**Du behältst das letzte Wort.** Im eingebauten Editor hörst du jeden Abschnitt per Tastendruck
-nach und änderst, was nicht stimmt. Unsichere Stellen sind farbig markiert — du siehst sofort,
-wo sich das Nachhören lohnt. Hat die KI einen Namen falsch verstanden, tippst du ihn **einmal**
-richtig — er wird im ganzen Dokument nachgezogen, auch in Kontext, Zusammenfassung und
-Anmerkungen, und steht so auch im Export richtig da. **Speichern musst du nichts:** kurz nach
-jeder Änderung sichert Transkribor von selbst, oben links steht, woran es gerade ist.
+**Du behältst das letzte Wort.** Im eingebauten Editor hörst du jeden Abschnitt per
+Tastendruck nach und änderst, was nicht stimmt — unsichere Stellen sind farbig markiert, ein
+richtig getippter Name zieht durchs ganze Dokument bis in den Export, und gespeichert wird
+von selbst.
 
-**Es sagt dir, wo es nichts gehört hat.** Manchmal überspringt die Spracherkennung ein Stück
-Aufnahme — nicht falsch verstanden, sondern gar nicht angefasst. Im Text ist davon nichts zu
-sehen: dort steht dann einfach nichts, wo jemand etwas gesagt hat. Transkribor hält deshalb die
-Länge der Aufnahme gegen das, was tatsächlich im Transkript steht, und meldet dir oben im
-Editor jede Stelle mit Zeitangabe, an der länger als eine Viertelminute nichts angekommen ist.
-Ob dort wirklich etwas fehlt oder einfach niemand geredet hat, hörst du in Sekunden nach — von
-allein wäre es dir kaum aufgefallen.
+<details>
+<summary>Mehr im Editor: finden, anmerken, rückgängig machen</summary>
 
 **Stellen wiederfinden.** Das Suchfeld oben im Editor durchsucht das ganze Transkript: Treffer
 bleiben hell, alles andere tritt in den Hintergrund, und mit `▲` `▼` springst du von Fundstelle
@@ -110,38 +108,54 @@ wollte — also genau die Stellen, an denen sich Nachhören lohnt. Die Liste geh
 Anmerkung geradeziehen, eine erledigte streichen (Text löschen genügt) oder eine eigene
 ergänzen. Und zu einem einzelnen Satz im Gespräch legst du über das Sprechblasen-Symbol eine
 Notiz an — „hier nachfragen“ steht dann direkt bei der Stelle und im Export mit unter den
-Anmerkungen. **Versehentlich etwas gestrichen?** Ob Anmerkung, Notiz, Kontext oder
-Zusammenfassung: es blendet sich kurz ein Hinweis ein, der den gestrichenen Text nennt — ein
-Klick auf „Rückgängig“ holt ihn zurück.
+Anmerkungen.
 
-**Untertitel für YouTube.** Ein Klick erzeugt eine `.srt`-Datei, die du bei YouTube hochlädst;
-sie ersetzt die schwachen Automatik-Untertitel. Die Sprechernamen kannst du dabei ein- oder
-ausblenden.
+**Versehentlich etwas gestrichen?** Ob Anmerkung, Notiz, Kontext oder Zusammenfassung: es
+blendet sich kurz ein Hinweis ein, der den gestrichenen Text nennt — ein Klick auf
+„Rückgängig“ holt ihn zurück.
+
+</details>
+
+**Es sagt dir, wo es nichts gehört hat.** Manchmal überspringt die Spracherkennung ein Stück
+Aufnahme — nicht falsch verstanden, sondern gar nicht angefasst; im Text steht dann einfach
+nichts, wo jemand etwas gesagt hat. Transkribor hält die Länge der Aufnahme gegen das, was
+tatsächlich im Transkript steht, und meldet oben im Editor jede Stelle mit Zeitangabe, an der
+länger als eine Viertelminute nichts angekommen ist. Ob dort wirklich etwas fehlt, hörst du
+in Sekunden nach — von allein wäre es dir kaum aufgefallen.
+
+**Videos direkt aus dem Netz — und Untertitel zurück.** YouTube- oder Instagram-Adresse
+einfügen genügt, Transkribor holt sich die Tonspur selbst. Und ein Klick erzeugt die
+`.srt`-Untertitel, die du bei YouTube hochlädst und die dort die schwachen Automatik-Untertitel
+ersetzen — mit oder ohne Sprechernamen.
+
+<details>
+<summary>Wie Transkribor den Video-Import instand hält</summary>
+
+YouTube und Instagram bauen ihre Seiten ständig um, wovon der Downloader jedes Mal aus dem
+Tritt kommt. Transkribor frischt ihn deshalb von sich aus auf, und zwar **beim Start im
+Hintergrund** — du merkst davon im Normalfall nichts; nachsehen (und abschalten) kannst du es
+unter **Einstellungen › Video-Import**.
+
+- Fügst du eine Adresse ein, während im Hintergrund noch aufgefrischt wird, sagt Transkribor
+  das und bittet dich, es gleich noch einmal zu versuchen.
+- Geht ein Download trotzdem schief, weil die Seite sich gerade wieder geändert hat,
+  aktualisiert es sofort und versucht es gleich noch einmal.
+- Machst du das Fenster mitten in einer Auffrischung zu, ist das meistens folgenlos. Bricht
+  dagegen die allererste Installation ab, hilft **Einstellungen › Video-Import › Jetzt
+  aktualisieren**.
+- Und wenn der Downloader dabei so zerbricht, dass Transkribor ihn danach gar nicht mehr
+  findet, merkt es sich den abgebrochenen Versuch und setzt ihn beim nächsten Start fort
+  (solange die automatische Auffrischung eingeschaltet ist).
+- Zusätzliche Programme brauchst du dafür keine — YouTube verlangt beim Herunterladen
+  inzwischen, dass ein kleines Stück Javascript ausgeführt wird, und Transkribor bringt alles
+  Nötige dafür mit.
+
+</details>
 
 **Ordnung, auch nach hundert Aufnahmen.** Projekte und Aufnahmen lassen sich jederzeit
 umbenennen — beim Umbenennen einer Aufnahme bietet dir Transkribor die Namen der Sprecher an,
 sodass aus `01172464` ein „Hans Müller, Garage Rüthi“ wird. Suchfeld und `Strg+K` führen dich
 auch in grossen Sammlungen mit einem Griff zum richtigen Projekt.
-
-**Videos direkt aus dem Netz.** YouTube- oder Instagram-Adresse einfügen genügt; Transkribor
-holt sich die Tonspur selbst. **Und hält sich dafür selbst instand:** YouTube und Instagram
-bauen ihre Seiten ständig um, wovon der Downloader jedes Mal aus dem Tritt kommt — Transkribor
-frischt ihn deshalb von sich aus auf, und zwar **beim Start im Hintergrund**. Früher konnte die
-Auffrischung ausgerechnet dann fällig werden, wenn du gerade eine Adresse eingefügt hattest,
-und der Download begann erst ein paar Minuten später. Fügst du eine Adresse ein, während im
-Hintergrund noch aufgefrischt wird, sagt Transkribor das und bittet dich, es gleich noch einmal
-zu versuchen — statt zu behaupten, der Downloader fehle. Geht ein
-Download trotzdem schief, weil die Seite sich gerade wieder geändert hat, aktualisiert es
-sofort und versucht es gleich noch einmal. Machst du das Fenster mitten in einer Auffrischung
-zu, ist das meistens folgenlos — und wenn der Downloader dabei so zerbricht, dass Transkribor
-ihn danach gar nicht mehr findet, merkt es sich den abgebrochenen Versuch und setzt ihn beim
-nächsten Start fort (solange die automatische Auffrischung eingeschaltet ist). Bricht
-dagegen die allererste Installation ab, ist das Sache der Einrichtung — dann hilft
-**Einstellungen › Video-Import › Jetzt aktualisieren**. Du
-merkst davon im Normalfall nichts; nachsehen (und abschalten) kannst du es unter
-**Einstellungen › Video-Import**. Zusätzliche Programme brauchst du dafür keine — YouTube
-verlangt beim Herunterladen inzwischen, dass ein kleines Stück Javascript ausgeführt wird,
-und Transkribor bringt alles Nötige dafür mit.
 
 **Es wartet nicht auf dich.** Aufnahmen werden nacheinander abgearbeitet, mehrere Projekte
 parallel — du kannst weiterarbeiten oder das Fenster zumachen.
@@ -188,75 +202,97 @@ Stern geben.
 
 ## Häufige Fragen
 
-**Kostet es etwas?** Nein. Transkribor ist freie Software (MIT-Lizenz). Kosten entstehen nur,
-wenn du für die Korrektur einen kostenpflichtigen KI-Dienst wählst — mit einem vorhandenen
-Abo oder einem lokalen Modell entfällt auch das.
+<details>
+<summary><strong>Kostet es etwas?</strong></summary>
 
-**Brauche ich Internet?** Nur zum Herunterladen und für die einmalige Einrichtung. Danach
-arbeitet das Transkribieren offline.
+Nein. Transkribor ist freie Software (MIT-Lizenz). Kosten entstehen nur, wenn du für die
+Korrektur einen kostenpflichtigen KI-Dienst wählst — mit einem vorhandenen Abo oder einem
+lokalen Modell entfällt auch das.
 
-**Wie komme ich an Updates?** Die App sieht beim Start und danach alle sechs Stunden von
-selbst nach. Gibt es eine neue Fassung, steht das unten in der Fusszeile — heruntergeladen und
-installiert wird sie erst, wenn du in den Einstellungen darauf klickst. Auf dem Mac benachrichtigt
-dich die App genauso und führt dich zur Release-Seite; auto-heruntergeladen wird dort nichts
-(ohne Apple-Notarisierung nicht möglich). In der Linux-`.deb`-Fassung prüft sie nicht selbst —
-dort schaust du auf der
+</details>
+
+<details>
+<summary><strong>Brauche ich Internet?</strong></summary>
+
+Nur zum Herunterladen und für die einmalige Einrichtung. Danach arbeitet das Transkribieren
+offline.
+
+</details>
+
+<details>
+<summary><strong>Wie komme ich an Updates?</strong></summary>
+
+Die App sieht beim Start und danach alle sechs Stunden von selbst nach. Gibt es eine neue
+Fassung, steht das unten in der Fusszeile — heruntergeladen und installiert wird sie erst,
+wenn du in den Einstellungen darauf klickst. Auf dem Mac benachrichtigt dich die App genauso
+und führt dich zur Release-Seite; auto-heruntergeladen wird dort nichts (ohne
+Apple-Notarisierung nicht möglich). In der Linux-`.deb`-Fassung prüft sie nicht selbst — dort
+schaust du auf der
 [Releases-Seite](https://github.com/napoleonmm83/Transkribor/releases/latest) nach.
 
-Manche Updates bringen neue Programmteile mit — meist für den Video-Import. Dann meldet sich nach
-dem Neustart einmal die Einrichtungsseite und sagt es dir; ein Klick auf **„Jetzt einrichten“**
-holt sie nach. Die grossen Sachen (PyTorch, Whisper) bleiben dabei normalerweise liegen — was in
-einer passenden Fassung schon da ist, wird nicht noch einmal geholt.
+Manche Updates bringen neue Programmteile mit — meist für den Video-Import. Dann meldet sich
+nach dem Neustart einmal die Einrichtungsseite und sagt es dir; ein Klick auf **„Jetzt
+einrichten“** holt sie nach. Die grossen Sachen (PyTorch, Whisper) bleiben dabei normalerweise
+liegen — was in einer passenden Fassung schon da ist, wird nicht noch einmal geholt.
 
 Kommt diese Seite bei **jedem** Start wieder, obwohl der Klick jedes Mal durchläuft, kann sich
-Transkribor nicht merken, dass es fertig ist. Meistens nennt die Seite dann die Datei, um die es
-geht; typischerweise hält ein anderes Programm sie fest oder sie ist schreibgeschützt. Benutzen
-lässt sich die App in der Zwischenzeit ganz normal.
+Transkribor nicht merken, dass es fertig ist. Meistens nennt die Seite dann die Datei, um die
+es geht; typischerweise hält ein anderes Programm sie fest oder sie ist schreibgeschützt.
+Benutzen lässt sich die App in der Zwischenzeit ganz normal.
 
-**Ein Video-Import schlägt fehl — was nun?** Meistens hat die Plattform etwas umgebaut. Warte
-kurz und versuche es noch einmal: Transkribor frischt den Downloader beim ersten Fehlversuch
-selbst auf und lädt dann gleich weiter. Klappt es danach immer noch nicht, hilft der Knopf
-**„Jetzt aktualisieren“** unter *Einstellungen › Video-Import* — dort steht auch, welche
-Fassung gerade läuft (während einer Aktualisierung erst wieder, wenn sie fertig ist: solange
-sie läuft, wäre jede Angabe geraten — das gilt auch, wenn ein Import im Hintergrund gerade
-selbst auffrischt). Läuft schon eine Auffrischung, wartet Transkribor auf sie, statt eine
-zweite danebenzustellen; war sie schneller, sagt es dir das als Hinweis — und behauptet
-nicht, es habe selbst etwas erneuert. Bleibt es dabei, ist das Video vermutlich nicht öffentlich abrufbar
-(private Videos und solche, die eine Anmeldung verlangen, unterstützt Transkribor nicht).
+</details>
 
-Zwei Meldungen können dabei auftauchen. Steht unter dem Knopf, dass sich die **Hilfsskripte für
-YouTube nicht prüfen lassen**, ist eine Paketdatei auf deinem Rechner beschädigt. Importieren
-kannst du weiterhin — Transkribor merkt nur nicht mehr von selbst, wenn diese Skripte nicht mehr
-zur Downloader-Fassung passen. „Jetzt aktualisieren“ hilft hier allerdings **nicht**: das
-Installationsprogramm stolpert über dieselbe kaputte Datei und bricht ab. Wieder heil wird es
-über die Einrichtungsseite („Jetzt einrichten“) oder, wenn du Transkribor selbst installiert
-hast, mit einer Neuinstallation der Python-Umgebung.
+<details>
+<summary><strong>Ein Video-Import schlägt fehl — was nun?</strong></summary>
 
-Und steht unter dem Knopf, dass eine **Aktualisierung abgebrochen** wurde, hat Transkribor
-sie beim Schliessen der App mitten im Schreiben erwischt — meistens nach einem abgewürgten
-Programm. Das ist kein Grund zur Neuinstallation: mit angestellter automatischer Aktualisierung
-(das ist der Normalfall) setzt der nächste Start von Transkribor die Reparatur von selbst fort;
-hast du sie ausgeschaltet, macht der Knopf **„Jetzt aktualisieren“** dieselbe Arbeit.
+Meistens hat die Plattform etwas umgebaut. Warte kurz und versuche es noch einmal: Transkribor
+frischt den Downloader beim ersten Fehlversuch selbst auf und lädt dann gleich weiter. Klappt
+es danach immer noch nicht, hilft der Knopf **„Jetzt aktualisieren“** unter
+*Einstellungen › Video-Import* — dort steht auch, welche Fassung gerade läuft (während einer
+Aktualisierung erst wieder, wenn sie fertig ist: solange sie läuft, wäre jede Angabe geraten —
+das gilt auch, wenn ein Import im Hintergrund gerade selbst auffrischt). Läuft schon eine
+Auffrischung, wartet Transkribor auf sie, statt eine zweite danebenzustellen; war sie
+schneller, sagt es dir das als Hinweis — und behauptet nicht, es habe selbst etwas erneuert.
+Bleibt es dabei, ist das Video vermutlich nicht öffentlich abrufbar (private Videos und solche,
+die eine Anmeldung verlangen, unterstützt Transkribor nicht).
 
-Und meldet Transkribor nach einer Aktualisierung, sie sei **ohne Sperre gelaufen**, konnte es
-gerade nicht sicherstellen, dass nicht zeitgleich ein Video-Import dasselbe tat. Das Ergebnis
-stimmt vermutlich trotzdem. Sicher gehst du, indem du den Knopf noch einmal drückst, wenn
-nichts anderes läuft; kommt die Meldung wieder, steht der Grund im Serverprotokoll (meistens
-liegt am Sperr-Pfad etwas im Weg, was dort nicht hingehört).
+Drei Meldungen können dabei auftauchen:
 
-**Welche Sprachen?** Ganz oben im Bereich **„Material hinzufügen“** steht **eine** Sprachauswahl:
-Schweizerdeutsch, Deutsch, Englisch, Französisch, Italienisch oder Automatisch (dann erkennt
-Whisper die Sprache selbst). Was du dort einstellst, gilt für alles, was du anschliessend
-hinzufügst — hochgeladene Dateien wie importierte Video-URLs. Schweizerdeutsch wird wie gehabt
-vollständig korrigiert — der Dialekt wird zu lesbarem Standarddeutsch, dazu kommen die
-Sprechernamen. Bei allen anderen Sprachen bleibt die Originalsprache erhalten, nichts wird
-übersetzt: ein englisches Video kommt als englisches Transkript heraus. In den
-Projekt-Einstellungen (⋯-Menü des Projekts) legst du die Standard-Sprache und die
+- **„Hilfsskripte für YouTube nicht prüfbar“** — eine Paketdatei auf deinem Rechner ist
+  beschädigt. Importieren kannst du weiterhin; „Jetzt aktualisieren“ hilft hier allerdings
+  **nicht**, das Installationsprogramm stolpert über dieselbe kaputte Datei. Wieder heil wird
+  es über die Einrichtungsseite („Jetzt einrichten“) oder, wenn du Transkribor selbst
+  installiert hast, mit einer Neuinstallation der Python-Umgebung.
+- **„Aktualisierung abgebrochen“** — Transkribor hat sie beim Schliessen der App mitten im
+  Schreiben erwischt, meistens nach einem abgewürgten Programm. Kein Grund zur
+  Neuinstallation: mit angestellter automatischer Aktualisierung (der Normalfall) setzt der
+  nächste Start die Reparatur von selbst fort; hast du sie ausgeschaltet, macht der Knopf
+  **„Jetzt aktualisieren“** dieselbe Arbeit.
+- **„Ohne Sperre gelaufen“** — Transkribor konnte gerade nicht sicherstellen, dass nicht
+  zeitgleich ein Video-Import dasselbe tat. Das Ergebnis stimmt vermutlich trotzdem; sicher
+  gehst du, indem du den Knopf noch einmal drückst, wenn nichts anderes läuft. Kommt die
+  Meldung wieder, steht der Grund im Serverprotokoll (meistens liegt am Sperr-Pfad etwas im
+  Weg, was dort nicht hingehört).
+
+</details>
+
+<details>
+<summary><strong>Welche Sprachen?</strong></summary>
+
+Ganz oben im Bereich **„Material hinzufügen“** steht **eine** Sprachauswahl: Schweizerdeutsch,
+Deutsch, Englisch, Französisch, Italienisch oder Automatisch (dann erkennt Whisper die Sprache
+selbst). Was du dort einstellst, gilt für alles, was du anschliessend hinzufügst — hochgeladene
+Dateien wie importierte Video-URLs. Schweizerdeutsch wird wie gehabt vollständig korrigiert —
+der Dialekt wird zu lesbarem Standarddeutsch, dazu kommen die Sprechernamen. Bei allen anderen
+Sprachen bleibt die Originalsprache erhalten, nichts wird übersetzt: ein englisches Video kommt
+als englisches Transkript heraus.
+
+In den Projekt-Einstellungen (⋯-Menü des Projekts) legst du die Standard-Sprache und die
 Korrektur-Tiefe fest; die Auswahl beim Hinzufügen nimmt die Standard-Sprache vorweg und lässt
-sich für die nächsten Aufnahmen abändern, ohne den Standard zu verstellen. Und solltest du
-dich später anders entscheiden: im ⋯-Menü der jeweiligen Aufnahme („Sprache, Sprecher & Korrektur“)
-lässt sich alles nachträglich ändern. Eine andere Sprache bedeutet Neu-Transkription — das
-alte Transkript wird verworfen, das Audio bleibt erhalten; eine andere Korrektur-Tiefe oder
+sich für die nächsten Aufnahmen abändern, ohne den Standard zu verstellen. Und solltest du dich
+später anders entscheiden: im ⋯-Menü der jeweiligen Aufnahme („Sprache, Sprecher & Korrektur“)
+lässt sich alles nachträglich ändern. Eine andere Sprache bedeutet Neu-Transkription — das alte
+Transkript wird verworfen, das Audio bleibt erhalten; eine andere Korrektur-Tiefe oder
 Sprecherzahl startet nur die Korrektur neu.
 
 Auch bei der Sprache gilt dort die Wahl **„Folgt dem Projekt“** (mit der geerbten Sprache in
@@ -270,13 +306,17 @@ angefasst, bleibt die Aufnahme an den Standard gekoppelt. (Aufnahmen, die du vor
 hinzugefügt hast, tragen meist eine feste Sprache; einmal auf „Folgt dem Projekt“ gestellt,
 folgen sie wieder mit.)
 
-**Und wenn in einem Video mehrere Sprachen vorkommen?** Etwa ein Anlass, bei dem eine Person
-Schweizerdeutsch spricht, die nächste Englisch. Dafür gibt es unter der Sprachauswahl das
-Kästchen **„Enthält weitere Sprachen“**. Die gewählte Sprache gilt dann als *Hauptsprache*, und
-Transkribor achtet im Verlauf der Aufnahme darauf, wann jemand in einer anderen Sprache spricht.
-Im Transkript steht danach jede Passage so da, wie sie gesprochen wurde: der Schweizer auf
-Standarddeutsch, der Engländer auf Englisch. Übersetzt wird nichts — das Transkript ist das
-Protokoll des Gesagten.
+</details>
+
+<details>
+<summary><strong>Und wenn in einem Video mehrere Sprachen vorkommen?</strong></summary>
+
+Etwa ein Anlass, bei dem eine Person Schweizerdeutsch spricht, die nächste Englisch. Dafür gibt
+es unter der Sprachauswahl das Kästchen **„Enthält weitere Sprachen“**. Die gewählte Sprache
+gilt dann als *Hauptsprache*, und Transkribor achtet im Verlauf der Aufnahme darauf, wann
+jemand in einer anderen Sprache spricht. Im Transkript steht danach jede Passage so da, wie sie
+gesprochen wurde: der Schweizer auf Standarddeutsch, der Engländer auf Englisch. Übersetzt wird
+nichts — das Transkript ist das Protokoll des Gesagten.
 
 Lass das Kästchen aus, wenn nur eine Sprache vorkommt. Es ändert, wie genau zugehört wird, und
 bei einsprachigen Aufnahmen schadet das mehr, als es nützt: die Erkennung springt dann
@@ -290,24 +330,27 @@ im Projekt eingestellt hast — auch wenn du das später änderst. Sobald du bei
 bewusst „Ja“ oder „Nein“ wählst, gilt deine Wahl für sie allein; mit „Folgt dem Projekt“ nimmst
 du das wieder zurück.
 
-**Es hat zu wenige Sprecher erkannt — was tun?** Das passiert vor allem, wenn du mit dem
-Mikrofon der Kamera aufnimmst statt mit Ansteckmikrofonen: alle Stimmen kommen aus derselben
-Richtung, klingen ähnlich weit weg, und Transkribor wirft dann zwei Personen in einen Topf.
-Typisch sieht man es daran, dass Antworten beim Interviewer stehen oder mehrere Leute unter
-einem Namen laufen.
+</details>
 
-Dagegen hilft das Feld **„Anzahl Sprecher“**. Du findest es so: in der Dateiliste auf das
-**⋯-Menü** der Aufnahme klicken, dort **„Sprache, Sprecher & Korrektur“** wählen — das Feld
-steht im Dialog gleich unter der Sprache, an zweiter Stelle. (In Fassungen **bis
+<details>
+<summary><strong>Es hat zu wenige Sprecher erkannt — was tun?</strong></summary>
+
+Das passiert vor allem, wenn du mit dem Mikrofon der Kamera aufnimmst statt mit
+Ansteckmikrofonen: alle Stimmen kommen aus derselben Richtung, klingen ähnlich weit weg, und
+Transkribor wirft dann zwei Personen in einen Topf. Typisch sieht man es daran, dass Antworten
+beim Interviewer stehen oder mehrere Leute unter einem Namen laufen.
+
+**Das Feld „Anzahl Sprecher“ ist der wirksamste Hebel.** Du findest es so: in der Dateiliste
+auf das **⋯-Menü** der Aufnahme klicken, dort **„Sprache, Sprecher & Korrektur“** wählen — das
+Feld steht im Dialog gleich unter der Sprache, an zweiter Stelle. (In Fassungen **bis
 einschliesslich `v0.22.0`** ist es das **unterste** Feld, und der Menüpunkt heisst dort
 „Sprache, Korrektur & Sprecher“ bzw. in noch älteren „Sprache & Korrektur-Tiefe“.)
 
 Trag dort ein, wie viele Personen tatsächlich gesprochen haben — **dich als fragende Person
 mitgezählt**. Waren es du und drei Teammitglieder, ist die Antwort *vier*. Transkribor trennt
-die Stimmen danach genau in so viele auf, statt zu raten, und das ist der mit Abstand
-wirksamste Hebel: an einer
-echten Aufnahme mit vier Personen wurde aus „Interviewer plus eine Person“ eine saubere
-Trennung, bei der die Fragen wieder beim Fragenden standen.
+die Stimmen danach genau in so viele auf, statt zu raten: an einer echten Aufnahme mit vier
+Personen wurde aus „Interviewer plus eine Person“ eine saubere Trennung, bei der die Fragen
+wieder beim Fragenden standen.
 
 Lass das Feld leer, wenn du es nicht sicher weisst — dann schätzt Transkribor wie bisher.
 Eine falsche Zahl ist schlechter als keine, denn sie wird genau eingehalten. Die Änderung
@@ -320,40 +363,58 @@ diesem Rechner ausgeschaltet. Die Sprecher werden dann allein aus dem Gesprächs
 erschlossen, und die Zahl ändert daran nichts.
 
 Bei Aufnahmen, die du **vor dieser Fassung** hinzugefügt hast, steht meist „Ja“ oder „Nein“ —
-damals wurde die Einstellung bei jedem Hinzufügen fest an der Aufnahme vermerkt. Wenn du willst,
-dass sie wieder dem Projekt folgen, stellst du sie einmal von Hand auf „Folgt dem Projekt“.
+damals wurde die Einstellung bei jedem Hinzufügen fest an der Aufnahme vermerkt. Wenn du
+willst, dass sie wieder dem Projekt folgen, stellst du sie einmal von Hand auf „Folgt dem
+Projekt“.
 
-**Wo liegen meine Dateien — und wie sichere ich sie?** Alles liegt in einem Ordner auf deinem
-Rechner. Wo genau, steht in den **Einstellungen** unter „Deine Dateien“; in der App bringt dich
-ein Klick auf **Ordner öffnen** direkt dorthin. Weil nichts davon in einer Cloud liegt, gibt es
-auch keine Sicherung ausser deiner eigenen: Kopiere diesen Ordner ab und zu auf eine externe
-Platte — darin stecken Aufnahmen, Transkripte und Korrekturen vollständig. Auf einen neuen
-Rechner nimmst du deine Arbeit mit, indem du den Ordner dorthin kopierst.
+</details>
 
-**Was passiert mit meinen Dateien?** Transkribor löscht nichts von allein. Transkript und
-Korrekturen bleiben erhalten, bis du eine Aufnahme **neu transkribierst** oder ihre **Sprache
-änderst**: dann wird das Transkript aus dem Audio neu erstellt, das bisherige Transkript samt
-Korrekturen fällt dabei weg (das Audio bleibt). Löschen kannst du nur du selbst, bewusst über
-das ⋯-Menü.
+<details>
+<summary><strong>Wo liegen meine Dateien — und wie sichere ich sie?</strong></summary>
 
-**„Deine gespeicherten Einstellungen waren beschädigt“ — was tun?** Sehr selten wird die
-kleine Datei unlesbar, in der deine Einstellungen stehen: ein Absturz mitten im Speichern, ein
-Synchronisierungsdienst, ein Datenträger mit Aussetzern. Transkribor arbeitet dann mit den
-Standardwerten weiter — dein hinterlegter API-Schlüssel ist damit nicht mehr eingetragen. Die
-alte Datei wird aber **nicht** überschrieben, sondern daneben aufbewahrt; der Hinweis auf der
-Einstellungsseite nennt dir den genauen Pfad. Öffne sie mit einem Texteditor: der Schlüssel
-steht dort meistens noch lesbar drin, du kannst ihn zurück ins Feld kopieren. Danach räumt der
-Knopf unter dem Hinweis die Datei weg.
+Alles liegt in einem Ordner auf deinem Rechner. Wo genau, steht in den **Einstellungen** unter
+„Deine Dateien“; in der App bringt dich ein Klick auf **Ordner öffnen** direkt dorthin. Weil
+nichts davon in einer Cloud liegt, gibt es auch keine Sicherung ausser deiner eigenen: Kopiere
+diesen Ordner ab und zu auf eine externe Platte — darin stecken Aufnahmen, Transkripte und
+Korrekturen vollständig. Auf einen neuen Rechner nimmst du deine Arbeit mit, indem du den
+Ordner dorthin kopierst.
 
-**„Gespeichert — aber ohne Schreibsperre“ — muss ich etwas tun?** Kurz nachsehen, mehr nicht.
-Normalerweise sorgt Transkribor dafür, dass immer nur *eine* Stelle gleichzeitig an deinen
-Einstellungen schreibt; dafür legt es kurz eine Markierung daneben an. Klappt das einmal nicht —
-ein Virenscanner hält sie fest, oder es liegt noch eine alte herum —, wird der Wert trotzdem
-gespeichert, aber ohne diesen Schutz. Hat in derselben Sekunde etwas anderes geschrieben (etwa die
-automatische Aktualisierung im Hintergrund), kann deine Eingabe dabei verlorengegangen sein.
-Deshalb die Meldung: schau, ob dein Wert wirklich im Feld steht, und trage ihn sonst noch einmal
-ein. (Lässt sich gar nichts schreiben, siehst du stattdessen eine Fehlermeldung — dann ist auch
-nichts gespeichert.)
+</details>
+
+<details>
+<summary><strong>Was passiert mit meinen Dateien?</strong></summary>
+
+Transkribor löscht nichts von allein. Transkript und Korrekturen bleiben erhalten, bis du eine
+Aufnahme **neu transkribierst** oder ihre **Sprache änderst**: dann wird das Transkript aus
+dem Audio neu erstellt, das bisherige Transkript samt Korrekturen fällt dabei weg (das Audio
+bleibt). Löschen kannst du nur du selbst, bewusst über das ⋯-Menü.
+
+</details>
+
+<details>
+<summary><strong>„Deine gespeicherten Einstellungen waren beschädigt“ — was tun?</strong></summary>
+
+Sehr selten wird die kleine Datei unlesbar, in der deine Einstellungen stehen: ein Absturz
+mitten im Speichern, ein Synchronisierungsdienst, ein Datenträger mit Aussetzern. Transkribor
+arbeitet dann mit den Standardwerten weiter — dein hinterlegter API-Schlüssel ist damit nicht
+mehr eingetragen. Die alte Datei wird aber **nicht** überschrieben, sondern daneben aufbewahrt;
+der Hinweis auf der Einstellungsseite nennt dir den genauen Pfad. Öffne sie mit einem
+Texteditor: der Schlüssel steht dort meistens noch lesbar drin, du kannst ihn zurück ins Feld
+kopieren. Danach räumt der Knopf unter dem Hinweis die Datei weg.
+
+</details>
+
+<details>
+<summary><strong>„Gespeichert — aber ohne Schreibsperre“ — muss ich etwas tun?</strong></summary>
+
+Kurz nachsehen, mehr nicht. Normalerweise sorgt Transkribor dafür, dass immer nur *eine*
+Stelle gleichzeitig an deinen Einstellungen schreibt; dafür legt es kurz eine Markierung
+daneben an. Klappt das einmal nicht — ein Virenscanner hält sie fest, oder es liegt noch eine
+alte herum —, wird der Wert trotzdem gespeichert, aber ohne diesen Schutz. Hat in derselben
+Sekunde etwas anderes geschrieben (etwa die automatische Aktualisierung im Hintergrund), kann
+deine Eingabe dabei verlorengegangen sein. Deshalb die Meldung: schau, ob dein Wert wirklich
+im Feld steht, und trage ihn sonst noch einmal ein. (Lässt sich gar nichts schreiben, siehst
+du stattdessen eine Fehlermeldung — dann ist auch nichts gespeichert.)
 
 Dasselbe gilt für die anderen Dateien, die Transkribor für dich führt: die Sprach-Einstellungen
 eines Projekts (alte Fassung als `projekt.json.kaputt` im Projektordner) und dein bearbeitetes
@@ -363,11 +424,16 @@ das. Deine bisherige Fassung wird nicht überschrieben: sobald du das nächste M
 speicherst, wandert sie als `<Name>.edit.json.kaputt` zur Seite und bleibt im Ordner
 `transkripte` liegen.
 
-**„… wurde inzwischen geändert“ — was ist da passiert?** Du hast im Editor etwas geschrieben,
-und während dein Text gespeichert wurde, ist die KI-Korrektur für dieselbe Aufnahme fertig
-geworden. Beide wollen dieselbe Datei beschreiben. Früher hat dabei stillschweigend derjenige
-gewonnen, der zufällig als Letzter ankam — meist dein Text, und die fertige Korrektur war weg,
-ohne dass es irgendwo stand. Jetzt fragt Transkribor lieber nach:
+</details>
+
+<details>
+<summary><strong>„… wurde inzwischen geändert“ — was ist da passiert?</strong></summary>
+
+Du hast im Editor etwas geschrieben, und während dein Text gespeichert wurde, ist die
+KI-Korrektur für dieselbe Aufnahme fertig geworden. Beide wollen dieselbe Datei beschreiben.
+Früher hat dabei stillschweigend derjenige gewonnen, der zufällig als Letzter ankam — meist
+dein Text, und die fertige Korrektur war weg, ohne dass es irgendwo stand. Jetzt fragt
+Transkribor lieber nach:
 
 - **OK** lädt die frisch korrigierte Fassung. Was du seit dem letzten Speichern getippt hast,
   ist damit weg — die Korrektur ist dafür vollständig da.
@@ -378,6 +444,8 @@ Solange die Aufnahme offen ist, bleibt dein Text stehen, bis du dich entschieden
 Frage allein verwirft nichts. Wechselst du dagegen vorher zu einer anderen Aufnahme, kann die
 fertige Korrektur gewinnen; dann sagt dir eine Meldung, dass deine letzte Änderung nicht mehr
 gespeichert wurde.
+
+</details>
 
 ---
 
