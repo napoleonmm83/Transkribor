@@ -1496,6 +1496,21 @@ def test_dateieinstellungen_meldet_ob_diarisierung_laeuft(client, tmp_projekt, m
     assert r.json()["diarisierung_aktiv"] is False
 
 
+def test_dateieinstellungen_melden_pyannote_verfuegbarkeit(client, tmp_projekt, monkeypatch):
+    """#270: der Kill-Switch ist der UNWAHRSCHEINLICHERE der beiden Ausfallgründe —
+    fehlendes pyannote ist der Normalfall einer halb eingerichteten Umgebung. Beide
+    Richtungen, sonst wäre ein Feld, das immer False meldet, ununterscheidbar (dieselbe
+    Regel wie der #266-Test darüber)."""
+    from webtool import diarize as _diarize
+    monkeypatch.setattr(_diarize, "_VERFUEGBAR", True)
+    r = client.get(f"/api/projects/{tmp_projekt}/files/S1/einstellungen")
+    assert r.json()["pyannote_da"] is True
+
+    monkeypatch.setattr(_diarize, "_VERFUEGBAR", False)
+    r = client.get(f"/api/projects/{tmp_projekt}/files/S1/einstellungen")
+    assert r.json()["pyannote_da"] is False
+
+
 def test_dateieinstellungen_unbekannte_datei_404(client, tmp_projekt):
     # Weder Audio noch Roh-JSON -> die Datei existiert fuer die API nicht.
     assert client.get(f"/api/projects/{tmp_projekt}/files/nope/einstellungen").status_code == 404

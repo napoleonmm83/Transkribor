@@ -27,6 +27,7 @@ from . import auth
 # wird im Serverprozess nirgends benutzt, wer ihn hier je liest, liest an der `.env` vorbei.
 from . import correct as _correct
 from . import device
+from . import diarize as _diarize
 from . import fetch as fetch_mod
 from . import jobs
 from . import llm
@@ -450,14 +451,15 @@ def dateieinstellungen(project: str, base: str):
     # belastbar, weil `settings.job_env()` nur WHISPER_MODEL/WHISPER_LANG setzt — der
     # correct-Subprozess liest exakt denselben Wert wie dieser Server.
     #
-    # Sie beantwortet AUSDRUECKLICH nur den Kill-Switch, nicht „laeuft pyannote wirklich":
-    # fehlt das Paket oder ist die GPU voll, steht hier True und es passiert trotzdem nichts.
-    # Dieselbe Trennung wie „Installiert != angemeldet" bei llm.available(); als Issue
-    # festgehalten statt hier mit einem Import von torch im Request-Pfad erkauft.
+    # Sie beantwortet AUSDRUECKLICH nur den Kill-Switch. Ob pyannote wirklich rechnen
+    # wuerde, sagt das SCHWESTERFELD `pyannote_da` (#270): gecacht je Serverlauf, ohne
+    # torch im Request-Pfad (find_spec + Dateistat, Details in diarize.verfuegbar).
+    # Offen bleibt dort der Laufzeitfall (GPU voll) — best-effort beim Lauf wie bisher.
     return {**_projekt.datei_ansicht(project, base),
             "sprach_choices": _sprachen.fuer_frontend(), "tiefen": _sprachen.TIEFEN,
             "sprecher_max": _sprachen.SPRECHER_MAX,
-            "diarisierung_aktiv": _correct.diarize_enabled()}
+            "diarisierung_aktiv": _correct.diarize_enabled(),
+            "pyannote_da": _diarize.verfuegbar()}
 
 
 @app.put("/api/projects/{project}/files/{base}/einstellungen")
