@@ -216,8 +216,12 @@ describe('SegmentView', () => {
   // Bauteil — der haeufigste Streichweg (400 Segmente je Dokument) haette sonst keine Stimme.
   it('erzaehlt den Notiz-Streich-Hinweis per aria-describedby, nicht nur per title (#244)', () => {
     const seg = mkSeg({ text: 'Text', note: 'Unsicher bei Minute 3' })
-    render(<TooltipProvider><SegmentView seg={seg} active={false} onPlay={vi.fn()} updateSegment={vi.fn()} /></TooltipProvider>)
-    const knopf = screen.getByTitle('Notiz bearbeiten (leeren streicht sie)')
+    const seg2 = mkSeg({ id: 2, text: 'Zweites', note: 'Zweite Notiz' })
+    render(<TooltipProvider>
+      <SegmentView seg={seg} active={false} onPlay={vi.fn()} updateSegment={vi.fn()} />
+      <SegmentView seg={seg2} active={false} onPlay={vi.fn()} updateSegment={vi.fn()} />
+    </TooltipProvider>)
+    const knopf = screen.getAllByTitle('Notiz bearbeiten (leeren streicht sie)')[0]
     const id = knopf.getAttribute('aria-describedby')
     expect(id).toBeTruthy()
     const hinweis = document.getElementById(id!)
@@ -227,5 +231,10 @@ describe('SegmentView', () => {
     expect(hinweis?.textContent).toBe(knopf.title)
     expect(hinweis?.className).toContain('sr-only')
     expect(knopf.contains(hinweis!), 'der Hinweis steht AUSSERHALB des Knopfes').toBe(false)
+    // Zwei Notiz-Knoefe im selben Dokument (400 je Datei ist der Normalfall) duerfen
+    // keine id teilen — sonst laedt die Beschreibung am falschen Segment (CodeRabbit-Fund).
+    const knopf2 = document.querySelector('[data-seg-id="2"] button[aria-describedby]')
+    expect(knopf2?.getAttribute('aria-describedby')).toBeTruthy()
+    expect(knopf2!.getAttribute('aria-describedby')).not.toBe(id)
   })
 })

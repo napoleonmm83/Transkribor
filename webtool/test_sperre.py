@@ -839,6 +839,11 @@ def test_die_drei_nur_windows_tests_laufen_auf_windows_wirklich():
             assert marker.name != "skip", (
                 f"{name} traegt ein bedingungsloses skip — auf Windows laeuft es nie (#222)."
             )
+            assert marker.name != "xfail", (
+                f"{name} traegt xfail — `xfail(run=False)` ueberspringt ganz, ein normales "
+                "xfail macht einen FEHLER gruen; in beiden Faellen lief der Test in der "
+                "Windows-CI nie wirksam (#222, CodeRabbit-Fund)."
+            )
             if marker.name == "skipif":
                 bedingung = marker.args[0] if marker.args else True
                 assert not bedingung, (
