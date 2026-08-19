@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { toast } from 'sonner'
 import { TextEditor, EINGABE_VERWORFEN } from './TextEditor'
 
@@ -19,6 +19,12 @@ export function EditierbarerText({ wert, platzhalter, onCommit, titel, className
   className?: string; aktiv?: boolean; dimmen?: boolean;
 }) {
   const [editing, setEditing] = useState(false)
+  // Der Hinweis „leeren streicht" (#244) haengt per aria-describedby am Knopf, nicht nur im
+  // title: der Knopf traegt Textinhalt, der als Accessible Name gewinnt — title erreicht nur
+  // die Maus. Der Beschreibungstext steht AUSSERHALB des Knopfes (darin wuerde er den Namen
+  // verschmutzen, dieselbe Lehre wie beim Erklaertext in `MehrsprachigKasten`); `useId`, weil
+  // beliebig viele Instanzen gleichzeitig im DOM stehen.
+  const hinweisId = useId()
   // Gleiche Treffer-Optik wie das Segment: gelber Ring fuer den aktiven Treffer, ausgegraut,
   // wenn die Suche läuft und dieses Feld nicht trifft (Issue #128).
   const trefferRing = aktiv ? 'ring-2 ring-inset ring-yellow-400 dark:ring-yellow-500' : ''
@@ -29,9 +35,12 @@ export function EditierbarerText({ wert, platzhalter, onCommit, titel, className
       onVerworfen={() => toast.info(EINGABE_VERWORFEN)} />
   )
   return (
-    <button type="button" onClick={() => setEditing(true)} title={titel}
-      className={`cursor-text whitespace-pre-wrap rounded-sm text-left focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 ${className} ${trefferRing}${dimmen ? ' opacity-40' : ''}`}>
-      {wert.trim() || <span className="italic opacity-60">{platzhalter}</span>}
-    </button>
+    <>
+      <button type="button" onClick={() => setEditing(true)} title={titel} aria-describedby={hinweisId}
+        className={`cursor-text whitespace-pre-wrap rounded-sm text-left focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 ${className} ${trefferRing}${dimmen ? ' opacity-40' : ''}`}>
+        {wert.trim() || <span className="italic opacity-60">{platzhalter}</span>}
+      </button>
+      <span id={hinweisId} className="sr-only">{titel}</span>
+    </>
   )
 }

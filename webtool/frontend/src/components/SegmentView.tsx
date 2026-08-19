@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useId, useLayoutEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { CircleHelp, MessageSquare, MessageSquarePlus, Play, ScanSearch, TriangleAlert } from 'lucide-react'
 import type { Segment } from '@/lib/types'
@@ -27,6 +27,10 @@ export function SegmentView({ seg, active, onPlay, updateSegment, dimmen = false
 }) {
   const [editing, setEditing] = useState(false)
   const [showRaw, setShowRaw] = useState(false)
+  // Der Notiz-Streich-Hinweis (#244) per aria-describedby — SegmentView benutzt
+  // `EditierbarerText` nicht (eigener Knopf, eigenes Layout), erbt die Beschreibung also
+  // nicht. `useId`, weil 400 solcher Knoefe je Dokument im DOM stehen.
+  const notizHinweisId = useId()
   // EIN Zustand fuer die Notiz, obwohl zwei Knoepfe hineinfuehren (das Symbol, solange keine
   // Notiz da ist; die Notizzeile selbst, sobald eine steht). Zwei Zustaende waeren zwei
   // Wahrheiten darueber, ob das Feld offen ist.
@@ -139,10 +143,11 @@ export function SegmentView({ seg, active, onPlay, updateSegment, dimmen = false
                 }}
                 onCancel={() => setNotiz(false)}
                 onVerworfen={() => toast.info(EINGABE_VERWORFEN)} /></div>
-            : <button type="button" onClick={() => setNotiz(true)} title="Notiz bearbeiten (leeren streicht sie)"
+            : <><button type="button" onClick={() => setNotiz(true)} title="Notiz bearbeiten (leeren streicht sie)"
+                aria-describedby={notizHinweisId}
                 className={`flex-1 cursor-text whitespace-pre-wrap text-left text-xs italic leading-relaxed ${focusRing}`}>
                 {seg.note}
-              </button>}
+              </button><span id={notizHinweisId} className="sr-only">Notiz bearbeiten (leeren streicht sie)</span></>}
         </div>}
     </div>
   )
