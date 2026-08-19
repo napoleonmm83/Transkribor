@@ -103,6 +103,13 @@ export type DateiEinstellungen = ProjectEinstellungen & {
    *  Trennung wie bei `llm.available()` („Installiert != angemeldet"). Der Hilfetext im
    *  Dialog nennt deshalb `TRANSKRIBOR_DIARIZE` beim Namen und behauptet nichts Weiteres. */
   diarisierung_aktiv: boolean
+  /** Kann die Sprechertrennung in DIESER Umgebung rechnen (pyannote + Modell da, je
+   *  Serverlauf gecacht)? Der zweite Ausfallgrund neben `diarisierung_aktiv` — und der
+   *  wahrscheinlichere: fehlendes pyannote ist der Normalfall einer halb eingerichteten
+   *  Umgebung (#270). Deckt NICHT den Laufzeitfall (GPU voll): der bleibt best-effort
+   *  beim Lauf. Runtime-Guard wie beim Schwesterfeld: `=== false`, ein aelterer Server
+   *  ohne das Feld gilt als verfuegbar (Rueckfall zum bisherigen Verhalten). */
+  pyannote_da: boolean
 };
 /** `sprache: null` / `mehrsprachig: null` heisst AUSDRUECKLICH „Override entfernen" — das Feld
  *  wegzulassen laesst ihn stehen (Partial-Update). Unterschieden wird serverseitig an

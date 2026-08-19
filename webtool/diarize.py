@@ -16,6 +16,37 @@ import os
 DIAR_MODEL = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                           "models", "speaker-diarization-community-1", "config.yaml")
 _PIPELINE = None
+# pyannote-Verfuegbarkeit, je Prozess EINMAL gemessen (#270). None = noch nicht gefragt.
+_VERFUEGBAR: bool | None = None
+
+
+def verfuegbar() -> bool:
+    """Wird die Sprechertrennung in DIESER Umgebung rechnen können? (#270)
+
+    Beantwortet zwei der drei Ausfallgründe — pyannote fehlt, Modelldatei fehlt — nicht
+    aber den dritten (GPU voll / sonstiger Laufzeitfehler: der bleibt best-effort beim
+    Lauf, ein Vorab-Test hiesse torch im Request-Pfad importieren). Fuer genau die zwei
+    gemessenen Faelle reicht find_spec + Dateistat, und find_spec laedt torch NICHT.
+
+    Zwei Fallen, beide gemessen (Wellenplan 3): find_spec('pyannote.audio') **wirft**
+    ModuleNotFoundError, wenn schon das Parent-Paket fehlt — es liefert nicht None, ein
+    ungeschuetzter Aufruf waere ein 500 im GET des Datei-Dialogs. Und der GET laeuft bei
+    jedem Oeffnen des Dialogs: das Ergebnis wird deshalb je Prozess gecacht (Vorbild
+    `_HARDWARE` in app.py; die Antwort aendert sich zur Laufzeit nicht — die venv nicht).
+    """
+    global _VERFUEGBAR
+    if _VERFUEGBAR is None:
+        try:
+            # Funktion-lokaler Import: nimmt (auch im Test) den aktuellen Attributstand
+            # von importlib.util — und laedt pyannote/torch dabei zu keinem Zeitpunkt.
+            from importlib.util import find_spec
+            _VERFUEGBAR = (find_spec("pyannote.audio") is not None
+                           and os.path.exists(DIAR_MODEL))
+        except (ModuleNotFoundError, ValueError):
+            # ValueError: ungueltiger Modulname — fuer falsche Eingaben reserviert, hier
+            # unmoeglich, aber der Aufruf darf nie werfen (er sitzt in einem GET).
+            _VERFUEGBAR = False
+    return _VERFUEGBAR
 
 
 def _pipeline():

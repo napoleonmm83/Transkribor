@@ -18,6 +18,7 @@ const BASIS = {
   // Der Kill-Switch TRANSKRIBOR_DIARIZE ist an (Normalfall) — sonst waere das Feld
   // „Anzahl Sprecher" ein Schalter, der gespeichert wird und nichts tut (#266).
   diarisierung_aktiv: true,
+  pyannote_da: true,   // Normalfall: Sprechertrennung kann rechnen (#270)
   sprach_choices: [
     { id: 'ch', label: 'Schweizerdeutsch', hint: '' },
     { id: 'en', label: 'Englisch', hint: '' },
@@ -434,6 +435,48 @@ describe('DateiEinstellungenDialog — Sprecherzahl (#264)', () => {
     await sprachWaehlerDa()
     expect(feld()).not.toHaveAttribute('readonly')
     expect(feld()).not.toHaveAttribute('aria-disabled')
+    expect(screen.getByText(/zuverlässiger/)).toBeInTheDocument()
+  })
+
+  it('sperrt das Feld und nennt pyannote, wenn die Sprechertrennung fehlt (#270)', async () => {
+    // Vorher: der Dialog nahm die Zahl entgegen, der Lauf lief ohne Sprechertrennung
+    // durch — mit Erfolgsmeldung. Der Kill-Switch-Auskunft aus #266 fehlte genau der
+    // wahrscheinlichere der beiden Ausfallgruende: fehlendes pyannote als Normalfall
+    // einer halb eingerichteten Umgebung.
+    vi.spyOn(api, 'getFileEinstellungen')
+      .mockResolvedValue({ ...BASIS, pyannote_da: false, sprecher: 4 })
+    render(<DateiEinstellungenDialog project="p" base="a" file={datei()} offen />)
+    await sprachWaehlerDa()
+    expect(feld()).toHaveAttribute('readonly')
+    expect(feld()).toHaveAttribute('aria-disabled', 'true')
+    expect(feld()).toHaveAttribute('aria-describedby', 'fs-sprecher-hilfe')
+    expect(feld()).toHaveValue('4')
+    expect(screen.getByText(/pyannote oder das Diarisierungsmodell fehlt/)).toBeInTheDocument()
+    expect(screen.queryByText(/TRANSKRIBOR_DIARIZE/)).not.toBeInTheDocument()
+  })
+
+  it('der Kill-Switch-Text gewinnt, wenn BEIDES fehlt (#270)', async () => {
+    // Zwei Sperrgruende, ein Feld: der Text muss EINEN nennen, nicht beide mischen.
+    // Der Kill-Switch ist die bewusstere Entscheidung (wer ihn setzt, weiss was er tut)
+    // und nennt die Variable beim Namen — deshalb dominiert er.
+    vi.spyOn(api, 'getFileEinstellungen')
+      .mockResolvedValue({ ...BASIS, diarisierung_aktiv: false, pyannote_da: false })
+    render(<DateiEinstellungenDialog project="p" base="a" file={datei()} offen />)
+    await sprachWaehlerDa()
+    expect(screen.getByText(/TRANSKRIBOR_DIARIZE/)).toBeInTheDocument()
+  })
+
+  it('ein Server OHNE pyannote_da laesst die Zahl bedienbar (#270)', async () => {
+    // Dieselbe Begruendung wie beim #266-Feld darueber: Server und Bundle sind getrennt,
+    // ein aelterer Server kennt `pyannote_da` nicht. `!undefined` waere `true` — das Feld
+    // waere dauerhaft gesperrt, ohne dass irgendwo stuende, warum. Der Rueckfall geht zum
+    // bisherigen Verhalten (bedienbar), nicht in eine Sperre, die niemand aufheben kann.
+    const { pyannote_da: _weg, ...ALT } = BASIS
+    vi.spyOn(api, 'getFileEinstellungen')
+      .mockResolvedValue(ALT as unknown as typeof BASIS)
+    render(<DateiEinstellungenDialog project="p" base="a" file={datei()} offen />)
+    await sprachWaehlerDa()
+    expect(feld()).not.toHaveAttribute('readonly')
     expect(screen.getByText(/zuverlässiger/)).toBeInTheDocument()
   })
 

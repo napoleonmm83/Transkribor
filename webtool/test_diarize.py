@@ -129,3 +129,82 @@ def test_diarize_file_waehlt_num_speakers_ODER_min_speakers(monkeypatch):
     gesehen.clear()
     diarize.diarize_file("x.m4a", min_speakers=2, num_speakers=None)
     assert gesehen == {"min_speakers": 2}          # ohne Einstellung unveraendert wie vor #264
+
+
+# --- verfuegbar() (#270): pyannote-Verfügbarkeit für den Datei-Dialog ---------------
+
+import importlib.util
+
+
+class _Spec:
+    """Attrappe: find_spec liefert ein Objekt oder None — Inhalt ist egal."""
+
+
+def _patch_find_spec(monkeypatch, verhalten):
+    """find_spec so faelschen, dass diarize.verfuegbar() die Wirklichkeit nicht braucht.
+
+    `verhalten`: 'da' -> Objekt, 'weg' -> None, 'parent-weg' -> ModuleNotFoundError.
+    """
+    def fake(name, *a, **k):
+        assert name == "pyannote.audio", f"unerwarteter Modulname {name}"
+        if verhalten == "parent-weg":
+            # Genau das wirft find_spec, wenn schon das PARENT-Paket fehlt — der Fall,
+            # den die Auskunft melden soll, und die Falle aus dem Wellenplan (kein None!).
+            raise ModuleNotFoundError(f"No module named {name.rsplit('.', 1)[0]!r}")
+        return _Spec() if verhalten == "da" else None
+    monkeypatch.setattr(importlib.util, "find_spec", fake)
+
+
+def test_verfuegbar_wandelt_fehlenden_parent_nicht_in_einen_wurf(monkeypatch, tmp_path):
+    """find_spec('pyannote.audio') WIRFT ModuleNotFoundError, wenn schon 'pyannote' fehlt
+    (Wellenplan 3, Negativkontrolle 'gibtsnicht.audio') — es liefert nicht None. Der GET
+    des Datei-Dialogs haette also ein 500 in genau dem Fall, den er melden will."""
+    monkeypatch.setattr(diarize, "_VERFUEGBAR", None)
+    monkeypatch.setattr(diarize, "DIAR_MODEL", str(tmp_path / "gibt-es.yaml"))
+    _patch_find_spec(monkeypatch, "parent-weg")
+    assert diarize.verfuegbar() is False
+
+
+def test_verfuegbar_false_wenn_pyannote_fehlt(monkeypatch, tmp_path):
+    monkeypatch.setattr(diarize, "_VERFUEGBAR", None)
+    monkeypatch.setattr(diarize, "DIAR_MODEL", str(tmp_path / "gibt-es.yaml"))
+    _patch_find_spec(monkeypatch, "weg")
+    assert diarize.verfuegbar() is False
+
+
+def test_verfuegbar_false_wenn_das_modell_fehlt(monkeypatch, tmp_path):
+    """pyannote installiert, Modelldatei weg: dieselbe halb eingerichtete Umgebung, die
+    #270 beschreibt — die Sprechertrennung wuerde still ausfallen, das Feld blieb bedienbar."""
+    monkeypatch.setattr(diarize, "_VERFUEGBAR", None)
+    monkeypatch.setattr(diarize, "DIAR_MODEL", str(tmp_path / "fehlt.yaml"))
+    _patch_find_spec(monkeypatch, "da")
+    assert diarize.verfuegbar() is False
+
+
+def test_verfuegbar_true_mit_pyannote_und_modell(monkeypatch, tmp_path):
+    modell = tmp_path / "config.yaml"
+    modell.write_bytes(b"x")
+    monkeypatch.setattr(diarize, "_VERFUEGBAR", None)
+    monkeypatch.setattr(diarize, "DIAR_MODEL", str(modell))
+    _patch_find_spec(monkeypatch, "da")
+    assert diarize.verfuegbar() is True
+
+
+def test_verfuegbar_fragt_nur_einmal_pro_prozess(monkeypatch, tmp_path):
+    """Der GET laeuft bei jedem Oeffnen des Dialogs — die Antwort darf nicht jedes Mal
+    find_spec + Dateistat zahlen. Vorbild: _HARDWARE in app.py (einmal je Serverlauf)."""
+    modell = tmp_path / "config.yaml"
+    modell.write_bytes(b"x")
+    monkeypatch.setattr(diarize, "DIAR_MODEL", str(modell))
+    rufe = []
+    echt = importlib.util.find_spec
+
+    def zaehlend(name, *a, **k):
+        rufe.append(name)
+        return echt(name, *a, **k)
+    monkeypatch.setattr(diarize, "_VERFUEGBAR", None)
+    monkeypatch.setattr(importlib.util, "find_spec", zaehlend)
+    assert diarize.verfuegbar() is True
+    assert diarize.verfuegbar() is True
+    assert diarize.verfuegbar() is True
+    assert rufe == ["pyannote.audio"]

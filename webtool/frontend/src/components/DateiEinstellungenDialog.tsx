@@ -107,6 +107,10 @@ export function DateiEinstellungenDialog({ project, base, file, offen, onOpenCha
   // Das muss „laeuft" heissen: der Rueckfall geht zum bisherigen Verhalten, nicht in eine
   // Sperre, die niemand aufheben kann.
   const diarAus = data?.diarisierung_aktiv === false
+  // Zweiter Sperrgrund (#270), dieselbe `=== false`-Regel: pyannote oder das Modell
+  // fehlt — die Sprechertrennung wuerde still ausfallen, obwohl der Kill-Switch an ist.
+  const diarWeg = data?.pyannote_da === false
+  const diarGesperrt = diarAus || diarWeg
   const sprecherGeaendert = !!data && sprecherWahl !== undefined && sprecherWahl !== data.sprecher
   const tiefeGeaendert = !!data && korrektur !== data.korrektur
   // Beides zieht denselben Lauf nach sich: die Diarisierung ist ein Prep-Schritt von
@@ -254,8 +258,8 @@ export function DateiEinstellungenDialog({ project, base, file, offen, onOpenCha
               <input id="fs-sprecher" type="text" inputMode="numeric"
                 value={sprecherText}
                 onChange={e => setSprecherText(e.target.value)}
-                readOnly={diarAus}
-                aria-disabled={diarAus || undefined}
+                readOnly={diarGesperrt}
+                aria-disabled={diarGesperrt || undefined}
                 aria-describedby="fs-sprecher-hilfe"
                 aria-invalid={sprecherWahl === undefined || undefined}
                 placeholder="automatisch"
@@ -267,12 +271,21 @@ export function DateiEinstellungenDialog({ project, base, file, offen, onOpenCha
                 {diarAus
                   // Die Zeile nennt die Variable beim Namen, statt „die Sprechertrennung
                   // funktioniert nicht" zu behaupten: der Server weiss nur, dass der
-                  // Kill-Switch gesetzt ist — ob pyannote laufen WUERDE, sagt er nicht (#270).
-                  // Ohne `=0`: `diarize_enabled` akzeptiert auch `false` und `no`, ein
-                  // konkreter Wert waere also fuer zwei von drei Faellen falsch.
+                  // Kill-Switch gesetzt ist (#266). Ohne `=0`: `diarize_enabled`
+                  // akzeptiert auch `false` und `no`, ein konkreter Wert waere also fuer
+                  // zwei von drei Faelle falsch. Dominiert bewusst den pyannote-Text: wer
+                  // den Kill-Switch setzt, weiss was er tut — die Variable beim Namen zu
+                  // nennen ist die genauere Auskunft, wenn BEIDES fehlt.
                   ? 'Die Sprechertrennung ist auf diesem Server abgeschaltet '
                     + '(Umgebungsvariable TRANSKRIBOR_DIARIZE) — die Zahl hätte hier '
                     + 'keine Wirkung.'
+                  : diarWeg
+                  // Was hier fehlt, ist eine Sache der Umgebung, nicht einer Entscheidung:
+                  // pyannote oder das Modell sind nicht da (je Serverlauf gemessen, #270).
+                  // Die GPU-voll-Faelle bleiben aussen vor — die traegt nur der Lauf.
+                  ? 'Die Sprechertrennung ist in dieser Umgebung nicht verfügbar '
+                    + '(pyannote oder das Diarisierungsmodell fehlt) — die Zahl hätte '
+                    + 'hier keine Wirkung.'
                   : sprecherWahl === undefined
                   ? `Bitte eine ganze Zahl von 1 bis ${sprecherMax} eintragen — oder leer lassen.`
                   : 'Leer lassen heisst automatisch erkennen. Wer weiss, wie viele Personen '
