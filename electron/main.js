@@ -150,7 +150,12 @@ ipcMain.handle('einrichten', () => {
 // Der Rueckweg (#242): der laengste Lauf der App war der einzige ohne Abbruch.
 // Ohne laufende Einrichtung ist der Aufruf wirkungslos — der Knopf existiert nur waehrend eines Laufs.
 ipcMain.handle('einrichten:abbrechen', () => {
-  if (einrichtungLaeuft) setup.abbrechen()
+  if (einrichtungLaeuft) {
+    // Eine Zeile ins Protokoll: der Abbruch selbst schreibt nirgends hin, und die Datei
+    // existiert fuer genau solche Fragen (war der Lauf abgebrochen oder gestorben?).
+    senden('log', 'Abbruch angefordert — beende den laufenden Schritt …')
+    setup.abbrechen()
+  }
 })
 
 ipcMain.handle('logs', () => backend.log())
