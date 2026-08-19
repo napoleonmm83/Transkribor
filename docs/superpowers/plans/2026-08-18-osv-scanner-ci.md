@@ -367,6 +367,7 @@ jobs:
     permissions:
       contents: read
       actions: read
+      security-events: write
       # security-events: write ist NOETIG, obwohl upload-sarif false bleibt: der aufgerufene
       # Workflow deklariert das Recht intern, und der Aufrufer darf nicht WENIGER gewaehren
       # (Deckelungsregel — ohne die Zeile startup_failure, per Bisektion GEMESSEN 2026-08-18;
