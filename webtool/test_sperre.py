@@ -814,7 +814,9 @@ def test_freigabe_erkennt_ein_fremdes_lock_auch_OHNE_merker(tmp_path, monkeypatc
 # fehlender Name (umbenannt/geloescht) wird ebenso rot wie eine Bedingung, die auf
 # Windows ueberspringt. NICHT abgedeckt — und in pytest nicht abdeckbar — sind das
 # Zurueckbauen der Matrix in test.yml selbst und ein `pytest.skip()` mitten im
-# Testkoerper; ersteres koennte nur die CI-Seite pruefen.
+# Testkoerper; ersteres koennte nur die CI-Seite pruefen. Und die Kette endet HIER:
+# diesen Waechter selbst zu loeschen oder zu ueberspringen hat keine Folge — ein
+# Waechter-der-Waechter waere endlos, diese Spitze ist bewusst ungedeckt.
 
 _NUR_WINDOWS = (
     "test_windows_beantwortet_beide_openprocess_ausgaenge",
@@ -840,8 +842,12 @@ def test_die_drei_nur_windows_tests_laufen_auf_windows_wirklich():
             if marker.name == "skipif":
                 bedingung = marker.args[0] if marker.args else True
                 assert not bedingung, (
-                    f"{name} wuerde auch auf Windows uebersprungen: die skipif-"
-                    f"Bedingung ergibt {bedingung!r} (Issue #222)."
+                    f"{name} wuerde auf Windows uebersprungen (Bedingung {bedingung!r}). "
+                    "Policy (#222): diese drei Tests MUESSEN auf Windows laufen — ein neuer, "
+                    "berechtigter Grund, einen zu überspringen, gehoert als bewusste Aenderung "
+                    "an _NUR_WINDOWS und diesem Waechter her, nicht als Fehlalarm, den man "
+                    "wegdrückt. String-Bedingungen gelten als wahr: sie sind abgekündigter "
+                    "pytest-Stil und werden hier absichtlich laut."
                 )
 
 

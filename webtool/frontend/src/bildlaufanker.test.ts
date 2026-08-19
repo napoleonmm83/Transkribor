@@ -18,6 +18,16 @@
  * - `overflow-hidden` bleibt ausgeklammert: dieselbe Luecke, aber ueberall Zierrat
  *   (Text-Abschneiden), jeder Treffer waere Rauschen — dieselbe Abgrenzung wie im
  *   Hüllen-Test.
+ *
+ * Vier weitere Vektoren (heute null Fundstellen im Korpus, bewusst nur dokumentiert —
+ * ein Kommentar-Stripper oder Breakpoint-Paar-Scanner waere der Ueberbau fuer 4 Stellen):
+ * - FALSCH GRUEN: `className='…'` mit einfachen Anfuehrungszeichen matcht gar nicht —
+ *   der einzige Weg, dem Waechter unbemerkt zu entkommen.
+ * - FALSCH ROT: auskommentiertes JSX mit `className="… overflow-auto …"` matcht weiter.
+ * - FALSCH ROT: interpolierte Anker (`` className={`overflow-auto ${x ? 'relative' : ''}`} ``)
+ *   sind im Rohquelltext kein bare Token, obwohl der Anker zur Laufzeit existiert.
+ * - FALSCH ROT: responsive Varianten (`md:overflow-auto md:relative`) — der Anker muesste
+ *   paarweise je Breakpoint stehen, das kann ein Token-Vergleich nicht ausdruecken.
  */
 import { describe, it, expect } from 'vitest'
 

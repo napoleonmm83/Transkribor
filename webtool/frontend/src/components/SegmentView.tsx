@@ -7,6 +7,10 @@ import { gestrichen } from '@/lib/streichen'
 import { UncertainWord } from './UncertainWord'
 import { TextEditor, EINGABE_VERWORFEN } from './TextEditor'
 
+/** EINE Quelle für `title` und sr-only-Beschreibung (#244) — zwei Literale wuerden
+ *  still auseinanderdriften, und der Test pinnt die Gleichheit. */
+const NOTIZ_HINWEIS = 'Notiz bearbeiten (leeren streicht sie)'
+
 function fmt(t: number) { const s = Math.max(0, t | 0); return `${(s / 60) | 0}:${String(s % 60).padStart(2, '0')}` }
 
 /** Die Segment-Flags. Als Emoji (⚠ 🔇) rendern sie je nach System in einer fremden
@@ -143,11 +147,11 @@ export function SegmentView({ seg, active, onPlay, updateSegment, dimmen = false
                 }}
                 onCancel={() => setNotiz(false)}
                 onVerworfen={() => toast.info(EINGABE_VERWORFEN)} /></div>
-            : <><button type="button" onClick={() => setNotiz(true)} title="Notiz bearbeiten (leeren streicht sie)"
+            : <><button type="button" onClick={() => setNotiz(true)} title={NOTIZ_HINWEIS}
                 aria-describedby={notizHinweisId}
                 className={`flex-1 cursor-text whitespace-pre-wrap text-left text-xs italic leading-relaxed ${focusRing}`}>
                 {seg.note}
-              </button><span id={notizHinweisId} className="sr-only">Notiz bearbeiten (leeren streicht sie)</span></>}
+              </button><span id={notizHinweisId} className="sr-only">{NOTIZ_HINWEIS}</span></>}
         </div>}
     </div>
   )
