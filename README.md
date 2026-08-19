@@ -214,8 +214,9 @@ lokalen Modell entfällt auch das.
 <details>
 <summary><strong>Brauche ich Internet?</strong></summary>
 
-Nur zum Herunterladen und für die einmalige Einrichtung. Danach arbeitet das Transkribieren
-offline.
+Nur zum Herunterladen und für die einmalige Einrichtung. Die Transkription arbeitet danach
+offline; für die Korrektur über einen Onlinedienst brauchst du weiterhin Internet (ein
+lokales Modell braucht keins).
 
 </details>
 
@@ -347,8 +348,8 @@ einschliesslich `v0.22.0`** ist es das **unterste** Feld, und der Menüpunkt hei
 „Sprache, Korrektur & Sprecher“ bzw. in noch älteren „Sprache & Korrektur-Tiefe“.)
 
 Trag dort ein, wie viele Personen tatsächlich gesprochen haben — **dich als fragende Person
-mitgezählt**. Waren es du und drei Teammitglieder, ist die Antwort *vier*. Transkribor trennt
-die Stimmen danach genau in so viele auf, statt zu raten: an einer echten Aufnahme mit vier
+mitgezählt**. Waren es du und drei Teammitglieder, ist die Antwort *vier*. Transkribor nimmt
+diese Zahl als Vorgabe für die Sprechertrennung, statt zu raten: an einer echten Aufnahme mit vier
 Personen wurde aus „Interviewer plus eine Person“ eine saubere Trennung, bei der die Fragen
 wieder beim Fragenden standen.
 
@@ -400,7 +401,8 @@ arbeitet dann mit den Standardwerten weiter — dein hinterlegter API-Schlüssel
 mehr eingetragen. Die alte Datei wird aber **nicht** überschrieben, sondern daneben aufbewahrt;
 der Hinweis auf der Einstellungsseite nennt dir den genauen Pfad. Öffne sie mit einem
 Texteditor: der Schlüssel steht dort meistens noch lesbar drin, du kannst ihn zurück ins Feld
-kopieren. Danach räumt der Knopf unter dem Hinweis die Datei weg.
+kopieren. Der Schlüssel ist ein Geheimnis — die Datei weder weitergeben noch hochladen. Danach
+räumt der Knopf unter dem Hinweis die Datei weg.
 
 </details>
 
