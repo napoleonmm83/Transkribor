@@ -197,11 +197,13 @@ def test_verfuegbar_fragt_nur_einmal_pro_prozess(monkeypatch, tmp_path):
     modell.write_bytes(b"x")
     monkeypatch.setattr(diarize, "DIAR_MODEL", str(modell))
     rufe = []
-    echt = importlib.util.find_spec
 
+    # Gezählt, aber GEFÄLSCHT: der CI-Runner hat kein pyannote, das echte find_spec
+    # lieferte dort False — derselbe Läufer-Fehler wie beim `_ejs_untaeglich`-Pin in
+    # test_ytdlp_update.py. Der Cache ist der Gegenstand, nicht die Installation.
     def zaehlend(name, *a, **k):
         rufe.append(name)
-        return echt(name, *a, **k)
+        return _Spec()
     monkeypatch.setattr(diarize, "_VERFUEGBAR", None)
     monkeypatch.setattr(importlib.util, "find_spec", zaehlend)
     assert diarize.verfuegbar() is True
