@@ -87,7 +87,23 @@ jobs:
       scan-args: |-
         --lockfile=package-lock.json:./package-lock.json
         --lockfile=package-lock.json:./webtool/frontend/package-lock.json
-  
+
+  # Das npm-Pendant des Freeze-Waechters: verschwindet oder wandert ein Lockfile,
+  # scannt osv-pr leer — und der Reusable-Workflow schluckt den Fehler still
+  # (google/osv-scanner-action#71, Scan-Exit 128 failt den Job nicht). Dieser
+  # Job macht genau das rot, was sonst gruen durchginge (Review-Fund).
+  lockfiles-da:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: Beide npm-Lockfiles existieren
+        run: |
+          test -f package-lock.json
+          test -f webtool/frontend/package-lock.json
+
   osv-voll:
     if: github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     permissions:
@@ -105,4 +121,3 @@ jobs:
         --lockfile=package-lock.json:./webtool/frontend/package-lock.json
         --lockfile=requirements.txt:./requirements-resolved.txt
       fail-on-vuln: false
-  # 
