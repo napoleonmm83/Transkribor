@@ -47,17 +47,16 @@ yt_dlp = None
 _PIP_HINWEIS = r'.venv\Scripts\python.exe -m pip install -U "yt-dlp[default]"'
 # Instagram/YouTube melden Login-Zwang in vielen Formulierungen; hier grob abgedeckt.
 _LOGIN_RE = re.compile(r"login|log in|sign in|private|not available|rate.?limit|cookies|bot", re.I)
-# Wonach ein VERALTETER Extraktor aussieht. Bewusst eine Positivliste: eine fremde Plattform,
-# fehlendes ffmpeg oder ein privates Video loesen damit KEINE Aktualisierung aus — ein pip bis
-# 120 s fuer einen Fehler, den es nicht reparieren kann, waere reine Wartezeit.
-# `requested format is not available` stand hier und war TOTER CODE: `_LOGIN_RE` enthaelt
-# `not available`, und das Veto unten schlaegt die Positivliste. Nachgemessen an der echten
-# yt-dlp-Meldung. Die Alternative — `_LOGIN_RE` auf `content is not available` schaerfen —
-# waere die schlechtere: `This video is not available` (entfernt/geosperrt) verloere damit
-# seine richtige Meldung "nicht oeffentlich abrufbar" UND loeste ein pip fuer nichts aus.
-# Formatfehler heilen sich deshalb nicht selbst; das steht in #173.
-_EXTRAKTOR_RE = re.compile(r"\b40[13]\b|unable to extract|failed to extract|nsig|signature",
-                           re.I)
+# Eigenfehler, den kein yt-dlp-Update reparieren kann. Seit #173 ist das die EINZE Ausnahme-
+# liste der Selbstheilung: eine Positivliste bekannter Extraktor-Formulierungen war geraten
+# (ein gemessener Fall plus plausible yt-dlp-Meldungen), und was sie verfehlte, heilte nie —
+# der Nutzer stand wieder an der Konsole, obwohl die Selbstheilung genau dafuer gebaut wurde.
+# Ein falscher Verdacht kostet dagegen hoechstens ein pip pro Lauf (`geheilt` in main);
+# ein verfehlter kostet die Funktion selbst. Also verdächtig, AUSSER Vorbedingung und Login-
+# Veto. Erbt von ValueError, weil check_url sie wirft und app.py am Endpunkt genau
+# `ValueError` fängt (-> 400) — erbt sie nicht, wird jeder URL-Fehler dort ein 500.
+class Vorbedingung(ValueError):
+    pass
 
 
 def _importiere_yt_dlp():
@@ -110,18 +109,27 @@ def _neu_laden() -> None:
 
 
 def _extraktor_verdacht(exc: Exception) -> bool:
-    """Sieht der Fehlschlag nach einem veralteten Extraktor aus — lohnt sich also ein Update?
+    """Sieht der Fehlschlag nach etwas aus, das ein yt-dlp-Update reparieren könnte?
 
-    Das Veto zaehlt: eine Meldung kann BEIDE Muster treffen ("Unable to extract nsig; use
-    --cookies-from-browser"), und dann gilt der Login-Verdacht — ein Update repariert eine
-    fehlende Anmeldung nie.
+    Seit #173 umgedreht: JEDER Fehlschlag ist Verdacht — eine Positivliste bekannter
+    Extraktor-Formulierungen waere Ratearbeit, und was sie verfehlte, heilte nie (der
+    Fehlschlag, den niemand kennt, ist der zukünftige Instagram-Bruch). Zwei Ausnahmen:
 
-    `\\b40[13]\\b` trifft auch in fremdgesteuertem Text (Videotitel, Fehlertext der Plattform).
-    Erzwingbar ist damit **ein** pip-Lauf pro Job, mit fester Argumentliste und Zeitdeckel —
-    Wartezeit, kein Hebel: der Befehl haengt an keiner Eingabe.
+    1. `Vorbedingung` — Eigenfehler (check_url, ffmpeg, yt-dlp fehlt/aktualisiert sich gerade,
+       Spracheintrag). Ein pip repariert sie nicht und startete teils ein drittes auf dieselbe
+       venv (#253).
+    2. Das Login-Veto — eine Meldung kann BEIDE Muster treffen ("Unable to extract nsig; use
+       --cookies-from-browser"), und dann gilt der Login-Verdacht: ein Update repariert eine
+       fehlende Anmeldung nie.
+
+    Ein falscher Verdacht (Netz weg, 404, Festplatte voll) kostet **ein** pip-Lauf pro Job,
+    mit fester Argumentliste und Zeitdeckel — Wartezeit, kein Hebel: der Befehl haengt an
+    keiner Eingabe. Die Rohmeldung samt Urteil landet fuer genau diese Faelle im Job-Log
+    (`_roh_ins_log`), damit sich die Ausnahmen an echtem Material nachpruefen lassen.
     """
-    msg = str(exc)
-    return bool(_EXTRAKTOR_RE.search(msg)) and not _LOGIN_RE.search(msg)
+    if isinstance(exc, Vorbedingung):
+        return False
+    return not _LOGIN_RE.search(str(exc))
 
 
 def _js_runtime_pfad() -> str:
@@ -204,11 +212,11 @@ def _rohmeldung(exc: Exception) -> str:
 
     `_human_error` glaettet auf einen von drei Saetzen und nimmt vorher nur die **letzte**
     Zeile (`roh.splitlines()[-1]`). Damit ist nach dem Protokollieren nicht mehr
-    rekonstruierbar, welche Formulierung yt-dlp wirklich benutzt hat — und genau daran
-    haengt `_EXTRAKTOR_RE`: seine Positivliste stammt aus EINEM gemessenen Fall (#162)
-    plus plausiblen Formulierungen. Ohne die Rohmeldung im Log gibt es bei einem echten
-    Instagram-Bruch keine Evidenz, an der die Liste nachzuziehen waere; „warten auf echte
-    Fehlschlaege" ist dann ein Plan ohne Endpunkt.
+    rekonstruierbar, welche Formulierung yt-dlp wirklich benutzt hat. Die Liste der
+    Ausnahmen (`Vorbedingung`, `_LOGIN_RE`) ist seit #173 kurz — aber jede Meldung, die
+    trotzdem einen pip-Lauf ausloest, ist ein Kandidat fuer eine weitere Ausnahme, und ohne
+    Rohmeldung im Log gibt es dafuer keine Evidenz; „warten auf echte Fehlschlaege" waere
+    dann ein Plan ohne Endpunkt.
 
     **Einzeilig**, weil `jobPhases.ts` das Protokoll zeilenweise liest und jede Zeile ohne
     `[fetch] `-Praefix in seine Datei-Regexes fiele. **Gedeckelt**, siehe `_ROH_MAX`.
@@ -244,10 +252,10 @@ def check_url(url: str) -> str:
     url = (url or "").strip()
     u = urlparse(url)
     if u.scheme != "https":
-        raise ValueError(f"nur https-URLs werden unterstützt: {url!r}")
+        raise Vorbedingung(f"nur https-URLs werden unterstützt: {url!r}")
     if (u.hostname or "").lower() not in ALLOWED_HOSTS:
-        raise ValueError(f"nicht unterstützte Plattform: {u.hostname or url!r} "
-                         f"(erlaubt sind YouTube und Instagram)")
+        raise Vorbedingung(f"nicht unterstützte Plattform: {u.hostname or url!r} "
+                           f"(erlaubt sind YouTube und Instagram)")
     return url
 
 
@@ -330,7 +338,7 @@ def download_one(project: str, url: str) -> str:
     # vor die, die es nicht tut. (Bis #253 war das dringlicher — damals konnte der Griff ein
     # pip von bis zu 120 s ausloesen; die Kalenderpruefung liegt jetzt am Serverstart.)
     if not transcribe.ensure_ffmpeg():
-        raise RuntimeError("ffmpeg nicht gefunden — installiere: winget install Gyan.FFmpeg")
+        raise Vorbedingung("ffmpeg nicht gefunden — installiere: winget install Gyan.FFmpeg")
     ydl_modul = _hole_yt_dlp()
     if ydl_modul is None:
         # **Das ist, was #253 NEU aufmacht.** Der Kalenderlauf liegt jetzt im Serverprozess
@@ -340,17 +348,18 @@ def download_one(project: str, url: str) -> str:
         #
         # Ohne diese Abfrage saehe der Nutzer drei falsche Dinge auf einmal: eine Meldung, die
         # „nicht installiert" behauptet, obwohl gerade INSTALLIERT wird; keine Selbstheilung
-        # (`_EXTRAKTOR_RE` trifft diesen Text nicht); und einen Rat, der ein DRITTES pip auf
-        # dieselbe venv startet.
+        # (beide Wuerfe sind `Vorbedingung`, #173 — ein pip repariert ein laufendes pip
+        # nicht, es startete nur ein zweites auf dieselbe venv); und einen Rat, der ein
+        # DRITTES pip auf dieselbe venv startet.
         #
         # Gefragt wird die Sperre, nicht `_lauf`: der Lauf sitzt in einem anderen Prozess —
         # dieselbe Begruendung wie bei `zustand()["laeuft"]` (#243). `wird_gehalten` ist eine
         # Momentaufnahme und taugt nur fuer die AUSKUNFT; eine Entscheidung daraus abzuleiten
         # baute genau die Race nach, gegen die die Sperre steht.
         if ytdlp_update.laeuft_gerade():
-            raise RuntimeError("yt-dlp wird gerade aktualisiert — bitte gleich noch einmal "
+            raise Vorbedingung("yt-dlp wird gerade aktualisiert — bitte gleich noch einmal "
                                "versuchen (der Import braucht den Downloader).")
-        raise RuntimeError(f"yt-dlp ist nicht installiert — {_PIP_HINWEIS}")
+        raise Vorbedingung(f"yt-dlp ist nicht installiert — {_PIP_HINWEIS}")
     adir = os.path.join(paths.project_dir(project), "audio")
     os.makedirs(adir, exist_ok=True)
 
@@ -378,7 +387,15 @@ def download_one(project: str, url: str) -> str:
         # Aufruf — und `""` landete dann als Sprach-Eintrag in projekt.json, vorbei an
         # `pruef_fehler` (das auf diesem Weg nicht laeuft). Der Datei-Dialog legte so einen
         # Eintrag als LEEREN Waehler vor, samt „neu transkribieren", das mit 400 endete (#234).
-        projekt.setze_datei(project, base, sprache=sprache or None, mehrsprachig=mehr)
+        #
+        # Vorbedingung statt Rohwurf (#173): der Eintrag laeuft NACH dem gelungenen Download.
+        # Als 'fremder' Fehlschlag wuerde er seit der Umkehr pip + Wiederholung ausloesen —
+        # und der Wiederholungsdownload legte die Datei per unique_base ein ZWEITES Mal ab,
+        # obwohl sie schon da war.
+        try:
+            projekt.setze_datei(project, base, sprache=sprache or None, mehrsprachig=mehr)
+        except Exception as e:
+            raise Vorbedingung(f"Spracheintrag nach dem Download fehlgeschlagen: {e}") from e
     return base
 
 
@@ -416,8 +433,9 @@ def main(argv=None):
     geladen = []
     geheilt = False        # hoechstens EIN pip pro Lauf, egal wie viele URLs brechen
     def _roh_ins_log(fehler: Exception) -> None:
-        """#173: die Rohmeldung samt Urteil der Positivliste. Erst beides nebeneinander
-        beantwortet die offene Frage — haette `_EXTRAKTOR_RE` diesen Fall getroffen?
+        """#173: die Rohmeldung samt Urteil. Erst beides nebeneinander beantwortet die
+        offene Frage — war dieser Fehlschlag ein pip-Lauf wert, und wenn ja (oder nein),
+        warum?
 
         **Gerufen bei JEDEM Fehlschlag, auch bei dem, der gleich geheilt wird.** Der
         Wiederholversuch ueberschreibt `fehler`; stuende die Zeile nur am Schleifenende,
