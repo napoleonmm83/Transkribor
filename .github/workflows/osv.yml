@@ -56,7 +56,7 @@ jobs:
         with:
           python-version: '3.13'
       - run: python scripts/osv_freeze.py
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v7
         with:
           name: osv-python-freeze
           path: requirements-resolved.txt
