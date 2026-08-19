@@ -90,7 +90,8 @@
 
   <div class="zeile">
     <button id="los" style="display:none">Jetzt einrichten</button>
-    <button id="logbtn" class="leise">Details</button>
+    <button id="abbrechen" class="leise" style="display:none" title="Bricht den Lauf ab — die Einrichtung wird beim nächsten Start wieder angeboten">Abbrechen</button>
+    <button id="logbtn" class="leise" autofocus>Details</button>
     <button id="datei" class="leise" title="Vollständiges Protokoll im Dateimanager zeigen">Protokoll öffnen</button>
     <span id="phase"></span>
   </div>
@@ -205,13 +206,43 @@ $('datei').onclick = async () => {
   const p = await window.transkribor.protokollOeffnen()
   $('phase').textContent = 'Protokoll: ' + p
 }
+// Zwei-Schritt-Knopf (#242): der Start-Knopf ist das erste fokussierbare Element der
+// Seite — Leertaste oder Enter loesten ihn aus, und er startet 10–30 Minuten und mehrere
+// GB ohne Rueckfrage. Der erste Klick macht nur SCHARF (nennt Grösse und Dauer), der
+// zweite startet. Ein Enter-Wegdriften trifft damit hoechstens die Scharf-Stellung.
+// Der Fokus liegt ausserdem bewusst auf „Details“ (autofocus) — der teure Knopf ist
+// nicht mehr der Standard.
+let scharf = false
 $('los').onclick = async () => {
-  $('los').disabled = true
+  if (!scharf) {
+    scharf = true
+    $('los').textContent = 'Wirklich einrichten? (mehrere GB, je nach Leitung 10–30 Min.) — nochmal klicken'
+    return
+  }
+  scharf = false
+  $('los').style.display = 'none'
+  $('abbrechen').style.display = ''
   laeuft(true)
   $('fehler').style.display = 'none'
   log.style.display = 'block'
-  await window.transkribor.einrichten()
+  const r = await window.transkribor.einrichten()
+  $('abbrechen').style.display = 'none'
+  if (r && r.abgebrochen) {
+    // Ein gewollter Abbruch ist kein Fehler (#242): kein roter Kasten, der Balken weg,
+    // der Knopf fuer einen erneuten Versuch frei. Merker ungeschrieben => venv gilt als
+    // veraltet, die Seite fragt beim naechsten Start wieder (#181-Konsistenz).
+    laeuft(false)
+    $('phase').textContent = ''
+    $('sub').textContent = 'Abgebrochen — die Einrichtung wird beim nächsten Start wieder angeboten.'
+    $('los').textContent = 'Erneut versuchen'
+    $('los').style.display = ''
+  }
+  // Ohne Abbruch: bei Erfolg laedt die App selbst; bei Fehler stellt der 'fehler'-
+  // Kanal den Knopf als „Erneut versuchen“ wieder her.
 }
+// Der Rueckweg (#242): der Knopf existiert nur waehrend eines Laufs; ohne laufende
+// Einrichtung ist der IPC-Aufruf wirkungslos.
+$('abbrechen').onclick = () => window.transkribor.abbrechen()
 
 window.transkribor.status().then(zeigeStatus)
 </script>
