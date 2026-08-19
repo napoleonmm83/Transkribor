@@ -74,13 +74,16 @@ def pruefe_anzahl(n: int) -> None:
 
 
 def pruefe_torch(abbild: dict) -> None:
-    """torch ohne +cu128-Suffix ist der PyPI-Build — die Paketzahl wuerde ihn
-    nicht auffallen (Review-Fund: der Zaehler prueft Menge, nicht Eigenschaft)."""
-    if "+" not in abbild.get("torch", ""):
-        print(f"torch fehlt im Abbild oder traegt kein lokales Suffix "
-              f"(got '{abbild.get('torch', '<fehlt>')}') — das waere der PyPI-CPU-Build, "
-              f"nicht der ausgelieferte CUDA-Build. Scan abgebrochen.", file=sys.stderr)
-        raise SystemExit(1)
+    """torch/torchaudio ohne lokales Suffix sind die PyPI-Builds — die Paketzahl
+    wuerde sie nicht auffallen (Review-Fund: der Zaehler prueft Menge, nicht
+    Eigenschaft). torchaudio gehoert dazu: es pinnt torch exakt, eine stille
+    PyPI-Version im Abbild waere die falsche Fassung."""
+    for name in ("torch", "torchaudio"):
+        if "+" not in abbild.get(name, ""):
+            print(f"{name} fehlt im Abbild oder traegt kein lokales Suffix "
+                  f"(got '{abbild.get(name, '<fehlt>')}') — das waere der PyPI-CPU-Build, "
+                  f"nicht der ausgelieferte CUDA-Build. Scan abgebrochen.", file=sys.stderr)
+            raise SystemExit(1)
 
 
 def _pip_report(ziel: str, *argumente: str) -> None:
