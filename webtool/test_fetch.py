@@ -203,7 +203,7 @@ def test_download_one_ohne_ffmpeg_bricht_vor_dem_download_ab(projekt, monkeypatc
     monkeypatch.setattr(transcribe_mod, "ensure_ffmpeg", lambda: False)
     monkeypatch.setattr(_FakeYDL, "extract_info",
                         lambda *a, **k: pytest.fail("ohne ffmpeg darf nichts geladen werden"))
-    with pytest.raises(RuntimeError, match="ffmpeg"):
+    with pytest.raises(fetch.Vorbedingung, match="ffmpeg"):
         fetch.download_one("Demo", "https://youtu.be/vid123")
 
 
@@ -213,7 +213,7 @@ def test_download_one_ohne_yt_dlp_meldet_klar(projekt, monkeypatch):
     # ausgehen — genau das tut er auf einem Rechner ohne das Paket.
     monkeypatch.setattr(fetch, "yt_dlp", None)
     monkeypatch.setattr(fetch, "_importiere_yt_dlp", lambda: None)
-    with pytest.raises(RuntimeError, match="yt-dlp"):
+    with pytest.raises(fetch.Vorbedingung, match="yt-dlp"):
         fetch.download_one("Demo", "https://youtu.be/vid123")
 
 
@@ -275,15 +275,18 @@ def test_rohmeldung_bewahrt_was_human_error_wegwirft(projekt, capsys):
     assert "extraktor-verdacht=True" in rohzeile
 
 
-def test_rohmeldung_meldet_AUCH_einen_fall_den_die_liste_NICHT_trifft(projekt, capsys):
-    """Der eigentliche Ertrag: ein Fehlschlag, den `_EXTRAKTOR_RE` verfehlt, ist der Fall,
-    den #173 sucht — er loest keine Selbstheilung aus und war bisher unsichtbar."""
+def test_rohmeldung_meldet_auch_den_fremden_fall_mit_seinem_urteil(projekt, capsys):
+    """Dieser Fehlschlag war der Ertrag des alten Tests — und der Beweis, dass die Positivliste
+    geraten war: „isn't available" (NICHT „not available" — das Login-Veto trifft ihn nicht)
+    verfehlte `_EXTRAKTOR_RE`, loeste also keine Selbstheilung aus und war unsichtbar. Seit
+    #173 ist er Verdacht (True) — und wenn sich an echtem Material zeigt, dass er keines war,
+    ist diese Rohzeile die Evidenz, an der die Ausnahmeliste wächst."""
     _FakeYDL.fehler = RuntimeError("ERROR: Sorry, this content isn't available right now")
     with pytest.raises(SystemExit):
         fetch.main(["Demo", "https://www.instagram.com/reel/C8xY2pQr/"])
     rohzeile = next(z for z in capsys.readouterr().out.splitlines()
                     if z.startswith("[fetch] roh"))
-    assert "extraktor-verdacht=False" in rohzeile
+    assert "extraktor-verdacht=True" in rohzeile
     assert "isn't available right now" in rohzeile
 
 
@@ -295,9 +298,10 @@ _MARKE = "[test] heilungsversuch startet"
 def test_rohmeldung_der_AUSLOESENDEN_meldung_geht_nicht_verloren(projekt, monkeypatch, capsys):
     """Loest der erste Fehlschlag die Selbstheilung aus, ueberschreibt der Wiederholversuch
     `fehler`. Stuende die Rohzeile nur am Schleifenende, fehlte ausgerechnet die AUSLOESENDE
-    Meldung — also genau die, an der `_EXTRAKTOR_RE` nachzuziehen waere. Der Zweck von #173
-    waere damit ausgehebelt, und das Protokoll laese sich obendrein widerspruechlich:
-    „yt-dlp aktualisiert" direkt ueber einem `extraktor-verdacht=False`.
+    Meldung — also genau die, an der die Ausnahmeliste (`Vorbedingung`, `_LOGIN_RE`)
+    nachzuziehen waere. Der Zweck von #173 waere damit ausgehebelt, und das Protokoll laese
+    sich obendrein widerspruechlich: „yt-dlp aktualisiert" direkt ueber einem
+    `extraktor-verdacht=False`.
 
     Gefunden vom Reviewer-Subagenten an PR #223 (M1), nicht von einem roten Test.
     """
@@ -305,7 +309,10 @@ def test_rohmeldung_der_AUSLOESENDEN_meldung_geht_nicht_verloren(projekt, monkey
 
     def heilen(erzwingen=False):
         print(_MARKE, flush=True)      # Zeitmarke: ab hier laeuft der Heilungsversuch
-        _FakeYDL.fehler = RuntimeError("ERROR: Sorry, this content isn't available")
+        # Bewusst eine VETO-treffende Meldung („not available"): der zweite Versuch soll
+        # nach der Heilung endgültig scheitern — Verdacht False, kein dritter Versuch.
+        _FakeYDL.fehler = RuntimeError(
+            "ERROR: Requested content is not available, login required")
         return True
     monkeypatch.setattr(fetch.ytdlp_update, "automatisch", heilen)
     monkeypatch.setattr(fetch, "_importiere_yt_dlp", lambda: _FakeYtDlp)   # fuer _neu_laden()
@@ -322,7 +329,7 @@ def test_rohmeldung_der_AUSLOESENDEN_meldung_geht_nicht_verloren(projekt, monkey
     # (CodeRabbit an PR #223.)
     assert zeilen.index(rohzeilen[0]) < zeilen.index(_MARKE)
     assert "nsig extraction failed" in rohzeilen[0] and "verdacht=True" in rohzeilen[0]
-    assert "isn't available" in rohzeilen[1] and "verdacht=False" in rohzeilen[1]
+    assert "not available" in rohzeilen[1] and "verdacht=False" in rohzeilen[1]
 
 
 def test_rohmeldung_ist_einzeilig_und_gedeckelt():
@@ -520,27 +527,26 @@ def test_selbstheilung_NICHT_bei_login_pflicht(projekt, monkeypatch):
 
 
 def test_login_veto_schlaegt_den_extraktor_verdacht(projekt):
-    """Der einzige Test, der das `and not _LOGIN_RE` wirklich ausuebt.
+    """Der einzige Test, der das Login-Veto wirklich ausuebt.
 
-    Die beiden Tests darunter treffen `_EXTRAKTOR_RE` gar nicht (nachgemessen) — sie waeren
-    auch ohne das Veto gruen, es liess sich ersatzlos loeschen. Diese Meldung trifft BEIDE
-    Muster: `nsig` steht in der Positivliste, `cookies` im Veto. Ein Update repariert eine
-    fehlende Anmeldung nie, also darf sie keine Selbstheilung ausloesen.
+    Seit #173 ist JEDER Fehlschlag Verdacht — die Meldung hier wuerfe ohne Veto also
+    Selbstheilung aus („Unable to extract" liest sich wie ein kaputter Extraktor). Aber
+    `cookies` steht im Veto, und ein Update repariert eine fehlende Anmeldung nie: das Veto
+    gewinnt gegen den Verdacht. Ohne diesen Test liesse sich das Veto ersatzlos loeschen.
     """
     e = RuntimeError("ERROR: Unable to extract nsig; use --cookies-from-browser")
-    assert fetch._EXTRAKTOR_RE.search(str(e))      # Positivliste trifft …
-    assert fetch._LOGIN_RE.search(str(e))          # … und das Veto auch
-    assert fetch._extraktor_verdacht(e) is False   # … das Veto gewinnt
+    assert fetch._LOGIN_RE.search(str(e))          # das Veto trifft …
+    assert fetch._extraktor_verdacht(e) is False   # … und gewinnt gegen den Verdacht
 
 
 def test_formatfehler_wird_nicht_als_extraktor_verdacht_geraten(projekt):
-    """`requested format is not available` stand in _EXTRAKTOR_RE und war TOTER CODE:
-    `_LOGIN_RE` enthaelt `not available` und schlug die Positivliste. Der Zweig ist raus;
-    dieser Test haelt fest, was daraus folgt — die Meldung gilt als Login-Fall (#173).
+    """`requested format is not available` stand mal in der alten Positivliste und war TOTER
+    CODE: `_LOGIN_RE` enthaelt `not available` und schlug sie. Dieser Test haelt fest, was
+    daraus folgt — die Meldung gilt weiterhin als Login-Fall, auch ohne Positivliste (#173).
 
-    **Er prueft NICHT das Veto**: seit der Streichung trifft die Meldung `_EXTRAKTOR_RE` gar
-    nicht mehr, er waere also auch ohne das Veto gruen. Dafuer gibt es den Test darueber.
-    """
+    **Er uebt das Veto nur beilaeufig aus** (dafuer, dass es sich wirklich meldet, gibt es
+    den Test darueber); sein eigener Gegenstand ist das Ergebnis: kein Verdacht, und die
+    uebersetzte Meldung fuer den Nutzer."""
     e = RuntimeError("ERROR: [youtube] abc: Requested format is not available. Use --list-formats")
     assert fetch._extraktor_verdacht(e) is False
     assert "nicht öffentlich abrufbar" in fetch._human_error(e)
@@ -600,13 +606,14 @@ def test_import_waehrend_einer_aktualisierung_sagt_das_auch(projekt, monkeypatch
     das nicht, weil der Import das pip gerade abwartete.
 
     Ohne diese Abfrage saehe der Nutzer drei falsche Dinge auf einmal: „nicht installiert",
-    waehrend gerade INSTALLIERT wird; keine Selbstheilung (`_EXTRAKTOR_RE` trifft den Text
-    nicht); und einen Rat, der ein DRITTES pip auf dieselbe venv startet.
+    waehrend gerade INSTALLIERT wird; keine Selbstheilung (beide Wuerfe sind `Vorbedingung`, #173 —
+    ein pip repariert ein laufendes pip nicht); und einen Rat, der ein DRITTES pip auf
+    dieselbe venv startet.
     """
     monkeypatch.setattr(fetch, "yt_dlp", None)
     monkeypatch.setattr(fetch, "_importiere_yt_dlp", lambda: None)   # pips Luecke
     monkeypatch.setattr(fetch.ytdlp_update, "laeuft_gerade", lambda *a: True)
-    with pytest.raises(RuntimeError, match="wird gerade aktualisiert"):
+    with pytest.raises(fetch.Vorbedingung, match="wird gerade aktualisiert"):
         fetch.download_one("Demo", "https://youtu.be/vid123")
 
 
@@ -617,7 +624,7 @@ def test_ohne_laufende_aktualisierung_bleibt_es_bei_nicht_installiert(projekt, m
     monkeypatch.setattr(fetch, "yt_dlp", None)
     monkeypatch.setattr(fetch, "_importiere_yt_dlp", lambda: None)
     monkeypatch.setattr(fetch.ytdlp_update, "laeuft_gerade", lambda *a: False)
-    with pytest.raises(RuntimeError, match="nicht installiert"):
+    with pytest.raises(fetch.Vorbedingung, match="nicht installiert"):
         fetch.download_one("Demo", "https://youtu.be/vid123")
 
 
@@ -700,3 +707,87 @@ def test_leere_fetch_sprache_schreibt_KEINEN_eintrag(projekt, monkeypatch):
     # Die Gegenprobe im selben Lauf: der Haken MUSS ankommen — sonst waere die Zusicherung
     # oben auch dann gruen, wenn `setze_datei` gar nicht gerufen wuerde.
     assert _p.datei_mehrsprachig("Demo", base) is True
+
+
+# --- Extraktor-Verdacht, umgedreht (#173) ------------------------------------
+
+def test_unbekannter_fremder_fehler_loest_die_selbstheilung_aus(projekt, monkeypatch):
+    """#173, der Kern der Umkehr: eine Meldung, die KEINE bekannte Formulierung trifft,
+    ist der Fall, den die alte Positivliste verfehlte — und genau der war der Schaden:
+    kein Update, der Nutzer wieder an der Konsole, obwohl die Selbstheilung dafuer
+    gebaut wurde. Ein falscher Treffer kostet hoechstens ein pip pro Lauf (`geheilt`);
+    ein verfehlter kostet die Funktion selbst. Also: alles ist Verdacht, AUSSER
+    Eigenfehlern (Vorbedingung) und dem Login-Veto."""
+    _FakeYDL.fehler = RuntimeError("ERROR: something completely unexpected broke")
+    versuche = []
+    monkeypatch.setattr(fetch.ytdlp_update, "automatisch",
+                        lambda *a, **k: versuche.append(1) or False)
+    with pytest.raises(SystemExit):
+        fetch.main(["Demo", "https://youtu.be/vid123"])
+    assert versuche == [1]
+
+
+def test_vorbedingung_erbt_valueerror():
+    """check_url wirft sie, und app.py fängt am Endpunkt genau `ValueError` (-> 400).
+    Erbt die Klasse nicht davon, wird jeder URL-Fehler dort ein 500 — der Typ ist der
+    Vertrag, nicht die Basisklassenwahl eine Geschmacksfrage."""
+    assert issubclass(fetch.Vorbedingung, ValueError)
+
+
+def test_check_url_wirft_die_vorbedingung():
+    with pytest.raises(fetch.Vorbedingung, match="Plattform"):
+        fetch.check_url("https://vimeo.com/1")
+
+
+def test_ffmpeg_fehlen_ist_eine_vorbedingung(projekt, monkeypatch):
+    monkeypatch.setattr(transcribe_mod, "ensure_ffmpeg", lambda: False)
+    with pytest.raises(fetch.Vorbedingung, match="ffmpeg"):
+        fetch.download_one("Demo", "https://youtu.be/vid123")
+
+
+def test_yt_dlp_fehlen_ist_eine_vorbedingung(projekt, monkeypatch):
+    monkeypatch.setattr(fetch, "yt_dlp", None)
+    monkeypatch.setattr(fetch, "_importiere_yt_dlp", lambda: None)
+    with pytest.raises(fetch.Vorbedingung, match="yt-dlp"):
+        fetch.download_one("Demo", "https://youtu.be/vid123")
+
+
+def test_laufendes_update_ist_eine_vorbedingung(projekt, monkeypatch):
+    monkeypatch.setattr(fetch, "yt_dlp", None)
+    monkeypatch.setattr(fetch, "_importiere_yt_dlp", lambda: None)
+    monkeypatch.setattr(fetch.ytdlp_update, "laeuft_gerade", lambda: True)
+    with pytest.raises(fetch.Vorbedingung, match="aktualisiert"):
+        fetch.download_one("Demo", "https://youtu.be/vid123")
+
+
+def test_vorbedingungen_loesen_kein_update_aus(projekt, monkeypatch):
+    """Die Kehrseite der Umkehr: waere NUR die Positivliste gestrichen, wuerde jetzt JEDER
+    Fehlschlag heilen — auch der fehlende Downloader selbst, der #253 zufolge ein DRITTES
+    pip auf dieselbe venv startete, und der Download, der mitten in pips
+    Deinstallationsluecke faellt. Die Klasse ist die Gegenmassnahme, nicht Dekoration."""
+    versuche = []
+    monkeypatch.setattr(fetch.ytdlp_update, "automatisch",
+                        lambda *a, **k: versuche.append(1) or False)
+    monkeypatch.setattr(transcribe_mod, "ensure_ffmpeg", lambda: False)
+    with pytest.raises(SystemExit):
+        fetch.main(["Demo", "https://youtu.be/vid123"])
+    assert versuche == []
+
+
+def test_spracheintrag_fehler_loest_keinen_zweiten_download_aus(projekt, monkeypatch):
+    """#173: der Spracheintrag laeuft NACH dem erfolgreichen Download — ein Fehler dort
+    ist ein Eigenfehler. Ohne Vorbedingung waere er nach der Umkehr ein 'fremder'
+    Fehlschlag: pip, Wiederholung, und unique_base() legte die Datei ein ZWEITES Mal ab
+    ('Mein Interview-2.m4a'). Der Download selbst war ja gelungen."""
+    monkeypatch.setenv("TRANSKRIBOR_FETCH_SPRACHE", "de")
+    monkeypatch.setattr(fetch.projekt, "setze_datei",
+                        lambda *a, **k: (_ for _ in ()).throw(RuntimeError("projekt.json kaputt")))
+    versuche = []
+    monkeypatch.setattr(fetch.ytdlp_update, "automatisch",
+                        lambda *a, **k: versuche.append(1) or False)
+    with pytest.raises(SystemExit):
+        fetch.main(["Demo", "https://youtu.be/vid123", "--download-only"])
+    assert versuche == []
+    assert len(_FakeYDL.gesehen) == 2      # genau EINE Runde: Metadaten + Download
+    assert (projekt / "Demo" / "audio" / "Mein Interview.m4a").exists()
+    assert not (projekt / "Demo" / "audio" / "Mein Interview-2.m4a").exists()
