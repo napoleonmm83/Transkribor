@@ -491,9 +491,12 @@ test('ein Abbruch aus der Zeit eines Sondierungs-Schritts erstickt den nächsten
 })
 
 test('abbrechen nimmt den ProzessBAUM mit — auch den Enkel', { timeout: 25000 }, async () => {
-  // /T bzw. die Prozessgruppe sind die Zusicherung; ohne sie staerbe nur das direkte
-  // Kind, und der Enkel schriebe als Waise weiter in die venv. Der Test macht den
-  // Unterschied sichtbar: ein Enkel, der ueberlebt, faellt auf.
+  // Zusicherung ist das VERHALTEN: nach dem Abbruch ist der ganze Baum tot, der
+  // Enkel schriebe sonst als Waise weiter in die venv. Ehrlich gesagt: auf Windows
+  // toetet schon das Job-Object von libuv den Baum (gemessen: eltern.kill() ohne
+  // taskkill nahm den Enkel mit) — der Test prueft die Garantie, nicht das /T-Flag;
+  // das laesst sich hier nicht isoliert rot kriegen. POSIX (Prozessgruppe) prueft
+  // derselbe Test im ubuntu-CI-Lauf.
   const { lauf, abbrechen, abbruchZurueck } = require('./setup')
   abbruchZurueck()   // ein frueherer Test kann den Merker verlassen haben
   const enkel = []
