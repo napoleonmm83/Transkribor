@@ -209,4 +209,20 @@ describe('SegmentView', () => {
     expect(root).not.toHaveClass('opacity-40')
     expect(root).not.toHaveClass('ring-yellow-400')
   })
+
+  // Issue #244 — SegmentView hat einen EIGENEN Knopf (benutzt `EditierbarerText` nicht),
+  // darum erbt es die Beschreibung nicht: der Streich-Hinweis stand nur im `title` und
+  // erreichte Tastatur und Screenreader nie. Hier dieselbe Pruefung wie am gemeinsamen
+  // Bauteil — der haeufigste Streichweg (400 Segmente je Dokument) haette sonst keine Stimme.
+  it('erzaehlt den Notiz-Streich-Hinweis per aria-describedby, nicht nur per title (#244)', () => {
+    const seg = mkSeg({ text: 'Text', note: 'Unsicher bei Minute 3' })
+    render(<TooltipProvider><SegmentView seg={seg} active={false} onPlay={vi.fn()} updateSegment={vi.fn()} /></TooltipProvider>)
+    const knopf = screen.getByTitle('Notiz bearbeiten (leeren streicht sie)')
+    const id = knopf.getAttribute('aria-describedby')
+    expect(id).toBeTruthy()
+    const hinweis = document.getElementById(id!)
+    expect(hinweis?.textContent).toBe('Notiz bearbeiten (leeren streicht sie)')
+    expect(hinweis?.className).toContain('sr-only')
+    expect(knopf.contains(hinweis!), 'der Hinweis steht AUSSERHALB des Knopfes').toBe(false)
+  })
 })
