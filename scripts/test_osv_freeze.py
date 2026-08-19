@@ -66,14 +66,28 @@ def test_torch_waechter_verlangt_cu128_suffix():
     # Der Zaehler prueft Menge, nicht Eigenschaft: ein suffixloser torch-Eintrag
     # waere der PyPI-CPU-Build bei unveraenderter Paketzahl — gruen ueber ein
     # falsches Abbild. Beide Richtungen: gut durch, schlecht raus (Review-Fund).
-    of.pruefe_torch({"torch": "2.11.0+cu128", "fastapi": "0.139.0"})  # wirft nicht
-    for schlecht in ({"torch": "2.13.0"}, {}, {"torchaudio": "2.11.0+cu128"}):
+    # torchaudio gehoert dazu (pinnt torch exakt — CLI-Fund Runde 2).
+    of.pruefe_torch({"torch": "2.11.0+cu128", "torchaudio": "2.11.0+cu128"})
+    for schlecht in ({"torch": "2.13.0"}, {}, {"torch": "2.11.0+cu128"},
+                     {"torch": "2.11.0+cu128", "torchaudio": "2.13.0"}):
         try:
             of.pruefe_torch(schlecht)
         except SystemExit as e:
             assert e.code == 1
         else:
             raise AssertionError(f"Waechter hat {schlecht} durchgelassen")
+
+
+def test_waechter_grenzwert_99_100():
+    # Grenzwert exakt: 99 ist noch kein Abbild, 100 ist eins (CLI-Fund Runde 2 —
+    # ohne diesen Test bliebe < vs <= ungetestet).
+    try:
+        of.pruefe_anzahl(99)
+    except SystemExit:
+        pass
+    else:
+        raise AssertionError("Wächter hat 99 durchgelassen")
+    of.pruefe_anzahl(100)  # wirft nicht
 
 
 def _alle():

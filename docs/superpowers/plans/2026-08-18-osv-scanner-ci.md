@@ -320,6 +320,8 @@ name: OSV
 # Diff nie "neu") oder Base ohne Artifact (jeder Fund "neu"). Entscheidung 2026-08-18.
 on:
   pull_request:
+  merge_group:
+    types: [checks_requested]
   push:
     branches: [master]
   schedule:
