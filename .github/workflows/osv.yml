@@ -48,7 +48,9 @@ jobs:
   # (Exit 128 des Scanners allein wuerde vom Reusable-Workflow geschluckt,
   # google/osv-scanner-action#71).
   resolve-python:
-    if: github.event_name != 'pull_request'
+    # Exakt die osv-voll-Events: merge_group braucht kein Python-Abbild
+    # (der PR-Scan ist npm-only) — ein Needs-lose Lauf waere verlorene Arbeit.
+    if: github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -69,6 +71,7 @@ jobs:
     # zum Pinnen). Ein Fork-Beitrag laeuft nach dem Merge durch den Vollscan auf master
     # — Abdeckung geht nicht verloren, nur die Diff-Ansicht im PR. CodeRabbit-Major.
     if: github.event_name == 'merge_group' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false)
+    needs: lockfiles-da
     permissions:
       contents: read
       actions: read
@@ -93,7 +96,7 @@ jobs:
   # (google/osv-scanner-action#71, Scan-Exit 128 failt den Job nicht). Dieser
   # Job macht genau das rot, was sonst gruen durchginge (Review-Fund).
   lockfiles-da:
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
     runs-on: ubuntu-latest
     permissions:
       contents: read
