@@ -222,6 +222,9 @@ $('los').onclick = async () => {
   scharf = false
   $('los').style.display = 'none'
   $('abbrechen').style.display = ''
+  // Fokus nachziehen: los ist versteckt, der Fokus hinge sonst auf einem unsichtbaren
+  // Element — Enter traefe danach nichts. Abbrechen ist jetzt die einzige Tat der Seite.
+  $('abbrechen').focus()
   laeuft(true)
   $('fehler').style.display = 'none'
   log.style.display = 'block'
