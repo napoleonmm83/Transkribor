@@ -28,6 +28,14 @@ test('die Update-Methoden sind da', () => {
   }
 })
 
+test('abbrechen ist die Bruecke für den Rückweg der Einrichtung (#242)', async () => {
+  // Letzte Kante der Abbruchkette: Knopf -> Bruecke -> Hauptprozess. Dass der
+  // Kanal ohne Argument gerufen wird, ist die schmale Bruecke (#218-Muster).
+  assert.strictEqual(typeof freigegeben.abbrechen, 'function')
+  await freigegeben.abbrechen()
+  assert.deepStrictEqual(aufrufe.at(-1), ['einrichten:abbrechen'])
+})
+
 test('der Kanal update ist erlaubt, ein erfundener nicht', () => {
   freigegeben.on('update', () => {})
   freigegeben.on('kanal-den-es-nicht-gibt', () => {})
