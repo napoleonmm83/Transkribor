@@ -123,6 +123,9 @@ async function paketmanager() {
 /** Kommando ausfuehren und jede Zeile melden. Loest mit dem Exitcode auf, wirft nie. */
 function lauf(cmd, args, onLine, opts = {}) {
   return new Promise(resolve => {
+    // Abbruch VOR dem Start: ein Merker aus der Zeit eines kurzen Sondierungs-Schritts
+    // darf nicht noch einen neuen Prozess aufmachen (#242).
+    if (abbruchFlag) return resolve(-1)
     onLine(`> ${cmd} ${args.join(' ')}`)
     let proc
     try {
@@ -131,6 +134,7 @@ function lauf(cmd, args, onLine, opts = {}) {
       onLine(`FEHLER: ${e.message}`)
       return resolve(-1)
     }
+    laufenderSchritt = proc
     const rest = { out: '', err: '' }
     const pump = (k, buf) => {
       rest[k] += buf.toString()
@@ -140,13 +144,46 @@ function lauf(cmd, args, onLine, opts = {}) {
     }
     proc.stdout.on('data', b => pump('out', b))
     proc.stderr.on('data', b => pump('err', b))
-    proc.on('error', e => { onLine(`FEHLER: ${e.message}`); resolve(-1) })
+    proc.on('error', e => {
+      laufenderSchritt = null
+      onLine(`FEHLER: ${e.message}`)
+      resolve(-1)
+    })
     proc.on('close', code => {
+      laufenderSchritt = null
       if (rest.out.trim()) onLine(rest.out.trim())
       if (rest.err.trim()) onLine(rest.err.trim())
       resolve(code === null ? -1 : code)
     })
   })
+}
+
+/** Ergebnis eines abgebrochenen Laufs. Eigener Schluessel `abgebrochen`, damit die Seite
+ *  einen GEWOLLTEN Abbruch nicht als roten Installationsfehler zeigt (#242). */
+const ABBRUCH = Object.freeze({ ok: false, abgebrochen: true,
+  fehler: 'Abgebrochen. Die Einrichtung wird beim nächsten Start wieder angeboten.' })
+
+/** Abbruch-Zustand (#242): der Knopf ist einen Tastendruck von 10–30 Minuten entfernt,
+ *  und der Lauf war der einzige der App ohne Rückweg (jobs.py kann längst abbrechen).
+ *  Einmal gesetzt, bricht der Merker JEDEM weiteren Schritt den Hals — auch einem, der
+ *  erst nach einer kurzen Sondierung starten wollte. */
+let abbruchFlag = false
+let laufenderSchritt = null
+
+/** Vom Hauptprozess gerufen (IPC 'einrichten:abbrechen'). `toeter` ist der Testzugang. */
+function abbrechen(toeter = _baumToeten) {
+  abbruchFlag = true
+  if (laufenderSchritt) toeter(laufenderSchritt)
+}
+
+/** Prozessbaum toeten — /T wie jobs.py: ein Waisenkind hielte Dateien der venv offen und
+ *  sieht danach "halbe Installation" aus, gegen die #181/#217 gebaut wurden. */
+function _baumToeten(proc) {
+  if (process.platform === 'win32') {
+    spawn('taskkill', ['/pid', String(proc.pid), '/T', '/F'], { windowsHide: true })
+  } else {
+    try { proc.kill('SIGTERM') } catch { /* bereits tot */ }
+  }
 }
 
 /**
@@ -448,6 +485,9 @@ async function einrichten(onLine, onSchritt, werkzeug = {}) {
     mkdir: d => fs.mkdirSync(d, { recursive: true }),
     ...werkzeug,
   }
+  // Frischer Abbruch-Merker: der Knopf bleibt nach einem Abbruch erreichbar, ein
+  // haengengebliebener Merker wuerde jeden Folgelauf sofort wieder toeten (#242).
+  abbruchFlag = false
   const schritte = []
   let py = await w.findePython()
   const pl = await w.planen()
@@ -465,6 +505,7 @@ async function einrichten(onLine, onSchritt, werkzeug = {}) {
     onSchritt('Python installieren')
     onLine('Python nicht gefunden — installiere es …')
     const code = await holen('Python.Python.3.13', 'python')
+    if (abbruchFlag) return ABBRUCH
     if (code !== 0) return { ok: false, fehler: 'Python konnte nicht installiert werden. Bitte von python.org installieren und Transkribor neu starten.' }
     py = await w.findePython()
     if (!py) return { ok: false, fehler: 'Python wurde installiert, ist aber noch nicht im PATH. Bitte Transkribor neu starten.' }
@@ -479,6 +520,7 @@ async function einrichten(onLine, onSchritt, werkzeug = {}) {
       // Nicht abbrechen wenn es scheitert: ohne ffmpeg laeuft immerhin noch das Bearbeiten
       // vorhandener Transkripte.
       await holen('Gyan.FFmpeg', 'ffmpeg')
+      if (abbruchFlag) return ABBRUCH
     } else {
       onLine(`ffmpeg nicht gefunden. ${pl.hinweis}`)
     }
@@ -490,34 +532,41 @@ async function einrichten(onLine, onSchritt, werkzeug = {}) {
   if (pl.installer === 'brew' && pl.brewPakete.includes('whisper-cpp') && !(await w.findeWhisperCpp())) {
     onSchritt('Schnelle Spracherkennung (whisper-cpp) installieren')
     await w.lauf('brew', ['install', 'whisper-cpp'], onLine)
+    if (abbruchFlag) return ABBRUCH
   }
 
   if (!w.exists(P.venvPython(P.venv))) {
     onSchritt('Umgebung anlegen')
     w.mkdir(path.dirname(P.venv))
     const code = await w.lauf(py.cmd, [...py.args, '-m', 'venv', P.venv], onLine)
+    if (abbruchFlag) return ABBRUCH
     if (code !== 0) return { ok: false, fehler: 'venv konnte nicht angelegt werden.' }
   }
   const vpy = P.venvPython(P.venv)
 
   onSchritt('pip aktualisieren')
   await w.lauf(vpy, ['-m', 'pip', 'install', '-U', 'pip'], onLine)
+  if (abbruchFlag) return ABBRUCH
 
   onSchritt(pl.torchIndex ? 'PyTorch mit CUDA laden (mehrere GB, dauert)'
                           : 'PyTorch laden (mehrere GB, dauert)')
   const torchArgs = ['-m', 'pip', 'install', 'torch']
   if (pl.torchIndex) torchArgs.push('--index-url', pl.torchIndex)
   let code = await w.lauf(vpy, torchArgs, onLine)
+  if (abbruchFlag) return ABBRUCH
   if (code !== 0 && pl.torchIndex) {
     onLine('CUDA-Variante fehlgeschlagen — versuche die CPU-Variante (Transkription wird dann langsam).')
     code = await w.lauf(vpy, ['-m', 'pip', 'install', 'torch'], onLine)
   }
+  if (abbruchFlag) return ABBRUCH
   if (code !== 0) return { ok: false, fehler: 'PyTorch konnte nicht installiert werden.' }
 
   onSchritt('Whisper und Werkzeuge laden')
   code = await w.lauf(vpy, ['-m', 'pip', 'install', '-r', P.requirements], onLine)
+  if (abbruchFlag) return ABBRUCH
   if (code !== 0) return { ok: false, fehler: 'Python-Pakete konnten nicht installiert werden.' }
   const torchOk = await w.cudaZurueckholen(vpy, pl, onLine)
+  if (abbruchFlag) return ABBRUCH
 
   // Geprueft wird der Import, NICHT der Merker: ein misslungenes Vermerken wuerde den Nutzer
   // sonst aussperren (kein ok -> kein Serverstart), obwohl alles installiert ist.
@@ -546,6 +595,6 @@ async function einrichten(onLine, onSchritt, werkzeug = {}) {
 
 // venvVollstaendig() ist ersatzlos weg: status() beantwortet dieselbe Frage ueber venvZustand(),
 // und ein zweiter Weg dorthin waere genau der, den kein Test bewacht (er hatte keinen Aufrufer).
-module.exports = { status, einrichten, findePython, plan, spawnEnv, wingetFfmpeg,
+module.exports = { status, einrichten, abbrechen, lauf, findePython, plan, spawnEnv, wingetFfmpeg,
                    nutztWhisperCpp, paketeAktuell, stempelSchreiben, stempelSchreibbar,
                    venvZustand, cudaVerloren, cudaZurueckholen }
