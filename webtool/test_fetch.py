@@ -791,3 +791,19 @@ def test_spracheintrag_fehler_loest_keinen_zweiten_download_aus(projekt, monkeyp
     assert len(_FakeYDL.gesehen) == 2      # genau EINE Runde: Metadaten + Download
     assert (projekt / "Demo" / "audio" / "Mein Interview.m4a").exists()
     assert not (projekt / "Demo" / "audio" / "Mein Interview-2.m4a").exists()
+
+
+def test_kaputter_netloc_ist_eine_vorbedingung_kein_pip(projekt, monkeypatch):
+    """urlparse("https://[::1") wirft SELBST einen nackten ValueError — nicht unsere beiden
+    Wuerfe. Ohne Wandelung waere er seit der Umkehr 'fremd' (Verdacht True) und loeste auf
+    dem CLI-Weg ein pip fuer einen Tippfehler aus; der Web-Endpunkt faengt vorher mit 400
+    ab, dasselbe Erbe macht ihn dort unkritisch. Unabhaengig gefunden von CodeRabbit-Bot
+    und Review-Subagent an PR #294, mit Skript gemessen."""
+    versuche = []
+    monkeypatch.setattr(fetch.ytdlp_update, "automatisch",
+                        lambda *a, **k: versuche.append(1) or False)
+    with pytest.raises(SystemExit):
+        fetch.main(["Demo", "https://[::1"])
+    assert versuche == []
+    with pytest.raises(fetch.Vorbedingung, match="URL"):
+        fetch.check_url("https://[::1")

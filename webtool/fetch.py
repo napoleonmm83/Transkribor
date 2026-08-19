@@ -47,16 +47,19 @@ yt_dlp = None
 _PIP_HINWEIS = r'.venv\Scripts\python.exe -m pip install -U "yt-dlp[default]"'
 # Instagram/YouTube melden Login-Zwang in vielen Formulierungen; hier grob abgedeckt.
 _LOGIN_RE = re.compile(r"login|log in|sign in|private|not available|rate.?limit|cookies|bot", re.I)
-# Eigenfehler, den kein yt-dlp-Update reparieren kann. Seit #173 ist das die EINZE Ausnahme-
-# liste der Selbstheilung: eine Positivliste bekannter Extraktor-Formulierungen war geraten
-# (ein gemessener Fall plus plausible yt-dlp-Meldungen), und was sie verfehlte, heilte nie —
-# der Nutzer stand wieder an der Konsole, obwohl die Selbstheilung genau dafuer gebaut wurde.
-# Ein falscher Verdacht kostet dagegen hoechstens ein pip pro Lauf (`geheilt` in main);
-# ein verfehlter kostet die Funktion selbst. Also verdächtig, AUSSER Vorbedingung und Login-
-# Veto. Erbt von ValueError, weil check_url sie wirft und app.py am Endpunkt genau
-# `ValueError` fängt (-> 400) — erbt sie nicht, wird jeder URL-Fehler dort ein 500.
 class Vorbedingung(ValueError):
-    pass
+    """Eigenfehler, den kein yt-dlp-Update reparieren kann (#173).
+
+    Seit der Umkehr ist JEDER Fehlschlag Verdacht — die einzige Ausnahmeliste der
+    Selbstheilung. Die bisherige Positivliste bekannter Extraktor-Formulierungen war
+    geraten: EIN gemessener Fall (#162 — HTTP 403 ohne JS-Laufzeit, Messung im zugehoerigen
+    PR) plus plausible yt-dlp-Meldungen, und was sie verfehlte, heilte nie — der Nutzer
+    stand wieder an der Konsole, obwohl die Selbstheilung genau dafuer gebaut wurde. Ein
+    falscher Verdacht kostet dagegen hoechstens ein pip pro Lauf (`geheilt` in main);
+    ein verfehlter kostet die Funktion selbst. Erbt von ValueError, weil check_url sie
+    wirft und app.py am Endpunkt genau `ValueError` faengt (-> 400) — erbt sie nicht,
+    wird jeder URL-Fehler dort ein 500.
+    """
 
 
 def _importiere_yt_dlp():
@@ -203,7 +206,8 @@ def _node_modus():
 # gemessen sind die yt-dlp-Meldungen dieses Projekts einzeilig und kurz. Er steht trotzdem,
 # weil der Text aus der Fremdplattform stammt (Fehlerseite, Videotitel) und im Job-Log
 # landet, das der Nutzer im Browser liest — und weil 500 Zeichen fuer den Zweck der Zeile
-# (die Formulierung erkennen, an der `_EXTRAKTOR_RE` nachzuziehen waere) reichlich sind.
+# (die Formulierung erkennen, an der eine weitere Ausnahme der Selbstheilung haette
+# wachsen koennen) reichlich sind.
 _ROH_MAX = 500
 
 
@@ -250,7 +254,14 @@ def _human_error(exc: Exception) -> str:
 def check_url(url: str) -> str:
     """Getrimmte URL, wenn erlaubt. Sonst ValueError mit nutzerlesbarer Meldung."""
     url = (url or "").strip()
-    u = urlparse(url)
+    try:
+        u = urlparse(url)
+    except ValueError as e:
+        # urlparse wirft bei kaputtem netloc ("https://[::1") einen NACKTEN ValueError —
+        # unser Wurf, nicht yt-dlps. Ohne Wandelung waere er seit der Umkehr 'fremd'
+        # (Verdacht True) und loeste auf dem CLI-Weg ein pip fuer einen Tippfehler aus;
+        # der Web-Endpunkt faengt vorher mit 400 ab (Vorbedingung erbt ValueError).
+        raise Vorbedingung(f"unlesbare URL: {e}") from e
     if u.scheme != "https":
         raise Vorbedingung(f"nur https-URLs werden unterstützt: {url!r}")
     if (u.hostname or "").lower() not in ALLOWED_HOSTS:
