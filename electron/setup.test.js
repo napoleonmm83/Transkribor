@@ -467,7 +467,8 @@ test('ein neuer Lauf beginnt ohne den Abbruch-Merker des vorigen', async () => {
 })
 
 test('abbrechen tötet den laufenden Schritt wirklich (echter Prozess, echter Baum-Töter)', { timeout: 20000 }, async () => {
-  const { lauf, abbrechen } = require('./setup')
+  const { lauf, abbrechen, abbruchZurueck } = require('./setup')
+  abbruchZurueck()   // ein frueherer Test kann den Merker verlassen haben
   const p = lauf(process.execPath, ['-e', 'setTimeout(() => {}, 60000)'], () => {})
   await new Promise(r => setTimeout(r, 1000))     // den Prozess laufen lassen
   abbrechen()
@@ -493,7 +494,8 @@ test('abbrechen nimmt den ProzessBAUM mit — auch den Enkel', { timeout: 25000 
   // /T bzw. die Prozessgruppe sind die Zusicherung; ohne sie staerbe nur das direkte
   // Kind, und der Enkel schriebe als Waise weiter in die venv. Der Test macht den
   // Unterschied sichtbar: ein Enkel, der ueberlebt, faellt auf.
-  const { lauf, abbrechen } = require('./setup')
+  const { lauf, abbrechen, abbruchZurueck } = require('./setup')
+  abbruchZurueck()   // ein frueherer Test kann den Merker verlassen haben
   const enkel = []
   const p = lauf(process.execPath, ['-e', [
     "const c = require('child_process').spawn(process.execPath,",
