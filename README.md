@@ -44,9 +44,11 @@ Auch mit **Schweizerdeutsch** kommt es zurecht.
 1. **[Transkribor herunterladen](https://github.com/napoleonmm83/Transkribor/releases/latest)**
    und installieren.
 2. Beim ersten Start richtet sich die App selbst ein — einmalig, im Normalfall 10–30 Minuten,
-   und sie lädt mehrere Gigabyte. Der Knopf fragt einmal nach („nochmal klicken zum Start“);
-   während des Vorgangs gibt es einen **Abbrechen**-Knopf. Ein abgebrochener Versuch richtet
-   sich beim nächsten Start einfach wieder an, es geht nichts verloren.
+   und sie lädt mehrere Gigabyte. (Später kann gelegentlich ein Update Nacharbeiten mitbringen,
+   meistens kleine, manchmal auch eine neue Fassung der Spracherkennung — erneut Gigabyte.)
+   Der Knopf fragt einmal nach („nochmal klicken zum Start“); während des Vorgangs gibt es
+   einen **Abbrechen**-Knopf. Ein abgebrochener Versuch richtet sich beim nächsten Start
+   einfach wieder an, es geht nichts verloren.
 3. Projekt anlegen, Audiodatei hineinziehen. **Fertig** — die Arbeit startet von allein, und
    du siehst live, wie weit sie ist.
 
@@ -83,9 +85,9 @@ eines Projekts hinweg einheitlich. Anschliessend prüft ein zweiter Durchgang, d
 dazuerfunden oder weggelassen wurde.
 
 **Du behältst das letzte Wort.** Im eingebauten Editor hörst du jeden Abschnitt per
-Tastendruck nach und änderst, was nicht stimmt — unsichere Stellen sind farbig markiert, ein
-richtig getippter Name zieht durchs ganze Dokument bis in den Export, und gespeichert wird
-von selbst.
+Tastendruck nach und änderst, was nicht stimmt — unsichere Stellen sind farbig markiert, und
+einen falsch verstandenen Namen tippst du **einmal** richtig: er zieht durchs ganze Dokument
+bis in den Export. Gespeichert wird von selbst.
 
 <details>
 <summary>Mehr im Editor: finden, anmerken, rückgängig machen</summary>
@@ -259,21 +261,23 @@ die eine Anmeldung verlangen, unterstützt Transkribor nicht).
 
 Drei Meldungen können dabei auftauchen:
 
-- **„Hilfsskripte für YouTube nicht prüfbar“** — eine Paketdatei auf deinem Rechner ist
-  beschädigt. Importieren kannst du weiterhin; „Jetzt aktualisieren“ hilft hier allerdings
-  **nicht**, das Installationsprogramm stolpert über dieselbe kaputte Datei. Wieder heil wird
-  es über die Einrichtungsseite („Jetzt einrichten“) oder, wenn du Transkribor selbst
-  installiert hast, mit einer Neuinstallation der Python-Umgebung.
-- **„Aktualisierung abgebrochen“** — Transkribor hat sie beim Schliessen der App mitten im
-  Schreiben erwischt, meistens nach einem abgewürgten Programm. Kein Grund zur
+- **„Die Hilfsskripte für YouTube lassen sich nicht prüfen“** — eine Paketdatei auf deinem
+  Rechner ist beschädigt. Importieren kannst du weiterhin; Transkribor merkt dann nur nicht
+  mehr von selbst, wenn die Skripte nicht mehr zur Downloader-Fassung passen. „Jetzt
+  aktualisieren“ hilft hier allerdings **nicht**, das Installationsprogramm stolpert über
+  dieselbe kaputte Datei. Wieder heil wird es über die Einrichtungsseite („Jetzt einrichten“)
+  oder, wenn du Transkribor selbst installiert hast, mit einer Neuinstallation der
+  Python-Umgebung.
+- **„Eine Aktualisierung wurde abgebrochen“** — Transkribor hat sie beim Schliessen der App
+  mitten im Schreiben erwischt, meistens nach einem abgewürgten Programm. Kein Grund zur
   Neuinstallation: mit angestellter automatischer Aktualisierung (der Normalfall) setzt der
   nächste Start die Reparatur von selbst fort; hast du sie ausgeschaltet, macht der Knopf
   **„Jetzt aktualisieren“** dieselbe Arbeit.
-- **„Ohne Sperre gelaufen“** — Transkribor konnte gerade nicht sicherstellen, dass nicht
-  zeitgleich ein Video-Import dasselbe tat. Das Ergebnis stimmt vermutlich trotzdem; sicher
-  gehst du, indem du den Knopf noch einmal drückst, wenn nichts anderes läuft. Kommt die
-  Meldung wieder, steht der Grund im Serverprotokoll (meistens liegt am Sperr-Pfad etwas im
-  Weg, was dort nicht hingehört).
+- **„Die Aktualisierung lief ohne Sperre“** — Transkribor konnte gerade nicht sicherstellen,
+  dass nicht zeitgleich ein Video-Import dasselbe tat. Das Ergebnis stimmt vermutlich
+  trotzdem; sicher gehst du, indem du den Knopf noch einmal drückst, wenn nichts anderes
+  läuft. Kommt die Meldung wieder, steht der Grund im Serverprotokoll (meistens liegt am
+  Sperr-Pfad etwas im Weg, was dort nicht hingehört).
 
 </details>
 
