@@ -474,3 +474,17 @@ test('abbrechen tötet den laufenden Schritt wirklich (echter Prozess, echter Ba
   const code = await p
   assert.notStrictEqual(code, 0, 'der Prozess muss getötet sein, nicht sauber beendet')
 })
+
+test('ein Abbruch aus der Zeit eines Sondierungs-Schritts erstickt den nächsten Lauf im Ansatz', { timeout: 15000 }, async () => {
+  // abbrechen() trifft oft, während kein laufender Schritt registriert ist (kurze
+  // Sondierungen wie findePython laufen ueber ausgabe, nicht lauf). Ohne den
+  // Eintritts-Wächter wuerde der NAECHSTE Prozess trotzdem starten — und niemand
+  // toetet ihn mehr: eine Waise, die Dateien der venv offen haelt, waehrend die
+  // Seite "Abgebrochen" zeigt.
+  const { lauf, abbrechen } = require('./setup')
+  abbrechen()
+  const start = Date.now()
+  const code = await lauf(process.execPath, ['-e', 'setTimeout(() => {}, 60000)'], () => {})
+  assert.strictEqual(code, -1)
+  assert.ok(Date.now() - start < 5000, 'der Prozess darf gar nicht erst laufen')
+})
