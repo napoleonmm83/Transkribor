@@ -488,3 +488,28 @@ test('ein Abbruch aus der Zeit eines Sondierungs-Schritts erstickt den nächsten
   assert.strictEqual(code, -1)
   assert.ok(Date.now() - start < 5000, 'der Prozess darf gar nicht erst laufen')
 })
+
+test('abbrechen nimmt den ProzessBAUM mit — auch den Enkel', { timeout: 25000 }, async () => {
+  // /T bzw. die Prozessgruppe sind die Zusicherung; ohne sie staerbe nur das direkte
+  // Kind, und der Enkel schriebe als Waise weiter in die venv. Der Test macht den
+  // Unterschied sichtbar: ein Enkel, der ueberlebt, faellt auf.
+  const { lauf, abbrechen } = require('./setup')
+  const enkel = []
+  const p = lauf(process.execPath, ['-e', [
+    "const c = require('child_process').spawn(process.execPath,",
+    "  ['-e', 'setTimeout(() => {}, 60000)'], { stdio: 'ignore' })",
+    "console.log('ENKEL=' + c.pid)",
+    "setTimeout(() => {}, 60000)",
+  ].join('\n')], z => { const m = /ENKEL=(\d+)/.exec(z); if (m) enkel.push(Number(m[1])) })
+  for (let i = 0; i < 50 && enkel.length === 0; i++) await new Promise(r => setTimeout(r, 100))
+  assert.strictEqual(enkel.length, 1, 'die Enkel-PID muss durchs Log kommen')
+  abbrechen()
+  const code = await p
+  assert.notStrictEqual(code, 0, 'der Hauptprozess stirbt')
+  let lebt = true
+  for (let i = 0; i < 50; i++) {
+    try { process.kill(enkel[0], 0) } catch { lebt = false; break }
+    await new Promise(r => setTimeout(r, 100))
+  }
+  assert.ok(!lebt, 'der Enkel muss mitsterben — sonst Waise, die in die venv schreibt')
+})

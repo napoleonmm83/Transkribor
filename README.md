@@ -33,8 +33,9 @@ Vereins- und Firmenarchive. Auch mit **Schweizerdeutsch** kommt es zurecht.
 
 1. **[Transkribor herunterladen](https://github.com/napoleonmm83/Transkribor/releases/latest)**
    und installieren.
-2. Beim ersten Start richtet sich die App selbst ein. Das dauert einmalig 10–30 Minuten und
-   lädt mehrere Gigabyte — danach nie wieder. Weil das ein grosser Vorgang ist, fragt der
+2. Beim ersten Start richtet sich die App selbst ein. Das dauert im Normalfall einmalig
+   10–30 Minuten und lädt mehrere Gigabyte — später kann gelegentlich ein Update kleine
+   Nacharbeiten mitbringen. Weil das ein grosser Vorgang ist, fragt der
    Knopf einmal nach („nochmal klicken zum Start“), und während des Vorgangs gibt es einen
    **Abbrechen**-Knopf: Ein abgebrochener Versuch richtet sich beim nächsten Start einfach
    wieder an, es geht nichts verloren.
