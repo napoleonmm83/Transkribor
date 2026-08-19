@@ -4,14 +4,22 @@
 
 # Transkribor
 
-**Aus Interview-Aufnahmen werden lesbare Transkripte — auf deinem eigenen Rechner.**
+Interviews führen ist das eine — stundenlanges Abtippen das andere.
+
+**Transkribor macht aus Interviews, Vorträgen und Videos lesbare, sprecher-markierte Transkripte — auf deinem eigenen Rechner.**
 
 <a href="https://github.com/napoleonmm83/Transkribor/releases/latest"><img alt="Neueste Version" src="https://img.shields.io/github/v/release/napoleonmm83/Transkribor?style=flat-square&color=4F46E5&label=Version"></a>
 <a href="https://github.com/napoleonmm83/Transkribor/releases"><img alt="Downloads" src="https://img.shields.io/github/downloads/napoleonmm83/Transkribor/total?style=flat-square&color=4F46E5&label=Downloads"></a>
-<img alt="Windows, macOS, Linux" src="https://img.shields.io/badge/Windows%20·%20macOS%20·%20Linux-4F46E5?style=flat-square">
 <a href="LICENSE"><img alt="MIT-Lizenz" src="https://img.shields.io/badge/Lizenz-MIT-4F46E5?style=flat-square"></a>
 
-**<a href="https://github.com/napoleonmm83/Transkribor/releases/latest">Herunterladen</a>** ·
+<a href="https://github.com/napoleonmm83/Transkribor/releases/latest/download/Transkribor-Setup.exe"><img alt="Transkribor für Windows herunterladen" src="https://img.shields.io/badge/Windows_herunterladen-0078D6?style=for-the-badge"></a>
+<a href="https://github.com/napoleonmm83/Transkribor/releases/latest/download/Transkribor-arm64.dmg"><img alt="Transkribor für macOS herunterladen" src="https://img.shields.io/badge/macOS_herunterladen-24292F?style=for-the-badge"></a>
+<a href="https://github.com/napoleonmm83/Transkribor/releases/latest/download/Transkribor.AppImage"><img alt="Transkribor für Linux herunterladen" src="https://img.shields.io/badge/Linux_herunterladen-E95420?style=for-the-badge"></a>
+
+<sub>Auch als <a href="https://github.com/napoleonmm83/Transkribor/releases/latest/download/Transkribor.deb">.deb</a> — <a href="https://github.com/napoleonmm83/Transkribor/releases/latest">alle Fassungen und Formate</a>.</sub>
+
+<sub>Transkribor ist kostenlos — falls es dir Arbeit abnimmt, freue ich mich über eine <a href="https://github.com/sponsors/napoleonmm83">❤️ Unterstützung</a>.</sub>
+
 <a href="#in-drei-schritten-loslegen">Loslegen</a> ·
 <a href="#was-du-davon-hast">Funktionen</a> ·
 <a href="#gefällt-es-dir">Unterstützen</a>
@@ -24,8 +32,10 @@ Du ziehst deine Audiodatei ins Fenster, der Rest passiert von selbst: Transkribo
 mit, erkennt, **wer gerade spricht**, korrigiert falsch verstandene Wörter im Zusammenhang
 und legt dir einen fertigen Text hin, den du direkt weiterverwenden kannst.
 
-Gemacht für alle, die viel mit Gesprächen arbeiten: Journalismus, Forschung, Podcast,
-Vereins- und Firmenarchive. Auch mit **Schweizerdeutsch** kommt es zurecht.
+Gemacht für alle, die viel mit Gesprochenem arbeiten: Journalismus und Forschung, Podcast,
+Vereins- und Firmenarchive — und für alle, die Vorträge festhalten oder eigenen Videos
+Untertitel mitgeben wollen (der YouTube-Import und der Untertitel-Export sind eingebaut).
+Auch mit **Schweizerdeutsch** kommt es zurecht.
 
 ---
 
@@ -155,6 +165,24 @@ Abo, das du vielleicht schon hast (Claude Code oder ChatGPT/Codex), ein eigener 
 Anthropic, OpenAI, Google oder OpenRouter — oder ein Modell, das lokal auf deinem Rechner
 läuft (z. B. Ollama). **Ohne Sprachmodell funktioniert das Transkribieren vollständig**, es
 entfällt nur die Korrektur.
+
+---
+
+## Gefällt es dir?
+
+Transkribor ist kostenlos und bleibt es. Wenn es dir Arbeit abnimmt, freue ich mich über eine
+Unterstützung — sie fliesst in Entwicklungszeit und die Signatur-Zertifikate, die den
+Installer künftig ohne Warnmeldung durchgehen lassen.
+
+<div align="center">
+
+<a href="https://github.com/sponsors/napoleonmm83"><img alt="Transkribor unterstützen" src="https://img.shields.io/badge/%E2%9D%A4_Transkribor_unterst%C3%BCtzen-EA4AAA?style=for-the-badge"></a>
+
+</div>
+
+Genauso hilfreich und kostenlos: einen [Fehler melden oder eine Idee
+vorschlagen](https://github.com/napoleonmm83/Transkribor/issues) — oder dem Projekt einen
+Stern geben.
 
 ---
 
@@ -350,24 +378,6 @@ Solange die Aufnahme offen ist, bleibt dein Text stehen, bis du dich entschieden
 Frage allein verwirft nichts. Wechselst du dagegen vorher zu einer anderen Aufnahme, kann die
 fertige Korrektur gewinnen; dann sagt dir eine Meldung, dass deine letzte Änderung nicht mehr
 gespeichert wurde.
-
----
-
-## Gefällt es dir?
-
-Transkribor ist kostenlos und bleibt es. Wenn es dir Arbeit abnimmt, freue ich mich über eine
-Unterstützung — sie fliesst in Entwicklungszeit und die Signatur-Zertifikate, die den
-Installer künftig ohne Warnmeldung durchgehen lassen.
-
-<div align="center">
-
-**[❤ Transkribor unterstützen](https://github.com/sponsors/napoleonmm83)**
-
-</div>
-
-Genauso hilfreich und kostenlos: einen [Fehler melden oder eine Idee
-vorschlagen](https://github.com/napoleonmm83/Transkribor/issues) — oder dem Projekt einen
-Stern geben.
 
 ---
 
