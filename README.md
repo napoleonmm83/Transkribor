@@ -13,7 +13,7 @@ Interviews führen ist das eine — stundenlanges Abtippen das andere.
 <a href="LICENSE"><img alt="MIT-Lizenz" src="https://img.shields.io/badge/Lizenz-MIT-4F46E5?style=flat-square"></a>
 
 <a href="https://github.com/napoleonmm83/Transkribor/releases/latest/download/Transkribor-Setup.exe"><img alt="Transkribor für Windows herunterladen" src="https://img.shields.io/badge/Windows_herunterladen-0078D6?style=for-the-badge"></a>
-<a href="https://github.com/napoleonmm83/Transkribor/releases/latest/download/Transkribor-arm64.dmg"><img alt="Transkribor für macOS herunterladen" src="https://img.shields.io/badge/macOS_herunterladen-24292F?style=for-the-badge"></a>
+<a href="https://github.com/napoleonmm83/Transkribor/releases/latest/download/Transkribor-arm64.dmg"><img alt="Transkribor für macOS (Apple Silicon) herunterladen" src="https://img.shields.io/badge/macOS_herunterladen_(Apple_Silicon)-24292F?style=for-the-badge"></a>
 <a href="https://github.com/napoleonmm83/Transkribor/releases/latest/download/Transkribor.AppImage"><img alt="Transkribor für Linux herunterladen" src="https://img.shields.io/badge/Linux_herunterladen-E95420?style=for-the-badge"></a>
 
 <sub>Auch als <a href="https://github.com/napoleonmm83/Transkribor/releases/latest/download/Transkribor.deb">.deb</a> — ohne Auto-Update, das bietet das AppImage — <a href="https://github.com/napoleonmm83/Transkribor/releases/latest">alle Fassungen und Formate</a>.</sub>
