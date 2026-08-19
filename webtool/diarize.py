@@ -32,7 +32,9 @@ def verfuegbar() -> bool:
     ModuleNotFoundError, wenn schon das Parent-Paket fehlt — es liefert nicht None, ein
     ungeschuetzter Aufruf waere ein 500 im GET des Datei-Dialogs. Und der GET laeuft bei
     jedem Oeffnen des Dialogs: das Ergebnis wird deshalb je Prozess gecacht (Vorbild
-    `_HARDWARE` in app.py; die Antwort aendert sich zur Laufzeit nicht — die venv nicht).
+    `_HARDWARE` in app.py). Die venv aendert sich zur Laufzeit nicht; die MODELLDATEI
+    koennte es (Reparatur im laufenden Betrieb) — ein dann veralteter False sperrt das Feld
+    bis zum Neustart, vernachlaessigbar gegen einen find_spec je GET.
     """
     global _VERFUEGBAR
     if _VERFUEGBAR is None:
