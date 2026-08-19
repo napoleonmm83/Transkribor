@@ -60,7 +60,7 @@
           ]
         }
       ],
-      "artifactName": "${productName}-Setup-${version}.${ext}"
+      "artifactName": "${productName}-Setup.${ext}"
     },
     "mac": {
       "target": [
@@ -74,7 +74,7 @@
       "category": "public.app-category.productivity",
       "identity": "-",
       "hardenedRuntime": false,
-      "artifactName": "${productName}-${version}-${arch}.${ext}"
+      "artifactName": "${productName}-${arch}.${ext}"
     },
     "linux": {
       "target": [
@@ -83,7 +83,7 @@
       ],
       "category": "AudioVideo",
       "synopsis": "Interview-Transkription mit Whisper, lokal",
-      "artifactName": "${productName}-${version}.${ext}"
+      "artifactName": "${productName}.${ext}"
     },
     "deb": {
       "depends": [
