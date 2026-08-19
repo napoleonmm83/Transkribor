@@ -181,6 +181,13 @@ function abbrechen(toeter = _baumToeten) {
   if (laufenderSchritt) toeter(laufenderSchritt)
 }
 
+/** Nur fuer Tests: den Abbruch-Merker klaeren — die Produktion tut das als erste Tat
+ *  von einrichten(). Ohne diesen Zugang muessten die echten Prozess-Tests auf die
+ *  Reihenfolge der suite hoffen: ein vorheriger Test, der abbrechen() ruft, laesst
+ *  den Merker stehen und jede spaetere lauf() stuende still (gemessen: der Enkel-Test
+ *  lief einzeln gruen, in der Suite rot). */
+function abbruchZurueck() { abbruchFlag = false }
+
 /** Prozessbaum toeten — /T wie jobs.py: ein Waisenkind hielte Dateien der venv offen und
  *  sieht danach "halbe Installation" aus, gegen die #181/#217 gebaut wurden. POSIX: die
  *  negative PID signaliert die GESAMTE Gruppe (spawn detached oben); ESRCH = schon tot. */
@@ -605,6 +612,6 @@ async function einrichten(onLine, onSchritt, werkzeug = {}) {
 
 // venvVollstaendig() ist ersatzlos weg: status() beantwortet dieselbe Frage ueber venvZustand(),
 // und ein zweiter Weg dorthin waere genau der, den kein Test bewacht (er hatte keinen Aufrufer).
-module.exports = { status, einrichten, abbrechen, lauf, findePython, plan, spawnEnv, wingetFfmpeg,
+module.exports = { status, einrichten, abbrechen, abbruchZurueck, lauf, findePython, plan, spawnEnv, wingetFfmpeg,
                    nutztWhisperCpp, paketeAktuell, stempelSchreiben, stempelSchreibbar,
                    venvZustand, cudaVerloren, cudaZurueckholen }
