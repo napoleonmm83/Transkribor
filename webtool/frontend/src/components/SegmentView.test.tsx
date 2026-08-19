@@ -221,7 +221,10 @@ describe('SegmentView', () => {
     const id = knopf.getAttribute('aria-describedby')
     expect(id).toBeTruthy()
     const hinweis = document.getElementById(id!)
-    expect(hinweis?.textContent).toBe('Notiz bearbeiten (leeren streicht sie)')
+    // Gleichheit mit dem title, nicht nur Existenz des Textes: `title` (Maus) und
+    // Beschreibung (Tastatur/Screenreader) sind zwei Ausgaben EINES Hinweises —
+    // driftet eines, merkt es sonst niemand (Reviewer-Fund M4).
+    expect(hinweis?.textContent).toBe(knopf.title)
     expect(hinweis?.className).toContain('sr-only')
     expect(knopf.contains(hinweis!), 'der Hinweis steht AUSSERHALB des Knopfes').toBe(false)
   })
