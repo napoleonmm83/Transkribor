@@ -440,3 +440,37 @@ test('ein gescheitertes ffmpeg bricht NICHT ab, ein gescheitertes `-r` schon', a
   assert.match(ohnePakete.r.fehler, /Python-Pakete/)
   assert.strictEqual(ohnePakete.merker, 0, 'nach einem Abbruch darf kein Merker liegenbleiben')
 })
+
+// --- Abbrechen (#242): der längste Lauf der App war der einzige ohne Rückweg ---
+
+test('Abbruch während des PyTorch-Schritts: eigenes Ergebnis, kein Merker, kein Nachlauf', async () => {
+  const { abbrechen } = require('./setup')
+  const spur = await einrichtenMit({
+    lauf: async (cmd, args) => {
+      if (args.join(' ').includes('install torch')) abbrechen()   // mitten im Schritt gefragt
+      return 0
+    },
+  })
+  assert.strictEqual(spur.r.ok, false)
+  assert.strictEqual(spur.r.abgebrochen, true)
+  assert.match(spur.r.fehler, /Abgebrochen/, 'kein Installationsfehler-Text für einen gewollten Abbruch')
+  assert.strictEqual(spur.merker, 0)
+  assert.ok(!pipZeilen(spur).some(a => a.includes('-r ')), 'pip -r darf nach dem Abbruch nicht mehr laufen')
+})
+
+test('ein neuer Lauf beginnt ohne den Abbruch-Merker des vorigen', async () => {
+  const { abbrechen } = require('./setup')
+  abbrechen()
+  const spur = await einrichtenMit()
+  assert.strictEqual(spur.r.ok, true, 'ein hängengebliebener Merker täte jeden Folgelauf töten')
+  assert.strictEqual(spur.merker, 1)
+})
+
+test('abbrechen tötet den laufenden Schritt wirklich (echter Prozess, echter Baum-Töter)', { timeout: 20000 }, async () => {
+  const { lauf, abbrechen } = require('./setup')
+  const p = lauf(process.execPath, ['-e', 'setTimeout(() => {}, 60000)'], () => {})
+  await new Promise(r => setTimeout(r, 1000))     // den Prozess laufen lassen
+  abbrechen()
+  const code = await p
+  assert.notStrictEqual(code, 0, 'der Prozess muss getötet sein, nicht sauber beendet')
+})
