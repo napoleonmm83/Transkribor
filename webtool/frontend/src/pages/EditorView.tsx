@@ -133,8 +133,11 @@ export function EditorView() {
         suchQuery={suchQuery} onSuchChange={setSuchQuery} suchCount={anzahl} suchIndex={idx}
         onSuchPrev={suchPrev} onSuchNext={suchNext} />
       {/* Kein eigenes <main> mehr (#72): die Huelle traegt es fuer alle Seiten (`#inhalt`),
-          und zwei ineinander sind ungueltig. Hier bleibt der reine Scroll-Behaelter. */}
-      <div className="min-h-0 overflow-auto">
+          und zwei ineinander sind ungueltig. Hier bleibt der reine Scroll-Behaelter.
+          `relative` ist kein Schmuck: der Behaelter ist bis hierher nur ueber `main`s Anker
+          mitgedeckt — die Quellbaum-Regel (bildlaufanker.test.ts, #209) verlangt ihn am
+          Behaelter selbst, damit ein entkoppeltes `absolute`-Kind nie wieder am Viewport landet. */}
+      <div className="relative min-h-0 overflow-auto">
         <Transcript doc={doc} loading={docLoading} activeId={activeId}
           onPlaySeg={s => waveRef.current?.playSegment(s)}
           onPlayTurn={segs => waveRef.current?.playTurn(segs)}
