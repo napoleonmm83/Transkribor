@@ -186,7 +186,11 @@ function abbrechen(toeter = _baumToeten) {
  *  negative PID signaliert die GESAMTE Gruppe (spawn detached oben); ESRCH = schon tot. */
 function _baumToeten(proc) {
   if (process.platform === 'win32') {
-    spawn('taskkill', ['/pid', String(proc.pid), '/T', '/F'], { windowsHide: true })
+    // Fehler-Hoerer ist Pflicht: ein spawn ohne 'error'-Handler wirft bei einem
+    // Startup-Fehler mitten im Hauptprozess. Faellt taskkill aus, ist der direkte
+    // Kill immer noch besser als ein Waisenbaum (CodeRabbit-Bot, PR #290).
+    const tk = spawn('taskkill', ['/pid', String(proc.pid), '/T', '/F'], { windowsHide: true })
+    tk.on('error', () => { try { proc.kill() } catch { /* bereits tot */ } })
   } else {
     try { process.kill(-proc.pid, 'SIGTERM') } catch { /* bereits tot (ESRCH) */ }
   }
