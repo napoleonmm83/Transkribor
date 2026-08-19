@@ -16,7 +16,7 @@ Interviews führen ist das eine — stundenlanges Abtippen das andere.
 <a href="https://github.com/napoleonmm83/Transkribor/releases/latest/download/Transkribor-arm64.dmg"><img alt="Transkribor für macOS herunterladen" src="https://img.shields.io/badge/macOS_herunterladen-24292F?style=for-the-badge"></a>
 <a href="https://github.com/napoleonmm83/Transkribor/releases/latest/download/Transkribor.AppImage"><img alt="Transkribor für Linux herunterladen" src="https://img.shields.io/badge/Linux_herunterladen-E95420?style=for-the-badge"></a>
 
-<sub>Auch als <a href="https://github.com/napoleonmm83/Transkribor/releases/latest/download/Transkribor.deb">.deb</a> — <a href="https://github.com/napoleonmm83/Transkribor/releases/latest">alle Fassungen und Formate</a>.</sub>
+<sub>Auch als <a href="https://github.com/napoleonmm83/Transkribor/releases/latest/download/Transkribor.deb">.deb</a> — ohne Auto-Update, das bietet das AppImage — <a href="https://github.com/napoleonmm83/Transkribor/releases/latest">alle Fassungen und Formate</a>.</sub>
 
 <sub>Transkribor ist kostenlos — falls es dir Arbeit abnimmt, freue ich mich über eine <a href="https://github.com/sponsors/napoleonmm83">❤️ Unterstützung</a>.</sub>
 
@@ -33,7 +33,7 @@ mit, erkennt, **wer gerade spricht**, korrigiert falsch verstandene Wörter im Z
 und legt dir einen fertigen Text hin, den du direkt weiterverwenden kannst.
 
 Gemacht für alle, die viel mit Gesprochenem arbeiten: Journalismus und Forschung, Podcast,
-Vereins- und Firmenarchive — und für alle, die Vorträge festhalten oder eigenen Videos
+Vereins- und Firmenarchive — und für alle, die Vorträge festhalten oder ihren eigenen Videos
 Untertitel mitgeben wollen (der YouTube-Import und der Untertitel-Export sind eingebaut).
 Auch mit **Schweizerdeutsch** kommt es zurecht.
 
@@ -171,8 +171,8 @@ entfällt nur die Korrektur.
 ## Gefällt es dir?
 
 Transkribor ist kostenlos und bleibt es. Wenn es dir Arbeit abnimmt, freue ich mich über eine
-Unterstützung — sie fliesst in Entwicklungszeit und die Signatur-Zertifikate, die den
-Installer künftig ohne Warnmeldung durchgehen lassen.
+Unterstützung — sie fliesst in Entwicklungszeit; das nächste Ziel sind die
+Signatur-Zertifikate, damit die Warnmeldung beim ersten Öffnen künftig entfallen kann.
 
 <div align="center">
 
