@@ -804,56 +804,9 @@ def test_freigabe_erkennt_ein_fremdes_lock_auch_OHNE_merker(tmp_path, monkeypatc
     assert os.path.isdir(lock)            # das fremde (noch leere) Lock steht
 
 
-# --- #222: der Windows-Waechter braucht selbst einen Waechter ------------------
-#
-# Der Windows-Job der CI existiert NUR fuer die drei Tests oben (#201) — und nichts
-# prueft, dass sie laufen: ein aufgeweiteter skipif, eine Umbenennung oder ein
-# Refactoring der Bedingung nähme sie still weg, und der Job bliebe dabei GRUEN
-# („692 passed, 1 skipped"). Dieser Test liest die Marker am importierten Modul,
-# nicht an der pytest-Sammlung — darum trifft er auch bei `-k`-Auswahl zu, und ein
-# fehlender Name (umbenannt/geloescht) wird ebenso rot wie eine Bedingung, die auf
-# Windows ueberspringt. NICHT abgedeckt — und in pytest nicht abdeckbar — sind das
-# Zurueckbauen der Matrix in test.yml selbst und ein `pytest.skip()` mitten im
-# Testkoerper; ersteres koennte nur die CI-Seite pruefen. Und die Kette endet HIER:
-# diesen Waechter selbst zu loeschen oder zu ueberspringen hat keine Folge — ein
-# Waechter-der-Waechter waere endlos, diese Spitze ist bewusst ungedeckt.
-
-_NUR_WINDOWS = (
-    "test_windows_beantwortet_beide_openprocess_ausgaenge",
-    "test_freigabe_ueberlebt_einen_lesenden_warter",
-    "test_freigabe_erkennt_ein_fremdes_lock_auch_OHNE_merker",
-)
-
-@pytest.mark.skipif(os.name != "nt", reason="Der Waechter wacht nur dort, wo die drei laufen sollen")
-def test_die_drei_nur_windows_tests_laufen_auf_windows_wirklich():
-    for name in _NUR_WINDOWS:
-        funktion = globals().get(name)
-        assert funktion is not None, (
-            f"{name} fehlt — umbenannt oder geloescht? Der Windows-Job der CI "
-            "liefe ohne jeden Gegenwert weiter (Issue #222)."
-        )
-        markers = getattr(funktion, "pytestmark", [])
-        if not isinstance(markers, list):
-            markers = [markers]           # ein einzelner Marker steht ohne Liste
-        for marker in markers:
-            assert marker.name != "skip", (
-                f"{name} traegt ein bedingungsloses skip — auf Windows laeuft es nie (#222)."
-            )
-            assert marker.name != "xfail", (
-                f"{name} traegt xfail — `xfail(run=False)` ueberspringt ganz, ein normales "
-                "xfail macht einen FEHLER gruen; in beiden Faellen lief der Test in der "
-                "Windows-CI nie wirksam (#222, CodeRabbit-Fund)."
-            )
-            if marker.name == "skipif":
-                bedingung = marker.args[0] if marker.args else True
-                assert not bedingung, (
-                    f"{name} wuerde auf Windows uebersprungen (Bedingung {bedingung!r}). "
-                    "Policy (#222): diese drei Tests MUESSEN auf Windows laufen — ein neuer, "
-                    "berechtigter Grund, einen zu überspringen, gehoert als bewusste Aenderung "
-                    "an _NUR_WINDOWS und diesem Waechter her, nicht als Fehlalarm, den man "
-                    "wegdrückt. String-Bedingungen gelten als wahr: sie sind abgekündigter "
-                    "pytest-Stil und werden hier absichtlich laut."
-                )
+# Der Windows-Waechter fuer die drei Nur-Windows-Tests oben (#222) wohnt in
+# `test_sperre_waechter.py` — ein EIGENES Modul, damit ein spaeteres Modul-Level-
+# pytestmark hier ihn nicht mit ueberspringt (CodeRabbit-Major an PR #291).
 
 
 # --- wird_gehalten: die Sperre als ANZEIGE (#243) ----------------------------

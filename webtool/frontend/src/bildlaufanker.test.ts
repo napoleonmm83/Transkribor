@@ -19,10 +19,8 @@
  *   (Text-Abschneiden), jeder Treffer waere Rauschen — dieselbe Abgrenzung wie im
  *   Hüllen-Test.
  *
- * Vier weitere Vektoren (heute null Fundstellen im Korpus, bewusst nur dokumentiert —
+ * Drei weitere Vektoren (heute null Fundstellen im Korpus, bewusst nur dokumentiert —
  * ein Kommentar-Stripper oder Breakpoint-Paar-Scanner waere der Ueberbau fuer 4 Stellen):
- * - FALSCH GRUEN: `className='…'` mit einfachen Anfuehrungszeichen matcht gar nicht —
- *   der einzige Weg, dem Waechter unbemerkt zu entkommen.
  * - FALSCH ROT: auskommentiertes JSX mit `className="… overflow-auto …"` matcht weiter.
  * - FALSCH ROT: interpolierte Anker (`` className={`overflow-auto ${x ? 'relative' : ''}`} ``)
  *   sind im Rohquelltext kein bare Token, obwohl der Anker zur Laufzeit existiert.
@@ -44,14 +42,16 @@ const quellDateien: Record<string, string> = {
   ...import.meta.glob('./**/*.tsx', { query: '?raw', import: 'default', eager: true }),
 }
 
-/** className="…" wie className={…} — siehe Grenzen im Dateikopf. */
-const CLASSNAME_RE = /className\s*=\s*(?:"([^"]*)"|\{`([^`]*)`\})/g
+/** className="…" wie className={…} — siehe Grenzen im Dateikopf. Die Form mit
+ *  einfachen Anfuehrungszeichen (nackt wie in {'…'}) gehoert dazu: sie waere sonst
+ *  der einzige Weg, dem Waechter unbemerkt zu entkommen (CodeRabbit-Fund PR #291). */
+const CLASSNAME_RE = /className\s*=\s*(?:"([^"]*)"|'([^']*)'|\{'([^']*)'\}|\{`([^`]*)`\})/g
 
 const fundstellen: { datei: string; klassen: string }[] = []
 for (const [pfad, inhalt] of Object.entries(quellDateien)) {
   if (KEIN_QUELLCODE.test(pfad)) continue
   for (const treffer of inhalt.matchAll(CLASSNAME_RE)) {
-    const klassen = treffer[1] ?? treffer[2] ?? ''
+    const klassen = treffer[1] ?? treffer[2] ?? treffer[3] ?? treffer[4] ?? ''
     if (/overflow-(x-|y-)?(auto|scroll)/.test(klassen)) fundstellen.push({ datei: pfad, klassen })
   }
 }
