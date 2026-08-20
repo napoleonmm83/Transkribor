@@ -49,8 +49,10 @@ Auch mit **Schweizerdeutsch** kommt es zurecht.
    Der Knopf fragt einmal nach („nochmal klicken zum Start“); während des Vorgangs gibt es
    einen **Abbrechen**-Knopf. Ein abgebrochener Versuch richtet sich beim nächsten Start
    einfach wieder an, es geht nichts verloren.
-3. Projekt anlegen, Audiodatei hineinziehen. **Fertig** — die Arbeit startet von allein, und
-   du siehst live, wie weit sie ist.
+3. Projekt anlegen, Audiodatei hineinziehen. Es öffnet sich ein Fenster, in dem du je
+   Aufnahme Sprache und Anzahl Sprecher einstellen und **kurz reinhören** kannst — dreimal
+   klicken, dann läuft alles von allein, und du siehst live, wie weit es ist. (Ab der
+   nächsten Fassung; in `v0.25.0` und älter liegen diese Felder direkt auf der Seite.)
 
 > [!WARNING]
 > **Beim ersten Öffnen warnt das Betriebssystem.** Der Installer ist nicht bei Microsoft bzw.
@@ -58,7 +60,7 @@ Auch mit **Schweizerdeutsch** kommt es zurecht.
 > Windows: *Weitere Informationen* → *Trotzdem ausführen*. macOS: Rechtsklick auf die App →
 > *Öffnen*.
 
-<img src="docs/bilder/arbeitsflaeche.png" alt="Die Arbeitsfläche eines Projekts: eine Fläche zum Hineinziehen von Audio, ein Feld für Video-Links und die Dateiliste mit dem Stand jeder Aufnahme.">
+<img src="docs/bilder/arbeitsflaeche.png" alt="Die Arbeitsfläche eines Projekts: oben der Knopf „+ Material“, darunter die Dateiliste mit dem Stand jeder Aufnahme.">
 
 ---
 
@@ -285,12 +287,13 @@ Drei Meldungen können dabei auftauchen:
 <details>
 <summary><strong>Welche Sprachen?</strong></summary>
 
-Ganz oben im Bereich **„Material hinzufügen“** steht **eine** Sprachauswahl: Schweizerdeutsch,
-Deutsch, Englisch, Französisch, Italienisch oder Automatisch (dann erkennt Whisper die Sprache
-selbst). Was du dort einstellst, gilt für alles, was du anschliessend hinzufügst — hochgeladene
-Dateien wie importierte Video-URLs. Die **Anzahl Sprecher** dagegen fragt Transkribor pro
-Aufnahme ab, gleich nachdem du sie ausgewählt hast (siehe „Es hat zu wenige Sprecher erkannt“
-weiter unten) — sie gehört der einzelnen Aufnahme, nicht dem ganzen Schwung. Schweizerdeutsch wird wie gehabt vollständig korrigiert —
+Schweizerdeutsch, Deutsch, Englisch, Französisch, Italienisch oder Automatisch (dann erkennt
+Whisper die Sprache selbst). Gewählt wird **pro Aufnahme**: klick auf **„+ Material“**, zieh
+deine Dateien hinein oder füge Video-Links ein — im zweiten Schritt steht dann eine Zeile je
+Aufnahme mit ihrer eigenen Sprache und ihrer eigenen Anzahl Sprecher. Praktisch, wenn ein
+englischer Vortrag und zwei Schweizer Interviews im selben Schwung dazukommen. Vorbelegt ist
+alles mit der Sprache des Projekts; änderst du sie nicht, folgt die Aufnahme weiterhin dem
+Projekt. Schweizerdeutsch wird wie gehabt vollständig korrigiert —
 der Dialekt wird zu lesbarem Standarddeutsch, dazu kommen die Sprechernamen. Bei allen anderen
 Sprachen bleibt die Originalsprache erhalten, nichts wird übersetzt: ein englisches Video kommt
 als englisches Transkript heraus.
@@ -358,13 +361,14 @@ Transkribor wirft dann zwei Personen in einen Topf. Typisch sieht man es daran, 
 beim Interviewer stehen oder mehrere Leute unter einem Namen laufen.
 
 **Das Feld „Anzahl Sprecher“ ist der wirksamste Hebel — und am besten trägst du die Zahl
-gleich beim Hinzufügen ein.** Sobald du Aufnahmen auswählst oder Video-Links einfügst,
-erscheint eine Liste mit einer Zeile pro Aufnahme und einem Feld „Anzahl Sprecher“ daneben;
-erst ein Klick auf den Startknopf darunter legt los (**„Hinzufügen & starten“** bei
-hochgeladenen Aufnahmen, **„Holen & starten“** bei Video-Links). Jede Aufnahme bekommt so ihre eigene
-Zahl — praktisch, wenn Zweiergespräche und ein Teaminterview im selben Schwung dazukommen.
-(Diese Liste gibt es **ab `v0.25.0`**; in Fassungen bis einschliesslich **`v0.24.0`** führt
-nur der Weg über das ⋯-Menü unten.)
+gleich beim Hinzufügen ein.** Über **„+ Material“** kommst du in ein Fenster mit drei
+Schritten: Dateien oder Video-Links wählen, dann je Aufnahme Sprache und Anzahl Sprecher
+setzen, dann prüfen und starten. Jede Aufnahme bekommt so ihre eigene Zahl — praktisch, wenn
+Zweiergespräche und ein Teaminterview im selben Schwung dazukommen. **Und du kannst vorher
+kurz reinhören:** ein Klick auf das Play-Symbol der Zeile spielt die Aufnahme unten im
+Fenster ab, damit du nicht raten musst, wie viele Leute darin vorkommen. (Das Fenster gibt es
+**ab der nächsten Fassung**; in `v0.25.0` stehen dieselben Felder direkt auf der Seite, in
+`v0.24.0` und älter führt nur der Weg über das ⋯-Menü unten.)
 
 Nachträglich geht es weiterhin: in der Dateiliste auf das **⋯-Menü** der Aufnahme klicken,
 dort **„Sprache, Sprecher & Korrektur“** wählen — das Feld steht im Dialog gleich unter der
