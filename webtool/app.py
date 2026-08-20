@@ -404,13 +404,30 @@ class DateiEinstellungenBody(EinstellungenBody):
     sprecher: StrictInt | None = None
 
 
+def _projekt_body(d: dict) -> dict:
+    """Die EINE Antwortform beider Projekt-Einstellungs-Endpunkte.
+
+    Vorher bauten GET und PUT je ein eigenes Literal, und dem PUT fehlten `sprach_choices`
+    und `tiefen` — waehrend `api.saveProjektEinstellungen` seinen Rueckgabewert als denselben
+    Typ tippt. Dieselbe Falle wie `_settings_body` (#239): es knallt nicht, solange der
+    Aufrufer die Antwort zusammenmischt, und faellt beim ersten auf, der es nicht tut.
+
+    `sprecher_max` ist ein reiner SERVER-Wert (wie im Datei-Endpunkt): die Vorschau beim
+    Hinzufuegen prueft den Bereich selbst, und `sprachen.SPRECHER_MAX` soll dafuer nicht ein
+    zweites Mal im Frontend stehen. Ein Projekt-STANDARD fuer die Sprecherzahl entsteht damit
+    NICHT — es gibt bewusst keinen (#264, die Zahl gehoert der Aufnahme); hier reist nur die
+    Obergrenze.
+    """
+    return {"sprache": d["sprache"], "korrektur": d["korrektur"],
+            "mehrsprachig": d["mehrsprachig"],
+            "sprach_choices": _sprachen.fuer_frontend(), "tiefen": _sprachen.TIEFEN,
+            "sprecher_max": _sprachen.SPRECHER_MAX}
+
+
 @app.get("/api/projects/{project}/einstellungen")
 def projekteinstellungen(project: str):
     _validate(project)
-    d = _projekt.laden(project)
-    return {"sprache": d["sprache"], "korrektur": d["korrektur"],
-            "mehrsprachig": d["mehrsprachig"],
-            "sprach_choices": _sprachen.fuer_frontend(), "tiefen": _sprachen.TIEFEN}
+    return _projekt_body(_projekt.laden(project))
 
 
 @app.put("/api/projects/{project}/einstellungen")
@@ -424,8 +441,7 @@ def projekteinstellungen_speichern(project: str, body: EinstellungenBody):
     # sicher, und ein PUT ohne `mehrsprachig` laesst den Haken stehen (Partial-Update).
     d = _projekt.speichern(project, {"sprache": body.sprache, "korrektur": body.korrektur,
                                      "mehrsprachig": body.mehrsprachig})
-    return {"sprache": d["sprache"], "korrektur": d["korrektur"],
-            "mehrsprachig": d["mehrsprachig"]}
+    return _projekt_body(d)
 
 
 @app.get("/api/projects/{project}/files/{base}/einstellungen")
