@@ -61,7 +61,7 @@ def ziel_phrase(sprach_id: str) -> str:
 
 
 def von_whisper_code(code: str, bevorzugt: str | None = None) -> str:
-    """Whisper-Detektion -> Sprach-id. Unbekannt -> de.
+    """Whisper-Detektion -> Sprach-id. Unbekannt (auch: gar keine Detektion) -> de.
 
     ponytail: 'ch' teilt sich den Whisper-Code 'de' mit 'de'. Da Whisper den
     Dialekt nicht erkennt, wird bei Detektion 'de' Standarddeutsch zurueckgegeben --
@@ -73,8 +73,16 @@ def von_whisper_code(code: str, bevorzugt: str | None = None) -> str:
     sein Schweizerdeutsch. Bei JEDER anderen erkannten Sprache greift er nicht -- sonst
     waere `auto` in einem CH-Projekt ein fest verdrahtetes `ch`, und der englische
     Beitrag bekaeme Dialekt-Glaettung. Der Vorrang steht hier und nicht am Aufrufort:
-    diese Tabelle ist die EINE Quelle fuer Whisper-Codes.
+    diese Tabelle ist die EINE Quelle fuer Whisper-Codes. `bevorzugt` muss ein String sein;
+    die Typwache dafuer sitzt eine Ebene entfernt in `projekt._lesen` (isinstance-Zwang), ein
+    zweiter Riegel hier waere nicht erreichbar.
+
+    Ohne Detektion (`None`, `""`) faellt sie auf "de" -- OHNE diese Zeile gewaenne `auto`:
+    dessen Whisper-Code IST `None`, die Schleife ueberspringt nur `ch`, und `bevorzugt="auto"`
+    traefe sogar schon die Zeile darueber. "auto" ist eine Meta-id, kein Sprachergebnis.
     """
+    if not code:
+        return "de"
     if bevorzugt in SPRACHEN and SPRACHEN[bevorzugt]["whisper"] == code:
         return bevorzugt
     for sid, e in SPRACHEN.items():
