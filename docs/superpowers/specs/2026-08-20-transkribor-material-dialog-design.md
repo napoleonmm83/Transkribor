@@ -357,21 +357,39 @@ Job-Leiste über den Dialog gehoben.
 
 ---
 
-## 7. Was vor dem Bauen zu messen ist
+## 7. Gemessen (2026-08-20), zwei Punkte offen
 
-Keine dieser Zahlen ist heute bekannt. Sie stehen hier, damit sie nicht später als Annahme
-durchgehen:
+Drei der vier Zahlen sind jetzt gemessen, in Chromium über `decodeAudioData` — dieselbe API,
+die Wavesurfer intern benutzt.
 
-1. **`.mp4`-Dekodierung** an einer echten Datei aus `projekte\` (Wegwerf-Kopie), in Chrome und
-   im gepackten Electron-Lauf. Ergebnis entscheidet, ob der Hörknopf dort angeboten wird.
-2. **Dekodierzeit und Speicher** für ein 30-Minuten-Interview über eine Blob-URL. Ergebnis
-   entscheidet, ob es beim „auf Klick dekodieren" bleibt oder ob es einen Ladezustand braucht.
-3. **Die feste Rahmenhöhe.** Im Entwurf 352 px. Bei etwa 480 px passen zehn Zeilen ohne
-   Scrollen — zu prüfen auf Marcus' Bildschirm und auf einem 13-Zoll-Laptop.
-4. **Erscheinen Sonner-Toasts über dem Dialog?** Der Workspace meldet Job-Ausgänge per Toast.
-   Liegen sie hinter dem Modal, geht ausgerechnet die Fehlermeldung eines gescheiterten Laufs
-   verloren. Vermutlich unkritisch (Sonner rendert in einem Portal), **aber nicht gemessen** —
-   und eine Vermutung über eine Stapelreihenfolge ist keine Zusicherung.
+**1. `.mp4` dekodiert, auch mit Videospur.** 5:10 mit H.264-Video + AAC-Ton: **259 ms**,
+2 Kanäle, 48 kHz, sauber. Der Hörknopf wird also auch für `.mp4` angeboten — es ist ein
+akzeptiertes Format (`app.py:AUDIO_EXT`, `UploadDropzone.tsx:AUDIO_RE`).
+**Die Datei ist ERZEUGT, nicht aus `projekte\` genommen:** dort liegt heute **kein einziges
+`.mp4`** (19 mp3, 6 wav, 5 m4a). Geprüft ist damit die *Struktur* (Videospur + AAC), nicht
+Marcus' Kamera-Codec. Wer eine echte Kameradatei zur Hand hat, misst nach; die Fehlermeldung
+bei Fehlschlag bleibt aus genau diesem Grund im Entwurf (5.1, Punkt 3).
+
+**2. Ein Ladezustand ist nötig.** 30 Minuten AAC (29 MB): laden 77 ms, **dekodieren 1595 ms**.
+Zum Vergleich 18 Minuten WAV (312 MB): laden 440 ms, dekodieren 488 ms — der Engpass ist
+das **Dekodieren komprimierter** Formate, nicht die Dateigrösse. 1,6 s ohne Rückmeldung liest
+sich als kaputter Knopf.
+
+**Und „nur eine Welle gleichzeitig" (5.1) ist damit belegt, nicht vorsorglich:** der dekodierte
+Puffer der 30-Minuten-Datei ist **659 MB** (1800 s × 48 000 × 2 Kanäle × 4 Byte, gerechnet).
+Zehn davon wären 6,6 GB. **Der Wert ist Arithmetik, keine Heap-Messung** — `performance.memory`
+taugt hier nicht, ein `AudioBuffer` liegt ausserhalb des JS-Heaps (gemessen wurden −28 MB und
+−298 MB, also GC-Rauschen).
+
+**3. Die feste Rahmenhöhe bleibt offen.** Sie hängt an Marcus' Bildschirm; im Entwurf 352 px,
+bei etwa 480 px passen zehn Zeilen ohne Scrollen.
+
+**4. Sonner-Toasts: GELESEN, nicht gemessen.** Sonners Behälter trägt
+`z-index: 999999999` (`node_modules/sonner/dist/styles.css`), `DialogOverlay`/`DialogContent`
+tragen `z-50` (`ui/dialog.tsx:40,62`), und der `Toaster` sitzt in `main.tsx` auf der Wurzel,
+also nicht in einem fremden Stapelkontext. Danach liegen Toasts oben. **Das ist eine Lesung,
+keine Messung** — sie wird beim Bau von Task 3 nachgeholt, wo der Dialog existiert und ein
+Toast einen Klick weit weg ist.
 
 ---
 
