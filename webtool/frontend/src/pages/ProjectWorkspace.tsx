@@ -215,8 +215,8 @@ export function ProjectWorkspace() {
           <div className="blatt flex flex-col items-center px-6 py-12 text-center">
             <FileAudio className="size-7 text-muted-foreground" aria-hidden="true" />
             <p className="mt-3 max-w-sm text-sm text-muted-foreground">
-              Noch keine Dateien. Lade Audio hoch oder füge eine Video-URL ein — die
-              Transkription startet von selbst.
+              Noch keine Dateien. Klick oben auf „+ Material“ — die Transkription startet
+              danach von selbst.
             </p>
           </div>
         )}

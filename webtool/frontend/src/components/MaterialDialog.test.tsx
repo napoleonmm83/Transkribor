@@ -97,6 +97,31 @@ describe('MaterialDialog', () => {
     expect(screen.getByText('b.mp3')).toBeInTheDocument()
   })
 
+  it('schliesst sich nach einem vollstaendig gelungenen Start — und NUR dann', async () => {
+    /* Im Browser gefunden, von keinem Test: der Dialog blieb mit leerer Liste offen, und der
+       einzige Rueckweg hiess „Abbrechen" — ein Knopf, der nach Verwerfen klingt, fuer einen
+       Lauf, der gerade geglueckt ist. Die Gegenrichtung gehoert dazu: nach einem
+       Teil-Fehlschlag darf er NICHT zugehen, sonst verschwaenden die gescheiterten Zeilen. */
+    const onSchliessen = vi.fn()
+    const { rerender } = render(
+      <MaterialDialog {...basis} onSchliessen={onSchliessen}
+        vorbelegteDateien={[datei('a.mp3')]} />)
+    fireEvent.click(screen.getByRole('button', { name: /Weiter/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Weiter/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Los geht/ }))
+    await waitFor(() => expect(onSchliessen).toHaveBeenCalled())
+
+    onSchliessen.mockClear()
+    vi.mocked(api.uploadAudio).mockRejectedValue(new Error('Netz weg'))
+    rerender(<MaterialDialog {...basis} project="Zweites" onSchliessen={onSchliessen}
+      vorbelegteDateien={[datei('b.mp3')]} />)
+    fireEvent.click(screen.getByRole('button', { name: /Weiter/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Weiter/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Los geht/ }))
+    await waitFor(() => expect(screen.getByText('b.mp3')).toBeInTheDocument())
+    expect(onSchliessen).not.toHaveBeenCalled()
+  })
+
   it('„existiert bereits" bleibt NICHT stehen — ein zweiter Versuch endete wieder mit 409', async () => {
     /* Aus `MaterialVorschau.test.tsx` mitgenommen: die Unterscheidung hat sonst keinen Test
        mehr. Alles Stehenlassen liefe beim naechsten Klick in lauter 409er, bedingungsloses
