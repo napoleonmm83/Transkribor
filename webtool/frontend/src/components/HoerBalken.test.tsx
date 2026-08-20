@@ -1,3 +1,4 @@
+import type React from 'react'
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { HoerBalken, ersteStelle } from './HoerBalken'
@@ -6,16 +7,22 @@ import { HoerBalken, ersteStelle } from './HoerBalken'
 // die Sprung-Wache (`gesprungen.current`) ungedeckt: mit einer stummen Attrappe bleibt die
 // Mutation „Wache raus" gruen, weil `onBereit` nie faellt (Reviewbefund W4).
 const springeZu = vi.hoisted(() => vi.fn())
-vi.mock('@/components/Waveform', () => ({
-  Waveform: (() => {
-    const { forwardRef, useEffect, useImperativeHandle } = require('react')
-    return forwardRef(function Welle({ url, onBereit }: any, ref: any) {
+// `await import('react')` IN der Factory, nicht `require` (das gibt es in diesem Baum nicht,
+// und `tsc -b` sagt es — `vitest` pruefte es nicht) und auch kein Import von aussen: die
+// Factory laeuft, bevor die Modulbindungen des Tests stehen.
+vi.mock('@/components/Waveform', async () => {
+  const { forwardRef, useEffect, useImperativeHandle } = await import('react')
+  return {
+    Waveform: forwardRef(function Welle(
+      { url, onBereit }: { url: string; onBereit?: (p: Float32Array, d: number) => void },
+      ref: React.Ref<{ springeZu: (s: number) => void }>,
+    ) {
       useImperativeHandle(ref, () => ({ springeZu }))
       useEffect(() => { onBereit?.(new Float32Array([0.001, 0.002, 0.9, 0.8]), 40) })
       return <div data-testid="welle" data-url={url} />
-    })
-  })(),
-}))
+    }),
+  }
+})
 
 const datei = (name: string) => new File(['x'], name, { type: 'audio/mpeg' })
 
