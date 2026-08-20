@@ -295,6 +295,15 @@ der Dialekt wird zu lesbarem Standarddeutsch, dazu kommen die Sprechernamen. Bei
 Sprachen bleibt die Originalsprache erhalten, nichts wird übersetzt: ein englisches Video kommt
 als englisches Transkript heraus.
 
+**„Automatisch" kennt keinen Dialekt — ausser dein Projekt steht auf Schweizerdeutsch.**
+Whisper hört Schweizerdeutsch als Deutsch, es kann den Dialekt gar nicht melden. Steht der
+Projekt-Standard aber auf Schweizerdeutsch, gilt er: hört Whisper Deutsch, behandelt
+Transkribor die Aufnahme als Schweizerdeutsch und glättet den Dialekt wie gewohnt. Hört es
+Englisch, Französisch oder Italienisch, bleibt es dabei — der Standard drängt sich nicht
+dazwischen. So kannst du einen gemischten Schwung mit „Automatisch" hinzufügen, ohne dass die
+Schweizer Aufnahmen dabei ungeglättet durchrutschen. (Ab der nächsten Fassung; in `v0.25.0`
+und älter ist „Automatisch" immer ohne Dialekt.)
+
 In den Projekt-Einstellungen (⋯-Menü des Projekts) legst du die Standard-Sprache und die
 Korrektur-Tiefe fest; die Auswahl beim Hinzufügen nimmt die Standard-Sprache vorweg und lässt
 sich für die nächsten Aufnahmen abändern, ohne den Standard zu verstellen. Und solltest du dich
