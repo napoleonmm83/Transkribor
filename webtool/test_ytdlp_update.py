@@ -2046,3 +2046,11 @@ def test_merken_schreibt_nichts_mehr_in_die_settings_json(tmp_path):
     if (tmp_path / "settings.json").exists():
         inhalt = (tmp_path / "settings.json").read_text(encoding="utf-8")
     assert "ytdlp_geprueft" not in inhalt
+
+
+def test_kein_ytdlp_schluessel_mehr_in_defaults_oder_settings():
+    """#281-Rueckfuehr-Waechter: Kalendermerker gehoert nicht in die Nutzer-Datei. Ein
+    DEFAULTS-Eintrag schluege durch save()s Filter wieder in die Datei durch — und waere
+    dann wieder pro Nutzer geteilt, der Fehler von dem dieser Fix handelt."""
+    assert "ytdlp_geprueft" not in settings.DEFAULTS
+    assert not hasattr(yu, "MERKER")
