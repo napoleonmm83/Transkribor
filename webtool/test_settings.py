@@ -195,25 +195,27 @@ def test_zwei_schreiber_verlieren_einander_nicht(monkeypatch):
 
     Das `load` wird kuenstlich verlangsamt: die echte Sequenz dauert Mikrosekunden und
     liefe auch ungesperrt fast immer durch — ein Test, der die Race nicht oeffnet, ist
-    gruen aus Zufall und beweist nichts.
+    gruen aus Zufall und beweist nichts. (CodeRabbit-CLI an #281: der Patch stand auf
+    `load`, aber `save()` liest seit #203 ueber `_lesen()` — die Verzoegerung lief ins
+    Leere und der Test war milder als beabsichtigt. Jetzt haengt sie am echten Pfad.)
     """
     import threading
     import time
-    orig = settings.load
+    orig = settings._lesen
 
     def langsam():
         d = orig()
         time.sleep(0.05)
         return d
 
-    monkeypatch.setattr(settings, "load", langsam)
+    monkeypatch.setattr(settings, "_lesen", langsam)
     faeden = [threading.Thread(target=settings.save, args=({"api_key": "sk-geheim"},)),
               threading.Thread(target=settings.save, args=({"whisper_model": "small"},))]
     for f in faeden:
         f.start()
     for f in faeden:
         f.join()
-    cfg = orig()
+    cfg, _ = orig()
     assert cfg["api_key"] == "sk-geheim"
     assert cfg["whisper_model"] == "small"
 
