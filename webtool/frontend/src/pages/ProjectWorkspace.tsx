@@ -10,7 +10,7 @@ import { FileStatusPill } from '@/components/FileStatusPill'
 import { ProjektMenue } from '@/components/ProjektMenue'
 import { PageHeader } from '@/components/PageHeader'
 import { MaterialDialog } from '@/components/MaterialDialog'
-import { istAudio } from '@/lib/materialZeilen'
+import { nurAudio } from '@/lib/materialZeilen'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { startTranscribe, startCorrect, cancelJob, getProjektEinstellungen } from '@/lib/api'
@@ -105,6 +105,21 @@ export function ProjectWorkspace() {
       .catch(e => { if (projectRef.current === project) meldeLadefehler(e) })
   }
 
+  // Ein Drop NEBEN die Ablageflaeche darf den Browser nicht die Datei oeffnen lassen: er
+  // ersetzt damit die Seite, und alles, was im Dialog stand, ist weg. Das Versprechen „die
+  // ganze Seite ist Drop-Ziel" macht den Fehlwurf ausserdem wahrscheinlicher — daneben liegt
+  // die Seitenleiste. `preventDefault` auf Fensterebene laesst den Drop einfach nichts tun
+  // (CodeRabbit-Bot).
+  useEffect(() => {
+    const stopp = (e: DragEvent) => e.preventDefault()
+    window.addEventListener('dragover', stopp)
+    window.addEventListener('drop', stopp)
+    return () => {
+      window.removeEventListener('dragover', stopp)
+      window.removeEventListener('drop', stopp)
+    }
+  }, [])
+
   // Discovery laufender Jobs steht im ProjektDatenProvider — sie gilt fuer ALLE Projekte,
   // nicht nur fuer das offene. `adopt` bleibt hier fuer die selbst gestarteten Jobs.
 
@@ -137,8 +152,8 @@ export function ProjectWorkspace() {
       onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setZieht(false) }}
       onDrop={e => {
         e.preventDefault(); setZieht(false)
-        const audio = Array.from(e.dataTransfer.files).filter(f => istAudio(f.name))
-        if (!audio.length) { toast.info('Keine Audiodatei dabei — es passiert nichts.'); return }
+        const audio = nurAudio(Array.from(e.dataTransfer.files), t => toast.info(t))
+        if (!audio.length) return
         setVorbelegt(audio); setDialogOffen(true)
       }}>
       {/* `pointer-events-none` ist Pflicht, nicht Kosmetik: ohne es faengt die Flaeche das

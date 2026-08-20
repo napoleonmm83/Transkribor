@@ -275,6 +275,26 @@ describe('MaterialDialog', () => {
     expect(screen.queryByText('a.mp3')).not.toBeInTheDocument()
   })
 
+  it('meldet den Ausgang an den Rueckruf DES PROJEKTS, in dem der Lauf startete', async () => {
+    /* Messung zu einem Reviewbefund (CodeRabbit-Bot, kritisch): `onFertig` laeuft ausserhalb
+       der `laufNr`-Wache — meldet ein Lauf aus Projekt A seinen Job also an den Rueckruf von
+       Projekt B, das inzwischen offen ist? Die Arbeitsflaeche baut daraus `adopt(job, project)`,
+       ein falsches Projekt waere ein falsch zugeordneter Job. */
+    let aufloesen: (w: unknown) => void = () => {}
+    vi.mocked(api.uploadAudio).mockReturnValue(new Promise(r => { aufloesen = r as never }))
+    const fertigA = vi.fn(); const fertigB = vi.fn()
+    const { rerender } = render(
+      <MaterialDialog {...basis} project="A" onFertig={fertigA}
+        vorbelegteDateien={[datei('a.mp3')]} />)
+    fireEvent.click(screen.getByRole('button', { name: /Weiter/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Weiter/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Los geht/ }))
+    rerender(<MaterialDialog {...basis} project="B" onFertig={fertigB} />)
+    await act(async () => { aufloesen({ base: 'a', file: 'a.mp3', job_id: 'j', started: true }) })
+    expect(fertigA).toHaveBeenCalled()
+    expect(fertigB).not.toHaveBeenCalled()
+  })
+
   it('nennt in Schritt 3 den Projekt-Standard, wenn „Automatisch" dabei ist', () => {
     /* Spec 10.1 — die alte Fassung dieses Tests erwartete eine WARNUNG („du verlierst die
        Dialekt-Glaettung"). Sie ist widerlegt: `auto` liefert Schweizerdeutsch nicht von sich
