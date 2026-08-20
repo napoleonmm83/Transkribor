@@ -313,6 +313,30 @@ describe('UploadDropzone — Reviewbefunde PR #297', () => {
     expect(screen.queryAllByRole('textbox')).toHaveLength(0)   // bleibt weg, auch in B
   })
 
+  it('waehrend eines Laufs oeffnet auch die TASTATUR keinen Dateidialog', async () => {
+    /* CodeRabbit-Bot, Nachlauf: `onClick` und `onDragOver` waren gegen `laeuft` geschuetzt,
+       `onKeyDown` nicht. Enter/Leertaste oeffnete also den Dialog, der Nutzer waehlte aus —
+       und `waehlen()` verwarf es still. Ein toter Weg, und einer, der ausgerechnet die
+       Tastaturbedienung trifft: mit der Maus passiert sichtbar nichts, per Tastatur
+       scheinbar etwas und dann doch nicht. */
+    vi.mocked(api.uploadAudio).mockImplementation(() => new Promise(() => {}))
+    render(<UploadDropzone project="Demo" onDone={vi.fn()} sprache="de" />)
+    const input = screen.getByTestId('upload-input') as HTMLInputElement
+    const klicks = vi.spyOn(input, 'click')
+    await act(async () => {
+      fireEvent.change(input, { target: { files: [new File(['x'], 'a.mp3')] } })
+    })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Hinzufügen & starten/ }))
+    })
+    klicks.mockClear()
+    const flaeche = screen.getByRole('button', { name: 'Audio hochladen' })
+    fireEvent.keyDown(flaeche, { key: 'Enter' })
+    fireEvent.keyDown(flaeche, { key: ' ' })
+    expect(klicks).not.toHaveBeenCalled()
+    expect(flaeche).toHaveAttribute('aria-disabled', 'true')
+  })
+
   it('waehrend eines Laufs nimmt die Zone keine neue Auswahl an', async () => {
     /* Sonst landeten neue Zeilen in der Vorschau, der Nutzer traegt eine Zahl ein — und
        `setAuswahl(gescheitert)` am Ende des laufenden Uploads wirft sie ersatzlos weg. */

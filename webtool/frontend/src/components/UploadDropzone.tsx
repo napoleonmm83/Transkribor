@@ -151,8 +151,16 @@ export function UploadDropzone({ project, onDone, sprache = '', mehrsprachig,
     <div>
       <div
         role="button" tabIndex={0} aria-label="Audio hochladen"
+        aria-disabled={laeuft || undefined}
         onClick={() => { if (!laeuft) inputRef.current?.click() }}
-        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); inputRef.current?.click() } }}
+        onKeyDown={e => {
+          // Dieselbe Sperre wie an der Maus — sonst oeffnet Enter/Leertaste den Dateidialog,
+          // der Nutzer waehlt aus, und `waehlen()` verwirft es still. Ein toter Weg, und
+          // einer, der ausgerechnet die Tastaturbedienung trifft: mit der Maus passiert
+          // sichtbar nichts, per Tastatur passiert scheinbar etwas und dann doch nicht.
+          if (laeuft) return
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); inputRef.current?.click() }
+        }}
         onDragOver={e => { e.preventDefault(); if (!laeuft) setOver(true) }}
         onDragLeave={() => setOver(false)}
         onDrop={e => { e.preventDefault(); setOver(false); waehlen(Array.from(e.dataTransfer.files)) }}
