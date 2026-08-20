@@ -288,7 +288,9 @@ Drei Meldungen können dabei auftauchen:
 Ganz oben im Bereich **„Material hinzufügen“** steht **eine** Sprachauswahl: Schweizerdeutsch,
 Deutsch, Englisch, Französisch, Italienisch oder Automatisch (dann erkennt Whisper die Sprache
 selbst). Was du dort einstellst, gilt für alles, was du anschliessend hinzufügst — hochgeladene
-Dateien wie importierte Video-URLs. Schweizerdeutsch wird wie gehabt vollständig korrigiert —
+Dateien wie importierte Video-URLs. Die **Anzahl Sprecher** dagegen fragt Transkribor pro
+Aufnahme ab, gleich nachdem du sie ausgewählt hast (siehe „Es hat zu wenige Sprecher erkannt“
+weiter unten) — sie gehört der einzelnen Aufnahme, nicht dem ganzen Schwung. Schweizerdeutsch wird wie gehabt vollständig korrigiert —
 der Dialekt wird zu lesbarem Standarddeutsch, dazu kommen die Sprechernamen. Bei allen anderen
 Sprachen bleibt die Originalsprache erhalten, nichts wird übersetzt: ein englisches Video kommt
 als englisches Transkript heraus.
@@ -346,11 +348,21 @@ Ansteckmikrofonen: alle Stimmen kommen aus derselben Richtung, klingen ähnlich 
 Transkribor wirft dann zwei Personen in einen Topf. Typisch sieht man es daran, dass Antworten
 beim Interviewer stehen oder mehrere Leute unter einem Namen laufen.
 
-**Das Feld „Anzahl Sprecher“ ist der wirksamste Hebel.** Du findest es so: in der Dateiliste
-auf das **⋯-Menü** der Aufnahme klicken, dort **„Sprache, Sprecher & Korrektur“** wählen — das
-Feld steht im Dialog gleich unter der Sprache, an zweiter Stelle. (In Fassungen **bis
-einschliesslich `v0.22.0`** ist es das **unterste** Feld, und der Menüpunkt heisst dort
-„Sprache, Korrektur & Sprecher“ bzw. in noch älteren „Sprache & Korrektur-Tiefe“.)
+**Das Feld „Anzahl Sprecher“ ist der wirksamste Hebel — und am besten trägst du die Zahl
+gleich beim Hinzufügen ein.** Sobald du Aufnahmen auswählst oder Video-Links einfügst,
+erscheint eine Liste mit einer Zeile pro Aufnahme und einem Feld „Anzahl Sprecher“ daneben;
+erst ein Klick auf **„Hinzufügen & starten“** legt los. Jede Aufnahme bekommt so ihre eigene
+Zahl — praktisch, wenn Zweiergespräche und ein Teaminterview im selben Schwung dazukommen.
+(Diese Liste gibt es **ab der nächsten Fassung**; bis dahin führt nur der Weg über das
+⋯-Menü unten.)
+
+Nachträglich geht es weiterhin: in der Dateiliste auf das **⋯-Menü** der Aufnahme klicken,
+dort **„Sprache, Sprecher & Korrektur“** wählen — das Feld steht im Dialog gleich unter der
+Sprache, an zweiter Stelle. (In Fassungen **bis einschliesslich `v0.22.0`** ist es das
+**unterste** Feld, und der Menüpunkt heisst dort „Sprache, Korrektur & Sprecher“ bzw. in noch
+älteren „Sprache & Korrektur-Tiefe“.) Der Unterschied ist nur die Wartezeit: beim Hinzufügen
+eingetragen, zählt die Zahl vom ersten Durchlauf an — nachträglich läuft die Korrektur noch
+einmal.
 
 Trag dort ein, wie viele Personen tatsächlich gesprochen haben — **dich als fragende Person
 mitgezählt**. Waren es du und drei Teammitglieder, ist die Antwort *vier*. Transkribor nimmt
