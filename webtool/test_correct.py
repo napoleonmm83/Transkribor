@@ -829,6 +829,39 @@ def test_ziel_dialekt_auto_nie_dialekt(tmp_path, monkeypatch):
     assert "English" in ziel and dialekt is False
 
 
+def _auto_datei(tmp_path, projekt_sprache, erkannt):
+    """Projekt mit Standard `projekt_sprache`, Datei ausdruecklich auf `auto`, Roh-JSON
+    mit dem detektierten Code `erkannt`."""
+    tdir = os.path.join(tmp_path, "p", "transkripte")
+    os.makedirs(tdir, exist_ok=True)
+    with open(os.path.join(tdir, "x.json"), "w") as fh:
+        json.dump({"language": erkannt}, fh)
+    from webtool import projekt
+    projekt.speichern("p", {"sprache": projekt_sprache})
+    projekt.setze_datei("p", "x", sprache="auto")
+
+
+def test_ziel_dialekt_auto_folgt_dem_projekt_standard(tmp_path, monkeypatch):
+    """Spec 10.1: erkanntes `de` + Projekt-Standard `ch` ⇒ `ch`, mit Dialekt-Glaettung.
+
+    Ohne den Vorrang gaebe `von_whisper_code` immer `de` zurueck -- `ch` waere fuer eine
+    `auto`-Datei unerreichbar, obwohl der Nutzer es am Projekt eingestellt hat."""
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    _auto_datei(tmp_path, "ch", "de")
+    ziel, dialekt, _ = correct._ziel_dialekt("p", "x")
+    assert "Standarddeutsch" in ziel and dialekt is True
+
+
+def test_ziel_dialekt_auto_uebergeht_den_projekt_standard_bei_fremder_sprache(tmp_path, monkeypatch):
+    """Negativkontrolle: der Standard greift NUR bei gleichem Whisper-Code. Sonst waere
+    `auto` in einem CH-Projekt ein fest verdrahtetes `ch` -- und der englische Beitrag
+    liefe mit Dialekt-Glaettung durch."""
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    _auto_datei(tmp_path, "ch", "en")
+    ziel, dialekt, _ = correct._ziel_dialekt("p", "x")
+    assert "English" in ziel and dialekt is False
+
+
 # ---- Leichte Modi: Prompt-Builder + Tiefen-Verzweigung in cmd_run ----
 
 def test_light_prompt_produziert_zusammenfassung_und_sprecher(monkeypatch):
