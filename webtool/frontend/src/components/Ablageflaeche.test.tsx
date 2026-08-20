@@ -54,6 +54,18 @@ describe('Ablageflaeche', () => {
     expect(toastMock.info).toHaveBeenCalledWith(expect.stringMatching(/[Kk]eine Audiodatei/))
   })
 
+  it('setzt das Dateifeld zurueck — sonst waehlt man dieselbe Datei zweimal ins Leere', () => {
+    /* `change` feuert nicht, wenn derselbe Wert erneut gewaehlt wird. Ohne den Reset waehlt
+       der Nutzer sichtbar aus, und es entsteht keine Zeile — genau der tote Weg, gegen den
+       weiter oben die Tastatursperre steht (CodeRabbit-Bot: die Zeile hatte keinen Test). */
+    const onDateien = vi.fn()
+    render(<Ablageflaeche onDateien={onDateien} />)
+    const feld = screen.getByTestId('ablage-input') as HTMLInputElement
+    fireEvent.change(feld, { target: { files: [new File(['x'], 'a.mp3')] } })
+    expect(onDateien).toHaveBeenCalledTimes(1)
+    expect(feld.value).toBe('')
+  })
+
   it('laesst Audio durch, auch neben einer fremden Datei', () => {
     const onDateien = vi.fn()
     render(<Ablageflaeche onDateien={onDateien} />)

@@ -2,7 +2,7 @@ import { useRef, useState } from 'react'
 import { Upload } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
-import { istAudio } from '@/lib/materialZeilen'
+import { nurAudio } from '@/lib/materialZeilen'
 
 /** Das Drop-Ziel, aus `UploadDropzone` herausgeloest: reine Darstellung, meldet nur Dateien.
  *
@@ -22,9 +22,8 @@ export function Ablageflaeche({ gesperrt, onDateien }: {
   // Dateidialog, ein Drop kommt daran vorbei. Und eine leere Menge darf nicht still
   // durchgehen — sonst legt der Nutzer einen Brief ab und es passiert scheinbar nichts.
   const melden = (roh: File[]) => {
-    const audio = roh.filter(f => istAudio(f.name))
-    if (!audio.length) { if (roh.length) toast.info('Keine Audiodatei dabei — es passiert nichts.'); return }
-    onDateien(audio)
+    const audio = nurAudio(roh, t => toast.info(t))
+    if (audio.length) onDateien(audio)
   }
   return (
     <>
@@ -37,7 +36,10 @@ export function Ablageflaeche({ gesperrt, onDateien }: {
           if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); oeffnen() }
         }}
         onDragOver={e => { e.preventDefault(); if (!gesperrt) setOver(true) }}
-        onDragLeave={() => setOver(false)}
+        // `relatedTarget` pruefen: `dragleave` feuert bei jeder Kindgrenze (die Flaeche hat
+        // welche), und der Rahmen flackerte beim Zug darueber. Dieselbe Wache wie am
+        // Seiten-Overlay.
+        onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setOver(false) }}
         onDrop={e => {
           e.preventDefault(); setOver(false)
           if (!gesperrt) melden(Array.from(e.dataTransfer.files))

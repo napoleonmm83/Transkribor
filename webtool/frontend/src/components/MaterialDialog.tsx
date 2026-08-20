@@ -9,7 +9,7 @@ import { MaterialZeile } from '@/components/MaterialZeile'
 import { alleGueltig, ergaenzen, sprachText, sprecherText,
          type Aufnahme } from '@/lib/materialZeilen'
 import { sprecherWahl } from '@/lib/sprecher'
-import { fetchUrls, uploadAudio } from '@/lib/api'
+import { HttpFehler, fetchUrls, uploadAudio } from '@/lib/api'
 import type { StartJob } from '@/lib/types'
 
 const SCHRITTE = ['Material wählen', 'Einstellen', 'Prüfen & starten']
@@ -66,6 +66,15 @@ export function MaterialDialog({ project, offen, vorbelegteDateien, sprachChoice
     // verlassen, saehe der Nutzer Sprache und Sprecherzahl der neuen Aufnahmen NIE.
     setSchritt(s => Math.min(s, 2))
   }, [vorbelegteDateien])
+
+  // Zeilen, die VOR der Antwort des Einstellungs-GET entstanden sind, tragen `sprache: ''`
+  // und zeigen einen Waehler ohne Optionen. Kommt die Antwort nach, ziehen sie nach.
+  useEffect(() => {
+    if (!projektSprache) return
+    setZeilen(alt => alt.some(z => !z.sprache)
+      ? alt.map(z => z.sprache ? z : { ...z, sprache: projektSprache })
+      : alt)
+  }, [projektSprache])
 
   function zeileAus(d: File): Aufnahme {
     return { schluessel: d.name, anzeige: d.name, sprecherText: '',
@@ -145,7 +154,12 @@ export function MaterialDialog({ project, offen, vorbelegteDateien, sprachChoice
         // endete wieder mit 409. Alles Stehenlassen liefe beim naechsten Klick in lauter 409er,
         // bedingungsloses Leeren waere Datenverlust.
         const grund = (e as Error)?.message
-        if (!/existiert bereits/.test(grund ?? '')) {
+        // Am STATUS unterscheiden, nicht am Meldungstext: `app.py` antwortet mit 409, und
+        // eine Umformulierung des `detail` liesse die Regex still auf den anderen Zweig
+        // fallen — ohne dass ein Test rot wird, weil die Attrappe denselben Text liefert
+        // (CodeRabbit-Bot). Der Text bleibt als Rueckfall fuer Aufrufer ohne Status.
+        const schonDa = e instanceof HttpFehler ? e.status === 409 : /existiert bereits/.test(grund ?? '')
+        if (!schonDa) {
           gescheitert.push(z)
           // Einen Grund nennen, auch wenn der Fehler keinen traegt: eine Zeile, die einfach
           // stehenbleibt, sieht aus wie ein vergessener Klick.

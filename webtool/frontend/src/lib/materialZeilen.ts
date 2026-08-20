@@ -23,6 +23,18 @@ export const AUDIO_RE = /\.(mp3|wav|m4a|aac|flac|ogg|opus|wma|mp4)$/i
 
 export const istAudio = (name: string) => AUDIO_RE.test(name)
 
+/** Die Meldung dazu steht hier MIT der Regel: sie stand kurz an beiden Drop-Wegen wortgleich,
+ *  und wer eine Stelle aendert, laesst die andere gruen zurueck (CodeRabbit-Bot). */
+export const KEIN_AUDIO = 'Keine Audiodatei dabei — es passiert nichts.'
+
+/** Filtert auf Audio und meldet, wenn nichts uebrig bleibt. `melden` ist der Toast des
+ *  Aufrufers — die Bibliothek gehoert nicht in eine reine Logikdatei. */
+export function nurAudio(roh: File[], melden: (text: string) => void): File[] {
+  const audio = roh.filter(f => istAudio(f.name))
+  if (!audio.length && roh.length) melden(KEIN_AUDIO)
+  return audio
+}
+
 /** ERGAENZT die Auswahl; Dubletten am Schluessel fallen weg, die alte Zeile gewinnt.
  *
  *  Anhaengen statt Ersetzen, weil „ich habe eine vergessen" sonst Datenverlust waere: die
