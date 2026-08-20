@@ -291,6 +291,28 @@ describe('UploadDropzone — Reviewbefunde PR #297', () => {
     expect(screen.queryAllByRole('textbox')).toHaveLength(0)   // bleibt weg
   })
 
+  it('ein Projektwechsel waehrend des Uploads bringt As Datei NICHT in Bs Vorschau', async () => {
+    /* CodeRabbit-Bot, Major — und dieselbe Klasse wie der BLOCKER aus dem Plan-Review, zurueck
+       durch die Tuer der eigenen Reparatur: der Wechsel leerte die Auswahl, invalidierte den
+       LAUFENDEN Upload aus Projekt A aber nicht. Dessen Ende setzte danach
+       `setAuswahl(gescheitert)` — in die Vorschau von B. Ein erneuter Start haette As Dateien
+       nach B geladen. Gemessen: 0 Zeilen nach dem Wechsel, wieder 1 nach dem Fehlschlag. */
+    let ablehnen: (e: Error) => void = () => {}
+    vi.mocked(api.uploadAudio).mockImplementation(() => new Promise((_, rej) => { ablehnen = rej }))
+    const { rerender } = render(<UploadDropzone project="A" onDone={vi.fn()} sprache="de" />)
+    const input = screen.getByTestId('upload-input') as HTMLInputElement
+    await act(async () => {
+      fireEvent.change(input, { target: { files: [new File(['x'], 'a.mp3')] } })
+    })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Hinzufügen & starten/ }))
+    })
+    await act(async () => { rerender(<UploadDropzone project="B" onDone={vi.fn()} sprache="de" />) })
+    expect(screen.queryAllByRole('textbox')).toHaveLength(0)
+    await act(async () => { ablehnen(new Error('Server weg')); await Promise.resolve() })
+    expect(screen.queryAllByRole('textbox')).toHaveLength(0)   // bleibt weg, auch in B
+  })
+
   it('waehrend eines Laufs nimmt die Zone keine neue Auswahl an', async () => {
     /* Sonst landeten neue Zeilen in der Vorschau, der Nutzer traegt eine Zahl ein — und
        `setAuswahl(gescheitert)` am Ende des laufenden Uploads wirft sie ersatzlos weg. */

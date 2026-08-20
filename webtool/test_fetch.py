@@ -141,6 +141,9 @@ def projekt(monkeypatch, tmp_path):
     Wer ffmpeg selbst zum Thema hat, patcht spaeter im Testkoerper und gewinnt damit.
     """
     monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    # Sonst entscheidet die echte Einstellungsdatei des Entwicklers mit — `download_one` geht
+    # ueber `projekt.setze_datei`, und dahinter haengt `sperre.datei` an `settings.path()`.
+    monkeypatch.setenv("TRANSKRIBOR_SETTINGS", str(tmp_path / "settings.json"))
     # Kein echtes pip aus einem Test: der Selbstaktualisierer wuerde sonst die venv des
     # Entwicklers waehrend des Laufs anfassen. Wer die Aktualisierung selbst zum Thema hat,
     # patcht `ytdlp_update.automatisch` spaeter im Testkoerper und gewinnt damit.
@@ -841,6 +844,22 @@ def test_sprecher_aus_env_liest_die_position_und_vertraegt_luecken():
     assert fetch._sprecher_aus_env("", 0) is None
     assert fetch._sprecher_aus_env(None, 0) is None
     assert fetch._sprecher_aus_env("zwei", 0) is None
+
+
+def test_sprecher_aus_env_haelt_sich_an_die_bereichsgrenzen():
+    """Der Umgebungsweg umging die Trust-Boundary: `pruef_fehler` sitzt im HTTP-Pfad, eine
+    `.env`-Zeile oder ein CLI-Aufruf geht daran vorbei. Gemessen (vor dem Fix): 99, 0 und -3
+    kamen durch und landeten so in `projekt.json`. Die Diarisierung bekaeme sie zwar nie —
+    `projekt._sprecher_wert` filtert beim LESEN —, aber der Schalter waere tot und die Datei
+    truege Muell. Sichere Richtung hier: „automatisch", denn im Subprozess gibt es niemanden,
+    dem man einen 400 zeigen koennte."""
+    from webtool import sprachen
+    assert fetch._sprecher_aus_env("0", 0) is None
+    assert fetch._sprecher_aus_env("-3", 0) is None
+    assert fetch._sprecher_aus_env(str(sprachen.SPRECHER_MAX + 1), 0) is None
+    # Die Grenzen selbst bleiben gueltig — sonst waere der Fix eine Verengung.
+    assert fetch._sprecher_aus_env("1", 0) == 1
+    assert fetch._sprecher_aus_env(str(sprachen.SPRECHER_MAX), 0) == sprachen.SPRECHER_MAX
 
 
 def test_wiederholung_nach_der_selbstheilung_traegt_die_zahl_AUCH_ein(projekt, monkeypatch):

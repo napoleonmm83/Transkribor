@@ -17,7 +17,7 @@ from urllib.parse import urlparse
 
 import transcribe
 
-from . import paths, projekt, ytdlp_update
+from . import paths, projekt, sprachen, ytdlp_update
 
 # Trust-Boundary: die URL kommt aus dem Browser. Gleichzeitig der Feature-Scope.
 ALLOWED_HOSTS = {
@@ -356,9 +356,16 @@ def _sprecher_aus_env(roh, i: int):
     if not 0 <= i < len(teile):
         return None
     try:
-        return int(teile[i])
+        wert = int(teile[i])
     except ValueError:
         return None
+    # Bereich ueber `sprachen.pruef_fehler` — die EINE Quelle, dieselbe wie im HTTP-Weg.
+    # Der Endpunkt weist einen Wert ausserhalb 1..SPRECHER_MAX mit 400 zurueck; dieser Weg
+    # hat niemanden zum Anmecken (er laeuft im Subprozess, gespeist aus der Umgebung), also
+    # gilt die sichere Richtung: „automatisch". Ohne die Pruefung landete eine 99 oder eine 0
+    # in `projekt.json` — die Diarisierung bekaeme sie zwar nie (`projekt._sprecher_wert`
+    # filtert beim LESEN, gemessen), aber der Schalter waere tot UND die Datei truege Muell.
+    return None if sprachen.pruef_fehler(sprecher=wert) else wert
 
 
 def download_one(project: str, url: str, sprecher=None) -> str:

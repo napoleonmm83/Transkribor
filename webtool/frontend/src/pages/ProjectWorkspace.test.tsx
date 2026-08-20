@@ -41,6 +41,10 @@ async function ladeHoch(datei = new File(['x'], 'a.mp3')) {
 
 describe('ProjectWorkspace (Stub)', () => {
   beforeEach(() => {
+    // Ohne das teilen sich die Tests die Aufrufliste der Attrappen. Aufgefallen ist es an
+    // einer Zusicherung ueber `mock.calls` — die sah Aufrufe der Tests DAVOR und war damit
+    // eine Aussage ueber die Reihenfolge in der Datei, nicht ueber das Verhalten.
+    vi.clearAllMocks()
     einstellungen({})
     // Projekt-Einstellungen default: leer — bestehende Tests sehen keine Sprach-Selects.
     vi.mocked(api.getProjektEinstellungen).mockResolvedValue(
@@ -515,10 +519,12 @@ describe('ProjectWorkspace (Stub)', () => {
     // `''` heisst „kein Override" — die Datei folgt Bs Standard. Ein mitgereistes `en` waere
     // der Fehler, den dieser Test fangen soll.
     await waitFor(() => expect(api.uploadAudio).toHaveBeenCalledWith('B', expect.any(File), '', undefined, undefined))
-    // Zwei `anything()`: seit der Sprecherzahl hat der Aufruf fuenf Argumente. Mit vier
-    // Erwartungen wuerde diese Negativ-Zusicherung nie mehr matchen — also immer gruen, egal
-    // was passiert. Ein vacuous gewordener Waechter ist schlimmer als keiner.
-    expect(api.uploadAudio).not.toHaveBeenCalledWith('B', expect.any(File), 'en',
-                                                     expect.anything(), expect.anything())
+    // Ueber die ARGUMENTLISTE, nicht ueber `toHaveBeenCalledWith`: `expect.anything()` matcht
+    // ausdruecklich KEIN `undefined` und kein `null` — und genau die stehen hier an Position 4
+    // und 5 (kein Mehrsprachig-Override, keine Sprecherzahl). Die Zusicherung haette also nie
+    // gematcht und waere immer gruen gewesen, egal was passiert: ein vacuous gewordener
+    // Waechter ist schlimmer als keiner. So geprueft haelt sie ausserdem, wenn ein sechstes
+    // Argument dazukommt. (CodeRabbit-Bot an PR #297.)
+    expect(vi.mocked(api.uploadAudio).mock.calls.every(c => c[2] !== 'en')).toBe(true)
   })
 })
