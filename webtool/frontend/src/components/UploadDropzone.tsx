@@ -76,6 +76,7 @@ export function UploadDropzone({ project, onDone, sprache = '', mehrsprachig,
     // (Dedupe je Projekt+Art), also reicht die zuletzt gemeldete Job-ID zum Adoptieren.
     let job: StartJob | undefined
     // ponytail: sequentiell statt Pool — lokale Uploads sind quasi instant; Pool nachruesten bei Bedarf
+    const gescheitert: UploadZeile[] = []
     for (const z of zeilen) {
       try {
         // `?? undefined`, NICHT `?? null`: leer heisst „Feld weglassen" (automatisch). Ein
@@ -87,13 +88,24 @@ export function UploadDropzone({ project, onDone, sprache = '', mehrsprachig,
       }
       catch (e) {
         const msg = (e as Error).message
-        patch(z.datei.name, { status: /existiert bereits/.test(msg) ? 'exists' : 'error', msg })
+        const schon_da = /existiert bereits/.test(msg)
+        patch(z.datei.name, { status: schon_da ? 'exists' : 'error', msg })
+        // „existiert bereits" ist KEIN Fehlschlag zum Wiederholen — die Aufnahme ist da, ein
+        // zweiter Versuch endet wieder mit 409. Alles andere schon (Netz weg, Server neu).
+        if (!schon_da) gescheitert.push(z)
       }
     }
-    // Erst NACH der Schleife: eine Datei, die scheitert, nimmt die anderen nicht mit, und die
-    // Vorschau verschwindet erst, wenn alle durch sind.
+    // Erst NACH der Schleife: eine Datei, die scheitert, nimmt die anderen nicht mit.
+    //
+    // Und stehen bleiben nur die GESCHEITERTEN — das ist die Antwort auf „was erlaubt der
+    // Umbau NEU?". Vorher konnte hier keine getippte Arbeit verlorengehen, weil es keine gab;
+    // seit der Vorschau steht in jeder Zeile eine von Hand eingetragene Sprecherzahl. Ein
+    // bedingungsloses `setAuswahl([])` warf sie bei einem Serverfehler alle weg, und der
+    // Nutzer haette Dateien UND Zahlen neu eintragen muessen. Die erfolgreichen verschwinden
+    // trotzdem, sonst liefe der naechste Klick in lauter 409er. `UrlFetch` haelt es an
+    // derselben Stelle genauso (`if (res.started)`).
     setLaeuft(false)
-    setAuswahl([])
+    setAuswahl(gescheitert)
     onDone?.(job)
   }
 
