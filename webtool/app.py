@@ -1196,7 +1196,7 @@ def cancel_job(job_id: str):
 
 @app.post("/api/projects/{project}/audio")
 def upload_audio(project: str, file: UploadFile = File(...), sprache: str = Form(None),
-                 mehrsprachig: bool = Form(None)):
+                 mehrsprachig: bool = Form(None), sprecher: int = Form(None)):
     _validate(project)
     name = os.path.basename(file.filename or "")           # vom Browser mitgesendete Pfade entfernen
     base, ext = os.path.splitext(name)
@@ -1205,7 +1205,8 @@ def upload_audio(project: str, file: UploadFile = File(...), sprache: str = Form
     if ext not in AUDIO_EXT:
         raise HTTPException(status_code=400, detail=f"nicht unterstützte Endung: {ext or '(keine)'}")
     # Sprache VOR dem Datei-Schreiben pruefen — sonst laege bei 400 eine orphan-Audiodatei.
-    fehler = _sprachen.pruef_fehler(sprache=sprache, mehrsprachig=mehrsprachig)
+    fehler = _sprachen.pruef_fehler(sprache=sprache, mehrsprachig=mehrsprachig,
+                                    sprecher=sprecher)
     if fehler:
         raise HTTPException(status_code=400, detail=fehler)
     adir = os.path.join(paths.project_dir(project), "audio")
@@ -1216,10 +1217,16 @@ def upload_audio(project: str, file: UploadFile = File(...), sprache: str = Form
             shutil.copyfileobj(file.file, out)
     except FileExistsError:
         raise HTTPException(status_code=409, detail="Datei existiert bereits")
-    # Sprache fuer diese Datei eintragen, BEVOR der Job laeuft — sonst transkribiert er auf
-    # Projekt-Standard. Fehlt das Feld, greift der Projekt-Default (Legacy-Verhalten).
-    if sprache or mehrsprachig is not None:
-        _projekt.setze_datei(project, base, sprache=sprache, mehrsprachig=mehrsprachig)
+    # Sprache und Sprecherzahl fuer diese Datei eintragen, BEVOR der Job laeuft — sonst
+    # transkribiert er auf Projekt-Standard und diarisiert ohne die Zahl. Fehlt ein Feld,
+    # greift der Projekt-Default bzw. „automatisch" (Legacy-Verhalten).
+    #
+    # Der Zeitpunkt ist der ganze Grund, warum die Vorschau VOR dem Upload sitzt und nicht
+    # daneben: der Upload startet die Pipeline selbst, wer die Zahl danach eintraegt, rennt
+    # gegen die eigene Korrektur. Ein Test misst deshalb den Zeitpunkt, nicht nur das Ergebnis.
+    if sprache or mehrsprachig is not None or sprecher is not None:
+        _projekt.setze_datei(project, base, sprache=sprache, mehrsprachig=mehrsprachig,
+                             sprecher=sprecher)
     # Hochladen IST der Startschuss: Transkription (und danach Korrektur) laufen von selbst an.
     # jobs.request() sorgt dafuer, dass ein Mehrfach-Upload hoechstens EINEN Nachlauf anhaengt.
     job_id, started = _start_transcribe(project)
