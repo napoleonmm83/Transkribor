@@ -138,11 +138,18 @@ export async function deleteFile(project: string, base: string): Promise<void> {
   await jn(await fetch(`/api/projects/${enc(project)}/files/${enc(base)}`, { method: 'DELETE' }))
 }
 export async function fetchUrls(project: string, urls: string[], sprache?: string,
-                                mehrsprachig?: boolean): Promise<StartJob> {
+                                mehrsprachig?: boolean,
+                                sprecher?: (number | null)[]): Promise<StartJob> {
   return jn(await fetch(`/api/projects/${enc(project)}/fetch`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ urls, ...(sprache ? { sprache } : {}),
-                           ...(mehrsprachig === undefined ? {} : { mehrsprachig }) }),
+                           ...(mehrsprachig === undefined ? {} : { mehrsprachig }),
+                           // Index-parallel zu `urls`; ganz weglassen, wenn keine Zahl dabei
+                           // ist — dann bleibt der Aufruf byte-gleich zu vorher. Ein leeres
+                           // Feld reist als `null` mit und HAELT seinen Platz: mit `undefined`
+                           // fiele der Eintrag in JSON.stringify weg und jede folgende Zahl
+                           // rutschte eine Aufnahme nach vorn.
+                           ...(sprecher === undefined ? {} : { sprecher }) }),
   }))
 }
 export async function getJob(jobId: string): Promise<JobStatus> {

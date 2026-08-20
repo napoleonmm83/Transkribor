@@ -85,6 +85,11 @@ export function ProjectWorkspace() {
   // F4-Handoff: sprachChoices erst durchreichen, wenn einstellungen+sprache da sind — sonst
   // wuerde der Select mit value="" gerendert (Radix warnt bei leerem Wert).
   const sprachChoices = einstellungen && sprache ? einstellungen.sprach_choices : []
+  // Obergrenze der Sprecherzahl vom Server. `?? 20` deckt einen aelteren Server bzw. einen
+  // fehlgeschlagenen GET — dieselbe Richtung wie bei `diarisierung_aktiv`: die Oberflaeche
+  // darf nicht in eine Sperre laufen, die niemand aufheben kann. Die Zahl steht damit nur an
+  // EINER Stelle im Frontend (hier), nicht in jeder Eingabekomponente.
+  const sprecherMax = einstellungen?.sprecher_max ?? 20
   const sprachLabel = einstellungen
     ? (einstellungen.sprach_choices.find(c => c.id === einstellungen.sprache)?.label ?? einstellungen.sprache)
     : ''
@@ -232,7 +237,7 @@ export function ProjectWorkspace() {
             </div>
           )}
           <UploadDropzone project={project!}
-            sprache={sprachWert} mehrsprachig={mehrWert}
+            sprache={sprachWert} mehrsprachig={mehrWert} sprecherMax={sprecherMax}
             onDone={job => {
             refresh(); refreshFiles()
             // Sofort adoptieren statt auf den naechsten Poll zu warten — der Balken soll direkt stehen.
@@ -240,7 +245,7 @@ export function ProjectWorkspace() {
             else if (job) toast.info('Transkription läuft schon — die neuen Dateien kommen danach dran.')
           }} />
           <UrlFetch project={project!}
-            sprache={sprachWert} mehrsprachig={mehrWert}
+            sprache={sprachWert} mehrsprachig={mehrWert} sprecherMax={sprecherMax}
             onStart={res => {
             if (!res.started) { toast.warning('Es läuft bereits ein Import für dieses Projekt.'); return }
             adopt(res.job_id, project!, 'fetch')
