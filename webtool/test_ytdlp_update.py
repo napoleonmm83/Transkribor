@@ -1553,8 +1553,8 @@ def test_der_merker_wird_INNERHALB_der_sperre_gesetzt(monkeypatch):
     pip-Abschnitt KEINE zweite Sperre mehr: der Kalendermerker ist eine Datei
     (`_merken()` → `_datum_setzen`), kein `settings.save()`. Die Folge hier nagelt beides
     fest — der Abbruch-Merker steht zwischen Sperre und pip, und es taucht KEIN
-    `auf:<settings>` mehr auf. Kaeme eine Verschachtelung zurueck, stünde die #207-Frist
-    (`_lock_stale()` = PIP_TIMEOUT + 30 + `frist()`) wieder auf tueurischem Papier."""
+    `auf:<settings>` mehr auf. Kaeme eine Verschachtelung zurueck, stuende die #207-Frist
+    (`_lock_stale()` = PIP_TIMEOUT + 30 + `frist()`) wieder auf tönernen Füssen."""
     folge = []
     monkeypatch.setattr(yu, "fassung", lambda: "2025.9.5")   # sonst legt aktualisiere() gar keinen Merker an
     echte_sperre = yu.sperre.datei
@@ -2063,3 +2063,27 @@ def test_kein_ytdlp_schluessel_mehr_in_defaults_oder_settings():
     dann wieder pro Nutzer geteilt, der Fehler von dem dieser Fix handelt."""
     assert "ytdlp_geprueft" not in settings.DEFAULTS
     assert not hasattr(yu, "MERKER")
+
+
+def test_datum_setzen_uebersteht_partiellen_write(monkeypatch):
+    """CodeRabbit-Gegenpunkt (2. Runde): `os.write` garantiert keine Vollstaendigkeit. Fuer
+    den ABBRUCHmerker waere ein torn write der stillte Tod der #257-Reparatur —
+    `_pip_unterbrochen()` laese None als „kein Merker". Der Loop muss ein 5-Byte-Stueck
+    zu Ende schreiben, nicht nur den ersten Ruf ueberleben.
+
+    KEIN `monkeypatch.undo()` am Ende: das naehme die autouse-Fixture mit (TRANSKRIBOR_
+    SETTINGS zeigte dann auf das echte Profil). Der Patch sitzt auf os.write und stoert
+    das Lesen nicht — `geprueft()` liest ueber os.read."""
+    echt = yu.os.write
+    rueck = [5]                                    # der erste Ruf schreibt nur 5 Bytes
+
+    def stueckweise(fd, daten):
+        if rueck:
+            n = min(rueck.pop(0), len(daten))
+            echt(fd, daten[:n])
+            return n
+        return echt(fd, daten)
+
+    monkeypatch.setattr(yu.os, "write", stueckweise)
+    yu._datum_setzen(yu._kalender_merker(), was="Test")
+    assert yu.geprueft() == HEUTE                  # das Datum ist VOLLSTAENDIG da

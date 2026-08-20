@@ -847,13 +847,24 @@ def _datum_setzen(pfad: str, *, was: str) -> None:
     unter `\.\pipe\`), `O_NONBLOCK` fehlt dort ohnehin — deshalb KEINE zusaetzliche
     Sonderdatei-Pruefung: sie waere ein Waechter ohne roten Test fuer einen Fall, den dieses
     Repo nicht herstellen kann.
+
+    **Geloopt, nicht Einzelruf** — `os.write` garantiert keine Vollstaendigkeit (non-blocking
+    FDs, Signale mitten im Write). Fuer den KALENDERmerker waere ein torn write nur ein
+    verlorener Termin (ungueltiges Datum → None → faellig → idempotentes pip). Fuer den
+    ABBRUCHmerker nicht: `_pip_unterbrochen()` laese None als „kein Merker" lesen, und an
+    einer zerlegten Installation kaeme die #257-Reparatur nie — der stillte Tod der
+    Selbstheilung. Der Loop kostet drei Zeilen und deckt beide, seit sie einen Schreiber
+    teilen. (CodeRabbit-Gegenpunkt auf eine Widerlegung, die nur die Kalenderhaelfte traf.)
     """
     flags = (os.O_WRONLY | os.O_CREAT | os.O_TRUNC
              | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_BINARY", 0))
+    daten = _heute().isoformat().encode("utf-8")
     try:
         fd = os.open(pfad, flags, 0o600)
         try:
-            os.write(fd, _heute().isoformat().encode("utf-8"))
+            geschrieben = 0
+            while geschrieben < len(daten):
+                geschrieben += os.write(fd, daten[geschrieben:])
         finally:
             os.close(fd)
     except (OSError, ValueError) as e:     # ValueError: eingebettetes NUL im Pfad
