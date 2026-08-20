@@ -14,6 +14,8 @@ export type WaveHandle = {
   skip: (sekunden: number) => void
   /** Anhalten und an den Anfang zurueck. */
   stop: () => void
+  /** Absolut an eine Sekunde springen. `skip` ist RELATIV und taugt dafuer nicht. */
+  springeZu: (sekunde: number) => void
 }
 
 // Wavesurfer malt auf Canvas und kann keine CSS-Variablen lesen — die Werte muessen hier
@@ -24,8 +26,12 @@ const colors = (dark: boolean) => ({
   progressColor: dark ? '#818CF8' : '#4F46E5',    // --primary hell/dunkel
 })
 
-export const Waveform = forwardRef<WaveHandle, { url: string; onTime: (t: number) => void }>(
-  function Waveform({ url, onTime }, ref) {
+export const Waveform = forwardRef<WaveHandle,
+  { url: string; onTime: (t: number) => void
+    /** Einmal beim `ready`: Pegel-Spitzen und Dauer. Optional — der Editor braucht sie
+     *  nicht, der Hoerbalken leitet daraus seine Sprungstelle ab. */
+    onBereit?: (peaks: Float32Array, dauer: number) => void }>(
+  function Waveform({ url, onTime, onBereit }, ref) {
     const container = useRef<HTMLDivElement>(null)
     const { theme } = useTheme()
     // isPlaying/currentTime/isReady bringt der Hook ohnehin mit und rendert ohnehin bei jedem
@@ -40,6 +46,15 @@ export const Waveform = forwardRef<WaveHandle, { url: string; onTime: (t: number
     // darum ueber das Segmentende hinaus.
     const fenster = useRef<Fenster | null>(null)
     useEffect(() => { fenster.current = null }, [url])   // andere Datei -> alte Grenze gilt nicht
+
+    // Peaks gibt es erst nach `ready` — vorher ist nichts dekodiert, es gaebe nichts zu
+    // springen. `exportPeaks()` liefert ein Array je Kanal; der erste reicht (Mono-Faltung
+    // waere teurer als der Nutzen fuer eine Pegelschwelle).
+    useEffect(() => {
+      if (!wavesurfer || !isReady || !onBereit) return
+      const kanaele = wavesurfer.exportPeaks()
+      onBereit(new Float32Array(kanaele[0] ?? []), wavesurfer.getDuration())
+    }, [wavesurfer, isReady, onBereit])
 
     useEffect(() => {
       if (!wavesurfer) return
@@ -104,6 +119,13 @@ export const Waveform = forwardRef<WaveHandle, { url: string; onTime: (t: number
         // naechsteAktion wuerde sonst ein Segment wiederholen, das gerade verworfen wurde.
         fenster.current = null
         wavesurfer.stop()   // pause + setTime(0)
+      },
+      springeZu(sekunde) {
+        if (!wavesurfer) return
+        // Dieselbe Begruendung wie in `skip`: setTime loescht stopAtPosition, und das
+        // gemerkte Fenster gilt danach nicht mehr fuer `naechsteAktion`.
+        fenster.current = null
+        wavesurfer.setTime(sekunde)
       },
     }), [wavesurfer])
     useImperativeHandle(ref, () => steuerung, [steuerung])
