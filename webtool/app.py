@@ -968,11 +968,11 @@ def fetch_urls(project: str, body: FetchBody):
     # Zusicherung da, nicht als Schutz: wer die Pruefung eines Tages verschiebt, bekommt einen
     # lauten Fehler statt einer still gekuerzten Liste, und still gekuerzt hiesse hier
     # verschobene Zuordnung (CodeRabbit-CLI).
-    paare = [(u.strip(), s, l) for u, s, l
+    paare = [(u.strip(), spk, spr) for u, spk, spr
              in zip(body.urls, sprecher_roh, sprache_roh, strict=True) if u.strip()]
     urls = [u for u, _, _ in paare]
-    sprecher = [s for _, s, _ in paare]
-    sprachen_liste = [l for _, _, l in paare]
+    sprecher = [spk for _, spk, _ in paare]
+    sprachen_liste = [spr for _, _, spr in paare]
     if not urls:
         raise HTTPException(status_code=400, detail="keine URL angegeben")
     if len(urls) > MAX_FETCH_URLS:

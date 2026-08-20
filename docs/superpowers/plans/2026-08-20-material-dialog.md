@@ -1403,9 +1403,12 @@ Niemals `git add -A`.
 - [ ] **Lokaler Funktionstest im Browser**, auf einem **Wegwerf-Projekt**, nie auf
   `projekte\`-Daten: zehn Dateien hinzufügen, Sprachen mischen, reinhören, scrubben, durch
   alle drei Schritte, „Los geht's". Screenshot als Beleg.
-- [ ] **Die drei ausstehenden Messungen aus Spec §7** durchführen und das Ergebnis in die
-  Spec nachtragen: `.mp4`-Dekodierung, Dekodierkosten bei 30 Minuten, die feste Rahmenhöhe.
-  Dazu die vierte: erscheinen Sonner-Toasts über dem Dialog?
+- [x] **`.mp4`-Dekodierung** (259 ms für 5:10, mit Videospur) und **Dekodierkosten bei
+  30 Minuten** (1595 ms, Puffer 659 MB ⇒ Ladezustand nötig) — gemessen am 2026-08-20, Ergebnis
+  steht in Spec §7.
+- [ ] **Die feste Rahmenhöhe** auf Marcus' Bildschirm und auf einem 13-Zoll-Laptop.
+- [ ] **Erscheinen Sonner-Toasts über dem Dialog?** Bisher nur GELESEN (z-index 999999999
+  gegen `z-50`) — am laufenden Dialog nachmessen, sobald er existiert.
 - [ ] **`superpowers:requesting-code-review`**, dann CodeRabbit CLI, dann Bot — in dieser
   Reihenfolge. Die Spec-Reviewstufe ist ausgefallen (beide Subagenten lieferten nichts) und
   wird hier nachgeholt; im PR-Text als das benennen.

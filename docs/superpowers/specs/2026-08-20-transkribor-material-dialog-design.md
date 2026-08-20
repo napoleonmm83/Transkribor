@@ -250,7 +250,10 @@ Entscheidung, die niemand getroffen hat.
 Zusammenfassung: Zahl der Aufnahmen, Sprecher-Verteilung (`10× automatisch` bzw.
 `3 von 10 gesetzt`), Sprach-Verteilung (`Schweizerdeutsch für alle` bzw. `7× Schweizerdeutsch,
 3× Englisch`), und was danach passiert („Transkription, dann Korrektur — automatisch").
-Enthält die Auswahl `auto`, steht hier ein Warnkasten (siehe 5.2). Knopf: **„Los geht's"**.
+Enthält die Auswahl `auto`, steht hier ein **Hinweis** — keine Warnung mehr (10.1): er nennt,
+dass Whisper die Sprache erkennt, und **bedingt** dazu den Projekt-Standard, falls dessen
+Whisper-Code nicht `None` ist („wird Deutsch erkannt, gilt der Projekt-Standard
+‹Schweizerdeutsch›"). Knopf: **„Los geht's"**.
 
 ### Der Hörbalken (P1)
 
@@ -295,8 +298,9 @@ Dinge dazu, die im Code stehen und deren Missachtung teuer wäre:
 - **Schweizerdeutsch kann `auto` von sich aus niemals liefern** — erst der Projekt-Standard
   aus 10.1 tut das. Der Kommentar in `von_whisper_code` sagt
   es wörtlich: *„'ch' ist nur als Nutzerauswahl gueltig, nie als Detektion."* Whisper meldet
-  `de`, und `auto` trägt `dialekt: False`. Für jede Schweizer Aufnahme heisst „automatisch"
-  also **ohne Dialekt-Glättung**.
+  `de`, und `auto` trägt `dialekt: False`. Für eine Schweizer Aufnahme heisst „automatisch"
+  deshalb **ohne Dialekt-Glättung — ausser der Projekt-Standard ist `ch`**, dann gewinnt er
+  (10.1). Ohne passenden Standard bleibt der Satz oben in voller Härte stehen.
 - **An echtem Material ist die Erkennung knapp.** Gemessen (Wurzel-`CLAUDE.md`, 12:24-Beitrag,
   Erkennung je 30-s-Fenster): echtes Deutsch 0,980–1,000, echtes Englisch mit Publikumsgeräusch
   **0,565**, Stille **0,289**.
