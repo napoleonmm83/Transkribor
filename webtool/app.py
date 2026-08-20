@@ -926,7 +926,11 @@ def correct_file(project: str, base: str, force: bool = False):
 
 class FetchBody(BaseModel):
     urls: list[str]
-    sprache: str | None = None
+    # Index-parallel zu `urls` — ODER ein einzelner String, der fuer alle gilt. Die zweite
+    # Form ist die bisherige Bedeutung und bleibt gueltig; sie wird VOR dem `zip` expandiert.
+    # Ein Auftrag mischt Aufnahmen mit verschiedenen Sprachen (`projekt.json` haelt `sprache`
+    # je Base — gemischtsprachige Projekte sind ausdruecklich vorgesehen).
+    sprache: str | list[str | None] | None = None
     mehrsprachig: bool | None = None
     # Index-parallel zu `urls`; `None` = automatisch. Eine LISTE statt eines Wertes, weil ein
     # Auftrag Aufnahmen mit verschiedenen Sprecherzahlen mischt — ein Wert fuer alle waere fuer
@@ -945,15 +949,27 @@ def fetch_urls(project: str, body: FetchBody):
     if len(sprecher_roh) != len(body.urls):
         raise HTTPException(status_code=400,
                             detail="sprecher muss so viele Eintraege haben wie urls")
+    # Erst EXPANDIEREN, dann filtern. Ein einzelner String gilt fuer alle URLs (die bisherige
+    # Bedeutung); andersherum braeche `strict=True` unten, und ohne `strict` waere es
+    # schlimmer — still gekuerzt heisst hier verschobene Zuordnung.
+    if isinstance(body.sprache, list):
+        sprache_roh = body.sprache
+    else:
+        sprache_roh = [body.sprache] * len(body.urls)
+    if len(sprache_roh) != len(body.urls):
+        raise HTTPException(status_code=400,
+                            detail="sprache muss so viele Eintraege haben wie urls")
     # PAARWEISE filtern: leere URL-Zeilen fielen sonst nur auf der einen Seite weg und
     # verschoeben ab da JEDE Zuordnung — die 5 des Teamgespraechs landete beim 2er-Interview.
     # `strict=True` kann nach der Laengenpruefung darueber nicht mehr feuern — es steht als
     # Zusicherung da, nicht als Schutz: wer die Pruefung eines Tages verschiebt, bekommt einen
     # lauten Fehler statt einer still gekuerzten Liste, und still gekuerzt hiesse hier
     # verschobene Zuordnung (CodeRabbit-CLI).
-    paare = [(u.strip(), s) for u, s in zip(body.urls, sprecher_roh, strict=True) if u.strip()]
-    urls = [u for u, _ in paare]
-    sprecher = [s for _, s in paare]
+    paare = [(u.strip(), s, l) for u, s, l
+             in zip(body.urls, sprecher_roh, sprache_roh, strict=True) if u.strip()]
+    urls = [u for u, _, _ in paare]
+    sprecher = [s for _, s, _ in paare]
+    sprachen_liste = [l for _, _, l in paare]
     if not urls:
         raise HTTPException(status_code=400, detail="keine URL angegeben")
     if len(urls) > MAX_FETCH_URLS:
@@ -965,7 +981,13 @@ def fetch_urls(project: str, body: FetchBody):
         raise HTTPException(status_code=400, detail=str(e))
     # Sprache am Endpoint pruefen: fetch.py traegt sie erst im Subprozess ein, ein spaetes
     # Scheitern liesse den Download erst laufen. gleiche Quelle wie die PUT-Endpunkte (#139).
-    fehler = _sprachen.pruef_fehler(sprache=body.sprache)
+    # Je Eintrag, NICHT `pruef_fehler(sprache=body.sprache)`: mit einer Liste ist
+    # `sprache not in SPRACHEN` ein dict-Lookup mit einer Liste -> `TypeError: unhashable
+    # type` -> 500 statt 400, ausgerechnet an der Stelle, deren Zweck eine saubere Meldung
+    # ist. Die alte Einzelpruefung ist deshalb ERSETZT, nicht ergaenzt.
+    fehler = None
+    for l in sprachen_liste:
+        fehler = fehler or _sprachen.pruef_fehler(sprache=l)
     for s in sprecher:
         fehler = fehler or _sprachen.pruef_fehler(sprecher=s)
     if fehler:
@@ -975,7 +997,13 @@ def fetch_urls(project: str, body: FetchBody):
     # Sprache pro geladener Base: fetch.py liest TRANSKRIBOR_FETCH_SPRACHE und traegt sie ein,
     # sobald der Basisname feststeht (die Basen kennen wir hier noch nicht).
     cmd = [sys.executable, "-m", "webtool.fetch", "--download-only", project, *urls]
-    env_sprache = {"TRANSKRIBOR_FETCH_SPRACHE": body.sprache} if body.sprache else {}
+    # IMMER gesetzt, auch leer — dieselbe Trust-Boundary wie bei TRANSKRIBOR_FETCH_SPRECHER
+    # darunter (#298): `jobs._run_proc` baut {**os.environ, **job_env(), **env}, das explizite
+    # `env` gewinnt. FEHLT der Schluessel, ueberlebt ein Altwert aus der `.env` in os.environ
+    # und schlaegt auf jeden Browser-Import durch. Mit der Liste waere der Schaden groesser
+    # als vorher: ein Altwert kollabierte ALLE Datei-Entscheidungen auf einen Wert.
+    # `fetch._sprache_aus_env("")` liest das sauber als „nicht gesetzt" zurueck.
+    env_sprache = {"TRANSKRIBOR_FETCH_SPRACHE": ",".join(l or "" for l in sprachen_liste)}
     # Als "1"/"0", weil eine Env-Variable nur Strings kennt; fetch.py liest sie zurueck.
     if body.mehrsprachig is not None:
         env_sprache["TRANSKRIBOR_FETCH_MEHRSPRACHIG"] = "1" if body.mehrsprachig else "0"
