@@ -594,11 +594,12 @@ def test_ohne_update_kein_zweiter_versuch(projekt, monkeypatch):
     _FakeYDL.fehler = _403
     downloads = []
     orig = fetch.download_one
-    # `sprecher` reicht durch: `_lade` gibt die Sprecherzahl der Position seit dem
-    # Vorschau-Umbau an BEIDE Aufrufstellen weiter. Die Zusicherung dieses Tests („kein
-    # zweiter Versuch") ist unberuehrt — nur die Signatur der Attrappe zieht nach.
+    # `sprecher` UND `sprache` reichen durch: `_lade` gibt beide der Position an BEIDE
+    # Aufrufstellen weiter. Die Zusicherung dieses Tests („kein zweiter Versuch") ist
+    # unberuehrt — nur die Signatur der Attrappe zieht nach.
     monkeypatch.setattr(fetch, "download_one",
-                        lambda p, u, sprecher=None: downloads.append(u) or orig(p, u, sprecher))
+                        lambda p, u, sprecher=None, sprache=None:
+                            downloads.append(u) or orig(p, u, sprecher, sprache))
     monkeypatch.setattr(fetch.ytdlp_update, "automatisch", lambda *a, **k: False)
     with pytest.raises(SystemExit):
         fetch.main(["Demo", "https://youtu.be/vid123"])
@@ -871,11 +872,11 @@ def test_wiederholung_nach_der_selbstheilung_traegt_die_zahl_AUCH_ein(projekt, m
     versuche = {"n": 0}
     echtes = fetch.download_one
 
-    def einmal_scheitern(project, url, sprecher=None):
+    def einmal_scheitern(project, url, sprecher=None, sprache=None):
         versuche["n"] += 1
         if versuche["n"] == 1:
             raise RuntimeError("Unable to extract player response")
-        return echtes(project, url, sprecher)
+        return echtes(project, url, sprecher, sprache)
 
     monkeypatch.setattr(fetch, "download_one", einmal_scheitern)
     monkeypatch.setattr(ytdlp_update, "automatisch", lambda erzwingen=False: True)
@@ -887,3 +888,53 @@ def test_wiederholung_nach_der_selbstheilung_traegt_die_zahl_AUCH_ein(projekt, m
     # Aufrufstelle bliebe ungedeckt.
     assert versuche["n"] == 2, "der Wiederholungsversuch lief gar nicht — Test misst nichts"
     assert projekt_mod.datei_ansicht("Demo", "Mein Interview")["sprecher"] == 3
+
+
+def test_sprache_aus_env_ist_positionsbasiert_und_wirft_nie():
+    """Spiegelbild von `_sprecher_aus_env`: dieselbe Positionslogik, dieselbe sichere
+    Richtung. Ein unsinniger Wert heisst „Projekt-Standard", nicht „Absturz im Subprozess
+    NACH dem Download" (#185).
+
+    Der EINE Unterschied zum Zwilling: ein einzelner Wert ohne Komma gilt fuer ALLE URLs.
+    Die Variable trug frueher genau einen Code fuer den ganzen Auftrag; wer sie von Hand
+    setzt, meint weiterhin das. `_sprecher_aus_env` tut hier das Gegenteil (zu kurze Liste
+    -> None) — die beiden sehen aehnlich aus und entscheiden im Randfall verschieden.
+    """
+    from webtool import sprachen
+    assert fetch._sprache_aus_env("ch,en,fr", 0) == "ch"
+    assert fetch._sprache_aus_env("ch,en,fr", 2) == "fr"
+    # Einzelwert gilt fuer alle — Rueckwaertskompatibilitaet der bisherigen Variable.
+    assert fetch._sprache_aus_env("en", 0) == "en"
+    assert fetch._sprache_aus_env("en", 7) == "en"
+    # Leerer Eintrag = kein Override fuer DIESE URL, waehrend die Nachbarn einen haben.
+    assert fetch._sprache_aus_env("ch,,en", 1) is None
+    # Ausserhalb, unbekannt, gar nicht gesetzt -> None, nie ein Wurf.
+    assert fetch._sprache_aus_env("ch,en", 5) is None
+    assert fetch._sprache_aus_env("klingonisch", 0) is None
+    assert fetch._sprache_aus_env(None, 0) is None
+    assert fetch._sprache_aus_env("", 0) is None
+    # Positivkontrolle: JEDE gueltige id kommt durch — sonst bliebe der Test gruen, wenn
+    # `pruef_fehler` eines Tages alles ablehnte.
+    for sid in sprachen.SPRACHEN:
+        assert fetch._sprache_aus_env(sid, 0) == sid
+
+
+def test_main_reicht_jeder_url_ihre_eigene_sprache_durch(projekt, monkeypatch):
+    """Gemischtsprachige Projekte sind vorgesehen (`projekt.json` haelt `sprache` je Base) —
+    der URL-Weg konnte als einziger nur EINEN Wert fuer den ganzen Auftrag.
+
+    Der Index kommt aus der Schleife, nicht aus einem Erfolgszaehler: sonst verschoebe ein
+    fehlgeschlagener Download jede folgende Zuordnung.
+    """
+    gesehen = []
+
+    def merken(project, url, sprecher=None, sprache=None):
+        gesehen.append((url, sprache))
+        return f"base{len(gesehen)}"
+
+    monkeypatch.setattr(fetch, "download_one", merken)
+    monkeypatch.setenv("TRANSKRIBOR_YTDLP_UPDATE", "0")
+    monkeypatch.setenv("TRANSKRIBOR_FETCH_SPRACHE", "ch,en")
+    fetch.main(["--download-only", "Demo",
+                "https://youtu.be/aaa", "https://youtu.be/bbb"])
+    assert gesehen == [("https://youtu.be/aaa", "ch"), ("https://youtu.be/bbb", "en")]
