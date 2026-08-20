@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Waveform, type WaveHandle } from '@/components/Waveform'
@@ -63,6 +63,20 @@ export function HoerBalken({ datei, anzeige, onSchliessen }: {
     return () => { URL.revokeObjectURL(u) }
   }, [datei])
 
+  // `useCallback` ist hier KEIN Feinschliff: `onBereit` steht in den Abhaengigkeiten des
+  // ready-Effekts in `Waveform`, und eine inline erzeugte Funktion wechselt bei JEDEM Render
+  // die Identitaet. Der Dialog rendert bei jedem Tastendruck in einem Sprecherfeld — der
+  // Effekt liefe also je Tastendruck erneut durch `exportPeaks()`, und das iteriert ueber die
+  // vollstaendigen Kanaldaten (bei 30 Minuten ~79 Mio. Samples je Kanal).
+  const bereit = useCallback((peaks: Float32Array, dauer: number) => {
+    // EINMAL je Datei springen, nicht bei jedem Play: sonst kaeme man nach einem bewussten
+    // Klick an den Anfang nie wieder dorthin zurueck.
+    if (gesprungen.current === url) return
+    gesprungen.current = url
+    const t = ersteStelle(peaks, dauer)
+    if (t > 0) welle.current?.springeZu(t)
+  }, [url])
+
   if (!datei || !url) return null
 
   return (
@@ -73,15 +87,7 @@ export function HoerBalken({ datei, anzeige, onSchliessen }: {
           <X className="size-4" />
         </Button>
       </div>
-      <Waveform ref={welle} url={url} onTime={() => {}}
-        onBereit={(peaks, dauer) => {
-          // EINMAL je Datei springen, nicht bei jedem Play: sonst kaeme man nach einem
-          // bewussten Klick an den Anfang nie wieder dorthin zurueck.
-          if (gesprungen.current === url) return
-          gesprungen.current = url
-          const t = ersteStelle(peaks, dauer)
-          if (t > 0) welle.current?.springeZu(t)
-        }} />
+      <Waveform ref={welle} url={url} onTime={() => {}} onBereit={bereit} />
       <p className="mt-1 text-xs text-muted-foreground">
         Der Marker „erstes Geräusch" zeigt, wo Play einsetzt — Applaus und Wind zählen mit.
       </p>

@@ -52,7 +52,9 @@ export const Waveform = forwardRef<WaveHandle,
     // waere teurer als der Nutzen fuer eine Pegelschwelle).
     useEffect(() => {
       if (!wavesurfer || !isReady || !onBereit) return
-      const kanaele = wavesurfer.exportPeaks()
+      // `channels: 1` — der Default ist 2, und `exportPeaks` laeuft je Kanal ueber die
+      // VOLLSTAENDIGEN Dekodierdaten. Wir brauchen nur den ersten (eine Pegelschwelle).
+      const kanaele = wavesurfer.exportPeaks({ channels: 1 })
       onBereit(new Float32Array(kanaele[0] ?? []), wavesurfer.getDuration())
     }, [wavesurfer, isReady, onBereit])
 
