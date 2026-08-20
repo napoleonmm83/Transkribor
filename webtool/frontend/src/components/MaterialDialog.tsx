@@ -53,7 +53,18 @@ export function MaterialDialog({ project, offen, vorbelegteDateien, sprachChoice
   // `setZeilen`: ein zweiter Wurf auf denselben offenen Dialog haengt an, statt die schon
   // getippten Zahlen zu loeschen.
   useEffect(() => {
-    if (vorbelegteDateien?.length) setZeilen(alt => ergaenzen(alt, vorbelegteDateien.map(zeileAus)))
+    if (!vorbelegteDateien?.length) return
+    setZeilen(alt => {
+      const neu = ergaenzen(alt, vorbelegteDateien.map(zeileAus))
+      // Stillschweigend weggefallene Dubletten sind ein toter Klick: der Nutzer legt zwei
+      // gleichnamige Dateien ab und sieht eine Zeile.
+      const weg = alt.length + vorbelegteDateien.length - neu.length
+      if (weg > 0) toast.info(`${weg} Aufnahme${weg > 1 ? 'n' : ''} war${weg > 1 ? 'en' : ''} schon in der Liste.`)
+      return neu
+    })
+    // Ein Drop darf nicht in der Zusammenfassung landen: wurde der Dialog auf Schritt 3
+    // verlassen, saehe der Nutzer Sprache und Sprecherzahl der neuen Aufnahmen NIE.
+    setSchritt(s => Math.min(s, 2))
   }, [vorbelegteDateien])
 
   function zeileAus(d: File): Aufnahme {
@@ -77,32 +88,48 @@ export function MaterialDialog({ project, offen, vorbelegteDateien, sprachChoice
   const starten = async () => {
     const meiner = ++laufNr.current
     setLaeuft(true); setKlingt(null)          // Ton hoert auf, BEVOR Zeilen verschwinden
-    if (quelle === 'link') {
-      // Die volle Liste, auch wenn alle gleich sind: sie ist index-parallel zu `urls` und
-      // muss ihre Plaetze halten. `sprache` bleibt an Position 3 der Signatur.
-      //
-      // Der Platz wird mit `null` gehalten, NICHT mit dem Projektwert. Der Plan schrieb hier
-      // `z.sprache` — damit bekaeme JEDE importierte Datei einen eigenen Eintrag in
-      // `projekt.json`, auch wenn sie nur den Standard wiederholt, und zoege bei einer
-      // spaeteren Aenderung des Projekt-Standards nicht mehr mit (#166/#234). `null` heisst
-      // „nicht gesetzt" und haelt den Index trotzdem — dieselbe Rolle wie `''` beim Upload,
-      // nur dass eine Liste kein Feld weglassen kann.
-      const res = await fetchUrls(project, zeilen.map(z => z.schluessel),
-                                  zeilen.map(z => z.sprache === projektSprache ? null : z.sprache),
-                                  undefined,
-                                  zeilen.map(z => sprecherWahl(z.sprecherText, sprecherMax) ?? null))
-      if (meiner === laufNr.current) {
-        setLaeuft(false)
-        // Gelungen ⇒ zu. Im Browser gemessen: ohne das bleibt der Dialog mit leerer Liste
-        // stehen, und der einzige Rueckweg heisst „Abbrechen" — also ein Knopf, der nach
-        // Verwerfen klingt, fuer einen Lauf, der gerade geglueckt ist.
-        if (res.started) { setZeilen([]); onSchliessen() }
-      }
-      onFertig(res, 'fetch'); return
-    }
     const gescheitert: Aufnahme[] = []
     let job: StartJob | undefined
-    for (const z of zeilen) {
+    let art: 'transcribe' | 'fetch' = 'transcribe'
+
+    // Verzweigt wird JE ZEILE, nicht nach dem zuletzt geklickten Reiter. `ergaenzen` haengt
+    // an, und `quelle` ist eine Ansicht des Reiters — beides zusammen liess Dateien und
+    // Links in EINER Liste landen, die dann ueber EINEN Sendeweg ging: die URL-Zeile lief in
+    // `uploadAudio(…, z.datei!)` mit `undefined` (422), oder ein Dateiname ging als URL an
+    // `/fetch` (400). Vorher war die Vermischung strukturell unmoeglich — zwei Komponenten,
+    // zwei Listen. Das ist der Weg, den dieser Umbau NEU aufgemacht hat.
+    const links = zeilen.filter(z => !z.datei)
+    const hoch = zeilen.filter(z => z.datei)
+
+    if (links.length) {
+      try {
+        // Die volle Liste, auch wenn alle gleich sind: sie ist index-parallel zu `urls` und
+        // muss ihre Plaetze halten. `sprache` bleibt an Position 3 der Signatur.
+        //
+        // Der Platz wird mit `null` gehalten, NICHT mit dem Projektwert. Ein mitgeschickter
+        // Wert machte aus JEDER importierten Datei einen Override, der spaeteren Aenderungen
+        // des Projekt-Standards nicht mehr folgt (#166/#234). `|| null` faengt zusaetzlich
+        // den Fall ab, dass die Einstellungen noch nicht geladen waren: `''` ist fuer
+        // `pruef_fehler` keine gueltige Sprache und endete in einem 400.
+        const res = await fetchUrls(project, links.map(z => z.schluessel),
+                                    links.map(z => z.sprache === projektSprache ? null : (z.sprache || null)),
+                                    undefined,
+                                    links.map(z => sprecherWahl(z.sprecherText, sprecherMax) ?? null))
+        job = res; art = 'fetch'
+        // Laeuft schon ⇒ die Zeilen BLEIBEN stehen (der Nutzer versucht es spaeter noch
+        // einmal); die Meldung dazu macht die Arbeitsflaeche in `onFertig`.
+        if (!res.started) gescheitert.push(...links)
+      } catch (e) {
+        // OHNE diesen Zweig verlaesst die Ausnahme `starten`: `setLaeuft(false)` liefe nie,
+        // der Knopf staende fuer immer auf „startet…", und weil dieser Dialog seinen Zustand
+        // AUFBEWAHRT, heilt auch Schliessen und Wiederoeffnen ihn nicht. Ausloeser ist kein
+        // Sonderfall, sondern der Alltag: eine nicht unterstuetzte URL (400 aus `check_url`).
+        toast.error(`Video-Links: ${(e as Error)?.message || 'Import fehlgeschlagen'}`)
+        gescheitert.push(...links)
+      }
+    }
+
+    for (const z of hoch) {
       try {
         // `?? undefined`, NICHT `?? null`: leer heisst „Formfeld weglassen" (automatisch).
         const wahl = sprecherWahl(z.sprecherText, sprecherMax) ?? undefined
@@ -112,7 +139,7 @@ export function MaterialDialog({ project, offen, vorbelegteDateien, sprachChoice
         // mit (#234/#166).
         const spr = z.sprache === projektSprache ? '' : z.sprache
         const r = await uploadAudio(project, z.datei!, spr, undefined, wahl)
-        if (r.job_id) job = { job_id: r.job_id, started: !!r.started }
+        if (r.job_id) { job = { job_id: r.job_id, started: !!r.started }; art = 'transcribe' }
       } catch (e) {
         // „existiert bereits" ist KEIN wiederholbarer Fehlschlag — ein zweiter Versuch
         // endete wieder mit 409. Alles Stehenlassen liefe beim naechsten Klick in lauter 409er,
@@ -126,6 +153,7 @@ export function MaterialDialog({ project, offen, vorbelegteDateien, sprachChoice
         }
       }
     }
+
     if (meiner === laufNr.current) {
       setLaeuft(false); setZeilen(gescheitert)
       // Zurueck in die Liste, wenn etwas stehenblieb: die Zusammenfassung zeigt nur Zahlen,
@@ -133,9 +161,15 @@ export function MaterialDialog({ project, offen, vorbelegteDateien, sprachChoice
       // zweiten Versuch startet. Ist NICHTS stehengeblieben, ist der Dialog fertig — er
       // bleibt sonst mit leerer Liste offen (im Browser gemessen).
       if (gescheitert.length) setSchritt(2)
-      else onSchliessen()
+      // Das URL-Feld MUSS mit geleert werden: der Dialog bewahrt seinen Zustand auf, die eben
+      // importierten Links staenden beim naechsten Oeffnen wieder da, und ein Klick auf
+      // „Holen" liefe in einen zweiten Download derselben Videos — `ergaenzen` schuetzt
+      // innerhalb der Liste, nicht gegen einen bereits erledigten Lauf.
+      // Zurueck auf Schritt 1: der Zustand wird aufbewahrt, ein spaeteres Oeffnen landete
+      // sonst in einer Zusammenfassung ueber NICHTS (im Test aufgefallen).
+      else { setUrlText(''); setSchritt(1); onSchliessen() }
     }
-    onFertig(job, 'transcribe')      // laeuft IMMER — der Workspace muss seine Liste nachziehen
+    onFertig(job, art)      // laeuft IMMER — der Workspace muss seine Liste nachziehen
   }
 
   if (!offen) return null
@@ -248,7 +282,12 @@ export function MaterialDialog({ project, offen, vorbelegteDateien, sprachChoice
         <div className="flex justify-end gap-2">
           {/* Abbrechen ist waehrend des Laufs NICHT gesperrt — es ist der einzige Rueckweg,
               und `uploadAudio`/`fetchUrls` haben kein Zeitlimit (#299). */}
-          <Button variant="ghost" onClick={onSchliessen}>Abbrechen</Button>
+          {/* Waehrend des Laufs heisst der Knopf „Schliessen": er bricht NICHTS ab — die
+              Upload-Schleife laeuft weiter, die Dateien landen im Projekt. „Abbrechen" waere
+              dort ein Versprechen, das er nicht einloest. Gesperrt wird er nie (#299: kein
+              Zeitlimit an uploadAudio/fetchUrls, sonst bliebe der Dialog bei einer haengenden
+              Verbindung fuer immer tot). */}
+          <Button variant="ghost" onClick={onSchliessen}>{laeuft ? 'Schliessen' : 'Abbrechen'}</Button>
           {schritt > 1 && (
             <Button variant="outline" disabled={laeuft}
               onClick={() => setSchritt(s => s - 1)}>Zurück</Button>

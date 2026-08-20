@@ -5,6 +5,9 @@ import * as api from '@/lib/api'
 
 vi.mock('@/lib/api')
 vi.mock('@/components/HoerBalken', () => ({ HoerBalken: () => null }))
+const toastMock = vi.hoisted(() => Object.assign(vi.fn(),
+  { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn(), dismiss: vi.fn() }))
+vi.mock('sonner', () => ({ toast: toastMock }))
 
 const basis = {
   project: 'Demo', offen: true,
@@ -85,6 +88,108 @@ describe('MaterialDialog', () => {
     expect(vi.mocked(api.fetchUrls).mock.calls[0][2]).toEqual([null, 'en'])
   })
 
+  it('ein abgelehnter URL-Import meldet sich und gibt den Dialog wieder frei (K1)', async () => {
+    /* Der Nachfolger des geloeschten `zeigt die Serverbegruendung und ruft onStart nicht`.
+       OHNE `try` verlaesst die Ausnahme `starten`: `setLaeuft(false)` liefe nie, der Knopf
+       staende fuer immer auf „startet…", und weil dieser Dialog seinen Zustand AUFBEWAHRT,
+       heilt auch Schliessen und Wiederoeffnen ihn nicht. Ausloeser ist der Alltag — eine
+       nicht unterstuetzte URL endet mit 400. */
+    vi.mocked(api.fetchUrls).mockRejectedValue(new Error('Nicht unterstuetzte Seite'))
+    render(<MaterialDialog {...basis} />)
+    fireEvent.click(screen.getByRole('tab', { name: /Links/ }))
+    fireEvent.change(screen.getByRole('textbox', { name: /Video-URLs/ }),
+                     { target: { value: 'https://boese.example/x' } })
+    fireEvent.click(screen.getByRole('button', { name: /Holen/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Weiter/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Los geht/ }))
+    await waitFor(() => expect(toastMock.error).toHaveBeenCalledWith(
+      expect.stringContaining('Nicht unterstuetzte Seite')))
+    // Der Dialog ist wieder bedienbar und steht in Schritt 2 — dort SIEHT der Nutzer die
+    // Zeile, die es nicht geschafft hat, bevor er den zweiten Versuch startet. Ohne den
+    // `catch` bliebe stattdessen `laeuft` stehen und beide Knoepfe waeren tot.
+    expect(screen.getByText('https://boese.example/x')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Weiter/ })).toBeEnabled()
+  })
+
+  it('eine GEMISCHTE Auswahl geht auf beiden Wegen — je Zeile, nicht je Reiter (K2)', async () => {
+    /* Der Weg, den dieser Umbau NEU aufgemacht hat: `ergaenzen` haengt an, `quelle` haengt am
+       zuletzt geklickten Reiter. Frueher war die Vermischung strukturell unmoeglich (zwei
+       Komponenten, zwei Listen). Ohne die Verzweigung je Zeile liefe die URL-Zeile in
+       `uploadAudio(…, undefined)` — FormData macht daraus "undefined", der Server 422. */
+    render(<MaterialDialog {...basis} />)
+    fireEvent.click(screen.getByRole('tab', { name: /Links/ }))
+    fireEvent.change(screen.getByRole('textbox', { name: /Video-URLs/ }),
+                     { target: { value: 'https://youtu.be/a' } })
+    fireEvent.click(screen.getByRole('button', { name: /Holen/ }))       // -> Schritt 2
+    fireEvent.click(screen.getByRole('button', { name: /Zurück/ }))      // -> Schritt 1
+    fireEvent.click(screen.getByRole('tab', { name: /Dateien/ }))
+    fireEvent.change(screen.getByTestId('ablage-input'),
+                     { target: { files: [datei('a.mp3')] } })
+    fireEvent.click(screen.getByRole('button', { name: /Weiter/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Weiter/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Los geht/ }))
+    await waitFor(() => expect(api.uploadAudio).toHaveBeenCalledTimes(1))
+    expect(api.fetchUrls).toHaveBeenCalledTimes(1)
+    // Jede Zeile auf IHREM Weg: die Datei als File, die URL als URL.
+    expect(vi.mocked(api.uploadAudio).mock.calls[0][1]).toBeInstanceOf(File)
+    expect(vi.mocked(api.fetchUrls).mock.calls[0][1]).toEqual(['https://youtu.be/a'])
+  })
+
+  it('nennt einen Grund, auch wenn der Fehler keinen traegt', async () => {
+    /* Aus `UploadDropzone.test.tsx` mitgenommen: `new Error('')` ist nicht `null`, das `||`
+       ist also die tragende Zeile — und war ungedeckt. */
+    vi.mocked(api.uploadAudio).mockRejectedValue(new Error(''))
+    render(<MaterialDialog {...basis} vorbelegteDateien={[datei('a.mp3')]} />)
+    fireEvent.click(screen.getByRole('button', { name: /Weiter/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Weiter/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Los geht/ }))
+    await waitFor(() => expect(toastMock.error).toHaveBeenCalledWith(
+      expect.stringMatching(/a\.mp3: .+/)))
+  })
+
+  it('leert das URL-Feld nach einem gelungenen Import', async () => {
+    /* Der Dialog bewahrt seinen Zustand auf — die eben importierten Links staenden beim
+       naechsten Oeffnen wieder im Feld, und ein Klick auf „Holen" liefe in einen ZWEITEN
+       Download derselben Videos. `ergaenzen` schuetzt innerhalb der Liste, nicht gegen einen
+       bereits erledigten Lauf. */
+    const { rerender } = render(<MaterialDialog {...basis} />)
+    fireEvent.click(screen.getByRole('tab', { name: /Links/ }))
+    fireEvent.change(screen.getByRole('textbox', { name: /Video-URLs/ }),
+                     { target: { value: 'https://youtu.be/a' } })
+    fireEvent.click(screen.getByRole('button', { name: /Holen/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Weiter/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Los geht/ }))
+    await waitFor(() => expect(api.fetchUrls).toHaveBeenCalled())
+    rerender(<MaterialDialog {...basis} offen={false} />)
+    rerender(<MaterialDialog {...basis} offen />)
+    fireEvent.click(screen.getByRole('tab', { name: /Links/ }))
+    expect(screen.getByRole('textbox', { name: /Video-URLs/ })).toHaveValue('')
+  })
+
+  it('ein Drop landet nie in der Zusammenfassung', async () => {
+    /* Neu durch den Wiedereinstieg ueber das Drop-Overlay: wurde der Dialog auf Schritt 3
+       verlassen, saehe der Nutzer Sprache und Sprecherzahl der frisch abgelegten Aufnahmen
+       NIE — sie liefen ungefragt mit dem Projekt-Standard los. */
+    const { rerender } = render(
+      <MaterialDialog {...basis} vorbelegteDateien={[datei('a.mp3')]} />)
+    fireEvent.click(screen.getByRole('button', { name: /Weiter/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Weiter/ }))   // Schritt 3
+    expect(screen.getByRole('button', { name: /Los geht/ })).toBeInTheDocument()
+    rerender(<MaterialDialog {...basis} vorbelegteDateien={[datei('a.mp3'), datei('b.mp3')]} />)
+    // Zurueck in Schritt 2: die Zeilen sind da UND einstellbar.
+    expect(screen.getByRole('textbox', { name: /Anzahl Sprecher für b\.mp3/ })).toBeInTheDocument()
+  })
+
+  it('„Holen" mit leerem Feld bleibt untaetig', () => {
+    /* Aus `UrlFetch.test.tsx`: ein `if` ohne Test. Ohne die Wache entstuende eine leere
+       Zeilenliste und der Dialog spraenge trotzdem in Schritt 2. */
+    render(<MaterialDialog {...basis} />)
+    fireEvent.click(screen.getByRole('tab', { name: /Links/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Holen/ }))
+    expect(screen.getByRole('textbox', { name: /Video-URLs/ })).toBeInTheDocument()  // Schritt 1
+    expect(api.fetchUrls).not.toHaveBeenCalled()
+  })
+
   it('behaelt nach einem Teil-Fehlschlag NUR die gescheiterten Zeilen', async () => {
     vi.mocked(api.uploadAudio)
       .mockResolvedValueOnce({ base: 'a', file: 'a.mp3' })
@@ -147,7 +252,10 @@ describe('MaterialDialog', () => {
     fireEvent.click(screen.getByRole('button', { name: /Weiter/ }))
     fireEvent.click(screen.getByRole('button', { name: /Los geht/ }))
     await waitFor(() => expect(screen.getByRole('button', { name: /Los geht|startet/ })).toBeDisabled())
-    expect(screen.getByRole('button', { name: /Abbrechen/ })).toBeEnabled()
+    // Waehrend des Laufs heisst der Knopf „Schliessen" — er bricht nichts ab, und
+    // „Abbrechen" waere dort ein Versprechen, das er nicht einloest. Die Zusicherung ist
+    // dieselbe: der Rueckweg bleibt bedienbar.
+    expect(screen.getByRole('button', { name: /Schliessen/ })).toBeEnabled()
   })
 
   it('ein Projektwechsel WAEHREND des Uploads schreibt As Ergebnis nicht in Bs Dialog', async () => {

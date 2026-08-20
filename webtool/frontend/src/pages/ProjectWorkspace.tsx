@@ -131,7 +131,10 @@ export function ProjectWorkspace() {
     // was in Ordnung war, solange man die Zone absichtlich treffen musste.
     <div className="p-6 sm:p-8" data-testid="drop-overlay-ziel"
       onDragOver={e => { e.preventDefault(); setZieht(true) }}
-      onDragLeave={() => setZieht(false)}
+      // `relatedTarget` pruefen: `dragleave` feuert bei JEDER Kindgrenze, die der Zeiger
+      // kreuzt — ueber die ganze Seite hinweg flackerte das Overlay dabei staendig. In der
+      // alten, kleinen Ablageflaeche fiel das kaum auf.
+      onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setZieht(false) }}
       onDrop={e => {
         e.preventDefault(); setZieht(false)
         const audio = Array.from(e.dataTransfer.files).filter(f => istAudio(f.name))
