@@ -697,8 +697,51 @@ def _pip_merker() -> str:
     return f"{_lockziel()}.abbruch"
 
 
+def _datum_aus_datei(pfad: str) -> dt.date | None:
+    """Ein ISO-Datum aus einer kleinen Merker-Datei, oder None: fehlend, unlesbar, oder in
+    der ZUKUNFT. Der gemeinsame Leser der Merker-Dateien (Abbruch seit #258, Kalender seit
+    #281) — eine Logik, zwei Pfade.
+
+    Ein Zukunftsdatum (vorgehende Rechneruhr) gilt als keines — dieselbe Richtung wie in
+    `geprueft()`, sonst waere ein Merker dauerhaft gueltig und seine Fristerkennung still
+    abgeschaltet.
+
+    **`O_NONBLOCK` wie in `sperre._merker_lesen` (#200), und aus demselben Grund.** Liegt am
+    Merker-Pfad ein FIFO, wartet ein normales `open()` auf einen Schreiber, der nie kommt —
+    ohne Frist. Hier waere das eine Stufe schlimmer als bei #200: der Aufrufer ist ueber
+    `faellig()` -> `beim_start()` der Lifespan VOR dem `yield`, dessen `except Exception`
+    keinen Haenger faengt — der Server kaeme gar nicht hoch, ohne Fehlerseite und ohne Log.
+    In WSL/ext4 gemessen: blankes `open()` kehrt binnen 3 s nicht zurueck, mit dem Flag
+    sofort. Was OFFEN bleibt, ist dasselbe wie dort: eine regulaere Datei auf einer nicht
+    erreichbaren Netzfreigabe (das Flag tut da nichts) — steht als #237.
+
+    `O_BINARY` nur auf Windows, `O_NONBLOCK` nur auf POSIX; `getattr(..., 0)` ist in beiden
+    Faellen das neutrale Element.
+    """
+    flags = os.O_RDONLY | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_BINARY", 0)
+    try:
+        fd = os.open(pfad, flags)
+    except (OSError, ValueError):     # ValueError: eingebettetes NUL im Pfad
+        return None
+    try:
+        roh = os.read(fd, 64)
+    except OSError:                   # BlockingIOError am haengenden Schreiber ist einer
+        return None
+    finally:
+        with contextlib.suppress(OSError):
+            os.close(fd)
+    try:
+        d = dt.date.fromisoformat(roh.decode("utf-8").strip())
+    except ValueError:                # UnicodeDecodeError IST einer (#185/#190)
+        return None
+    return None if d > _heute() else d
+
+
 def _merker_datum() -> dt.date | None:
-    """Das Datum im Merker, oder None (kein Merker, unlesbar, oder in der ZUKUNFT).
+    """Das Datum im Abbruch-Merker, oder None (kein Merker, unlesbar, oder in der ZUKUNFT).
+
+    Lesen und Zukunftswache liegen im gemeinsamen Leser `_datum_aus_datei`; warum die Wache
+    im LESER steht und nicht erst im Verbraucher, steht in dessen Docstring (#268).
 
     Ein Zukunftsdatum (vorgehende Rechneruhr) gilt als keines — dieselbe Richtung wie in
     `geprueft()`, sonst waere der Merker dauerhaft gueltig und die Erkennung still abgeschaltet.
@@ -722,23 +765,7 @@ def _merker_datum() -> dt.date | None:
     #
     # `O_BINARY` nur auf Windows, `O_NONBLOCK` nur auf POSIX; `getattr(..., 0)` ist in beiden
     # Faellen das neutrale Element.
-    flags = os.O_RDONLY | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_BINARY", 0)
-    try:
-        fd = os.open(_pip_merker(), flags)
-    except (OSError, ValueError):     # ValueError: eingebettetes NUL im Pfad
-        return None
-    try:
-        roh = os.read(fd, 64)
-    except OSError:                   # BlockingIOError am haengenden Schreiber ist einer
-        return None
-    finally:
-        with contextlib.suppress(OSError):
-            os.close(fd)
-    try:
-        d = dt.date.fromisoformat(roh.decode("utf-8").strip())
-    except ValueError:                # UnicodeDecodeError IST einer (#185/#190)
-        return None
-    return None if d > _heute() else d
+    return _datum_aus_datei(_pip_merker())
 
 
 def _pip_merker_setzen() -> None:
@@ -774,28 +801,36 @@ def _pip_merker_setzen() -> None:
     diesem Fix war. Aber nicht STILL, sonst ist er von einem gesetzten nicht zu unterscheiden
     (dieselbe Regel wie bei `sperre.datei`s fail-open).
     """
-    # **`O_NONBLOCK` auch beim SCHREIBEN**, nicht nur beim Lesen. Ein `open(..., "w")` auf
-    # einen FIFO wartet auf einen LESER, der nie kommt — und diese Zeile laeuft INNERHALB der
-    # pip-Sperre im Hintergrundfaden: der Haenger hielte die Sperre fuer immer, die
-    # Einstellungsseite meldete dauerhaft „eine Aktualisierung laeuft gerade" (#243), und der
-    # Knopf saesse bei jedem Klick die volle Frist ab. Mit dem Flag wirft `os.open` dort ENXIO,
-    # das der Zweig unten als „nicht schreibbar" behandelt — best effort wie gehabt.
-    # (CodeRabbit-CLI, Major; dieselbe Klasse wie #200, dort nur die Leseseite.)
-    #
-    # Auf Windows gibt es diesen Fall an einem gewoehnlichen Pfad nicht (benannte Pipes leben
-    # unter `\.\pipe\`), `O_NONBLOCK` fehlt dort ohnehin — deshalb KEINE zusaetzliche
-    # Sonderdatei-Pruefung: sie waere ein Waechter ohne roten Test fuer einen Fall, den dieses
-    # Repo nicht herstellen kann.
+    _datum_setzen(_pip_merker(), was="Merker fuer den pip-Lauf")
+
+
+def _datum_setzen(pfad: str, *, was: str) -> None:
+    """Heute als ISO-Datum in eine Merker-Datei schreiben — best effort, wirft nie (#185).
+    Der gemeinsame Schreiber der Merker-Dateien (Abbruch seit #258, Kalender seit #281).
+
+    **`O_NONBLOCK` auch beim SCHREIBEN**, nicht nur beim Lesen. Ein `open(..., "w")` auf
+    einen FIFO wartet auf einen LESER, der nie kommt — und diese Zeile kann INNERHALB der
+    pip-Sperre im Hintergrundfaden laufen: der Haenger hielte die Sperre fuer immer, die
+    Einstellungsseite meldete dauerhaft „eine Aktualisierung laeuft gerade" (#243), und der
+    Knopf saesse bei jedem Klick die volle Frist ab. Mit dem Flag wirft `os.open` dort ENXIO,
+    das der Zweig unten als „nicht schreibbar" behandelt — best effort wie gehabt.
+    (CodeRabbit-CLI, Major; dieselbe Klasse wie #200, dort nur die Leseseite.)
+
+    Auf Windows gibt es diesen Fall an einem gewoehnlichen Pfad nicht (benannte Pipes leben
+    unter `\.\pipe\`), `O_NONBLOCK` fehlt dort ohnehin — deshalb KEINE zusaetzliche
+    Sonderdatei-Pruefung: sie waere ein Waechter ohne roten Test fuer einen Fall, den dieses
+    Repo nicht herstellen kann.
+    """
     flags = (os.O_WRONLY | os.O_CREAT | os.O_TRUNC
              | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_BINARY", 0))
     try:
-        fd = os.open(_pip_merker(), flags, 0o600)
+        fd = os.open(pfad, flags, 0o600)
         try:
             os.write(fd, _heute().isoformat().encode("utf-8"))
         finally:
             os.close(fd)
     except (OSError, ValueError) as e:     # ValueError: eingebettetes NUL im Pfad
-        print(f"[ytdlp] Merker fuer den pip-Lauf nicht schreibbar: {e}", flush=True)
+        print(f"[ytdlp] {was} nicht schreibbar: {e}", flush=True)
 
 
 def _pip_merker_loeschen() -> None:
