@@ -385,8 +385,18 @@ Zehn davon wären 6,6 GB. **Der Wert ist Arithmetik, keine Heap-Messung** — `p
 taugt hier nicht, ein `AudioBuffer` liegt ausserhalb des JS-Heaps (gemessen wurden −28 MB und
 −298 MB, also GC-Rauschen).
 
-**3. Die feste Rahmenhöhe bleibt offen.** Sie hängt an Marcus' Bildschirm; im Entwurf 352 px,
-bei etwa 480 px passen zehn Zeilen ohne Scrollen.
+**3. Die Rahmenhöhe ist `min(480px, 70vh)`** (Marcus, 2026-08-20). Nicht 352 px wie im
+Entwurf und auch nicht fest 480 px — und der Grund ist, dass beide Eigenschaften gleichzeitig
+gelten müssen:
+**Sie ist für ein gegebenes Fenster eine KONSTANTE**, der Rahmen springt beim Schrittwechsel
+also nicht. Genau deswegen wollte H1 eine feste Höhe; `min(…)` gibt das her, ein `min-height`
+mit wachsendem Inhalt nicht (Schritt 1 wäre 352, Schritt 2 mit zehn Zeilen 480 — und damit der
+Sprung, den H1 vermeiden wollte).
+**Und sie schneidet auf kleinen Schirmen nicht ab.** Fest 480 px ergäbe mit Kopf, Schrittleiste
+und Hörbalken rund 700 px — auf einem 13-Zoll-Laptop (768 px) ist das die Konstellation aus
+**#283**: oben und unten abgeschnitten, „Los geht's" unerreichbar. Ein fester Pixelwert ist dort
+die Fehlerklasse selbst, nicht nur ein knapper Wert.
+Auf Marcus' Schirm sind es 480 px, also zehn Zeilen ohne Scrollen.
 
 **4. Sonner-Toasts: GELESEN, nicht gemessen.** Sonners Behälter trägt
 `z-index: 999999999` (`node_modules/sonner/dist/styles.css`), `DialogOverlay`/`DialogContent`
