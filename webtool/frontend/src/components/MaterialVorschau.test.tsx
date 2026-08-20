@@ -72,6 +72,27 @@ describe('MaterialVorschau', () => {
     }
   })
 
+  it('der Bezug haelt auch bei Leerzeichen und Sonderzeichen im Namen', () => {
+    /* Gemessen, nicht vermutet: `aria-describedby` ist eine durch LEERZEICHEN getrennte
+       Liste von Ids. Baute man die Id aus dem Schluessel, zerfiele „Interview Müller.mp3"
+       darin in ZWEI Referenzen, und beide zeigten ins Leere — die Begruendung erreichte
+       einen Screenreader-Nutzer also gar nicht (#244 durch eine neue Tuer).
+
+       Diese Luecke war da, und die Testdaten oben haben sie NICHT gefunden: sie trugen
+       `interview_01.mp3` und `team.mp3`, beide ohne Leerzeichen. Gefunden hat sie die
+       CodeRabbit-CLI. Deshalb steht hier jetzt echtes Material — Dateinamen mit Leerzeichen
+       sind der Normalfall, URLs mit `/` und `?` ebenso. */
+    render(<MaterialVorschau {...basis} zeilen={[
+      { schluessel: 'Interview Müller.mp3', anzeige: 'Interview Müller.mp3', sprecherText: '99' },
+      { schluessel: 'https://youtu.be/a?t=1', anzeige: 'https://youtu.be/a?t=1', sprecherText: '99' },
+    ]} />)
+    for (const feld of screen.getAllByRole('textbox')) {
+      const id = feld.getAttribute('aria-describedby')!
+      expect(id.split(/\s+/)).toHaveLength(1)              // EINE Referenz, nicht zwei
+      expect(document.getElementById(id)).not.toBeNull()   // und sie loest auf
+    }
+  })
+
   it('waehrend des Laufs ist der Start gesperrt — kein doppelter Upload per Doppelklick', () => {
     render(<MaterialVorschau {...basis} zeilen={zeilen} laeuft />)
     expect(screen.getByRole('button', { name: /Hinzufügen & starten/ })).toBeDisabled()

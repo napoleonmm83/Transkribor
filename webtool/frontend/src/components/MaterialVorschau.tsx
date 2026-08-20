@@ -1,3 +1,4 @@
+import { useId } from 'react'
 import { sprecherWahl } from '@/lib/sprecher'
 import { Button } from '@/components/ui/button'
 
@@ -34,6 +35,16 @@ export function MaterialVorschau({ titel, zeilen, sprecherMax, laeuft, startText
   onStart: () => void
   onAbbrechen: () => void
 }) {
+  // Die Hilfetext-Id wird aus `useId` + Laufnummer gebaut, NICHT aus dem Schluessel.
+  //
+  // Der Schluessel ist ein Dateiname oder eine URL, und `aria-describedby` ist eine durch
+  // LEERZEICHEN getrennte Liste von Ids: „Interview Mueller.mp3" zerfaellt darin in zwei
+  // Referenzen, und beide zeigen ins Leere — gemessen. Die Begruendung, warum der Start
+  // gesperrt ist, erreicht einen Screenreader-Nutzer dann gar nicht mehr (#244 durch eine
+  // neue Tuer). `useId` deckt zugleich den zweiten Fall: Upload- und URL-Vorschau koennen
+  // gleichzeitig offen stehen und haetten bei gleichem Schluessel dieselbe Id zweimal im
+  // Dokument.
+  const idBasis = useId()
   const wahl = (z: VorschauZeile) => sprecherWahl(z.sprecherText, sprecherMax)
   // EINE ungueltige Zeile sperrt den GANZEN Knopf — dieselbe Regel wie im Datei-Dialog.
   // Sonst liesse sich ueber eine gueltige Nachbarzeile starten, und die fehlerhafte Eingabe
@@ -48,9 +59,9 @@ export function MaterialVorschau({ titel, zeilen, sprecherMax, laeuft, startText
         bei Aufnahmen mit einem Kameramikrofon.
       </p>
       <ul className="space-y-2">
-        {zeilen.map(z => {
+        {zeilen.map((z, i) => {
           const w = wahl(z)
-          const hilfeId = `vorschau-hilfe-${z.schluessel}`
+          const hilfeId = `${idBasis}-hilfe-${i}`
           return (
             <li key={z.schluessel} className="flex items-start gap-3">
               <span className="min-w-0 flex-1 truncate pt-2 text-sm" title={z.anzeige}>
