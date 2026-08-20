@@ -98,7 +98,14 @@ export function MaterialVorschau({ titel, zeilen, sprecherMax, laeuft, startText
         })}
       </ul>
       <div className="mt-4 flex justify-end gap-2">
-        <Button variant="outline" onClick={onAbbrechen} disabled={laeuft}>Abbrechen</Button>
+        {/* Abbrechen ist waehrend des Laufs BEWUSST nicht gesperrt — es ist der einzige
+            Rueckweg. `uploadAudio`/`fetchUrls` haben kein Zeitlimit (nur `getDoc` hat eines,
+            mit genau dieser Begruendung im Kommentar daneben); haengt die Verbindung, bliebe
+            `laeuft` fuer immer true. Mit gesperrtem Abbrechen waeren dann ALLE Bedienelemente
+            tot, und der einzige Ausweg waere ein Neuladen — mitsamt Verlust der Auswahl und
+            aller getippten Sprecherzahlen. Der Knopf raeumt nur lokalen Zustand auf; er
+            bricht keine laufende Anfrage ab, aber er gibt die Oberflaeche zurueck. */}
+        <Button variant="outline" onClick={onAbbrechen}>Abbrechen</Button>
         <Button onClick={onStart} disabled={gesperrt}>{startText}</Button>
       </div>
     </div>

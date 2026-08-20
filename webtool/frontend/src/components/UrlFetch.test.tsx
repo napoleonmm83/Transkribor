@@ -153,3 +153,17 @@ describe('UrlFetch — Vorschau vor dem Start', () => {
     expect(api.fetchUrls).not.toHaveBeenCalled()
   })
 })
+
+describe('UrlFetch — Reviewbefund PR #297', () => {
+  it('dieselbe URL zweimal im Feld ergibt EINE Zeile', () => {
+    /* Dieselbe Falle wie beim Upload: `bekannt` wuchs beim Filtern nicht mit, zwei gleiche
+       URLs ergaben zwei Zeilen mit demselben Schluessel — nicht einzeln bearbeitbar, und
+       beim Start ein doppelter Download. */
+    render(<UrlFetch project="Demo" onStart={vi.fn()} sprache="de" />)
+    fireEvent.change(screen.getByLabelText('Video-URLs'), {
+      target: { value: ['https://youtu.be/aaa', 'https://youtu.be/aaa'].join('\n') },
+    })
+    fireEvent.click(screen.getByRole('button', { name: /^holen$/i }))
+    expect(screen.getAllByRole('textbox', { name: /Anzahl Sprecher/ })).toHaveLength(1)
+  })
+})

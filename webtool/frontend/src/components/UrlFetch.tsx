@@ -38,10 +38,17 @@ export function UrlFetch({ project, onStart, sprache = '', mehrsprachig,
   const waehlen = () => {
     if (!urls.length) return
     setAuswahl(alt => {
+      // `bekannt` waechst WAEHREND des Filterns mit — dieselbe Falle wie beim Upload: zweimal
+      // dieselbe URL im Textfeld ergaebe sonst zwei Zeilen mit demselben Schluessel, die sich
+      // nicht mehr einzeln bearbeiten liessen (und einen doppelten Download).
       const bekannt = new Set(alt.map(z => z.schluessel))
-      return [...alt, ...urls.filter(u => !bekannt.has(u)).map(u => ({
-        schluessel: u, anzeige: u, sprecherText: '',
-      }))]
+      const neu: VorschauZeile[] = []
+      for (const u of urls) {
+        if (bekannt.has(u)) continue
+        bekannt.add(u)
+        neu.push({ schluessel: u, anzeige: u, sprecherText: '' })
+      }
+      return [...alt, ...neu]
     })
   }
 
