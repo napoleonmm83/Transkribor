@@ -51,8 +51,8 @@ Auch mit **Schweizerdeutsch** kommt es zurecht.
    einfach wieder an, es geht nichts verloren.
 3. Projekt anlegen, Audiodatei hineinziehen. Es öffnet sich ein Fenster, in dem du je
    Aufnahme Sprache und Anzahl Sprecher einstellen und **kurz reinhören** kannst — dreimal
-   klicken, dann läuft alles von allein, und du siehst live, wie weit es ist. (Ab der
-   nächsten Fassung; in `v0.25.0` und älter liegen diese Felder direkt auf der Seite.)
+   klicken, dann läuft alles von allein, und du siehst live, wie weit es ist. (Ab
+   `v0.26.0`; in `v0.25.0` und älter liegen diese Felder direkt auf der Seite.)
 
 > [!WARNING]
 > **Beim ersten Öffnen warnt das Betriebssystem.** Der Installer ist nicht bei Microsoft bzw.
@@ -304,7 +304,7 @@ Projekt-Standard aber auf Schweizerdeutsch — die Vorgabe für neue Projekte �
 Transkribor die Aufnahme als Schweizerdeutsch und glättet den Dialekt wie gewohnt. Hört es
 Englisch, Französisch oder Italienisch, bleibt es dabei — der Standard drängt sich nicht
 dazwischen. So kannst du einen gemischten Schwung mit „Automatisch" hinzufügen, ohne dass die
-Schweizer Aufnahmen dabei ungeglättet durchrutschen. (Ab der nächsten Fassung; in `v0.25.0`
+Schweizer Aufnahmen dabei ungeglättet durchrutschen. (Ab `v0.26.0`; in `v0.25.0`
 und älter ist „Automatisch" immer ohne Dialekt.)
 
 In den Projekt-Einstellungen (⋯-Menü des Projekts) legst du die Standard-Sprache und die
@@ -375,7 +375,7 @@ Zweiergespräche und ein Teaminterview im selben Schwung dazukommen. **Und du ka
 kurz reinhören:** ein Klick auf das Play-Symbol der Zeile spielt die Aufnahme unten im
 Fenster ab, damit du nicht raten musst, wie viele Leute darin vorkommen. Bei Video-Links geht
 das erst nach dem Herunterladen — dort sagt der Knopf es auch. (Das Fenster gibt es
-**ab der nächsten Fassung**; in `v0.25.0` stehen dieselben Felder direkt auf der Seite, in
+**ab `v0.26.0`**; in `v0.25.0` stehen dieselben Felder direkt auf der Seite, in
 `v0.24.0` und älter führt nur der Weg über das ⋯-Menü unten.)
 
 Nachträglich geht es weiterhin: in der Dateiliste auf das **⋯-Menü** der Aufnahme klicken,
