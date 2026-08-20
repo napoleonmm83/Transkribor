@@ -47,16 +47,22 @@ export const Waveform = forwardRef<WaveHandle,
     const fenster = useRef<Fenster | null>(null)
     useEffect(() => { fenster.current = null }, [url])   // andere Datei -> alte Grenze gilt nicht
 
-    // Peaks gibt es erst nach `ready` — vorher ist nichts dekodiert, es gaebe nichts zu
-    // springen. `exportPeaks()` liefert ein Array je Kanal; der erste reicht (Mono-Faltung
-    // waere teurer als der Nutzen fuer eine Pegelschwelle).
+    // Am EREIGNIS haengen, nicht am `isReady`-Flag — und das ist kein Stilfrage:
+    // `isReady` bleibt beim Dateiwechsel stehen, waehrend die neue Datei noch laedt. Der
+    // Effekt lief dann mit der NEUEN `url` und den ALTEN Dekodierdaten, meldete also die
+    // Pegel der vorigen Aufnahme fuer die neue — und weil der Hoerbalken sich merkt, dass er
+    // fuer diese url schon gesprungen ist, wuerde die richtige Meldung danach verworfen: die
+    // zweite Datei spraenge auf die Geraeuschstelle der ersten, dauerhaft. `ready` feuert
+    // dagegen genau einmal je geladener Datei und traegt ihre Dauer mit (CodeRabbit-CLI).
+    //
+    // `channels: 1` — der Default ist 2, und `exportPeaks` laeuft je Kanal ueber die
+    // VOLLSTAENDIGEN Dekodierdaten. Wir brauchen nur den ersten (eine Pegelschwelle).
     useEffect(() => {
-      if (!wavesurfer || !isReady || !onBereit) return
-      // `channels: 1` — der Default ist 2, und `exportPeaks` laeuft je Kanal ueber die
-      // VOLLSTAENDIGEN Dekodierdaten. Wir brauchen nur den ersten (eine Pegelschwelle).
-      const kanaele = wavesurfer.exportPeaks({ channels: 1 })
-      onBereit(new Float32Array(kanaele[0] ?? []), wavesurfer.getDuration())
-    }, [wavesurfer, isReady, onBereit])
+      if (!wavesurfer || !onBereit) return
+      return wavesurfer.on('ready', (dauer: number) => {
+        onBereit(new Float32Array(wavesurfer.exportPeaks({ channels: 1 })[0] ?? []), dauer)
+      })
+    }, [wavesurfer, onBereit])
 
     useEffect(() => {
       if (!wavesurfer) return

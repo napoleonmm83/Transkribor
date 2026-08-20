@@ -244,11 +244,10 @@ export function MaterialDialog({ project, offen, vorbelegteDateien, sprachChoice
 
           {schritt === 2 && (
             <div className="space-y-2">
-              {/* `relative` ist Pflicht, nicht Kosmetik (#209): ein overflow-Behaelter klemmt
-                  absolut positionierte Nachfahren nur, wenn er selbst ihr Bezugsrahmen ist —
-                  sonst haengt sich ein `sr-only` an den Viewport und macht das DOKUMENT
-                  scrollbar. Der Quellbaum-Waechter hat genau diese Zeile rot gemacht. */}
-              <ul className="relative max-h-[min(400px,60vh)] space-y-1.5 overflow-y-auto pr-1">
+              {/* Kein eigener Bildlauf mehr: seit der Dialog seine Hoehe deckelt und sein
+                  Inhaltsbereich scrollt, waeren das zwei Bildlaufleisten ineinander
+                  (CodeRabbit-CLI). Die Hoehe verwaltet der Dialog. */}
+              <ul className="space-y-1.5">
                 {zeilen.map(z => (
                   <MaterialZeile key={z.schluessel} zeile={z} sprachChoices={sprachChoices}
                     sprecherMax={sprecherMax} hoerbar={!!z.datei} klingt={klingt === z.schluessel}
