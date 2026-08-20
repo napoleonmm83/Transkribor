@@ -91,7 +91,13 @@ export function MaterialDialog({ project, offen, vorbelegteDateien, sprachChoice
                                   zeilen.map(z => z.sprache === projektSprache ? null : z.sprache),
                                   undefined,
                                   zeilen.map(z => sprecherWahl(z.sprecherText, sprecherMax) ?? null))
-      if (meiner === laufNr.current) { setLaeuft(false); if (res.started) setZeilen([]) }
+      if (meiner === laufNr.current) {
+        setLaeuft(false)
+        // Gelungen ⇒ zu. Im Browser gemessen: ohne das bleibt der Dialog mit leerer Liste
+        // stehen, und der einzige Rueckweg heisst „Abbrechen" — also ein Knopf, der nach
+        // Verwerfen klingt, fuer einen Lauf, der gerade geglueckt ist.
+        if (res.started) { setZeilen([]); onSchliessen() }
+      }
       onFertig(res, 'fetch'); return
     }
     const gescheitert: Aufnahme[] = []
@@ -124,8 +130,10 @@ export function MaterialDialog({ project, offen, vorbelegteDateien, sprachChoice
       setLaeuft(false); setZeilen(gescheitert)
       // Zurueck in die Liste, wenn etwas stehenblieb: die Zusammenfassung zeigt nur Zahlen,
       // und der Nutzer muss SEHEN, welche Aufnahme es nicht geschafft hat, bevor er den
-      // zweiten Versuch startet.
+      // zweiten Versuch startet. Ist NICHTS stehengeblieben, ist der Dialog fertig — er
+      // bleibt sonst mit leerer Liste offen (im Browser gemessen).
       if (gescheitert.length) setSchritt(2)
+      else onSchliessen()
     }
     onFertig(job, 'transcribe')      // laeuft IMMER — der Workspace muss seine Liste nachziehen
   }
@@ -143,10 +151,16 @@ export function MaterialDialog({ project, offen, vorbelegteDateien, sprachChoice
 
   return (
     <Dialog open={offen} onOpenChange={o => { if (!o) onSchliessen() }}>
-      {/* min(480px, 70vh) fuer die Liste: fuer ein gegebenes Fenster eine KONSTANTE, der
-          Rahmen springt beim Schrittwechsel also nicht (der Grund fuer H1s feste Hoehe) —
-          und ohne den Abschnitt-Fall aus #283, den ein fester Pixelwert dort erzeugt. */}
-      <DialogContent className="sm:max-w-3xl">
+      {/* Die Hoehe haengt am GANZEN Dialog, nicht an der Liste darin — und das ist der
+          Unterschied, den erst der Browser gezeigt hat: mit `min-h` auf der Liste stand der
+          Dialog bei einem 532-px-Fenster 540 px hoch da, also #283 in eigener Sache (oben und
+          unten abgeschnitten, „Los geht's" unerreichbar). Der Rahmen (Kopf, Schrittleiste,
+          Knopfzeile, Innenabstand) misst 168 px, deshalb 648 = 480 + 168: auf einem grossen
+          Schirm bleiben Marcus' 480 px fuer die Liste, auf einem kleinen greift 90vh und die
+          Liste schrumpft mit, statt den Dialog aus dem Fenster zu schieben.
+          Fuer ein gegebenes Fenster ist das weiterhin eine KONSTANTE — der Rahmen springt
+          beim Schrittwechsel nicht (der Grund fuer H1s feste Hoehe). */}
+      <DialogContent className="flex h-[min(648px,90vh)] flex-col sm:max-w-3xl">
         <DialogHeader><DialogTitle>Material hinzufügen</DialogTitle></DialogHeader>
 
         <ol className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -158,7 +172,10 @@ export function MaterialDialog({ project, offen, vorbelegteDateien, sprachChoice
           ))}
         </ol>
 
-        <div className="min-h-[min(480px,70vh)]">
+        {/* `relative` ist Pflicht (#209): ein overflow-Behaelter klemmt absolut positionierte
+            Nachfahren nur, wenn er selbst ihr Bezugsrahmen ist. Der Quellbaum-Waechter hat
+            genau diese Zeile rot gemacht — zum zweiten Mal in diesem PR. */}
+        <div className="relative min-h-0 flex-1 overflow-y-auto">
           {schritt === 1 && (
             <div className="space-y-3">
               <div role="tablist" className="flex gap-1">

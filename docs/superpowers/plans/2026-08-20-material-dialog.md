@@ -1412,8 +1412,9 @@ Niemals `git add -A`.
 - [x] **Die Rahmenhöhe** ist entschieden: `min(480px, 70vh)` (Spec §7.3) — konstant je
   Fenster (kein Sprung beim Schrittwechsel) und ohne den Abschnitt-Fall aus #283. Im Browser
   auf beiden Höhen gegenprüfen, wenn der Dialog steht.
-- [ ] **Erscheinen Sonner-Toasts über dem Dialog?** Bisher nur GELESEN (z-index 999999999
-  gegen `z-50`) — am laufenden Dialog nachmessen, sobald er existiert.
+- [x] **Sonner-Toasts liegen über dem Dialog** — am fertigen Dialog gemessen (Screenshot +
+  Stapelkontext-Prüfung). `elementFromPoint` taugt dafür NICHT: der Toast ist
+  `pointer-events: none`, Treffertests überspringen ihn.
 - [ ] **`superpowers:requesting-code-review`**, dann CodeRabbit CLI, dann Bot — in dieser
   Reihenfolge. Die Spec-Reviewstufe ist ausgefallen (beide Subagenten lieferten nichts) und
   wird hier nachgeholt; im PR-Text als das benennen.

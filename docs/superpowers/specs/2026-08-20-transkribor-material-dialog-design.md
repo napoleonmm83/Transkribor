@@ -398,12 +398,25 @@ und Hörbalken rund 700 px — auf einem 13-Zoll-Laptop (768 px) ist das die Kon
 die Fehlerklasse selbst, nicht nur ein knapper Wert.
 Auf Marcus' Schirm sind es 480 px, also zehn Zeilen ohne Scrollen.
 
-**4. Sonner-Toasts: GELESEN, nicht gemessen.** Sonners Behälter trägt
-`z-index: 999999999` (`node_modules/sonner/dist/styles.css`), `DialogOverlay`/`DialogContent`
-tragen `z-50` (`ui/dialog.tsx:40,62`), und der `Toaster` sitzt in `main.tsx` auf der Wurzel,
-also nicht in einem fremden Stapelkontext. Danach liegen Toasts oben. **Das ist eine Lesung,
-keine Messung** — sie wird beim Bau von Task 3 nachgeholt, wo der Dialog existiert und ein
-Toast einen Klick weit weg ist.
+**Und sie gehört an den GANZEN Dialog, nicht an die Liste darin — im Browser gemessen.** Mit
+`min-h` auf der Liste stand der Dialog bei einem 532-px-Fenster **540 px** hoch da, passte
+also nicht hinein: #283 in eigener Sache, oben und unten abgeschnitten, „Los geht's"
+unerreichbar. Der Rahmen (Kopf, Schrittleiste, Knopfzeile, Innenabstand) misst **168 px**,
+deshalb `h-[min(648px,90vh)]` am Dialog (648 = 480 + 168) und `flex-1 min-h-0 overflow-y-auto`
+am Inhalt: auf grossem Schirm bleiben die 480 px für die Liste, auf kleinem greift 90vh und
+die Liste schrumpft mit, statt den Dialog aus dem Fenster zu schieben. Nachgemessen: 479 px
+in einem 532-px-Fenster, kein Dokument-Bildlauf.
+
+**4. Sonner-Toasts liegen über dem Modal — GEMESSEN** (2026-08-20, am fertigen Dialog):
+Toast sichtbar über dem geöffneten Dialog im Screenshot, dazu strukturell abgesichert —
+**kein** Vorfahre von Toaster oder Dialog erzeugt einen Stapelkontext (beide Listen leer
+geprüft: `transform`, `filter`, `isolation`, `will-change`, `contain`, `opacity`, `z-index`),
+beide hängen im Wurzelkontext, und dort entscheidet allein `z-index`: **999999999 gegen 50**.
+
+**Eine Sonde war dabei ungültig, und das ist die Lehre:** `document.elementFromPoint` an der
+Mitte des Toasts lieferte den **Dialog** — nicht weil der oben liegt, sondern weil Sonner den
+Toast auf `pointer-events: none` setzt und Treffertests solche Elemente per Definition
+überspringen. Eine Trefferabfrage sagt nichts über die Malreihenfolge.
 
 ---
 
