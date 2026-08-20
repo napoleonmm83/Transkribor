@@ -40,6 +40,16 @@ def test_von_whisper_code_erkennt_nicht_ch():
 # Projekt-Standard `ch` gesetzt hat, meint bei erkanntem Deutsch sein Schweizerdeutsch.
 # Der Vorrang steht HIER und nicht am Aufrufort: die Whisper-Code-Tabelle ist die EINE Quelle.
 
+def test_von_whisper_code_ohne_detektion_faellt_auf_de():
+    """Ohne diese Wache gewinnt `auto`: dessen Whisper-Code ist `None`, die Schleife
+    ueberspringt nur `ch` — und mit einem Standard `auto` traefe schon die Vorrang-Zeile.
+    Gemessen war das Ergebnis `"auto"`, eine Meta-id, entgegen dem eigenen Docstring."""
+    assert sprachen.von_whisper_code(None) == "de"
+    assert sprachen.von_whisper_code("") == "de"
+    assert sprachen.von_whisper_code(None, "auto") == "de"
+    assert sprachen.von_whisper_code(None, "ch") == "de"
+
+
 def test_von_whisper_code_bevorzugt_gewinnt_bei_gleichem_whisper_code():
     assert sprachen.von_whisper_code("de", "ch") == "ch"
 

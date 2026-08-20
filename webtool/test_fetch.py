@@ -703,13 +703,16 @@ def test_leere_fetch_sprache_schreibt_KEINEN_eintrag(projekt, monkeypatch):
     Gefahren wird der ECHTE Weg (`download_one` mit gefaelschtem yt-dlp), nicht die Zeile
     nachgebaut: ein Test, der `sprache or None` selbst schreibt, prueft seinen eigenen Nachbau
     und bliebe gruen, wenn jemand es in `fetch.py` entfernt.
+
+    `""` kommt als PARAMETER, nicht mehr aus der Umgebung: seit `download_one` die Variable
+    nicht mehr selbst liest, war die Env-Zeile hier inert und der Test mass `None or None`
+    — die Zusicherung stand nur noch im Namen (Reviewbefund W1, nachgemessen).
     """
     # Lokaler Import unter anderem Namen: dieses Modul definiert eine FIXTURE `projekt`, die
     # den Modulnamen auf Dateiebene ueberschattet.
     from webtool import projekt as _p
-    monkeypatch.setenv("TRANSKRIBOR_FETCH_SPRACHE", "")
     monkeypatch.setenv("TRANSKRIBOR_FETCH_MEHRSPRACHIG", "1")
-    base = fetch.download_one("Demo", "https://youtu.be/vid123")
+    base = fetch.download_one("Demo", "https://youtu.be/vid123", None, "")
     assert _p.datei_ansicht("Demo", base)["sprache_eigen"] is None, "leerer String eingetragen"
     # Die Gegenprobe im selben Lauf: der Haken MUSS ankommen — sonst waere die Zusicherung
     # oben auch dann gruen, wenn `setze_datei` gar nicht gerufen wuerde.

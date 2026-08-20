@@ -451,8 +451,9 @@ def download_one(project: str, url: str, sprecher=None, sprache=None) -> str:
     # Zuordnung URL->Sprache kennt nur `main` (ueber den Schleifenindex). Genau wie `sprecher`.
     mehr = _mehrsprachig_aus_env()
     if sprache or mehr is not None or sprecher is not None:
-        # `or None`, weil eine leere `.env`-Zeile `""` liefert und nicht `None` (dieselbe
-        # Null-Richtung wie bei `TRANSKRIBOR_YTDLP_UPDATE=`). Ist gleichzeitig
+        # `or None`, weil `""` nicht `None` ist. Es kommt heute nur noch von einem DIREKTEN
+        # Aufrufer — `_sprache_aus_env` filtert Leeres vorher weg —, der Riegel ist also die
+        # Grenze dieser Funktion, nicht die des Env-Parsers. Ist gleichzeitig
         # `TRANSKRIBOR_FETCH_MEHRSPRACHIG` gesetzt, traegt der ZWEITE Konjunkt oben den
         # Aufruf — und `""` landete dann als Sprach-Eintrag in projekt.json, vorbei an
         # `pruef_fehler` (das auf diesem Weg nicht laeuft). Der Datei-Dialog legte so einen
