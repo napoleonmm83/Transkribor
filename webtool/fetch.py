@@ -339,7 +339,29 @@ def _mehrsprachig_aus_env():
     return None if roh is None else roh.strip().lower() in ("1", "true", "yes")
 
 
-def download_one(project: str, url: str) -> str:
+def _sprecher_aus_env(roh, i: int):
+    """Die Sprecherzahl der i-ten URL aus der Komma-Liste, oder None.
+
+    Positionsbasiert, weil die Zuordnung URL->Zahl sonst durch den Titel einer
+    Video-Beschreibung laufen muesste. Stabil, weil `check_url` die Liste weder umsortiert
+    noch kuerzt und `main` ueber `args.urls` iteriert — ein fehlgeschlagener Download
+    verschiebt nichts, denn der Index kommt aus der Schleife, nicht aus einem Erfolgszaehler.
+
+    Wirft NIE (#185): eine fremd gesetzte, zu kurze oder unsinnige Variable heisst
+    „automatisch", nicht „Absturz im Subprozess NACH dem Download".
+    """
+    if not roh:
+        return None
+    teile = roh.split(",")
+    if not 0 <= i < len(teile):
+        return None
+    try:
+        return int(teile[i])
+    except ValueError:
+        return None
+
+
+def download_one(project: str, url: str, sprecher=None) -> str:
     """Laedt die Tonspur nach projekte/<project>/audio/. Liefert den Basisnamen."""
     # Der FFmpegExtractAudio-Postprocessor laeuft im extract_info(download=True) unten und
     # sucht ffmpeg auf PATH. ensure_ffmpeg() legt den winget-Pfad dorthin — muss also HIER
@@ -391,7 +413,7 @@ def download_one(project: str, url: str) -> str:
     # Variable, greift der Projekt-Default — Legacy-Verhalten bleibt unveraendert.
     sprache = os.environ.get("TRANSKRIBOR_FETCH_SPRACHE")
     mehr = _mehrsprachig_aus_env()
-    if sprache or mehr is not None:
+    if sprache or mehr is not None or sprecher is not None:
         # `or None`, weil eine leere `.env`-Zeile `""` liefert und nicht `None` (dieselbe
         # Null-Richtung wie bei `TRANSKRIBOR_YTDLP_UPDATE=`). Ist gleichzeitig
         # `TRANSKRIBOR_FETCH_MEHRSPRACHIG` gesetzt, traegt der ZWEITE Konjunkt oben den
@@ -404,18 +426,22 @@ def download_one(project: str, url: str) -> str:
         # und der Wiederholungsdownload legte die Datei per unique_base ein ZWEITES Mal ab,
         # obwohl sie schon da war.
         try:
-            projekt.setze_datei(project, base, sprache=sprache or None, mehrsprachig=mehr)
+            projekt.setze_datei(project, base, sprache=sprache or None, mehrsprachig=mehr,
+                                sprecher=sprecher)
         except Exception as e:
             raise Vorbedingung(f"Spracheintrag nach dem Download fehlgeschlagen: {e}") from e
     return base
 
 
-def _lade(project: str, url: str):
+def _lade(project: str, url: str, sprecher=None):
     """(base, None) bei Erfolg, (None, exception) sonst — damit `main` denselben Versuch
     zweimal machen kann (einmal, und nach einer Aktualisierung noch einmal), ohne den
-    try/except-Block zu verdoppeln."""
+    try/except-Block zu verdoppeln.
+
+    `sprecher` reicht durch: BEIDE Aufrufe in `main` tragen denselben Wert, sonst verloere
+    ausgerechnet der Download seine Sprecherzahl, der erst nach der Selbstheilung klappt."""
     try:
-        return download_one(project, check_url(url)), None
+        return download_one(project, check_url(url), sprecher), None
     except Exception as e:
         return None, e
 
@@ -461,8 +487,13 @@ def main(argv=None):
         print(f"[fetch] roh ({type(fehler).__name__}, extraktor-verdacht="
               f"{_extraktor_verdacht(fehler)}): {_rohmeldung(fehler)}", flush=True)
 
-    for url in args.urls:
-        base, fehler = _lade(args.project, url)
+    # EINMAL gelesen, nicht je URL: die Variable aendert sich waehrend des Laufs nicht.
+    sprecher_roh = os.environ.get("TRANSKRIBOR_FETCH_SPRECHER")
+    for i, url in enumerate(args.urls):
+        # Der Index kommt aus der Schleife, nicht aus einem Erfolgszaehler — ein
+        # fehlgeschlagener Download verschiebt die Zuordnung damit nicht.
+        sprecher = _sprecher_aus_env(sprecher_roh, i)
+        base, fehler = _lade(args.project, url, sprecher)
         if fehler is not None:
             _roh_ins_log(fehler)
         # Selbstheilung: ein veralteter Extraktor bricht nicht nach Kalender, sondern wenn
@@ -478,7 +509,9 @@ def main(argv=None):
             if ytdlp_update.automatisch(erzwingen=True):
                 print(f"[fetch] yt-dlp aktualisiert — versuche {url} noch einmal", flush=True)
                 _neu_laden()
-                base, fehler = _lade(args.project, url)
+                # Zweite Aufrufstelle: DERSELBE Wert wie oben. Ohne ihn verlaere genau der
+                # Download seine Sprecherzahl, der erst nach der Heilung klappt.
+                base, fehler = _lade(args.project, url, sprecher)
                 if fehler is not None:
                     _roh_ins_log(fehler)      # der zweite Versuch, nach der Heilung
         if fehler is not None:

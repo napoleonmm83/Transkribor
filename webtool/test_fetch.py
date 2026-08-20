@@ -591,8 +591,11 @@ def test_ohne_update_kein_zweiter_versuch(projekt, monkeypatch):
     _FakeYDL.fehler = _403
     downloads = []
     orig = fetch.download_one
+    # `sprecher` reicht durch: `_lade` gibt die Sprecherzahl der Position seit dem
+    # Vorschau-Umbau an BEIDE Aufrufstellen weiter. Die Zusicherung dieses Tests („kein
+    # zweiter Versuch") ist unberuehrt — nur die Signatur der Attrappe zieht nach.
     monkeypatch.setattr(fetch, "download_one",
-                        lambda p, u: downloads.append(u) or orig(p, u))
+                        lambda p, u, sprecher=None: downloads.append(u) or orig(p, u, sprecher))
     monkeypatch.setattr(fetch.ytdlp_update, "automatisch", lambda *a, **k: False)
     with pytest.raises(SystemExit):
         fetch.main(["Demo", "https://youtu.be/vid123"])
@@ -807,3 +810,61 @@ def test_kaputter_netloc_ist_eine_vorbedingung_kein_pip(projekt, monkeypatch):
     assert versuche == []
     with pytest.raises(fetch.Vorbedingung, match="URL"):
         fetch.check_url("https://[::1")
+
+
+# --- Sprecherzahl je URL (#Vorschau beim Hinzufuegen) ------------------------
+
+def test_download_one_traegt_die_sprecherzahl_der_position_ein(projekt):
+    """Die Zahl gehoert der Aufnahme, nicht dem Auftrag: `download_one` bekommt sie als
+    Parameter, weil erst hier der Basisname feststeht."""
+    from webtool import projekt as projekt_mod
+    base = fetch.download_one("Demo", "https://youtu.be/vid123", sprecher=5)
+    assert projekt_mod.datei_ansicht("Demo", base)["sprecher"] == 5
+
+
+def test_download_one_ohne_sprecherzahl_traegt_nichts_ein(projekt):
+    """Negativkontrolle: ohne Angabe bleibt es bei „automatisch" — sonst schriebe der
+    URL-Import jeder Aufnahme still einen Override."""
+    from webtool import projekt as projekt_mod
+    base = fetch.download_one("Demo", "https://youtu.be/vid123")
+    assert projekt_mod.datei_ansicht("Demo", base)["sprecher"] is None
+
+
+def test_sprecher_aus_env_liest_die_position_und_vertraegt_luecken():
+    """Leeres Feld = automatisch; eine zu kurze Liste (fremd gesetzte Variable) darf nicht
+    werfen — dieses Modul gibt keine Exception an Aufrufer (#185)."""
+    assert fetch._sprecher_aus_env("2,,5", 0) == 2
+    assert fetch._sprecher_aus_env("2,,5", 1) is None
+    assert fetch._sprecher_aus_env("2,,5", 2) == 5
+    assert fetch._sprecher_aus_env("2,,5", 9) is None
+    assert fetch._sprecher_aus_env("2,,5", -1) is None
+    assert fetch._sprecher_aus_env("", 0) is None
+    assert fetch._sprecher_aus_env(None, 0) is None
+    assert fetch._sprecher_aus_env("zwei", 0) is None
+
+
+def test_wiederholung_nach_der_selbstheilung_traegt_die_zahl_AUCH_ein(projekt, monkeypatch):
+    """#173-Pfad: der erste Versuch scheitert, yt-dlp wird aktualisiert, der zweite gelingt.
+    `_lade` wird an ZWEI Stellen gerufen (fetch.py:465 und :481); ohne die Zahl am ZWEITEN
+    verliert genau der Download seine Sprecherzahl, der erst nach der Heilung klappt — der
+    Normalfall, wenn YouTube etwas umgestellt hat."""
+    from webtool import projekt as projekt_mod, ytdlp_update
+    versuche = {"n": 0}
+    echtes = fetch.download_one
+
+    def einmal_scheitern(project, url, sprecher=None):
+        versuche["n"] += 1
+        if versuche["n"] == 1:
+            raise RuntimeError("Unable to extract player response")
+        return echtes(project, url, sprecher)
+
+    monkeypatch.setattr(fetch, "download_one", einmal_scheitern)
+    monkeypatch.setattr(ytdlp_update, "automatisch", lambda erzwingen=False: True)
+    monkeypatch.setattr(fetch, "_neu_laden", lambda: None)
+    monkeypatch.setenv("TRANSKRIBOR_FETCH_SPRECHER", "3")
+    fetch.main(["--download-only", "Demo", "https://youtu.be/vid123"])
+    # Positivkontrolle: ohne sie bliebe der Test gruen, wenn die Selbstheilung gar nicht
+    # ausgeloest wuerde — er pruefte dann nur den ersten Versuch, und die zweite
+    # Aufrufstelle bliebe ungedeckt.
+    assert versuche["n"] == 2, "der Wiederholungsversuch lief gar nicht — Test misst nichts"
+    assert projekt_mod.datei_ansicht("Demo", "Mein Interview")["sprecher"] == 3

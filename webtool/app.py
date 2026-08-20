@@ -928,13 +928,28 @@ class FetchBody(BaseModel):
     urls: list[str]
     sprache: str | None = None
     mehrsprachig: bool | None = None
+    # Index-parallel zu `urls`; `None` = automatisch. Eine LISTE statt eines Wertes, weil ein
+    # Auftrag Aufnahmen mit verschiedenen Sprecherzahlen mischt — ein Wert fuer alle waere fuer
+    # die Haelfte falsch, und `num_speakers` ist exakt, keine Obergrenze (#264).
+    # `StrictInt` aus demselben Grund wie in `DateiEinstellungenBody`: sonst naehme Pydantic
+    # `"5"` und `5.0` an, waehrend `projekt._sprecher_wert` denselben Wert VERWIRFT.
+    sprecher: list[StrictInt | None] | None = None
 
 
 @app.post("/api/projects/{project}/fetch")
 def fetch_urls(project: str, body: FetchBody):
     """URL-Import: laedt Audio von YouTube/Instagram und transkribiert genau diese Dateien."""
     _validate(project)
-    urls = [u.strip() for u in body.urls if u.strip()]
+    # Laenge VOR dem Filtern pruefen: danach ist die Zuordnung schon verloren.
+    sprecher_roh = body.sprecher if body.sprecher is not None else [None] * len(body.urls)
+    if len(sprecher_roh) != len(body.urls):
+        raise HTTPException(status_code=400,
+                            detail="sprecher muss so viele Eintraege haben wie urls")
+    # PAARWEISE filtern: leere URL-Zeilen fielen sonst nur auf der einen Seite weg und
+    # verschoeben ab da JEDE Zuordnung — die 5 des Teamgespraechs landete beim 2er-Interview.
+    paare = [(u.strip(), s) for u, s in zip(body.urls, sprecher_roh) if u.strip()]
+    urls = [u for u, _ in paare]
+    sprecher = [s for _, s in paare]
     if not urls:
         raise HTTPException(status_code=400, detail="keine URL angegeben")
     if len(urls) > MAX_FETCH_URLS:
@@ -947,6 +962,8 @@ def fetch_urls(project: str, body: FetchBody):
     # Sprache am Endpoint pruefen: fetch.py traegt sie erst im Subprozess ein, ein spaetes
     # Scheitern liesse den Download erst laufen. gleiche Quelle wie die PUT-Endpunkte (#139).
     fehler = _sprachen.pruef_fehler(sprache=body.sprache)
+    for s in sprecher:
+        fehler = fehler or _sprachen.pruef_fehler(sprecher=s)
     if fehler:
         raise HTTPException(status_code=400, detail=fehler)
     # Eigene Job-Art: der Download braucht keine GPU. Als "transcribe" gefuehrt wuerde er von
@@ -958,6 +975,12 @@ def fetch_urls(project: str, body: FetchBody):
     # Als "1"/"0", weil eine Env-Variable nur Strings kennt; fetch.py liest sie zurueck.
     if body.mehrsprachig is not None:
         env_sprache["TRANSKRIBOR_FETCH_MEHRSPRACHIG"] = "1" if body.mehrsprachig else "0"
+    # Komma-Liste, index-parallel zu den URLs; ein leeres Feld heisst „automatisch". Nur
+    # setzen, wenn ueberhaupt eine Zahl dabei ist — sonst traegt `fetch.py` nichts ein und das
+    # Legacy-Verhalten bleibt Bit fuer Bit erhalten.
+    if any(s is not None for s in sprecher):
+        env_sprache["TRANSKRIBOR_FETCH_SPRECHER"] = ",".join(
+            "" if s is None else str(s) for s in sprecher)
     job_id, started = jobs.start(project, cmd, paths.ROOT, "fetch",
                                  then=lambda: _start_transcribe(project), env=env_sprache)
     return {"job_id": job_id, "started": started}
