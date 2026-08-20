@@ -234,3 +234,78 @@ describe('UploadDropzone — was der Umbau NEU erlaubt', () => {
     expect(screen.queryByRole('textbox', { name: /a\.mp3/ })).not.toBeInTheDocument()
   })
 })
+
+describe('UploadDropzone — Reviewbefunde PR #297', () => {
+  it('zwei gleichnamige Dateien in EINEM Aufruf ergeben EINE Zeile', () => {
+    /* Der Dubletten-Schutz deckte nur gegen FRUEHERE Zeilen, nicht innerhalb derselben
+       Auswahl (`bekannt` wuchs beim Filtern nicht mit). Zwei `a.mp3` aus verschiedenen
+       Ordnern ergaben zwei Zeilen mit demselben Schluessel: React-`key`-Kollision,
+       `onAendern` traf beide gleichzeitig, und beim Start kollidierte die zweite
+       serverseitig mit 409 — eine der Aufnahmen war faktisch verloren. Gemessen: 2 Zeilen. */
+    render(<UploadDropzone project="Demo" onDone={vi.fn()} sprache="de" />)
+    const input = screen.getByTestId('upload-input') as HTMLInputElement
+    fireEvent.change(input, { target: { files: [new File(['x'], 'a.mp3'),
+                                                new File(['y'], 'a.mp3')] } })
+    expect(screen.getAllByRole('textbox')).toHaveLength(1)
+  })
+
+  it('Abbrechen bleibt erreichbar, auch wenn der Upload haengt', async () => {
+    /* BLOCKER des Reviews: `uploadAudio` hat KEIN Zeitlimit (nur `getDoc` hat eines, mit
+       genau dieser Begruendung daneben). Haengt die Verbindung, bleibt `laeuft` fuer immer
+       true — mit gesperrtem Abbrechen waeren alle Bedienelemente tot, und der einzige
+       Ausweg waere ein Neuladen samt Verlust aller getippten Zahlen. */
+    vi.mocked(api.uploadAudio).mockImplementation(() => new Promise(() => {}))
+    render(<UploadDropzone project="Demo" onDone={vi.fn()} sprache="de" />)
+    const input = screen.getByTestId('upload-input') as HTMLInputElement
+    await act(async () => {
+      fireEvent.change(input, { target: { files: [new File(['x'], 'a.mp3')] } })
+    })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Hinzufügen & starten/ }))
+    })
+    const abbrechen = screen.getByRole('button', { name: /Abbrechen/ }) as HTMLButtonElement
+    expect(abbrechen.disabled).toBe(false)
+    fireEvent.click(abbrechen)
+    expect(screen.queryAllByRole('textbox')).toHaveLength(0)   // Oberflaeche ist zurueck
+  })
+
+  it('ein abgebrochener Lauf holt die Vorschau NICHT zurueck', async () => {
+    /* Was der Abbrechen-Fix NEU erlaubte, an der eigenen Reparatur gemessen: der Klick raeumt
+       die Vorschau, die laufenden Anfragen laufen aber weiter — und ihr Ende setzte danach
+       `setAuswahl(gescheitert)`, womit die verworfene Auswahl wiederkam (gemessen: nach
+       Abbrechen 0 Zeilen, nach dem Fehlschlag wieder 1). Die Laufnummer schneidet das ab,
+       dasselbe Muster wie `fassung` in `useDoc`. */
+    let ablehnen: (e: Error) => void = () => {}
+    vi.mocked(api.uploadAudio).mockImplementation(() => new Promise((_, rej) => { ablehnen = rej }))
+    render(<UploadDropzone project="Demo" onDone={vi.fn()} sprache="de" />)
+    const input = screen.getByTestId('upload-input') as HTMLInputElement
+    await act(async () => {
+      fireEvent.change(input, { target: { files: [new File(['x'], 'a.mp3')] } })
+    })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Hinzufügen & starten/ }))
+    })
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Abbrechen/ })) })
+    expect(screen.queryAllByRole('textbox')).toHaveLength(0)
+    await act(async () => { ablehnen(new Error('Server weg')); await Promise.resolve() })
+    expect(screen.queryAllByRole('textbox')).toHaveLength(0)   // bleibt weg
+  })
+
+  it('waehrend eines Laufs nimmt die Zone keine neue Auswahl an', async () => {
+    /* Sonst landeten neue Zeilen in der Vorschau, der Nutzer traegt eine Zahl ein — und
+       `setAuswahl(gescheitert)` am Ende des laufenden Uploads wirft sie ersatzlos weg. */
+    vi.mocked(api.uploadAudio).mockImplementation(() => new Promise(() => {}))
+    render(<UploadDropzone project="Demo" onDone={vi.fn()} sprache="de" />)
+    const input = screen.getByTestId('upload-input') as HTMLInputElement
+    await act(async () => {
+      fireEvent.change(input, { target: { files: [new File(['x'], 'a.mp3')] } })
+    })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Hinzufügen & starten/ }))
+    })
+    await act(async () => {
+      fireEvent.change(input, { target: { files: [new File(['y'], 'b.mp3')] } })
+    })
+    expect(screen.queryByRole('textbox', { name: /b\.mp3/ })).not.toBeInTheDocument()
+  })
+})

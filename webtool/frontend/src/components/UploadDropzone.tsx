@@ -39,6 +39,14 @@ export function UploadDropzone({ project, onDone, sprache = '', mehrsprachig,
   const [auswahl, setAuswahl] = useState<UploadZeile[]>([])
   const [laeuft, setLaeuft] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
+  // Laufnummer, damit ein abgebrochener Lauf die Oberflaeche nicht mehr anfasst.
+  //
+  // Das ist die Antwort auf „was erlaubt der Abbrechen-Fix NEU?": ein Klick auf Abbrechen
+  // raeumt die Vorschau, die laufenden Anfragen laufen aber weiter — und ihr Ende setzte
+  // danach `setAuswahl(gescheitert)`, womit die verworfene Auswahl WIEDERKAM (gemessen: nach
+  // Abbrechen 0 Zeilen, nach dem Fehlschlag wieder 1). Dasselbe Muster wie `fassung` in
+  // `useDoc`: wer nicht mehr der aktuelle Lauf ist, schreibt nicht mehr.
+  const laufNr = useRef(0)
 
   // Die Auswahl gehoert dem Projekt, in dem sie getroffen wurde. React Router baut die Seite
   // beim Wechsel des Routenparameters NICHT neu auf — ohne diesen Reset landeten die fuer
@@ -57,19 +65,39 @@ export function UploadDropzone({ project, onDone, sprache = '', mehrsprachig,
    *  gleichem Basisnamen ohnehin mit 409).
    */
   const waehlen = (files: File[]) => {
+    // Waehrend eines Laufs keine neue Auswahl annehmen — symmetrisch zu `UrlFetch`, wo
+    // Textfeld und Knopf ohnehin gesperrt sind. Sonst landeten neue Zeilen in der Vorschau,
+    // der Nutzer traegt eine Zahl ein, und `setAuswahl(gescheitert)` am Ende des laufenden
+    // Uploads wirft sie ersatzlos weg (kein funktionales Update — es ersetzt den Zustand).
+    // Genau die Datenverlust-Klasse, gegen die die „nur Gescheiterte bleiben"-Regel gebaut
+    // ist, durch eine Tuer, die sie nicht bedacht hatte.
+    if (laeuft) return
     const audio = files.filter(f => AUDIO_RE.test(f.name))
     if (!audio.length) return
     setAuswahl(alt => {
+      // `bekannt` waechst WAEHREND des Filterns mit — sonst deckt der Schutz nur gegen
+      // fruehere Zeilen, nicht gegen Dubletten in DERSELBEN Auswahl. Zwei gleichnamige
+      // Dateien aus verschiedenen Ordnern (Mehrfachauswahl) ergaeben sonst zwei Zeilen mit
+      // demselben Schluessel: React-`key`-Kollision, `onAendern` traefe beide gleichzeitig,
+      // und beim Start kollidierte die zweite serverseitig mit 409 — eine der beiden
+      // Aufnahmen waere faktisch verloren. Gemessen, bevor es gefixt wurde.
       const bekannt = new Set(alt.map(z => z.schluessel))
-      return [...alt, ...audio.filter(f => !bekannt.has(f.name)).map(f => ({
-        schluessel: f.name, anzeige: f.name, sprecherText: '', datei: f,
-      }))]
+      const neu: UploadZeile[] = []
+      for (const f of audio) {
+        if (bekannt.has(f.name)) continue
+        bekannt.add(f.name)
+        neu.push({ schluessel: f.name, anzeige: f.name, sprecherText: '', datei: f })
+      }
+      return [...alt, ...neu]
     })
   }
+
+  const abbrechen = () => { laufNr.current++; setLaeuft(false); setAuswahl([]) }
 
   const upload = async (zeilen: UploadZeile[]) => {
     const audio = zeilen.map(z => z.datei)
     if (!audio.length) return
+    const meiner = ++laufNr.current
     setLaeuft(true)
     setItems(audio.map(f => ({ name: f.name, status: 'uploading' as Status })))
     // Jeder Upload stoesst serverseitig die Transkription an; der Job ist fuer alle derselbe
@@ -104,8 +132,13 @@ export function UploadDropzone({ project, onDone, sprache = '', mehrsprachig,
     // Nutzer haette Dateien UND Zahlen neu eintragen muessen. Die erfolgreichen verschwinden
     // trotzdem, sonst liefe der naechste Klick in lauter 409er. `UrlFetch` haelt es an
     // derselben Stelle genauso (`if (res.started)`).
-    setLaeuft(false)
-    setAuswahl(gescheitert)
+    // `onDone` laeuft IMMER — auch nach einem Abbruch koennen Dateien beim Server angekommen
+    // sein, und der Workspace muss seine Liste nachziehen. Nur die Oberflaeche dieses
+    // Bauteils fasst ein ueberholter Lauf nicht mehr an.
+    if (meiner === laufNr.current) {
+      setLaeuft(false)
+      setAuswahl(gescheitert)
+    }
     onDone?.(job)
   }
 
@@ -113,9 +146,9 @@ export function UploadDropzone({ project, onDone, sprache = '', mehrsprachig,
     <div>
       <div
         role="button" tabIndex={0} aria-label="Audio hochladen"
-        onClick={() => inputRef.current?.click()}
+        onClick={() => { if (!laeuft) inputRef.current?.click() }}
         onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); inputRef.current?.click() } }}
-        onDragOver={e => { e.preventDefault(); setOver(true) }}
+        onDragOver={e => { e.preventDefault(); if (!laeuft) setOver(true) }}
         onDragLeave={() => setOver(false)}
         onDrop={e => { e.preventDefault(); setOver(false); waehlen(Array.from(e.dataTransfer.files)) }}
         // blatt = dieselbe Flaeche wie die Dateiliste darunter; nur die Kante ist gestrichelt,
@@ -145,7 +178,7 @@ export function UploadDropzone({ project, onDone, sprache = '', mehrsprachig,
             onAendern={(k, t) => setAuswahl(alt => alt.map(z =>
               z.schluessel === k ? { ...z, sprecherText: t } : z))}
             onStart={() => upload(auswahl)}
-            onAbbrechen={() => setAuswahl([])} />
+            onAbbrechen={abbrechen} />
         </div>
       )}
       {items.length > 0 && (
