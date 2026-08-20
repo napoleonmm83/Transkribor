@@ -60,6 +60,18 @@ describe('MaterialVorschau', () => {
     expect(document.getElementById(hilfeId)?.textContent).toMatch(/1 bis 20/)
   })
 
+  it('ein GUELTIGES Feld zeigt mit keinem Bezug ins Leere', () => {
+    /* Gegenrichtung zum Test darueber, und sie hat gefehlt: die Mutation
+       „aria-describedby immer setzen" blieb gruen, weil nur der ungueltige Fall geprueft war.
+       Ein Bezug auf eine nicht existierende Id ist fuer einen Screenreader stumm — die
+       Vorlesereihenfolge bricht ab, ohne dass irgendwo etwas fehlt (#244). */
+    render(<MaterialVorschau {...basis} zeilen={zeilen} />)
+    for (const feld of screen.getAllByRole('textbox')) {
+      const id = feld.getAttribute('aria-describedby')
+      expect(id === null || document.getElementById(id) !== null).toBe(true)
+    }
+  })
+
   it('waehrend des Laufs ist der Start gesperrt — kein doppelter Upload per Doppelklick', () => {
     render(<MaterialVorschau {...basis} zeilen={zeilen} laeuft />)
     expect(screen.getByRole('button', { name: /Hinzufügen & starten/ })).toBeDisabled()
