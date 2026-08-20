@@ -975,12 +975,25 @@ def fetch_urls(project: str, body: FetchBody):
     # Als "1"/"0", weil eine Env-Variable nur Strings kennt; fetch.py liest sie zurueck.
     if body.mehrsprachig is not None:
         env_sprache["TRANSKRIBOR_FETCH_MEHRSPRACHIG"] = "1" if body.mehrsprachig else "0"
-    # Komma-Liste, index-parallel zu den URLs; ein leeres Feld heisst „automatisch". Nur
-    # setzen, wenn ueberhaupt eine Zahl dabei ist — sonst traegt `fetch.py` nichts ein und das
-    # Legacy-Verhalten bleibt Bit fuer Bit erhalten.
-    if any(s is not None for s in sprecher):
-        env_sprache["TRANSKRIBOR_FETCH_SPRECHER"] = ",".join(
-            "" if s is None else str(s) for s in sprecher)
+    # Komma-Liste, index-parallel zu den URLs; ein leeres Feld heisst „automatisch".
+    #
+    # IMMER gesetzt, auch wenn keine einzige Zahl dabei ist — und das ist kein Schoenheits-
+    # fehler, sondern eine Trust-Boundary: `jobs._run_proc` baut die Subprozess-Umgebung als
+    # `{**os.environ, **job_env(), **env}`, der Lauf erbt also alles, was beim Server steht.
+    # Eine `TRANSKRIBOR_FETCH_SPRECHER`-Zeile in der `.env` (Ueberbleibsel eines CLI-Tests;
+    # die Datei GEWINNT gegen die gesetzte Variable) schlaege sonst auf jeden Browser-Import
+    # durch, und ein plausibler Altwert wie „3" kommt durch jede Bereichspruefung — falsche
+    # Cluster, GPU-Minuten, kein Fehler. Ein leerer Wert neutralisiert das:
+    # `_sprecher_aus_env("")` liefert None. Wer im Browser nichts eintraegt, meint
+    # „automatisch", und diese Entscheidung schlaegt eine Altlast in der Umgebung.
+    # Der CLI-Weg (`python -m webtool.fetch`) bleibt unberuehrt — dort setzt niemand `env`.
+    #
+    # Fuer `TRANSKRIBOR_FETCH_SPRACHE`/`_MEHRSPRACHIG` gilt dasselbe Leck, der Fix ist dort
+    # aber NICHT derselbe Einzeiler: `_mehrsprachig_aus_env("")` liefert `False`, nicht `None`
+    # (gemessen) — ein leerer Wert erzeugte dort also einen echten Datei-Override. Als Issue
+    # festgehalten statt hier mit erweitertem Scope halb gebaut.
+    env_sprache["TRANSKRIBOR_FETCH_SPRECHER"] = ",".join(
+        "" if s is None else str(s) for s in sprecher)
     job_id, started = jobs.start(project, cmd, paths.ROOT, "fetch",
                                  then=lambda: _start_transcribe(project), env=env_sprache)
     return {"job_id": job_id, "started": started}
