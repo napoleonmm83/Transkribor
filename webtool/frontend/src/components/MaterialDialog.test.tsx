@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MaterialDialog } from './MaterialDialog'
 import * as api from '@/lib/api'
 
@@ -78,7 +78,11 @@ describe('MaterialDialog', () => {
     // Index 2 = `sprache`. Sie behaelt ihren Platz in der Signatur und wird nur im TYP
     // breiter — ein Umsortieren der Parameter waere eine stille Bruchstelle fuer jeden
     // bestehenden Aufrufer.
-    expect(vi.mocked(api.fetchUrls).mock.calls[0][2]).toEqual(['ch', 'en'])
+    // `null` fuer die erste Zeile, nicht `'ch'`: sie entspricht dem Projekt-Standard, und ein
+    // mitgeschickter Wert machte daraus einen Datei-Override (#166/#234). Der PLATZ bleibt
+    // trotzdem belegt — daran haengt die index-parallele Zuordnung. Der Plan erwartete hier
+    // `['ch','en']`; das waere der Override gewesen.
+    expect(vi.mocked(api.fetchUrls).mock.calls[0][2]).toEqual([null, 'en'])
   })
 
   it('behaelt nach einem Teil-Fehlschlag NUR die gescheiterten Zeilen', async () => {
@@ -91,6 +95,51 @@ describe('MaterialDialog', () => {
     fireEvent.click(screen.getByRole('button', { name: /Los geht/ }))
     await waitFor(() => expect(screen.queryByText('a.mp3')).not.toBeInTheDocument())
     expect(screen.getByText('b.mp3')).toBeInTheDocument()
+  })
+
+  it('„existiert bereits" bleibt NICHT stehen — ein zweiter Versuch endete wieder mit 409', async () => {
+    /* Aus `MaterialVorschau.test.tsx` mitgenommen: die Unterscheidung hat sonst keinen Test
+       mehr. Alles Stehenlassen liefe beim naechsten Klick in lauter 409er, bedingungsloses
+       Leeren waere Datenverlust — deshalb genau diese eine Ausnahme. */
+    vi.mocked(api.uploadAudio)
+      .mockRejectedValueOnce(new Error('a.mp3 existiert bereits'))
+      .mockRejectedValueOnce(new Error('Netz weg'))
+    render(<MaterialDialog {...basis} vorbelegteDateien={[datei('a.mp3'), datei('b.mp3')]} />)
+    fireEvent.click(screen.getByRole('button', { name: /Weiter/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Weiter/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Los geht/ }))
+    await waitFor(() => expect(screen.getByText('b.mp3')).toBeInTheDocument())
+    expect(screen.queryByText('a.mp3')).not.toBeInTheDocument()
+  })
+
+  it('Abbrechen bleibt erreichbar, auch wenn der Upload haengt (#299)', async () => {
+    /* `uploadAudio` hat kein Zeitlimit. Waere Abbrechen mitgesperrt, bliebe der Dialog bei
+       einer haengenden Verbindung fuer immer tot, und der einzige Ausweg waere ein Neuladen
+       samt Verlust aller Eingaben. */
+    vi.mocked(api.uploadAudio).mockReturnValue(new Promise(() => {}))
+    render(<MaterialDialog {...basis} vorbelegteDateien={[datei('a.mp3')]} />)
+    fireEvent.click(screen.getByRole('button', { name: /Weiter/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Weiter/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Los geht/ }))
+    await waitFor(() => expect(screen.getByRole('button', { name: /Los geht|startet/ })).toBeDisabled())
+    expect(screen.getByRole('button', { name: /Abbrechen/ })).toBeEnabled()
+  })
+
+  it('ein Projektwechsel WAEHREND des Uploads schreibt As Ergebnis nicht in Bs Dialog', async () => {
+    /* Die `laufNr`-Wache. Der Plan fuehrte sie als „kein Test — im Browser pruefen"; sie ist
+       aber herstellbar: der Upload haengt, das Projekt wechselt (Reset), DANN antwortet er.
+       Ohne den Vergleich setzte sein `setZeilen(gescheitert)` Projekt As Zeilen in Bs frisch
+       geleerten Dialog zurueck. */
+    let ablehnen: (e: Error) => void = () => {}
+    vi.mocked(api.uploadAudio).mockReturnValue(new Promise((_, rej) => { ablehnen = rej }))
+    const { rerender } = render(
+      <MaterialDialog {...basis} vorbelegteDateien={[datei('a.mp3')]} />)
+    fireEvent.click(screen.getByRole('button', { name: /Weiter/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Weiter/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Los geht/ }))
+    rerender(<MaterialDialog {...basis} project="Anderes" />)
+    await act(async () => { ablehnen(new Error('Netz weg')) })
+    expect(screen.queryByText('a.mp3')).not.toBeInTheDocument()
   })
 
   it('nennt in Schritt 3 den Projekt-Standard, wenn „Automatisch" dabei ist', () => {

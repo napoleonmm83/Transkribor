@@ -13,6 +13,16 @@ export type Aufnahme = {
   datei?: File
 }
 
+/** Dieselbe Liste wie `app.py:AUDIO_EXT` und das `accept` des Dateifelds.
+ *
+ *  Sie steht HIER und nicht in einer der beiden Ablageflaechen: es gibt zwei Drop-Wege (die
+ *  Flaeche im Dialog und das seitenweite Overlay der Arbeitsflaeche), und zwei Listen liefen
+ *  beim naechsten Format auseinander.
+ */
+export const AUDIO_RE = /\.(mp3|wav|m4a|aac|flac|ogg|opus|wma|mp4)$/i
+
+export const istAudio = (name: string) => AUDIO_RE.test(name)
+
 /** ERGAENZT die Auswahl; Dubletten am Schluessel fallen weg, die alte Zeile gewinnt.
  *
  *  Anhaengen statt Ersetzen, weil „ich habe eine vergessen" sonst Datenverlust waere: die
