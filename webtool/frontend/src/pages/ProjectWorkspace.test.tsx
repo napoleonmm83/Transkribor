@@ -22,6 +22,14 @@ const einstellungen = (s: Partial<Settings>) =>
  *  danach ist die Zahl ein Rennen). Die Zusicherungen dieser Tests sind unveraendert — nur
  *  der Ausloeser wandert von der Dateiwahl auf „Hinzufügen & starten".
  */
+async function holeUrl(url = 'https://youtu.be/a') {
+  fireEvent.change(screen.getByLabelText('Video-URLs'), { target: { value: url } })
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: /^holen$/i })) })
+  await act(async () => {
+    fireEvent.click(screen.getByRole('button', { name: /Holen & starten/ }))
+  })
+}
+
 async function ladeHoch(datei = new File(['x'], 'a.mp3')) {
   await act(async () => {
     fireEvent.change(screen.getByTestId('upload-input'), { target: { files: [datei] } })
@@ -326,9 +334,8 @@ describe('ProjectWorkspace (Stub)', () => {
     await ladeHoch()
     await waitFor(() => expect(api.uploadAudio).toHaveBeenCalledWith('Demo', expect.any(File), 'en', undefined, undefined))
 
-    fireEvent.change(screen.getByLabelText('Video-URLs'), { target: { value: 'https://youtu.be/a' } })
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /holen/i })) })
-    await waitFor(() => expect(api.fetchUrls).toHaveBeenCalledWith('Demo', ['https://youtu.be/a'], 'en', undefined))
+    await holeUrl()
+    await waitFor(() => expect(api.fetchUrls).toHaveBeenCalledWith('Demo', ['https://youtu.be/a'], 'en', undefined, undefined))
   })
 
   it('ein vom Projekt ABWEICHENDER Haken geht sehr wohl mit — die Sprache daneben NICHT (#166/#234)', async () => {
@@ -357,10 +364,9 @@ describe('ProjectWorkspace (Stub)', () => {
     // BEIDE Kinder, nicht nur eines: `sprachWert` wird an `UploadDropzone` UND `UrlFetch`
     // gereicht, und ein zurueckgebliebenes `sprache={sprache}` an einem von beiden bliebe sonst
     // gruen. Der Test darueber prueft am URL-Import nur den ABWEICHENDEN Wert.
-    fireEvent.change(screen.getByLabelText('Video-URLs'), { target: { value: 'https://youtu.be/a' } })
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /holen/i })) })
+    await holeUrl()
     await waitFor(() => expect(api.fetchUrls).toHaveBeenCalledWith(
-      'Demo', ['https://youtu.be/a'], '', true))
+      'Demo', ['https://youtu.be/a'], '', true, undefined))
   })
 
   it('schickt ohne geladene Einstellungen KEIN mehrsprachig mit', async () => {
