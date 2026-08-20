@@ -155,11 +155,14 @@ export async function cancelJob(jobId: string): Promise<void> {
  *  `sprache` ist optional: nur gesetzt, wenn das Projekt eine abweichende Sprache vorgibt.
  *  `mehrsprachig` ebenso — undefined heisst „kein Datei-Override“, der Projektwert gilt. */
 export async function uploadAudio(project: string, file: File, sprache?: string,
-                                  mehrsprachig?: boolean):
+                                  mehrsprachig?: boolean, sprecher?: number):
   Promise<{ base: string; file: string; job_id?: string; started?: boolean }> {
   const fd = new FormData(); fd.append('file', file)
   if (sprache) fd.append('sprache', sprache)
   if (mehrsprachig !== undefined) fd.append('mehrsprachig', String(mehrsprachig))
+  // Nur bei einer echten Zahl: ein leeres Feld heisst „automatisch", und ein mitgeschicktes
+  // "" waere fuer FastAPI ein Typfehler (422) statt eines ausgelassenen Feldes.
+  if (sprecher !== undefined) fd.append('sprecher', String(sprecher))
   return jn(await fetch(`/api/projects/${enc(project)}/audio`, { method: 'POST', body: fd }))
 }
 export async function createProject(name: string): Promise<{ ok: boolean; name: string }> {

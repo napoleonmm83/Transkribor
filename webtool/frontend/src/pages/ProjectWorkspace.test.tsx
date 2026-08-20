@@ -15,6 +15,22 @@ vi.mock('sonner', () => ({ toast: toastMock }))
 const einstellungen = (s: Partial<Settings>) =>
   vi.mocked(api.getSettings).mockResolvedValue({ ai_ready: true, ai_reason: '', ...s } as Settings)
 
+/** Datei waehlen UND starten.
+ *
+ *  Die Auswahl laedt seit dem Vorschau-Umbau nicht mehr sofort hoch: dazwischen steht die
+ *  Zeile je Aufnahme mit ihrer Sprecherzahl (der Upload startet serverseitig die Pipeline,
+ *  danach ist die Zahl ein Rennen). Die Zusicherungen dieser Tests sind unveraendert — nur
+ *  der Ausloeser wandert von der Dateiwahl auf „Hinzufügen & starten".
+ */
+async function ladeHoch(datei = new File(['x'], 'a.mp3')) {
+  await act(async () => {
+    fireEvent.change(screen.getByTestId('upload-input'), { target: { files: [datei] } })
+  })
+  await act(async () => {
+    fireEvent.click(screen.getByRole('button', { name: /Hinzufügen & starten/ }))
+  })
+}
+
 describe('ProjectWorkspace (Stub)', () => {
   beforeEach(() => {
     einstellungen({})
@@ -307,10 +323,8 @@ describe('ProjectWorkspace (Stub)', () => {
     // `undefined`, NICHT `false` (#166): der Haken steht unveraendert auf dem Projektwert, also
     // geht kein Datei-Override mit — sonst traege jede hochgeladene Datei einen eigenen Eintrag
     // und zoege bei einer spaeteren Aenderung des Projekt-Standards nicht mehr mit.
-    await act(async () => {
-      fireEvent.change(screen.getByTestId('upload-input'), { target: { files: [new File(['x'], 'a.mp3')] } })
-    })
-    await waitFor(() => expect(api.uploadAudio).toHaveBeenCalledWith('Demo', expect.any(File), 'en', undefined))
+    await ladeHoch()
+    await waitFor(() => expect(api.uploadAudio).toHaveBeenCalledWith('Demo', expect.any(File), 'en', undefined, undefined))
 
     fireEvent.change(screen.getByLabelText('Video-URLs'), { target: { value: 'https://youtu.be/a' } })
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: /holen/i })) })
@@ -334,13 +348,11 @@ describe('ProjectWorkspace (Stub)', () => {
     zeigen()
     await screen.findByRole('combobox')
     fireEvent.click(screen.getByLabelText(/Enthält weitere Sprachen/))   // false -> true
-    await act(async () => {
-      fireEvent.change(screen.getByTestId('upload-input'), { target: { files: [new File(['x'], 'a.mp3')] } })
-    })
+    await ladeHoch()
     await waitFor(() => expect(api.uploadAudio).toHaveBeenCalledWith(
       // `''` ist bei der Sprache die Schreibweise fuer „nicht gesetzt" (uploadAudio laesst das
       // Feld dann weg) — beim Haken ist es `undefined`, weil `false` dort ein Wert waere.
-      'Demo', expect.any(File), '', true))
+      'Demo', expect.any(File), '', true, undefined))
 
     // BEIDE Kinder, nicht nur eines: `sprachWert` wird an `UploadDropzone` UND `UrlFetch`
     // gereicht, und ein zurueckgebliebenes `sprache={sprache}` an einem von beiden bliebe sonst
@@ -362,10 +374,8 @@ describe('ProjectWorkspace (Stub)', () => {
     vi.mocked(api.uploadAudio).mockResolvedValue({ base: 'a', file: 'a.mp3' })
     zeigen()
     await waitFor(() => expect(screen.queryAllByRole('combobox')).toHaveLength(0))
-    await act(async () => {
-      fireEvent.change(screen.getByTestId('upload-input'), { target: { files: [new File(['x'], 'a.mp3')] } })
-    })
-    await waitFor(() => expect(api.uploadAudio).toHaveBeenCalledWith('Demo', expect.any(File), '', undefined))
+    await ladeHoch()
+    await waitFor(() => expect(api.uploadAudio).toHaveBeenCalledWith('Demo', expect.any(File), '', undefined, undefined))
   })
 
   it('meldet einen fehlgeschlagenen Einstellungs-GET, statt ihn zu verschlucken (#215)', async () => {
@@ -448,10 +458,8 @@ describe('ProjectWorkspace (Stub)', () => {
     await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(1))
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'zu B' })) })
     expect(screen.queryAllByRole('combobox')).toHaveLength(0)   // Einstellungen von B unterwegs
-    await act(async () => {
-      fireEvent.change(screen.getByTestId('upload-input'), { target: { files: [new File(['x'], 'a.mp3')] } })
-    })
-    await waitFor(() => expect(api.uploadAudio).toHaveBeenCalledWith('B', expect.any(File), '', undefined))
+    await ladeHoch()
+    await waitFor(() => expect(api.uploadAudio).toHaveBeenCalledWith('B', expect.any(File), '', undefined, undefined))
   })
 
   it('nimmt nach dem Wechsel den Standard von B — nicht die Auswahl aus A (#234)', async () => {
@@ -497,12 +505,14 @@ describe('ProjectWorkspace (Stub)', () => {
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'zu B' })) })
     // Warten, bis Bs Auswahl wirklich steht — sonst prueft der Test nur das Fenster oben.
     await waitFor(() => expect(screen.getByRole('combobox')).toHaveTextContent('Französisch'))
-    await act(async () => {
-      fireEvent.change(screen.getByTestId('upload-input'), { target: { files: [new File(['x'], 'a.mp3')] } })
-    })
+    await ladeHoch()
     // `''` heisst „kein Override" — die Datei folgt Bs Standard. Ein mitgereistes `en` waere
     // der Fehler, den dieser Test fangen soll.
-    await waitFor(() => expect(api.uploadAudio).toHaveBeenCalledWith('B', expect.any(File), '', undefined))
-    expect(api.uploadAudio).not.toHaveBeenCalledWith('B', expect.any(File), 'en', expect.anything())
+    await waitFor(() => expect(api.uploadAudio).toHaveBeenCalledWith('B', expect.any(File), '', undefined, undefined))
+    // Zwei `anything()`: seit der Sprecherzahl hat der Aufruf fuenf Argumente. Mit vier
+    // Erwartungen wuerde diese Negativ-Zusicherung nie mehr matchen — also immer gruen, egal
+    // was passiert. Ein vacuous gewordener Waechter ist schlimmer als keiner.
+    expect(api.uploadAudio).not.toHaveBeenCalledWith('B', expect.any(File), 'en',
+                                                     expect.anything(), expect.anything())
   })
 })
