@@ -2497,6 +2497,11 @@ def test_fetch_setzt_den_sprach_schluessel_IMMER(client, monkeypatch):
     assert r.status_code == 200
     assert gesehen["TRANSKRIBOR_FETCH_SPRACHE"] == "", \
         "der Schluessel muss gesetzt sein, sonst gewinnt die Altlast aus os.environ"
+    # Benannte Luecke: gemessen wird bis zur `jobs.start`-Attrappe. Das Glied dahinter — ob ein
+    # leerer Wert im `env`-Dict einen GEERBTEN Wert auf Windows wirklich ueberschreibt statt zu
+    # verschwinden — haengt an CreateProcess, nicht an unserem Code. Im Review mit einem echten
+    # Kindprozess nachgemessen: Kind sieht `''`, nicht `'en'`. Ein Waechter dafuer gehoerte nach
+    # test_jobs.py (echter Popen), einmal fuer beide Variablen.
 
 
 def test_fetch_einzelner_sprachwert_gilt_fuer_alle_urls(client, monkeypatch):

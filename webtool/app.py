@@ -930,6 +930,9 @@ class FetchBody(BaseModel):
     # Form ist die bisherige Bedeutung und bleibt gueltig; sie wird VOR dem `zip` expandiert.
     # Ein Auftrag mischt Aufnahmen mit verschiedenen Sprachen (`projekt.json` haelt `sprache`
     # je Base — gemischtsprachige Projekte sind ausdruecklich vorgesehen).
+    # `null` heisst „nicht gesetzt"; `""` ist ein FEHLER (400 aus `pruef_fehler`), kein Weg
+    # zum Zuruecksetzen — umgekehrt zur Env-Schicht, wo `""` genau „nicht gesetzt" bedeutet.
+    # Absicht: im Rumpf ist explizit besser als raten, in der Umgebung gibt es kein `null`.
     sprache: str | list[str | None] | None = None
     mehrsprachig: bool | None = None
     # Index-parallel zu `urls`; `None` = automatisch. Eine LISTE statt eines Wertes, weil ein
@@ -1020,7 +1023,8 @@ def fetch_urls(project: str, body: FetchBody):
     # „automatisch", und diese Entscheidung schlaegt eine Altlast in der Umgebung.
     # Der CLI-Weg (`python -m webtool.fetch`) bleibt unberuehrt — dort setzt niemand `env`.
     #
-    # Fuer `TRANSKRIBOR_FETCH_SPRACHE`/`_MEHRSPRACHIG` gilt dasselbe Leck, der Fix ist dort
+    # `TRANSKRIBOR_FETCH_SPRACHE` geht seit 2026-08-20 denselben Weg (siehe oben, unbedingt
+    # gesetzt). Fuer `TRANSKRIBOR_FETCH_MEHRSPRACHIG` gilt das Leck weiterhin, der Fix ist dort
     # aber NICHT derselbe Einzeiler: `_mehrsprachig_aus_env("")` liefert `False`, nicht `None`
     # (gemessen) — ein leerer Wert erzeugte dort also einen echten Datei-Override. Als Issue
     # festgehalten statt hier mit erweitertem Scope halb gebaut.

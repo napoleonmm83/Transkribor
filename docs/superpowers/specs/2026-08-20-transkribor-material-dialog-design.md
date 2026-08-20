@@ -475,6 +475,17 @@ mit den Whisper-Codes ist die EINE Quelle, und `ch`/`de` ist die einzige Kollisi
 **Die Transkription ändert sich nicht.** `ch` und `de` teilen den Whisper-Code `de`; betroffen
 sind nur `ziel`-Phrase und Dialekt-Flag der **Korrektur**.
 
+**Zwei Dinge, die die Rangfolge betreffen, benannt statt versteckt** (beide aus dem Review):
+**Ein Datei-Override verliert hier erstmals gegen den Projektwert.** Überall sonst in
+`projekt.py` schlägt die Datei das Projekt (`datei_sprache`, `datei_korrektur`,
+`datei_mehrsprachig`); der Vorrang holt den Projektwert durch die Hintertür zurück und
+überstimmt ein ausdrücklich gewähltes `auto` — für Deutsch. Verteidigbar, weil `auto` „ich
+weiss es nicht" heisst und nicht „bitte kein Dialekt" (wer Hochdeutsch will, wählt `de`), aber
+es durchbricht die sonst geltende Regel. **Und die Reichweite ist grösser, als „dein Projekt
+steht auf Schweizerdeutsch" klingt:** `SPRACH_DEFAULT` ist `ch`, `projekt._lesen` füllt einen
+fehlenden Schlüssel damit auf — der Vorrang hängt in der Mehrzahl der Fälle an einem
+**unangetasteten Default**, nicht an einer Entscheidung.
+
 **Der Preis, benannt:** alle Altprojekte stehen auf `ch` (`SPRACH_DEFAULT`). Eine bestehende
 `auto`-Datei, bei der Whisper `de` erkennt, bekommt dort ab sofort Dialekt-Glättung, wo sie
 vorher Standarddeutsch bekam. Das ist die gewollte Richtung — aber es ist eine

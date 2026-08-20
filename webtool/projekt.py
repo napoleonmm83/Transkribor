@@ -281,6 +281,15 @@ def datei_einstellungen(project: str, base: str) -> tuple:
 
 
 def tiefe_effektiv(project: str, base: str) -> str:
+    """Die TIEFE, nicht die Dialekt-Frage — die beantwortet `correct._ziel_dialekt`.
+
+    Seit dem `auto`-Vorrang (Spec 10.1) laufen beide auseinander: eine Datei auf `auto` ist
+    hier nie `"ch"` ⇒ `voll`, waehrend `_ziel_dialekt` in einem ch-Projekt bei erkanntem `de`
+    `dialekt=True` liefert. Heute folgenlos, weil `correct.py` `voll` und `voll_dialekt` in
+    DENSELBEN Zweig fuehrt und die Dialekt-Entscheidung ueber `dialekt` reist (und
+    `datei_ansicht` `korrektur` roh zurueckgibt, also keine Anzeige „ohne Dialekt" behauptet,
+    waehrend mit gerechnet wird). Wer den Zweig je aufteilt — die Labels laden dazu ein —,
+    macht daraus einen stillen Fehler."""
     tiefe = datei_korrektur(project, base)
     if tiefe != "auto":
         return tiefe

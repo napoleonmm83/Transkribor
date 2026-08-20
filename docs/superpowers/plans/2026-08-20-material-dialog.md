@@ -1042,20 +1042,39 @@ describe('MaterialDialog', () => {
     expect(screen.getByText('b.mp3')).toBeInTheDocument()
   })
 
-  it('warnt in Schritt 3, wenn „Automatisch" dabei ist', () => {
-    /* Spec §5.2: `auto` kann Schweizerdeutsch NIE liefern — `von_whisper_code` ueberspringt
-       `ch` bewusst, und `SPRACHEN["auto"]` traegt `dialekt: False`. Wer es waehlt, verliert
-       die Dialekt-Glaettung. Die Warnung steht in der Zusammenfassung, weil dort die
-       Entscheidung noch umkehrbar ist. */
-    render(<MaterialDialog {...basis}
+  it('nennt in Schritt 3 den Projekt-Standard, wenn „Automatisch" dabei ist', () => {
+    /* Spec 10.1 — die alte Fassung dieses Tests erwartete eine WARNUNG („du verlierst die
+       Dialekt-Glaettung"). Sie ist widerlegt: `auto` liefert Schweizerdeutsch nicht von sich
+       aus, aber der Projekt-Standard tut es — erkennt Whisper `de` und das Projekt steht auf
+       `ch`, gilt `ch` samt Glaettung. Die Warnung stuende also genau fuer die Konstellation
+       da, die 10.1 repariert, und schoebe den Nutzer von `auto` weg, wo `auto` richtig ist.
+       Der Hinweis steht in der Zusammenfassung, weil die Entscheidung dort noch umkehrbar
+       ist. */
+    render(<MaterialDialog {...basis} projektSprache="ch"
       sprachChoices={[...basis.sprachChoices, { id: 'auto', label: 'Automatisch' }]}
       vorbelegteDateien={[datei('a.mp3')]} />)
     fireEvent.click(screen.getByRole('button', { name: /Weiter/ }))
-    expect(screen.queryByText(/Dialekt/i)).not.toBeInTheDocument()   // noch nicht gewaehlt
+    expect(screen.queryByText(/Projekt-Standard/i)).not.toBeInTheDocument()  // nicht gewaehlt
     fireEvent.change(screen.getByRole('combobox', { name: /Sprache für a\.mp3/ }),
                      { target: { value: 'auto' } })
     fireEvent.click(screen.getByRole('button', { name: /Weiter/ }))
-    expect(screen.getByText(/Dialekt-Glättung/i)).toBeInTheDocument()
+    expect(screen.getByText(/Projekt-Standard/i)).toBeInTheDocument()
+    expect(screen.queryByText(/verlier|ohne Dialekt/i)).not.toBeInTheDocument()
+  })
+
+  it('nennt den Standard NICHT, wenn er selbst „Automatisch" ist', () => {
+    /* Die BEDINGUNG aus 10.1: der zweite Satz nur, wenn der Whisper-Code des Standards nicht
+       `None` ist. Bei `projektSprache='auto'` gibt es nichts, was gewinnen koennte — der Satz
+       waere eine Zusage ohne Gegenstand. Ohne diesen Test ist die Bedingung Dekoration: der
+       Test darueber bliebe auch dann gruen, wenn der Satz IMMER erschiene. */
+    render(<MaterialDialog {...basis} projektSprache="auto"
+      sprachChoices={[...basis.sprachChoices, { id: 'auto', label: 'Automatisch' }]}
+      vorbelegteDateien={[datei('a.mp3')]} />)
+    fireEvent.click(screen.getByRole('button', { name: /Weiter/ }))
+    fireEvent.change(screen.getByRole('combobox', { name: /Sprache für a\.mp3/ }),
+                     { target: { value: 'auto' } })
+    fireEvent.click(screen.getByRole('button', { name: /Weiter/ }))
+    expect(screen.queryByText(/Projekt-Standard/i)).not.toBeInTheDocument()
   })
 
   it('gibt eine aufbewahrte Auswahl nur im SELBEN Projekt zurueck', () => {
@@ -1178,6 +1197,7 @@ git commit -m "feat(frontend): MaterialDialog — drei Schritte, Sprache und Spr
 | M21 | `spr` fest auf `z.sprache` | erster Test (erwartet `''` für die Projektsprache) |
 | M22 | Weiter-Sperre entfernen | Gültigkeits-Test |
 | M23 | `laufNr`-Vergleich entfernen | (kein Test — **im Browser prüfen**, Rennen) |
+| M23a | den Projekt-Standard-Hinweis UNBEDINGT zeigen (Bedingung „Whisper-Code ≠ `None`" raus) | zweiter `auto`-Test (`projektSprache='auto'`) |
 
 ---
 

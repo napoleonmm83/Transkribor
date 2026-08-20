@@ -297,7 +297,7 @@ als englisches Transkript heraus.
 
 **„Automatisch" kennt keinen Dialekt — ausser dein Projekt steht auf Schweizerdeutsch.**
 Whisper hört Schweizerdeutsch als Deutsch, es kann den Dialekt gar nicht melden. Steht der
-Projekt-Standard aber auf Schweizerdeutsch, gilt er: hört Whisper Deutsch, behandelt
+Projekt-Standard aber auf Schweizerdeutsch — die Vorgabe für neue Projekte —, gilt er: hört Whisper Deutsch, behandelt
 Transkribor die Aufnahme als Schweizerdeutsch und glättet den Dialekt wie gewohnt. Hört es
 Englisch, Französisch oder Italienisch, bleibt es dabei — der Standard drängt sich nicht
 dazwischen. So kannst du einen gemischten Schwung mit „Automatisch" hinzufügen, ohne dass die
