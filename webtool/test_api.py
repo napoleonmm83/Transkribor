@@ -781,11 +781,13 @@ def test_settings_meldet_und_entfernt_die_beiseitegelegte_datei(client, tmp_path
 
 
 def test_settings_ytdlp_merker_kommt_nicht_aus_dem_browser(client):
-    """Der Merker ist Buchhaltung des Servers. Ein vom Browser gesetztes Datum in der
-    Zukunft legte die Aktualisierung auf Jahre still."""
+    """Der Merker ist Buchhaltung des Servers — seit #281 als venv-eigene Datei, aber der
+    PUT-Waechter bleibt: ein vom Browser gesetztes Datum haette die Aktualisierung auf
+    Jahre stillgelegt. Der Schluessel ist nicht mal mehr in DEFAULTS, `load()` liefert
+    ihn also nie."""
     client.put("/api/settings", json={"ytdlp_geprueft": "2099-01-01"})
     from webtool import settings as s
-    assert s.load()["ytdlp_geprueft"] == ""
+    assert "ytdlp_geprueft" not in s.load()
 
 
 def test_ytdlp_update_knopf_kehrt_zurueck_WAEHREND_pip_noch_laeuft(client, monkeypatch):

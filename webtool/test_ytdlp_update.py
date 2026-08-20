@@ -82,6 +82,14 @@ def _pip(returncode=0, ausgabe="Successfully installed yt-dlp-2026.8.12"):
     return gerufen, run
 
 
+def _kalender_merken(datum: str) -> None:
+    """Test-Hilfe #281: den Kalendermerker DER EIGENEN venv auf ein Datum setzen —
+    ersetzt das fruehere `settings.save({'ytdlp_geprueft': …})`, das seit #281
+    herausgefiltert wird (und dessen Setzen damit vacuous waere)."""
+    with open(yu._kalender_merker(), "w", encoding="utf-8") as f:
+        f.write(datum)
+
+
 # --- Faelligkeit (ohne Netz, allein aus der Versionsnummer) ------------------
 
 def test_frische_fassung_ist_nicht_faellig(monkeypatch):
@@ -99,13 +107,13 @@ def test_merker_bremst_die_alte_fassung(monkeypatch):
     """yt-dlp veroeffentlicht stabil etwa monatlich. Allein an der Fassung gemessen waere
     sie nach 14 Tagen DAUERHAFT faellig, und jeder Import liefe in ein pip, das nichts tut."""
     monkeypatch.setattr(yu, "fassung", lambda: "2026.7.4")
-    settings.save({"ytdlp_geprueft": "2026-08-10"})               # vor drei Tagen geprueft
+    _kalender_merken("2026-08-10")                                  # vor drei Tagen geprueft
     assert yu.faellig() is False
 
 
 def test_alter_merker_gibt_wieder_frei(monkeypatch):
     monkeypatch.setattr(yu, "fassung", lambda: "2026.7.4")
-    settings.save({"ytdlp_geprueft": "2026-07-01"})
+    _kalender_merken("2026-07-01")
     assert yu.faellig() is True
 
 
@@ -121,14 +129,14 @@ def test_unlesbare_fassung_gilt_als_faellig_aber_der_merker_bremst(monkeypatch):
     sonst waere eine exotische Fassungsnummer ein pip bei JEDEM Import."""
     monkeypatch.setattr(yu, "fassung", lambda: "unbekannt")
     assert yu.faellig() is True
-    settings.save({"ytdlp_geprueft": HEUTE.isoformat()})
+    _kalender_merken(HEUTE.isoformat())
     assert yu.faellig() is False
 
 
 def test_kaputter_merker_blockiert_nicht(monkeypatch):
     """Ein von Hand verdrehtes Datum darf die Aktualisierung nicht fuer immer abschalten."""
     monkeypatch.setattr(yu, "fassung", lambda: "2026.7.4")
-    settings.save({"ytdlp_geprueft": "gestern"})
+    _kalender_merken("gestern")
     assert yu.faellig() is True
 
 
@@ -138,7 +146,7 @@ def test_merker_in_der_ZUKUNFT_blockiert_nicht(monkeypatch):
     per Handbearbeitung oder einer vorgehenden Rechneruhr; der API-Pfad ist verteidigt
     (`SettingsBody` kennt den Schluessel nicht), diese beiden nicht."""
     monkeypatch.setattr(yu, "fassung", lambda: "2026.7.4")
-    settings.save({"ytdlp_geprueft": "2099-01-01"})
+    _kalender_merken("2099-01-01")
     assert yu.geprueft() is None
     assert yu.faellig() is True
 
@@ -192,9 +200,9 @@ def test_fehlende_loeserskripte_bremst_der_merker_nur_einen_TAG(monkeypatch):
     """
     monkeypatch.setattr(yu, "fassung", lambda: "2026.8.12")
     monkeypatch.setattr(yu, "_ejs_untauglich", lambda: True)
-    settings.save({"ytdlp_geprueft": HEUTE.isoformat()})
+    _kalender_merken(HEUTE.isoformat())
     assert yu.faellig() is False
-    settings.save({"ytdlp_geprueft": (HEUTE - dt.timedelta(days=1)).isoformat()})
+    _kalender_merken((HEUTE - dt.timedelta(days=1)).isoformat())
     assert yu.faellig() is True
 
 
@@ -940,7 +948,9 @@ def test_aktualisiere_setzt_den_merker(monkeypatch):
     _, run = _pip()
     monkeypatch.setattr(yu.subprocess, "run", run)
     yu.aktualisiere()
-    assert settings.load()["ytdlp_geprueft"] == "2026-08-13"
+    # ueber geprueft() gelesen, nicht die Datei direkt: die Zusicherung deckt setzen
+    # UND lesen — seit #281 beides venv-lokal.
+    assert yu.geprueft() == HEUTE
 
 
 def test_merker_auch_nach_fehlschlag(monkeypatch):
@@ -949,7 +959,7 @@ def test_merker_auch_nach_fehlschlag(monkeypatch):
         raise subprocess.TimeoutExpired("pip", 120)
     monkeypatch.setattr(yu.subprocess, "run", kaputt)
     assert yu.aktualisiere() == (False, True)
-    assert settings.load()["ytdlp_geprueft"] == "2026-08-13"
+    assert yu.geprueft() == HEUTE
 
 
 def test_pip_exitcode_ungleich_null_ist_kein_erfolg(monkeypatch):
@@ -1015,7 +1025,7 @@ def test_erzwingen_uebergeht_den_merker(monkeypatch):
     gerufen, run = _pip()
     monkeypatch.setattr(yu.subprocess, "run", run)
     monkeypatch.setattr(yu, "fassung", lambda: "2026.8.12")
-    settings.save({"ytdlp_geprueft": HEUTE.isoformat()})
+    _kalender_merken(HEUTE.isoformat())
     assert yu.automatisch(erzwingen=True) is True
     assert len(gerufen) == 1
 
@@ -1539,11 +1549,12 @@ def test_der_merker_wird_INNERHALB_der_sperre_gesetzt(monkeypatch):
     Aktualisierer gleichzeitig sind hier der Normalfall (Server + fetch-Subprozess, seit #254
     auch zwei Server).
 
-    Die Sperren tragen ihren Pfad, statt nur „auf"/„zu" zu zaehlen: `_merken()` nimmt
-    INNERHALB der pip-Sperre zusaetzlich die settings-Sperre, und die laeuft durch dieselbe
-    gefaelschte Funktion. Diese Verschachtelung ist kein Rauschen, sondern genau die Rechnung
-    aus #207 (`_lock_stale()` = PIP_TIMEOUT + 30 + `frist()`) — sie gehoert festgenagelt, nicht
-    weggefiltert."""
+    Die Sperren tragen ihren Pfad, statt nur „auf"/„zu" zu zaehlen. Seit #281 nimmt der
+    pip-Abschnitt KEINE zweite Sperre mehr: der Kalendermerker ist eine Datei
+    (`_merken()` → `_datum_setzen`), kein `settings.save()`. Die Folge hier nagelt beides
+    fest — der Abbruch-Merker steht zwischen Sperre und pip, und es taucht KEIN
+    `auf:<settings>` mehr auf. Kaeme eine Verschachtelung zurueck, stünde die #207-Frist
+    (`_lock_stale()` = PIP_TIMEOUT + 30 + `frist()`) wieder auf tueurischem Papier."""
     folge = []
     monkeypatch.setattr(yu, "fassung", lambda: "2025.9.5")   # sonst legt aktualisiere() gar keinen Merker an
     echte_sperre = yu.sperre.datei
@@ -1564,13 +1575,11 @@ def test_der_merker_wird_INNERHALB_der_sperre_gesetzt(monkeypatch):
     monkeypatch.setattr(yu, "_pip_merker_setzen", lambda: folge.append("merker gesetzt"))
     monkeypatch.setattr(yu, "_pip_merker_loeschen", lambda: folge.append("merker weg"))
     yu.aktualisiere()
-    pip_lock, settings_lock = (os.path.basename(yu._lockziel()),
-                               os.path.basename(settings.path()))
-    # „merker weg" VOR „auf:<settings>": `_merken()` faengt nur `OSError`, ein anderer Wurf
-    # dort liesse den Merker sonst liegen, obwohl pip sauber durchgelaufen ist. Ohne diese
-    # Marke war die Reihenfolge unbewacht (Reviewbefund m7).
+    pip_lock = os.path.basename(yu._lockziel())
+    # „merker weg" VOR „zu:<pip_lock>": `_merken()` steht im selben Abschnitt wie das
+    # pip — ein Wurf dazwischen liesse den Merker liegen, obwohl pip sauber lief.
     assert folge == ["auf:" + pip_lock, "merker gesetzt", "pip", "merker weg",
-                     "auf:" + settings_lock, "zu:" + settings_lock, "zu:" + pip_lock]
+                     "zu:" + pip_lock]
 
 
 def test_nur_ein_GELUNGENER_lauf_raeumt_den_merker_weg(monkeypatch):
@@ -1615,7 +1624,7 @@ def test_ein_unterbrochener_lauf_OHNE_schaden_macht_NICHT_faellig(monkeypatch):
     Ohne diese Haelfte liefe bei jedem Start eine Reparatur fuer einen Schaden, den es nicht
     gibt."""
     monkeypatch.setattr(yu, "fassung", lambda: "2026.8.12")
-    settings.save({"ytdlp_geprueft": HEUTE.isoformat()})
+    _kalender_merken(HEUTE.isoformat())
     yu._pip_merker_setzen()
     assert yu._pip_unterbrochen() is True
     assert yu.faellig() is False
@@ -1637,7 +1646,7 @@ def test_beim_start_holt_einen_unterbrochenen_lauf_nach(monkeypatch):
     """Die Kette, an der beide Issues haengen: der naechste Serverstart repariert.
     `starte_hintergrund` gefaelscht, sonst liefe ein echter Faden mit echtem pip."""
     monkeypatch.setattr(yu, "fassung", lambda: None)
-    settings.save({"ytdlp_geprueft": HEUTE.isoformat()})
+    _kalender_merken(HEUTE.isoformat())
     monkeypatch.setattr(yu, "laeuft_gerade", lambda *a: False)
     gestartet = []
     monkeypatch.setattr(yu, "starte_hintergrund", lambda **k: gestartet.append(1) or True)
@@ -2009,3 +2018,31 @@ def test_starte_hintergrund_reicht_die_bedingung_in_den_faden_durch(monkeypatch)
     assert yu.starte_hintergrund(nur_wenn_faellig=True) is True
     assert fertig.wait(5)
     assert gesehen == [True]
+
+
+# --- Kalendermerker pro venv (#281) -------------------------------------------
+
+def test_merker_haengt_an_der_venv_nicht_am_nutzer(monkeypatch):
+    """#281: der Kalendermerker ist Buchhaltung DER VENV. Prozess A (andere Kennung)
+    darf den Termin von B nicht verbrauchen — gemessen 2026-08-20 an der echten
+    Doppel-Konstellation (Dev- und App-venv teilen eine settings.json): B faellig True,
+    A merkt, B faellig False, ohne dass As pip je Bs venv angefasst hat."""
+    # path/HEUTE/_ejs_untauglich deckt die autouse-Fixture `isoliert`; hier wird nur
+    # gefaelscht, was den Fall TRAEGT: eine alte Fassung und zwei Kennungen.
+    monkeypatch.setattr(yu, "fassung", lambda: "2026.7.4")          # 40 Tage vor HEUTE
+    monkeypatch.setattr(yu, "_venv_kennung", lambda: "aaaa")
+    assert yu.faellig() is True
+    yu._merken()                                                    # Prozess A merkt
+    monkeypatch.setattr(yu, "_venv_kennung", lambda: "bbbb")        # Prozess B
+    assert yu.faellig() is True        # master-Code: False — DER Fix-Beweis
+    assert yu.geprueft() is None       # B hat keinen eigenen Merker gesehen
+
+
+def test_merken_schreibt_nichts_mehr_in_die_settings_json(tmp_path):
+    """Rueckfuehr-Waechter der anderen Richtung: der Merker gehoert nicht in die
+    Nutzerw-Datei. Am master legt _merken() sie mit ytdlp_geprueft=heute an."""
+    yu._merken()
+    inhalt = ""
+    if (tmp_path / "settings.json").exists():
+        inhalt = (tmp_path / "settings.json").read_text(encoding="utf-8")
+    assert "ytdlp_geprueft" not in inhalt

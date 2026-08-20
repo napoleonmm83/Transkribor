@@ -73,19 +73,20 @@ def test_nicht_dekodierbare_datei_faellt_auf_defaults(tmp_path, capsys):
 def test_save_legt_die_unlesbare_datei_beiseite_statt_sie_zu_ersetzen(tmp_path):
     """#192: `save()` ist ein Read-Modify-Write ueber `load()`, und `load()` faellt seit #185
     auch bei kaputten BYTES auf Defaults zurueck — der naechste Schreiber ersetzte die Datei
-    damit samt Key. Geschrieben wird das vom yt-dlp-Merker aus dem fetch-Subprozess, also
-    unbeaufsichtigt; genau dieser Schreiber steht deshalb hier im Test.
+    damit samt Key. (Bis #281 war der unbeaufsichtigte Schreiber der yt-dlp-Merker aus dem
+    fetch-Subprozess; seitdem ist settings.json wieder allein Sache des Servers — der Fall
+    bleibt: ein Absturz mitten im Schreiben.)
 
     Der Key ist mit blossem Auge noch lesbar — das ist der Punkt: kaputt fuer `json.load`
     heisst nicht kaputt fuer den Menschen."""
     p = tmp_path / "settings.json"
     roh = b'{"api_key": "sk-GEHEIM-\xff\xfe", "provider": "openai"}'
     p.write_bytes(roh)
-    settings.save({"ytdlp_geprueft": "2026-08-14"})
+    settings.save({"model": "claude-opus-5"})
     # BYTEGLEICH, nicht nur "der Key kommt drin vor": gerettet wird die Datei, nicht ein
     # Teil davon — wer sie repariert, braucht auch den Rest (CodeRabbit-CLI an PR #203).
     assert (tmp_path / "settings.json.kaputt").read_bytes() == roh
-    assert json.loads(p.read_text(encoding="utf-8"))["ytdlp_geprueft"] == "2026-08-14"
+    assert json.loads(p.read_text(encoding="utf-8"))["model"] == "claude-opus-5"
 
 
 def test_public_nennt_die_beiseitegelegte_datei(tmp_path):
@@ -207,32 +208,32 @@ def test_zwei_schreiber_verlieren_einander_nicht(monkeypatch):
 
     monkeypatch.setattr(settings, "load", langsam)
     faeden = [threading.Thread(target=settings.save, args=({"api_key": "sk-geheim"},)),
-              threading.Thread(target=settings.save, args=({"ytdlp_geprueft": "2026-08-13"},))]
+              threading.Thread(target=settings.save, args=({"whisper_model": "small"},))]
     for f in faeden:
         f.start()
     for f in faeden:
         f.join()
     cfg = orig()
     assert cfg["api_key"] == "sk-geheim"
-    assert cfg["ytdlp_geprueft"] == "2026-08-13"
+    assert cfg["whisper_model"] == "small"
 
 
 def test_pfad_ohne_verzeichnisanteil_laesst_sich_speichern(tmp_path, monkeypatch):
     """`TRANSKRIBOR_SETTINGS=settings.json` (ohne Ordner) ergibt einen leeren dirname, und
     `os.makedirs("")` wirft FileNotFoundError — womit JEDES Speichern scheiterte: der PUT
-    mit 500, und der yt-dlp-Merker still (`_merken()` faengt den OSError ab, das Datum wurde
-    also nie gesetzt und jeder Import lief in ein pip).
+    mit 500. (Bis #281 fiel daneben still der yt-dlp-Merker aus — `_merken()` fing den
+    OSError ab, das Datum wurde nie gesetzt und jeder Import lief in ein pip.)
 
     Der cwd-Wechsel gehoert zum Fall: ein relativer Pfad ist nur zusammen mit dem
     Arbeitsverzeichnis eine Angabe, und die Datei soll in tmp_path landen, nicht im Repo.
     """
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("TRANSKRIBOR_SETTINGS", "settings.json")
-    settings.save({"model": "claude-opus-5", "ytdlp_geprueft": "2026-08-13"})
+    settings.save({"model": "claude-opus-5", "ytdlp_auto": "0"})
     assert (tmp_path / "settings.json").exists()
     cfg = settings.load()
     assert cfg["model"] == "claude-opus-5"
-    assert cfg["ytdlp_geprueft"] == "2026-08-13"      # der Merker haelt, nicht nur der Aufruf
+    assert cfg["ytdlp_auto"] == "0"                    # der zweite Key haelt, nicht nur der Aufruf
 
 
 def test_nicht_dekodierbare_env_stoppt_den_serverstart_nicht(tmp_path, monkeypatch):

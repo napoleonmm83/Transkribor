@@ -92,10 +92,12 @@ DEFAULTS = {"provider": "claude-cli", "model": "", "base_url": "", "api_key": ""
             # Whisper-Stufe und -Sprache. large-v3/de ist das bisherige Verhalten —
             # eine Verhaltensaenderung fuer Bestandsnutzer waere unnoetig.
             "whisper_model": "large-v3", "whisper_lang": "de",
-            # yt-dlp-Selbstaktualisierung: Schalter + Merker der letzten Pruefung (ISO-Datum).
+            # yt-dlp-Selbstaktualisierung: der Schalter bleibt eine Nutzereinstellung; der
+            # Pruef-Merker ist seit #281 venv-Buchhaltung als Datei (ytdlp_update._kalender_merker)
+            # und hier GELOESCHT — ein Alt-Bestand wird beim nächsten save() herausgefiltert.
             # STRINGS, nicht bool/date — `save()` filtert auf isinstance(str) und wuerde alles
             # andere still verwerfen (dieselbe Falle wie `mehrsprachig` in projekt.py).
-            "ytdlp_auto": "1", "ytdlp_geprueft": ""}
+            "ytdlp_auto": "1"}
 
 
 def load() -> dict:
@@ -139,10 +141,12 @@ def _lesen() -> tuple:
         # Und was dieser Rueckfall NEU erlaubt, gehoert protokolliert: `save()` ist ein
         # Read-Modify-Write ueber `load()`. Vorher warf eine kaputte Datei und blieb liegen;
         # jetzt liefert sie DEFAULTS — und der naechste Schreiber ueberbuegelt sie damit.
-        # Der yt-dlp-Merker tut das unbeaufsichtigt aus dem fetch-Subprozess, ein noch
-        # lesbarer API-Key waere danach weg. Die Richtung bleibt trotzdem richtig (dauerhaft
-        # 500 und im Browser nicht reparierbar waere schlechter) — sie darf nur nicht STILL
-        # sein. Ein FileNotFoundError ist dabei der Normalfall (erster Start) und schweigt.
+        # Der yt-dlp-Merker tat das unbeaufsichtigt aus dem fetch-Subprozess (#192, bis
+        # #281 — seither schreibt er seine Merker als Dateien und nicht mehr hierher);
+        # ein noch lesbarer API-Key waere danach weg. Die Richtung bleibt trotzdem richtig
+        # (dauerhaft 500 und im Browser nicht reparierbar waere schlechter) — sie darf nur
+        # nicht STILL sein. Ein FileNotFoundError ist dabei der Normalfall (erster Start)
+        # und schweigt.
         if isinstance(e, FileNotFoundError):
             return dict(DEFAULTS), False
         print(f"[settings] {path()} unlesbar ({type(e).__name__}: {e}) — nehme Defaults; "
@@ -172,18 +176,21 @@ def save(patch: dict) -> tuple:
     ueberbuegeln (#192), und den kann niemand rekonstruieren. Wer die Antwort nicht braucht
     (`_merken()` im fetch-Subprozess), ignoriert sie wie bisher.
 
-    Gesperrt, weil es seit der yt-dlp-Selbstaktualisierung ZWEI Schreiber gibt: den Server
-    (Einstellungen aus dem Browser) und den fetch-Subprozess (den Pruef-Merker). Ohne die
-    Sperre verschraenken sich load+merge+replace, der letzte gewinnt — und ein gerade
-    eingetragener API-Key waere weg (dieselbe Race wie #134 auf projekt.json). Die Sperre
-    liegt HIER statt bei den Aufrufern: sie ist nur wirksam, wenn ALLE sie nehmen.
+    Gesperrt, weil es zu zeitweise ZWEI Schreiber gab — den Server (Einstellungen aus dem
+    Browser) und den fetch-Subprozess (den Pruef-Merker, bis #281; seither schreibt der
+    seine Merker als Dateien). Ohne die Sperre verschraenken sich load+merge+replace, der
+    letzte gewinnt — und ein gerade eingetragener API-Key waere weg (dieselbe Race wie
+    #134 auf projekt.json; zwei gleichzeitige PUTs aus zwei Tabs treffen sie auch mit nur
+    einem Schreiber-Typ). Die Sperre liegt HIER statt bei den Aufrufern: sie ist nur
+    wirksam, wenn ALLE sie nehmen.
     """
     p = path()
     # `or "."`: ein TRANSKRIBOR_SETTINGS ohne Verzeichnisanteil ("settings.json") liefert
     # einen leeren dirname, und `os.makedirs("")` wirft FileNotFoundError — womit JEDES
-    # Speichern scheiterte: der PUT mit 500, und der yt-dlp-Merker still (dort faengt
-    # `_merken()` den OSError ab, das Datum wurde also nie gesetzt und jeder Import lief in
-    # ein pip). Der Fix gehoert HIERHER, wo alle Schreiber durchgehen — nicht in die
+    # Speichern scheiterte: der PUT mit 500, und bis #281 daneben still der yt-dlp-Merker
+    # (dort faengt `_merken()` den OSError ab, das Datum wurde also nie gesetzt und jeder
+    # Import lief in ein pip — seither schreibt der Merker Dateien und umgeht save()
+    # ganz). Der Fix gehoert HIERHER, wo alle Schreiber durchgehen — nicht in die
     # einzelnen Aufrufer.
     os.makedirs(os.path.dirname(p) or ".", exist_ok=True)
     with sperre.datei(p) as gehalten:
