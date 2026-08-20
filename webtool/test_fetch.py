@@ -938,3 +938,34 @@ def test_main_reicht_jeder_url_ihre_eigene_sprache_durch(projekt, monkeypatch):
     fetch.main(["--download-only", "Demo",
                 "https://youtu.be/aaa", "https://youtu.be/bbb"])
     assert gesehen == [("https://youtu.be/aaa", "ch"), ("https://youtu.be/bbb", "en")]
+
+
+def test_wiederholung_nach_der_selbstheilung_traegt_die_SPRACHE_auch_ein(projekt, monkeypatch):
+    """Zwilling des Sprecherzahl-Tests darueber, fuer die Sprache — und er war noetig:
+    die Mutationsprobe M3 (zweite `_lade`-Aufrufstelle ohne `sprache`) blieb ohne ihn
+    GRUEN, die Zeile hatte also null Abdeckung.
+
+    `_lade` wird an ZWEI Stellen gerufen; die zweite ist der Versuch nach der
+    yt-dlp-Aktualisierung — also der Normalfall, wenn YouTube etwas umgestellt hat. Ohne
+    den Wert dort verliert genau der Download seine Sprache, der erst danach klappt, und
+    eine falsche Sprache kostet eine komplette Neu-Transkription.
+    """
+    from webtool import projekt as projekt_mod, ytdlp_update
+    versuche = {"n": 0}
+    echtes = fetch.download_one
+
+    def einmal_scheitern(project, url, sprecher=None, sprache=None):
+        versuche["n"] += 1
+        if versuche["n"] == 1:
+            raise RuntimeError("Unable to extract player response")
+        return echtes(project, url, sprecher, sprache)
+
+    monkeypatch.setattr(fetch, "download_one", einmal_scheitern)
+    monkeypatch.setattr(ytdlp_update, "automatisch", lambda erzwingen=False: True)
+    monkeypatch.setattr(fetch, "_neu_laden", lambda: None)
+    monkeypatch.setenv("TRANSKRIBOR_FETCH_SPRACHE", "en")
+    fetch.main(["--download-only", "Demo", "https://youtu.be/vid123"])
+    # Positivkontrolle: ohne sie bliebe der Test gruen, wenn die Selbstheilung gar nicht
+    # ausgeloest wuerde — er pruefte dann nur den ersten Versuch.
+    assert versuche["n"] == 2, "der Wiederholungsversuch lief gar nicht — Test misst nichts"
+    assert projekt_mod.datei_ansicht("Demo", "Mein Interview")["sprache"] == "en"
