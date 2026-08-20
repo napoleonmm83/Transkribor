@@ -2354,3 +2354,66 @@ def test_upload_lehnt_sprecherzahl_ausserhalb_des_bereichs_ab(client, tmp_path):
                     files={"file": ("Zuviel.mp3", b"a", "audio/mpeg")}, data={"sprecher": "0"})
     assert r.status_code == 400 and "sprecher" in r.json()["detail"]
     assert not (tmp_path / "Demo" / "audio" / "Zuviel.mp3").exists()
+
+
+def _fetch_env_faenger(monkeypatch):
+    """jobs.start faelschen und die uebergebene Subprozess-Umgebung einsammeln."""
+    gesehen = {}
+    import webtool.jobs as jobs_mod
+
+    def fake_start(project, cmd, cwd, kind, then=None, env=None):
+        gesehen.update(env or {})
+        gesehen["_cmd"] = cmd
+        return "f1", True
+
+    monkeypatch.setattr(jobs_mod, "start", fake_start)
+    return gesehen
+
+
+def test_fetch_reicht_eine_sprecherzahl_JE_URL_durch(client, tmp_projekt, monkeypatch):
+    """`fetch.py` kennt den Basisnamen erst nach dem Download — die Zahl reist deshalb wie die
+    Sprache per Env, aber als LISTE: „meist gemischt" gilt beim URL-Import genauso."""
+    gesehen = _fetch_env_faenger(monkeypatch)
+    r = client.post(f"/api/projects/{tmp_projekt}/fetch",
+                    json={"urls": ["https://youtu.be/aaaaaaaaaaa", "https://youtu.be/bbbbbbbbbbb"],
+                          "sprecher": [2, 5]})
+    assert r.status_code == 200
+    assert gesehen["TRANSKRIBOR_FETCH_SPRECHER"] == "2,5"
+
+
+def test_fetch_leere_url_zeilen_verschieben_die_zuordnung_NICHT(client, tmp_projekt, monkeypatch):
+    """Der Endpunkt wirft leere URL-Zeilen weg. Wuerde die Sprecher-Liste danach unveraendert
+    uebernommen, landete ab der ersten Leerzeile JEDE Zahl bei der falschen Aufnahme — die 5
+    des Teamgespraechs beim 2er-Interview. Gefiltert wird deshalb PAARWEISE."""
+    gesehen = _fetch_env_faenger(monkeypatch)
+    r = client.post(f"/api/projects/{tmp_projekt}/fetch",
+                    json={"urls": ["  ", "https://youtu.be/aaaaaaaaaaa", "https://youtu.be/bbbbbbbbbbb"],
+                          "sprecher": [None, 2, 5]})
+    assert r.status_code == 200
+    assert gesehen["TRANSKRIBOR_FETCH_SPRECHER"] == "2,5"
+
+
+def test_fetch_ohne_sprecherzahlen_setzt_die_variable_gar_nicht(client, tmp_projekt, monkeypatch):
+    """Legacy-Verhalten: kein Feld, keine Variable — `fetch.py` traegt dann nichts ein."""
+    gesehen = _fetch_env_faenger(monkeypatch)
+    client.post(f"/api/projects/{tmp_projekt}/fetch",
+                json={"urls": ["https://youtu.be/aaaaaaaaaaa"]})
+    assert "TRANSKRIBOR_FETCH_SPRECHER" not in gesehen
+
+
+def test_fetch_lehnt_falsche_listenlaenge_ab(client, tmp_projekt):
+    """Eine kuerzere Liste waere kein harmloser Teil-Auftrag, sondern eine stille
+    Fehlzuordnung ab dem ersten fehlenden Eintrag."""
+    r = client.post(f"/api/projects/{tmp_projekt}/fetch",
+                    json={"urls": ["https://youtu.be/aaaaaaaaaaa", "https://youtu.be/bbbbbbbbbbb"],
+                          "sprecher": [2]})
+    assert r.status_code == 400 and "sprecher" in r.json()["detail"]
+
+
+def test_fetch_lehnt_sprecherzahl_ausserhalb_des_bereichs_ab(client, tmp_projekt):
+    """Dieselbe Trust-Boundary wie beim Upload und am PUT — geprueft am Endpunkt, weil
+    `fetch.py` sie erst im Subprozess eintraegt (ein spaetes Scheitern liesse den Download
+    erst laufen; dieselbe Begruendung wie bei der Sprache)."""
+    r = client.post(f"/api/projects/{tmp_projekt}/fetch",
+                    json={"urls": ["https://youtu.be/aaaaaaaaaaa"], "sprecher": [99]})
+    assert r.status_code == 400 and "sprecher" in r.json()["detail"]
