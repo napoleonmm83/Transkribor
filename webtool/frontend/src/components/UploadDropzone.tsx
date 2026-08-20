@@ -53,7 +53,12 @@ export function UploadDropzone({ project, onDone, sprache = '', mehrsprachig,
   // Projekt A gewaehlten Dateien samt eingetippter Sprecherzahl in Projekt B, still und mit
   // Erfolgsmeldung. Dasselbe Muster, wegen dem `ProjectWorkspace` `sprache` zuruecksetzt
   // (frontend/CLAUDE.md); hier wiegt es schwerer, weil ganze Dateien mitwandern.
-  useEffect(() => { setAuswahl([]); setItems([]) }, [project])
+  // `laufNr.current++` gehoert HIERHER, nicht nur ins Abbrechen: sonst leert der Wechsel zwar
+  // die Auswahl, der laufende Upload aus Projekt A schreibt sein Ergebnis danach aber in die
+  // Vorschau von Projekt B — und ein erneuter Start laedt As Dateien nach B. Gemessen (0
+  // Zeilen nach dem Wechsel, wieder 1 nach dem Fehlschlag). Das ist derselbe BLOCKER, den der
+  // Plan-Review schon einmal fand, zurueck durch die Tuer der eigenen Reparatur.
+  useEffect(() => { laufNr.current++; setAuswahl([]); setItems([]) }, [project])
 
   const patch = (name: string, p: Partial<Item>) =>
     setItems(prev => prev.map(it => it.name === name ? { ...it, ...p } : it))

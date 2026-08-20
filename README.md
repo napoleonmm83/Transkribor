@@ -351,7 +351,8 @@ beim Interviewer stehen oder mehrere Leute unter einem Namen laufen.
 **Das Feld „Anzahl Sprecher“ ist der wirksamste Hebel — und am besten trägst du die Zahl
 gleich beim Hinzufügen ein.** Sobald du Aufnahmen auswählst oder Video-Links einfügst,
 erscheint eine Liste mit einer Zeile pro Aufnahme und einem Feld „Anzahl Sprecher“ daneben;
-erst ein Klick auf **„Hinzufügen & starten“** legt los. Jede Aufnahme bekommt so ihre eigene
+erst ein Klick auf den Startknopf darunter legt los (**„Hinzufügen & starten“** bei
+hochgeladenen Aufnahmen, **„Holen & starten“** bei Video-Links). Jede Aufnahme bekommt so ihre eigene
 Zahl — praktisch, wenn Zweiergespräche und ein Teaminterview im selben Schwung dazukommen.
 (Diese Liste gibt es **ab der nächsten Fassung**; bis dahin führt nur der Weg über das
 ⋯-Menü unten.)
