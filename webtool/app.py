@@ -963,6 +963,7 @@ class SettingsBody(BaseModel):
     # eine Moeglichkeit haette, das zurueckzunehmen. Env und Handbearbeitung bleiben.
     # `ytdlp_geprueft` fehlt aus demselben Grund: der Merker ist Buchhaltung des Servers,
     # ein vom Browser gesetztes Datum koennte die Aktualisierung auf Jahre stilllegen.
+    # (Seit #281 ist er ohnehin eine venv-eigene Datei und nicht mehr in settings.json.)
 
 
 def _settings_body(cfg: dict | None = None) -> dict:

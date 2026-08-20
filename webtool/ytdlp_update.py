@@ -57,7 +57,8 @@ from . import settings, sperre
 # liesse einen kaputten Extraktor monatelang kaputt. Eine Zahl, an einer Stelle.
 INTERVALL_TAGE = 14
 PIP_TIMEOUT = 120
-MERKER = "ytdlp_geprueft"
+# Kein MERKER-Konstante mehr: der Kalendermerker lebt seit #281 als Datei je venv
+# (`_kalender_merker()`), nicht als Schluessel in settings.json.
 # Das Paket mit den Loeserskripten fuer YouTubes JS-Challenge; kommt ueber `yt-dlp[default]`.
 _EJS = "yt-dlp-ejs"
 # --- Wie der Paketname in beiden Regexes geschrieben steht -------------------
@@ -472,20 +473,27 @@ def auto_an() -> bool:
 
 
 def geprueft() -> dt.date | None:
-    """Wann zuletzt geprueft wurde. Ein verdrehtes Datum gilt als 'nie' — es darf die
-    Aktualisierung nicht fuer immer abschalten.
+    """Wann zuletzt geprueft wurde — fuer DIESE venv (#281).
 
-    Das gilt fuer unlesbare Werte UND fuer Daten in der Zukunft. Letzteres stand zuerst nur
-    im Docstring: `(heute - g).days` wird bei einem Zukunftsdatum negativ, `faellig()` also
-    dauerhaft False — `ytdlp_geprueft: "2099-01-01"` schaltete den Kalenderweg **still und
-    fuer immer** ab. Der API-Pfad ist dagegen verteidigt (`SettingsBody` kennt den Schluessel
-    nicht), Handbearbeitung und eine vorgehende Rechneruhr aber nicht.
+    Bis #281 stand der Merker als `ytdlp_geprueft`-Schluessel in `settings.json`, und die
+    ist pro NUTZER geteilt: `electron/backend.js` setzt `TRANSKRIBOR_SETTINGS` nicht, also
+    konsumierte der erste Prozess (typisch der taeglich laufende Entwicklerserver) den
+    14-Tage-Termin der gepackten App-venv — gemessen 2026-08-20 an der echten
+    Doppel-Konstellation: App-venv faellig True, Dev-venv ruft nur `_merken()`, App-venv
+    faellig False. Der Merker liegt jetzt als Datei neben der Sperre (`.geprueft`), demselben
+    Muster wie `.lock` (#254) und `.abbruch` (#258).
+
+    Die Wache gegen verdrehte/zukuenftige Daten steht im gemeinsamen Leser
+    `_datum_aus_datei` — ein `2099-01-01` schaltet den Kalenderweg weiterhin nur bis zum
+    naechsten Tag ab, nicht fuer immer. Der API-Pfad ist und bleibt verteidigt
+    (`SettingsBody` kennt kein Feld dafuer); Handbearbeitung der Datei und eine vorgehende
+    Rechneruhr deckt der Leser.
+
+    Migration: ein Alt-Bestand in `settings.json` hat keinen Leser mehr und wird vom
+    naechsten `settings.save()` herausgefiltert. Jede venv prueft danach einmal eher —
+    die sichere Richtung (ein idempotentes pip statt eines verpassten Termins).
     """
-    try:
-        d = dt.date.fromisoformat((settings.load().get(MERKER) or "").strip())
-    except ValueError:
-        return None
-    return None if d > _heute() else d
+    return _datum_aus_datei(_kalender_merker())
 
 
 def faellig() -> bool:
@@ -567,11 +575,13 @@ def faellig() -> bool:
 def _merken() -> None:
     """Merker setzen — AUCH nach einem Fehlschlag, sonst liefe der naechste Import in
     denselben Timeout. Buchhaltung, kein Ergebnis: scheitert das Schreiben (schreibgeschuetztes
-    Profil), darf es den Aufrufer nicht mitreissen."""
-    try:
-        settings.save({MERKER: _heute().isoformat()})
-    except OSError as e:
-        print(f"[ytdlp] Merker nicht schreibbar: {e}", flush=True)
+    Profil), darf es den Aufrufer nicht mitreissen.
+
+    Seit #281 als Datei neben der Sperre — nimmt damit auch KEIN settings-Lock mehr: die
+    pip→settings-Verschachtelung aus #207 entfaellt (die Frist-Formel bleibt bewusst
+    stehen, eine grosszuegige Obergrenze ist kein Fehler). Und der fetch-Subprozess
+    schreibt nichts mehr in `settings.json` — die #134-Lage um einen Schreiber aermer."""
+    _datum_setzen(_kalender_merker(), was="Kalendermerker")
 
 
 # `[default]` ist Pflicht, nicht Kosmetik: darin steckt `yt-dlp-ejs==0.8.0`, das Paket mit den
@@ -615,13 +625,18 @@ def _lock_stale() -> float:
     `sperre.frist()` selbst eine ist und eine Modulkonstante sie beim Import einfrieren
     wuerde.
 
-    Die Frist muss die WIRKLICHE Haltedauer decken, nicht nur den pip-Lauf: das `_merken()`
-    in `aktualisiere()` nimmt INNERHALB dieser Sperre das settings-Lock und wartet darauf
-    schlimmstenfalls dessen volle `sperre.frist()`. Mit `PIP_TIMEOUT + 30` stand eine
-    Haltedauer von bis zu 185 s gegen eine Frist von 155 s — ein Warter uebernahm die Sperre
-    also, waehrend pip noch lief, und genau die zwei gleichzeitigen `pip install` auf
-    dieselbe venv sind der Schaden, gegen den sie gebaut ist. Die 30 s bleiben der Zuschlag
-    fuer `subprocess.run`s Nach-Kill-`communicate()`, das auf Windows ohne Frist laeuft.
+    Die Frist muss die WIRKLICHE Haltedauer decken, nicht nur den pip-Lauf: bis #281 nahm
+    das `_merken()` in `aktualisiere()` INNERHALB dieser Sperre das settings-Lock und
+    wartete darauf schlimmstenfalls dessen volle `sperre.frist()`. Mit `PIP_TIMEOUT + 30`
+    stand eine Haltedauer von bis zu 185 s gegen eine Frist von 155 s — ein Warter
+    uebernahm die Sperre also, waehrend pip noch lief, und genau die zwei gleichzeitigen
+    `pip install` auf dieselbe venv sind der Schaden, gegen den sie gebaut ist. Die 30 s
+    bleiben der Zuschlag fuer `subprocess.run`s Nach-Kill-`communicate()`, das auf Windows
+    ohne Frist laeuft.
+
+    Seit #281 nimmt der Abschnitt keine zweite Sperre mehr (der Kalendermerker ist eine
+    Datei) — die Formel bleibt BEWUSST stehen: eine grosszuegige Obergrenze ist kein
+    Fehler, und jede Aenderung hier waere eine eigene #207-Diskussion mit eigener Messung.
     Preis: ein Lock OHNE Auskunft (fremder Rechner, unschreibbarer Merker) gilt entsprechend
     spaeter als verwaist — ein toter lokaler Halter wird weiterhin sofort erkannt, die Uhr
     ist nur der Rueckfall.
@@ -668,6 +683,15 @@ def _venv_kennung() -> str:
     # `_blake2` und kennt keinen Provider. Gelesen, nicht gemessen — hier steht kein
     # FIPS-Rechner; die Zeile kostet nichts, der Wurf koennte den URL-Import abreissen.
     return hashlib.blake2b(roh, digest_size=4).hexdigest()
+
+
+def _kalender_merker() -> str:
+    """Pfad des Kalendermerkers (#281): AN DER VENV, nicht am Nutzer. Dasselbe Muster wie
+    Sperre (`.lock`, #254) und Abbruch-Merker (`.abbruch`, #258) — `settings.json` ist pro
+    Nutzer geteilt, der Termin gehoert aber der Umgebung: zwei Serverprozesse mit zwei
+    venvs duerfen sich den 14-Tage-Takt nicht gegenseitig verbrauchen (gemessen, s.
+    `geprueft()`-Docstring)."""
+    return f"{_lockziel()}.geprueft"
 
 
 def _pip_merker() -> str:
