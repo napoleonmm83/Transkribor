@@ -137,12 +137,18 @@ export async function startRetranscribeFile(project: string, base: string): Prom
 export async function deleteFile(project: string, base: string): Promise<void> {
   await jn(await fetch(`/api/projects/${enc(project)}/files/${enc(base)}`, { method: 'DELETE' }))
 }
-export async function fetchUrls(project: string, urls: string[], sprache?: string,
+export async function fetchUrls(project: string, urls: string[],
+                                sprache?: string | (string | null)[],
                                 mehrsprachig?: boolean,
                                 sprecher?: (number | null)[]): Promise<StartJob> {
   return jn(await fetch(`/api/projects/${enc(project)}/fetch`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ urls, ...(sprache ? { sprache } : {}),
+    // `sprache` faellt nur weg, wenn sie GAR NICHT gesetzt ist. Eine leere Liste ist ein
+    // gueltiger Wert und darf nicht als „nicht gesetzt" durchgehen — deshalb
+    // `=== undefined` und nicht das truthy `sprache ?`, das hier bisher stand. Der
+    // Parameter bleibt an Position 3 und wird nur im TYP breiter: ein Umsortieren waere
+    // eine stille Bruchstelle fuer jeden bestehenden Aufrufer.
+    body: JSON.stringify({ urls, ...(sprache === undefined ? {} : { sprache }),
                            ...(mehrsprachig === undefined ? {} : { mehrsprachig }),
                            // Index-parallel zu `urls`; ganz weglassen, wenn keine Zahl dabei
                            // ist — dann bleibt der Aufruf byte-gleich zu vorher. Ein leeres
