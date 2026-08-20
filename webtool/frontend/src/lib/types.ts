@@ -70,6 +70,11 @@ export type ProjectEinstellungen = {
   mehrsprachig: boolean
   sprach_choices: SprachChoice[]
   tiefen: TiefeChoice[]
+  /** Obergrenze fuer `sprecher`, vom Server (`sprachen.SPRECHER_MAX`). Kommt bei BEIDEN
+   *  Einstellungs-Endpunkten mit — die Vorschau beim Hinzufuegen braucht die Grenze, bevor es
+   *  eine Datei gibt, die sie nennen koennte, und die Zahl soll im Frontend nicht ein zweites
+   *  Mal stehen. Ein Projekt-STANDARD fuer die Sprecherzahl ist das NICHT (#264). */
+  sprecher_max: number
 };
 /** Nur die gesetzten Werte (sprache/korrektur/mehrsprachig). Der PROJEKT-PUT echo't genau diese
  *  drei Felder; der DATEI-PUT liefert seit #166 zusätzlich `mehrsprachig_eigen`/`_projekt` (die
@@ -92,9 +97,8 @@ export type DateiEinstellungen = ProjectEinstellungen & {
    *  Projekt-Standard, von dem eine Datei erben koennte — die Sprecherzahl gehoert der
    *  Aufnahme, nicht dem Projekt. */
   sprecher: number | null
-  /** Obergrenze fuer `sprecher`, vom Server (`sprachen.SPRECHER_MAX`). Kommt mit, damit das
-   *  Eingabefeld den Bereich selbst pruefen kann, ohne die Zahl ein zweites Mal zu kennen. */
-  sprecher_max: number
+  // `sprecher_max` steht seit dem Vorschau-Umbau in `ProjectEinstellungen` (oben) und wird
+  // hierher vererbt — der Datei-Endpunkt liefert es unveraendert mit.
   /** Ist der Kill-Switch `TRANSKRIBOR_DIARIZE` AN? Sonst kehrt `cmd_diarize` sofort zurueck,
    *  und „Anzahl Sprecher" waere ein Schalter, der gespeichert wird und nichts tut (#266).
    *

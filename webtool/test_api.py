@@ -2295,3 +2295,24 @@ def test_projekt_endpunkt_kennt_die_sprecherzahl_NICHT(client, tmp_projekt):
     # dem Feld antwortete hier 422 statt 200.
     assert client.put(f"/api/projects/{tmp_projekt}/einstellungen",
                       json={"sprecher": "keine Zahl"}).status_code == 200
+
+
+def test_projekteinstellungen_put_liefert_dieselben_felder_wie_der_get(client):
+    """Der PUT gab zwei Felder weniger zurueck als der GET (`sprach_choices`, `tiefen`) —
+    dieselbe Divergenz wie bei `_settings_body` (#239), nur eine Datei weiter. Das Frontend
+    tippt beide Antworten als denselben Typ."""
+    g = client.get("/api/projects/Demo/einstellungen")
+    p = client.put("/api/projects/Demo/einstellungen", json={"sprache": "de"})
+    assert g.status_code == 200 and p.status_code == 200
+    assert set(p.json()) == set(g.json())
+
+
+def test_projekteinstellungen_nennen_die_sprecher_obergrenze(client):
+    """Waechter gegen den Verlust der Menge SELBST: faellt `sprecher_max` aus dem gemeinsamen
+    Bauweg, verschwaende es auf BEIDEN Seiten und der Paritaetstest oben bliebe gruen. Die
+    Vorschau beim Hinzufuegen braucht die Grenze, bevor es eine Datei gibt, die sie nennen
+    koennte — und `sprachen.SPRECHER_MAX` darf im Frontend nicht ein zweites Mal stehen."""
+    from webtool import sprachen as s
+    for antwort in (client.get("/api/projects/Demo/einstellungen"),
+                    client.put("/api/projects/Demo/einstellungen", json={})):
+        assert antwort.json()["sprecher_max"] == s.SPRECHER_MAX

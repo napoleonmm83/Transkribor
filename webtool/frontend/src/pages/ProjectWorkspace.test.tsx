@@ -20,7 +20,8 @@ describe('ProjectWorkspace (Stub)', () => {
     einstellungen({})
     // Projekt-Einstellungen default: leer — bestehende Tests sehen keine Sprach-Selects.
     vi.mocked(api.getProjektEinstellungen).mockResolvedValue(
-      { sprache: 'de', korrektur: 'auto', mehrsprachig: false, sprach_choices: [], tiefen: [] })
+      { sprache: 'de', korrektur: 'auto', mehrsprachig: false, sprach_choices: [], tiefen: [],
+        sprecher_max: 20 })
   })
 
   const nurDemo = () => {
@@ -256,7 +257,7 @@ describe('ProjectWorkspace (Stub)', () => {
     vi.mocked(api.listProjects).mockResolvedValue([{ name: 'Demo', dateien: 0, fertig: 0, geaendert: 0, active_jobs: [] }])
     vi.mocked(api.getProjectFiles).mockResolvedValue({ name: 'Demo', files: [] })
     vi.mocked(api.getProjektEinstellungen).mockResolvedValue({
-      sprache: 'ch', korrektur: 'auto', mehrsprachig: false,
+      sprache: 'ch', korrektur: 'auto', mehrsprachig: false, sprecher_max: 20,
       sprach_choices: [{ id: 'ch', label: 'Schweizerdeutsch', hint: '' },
                        { id: 'en', label: 'Englisch', hint: '' }],
       tiefen: [{ id: 'auto', label: 'Auto' }],
@@ -422,7 +423,7 @@ describe('ProjectWorkspace (Stub)', () => {
     vi.mocked(api.uploadAudio).mockResolvedValue({ base: 'a', file: 'a.mp3' })
     vi.mocked(api.getProjektEinstellungen)
       .mockResolvedValueOnce({
-        sprache: 'en', korrektur: 'auto', mehrsprachig: true,
+        sprache: 'en', korrektur: 'auto', mehrsprachig: true, sprecher_max: 20,
         sprach_choices: [{ id: 'en', label: 'Englisch', hint: '' }],
         tiefen: [{ id: 'auto', label: 'Auto' }],
       })
@@ -471,9 +472,9 @@ describe('ProjectWorkspace (Stub)', () => {
     vi.mocked(api.uploadAudio).mockResolvedValue({ base: 'a', file: 'a.mp3' })
     const wahl = [{ id: 'en', label: 'Englisch', hint: '' }, { id: 'fr', label: 'Französisch', hint: '' }]
     vi.mocked(api.getProjektEinstellungen)
-      .mockResolvedValueOnce({ sprache: 'en', korrektur: 'auto', mehrsprachig: false,
+      .mockResolvedValueOnce({ sprache: 'en', korrektur: 'auto', mehrsprachig: false, sprecher_max: 20,
                                sprach_choices: wahl, tiefen: [{ id: 'auto', label: 'Auto' }] })
-      .mockResolvedValueOnce({ sprache: 'fr', korrektur: 'auto', mehrsprachig: false,
+      .mockResolvedValueOnce({ sprache: 'fr', korrektur: 'auto', mehrsprachig: false, sprecher_max: 20,
                                sprach_choices: wahl, tiefen: [{ id: 'auto', label: 'Auto' }] })
     const ZuB = () => {
       const nav = useNavigate()
