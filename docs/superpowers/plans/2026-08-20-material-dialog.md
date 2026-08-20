@@ -826,9 +826,12 @@ export function HoerBalken({ datei, anzeige, onSchliessen }: {...}) {
     setUrl(u)
     // Die Aufraeumfunktion deckt ALLE Ausgaenge in einem: Dateiwechsel, Schliessen,
     // Schrittwechsel, Projektwechsel und das Verschwinden der klingenden Zeile nach einem
-    // Teil-Fehlschlag. Sie laeuft NACH dem Abbau des Kindes — und genau in dieser
-    // Reihenfolge muss es sein: `revokeObjectURL` vor dem Zerstoeren der
-    // Wavesurfer-Instanz braeche die laufende Wiedergabe.
+    // Teil-Fehlschlag. Sie laeuft NACH dem Abbau des Kindes — hier passiert also zuerst
+    // `Waveform` -> `destroy()`, DANN dieses `revokeObjectURL`. Die umgekehrte Reihenfolge
+    // (erst freigeben, dann zerstoeren) braeche die laufende Wiedergabe; sie ist der Fall,
+    // den dieser Aufbau vermeidet, nicht der, der hier eintritt.
+    // Die Reihenfolge selbst ist bisher nur GELESEN (React-Quelle, `@wavesurfer/react`
+    // ruft `destroy()` im eigenen Cleanup) — beim Bau im Browser nachmessen, nicht annehmen.
     return () => { URL.revokeObjectURL(u) }
   }, [datei])
   if (!datei || !url) return null
