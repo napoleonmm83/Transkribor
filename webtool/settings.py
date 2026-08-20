@@ -173,8 +173,7 @@ def save(patch: dict) -> tuple:
     Tupel-Form wie `_lesen()`, und aus demselben Grund: der Zustand geht den Aufrufer etwas an,
     weil er sonst unbesehen Erfolg meldet. Der PUT reicht ihn an den Browser weiter — ein
     gleichzeitiger Schreiber kann in diesem Fall einen gerade eingetragenen API-Key
-    ueberbuegeln (#192), und den kann niemand rekonstruieren. Wer die Antwort nicht braucht
-    (`_merken()` im fetch-Subprozess), ignoriert sie wie bisher.
+    ueberbuegeln (#192), und den kann niemand rekonstruieren.
 
     Gesperrt, weil es zu zeitweise ZWEI Schreiber gab — den Server (Einstellungen aus dem
     Browser) und den fetch-Subprozess (den Pruef-Merker, bis #281; seither schreibt der

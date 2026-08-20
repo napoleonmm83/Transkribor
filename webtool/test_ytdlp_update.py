@@ -2033,6 +2033,7 @@ def test_merker_haengt_an_der_venv_nicht_am_nutzer(monkeypatch):
     monkeypatch.setattr(yu, "_venv_kennung", lambda: "aaaa")
     assert yu.faellig() is True
     yu._merken()                                                    # Prozess A merkt
+    assert yu.faellig() is False       # POSITIVkontrolle: der EIGENE Merker bremst A
     monkeypatch.setattr(yu, "_venv_kennung", lambda: "bbbb")        # Prozess B
     assert yu.faellig() is True        # master-Code: False — DER Fix-Beweis
     assert yu.geprueft() is None       # B hat keinen eigenen Merker gesehen
