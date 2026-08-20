@@ -829,7 +829,10 @@ def _pip_merker_setzen() -> None:
 
 
 def _datum_setzen(pfad: str, *, was: str) -> None:
-    """Heute als ISO-Datum in eine Merker-Datei schreiben — best effort, wirft nie (#185).
+    # `r"""`: der Docstring nennt `\.\pipe\` — `\.` ist eine ungueltige Escape-Sequenz,
+    # heute eine SyntaxWarning, kuenftig ein SyntaxError (dieselbe Falle wie bei
+    # `_venv_kennung`; als KOMMENTAR an dieser Stelle war es harmlos, als Docstring nicht).
+    r"""Heute als ISO-Datum in eine Merker-Datei schreiben — best effort, wirft nie (#185).
     Der gemeinsame Schreiber der Merker-Dateien (Abbruch seit #258, Kalender seit #281).
 
     **`O_NONBLOCK` auch beim SCHREIBEN**, nicht nur beim Lesen. Ein `open(..., "w")` auf
