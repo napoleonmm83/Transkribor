@@ -1,7 +1,8 @@
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 import { Upload } from 'lucide-react'
+import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
-import { useState } from 'react'
+import { istAudio } from '@/lib/materialZeilen'
 
 /** Das Drop-Ziel, aus `UploadDropzone` herausgeloest: reine Darstellung, meldet nur Dateien.
  *
@@ -17,6 +18,14 @@ export function Ablageflaeche({ gesperrt, onDateien }: {
   const inputRef = useRef<HTMLInputElement>(null)
   const [over, setOver] = useState(false)
   const oeffnen = () => { if (!gesperrt) inputRef.current?.click() }
+  // Gefiltert wird HIER, nicht beim Aufrufer: das `accept` des Dateifelds gilt nur fuer den
+  // Dateidialog, ein Drop kommt daran vorbei. Und eine leere Menge darf nicht still
+  // durchgehen — sonst legt der Nutzer einen Brief ab und es passiert scheinbar nichts.
+  const melden = (roh: File[]) => {
+    const audio = roh.filter(f => istAudio(f.name))
+    if (!audio.length) { if (roh.length) toast.info('Keine Audiodatei dabei — es passiert nichts.'); return }
+    onDateien(audio)
+  }
   return (
     <>
       <div
@@ -31,7 +40,7 @@ export function Ablageflaeche({ gesperrt, onDateien }: {
         onDragLeave={() => setOver(false)}
         onDrop={e => {
           e.preventDefault(); setOver(false)
-          if (!gesperrt) onDateien(Array.from(e.dataTransfer.files))
+          if (!gesperrt) melden(Array.from(e.dataTransfer.files))
         }}
         // Fokusring explizit: die Flaeche ist ein div mit tabIndex, bekaeme also nur den
         // Standardring des Browsers — und sie ist die groesste Klickflaeche hier.
@@ -48,7 +57,7 @@ export function Ablageflaeche({ gesperrt, onDateien }: {
       </div>
       <input ref={inputRef} data-testid="ablage-input" type="file" hidden multiple
         accept="audio/*,.mp3,.wav,.m4a,.aac,.flac,.ogg,.opus,.wma,.mp4"
-        onChange={e => { onDateien(Array.from(e.target.files ?? [])); e.target.value = '' }} />
+        onChange={e => { melden(Array.from(e.target.files ?? [])); e.target.value = '' }} />
     </>
   )
 }

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
@@ -79,8 +80,16 @@ export function MaterialDialog({ project, offen, vorbelegteDateien, sprachChoice
     if (quelle === 'link') {
       // Die volle Liste, auch wenn alle gleich sind: sie ist index-parallel zu `urls` und
       // muss ihre Plaetze halten. `sprache` bleibt an Position 3 der Signatur.
+      //
+      // Der Platz wird mit `null` gehalten, NICHT mit dem Projektwert. Der Plan schrieb hier
+      // `z.sprache` — damit bekaeme JEDE importierte Datei einen eigenen Eintrag in
+      // `projekt.json`, auch wenn sie nur den Standard wiederholt, und zoege bei einer
+      // spaeteren Aenderung des Projekt-Standards nicht mehr mit (#166/#234). `null` heisst
+      // „nicht gesetzt" und haelt den Index trotzdem — dieselbe Rolle wie `''` beim Upload,
+      // nur dass eine Liste kein Feld weglassen kann.
       const res = await fetchUrls(project, zeilen.map(z => z.schluessel),
-                                  zeilen.map(z => z.sprache), undefined,
+                                  zeilen.map(z => z.sprache === projektSprache ? null : z.sprache),
+                                  undefined,
                                   zeilen.map(z => sprecherWahl(z.sprecherText, sprecherMax) ?? null))
       if (meiner === laufNr.current) { setLaeuft(false); if (res.started) setZeilen([]) }
       onFertig(res, 'fetch'); return
@@ -102,7 +111,13 @@ export function MaterialDialog({ project, offen, vorbelegteDateien, sprachChoice
         // „existiert bereits" ist KEIN wiederholbarer Fehlschlag — ein zweiter Versuch
         // endete wieder mit 409. Alles Stehenlassen liefe beim naechsten Klick in lauter 409er,
         // bedingungsloses Leeren waere Datenverlust.
-        if (!/existiert bereits/.test((e as Error).message)) gescheitert.push(z)
+        const grund = (e as Error)?.message
+        if (!/existiert bereits/.test(grund ?? '')) {
+          gescheitert.push(z)
+          // Einen Grund nennen, auch wenn der Fehler keinen traegt: eine Zeile, die einfach
+          // stehenbleibt, sieht aus wie ein vergessener Klick.
+          toast.error(`${z.anzeige}: ${grund || 'Hinzufügen fehlgeschlagen'}`)
+        }
       }
     }
     if (meiner === laufNr.current) {

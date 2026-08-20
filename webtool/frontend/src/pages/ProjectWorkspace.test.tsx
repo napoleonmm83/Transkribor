@@ -331,6 +331,21 @@ describe('ProjectWorkspace (Stub)', () => {
     expect(screen.queryByText(/Enthält weitere Sprachen/)).not.toBeInTheDocument()
   })
 
+  it('meldet den Start eines URL-Imports nach oben — mit eigener Meldung', async () => {
+    /* Der URL-Weg hatte seine Zusicherung bisher im geloeschten Test darueber. Sie gilt der
+       ARBEITSFLAECHE: sie adoptiert den Job sofort (der Balken soll stehen, ohne auf den
+       naechsten Poll zu warten) und sagt dazu, dass die Transkription von selbst folgt —
+       eine andere Aussage als beim Upload. */
+    nurDemo()
+    vi.mocked(api.fetchUrls).mockResolvedValue({ job_id: 'j-fetch', started: true })
+    zeigen()
+    await screen.findByRole('button', { name: /^Material$/ })
+    await holeUrl()
+    await waitFor(() => expect(api.fetchUrls).toHaveBeenCalledWith(
+      'Demo', ['https://youtu.be/a'], [null], undefined, [null]))
+    expect(toastMock.success).toHaveBeenCalledWith(expect.stringMatching(/Transkription folgt/))
+  })
+
   it('sagt es, wenn beim Ablegen keine Audiodatei dabei war', async () => {
     /* Neu durch das seitenweite Overlay: der alte Weg filterte per AUDIO_RE und kehrte bei
        leerer Menge STILL zurueck — was in Ordnung war, solange man die Ablageflaeche

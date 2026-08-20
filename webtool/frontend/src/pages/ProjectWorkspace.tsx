@@ -10,6 +10,7 @@ import { FileStatusPill } from '@/components/FileStatusPill'
 import { ProjektMenue } from '@/components/ProjektMenue'
 import { PageHeader } from '@/components/PageHeader'
 import { MaterialDialog } from '@/components/MaterialDialog'
+import { istAudio } from '@/lib/materialZeilen'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { startTranscribe, startCorrect, cancelJob, getProjektEinstellungen } from '@/lib/api'
@@ -32,10 +33,6 @@ import type { ProjectEinstellungen, StartJob } from '@/lib/types'
 function meldeLadefehler(e: unknown) {
   toast.error(`Projekt-Einstellungen laden fehlgeschlagen: ${(e as Error).message}`)
 }
-
-// Dieselbe Liste wie `app.py:AUDIO_EXT` und die Ablageflaeche — sie steht hier, weil das
-// Overlay Drops FILTERN muss, bevor irgendetwas geoeffnet wird.
-const AUDIO_RE = /\.(mp3|wav|m4a|aac|flac|ogg|opus|wma|mp4)$/i
 
 export function ProjectWorkspace() {
   const { project } = useParams<{ project: string }>()
@@ -137,7 +134,7 @@ export function ProjectWorkspace() {
       onDragLeave={() => setZieht(false)}
       onDrop={e => {
         e.preventDefault(); setZieht(false)
-        const audio = Array.from(e.dataTransfer.files).filter(f => AUDIO_RE.test(f.name))
+        const audio = Array.from(e.dataTransfer.files).filter(f => istAudio(f.name))
         if (!audio.length) { toast.info('Keine Audiodatei dabei — es passiert nichts.'); return }
         setVorbelegt(audio); setDialogOffen(true)
       }}>
