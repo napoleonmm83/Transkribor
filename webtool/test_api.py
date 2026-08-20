@@ -2439,3 +2439,91 @@ def test_fetch_lehnt_sprecherzahl_ausserhalb_des_bereichs_ab(client, tmp_projekt
     r = client.post(f"/api/projects/{tmp_projekt}/fetch",
                     json={"urls": ["https://youtu.be/aaaaaaaaaaa"], "sprecher": [99]})
     assert r.status_code == 400 and "sprecher" in r.json()["detail"]
+
+
+# --- Sprache je URL (Material-Dialog, Task 2) ---------------------------------
+
+def test_fetch_nimmt_eine_sprache_je_url(client, monkeypatch):
+    """Gemischtsprachige Projekte sind vorgesehen (`projekt.json` haelt `sprache` je Base) —
+    der URL-Weg konnte als einziger nur EINEN Wert fuer den ganzen Auftrag."""
+    from webtool import jobs
+    gesehen = {}
+    monkeypatch.setattr(jobs, "start",
+                        lambda *a, env=None, **k: gesehen.update(env or {}) or ("j1", True))
+    r = client.post("/api/projects/Demo/fetch",
+                    json={"urls": ["https://youtu.be/aaa", "https://youtu.be/bbb"],
+                          "sprache": ["ch", "en"]})
+    assert r.status_code == 200
+    assert gesehen["TRANSKRIBOR_FETCH_SPRACHE"] == "ch,en"
+
+
+def test_fetch_weist_eine_falsch_lange_sprachliste_mit_400_ab(client):
+    """400, nicht 500. Ohne eigene Laengenpruefung feuert `zip(..., strict=True)` einen
+    rohen ValueError — ausgerechnet an der Stelle, deren Zweck eine saubere Meldung ist."""
+    r = client.post("/api/projects/Demo/fetch",
+                    json={"urls": ["https://youtu.be/aaa", "https://youtu.be/bbb"],
+                          "sprache": ["ch"]})
+    assert r.status_code == 400
+    assert "sprache" in r.json()["detail"]
+
+
+def test_fetch_gibt_400_statt_500_bei_unbekannter_sprache_IN_DER_LISTE(client, monkeypatch):
+    """Die alte Einzelpruefung `pruef_fehler(sprache=body.sprache)` WIRFT bei einer Liste:
+    `sprache not in SPRACHEN` ist ein dict-Lookup -> `TypeError: unhashable type`. Sie muss
+    durch die Schleife ERSETZT werden, nicht ergaenzt. (Fund des Faktenpruefer-Subagenten,
+    dessen Bericht aus dem Transkript geborgen wurde.)"""
+    from webtool import jobs
+    gestartet = []
+    monkeypatch.setattr(jobs, "start", lambda *a, **k: gestartet.append(1) or ("j1", True))
+    r = client.post("/api/projects/Demo/fetch",
+                    json={"urls": ["https://youtu.be/aaa", "https://youtu.be/bbb"],
+                          "sprache": ["ch", "klingonisch"]})
+    assert r.status_code == 400
+    assert "klingonisch" in r.json()["detail"]
+    assert gestartet == []
+
+
+def test_fetch_setzt_den_sprach_schluessel_IMMER(client, monkeypatch):
+    """#298: `jobs._run_proc` baut {**os.environ, **job_env(), **env} — das explizite `env`
+    gewinnt. Der Durchschlag entsteht durch das BEDINGTE Setzen: fehlt der Schluessel,
+    ueberlebt ein Altwert aus der `.env`. Mit der Liste kollabierte er ALLE
+    Datei-Entscheidungen auf einen einzigen Wert — still, mit Erfolgsmeldung."""
+    from webtool import jobs
+    gesehen = {}
+    monkeypatch.setattr(jobs, "start",
+                        lambda *a, env=None, **k: gesehen.update(env or {}) or ("j1", True))
+    monkeypatch.setenv("TRANSKRIBOR_FETCH_SPRACHE", "en")        # Altlast
+    r = client.post("/api/projects/Demo/fetch", json={"urls": ["https://youtu.be/aaa"]})
+    assert r.status_code == 200
+    assert gesehen["TRANSKRIBOR_FETCH_SPRACHE"] == "", \
+        "der Schluessel muss gesetzt sein, sonst gewinnt die Altlast aus os.environ"
+
+
+def test_fetch_einzelner_sprachwert_gilt_fuer_alle_urls(client, monkeypatch):
+    """Rueckwaertskompatibel: ein String (kein Array) behaelt seine bisherige Bedeutung.
+    Er wird VOR dem `zip` auf die Zahl der URLs expandiert — andersherum braeche
+    `strict=True`, und ohne `strict` waere es schlimmer: still gekuerzt heisst hier
+    verschobene Zuordnung."""
+    from webtool import jobs
+    gesehen = {}
+    monkeypatch.setattr(jobs, "start",
+                        lambda *a, env=None, **k: gesehen.update(env or {}) or ("j1", True))
+    r = client.post("/api/projects/Demo/fetch",
+                    json={"urls": ["https://youtu.be/aaa", "https://youtu.be/bbb"],
+                          "sprache": "fr"})
+    assert r.status_code == 200
+    assert gesehen["TRANSKRIBOR_FETCH_SPRACHE"] == "fr,fr"
+
+
+def test_fetch_filtert_urls_und_sprachen_PAARWEISE(client, monkeypatch):
+    """Leere URL-Zeilen fielen sonst nur auf einer Seite weg und verschoeben ab da JEDE
+    Zuordnung — dieselbe Falle, die bei `sprecher` schon zugeschlagen hat."""
+    from webtool import jobs
+    gesehen = {}
+    monkeypatch.setattr(jobs, "start",
+                        lambda *a, env=None, **k: gesehen.update(env or {}) or ("j1", True))
+    r = client.post("/api/projects/Demo/fetch",
+                    json={"urls": ["https://youtu.be/aaa", "  ", "https://youtu.be/ccc"],
+                          "sprache": ["ch", "de", "en"]})
+    assert r.status_code == 200
+    assert gesehen["TRANSKRIBOR_FETCH_SPRACHE"] == "ch,en"
