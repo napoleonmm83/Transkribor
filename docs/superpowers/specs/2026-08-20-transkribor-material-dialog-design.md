@@ -19,10 +19,21 @@ Zustand mit drei gewählten Dateien und offener Upload-Vorschau, abgezählt am M
 | | heute |
 |---|---|
 | Karten übereinander (`.blatt`) | **4** — Sprache · Ablagefläche · Vorschau · Video-URLs |
-| Bedienelemente im Bereich | **11** (+ 4 im Seitenkopf) |
-| Erklärabsätze gleichzeitig sichtbar | **3**, zusammen ~70 Wörter |
+| Bedienelemente im Bereich | **10** (+ 4 im Seitenkopf) |
+| Erklärabsätze gleichzeitig sichtbar | **4**, zusammen **75** Wörter |
 | sichtbare Einträge der Dateiliste | **0** — sie beginnt unterhalb des Sichtfelds |
 | gleichzeitig mögliche Primärknöpfe | **2** — Upload- und URL-Vorschau können beide offen stehen |
+
+Die zehn Bedienelemente einzeln, damit die Zahl nachprüfbar bleibt: Sprach-Select ·
+„Enthält weitere Sprachen" · Ablagefläche (`role="button"`) · 3× Sprecherfeld · Abbrechen ·
+Hinzufügen & starten · URL-Textfeld · Holen. Das verborgene `<input type="file">` zählt nicht.
+Die vier Erklärabsätze: Sprach-Hinweis (7 Wörter) · `MehrsprachigKasten` (25) ·
+Ablageflächen-Untertext (14) · `MaterialVorschau` (29).
+
+**Erste Fassung dieses Abschnitts nannte 11 Bedienelemente und 3 Absätze mit ~70 Wörtern.**
+Beides war aus den Mockups übernommen statt am Markup gezählt; die Zahlen oben sind
+nachgezählt. Genau die Fehlerklasse, gegen die dieses Repo seine Prüfregel hat — hier an der
+eigenen Spec.
 
 Drei strukturelle Befunde dahinter:
 
@@ -31,8 +42,9 @@ der Bereich auf der Seite zeigen dasselbe Bedienelement mit derselben Beschriftu
 demselben Erklärtext; `MehrsprachigKasten` ist buchstäblich dieselbe Komponente. Die Bedeutung
 ist verschieden — der Dialog schreibt den Projekt-Standard zurück, die Seite setzt einen
 Override für neu Hinzugefügtes —, und nichts an der Darstellung sagt das. Der Umfang der
-Kommentare an `sprachWert`/`mehrWert` (rund 30 Zeilen Begründung, wann ein Override entsteht)
-ist das Symptom: wenn die Erklärung so lang ist, liegt der Fehler in der Oberfläche.
+Kommentare an `sprachWert`/`mehrWert` (**34 Kommentarzeilen**, `ProjectWorkspace.tsx:95-142`,
+nur dafür, wann ein Override entsteht) ist das Symptom: wenn die Erklärung so lang ist, liegt
+der Fehler in der Oberfläche.
 
 **B2 — Der Bereich ist dauerhaft ausgefahren für einen seltenen Vorgang.** Bei einem Projekt
 mit zehn Aufnahmen ist Hinzufügen ein Randfall, belegt aber den ganzen ersten Bildschirm.
@@ -160,10 +172,29 @@ er hat sein Vorbild eine Zeile weiter:
   gilt für alle URLs. Eine Liste muss so viele Einträge haben wie URLs, sonst **400** — wie bei
   `sprecher`. Sprach-ids enthalten kein Komma (`ch/de/en/fr/it/auto`), die Trennung ist
   eindeutig.
-- **Berührt Issue #298** (`.env`-Altlast bei `FETCH_SPRACHE`/`_MEHRSPRACHIG`). Dieser Umbau
-  behebt #298 **nicht** und darf ihn auch nicht verdecken: solange `settings.load_env()` die
-  `.env` gegen eine gesetzte Variable gewinnen lässt, schlägt ein Altwert weiterhin durch. Wer
-  das hier anfasst, prüft #298 mit — sonst bekommt der neue Listen-Pfad denselben Fehler geerbt.
+- **Die Längenprüfung muss BEIDE Listen decken.** `app.py:944-947` prüft heute nur
+  `sprecher_roh`. Kommt `sprache` als Liste falscher Länge, feuert `zip(…, strict=True)` einen
+  rohen `ValueError` — also **500 statt 400**, ausgerechnet an der Stelle, deren Zweck eine
+  saubere Fehlermeldung ist.
+- **Reihenfolge: erst expandieren, dann filtern.** Ein Einzelwert wird **vor** dem `zip` auf
+  die Zahl der URLs aufgeblasen. Andersherum bricht `strict=True`, und ohne `strict` wäre es
+  schlimmer: still gekürzt heisst hier verschobene Zuordnung.
+
+**Verhältnis zu Issue #298 — der Mechanismus ist ein anderer, als hier zuerst stand.**
+Nicht `settings.load_env()` ist die Ursache. `jobs._run_proc` baut die Subprozess-Umgebung als
+`{**os.environ, **job_env(), **env}`; das explizite `env` **gewinnt**. Der Durchschlag entsteht
+dadurch, dass `app.py:978` den Schlüssel **bedingt** setzt (`if body.sprache`) — fehlt er,
+überlebt der Altwert aus `os.environ`, den `load_env()` aus der `.env` dorthin geschrieben hat.
+Die Fixrichtung ist deshalb **„den Schlüssel immer setzen, auch leer"**, genau der Weg, den
+#297 für `TRANSKRIBOR_FETCH_SPRECHER` schon gegangen ist — nicht eine Änderung am Vorrang.
+
+**Und dieser Umbau verschärft #298, statt ihn nur zu berühren.** Heute überschreibt ein
+Altwert *eine* Sprache für den Auftrag. Mit der index-parallelen Liste kollabiert er **alle
+Datei-Entscheidungen auf einen Wert** — still, mit Erfolgsmeldung. Der Schlüssel muss also
+unbedingt gesetzt werden, und die Leseseite in `fetch.py` muss `""` als „nicht gesetzt" lesen.
+**Achtung beim Nachbarn:** `_mehrsprachig_aus_env("")` liefert laut #298 **`False`, nicht
+`None`** — dieselbe Behandlung dort blind zu übernehmen schriebe einen echten Datei-Override
+fest (die Falle aus #166).
 
 ---
 
@@ -173,6 +204,12 @@ er hat sein Vorbild eine Zeile weiter:
 
 Ein Primärknopf **„+ Material"** im Seitenkopf, neben „Transkribieren" und „Korrigieren".
 Zusätzlich öffnet ein Drop auf die Arbeitsfläche den Dialog direkt mit den Dateien.
+
+**Das seitenweite Overlay fängt Drops ab, die heute ins Leere gehen.** `waehlen` filtert per
+`AUDIO_RE` und kehrt bei leerer Menge **still** zurück — heute nur, wenn man die Ablagefläche
+absichtlich trifft. Seitenweit heisst: ein PDF irgendwo fallen lassen und es passiert
+scheinbar nichts. Der neue Weg braucht deshalb eine Meldung („keine Audiodatei dabei"), die
+der alte nicht brauchte.
 
 ### Schritt 1 — Quelle
 
@@ -230,6 +267,14 @@ sie. Der Anfang bleibt über einen Klick ganz links erreichbar.
    zehn Interviews à 30 Minuten wären zehn Wellen ein Speicherproblem: dekodiert wird erst auf
    Klick und nur für diese eine Datei; beim Wechsel wird die vorige freigegeben
    (`URL.revokeObjectURL`).
+   **Der Abspieler hat mehr Ausgänge als den Dateiwechsel, und alle müssen ihn beenden:**
+   Dialog geschlossen (X, Esc, Klick auf den Hintergrund), Schrittwechsel, Projektwechsel,
+   Start des Uploads — **und der Fall, dass die klingende Zeile aus der Liste verschwindet.**
+   Nach einem Teil-Fehlschlag bleiben nur die gescheiterten Zeilen stehen (§6.4); eine
+   erfolgreiche Datei ist dann weg, ihr Ton liefe ohne diesen Ausgang weiter. Vorher unmöglich,
+   weil es an dieser Stelle keinen Abspieler gab.
+   **Die Gegenrichtung ist genauso scharf:** `revokeObjectURL` **vor** dem Zerstören der
+   Wavesurfer-Instanz bricht die laufende Wiedergabe. Erst zerstören, dann freigeben.
 3. **`.mp4` ist ungeprüft.** Ob die Tonspur sich dekodieren lässt, hängt vom Codec und vom
    Browser ab. **Das ist zu messen, bevor gebaut wird** (siehe 7). Bis dahin gilt: anbieten und
    bei Fehlschlag eine Meldung zeigen, statt still nichts zu tun.
@@ -287,6 +332,19 @@ mitwandern muss:
 **stellt beim nächsten Öffnen wieder her**, was schon eingetippt war. Getippte Sprecherzahlen
 sind Arbeit; dieselbe Regel wie Punkt 4. Wird das verworfen, ändert sich nur diese eine Stelle.
 
+**Diese Annahme widerspricht Punkt 1, solange nicht dazugesagt wird, dass sie
+PROJEKTGEBUNDEN ist.** Ohne das ist die Wiederherstellung exakt der Bug aus Punkt 1 durch die
+eigene Hintertür: Dialog in Projekt A schliessen, zu B wechseln, öffnen — und As Dateien samt
+Zahlen stehen darin. Der aufbewahrte Zustand hängt deshalb am Projektnamen und wird beim
+Wechsel verworfen, nicht bloss versteckt.
+
+**Sechstens, neu durch den Dialog: das Modal verdeckt den Abbrechen-Knopf laufender Jobs.**
+Die Arbeitsfläche zeigt je laufendem Job eine Leiste mit „Abbrechen"; mit offenem Dialog ist
+sie unerreichbar, heute ist sie es nie. Wer während eines Laufs Material hinzufügt und dann
+abbrechen will, muss erst schliessen — und verlässt sich dabei auf die Wiederherstellung oben.
+Das ist der Preis des Modals und wird hier bewusst gezahlt; wenn er zu hoch ist, gehört die
+Job-Leiste über den Dialog gehoben.
+
 ---
 
 ## 7. Was vor dem Bauen zu messen ist
@@ -300,6 +358,10 @@ durchgehen:
    entscheidet, ob es beim „auf Klick dekodieren" bleibt oder ob es einen Ladezustand braucht.
 3. **Die feste Rahmenhöhe.** Im Entwurf 352 px. Bei etwa 480 px passen zehn Zeilen ohne
    Scrollen — zu prüfen auf Marcus' Bildschirm und auf einem 13-Zoll-Laptop.
+4. **Erscheinen Sonner-Toasts über dem Dialog?** Der Workspace meldet Job-Ausgänge per Toast.
+   Liegen sie hinter dem Modal, geht ausgerechnet die Fehlermeldung eines gescheiterten Laufs
+   verloren. Vermutlich unkritisch (Sonner rendert in einem Portal), **aber nicht gemessen** —
+   und eine Vermutung über eine Stapelreihenfolge ist keine Zusicherung.
 
 ---
 
@@ -330,7 +392,13 @@ durchgehen:
 | `webtool/frontend/src/pages/ProjectWorkspace.tsx` | Bereich raus, Knopf rein, Drop-Overlay |
 | `webtool/frontend/src/lib/api.ts` | `fetchUrls`: `sprache` wird Liste |
 | `webtool/app.py` | `FetchBody.sprache` Liste, paarweise Filterung erweitert |
-| `webtool/fetch.py` | `download_one` bekommt `sprache` als Parameter |
+| `webtool/fetch.py` | `download_one` bekommt `sprache` als Parameter; `""` gilt als „nicht gesetzt" |
+| `webtool/test_api.py` | `fetch_urls`: Längenprüfung beider Listen, Einzelwert-Expansion, 400 statt 500 |
+| `webtool/test_fetch.py` | `download_one` mit Sprache je Index; Altlast-Neutralisierung (#298) |
+| `webtool/frontend/src/components/MaterialVorschau.test.tsx` | entfällt mit der Komponente; die Zusicherungen wandern mit |
+| `webtool/frontend/src/components/UploadDropzone.test.tsx` | schrumpft auf die Ablagefläche |
+| `webtool/frontend/src/components/UrlFetch.test.tsx` | schrumpft auf das Textfeld |
+| `webtool/frontend/src/pages/ProjectWorkspace.test.tsx` | Bereich raus, Knopf + Overlay rein |
 
 `MehrsprachigKasten` bleibt unverändert und wird im Dialog **nicht** verwendet — das Kästchen
 „Enthält weitere Sprachen" betrifft *eine Aufnahme mit mehreren Sprachen darin* und ist damit
@@ -350,6 +418,23 @@ Getroffen, weil sie die Arbeit nicht blockieren. Jede ist eine Stelle, nicht das
    die Zeile wieder voller — und davon kamen wir her.
 
 ---
+
+## Herkunft der Prüfung
+
+Diese Fassung ist **überarbeitet, nicht erstgeschrieben**. Was geprüft wurde und was nicht,
+damit niemand mehr Sicherheit annimmt, als dahintersteht:
+
+- **Zwei Reviewer-Subagenten wurden losgeschickt** (Faktenprüfer und „Was erlaubt das NEU?")
+  und **lieferten beide keinen Bericht** — je zweimal idle, auch nach Nachfrage mit
+  verengtem Auftrag. Bekanntes Muster in diesem Projekt.
+- **Beide Linsen wurden deshalb selbst gefahren.** Das ist ein schwächerer Beleg als ein
+  fremder Blick und wird hier als das benannt, was es ist: **selbst geprüft, kein zweiter
+  Reviewer.** Die Stufe ist nachzuholen, bevor gebaut wird.
+- **Nachgezählt statt übernommen** wurden die Zahlen in §1 (zwei davon waren falsch), die
+  34 Kommentarzeilen in §1 B1, die vier Testdateien in §9 und das Verhältnis zu #298 (§3 nannte
+  den falschen Mechanismus).
+- **CodeRabbit ist an dieser Spec nicht gelaufen.** Für ein reines Design-Dokument ohne Code
+  ist das vertretbar; am Implementierungs-PR ist es Pflicht.
 
 ## Mockups
 
