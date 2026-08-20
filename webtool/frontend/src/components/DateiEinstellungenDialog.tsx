@@ -1,6 +1,10 @@
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { getFileEinstellungen, saveFileEinstellungen } from '@/lib/api'
+// Umbenannt beim Import: der lokale Bezeichner `sprecherWahl` steht unten fuer das ERGEBNIS
+// und wird neunmal benutzt. Ohne die Umbenennung verdeckte er die Funktion, und der Aufruf
+// traefe sich selbst (`Cannot access 'sprecherWahl' before initialization` — zur Laufzeit).
+import { sprecherWahl as sprecherWahlAus } from '@/lib/sprecher'
 import type { DateiEinstellungen, ProjectFile } from '@/lib/types'
 import { MehrsprachigWahl, type MehrWahl } from '@/components/MehrsprachigKasten'
 import { Button } from '@/components/ui/button'
@@ -97,11 +101,7 @@ export function DateiEinstellungenDialog({ project, base, file, offen, onOpenCha
   // Speichern-Knopf bleibt grau — sie ungeprueft zu schicken hiesse, den Nutzer den 400er
   // des Servers lesen zu lassen, obwohl das Feld die Regel kennt.
   const sprecherMax = data?.sprecher_max ?? 20
-  const sprecherWahl: number | null | undefined =
-    sprecherText.trim() === '' ? null
-    : /^\d+$/.test(sprecherText.trim())
-      && +sprecherText >= 1 && +sprecherText <= sprecherMax ? +sprecherText
-    : undefined
+  const sprecherWahl = sprecherWahlAus(sprecherText, sprecherMax)
   // `=== false` statt `!…`: der Typ sagt „Pflichtfeld", aber der Typ ist der VERTRAG, nicht
   // die Garantie — Server und Bundle sind getrennt, ein aelterer Server liefert `undefined`.
   // Das muss „laeuft" heissen: der Rueckfall geht zum bisherigen Verhalten, nicht in eine
