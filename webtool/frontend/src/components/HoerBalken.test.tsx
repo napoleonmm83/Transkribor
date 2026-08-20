@@ -2,8 +2,19 @@ import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { HoerBalken, ersteStelle } from './HoerBalken'
 
+// Die Attrappe ruft `onBereit` bei JEDEM Render und reicht `springeZu` durch — sonst waere
+// die Sprung-Wache (`gesprungen.current`) ungedeckt: mit einer stummen Attrappe bleibt die
+// Mutation „Wache raus" gruen, weil `onBereit` nie faellt (Reviewbefund W4).
+const springeZu = vi.hoisted(() => vi.fn())
 vi.mock('@/components/Waveform', () => ({
-  Waveform: ({ url }: { url: string }) => <div data-testid="welle" data-url={url} />,
+  Waveform: (() => {
+    const { forwardRef, useEffect, useImperativeHandle } = require('react')
+    return forwardRef(function Welle({ url, onBereit }: any, ref: any) {
+      useImperativeHandle(ref, () => ({ springeZu }))
+      useEffect(() => { onBereit?.(new Float32Array([0.001, 0.002, 0.9, 0.8]), 40) })
+      return <div data-testid="welle" data-url={url} />
+    })
+  })(),
 }))
 
 const datei = (name: string) => new File(['x'], name, { type: 'audio/mpeg' })
@@ -53,6 +64,22 @@ describe('HoerBalken', () => {
     render(<HoerBalken datei={datei('a.mp3')} anzeige="a.mp3" onSchliessen={() => {}} />)
     expect(screen.getByText(/erstes Geräusch/i)).toBeInTheDocument()
     expect(screen.queryByText(/erste Sprache/i)).not.toBeInTheDocument()
+  })
+
+  it('springt EINMAL je Datei, nicht bei jedem Render', () => {
+    /* Sonst kaeme man nach einem bewussten Klick an den Anfang nie wieder dorthin zurueck:
+       jeder Tastendruck in einem Sprecherfeld rendert den Dialog — und damit den Balken —
+       neu, und der Abspieler spraenge jedes Mal zurueck an die Geraeuschstelle. */
+    springeZu.mockClear()
+    // DIESELBE Datei ueber alle Renders — ein neues File-Objekt je Render waere eine neue
+    // Blob-URL und damit ein anderer Fall (der ist der Dateiwechsel, eine Zeile tiefer).
+    const d = datei('a.mp3')
+    const { rerender } = render(
+      <HoerBalken datei={d} anzeige="a.mp3" onSchliessen={() => {}} />)
+    rerender(<HoerBalken datei={d} anzeige="a.mp3" onSchliessen={() => {}} />)
+    rerender(<HoerBalken datei={d} anzeige="a.mp3" onSchliessen={() => {}} />)
+    expect(springeZu).toHaveBeenCalledTimes(1)
+    expect(springeZu).toHaveBeenCalledWith(expect.closeTo(40 * 2 / 4 - 0.25, 2))
   })
 
   it('nennt die Aufnahme beim Namen und laesst sie schliessen', () => {
