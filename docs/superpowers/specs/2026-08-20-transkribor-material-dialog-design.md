@@ -21,7 +21,7 @@ Zustand mit drei gewählten Dateien und offener Upload-Vorschau, abgezählt am M
 | Karten übereinander (`.blatt`) | **4** — Sprache · Ablagefläche · Vorschau · Video-URLs |
 | Bedienelemente im Bereich | **10** (+ 4 im Seitenkopf) |
 | Erklärabsätze gleichzeitig sichtbar | **4**, zusammen **75** Wörter |
-| sichtbare Einträge der Dateiliste | **0** — sie beginnt unterhalb des Sichtfelds |
+| sichtbare Einträge der Dateiliste | **0** — am Screenshot abgelesen, nicht am Markup: die Zahl hängt an Fensterhöhe und Zoom |
 | gleichzeitig mögliche Primärknöpfe | **2** — Upload- und URL-Vorschau können beide offen stehen |
 
 Die zehn Bedienelemente einzeln, damit die Zahl nachprüfbar bleibt: Sprach-Select ·
@@ -169,9 +169,17 @@ er hat sein Vorbild eine Zeile weiter:
 - `download_one(project, url, sprecher=None, sprache=None)` bekommt die Sprache als Parameter,
   statt sie selbst aus der Umgebung zu lesen.
 - **Rückwärtskompatibel:** ein einzelner Wert ohne Komma behält seine heutige Bedeutung und
-  gilt für alle URLs. Eine Liste muss so viele Einträge haben wie URLs, sonst **400** — wie bei
-  `sprecher`. Sprach-ids enthalten kein Komma (`ch/de/en/fr/it/auto`), die Trennung ist
-  eindeutig.
+  gilt für alle URLs. Eine Liste muss so viele Einträge haben wie URLs, sonst **400**.
+  Sprach-ids enthalten kein Komma (`ch/de/en/fr/it/auto`), die Trennung ist eindeutig.
+  **Die Regel gilt NUR der Env-Schicht** — im JSON-Rumpf entscheidet der Typ, nicht ein
+  Trennzeichen. Und sie ist **nicht** „dieselbe Form wie `sprecher`", wie hier zuerst stand:
+  `_sprecher_aus_env` liefert bei einer zu kurzen Liste `None`, „einer gilt für alle" tut das
+  Gegenteil. Die Zwillingsbehauptung war bequem und falsch; die beiden Parser sehen ähnlich
+  aus und entscheiden im Randfall entgegengesetzt.
+- **Die Einzelprüfung `pruef_fehler(sprache=body.sprache)` in `app.py:968` muss WEG.** Mit
+  einer Liste macht `sprache not in SPRACHEN` (`sprachen.py:114`) einen dict-Lookup mit einer
+  Liste → `TypeError: unhashable type` → **500 statt 400**. Sie wird durch eine Schleife über
+  die aufgelöste Liste ersetzt, nicht ergänzt.
 - **Die Längenprüfung muss BEIDE Listen decken.** `app.py:944-947` prüft heute nur
   `sprecher_roh`. Kommt `sprache` als Liste falscher Länge, feuert `zip(…, strict=True)` einen
   rohen `ValueError` — also **500 statt 400**, ausgerechnet an der Stelle, deren Zweck eine
@@ -424,12 +432,19 @@ Getroffen, weil sie die Arbeit nicht blockieren. Jede ist eine Stelle, nicht das
 Diese Fassung ist **überarbeitet, nicht erstgeschrieben**. Was geprüft wurde und was nicht,
 damit niemand mehr Sicherheit annimmt, als dahintersteht:
 
-- **Zwei Reviewer-Subagenten wurden losgeschickt** (Faktenprüfer und „Was erlaubt das NEU?")
-  und **lieferten beide keinen Bericht** — je zweimal idle, auch nach Nachfrage mit
-  verengtem Auftrag. Bekanntes Muster in diesem Projekt.
-- **Beide Linsen wurden deshalb selbst gefahren.** Das ist ein schwächerer Beleg als ein
-  fremder Blick und wird hier als das benannt, was es ist: **selbst geprüft, kein zweiter
-  Reviewer.** Die Stufe ist nachzuholen, bevor gebaut wird.
+- **Zwei Reviewer-Subagenten wurden losgeschickt**, und sie fielen auf **zwei
+  verschiedene** Arten aus — was von aussen identisch aussah:
+  - **Der Faktenprüfer lief vollständig durch** (83 Transkriptzeilen, 632 KB, 27
+    Werkzeugaufrufe) und hatte einen **fertigen Bericht** als Schlusstext. Nur die
+    Zustellung scheiterte. Der Bericht wurde nachträglich aus dem Transkript geborgen und
+    ist eingearbeitet — er fand unter anderem den `TypeError` bei `pruef_fehler` mit einer
+    Liste, der sonst als 500 im Code gelandet wäre.
+  - **Der zweite Agent hat nie gestartet** — kein Transkript, obwohl seine Definition
+    (`.claude/agents/was-erlaubt-der-fix-neu.md`) vorliegt. Diese Linse wurde selbst
+    gefahren und ist damit **kein fremder Blick**; sie ist vor dem Bauen nachzuholen.
+- **Kein Kontextproblem.** Das war die Ursache in früheren Fällen, hier nachweislich nicht.
+  Wer beim nächsten „idle ohne Bericht" nachfragt statt nachzusehen, verschenkt die Arbeit
+  eines vollständig gelaufenen Reviews — die Regel dazu steht jetzt in `CLAUDE.md`.
 - **Nachgezählt statt übernommen** wurden die Zahlen in §1 (zwei davon waren falsch), die
   34 Kommentarzeilen in §1 B1, die vier Testdateien in §9 und das Verhältnis zu #298 (§3 nannte
   den falschen Mechanismus).
