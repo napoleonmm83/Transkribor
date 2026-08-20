@@ -98,6 +98,19 @@ def test_public_nennt_die_beiseitegelegte_datei(tmp_path):
     assert settings.public()["kaputt"] == str(tmp_path / "settings.json.kaputt")
 
 
+def test_altbestand_ytdlp_geprueft_wird_beim_save_herausgefiltert(tmp_path):
+    """#281-Migration (CodeRabbit-Major): der Kalendermerker ist kein DEFAULTS-Schluessel
+    mehr; ein Alt-Bestand darf weder beim Laden durchkommen noch beim naechsten Speichern
+    ueberleben — sonst laege der geteilte Merker erneut bei jedem Start in der Datei."""
+    (tmp_path / "settings.json").write_text(
+        '{"api_key": "sk-geheim", "ytdlp_geprueft": "2026-08-14"}', encoding="utf-8")
+    assert "ytdlp_geprueft" not in settings.load()          # Filter schon beim LESEN
+    settings.save({"model": "claude-opus-5"})
+    roh = (tmp_path / "settings.json").read_text(encoding="utf-8")
+    assert "ytdlp_geprueft" not in roh                        # und physisch weg beim Schreiben
+    assert settings.load()["api_key"] == "sk-geheim"          # der Key ueberlebt
+
+
 def test_gueltiges_aber_objektloses_json_wird_nicht_gerettet(tmp_path):
     """`[]` ist lesbar, nur keine Einstellung — darin steht nichts, was jemand zurueckholen
     wollte. Es zu retten kostete den einen Platz, auf dem sonst der API-Key liegt (die erste
@@ -195,26 +208,36 @@ def test_zwei_schreiber_verlieren_einander_nicht(monkeypatch):
 
     Das `load` wird kuenstlich verlangsamt: die echte Sequenz dauert Mikrosekunden und
     liefe auch ungesperrt fast immer durch — ein Test, der die Race nicht oeffnet, ist
-    gruen aus Zufall und beweist nichts. (CodeRabbit-CLI an #281: der Patch stand auf
-    `load`, aber `save()` liest seit #203 ueber `_lesen()` — die Verzoegerung lief ins
-    Leere und der Test war milder als beabsichtigt. Jetzt haengt sie am echten Pfad.)
+    gruen aus Zufall und beweist nichts. (CodeRabbit an #281, zweistufig: der Patch stand
+    auf `load`, aber `save()` liest seit #203 ueber `_lesen()` — die Verzoegerung lief
+    ins Leere. Und Schlaf ist Wahrscheinlichkeit, kein Beweis: jetzt BLOCKIERT der erste
+    Leser, bis der Test ihn freigibt, und die Zusicherung ist, dass der zweite den
+    Read-Modify-write HAELT — ohne `sperre.datei()` ist genau das rot, deterministisch.)
     """
     import threading
-    import time
     orig = settings._lesen
+    betreten = threading.Event()
+    frei = threading.Event()
+    leser = []
 
-    def langsam():
-        d = orig()
-        time.sleep(0.05)
-        return d
+    def hook():
+        leser.append(threading.get_ident())
+        if len(leser) == 1:
+            betreten.set()
+            assert frei.wait(5), "der Test kam nie zur Freigabe"
+        return orig()
 
-    monkeypatch.setattr(settings, "_lesen", langsam)
-    faeden = [threading.Thread(target=settings.save, args=({"api_key": "sk-geheim"},)),
-              threading.Thread(target=settings.save, args=({"whisper_model": "small"},))]
-    for f in faeden:
-        f.start()
-    for f in faeden:
-        f.join()
+    monkeypatch.setattr(settings, "_lesen", hook)
+    a = threading.Thread(target=settings.save, args=({"api_key": "sk-geheim"},))
+    a.start()
+    assert betreten.wait(5)
+    b = threading.Thread(target=settings.save, args=({"whisper_model": "small"},))
+    b.start()
+    b.join(0.3)
+    assert len(leser) == 1, "ohne Sperre erreicht der zweite Schreiber den Read von A"
+    frei.set()
+    a.join(5)
+    b.join(5)
     cfg, _ = orig()
     assert cfg["api_key"] == "sk-geheim"
     assert cfg["whisper_model"] == "small"

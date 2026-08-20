@@ -1574,12 +1574,20 @@ def test_der_merker_wird_INNERHALB_der_sperre_gesetzt(monkeypatch):
     monkeypatch.setattr(yu.subprocess, "run", run)
     monkeypatch.setattr(yu, "_pip_merker_setzen", lambda: folge.append("merker gesetzt"))
     monkeypatch.setattr(yu, "_pip_merker_loeschen", lambda: folge.append("merker weg"))
+    # Kalendermerker sichtbar machen UND zugleich wachen, dass er ohne settings.save
+    # auskommt (CodeRabbit-Major an #281): `_merken()` laeuft REAL — kaeme sein alter
+    # Schreiber zurueck, schriebe der Wächter hier fehl, und der Test hinge nicht an
+    # einem Zufall. Nur der Dateischreibvorgang selbst ist eine Attrappe (legt nichts an).
+    monkeypatch.setattr(yu.settings, "save",
+                        lambda *a, **k: pytest.fail("settings.save im pip-Abschnitt"))
+    monkeypatch.setattr(yu, "_datum_setzen", lambda p, *, was: folge.append(was))
     yu.aktualisiere()
     pip_lock = os.path.basename(yu._lockziel())
-    # „merker weg" VOR „zu:<pip_lock>": `_merken()` steht im selben Abschnitt wie das
-    # pip — ein Wurf dazwischen liesse den Merker liegen, obwohl pip sauber lief.
+    # „merker weg" und „Kalendermerker" VOR „zu:<pip_lock>": beide stehen im selben
+    # Abschnitt wie das pip — ein Wurf dazwischen liesse einen liegen, obwohl pip
+    # sauber lief.
     assert folge == ["auf:" + pip_lock, "merker gesetzt", "pip", "merker weg",
-                     "zu:" + pip_lock]
+                     "Kalendermerker", "zu:" + pip_lock]
 
 
 def test_nur_ein_GELUNGENER_lauf_raeumt_den_merker_weg(monkeypatch):
