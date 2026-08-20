@@ -305,11 +305,34 @@ Die paarweise Filterung nimmt die dritte Liste auf:
     sprachen_liste = [l for _, _, l in drillinge]
 ```
 
-Die Gültigkeitsprüfung deckt jetzt jeden Eintrag:
+Die Gültigkeitsprüfung deckt jetzt jeden Eintrag — und die **alte Zeile muss WEG**:
 
 ```python
+    # ENTFERNEN (app.py:968):
+    #   fehler = _sprachen.pruef_fehler(sprache=body.sprache)
+    # Mit einer Liste macht `sprache not in SPRACHEN` (sprachen.py:114) einen dict-Lookup
+    # mit einer Liste -> `TypeError: unhashable type: 'list'` -> 500 statt 400, ausgerechnet
+    # an der Stelle, deren Zweck eine saubere Meldung ist. Bleibt sie stehen, ist die
+    # Schleife darunter unerreichbar.
+    fehler = None
     for l in sprachen_liste:
         fehler = fehler or _sprachen.pruef_fehler(sprache=l)
+    for s in sprecher:
+        fehler = fehler or _sprachen.pruef_fehler(sprecher=s)
+```
+
+Ein eigener Test dafür, weil ein `TypeError` anders aussieht als ein Validierungsfehler:
+
+```python
+def test_fetch_gibt_400_statt_500_wenn_eine_sprache_in_der_liste_unbekannt_ist(client, tmp_projekte):
+    """Die alte Einzelpruefung mit `body.sprache` wuerde bei einer Liste WERFEN, nicht
+    melden — ein 500 an der Stelle, deren Zweck eine saubere Meldung ist. Gefunden vom
+    Faktenpruefer-Subagenten, dessen Bericht aus dem Transkript geborgen wurde."""
+    r = client.post("/api/projects/Demo/fetch", json={
+        "urls": ["https://youtu.be/a", "https://youtu.be/b"],
+        "sprache": ["ch", "klingonisch"]})
+    assert r.status_code == 400
+    assert "klingonisch" in r.json()["detail"]
 ```
 
 Und der Env-Aufbau — **unbedingt setzen**:
