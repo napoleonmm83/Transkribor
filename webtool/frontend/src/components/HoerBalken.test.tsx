@@ -76,6 +76,14 @@ describe('ersteStelle', () => {
     expect(ersteStelle(new Float32Array([0.8, 0.9, 0.85]), 30)).toBe(0)
   })
 
+  it('zaehlt eine NEGATIVE Spitze als laut', () => {
+    /* `exportPeaks` behaelt das Vorzeichen: wavesurfer nimmt je Fenster das Sample mit dem
+       groessten BETRAG und pusht es unveraendert (wavesurfer.js:441, nachgelesen). Ohne
+       `Math.abs` laese diese Funktion rund die Haelfte aller lauten Fenster als Stille —
+       hier: sie spraenge auf 19,75 statt auf 9,75. */
+    expect(ersteStelle(new Float32Array([0.002, -0.9, 0.8]), 30)).toBeCloseTo(9.75, 2)
+  })
+
   it('bleibt bei 0, wenn die Datei stumm ist — statt ans Ende zu springen', () => {
     /* Ohne diesen Zweig setzte die Schleife nie und `erste` bliebe auf einem Initialwert,
        den niemand geprueft hat. Eine stumme Datei ist selten, aber sie ist der Fall, in dem
