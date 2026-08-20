@@ -1,20 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
-import { Bot, ScanText, X, FileAudio, Loader2 } from 'lucide-react'
+import { Bot, ScanText, X, FileAudio, Loader2, Plus } from 'lucide-react'
 import { useProjekte, useDateien } from '@/hooks/useProjektDaten'
 import { useAiReady } from '@/hooks/useAiReady'
 import { mergePhases, useActiveJob } from '@/hooks/useActiveJob'
 import { DateiMenue } from '@/components/DateiMenue'
 import { FileStatusPill } from '@/components/FileStatusPill'
-import { UploadDropzone } from '@/components/UploadDropzone'
-import { UrlFetch } from '@/components/UrlFetch'
 import { ProjektMenue } from '@/components/ProjektMenue'
 import { PageHeader } from '@/components/PageHeader'
-import { MehrsprachigKasten } from '@/components/MehrsprachigKasten'
+import { MaterialDialog } from '@/components/MaterialDialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { startTranscribe, startCorrect, cancelJob, getProjektEinstellungen } from '@/lib/api'
 import { describePhases, KIND_LABEL } from '@/lib/jobPhases'
 import { cn } from '@/lib/utils'
@@ -35,6 +32,10 @@ import type { ProjectEinstellungen, StartJob } from '@/lib/types'
 function meldeLadefehler(e: unknown) {
   toast.error(`Projekt-Einstellungen laden fehlgeschlagen: ${(e as Error).message}`)
 }
+
+// Dieselbe Liste wie `app.py:AUDIO_EXT` und die Ablageflaeche — sie steht hier, weil das
+// Overlay Drops FILTERN muss, bevor irgendetwas geoeffnet wird.
+const AUDIO_RE = /\.(mp3|wav|m4a|aac|flac|ogg|opus|wma|mp4)$/i
 
 export function ProjectWorkspace() {
   const { project } = useParams<{ project: string }>()
@@ -57,7 +58,9 @@ export function ProjectWorkspace() {
   // und schreibt NICHT ins Projekt zurueck (dafuer der Dialog im ⋯-Menü).
   const [einstellungen, setEinstellungen] = useState<ProjectEinstellungen | null>(null)
   const [sprache, setSprache] = useState('')
-  const [mehrsprachig, setMehrsprachig] = useState(false)
+  const [dialogOffen, setDialogOffen] = useState(false)
+  const [vorbelegt, setVorbelegt] = useState<File[]>([])
+  const [zieht, setZieht] = useState(false)
   useEffect(() => {
     if (!project) return
     let aktiv = true
@@ -75,9 +78,9 @@ export function ProjectWorkspace() {
     // nicht liegenbleiben) — aber wer den Schutz sucht, findet ihn bei `sprachWert`, und
     // sobald B geantwortet hat, traegt ihn `setSprache(d.sprache)` unten. Beide Fenster haben
     // je einen eigenen Test.
-    setSprache(''); setMehrsprachig(false)
+    setSprache('')
     getProjektEinstellungen(project)
-      .then(d => { if (aktiv) { setEinstellungen(d); setSprache(d.sprache); setMehrsprachig(d.mehrsprachig) } })
+      .then(d => { if (aktiv) { setEinstellungen(d); setSprache(d.sprache) } })
       .catch(e => { if (aktiv) meldeLadefehler(e) })
     return () => { aktiv = false }
   }, [project])
@@ -93,42 +96,6 @@ export function ProjectWorkspace() {
   const sprachLabel = einstellungen
     ? (einstellungen.sprach_choices.find(c => c.id === einstellungen.sprache)?.label ?? einstellungen.sprache)
     : ''
-  // EIN Ausdruck fuer beide Fragen — „steht der Waehler?" und „geht ein Override mit?" sind
-  // dieselbe Frage („hat der Nutzer die Auswahl ueberhaupt gesehen?"). Zweimal notiert wuerden
-  // sie beim naechsten Zusatz (`&& !running`) still auseinanderlaufen.
-  const zeigeSprachwahl = sprachChoices.length > 0
-  // Der Haken muss GENAUSO degradieren wie `sprache` (die API-Funktionen lassen einen leeren
-  // String weg): sind die Einstellungen gar nicht geladen (Fehler beim GET -> keine Auswahl
-  // gerendert), schluege ein hartes `false` einen auf true stehenden Projekt-Standard — der
-  // Nutzer saehe kein Kaestchen und bekaeme trotzdem einen Datei-Override. undefined = keiner.
-  //
-  // Und er geht nur mit, wenn er vom Projektstandard ABWEICHT (#166): `datei_mehrsprachig`
-  // loest den Rueckfall ueber die Anwesenheit des Schluessels auf — ein mitgeschickter Wert,
-  // der ohnehin dem Projekt entspricht, macht daraus einen echten Override, und die Datei zieht
-  // bei einer spaeteren Aenderung des Projekt-Standards nicht mehr mit. Vorher trug damit
-  // praktisch JEDE hochgeladene Datei einen eigenen Eintrag, und der Projektwert wirkte nur noch
-  // auf Altbestand. Wer bewusst abweicht, bekommt den Override — genau dann ist er gemeint.
-  const mehrWert = zeigeSprachwahl && einstellungen && mehrsprachig !== einstellungen.mehrsprachig
-    ? mehrsprachig : undefined
-  // Dieselbe Regel fuer die Sprache (#234) — und sie wiegt hier SCHWERER als beim Haken: eine
-  // falsche Sprache kostet eine komplette Neu-Transkription, kein blosses Umschalten des
-  // Decoders. Der Waehler steht mit dem Projektwert vorbelegt da; wer ihn nie anfasst, meint
-  // „wie das Projekt" und darf nicht stillschweigend einen Override bekommen, der die Datei von
-  // jeder spaeteren Aenderung des Projekt-Standards abschneidet.
-  //
-  // `''` und nicht `undefined`: bei einer Zeichenkette ist der leere String hier die
-  // eingefuehrte Schreibweise fuer „nicht gesetzt" (`uploadAudio`/`fetchUrls` lassen das Feld
-  // dann weg, und beide Kinder tragen `sprache = ''` als Vorgabe). Beim Haken geht das nicht —
-  // dort waere `false` ein Wert — deshalb steht dort `undefined`.
-  //
-  // **Die Kehrseite, damit sie niemand neu entdecken muss:** verglichen wird gegen ein
-  // `einstellungen`, das aus einem GET stammt und veraltet sein KANN. Aendert ein zweiter Tab
-  // den Projekt-Standard von `ch` auf `en`, sieht der Nutzer hier weiter „Schweizerdeutsch",
-  // laedt hoch — und die Datei bekommt `en`. Das ist nicht schlimmer als vorher, sondern
-  // andersherum falsch (vorher waere `ch` festgeschrieben worden), und `mehrWert` hat dieselbe
-  // Form seit #166. Im selben Tab ist der Fall zu: `reloadEinstellungen` zieht beides nach.
-  const sprachWert = zeigeSprachwahl && einstellungen && sprache !== einstellungen.sprache
-    ? sprache : ''
   // projektRef hält den aktuellen Projekt-Namen fuer reloadEinstellungen — die Antwort
   // von Projekt A darf nicht landen, nachdem auf Projekt B gewechselt wurde (dasselbe
   // Muster wie der `aktiv`-Riegel oben, nur fuer den Speichern-Reload-Pfad).
@@ -137,7 +104,7 @@ export function ProjectWorkspace() {
   const reloadEinstellungen = () => {
     if (!project) return
     getProjektEinstellungen(project)
-      .then(d => { if (projectRef.current === project) { setEinstellungen(d); setSprache(d.sprache); setMehrsprachig(d.mehrsprachig) } })
+      .then(d => { if (projectRef.current === project) { setEinstellungen(d); setSprache(d.sprache) } })
       .catch(e => { if (projectRef.current === project) meldeLadefehler(e) })
   }
 
@@ -161,9 +128,32 @@ export function ProjectWorkspace() {
   }
 
   return (
-    <div className="p-6 sm:p-8">
+    // Das Overlay liegt ueber der GANZEN Arbeitsflaeche — es faengt damit Drops, die vorher
+    // an der Ablageflaeche vorbeigingen. Ein PDF irgendwo fallen zu lassen darf deshalb
+    // nicht still nichts tun: der alte `waehlen`-Weg filterte und kehrte wortlos zurueck,
+    // was in Ordnung war, solange man die Zone absichtlich treffen musste.
+    <div className="p-6 sm:p-8" data-testid="drop-overlay-ziel"
+      onDragOver={e => { e.preventDefault(); setZieht(true) }}
+      onDragLeave={() => setZieht(false)}
+      onDrop={e => {
+        e.preventDefault(); setZieht(false)
+        const audio = Array.from(e.dataTransfer.files).filter(f => AUDIO_RE.test(f.name))
+        if (!audio.length) { toast.info('Keine Audiodatei dabei — es passiert nichts.'); return }
+        setVorbelegt(audio); setDialogOffen(true)
+      }}>
+      {/* `pointer-events-none` ist Pflicht, nicht Kosmetik: ohne es faengt die Flaeche das
+          drop-Ereignis selbst ab, und der Handler am Container darunter feuert nie. */}
+      {zieht && (
+        <div className="pointer-events-none fixed inset-0 z-40 flex items-center justify-center
+                        border-2 border-dashed border-primary bg-background/80">
+          <p className="text-sm font-medium">Zum Hinzufügen loslassen</p>
+        </div>
+      )}
       <PageHeader rubrik="Projekt" titel={project ?? ''} zurueck="/" zurueckText="Übersicht">
         {sprachLabel && <Badge variant="outline">{sprachLabel}</Badge>}
+        <Button size="sm" onClick={() => setDialogOffen(true)}>
+          <Plus className="size-4" /> Material
+        </Button>
         <Button variant="outline" size="sm"
           onClick={() => startJob(() => startTranscribe(project!), 'transcribe', 'Transkribieren')}>
           <ScanText className="size-4" /> Transkribieren
@@ -201,58 +191,6 @@ export function ProjectWorkspace() {
           ))}
         </div>
       )}
-
-      <section className="mb-8">
-        <h2 className="rubrik mb-3">Material hinzufügen</h2>
-        <div className="space-y-3">
-          {/* EINE Sprachauswahl fuer den ganzen Bereich. Vorher trugen Upload und URL-Import je
-              eine eigene — beide an DERSELBEN State, also zwei Ansichten desselben Werts: was
-              man oben umstellte, stand unten schon anders da, ohne dass es einen Unterschied
-              gab. Sie steht VOR beiden Eingaben, weil sie fuer beide gilt und weil der Job mit
-              dem Hinzufuegen sofort startet — nachtraeglich kostet sie einen zweiten Lauf.
-              shadcn-Select ist ein <button>, kein <select> → aria-labelledby statt htmlFor.
-              Der Geltungsbereich haengt per aria-describedby am Waehler und NICHT im Label:
-              im Label gelesen hiesse das Bedienelement „Sprache Gilt für alles, was du hier
-              hinzufügst" — dieselbe Trennung wie im Kopf von MehrsprachigKasten. Und genau
-              dieser Satz IST die Aussage der Aenderung (ein Waehler fuer beide Eingaben); ohne
-              die Bindung hoert man am Kombinationsfeld nur „Sprache". */}
-          {zeigeSprachwahl && (
-            <div className="blatt p-4">
-              <label id="lbl-neu-sprache" className="block text-sm font-medium">Sprache</label>
-              <p id="lbl-neu-sprache-hinweis" className="mb-1.5 text-sm text-muted-foreground">
-                Gilt für alles, was du hier hinzufügst.
-              </p>
-              <Select value={sprache} onValueChange={setSprache}>
-                <SelectTrigger className="w-full" aria-labelledby="lbl-neu-sprache"
-                  aria-describedby="lbl-neu-sprache-hinweis"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {sprachChoices.map(c => (
-                    <SelectItem key={c.id} value={c.id}>{c.label}{c.hint && ` — ${c.hint}`}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <div className="mt-2">
-                <MehrsprachigKasten wert={mehrsprachig} setzen={setMehrsprachig} id="mehr-neu" />
-              </div>
-            </div>
-          )}
-          <UploadDropzone project={project!}
-            sprache={sprachWert} mehrsprachig={mehrWert} sprecherMax={sprecherMax}
-            onDone={job => {
-            refresh(); refreshFiles()
-            // Sofort adoptieren statt auf den naechsten Poll zu warten — der Balken soll direkt stehen.
-            if (job?.started) { adopt(job.job_id, project!, 'transcribe'); toast.success('Transkription gestartet') }
-            else if (job) toast.info('Transkription läuft schon — die neuen Dateien kommen danach dran.')
-          }} />
-          <UrlFetch project={project!}
-            sprache={sprachWert} mehrsprachig={mehrWert} sprecherMax={sprecherMax}
-            onStart={res => {
-            if (!res.started) { toast.warning('Es läuft bereits ein Import für dieses Projekt.'); return }
-            adopt(res.job_id, project!, 'fetch')
-            toast.success('Herunterladen gestartet — Transkription folgt automatisch')
-          }} />
-        </div>
-      </section>
 
       <section>
         <h2 className="rubrik mb-3">
@@ -321,6 +259,21 @@ export function ProjectWorkspace() {
       </section>
 
       {!p && <p className="text-sm text-muted-foreground">Projekt nicht gefunden.</p>}
+      <MaterialDialog project={project!} offen={dialogOffen} vorbelegteDateien={vorbelegt}
+        sprachChoices={sprachChoices} projektSprache={sprache} sprecherMax={sprecherMax}
+        onSchliessen={() => { setDialogOffen(false); setVorbelegt([]) }}
+        onFertig={(job, art) => {
+          refresh(); refreshFiles()
+          // Sofort adoptieren statt auf den naechsten Poll zu warten — der Balken soll
+          // direkt stehen.
+          if (job?.started) {
+            adopt(job.job_id, project!, art ?? 'transcribe')
+            toast.success(art === 'fetch' ? 'Herunterladen gestartet — Transkription folgt automatisch'
+                                          : 'Transkription gestartet')
+          } else if (job) {
+            toast.info('Läuft schon — die neuen Dateien kommen danach dran.')
+          }
+        }} />
     </div>
   )
 }

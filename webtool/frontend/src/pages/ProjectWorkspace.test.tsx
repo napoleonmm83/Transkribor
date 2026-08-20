@@ -9,34 +9,44 @@ import * as api from '@/lib/api'
 import type { Settings, ProjectFile } from '@/lib/types'
 
 vi.mock('@/lib/api')
-const toastMock = vi.hoisted(() => Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn(), dismiss: vi.fn() }))
+// `info` und `warning` gehoeren in den Mock, auch wenn gerade nur `info` geprueft wird:
+// fehlt eine Variante, WIRFT der Aufruf im Handler (nicht „gilt als nicht gerufen"), und
+// jede `not.toHaveBeenCalled`-Zusicherung darueber waere ohnehin keine (Frontend-CLAUDE.md).
+const toastMock = vi.hoisted(() => Object.assign(vi.fn(),
+  { success: vi.fn(), error: vi.fn(), dismiss: vi.fn(), info: vi.fn(), warning: vi.fn() }))
 vi.mock('sonner', () => ({ toast: toastMock }))
 
 const einstellungen = (s: Partial<Settings>) =>
   vi.mocked(api.getSettings).mockResolvedValue({ ai_ready: true, ai_reason: '', ...s } as Settings)
 
-/** Datei waehlen UND starten.
+/** Material ueber den DIALOG hinzufuegen — Auswahl, beide Weiter, „Los geht's".
  *
- *  Die Auswahl laedt seit dem Vorschau-Umbau nicht mehr sofort hoch: dazwischen steht die
- *  Zeile je Aufnahme mit ihrer Sprecherzahl (der Upload startet serverseitig die Pipeline,
- *  danach ist die Zahl ein Rennen). Die Zusicherungen dieser Tests sind unveraendert — nur
- *  der Ausloeser wandert von der Dateiwahl auf „Hinzufügen & starten".
+ *  Die Zusicherungen dieser Tests gelten der ARBEITSFLAECHE (Job-Adoption, Toasts,
+ *  Nachladen der Listen) und sind unveraendert; nur der Weg dorthin fuehrt seit dem
+ *  Material-Dialog nicht mehr ueber einen Bereich auf der Seite. Was IM Dialog passiert,
+ *  prueft `MaterialDialog.test.tsx`.
  */
+async function oeffneDialog() {
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: /^Material$/ })) })
+}
+
 async function holeUrl(url = 'https://youtu.be/a') {
+  await oeffneDialog()
+  fireEvent.click(screen.getByRole('tab', { name: /Links/ }))
   fireEvent.change(screen.getByLabelText('Video-URLs'), { target: { value: url } })
-  await act(async () => { fireEvent.click(screen.getByRole('button', { name: /^holen$/i })) })
-  await act(async () => {
-    fireEvent.click(screen.getByRole('button', { name: /Holen & starten/ }))
-  })
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: /^Holen$/i })) })
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Weiter/ })) })
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Los geht/ })) })
 }
 
 async function ladeHoch(datei = new File(['x'], 'a.mp3')) {
+  await oeffneDialog()
   await act(async () => {
-    fireEvent.change(screen.getByTestId('upload-input'), { target: { files: [datei] } })
+    fireEvent.change(screen.getByTestId('ablage-input'), { target: { files: [datei] } })
   })
-  await act(async () => {
-    fireEvent.click(screen.getByRole('button', { name: /Hinzufügen & starten/ }))
-  })
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Weiter/ })) })
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Weiter/ })) })
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Los geht/ })) })
 }
 
 describe('ProjectWorkspace (Stub)', () => {
@@ -304,74 +314,42 @@ describe('ProjectWorkspace (Stub)', () => {
     </MemoryRouter>,
   )
 
-  it('zeigt Sprach-Badge und GENAU EINE Sprachauswahl, die Upload UND URL-Import steuert', async () => {
-    /* Vorher trugen Upload und URL-Import je einen eigenen Waehler — beide an derselben
-       State, also zwei Ansichten desselben Werts. Der Test haelt beides fest: dass es nur
-       noch EINEN gibt (Anzahl), und dass er trotzdem BEIDE Wege erreicht (die Umstellung
-       auf Englisch kommt bei uploadAudio und bei fetchUrls an). Nur die Anzahl zu pruefen
-       liesse einen Waehler durchgehen, der nichts mehr bewirkt. */
+  it('zeigt das Sprach-Badge, aber KEINEN Bereich „Material hinzufügen" mehr', async () => {
+    /* B2 der Spec: bei zehn Aufnahmen ist Hinzufuegen ein Randfall und belegte trotzdem den
+       ganzen ersten Bildschirm. Die Sprachauswahl ist damit hier ganz weg — sie steht als
+       Projekt-Standard im Punkte-Menue und je Aufnahme im Dialog (B1: eine Bedeutung, ein
+       Ort). Das BADGE bleibt: es zeigt weiter den Projekt-Standard.
+
+       Was der Waehler frueher hier bewirkte (Sprache erreicht Upload UND URL-Import), prueft
+       jetzt `MaterialDialog.test.tsx` je Aufnahme — mit Mutationsprobe. */
     mitSprachen()
-    vi.mocked(api.uploadAudio).mockResolvedValue({ base: 'a', file: 'a.mp3' })
-    vi.mocked(api.fetchUrls).mockResolvedValue({ job_id: 'j1', started: true })
     zeigen()
-    // Gezaehlt wird das Bedienelement selbst, nicht sein Beschriftungstext: eine Textzaehlung
-    // braeche auch, wenn das Sprachlabel woanders auftaucht (Pille, Dateizeile) — rot aus dem
-    // falschen Grund. Zwei Waehler wuerden hier 2 und 2 ergeben.
-    await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(1))
-    expect(screen.getAllByText(/Enthält weitere Sprachen/)).toHaveLength(1)
-    // Der Geltungsbereich haengt am Waehler, nicht bloss daneben — jsdom sieht die Bindung,
-    // NICHT ihre Wirkung auf den vorgelesenen Namen; die steht im Browser-Gegencheck.
-    expect(screen.getByRole('combobox'))
-      .toHaveAttribute('aria-describedby', 'lbl-neu-sprache-hinweis')
-
-    // Ueber den NAMEN: hier gibt es zwar nur EINE combobox (die Zeile darueber belegt es),
-    // aber ein Positionsgriff bleibt ein Positionsgriff — siehe #273.
-    fireEvent.click(screen.getByRole('combobox', { name: 'Sprache' }))
-    fireEvent.click(await screen.findByText('Englisch'))
-    // Das Badge zeigt weiter den PROJEKT-Standard: die Auswahl hier ist ein Override fuer die
-    // naechsten Aufnahmen und schreibt nicht ins Projekt zurueck.
-    expect(screen.getByText('Schweizerdeutsch')).toBeInTheDocument()
-
-    // `undefined`, NICHT `false` (#166): der Haken steht unveraendert auf dem Projektwert, also
-    // geht kein Datei-Override mit — sonst traege jede hochgeladene Datei einen eigenen Eintrag
-    // und zoege bei einer spaeteren Aenderung des Projekt-Standards nicht mehr mit.
-    await ladeHoch()
-    await waitFor(() => expect(api.uploadAudio).toHaveBeenCalledWith('Demo', expect.any(File), 'en', undefined, undefined))
-
-    await holeUrl()
-    await waitFor(() => expect(api.fetchUrls).toHaveBeenCalledWith('Demo', ['https://youtu.be/a'], 'en', undefined, undefined))
+    await screen.findByRole('button', { name: /^Material$/ })
+    expect(screen.getByText('Schweizerdeutsch')).toBeInTheDocument()   // Badge
+    expect(screen.queryAllByRole('combobox')).toHaveLength(0)
+    expect(screen.queryByLabelText('Video-URLs')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Enthält weitere Sprachen/)).not.toBeInTheDocument()
   })
 
-  it('ein vom Projekt ABWEICHENDER Haken geht sehr wohl mit — die Sprache daneben NICHT (#166/#234)', async () => {
-    /* Die Gegenprobe zum Test darueber — ohne sie waere „schickt nichts mit" auch dann gruen,
-       wenn der Haken ueberhaupt nie ankommt. Genau dann waere die Mehrsprachigkeit pro Datei
-       unbedienbar geworden.
-
-       Und derselbe Aufruf traegt beide Richtungen: der Haken weicht ab und geht mit, die
-       Sprache steht unveraendert auf dem Projektwert und bleibt weg (#234). Vorher stand hier
-       `'ch'` — also genau die Einbahnstrasse: jede hochgeladene Datei bekam einen
-       Sprach-Eintrag, auch wenn niemand die Auswahl angefasst hatte, und zog bei einer
-       spaeteren Aenderung des Projekt-Standards nie wieder mit. Eine falsche Sprache kostet
-       eine komplette Neu-Transkription. */
-    mitSprachen()
-    vi.mocked(api.uploadAudio).mockResolvedValue({ base: 'a', file: 'a.mp3' })
-    vi.mocked(api.fetchUrls).mockResolvedValue({ job_id: 'j1', started: true })
+  it('sagt es, wenn beim Ablegen keine Audiodatei dabei war', async () => {
+    /* Neu durch das seitenweite Overlay: der alte Weg filterte per AUDIO_RE und kehrte bei
+       leerer Menge STILL zurueck — was in Ordnung war, solange man die Ablageflaeche
+       absichtlich treffen musste. Jetzt faengt die ganze Seite den Drop. */
+    nurDemo()
     zeigen()
-    await screen.findByRole('combobox')
-    fireEvent.click(screen.getByLabelText(/Enthält weitere Sprachen/))   // false -> true
-    await ladeHoch()
-    await waitFor(() => expect(api.uploadAudio).toHaveBeenCalledWith(
-      // `''` ist bei der Sprache die Schreibweise fuer „nicht gesetzt" (uploadAudio laesst das
-      // Feld dann weg) — beim Haken ist es `undefined`, weil `false` dort ein Wert waere.
-      'Demo', expect.any(File), '', true, undefined))
-
-    // BEIDE Kinder, nicht nur eines: `sprachWert` wird an `UploadDropzone` UND `UrlFetch`
-    // gereicht, und ein zurueckgebliebenes `sprache={sprache}` an einem von beiden bliebe sonst
-    // gruen. Der Test darueber prueft am URL-Import nur den ABWEICHENDEN Wert.
-    await holeUrl()
-    await waitFor(() => expect(api.fetchUrls).toHaveBeenCalledWith(
-      'Demo', ['https://youtu.be/a'], '', true, undefined))
+    const flaeche = await screen.findByTestId('drop-overlay-ziel')
+    fireEvent.drop(flaeche, { dataTransfer: { files: [new File(['x'], 'brief.pdf')] } })
+    await waitFor(() => expect(toastMock.info).toHaveBeenCalledWith(
+      expect.stringMatching(/[Kk]eine Audiodatei/)))
   })
+
+  /* HIER STAND: „ein vom Projekt ABWEICHENDER Haken geht sehr wohl mit — die Sprache
+     daneben NICHT (#166/#234)". Die Sprach-Haelfte hat einen Nachfolger: `MaterialDialog`
+     schickt `''`, solange die Zeile dem Projektwert entspricht (mutationsgeprueft, M21).
+     Die HAKEN-Haelfte hat KEINEN — der Dialog schickt `mehrsprachig` gar nicht mehr, weil
+     das Kaestchen eine Eigenschaft der einzelnen AUFNAHME ist und ins Punkte-Menue gehoert
+     (Spec 9). Das ist eine bewusste Verkleinerung, keine vergessene Zusicherung: „Enthaelt
+     weitere Sprachen" laesst sich beim Hinzufuegen nicht mehr setzen, sondern erst danach. */
 
   it('schickt ohne geladene Einstellungen KEIN mehrsprachig mit', async () => {
     /* Schlaegt der GET fehl, wird die Auswahl gar nicht gerendert. Ein hartes `false` wuerde
@@ -383,7 +361,7 @@ describe('ProjectWorkspace (Stub)', () => {
     vi.mocked(api.getProjektEinstellungen).mockRejectedValue(new Error('kaputt'))
     vi.mocked(api.uploadAudio).mockResolvedValue({ base: 'a', file: 'a.mp3' })
     zeigen()
-    await waitFor(() => expect(screen.queryAllByRole('combobox')).toHaveLength(0))
+    await screen.findByRole('button', { name: /^Material$/ })
     await ladeHoch()
     await waitFor(() => expect(api.uploadAudio).toHaveBeenCalledWith('Demo', expect.any(File), '', undefined, undefined))
   })
@@ -415,7 +393,8 @@ describe('ProjectWorkspace (Stub)', () => {
     vi.mocked(api.saveProjektEinstellungen).mockResolvedValue(
       { sprache: 'ch', korrektur: 'auto', mehrsprachig: false })
     zeigen()
-    await screen.findByRole('combobox')
+    // Warteanker ist der Projekt-Knopf: eine `combobox` gibt es auf der Seite nicht mehr.
+    await screen.findByRole('button', { name: /Aktionen für/ })
     // Radix oeffnet das Menue nur auf einen echten Zeigerklick — `click` allein reicht nicht.
     fireEvent.pointerDown(screen.getByRole('button', { name: /Aktionen für/ }),
       { button: 0, ctrlKey: false, pointerType: 'mouse' })
@@ -465,9 +444,10 @@ describe('ProjectWorkspace (Stub)', () => {
         </JobProvider>
       </MemoryRouter>,
     )
-    await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(1))
+    // Das Badge traegt den Projekt-Standard und ist damit der Anker, seit der Waehler weg ist.
+    await waitFor(() => expect(screen.getByText('Englisch')).toBeInTheDocument())
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'zu B' })) })
-    expect(screen.queryAllByRole('combobox')).toHaveLength(0)   // Einstellungen von B unterwegs
+    expect(screen.queryByText('Englisch')).not.toBeInTheDocument()  // Einstellungen von B unterwegs
     await ladeHoch()
     await waitFor(() => expect(api.uploadAudio).toHaveBeenCalledWith('B', expect.any(File), '', undefined, undefined))
   })
@@ -511,10 +491,10 @@ describe('ProjectWorkspace (Stub)', () => {
         </JobProvider>
       </MemoryRouter>,
     )
-    await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(1))
+    await waitFor(() => expect(screen.getByText('Englisch')).toBeInTheDocument())
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'zu B' })) })
-    // Warten, bis Bs Auswahl wirklich steht — sonst prueft der Test nur das Fenster oben.
-    await waitFor(() => expect(screen.getByRole('combobox')).toHaveTextContent('Französisch'))
+    // Warten, bis Bs Standard wirklich steht — sonst prueft der Test nur das Fenster oben.
+    await waitFor(() => expect(screen.getByText('Französisch')).toBeInTheDocument())
     await ladeHoch()
     // `''` heisst „kein Override" — die Datei folgt Bs Standard. Ein mitgereistes `en` waere
     // der Fehler, den dieser Test fangen soll.
