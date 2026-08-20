@@ -368,7 +368,36 @@ def _sprecher_aus_env(roh, i: int):
     return None if sprachen.pruef_fehler(sprecher=wert) else wert
 
 
-def download_one(project: str, url: str, sprecher=None) -> str:
+def _sprache_aus_env(roh, i: int):
+    """Die Sprache der i-ten URL aus der Komma-Liste, oder None (= Projekt-Standard).
+
+    Zwilling von `_sprecher_aus_env` — mit EINEM Unterschied, den man kennen muss:
+    **ein einzelner Wert ohne Komma gilt fuer ALLE URLs.** Die Variable trug bisher genau
+    einen Sprach-Code fuer den ganzen Auftrag; wer sie von Hand setzt, meint weiterhin das.
+    `_sprecher_aus_env` entscheidet im selben Randfall entgegengesetzt (eine zu kurze Liste
+    heisst dort None) — die beiden Funktionen sehen aehnlich aus und sind es hier nicht.
+    Sprach-ids enthalten kein Komma (`ch/de/en/fr/it/auto`), die Trennung ist eindeutig.
+
+    Wirft NIE (#185): ein unbekannter Wert heisst „Projekt-Standard", nicht „Absturz im
+    Subprozess NACH dem Download". Gueltigkeit ueber `sprachen.pruef_fehler` — dieselbe
+    Quelle wie im HTTP-Weg, damit die beiden Wege nicht auseinanderdriften.
+    """
+    if not roh:
+        return None
+    teile = roh.split(",")
+    if len(teile) == 1:
+        wert = teile[0]
+    elif 0 <= i < len(teile):
+        wert = teile[i]
+    else:
+        return None
+    wert = wert.strip()
+    if not wert:
+        return None
+    return None if sprachen.pruef_fehler(sprache=wert) else wert
+
+
+def download_one(project: str, url: str, sprecher=None, sprache=None) -> str:
     """Laedt die Tonspur nach projekte/<project>/audio/. Liefert den Basisnamen."""
     # Der FFmpegExtractAudio-Postprocessor laeuft im extract_info(download=True) unten und
     # sucht ffmpeg auf PATH. ensure_ffmpeg() legt den winget-Pfad dorthin — muss also HIER
@@ -418,7 +447,8 @@ def download_one(project: str, url: str, sprecher=None) -> str:
     print(f"[fetch] fertig {base}", flush=True)
     # Sprache pro geladene Base eintragen (vom Web-Tool per Env durchgereicht). Fehlt die
     # Variable, greift der Projekt-Default — Legacy-Verhalten bleibt unveraendert.
-    sprache = os.environ.get("TRANSKRIBOR_FETCH_SPRACHE")
+    # `sprache` kommt als PARAMETER, nicht mehr aus der Umgebung: sie gilt je URL, und die
+    # Zuordnung URL->Sprache kennt nur `main` (ueber den Schleifenindex). Genau wie `sprecher`.
     mehr = _mehrsprachig_aus_env()
     if sprache or mehr is not None or sprecher is not None:
         # `or None`, weil eine leere `.env`-Zeile `""` liefert und nicht `None` (dieselbe
@@ -440,15 +470,16 @@ def download_one(project: str, url: str, sprecher=None) -> str:
     return base
 
 
-def _lade(project: str, url: str, sprecher=None):
+def _lade(project: str, url: str, sprecher=None, sprache=None):
     """(base, None) bei Erfolg, (None, exception) sonst — damit `main` denselben Versuch
     zweimal machen kann (einmal, und nach einer Aktualisierung noch einmal), ohne den
     try/except-Block zu verdoppeln.
 
-    `sprecher` reicht durch: BEIDE Aufrufe in `main` tragen denselben Wert, sonst verloere
-    ausgerechnet der Download seine Sprecherzahl, der erst nach der Selbstheilung klappt."""
+    `sprecher` UND `sprache` reichen durch: BEIDE Aufrufe in `main` tragen dieselben Werte,
+    sonst verloere ausgerechnet der Download seine Datei-Einstellungen, der erst nach der
+    Selbstheilung klappt."""
     try:
-        return download_one(project, check_url(url), sprecher), None
+        return download_one(project, check_url(url), sprecher, sprache), None
     except Exception as e:
         return None, e
 
@@ -494,13 +525,15 @@ def main(argv=None):
         print(f"[fetch] roh ({type(fehler).__name__}, extraktor-verdacht="
               f"{_extraktor_verdacht(fehler)}): {_rohmeldung(fehler)}", flush=True)
 
-    # EINMAL gelesen, nicht je URL: die Variable aendert sich waehrend des Laufs nicht.
+    # EINMAL gelesen, nicht je URL: die Variablen aendern sich waehrend des Laufs nicht.
     sprecher_roh = os.environ.get("TRANSKRIBOR_FETCH_SPRECHER")
+    sprache_roh = os.environ.get("TRANSKRIBOR_FETCH_SPRACHE")
     for i, url in enumerate(args.urls):
         # Der Index kommt aus der Schleife, nicht aus einem Erfolgszaehler — ein
         # fehlgeschlagener Download verschiebt die Zuordnung damit nicht.
         sprecher = _sprecher_aus_env(sprecher_roh, i)
-        base, fehler = _lade(args.project, url, sprecher)
+        sprache = _sprache_aus_env(sprache_roh, i)
+        base, fehler = _lade(args.project, url, sprecher, sprache)
         if fehler is not None:
             _roh_ins_log(fehler)
         # Selbstheilung: ein veralteter Extraktor bricht nicht nach Kalender, sondern wenn
@@ -516,9 +549,9 @@ def main(argv=None):
             if ytdlp_update.automatisch(erzwingen=True):
                 print(f"[fetch] yt-dlp aktualisiert — versuche {url} noch einmal", flush=True)
                 _neu_laden()
-                # Zweite Aufrufstelle: DERSELBE Wert wie oben. Ohne ihn verlaere genau der
-                # Download seine Sprecherzahl, der erst nach der Heilung klappt.
-                base, fehler = _lade(args.project, url, sprecher)
+                # Zweite Aufrufstelle: DIESELBEN Werte wie oben. Ohne sie verlaere genau der
+                # Download seine Datei-Einstellungen, der erst nach der Heilung klappt.
+                base, fehler = _lade(args.project, url, sprecher, sprache)
                 if fehler is not None:
                     _roh_ins_log(fehler)      # der zweite Versuch, nach der Heilung
         if fehler is not None:
