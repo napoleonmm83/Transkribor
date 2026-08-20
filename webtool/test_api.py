@@ -2340,10 +2340,20 @@ def test_upload_traegt_die_sprecherzahl_ein_BEVOR_der_job_laeuft(client, monkeyp
 
 def test_upload_ohne_sprecherzahl_legt_keinen_eintrag_an(client):
     """Legacy-Verhalten: wer das Feld weglaesst, bekommt `null` (automatisch) — und keinen
-    Datei-Override, der spaeter etwas festschriebe."""
+    Datei-Override, der spaeter etwas festschriebe.
+
+    Geprueft wird der EINTRAG, nicht der aufgeloeste Wert. `datei_ansicht(...)["sprecher"]`
+    liefert `None` sowohl fuer eine nie angelegte Datei ALS AUCH fuer einen leeren Override
+    `{}` — und `setze_datei` schreibt IMMER, auch wenn jeder Parameter `None` ist (gemessen
+    am 2026-08-20). Ein Test gegen den aufgeloesten Wert kann den Waechter in `upload_audio`
+    also gar nicht beobachten: faellt er weg, schriebe JEDER Upload einen leeren Override in
+    `projekt.json`, unter dem projektweiten Lock, bei jedem Request — und die Suite bliebe
+    gruen. Genau so stand es hier, gefunden vom Reviewer-Subagenten am Gate A.
+    """
     from webtool import projekt as projekt_mod
     r = client.post("/api/projects/Demo/audio", files={"file": ("Ohne.mp3", b"a", "audio/mpeg")})
     assert r.status_code == 200
+    assert "Ohne" not in projekt_mod.laden("Demo")["dateien"]
     assert projekt_mod.datei_ansicht("Demo", "Ohne")["sprecher"] is None
 
 
@@ -2393,12 +2403,24 @@ def test_fetch_leere_url_zeilen_verschieben_die_zuordnung_NICHT(client, tmp_proj
     assert gesehen["TRANSKRIBOR_FETCH_SPRECHER"] == "2,5"
 
 
-def test_fetch_ohne_sprecherzahlen_setzt_die_variable_gar_nicht(client, tmp_projekt, monkeypatch):
-    """Legacy-Verhalten: kein Feld, keine Variable — `fetch.py` traegt dann nichts ein."""
+def test_fetch_ohne_sprecherzahlen_neutralisiert_einen_altwert_aus_der_umgebung(
+        client, tmp_projekt, monkeypatch):
+    """Kein Feld heisst „automatisch" — und das muss eine Altlast in der Umgebung SCHLAGEN.
+
+    Der Subprozess erbt `os.environ` des Servers (`jobs._run_proc`), und eine
+    `TRANSKRIBOR_FETCH_SPRECHER`-Zeile in der `.env` gewinnt dort. Waere der Schluessel bei
+    fehlendem Feld gar nicht gesetzt, bekaeme ein Browser-Import die Zahl eines alten
+    CLI-Tests — ein plausibler Wert wie „3" kommt durch jede Bereichspruefung, und die Folge
+    waeren falsche Cluster ohne eine einzige Fehlermeldung. Ein leerer Wert loest in
+    `_sprecher_aus_env` zu None auf, das Legacy-Verhalten bleibt also erhalten.
+    (Fund des Reviewer-Subagenten am Gate A.)
+    """
     gesehen = _fetch_env_faenger(monkeypatch)
     client.post(f"/api/projects/{tmp_projekt}/fetch",
                 json={"urls": ["https://youtu.be/aaaaaaaaaaa"]})
-    assert "TRANSKRIBOR_FETCH_SPRECHER" not in gesehen
+    assert gesehen["TRANSKRIBOR_FETCH_SPRECHER"] == ""
+    from webtool import fetch as fetch_mod
+    assert fetch_mod._sprecher_aus_env(gesehen["TRANSKRIBOR_FETCH_SPRECHER"], 0) is None
 
 
 def test_fetch_lehnt_falsche_listenlaenge_ab(client, tmp_projekt):
