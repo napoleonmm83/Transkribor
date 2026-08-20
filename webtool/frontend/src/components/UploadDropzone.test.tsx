@@ -185,3 +185,52 @@ describe('UploadDropzone — Vorschau vor dem Start', () => {
     expect(api.uploadAudio).not.toHaveBeenCalled()
   })
 })
+
+describe('UploadDropzone — was der Umbau NEU erlaubt', () => {
+  it('ein Serverfehler behaelt die Zeile SAMT eingetippter Zahl', async () => {
+    /* Vorher konnte hier keine getippte Arbeit verlorengehen, weil es keine gab. Seit der
+       Vorschau steht in jeder Zeile eine von Hand eingetragene Sprecherzahl — ein
+       bedingungsloses Leeren warf sie bei einem Serverfehler weg, und der Nutzer haette
+       Dateien UND Zahlen neu eintragen muessen. */
+    vi.mocked(api.uploadAudio).mockRejectedValue(new Error('Server nicht erreichbar'))
+    render(<UploadDropzone project="Demo" onDone={vi.fn()} sprache="de" />)
+    const input = screen.getByTestId('upload-input') as HTMLInputElement
+    await act(async () => {
+      fireEvent.change(input, { target: { files: [new File(['x'], 'a.mp3')] } })
+    })
+    fireEvent.change(screen.getByRole('textbox', { name: /a\.mp3/ }), { target: { value: '3' } })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Hinzufügen & starten/ }))
+    })
+    expect(screen.getByRole('textbox', { name: /a\.mp3/ })).toHaveValue('3')
+  })
+
+  it('„existiert bereits" bleibt NICHT stehen — ein zweiter Versuch endete wieder mit 409', async () => {
+    /* Gegenrichtung: ohne sie waere „behaelt die Zeile" auch dann gruen, wenn die Vorschau
+       nach jedem Ausgang stehenbliebe — ein Dauerzustand, aus dem nur „Abbrechen" hilft. */
+    vi.mocked(api.uploadAudio).mockRejectedValue(new Error('Datei existiert bereits'))
+    render(<UploadDropzone project="Demo" onDone={vi.fn()} sprache="de" />)
+    const input = screen.getByTestId('upload-input') as HTMLInputElement
+    await act(async () => {
+      fireEvent.change(input, { target: { files: [new File(['x'], 'a.mp3')] } })
+    })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Hinzufügen & starten/ }))
+    })
+    expect(screen.queryByRole('textbox', { name: /a\.mp3/ })).not.toBeInTheDocument()
+    expect(screen.getByText(/existiert bereits/)).toBeInTheDocument()
+  })
+
+  it('nach Erfolg ist die Vorschau weg', async () => {
+    vi.mocked(api.uploadAudio).mockResolvedValue({ base: 'a', file: 'a.mp3' })
+    render(<UploadDropzone project="Demo" onDone={vi.fn()} sprache="de" />)
+    const input = screen.getByTestId('upload-input') as HTMLInputElement
+    await act(async () => {
+      fireEvent.change(input, { target: { files: [new File(['x'], 'a.mp3')] } })
+    })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Hinzufügen & starten/ }))
+    })
+    expect(screen.queryByRole('textbox', { name: /a\.mp3/ })).not.toBeInTheDocument()
+  })
+})
