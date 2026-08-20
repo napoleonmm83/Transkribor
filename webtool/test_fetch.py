@@ -943,6 +943,30 @@ def test_main_reicht_jeder_url_ihre_eigene_sprache_durch(projekt, monkeypatch):
     assert gesehen == [("https://youtu.be/aaa", "ch"), ("https://youtu.be/bbb", "en")]
 
 
+def test_fehlgeschlagener_download_verschiebt_die_zuordnung_NICHT(projekt, monkeypatch):
+    """Die Zusicherung, die im Docstring des Tests darueber nur BEHAUPTET war: der Index kommt
+    aus `enumerate(args.urls)`, nicht aus einem Erfolgszaehler. Ohne diesen Test bliebe ein
+    Umbau auf `len(gesehen)` gruen — und die zweite URL bekaeme die Sprache der ersten.
+
+    `Vorbedingung` ist der Wurf, der KEINE Selbstheilung ausloest (#173) — der Lauf geht also
+    einfach zur naechsten URL weiter, genau der Fall, um den es hier geht.
+    """
+    gesehen = []
+
+    def merken(project, url, sprecher=None, sprache=None):
+        gesehen.append((url, sprache))
+        if len(gesehen) == 1:
+            raise fetch.Vorbedingung("Download fehlgeschlagen")
+        return f"base{len(gesehen)}"
+
+    monkeypatch.setattr(fetch, "download_one", merken)
+    monkeypatch.setenv("TRANSKRIBOR_YTDLP_UPDATE", "0")
+    monkeypatch.setenv("TRANSKRIBOR_FETCH_SPRACHE", "ch,en")
+    fetch.main(["--download-only", "Demo",
+                "https://youtu.be/aaa", "https://youtu.be/bbb"])
+    assert gesehen == [("https://youtu.be/aaa", "ch"), ("https://youtu.be/bbb", "en")]
+
+
 def test_wiederholung_nach_der_selbstheilung_traegt_die_SPRACHE_auch_ein(projekt, monkeypatch):
     """Zwilling des Sprecherzahl-Tests darueber, fuer die Sprache — und er war noetig:
     die Mutationsprobe M3 (zweite `_lade`-Aufrufstelle ohne `sprache`) blieb ohne ihn

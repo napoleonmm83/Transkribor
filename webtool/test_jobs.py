@@ -35,6 +35,29 @@ def _echo_cmd(n=3):
     return [sys.executable, "-c", code]
 
 
+def test_leerer_env_wert_verdraengt_einen_geerbten_im_KIND(tmp_path, monkeypatch):
+    """Die #298-Zusicherung endet in `test_api.py` an der `jobs.start`-Attrappe: dort ist
+    belegt, dass ein leerer Wert im `env`-Dict ANKOMMT — nicht, dass er im Kind einen
+    geerbten Wert wirklich verdraengt, statt zu verschwinden. Das haengt an CreateProcess
+    bzw. execve und an unserer Mischreihenfolge in `_run_proc` (`**os.environ` zuerst,
+    `**env` zuletzt), nicht an der Attrappe.
+
+    Die Gegenprobe im selben Test ist Pflicht: ohne `env` MUSS das Kind die Altlast sehen,
+    sonst waere die Zusicherung oben auch dann gruen, wenn gar nichts geerbt wuerde.
+    """
+    monkeypatch.setenv("TRANSKRIBOR_SETTINGS", str(tmp_path / "settings.json"))
+    monkeypatch.setenv("TRANSKRIBOR_FETCH_SPRACHE", "en")        # Altlast im Serverprozess
+    code = "import os; print(repr(os.environ.get('TRANSKRIBOR_FETCH_SPRACHE')))"
+    cmd = [sys.executable, "-c", code]
+
+    jid, _ = jobs.start("P_env_leer", cmd, cwd=None, kind="fetch",
+                        env={"TRANSKRIBOR_FETCH_SPRACHE": ""})
+    assert _wait(jid)["lines"] == ["''"], "der leere Wert verdraengt die Altlast nicht"
+
+    jid2, _ = jobs.start("P_env_ohne", cmd, cwd=None, kind="fetch")
+    assert _wait(jid2)["lines"] == ["'en'"], "Gegenprobe: ohne env muss geerbt werden"
+
+
 def test_start_streams_lines_and_completes():
     jid, started = jobs.start("P_stream", _echo_cmd(3), cwd=None, kind="transcribe")
     assert started is True

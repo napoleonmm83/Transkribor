@@ -60,7 +60,7 @@ def ziel_phrase(sprach_id: str) -> str:
     return _eintrag(sprach_id)["ziel"]
 
 
-def von_whisper_code(code: str, bevorzugt: str | None = None) -> str:
+def von_whisper_code(code: str | None, bevorzugt: str | None = None) -> str:
     """Whisper-Detektion -> Sprach-id. Unbekannt (auch: gar keine Detektion) -> de.
 
     ponytail: 'ch' teilt sich den Whisper-Code 'de' mit 'de'. Da Whisper den
