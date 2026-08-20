@@ -332,7 +332,14 @@ folgen sie wieder mit.)
 <summary><strong>Und wenn in einem Video mehrere Sprachen vorkommen?</strong></summary>
 
 Etwa ein Anlass, bei dem eine Person Schweizerdeutsch spricht, die nächste Englisch. Dafür gibt
-es unter der Sprachauswahl das Kästchen **„Enthält weitere Sprachen“**. Die gewählte Sprache
+es das Kästchen **„Enthält weitere Sprachen“** — an zwei Stellen: in den **Projekt**-Einstellungen
+(⋯-Menü des Projekts), wo es für alles Neue gilt, und im **⋯-Menü der einzelnen Aufnahme**
+(„Sprache, Sprecher & Korrektur“) für den Einzelfall. Im Fenster „+ Material“ steht es
+bewusst nicht: es beschreibt eine Eigenschaft *einer* Aufnahme und wäre dort das vierte Feld
+je Zeile. (Bis einschliesslich `v0.25.0` stand es beim Hinzufügen direkt auf der Seite.)
+**Setz es am Projekt, bevor du solche Aufnahmen hinzufügst** — nachträglich am ⋯-Menü kostet
+es eine komplette Neu-Transkription, weil das Hinzufügen den Lauf sofort startet.
+Die gewählte Sprache
 gilt dann als *Hauptsprache*, und Transkribor achtet im Verlauf der Aufnahme darauf, wann
 jemand in einer anderen Sprache spricht. Im Transkript steht danach jede Passage so da, wie sie
 gesprochen wurde: der Schweizer auf Standarddeutsch, der Engländer auf Englisch. Übersetzt wird
@@ -366,7 +373,8 @@ Schritten: Dateien oder Video-Links wählen, dann je Aufnahme Sprache und Anzahl
 setzen, dann prüfen und starten. Jede Aufnahme bekommt so ihre eigene Zahl — praktisch, wenn
 Zweiergespräche und ein Teaminterview im selben Schwung dazukommen. **Und du kannst vorher
 kurz reinhören:** ein Klick auf das Play-Symbol der Zeile spielt die Aufnahme unten im
-Fenster ab, damit du nicht raten musst, wie viele Leute darin vorkommen. (Das Fenster gibt es
+Fenster ab, damit du nicht raten musst, wie viele Leute darin vorkommen. Bei Video-Links geht
+das erst nach dem Herunterladen — dort sagt der Knopf es auch. (Das Fenster gibt es
 **ab der nächsten Fassung**; in `v0.25.0` stehen dieselben Felder direkt auf der Seite, in
 `v0.24.0` und älter führt nur der Weg über das ⋯-Menü unten.)
 
