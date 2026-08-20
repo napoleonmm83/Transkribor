@@ -2316,3 +2316,41 @@ def test_projekteinstellungen_nennen_die_sprecher_obergrenze(client):
     for antwort in (client.get("/api/projects/Demo/einstellungen"),
                     client.put("/api/projects/Demo/einstellungen", json={})):
         assert antwort.json()["sprecher_max"] == s.SPRECHER_MAX
+
+
+def test_upload_traegt_die_sprecherzahl_ein_BEVOR_der_job_laeuft(client, monkeypatch):
+    """Die Zahl muss in projekt.json stehen, wenn `_start_transcribe` laeuft — sonst ist sie
+    ein Rennen gegen die eigene Pipeline (genau der Fehler, den dieser Umbau behebt).
+    Geprueft wird deshalb der ZEITPUNKT, nicht nur das Ergebnis: die Attrappe liest den Stand
+    in dem Moment, in dem der Job gestartet wuerde."""
+    from webtool import projekt as projekt_mod
+    import webtool.jobs as jobs_mod
+    beim_start = {}
+
+    def fake_start(project, cmd, cwd, kind, then=None, env=None):
+        beim_start["sprecher"] = projekt_mod.datei_ansicht(project, "Neu")["sprecher"]
+        return "upl1", True
+
+    monkeypatch.setattr(jobs_mod, "start", fake_start)
+    r = client.post("/api/projects/Demo/audio",
+                    files={"file": ("Neu.mp3", b"a", "audio/mpeg")}, data={"sprecher": "4"})
+    assert r.status_code == 200
+    assert beim_start["sprecher"] == 4
+
+
+def test_upload_ohne_sprecherzahl_legt_keinen_eintrag_an(client):
+    """Legacy-Verhalten: wer das Feld weglaesst, bekommt `null` (automatisch) — und keinen
+    Datei-Override, der spaeter etwas festschriebe."""
+    from webtool import projekt as projekt_mod
+    r = client.post("/api/projects/Demo/audio", files={"file": ("Ohne.mp3", b"a", "audio/mpeg")})
+    assert r.status_code == 200
+    assert projekt_mod.datei_ansicht("Demo", "Ohne")["sprecher"] is None
+
+
+def test_upload_lehnt_sprecherzahl_ausserhalb_des_bereichs_ab(client, tmp_path):
+    """Trust-Boundary (#264): der Wert geht ungefiltert an pyannote. Und die Pruefung laeuft
+    VOR dem Schreiben — sonst laege bei 400 eine verwaiste Audiodatei im Projekt."""
+    r = client.post("/api/projects/Demo/audio",
+                    files={"file": ("Zuviel.mp3", b"a", "audio/mpeg")}, data={"sprecher": "0"})
+    assert r.status_code == 400 and "sprecher" in r.json()["detail"]
+    assert not (tmp_path / "Demo" / "audio" / "Zuviel.mp3").exists()
