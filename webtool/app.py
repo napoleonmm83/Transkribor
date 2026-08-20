@@ -947,7 +947,11 @@ def fetch_urls(project: str, body: FetchBody):
                             detail="sprecher muss so viele Eintraege haben wie urls")
     # PAARWEISE filtern: leere URL-Zeilen fielen sonst nur auf der einen Seite weg und
     # verschoeben ab da JEDE Zuordnung — die 5 des Teamgespraechs landete beim 2er-Interview.
-    paare = [(u.strip(), s) for u, s in zip(body.urls, sprecher_roh) if u.strip()]
+    # `strict=True` kann nach der Laengenpruefung darueber nicht mehr feuern — es steht als
+    # Zusicherung da, nicht als Schutz: wer die Pruefung eines Tages verschiebt, bekommt einen
+    # lauten Fehler statt einer still gekuerzten Liste, und still gekuerzt hiesse hier
+    # verschobene Zuordnung (CodeRabbit-CLI).
+    paare = [(u.strip(), s) for u, s in zip(body.urls, sprecher_roh, strict=True) if u.strip()]
     urls = [u for u, _ in paare]
     sprecher = [s for _, s in paare]
     if not urls:
