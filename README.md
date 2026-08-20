@@ -354,8 +354,8 @@ erscheint eine Liste mit einer Zeile pro Aufnahme und einem Feld „Anzahl Sprec
 erst ein Klick auf den Startknopf darunter legt los (**„Hinzufügen & starten“** bei
 hochgeladenen Aufnahmen, **„Holen & starten“** bei Video-Links). Jede Aufnahme bekommt so ihre eigene
 Zahl — praktisch, wenn Zweiergespräche und ein Teaminterview im selben Schwung dazukommen.
-(Diese Liste gibt es **ab der nächsten Fassung**; bis dahin führt nur der Weg über das
-⋯-Menü unten.)
+(Diese Liste gibt es **ab `v0.25.0`**; in Fassungen bis einschliesslich **`v0.24.0`** führt
+nur der Weg über das ⋯-Menü unten.)
 
 Nachträglich geht es weiterhin: in der Dateiliste auf das **⋯-Menü** der Aufnahme klicken,
 dort **„Sprache, Sprecher & Korrektur“** wählen — das Feld steht im Dialog gleich unter der
