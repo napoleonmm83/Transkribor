@@ -292,7 +292,8 @@ sie. Der Anfang bleibt über einen Klick ganz links erreichbar.
 `sprachen.py` führt `auto` mit `whisper: None` — Whisper bestimmt die Sprache selbst. Zwei
 Dinge dazu, die im Code stehen und deren Missachtung teuer wäre:
 
-- **Schweizerdeutsch kann `auto` niemals liefern.** Der Kommentar in `von_whisper_code` sagt
+- **Schweizerdeutsch kann `auto` von sich aus niemals liefern** — erst der Projekt-Standard
+  aus 10.1 tut das. Der Kommentar in `von_whisper_code` sagt
   es wörtlich: *„'ch' ist nur als Nutzerauswahl gueltig, nie als Detektion."* Whisper meldet
   `de`, und `auto` trägt `dialekt: False`. Für jede Schweizer Aufnahme heisst „automatisch"
   also **ohne Dialekt-Glättung**.
@@ -301,7 +302,9 @@ Dinge dazu, die im Code stehen und deren Missachtung teuer wäre:
   **0,565**, Stille **0,289**.
 
 Deshalb: `auto` bleibt **wählbar**, wird aber **nirgends Vorgabe**, und die Zusammenfassung in
-Schritt 3 nennt die Folge beim Namen.
+Schritt 3 nennt die Folge beim Namen — seit 10.1 einschliesslich des Projekt-Standards, der bei
+erkanntem `de` gewinnt. Die zweite Messung oben bleibt der Grund, warum `auto` nicht Vorgabe
+wird: der Vorrang repariert die `ch`/`de`-Kollision, nicht eine unsichere Erkennung.
 
 ### 5.3 Die Sprunghilfe findet Geräusch, nicht Sprache
 
@@ -336,10 +339,9 @@ mitwandern muss:
    Zeitlimit (Issue #299); hängt die Verbindung, bliebe der Dialog sonst für immer tot, und der
    einzige Ausweg wäre ein Neuladen samt Verlust aller Eingaben.
 
-**Annahme, die Marcus noch nicht bestätigt hat:** ein mitten im Ablauf geschlossener Dialog
+**Von Marcus bestätigt (2026-08-20, s. 10):** ein mitten im Ablauf geschlossener Dialog
 **stellt beim nächsten Öffnen wieder her**, was schon eingetippt war. Getippte Sprecherzahlen
-sind Arbeit; dieselbe Regel wie Punkt 4. Wird das verworfen, ändert sich nur diese eine Stelle.
-
+sind Arbeit; dieselbe Regel wie Punkt 4. 
 **Diese Annahme widerspricht Punkt 1, solange nicht dazugesagt wird, dass sie
 PROJEKTGEBUNDEN ist.** Ohne das ist die Wiederherstellung exakt der Bug aus Punkt 1 durch die
 eigene Hintertür: Dialog in Projekt A schliessen, zu B wechseln, öffnen — und As Dateien samt
@@ -415,15 +417,56 @@ mischen wäre genau die Verwechslung, die B1 erzeugt hat.
 
 ---
 
-## 10. Offene Annahmen
+## 10. Entschieden (Marcus, 2026-08-20)
 
-Getroffen, weil sie die Arbeit nicht blockieren. Jede ist eine Stelle, nicht das Design:
+Die vier offenen Annahmen sind beantwortet. Sie stehen hier als Entscheidung, nicht mehr als
+Vorgriff:
 
-1. **`auto` bleibt in der Liste**, mit Warnhinweis in Schritt 3. Alternative: ganz raus.
-2. **Die Sprunghilfe ist an.** Alternative: bei 0:00 starten und die Marke nur anzeigen.
-3. **Ein geschlossener Dialog stellt seine Eingaben wieder her** (Abschnitt 6).
+1. **`auto` bleibt in der Liste**, mit Hinweis in Schritt 3 — **und bekommt einen Vorrang**,
+   siehe 10.1. Der Hinweistext ändert sich dadurch (10.1, letzter Absatz).
+2. **Die Sprunghilfe springt.** Play beginnt an der ersten Geräuschstelle, nicht bei 0:00.
+   Die Beschriftung bleibt „erstes Geräusch" — 5.3 gilt unverändert.
+3. **Ein geschlossener Dialog stellt seine Eingaben wieder her**, **projektgebunden**
+   (Abschnitt 6). Getippte Sprecherzahlen sind Arbeit; und weil das Modal den
+   Abbrechen-Knopf laufender Jobs verdeckt, darf Schliessen nichts kosten.
 4. **Kein „+15 s"-Knopf.** Play, Stop und Klick in die Welle genügen; jeder weitere Knopf macht
    die Zeile wieder voller — und davon kamen wir her.
+
+### 10.1 Neu: der Projekt-Standard gewinnt bei `auto`
+
+Marcus' Bedingung für Entscheidung 1: *„man kann eine Default-Sprache einstellen, die bei
+`auto` Prio 1 ist, wenn eine erkannte Sprache matcht — also zum Beispiel `de` erkannt und
+Default ist `ch`, dann `ch`."*
+
+Quelle ist der **Projekt-Standard aus dem ⋯-Menü** (`projekt.json:sprache`), keine neue
+Einstellung. Der Wert existiert bereits als Fallback für Dateien ohne eigene Wahl; ihn als
+Vorrang mitzubenutzen ist dieselbe Bedeutung („was wird hier normalerweise gesprochen") an
+demselben Ort. Eine zweite, globale Sprachquelle wäre genau die Doppelung, die B1 erzeugt hat.
+
+| Datei-Sprache | Whisper erkennt | Projekt-Standard | Ergebnis |
+|---|---|---|---|
+| `auto` | `de` | `ch` | **`ch`** — mit Dialekt-Glättung |
+| `auto` | `de` | `de` | `de` — wie bisher |
+| `auto` | `en` | `ch` | `en` — der Standard greift nicht |
+| `auto` | (nichts erkannt) | egal | `de` — wie bisher |
+
+**Es ist EINE Zeile** (`correct.py:96`, `_s.von_whisper_code(code)`): der Vorrang gehört als
+Parameter in `sprachen.von_whisper_code`, nicht als Sonderfall an den Aufrufort — die Tabelle
+mit den Whisper-Codes ist die EINE Quelle, und `ch`/`de` ist die einzige Kollision darin.
+
+**Die Transkription ändert sich nicht.** `ch` und `de` teilen den Whisper-Code `de`; betroffen
+sind nur `ziel`-Phrase und Dialekt-Flag der **Korrektur**.
+
+**Der Preis, benannt:** alle Altprojekte stehen auf `ch` (`SPRACH_DEFAULT`). Eine bestehende
+`auto`-Datei, bei der Whisper `de` erkennt, bekommt dort ab sofort Dialekt-Glättung, wo sie
+vorher Standarddeutsch bekam. Das ist die gewollte Richtung — aber es ist eine
+Verhaltensänderung an bestehenden Projekten und gehört in die README.
+
+**Und der Hinweistext in Schritt 3 ändert sich mit.** „Automatisch liefert nie
+Schweizerdeutsch" stimmt danach nicht mehr. Er nennt jetzt den Vorrang: *„Automatisch:
+Whisper erkennt die Sprache. Wird Deutsch erkannt, gilt der Projekt-Standard
+‹Schweizerdeutsch›."* — der zweite Satz nur, wenn der Projekt-Standard überhaupt greifen kann
+(Whisper-Code des Standards ist nicht `None`). Behauptet wird damit nur, was 5.2 hergibt.
 
 ---
 

@@ -17,7 +17,7 @@ SPRACHEN = {
              "whisper": "fr", "dialekt": False, "ziel": "français courant"},
     "it":   {"label": "Italienisch", "hint": "Italiano",
              "whisper": "it", "dialekt": False, "ziel": "italiano corretto"},
-    "auto": {"label": "Automatisch", "hint": "Whisper erkennt (kein Dialekt)",
+    "auto": {"label": "Automatisch", "hint": "Whisper erkennt die Sprache",
              "whisper": None, "dialekt": False, "ziel": ""},
 }
 
@@ -60,13 +60,23 @@ def ziel_phrase(sprach_id: str) -> str:
     return _eintrag(sprach_id)["ziel"]
 
 
-def von_whisper_code(code: str) -> str:
-    """Whisper-Detektion -> Sprach-id. ch wird nie detektiert; Unbekannt -> de.
+def von_whisper_code(code: str, bevorzugt: str | None = None) -> str:
+    """Whisper-Detektion -> Sprach-id. Unbekannt -> de.
 
     ponytail: 'ch' teilt sich den Whisper-Code 'de' mit 'de'. Da Whisper den
-    Dialekt nicht erkennt, wird bei Detektion 'de' immer Standarddeutsch
-    zurueckgegeben -- 'ch' ist nur als Nutzerauswahl gueltig, nie als Detektion.
+    Dialekt nicht erkennt, wird bei Detektion 'de' Standarddeutsch zurueckgegeben --
+    'ch' ist als Detektion nie gueltig.
+
+    `bevorzugt` (der Projekt-Standard, s. `correct._ziel_dialekt`) durchbricht das an
+    GENAU dieser Kollision: stimmt sein Whisper-Code mit der Detektion ueberein, gewinnt
+    er. Wer sein Projekt auf Schweizerdeutsch gestellt hat, meint bei erkanntem Deutsch
+    sein Schweizerdeutsch. Bei JEDER anderen erkannten Sprache greift er nicht -- sonst
+    waere `auto` in einem CH-Projekt ein fest verdrahtetes `ch`, und der englische
+    Beitrag bekaeme Dialekt-Glaettung. Der Vorrang steht hier und nicht am Aufrufort:
+    diese Tabelle ist die EINE Quelle fuer Whisper-Codes.
     """
+    if bevorzugt in SPRACHEN and SPRACHEN[bevorzugt]["whisper"] == code:
+        return bevorzugt
     for sid, e in SPRACHEN.items():
         if sid == "ch":
             continue

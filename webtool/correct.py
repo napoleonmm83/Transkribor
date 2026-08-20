@@ -76,9 +76,11 @@ def _default_context(ziel: str, dialekt: bool = True, mehrsprachig: bool = False
 def _ziel_dialekt(project: str, base: str) -> tuple:
     """(ziel-Phrase, dialekt-Flag, mehrsprachig-Flag) fuer die Prompts einer Datei.
 
-    'auto' wird an der ROH-JSON aufgeloest (Whispers detektierter language-Code);
-    Dialekt ist dabei stets aus (ch wird nie auto-detektiert). Eine explizite
-    Nutzerauswahl von 'ch' ist der einzige Weg, dialekt=True zu bekommen.
+    'auto' wird an der ROH-JSON aufgeloest (Whispers detektierter language-Code) --
+    mit dem PROJEKT-STANDARD als Vorrang: erkennt Whisper 'de' und das Projekt steht auf
+    'ch', gilt 'ch' samt Dialekt-Glaettung (Spec 10.1). Bei jeder anderen erkannten
+    Sprache greift der Standard nicht. Ohne passenden Standard bleibt es dabei, dass
+    'ch' nie aus einer Detektion kommt.
 
     `ziel` und `dialekt` folgen auch bei gemischten Aufnahmen UNVERAENDERT der
     Ankersprache — das mehrsprachig-Flag kommt zusaetzlich, es ersetzt nichts."""
@@ -93,7 +95,7 @@ def _ziel_dialekt(project: str, base: str) -> tuple:
             code = _load(os.path.join(paths.transkripte_dir(project), base + ".json")).get("language")
         except (OSError, ValueError):     # ValueError deckt auch UnicodeDecodeError (#190)
             code = None
-        sid = _s.von_whisper_code(code) if code else "de"
+        sid = _s.von_whisper_code(code, _pj.laden(project)["sprache"]) if code else "de"
     return _s.ziel_phrase(sid), _s.ist_dialekt(sid), _pj.datei_mehrsprachig(project, base)
 
 

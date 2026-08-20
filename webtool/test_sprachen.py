@@ -35,6 +35,25 @@ def test_von_whisper_code_erkennt_nicht_ch():
     assert sprachen.von_whisper_code("xx") == "de"   # unbekannt -> de (sicherer Rueckfall)
 
 
+# ---- Der Projekt-Standard gewinnt bei `auto` (Spec 10.1) ----
+# `ch` und `de` teilen den Whisper-Code `de`; die Detektion kann sie nicht trennen. Wer als
+# Projekt-Standard `ch` gesetzt hat, meint bei erkanntem Deutsch sein Schweizerdeutsch.
+# Der Vorrang steht HIER und nicht am Aufrufort: die Whisper-Code-Tabelle ist die EINE Quelle.
+
+def test_von_whisper_code_bevorzugt_gewinnt_bei_gleichem_whisper_code():
+    assert sprachen.von_whisper_code("de", "ch") == "ch"
+
+
+def test_von_whisper_code_bevorzugt_greift_nur_bei_treffer():
+    # Der Standard darf eine ANDERE erkannte Sprache nicht ueberschreiben -- sonst waere
+    # `auto` in einem CH-Projekt ein fest verdrahtetes `ch`, und der englische Beitrag
+    # bekaeme Dialekt-Glaettung.
+    assert sprachen.von_whisper_code("en", "ch") == "en"
+    assert sprachen.von_whisper_code("de", "auto") == "de"    # auto hat keinen Whisper-Code
+    assert sprachen.von_whisper_code("de", "quatsch") == "de"  # unbekannter Standard zaehlt nicht
+    assert sprachen.von_whisper_code("de", None) == "de"       # ohne Standard wie bisher
+
+
 def test_fuer_frontend_enthaelt_alle_sechs():
     ids = {e["id"] for e in sprachen.fuer_frontend()}
     assert ids == {"ch", "de", "en", "fr", "it", "auto"}
