@@ -5,6 +5,7 @@ import { getFileEinstellungen, saveFileEinstellungen } from '@/lib/api'
 // und wird neunmal benutzt. Ohne die Umbenennung verdeckte er die Funktion, und der Aufruf
 // traefe sich selbst (`Cannot access 'sprecherWahl' before initialization` — zur Laufzeit).
 import { sprecherWahl as sprecherWahlAus } from '@/lib/sprecher'
+import { autoHinweis } from '@/lib/autoHinweis'
 import type { DateiEinstellungen, ProjectFile } from '@/lib/types'
 import { MehrsprachigWahl, type MehrWahl } from '@/components/MehrsprachigKasten'
 import { Button } from '@/components/ui/button'
@@ -228,6 +229,16 @@ export function DateiEinstellungenDialog({ project, base, file, offen, onOpenCha
                   ))}
                 </SelectContent>
               </Select>
+              {/* Die `auto`-Regel steht dort, wo man sie ausloest (#301). Der `hint` im
+                  Waehler kann sie strukturell NICHT tragen: er ist statisch und kennt den
+                  Projekt-Standard nicht, der Satz ist aber bedingt. Bezug ist
+                  `sprachEffektiv` — auch „Folgt dem Projekt" landet bei `auto`, wenn der
+                  Projekt-Standard selbst `auto` ist, und dann gilt die Regel genauso. */}
+              {autoHinweis(sprachEffektiv, data.sprache_projekt, data.sprach_choices) && (
+                <p className="mt-1.5 text-xs text-muted-foreground">
+                  {autoHinweis(sprachEffektiv, data.sprache_projekt, data.sprach_choices)}
+                </p>
+              )}
             </div>
             <div>
               <label htmlFor="fs-sprecher" className="mb-1.5 block text-sm font-medium">

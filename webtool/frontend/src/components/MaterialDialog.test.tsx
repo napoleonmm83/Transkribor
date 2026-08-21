@@ -11,7 +11,11 @@ vi.mock('sonner', () => ({ toast: toastMock }))
 
 const basis = {
   project: 'Demo', offen: true,
-  sprachChoices: [{ id: 'ch', label: 'Schweizerdeutsch' }, { id: 'en', label: 'Englisch' }],
+  // `dialekt` seit #301: ohne das Flag schweigt `autoHinweis` bewusst („unbekannt" statt
+  // einer moeglichen Falschaussage) — eine Attrappe ohne es wuerde also den Satz
+  // wegtesten, den es zu pruefen gilt.
+  sprachChoices: [{ id: 'ch', label: 'Schweizerdeutsch', dialekt: true },
+                  { id: 'en', label: 'Englisch', dialekt: false }],
   projektSprache: 'ch', sprecherMax: 20,
   onSchliessen: () => {}, onFertig: () => {},
 }
@@ -360,7 +364,7 @@ describe('MaterialDialog', () => {
        aus, aber der Projekt-Standard tut es. Die Warnung stuende also genau fuer die
        Konstellation da, die 10.1 repariert. */
     render(<MaterialDialog {...basis} projektSprache="ch"
-      sprachChoices={[...basis.sprachChoices, { id: 'auto', label: 'Automatisch' }]}
+      sprachChoices={[...basis.sprachChoices, { id: 'auto', label: 'Automatisch', dialekt: false }]}
       vorbelegteDateien={[datei('a.mp3')]} />)
     fireEvent.click(screen.getByRole('button', { name: /Weiter/ }))
     expect(screen.queryByText(/Projekt-Standard/i)).not.toBeInTheDocument()  // nicht gewaehlt
@@ -369,6 +373,28 @@ describe('MaterialDialog', () => {
     fireEvent.click(screen.getByRole('button', { name: /Weiter/ }))
     expect(screen.getByText(/Projekt-Standard/i)).toBeInTheDocument()
     expect(screen.queryByText(/verlier|ohne Dialekt/i)).not.toBeInTheDocument()
+  })
+
+  it('nennt einen NICHT-Dialekt-Standard nicht als Gewinner (#301)', () => {
+    /* Die Bedingung war `projektSprache !== 'auto'` und damit zu weit: ein englisches
+       Projekt bekam „Wird Deutsch erkannt, gilt der Projekt-Standard Englisch".
+       GEMESSEN an `sprachen.von_whisper_code` ist das falsch — dort gilt `de`:
+
+           erkannt  Standard  mit Vorrang  ohne Vorrang
+           de       ch        ch           de            <- der EINZIGE Unterschied
+           de       en        de           de
+
+       Der Vorrang greift nur, wo sich zwei ids einen Whisper-Code teilen. Ohne diesen Test
+       bliebe die Korrektur ungedeckt: der Test darunter prueft nur den `auto`-Standard. */
+    render(<MaterialDialog {...basis} projektSprache="en"
+      sprachChoices={[...basis.sprachChoices, { id: 'auto', label: 'Automatisch', dialekt: false }]}
+      vorbelegteDateien={[datei('a.mp3')]} />)
+    fireEvent.click(screen.getByRole('button', { name: /Weiter/ }))
+    fireEvent.change(screen.getByRole('combobox', { name: /Sprache für a\.mp3/ }),
+                     { target: { value: 'auto' } })
+    fireEvent.click(screen.getByRole('button', { name: /Weiter/ }))
+    expect(screen.queryByText(/gilt der Projekt-Standard/)).toBeNull()
+    expect(screen.getByText(/ohne Dialekt-Glättung/)).toBeInTheDocument()
   })
 
   it('nennt den Standard NICHT, wenn er selbst „Automatisch" ist', () => {

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { getProjektEinstellungen, saveProjektEinstellungen } from '@/lib/api'
+import { autoHinweis } from '@/lib/autoHinweis'
 import type { ProjectEinstellungen } from '@/lib/types'
 import { MehrsprachigKasten } from '@/components/MehrsprachigKasten'
 import { Button } from '@/components/ui/button'
@@ -85,6 +86,17 @@ export function ProjektEinstellungenDialog({ project, offen, onOpenChange, onGea
                   ))}
                 </SelectContent>
               </Select>
+              {/* `null` als Bezug, und das ist der Unterschied zum Datei-Dialog (#301):
+                  hier SETZT man den Projekt-Standard gerade, einen darueber gibt es nicht.
+                  `correct._ziel_dialekt` reichte in diesem Fall `auto` als `bevorzugt`
+                  weiter — und das trifft nie, weil `auto` keinen Whisper-Code hat. Also
+                  reine Detektion, und genau das sagt der Satz. Denselben Text wie im
+                  Datei-Dialog zu zeigen waere hier schlicht falsch. */}
+              {autoHinweis(sprache, null, data.sprach_choices) && (
+                <p className="mt-1.5 text-xs text-muted-foreground">
+                  {autoHinweis(sprache, null, data.sprach_choices)}
+                </p>
+              )}
             </div>
             <div>
               <label id="lbl-tiefe" className="mb-1.5 block text-sm font-medium">Korrektur-Tiefe</label>

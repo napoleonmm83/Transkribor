@@ -9,6 +9,7 @@ import { MaterialZeile } from '@/components/MaterialZeile'
 import { alleGueltig, ergaenzen, sprachText, sprecherText,
          type Aufnahme } from '@/lib/materialZeilen'
 import { sprecherWahl } from '@/lib/sprecher'
+import { autoHinweis } from '@/lib/autoHinweis'
 import { HttpFehler, SendeZeitlimit, fetchUrls, uploadAudio } from '@/lib/api'
 import type { StartJob } from '@/lib/types'
 
@@ -25,7 +26,7 @@ export function MaterialDialog({ project, offen, vorbelegteDateien, sprachChoice
   project: string
   offen: boolean
   vorbelegteDateien?: File[]
-  sprachChoices: { id: string; label: string; hint?: string }[]
+  sprachChoices: { id: string; label: string; hint?: string; dialekt?: boolean }[]
   projektSprache: string
   sprecherMax: number
   onSchliessen: () => void
@@ -201,8 +202,12 @@ export function MaterialDialog({ project, offen, vorbelegteDateien, sprachChoice
   // Der Hinweis erscheint NUR, wenn der Projekt-Standard ueberhaupt gewinnen kann. `auto`
   // ist die einzige id ohne Whisper-Code (`sprachen.py`), und der Satz waere sonst eine
   // Zusage ohne Gegenstand. Sollte je eine zweite solche id dazukommen, faellt es hier auf.
-  const standardGreift = projektSprache !== 'auto'
   const autoDabei = zeilen.some(z => z.sprache === 'auto')
+  // Der Satz kommt seit #301 aus `autoHinweis` — EINE Quelle fuer Datei-Dialog,
+  // Projekt-Dialog und diese Zusammenfassung. Sie deckt nebenbei den #305-Fall mit ab
+  // (leerer `projektSprache` ⇒ „es gilt, was Whisper erkennt"), der hier bis eben als
+  // `|| 'Projekt-Standard'` von Hand nachgebaut war.
+  const hinweis = autoDabei ? autoHinweis('auto', projektSprache, sprachChoices) : null
 
   return (
     <Dialog open={offen} onOpenChange={o => { if (!o) onSchliessen() }}>
@@ -304,14 +309,14 @@ export function MaterialDialog({ project, offen, vorbelegteDateien, sprachChoice
               </p>
               {autoDabei && (
                 <p className="text-muted-foreground">
-                  „Automatisch“: Whisper erkennt die Sprache selbst.
-                  {/* `||`, nicht `??` — der Zwilling des Lochs, das `sprachText` gerade bekommen hat
-                      (#305): bei leerem `projektSprache` stuende hier „gilt der Projekt-Standard
-                      „".". Heute nicht erreichbar (`autoDabei` braucht eine Zeile mit `'auto'`,
-                      und die entsteht nur an einem Waehler, den es bei leeren `sprachChoices`
-                      nicht gibt) — es ist Haertung, aber genau die Form „an EINER Stelle
-                      behoben, nicht die Klasse". Ein Zeichen. */}
-                  {standardGreift && ` Wird Deutsch erkannt, gilt der Projekt-Standard „${labels[projektSprache] || projektSprache || 'Projekt-Standard'}“.`}
+                  {/* Die Bedingung hier war FALSCH und ist gemessen widerlegt: sie lautete
+                      `projektSprache !== 'auto'`, also bekam ein englisches Projekt „Wird
+                      Deutsch erkannt, gilt der Projekt-Standard Englisch" — nachgemessen an
+                      `sprachen.von_whisper_code` gilt dort `de`. Der Vorrang greift NUR, wo
+                      sich zwei ids einen Whisper-Code teilen, und das ist ausschliesslich
+                      `ch`/`de`. Die Unterscheidung liegt jetzt am `dialekt`-Flag der Tabelle
+                      statt an einer hier nachgebauten Regel. */}
+                  „Automatisch“: Whisper erkennt die Sprache selbst.{hinweis && ` ${hinweis}`}
                 </p>
               )}
             </div>
