@@ -17,6 +17,9 @@ const GRUENDE: Record<string, string> = {
   // Beide Quellen für die Update-Adresse waren leer (`electron/updater.js`). Der Satz nennt
   // den Ausweg, weil dieses Exemplar sich nicht selbst helfen kann.
   'keine-quelle': 'Diese Fassung kennt keine Update-Quelle — bitte lade sie neu herunter.',
+  // `erstellen` lief gar nicht erst (Verpackungsfehler). Ohne eigenen Grund sagte die Seite
+  // hier „Updates gibt es in der installierten App" — in der installierten App (#319).
+  'kein-updater': 'Die Update-Prüfung konnte nicht gestartet werden — Einzelheiten stehen im Protokoll.',
 }
 
 /** Bytes als MB mit einer Nachkommastelle, deutsches Dezimalkomma. */

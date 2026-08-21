@@ -224,4 +224,4 @@ export type UpdateZustand =
   | { version: string; art: 'fehler'; text: string }
   /** `grund` ist ein Code, kein Satz — der deutsche Text steht in VersionPage.tsx.
    *  `keine-quelle`: beide Quellen fuer die Update-Adresse waren leer (electron/updater.js). */
-  | { version: string; art: 'nicht_moeglich'; grund: 'entwicklung' | 'kein-appimage' | 'keine-quelle' };
+  | { version: string; art: 'nicht_moeglich'; grund: 'entwicklung' | 'kein-appimage' | 'keine-quelle' | 'kein-updater' };
