@@ -60,8 +60,22 @@ Alles hier ist gemessen, nicht angenommen — wer etwas davon ändert, misst neu
   2026-08-21): `model` nimmt `sonnet|opus|haiku|fable`, eine volle Modell-ID oder `inherit`
   (Default); `effort` nimmt `low|medium|high|xhigh|max` und „overrides session effort". Beide
   Orte gelten, `.claude/agents/` schlägt `~/.claude/agents/` bei Namensgleichheit.
-- **⚠️ EINE NEU ANGELEGTE AGENTENDATEI GILT IN DER LAUFENDEN SITZUNG NICHT — und der Dispatch
-  sagt es nicht.** Gemessen 2026-08-21: eine mitten in der Sitzung erzeugte Definition
+- **Vorrangregel `model`** (dokumentiert): `CLAUDE_CODE_SUBAGENT_MODEL` → **Aufruf-Parameter** →
+  Frontmatter → Sitzungsmodell. **Der Parameter schlägt die Datei.** Folge für den Entwurf: beim
+  Dispatch eines Routing-Agenten wird **kein** `model` mitgegeben — sonst überschreibt der
+  Aufrufort genau die Quelle, die die Tafel autoritativ machen soll. Für `general-purpose` (der
+  kein Frontmatter-Modell hat) ist der Parameter dagegen der einzige Weg.
+- **Für `effort` gibt es KEINE Aufruf-Stufe** (dokumentiert): weder ein Parameter am
+  `Agent`-Werkzeug noch ein Env-Pendant zu `CLAUDE_CODE_SUBAGENT_MODEL`. Nur Frontmatter oder
+  Sitzungserbe. **Das Effort-Routing steht und fällt mit dem Frontmatter** — es gibt keinen
+  Rückweg.
+- **⚠️ FEHLTE `~/.claude/agents/` BEIM SITZUNGSSTART, GILT EINE DORT NEU ANGELEGTE DATEI IN
+  DIESER SITZUNG NICHT — und der Dispatch sagt es nicht.** Die Doku nennt die Bedingung
+  ausdrücklich: *„If Claude can't find the new subagent, restart Claude Code… happens only when
+  `~/.claude/agents/` didn't exist before the session started"*. Genau dieser Fall lag hier vor
+  (das Verzeichnis wurde mitten in der Sitzung erst angelegt).
+  **Was die Doku NICHT sagt und hier gemessen wurde:** der Dispatch **scheitert nicht**, er
+  ersetzt still. Gemessen 2026-08-21: eine mitten in der Sitzung erzeugte Definition
   (`model: haiku`, eigener Körper mit einem Codewort) löste unter ihrem Namen **ohne Fehler**
   auf, lief aber auf dem Sitzungsmodell, mit Sitzungs-Effort — und antwortete **nicht** mit
   ihrem Codewort, sondern aus dem Kontext der aufrufenden Sitzung. Der `subagent_type` wurde
@@ -70,8 +84,17 @@ Alles hier ist gemessen, nicht angenommen — wer etwas davon ändert, misst neu
   ein Probelauf, der „antworte mit BEREIT" verlangt, bekommt „BEREIT" — egal wer antwortet. Die
   Unterscheidung gelingt nur mit einer Anweisung, die **ausschliesslich** im Körper der Datei
   steht.
-  **Folge für die Prüfung:** ob `model:`/`effort:` wirken, ist an einer frisch angelegten Datei
-  grundsätzlich nicht messbar. Es braucht eine **neue Sitzung** — dieselbe Bedingung wie in §7.3.
+  **Folge für die Prüfung:** ob `model:`/`effort:` wirken, war unter dieser Bedingung nicht
+  messbar. Es braucht eine **neue Sitzung** — dieselbe Bedingung wie in §7.3.
+  **Ein zweiter Fall bleibt unerklärt:** `.claude/agents/mutationsprobe.md` existierte beim
+  Sitzungsstart, wurde nur im Frontmatter ergänzt — und `effort: low` griff ebenfalls nicht.
+  Die Verzeichnis-Bedingung der Doku deckt das nicht ab. Entweder gilt dieselbe Zwischenspeicherung
+  auch für **geänderte** Dateien, oder es ist etwas anderes. Offen; die neue Sitzung beantwortet
+  auch das, weil sie beide Dateien frisch einliest.
+  **Nicht verwechseln:** die zwei Changelog-Einträge zu `effort:` (v2.1.222 und früher) sind
+  **Anzeigefehler** — falsches Label im Spinner bzw. in der Statuszeile. Sie besagen, dass die
+  Anwendung darunter korrekt war, und erklären eine Messung am echten Wert im Transkript
+  gerade **nicht**.
 - **`UserPromptSubmit`-Injektionen akkumulieren.** Sie landen im Turn und bleiben in der
   Historie. Anthropics eigener ausgelieferter Hook (2 325 Zeilen) hält deshalb Sitzungszustand:
   `atomic_check_and_mark_warning(...)` — *„Returns True if this is the first time seeing this
