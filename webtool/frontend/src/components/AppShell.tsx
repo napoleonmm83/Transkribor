@@ -7,6 +7,7 @@ import { EditorBrueckeProvider, useEditorBruecke } from '@/hooks/useEditorBrueck
 import { useDokumentTitel } from '@/hooks/useDokumentTitel'
 import { useJob } from '@/hooks/useJob'
 import { useOsFortschritt } from '@/hooks/useOsFortschritt'
+import { toast } from 'sonner'
 import { uploadAudio, startTranscribe, startCorrect } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { Sidebar } from './Sidebar'
@@ -58,7 +59,15 @@ function Leiste() {
       onAngelegt={n => { if (wechselErlaubt(null)) navigate(`/p/${encodeURIComponent(n)}`) }}
       active={active}
       onOpen={s => { if (wechselErlaubt(s)) navigate(`/p/${encodeURIComponent(s.project)}/${encodeURIComponent(s.base)}`) }}
-      onUpload={(p, f) => uploadAudio(p, f).then(nachladen)}
+      // `.catch` ist Pflicht, nicht Hoeflichkeit (#299): das ist der EINZIGE Upload-Weg,
+      // der nicht durch den MaterialDialog laeuft (Knopf „Audio hochladen" in der Leiste),
+      // und einen globalen `unhandledrejection`-Handler gibt es in dieser App nicht — der
+      // Fehlschlag war schlicht unsichtbar. Vor dem Zeitlimit hing ein toter Request
+      // wenigstens erkennbar; seit er ABLEHNT, landete ausgerechnet die Meldung, die #299
+      // dafuer gebaut hat, hier nirgends. Der Grund muss mit: ohne ihn versucht es der
+      // Nutzer noch einmal und bekommt einen 409.
+      onUpload={(p, f) => uploadAudio(p, f).then(nachladen)
+        .catch(e => toast.error(`Hochladen: ${(e as Error)?.message || 'fehlgeschlagen'}`))}
       onTranscribe={p => start(() => startTranscribe(p), `Transkribieren ${p}`, nachladen)}
       onCorrect={p => start(() => startCorrect(p), `Korrigieren ${p}`, nachladen)}
       // Die Datei-Aktionen (korrigieren/neu transkribieren/loeschen) haengen nicht mehr hier:

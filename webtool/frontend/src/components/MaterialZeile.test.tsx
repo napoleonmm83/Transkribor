@@ -20,6 +20,10 @@ describe('MaterialZeile', () => {
       zeile={{ ...basis.zeile, sprache: '' }} />)
     expect(screen.queryByRole('combobox')).toBeNull()
     expect(screen.getByText(/Projekt-Standard/)).toBeInTheDocument()
+    // Das ersetzte `<select>` trug `aria-label="Sprache für …"`. Ohne Ersatz liest ein
+    // Screenreader bei zehn Aufnahmen zehnmal „Projekt-Standard", ohne dass hoerbar wird,
+    // welche Spalte gemeint ist — der `title` traegt das nicht (#244). (Fund des Reviewers.)
+    expect(screen.getByText(/Sprache für interview\.mp3/)).toBeInTheDocument()
   })
 
   it('beschriftet das Sprecherfeld AM Feld, nicht darunter (S1)', () => {

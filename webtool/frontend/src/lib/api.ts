@@ -95,13 +95,23 @@ const LADE_ZEITLIMIT_MS = 30_000
  *  Bemessen wird an der uebertragenen Menge, nicht an einer Antwortzeit. 1 MB/s ist die
  *  angesetzte Untergrenze und dafuer absichtlich weit unter der Wirklichkeit: der Server
  *  steht auf `127.0.0.1` (die Origin-Middleware in `app.py` weist alles andere mit 403 ab),
- *  die Strecke ist also Loopback plus ein Schreibvorgang auf die lokale Platte. Die Frist
- *  soll „irgendwann aufgeben" heissen, nicht „schnell genug sein".
+ *  die Strecke ist also Loopback plus ein Schreibvorgang auf die lokale Platte.
+ *
+ *  **Die Uebertragung ist aber nicht der einzige Zeitfresser, und daran haengt die
+ *  Grundfrist.** `upload_audio` ruft bei gesetzter Sprache oder Sprecherzahl
+ *  `projekt.setze_datei` → `sperre.datei(...)` mit `stale=60`; dessen Warteschleife gibt
+ *  erst nach `sperre.frist(60)` = **65 s** auf bzw. greift erzwungen zu. Eine Grundfrist
+ *  von 60 s waere damit KUERZER als die Worst-Case-Wartezeit im selben Request gewesen —
+ *  die Frist haette einen Vorgang abgeschnitten, der noch regulaer laeuft. 90 s liegen
+ *  darueber, mit Luft. (Bewusst eine eigene Zahl mit hingeschriebener Herleitung, keine
+ *  zweite Quelle fuer `sperre.frist()`: die steht in Python und ist von hier nicht lesbar;
+ *  ein Waechter im Test haelt sie ueber 65 s.)
+ *  Die Frist soll „irgendwann aufgeben" heissen, nicht „schnell genug sein".
  *
  *  **Ein gerissenes Limit heisst NICHT „fehlgeschlagen".** Anders als beim Laden ist der
  *  Abbruch hier nicht folgenlos: der Server kann die Datei bereits geschrieben und den
  *  Transkriptions-Job gestartet haben. Wer daraufhin erneut hochlaedt, bekommt einen 409. */
-const UPLOAD_GRUNDFRIST_MS = 60_000
+const UPLOAD_GRUNDFRIST_MS = 90_000
 const UPLOAD_MS_JE_MB = 1_000
 const SENDE_ZEITLIMIT_MS = 30_000
 

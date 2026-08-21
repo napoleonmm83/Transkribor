@@ -111,7 +111,13 @@ describe('Zeitlimit beim Senden (#299)', () => {
     // Die Frist eines JSON-GET (30 s) wuerde einen echten Upload abschneiden — genau davor
     // warnt das Issue. Sie muss mit der uebertragenen Menge wachsen, nicht fest sein.
     expect(gross).toBeGreaterThan(klein)
-    expect(klein).toBeGreaterThanOrEqual(30_000)
+    // Und die Grundfrist muss ueber der Worst-Case-Wartezeit liegen, die derselbe Request
+    // schon ohne jede Uebertragung haben kann: `upload_audio` nimmt bei gesetzter Sprache
+    // oder Sprecherzahl `sperre.datei(..., stale=60)`, deren Warteschleife bis
+    // `sperre.frist(60)` = 65 s laeuft. Darunter schnitte die Frist einen Vorgang ab, der
+    // noch regulaer arbeitet — die Zahl steht in Python und ist von hier nicht lesbar,
+    // deshalb ein Waechter statt einer geteilten Konstante. (Fund des Reviewers.)
+    expect(klein).toBeGreaterThan(65_000)
   })
 
   it('uebersetzt ein gerissenes Zeitlimit in „vielleicht doch angekommen"', async () => {
@@ -122,6 +128,17 @@ describe('Zeitlimit beim Senden (#299)', () => {
     await expect(api.uploadAudio('P', dateiMit(1_000))).rejects.toThrow(/möglicherweise/)
   })
 
+  it('laesst einen HttpFehler auch bei fetchUrls durch (Zwilling)', async () => {
+    /* Bewacht das `return await` in `fetchUrls`. OHNE es laeuft die Ablehnung von `jn` am
+       eigenen `catch` vorbei — der Durchlass-Zweig von `sendeFehler` waere auf dieser
+       Haelfte unerreichbar, und eine kuenftige Aenderung, die den `HttpFehler` verschluckt,
+       wuerde nur an `uploadAudio` rot. Genau diese Asymmetrie hat der Reviewer gemessen:
+       `await` in `fetchUrls` entfernt ⇒ 52/52 gruen. */
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+      { ok: false, status: 400, json: async () => ({ detail: 'nicht unterstuetzte URL' }) }))
+    await expect(api.fetchUrls('P', ['https://youtu.be/x'])).rejects.toBeInstanceOf(api.HttpFehler)
+  })
+
   it('laesst einen HttpFehler unveraendert durch — die 409-Erkennung haengt daran', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
       { ok: false, status: 409, json: async () => ({ detail: 'existiert bereits' }) }))
@@ -129,6 +146,22 @@ describe('Zeitlimit beim Senden (#299)', () => {
     // HttpFehler && e.status === 409`. Eine Uebersetzung, die den Typ verschluckt, liesse
     // jede Dublette als echten Fehlschlag in der Liste stehenbleiben.
     await expect(api.uploadAudio('P', dateiMit(1_000))).rejects.toBeInstanceOf(api.HttpFehler)
+  })
+
+  it('rundet die Frist auf eine GANZE Zahl', async () => {
+    /* Node validiert `AbortSignal.timeout(delay)` als uint32 und wirft bei einem Bruchteil
+       `RangeError` — und zwar VOR dem `fetch`, also als Absturz statt als Fehlschlag.
+       (Der Browser schneidet nach WebIDL still ab; die strengere Seite gewinnt hier.)
+
+       Dieser Test steht ausdruecklich NEBEN den vorhandenen uploadAudio-Tests, obwohl deren
+       `new File(['a'], …)` mit `size = 1` denselben Wurf ausloest: das ist ein ZUFALL ihrer
+       Testdaten, kein Waechter. Wer sie je auf eine runde Groesse umstellt, naehme den
+       Schutz still mit weg. Deshalb hier eine bewusst krumme Groesse. (Fund des Reviewers.) */
+    const spy = vi.spyOn(AbortSignal, 'timeout')
+    vi.stubGlobal('fetch', okFetch())
+    await api.uploadAudio('P', dateiMit(1_234_567))
+    const ms = spy.mock.calls.at(-1)![0] as number
+    expect(Number.isInteger(ms)).toBe(true)
   })
 
   it('gibt auch fetchUrls ein Zeitlimit mit', async () => {
