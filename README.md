@@ -237,11 +237,18 @@ weiterhin Internet (ein lokales Modell braucht keins).
 
 Die App sieht beim Start und danach alle sechs Stunden von selbst nach. Gibt es eine neue
 Fassung, steht das unten in der Fusszeile — heruntergeladen und installiert wird sie erst,
-wenn du in den Einstellungen darauf klickst. Auf dem Mac benachrichtigt dich die App genauso
-und führt dich zur Release-Seite; auto-heruntergeladen wird dort nichts (ohne
-Apple-Notarisierung nicht möglich). In der Linux-`.deb`-Fassung prüft sie nicht selbst — dort
-schaust du auf der
+wenn du darauf klickst. Auf dem Mac benachrichtigt dich die App genauso und führt dich zur
+Release-Seite; auto-heruntergeladen wird dort nichts (ohne Apple-Notarisierung nicht
+möglich). In der Linux-`.deb`-Fassung prüft sie nicht selbst — dort schaust du auf der
 [Releases-Seite](https://github.com/napoleonmm83/Transkribor/releases/latest) nach.
+
+In Fassungen bis einschliesslich `v0.29.0` steht die Bedienung dafür in den Einstellungen.
+Ab der nächsten Fassung hat sie eine eigene Seite: die Versionsnummer unten rechts führt
+dorthin. Oben steht, welche Fassung du benutzt und ob eine neue bereitsteht — darunter der
+**Versionsverlauf**: die letzten zehn Fassungen mit der Beschreibung dessen, was sich
+jeweils geändert hat. Die neueste ist aufgeklappt, die älteren öffnest du mit einem Klick.
+Dafür braucht die App eine Internetverbindung; ohne sie steht dort ein Hinweis und der Weg
+zur Release-Seite.
 
 Manche Updates bringen neue Programmteile mit — meist für den Video-Import. Dann meldet sich
 nach dem Neustart einmal die Einrichtungsseite und sagt es dir; ein Klick auf **„Jetzt
