@@ -86,12 +86,22 @@ export function ProjektEinstellungenDialog({ project, offen, onOpenChange, onGea
                   ))}
                 </SelectContent>
               </Select>
-              {/* `null` als Bezug, und das ist der Unterschied zum Datei-Dialog (#301):
-                  hier SETZT man den Projekt-Standard gerade, einen darueber gibt es nicht.
-                  `correct._ziel_dialekt` reichte in diesem Fall `auto` als `bevorzugt`
-                  weiter — und das trifft nie, weil `auto` keinen Whisper-Code hat. Also
-                  reine Detektion, und genau das sagt der Satz. Denselben Text wie im
-                  Datei-Dialog zu zeigen waere hier schlicht falsch. */}
+              {/* `null` als Bezug: hier SETZT man den Projekt-Standard gerade, einen
+                  darueber gibt es nicht. `correct._ziel_dialekt` reichte in diesem Fall
+                  `auto` als `bevorzugt` weiter — und das trifft nie, weil `auto` keinen
+                  Whisper-Code hat. Also reine Detektion, und genau das sagt der Satz.
+                  Denselben Text wie im Datei-Dialog zu zeigen waere hier schlicht falsch.
+
+                  **Das `null` ist heute allerdings NICHT unterscheidbar von `sprache`, und
+                  das gehoert hierhin statt in eine Behauptung.** Mutationsprobe: `null` →
+                  `sprache` liess alle Tests gruen. Der Grund ist strukturell — in diesem
+                  Dialog ist die gewaehlte Sprache ZUGLEICH der Standard, der Satz erscheint
+                  nur bei `auto`, und `autoHinweis` kehrt fuer `projektStandard === 'auto'`
+                  ohnehin frueh zurueck. Beide Argumente laufen also in denselben Zweig.
+                  `null` bleibt trotzdem stehen: es ist die semantisch wahre Angabe („es gibt
+                  keinen uebergeordneten Standard"), und sollte der Satz je auch bei fester
+                  Sprache erscheinen, waere `sprache` dort sofort falsch. Ein Test dafuer ist
+                  heute nicht baubar — das ist eine benannte Luecke, keine gepruefte Zeile. */}
               {autoHinweis(sprache, null, data.sprach_choices) && (
                 <p className="mt-1.5 text-xs text-muted-foreground">
                   {autoHinweis(sprache, null, data.sprach_choices)}
