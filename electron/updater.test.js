@@ -2,7 +2,7 @@
 const test = require('node:test')
 const assert = require('node:assert')
 const { nichtMoeglich, sollPruefen, erstellen, macUrls, istNeuer, parseLatestMac,
-  ersatz: erstellenErsatz } = require('./updater')
+  ersatz: erstellenErsatz, nachFehler } = require('./updater')
 
 test('Entwicklungsmodus kann sich nicht selbst aktualisieren', () => {
   assert.strictEqual(nichtMoeglich('win32', false, false), 'entwicklung')
@@ -321,11 +321,20 @@ test('ersatz tut bei jeder Aktion NICHTS und wirft nicht', () => {
   assert.strictEqual(u.zustand().art, 'nicht_moeglich', 'der Zustand bleibt, was er war')
 })
 
-test('ersatz haelt seinen Zustand stabil — dieselbe Auskunft bei jedem Abruf', () => {
-  const u = erstellenErsatz('0.30.0', 'kein-updater')
-  assert.deepStrictEqual(u.zustand(), u.zustand())
+// --- nachFehler: die eine Entscheidung des Fixes, jetzt ausserhalb von main.js (#319) -----
+
+test('nachFehler nimmt den Ersatz, wenn noch kein Automat steht', () => {
+  const u = nachFehler(null, '0.30.0')
+  assert.deepStrictEqual(u.zustand(), { version: '0.30.0', art: 'nicht_moeglich', grund: 'kein-updater' })
 })
 
-test('sollPruefen laesst den Ersatz in Ruhe — der 6-h-Zeitgeber laeuft nicht leer', () => {
-  assert.strictEqual(sollPruefen(erstellenErsatz('0.30.0', 'kein-updater').zustand()), false)
+test('nachFehler BEHAELT einen vorhandenen Automaten', () => {
+  // Der `try` in main.js umschliesst auch pruefen() und den Zeitgeber: ein Wurf DANACH darf
+  // einen funktionierenden Automaten nicht durch einen ersetzen, der "geht nicht" sagt.
+  const echt = erstellen({
+    autoUpdater: attrappe(), version: '0.30.0', plattform: 'win32', gepackt: true,
+    appimage: false, aendert: () => {},
+  })
+  assert.strictEqual(nachFehler(echt, '0.30.0'), echt, 'derselbe Automat, nicht ein Ersatz')
+  assert.strictEqual(nachFehler(echt, '0.30.0').zustand().art, 'unbekannt')
 })

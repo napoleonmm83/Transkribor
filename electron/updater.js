@@ -98,8 +98,11 @@ function sollPruefen(stand) { return !!stand && ERNEUT_PRUEFEN.includes(stand.ar
  * Kreis. Dieselbe Klasse wie `"text": ""` in `apply_correction` — ein Wert trug zwei
  * Bedeutungen; jetzt sagt der Zustand, welche gemeint ist.
  *
- * Die Aktionen sind No-Ops und werfen NICHT: die IPC-Kanaele rufen sie unveraendert, und ein
- * Wurf im Hauptprozess waere schlimmer als die Auskunft, die er ersetzt.
+ * Die Aktionen sind No-Ops, weil es nichts zu tun gibt — **nicht**, weil ein Wurf gefaehrlich
+ * waere: `ipcMain.handle` serialisiert einen Wurf zu einer abgelehnten Promise im Renderer
+ * (electron.d.ts zu `handle`/`invoke`), und `useUpdate` verschluckt die ohnehin mit
+ * `.catch(() => {})`. Die erste Fassung dieses Kommentars behauptete „ein Wurf im
+ * Hauptprozess waere schlimmer" — die Entscheidung bleibt, der Grund war erfunden.
  */
 function ersatz(version, grund) {
   const stand = { version, art: 'nicht_moeglich', grund }
@@ -109,6 +112,24 @@ function ersatz(version, grund) {
     laden: () => {},
     installieren: () => {},
   }
+}
+
+/**
+ * Nach einem Wurf beim Aufbau: den bestehenden Automaten behalten, sonst den Ersatz.
+ *
+ * Das ist die EINZIGE Entscheidung des #319-Fixes, und sie stand zuerst als `if` in
+ * `main.js` — entgegen der Regel, die dort selbst notiert ist („alles, was eine Entscheidung
+ * trifft, gehoert woandershin"): `main.js` ist das einzige Electron-Modul ohne Tests (#251).
+ * Faellt sie weg, bleiben alle Tests des Fixes gruen und #319 ist zurueck, denn die
+ * Frontend-Tests pruefen nur die ANZEIGE eines Zustands, den ausschliesslich diese Zeile
+ * erzeugt.
+ *
+ * Warum ueberhaupt „behalten": der `try` in `main.js` umschliesst auch `pruefen()` und den
+ * 6-h-Zeitgeber. Ein Wurf DANACH darf einen funktionierenden Automaten nicht durch einen
+ * ersetzen, der „geht nicht" sagt.
+ */
+function nachFehler(vorhanden, version) {
+  return vorhanden || ersatz(version, 'kein-updater')
 }
 
 /**
@@ -192,4 +213,4 @@ function erstellen({ autoUpdater, version, plattform, gepackt, appimage, aendert
   }
 }
 
-module.exports = { nichtMoeglich, sollPruefen, erstellen, ersatz, macUrls, istNeuer, parseLatestMac, publishAusYml }
+module.exports = { nichtMoeglich, sollPruefen, erstellen, ersatz, nachFehler, macUrls, istNeuer, parseLatestMac, publishAusYml }
