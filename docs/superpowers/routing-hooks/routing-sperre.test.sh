@@ -116,18 +116,58 @@ rm -f review-selbsttest.md
 [ "$(lauf '{"tool_input":{"command":"git commit -m \"irgendwas mit = und gh pr create im Text\""}}')" = "0" ] \
   || { echo "FAIL: Fliesstext mit '=' wird faelschlich als Zuweisungskette gelesen" >&2; fehler=1; }
 
-# 16-19. Quotierter Wert schlaegt die Erkennung NICHT mehr (Fixture-Review Runde 3, 2026-08-21):
+# 16-17. Quotierter Wert schlaegt die Erkennung NICHT mehr (Fixture-Review Runde 3, 2026-08-21):
 #     GH_TOKEN="abc123" gh pr create schluepfte durch, weil die alte Wertklasse am ersten `"`
-#     abbrach. Beide Quotierungsformen (JSON-escaped `\"…\"` und roh `"…"`), je mit und ohne
-#     eingebettetes Leerzeichen im Wert.
+#     abbrach. JSON-escaped (`\"…\"`), je mit und ohne eingebettetes Leerzeichen im Wert.
+#     Die frueheren Pruefungen 18/19 (dieselben Faelle mit ROHEN, unescapten `"`) sind in
+#     Runde 4 ERSATZLOS gestrichen: ihre Eingabe war kein gueltiges JSON — der Hook bekommt
+#     ein `"` im Befehl immer als `\"`. Sie deckten also keine reale Eingabe, und die einzige
+#     Regex-Alternative, die sie trug, war zugleich die einzige, die ueber die Feldgrenze
+#     laufen konnte. Ersatz: Pruefung 26 sichert genau die Grenze, die dafuer eingezogen wurde.
 [ "$(lauf '{"tool_input":{"command":"GH_TOKEN=\"abc123\" gh pr create"}}')" = "2" ] \
   || { echo "FAIL: escaped-quotierter Wert (ohne Leerzeichen) umgeht die Erkennung" >&2; fehler=1; }
 [ "$(lauf '{"tool_input":{"command":"GH_TOKEN=\"abc 123\" gh pr create"}}')" = "2" ] \
   || { echo "FAIL: escaped-quotierter Wert (mit Leerzeichen) umgeht die Erkennung" >&2; fehler=1; }
-[ "$(lauf '{"tool_input":{"command":"GH_TOKEN="abc123" gh pr create"}}')" = "2" ] \
-  || { echo "FAIL: roh-quotierter Wert (ohne Leerzeichen) umgeht die Erkennung" >&2; fehler=1; }
-[ "$(lauf '{"tool_input":{"command":"GH_TOKEN="abc 123" gh pr create"}}')" = "2" ] \
-  || { echo "FAIL: roh-quotierter Wert (mit Leerzeichen) umgeht die Erkennung" >&2; fehler=1; }
+
+# 18-20. Wertformen mit Leerraum, die KEINE Quotierung im JSON-Sinn sind (Fix-Runde 4).
+#     Als Aufzaehlung von Shell-Syntax ist diese Klasse offen — deshalb begrenzt die Wertklasse
+#     jetzt an der FELDGRENZE statt an einer Liste erlaubter Schreibweisen. Diese drei sind die
+#     Stichprobe darauf, nicht die Liste.
+[ "$(lauf '{"tool_input":{"command":"GH_TOKEN='"'"'abc 123'"'"' gh pr create"}}')" = "2" ] \
+  || { echo "FAIL: einfach quotierter Wert umgeht die Erkennung" >&2; fehler=1; }
+[ "$(lauf '{"tool_input":{"command":"GH_TOKEN=$(pass show gh) gh pr create"}}')" = "2" ] \
+  || { echo "FAIL: Kommandosubstitution im Wert umgeht die Erkennung" >&2; fehler=1; }
+[ "$(lauf '{"tool_input":{"command":"GH_TOKEN=abc\\ 123 gh pr create"}}')" = "2" ] \
+  || { echo "FAIL: backslash-escaptes Leerzeichen im Wert umgeht die Erkennung" >&2; fehler=1; }
+
+# 21-23. JSON-Escapes, die fuer einen Shell-Trenner stehen (Fix-Runde 4). Pruefung 21 ist die
+#     groesste und realistischste Luecke der ganzen Reihe: mehrzeilig IST die Normalform des
+#     PR-Wegs (erst pushen, dann den PR aufmachen), und sie lief drei Runden lang durch.
+[ "$(lauf '{"tool_input":{"command":"git push -u origin f\ngh pr create --fill"}}')" = "2" ] \
+  || { echo "FAIL: mehrzeiliger Befehl (\\n) umgeht die Erkennung" >&2; fehler=1; }
+[ "$(lauf '{"tool_input":{"command":"git push -u origin f\rgh pr create --fill"}}')" = "2" ] \
+  || { echo "FAIL: \\r als Trenner umgeht die Erkennung" >&2; fehler=1; }
+[ "$(lauf '{"tool_input":{"command":"git push\tgh pr create --fill"}}')" = "2" ] \
+  || { echo "FAIL: \\t als Trenner umgeht die Erkennung" >&2; fehler=1; }
+
+# 24. Der Trenner NACH dem Befehl: steht `gh pr create` in der ERSTEN Zeile, folgt auf "create"
+#     das `\` des JSON-Escapes — weder Leerraum noch `"` noch Zeilenende. Ohne den Backslash in
+#     `ende` bliebe genau diese Haelfte des mehrzeiligen Falls offen.
+[ "$(lauf '{"tool_input":{"command":"git push && gh pr create\necho fertig"}}')" = "2" ] \
+  || { echo "FAIL: Befehl in der ersten Zeile eines mehrzeiligen Kommandos umgeht die Erkennung" >&2; fehler=1; }
+
+# 25. Der Fluchtweg ueberlebt den neuen Anker (Gegenprobe zu 21): ein Waechter, der die Luecke
+#     schliesst und dabei den Notausgang zumauert, wird beim ersten Mal weggeklickt.
+[ "$(lauf '{"tool_input":{"command":"git push -u origin f\nKEIN_REVIEW=1 gh pr create --fill"}}')" = "0" ] \
+  || { echo "FAIL: Fluchtweg wirkt nach einem Zeilenumbruch nicht" >&2; fehler=1; }
+
+# 26. FELDGRENZE — der tragende Gedanke von Runde 4, und der Ersatz fuer die gestrichenen
+#     Pruefungen 18/19. Der Befehl ist hier nur `FOO=x`; `gh pr create` steht in einem ANDEREN
+#     JSON-Feld. Die Zuweisungs-Wertklasse darf das unescapte `"` dazwischen nicht ueberspringen.
+#     Mutationsgeprueft: `[^"]` -> `.` macht daraus Exit 2 (gemessen), also einen Fehlalarm auf
+#     einen Befehl, der die Phrase gar nicht enthaelt.
+[ "$(lauf '{"tool_input":{"command":"FOO=x"},"beschreibung":" gh pr create"}')" = "0" ] \
+  || { echo "FAIL: Zuweisungswert laeuft ueber die JSON-Feldgrenze" >&2; fehler=1; }
 
 [ $fehler -eq 0 ] && echo "OK"
 exit $fehler

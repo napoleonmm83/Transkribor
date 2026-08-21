@@ -17,12 +17,40 @@
 # ersten Mal weggeklickt) und deckt den bekannten Fall ab, dass der Subagent lief, aber idle
 # ohne Bericht zurueckkam — dann steht der Bericht im Transkript statt auf der Platte.
 #
-# BEKANNTE, BEWUSSTE Luecke (Fixture-Review, 2026-08-21): der Anker prueft eine Textposition
-# im Roh-JSON, keine echte Shell-Auswertung. `bash -c "gh pr create"`, `sh -c '...'` und ein
+# DER TRAGENDE GEDANKE (Fix-Runde 4): begrenzt wird an der FELDGRENZE, nicht am Wert. Drei
+# Runden lang wurde die Wertklasse einer Zuweisung um je eine Schreibweise erweitert
+# (unquotiert → quotiert → escaped-quotiert) — und Runde 4 war danach vorhersehbar, weil
+# Shell-Syntax fuer Werte nicht abschliessend aufzaehlbar ist (`'a b'`, `$(pass show gh)`,
+# `abc\ 123`, `${X:-y}`, …). Hier wird Roh-JSON gelesen: darin ist JEDES `"` des Befehls als
+# `\"` escaped, ein UNESCAPTES `"` ist also exakt das Feldende. Der Wert darf deshalb alles
+# enthalten ausser einem unescapten `"` — damit ist die ganze Klasse „Wertform mit Leerraum"
+# auf einen Schlag zu, und die Aufzaehlung endet.
+#
+# Aus demselben Grund steht `\n`/`\r`/`\t` in der Ankerklasse: ein JSON-Escape, das fuer einen
+# Shell-Trenner steht, IST einer. Diese Liste ist endlich (RFC 8259 zaehlt die Escapes
+# abschliessend auf), im Gegensatz zur Shell-Wertsyntax. Der MEHRZEILIGE Befehl ist dabei kein
+# Randfall, sondern die Normalform des PR-Wegs (`git push -u origin f` + Umbruch +
+# `gh pr create --fill`) und lief bis Runde 4 ungeprueft durch. Rest-Luecke derselben Klasse:
+# ein Unicode-Escape (U+000A als \\u000a geschrieben) statt \n — theoretisch moeglich, vom
+# Bash-Werkzeug nie so erzeugt, deshalb benannt statt gebaut.
+#
+# BEKANNTE, BEWUSSTE Luecke: der Anker prueft eine Textposition im Roh-JSON, keine echte
+# Shell-Auswertung. `bash -c "gh pr create"`, `sh -c '...'`, `env FOO=x gh pr create` und ein
 # voller Pfad (`/usr/bin/gh pr create`) laufen deshalb OHNE Review durch. Die Ankerklasse
-# `[;&|(]` absichtlich NICHT um `"` oder `/` erweitern: jedes zusaetzliche Zeichen dort erhoeht
-# die Fehlalarmrate (echte Woerter, die zufaellig danebenstehen), und ein Waechter mit
+# absichtlich NICHT um `"` oder `/` erweitern: jedes zusaetzliche Zeichen dort erhoeht die
+# Fehlalarmrate (echte Woerter, die zufaellig danebenstehen), und ein Waechter mit
 # Fehlalarmen wird abgeschaltet — teurer als diese Luecke. Siehe Pruefung 8 im Selbsttest.
+#
+# ZWEI BENANNTE FEHLALARME — der Preis, beide klein und beide gemessen:
+# 1. `git commit -m 'Doku: (FOO="a b" gh pr create erklaert)'` sperrt. Klammer als Anker,
+#    danach ein Token der Form NAME=wert, danach die Phrase. Das ist KEIN Preis von Runde 4:
+#    gemessen am Stand vor Runde 4 sperrte derselbe Befehl bereits (Exit 2) — er entstand mit
+#    der Zuweisungsgruppe in Runde 2/3. Runde 4 behaelt ihn bei.
+# 2. Ein mehrzeiliger Befehl, dessen ZWEITE Zeile mit `gh pr create` beginnt, ohne dass er ihn
+#    ausfuehrt (Heredoc, das Doku schreibt), sperrt seit Runde 4. Das ist dieselbe Abwaegung,
+#    die der Anker `;` seit jeher trifft: `git commit -m "erst dies; gh pr create danach"`
+#    sperrt schon heute (gemessen). Ein Zeilenumbruch ist ein Trenner wie `;` — nur haeufiger.
+#    Fluchtweg in beiden Faellen: `KEIN_REVIEW=1` davor.
 #
 # Umgebungs-Praefixe (`GH_TOKEN=x gh pr create`) sind dagegen KEINE Luecke, sondern die
 # normale Schreibweise desselben Befehls — sie stehen deshalb in der Ankerklasse, nicht nur
@@ -54,24 +82,30 @@ roh=$(cat)
 # Shell-Trenner, gefolgt von beliebig vielen `NAME=wert`-Praefixen. Ohne den Anker schlaegt
 # der Waechter auch bei Kommandos an, die den Text nur ERWAEHNEN.
 #
-# Der WERT einer Zuweisung ist entweder unquotiert (kein Leerraum, kein Anfuehrungszeichen)
-# oder quotiert — und quotiert kommt in ZWEI Formen an, weil hier Roh-JSON gelesen wird, nicht
-# die Kommandozeile: ein echtes `"` im Befehl steht im JSON als `\"` (Fixture-Review Runde 3,
-# 2026-08-21: `GH_TOKEN="abc123" gh pr create` schlüpfte durch, weil die alte Wertklasse am
-# ersten `"` abbrach und danach keine zweite Anker-Gelegenheit blieb). Beide Formen decken
-# auch ein eingebettetes Leerzeichen im Wert ab (`GH_TOKEN="abc 123"`), ohne den Rest des
-# Befehls zu verschlucken — die Wertklasse endet exakt am schliessenden Anfuehrungszeichen.
-anker='("command":[[:space:]]*"|[;&|(]|^)[[:space:]]*'
-wert='(\\"[^"]*\\"|"[^"]*"|[^[:space:]"]*)'
-zuweisungen="([A-Za-z_][A-Za-z0-9_]*=${wert}[[:space:]]+)*"
-printf '%s' "$roh" | grep -Eq "${anker}${zuweisungen}gh[[:space:]]+pr[[:space:]]+create([[:space:]\"]|\$)" || exit 0
+# Der WERT einer Zuweisung wird NICHT mehr aufgezaehlt, sondern an der Feldgrenze begrenzt
+# (siehe „DER TRAGENDE GEDANKE" oben): alles ausser einem unescapten `"`, wobei ein escapter
+# (`\"`) ausdruecklich dazugehoert. Damit decken sich `'a b'`, `$(pass show gh)`, `abc\ 123`
+# und jede kuenftige Schreibweise ohne weitere Runde ab.
+#
+# Die frueheren drei Alternativen sind ersatzlos weg. Die eine davon, die ein UNESCAPTES `"`
+# ueberspringen konnte (`"[^"]*"`), war zugleich die einzige, die ueber die Feldgrenze laufen
+# konnte — und sie trug ausschliesslich zwei Selbsttests, deren Eingabe gar kein gueltiges
+# JSON war (Fix-Runde 4).
+#
+# `ende` laesst neben Leerraum/`"`/Zeilenende auch einen Backslash zu: bei
+# `gh pr create\ngit push` folgt auf `create` das `\` des JSON-Escapes, sonst bliebe genau
+# der mehrzeilige Fall mit dem Befehl in der ERSTEN Zeile offen (gemessen).
+anker='("command":[[:space:]]*"|[;&|(]|\\n|\\r|\\t|^)[[:space:]]*'
+zuweisungen='([A-Za-z_][A-Za-z0-9_]*=([^"]|\\")*[[:space:]])*'
+ende='([[:space:]"]|\\|$)'
+printf '%s' "$roh" | grep -Eq "${anker}${zuweisungen}gh[[:space:]]+pr[[:space:]]+create${ende}" || exit 0
 
 # Derselbe Anker + dieselben fuehrenden Zuweisungen wie oben, aber KEIN_REVIEW=1 ist danach
 # PFLICHT statt Teil der freien Gruppe — es muss das letzte Praefix vor "gh" sein. Ein
 # blosses `grep -q 'KEIN_REVIEW=1'` (frueher hier) fand die Zeichenkette IRGENDWO im
 # Roh-JSON und schaltete die Sperre auch dann ab, wenn KEIN_REVIEW=1 nur in einer
 # Commit-Message oder einem Kommentar zufaellig genannt wurde (Fixture-Review Runde 1).
-printf '%s' "$roh" | grep -Eq "${anker}${zuweisungen}KEIN_REVIEW=1[[:space:]]+gh[[:space:]]+pr[[:space:]]+create([[:space:]\"]|\$)" && exit 0
+printf '%s' "$roh" | grep -Eq "${anker}${zuweisungen}KEIN_REVIEW=1[[:space:]]+gh[[:space:]]+pr[[:space:]]+create${ende}" && exit 0
 
 basis=$(git log -1 --format=%cI "$(git merge-base master HEAD 2>/dev/null)" 2>/dev/null)
 # Kein Abzweigpunkt ermittelbar (kein git, kein master) -> durchlassen. Ein Waechter, der bei
