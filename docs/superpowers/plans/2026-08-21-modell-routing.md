@@ -19,8 +19,16 @@ Agenten-Frontmatter (YAML), `node` für JSON-Validierung.
 
 Wörtlich aus der Spec — gilt implizit für jede Task:
 
-- **`python` liegt im Git-Bash-PATH dieses Rechners NICHT** (Exit 127, gemessen). Hooks parsen
-  Roh-JSON mit `grep`, nie mit einem Parser. Für JSON-Validierung im Test: `node`.
+- **Hooks parsen Roh-JSON mit `grep`, nie mit einem Interpreter.** Für JSON-Validierung im Test:
+  `node`.
+  **Korrigiert am 2026-08-21:** hier stand „`python` liegt im Git-Bash-PATH dieses Rechners NICHT
+  (Exit 127, gemessen)" — übernommen aus `.claude/hooks/kein-pauschales-add.sh`. **Die Messung ist
+  abgelaufen:** `which python` → `/c/Python314/python`, Python 3.14.7, `python -c` läuft mit
+  Exit 0. Der Satz war einmal richtig und trägt das Wort „gemessen", was jede Nachprüfung
+  abgewürgt hat — ich habe ihn ungeprüft übernommen und in einen neuen Hook weitergereicht.
+  **Die Entscheidung bleibt trotzdem**, mit dem Grund, der trägt: ein Wächter, der von einem
+  Interpreter im PATH abhängt, fällt **still** aus, sobald sich der PATH ändert — und dass sich
+  dieser PATH ändert, ist hier gerade belegt worden.
 - **cwd ist im Hook nicht garantiert.** Projekt-Hooks beginnen mit
   `cd "${CLAUDE_PROJECT_DIR:-E:/Git/Transkribor}"`.
 - **`exit 2` sperrt, `exit 0` lässt durch.** Jeder Wächter braucht einen dokumentierten
