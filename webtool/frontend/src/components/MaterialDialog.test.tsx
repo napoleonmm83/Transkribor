@@ -4,7 +4,10 @@ import { MaterialDialog } from './MaterialDialog'
 import * as api from '@/lib/api'
 
 vi.mock('@/lib/api')
-vi.mock('@/components/HoerBalken', () => ({ HoerBalken: () => null }))
+vi.mock('@/components/HoerBalken', () => ({
+  HoerBalken: ({ datei }: { datei: File | null }) =>
+    datei ? <div data-testid="hoerbalken" /> : null,
+}))
 const toastMock = vi.hoisted(() => Object.assign(vi.fn(),
   { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn(), dismiss: vi.fn() }))
 vi.mock('sonner', () => ({ toast: toastMock }))
@@ -678,6 +681,28 @@ describe('MaterialDialog', () => {
     // Und die Zusicherung, die den Testnamen einloest: in Schritt 1 rollt GENAU EINE
     // Flaeche. Zwei waeren die Leisten ineinander, die Schritt 2 bewusst vermeidet.
     expect(spalte!.querySelectorAll('[class*="overflow-y-auto"]')).toHaveLength(1)
+  })
+
+  it('haelt den Hoerbalken AUSSERHALB der Rollflaeche (Schritt 2)', () => {
+    /* Er soll sichtbar bleiben, waehrend man die Liste durchgeht — vorher stand er am Ende
+       des Flusses und wanderte beim Blaettern aus dem Bild, ausgerechnet waehrend er spielt.
+       Die Attrappe oben rendert dafuer ein Element: mit `() => null` gaebe es nichts, dessen
+       Platz im Baum man pruefen koennte. */
+    render(<MaterialDialog {...basis} vorbelegteDateien={[datei('a.mp3')]} />)
+    fireEvent.click(screen.getByRole('button', { name: /Weiter/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Reinhören: a\.mp3/ }))
+
+    const balken = screen.getByTestId('hoerbalken')
+    const liste = screen.getByText('a.mp3').closest('ul')!
+    expect(liste.className).toContain('overflow-y-auto')
+    /* Der Boden zaehlt hier MEHR als in Schritt 1: der Hoerbalken erscheint auf Klick und
+       nimmt der Liste seine Hoehe auf einen Schlag weg — ohne ihn faellt sie auf 0 und die
+       Zeilen sind ueber keinen Bildlauf mehr erreichbar (derselbe Kollaps wie C1). */
+    expect(liste.className).toContain('min-h-24')
+    expect(liste.contains(balken)).toBe(false)
+    // Geschwister in DERSELBEN Spalte: laege er in einem anderen Behaelter, rollte er mit
+    // dessen Bildlauf mit — „ausserhalb der Liste" allein reicht als Zusicherung nicht.
+    expect(balken.parentElement).toBe(liste.parentElement)
   })
 
   it('gibt BEIDEN Rollflaechen des Dialogs dieselbe Leiste', () => {

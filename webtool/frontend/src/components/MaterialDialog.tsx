@@ -435,8 +435,12 @@ export function MaterialDialog({ project, offen, vorbelegteDateien, sprachChoice
             </div>
           )}
 
+          {/* Schritt 2 traegt seine Hoehe selbst — dieselbe Spalte wie Schritt 1, aus
+              demselben Grund: gerollt wird die LISTE, der Hoerbalken steht fest darunter.
+              Vorher rollte der ganze Bereich, und die Welle wanderte beim Blaettern aus dem
+              Bild — ausgerechnet waehrend sie spielt. */}
           {schritt === 2 && (
-            <div className="space-y-2">
+            <div className="flex h-full flex-col gap-2">
               {/* EINMAL statt je Zeile (#305): der `title` an der Zeile erreicht nur die
                   Maus, und bei zehn Aufnahmen staende zehnmal „Projekt-Standard" ohne
                   Grund daneben. Erreichbar, solange der Einstellungs-GET laeuft (kurz)
@@ -450,10 +454,17 @@ export function MaterialDialog({ project, offen, vorbelegteDateien, sprachChoice
                   gilt der Projekt-Standard. Nachträglich änderbar im ⋯-Menü der Aufnahme.
                 </p>
               )}
-              {/* Kein eigener Bildlauf mehr: seit der Dialog seine Hoehe deckelt und sein
-                  Inhaltsbereich scrollt, waeren das zwei Bildlaufleisten ineinander
-                  (CodeRabbit-CLI). Die Hoehe verwaltet der Dialog. */}
-              <ul className="space-y-1.5">
+              {/* Hier stand „Kein eigener Bildlauf mehr … waeren das zwei Bildlaufleisten
+                  ineinander (CodeRabbit-CLI)". Der Einwand war richtig, seine Bedingung ist
+                  aber weggefallen: solange der Block seine Hoehe selbst traegt, rollt der
+                  aeussere Behaelter in Schritt 2 nicht mehr mit — es gibt also weiterhin nur
+                  EINE Leiste, nur an einer anderen Stelle. Unterhalb der Kippkante rollen
+                  bewusst beide (siehe Schritt 1).
+                  `min-h-24` ist auch hier der Boden aus dem 0-px-Kollaps und ERSETZT
+                  `min-h-0` — dieselbe Eigenschaft, und hier ist der Fall naeher: der
+                  Hoerbalken erscheint auf Klick und nimmt der Liste auf einen Schlag seine
+                  Hoehe weg. */}
+              <ul className="rollbalken relative min-h-24 flex-1 space-y-1.5 overflow-y-auto pr-1">
                 {zeilen.map(z => (
                   <MaterialZeile key={z.schluessel} zeile={z} sprachChoices={sprachChoices}
                     sprecherMax={sprecherMax} hoerbar={!!z.datei} klingt={klingt === z.schluessel}
@@ -461,6 +472,9 @@ export function MaterialDialog({ project, offen, vorbelegteDateien, sprachChoice
                     onHoeren={s => setKlingt(a => a === s ? null : s)} />
                 ))}
               </ul>
+              {/* AUSSERHALB der Rollflaeche: er soll sichtbar bleiben, waehrend man die
+                  Liste durchgeht. `null`, wenn nichts klingt — dann kostet er auch keinen
+                  Platz. */}
               <HoerBalken datei={klingende?.datei ?? null} anzeige={klingende?.anzeige ?? ''}
                 onSchliessen={() => setKlingt(null)} />
             </div>
