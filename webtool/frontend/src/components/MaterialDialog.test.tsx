@@ -646,4 +646,24 @@ describe('MaterialDialog', () => {
     // Genau EINE Groessenangabe: die Link-Zeile bekommt keine.
     expect(screen.getAllByText(/\d (MB|KB|GB)$/)).toHaveLength(1)
   })
+  it('gibt der Auswahlliste einen EIGENEN Bildlauf, damit das Drop-Ziel stehenbleibt', () => {
+    /* Vorher rollte der ganze Inhaltsbereich: wer zehn Dateien gewaehlt hatte und in der
+       Liste nach unten ging, schob die Ablageflaeche aus dem Bild — also die Flaeche, auf
+       der die naechste Datei landen soll.
+       jsdom hat KEIN Layout: `scrollHeight` ist hier immer 0, „rollt wirklich" laesst sich
+       damit nicht messen. Dieser Test haelt deshalb nur die Struktur fest, an der es haengt
+       (die Liste ist die Rollflaeche, nicht ihr Elternteil). Gemessen ist es im Browser:
+       aeusserer Behaelter 310/310 (rollt nicht), Liste 640/138 (rollt), und die
+       Ablageflaeche steht vor wie nach dem Rollen bei 162 px. */
+    render(<MaterialDialog {...basis} vorbelegteDateien={[datei('a.mp3'), datei('b.mp3')]} />)
+    // Ueber eine Zeile hochgehen, nicht ueber `container`: der Dialog haengt in einem
+    // Radix-PORTAL und liegt damit ausserhalb. Und nicht ueber `getByRole('list')` — die
+    // Schrittleiste darueber ist ein `<ol>` und traegt dieselbe Rolle.
+    const liste = screen.getByText('a.mp3').closest('ul')!
+    expect(liste.className).toContain('overflow-y-auto')
+    // `min-h-0` ist die zweite Haelfte: ohne es waechst ein Flex-Kind mit seinem Inhalt und
+    // das `overflow` greift nie — die Klasse allein waere eine Zusicherung ohne Wirkung.
+    expect(liste.className).toContain('min-h-0')
+    expect(liste.className).toContain('rollbalken')
+  })
 })

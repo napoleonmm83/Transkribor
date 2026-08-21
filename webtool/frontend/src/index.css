@@ -214,6 +214,26 @@ a.blatt:hover, .blatt-klickbar:hover {
   border-color: color-mix(in oklab, var(--primary) 45%, var(--border));
 }
 
+/* Bildlaufleiste im Hausakzent statt im Grau des Systems.
+   Drei Entscheidungen dahinter:
+   - **Die Standardeigenschaften, KEIN `::-webkit-scrollbar`.** `scrollbar-width`/
+     `scrollbar-color` koennen Chromium 121+, Firefox 64+ und Safari 18.2+; die App laeuft
+     gepackt auf Electron (Chromium), also ist der alte Weg nur ein zweiter Satz Regeln, der
+     mit dem ersten kollidiert (setzt man beides, gewinnt in Chromium ohnehin der Standard).
+     Wo die Eigenschaften fehlen, steht die gewohnte Systemleiste — kein Schaden.
+   - **`transparent` als Bahn.** Eine eingefaerbte Bahn zoege eine dauerhafte senkrechte
+     Linie durch die Flaeche, auch wenn nichts zu rollen ist.
+   - **Der Griff ist gemischt, nicht `--primary` pur.** Voller Akzent neben einem
+     Akzent-Knopf (,,Weiter") ergaebe zwei gleich laute Indigo-Flaechen; 55 % traegt die
+     Zugehoerigkeit, ohne den Knopf zu verdraengen. Beim Zeigen darauf wird er kraeftiger —
+     dieselbe Richtung wie jeder andere Hover in dieser App.
+   `--primary` wechselt mit dem Design, die Klasse gilt deshalb fuer hell UND dunkel. */
+.rollbalken {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklab, var(--primary) 55%, transparent) transparent;
+}
+.rollbalken:hover { scrollbar-color: color-mix(in oklab, var(--primary) 80%, transparent) transparent; }
+
 /* Zifferblatt-Ziffern fuer Laufzeiten und Zaehler: gleiche Breite, damit nichts springt. */
 .ziffern { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 
