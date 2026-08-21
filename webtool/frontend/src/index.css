@@ -255,10 +255,16 @@ a.blatt:hover, .blatt-klickbar:hover {
    - **Die Farben bleiben kuehl** (Indigo → Cyan → Violett). Bernstein und Rot sind in dieser
      App inhaltlich belegt (unsichere Woerter, s. `.u-yellow`/`.u-red`) — ein Regenbogen haette
      genau die Signalfarben verbraucht, an denen das Auge sonst haengenbleiben soll.
-   - **`--rahmen-winkel` steht AUCH als normale Deklaration.** Ohne `@property`-Unterstuetzung
-     waere `from var(--rahmen-winkel)` ein ungueltiger Wert, der conic-gradient fiele aus und
-     der Rahmen bliebe ganz weg. So bleibt er stehen, nur unbewegt. Die Animation gewinnt
-     trotzdem: Animationen schlagen in der Kaskade normale Deklarationen.
+   - **`--rahmen-winkel` steht AUCH als normale Deklaration** — als Rueckfall, nicht als
+     Wiederholung, und der Satz dazu war zuerst zu kurz gefasst (CodeRabbit-CLI). Genau
+     lautet er: OHNE die Zeile und ohne `@property` ist `var(--rahmen-winkel)` leer, damit
+     ist der conic-gradient ungueltig und der Rahmen ganz weg. MIT der Zeile, aber ohne
+     `@property` (alte Engine), bleibt die Eigenschaft untypisiert — der Wert wird trotzdem
+     substituiert, `from 0deg` ist gueltig, und der Rahmen steht als STEHENDER Verlauf da;
+     animiert wird er dort nicht, weil eine nicht registrierte Custom Property nicht
+     interpoliert, sondern diskret umspringt (bei einem Kegelverlauf ist 360deg ohnehin
+     dasselbe Bild wie 0deg). Registriert — also ueberall, wo diese App laeuft — gewinnt die
+     Animation: sie schlaegt in der Kaskade normale Deklarationen.
    - **Der Traeger MUSS positioniert sein** (`fixed`/`relative`/`absolute`) — `inset` bezieht
      sich sonst auf den naechsten positionierten Vorfahren oder das Fenster, und der Rahmen
      landet irgendwo. `DialogContent` ist `fixed` (shadcn); ein `position: relative` HIER
