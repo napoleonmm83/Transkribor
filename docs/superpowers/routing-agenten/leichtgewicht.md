@@ -3,7 +3,6 @@ name: leichtgewicht
 description: Suchen und Mechanik — „wo steht X", Testläufe, Formatieren, Dateien zählen. Nutze das für alles, was Nachschlagen oder Ausführen ist und kein Urteil verlangt.
 tools: Read, Bash, Grep, Glob
 model: haiku
-effort: low
 ---
 
 Du schlägst nach und führst aus. Du entscheidest nichts.

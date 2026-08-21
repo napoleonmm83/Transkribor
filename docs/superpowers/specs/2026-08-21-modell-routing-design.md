@@ -52,6 +52,24 @@ Alles hier ist gemessen, nicht angenommen — wer etwas davon ändert, misst neu
   Changelog Zeile 396 — *„Fixed the spinner's effort label in a subagent's transcript view
   showing the session's effort level instead of the subagent's own `effort:` setting"*. Im
   Zensus der 39 Agentendateien setzt ihn **null**mal jemand.
+- **✅ BEIDE ACHSEN SIND GEMESSEN (2026-08-21).** Zwei Proben, je aus einer frischen Sitzung
+  (`claude -p`, Elternsitzung `--model opus` bei globalem `effortLevel: xhigh`):
+
+  | Agent | Frontmatter | gemessen im Transkript |
+  |---|---|---|
+  | `leichtgewicht` | `haiku` / `low` | `claude-haiku-4-5-20251001`, effort **abwesend** |
+  | `browser-beleg` | `sonnet` / `medium` | `claude-sonnet-5`, effort **`medium`** |
+
+  `model:` **und** `effort:` schlagen die Sitzungswerte. Die Kernannahme des Entwurfs trägt.
+- **⚠️ Haiku 4.5 kennt keine Effort-Stufen — und sagt es nicht.** Bei `leichtgewicht` fehlt das
+  Effort-Feld im Datensatz **ganz**, statt auf dem Sitzungswert zu stehen. Der `claude-api`-Skill
+  nennt den Grund: Effort „errors on Sonnet 4.5 / Haiku 4.5". Hier wirft es nicht, es wird
+  **still ignoriert** — ein toter Schalter. Deshalb trägt `leichtgewicht.md` **kein** `effort:`
+  mehr, und die Tafel vermerkt es an der Zeile.
+  **Lehre für die Wahl eines Prüfsteins:** `leichtgewicht` war als „schärfster" gewählt, weil
+  beide Werte maximal weit vom Sitzungswert abweichen. Ein Wert, den das Modell gar nicht kennt,
+  ist aber keine Abweichung, sondern eine Leerstelle — die Probe konnte über Effort nichts sagen.
+  Der Prüfstein muss die Achse **beherrschen**, nicht nur auf ihr weit entfernt liegen.
 - **Das `Agent`-Werkzeug hat KEINEN `effort`-Parameter** — nur `model`. Effort kommt entweder
   aus der Agentendatei oder aus `opts.effort` eines Workflow-Laufs. **Architektonische Folge:**
   jede Tafelzeile, deren Effort vom Sitzungswert abweicht, **braucht eine eigene Agentendatei**;
