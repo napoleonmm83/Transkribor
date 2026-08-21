@@ -17,12 +17,13 @@
 # (in der Skill-Liste der Sitzung vorhanden, auf der Platte nicht auffindbar) — das ist eine
 # EXISTENZ-Ausnahme fuer zwei bekannte Faelle, keine Abschwaechung der Pruefung.
 #
-# FORM-PRUEFUNG: an einer echten Datei mit mehreren Tabellen unterschiedlicher Breite
-# gemessen scheitert reine Spaltenposition — Spalte 3 ist dann mal "Wer", mal etwas anderes,
-# und aus einem Eintrag wie "kein `model`-Schlüssel" wuerde der Scheinagent `model`. Deshalb
-# wird jeder Treffer zusaetzlich gegen eine Namensform geprueft; was nicht wie ein Agent-
-# oder Skill-Name aussieht, wird verworfen statt gemeldet. Ein Waechter mit Fehlalarmen wird
-# abgeschaltet — das hier ist die Gegenmassnahme, kein vollstaendiger Parser.
+# FORM-PRUEFUNG, VORSORGLICH: reine Spaltenposition scheitert, sobald zwei Tabellen
+# unterschiedlicher Breite in derselben Datei stehen — Spalte 3 ist dann mal "Wer", mal
+# etwas anderes, und aus einem Eintrag wie "kein `model`-Schlüssel" wuerde der Scheinagent
+# `model`. Diese Form kommt in DIESER Datei (nur eine Tabelle je Tafel) nicht vor — ungeprueft
+# ist das nicht, es ist eine Haertung gegen eine Form, die in vergleichbaren Markdown-Dateien
+# vorkommt. Deshalb wird jeder Treffer zusaetzlich gegen eine Namensform geprueft; was nicht
+# wie ein Agent- oder Skill-Name aussieht, wird verworfen statt gemeldet.
 #
 # Selbsttest:
 #   bash .claude/hooks/routing-lint.sh            # Exit 0, wenn die Tafel sauber ist
@@ -46,13 +47,13 @@ namen() {  # $1 = Spaltennummer, $2 = Namensform-Regex
 }
 
 for a in $(namen 3 "$AGENT_RE"); do
-  case "$a" in Haupt-Loop|—|"") continue ;; esac
   [ -f "$HOME/.claude/agents/$a.md" ] || [ -f ".claude/agents/$a.md" ] || {
     echo "TOTER AGENT in der Tafel: $a" >&2; fehler=1; }
 done
 
 for s in $(namen 5 "$SKILL_RE"); do
-  case "$s" in —|"") continue ;; esac
+  # ctx7/claude-api existieren wirklich, sind aber nicht datei-/verzeichnisbasiert
+  # auffindbar (siehe Kopfkommentar) — echte Ausnahme, kein Formfilter-Rest.
   case "$s" in ctx7|claude-api) continue ;; esac
   kurz="${s##*:}"    # 'superpowers:brainstorming' -> 'brainstorming'
   find "$HOME/.claude/plugins/cache" "$HOME/.claude/skills" ".claude/skills" \
