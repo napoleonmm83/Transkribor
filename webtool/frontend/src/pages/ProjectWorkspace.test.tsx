@@ -357,6 +357,12 @@ describe('ProjectWorkspace (Stub)', () => {
     const flaeche = await screen.findByTestId('drop-overlay-ziel')
     // Die Region steht DAUERHAFT da (sonst saehe ein Screenreader die Einfuegung, nicht die
     // Aenderung, und sagte nichts) — geprueft wird deshalb ihr INHALT, nicht ihre Existenz.
+    //
+    // `toHaveTextContent('')` sieht nach einer vacuous Zusicherung aus (jest-dom vergleicht
+    // Strings als SUBSTRING, und der leere String steckt in jedem) — ist es aber nicht:
+    // nachgemessen mit einem Element, in dem Text steht, wird die Zeile ROT. Der leere
+    // String ist dort ein Sonderfall. Steht hier, weil der Verdacht naheliegt und schon
+    // einmal als Reviewbefund kam (CodeRabbit-CLI, widerlegt).
     expect(screen.getByRole('status')).toHaveTextContent('')
     fireEvent.dragOver(flaeche, { dataTransfer: { files: [] } })
     expect(screen.getByRole('status')).toHaveTextContent(/loslassen/i)

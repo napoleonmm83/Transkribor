@@ -169,6 +169,19 @@ export function ProjectWorkspace() {
       // liefert, laesst sich mit Playwright nicht simulieren. Die Zeile kostet nichts und
       // deckt jeden Fall, in dem er ihn liefert — sie ist damit ein Schutz mit gemessenem
       // MECHANISMUS, aber ohne Beleg fuer den Fall, der hier wirklich vorkommt.
+      //
+      // **Das Escape ABZUFANGEN ist KEIN Ausweg — gemessen, damit es niemand zweimal
+      // versucht.** Die CodeRabbit-CLI schlug genau das vor („einen Abbruchpfad, der bei
+      // Escape zuverlaessig `setZieht(false)` aufruft"). Im Browser nachgestellt kommt
+      // waehrend eines laufenden Drags am Fenster an:
+      //
+      //     --- Escape ---
+      //     dragend
+      //     keyup(Escape)          <- NUR keyup, KEIN keydown
+      //
+      // Der `keydown` wird vom Drag-Vorgang geschluckt, ein `keydown`-Handler waere also
+      // wirkungslos; das `keyup` kommt NACH `dragend` und waere redundant. `dragend` ist
+      // der einzige Kanal, den es hier gibt.
       onDragEnd={() => setZieht(false)}
       onDrop={e => {
         e.preventDefault(); setZieht(false)
