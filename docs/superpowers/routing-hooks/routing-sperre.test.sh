@@ -169,5 +169,21 @@ rm -f review-selbsttest.md
 [ "$(lauf '{"tool_input":{"command":"FOO=x"},"beschreibung":" gh pr create"}')" = "0" ] \
   || { echo "FAIL: Zuweisungswert laeuft ueber die JSON-Feldgrenze" >&2; fehler=1; }
 
+# 27. Der Fluchtweg gilt dem VORKOMMEN, nicht dem ganzen Aufruf (Fix-Runde 5). Ein Heredoc,
+#     das `KEIN_REVIEW=1 gh pr create` nur AUFSCHREIBT, gab bis Runde 4 ein echtes
+#     `gh pr create` in derselben Zeile frei — derselbe Befund wie Pruefung 6/7, nur ueber
+#     die Zeilenanfangs-Position, die der `\n`-Anker aus Runde 4 neu erreichbar machte.
+#     Realistisch: wer ueber dieses System schreibt, schreibt den Fluchtweg hin.
+[ "$(lauf '{"tool_input":{"command":"cat > d.md <<'"'"'EOF'"'"'\nKEIN_REVIEW=1 gh pr create\nEOF\ngit push && gh pr create --fill"}}')" = "2" ] \
+  || { echo "FAIL: erwaehnter Fluchtweg gibt einen ANDEREN gh pr create frei" >&2; fehler=1; }
+
+# 28. Kein Fehlalarm auf `NAME=wert <befehl> … # <text mit gh pr create>` (Fix-Runde 5).
+#     Genau die Form, die CLAUDE.md fuer Testlaeufe vorschreibt. Sie sperrte in Runde 4, weil
+#     die Wertklasse dort ueber Leerraum hinweglief und alles bis zum naechsten
+#     `gh pr create` verschluckte. Die sechs Erwaehnungsproben konnten das nicht finden:
+#     allen fehlt ein `NAME=`-Token am Anfang.
+[ "$(lauf '{"tool_input":{"command":"TRANSKRIBOR_YTDLP_UPDATE=0 pytest webtool/tests -q   # danach gh pr create"}}')" = "0" ] \
+  || { echo "FAIL: Zuweisung + Befehl + Erwaehnung schlaegt faelschlich an" >&2; fehler=1; }
+
 [ $fehler -eq 0 ] && echo "OK"
 exit $fehler

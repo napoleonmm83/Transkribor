@@ -22,9 +22,14 @@
 # (unquotiert → quotiert → escaped-quotiert) — und Runde 4 war danach vorhersehbar, weil
 # Shell-Syntax fuer Werte nicht abschliessend aufzaehlbar ist (`'a b'`, `$(pass show gh)`,
 # `abc\ 123`, `${X:-y}`, …). Hier wird Roh-JSON gelesen: darin ist JEDES `"` des Befehls als
-# `\"` escaped, ein UNESCAPTES `"` ist also exakt das Feldende. Der Wert darf deshalb alles
-# enthalten ausser einem unescapten `"` — damit ist die ganze Klasse „Wertform mit Leerraum"
-# auf einen Schlag zu, und die Aufzaehlung endet.
+# `\"` escaped, ein UNESCAPTES `"` ist also exakt das Feldende.
+#
+# **Fuer den ANKER traegt dieser Gedanke, fuer den WERT trug er zu weit** (Fix-Runde 5).
+# Runde 4 liess den Wert alles ausser einem unescapten `"` enthalten — damit frass er auch
+# Leerraum, ganze Woerter und `#`-Kommentare, bis irgendwo `gh pr create` auftauchte.
+# Gemessen sperrte danach `TRANSKRIBOR_YTDLP_UPDATE=0 pytest webtool/tests -q  # dann
+# gh pr create` — eine Form, die CLAUDE.md ausdruecklich vorschreibt. Der Wert ist deshalb
+# wieder EIN Shell-Wort (siehe bei `wert` unten); die Feldgrenze bleibt der Deckel darueber.
 #
 # Aus demselben Grund steht `\n`/`\r`/`\t` in der Ankerklasse: ein JSON-Escape, das fuer einen
 # Shell-Trenner steht, IST einer. Diese Liste ist endlich (RFC 8259 zaehlt die Escapes
@@ -49,8 +54,12 @@
 # 2. Ein mehrzeiliger Befehl, dessen ZWEITE Zeile mit `gh pr create` beginnt, ohne dass er ihn
 #    ausfuehrt (Heredoc, das Doku schreibt), sperrt seit Runde 4. Das ist dieselbe Abwaegung,
 #    die der Anker `;` seit jeher trifft: `git commit -m "erst dies; gh pr create danach"`
-#    sperrt schon heute (gemessen). Ein Zeilenumbruch ist ein Trenner wie `;` — nur haeufiger.
-#    Fluchtweg in beiden Faellen: `KEIN_REVIEW=1` davor.
+#    sperrt (gemessen), `"erst dies; und dann gh pr create"` nicht. Ein Zeilenumbruch ist ein
+#    Trenner wie `;` — nur haeufiger. Fluchtweg in beiden Faellen: `KEIN_REVIEW=1` davor.
+#    **Diese Gleichsetzung stimmte in Runde 4 NICHT, und der Unterschied war der Befund von
+#    Runde 5:** der `;`-Anker duldet NULL dazwischenstehende Woerter, die damalige Wertklasse
+#    unbegrenzt viele — der Heredoc-Fall war also nur ein Einzelfall einer viel groesseren
+#    Klasse, nicht die Klasse. Seit der Wert wieder ein Wort ist, deckt sich beides.
 #
 # Umgebungs-Praefixe (`GH_TOKEN=x gh pr create`) sind dagegen KEINE Luecke, sondern die
 # normale Schreibweise desselben Befehls — sie stehen deshalb in der Ankerklasse, nicht nur
@@ -63,6 +72,14 @@
 # Variable (`xKEIN_REVIEW=1`) ist eine andere Variable und triggert nichts: die Zuweisungs-
 # Gruppe verschluckt das ganze Token, das Literal `KEIN_REVIEW=1` findet dahinter keine
 # zweite Gelegenheit.
+#
+# **Bis Runde 4 band das den Fluchtweg nur an eine BEFEHLSPOSITION, nicht an ein VORKOMMEN.**
+# Der Runde-1-Fix („`KEIN_REVIEW=1` muss Praefix sein, nicht irgendwo im Text") galt damit nur
+# so weit, wie es Ankerpositionen gab — und der `\n`-Anker aus Runde 4 machte eine neue
+# auf: ein Heredoc, das `KEIN_REVIEW=1 gh pr create` bloss AUFSCHREIBT, gab ein echtes
+# `gh pr create` in derselben Zeile frei (gemessen, Runde 5). Derselbe Befund wie Runde 1,
+# ueber einen neuen Weg. Der Schnitt unten (`rest`) bindet den Fluchtweg jetzt an das
+# Vorkommen, vor dem er wirklich steht — die Behauptung traegt erst seitdem unqualifiziert.
 #
 # Selbsttest:
 #   bash .claude/hooks/routing-sperre.test.sh
@@ -96,16 +113,34 @@ roh=$(cat)
 # `gh pr create\ngit push` folgt auf `create` das `\` des JSON-Escapes, sonst bliebe genau
 # der mehrzeilige Fall mit dem Befehl in der ERSTEN Zeile offen (gemessen).
 anker='("command":[[:space:]]*"|[;&|(]|\\n|\\r|\\t|^)[[:space:]]*'
-zuweisungen='([A-Za-z_][A-Za-z0-9_]*=([^"]|\\")*[[:space:]])*'
+# Ein Wert ist EIN Shell-Wort. Leerraum darf nur INNERHALB einer Quotierung stehen —
+# `\"…\"` (JSON-escaped), `'…'`, `$(…)` oder ein backslash-escaptes Leerzeichen (im Roh-JSON
+# `\\` + Leerzeichen). Alles andere endet am ersten Leerraum.
+#
+# DER PREIS IST GEMESSEN, nicht geschaetzt: Werte, deren Leerraum in einer HIER NICHT
+# aufgezaehlten Quotierung steckt, laufen jetzt wieder durch — `GH_TOKEN=`+Backticks,
+# `GH_TOKEN=${T:-a b}` und ein `$( … \"…\" … )` mit Anfuehrungszeichen darin ergaben je
+# Exit 0 (unter der permissiven Klasse aus Runde 4: Exit 2). Das ist der bewusste Tausch aus
+# Runde 5: unbegrenztes Fressen kostete einen Fehlalarm auf `NAME=wert befehl … # text`,
+# also auf der Form, die CLAUDE.md fuer Testlaeufe vorschreibt — ein Fehlalarm auf einem
+# taeglichen Befehl ist teurer als eine Luecke bei einer exotischen Quotierung. Wer eine
+# davon braucht: hier eine Alternative ergaenzen, nicht die Klasse wieder oeffnen.
+wert='(\\"[^"]*\\"|'\''[^'\'']*'\''|\$\([^)"]*\)|\\\\[[:space:]]|[^"[:space:]])*'
+zuweisungen="([A-Za-z_][A-Za-z0-9_]*=${wert}[[:space:]]+)*"
 ende='([[:space:]"]|\\|$)'
-printf '%s' "$roh" | grep -Eq "${anker}${zuweisungen}gh[[:space:]]+pr[[:space:]]+create${ende}" || exit 0
+treffer="${anker}${zuweisungen}gh[[:space:]]+pr[[:space:]]+create"
 
-# Derselbe Anker + dieselben fuehrenden Zuweisungen wie oben, aber KEIN_REVIEW=1 ist danach
-# PFLICHT statt Teil der freien Gruppe — es muss das letzte Praefix vor "gh" sein. Ein
-# blosses `grep -q 'KEIN_REVIEW=1'` (frueher hier) fand die Zeichenkette IRGENDWO im
-# Roh-JSON und schaltete die Sperre auch dann ab, wenn KEIN_REVIEW=1 nur in einer
-# Commit-Message oder einem Kommentar zufaellig genannt wurde (Fixture-Review Runde 1).
-printf '%s' "$roh" | grep -Eq "${anker}${zuweisungen}KEIN_REVIEW=1[[:space:]]+gh[[:space:]]+pr[[:space:]]+create${ende}" && exit 0
+# Erst die Vorkommen HERAUSSCHNEIDEN, an denen KEIN_REVIEW=1 wirklich als Praefix steht,
+# dann entscheidet die Erkennung ueber den REST. Zwei unabhaengige greps taten das nicht:
+# der Fluchtweg-grep durfte an einem BELIEBIGEN Anker anschlagen und schaltete die Sperre
+# damit fuer den GANZEN Aufruf ab (Fixture-Review Runde 5, gemessen: ein Heredoc, das
+# `KEIN_REVIEW=1 gh pr create` nur AUFSCHREIBT, gab ein echtes `gh pr create` in derselben
+# Zeile frei). Ersetzt wird durch ein Leerzeichen, nicht durch nichts: der Anker wird
+# mitgeschnitten, und zwei zusammengeschobene Woerter koennten sonst einen neuen Treffer
+# bilden. Nebenwirkung des Schnitts: die Erkennung laeuft jetzt auf `rest` statt auf `roh` —
+# genau darin liegt die Bindung, die vorher fehlte.
+rest=$(printf '%s' "$roh" | sed -E "s/${anker}${zuweisungen}KEIN_REVIEW=1[[:space:]]+gh[[:space:]]+pr[[:space:]]+create/ /g")
+printf '%s' "$rest" | grep -Eq "${treffer}${ende}" || exit 0
 
 basis=$(git log -1 --format=%cI "$(git merge-base master HEAD 2>/dev/null)" 2>/dev/null)
 # Kein Abzweigpunkt ermittelbar (kein git, kein master) -> durchlassen. Ein Waechter, der bei
