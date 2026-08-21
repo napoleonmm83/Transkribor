@@ -358,12 +358,13 @@ describe('ProjectWorkspace (Stub)', () => {
     // Die Region steht DAUERHAFT da (sonst saehe ein Screenreader die Einfuegung, nicht die
     // Aenderung, und sagte nichts) — geprueft wird deshalb ihr INHALT, nicht ihre Existenz.
     //
-    // `toHaveTextContent('')` sieht nach einer vacuous Zusicherung aus (jest-dom vergleicht
-    // Strings als SUBSTRING, und der leere String steckt in jedem) — ist es aber nicht:
-    // nachgemessen mit einem Element, in dem Text steht, wird die Zeile ROT. Der leere
-    // String ist dort ein Sonderfall. Steht hier, weil der Verdacht naheliegt und schon
-    // einmal als Reviewbefund kam (CodeRabbit-CLI, widerlegt).
-    expect(screen.getByRole('status')).toHaveTextContent('')
+    // `toBeEmptyDOMElement()`, nicht `toHaveTextContent('')`. Beides ist hier korrekt —
+    // nachgemessen: an einem Element MIT Text wird auch die zweite Form rot, der leere
+    // String ist in jest-dom seit 4.1.1 ein Sonderfall statt eines Substring-Vergleichs
+    // (der Verdacht kam als Befund von CLI und Bot, die Messung widerlegt ihn). Die
+    // Bibliothek empfiehlt fuer „ist leer" trotzdem diese Form, und sie sagt, was gemeint
+    // ist, statt eine Ausnahme auszunutzen.
+    expect(screen.getByRole('status')).toBeEmptyDOMElement()
     fireEvent.dragOver(flaeche, { dataTransfer: { files: [] } })
     expect(screen.getByRole('status')).toHaveTextContent(/loslassen/i)
   })
@@ -380,7 +381,7 @@ describe('ProjectWorkspace (Stub)', () => {
     fireEvent.dragOver(flaeche, { dataTransfer: { files: [] } })
     expect(screen.getByRole('status')).toHaveTextContent(/loslassen/i)
     fireEvent.dragEnd(flaeche)
-    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent(''))
+    await waitFor(() => expect(screen.getByRole('status')).toBeEmptyDOMElement())
   })
 
   it('sagt es, wenn beim Ablegen keine Audiodatei dabei war', async () => {

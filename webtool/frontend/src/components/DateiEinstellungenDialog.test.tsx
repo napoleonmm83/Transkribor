@@ -598,7 +598,10 @@ describe('auto-Regel erklaeren (#301)', () => {
       { ...BASIS, sprache_eigen: 'ch' })
     render(<DateiEinstellungenDialog project="p" base="a" file={datei()} offen />)
     await sprachWaehlerDa()
+    // BEIDE Texte, nicht nur den Dialekt-Satz: renderte eine Regression bei fester Sprache
+    // stattdessen den generischen Satz, bliebe die Zusicherung sonst gruen (CodeRabbit-Bot).
     expect(screen.queryByText(/gilt der Projekt-Standard/)).toBeNull()
+    expect(screen.queryByText(/Es gilt, was Whisper erkennt/)).toBeNull()
     getSpy.mockRestore()
   })
 })
