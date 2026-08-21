@@ -3,6 +3,7 @@ import { HomeGallery } from '@/pages/HomeGallery'
 import { ProjectWorkspace } from '@/pages/ProjectWorkspace'
 import { EditorView } from '@/pages/EditorView'
 import { SettingsPage } from '@/pages/SettingsPage'
+import { VersionPage } from '@/pages/VersionPage'
 import { ProjektPalette } from '@/components/ProjektPalette'
 import { AppShell } from '@/components/AppShell'
 
@@ -19,6 +20,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<HomeGallery />} />
         <Route path="/einstellungen" element={<SettingsPage />} />
+        <Route path="/version" element={<VersionPage />} />
         <Route path="/p/:project" element={<ProjectWorkspace />} />
         <Route path="/p/:project/:base" element={<EditorView />} />
       </Routes>

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor, act, cleanup } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { toast } from 'sonner'
 import { SettingsPage } from './SettingsPage'
@@ -15,14 +15,6 @@ vi.mock('@/lib/api')
 vi.mock('sonner', () => ({
   toast: { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() },
 }))
-// Default: kein Electron -> Abschnitt bleibt aus, wie es SettingsPage ausserhalb dieses
-// Tests auch fuer alle SettingsPage-Tests erwartet, die zeigeMit gar nicht aufrufen.
-vi.mock('@/hooks/useUpdate', () => ({
-  useUpdate: vi.fn(() => ({ zustand: null, pruefen: vi.fn(), laden: vi.fn(), installieren: vi.fn() })),
-}))
-
-import { useUpdate } from '@/hooks/useUpdate'
-import type { UpdateZustand } from '@/lib/types'
 
 const BASIS: Settings = {
   provider: 'claude-cli', model: '', base_url: '', has_key: false, env_key: '',
@@ -1205,101 +1197,15 @@ describe('SettingsPage', () => {
   })
 })
 
-function zeigeMit(zustand: UpdateZustand | null) {
-  const spies = { pruefen: vi.fn(), laden: vi.fn(), installieren: vi.fn(), protokollOeffnen: vi.fn() }
-  vi.mocked(useUpdate).mockReturnValue({ zustand, ...spies })
-  // SettingsPage zeigt bis zum Laden von getSettings nur "Lädt…" und braucht wegen <Link> einen Router —
-  // beides gibt der Brief nicht her, ohne das wuerde jeder Test hier auf "Lädt…" haengen bleiben.
-  vi.mocked(api.getSettings).mockResolvedValue(BASIS)
-  vi.mocked(api.getHardware).mockResolvedValue({ device: 'cuda', name: 'NVIDIA RTX 5080', torch_ok: true, asr: 'cuda' })
-  return { ...render(<MemoryRouter><SettingsPage /></MemoryRouter>), spies }
-}
-
-describe('Abschnitt Version und Updates', () => {
+describe('Wegweiser Version und Updates', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  it('ohne Electron erscheint der Abschnitt gar nicht', async () => {
-    zeigeMit(null)
-    await screen.findByText(/Qualität der Transkription/i)
-    expect(screen.queryByText(/Version und Updates/)).toBeNull()
-  })
-
-  // `/aktuell/` allein reichte, solange das Wort nur einmal auf der Seite stand. Seit dem
-  // Abschnitt "Video-Import" ("Videodownloader aktuell halten") trifft es zwei Stellen —
-  // gesucht wird deshalb der tatsaechlich gerenderte Text " · aktuell" des Update-Blocks.
-  it('zeigt die laufende Version', async () => {
-    zeigeMit({ version: '0.2.1', art: 'aktuell' })
-    expect(await screen.findByText(/0\.2\.1/)).toBeTruthy()
-    expect(screen.getByText(/· aktuell/)).toBeTruthy()
-  })
-
-  it('vor der ersten Pruefung nur Version und Knopf, kein "aktuell"', async () => {
-    zeigeMit({ version: '0.2.1', art: 'unbekannt' })
-    expect(await screen.findByRole('button', { name: /Nach Updates suchen/ })).toBeTruthy()
-    expect(screen.queryByText(/· aktuell/)).toBeNull()   // sonst behauptet die Seite Wissen, das sie nicht hat
-  })
-
-  it('bietet den Download mit Groesse an', async () => {
-    zeigeMit({ version: '0.2.1', art: 'verfuegbar', neue: '0.3.0', groesse: 98566144 })
-    expect(await screen.findByText(/0\.3\.0 verfügbar/)).toBeTruthy()
-    expect(screen.getByRole('button', { name: /Herunterladen \(94 MB\)/ })).toBeTruthy()
-  })
-
-  it('bietet den Download ohne Groesse an, statt "0 MB" zu erfinden', async () => {
-    zeigeMit({ version: '0.2.1', art: 'verfuegbar', neue: '0.3.0', groesse: null })
-    const btn = await screen.findByRole('button', { name: 'Herunterladen' })
-    expect(btn.textContent).not.toMatch(/MB/)
-  })
-
-  it('zeigt beim Laden Prozent, MB und Tempo', async () => {
-    zeigeMit({ version: '0.2.1', art: 'laedt', prozent: 43.2, geladen: 41 * 1048576, gesamt: 94 * 1048576, tempo: 6.2 * 1048576 })
-    expect(await screen.findByText(/43 %/)).toBeTruthy()
-    expect(screen.getByText(/41 von 94 MB/)).toBeTruthy()
-    expect(screen.getByText(/6,2 MB\/s/)).toBeTruthy()
-    expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '43')
-  })
-
-  it('bietet nach dem Laden den Neustart an', async () => {
-    zeigeMit({ version: '0.2.1', art: 'bereit', neue: '0.3.0' })
-    expect(await screen.findByRole('button', { name: /Neu starten und installieren/ })).toBeTruthy()
-  })
-
-  it('Mac (verfuegbar_manuell): Manuelldownload-Knopf statt Auto-Download', async () => {
-    // Mac kann nicht auto-aktualisieren (Squirrel.Mac ohne Notarisierung), prueft aber manuell.
-    // Der Zustand zeigt einen "Manuell herunterladen"-Knopf (geht ueber den laden-IPC, der auf Mac
-    // die Release-Seite oeffnet), NICHT den "Herunterladen"-Auto-Knopf aus 'verfuegbar'.
-    const { spies } = zeigeMit({ version: '0.16.0', art: 'verfuegbar_manuell', neue: '0.17.0', groesse: 149843177 })
-    expect(await screen.findByText(/0\.17\.0/)).toBeTruthy()
-    expect(screen.getByText(/Auto-Update.*nicht möglich/)).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: /Manuell herunterladen/ }))
-    expect(spies.laden).toHaveBeenCalled()
-    expect(screen.queryByRole('button', { name: /^Herunterladen/ })).toBeNull()   // kein Auto-Knopf
-  })
-
-  it('kennt auch die beiden anderen Gruende', async () => {
-    zeigeMit({ version: '0.2.1', art: 'nicht_moeglich', grund: 'entwicklung' })
-    expect(await screen.findByText(/Entwicklungsmodus/)).toBeTruthy()
-    cleanup()
-    zeigeMit({ version: '0.2.1', art: 'nicht_moeglich', grund: 'kein-appimage' })
-    expect(await screen.findByText(/AppImage/)).toBeTruthy()
-  })
-
-  it('zeigt einen Fehler samt Weg zum Protokoll', async () => {
-    zeigeMit({ version: '0.2.1', art: 'fehler', text: '404 releases.atom' })
-    expect(await screen.findByText(/404 releases\.atom/)).toBeTruthy()
-  })
-
-  it('im Fehlerzustand: erneut pruefen bleibt moeglich, und es gibt einen Weg ins Protokoll', async () => {
-    // War vorher eine Sackgasse: kein Knopf, kein Weg raus ausser Neustart.
-    const { spies } = zeigeMit({ version: '0.2.1', art: 'fehler', text: '404 releases.atom' })
-    await screen.findByText(/404 releases\.atom/)
-    expect(screen.getByRole('button', { name: /Nach Updates suchen/ })).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: /Protokoll/ }))
-    expect(spies.protokollOeffnen).toHaveBeenCalled()
-  })
-
-  it('sperrt den Knopf waehrend der Pruefung', async () => {
-    zeigeMit({ version: '0.2.1', art: 'prueft' })
-    expect((await screen.findByRole('button', { name: /Wird geprüft/ })).hasAttribute('disabled')).toBe(true)
+  it('verweist auf die eigene Seite, statt die Bedienung hier zu fuehren', async () => {
+    // Die Update-Bedienung ist nach /version umgezogen; hier bleibt der Weg dorthin, sonst
+    // findet sie niemand. Die Tests dazu stehen in VersionPage.test.tsx.
+    zeige()
+    const link = await screen.findByRole('link', { name: /Version und Updates/ })
+    expect(link).toHaveAttribute('href', '/version')
+    expect(screen.queryByRole('button', { name: /Nach Updates suchen/ })).toBeNull()
   })
 })

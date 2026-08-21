@@ -91,7 +91,16 @@ describe('StatusBar', () => {
     bruecke({ version: '0.10.0', art: 'verfuegbar', neue: '0.11.0', groesse: 96 })
     zeigen()
     const link = await screen.findByRole('link', { name: /Update 0.11.0 verfügbar/ })
-    expect(link).toHaveAttribute('href', '/einstellungen')
+    expect(link).toHaveAttribute('href', '/version')
+  })
+
+  it('die Versionsnummer fuehrt zur Versionsseite', async () => {
+    // Sie steht auf jeder Route, und wer wissen will, welche Fassung laeuft, klickt dort.
+    // Vorher war sie ein blosser Text — der Weg fuehrte nur ueber die Einstellungen.
+    vi.mocked(api.getHardware).mockRejectedValue(new Error('weg'))
+    zeigen()
+    const link = await screen.findByRole('link', { name: /^v\d/ })
+    expect(link).toHaveAttribute('href', '/version')
   })
 
   it('schweigt, solange es nichts zu tun gibt', async () => {

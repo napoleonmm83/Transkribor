@@ -62,7 +62,7 @@ export function StatusBar() {
       <span className="min-w-0 flex-1 truncate" aria-live="polite">{text}</span>
       {hinweis && (
         // aria-live: ein Update taucht auf, ohne dass jemand etwas angeklickt hat.
-        <Link to="/einstellungen" aria-live="polite"
+        <Link to="/version" aria-live="polite"
           className="shrink-0 font-medium text-primary underline-offset-2 hover:underline
                      focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
           {hinweis}
@@ -94,7 +94,13 @@ export function StatusBar() {
       {/* Aus derselben Not wie der Einstellungen-Link: er stand nur in der Editor-Leiste. */}
       <ThemeToggle />
       {rechenwerk && <span className="shrink-0">{rechenwerk}</span>}
-      <span className="shrink-0 tabular-nums">v{version}</span>
+      {/* Die Nummer IST der Weg zur Versionsseite — sie steht auf jeder Route, und wer
+          wissen will, welche Fassung laeuft, klickt genau hier. */}
+      <Link to="/version"
+        className="shrink-0 tabular-nums underline-offset-2 hover:text-foreground hover:underline
+                   focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+        v{version}
+      </Link>
     </footer>
   )
 }
