@@ -465,6 +465,10 @@ describe('MaterialDialog', () => {
     fireEvent.click(screen.getByRole('button', { name: /Weiter/ }))
     expect(screen.queryByText(/gilt der Projekt-Standard/)).toBeNull()
     expect(screen.getByText(/ohne Dialekt-Glättung/)).toBeInTheDocument()
+    // Der Hinweis ERSETZT den generischen Satz, er haengt sich nicht daran: „…Whisper
+    // erkennt die Sprache selbst. Es gilt, was Whisper erkennt." waeren zwei Saetze mit
+    // derselben Aussage (Reviewbefund n1).
+    expect(screen.queryByText(/Sprache selbst/)).toBeNull()
   })
 
   it('zeigt in Schritt 3 NICHTS, solange keine Zeile auf „Automatisch" steht', () => {
