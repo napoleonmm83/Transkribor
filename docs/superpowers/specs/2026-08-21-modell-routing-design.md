@@ -162,7 +162,7 @@ gespart, nicht am Modell.
 | # | Baustein | Rolle |
 |---|---|---|
 | 1 | `~/.claude/routing.md` | **DIE Quelle**, Langfassung. Wird nicht injiziert — gelesen, wenn geroutet wird. |
-| 2 | `UserPromptSubmit`-Hook, JSON/`additionalContext` | **5 Zeilen** (~80 Token/Turn): Aufgabentypen + Verweis. |
+| 2 | `UserPromptSubmit`-Hook, JSON/`additionalContext` | **5 Zeilen** (gemessen 584 Zeichen ≈ 146 Token/Turn): Aufgabentypen + Verweis. |
 | 3 | Das Ensemble: 8 Agentendateien (2 vorhanden, 6 neu) | `model:` **und** `effort:` festgenagelt, Begründung im Körper der Datei |
 | 4 | `$CLAUDE_PROJECT_DIR/.claude/routing.md` | Overlay. **Datei schlägt Global** — dieselbe Rangfolge wie `projekt.py`. |
 | 5 | `.claude/hooks/routing-sperre.sh`, `.claude/hooks/routing-lint.sh` | Sperre und Drift-Wächter (zwei Skripte, eine Rolle) |
@@ -208,7 +208,7 @@ wäre eine dritte Stelle, an der dasselbe steht.
 | Testläufe, Formatieren, Mechanik | `leichtgewicht` | **haiku** · low | — |
 | Browser-Beleg | `browser-beleg` | **sonnet** · medium | `playwright` |
 | README / Doku im Hausstil | `doku` | **sonnet** · high | — |
-| Bibliotheks-/API-Frage | Haupt-Loop | — | `find-docs` bzw. `ctx7` |
+| Bibliotheks-/API-Frage | Haupt-Loop | — | `find-docs` (dazu die `ctx7`-CLI aus der globalen Regel — ein Werkzeug, kein Skill) |
 | Modell-/LLM-Frage | Haupt-Loop | — | `claude-api` |
 | Fertig melden | Haupt-Loop | — | `superpowers:verification-before-completion` |
 
