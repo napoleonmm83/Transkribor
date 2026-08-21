@@ -185,5 +185,14 @@ rm -f review-selbsttest.md
 [ "$(lauf '{"tool_input":{"command":"TRANSKRIBOR_YTDLP_UPDATE=0 pytest webtool/tests -q   # danach gh pr create"}}')" = "0" ] \
   || { echo "FAIL: Zuweisung + Befehl + Erwaehnung schlaegt faelschlich an" >&2; fehler=1; }
 
+# 29. Ein echtes Vorkommen UNMITTELBAR hinter einem escapten. Haelt fest, warum der Fluchtweg
+#     ueber einen SCHNITT laeuft und nicht ueber ein Zaehlen von Treffern gegen escapte
+#     Treffer: `grep -o` findet nicht-ueberlappend, das `ende` des escapten Vorkommens frisst
+#     den `\n`-Anker des naechsten — die Zaehl-Variante kommt hier auf 1 gegen 1 und laesst
+#     durch (nachgebaut und gemessen: Exit 0, wo der Schnitt 2 liefert). Diese Pruefung ist
+#     der Grund, diese Variante NICHT zu nehmen; sie wird von derselben Mutation rot wie 27.
+[ "$(lauf '{"tool_input":{"command":"KEIN_REVIEW=1 gh pr create\ngh pr create"}}')" = "2" ] \
+  || { echo "FAIL: escaptes Vorkommen gibt das direkt folgende echte frei" >&2; fehler=1; }
+
 [ $fehler -eq 0 ] && echo "OK"
 exit $fehler
