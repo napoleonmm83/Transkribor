@@ -46,6 +46,11 @@ describe('autoHinweis (#301)', () => {
        ist unbekannt, welcher der beiden Saetze stimmt. Der Satz „ohne Dialekt-Glaettung"
        waere dann eine moegliche FALSCHAUSSAGE — kein Satz ist die ehrliche Richtung. */
     expect(autoHinweis('auto', 'xx', WAHL)).toBeNull()
+    // Der LEERE String ist der dritte Fall, und er unterscheidet sich von `null`: er heisst
+    // „noch nicht geladen", nicht „es gibt keinen Standard" — der koennte `ch` sein, dann
+    // waere OHNE eine Falschaussage. Ein frueheres `!projektStandard` warf beides in
+    // denselben Zweig (Reviewbefund m3).
+    expect(autoHinweis('auto', '', WAHL)).toBeNull()
     expect(autoHinweis('auto', 'ch', [{ id: 'ch', label: 'Schweizerdeutsch' }])).toBeNull()
   })
 })
