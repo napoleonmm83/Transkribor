@@ -346,6 +346,35 @@ describe('ProjectWorkspace (Stub)', () => {
     expect(toastMock.success).toHaveBeenCalledWith(expect.stringMatching(/Transkription folgt/))
   })
 
+  it('sagt das Drop-Ziel AN, nicht nur farbig (#304/Kl9)', async () => {
+    /* Die Ansage „Zum Hinzufügen loslassen" war rein visuell. Als `role="status"` ist sie
+       eine Live-Region und wird vorgelesen — und der Test haengt damit an dem, was der
+       Nutzer WAHRNIMMT, statt an einer `testid`, die nur fuer ihn selbst existiert.
+       Mit Gegenprobe: ohne Zug darf die Rolle NICHT im Baum stehen, sonst waere die
+       Live-Region eine Dauermeldung. */
+    nurDemo()
+    zeigen()
+    const flaeche = await screen.findByTestId('drop-overlay-ziel')
+    expect(screen.queryByRole('status')).toBeNull()
+    fireEvent.dragOver(flaeche, { dataTransfer: { files: [] } })
+    expect(await screen.findByRole('status')).toHaveTextContent(/loslassen/i)
+  })
+
+  it('raeumt das Overlay auch bei einem ABGEBROCHENEN Zug weg (#304/Kl2)', async () => {
+    /* Im Browser gemessen: bricht man den Zug per Escape ab, ohne den Container zu
+       verlassen, feuert NUR `dragend` — kein `dragleave`. Da `zieht` bisher allein an
+       `dragleave` hing, blieb das Overlay ueber der ganzen Seite stehen.
+       Der Test prueft die Verdrahtung; die MESSUNG steht als Kommentar am Handler, weil
+       jsdom die Ereignisfolge des Browsers nicht nachbildet. */
+    nurDemo()
+    zeigen()
+    const flaeche = await screen.findByTestId('drop-overlay-ziel')
+    fireEvent.dragOver(flaeche, { dataTransfer: { files: [] } })
+    expect(await screen.findByRole('status')).toBeInTheDocument()
+    fireEvent.dragEnd(flaeche)
+    await waitFor(() => expect(screen.queryByRole('status')).toBeNull())
+  })
+
   it('sagt es, wenn beim Ablegen keine Audiodatei dabei war', async () => {
     /* Neu durch das seitenweite Overlay: der alte Weg filterte per AUDIO_RE und kehrte bei
        leerer Menge STILL zurueck — was in Ordnung war, solange man die Ablageflaeche

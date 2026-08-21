@@ -150,6 +150,26 @@ export function ProjectWorkspace() {
       // kreuzt — ueber die ganze Seite hinweg flackerte das Overlay dabei staendig. In der
       // alten, kleinen Ablageflaeche fiel das kaum auf.
       onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setZieht(false) }}
+      // Rueckfall fuer den ABGEBROCHENEN Zug (#304/Kl2). Im Browser gemessen (Chromium, Zug
+      // per Escape abgebrochen, ohne den Container zu verlassen):
+      //
+      //     dragenter -> dragleave -> dragenter -> dragleave
+      //     --- Escape ---
+      //     dragend                       <- und sonst NICHTS
+      //
+      // Das `dragleave`, an dem `zieht` bisher allein hing, kommt dort NICHT mehr. Ohne
+      // diese Zeile bleibt das Overlay ueber der ganzen Seite stehen; es ist
+      // `pointer-events-none`, blockiert also nichts, verdeckt aber alles bis zum naechsten
+      // Zug.
+      //
+      // **Was NICHT belegt ist, und das ist der wichtigere Teil:** gemessen wurde ein
+      // IN-PAGE-Drag — und solche gibt es in dieser App gar nicht (kein einziges
+      // `draggable`, nachgesehen). Der reale Weg ist der Datei-Zug vom Desktop, und dort
+      // hat der Zug keinen Quellknoten im Dokument; ob der Browser `dragend` dann ueberhaupt
+      // liefert, laesst sich mit Playwright nicht simulieren. Die Zeile kostet nichts und
+      // deckt jeden Fall, in dem er ihn liefert — sie ist damit ein Schutz mit gemessenem
+      // MECHANISMUS, aber ohne Beleg fuer den Fall, der hier wirklich vorkommt.
+      onDragEnd={() => setZieht(false)}
       onDrop={e => {
         e.preventDefault(); setZieht(false)
         const audio = nurAudio(Array.from(e.dataTransfer.files), t => toast.info(t))
@@ -158,9 +178,18 @@ export function ProjectWorkspace() {
       }}>
       {/* `pointer-events-none` ist Pflicht, nicht Kosmetik: ohne es faengt die Flaeche das
           drop-Ereignis selbst ab, und der Handler am Container darunter feuert nie. */}
+      {/* `role="status"` (#304/Kl9): die Ansage war rein visuell — wer den Bildschirm nicht
+          sieht, bekam beim Ziehen ueber die Seite keinerlei Rueckmeldung. Als Live-Region
+          wird sie vorgelesen, sobald sie erscheint.
+          Nebenbei loest das den Testanker-Befund an der richtigen Stelle: der Test kann
+          jetzt ueber die ROLLE pruefen, dass der Nutzer die Ansage bekommt. Die `testid` am
+          Container darunter BLEIBT — er ist ein Layout-Div ohne Nutzer-Semantik, und ihm
+          eine ARIA-Rolle zu geben, nur damit ein Test ihn findet, waere eine erfundene
+          Landmark in der Navigationsstruktur. Ein `drop`-Ereignis braucht ein Element,
+          keine Bedeutung. */}
       {zieht && (
-        <div className="pointer-events-none fixed inset-0 z-40 flex items-center justify-center
-                        border-2 border-dashed border-primary bg-background/80">
+        <div role="status" className="pointer-events-none fixed inset-0 z-40 flex items-center
+                        justify-center border-2 border-dashed border-primary bg-background/80">
           <p className="text-sm font-medium">Zum Hinzufügen loslassen</p>
         </div>
       )}

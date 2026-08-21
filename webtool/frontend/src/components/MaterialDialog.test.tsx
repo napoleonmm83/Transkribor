@@ -101,6 +101,69 @@ describe('MaterialDialog', () => {
     expect(screen.getByText('https://youtu.be/bbbbbbbbbbb')).toBeInTheDocument()
   })
 
+  describe('Reiterleiste nach dem APG-Muster (#304)', () => {
+    const reiter = () => screen.getAllByRole('tab')
+
+    it('bindet jeden Reiter an ein Panel, das es wirklich gibt', () => {
+      /* Ein `role="tab"` kuendigt ein Panel an. Fehlte es, nannte ein Screenreader eine
+         Beziehung, die im Baum nirgends existiert — kein WCAG-Verstoss, aber eine
+         Falschaussage der Oberflaeche ueber sich selbst.
+         Geprueft wird die AUFLOESBARKEIT, nicht die blosse Anwesenheit des Attributs:
+         ein `aria-controls` auf eine tote Id ist stumm (dieselbe Lehre wie #244). */
+      render(<MaterialDialog {...basis} />)
+      const aktiv = reiter().find(t => t.getAttribute('aria-selected') === 'true')!
+      const panelId = aktiv.getAttribute('aria-controls')!
+      const panel = document.getElementById(panelId)
+      expect(panel).not.toBeNull()
+      expect(panel).toHaveAttribute('role', 'tabpanel')
+      expect(panel).toHaveAttribute('aria-labelledby', aktiv.id)
+    })
+
+    it('wechselt mit den Pfeiltasten und laeuft dabei um', () => {
+      /* Das APG-Muster verlangt Pfeiltasten; heute ging nur Tab. Der Umlauf gehoert dazu —
+         ohne ihn steht man am Ende der Leiste und nichts passiert. */
+      render(<MaterialDialog {...basis} />)
+      const [dateien, links] = reiter()
+      dateien.focus()
+      fireEvent.keyDown(dateien, { key: 'ArrowRight' })
+      expect(links).toHaveAttribute('aria-selected', 'true')
+      expect(links).toHaveFocus()
+      fireEvent.keyDown(links, { key: 'ArrowRight' })       // Umlauf ans andere Ende
+      expect(reiter()[0]).toHaveAttribute('aria-selected', 'true')
+      fireEvent.keyDown(reiter()[0], { key: 'ArrowLeft' })  // und zurueck
+      expect(reiter()[1]).toHaveAttribute('aria-selected', 'true')
+    })
+
+    it('springt mit Home und End an die Enden', () => {
+      render(<MaterialDialog {...basis} />)
+      const [dateien, links] = reiter()
+      dateien.focus()
+      fireEvent.keyDown(dateien, { key: 'End' })
+      expect(links).toHaveAttribute('aria-selected', 'true')
+      fireEvent.keyDown(links, { key: 'Home' })
+      expect(dateien).toHaveAttribute('aria-selected', 'true')
+    })
+
+    it('ist EIN Tabstopp, nicht zwei (Roving Tabindex)', () => {
+      /* Die bewusste Verhaltensaenderung: vorher tabbte man durch beide Knoepfe. Das
+         APG-Muster macht die Leiste zu einem einzigen Halt — innerhalb wird mit Pfeilen
+         navigiert. Ohne den Roving Tabindex waere die Pfeiltasten-Navigation ein zweiter,
+         konkurrierender Weg statt des vorgesehenen. */
+      render(<MaterialDialog {...basis} />)
+      const [dateien, links] = reiter()
+      expect(dateien).toHaveAttribute('tabindex', '0')
+      expect(links).toHaveAttribute('tabindex', '-1')
+    })
+
+    it('laesst die Maus unveraendert', () => {
+      /* Gegenprobe: die Tastaturbedienung darf den vorhandenen Weg nicht ersetzen. */
+      render(<MaterialDialog {...basis} />)
+      fireEvent.click(reiter()[1])
+      expect(reiter()[1]).toHaveAttribute('aria-selected', 'true')
+      expect(screen.getByRole('textbox', { name: 'Video-URLs' })).toBeInTheDocument()
+    })
+  })
+
   it('ein Schrittwechsel verliert NICHTS', async () => {
     /* Die Bedingung, unter der der waagrechte Ablauf ueberhaupt vertretbar ist. */
     render(<MaterialDialog {...basis} vorbelegteDateien={[datei('a.mp3')]} />)
