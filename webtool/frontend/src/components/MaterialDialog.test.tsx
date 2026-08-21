@@ -759,6 +759,19 @@ describe('MaterialDialog', () => {
       expect(holen.mock.instances).toContain(knopf)
       expect(holen.mock.calls[holen.mock.instances.indexOf(knopf)][0])
         .toEqual({ block: 'nearest' })
+
+      /* Und nach einem Schrittwechsel wieder: 2 → 3 → 2 baut eine NEUE `<ul>`, und der
+         Beobachter muss ihr folgen. Mit einem `useRef` statt des Callback-Refs bliebe er am
+         alten, abgehaengten Element und die Nachfuehrung waere still tot (CodeRabbit-CLI). */
+      const vorher = rueckrufe.length
+      fireEvent.click(screen.getByRole('button', { name: /Weiter/ }))
+      fireEvent.click(screen.getByRole('button', { name: /Zurück/ }))
+      expect(rueckrufe.length).toBeGreaterThan(vorher)
+
+      holen.mockClear()
+      rueckrufe.slice(vorher).forEach(cb => cb())
+      expect(holen.mock.instances)
+        .toContain(screen.getByRole('button', { name: /Reinhören: b\.mp3/ }))
     } finally {
       holen.mockRestore()
       vi.unstubAllGlobals()

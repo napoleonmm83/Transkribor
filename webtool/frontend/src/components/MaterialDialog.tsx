@@ -47,7 +47,12 @@ export function MaterialDialog({ project, offen, vorbelegteDateien, sprachChoice
   // und `document.getElementById` ist dafuer der Weg, den die Reiterleiste schon geht.
   // NICHT der `schluessel` — der traegt Leerzeichen („Interview Mueller.mp3“).
   const listeId = useId()
-  const listeRef = useRef<HTMLUListElement>(null)
+  // STATE, kein `useRef`: der Effekt unten haengt an diesem Knoten, und ein Ref aendert
+  // keine Abhaengigkeit. Beim Schrittwechsel (2 → 3 → 2) baut React eine NEUE `<ul>` — mit
+  // einem Ref liefe der Effekt nicht erneut und der Beobachter bliebe am alten, laengst
+  // abgehaengten Element (CodeRabbit-CLI). Ein Callback-Ref auf `setListe` ist das
+  // idiomatische Mittel dafuer.
+  const [liste, setListe] = useState<HTMLUListElement | null>(null)
 
   // Der Projektwechsel verwirft ALLES — auch den Schritt und den Abspieler. React Router
   // baut dieses Element beim Parameterwechsel nicht neu auf; ohne Reset landeten Projekt As
@@ -128,7 +133,6 @@ export function MaterialDialog({ project, offen, vorbelegteDateien, sprachChoice
   // No-op, es springt also nichts. Und weil die Groesse auch beim Fensterwechsel faellt,
   // bleibt die klingende Zeile dabei gleich mit sichtbar.
   useEffect(() => {
-    const liste = listeRef.current
     if (!klingt || !liste || typeof ResizeObserver === 'undefined') return
     const beobachter = new ResizeObserver(() => {
       const i = zeilen.findIndex(z => z.schluessel === klingt)
@@ -136,7 +140,7 @@ export function MaterialDialog({ project, offen, vorbelegteDateien, sprachChoice
     })
     beobachter.observe(liste)
     return () => beobachter.disconnect()
-  }, [klingt, zeilen, listeId])
+  }, [klingt, zeilen, listeId, liste])
 
   const urlsUebernehmen = () => {
     const neu = urlText.split('\n').map(u => u.trim()).filter(Boolean)
@@ -493,7 +497,7 @@ export function MaterialDialog({ project, offen, vorbelegteDateien, sprachChoice
                   `min-h-0` — dieselbe Eigenschaft, und hier ist der Fall naeher: der
                   Hoerbalken erscheint auf Klick und nimmt der Liste auf einen Schlag seine
                   Hoehe weg. */}
-              <ul ref={listeRef}
+              <ul ref={setListe}
                 className="rollbalken relative min-h-24 flex-1 space-y-1.5 overflow-y-auto pr-1">
                 {zeilen.map((z, i) => (
                   <MaterialZeile key={z.schluessel} zeile={z} sprachChoices={sprachChoices}
