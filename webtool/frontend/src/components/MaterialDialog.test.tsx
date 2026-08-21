@@ -576,4 +576,74 @@ describe('MaterialDialog', () => {
     expect(screen.getByRole('button', { name: /Reinhören: a\.mp3/ }))
       .toHaveAttribute('aria-pressed', 'false')
   })
+  it('nimmt die entfernte URL AUS dem Textfeld — sonst holt „Holen" sie zurueck', async () => {
+    /* Der Weg, den erst der Entfernen-Knopf aufgemacht hat: das Textfeld behaelt seinen
+       Inhalt (bewusst, `starten` leert es erst am Ende), also stand die eben entfernte URL
+       weiter da — und ein Klick auf „Holen" legte sie neu an UND sprang auf Schritt 2.
+       Dieselbe Regel wie in `starten`, nur fuer den Rueckweg. */
+    render(<MaterialDialog {...basis} />)
+    fireEvent.click(screen.getByRole('tab', { name: 'Links' }))
+    fireEvent.change(screen.getByRole('textbox', { name: 'Video-URLs' }),
+                     { target: { value: 'https://youtu.be/aaa\nhttps://youtu.be/bbb' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Holen' }))
+    fireEvent.click(screen.getByRole('button', { name: /Zurück/ }))
+    fireEvent.click(screen.getByRole('button',
+      { name: 'https://youtu.be/aaa aus der Auswahl entfernen' }))
+
+    /* Gemessen wird am TEXTFELD, und zwar HIER — nach dem naechsten „Holen" steht der
+       Dialog auf Schritt 2, wo es kein Textfeld gibt. */
+    /* Nicht an der Liste: die Nachbarzeile steht ohnehin in `zeilen`, also blieb die
+       Zusicherung „bbb ist noch da" auch unter der Mutation `setUrlText('')` gruen —
+       geprueft gehoert, was im FELD uebrig bleibt. Ein pauschales Leeren waere derselbe
+       Datenverlust von der anderen Seite: wer zehn Links eingetippt hat, verloere sie
+       durch einen Klick auf ein einzelnes ✕. */
+    expect(screen.getByRole('textbox', { name: 'Video-URLs' }))
+      .toHaveValue('https://youtu.be/bbb')
+
+    // Und die Wirkung: „Holen" legt die entfernte Zeile NICHT wieder an.
+    fireEvent.click(screen.getByRole('button', { name: 'Holen' }))
+    expect(screen.queryByText('https://youtu.be/aaa')).toBeNull()
+    expect(screen.getByText('https://youtu.be/bbb')).toBeInTheDocument()
+  })
+
+  it('laesst den Fokus nicht auf <body> fallen, wenn eine Zeile verschwindet', () => {
+    /* Der Knopf entfernt das Element, auf dem der Fokus steht. Ohne Griff landet er auf
+       <body>, Radix zieht ihn an den Dialoganfang, und wer drei Fehlgriffe herausnehmen
+       will, tabbt sich nach JEDEM Klick neu durch die Liste. */
+    render(<MaterialDialog {...basis}
+      vorbelegteDateien={[datei('a.mp3'), datei('b.mp3')]} />)
+    fireEvent.click(screen.getByRole('button', { name: 'a.mp3 aus der Auswahl entfernen' }))
+    expect(document.activeElement)
+      .toBe(screen.getByRole('button', { name: 'b.mp3 aus der Auswahl entfernen' }))
+
+    // Die letzte Zeile hat keinen Nachfolger — dann traegt der aktive Reiter den Fokus,
+    // nicht <body>.
+    fireEvent.click(screen.getByRole('button', { name: 'b.mp3 aus der Auswahl entfernen' }))
+    expect(document.activeElement).toBe(screen.getByRole('tab', { name: 'Dateien' }))
+  })
+
+  it('zeigt eine Grösse nur dort, wo es eine gibt — Links haben noch keine', () => {
+    /* `zeilen` mischt Datei- und Link-Zeilen (`ergaenzen`), und die Liste verzweigt zweimal
+       danach: Symbol und Groessenspalte. Ohne diesen Test ist `z.datei &&` unbedeckt — die
+       Datei-Haelfte allein haelt sie nicht.
+       Das SYMBOL bleibt bewusst ungeprueft: lucide rendert `FileAudio` als
+       `lucide-file-headphone` (der Importname ist ein Alias) und `Link2` als
+       `lucide-link2 lucide-link-2` — eine Zusicherung darauf misst den internen Namen einer
+       Bibliothek, nicht unsere Verzweigung, und ein Update faerbte sie rot ohne Fehler.
+       Der Unterschied ist im Browser belegt (`material-dialog-gemischt.png`); sein Schaden
+       waere kosmetisch und sofort sichtbar. Die Groessenspalte traegt dieselbe Bedingung
+       und ist hier scharf. */
+    render(<MaterialDialog {...basis}
+      vorbelegteDateien={[mitGroesse(datei('a.mp3'), 4_200_000)]} />)
+    fireEvent.click(screen.getByRole('tab', { name: 'Links' }))
+    fireEvent.change(screen.getByRole('textbox', { name: 'Video-URLs' }),
+                     { target: { value: 'https://youtu.be/aaa' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Holen' }))
+    fireEvent.click(screen.getByRole('button', { name: /Zurück/ }))
+
+    expect(screen.getByText('2 Aufnahmen gewählt')).toBeInTheDocument()
+    expect(screen.getByText('4,2 MB')).toBeInTheDocument()
+    // Genau EINE Groessenangabe: die Link-Zeile bekommt keine.
+    expect(screen.getAllByText(/\d (MB|KB|GB)$/)).toHaveLength(1)
+  })
 })

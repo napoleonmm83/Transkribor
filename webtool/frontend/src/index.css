@@ -259,6 +259,11 @@ a.blatt:hover, .blatt-klickbar:hover {
      waere `from var(--rahmen-winkel)` ein ungueltiger Wert, der conic-gradient fiele aus und
      der Rahmen bliebe ganz weg. So bleibt er stehen, nur unbewegt. Die Animation gewinnt
      trotzdem: Animationen schlagen in der Kaskade normale Deklarationen.
+   - **Der Traeger MUSS positioniert sein** (`fixed`/`relative`/`absolute`) — `inset` bezieht
+     sich sonst auf den naechsten positionierten Vorfahren oder das Fenster, und der Rahmen
+     landet irgendwo. `DialogContent` ist `fixed` (shadcn); ein `position: relative` HIER
+     waere gegen eine Utility ohnehin wirkungslos (`@layer utilities` schlaegt
+     `@layer components`). Dieselbe Lehre wie #209, zwoelf Zeilen weiter in `MaterialDialog`.
    - **Der Radius ist um die 2 px groesser als der des Dialogs** — `border-radius: inherit`
      ergaebe aussen dieselbe Rundung wie innen, und die Ecke liefe sichtbar spitz zu. */
 .rahmen-animiert::before {
@@ -288,6 +293,15 @@ a.blatt:hover, .blatt-klickbar:hover {
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  /* Die Zeile darueber deckelt nur die DAUER — `animation-iteration-count` bleibt `infinite`,
+     die Animation laeuft also weiter und wird je Frame neu gesampelt. In Chromium gemessen
+     landen dabei nur 0deg und 360deg, was fuer einen conic-gradient dasselbe Bild ergibt;
+     das ist aber die Zeitaufloesung dieser Engine und keine Zusage. Eine feiner aufloesende
+     sampelt Zwischenwerte — und dann steht bei einem Nutzer, der ausdruecklich WENIGER
+     Bewegung angefordert hat, ein Farbstroboskop um den ganzen Dialogrand. `animation: none`
+     haelt ihn wirklich an, der Verlauf bleibt als stehender Rahmen. Dieselbe Loesung wie
+     shadcns eigenes `.shimmer` (`shadcn/dist/tailwind.css:623`). */
+  .rahmen-animiert::before { animation: none; }
 }
 
 /* Ausserhalb von @layer components: `@property` und `@keyframes` sind keine Klassen, und
