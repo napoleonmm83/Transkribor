@@ -55,6 +55,48 @@ describe('MaterialDialog', () => {
     expect(screen.queryByText(/Sprachauswahl steht gerade nicht zur Verfügung/)).toBeNull()
   })
 
+  it('bietet Links nach einem gerissenen Zeitlimit NICHT erneut an', async () => {
+    /* Was das Zeitlimit aus #299 NEU erlaubt: `fetchUrls` konnte vorher nicht mit einem
+       TimeoutError ablehnen. Jetzt kann es — und der `catch` schob alle Links zurueck in
+       die Liste, also zurueck auf Schritt 2 mit einem Knopf, der zum zweiten Versuch
+       einlaedt. Anders als beim Upload faengt den KEIN 409 ab: `fetch.download_one` legt
+       ueber `unique_base` eine ZWEITE Datei an (`Video-2.m4a`), die dann transkribiert und
+       korrigiert wird. Der Toast sagte dabei gleichzeitig „moeglicherweise trotzdem
+       gestartet" — die Zeilen behaupteten das Gegenteil. (Fund der Selbstreview.)
+
+       Unterschieden wird am TYP, nicht am Meldungstext: eine Umformulierung liesse die
+       Erkennung sonst still auf den anderen Zweig fallen (dieselbe Regel wie beim 409). */
+    vi.mocked(api.fetchUrls).mockRejectedValue(new api.SendeZeitlimit(
+      'Zeitlimit überschritten — der Import ist möglicherweise trotzdem gestartet.'))
+    render(<MaterialDialog {...basis} />)
+    fireEvent.click(screen.getByRole('tab', { name: 'Links' }))
+    fireEvent.change(screen.getByRole('textbox', { name: 'Video-URLs' }),
+                     { target: { value: 'https://youtu.be/aaaaaaaaaaa' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Holen' }))
+    fireEvent.click(screen.getByRole('button', { name: /Weiter/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Los geht/ }))
+    await waitFor(() => expect(toastMock.error).toHaveBeenCalled())
+    // Die Zeile darf NICHT wieder dastehen — sonst ist der naechste Klick ein zweiter Download.
+    await waitFor(() =>
+      expect(screen.queryByText('https://youtu.be/aaaaaaaaaaa')).toBeNull())
+  })
+
+  it('bietet Links nach einem GEWOEHNLICHEN Fehlschlag weiter an', async () => {
+    /* Gegenprobe: eine nicht unterstuetzte URL (400 aus `check_url`) ist der Alltagsfall,
+       und dort ist das Stehenlassen richtig — es ist nichts angekommen, der Nutzer
+       korrigiert die URL. Ohne diese Richtung waere der Fix oben ein Datenverlust. */
+    vi.mocked(api.fetchUrls).mockRejectedValue(new Error('nicht unterstuetzte URL'))
+    render(<MaterialDialog {...basis} />)
+    fireEvent.click(screen.getByRole('tab', { name: 'Links' }))
+    fireEvent.change(screen.getByRole('textbox', { name: 'Video-URLs' }),
+                     { target: { value: 'https://youtu.be/bbbbbbbbbbb' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Holen' }))
+    fireEvent.click(screen.getByRole('button', { name: /Weiter/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Los geht/ }))
+    await waitFor(() => expect(toastMock.error).toHaveBeenCalled())
+    expect(screen.getByText('https://youtu.be/bbbbbbbbbbb')).toBeInTheDocument()
+  })
+
   it('ein Schrittwechsel verliert NICHTS', async () => {
     /* Die Bedingung, unter der der waagrechte Ablauf ueberhaupt vertretbar ist. */
     render(<MaterialDialog {...basis} vorbelegteDateien={[datei('a.mp3')]} />)

@@ -9,7 +9,7 @@ import { MaterialZeile } from '@/components/MaterialZeile'
 import { alleGueltig, ergaenzen, sprachText, sprecherText,
          type Aufnahme } from '@/lib/materialZeilen'
 import { sprecherWahl } from '@/lib/sprecher'
-import { HttpFehler, fetchUrls, uploadAudio } from '@/lib/api'
+import { HttpFehler, SendeZeitlimit, fetchUrls, uploadAudio } from '@/lib/api'
 import type { StartJob } from '@/lib/types'
 
 const SCHRITTE = ['Material wählen', 'Einstellen', 'Prüfen & starten']
@@ -134,7 +134,14 @@ export function MaterialDialog({ project, offen, vorbelegteDateien, sprachChoice
         // AUFBEWAHRT, heilt auch Schliessen und Wiederoeffnen ihn nicht. Ausloeser ist kein
         // Sonderfall, sondern der Alltag: eine nicht unterstuetzte URL (400 aus `check_url`).
         toast.error(`Video-Links: ${(e as Error)?.message || 'Import fehlgeschlagen'}`)
-        gescheitert.push(...links)
+        // Nach einem gerissenen ZEITLIMIT die Links NICHT erneut anbieten — das ist der
+        // Zustand, den #299 hier neu moeglich gemacht hat. Der Server kann den Job laengst
+        // gestartet haben; ein zweiter Klick faengt sich anders als beim Upload KEINEN 409,
+        // sondern laedt dieselben Videos noch einmal (`unique_base` → `Video-2.m4a`) und
+        // schickt sie durch Transkription und Korrektur. Die Zeilen stehenzulassen waere
+        // ausserdem ein Widerspruch zum eigenen Toast („moeglicherweise trotzdem
+        // gestartet"). Am TYP unterschieden, nicht am Text — dieselbe Regel wie beim 409.
+        if (!(e instanceof SendeZeitlimit)) gescheitert.push(...links)
       }
     }
 
@@ -298,7 +305,13 @@ export function MaterialDialog({ project, offen, vorbelegteDateien, sprachChoice
               {autoDabei && (
                 <p className="text-muted-foreground">
                   „Automatisch“: Whisper erkennt die Sprache selbst.
-                  {standardGreift && ` Wird Deutsch erkannt, gilt der Projekt-Standard „${labels[projektSprache] ?? projektSprache}“.`}
+                  {/* `||`, nicht `??` — der Zwilling des Lochs, das `sprachText` gerade bekommen hat
+                      (#305): bei leerem `projektSprache` stuende hier „gilt der Projekt-Standard
+                      „".". Heute nicht erreichbar (`autoDabei` braucht eine Zeile mit `'auto'`,
+                      und die entsteht nur an einem Waehler, den es bei leeren `sprachChoices`
+                      nicht gibt) — es ist Haertung, aber genau die Form „an EINER Stelle
+                      behoben, nicht die Klasse". Ein Zeichen. */}
+                  {standardGreift && ` Wird Deutsch erkannt, gilt der Projekt-Standard „${labels[projektSprache] || projektSprache || 'Projekt-Standard'}“.`}
                 </p>
               )}
             </div>

@@ -116,12 +116,31 @@ const UPLOAD_MS_JE_MB = 1_000
 const SENDE_ZEITLIMIT_MS = 30_000
 
 /** `Math.ceil` ist Pflicht, nicht Kosmetik: Node wirft bei einem Bruchteil
- *  `RangeError: The value of "delay" is out of range` — eine 1-Byte-Datei ergab 60000.001,
- *  und der Wurf kaeme VOR dem `fetch`, also als Absturz statt als Fehlschlag. Der Browser
+ *  `RangeError: The value of "delay" is out of range`, und der Wurf kaeme VOR dem `fetch`,
+ *  also als Absturz statt als Fehlschlag. Betroffen ist jede Groesse, die kein Vielfaches
+ *  von 1000 Bytes ist — eine 1-Byte-Datei ergibt `90000.000001`. (Die urspruengliche
+ *  Messung nannte hier `60000.001`; das war die Grundfrist VOR der Anhebung auf 90 s und
+ *  stand danach als veraltete Zahl in einem Kommentar — genau die Fehlerklasse, gegen die
+ *  dieses Repo am haeufigsten anlaeuft.) Der Browser
  *  runde still (WebIDL `unsigned long long`), der Testlauf haette den Aufruf also gar nicht
  *  erst zugelassen — dieselbe Plattformdifferenz, nur andersherum als sonst. */
 const uploadFrist = (bytes: number) =>
   Math.ceil(UPLOAD_GRUNDFRIST_MS + (bytes / 1_000_000) * UPLOAD_MS_JE_MB)
+
+/** Ein gerissenes SENDE-Zeitlimit als eigener Typ — wie `HttpFehler`, und aus demselben
+ *  Grund: der Aufrufer muss es am TYP erkennen koennen, nicht am Meldungstext. Eine
+ *  Umformulierung liesse eine Textpruefung sonst still auf den falschen Zweig fallen.
+ *
+ *  Gebraucht wird das im URL-Zweig von `MaterialDialog`: nach einem Zeitlimit darf er die
+ *  Links NICHT erneut anbieten. Anders als beim Upload faengt den kein 409 ab —
+ *  `fetch.download_one` legt ueber `unique_base` eine ZWEITE Datei an, die dann auch noch
+ *  transkribiert und korrigiert wird. */
+export class SendeZeitlimit extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'SendeZeitlimit'
+  }
+}
 
 /** Uebersetzt NUR das gerissene Zeitlimit; alles andere geht unveraendert weiter — der
  *  `HttpFehler` samt `status` muss durch, weil `MaterialDialog` die Dublette (409) daran von
@@ -130,7 +149,7 @@ const uploadFrist = (bytes: number) =>
  *  an der Aufrufstelle ohne Kniff zu lesen. */
 function sendeFehler(e: unknown, folge: string): Error {
   return (e as Error)?.name === 'TimeoutError'
-    ? new Error(`Zeitlimit überschritten — ${folge}. Nach dem Neuladen zeigt die Liste, was angekommen ist.`)
+    ? new SendeZeitlimit(`Zeitlimit überschritten — ${folge}. Nach dem Neuladen zeigt die Liste, was angekommen ist.`)
     : e as Error
 }
 
