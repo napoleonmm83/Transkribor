@@ -54,5 +54,22 @@ touch review-selbsttest.md
 [ "$(lauf "$PR")" = "0" ] || { echo "FAIL: sperrt TROTZ Review" >&2; fehler=1; }
 rm -f review-selbsttest.md
 
+# 6. KEIN_REVIEW=1 in einer Commit-Message (nicht als Praefix) -> sperrt TROTZDEM
+#    (Fixture-Review, 2026-08-21: ein unangebundenes `grep -q 'KEIN_REVIEW=1'` fand die
+#    Zeichenkette IRGENDWO im Roh-JSON und schaltete die Sperre versehentlich ab)
+[ "$(lauf '{"tool_input":{"command":"git commit -m \"KEIN_REVIEW=1 rejected\" && gh pr create"}}')" = "2" ] \
+  || { echo "FAIL: Commit-Message-Erwaehnung von KEIN_REVIEW=1 wirkt als Fluchtweg" >&2; fehler=1; }
+
+# 7. KEIN_REVIEW=1 in einem Kommentar vor dem Befehl (nicht als Praefix) -> sperrt TROTZDEM
+[ "$(lauf '{"tool_input":{"command":"echo note about KEIN_REVIEW=1; gh pr create"}}')" = "2" ] \
+  || { echo "FAIL: Kommentar-Erwaehnung von KEIN_REVIEW=1 wirkt als Fluchtweg" >&2; fehler=1; }
+
+# 8. `bash -c "gh pr create"` -> laesst durch (BEKANNTE, BEWUSSTE Luecke, siehe Kommentar in
+#    routing-sperre.sh: der Anker prueft eine Textposition, keine echte Shell-Auswertung.
+#    Die Ankerklasse wird NICHT erweitert, weil das die Fehlalarmrate erhoeht — diese Probe
+#    haelt die Grenze fest, statt sie unausgesprochen zu lassen)
+[ "$(lauf '{"tool_input":{"command":"bash -c \"gh pr create\""}}')" = "0" ] \
+  || { echo "FAIL: bash -c wird jetzt erfasst - Kommentar in routing-sperre.sh nachziehen" >&2; fehler=1; }
+
 [ $fehler -eq 0 ] && echo "OK"
 exit $fehler
