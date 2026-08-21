@@ -52,7 +52,10 @@ Auch mit **Schweizerdeutsch** kommt es zurecht.
 3. Projekt anlegen, Audiodatei hineinziehen. Es öffnet sich ein Fenster, in dem du je
    Aufnahme Sprache und Anzahl Sprecher einstellen und **kurz reinhören** kannst — dreimal
    klicken, dann läuft alles von allein, und du siehst live, wie weit es ist. (Ab
-   `v0.26.0`; in `v0.25.0` und älter liegen diese Felder direkt auf der Seite.)
+   `v0.26.0`; in `v0.25.0` und älter liegen diese Felder direkt auf der Seite.) Ab der
+   nächsten Fassung steht schon im ersten Schritt, **welche** Dateien du gewählt hast —
+   mit Namen und Grösse; eine versehentlich mitgenommene nimmst du mit dem ✕ daneben
+   wieder heraus, ohne von vorn anzufangen.
 
 > [!WARNING]
 > **Beim ersten Öffnen warnt das Betriebssystem.** Der Installer ist nicht bei Microsoft bzw.

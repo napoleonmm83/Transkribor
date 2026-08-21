@@ -20,6 +20,12 @@ const basis = {
   onSchliessen: () => {}, onFertig: () => {},
 }
 const datei = (n: string) => new File(['x'], n, { type: 'audio/mpeg' })
+/* Eine echt allokierte 4-MB-Datei kostet den Testlauf Speicher fuer nichts: `size` ist
+ * das einzige Feld, das die Groessenspalte liest (dieselbe Attrappe wie in api.test.ts). */
+const mitGroesse = (d: File, bytes: number) => {
+  Object.defineProperty(d, 'size', { value: bytes })
+  return d
+}
 
 beforeEach(() => {
   vi.clearAllMocks()   // OHNE das zaehlt jede not.toHaveBeenCalled-Zusicherung fremde Aufrufe
@@ -530,5 +536,44 @@ describe('MaterialDialog', () => {
     expect(screen.getByRole('textbox', { name: /Anzahl Sprecher/ })).toHaveValue('4')
     rerender(<MaterialDialog {...basis} project="Anderes" offen />) // anderes Projekt: leer
     expect(screen.queryByText('a.mp3')).not.toBeInTheDocument()
+  })
+  it('zeigt die gewaehlten Aufnahmen mit NAMEN, nicht nur ihre Zahl', () => {
+    /* Schritt 1 stand vorher bei „3 Aufnahmen gewählt" — wer mehrere Dateien auf einmal
+       waehlte, erfuhr bis Schritt 2 nicht, WELCHE es geworden sind. Geprueft wird deshalb
+       ohne einen Klick auf „Weiter". */
+    render(<MaterialDialog {...basis}
+      vorbelegteDateien={[mitGroesse(datei('a.mp3'), 4_200_000), datei('b.mp3')]} />)
+    expect(screen.getByText('2 Aufnahmen gewählt')).toBeInTheDocument()
+    expect(screen.getByText('a.mp3')).toBeInTheDocument()
+    expect(screen.getByText('b.mp3')).toBeInTheDocument()
+    expect(screen.getByText('4,2 MB')).toBeInTheDocument()
+  })
+
+  it('entfernt GENAU die angeklickte Aufnahme', () => {
+    render(<MaterialDialog {...basis} vorbelegteDateien={[datei('a.mp3'), datei('b.mp3')]} />)
+    fireEvent.click(screen.getByRole('button', { name: 'a.mp3 aus der Auswahl entfernen' }))
+    expect(screen.queryByText('a.mp3')).toBeNull()
+    /* Die Nachbarzeile MUSS stehenbleiben: aus `!==` ein `===` gemacht, loeschte der Klick
+       alles ausser der angeklickten Zeile — und das faellt ohne diese Zusicherung nicht auf,
+       weil die erste Zeile in beiden Faellen verschwindet. */
+    expect(screen.getByText('b.mp3')).toBeInTheDocument()
+    expect(screen.getByText('1 Aufnahme gewählt')).toBeInTheDocument()
+  })
+  it('vergisst den Abspieler, wenn die klingende Aufnahme aus der Liste faellt', () => {
+    /* Sonst bleibt ihr Schluessel im Zustand stehen — und dieselbe Datei, spaeter erneut
+       hinzugefuegt, spielt beim Betreten von Schritt 2 ungefragt los. Derselbe Fall wie die
+       Zeile, die nach einem Teil-Fehlschlag aus der Liste faellt. */
+    const { rerender } = render(<MaterialDialog {...basis} vorbelegteDateien={[datei('a.mp3')]} />)
+    fireEvent.click(screen.getByRole('button', { name: /Weiter/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Reinhören: a\.mp3/ }))
+    expect(screen.getByRole('button', { name: /Reinhören: a\.mp3/ }))
+      .toHaveAttribute('aria-pressed', 'true')
+
+    fireEvent.click(screen.getByRole('button', { name: /Zurück/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'a.mp3 aus der Auswahl entfernen' }))
+    rerender(<MaterialDialog {...basis} vorbelegteDateien={[datei('a.mp3')]} />)
+    fireEvent.click(screen.getByRole('button', { name: /Weiter/ }))
+    expect(screen.getByRole('button', { name: /Reinhören: a\.mp3/ }))
+      .toHaveAttribute('aria-pressed', 'false')
   })
 })
