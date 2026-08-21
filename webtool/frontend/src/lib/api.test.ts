@@ -126,6 +126,13 @@ describe('Zeitlimit beim Senden (#299)', () => {
     // „fehlgeschlagen" waere falsch: der Server kann die Datei schon geschrieben und den
     // Transkriptions-Job gestartet haben. Wer daraufhin erneut hochlaedt, bekommt einen 409.
     await expect(api.uploadAudio('P', dateiMit(1_000))).rejects.toThrow(/möglicherweise/)
+    // Und der TYP muss stimmen, nicht nur der Text: `MaterialDialog` entscheidet an
+    // `instanceof SendeZeitlimit`, ob er die Links erneut anbietet — ein blanker `Error`
+    // liesse ihn dieselben Videos ein zweites Mal laden. Der Dialog-Test kann das nicht
+    // sehen (er faelscht `api.fetchUrls` und bekommt den Typ geschenkt); die Mutationsprobe
+    // hat genau diese Luecke aufgedeckt.
+    await expect(api.uploadAudio('P', dateiMit(1_000))).rejects.toBeInstanceOf(api.SendeZeitlimit)
+    await expect(api.fetchUrls('P', ['https://youtu.be/x'])).rejects.toBeInstanceOf(api.SendeZeitlimit)
   })
 
   it('laesst einen HttpFehler auch bei fetchUrls durch (Zwilling)', async () => {
