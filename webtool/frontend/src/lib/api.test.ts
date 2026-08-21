@@ -171,7 +171,11 @@ describe('Zeitlimit beim Senden (#299)', () => {
     await api.fetchUrls('P', ['https://youtu.be/x'])
     // Der Handler validiert nur und startet einen Job — der Download laeuft im Subprozess.
     // Hier reicht die Frist eines JSON-Endpunkts.
-    expect(spy).toHaveBeenCalled()
+    //
+    // Die ZAHL festnageln, nicht nur die Anwesenheit eines Signals: `toHaveBeenCalled()`
+    // allein bliebe gruen, wenn die Frist auf 1 ms faellt — und ein clientseitiger Abbruch
+    // ist hier nicht folgenlos, der Job kann laengst laufen. (CodeRabbit-Bot.)
+    expect(spy).toHaveBeenCalledWith(30_000)
     expect(fm.mock.calls[0][1].signal).toBeInstanceOf(AbortSignal)
   })
 })
