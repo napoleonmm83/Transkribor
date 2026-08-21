@@ -30,6 +30,18 @@ describe('holeReleases', () => {
     expect((await holeReleases()).map(r => r.tag)).toEqual(['v0.29.0'])
   })
 
+  it('zeigt hoechstens zehn Fassungen — auch wenn Vorabfassungen dazwischenliegen', async () => {
+    // `per_page` greift VOR dem Filter: wuerden 10 geholt und eine davon fiele raus, zeigte
+    // die Seite neun. Deshalb 15 holen, 10 zeigen — und genau das misst dieser Test, indem
+    // er drei Vorabfassungen dazwischenstreut.
+    const viele = Array.from({ length: 15 }, (_, i) => ({
+      tag_name: `v0.${i}.0`, published_at: '2026-01-01T00:00:00Z',
+      prerelease: i % 5 === 0, draft: false, body: '',
+    }))
+    vi.stubGlobal('fetch', vi.fn(async () => antwort(viele)))
+    expect(await holeReleases()).toHaveLength(10)
+  })
+
   it('wirft bei HTTP-Fehler mit dem Status darin', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => antwort(null, false, 403)))
     await expect(holeReleases()).rejects.toThrow(/403/)
