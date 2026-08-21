@@ -4,9 +4,14 @@ import { MaterialDialog } from './MaterialDialog'
 import * as api from '@/lib/api'
 
 vi.mock('@/lib/api')
+/* Die Attrappe rendert ein ELEMENT, sonst liesse sich „liegt ausserhalb der Rollflaeche"
+   nicht pruefen — ein `null` hat keinen Platz im Baum. Sie bildet die eine Regel nach, auf
+   die es hier ankommt: nichts, solange nichts klingt (`HoerBalken.tsx`, dort getrennt
+   festgenagelt in `HoerBalken.test.tsx`). Welle, Transport und Blob-Lebenszyklus gehoeren
+   nicht in diesen Test. */
 vi.mock('@/components/HoerBalken', () => ({
-  HoerBalken: ({ datei }: { datei: File | null }) =>
-    datei ? <div data-testid="hoerbalken" /> : null,
+  HoerBalken: ({ datei, onSchliessen }: { datei: File | null; onSchliessen: () => void }) =>
+    datei ? <button data-testid="hoerbalken" onClick={onSchliessen}>zu</button> : null,
 }))
 const toastMock = vi.hoisted(() => Object.assign(vi.fn(),
   { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn(), dismiss: vi.fn() }))
@@ -696,13 +701,82 @@ describe('MaterialDialog', () => {
     const liste = screen.getByText('a.mp3').closest('ul')!
     expect(liste.className).toContain('overflow-y-auto')
     /* Der Boden zaehlt hier MEHR als in Schritt 1: der Hoerbalken erscheint auf Klick und
-       nimmt der Liste seine Hoehe auf einen Schlag weg — ohne ihn faellt sie auf 0 und die
-       Zeilen sind ueber keinen Bildlauf mehr erreichbar (derselbe Kollaps wie C1). */
+       nimmt der Liste 185 px auf einen Schlag weg (gemessen 354 → 147 px — nicht auf 0,
+       der Boden greift ja). OHNE ihn faellt sie auf 0, und dann sind die Zeilen ueber keinen
+       Bildlauf mehr erreichbar: derselbe Kollaps wie in PR #313. */
     expect(liste.className).toContain('min-h-24')
-    expect(liste.contains(balken)).toBe(false)
-    // Geschwister in DERSELBEN Spalte: laege er in einem anderen Behaelter, rollte er mit
-    // dessen Bildlauf mit — „ausserhalb der Liste" allein reicht als Zusicherung nicht.
-    expect(balken.parentElement).toBe(liste.parentElement)
+
+    /* Die Klassen an der `<ul>` tun ohne die Elternspalte NICHTS — ein Reviewer hat
+       gemessen, dass `h-full` weg, `flex-col` weg und sogar der Rueckbau der ganzen Spalte
+       auf `space-y-2` alle 39 Tests gruen liessen. Die tragenden Klassen gehoeren also
+       ausdruecklich in die Zusicherung, nicht nur ihre Wirkung. */
+    expect(liste.parentElement!.className).toContain('h-full')
+    expect(liste.parentElement!.className).toContain('flex-col')
+
+    /* EINE Zusicherung statt zweier: „unmittelbar nach der Liste" deckt „nicht darin" und
+       „Geschwister derselben Spalte" mit ab — und zusaetzlich die REIHENFOLGE. Ueber der
+       Liste stuende er im Weg. */
+    expect(liste.nextElementSibling).toBe(balken)
+  })
+
+  it('holt die klingende Zeile zurueck ins Bild, wenn die Liste schrumpft', () => {
+    /* Der Hoerbalken nimmt der Liste beim Oeffnen rund die Haelfte ihrer Hoehe (gemessen
+       354 → 147 px), waehrend der Browser `scrollTop` behaelt — die eben angeklickte Zeile
+       rutscht unter die Kante, samt Fokusring und `aria-pressed`. Ab der fuenften von acht
+       Zeilen trifft das jede.
+       Ausgeloest wird das Nachfuehren von der GROESSENAENDERUNG, nicht vom Klick: ein
+       `requestAnimationFrame` am Klick war der erste Versuch und ist im Browser widerlegt
+       (die Liste schrumpft erst, wenn wavesurfer fertig dekodiert hat).
+       jsdom kennt keinen `ResizeObserver` und hat kein Layout — der Stub hier laesst den
+       Test seinen Rueckruf SELBST ausloesen. Geprueft wird damit die Reaktion, nicht die
+       Erkennung; dass die Zeile im echten Browser wirklich zurueckkommt, ist dort gemessen
+       (Zeile 6 wanderte von 334 auf 287 und blieb im Bild, ohne den Beobachter blieb sie
+       bei 334 und fiel heraus). */
+    /* Der Rueckruf wird erst bei `observe()` gesammelt, NICHT im Konstruktor: sonst misst
+       der Test nur, dass ein Beobachter gebaut wurde — die Mutation „`observe()` weglassen"
+       blieb damit gruen (gemessen). Angemeldet ist er erst, wenn er auch etwas beobachtet. */
+    const rueckrufe: Array<() => void> = []
+    vi.stubGlobal('ResizeObserver', class {
+      // Explizites Feld statt Parameter-Property: die ist TypeScript-only-Syntax und faellt
+      // unter `erasableSyntaxOnly` (TS1294) — vitest schluckt sie, `npm run build` nicht.
+      cb: () => void
+      constructor(cb: () => void) { this.cb = cb }
+      observe() { rueckrufe.push(this.cb) }
+      disconnect() {}
+    })
+    const holen = vi.spyOn(HTMLElement.prototype, 'scrollIntoView').mockImplementation(() => {})
+    try {
+      render(<MaterialDialog {...basis} vorbelegteDateien={[datei('a.mp3'), datei('b.mp3')]} />)
+      fireEvent.click(screen.getByRole('button', { name: /Weiter/ }))
+      const knopf = screen.getByRole('button', { name: /Reinhören: b\.mp3/ })
+      fireEvent.click(knopf)
+
+      // Positivkontrolle: ohne angemeldeten Beobachter wuerde der Test nichts messen.
+      expect(rueckrufe.length).toBeGreaterThan(0)
+      expect(holen).not.toHaveBeenCalled()      // vor der Groessenaenderung passiert nichts
+      rueckrufe.forEach(cb => cb())
+
+      expect(holen.mock.instances).toContain(knopf)
+      expect(holen.mock.calls[holen.mock.instances.indexOf(knopf)][0])
+        .toEqual({ block: 'nearest' })
+    } finally {
+      holen.mockRestore()
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('legt den Fokus zurueck, wenn der Hoerbalken schliesst', () => {
+    /* Der ✕ des Balkens ist der Zwilling des Entfernen-✕ aus PR #310: er nimmt das Element
+       weg, auf dem der Fokus steht. Ohne Griff faellt der auf <body>, und Radix zieht ihn an
+       den Dialoganfang — weit weg von der Zeile, mit der man gerade gearbeitet hat. */
+    render(<MaterialDialog {...basis} vorbelegteDateien={[datei('a.mp3'), datei('b.mp3')]} />)
+    fireEvent.click(screen.getByRole('button', { name: /Weiter/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Reinhören: b\.mp3/ }))
+    fireEvent.click(screen.getByTestId('hoerbalken'))
+
+    // Der Play-Knopf DIESER Zeile, nicht irgendeiner: `findIndex` muss den Schluessel treffen.
+    expect(document.activeElement)
+      .toBe(screen.getByRole('button', { name: /Reinhören: b\.mp3/ }))
   })
 
   it('gibt BEIDEN Rollflaechen des Dialogs dieselbe Leiste', () => {

@@ -9,13 +9,16 @@ import { sprecherWahl } from '@/lib/sprecher'
  *  liegt im Dialog, damit ein Schrittwechsel nichts verliert (Spec 6.3).
  */
 export function MaterialZeile({ zeile, sprachChoices, sprecherMax, hoerbar, klingt,
-                                gesperrt, onSprecher, onSprache, onHoeren }: {
+                                gesperrt, playId, onSprecher, onSprache, onHoeren }: {
   zeile: Aufnahme
   sprachChoices: { id: string; label: string; hint?: string; dialekt?: boolean }[]
   sprecherMax: number
   hoerbar: boolean          // false beim URL-Import: noch nichts heruntergeladen
   klingt: boolean
   gesperrt?: boolean
+  // Damit der Dialog den Fokus hierher zuruecklegen kann, wenn der Hoerbalken schliesst.
+  // Eine Id, KEIN Verweis ueber `aria-label`: „Interview (2).mp3" ist kein gueltiger Selektor.
+  playId?: string
   onSprecher: (schluessel: string, text: string) => void
   onSprache: (schluessel: string, id: string) => void
   onHoeren: (schluessel: string) => void
@@ -26,7 +29,13 @@ export function MaterialZeile({ zeile, sprachChoices, sprecherMax, hoerbar, klin
   const w = sprecherWahl(zeile.sprecherText, sprecherMax)
   return (
     <li className="flex min-h-9 items-center gap-2.5">
-      <button type="button" disabled={!hoerbar} aria-pressed={klingt}
+      {/* Das Nachfuehren beim Oeffnen des Hoerbalkens liegt NICHT hier, sondern im Dialog
+          (`ResizeObserver` auf der Liste). Ein `requestAnimationFrame` an diesem Klick stand
+          hier und ist zurueckgebaut: im Browser gemessen wirkt er nicht — die Liste schrumpft
+          erst, wenn wavesurfer fertig dekodiert hat, also rund eine Sekunde spaeter, und der
+          Rahmen danach sieht ein Layout, in dem noch nichts passiert ist (Zeile 6 stand vor
+          wie nach dem Klick bei 334 px und war danach ausserhalb der Liste). */}
+      <button type="button" id={playId} disabled={!hoerbar} aria-pressed={klingt}
         aria-label={hoerbar ? `Reinhören: ${zeile.anzeige}`
                             : `${zeile.anzeige} — erst nach dem Herunterladen hörbar`}
         onClick={() => onHoeren(zeile.schluessel)}

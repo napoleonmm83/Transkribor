@@ -47,6 +47,7 @@ export function MaterialDialog({ project, offen, vorbelegteDateien, sprachChoice
   // und `document.getElementById` ist dafuer der Weg, den die Reiterleiste schon geht.
   // NICHT der `schluessel` — der traegt Leerzeichen („Interview Mueller.mp3“).
   const listeId = useId()
+  const listeRef = useRef<HTMLUListElement>(null)
 
   // Der Projektwechsel verwirft ALLES — auch den Schritt und den Abspieler. React Router
   // baut dieses Element beim Parameterwechsel nicht neu auf; ohne Reset landeten Projekt As
@@ -113,6 +114,29 @@ export function MaterialDialog({ project, offen, vorbelegteDateien, sprachChoice
     setKlingt(a => a === schluessel ? null : a)
     setUrlText(t => t.split('\n').filter(u => u.trim() !== schluessel).join('\n'))
   }
+
+  // Der Hoerbalken nimmt der Liste beim Oeffnen rund die Haelfte ihrer Hoehe (gemessen
+  // 354 → 147 px), waehrend der Browser `scrollTop` behaelt: die eben angeklickte Zeile
+  // rutscht unter die Kante — samt Fokusring und dem `aria-pressed`, das die Wirkung des
+  // Klicks anzeigt. Ab der fuenften von acht Zeilen trifft das jede.
+  //
+  // Beobachtet wird die GROESSE der Liste, nicht der Klick. Ein `requestAnimationFrame` am
+  // Klick war der erste Versuch und ist im Browser widerlegt: die Liste schrumpft erst,
+  // wenn wavesurfer fertig dekodiert hat — der Rahmen danach sieht ein unveraendertes
+  // Layout und `block: 'nearest'` tut folgerichtig nichts.
+  // `nearest` bleibt trotzdem richtig: solange die Zeile im Bild steht, ist der Aufruf ein
+  // No-op, es springt also nichts. Und weil die Groesse auch beim Fensterwechsel faellt,
+  // bleibt die klingende Zeile dabei gleich mit sichtbar.
+  useEffect(() => {
+    const liste = listeRef.current
+    if (!klingt || !liste || typeof ResizeObserver === 'undefined') return
+    const beobachter = new ResizeObserver(() => {
+      const i = zeilen.findIndex(z => z.schluessel === klingt)
+      if (i >= 0) document.getElementById(`${listeId}-play-${i}`)?.scrollIntoView({ block: 'nearest' })
+    })
+    beobachter.observe(liste)
+    return () => beobachter.disconnect()
+  }, [klingt, zeilen, listeId])
 
   const urlsUebernehmen = () => {
     const neu = urlText.split('\n').map(u => u.trim()).filter(Boolean)
@@ -458,17 +482,24 @@ export function MaterialDialog({ project, offen, vorbelegteDateien, sprachChoice
                   ineinander (CodeRabbit-CLI)". Der Einwand war richtig, seine Bedingung ist
                   aber weggefallen: solange der Block seine Hoehe selbst traegt, rollt der
                   aeussere Behaelter in Schritt 2 nicht mehr mit — es gibt also weiterhin nur
-                  EINE Leiste, nur an einer anderen Stelle. Unterhalb der Kippkante rollen
-                  bewusst beide (siehe Schritt 1).
+                  EINE Leiste, nur an einer anderen Stelle.
+                  **Die Kippkante ist hier eine ANDERE als in Schritt 1**, und „siehe Schritt 1"
+                  stand hier zuerst falsch: dort sind es 378 px Fensterhoehe, hier mit offenem
+                  Hoerbalken ≈ **513 px** (mit dem Sprachhinweis ≈ 557). Darunter greift der
+                  Boden, die Spalte ueberlaeuft und beide Behaelter rollen — bewusst, denn zwei
+                  Leisten sind besser als unerreichbarer Inhalt. Was kippt, ist der Boden, NICHT
+                  das Selbst-Tragen der Hoehe: das gilt immer.
                   `min-h-24` ist auch hier der Boden aus dem 0-px-Kollaps und ERSETZT
                   `min-h-0` — dieselbe Eigenschaft, und hier ist der Fall naeher: der
                   Hoerbalken erscheint auf Klick und nimmt der Liste auf einen Schlag seine
                   Hoehe weg. */}
-              <ul className="rollbalken relative min-h-24 flex-1 space-y-1.5 overflow-y-auto pr-1">
-                {zeilen.map(z => (
+              <ul ref={listeRef}
+                className="rollbalken relative min-h-24 flex-1 space-y-1.5 overflow-y-auto pr-1">
+                {zeilen.map((z, i) => (
                   <MaterialZeile key={z.schluessel} zeile={z} sprachChoices={sprachChoices}
                     sprecherMax={sprecherMax} hoerbar={!!z.datei} klingt={klingt === z.schluessel}
-                    gesperrt={laeuft} onSprecher={setzeSprecher} onSprache={setzeSprache}
+                    gesperrt={laeuft} playId={`${listeId}-play-${i}`}
+                    onSprecher={setzeSprecher} onSprache={setzeSprache}
                     onHoeren={s => setKlingt(a => a === s ? null : s)} />
                 ))}
               </ul>
@@ -476,7 +507,17 @@ export function MaterialDialog({ project, offen, vorbelegteDateien, sprachChoice
                   Liste durchgeht. `null`, wenn nichts klingt — dann kostet er auch keinen
                   Platz. */}
               <HoerBalken datei={klingende?.datei ?? null} anzeige={klingende?.anzeige ?? ''}
-                onSchliessen={() => setKlingt(null)} />
+                onSchliessen={() => {
+                  // Der ✕ des Balkens ist der Zwilling des Entfernen-✕ aus PR #310: er nimmt
+                  // das Element weg, auf dem der Fokus steht, und ohne Griff faellt der auf
+                  // <body>. Der Play-Knopf der Zeile ist der richtige Rueckweg — dorthin
+                  // wollte der Nutzer ohnehin zurueck. Er bleibt im DOM, der Griff wirkt also
+                  // synchron. Dieselbe Frage an der Nachbarstelle gestellt statt nur die
+                  // gemeldete zu beheben.
+                  const i = zeilen.findIndex(z => z.schluessel === klingt)
+                  setKlingt(null)
+                  if (i >= 0) document.getElementById(`${listeId}-play-${i}`)?.focus()
+                }} />
             </div>
           )}
 
