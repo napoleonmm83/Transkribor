@@ -178,7 +178,12 @@ export async function fetchUrls(project: string, urls: string[],
                                 mehrsprachig?: boolean,
                                 sprecher?: (number | null)[]): Promise<StartJob> {
   try {
-    return jn(await fetch(`/api/projects/${enc(project)}/fetch`, {
+    // `return await`, nicht `return`: in einer async-Funktion laeuft die Ablehnung eines
+    // ZURUECKGEGEBENEN Promise am eigenen `catch` vorbei — der `HttpFehler` aus `jn` kaeme
+    // dann nie bei `sendeFehler` an, und dessen Durchlass-Zweig waere unerreichbar. Die
+    // Mutationsprobe hat genau das aufgedeckt: „HttpFehler kommt durch" stimmte, aber aus
+    // dem falschen Grund, und ein spaeter ergaenztes `await` haette es still gekippt.
+    return await jn(await fetch(`/api/projects/${enc(project)}/fetch`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     // Der Handler validiert nur und startet einen Job — der Download laeuft im Subprozess.
     // Hier reicht die Frist eines JSON-Endpunkts.
@@ -218,7 +223,9 @@ export async function uploadAudio(project: string, file: File, sprache?: string,
   // "" waere fuer FastAPI ein Typfehler (422) statt eines ausgelassenen Feldes.
   if (sprecher !== undefined) fd.append('sprecher', String(sprecher))
   try {
-    return jn(await fetch(`/api/projects/${enc(project)}/audio`,
+    // `return await` — siehe `fetchUrls`: ohne das `await` erreicht die `jn`-Ablehnung den
+    // eigenen `catch` nicht, und der 409 der Dublette liefe an `sendeFehler` vorbei.
+    return await jn(await fetch(`/api/projects/${enc(project)}/audio`,
       { method: 'POST', body: fd, signal: AbortSignal.timeout(uploadFrist(file.size)) }))
   } catch (e) { throw sendeFehler(e, 'die Aufnahme ist möglicherweise trotzdem angekommen') }
 }
