@@ -40,12 +40,26 @@ export function MaterialZeile({ zeile, sprachChoices, sprecherMax, hoerbar, klin
       {/* Natives <select>, NICHT shadcn-Select: das rendert ein <button> plus Radix-Portal,
           und zehn davon in einer Scrollflaeche sind teurer als zehn native Felder. Dieselbe
           Abwaegung wie beim Kaestchen in MehrsprachigKasten. */}
-      <select value={zeile.sprache} disabled={gesperrt}
-        className="h-9 w-40 shrink-0 rounded-md border border-input bg-transparent px-2 text-sm"
-        aria-label={`Sprache für ${zeile.anzeige}`}
-        onChange={e => onSprache(zeile.schluessel, e.target.value)}>
-        {sprachChoices.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
-      </select>
+      {sprachChoices.length === 0 ? (
+        /* Ohne Optionen waere das `<select>` ein Bedienelement, das nichts anbietet: der
+           Nutzer klappt auf und findet NICHTS, ohne zu erfahren warum (#305). Erreichbar,
+           solange der Einstellungs-GET laeuft (kurz) und nach einem gescheiterten GET
+           (dauerhaft) — der Fehler selbst meldet sich als Toast auf der Arbeitsflaeche.
+           KEIN `disabled`-Waehler: ein deaktiviertes Feld ist nicht fokussierbar, seine
+           Begruendung kaeme per `aria-describedby` also nie an (#245). Ein Text sagt sie
+           direkt. Der Sendeweg ist davon unberuehrt — leer heisst „kein Override". */
+        <span className="w-40 shrink-0 truncate text-sm text-muted-foreground"
+          title="Die Sprachauswahl steht nicht zur Verfügung — es gilt der Projekt-Standard.">
+          Projekt-Standard
+        </span>
+      ) : (
+        <select value={zeile.sprache} disabled={gesperrt}
+          className="h-9 w-40 shrink-0 rounded-md border border-input bg-transparent px-2 text-sm"
+          aria-label={`Sprache für ${zeile.anzeige}`}
+          onChange={e => onSprache(zeile.schluessel, e.target.value)}>
+          {sprachChoices.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+        </select>
+      )}
 
       <div className="w-48 shrink-0">
         <span className="flex h-9 items-center overflow-hidden rounded-md border border-input

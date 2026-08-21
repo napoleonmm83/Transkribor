@@ -334,9 +334,20 @@ def _mehrsprachig_aus_env():
     Parser dupliziert, prueft sich selbst. Wichtig ist die Null-Richtung: der Wert ist ein
     STRING, und "0" ist truthy. Ein blosses `bool(env)` gaebe einer bewusst einsprachig
     markierten Datei den Haken doch.
+
+    **Ein LEERER Wert heisst „nicht gesetzt", nicht `False` (#298).** Das ist die Bedingung
+    dafuer, dass `app.py` den Schluessel unbedingt setzen kann: `jobs._run_proc` baut
+    `{**os.environ, **job_env(), **env}`, und fehlt der Schluessel im expliziten `env`,
+    ueberlebt eine `.env`-Zeile aus einem alten CLI-Test und schlaegt auf JEDEN
+    Browser-Import durch. Mit `False` erzeugte der leere Wert stattdessen einen echten
+    Datei-Override — die Falle aus #166. Eine Env-Variable kennt kein `null`, `""` ist also
+    der einzige Weg, in einer Umgebung „nicht gesetzt" zu sagen; dieselbe Null-Richtung, die
+    `_sprecher_aus_env` und `_sprache_aus_env` schon haben.
     """
-    roh = os.environ.get("TRANSKRIBOR_FETCH_MEHRSPRACHIG")
-    return None if roh is None else roh.strip().lower() in ("1", "true", "yes")
+    roh = (os.environ.get("TRANSKRIBOR_FETCH_MEHRSPRACHIG") or "").strip()
+    if not roh:
+        return None
+    return roh.lower() in ("1", "true", "yes")
 
 
 def _sprecher_aus_env(roh, i: int):

@@ -50,6 +50,18 @@ describe('Zusammenfassung', () => {
     expect(sprachText([], { ch: 'Schweizerdeutsch' })).toBe('—')
   })
 
+  it('benennt eine noch unbekannte Sprache, statt ein Loch zu lassen (#305)', () => {
+    /* Solange der Einstellungs-GET nicht geantwortet hat — oder wenn er FEHLSCHLAEGT —, ist
+       `projektSprache` der leere String, und eine in diesem Zustand angelegte Zeile traegt
+       `sprache: ''`. `labels[''] ?? ''` machte daraus „ für alle": ein Loch in der
+       Zusammenfassung, genau an der Stelle, die dem Nutzer sagen soll, was gleich passiert.
+       Der Sendeweg ist davon unberuehrt (leer heisst „kein Override", der Projekt-Standard
+       gilt) — es fehlte nur das Wort dafuer. */
+    expect(sprachText([z('a', { sprache: '' })], {})).toBe('Projekt-Standard für alle')
+    expect(sprachText([z('a'), z('b', { sprache: '' })], { ch: 'Schweizerdeutsch' }))
+      .toBe('1× Schweizerdeutsch, 1× Projekt-Standard')
+  })
+
   it('nennt die haeufigste Sprache zuerst', () => {
     const labels = { ch: 'Schweizerdeutsch', en: 'Englisch' }
     expect(sprachText([z('a', { sprache: 'en' }), z('b'), z('c')], labels))

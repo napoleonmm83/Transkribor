@@ -38,6 +38,23 @@ describe('MaterialDialog', () => {
     expect(api.uploadAudio).toHaveBeenNthCalledWith(2, 'Demo', expect.any(File), 'en', undefined, undefined)
   })
 
+  it('erklaert EINMAL, warum die Sprache nicht waehlbar ist (#305)', () => {
+    /* Der `title` an der Zeile erreicht nur die Maus, und bei zehn Aufnahmen staende
+       zehnmal „Projekt-Standard" ohne Grund daneben. Der Satz gehoert deshalb ueber die
+       Liste — einmal, sichtbar, fuer beide Eingabewege.
+       Gegenprobe unten: mit Auswahl darf er NICHT erscheinen. Ein Hinweis, der immer da
+       ist, ist als Daueralarm derselbe Schaden von der anderen Seite. */
+    const { rerender } = render(
+      <MaterialDialog {...basis} sprachChoices={[]} projektSprache=""
+        vorbelegteDateien={[datei('a.mp3')]} />)
+    fireEvent.click(screen.getByRole('button', { name: /Weiter/ }))
+    expect(screen.getByText(/Sprachauswahl steht gerade nicht zur Verfügung/))
+      .toBeInTheDocument()
+
+    rerender(<MaterialDialog {...basis} vorbelegteDateien={[datei('a.mp3')]} />)
+    expect(screen.queryByText(/Sprachauswahl steht gerade nicht zur Verfügung/)).toBeNull()
+  })
+
   it('ein Schrittwechsel verliert NICHTS', async () => {
     /* Die Bedingung, unter der der waagrechte Ablauf ueberhaupt vertretbar ist. */
     render(<MaterialDialog {...basis} vorbelegteDateien={[datei('a.mp3')]} />)

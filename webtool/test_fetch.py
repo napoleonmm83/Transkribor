@@ -686,9 +686,23 @@ def test_env_parser_liest_beide_richtungen(monkeypatch):
     monkeypatch.delenv("TRANSKRIBOR_FETCH_MEHRSPRACHIG", raising=False)
     assert fetch._mehrsprachig_aus_env() is None
     for wert, erwartet in (("1", True), ("true", True), ("YES", True),
-                           ("0", False), ("no", False), ("", False)):
+                           ("0", False), ("no", False)):
         monkeypatch.setenv("TRANSKRIBOR_FETCH_MEHRSPRACHIG", wert)
         assert fetch._mehrsprachig_aus_env() is erwartet, wert
+
+
+def test_leerer_mehrsprachig_wert_heisst_NICHT_GESETZT(monkeypatch):
+    """#298: `""` muss `None` ergeben, nicht `False` — sonst kann `app.py` den Schluessel
+    nicht unbedingt setzen, und eine `.env`-Altlast schlaegt auf jeden Browser-Import durch.
+
+    Die Richtung ist die Entscheidung: mit `False` erzeugte der leere Wert einen echten
+    Datei-Override (`mehrsprachig=False` festgeschrieben) statt die Altlast zu neutralisieren
+    — genau die Falle aus #166. `""` ist der einzige Weg, in einer Umgebung „nicht gesetzt"
+    zu sagen: eine Env-Variable kennt kein `null`.
+    """
+    for leer in ("", "   ", "	"):
+        monkeypatch.setenv("TRANSKRIBOR_FETCH_MEHRSPRACHIG", leer)
+        assert fetch._mehrsprachig_aus_env() is None, repr(leer)
 
 
 def test_leere_fetch_sprache_schreibt_KEINEN_eintrag(projekt, monkeypatch):

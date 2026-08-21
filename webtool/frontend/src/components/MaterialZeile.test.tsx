@@ -10,6 +10,18 @@ const basis = {
 }
 
 describe('MaterialZeile', () => {
+  it('zeigt statt eines leeren Waehlers den Projekt-Standard (#305)', () => {
+    /* Ohne Optionen ist ein `<select>` ein Bedienelement, das nichts anbietet — der Nutzer
+       sieht ein Feld, kann es aufklappen und findet NICHTS, ohne zu erfahren warum.
+       Erreichbar beim Laden (kurz) und nach einem gescheiterten Einstellungs-GET (dauerhaft).
+       Statt eines `disabled`-Waehlers ein Text: ein deaktiviertes Feld ist nicht
+       fokussierbar, seine Begruendung kaeme per `aria-describedby` also nie an (#245). */
+    render(<MaterialZeile {...basis} sprachChoices={[]}
+      zeile={{ ...basis.zeile, sprache: '' }} />)
+    expect(screen.queryByRole('combobox')).toBeNull()
+    expect(screen.getByText(/Projekt-Standard/)).toBeInTheDocument()
+  })
+
   it('beschriftet das Sprecherfeld AM Feld, nicht darunter (S1)', () => {
     /* Vorher stand „automatisch" als Platzhalter im Feld und „Anzahl Sprecher" als Zeile
        DARUNTER — der Hinweis kam nach dem Element, das er erklaert. */
