@@ -125,6 +125,13 @@ describe('MaterialDialog', () => {
         const id = t.getAttribute('aria-controls')
         if (id !== null) expect(document.getElementById(id)).not.toBeNull()
       }
+      // Und die Gegenrichtung: der INAKTIVE Reiter darf gar kein `aria-controls` tragen.
+      // Ohne sie bliebe der Test gruen, wenn ALLE Reiter auf das aktive Panel zeigen — der
+      // Vertrag lautet aber „nur der aktive verweist auf das gerenderte Panel"
+      // (CodeRabbit-Bot).
+      for (const t of reiter().filter(x => x.getAttribute('aria-selected') !== 'true')) {
+        expect(t).not.toHaveAttribute('aria-controls')
+      }
     })
 
     it('wechselt mit den Pfeiltasten und laeuft dabei um', () => {
@@ -136,6 +143,11 @@ describe('MaterialDialog', () => {
       fireEvent.keyDown(dateien, { key: 'ArrowRight' })
       expect(links).toHaveAttribute('aria-selected', 'true')
       expect(links).toHaveFocus()
+      // Der Roving-Tabindex muss MITWANDERN. Bliebe er beim alten Reiter, waere die Leiste
+      // nach einem Pfeildruck kein Tabstopp mehr, den man wieder betreten kann — und der
+      // Test darunter prueft nur den Ausgangszustand (CodeRabbit-Bot).
+      expect(links).toHaveAttribute('tabindex', '0')
+      expect(dateien).toHaveAttribute('tabindex', '-1')
       fireEvent.keyDown(links, { key: 'ArrowRight' })       // Umlauf ans andere Ende
       expect(reiter()[0]).toHaveAttribute('aria-selected', 'true')
       fireEvent.keyDown(reiter()[0], { key: 'ArrowLeft' })  // und zurueck
