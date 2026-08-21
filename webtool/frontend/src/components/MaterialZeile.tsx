@@ -50,6 +50,11 @@ export function MaterialZeile({ zeile, sprachChoices, sprecherMax, hoerbar, klin
            direkt. Der Sendeweg ist davon unberuehrt — leer heisst „kein Override". */
         <span className="w-40 shrink-0 truncate text-sm text-muted-foreground"
           title="Die Sprachauswahl steht nicht zur Verfügung — es gilt der Projekt-Standard.">
+          {/* Das ersetzte `<select>` trug `aria-label="Sprache für …"`; ohne Ersatz liest
+              ein Screenreader bei zehn Aufnahmen zehnmal „Projekt-Standard", ohne dass
+              hoerbar wird, welche Spalte gemeint ist. Der `title` traegt das nicht — dass
+              er nur die Maus erreicht, ist in diesem Repo mehrfach aufgeschlagen (#244). */}
+          <span className="sr-only">Sprache für {zeile.anzeige}: </span>
           Projekt-Standard
         </span>
       ) : (

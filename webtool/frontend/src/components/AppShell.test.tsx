@@ -9,6 +9,9 @@ import * as api from '@/lib/api'
 import type { Settings } from '@/lib/types'
 
 vi.mock('@/lib/api')
+const toastMock = vi.hoisted(() => Object.assign(vi.fn(),
+  { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn(), dismiss: vi.fn() }))
+vi.mock('sonner', () => ({ toast: toastMock, Toaster: () => null }))
 
 /** Ersatz-Editor: meldet der Huelle ein offenes Dokument, ohne useDoc und ohne Server.
  *  Geprueft wird die Huelle — dass EditorView selbst meldet, sichert EditorView.test.tsx.
@@ -85,6 +88,31 @@ describe('AppShell', () => {
     )
     await waitFor(() => expect(screen.getByRole('navigation', { name: 'Projekte' })).toBeInTheDocument())
     expect(screen.getByText('Alpha')).toBeInTheDocument()
+  })
+
+  it('meldet einen gescheiterten Upload aus der Leiste (#299)', async () => {
+    /* Der ZWEITE Upload-Weg — der einzige, der nicht durch den MaterialDialog laeuft.
+       `uploadAudio(p, f).then(nachladen)` hatte keinen `.catch`, und einen globalen
+       `unhandledrejection`-Handler gibt es in dieser App nicht: der Fehlschlag war
+       unsichtbar. Vor #299 hing ein toter Request wenigstens noch erkennbar („es tut sich
+       nichts"); seit er nach der Frist ABLEHNT, landet ausgerechnet die Meldung, die #299
+       eigens dafuer gebaut hat, auf diesem Pfad nirgends. (Fund des Reviewers.) */
+    vi.mocked(api.listProjects).mockResolvedValue([{ name: 'Alpha', dateien: 1, fertig: 0, geaendert: 0 }])
+    vi.mocked(api.getProjectFiles).mockResolvedValue({ name: 'Alpha', files: [] })
+    vi.mocked(api.uploadAudio).mockRejectedValue(
+      new Error('Zeitlimit überschritten — die Aufnahme ist möglicherweise trotzdem angekommen.'))
+    const { container } = render(
+      <MemoryRouter initialEntries={['/p/Alpha']}>
+        <JobProvider><AppShell><p>Inhalt</p></AppShell></JobProvider>
+      </MemoryRouter>,
+    )
+    await waitFor(() => expect(screen.getByText('Alpha')).toBeInTheDocument())
+    const feld = container.querySelector('input[type=file]') as HTMLInputElement
+    fireEvent.change(feld, { target: { files: [new File(['x'], 'a.mp3', { type: 'audio/mpeg' })] } })
+    await waitFor(() => expect(toastMock.error).toHaveBeenCalled())
+    // Der Grund muss MITKOMMEN: „Hochladen fehlgeschlagen" ohne den Text schickt den Nutzer
+    // in einen zweiten Versuch, der mit 409 endet.
+    expect(String(toastMock.error.mock.calls[0][0])).toMatch(/möglicherweise trotzdem angekommen/)
   })
 
   it('bietet einen Sprunglink VOR der Leiste', () => {
