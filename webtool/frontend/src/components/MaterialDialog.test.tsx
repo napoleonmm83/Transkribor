@@ -438,7 +438,6 @@ describe('MaterialDialog', () => {
       sprachChoices={[...basis.sprachChoices, { id: 'auto', label: 'Automatisch', dialekt: false }]}
       vorbelegteDateien={[datei('a.mp3')]} />)
     fireEvent.click(screen.getByRole('button', { name: /Weiter/ }))
-    expect(screen.queryByText(/Projekt-Standard/i)).not.toBeInTheDocument()  // nicht gewaehlt
     fireEvent.change(screen.getByRole('combobox', { name: /Sprache für a\.mp3/ }),
                      { target: { value: 'auto' } })
     fireEvent.click(screen.getByRole('button', { name: /Weiter/ }))
@@ -468,13 +467,32 @@ describe('MaterialDialog', () => {
     expect(screen.getByText(/ohne Dialekt-Glättung/)).toBeInTheDocument()
   })
 
+  it('zeigt in Schritt 3 NICHTS, solange keine Zeile auf „Automatisch" steht', () => {
+    /* Die Gegenprobe stand vorher eine EBENE DANEBEN: sie klickte einmal `Weiter` und
+       pruefte die Abwesenheit auf Schritt 2 — der Absatz haengt aber an `schritt === 3`.
+       Damit konnte sie nicht rot werden, egal was `autoDabei` sagt. GEMESSEN vom Reviewer:
+       `autoDabei = zeilen.length > 0` liess 582/582 gruen.
+       Das zaehlt, weil `autoDabei` durch den #301-Umbau tragend geworden ist
+       (`const hinweis = autoDabei ? autoHinweis(…) : null`): braeche die Bedingung, staende
+       der Erklaersatz in JEDEM Projekt, auch ohne eine einzige `auto`-Aufnahme — genau der
+       Daueralarm, gegen den `autoHinweis.test.ts` eine eigene Gegenprobe fuehrt. */
+    render(<MaterialDialog {...basis} projektSprache="ch"
+      sprachChoices={[...basis.sprachChoices, { id: 'auto', label: 'Automatisch', dialekt: false }]}
+      vorbelegteDateien={[datei('a.mp3')]} />)
+    fireEvent.click(screen.getByRole('button', { name: /Weiter/ }))   // Schritt 2
+    fireEvent.click(screen.getByRole('button', { name: /Weiter/ }))   // Schritt 3
+    expect(screen.getByText(/1 Aufnahme/)).toBeInTheDocument()        // wirklich auf Schritt 3
+    expect(screen.queryByText(/Automatisch“:/)).toBeNull()
+    expect(screen.queryByText(/Dialekt-Glättung/)).toBeNull()
+  })
+
   it('nennt den Standard NICHT, wenn er selbst „Automatisch" ist', () => {
     /* Die BEDINGUNG aus 10.1: der zweite Satz nur, wenn der Standard ueberhaupt einen
        Whisper-Code hat. Bei `projektSprache='auto'` gibt es nichts, was gewinnen koennte —
        der Satz waere eine Zusage ohne Gegenstand. Ohne diesen Test ist die Bedingung
        Dekoration: der Test darueber bliebe auch gruen, wenn der Satz IMMER erschiene. */
     render(<MaterialDialog {...basis} projektSprache="auto"
-      sprachChoices={[...basis.sprachChoices, { id: 'auto', label: 'Automatisch' }]}
+      sprachChoices={[...basis.sprachChoices, { id: 'auto', label: 'Automatisch' , dialekt: false }]}
       vorbelegteDateien={[datei('a.mp3')]} />)
     fireEvent.click(screen.getByRole('button', { name: /Weiter/ }))
     fireEvent.change(screen.getByRole('combobox', { name: /Sprache für a\.mp3/ }),

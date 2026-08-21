@@ -31,9 +31,16 @@ export function autoHinweis(
   if (gewaehlt !== 'auto') return null
   const OHNE = 'Es gilt, was Whisper erkennt. Schweizerdeutsch wird dabei als Deutsch '
              + 'behandelt, ohne Dialekt-Glättung.'
-  // Kein übergeordneter Standard (Projekt-Dialog, oder er steht selbst auf „automatisch"):
-  // `bevorzugt` wäre dort `auto` und trifft nie — reine Detektion, und das ist sicher.
-  if (!projektStandard || projektStandard === 'auto') return OHNE
+  // `null` heisst „es gibt keinen übergeordneten Standard" (Projekt-Dialog), `'auto'` heisst
+  // „er trifft nie" — beides sicher, also OHNE.
+  //
+  // **`''` gehört ausdrücklich NICHT hierher.** Es heisst „noch nicht geladen", nicht „keiner
+  // da" — der Standard könnte `ch` sein, und OHNE wäre dann eine Falschaussage. Ein früheres
+  // `!projektStandard` warf beides in denselben Zweig und verkaufte das als Gewinn. `''`
+  // fällt jetzt durch bis zum `find`, findet nichts und führt zum Schweigen — dieselbe
+  // Richtung wie beim fehlenden Flag unten. (Reviewbefund m3; heute nicht erreichbar,
+  // nachgeprüft — es ist ein Zeichen, kein Fix.)
+  if (projektStandard === null || projektStandard === 'auto') return OHNE
   const c = wahl.find(x => x.id === projektStandard)
   // Unbekannter Standard oder fehlendes Flag (älterer Server): dann ist UNBEKANNT, welcher
   // der beiden Sätze stimmt — und „ohne Dialekt-Glättung" wäre eine mögliche Falschaussage.

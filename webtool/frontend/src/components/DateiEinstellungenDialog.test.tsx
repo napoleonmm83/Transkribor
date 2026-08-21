@@ -577,6 +577,20 @@ describe('auto-Regel erklaeren (#301)', () => {
     getSpy.mockRestore()
   })
 
+  it('gilt auch, wenn die Datei ERBT und das Projekt auf „automatisch" steht', async () => {
+    /* Genau der Fall, den der Kommentar am Bezug begruendet („auch ‚Folgt dem Projekt'
+       landet bei `auto`") — und der bis hierhin in keinem Test vorkam: der neue Test
+       darueber setzt `sprache_eigen: 'auto'`, dort sind `sprachEffektiv` und `sprachWahl`
+       identisch. Ohne diesen Test ist die Wahl des Bezugs eine Behauptung im Kommentar
+       (Reviewbefund m1, dort gemessen: `sprachWahl ?? ''` liess 47/47 gruen). */
+    const getSpy = vi.spyOn(api, 'getFileEinstellungen').mockResolvedValue(
+      { ...BASIS, sprache_eigen: null, sprache_projekt: 'auto', sprache: 'auto' })
+    render(<DateiEinstellungenDialog project="p" base="a" file={datei()} offen />)
+    await sprachWaehlerDa()
+    expect(await screen.findByText(/ohne Dialekt-Glättung/)).toBeInTheDocument()
+    getSpy.mockRestore()
+  })
+
   it('sagt nichts, solange eine feste Sprache gewaehlt ist', async () => {
     /* Gegenprobe — ein Hinweis, der immer dasteht, ist als Daueralarm derselbe Schaden
        von der anderen Seite. */

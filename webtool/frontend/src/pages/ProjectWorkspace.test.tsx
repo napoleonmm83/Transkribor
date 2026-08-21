@@ -296,8 +296,8 @@ describe('ProjectWorkspace (Stub)', () => {
     vi.mocked(api.getProjectFiles).mockResolvedValue({ name: 'Demo', files: [] })
     vi.mocked(api.getProjektEinstellungen).mockResolvedValue({
       sprache: 'ch', korrektur: 'auto', mehrsprachig: false, sprecher_max: 20,
-      sprach_choices: [{ id: 'ch', label: 'Schweizerdeutsch', hint: '' },
-                       { id: 'en', label: 'Englisch', hint: '' }],
+      sprach_choices: [{ id: 'ch', label: 'Schweizerdeutsch', hint: '' , dialekt: true },
+                       { id: 'en', label: 'Englisch', hint: '' , dialekt: false }],
       tiefen: [{ id: 'auto', label: 'Auto' }],
     })
   }
@@ -355,9 +355,11 @@ describe('ProjectWorkspace (Stub)', () => {
     nurDemo()
     zeigen()
     const flaeche = await screen.findByTestId('drop-overlay-ziel')
-    expect(screen.queryByRole('status')).toBeNull()
+    // Die Region steht DAUERHAFT da (sonst saehe ein Screenreader die Einfuegung, nicht die
+    // Aenderung, und sagte nichts) — geprueft wird deshalb ihr INHALT, nicht ihre Existenz.
+    expect(screen.getByRole('status')).toHaveTextContent('')
     fireEvent.dragOver(flaeche, { dataTransfer: { files: [] } })
-    expect(await screen.findByRole('status')).toHaveTextContent(/loslassen/i)
+    expect(screen.getByRole('status')).toHaveTextContent(/loslassen/i)
   })
 
   it('raeumt das Overlay auch bei einem ABGEBROCHENEN Zug weg (#304/Kl2)', async () => {
@@ -370,9 +372,9 @@ describe('ProjectWorkspace (Stub)', () => {
     zeigen()
     const flaeche = await screen.findByTestId('drop-overlay-ziel')
     fireEvent.dragOver(flaeche, { dataTransfer: { files: [] } })
-    expect(await screen.findByRole('status')).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent(/loslassen/i)
     fireEvent.dragEnd(flaeche)
-    await waitFor(() => expect(screen.queryByRole('status')).toBeNull())
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent(''))
   })
 
   it('sagt es, wenn beim Ablegen keine Audiodatei dabei war', async () => {
@@ -467,7 +469,7 @@ describe('ProjectWorkspace (Stub)', () => {
     vi.mocked(api.getProjektEinstellungen)
       .mockResolvedValueOnce({
         sprache: 'en', korrektur: 'auto', mehrsprachig: true, sprecher_max: 20,
-        sprach_choices: [{ id: 'en', label: 'Englisch', hint: '' }],
+        sprach_choices: [{ id: 'en', label: 'Englisch', hint: '' , dialekt: false }],
         tiefen: [{ id: 'auto', label: 'Auto' }],
       })
       .mockReturnValueOnce(new Promise(() => {}))   // Projekt B: Antwort steht noch aus
@@ -512,7 +514,7 @@ describe('ProjectWorkspace (Stub)', () => {
       { name: 'B', dateien: 0, fertig: 0, geaendert: 0, active_jobs: [] }])
     vi.mocked(api.getProjectFiles).mockResolvedValue({ name: 'A', files: [] })
     vi.mocked(api.uploadAudio).mockResolvedValue({ base: 'a', file: 'a.mp3' })
-    const wahl = [{ id: 'en', label: 'Englisch', hint: '' }, { id: 'fr', label: 'Französisch', hint: '' }]
+    const wahl = [{ id: 'en', label: 'Englisch', hint: '' , dialekt: false }, { id: 'fr', label: 'Französisch', hint: '' , dialekt: false }]
     vi.mocked(api.getProjektEinstellungen)
       .mockResolvedValueOnce({ sprache: 'en', korrektur: 'auto', mehrsprachig: false, sprecher_max: 20,
                                sprach_choices: wahl, tiefen: [{ id: 'auto', label: 'Auto' }] })
