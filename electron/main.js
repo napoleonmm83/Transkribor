@@ -8,6 +8,7 @@
  */
 const { app, BrowserWindow, ipcMain, shell, nativeTheme, net } = require('electron')
 const path = require('path')
+const fs = require('fs')
 const backend = require('./backend')
 const setup = require('./setup')
 const protokoll = require('./protokoll')
@@ -257,8 +258,15 @@ async function starten() {
     // latest-mac.yml selbst und lief damit gegen feedUrl=null.
     // Fehlt die Datei (Entwicklungsbetrieb), faellt macUrls auf paket.build.publish zurueck.
     let updateYml = ''
-    try { updateYml = require('fs').readFileSync(path.join(process.resourcesPath, 'app-update.yml'), 'utf8') }
-    catch { /* nicht gepackt oder ohne Publish-Ziel — der Rueckfall greift */ }
+    try { updateYml = fs.readFileSync(path.join(process.resourcesPath, 'app-update.yml'), 'utf8') }
+    catch (e) {
+      // Im Entwicklungsbetrieb gibt es die Datei nicht — das ist der Normalfall und keine
+      // Meldung wert. GEPACKT ist ihr Fehlen der Grund, warum gleich nichts mehr geht:
+      // ohne die Zeile stuende im Protokoll danach NICHTS (vorher stand dort wenigstens
+      // "Failed to parse URL from null"), und wer "bei mir kommt kein Update" meldet,
+      // liefert eine Datei, in der der Grund fehlt. Dieselbe Regel wie #192.
+      if (app.isPackaged) protokoll.schreiben(`app-update.yml nicht lesbar: ${e && e.message || e}`)
+    }
     const macUrls = updater.macUrls(paket, updateYml)
     autoUpdater.logger = null
     aktualisierer = updater.erstellen({
@@ -278,6 +286,14 @@ async function starten() {
         if (win && !win.isDestroyed()) win.webContents.send('update', z)
       },
     })
+    // Der Anfangszustand geht NICHT durch `aendert` (er wird in `erstellen` direkt gesetzt),
+    // faende also keinen Weg ins Protokoll — und `keine-quelle` ist genau der Zustand, ueber
+    // den jemand spaeter Auskunft braucht.
+    const anfang = aktualisierer.zustand()
+    if (anfang.art === 'nicht_moeglich' && anfang.grund === 'keine-quelle') {
+      protokoll.schreiben('Update-Pruefung nicht moeglich: keine Update-Quelle '
+        + '(app-update.yml fehlt/ohne github-Publish, und die gepackte package.json traegt kein build-Feld)')
+    }
     aktualisierer.pruefen()
     // Danach alle 6 h leise nachsehen. Ohne das erfaehrt eine App, die tagelang offen bleibt
     // (bei langen Transkriptionen der Normalfall), erst beim naechsten Start von einer neuen

@@ -245,7 +245,7 @@ möglich). In der Linux-`.deb`-Fassung prüft sie nicht selbst — dort schaust 
 In Fassungen bis einschliesslich `v0.29.0` steht die Bedienung dafür in den Einstellungen.
 Ab der nächsten Fassung hat sie eine eigene Seite: die Versionsnummer unten rechts führt
 dorthin. Oben steht, welche Fassung du benutzt und ob eine neue bereitsteht — darunter der
-**Versionsverlauf**: die letzten zehn Fassungen mit der Beschreibung dessen, was sich
+**Versionsverlauf**: die letzten Fassungen mit der Beschreibung dessen, was sich
 jeweils geändert hat. Die neueste ist aufgeklappt, die älteren öffnest du mit einem Klick.
 Dafür braucht die App eine Internetverbindung; ohne sie steht dort ein Hinweis und der Weg
 zur Release-Seite.

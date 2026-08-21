@@ -40,8 +40,11 @@ function publishAusYml(text) {
  * ZWEI Quellen, und keine deckt beide Faelle ab: electron-builder LOESCHT `build` aus der
  * package.json, die es in die App legt (app-builder-lib/out/fileTransformer.js,
  * `ignoredPackageMetadataProperties`) — gepackt gibt es nur die app-update.yml. Im
- * Entwicklungsbetrieb gibt es umgekehrt nur die package.json. Die yml gewinnt: sie ist die
- * Konfiguration, mit der das laufende Artefakt tatsaechlich gebaut wurde.
+ * Entwicklungsbetrieb gibt es umgekehrt nur die package.json. Eine **github**-yml gewinnt:
+ * sie ist die Konfiguration, mit der das laufende Artefakt tatsaechlich gebaut wurde. Alles
+ * andere (`provider: generic`) faellt auf `build.publish` zurueck — heute unerreichbar, weil
+ * die beiden Quellen nie gleichzeitig existieren, aber die Regel ist nicht "yml schlaegt
+ * package.json", sondern "eine github-yml schlaegt sie".
  */
 function macUrls(paket, ymlText) {
   const p = publishAusYml(ymlText) || (paket && paket.build && paket.build.publish && paket.build.publish[0])

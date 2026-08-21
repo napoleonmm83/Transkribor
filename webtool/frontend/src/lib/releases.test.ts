@@ -44,12 +44,27 @@ describe('holeReleases', () => {
   })
 
   it('reicht das Abbruchsignal durch — die Seite kann verlassen werden, während geladen wird', async () => {
+    // Gemessen wird die WIRKUNG, nicht die Identitaet: seit dem Zeitlimit geht ein
+    // zusammengesetztes Signal an fetch, ein Vergleich auf Gleichheit waere also rot,
+    // obwohl der Abbruch funktioniert.
     // Signatur ausgeschrieben: `vi.fn(async () => …)` ergibt Aufrufe vom Tupeltyp `[]`, und
     // `calls[0][1]` waere dann TS2493 — sichtbar erst in `tsc -b`, nicht im vitest-Lauf.
     const f = vi.fn(async (_url: string, _opt?: RequestInit) => antwort([]))
     vi.stubGlobal('fetch', f)
-    const signal = new AbortController().signal
-    await holeReleases(signal)
-    expect(f.mock.calls[0][1]).toMatchObject({ signal })
+    const ac = new AbortController()
+    await holeReleases(ac.signal)
+    const uebergeben = f.mock.calls[0][1]?.signal as AbortSignal
+    expect(uebergeben.aborted).toBe(false)
+    ac.abort()
+    expect(uebergeben.aborted).toBe(true)
+  })
+
+  it('bricht auch ohne aeusseres Signal nach einer Frist ab', async () => {
+    // Ohne Frist dreht der Spinner bei einer haengenden Verbindung bis zum Verlassen der
+    // Seite — und der Weg zu GitHub steht nur im Fehlerzweig.
+    const f = vi.fn(async (_url: string, _opt?: RequestInit) => antwort([]))
+    vi.stubGlobal('fetch', f)
+    await holeReleases()
+    expect(f.mock.calls[0][1]?.signal).toBeInstanceOf(AbortSignal)
   })
 })

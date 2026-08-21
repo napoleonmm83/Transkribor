@@ -1,3 +1,4 @@
+import { StrictMode } from 'react'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
@@ -173,9 +174,40 @@ describe('VersionPage — Versionsverlauf', () => {
     expect(screen.getByRole('link', { name: /Auf GitHub ansehen/ })).toBeTruthy()
   })
 
+  it('auch die leere Liste bietet den Weg zu GitHub an', async () => {
+    // Sonst steht der Ausweg in zwei von drei Zweigen (Fehler, Nicht-leer) und ausgerechnet
+    // dort nicht, wo die Seite gar nichts zu zeigen hat.
+    zeigeMit(null, [])
+    expect(await screen.findByText(/Noch keine veröffentlichten Fassungen/)).toBeTruthy()
+    expect(screen.getAllByRole('link', { name: /Auf GitHub ansehen|Alle Fassungen ansehen/ }).length)
+      .toBeGreaterThan(1)
+  })
+
   it('eine Fassung ohne Notizen bleibt kein leerer Block', async () => {
     zeigeMit(null, [{ ...RELEASE, notizen: '   ' }])
     expect(await screen.findByText('Keine Beschreibung.')).toBeTruthy()
+  })
+
+  it('meldet den Abbruch des StrictMode-Doppelmounts NICHT als Fehler', async () => {
+    // Der Waechter `if (!ab.signal.aborted)` hatte NULL Abdeckung (Reviewbefund): der
+    // Abbruchtest unten mockt mit `mockResolvedValue`, der Mock lehnt also nie ab.
+    // Nach einem UNMOUNT zu pruefen waere ebenfalls vacuous — dort ist das DOM leer, egal
+    // was der catch tut. Scharf wird es nur im StrictMode: mount→unmount→mount auf
+    // DERSELBEN Fiber, der erste Abruf lehnt ab, die Seite steht danach aber da.
+    let n = 0
+    vi.mocked(useUpdate).mockReturnValue({ zustand: null, pruefen: vi.fn(), laden: vi.fn(), installieren: vi.fn(), protokollOeffnen: vi.fn() })
+    vi.mocked(holeReleases).mockImplementation((signal?: AbortSignal) => {
+      n += 1
+      if (n === 1) {
+        return new Promise((_, ab) => {
+          signal?.addEventListener('abort', () => ab(new Error('The user aborted a request.')))
+        })
+      }
+      return Promise.resolve([RELEASE])
+    })
+    render(<StrictMode><MemoryRouter><VersionPage /></MemoryRouter></StrictMode>)
+    expect(await screen.findByRole('heading', { name: '0.29.0' })).toBeTruthy()
+    expect(screen.queryByText(/lässt sich gerade nicht laden/)).toBeNull()
   })
 
   it('bricht die Abfrage ab, wenn die Seite verlassen wird', async () => {

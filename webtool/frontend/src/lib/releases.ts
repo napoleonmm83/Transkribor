@@ -13,6 +13,15 @@ export type Release = {
 const QUELLE = 'https://api.github.com/repos/napoleonmm83/Transkribor/releases?per_page=10'
 
 /**
+ * Ohne Frist bedeutet eine haengende Verbindung (Captive Portal, eine Firewall, die verwirft
+ * statt abzulehnen) einen Spinner ohne Ausweg: der Link zu GitHub haengt am Fehlerzweig, und
+ * den erreicht nur, wer eine Ablehnung bekommt. Zehn Sekunden sind grosszuegig fuer 30 KB
+ * JSON. Ganze Zahl, weil `AbortSignal.timeout` bei einem Bruchteil in Node `RangeError`
+ * wirft — und zwar VOR dem fetch, also als Absturz statt als Fehlschlag (#298).
+ */
+const FRIST_MS = 10000
+
+/**
  * Die letzten Fassungen von GitHub. Direkt aus dem Browser, ohne Umweg über den eigenen
  * Server: es gibt nichts zu verbergen und nichts zwischenzuspeichern, und ein Endpunkt mehr
  * wäre eine Schicht, die nur durchreicht.
@@ -23,7 +32,12 @@ const QUELLE = 'https://api.github.com/repos/napoleonmm83/Transkribor/releases?p
  * Releases `--prerelease` tragen MÜSSEN.
  */
 export async function holeReleases(signal?: AbortSignal): Promise<Release[]> {
-  const r = await fetch(QUELLE, { headers: { Accept: 'application/vnd.github+json' }, signal })
+  // Beide Abbruchgruende zaehlen: das Zeitlimit UND das Verlassen der Seite.
+  const frist = AbortSignal.timeout(FRIST_MS)
+  const r = await fetch(QUELLE, {
+    headers: { Accept: 'application/vnd.github+json' },
+    signal: signal ? AbortSignal.any([signal, frist]) : frist,
+  })
   if (!r.ok) throw new Error(`GitHub antwortet ${r.status}`)
   const roh: unknown = await r.json()
   // Bei überschrittenem Anfragekontingent antwortet GitHub mit einem Objekt, nicht mit einer
