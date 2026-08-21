@@ -307,6 +307,10 @@ dazwischen. So kannst du einen gemischten Schwung mit „Automatisch" hinzufüge
 Schweizer Aufnahmen dabei ungeglättet durchrutschen. (Ab `v0.26.0`; in `v0.25.0`
 und älter ist „Automatisch" immer ohne Dialekt.)
 
+Seit `v0.26.1` steht das auch dort, wo du es einstellst: wählst du „Automatisch", sagt dir
+der Dialog in einem Satz, was das für diese Aufnahme heisst — ob der Projekt-Standard
+greift oder ob es bei dem bleibt, was Whisper hört.
+
 In den Projekt-Einstellungen (⋯-Menü des Projekts) legst du die Standard-Sprache und die
 Korrektur-Tiefe fest; die Auswahl beim Hinzufügen nimmt die Standard-Sprache vorweg und lässt
 sich für die nächsten Aufnahmen abändern, ohne den Standard zu verstellen. Und solltest du dich
