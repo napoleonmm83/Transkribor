@@ -103,6 +103,26 @@ describe('StatusBar', () => {
     expect(link).toHaveAttribute('href', '/version')
   })
 
+  it('sagt eine tote Update-Quelle an — der einzige nicht_moeglich-Grund, der das tut', async () => {
+    // Entwicklungsbetrieb und .deb sind Eigenschaften der Installation, die der Nutzer kennt.
+    // `keine-quelle` ist ein Defekt, der ihn dauerhaft von Updates abschneidet: stuende er
+    // nur auf der Versionsseite, merkte es niemand.
+    vi.mocked(api.getHardware).mockRejectedValue(new Error('weg'))
+    bruecke({ version: '0.10.0', art: 'nicht_moeglich', grund: 'keine-quelle' })
+    zeigen()
+    expect(await screen.findByRole('link', { name: /Updates nicht möglich/ })).toBeTruthy()
+  })
+
+  it('schweigt bei den anderen Gruenden, warum Updates nicht moeglich sind', async () => {
+    // Gegenprobe: ein Daueralarm im Entwicklungsbetrieb waere derselbe Schaden von der
+    // anderen Seite.
+    vi.mocked(api.getHardware).mockRejectedValue(new Error('weg'))
+    bruecke({ version: '0.10.0', art: 'nicht_moeglich', grund: 'entwicklung' })
+    zeigen()
+    await waitFor(() => expect(screen.getByText('v0.10.0')).toBeInTheDocument())
+    expect(screen.queryByText(/nicht möglich/)).toBeNull()
+  })
+
   it('schweigt, solange es nichts zu tun gibt', async () => {
     // "aktuell" und "prueft" in einer Zeile, die man dauernd im Blick hat, sind Rauschen.
     vi.mocked(api.getHardware).mockRejectedValue(new Error('weg'))

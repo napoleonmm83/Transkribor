@@ -12,13 +12,19 @@ import type { UpdateZustand } from '@/lib/types'
  * Was in der Fusszeile ueber ein Update steht — `null`, solange es nichts zu tun gibt.
  *
  * Bewusst nur die Zustaende, die eine Handlung nach sich ziehen: „aktuell“ und „prueft“
- * sind Rauschen in einer Zeile, die man dauernd im Blick hat. Der Text fuehrt in die
- * Einstellungen, wo die vollstaendige Steuerung steht — die sechs Zustaende samt
+ * sind Rauschen in einer Zeile, die man dauernd im Blick hat. Der Text fuehrt auf die
+ * Versionsseite, wo die vollstaendige Steuerung steht — die sechs Zustaende samt
  * Fortschrittsbalken und Protokoll-Link ein zweites Mal in 24 px Hoehe nachzubauen,
  * waere zwei Fassungen derselben Sache.
+ *
+ * `keine-quelle` ist die EINZIGE Ausnahme unter `nicht_moeglich`: die anderen Gruende sind
+ * Eigenschaften der Installation, die der Nutzer kennt (Entwicklungsbetrieb, .deb-Paket) —
+ * dieser hier ist ein Defekt, der ihn dauerhaft von Updates abschneidet, ohne dass er es
+ * merkt. Er zieht eine Handlung nach sich („neu herunterladen"), also gehoert er hierher.
  */
 function updateHinweis(z: UpdateZustand | null): string | null {
   if (!z) return null
+  if (z.art === 'nicht_moeglich' && z.grund === 'keine-quelle') return 'Updates nicht möglich'
   if (z.art === 'verfuegbar' || z.art === 'verfuegbar_manuell') return `Update ${z.neue} verfügbar`
   if (z.art === 'laedt') return `Update lädt · ${Math.round(z.prozent)} %`
   if (z.art === 'bereit') return `Update ${z.neue} bereit`

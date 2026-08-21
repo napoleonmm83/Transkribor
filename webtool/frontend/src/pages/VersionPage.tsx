@@ -44,8 +44,12 @@ export function VersionPage() {
     const ab = new AbortController()
     holeReleases(ab.signal)
       .then(setVerlauf)
-      // Nach dem Abbruch ist die Seite verlassen — eine Fehlermeldung ginge an niemanden mehr
-      // und überschriebe beim schnellen Hin und Her das Ergebnis eines frischen Ladelaufs.
+      // Der Wächter gilt dem StrictMode-Doppelmount: der Effekt läuft mount→unmount→mount
+      // auf DERSELBEN Fiber, der erste `abort()` lässt den ersten Abruf ablehnen, und ohne
+      // ihn stünde im Entwicklungsbetrieb kurz „lässt sich nicht laden (The user aborted a
+      // request.)" auf einer Seite, die gleich darauf lädt. NICHT gegen „überschreibt eine
+      // neue Instanz" — die hat ihren eigenen useState-Slot, dorthin kommt der alte Aufruf
+      // gar nicht (Reviewbefund: die erste Begründung behauptete genau das).
       .catch((e: Error) => { if (!ab.signal.aborted) setFehler(e.message) })
     return () => ab.abort()
   }, [])
@@ -155,14 +159,18 @@ export function VersionPage() {
         )}
 
         {verlauf?.length === 0 && (
-          <p className="text-sm text-muted-foreground">Noch keine veröffentlichten Fassungen.</p>
+          <p className="text-sm text-muted-foreground">
+            Noch keine veröffentlichten Fassungen.{' '}
+            <a className="underline underline-offset-2 hover:text-foreground" href={RELEASES}
+              target="_blank" rel="noreferrer">Auf GitHub ansehen</a>
+          </p>
         )}
 
         {verlauf?.map((r, i) => (
           // <details> statt eigenem Aufklapp-Zustand: die Notizen sind lang, und der Browser
           // kann das seit jeher — samt Tastaturbedienung. Die neueste steht offen, weil sie
           // fast immer die gesuchte ist.
-          <details key={r.tag} open={i === 0} className="group border-b border-border/60 py-3 last:border-b-0">
+          <details key={r.tag || i} open={i === 0} className="group border-b border-border/60 py-3 last:border-b-0">
             <summary className="flex cursor-pointer items-baseline gap-3 rounded-md
                                 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
               {/* Eigenes Symbol, weil `display: flex` am <summary> den Marker des Browsers
