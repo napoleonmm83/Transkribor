@@ -153,6 +153,16 @@ describe('VersionPage — Versionsverlauf', () => {
     expect(bloecke[1].open).toBe(false)
   })
 
+  it('jede Fassung traegt ein Aufklapp-Symbol', async () => {
+    // Der Browser zeichnet keines: `display: flex` am <summary> unterdrueckt den Marker
+    // (gemessen — `::marker` leer, kein Dreieck), und eine zugeklappte Fassung sah damit
+    // nach einer toten Zeile aus. Die DREHUNG beim Oeffnen kann jsdom nicht zeigen (kein
+    // CSS); sie ist im Browser belegt (rotate: 90deg offen, none zu).
+    zeigeMit(null, [RELEASE, { ...RELEASE, version: '0.28.0', tag: 'v0.28.0' }])
+    await screen.findByRole('heading', { name: '0.29.0' })
+    expect(document.querySelectorAll('details > summary svg')).toHaveLength(2)
+  })
+
   it('sagt es, wenn der Verlauf nicht ladbar ist — samt Grund und Weg zu GitHub', async () => {
     // Kein Netz ist der Normalfall auf einem Rechner ohne Verbindung; eine leere Flaeche
     // liesse den Leser raten, ob es keine Fassungen gibt oder die Abfrage scheiterte.
