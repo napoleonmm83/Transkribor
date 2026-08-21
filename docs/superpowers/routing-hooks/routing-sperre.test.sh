@@ -71,5 +71,26 @@ rm -f review-selbsttest.md
 [ "$(lauf '{"tool_input":{"command":"bash -c \"gh pr create\""}}')" = "0" ] \
   || { echo "FAIL: bash -c wird jetzt erfasst - Kommentar in routing-sperre.sh nachziehen" >&2; fehler=1; }
 
+# 9. `GH_TOKEN=abc123 gh pr create` -> sperrt (Fixture-Review Runde 2, 2026-08-21: ein
+#    Umgebungs-Praefix ist die normale Schreibweise desselben Befehls und hebelte bisher die
+#    ERKENNUNG selbst aus, nicht nur den Fluchtweg — die Detektions-Regex kam nie bei "gh" an)
+[ "$(lauf '{"tool_input":{"command":"GH_TOKEN=abc123 gh pr create"}}')" = "2" ] \
+  || { echo "FAIL: Umgebungs-Praefix umgeht die Erkennung" >&2; fehler=1; }
+
+# 10. Ein zweites Umgebungs-Praefix -> sperrt ebenso (keine Zufallstreffer auf GH_TOKEN)
+[ "$(lauf '{"tool_input":{"command":"GIT_PAGER=cat gh pr create"}}')" = "2" ] \
+  || { echo "FAIL: GIT_PAGER-Praefix umgeht die Erkennung" >&2; fehler=1; }
+
+# 11. `GH_TOKEN=x KEIN_REVIEW=1 gh pr create` -> laesst durch (bewusste Entscheidung: der
+#     Fluchtweg wirkt, wenn KEIN_REVIEW=1 das LETZTE Praefix vor "gh" ist, auch wenn ihm
+#     andere Zuweisungen vorausgehen -- siehe Kommentar in routing-sperre.sh)
+[ "$(lauf '{"tool_input":{"command":"GH_TOKEN=x KEIN_REVIEW=1 gh pr create"}}')" = "0" ] \
+  || { echo "FAIL: Fluchtweg wirkt nicht mehr mit vorangestelltem Umgebungs-Praefix" >&2; fehler=1; }
+
+# 12. `xKEIN_REVIEW=1 gh pr create` -> sperrt (ein Praefix AN der Variable ist eine ANDERE
+#     Variable; der Fluchtweg darf nicht ueber einen Namensteiltreffer ausloesen)
+[ "$(lauf '{"tool_input":{"command":"xKEIN_REVIEW=1 gh pr create"}}')" = "2" ] \
+  || { echo "FAIL: xKEIN_REVIEW=1 wird faelschlich als Fluchtweg erkannt" >&2; fehler=1; }
+
 [ $fehler -eq 0 ] && echo "OK"
 exit $fehler

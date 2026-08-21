@@ -22,7 +22,19 @@
 # voller Pfad (`/usr/bin/gh pr create`) laufen deshalb OHNE Review durch. Die Ankerklasse
 # `[;&|(]` absichtlich NICHT um `"` oder `/` erweitern: jedes zusaetzliche Zeichen dort erhoeht
 # die Fehlalarmrate (echte Woerter, die zufaellig danebenstehen), und ein Waechter mit
-# Fehlalarmen wird abgeschaltet — teurer als diese Luecke. Siehe Pruefung 6 im Selbsttest.
+# Fehlalarmen wird abgeschaltet — teurer als diese Luecke. Siehe Pruefung 8 im Selbsttest.
+#
+# Umgebungs-Praefixe (`GH_TOKEN=x gh pr create`) sind dagegen KEINE Luecke, sondern die
+# normale Schreibweise desselben Befehls — sie stehen deshalb in der Ankerklasse, nicht nur
+# im Kommentar (Fixture-Review Runde 2, 2026-08-21: `GH_TOKEN=abc123 gh pr create` lief
+# unerkannt durch, weil die Erkennung selbst nie bis zu "gh" vordrang). `zuweisungen*` deckt
+# beliebig viele `NAME=wert`-Praefixe ab, inklusive KEIN_REVIEW=1 — der Fluchtweg-Check
+# unten verlangt zusaetzlich, dass KEIN_REVIEW=1 das LETZTE Praefix vor "gh" ist
+# (`GH_TOKEN=x KEIN_REVIEW=1 gh pr create` wirkt also, `KEIN_REVIEW=1 GH_TOKEN=x gh pr
+# create` nicht) — eine bewusste, kleine Grenze statt eines Nebeneffekts. Ein Praefix AN der
+# Variable (`xKEIN_REVIEW=1`) ist eine andere Variable und triggert nichts: die Zuweisungs-
+# Gruppe verschluckt das ganze Token, das Literal `KEIN_REVIEW=1` findet dahinter keine
+# zweite Gelegenheit.
 #
 # Selbsttest:
 #   bash .claude/hooks/routing-sperre.test.sh
@@ -39,16 +51,18 @@ roh=$(cat)
 # `grep` bleibt trotzdem die richtige Wahl, mit dem Grund, der traegt, nicht mit einer
 # Momentaufnahme.
 # Der Anker verlangt Befehlsposition: direkt hinter "command":" oder hinter einem
-# Shell-Trenner, optional mit vorangestelltem KEIN_REVIEW=1. Ohne ihn schlaegt der Waechter
-# auch bei Kommandos an, die den Text nur ERWAEHNEN.
-printf '%s' "$roh" | grep -Eq '("command":[[:space:]]*"|[;&|(]|^)[[:space:]]*(KEIN_REVIEW=1[[:space:]]+)?gh[[:space:]]+pr[[:space:]]+create([[:space:]"]|$)' || exit 0
+# Shell-Trenner, gefolgt von beliebig vielen `NAME=wert`-Praefixen. Ohne den Anker schlaegt
+# der Waechter auch bei Kommandos an, die den Text nur ERWAEHNEN.
+anker='("command":[[:space:]]*"|[;&|(]|^)[[:space:]]*'
+zuweisungen='([A-Za-z_][A-Za-z0-9_]*=[^[:space:]"]*[[:space:]]+)*'
+printf '%s' "$roh" | grep -Eq "${anker}${zuweisungen}gh[[:space:]]+pr[[:space:]]+create([[:space:]\"]|\$)" || exit 0
 
-# Derselbe Anker wie oben, aber KEIN_REVIEW=1 ist hier PFLICHT statt optional — die
-# Praefix-Gruppe muss unmittelbar vor "gh pr create" stehen. Ein blosses `grep -q
-# 'KEIN_REVIEW=1'` (frueher hier) fand die Zeichenkette IRGENDWO im Roh-JSON und schaltete
-# die Sperre auch dann ab, wenn KEIN_REVIEW=1 nur in einer Commit-Message oder einem
-# Kommentar zufaellig genannt wurde (Fixture-Review, 2026-08-21).
-printf '%s' "$roh" | grep -Eq '("command":[[:space:]]*"|[;&|(]|^)[[:space:]]*KEIN_REVIEW=1[[:space:]]+gh[[:space:]]+pr[[:space:]]+create([[:space:]"]|$)' && exit 0
+# Derselbe Anker + dieselben fuehrenden Zuweisungen wie oben, aber KEIN_REVIEW=1 ist danach
+# PFLICHT statt Teil der freien Gruppe — es muss das letzte Praefix vor "gh" sein. Ein
+# blosses `grep -q 'KEIN_REVIEW=1'` (frueher hier) fand die Zeichenkette IRGENDWO im
+# Roh-JSON und schaltete die Sperre auch dann ab, wenn KEIN_REVIEW=1 nur in einer
+# Commit-Message oder einem Kommentar zufaellig genannt wurde (Fixture-Review Runde 1).
+printf '%s' "$roh" | grep -Eq "${anker}${zuweisungen}KEIN_REVIEW=1[[:space:]]+gh[[:space:]]+pr[[:space:]]+create([[:space:]\"]|\$)" && exit 0
 
 basis=$(git log -1 --format=%cI "$(git merge-base master HEAD 2>/dev/null)" 2>/dev/null)
 # Kein Abzweigpunkt ermittelbar (kein git, kein master) -> durchlassen. Ein Waechter, der bei
