@@ -194,5 +194,44 @@ rm -f review-selbsttest.md
 [ "$(lauf '{"tool_input":{"command":"KEIN_REVIEW=1 gh pr create\ngh pr create"}}')" = "2" ] \
   || { echo "FAIL: escaptes Vorkommen gibt das direkt folgende echte frei" >&2; fehler=1; }
 
+# 30. DIE ZWEITE SHELL. Die Systembeschreibung nennt PowerShell als PRIMAERE Shell, und
+#     gemessen ueber alle Sitzungstranskripte liefen 23 von 187 `gh pr create` dieses Projekts
+#     darueber — 12% aller PR-Eroeffnungen, zuletzt am 2026-08-15. Der Waechter hing bis zum
+#     Abschlussreview allein am Matcher "Bash".
+#     Was DIESE Pruefung zeigt: das Skript liest Roh-JSON und ist damit shell-AGNOSTISCH —
+#     die reale PowerShell-Form (`Set-Location <pfad>; gh pr create …`, Backslashes im Pfad
+#     als `\\` im JSON) trifft ueber den `;`-Anker. Was sie NICHT zeigt: dass der Hook bei
+#     einem PowerShell-Aufruf auch AUFGERUFEN wird — das haengt am zweiten Matcher-Eintrag in
+#     `.claude/settings.json`, den kein Selbsttest liest (bewusst offen gelassen, eigenes
+#     Issue). Faellt der Eintrag heraus, bleibt diese Pruefung gruen.
+[ "$(lauf '{"tool_input":{"command":"Set-Location E:\\Git\\Transkribor; gh pr create --base master --head feat/x"}}')" = "2" ] \
+  || { echo "FAIL: reale PowerShell-Form umgeht die Erkennung" >&2; fehler=1; }
+
+# 31-35. DER TRENNER NACH DEM BEFEHL, als KLASSE. Pruefung 24 stellte diese Frage und deckte
+#     genau einen Fall ab (den Backslash). Alles andere lief durch: hinter `create` steht in
+#     jeder der Pruefungen 1-29 entweder Leerraum, `"`, `\` oder das Zeilenende — die Luecke
+#     konnte strukturell von keiner gefunden werden. Gemessen am Stand davor: `;`, `&&`, `|`
+#     und `&` unmittelbar hinter `create` ergaben je Exit 0.
+#     35 ist die frueher als „geparkt" gefuehrte Klammer-Luecke: sie war nie eine eigene
+#     Klasse, sondern das `)`-Mitglied dieser. `$(gh pr create)` faellt mit derselben Zeile.
+[ "$(lauf '{"tool_input":{"command":"gh pr create;echo x"}}')" = "2" ] \
+  || { echo "FAIL: ; unmittelbar hinter create umgeht die Erkennung" >&2; fehler=1; }
+[ "$(lauf '{"tool_input":{"command":"gh pr create&&echo x"}}')" = "2" ] \
+  || { echo "FAIL: && unmittelbar hinter create umgeht die Erkennung" >&2; fehler=1; }
+[ "$(lauf '{"tool_input":{"command":"gh pr create|cat"}}')" = "2" ] \
+  || { echo "FAIL: | unmittelbar hinter create umgeht die Erkennung" >&2; fehler=1; }
+[ "$(lauf '{"tool_input":{"command":"gh pr create&"}}')" = "2" ] \
+  || { echo "FAIL: & unmittelbar hinter create umgeht die Erkennung" >&2; fehler=1; }
+[ "$(lauf '{"tool_input":{"command":"$(gh pr create)"}}')" = "2" ] \
+  || { echo "FAIL: Kommandosubstitution (die frueher geparkte Klammer) umgeht die Erkennung" >&2; fehler=1; }
+
+# 36. GEGENPROBE zur erweiterten `ende`-Klasse — und der Grund, warum `-` NICHT darin steht.
+#     Pruefung 14 deckt den Unterbefehl ohne Trenner ab; diese hier haengt einen echten
+#     Trenner HINTER den Unterbefehl. Waere `ende` zu weit (etwa `[^[:alnum:]]`), schluege sie
+#     auf `create-branch` an — ein Fehlalarm auf einem Befehl, der nichts eroeffnet, und ein
+#     Waechter mit Fehlalarmen wird abgeschaltet.
+[ "$(lauf '{"tool_input":{"command":"gh pr create-branch --dry-run; echo fertig"}}')" = "0" ] \
+  || { echo "FAIL: create-branch mit nachfolgendem Trenner schlaegt faelschlich an" >&2; fehler=1; }
+
 [ $fehler -eq 0 ] && echo "OK"
 exit $fehler

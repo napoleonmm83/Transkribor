@@ -56,3 +56,14 @@ nicht ein — das entscheidet der Aufrufer.
   Einstellungsdatei mit.
 - Läuft der Test gegen eine **Attrappe**, sagt die Probe nur etwas über die Attrappe. Vermerke
   das ausdrücklich, wenn es zutrifft.
+
+## Warum dieses Modell
+
+`opus · low`: Fähigkeit behalten, am Effort sparen. Der Agent **editiert echten Quelltext und
+spielt ihn zurück** — in diesem Repo hat eine Mutationsprobe dabei schon einmal einen
+kritischen Fehler eingebaut (Absturz jedes Apple-Silicon-Laufs), den 482 grüne Tests nicht
+sahen. Die Ersparnis durch ein schwächeres Modell wäre klein, der Schaden einer kaputten
+Rückspielung real.
+
+`low`, weil der Ablauf oben **vorgegeben** ist: mutieren, Diff lesen, Test laufen lassen,
+zurückspielen. Der teure Schritt ist 4, und der ist Lesen, nicht Schliessen.

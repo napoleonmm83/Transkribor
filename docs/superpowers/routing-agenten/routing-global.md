@@ -20,9 +20,9 @@ weitergearbeitet; die Entscheidung liegt beim Menschen.
 | Faktenprüfung (Behauptung ↔ Code) | `faktenpruefer` | **fable** · high | — |
 | Mutationsprobe | `mutationsprobe` | **opus · low** | — |
 | Diagnose / Fehlersuche | Haupt-Loop | (Sitzung) · xhigh | `superpowers:systematic-debugging` |
-| Suchen / „wo steht X" | `leichtgewicht` | **haiku** · low | — |
-| Testläufe, Formatieren, Mechanik | `leichtgewicht` | **haiku** · low | — |
-| Browser-Beleg | `browser-beleg` | **sonnet** · medium | `playwright` |
+| Suchen / „wo steht X" | `leichtgewicht` | **haiku** · — (siehe unten) | — |
+| Testläufe, Formatieren, Mechanik | `leichtgewicht` | **haiku** · — (siehe unten) | — |
+| Browser-Beleg | `browser-beleg` | **sonnet** · medium | — (siehe unten) |
 | README / Doku im Hausstil | `doku` | **sonnet** · high | — |
 | Bibliotheks-/API-Frage | Haupt-Loop | — | `find-docs` bzw. `ctx7` |
 | Modell-/LLM-Frage | Haupt-Loop | — | `claude-api` |
@@ -31,7 +31,17 @@ weitergearbeitet; die Entscheidung liegt beim Menschen.
 **`leichtgewicht` kennt kein `effort:`.** Haiku 4.5 wirft dabei nicht, es ignoriert das Feld
 still (gemessen 2026-08-21: im Transkript fehlt `effort` ganz statt auf einem Wert zu stehen).
 Die Zeile steuert also nur das Modell, nicht das Nachdenk-Budget — wer hier „low" liest,
-verspricht mehr, als die Plattform hält.
+verspricht mehr, als die Plattform hält. Deshalb steht in seinen beiden Zeilen oben **kein
+Effort**, sondern ein Strich: der Satz stand hier, während die Tabelle drei Zeilen darüber
+weiter „haiku · low" behauptete (Abschlussreview 2026-08-21).
+
+**Browser-Beleg hat keinen Pflicht-Skill, und das ist kein Versehen.** Hier stand `playwright`
+— das ist **kein Skill**, sondern ein MCP-Server (Plugin `playwright`, Werkzeuge
+`mcp__plugin_playwright_playwright__browser_*`; im Plugin-Cache gemessen: kein `SKILL.md`,
+kein `skills/`-Verzeichnis). Der Drift-Wächter bestätigte den Eintrag trotzdem, weil unter
+`~/.claude/skills/gstack/node_modules/playwright` ein gleichnamiges npm-Paket liegt — eine
+Bestätigung aus dem Nichts. Die Werkzeuge stehen jetzt dort, wo sie wirken: in der
+`tools:`-Zeile von `browser-beleg.md`. Derselbe Kategorienfehler wie bei der `ctx7`-CLI.
 
 ### Die drei begründungspflichtigen Zeilen
 

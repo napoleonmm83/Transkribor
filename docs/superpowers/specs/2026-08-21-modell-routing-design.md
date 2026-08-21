@@ -147,7 +147,9 @@ Alles hier ist gemessen, nicht angenommen — wer etwas davon ändert, misst neu
 - **cwd ist im Hook nicht garantiert.** Der Referenz-Hook nutzt
   `os.environ.get("CLAUDE_PROJECT_DIR", os.getcwd())`; die vorhandenen Projekt-Hooks beginnen
   mit `cd "${CLAUDE_PROJECT_DIR:-E:/Git/Transkribor}"`.
-- **25 `review-*.md` im Projektstamm, alle untracked.** Die Konvention aus `CLAUDE.md` („Der
+- **Dutzende `review-*.md` im Projektstamm, alle untracked** (`ls review-*.md | wc -l`; hier
+  stand einmal „25", und die Zahl war beim Mergen schon falsch — es ist die gelebte
+  Konvention, die den Wächter trägt, nicht ihr Zählerstand). Die Konvention aus `CLAUDE.md` („Der
   Reviewer schreibt seinen Bericht in eine DATEI") wird gelebt — es gibt also bereits eine Spur,
   an der ein Wächter „hat ein Review stattgefunden?" beantworten kann, ohne neuen Zustand zu
   erfinden.
@@ -169,8 +171,8 @@ gespart, nicht am Modell.
 | # | Baustein | Rolle |
 |---|---|---|
 | 1 | `~/.claude/routing.md` | **DIE Quelle**, Langfassung. Wird nicht injiziert — gelesen, wenn geroutet wird. |
-| 2 | `UserPromptSubmit`-Hook, JSON/`additionalContext` | **5 Zeilen** (gemessen 584 Zeichen ≈ 146 Token/Turn): Aufgabentypen + Verweis. |
-| 3 | Das Ensemble: 8 Agentendateien (2 vorhanden, 6 neu) | `model:` **und** `effort:` festgenagelt, Begründung im Körper der Datei |
+| 2 | `UserPromptSubmit`-Hook, JSON/`additionalContext` | **5 Zeilen** (gemessen 492 Zeichen ≈ 120 Token/Turn): Aufgabentypen + Verweis. |
+| 3 | Das Ensemble: 8 Agentendateien (2 vorhanden, 6 neu) | `model:` festgenagelt, `effort:` wo die Plattform es hält (`leichtgewicht` nicht — siehe §2), Begründung im Körper **jeder** Datei |
 | 4 | `$CLAUDE_PROJECT_DIR/.claude/routing.md` | Overlay. **Datei schlägt Global** — dieselbe Rangfolge wie `projekt.py`. |
 | 5 | `.claude/hooks/routing-sperre.sh`, `.claude/hooks/routing-lint.sh` | Sperre und Drift-Wächter (zwei Skripte, eine Rolle) |
 
@@ -188,7 +190,7 @@ liegt die Zahl fest, sie ist keine Geschmacksfrage.
 | `umsetzer` | sonnet · high | neu |
 | `doku` | sonnet · high | neu |
 | `browser-beleg` | sonnet · medium | neu |
-| `leichtgewicht` | haiku · low | neu — Suche **und** Mechanik in einer Datei |
+| `leichtgewicht` | haiku · — | neu — Suche **und** Mechanik in einer Datei; **kein** `effort:` (§2) |
 
 `leichtgewicht` fasst zwei Tafelzeilen zusammen, weil sie sich in Modell, Effort und Werkzeugen
 nicht unterscheiden; zwei Dateien wären zwei Quellen für dieselbe Konfiguration. Der eingebaute
@@ -211,9 +213,9 @@ wäre eine dritte Stelle, an der dasselbe steht.
 | Faktenprüfung (Behauptung ↔ Code) | `faktenpruefer` | **fable** · high | — |
 | Mutationsprobe | `mutationsprobe` | **opus · low** | — |
 | Diagnose / Fehlersuche | Haupt-Loop | (Sitzung) · xhigh | `superpowers:systematic-debugging` |
-| Suchen / „wo steht X" | `leichtgewicht` | **haiku** · low | — |
-| Testläufe, Formatieren, Mechanik | `leichtgewicht` | **haiku** · low | — |
-| Browser-Beleg | `browser-beleg` | **sonnet** · medium | `playwright` |
+| Suchen / „wo steht X" | `leichtgewicht` | **haiku** · — (kein `effort:`, siehe §2) | — |
+| Testläufe, Formatieren, Mechanik | `leichtgewicht` | **haiku** · — (kein `effort:`, siehe §2) | — |
+| Browser-Beleg | `browser-beleg` | **sonnet** · medium | — (Playwright ist ein MCP-Server, kein Skill — die Werkzeuge stehen in `browser-beleg.md` unter `tools:`) |
 | README / Doku im Hausstil | `doku` | **sonnet** · high | — |
 | Bibliotheks-/API-Frage | Haupt-Loop | — | `find-docs` (dazu die `ctx7`-CLI aus der globalen Regel — ein Werkzeug, kein Skill) |
 | Modell-/LLM-Frage | Haupt-Loop | — | `claude-api` |

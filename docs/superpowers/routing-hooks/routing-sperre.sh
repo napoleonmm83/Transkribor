@@ -6,8 +6,12 @@
 # CI durch, drei echte Fehler steckten trotzdem drin. Eine Regel, die nur in Prosa steht,
 # faellt weg — genau das ist mit der Bericht-in-eine-Datei-Konvention passiert.
 #
-# ERKANNT wird das Review an den 25 review-*.md im Projektstamm: eine Spur, die als
+# ERKANNT wird das Review an den `review-*.md` im Projektstamm: eine Spur, die als
 # Nebenprodukt echter Arbeit entsteht. Kein neuer Zustand, der driften koennte.
+# Nicht die ANZAHL traegt die Begruendung, sondern die gelebte Konvention — hier stand
+# einmal "25", und die Zahl war beim Mergen schon falsch (30 an dem Tag, vier davon aus der
+# Arbeit, die den Satz schrieb). Wer sie wissen will, zaehlt sie:
+#   ls review-*.md | wc -l   # alle untracked, `git ls-files 'review-*.md'` bleibt leer
 #
 # NUR Stufe 1. CodeRabbit BRAUCHT den PR, kann hier also nicht geprueft werden; Mutationsprobe
 # und lokaler Funktionstest sind an keinem Dateinamen erkennbar. Eine Stufe verlaesslich ist
@@ -50,7 +54,10 @@
 # 1. `git commit -m 'Doku: (FOO="a b" gh pr create erklaert)'` sperrt. Klammer als Anker,
 #    danach ein Token der Form NAME=wert, danach die Phrase. Das ist KEIN Preis von Runde 4:
 #    gemessen am Stand vor Runde 4 sperrte derselbe Befehl bereits (Exit 2) — er entstand mit
-#    der Zuweisungsgruppe in Runde 2/3. Runde 4 behaelt ihn bei.
+#    der Zuweisungsgruppe in Runde 2/3. Runde 4 behaelt ihn bei. Die Trenner in `ende`
+#    (Abschlussreview) dehnen ihn um genau einen Fall: `… (gh pr create)` — dieselbe
+#    Erwaehnung, nur mit `create` als letztem Wort vor der Klammer. Gemessen: mit Leerzeichen
+#    dahinter sperrte sie ohnehin schon. Kein neuer Preis, ein Stueck weit derselbe.
 # 2. Ein mehrzeiliger Befehl, dessen ZWEITE Zeile mit `gh pr create` beginnt, ohne dass er ihn
 #    ausfuehrt (Heredoc, das Doku schreibt), sperrt seit Runde 4. Das ist dieselbe Abwaegung,
 #    die der Anker `;` seit jeher trifft: `git commit -m "erst dies; gh pr create danach"`
@@ -112,6 +119,15 @@ roh=$(cat)
 # `ende` laesst neben Leerraum/`"`/Zeilenende auch einen Backslash zu: bei
 # `gh pr create\ngit push` folgt auf `create` das `\` des JSON-Escapes, sonst bliebe genau
 # der mehrzeilige Fall mit dem Befehl in der ERSTEN Zeile offen (gemessen).
+#
+# **Und `ende` traegt DIESELBE TRENNERLISTE wie der Anker** (Abschlussreview, gemessen):
+# fuenf Fix-Runden haerteten die Vorderseite, die Rueckseite kannte keinen einzigen Trenner.
+# `gh pr create;echo x`, `…&&…`, `…|cat` und `…&` liefen samt und sonders durch (Exit 0,
+# gemessen) — nur die Form MIT Leerzeichen davor sperrte. Die Asymmetrie war nicht zu
+# verteidigen: derselbe `;`, der vor der Phrase als Trenner gilt, galt dahinter nicht.
+# Die frueher geparkte `)`-Luecke (`(gh pr create)`, `$(gh pr create)`) ist damit
+# miterledigt — sie war nie eine eigene Klasse, sondern das Klammer-Mitglied dieser.
+# `-` bleibt DRAUSSEN: `gh pr create-branch` ist ein eigener Unterbefehl (Pruefung 14).
 anker='("command":[[:space:]]*"|[;&|(]|\\n|\\r|\\t|^)[[:space:]]*'
 # Ein Wert ist EIN Shell-Wort. Leerraum darf nur INNERHALB einer Quotierung stehen —
 # `\"…\"` (JSON-escaped), `'…'`, `$(…)` oder ein backslash-escaptes Leerzeichen (im Roh-JSON
@@ -127,7 +143,7 @@ anker='("command":[[:space:]]*"|[;&|(]|\\n|\\r|\\t|^)[[:space:]]*'
 # davon braucht: hier eine Alternative ergaenzen, nicht die Klasse wieder oeffnen.
 wert='(\\"[^"]*\\"|'\''[^'\'']*'\''|\$\([^)"]*\)|\\\\[[:space:]]|[^"[:space:]])*'
 zuweisungen="([A-Za-z_][A-Za-z0-9_]*=${wert}[[:space:]]+)*"
-ende='([[:space:]"]|\\|$)'
+ende='([[:space:]");&|(]|\\|$)'
 treffer="${anker}${zuweisungen}gh[[:space:]]+pr[[:space:]]+create"
 
 # Erst die Vorkommen HERAUSSCHNEIDEN, an denen KEIN_REVIEW=1 wirklich als Praefix steht,

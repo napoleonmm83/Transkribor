@@ -56,8 +56,18 @@ for s in $(namen 5 "$SKILL_RE"); do
   # auffindbar (siehe Kopfkommentar) — echte Ausnahme, kein Formfilter-Rest.
   case "$s" in ctx7|claude-api) continue ;; esac
   kurz="${s##*:}"    # 'superpowers:brainstorming' -> 'brainstorming'
+  # `node_modules` ist AUSGESCHLOSSEN, und das ist keine Vorsichtsmassnahme: `-type d -name`
+  # macht jedes gleichnamige Verzeichnis unter den drei Suchwurzeln zu einem gueltigen Skill,
+  # und unter `~/.claude/skills/gstack/node_modules` liegen 207 npm-Pakete. Gemessen: `semver`
+  # und `undici` — reine npm-Pakete, die kein Mensch je als Skill genannt hat — wurden vom
+  # alten Aufruf mit je 1 Treffer BESTAETIGT, mit dem Ausschluss sind es 0. Ein Waechter, der
+  # von einer Abhaengigkeit befriedigt wird, meldet gruen fuer einen toten Eintrag — das ist
+  # schlimmer als kein Waechter. (Den Anlass, `playwright`, faengt der Ausschluss NICHT: das
+  # loest zusaetzlich ueber sein Plugin-Wurzelverzeichnis auf. Deshalb steht es nicht mehr in
+  # der Skill-Spalte der Tafel — ein MCP-Server ist kein Skill. Zwei Wege, zwei Fixes.)
   find "$HOME/.claude/plugins/cache" "$HOME/.claude/skills" ".claude/skills" \
-       -maxdepth 6 \( -type d -name "$kurz" -o -type f -name "$kurz.md" \) 2>/dev/null \
+       -maxdepth 6 -not -path '*/node_modules/*' \
+       \( -type d -name "$kurz" -o -type f -name "$kurz.md" \) 2>/dev/null \
        | grep -q . || {
     echo "TOTER SKILL in der Tafel: $s" >&2; fehler=1; }
 done

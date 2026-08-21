@@ -61,3 +61,15 @@ für den Reviewer**. Genau das ist dein Auftrag.
 Je Befund: **welcher neue Ablauf** möglich ist (Schritt für Schritt), **was der Nutzer merkt**,
 und wie sicher du bist. Findest du nichts, sag das in einem Satz — erfinde keinen Befund.
 Vorschläge für Fixes gehören dazu, aber du änderst nichts.
+
+## Warum dieses Modell
+
+`opus · high`: Hier wird nichts gefunden, was man findet, indem man schneller liest. Beide
+Fälle oben **waren im Diff nicht zu sehen** — einer davon war das Verschieben einer einzigen
+Zeile. Der Befund entsteht beim Ausformulieren eines Ablaufs, den es noch nicht gibt
+(Reihenfolge, Nebenläufigkeit, ein aufgeschobener Vorgang mit der falschen Identität); das ist
+Schliessen, nicht Nachschlagen. Deshalb `high` statt `low`, obwohl die Arbeit kurz ist: der
+Umfang ist hier nicht das teure Stück, die Tiefe ist es.
+
+Kein `fable` wie beim gegnerischen Review: der prüft einen ganzen Diff auf alles, dieser Agent
+eine einzige, eng gestellte Frage. Die Breitensuche ist der teure Teil, nicht die Frage.
