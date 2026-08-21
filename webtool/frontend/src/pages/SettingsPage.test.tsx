@@ -1198,7 +1198,15 @@ describe('SettingsPage', () => {
 })
 
 describe('Wegweiser Version und Updates', () => {
-  beforeEach(() => vi.clearAllMocks())
+  // Die Mock-Vorgaben gehoeren HIERHIN, nicht in den Nachbarblock: allein laufend
+  // (`vitest -t "Wegweiser"`) liefert der Automock von '@/lib/api' `undefined`, und
+  // `.then` darauf reisst den Lauf um — gemessen, TypeError plus roter Test. Ein Test,
+  // der nur in Gesellschaft gruen ist, sichert nichts (CodeRabbit-CLI, Major).
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(api.listModels).mockResolvedValue([])
+    vi.mocked(api.getAuth).mockResolvedValue({ unterstuetzt: false, angemeldet: false, detail: '' })
+  })
 
   it('verweist auf die eigene Seite, statt die Bedienung hier zu fuehren', async () => {
     // Die Update-Bedienung ist nach /version umgezogen; hier bleibt der Weg dorthin, sonst

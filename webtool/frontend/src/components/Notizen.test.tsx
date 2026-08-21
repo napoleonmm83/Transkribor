@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
-import { Notizen, bloecke } from './Notizen'
+import { Notizen } from './Notizen'
+import { bloecke } from '@/lib/notizen'
 
 describe('bloecke — der Zerleger', () => {
   it('macht aus ## eine Überschrift', () => {
