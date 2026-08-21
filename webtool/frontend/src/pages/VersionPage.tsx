@@ -6,12 +6,21 @@ import { Abschnitt } from '@/components/Abschnitt'
 import { Notizen } from '@/components/Notizen'
 import { Button } from '@/components/ui/button'
 import { holeReleases, type Release } from '@/lib/releases'
+import type { UpdateZustand } from '@/lib/types'
 import { tag } from '@/lib/utils'
 
 const RELEASES = 'https://github.com/napoleonmm83/Transkribor/releases'
 
-/** Der Grund kommt als Code aus Electron — der Satz gehört hierher, wo Umlaute erlaubt sind. */
-const GRUENDE: Record<string, string> = {
+/**
+ * Der Grund kommt als Code aus Electron — der Satz gehört hierher, wo Umlaute erlaubt sind.
+ *
+ * `Record<Grund, …>`, nicht `Record<string, …>`: sonst zwingt ein neuer Code in der Union den
+ * Compiler zu nichts, der Rückfall unten schluckt die Lücke still, und es entsteht ein
+ * Zustand ohne passenden Satz — also genau die Klasse, aus der #319 kam.
+ */
+type Grund = Extract<UpdateZustand, { art: 'nicht_moeglich' }>['grund']
+
+const GRUENDE: Record<Grund, string> = {
   entwicklung: 'Entwicklungsmodus — Updates gibt es nur in der installierten App.',
   'kein-appimage': 'Nur die AppImage kann sich selbst aktualisieren.',
   // Beide Quellen für die Update-Adresse waren leer (`electron/updater.js`). Der Satz nennt
@@ -19,7 +28,7 @@ const GRUENDE: Record<string, string> = {
   'keine-quelle': 'Diese Fassung kennt keine Update-Quelle — bitte lade sie neu herunter.',
   // `erstellen` lief gar nicht erst (Verpackungsfehler). Ohne eigenen Grund sagte die Seite
   // hier „Updates gibt es in der installierten App" — in der installierten App (#319).
-  'kein-updater': 'Die Update-Prüfung konnte nicht gestartet werden — Einzelheiten stehen im Protokoll.',
+  'kein-updater': 'Die Update-Prüfung konnte nicht gestartet werden.',
 }
 
 /** Bytes als MB mit einer Nachkommastelle, deutsches Dezimalkomma. */
@@ -137,7 +146,19 @@ export function VersionPage() {
 
         {upd?.art === 'nicht_moeglich' && (
           <p className="mt-3 text-sm text-muted-foreground">
-            {GRUENDE[upd.grund] ?? 'Updates sind auf diesem System nicht möglich.'}{' '}
+            {GRUENDE[upd.grund]}{' '}
+            {/* Der Weg, den der Satz nennt, muss auch begehbar sein: das Menü ist
+                ausgeblendet, einen zweiten Zugang zum Protokoll gibt es nicht — ein „siehe
+                Protokoll" ohne Knopf wäre derselbe Kreis wie der Satz, den dieser Zustand
+                gerade abgelöst hat. `kein-updater` tritt nur in Electron auf, die Brücke ist
+                dort also immer da. */}
+            {upd.grund === 'kein-updater' && (
+              <>
+                Einzelheiten stehen im{' '}
+                <button type="button" className="underline underline-offset-2 hover:text-foreground"
+                  onClick={protokollOeffnen}>Protokoll</button>.{' '}
+              </>
+            )}
             <a className="underline underline-offset-2 hover:text-foreground" href={RELEASES}
               target="_blank" rel="noreferrer">Versionen ansehen</a>
           </p>

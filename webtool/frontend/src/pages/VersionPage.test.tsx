@@ -104,13 +104,26 @@ describe('VersionPage — diese Fassung', () => {
     expect(await screen.findByText(/lade sie neu herunter/)).toBeTruthy()
   })
 
-  it('sagt bei kaputtem Updater die Wahrheit, statt in die App zu verweisen — IN der App', async () => {
-    // #319: konnte `erstellen` gar nicht laufen (Verpackungsfehler), lieferte der IPC-Kanal
-    // `null` — ununterscheidbar vom Browser-Fall. Die Seite schickte den Nutzer damit in die
-    // App, in der er schon sass. Jetzt traegt der Zustand seinen eigenen Grund.
-    zeigeMit({ version: '0.2.1', art: 'nicht_moeglich', grund: 'kein-updater' })
+  it('sagt bei kaputtem Updater die Wahrheit UND bietet den Weg an, den sie nennt', async () => {
+    // #319: konnte `erstellen` gar nicht laufen, lieferte der IPC-Kanal `null` —
+    // ununterscheidbar vom Browser-Fall. Die Seite schickte den Nutzer damit in die App, in
+    // der er schon sass. Jetzt traegt der Zustand seinen eigenen Grund.
+    // Die zweite Zusicherung misst den KNOPF, nicht die Abwesenheit des alten Satzes: der
+    // stand allein im `!upd`-Zweig und waere fuer JEDEN Nicht-null-Zustand trivial weg
+    // (Reviewbefund — die Zusicherung konnte nicht fehlschlagen). Das Menue ist
+    // ausgeblendet, ohne diesen Knopf gibt es keinen Weg ins Protokoll.
+    const { spies } = zeigeMit({ version: '0.2.1', art: 'nicht_moeglich', grund: 'kein-updater' })
     expect(await screen.findByText(/konnte nicht gestartet werden/)).toBeTruthy()
-    expect(screen.queryByText(/Updates gibt es in der installierten App/)).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /Protokoll/ }))
+    expect(spies.protokollOeffnen).toHaveBeenCalled()
+  })
+
+  it('bietet den Protokoll-Knopf NUR bei kein-updater an', async () => {
+    // Gegenprobe: bei „Entwicklungsmodus" gibt es nichts nachzusehen — ein Knopf, der
+    // ueberall steht, ist derselbe Schaden von der anderen Seite.
+    zeigeMit({ version: '0.2.1', art: 'nicht_moeglich', grund: 'entwicklung' })
+    await screen.findByText(/Entwicklungsmodus/)
+    expect(screen.queryByRole('button', { name: /Protokoll/ })).toBeNull()
   })
 
   it('zeigt einen Fehler samt Weg zum Protokoll', async () => {

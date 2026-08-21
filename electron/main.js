@@ -309,13 +309,15 @@ async function starten() {
     // Ein Hintergrund-Zeitgeber darf die App nie am Leben halten.
     zeitgeber.unref()
   } catch (e) {
-    protokoll.schreiben(`Update-Pruefung nicht moeglich: ${e && e.message || e}`)
-    // Ohne den Ersatz bliebe `aktualisierer` null, `update:status` lieferte null — und das
-    // ist im Frontend NICHT von „laeuft im normalen Browser" zu unterscheiden (#319).
-    // **Nur wenn noch keiner steht:** dieser `try` umschliesst auch `pruefen()` und den
-    // Zeitgeber; ein Wurf DANACH duerfte einen funktionierenden Automaten nicht durch einen
-    // ersetzen, der „geht nicht" sagt.
-    if (!aktualisierer) aktualisierer = updater.ersatz(app.getVersion(), 'kein-updater')
+    // Eigener Wortlaut, nicht derselbe wie beim fehlenden Feed (oben): seit die Oberflaeche
+    // den Nutzer aktiv in diese Datei schickt, muessen die beiden Lagen unterscheidbar sein.
+    protokoll.schreiben(`Update-Aufbau fehlgeschlagen: ${e && e.message || e}`)
+    // Ohne Ersatz bliebe `aktualisierer` null, `update:status` lieferte null — und das ist im
+    // Frontend NICHT von „laeuft im normalen Browser" zu unterscheiden (#319). Die
+    // Entscheidung „behalten oder ersetzen" steht in `updater.nachFehler`, damit sie einen
+    // Test hat; hier bleibt eine Leitung. Der `catch` deckt dabei ALLES ab `require` bis
+    // `erstellen` — nicht nur den Namensgeber `electron-updater`.
+    aktualisierer = updater.nachFehler(aktualisierer, app.getVersion())
   }
 }
 
