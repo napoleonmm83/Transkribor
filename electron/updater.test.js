@@ -246,3 +246,58 @@ test('Mac: laden oeffnet den Browser, nicht downloadUpdate', () => {
   assert.deepStrictEqual(au.aufrufe, [], 'kein downloadUpdate auf Mac')
   assert.deepStrictEqual(auf, ['https://x/releases/latest'], 'oeffnet die Release-Seite')
 })
+
+// --- Feed-Quelle im GEPACKTEN Build (macOS-Fehler "Failed to parse URL from null") ----------
+// electron-builder loescht `build` aus der package.json, die es in die .app legt
+// (app-builder-lib/out/fileTransformer.js: ignoredPackageMetadataProperties enthaelt "build").
+// Im Repo lief macUrls deshalb gruen und lieferte gepackt null -> fetch(null).
+
+test('macUrls liest owner/repo aus app-update.yml — die Quelle, die das Packen ueberlebt', () => {
+  const yml = 'provider: github\nowner: napoleonmm83\nrepo: Transkribor\nupdaterCacheDirName: transkribor-updater\n'
+  const urls = macUrls({}, yml)   // package.json OHNE build — genau der gepackte Fall
+  assert.strictEqual(urls.feed, 'https://github.com/napoleonmm83/Transkribor/releases/latest/download/latest-mac.yml')
+  assert.strictEqual(urls.release, 'https://github.com/napoleonmm83/Transkribor/releases/latest')
+})
+
+test('macUrls faellt ohne yml auf build.publish zurueck — der Entwicklungsbetrieb hat keine', () => {
+  const paket = { build: { publish: [{ provider: 'github', owner: 'napoleonmm83', repo: 'Transkribor' }] } }
+  for (const ohne of [undefined, null, '', 'provider: generic\nurl: https://x/\n']) {
+    const urls = macUrls(paket, ohne)
+    assert.ok(urls, `Rueckfall fehlt bei ${JSON.stringify(ohne)}`)
+    assert.strictEqual(urls.feed, 'https://github.com/napoleonmm83/Transkribor/releases/latest/download/latest-mac.yml')
+  }
+})
+
+test('macUrls: eine unvollstaendige yml verdeckt den Rueckfall nicht', () => {
+  // owner ohne repo ist kein halbes Ergebnis, sondern gar keines — sonst baute die
+  // naechste Zeile eine URL mit "undefined" darin.
+  const paket = { build: { publish: [{ provider: 'github', owner: 'napoleonmm83', repo: 'Transkribor' }] } }
+  const urls = macUrls(paket, 'provider: github\nowner: napoleonmm83\n')
+  assert.strictEqual(urls.feed, 'https://github.com/napoleonmm83/Transkribor/releases/latest/download/latest-mac.yml')
+  assert.strictEqual(macUrls({}, 'provider: github\nowner: napoleonmm83\n'), null)
+})
+
+test('Mac ohne Feed-URL: nicht_moeglich statt fetch(null)', () => {
+  let geholt = 0
+  const u = erstellen({
+    autoUpdater: attrappe(), version: '0.16.0', plattform: 'darwin', gepackt: true, appimage: false,
+    hole: () => { geholt++; throw new Error('haette nie laufen duerfen') },
+    openExternal: () => {}, feedUrl: null, releaseUrl: null, aendert: () => {},
+  })
+  assert.strictEqual(u.zustand().art, 'nicht_moeglich')
+  assert.strictEqual(u.zustand().grund, 'keine-quelle')
+  u.pruefen()
+  assert.strictEqual(geholt, 0, 'ohne Quelle wird nichts geholt')
+  assert.strictEqual(u.zustand().art, 'nicht_moeglich', 'und der Zustand bleibt ehrlich')
+})
+
+test('Mac ohne Release-URL: laden oeffnet nichts', () => {
+  const auf = []
+  const u = erstellen({
+    autoUpdater: attrappe(), version: '0.16.0', plattform: 'darwin', gepackt: true, appimage: false,
+    hole: async () => ({ ok: true, text: async () => 'version: 0.17.0\n' }),
+    openExternal: url => auf.push(url), feedUrl: null, releaseUrl: null, aendert: () => {},
+  })
+  u.laden()
+  assert.deepStrictEqual(auf, [], 'openExternal(null) waere ein Wurf im Hauptprozess')
+})
