@@ -29,7 +29,7 @@ export function MaterialDialog({ project, offen, vorbelegteDateien, sprachChoice
   project: string
   offen: boolean
   vorbelegteDateien?: File[]
-  sprachChoices: { id: string; label: string; hint?: string; dialekt?: boolean }[]
+  sprachChoices: { id: string; label: string; hint?: string; dialekt: boolean }[]
   projektSprache: string
   sprecherMax: number
   onSchliessen: () => void
@@ -256,8 +256,9 @@ export function MaterialDialog({ project, offen, vorbelegteDateien, sprachChoice
                     // zeigte sonst auf eine Id, die es nicht gibt — derselbe Fehler, den
                     // #304 behebt, nur verschoben. Gefunden hat das der Browser-Test, nicht
                     // die Unit-Tests: die prueften den AKTIVEN Reiter und blieben gruen.
-                    // Kein `aria-controls` ist besser als eines ins Leere; das APG-Muster
-                    // laesst es fuer nicht gerenderte Panels ausdruecklich weg.
+                    // Kein `aria-controls` ist besser als eines ins Leere: ein Verweis auf
+                    // eine nicht existierende Id ist stumm — das folgt schon aus ARIA, ohne
+                    // dass man das APG dafuer bemuehen muesste.
                     aria-controls={quelle === id ? `mat-panel-${id}` : undefined}
                     tabIndex={quelle === id ? 0 : -1}
                     onClick={() => setQuelle(id)}
@@ -355,7 +356,11 @@ export function MaterialDialog({ project, offen, vorbelegteDateien, sprachChoice
                       sich zwei ids einen Whisper-Code teilen, und das ist ausschliesslich
                       `ch`/`de`. Die Unterscheidung liegt jetzt am `dialekt`-Flag der Tabelle
                       statt an einer hier nachgebauten Regel. */}
-                  „Automatisch“: Whisper erkennt die Sprache selbst.{hinweis && ` ${hinweis}`}
+                  {/* Der Hinweis ERSETZT den generischen Satz, er haengt sich nicht daran:
+                      „…Whisper erkennt die Sprache selbst. Es gilt, was Whisper erkennt."
+                      waren zwei Saetze mit derselben Aussage. In den beiden Dialogen traegt
+                      der erste Halbsatz von `OHNE`, hier steht er schon davor. */}
+                  „Automatisch“: {hinweis ?? 'Whisper erkennt die Sprache selbst.'}
                 </p>
               )}
             </div>

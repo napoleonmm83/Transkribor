@@ -9,10 +9,10 @@ vi.mock('@/lib/api')
 const BASIS = {
   sprache: 'ch', korrektur: 'auto', mehrsprachig: false, sprecher_max: 20,
   sprach_choices: [
-    { id: 'ch', label: 'Schweizerdeutsch', hint: '' },
-    { id: 'en', label: 'Englisch', hint: '' },
+    { id: 'ch', label: 'Schweizerdeutsch', hint: '' , dialekt: true },
+    { id: 'en', label: 'Englisch', hint: '' , dialekt: false },
   ],
-  tiefen: [{ id: 'voll_dialekt', label: 'Voll' }, { id: 'leicht', label: 'Leicht' }],
+  tiefen: [{ id: 'voll_dialekt', label: 'Voll' }, { id: 'leicht', label: 'Leicht' , dialekt: false }],
 }
 
 /** Radix oeffnet das Menue nur auf einen echten Zeigerklick — `click` allein reicht nicht

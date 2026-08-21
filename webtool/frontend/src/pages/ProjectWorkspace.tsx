@@ -178,18 +178,26 @@ export function ProjectWorkspace() {
       }}>
       {/* `pointer-events-none` ist Pflicht, nicht Kosmetik: ohne es faengt die Flaeche das
           drop-Ereignis selbst ab, und der Handler am Container darunter feuert nie. */}
-      {/* `role="status"` (#304/Kl9): die Ansage war rein visuell — wer den Bildschirm nicht
-          sieht, bekam beim Ziehen ueber die Seite keinerlei Rueckmeldung. Als Live-Region
-          wird sie vorgelesen, sobald sie erscheint.
-          Nebenbei loest das den Testanker-Befund an der richtigen Stelle: der Test kann
-          jetzt ueber die ROLLE pruefen, dass der Nutzer die Ansage bekommt. Die `testid` am
-          Container darunter BLEIBT — er ist ein Layout-Div ohne Nutzer-Semantik, und ihm
-          eine ARIA-Rolle zu geben, nur damit ein Test ihn findet, waere eine erfundene
-          Landmark in der Navigationsstruktur. Ein `drop`-Ereignis braucht ein Element,
-          keine Bedeutung. */}
+      {/* Die Ansage war rein visuell (#304/Kl9) — wer den Bildschirm nicht sieht, bekam beim
+          Ziehen ueber die Seite keinerlei Rueckmeldung.
+          **Die Live-Region steht DAUERHAFT im Baum, nur ihr Text wechselt** — und das ist
+          nicht dasselbe wie `{zieht && <div role="status">…}`. Wird eine Live-Region
+          GEMEINSAM mit ihrem Inhalt eingefuegt, kuendigen mehrere Screenreader/Browser-Paare
+          sie gar nicht an; angesagt wird zuverlaessig nur, was sich in einer Region aendert,
+          die beim Eintreten der Aenderung schon dastand. Der erste Anlauf hatte die Rolle am
+          Overlay selbst und im Kommentar die Zusage „wird vorgelesen, sobald sie erscheint" —
+          eine Behauptung, die kein Test und keine Messung deckt (Reviewbefund m4).
+          Kein Dauerplappern: `setZieht(true)` mit unveraendertem Wert laeuft in Reacts
+          Bailout, der DOM wird nicht angefasst, und eine Live-Region sagt nur bei einer
+          DOM-Aenderung etwas — `dragover` darf also beliebig oft feuern.
+          Die `testid` am Container BLEIBT: er ist ein Layout-Div ohne Nutzer-Semantik, und
+          ihm eine ARIA-Rolle zu geben, nur damit ein Test ihn findet, waere eine erfundene
+          Landmark. Ein `drop`-Ereignis braucht ein Element, keine Bedeutung. */}
+      <div role="status" className="sr-only">{zieht ? 'Zum Hinzufügen loslassen' : ''}</div>
       {zieht && (
-        <div role="status" className="pointer-events-none fixed inset-0 z-40 flex items-center
-                        justify-center border-2 border-dashed border-primary bg-background/80">
+        <div aria-hidden="true" className="pointer-events-none fixed inset-0 z-40 flex
+                        items-center justify-center border-2 border-dashed border-primary
+                        bg-background/80">
           <p className="text-sm font-medium">Zum Hinzufügen loslassen</p>
         </div>
       )}

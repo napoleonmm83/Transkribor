@@ -121,7 +121,7 @@ def test_pruef_fehler_sprecher():
         assert msg and "sprecher" in msg, f"{schlecht!r} haette abgewiesen werden muessen"
 
 
-def test_fuer_frontend_liefert_das_dialekt_flag(monkeypatch):
+def test_fuer_frontend_liefert_das_dialekt_flag():
     """#301: der Erklaersatz zur `auto`-Regel braucht die Frage „ist der Projekt-Standard
     eine Dialekt-Sprache?" — und die darf das Frontend NICHT selbst beantworten.
 

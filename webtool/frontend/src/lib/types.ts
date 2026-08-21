@@ -59,10 +59,18 @@ export type ProviderInfo = {
 export type WhisperChoice = { id: string; label: string; hint: string };
 /** Sprach-Auswahl pro Projekt (Backend liefert die zur Verfuegung stehenden Ids + Labels). */
 /** `dialekt` seit #301: der Erklaersatz zur `auto`-Regel muss wissen, ob der
- *  Projekt-Standard bei erkanntem Deutsch GEWINNT. OPTIONAL, damit bestehende
- *  Test-Attrappen nicht am `tsc -b` auflaufen — `autoHinweis` behandelt ein fehlendes
- *  Feld als „unbekannt" und schweigt dann, statt moeglicherweise Falsches zu sagen. */
-export type SprachChoice = { id: string; label: string; hint: string; dialekt?: boolean };
+ *  Projekt-Standard bei erkanntem Deutsch GEWINNT.
+ *
+ *  **PFLICHTFELD**, obwohl das drei Test-Attrappen kostet. Zuerst stand hier `?:`, mit der
+ *  Begruendung „damit bestehende Attrappen nicht am `tsc -b` auflaufen" — Testbequemlichkeit
+ *  ist der schwaechere Grund, und fuer dieselbe Frage wurde in #270 bereits andersherum
+ *  entschieden (`diarisierung_aktiv`/`pyannote_da` sind Pflicht, ein CLI-Befund „optional
+ *  machen" wurde mit „Typ = Vertrag des aktuellen Servers" zurueckgewiesen).
+ *  Was optional NEU erlaubt haette: faellt `dialekt` je aus `sprachen.fuer_frontend()`,
+ *  bliebe `tsc -b` gruen, `autoHinweis` schwiege programmgemaess — und #301 waere an ALLEN
+ *  DREI Stellen still weg. Die Frontend-Tests faengen das nicht, weil ihre Attrappen den
+ *  Vertrag selbst behaupten (dieselbe Struktur wie der `_settings_body`-Befund aus #239). */
+export type SprachChoice = { id: string; label: string; hint: string; dialekt: boolean };
 export type TiefeChoice = { id: string; label: string };
 /** Per-Projekt-Einstellungen: gewaehlte Sprache + Korrekturtiefe, plus die Wahlmoeglichkeiten,
  *  die der Backend anbietet (fuer Select/Dropdown in der Arbeitsflaeche). */
