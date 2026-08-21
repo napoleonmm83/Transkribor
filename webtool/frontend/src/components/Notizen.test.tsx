@@ -122,18 +122,26 @@ describe('Notizen — Auszeichnung an echtem Material', () => {
   })
 
   it('zerlegt **fett** NICHT in Kursivbereiche', () => {
-    // Die Falle beim Ergänzen: steht die Kursiv-Alternative vor der fetten, frisst sie
-    // jedes `**` von innen auf.
+    // Die naheliegende Erklärung dafür ist gemessen FALSCH: nicht die Reihenfolge der
+    // Alternativen schützt das `**`, sondern `(?![\s*])` — mit vertauschter Reihenfolge
+    // bleibt dieser Test grün. Er sichert also das Ergebnis, nicht die Anordnung.
     render(<Notizen text={'**Aussuchen** — Dateien hineinziehen.'} />)
     expect(screen.getByText('Aussuchen').tagName).toBe('STRONG')
     expect(document.querySelectorAll('em')).toHaveLength(0)
   })
 
   it('hält eine Multiplikation für keine Kursivschrift', () => {
-    // Ohne die Leerraum-Regel begänne der Kursivbereich beim Malzeichen und liefe bis zum
-    // nächsten Stern — mitten durch den Satz.
+    // Der Satz MIT nachfolgendem Wort („und *so* weiter") ist der falsche Prüfstein: dort
+    // fängt schon `(?![*\w])` den Kandidaten ab, und die Mutation „Leerraum-Regel raus"
+    // blieb damit grün (gemessen). Scharf wird es, wenn der zweite Stern am Zeilenende
+    // steht — dann entscheidet allein der Leerraum davor.
+    render(<Notizen text={'5 * 3 = 15 *'} />)
+    expect(document.querySelectorAll('em')).toHaveLength(0)
+  })
+
+  it('zeichnet trotzdem aus, wo ein Malzeichen daneben steht', () => {
+    // Gegenprobe: die Regel darf nicht jede Kursivschrift verschlucken.
     render(<Notizen text={'5 * 3 = 15 und *so* weiter.'} />)
-    expect(document.querySelectorAll('em')).toHaveLength(1)
     expect(screen.getByText('so').tagName).toBe('EM')
   })
 

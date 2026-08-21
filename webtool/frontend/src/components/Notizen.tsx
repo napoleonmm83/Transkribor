@@ -78,11 +78,17 @@ export function bloecke(text: string): Block[] {
 /**
  * Ein Durchgang für alle Auszeichnungen — split mit Fanggruppe behält die Treffer.
  *
- * **Fett steht VOR kursiv**, sonst zerlegt die Kursiv-Alternative jedes `**fett**` (bei
- * gleicher Fundstelle gewinnt die erste Alternative). Die Kursiv-Alternative verlangt
- * ausserdem, dass direkt hinter dem öffnenden und vor dem schliessenden Stern kein Leerraum
- * steht — sonst würde aus „5 * 3 = 15 und *so*" ein Kursivbereich, der bei der Multiplikation
- * beginnt. Dieselbe Regel benutzt CommonMark.
+ * **Die Lookarounds tragen, NICHT die Reihenfolge.** Fett steht zuerst, weil es sich so
+ * liest — wirkungslos ist es trotzdem: gemessen an `**A**`, `a **b** c *d*` und beiden
+ * Multiplikationsfällen liefert die getauschte Fassung dasselbe, weil `(?![\s*])` die
+ * Kursiv-Alternative an einem `**` gar nicht erst greifen lässt. Die Mutation „Reihenfolge
+ * tauschen" bleibt also grün; wer hier einen Wächter vermutet, sucht ihn vergebens.
+ *
+ * Was WIRKLICH trägt, ist der Leerraum: direkt hinter dem öffnenden und vor dem schliessenden
+ * Stern darf keiner stehen. Ohne diese Regel wird aus „5 * 3 = 15 *" der Kursivbereich
+ * „* 3 = 15 *" — und das ist der einzige Fall, in dem sie den Ausschlag gibt (bei „… und *so*
+ * weiter" fängt ihn schon `(?![*\w])` ab, weshalb die Mutation dort grün blieb). Dieselbe
+ * Regel benutzt CommonMark.
  */
 const AUSZEICHNUNG =
   /(\*\*[^*]+\*\*|(?<![*\w])\*(?![\s*])[^*\n]+(?<!\s)\*(?![*\w])|`[^`]+`|\[[^\]]+\]\((?:[^()\s]|\([^()\s]*\))+\))/g
