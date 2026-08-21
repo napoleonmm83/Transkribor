@@ -93,3 +93,18 @@ export function sprachText(zeilen: Aufnahme[], labels: Record<string, string>): 
   if (teile.length === 1) return `${name(teile[0][0])} für alle`
   return teile.map(([id, n]) => `${n}× ${name(id)}`).join(', ')
 }
+
+/** „4,2 MB" · „812 KB" — die Groesse neben dem Dateinamen in Schritt 1.
+ *
+ *  Dezimal (1000), nicht binaer (1024): `api.uploadFrist` bemisst das Zeitlimit mit
+ *  `bytes / 1_000_000`. Zwei MB-Begriffe nebeneinander hiesse, dass die angezeigte Groesse
+ *  eine andere ist als die, auf der die Frist rechnet.
+ *
+ *  KEIN `Math.max(1, …)`: eine 0-Byte-Aufnahme (abgebrochener Export) soll als „0 KB"
+ *  dastehen. Eine auf „1 KB" aufgerundete Anzeige verstellte genau den Blick, fuer den
+ *  diese Liste ueberhaupt da ist.
+ */
+export function groesseText(bytes: number): string {
+  if (bytes >= 1_000_000) return `${(bytes / 1_000_000).toFixed(1).replace('.', ',')} MB`
+  return `${Math.round(bytes / 1000)} KB`
+}

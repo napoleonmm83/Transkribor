@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { FileAudio, Link2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -6,7 +7,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Ablageflaeche } from '@/components/Ablageflaeche'
 import { HoerBalken } from '@/components/HoerBalken'
 import { MaterialZeile } from '@/components/MaterialZeile'
-import { alleGueltig, ergaenzen, sprachText, sprecherText,
+import { alleGueltig, ergaenzen, groesseText, sprachText, sprecherText,
          type Aufnahme } from '@/lib/materialZeilen'
 import { sprecherWahl } from '@/lib/sprecher'
 import { autoHinweis } from '@/lib/autoHinweis'
@@ -89,6 +90,14 @@ export function MaterialDialog({ project, offen, vorbelegteDateien, sprachChoice
     setZeilen(alt => alt.map(z => z.schluessel === schluessel ? { ...z, sprecherText: text } : z))
   const setzeSprache = (schluessel: string, id: string) =>
     setZeilen(alt => alt.map(z => z.schluessel === schluessel ? { ...z, sprache: id } : z))
+  // `setKlingt` geht MIT: eine klingende Zeile, die aus der Liste faellt, ist derselbe Fall
+  // wie der Teil-Fehlschlag in `starten` — sonst bleibt ihr Schluessel stehen, und eine
+  // spaeter erneut hinzugefuegte gleichnamige Datei spielt beim Betreten von Schritt 2
+  // ungefragt los. Der Balken raeumt sich ueber genau diesen Wert auf.
+  const entfernen = (schluessel: string) => {
+    setZeilen(alt => alt.filter(z => z.schluessel !== schluessel))
+    setKlingt(a => a === schluessel ? null : a)
+  }
 
   const urlsUebernehmen = () => {
     const neu = urlText.split('\n').map(u => u.trim()).filter(Boolean)
@@ -223,7 +232,7 @@ export function MaterialDialog({ project, offen, vorbelegteDateien, sprachChoice
           Liste schrumpft mit, statt den Dialog aus dem Fenster zu schieben.
           Fuer ein gegebenes Fenster ist das weiterhin eine KONSTANTE — der Rahmen springt
           beim Schrittwechsel nicht (der Grund fuer H1s feste Hoehe). */}
-      <DialogContent className="flex h-[min(648px,90vh)] flex-col sm:max-w-3xl">
+      <DialogContent className="rahmen-animiert flex h-[min(648px,90vh)] flex-col sm:max-w-3xl">
         <DialogHeader><DialogTitle>Material hinzufügen</DialogTitle></DialogHeader>
 
         <ol className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -300,10 +309,46 @@ export function MaterialDialog({ project, offen, vorbelegteDateien, sprachChoice
                     </div>
                   )}
               </div>
+              {/* Vorher stand hier NUR die Zahl („3 Aufnahmen gewählt"), grau und klein — wer
+                  mehrere Dateien auf einmal waehlte, sah bis Schritt 2 nicht, WELCHE es
+                  geworden sind, und ein Fehlgriff war bis dahin nur ueber „Abbrechen"
+                  zurueckzunehmen. Der Entfernen-Knopf gehoert deshalb zur Sichtbarkeit
+                  dazu: eine Liste, die einen Fehler zeigt, aber nicht korrigieren laesst,
+                  verschiebt das Problem nur nach vorn.
+                  Das Symbol unterscheidet Datei und Link — beide Arten landen in DERSELBEN
+                  Liste (`ergaenzen`), und `starten` verzweigt je Zeile danach. */}
               {zeilen.length > 0 && (
-                <p className="text-sm text-muted-foreground">
-                  {zeilen.length} {zeilen.length === 1 ? 'Aufnahme' : 'Aufnahmen'} gewählt
-                </p>
+                <div className="space-y-1.5">
+                  <p className="text-sm font-medium">
+                    {zeilen.length} {zeilen.length === 1 ? 'Aufnahme' : 'Aufnahmen'} gewählt
+                  </p>
+                  <ul className="space-y-1">
+                    {zeilen.map(z => (
+                      <li key={z.schluessel}
+                        className="flex items-center gap-2 rounded-md border bg-muted/40 px-2.5 py-1.5 text-sm">
+                        {z.datei
+                          ? <FileAudio className="size-4 shrink-0 text-primary" aria-hidden="true" />
+                          : <Link2 className="size-4 shrink-0 text-primary" aria-hidden="true" />}
+                        <span className="min-w-0 flex-1 truncate" title={z.anzeige}>{z.anzeige}</span>
+                        {/* Nur bei Dateien: eine URL-Zeile hat noch nichts, was eine Groesse
+                            haette — heruntergeladen wird erst nach dem Start. */}
+                        {z.datei && (
+                          <span className="ziffern shrink-0 text-xs text-muted-foreground">
+                            {groesseText(z.datei.size)}
+                          </span>
+                        )}
+                        <button type="button" disabled={laeuft}
+                          aria-label={`${z.anzeige} aus der Auswahl entfernen`}
+                          onClick={() => entfernen(z.schluessel)}
+                          className="shrink-0 rounded-sm p-0.5 text-muted-foreground hover:text-foreground
+                                     focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring
+                                     disabled:opacity-40">
+                          <X className="size-4" />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               )}
             </div>
           )}

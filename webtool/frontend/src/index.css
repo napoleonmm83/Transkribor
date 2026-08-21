@@ -246,8 +246,53 @@ a.blatt:hover, .blatt-klickbar:hover {
 .dark [data-slot="tooltip-content"] .u-yellow { color: #B45309; }
 .dark [data-slot="tooltip-content"] .u-red { color: #B91C1C; }
 
+
+/* Der animierte Rahmen des Material-Dialogs (rotierender Kegelverlauf, per Maske auf die
+   Rahmenbreite beschnitten). Vier Dinge, die man nicht aus dem Diff liest:
+   - **`pointer-events: none` ist PFLICHT, kein Feinschliff.** Die Maske macht die Mitte nur
+     SICHTBAR durchlaessig; fuer die Treffererkennung liegt das Pseudo-Element weiter ueber
+     dem ganzen Dialog. Ohne die Zeile ist kein Knopf darin mehr klickbar.
+   - **Die Farben bleiben kuehl** (Indigo → Cyan → Violett). Bernstein und Rot sind in dieser
+     App inhaltlich belegt (unsichere Woerter, s. `.u-yellow`/`.u-red`) — ein Regenbogen haette
+     genau die Signalfarben verbraucht, an denen das Auge sonst haengenbleiben soll.
+   - **`--rahmen-winkel` steht AUCH als normale Deklaration.** Ohne `@property`-Unterstuetzung
+     waere `from var(--rahmen-winkel)` ein ungueltiger Wert, der conic-gradient fiele aus und
+     der Rahmen bliebe ganz weg. So bleibt er stehen, nur unbewegt. Die Animation gewinnt
+     trotzdem: Animationen schlagen in der Kaskade normale Deklarationen.
+   - **Der Radius ist um die 2 px groesser als der des Dialogs** — `border-radius: inherit`
+     ergaebe aussen dieselbe Rundung wie innen, und die Ecke liefe sichtbar spitz zu. */
+.rahmen-animiert::before {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  padding: 2px;
+  border-radius: calc(var(--radius) + 2px);
+  --rahmen-winkel: 0deg;
+  background: conic-gradient(from var(--rahmen-winkel),
+              var(--primary), #22D3EE, #A78BFA, var(--primary));
+  /* REIHENFOLGE: erst beide Shorthands, DANN `*-composite`. `mask` ist ein Shorthand, das
+     `mask-composite` mit zuruecksetzt — steht `exclude` davor, faltet lightningcss (der
+     Minifier von Tailwind v4) beim Bauen alles zusammen und die Zeile faellt WEG. Am
+     gebauten Bundle gemessen: `mask-composite` fehlte, `-webkit-mask-composite` blieb.
+     Ohne sie addieren sich die beiden Maskenebenen, statt sich auszustanzen — der Verlauf
+     laege dann ueber dem GANZEN Dialog statt nur im Rahmen. */
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: rahmen-dreht 6s linear infinite;
+  pointer-events: none;
+}
+
 }  /* @layer components */
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
+
+/* Ausserhalb von @layer components: `@property` und `@keyframes` sind keine Klassen, und
+   registrierte Eigenschaften sind ohnehin nicht schichtabhaengig — hier steht das nur da,
+   wo es niemand als Kaskadenfrage missversteht. Ohne die Registrierung als `<angle>` waere
+   der Winkel eine Zeichenkette und liesse sich nicht animieren (er spraenge von 0 auf 360). */
+@property --rahmen-winkel { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+@keyframes rahmen-dreht { to { --rahmen-winkel: 360deg; } }

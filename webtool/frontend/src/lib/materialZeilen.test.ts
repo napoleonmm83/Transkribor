@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ergaenzen, sprecherText, sprachText, alleGueltig,
+import { ergaenzen, groesseText, sprecherText, sprachText, alleGueltig,
          type Aufnahme } from './materialZeilen'
 
 const z = (s: string, extra: Partial<Aufnahme> = {}): Aufnahme =>
@@ -74,5 +74,22 @@ describe('alleGueltig', () => {
     expect(alleGueltig([z('a', { sprecherText: '2' }), z('b', { sprecherText: 'x' })], 20))
       .toBe(false)
     expect(alleGueltig([z('a', { sprecherText: '2' }), z('b')], 20)).toBe(true)
+  })
+})
+
+describe('groesseText', () => {
+  it('rechnet dezimal — dieselbe MB-Definition wie das Upload-Zeitlimit', () => {
+    // `api.uploadFrist` bemisst die Frist mit `bytes / 1_000_000`. Binaer gerechnet stuende
+    // neben dem Namen eine andere Zahl als die, auf der die Frist beruht.
+    expect(groesseText(4_200_000)).toBe('4,2 MB')
+    expect(groesseText(1_000_000)).toBe('1,0 MB')
+    expect(groesseText(812_000)).toBe('812 KB')
+  })
+
+  it('rundet eine 0-Byte-Aufnahme NICHT auf „1 KB" hoch', () => {
+    // Ein abgebrochener Export ist genau der Fall, fuer den diese Spalte da ist: die Datei
+    // sieht in der Liste normal aus, und nur die Groesse verraet, dass nichts drin ist.
+    // Ein `Math.max(1, …)` verstellte den Blick darauf.
+    expect(groesseText(0)).toBe('0 KB')
   })
 })
