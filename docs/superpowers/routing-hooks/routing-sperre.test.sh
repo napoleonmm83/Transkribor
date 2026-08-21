@@ -233,5 +233,17 @@ rm -f review-selbsttest.md
 [ "$(lauf '{"tool_input":{"command":"gh pr create-branch --dry-run; echo fertig"}}')" = "0" ] \
   || { echo "FAIL: create-branch mit nachfolgendem Trenner schlaegt faelschlich an" >&2; fehler=1; }
 
+# 37-38. DER POWERSHELL-FLUCHTWEG (Fix-Runde 6, Rereview 2026-08-21). Die Bash-Form
+#     `KEIN_REVIEW=1 gh pr create` ist in PowerShell ein CommandNotFound; `$env:KEIN_REVIEW=1`
+#     sperrte bis hierher TROTZDEM, weil weder Zuweisungs- noch Ankerklasse `$env:` kennen —
+#     der Waechter lief auf der primaeren Shell dieses Rechners ohne den Notausgang, den sein
+#     eigener Kopfkommentar fuer zwingend erklaert. 37 ist die Positivprobe, 38 haelt dieselbe
+#     Enge wie beim Bash-Praefix fest: NICHTS ausser `;` und Leerraum zwischen Fluchtweg und
+#     Befehl, sonst wirkt er nicht (derselbe Massstab wie Pruefung 27 fuer die Bash-Form).
+[ "$(lauf '{"tool_input":{"command":"$env:KEIN_REVIEW=1; gh pr create --fill"}}')" = "0" ] \
+  || { echo "FAIL: PowerShell-Fluchtweg wirkt nicht" >&2; fehler=1; }
+[ "$(lauf '{"tool_input":{"command":"$env:KEIN_REVIEW=1; echo hi; gh pr create --fill"}}')" = "2" ] \
+  || { echo "FAIL: PowerShell-Fluchtweg wirkt auch MIT Text dazwischen - kein Loch geschlossen" >&2; fehler=1; }
+
 [ $fehler -eq 0 ] && echo "OK"
 exit $fehler

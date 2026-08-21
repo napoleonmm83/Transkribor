@@ -128,6 +128,18 @@ roh=$(cat)
 # Die frueher geparkte `)`-Luecke (`(gh pr create)`, `$(gh pr create)`) ist damit
 # miterledigt — sie war nie eine eigene Klasse, sondern das Klammer-Mitglied dieser.
 # `-` bleibt DRAUSSEN: `gh pr create-branch` ist ein eigener Unterbefehl (Pruefung 14).
+#
+# **DER FLUCHTWEG SELBST HATTE EINE LUECKE — auf der Shell, auf der dieser Rechner primaer
+# arbeitet** (Rereview 2026-08-21, Fix-Runde 6): der Matcher deckt seit Runde 5 auch das
+# PowerShell-Werkzeug ab (Pruefung 30), dessen Fluchtweg-Syntax ist aber Bash: `KEIN_REVIEW=1
+# gh pr create` ist in PowerShell ein CommandNotFound (gemessen), und die PS-eigene Form
+# `$env:KEIN_REVIEW=1; gh pr create` sperrte TROTZDEM — weder Zuweisungs- noch Ankerklasse
+# kennen `$env:`. Ein Waechter mit einem Notausgang, der auf der primaeren Shell nicht
+# existiert, ist derselbe Schaden wie gar keiner. Der PS-Fluchtweg ist deshalb ein EIGENER,
+# ebenso enger Anker (`ps_flucht` unten): `$env:KEIN_REVIEW=1` unmittelbar vor `gh pr create`,
+# getrennt nur durch `;` und Leerraum — dieselbe Enge wie beim Bash-Praefix (Pruefung 38 haelt
+# fest, dass etwas DAZWISCHEN weiterhin sperrt), aber ohne die `zuweisungen`-Kette davor: die
+# ist Bash-Grammatik (`NAME=wert`) und `$env:NAME=wert` faellt nicht darunter.
 anker='("command":[[:space:]]*"|[;&|(]|\\n|\\r|\\t|^)[[:space:]]*'
 # Ein Wert ist EIN Shell-Wort. Leerraum darf nur INNERHALB einer Quotierung stehen —
 # `\"…\"` (JSON-escaped), `'…'`, `$(…)` oder ein backslash-escaptes Leerzeichen (im Roh-JSON
@@ -143,6 +155,10 @@ anker='("command":[[:space:]]*"|[;&|(]|\\n|\\r|\\t|^)[[:space:]]*'
 # davon braucht: hier eine Alternative ergaenzen, nicht die Klasse wieder oeffnen.
 wert='(\\"[^"]*\\"|'\''[^'\'']*'\''|\$\([^)"]*\)|\\\\[[:space:]]|[^"[:space:]])*'
 zuweisungen="([A-Za-z_][A-Za-z0-9_]*=${wert}[[:space:]]+)*"
+# PowerShell-Fluchtweg (Fix-Runde 6, siehe Kopfkommentar): `$env:KEIN_REVIEW=1`, dann NICHTS
+# ausser `;` und Leerraum, dann `gh pr create` — bewusst OHNE `zuweisungen` davor, das ist
+# Bash-Grammatik. `\$` ist das escapte Dollarzeichen, kein Regex-Ankerzeichen.
+ps_flucht='\$env:KEIN_REVIEW=1[[:space:]]*;[[:space:]]*'
 ende='([[:space:]");&|(]|\\|$)'
 treffer="${anker}${zuweisungen}gh[[:space:]]+pr[[:space:]]+create"
 
@@ -154,8 +170,12 @@ treffer="${anker}${zuweisungen}gh[[:space:]]+pr[[:space:]]+create"
 # Zeile frei). Ersetzt wird durch ein Leerzeichen, nicht durch nichts: der Anker wird
 # mitgeschnitten, und zwei zusammengeschobene Woerter koennten sonst einen neuen Treffer
 # bilden. Nebenwirkung des Schnitts: die Erkennung laeuft jetzt auf `rest` statt auf `roh` —
-# genau darin liegt die Bindung, die vorher fehlte.
-rest=$(printf '%s' "$roh" | sed -E "s/${anker}${zuweisungen}KEIN_REVIEW=1[[:space:]]+gh[[:space:]]+pr[[:space:]]+create/ /g")
+# genau darin liegt die Bindung, die vorher fehlte. Der zweite `sed`-Ausdruck schneidet
+# denselben Fall fuer den PowerShell-Fluchtweg heraus, unabhaengig vom ersten (zwei Faelle,
+# zwei Grammatiken, kein gemeinsamer Ausdruck erzwungen).
+rest=$(printf '%s' "$roh" | sed -E \
+  -e "s/${anker}${zuweisungen}KEIN_REVIEW=1[[:space:]]+gh[[:space:]]+pr[[:space:]]+create/ /g" \
+  -e "s/${anker}${ps_flucht}gh[[:space:]]+pr[[:space:]]+create/ /g")
 printf '%s' "$rest" | grep -Eq "${treffer}${ende}" || exit 0
 
 basis=$(git log -1 --format=%cI "$(git merge-base master HEAD 2>/dev/null)" 2>/dev/null)
@@ -168,5 +188,6 @@ find . -maxdepth 1 -name 'review-*.md' -newermt "$basis" 2>/dev/null | grep -q .
 echo 'Kein Subagent-Review auf diesem Branch: es liegt kein review-*.md, das neuer ist als der' >&2
 echo 'Abzweigpunkt von master. CLAUDE.md verlangt superpowers:requesting-code-review ZUERST,' >&2
 echo 'dann CodeRabbit — und CodeRabbit braucht den PR, kann hier also nicht geprueft werden.' >&2
-echo 'Lief der Review und kam nur idle ohne Bericht zurueck: KEIN_REVIEW=1 gh pr create …' >&2
+echo 'Lief der Review und kam nur idle ohne Bericht zurueck: KEIN_REVIEW=1 gh pr create … (Bash)' >&2
+echo 'bzw. $env:KEIN_REVIEW=1; gh pr create … (PowerShell).' >&2
 exit 2

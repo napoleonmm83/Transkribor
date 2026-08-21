@@ -13,7 +13,7 @@ Vollkopie wäre eine zweite Quelle für fremden Zustand.
 
 | Kopie hier | Produktiv |
 |---|---|
-| `routing-sperre.sh`, `routing-sperre.test.sh`, `routing-lint.sh` | `$CLAUDE_PROJECT_DIR/.claude/hooks/` |
+| `routing-sperre.sh`, `routing-sperre.test.sh`, `routing-lint.sh`, `routing-lint.test.sh` | `$CLAUDE_PROJECT_DIR/.claude/hooks/` |
 | `routing-tafel.sh`, `routing-tafel.test.sh` | `~/.claude/hooks/` |
 | die Agentendateien und beide Tafeln | `docs/superpowers/routing-agenten/` (eigener Ordner) |
 
@@ -62,6 +62,13 @@ liest Roh-JSON und ist damit shell-agnostisch; die reale Form
 `Set-Location <pfad>; gh pr create --base master` trifft über den `;`-Anker (Prüfung 30 im
 Selbsttest). Es fehlte allein die Verdrahtung.
 
+**Die Verdrahtung war fertig, der Fluchtweg nicht** (Fix-Runde 6, Rereview 2026-08-21): die
+Bash-Form `KEIN_REVIEW=1 gh pr create` ist in PowerShell ein CommandNotFound, und die
+PS-eigene Form `$env:KEIN_REVIEW=1; gh pr create` sperrte trotzdem — ein Notausgang, der auf
+der primären Shell dieses Rechners nicht existierte. Behoben mit einem eigenen, ebenso engen
+Anker (`ps_flucht` in `routing-sperre.sh`); Prüfungen 37/38 im Selbsttest halten die Enge
+fest (Fluchtweg wirkt nur unmittelbar vor `gh pr create`, nicht mit Text dazwischen).
+
 **Die Matcher sind Reguläre Ausdrücke.** `"Bash"` trifft deshalb auch `BashOutput`, wo die
 Prüfung gegenstandslos ist (sie läuft dort ins Leere und lässt durch). Bewusst nicht
 verankert — so ist es an den beiden älteren Hooks seit jeher.
@@ -80,8 +87,8 @@ Prüfung.
 2. Die beiden JSON-Blöcke in die jeweilige `settings.json` einfügen (bestehende `hooks`-Einträge
    ergänzen, nicht ersetzen) und mit `node -e 'JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"))' <datei>`
    nachprüfen — eine ungültige `settings.json` schaltet **alle** Hooks ab.
-3. Selbsttests fahren: `bash .claude/hooks/routing-sperre.test.sh` und
-   `bash ~/.claude/hooks/routing-tafel.test.sh` (beide `OK`), dazu
-   `bash .claude/hooks/routing-lint.sh` (`Tafel sauber.`).
+3. Selbsttests fahren: `bash .claude/hooks/routing-sperre.test.sh`,
+   `bash .claude/hooks/routing-lint.test.sh` und `bash ~/.claude/hooks/routing-tafel.test.sh`
+   (alle drei `OK`), dazu `bash .claude/hooks/routing-lint.sh` (`Tafel sauber.`).
 4. Neue Sitzung starten: eine mitten in der Sitzung angelegte `~/.claude/agents/`-Datei gilt
    nicht (siehe Spec §2), und die Tafel wird erst beim nächsten Prompt eingespielt.

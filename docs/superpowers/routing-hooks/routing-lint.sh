@@ -11,6 +11,11 @@
 # ODER als Befehlsdatei (commands/<name>.md) existieren — gemessen an `coderabbit-review`,
 # das nur als commands/coderabbit-review.md vorliegt, kein Verzeichnis ist.
 #
+# DIE FORM WIRD ERZWUNGEN, NICHT NUR BEHAUPTET (Rereview 2026-08-21): bis hierher bestaetigte
+# ein blosser NAMENSTREFFER auch jede Plugin-Wurzel, git-Interna und die Plugin-Anatomie
+# selbst — der Absatz oben behauptete die zwei Formen, der Code pruefte nur den Namen. Details
+# und der Befund dazu stehen bei der Fundstelle (`SKILL_WURZELN` unten).
+#
 # Zwei Namen sind darueber hinaus per Hand ausgenommen: `ctx7` ist ein CLI-Tool
 # (~/.claude/rules/context7.md), kein Skill; `claude-api` ist ein eingebauter Skill dieser
 # Umgebung ohne eigenes Verzeichnis unter ~/.claude. Beide am 2026-08-21 von Hand verifiziert
@@ -51,24 +56,32 @@ for a in $(namen 3 "$AGENT_RE"); do
     echo "TOTER AGENT in der Tafel: $a" >&2; fehler=1; }
 done
 
+SKILL_WURZELN="$HOME/.claude/plugins/cache $HOME/.claude/skills .claude/skills"
+
 for s in $(namen 5 "$SKILL_RE"); do
   # ctx7/claude-api existieren wirklich, sind aber nicht datei-/verzeichnisbasiert
   # auffindbar (siehe Kopfkommentar) — echte Ausnahme, kein Formfilter-Rest.
   case "$s" in ctx7|claude-api) continue ;; esac
   kurz="${s##*:}"    # 'superpowers:brainstorming' -> 'brainstorming'
-  # `node_modules` ist AUSGESCHLOSSEN, und das ist keine Vorsichtsmassnahme: `-type d -name`
-  # macht jedes gleichnamige Verzeichnis unter den drei Suchwurzeln zu einem gueltigen Skill,
-  # und unter `~/.claude/skills/gstack/node_modules` liegen 207 npm-Pakete. Gemessen: `semver`
-  # und `undici` — reine npm-Pakete, die kein Mensch je als Skill genannt hat — wurden vom
-  # alten Aufruf mit je 1 Treffer BESTAETIGT, mit dem Ausschluss sind es 0. Ein Waechter, der
-  # von einer Abhaengigkeit befriedigt wird, meldet gruen fuer einen toten Eintrag — das ist
-  # schlimmer als kein Waechter. (Den Anlass, `playwright`, faengt der Ausschluss NICHT: das
-  # loest zusaetzlich ueber sein Plugin-Wurzelverzeichnis auf. Deshalb steht es nicht mehr in
-  # der Skill-Spalte der Tafel — ein MCP-Server ist kein Skill. Zwei Wege, zwei Fixes.)
-  find "$HOME/.claude/plugins/cache" "$HOME/.claude/skills" ".claude/skills" \
-       -maxdepth 6 -not -path '*/node_modules/*' \
-       \( -type d -name "$kurz" -o -type f -name "$kurz.md" \) 2>/dev/null \
-       | grep -q . || {
+  # NUR NOCH ZWEI FORMEN zaehlen als Skill (Rereview 2026-08-21, Frage 4): ein blosser
+  # NAMENSTREFFER unter einer der drei Suchwurzeln bestaetigte bislang auch jede Plugin-
+  # Wurzel (cloudflare, firebase, coderabbit, ...), git-Interna aus einem der 38 kompletten
+  # Klone im Suchraum (hooks, info, objects, refs) und die Plugin-Anatomie selbst (commands,
+  # agents, skills als Verzeichnisname) — der `node_modules`-Ausschluss schloss davon genau
+  # EINEN Weg. Ein Skill ist jetzt nur, was wie einer AUSSIEHT: ein Verzeichnis
+  # `skills/<name>/` MIT Manifest (`SKILL.md` oder `skill.md` darin — der Name allein reicht
+  # nicht mehr) oder eine Befehlsdatei `commands/<name>.md`. `node_modules` bleibt trotzdem
+  # ausgeschlossen — billige zweite Schicht, kein Ersatz mehr fuer die Formpruefung.
+  gefunden=""
+  for d in $(find $SKILL_WURZELN -maxdepth 6 -type d -path "*/skills/$kurz" \
+                  -not -path '*/node_modules/*' 2>/dev/null); do
+    { [ -f "$d/SKILL.md" ] || [ -f "$d/skill.md" ]; } && { gefunden=1; break; }
+  done
+  if [ -z "$gefunden" ]; then
+    find $SKILL_WURZELN -maxdepth 6 -type f -path "*/commands/$kurz.md" \
+         -not -path '*/node_modules/*' 2>/dev/null | grep -q . && gefunden=1
+  fi
+  [ -n "$gefunden" ] || {
     echo "TOTER SKILL in der Tafel: $s" >&2; fehler=1; }
 done
 
