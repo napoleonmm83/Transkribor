@@ -59,12 +59,18 @@ describe('holeReleases', () => {
     expect(uebergeben.aborted).toBe(true)
   })
 
-  it('bricht auch ohne aeusseres Signal nach einer Frist ab', async () => {
+  it('bricht auch ohne aeusseres Signal nach einer Frist WIRKLICH ab', async () => {
     // Ohne Frist dreht der Spinner bei einer haengenden Verbindung bis zum Verlassen der
     // Seite — und der Weg zu GitHub steht nur im Fehlerzweig.
+    // Gemessen wird der Abbruch, nicht nur die Anwesenheit eines Signals: die Frist kommt
+    // als Parameter herein (5 ms), weil `AbortSignal.timeout` an vitests Fake-Timers
+    // vorbeilaeuft — mit `advanceTimersByTime(10001)` bleibt `aborted` auf `false`.
     const f = vi.fn(async (_url: string, _opt?: RequestInit) => antwort([]))
     vi.stubGlobal('fetch', f)
-    await holeReleases()
-    expect(f.mock.calls[0][1]?.signal).toBeInstanceOf(AbortSignal)
+    await holeReleases(undefined, 5)
+    const uebergeben = f.mock.calls[0][1]?.signal as AbortSignal
+    expect(uebergeben.aborted).toBe(false)
+    await new Promise(r => setTimeout(r, 25))
+    expect(uebergeben.aborted).toBe(true)
   })
 })

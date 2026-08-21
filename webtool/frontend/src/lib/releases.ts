@@ -10,7 +10,10 @@ export type Release = {
   url: string
 }
 
-const QUELLE = 'https://api.github.com/repos/napoleonmm83/Transkribor/releases?per_page=10'
+// 15 geholt, 10 gezeigt: der Prerelease-Filter greift NACH dem Abruf, sonst zeigte die Seite
+// neun Fassungen, sobald ein `modelle-v1` dazwischenliegt — und zwar unvorhersehbar viele.
+const QUELLE = 'https://api.github.com/repos/napoleonmm83/Transkribor/releases?per_page=15'
+const ZEIGEN = 10
 
 /**
  * Ohne Frist bedeutet eine haengende Verbindung (Captive Portal, eine Firewall, die verwirft
@@ -22,6 +25,14 @@ const QUELLE = 'https://api.github.com/repos/napoleonmm83/Transkribor/releases?p
 const FRIST_MS = 10000
 
 /**
+ * Die Frist ist ein PARAMETER, nicht nur eine Konstante — dasselbe Muster wie `autoUpdater`
+ * in `updater.erstellen` oder `werkzeug` in `setup.einrichten`. Grund: `AbortSignal.timeout`
+ * laeuft an vitests Fake-Timers VORBEI (gemessen: `advanceTimersByTime(10001)` laesst
+ * `aborted` auf `false`), Node zaehlt intern. Ohne den Parameter liesse sich nur pruefen,
+ * DASS ein Signal uebergeben wird — nicht, dass die Frist wirklich abbricht.
+ */
+
+/**
  * Die letzten Fassungen von GitHub. Direkt aus dem Browser, ohne Umweg über den eigenen
  * Server: es gibt nichts zu verbergen und nichts zwischenzuspeichern, und ein Endpunkt mehr
  * wäre eine Schicht, die nur durchreicht.
@@ -31,9 +42,9 @@ const FRIST_MS = 10000
  * nichts zu lesen gibt. Aus demselben Grund hält `electron/CLAUDE.md` fest, dass solche
  * Releases `--prerelease` tragen MÜSSEN.
  */
-export async function holeReleases(signal?: AbortSignal): Promise<Release[]> {
+export async function holeReleases(signal?: AbortSignal, fristMs = FRIST_MS): Promise<Release[]> {
   // Beide Abbruchgruende zaehlen: das Zeitlimit UND das Verlassen der Seite.
-  const frist = AbortSignal.timeout(FRIST_MS)
+  const frist = AbortSignal.timeout(fristMs)
   const r = await fetch(QUELLE, {
     headers: { Accept: 'application/vnd.github+json' },
     signal: signal ? AbortSignal.any([signal, frist]) : frist,
@@ -45,6 +56,7 @@ export async function holeReleases(signal?: AbortSignal): Promise<Release[]> {
   if (!Array.isArray(roh)) throw new Error('GitHub antwortet nicht mit einer Liste')
   return (roh as Record<string, unknown>[])
     .filter(e => e && !e.draft && !e.prerelease)
+    .slice(0, ZEIGEN)
     .map(e => ({
       version: String(e.tag_name ?? '').replace(/^v/, ''),
       tag: String(e.tag_name ?? ''),
