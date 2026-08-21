@@ -35,9 +35,12 @@ describe('holeReleases', () => {
     await expect(holeReleases()).rejects.toThrow(/403/)
   })
 
-  it('wirft, wenn die Antwort keine Liste ist', async () => {
+  it('wirft mit eigener Meldung, wenn die Antwort keine Liste ist', async () => {
+    // Bei ueberschrittenem Kontingent antwortet GitHub mit einem Objekt. Die Meldung MUSS
+    // geprueft werden: ohne die Wache wirft `roh.filter` von selbst einen TypeError, ein
+    // blosses `rejects.toThrow()` bliebe also auch ohne sie gruen (gemessen).
     vi.stubGlobal('fetch', vi.fn(async () => antwort({ message: 'rate limit' })))
-    await expect(holeReleases()).rejects.toThrow()
+    await expect(holeReleases()).rejects.toThrow(/keine Liste|nicht mit einer Liste/)
   })
 
   it('reicht das Abbruchsignal durch — die Seite kann verlassen werden, während geladen wird', async () => {
