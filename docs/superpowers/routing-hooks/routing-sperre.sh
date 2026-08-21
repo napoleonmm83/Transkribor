@@ -53,8 +53,17 @@ roh=$(cat)
 # Der Anker verlangt Befehlsposition: direkt hinter "command":" oder hinter einem
 # Shell-Trenner, gefolgt von beliebig vielen `NAME=wert`-Praefixen. Ohne den Anker schlaegt
 # der Waechter auch bei Kommandos an, die den Text nur ERWAEHNEN.
+#
+# Der WERT einer Zuweisung ist entweder unquotiert (kein Leerraum, kein Anfuehrungszeichen)
+# oder quotiert — und quotiert kommt in ZWEI Formen an, weil hier Roh-JSON gelesen wird, nicht
+# die Kommandozeile: ein echtes `"` im Befehl steht im JSON als `\"` (Fixture-Review Runde 3,
+# 2026-08-21: `GH_TOKEN="abc123" gh pr create` schlüpfte durch, weil die alte Wertklasse am
+# ersten `"` abbrach und danach keine zweite Anker-Gelegenheit blieb). Beide Formen decken
+# auch ein eingebettetes Leerzeichen im Wert ab (`GH_TOKEN="abc 123"`), ohne den Rest des
+# Befehls zu verschlucken — die Wertklasse endet exakt am schliessenden Anfuehrungszeichen.
 anker='("command":[[:space:]]*"|[;&|(]|^)[[:space:]]*'
-zuweisungen='([A-Za-z_][A-Za-z0-9_]*=[^[:space:]"]*[[:space:]]+)*'
+wert='(\\"[^"]*\\"|"[^"]*"|[^[:space:]"]*)'
+zuweisungen="([A-Za-z_][A-Za-z0-9_]*=${wert}[[:space:]]+)*"
 printf '%s' "$roh" | grep -Eq "${anker}${zuweisungen}gh[[:space:]]+pr[[:space:]]+create([[:space:]\"]|\$)" || exit 0
 
 # Derselbe Anker + dieselben fuehrenden Zuweisungen wie oben, aber KEIN_REVIEW=1 ist danach

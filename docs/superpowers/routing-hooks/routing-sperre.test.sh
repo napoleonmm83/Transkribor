@@ -86,11 +86,48 @@ rm -f review-selbsttest.md
 #     andere Zuweisungen vorausgehen -- siehe Kommentar in routing-sperre.sh)
 [ "$(lauf '{"tool_input":{"command":"GH_TOKEN=x KEIN_REVIEW=1 gh pr create"}}')" = "0" ] \
   || { echo "FAIL: Fluchtweg wirkt nicht mehr mit vorangestelltem Umgebungs-Praefix" >&2; fehler=1; }
+# NICHT schaerfen (Fixture-Review Runde 3, 2026-08-21): ein stderr-basierter Nachweis, DASS
+# der Durchlass ueber den Fluchtweg lief (statt weil der Haupttreffer gar nicht matcht), waere
+# nachgerechnet WIRKUNGSLOS — beide Durchlasspfade sind still, nur der Sperr-Pfad schreibt auf
+# stderr. Ein Debug-Marker im Skript nur fuer diesen einen Test waere Ueberbau; da Test 9/10/12
+# dieselbe Mutation (Zuweisungsgruppe entfernt) bereits rot erkennen, geht dabei kein Schutz
+# verloren. Absichtlich so belassen — nicht als Luecke „reparieren".
 
 # 12. `xKEIN_REVIEW=1 gh pr create` -> sperrt (ein Praefix AN der Variable ist eine ANDERE
 #     Variable; der Fluchtweg darf nicht ueber einen Namensteiltreffer ausloesen)
 [ "$(lauf '{"tool_input":{"command":"xKEIN_REVIEW=1 gh pr create"}}')" = "2" ] \
   || { echo "FAIL: xKEIN_REVIEW=1 wird faelschlich als Fluchtweg erkannt" >&2; fehler=1; }
+
+# 13. `KEIN_REVIEW=1 GH_TOKEN=x gh pr create` (Reihenfolge vertauscht) -> sperrt (Umkehrung
+#     von Test 11: der Fluchtweg wirkt nur als LETZTES Praefix vor "gh", nicht irgendwo in der
+#     Zuweisungskette — die Entscheidung war bisher nur beschrieben, nicht festgeschrieben)
+[ "$(lauf '{"tool_input":{"command":"KEIN_REVIEW=1 GH_TOKEN=x gh pr create"}}')" = "2" ] \
+  || { echo "FAIL: Fluchtweg wirkt auch NICHT als letztes Praefix - Entscheidung gebrochen" >&2; fehler=1; }
+
+# 14. `gh pr create-branch` -> laesst durch (eigener Subbefehl, kein "gh pr create";
+#     bislang nur manuell geprueft, jetzt als Regression festgehalten)
+[ "$(lauf '{"tool_input":{"command":"gh pr create-branch --dry-run"}}')" = "0" ] \
+  || { echo "FAIL: sperrt gh pr create-branch faelschlich" >&2; fehler=1; }
+
+# 15. `=` im Fliesstext einer Commit-Message -> laesst durch (Fixture-Review Runde 3, 2026-08-21:
+#     die Gefahr der erweiterten Wertklasse — "mit = und gh pr create" ist KEIN NAME=wert-Token,
+#     weil "mit" nicht UNMITTELBAR von "=" gefolgt wird; die Zuweisungsgruppe darf hier nicht
+#     bis zum echten "gh pr create" im Fliesstext durchgreifen)
+[ "$(lauf '{"tool_input":{"command":"git commit -m \"irgendwas mit = und gh pr create im Text\""}}')" = "0" ] \
+  || { echo "FAIL: Fliesstext mit '=' wird faelschlich als Zuweisungskette gelesen" >&2; fehler=1; }
+
+# 16-19. Quotierter Wert schlaegt die Erkennung NICHT mehr (Fixture-Review Runde 3, 2026-08-21):
+#     GH_TOKEN="abc123" gh pr create schluepfte durch, weil die alte Wertklasse am ersten `"`
+#     abbrach. Beide Quotierungsformen (JSON-escaped `\"…\"` und roh `"…"`), je mit und ohne
+#     eingebettetes Leerzeichen im Wert.
+[ "$(lauf '{"tool_input":{"command":"GH_TOKEN=\"abc123\" gh pr create"}}')" = "2" ] \
+  || { echo "FAIL: escaped-quotierter Wert (ohne Leerzeichen) umgeht die Erkennung" >&2; fehler=1; }
+[ "$(lauf '{"tool_input":{"command":"GH_TOKEN=\"abc 123\" gh pr create"}}')" = "2" ] \
+  || { echo "FAIL: escaped-quotierter Wert (mit Leerzeichen) umgeht die Erkennung" >&2; fehler=1; }
+[ "$(lauf '{"tool_input":{"command":"GH_TOKEN="abc123" gh pr create"}}')" = "2" ] \
+  || { echo "FAIL: roh-quotierter Wert (ohne Leerzeichen) umgeht die Erkennung" >&2; fehler=1; }
+[ "$(lauf '{"tool_input":{"command":"GH_TOKEN="abc 123" gh pr create"}}')" = "2" ] \
+  || { echo "FAIL: roh-quotierter Wert (mit Leerzeichen) umgeht die Erkennung" >&2; fehler=1; }
 
 [ $fehler -eq 0 ] && echo "OK"
 exit $fehler
