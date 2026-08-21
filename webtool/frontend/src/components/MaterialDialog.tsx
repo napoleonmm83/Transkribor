@@ -14,6 +14,9 @@ import { HttpFehler, SendeZeitlimit, fetchUrls, uploadAudio } from '@/lib/api'
 import type { StartJob } from '@/lib/types'
 
 const SCHRITTE = ['Material wählen', 'Einstellen', 'Prüfen & starten']
+/** Die Reiter als Liste, damit Pfeiltasten und Umlauf ueber den INDEX rechnen koennen
+ *  statt ueber ein zweites `if`. Kommt ein dritter Reiter dazu, traegt ihn beides. */
+const QUELLEN = [['datei', 'Dateien'], ['link', 'Links']] as const
 
 /** Der Dialog „Material hinzufügen": drei waagrechte Schritte (H1), Sprache und
  *  Sprecherzahl je Aufnahme (L2/S1), ein Hörbalken unten (P1).
@@ -238,10 +241,32 @@ export function MaterialDialog({ project, offen, vorbelegteDateien, sprachChoice
         <div className="relative min-h-0 flex-1 overflow-y-auto">
           {schritt === 1 && (
             <div className="space-y-3">
-              <div role="tablist" className="flex gap-1">
-                {([['datei', 'Dateien'], ['link', 'Links']] as const).map(([id, text]) => (
-                  <button key={id} type="button" role="tab" aria-selected={quelle === id}
+              {/* Von Hand nach dem APG-Muster (#304) statt shadcn-`Tabs`: das braechte eine
+                  Radix-Abhaengigkeit fuer zwei Reiter, und die fehlenden Attribute sind
+                  billiger als sie.
+                  **Roving Tabindex ist eine Verhaltensaenderung, kein Zusatz:** vorher tabbte
+                  man durch BEIDE Knoepfe, jetzt ist die Leiste EIN Halt und man navigiert
+                  darin mit Pfeilen. Ohne ihn waere die Pfeiltasten-Navigation ein zweiter,
+                  konkurrierender Weg statt des vorgesehenen. */}
+              <div role="tablist" aria-label="Art des Materials" className="flex gap-1">
+                {QUELLEN.map(([id, text], i) => (
+                  <button key={id} type="button" role="tab" id={`mat-reiter-${id}`}
+                    aria-selected={quelle === id} aria-controls={`mat-panel-${id}`}
+                    tabIndex={quelle === id ? 0 : -1}
                     onClick={() => setQuelle(id)}
+                    onKeyDown={e => {
+                      // `Home`/`End` gehoeren zum Muster; ohne sie ist die Leiste bei mehr
+                      // als zwei Reitern eine Klickstrecke.
+                      const ziel = e.key === 'ArrowRight' ? i + 1 : e.key === 'ArrowLeft' ? i - 1
+                                 : e.key === 'Home' ? 0 : e.key === 'End' ? QUELLEN.length - 1
+                                 : null
+                      if (ziel === null) return
+                      e.preventDefault()
+                      // Umlauf: am Ende der Leiste stehenzubleiben ist ein toter Tastendruck.
+                      const n = (ziel + QUELLEN.length) % QUELLEN.length
+                      setQuelle(QUELLEN[n][0])
+                      document.getElementById(`mat-reiter-${QUELLEN[n][0]}`)?.focus()
+                    }}
                     className={quelle === id
                       ? 'rounded-md bg-accent px-3 py-1.5 text-sm font-medium'
                       : 'rounded-md px-3 py-1.5 text-sm text-muted-foreground'}>
@@ -249,17 +274,24 @@ export function MaterialDialog({ project, offen, vorbelegteDateien, sprachChoice
                   </button>
                 ))}
               </div>
-              {quelle === 'datei'
-                ? <Ablageflaeche gesperrt={laeuft}
-                    onDateien={ds => setZeilen(alt => ergaenzen(alt, ds.map(zeileAus)))} />
-                : (
-                  <div className="space-y-2">
-                    <Textarea aria-label="Video-URLs" rows={3} value={urlText}
-                      onChange={e => setUrlText(e.target.value)}
-                      placeholder="YouTube- oder Instagram-Reel-Links, eine URL pro Zeile" />
-                    <Button type="button" onClick={urlsUebernehmen}>Holen</Button>
-                  </div>
-                )}
+              {/* Das Panel, das die Reiter mit `aria-controls` ankuendigen. Es wird
+                  UMGEHAENGT statt beide zu rendern — `id` und `aria-labelledby` folgen dem
+                  aktiven Reiter, und ein verstecktes zweites Panel waere ein zweiter
+                  Textbereich im Baum, den die Suche und der Tabstopp mitzaehlen. */}
+              <div role="tabpanel" id={`mat-panel-${quelle}`}
+                aria-labelledby={`mat-reiter-${quelle}`}>
+                {quelle === 'datei'
+                  ? <Ablageflaeche gesperrt={laeuft}
+                      onDateien={ds => setZeilen(alt => ergaenzen(alt, ds.map(zeileAus)))} />
+                  : (
+                    <div className="space-y-2">
+                      <Textarea aria-label="Video-URLs" rows={3} value={urlText}
+                        onChange={e => setUrlText(e.target.value)}
+                        placeholder="YouTube- oder Instagram-Reel-Links, eine URL pro Zeile" />
+                      <Button type="button" onClick={urlsUebernehmen}>Holen</Button>
+                    </div>
+                  )}
+              </div>
               {zeilen.length > 0 && (
                 <p className="text-sm text-muted-foreground">
                   {zeilen.length} {zeilen.length === 1 ? 'Aufnahme' : 'Aufnahmen'} gewählt
