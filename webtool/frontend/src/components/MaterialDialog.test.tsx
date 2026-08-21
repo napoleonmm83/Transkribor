@@ -661,9 +661,33 @@ describe('MaterialDialog', () => {
     // Schrittleiste darueber ist ein `<ol>` und traegt dieselbe Rolle.
     const liste = screen.getByText('a.mp3').closest('ul')!
     expect(liste.className).toContain('overflow-y-auto')
-    // `min-h-0` ist die zweite Haelfte: ohne es waechst ein Flex-Kind mit seinem Inhalt und
-    // das `overflow` greift nie — die Klasse allein waere eine Zusicherung ohne Wirkung.
-    expect(liste.className).toContain('min-h-0')
+    // `min-h-24` traegt hier ZWEI Dinge: es erlaubt das Schrumpfen unter die Inhaltshoehe
+    // (sonst waechst ein Flex-Kind mit seinem Inhalt und `overflow` greift nie) UND setzt
+    // den Boden aus C1, unter den die Liste nicht mehr fallen darf.
+    expect(liste.className).toContain('min-h-24')
+    expect(liste.className).toContain('rollbalken')
+
+    /* Die beiden Klassen, an denen die Wirkung WIRKLICH haengt — der Reviewer hat gemessen,
+       dass ihr Wegfall exakt den alten Fehler wiederherstellt, waehrend die drei
+       Zusicherungen oben gruen bleiben. Ein Waechter, der nur prueft, was ohnehin im
+       `expect` steht, lebt vom Zufall. */
+    const spalte = liste.closest('div.flex.h-full')
+    expect(spalte).not.toBeNull()
+    expect(liste.parentElement!.className).toContain('min-h-0')
+
+    // Und die Zusicherung, die den Testnamen einloest: in Schritt 1 rollt GENAU EINE
+    // Flaeche. Zwei waeren die Leisten ineinander, die Schritt 2 bewusst vermeidet.
+    expect(spalte!.querySelectorAll('[class*="overflow-y-auto"]')).toHaveLength(1)
+  })
+
+  it('gibt BEIDEN Rollflaechen des Dialogs dieselbe Leiste', () => {
+    /* Der aeussere Behaelter traegt die Schritte 2 und 3, die Liste den Schritt 1. Ohne die
+       Klasse an beiden stuende in demselben Fenster eine indigofarbene neben einer grauen
+       Systemleiste — je nachdem, auf welchem Schritt man gerade ist. */
+    render(<MaterialDialog {...basis} vorbelegteDateien={[datei('a.mp3')]} />)
+    const liste = screen.getByText('a.mp3').closest('ul')!
+    const aussen = liste.closest('[class*="overflow-y-auto"]:not(ul)')!
+    expect(aussen.className).toContain('rollbalken')
     expect(liste.className).toContain('rollbalken')
   })
 })
