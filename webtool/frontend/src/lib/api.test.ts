@@ -84,3 +84,61 @@ describe('DateiEinstellungen', () => {
     expect(r.sprache).toBe('en')
   })
 })
+
+/** #299: `uploadAudio`/`fetchUrls` liefen ohne Zeitlimit — ein haengender Request (uvicorn
+ *  mitten im Neustart, abgerissene Strecke) wurde nie abgeraeumt. Der Dialog kam ueber
+ *  „Schliessen" zwar heraus, aber der Nutzer musste den Fehlschlag selbst bemerken. */
+describe('Zeitlimit beim Senden (#299)', () => {
+  afterEach(() => { vi.restoreAllMocks() })
+
+  /** Eine echte 500-MB-Datei wuerde der Testlauf allokieren. `size` ist das einzige Feld,
+   *  das die Frist bestimmt. */
+  function dateiMit(bytes: number): File {
+    const f = new File(['x'], 'aufnahme.mp3')
+    Object.defineProperty(f, 'size', { value: bytes })
+    return f
+  }
+  const okFetch = () => vi.fn().mockResolvedValue(
+    { ok: true, json: async () => ({ base: 'a', file: 'a.mp3' }) })
+
+  it('bemisst die Upload-Frist an der Dateigroesse', async () => {
+    const spy = vi.spyOn(AbortSignal, 'timeout')
+    vi.stubGlobal('fetch', okFetch())
+    await api.uploadAudio('P', dateiMit(1_000_000))
+    const klein = spy.mock.calls.at(-1)![0] as number
+    await api.uploadAudio('P', dateiMit(500_000_000))
+    const gross = spy.mock.calls.at(-1)![0] as number
+    // Die Frist eines JSON-GET (30 s) wuerde einen echten Upload abschneiden — genau davor
+    // warnt das Issue. Sie muss mit der uebertragenen Menge wachsen, nicht fest sein.
+    expect(gross).toBeGreaterThan(klein)
+    expect(klein).toBeGreaterThanOrEqual(30_000)
+  })
+
+  it('uebersetzt ein gerissenes Zeitlimit in „vielleicht doch angekommen"', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(
+      new DOMException('The operation was aborted due to timeout', 'TimeoutError')))
+    // „fehlgeschlagen" waere falsch: der Server kann die Datei schon geschrieben und den
+    // Transkriptions-Job gestartet haben. Wer daraufhin erneut hochlaedt, bekommt einen 409.
+    await expect(api.uploadAudio('P', dateiMit(1_000))).rejects.toThrow(/möglicherweise/)
+  })
+
+  it('laesst einen HttpFehler unveraendert durch — die 409-Erkennung haengt daran', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+      { ok: false, status: 409, json: async () => ({ detail: 'existiert bereits' }) }))
+    // `MaterialDialog` unterscheidet „schon da" von „fehlgeschlagen" an `e instanceof
+    // HttpFehler && e.status === 409`. Eine Uebersetzung, die den Typ verschluckt, liesse
+    // jede Dublette als echten Fehlschlag in der Liste stehenbleiben.
+    await expect(api.uploadAudio('P', dateiMit(1_000))).rejects.toBeInstanceOf(api.HttpFehler)
+  })
+
+  it('gibt auch fetchUrls ein Zeitlimit mit', async () => {
+    const spy = vi.spyOn(AbortSignal, 'timeout')
+    const fm = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ job_id: 'j', started: true }) })
+    vi.stubGlobal('fetch', fm)
+    await api.fetchUrls('P', ['https://youtu.be/x'])
+    // Der Handler validiert nur und startet einen Job — der Download laeuft im Subprozess.
+    // Hier reicht die Frist eines JSON-Endpunkts.
+    expect(spy).toHaveBeenCalled()
+    expect(fm.mock.calls[0][1].signal).toBeInstanceOf(AbortSignal)
+  })
+})

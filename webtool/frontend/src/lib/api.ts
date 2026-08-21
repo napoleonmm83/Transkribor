@@ -88,6 +88,42 @@ export async function saveFileEinstellungen(
  *  finaler Toast) neu takten, und dort ist ein Fehlschlag bereits behandelt. */
 const LADE_ZEITLIMIT_MS = 30_000
 
+/** Zeitlimit fuers SENDEN (#299). Zwei Unterschiede zum GET oben, beide tragend:
+ *
+ *  **Die Frist waechst mit der Datei.** Ein Upload uebertraegt Audio; die 30 s eines
+ *  JSON-Endpunkts schnitten einen echten Upload ab, statt einen haengenden abzuraeumen.
+ *  Bemessen wird an der uebertragenen Menge, nicht an einer Antwortzeit. 1 MB/s ist die
+ *  angesetzte Untergrenze und dafuer absichtlich weit unter der Wirklichkeit: der Server
+ *  steht auf `127.0.0.1` (die Origin-Middleware in `app.py` weist alles andere mit 403 ab),
+ *  die Strecke ist also Loopback plus ein Schreibvorgang auf die lokale Platte. Die Frist
+ *  soll „irgendwann aufgeben" heissen, nicht „schnell genug sein".
+ *
+ *  **Ein gerissenes Limit heisst NICHT „fehlgeschlagen".** Anders als beim Laden ist der
+ *  Abbruch hier nicht folgenlos: der Server kann die Datei bereits geschrieben und den
+ *  Transkriptions-Job gestartet haben. Wer daraufhin erneut hochlaedt, bekommt einen 409. */
+const UPLOAD_GRUNDFRIST_MS = 60_000
+const UPLOAD_MS_JE_MB = 1_000
+const SENDE_ZEITLIMIT_MS = 30_000
+
+/** `Math.ceil` ist Pflicht, nicht Kosmetik: Node wirft bei einem Bruchteil
+ *  `RangeError: The value of "delay" is out of range` — eine 1-Byte-Datei ergab 60000.001,
+ *  und der Wurf kaeme VOR dem `fetch`, also als Absturz statt als Fehlschlag. Der Browser
+ *  runde still (WebIDL `unsigned long long`), der Testlauf haette den Aufruf also gar nicht
+ *  erst zugelassen — dieselbe Plattformdifferenz, nur andersherum als sonst. */
+const uploadFrist = (bytes: number) =>
+  Math.ceil(UPLOAD_GRUNDFRIST_MS + (bytes / 1_000_000) * UPLOAD_MS_JE_MB)
+
+/** Uebersetzt NUR das gerissene Zeitlimit; alles andere geht unveraendert weiter — der
+ *  `HttpFehler` samt `status` muss durch, weil `MaterialDialog` die Dublette (409) daran von
+ *  einem echten Fehlschlag unterscheidet. Gibt den Fehler ZURUECK statt zu werfen: ein
+ *  `never`-Rueckgabetyp haenge an TS' Unerreichbarkeits-Analyse, `throw sendeFehler(...)` ist
+ *  an der Aufrufstelle ohne Kniff zu lesen. */
+function sendeFehler(e: unknown, folge: string): Error {
+  return (e as Error)?.name === 'TimeoutError'
+    ? new Error(`Zeitlimit überschritten — ${folge}. Nach dem Neuladen zeigt die Liste, was angekommen ist.`)
+    : e as Error
+}
+
 export async function getDoc(project: string, base: string): Promise<EditDoc> {
   return jn(await fetch(`/api/projects/${enc(project)}/files/${enc(base)}`,
     { signal: AbortSignal.timeout(LADE_ZEITLIMIT_MS) }))
@@ -141,8 +177,12 @@ export async function fetchUrls(project: string, urls: string[],
                                 sprache?: string | (string | null)[],
                                 mehrsprachig?: boolean,
                                 sprecher?: (number | null)[]): Promise<StartJob> {
-  return jn(await fetch(`/api/projects/${enc(project)}/fetch`, {
+  try {
+    return jn(await fetch(`/api/projects/${enc(project)}/fetch`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
+    // Der Handler validiert nur und startet einen Job — der Download laeuft im Subprozess.
+    // Hier reicht die Frist eines JSON-Endpunkts.
+    signal: AbortSignal.timeout(SENDE_ZEITLIMIT_MS),
     // `sprache` faellt nur weg, wenn sie GAR NICHT gesetzt ist. Eine leere Liste ist ein
     // gueltiger Wert und darf nicht als „nicht gesetzt" durchgehen — deshalb
     // `=== undefined` und nicht das truthy `sprache ?`, das hier bisher stand. Der
@@ -156,7 +196,8 @@ export async function fetchUrls(project: string, urls: string[],
                            // fiele der Eintrag in JSON.stringify weg und jede folgende Zahl
                            // rutschte eine Aufnahme nach vorn.
                            ...(sprecher === undefined ? {} : { sprecher }) }),
-  }))
+    }))
+  } catch (e) { throw sendeFehler(e, 'der Import ist möglicherweise trotzdem gestartet') }
 }
 export async function getJob(jobId: string): Promise<JobStatus> {
   return jn(await fetch(`/api/jobs/${enc(jobId)}`))
@@ -176,7 +217,10 @@ export async function uploadAudio(project: string, file: File, sprache?: string,
   // Nur bei einer echten Zahl: ein leeres Feld heisst „automatisch", und ein mitgeschicktes
   // "" waere fuer FastAPI ein Typfehler (422) statt eines ausgelassenen Feldes.
   if (sprecher !== undefined) fd.append('sprecher', String(sprecher))
-  return jn(await fetch(`/api/projects/${enc(project)}/audio`, { method: 'POST', body: fd }))
+  try {
+    return jn(await fetch(`/api/projects/${enc(project)}/audio`,
+      { method: 'POST', body: fd, signal: AbortSignal.timeout(uploadFrist(file.size)) }))
+  } catch (e) { throw sendeFehler(e, 'die Aufnahme ist möglicherweise trotzdem angekommen') }
 }
 export async function createProject(name: string): Promise<{ ok: boolean; name: string }> {
   return jn(await fetch('/api/projects', {

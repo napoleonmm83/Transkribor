@@ -1786,6 +1786,39 @@ def test_fetch_env_kennt_auch_den_ausgeschalteten_haken(client, tmp_projekt, mon
     assert gesehen.get("TRANSKRIBOR_FETCH_MEHRSPRACHIG") == "0"
 
 
+def test_fetch_setzt_den_mehrsprachig_schluessel_IMMER(client, tmp_projekt, monkeypatch):
+    """#298, zweite Haelfte: dasselbe Leck wie bei TRANSKRIBOR_FETCH_SPRACHE — der Schluessel
+    wurde nur BEDINGT gesetzt, also ueberlebte eine `.env`-Zeile aus einem alten CLI-Test in
+    `os.environ` und schlug auf jeden Browser-Import durch (`jobs._run_proc` baut
+    `{**os.environ, **job_env(), **env}`).
+
+    Der Fix war hier NICHT derselbe Einzeiler wie bei der Sprache, und das ist der Grund, warum
+    es ein eigener PR wurde: `_mehrsprachig_aus_env("")` lieferte `False`, nicht `None` — ein
+    leerer Wert haette also einen echten Datei-Override festgeschrieben statt die Altlast zu
+    neutralisieren (die Falle aus #166). Die Leseseite ist deshalb mitgeaendert; die
+    Gegenrichtung („0" bleibt False, wird NICHT zu nicht-gesetzt") steht im Parser-Test
+    `test_env_parser_liest_beide_richtungen` in test_fetch.py.
+
+    Der Preis einer durchgeschlagenen Altlast ist gemessen und hoch: `mehrsprachig` schaltet in
+    `transcribe.py` `multilingual` + `condition_on_previous_text=False`. Auf einer rein
+    deutschen Aufnahme (28 Fenster) meldete die Erkennung dann zweimal „Englisch" mit p = 0,432
+    bzw. 0,289 und schob einen Satz ein, den niemand gesagt hat — von 206 Segmenttexten blieben
+    89 identisch.
+    """
+    gesehen = _fetch_env_faenger(monkeypatch)
+    monkeypatch.setenv("TRANSKRIBOR_FETCH_MEHRSPRACHIG", "1")          # Altlast aus der .env
+    r = client.post(f"/api/projects/{tmp_projekt}/fetch",
+                    json={"urls": ["https://youtu.be/aaaaaaaaaaa"]})   # kein Feld = kein Override
+    assert r.status_code == 200
+    assert gesehen["TRANSKRIBOR_FETCH_MEHRSPRACHIG"] == "",         "der Schluessel muss gesetzt sein, sonst gewinnt die Altlast aus os.environ"
+    # Bis zur Leseseite durchziehen: ein gesetzter, aber falsch gelesener leerer Wert waere
+    # derselbe Schaden mit einer anderen Signatur.
+    from webtool import fetch as fetch_mod
+    monkeypatch.setenv("TRANSKRIBOR_FETCH_MEHRSPRACHIG",
+                       gesehen["TRANSKRIBOR_FETCH_MEHRSPRACHIG"])
+    assert fetch_mod._mehrsprachig_aus_env() is None
+
+
 # ---- #190: nicht dekodierbare Bytes sind KEIN JSONDecodeError ----
 
 def test_nicht_dekodierbare_edit_json_heilt_sich_aus_der_roh_json(client, tmp_path):

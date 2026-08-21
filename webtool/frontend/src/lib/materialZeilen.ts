@@ -84,6 +84,12 @@ export function sprachText(zeilen: Aufnahme[], labels: Record<string, string>): 
   const zahl: Record<string, number> = {}
   for (const z of zeilen) zahl[z.sprache] = (zahl[z.sprache] ?? 0) + 1
   const teile = Object.entries(zahl).sort((a, b) => b[1] - a[1])
-  if (teile.length === 1) return `${labels[teile[0][0]] ?? teile[0][0]} für alle`
-  return teile.map(([id, n]) => `${n}× ${labels[id] ?? id}`).join(', ')
+  // `||`, nicht `??` (#305): eine Zeile, die VOR der Antwort des Einstellungs-GET entstanden
+  // ist, traegt `sprache: ''` — und `labels[''] ?? ''` machte daraus „ für alle", ein Loch an
+  // genau der Stelle, die dem Nutzer ansagt, was gleich passiert. Leer heisst hier nicht
+  // „unbekannt", sondern „kein Override" — es gilt der Projekt-Standard, und das ist die
+  // Auskunft, die hinschreibbar ist, ohne den Wert zu kennen.
+  const name = (id: string) => labels[id] || id || 'Projekt-Standard'
+  if (teile.length === 1) return `${name(teile[0][0])} für alle`
+  return teile.map(([id, n]) => `${n}× ${name(id)}`).join(', ')
 }

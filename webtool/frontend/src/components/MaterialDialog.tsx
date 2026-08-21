@@ -258,6 +258,19 @@ export function MaterialDialog({ project, offen, vorbelegteDateien, sprachChoice
 
           {schritt === 2 && (
             <div className="space-y-2">
+              {/* EINMAL statt je Zeile (#305): der `title` an der Zeile erreicht nur die
+                  Maus, und bei zehn Aufnahmen staende zehnmal „Projekt-Standard" ohne
+                  Grund daneben. Erreichbar, solange der Einstellungs-GET laeuft (kurz)
+                  und nach einem gescheiterten GET (dauerhaft) — die Zeilen zeigen dann
+                  statt eines leeren Waehlers den Projekt-Standard an.
+                  Nur bei leerer Auswahl: ein Hinweis, der immer dasteht, ist als
+                  Daueralarm derselbe Schaden von der anderen Seite. */}
+              {sprachChoices.length === 0 && (
+                <p className="text-xs text-muted-foreground">
+                  Die Sprachauswahl steht gerade nicht zur Verfügung — für alle Aufnahmen
+                  gilt der Projekt-Standard. Nachträglich änderbar im ⋯-Menü der Aufnahme.
+                </p>
+              )}
               {/* Kein eigener Bildlauf mehr: seit der Dialog seine Hoehe deckelt und sein
                   Inhaltsbereich scrollt, waeren das zwei Bildlaufleisten ineinander
                   (CodeRabbit-CLI). Die Hoehe verwaltet der Dialog. */}
@@ -293,13 +306,15 @@ export function MaterialDialog({ project, offen, vorbelegteDateien, sprachChoice
         </div>
 
         <div className="flex justify-end gap-2">
-          {/* Abbrechen ist waehrend des Laufs NICHT gesperrt — es ist der einzige Rueckweg,
-              und `uploadAudio`/`fetchUrls` haben kein Zeitlimit (#299). */}
           {/* Waehrend des Laufs heisst der Knopf „Schliessen": er bricht NICHTS ab — die
               Upload-Schleife laeuft weiter, die Dateien landen im Projekt. „Abbrechen" waere
-              dort ein Versprechen, das er nicht einloest. Gesperrt wird er nie (#299: kein
-              Zeitlimit an uploadAudio/fetchUrls, sonst bliebe der Dialog bei einer haengenden
-              Verbindung fuer immer tot). */}
+              dort ein Versprechen, das er nicht einloest.
+              Gesperrt wird er NIE. Die Begruendung hat sich mit #299 nur verschoben, nicht
+              erledigt: `uploadAudio`/`fetchUrls` haben jetzt ein Zeitlimit, aber es waechst
+              mit der Datei und reicht bei einer grossen Aufnahme in die Dutzende Minuten.
+              Als einziger Rueckweg aus einer haengenden Verbindung bleibt der Knopf also
+              genauso noetig wie vorher — das Limit raeumt den REQUEST ab, nicht die
+              Wartezeit des Nutzers. */}
           <Button variant="ghost" onClick={onSchliessen}>{laeuft ? 'Schliessen' : 'Abbrechen'}</Button>
           {schritt > 1 && (
             <Button variant="outline" disabled={laeuft}

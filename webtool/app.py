@@ -1008,8 +1008,13 @@ def fetch_urls(project: str, body: FetchBody):
     # `fetch._sprache_aus_env("")` liest das sauber als „nicht gesetzt" zurueck.
     env_sprache = {"TRANSKRIBOR_FETCH_SPRACHE": ",".join(l or "" for l in sprachen_liste)}
     # Als "1"/"0", weil eine Env-Variable nur Strings kennt; fetch.py liest sie zurueck.
-    if body.mehrsprachig is not None:
-        env_sprache["TRANSKRIBOR_FETCH_MEHRSPRACHIG"] = "1" if body.mehrsprachig else "0"
+    # IMMER gesetzt, auch leer (#298) — dieselbe Trust-Boundary wie bei SPRACHE und SPRECHER:
+    # fehlt der Schluessel im expliziten `env`, ueberlebt eine `.env`-Altlast in `os.environ`
+    # und schlaegt auf jeden Browser-Import durch. `""` heisst „nicht gesetzt"; eine
+    # Env-Variable kennt kein `null`. Die Leseseite ist dafuer MITGEAENDERT — sie las `""`
+    # bisher als `False` und haette daraus einen echten Datei-Override gemacht (#166).
+    env_sprache["TRANSKRIBOR_FETCH_MEHRSPRACHIG"] = (
+        "" if body.mehrsprachig is None else ("1" if body.mehrsprachig else "0"))
     # Komma-Liste, index-parallel zu den URLs; ein leeres Feld heisst „automatisch".
     #
     # IMMER gesetzt, auch wenn keine einzige Zahl dabei ist — und das ist kein Schoenheits-
@@ -1023,11 +1028,11 @@ def fetch_urls(project: str, body: FetchBody):
     # „automatisch", und diese Entscheidung schlaegt eine Altlast in der Umgebung.
     # Der CLI-Weg (`python -m webtool.fetch`) bleibt unberuehrt — dort setzt niemand `env`.
     #
-    # `TRANSKRIBOR_FETCH_SPRACHE` geht seit 2026-08-20 denselben Weg (siehe oben, unbedingt
-    # gesetzt). Fuer `TRANSKRIBOR_FETCH_MEHRSPRACHIG` gilt das Leck weiterhin, der Fix ist dort
-    # aber NICHT derselbe Einzeiler: `_mehrsprachig_aus_env("")` liefert `False`, nicht `None`
-    # (gemessen) — ein leerer Wert erzeugte dort also einen echten Datei-Override. Als Issue
-    # festgehalten statt hier mit erweitertem Scope halb gebaut.
+    # `TRANSKRIBOR_FETCH_SPRACHE` und `TRANSKRIBOR_FETCH_MEHRSPRACHIG` gehen denselben Weg
+    # (beide oben, unbedingt gesetzt). Bei MEHRSPRACHIG war es NICHT derselbe Einzeiler und
+    # kam deshalb erst mit #298: `_mehrsprachig_aus_env("")` lieferte `False`, nicht `None`,
+    # ein leerer Wert haette dort also einen echten Datei-Override erzeugt. Der Parser ist
+    # jetzt auf dieselbe Null-Richtung umgestellt.
     env_sprache["TRANSKRIBOR_FETCH_SPRECHER"] = ",".join(
         "" if s is None else str(s) for s in sprecher)
     job_id, started = jobs.start(project, cmd, paths.ROOT, "fetch",
