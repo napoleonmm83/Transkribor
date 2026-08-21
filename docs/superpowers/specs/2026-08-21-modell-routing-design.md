@@ -55,12 +55,19 @@ Alles hier ist gemessen, nicht angenommen — wer etwas davon ändert, misst neu
 - **✅ BEIDE ACHSEN SIND GEMESSEN (2026-08-21).** Zwei Proben, je aus einer frischen Sitzung
   (`claude -p`, Elternsitzung `--model opus` bei globalem `effortLevel: xhigh`):
 
-  | Agent | Frontmatter | gemessen im Transkript |
-  |---|---|---|
-  | `leichtgewicht` | `haiku` / `low` | `claude-haiku-4-5-20251001`, effort **abwesend** |
-  | `browser-beleg` | `sonnet` / `medium` | `claude-sonnet-5`, effort **`medium`** |
+  | Agent | Frontmatter | gemessen im Transkript | unterscheidet sich in |
+  |---|---|---|---|
+  | `pruefer-gegnerisch` | `fable` / `high` | `claude-fable-5`, `high` | beiden Achsen |
+  | `browser-beleg` | `sonnet` / `medium` | `claude-sonnet-5`, `medium` | beiden Achsen |
+  | `mutationsprobe` | `opus` / `low` | `claude-opus-5`, `low` | **nur Effort** |
+  | `leichtgewicht` | `haiku` / — | `claude-haiku-4-5-20251001`, effort abwesend | nur Modell |
 
   `model:` **und** `effort:` schlagen die Sitzungswerte. Die Kernannahme des Entwurfs trägt.
+  **`mutationsprobe` ist der schärfste Beleg der Effort-Achse:** sein Modell ist mit dem der
+  Elternsitzung identisch (`opus`), der Effort ist der einzige Unterschied — dort kann die
+  Wirkung nicht vom Modellwechsel getragen werden.
+  **Und `fable` ist auf diesem Abo verfügbar** — die zwei teuersten Zeilen der Tafel sind damit
+  keine Absichtserklärung. Vorher ungeprüft.
 - **⚠️ Haiku 4.5 kennt keine Effort-Stufen — und sagt es nicht.** Bei `leichtgewicht` fehlt das
   Effort-Feld im Datensatz **ganz**, statt auf dem Sitzungswert zu stehen. Der `claude-api`-Skill
   nennt den Grund: Effort „errors on Sonnet 4.5 / Haiku 4.5". Hier wirft es nicht, es wird
@@ -104,11 +111,11 @@ Alles hier ist gemessen, nicht angenommen — wer etwas davon ändert, misst neu
   steht.
   **Folge für die Prüfung:** ob `model:`/`effort:` wirken, war unter dieser Bedingung nicht
   messbar. Es braucht eine **neue Sitzung** — dieselbe Bedingung wie in §7.3.
-  **Ein zweiter Fall bleibt unerklärt:** `.claude/agents/mutationsprobe.md` existierte beim
-  Sitzungsstart, wurde nur im Frontmatter ergänzt — und `effort: low` griff ebenfalls nicht.
-  Die Verzeichnis-Bedingung der Doku deckt das nicht ab. Entweder gilt dieselbe Zwischenspeicherung
-  auch für **geänderte** Dateien, oder es ist etwas anderes. Offen; die neue Sitzung beantwortet
-  auch das, weil sie beide Dateien frisch einliest.
+  **Der zweite Fall ist inzwischen GEKLÄRT:** `.claude/agents/mutationsprobe.md` existierte beim
+  Sitzungsstart, wurde nur im Frontmatter ergänzt — und `effort: low` griff mitten in der Sitzung
+  ebenfalls nicht. Die Verzeichnis-Bedingung der Doku deckt das nicht ab. In einer **frischen**
+  Sitzung greift es (gemessen: `claude-opus-5` / `low`). Dieselbe Zwischenspeicherung gilt also
+  auch für **geänderte** Dateien, nicht nur für neue — das sagt die Doku so nicht.
   **Nicht verwechseln:** die zwei Changelog-Einträge zu `effort:` (v2.1.222 und früher) sind
   **Anzeigefehler** — falsches Label im Spinner bzw. in der Statuszeile. Sie besagen, dass die
   Anwendung darunter korrekt war, und erklären eine Messung am echten Wert im Transkript
