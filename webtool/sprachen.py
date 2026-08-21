@@ -94,7 +94,18 @@ def von_whisper_code(code: str | None, bevorzugt: str | None = None) -> str:
 
 
 def fuer_frontend() -> list:
-    return [{"id": sid, "label": e["label"], "hint": e["hint"]}
+    """id/label/hint plus `dialekt` — Letzteres seit #301 fuer den Erklaersatz zur
+    `auto`-Regel.
+
+    Warum das Flag mitreist statt im Frontend zu stehen: der Satz muss wissen, ob der
+    Projekt-Standard bei erkanntem Deutsch GEWINNT (dann „mit Dialekt-Glaettung") oder nicht.
+    Ein hartverdrahtetes `'ch'` dort waere eine zweite Quelle neben dieser Tabelle — dieselbe
+    Regel wie bei den Anbieter-Modellen und den Whisper-Codes. Und der Vorrang haengt
+    tatsaechlich an ihr: er aendert das Ergebnis NUR dort, wo sich zwei ids einen
+    Whisper-Code teilen (gemessen — `de`+`ch` ist der einzige solche Fall; bei jedem anderen
+    Standard liefert `von_whisper_code` mit und ohne `bevorzugt` dasselbe).
+    """
+    return [{"id": sid, "label": e["label"], "hint": e["hint"], "dialekt": e["dialekt"]}
             for sid, e in SPRACHEN.items()]
 
 

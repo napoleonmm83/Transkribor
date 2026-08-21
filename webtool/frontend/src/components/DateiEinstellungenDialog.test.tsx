@@ -20,8 +20,11 @@ const BASIS = {
   diarisierung_aktiv: true,
   pyannote_da: true,   // Normalfall: Sprechertrennung kann rechnen (#270)
   sprach_choices: [
-    { id: 'ch', label: 'Schweizerdeutsch', hint: '' },
-    { id: 'en', label: 'Englisch', hint: '' },
+    // `dialekt` seit #301 — der Erklaersatz zur `auto`-Regel haengt daran, und ohne das
+    // Flag schweigt er (bewusst: „unbekannt" statt einer moeglichen Falschaussage).
+    { id: 'ch', label: 'Schweizerdeutsch', hint: '', dialekt: true },
+    { id: 'en', label: 'Englisch', hint: '', dialekt: false },
+    { id: 'auto', label: 'Automatisch', hint: 'Whisper erkennt die Sprache', dialekt: false },
   ],
   tiefen: [{ id: 'auto', label: 'Automatisch (aus Sprache)' }, { id: 'voll_dialekt', label: 'Voll (mit Dialekt)' }, { id: 'leicht', label: 'Leicht' }],
 }
@@ -556,5 +559,32 @@ describe('DateiEinstellungenDialog — Sprecherzahl, ungültige Zwischeneingabe 
     }
     expect(save).not.toHaveBeenCalled()
     save.mockRestore()
+  })
+})
+
+describe('auto-Regel erklaeren (#301)', () => {
+  it('nennt den Projekt-Standard, wenn „automatisch" gewaehlt ist', async () => {
+    /* Wer `auto` waehlt, bekommt in einem ch-Projekt Dialekt-Glaettung und erfuhr das
+       nirgends — die README erklaerte es, die Oberflaeche an der Stelle der ENTSCHEIDUNG
+       nicht. Der `hint` kann es strukturell nicht tragen: er ist statisch und kennt den
+       Projekt-Standard nicht, der Satz ist aber bedingt. */
+    const getSpy = vi.spyOn(api, 'getFileEinstellungen').mockResolvedValue(
+      { ...BASIS, sprache_eigen: 'auto', sprache: 'auto' })
+    render(<DateiEinstellungenDialog project="p" base="a" file={datei()} offen />)
+    await sprachWaehlerDa()
+    expect(await screen.findByText(/gilt der Projekt-Standard „Schweizerdeutsch/))
+      .toBeInTheDocument()
+    getSpy.mockRestore()
+  })
+
+  it('sagt nichts, solange eine feste Sprache gewaehlt ist', async () => {
+    /* Gegenprobe — ein Hinweis, der immer dasteht, ist als Daueralarm derselbe Schaden
+       von der anderen Seite. */
+    const getSpy = vi.spyOn(api, 'getFileEinstellungen').mockResolvedValue(
+      { ...BASIS, sprache_eigen: 'ch' })
+    render(<DateiEinstellungenDialog project="p" base="a" file={datei()} offen />)
+    await sprachWaehlerDa()
+    expect(screen.queryByText(/gilt der Projekt-Standard/)).toBeNull()
+    getSpy.mockRestore()
   })
 })

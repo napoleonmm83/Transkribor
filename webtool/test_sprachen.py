@@ -119,3 +119,21 @@ def test_pruef_fehler_sprecher():
     for schlecht in (0, -1, sprachen.SPRECHER_MAX + 1, True, 2.5, "vier"):
         msg = sprachen.pruef_fehler(sprecher=schlecht)
         assert msg and "sprecher" in msg, f"{schlecht!r} haette abgewiesen werden muessen"
+
+
+def test_fuer_frontend_liefert_das_dialekt_flag(monkeypatch):
+    """#301: der Erklaersatz zur `auto`-Regel braucht die Frage „ist der Projekt-Standard
+    eine Dialekt-Sprache?" — und die darf das Frontend NICHT selbst beantworten.
+
+    Ein hartverdrahtetes `'ch'` dort waere eine zweite Quelle neben dieser Tabelle, und der
+    Vorrang haengt genau an ihr: er wird nur sichtbar, wo sich zwei ids einen Whisper-Code
+    teilen (gemessen: `de`+`ch` ist der EINZIGE Fall, in dem `von_whisper_code` mit und ohne
+    `bevorzugt` verschiedene Ergebnisse liefert). Kommt je eine zweite Dialekt-Sprache dazu,
+    zieht die Oberflaeche damit von selbst mit.
+    """
+    eintraege = {e["id"]: e for e in sprachen.fuer_frontend()}
+    assert eintraege["ch"]["dialekt"] is True
+    # Gegenrichtung: ein IMMER gesetztes Flag waere derselbe Schaden von der anderen Seite —
+    # dann bekaeme ein englisches Projekt den Dialekt-Satz.
+    for sid in ("de", "en", "fr", "it", "auto"):
+        assert eintraege[sid]["dialekt"] is False, sid

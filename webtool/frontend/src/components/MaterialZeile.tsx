@@ -11,7 +11,7 @@ import { sprecherWahl } from '@/lib/sprecher'
 export function MaterialZeile({ zeile, sprachChoices, sprecherMax, hoerbar, klingt,
                                 gesperrt, onSprecher, onSprache, onHoeren }: {
   zeile: Aufnahme
-  sprachChoices: { id: string; label: string; hint?: string }[]
+  sprachChoices: { id: string; label: string; hint?: string; dialekt?: boolean }[]
   sprecherMax: number
   hoerbar: boolean          // false beim URL-Import: noch nichts heruntergeladen
   klingt: boolean

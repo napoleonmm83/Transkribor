@@ -6,8 +6,9 @@ import { ProjektEinstellungenDialog } from './ProjektEinstellungenDialog'
 const BASIS = {
   sprache: 'ch', korrektur: 'auto', mehrsprachig: false, sprecher_max: 20,
   sprach_choices: [
-    { id: 'ch', label: 'Schweizerdeutsch', hint: '' },
-    { id: 'en', label: 'Englisch', hint: '' },
+    { id: 'ch', label: 'Schweizerdeutsch', hint: '', dialekt: true },
+    { id: 'en', label: 'Englisch', hint: '', dialekt: false },
+    { id: 'auto', label: 'Automatisch', hint: 'Whisper erkennt die Sprache', dialekt: false },
   ],
   tiefen: [{ id: 'auto', label: 'Automatisch (aus Sprache)' }, { id: 'voll_dialekt', label: 'Voll' }, { id: 'leicht', label: 'Leicht' }],
 }
@@ -59,5 +60,32 @@ describe('ProjektEinstellungenDialog — mehrsprachig', () => {
     await waitFor(() => expect(saveSpy).toHaveBeenCalledWith(
       'p', expect.objectContaining({ mehrsprachig: false })))
     saveSpy.mockRestore()
+  })
+})
+
+describe('auto-Regel im Projekt-Dialog (#301)', () => {
+  it('sagt bei „Automatisch", dass KEINE Dialekt-Glaettung greift', async () => {
+    /* Der Unterschied zum Datei-Dialog, und der Grund, warum es NICHT derselbe Satz sein
+       darf: hier SETZT man den Projekt-Standard gerade — einen darueber gibt es nicht.
+       `correct._ziel_dialekt` reichte in diesem Fall `auto` als `bevorzugt` weiter, und das
+       trifft nie (`auto` hat keinen Whisper-Code). Also reine Detektion, und Schweizerdeutsch
+       kommt dann als Deutsch zurueck. Genau diese Auskunft braucht, wer die Glaettung NICHT
+       will — das Issue nennt den Fall ausdruecklich. */
+    const getSpy = vi.spyOn(api, 'getProjektEinstellungen')
+      .mockResolvedValue({ ...BASIS, sprache: 'auto' })
+    render(<ProjektEinstellungenDialog project="p" offen onOpenChange={() => {}} />)
+    expect(await screen.findByText(/ohne Dialekt-Glättung/)).toBeInTheDocument()
+    // NICHT der Satz aus dem Datei-Dialog: es gibt hier keinen Standard, der gewinnen koennte.
+    expect(screen.queryByText(/gilt der Projekt-Standard/)).toBeNull()
+    getSpy.mockRestore()
+  })
+
+  it('sagt nichts, solange eine feste Sprache gewaehlt ist', async () => {
+    /* Gegenprobe gegen den Daueralarm. */
+    const getSpy = vi.spyOn(api, 'getProjektEinstellungen').mockResolvedValue(BASIS)
+    render(<ProjektEinstellungenDialog project="p" offen onOpenChange={() => {}} />)
+    await screen.findByRole('combobox', { name: 'Sprache' })
+    expect(screen.queryByText(/Dialekt-Glättung/)).toBeNull()
+    getSpy.mockRestore()
   })
 })
