@@ -263,8 +263,20 @@ export function MaterialDialog({ project, offen, vorbelegteDateien, sprachChoice
             Nachfahren nur, wenn er selbst ihr Bezugsrahmen ist. Der Quellbaum-Waechter hat
             genau diese Zeile rot gemacht — zum zweiten Mal in diesem PR. */}
         <div className="relative min-h-0 flex-1 overflow-y-auto">
+          {/* Schritt 1 traegt seine Hoehe selbst (`h-full` + Spalte): Reiterleiste und
+              Ablageflaeche bleiben stehen, GEROLLT wird nur die Auswahlliste. Vorher rollte
+              der ganze Bereich, und wer zehn Dateien gewaehlt hatte, schob beim Suchen einer
+              einzelnen Zeile das Drop-Ziel aus dem Bild — also genau die Flaeche, auf der
+              die naechste Datei landen soll.
+              Der aeussere Behaelter behaelt sein `overflow-y-auto` fuer die Schritte 2 und 3;
+              in Schritt 1 greift es nicht mehr, weil dieser Block nie hoeher wird als sein
+              Platz. Zwei Leisten ineinander gibt es also nicht — genau der Grund, aus dem
+              Schritt 2 seinen eigenen Bildlauf wieder verloren hat (CodeRabbit-CLI).
+              Die Grenze ist benannt: unter etwa 300 px Fensterhoehe passen schon Reiter und
+              Ablageflaeche nicht mehr, dann rollt wieder der aeussere Behaelter. Das ist
+              #283 und nicht schlechter als vorher. */}
           {schritt === 1 && (
-            <div className="space-y-3">
+            <div className="flex h-full flex-col gap-3">
               {/* Von Hand nach dem APG-Muster (#304) statt shadcn-`Tabs`: das braechte eine
                   Radix-Abhaengigkeit fuer zwei Reiter, und die fehlenden Attribute sind
                   billiger als sie.
@@ -272,7 +284,7 @@ export function MaterialDialog({ project, offen, vorbelegteDateien, sprachChoice
                   man durch BEIDE Knoepfe, jetzt ist die Leiste EIN Halt und man navigiert
                   darin mit Pfeilen. Ohne ihn waere die Pfeiltasten-Navigation ein zweiter,
                   konkurrierender Weg statt des vorgesehenen. */}
-              <div role="tablist" aria-label="Art des Materials" className="flex gap-1">
+              <div role="tablist" aria-label="Art des Materials" className="flex shrink-0 gap-1">
                 {QUELLEN.map(([id, text], i) => (
                   <button key={id} type="button" role="tab" id={`mat-reiter-${id}`}
                     aria-selected={quelle === id}
@@ -310,7 +322,7 @@ export function MaterialDialog({ project, offen, vorbelegteDateien, sprachChoice
                   UMGEHAENGT statt beide zu rendern — `id` und `aria-labelledby` folgen dem
                   aktiven Reiter, und ein verstecktes zweites Panel waere ein zweiter
                   Textbereich im Baum, den die Suche und der Tabstopp mitzaehlen. */}
-              <div role="tabpanel" id={`mat-panel-${quelle}`}
+              <div role="tabpanel" id={`mat-panel-${quelle}`} className="shrink-0"
                 aria-labelledby={`mat-reiter-${quelle}`}>
                 {quelle === 'datei'
                   ? <Ablageflaeche gesperrt={laeuft}
@@ -333,11 +345,20 @@ export function MaterialDialog({ project, offen, vorbelegteDateien, sprachChoice
                   Das Symbol unterscheidet Datei und Link — beide Arten landen in DERSELBEN
                   Liste (`ergaenzen`), und `starten` verzweigt je Zeile danach. */}
               {zeilen.length > 0 && (
-                <div className="space-y-1.5">
-                  <p className="text-sm font-medium">
+                <div className="flex min-h-0 flex-1 flex-col gap-1.5">
+                  <p className="shrink-0 text-sm font-medium">
                     {zeilen.length} {zeilen.length === 1 ? 'Aufnahme' : 'Aufnahmen'} gewählt
                   </p>
-                  <ul className="space-y-1">
+                  {/* `min-h-0` ist die zweite Haelfte von `flex-1`: ohne es waechst ein
+                      Flex-Kind mit seinem Inhalt (Default `min-height: auto`) und das
+                      `overflow-y-auto` greift nie — dieselbe Falle wie im Raster der
+                      App-Huelle. `relative` ist die zweite Haelfte von `overflow-y-auto`:
+                      geklemmt werden absolut positionierte Nachfahren nur, wenn der
+                      Behaelter ihr Bezugsrahmen ist — die Liste hat heute keine, die
+                      Regel gilt aber fuer JEDE Bildlaufflaeche (#209), und der
+                      Quellbaum-Waechter hat genau diese Zeile rot gemacht.
+                      `pr-1` haelt die Leiste vom ✕ weg. */}
+                  <ul className="rollbalken relative min-h-0 flex-1 space-y-1 overflow-y-auto pr-1">
                     {zeilen.map((z, i) => (
                       <li key={z.schluessel}
                         className="flex items-center gap-2 rounded-md border bg-muted/40 px-2.5 py-1.5 text-sm">

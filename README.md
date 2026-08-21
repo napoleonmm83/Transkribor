@@ -55,7 +55,9 @@ Auch mit **Schweizerdeutsch** kommt es zurecht.
    `v0.26.0`; in `v0.25.0` und älter liegen diese Felder direkt auf der Seite.) Ab
    `v0.27.0` steht schon im ersten Schritt, **was** du gewählt hast — Dateien mit
    Namen und Grösse, Video-Links mit ihrer Adresse; eine versehentlich mitgenommene nimmst
-   du mit dem ✕ daneben wieder heraus, ohne von vorn anzufangen.
+   du mit dem ✕ daneben wieder heraus, ohne von vorn anzufangen. (Ab der nächsten Fassung
+   bleibt dabei auch bei zwanzig Aufnahmen das Feld zum Hineinziehen sichtbar —
+   geblättert wird nur in der Liste.)
 
 > [!WARNING]
 > **Beim ersten Öffnen warnt das Betriebssystem.** Der Installer ist nicht bei Microsoft bzw.
