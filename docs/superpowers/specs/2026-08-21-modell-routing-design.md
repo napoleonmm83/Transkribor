@@ -61,9 +61,25 @@ Alles hier ist gemessen, nicht angenommen — wer etwas davon ändert, misst neu
   `atomic_check_and_mark_warning(...)` — *„Returns True if this is the first time seeing this
   warning, False if it was already shown (should skip it)."* Eine 40-Zeilen-Tafel bei jedem
   Prompt wären ~500 Token × Turnzahl.
-- **Der belegte Ausgabevertrag ist JSON**, nicht nackter stdout:
-  `{"hookSpecificOutput": {"hookEventName": "…", "additionalContext": "…"}}`. Ob stdout allein
-  reicht, ist **nicht gemessen** — siehe §7.3.
+- **Der Ausgabevertrag ist JSON** — und der Weg ist seit 2026-08-21 **gemessen**, nicht mehr nur
+  belegt: ein Hook, der
+  `{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"<marker>"}}`
+  schreibt, stellt `<marker>` wörtlich in den Kontext zu. Geprüft mit einem Platzhalter-Marker
+  aus einer fremden Sitzung heraus. Ob nackter stdout **ebenfalls** reichen würde, ist weiterhin
+  offen und für den Entwurf ohne Belang.
+- **Der Hook greift auch in BEREITS LAUFENDEN Sitzungen**, nicht erst in neuen (gemessen
+  2026-08-21: der Marker erschien im Kontext der laufenden Sitzung, die ihn eingerichtet hatte).
+  Folge für die Bedienung: eine Änderung an der Tafel wirkt sofort — auch mitten in einer
+  Arbeit, an der jemand gerade sitzt.
+- **Die Akkumulation ist bestätigt.** Die fremde Sitzung berichtete unaufgefordert, der Marker
+  „hängt an beiden deiner Nachrichten". Was §2 aus Anthropics Hook nur hergeleitet hatte, ist
+  damit am eigenen System gemessen — die Entscheidung für fünf statt vierzig Zeilen steht auf
+  einer Messung.
+- **Der `model`-Parameter am `Agent`-Werkzeug wirkt** (gemessen 2026-08-21): zwei mit
+  `model: sonnet` dispatchte Subagenten zeigen `claude-sonnet-5` im Transkript, nicht das
+  Sitzungsmodell. **Zugleich die Negativkontrolle aus §7.2:** dieselben Agenten sind
+  `general-purpose` ohne eigenes Frontmatter und zeigen `"effort":"xhigh"` — den Sitzungswert.
+  Modell folgt dem Dispatch, Effort nicht. Ob `effort:` im Frontmatter greift, bleibt offen.
 - **cwd ist im Hook nicht garantiert.** Der Referenz-Hook nutzt
   `os.environ.get("CLAUDE_PROJECT_DIR", os.getcwd())`; die vorhandenen Projekt-Hooks beginnen
   mit `cd "${CLAUDE_PROJECT_DIR:-E:/Git/Transkribor}"`.
@@ -221,8 +237,15 @@ Pinning wirkungslos — sichtbar an keinem Test, nur hier.
 ### 7.3 Hook-Injektion — nur im echten Lauf
 
 `additionalContext` ist in keinem Unit-Test beobachtbar: Sitzung starten, triviale Frage,
-prüfen ob die fünf Zeilen ankommen. Hier hängt die einzige ungemessene Annahme des Entwurfs
-(stdout vs. JSON, §2).
+prüfen ob die fünf Zeilen ankommen.
+
+**Erledigt am 2026-08-21** mit einem Platzhalter-Marker (`ROUTING-MARKER-TASK1`): eine fremde
+Sitzung gab ihn wörtlich wieder. Damit ist die letzte ungemessene Annahme des Entwurfs
+geschlossen. Zwei Nebenbefunde stehen in §2 — der Hook greift auch in laufenden Sitzungen,
+und die Akkumulation ist bestätigt.
+
+Der Marker war **bewusst** ein Platzhalter statt der echten Tafel: hätte der Weg nicht
+funktioniert, wären zwei Skripte verloren gewesen statt der halben Umsetzung.
 
 ### 7.4 Drift-Wächter
 
