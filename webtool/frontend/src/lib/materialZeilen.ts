@@ -106,9 +106,15 @@ export function sprachText(zeilen: Aufnahme[], labels: Record<string, string>): 
  *
  *  Die GB-Stufe ist nicht Zierde: `.mp4` steht in `AUDIO_RE`, ein langes Video kommt also
  *  hier an, und „4250,0 MB" liest niemand als vier Gigabyte.
+ *
+ *  Die Schwellen liegen dort, wo die ANZEIGE ueberlaeuft, nicht auf der runden Zahl: mit
+ *  `>= 1_000_000_000` stuende eine Datei von 999 999 999 Bytes als „1000,0 MB" da, direkt
+ *  neben „1,0 GB" fuer ein Byte mehr (CodeRabbit-CLI). Dieselbe Kante hat die KB-Stufe —
+ *  `Math.round(999_500 / 1000)` ist 1000 —, und sie ist hier gleich mit korrigiert: einen
+ *  Randfall nur an der gemeldeten Stelle zu beheben, laesst den Zwilling daneben stehen.
  */
 export function groesseText(bytes: number): string {
-  if (bytes >= 1_000_000_000) return `${(bytes / 1_000_000_000).toFixed(1).replace('.', ',')} GB`
-  if (bytes >= 1_000_000) return `${(bytes / 1_000_000).toFixed(1).replace('.', ',')} MB`
+  if (bytes >= 999_950_000) return `${(bytes / 1_000_000_000).toFixed(1).replace('.', ',')} GB`
+  if (bytes >= 999_500) return `${(bytes / 1_000_000).toFixed(1).replace('.', ',')} MB`
   return `${Math.round(bytes / 1000)} KB`
 }

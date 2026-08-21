@@ -92,6 +92,16 @@ describe('groesseText', () => {
     expect(groesseText(999_000_000)).toBe('999,0 MB')
   })
 
+  it('kippt die Einheit dort, wo die ANZEIGE ueberlaeuft — an BEIDEN Grenzen', () => {
+    /* Mit der Schwelle auf der runden Zahl stuende „1000,0 MB" direkt neben „1,0 GB" fuer
+       ein Byte mehr (CodeRabbit-CLI). Dieselbe Kante hat die KB-Stufe; beide sind geprueft,
+       weil ein Fix nur an der gemeldeten Stelle den Zwilling daneben stehen liesse. */
+    expect(groesseText(999_999_999)).toBe('1,0 GB')
+    expect(groesseText(999_949_999)).toBe('999,9 MB')
+    expect(groesseText(999_999)).toBe('1,0 MB')
+    expect(groesseText(999_499)).toBe('999 KB')
+  })
+
   it('rundet eine 0-Byte-Aufnahme NICHT auf „1 KB" hoch', () => {
     // Ein abgebrochener Export ist genau der Fall, fuer den diese Spalte da ist: die Datei
     // sieht in der Liste normal aus, und nur die Groesse verraet, dass nichts drin ist.
