@@ -250,7 +250,16 @@ async function starten() {
   try {
     const { autoUpdater } = require('electron-updater')
     const paket = require('../package.json')
-    const macUrls = updater.macUrls(paket)
+    // app-update.yml ist die EINZIGE Publish-Quelle, die das Packen ueberlebt: electron-builder
+    // loescht `build` aus der package.json, die es in die App legt (app-builder-lib/out/
+    // fileTransformer.js, `ignoredPackageMetadataProperties`). Ohne sie stand auf macOS in
+    // jedem Protokoll "Failed to parse URL from null" — der Mac-Zweig holt seine
+    // latest-mac.yml selbst und lief damit gegen feedUrl=null.
+    // Fehlt die Datei (Entwicklungsbetrieb), faellt macUrls auf paket.build.publish zurueck.
+    let updateYml = ''
+    try { updateYml = require('fs').readFileSync(path.join(process.resourcesPath, 'app-update.yml'), 'utf8') }
+    catch { /* nicht gepackt oder ohne Publish-Ziel — der Rueckfall greift */ }
+    const macUrls = updater.macUrls(paket, updateYml)
     autoUpdater.logger = null
     aktualisierer = updater.erstellen({
       autoUpdater,

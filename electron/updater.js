@@ -18,11 +18,33 @@ function nichtMoeglich(plattform, gepackt, appimage) {
 }
 
 /**
- * Feed- + Release-URL fuer den Mac-Manualcheck aus build.publish ableiten. Eine Wahrheitsquelle
- * statt hartkodiert — bei Repository-Umzug zieht das mit. null, falls kein github-Publish.
+ * owner/repo aus einer app-update.yml lesen (electron-builder erzeugt sie beim Packen aus
+ * build.publish und legt sie zu den Resources). Regex statt YAML-Parser: die Datei hat vier
+ * flache Zeilen, und parseLatestMac macht es nebenan schon so.
+ * Unvollstaendig ist wie gar nicht — ein halbes Ergebnis baute sonst eine URL mit
+ * "undefined" darin und verdeckte dabei den Rueckfall.
  */
-function macUrls(paket) {
-  const p = paket && paket.build && paket.build.publish && paket.build.publish[0]
+function publishAusYml(text) {
+  const t = String(text || '')
+  const provider = /^provider:\s*(\S+)/m.exec(t)
+  const owner = /^owner:\s*(\S+)/m.exec(t)
+  const repo = /^repo:\s*(\S+)/m.exec(t)
+  if (!provider || provider[1] !== 'github' || !owner || !repo) return null
+  return { provider: 'github', owner: owner[1], repo: repo[1] }
+}
+
+/**
+ * Feed- + Release-URL fuer den Mac-Manualcheck ableiten. Eine Wahrheitsquelle statt
+ * hartkodiert — bei Repository-Umzug zieht das mit. null, falls kein github-Publish.
+ *
+ * ZWEI Quellen, und keine deckt beide Faelle ab: electron-builder LOESCHT `build` aus der
+ * package.json, die es in die App legt (app-builder-lib/out/fileTransformer.js,
+ * `ignoredPackageMetadataProperties`) — gepackt gibt es nur die app-update.yml. Im
+ * Entwicklungsbetrieb gibt es umgekehrt nur die package.json. Die yml gewinnt: sie ist die
+ * Konfiguration, mit der das laufende Artefakt tatsaechlich gebaut wurde.
+ */
+function macUrls(paket, ymlText) {
+  const p = publishAusYml(ymlText) || (paket && paket.build && paket.build.publish && paket.build.publish[0])
   if (!p || p.provider !== 'github' || !p.owner || !p.repo) return null
   const base = `https://github.com/${p.owner}/${p.repo}`
   return { feed: `${base}/releases/latest/download/latest-mac.yml`, release: `${base}/releases/latest` }
@@ -77,9 +99,15 @@ function erstellen({ autoUpdater, version, plattform, gepackt, appimage, aendert
   // verfuegbar -> 'verfuegbar_manuell' (manueller Download), laden oeffnet den Browser, nicht
   // downloadUpdate. hole/openExternal werden hereingereicht (wie autoUpdater) -> ohne Mac testbar.
   if (plattform === 'darwin' && gepackt) {
+    // Ohne Feed-URL waere jede Pruefung ein hole(null) -> "Failed to parse URL from null":
+    // richtig, aber unbrauchbar, weil die einzige sinnvolle Reaktion nicht darin steht. Der
+    // Fall ist erreichbar, sobald beide Quellen oben leer ausgehen (kein github-Publish,
+    // fehlende app-update.yml) — dann KANN dieses Exemplar sich nicht aktualisieren.
+    if (!feedUrl) stand = { version, art: 'nicht_moeglich', grund: 'keine-quelle' }
     return {
       zustand: () => stand,
       pruefen: () => {
+        if (!feedUrl) return
         setzen({ art: 'prueft' })
         hole(feedUrl).then(r => {
           if (!r.ok) throw new Error(`latest-mac.yml HTTP ${r.status}`)
@@ -92,7 +120,7 @@ function erstellen({ autoUpdater, version, plattform, gepackt, appimage, aendert
           setzen({ art: 'aktuell' })
         }).catch(e => setzen({ art: 'fehler', text: (e && e.message) || String(e) }))
       },
-      laden: () => { openExternal(releaseUrl) },
+      laden: () => { if (releaseUrl) openExternal(releaseUrl) },
       installieren: () => {},
     }
   }
@@ -137,4 +165,4 @@ function erstellen({ autoUpdater, version, plattform, gepackt, appimage, aendert
   }
 }
 
-module.exports = { nichtMoeglich, sollPruefen, erstellen, macUrls, istNeuer, parseLatestMac }
+module.exports = { nichtMoeglich, sollPruefen, erstellen, macUrls, istNeuer, parseLatestMac, publishAusYml }
