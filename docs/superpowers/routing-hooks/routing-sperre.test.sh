@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+# Selbsttest fuer routing-sperre.sh — BEIDE Richtungen.
+# Ein Waechter, der immer sperrt, ist derselbe Schaden spiegelverkehrt (#197).
+set -u
+cd "${CLAUDE_PROJECT_DIR:-E:/Git/Transkribor}" || exit 1
+H=.claude/hooks/routing-sperre.sh
+fehler=0
+
+lauf() { printf '%s' "$1" | bash "$H" >/dev/null 2>&1; echo $?; }
+PR='{"tool_input":{"command":"gh pr create --fill"}}'
+
+# Trap-Selbsttest ZUERST, isoliert in einem Wegwerfordner: die Wiederherstellung unten
+# haengt an einem trap auf EXIT — der muss auch bei einem ABBRUCH mitten im Lauf feuern,
+# nicht nur beim sauberen Skriptende. Ohne diese Probe waere der trap unten ungeprueft.
+strap_tmp=$(mktemp -d)
+: > "$strap_tmp/review-trapfang.md"
+(
+  cd "$strap_tmp" || exit 1
+  itmp=$(mktemp -d)
+  mv review-*.md "$itmp"/ 2>/dev/null
+  trap 'mv "$itmp"/review-*.md . 2>/dev/null; rmdir "$itmp" 2>/dev/null' EXIT
+  exit 1  # simulierter Abbruch mitten im Lauf, nicht das saubere Skriptende
+)
+[ -f "$strap_tmp/review-trapfang.md" ] \
+  || { echo "FAIL: trap stellt bei einem Abbruch nicht wieder her" >&2; fehler=1; }
+rm -rf "$strap_tmp"
+
+# Aufraeumen, damit der Test nicht vom Zufall lebt: ein liegengebliebenes
+# review-*.md aus echter Arbeit wuerde den Sperrfall gruen machen.
+tmp=$(mktemp -d); mv review-*.md "$tmp"/ 2>/dev/null
+# trap statt eines einzelnen Aufraeum-Aufrufs am Ende: bricht DIESER Testlauf dazwischen
+# ab (Signal, ein frueher `exit`), blieben Marcus' echten Berichte sonst im Wegwerfordner
+# liegen statt im Projektstamm — es sind echte Arbeitsergebnisse ohne Sicherung.
+trap 'mv "$tmp"/review-*.md . 2>/dev/null; rmdir "$tmp" 2>/dev/null' EXIT
+
+# 1. Kein Review -> sperrt
+[ "$(lauf "$PR")" = "2" ] || { echo "FAIL: sperrt nicht ohne Review" >&2; fehler=1; }
+
+# 2. Fluchtweg -> laesst durch
+[ "$(lauf '{"tool_input":{"command":"KEIN_REVIEW=1 gh pr create --fill"}}')" = "0" ] \
+  || { echo "FAIL: Fluchtweg wirkt nicht" >&2; fehler=1; }
+
+# 3. Fremder Befehl -> laesst durch (der Waechter darf nicht ueberall zuschlagen)
+[ "$(lauf '{"tool_input":{"command":"git status"}}')" = "0" ] \
+  || { echo "FAIL: sperrt einen fremden Befehl" >&2; fehler=1; }
+
+# 4. Blosse ERWAEHNUNG -> laesst durch (Befehlspositions-Anker; genau hier ist
+#    kein-pauschales-add.sh beim ersten Einsatz aufgelaufen)
+[ "$(lauf '{"tool_input":{"command":"echo gh pr create > notiz.md"}}')" = "0" ] \
+  || { echo "FAIL: schlaegt bei blosser Erwaehnung an" >&2; fehler=1; }
+
+# 5. Review vorhanden -> laesst durch (die Negativkontrolle)
+touch review-selbsttest.md
+[ "$(lauf "$PR")" = "0" ] || { echo "FAIL: sperrt TROTZ Review" >&2; fehler=1; }
+rm -f review-selbsttest.md
+
+[ $fehler -eq 0 ] && echo "OK"
+exit $fehler
