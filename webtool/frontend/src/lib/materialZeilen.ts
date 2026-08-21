@@ -101,10 +101,14 @@ export function sprachText(zeilen: Aufnahme[], labels: Record<string, string>): 
  *  eine andere ist als die, auf der die Frist rechnet.
  *
  *  KEIN `Math.max(1, …)`: eine 0-Byte-Aufnahme (abgebrochener Export) soll als „0 KB"
- *  dastehen. Eine auf „1 KB" aufgerundete Anzeige verstellte genau den Blick, fuer den
- *  diese Liste ueberhaupt da ist.
+ *  dastehen — und alles unter 500 Bytes mit ihr, denn auch das ist keine Aufnahme. Eine auf
+ *  „1 KB" aufgerundete Anzeige verstellte genau den Blick, fuer den diese Liste da ist.
+ *
+ *  Die GB-Stufe ist nicht Zierde: `.mp4` steht in `AUDIO_RE`, ein langes Video kommt also
+ *  hier an, und „4250,0 MB" liest niemand als vier Gigabyte.
  */
 export function groesseText(bytes: number): string {
+  if (bytes >= 1_000_000_000) return `${(bytes / 1_000_000_000).toFixed(1).replace('.', ',')} GB`
   if (bytes >= 1_000_000) return `${(bytes / 1_000_000).toFixed(1).replace('.', ',')} MB`
   return `${Math.round(bytes / 1000)} KB`
 }

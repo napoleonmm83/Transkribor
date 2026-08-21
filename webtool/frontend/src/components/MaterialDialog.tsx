@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { FileAudio, Link2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -43,6 +43,10 @@ export function MaterialDialog({ project, offen, vorbelegteDateien, sprachChoice
   const [laeuft, setLaeuft] = useState(false)
   const [klingt, setKlingt] = useState<string | null>(null)
   const laufNr = useRef(0)
+  // Fuer die Ids der Entfernen-Knoepfe: der Fokus springt beim Entfernen auf den Nachbarn,
+  // und `document.getElementById` ist dafuer der Weg, den die Reiterleiste schon geht.
+  // NICHT der `schluessel` — der traegt Leerzeichen („Interview Mueller.mp3“).
+  const listeId = useId()
 
   // Der Projektwechsel verwirft ALLES — auch den Schritt und den Abspieler. React Router
   // baut dieses Element beim Parameterwechsel nicht neu auf; ohne Reset landeten Projekt As
@@ -91,12 +95,23 @@ export function MaterialDialog({ project, offen, vorbelegteDateien, sprachChoice
   const setzeSprache = (schluessel: string, id: string) =>
     setZeilen(alt => alt.map(z => z.schluessel === schluessel ? { ...z, sprache: id } : z))
   // `setKlingt` geht MIT: eine klingende Zeile, die aus der Liste faellt, ist derselbe Fall
-  // wie der Teil-Fehlschlag in `starten` — sonst bleibt ihr Schluessel stehen, und eine
-  // spaeter erneut hinzugefuegte gleichnamige Datei spielt beim Betreten von Schritt 2
-  // ungefragt los. Der Balken raeumt sich ueber genau diesen Wert auf.
+  // wie der Teil-Fehlschlag in `starten` — sonst bleibt ihr Schluessel stehen, und dieselbe
+  // Datei, spaeter erneut hinzugefuegt, steht in Schritt 2 wieder als „klingend“ da: der
+  // Hoerbalken oeffnet sich unaufgefordert und dekodiert die ganze Datei. ABGESPIELT wird
+  // dabei nichts — `Waveform` ruft `play()` ausschliesslich aus `steuerung.toggle`, also aus
+  // einem Klick (gelesen: `Waveform.tsx:100-113`). Eine fruehere Fassung dieses Kommentars
+  // behauptete eine Wiedergabe; das war gemessen falsch.
+  //
+  // Die URL geht ebenfalls mit — und das ist der Weg, den erst dieser Knopf aufgemacht hat.
+  // Vorher liess sich in Schritt 1 keine Zeile entfernen; jetzt zeigt das Textfeld sie
+  // weiter an, und ein Klick auf „Holen“ macht die Entfernung rueckgaengig UND springt
+  // ungefragt auf Schritt 2. Dieselbe Regel steht in `starten` („Das URL-Feld MUSS mit
+  // geleert werden“), dort fuer den ganzen Lauf. Bei einer Datei-Zeile trifft der Filter
+  // nie etwas: ihr Schluessel ist ein Dateiname und steht in keinem URL-Feld.
   const entfernen = (schluessel: string) => {
     setZeilen(alt => alt.filter(z => z.schluessel !== schluessel))
     setKlingt(a => a === schluessel ? null : a)
+    setUrlText(t => t.split('\n').filter(u => u.trim() !== schluessel).join('\n'))
   }
 
   const urlsUebernehmen = () => {
@@ -323,7 +338,7 @@ export function MaterialDialog({ project, offen, vorbelegteDateien, sprachChoice
                     {zeilen.length} {zeilen.length === 1 ? 'Aufnahme' : 'Aufnahmen'} gewählt
                   </p>
                   <ul className="space-y-1">
-                    {zeilen.map(z => (
+                    {zeilen.map((z, i) => (
                       <li key={z.schluessel}
                         className="flex items-center gap-2 rounded-md border bg-muted/40 px-2.5 py-1.5 text-sm">
                         {z.datei
@@ -337,12 +352,32 @@ export function MaterialDialog({ project, offen, vorbelegteDateien, sprachChoice
                             {groesseText(z.datei.size)}
                           </span>
                         )}
-                        <button type="button" disabled={laeuft}
+                        {/* KEIN `disabled={laeuft}`: die Liste wird nie mit `laeuft === true`
+                            gerendert — `starten` ist nur vom Schritt-3-Knopf aus erreichbar,
+                            „Zurueck“/„Weiter“ sind waehrenddessen gesperrt, und die beiden Wege
+                            zurueck auf Schritt 1 setzen `laeuft` im selben Batch auf false.
+                            Ein Riegel, den kein Test rot bekommt, ist Dekoration.
+                            `p-1.5` statt `p-0.5` ergibt 28 px Zielflaeche: mit 20 px bestuende
+                            WCAG 2.2 SC 2.5.8 nur ueber die Abstandsausnahme — knapp fuer die
+                            einzige zerstoerende Aktion der Liste. */}
+                        <button type="button" id={`${listeId}-${i}`}
                           aria-label={`${z.anzeige} aus der Auswahl entfernen`}
-                          onClick={() => entfernen(z.schluessel)}
-                          className="shrink-0 rounded-sm p-0.5 text-muted-foreground hover:text-foreground
-                                     focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring
-                                     disabled:opacity-40">
+                          onClick={() => {
+                            // Sonst faellt der Fokus auf <body>, und Radix' FocusScope zieht ihn
+                            // an den Dialoganfang: wer drei Fehlgriffe herausnehmen will, tabbt
+                            // sich nach JEDEM Klick neu durch die Liste. Der Nachbarknopf steht
+                            // schon im DOM und verschwindet nicht, der Griff wirkt also
+                            // synchron — React haengt danach nur eine andere `id` an denselben
+                            // Knoten (wiederverwendet ueber `key`). Bei der letzten Zeile der
+                            // Vorgaenger, bei der einzigen der aktive Reiter: den gibt es in
+                            // Schritt 1 immer.
+                            const nachbar = i + 1 < zeilen.length ? `${listeId}-${i + 1}`
+                                          : i > 0 ? `${listeId}-${i - 1}` : `mat-reiter-${quelle}`
+                            entfernen(z.schluessel)
+                            document.getElementById(nachbar)?.focus()
+                          }}
+                          className="shrink-0 rounded-sm p-1.5 text-muted-foreground hover:text-foreground
+                                     focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                           <X className="size-4" />
                         </button>
                       </li>

@@ -86,6 +86,12 @@ describe('groesseText', () => {
     expect(groesseText(812_000)).toBe('812 KB')
   })
 
+  it('kennt eine GB-Stufe — `.mp4` steht in AUDIO_RE, ein langes Video kommt hier an', () => {
+    // „4250,0 MB" liest niemand als vier Gigabyte.
+    expect(groesseText(4_250_000_000)).toBe('4,3 GB')
+    expect(groesseText(999_000_000)).toBe('999,0 MB')
+  })
+
   it('rundet eine 0-Byte-Aufnahme NICHT auf „1 KB" hoch', () => {
     // Ein abgebrochener Export ist genau der Fall, fuer den diese Spalte da ist: die Datei
     // sieht in der Liste normal aus, und nur die Groesse verraet, dass nichts drin ist.
