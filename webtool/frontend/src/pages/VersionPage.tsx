@@ -1,0 +1,192 @@
+import { useEffect, useState } from 'react'
+import { Loader2 } from 'lucide-react'
+import { useUpdate } from '@/hooks/useUpdate'
+import { PageHeader } from '@/components/PageHeader'
+import { Abschnitt } from '@/components/Abschnitt'
+import { Notizen } from '@/components/Notizen'
+import { Button } from '@/components/ui/button'
+import { holeReleases, type Release } from '@/lib/releases'
+import { tag } from '@/lib/utils'
+
+const RELEASES = 'https://github.com/napoleonmm83/Transkribor/releases'
+
+/** Der Grund kommt als Code aus Electron — der Satz gehört hierher, wo Umlaute erlaubt sind. */
+const GRUENDE: Record<string, string> = {
+  entwicklung: 'Entwicklungsmodus — Updates gibt es nur in der installierten App.',
+  'kein-appimage': 'Nur die AppImage kann sich selbst aktualisieren.',
+  // Beide Quellen für die Update-Adresse waren leer (`electron/updater.js`). Der Satz nennt
+  // den Ausweg, weil dieses Exemplar sich nicht selbst helfen kann.
+  'keine-quelle': 'Diese Fassung kennt keine Update-Quelle — bitte lade sie neu herunter.',
+}
+
+/** Bytes als MB mit einer Nachkommastelle, deutsches Dezimalkomma. */
+function mb(bytes: number, stellen = 0) {
+  return (bytes / 1048576).toFixed(stellen).replace('.', ',')
+}
+
+/**
+ * Version, Update und Verlauf — die drei Fragen zu „welchen Stand habe ich?" auf einer Seite.
+ *
+ * Lag bis dahin als Abschnitt in den Einstellungen, zwischen Whisper-Qualität und KI-Anbieter:
+ * Einstellungen sind Dinge, die man EINSTELLT, ein Update ist keines. Der Verlauf kam dazu,
+ * weil die Frage „was ist eigentlich neu?" bis dahin nur GitHub beantwortet hat — und dorthin
+ * geht niemand, der die App benutzt, um nicht mit Dateien zu hantieren.
+ */
+export function VersionPage() {
+  const { zustand: upd, pruefen, laden, installieren, protokollOeffnen } = useUpdate()
+  // Ausserhalb von Electron gibt es keinen Update-Zustand — dann ist der zur Bauzeit
+  // eingesetzte Wert die einzige (und richtige) Quelle, wie in der Fusszeile.
+  const version = upd?.version ?? __APP_VERSION__
+  const [verlauf, setVerlauf] = useState<Release[] | null>(null)
+  const [fehler, setFehler] = useState('')
+
+  useEffect(() => {
+    const ab = new AbortController()
+    holeReleases(ab.signal)
+      .then(setVerlauf)
+      // Nach dem Abbruch ist die Seite verlassen — eine Fehlermeldung ginge an niemanden mehr
+      // und überschriebe beim schnellen Hin und Her das Ergebnis eines frischen Ladelaufs.
+      .catch((e: Error) => { if (!ab.signal.aborted) setFehler(e.message) })
+    return () => ab.abort()
+  }, [])
+
+  return (
+    <div className="p-6 sm:p-8">
+      <PageHeader rubrik="Transkribor" titel="Version und Updates" zurueck="/" zurueckText="Übersicht" />
+
+      <Abschnitt titel="Diese Fassung">
+        <p className="ziffern text-3xl font-semibold">{version}</p>
+
+        {!upd && (
+          // Der Browser-Fall: dieselbe Oberfläche, aber hier gibt es nichts zu aktualisieren.
+          <p className="mt-2 text-sm text-muted-foreground">
+            Updates gibt es in der installierten App.{' '}
+            <a className="underline underline-offset-2 hover:text-foreground" href={RELEASES}
+              target="_blank" rel="noreferrer">Alle Fassungen ansehen</a>
+          </p>
+        )}
+
+        {upd?.art === 'aktuell' && (
+          <p className="mt-1 text-sm text-muted-foreground">Das ist die neueste Fassung.</p>
+        )}
+
+        {(upd?.art === 'unbekannt' || upd?.art === 'aktuell' || upd?.art === 'prueft' || upd?.art === 'fehler') && (
+          <Button className="mt-3" variant="outline" disabled={upd.art === 'prueft'} onClick={pruefen}>
+            {upd.art === 'prueft'
+              ? <><Loader2 className="size-4 animate-spin" /> Wird geprüft …</>
+              : 'Nach Updates suchen'}
+          </Button>
+        )}
+
+        {upd?.art === 'verfuegbar' && (
+          <div className="mt-3">
+            <p className="text-sm">{upd.neue} verfügbar</p>
+            <Button className="mt-2" onClick={laden}>
+              Herunterladen{upd.groesse != null && ` (${mb(upd.groesse)} MB)`}
+            </Button>
+          </div>
+        )}
+
+        {upd?.art === 'verfuegbar_manuell' && (
+          // Mac: Auto-Update ohne Notarisierung nicht moeglich, aber die Pruefung lief. Statt des
+          // Auto-Download-Knopfs (der downloadUpdate riefe, das auf Mac scheitert) ein Knopf, der
+          // ueber denselben `laden`-IPC geht — der Mac-Automat oeffnet darin die Release-Seite.
+          <div className="mt-3">
+            <p className="text-sm">
+              Update {upd.neue} verfügbar{upd.groesse != null && ` (${mb(upd.groesse)} MB)`}.{' '}
+              Auf macOS ist Auto-Update ohne Notarisierung nicht möglich.
+            </p>
+            <Button className="mt-2" onClick={laden}>Manuell herunterladen</Button>
+          </div>
+        )}
+
+        {upd?.art === 'laedt' && (
+          <div className="mt-3">
+            <div className="h-2 w-full overflow-hidden rounded-full bg-muted" role="progressbar"
+              aria-valuenow={Math.round(upd.prozent)} aria-valuemin={0} aria-valuemax={100}
+              aria-label="Update wird heruntergeladen">
+              <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${upd.prozent}%` }} />
+            </div>
+            <p className="mt-2 text-sm text-muted-foreground">
+              <span className="ziffern">{Math.round(upd.prozent)} %</span> · {mb(upd.geladen)} von {mb(upd.gesamt)} MB · {mb(upd.tempo, 1)} MB/s
+            </p>
+          </div>
+        )}
+
+        {upd?.art === 'bereit' && (
+          <div className="mt-3">
+            <p className="text-sm">{upd.neue} ist bereit.</p>
+            <Button className="mt-2" onClick={installieren}>Neu starten und installieren</Button>
+          </div>
+        )}
+
+        {upd?.art === 'fehler' && (
+          <p className="mt-3 text-sm text-muted-foreground">
+            Prüfung fehlgeschlagen: {upd.text} — Einzelheiten stehen im{' '}
+            <button type="button" className="underline underline-offset-2 hover:text-foreground"
+              onClick={protokollOeffnen}>Protokoll</button>.
+          </p>
+        )}
+
+        {upd?.art === 'nicht_moeglich' && (
+          <p className="mt-3 text-sm text-muted-foreground">
+            {GRUENDE[upd.grund] ?? 'Updates sind auf diesem System nicht möglich.'}{' '}
+            <a className="underline underline-offset-2 hover:text-foreground" href={RELEASES}
+              target="_blank" rel="noreferrer">Versionen ansehen</a>
+          </p>
+        )}
+      </Abschnitt>
+
+      <Abschnitt titel="Versionsverlauf">
+        {!verlauf && !fehler && (
+          <p className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="size-4 animate-spin" aria-hidden="true" /> Lädt …
+          </p>
+        )}
+
+        {fehler && (
+          // Kein Netz, GitHub weg, Kontingent überschritten — für den Leser derselbe Fall:
+          // hier steht heute nichts. Der Grund steht trotzdem dabei, sonst rät er.
+          <p className="text-sm text-muted-foreground">
+            Der Verlauf lässt sich gerade nicht laden ({fehler}).{' '}
+            <a className="underline underline-offset-2 hover:text-foreground" href={RELEASES}
+              target="_blank" rel="noreferrer">Auf GitHub ansehen</a>
+          </p>
+        )}
+
+        {verlauf?.length === 0 && (
+          <p className="text-sm text-muted-foreground">Noch keine veröffentlichten Fassungen.</p>
+        )}
+
+        {verlauf?.map((r, i) => (
+          // <details> statt eigenem Aufklapp-Zustand: die Notizen sind lang, und der Browser
+          // kann das seit jeher — samt Tastaturbedienung. Die neueste steht offen, weil sie
+          // fast immer die gesuchte ist.
+          <details key={r.tag} open={i === 0} className="border-b border-border/60 py-3 last:border-b-0">
+            <summary className="flex cursor-pointer items-baseline gap-3 rounded-md
+                                focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+              <h3 className="ziffern font-medium">{r.version}</h3>
+              <span className="text-xs text-muted-foreground">{tag(r.datum)}</span>
+              {r.version === version && (
+                <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                  installiert
+                </span>
+              )}
+            </summary>
+            <div className="mt-3 pl-1">
+              <Notizen text={r.notizen} />
+              {!r.notizen.trim() && <p className="text-sm text-muted-foreground">Keine Beschreibung.</p>}
+            </div>
+          </details>
+        ))}
+
+        {verlauf && verlauf.length > 0 && (
+          <p className="mt-4 text-sm text-muted-foreground">
+            <a className="underline underline-offset-2 hover:text-foreground" href={RELEASES}
+              target="_blank" rel="noreferrer">Ältere Fassungen auf GitHub</a>
+          </p>
+        )}
+      </Abschnitt>
+    </div>
+  )
+}

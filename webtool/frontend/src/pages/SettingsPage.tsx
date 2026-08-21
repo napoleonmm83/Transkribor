@@ -1,50 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 import { FolderOpen, KeyRound, Loader2, LogIn, RefreshCw } from 'lucide-react'
 import {
   cancelLogin, getAuth, getHardware, getSettings, listModels, loginState,
   saveSettings, startLogin, submitLoginCode, testSettings, updateYtdlp, verwerfeKaputt,
 } from '@/lib/api'
-import { useUpdate } from '@/hooks/useUpdate'
 import { PageHeader } from '@/components/PageHeader'
+import { Abschnitt } from '@/components/Abschnitt'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { tag } from '@/lib/utils'
 import type { AuthStatus, Hardware, LoginState, ModelInfo, ProviderInfo, Settings, YtdlpStand } from '@/lib/types'
-
-const RELEASES = 'https://github.com/napoleonmm83/Transkribor/releases'
-
-/** ISO-Datum vom Server als deutsches Datum. Von Hand umgedreht statt per
- *  `toLocaleDateString`: dessen Ausgabe hängt an der ICU-Fassung der Laufzeit, wäre also im
- *  Test eine andere als im Browser. Im Screenshot fiel auf, dass `2026-08-13` in einer sonst
- *  durchgehend deutschen Seite wie eine Fehlermeldung aussieht. */
-function tag(iso: string) {
-  return iso.split('-').reverse().join('.')
-}
-
-/** Bytes als MB mit einer Nachkommastelle, deutsches Dezimalkomma. */
-function mb(bytes: number, stellen = 0) {
-  return (bytes / 1048576).toFixed(stellen).replace('.', ',')
-}
-
-/** Der Grund kommt als Code aus Electron — der Satz gehoert hierher, wo Umlaute erlaubt sind. */
-const GRUENDE: Record<string, string> = {
-  entwicklung: 'Entwicklungsmodus — Updates gibt es nur in der installierten App.',
-  'kein-appimage': 'Nur die AppImage kann sich selbst aktualisieren.',
-}
-
-/**
- * Abschnitt als Blatt. Vorher trennten nur `border-t`-Striche — die Seite las sich als eine
- * lange Rolle, in der Whisper-Qualitaet, KI-Anbieter und Update-Stand gleich wichtig aussahen.
- */
-function Abschnitt({ titel, children }: { titel: string; children: React.ReactNode }) {
-  return (
-    <section className="blatt mb-6 p-5">
-      <h2 className="rubrik mb-4">{titel}</h2>
-      {children}
-    </section>
-  )
-}
 
 /**
  * Der „Ordner öffnen"-Griff der Electron-Brücke, oder `null` im Browser (#218).
@@ -282,7 +250,6 @@ export function SettingsPage() {
   const { neuerLauf: ytNeuerLauf, kennung: ytKennung, melde: ytMeldeEinmal } = useEinmalJeLauf()
   const [kaputtLaeuft, setKaputtLaeuft] = useState(false)
   const [hw, setHw] = useState<Hardware | null>(null)
-  const { zustand: upd, pruefen, laden, installieren, protokollOeffnen } = useUpdate()
 
   useEffect(() => { getSettings().then(setS).catch(e => toast.error(String(e))) }, [])
   useEffect(() => { getHardware().then(setHw).catch(() => setHw(null)) }, [])
@@ -936,78 +903,17 @@ export function SettingsPage() {
         )}
       </Abschnitt>
 
-      {upd && (
-        <Abschnitt titel="Version und Updates">
-          <p className="text-sm">
-            <span className="font-medium">Transkribor {upd.version}</span>
-            {upd.art === 'aktuell' && <span className="text-muted-foreground"> · aktuell</span>}
-          </p>
+      <Abschnitt titel="Version und Updates">
+        {/* Nur ein Wegweiser: die Bedienung steht auf einer eigenen Seite. Einstellungen sind
+            Dinge, die man EINSTELLT — ein Update ist keines, und der Verlauf schon gar nicht. */}
+        <p className="text-sm text-muted-foreground">
+          Welche Fassung läuft, ob eine neue bereitsteht und was sich zuletzt geändert hat:{' '}
+          <Link className="underline underline-offset-2 hover:text-foreground" to="/version">
+            Version und Updates
+          </Link>
+        </p>
+      </Abschnitt>
 
-          {(upd.art === 'unbekannt' || upd.art === 'aktuell' || upd.art === 'prueft' || upd.art === 'fehler') && (
-            <Button className="mt-3" variant="outline" disabled={upd.art === 'prueft'} onClick={pruefen}>
-              {upd.art === 'prueft'
-                ? <><Loader2 className="size-4 animate-spin" /> Wird geprüft …</>
-                : 'Nach Updates suchen'}
-            </Button>
-          )}
-
-          {upd.art === 'verfuegbar' && (
-            <div className="mt-3">
-              <p className="text-sm">{upd.neue} verfügbar</p>
-              <Button className="mt-2" onClick={laden}>
-                Herunterladen{upd.groesse != null && ` (${mb(upd.groesse)} MB)`}
-              </Button>
-            </div>
-          )}
-
-          {upd.art === 'verfuegbar_manuell' && (
-            // Mac: Auto-Update ohne Notarisierung nicht moeglich, aber die Pruefung lief. Statt des
-            // Auto-Download-Knopfs (der downloadUpdate riefe, das auf Mac scheitert) ein Knopf, der
-            // ueber denselben `laden`-IPC geht — der Mac-Automat oeffnet darin die Release-Seite.
-            <div className="mt-3">
-              <p className="text-sm">
-                Update {upd.neue} verfügbar{upd.groesse != null && ` (${mb(upd.groesse)} MB)`}.{' '}
-                Auf macOS ist Auto-Update ohne Notarisierung nicht möglich.
-              </p>
-              <Button className="mt-2" onClick={laden}>Manuell herunterladen</Button>
-            </div>
-          )}
-
-          {upd.art === 'laedt' && (
-            <div className="mt-3">
-              <div className="h-2 w-full overflow-hidden rounded-full bg-muted" role="progressbar"
-                aria-valuenow={Math.round(upd.prozent)} aria-valuemin={0} aria-valuemax={100}
-                aria-label="Update wird heruntergeladen">
-                <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${upd.prozent}%` }} />
-              </div>
-              <p className="mt-2 text-sm text-muted-foreground">
-                <span className="ziffern">{Math.round(upd.prozent)} %</span> · {mb(upd.geladen)} von {mb(upd.gesamt)} MB · {mb(upd.tempo, 1)} MB/s
-              </p>
-            </div>
-          )}
-
-          {upd.art === 'bereit' && (
-            <div className="mt-3">
-              <p className="text-sm">{upd.neue} ist bereit.</p>
-              <Button className="mt-2" onClick={installieren}>Neu starten und installieren</Button>
-            </div>
-          )}
-
-          {upd.art === 'fehler' && (
-            <p className="mt-3 text-sm text-muted-foreground">
-              Prüfung fehlgeschlagen: {upd.text} — Einzelheiten stehen im{' '}
-              <button type="button" className="underline underline-offset-2 hover:text-foreground" onClick={protokollOeffnen}>Protokoll</button>.
-            </p>
-          )}
-
-          {upd.art === 'nicht_moeglich' && (
-            <p className="mt-3 text-sm text-muted-foreground">
-              {GRUENDE[upd.grund] ?? 'Updates sind auf diesem System nicht möglich.'}{' '}
-              <a className="underline underline-offset-2 hover:text-foreground" href={RELEASES} target="_blank" rel="noreferrer">Versionen ansehen</a>
-            </p>
-          )}
-        </Abschnitt>
-      )}
     </div>
   )
 }
