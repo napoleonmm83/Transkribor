@@ -88,6 +88,30 @@ const ERNEUT_PRUEFEN = ['unbekannt', 'aktuell', 'fehler']
 function sollPruefen(stand) { return !!stand && ERNEUT_PRUEFEN.includes(stand.art) }
 
 /**
+ * Ein Automat, der nur EINES sagen kann: warum es hier keine Updates gibt (#319).
+ *
+ * Gebraucht, wenn `erstellen` gar nicht erst laufen konnte — etwa weil
+ * `require('electron-updater')` wirft (Verpackungsfehler). Vorher blieb `aktualisierer` in
+ * `main.js` dann `null`, `update:status` lieferte `null`, und im Frontend ist das **nicht**
+ * von „laeuft im normalen Browser" zu unterscheiden: die Versionsseite sagte in der
+ * INSTALLIERTEN App „Updates gibt es in der installierten App" und schickte den Nutzer im
+ * Kreis. Dieselbe Klasse wie `"text": ""` in `apply_correction` — ein Wert trug zwei
+ * Bedeutungen; jetzt sagt der Zustand, welche gemeint ist.
+ *
+ * Die Aktionen sind No-Ops und werfen NICHT: die IPC-Kanaele rufen sie unveraendert, und ein
+ * Wurf im Hauptprozess waere schlimmer als die Auskunft, die er ersetzt.
+ */
+function ersatz(version, grund) {
+  const stand = { version, art: 'nicht_moeglich', grund }
+  return {
+    zustand: () => stand,
+    pruefen: () => {},
+    laden: () => {},
+    installieren: () => {},
+  }
+}
+
+/**
  * Baut den Automaten. `aendert` wird bei jeder Zustandsaenderung gerufen — daran haengt
  * die Anzeige im Fenster.
  */
@@ -168,4 +192,4 @@ function erstellen({ autoUpdater, version, plattform, gepackt, appimage, aendert
   }
 }
 
-module.exports = { nichtMoeglich, sollPruefen, erstellen, macUrls, istNeuer, parseLatestMac, publishAusYml }
+module.exports = { nichtMoeglich, sollPruefen, erstellen, ersatz, macUrls, istNeuer, parseLatestMac, publishAusYml }

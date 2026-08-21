@@ -310,6 +310,12 @@ async function starten() {
     zeitgeber.unref()
   } catch (e) {
     protokoll.schreiben(`Update-Pruefung nicht moeglich: ${e && e.message || e}`)
+    // Ohne den Ersatz bliebe `aktualisierer` null, `update:status` lieferte null — und das
+    // ist im Frontend NICHT von „laeuft im normalen Browser" zu unterscheiden (#319).
+    // **Nur wenn noch keiner steht:** dieser `try` umschliesst auch `pruefen()` und den
+    // Zeitgeber; ein Wurf DANACH duerfte einen funktionierenden Automaten nicht durch einen
+    // ersetzen, der „geht nicht" sagt.
+    if (!aktualisierer) aktualisierer = updater.ersatz(app.getVersion(), 'kein-updater')
   }
 }
 

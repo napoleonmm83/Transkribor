@@ -17,14 +17,17 @@ import type { UpdateZustand } from '@/lib/types'
  * Fortschrittsbalken und Protokoll-Link ein zweites Mal in 24 px Hoehe nachzubauen,
  * waere zwei Fassungen derselben Sache.
  *
- * `keine-quelle` ist die EINZIGE Ausnahme unter `nicht_moeglich`: die anderen Gruende sind
- * Eigenschaften der Installation, die der Nutzer kennt (Entwicklungsbetrieb, .deb-Paket) —
- * dieser hier ist ein Defekt, der ihn dauerhaft von Updates abschneidet, ohne dass er es
- * merkt. Er zieht eine Handlung nach sich („neu herunterladen"), also gehoert er hierher.
+ * `keine-quelle` und `kein-updater` sind die Ausnahmen unter `nicht_moeglich`: die anderen
+ * Gruende sind Eigenschaften der Installation, die der Nutzer kennt (Entwicklungsbetrieb,
+ * .deb-Paket) — diese beiden sind DEFEKTE, die ihn dauerhaft von Updates abschneiden, ohne
+ * dass er es merkt. Sie ziehen eine Handlung nach sich (neu herunterladen bzw. ins Protokoll
+ * sehen), also gehoeren sie hierher.
  */
 function updateHinweis(z: UpdateZustand | null): string | null {
   if (!z) return null
-  if (z.art === 'nicht_moeglich' && z.grund === 'keine-quelle') return 'Updates nicht möglich'
+  if (z.art === 'nicht_moeglich' && (z.grund === 'keine-quelle' || z.grund === 'kein-updater')) {
+    return 'Updates nicht möglich'
+  }
   if (z.art === 'verfuegbar' || z.art === 'verfuegbar_manuell') return `Update ${z.neue} verfügbar`
   if (z.art === 'laedt') return `Update lädt · ${Math.round(z.prozent)} %`
   if (z.art === 'bereit') return `Update ${z.neue} bereit`

@@ -113,6 +113,15 @@ describe('StatusBar', () => {
     expect(await screen.findByRole('link', { name: /Updates nicht möglich/ })).toBeTruthy()
   })
 
+  it('sagt auch einen nicht gebauten Updater an', async () => {
+    // #319 — derselbe Grund wie bei `keine-quelle`: ein Defekt, der still von Updates
+    // abschneidet. In der Fusszeile steht er, weil die auf JEDER Seite sichtbar ist.
+    vi.mocked(api.getHardware).mockRejectedValue(new Error('weg'))
+    bruecke({ version: '0.10.0', art: 'nicht_moeglich', grund: 'kein-updater' })
+    zeigen()
+    expect(await screen.findByRole('link', { name: /Updates nicht möglich/ })).toBeTruthy()
+  })
+
   it('schweigt bei den anderen Gruenden, warum Updates nicht moeglich sind', async () => {
     // Gegenprobe: ein Daueralarm im Entwicklungsbetrieb waere derselbe Schaden von der
     // anderen Seite.

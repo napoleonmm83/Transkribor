@@ -104,6 +104,15 @@ describe('VersionPage — diese Fassung', () => {
     expect(await screen.findByText(/lade sie neu herunter/)).toBeTruthy()
   })
 
+  it('sagt bei kaputtem Updater die Wahrheit, statt in die App zu verweisen — IN der App', async () => {
+    // #319: konnte `erstellen` gar nicht laufen (Verpackungsfehler), lieferte der IPC-Kanal
+    // `null` — ununterscheidbar vom Browser-Fall. Die Seite schickte den Nutzer damit in die
+    // App, in der er schon sass. Jetzt traegt der Zustand seinen eigenen Grund.
+    zeigeMit({ version: '0.2.1', art: 'nicht_moeglich', grund: 'kein-updater' })
+    expect(await screen.findByText(/konnte nicht gestartet werden/)).toBeTruthy()
+    expect(screen.queryByText(/Updates gibt es in der installierten App/)).toBeNull()
+  })
+
   it('zeigt einen Fehler samt Weg zum Protokoll', async () => {
     zeigeMit({ version: '0.2.1', art: 'fehler', text: '404 releases.atom' })
     expect(await screen.findByText(/404 releases\.atom/)).toBeTruthy()
