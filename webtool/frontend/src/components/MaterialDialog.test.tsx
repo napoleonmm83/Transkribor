@@ -117,6 +117,14 @@ describe('MaterialDialog', () => {
       expect(panel).not.toBeNull()
       expect(panel).toHaveAttribute('role', 'tabpanel')
       expect(panel).toHaveAttribute('aria-labelledby', aktiv.id)
+      // JEDER Reiter, nicht nur der aktive — und das ist der Punkt, den erst der Browser
+      // gezeigt hat: es wird nur EIN Panel gerendert, der inaktive Reiter zeigte damit auf
+      // eine tote Id. Das ist derselbe Fehler, den #304 behebt, nur verschoben: ein
+      // `aria-controls` ins Leere kuendigt eine Beziehung an, die es nicht gibt.
+      for (const t of reiter()) {
+        const id = t.getAttribute('aria-controls')
+        if (id !== null) expect(document.getElementById(id)).not.toBeNull()
+      }
     })
 
     it('wechselt mit den Pfeiltasten und laeuft dabei um', () => {

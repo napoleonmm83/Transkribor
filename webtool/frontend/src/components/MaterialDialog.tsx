@@ -251,7 +251,14 @@ export function MaterialDialog({ project, offen, vorbelegteDateien, sprachChoice
               <div role="tablist" aria-label="Art des Materials" className="flex gap-1">
                 {QUELLEN.map(([id, text], i) => (
                   <button key={id} type="button" role="tab" id={`mat-reiter-${id}`}
-                    aria-selected={quelle === id} aria-controls={`mat-panel-${id}`}
+                    aria-selected={quelle === id}
+                    // NUR am aktiven Reiter: gerendert wird ein einziges Panel, der inaktive
+                    // zeigte sonst auf eine Id, die es nicht gibt — derselbe Fehler, den
+                    // #304 behebt, nur verschoben. Gefunden hat das der Browser-Test, nicht
+                    // die Unit-Tests: die prueften den AKTIVEN Reiter und blieben gruen.
+                    // Kein `aria-controls` ist besser als eines ins Leere; das APG-Muster
+                    // laesst es fuer nicht gerenderte Panels ausdruecklich weg.
+                    aria-controls={quelle === id ? `mat-panel-${id}` : undefined}
                     tabIndex={quelle === id ? 0 : -1}
                     onClick={() => setQuelle(id)}
                     onKeyDown={e => {
