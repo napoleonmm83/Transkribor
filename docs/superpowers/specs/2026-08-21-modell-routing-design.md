@@ -56,6 +56,22 @@ Alles hier ist gemessen, nicht angenommen — wer etwas davon ändert, misst neu
   aus der Agentendatei oder aus `opts.effort` eines Workflow-Laufs. **Architektonische Folge:**
   jede Tafelzeile, deren Effort vom Sitzungswert abweicht, **braucht eine eigene Agentendatei**;
   ein Ad-hoc-Aufruf kann sie nicht ausdrücken.
+- **Die offizielle Doku bestätigt beide Felder** (`code.claude.com/docs/en/sub-agents`, abgerufen
+  2026-08-21): `model` nimmt `sonnet|opus|haiku|fable`, eine volle Modell-ID oder `inherit`
+  (Default); `effort` nimmt `low|medium|high|xhigh|max` und „overrides session effort". Beide
+  Orte gelten, `.claude/agents/` schlägt `~/.claude/agents/` bei Namensgleichheit.
+- **⚠️ EINE NEU ANGELEGTE AGENTENDATEI GILT IN DER LAUFENDEN SITZUNG NICHT — und der Dispatch
+  sagt es nicht.** Gemessen 2026-08-21: eine mitten in der Sitzung erzeugte Definition
+  (`model: haiku`, eigener Körper mit einem Codewort) löste unter ihrem Namen **ohne Fehler**
+  auf, lief aber auf dem Sitzungsmodell, mit Sitzungs-Effort — und antwortete **nicht** mit
+  ihrem Codewort, sondern aus dem Kontext der aufrufenden Sitzung. Der `subagent_type` wurde
+  also **still ersetzt**, nicht abgelehnt.
+  Das ist eine Falle für jeden, der hier Agenten baut, und sie ist **ohne Codewort unsichtbar**:
+  ein Probelauf, der „antworte mit BEREIT" verlangt, bekommt „BEREIT" — egal wer antwortet. Die
+  Unterscheidung gelingt nur mit einer Anweisung, die **ausschliesslich** im Körper der Datei
+  steht.
+  **Folge für die Prüfung:** ob `model:`/`effort:` wirken, ist an einer frisch angelegten Datei
+  grundsätzlich nicht messbar. Es braucht eine **neue Sitzung** — dieselbe Bedingung wie in §7.3.
 - **`UserPromptSubmit`-Injektionen akkumulieren.** Sie landen im Turn und bleiben in der
   Historie. Anthropics eigener ausgelieferter Hook (2 325 Zeilen) hält deshalb Sitzungszustand:
   `atomic_check_and_mark_warning(...)` — *„Returns True if this is the first time seeing this
