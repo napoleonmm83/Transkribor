@@ -43,6 +43,14 @@ describe('Notizen — die Anzeige', () => {
     expect(screen.queryByText(/\*\*/)).toBeNull()
   })
 
+  it('zeichnet INNERHALB von fett weiter aus — echte Notizen mischen das', () => {
+    // „**Kein `position: sticky`**" steht wortwoertlich in den Notizen zu v0.29.0. Ohne den
+    // zweiten Durchgang standen die Backticks sichtbar im fetten Text (im Browser gefunden).
+    render(<Notizen text={'- **Kein `position: sticky`** — sonst scheint es durch.'} />)
+    expect(screen.getByText('position: sticky').tagName).toBe('CODE')
+    expect(screen.queryByText(/`/)).toBeNull()
+  })
+
   it('macht aus [Text](https://…) einen Link', () => {
     render(<Notizen text="Siehe [Issue 281](https://github.com/x/y/issues/281)." />)
     const a = screen.getByRole('link', { name: 'Issue 281' })

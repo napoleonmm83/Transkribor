@@ -49,7 +49,11 @@ const AUSZEICHNUNG = /(\*\*[^*]+\*\*|`[^`]+`|\[[^\]]+\]\([^)]+\))/g
 
 function inline(text: string): ReactNode[] {
   return text.split(AUSZEICHNUNG).map((teil, i) => {
-    if (/^\*\*[^*]+\*\*$/.test(teil)) return <strong key={i}>{teil.slice(2, -2)}</strong>
+    // Rekursiv, weil fett und `code` sich mischen: „**Kein `position: sticky`**" steht so in
+    // den echten Notizen, und ohne den zweiten Durchgang blieben die Backticks im fetten Text
+    // stehen (im Browser gefunden, nicht im Unit-Test — der hatte nur die reinen Faelle).
+    // Terminiert, weil die Marker beim Abschneiden verschwinden und `**` innen ausgeschlossen ist.
+    if (/^\*\*[^*]+\*\*$/.test(teil)) return <strong key={i}>{inline(teil.slice(2, -2))}</strong>
     if (/^`[^`]+`$/.test(teil)) {
       return <code key={i} className="rounded bg-muted px-1 py-0.5 text-[0.85em]">{teil.slice(1, -1)}</code>
     }

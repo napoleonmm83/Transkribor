@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Loader2 } from 'lucide-react'
+import { ChevronRight, Loader2 } from 'lucide-react'
 import { useUpdate } from '@/hooks/useUpdate'
 import { PageHeader } from '@/components/PageHeader'
 import { Abschnitt } from '@/components/Abschnitt'
@@ -162,9 +162,15 @@ export function VersionPage() {
           // <details> statt eigenem Aufklapp-Zustand: die Notizen sind lang, und der Browser
           // kann das seit jeher — samt Tastaturbedienung. Die neueste steht offen, weil sie
           // fast immer die gesuchte ist.
-          <details key={r.tag} open={i === 0} className="border-b border-border/60 py-3 last:border-b-0">
+          <details key={r.tag} open={i === 0} className="group border-b border-border/60 py-3 last:border-b-0">
             <summary className="flex cursor-pointer items-baseline gap-3 rounded-md
                                 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+              {/* Eigenes Symbol, weil `display: flex` am <summary> den Marker des Browsers
+                  unterdrückt (im Browser gemessen: `::marker` leer, kein Dreieck) — ohne das
+                  sah eine zugeklappte Fassung nach einer toten Zeile aus. */}
+              <ChevronRight aria-hidden="true"
+                className="mt-0.5 size-4 shrink-0 self-start text-muted-foreground transition-transform
+                           group-open:rotate-90 motion-reduce:transition-none" />
               <h3 className="ziffern font-medium">{r.version}</h3>
               <span className="text-xs text-muted-foreground">{tag(r.datum)}</span>
               {r.version === version && (
