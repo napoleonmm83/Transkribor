@@ -57,7 +57,7 @@ Auch mit **Schweizerdeutsch** kommt es zurecht.
    Namen und Grösse, Video-Links mit ihrer Adresse; eine versehentlich mitgenommene nimmst
    du mit dem ✕ daneben wieder heraus, ohne von vorn anzufangen. (Ab `v0.28.0`
    bleibt dabei auch bei zwanzig Aufnahmen das Feld zum Hineinziehen sichtbar —
-   geblättert wird nur in der Liste. Ab der nächsten Fassung gilt dasselbe im zweiten
+   geblättert wird nur in der Liste. Ab `v0.29.0` gilt dasselbe im zweiten
    Schritt: der Abspieler mit der Tonspur bleibt beim Blättern stehen, statt nach oben
    aus dem Bild zu wandern.)
 
