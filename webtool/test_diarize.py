@@ -210,3 +210,197 @@ def test_verfuegbar_fragt_nur_einmal_pro_prozess(monkeypatch, tmp_path):
     assert diarize.verfuegbar() is True
     assert diarize.verfuegbar() is True
     assert rufe == ["pyannote.audio"]
+
+
+# --- Diagnose im Sidecar (#275): pi-Spektrum + Ueberlebensquote ---------------------
+# Die Sonden greifen in FREMDE Innereien. Die Tests fahren deshalb gegen eine nachgebaute
+# pyannote-Oberflaeche (das echte Paket fehlt auf dem CI-Laeufer, #270) — und EIN Waechter
+# unten prueft dieselben Griffpunkte am ECHTEN Paket, uebersprungen wo es fehlt.
+
+
+class _Emb:
+    """Was `filter_embeddings` als erstes Argument bekommt: (chunks, speakers, dim)."""
+    shape = (100, 3, 192)
+
+
+class _BasisClustering:
+    """Spiegelt pyannotes Aufbau: `BaseClustering` DEFINIERT `filter_embeddings` …"""
+    def filter_embeddings(self, embeddings, segmentations=None, min_active_ratio=0.2):
+        return ("gefiltert", list(range(195)), "speaker_idx")
+
+
+class _FakeClustering(_BasisClustering):
+    """… und `VBxClustering` ERBT es nur. Der Unterschied ist tragend: der Rueckbau ist
+    deshalb ein `delattr` auf der Unterklasse, kein Zurueckschreiben — ein Nachbau, der die
+    Methode selbst definiert, pruefte den anderen Zweig (siehe eigener Test unten)."""
+
+
+class _FakePipe:
+    def __init__(self):
+        self.clustering = _FakeClustering()
+        self.sah_patch = {}
+
+    def __call__(self, wave, **kw):
+        from pyannote.audio.pipelines import clustering as cl
+        # Festhalten, WAS waehrend des Laufs installiert war — danach ist alles
+        # zurueckgebaut, ein Blick von aussen koennte den Patch also nie sehen.
+        self.sah_patch["vbx"] = cl.cluster_vbx is not _echtes_vbx
+        self.sah_patch["filter"] = "filter_embeddings" in vars(type(self.clustering))
+        cl.cluster_vbx("ahc", "fea", "phi")
+        self.clustering.filter_embeddings(_Emb(), segmentations="seg")
+
+        class _Ann:
+            def itertracks(self, yield_label=True):
+                return []
+        return _Ann()
+
+
+def _echtes_vbx(*a, **kw):
+    return ("q", [0.62, 0.38, 4e-07])
+
+
+def _pyannote_attrappe(monkeypatch):
+    """Baut `pyannote.audio.pipelines.clustering` nach und gibt das Modul zurueck."""
+    import sys, types
+    cl = types.ModuleType("pyannote.audio.pipelines.clustering")
+    cl.cluster_vbx = _echtes_vbx
+    pipelines = types.ModuleType("pyannote.audio.pipelines")
+    pipelines.clustering = cl
+    audio = types.ModuleType("pyannote.audio")
+    audio.pipelines = pipelines
+    wurzel = types.ModuleType("pyannote")
+    wurzel.audio = audio
+    for name, mod in [("pyannote", wurzel), ("pyannote.audio", audio),
+                      ("pyannote.audio.pipelines", pipelines),
+                      ("pyannote.audio.pipelines.clustering", cl)]:
+        monkeypatch.setitem(sys.modules, name, mod)
+    return cl
+
+
+def test_diagnose_none_setzt_keinen_patch(monkeypatch):
+    """Der Default-Weg darf pyannote NICHT anfassen.
+
+    Gemessen wird von INNEN (`sah_patch`), nicht von aussen: der Rueckbau im `finally`
+    laeuft vor jeder Pruefung von aussen, ein Patch waere dort unsichtbar. Genau die Luecke,
+    an der ein Waechter „vom Zufall lebt"."""
+    cl = _pyannote_attrappe(monkeypatch)
+    pipe = _FakePipe()
+    monkeypatch.setattr(diarize, "_load_waveform", lambda p: "audio")
+    monkeypatch.setattr(diarize, "_pipeline", lambda: pipe)
+
+    diarize.diarize_file("x.m4a")                       # ohne diagnose= : heutiger Weg
+    assert pipe.sah_patch == {"vbx": False, "filter": False}
+    assert cl.cluster_vbx is _echtes_vbx
+
+
+def test_diagnose_fuellt_pi_und_ueberlebensquote_und_baut_zurueck(monkeypatch):
+    """Die eigentliche Zusicherung von #275 — und der Rueckbau in derselben Probe.
+
+    `slots` ist die dem Filter ANGEBOTENE Menge (chunks x speakers), `durchgelassen` die
+    Laenge von `chunk_idx`. Der Rueckbau gehoert dazu, weil der `cluster_vbx`-Griff
+    PROZESSWEIT ist: ein haengengebliebener Patch beschriebe die naechste Datei mit den
+    Zahlen dieser."""
+    cl = _pyannote_attrappe(monkeypatch)
+    pipe = _FakePipe()
+    monkeypatch.setattr(diarize, "_load_waveform", lambda p: "audio")
+    monkeypatch.setattr(diarize, "_pipeline", lambda: pipe)
+
+    diagnose: dict = {}
+    diarize.diarize_file("x.m4a", diagnose=diagnose)
+
+    assert pipe.sah_patch == {"vbx": True, "filter": True}      # waehrend des Laufs installiert
+    assert diagnose["pi"] == [0.62, 0.38, 4e-07]
+    assert diagnose["slots"] == 300 and diagnose["durchgelassen"] == 195
+    # ... und danach nichts mehr davon zu sehen
+    assert cl.cluster_vbx is _echtes_vbx
+    assert "filter_embeddings" not in vars(_FakeClustering)
+
+
+def test_rueckbau_auch_wenn_die_pipeline_wirft(monkeypatch):
+    """Ein Wurf mitten im Lauf darf den prozessweiten Patch nicht stehen lassen."""
+    cl = _pyannote_attrappe(monkeypatch)
+
+    class _WerfendePipe(_FakePipe):
+        def __call__(self, wave, **kw):
+            raise RuntimeError("GPU voll")
+
+    monkeypatch.setattr(diarize, "_load_waveform", lambda p: "audio")
+    monkeypatch.setattr(diarize, "_pipeline", lambda: _WerfendePipe())
+    import pytest
+    with pytest.raises(RuntimeError):
+        diarize.diarize_file("x.m4a", diagnose={})
+    assert cl.cluster_vbx is _echtes_vbx
+    assert "filter_embeddings" not in vars(_FakeClustering)
+
+
+def test_fehlender_griffpunkt_kostet_die_diagnose_nicht_den_lauf(monkeypatch):
+    """Best effort: hat pyannote `cluster_vbx` nicht mehr, laeuft die Diarisierung trotzdem.
+
+    Die Gegenrichtung waere schlimmer als keine Diagnose — ein Wurf aus einer reinen
+    Protokollfunktion killte einen Lauf, der sonst durchgelaufen waere."""
+    cl = _pyannote_attrappe(monkeypatch)
+    del cl.cluster_vbx
+
+    class _OhneVbx(_FakePipe):
+        def __call__(self, wave, **kw):
+            self.clustering.filter_embeddings(_Emb(), segmentations="seg")
+
+            class _Ann:
+                def itertracks(self, yield_label=True):
+                    return []
+            return _Ann()
+
+    pipe = _OhneVbx()
+    monkeypatch.setattr(diarize, "_load_waveform", lambda p: "audio")
+    monkeypatch.setattr(diarize, "_pipeline", lambda: pipe)
+    diagnose: dict = {}
+    assert diarize.diarize_file("x.m4a", diagnose=diagnose) == []      # Lauf lebt
+    assert "pi" not in diagnose                                        # nur die Diagnose fehlt
+    assert diagnose["slots"] == 300                                    # die andere Sonde traegt
+
+
+def test_waechter_die_griffpunkte_gibt_es_im_ECHTEN_pyannote():
+    """Der Waechter, den #275 verlangt: bricht pyannote die Signatur, wird das hier rot —
+    und nicht erst still, indem die Diagnose leer bleibt.
+
+    Uebersprungen, wo pyannote fehlt (CI-Laeufer, #270) — sonst waere dieser Test dort rot
+    und lokal gruen, genau die Falle aus dem `pyannote_da`-Fix."""
+    import inspect, pytest
+    pytest.importorskip("pyannote.audio", reason="pyannote fehlt (CI) — Waechter gilt lokal")
+    from pyannote.audio.pipelines import clustering as cl
+
+    assert callable(getattr(cl, "cluster_vbx", None)),         "cluster_vbx ist kein modulglobaler Name mehr — Sonde 1 greift ins Leere"
+    quelle = inspect.getsource(cl.VBxClustering.__call__)
+    assert "cluster_vbx(" in quelle, "VBxClustering ruft cluster_vbx nicht mehr"
+    assert "self.filter_embeddings(" in quelle, "VBxClustering ruft filter_embeddings nicht mehr"
+
+    sig = inspect.signature(cl.BaseClustering.filter_embeddings)
+    assert list(sig.parameters)[:2] == ["self", "embeddings"],         "filter_embeddings nimmt die Einbettungen nicht mehr als erstes Argument"
+
+
+def test_rueckbau_schreibt_zurueck_wenn_die_klasse_es_selbst_definiert(monkeypatch):
+    """Der zweite Rueckbau-Zweig. Das echte `VBxClustering` ERBT `filter_embeddings`, hier
+    greift also `delattr`. Definierte eine kuenftige pyannote-Fassung es direkt auf der
+    benutzten Klasse, wuerde `delattr` die ECHTE Methode entfernen — deshalb der
+    `vars()`-Test im Code und diese Probe dafuer."""
+    _pyannote_attrappe(monkeypatch)
+
+    class _EigenesClustering:
+        def filter_embeddings(self, embeddings, segmentations=None, min_active_ratio=0.2):
+            return ("gefiltert", list(range(7)), "sp")
+
+    original = _EigenesClustering.filter_embeddings
+
+    class _Pipe(_FakePipe):
+        def __init__(self):
+            self.clustering = _EigenesClustering()
+            self.sah_patch = {}
+
+    pipe = _Pipe()
+    monkeypatch.setattr(diarize, "_load_waveform", lambda p: "audio")
+    monkeypatch.setattr(diarize, "_pipeline", lambda: pipe)
+    diagnose: dict = {}
+    diarize.diarize_file("x.m4a", diagnose=diagnose)
+
+    assert diagnose["durchgelassen"] == 7                       # die Sonde lief
+    assert _EigenesClustering.filter_embeddings is original     # und ist sauber zurueck

@@ -481,11 +481,44 @@ def test_cmd_diarize_writes_sidecar(project, monkeypatch):
     _root, t = project
     monkeypatch.setenv("TRANSKRIBOR_DIARIZE", "1")
     import webtool.diarize as diar
-    monkeypatch.setattr(diar, "diarize_file", lambda audio, min_speakers=2, num_speakers=None: _fake_turns())
+    monkeypatch.setattr(diar, "diarize_file", lambda audio, min_speakers=2, num_speakers=None, diagnose=None: _fake_turns())
     assert correct.cmd_diarize("Demo") == 1
     side = json.loads((t / "S1.diar.json").read_text(encoding="utf-8"))
     assert side["segments"] == [{"id": 0, "speaker": "Sprecher 1"}]
     assert side["turns"] and side["audio"] == "S1.mp3"
+
+
+def test_diagnose_landet_im_sidecar(project, monkeypatch):
+    """#275: was `diarize_file` in das mitgegebene dict schreibt, steht danach in der
+    `.diar.json`. Ohne diesen Weg waere die Diagnose gemessen und weggeworfen."""
+    _root, t = project
+    monkeypatch.setenv("TRANSKRIBOR_DIARIZE", "1")
+    import webtool.diarize as diar
+
+    def fake(audio, min_speakers=2, num_speakers=None, diagnose=None):
+        if diagnose is not None:
+            diagnose.update(pi=[0.62, 0.38, 4e-07], slots=287, durchgelassen=195)
+        return _fake_turns()
+
+    monkeypatch.setattr(diar, "diarize_file", fake)
+    assert correct.cmd_diarize("Demo") == 1
+    side = json.loads((t / "S1.diar.json").read_text(encoding="utf-8"))
+    assert side["diagnose"] == {"pi": [0.62, 0.38, 4e-07], "slots": 287, "durchgelassen": 195}
+
+
+def test_ohne_diagnose_steht_der_schluessel_NICHT_im_sidecar(project, monkeypatch):
+    """Die Gegenrichtung, und sie ist die wichtigere: greift der Monkeypatch nicht (fremdes
+    Paket geaendert), darf KEIN leerer `diagnose`-Schluessel entstehen. Der behauptete
+    „gemessen, nichts gefunden" — dieselbe Unterscheidung wie `"text": ""` gegen einen
+    fehlenden Schluessel in `apply_correction`. Bestehende Sidecars bleiben damit gueltig."""
+    _root, t = project
+    monkeypatch.setenv("TRANSKRIBOR_DIARIZE", "1")
+    import webtool.diarize as diar
+    monkeypatch.setattr(diar, "diarize_file",
+                        lambda audio, min_speakers=2, num_speakers=None, diagnose=None: _fake_turns())
+    assert correct.cmd_diarize("Demo") == 1
+    side = json.loads((t / "S1.diar.json").read_text(encoding="utf-8"))
+    assert "diagnose" not in side
 
 
 def test_cmd_diarize_disabled_by_env(project, monkeypatch):
@@ -530,7 +563,7 @@ def test_run_single_base_diarizes_only_that_file(project, monkeypatch):
     monkeypatch.setenv("TRANSKRIBOR_DIARIZE", "1")
     import webtool.diarize as diar
     calls = {"n": 0}
-    def fake_diarize(audio, min_speakers=2, num_speakers=None):
+    def fake_diarize(audio, min_speakers=2, num_speakers=None, diagnose=None):
         calls["n"] += 1
         return [{"start": 0.0, "end": 1.0, "cluster": "SPEAKER_00"}]
     monkeypatch.setattr(diar, "diarize_file", fake_diarize)
@@ -546,7 +579,7 @@ def test_run_diarizes_before_prep_and_injects(project, monkeypatch):
     monkeypatch.setenv("TRANSKRIBOR_DIARIZE", "1")
     import webtool.diarize as diar
     monkeypatch.setattr(diar, "diarize_file",
-                        lambda audio, min_speakers=2, num_speakers=None: [{"start": 0.0, "end": 1.0, "cluster": "SPEAKER_00"}])
+                        lambda audio, min_speakers=2, num_speakers=None, diagnose=None: [{"start": 0.0, "end": 1.0, "cluster": "SPEAKER_00"}])
     calls = []
     monkeypatch.setattr(correct, "_run_claude", _fake_claude(t, calls))
     assert correct.cmd_run("Demo") == 1
@@ -1237,7 +1270,7 @@ def test_diarize_reicht_die_eingestellte_sprecherzahl_durch(project, monkeypatch
     from webtool import projekt
     gesehen = {}
     monkeypatch.setattr(diar, "diarize_file",
-                        lambda audio, min_speakers=2, num_speakers=None:
+                        lambda audio, min_speakers=2, num_speakers=None, diagnose=None:
                         gesehen.update(min=min_speakers, num=num_speakers) or _fake_turns())
     projekt.setze_datei("Demo", "S1", sprecher=5)
     assert correct.cmd_diarize("Demo") == 1
@@ -1255,7 +1288,7 @@ def test_diarize_ohne_einstellung_bleibt_beim_alten_verhalten(project, monkeypat
     import webtool.diarize as diar
     gesehen = {}
     monkeypatch.setattr(diar, "diarize_file",
-                        lambda audio, min_speakers=2, num_speakers=None:
+                        lambda audio, min_speakers=2, num_speakers=None, diagnose=None:
                         gesehen.update(min=min_speakers, num=num_speakers) or _fake_turns())
     assert correct.cmd_diarize("Demo") == 1
     assert gesehen == {"min": 2, "num": None}
@@ -1274,7 +1307,7 @@ def test_geaenderte_sprecherzahl_erzwingt_neue_diarisierung(project, monkeypatch
     from webtool import projekt
     laeufe = {"n": 0}
     monkeypatch.setattr(diar, "diarize_file",
-                        lambda audio, min_speakers=2, num_speakers=None:
+                        lambda audio, min_speakers=2, num_speakers=None, diagnose=None:
                         laeufe.__setitem__("n", laeufe["n"] + 1) or _fake_turns())
     assert correct.cmd_diarize("Demo") == 1 and laeufe["n"] == 1
     assert correct.cmd_diarize("Demo") == 0 and laeufe["n"] == 1     # unveraendert -> Skip
@@ -1305,12 +1338,12 @@ def test_scheiternde_diarisierung_laesst_kein_veraltetes_sidecar_zurueck(project
     import webtool.diarize as diar
     from webtool import projekt
     monkeypatch.setattr(diar, "diarize_file",
-                        lambda audio, min_speakers=2, num_speakers=None: _fake_turns())
+                        lambda audio, min_speakers=2, num_speakers=None, diagnose=None: _fake_turns())
     assert correct.cmd_diarize("Demo") == 1                    # Sidecar aus dem Auto-Lauf
     assert (t / "S1.diar.json").exists()
 
     laeufe = {"n": 0}
-    def boom(audio, min_speakers=2, num_speakers=None):
+    def boom(audio, min_speakers=2, num_speakers=None, diagnose=None):
         laeufe["n"] += 1
         raise RuntimeError("CUDA out of memory")
     monkeypatch.setattr(diar, "diarize_file", boom)
@@ -1321,6 +1354,6 @@ def test_scheiternde_diarisierung_laesst_kein_veraltetes_sidecar_zurueck(project
     # aus dem dokumentierten „kein Sidecar"-Zustand heraus, nicht aus einer Ungleichheit, die
     # sich selbst am Leben haelt. Der Unterschied zeigt sich, sobald die GPU wieder da ist:
     monkeypatch.setattr(diar, "diarize_file",
-                        lambda audio, min_speakers=2, num_speakers=None: _fake_turns())
+                        lambda audio, min_speakers=2, num_speakers=None, diagnose=None: _fake_turns())
     assert correct.cmd_diarize("Demo") == 1
     assert correct.cmd_diarize("Demo") == 0                    # konvergiert, kein Dauerlauf
