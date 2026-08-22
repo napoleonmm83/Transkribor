@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
-import { Bot, ChevronRight, Loader2, ScanText, Search, Upload } from 'lucide-react'
+import { Bot, ChevronRight, Heart, Loader2, ScanText, Search, Upload } from 'lucide-react'
 import type { ActiveJob, JobPhases, ProjectFile } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -164,6 +164,33 @@ export function Sidebar({
           )
         })}
       </nav>
+
+      {/* Unten festgenagelt OHNE `position: sticky`: die Leiste ist eine Flex-Spalte, in der
+          NUR das <nav> waechst (`flex-1 overflow-auto`) — ein `shrink-0`-Geschwister dahinter
+          steht damit immer am unteren Rand, bei drei Projekten wie bei dreihundert. `sticky`
+          waere hier sogar falsch: es muesste IM Bildlaufbehaelter sitzen und wuerde bei kurzer
+          Liste mit dem Inhalt nach oben rutschen.
+          Warum ueberhaupt in der Leiste und nicht auf einer eigenen Seite: sie ist die einzige
+          Flaeche, die auf JEDER Seite sichtbar ist — eine Bitte, die man suchen muss, liest
+          niemand. `target="_blank"` ist in der App Pflicht, nicht Hoeflichkeit: das
+          Electron-Fenster hat keine Adresszeile und keinen Zurueck-Knopf, ein Ziel im selben
+          Fenster waere eine Einbahnstrasse aus dem Programm heraus. Der `setWindowOpenHandler`
+          in `electron/main.js` faengt `_blank` ab und uebergibt an den System-Browser. */}
+      <div className="shrink-0 border-t p-2">
+        <p className="px-1 pb-2 text-xs leading-snug text-muted-foreground">
+          Transkribor ist kostenlos und bleibt es. Wenn es dir Arbeit abnimmt, freue ich mich
+          über deine Unterstützung.
+        </p>
+        <Button asChild variant="outline" size="sm" className="w-full">
+          <a href="https://github.com/sponsors/napoleonmm83" target="_blank" rel="noreferrer">
+            {/* `fill-current` macht aus dem Umriss ein volles Herz — bei 14 px ist die
+                Kontur allein kaum als Herz lesbar (dieselbe Regel wie bei den Icons der
+                Dateizeile). Die Farbe ist die des Sponsors-Knopfs auf GitHub. */}
+            <Heart className="size-3.5 fill-current text-[#EA4AAA]" aria-hidden="true" />
+            Projekt unterstützen
+          </a>
+        </Button>
+      </div>
     </div>
   )
 }

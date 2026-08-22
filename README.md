@@ -206,6 +206,9 @@ Signatur-Zertifikate, damit die Warnmeldung beim ersten Öffnen künftig entfall
 
 </div>
 
+Ab der nächsten Fassung steht derselbe Knopf auch unten links in der App, unter der
+Projektliste — du musst dafür also nicht hierher zurückkommen.
+
 Genauso hilfreich und kostenlos: einen [Fehler melden oder eine Idee
 vorschlagen](https://github.com/napoleonmm83/Transkribor/issues) — oder dem Projekt einen
 Stern geben.
