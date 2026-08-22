@@ -352,7 +352,7 @@ Sie teilen keinen der vier Kostenposten — gebündelt gewönne man nichts.
 ## Entscheidungen, die Marcus blockieren — EINE Nachfrage
 
 > **Fassung 3, 2026-08-22:** gestellt und beantwortet, soweit es Entscheidungen waren.
-> Punkte 5, 6 und 7 sind erledigt (mit #276 aus Fassung 2 also **fünf von sieben**). Offen
+> Punkte 5, 6 und 7 sind erledigt (mit #276 aus Fassung 2 also **vier von sieben**). Offen
 > bleiben **2** (Task 8), **3** (#95) und **4** (#70+#71) — das sind Arbeit und Beschaffung,
 > keine Entscheidungen. Die Antworten stehen unten und in den Issues selbst.
 
@@ -384,7 +384,7 @@ Sie teilen keinen der vier Kostenposten — gebündelt gewönne man nichts.
 | 1 | ~~**B1** #283 + #311~~ ✅ **erledigt** (PR #333) | 2 zu |
 | 2 | ~~**B2a** #323 (in `claude-routing`)~~ ✅ **erledigt** (PR #7 + #8) | 1 zu, +1 neu (#334) |
 | 3 | ~~**B4** #275~~ ✅ **erledigt** (PR #336) | 1 zu, Tueroeffner offen |
-| 4 | ~~**Nachfrage an Marcus**~~ ✅ **erledigt** (2026-08-22) | 5 von 7 beantwortet |
+| 4 | ~~**Nachfrage an Marcus**~~ ✅ **erledigt** (2026-08-22) | 4 von 7 beantwortet |
 | 5 | ~~**Stufe 0** PR-Bestand: #322 · #325→#338 · 4 Branches~~ ✅ **erledigt** | 0 offene PRs |
 | 6 | ~~**#267** schliessen oder umwidmen~~ ✅ **geschlossen**, mit der Messung | 1 zu |
 | 7 | **B3-Vorarbeit** #84-Mess-Harness + Bestanden-Blatt | entblockt die Mac-Sitzung |
@@ -444,8 +444,9 @@ aufgeführt, damit die Tabelle nicht als aktuelle Issue-Liste missverstanden wir
 
 ## Fassung 3 (2026-08-22 abends)
 
-**Was sich seit Fassung 2 geändert hat:** #267 ist zu, beide offenen PRs sind weg, fünf der
-sieben Nachfragen sind beantwortet. Fassung 2 hatte **drei Lücken**; sie werden hier
+**Was sich seit Fassung 2 geändert hat:** #267 ist zu, beide offenen PRs sind weg, **vier der
+sieben** Nachfragen sind beantwortet (#276, #328, #136-Material, #36-VM; offen bleiben
+Task 8, #95 und #70+#71). Fassung 2 hatte **drei Lücken**; sie werden hier
 geschlossen, nicht überschrieben — alles oberhalb bleibt stehen.
 
 ### Lücke 1: offene PRs waren kein Kostenposten
