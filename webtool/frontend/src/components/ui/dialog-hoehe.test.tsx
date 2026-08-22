@@ -59,25 +59,6 @@ describe('Dialog-Hoehendeckel (#283)', () => {
     expect(inhalt.className).toContain('overflow-y-auto')
   })
 
-  it('MaterialDialog nimmt den Basis-Bildlauf zurueck — sonst klemmt er den Rahmen', () => {
-    // Kein kuenstlicher Fall, sondern der GEMESSENE: `.rahmen-animiert` setzt sein `::before`
-    // auf `inset: -2px`. Ein `overflow` != visible macht daraus scrollbaren Inhalt — im
-    // Browser bei 320 px erschienen beide Leisten (je 15 px) fuer 2 px Ueberlauf, und die
-    // 15 px gingen von der Listenhoehe ab. `overflow-hidden` waere die falsche Ausnahme: es
-    // klemmt denselben Rahmen. Die zweite Zusicherung ist die tragende — sie misst, dass
-    // twMerge die Basis-Klasse WIRKLICH entfernt und nicht bloss eine zweite danebenstellt.
-    render(
-      <Dialog open>
-        <DialogContent className="rahmen-animiert overflow-visible">
-          <DialogTitle>Titel</DialogTitle>
-        </DialogContent>
-      </Dialog>,
-    )
-    const inhalt = document.querySelector('[data-slot="dialog-content"]')!
-    expect(inhalt.className).toContain('overflow-visible')
-    expect(inhalt.className).not.toContain('overflow-y-auto')
-  })
-
   it('der Verbraucher schlaegt die Basis weiterhin (twMerge)', () => {
     // Negativkontrolle zur Regel oben: waere der Deckel unueberstimmbar (`!max-h-…`),
     // braechen `MaterialDialog` und `CommandDialog`, die beide bewusst eigene Werte setzen.
@@ -85,6 +66,13 @@ describe('Dialog-Hoehendeckel (#283)', () => {
     // **Was er NICHT kann:** ohne den Fix ist er vollstaendig gruen — er sagt also nichts
     // darueber, dass es den Deckel gibt (das tun Test 1 und 2). Und gegen einen Deckel an
     // einem ELTERN-Element ist er blind; auch den faengt Test 1.
+    // **Warum er trotzdem bleibt** (CodeRabbit-CLI schlug vor, ihn zu streichen): er ist der
+    // EINZIGE Test ueber die `max-h`-Achse der Ueberstimmbarkeit, und die Mutation
+    // `!max-h-…`/`!overflow-y-auto` macht ihn rot — Dekoration ist er also nicht. Hier stand
+    // daneben ein zweiter, engerer Mechanismus-Test (`overflow-visible` an einem erfundenen
+    // Verbraucher); der ist RAUS, weil beide an derselben Mutation starben und keiner an der
+    // echten. Was der echte `MaterialDialog` tut, misst sein eigener Test in
+    // `MaterialDialog.test.tsx` — der stirbt, wenn dort `overflow-visible` wegfaellt.
     render(
       <Dialog open>
         <DialogContent className="max-h-[200px] overflow-hidden">
