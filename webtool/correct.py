@@ -265,8 +265,9 @@ def cmd_diarize(project: str, only_bases: list = None) -> int:
                     os.remove(dpath)
             wieviele = f" ({sprecher} Sprecher)" if sprecher else ""
             print(f"→ Diarisiere {base}{wieviele} …", flush=True)
+            diagnose: dict = {}
             turns = diarize.diarize_file(audio, min_speakers=DIARIZE_MIN_SPEAKERS,
-                                         num_speakers=sprecher)
+                                         num_speakers=sprecher, diagnose=diagnose)
             if not turns:
                 print(f"diarize: SKIP {base} (keine Sprecher erkannt)", flush=True)
                 continue
@@ -279,6 +280,12 @@ def cmd_diarize(project: str, only_bases: list = None) -> int:
                    "sprecher": sprecher,          # womit gerechnet wurde -> Skip-Entscheidung oben
                    "turns": turns,
                    "segments": [{"id": sid, "speaker": spk} for sid, spk in seg_speakers.items()]}
+            # Diagnose nur, WENN sie zustande kam (#275). Ein leerer Schluessel waere schlimmer
+            # als keiner: er behauptete "gemessen, nichts gefunden", wo in Wahrheit der
+            # Monkeypatch nicht griff. Bestehende Sidecars ohne den Schluessel bleiben gueltig —
+            # dieselbe Regel wie bei `sprecher` (fehlt = "automatisch").
+            if diagnose:
+                doc["diagnose"] = diagnose
             paths.atomic_write(dpath, json.dumps(doc, ensure_ascii=False, indent=1))
             n += 1
         # BEWUSST nicht auf ValueError geweitet (#190): ein UnicodeDecodeError landet eine

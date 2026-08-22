@@ -5,6 +5,7 @@ grösster zeitlicher Überlappung (`assign_clusters`) ist reines, unit-getestete
 Die torch/pyannote-Importe liegen bewusst INNERHALB der Funktionen (lazy) — `import
 webtool.diarize` bleibt leicht und ohne installiertes pyannote lauffähig (Best-effort-Fallback
 im Aufrufer)."""
+import contextlib
 import os
 
 # Das Modell liegt IM Repo (models/, ~31 MB) und wird mit der App ausgeliefert, statt bei
@@ -73,6 +74,90 @@ def _pipeline():
     return _PIPELINE
 
 
+def _diagnose_sonden(pipe, diagnose):
+    """Zwei Sonden in pyannotes Innereien, damit `<base>.diar.json` sagen kann, wie SICHER
+    die Clusterung war (#275) — reine Diagnose, kein Verhaltenswechsel: beide Sonden reichen
+    ihre Argumente unveraendert durch und geben das Original zurueck.
+
+    Warum ueberhaupt ein Monkeypatch: beide Groessen wirft pyannote selbst weg.
+    `clustering.py:609` bindet `q, sp = cluster_vbx(...)` LOKAL, und :669 gibt nur
+    `(hard_clusters, soft_clusters, centroids)` zurueck — `sp` ist nicht dabei; auch
+    `speaker_diarization.py:640` verwirft, was uebrig bleibt. Es gibt keinen Auslesepfad.
+
+    **Zwei Sonden, zwei verschiedene Griffe — das ist keine Inkonsequenz:**
+    - `cluster_vbx` ist ein MODULGLOBALER Name, den `clustering.py:34` zur Importzeit bindet
+      (`from ...utils.vbx import cluster_vbx`). Wer `utils.vbx` patcht, patcht ins Leere. Der
+      Griff ist prozessweit, deshalb steht der Rueckbau im `finally` — dieselbe Lehre wie beim
+      `_Sprachschwelle`-Proxy in `transcribe.py`, wo ein haengengebliebener Patch die naechste
+      Datei klemmte.
+    - `filter_embeddings` ist eine METHODE mit dokumentierter Signatur. Gepatcht wird
+      `type(pipe.clustering)` (= `VBxClustering`), nicht die Instanz: pyannotes
+      `Pipeline.__setattr__` ist ueberschrieben und faengt Zuweisungen ab. Und nicht
+      `BaseClustering`, wo die Methode definiert ist — der Override auf der Unterklasse ist
+      der engere Griff. Weil `filter_embeddings` NICHT in `vars(VBxClustering)` steht, ist
+      der Rueckbau ein `delattr`, kein Zurueckschreiben.
+
+    **Best effort, weil es fremde Innereien sind:** fehlt ein Griffpunkt (pyannote hat sich
+    geaendert), wird er ausgelassen — die Diarisierung laeuft, die Diagnose fehlt. Dieselbe
+    Richtung wie der bestehende Sidecar-Rueckfall. Ein Waechtertest haelt fest, wann das
+    eintritt (`test_diarize.py`), sonst faellt die Diagnose still weg.
+
+    `pi` KANN fehlen, ohne dass etwas kaputt ist: `VBxClustering.__call__` steigt bei weniger
+    als zwei Trainings-Embeddings vorzeitig aus (`clustering.py:588`) und ruft `cluster_vbx`
+    dann nie.
+    """
+    if diagnose is None:                       # Default-Weg: KEIN Patch, byte-identisch
+        return contextlib.nullcontext()
+    return _Sonden(pipe, diagnose)
+
+
+@contextlib.contextmanager
+def _Sonden(pipe, diagnose: dict):
+    cl = klass = vbx_alt = filter_alt = None
+    try:
+        from pyannote.audio.pipelines import clustering as cl
+        vbx_alt = getattr(cl, "cluster_vbx", None)
+        klass = type(pipe.clustering)
+        filter_alt = getattr(klass, "filter_embeddings", None)
+    except Exception:                          # pyannote anders gebaut -> ohne Diagnose weiter
+        pass
+
+    def sonde_vbx(*a, **kw):
+        q, sp = vbx_alt(*a, **kw)
+        with contextlib.suppress(Exception):
+            diagnose["pi"] = [float(x) for x in sp]
+        return q, sp
+
+    def sonde_filter(self, embeddings, *a, **kw):
+        raus = filter_alt(self, embeddings, *a, **kw)
+        with contextlib.suppress(Exception):
+            # `slots` = alle Fenster-x-Sprecher-Paare, die dem Filter ANGEBOTEN wurden;
+            # `durchgelassen` = wie viele davon ins Clustering kamen (Laenge von chunk_idx).
+            # Bewusst die angebotene Menge und nicht "Slots mit Sprache": Letzteres muesste
+            # pyannotes `single_active_mask`-Rechnung hier nachbauen, und ein Nachbau fremder
+            # Interna driftet still.
+            diagnose["slots"] = int(embeddings.shape[0] * embeddings.shape[1])
+            diagnose["durchgelassen"] = int(len(raus[1]))
+        return raus
+
+    eigenes = klass is not None and "filter_embeddings" in vars(klass)
+    if vbx_alt is not None:
+        cl.cluster_vbx = sonde_vbx
+    if filter_alt is not None:
+        klass.filter_embeddings = sonde_filter
+    try:
+        yield
+    finally:
+        if vbx_alt is not None:
+            cl.cluster_vbx = vbx_alt
+        if filter_alt is not None:
+            if eigenes:
+                klass.filter_embeddings = filter_alt
+            else:
+                with contextlib.suppress(AttributeError):
+                    delattr(klass, "filter_embeddings")
+
+
 def _load_waveform(audio_path: str) -> dict:
     """Audio -> {'waveform': (1,time) float32-Tensor, 'sample_rate': 16000} via
     faster_whisper.decode_audio. Umgeht das auf Windows kaputte torchcodec-Decoding
@@ -89,13 +174,19 @@ def _load_waveform(audio_path: str) -> dict:
     return {"waveform": torch.from_numpy(samples).unsqueeze(0), "sample_rate": 16000}
 
 
-def diarize_file(audio_path: str, min_speakers: int = 2, num_speakers: int | None = None) -> list:
+def diarize_file(audio_path: str, min_speakers: int = 2, num_speakers: int | None = None,
+                 diagnose: dict | None = None) -> list:
     """Diarisiert eine Audiodatei -> [{'start','end','cluster'}] (zeitlich sortiert).
     'cluster' ist das rohe pyannote-Label (z.B. 'SPEAKER_00'). Audio wird in-memory
     geladen (torchcodec-Bypass, siehe _load_waveform).
 
     `num_speakers` ist die vom Nutzer angegebene EXAKTE Sprecherzahl; `None` laesst pyannote
     schaetzen (Verhalten wie bisher).
+
+    `diagnose` ist ein OPTIONALES dict, das der Aufrufer mitgibt und nach dem Lauf ausliest
+    (#275): es fuellt sich mit `pi` (dem VBx-Gewichtsspektrum — das Eigengap-Analogon fuer
+    "wie knapp war das?") und `slots`/`durchgelassen` (Ueberlebensquote des
+    `min_active_ratio`-Filters). `None` heisst "keine Diagnose" und setzt keinen Patch.
 
     **Warum entweder-oder statt beides:** NICHT, weil pyannote das zurueckweisen wuerde — das
     stand hier und ist nachgemessen falsch. `pipelines/utils/diarization.py:58` macht
@@ -115,7 +206,11 @@ def diarize_file(audio_path: str, min_speakers: int = 2, num_speakers: int | Non
     ohnehin nur der Mensch hat, der dabei war.
     """
     grenzen = {"num_speakers": num_speakers} if num_speakers else {"min_speakers": min_speakers}
-    output = _pipeline()(_load_waveform(audio_path), **grenzen)
+    pipe = _pipeline()
+    # `diagnose=None` (der Default JEDES heutigen Aufrufers) setzt KEINEN Patch — der Weg
+    # bleibt byte-identisch zu vorher, auch fuer die Tests, die `diarize_file` faelschen.
+    with _diagnose_sonden(pipe, diagnose):
+        output = pipe(_load_waveform(audio_path), **grenzen)
     # pyannote 4.x/community-1 liefert ein DiarizeOutput-Objekt; die Annotation (mit
     # itertracks) steckt in .speaker_diarization. Ältere Versionen geben die Annotation
     # direkt zurück -> getattr-Fallback macht diarize_file robust gegen beide APIs.
