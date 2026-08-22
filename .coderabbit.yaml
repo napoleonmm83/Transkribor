@@ -128,12 +128,26 @@ reviews:
         - **Reihenfolge-Annahmen ueber React-Effekte** sind kein Beweis; verlangte
           Zusicherungen gehoeren an Daten, nicht an Timing.
 
-    - path: "**/*.md"
+    # ZWEI Eintraege statt einem — die Trennung ist an PR #325 gemessen. Unter `**/*.md` stand
+    # die Nutzer-Regel und traf damit AUCH Entwicklerdoku: der Bot verlangte, eine README
+    # ueber einen git-Hook („was hier liegt und was woanders") von Pfaden, Hook-Namen und
+    # Befehlen zu befreien und fuer „Menschen ohne technischen Hintergrund" umzuschreiben —
+    # womit sie ihren einzigen Zweck verloeren, denn ihre Leserschaft ist, wer den Hook
+    # pflegt. CLAUDE.md meint mit „die README" die EINE im Wurzelverzeichnis.
+    - path: "README.md"
       instructions: |
         Pruefe, ob die README noch stimmt, was die Aenderung fuer den NUTZER bedeutet. Sie
         richtet sich an Menschen ohne technischen Hintergrund: kein Changelog-Ton, keine
-        API-Namen. Melde jede Zusage, die der Code nicht einloest (z.B. eine versprochene
-        Rueckfrage, die es auf diesem Weg nicht gibt) — das ist hier schon vorgekommen.
+        API-Namen. Technisches gehoert in den Abschnitt „Fuer Entwickler" ans Ende.
+
+    - path: "**/*.md"
+      instructions: |
+        Melde jede Zusage, die der Code nicht einloest (z.B. eine versprochene Rueckfrage,
+        die es auf diesem Weg nicht gibt) — das ist hier schon vorgekommen, und es ist die
+        haeufigste Fehlerklasse dieses Repos: eine Behauptung, die schaerfer ist als der Code.
+        Pruefe Zahlen und Messaussagen gegen die Quelle, nicht gegen die Plausibilitaet.
+        KEINE Stilvorgaben aus der Nutzer-README auf Entwicklerdoku uebertragen (`docs/**`,
+        Agenten- und Hook-Dateien): dort SIND Pfade, Befehle und Symbolnamen der Inhalt.
 
     - path: "electron/**"
       instructions: |

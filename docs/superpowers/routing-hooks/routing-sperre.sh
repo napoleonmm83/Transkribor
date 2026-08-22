@@ -12,6 +12,9 @@
 # einmal "25", und die Zahl war beim Mergen schon falsch (30 an dem Tag, vier davon aus der
 # Arbeit, die den Satz schrieb). Wer sie wissen will, zaehlt sie:
 #   ls review-*.md | wc -l   # alle untracked, `git ls-files 'review-*.md'` bleibt leer
+# Weil sie untracked sind, ueberleben sie jeden Branchwechsel — WELCHER Bericht zaehlt, haengt
+# deshalb am Zeitanker unten, und der ist der erste Commit dieses Branches, nicht der
+# Abzweigpunkt. Die Begruendung samt Messung steht dort.
 #
 # NUR Stufe 1. CodeRabbit BRAUCHT den PR, kann hier also nicht geprueft werden; Mutationsprobe
 # und lokaler Funktionstest sind an keinem Dateinamen erkennbar. Eine Stufe verlaesslich ist
@@ -178,11 +181,32 @@ rest=$(printf '%s' "$roh" | sed -E \
   -e "s/${anker}${ps_flucht}gh[[:space:]]+pr[[:space:]]+create/ /g")
 printf '%s' "$rest" | grep -Eq "${treffer}${ende}" || exit 0
 
-basis=$(git log -1 --format=%cI "$(git merge-base master HEAD 2>/dev/null)" 2>/dev/null)
-# Kein Abzweigpunkt ermittelbar (kein git, kein master) -> durchlassen. Ein Waechter, der bei
+# DER ANKER IST DER ERSTE COMMIT DIESES BRANCHES, NICHT DER ABZWEIGPUNKT (CodeRabbit an
+# PR #325, nachgemessen). Der Abzweigpunkt liegt vor der Arbeit, nicht an ihrem Anfang — und
+# die Berichte sind untracked, ueberleben also jeden Branchwechsel. Ihre mtime allein sagt
+# damit nichts darueber, WOZU sie gehoeren. Gemessen an genau diesem Repo am 2026-08-22:
+# 6 der im Stamm liegenden review-*.md waren neuer als die master-Spitze — jede frische
+# Abzweigung waere ohne ein einziges eigenes Review durchgelassen worden.
+#
+# AUTOR-Datum (%aI), nicht Committer-Datum: ein Rebase auf einen neueren master schreibt %cI
+# auf JETZT um. Der Waechter verwuerfe danach den eigenen, laengst geschriebenen Bericht —
+# ein Fehlalarm auf dem Normalweg dieses Repos (`gh pr merge --rebase`, master per
+# Fast-Forward nachziehen). `tail -1` ist der aelteste der aufgelisteten Commits.
+basis=$(git log --format=%aI master..HEAD 2>/dev/null | tail -1)
+# Noch kein eigener Commit -> zurueck auf den Abzweigpunkt. `gh pr create` eroeffnet dann
+# ohnehin nichts ("No commits between ..."), der Zweig ist nur der Fail-Open-Rest.
+[ -n "$basis" ] || basis=$(git log -1 --format=%aI "$(git merge-base master HEAD 2>/dev/null)" 2>/dev/null)
+# Kein Anker ermittelbar (kein git, kein master) -> durchlassen. Ein Waechter, der bei
 # eigener Unsicherheit sperrt, blockiert Arbeit, ueber die er nichts weiss.
 [ -n "$basis" ] || exit 0
 
+# BEWUSST OFFEN: ein Bericht, der auf einem PARALLELEN Branch nach diesem ersten Commit
+# entstand, gibt diesen hier weiterhin frei. Das Fenster ist von „alles der letzten Tage" auf
+# „gleichzeitige Arbeit an zwei Branches" geschrumpft. Enger ginge es nur ueber Metadaten IM
+# Bericht (Basis- und Pruef-Commit, CodeRabbits Vorschlag) — die verlangen ein Format, das
+# kein Subagent zusichert, und ein Waechter, der an einem nicht garantierten Format scheitert,
+# wird weggeklickt. Derselbe Massstab wie bei der Ankerklasse oben: lieber eine benannte
+# Luecke als ein Fehlalarm.
 find . -maxdepth 1 -name 'review-*.md' -newermt "$basis" 2>/dev/null | grep -q . && exit 0
 
 echo 'Kein Subagent-Review auf diesem Branch: es liegt kein review-*.md, das neuer ist als der' >&2

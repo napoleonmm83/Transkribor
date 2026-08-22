@@ -245,5 +245,35 @@ rm -f review-selbsttest.md
 [ "$(lauf '{"tool_input":{"command":"$env:KEIN_REVIEW=1; echo hi; gh pr create --fill"}}')" = "2" ] \
   || { echo "FAIL: PowerShell-Fluchtweg wirkt auch MIT Text dazwischen - kein Loch geschlossen" >&2; fehler=1; }
 
+# 39-40. DER NACHWEIS MUSS ZU DIESEM BRANCH GEHOEREN (CodeRabbit an PR #325). Der Anker war
+#     der ABZWEIGPUNKT, und der liegt vor der Arbeit statt an ihrem Anfang — Berichte sind
+#     untracked und ueberleben jeden Branchwechsel. Gemessen an diesem Repo am 2026-08-22:
+#     6 liegende review-*.md waren neuer als die master-Spitze, jede frische Abzweigung waere
+#     also ohne eigenes Review durchgelassen worden.
+#     WEGWERF-REPO statt der echten Zeitstempel dieses Branches: die Probe soll auf jedem
+#     Branch dasselbe messen, und sie braucht Daten, die hier niemand hat.
+#     BEIDE Richtungen, und beide sind zugleich Mutationsanker:
+#     39 wird rot, sobald wieder der Abzweigpunkt zaehlt (der Bericht von 01-02 liegt danach
+#     im Fenster). 40 wird rot, sobald statt %aI wieder %cI zaehlt — das Commit traegt
+#     bewusst ein spaeteres Committer-Datum (01-09), so wie es ein Rebase auf einen neueren
+#     master hinterlaesst; der eigene Bericht von 01-04 fiele dann aus dem Fenster.
+hookabs="$PWD/$H"
+lauf_in() { printf '%s' "$2" | CLAUDE_PROJECT_DIR="$1" bash "$hookabs" >/dev/null 2>&1; echo $?; }
+wr=$(mktemp -d)
+(
+  cd "$wr" || exit 1
+  git init -q . && git symbolic-ref HEAD refs/heads/master
+  GIT_AUTHOR_DATE="2020-01-01T00:00:00+00:00" GIT_COMMITTER_DATE="2020-01-01T00:00:00+00:00"     git -c user.email=t@t -c user.name=t commit -q --allow-empty -m basis
+  git checkout -q -b feat
+  GIT_AUTHOR_DATE="2020-01-03T00:00:00+00:00" GIT_COMMITTER_DATE="2020-01-09T00:00:00+00:00"     git -c user.email=t@t -c user.name=t commit -q --allow-empty -m arbeit
+) >/dev/null 2>&1
+
+touch -d "2020-01-02 00:00:00 +0000" "$wr/review-fremd.md"
+[ "$(lauf_in "$wr" "$PR")" = "2" ]   || { echo "FAIL: ein Bericht von VOR dem ersten Commit dieses Branches gibt ihn frei" >&2; fehler=1; }
+
+touch -d "2020-01-04 00:00:00 +0000" "$wr/review-eigen.md"
+[ "$(lauf_in "$wr" "$PR")" = "0" ]   || { echo "FAIL: sperrt TROTZ eigenem Bericht (Committer-Datum statt Autor-Datum?)" >&2; fehler=1; }
+rm -rf "$wr"
+
 [ $fehler -eq 0 ] && echo "OK"
 exit $fehler

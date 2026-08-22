@@ -9,8 +9,8 @@ Hier liegt nur, was **in Transkribor** wirkt.
 
 ## Die `gh pr create`-Sperre
 
-`routing-sperre.sh` hält `gh pr create` an, wenn auf dem Branch kein `review-*.md` neuer ist als
-der Abzweigpunkt von master. Damit erzwingt sie **Stufe 1** der Reviewkette aus `CLAUDE.md`
+`routing-sperre.sh` hält das Eröffnen eines PR an, wenn auf dem Branch kein `review-*.md` neuer
+ist als der **erste Commit dieses Branches**. Damit erzwingt sie **Stufe 1** der Reviewkette aus `CLAUDE.md`
 („`superpowers:requesting-code-review` ZUERST, dann CodeRabbit") — CodeRabbit braucht den PR und
 ist an dieser Stelle nicht prüfbar.
 
@@ -25,13 +25,22 @@ Fünf Dinge, die man nicht aus dem Skript liest:
   Beide sind **eng an das Vorkommen gebunden** — steht etwas dazwischen, sperrt sie. Ein
   Fluchtweg, der irgendwo im Text stehen darf, ist kein Fluchtweg, sondern ein Loch; das hat eine
   eigene Fix-Runde gekostet.
-- **Sie prüft Roh-JSON mit `grep`, nie mit einem Interpreter.** Nicht weil ein Interpreter fehlte
+- **Sie prüft Roh-JSON mit `sed` und `grep`, nie mit einem Interpreter.** (`sed` schneidet die
+  Fluchtweg-Vorkommen heraus, `grep` entscheidet über den Rest.) Nicht weil ein Interpreter fehlte
   — sondern weil ein Wächter, der von einem Interpreter im PATH abhängt, **still** ausfällt,
   sobald sich der PATH ändert. Genau das ist hier belegt passiert (siehe #324).
 - **Bewusst offen:** `bash -c "gh pr create"`, `sh -c`, voller Pfad. Die Ankerklasse dafür zu
   erweitern kostet Fehlalarme, und ein Wächter mit Fehlalarmen wird abgeschaltet. Sie ist gegen
   **Vergessen** gebaut, nicht gegen Absicht — wer sie umgehen will, hat den Fluchtweg.
-- **Bewusst in Kauf genommen:** eine Zeile, die mit `gh pr create` beginnt (Heredoc, mehrzeilige
+- **Der Anker ist der erste Commit des Branches, nicht der Abzweigpunkt** (seit 2026-08-22).
+  Der Unterschied ist kein Detail: die Berichte sind untracked und überleben jeden Branchwechsel,
+  ihre mtime allein sagt also nicht, WOZU sie gehören. Gemessen am 2026-08-22 lagen 6 Berichte im
+  Stamm, die neuer waren als die master-Spitze — jede frische Abzweigung wäre ohne ein einziges
+  eigenes Review durchgelassen worden. Gerechnet wird mit dem **Autor**-Datum: ein Rebase auf
+  einen neueren master schreibt das Committer-Datum auf jetzt um, und der Wächter verwürfe danach
+  den eigenen, längst geschriebenen Bericht. Bewusst offen bleibt ein Bericht von einem
+  **parallel** bearbeiteten Branch — dafür müsste der Dateiname den Branch tragen.
+- **Bewusst in Kauf genommen:** eine Zeile, die mit dem PR-Befehl beginnt (Heredoc, mehrzeilige
   Commit-Message), wird gesperrt. Das ist der Preis dafür, dass mehrzeilige Befehle überhaupt
   erkannt werden — und die sind beim PR-Weg die Normalform, nicht die Ausnahme.
 
