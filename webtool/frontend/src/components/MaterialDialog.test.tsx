@@ -568,6 +568,22 @@ describe('MaterialDialog', () => {
     expect(screen.getByText('1 Aufnahme gewählt')).toBeInTheDocument()
   })
 
+  it('nimmt den Basis-Bildlauf zurueck, sonst klemmt er den animierten Rahmen', () => {
+    /* Der Basis-Deckel aus #283 (`overflow-y-auto` an `DialogContent`) macht aus dem 2 px
+       ueberstehenden `::before` von `.rahmen-animiert` scrollbaren Inhalt: im Browser bei
+       320 px Fensterhoehe erschienen BEIDE Leisten, je 15 px, und die 15 px gingen von der
+       Listenhoehe ab, die #313/#315 austariert haben. `overflow-hidden` waere die falsche
+       Ausnahme — es klemmt denselben Rahmen, den PR #310 gebaut hat.
+       Der Mechanismus (twMerge entfernt die Basisklasse) steht in `dialog-hoehe.test.tsx`;
+       hier wird gemessen, dass DIESES Bauteil ihn wirklich benutzt — beilaeufige Abdeckung
+       durch den Mechanismus-Test waere keine. */
+    render(<MaterialDialog {...basis} />)
+    const inhalt = document.querySelector('[data-slot="dialog-content"]')!
+    expect(inhalt.className).toContain('rahmen-animiert')
+    expect(inhalt.className).toContain('overflow-visible')
+    expect(inhalt.className).not.toContain('overflow-y-auto')
+  })
+
   it('sagt den Wegfall an — die Live-Region bleibt DAUERHAFT im Baum (#311)', () => {
     /* Der ✕ entfernt eine Zeile: sichtbar sofort, hoerbar bisher nicht. Fuer Tastaturnutzer
        trug der Fokuswechsel die Ansage; fuer SPRACHSTEUERUNG passierte akustisch nichts.

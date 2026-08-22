@@ -58,6 +58,25 @@ describe('Dialog-Hoehendeckel (#283)', () => {
     expect(inhalt.className).toContain('overflow-y-auto')
   })
 
+  it('MaterialDialog nimmt den Basis-Bildlauf zurueck — sonst klemmt er den Rahmen', () => {
+    // Kein kuenstlicher Fall, sondern der GEMESSENE: `.rahmen-animiert` setzt sein `::before`
+    // auf `inset: -2px`. Ein `overflow` != visible macht daraus scrollbaren Inhalt — im
+    // Browser bei 320 px erschienen beide Leisten (je 15 px) fuer 2 px Ueberlauf, und die
+    // 15 px gingen von der Listenhoehe ab. `overflow-hidden` waere die falsche Ausnahme: es
+    // klemmt denselben Rahmen. Die zweite Zusicherung ist die tragende — sie misst, dass
+    // twMerge die Basis-Klasse WIRKLICH entfernt und nicht bloss eine zweite danebenstellt.
+    render(
+      <Dialog open>
+        <DialogContent className="rahmen-animiert overflow-visible">
+          <DialogTitle>Titel</DialogTitle>
+        </DialogContent>
+      </Dialog>,
+    )
+    const inhalt = document.querySelector('[data-slot="dialog-content"]')!
+    expect(inhalt.className).toContain('overflow-visible')
+    expect(inhalt.className).not.toContain('overflow-y-auto')
+  })
+
   it('der Verbraucher schlaegt die Basis weiterhin (twMerge)', () => {
     // Negativkontrolle zur Regel oben: waere der Deckel unueberstimmbar (z. B. per
     // `!max-h-…` oder an einem Eltern-Element), braechen `MaterialDialog` und
