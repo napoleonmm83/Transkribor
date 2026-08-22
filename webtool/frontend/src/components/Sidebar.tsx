@@ -185,9 +185,23 @@ export function Sidebar({
           <a href="https://github.com/sponsors/napoleonmm83" target="_blank" rel="noreferrer">
             {/* `fill-current` macht aus dem Umriss ein volles Herz — bei 14 px ist die
                 Kontur allein kaum als Herz lesbar (dieselbe Regel wie bei den Icons der
-                Dateizeile). Die Farbe ist die des Sponsors-Knopfs auf GitHub. */}
+                Dateizeile). Die Farbe ist die des Abzeichens in unserer eigenen README
+                (`README.md`, `…-EA4AAA?style=for-the-badge`) — DAS ist die pruefbare Quelle,
+                nicht GitHubs Primer-Token, und sie macht die Zusage der README-Zeile
+                („derselbe Knopf") am Diff nachweisbar.
+                Die einzige feste Hexfarbe im Frontend, und BEWUSST kein Theme-Token: ein
+                Token-Paar fuehrt hell und dunkel getrennt — hier ist die Gleichheit der
+                Punkt, es ist eine Markenfarbe, keine Flaechenfarbe. Kontrast auf
+                `--background` gemessen: 3,32:1 hell, 5,67:1 dunkel; das Herz ist neben
+                seinem Textlabel ohnehin Dekoration. */}
             <Heart className="size-3.5 fill-current text-[#EA4AAA]" aria-hidden="true" />
             Projekt unterstützen
+            {/* In der App fuehrt der Klick ueber `shell.openExternal` in den SYSTEM-Browser —
+                ein Anwendungswechsel. Eine Vorlesehilfe hat keinen Hover, an dem die URL
+                erschiene; ohne diesen Zusatz heisst der Link dort nur „Projekt
+                unterstuetzen" und kuendigt den Sprung nicht an. Sichtbar bleibt er draussen:
+                der laengere Text braeche in der 260-px-Leiste um. */}
+            <span className="sr-only"> (öffnet github.com im Browser)</span>
           </a>
         </Button>
       </div>
