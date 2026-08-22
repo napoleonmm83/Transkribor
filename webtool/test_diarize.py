@@ -310,8 +310,9 @@ def test_diagnose_none_setzt_keinen_patch(monkeypatch):
 def test_diagnose_fuellt_pi_und_ueberlebensquote_und_baut_zurueck(monkeypatch):
     """Die eigentliche Zusicherung von #275 — und der Rueckbau in derselben Probe.
 
-    `slots` ist die dem Filter ANGEBOTENE Menge (chunks x speakers), `durchgelassen` die
-    Laenge von `chunk_idx`. Der Rueckbau gehoert dazu, weil der `cluster_vbx`-Griff
+    `slots` sind die Fenster-x-Sprecher-Paare MIT SPRACHE (nicht chunks x speakers — die
+    Definition wurde korrigiert, siehe unten), `durchgelassen` die Laenge von `chunk_idx`.
+    Der Rueckbau gehoert dazu, weil der `cluster_vbx`-Griff
     PROZESSWEIT ist: ein haengengebliebener Patch beschriebe die naechste Datei mit den
     Zahlen dieser."""
     cl = _pyannote_attrappe(monkeypatch)
@@ -386,6 +387,12 @@ def test_waechter_die_griffpunkte_gibt_es_im_ECHTEN_pyannote():
     pytest.importorskip("pyannote.audio", reason="pyannote fehlt (CI) — Waechter gilt lokal")
     from pyannote.audio.pipelines import clustering as cl
 
+    # Was dieser Waechter NICHT kann: er pinnt den NAMEN und den Aufruf-Substring, nicht die
+    # BINDUNG und nicht die Rueckgabeform. Stellte pyannote auf `vbx.cluster_vbx(...)` um und
+    # liesse den Modulglobal aus Kompatibilitaet stehen, bliebe er gruen, waehrend Sonde 1 ins
+    # Leere griffe — dann fehlt `pi`, mehr nicht: seit dem Durchreich-Fix kostet das keinen
+    # Lauf mehr. Ein schaerferer Griff waere fragiler; die Grenze steht hier, statt
+    # unausgesprochen zu bleiben.
     assert callable(getattr(cl, "cluster_vbx", None)),         "cluster_vbx ist kein modulglobaler Name mehr — Sonde 1 greift ins Leere"
     quelle = inspect.getsource(cl.VBxClustering.__call__)
     assert "cluster_vbx(" in quelle, "VBxClustering ruft cluster_vbx nicht mehr"
@@ -445,3 +452,93 @@ def test_ohne_segmentierung_bleibt_slots_weg_statt_zu_luegen(monkeypatch):
     diarize.diarize_file("x.m4a", diagnose=diagnose)
     assert "slots" not in diagnose and "durchgelassen" not in diagnose
     assert diagnose["pi"] == [0.62, 0.38, 4e-07]             # die andere Sonde bleibt
+
+
+def test_fremde_rueckgabeform_von_cluster_vbx_kostet_nur_die_diagnose(monkeypatch):
+    """Der Befund, den BEIDE Reviewer unabhaengig fanden — und er hatte null Abdeckung.
+
+    Die erste Fassung machte `q, sp = vbx_alt(...)` VOR dem `suppress` und schrieb die
+    Aritaet damit als Konstante fest. Aendert pyannote die Rueckgabeform, wirft die Sonde
+    MITTEN in fremdem Clustering; der Wurf reist bis in `cmd_diarize`s breites `except` und
+    ergibt „SKIP … Korrektur ohne Cluster" fuer JEDE Datei des Laufs — eine reine
+    Protokollfunktion schaltet die Sprechertrennung ab, still, mit Erfolgsmeldung.
+
+    Hier mit einem 3-Tupel nachgestellt: der Lauf muss leben, nur `pi` fehlt."""
+    cl = _pyannote_attrappe(monkeypatch)
+    cl.cluster_vbx = lambda *a, **kw: ("q", [0.5, 0.5], "etwas Neues")
+
+    class _Dreier(_FakePipe):
+        def __call__(self, wave, **kw):
+            from pyannote.audio.pipelines import clustering as c
+            q, pi, neu = c.cluster_vbx("ahc", "fea", "phi")   # pyannote packt SELBST drei aus
+            self.clustering.filter_embeddings(_Emb(), segmentations=_Seg())
+
+            class _Ann:
+                def itertracks(self, yield_label=True):
+                    return []
+            return _Ann()
+
+    monkeypatch.setattr(diarize, "_load_waveform", lambda p: "audio")
+    monkeypatch.setattr(diarize, "_pipeline", lambda: _Dreier())
+    diagnose: dict = {}
+    assert diarize.diarize_file("x.m4a", diagnose=diagnose) == []   # der Lauf LEBT
+    assert diagnose["pi"] == [0.5, 0.5]     # aus raus[1]; der Durchreicher packt nicht aus
+    assert diagnose["slots"] == 100         # die andere Sonde bleibt unberuehrt
+
+
+def test_kein_nenner_ohne_zaehler(monkeypatch):
+    """Die Spiegelrichtung der Kopplung. Die erste Fassung setzte `slots` VOR
+    `durchgelassen`; scheiterte dann `raus[1]`, reiste ein Nenner ohne Zaehler ins Sidecar
+    (gemessen: `{"pi": …, "slots": 12}`). Jetzt werden beide erst gerechnet, dann gemeinsam
+    gesetzt."""
+    _pyannote_attrappe(monkeypatch)
+
+    class _KaputterFilter(_BasisClustering):
+        def filter_embeddings(self, embeddings, segmentations=None, min_active_ratio=0.2):
+            return ("gefiltert",)                       # zu kurz: raus[1] wirft
+
+    class _Pipe(_FakePipe):
+        def __init__(self):
+            self.clustering = _KaputterFilter()
+            self.sah_patch = {}
+
+    monkeypatch.setattr(diarize, "_load_waveform", lambda p: "audio")
+    monkeypatch.setattr(diarize, "_pipeline", lambda: _Pipe())
+    diagnose: dict = {}
+    diarize.diarize_file("x.m4a", diagnose=diagnose)
+    assert "slots" not in diagnose and "durchgelassen" not in diagnose
+    assert diagnose["pi"] == [0.62, 0.38, 4e-07]        # die vbx-Sonde bleibt unberuehrt
+
+
+def test_scheiternde_zweite_installation_laesst_den_ersten_patch_nicht_stehen(monkeypatch):
+    """Die Tuer, die das `finally` frueher nicht abdeckte (Reviewbefund W4).
+
+    Die zwei Installationszeilen standen VOR dem `try`. Wirft die zweite, verlaesst der
+    Generator seinen Koerper davor — und der prozessweite vbx-Patch bleibt stehen. Die
+    naechste Datei laese dann die stehengebliebene Sonde als „Original", schriebe in das tote
+    `diagnose` der Vorgaengerin, und das `finally` stellte am Ende die Sonde statt der echten
+    Funktion wieder her; die Kette waechst mit jeder Datei. Dieselbe Klasse, die der
+    `_Sprachschwelle`-Proxy in `transcribe.py` schon einmal gekostet hat.
+
+    Mit heutigem pyannote nicht erreichbar (`VBxClustering` ist eine gewoehnliche Klasse) —
+    deshalb hier ein Typ, der Zuweisungen ablehnt."""
+    cl = _pyannote_attrappe(monkeypatch)
+
+    class _Stur(type):
+        def __setattr__(cls, name, value):
+            raise TypeError("diese Klasse nimmt nichts an")
+
+    class _Unveraenderlich(_BasisClustering, metaclass=_Stur):
+        pass
+
+    class _Pipe(_FakePipe):
+        def __init__(self):
+            self.clustering = _Unveraenderlich()
+            self.sah_patch = {}
+
+    monkeypatch.setattr(diarize, "_load_waveform", lambda p: "audio")
+    monkeypatch.setattr(diarize, "_pipeline", lambda: _Pipe())
+    import pytest
+    with pytest.raises(TypeError):
+        diarize.diarize_file("x.m4a", diagnose={})
+    assert cl.cluster_vbx is _echtes_vbx        # der ERSTE Patch ist trotzdem zurueckgebaut

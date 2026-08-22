@@ -102,6 +102,12 @@ def _diagnose_sonden(pipe, diagnose):
     Richtung wie der bestehende Sidecar-Rueckfall. Ein Waechtertest haelt fest, wann das
     eintritt (`test_diarize.py`), sonst faellt die Diagnose still weg.
 
+    **Setzt voraus, dass `cmd_diarize` seriell bleibt.** Beide Griffe sind prozessweit; heute
+    ist das gedeckt (jeder Job ist ein eigener Subprozess, und `cmd_diarize` laeuft als
+    Schleife VOR dem ThreadPoolExecutor). Wer die Diarisierung je parallelisiert, bekommt
+    Diagnosezahlen im falschen Sidecar — die Cluster bleiben richtig, weil die Sonden
+    durchreichen.
+
     `pi` KANN fehlen, ohne dass etwas kaputt ist: `VBxClustering.__call__` steigt bei weniger
     als zwei Trainings-Embeddings vorzeitig aus (`clustering.py:588`) und ruft `cluster_vbx`
     dann nie.
@@ -123,10 +129,17 @@ def _Sonden(pipe, diagnose: dict):
         pass
 
     def sonde_vbx(*a, **kw):
-        q, sp = vbx_alt(*a, **kw)
+        # Das ENTPACKEN gehoert in den suppress, nicht davor (beide Reviewer, unabhaengig).
+        # `q, sp = vbx_alt(...)` schrieb die Aritaet als Konstante fest und warf bei einer
+        # geaenderten Rueckgabeform MITTEN in pyannotes Clustering — ungeschuetzt, weil das
+        # suppress erst eine Zeile spaeter begann. Der Wurf reist bis in `cmd_diarize`s
+        # breites `except` und ergibt „SKIP … Korrektur ohne Cluster" fuer JEDE Datei des
+        # Laufs: eine reine Protokollfunktion schaltet die Sprechertrennung ab, still, mit
+        # Erfolgsmeldung. Genau der Tag, fuer den die Best-effort-Architektur gebaut ist.
+        raus = vbx_alt(*a, **kw)
         with contextlib.suppress(Exception):
-            diagnose["pi"] = [float(x) for x in sp]
-        return q, sp
+            diagnose["pi"] = [float(x) for x in raus[1]]
+        return raus
 
     def sonde_filter(self, embeddings, *a, **kw):
         raus = filter_alt(self, embeddings, *a, **kw)
@@ -135,32 +148,51 @@ def _Sonden(pipe, diagnose: dict):
             # `durchgelassen` = wie viele davon ins Clustering kamen (Laenge von chunk_idx).
             #
             # **Warum nicht einfach `embeddings.shape[0] * shape[1]`** — das waere kuerzer und
-            # war die erste Fassung: es zaehlt auch die stillen Paare mit, und daran ist die
-            # Zahl nicht mehr mit der Referenztabelle der Spec vergleichbar (1.6(j):
-            # 16-32 % verworfen). Am echten Audio gemessen: angeboten 48, mit Sprache 20,
-            # durchgelassen 16 — also **20 %** verworfen gegen die Sprache, aber **67 %**
-            # gegen die angebotene Menge. Zwei Zahlen, ein Name: wer die 67 neben die 32 der
-            # Spec legt, zieht einen falschen Schluss. Ein stilles Paar ist keine verlorene
-            # Sprecherpraesenz.
+            # war die erste Fassung: es zaehlt auch die stillen Paare mit. Am echten Audio
+            # gemessen: angeboten 48, mit Sprache 20, durchgelassen 16 — also **20 %**
+            # verworfen gegen die Sprache, aber **67 %** gegen die angebotene Menge. Ein
+            # stilles Paar ist keine verlorene Sprecherpraesenz, und zwei Zahlen unter einem
+            # Namen sind eine Falle.
+            #
+            # **Die Groessenordnung passt zur Spec-Tabelle (1.6(j): 16-32 %) — GLEICH ist sie
+            # nicht nachweisbar.** Wie dort „aktive Slots" gezaehlt wurde, ist nirgends
+            # erhalten (Spec, Commit und Memory geprueft: nur die Tabelle ueberlebte). Auf der
+            # einen hier beidseitig gezaehlten Datei fallen „mit Sprache" und „allein
+            # gesprochen" zusammen, WEIL dort nichts ueberlappt — und ausgerechnet die
+            # 32-%-Zeile der Spec ist ein Gruppeninterview. Wer die Zahlen vergleicht, misst
+            # eine ueberlappende Datei vorher beidseitig nach.
             #
             # `d.sum(axis=1) > 0` ist KEIN Nachbau von pyannotes `single_active_mask` (die
             # Frage dort ist „allein gesprochen", hier nur „gesprochen") — es liest die
             # Segmentierung, deren Form `(chunks, frames, speakers)` im Docstring von
             # `filter_embeddings` steht. Fehlt `segmentations`, bleibt `slots` weg: eine
             # Ueberlebensquote ohne Nenner waere schlimmer als keine.
-            seg = kw.get("segmentations")
-            if seg is None and a:
-                seg = a[0]
-            diagnose["slots"] = int((seg.data.sum(axis=1) > 0).sum())
-            diagnose["durchgelassen"] = int(len(raus[1]))
+            # ERST beide rechnen, DANN beide setzen: sonst reist ein Nenner ohne Zaehler
+            # ins Sidecar, wenn `raus[1]` scheitert (gemessen: `{"pi": …, "slots": 12}`).
+            # Der Kommentar versprach bisher nur die eine Richtung.
+            # Kein positionaler Rueckfall auf `a[0]`: der echte Aufruf ist Keyword
+            # (`clustering.py:585`), der Zweig hatte NULL Abdeckung (Mutationsprobe: 107 Tests
+            # blieben gruen) — und ein Zweig, der auch ohne seine Logik gruen bleibt, ist
+            # Dekoration.
+            slots = int((kw["segmentations"].data.sum(axis=1) > 0).sum())
+            durchgelassen = int(len(raus[1]))
+            diagnose["slots"], diagnose["durchgelassen"] = slots, durchgelassen
         return raus
 
     eigenes = klass is not None and "filter_embeddings" in vars(klass)
-    if vbx_alt is not None:
-        cl.cluster_vbx = sonde_vbx
-    if filter_alt is not None:
-        klass.filter_embeddings = sonde_filter
+    # Das `try` faengt AUCH die Installation, nicht nur den `yield`. Wirft die zweite
+    # Zuweisung, verliesse der Generator seinen Koerper davor — und der vbx-Patch bliebe
+    # prozessweit stehen. Die naechste Datei laese dann die stehengebliebene Sonde als
+    # Original, schriebe in das tote `diagnose` der Vorgaengerin, und das `finally` stellte
+    # am Ende die Sonde statt der echten Funktion wieder her; die Kette waechst mit jeder
+    # Datei. Dieselbe Klasse, die der `_Sprachschwelle`-Proxy in `transcribe.py` gekostet hat,
+    # nur durch eine Tuer, die das `finally` nicht abdeckte. Heute nicht erreichbar
+    # (`VBxClustering` ist eine gewoehnliche Klasse) — die Tuer kostet nichts.
     try:
+        if vbx_alt is not None:
+            cl.cluster_vbx = sonde_vbx
+        if filter_alt is not None:
+            klass.filter_embeddings = sonde_filter
         yield
     finally:
         if vbx_alt is not None:
@@ -201,7 +233,17 @@ def diarize_file(audio_path: str, min_speakers: int = 2, num_speakers: int | Non
     `diagnose` ist ein OPTIONALES dict, das der Aufrufer mitgibt und nach dem Lauf ausliest
     (#275): es fuellt sich mit `pi` (dem VBx-Gewichtsspektrum — das Eigengap-Analogon fuer
     "wie knapp war das?") und `slots`/`durchgelassen` (Ueberlebensquote des
-    `min_active_ratio`-Filters). `None` heisst "keine Diagnose" und setzt keinen Patch.
+    Embedding-Filters). `None` heisst "keine Diagnose" und setzt keinen Patch.
+
+    „Embedding-Filter", nicht „`min_active_ratio`-Filter": `filter_embeddings` verwirft
+    ausserdem NaN-Einbettungen (`clustering.py:120-124`). `slots - durchgelassen` vermischt
+    also zwei Ursachen, und der engere Name behauptete eine Trennschaerfe, die es nicht gibt.
+
+    **Fehlt `pi`, sagt `durchgelassen`, warum:** unter 2 steigt `VBxClustering.__call__`
+    vorzeitig aus (`clustering.py:588`) und ruft `cluster_vbx` nie — die Diagnose ist dann
+    vollstaendig, nur ohne Spektrum. Ab 2 hat der Griff versagt. Ohne diese Unterscheidung
+    sind beide Faelle von aussen gleich, und der Block behauptete „gemessen" fuer einen, in
+    dem nichts gemessen wurde.
 
     **Warum entweder-oder statt beides:** NICHT, weil pyannote das zurueckweisen wuerde — das
     stand hier und ist nachgemessen falsch. `pipelines/utils/diarization.py:58` macht
@@ -222,8 +264,11 @@ def diarize_file(audio_path: str, min_speakers: int = 2, num_speakers: int | Non
     """
     grenzen = {"num_speakers": num_speakers} if num_speakers else {"min_speakers": min_speakers}
     pipe = _pipeline()
-    # `diagnose=None` (der Default JEDES heutigen Aufrufers) setzt KEINEN Patch — der Weg
-    # bleibt byte-identisch zu vorher, auch fuer die Tests, die `diarize_file` faelschen.
+    # `diagnose=None` setzt KEINEN Patch. Das schuetzt Tests und Fremdaufrufer
+    # (`tools/diar_eval.py`), NICHT die Produktion: `cmd_diarize` uebergibt immer ein dict,
+    # der Patch ist im echten Lauf also die Regel. „Byte-identisch bei `diagnose=None`" waere
+    # als Sicherheitsaussage ueber den Betrieb irrefuehrend — die Absicherung des echten Wegs
+    # ist der Durchreich-Charakter der Sonden, nicht dieser Zweig.
     with _diagnose_sonden(pipe, diagnose):
         output = pipe(_load_waveform(audio_path), **grenzen)
     # pyannote 4.x/community-1 liefert ein DiarizeOutput-Objekt; die Annotation (mit
