@@ -246,6 +246,49 @@ Wächtertest, der rot wird, wenn pyannote die Signatur ändert.
 zu unterscheiden, bei dem zwei Sprecher knapp unter die VBx-Schwelle gestorben sind. Ohne
 diese Zahl misst jeder Kandidat blind — auch #274, wenn Task 8 kommt.
 
+### ► UMGESETZT in PR #336 (2026-08-22), #275 ist ZU
+
+Alles oberhalb bleibt als Begründung stehen. Was der Bau ergab und im Plan so nicht stand:
+
+- **Es sind ZWEI Patchpunkte, nicht einer.** Der Plan (und der Issue) kennen nur `cluster_vbx`.
+  Die Überlebensquote kommt aus `filter_embeddings` — einer **Methode** mit dokumentierter
+  Signatur, gepatcht auf `type(pipe.clustering)` statt auf der Instanz (pyannotes
+  `Pipeline.__setattr__` ist überschrieben, nachgemessen). Der Rückbau ist dort ein `delattr`,
+  weil die Methode in `vars(BaseClustering)` steht und nicht in `vars(VBxClustering)` — und
+  **beide** Rückbau-Zweige sind getestet, weil eine künftige pyannote-Fassung sie direkt auf
+  der benutzten Klasse definieren könnte.
+- **Der schwerste Befund lag in der eigenen Sonde, und zwei Subagenten fanden ihn unabhängig.**
+  `q, sp = vbx_alt(...)` stand VOR dem `suppress` und schrieb die Arität als Konstante fest.
+  Ändert pyannote die Rückgabeform, wirft die *Protokoll*funktion mitten in fremdem Clustering;
+  der Wurf reist bis in `cmd_diarize`s breites `except` und ergibt „Korrektur ohne Cluster" für
+  **jede Datei des Laufs** — die Sprechertrennung fällt still aus, mit Erfolgsmeldung. Genau
+  der Tag, für den die Best-effort-Architektur gebaut ist, und sie hätte in die **falsche
+  Richtung** versagt.
+- **Der Test war grün, als die Zahl schon falsch war.** `slots` zählte zunächst
+  `chunks × speakers`. Am echten Audio: angeboten 48, mit Sprache 20, durchgelassen 16 — 20 %
+  verworfen gegen die Sprache, **67 %** gegen die angebotene Menge. Nur die 20 % liegen in der
+  Grössenordnung der Spec-Tabelle (1.6(j), 16–32 %). Gefunden hat es allein der Vergleich mit
+  einer **Referenzmessung im Repo**; ohne die wäre 67 % eine plausible, testgedeckte Zahl
+  gewesen.
+- **Drei eigene Behauptungen zurückgezogen** statt verteidigt: „der Default JEDES heutigen
+  Aufrufers" (`cmd_diarize` übergibt immer ein dict — die Produktion fährt den Patch-Zweig);
+  die Spec-Vergleichbarkeit (Grössenordnung, **nicht** Gleichheit — die damalige Zählmethode ist
+  nirgends erhalten); „Überlebensquote des `min_active_ratio`-Filters" (`filter_embeddings`
+  verwirft auch NaN, die Differenz vermischt zwei Ursachen).
+- **Der Betrieb ist NICHT betroffen** — ausdrücklich gemessen, nicht geschlossen: keine neue
+  Nebenläufigkeit (jeder Job ist ein Subprozess, `cmd_diarize` läuft seriell vor dem Executor),
+  kein Verhaltenswechsel (drei Läufe ohne/mit/danach liefern identische Turns), alle
+  Sidecar-Leser geprüft — der neue Schlüssel ist inert, kein Frontend liest ihn.
+- **Eine abgeschossene CLI meldet Erfolg.** Der Nachhol-Lauf für den rate-limitierten Bot lief
+  in `timeout 600`, bekam SIGTERM, fuhr sauber herunter und endete mit **Exit 0 ohne
+  `"type":"complete"`**. Erkannt nur, weil das fehlende Abschlussereignis nicht zum grünen Exit
+  passte — dieselbe Regel wie bei `_run_claude`: Erfolg misst man am Ergebnis, nicht am
+  Exitcode. Zweiter Lauf mit 25 Minuten: `review_completed, findings: 0`.
+- **Dreimal hat in dieser Arbeit die Anwendungs-Kontrolle eine wertlose grüne Zahl abgefangen**
+  (zweimal scheiterte `sed` still an einer Fortsetzungszeile, einmal war der Mutationsanker
+  nicht eindeutig — `tdir = …` kommt in `correct.py` zweimal vor). „Grün" bedeutete dort
+  jeweils *nichts verändert*.
+
 ---
 
 ## B5 — sperre.py: zwei Issues, ZWEI verschiedene Antworten (#237 ≠ #210)
@@ -326,7 +369,7 @@ Sie teilen keinen der vier Kostenposten — gebündelt gewönne man nichts.
 |---|---|---|
 | 1 | ~~**B1** #283 + #311~~ ✅ **erledigt** (PR #333) | 2 zu |
 | 2 | ~~**B2a** #323 (in `claude-routing`)~~ ✅ **erledigt** (PR #7 + #8) | 1 zu, +1 neu (#334) |
-| 3 | **B4** #275 (Monkeypatch, best effort, mit Wächtertest) | 1 zu, Türöffner |
+| 3 | ~~**B4** #275~~ ✅ **erledigt** (PR #336) | 1 zu, Tueroeffner offen |
 | 4 | **B3-Vorarbeit** #84-Mess-Harness + Bestanden-Blatt | entblockt Marcus |
 | 5 | **Nachfrage an Marcus** (5 Entscheidungen + 2 Sachfragen) | entblockt bis zu 6 |
 | 6 | **#267** schliessen oder umwidmen · **#251** einplanen | 1 zu, 1 terminiert |
