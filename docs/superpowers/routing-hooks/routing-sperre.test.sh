@@ -34,6 +34,19 @@ wr=""   # Wegwerf-Repo der Pruefungen 39-41, weiter unten angelegt; der trap rae
 # liegen statt im Projektstamm — es sind echte Arbeitsergebnisse ohne Sicherung.
 trap 'mv "$tmp"/review-*.md . 2>/dev/null; rmdir "$tmp" 2>/dev/null; [ -n "$wr" ] && rm -rf "$wr"' EXIT
 
+# 0. SPIEGEL == ORIGINAL. Produktiv laeuft `.claude/hooks/`, versioniert ist der Spiegel unter
+#    `docs/superpowers/routing-hooks/` — `.claude/` ist hier untracked und das Remote oeffentlich.
+#    Ohne diese Probe misst der Selbsttest eine Datei, die im PR gar nicht steht: wer nur das
+#    Original aendert, laesst den Reviewer veralteten Text lesen; wer nur den Spiegel aendert
+#    (etwa einen uebernommenen Vorschlag aus der Weboberflaeche), aendert am laufenden Waechter
+#    NICHTS und alle Pruefungen bleiben gruen. Genau dieser Fehler stand in claude-routing:
+#    dessen Lint-Selbsttest rief Transkribors Kopie auf. Steht ganz vorn, weil alles danach
+#    wertlos ist, wenn die beiden auseinanderlaufen.
+for spiegel in routing-sperre.sh routing-sperre.test.sh; do
+  cmp -s ".claude/hooks/$spiegel" "docs/superpowers/routing-hooks/$spiegel"     || { echo "FAIL: Spiegel weicht vom Original ab: $spiegel" >&2; fehler=1; }
+done
+cmp -s .claude/routing.md docs/superpowers/routing-agenten/routing-overlay.md   || { echo "FAIL: Spiegel weicht vom Original ab: routing.md" >&2; fehler=1; }
+
 # 1. Kein Review -> sperrt
 [ "$(lauf "$PR")" = "2" ] || { echo "FAIL: sperrt nicht ohne Review" >&2; fehler=1; }
 

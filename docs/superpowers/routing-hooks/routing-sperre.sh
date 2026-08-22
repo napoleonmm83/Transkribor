@@ -192,7 +192,14 @@ printf '%s' "$rest" | grep -Eq "${treffer}${ende}" || exit 0
 # auf JETZT um. Der Waechter verwuerfe danach den eigenen, laengst geschriebenen Bericht —
 # ein Fehlalarm auf dem Normalweg dieses Repos (`gh pr merge --rebase`, master per
 # Fast-Forward nachziehen). `tail -1` ist der aelteste der aufgelisteten Commits.
-basis=$(git log --format=%aI master..HEAD 2>/dev/null | tail -1)
+# `--topo-order` steht hier fuer die ZUSICHERUNG, nicht wegen eines gemessenen Unterschieds
+# (CodeRabbit-CLI): die Vorgabe von `git log` ist Reihenfolge nach Commit-Datum, und `tail -1`
+# soll den topologisch ERSTEN Commit treffen. An zwei konstruierten Faellen — nicht-monotone
+# Committer-Daten auf einem linearen Branch, und ein Merge zweier Straenge — liefern beide
+# Ordnungen dasselbe; ein Fall, in dem sie auseinandergehen, liess sich nicht bauen. Das Wort
+# kostet nichts und macht aus einer unbelegten Vorgabe eine dokumentierte Garantie. Ein Test
+# dazu waere vakuos und fehlt deshalb bewusst.
+basis=$(git log --topo-order --format=%aI master..HEAD 2>/dev/null | tail -1)
 # Noch kein eigener Commit auf DIESEM Branch -> zurueck auf den Abzweigpunkt. Meist laeuft
 # das Eroeffnen dann ohnehin ins Leere ("No commits between ..."), aber nicht immer: mit
 # `--head <anderer-branch>` eroeffnet der Befehl sehr wohl einen PR (genau diese Form steht als

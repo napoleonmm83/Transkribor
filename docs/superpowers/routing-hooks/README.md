@@ -35,9 +35,12 @@ und war beim Mergen schon falsch):
   **Vergessen** gebaut, nicht gegen Absicht — wer sie umgehen will, hat den Fluchtweg.
 - **Der Anker ist der erste Commit des Branches, nicht der Abzweigpunkt** (seit 2026-08-22).
   Der Unterschied ist kein Detail: die Berichte sind untracked und überleben jeden Branchwechsel,
-  ihre mtime allein sagt also nicht, WOZU sie gehören. Gemessen am 2026-08-22 lagen 6 Berichte im
+  ihre mtime allein sagt also nicht, WOZU sie gehören. Am 2026-08-22 lagen **6** Berichte im
   Stamm, die neuer waren als die master-Spitze — jede frische Abzweigung wäre ohne ein einziges
-  eigenes Review durchgelassen worden. Gerechnet wird mit dem **Autor**-Datum: ein Rebase auf
+  eigenes Review durchgelassen worden. Die Zahl ist eine Momentaufnahme jenes Tages (die sechs
+  sind inzwischen nach `claude-routing` umgezogen); nachzählen lässt sich der Zustand jederzeit
+  mit dem Befehl, der sie ergab:
+  `find . -maxdepth 1 -name 'review-*.md' -newermt "$(git log -1 --format=%cI master)" | wc -l`. Gerechnet wird mit dem **Autor**-Datum: ein Rebase auf
   einen neueren master schreibt das Committer-Datum auf jetzt um, und der Wächter verwürfe danach
   den eigenen, längst geschriebenen Bericht. Bewusst offen bleibt ein Bericht von einem
   **parallel** bearbeiteten Branch — dafür müsste der Dateiname den Branch tragen.
