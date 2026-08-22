@@ -223,10 +223,24 @@ class _Emb:
     shape = (100, 3, 192)
 
 
+class _Seg:
+    """Die Segmentierung, aus der `slots` kommt: `(chunks, frames, speakers)`.
+
+    Bewusst so gebaut, dass die erwartete Zahl von Hand nachrechenbar ist: Sprecher 0 spricht
+    in 60 Fenstern, Sprecher 1 in 40, Sprecher 2 nie → **100** Slots mit Sprache, waehrend
+    `chunks x speakers` **300** ergaebe. Genau dieser Unterschied ist die Zusicherung."""
+
+    def __init__(self):
+        import numpy as np
+        self.data = np.zeros((100, 10, 3))
+        self.data[:60, :, 0] = 1.0
+        self.data[:40, :, 1] = 1.0
+
+
 class _BasisClustering:
     """Spiegelt pyannotes Aufbau: `BaseClustering` DEFINIERT `filter_embeddings` …"""
     def filter_embeddings(self, embeddings, segmentations=None, min_active_ratio=0.2):
-        return ("gefiltert", list(range(195)), "speaker_idx")
+        return ("gefiltert", list(range(80)), "speaker_idx")
 
 
 class _FakeClustering(_BasisClustering):
@@ -247,7 +261,7 @@ class _FakePipe:
         self.sah_patch["vbx"] = cl.cluster_vbx is not _echtes_vbx
         self.sah_patch["filter"] = "filter_embeddings" in vars(type(self.clustering))
         cl.cluster_vbx("ahc", "fea", "phi")
-        self.clustering.filter_embeddings(_Emb(), segmentations="seg")
+        self.clustering.filter_embeddings(_Emb(), segmentations=_Seg())
 
         class _Ann:
             def itertracks(self, yield_label=True):
@@ -310,7 +324,10 @@ def test_diagnose_fuellt_pi_und_ueberlebensquote_und_baut_zurueck(monkeypatch):
 
     assert pipe.sah_patch == {"vbx": True, "filter": True}      # waehrend des Laufs installiert
     assert diagnose["pi"] == [0.62, 0.38, 4e-07]
-    assert diagnose["slots"] == 300 and diagnose["durchgelassen"] == 195
+    # 100, nicht 300: gezaehlt werden Slots MIT SPRACHE, nicht chunks x speakers. An echtem
+    # Audio gemessen macht das 20 % gegen 67 % verworfen — und nur die 20 % sind mit der
+    # Referenztabelle der Spec (1.6(j), 16-32 %) vergleichbar.
+    assert diagnose["slots"] == 100 and diagnose["durchgelassen"] == 80
     # ... und danach nichts mehr davon zu sehen
     assert cl.cluster_vbx is _echtes_vbx
     assert "filter_embeddings" not in vars(_FakeClustering)
@@ -343,7 +360,7 @@ def test_fehlender_griffpunkt_kostet_die_diagnose_nicht_den_lauf(monkeypatch):
 
     class _OhneVbx(_FakePipe):
         def __call__(self, wave, **kw):
-            self.clustering.filter_embeddings(_Emb(), segmentations="seg")
+            self.clustering.filter_embeddings(_Emb(), segmentations=_Seg())
 
             class _Ann:
                 def itertracks(self, yield_label=True):
@@ -356,7 +373,7 @@ def test_fehlender_griffpunkt_kostet_die_diagnose_nicht_den_lauf(monkeypatch):
     diagnose: dict = {}
     assert diarize.diarize_file("x.m4a", diagnose=diagnose) == []      # Lauf lebt
     assert "pi" not in diagnose                                        # nur die Diagnose fehlt
-    assert diagnose["slots"] == 300                                    # die andere Sonde traegt
+    assert diagnose["slots"] == 100                                    # die andere Sonde traegt
 
 
 def test_waechter_die_griffpunkte_gibt_es_im_ECHTEN_pyannote():
@@ -404,3 +421,27 @@ def test_rueckbau_schreibt_zurueck_wenn_die_klasse_es_selbst_definiert(monkeypat
 
     assert diagnose["durchgelassen"] == 7                       # die Sonde lief
     assert _EigenesClustering.filter_embeddings is original     # und ist sauber zurueck
+
+
+def test_ohne_segmentierung_bleibt_slots_weg_statt_zu_luegen(monkeypatch):
+    """`filter_embeddings` erlaubt `segmentations=None`. Dann gibt es keinen Nenner — und
+    eine Ueberlebensquote ohne Nenner waere schlimmer als keine. Geprueft wird, dass NUR
+    `slots` fehlt und der Lauf normal weiterlaeuft."""
+    _pyannote_attrappe(monkeypatch)
+
+    class _OhneSeg(_FakePipe):
+        def __call__(self, wave, **kw):
+            from pyannote.audio.pipelines import clustering as cl
+            cl.cluster_vbx("ahc", "fea", "phi")
+            self.clustering.filter_embeddings(_Emb())        # ohne segmentations
+            class _Ann:
+                def itertracks(self, yield_label=True):
+                    return []
+            return _Ann()
+
+    monkeypatch.setattr(diarize, "_load_waveform", lambda p: "audio")
+    monkeypatch.setattr(diarize, "_pipeline", lambda: _OhneSeg())
+    diagnose: dict = {}
+    diarize.diarize_file("x.m4a", diagnose=diagnose)
+    assert "slots" not in diagnose and "durchgelassen" not in diagnose
+    assert diagnose["pi"] == [0.62, 0.38, 4e-07]             # die andere Sonde bleibt
