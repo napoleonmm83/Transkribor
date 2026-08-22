@@ -297,9 +297,11 @@ Shell bzw. Backend und brauchen keinen Browser). **Ersparnis: 1 Reviewslot, 1 Br
 Fassung 1 behauptete „vier statt fünf Zyklen, eine statt drei Sitzungen" — beides falsch
 gerechnet, weil sie #275 eine Browser-Sitzung zuschrieb, die es nicht braucht.
 
-**Bilanz über alle 24 — gezählt in ISSUES, jedes genau einmal.** (Die Nachfrage oben bündelt
-mehrere Issues zu *fünf Entscheidungen*; das ist eine andere Einheit und darum hier nicht die
-Zählgrösse.)
+**Bilanz über die 24 AUSGANGS-Issues** — der Stand vom 2026-08-22, als dieser Plan
+geschrieben wurde. Gezählt in ISSUES, jedes genau einmal. (Die Nachfrage oben bündelt mehrere
+davon zu *fünf Entscheidungen*; das ist eine andere Einheit und darum hier nicht die
+Zählgrösse.) **Das ist kein Abbild der heutigen Issue-Liste** — was seither dazugekommen ist,
+steht darunter.
 
 | Kategorie | Anz. | Issues |
 |---|---|---|
@@ -316,6 +318,18 @@ vier ohne tragenden Grund (#251, #210, #36-Linux, #267) haben ihn jetzt.
 **#276 ist am 2026-08-22 beantwortet** (CC-BY-NC im Installer akzeptabel) und bleibt trotzdem
 in „wartet auf Marcus": aus der Entscheidungs- ist eine **Messaufgabe** geworden, und die
 hängt an Task 8.
+
+### Seit diesem Plan dazugekommen — NICHT in der Tabelle oben
+
+Die Summe 24 bleibt die des Ausgangsstands; diese vier Posten kommen obendrauf und sind hier
+aufgeführt, damit die Tabelle nicht als aktuelle Issue-Liste missverstanden wird.
+
+| Posten | Woher | Einordnung |
+|---|---|---|
+| **#330** ✕ eines gerollten Dialogs wandert aus dem Bild | Folge von B1 | Frontend, klein; drei Auswege gemessen. Kandidat für ein späteres UI-Bündel. |
+| **#331** README-Wächter schlägt still nicht an | beim Bau von B1 gefunden | Gehört zum **Routing-System** — und wie #324 gibt es dafür in `claude-routing` noch keine Datei. Vorbedingung: Spiegel-Import. |
+| **#332** Deckel kennt die Ziehzone der Titelzeile nicht | Review zu B1 | **Zuerst messen, dann entscheiden** — ob der Klick dort wirklich zieht, ist ungeprüft. Braucht die gepackte App, also Marcus. |
+| **#36, Linux-Hälfte** | schon in B3 benannt | **Kein Bündel hat sie.** Marcus' Mac deckt AppImage/deb nicht ab; nötig wäre eine VM mit Desktop-Bibliotheken. #36 bleibt nach der Mac-Sitzung offen. |
 
 ---
 
