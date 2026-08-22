@@ -29,9 +29,17 @@ Gebündelt wird nach **geteilten Prüfkosten**, nicht nach Themenähnlichkeit
    ist nur der **Security**-Trial. Ein PR weniger ist ein Reviewslot mehr.
 3. **Mac-Hardware** — nur Marcus.
 4. **Marcus' Entscheidungen** — kosten je eine Antwort, wenn man sie bündelt.
-5. **Der PR-Bestand** *(Fassung 3)* — ein offener PR **bindet** einen Reviewslot, ohne ihn zu
-   nutzen. Fassung 2 hatte diesen Posten nicht, und prompt lagen zwei grüne, mergebare PRs
-   vergessen herum. **Vor jedem Bündel in BEIDEN Repos nachsehen** — dieser Plan reicht über
+5. **Der PR-Bestand** *(Fassung 3)* — **kein Kontingent-, sondern ein Zustandsposten.** Die
+   erste Fassung dieses Punktes behauptete, ein offener PR „binde einen Reviewslot" — das ist
+   **falsch und war ungeprüft**, ausgerechnet im Absatz, der das Nachrechnen einführt. Posten 2
+   wird von **Reviewversuchen** verbraucht, also von *Commits*; ein PR, der unangetastet
+   liegt, kostet **nichts**. An diesem Abend beidseitig belegt: #325 lag einen Tag ohne einen
+   einzigen Bot-Lauf, während #338/#339 samt Fixcommits in Stunden bis in die Drosselung
+   liefen. **Aufräumen kostet Kontingent, Liegenlassen nicht.**
+   Was ein liegender PR wirklich kostet: fertige Arbeit erreicht niemanden, der Branch driftet,
+   und — der teure Fall, heute gemessen — **ein grüner Haken verdeckt einen ungeprüften
+   Stand** (#325: `success | Review rate limited`).
+   **Vor jedem Bündel in BEIDEN Repos nachsehen** — dieser Plan reicht über
    zwei davon (B2b′ läuft in `claude-routing`), und `gh pr list` **ohne `--repo` sieht nur
    das, in dem man gerade steht**:
    `gh pr list --repo napoleonmm83/Transkribor` · `gh pr list --repo napoleonmm83/claude-routing`.
@@ -361,9 +369,12 @@ Sie teilen keinen der vier Kostenposten — gebündelt gewönne man nichts.
 > bleiben **2** (Task 8), **3** (#95) und **4** (#70+#71) — das sind Arbeit und Beschaffung,
 > keine Entscheidungen. Die Antworten stehen unten und in den Issues selbst.
 
-1. **#276 — DiariZen-Lizenz:** ist ein **CC-BY-NC**-Modell im ausgelieferten Installer
+1. ~~**#276 — DiariZen-Lizenz:** ist ein **CC-BY-NC**-Modell im ausgelieferten Installer
    akzeptabel? Bei *nein* entfällt der Kandidat ersatzlos, community-1 bleibt gesetzt, #276
-   ist sofort schliessbar.
+   ist sofort schliessbar.~~
+   ✅ **beantwortet: akzeptabel** (2026-08-22). Aus der Entscheidungs- ist eine **Messaufgabe**
+   geworden — DiariZen bleibt Kandidat, die Messung hängt an Task 8. #276 bleibt deshalb offen,
+   aber nicht mehr als *Nachfrage*.
 2. **Task 8 — der Referenzsatz** (13 im Editor korrigierte Dateien, Gruppenmitglieder
    einzeln benannt). Blockiert #274 und jede weitere Diarisierungs-Messung. Steht seit
    2026-08-17. *(In Fassung 1 fehlte er, obwohl B4 ihn selbst als Blocker nennt.)*
