@@ -144,6 +144,48 @@ Branch? git-Notiz? Commit-Trailer?) ist das Brainstorming, keine Umsetzung.
 *Nebenbefund:* #326 nennt als Spiegel noch `docs/superpowers/routing-hooks/` — das
 Verzeichnis existiert nicht mehr, die Fundstelle im Issue ist veraltet.
 
+### ► UMGESETZT in claude-routing PR #7 + #8 (2026-08-22), #323 ist ZU
+
+Alles oberhalb bleibt als Begründung stehen. Was der Bau ergab und im Plan so nicht stand:
+
+- **Die Fixture reichte weiter, als B2a annahm.** Nicht nur die „kein Review"-Fälle laufen
+  darauf, sondern **alle** — der Test braucht den echten Projektstamm für gar nichts mehr
+  (Hookpfad aus `BASH_SOURCE`). Damit fällt der Wiederherstellungs-`trap` weg **und mit ihm
+  seine eigene Probe**: nichts wiederherzustellen ist besser als ein geprüftes
+  Wiederherstellen. Zusicherungen 42 → 43.
+- **Drei Befunde kamen erst beim PRÜFEN des Fixes, jeder von einem anderen Prüfer — und alle
+  drei sind dieselbe Klasse:** die Begründung versprach mehr als der Code hielt. Subagent:
+  `GIT_CONFIG_GLOBAL/SYSTEM` (ein globales `core.hooksPath` tötet die Fixture-Commits) plus ein
+  Fixture-Wächter, der „die ganze Reihe hängt daran" sagte und nur `fehler=1` setzte
+  (gemessen: 35 von 40 Prüfungen liefen dann still gegen den echten Stamm). CLI:
+  `GIT_CONFIG_COUNT` als **dritter** Kanal. Bot (**Major**): `GIT_DIR`.
+- **Der Bot-Befund war beim Nachstellen ein echter Schaden:** mit gesetztem `GIT_DIR` landeten
+  drei Fixture-Commits in Transkribors **echtem** Repo (835 → 838, nicht gepusht, per
+  `git reset --soft` zurückgesetzt). Genau die Schadensklasse von #323, über einen Weg, den das
+  Issue nicht nannte. Nach dem Fix: 835 → 835.
+- **Die Isolation hat jetzt einen eigenen Wächter (Prüfung 42):** der Test ruft sich selbst mit
+  feindlicher Umgebung auf, über beide Konfigurationskanäle. Nicht zirkulär — er fragt nicht
+  „hast du etwas angefasst" (die eigene Behauptung als Maßstab), sondern spritzt eine Störung
+  ein und misst die Wirkung. Preis: 17 statt 8 Sekunden Laufzeit.
+- **Der Preis des Fixes ist benannt, nicht verschwiegen → #334.** Der alte Test lief im echten
+  Repo und wäre bei `master`→`main` rot geworden; der Hook verdrahtet `master` und lässt ohne
+  Anker **still** durch. Die Fixture baut sich ihr eigenes `master`. Der Sensor ist weg, #334
+  ist sein Ersatz. `claude-routing` selbst hat keinen `master` — dort wäre die Sperre von Tag 1
+  an aus gewesen, mit grünem Selbsttest daneben.
+- **Ein zweiter Defekt fiel beim Abgleich Spiegel↔Live auf (PR #8):** `claude-routing` hatte
+  keine `.gitattributes`, `core.autocrlf=true` schrieb 335 CR-Bytes in die Arbeitskopie. Unter
+  Linux-bash ergibt das Syntaxfehler und **Exit 0 bei leerem stdout** — Erfolg für einen
+  Selbsttest, der nie gelaufen ist.
+- **Zwei Messfallen, beide selbst hineingetappt:** `sed` scheiterte zweimal still an einer
+  Fortsetzungszeile, die Mutation kam nie an (`mutation-greift-nicht-gruen` — nur die
+  Anwendungs-Kontrolle `grep -c` auf den Mutationsmarker fing es). Und `out=$(bash … 2>&1)`
+  durch zwei Shell-Ebenen (`wsl -- bash -c`) verschluckte die Ausgabe und meldete leeres stdout
+  auch für den **grünen** Lauf — eine Behauptung, die ich zurückziehen musste.
+- **Betriebsnotiz:** die CodeRabbit-CLI hing 17 Minuten bei 1 s CPU, weil sie den Default-Branch
+  per `git fetch` holt, `claude-routing` **privat** ist und WSL keinen `credential.helper` hat.
+  Transkribor ist öffentlich, deshalb fiel es nie auf. Abhilfe ohne Zugangsdaten: einmal
+  `git remote set-head origin main` (rein lokal), danach lief die Review in 100 Sekunden.
+
 ---
 
 ## B3 — Der Mac-Durchgang (#318 + #84, #36 nur zur Hälfte) ▶ blockiert auf Marcus
@@ -282,8 +324,8 @@ Sie teilen keinen der vier Kostenposten — gebündelt gewönne man nichts.
 
 | # | Was | Ergebnis |
 |---|---|---|
-| 1 | **B1** #283 + #311 — ein PR, Abbruchregel bei Runde 2 | 2 zu |
-| 2 | **B2a** #323 (in `claude-routing`) | 1 zu |
+| 1 | ~~**B1** #283 + #311~~ ✅ **erledigt** (PR #333) | 2 zu |
+| 2 | ~~**B2a** #323 (in `claude-routing`)~~ ✅ **erledigt** (PR #7 + #8) | 1 zu, +1 neu (#334) |
 | 3 | **B4** #275 (Monkeypatch, best effort, mit Wächtertest) | 1 zu, Türöffner |
 | 4 | **B3-Vorarbeit** #84-Mess-Harness + Bestanden-Blatt | entblockt Marcus |
 | 5 | **Nachfrage an Marcus** (5 Entscheidungen + 2 Sachfragen) | entblockt bis zu 6 |
