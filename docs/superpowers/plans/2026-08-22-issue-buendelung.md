@@ -16,7 +16,8 @@ weil die falschen Zahlen sonst über Zitate weiterleben.
 ## Das Bündelungskriterium
 
 Gebündelt wird nach **geteilten Prüfkosten**, nicht nach Themenähnlichkeit
-(`aehnlichkeit-ist-keine-kopplung`). Die vier teuren Posten:
+(`aehnlichkeit-ist-keine-kopplung`). Die vier teuren Posten — und seit Fassung 3 ein
+fünfter, der **kein** Kontingent verbraucht, sondern einen Zustand beschreibt:
 
 1. **Browser-Sitzung** — App starten, Wegwerf-Projekt, Screenshots, löschen. Pflicht nach
    jedem sichtbaren Frontend-Fix. Fällt pro PR an, nicht pro Fix.
@@ -411,7 +412,7 @@ Sie teilen keinen der vier Kostenposten — gebündelt gewönne man nichts.
 | 5 | ~~**Stufe 0** PR-Bestand: #322 · #325→#338 · 4 Branches~~ ✅ **erledigt** | 0 offene PRs |
 | 6 | ~~**#267** schliessen oder umwidmen~~ ✅ **geschlossen**, mit der Messung | 1 zu |
 | 7 | **B3-Vorarbeit** #84-Mess-Harness + Bestanden-Blatt | entblockt die Mac-Sitzung |
-| 8 | **B2b′** Spiegel-Import → #331 → #334 → #324 (`claude-routing`) | 3 zu, 1 Reviewslot |
+| 8 | **B2b′** Spiegel-Import → #331 → #334 → #324 (`claude-routing`) | 3 zu, 1 PR |
 | 9 | **B7** #330 + #328 (eine Browser-Sitzung) | 2 zu, 1 Sitzung |
 | 10 | **#251** einplanen · **B6** #136 (Material liegt vor) | 1 zur Disposition, 1 messbar |
 | 11 | **B2c** #326 — erst Entwurf, dann Bau | nach Entwurf |
@@ -525,8 +526,9 @@ aber es war nachzumessen — B2a hat in genau diesem Repo Dateien angefasst):
 `readme-pflicht.sh` sind **nicht darunter**. Lokal liegen in `.claude/hooks/` **fünf** Dateien,
 gespiegelt sind **zwei** (`routing-sperre.sh`, `routing-sperre.test.sh`).
 
-Reihenfolge im Bündel: **Spiegel-Import → #331 → #334 → #324.** Ein PR, ein Reviewslot,
-drei Issues. Kein Browser.
+Reihenfolge im Bündel: **Spiegel-Import → #331 → #334 → #324.** Ein PR, drei Issues, kein
+Browser. **Ein** Reviewversuch ist dabei die Untergrenze, nicht die Zahl — jede Fixrunde ist
+ein weiterer (Posten 2).
 
 - **#331** — `readme-pflicht.sh:20` prüft auf die Zeichenkette `git commit`; ein globales
   `-c` schiebt sich dazwischen und macht den Wächter blind. Er war **still aus**.
@@ -545,7 +547,7 @@ brauchbare Weg — das Repo ist privat, der Lauf hing zuletzt 17 Minuten am fehl
 
 #### B7 — UI-Bündel #330 + #328 (eine Browser-Sitzung)
 
-Nach demselben Kriterium wie B1: ein App-Start, ein Wegwerf-Projekt, ein Reviewslot.
+Nach demselben Kriterium wie B1: ein App-Start, ein Wegwerf-Projekt, ein PR.
 
 - **#330** — der ✕ eines gerollten Dialogs wandert aus dem Bild (gemessen: `top` fällt von 33
   auf **−297** bei 320 px Fensterhöhe). Folge des Höhendeckels aus B1.
