@@ -155,17 +155,23 @@ describe('Sidebar', () => {
     expect(knopf).toHaveAttribute('rel', expect.stringContaining('noreferrer'))
   })
 
-  it('der Spendenblock steht AUSSERHALB der rollenden Projektliste', () => {
+  it('der Spendenblock steht NACH der rollenden Projektliste, nicht darin', () => {
     // Das ist die eigentliche Zusicherung hinter „unten festgenagelt": die Leiste ist eine
-    // Flex-Spalte, in der nur das <nav> waechst -- ein Geschwister dahinter steht damit
-    // immer am unteren Rand. Im <nav> gelandet, rollte der Knopf bei dreihundert Projekten
-    // aus dem Bild. jsdom rechnet kein Layout; die STRUKTUR ist der Teil, der hier
+    // Flex-Spalte, in der nur das <nav> waechst -- ein Geschwister DAHINTER steht damit
+    // immer am unteren Rand. jsdom rechnet kein Layout; die STRUKTUR ist der Teil, der hier
     // pruefbar ist, das Aussehen kommt aus der Browser-Gegenprobe.
-    const { container } = zeigen({ projekte: PROJEKTE })
+    //
+    // Gemessen wird die REIHENFOLGE, nicht das Enthaltensein: `not.toContainElement` ist
+    // `Node.contains` und damit reihenfolgeblind -- der Block VOR das Suchfeld geschoben
+    // (der wahrscheinlichste naechste Diff, wenn jemand ihn optisch hochziehen will) steckt
+    // ebenfalls nicht im <nav>, stuende aber oben links statt unten links. Beide
+    // Verschiebungen sehen von aussen gleich aus und haetten entgegengesetzte Abdeckung.
+    // DOCUMENT_POSITION_FOLLOWING trennt sie: im <nav> ist es CONTAINED_BY, davor PRECEDING.
+    const { container } = zeigen()
     const nav = container.querySelector('nav')
     const knopf = screen.getByRole('link', { name: /Projekt unterstützen/ })
     expect(nav).not.toBeNull()
     expect(nav).toContainElement(screen.getByText('Alpha'))   // Positivkontrolle
-    expect(nav).not.toContainElement(knopf)
+    expect(nav!.compareDocumentPosition(knopf) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 })
