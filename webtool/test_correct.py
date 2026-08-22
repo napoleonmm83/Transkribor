@@ -506,6 +506,36 @@ def test_diagnose_landet_im_sidecar(project, monkeypatch):
     assert side["diagnose"] == {"pi": [0.62, 0.38, 4e-07], "slots": 287, "durchgelassen": 195}
 
 
+def test_diagnose_gehoert_der_datei_nicht_dem_lauf(project, monkeypatch):
+    """Zwei Dateien in EINEM Lauf duerfen sich die Diagnose nicht teilen (CodeRabbit-Bot).
+
+    `diagnose = {}` entsteht INNERHALB der Schleife von `cmd_diarize`. Wer es heraushebt —
+    eine Zeile hoeher, sieht harmlos aus —, vererbt die Zahlen der ersten Datei an alle
+    folgenden: S2 bekaeme ein `pi`, das zu S1 gehoert, und niemand saehe es an der Datei an.
+    Dieselbe Klasse wie der `_Sprachschwelle`-Proxy in `transcribe.py`, nur eine Ebene hoeher.
+
+    Die Attrappe fuellt deshalb NUR fuer S1: danach muss S1 die Zahlen tragen und S2 den
+    Schluessel gar nicht haben."""
+    _root, t = project
+    monkeypatch.setenv("TRANSKRIBOR_DIARIZE", "1")
+    _add_S2(t)
+    (_root / "Demo" / "audio" / "S2.mp3").write_bytes(b"x")   # sonst ueberspringt cmd_diarize S2
+    import webtool.diarize as diar
+
+    def nur_fuer_S1(audio, min_speakers=2, num_speakers=None, diagnose=None):
+        if diagnose is not None and "S1" in os.path.basename(audio):
+            diagnose.update(pi=[0.9, 0.1], slots=42, durchgelassen=40)
+        return _fake_turns()
+
+    monkeypatch.setattr(diar, "diarize_file", nur_fuer_S1)
+    assert correct.cmd_diarize("Demo") == 2
+
+    s1 = json.loads((t / "S1.diar.json").read_text(encoding="utf-8"))
+    s2 = json.loads((t / "S2.diar.json").read_text(encoding="utf-8"))
+    assert s1["diagnose"] == {"pi": [0.9, 0.1], "slots": 42, "durchgelassen": 40}
+    assert "diagnose" not in s2          # NICHT geerbt
+
+
 def test_ohne_diagnose_steht_der_schluessel_NICHT_im_sidecar(project, monkeypatch):
     """Die Gegenrichtung, und sie ist die wichtigere: greift der Monkeypatch nicht (fremdes
     Paket geaendert), darf KEIN leerer `diagnose`-Schluessel entstehen. Der behauptete
