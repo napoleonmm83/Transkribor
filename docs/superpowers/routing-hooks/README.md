@@ -14,7 +14,8 @@ ist als der **erste Commit dieses Branches**. Damit erzwingt sie **Stufe 1** der
 („`superpowers:requesting-code-review` ZUERST, dann CodeRabbit") — CodeRabbit braucht den PR und
 ist an dieser Stelle nicht prüfbar.
 
-Fünf Dinge, die man nicht aus dem Skript liest:
+Was man nicht aus dem Skript liest (ohne Zahl davor — genau so eine stand im Kopf der Sperre
+und war beim Mergen schon falsch):
 
 - **Sie hängt an ZWEI Werkzeugen**, `Bash` und `PowerShell`. Das war lange nicht so, und der Fehler
   war teuer: ein Zensus über alle Sitzungstranskripte ergab **23 von 187** echten `gh pr create`

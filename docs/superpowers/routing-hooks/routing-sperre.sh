@@ -193,25 +193,49 @@ printf '%s' "$rest" | grep -Eq "${treffer}${ende}" || exit 0
 # ein Fehlalarm auf dem Normalweg dieses Repos (`gh pr merge --rebase`, master per
 # Fast-Forward nachziehen). `tail -1` ist der aelteste der aufgelisteten Commits.
 basis=$(git log --format=%aI master..HEAD 2>/dev/null | tail -1)
-# Noch kein eigener Commit -> zurueck auf den Abzweigpunkt. `gh pr create` eroeffnet dann
-# ohnehin nichts ("No commits between ..."), der Zweig ist nur der Fail-Open-Rest.
+# Noch kein eigener Commit auf DIESEM Branch -> zurueck auf den Abzweigpunkt. Meist laeuft
+# das Eroeffnen dann ohnehin ins Leere ("No commits between ..."), aber nicht immer: mit
+# `--head <anderer-branch>` eroeffnet der Befehl sehr wohl einen PR (genau diese Form steht als
+# Fixture in Pruefung 30). Der Zweig ist also ein echter Fail-Open, kein toter Ast.
 [ -n "$basis" ] || basis=$(git log -1 --format=%aI "$(git merge-base master HEAD 2>/dev/null)" 2>/dev/null)
 # Kein Anker ermittelbar (kein git, kein master) -> durchlassen. Ein Waechter, der bei
 # eigener Unsicherheit sperrt, blockiert Arbeit, ueber die er nichts weiss.
 [ -n "$basis" ] || exit 0
 
-# BEWUSST OFFEN: ein Bericht, der auf einem PARALLELEN Branch nach diesem ersten Commit
-# entstand, gibt diesen hier weiterhin frei. Das Fenster ist von „alles der letzten Tage" auf
-# „gleichzeitige Arbeit an zwei Branches" geschrumpft. Enger ginge es nur ueber Metadaten IM
-# Bericht (Basis- und Pruef-Commit, CodeRabbits Vorschlag) — die verlangen ein Format, das
-# kein Subagent zusichert, und ein Waechter, der an einem nicht garantierten Format scheitert,
-# wird weggeklickt. Derselbe Massstab wie bei der Ankerklasse oben: lieber eine benannte
-# Luecke als ein Fehlalarm.
+# WAS DER NEUE ANKER SPERRT, WAS DER ALTE DURCHLIESS (Rereview, gemessen): der Ablauf
+# „Arbeitsbaum reviewen -> Bericht faellt an -> EIN Commit -> PR" wird jetzt gesperrt, denn der
+# Bericht ist aelter als dieser eine Commit. Dasselbe nach einem lokalen Quetschen
+# (`git reset --soft master` + commit traegt das Autor-Datum JETZT). Auf Mehr-Commit-Branches —
+# dem Normalweg dieses Repos, Review nach dem Commit — tritt es nicht auf. Es ist der Preis
+# des Fixes und steht deshalb IN DER SPERRMELDUNG, nicht nur hier: ein Fehlalarm, den der
+# Waechter selbst erklaert, kostet einen Fluchtweg; einer, den er verschweigt, kostet den
+# Waechter.
+#
+# BEWUSST OFFEN, und weiter als „parallel gearbeitet": frei gibt jeder Bericht, dessen mtime
+# hinter dem Autor-Datum des ersten Branch-Commits liegt. Gemessen faellt darunter auch ein
+# Branch, der mit einem CHERRY-PICK beginnt (das Autor-Datum bleibt alt, der Bericht von
+# gestern liegt also dahinter), und ein auf einen Feature-Branch GESTAPELTER Branch. Enger
+# ginge es nur ueber Metadaten IM Bericht (Basis- und Pruef-Commit, CodeRabbits Vorschlag) —
+# die verlangen ein Format, das kein Subagent zusichert, und ein Waechter, der an einem nicht
+# garantierten Format scheitert, wird weggeklickt. Derselbe Massstab wie bei der Ankerklasse
+# oben: lieber eine benannte Luecke als ein Fehlalarm.
 find . -maxdepth 1 -name 'review-*.md' -newermt "$basis" 2>/dev/null | grep -q . && exit 0
 
-echo 'Kein Subagent-Review auf diesem Branch: es liegt kein review-*.md, das neuer ist als der' >&2
-echo 'Abzweigpunkt von master. CLAUDE.md verlangt superpowers:requesting-code-review ZUERST,' >&2
-echo 'dann CodeRabbit — und CodeRabbit braucht den PR, kann hier also nicht geprueft werden.' >&2
-echo 'Lief der Review und kam nur idle ohne Bericht zurueck: KEIN_REVIEW=1 gh pr create … (Bash)' >&2
-echo 'bzw. $env:KEIN_REVIEW=1; gh pr create … (PowerShell).' >&2
+# Die Meldung nennt den Anker, an dem wirklich gemessen wird. Sie nannte bis zum
+# Branch-Anker-Fix den Abzweigpunkt weiter — wer gesperrt wurde, prueft dann das falsche
+# Kriterium, findet seinen Bericht tatsaechlich neuer als den Abzweigpunkt und haelt den
+# Waechter fuer kaputt. Und sie nennt den Fehlalarm gleich mit: ein Waechter, der einen
+# bekannten Fehlalarm verschweigt, wird beim ersten Treffer abgeschaltet.
+echo 'Kein Subagent-Review auf diesem Branch: es liegt kein review-*.md, das neuer ist als' >&2
+echo 'der ERSTE Commit dieses Branches. (Nicht der Abzweigpunkt von master — ein Bericht aus' >&2
+echo 'frueherer Arbeit liegt zwar dahinter, gehoert aber nicht zu dieser hier.)' >&2
+echo 'CLAUDE.md verlangt superpowers:requesting-code-review ZUERST, dann CodeRabbit — und' >&2
+echo 'CodeRabbit braucht den PR, kann hier also nicht geprueft werden.' >&2
+echo '' >&2
+echo 'Drei Faelle, in denen der Review LIEF und der Waechter ihn trotzdem nicht sieht:' >&2
+echo '  1. Der Bericht entstand VOR dem einzigen Commit dieses Branches (Review am' >&2
+echo '     Arbeitsbaum, danach einmal committet) — oder die Commits wurden lokal gequetscht.' >&2
+echo '  2. Der Subagent kam idle ohne Bericht zurueck; er steht dann im Transkript.' >&2
+echo '  3. Der Bericht liegt woanders als im Projektstamm.' >&2
+echo 'Dann: KEIN_REVIEW=1 als Praefix (Bash) bzw. $env:KEIN_REVIEW=1 davor (PowerShell).' >&2
 exit 2

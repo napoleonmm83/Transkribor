@@ -28,10 +28,11 @@ rm -rf "$strap_tmp"
 # Aufraeumen, damit der Test nicht vom Zufall lebt: ein liegengebliebenes
 # review-*.md aus echter Arbeit wuerde den Sperrfall gruen machen.
 tmp=$(mktemp -d); mv review-*.md "$tmp"/ 2>/dev/null
+wr=""   # Wegwerf-Repo der Pruefungen 39-41, weiter unten angelegt; der trap raeumt es mit
 # trap statt eines einzelnen Aufraeum-Aufrufs am Ende: bricht DIESER Testlauf dazwischen
 # ab (Signal, ein frueher `exit`), blieben Marcus' echten Berichte sonst im Wegwerfordner
 # liegen statt im Projektstamm — es sind echte Arbeitsergebnisse ohne Sicherung.
-trap 'mv "$tmp"/review-*.md . 2>/dev/null; rmdir "$tmp" 2>/dev/null' EXIT
+trap 'mv "$tmp"/review-*.md . 2>/dev/null; rmdir "$tmp" 2>/dev/null; [ -n "$wr" ] && rm -rf "$wr"' EXIT
 
 # 1. Kein Review -> sperrt
 [ "$(lauf "$PR")" = "2" ] || { echo "FAIL: sperrt nicht ohne Review" >&2; fehler=1; }
@@ -260,20 +261,31 @@ rm -f review-selbsttest.md
 hookabs="$PWD/$H"
 lauf_in() { printf '%s' "$2" | CLAUDE_PROJECT_DIR="$1" bash "$hookabs" >/dev/null 2>&1; echo $?; }
 wr=$(mktemp -d)
+# `-c commit.gpgsign=false`: ist die Signierung global an, scheitern die Fixture-Commits hier
+# STILL (kein Branch, kein Commit) — 39 wuerde mit irrefuehrender Meldung rot und 40 vakuos
+# gruen. Der Selbsttest darf nicht davon abhaengen, wie der Entwickler git eingestellt hat.
+# ZWEI Commits auf dem Branch, und der zweite ist der Grund: mit nur einem sind „aeltester"
+# und „neuester" dieselbe Zeile, und `tail -1` haette NULL Abdeckung (gemessen: `tail`->`head`
+# liess alle Pruefungen gruen). Autor-Datum 01-05 liegt hinter dem eigenen Bericht (01-04) —
+# wer am neuesten Commit ankert, sperrt damit jeden Mehr-Commit-Branch, und 40 wird rot.
+gitf() { git -c user.email=t@t -c user.name=t -c commit.gpgsign=false "$@"; }
 (
   cd "$wr" || exit 1
   git init -q . && git symbolic-ref HEAD refs/heads/master
-  GIT_AUTHOR_DATE="2020-01-01T00:00:00+00:00" GIT_COMMITTER_DATE="2020-01-01T00:00:00+00:00"     git -c user.email=t@t -c user.name=t commit -q --allow-empty -m basis
+  GIT_AUTHOR_DATE="2020-01-01T00:00:00+00:00" GIT_COMMITTER_DATE="2020-01-01T00:00:00+00:00"     gitf commit -q --allow-empty -m basis
   git checkout -q -b feat
-  GIT_AUTHOR_DATE="2020-01-03T00:00:00+00:00" GIT_COMMITTER_DATE="2020-01-09T00:00:00+00:00"     git -c user.email=t@t -c user.name=t commit -q --allow-empty -m arbeit
+  GIT_AUTHOR_DATE="2020-01-03T00:00:00+00:00" GIT_COMMITTER_DATE="2020-01-09T00:00:00+00:00"     gitf commit -q --allow-empty -m arbeit
+  GIT_AUTHOR_DATE="2020-01-05T00:00:00+00:00" GIT_COMMITTER_DATE="2020-01-10T00:00:00+00:00"     gitf commit -q --allow-empty -m nacharbeit
 ) >/dev/null 2>&1
+# 41. Die Fixture selbst — ohne sie waeren 39 und 40 stumm gruen, wenn `git init` oder ein
+#     Commit scheitert (kein Branch -> `master..HEAD` leer -> Rueckfall -> anderer Anker).
+[ "$(cd "$wr" && git rev-list --count master..HEAD 2>/dev/null)" = "2" ]   || { echo "FAIL: Fixture-Repo hat nicht die zwei erwarteten Branch-Commits" >&2; fehler=1; }
 
 touch -d "2020-01-02 00:00:00 +0000" "$wr/review-fremd.md"
 [ "$(lauf_in "$wr" "$PR")" = "2" ]   || { echo "FAIL: ein Bericht von VOR dem ersten Commit dieses Branches gibt ihn frei" >&2; fehler=1; }
 
 touch -d "2020-01-04 00:00:00 +0000" "$wr/review-eigen.md"
-[ "$(lauf_in "$wr" "$PR")" = "0" ]   || { echo "FAIL: sperrt TROTZ eigenem Bericht (Committer-Datum statt Autor-Datum?)" >&2; fehler=1; }
-rm -rf "$wr"
+[ "$(lauf_in "$wr" "$PR")" = "0" ]   || { echo "FAIL: sperrt TROTZ eigenem Bericht - Anker am NEUESTEN Commit (head statt tail) oder am Committer- statt Autor-Datum?" >&2; fehler=1; }
 
 [ $fehler -eq 0 ] && echo "OK"
 exit $fehler
