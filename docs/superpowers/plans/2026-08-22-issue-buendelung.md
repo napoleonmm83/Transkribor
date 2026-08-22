@@ -1,0 +1,299 @@
+# Bündelungsplan: 24 offene Issues
+
+> **Kein Implementierungsplan.** Triage-Dokument: es entscheidet, WELCHE Bündel existieren,
+> in welcher Reihenfolge sie laufen und welche blockiert sind. Jedes Bündel bekommt seinen
+> eigenen Plan nach `superpowers:writing-plans`, wenn es dran ist.
+
+**Stand:** master `af24095`, `v0.31.0` live, 24 offene Issues (gezählt).
+**Fassung 2** — Fassung 1 wurde von `faktenpruefer` und `pruefer-gegnerisch` zerlegt
+(Berichte: `review-buendelungsplan-fakten.md`, `review-buendelungsplan-gegnerisch.md`).
+**Fünf Zahlen darin waren falsch**, obwohl sie als „nachgeprüft" auftraten. Was korrigiert
+wurde, steht am Ende unter „Was Fassung 1 falsch hatte" — nicht als Zerknirschung, sondern
+weil die falschen Zahlen sonst über Zitate weiterleben.
+
+## Das Bündelungskriterium
+
+Gebündelt wird nach **geteilten Prüfkosten**, nicht nach Themenähnlichkeit
+(`aehnlichkeit-ist-keine-kopplung`). Die vier teuren Posten:
+
+1. **Browser-Sitzung** — App starten, Wegwerf-Projekt, Screenshots, löschen. Pflicht nach
+   jedem sichtbaren Frontend-Fix. Fällt pro PR an, nicht pro Fix.
+2. **CodeRabbit-Kontingent** — an PR #329 gemessen: „98 included PR review attempts over the
+   past 7 days set your current allowance at **1 review per hour**". Das ist eine
+   **dynamische Fair-Usage-Drosselung**, keine feste Plangrösse, und der Plan läuft weiter
+   („Pro Plus", an #327 sichtbar). Abgelaufen ist nur der **Security**-Trial. Das Argument
+   hält trotzdem: ein PR weniger ist ein Reviewslot mehr.
+3. **Mac-Hardware** — nur Marcus.
+4. **Marcus' Entscheidungen** — kosten je eine Antwort, wenn man sie bündelt.
+
+Zwei Issues im selben Bereich, die keinen dieser Posten teilen, werden **nicht** gebündelt.
+
+---
+
+## B1 — Dialoge bei kleiner Fensterhöhe bedienbar (#283 + #311) ▶ ZUERST
+
+**Warum gebündelt:** eine Browser-Sitzung deckt beides — ein App-Start, ein Wegwerf-Projekt,
+ein Reviewslot statt zwei. Das ist der **einzige** Grund; fachlich teilen die beiden nichts.
+
+**Warum zuerst:** #283 ist der einzige offene Issue mit einem Zustand, in dem sich nichts
+mehr speichern lässt. Es gibt keinen Konkurrenten um Platz 1.
+
+**Wie schlimm es wirklich ist — die Dringlichkeit ist kleiner als in Fassung 1:**
+`electron/main.js:50` setzt `minHeight: 600` (Aussenmass, Viewport am Minimum ~560 px). Der
+**Totalausfall bei 420 px ist damit nur im Browser erreichbar**; in der gepackten App ist der
+597-px-Dialog am Minimum um ~19 px angeschnitten, der Knopf also teilweise klickbar.
+„Die App ist unbedienbar" war eine Browser-Erzählung. Es bleibt ein echter Fehler — nur einer,
+der die installierte App streift statt sie zu blockieren.
+
+**Der Zusatzbefund, den #283 selbst nicht hat:**
+`ui/dialog.tsx:62` hat `fixed top-[50%]` ohne `max-h`/`overflow-y` — wie beschrieben. **Aber
+`ui/alert-dialog.tsx:59` trägt dieselbe Signatur und ist ein EIGENES Bauteil**
+(`AlertDialogPrimitive.Content`, importiert nichts aus `ui/dialog.tsx`). Ein Fix nur an der
+im Issue genannten Stelle liesse `DeleteProjectDialog` und die Alert-Dialoge in `DateiMenue`
+kaputt — `fix-an-einer-stelle-ist-kein-fix-der-klasse`. **Beide Bauteile in den Fix.**
+Nebenbei: #283 zählt „Löschen" fälschlich zu den `dialog.tsx`-Verbrauchern.
+
+**Zensus statt Schätzung** (Fassung 1 hatte hier 10/3 aus einer Substring-Falle —
+`grep "DialogContent"` fängt `AlertDialogContent` mit und zählt Definitionsdateien mit):
+
+| Bauteil | Verbraucher | Dateien |
+|---|---|---|
+| `DialogContent` | **6** | `MaterialDialog`, `DateiEinstellungenDialog`, `NewProjectDialog`, `ProjektEinstellungenDialog`, `UmbenennenDialog`, `ui/command` |
+| `AlertDialogContent` | **2** | `DateiMenue`, `DeleteProjectDialog` |
+
+**Kein drittes betroffenes Bauteil:** `grep 'top-\[50%\]'` über `ui/` liefert genau diese
+zwei. Kein `sheet.tsx`, kein `drawer.tsx`; `popover`/`select`/`dropdown-menu`/`tooltip` sind
+Radix-Popper-positioniert, `select.tsx:63` hat bereits eigenes `max-h`+`overflow-y`.
+
+**Zwei Fallen für die Browser-Prüfliste:**
+- **`ui/command.tsx:51`** rendert `<DialogContent className="overflow-hidden p-0">`. `cn` ist
+  `twMerge(clsx(…))` (`lib/utils.ts:5`) — der Verbraucher gewinnt Konflikte. Ein in
+  `dialog.tsx` ergänztes `overflow-y-auto` würde dort **überstimmt**, ein `max-h-*` bliebe
+  stehen. Die Palette rollt intern ohnehin (`CommandList: max-h-[300px] overflow-y-auto`).
+- **`MaterialDialog.tsx:278`** deckelt sich mit `h-[min(648px,90vh)]` **selbst** und ist vom
+  #283-Symptom gar nicht betroffen. Er ist damit die **Negativkontrolle**, nicht der Testfall.
+  (Fassung 1 warnte vor einer „sticky-Kopfzeile" — die gibt es dort nicht: `grep sticky` über
+  `src/` findet nur Kommentare. Kopf und Schrittleiste stehen fest, weil sie nicht-rollende
+  Flex-Geschwister über dem Bildlaufbehälter sind. Und der Bildlauf kam aus **PR #313/#315**,
+  nicht #310.) Die offene Frage bleibt, muss aber anders lauten: wie wirkt ein Basis-`max-h`
+  auf einen Verbraucher, der schon `h-[…]` + Flex-Spalte + innere Bildläufe hat?
+
+**Ein PR, und die ehrliche Abbruchregel statt einer Beruhigung.** Fassung 1 sagte „getrennte
+Commits, damit ein Reviewer den riskanten Fix ablehnen kann, ohne #311 mitzunehmen" — das ist
+hohl: der Repo-Workflow ist **Rebase-Merge des ganzen PRs**, einen Commit einzeln abzulehnen
+gibt es nicht. Die tragfähige Regel: **braucht der Bauteil-Fix eine zweite Reviewrunde, wird
+#311 abgespalten und separat gemerged.** Dann ist die Bündelung ihren Reviewslot wert
+gewesen, ohne den kleinen Fix am grossen festzunageln.
+
+**Prüfung:** vitest beide Richtungen + Mutationsprobe · Browser bei **420 px** (Fehlerfall)
+UND **900 px** (Negativkontrolle: kein Bildlauf im Normalfall) · alle **8** Verbraucher
+einmal öffnen · Screenreader-Gegencheck für #311, weil jsdom Live-Regionen nicht nachbildet.
+
+---
+
+## B2 — Routing-Wächter: gehört NICHT in dieses Repo (#323, dann #324, dann #326)
+
+**Nachgeprüft:** `git ls-files .claude/` ist **leer** — komplett untracked. `.claude/hooks/`
+enthält 5 Dateien. In `E:\Git\claude-routing\projekte\transkribor\hooks\` liegen davon
+**genau zwei**: `routing-sperre.sh` und `routing-sperre.test.sh`, beide **byte-identisch**
+mit den lokalen.
+
+**B2a — sofort: #323 allein.** Selbsttest verschiebt 30 unversionierte `review-*.md` →
+Wegwerf-Fixture im Scratchpad statt im echten Projektstamm. Träger ist
+`routing-sperre.test.sh`, der in claude-routing liegt. Ein PR dort, fertig.
+
+**B2b — #324 braucht einen Schritt davor.** Seine beiden Träger sind
+`kein-pauschales-add.sh` und `CLAUDE.md`. **Keiner von beiden ist in claude-routing
+versioniert** (`find` über das ganze Repo: kein Treffer; `readme-pflicht.sh` fehlt ebenso).
+CLAUDE.md ist hier gitignoriert (`.gitignore:35`) und dort nicht gespiegelt. **Ein „PR in
+claude-routing" für #324 hätte heute keine Datei zum Ändern.** Fassung 1 bündelte #324 mit
+#323 auf einer Prämisse, die nur das *Verzeichnis* geprüft hatte, nicht seinen Inhalt.
+Reihenfolge: erst `kein-pauschales-add.sh` (und sinnvollerweise `readme-pflicht.sh`) in den
+Spiegel aufnehmen, dann die Begründung austauschen — **nicht die Entscheidung**, die bleibt
+richtig. Die CLAUDE.md-Hälfte bleibt eine lokale Änderung ohne Reviewweg; das ist hinzunehmen,
+aber zu benennen.
+
+**B2c — #326 getrennt und später** (Zeitanker der PR-Sperre): **kein Tweak, sondern ein
+Neuentwurf.** Der Issue sagt selbst, eine mtime sei die falsche Größe — sie sagt *wann* ein
+Bericht entstand, nicht *wozu* er gehört. Ohne entschiedenen Ersatz (Bericht nennt den
+Branch? git-Notiz? Commit-Trailer?) ist das Brainstorming, keine Umsetzung.
+*Nebenbefund:* #326 nennt als Spiegel noch `docs/superpowers/routing-hooks/` — das
+Verzeichnis existiert nicht mehr, die Fundstelle im Issue ist veraltet.
+
+---
+
+## B3 — Der Mac-Durchgang (#318 + #84, #36 nur zur Hälfte) ▶ blockiert auf Marcus
+
+**Was eine Mac-Sitzung wirklich schliesst:** #318 und #84 ganz — **#36 nur zur Hälfte.**
+Sein Titel lautet „macOS **und Linux**", und Marcus' Mac prüft weder AppImage noch deb.
+Fassung 1 schrieb „entblockt 3 Issues"; das stimmt nicht. Der Linux-Teil braucht eine VM mit
+Desktop-Bibliotheken (WSL hat keine) und kommt in keinem Bündel vor — **das ist eine offene
+Lücke, keine Entscheidung.**
+
+**Reihenfolge in der Sitzung:**
+1. **#318** — `.dmg` per Finder starten, Protokoll lesen. Bestanden: weder „Failed to parse
+   URL" noch „app-update.yml nicht lesbar"; bei neuerer Fassung „Update … verfügbar" mit
+   funktionierendem „Manuell herunterladen". Fünf Minuten.
+2. **#36 (macOS-Hälfte)** — volle Pipeline aus dem `.dmg`, zwingend per **Finder** (nicht
+   `npm start`: das erbt den Shell-PATH und versteckt genau die Fehlerklasse). Mitzuprüfen:
+   ist `models/` im `.dmg` angekommen, läuft die Sprechertrennung ohne HF-Token.
+3. **#84** — dieselbe Datei mit und ohne `--prompt`, Abdeckung (Summe der Segmentdauern) und
+   Wortzahl vergleichen.
+
+**Meine Vorarbeit — und was daran WIRKLICH Arbeit ist.** #318 und #36 tragen ihre Schritte
+und Bestanden-Kriterien bereits im Issue-Text; sie abzuschreiben wäre Doppelung. Echt ist
+nur **#84**: `--prompt` ist aus `whispercpp.transkribiere()` **entfernt**, der „mit
+Prompt"-Arm der Messung hat also keinen Aufrufweg — den gibt es nirgends. Zu bauen ist ein
+kleines Mess-Harness (zwei `whisper-cli`-Läufe, Abdeckung + Wortzahl auszählen), das Marcus
+ohne Nachfragen starten kann. Alles andere ist eine halbe Seite Bestanden-Haken.
+
+**Nicht dazu gebündelt:** #95 (Signieren) — Beschaffung, keine Messung.
+
+---
+
+## B4 — Diarisierungs-Diagnose (#275) ▶ allein, als Türöffner
+
+**Warum allein:** #275 ist der einzige der vier Diarisierungs-Issues, der jetzt läuft — reines
+Protokoll, zwei Schlüssel mehr in `<base>.diar.json`, **kein Verhaltenswechsel**. Die anderen:
+- **#274** (`min_active_ratio`) ist laut eigenem Text „kein fertiger Fix", **nur mit dem
+  Referenzsatz aus Task 8 messbar** → hängt an Marcus.
+- **#276** (DiariZen) ist eine **Lizenzentscheidung** vor jeder Messung.
+- **#267** ist in seiner Prämisse widerlegt (MEMORY/CLAUDE.md:889-895: `Sprecher 1` ist ein
+  *gemischter* Cluster) → braucht eine **Disposition**, siehe unten.
+
+**Die Machbarkeitsfrage ist inzwischen beantwortet — und die Antwort ist unbequem.**
+Fassung 1 sagte „ungeprüft, erste Frage vor dem Bau". Gemessen:
+`clustering.py:609` `q, sp = cluster_vbx(…)` ist eine **lokale Variable**; :669 gibt
+`(hard_clusters, soft_clusters, centroids)` zurück — **`sp` ist nicht dabei**.
+`speaker_diarization.py:640` verwirft selbst `soft_clusters`. `webtool/diarize.py:118` sieht
+nur das Endergebnis. **Ohne Patch kommt man an `sp` nicht heran.** Der einzige Weg ist der im
+Issue beschriebene Monkeypatch auf `pyannote.audio.pipelines.clustering.cluster_vbx` (der
+Name ist zur Importzeit gebunden — `utils.vbx` zu patchen liefe ins Leere). Indirekt sichtbar
+wäre nur die *Anzahl* der Überlebenden (`centroids.shape[0]`), nie das Spektrum.
+
+**Folge:** #275 wird ein **best-effort-Monkeypatch** mit Rückfall auf „keine Diagnose", nicht
+ein sauberer Auslesepfad. Das ist vertretbar (es ist reine Diagnose, ein Ausfall kostet
+nichts), muss aber im Plan des Bündels als solches stehen — und der Patch braucht einen
+Wächtertest, der rot wird, wenn pyannote die Signatur ändert.
+
+**Warum es trotzdem zuerst zählt:** heute ist ein echtes 2-Sprecher-Gespräch nicht von einem
+zu unterscheiden, bei dem zwei Sprecher knapp unter die VBx-Schwelle gestorben sind. Ohne
+diese Zahl misst jeder Kandidat blind — auch #274, wenn Task 8 kommt.
+
+---
+
+## B5 — sperre.py: zwei Issues, ZWEI verschiedene Antworten (#237 ≠ #210)
+
+Fassung 1 warf beide in ein „nicht bauen". Das trägt nur für eines von beiden.
+
+**#237 (Netzfreigabe) — nicht bauen. Die Belege stehen wörtlich im Issue:** der Fall wurde
+nie beobachtet, und die Zahl „zehner Sekunden" ist aus dem Ursprungs-Issue übernommen und
+**nicht nachgemessen**. Wer es angeht, misst zuerst, ob eine getrennte SMB-Freigabe hier
+überhaupt hängt — das ist die ganze Arbeit, und sie kann mit „nein" enden.
+
+**#210 (`stale` ist eine Schätzung) — offen, nicht abgelehnt.** Das Kopfargument gegen beide
+war „ein Faden je Lock-Erwerb auf dem Request-Pfad". **Das trifft #210 nicht:** der Issue
+zeichnet selbst einen **fadenfreien** Weg vor — die Prozess-**Startzeit** mit in den Merker
+(Windows `GetProcessTimes` am ohnehin geöffneten Handle, Linux `/proc/<pid>/stat` Feld 22).
+Der macht die Fristschätzung *überflüssig* statt sie zu verbessern. Fassung 1 beschrieb ihn
+unter „Falls doch" und sortierte ihn trotzdem unter „gar nicht" — das war eine Bequemlichkeit,
+keine Entscheidung. Der verschwiegene Preis des Nichtstuns: die Schadensklasse (verlorener
+Read-Modify-Write bei `settings.save()`/`projekt.setze_datei`) ist **einmal real eingetreten**
+(#207) und bleibt offen; heute schützt nur, dass jemand die Arithmetik im Kopf richtig macht.
+**Disposition:** kein Wegwerf-Kandidat, sondern ein Bündel für später — mit dem ausdrücklichen
+Vermerk, dass auf macOS kein portabler Weg ohne `sysctl`-Structs existiert und es dort beim
+heutigen Verhalten bliebe.
+
+---
+
+## B6 — Mehrsprachigkeit: Reihenfolge, kein Bündel (#136 → #137, #164 blockiert)
+
+**#136 vor #137** — der Merkposten steht in **MEMORY.md:127**, nicht in CLAUDE.md (Fassung 1
+schrieb ihn CLAUDE.md zu; wer dort nachschlägt, findet ihn nicht). Der Grund trägt trotzdem:
+- **#136** ist eine **Messung** (Treue der Korrektur an nicht-deutschem Audio). Sie
+  entscheidet, ob #137 überhaupt das richtige Problem löst.
+- **#137** wäre ein Bau auf einer ungemessenen Annahme.
+- **#164** ist an einem **Datenproblem** blockiert, nicht an Priorität: `faster_whisper.Segment`
+  hat kein `language`-Feld, der Proxy sieht kein `seek`, und eine Zuordnung über die
+  Reihenfolge bricht **still** an stillen Fenstern.
+
+Sie teilen keinen der vier Kostenposten — gebündelt gewönne man nichts.
+
+---
+
+## Nicht bündeln — mit Disposition
+
+| Issue | Disposition |
+|---|---|
+| **#288** torch CVE | **Nichts zu tun.** Schliesst sich selbst, sobald der cu128-Index eine Fixfassung führt. Der Issue IST der Tracker. Handlung: quartalsweise nachsehen. |
+| **#45** Dependency Dashboard | Renovate-Bot-Artefakt, kein Issue. |
+| **#251** `main.js` ohne Tests | **Unblockiert, Weg bekannt** (Weg 3, „ladbar machen", 6 Attrappen: app, BrowserWindow, ipcMain, nativeTheme, net, shell). MEMORY.md:129 sagt „bleibt GETRENNT" — das heisst *eigener PR*, **nicht „nie"**. Fassung 1 gab ihm keine Zeile in der Reihenfolge; das war eine Auslassung. → **nach B4 einplanen.** |
+| **#267** Interviewer-Split | **Zombie — braucht eine Entscheidung, keine Arbeit.** Die Prämisse ist widerlegt, der gebaute Fix läuft ohne Wirkungsbehauptung. Entweder **schliessen** (mit der Messung als Begründung) oder auf das umwidmen, was wirklich nötig wäre: Zuordnung **je Segment** statt je Cluster. Beides ist billig; ihn offen und unbeschrieben zu lassen ist die einzige schlechte Option. |
+| **#36 (Linux-Hälfte)** | **Kein Bündel hat ihn.** Braucht eine VM mit Desktop-Bibliotheken. Offene Lücke, hier benannt statt versteckt. |
+| **#95** Installer signieren | Beschaffung + Geld. Blockiert auf **einer** Frage an Certum: läuft SimplySign (Cloud) in GitHub Actions? Mit Hardware-Token müsste jeder Release von Hand signiert werden — das entwertet `release.yml`. **Die Anfrage braucht einen Besitzer**; sie stellt sich nicht von selbst. |
+| **#328** Spendenknopf im Fehlerzustand | Bewusste Entscheidung aus PR #327; der Reviewer gab absichtlich keine Empfehlung. Geschmacksfrage → Nachfrage Punkt 4. |
+
+---
+
+## Entscheidungen, die Marcus blockieren — EINE Nachfrage
+
+1. **#276 — DiariZen-Lizenz:** ist ein **CC-BY-NC**-Modell im ausgelieferten Installer
+   akzeptabel? Bei *nein* entfällt der Kandidat ersatzlos, community-1 bleibt gesetzt, #276
+   ist sofort schliessbar.
+2. **Task 8 — der Referenzsatz** (13 im Editor korrigierte Dateien, Gruppenmitglieder
+   einzeln benannt). Blockiert #274 und jede weitere Diarisierungs-Messung. Steht seit
+   2026-08-17. *(In Fassung 1 fehlte er, obwohl B4 ihn selbst als Blocker nennt.)*
+3. **#95 — Signieren:** kaufen? Und wer stellt die Certum-Anfrage (Cloud CI-tauglich?).
+4. **#70 + #71 — Layout nach PR #68:** beide sind Gestaltungsfragen, keine Defekte. Sie
+   gehören zusammen: dieselbe Ursache (die Aufteilung stimmt bei 300 Projekten und bei 5
+   nicht). → `superpowers:brainstorming`, nicht ein Fix.
+5. **#328 — Takt:** Spendenknopf im Fehlerzustand ausblenden, ja oder nein?
+6. **Sachfrage (B6):** gibt es echtes nicht-deutsches Interview-Audio für #136? Ohne das ist
+   die Messung nicht fahrbar (`positivkontrolle-braucht-echtes-material`).
+7. **Sachfrage (#36):** gibt es eine Linux-VM mit Desktop, oder bleibt die Hälfte offen?
+
+---
+
+## Empfohlene Reihenfolge
+
+| # | Was | Ergebnis |
+|---|---|---|
+| 1 | **B1** #283 + #311 — ein PR, Abbruchregel bei Runde 2 | 2 zu |
+| 2 | **B2a** #323 (in `claude-routing`) | 1 zu |
+| 3 | **B4** #275 (Monkeypatch, best effort, mit Wächtertest) | 1 zu, Türöffner |
+| 4 | **B3-Vorarbeit** #84-Mess-Harness + Bestanden-Blatt | entblockt Marcus |
+| 5 | **Nachfrage an Marcus** (5 Entscheidungen + 2 Sachfragen) | entblockt bis zu 6 |
+| 6 | **#267** schliessen oder umwidmen · **#251** einplanen | 1 zu, 1 terminiert |
+| 7 | **B2b** #324 (nach Spiegel-Import) · **B2c** #326 · **B6** #136 | nach Entscheidung |
+| — | **#237** nicht bauen · **#210** später, fadenfreier Weg | — |
+
+**Ehrliche Rechnung.** Schritte 1–3 schliessen **4 Issues in 3 Review-Zyklen** mit **1
+Browser-Sitzung**. Unbündelt wären es 4 Zyklen und 2 Browser-Sitzungen (#323 und #275 sind
+Shell bzw. Backend und brauchen keinen Browser). **Ersparnis: 1 Reviewslot, 1 Browser-Sitzung.**
+Fassung 1 behauptete „vier statt fünf Zyklen, eine statt drei Sitzungen" — beides falsch
+gerechnet, weil sie #275 eine Browser-Sitzung zuschrieb, die es nicht braucht.
+
+**Bilanz über alle 24:** 4 werden jetzt gebaut, 2 bekommen eine Disposition (#267, #251),
+7 hängen an einer Antwort, 2 sind Nicht-Issues (#45, #288), 1 ist abgelehnt (#237), 8 sind
+sortiert und terminiert. **Keines ohne Grund weggeschoben** — das war der schwerste Befund
+gegen Fassung 1, und die vier ohne tragenden Grund (#251, #210, #36-Linux, #267) haben ihn
+jetzt.
+
+---
+
+## Was Fassung 1 falsch hatte
+
+Damit die Zahlen nicht über Zitate weiterleben:
+
+| Behauptung (Fassung 1) | Richtig |
+|---|---|
+| 10 Verbraucher `DialogContent`, 3 `AlertDialogContent` | **6 und 2** — Substring-Grep fing `AlertDialogContent` mit und zählte Definitionsdateien |
+| „Die App ist unbedienbar" | Nur im **Browser**; `electron/main.js:50` erzwingt `minHeight: 600` |
+| Getrennte Commits erlauben getrennte Ablehnung | **Nein** — Rebase-Merge des ganzen PRs. Ersetzt durch die Abbruchregel |
+| `MaterialDialog` hat sticky-Kopf aus PR #310 | **Kein `sticky`** in der Datei; Bildlauf aus **#313/#315**; er ist **Negativkontrolle**, self-capped |
+| #323 + #324 sind ein Bündel in claude-routing | **#324s Träger existiert dort nicht** — Spiegel-Import ist Vorbedingung |
+| „#136 vor #137" / „#251 bleibt GETRENNT" stehen in CLAUDE.md | Beide in **MEMORY.md** (127, 129) |
+| CodeRabbit-Trial abgelaufen | Nur der **Security**-Trial; Plan „Pro Plus" läuft, Drosselung ist dynamisch |
+| B3 entblockt 3 Issues | **2,5** — #36 ist „macOS **und Linux**" |
+| #275-Machbarkeit „erste Frage" | Beantwortet: **nur per Monkeypatch**, `sp` verlässt `clustering.py` nicht |
+| 4 statt 5 Zyklen, 1 statt 3 Sitzungen | **3 statt 4 Zyklen, 1 statt 2 Sitzungen** |
