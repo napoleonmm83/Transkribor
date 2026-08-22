@@ -592,7 +592,7 @@ ersten Zeile, weil die Vorarbeit als Nächstes ansteht; die Mac-Hälfte hängt a
 
 | Auslassung | Wirkung |
 |---|---|
-| Kein Kostenposten für offene PRs | Zwei grüne PRs lagen einen Tag lang und banden Reviewslots |
+| Kein Kostenposten für offene PRs | Zwei grüne PRs lagen einen Tag lang — fertige Arbeit, die niemanden erreichte, und an #325 ein grüner Haken über einem ungeprüften Stand. *(Kontingent kosteten sie nicht — das war Fassung 3s eigener Fehlgriff, siehe Posten 2.)* |
 | #334 in keiner Reihenfolge | Der benannte Preis von B2a wäre im Fliesstext verschwunden |
 | #331/#334/#324 in drei Abschnitten | Ihre gemeinsame Vorbedingung war nicht als solche sichtbar |
 | „Drosselung" als PR-Eigenschaft gedacht | Sie hängt am **Commit** — ein neuer Commit ist der Ausweg, ein `@coderabbitai review` nicht |
