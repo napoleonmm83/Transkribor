@@ -4,7 +4,9 @@
 > in welcher Reihenfolge sie laufen und welche blockiert sind. Jedes Bündel bekommt seinen
 > eigenen Plan nach `superpowers:writing-plans`, wenn es dran ist.
 
-**Stand:** master `af24095`, `v0.31.0` live, 24 offene Issues (gezählt).
+**Stand (Fassung 3):** master `80e2e1d`, `v0.31.0` live, **23 offene Issues, 0 offene PRs**
+(gezählt am 2026-08-22 abends). Was Fassung 3 ergänzt, steht am Ende unter „Fassung 3".
+**Stand Fassung 2:** master `af24095`, 24 offene Issues.
 **Fassung 2** — Fassung 1 wurde von `faktenpruefer` und `pruefer-gegnerisch` zerlegt
 (Berichte: `review-buendelungsplan-fakten.md`, `review-buendelungsplan-gegnerisch.md`).
 **Fünf Zahlen darin waren falsch**, obwohl sie als „nachgeprüft" auftraten. Was korrigiert
@@ -27,6 +29,9 @@ Gebündelt wird nach **geteilten Prüfkosten**, nicht nach Themenähnlichkeit
    ist nur der **Security**-Trial. Ein PR weniger ist ein Reviewslot mehr.
 3. **Mac-Hardware** — nur Marcus.
 4. **Marcus' Entscheidungen** — kosten je eine Antwort, wenn man sie bündelt.
+5. **Der PR-Bestand** *(Fassung 3)* — ein offener PR **bindet** einen Reviewslot, ohne ihn zu
+   nutzen. Fassung 2 hatte diesen Posten nicht, und prompt lagen zwei grüne, mergebare PRs
+   vergessen herum. **Vor jedem Bündel `gh pr list`.**
 
 Zwei Issues im selben Bereich, die keinen dieser Posten teilen, werden **nicht** gebündelt.
 
@@ -346,6 +351,11 @@ Sie teilen keinen der vier Kostenposten — gebündelt gewönne man nichts.
 
 ## Entscheidungen, die Marcus blockieren — EINE Nachfrage
 
+> **Fassung 3, 2026-08-22:** gestellt und beantwortet, soweit es Entscheidungen waren.
+> Punkte 5, 6 und 7 sind erledigt (mit #276 aus Fassung 2 also **fünf von sieben**). Offen
+> bleiben **2** (Task 8), **3** (#95) und **4** (#70+#71) — das sind Arbeit und Beschaffung,
+> keine Entscheidungen. Die Antworten stehen unten und in den Issues selbst.
+
 1. **#276 — DiariZen-Lizenz:** ist ein **CC-BY-NC**-Modell im ausgelieferten Installer
    akzeptabel? Bei *nein* entfällt der Kandidat ersatzlos, community-1 bleibt gesetzt, #276
    ist sofort schliessbar.
@@ -356,10 +366,14 @@ Sie teilen keinen der vier Kostenposten — gebündelt gewönne man nichts.
 4. **#70 + #71 — Layout nach PR #68:** beide sind Gestaltungsfragen, keine Defekte. Sie
    gehören zusammen: dieselbe Ursache (die Aufteilung stimmt bei 300 Projekten und bei 5
    nicht). → `superpowers:brainstorming`, nicht ein Fix.
-5. **#328 — Takt:** Spendenknopf im Fehlerzustand ausblenden, ja oder nein?
-6. **Sachfrage (B6):** gibt es echtes nicht-deutsches Interview-Audio für #136? Ohne das ist
-   die Messung nicht fahrbar (`positivkontrolle-braucht-echtes-material`).
-7. **Sachfrage (#36):** gibt es eine Linux-VM mit Desktop, oder bleibt die Hälfte offen?
+5. ~~**#328 — Takt:** Spendenknopf im Fehlerzustand ausblenden, ja oder nein?~~
+   ✅ **beantwortet: ausblenden** (2026-08-22). → B7.
+6. ~~**Sachfrage (B6):** gibt es echtes nicht-deutsches Interview-Audio für #136?~~
+   ✅ **beantwortet: liegt vor** (2026-08-22). B6 ist damit fahrbar, die Vorbedingung
+   `positivkontrolle-braucht-echtes-material` ist erfüllt.
+7. ~~**Sachfrage (#36):** gibt es eine Linux-VM mit Desktop, oder bleibt die Hälfte offen?~~
+   ✅ **beantwortet: keine, und keine geplant** (2026-08-22). #36 bleibt nach der Mac-Sitzung
+   offen — die Lücke ist am Issue benannt statt weggezählt.
 
 ---
 
@@ -370,11 +384,21 @@ Sie teilen keinen der vier Kostenposten — gebündelt gewönne man nichts.
 | 1 | ~~**B1** #283 + #311~~ ✅ **erledigt** (PR #333) | 2 zu |
 | 2 | ~~**B2a** #323 (in `claude-routing`)~~ ✅ **erledigt** (PR #7 + #8) | 1 zu, +1 neu (#334) |
 | 3 | ~~**B4** #275~~ ✅ **erledigt** (PR #336) | 1 zu, Tueroeffner offen |
-| 4 | **B3-Vorarbeit** #84-Mess-Harness + Bestanden-Blatt | entblockt Marcus |
-| 5 | **Nachfrage an Marcus** (5 Entscheidungen + 2 Sachfragen) | entblockt bis zu 6 |
-| 6 | **#267** schliessen oder umwidmen · **#251** einplanen | 1 zu, 1 terminiert |
-| 7 | **B2b** #324 (nach Spiegel-Import) · **B2c** #326 · **B6** #136 | nach Entscheidung |
-| — | **#237** nicht bauen · **#210** später, fadenfreier Weg | — |
+| 4 | ~~**Nachfrage an Marcus**~~ ✅ **erledigt** (2026-08-22) | 5 von 7 beantwortet |
+| 5 | ~~**Stufe 0** PR-Bestand: #322 · #325→#338 · 4 Branches~~ ✅ **erledigt** | 0 offene PRs |
+| 6 | ~~**#267** schliessen oder umwidmen~~ ✅ **geschlossen**, mit der Messung | 1 zu |
+| 7 | **B3-Vorarbeit** #84-Mess-Harness + Bestanden-Blatt | entblockt die Mac-Sitzung |
+| 8 | **B2b′** Spiegel-Import → #331 → #334 → #324 (`claude-routing`) | 3 zu, 1 Reviewslot |
+| 9 | **B7** #330 + #328 (eine Browser-Sitzung) | 2 zu, 1 Sitzung |
+| 10 | **#251** einplanen · **B6** #136 (Material liegt vor) | 1 terminiert, 1 messbar |
+| 11 | **B2c** #326 — erst Entwurf, dann Bau | nach Entwurf |
+| — | **#237** nicht bauen · **#210** später, fadenfreier Weg · **#36-Linux** ohne Weg | — |
+
+**Warum B3-Vorarbeit (7) vor dem Routing-Bündel (8) steht** — obwohl das Bündel drei Issues
+schliesst und die Vorarbeit keines: es ist dasselbe Prinzip, das die Nachfrage nach vorn
+gezogen hat. **Was Marcus entblockt, geht zuerst.** Der Mac-Termin ist angefragt und noch
+offen; kommt er kurzfristig, muss das Harness schon liegen. Das Routing-Bündel wartet
+folgenlos, eine ungenutzte Mac-Sitzung nicht.
 
 **Ehrliche Rechnung.** Schritte 1–3 schliessen **4 Issues in 3 Review-Zyklen** mit **1
 Browser-Sitzung**. Unbündelt wären es 4 Zyklen und 2 Browser-Sitzungen (#323 und #275 sind
@@ -415,6 +439,132 @@ aufgeführt, damit die Tabelle nicht als aktuelle Issue-Liste missverstanden wir
 | **#331** README-Wächter schlägt still nicht an | beim Bau von B1 gefunden | Gehört zum **Routing-System** — und wie #324 gibt es dafür in `claude-routing` noch keine Datei. Vorbedingung: Spiegel-Import. |
 | **#332** Deckel kennt die Ziehzone der Titelzeile nicht | Review zu B1 | **Zuerst messen, dann entscheiden** — ob der Klick dort wirklich zieht, ist ungeprüft. Braucht die gepackte App, also Marcus. |
 | **#36, Linux-Hälfte** | schon in B3 benannt | **Kein Bündel hat sie.** Marcus' Mac deckt AppImage/deb nicht ab; nötig wäre eine VM mit Desktop-Bibliotheken. #36 bleibt nach der Mac-Sitzung offen. |
+
+---
+
+## Fassung 3 (2026-08-22 abends)
+
+**Was sich seit Fassung 2 geändert hat:** #267 ist zu, beide offenen PRs sind weg, fünf der
+sieben Nachfragen sind beantwortet. Fassung 2 hatte **drei Lücken**; sie werden hier
+geschlossen, nicht überschrieben — alles oberhalb bleibt stehen.
+
+### Lücke 1: offene PRs waren kein Kostenposten
+
+Fassung 2 zählt vier teure Posten und **keinen für liegende PRs**. Prompt lagen zwei
+vergessen herum — beide grün, beide mergebar, seit dem Vortag. Ein offener PR *bindet* einen
+Reviewslot, ohne ihn zu nutzen; das ist derselbe knappe Posten wie in Kriterium 2.
+**Der fünfte Posten steht jetzt oben.**
+
+Was der Aufräumlauf ergab und was man nicht aus dem Diff liest:
+
+- **#325 trug netto EINE Datei** (`.coderabbit.yaml`, 21+/3−) bei **27 Commits**. Deren Inhalt
+  (das Routing-System) war längst nach `claude-routing` gezogen; ein Rebase-Merge hätte 27
+  Commits ohne Gegenstand auf master geschrieben.
+- **Sein grüner CodeRabbit-Haken bedeutete „nicht geschaut".** Status auf `37df979`:
+  `CodeRabbit | success | Review rate limited | 2026-08-22T07:36:45Z`. Das echte Review lief am
+  **21.08. um 22:04**, der Commit stammt vom **22.08. um 07:35**. Die Falle steht in CLAUDE.md
+  — aber in einer Form, die dort **nicht** steht: **die Drosselung hängt am COMMIT, nicht am
+  PR.** Ein rate-limitierter Lauf zählt als „bereits gesehen", und danach hilft auch
+  `@coderabbitai review` nicht mehr. Und der sonst empfohlene Weg greift hier nicht: im
+  PR-Kommentar steht dazu **nichts**, die Auskunft steht allein in der
+  **Statusbeschreibung** — abzurufen über
+  `gh api repos/<owner>/<repo>/commits/<sha>/status`.
+- **Der Ausweg ist ein frischer Commit, kein Wegklicken.** Neu geschnitten als **#338**,
+  Inhalt byte-identisch: `success | Review completed`, „No actionable comments". Beide Zustände
+  an derselben Datei gemessen, im Abstand von Stunden.
+
+### Lücke 2: #334 hatte keinen Slot
+
+Er entstand als **benannter Preis** von B2a und stand danach nur in dessen ►UMGESETZT-Notiz —
+in keiner Reihenfolge, in keiner Bilanz. Ein Issue, das nur im Fliesstext eines erledigten
+Bündels lebt, ist praktisch verloren.
+
+### Lücke 3: die Routing-Issues teilen eine Vorbedingung, standen aber in drei Abschnitten
+
+#324 in B2b, #326 in B2c, #331 unter „dazugekommen", #334 nirgends. **Drei davon hängen an
+derselben Sache** — genau der Fall, für den es das Bündelungskriterium gibt.
+
+#### B2b′ — #331 + #334 + #324 sind EIN Bündel
+
+**Nachgemessen am 2026-08-22 abends, also NACH B2a** (Fassung 2 mass davor; das Ergebnis hält,
+aber es war nachzumessen — B2a hat in genau diesem Repo Dateien angefasst):
+
+`git ls-files` in `claude-routing` listet **7** Hook-Dateien. `kein-pauschales-add.sh` und
+`readme-pflicht.sh` sind **nicht darunter**. Lokal liegen in `.claude/hooks/` **fünf** Dateien,
+gespiegelt sind **zwei** (`routing-sperre.sh`, `routing-sperre.test.sh`).
+
+Reihenfolge im Bündel: **Spiegel-Import → #331 → #334 → #324.** Ein PR, ein Reviewslot,
+drei Issues. Kein Browser.
+
+- **#331** — `readme-pflicht.sh:20` prüft auf die Zeichenkette `git commit`; ein globales
+  `-c` schiebt sich dazwischen und macht den Wächter blind. Er war **still aus**.
+- **#334** — `routing-sperre.sh:202/207` verdrahtet `master`; ohne diesen Branch bleibt der
+  Anker leer und `:210` lässt durch. In jedem `main`-Repo **still aus**. `claude-routing`
+  selbst hat keinen `master`.
+- **#324** — abgelaufene Messung („python liegt im Git-Bash-PATH NICHT"). **Am 2026-08-22
+  nebenbei erneut widerlegt:** `python -c` läuft in Git Bash, Exit 0.
+
+**„Anderes Repo" heisst nicht „gratis":** `claude-routing` verbraucht **dasselbe**
+CodeRabbit-Kontingent. Der Slot ist geteilt, nicht zusätzlich. Und dort ist die CLI der einzige
+brauchbare Weg — das Repo ist privat, der Lauf hing zuletzt 17 Minuten am fehlenden
+`credential.helper` in WSL (Abhilfe: einmal `git remote set-head origin main`, rein lokal).
+
+**#326 bleibt draussen** — unverändert die Einordnung aus B2c: ein Neuentwurf, kein Tweak.
+
+#### B7 — UI-Bündel #330 + #328 (eine Browser-Sitzung)
+
+Nach demselben Kriterium wie B1: ein App-Start, ein Wegwerf-Projekt, ein Reviewslot.
+
+- **#330** — der ✕ eines gerollten Dialogs wandert aus dem Bild (gemessen: `top` fällt von 33
+  auf **−297** bei 320 px Fensterhöhe). Folge des Höhendeckels aus B1.
+- **#328** — Spendenknopf im Fehlerzustand der Leiste. **Entschieden: ausblenden**
+  (Marcus, 2026-08-22). Der Reviewer an PR #327 hatte bewusst keine Empfehlung gegeben.
+
+**#332 gehört NICHT dazu.** Er braucht die **gepackte** App — also Marcus — und ist bislang
+*hergeleitet, nicht gemessen*. Ob ein Klick in den obersten 40 px wirklich das Fenster zieht,
+ist ungeprüft; das ist der erste Schritt, nicht der Fix.
+
+### Beantwortet am 2026-08-22
+
+| Frage | Antwort | Folge |
+|---|---|---|
+| **#328** Takt | ausblenden | → B7 |
+| **#267** | schliessen, mit der Messung als Begründung | **zu** |
+| **#136** Material | liegt vor | B6 ist fahrbar |
+| **#36** Linux-VM | keine, und keine geplant | Lücke am Issue benannt |
+
+**Offen und weiterhin bei Marcus:** **Task 8** (der Referenzsatz — blockiert #274 und jede
+weitere Diarisierungs-Messung, steht seit dem 2026-08-17 und ist der teuerste offene Posten
+überhaupt), der **Mac-Termin**, die **#95-Certum-Anfrage**. **#70 + #71** brauchen ein
+`superpowers:brainstorming`, keinen Fix — sie sind Gestaltungsfragen mit einer gemeinsamen
+Ursache.
+
+### Bilanz über die 23 HEUTE offenen Issues
+
+Ersetzt für den Tagesstand die Tabelle über die 24 Ausgangs-Issues; die bleibt als
+Ausgangsaufnahme stehen. Gezählt in Issues, jedes genau einmal.
+
+| Kategorie | Anz. | Issues |
+|---|---|---|
+| als Nächstes gebaut | **6** | #331, #334, #324 (B2b′) · #330, #328 (B7) · #84 (B3-Vorarbeit) |
+| wartet auf Marcus | **7** | #318, #36 (Mac) · #274, #276 (Task 8) · #95 (Kauf) · #70, #71 (Gestaltung) |
+| terminiert, Reihenfolge steht | **5** | #326 (Neuentwurf) · #136 → #137 · #164 (Datenproblem) · #210 (fadenfreier Weg) |
+| Disposition nötig, keine Arbeit | **2** | #251 (einplanen) · #332 (erst messen, dann entscheiden) |
+| Nicht-Issues | **2** | #288 (Tracker) · #45 (Renovate-Bot) |
+| abgelehnt | **1** | #237 |
+| **Summe** | **23** | |
+
+*(#84 hat zwei Hälften — mein Mess-Harness und Marcus' Messung darauf. Es steht in der
+ersten Zeile, weil die Vorarbeit als Nächstes ansteht; die Mac-Hälfte hängt am Termin.)*
+
+### Was Fassung 2 nicht hatte
+
+| Auslassung | Wirkung |
+|---|---|
+| Kein Kostenposten für offene PRs | Zwei grüne PRs lagen einen Tag lang und banden Reviewslots |
+| #334 in keiner Reihenfolge | Der benannte Preis von B2a wäre im Fliesstext verschwunden |
+| #331/#334/#324 in drei Abschnitten | Ihre gemeinsame Vorbedingung war nicht als solche sichtbar |
+| „Drosselung" als PR-Eigenschaft gedacht | Sie hängt am **Commit** — ein neuer Commit ist der Ausweg, ein `@coderabbitai review` nicht |
 
 ---
 
