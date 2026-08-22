@@ -413,7 +413,7 @@ Sie teilen keinen der vier Kostenposten — gebündelt gewönne man nichts.
 | 7 | **B3-Vorarbeit** #84-Mess-Harness + Bestanden-Blatt | entblockt die Mac-Sitzung |
 | 8 | **B2b′** Spiegel-Import → #331 → #334 → #324 (`claude-routing`) | 3 zu, 1 Reviewslot |
 | 9 | **B7** #330 + #328 (eine Browser-Sitzung) | 2 zu, 1 Sitzung |
-| 10 | **#251** einplanen · **B6** #136 (Material liegt vor) | 1 terminiert, 1 messbar |
+| 10 | **#251** einplanen · **B6** #136 (Material liegt vor) | 1 zur Disposition, 1 messbar |
 | 11 | **B2c** #326 — erst Entwurf, dann Bau | nach Entwurf |
 | — | **#237** nicht bauen · **#210** später, fadenfreier Weg · **#36-Linux** ohne Weg | — |
 
@@ -475,9 +475,16 @@ geschlossen, nicht überschrieben — alles oberhalb bleibt stehen.
 ### Lücke 1: offene PRs waren kein Kostenposten
 
 Fassung 2 zählt vier teure Posten und **keinen für liegende PRs**. Prompt lagen zwei
-vergessen herum — beide grün, beide mergebar, seit dem Vortag. Ein offener PR *bindet* einen
-Reviewslot, ohne ihn zu nutzen; das ist derselbe knappe Posten wie in Kriterium 2.
-**Der fünfte Posten steht jetzt oben.**
+vergessen herum — beide grün, beide mergebar, seit dem Vortag. **Der fünfte Posten steht
+jetzt oben**, aber als *Zustands*-, nicht als Kontingentposten: ein unangetasteter PR
+verbraucht **nichts** (Posten 2 zählt Commits, siehe dort). Er kostet, dass fertige Arbeit
+niemanden erreicht, dass der Branch driftet — und im teuren Fall, dass ein grüner Haken
+einen ungeprüften Stand verdeckt.
+
+*(Die erste Fassung dieses Absatzes behauptete das Gegenteil — „ein offener PR bindet einen
+Reviewslot" — und der Satz überlebte den Fix am Kostenposten selbst um einen Commit. Genau
+`widerlegte-regel-lebt-in-ihren-traegern`: die Behauptung wurde an EINER Stelle korrigiert
+und lebte in ihrem zweiten Träger weiter, bis die CLI ihn fand.)*
 
 Was der Aufräumlauf ergab und was man nicht aus dem Diff liest:
 
