@@ -395,9 +395,12 @@ export function MaterialDialog({ project, offen, vorbelegteDateien, sprachChoice
                   Live-Region, die erst MIT ihrem Inhalt in den Baum kommt, wird von
                   Screenreadern oft nicht mehr beobachtet — sie muss vorher dastehen und nur
                   ihren Text wechseln. Das ist der Umbau der Bedingung, nicht ein Attribut.
-                  Leer kostet sie eine Zeilenhoehe im leeren Schritt 1; `empty:hidden` waere
-                  der Rueckschritt in genau das Problem (display:none ist aus dem
-                  Barrierefreiheitsbaum raus, das Wiedereinblenden waere dasselbe Einziehen).
+                  Leer kostet sie NICHTS: im Browser gemessen 0 px hoch — ein leerer Block
+                  erzeugt keine Zeilenbox, die `text-sm`-Zeilenhoehe greift also gar nicht.
+                  (Hier stand zuerst „kostet eine Zeilenhoehe"; das war geraten, nicht
+                  gemessen.) `empty:hidden` waere trotzdem der Rueckschritt in genau das
+                  Problem — `display:none` ist aus dem Barrierefreiheitsbaum raus, das
+                  Wiedereinblenden waere dasselbe Einziehen.
                   jsdom bildet Live-Regionen nicht nach — der Test kann nur Rolle und Text
                   pruefen, die Ansage selbst gehoert in den Browser-Gegencheck. */}
               <p role="status" className="text-sm font-medium">
