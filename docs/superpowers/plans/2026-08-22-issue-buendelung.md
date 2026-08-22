@@ -31,7 +31,12 @@ Gebündelt wird nach **geteilten Prüfkosten**, nicht nach Themenähnlichkeit
 4. **Marcus' Entscheidungen** — kosten je eine Antwort, wenn man sie bündelt.
 5. **Der PR-Bestand** *(Fassung 3)* — ein offener PR **bindet** einen Reviewslot, ohne ihn zu
    nutzen. Fassung 2 hatte diesen Posten nicht, und prompt lagen zwei grüne, mergebare PRs
-   vergessen herum. **Vor jedem Bündel `gh pr list`.**
+   vergessen herum. **Vor jedem Bündel in BEIDEN Repos nachsehen** — dieser Plan reicht über
+   zwei davon (B2b′ läuft in `claude-routing`), und `gh pr list` **ohne `--repo` sieht nur
+   das, in dem man gerade steht**:
+   `gh pr list --repo napoleonmm83/Transkribor` · `gh pr list --repo napoleonmm83/claude-routing`.
+   *(Am 2026-08-22 nachgesehen: dort 0 offene. Die Regel wäre trotzdem blind gewesen —
+   der Fehler war die Regel, nicht ihr Ergebnis.)*
 
 Zwei Issues im selben Bereich, die keinen dieser Posten teilen, werden **nicht** gebündelt.
 
