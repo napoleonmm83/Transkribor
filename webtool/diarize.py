@@ -131,12 +131,27 @@ def _Sonden(pipe, diagnose: dict):
     def sonde_filter(self, embeddings, *a, **kw):
         raus = filter_alt(self, embeddings, *a, **kw)
         with contextlib.suppress(Exception):
-            # `slots` = alle Fenster-x-Sprecher-Paare, die dem Filter ANGEBOTEN wurden;
+            # `slots` = Fenster-x-Sprecher-Paare, in denen UEBERHAUPT gesprochen wird;
             # `durchgelassen` = wie viele davon ins Clustering kamen (Laenge von chunk_idx).
-            # Bewusst die angebotene Menge und nicht "Slots mit Sprache": Letzteres muesste
-            # pyannotes `single_active_mask`-Rechnung hier nachbauen, und ein Nachbau fremder
-            # Interna driftet still.
-            diagnose["slots"] = int(embeddings.shape[0] * embeddings.shape[1])
+            #
+            # **Warum nicht einfach `embeddings.shape[0] * shape[1]`** — das waere kuerzer und
+            # war die erste Fassung: es zaehlt auch die stillen Paare mit, und daran ist die
+            # Zahl nicht mehr mit der Referenztabelle der Spec vergleichbar (1.6(j):
+            # 16-32 % verworfen). Am echten Audio gemessen: angeboten 48, mit Sprache 20,
+            # durchgelassen 16 — also **20 %** verworfen gegen die Sprache, aber **67 %**
+            # gegen die angebotene Menge. Zwei Zahlen, ein Name: wer die 67 neben die 32 der
+            # Spec legt, zieht einen falschen Schluss. Ein stilles Paar ist keine verlorene
+            # Sprecherpraesenz.
+            #
+            # `d.sum(axis=1) > 0` ist KEIN Nachbau von pyannotes `single_active_mask` (die
+            # Frage dort ist „allein gesprochen", hier nur „gesprochen") — es liest die
+            # Segmentierung, deren Form `(chunks, frames, speakers)` im Docstring von
+            # `filter_embeddings` steht. Fehlt `segmentations`, bleibt `slots` weg: eine
+            # Ueberlebensquote ohne Nenner waere schlimmer als keine.
+            seg = kw.get("segmentations")
+            if seg is None and a:
+                seg = a[0]
+            diagnose["slots"] = int((seg.data.sum(axis=1) > 0).sum())
             diagnose["durchgelassen"] = int(len(raus[1]))
         return raus
 
