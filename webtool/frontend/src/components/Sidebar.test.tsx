@@ -166,12 +166,17 @@ describe('Sidebar', () => {
     // (der wahrscheinlichste naechste Diff, wenn jemand ihn optisch hochziehen will) steckt
     // ebenfalls nicht im <nav>, stuende aber oben links statt unten links. Beide
     // Verschiebungen sehen von aussen gleich aus und haetten entgegengesetzte Abdeckung.
-    // DOCUMENT_POSITION_FOLLOWING trennt sie: im <nav> ist es CONTAINED_BY, davor PRECEDING.
+    //
+    // Es braucht BEIDE Haelften, und das ist gemessen, nicht gefolgert: fuer einen NACHFAHREN
+    // setzt `compareDocumentPosition` `CONTAINED_BY` UND `FOLLOWING` (ein Kind steht in
+    // Dokumentreihenfolge ja auch danach). Die Reihenfolge-Zeile allein liess Mutation A also
+    // gruen durch — der Fix fuer die eine Blindstelle riss die andere wieder auf.
     const { container } = zeigen()
     const nav = container.querySelector('nav')
     const knopf = screen.getByRole('link', { name: /Projekt unterstützen/ })
     expect(nav).not.toBeNull()
     expect(nav).toContainElement(screen.getByText('Alpha'))   // Positivkontrolle
-    expect(nav!.compareDocumentPosition(knopf) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(nav).not.toContainElement(knopf)                                  // nicht DARIN
+    expect(nav!.compareDocumentPosition(knopf) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()  // sondern DANACH
   })
 })
