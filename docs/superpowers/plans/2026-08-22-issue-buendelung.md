@@ -27,6 +27,13 @@ Gebündelt wird nach **geteilten Prüfkosten**, nicht nach Themenähnlichkeit
    feste Plangrösse — **die Zahl ist morgen eine andere**, das Argument bleibt. Der Plan läuft
    weiter („Pro Plus", am Bot-Lauf zu PR #333 desselben Tages erneut bestätigt); abgelaufen
    ist nur der **Security**-Trial. Ein PR weniger ist ein Reviewslot mehr.
+   **Die Einheit ist der COMMIT, nicht der PR** *(Fassung 3, gemessen)*: verbraucht werden
+   „review attempts", und jeder Push auf einen offenen PR ist einer. An PR #339 gezählt —
+   **ein** PR, vier Commits, davon `f6f84ca` geprüft, `dbc4fdb` und `d3e3adc` jeweils
+   `Review rate limited`. **Jedes „1 Reviewslot" in diesem Dokument ist daher eine
+   Untergrenze**, keine Zahl. Die Bündelungsrichtung bleibt trotzdem richtig, nur aus einem
+   anderen Grund als gedacht: weniger PRs heissen weniger *Runden* von Befund-und-Fix, und
+   die Runden sind es, die zählen.
 3. **Mac-Hardware** — nur Marcus.
 4. **Marcus' Entscheidungen** — kosten je eine Antwort, wenn man sie bündelt.
 5. **Der PR-Bestand** *(Fassung 3)* — **kein Kontingent-, sondern ein Zustandsposten.** Die
