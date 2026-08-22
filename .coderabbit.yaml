@@ -139,6 +139,10 @@ reviews:
         Pruefe, ob die README noch stimmt, was die Aenderung fuer den NUTZER bedeutet. Sie
         richtet sich an Menschen ohne technischen Hintergrund: kein Changelog-Ton, keine
         API-Namen. Technisches gehoert in den Abschnitt „Fuer Entwickler" ans Ende.
+        Und wie bei jeder .md: melde jede Zusage, die der Code nicht einloest. Der Satz steht
+        bewusst zweimal — ob CodeRabbit bei mehreren passenden `path`-Mustern KUMULIERT oder
+        nur das speziellste anwendet, sagt die Doku nicht, und diese Datei ist der einzige
+        Kanal zum Bot. Eine doppelte Zeile ist billiger als eine still verlorene Regel.
 
     - path: "**/*.md"
       instructions: |
