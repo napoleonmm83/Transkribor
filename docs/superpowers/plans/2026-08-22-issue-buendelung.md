@@ -18,11 +18,13 @@ Gebündelt wird nach **geteilten Prüfkosten**, nicht nach Themenähnlichkeit
 
 1. **Browser-Sitzung** — App starten, Wegwerf-Projekt, Screenshots, löschen. Pflicht nach
    jedem sichtbaren Frontend-Fix. Fällt pro PR an, nicht pro Fix.
-2. **CodeRabbit-Kontingent** — an PR #329 gemessen: „98 included PR review attempts over the
-   past 7 days set your current allowance at **1 review per hour**". Das ist eine
-   **dynamische Fair-Usage-Drosselung**, keine feste Plangrösse, und der Plan läuft weiter
-   („Pro Plus", an #327 sichtbar). Abgelaufen ist nur der **Security**-Trial. Das Argument
-   hält trotzdem: ein PR weniger ist ein Reviewslot mehr.
+2. **CodeRabbit-Kontingent** — **Momentaufnahme vom 2026-08-22**, gelesen an den
+   Bot-Kommentaren zu PR #329 und #327 (`gh api …/issues/<nr>/comments`): „98 included PR
+   review attempts over the past 7 days set your current allowance at **1 review per hour**".
+   Das ist eine **dynamische Fair-Usage-Drosselung** über ein gleitendes 7-Tage-Fenster, keine
+   feste Plangrösse — **die Zahl ist morgen eine andere**, das Argument bleibt. Der Plan läuft
+   weiter („Pro Plus", am Bot-Lauf zu PR #333 desselben Tages erneut bestätigt); abgelaufen
+   ist nur der **Security**-Trial. Ein PR weniger ist ein Reviewslot mehr.
 3. **Mac-Hardware** — nur Marcus.
 4. **Marcus' Entscheidungen** — kosten je eine Antwort, wenn man sie bündelt.
 
@@ -88,6 +90,28 @@ gewesen, ohne den kleinen Fix am grossen festzunageln.
 **Prüfung:** vitest beide Richtungen + Mutationsprobe · Browser bei **420 px** (Fehlerfall)
 UND **900 px** (Negativkontrolle: kein Bildlauf im Normalfall) · alle **8** Verbraucher
 einmal öffnen · Screenreader-Gegencheck für #311, weil jsdom Live-Regionen nicht nachbildet.
+
+### ► UMGESETZT in PR #333 (2026-08-22)
+
+Alles oberhalb dieser Zeile beschreibt die **Ausgangslage vor** dem PR und bleibt als
+Begründung stehen — der Code trägt die Fixes inzwischen. Was der Bau ergab und im Plan so
+nicht stand:
+
+- Die offene Frage („wie wirkt ein Basis-`max-h` auf den Material-Dialog?") war **berechtigt,
+  aber falsch verortet**. Nicht die Höhenkette brach, sondern der **animierte Rahmen**: sein
+  `::before` hat `inset: -2px`, und ein `overflow ≠ visible` macht daraus scrollbaren Inhalt.
+  Gemessen bei 320 px: **beide** Bildlaufleisten, je 15 px, für 2 px Phantom-Überlauf, und
+  `clientHeight` fiel 286 → 271. Der Reviewer bestätigte per Pixelprobe, dass der Rahmen ganz
+  verschwand. `MaterialDialog` nimmt die Basis deshalb mit `overflow-visible` zurück;
+  `overflow-hidden` wäre die falsche Ausnahme — es klemmt denselben Rahmen.
+- **#311 war zunächst halb wirkungslos, und kein Test zeigte es:** `aria-relevant` steht per
+  Default auf `additions text`, eine **Entfernung** von Text wird nicht angesagt — der
+  Übergang auf `""` blieb also stumm, und der eigene Test schrieb ihn als Soll fest. Der leere
+  Zustand trägt jetzt Text (`sr-only`: aus dem Fluss, im Barrierefreiheitsbaum).
+- **Drei neue Issues:** #330 (der ✕ eines gerollten Dialogs wandert aus dem Bild), #331 (der
+  README-Wächter schlug **still** nicht an — er prüft auf die Zeichenkette `git commit`, und
+  `git -c … commit` schiebt sich dazwischen), #332 (der Deckel kennt die 40-px-Ziehzone der
+  Titelzeile nicht — **hergeleitet, nicht gemessen**).
 
 ---
 
@@ -273,11 +297,25 @@ Shell bzw. Backend und brauchen keinen Browser). **Ersparnis: 1 Reviewslot, 1 Br
 Fassung 1 behauptete „vier statt fünf Zyklen, eine statt drei Sitzungen" — beides falsch
 gerechnet, weil sie #275 eine Browser-Sitzung zuschrieb, die es nicht braucht.
 
-**Bilanz über alle 24:** 4 werden jetzt gebaut, 2 bekommen eine Disposition (#267, #251),
-7 hängen an einer Antwort, 2 sind Nicht-Issues (#45, #288), 1 ist abgelehnt (#237), 8 sind
-sortiert und terminiert. **Keines ohne Grund weggeschoben** — das war der schwerste Befund
-gegen Fassung 1, und die vier ohne tragenden Grund (#251, #210, #36-Linux, #267) haben ihn
-jetzt.
+**Bilanz über alle 24 — gezählt in ISSUES, jedes genau einmal.** (Die Nachfrage oben bündelt
+mehrere Issues zu *fünf Entscheidungen*; das ist eine andere Einheit und darum hier nicht die
+Zählgrösse.)
+
+| Kategorie | Anz. | Issues |
+|---|---|---|
+| jetzt gebaut | **4** | #283, #311 (B1) · #323 (B2a) · #275 (B4) |
+| wartet auf Marcus | **10** | #318, #36, #84 (Mac) · #274, #276 (Task 8) · #136 (Audio) · #95 (Kauf) · #70, #71 (Gestaltung) · #328 (Takt) |
+| terminiert, Reihenfolge steht | **5** | #324 (nach Spiegel-Import) · #326 (Neuentwurf) · #137 (nach #136) · #164 (Datenproblem) · #210 (fadenfreier Weg) |
+| Disposition nötig, keine Arbeit | **2** | #267 (schliessen oder umwidmen) · #251 (einplanen) |
+| Nicht-Issues | **2** | #288 (Tracker, schliesst sich selbst) · #45 (Renovate-Bot) |
+| abgelehnt | **1** | #237 (nie beobachtet, Kernzahl ungemessen) |
+| **Summe** | **24** | |
+
+**Keines ohne Grund weggeschoben** — das war der schwerste Befund gegen Fassung 1, und die
+vier ohne tragenden Grund (#251, #210, #36-Linux, #267) haben ihn jetzt.
+**#276 ist am 2026-08-22 beantwortet** (CC-BY-NC im Installer akzeptabel) und bleibt trotzdem
+in „wartet auf Marcus": aus der Entscheidungs- ist eine **Messaufgabe** geworden, und die
+hängt an Task 8.
 
 ---
 
