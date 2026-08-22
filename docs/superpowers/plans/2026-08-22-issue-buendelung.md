@@ -512,9 +512,9 @@ Bündels lebt, ist praktisch verloren.
 
 ### Lücke 3: die Routing-Issues teilen eine Vorbedingung, standen aber in drei Abschnitten
 
-Zuvor stand #324 in B2b, #326 in B2c, #331 unter „dazugekommen", #334 nirgends. **Drei davon
-hängen an derselben
-Sache** — genau der Fall, für den es das Bündelungskriterium gibt.
+Zuvor stand #324 in B2b, #326 in B2c, #331 unter „dazugekommen", #334 nirgends.
+**Drei davon hängen an derselben Sache** — genau der Fall, für den es das
+Bündelungskriterium gibt.
 
 #### B2b′ — #331 + #334 + #324 sind EIN Bündel
 
