@@ -567,6 +567,26 @@ describe('MaterialDialog', () => {
     expect(screen.getByText('b.mp3')).toBeInTheDocument()
     expect(screen.getByText('1 Aufnahme gewählt')).toBeInTheDocument()
   })
+
+  it('sagt den Wegfall an — die Live-Region bleibt DAUERHAFT im Baum (#311)', () => {
+    /* Der ✕ entfernt eine Zeile: sichtbar sofort, hoerbar bisher nicht. Fuer Tastaturnutzer
+       trug der Fokuswechsel die Ansage; fuer SPRACHSTEUERUNG passierte akustisch nichts.
+       Geprueft wird die IDENTITAET des Knotens, nicht bloss sein Vorhandensein: eine
+       Live-Region, die mit ihrem Inhalt in den Baum kommt und wieder verschwindet, wird von
+       Screenreadern oft nicht mehr beobachtet — genau daran scheiterte das Attribut allein.
+       Die letzte Zusicherung ist die tragende: bei NULL Zeilen muss sie stehenbleiben.
+       jsdom bildet die Vorlesung nicht nach; dass die Ansage ankommt, gehoert in den
+       Browser-Gegencheck. */
+    render(<MaterialDialog {...basis} vorbelegteDateien={[datei('a.mp3'), datei('b.mp3')]} />)
+    const region = screen.getByRole('status')
+    expect(region).toHaveTextContent('2 Aufnahmen gewählt')
+    fireEvent.click(screen.getByRole('button', { name: 'a.mp3 aus der Auswahl entfernen' }))
+    expect(screen.getByRole('status')).toBe(region)
+    expect(region).toHaveTextContent('1 Aufnahme gewählt')
+    fireEvent.click(screen.getByRole('button', { name: 'b.mp3 aus der Auswahl entfernen' }))
+    expect(screen.getByRole('status')).toBe(region)
+    expect(region.textContent?.trim()).toBe('')
+  })
   it('vergisst den Abspieler, wenn die klingende Aufnahme aus der Liste faellt', () => {
     /* Sonst bleibt ihr Schluessel im Zustand stehen — und dieselbe Datei, spaeter erneut
        hinzugefuegt, spielt beim Betreten von Schritt 2 ungefragt los. Derselbe Fall wie die

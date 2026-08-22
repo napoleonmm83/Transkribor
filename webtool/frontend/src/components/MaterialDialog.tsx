@@ -386,11 +386,27 @@ export function MaterialDialog({ project, offen, vorbelegteDateien, sprachChoice
                   verschiebt das Problem nur nach vorn.
                   Das Symbol unterscheidet Datei und Link — beide Arten landen in DERSELBEN
                   Liste (`ergaenzen`), und `starten` verzweigt je Zeile danach. */}
+              {/* Die Zaehlzeile steht AUSSERHALB der Bedingung und ist DAUERHAFT im Baum
+                  (#311). Der ✕ entfernt eine Zeile — sichtbar sofort, hoerbar bisher nicht:
+                  fuer Tastaturnutzer traegt der Fokuswechsel die Ansage (er springt auf den ✕
+                  der Nachbarzeile, deren `aria-label` den Namen fuehrt), fuer
+                  SPRACHSTEUERUNG („klick Podium.wav entfernen") passiert akustisch nichts.
+                  **Warum herausgehoben statt bloss `role="status"` angehaengt:** eine
+                  Live-Region, die erst MIT ihrem Inhalt in den Baum kommt, wird von
+                  Screenreadern oft nicht mehr beobachtet — sie muss vorher dastehen und nur
+                  ihren Text wechseln. Das ist der Umbau der Bedingung, nicht ein Attribut.
+                  Leer kostet sie eine Zeilenhoehe im leeren Schritt 1; `empty:hidden` waere
+                  der Rueckschritt in genau das Problem (display:none ist aus dem
+                  Barrierefreiheitsbaum raus, das Wiedereinblenden waere dasselbe Einziehen).
+                  jsdom bildet Live-Regionen nicht nach — der Test kann nur Rolle und Text
+                  pruefen, die Ansage selbst gehoert in den Browser-Gegencheck. */}
+              <p role="status" className="text-sm font-medium">
+                {zeilen.length > 0
+                  ? `${zeilen.length} ${zeilen.length === 1 ? 'Aufnahme' : 'Aufnahmen'} gewählt`
+                  : ''}
+              </p>
               {zeilen.length > 0 && (
                 <div className="flex min-h-0 flex-1 flex-col gap-1.5">
-                  <p className="text-sm font-medium">
-                    {zeilen.length} {zeilen.length === 1 ? 'Aufnahme' : 'Aufnahmen'} gewählt
-                  </p>
                   {/* `min-h-0` ist die zweite Haelfte von `flex-1`: ohne es waechst ein
                       Flex-Kind mit seinem Inhalt (Default `min-height: auto`) und das
                       `overflow-y-auto` greift nie — dieselbe Falle wie im Raster der
