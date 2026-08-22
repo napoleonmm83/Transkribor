@@ -25,10 +25,11 @@ import { AlertDialog, AlertDialogContent, AlertDialogTitle } from './alert-dialo
  * Hoehendeckel und einen eigenen Bildlauf.
  *
  * Warum der Deckel in die BASIS gehoert und nicht an die Verbraucher: `cn` ist
- * `twMerge(clsx(…))`, der Verbraucher-`className` gewinnt Konflikte. Wer einen eigenen
- * Deckel braucht (`MaterialDialog`: `h-[min(648px,90vh)]`) oder eigenen Bildlauf verbietet
- * (`ui/command`: `overflow-hidden`), ueberstimmt die Basis weiterhin — die Basis ist der
- * Rueckfall fuer die sechs bzw. zwei Verbraucher, die nichts sagen.
+ * `twMerge(clsx(…))`, der Verbraucher-`className` gewinnt Konflikte. GENAU ZWEI der sechs
+ * `DialogContent`-Verbraucher sagen etwas — `MaterialDialog` (`overflow-visible`, wegen des
+ * animierten Rahmens) und `ui/command` (`overflow-hidden`, es rollt in `CommandList` selbst).
+ * Die uebrigen vier und BEIDE `AlertDialogContent`-Verbraucher sagen nichts und bekommen den
+ * Rueckfall. (Hier stand zuerst „die sechs … die nichts sagen" — falsch gezaehlt.)
  */
 
 describe('Dialog-Hoehendeckel (#283)', () => {
@@ -78,10 +79,12 @@ describe('Dialog-Hoehendeckel (#283)', () => {
   })
 
   it('der Verbraucher schlaegt die Basis weiterhin (twMerge)', () => {
-    // Negativkontrolle zur Regel oben: waere der Deckel unueberstimmbar (z. B. per
-    // `!max-h-…` oder an einem Eltern-Element), braechen `MaterialDialog` und
-    // `CommandDialog`, die beide bewusst eigene Werte setzen. Der Test haelt fest, dass
-    // die Basis ein RUECKFALL ist, keine Vorschrift.
+    // Negativkontrolle zur Regel oben: waere der Deckel unueberstimmbar (`!max-h-…`),
+    // braechen `MaterialDialog` und `CommandDialog`, die beide bewusst eigene Werte setzen.
+    // Der Test haelt fest, dass die Basis ein RUECKFALL ist, keine Vorschrift.
+    // **Was er NICHT kann:** ohne den Fix ist er vollstaendig gruen — er sagt also nichts
+    // darueber, dass es den Deckel gibt (das tun Test 1 und 2). Und gegen einen Deckel an
+    // einem ELTERN-Element ist er blind; auch den faengt Test 1.
     render(
       <Dialog open>
         <DialogContent className="max-h-[200px] overflow-hidden">

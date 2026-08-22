@@ -596,12 +596,24 @@ describe('MaterialDialog', () => {
     render(<MaterialDialog {...basis} vorbelegteDateien={[datei('a.mp3'), datei('b.mp3')]} />)
     const region = screen.getByRole('status')
     expect(region).toHaveTextContent('2 Aufnahmen gewählt')
+    // Gegenrichtung zur `sr-only`-Zusicherung unten: mit Auswahl ist die Zeile SICHTBAR.
+    // Ohne sie waere ein dauerhaft verstecktes Feld gruen — derselbe Schaden andersherum.
+    expect(region.className).not.toContain('sr-only')
     fireEvent.click(screen.getByRole('button', { name: 'a.mp3 aus der Auswahl entfernen' }))
     expect(screen.getByRole('status')).toBe(region)
     expect(region).toHaveTextContent('1 Aufnahme gewählt')
     fireEvent.click(screen.getByRole('button', { name: 'b.mp3 aus der Auswahl entfernen' }))
     expect(screen.getByRole('status')).toBe(region)
-    expect(region.textContent?.trim()).toBe('')
+    /* NICHT leer, und das ist der Kern: `aria-relevant` steht per Default auf
+       `additions text` — eine ENTFERNUNG von Text wird nicht angesagt. Ein Uebergang nach ""
+       waere genau das, und der Zielfall des Issues (Sprachsteuerung, ohne Fokuswechsel)
+       bliebe beim LETZTEN Entfernen stumm. Eine fruehere Fassung dieses Tests hat das leere
+       Ende als Soll festgeschrieben; gefunden hat es der Review-Subagent. */
+    expect(region).toHaveTextContent('Keine Aufnahmen gewählt')
+    // ...und sichtbar bleibt der leere Zustand trotzdem leer: `sr-only` nimmt sie aus dem
+    // Fluss, kostet also weder Hoehe noch die `gap-3` der Spalte, BLEIBT aber im
+    // Barrierefreiheitsbaum (anders als `display:none`).
+    expect(region.className).toContain('sr-only')
   })
   it('vergisst den Abspieler, wenn die klingende Aufnahme aus der Liste faellt', () => {
     /* Sonst bleibt ihr Schluessel im Zustand stehen — und dieselbe Datei, spaeter erneut

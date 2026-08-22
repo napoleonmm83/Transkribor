@@ -285,9 +285,11 @@ export function MaterialDialog({ project, offen, vorbelegteDateien, sprachChoice
           die 15 px gingen von der Listenhoehe ab, die #313/#315 austariert haben.
           **`overflow-hidden` waere hier falsch** (auch gemessen): es nimmt zwar die Leisten,
           klemmt aber denselben Rahmen ab, den PR #310 gebaut hat.
-          Der Deckel `max-h-*` aus der Basis bleibt wirksam (kein Konflikt mit `h-*`) und ist
-          hier ohnehin gegenstandslos: der Dialog deckelt sich mit `h-[min(648px,90vh)]`
-          selbst und rollt in seinen INNEREN Behaeltern. */}
+          Der Deckel `max-h-*` aus der Basis bleibt wirksam (kein Konflikt mit `h-*`) — und
+          unterhalb von 320 px Fensterhoehe klemmt er sogar UNTER das eigene
+          `h-[min(648px,90vh)]` (`100dvh-2rem` faellt dann unter `90vh`). Folgenlos ist das
+          nur, weil der Dialog in seinen INNEREN Behaeltern rollt; „gegenstandslos" waere zu
+          scharf formuliert. */}
       <DialogContent className="rahmen-animiert flex h-[min(648px,90vh)] flex-col overflow-visible sm:max-w-3xl">
         <DialogHeader><DialogTitle>Material hinzufügen</DialogTitle></DialogHeader>
 
@@ -408,18 +410,25 @@ export function MaterialDialog({ project, offen, vorbelegteDateien, sprachChoice
                   Live-Region, die erst MIT ihrem Inhalt in den Baum kommt, wird von
                   Screenreadern oft nicht mehr beobachtet — sie muss vorher dastehen und nur
                   ihren Text wechseln. Das ist der Umbau der Bedingung, nicht ein Attribut.
-                  Leer kostet sie NICHTS: im Browser gemessen 0 px hoch — ein leerer Block
-                  erzeugt keine Zeilenbox, die `text-sm`-Zeilenhoehe greift also gar nicht.
-                  (Hier stand zuerst „kostet eine Zeilenhoehe"; das war geraten, nicht
-                  gemessen.) `empty:hidden` waere trotzdem der Rueckschritt in genau das
-                  Problem — `display:none` ist aus dem Barrierefreiheitsbaum raus, das
-                  Wiedereinblenden waere dasselbe Einziehen.
-                  jsdom bildet Live-Regionen nicht nach — der Test kann nur Rolle und Text
-                  pruefen, die Ansage selbst gehoert in den Browser-Gegencheck. */}
-              <p role="status" className="text-sm font-medium">
+                  **Der leere Zustand traegt TEXT, und das ist der Kern, nicht Kosmetik.**
+                  `aria-relevant` steht per Default auf `additions text` — eine ENTFERNUNG von
+                  Text wird nicht angesagt. „1 Aufnahme gewaehlt" → "" waere genau das, und der
+                  Zielfall des Issues (Sprachsteuerung, ohne Fokuswechsel) bliebe beim LETZTEN
+                  Entfernen stumm: der Fix waere gebaut und wirkungslos, wie #267 schon einmal.
+                  Mit „Keine Aufnahmen gewaehlt" ist JEDER Uebergang eine Textaenderung mit
+                  Zuwachs. (`aria-atomic` hilft dagegen nicht — es regelt WIE VIEL vorgelesen
+                  wird, nicht OB.)
+                  Sichtbar bleibt der leere Zustand leer: `sr-only` nimmt die Zeile aus dem
+                  Fluss (`position:absolute`), sie kostet also weder Hoehe noch die `gap-3` der
+                  Spalte — und BLEIBT im Barrierefreiheitsbaum, anders als `empty:hidden`/
+                  `display:none`, das der Rueckschritt in genau das Einzieh-Problem waere.
+                  jsdom bildet Live-Regionen nicht nach — der Test kann nur Rolle, Klasse und
+                  Text pruefen; ob die Ansage ankommt, gehoert in den Browser-Gegencheck. */}
+              <p role="status"
+                 className={`text-sm font-medium${zeilen.length === 0 ? ' sr-only' : ''}`}>
                 {zeilen.length > 0
                   ? `${zeilen.length} ${zeilen.length === 1 ? 'Aufnahme' : 'Aufnahmen'} gewählt`
-                  : ''}
+                  : 'Keine Aufnahmen gewählt'}
               </p>
               {zeilen.length > 0 && (
                 <div className="flex min-h-0 flex-1 flex-col gap-1.5">
