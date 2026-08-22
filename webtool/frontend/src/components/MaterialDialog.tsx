@@ -275,7 +275,20 @@ export function MaterialDialog({ project, offen, vorbelegteDateien, sprachChoice
           Liste schrumpft mit, statt den Dialog aus dem Fenster zu schieben.
           Fuer ein gegebenes Fenster ist das weiterhin eine KONSTANTE — der Rahmen springt
           beim Schrittwechsel nicht (der Grund fuer H1s feste Hoehe). */}
-      <DialogContent className="rahmen-animiert flex h-[min(648px,90vh)] flex-col sm:max-w-3xl">
+      {/* `overflow-visible` nimmt den Basis-Bildlauf aus #283 bewusst ZURUECK — dasselbe
+          Ausnahme-Muster wie `CommandDialog` (`overflow-hidden`), nur in die andere Richtung:
+          `cn` ist twMerge, der Verbraucher gewinnt.
+          **Der Grund ist der animierte Rahmen, und er ist gemessen.** Das `::before` aus
+          `.rahmen-animiert` hat `inset: -2px`, ragt also 2 px ueber den Dialog hinaus. Ein
+          `overflow` != visible macht daraus scrollbaren Inhalt: im Browser bei 320 px
+          Fensterhoehe erschienen BEIDE Leisten, je 15 px, fuer 2 px Phantom-Ueberlauf — und
+          die 15 px gingen von der Listenhoehe ab, die #313/#315 austariert haben.
+          **`overflow-hidden` waere hier falsch** (auch gemessen): es nimmt zwar die Leisten,
+          klemmt aber denselben Rahmen ab, den PR #310 gebaut hat.
+          Der Deckel `max-h-*` aus der Basis bleibt wirksam (kein Konflikt mit `h-*`) und ist
+          hier ohnehin gegenstandslos: der Dialog deckelt sich mit `h-[min(648px,90vh)]`
+          selbst und rollt in seinen INNEREN Behaeltern. */}
+      <DialogContent className="rahmen-animiert flex h-[min(648px,90vh)] flex-col overflow-visible sm:max-w-3xl">
         <DialogHeader><DialogTitle>Material hinzufügen</DialogTitle></DialogHeader>
 
         <ol className="flex items-center gap-2 text-xs text-muted-foreground">
