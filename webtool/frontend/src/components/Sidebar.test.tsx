@@ -143,4 +143,29 @@ describe('Sidebar', () => {
     fireEvent.click(screen.getByText(/^„Neu“ anlegen$/))
     expect(screen.getByLabelText('Projektname')).toHaveValue('Neu')
   })
+
+  it('der Spendenknopf zeigt auf GitHub Sponsors und oeffnet ein neues Fenster', () => {
+    zeigen()
+    const knopf = screen.getByRole('link', { name: /Projekt unterstützen/ })
+    expect(knopf).toHaveAttribute('href', 'https://github.com/sponsors/napoleonmm83')
+    // Pflicht, nicht Hoeflichkeit: das Electron-Fenster hat keine Adresszeile und keinen
+    // Zurueck-Knopf -- im selben Fenster geoeffnet waere GitHub eine Einbahnstrasse aus
+    // dem Programm heraus. `setWindowOpenHandler` in electron/main.js faengt `_blank` ab.
+    expect(knopf).toHaveAttribute('target', '_blank')
+    expect(knopf).toHaveAttribute('rel', expect.stringContaining('noreferrer'))
+  })
+
+  it('der Spendenblock steht AUSSERHALB der rollenden Projektliste', () => {
+    // Das ist die eigentliche Zusicherung hinter „unten festgenagelt": die Leiste ist eine
+    // Flex-Spalte, in der nur das <nav> waechst -- ein Geschwister dahinter steht damit
+    // immer am unteren Rand. Im <nav> gelandet, rollte der Knopf bei dreihundert Projekten
+    // aus dem Bild. jsdom rechnet kein Layout; die STRUKTUR ist der Teil, der hier
+    // pruefbar ist, das Aussehen kommt aus der Browser-Gegenprobe.
+    const { container } = zeigen({ projekte: PROJEKTE })
+    const nav = container.querySelector('nav')
+    const knopf = screen.getByRole('link', { name: /Projekt unterstützen/ })
+    expect(nav).not.toBeNull()
+    expect(nav).toContainElement(screen.getByText('Alpha'))   // Positivkontrolle
+    expect(nav).not.toContainElement(knopf)
+  })
 })
