@@ -187,9 +187,11 @@ Menge — mehrere Aufnahmen laufen nebeneinander, und eine lange Aufnahme wird i
 ohnehin in Abschnitte geteilt, die sich ebenfalls verteilen. Wenig bringt der Regler nur
 bei einer einzelnen **kurzen** Datei: da gibt es nichts zu verteilen.
 
-Geht dabei etwas schief — das Netz weg, ein Limit erreicht —, ist keine Arbeit verloren:
-die betroffene Aufnahme wird übersprungen, und ein erneuter Lauf holt genau sie nach.
-Was schon fertig war, wird nicht noch einmal berechnet.
+Das gilt für Läufe, die durchlaufen. Geht mittendrin etwas schief — das Netz weg, ein
+Limit erreicht —, ist trotzdem nichts verloren: die betroffene Aufnahme wird übersprungen,
+ein erneuter Lauf holt genau sie nach, und alles schon Fertige bleibt liegen. Nur was im
+Moment des Abbruchs gerade in Arbeit war, fällt noch einmal an — und davon bei einem hohen
+Wert entsprechend mehr, weil mehr gleichzeitig unterwegs ist.
 
 <img src="docs/bilder/editor-hell.png" alt="Derselbe Editor im hellen Design: Zusammenfassung des Gesprächs, Redebeiträge mit Sprechernamen und Zeitmarken, unten die Wellenform mit Wiedergabe.">
 
