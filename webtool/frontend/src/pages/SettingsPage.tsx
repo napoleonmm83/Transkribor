@@ -597,6 +597,35 @@ export function SettingsPage() {
         </p>
       </Abschnitt>
 
+      <Abschnitt titel="Tempo der Korrektur">
+        {/* Ein Select und KEIN Zahlenfeld: `<input type="number">` liefert bei einer
+            ungültigen Zwischeneingabe einen LEEREN value (validity.badInput) und zeigt dem
+            Nutzer den getippten Text weiter an — ein Vertipper hätte hier also den
+            gespeicherten Wert still verworfen. Mit festen Optionen gibt es den Zustand
+            nicht, und die Prüfung im Frontend erübrigt sich ganz. */}
+        <label id="lbl-parallel" className="mb-1.5 block text-sm font-medium">
+          Gleichzeitige Anfragen an die KI
+        </label>
+        <Select value={s.parallel} onValueChange={n => speichern({ parallel: n })}>
+          <SelectTrigger className="w-full" aria-labelledby="lbl-parallel"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {/* Aus `parallel_max` erzeugt, nicht aus einer Liste hier: die Grenze steht in
+                settings.PARALLEL_MAX und soll an genau einer Stelle stehen. */}
+            {Array.from({ length: s.parallel_max }, (_, i) => String(i + 1)).map(n => (
+              <SelectItem key={n} value={n}>
+                {n}{n === '3' && ' — Standard'}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <p className="mt-2 text-xs text-muted-foreground">
+          Transkribor korrigiert mehrere Aufnahmen gleichzeitig. Ein höherer Wert macht ein
+          Projekt schneller fertig — bei einem Abo (Claude oder ChatGPT) ist dafür auch das
+          monatliche Kontingent schneller aufgebraucht. Bei einem eigenen API-Schlüssel
+          entstehen entsprechend schneller Kosten.
+        </p>
+      </Abschnitt>
+
       <Abschnitt titel="Video-Import">
         {/* Natives <input type="checkbox"> wie im MehrsprachigKasten — components/ui/ hat
             kein Checkbox-Bauteil, und eines dafür zu ziehen waere eine Abhaengigkeit fuer

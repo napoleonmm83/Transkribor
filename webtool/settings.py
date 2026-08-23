@@ -97,7 +97,37 @@ DEFAULTS = {"provider": "claude-cli", "model": "", "base_url": "", "api_key": ""
             # und hier GELOESCHT — ein Alt-Bestand wird beim nächsten save() herausgefiltert.
             # STRINGS, nicht bool/date — `save()` filtert auf isinstance(str) und wuerde alles
             # andere still verwerfen (dieselbe Falle wie `mehrsprachig` in projekt.py).
+            # Gleichzeitige LLM-Aufrufe der Korrektur (`TRANSKRIBOR_PARALLEL`). STRING wie
+            # `ytdlp_auto` — `save()`/`_lesen()` filtern auf isinstance(str) und wuerden eine
+            # Zahl STILL verwerfen (dieselbe Falle wie `mehrsprachig` in projekt.py).
+            #
+            # Default bleibt "3", also das bisherige Verhalten. Ein hoeherer Standard waere
+            # beim Abo-Anbieter eine Kostenentscheidung, die niemand getroffen hat: mehr
+            # Slots heisst schneller fertig UND schneller Kontingent weg. Deshalb ein
+            # Regler, kein neuer Default.
+            "parallel": "3",
             "ytdlp_auto": "1"}
+
+# Obergrenze des Reglers. 16 ist keine technische Schranke, sondern eine Fuehrung: mehr
+# gleichzeitige `claude -p` sind mehr node-Prozesse à ~7,7 s Startup, und bei einem
+# API-Anbieter faengt irgendwo das Rate-Limit an. Die Zahl steht HIER und nirgends sonst —
+# Validierung (`app.put_settings`), Rueckfall (`_lesen`) und die Oberflaeche lesen sie von
+# hier, sonst laufen sie beim naechsten Anfassen auseinander (dieselbe Regel wie
+# `sprachen.SPRECHER_MAX`).
+PARALLEL_MAX = 16
+
+
+def parallel_ok(wert) -> bool:
+    """Ist `wert` eine zulaessige Slot-Zahl (1 … PARALLEL_MAX, als String)?
+
+    Trust-Boundary: der Wert reist ueber `job_env()` als Umgebungsvariable in einen
+    Subprozess. `correct.py` faengt einen Tippfehler zwar ab (ValueError -> 3), aber eine
+    handgeschriebene 10000 kaeme dort unveraendert durch und startete 10000 Threads.
+    """
+    try:
+        return 1 <= int(str(wert).strip()) <= PARALLEL_MAX
+    except (TypeError, ValueError):
+        return False
 
 
 def load() -> dict:
@@ -161,6 +191,12 @@ def _lesen() -> tuple:
                           if k in DEFAULTS and isinstance(v, str)}}
     if cfg["whisper_model"] not in KNOWN_WHISPER_MODELS:
         cfg["whisper_model"] = DEFAULTS["whisper_model"]
+    # Dieselbe Behandlung wie beim Whisper-Modell: eine von Hand editierte oder aus einer
+    # aelteren Fassung stammende Datei darf keinen unbrauchbaren Wert in den Subprozess
+    # tragen. Der Schreibpfad ist ueber `put_settings` geschaerft — dies ist der Lesepfad,
+    # und beide braucht es (die Datei liegt im Nutzerprofil und ist editierbar).
+    if not parallel_ok(cfg["parallel"]):
+        cfg["parallel"] = DEFAULTS["parallel"]
     return cfg, False
 
 
@@ -222,6 +258,10 @@ def public(cfg: dict = None) -> dict:
             # sonst holt niemand den Key zurueck, der dort noch drinsteht.
             "kaputt": kaputt_pfad(),
             "whisper_model": cfg["whisper_model"], "whisper_lang": cfg["whisper_lang"],
+            # Der gespeicherte Wert plus die Grenze, gegen die das Frontend pruefen soll —
+            # eine dort verdrahtete 16 waere beim naechsten Anfassen falsch (dasselbe
+            # Muster wie `sprecher_max` im Datei-Endpunkt).
+            "parallel": cfg["parallel"], "parallel_max": PARALLEL_MAX,
             # Der gespeicherte Wert, nicht der wirksame: der Haken im Browser soll zeigen,
             # was IN der Datei steht. Ob eine Env-Variable ihn ueberstimmt, sagt
             # `ytdlp_update.zustand()["auto"]` — das Frontend vergleicht beides.
@@ -233,6 +273,10 @@ def job_env() -> dict:
     gewinnt immer — wer WHISPER_MODEL gesetzt hat (webtool.ps1 aus der .env, CI), soll sie
     behalten."""
     cfg = load()
-    paare = (("WHISPER_MODEL", "whisper_model"), ("WHISPER_LANG", "whisper_lang"))
+    paare = (("WHISPER_MODEL", "whisper_model"), ("WHISPER_LANG", "whisper_lang"),
+             # Der Korrektur-Deckel. Ohne ihn wirkte die Einstellung NUR, wenn die Variable
+             # schon in der Serverumgebung stand (.env oder Shell) — im Browser gab es sie
+             # gar nicht, und deshalb lief sie ueberall auf dem Default 3.
+             ("TRANSKRIBOR_PARALLEL", "parallel"))
     return {env: cfg[key] for env, key in paare
             if cfg[key] and not os.environ.get(env)}

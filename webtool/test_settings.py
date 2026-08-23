@@ -2,16 +2,22 @@
 die echte Datei des Entwicklers ueber das Testergebnis."""
 import json
 import os
+import subprocess
+import sys
 
 import pytest
 
-from webtool import settings
+from webtool import paths, settings
 
 
 @pytest.fixture(autouse=True)
 def eigene_datei(tmp_path, monkeypatch):
     monkeypatch.setenv("TRANSKRIBOR_SETTINGS", str(tmp_path / "settings.json"))
-    for name in ("WHISPER_MODEL", "WHISPER_LANG"):
+    # TRANSKRIBOR_PARALLEL gehoert MIT in die Liste: `job_env()` laesst eine echte
+    # Umgebungsvariable gewinnen, ein Wert in der `.env` des Entwicklers entschiede sonst
+    # ueber `test_parallel_echte_umgebungsvariable_gewinnt` — genau die Falle aus dem
+    # Docstring oben, nur eine Variable weiter.
+    for name in ("WHISPER_MODEL", "WHISPER_LANG", "TRANSKRIBOR_PARALLEL"):
         monkeypatch.delenv(name, raising=False)
 
 
@@ -272,3 +278,73 @@ def test_nicht_dekodierbare_env_stoppt_den_serverstart_nicht(tmp_path, monkeypat
     monkeypatch.setenv("TRANSKRIBOR_ENV", str(env))
     monkeypatch.delenv("WHISPER_MODEL", raising=False)
     assert settings.load_env() == []                     # kein Wurf, nichts gesetzt
+
+
+# --- Korrektur-Deckel (TRANSKRIBOR_PARALLEL) ---------------------------------------------
+
+def test_parallel_default_bleibt_drei():
+    """Der Regler aendert das bisherige Verhalten NICHT — 3 ist, was correct.py fest hatte."""
+    assert settings.load()["parallel"] == "3"
+
+
+def test_parallel_speichern_und_lesen():
+    settings.save({"parallel": "8"})
+    assert settings.load()["parallel"] == "8"
+
+
+@pytest.mark.parametrize("wert,gut", [
+    ("1", True), ("3", True), (str(settings.PARALLEL_MAX), True),
+    ("0", False), ("-1", False), (str(settings.PARALLEL_MAX + 1), False),
+    ("abc", False), ("", False), ("3.5", False), (None, False),
+    ("  4  ", True),          # `save()` strippt, ein handgeschriebener Wert nicht
+])
+def test_parallel_ok_grenzen(wert, gut):
+    assert settings.parallel_ok(wert) is gut
+
+
+def test_parallel_unbrauchbarer_wert_faellt_auf_default(tmp_path):
+    """Der LESEpfad. Die Datei liegt im Nutzerprofil und ist von Hand editierbar; eine
+    10000 kaeme sonst ueber job_env() in den Subprozess und startete dort 10000 Threads —
+    `correct.py` faengt nur den ValueError eines Tippfehlers ab, nicht eine gueltige Zahl."""
+    p = tmp_path / "settings.json"
+    p.write_text(json.dumps({"parallel": "10000"}), encoding="utf-8")
+    assert settings.load()["parallel"] == "3"
+
+
+def test_job_env_exportiert_den_deckel():
+    """Ohne diese Zeile wirkte die Einstellung NUR ueber die .env — im Browser gab es sie
+    gar nicht, und deshalb lief sie ueberall auf dem Default."""
+    settings.save({"parallel": "6"})
+    assert settings.job_env()["TRANSKRIBOR_PARALLEL"] == "6"
+
+
+def test_parallel_echte_umgebungsvariable_gewinnt(monkeypatch):
+    settings.save({"parallel": "6"})
+    monkeypatch.setenv("TRANSKRIBOR_PARALLEL", "2")
+    assert "TRANSKRIBOR_PARALLEL" not in settings.job_env()
+
+
+def test_public_liefert_deckel_und_grenze():
+    """`parallel_max` reist mit, damit das Frontend die Grenze nicht ein zweites Mal fuehrt."""
+    settings.save({"parallel": "5"})
+    p = settings.public()
+    assert p["parallel"] == "5"
+    assert p["parallel_max"] == settings.PARALLEL_MAX
+
+
+def test_deckel_kommt_im_subprozess_wirklich_an(tmp_path, monkeypatch):
+    """Die GANZE Kette, ohne Attrappe: settings -> job_env -> Subprozess-Umgebung -> der
+    Wert, den `correct.py` tatsaechlich benutzt.
+
+    Noetig, weil `correct.CLAUDE_PARALLEL` beim MODULIMPORT aus der Umgebung gelesen wird.
+    Im Serverprozess ist er damit eingefroren — dass die Einstellung trotzdem greift, haengt
+    allein daran, dass der Lauf ein frisch gestarteter `python -m webtool.correct` ist. Ein
+    Test, der nur `job_env()` prueft, sagt darueber nichts.
+    """
+    settings.save({"parallel": "7"})
+    umgebung = {**os.environ, **settings.job_env()}
+    r = subprocess.run([sys.executable, "-c",
+                        "from webtool import correct; print(correct.CLAUDE_PARALLEL)"],
+                       capture_output=True, text=True, env=umgebung, cwd=paths.ROOT)
+    assert r.returncode == 0, r.stderr
+    assert r.stdout.strip() == "7"

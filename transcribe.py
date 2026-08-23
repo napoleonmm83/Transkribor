@@ -461,6 +461,12 @@ def transcribe_project(name, model, language, only=None):
     print(f"[{name}] Modell {model}, {len(files)} Datei(en)", flush=True)
     # Das Modell erst laden, wenn feststeht, dass gerechnet wird — bei whisper.cpp
     # uebernimmt das transkribiere() pro Datei (der Unterprozess haelt nichts vor).
+    # Phasenuhr fuer den ganzen Lauf. Die Einzeldauern unten gibt es laengst; was fehlte,
+    # ist die Summe — nur sie laesst sich mit der Korrekturphase (`⏱ Phasen:` in correct.py)
+    # vergleichen. Die Marke steht VOR dem Modell-Laden, denn die ~30 s fallen real an und
+    # gehoeren zu dem, was der Nutzer wartet.
+    t_phase = time.time()
+    n_ok = audio_gesamt = 0
     m = None if engine == "whisper.cpp" else _modell(model, device)
 
     for f in files:
@@ -505,6 +511,8 @@ def transcribe_project(name, model, language, only=None):
         # genau die zu kurze Zahl, die den Verlust verdeckt. Der Rueckfall gilt Laeufen ohne
         # das Feld (alte Roh-JSON, whisper.cpp ohne lesbare WAV).
         dur = result.get("duration") or (result["segments"][-1]["end"] if result["segments"] else 0)
+        n_ok += 1
+        audio_gesamt += dur
         print(f"[{name}] fertig {base}: {dt:.0f}s, {len(result['segments'])} Segmente, "
               f"Audio {fmt(dur)}, {dur/max(dt,1):.1f}x", flush=True)
         if result["luecken"]:
@@ -512,6 +520,11 @@ def transcribe_project(name, model, language, only=None):
             print(f"[{name}] ⚠ {base}: {len(result['luecken'])} Abschnitt(e) ohne Transkript "
                   f"({orte}) — bitte im Ton gegenhoeren", flush=True)
 
+    # Der Faktor gilt dem GANZEN Lauf, Modell-Ladezeit eingerechnet — er ist damit kleiner
+    # als die Einzelwerte oben und genau deshalb der ehrliche Vergleichswert.
+    dt_phase = time.time() - t_phase
+    print(f"⏱ [{name}]: {n_ok} Datei(en) transkribiert in {dt_phase:.0f}s "
+          f"(Audio {fmt(audio_gesamt)}, {audio_gesamt/max(dt_phase, 1):.1f}x)", flush=True)
     print(f"[{name}] -> {out_dir}", flush=True)
 
 

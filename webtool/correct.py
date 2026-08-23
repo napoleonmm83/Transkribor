@@ -19,6 +19,7 @@ import shutil
 import subprocess
 import sys
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 
 from . import llm
@@ -223,6 +224,7 @@ def cmd_diarize(project: str, only_bases: list = None) -> int:
         return 0
     tdir = paths.transkripte_dir(project)
     n = 0
+    t_phase = time.monotonic()
     for base in (only_bases if only_bases is not None else bases(project)):
         dpath = os.path.join(tdir, base + ".diar.json")
         raw_json = os.path.join(tdir, base + ".json")
@@ -266,8 +268,10 @@ def cmd_diarize(project: str, only_bases: list = None) -> int:
             wieviele = f" ({sprecher} Sprecher)" if sprecher else ""
             print(f"→ Diarisiere {base}{wieviele} …", flush=True)
             diagnose: dict = {}
+            t0 = time.monotonic()
             turns = diarize.diarize_file(audio, min_speakers=DIARIZE_MIN_SPEAKERS,
                                          num_speakers=sprecher, diagnose=diagnose)
+            dt = time.monotonic() - t0
             if not turns:
                 print(f"diarize: SKIP {base} (keine Sprecher erkannt)", flush=True)
                 continue
@@ -287,6 +291,10 @@ def cmd_diarize(project: str, only_bases: list = None) -> int:
             if diagnose:
                 doc["diagnose"] = diagnose
             paths.atomic_write(dpath, json.dumps(doc, ensure_ascii=False, indent=1))
+            # Eigene Zeile statt eines Anhangs an „→ Diarisiere … …": dessen Regex in
+            # jobPhases.ts endet auf `$`. Das ⏱-Praefix faengt dort keiner der Regexe —
+            # unbekannte Zeilen ignoriert der Parser bewusst (Kommentar am Ende der Schleife).
+            print(f"⏱ {base}: Diarisierung {dt:.0f}s", flush=True)
             n += 1
         # BEWUSST nicht auf ValueError geweitet (#190): ein UnicodeDecodeError landet eine
         # Zeile tiefer im Exception-Zweig und wird dort korrekt gemeldet — dieser Lauf
@@ -296,7 +304,8 @@ def cmd_diarize(project: str, only_bases: list = None) -> int:
             print(f"diarize: SKIP {base} (Roh-JSON unlesbar: {e})", flush=True)
         except Exception as e:                          # pyannote/Token/GPU/HF-403 (erbt OSError!) — NIE den Lauf killen
             print(f"diarize: SKIP {base} ({type(e).__name__}: {e}) — Korrektur ohne Cluster", flush=True)
-    print(f"diarize: {n} Datei(en) diarisiert", flush=True)
+    # Anhang, kein Umbau: `/^diarize: \d+ Datei/` in jobPhases.ts hat keinen $-Anker.
+    print(f"diarize: {n} Datei(en) diarisiert in {time.monotonic() - t_phase:.0f}s", flush=True)
     return n
 
 
@@ -773,11 +782,19 @@ def _correct_one(base: str, tagged: str, target: str, gjson: str, context: str, 
     gehört in JEDE Zeile: bei parallelen Läufen verschränken sich die Ausgaben, eine Zeile
     ohne Basisnamen liesse sich keinem Lauf mehr zuordnen."""
     print(f"→ Korrigiere {base}{part} …", flush=True)
+    t0 = time.monotonic()
     _ask_llm(_correct_prompt(base, tagged, target, gjson, context, id_range, known, ziel, dialekt,
                              mehrsprachig),
              [tagged], target)
+    # Getrennt gemessen, weil der Treue-Pass die Aufrufe je Block VERDOPPELT: eine Summe
+    # liesse offen, ob eine Verkuerzung bei den Slots oder beim Verify zu holen waere.
+    # Die Wartezeit auf einen freien `_claude_slots`-Platz steckt bewusst MIT drin — genau
+    # sie ist der Effekt, den ein hoeherer Deckel wegnehmen soll.
+    dt_korrektur = time.monotonic() - t0
+    dt_verify = 0.0
     if verify and _valid_correction(target):    # Treue-Pass nur auf eine GÜLTIGE Erst-Korrektur
         print(f"→ Verifiziere {base}{part} (Treue gegen Roh) …", flush=True)
+        t0 = time.monotonic()
         good = _load(target)                    # Snapshot: darf nicht durch einen kaputten Verify verloren gehen
         # Der Treue-Pass prueft die Korrektur GEGEN das Roh -> ohne API-Werkzeuge braucht er beide Dateien.
         _ask_llm(_verify_prompt(base, tagged, target, context, id_range, known, ziel, dialekt,
@@ -786,6 +803,9 @@ def _correct_one(base: str, tagged: str, target: str, gjson: str, context: str, 
         if not _valid_correction(target):       # Verify hat die gültige Korrektur zerstört -> zurückrollen
             paths.atomic_write(target, json.dumps(good, ensure_ascii=False, indent=1))
             print(f"⚠ Verifikation ungültig — behalte unverifizierte {base}.correction.json", flush=True)
+        dt_verify = time.monotonic() - t0
+    wie = f", Verify {dt_verify:.0f}s" if dt_verify else ""
+    print(f"⏱ {base}{part}: Korrektur {dt_korrektur:.0f}s{wie}", flush=True)
 
 
 def _correct_file(project: str, base: str, gjson: str, context: str, verify: bool,
@@ -913,14 +933,23 @@ def cmd_run(project: str, base: str = None, force: bool = False, verify: bool = 
     # gibt danach alle uebrigen Aufnahmen zum Loeschen/Umbenennen frei (Issue #80).
     print("[scope] " + "\t".join(all_bases), flush=True)
     print(f"run: {len(all_bases)} Datei(en) in Projekt {project!r}", flush=True)
+    # Phasenuhren. Ohne sie war nur die Transkription vermessen (transcribe.py druckt `dt`
+    # je Datei) — wie sich die Wandzeit auf Diarisieren/Vorbereiten/Glossar/Korrigieren
+    # verteilt, war Vermutung. Der Deckel steht mit in der Zeile: zwei Laeufe sind sonst
+    # nicht vergleichbar, und genau das ist der Zweck der Messung.
+    t_start = time.monotonic()
     cmd_diarize(project, all_bases)                    # -> <base>.diar.json (best-effort, GPU); scoped auf all_bases
+    t_diar = time.monotonic()
     cmd_prep(project)                                  # -> <base>.tagged.txt (Cluster-Präfix falls diarisiert)
+    t_prep = time.monotonic()
     from . import projekt as _pj
     context = _context(project)
     # Glossar nur bauen, wenn mind. eine Datei im Voll-Modus laeuft -- leicht/zusammenfassung
     # sind Einzeldatei-Laeufe ohne korpus-weites Glossar (spart den Glossar-Aufruf).
     hat_voll = any(_pj.tiefe_effektiv(project, b) in ("voll", "voll_dialekt") for b in all_bases)
     gjson = _glossary(project, context) if hat_voll else ""
+    t_gloss = time.monotonic()
+
     def one(b: str) -> bool:
         try:  # eine kaputte Datei darf den Batch nicht abbrechen
             epath = os.path.join(tdir, b + ".edit.json")
@@ -961,7 +990,11 @@ def cmd_run(project: str, base: str = None, force: bool = False, verify: bool = 
     # nur auf Opus; wie viele davon wirklich gleichzeitig laufen, regelt _claude_slots.
     with ThreadPoolExecutor(max_workers=min(len(all_bases), CLAUDE_PARALLEL)) as ex:
         done = sum(ex.map(one, all_bases))
+    t_ende = time.monotonic()
     print(f"run: fertig — {done}/{len(all_bases)} Datei(en) korrigiert", flush=True)
+    print(f"⏱ Phasen: diarisieren {t_diar - t_start:.0f}s · vorbereiten {t_prep - t_diar:.0f}s · "
+          f"glossar {t_gloss - t_prep:.0f}s · korrigieren {t_ende - t_gloss:.0f}s · "
+          f"gesamt {t_ende - t_start:.0f}s (parallel={CLAUDE_PARALLEL})", flush=True)
     return done
 
 

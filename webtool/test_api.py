@@ -597,6 +597,7 @@ def test_settings_speichern_und_key_bleibt_geheim(client):
 
 
 def test_settings_modellwechsel_behaelt_den_key(client):
+    from webtool import settings          # lokal wie ueberall in dieser Datei
     client.put("/api/settings", json={"provider": "anthropic", "api_key": "sk-a"})
     r = client.put("/api/settings", json={"model": "claude-sonnet-5"})
     body = r.json()
@@ -620,6 +621,9 @@ def test_settings_modellwechsel_behaelt_den_key(client):
     assert body == {"provider": "anthropic", "model": "claude-sonnet-5",
                     "base_url": "", "has_key": True,
                     "whisper_model": "large-v3", "whisper_lang": "de",
+                    # Der Korrektur-Deckel und seine Grenze. "3" ist der bisherige, fest
+                    # verdrahtete Wert — wer den Regler nicht anfasst, merkt nichts.
+                    "parallel": "3", "parallel_max": settings.PARALLEL_MAX,
                     # "" = es liegt keine beiseitegelegte Einstellungsdatei (#192)
                     "ytdlp_auto": "1", "kaputt": "",
                     # Der Normalfall (#194) — und zugleich die Gegenprobe zum Test unten:
@@ -639,6 +643,7 @@ def test_settings_rumpf_traegt_alle_felder_die_das_frontend_tippt(client):
         # aus settings.public()
         "provider", "model", "base_url", "has_key", "kaputt",
         "whisper_model", "whisper_lang", "ytdlp_auto",
+        "parallel", "parallel_max",
         # Umgebung, die das Frontend braucht
         "providers", "env_key", "whisper_choices", "ai_ready", "ai_reason",
         # wo die Arbeit des Nutzers liegt (#218)
@@ -764,6 +769,23 @@ def test_settings_lehnt_ungueltigen_ytdlp_schalter_ab(client):
     ein JA. Der Schreibpfad ist die Stelle, an der das auffallen muss."""
     assert client.put("/api/settings", json={"ytdlp_auto": "nein"}).status_code == 400
     assert client.get("/api/settings").json()["ytdlp_auto"] == "1"
+
+
+def test_settings_lehnt_unbrauchbaren_deckel_ab(client):
+    """Der Wert reist ueber `job_env()` als Umgebungsvariable in den Korrektur-Subprozess und
+    wird dort zur Threadzahl. `correct.py` faengt nur einen Tippfehler ab (ValueError -> 3) —
+    eine gueltige, aber absurde Zahl kaeme unveraendert durch. Der Schreibpfad ist die
+    Stelle, an der das auffallen muss (dieselbe Regel wie beim yt-dlp-Schalter darueber).
+
+    Drei Richtungen, weil sie verschiedene Zweige von `parallel_ok` treffen: zu gross, gar
+    keine Zahl, und die Null (die untere Grenze — `Semaphore(0)` blockierte fuer immer)."""
+    for schlecht in ("10000", "viele", "0"):
+        assert client.put("/api/settings", json={"parallel": schlecht}).status_code == 400, schlecht
+    assert client.get("/api/settings").json()["parallel"] == "3"
+    # Positivkontrolle: die Wache laesst einen gueltigen Wert durch. Ohne sie waere der Test
+    # auch dann gruen, wenn der Endpunkt JEDEN Wert mit 400 ablehnte.
+    assert client.put("/api/settings", json={"parallel": "8"}).status_code == 200
+    assert client.get("/api/settings").json()["parallel"] == "8"
 
 
 def test_settings_meldet_und_entfernt_die_beiseitegelegte_datei(client, tmp_path):
