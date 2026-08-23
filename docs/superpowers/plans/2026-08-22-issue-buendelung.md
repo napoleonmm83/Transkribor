@@ -792,6 +792,16 @@ eigenem PowerShell-Zweig (`ps_flucht`, :164, :179–181); `readme-pflicht.sh` un
 benutzen **Message-Marker**. Das sind zwei **Grammatiken**, nicht zwei Namen. **Entscheidung:
 die Lib trägt nur die ERKENNUNG; die Fluchtwege bleiben bei ihren Verbrauchern.**
 
+**Eine Bedingung fürs Laden, die man einmal falsch macht:** `routing-sperre.sh:98` macht als
+erstes ein `cd "${CLAUDE_PROJECT_DIR:-…}"`. Ein `source` über einen relativen Pfad bräche
+damit je nachdem, ob er vor oder nach dieser Zeile steht. Die Lib wird **`BASH_SOURCE`-relativ**
+geladen — derselbe Griff, mit dem der Selbsttest seit B2a seinen Hookpfad findet.
+
+**Und der Ausfall ist gedeckt, nicht bloss gehofft:** schlägt das `source` fehl, bleibt die
+Erkennungsphrase ankerlos, und Prüfung 4 des Selbsttests wird rot (am Code nachvollzogen). Die
+43 Zusicherungen decken die Extraktion also gegen den Totalausfall ab — sie decken **nicht** die
+siebte Härtungsdimension, die neu ist und eigene Zusicherungen braucht.
+
 ### Ein Posten, den der erste Entwurf ganz übersah: die PowerShell-Verdrahtung
 
 `.claude/settings.json:24–33` ruft für den `PowerShell`-Matcher **nur** `routing-sperre.sh`.
@@ -837,6 +847,22 @@ Stufe B misst den **Arbeitsbaum**, nicht den gepushten Stand. Eine untrackte Dat
 grün machen, was der PR nicht enthält — und umgekehrt lokal rot, was auf dem Branch grün ist.
 Die CI misst das richtige Objekt; ein `PreToolUse`-Hook kann das strukturell nicht. Der Guard
 ist eine **Vorwarnung**, kein Ersatz für die CI, und die Sperrmeldung sagt das.
+
+**Konkret und benannt:** `tsconfig.app.json:28` schliesst `src` ein — also auch eine
+**untrackte** Scratch-Komponente mit Typfehler. Die sperrt dann einen PR, in dem sie gar nicht
+vorkommt. Das ist die einzige bekannte Fehlalarmklasse von Stufe B; sie kostet einen
+Fluchtweg, und weil `tsc` seinen Fehler mit Datei und Zeile nennt, ist sie in Sekunden als
+solche erkennbar. Eine Stale-Cache-Klasse wie beim `__pycache__` gibt es **nicht**:
+`--force` ignoriert `tsbuildinfo` per Definition (nachgesehen — die Dateien liegen unter
+`node_modules/.tmp/`).
+
+**Sperren oder nur melden — entschieden: sperren, mit benannter Gegenstimme.** Der gegnerische
+Prüfer empfahl ausdrücklich `non-blocking`. Dagegen steht, dass `routing-sperre.sh` seit
+Monaten sperrt und funktioniert, dass ein Hinweis am PR-Moment vom Automaten überlesen wird,
+und dass die beiden Gründe, die bei der 72-s-Fassung für „nur melden" sprachen — Latenz und
+Umgebungs-Rot — bei 0,47 s und `--force` **beide entfallen**. Bleibt die untrackte
+Scratch-Datei; die trägt einen Fluchtweg, keine Regeländerung. Wer das umdreht, findet hier
+den Grund, gegen den er argumentieren muss.
 
 ### Prüfung des Guards selbst
 
