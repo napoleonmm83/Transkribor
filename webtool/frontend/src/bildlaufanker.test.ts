@@ -70,3 +70,43 @@ describe('Quellbaum: jeder Bildlaufbehaelter hat einen Bezugsrahmen (#209)', () 
     expect(ohneAnker).toEqual([])
   })
 })
+
+/**
+ * Der Scanner oben ist an der KLASSE verankert — und genau daran laeuft die meistbenutzte
+ * Rollflaeche der App vorbei: Radix' ScrollArea-Viewport (`Transcript.tsx` rollt darin)
+ * traegt kein `overflow-*` im Markup, Radix setzt `overflow: scroll` zur LAUFZEIT. Der
+ * Viewport ist damit ein Bildlaufbehaelter, den der Scanner strukturell nie sieht.
+ *
+ * Gemessen am echten Dokument (105 Segmente, 14 Anmerkungen, Fenster 1927x1299), bevor der
+ * Anker gesetzt war: von 121 absolut positionierten Nachfahren entkamen **16** der Klemmung
+ * — alle `sr-only`, deren Bezugsrahmen die ScrollArea-WURZEL war (`relative`), waehrend der
+ * Viewport `static` stand. Ihre Flusspositionen reichten bis 9909 px bei einer
+ * Viewport-Unterkante von 1144 px; das blies die Wurzel auf `scrollHeight` 9816 und gab dem
+ * `overflow-auto`-Div aus `EditorView.tsx` eine ZWEITE, echte Bildlaufflaeche. Sichtbar als
+ * zweite Leiste am rechten Rand, die erst greift, wenn die innere unten ist.
+ * Mit `position: relative` am Viewport im selben Lauf: entkommene 16 -> 0,
+ * `scrollHeight` des Divs 9816 -> 1051 (= `clientHeight`), native Leiste 10 px -> 0 px,
+ * und das Transkript rollt weiter (Viewport 9951 > 1051).
+ *
+ * Warum eine EIGENE Zusicherung und keine Erweiterung des Scanners: der Scanner
+ * muesste dafuer wissen, welche Fremdkomponenten ihr `overflow` in JS setzen — das ist
+ * keine Regel ueber den Quellbaum mehr, sondern eine Liste. Diese Liste hat heute genau
+ * einen Eintrag, und der steht hier.
+ */
+describe('Radix-ScrollArea: der Viewport traegt den Anker selbst', () => {
+  const quelle = quellDateien['./components/ui/scroll-area.tsx']
+
+  it('die Datei ist wirklich gelesen (Positivkontrolle)', () => {
+    // Ohne das waere eine verschobene Datei ein gruener Test statt eines roten.
+    expect(quelle).toBeDefined()
+    expect(quelle).toContain('ScrollAreaPrimitive.Viewport')
+  })
+
+  it('der Viewport hat einen Bezugsrahmen', () => {
+    const ab = quelle.indexOf('ScrollAreaPrimitive.Viewport')
+    const treffer = /className\s*=\s*"([^"]*)"/.exec(quelle.slice(ab))
+    expect(treffer).not.toBeNull()
+    const klassen = treffer![1].split(/\s+/)
+    expect(klassen.filter(k => ANKER.includes(k))).not.toEqual([])
+  })
+})
