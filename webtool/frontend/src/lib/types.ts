@@ -149,7 +149,10 @@ export type Settings = {
   providers: ProviderInfo[]; env_key: string;
   whisper_model: string; whisper_lang: string; whisper_choices: WhisperChoice[];
   /** Gleichzeitige Korrektur-Anfragen an die KI ("1".."parallel_max"). Wie `ytdlp_auto` der
-   *  GESPEICHERTE Wert — was wirklich gilt, sagt `parallel_env`. */
+   *  GESPEICHERTE Wert; er gilt, solange `parallel_env` leer ist — sonst gewinnt die
+   *  Umgebung, und die wirksame Zahl steht in `parallel_env_wirksam`. (Hier stand „was
+   *  wirklich gilt, sagt parallel_env"; das war schon vor der Aufteilung ungenau — roh
+   *  ist nicht wirksam.) */
   parallel: string;
   /** Obergrenze des Reglers, vom Server (settings.PARALLEL_MAX). Hier NICHT verdrahten:
    *  eine zweite Zahl neben der Validierung läuft beim nächsten Anfassen auseinander. */

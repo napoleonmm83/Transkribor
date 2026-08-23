@@ -199,12 +199,19 @@ def _lesen() -> tuple:
                           if k in DEFAULTS and isinstance(v, str)}}
     if cfg["whisper_model"] not in KNOWN_WHISPER_MODELS:
         cfg["whisper_model"] = DEFAULTS["whisper_model"]
-    # Dieselbe Behandlung wie beim Whisper-Modell: eine von Hand editierte oder aus einer
-    # aelteren Fassung stammende Datei darf keinen unbrauchbaren Wert in den Subprozess
-    # tragen. Der Schreibpfad ist ueber `put_settings` geschaerft — dies ist der Lesepfad,
-    # und beide braucht es (die Datei liegt im Nutzerprofil und ist editierbar).
-    if not parallel_ok(cfg["parallel"]):
-        cfg["parallel"] = DEFAULTS["parallel"]
+    # NORMALISIERT, nicht nur validiert — und das schliesst zwei Loecher auf einmal.
+    #
+    # (1) `"03"` ist fuer `parallel_ok` gueltig und wurde unveraendert weitergereicht. Die
+    #     Auswahlliste der Einstellungsseite fuehrt aber `"1"`…`"16"`, also matchte der Wert
+    #     KEINE Option und das Feld stand leer da (gemessen). Ein handeditierter oder ueber
+    #     die API gesetzter Wert konnte die Anzeige so still leerraeumen.
+    # (2) Datei-Weg und Umgebungs-Weg behandelten denselben Wert VERSCHIEDEN: `"200"` fiel
+    #     hier auf 3 zurueck, waehrend `correct.py` auf 16 klemmt. Zwei Regeln fuer dieselbe
+    #     Frage — jetzt geht auch dieser Weg durch `parallel_wirksam`, die eine Rechnung.
+    #
+    # Die Datei selbst darf `"03"` behalten; sie heilt sich beim naechsten `save()`, weil das
+    # ein Read-Modify-Write ueber genau diesen Lesepfad ist.
+    cfg["parallel"] = str(parallel_wirksam(cfg["parallel"]))
     return cfg, False
 
 

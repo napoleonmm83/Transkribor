@@ -649,11 +649,11 @@ export function SettingsPage() {
         )}
 
         <p className="mt-2 text-xs text-muted-foreground">
-          Transkribor korrigiert mehrere Aufnahmen gleichzeitig. Ein höherer Wert macht ein
-          Projekt schneller fertig — bei einem Abo (Claude oder ChatGPT) ist dafür auch das
-          monatliche Kontingent schneller aufgebraucht. Bei einem eigenen API-Schlüssel
+          Transkribor korrigiert mehrere Aufnahmen gleichzeitig. Ein höherer Wert kann ein
+          Projekt früher fertigstellen — bei einem Abo (Claude oder ChatGPT) ist dafür auch
+          das monatliche Kontingent schneller aufgebraucht. Bei einem eigenen API-Schlüssel
           entstehen entsprechend schneller Kosten. Der Wert gilt je laufendem Projekt: zwei
-          Projekte gleichzeitig ergeben doppelt so viele Anfragen.
+          Projekte gleichzeitig können doppelt so viele Anfragen erzeugen.
         </p>
       </Abschnitt>
 
