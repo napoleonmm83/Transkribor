@@ -172,7 +172,7 @@ versteckt sie sich hinter der ersten LLM-Wartezeit, ohne echte Parallelität. Hi
 > was dort widerlegt wurde, ist hier gestrichen statt ergänzt.
 
 Gemessen wurde `BatchedInferencePipeline` an einer echten Aufnahme gegen den heutigen Weg —
-Kriterium **Segmentzahl und Worttreue**, nicht nur Sekunden. Ergebnis: 2,78× schneller, aber
+Kriterium **Segmentzahl und Worttreue**, nicht nur Sekunden. Ergebnis: 2,79× schneller, aber
 VAD-Pflicht und gröbere Segmentierung → als Wahlmöglichkeit, nicht als Standard (Issue #346).
 Ein Einbau bräuchte den heutigen seriellen Weg als Rückfall für mehrsprachige Dateien; **ob
 der `_Sprachschwelle`-Proxy im batched Pfad greift, ist weiterhin offen** (1.3 führt es als
@@ -206,8 +206,15 @@ zurückgeschrieben), RTX 5080, `large-v3`.
 | 4 Aufnahmen (je ~3–5 Min) | 18 s gesamt (erste 10 s inkl. Modell-Laden, dann 2–3 s je Datei) | — |
 | 1 Aufnahme, 21,7 Min | **24 s** | ~54× Echtzeit |
 
-Die Diarisierung skaliert linear mit ~1 s pro Audiominute. Für ein Projekt mit 132 Min
-Material sind das **~2,5 Minuten** — gegen eine Korrektur, die pro Datei Minuten braucht.
+**GEMESSEN sind genau diese zwei Zeilen** — zwei Läufe, mehr nicht.
+
+**HERGELEITET** ist alles Weitere, und mit welcher Unschärfe, gehört dazu: die 21,7-Min-Aufnahme
+ergibt ~1,1 s je Audiominute, der Vier-Dateien-Lauf (~16 Min Audio) rechnerisch ~1,1 s — aber
+in beiden steckt das einmalige Modell-Laden (~10 s beim ersten Aufruf) mit drin, das sich auf
+mehr Material verteilt. Zwei Punkte in derselben Größenordnung sind **kein Beleg für
+Linearität**, nur ein Hinweis darauf, dass die Größenordnung stimmt. Eine Hochrechnung auf
+132 Min Projektmaterial (~2,5 Min) ist entsprechend grob — sie trägt die Entscheidung, weil
+selbst ein Faktor 2 daneben nichts ändern würde, nicht weil sie genau wäre.
 
 **Parallelisierung spart also wenige Prozent** — und dafür müsste der globale Sonden-Patch
 threadlokal werden, mit dem Risiko, die Diagnose aus #275 still falsch zu machen.
@@ -222,10 +229,15 @@ Issue #345 ist damit **gemessen erledigt**, nicht offen.
 
 An der 21,7-Min-Aufnahme, sonst identische Decoder-Parameter:
 
-| | Dauer | Faktor | Segmente | Wörter | letztes Segment |
-|---|---|---|---|---|---|
-| seriell (heute) | 80,0 s | 16,3× | 411 | 2868 | 1300,6 s |
-| batched + VAD | **28,7 s** | **45,3×** | 277 | 2596 | 1116,6 s |
+| | Dauer | Echtzeitfaktor | schneller als seriell | Segmente | Wörter | letztes Segment |
+|---|---|---|---|---|---|---|
+| seriell (heute) | 80,0 s | 16,3× | — | 411 | 2868 | 1300,6 s |
+| batched + VAD | **28,7 s** | **45,3×** | **2,79×** | 277 | 2596 | 1116,6 s |
+
+Zwei verschiedene Zahlen, die beide „Faktor" heissen könnten und es hier deshalb nicht tun:
+der **Echtzeitfaktor** setzt die Rechenzeit gegen die Audiodauer (1300,6 s / 28,7 s = 45,3),
+die **Beschleunigung** die beiden Läufe gegeneinander (80,0 / 28,7 = 2,79). Im Fliesstext
+steht der zweite.
 
 **`vad_filter=True` ist keine Wahl, sondern Pflicht:** ohne VAD wirft
 `BatchedInferencePipeline` `RuntimeError: No clip timestamps found`. Der Plan nahm oben an,
@@ -259,7 +271,7 @@ an einer 21,7-Min-Aufnahme, gegen eine Korrektur im Minutenbereich.
 **Empfehlung: als Wahlmöglichkeit anbieten, nicht als Standard umstellen** — und vorher an
 mehreren Aufnahmen messen. Issue #346 trägt die Zahlen.
 
-### 5.3 Der Treue-Pass kostet 56 % der Korrekturzeit — an vier Dateien gemessen
+### 5.3 Der Treue-Pass kostet 56 % der Korrekturphase — an vier Dateien gemessen
 
 Vier echte Aufnahmen (41–76 Segmente), `TRANSKRIBOR_PARALLEL=1`, Modell `sonnet`:
 
@@ -271,8 +283,12 @@ Vier echte Aufnahmen (41–76 Segmente), `TRANSKRIBOR_PARALLEL=1`, Modell `sonne
 | C0703 | 109 s | 129 s | +18 % |
 | **Summe** | **368 s** | **467 s** | **+27 %** |
 
-Gesamtlauf 834 s. **Ohne Treue-Pass wären es ~368 s** — er kostet also mehr als die
-Korrektur selbst, und die Gesamtzeit ist mit ihm das **2,27-fache**.
+Gesamtlauf 834 s. **Ohne Treue-Pass wären es ~368 s.**
+
+Die Bezugsgrösse muss man dazusagen, sonst widersprechen sich die Zahlen scheinbar: 467 s
+sind **56 % der ganzen Korrekturphase** (467 / 835) und zugleich **127 % der reinen
+Korrekturzeit** (467 / 368). Beides beschreibt denselben Sachverhalt — der Pass kostet mehr
+als die Korrektur selbst, und die Gesamtzeit ist mit ihm das **2,27-fache**.
 
 Das schärft die Zahl aus 2.1 (dort *eine* Datei mit vier Segmenten, wo der
 `claude -p`-Startup von ~7,7 s noch stark durchschlug): der Effekt bleibt bei echten
@@ -283,7 +299,7 @@ einer und schreibt dieselbe Menge JSON zurück.
 CLAUDE.md sagt dazu bisher „verdoppelt die Opus-Aufrufe pro Datei". Für die **Zeit** stimmt
 das nicht ganz: sie wird mehr als verdoppelt.
 
-**Folge für den Nutzer:** `TRANSKRIBOR_VERIFY=0` spart **56 % bei `parallel=1`** — und
+**Folge für den Nutzer:** `TRANSKRIBOR_VERIFY=0` spart **56 % der Phase bei `parallel=1`** — und
 **43 % bei `parallel=4`** (256 s → 146 s, die längste reine Korrektur des A/B-Laufs aus 5.4).
 „Mehr als halbiert" gilt also nur im sequentiellen Fall; unter Parallelität verschiebt sich
 der Anteil, weil die Ketten unterschiedlich lang sind. Das
