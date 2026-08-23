@@ -132,8 +132,14 @@ describe('useProjectFiles', () => {
     // gruen, selbst wenn `refresh` die Liste zwischendurch leerte (CodeRabbit-Bot).
     await act(async () => { result.current.refresh() })
     expect(result.current.files).toEqual([datei])
-    await act(async () => { aufloesen?.({ name: 'A', files: [datei] }) })
-    expect(result.current.files).toEqual([datei])
+
+    // Und die zweite Antwort traegt ANDERE Daten: mit zweimal `[datei]` waere
+    // `aufloesen?.(…)` ein stiller No-op, falls `refresh` gar keine zweite Anfrage startet —
+    // der Test bestuende dann auch ueber einem Hook, der nie nachlaedt (CodeRabbit-Bot).
+    expect(aufloesen).toBeDefined()
+    const zweite: ProjectFile = { ...datei, base: 'S9' }
+    await act(async () => { aufloesen?.({ name: 'A', files: [zweite] }) })
+    expect(result.current.files).toEqual([zweite])
   })
 
   it('verwirft eine verspaetete Antwort eines verlassenen Projekts', async () => {
