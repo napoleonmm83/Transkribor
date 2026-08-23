@@ -420,6 +420,7 @@ Sie teilen keinen der vier Kostenposten — gebündelt gewönne man nichts.
 | 6 | ~~**#267** schliessen oder umwidmen~~ ✅ **geschlossen**, mit der Messung | 1 zu |
 | 7 | **B3-Vorarbeit** #84-Mess-Harness + Bestanden-Blatt | entblockt die Mac-Sitzung |
 | 8 | **B2b′** Spiegel-Import → #331 → #334 → #324 (`claude-routing`) | 3 zu, 1 PR |
+| | ⚠️ **Zeile 8 ist von Fassung 4 überholt** — B2b′ ist in **8a + 8b** geteilt, und der Spiegel-Import trägt zwei Posten mehr (Erkenner-Lib, PowerShell-Verdrahtung). Massgeblich ist die Tabelle unter „Fassung 4 → Reihenfolge, ergänzt". | |
 | 9 | **B7** #330 + #328 (eine Browser-Sitzung) | 2 zu, 1 Sitzung |
 | 10 | **#251** einplanen · **B6** #136 (Material liegt vor) | 1 zur Disposition, 1 messbar |
 | 11 | **B2c** #326 — erst Entwurf, dann Bau | nach Entwurf |
@@ -536,6 +537,11 @@ gespiegelt sind **zwei** (`routing-sperre.sh`, `routing-sperre.test.sh`).
 Reihenfolge im Bündel: **Spiegel-Import → #331 → #334 → #324.** Ein PR, drei Issues, kein
 Browser. **Ein** Reviewversuch ist dabei die Untergrenze, nicht die Zahl — jede Fixrunde ist
 ein weiterer (Posten 2).
+
+> ⚠️ **Von Fassung 4 überholt.** Der Bündelinhalt wächst um zwei Posten (Erkenner-Lib,
+> PowerShell-Verdrahtung), und #331 ist **kein Abfallprodukt der Lib**, sondern eine eigene
+> Härtungsdimension — gemessen. Der Guard wird als **B2b′-2** abgetrennt. Massgeblich ist
+> „Fassung 4 → Zuschnitt".
 
 - **#331** — `readme-pflicht.sh:20` prüft auf die Zeichenkette `git commit`; ein globales
   `-c` schiebt sich dazwischen und macht den Wächter blind. Er war **still aus**.
@@ -912,7 +918,7 @@ Damit die Zahlen nicht über Zitate weiterleben:
 | „läuft NACH `routing-sperre.sh`" | **Nicht herstellbar** — passende Hooks laufen parallel |
 | „#331 fällt bei der Lib-Extraktion ab" | **Widerlegt.** `-c` steht ZWISCHEN den Befehlswörtern; keine der sechs Runden kennt diese Klasse. Es braucht eine siebte |
 | „zwei von drei Wächtern still aus" | **Eine Blindstelle je Wächter.** `routing-sperre` wirkt hier, `readme-pflicht` erkennt plaines `git commit` weiter |
-| `readme-pflicht.sh:20` · „43 Zusicherungen" · `vitest --run` | **:19** · 43 **`||`**-Zusicherungen (+1 andere FAIL-Stelle) · `package.json:11` sagt **`vitest run`** |
+| `readme-pflicht.sh:20` · „43 Zusicherungen" · `vitest --run` | **:19** · 43 **`\|\|`**-Zusicherungen (+1 andere FAIL-Stelle) · `package.json:11` sagt **`vitest run`** |
 | Zwei PRs wegen des Kontingents | **Gestrichen** — ungemessen und dem eigenen Kostenmodell zuwider. Tragend ist die Abbruchregel |
 | PowerShell-Verdrahtung | **Fehlte ganz.** `settings.json:24–33` ruft dort nur `routing-sperre` |
 
