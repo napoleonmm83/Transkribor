@@ -531,12 +531,16 @@ Was du damit tust:
 - **Bei der Korrektur:** oft war der KI-Dienst kurz nicht erreichbar. Ein zweiter Versuch
   reicht meist.
 
-Und wenn **gar keine** Aufnahme geklappt hat? Beim Transkribieren steht dann dieselbe gelbe
-Meldung, nur mit grösseren Zahlen („5 von 5 fehlgeschlagen") — ein Transkriptionslauf arbeitet
-sich immer bis zum Ende durch. Eine **rote** Fehlermeldung heisst etwas anderes: der Lauf konnte
-gar nicht erst anfangen. Das passiert beim Korrigieren, wenn der KI-Dienst nicht erreichbar ist,
-und beim Video-Import, wenn sich keine einzige Adresse laden liess; die Meldung nennt dann den
-Grund statt der Dateinamen.
+**Gelb oder rot — der Unterschied sagt dir, wo du suchen musst.** Gelb heisst: der Lauf ist
+durchgelaufen, einzelne Aufnahmen sind dabei liegengeblieben — such bei diesen Aufnahmen. Das
+gilt auch, wenn es alle erwischt hat („5 von 5 fehlgeschlagen"): die Zahlen werden grösser, die
+Farbe bleibt.
+
+Eine **rote** Meldung heisst: der Lauf als Ganzes ist gescheitert. Entweder konnte er gar nicht
+arbeiten — das Spracherkennungs-Modell liess sich nicht laden, der KI-Dienst war nicht
+erreichbar — oder es gelang keine einzige Datei. Dort steht statt der Dateinamen der Grund aus
+dem Protokoll; such dann nicht bei den Aufnahmen, sondern bei den Einstellungen oder der
+Verbindung.
 
 </details>
 

@@ -67,7 +67,13 @@ function Leiste() {
       // wenigstens erkennbar; seit er ABLEHNT, landete ausgerechnet die Meldung, die #299
       // dafuer gebaut hat, hier nirgends. Der Grund muss mit: ohne ihn versucht es der
       // Nutzer noch einmal und bekommt einen 409.
-      onUpload={(p, f) => uploadAudio(p, f).then(nachladen)
+      // Der Upload IST der Startschuss (das Backend startet die Transkription selbst und gibt
+      // die Kennung zurueck) — also gehoert er zu den Startwegen und muss adoptieren. Ohne
+      // das sieht der JobProvider den Lauf erst ueber den 4-s-Summenpoll, und ein Lauf, der
+      // vorher stirbt, bleibt wieder ohne Ausgangsmeldung: genau die Klasse, die #376
+      // schliesst. Der MaterialDialog tat es laengst; dieser zweite Upload-Weg nicht.
+      onUpload={(p, f) => uploadAudio(p, f)
+        .then(res => { if (res.started && res.job_id) adopt(res.job_id, p, 'transcribe'); nachladen() })
         .catch(e => toast.error(`Hochladen: ${(e as Error)?.message || 'fehlgeschlagen'}`))}
       // `adopt` innerhalb von `fn` — dasselbe Muster wie in DateiMenue.tsx. Es ist seit #376
       // Pflicht, nicht Beschleunigung: den Ausgang meldet `useJobAusgang` ueber den

@@ -102,6 +102,19 @@ describe('useJobAusgang (#376)', () => {
     expect(letzter?.[1]?.description).toContain('run: FEHLER')
   })
 
+  it('der Grund zeigt auf die FEHLER-Zeile, nicht auf die Erfolge danach (#376/B5)', async () => {
+    // Der URL-Import druckt seine `[fetch] FEHLER …` beliebig weit oben und danach jeden
+    // Erfolg plus die Bilanz. Die blanken letzten drei Zeilen zeigten damit auf die
+    // geglueckten Downloads — also auf alles ausser den Grund.
+    vi.mocked(api.getJob).mockResolvedValue({ status: 'done', kind: 'fetch',
+      lines: ['[fetch] FEHLER https://x/1: Video nicht verfuegbar',
+              '[fetch] geladen: Zweites Video', '[fetch] geladen: Drittes Video',
+              '[fetch] 2 von 3 geladen'] })
+    await laufen('fetch')
+    await act(async () => { await new Promise(r => setTimeout(r, 20)) })
+    expect(toastMock.warning.mock.calls.at(-1)?.[1]?.description).toContain('Video nicht verfuegbar')
+  })
+
   it('ein ganz gescheiterter Lauf meldet einen Fehler', async () => {
     vi.mocked(api.getJob).mockResolvedValue({ status: 'error', kind: 'transcribe', lines: [] })
     await laufen('transcribe')

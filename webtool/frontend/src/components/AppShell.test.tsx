@@ -14,7 +14,11 @@ vi.mock('@/lib/api')
 // lief in diesen Tests also gar nicht, still. Aufgefallen erst an einer Mutationsprobe, die
 // dadurch gruen blieb (der Waechter konnte nicht anschlagen, weil der Pfad nie lief).
 const toastMock = vi.hoisted(() => Object.assign(vi.fn(),
-  { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn(), dismiss: vi.fn(), loading: vi.fn() }))
+  { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn(), dismiss: vi.fn(),
+    // Mit KENNUNG: ohne sie liefert `toast.loading` undefined, `toast.dismiss(id)` sieht aus
+    // wie `toast.dismiss()` — und das dismisst ALLE Toasts, auch die Ausgangsmeldung.
+    // Genau daran blieb die Mutation `toast.dismiss(id)` -> `toast.dismiss()` gruen.
+    loading: vi.fn(() => 'lade-toast') }))
 vi.mock('sonner', () => ({ toast: toastMock, Toaster: () => null }))
 
 /** Ersatz-Editor: meldet der Huelle ein offenes Dokument, ohne useDoc und ohne Server.
@@ -177,7 +181,28 @@ describe('AppShell', () => {
     // mit lebendem „Abbrechen"-Knopf; bliebe er stehen, haette der Nutzer neben der
     // Ausgangsmeldung dauerhaft einen Spinner fuer einen Lauf, den es nicht mehr gibt.
     // Ungeprueft blieb `toast.dismiss(id)` -> `void id` gruen (gemessen vom Reviewer).
-    expect(toastMock.dismiss).toHaveBeenCalled()
+    expect(toastMock.dismiss).toHaveBeenCalledWith('lade-toast')
+  })
+
+  it('der Upload aus der Leiste ADOPTIERT den gestarteten Lauf (Codex-Befund)', async () => {
+    /* Hochladen IST der Startschuss: das Backend startet die Transkription selbst und gibt
+       die Kennung zurueck (`uploadAudio` -> `{job_id, started}`). Dieser Weg — der einzige
+       Upload ausserhalb des MaterialDialogs — reichte sie ins Leere und lud nur die Listen
+       nach. Der JobProvider sah den Lauf damit erst ueber den 4-s-Summenpoll, und ein Lauf,
+       der vorher stirbt, blieb ohne Ausgangsmeldung: genau die Klasse, die #376 schliesst. */
+    vi.mocked(api.listProjects).mockResolvedValue([{ name: 'Alpha', dateien: 1, fertig: 0, geaendert: 0 }])
+    vi.mocked(api.getProjectFiles).mockResolvedValue({ name: 'Alpha', files: [] })
+    vi.mocked(api.getJob).mockResolvedValue({ status: 'running', kind: 'transcribe', lines: [] })
+    vi.mocked(api.uploadAudio).mockResolvedValue({ base: 'a', file: 'a.mp3', job_id: 'j7', started: true })
+    const { container } = render(
+      <MemoryRouter initialEntries={['/p/Alpha']}>
+        <JobProvider intervalMs={10000}><AppShell><Jobspiegel /></AppShell></JobProvider>
+      </MemoryRouter>,
+    )
+    await waitFor(() => expect(screen.getByText('Alpha')).toBeInTheDocument())
+    const feld = container.querySelector('input[type=file]') as HTMLInputElement
+    fireEvent.change(feld, { target: { files: [new File(['x'], 'a.mp3', { type: 'audio/mpeg' })] } })
+    await waitFor(() => expect(screen.getByTestId('jobspiegel')).toHaveTextContent('j7:transcribe'))
   })
 
   it('bietet einen Sprunglink VOR der Leiste', () => {
