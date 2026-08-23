@@ -305,9 +305,7 @@ export function MaterialDialog({ project, offen, vorbelegteDateien, sprachChoice
         {/* `relative` ist Pflicht (#209): ein overflow-Behaelter klemmt absolut positionierte
             Nachfahren nur, wenn er selbst ihr Bezugsrahmen ist. Der Quellbaum-Waechter hat
             genau diese Zeile rot gemacht — zum zweiten Mal in diesem PR. */}
-        {/* `rollbalken` auch hier: sonst traegt derselbe Dialog in Schritt 1 eine
-            indigofarbene und in Schritt 2 die graue Systemleiste. */}
-        <div className="rollbalken relative min-h-0 flex-1 overflow-y-auto">
+        <div className="relative min-h-0 flex-1 overflow-y-auto">
           {/* Schritt 1 traegt seine Hoehe selbst (`h-full` + Spalte): Reiterleiste und
               Ablageflaeche bleiben stehen, GEROLLT wird nur die Auswahlliste. Vorher rollte
               der ganze Bereich, und wer zehn Dateien gewaehlt hatte, schob beim Suchen einer
@@ -453,7 +451,7 @@ export function MaterialDialog({ project, offen, vorbelegteDateien, sprachChoice
                       Regel gilt aber fuer JEDE Bildlaufflaeche (#209), und der
                       Quellbaum-Waechter hat genau diese Zeile rot gemacht.
                       `pr-1` haelt die Leiste vom ✕ weg. */}
-                  <ul className="rollbalken relative min-h-24 flex-1 space-y-1 overflow-y-auto pr-1">
+                  <ul className="relative min-h-24 flex-1 space-y-1 overflow-y-auto pr-1">
                     {zeilen.map((z, i) => (
                       <li key={z.schluessel}
                         className="flex items-center gap-2 rounded-md border bg-muted/40 px-2.5 py-1.5 text-sm">
@@ -539,7 +537,7 @@ export function MaterialDialog({ project, offen, vorbelegteDateien, sprachChoice
                   Hoerbalken erscheint auf Klick und nimmt der Liste auf einen Schlag seine
                   Hoehe weg. */}
               <ul ref={setListe}
-                className="rollbalken relative min-h-24 flex-1 space-y-1.5 overflow-y-auto pr-1">
+                className="relative min-h-24 flex-1 space-y-1.5 overflow-y-auto pr-1">
                 {zeilen.map((z, i) => (
                   <MaterialZeile key={z.schluessel} zeile={z} sprachChoices={sprachChoices}
                     sprecherMax={sprecherMax} hoerbar={!!z.datei} klingt={klingt === z.schluessel}
