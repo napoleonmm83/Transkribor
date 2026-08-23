@@ -169,8 +169,16 @@ umbenennen — beim Umbenennen einer Aufnahme bietet dir Transkribor die Namen d
 sodass aus `01172464` ein „Hans Müller, Garage Rüthi“ wird. Suchfeld und `Strg+K` führen dich
 auch in grossen Sammlungen mit einem Griff zum richtigen Projekt.
 
-**Es wartet nicht auf dich.** Aufnahmen werden nacheinander abgearbeitet, mehrere Projekte
-parallel — du kannst weiterarbeiten oder das Fenster zumachen.
+**Es wartet nicht auf dich.** Aufnahmen werden nacheinander abgehört, die Korrektur läuft
+danach für mehrere gleichzeitig, und mehrere Projekte laufen ohnehin nebeneinander — du
+kannst weiterarbeiten oder das Fenster zumachen.
+
+Wie viele Aufnahmen gleichzeitig korrigiert werden, stellst du ab der nächsten Fassung
+selbst ein, unter **Einstellungen › Tempo der Korrektur** (bis einschliesslich `v0.31.0`
+sind es fest drei). Mehr heisst: ein grosses Projekt ist früher fertig. Nutzt du ein Abo
+von Claude oder ChatGPT, ist dafür auch dein monatliches Kontingent schneller aufgebraucht —
+bei einem eigenen Schlüssel entstehen entsprechend schneller Kosten. Drei ist ein guter
+Ausgangswert; wer über Nacht ein ganzes Interview-Projekt durchlaufen lässt, dreht höher.
 
 <img src="docs/bilder/editor-hell.png" alt="Derselbe Editor im hellen Design: Zusammenfassung des Gesprächs, Redebeiträge mit Sprechernamen und Zeitmarken, unten die Wellenform mit Wiedergabe.">
 

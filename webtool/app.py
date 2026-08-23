@@ -1050,6 +1050,7 @@ class SettingsBody(BaseModel):
     base_url: str | None = None
     api_key: str | None = None          # weggelassen = gespeicherten Key behalten
     whisper_model: str | None = None    # Qualitaetsstufe der Transkription
+    parallel: str | None = None          # gleichzeitige LLM-Aufrufe der Korrektur, "1".."16"
     ytdlp_auto: str | None = None        # "1"/"0" — yt-dlp automatisch aktualisieren
     # whisper_lang fehlt hier bewusst: es hat keine UI, und ein ueber die API gesetztes
     # "Deutsch" statt "de" liesse jeden kuenftigen Lauf scheitern, ohne dass der Browser
@@ -1124,6 +1125,10 @@ def put_settings(body: SettingsBody):
     if "whisper_model" in patch and patch["whisper_model"] not in settings.KNOWN_WHISPER_MODELS:
         raise HTTPException(status_code=400,
                             detail=f"unbekanntes Whisper-Modell: {patch['whisper_model']}")
+    if "parallel" in patch and not settings.parallel_ok(patch["parallel"]):
+        raise HTTPException(
+            status_code=400,
+            detail=f"parallel muss zwischen 1 und {settings.PARALLEL_MAX} liegen: {patch['parallel']!r}")
     if "ytdlp_auto" in patch and patch["ytdlp_auto"] not in ("0", "1"):
         raise HTTPException(status_code=400,
                             detail=f"ytdlp_auto muss '0' oder '1' sein: {patch['ytdlp_auto']!r}")

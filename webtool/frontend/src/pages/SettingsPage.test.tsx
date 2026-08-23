@@ -26,6 +26,7 @@ const BASIS: Settings = {
   ai_ready: true, ai_reason: '',
   kaputt: '',
   projekte_pfad: 'C:\\Users\\test\\AppData\\Roaming\\Transkribor\\projekte',
+  parallel: '3', parallel_max: 16,
   ytdlp_auto: '1',
   ytdlp: { version: '2026.8.12', unlesbar: false, geprueft: '2026-08-13', auto: true, env: false, laeuft: false, ergebnis: '', ungeschuetzt: false, unterbrochen: false, ejs_unlesbar: false },
   providers: [
