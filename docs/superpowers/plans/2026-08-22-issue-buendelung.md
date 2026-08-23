@@ -4,6 +4,13 @@
 > in welcher Reihenfolge sie laufen und welche blockiert sind. Jedes Bündel bekommt seinen
 > eigenen Plan nach `superpowers:writing-plans`, wenn es dran ist.
 
+**Stand (Fassung 4):** master `d51fa3e`, `v0.31.0` live, **23 offene Issues, 0 offene PRs**
+(PRs in beiden Repos gezählt am 2026-08-23 morgens; die 23 Issues sind Transkribors).
+Fassung 4 ergänzt **kein Issue-Bündel**, sondern den Prüfapparat selbst: **jeder der drei
+Wächter hat eine stille Blindstelle**, und die Testhälfte fehlte ganz. Ihr erster Entwurf
+wurde vor dem Bau von zwei Prüfern zerlegt — Stufe B ist deshalb `tsc -b` (470 ms) statt
+eines Suitenlaufs (72 s, hätte im belegten Fenster 0 von 1 Rot-Fällen gefangen).
+Steht am Ende unter „Fassung 4".
 **Stand (Fassung 3):** master `80e2e1d`, `v0.31.0` live, **23 offene Issues, 0 offene PRs**
 (gezählt am 2026-08-22 abends). Was Fassung 3 ergänzt, steht am Ende unter „Fassung 3".
 **Stand Fassung 2:** master `af24095`, 24 offene Issues.
@@ -618,3 +625,275 @@ Damit die Zahlen nicht über Zitate weiterleben:
 | B3 entblockt 3 Issues | **2,5** — #36 ist „macOS **und Linux**" |
 | #275-Machbarkeit „erste Frage" | Beantwortet: **nur per Monkeypatch**, `sp` verlässt `clustering.py` nicht |
 | 4 statt 5 Zyklen, 1 statt 3 Sitzungen | **3 statt 4 Zyklen, 1 statt 2 Sitzungen** |
+
+---
+
+## Fassung 4 (2026-08-23) — der Wächter-Bestand als eigenes Bündel
+
+> **Diese Fassung wurde vor dem Bau von zwei Prüfern zerlegt** (`review-fassung4-fakten.md`,
+> `review-fassung4-gegnerisch.md`). Der erste Entwurf schlug einen 72-Sekunden-Suitenlauf am
+> PR-Moment vor und stützte sich auf eine Positivkontrolle, die **mit einem kaputten
+> Klassifikator gemessen war**. Beides ist unten ersetzt, nicht geglättet. Was der erste
+> Entwurf falsch hatte, steht am Ende — nicht als Zerknirschung, sondern weil die Zahlen
+> sonst über Zitate weiterleben.
+
+**Stand, nachgezählt statt fortgeschrieben:** master `d51fa3e`, `v0.31.0` live, **23 offene
+Issues, 0 offene PRs** — in **beiden** Repos nachgesehen (Posten 5; `claude-routing` hat
+zusätzlich 6 offene *Issues*, die Zahl 23 gilt Transkribor). Die Bündel B1–B7 aus Fassung 3
+bleiben unverändert gültig; Fassung 4 fügt **kein neues Issue-Bündel** hinzu, sondern schliesst
+eine Lücke im Prüfapparat selbst.
+
+### Lücke 4: der Plan bündelt die Arbeit, aber niemand prüft den Prüfer
+
+Fassung 3 zählt fünf Kostenposten und ordnet 23 Issues. Was in keiner Fassung steht: **die
+Wächter, die diese Kosten überhaupt erzwingen, sind selbst ungeprüft.**
+
+| Wächter | Erzwingt | Zustand |
+|---|---|---|
+| `kein-pauschales-add.sh` | CLAUDE.md nicht versehentlich committen (#110) | ungemessen (nicht im Prüfauftrag) |
+| `readme-pflicht.sh` | README im selben Commit | **blind gegen `git -c … commit`** (#331, am echten Hook reproduziert: Exit 0) |
+| `routing-sperre.sh` | Stufe 1: Subagent-Review vor dem PR | wirkt **hier**; in jedem `main`-Repo still aus (#334, im Wegwerf-Repo reproduziert) |
+| — | **Test zum Fix, grüne Suite** | **existiert nicht** |
+
+**Die Verdichtung „zwei von drei Wächtern waren still aus" ist zu scharf** und stand so im
+ersten Entwurf: `routing-sperre.sh` war am Einsatzort nie aus, und `readme-pflicht.sh` erkennt
+ein plaines `git commit` weiterhin. Genau genommen: **eine Blindstelle je Wächter**, beide
+gemessen, beide still.
+
+Die letzte Zeile ist **kein Versäumnis, sondern eine dokumentierte Entscheidung.**
+`routing-sperre.sh` begründet sie im Kopf: „Mutationsprobe und lokaler Funktionstest sind an
+keinem Dateinamen erkennbar. Eine Stufe verlässlich ist mehr wert als drei wackelige."
+Wer die Testhälfte nachrüstet, muss gegen dieses Argument antreten — nicht daran vorbei.
+
+### Der Code-Guard: zwei Stufen, und die zweite ist nicht die, die hier zuerst stand
+
+**Stufe A — `git commit`: `fix`/`feat` ohne Testdatei.** Aus dem *gestagten* Diff (wie
+`readme-pflicht.sh`). **Nur bei Commit-Messages mit `fix`- oder `feat`-Präfix** — die
+Verengung ist nicht Geschmack, sie ist der Unterschied zwischen brauchbar und abschaltreif
+(Messung unten). Laufzeit **0 s**, kein neuer Zustand.
+
+**Stufe B — `gh pr create`: `tsc -b`, NICHT die Suiten.** Gemessen **470 ms**
+(`./node_modules/.bin/tsc -b --force`, zwei Läufe: 475/470 ms, Exit 0). Positivkontrolle
+gefahren: ein injizierter Typfehler in `src/lib/api.ts` ergibt Exit 1 mit `TS2322`, sauber
+zurückgespielt. `tsconfig.app.json:28` schliesst `src` ein — also **auch die Testdateien**,
+und genau dort sass der einzige gemessene Rot-Fall.
+
+**Warum nicht die Suiten — der Grund ist eine Messung, kein Geschmack.** Im belegten Fenster
+(2026-08-20 bis 08-22, `gh run list`): **136 pull_request-Läufe über 28 PR-Branches, 131 grün,
+4 abgebrochen, 1 rot.** Der eine rote (PR #302, erster Lauf des Branches) fiel an
+`npm run build` mit `TS2591` in `HoerBalken.test.tsx` — einem **tsc-Typfehler**. Python und
+Electron waren grün, vitest lokal ebenfalls.
+
+> **Ein Suitenlauf am PR-Moment hätte in diesem Fenster NULL Fälle gefangen und
+> 28 × 72 s ≈ 34 Minuten gekostet.** Der Check, der den gemessenen Fall gefangen hätte, kostet
+> **0,47 s** — Faktor 150.
+
+**Und der Wegfall zieht drei Folgekosten mit sich, die der erste Entwurf hatte:**
+die Hook-Zeitgrenze bleibt bei **10 s** (keine `settings.json`-Anhebung, deren Obergrenze
+ohnehin **nicht belegbar** war); die zwei **dokumentierten Fehlalarme** des Parsers
+(`routing-sperre.sh:56–68`) bleiben bei ihrem heutigen Preis, statt um Faktor ~18 teurer zu
+werden; und der Hausregel-Einwand unten verliert seine Spitze.
+
+**Die Reihenfolge „erst Review, dann Test" ist NICHT herstellbar** — passende Hooks laufen
+parallel, nicht in Listenreihenfolge (hergeleitet aus der Hook-Semantik, **vor dem Bau mit
+zwei Zeitstempel-Hooks zu messen**). Bei 0,47 s ist das folgenlos: es kostet zwei
+Sperrmeldungen statt einer. Bei 72 s wäre es eine Minute Warten auf eine Sperre, die schon
+feststand. Der Plan behauptet die Reihenfolge deshalb nicht mehr.
+
+**Fehlersemantik — ausdrücklich, weil ihr Fehlen die Fehlerklasse dieses Abschnitts ist:**
+nur Exit 2 sperrt; jeder andere Code und jeder Timeout laufen **durch**. Beide Stufen sind
+also **fail-open**, und das ist die richtige Richtung (dieselbe Entscheidung wie
+`routing-sperre.sh:208–210`: ein Wächter, der bei eigener Unsicherheit sperrt, blockiert
+Arbeit, über die er nichts weiss). Aber sie muss **dastehen** — ein vierter Wächter mit
+eingebautem Still-Aus wäre genau der Fehler, gegen den Lücke 4 argumentiert. Fehlt `node` oder
+`node_modules`, schweigt Stufe B; der Selbsttest misst das als eigene Zusicherung.
+
+**Die Fluchtwege:**
+
+- Stufe A: **`[ohne-test]` in der Commit-Message** (Muster wie `[intern]`) **plus
+  `KEIN_TEST=1` als Env-Präfix**. Der zweite ist nicht Redundanz, sondern Pflicht: bei
+  `git commit -F datei`, `-c`/`-C` oder Editor-Message steht die Message **nicht** im
+  Command-JSON, das der Hook liest — der Marker wäre dort unbenutzbar und die Sperre ein
+  Ausgang ohne Tür. `readme-pflicht.sh` hat für diesen Fall einen zweiten Weg (README stagen);
+  Stufe A hätte sonst nur die Dummy-Testdatei, also genau das Ritual, das dieser Plan als
+  Risiko benennt.
+- Stufe B: **`KEIN_TEST=1`**.
+
+**Der Auditpfad ist weicher als er klingt, und das gehört gesagt:** `git commit --amend` mit
+leerem Index sieht Stufe A gar nicht (gestagter Diff leer → durch), der Marker ist also
+nachträglich entfernbar. `git log --grep` **zählt** die Schuld, es **beweist** sie nicht.
+
+**Was der Guard ausdrücklich NICHT prüft:** Mutationsprobe, lokaler Funktionstest im Browser,
+CodeRabbit, und ob ein mitgelieferter Test überhaupt etwas zusichert (`vacuous-guard-test`).
+Stufe A misst **Anwesenheit**, nicht Güte. Beides gehört in die Sperrmeldung, sonst liest sich
+ein grüner Durchlauf als „geprüft".
+
+### Was Stufe A wirklich leistet — normativ, nicht detektivisch
+
+Die ehrliche Lesart der Historie, und sie ist unbequemer als die erste Fassung:
+
+| Messung | Ergebnis |
+|---|---|
+| Letzte **25 gemergte PRs** | **0 Sperren** — jede gemergte Arbeit trug einen Test |
+| Letzte **80 Commits**, erste (kaputte) Definition | 4 Treffer — **1 echter, 2 Fehlalarme, 1 Artefakt** |
+| Letzte **120 Commits**, korrigierte Definition, nur `fix`/`feat` (63 Stück) | **1 Sperre, 0 Fehlalarme** |
+
+**Auf PR-Ebene fängt der Wächter in der gesamten belegten Historie keine einzige fehlende
+Testexistenz.** Bei `cf7b2654` (`fix(api): return await`, allein `src/lib/api.ts`) folgten die
+Tests zwei bis vier Commits später im selben Strang. Was Stufe A erzwingt, ist der
+**Ablageort** — „Der Test gehört zum Fix, nicht in einen Nachtrag" (CLAUDE.md) —, nicht die
+Entdeckung eines fehlenden Tests. So und nicht anders wird er verkauft.
+
+**Dazu die Repo-eigene Messgeschichte, die gegen den Guard spricht:** fehlende Tests sind
+nicht die dokumentierte Fehlerklasse dieses Repos. PR #227 hatte 437 grüne Tests, und niemand
+hatte den Knopf je gedrückt; „keiner davon war an einem roten Test zu sehen". Übersehene
+**Browser- und Funktionsprüfungen** sind die Klasse — und die prüft dieser Guard
+ausdrücklich nicht.
+
+### Warum die Verengung auf `fix`/`feat` tragend ist
+
+Ohne sie sperrt Stufe A auf **reinen Kommentaränderungen** in Quelldateien: `88c048c2` und
+`13bdabdd` ändern nachweislich nur Kommentartext in `.tsx`. Damit stünde die Bilanz bei
+**1 echt : 2 Fehlalarm** — und `readme-pflicht.sh` schreibt selbst, ein Wächter, „der meistens
+danebenliegt, erzieht nur zum Wegklicken".
+
+**Ein Kommentarfilter ist nicht baubar, und das ist gemessen, nicht vermutet:** JSX-Kommentare
+sind `{/* … */}`, die geänderten Zeilen sind Fortsetzungszeilen **im Kommentarkörper** und
+tragen kein Zeilenpräfix. Ein zeilenpräfix-basierter Filter hält beide Commits für
+Codeänderungen (gefahren, beide falsch klassifiziert). Wer es trotzdem einbaut, baut den
+Fehlalarm ein.
+
+Die Verengung auf Conventional-Commit-Präfixe nutzt stattdessen ein Signal, das dieses Repo
+ohnehin diszipliniert produziert, und trifft die Absicht genau: `docs:` ist kein Fix.
+
+### Der Lib-Anspruch war falsch — #331 fällt NICHT nebenbei ab
+
+Der erste Entwurf verkaufte einen gemeinsamen Erkenner als Klassenfix, aus dem #331
+abfällt. **Gemessen ist das widerlegt:**
+
+    printf 'git -c user.name=x commit -m "y"' | grep -q  'git commit'              → kein Match
+    printf 'git -c user.name=x commit -m "y"' | grep -Eq 'git[[:space:]]+commit'   → kein Match
+
+#331s Form ist eine **Option ZWISCHEN den Befehlswörtern**. Alle sechs Härtungsrunden des
+Parsers behandeln Zuweisungs-**Präfixe vor** dem Befehl (`zuweisungen`,
+`routing-sperre.sh:160`) und Feldgrenzen darum herum — **keine** kennt Tokens zwischen den
+Wörtern der Phrase. Ein auf „Befehlsmuster" parametrisierter Erkenner ist für die `-c`-Form
+**genauso blind wie das heutige grep**. #331 verlangt eine **siebte, neue
+Härtungsdimension** (Option-mit-Wert zwischen den Wörtern, mit eigener Wertklassenfrage:
+`-c 'a b'`, `-c a=b`, `--git-dir=…`) — echte Arbeit mit eigenem Reviewrisiko.
+
+*(Nebenbefund: der grep steht in `readme-pflicht.sh:19`, nicht `:20`. Issue #331 trägt
+dieselbe falsche Zeilennummer und wird beim Fix mitkorrigiert.)*
+
+**Und die Lib bleibt kleiner als behauptet.** „Parametrisiert auf Befehlsmuster und
+Fluchtweg-Name" passt auf einen von drei Verbrauchern: `routing-sperre.sh` benutzt
+Env-Präfix-Grammatik mit fest verdrahtetem `KEIN_REVIEW` in **zwei** `sed`-Ausdrücken plus
+eigenem PowerShell-Zweig (`ps_flucht`, :164, :179–181); `readme-pflicht.sh` und Stufe A
+benutzen **Message-Marker**. Das sind zwei **Grammatiken**, nicht zwei Namen. **Entscheidung:
+die Lib trägt nur die ERKENNUNG; die Fluchtwege bleiben bei ihren Verbrauchern.**
+
+### Ein Posten, den der erste Entwurf ganz übersah: die PowerShell-Verdrahtung
+
+`.claude/settings.json:24–33` ruft für den `PowerShell`-Matcher **nur** `routing-sperre.sh`.
+Weder `readme-pflicht.sh` (heute schon nicht) noch der künftige Guard laufen dort — und
+PowerShell ist die primäre Shell dieses Rechners. **Das ist Klasse #334 im selben Bündel, das
+#334 behebt:** ein Wächter, der auf einem Weg still nicht anschlägt. Die Verdrahtung ist ein
+eigener Posten in B2b′-1, kein Nebensatz.
+
+### Zuschnitt: zwei PRs, und der Grund ist die Abbruchregel — nicht das Kontingent
+
+| PR | Inhalt | Schliesst |
+|---|---|---|
+| **B2b′-1** Wächter-Instandsetzung | Spiegel-Import · Erkenner-Lib (nur Erkennung) · **7. Härtungsdimension** · #331 · #334 · #324 · PowerShell-Verdrahtung | **3 Issues** |
+| **B2b′-2** Code-Guard | Stufe A (`fix`/`feat`) + Stufe B (`tsc -b`) + Selbsttest-Erweiterung | 0 (neue Fähigkeit) |
+
+**Das Kontingent-Argument für den Split wird gestrichen.** Es lautete, ein grosser PR erzeuge
+mehr Befundrunden — das war die **einzige ungemessene Behauptung** in einem Abschnitt, der mit
+„alle Zahlen sind gemessen" warb, und nach dem eigenen Kostenmodell (Reviewversuche je
+*Commit*) ist die Summe beim Split identisch, zwei Erst-Reviews kommen sogar dazu.
+
+**Tragend ist allein die Abbruchregel:** der Guard baut auf dem Erkenner auf. Wackelt der
+Unterbau, sind die Selbsttests des Guards wertlos — also steht B2b′-2 still, bis B2b′-1 steht.
+
+### Der Hausregel-Widerspruch, beantwortet statt übergangen
+
+CLAUDE.md: „**`pre_merge_checks` als `warning`, nie `error`.** Ein Gate, das den Merge sperrt,
+wird umgangen; ein Hinweis wird gelesen."
+
+**Für Stufe A ist er entkräftet** — sie erfüllt dieselben Akzeptanzbedingungen wie die
+bestehende `routing-sperre.sh`: sofortige Meldung, erklärender Text, billiger Fluchtweg, und
+eine **an der echten Historie gemessene Fehlalarmquote von 0** (63 `fix`/`feat`-Commits).
+
+**Für Stufe B war er in der 72-Sekunden-Fassung NICHT entkräftbar** — Latenz plus die im Repo
+dokumentierte Umgebungs-Rot-Klasse (stale `__pycache__` nach Mutationsserien, PR #180: 30
+Minuten Suche an einem Fehler, den es im Quelltext nie gab) hätten `KEIN_TEST=1` zur Routine
+gemacht, und die Hausregel prognostiziert genau dieses Wegklicken. **Bei 0,47 s und einem
+Check ohne Umgebungszustand fällt beides weg.** Das ist der eigentliche Grund für den Tausch,
+nicht die gesparte Zeit.
+
+### Eine Grenze, die kein Hook überwinden kann
+
+Stufe B misst den **Arbeitsbaum**, nicht den gepushten Stand. Eine untrackte Datei kann lokal
+grün machen, was der PR nicht enthält — und umgekehrt lokal rot, was auf dem Branch grün ist.
+Die CI misst das richtige Objekt; ein `PreToolUse`-Hook kann das strukturell nicht. Der Guard
+ist eine **Vorwarnung**, kein Ersatz für die CI, und die Sperrmeldung sagt das.
+
+### Prüfung des Guards selbst
+
+`routing-sperre.test.sh` liegt daneben und hat **43 `||`-Zusicherungen** samt Wegwerf-Fixture
+(daneben eine 44. FAIL-Stelle, die keine `||`-Zusicherung ist) — der neue Wächter erweitert
+**diese** Datei, statt eine zweite Testwelt aufzumachen. Pflicht:
+
+1. **Positiv- UND Negativkontrolle** je Stufe. Ohne die zweite Richtung ist ein Dauer-Sperrer
+   grün.
+2. **Die Verengung selbst wird geprüft:** ein `docs:`-Commit an einer Quelldatei ohne Test
+   muss **durchlaufen**. Genau das ist der Unterschied zu 1:2.
+3. **Beide Fluchtwege**, plus die Falle aus Runde 5: ein Heredoc, das den Fluchtweg nur
+   *aufschreibt*, darf keinen echten Befehl freigeben. Und der `-F`-Fall: Message nicht im
+   JSON → `KEIN_TEST=1` muss greifen.
+4. **Fail-open wird zugesichert, nicht angenommen:** fehlendes `node` → Stufe B schweigt
+   (Exit 0), nicht Exit 2.
+5. **Mutationsprobe** mit Anwendungs-Kontrolle (`grep -c` auf den Marker) — `sed` ist in
+   diesem Repo dreimal still an einer Fortsetzungszeile gescheitert.
+6. **`.gitattributes`-Probe** (Lehre aus PR #8): CRLF in einer `.sh` ergibt unter Linux-bash
+   Syntaxfehler und **Exit 0 bei leerem stdout** — Erfolg für einen Test, der nie lief.
+7. **Hook-Parallelität messen**, bevor irgendein Text eine Reihenfolge behauptet: zwei
+   Zeitstempel-Hooks, Ausgabe vergleichen.
+
+### Reihenfolge, ergänzt
+
+| # | Was | Ergebnis |
+|---|---|---|
+| 7 | **B3-Vorarbeit** #84-Mess-Harness *(unverändert: was Marcus entblockt, geht zuerst)* | entblockt die Mac-Sitzung |
+| 8a | **B2b′-1** Spiegel-Import → Erkenner-Lib + 7. Dimension → #331 → #334 → #324 → PowerShell | 3 zu, 1 PR |
+| 8b | **B2b′-2** Code-Guard Stufe A + B | neue Fähigkeit, 1 PR |
+| 9 | **B7** #330 + #328 *(unverändert)* | 2 zu, 1 Sitzung |
+
+Ab 10 unverändert. **Warum der Guard hinter B3-Vorarbeit bleibt:** derselbe Grund wie in
+Fassung 3 — der Mac-Termin kann kurzfristig kommen; der Guard wartet folgenlos, eine
+ungenutzte Mac-Sitzung nicht.
+
+### Was der erste Entwurf von Fassung 4 falsch hatte
+
+Damit die Zahlen nicht über Zitate weiterleben:
+
+| Behauptung | Richtig |
+|---|---|
+| „4 Sperren / 80 Commits, Positivkontrolle bestanden" | **1 echter Treffer, 2 Fehlalarme, 1 Artefakt.** Der Klassifikator kannte `.test.js` nicht und zählte `electron/updater.test.js` über `electron/.*\.js` sogar als **Quellcode** |
+| „Der Wächter hätte bei #318 angehalten" | **`b241a175` trägt seinen Test im selben Commit** (`electron/updater.test.js`, +55). Er hätte nicht angehalten — und #318s Lücke (Lauf am gepackten Mac-Ziel) steht auf der planeigenen „prüft NICHT"-Liste |
+| Stufe B = `pytest` + `vitest`, 72 s | **`tsc -b`, 470 ms.** Die Suiten hätten im belegten Fenster **0 von 1** Rot-Fällen gefangen; der eine war ein tsc-Fehler |
+| „Hook-Zeitgrenze von 10 s auf 180 s" | **Entfällt.** Die Obergrenze war ohnehin nicht belegbar, und der Timeout steht **je Hook-Kommando** — pauschal gehoben hätte er auch `routing-sperre` auf 180 s gestellt |
+| „läuft NACH `routing-sperre.sh`" | **Nicht herstellbar** — passende Hooks laufen parallel |
+| „#331 fällt bei der Lib-Extraktion ab" | **Widerlegt.** `-c` steht ZWISCHEN den Befehlswörtern; keine der sechs Runden kennt diese Klasse. Es braucht eine siebte |
+| „zwei von drei Wächtern still aus" | **Eine Blindstelle je Wächter.** `routing-sperre` wirkt hier, `readme-pflicht` erkennt plaines `git commit` weiter |
+| `readme-pflicht.sh:20` · „43 Zusicherungen" · `vitest --run` | **:19** · 43 **`||`**-Zusicherungen (+1 andere FAIL-Stelle) · `package.json:11` sagt **`vitest run`** |
+| Zwei PRs wegen des Kontingents | **Gestrichen** — ungemessen und dem eigenen Kostenmodell zuwider. Tragend ist die Abbruchregel |
+| PowerShell-Verdrahtung | **Fehlte ganz.** `settings.json:24–33` ruft dort nur `routing-sperre` |
+
+### Was Fassung 3 nicht hatte
+
+| Auslassung | Wirkung |
+|---|---|
+| Kein Blick auf den Wächter-Bestand als Ganzes | #331 und #334 standen als Einzel-Issues da; dass **jeder Wächter eine stille Blindstelle hat**, stand nirgends als Befund |
+| Testhälfte des Prüfapparats gar nicht adressiert | CLAUDE.md verlangt Review **UND** Test; erzwungen wurde nur Review |
+| #331 als reine Zeichenketten-Frage gelesen | Er ist eine **eigene Härtungsdimension**, keine Variante der sechs vorhandenen |
