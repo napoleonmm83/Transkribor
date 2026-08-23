@@ -73,8 +73,24 @@ function melde(j: Job, art: 'error' | 'warning', titel: string, namen: string[])
   const zeigen = (beschreibung?: string) =>
     toast[art](titel, { duration: 8000, description: beschreibung || undefined })
   if (namen.length) { zeigen(namen.join(', ')); return }
-  getJob(j.id).then(r => zeigen(grund(r.lines ?? []))).catch(() => zeigen())
+
+  // Gegen die Frist, und das ist KEINE Vorsichtsmassnahme: `getJob` hat kein Zeitlimit, und
+  // seit die Begruendung VOR dem Toast geholt wird, verschluckt ein haengender Aufruf die
+  // GANZE Meldung — also genau der stille Ausgang, gegen den dieser Hook gebaut ist. In der
+  // Fassung davor (Toast zuerst, Grund nachgereicht) war ein Haenger folgenlos; die Umstellung
+  // hat den Fall erst scharf gemacht. `einmal` sorgt dafuer, dass Frist und Antwort nicht
+  // beide melden.
+  let gezeigt = false
+  const einmal = (beschreibung?: string) => { if (!gezeigt) { gezeigt = true; zeigen(beschreibung) } }
+  const uhr = setTimeout(() => einmal(), GRUND_FRIST_MS)
+  getJob(j.id)
+    .then(r => { clearTimeout(uhr); einmal(grund(r.lines ?? [])) })
+    .catch(() => { clearTimeout(uhr); einmal() })
 }
+
+/** So lange darf die Begruendung den Toast aufhalten. Grosszuegig gegenueber einem langsamen
+ *  Job-Log, kurz genug, dass niemand auf eine Meldung wartet, die schon feststeht. */
+const GRUND_FRIST_MS = 3000
 
 /**
  * Die drei Zeilen, die am ehesten den Grund tragen.

@@ -123,6 +123,33 @@ describe('useJobAusgang (#376)', () => {
     expect(toastMock.success).not.toHaveBeenCalled()
   })
 
+  it('ein haengender getJob verschluckt die Meldung NICHT (CodeRabbit-CLI, Major)', async () => {
+    // Seit die Begruendung VOR dem Toast geholt wird, wuerde ein haengender `getJob` die
+    // GANZE Meldung schlucken — also genau der stille Ausgang, gegen den dieser Hook gebaut
+    // ist. In der Fassung davor (Toast zuerst) war ein Haenger folgenlos; die Umstellung hat
+    // den Fall erst scharf gemacht. Nach der Frist muss die Meldung trotzdem stehen, ohne
+    // Grund, und GENAU EINMAL.
+    let aufloesen: ((w: unknown) => void) | undefined
+    let rufe = 0
+    vi.mocked(api.getJob).mockImplementation(() => {
+      rufe += 1
+      // Der erste Aufruf ist der Poll des Providers (er muss den Job terminal melden), erst
+      // der zweite ist die Diagnose — und nur der haengt.
+      if (rufe === 1) return Promise.resolve({ status: 'error', kind: 'correct', lines: [] })
+      return new Promise(r => { aufloesen = r as (w: unknown) => void })
+    })
+    const adopt = zeigen()
+    await act(async () => { adopt('j1', 'Alpha', 'correct') })
+    await act(async () => { await new Promise(r => setTimeout(r, 40)) })
+    expect(toastMock.error).not.toHaveBeenCalled()          // haengt noch: nichts gemeldet
+    await act(async () => { await new Promise(r => setTimeout(r, 3100)) })
+    expect(toastMock.error).toHaveBeenCalledTimes(1)
+    expect(toastMock.error.mock.calls[0][1]?.description).toBeUndefined()
+    // Und die verspaetete Antwort darf keine ZWEITE Meldung nachschieben.
+    await act(async () => { aufloesen?.({ status: 'error', kind: 'correct', lines: ['spaet'] }) })
+    expect(toastMock.error).toHaveBeenCalledTimes(1)
+  }, 10000)
+
   it('ein Abbruch ist kein Fehler', async () => {
     // Eine Entscheidung des Nutzers darf nicht wie ein Unfall klingen — derselbe Wortlaut wie
     // in useOsFortschritt, damit dieselbe Sache nicht zwei Namen hat.
