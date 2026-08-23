@@ -380,6 +380,8 @@ def test_parallel_env_liefert_den_ROHEN_wert(monkeypatch):
     ("200", str(settings.PARALLEL_MAX)),         # darueber: geklemmt
     ("0", "1"),                                  # darunter: max(1, …) wie bisher
     ("viele", "3"),                              # Tippfehler: Rueckfall, kein Wurf
+    ("03", "3"),                                 # gleichWERTIG: keine Warnung
+    ("+3", "3"),                                 # dito
 ])
 def test_umgebungsvariable_wird_auf_PARALLEL_MAX_geklemmt(gesetzt, erwartet, monkeypatch):
     """Der Weg, den `parallel_ok` NICHT deckt — `correct.py` klemmt ihn selbst.
@@ -404,7 +406,14 @@ def test_umgebungsvariable_wird_auf_PARALLEL_MAX_geklemmt(gesetzt, erwartet, mon
     # schreibt eine Zahl hin und bekaeme eine andere. Die Gegenrichtung steht mit im
     # Parameter-Satz: bei "8" (unveraendert) darf NICHTS gemeldet werden, sonst waere es
     # ein Daueralarm.
-    assert ("nicht der wirksame Wert" in r.stderr) is (gesetzt != erwartet)
+    # Verglichen wird die ZAHL, nicht die Zeichenkette: "03" und "+3" ergeben 3 und duerfen
+    # NICHT warnen — ein Textvergleich tat es und war damit ein Fehlalarm-Weg
+    # (CodeRabbit-CLI). Ein unlesbarer Wert bleibt eine Abweichung.
+    try:
+        weicht_ab = int(gesetzt) != int(erwartet)
+    except ValueError:
+        weicht_ab = True
+    assert ("nicht der wirksame Wert" in r.stderr) is weicht_ab
 
 
 @pytest.mark.parametrize("roh,erwartet", [

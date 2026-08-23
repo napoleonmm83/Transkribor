@@ -1267,6 +1267,14 @@ describe('Tempo der Korrektur', () => {
     expect(await screen.findByText(/wirkungslos/)).not.toHaveTextContent('wirksam sind')
   })
 
+  it('nennt den wirksamen Wert NICHT bei gleichWERTIGER Schreibweise', async () => {
+    // „03" und 3 sind dieselbe Zahl. Ein Textvergleich zeigte dort „03, wirksam sind 3" —
+    // ein Zusatz ohne Aussage (CodeRabbit-CLI, Zwilling des Befunds in correct.py).
+    zeige({ parallel: '3', parallel_env: '03', parallel_env_wirksam: '3' })
+    await screen.findByText('Tempo der Korrektur')
+    expect(await screen.findByText(/wirkungslos/)).not.toHaveTextContent('wirksam sind')
+  })
+
   it('ohne Override kein Hinweis und kein gesperrtes Feld', async () => {
     // Die Gegenprobe. Ein Hinweis, der immer dasteht, ist als Daueralarm derselbe Schaden
     // von der anderen Seite — und ein dauerhaft gesperrtes Feld waere der tote Schalter,

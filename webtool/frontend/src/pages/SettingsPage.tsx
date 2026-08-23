@@ -634,10 +634,14 @@ export function SettingsPage() {
             Diese Einstellung ist gerade wirkungslos: <code>TRANSKRIBOR_PARALLEL</code> in der
             Umgebung überstimmt sie. Dort steht{' '}
             <span className="font-medium">{s.parallel_env}</span>
-            {/* Nur nennen, wenn es abweicht — sonst stünde „200, wirksam 200“ da. Der
+            {/* Nur nennen, wenn es abweicht — sonst stünde „12, wirksam sind 12“ da. Der
                 eingetragene Wert allein wäre als Wirksamkeitsangabe falsch, seit der
-                Umgebungs-Weg geklemmt wird: 200 ergibt 16, „viele“ ergibt 3. */}
-            {s.parallel_env_wirksam && s.parallel_env_wirksam !== s.parallel_env.trim() && (
+                Umgebungs-Weg geklemmt wird: 200 ergibt 16, „viele“ ergibt 3.
+                Verglichen wird die ZAHL, nicht der Text: „03“ und „+3“ ergeben beide 3, ein
+                Textvergleich zeigte dort einen Zusatz ohne Aussage. `Number('viele')` ist
+                NaN und damit ungleich — der Rückfall wird also genannt, wie er soll. */}
+            {s.parallel_env_wirksam
+              && Number(s.parallel_env) !== Number(s.parallel_env_wirksam) && (
               <>, wirksam sind <span className="font-medium">{s.parallel_env_wirksam}</span></>
             )}
             . Entferne die Zeile aus deiner <code>.env</code>, um wieder hier einzustellen.
