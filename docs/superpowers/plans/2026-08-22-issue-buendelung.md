@@ -8,7 +8,7 @@
 (PRs in beiden Repos gezählt am 2026-08-23 morgens; die 23 Issues sind Transkribors).
 Fassung 4 ergänzt **kein Issue-Bündel**, sondern den Prüfapparat selbst: **jeder der drei
 Wächter hat eine stille Blindstelle**, und die Testhälfte fehlte ganz. Ihr erster Entwurf
-wurde vor dem Bau von zwei Prüfern zerlegt — Stufe B ist deshalb `tsc -b` (470 ms) statt
+wurde vor dem Bau von zwei Prüfern zerlegt — Stufe B ist deshalb `tsc -b --force` (470 ms) statt
 eines Suitenlaufs (72 s, hätte im belegten Fenster 0 von 1 Rot-Fällen gefangen).
 Steht am Ende unter „Fassung 4".
 **Stand (Fassung 3):** master `80e2e1d`, `v0.31.0` live, **23 offene Issues, 0 offene PRs**
@@ -678,11 +678,19 @@ Wer die Testhälfte nachrüstet, muss gegen dieses Argument antreten — nicht d
 Verengung ist nicht Geschmack, sie ist der Unterschied zwischen brauchbar und abschaltreif
 (Messung unten). Laufzeit **0 s**, kein neuer Zustand.
 
-**Stufe B — `gh pr create`: `tsc -b`, NICHT die Suiten.** Gemessen **470 ms**
-(`./node_modules/.bin/tsc -b --force`, zwei Läufe: 475/470 ms, Exit 0). Positivkontrolle
-gefahren: ein injizierter Typfehler in `src/lib/api.ts` ergibt Exit 1 mit `TS2322`, sauber
-zurückgespielt. `tsconfig.app.json:28` schliesst `src` ein — also **auch die Testdateien**,
-und genau dort sass der einzige gemessene Rot-Fall.
+**Stufe B — `gh pr create`: `tsc -b --force`, NICHT die Suiten.** Gemessen **470 ms** im
+Arbeitsverzeichnis `webtool/frontend` (`./node_modules/.bin/tsc -b --force`, zwei Läufe:
+475/470 ms, Exit 0). Positivkontrolle gefahren: ein injizierter Typfehler in `src/lib/api.ts`
+ergibt Exit 1 mit `TS2322`, sauber zurückgespielt. `tsconfig.app.json:28` schliesst `src` ein
+— also **auch die Testdateien**, und genau dort sass der einzige gemessene Rot-Fall.
+
+**`--force` ist Bestandteil des Aufrufs, nicht der Messung** (CodeRabbit-Bot, berechtigt: der
+Text nannte zuerst `tsc -b`, gemessen war `--force`). Ohne das Flag gälte `tsbuildinfo`
+(liegt unter `node_modules/.tmp/`), und der Guard hätte genau die Stale-Cache-Klasse, die
+unten als „gibt es nicht" ausgeschlossen wird — ein Wächter, der grün meldet, weil er einen
+alten Stand wiederverwendet. Der Preis ist die volle statt der inkrementellen Prüfung; bei
+470 ms ist er keiner. *(`package.json:6–12` fährt im Build-Skript `tsc -b` ohne `--force` —
+dort ist der Cache erwünscht, das ist ein anderer Zweck.)*
 
 **Warum nicht die Suiten — der Grund ist eine Messung, kein Geschmack.** Im belegten Fenster
 (2026-08-20 bis 08-22, `gh run list`): **136 pull_request-Läufe über 28 PR-Branches, 131 grün,
@@ -821,7 +829,7 @@ eigener Posten in B2b′-1, kein Nebensatz.
 | PR | Inhalt | Schliesst |
 |---|---|---|
 | **B2b′-1** Wächter-Instandsetzung | Spiegel-Import · Erkenner-Lib (nur Erkennung) · **7. Härtungsdimension** · #331 · #334 · #324 · PowerShell-Verdrahtung | **3 Issues** |
-| **B2b′-2** Code-Guard | Stufe A (`fix`/`feat`) + Stufe B (`tsc -b`) + Selbsttest-Erweiterung | 0 (neue Fähigkeit) |
+| **B2b′-2** Code-Guard | Stufe A (`fix`/`feat`) + Stufe B (`tsc -b --force`) + Selbsttest-Erweiterung | 0 (neue Fähigkeit) |
 
 **Das Kontingent-Argument für den Split wird gestrichen.** Es lautete, ein grosser PR erzeuge
 mehr Befundrunden — das war die **einzige ungemessene Behauptung** in einem Abschnitt, der mit
@@ -913,7 +921,7 @@ Damit die Zahlen nicht über Zitate weiterleben:
 |---|---|
 | „4 Sperren / 80 Commits, Positivkontrolle bestanden" | **1 echter Treffer, 2 Fehlalarme, 1 Artefakt.** Der Klassifikator kannte `.test.js` nicht und zählte `electron/updater.test.js` über `electron/.*\.js` sogar als **Quellcode** |
 | „Der Wächter hätte bei #318 angehalten" | **`b241a175` trägt seinen Test im selben Commit** (`electron/updater.test.js`, +55). Er hätte nicht angehalten — und #318s Lücke (Lauf am gepackten Mac-Ziel) steht auf der planeigenen „prüft NICHT"-Liste |
-| Stufe B = `pytest` + `vitest`, 72 s | **`tsc -b`, 470 ms.** Die Suiten hätten im belegten Fenster **0 von 1** Rot-Fällen gefangen; der eine war ein tsc-Fehler |
+| Stufe B = `pytest` + `vitest`, 72 s | **`tsc -b --force`, 470 ms.** Die Suiten hätten im belegten Fenster **0 von 1** Rot-Fällen gefangen; der eine war ein tsc-Fehler |
 | „Hook-Zeitgrenze von 10 s auf 180 s" | **Entfällt.** Die Obergrenze war ohnehin nicht belegbar, und der Timeout steht **je Hook-Kommando** — pauschal gehoben hätte er auch `routing-sperre` auf 180 s gestellt |
 | „läuft NACH `routing-sperre.sh`" | **Nicht herstellbar** — passende Hooks laufen parallel |
 | „#331 fällt bei der Lib-Extraktion ab" | **Widerlegt.** `-c` steht ZWISCHEN den Befehlswörtern; keine der sechs Runden kennt diese Klasse. Es braucht eine siebte |
