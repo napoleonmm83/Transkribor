@@ -31,6 +31,7 @@ import { describe, it, expect } from 'vitest'
 import { render } from '@testing-library/react'
 import { createElement } from 'react'
 import { ScrollArea } from './components/ui/scroll-area'
+import { Command, CommandList } from './components/ui/command'
 
 /** Was einen Behaelter zum Bezugsrahmen macht — dieselbe Liste wie im Hüllen-Test. */
 const ANKER = ['relative', 'absolute', 'fixed', 'sticky']
@@ -102,15 +103,30 @@ describe('Quellbaum: jeder Bildlaufbehaelter hat einen Bezugsrahmen (#209)', () 
  * jsdom rechnet kein Layout — die WIRKUNG ist hier nicht pruefbar, sie ist im Browser
  * gemessen (Zahlen oben). Hier steht, woran sie haengt.
  */
-describe('Radix-ScrollArea: der Viewport traegt den Anker selbst', () => {
-  it('der gerenderte Viewport hat eine Anker-Klasse', () => {
+/** Traegt der gerenderte Knoten eine Anker-Klasse? Positivkontrolle inklusive: ein
+ *  fehlender Knoten (umbenannte Fremd-Marke) macht rot statt still gruen. */
+function ankerPruefen(container: HTMLElement, selektor: string) {
+  const el = container.querySelector(selektor)
+  expect(el, `kein Knoten fuer ${selektor}`).not.toBeNull()
+  const klassen = (el!.className || '').split(/\s+/)
+  expect(klassen.filter(k => ANKER.includes(k))).not.toEqual([])
+}
+
+describe('Fremdkomponenten mit Laufzeit-overflow tragen den Anker selbst', () => {
+  it('Radix-ScrollArea: der Viewport', () => {
     const { container } = render(
       createElement(ScrollArea, null, createElement('p', null, 'Inhalt')),
     )
-    const viewport = container.querySelector('[data-radix-scroll-area-viewport]')
-    // Positivkontrolle: ohne sie waere eine umbenannte Radix-Marke ein gruener Test.
-    expect(viewport).not.toBeNull()
-    const klassen = (viewport!.className || '').split(/\s+/)
-    expect(klassen.filter(k => ANKER.includes(k))).not.toEqual([])
+    ankerPruefen(container, '[data-radix-scroll-area-viewport]')
+  })
+
+  // cmdk setzt sein `overflow` zwar als KLASSE, aber in `cn(…)` — der Scanner oben sieht
+  // Zeichenketten nur direkt am Attribut (#366). Bis der geschlossen ist, haengt der Anker
+  // von `CommandList` an dieser Zusicherung und an nichts sonst.
+  it('cmdk: die CommandList', () => {
+    const { container } = render(
+      createElement(Command, null, createElement(CommandList, null, createElement('div', null, 'x'))),
+    )
+    ankerPruefen(container, '[data-slot="command-list"]')
   })
 })
