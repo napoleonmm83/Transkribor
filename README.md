@@ -532,9 +532,7 @@ Was du damit tust:
   reicht meist.
 
 **Gelb oder rot — der Unterschied sagt dir, wo du suchen musst.** Gelb heisst: der Lauf ist
-durchgelaufen, einzelne Aufnahmen sind dabei liegengeblieben — such bei diesen Aufnahmen. Das
-gilt auch, wenn es alle erwischt hat („5 von 5 fehlgeschlagen“): die Zahlen werden grösser, die
-Farbe bleibt.
+durchgelaufen, einzelne Aufnahmen sind dabei liegengeblieben — such bei diesen Aufnahmen.
 
 Eine **rote** Meldung heisst: der Lauf als Ganzes ist gescheitert. Entweder konnte er gar nicht
 arbeiten — das Spracherkennungs-Modell liess sich nicht laden, der KI-Dienst war nicht

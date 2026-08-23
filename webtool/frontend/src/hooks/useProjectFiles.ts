@@ -57,5 +57,21 @@ export function useProjectFiles(project: string) {
   // `loading` muss mit: sonst zeigt die Luecke „Noch keine Dateien" — eine Tatsachenbehauptung
   // ueber ein Projekt, von dem noch nichts bekannt ist.
   useEffect(() => { setFiles([]); setFehler(false); setLoading(true); refresh() }, [refresh])
-  return { files, loading, fehler, refresh }
+  // Der Zwischenrender: `project` hat gewechselt, der Effekt darunter hat aber noch nicht
+  // geleert (React fuehrt Effekte NACH dem Rendern aus). In genau diesem einen Durchgang gibt
+  // der Hook sonst die Dateien des VERLASSENEN Projekts unter dem neuen Namen heraus — und
+  // seine Verbraucher pruefen das nicht nach (`ProjectWorkspace` rendert die Liste, die
+  // Seitenleiste reicht sie als Dateien des neuen Projekts weiter).
+  //
+  // `angefragt` traegt, wofuer der zuletzt gestartete Ladevorgang galt; es wird in `refresh`
+  // gesetzt, also im Effekt — waehrend des Zwischenrenders steht dort noch das alte Projekt.
+  // Der Vergleich ist damit genau die Frage „gehoert dieser Zustand zu dem, was ich anzeige?".
+  // Kein neuer State: derselbe Ref, der die verspaeteten Antworten schon aussortiert.
+  const passt = angefragt.current === project
+  return {
+    files: passt ? files : [],
+    loading: passt ? loading : true,
+    fehler: passt ? fehler : false,
+    refresh,
+  }
 }

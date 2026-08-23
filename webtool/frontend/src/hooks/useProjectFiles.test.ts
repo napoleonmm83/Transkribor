@@ -77,6 +77,33 @@ describe('useProjectFiles', () => {
     await waitFor(() => expect(result.current.files).toEqual([bDatei]))
   })
 
+  it('der ZWISCHENRENDER gibt keine Dateien des verlassenen Projekts heraus (Bot-Major)', async () => {
+    // React fuehrt Effekte NACH dem Rendern aus: zwischen „`project` hat gewechselt" und
+    // „der Effekt hat geleert" liegt GENAU EIN Durchgang, in dem der Hook den alten Zustand
+    // unter dem neuen Namen herausgibt. Seine Verbraucher pruefen das nicht nach —
+    // `ProjectWorkspace` rendert die Liste, die Seitenleiste reicht sie als Dateien des neuen
+    // Projekts weiter.
+    //
+    // Gemessen wird deshalb WAEHREND des Renderns, nicht danach: `rerender` spuelt die
+    // Effekte, der Endzustand ist also in beiden Faellen leer und taugt nicht als Sensor.
+    const gesehen: string[] = []
+    vi.mocked(api.getProjectFiles)
+      .mockResolvedValueOnce({ name: 'A', files: [datei] })
+      .mockImplementationOnce(() => new Promise(() => {}))     // B bleibt offen
+    const { result, rerender } = renderHook(({ p }) => {
+      const r = useProjectFiles(p)
+      gesehen.push(`${p}:${r.files.map(f => f.base).join('+') || '-'}`)
+      return r
+    }, { initialProps: { p: 'A' } })
+    await waitFor(() => expect(result.current.files).toEqual([datei]))
+
+    gesehen.length = 0
+    rerender({ p: 'B' })
+    // KEIN Durchgang darf B mit den Dateien von A zeigen.
+    expect(gesehen.filter(g => g.startsWith('B:') && g !== 'B:-')).toEqual([])
+    expect(gesehen.some(g => g === 'B:-')).toBe(true)          // Positivkontrolle: B wurde gerendert
+  })
+
   it('der Fehler des VERLASSENEN Projekts steht nicht ueber dem neuen (#377)', async () => {
     // Eigener Test statt einer Zusicherung im Wechsel-Test darueber: dort ist A erfolgreich,
     // `fehler` also ohnehin false — die Pruefung waere vacuous gewesen und das Entfernen von
@@ -94,10 +121,18 @@ describe('useProjectFiles', () => {
     // Gegenrichtung, und ohne sie waere der Fix ein Flackern: `refresh()` laeuft bei jedem
     // fertigen Job und bei jeder Aenderung im Summenpoll. Wuerde dort auch geleert, blinkte
     // die Liste im Betrieb staendig leer.
-    vi.mocked(api.getProjectFiles).mockResolvedValue({ name: 'A', files: [datei] })
+    let aufloesen: ((w: { name: string; files: ProjectFile[] }) => void) | undefined
+    vi.mocked(api.getProjectFiles)
+      .mockResolvedValueOnce({ name: 'A', files: [datei] })
+      .mockImplementationOnce(() => new Promise(r => { aufloesen = r }))
     const { result } = renderHook(() => useProjectFiles('A'))
     await waitFor(() => expect(result.current.files).toEqual([datei]))
+
+    // Die zweite Anfrage bleibt OFFEN — sonst misst der Test nur den Endzustand und bliebe
+    // gruen, selbst wenn `refresh` die Liste zwischendurch leerte (CodeRabbit-Bot).
     await act(async () => { result.current.refresh() })
+    expect(result.current.files).toEqual([datei])
+    await act(async () => { aufloesen?.({ name: 'A', files: [datei] }) })
     expect(result.current.files).toEqual([datei])
   })
 
