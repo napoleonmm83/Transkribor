@@ -111,8 +111,16 @@ DEFAULTS = {"provider": "claude-cli", "model": "", "base_url": "", "api_key": ""
             # treffen mehr Anfragen gleichzeitig ein (kein 429-Retry in `llm._request`).
             #
             # Der Default bleibt trotzdem 3 — nicht wegen der Kosten, sondern weil ein
-            # hoeherer Wert die Rate fuer JEDEN Bestandsnutzer aendern wuerde, auch fuer den
-            # mit knappem Fenster. Deshalb ein Regler, kein neuer Standard.
+            # hoeherer Wert die Rate fuer jeden Bestandsnutzer OHNE eigenen Wert aendern
+            # wuerde, auch fuer den mit knappem Fenster. (Wer TRANSKRIBOR_PARALLEL gesetzt
+            # hat, waere unberuehrt — die Variable gewinnt.) Deshalb ein Regler, kein neuer
+            # Standard.
+            #
+            # Wo "kostet nicht mehr" NICHT gilt, und das ist die ehrliche Einschraenkung:
+            # bei einem Fehlschlag mitten im Lauf (Abo-Fenster erreicht, Netz weg) sterben
+            # bei Deckel N bis zu N Aufrufe halbfertig statt einem. Teilverbrauchte Arbeit
+            # wird beim Nachholen erneut bezahlt — proportional zum Deckel. Klein, aber real.
+            # Gelungene Aufrufe schuetzt der Resume (`_valid_correction` + Teil-Dateien).
             "parallel": "3",
             "ytdlp_auto": "1"}
 
