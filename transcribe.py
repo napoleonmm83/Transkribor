@@ -465,7 +465,14 @@ def transcribe_project(name, model, language, only=None):
     # ist die Summe — nur sie laesst sich mit der Korrekturphase (`⏱ Phasen:` in correct.py)
     # vergleichen. Die Marke steht VOR dem Modell-Laden, denn die ~30 s fallen real an und
     # gehoeren zu dem, was der Nutzer wartet.
-    t_phase = time.time()
+    #
+    # `monotonic`, nicht `time.time()` — wie der Zwilling in correct.py. Ein
+    # NTP-Sprung waehrend eines langen Laufs macht die Differenz sonst negativ, und
+    # `max(dt_phase, 1)` unten druckt daraus einen absurden Faktor: eine falsche Zahl
+    # in genau der Zeile, die zum Messen gebaut ist. Die drei Stellen darunter
+    # (Einzeldauer je Datei) sind aus demselben Grund mitgezogen — dieselbe Frage an
+    # der Nachbarstelle.
+    t_phase = time.monotonic()
     n_ok = audio_gesamt = 0
     m = None if engine == "whisper.cpp" else _modell(model, device)
 
@@ -476,7 +483,7 @@ def transcribe_project(name, model, language, only=None):
             print(f"[{name}] skip (vorhanden): {base}", flush=True)
             continue
         print(f"[{name}] -> transkribiere {base} …", flush=True)
-        t0 = time.time()
+        t0 = time.monotonic()
         try:
             # Der ganze MPS-Rueckfall stand hier: Modell auf CPU neu laden, pruefen ob es an
             # MPS oder an der Datei lag, Geraet wiederherstellen. Mit CTranslate2 gibt es den
@@ -494,7 +501,7 @@ def transcribe_project(name, model, language, only=None):
         except Exception as e:
             print(f"[{name}] FEHLER {base}: {e}", flush=True)
             continue
-        dt = time.time() - t0
+        dt = time.monotonic() - t0
         # EINE Stelle fuer beide Engines: hier laufen der faster-whisper- und der
         # whisper.cpp-Pfad zusammen, und hier wird geschrieben. In `_transkribiere_datei`
         # stuende die Wache vor der Verzweigung — oder zweimal.
@@ -522,7 +529,7 @@ def transcribe_project(name, model, language, only=None):
 
     # Der Faktor gilt dem GANZEN Lauf, Modell-Ladezeit eingerechnet — er ist damit kleiner
     # als die Einzelwerte oben und genau deshalb der ehrliche Vergleichswert.
-    dt_phase = time.time() - t_phase
+    dt_phase = time.monotonic() - t_phase
     print(f"⏱ [{name}]: {n_ok} Datei(en) transkribiert in {dt_phase:.0f}s "
           f"(Audio {fmt(audio_gesamt)}, {audio_gesamt/max(dt_phase, 1):.1f}x)", flush=True)
     print(f"[{name}] -> {out_dir}", flush=True)
