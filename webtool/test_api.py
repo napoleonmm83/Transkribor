@@ -633,7 +633,7 @@ def test_settings_modellwechsel_behaelt_den_key(client):
                     # echte Zusicherung — ein dauerhaft gemeldetes Override waere ein
                     # Daueralarm und faellt genau hier auf.
                     "parallel": "3", "parallel_max": settings.PARALLEL_MAX,
-                    "parallel_default": "3", "parallel_env": "",
+                    "parallel_default": "3", "parallel_env": "", "parallel_env_wirksam": "",
                     # "" = es liegt keine beiseitegelegte Einstellungsdatei (#192)
                     "ytdlp_auto": "1", "kaputt": "",
                     # Der Normalfall (#194) — und zugleich die Gegenprobe zum Test unten:
@@ -658,8 +658,8 @@ def test_settings_rumpf_traegt_alle_felder_die_das_frontend_tippt(client):
         "providers", "env_key", "whisper_choices", "ai_ready", "ai_reason",
         # wo die Arbeit des Nutzers liegt (#218)
         "projekte_pfad",
-        # ob TRANSKRIBOR_PARALLEL den gespeicherten Deckel ueberstimmt
-        "parallel_env",
+        # ob TRANSKRIBOR_PARALLEL den gespeicherten Deckel ueberstimmt (roh + wirksam)
+        "parallel_env", "parallel_env_wirksam",
         "ytdlp"}
 
 

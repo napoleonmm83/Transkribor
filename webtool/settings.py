@@ -282,19 +282,36 @@ def public(cfg: dict = None) -> dict:
 PARALLEL_ENV = "TRANSKRIBOR_PARALLEL"
 
 
+def parallel_wirksam(roh) -> int:
+    """Aus einem rohen Wert die Zahl der Slots, die WIRKLICH gilt — die EINE Quelle dafuer.
+
+    `correct.py` hatte diese Rechnung inline; damit stand die Klemmung an einer Stelle und
+    `PARALLEL_MAX` behauptete daneben, die Grenze fuer alle Wege zu sein. Aufgefallen ist es
+    an der Anzeige: solange der Umgebungs-Weg UNGEKLEMMT war, war der rohe Wert auch der
+    wirksame, und die Einstellungsseite durfte ihn so nennen. Mit der Klemmung wurde
+    derselbe Satz falsch — bei `200` gelten 16. Ein Fix, der die Nachbarstelle zur Luege
+    macht (CodeRabbit-CLI).
+
+    Rueckfall 3 bei allem Unlesbaren, Untergrenze 1 — beides wie bisher in `correct.py`.
+    """
+    try:
+        return max(1, min(int(str(roh).strip()), PARALLEL_MAX))
+    except (TypeError, ValueError):
+        return int(DEFAULTS["parallel"])
+
+
 def parallel_env() -> str:
-    """Der Wert der Umgebungsvariable, wenn sie den gespeicherten Deckel ueberstimmt — sonst "".
+    """Der ROHE Wert der Umgebungsvariable, wenn sie den gespeicherten Deckel ueberstimmt.
 
     Ohne diese Auskunft ist der Regler auf der Einstellungsseite ein TOTER SCHALTER MIT
     BESTAETIGUNGSTON: `job_env()` laesst eine gesetzte Variable gewinnen, der Nutzer stellt
-    16 ein, sieht 16 und laeuft weiter auf dem `.env`-Wert. Dasselbe Paar wie
-    `ytdlp_auto` (gespeichert) neben `ytdlp.auto` (wirksam) — und hier noetiger als dort,
-    weil `.env.example` die Variable seit demselben Diff ausdruecklich ANBIETET.
+    16 ein, sieht 16 und laeuft weiter auf dem `.env`-Wert. Dasselbe Paar wie `ytdlp_auto`
+    (gespeichert) neben `ytdlp.auto` (wirksam) — und hier noetiger als dort, weil
+    `.env.example` die Variable seit demselben Diff ausdruecklich ANBIETET.
 
-    Geliefert wird der ROHE String, nicht der wirksame Slot-Wert: `correct.py` faengt einen
-    Tippfehler mit einem Rueckfall auf 3 ab, und diese Logik ein zweites Mal hinzuschreiben
-    waere die Divergenz, gegen die PARALLEL_MAX die eine Quelle sein soll. Wer `viele` in
-    seine `.env` schreibt, soll `viele` lesen.
+    ROH, weil der Nutzer wiederfinden soll, was er selbst geschrieben hat; was daraus
+    wirklich wird, sagt `parallel_wirksam()`. Die Oberflaeche zeigt beides, sobald sie
+    auseinanderfallen.
     """
     return os.environ.get(PARALLEL_ENV) or ""
 

@@ -399,6 +399,27 @@ def test_umgebungsvariable_wird_auf_PARALLEL_MAX_geklemmt(gesetzt, erwartet, mon
                        capture_output=True, text=True, env=umgebung, cwd=paths.ROOT)
     assert r.returncode == 0, r.stderr
     assert r.stdout.strip() == erwartet
-    # Geklemmt wird LAUT: eine stille Aenderung waere derselbe tote Schalter wie das
-    # ueberstimmte Feld — der Nutzer schreibt eine Zahl hin und bekaeme eine andere.
-    assert ("liegt ueber der Grenze" in r.stderr) is (gesetzt == "200")
+    # Gemeldet wird LAUT und bei JEDER Abweichung, nicht nur bei Ueberschreitung: eine
+    # stille Aenderung waere derselbe tote Schalter wie das ueberstimmte Feld — der Nutzer
+    # schreibt eine Zahl hin und bekaeme eine andere. Die Gegenrichtung steht mit im
+    # Parameter-Satz: bei "8" (unveraendert) darf NICHTS gemeldet werden, sonst waere es
+    # ein Daueralarm.
+    assert ("nicht der wirksame Wert" in r.stderr) is (gesetzt != erwartet)
+
+
+@pytest.mark.parametrize("roh,erwartet", [
+    ("8", 8), ("1", 1), (str(settings.PARALLEL_MAX), settings.PARALLEL_MAX),
+    ("200", settings.PARALLEL_MAX),      # geklemmt
+    ("0", 1), ("-5", 1),                 # Untergrenze
+    ("viele", 3), ("", 3), (None, 3),    # Rueckfall
+    ("  6  ", 6),                        # handgeschrieben, mit Leerraum
+])
+def test_parallel_wirksam_ist_die_eine_rechnung(roh, erwartet):
+    """`correct.py` hatte diese Rechnung inline — damit stand die Klemmung an EINER Stelle,
+    waehrend PARALLEL_MAX daneben behauptete, die Grenze fuer alle Wege zu sein.
+
+    Aufgefallen ist es an der ANZEIGE: solange der Umgebungs-Weg ungeklemmt war, war der
+    rohe Wert auch der wirksame, und die Einstellungsseite durfte ihn so nennen. Mit der
+    Klemmung wurde derselbe Satz falsch (200 ⇒ 16). Ein Fix, der die Nachbarstelle zur
+    Luege macht — gefunden von der CodeRabbit-CLI."""
+    assert settings.parallel_wirksam(roh) == erwartet

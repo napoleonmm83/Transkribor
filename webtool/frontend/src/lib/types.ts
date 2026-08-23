@@ -157,10 +157,14 @@ export type Settings = {
   /** Ausgangswert (settings.DEFAULTS), nur zur Markierung im Auswahlmenü. Aus demselben
    *  Grund vom Server wie `parallel_max`. */
   parallel_default: string;
-  /** Der Wert von `TRANSKRIBOR_PARALLEL`, wenn die Variable den gespeicherten Deckel
-   *  überstimmt — sonst `''`. Nicht-leer heisst: der Regler daneben ist wirkungslos.
+  /** Der EINGETRAGENE Wert von `TRANSKRIBOR_PARALLEL`, wenn die Variable den gespeicherten
+   *  Deckel überstimmt — sonst `''`. Nicht-leer heisst: der Regler daneben ist wirkungslos.
    *  Ohne dieses Feld wäre er ein toter Schalter mit Bestätigungston. */
   parallel_env: string;
+  /** Was aus `parallel_env` wirklich wird (`''`, wenn kein Override). Kann abweichen: `200`
+   *  wird auf 16 geklemmt, `viele` fällt auf 3 zurück. Der eingetragene Wert allein wäre
+   *  als Wirksamkeitsangabe falsch. */
+  parallel_env_wirksam: string;
   ai_ready: boolean; ai_reason: string;
   /** Der GESPEICHERTE Schalter ("1"/"0"). Was tatsächlich gilt, steht in `ytdlp.auto` —
    *  eine gesetzte Umgebungsvariable überstimmt die Datei. */
