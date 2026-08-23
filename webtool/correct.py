@@ -56,11 +56,19 @@ _ROH_PARALLEL = os.environ.get("TRANSKRIBOR_PARALLEL") or ""
 # PARALLEL_MAX die eine Quelle sein soll. Ein Tippfehler faellt dort auf 3 zurueck, statt
 # den Korrekturlauf zu killen.
 CLAUDE_PARALLEL = settings.parallel_wirksam(_ROH_PARALLEL or "3")
-if _ROH_PARALLEL and str(CLAUDE_PARALLEL) != _ROH_PARALLEL.strip():
-    # NICHT still: der Nutzer hat eine Zahl hingeschrieben und bekommt eine andere.
-    print(f"TRANSKRIBOR_PARALLEL={_ROH_PARALLEL!r} ist nicht der wirksame Wert — "
-          f"nehme {CLAUDE_PARALLEL} (erlaubt 1…{settings.PARALLEL_MAX})",
-          file=sys.stderr, flush=True)
+if _ROH_PARALLEL:
+    # Verglichen wird die ZAHL, nicht die Zeichenkette: `"03"` und `"+3"` ergeben beide 3,
+    # ein Textvergleich meldete dort eine Abweichung, die es nicht gibt (CodeRabbit-CLI).
+    # Ein nicht lesbarer Wert IST eine Abweichung — dort greift der Rueckfall auf 3.
+    try:
+        _weicht_ab = int(_ROH_PARALLEL) != CLAUDE_PARALLEL
+    except ValueError:
+        _weicht_ab = True
+    if _weicht_ab:
+        # NICHT still: der Nutzer hat eine Zahl hingeschrieben und bekommt eine andere.
+        print(f"TRANSKRIBOR_PARALLEL={_ROH_PARALLEL!r} ist nicht der wirksame Wert — "
+              f"nehme {CLAUDE_PARALLEL} (erlaubt 1…{settings.PARALLEL_MAX})",
+              file=sys.stderr, flush=True)
 _claude_slots = threading.Semaphore(CLAUDE_PARALLEL)
 _CREATE_NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 
