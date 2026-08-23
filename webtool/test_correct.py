@@ -741,8 +741,9 @@ def test_der_treue_pass_laeuft_ueber_dateien_hinweg_PARALLEL(project, monkeypatc
 
     Der Wächter daneben (`test_parallel_calls_stay_under_the_global_cap`) faehrt mit
     `verify=False` und sagt darueber NICHTS. Ohne diesen Test waere die Zusicherung „der
-    Treue-Pass wird mitparallelisiert" eine Behauptung — und sie steht seit der
-    Tempo-Messung in der README.
+    Treue-Pass wird mitparallelisiert" eine Behauptung — und auf ihr steht die gemessene
+    Beschleunigung in `docs/superpowers/plans/2026-08-23-parallelisierung.md` (5.4), deren
+    Ketten je Datei Korrektur UND Verify enthalten.
 
     Gemessen wird, dass zwei VERIFY-Aufrufe gleichzeitig unterwegs sind. Innerhalb EINER
     Datei geht das nicht (Verify braucht das Ergebnis der Korrektur); ueber zwei Dateien

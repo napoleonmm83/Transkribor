@@ -181,10 +181,15 @@ werden, hängt an der Zahl deiner Aufnahmen, nicht an dieser Einstellung. Was si
 ist das Tempo: nutzt du ein Abo von Claude oder ChatGPT, kann ein Nutzungslimit dadurch
 früher greifen, und bei einem eigenen Schlüssel treffen mehr Anfragen gleichzeitig ein.
 
-Gemessen an vier Aufnahmen: mit drei Anfragen gleichzeitig statt einer war dasselbe Projekt
-**gut dreimal so schnell** fertig (14 Minuten gegen 4). Der Gewinn wächst mit der Zahl der
-Aufnahmen — bei einer einzelnen langen Datei bringt ein höherer Wert wenig. Wer regelmässig
-zehn oder mehr Aufnahmen auf einmal verarbeitet, ist mit acht gut bedient.
+Gemessen an vier Aufnahmen: mit **vier** Anfragen gleichzeitig statt einer war dasselbe
+Projekt **gut dreimal so schnell** fertig (14 Minuten gegen 4). Der Gewinn wächst mit der
+Menge — mehrere Aufnahmen laufen nebeneinander, und eine lange Aufnahme wird intern
+ohnehin in Abschnitte geteilt, die sich ebenfalls verteilen. Wenig bringt der Regler nur
+bei einer einzelnen **kurzen** Datei: da gibt es nichts zu verteilen.
+
+Geht dabei etwas schief — das Netz weg, ein Limit erreicht —, ist keine Arbeit verloren:
+die betroffene Aufnahme wird übersprungen, und ein erneuter Lauf holt genau sie nach.
+Was schon fertig war, wird nicht noch einmal berechnet.
 
 <img src="docs/bilder/editor-hell.png" alt="Derselbe Editor im hellen Design: Zusammenfassung des Gesprächs, Redebeiträge mit Sprechernamen und Zeitmarken, unten die Wellenform mit Wiedergabe.">
 
