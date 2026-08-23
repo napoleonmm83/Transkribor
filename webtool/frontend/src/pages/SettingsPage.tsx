@@ -243,6 +243,8 @@ export function SettingsPage() {
   // fiele und die Obergrenze wirkungslos waere (derselbe Mechanismus, wegen dessen der Poll
   // oben nicht an `s.ytdlp.laeuft` haengen darf).
   const settingsStand = useRef(0)
+  // Laufende Nummer der Speichervorgaenge — ordnet sie untereinander (siehe `speichern`).
+  const speicherLauf = useRef(0)
   // Drei Wege enden in einer Meldung über denselben Lauf: der Poll, der Direktstart in
   // `ytJetzt` und die Obergrenze. Seit #236 erzeugt jeder Durchlauf bis zu ZWEI Toasts
   // (Erfolg und die Warnung „ohne Sperre") — doppelt gemeldet wären das vier für einen
@@ -322,6 +324,16 @@ export function SettingsPage() {
     // der Nutzer klickt erneut. Die Wurzel (der Timeout) ist BENANNT, nicht behoben: ein
     // kürzerer Timeout würde gesunde Anmeldungen abschneiden.
     setSpeichert(n => n + 1)
+    // Wer von mehreren gleichzeitigen Speicherlaeufen der JUENGSTE ist. Der Zaehler daneben
+    // (`speichert`) beantwortet nur „laeuft ueberhaupt einer" und ordnet sie NICHT.
+    //
+    // Der PUT liefert seit #239 den vollstaendigen `Settings`-Rumpf, und `setS(neu)` setzte
+    // ihn unbedingt: kommt ein AELTERER Lauf nach einem juengeren zurueck, stand danach der
+    // alte Wert in der Oberflaeche — gespeichert war der neue, angezeigt der Vorgaenger.
+    // Erreichbar ueber zwei Feldwechsel in Folge (der Kommentar an `speichert` beschreibt
+    // genau das) und seit dem Tempo-Select noch leichter: zwei Klicks brauchen keinen Blur.
+    // Dieselbe Technik wie `fassung` in useDoc.ts und der `angewandt`-Riegel des Polls.
+    const meinLauf = ++speicherLauf.current
     try {
       // Ersetzen, nicht zusammenführen — seit #239 liefert der PUT denselben vollständigen
       // Rumpf wie der GET. Vorher stand hier ein `{...cur, ...neu}`, das die fünf fehlenden
@@ -334,8 +346,15 @@ export function SettingsPage() {
       // gespeicherten Wert wieder zurueck. Sein `angewandt`-Riegel deckt das NICHT: der ordnet
       // nur Poll-Runden untereinander, und der Konkurrent ist hier `speichern`, keine Runde.
       // (CodeRabbit-CLI an PR #255, Major.)
+      // Der Stand wird IMMER hochgezaehlt, auch von einem ueberholten Lauf: er hat wirklich
+      // geschrieben, und der Poll (#252) muss seine aeltere Antwort danach verwerfen.
       settingsStand.current += 1
-      setS(neu)
+      // `setS` dagegen NUR vom juengsten — sonst zieht die Antwort von eben den Wert von
+      // vorhin zurueck in die Anzeige.
+      if (meinLauf === speicherLauf.current) setS(neu)
+      // `danach` und die Warnung unten bleiben UNBEDINGT: beide gelten diesem einen
+      // Schreibvorgang („Key gespeichert", „ohne Schreibsperre geschrieben") und waeren als
+      // Auskunft ueber ihn auch dann wahr, wenn inzwischen ein weiterer losgelaufen ist.
       danach?.()
       if (ungeschuetzt) toast.warning(
         'Gespeichert — aber ohne Schreibsperre. Hat in derselben Sekunde etwas anderes '
