@@ -164,6 +164,28 @@ describe('mergePhases', () => {
     expect(mergePhases([c, t]).active.A).toEqual({ phase: 'transcribe', pct: 20 })
   })
 
+  it('kollidieren zwei TERMINALE Ausgaenge, gewinnt der schwerere — in BEIDEN Reihenfolgen (#377)', () => {
+    // Hier stand ein `Object.assign`, also „der spaetere Job im Array gewinnt". Die
+    // Reihenfolge ist aber nicht zufaellig, sondern systematisch die schlechte: `jobs.py`
+    // sortiert `active_for` nach `kind` (correct vor transcribe), und ein Transkriptionslauf
+    // druckt beim Start fuer JEDE bereits transkribierte Datei `skip (vorhanden)` -> 'skipped'.
+    // Sein harmloses 'skipped' ueberschrieb damit jedes 'failed' des parallel laufenden
+    // Korrekturlaufs — genau das Signal, das am wenigsten verschwinden darf.
+    const c = job('j1', 'correct', { global: null, active: {}, perBase: { A: 'failed' } })
+    const t = job('j2', 'transcribe', { global: null, active: {}, perBase: { A: 'skipped' } })
+    expect(mergePhases([c, t]).perBase.A).toBe('failed')   // die echte Adoptionsreihenfolge
+    expect(mergePhases([t, c]).perBase.A).toBe('failed')   // und die Gegenrichtung
+  })
+
+  it('zwischen done und skipped gewinnt done', () => {
+    // Zweite Haelfte der Rangfolge, eigener Test: ein `RANG`, der NUR 'failed' heraushebt,
+    // liesse den Rest weiter an der Reihenfolge haengen und bliebe oben gruen.
+    const a = job('j1', 'correct', { global: null, active: {}, perBase: { A: 'done' } })
+    const b = job('j2', 'transcribe', { global: null, active: {}, perBase: { A: 'skipped' } })
+    expect(mergePhases([a, b]).perBase.A).toBe('done')
+    expect(mergePhases([b, a]).perBase.A).toBe('done')
+  })
+
   it('global gilt nur, solange keine Datei laeuft', () => {
     expect(mergePhases([job('j1', 'correct', { global: 'glossary', active: {}, perBase: {} })]).global)
       .toBe('glossary')

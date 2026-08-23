@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { getJob } from '@/lib/api'
 import { parseJobPhases } from '@/lib/jobPhases'
-import type { JobPhases } from '@/lib/types'
+import type { FileState, JobPhases } from '@/lib/types'
 
 export type Job = { id: string; project: string; kind: string; status: string; phases: JobPhases }
 type Ctx = {
@@ -15,15 +15,32 @@ type Ctx = {
 const EMPTY: JobPhases = { global: null, active: {}, perBase: {} }
 const JobContext = createContext<Ctx | null>(null)
 
+/** Schwere der Endzustaende. Ein Fehlschlag darf NIE von etwas Harmlosem verdeckt werden;
+ *  zwischen 'done' und 'skipped' gewinnt 'done', weil "in diesem Lauf gemacht" mehr aussagt
+ *  als "es gab nichts zu tun". */
+const RANG: Record<FileState, number> = { failed: 3, done: 2, skipped: 1 }
+
 /** Transkription und Korrektur duerfen gleichzeitig laufen (jobs.py: Dedupe je Projekt UND Art),
  *  also mehrere Jobs zusammenfuehren. NUR Jobs EINES Projekts hineingeben — `active` ist nach
  *  Basisnamen indiziert, und derselbe Basisname existiert durchaus in mehreren Projekten.
  *
- *  Zwei Regeln, ohne die die Anzeige von der Job-Reihenfolge abhinge:
+ *  Drei Regeln, ohne die die Anzeige von der Job-Reihenfolge abhinge:
  *  - Ein perBase-Eintrag weicht, wenn dieselbe Datei in einem anderen Job gerade laeuft — sonst
  *    maskiert das 'Fertig' der Transkription die laufende Korrektur (FileStatusPill prueft state zuerst).
  *  - Kollidieren zwei aktive Phasen auf derselben Datei, gewinnt 'transcribe': dann wird das
- *    Transkript gerade ersetzt, und die Korrektur arbeitet auf gleich veralteten Daten. */
+ *    Transkript gerade ersetzt, und die Korrektur arbeitet auf gleich veralteten Daten.
+ *  - Kollidieren zwei TERMINALE Ausgaenge, gewinnt der schwerere (`RANG`). Hier stand ein
+ *    `Object.assign`, also "der spaetere Job im Array" — und diese Reihenfolge ist nicht
+ *    zufaellig, sondern systematisch die schlechte: `jobs.py:273` sortiert `active_for` nach
+ *    `kind`, also `correct` vor `transcribe`, und `useProjektDaten` adoptiert in dieser
+ *    Reihenfolge. Ein Transkriptionslauf druckt beim Start fuer JEDE bereits transkribierte
+ *    Datei `skip (vorhanden)` — womit sein 'skipped' jedes 'failed' des parallelen
+ *    Korrekturlaufs ueberschrieb. Gemessen an genau dieser Paarung, beide Richtungen.
+ *
+ *  `global` bleibt reihenfolgeabhaengig (`?? `) und ist es bewusst: die globalen Phasen sind
+ *  keine Rangfolge ("Glossar" ist nicht schwerer als "Vorbereiten"), und der erste laufende
+ *  Job ist die naheliegendste Auskunft. Der Satz "ohne die Regeln haenge die Anzeige von der
+ *  Reihenfolge ab" galt hier nie — er stand trotzdem da. */
 export function mergePhases(jobs: Job[]): JobPhases {
   const active: JobPhases['active'] = {}
   const perBase: JobPhases['perBase'] = {}
@@ -33,7 +50,10 @@ export function mergePhases(jobs: Job[]): JobPhases {
       if (base in active && j.kind !== 'transcribe') continue
       active[base] = work
     }
-    Object.assign(perBase, j.phases.perBase)
+    for (const [base, zustand] of Object.entries(j.phases.perBase)) {
+      const da = perBase[base]
+      if (!da || RANG[zustand] > RANG[da]) perBase[base] = zustand
+    }
     global = global ?? j.phases.global
   }
   for (const base of Object.keys(active)) delete perBase[base]
