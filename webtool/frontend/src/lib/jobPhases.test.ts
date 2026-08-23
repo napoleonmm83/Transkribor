@@ -5,7 +5,11 @@ describe('parseJobPhases — correct', () => {
   it('aktive Datei + Phase, sequentiell', () => {
     const p = parseJobPhases('correct', [
       "run: 3 Datei(en) in Projekt 'Demo'",
-      '→ Diarisiere A …', '→ Diarisiere B …', 'diarize: 2 Datei(en) diarisiert',
+      '→ Diarisiere A …', '→ Diarisiere B …',
+      // MIT Dauer-Anhang — genau so druckt correct.py die Zeile seit der Phasenmessung.
+      // Vorher stand hier die Form ohne Anhang, und der Test wäre gegen einen $-Anker
+      // im Regex blind geblieben, während die Produktion längst anders druckt.
+      'diarize: 2 Datei(en) diarisiert in 45s',
       'prep: 3 Datei(en) getaggt in /x',
       '→ Glossar (gemeinsame Namen/Begriffe) …', '✓ Glossar: 4 Eigennamen, 2 Korrekturen',
       '→ Korrigiere A …', 'apply: A -> edit.json + md (12 Segmente)',
@@ -15,6 +19,55 @@ describe('parseJobPhases — correct', () => {
     expect(p.perBase).toEqual({ A: 'done' })
     expect(p.global).toBeNull()
   })
+  it('der Dauer-Anhang beendet die Diarisierungs-Phase weiterhin', () => {
+    // Der Wächter für den stdout-Vertrag: `correct.py` haengt seit der Phasenmessung
+    // ` in 45s` an diese Zeile an, und `/^diarize: \d+ Datei/` darf deshalb keinen
+    // $-Anker bekommen. Sonst bliebe die Anzeige waehrend `cmd_prep` auf „Diarisiere A"
+    // stehen, obwohl die Diarisierung fertig ist.
+    //
+    // Der Schnitt endet ABSICHTLICH vor dem ersten `→ Korrigiere`: das setzt `active[A]`
+    // neu und macht die Wirkung dieser Zeile unsichtbar. Genau daran war der erste Versuch
+    // dieses Tests vacuous — die Mutation (mit $-Anker) blieb gruen, gemessen.
+    const p = parseJobPhases('correct', [
+      '→ Diarisiere A …', '⏱ A: Diarisierung 45s',
+      'diarize: 1 Datei(en) diarisiert in 45s',
+    ])
+    expect(p.active).toEqual({})
+    expect(p.global).toBeNull()
+  })
+
+  it('die ⏱-Messzeilen aendern nichts am geparsten Zustand', () => {
+    // Die Phasenmessung druckt drei neue Zeilenarten. Keine davon darf ein Datei-Ereignis
+    // ausloesen: `⏱ A: …` sieht `→ Diarisiere A …` aehnlich genug, dass ein spaeter
+    // gelockerter Regex sie fangen koennte, und `⏱ A · Block 1/2: …` steht dem
+    // Block-Fortschritt `[✓✗↷] A · Block n/m …` sehr nahe — faenge er sie, zaehlte der
+    // Balken den Block DOPPELT und schoesse ueber 100 %.
+    //
+    // Verglichen wird gegen den Lauf OHNE die Messzeilen, nicht gegen ein hingeschriebenes
+    // Ergebnis: so bleibt der Test gueltig, wenn sich am Parser sonst etwas aendert, und er
+    // misst genau die eine Eigenschaft, um die es geht — dass die Zeilen folgenlos sind.
+    const ohne = [
+      '→ Diarisiere A …', 'diarize: 1 Datei(en) diarisiert in 45s',
+      'A: 300 Segmente → 2 Blöcke',
+      '→ Korrigiere A · Block 1/2 …', '✓ A · Block 1/2 fertig',
+    ]
+    const mit = [
+      '→ Diarisiere A …', '⏱ A: Diarisierung 45s', 'diarize: 1 Datei(en) diarisiert in 45s',
+      'A: 300 Segmente → 2 Blöcke',
+      '→ Korrigiere A · Block 1/2 …', '⏱ A · Block 1/2: Korrektur 82s, Verify 61s',
+      '✓ A · Block 1/2 fertig',
+      '⏱ Phasen: diarisieren 45s · vorbereiten 1s · glossar 30s · korrigieren 620s · '
+        + 'gesamt 696s (parallel=3)',
+    ]
+    expect(parseJobPhases('correct', mit)).toEqual(parseJobPhases('correct', ohne))
+    // Positivkontrolle: der Vergleich oben waere auch dann gruen, wenn BEIDE Laeufe nichts
+    // ergaeben. `0/2` und nicht `1/2`, obwohl Block 1 fertig gemeldet ist: `prog()` wird beim
+    // Betreten der Phase ausgewertet (`→ Korrigiere`), ein spaeteres `✓ fertig` rechnet den
+    // Eintrag nicht nach. Beim Messen dieses Tests aufgefallen — hier festgehalten, damit der
+    // naechste Leser es nicht fuer einen Tippfehler haelt.
+    expect(parseJobPhases('correct', mit).active).toEqual({ A: { phase: 'correct', pct: 0, detail: '0/2 Blöcke' } })
+  })
+
   it('mehrere Dateien gleichzeitig — verschraenkte Zeilen bleiben getrennt', () => {
     const p = parseJobPhases('correct', [
       '→ Korrigiere A …', '→ Korrigiere B …', '→ Korrigiere C …',
