@@ -26,7 +26,7 @@ const BASIS: Settings = {
   ai_ready: true, ai_reason: '',
   kaputt: '',
   projekte_pfad: 'C:\\Users\\test\\AppData\\Roaming\\Transkribor\\projekte',
-  parallel: '3', parallel_max: 16,
+  parallel: '3', parallel_max: 16, parallel_default: '3', parallel_env: '',
   ytdlp_auto: '1',
   ytdlp: { version: '2026.8.12', unlesbar: false, geprueft: '2026-08-13', auto: true, env: false, laeuft: false, ergebnis: '', ungeschuetzt: false, unterbrochen: false, ejs_unlesbar: false },
   providers: [
@@ -1216,5 +1216,45 @@ describe('Wegweiser Version und Updates', () => {
     const link = await screen.findByRole('link', { name: /Version und Updates/ })
     expect(link).toHaveAttribute('href', '/version')
     expect(screen.queryByRole('button', { name: /Nach Updates suchen/ })).toBeNull()
+  })
+})
+
+describe('Tempo der Korrektur', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(api.listModels).mockResolvedValue([])
+    vi.mocked(api.getAuth).mockResolvedValue({ unterstuetzt: false, angemeldet: false, detail: '' })
+  })
+
+  it('baut die Auswahl aus parallel_max und markiert parallel_default', async () => {
+    // Beide Zahlen kommen vom SERVER. Der Test faehrt deshalb absichtlich NICHT mit 16/3:
+    // mit den Produktivwerten waere er auch gruen, wenn die Komponente sie verdrahtet haette
+    // — genau die zweite Quelle, gegen die settings.PARALLEL_MAX die eine sein soll.
+    zeige({ parallel: '2', parallel_max: 4, parallel_default: '2' })
+    await screen.findByText('Tempo der Korrektur')
+    fireEvent.click(screen.getByRole('combobox', { name: /Gleichzeitige Anfragen/ }))
+    const optionen = await screen.findAllByRole('option')
+    expect(optionen.map(o => o.textContent)).toEqual(['1', '2 — Standard', '3', '4'])
+  })
+
+  it('sagt an, dass die Umgebungsvariable den Regler ueberstimmt — und sperrt ihn', async () => {
+    // Ohne diese Auskunft ist der Regler ein toter Schalter mit Bestaetigungston: der Nutzer
+    // stellt um, sieht seinen Wert, und der Lauf nimmt weiter den `.env`-Wert.
+    zeige({ parallel: '3', parallel_env: '12' })
+    await screen.findByText('Tempo der Korrektur')
+    const hinweis = await screen.findByText(/wirkungslos/)
+    expect(hinweis).toHaveTextContent('TRANSKRIBOR_PARALLEL')
+    expect(hinweis).toHaveTextContent('12')                    // der WIRKSAME Wert wird genannt
+    expect(screen.getByRole('combobox', { name: /Gleichzeitige Anfragen/ })).toBeDisabled()
+  })
+
+  it('ohne Override kein Hinweis und kein gesperrtes Feld', async () => {
+    // Die Gegenprobe. Ein Hinweis, der immer dasteht, ist als Daueralarm derselbe Schaden
+    // von der anderen Seite — und ein dauerhaft gesperrtes Feld waere der tote Schalter,
+    // nur andersherum.
+    zeige({ parallel: '5', parallel_env: '' })
+    await screen.findByText('Tempo der Korrektur')
+    expect(screen.queryByText(/wirkungslos/)).toBeNull()
+    expect(screen.getByRole('combobox', { name: /Gleichzeitige Anfragen/ })).not.toBeDisabled()
   })
 })

@@ -120,9 +120,16 @@ PARALLEL_MAX = 16
 def parallel_ok(wert) -> bool:
     """Ist `wert` eine zulaessige Slot-Zahl (1 … PARALLEL_MAX, als String)?
 
-    Trust-Boundary: der Wert reist ueber `job_env()` als Umgebungsvariable in einen
-    Subprozess. `correct.py` faengt einen Tippfehler zwar ab (ValueError -> 3), aber eine
-    handgeschriebene 10000 kaeme dort unveraendert durch und startete 10000 Threads.
+    Bewacht den Weg ueber die EINSTELLUNGSDATEI — HTTP-Schreibpfad (`put_settings` → 400)
+    und Lesepfad (`_lesen` faellt zurueck). Der Wert reist von dort ueber `job_env()` in den
+    correct-Subprozess und wird zur Groesse des `_claude_slots`-Semaphores.
+
+    **Der Weg ueber die Umgebungsvariable ist BEWUSST nicht gedeckt.** `correct.py:44` hat
+    `max(1, int(…))` ohne obere Klammer, und `job_env()` laesst eine gesetzte
+    `TRANSKRIBOR_PARALLEL` gewinnen — ein `.env`-Eintrag von 50 ergibt also 50 Slots. Das
+    ist dasselbe Muster wie bei `TRANSKRIBOR_MIX_SCHWELLE`: wer die `.env` schreibt, hat
+    ohnehin Dateizugriff, und PARALLEL_MAX ist eine Fuehrung fuer die Oberflaeche, keine
+    technische Schranke. Hier zu klemmen naehme den Fluchtweg, ohne etwas zu schuetzen.
     """
     try:
         return 1 <= int(str(wert).strip()) <= PARALLEL_MAX
@@ -258,14 +265,37 @@ def public(cfg: dict = None) -> dict:
             # sonst holt niemand den Key zurueck, der dort noch drinsteht.
             "kaputt": kaputt_pfad(),
             "whisper_model": cfg["whisper_model"], "whisper_lang": cfg["whisper_lang"],
-            # Der gespeicherte Wert plus die Grenze, gegen die das Frontend pruefen soll —
-            # eine dort verdrahtete 16 waere beim naechsten Anfassen falsch (dasselbe
-            # Muster wie `sprecher_max` im Datei-Endpunkt).
+            # Der gespeicherte Wert plus Grenze und Standard — beide vom Server, weil eine
+            # im Frontend verdrahtete 16 (oder 3) beim naechsten Anfassen falsch waere
+            # (dasselbe Muster wie `sprecher_max` im Datei-Endpunkt). `parallel_default`
+            # markiert im Auswahlmenue den Ausgangswert; er stand dort zuerst als Literal,
+            # also genau die zweite Quelle, gegen die `parallel_max` daneben argumentiert.
             "parallel": cfg["parallel"], "parallel_max": PARALLEL_MAX,
+            "parallel_default": DEFAULTS["parallel"],
             # Der gespeicherte Wert, nicht der wirksame: der Haken im Browser soll zeigen,
             # was IN der Datei steht. Ob eine Env-Variable ihn ueberstimmt, sagt
             # `ytdlp_update.zustand()["auto"]` — das Frontend vergleicht beides.
             "ytdlp_auto": cfg["ytdlp_auto"]}
+
+
+PARALLEL_ENV = "TRANSKRIBOR_PARALLEL"
+
+
+def parallel_env() -> str:
+    """Der Wert der Umgebungsvariable, wenn sie den gespeicherten Deckel ueberstimmt — sonst "".
+
+    Ohne diese Auskunft ist der Regler auf der Einstellungsseite ein TOTER SCHALTER MIT
+    BESTAETIGUNGSTON: `job_env()` laesst eine gesetzte Variable gewinnen, der Nutzer stellt
+    16 ein, sieht 16 und laeuft weiter auf dem `.env`-Wert. Dasselbe Paar wie
+    `ytdlp_auto` (gespeichert) neben `ytdlp.auto` (wirksam) — und hier noetiger als dort,
+    weil `.env.example` die Variable seit demselben Diff ausdruecklich ANBIETET.
+
+    Geliefert wird der ROHE String, nicht der wirksame Slot-Wert: `correct.py` faengt einen
+    Tippfehler mit einem Rueckfall auf 3 ab, und diese Logik ein zweites Mal hinzuschreiben
+    waere die Divergenz, gegen die PARALLEL_MAX die eine Quelle sein soll. Wer `viele` in
+    seine `.env` schreibt, soll `viele` lesen.
+    """
+    return os.environ.get(PARALLEL_ENV) or ""
 
 
 def job_env() -> dict:
@@ -276,7 +306,8 @@ def job_env() -> dict:
     paare = (("WHISPER_MODEL", "whisper_model"), ("WHISPER_LANG", "whisper_lang"),
              # Der Korrektur-Deckel. Ohne ihn wirkte die Einstellung NUR, wenn die Variable
              # schon in der Serverumgebung stand (.env oder Shell) — im Browser gab es sie
-             # gar nicht, und deshalb lief sie ueberall auf dem Default 3.
-             ("TRANSKRIBOR_PARALLEL", "parallel"))
+             # gar nicht, und deshalb lief sie ueberall auf dem Default 3. Dass eine gesetzte
+             # Variable weiterhin gewinnt, sagt die Oberflaeche an: `parallel_env()`.
+             (PARALLEL_ENV, "parallel"))
     return {env: cfg[key] for env, key in paare
             if cfg[key] and not os.environ.get(env)}

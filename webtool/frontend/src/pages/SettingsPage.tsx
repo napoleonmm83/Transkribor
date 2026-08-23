@@ -606,23 +606,44 @@ export function SettingsPage() {
         <label id="lbl-parallel" className="mb-1.5 block text-sm font-medium">
           Gleichzeitige Anfragen an die KI
         </label>
-        <Select value={s.parallel} onValueChange={n => speichern({ parallel: n })}>
-          <SelectTrigger className="w-full" aria-labelledby="lbl-parallel"><SelectValue /></SelectTrigger>
+        <Select value={s.parallel} onValueChange={n => speichern({ parallel: n })}
+                disabled={!!s.parallel_env}>
+          <SelectTrigger className="w-full" aria-labelledby="lbl-parallel"
+                         aria-describedby={s.parallel_env ? 'hlp-parallel-env' : undefined}>
+            <SelectValue />
+          </SelectTrigger>
           <SelectContent>
-            {/* Aus `parallel_max` erzeugt, nicht aus einer Liste hier: die Grenze steht in
-                settings.PARALLEL_MAX und soll an genau einer Stelle stehen. */}
+            {/* Grenze UND Standard kommen vom Server: eine hier verdrahtete 16 (oder 3) wäre
+                die zweite Quelle, gegen die settings.PARALLEL_MAX die eine sein soll. */}
             {Array.from({ length: s.parallel_max }, (_, i) => String(i + 1)).map(n => (
               <SelectItem key={n} value={n}>
-                {n}{n === '3' && ' — Standard'}
+                {n}{n === s.parallel_default && ' — Standard'}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
+
+        {/* Dasselbe Muster wie beim yt-dlp-Haken weiter unten, und hier nötiger als dort:
+            `.env.example` bietet die Variable seit demselben Diff ausdrücklich an, der Fix
+            hat den toten Regler also erst wahrscheinlich gemacht. Zusätzlich `disabled` —
+            ein bedienbares Feld, das nichts tut, ist die schlimmere Hälfte des Problems; der
+            gespeicherte Wert bleibt dabei sichtbar (dieselbe Entscheidung wie beim
+            Sprecherzahl-Feld unter TRANSKRIBOR_DIARIZE=0). */}
+        {s.parallel_env && (
+          <p id="hlp-parallel-env" className="mt-3 text-xs text-amber-600 dark:text-amber-500">
+            Diese Einstellung ist gerade wirkungslos: <code>TRANSKRIBOR_PARALLEL</code> in der
+            Umgebung überstimmt sie und setzt den Wert auf{' '}
+            <span className="font-medium">{s.parallel_env}</span>. Entferne die Zeile aus
+            deiner <code>.env</code>, um wieder hier einzustellen.
+          </p>
+        )}
+
         <p className="mt-2 text-xs text-muted-foreground">
           Transkribor korrigiert mehrere Aufnahmen gleichzeitig. Ein höherer Wert macht ein
           Projekt schneller fertig — bei einem Abo (Claude oder ChatGPT) ist dafür auch das
           monatliche Kontingent schneller aufgebraucht. Bei einem eigenen API-Schlüssel
-          entstehen entsprechend schneller Kosten.
+          entstehen entsprechend schneller Kosten. Der Wert gilt je laufendem Projekt: zwei
+          Projekte gleichzeitig ergeben doppelt so viele Anfragen.
         </p>
       </Abschnitt>
 

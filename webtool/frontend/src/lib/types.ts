@@ -149,11 +149,18 @@ export type Settings = {
   providers: ProviderInfo[]; env_key: string;
   whisper_model: string; whisper_lang: string; whisper_choices: WhisperChoice[];
   /** Gleichzeitige Korrektur-Anfragen an die KI ("1".."parallel_max"). Wie `ytdlp_auto` der
-   *  GESPEICHERTE Wert — eine gesetzte `TRANSKRIBOR_PARALLEL` überstimmt ihn im Lauf. */
+   *  GESPEICHERTE Wert — was wirklich gilt, sagt `parallel_env`. */
   parallel: string;
   /** Obergrenze des Reglers, vom Server (settings.PARALLEL_MAX). Hier NICHT verdrahten:
    *  eine zweite Zahl neben der Validierung läuft beim nächsten Anfassen auseinander. */
   parallel_max: number;
+  /** Ausgangswert (settings.DEFAULTS), nur zur Markierung im Auswahlmenü. Aus demselben
+   *  Grund vom Server wie `parallel_max`. */
+  parallel_default: string;
+  /** Der Wert von `TRANSKRIBOR_PARALLEL`, wenn die Variable den gespeicherten Deckel
+   *  überstimmt — sonst `''`. Nicht-leer heisst: der Regler daneben ist wirkungslos.
+   *  Ohne dieses Feld wäre er ein toter Schalter mit Bestätigungston. */
+  parallel_env: string;
   ai_ready: boolean; ai_reason: string;
   /** Der GESPEICHERTE Schalter ("1"/"0"). Was tatsächlich gilt, steht in `ytdlp.auto` —
    *  eine gesetzte Umgebungsvariable überstimmt die Datei. */
