@@ -28,6 +28,9 @@
  *   paarweise je Breakpoint stehen, das kann ein Token-Vergleich nicht ausdruecken.
  */
 import { describe, it, expect } from 'vitest'
+import { render } from '@testing-library/react'
+import { createElement } from 'react'
+import { ScrollArea } from './components/ui/scroll-area'
 
 /** Was einen Behaelter zum Bezugsrahmen macht — dieselbe Liste wie im Hüllen-Test. */
 const ANKER = ['relative', 'absolute', 'fixed', 'sticky']
@@ -74,39 +77,40 @@ describe('Quellbaum: jeder Bildlaufbehaelter hat einen Bezugsrahmen (#209)', () 
 /**
  * Der Scanner oben ist an der KLASSE verankert — und genau daran laeuft die meistbenutzte
  * Rollflaeche der App vorbei: Radix' ScrollArea-Viewport (`Transcript.tsx` rollt darin)
- * traegt kein `overflow-*` im Markup, Radix setzt `overflow: scroll` zur LAUFZEIT. Der
- * Viewport ist damit ein Bildlaufbehaelter, den der Scanner strukturell nie sieht.
+ * traegt kein `overflow-*` im Markup, Radix setzt `overflow` zur LAUFZEIT
+ * (`@radix-ui/react-scroll-area` Viewport: nur `overflowX`/`overflowY`, KEIN `position`;
+ * die Root setzt `position:"relative"` inline). Der Viewport ist damit ein
+ * Bildlaufbehaelter, den ein Quelltext-Scanner strukturell nie sieht.
  *
  * Gemessen am echten Dokument (105 Segmente, 14 Anmerkungen, Fenster 1927x1299), bevor der
  * Anker gesetzt war: von 121 absolut positionierten Nachfahren entkamen **16** der Klemmung
- * — alle `sr-only`, deren Bezugsrahmen die ScrollArea-WURZEL war (`relative`), waehrend der
- * Viewport `static` stand. Ihre Flusspositionen reichten bis 9909 px bei einer
- * Viewport-Unterkante von 1144 px; das blies die Wurzel auf `scrollHeight` 9816 und gab dem
- * `overflow-auto`-Div aus `EditorView.tsx` eine ZWEITE, echte Bildlaufflaeche. Sichtbar als
- * zweite Leiste am rechten Rand, die erst greift, wenn die innere unten ist.
- * Mit `position: relative` am Viewport im selben Lauf: entkommene 16 -> 0,
- * `scrollHeight` des Divs 9816 -> 1051 (= `clientHeight`), native Leiste 10 px -> 0 px,
- * und das Transkript rollt weiter (Viewport 9951 > 1051).
+ * — alle `sr-only`, deren Bezugsrahmen die ScrollArea-WURZEL war. Ihre Flusspositionen
+ * reichten bis 9909 px bei einer Viewport-Unterkante von 1144 px; das blies die Wurzel auf
+ * `scrollHeight` 9816 und gab dem `overflow-auto`-Div aus `EditorView.tsx` eine ZWEITE,
+ * echte Bildlaufflaeche. Mit dem Anker im selben Lauf: entkommene 16 -> 0, `scrollHeight`
+ * des Divs 9816 -> 1051 (= `clientHeight`), native Leiste 10 px -> 0 px, Transkript rollt
+ * weiter (Viewport 9951 > 1051).
  *
- * Warum eine EIGENE Zusicherung und keine Erweiterung des Scanners: der Scanner
- * muesste dafuer wissen, welche Fremdkomponenten ihr `overflow` in JS setzen — das ist
- * keine Regel ueber den Quellbaum mehr, sondern eine Liste. Diese Liste hat heute genau
- * einen Eintrag, und der steht hier.
+ * **Gemessen wird das GERENDERTE Element, nicht der Quelltext — und das ist der Kern.**
+ * Die erste Fassung las `scroll-area.tsx` und nahm das erste `className="…"` nach dem
+ * Viewport. Schreibt man den Viewport als `className={cn("size-full …")}` — die Form, die
+ * Root und ScrollBar in DERSELBEN Datei benutzen —, findet die Regex dort keinen
+ * Anfuehrungsstrich und rutscht weiter bis zum `ScrollAreaThumb`, der zufaellig `relative`
+ * traegt: Build gruen, Waechter gruen, Defekt zurueck (im Review gemessen). Am gerenderten
+ * Knoten ist die Bauform der Klassenliste egal.
+ *
+ * jsdom rechnet kein Layout — die WIRKUNG ist hier nicht pruefbar, sie ist im Browser
+ * gemessen (Zahlen oben). Hier steht, woran sie haengt.
  */
 describe('Radix-ScrollArea: der Viewport traegt den Anker selbst', () => {
-  const quelle = quellDateien['./components/ui/scroll-area.tsx']
-
-  it('die Datei ist wirklich gelesen (Positivkontrolle)', () => {
-    // Ohne das waere eine verschobene Datei ein gruener Test statt eines roten.
-    expect(quelle).toBeDefined()
-    expect(quelle).toContain('ScrollAreaPrimitive.Viewport')
-  })
-
-  it('der Viewport hat einen Bezugsrahmen', () => {
-    const ab = quelle.indexOf('ScrollAreaPrimitive.Viewport')
-    const treffer = /className\s*=\s*"([^"]*)"/.exec(quelle.slice(ab))
-    expect(treffer).not.toBeNull()
-    const klassen = treffer![1].split(/\s+/)
+  it('der gerenderte Viewport hat eine Anker-Klasse', () => {
+    const { container } = render(
+      createElement(ScrollArea, null, createElement('p', null, 'Inhalt')),
+    )
+    const viewport = container.querySelector('[data-radix-scroll-area-viewport]')
+    // Positivkontrolle: ohne sie waere eine umbenannte Radix-Marke ein gruener Test.
+    expect(viewport).not.toBeNull()
+    const klassen = (viewport!.className || '').split(/\s+/)
     expect(klassen.filter(k => ANKER.includes(k))).not.toEqual([])
   })
 })

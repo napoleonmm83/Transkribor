@@ -28,7 +28,10 @@ function ScrollArea({
           dem `overflow-auto`-Div in `EditorView.tsx` eine ZWEITE Bildlaufflaeche: zwei
           Leisten am rechten Rand, die zweite greift erst, wenn die erste unten ist.
           Dieselbe Falle wie an `main` in `AppShell.tsx`, dort schon behoben — und dort
-          ebenfalls von einem `sr-only` ausgeloest. */}
+          ebenfalls von einem `sr-only` ausgeloest.
+          **Das `relative` an der Root oben hilft NICHT und ist ueberhaupt wirkungslos:**
+          Radix setzt dort `position:"relative"` inline, und Inline schlaegt Klasse. Die Root
+          war nie das Problem — sie war der falsche Bezugsrahmen. */}
       <ScrollAreaPrimitive.Viewport
         data-slot="scroll-area-viewport"
         className="relative size-full rounded-[inherit] transition-[color,box-shadow] outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1"
