@@ -90,7 +90,13 @@ function CommandList({
     <CommandPrimitive.List
       data-slot="command-list"
       className={cn(
-        "max-h-[300px] scroll-py-1 overflow-x-hidden overflow-y-auto",
+        // `relative` aus demselben Grund wie am ScrollArea-Viewport: ein `overflow`-Behaelter
+        // klemmt absolut positionierte Nachfahren NUR, wenn er selbst ihr Bezugsrahmen ist.
+        // cmdk rendert im Command-Root ein `<label>` mit inline `position:absolute` — dieselbe
+        // Signatur wie das `sr-only`, das den Editor-Fehler ausgeloest hat. Heute latent (beide
+        // Verbraucher haengen unter positionierten Radix-Wrappern), aber der Scanner in
+        // `bildlaufanker.test.ts` sieht diese Zeile nicht: sie steht in `cn(…)`.
+        "relative max-h-[300px] scroll-py-1 overflow-x-hidden overflow-y-auto",
         className
       )}
       {...props}
