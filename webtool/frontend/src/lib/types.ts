@@ -232,6 +232,11 @@ export type JobPhases = {
   /** Basisname -> was daran gerade laeuft. Mehrere Eintraege, weil correct parallel arbeitet. */
   active: Record<string, FileWork>;
   perBase: Record<string, FileState>;
+  /** Nur der URL-Import: „N von M geladen". Er kennt KEINE Basisnamen — der Parser verwirft
+   *  jede `[fetch] `-Zeile bewusst (sonst laese er die URL als Dateinamen), also entsteht dort
+   *  nie ein `perBase`-Eintrag. Ohne diese Bilanz sieht ein Teilfehlschlag des Imports von
+   *  aussen aus wie ein glatter Erfolg — `fetch.py` wirft nur, wenn GAR nichts geladen wurde. */
+  bilanz?: { ok: number; gesamt: number };
 };
 /** Update-Zustand aus Electron. `version` ist immer die LAUFENDE App-Version. */
 export type UpdateZustand =

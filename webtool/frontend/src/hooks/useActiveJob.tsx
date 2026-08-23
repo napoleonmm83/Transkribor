@@ -45,6 +45,7 @@ export function mergePhases(jobs: Job[]): JobPhases {
   const active: JobPhases['active'] = {}
   const perBase: JobPhases['perBase'] = {}
   let global: JobPhases['global'] = null
+  let bilanz: JobPhases['bilanz']
   for (const j of jobs) {
     for (const [base, work] of Object.entries(j.phases.active)) {
       if (base in active && j.kind !== 'transcribe') continue
@@ -55,9 +56,12 @@ export function mergePhases(jobs: Job[]): JobPhases {
       if (!da || RANG[zustand] > RANG[da]) perBase[base] = zustand
     }
     global = global ?? j.phases.global
+    // Wie `global`: der erste, der eine hat. Zwei fetch-Jobs desselben Projekts kann es nicht
+    // geben (Dedupe je Projekt UND Art, jobs.py), eine Rangfolge braucht es also nicht.
+    bilanz = bilanz ?? j.phases.bilanz
   }
   for (const base of Object.keys(active)) delete perBase[base]
-  return { global: Object.keys(active).length ? null : global, active, perBase }
+  return { global: Object.keys(active).length ? null : global, active, perBase, bilanz }
 }
 
 export function JobProvider({ children, intervalMs = 1500 }: { children: ReactNode; intervalMs?: number }) {

@@ -77,6 +77,19 @@ describe('useProjectFiles', () => {
     await waitFor(() => expect(result.current.files).toEqual([bDatei]))
   })
 
+  it('der Fehler des VERLASSENEN Projekts steht nicht ueber dem neuen (#377)', async () => {
+    // Eigener Test statt einer Zusicherung im Wechsel-Test darueber: dort ist A erfolgreich,
+    // `fehler` also ohnehin false — die Pruefung waere vacuous gewesen und das Entfernen von
+    // `setFehler(false)` bliebe gruen. Hier scheitert A wirklich.
+    vi.mocked(api.getProjectFiles)
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockImplementationOnce(() => new Promise(() => {}))   // B bleibt haengen: der Zwischenzustand IST der Fall
+    const { result, rerender } = renderHook(({ p }) => useProjectFiles(p), { initialProps: { p: 'A' } })
+    await waitFor(() => expect(result.current.fehler).toBe(true))
+    rerender({ p: 'B' })
+    expect(result.current.fehler).toBe(false)
+  })
+
   it('leert NICHT bei einem gewoehnlichen refresh desselben Projekts', async () => {
     // Gegenrichtung, und ohne sie waere der Fix ein Flackern: `refresh()` laeuft bei jedem
     // fertigen Job und bei jeder Aenderung im Summenpoll. Wuerde dort auch geleert, blinkte

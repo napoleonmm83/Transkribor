@@ -24,6 +24,7 @@ export function parseJobPhases(kind: string, lines: string[]): JobPhases {
   const blocks: Record<string, { done: Set<number>; total: number }> = {}
   let global: GlobalPhase | null = null
   let cursor: string | null = null            // transcribe: die eine laufende Datei
+  let bilanz: JobPhases['bilanz']
 
   const terminal = (base: string, state: FileState) => {
     perBase[base] = state
@@ -52,7 +53,12 @@ export function parseJobPhases(kind: string, lines: string[]): JobPhases {
       // MUSS vor den Regexen unten stehen: '[fetch] FEHLER <url>: …' wuerde sonst von
       // /^\[.+?\] FEHLER (.+?): / als Datei-Fehlschlag mit der URL als Basisnamen gelesen.
       if (l.startsWith('[fetch] ')) {
-        if (/^\[fetch\] \d+ von \d+ geladen$/.test(l)) global = null
+        // Die Bilanzzeile ist die EINZIGE Auskunft dieses Laufs ueber Erfolg und Misserfolg:
+        // Basisnamen gibt es hier nicht (die Datei entsteht erst beim Laden), und der Zweig
+        // hier verwirft jede andere `[fetch]`-Zeile bewusst — sonst laese die FEHLER-Regex
+        // die URL als Dateinamen. Ohne sie meldet ein Import, bei dem 2 von 5 Videos tot
+        // sind, glatten Erfolg: `fetch.py:576` wirft nur, wenn GAR nichts geladen wurde.
+        if ((m = l.match(/^\[fetch\] (\d+) von (\d+) geladen$/))) { bilanz = { ok: +m[1], gesamt: +m[2] }; global = null }
         else { cursor = null; global = 'download' }
         continue
       }
@@ -98,7 +104,7 @@ export function parseJobPhases(kind: string, lines: string[]): JobPhases {
     // reuse / diarize-SKIP / prep-SKIP / "Diarisierung deaktiviert" -> bewusst ignoriert
   }
 
-  return { global: Object.keys(active).length ? null : global, active, perBase }
+  return { global: Object.keys(active).length ? null : global, active, perBase, bilanz }
 }
 
 /** Einzeiler fuer Toast & Co. — nie rohe Log-Zeilen anzeigen, die sind fuer den Parser, nicht fuer Menschen. */
