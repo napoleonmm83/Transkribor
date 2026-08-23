@@ -1275,6 +1275,37 @@ describe('Tempo der Korrektur', () => {
     expect(await screen.findByText(/wirkungslos/)).not.toHaveTextContent('wirksam sind')
   })
 
+  it('eine ueberholte PUT-Antwort zieht den Wert NICHT zurueck', async () => {
+    // Der PUT liefert seit #239 den vollstaendigen Settings-Rumpf, und `setS(neu)` setzte
+    // ihn unbedingt. Zwei Speicherlaeufe, der aeltere kehrt SPAETER zurueck: danach stand
+    // der Wert von vorhin in der Anzeige — gespeichert war der neue, angezeigt der alte.
+    // (CodeRabbit-Bot, Major. Erreichbar ueber zwei Feldwechsel; mit dem Tempo-Select
+    // brauchen zwei Klicks nicht einmal einen Blur.)
+    const loeser: Array<() => void> = []
+    vi.mocked(api.saveSettings).mockImplementation(
+      (patch: Record<string, string>) =>
+        new Promise(res => loeser.push(() => res({ ...BASIS, ...patch, ungeschuetzt: false }))))
+
+    zeige({ parallel: '3' })
+    await screen.findByText('Tempo der Korrektur')
+    const feld = () => screen.getByRole('combobox', { name: /Gleichzeitige Anfragen/ })
+
+    fireEvent.click(feld())
+    fireEvent.click(await screen.findByRole('option', { name: '8' }))
+    fireEvent.click(feld())
+    fireEvent.click(await screen.findByRole('option', { name: '5' }))
+
+    // Positivkontrolle: ohne ZWEI ausstehende Antworten gaebe es das Rennen nicht, und der
+    // Test waere gruen, ohne je etwas geprueft zu haben.
+    expect(loeser).toHaveLength(2)
+
+    // Verkehrt herum aufloesen: erst der juengere (5), dann der aeltere (8).
+    await act(async () => { loeser[1](); await Promise.resolve() })
+    await act(async () => { loeser[0](); await Promise.resolve() })
+
+    await waitFor(() => expect(feld()).toHaveTextContent('5'))
+  })
+
   it('ohne Override kein Hinweis und kein gesperrtes Feld', async () => {
     // Die Gegenprobe. Ein Hinweis, der immer dasteht, ist als Daueralarm derselbe Schaden
     // von der anderen Seite — und ein dauerhaft gesperrtes Feld waere der tote Schalter,
