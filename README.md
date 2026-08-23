@@ -533,7 +533,7 @@ Was du damit tust:
 
 **Gelb oder rot — der Unterschied sagt dir, wo du suchen musst.** Gelb heisst: der Lauf ist
 durchgelaufen, einzelne Aufnahmen sind dabei liegengeblieben — such bei diesen Aufnahmen. Das
-gilt auch, wenn es alle erwischt hat („5 von 5 fehlgeschlagen"): die Zahlen werden grösser, die
+gilt auch, wenn es alle erwischt hat („5 von 5 fehlgeschlagen“): die Zahlen werden grösser, die
 Farbe bleibt.
 
 Eine **rote** Meldung heisst: der Lauf als Ganzes ist gescheitert. Entweder konnte er gar nicht

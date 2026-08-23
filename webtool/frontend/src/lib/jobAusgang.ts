@@ -44,6 +44,13 @@ export function ausgang(j: { status: string; phases: JobPhases }): Ausgang {
   // einen `perBase`-Eintrag — der Zweig darueber greift bei ihm nie. Ohne die Bilanz meldete
   // ein Import, bei dem 2 von 5 Videos tot sind, glatten ERFOLG: `fetch.py:576` wirft nur,
   // wenn GAR nichts geladen wurde.
+  //
+  // Die Reihenfolge (erst `perBase`, dann Bilanz) verliert nichts: BEIDES zugleich gibt es
+  // nicht. Der fetch-JOB faehrt immer `--download-only` (app.py:1005) und druckt
+  // ausschliesslich `[fetch] `-Zeilen — die verwirft `jobPhases.ts:54` saemtlich, es entsteht
+  // dort also nie ein `perBase`-Eintrag; die anschliessende Transkription ist ein EIGENER Job
+  // (ueber `then=`) und druckt keine `[fetch]`-Zeile. Wer das aendert, prueft diese Stelle mit:
+  // dann faellt die Bilanz still unter den Tisch.
   const b = j.phases.bilanz
   if (b && b.ok < b.gesamt) return { art: 'unvollstaendig', ok: b.ok, gesamt: b.gesamt }
 
