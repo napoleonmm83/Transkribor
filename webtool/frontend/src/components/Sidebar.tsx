@@ -49,6 +49,18 @@ export function Sidebar({
     return [...gefiltert].sort((a, b) => b.geaendert - a.geaendert || a.name.localeCompare(b.name, 'de'))
   }, [projekte, suche])
 
+  // Die Leiste hat nichts zu zeigen. Was dann dasteht, entscheidet EIN Ausdruck plus `fehler`;
+  // vorher stand `projekte.length === 0 && !loading` dreimal nebeneinander im JSX, und die drei
+  // Zustaende (laedt / geklemmt / leer) lasen sich wie drei unabhaengige Bedingungen statt wie
+  // eine Fallunterscheidung.
+  const nichts = projekte.length === 0 && !loading
+  /** Geklemmt = nichts zu zeigen und kein Grund bekannt. Genau diese Bedingung stand bisher nur
+   *  am Fehlerabsatz; der Fussblock darunter rendert unbedingt und bat ausgerechnet hier um Geld
+   *  (#328). Bewusst NICHT `fehler` allein: schlaegt ein Poll fehl, WAEHREND die Liste steht,
+   *  sieht der Nutzer eine funktionierende App — dort waere das Ausblenden ein Flackern ohne
+   *  Anlass. Und bewusst mit `!loading`: waehrend des Ladens ist noch nichts entschieden. */
+  const geklemmt = nichts && !!fehler
+
   return (
     <div className="flex h-full flex-col">
       {/* Das Suchfeld scrollt nicht mit: bei hunderten Projekten ist es sonst nach drei
@@ -81,10 +93,10 @@ export function Sidebar({
           entkommenes Kind in Zeile 300 waere kein 68-px-Ueberlauf mehr. */}
       <nav className="relative min-h-0 flex-1 overflow-auto px-1 pb-2" aria-label="Projekte">
         {projekte.length === 0 && loading && <p className="px-2 py-1 text-sm text-muted-foreground">lädt…</p>}
-        {projekte.length === 0 && !loading && fehler && (
+        {geklemmt && (
           <p className="px-2 py-1 text-sm text-muted-foreground">Projekte konnten nicht geladen werden.</p>
         )}
-        {projekte.length === 0 && !loading && !fehler && (
+        {nichts && !fehler && (
           <p className="px-2 py-1 text-sm text-muted-foreground">Noch keine Projekte.</p>
         )}
         {projekte.length > 0 && treffer.length === 0 && (
@@ -176,6 +188,11 @@ export function Sidebar({
           Electron-Fenster hat keine Adresszeile und keinen Zurueck-Knopf, ein Ziel im selben
           Fenster waere eine Einbahnstrasse aus dem Programm heraus. Der `setWindowOpenHandler`
           in `electron/main.js` faengt `_blank` ab und uebergibt an den System-Browser. */}
+      {/* #328: nicht im Klemmzustand. Wer gerade „Projekte konnten nicht geladen werden."
+          liest, bekommt keine Spendenbitte darunter — eine Frage des Takts, kein Fehler.
+          Der Block verschwindet GANZ (Hinweiszeile mit), nicht nur der Knopf: der Satz
+          „wenn es dir Arbeit abnimmt" ist genau dann am falschesten. */}
+      {!geklemmt && (
       <div className="shrink-0 border-t p-2">
         <p className="px-1 pb-2 text-xs leading-snug text-muted-foreground">
           Transkribor ist kostenlos und bleibt es. Wenn es dir Arbeit abnimmt, freue ich mich
@@ -205,6 +222,7 @@ export function Sidebar({
           </a>
         </Button>
       </div>
+      )}
     </div>
   )
 }
