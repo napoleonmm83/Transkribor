@@ -721,7 +721,6 @@ describe('MaterialDialog', () => {
     // (sonst waechst ein Flex-Kind mit seinem Inhalt und `overflow` greift nie) UND setzt
     // den Boden aus C1, unter den die Liste nicht mehr fallen darf.
     expect(liste.className).toContain('min-h-24')
-    expect(liste.className).toContain('rollbalken')
 
     /* Die beiden Klassen, an denen die Wirkung WIRKLICH haengt — der Reviewer hat gemessen,
        dass ihr Wegfall exakt den alten Fehler wiederherstellt, waehrend die drei
@@ -840,14 +839,4 @@ describe('MaterialDialog', () => {
       .toBe(screen.getByRole('button', { name: /Reinhören: b\.mp3/ }))
   })
 
-  it('gibt BEIDEN Rollflaechen des Dialogs dieselbe Leiste', () => {
-    /* Der aeussere Behaelter traegt die Schritte 2 und 3, die Liste den Schritt 1. Ohne die
-       Klasse an beiden stuende in demselben Fenster eine indigofarbene neben einer grauen
-       Systemleiste — je nachdem, auf welchem Schritt man gerade ist. */
-    render(<MaterialDialog {...basis} vorbelegteDateien={[datei('a.mp3')]} />)
-    const liste = screen.getByText('a.mp3').closest('ul')!
-    const aussen = liste.closest('[class*="overflow-y-auto"]:not(ul)')!
-    expect(aussen.className).toContain('rollbalken')
-    expect(liste.className).toContain('rollbalken')
-  })
 })

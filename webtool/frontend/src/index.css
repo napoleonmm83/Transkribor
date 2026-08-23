@@ -153,6 +153,38 @@
   * {
     @apply border-border outline-ring/50;
     }
+  /* Bildlaufleiste im Hausakzent statt im Grau des Systems — an `*`, damit sie fuer JEDE
+     Rollflaeche gilt (Huelle, Seitenleiste, Editor, Dialoge, Auswahllisten, Textfelder).
+     Fuenf Entscheidungen dahinter:
+     - **`*`, KEINE Klasse.** Sie hing zuerst an `.rollbalken` und stand damit an drei
+       Stellen des Material-Dialogs — im uebrigen Fenster daneben die graue Systemleiste,
+       im Browser gesehen. Eine Klasse, die man an jede neue Rollflaeche NICHT vergisst,
+       gibt es nicht; `scrollbar-width` vererbt sich nicht, also traegt `*` sie.
+     - **Die Standardeigenschaften, KEIN `::-webkit-scrollbar`.** `scrollbar-width`/
+       `scrollbar-color` koennen Chromium 121+, Firefox 64+ und Safari 18.2+; die App laeuft
+       gepackt auf Electron (Chromium), also ist der alte Weg nur ein zweiter Satz Regeln, der
+       mit dem ersten kollidiert (setzt man beides, gewinnt in Chromium ohnehin der Standard).
+       Wo die Eigenschaften fehlen, steht die gewohnte Systemleiste — kein Schaden.
+     - **`transparent` als Bahn.** Eine eingefaerbte Bahn zoege eine dauerhafte senkrechte
+       Linie durch die Flaeche, auch wenn nichts zu rollen ist.
+     - **Der Griff ist gemischt, nicht `--primary` pur** — aber nicht beliebig gemischt:
+       **70 % ergibt 3,33:1 (hell) bzw. 3,73:1 (dunkel)**, die ersten Werte ueber der 3:1-Grenze
+       aus SC 1.4.11. Die Ausnahme fuer Bedienelemente („appearance determined by the user
+       agent") faellt weg, sobald `scrollbar-color` gesetzt ist — wer die Leiste einfaerbt,
+       schuldet ihren Kontrast. 55 % standen zuerst hier und ergaben 2,49:1 / 2,72:1.
+     - **Der Hover (80 %) ist mit dem Umzug WEGGEFALLEN, absichtlich.** `:hover` faellt auf
+       jeden Vorfahren, `html:hover` gilt also, sobald der Zeiger irgendwo im Fenster steht —
+       ein `*:hover` waere kein Hover mehr, sondern der Normalzustand mit Flackern beim
+       Verlassen des Fensters. Er war ohnehin nie die Barrierefreiheits-Massnahme (Tastatur-
+       und Touchnutzer sehen ihn nie); die traegt der 70-%-Wert allein.
+     **Der lightningcss-Fallback ist `--primary` PUR.** Engines mit `scrollbar-color`, aber
+     ohne `color-mix` (Firefox 64-112) bekommen den vollen Akzent — bewusst hingenommen
+     (der Kontrast wird dabei besser, nicht schlechter).
+     `--primary` wechselt mit dem Design, die Regel gilt deshalb fuer hell UND dunkel. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in oklab, var(--primary) 70%, transparent) transparent;
+    }
   body {
     @apply bg-background text-foreground font-sans;
     -webkit-font-smoothing: antialiased;
@@ -213,37 +245,6 @@
 a.blatt:hover, .blatt-klickbar:hover {
   border-color: color-mix(in oklab, var(--primary) 45%, var(--border));
 }
-
-/* Bildlaufleiste im Hausakzent statt im Grau des Systems.
-   Drei Entscheidungen dahinter:
-   - **Die Standardeigenschaften, KEIN `::-webkit-scrollbar`.** `scrollbar-width`/
-     `scrollbar-color` koennen Chromium 121+, Firefox 64+ und Safari 18.2+; die App laeuft
-     gepackt auf Electron (Chromium), also ist der alte Weg nur ein zweiter Satz Regeln, der
-     mit dem ersten kollidiert (setzt man beides, gewinnt in Chromium ohnehin der Standard).
-     Wo die Eigenschaften fehlen, steht die gewohnte Systemleiste — kein Schaden.
-   - **`transparent` als Bahn.** Eine eingefaerbte Bahn zoege eine dauerhafte senkrechte
-     Linie durch die Flaeche, auch wenn nichts zu rollen ist.
-   - **Der Griff ist gemischt, nicht `--primary` pur** — aber nicht beliebig gemischt:
-     **70 % ergibt 3,33:1 (hell) bzw. 3,73:1 (dunkel)**, die ersten Werte ueber der 3:1-Grenze
-     aus SC 1.4.11. Die Ausnahme fuer Bedienelemente („appearance determined by the user
-     agent") faellt weg, sobald `scrollbar-color` gesetzt ist — wer die Leiste einfaerbt,
-     schuldet ihren Kontrast. 55 % standen zuerst hier und ergaben 2,49:1 / 2,72:1.
-     Der Hover (80 %) ist KEIN Ersatz: Tastatur- und Touchnutzer sehen ihn nie.
-   - **Der lightningcss-Fallback ist `--primary` PUR.** Engines mit `scrollbar-color`, aber
-     ohne `color-mix` (Firefox 64-112) bekommen den vollen Akzent und dort auch keinen
-     Hover-Unterschied — bewusst hingenommen (der Kontrast wird dabei besser, nicht
-     schlechter). `.blatt:hover` daneben verhaelt sich genauso.
-   - **`scrollbar-color` VERERBT sich, `scrollbar-width` nicht.** Beides steht deshalb in
-     derselben Klasse, und die muss an JEDE Rollflaeche, die schmal sein soll — die Farbe
-     allein saeh ein Nachfahre auch ohne sie. Sichtbarer Nebeneffekt: das URL-Feld im
-     Material-Dialog bekommt seine Farbe geschenkt (im Browser belegt), nur eben in voller
-     Breite. Gewollt: eine Leiste im Dialog, ein Ton.
-   `--primary` wechselt mit dem Design, die Klasse gilt deshalb fuer hell UND dunkel. */
-.rollbalken {
-  scrollbar-width: thin;
-  scrollbar-color: color-mix(in oklab, var(--primary) 70%, transparent) transparent;
-}
-.rollbalken:hover { scrollbar-color: color-mix(in oklab, var(--primary) 80%, transparent) transparent; }
 
 /* Zifferblatt-Ziffern fuer Laufzeiten und Zaehler: gleiche Breite, damit nichts springt. */
 .ziffern { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }

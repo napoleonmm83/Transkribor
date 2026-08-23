@@ -19,5 +19,7 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["vite.config.ts", "vitest.config.ts", "version.config.ts"]
+  // `rollbalken.test.ts` liegt hier statt unter `src`, weil er `node:fs` braucht —
+  // die Begruendung steht in der Datei selbst.
+  "include": ["vite.config.ts", "vitest.config.ts", "version.config.ts", "rollbalken.test.ts"]
 }
