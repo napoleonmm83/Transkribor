@@ -7,6 +7,7 @@ import { EditorBrueckeProvider, useEditorBruecke } from '@/hooks/useEditorBrueck
 import { useDokumentTitel } from '@/hooks/useDokumentTitel'
 import { useJob } from '@/hooks/useJob'
 import { useOsFortschritt } from '@/hooks/useOsFortschritt'
+import { useJobAusgang } from '@/hooks/useJobAusgang'
 import { toast } from 'sonner'
 import { uploadAudio, startTranscribe, startCorrect } from '@/lib/api'
 import { cn } from '@/lib/utils'
@@ -20,7 +21,7 @@ function Leiste() {
   const navigate = useNavigate()
   const { projects, loading, fehler, refresh } = useProjekte()
   const { projekt, files, loading: dateienLaden, refresh: refreshFiles } = useDateien()
-  const { jobs } = useActiveJob()
+  const { jobs, adopt } = useActiveJob()
   const { start } = useJob()
   const aiReason = useAiReady()
 
@@ -68,8 +69,17 @@ function Leiste() {
       // Nutzer noch einmal und bekommt einen 409.
       onUpload={(p, f) => uploadAudio(p, f).then(nachladen)
         .catch(e => toast.error(`Hochladen: ${(e as Error)?.message || 'fehlgeschlagen'}`))}
-      onTranscribe={p => start(() => startTranscribe(p), `Transkribieren ${p}`, nachladen)}
-      onCorrect={p => start(() => startCorrect(p), `Korrigieren ${p}`, nachladen)}
+      // `adopt` innerhalb von `fn` — dasselbe Muster wie in DateiMenue.tsx. Es ist seit #376
+      // Pflicht, nicht Beschleunigung: den Ausgang meldet `useJobAusgang` ueber den
+      // JobProvider, und der sieht nur ADOPTIERTE Jobs. Ohne den Griff haengt die Meldung am
+      // Summenpoll (bis 4 s) — ein Lauf, der frueher stirbt (Modell-Ladefehler), waere
+      // wieder unsichtbar, also genau der Fall, den #376 schliesst.
+      onTranscribe={p => start(() => startTranscribe(p).then(res => {
+        if (res.started) adopt(res.job_id, p, 'transcribe'); return res
+      }), `Transkribieren ${p}`, nachladen)}
+      onCorrect={p => start(() => startCorrect(p).then(res => {
+        if (res.started) adopt(res.job_id, p, 'correct'); return res
+      }), `Korrigieren ${p}`, nachladen)}
       // Die Datei-Aktionen (korrigieren/neu transkribieren/loeschen) haengen nicht mehr hier:
       // sie stehen in DateiMenue, das sich Nachladen, Job-Adoption und die Editor-Bruecke selbst
       // aus den Kontexten holt. Eine durchgereichte Kette hatte zwei Fassungen desselben Knopfs
@@ -107,6 +117,9 @@ function Rahmen({ children }: { children: ReactNode }) {
   const inhalt = useRef<HTMLElement>(null)   // seit #72 ein <main>, kein <div>
   const titel = useDokumentTitel()
   useOsFortschritt()
+  // Der Zwilling im Fenster (#376). Beide EINMAL hier, nicht in den Startwegen:
+  // sonst braucht jeder neue Startweg seine eigene Kopie der Ausgangsmeldung.
+  useJobAusgang()
   // Kehrseite des EINEN Bildlaufbehaelters: der Versatz ueberlebt den Routenwechsel. Aus
   // einem langen Transkript zurueck zur Uebersicht landete man sonst mitten in der Seite.
   // React Router setzt das absichtlich nicht selbst zurueck — es weiss nicht, welches

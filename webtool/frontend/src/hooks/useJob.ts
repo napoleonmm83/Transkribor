@@ -26,11 +26,21 @@ export function useJob() {
           action: cancelling ? undefined : { label: 'Abbrechen', onClick: cancel } })
         setTimeout(tick, 1500)
       } else {
-        if (j.status === 'done') toast.success(`${label} fertig`, { id, duration: 4000 })
-        else if (j.status === 'cancelled') toast.warning(`${label} abgebrochen`, { id, duration: 4000 })
-        // Im Fehlerfall bleiben die Roh-Zeilen die einzige Diagnose — sonst steht der Nutzer ohne da.
-        else toast.error(`${label} — Fehler`, { id, duration: 8000,
-          description: j.lines.filter(l => l.trim()).slice(-3).join(' · ') || undefined })
+        // Den AUSGANG meldet seit #376 `useJobAusgang` — EINMAL im Rahmen, ueber den
+        // JobProvider, also fuer JEDEN Startweg gleich. Hier stand er auch, und genau das war
+        // die Spaltung: die Knoepfe der Seitenleiste (dieser Weg) meldeten einen Fehlschlag,
+        // dieselben Knoepfe der Arbeitsflaeche (kein `useJob`) meldeten nichts.
+        //
+        // Uebrig bleibt, den Laufenden-Toast wegzunehmen — zwei Meldungen ueber dasselbe Ende
+        // waeren die Kehrseite der Vereinheitlichung. Die Rohzeilen sind dabei ersatzlos
+        // entfallen: sie sind fuer den Parser geschrieben, nicht fuer Menschen (derselbe
+        // Grund, aus dem es `describePhases` gibt), und sie beantworteten die Frage nicht,
+        // die zaehlt — WELCHE Datei. Das tut `useJobAusgang` aus `perBase`.
+        //
+        // VORBEDINGUNG: der Aufrufer muss den Job adoptieren (`adopt`), sonst kennt der
+        // JobProvider ihn nicht und der Ausgang faellt ganz aus. Beide Aufrufer tun das
+        // (AppShell.tsx, DateiMenue.tsx) und je ein Test haelt es fest.
+        toast.dismiss(id)
         onDone?.()
       }
     }

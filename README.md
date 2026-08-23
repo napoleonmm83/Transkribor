@@ -513,6 +513,30 @@ speicherst, wandert sie als `<Name>.edit.json.kaputt` zur Seite und bleibt im Or
 </details>
 
 <details>
+<summary><strong>„2 von 5 fehlgeschlagen“ — und vorher stand da „fertig“?</strong></summary>
+
+Ein Lauf über mehrere Aufnahmen bricht nicht ab, wenn eine davon nicht klappt — er überspringt
+sie und macht mit der nächsten weiter. Das ist so gewollt: eine kaputte Datei soll dir nicht
+die anderen vierzehn kosten.
+
+Nur hat Transkribor am Ende trotzdem „fertig“ gemeldet. Wer nicht die ganze Zeit zugesehen hat,
+erfuhr also nie, dass etwas liegengeblieben ist — das Projekt sah durchgearbeitet aus, und die
+fehlenden Aufnahmen fielen erst Wochen später auf.
+
+Jetzt sagt die Meldung am Ende, wie viele nicht geklappt haben, und **nennt sie beim Namen**.
+Was du damit tust:
+
+- **Einzelne Aufnahme noch einmal versuchen** — über das ⋯-Menü neben ihr, „Transkribieren“
+  bzw. „Korrigieren“. Häufigster Grund ist eine beschädigte oder leere Tondatei.
+- **Bei der Korrektur:** oft war der KI-Dienst kurz nicht erreichbar. Ein zweiter Versuch
+  reicht meist.
+
+Klappt gar nichts, siehst du stattdessen eine rote Fehlermeldung — dann ist der ganze Lauf
+gescheitert, nicht nur einzelne Aufnahmen.
+
+</details>
+
+<details>
 <summary><strong>„… wurde inzwischen geändert“ — was ist da passiert?</strong></summary>
 
 Du hast im Editor etwas geschrieben, und während dein Text gespeichert wurde, ist die

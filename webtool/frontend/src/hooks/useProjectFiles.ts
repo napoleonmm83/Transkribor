@@ -46,6 +46,16 @@ export function useProjectFiles(project: string) {
       .catch(() => { if (aktuell()) setFehler(true) })
       .finally(() => { if (aktuell()) setLoading(false) })
   }, [project])
-  useEffect(() => { refresh() }, [refresh])
+  // Beim PROJEKTWECHSEL erst leeren, dann laden (#377). `refresh` wechselt seine Identitaet
+  // genau dann, wenn `project` wechselt — dieser Effekt laeuft also nicht bei den vielen
+  // Nachlade-Aufrufen (Job fertig, Summenpoll), sondern nur beim Wechsel. Ohne das Leeren
+  // stehen die Dateien des VERLASSENEN Projekts weiter da, bis die neue Antwort kommt, und
+  // die Arbeitsflaeche dekoriert sie mit den Job-Phasen des NEUEN Projekts: `perBase` ist nur
+  // nach Basisnamen indiziert, und gleiche Basisnamen ueber Projekte hinweg sind der
+  // Normalfall („Timeline 1" liegt in mehreren). Scheitert der neue GET, blieb die Altliste
+  // sogar dauerhaft unter dem Fehlerkasten stehen.
+  // `loading` muss mit: sonst zeigt die Luecke „Noch keine Dateien" — eine Tatsachenbehauptung
+  // ueber ein Projekt, von dem noch nichts bekannt ist.
+  useEffect(() => { setFiles([]); setFehler(false); setLoading(true); refresh() }, [refresh])
   return { files, loading, fehler, refresh }
 }

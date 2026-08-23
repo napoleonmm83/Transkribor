@@ -52,6 +52,42 @@ describe('useProjectFiles', () => {
     await waitFor(() => expect(api.getProjectFiles).toHaveBeenCalledTimes(2))
   })
 
+  it('leert die Liste beim PROJEKTWECHSEL, statt die alte stehen zu lassen (#377)', async () => {
+    // Ohne das Leeren stehen die Dateien des verlassenen Projekts weiter da, bis die neue
+    // Antwort kommt — und die Arbeitsflaeche dekoriert sie mit den Job-Phasen des NEUEN
+    // Projekts (`perBase` ist nur nach Basisnamen indiziert, gleiche Basisnamen ueber
+    // Projekte hinweg sind der Normalfall). Scheitert der neue GET, blieb die Altliste sogar
+    // dauerhaft unter dem Fehlerkasten stehen.
+    let aufloesen: ((w: { name: string; files: ProjectFile[] }) => void) | undefined
+    vi.mocked(api.getProjectFiles)
+      .mockResolvedValueOnce({ name: 'A', files: [datei] })
+      .mockImplementationOnce(() => new Promise(r => { aufloesen = r }))
+    const { result, rerender } = renderHook(({ p }) => useProjectFiles(p), { initialProps: { p: 'A' } })
+    await waitFor(() => expect(result.current.files).toEqual([datei]))
+
+    rerender({ p: 'B' })
+    // Der Kern: SOFORT leer, nicht erst wenn Bs Antwort da ist.
+    expect(result.current.files).toEqual([])
+    // Und `loading` muss mit — sonst zeigt die Luecke „Noch keine Dateien", eine
+    // Tatsachenbehauptung ueber ein Projekt, von dem noch nichts bekannt ist.
+    expect(result.current.loading).toBe(true)
+
+    const bDatei = { ...datei, base: 'B1' }
+    await act(async () => { aufloesen?.({ name: 'B', files: [bDatei] }) })
+    await waitFor(() => expect(result.current.files).toEqual([bDatei]))
+  })
+
+  it('leert NICHT bei einem gewoehnlichen refresh desselben Projekts', async () => {
+    // Gegenrichtung, und ohne sie waere der Fix ein Flackern: `refresh()` laeuft bei jedem
+    // fertigen Job und bei jeder Aenderung im Summenpoll. Wuerde dort auch geleert, blinkte
+    // die Liste im Betrieb staendig leer.
+    vi.mocked(api.getProjectFiles).mockResolvedValue({ name: 'A', files: [datei] })
+    const { result } = renderHook(() => useProjectFiles('A'))
+    await waitFor(() => expect(result.current.files).toEqual([datei]))
+    await act(async () => { result.current.refresh() })
+    expect(result.current.files).toEqual([datei])
+  })
+
   it('verwirft eine verspaetete Antwort eines verlassenen Projekts', async () => {
     // 'Alt' bleibt haengen (loest nie auf), waehrend 'Neu' sofort antwortet -- simuliert eine
     // langsame Antwort, die erst NACH dem Projektwechsel eintrifft.

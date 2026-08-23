@@ -1,16 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom'
 import { AppShell } from './AppShell'
-import { JobProvider } from '@/hooks/useActiveJob'
+import { JobProvider, useActiveJob } from '@/hooks/useActiveJob'
 import { useEditorMelden } from '@/hooks/useEditorBruecke'
 import type { SpeicherStand } from '@/hooks/useDoc'
 import * as api from '@/lib/api'
 import type { Settings } from '@/lib/types'
 
 vi.mock('@/lib/api')
+// `loading` gehoert dazu, und sein Fehlen war nicht folgenlos: `useJob.start` ruft es als
+// ERSTES, ohne es stirbt der Aufruf an `undefined(...)` — der ganze Job-Weg der Seitenleiste
+// lief in diesen Tests also gar nicht, still. Aufgefallen erst an einer Mutationsprobe, die
+// dadurch gruen blieb (der Waechter konnte nicht anschlagen, weil der Pfad nie lief).
 const toastMock = vi.hoisted(() => Object.assign(vi.fn(),
-  { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn(), dismiss: vi.fn() }))
+  { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn(), dismiss: vi.fn(), loading: vi.fn() }))
 vi.mock('sonner', () => ({ toast: toastMock, Toaster: () => null }))
 
 /** Ersatz-Editor: meldet der Huelle ein offenes Dokument, ohne useDoc und ohne Server.
@@ -34,6 +38,13 @@ const DATEIEN = [
   { base: 'a', has_audio: true, has_raw: true, has_edit: false, has_md: false },
   { base: 'b', has_audio: true, has_raw: true, has_edit: false, has_md: false },
 ]
+
+/** Spiegelt die adoptierten Jobs des Providers nach aussen — die einzige Stelle, an der sich
+ *  „adoptiert" beobachten laesst, ohne auf `api.getJob` zu schauen (das ruft `useJob` selbst). */
+function Jobspiegel() {
+  const { jobs } = useActiveJob()
+  return <span data-testid="jobspiegel">{jobs.map(j => `${j.id}:${j.kind}`).join(' ')}</span>
+}
 
 describe('AppShell', () => {
   beforeEach(() => {
@@ -113,6 +124,55 @@ describe('AppShell', () => {
     // Der Grund muss MITKOMMEN: „Hochladen fehlgeschlagen" ohne den Text schickt den Nutzer
     // in einen zweiten Versuch, der mit 409 endet.
     expect(String(toastMock.error.mock.calls[0][0])).toMatch(/möglicherweise trotzdem angekommen/)
+  })
+
+  it('die Leisten-Knoepfe ADOPTIEREN ihren Job — sonst faellt die Ausgangsmeldung aus (#376)', async () => {
+    /* Seit #376 meldet `useJobAusgang` den Ausgang JEDES Laufs, ueber den JobProvider — der
+       sieht aber nur ADOPTIERTE Jobs. `useJob` adoptiert nicht selbst (es kennt Projekt und
+       Art nicht), also muss es der Aufrufer tun; hier stand nur `start(() => startTranscribe(p), …)`.
+       Ohne den Griff haengt die Meldung am Summenpoll (bis 4 s), und ein Lauf, der frueher
+       stirbt (Modell-Ladefehler), waere wieder unsichtbar — genau der Fall, den #376 schliesst.
+
+       Gemessen wird am Provider, NICHT an `api.getJob`: `useJob` pollt selbst, ein Aufruf dort
+       belegt gar nichts. */
+    vi.mocked(api.listProjects).mockResolvedValue([{ name: 'Alpha', dateien: 1, fertig: 0, geaendert: 0 }])
+    vi.mocked(api.getProjectFiles).mockResolvedValue({ name: 'Alpha', files: [] })
+    vi.mocked(api.getJob).mockResolvedValue({ status: 'running', kind: 'transcribe', lines: [] })
+    vi.mocked(api.startTranscribe).mockResolvedValue({ started: true, job_id: 'j9' })
+    render(
+      <MemoryRouter initialEntries={['/p/Alpha']}>
+        <JobProvider intervalMs={10000}><AppShell><Jobspiegel /></AppShell></JobProvider>
+      </MemoryRouter>,
+    )
+    await waitFor(() => expect(screen.getByText('Alpha')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: 'Transkribieren' }))
+    await waitFor(() => expect(screen.getByTestId('jobspiegel')).toHaveTextContent('j9:transcribe'))
+  })
+
+  it('der Ausgang wird GENAU EINMAL gemeldet — die Huelle montiert useJobAusgang (#376)', async () => {
+    /* Zwei Wachposten in einem, und beide fehlten sonst:
+       (1) Faellt `useJobAusgang()` aus dem Rahmen, bleibt jeder Ausgang stumm — die eigenen
+           Tests des Hooks montieren ihn selbst und wuerden das nie merken.
+       (2) Meldete `useJob` seinen Ausgang wieder mit (dort stand er frueher), gaebe es ZWEI
+           Toasts fuer dasselbe Ende. Genau deshalb ist er dort entfallen. */
+    vi.mocked(api.listProjects).mockResolvedValue([{ name: 'Alpha', dateien: 1, fertig: 0, geaendert: 0 }])
+    vi.mocked(api.getProjectFiles).mockResolvedValue({ name: 'Alpha', files: [] })
+    vi.mocked(api.getJob).mockResolvedValue({ status: 'done', kind: 'transcribe', lines: [] })
+    vi.mocked(api.startTranscribe).mockResolvedValue({ started: true, job_id: 'j9' })
+    render(
+      <MemoryRouter initialEntries={['/p/Alpha']}>
+        <JobProvider intervalMs={10}><AppShell><p>Inhalt</p></AppShell></JobProvider>
+      </MemoryRouter>,
+    )
+    await waitFor(() => expect(screen.getByText('Alpha')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: 'Transkribieren' }))
+    await waitFor(() => expect(toastMock.success).toHaveBeenCalledWith(
+      expect.stringContaining('Alpha'), expect.anything()))
+    // ABWARTEN, bevor gezaehlt wird: `waitFor` loest beim ERSTEN Toast auf, ein zweiter aus
+    // `useJob`s eigenem Poll kaeme Mikrosekunden spaeter. Ohne diese Pause ist der Zaehler
+    // blind (gemessen).
+    await act(async () => { await new Promise(r => setTimeout(r, 60)) })
+    expect(toastMock.success).toHaveBeenCalledTimes(1)
   })
 
   it('bietet einen Sprunglink VOR der Leiste', () => {
