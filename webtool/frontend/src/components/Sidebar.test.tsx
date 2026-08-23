@@ -179,4 +179,55 @@ describe('Sidebar', () => {
     expect(nav).not.toContainElement(knopf)                                  // nicht DARIN
     expect(nav!.compareDocumentPosition(knopf) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()  // sondern DANACH
   })
+
+  it('der Spendenblock verschwindet, wenn die Leiste ihren Klemmzustand meldet (#328)', () => {
+    // BEIDE Richtungen, und das ist die Auflage aus dem Issue: ein Waechter, der nur die
+    // ABWESENHEIT prueft, bleibt gruen, wenn der Block ganz aus dem Bauteil faellt. Der
+    // Normalfall ist deshalb Teil derselben Zusicherung.
+    // Zwei Renders nebeneinander, je auf ihren `container` eingegrenzt: `zeigen` gibt kein
+    // `unmount` heraus, und ein globales `screen` faende in beiden Baeumen gleichzeitig.
+    const normal = within(zeigen().container)
+    expect(normal.queryByRole('link', { name: /Projekt unterstützen/ })).not.toBeNull()
+
+    const klemmt = within(zeigen({ projekte: [], fehler: true }).container)
+    expect(klemmt.getByText('Projekte konnten nicht geladen werden.')).toBeInTheDocument()
+    expect(klemmt.queryByRole('link', { name: /Projekt unterstützen/ })).toBeNull()
+    // Die Hinweiszeile geht MIT weg, nicht nur der Knopf -- „wenn es dir Arbeit abnimmt"
+    // ist genau im Klemmzustand am falschesten.
+    expect(klemmt.queryByText(/kostenlos und bleibt es/)).toBeNull()
+  })
+
+  it('das LEERE, gesunde Projektverzeichnis ist kein Klemmzustand (#328)', () => {
+    // Die Gegenrichtung, und sie war die Luecke: die drei ersten Mutationen VERBREITERN die
+    // Bedingung alle, „zu eng" blieb ungeprueft. `geklemmt` ohne `!!fehler` liess 17/17 Tests
+    // gruen (gemessener Reviewbefund) — und das Schadensbild ist der Zustand JEDER
+    // Neuinstallation: Zeile 95 prueft `!fehler`, also stuenden „Noch keine Projekte." und
+    // „Projekte konnten nicht geladen werden." gleichzeitig da, und die gesunde App verstecke
+    // ihren Spendenblock. Kein anderes Testfile rendert die Leiste; die Mutation ueberlebte
+    // die ganze Suite.
+    const leer = within(zeigen({ projekte: [] }).container)
+    expect(leer.getByText('Noch keine Projekte.')).toBeInTheDocument()
+    expect(leer.queryByText('Projekte konnten nicht geladen werden.')).toBeNull()
+    expect(leer.queryByRole('link', { name: /Projekt unterstützen/ })).not.toBeNull()
+  })
+
+  it('waehrend des Ladens gilt nichts als geklemmt, auch nach einem Fehler (#328)', () => {
+    // Bewacht das dritte Glied (`!loading`), das ebenfalls null Abdeckung hatte. Die
+    // Produktionswirkung ist klein (`useProjects` haelt fehler UND loading hoechstens einen
+    // Zwischenrender lang) — aber der Kommentar an `geklemmt` behauptet das Glied, und was
+    // behauptet wird, wird bewacht.
+    const laedt = within(zeigen({ projekte: [], loading: true, fehler: true }).container)
+    expect(laedt.getByText('lädt…')).toBeInTheDocument()
+    expect(laedt.queryByText('Projekte konnten nicht geladen werden.')).toBeNull()
+    expect(laedt.queryByRole('link', { name: /Projekt unterstützen/ })).not.toBeNull()
+  })
+
+  it('ein fehlgeschlagener Poll bei STEHENDER Liste blendet nichts aus (#328)', () => {
+    // Die Bedingung ist bewusst NICHT `fehler` allein: schlaegt ein Poll fehl, waehrend die
+    // Liste steht, sieht der Nutzer eine funktionierende App -- dort waere das Ausblenden ein
+    // Flackern ohne Anlass. Ohne diesen Test bliebe die Verkuerzung auf `!!fehler` gruen.
+    const b = within(zeigen({ fehler: true }).container)
+    expect(b.queryByText('Projekte konnten nicht geladen werden.')).toBeNull()
+    expect(b.queryByRole('link', { name: /Projekt unterstützen/ })).not.toBeNull()
+  })
 })
