@@ -242,3 +242,68 @@ an einer 21,7-Min-Aufnahme, gegen eine Korrektur im Minutenbereich.
 
 **Empfehlung: als Wahlmöglichkeit anbieten, nicht als Standard umstellen** — und vorher an
 mehreren Aufnahmen messen. Issue #346 trägt die Zahlen.
+
+### 5.3 Der Treue-Pass kostet 56 % der Korrekturzeit — an vier Dateien gemessen
+
+Vier echte Aufnahmen (41–76 Segmente), `TRANSKRIBOR_PARALLEL=1`, Modell `sonnet`:
+
+| Datei | Korrektur | Verify | Verify teurer um |
+|---|---|---|---|
+| C0687 | 101 s | 127 s | +26 % |
+| C0700 | 76 s | 98 s | +29 % |
+| C0701 | 82 s | 113 s | +38 % |
+| C0703 | 109 s | 129 s | +18 % |
+| **Summe** | **368 s** | **467 s** | **+27 %** |
+
+Gesamtlauf 834 s. **Ohne Treue-Pass wären es ~368 s** — er kostet also mehr als die
+Korrektur selbst, und die Gesamtzeit ist mit ihm das **2,27-fache**.
+
+Das schärft die Zahl aus 2.1 (dort *eine* Datei mit vier Segmenten, wo der
+`claude -p`-Startup von ~7,7 s noch stark durchschlug): der Effekt bleibt bei echten
+Dateigrößen bestehen und ist keine Anlaufkosten-Illusion. Er ist auch nicht zufällig — der
+Verify-Aufruf liest **zwei** Dateien (`tagged.txt` **und** die `correction.json`) statt
+einer und schreibt dieselbe Menge JSON zurück.
+
+CLAUDE.md sagt dazu bisher „verdoppelt die Opus-Aufrufe pro Datei". Für die **Zeit** stimmt
+das nicht ganz: sie wird mehr als verdoppelt.
+
+**Folge für den Nutzer:** `TRANSKRIBOR_VERIFY=0` mehr als halbiert die Korrekturzeit. Das
+ist eine **Qualitäts**entscheidung (der Pass prüft die Treue gegen das Rohtranskript und hat
+mehrfach echte Fehler gefangen — `[Musik]`, gestrichene Untertitel-Floskeln), aber sie
+gehört mit dieser Zahl getroffen und nicht blind. Einen Schalter im Browser gibt es dafür
+heute **nicht**; die Variable wirkt server-weit über den uvicorn-Prozess.
+
+### 5.4 Der Deckel wirkt — A/B am echten Pfad, 3,26×
+
+Dieselben vier Aufnahmen, derselbe Code, einmal `TRANSKRIBOR_PARALLEL=1`, einmal `=4`.
+Zwischen den Läufen wurden `correction.json`/`edit.json` gelöscht (sonst greift der Reuse).
+
+| Deckel | Wandzeit | Faktor |
+|---|---|---|
+| 1 | **834 s** (13,9 Min) | — |
+| 4 | **256 s** (4,3 Min) | **3,26×** |
+
+**Die Überlappung ist verschnittfrei**, und das ist der aussagekräftigste Teil der Messung:
+
+| Datei | Kette (Korrektur + Verify) |
+|---|---|
+| C0703 | 256 s |
+| C0687 | 231 s |
+| C0701 | 217 s |
+| C0700 | 201 s |
+| Summe | 905 s |
+
+**Die gemessene Wandzeit (256 s) ist exakt die längste Einzelkette.** Es gibt also keinen
+Leerlauf zwischen den Dateien — der Semaphore gibt frei, sobald ein Aufruf zurück ist. Mehr
+ist bei vier unabhängigen Dateien nicht herauszuholen; die Untergrenze ist die langsamste
+Datei.
+
+**Folgen für die Praxis:**
+
+- Ein Deckel **oberhalb der Dateizahl** bringt nichts. Bei vier Dateien ist 4 das Optimum,
+  16 wäre identisch.
+- Der Gewinn wächst mit der Zahl der Aufnahmen, nicht mit ihrer Länge.
+- Zusammen mit 5.3: `parallel=4` **und** ohne Treue-Pass läge dieselbe Arbeit bei ~146 s
+  (der längsten reinen Korrektur) statt 834 s. Das ist der Rahmen, in dem sich Tempo hier
+  überhaupt bewegen lässt — alles andere (Diarisierung, Batching) sind einstellige Prozente
+  daneben.
