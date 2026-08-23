@@ -26,6 +26,11 @@ def client(monkeypatch, tmp_path):
     # Entwicklers ueber das Testergebnis. Reproduziert: mit `TRANSKRIBOR_YTDLP_UPDATE=1`
     # faellt `test_settings_ytdlp_schalter_wird_gespeichert` um.
     monkeypatch.delenv("TRANSKRIBOR_YTDLP_UPDATE", raising=False)
+    # Aus demselben Grund, eine Variable weiter: `job_env()` laesst eine gesetzte
+    # TRANSKRIBOR_PARALLEL gegen die Einstellungsdatei gewinnen, und `parallel_env` im
+    # Einstellungs-Rumpf meldet genau das. Eine Zeile in der `.env` des Entwicklers
+    # entschiede sonst ueber `test_settings_modellwechsel_behaelt_den_key`.
+    monkeypatch.delenv("TRANSKRIBOR_PARALLEL", raising=False)
     proj = tmp_path / "Demo"
     (proj / "audio").mkdir(parents=True)
     (proj / "transkripte").mkdir()
@@ -621,9 +626,14 @@ def test_settings_modellwechsel_behaelt_den_key(client):
     assert body == {"provider": "anthropic", "model": "claude-sonnet-5",
                     "base_url": "", "has_key": True,
                     "whisper_model": "large-v3", "whisper_lang": "de",
-                    # Der Korrektur-Deckel und seine Grenze. "3" ist der bisherige, fest
-                    # verdrahtete Wert — wer den Regler nicht anfasst, merkt nichts.
+                    # Der Korrektur-Deckel, seine Grenze und der Ausgangswert. "3" ist der
+                    # bisherige, fest verdrahtete Wert — wer den Regler nicht anfasst, merkt
+                    # nichts. `parallel_env` steht MIT im Vergleich (statt oben weggepoppt zu
+                    # werden): die Fixture raeumt die Variable weg, "" ist hier also eine
+                    # echte Zusicherung — ein dauerhaft gemeldetes Override waere ein
+                    # Daueralarm und faellt genau hier auf.
                     "parallel": "3", "parallel_max": settings.PARALLEL_MAX,
+                    "parallel_default": "3", "parallel_env": "",
                     # "" = es liegt keine beiseitegelegte Einstellungsdatei (#192)
                     "ytdlp_auto": "1", "kaputt": "",
                     # Der Normalfall (#194) — und zugleich die Gegenprobe zum Test unten:
@@ -643,11 +653,13 @@ def test_settings_rumpf_traegt_alle_felder_die_das_frontend_tippt(client):
         # aus settings.public()
         "provider", "model", "base_url", "has_key", "kaputt",
         "whisper_model", "whisper_lang", "ytdlp_auto",
-        "parallel", "parallel_max",
+        "parallel", "parallel_max", "parallel_default",
         # Umgebung, die das Frontend braucht
         "providers", "env_key", "whisper_choices", "ai_ready", "ai_reason",
         # wo die Arbeit des Nutzers liegt (#218)
         "projekte_pfad",
+        # ob TRANSKRIBOR_PARALLEL den gespeicherten Deckel ueberstimmt
+        "parallel_env",
         "ytdlp"}
 
 
@@ -773,12 +785,16 @@ def test_settings_lehnt_ungueltigen_ytdlp_schalter_ab(client):
 
 def test_settings_lehnt_unbrauchbaren_deckel_ab(client):
     """Der Wert reist ueber `job_env()` als Umgebungsvariable in den Korrektur-Subprozess und
-    wird dort zur Threadzahl. `correct.py` faengt nur einen Tippfehler ab (ValueError -> 3) —
-    eine gueltige, aber absurde Zahl kaeme unveraendert durch. Der Schreibpfad ist die
-    Stelle, an der das auffallen muss (dieselbe Regel wie beim yt-dlp-Schalter darueber).
+    wird dort zur Groesse des `_claude_slots`-Semaphores. `correct.py` faengt nur einen
+    Tippfehler ab (ValueError -> 3) — eine gueltige, aber absurde Zahl kaeme unveraendert
+    durch. Der Schreibpfad ist die Stelle, an der das auffallen muss (dieselbe Regel wie beim
+    yt-dlp-Schalter darueber).
 
     Drei Richtungen, weil sie verschiedene Zweige von `parallel_ok` treffen: zu gross, gar
-    keine Zahl, und die Null (die untere Grenze — `Semaphore(0)` blockierte fuer immer)."""
+    keine Zahl, und die Null. Bei der Null ist die Begruendung NICHT „Semaphore(0) blockiert
+    fuer immer" — so stand es hier, und `max(1, …)` in correct.py macht daraus laengst eine 1.
+    Sie wird abgelehnt, weil eine gespeicherte 0 etwas anderes TUT als sie sagt: der Nutzer
+    laese „keine gleichzeitigen Anfragen" und bekaeme eine."""
     for schlecht in ("10000", "viele", "0"):
         assert client.put("/api/settings", json={"parallel": schlecht}).status_code == 400, schlecht
     assert client.get("/api/settings").json()["parallel"] == "3"

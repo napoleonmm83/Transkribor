@@ -303,9 +303,14 @@ def test_parallel_ok_grenzen(wert, gut):
 
 
 def test_parallel_unbrauchbarer_wert_faellt_auf_default(tmp_path):
-    """Der LESEpfad. Die Datei liegt im Nutzerprofil und ist von Hand editierbar; eine
-    10000 kaeme sonst ueber job_env() in den Subprozess und startete dort 10000 Threads —
-    `correct.py` faengt nur den ValueError eines Tippfehlers ab, nicht eine gueltige Zahl."""
+    """Der LESEpfad. Die Datei liegt im Nutzerprofil und ist von Hand editierbar;
+    `correct.py` faengt nur den ValueError eines Tippfehlers ab, nicht eine gueltige Zahl.
+
+    Hier stand „startete dort 10000 Threads" — das stimmt mechanisch NICHT: beide ThreadPools
+    sind auf `min(len(…), CLAUDE_PARALLEL)` begrenzt, es gibt nie mehr Threads als Dateien
+    bzw. Bloecke. Was wegfaellt, ist der DECKEL: ein Semaphore mit 10000 Plaetzen laesst
+    jede Datei und jeden Block gleichzeitig los — bei 50 Aufnahmen also 50 `claude -p`
+    mit je eigenem node."""
     p = tmp_path / "settings.json"
     p.write_text(json.dumps({"parallel": "10000"}), encoding="utf-8")
     assert settings.load()["parallel"] == "3"
@@ -348,3 +353,23 @@ def test_deckel_kommt_im_subprozess_wirklich_an(tmp_path, monkeypatch):
                        capture_output=True, text=True, env=umgebung, cwd=paths.ROOT)
     assert r.returncode == 0, r.stderr
     assert r.stdout.strip() == "7"
+
+
+def test_parallel_env_meldet_das_override(monkeypatch):
+    """Ohne diese Auskunft ist der Regler ein toter Schalter mit Bestaetigungston: `job_env()`
+    laesst eine gesetzte Variable gewinnen, der Nutzer stellt 16 ein und laeuft weiter auf
+    dem `.env`-Wert. Beide Richtungen, weil ein IMMER gemeldetes Override derselbe Schaden
+    von der anderen Seite waere (Daueralarm)."""
+    settings.save({"parallel": "6"})
+    assert settings.parallel_env() == ""                  # Normalfall: kein Override
+    monkeypatch.setenv("TRANSKRIBOR_PARALLEL", "2")
+    assert settings.parallel_env() == "2"
+    assert settings.load()["parallel"] == "6"             # der gespeicherte Wert bleibt sichtbar
+
+
+def test_parallel_env_liefert_den_ROHEN_wert(monkeypatch):
+    """Kein zweiter Rueckfall auf 3: `correct.py` faengt den Tippfehler ab, und diese Logik
+    hier zu wiederholen waere die Divergenz, gegen die PARALLEL_MAX die eine Quelle ist.
+    Wer `viele` in seine `.env` schreibt, soll `viele` lesen."""
+    monkeypatch.setenv("TRANSKRIBOR_PARALLEL", "viele")
+    assert settings.parallel_env() == "viele"

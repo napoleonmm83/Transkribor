@@ -464,8 +464,11 @@ def dateieinstellungen(project: str, base: str):
     # waere genau die Divergenz, gegen die `pruef_fehler` die EINE Quelle ist.
     # `diarisierung_aktiv` reist wie `sprecher_max` als reiner Server-Wert mit: das Feld
     # „Anzahl Sprecher" ist ohne Diarisierung ein toter Schalter (#266). Die Auskunft ist
-    # belastbar, weil `settings.job_env()` nur WHISPER_MODEL/WHISPER_LANG setzt — der
-    # correct-Subprozess liest exakt denselben Wert wie dieser Server.
+    # belastbar, weil `settings.job_env()` `TRANSKRIBOR_DIARIZE` NICHT anfasst — der
+    # correct-Subprozess liest exakt denselben Wert wie dieser Server. (Hier stand die
+    # Aufzaehlung „nur WHISPER_MODEL/WHISPER_LANG"; sie wurde mit `TRANSKRIBOR_PARALLEL`
+    # falsch, ohne dass die Zusicherung selbst gelitten haette. Die Eigenschaft, auf die es
+    # ankommt, ist die Abwesenheit DIESES Schluessels — nicht die Laenge der Liste.)
     #
     # Sie beantwortet AUSDRUECKLICH nur den Kill-Switch. Ob pyannote wirklich rechnen
     # wuerde, sagt das SCHWESTERFELD `pyannote_da` (#270): gecacht je Serverlauf, ohne
@@ -1104,6 +1107,12 @@ def _settings_body(cfg: dict | None = None) -> dict:
             # `P.projekte`, und `paths.projekte_root()` liest genau das — Anzeige und
             # „Ordner oeffnen" zeigen damit per Konstruktion auf dasselbe Verzeichnis.
             "projekte_pfad": paths.projekte_root(),
+            # Ob `TRANSKRIBOR_PARALLEL` den gespeicherten Deckel ueberstimmt (roher Wert
+            # oder ""). Gehoert HIER hin und nicht in `settings.public()`: das sind „die
+            # Einstellungen ohne die Geheimnisse", die Umgebung ist keine Einstellung —
+            # dieselbe Abgrenzung wie bei `projekte_pfad` darueber. Ohne das Feld waere der
+            # Regler bei gesetzter Variable ein toter Schalter mit Bestaetigungston.
+            "parallel_env": settings.parallel_env(),
             # Installierte yt-dlp-Fassung + Merker + WIRKSAMER Schalter. Letzterer kann von
             # `ytdlp_auto` abweichen, wenn TRANSKRIBOR_YTDLP_UPDATE gesetzt ist — das Frontend
             # vergleicht beides und sagt es, statt einen Haken zu zeigen, der nichts tut.

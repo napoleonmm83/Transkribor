@@ -234,6 +234,22 @@ def test_kaputte_datei_ueberspringt_nur_sich_selbst(tmp_path, monkeypatch, capsy
     assert "FEHLER a" in capsys.readouterr().out
 
 
+def test_lauf_meldet_seine_gesamtdauer_und_zaehlt_nur_geglueckte(tmp_path, monkeypatch, capsys):
+    """Die Summenzeile der Phasenmessung. Nur sie laesst sich mit der Korrekturphase
+    (`⏱ Phasen:` in correct.py) vergleichen — die Einzelzeilen daneben gibt es laengst.
+
+    Auf der kaputten Buehne, weil die interessante Zusicherung die ZAEHLUNG ist: `n_ok` und
+    `audio_gesamt` werden erst NACH dem `except continue` hochgezaehlt, eine gescheiterte
+    Datei darf also weder mitzaehlen noch ihre Laenge beisteuern. Bei zwei Dateien, von denen
+    eine wirft, ist „1" die einzige richtige Antwort — „2" hiesse, die Zaehler stuenden vor
+    dem Fehlerzweig, und der Echtzeitfaktor waere dauerhaft geschoent."""
+    _lauf_projekt(tmp_path, monkeypatch, kaputt={"a.mp3"})
+    transcribe.transcribe_project("P", "large-v3", "de")
+    aus = capsys.readouterr().out
+    assert "1 Datei(en) transkribiert in" in aus
+    assert "2 Datei(en) transkribiert in" not in aus
+
+
 def test_compute_type_haengt_am_geraet(monkeypatch):
     """float16 ist auf der CPU teils nicht implementiert und sonst langsam."""
     _faster_attrappe(monkeypatch)
