@@ -164,12 +164,19 @@ versteckt sie sich hinter der ersten LLM-Wartezeit, ohne echte Parallelität. Hi
 `cmd_prep` webt die Cluster ein und läuft heute nach `cmd_diarize` für alle Dateien.
 
 ### Stufe 3 — Transkription  *(zuletzt, und anders als gefragt)*
-**Nicht** über Dateien parallelisieren (Gründe A/B/C oben). Stattdessen
-`BatchedInferencePipeline` an *einer* echten Aufnahme messen, mit angeglichenen Defaults
-(`vad_filter=False`, `without_timestamps=False`, `word_timestamps=True`) gegen den heutigen
-Weg — Kriterium ist **Segmentzahl und Worttreue**, nicht nur Sekunden. Gewinnt sie:
-einbauen mit dem heutigen seriellen Weg als Rückfall für mehrsprachige Dateien, weil der
-`_Sprachschwelle`-Proxy dort nicht greift.
+**Nicht** über Dateien parallelisieren (Gründe A/B/C oben).
+
+> **Diese Stufe ist ausgeführt — und ihre eigene Anweisung war falsch.** Hier stand
+> „mit angeglichenen Defaults (`vad_filter=False`, …)". Das geht nicht: ohne VAD wirft
+> `BatchedInferencePipeline` `RuntimeError`. Die Messung samt Ergebnis steht in **5.2**;
+> was dort widerlegt wurde, ist hier gestrichen statt ergänzt.
+
+Gemessen wurde `BatchedInferencePipeline` an einer echten Aufnahme gegen den heutigen Weg —
+Kriterium **Segmentzahl und Worttreue**, nicht nur Sekunden. Ergebnis: 2,78× schneller, aber
+VAD-Pflicht und gröbere Segmentierung → als Wahlmöglichkeit, nicht als Standard (Issue #346).
+Ein Einbau bräuchte den heutigen seriellen Weg als Rückfall für mehrsprachige Dateien; **ob
+der `_Sprachschwelle`-Proxy im batched Pfad greift, ist weiterhin offen** (1.3 führt es als
+offene Frage, und diese Messung hat es nicht geklärt).
 
 Falls doch Dateiparallelität: dann zwingend `num_workers>1` **und** ein eigenes
 `WhisperModel` je Thread (oder ein Lock um den Proxy-Abschnitt) — sonst Grund B.
@@ -202,10 +209,14 @@ zurückgeschrieben), RTX 5080, `large-v3`.
 Die Diarisierung skaliert linear mit ~1 s pro Audiominute. Für ein Projekt mit 132 Min
 Material sind das **~2,5 Minuten** — gegen eine Korrektur, die pro Datei Minuten braucht.
 
-**Parallelisierung würde 2–4 % der Laufzeit sparen** und dafür den globalen Sonden-Patch
-threadlokal machen müssen, also das Risiko tragen, die Diagnose aus #275 still falsch zu
-machen. Das Verhältnis stimmt nicht. Issue #345 ist damit **gemessen erledigt**, nicht
-offen.
+**Parallelisierung spart also wenige Prozent** — und dafür müsste der globale Sonden-Patch
+threadlokal werden, mit dem Risiko, die Diagnose aus #275 still falsch zu machen.
+
+Der Nenner, damit die Zahl nachvollziehbar bleibt: gemessen an dem Vier-Dateien-Lauf aus 5.4
+stehen 18 s Diarisierung gegen 256 s Korrektur (parallel=4) bzw. 834 s (parallel=1) — also
+**7 % bzw. 2 %** der Gesamtzeit, und davon wäre nur ein Teil einzusparen (das Modell-Laden
+bleibt). Bei größeren Projekten verschiebt sich beides nach oben, das Verhältnis bleibt.
+Issue #345 ist damit **gemessen erledigt**, nicht offen.
 
 ### 5.2 `BatchedInferencePipeline` — messbar schneller, aber eine Qualitätsentscheidung
 
@@ -220,6 +231,11 @@ An der 21,7-Min-Aufnahme, sonst identische Decoder-Parameter:
 `BatchedInferencePipeline` `RuntimeError: No clip timestamps found`. Der Plan nahm oben an,
 man könne die Defaults angleichen — **das geht nicht**, und `_opts` schaltet VAD bewusst ab
 (`test_opts_schaltet_vad_aus`).
+
+Genau genommen nennt die Fehlermeldung eine zweite Möglichkeit: `clip_timestamps` von Hand
+zu übergeben. Das hiesse, die Sprachabschnitte selbst zu bestimmen — also VAD nachzubauen,
+statt es zu vermeiden. (Und bei einer Aufnahme unter 30 s wirft es gar nicht erst; für
+Interviewmaterial ohne Bedeutung.)
 
 Zwei Sorgen aus Abschnitt 1.3 sind damit geprüft, eine davon **entkräftet**:
 
@@ -267,7 +283,10 @@ einer und schreibt dieselbe Menge JSON zurück.
 CLAUDE.md sagt dazu bisher „verdoppelt die Opus-Aufrufe pro Datei". Für die **Zeit** stimmt
 das nicht ganz: sie wird mehr als verdoppelt.
 
-**Folge für den Nutzer:** `TRANSKRIBOR_VERIFY=0` mehr als halbiert die Korrekturzeit. Das
+**Folge für den Nutzer:** `TRANSKRIBOR_VERIFY=0` spart **56 % bei `parallel=1`** — und
+**43 % bei `parallel=4`** (256 s → 146 s, die längste reine Korrektur des A/B-Laufs aus 5.4).
+„Mehr als halbiert" gilt also nur im sequentiellen Fall; unter Parallelität verschiebt sich
+der Anteil, weil die Ketten unterschiedlich lang sind. Das
 ist eine **Qualitäts**entscheidung (der Pass prüft die Treue gegen das Rohtranskript und hat
 mehrfach echte Fehler gefangen — `[Musik]`, gestrichene Untertitel-Floskeln), aber sie
 gehört mit dieser Zahl getroffen und nicht blind. Einen Schalter im Browser gibt es dafür
@@ -283,27 +302,38 @@ Zwischen den Läufen wurden `correction.json`/`edit.json` gelöscht (sonst greif
 | 1 | **834 s** (13,9 Min) | — |
 | 4 | **256 s** (4,3 Min) | **3,26×** |
 
-**Die Überlappung ist verschnittfrei**, und das ist der aussagekräftigste Teil der Messung:
+**Der Scheduler arbeitet ohne Leerlauf** — und derselbe Vergleich zeigt, dass die Aufrufe
+dabei teurer werden. Beide Läufe nebeneinander, je Datei `Korrektur + Verify`:
 
-| Datei | Kette (Korrektur + Verify) |
-|---|---|
-| C0703 | 256 s |
-| C0687 | 231 s |
-| C0701 | 217 s |
-| C0700 | 201 s |
-| Summe | 905 s |
+| Datei | `parallel=1` | `parallel=4` | Aufschlag |
+|---|---|---|---|
+| C0687 | 101 + 127 = 228 s | 94 + 137 = **231 s** | +1,3 % |
+| C0700 | 76 + 98 = 174 s | 80 + 121 = **201 s** | +15,5 % |
+| C0701 | 82 + 113 = 195 s | 85 + 132 = **217 s** | +11,3 % |
+| C0703 | 109 + 129 = 238 s | 146 + 110 = **256 s** | +7,6 % |
+| Summe | 835 s | **905 s** | **+8,4 %** |
 
-**Die gemessene Wandzeit (256 s) ist exakt die längste Einzelkette.** Es gibt also keinen
-Leerlauf zwischen den Dateien — der Semaphore gibt frei, sobald ein Aufruf zurück ist. Mehr
-ist bei vier unabhängigen Dateien nicht herauszuholen; die Untergrenze ist die langsamste
-Datei.
+**Die gemessene Wandzeit (256 s) ist exakt die längste Einzelkette des parallelen Laufs.**
+Zwischen den Dateien gibt es also keinen Leerlauf — der Semaphore gibt frei, sobald ein
+Aufruf zurück ist.
+
+**„Verschnittfrei" gilt aber nur für den Scheduler, nicht für die Arbeit.** Unter Last
+brauchen dieselben Aufrufe **8,4 % länger** (vier gleichzeitige `claude -p` teilen sich
+Rechner und Leitung). Der reale Faktor ist deshalb **3,26× statt der rechnerischen 3,50×**,
+die aus der längsten Kette des *sequentiellen* Laufs (238 s) folgen würden. Die Untergrenze
+ist damit auch keine feste Dateieigenschaft, sondern hängt davon ab, wie viel sonst läuft.
 
 **Folgen für die Praxis:**
 
-- Ein Deckel **oberhalb der Dateizahl** bringt nichts. Bei vier Dateien ist 4 das Optimum,
-  16 wäre identisch.
-- Der Gewinn wächst mit der Zahl der Aufnahmen, nicht mit ihrer Länge.
-- Zusammen mit 5.3: `parallel=4` **und** ohne Treue-Pass läge dieselbe Arbeit bei ~146 s
-  (der längsten reinen Korrektur) statt 834 s. Das ist der Rahmen, in dem sich Tempo hier
-  überhaupt bewegen lässt — alles andere (Diarisierung, Batching) sind einstellige Prozente
-  daneben.
+- **Bei Dateien mit EINEM Block** (bis `CHUNK_SEGMENTS` = 150 Segmente, so wie hier
+  gemessen) bringt ein Deckel oberhalb der Dateizahl nichts: vier Dateien schöpfen vier
+  Slots aus, 16 wäre identisch.
+- **Bei gestückelten Dateien gilt das NICHT.** Ab 151 Segmenten laufen die Blöcke 2..n
+  parallel, und der Semaphore deckelt Dateien **und** Blöcke gemeinsam — dort zahlt sich ein
+  höherer Wert weiter aus. Der Kommentar an `CLAUDE_PARALLEL` beziffert den Extremfall:
+  16 Dateien à 6 Blöcken ergaben bei einem Deckel von 200 gemessene **80 gleichzeitige
+  `claude -p`**. Wer die Regel oben verallgemeinert, unterschätzt genau diesen Fall.
+- Zusammen mit 5.3: `parallel=4` **und** ohne Treue-Pass läge dieselbe Arbeit bei **146 s**
+  — der reinen Korrekturzeit von C0703, der längsten des parallelen Laufs (in der Tabelle
+  oben ablesbar). Gegen 834 s sequentiell mit Verify. Das ist der Rahmen, in dem sich Tempo
+  hier bewegen lässt; Diarisierung und Batching sind einstellige Prozente daneben.
