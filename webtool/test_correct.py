@@ -734,6 +734,54 @@ def test_parallel_calls_stay_under_the_global_cap(project, monkeypatch):
     assert state["max"] > 1                                    # ... und es lief wirklich parallel
 
 
+def test_der_treue_pass_laeuft_ueber_dateien_hinweg_PARALLEL(project, monkeypatch):
+    """Marcus' Frage: laufen zehn Dateien auch im Treue-Pass nebeneinander, nicht nur in der
+    Korrektur? Ja — `_correct_one` macht Korrektur UND Verify innerhalb des Datei-Threads,
+    der Deckel gilt fuer beide Aufrufarten gleich.
+
+    Der Wächter daneben (`test_parallel_calls_stay_under_the_global_cap`) faehrt mit
+    `verify=False` und sagt darueber NICHTS. Ohne diesen Test waere die Zusicherung „der
+    Treue-Pass wird mitparallelisiert" eine Behauptung — und sie steht seit der
+    Tempo-Messung in der README.
+
+    Gemessen wird, dass zwei VERIFY-Aufrufe gleichzeitig unterwegs sind. Innerhalb EINER
+    Datei geht das nicht (Verify braucht das Ergebnis der Korrektur); ueber zwei Dateien
+    hinweg schon."""
+    import threading, time
+    _root, t = project
+    _write_raw(t, "S1", 2)
+    _write_raw(t, "S2", 2)
+    (_root / "Demo" / "audio" / "S2.mp3").write_bytes(b"x")
+    monkeypatch.setattr(correct, "_claude_slots", threading.Semaphore(4))
+    monkeypatch.setattr(correct, "_claude_exe", lambda: "C:/fake/claude.exe")
+
+    lock, state = threading.Lock(), {"verify_jetzt": 0, "verify_max": 0}
+    schreibe = _chunk_claude(t, [], lock)
+
+    def fake_run(cmd, **kw):
+        # `TREUE-CHECK` ist der etablierte Marker — `_chunk_claude` erkennt den Verify-Pass
+        # daran (Zeile 650). Ein selbst ausgedachtes "Treue" traf NICHT (Grossschreibung),
+        # und ohne die Positivkontrolle unten waere das als "laeuft nicht parallel"
+        # durchgegangen statt als Fehler im Test.
+        ist_verify = "TREUE-CHECK" in kw["input"]
+        if ist_verify:
+            with lock:
+                state["verify_jetzt"] += 1
+                state["verify_max"] = max(state["verify_max"], state["verify_jetzt"])
+        time.sleep(0.05)                     # Ueberlappung erzwingen, sonst misst der Test nichts
+        schreibe(kw["input"])
+        if ist_verify:
+            with lock:
+                state["verify_jetzt"] -= 1
+        return type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+
+    monkeypatch.setattr(correct.subprocess, "run", fake_run)
+    assert correct.cmd_run("Demo", verify=True) == 2
+    # Positivkontrolle: es gab ueberhaupt Verify-Aufrufe (sonst waere die Zeile darunter leer).
+    assert state["verify_max"] >= 1, "kein Treue-Pass gelaufen — der Test misst nichts"
+    assert state["verify_max"] > 1, "der Treue-Pass lief NICHT parallel ueber die Dateien"
+
+
 def test_verify_pass_bekommt_die_schon_vergebenen_sprechernamen(project, monkeypatch):
     """Der Treue-Pass schreibt die Datei NEU und prueft dabei die Sprecherzuordnung. Ohne
     `known` taufte er Block 2..n um und machte den Anker aus Block 1 wieder zunichte."""

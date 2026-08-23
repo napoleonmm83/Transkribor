@@ -101,10 +101,18 @@ DEFAULTS = {"provider": "claude-cli", "model": "", "base_url": "", "api_key": ""
             # `ytdlp_auto` — `save()`/`_lesen()` filtern auf isinstance(str) und wuerden eine
             # Zahl STILL verwerfen (dieselbe Falle wie `mehrsprachig` in projekt.py).
             #
-            # Default bleibt "3", also das bisherige Verhalten. Ein hoeherer Standard waere
-            # beim Abo-Anbieter eine Kostenentscheidung, die niemand getroffen hat: mehr
-            # Slots heisst schneller fertig UND schneller Kontingent weg. Deshalb ein
-            # Regler, kein neuer Default.
+            # Default bleibt "3", also das bisherige Verhalten.
+            #
+            # Die Begruendung dafuer war zuerst FALSCH ("mehr Slots heisst schneller
+            # Kontingent weg"). Die Zahl der LLM-Aufrufe haengt an der Zahl der Dateien und
+            # Bloecke, NICHT am Deckel — dieselbe Arbeit kostet dasselbe, egal ob sie
+            # nacheinander oder nebeneinander laeuft. Was sich aendert, ist die RATE: ein
+            # Nutzungsfenster des Abos kann frueher greifen, und bei einem API-Anbieter
+            # treffen mehr Anfragen gleichzeitig ein (kein 429-Retry in `llm._request`).
+            #
+            # Der Default bleibt trotzdem 3 — nicht wegen der Kosten, sondern weil ein
+            # hoeherer Wert die Rate fuer JEDEN Bestandsnutzer aendern wuerde, auch fuer den
+            # mit knappem Fenster. Deshalb ein Regler, kein neuer Standard.
             "parallel": "3",
             "ytdlp_auto": "1"}
 
