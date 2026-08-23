@@ -58,6 +58,22 @@ describe('useOsFortschritt', () => {
     expect(meldungen[0]).toContain('Alpha')
   })
 
+  it('meldet einen TEILfehlschlag nicht als „fertig" (#376/B2)', async () => {
+    // Der OS-Zwilling hatte eine EIGENE Fassung des Urteils und bildete `done` bedingungslos
+    // auf „fertig" ab. Er ist damit ausgerechnet dort falsch, wo er am meisten zaehlt: die
+    // Systemmeldung existiert fuer die Person, die NICHT hinsieht — und genau die ist die
+    // Zielperson von #376. Jetzt fragen beide Flaechen `lib/jobAusgang.ts`.
+    vi.mocked(api.getJob).mockResolvedValue({ status: 'done', kind: 'correct',
+      lines: ['apply: A -> edit.json', '✗ Fehler bei B: LLM-Ausgabe ungueltig'] })
+    zeigen()
+    const adopt = (globalThis as unknown as { __adopt: (i: string, p: string, k: string) => void }).__adopt
+    await act(async () => { adopt('j1', 'Alpha', 'correct') })
+    await act(async () => { await new Promise(r => setTimeout(r, 40)) })
+    expect(meldungen).toHaveLength(1)
+    expect(meldungen[0]).not.toContain('fertig')
+    expect(meldungen[0]).toContain('1 von 2 fehlgeschlagen')
+  })
+
   it('meldet einen beendeten Lauf genau einmal, auch wenn ein zweiter weiterlaeuft', async () => {
     // A wird terminal, B laeuft weiter -- onSettled feuert bei JEDEM weiteren Tick erneut,
     // solange B noch laeuft. A darf dabei trotzdem nur EINMAL gemeldet werden: useActiveJob.tsx

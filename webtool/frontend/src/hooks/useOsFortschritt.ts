@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { useActiveJob } from './useActiveJob'
+import { ausgang } from '@/lib/jobAusgang'
 import { useProjekte } from './useProjektDaten'
 import { KIND_LABEL } from '@/lib/jobPhases'
 
@@ -32,12 +33,23 @@ export function useOsFortschritt(): void {
       // nicht wie ein Unfall klingen -- und nachzulesen gibt es dort nichts, er weiss ja,
       // was er getan hat. Wortlaut wie in useJob.ts, damit dieselbe Sache nicht zwei
       // Namen hat.
-      const [ausgang, body] = j.status === 'done'
+      // WAS ausgegangen ist, entscheidet `lib/jobAusgang.ts` — dieselbe Funktion fragt der
+      // Toast im Fenster. Hier stand eine eigene Fassung, und sie war die schlechtere: sie
+      // bildete `done` bedingungslos auf „fertig" ab und meldete damit Erfolg ueber einen
+      // Lauf, in dem einzelne Aufnahmen gescheitert sind. Ausgerechnet hier wiegt das am
+      // schwersten — die OS-Meldung existiert fuer die Person, die NICHT hinsieht, und genau
+      // die ist die Zielperson von #376.
+      const a = ausgang(j)
+      const [wie, body] = a.art === 'erfolg'
         ? ['fertig', 'Das Ergebnis liegt im Projekt.']
-        : j.status === 'cancelled'
+        : a.art === 'abbruch'
           ? ['abgebrochen', 'Der Lauf wurde auf deinen Wunsch beendet.']
-          : ['fehlgeschlagen', 'Details stehen im Protokoll.']
-      new Notification(`${j.project}: ${was} ${ausgang}`, { body })
+          : a.art === 'teil'
+            ? [`${a.misslungen.length} von ${a.versucht} fehlgeschlagen`, a.misslungen.join(', ')]
+            : a.art === 'unvollstaendig'
+              ? [`${a.ok} von ${a.gesamt} geladen`, 'Nicht jede Adresse liess sich laden.']
+              : ['fehlgeschlagen', 'Details stehen im Protokoll.']
+      new Notification(`${j.project}: ${was} ${wie}`, { body })
     }
   }), [onSettled])
 

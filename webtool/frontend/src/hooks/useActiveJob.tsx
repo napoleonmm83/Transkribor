@@ -45,7 +45,6 @@ export function mergePhases(jobs: Job[]): JobPhases {
   const active: JobPhases['active'] = {}
   const perBase: JobPhases['perBase'] = {}
   let global: JobPhases['global'] = null
-  let bilanz: JobPhases['bilanz']
   for (const j of jobs) {
     for (const [base, work] of Object.entries(j.phases.active)) {
       if (base in active && j.kind !== 'transcribe') continue
@@ -56,12 +55,16 @@ export function mergePhases(jobs: Job[]): JobPhases {
       if (!da || RANG[zustand] > RANG[da]) perBase[base] = zustand
     }
     global = global ?? j.phases.global
-    // Wie `global`: der erste, der eine hat. Zwei fetch-Jobs desselben Projekts kann es nicht
-    // geben (Dedupe je Projekt UND Art, jobs.py), eine Rangfolge braucht es also nicht.
-    bilanz = bilanz ?? j.phases.bilanz
   }
   for (const base of Object.keys(active)) delete perBase[base]
-  return { global: Object.keys(active).length ? null : global, active, perBase, bilanz }
+  // KEINE `bilanz` im Ergebnis, und das ist Absicht: sie gehoert EINEM Lauf (dem URL-Import),
+  // und ihr einziger Leser — der Ausgang — bekommt ihn einzeln aus der `onSettled`-Nutzlast.
+  // Hier stand ein `bilanz ?? j.phases.bilanz` mit der Begruendung „zwei fetch-Jobs desselben
+  // Projekts kann es nicht geben"; die haelt der Code nicht (jobs.py dedupliziert nur
+  // LAUFENDE, der Provider behaelt terminale Jobs), und gelesen hat es ohnehin niemand —
+  // die Zeile zu entfernen liess alle Tests gruen. Erster-gewinnt haette bei terminalem
+  // Eingang die Bilanz des AELTESTEN Laufs gemeldet.
+  return { global: Object.keys(active).length ? null : global, active, perBase }
 }
 
 export function JobProvider({ children, intervalMs = 1500 }: { children: ReactNode; intervalMs?: number }) {
