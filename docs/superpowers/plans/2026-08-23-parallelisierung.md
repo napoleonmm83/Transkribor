@@ -109,6 +109,26 @@ dominiert. **Belegt ist das nicht**, und die Diarisierung fehlt in der Rechnung 
 
 Genau darum steht Stufe 0 vor allem anderen.
 
+### 2.1 Erster Messwert (2026-08-23, Wegwerf-Projekt)
+
+Stufe 0 ist gebaut; ein Lauf am echten Pfad (`python -m webtool.correct run`, eigenes
+`TRANSKRIBOR_PROJEKTE` im Scratchpad, danach gelöscht) liefert:
+
+```
+⏱ probe: Korrektur 22s, Verify 35s
+⏱ Phasen: diarisieren 0s · vorbereiten 0s · glossar 0s · korrigieren 57s · gesamt 57s (parallel=8)
+```
+
+**Der Treue-Pass kostet mehr als die Korrektur selbst** — 35 s gegen 22 s. CLAUDE.md sagt
+dazu bisher „verdoppelt die Opus-Aufrufe pro Datei"; bei der *Zeit* ist es mehr als eine
+Verdopplung. Das ist der erste belastbare Grund, `--no-verify` als bewusste
+Tempo-Entscheidung zu behandeln statt als Randnotiz.
+
+**Was diese Zahl NICHT trägt:** eine Datei, vier Segmente, ohne Audio (Diarisierung
+übersprungen) und ohne `.raw.txt` (Glossar übersprungen). Sie belegt, dass die Messung
+funktioniert und dass Verify teuer ist — sie ist **keine** Verteilung über ein echtes
+Projekt. Die steht noch aus, und sie ist der Eingang zu Stufe 2 und 3.
+
 ---
 
 ## 3. Plan, gestaffelt
