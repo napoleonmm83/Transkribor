@@ -905,13 +905,34 @@ den Grund, gegen den er argumentieren muss.
 | # | Was | Ergebnis |
 |---|---|---|
 | 7 | **B3-Vorarbeit** #84-Mess-Harness *(unverändert: was Marcus entblockt, geht zuerst)* | entblockt die Mac-Sitzung |
-| 8a | **B2b′-1** Spiegel-Import → Erkenner-Lib + 7. Dimension → #331 → #334 → #324 → PowerShell | 3 zu, 1 PR |
-| 8b | **B2b′-2** Code-Guard Stufe A + B | neue Fähigkeit, 1 PR |
+| 8a | ~~**B2b′-1** Spiegel-Import → Erkenner-Lib + 7. Dimension → #331 → #334 → #324 → PowerShell~~ ✅ **erledigt** (`claude-routing` PR #9) | **4 zu** (#331, #334, #342, #324), 12 neue Issues |
+| — | **B2b′-2** Code-Guard Stufe A + B | **kein eigener Schritt mehr** — siehe unten |
 | 9 | **B7** #330 + #328 *(unverändert)* | 2 zu, 1 Sitzung |
 
-Ab 10 unverändert. **Warum der Guard hinter B3-Vorarbeit bleibt:** derselbe Grund wie in
-Fassung 3 — der Mac-Termin kann kurzfristig kommen; der Guard wartet folgenlos, eine
-ungenutzte Mac-Sitzung nicht.
+Ab 10 unverändert.
+
+### B2b′-2 ist kein Schritt in dieser Reihenfolge — er begleitet die Codearbeit
+
+**Entscheidung (Marcus, 2026-08-23):** „der code guard soll nur bei der späteren code arbeit
+nach dem plan zum einsatz kommen."
+
+Der **neue** Guard — Stufe A (`fix`/`feat` ohne Testdatei, am Commit) und Stufe B
+(`tsc -b --force`, am PR) — wird **nicht als eigenes Bündel abgearbeitet**. Er wird gebaut und
+scharfgeschaltet, wenn die eigentliche Codearbeit nach diesem Plan beginnt, und dient ihr.
+Als Selbstzweck wäre er das, was dieser Plan sonst überall ablehnt: Arbeit an der
+Werkzeugkiste statt an der Sache.
+
+**Was das NICHT heisst:** die drei *bestehenden* Wächter sind seit B2b′-1 repariert und
+scharf, auch unter PowerShell. Der Preis dafür ist gemessen und angenommen — sechs Fehlalarme
+an einem Tag, alle beim Dokumentieren, mit Fluchtwegen (#349).
+
+**Was bleibt:** der Entwurf steht oben unter „Der Code-Guard: zwei Stufen" samt aller
+Messungen (`tsc -b --force` 470 ms; Stufe A 1 Sperre / 0 Fehlalarme über 63 `fix`/`feat`-Commits;
+die Suiten hätten im belegten Fenster **0 von 1** Rot-Fällen gefangen). Wer ihn baut, fängt
+dort an — nicht bei einer neuen Analyse.
+
+**Warum B3-Vorarbeit weiterhin vorn steht:** unverändert der Grund aus Fassung 3 — der
+Mac-Termin kann kurzfristig kommen, und was Marcus entblockt, geht zuerst.
 
 ### Was der erste Entwurf von Fassung 4 falsch hatte
 
