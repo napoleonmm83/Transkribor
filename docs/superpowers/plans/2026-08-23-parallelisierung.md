@@ -184,3 +184,61 @@ Falls doch Dateiparallelität: dann zwingend `num_workers>1` **und** ein eigenes
   warum Schreibweisen über Dateien konsistent bleiben. Aufgeteilt wäre es pro Datei neu.
 - **Den Verify-Pass abschalten**, um zu halbieren: das ist keine Parallelisierung,
   sondern weniger Prüfung.
+
+---
+
+## 5. Messungen vom 2026-08-23 (nach dem Merge von PR #343)
+
+Alles an **echtem Material** aus `projekte/` (in ein Wegwerf-Projekt kopiert, nie
+zurückgeschrieben), RTX 5080, `large-v3`.
+
+### 5.1 Diarisierung — Stufe 2 ist damit beantwortet: NICHT bauen
+
+| Material | Dauer | Faktor |
+|---|---|---|
+| 4 Aufnahmen (je ~3–5 Min) | 18 s gesamt (erste 10 s inkl. Modell-Laden, dann 2–3 s je Datei) | — |
+| 1 Aufnahme, 21,7 Min | **24 s** | ~54× Echtzeit |
+
+Die Diarisierung skaliert linear mit ~1 s pro Audiominute. Für ein Projekt mit 132 Min
+Material sind das **~2,5 Minuten** — gegen eine Korrektur, die pro Datei Minuten braucht.
+
+**Parallelisierung würde 2–4 % der Laufzeit sparen** und dafür den globalen Sonden-Patch
+threadlokal machen müssen, also das Risiko tragen, die Diagnose aus #275 still falsch zu
+machen. Das Verhältnis stimmt nicht. Issue #345 ist damit **gemessen erledigt**, nicht
+offen.
+
+### 5.2 `BatchedInferencePipeline` — messbar schneller, aber eine Qualitätsentscheidung
+
+An der 21,7-Min-Aufnahme, sonst identische Decoder-Parameter:
+
+| | Dauer | Faktor | Segmente | Wörter | letztes Segment |
+|---|---|---|---|---|---|
+| seriell (heute) | 80,0 s | 16,3× | 411 | 2868 | 1300,6 s |
+| batched + VAD | **28,7 s** | **45,3×** | 277 | 2596 | 1116,6 s |
+
+**`vad_filter=True` ist keine Wahl, sondern Pflicht:** ohne VAD wirft
+`BatchedInferencePipeline` `RuntimeError: No clip timestamps found`. Der Plan nahm oben an,
+man könne die Defaults angleichen — **das geht nicht**, und `_opts` schaltet VAD bewusst ab
+(`test_opts_schaltet_vad_aus`).
+
+Zwei Sorgen aus Abschnitt 1.3 sind damit geprüft, eine davon **entkräftet**:
+
+- **Die Zeitachse stimmt.** faster-whisper mappt VAD-Zeiten zurück
+  (`restore_speech_timestamps`); sechs Stichproben über die ganze Aufnahme liegen unter
+  0,3 s Abweichung. Eine frühere Messung „Median 92 s Versatz" war ein **Artefakt des
+  Vergleichs** (Segment #i gegen #i bei unterschiedlicher Segmentierung) — nicht des Codes.
+- **Der Wortverlust liegt überwiegend im Halluzinationsbereich.** Von 22 Fenstern à 60 s
+  haben nur zwei unter 60 % der Wörter, beide bei 18–19 Min — dort erfindet der serielle
+  Lauf 24× „Danke auch dir." über Stille, was VAD wegschneidet. Das ist eine
+  *Verbesserung*, keine Verschlechterung.
+
+**Was offen bleibt und gegen einen Einbau ohne Rückfrage spricht:** die Segmentierung wird
+gröber (411 → 277), und ob die verbleibende Wortdifferenz *ausschließlich* Halluzination
+ist, ist an **einer** Datei nicht belegt. Die Transkription ist die Grundlage von allem —
+„eine Passage, die Whisper nie gelesen hat, kann niemand mehr zurückholen".
+
+Und der Ertrag ist begrenzt: die Transkription ist ohnehin die kürzeste Phase. 51 s Gewinn
+an einer 21,7-Min-Aufnahme, gegen eine Korrektur im Minutenbereich.
+
+**Empfehlung: als Wahlmöglichkeit anbieten, nicht als Standard umstellen** — und vorher an
+mehreren Aufnahmen messen. Issue #346 trägt die Zahlen.
