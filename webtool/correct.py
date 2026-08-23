@@ -40,8 +40,23 @@ CHUNK_SEGMENTS = 150          # max. Segmente pro claude-Aufruf; darüber wird d
 # Gleichzeitige claude-Aufrufe. Die Aufrufe warten fast nur auf Opus, also parallelisieren
 # Threads sie gut. Der Deckel sitzt bewusst an _run_claude und nicht an den Executors: Datei-
 # und Block-Parallelität wären sonst multiplikativ (3 Dateien × 3 Blöcke = 9 Opus-Sessions).
+#
+# `settings.PARALLEL_MAX` klemmt AUCH den Weg über die Umgebungsvariable, und das ist eine
+# Korrektur an dieser Zeile: sie hatte nur `max(1, …)`, während `.env.example` die Variable
+# seit demselben Diff bewirbt. Gemessen an einem Prüfstand mit 16 Dateien à 6 Blöcken
+# (192 Aufrufe): bei `TRANSKRIBOR_PARALLEL=200` deckelt der Semaphor nichts mehr, übrig
+# bleiben **80 gleichzeitige `claude -p`** — 80 node-Prozesse, ausgelöst von einem Tippfehler
+# („160" statt „16"). Die Analogie zu `TRANSKRIBOR_MIX_SCHWELLE` (dort wird bewusst nicht
+# geklemmt) trägt hier NICHT: ein falscher Schwellenwert kostet Qualität, eine falsche
+# Slot-Zahl startet Prozesse. Wer wirklich mehr will, hebt PARALLEL_MAX — eine Zahl, eine
+# Stelle. Geklemmt wird laut, nicht still.
 try:
-    CLAUDE_PARALLEL = max(1, int(os.environ.get("TRANSKRIBOR_PARALLEL") or 3))
+    _gewuenscht = int(os.environ.get("TRANSKRIBOR_PARALLEL") or 3)
+    CLAUDE_PARALLEL = max(1, min(_gewuenscht, settings.PARALLEL_MAX))
+    if _gewuenscht > settings.PARALLEL_MAX:
+        # NICHT still: der Nutzer hat eine Zahl hingeschrieben und bekommt eine andere.
+        print(f"TRANSKRIBOR_PARALLEL={_gewuenscht} liegt ueber der Grenze "
+              f"{settings.PARALLEL_MAX} — nehme {CLAUDE_PARALLEL}", file=sys.stderr, flush=True)
 except ValueError:                # Tippfehler in der .env darf den Korrekturlauf nicht killen
     CLAUDE_PARALLEL = 3
 _claude_slots = threading.Semaphore(CLAUDE_PARALLEL)

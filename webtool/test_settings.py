@@ -373,3 +373,32 @@ def test_parallel_env_liefert_den_ROHEN_wert(monkeypatch):
     Wer `viele` in seine `.env` schreibt, soll `viele` lesen."""
     monkeypatch.setenv("TRANSKRIBOR_PARALLEL", "viele")
     assert settings.parallel_env() == "viele"
+
+
+@pytest.mark.parametrize("gesetzt,erwartet", [
+    ("8", "8"),                                  # im Bereich: unveraendert
+    ("200", str(settings.PARALLEL_MAX)),         # darueber: geklemmt
+    ("0", "1"),                                  # darunter: max(1, …) wie bisher
+    ("viele", "3"),                              # Tippfehler: Rueckfall, kein Wurf
+])
+def test_umgebungsvariable_wird_auf_PARALLEL_MAX_geklemmt(gesetzt, erwartet, monkeypatch):
+    """Der Weg, den `parallel_ok` NICHT deckt — `correct.py` klemmt ihn selbst.
+
+    Gemessen am Pruefstand des Reviews: bei `TRANSKRIBOR_PARALLEL=200` deckelt der Semaphor
+    nichts mehr, uebrig bleiben **80 gleichzeitige `claude -p`** (16 Dateien à 6 Bloecke).
+    Ausloeser ist ein Tippfehler — „160" statt „16" —, und `.env.example` bewirbt die
+    Variable seit demselben Diff. Vorher stand dort nur `max(1, …)`.
+
+    Im SUBPROZESS, weil `CLAUDE_PARALLEL` beim Modulimport entsteht: ein `monkeypatch.setenv`
+    im laufenden Prozess kaeme zu spaet, und ein `importlib.reload` faelschte den Zustand
+    fuer jeden Folgetest der Sitzung.
+    """
+    umgebung = {**os.environ, "TRANSKRIBOR_PARALLEL": gesetzt}
+    r = subprocess.run([sys.executable, "-c",
+                        "from webtool import correct; print(correct.CLAUDE_PARALLEL)"],
+                       capture_output=True, text=True, env=umgebung, cwd=paths.ROOT)
+    assert r.returncode == 0, r.stderr
+    assert r.stdout.strip() == erwartet
+    # Geklemmt wird LAUT: eine stille Aenderung waere derselbe tote Schalter wie das
+    # ueberstimmte Feld — der Nutzer schreibt eine Zahl hin und bekaeme eine andere.
+    assert ("liegt ueber der Grenze" in r.stderr) is (gesetzt == "200")

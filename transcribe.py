@@ -529,6 +529,22 @@ def transcribe_project(name, model, language, only=None):
 
 
 def main():
+    # Dieselben drei Zeilen wie in `correct.main` und `fetch.main` — dieser Laeufer war der
+    # EINZIGE ohne sie, und das war ein echter Abbruch, kein Schoenheitsfehler: bei
+    # umgeleitetem stdout auf Windows ist `sys.stdout.encoding` die ANSI-Codepage (gemessen
+    # cp1252), und die Phasenzeile am Ende von `transcribe_project` traegt U+23F1. Der Lauf
+    # schrieb also alle Transkripte, warf dann `UnicodeEncodeError` und endete mit Exit 1 —
+    # wer den Exitcode auswertet, haelt einen fertigen Lauf fuer gescheitert. Gemessen mit
+    # `PYTHONUTF8=0`; eine Umgebung MIT der Variable maskiert den Fall vollstaendig.
+    #
+    # Die Zeile mit dem Warnzeichen (Luecken im Transkript) hatte dieselbe Falle schon
+    # vorher, nur hinter einem `if`; deshalb wird hier der WEG repariert und nicht das eine
+    # Zeichen ersetzt. `fetch.py` ruft `transcribe_project` ebenfalls, geht aber durch sein
+    # eigenes `main()` und war nie betroffen.
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
     ap = argparse.ArgumentParser(description="Whisper-Transkription pro Projekt")
     ap.add_argument("projekt", nargs="?", help="Projektname (Ordner in projekte/)")
     ap.add_argument("--all", action="store_true", help="alle Projekte")

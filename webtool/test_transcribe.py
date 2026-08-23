@@ -6,6 +6,8 @@ import os
 import sys
 import types
 
+import pytest
+
 import transcribe
 
 
@@ -745,3 +747,43 @@ def test_die_grenze_selbst_zaehlt_als_luecke():
     assert transcribe.luecken([_seg(0, 10)], dauer=10 + grenze) == [
         {"start": 10, "end": 10 + grenze, "dauer": grenze}]
     assert transcribe.luecken([_seg(0, 10)], dauer=10 + knapp) == []
+
+
+def test_alle_drei_laeufer_konfigurieren_ihren_stdout_um(monkeypatch):
+    """Der Wurf, den es gab: `transcribe.py` war der EINZIGE Laeufer ohne diese Zeilen, und
+    seine Phasenzeile traegt U+23F1. Bei umgeleitetem stdout auf Windows ist
+    `sys.stdout.encoding` die ANSI-Codepage (gemessen: cp1252) — der Lauf schrieb alle
+    Transkripte, warf dann `UnicodeEncodeError` und endete mit Exit 1. Wer den Exitcode
+    auswertet, haelt einen fertigen Lauf fuer gescheitert.
+
+    Geprueft werden ALLE DREI, nicht nur der reparierte: die Fehlerklasse ist „ein Laeufer
+    ohne reconfigure", und die beiden Zwillinge hatten dafuer ebenfalls keinen Test.
+
+    Gefahren wird mit einem ungueltigen Argument: argparse wirft dann `SystemExit`, und weil
+    `reconfigure` VOR dem Parsen steht, ist es zu dem Zeitpunkt bereits gelaufen. Damit misst
+    der Test zugleich die REIHENFOLGE — dahinter gesetzt liefe die Umkonfiguration bei jedem
+    Fehlaufruf zu spaet.
+
+    **Nicht mit einer Attrappe auf `sys.stdout.reconfigure`**: das echte `sys.stdout` von
+    pytest ist ein `EncodedFile` ohne diese Methode, der `except AttributeError`-Zweig
+    verschluckte den Aufruf also still. Deshalb ein eigenes Objekt.
+    """
+    import importlib
+
+    class Merker:
+        def __init__(self): self.aufrufe = []
+        def reconfigure(self, **kw): self.aufrufe.append(kw)
+        def write(self, *a): pass
+        def flush(self): pass
+
+    for modul, argv in (("transcribe", ["x", "--gibt-es-nicht"]),
+                        ("webtool.correct", ["x", "--gibt-es-nicht"]),
+                        ("webtool.fetch", ["x", "--gibt-es-nicht"])):
+        m = importlib.import_module(modul)
+        merker = Merker()
+        monkeypatch.setattr(m.sys, "stdout", merker)
+        monkeypatch.setattr(m.sys, "argv", argv)
+        with pytest.raises(SystemExit):
+            m.main()
+        assert merker.aufrufe, f"{modul}.main() konfiguriert sys.stdout nicht um"
+        assert merker.aufrufe[0]["encoding"] == "utf-8", modul
