@@ -47,9 +47,23 @@ function ScrollBar({
       )}
       {...props}
     >
+      {/* Der Daumen traegt den Hausakzent, nicht `bg-border` — und das ist KEINE Kosmetik:
+          Radix versteckt die native Leiste zur Laufzeit (ein ungeschichtetes `<style>` mit
+          `[data-radix-scroll-area-viewport]{scrollbar-width:none}` plus
+          `::-webkit-scrollbar{display:none}`), womit die globale `*`-Regel aus `index.css`
+          hier NICHT ankommt — sie ist geschichtet und hat Spezifitaet 0,0,0. Das Transkript
+          rollt in genau dieser Flaeche (`Transcript.tsx`), also auf der meistbenutzten
+          Rollflaeche der App; sie blieb grau bei **1,22:1**, waehrend ueberall sonst 3,33:1
+          stand. `bg-primary/70` ist rechnerisch DIESELBE Farbe wie die globale Regel —
+          Tailwind v4 uebersetzt den Deckkraft-Modifikator nach
+          `color-mix(in oklab, var(--primary) 70%, transparent)`, also Zeichen fuer Zeichen
+          das, was in `index.css` steht. `w-2.5` (10 px) entspricht dabei etwa `thin`.
+          **Was bleibt:** Radix' Voreinstellung `type="hover"` zeigt den Daumen nur, solange
+          der Zeiger ueber der Flaeche steht — die nativen Leisten daneben stehen dauerhaft.
+          Eine bewusst nicht angefasste Differenz: das ist Verhalten, nicht Farbe. */}
       <ScrollAreaPrimitive.ScrollAreaThumb
         data-slot="scroll-area-thumb"
-        className="relative flex-1 rounded-full bg-border"
+        className="relative flex-1 rounded-full bg-primary/70"
       />
     </ScrollAreaPrimitive.ScrollAreaScrollbar>
   )
