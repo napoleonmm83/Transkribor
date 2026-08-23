@@ -690,7 +690,8 @@ export function SettingsPage() {
           Verbrauchs — bei einem Abo kann ein Nutzungslimit dadurch früher greifen, bei einem
           eigenen API-Schlüssel treffen mehr Anfragen gleichzeitig ein. Der Wert gilt je
           laufendem Projekt: zwei Projekte gleichzeitig können doppelt so viele Anfragen
-          nebeneinander erzeugen.
+          nebeneinander erzeugen. Bricht ein Lauf mittendrin ab, fällt nur das noch einmal
+          an, was gerade in Arbeit war — bei einem hohen Wert entsprechend mehr.
         </p>
       </Abschnitt>
 
