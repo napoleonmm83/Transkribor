@@ -175,12 +175,16 @@ kannst weiterarbeiten oder das Fenster zumachen.
 
 Wie viele Aufnahmen gleichzeitig korrigiert werden, stellst du ab der nächsten Fassung
 selbst ein, unter **Einstellungen › Tempo der Korrektur** (bis einschliesslich `v0.31.0`
-sind es fest drei). Mehr heisst: ein grosses Projekt ist früher fertig. Nutzt du ein Abo
-von Claude oder ChatGPT, ist dafür auch dein monatliches Kontingent schneller aufgebraucht —
-bei einem eigenen Schlüssel entstehen entsprechend schneller Kosten. Der Wert gilt dabei je
-Projekt, das gerade läuft: lässt du zwei gleichzeitig durchlaufen, sind es doppelt so viele
-Anfragen. Drei ist ein guter Ausgangswert; wer über Nacht ein ganzes Interview-Projekt
-durchlaufen lässt, dreht höher.
+sind es fest drei). Mehr heisst: ein grosses Projekt ist früher fertig — **und es kostet
+dich nicht mehr**. Es sind dieselben Anfragen, nur dichter hintereinander; wie viele es
+werden, hängt an der Zahl deiner Aufnahmen, nicht an dieser Einstellung. Was sich ändert,
+ist das Tempo: nutzt du ein Abo von Claude oder ChatGPT, kann ein Nutzungslimit dadurch
+früher greifen, und bei einem eigenen Schlüssel treffen mehr Anfragen gleichzeitig ein.
+
+Gemessen an vier Aufnahmen: mit drei Anfragen gleichzeitig statt einer war dasselbe Projekt
+**gut dreimal so schnell** fertig (14 Minuten gegen 4). Der Gewinn wächst mit der Zahl der
+Aufnahmen — bei einer einzelnen langen Datei bringt ein höherer Wert wenig. Wer regelmässig
+zehn oder mehr Aufnahmen auf einmal verarbeitet, ist mit acht gut bedient.
 
 <img src="docs/bilder/editor-hell.png" alt="Derselbe Editor im hellen Design: Zusammenfassung des Gesprächs, Redebeiträge mit Sprechernamen und Zeitmarken, unten die Wellenform mit Wiedergabe.">
 
