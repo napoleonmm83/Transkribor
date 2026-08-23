@@ -17,12 +17,19 @@
  * - **Der Waechter liegt bewusst NICHT unter `src/`.** Dort haette er die Datei nur ueber
  *   Vite lesen koennen, und `import './src/index.css?raw'` liefert unter vitest einen LEEREN
  *   String: ohne `test.css` stubbt vitest jeden CSS-Import, und der Stub greift vor Vites
- *   `?raw` (gemessen: `laenge: 0`). `test.css: true` haette dafuer die verarbeitete
- *   Tailwind-CSS in JEDEN der ~900 Tests gezogen. Am Root faellt er unter
- *   `tsconfig.node.json` und darf `node:fs` lesen.
+ *   `?raw`. GEMESSEN mit einer Wegwerf-Testdatei, die den Wert in eine Zusicherung schrieb:
+ *   `{ typ: 'string', laenge: 0, kopf: '' }` bei 17 719 Byte Datei — sowohl als direkter
+ *   Import als auch ueber `import.meta.glob(..., { query: '?raw' })`. Mit `test.css: true`
+ *   kam derselbe Ausdruck auf `laenge: 17653`; das haette die verarbeitete Tailwind-CSS in
+ *   JEDEN der ~900 Tests gezogen. Am Root faellt der Waechter unter `tsconfig.node.json`
+ *   und darf `node:fs` lesen.
  * - **Kommentare werden vor dem Vergleich entfernt.** Ohne das haelt ein Kommentar, der die
- *   Regel ZITIERT, den Waechter gruen, waehrend die Regel geloescht ist — gemessen, und
- *   dieses Repo zitiert Code in Kommentaren am laufenden Band (die Datei hier auch).
+ *   Regel ZITIERT, den Waechter gruen, waehrend die Regel geloescht ist. GEMESSEN als
+ *   Mutation an `src/index.css`: den `* { … }`-Block ersetzt durch
+ *   `/* Hier stand frueher: * { scrollbar-width: thin; … } *\/` und
+ *   `npx vitest run rollbalken.test.ts` gefahren — OHNE `ohneKommentare` gruen (2 passed),
+ *   MIT rot (`1 failed | 1 passed`), Rueckbau gruen. Dieses Repo zitiert Code in
+ *   Kommentaren am laufenden Band (die Datei hier auch).
  *
  * Die Wirkung selbst ist hier nicht pruefbar: jsdom rechnet kein Layout und rendert keine
  * Bildlaufleisten, `getComputedStyle` kennt `scrollbar-width` dort nicht. Geprueft wurde sie
@@ -53,7 +60,8 @@ describe('Bildlaufleiste', () => {
     expect(css).toMatch(/^\s*\*\s*\{[^{}]*scrollbar-color:/m)
 
     // Und sie darf nicht WIEDER an eine Klasse wandern: ein klassengebundener Block wuerde
-    // dieselbe Luecke aufmachen, aus der dieser Fix kommt.
+    // dieselbe Luecke aufmachen, aus der dieser Fix kommt. Mutation `* {` → `.rollbalken {`
+    // ⇒ `1 failed | 1 passed`, Rueckbau ⇒ `2 passed`.
     expect(css).not.toMatch(/\.[\w-]+[^{}]*\{[^{}]*scrollbar-width/)
   })
 
