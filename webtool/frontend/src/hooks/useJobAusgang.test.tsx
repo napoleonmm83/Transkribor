@@ -57,6 +57,51 @@ describe('useJobAusgang (#376)', () => {
     expect(opts?.description).toBe('B')
   })
 
+  it('der Nenner zaehlt nur die VERSUCHTEN, nicht die uebersprungenen (#376/B7)', async () => {
+    // Ein Lauf ueber ein gewachsenes Projekt druckt fuer jede schon fertige Datei
+    // `skip (vorhanden)`. Zaehlte der Nenner die mit, hiesse es „1 von 4 fehlgeschlagen"
+    // — und der Nutzer sucht drei Aufnahmen, die nie angefasst wurden.
+    vi.mocked(api.getJob).mockResolvedValue({ status: 'done', kind: 'transcribe',
+      lines: ['[P] skip (vorhanden): alt1', '[P] skip (vorhanden): alt2',
+              '[P] fertig neu1: 10 Segmente', '[P] FEHLER neu2: kaputt'] })
+    await laufen('transcribe')
+    expect(toastMock.warning.mock.calls[0][0]).toContain('1 von 2')
+  })
+
+  it('ein URL-Import mit toten Videos meldet NICHT „fertig" (#376/B1)', async () => {
+    // Der Import kennt keine Basisnamen (die Datei entsteht erst beim Laden), also gibt es
+    // nie einen perBase-Eintrag — und `fetch.py:576` wirft nur, wenn GAR nichts geladen
+    // wurde. Ohne die Bilanzzeile meldete dieser Lauf glatten Erfolg. Der Fehlschlag war
+    // vorher unsichtbar; ihn als Erfolg zu BEHAUPTEN waere schlimmer.
+    vi.mocked(api.getJob).mockResolvedValue({ status: 'done', kind: 'fetch',
+      lines: ['[fetch] FEHLER https://x/1: Video nicht verfuegbar', '[fetch] 3 von 5 geladen'] })
+    await laufen('fetch')
+    expect(toastMock.success).not.toHaveBeenCalled()
+    expect(toastMock.warning.mock.calls[0][0]).toContain('3 von 5 geladen')
+  })
+
+  it('ein vollstaendiger URL-Import meldet Erfolg', async () => {
+    // Gegenrichtung: eine Bilanz ALLEIN darf nicht warnen, sonst ist jeder Import verdaechtig.
+    vi.mocked(api.getJob).mockResolvedValue({ status: 'done', kind: 'fetch',
+      lines: ['[fetch] 5 von 5 geladen'] })
+    await laufen('fetch')
+    expect(toastMock.warning).not.toHaveBeenCalled()
+    expect(toastMock.success).toHaveBeenCalledTimes(1)
+  })
+
+  it('ohne Dateinamen wird der GRUND nachgereicht (#376/B2)', async () => {
+    // Stirbt ein Lauf vor der ersten Datei, lautet die Frage nicht „welche?", sondern
+    // „warum?" — und darauf antworten nur die Log-Zeilen. `useJob` zeigte dafuer die letzten
+    // drei; mit dem Umzug hierher waere das ersatzlos entfallen, und weil die Zeilen mit dem
+    // Job sterben (#371), stuende der Grund danach nirgends mehr.
+    vi.mocked(api.getJob).mockResolvedValue({ status: 'error', kind: 'correct',
+      lines: ['prep: 3 Datei(en)', 'run: FEHLER — 0 von 3 versuchten Datei(en) korrigiert'] })
+    await laufen()
+    await act(async () => { await new Promise(r => setTimeout(r, 20)) })
+    const letzter = toastMock.error.mock.calls.at(-1)
+    expect(letzter?.[1]?.description).toContain('run: FEHLER')
+  })
+
   it('ein ganz gescheiterter Lauf meldet einen Fehler', async () => {
     vi.mocked(api.getJob).mockResolvedValue({ status: 'error', kind: 'transcribe', lines: [] })
     await laufen('transcribe')

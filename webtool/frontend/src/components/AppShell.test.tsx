@@ -173,6 +173,11 @@ describe('AppShell', () => {
     // blind (gemessen).
     await act(async () => { await new Promise(r => setTimeout(r, 60)) })
     expect(toastMock.success).toHaveBeenCalledTimes(1)
+    // (3) Und `useJob` muss seinen Lade-Toast WEGNEHMEN. Der stand auf `duration: Infinity`
+    // mit lebendem „Abbrechen"-Knopf; bliebe er stehen, haette der Nutzer neben der
+    // Ausgangsmeldung dauerhaft einen Spinner fuer einen Lauf, den es nicht mehr gibt.
+    // Ungeprueft blieb `toast.dismiss(id)` -> `void id` gruen (gemessen vom Reviewer).
+    expect(toastMock.dismiss).toHaveBeenCalled()
   })
 
   it('bietet einen Sprunglink VOR der Leiste', () => {

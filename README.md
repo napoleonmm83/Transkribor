@@ -531,8 +531,12 @@ Was du damit tust:
 - **Bei der Korrektur:** oft war der KI-Dienst kurz nicht erreichbar. Ein zweiter Versuch
   reicht meist.
 
-Klappt gar nichts, siehst du stattdessen eine rote Fehlermeldung — dann ist der ganze Lauf
-gescheitert, nicht nur einzelne Aufnahmen.
+Und wenn **gar keine** Aufnahme geklappt hat? Beim Transkribieren steht dann dieselbe gelbe
+Meldung, nur mit grösseren Zahlen („5 von 5 fehlgeschlagen") — ein Transkriptionslauf arbeitet
+sich immer bis zum Ende durch. Eine **rote** Fehlermeldung heisst etwas anderes: der Lauf konnte
+gar nicht erst anfangen. Das passiert beim Korrigieren, wenn der KI-Dienst nicht erreichbar ist,
+und beim Video-Import, wenn sich keine einzige Adresse laden liess; die Meldung nennt dann den
+Grund statt der Dateinamen.
 
 </details>
 

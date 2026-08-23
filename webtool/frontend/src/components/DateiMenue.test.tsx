@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor, within } from '@testing-library/rea
 import { DateiMenue } from './DateiMenue'
 import { Huelle } from '@/lib/testHuelle'
 import { useEditorMelden } from '@/hooks/useEditorBruecke'
+import { useActiveJob } from '@/hooks/useActiveJob'
 import * as api from '@/lib/api'
 import type { ProjectFile } from '@/lib/types'
 
@@ -25,8 +26,15 @@ const menueOeffnen = async () => {
   return screen.findByRole('menu')
 }
 
+/** Spiegelt die adoptierten Jobs — „adoptiert" ist sonst von aussen nicht beobachtbar
+ *  (`api.getJob` ruft `useJob` ohnehin selbst). */
+function Jobspiegel() {
+  const { jobs } = useActiveJob()
+  return <span data-testid="jobspiegel">{jobs.map(j => `${j.id}:${j.kind}`).join(' ')}</span>
+}
+
 const zeigen = (file: ProjectFile, pfad?: string) =>
-  render(<Huelle pfad={pfad}><DateiMenue project="P" file={file} /></Huelle>)
+  render(<Huelle pfad={pfad}><DateiMenue project="P" file={file} /><Jobspiegel /></Huelle>)
 
 beforeEach(() => {
   // Ohne clearAllMocks zaehlt der Abbrechen-Test die Aufrufe des Tests davor mit und
@@ -74,6 +82,18 @@ describe('Korrigieren', () => {
     await menueOeffnen()
     fireEvent.click(await screen.findByText('Korrigieren'))
     await waitFor(() => expect(api.startCorrectFile).toHaveBeenCalledWith('P', 'a', false))
+  })
+
+  it('ADOPTIERT den gestarteten Job — sonst faellt die Ausgangsmeldung aus (#376)', async () => {
+    // `useJob` meldet den Ausgang seit #376 nicht mehr selbst; das tut `useJobAusgang` ueber
+    // den JobProvider, und der sieht nur ADOPTIERTE Jobs. Die Adoption hier ist damit
+    // tragend geworden — und war ungeprueft: sie aus `jobStarten` zu entfernen liess alle
+    // 678 Tests gruen (gemessen vom Reviewer), waehrend der Kommentar in `useJob.ts`
+    // ausdruecklich behauptet, „je ein Test haelt es fest".
+    zeigen(datei({ has_edit: false }))
+    await menueOeffnen()
+    fireEvent.click(await screen.findByText('Korrigieren'))
+    await waitFor(() => expect(screen.getByTestId('jobspiegel')).toHaveTextContent('1:correct'))
   })
 
   it('ist ohne KI-Anbieter gesperrt', async () => {
