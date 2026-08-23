@@ -756,6 +756,7 @@ def test_der_treue_pass_laeuft_ueber_dateien_hinweg_PARALLEL(project, monkeypatc
     monkeypatch.setattr(correct, "_claude_exe", lambda: "C:/fake/claude.exe")
 
     lock, state = threading.Lock(), {"verify_jetzt": 0, "verify_max": 0}
+    verify_dateien = []
     schreibe = _chunk_claude(t, [], lock)
 
     def fake_run(cmd, **kw):
@@ -768,6 +769,14 @@ def test_der_treue_pass_laeuft_ueber_dateien_hinweg_PARALLEL(project, monkeypatc
             with lock:
                 state["verify_jetzt"] += 1
                 state["verify_max"] = max(state["verify_max"], state["verify_jetzt"])
+                # WELCHE Datei — nicht nur wie viele. Ohne das sagt der Test nur „zwei
+                # Verify gleichzeitig"; dass es VERSCHIEDENE Dateien sind (der Name
+                # behauptet es), folgt sonst bloss daraus, dass hier zufaellig jede Datei
+                # einen Block hat. Mit mehr Segmenten waeren zwei Bloecke DERSELBEN Datei
+                # dieselbe Beobachtung (CodeRabbit-CLI).
+                m = re.search(r"(\S+)\.correction\.json", kw["input"])
+                if m:
+                    verify_dateien.append(os.path.basename(m.group(1)))
         time.sleep(0.05)                     # Ueberlappung erzwingen, sonst misst der Test nichts
         schreibe(kw["input"])
         if ist_verify:
@@ -780,6 +789,7 @@ def test_der_treue_pass_laeuft_ueber_dateien_hinweg_PARALLEL(project, monkeypatc
     # Positivkontrolle: es gab ueberhaupt Verify-Aufrufe (sonst waere die Zeile darunter leer).
     assert state["verify_max"] >= 1, "kein Treue-Pass gelaufen — der Test misst nichts"
     assert state["verify_max"] > 1, "der Treue-Pass lief NICHT parallel ueber die Dateien"
+    assert set(verify_dateien) == {"S1", "S2"},         f"beide Dateien muessen durch den Treue-Pass — gesehen: {sorted(set(verify_dateien))}"
 
 
 def test_verify_pass_bekommt_die_schon_vergebenen_sprechernamen(project, monkeypatch):
