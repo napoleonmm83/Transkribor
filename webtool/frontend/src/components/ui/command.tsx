@@ -91,11 +91,21 @@ function CommandList({
       data-slot="command-list"
       className={cn(
         // `relative` aus demselben Grund wie am ScrollArea-Viewport: ein `overflow`-Behaelter
-        // klemmt absolut positionierte Nachfahren NUR, wenn er selbst ihr Bezugsrahmen ist.
-        // cmdk rendert im Command-Root ein `<label>` mit inline `position:absolute` — dieselbe
-        // Signatur wie das `sr-only`, das den Editor-Fehler ausgeloest hat. Heute latent (beide
-        // Verbraucher haengen unter positionierten Radix-Wrappern), aber der Scanner in
-        // `bildlaufanker.test.ts` sieht diese Zeile nicht: sie steht in `cn(…)`.
+        // klemmt absolut positionierte Nachfahren NUR, wenn er selbst ihr Bezugsrahmen ist,
+        // und diese Liste IST der Bildlaufbehaelter (`overflow-y-auto` eine Zeile tiefer).
+        // **Heute ein No-op, und das ist gemessen:** weder `ProjektPalette` noch
+        // `SpeakerCombobox` rendert absolut positionierte Nachfahren in die Liste. Er steht
+        // trotzdem — dieselbe Abwaegung wie am `<nav>` der Seitenleiste (`AppShell.tsx`): der
+        // Anker ist billig, und es ist der Behaelter, dessen Inhalt mit den Daten waechst.
+        // **cmdks `<label>` ist NICHT der Grund** (so stand es hier zuerst, CodeRabbit-Bot,
+        // Major): das `position:absolute`-Label haengt im Command-ROOT (cmdk 1.1.1,
+        // `createElement("label", …, {style: Te})`), ist also nie Nachfahre dieser Liste — kein
+        // `overflow` von ihr kann es klemmen oder verfehlen. Es an die Root zu haengen (der
+        // Vorschlag des Befunds) waere eine ANDERE Frage als die Ankerregel, und sie stellt sich
+        // nicht: beide Verbraucher geben dem Label ohnehin einen positionierten Vorfahren
+        // (`DialogContent` ist `fixed`, `PopoverContent` positioniert Radix).
+        // Der Scanner in `bildlaufanker.test.ts` sieht diese Zeile nicht (sie steht in `cn(…)`,
+        // #366) — der Waechter dafuer ist die DOM-Zusicherung dort.
         "relative max-h-[300px] scroll-py-1 overflow-x-hidden overflow-y-auto",
         className
       )}
