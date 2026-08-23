@@ -636,6 +636,27 @@ Damit die Zahlen nicht über Zitate weiterleben:
 
 ## Fassung 4 (2026-08-23) — der Wächter-Bestand als eigenes Bündel
 
+> ## ⛔ ZURÜCKGEBAUT am 2026-08-23 — dieser ganze Abschnitt ist gegenstandslos
+>
+> **Die projektgebundenen Wächter sind aus Transkribor entfernt.** Marcus am selben Tag:
+> projektgebundene Wächter sind unsauber; eine Lösung für **alle** Projekte wird neu
+> aufgesetzt. Entfernt wurden `.claude/hooks/` samt Verdrahtung in `settings.json` und der
+> Spiegel in `claude-routing` (dort PR #10).
+>
+> **Nicht weil es nicht funktionierte** — die vier Issues waren gemessen behoben. Der Grund
+> ist der Zuschnitt.
+>
+> **Was unten steht, bleibt als Messprotokoll stehen und wird nicht gelöscht.** Die Zahlen
+> darin sind für einen Neuschnitt brauchbar, die Fundstellen nicht: `tsc -b --force` 470 ms ·
+> Stufe A 1 Sperre / 0 Fehlalarme über 63 `fix`/`feat`-Commits · die Suiten hätten im belegten
+> Fenster 0 von 1 Rot-Fällen gefangen · sechs Fehlalarme an einem Tag, alle beim Dokumentieren.
+> Dazu die 13 geschlossenen Issues #349–#362.
+>
+> **Drei Lehren daraus** stehen dauerhaft in `claude-routing`, `hooks/verdrahtung.md`:
+> ein Wächter ohne eigenen Test ist über Jahre still aus · shell-agnostisch reicht nicht
+> (PowerShells Blocksyntax lief an allen dreien vorbei) · Fehlalarme entstehen beim
+> Dokumentieren.
+
 > **Diese Fassung wurde vor dem Bau von zwei Prüfern zerlegt** (`review-fassung4-fakten.md`,
 > `review-fassung4-gegnerisch.md`). Der erste Entwurf schlug einen 72-Sekunden-Suitenlauf am
 > PR-Moment vor und stützte sich auf eine Positivkontrolle, die **mit einem kaputten
@@ -905,13 +926,18 @@ den Grund, gegen den er argumentieren muss.
 | # | Was | Ergebnis |
 |---|---|---|
 | 7 | **B3-Vorarbeit** #84-Mess-Harness *(unverändert: was Marcus entblockt, geht zuerst)* | entblockt die Mac-Sitzung |
-| 8a | ~~**B2b′-1** Spiegel-Import → Erkenner-Lib + 7. Dimension → #331 → #334 → #324 → PowerShell~~ ✅ **erledigt** (`claude-routing` PR #9) | **4 zu** (#331, #334, #342, #324), 12 neue Issues |
-| — | **B2b′-2** Code-Guard Stufe A + B | **kein eigener Schritt mehr** — siehe unten |
+| — | ~~**B2b′-1** Wächter-Instandsetzung~~ ⛔ **zurückgebaut** — gebaut (PR #9), dann samt Wächtern entfernt (PR #10). Die 4 Issues sind zu, die 13 Folge-Issues geschlossen. | — |
+| — | ~~**B2b′-2** Code-Guard Stufe A + B~~ ⛔ **entfällt** — wird projektübergreifend neu aufgesetzt | — |
 | 9 | **B7** #330 + #328 *(unverändert)* | 2 zu, 1 Sitzung |
 
 Ab 10 unverändert.
 
-### B2b′-2 ist kein Schritt in dieser Reihenfolge — er begleitet die Codearbeit
+### B2b′-2 entfällt ganz — der Guard wird projektübergreifend neu aufgesetzt
+
+> **Überholt am 2026-08-23, wenige Stunden nach dem Absatz darunter.** Der Guard sollte
+> zunächst die spätere Codearbeit begleiten; dann fiel die Entscheidung, projektgebundene
+> Wächter ganz aufzugeben. Der Absatz bleibt stehen, weil er die Zwischenentscheidung
+> dokumentiert — massgeblich ist der Kasten am Kopf von Fassung 4.
 
 **Entscheidung (Marcus, 2026-08-23):** „der code guard soll nur bei der späteren code arbeit
 nach dem plan zum einsatz kommen."
