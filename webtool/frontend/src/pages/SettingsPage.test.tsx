@@ -1306,6 +1306,39 @@ describe('Tempo der Korrektur', () => {
     await waitFor(() => expect(feld()).toHaveTextContent('5'))
   })
 
+  it('aelterer Lauf glueckt, juengster scheitert — die Anzeige bleibt nicht veraltet', async () => {
+    // Was der Riegel im Test darueber NEU erlaubt (CodeRabbit-CLI, Major): der aeltere Lauf
+    // wird unterdrueckt, der juengste kommt nie bis `setS` — die Anzeige staende auf dem
+    // Stand von VOR beiden, obwohl der aeltere gespeichert HAT. Nachgeladen wird dann.
+    let n = 0
+    const loeser: Array<() => void> = []
+    vi.mocked(api.saveSettings).mockImplementation((patch: Record<string, string>) => {
+      const meins = ++n
+      return new Promise((res, rej) => loeser.push(
+        meins === 1 ? () => res({ ...BASIS, ...patch, ungeschuetzt: false })
+                    : () => rej(new Error('Netz weg'))))
+    })
+
+    zeige({ parallel: '3' })
+    await screen.findByText('Tempo der Korrektur')
+    const feld = () => screen.getByRole('combobox', { name: /Gleichzeitige Anfragen/ })
+
+    fireEvent.click(feld())
+    fireEvent.click(await screen.findByRole('option', { name: '8' }))
+    fireEvent.click(feld())
+    fireEvent.click(await screen.findByRole('option', { name: '5' }))
+    expect(loeser).toHaveLength(2)               // Positivkontrolle: das Rennen findet statt
+
+    // Der Server hat den AELTEREN Wert (8) — das liefert das Nachladen.
+    vi.mocked(api.getSettings).mockResolvedValue({ ...BASIS, parallel: '8' })
+
+    await act(async () => { loeser[0](); await Promise.resolve() })   // aelterer glueckt
+    await act(async () => { loeser[1](); await Promise.resolve() })   // juengster scheitert
+
+    await waitFor(() => expect(feld()).toHaveTextContent('8'))
+    expect(toast.error).toHaveBeenCalled()       // der Fehlschlag wird trotzdem gemeldet
+  })
+
   it('ohne Override kein Hinweis und kein gesperrtes Feld', async () => {
     // Die Gegenprobe. Ein Hinweis, der immer dasteht, ist als Daueralarm derselbe Schaden
     // von der anderen Seite — und ein dauerhaft gesperrtes Feld waere der tote Schalter,

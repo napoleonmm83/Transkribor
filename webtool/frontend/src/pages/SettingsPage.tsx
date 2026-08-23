@@ -359,7 +359,23 @@ export function SettingsPage() {
       if (ungeschuetzt) toast.warning(
         'Gespeichert — aber ohne Schreibsperre. Hat in derselben Sekunde etwas anderes '
         + 'geschrieben, kann die Änderung überschrieben worden sein. Bitte kurz nachsehen.')
-    } catch (e) { toast.error(`Speichern fehlgeschlagen: ${(e as Error).message}`) }
+    } catch (e) {
+      toast.error(`Speichern fehlgeschlagen: ${(e as Error).message}`)
+      // **Was der Riegel oben NEU erlaubt** (CodeRabbit-CLI, Major): war ein ÄLTERER Lauf
+      // erfolgreich und der jüngste scheitert, hat `setS` niemand aufgerufen — der ältere
+      // wurde unterdrückt, der jüngste kam nie so weit. Die Anzeige stünde dann auf dem
+      // Stand von VOR beiden, obwohl auf dem Server der Wert des älteren steht. Vor dem
+      // Riegel gab es diesen Zustand nicht (der ältere setzte einfach).
+      //
+      // Nachladen statt raten: was nach einem Fehlschlag wirklich gespeichert ist, weiß
+      // hier niemand. Nur wenn ich der jüngste bin — sonst räumte ein älterer Fehlschlag
+      // die Anzeige eines noch laufenden jüngeren ab. Und die Antwort wird beim Eintreffen
+      // NOCHMAL gegen den Zähler geprüft, weil inzwischen ein neuer Lauf gestartet sein kann.
+      if (meinLauf === speicherLauf.current) {
+        const frisch = await getSettings().catch(() => null)
+        if (frisch && meinLauf === speicherLauf.current) setS(frisch)
+      }
+    }
     finally { setSpeichert(n => n - 1) }
   }
 
