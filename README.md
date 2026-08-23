@@ -177,9 +177,10 @@ Wie viele Aufnahmen gleichzeitig korrigiert werden, stellst du ab der nächsten 
 selbst ein, unter **Einstellungen › Tempo der Korrektur** (bis einschliesslich `v0.31.0`
 sind es fest drei). Mehr heisst: ein grosses Projekt ist früher fertig — **und es kostet
 dich nicht mehr**. Es sind dieselben Anfragen, nur dichter hintereinander; wie viele es
-werden, hängt an der Zahl deiner Aufnahmen, nicht an dieser Einstellung. Was sich ändert,
-ist das Tempo: nutzt du ein Abo von Claude oder ChatGPT, kann ein Nutzungslimit dadurch
-früher greifen, und bei einem eigenen Schlüssel treffen mehr Anfragen gleichzeitig ein.
+werden, hängt an Zahl und Länge deiner Aufnahmen, nicht an dieser Einstellung. Was sich
+ändert, ist das Tempo: nutzt du ein Abo von Claude oder ChatGPT, kann ein Nutzungslimit
+dadurch früher greifen, und bei einem eigenen Schlüssel treffen mehr Anfragen gleichzeitig
+ein.
 
 Gemessen an vier Aufnahmen: mit **vier** Anfragen gleichzeitig statt einer war dasselbe
 Projekt **gut dreimal so schnell** fertig (14 Minuten gegen 4). Der Gewinn wächst mit der
@@ -189,9 +190,10 @@ bei einer einzelnen **kurzen** Datei: da gibt es nichts zu verteilen.
 
 Das gilt für Läufe, die durchlaufen. Geht mittendrin etwas schief — das Netz weg, ein
 Limit erreicht —, ist trotzdem nichts verloren: die betroffene Aufnahme wird übersprungen,
-ein erneuter Lauf holt genau sie nach, und alles schon Fertige bleibt liegen. Nur was im
-Moment des Abbruchs gerade in Arbeit war, fällt noch einmal an — und davon bei einem hohen
-Wert entsprechend mehr, weil mehr gleichzeitig unterwegs ist.
+und ein erneuter Lauf holt genau sie nach, sobald der Weg wieder frei ist. Alles schon
+Fertige bleibt dabei liegen; nur was im Moment des Abbruchs gerade in Arbeit war, fällt
+noch einmal an — und davon bei einem hohen Wert entsprechend mehr, weil mehr gleichzeitig
+unterwegs ist.
 
 <img src="docs/bilder/editor-hell.png" alt="Derselbe Editor im hellen Design: Zusammenfassung des Gesprächs, Redebeiträge mit Sprechernamen und Zeitmarken, unten die Wellenform mit Wiedergabe.">
 
