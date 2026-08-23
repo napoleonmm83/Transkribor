@@ -124,12 +124,13 @@ def parallel_ok(wert) -> bool:
     und Lesepfad (`_lesen` faellt zurueck). Der Wert reist von dort ueber `job_env()` in den
     correct-Subprozess und wird zur Groesse des `_claude_slots`-Semaphores.
 
-    **Der Weg ueber die Umgebungsvariable ist BEWUSST nicht gedeckt.** `correct.py:44` hat
-    `max(1, int(…))` ohne obere Klammer, und `job_env()` laesst eine gesetzte
-    `TRANSKRIBOR_PARALLEL` gewinnen — ein `.env`-Eintrag von 50 ergibt also 50 Slots. Das
-    ist dasselbe Muster wie bei `TRANSKRIBOR_MIX_SCHWELLE`: wer die `.env` schreibt, hat
-    ohnehin Dateizugriff, und PARALLEL_MAX ist eine Fuehrung fuer die Oberflaeche, keine
-    technische Schranke. Hier zu klemmen naehme den Fluchtweg, ohne etwas zu schuetzen.
+    **Der Weg ueber die Umgebungsvariable geht nicht hier durch, ist aber ebenfalls
+    geklemmt** — in `correct.py` selbst, per `min(…, PARALLEL_MAX)`. Hier stand kurz das
+    Gegenteil („bewusst nicht gedeckt, dasselbe Muster wie TRANSKRIBOR_MIX_SCHWELLE"); die
+    Messung dazu (200 ⇒ 80 gleichzeitige `claude -p`) hat die Abwaegung gedreht, und die
+    Analogie traegt nicht: ein falscher Schwellenwert kostet Qualitaet, eine falsche
+    Slot-Zahl startet Prozesse. PARALLEL_MAX ist damit die Grenze fuer ALLE Wege — was der
+    Name behauptet.
     """
     try:
         return 1 <= int(str(wert).strip()) <= PARALLEL_MAX
