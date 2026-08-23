@@ -26,7 +26,7 @@ const BASIS: Settings = {
   ai_ready: true, ai_reason: '',
   kaputt: '',
   projekte_pfad: 'C:\\Users\\test\\AppData\\Roaming\\Transkribor\\projekte',
-  parallel: '3', parallel_max: 16, parallel_default: '3', parallel_env: '',
+  parallel: '3', parallel_max: 16, parallel_default: '3', parallel_env: '', parallel_env_wirksam: '',
   ytdlp_auto: '1',
   ytdlp: { version: '2026.8.12', unlesbar: false, geprueft: '2026-08-13', auto: true, env: false, laeuft: false, ergebnis: '', ungeschuetzt: false, unterbrochen: false, ejs_unlesbar: false },
   providers: [
@@ -1246,6 +1246,25 @@ describe('Tempo der Korrektur', () => {
     expect(hinweis).toHaveTextContent('TRANSKRIBOR_PARALLEL')
     expect(hinweis).toHaveTextContent('12')                    // der WIRKSAME Wert wird genannt
     expect(screen.getByRole('combobox', { name: /Gleichzeitige Anfragen/ })).toBeDisabled()
+  })
+
+  it('nennt den wirksamen Wert, wenn er vom eingetragenen abweicht', async () => {
+    // Die Klemmung hat das noetig gemacht: `200` ergibt 16, `viele` ergibt 3. Ein Hinweis,
+    // der nur den eingetragenen Wert nennt, waere als Wirksamkeitsangabe falsch — und
+    // genau so stand er da, bis CodeRabbit es fand.
+    zeige({ parallel: '3', parallel_env: '200', parallel_env_wirksam: '16' })
+    await screen.findByText('Tempo der Korrektur')
+    const hinweis = await screen.findByText(/wirkungslos/)
+    expect(hinweis).toHaveTextContent('200')
+    expect(hinweis).toHaveTextContent(/wirksam sind\s*16/)
+  })
+
+  it('nennt den wirksamen Wert NICHT, wenn er gleich ist', async () => {
+    // Gegenprobe: sonst staende „12, wirksam sind 12" da — Rauschen, das den Blick von der
+    // eigentlichen Aussage abzieht.
+    zeige({ parallel: '3', parallel_env: '12', parallel_env_wirksam: '12' })
+    await screen.findByText('Tempo der Korrektur')
+    expect(await screen.findByText(/wirkungslos/)).not.toHaveTextContent('wirksam sind')
   })
 
   it('ohne Override kein Hinweis und kein gesperrtes Feld', async () => {

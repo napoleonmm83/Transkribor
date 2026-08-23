@@ -1107,12 +1107,16 @@ def _settings_body(cfg: dict | None = None) -> dict:
             # `P.projekte`, und `paths.projekte_root()` liest genau das — Anzeige und
             # „Ordner oeffnen" zeigen damit per Konstruktion auf dasselbe Verzeichnis.
             "projekte_pfad": paths.projekte_root(),
-            # Ob `TRANSKRIBOR_PARALLEL` den gespeicherten Deckel ueberstimmt (roher Wert
-            # oder ""). Gehoert HIER hin und nicht in `settings.public()`: das sind „die
-            # Einstellungen ohne die Geheimnisse", die Umgebung ist keine Einstellung —
-            # dieselbe Abgrenzung wie bei `projekte_pfad` darueber. Ohne das Feld waere der
-            # Regler bei gesetzter Variable ein toter Schalter mit Bestaetigungston.
+            # Ob `TRANSKRIBOR_PARALLEL` den gespeicherten Deckel ueberstimmt: der EINGETRAGENE
+            # Wert (roh, "" = kein Override) und die Zahl, die daraus WIRKLICH wird. Beide,
+            # weil sie auseinanderfallen koennen — `200` ergibt 16, `viele` ergibt 3 —, und
+            # eine Anzeige, die den rohen Wert als wirksam ausgibt, waere falsch (genau das
+            # hat die Klemmung neu moeglich gemacht). Gehoert HIER hin und nicht in
+            # `settings.public()`: das sind „die Einstellungen ohne die Geheimnisse", die
+            # Umgebung ist keine Einstellung — dieselbe Abgrenzung wie `projekte_pfad`.
             "parallel_env": settings.parallel_env(),
+            "parallel_env_wirksam": (str(settings.parallel_wirksam(settings.parallel_env()))
+                                     if settings.parallel_env() else ""),
             # Installierte yt-dlp-Fassung + Merker + WIRKSAMER Schalter. Letzterer kann von
             # `ytdlp_auto` abweichen, wenn TRANSKRIBOR_YTDLP_UPDATE gesetzt ist — das Frontend
             # vergleicht beides und sagt es, statt einen Haken zu zeigen, der nichts tut.

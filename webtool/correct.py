@@ -50,15 +50,17 @@ CHUNK_SEGMENTS = 150          # max. Segmente pro claude-Aufruf; darüber wird d
 # geklemmt) trägt hier NICHT: ein falscher Schwellenwert kostet Qualität, eine falsche
 # Slot-Zahl startet Prozesse. Wer wirklich mehr will, hebt PARALLEL_MAX — eine Zahl, eine
 # Stelle. Geklemmt wird laut, nicht still.
-try:
-    _gewuenscht = int(os.environ.get("TRANSKRIBOR_PARALLEL") or 3)
-    CLAUDE_PARALLEL = max(1, min(_gewuenscht, settings.PARALLEL_MAX))
-    if _gewuenscht > settings.PARALLEL_MAX:
-        # NICHT still: der Nutzer hat eine Zahl hingeschrieben und bekommt eine andere.
-        print(f"TRANSKRIBOR_PARALLEL={_gewuenscht} liegt ueber der Grenze "
-              f"{settings.PARALLEL_MAX} — nehme {CLAUDE_PARALLEL}", file=sys.stderr, flush=True)
-except ValueError:                # Tippfehler in der .env darf den Korrekturlauf nicht killen
-    CLAUDE_PARALLEL = 3
+_ROH_PARALLEL = os.environ.get("TRANSKRIBOR_PARALLEL") or ""
+# Die Rechnung steht in settings, nicht hier: die Einstellungsseite muss dieselbe Zahl
+# nennen koennen, und zwei Fassungen davon waeren genau die Divergenz, gegen die
+# PARALLEL_MAX die eine Quelle sein soll. Ein Tippfehler faellt dort auf 3 zurueck, statt
+# den Korrekturlauf zu killen.
+CLAUDE_PARALLEL = settings.parallel_wirksam(_ROH_PARALLEL or "3")
+if _ROH_PARALLEL and str(CLAUDE_PARALLEL) != _ROH_PARALLEL.strip():
+    # NICHT still: der Nutzer hat eine Zahl hingeschrieben und bekommt eine andere.
+    print(f"TRANSKRIBOR_PARALLEL={_ROH_PARALLEL!r} ist nicht der wirksame Wert — "
+          f"nehme {CLAUDE_PARALLEL} (erlaubt 1…{settings.PARALLEL_MAX})",
+          file=sys.stderr, flush=True)
 _claude_slots = threading.Semaphore(CLAUDE_PARALLEL)
 _CREATE_NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 
