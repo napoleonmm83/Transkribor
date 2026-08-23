@@ -16,9 +16,22 @@ function ScrollArea({
       className={cn("relative", className)}
       {...props}
     >
+      {/* `relative` ist hier Pflicht, nicht Zierrat — und der Scanner in
+          `bildlaufanker.test.ts` kann es nicht erzwingen: er sucht `overflow-*` in
+          Klassennamen, und der Viewport hat keinen. Radix setzt sein `overflow: scroll`
+          zur LAUFZEIT. Ohne Anker ist der Bezugsrahmen absolut positionierter Nachfahren
+          die ScrollArea-WURZEL, die AUSSERHALB der rollenden Flaeche liegt; geklemmt wird
+          aber nur, wessen Bezugsrahmen INNERHALB liegt. Gemessen am Editor (105 Segmente,
+          14 Anmerkungen): 16 von 121 absoluten Nachfahren entkamen — alle `sr-only`, das
+          IST `position:absolute` —, ihre Flusspositionen reichten bis 9909 px bei
+          Viewport-Unterkante 1144 px. Das blies die Wurzel auf `scrollHeight` 9816 und gab
+          dem `overflow-auto`-Div in `EditorView.tsx` eine ZWEITE Bildlaufflaeche: zwei
+          Leisten am rechten Rand, die zweite greift erst, wenn die erste unten ist.
+          Dieselbe Falle wie an `main` in `AppShell.tsx`, dort schon behoben — und dort
+          ebenfalls von einem `sr-only` ausgeloest. */}
       <ScrollAreaPrimitive.Viewport
         data-slot="scroll-area-viewport"
-        className="size-full rounded-[inherit] transition-[color,box-shadow] outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1"
+        className="relative size-full rounded-[inherit] transition-[color,box-shadow] outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1"
       >
         {children}
       </ScrollAreaPrimitive.Viewport>
