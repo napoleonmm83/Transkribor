@@ -194,6 +194,13 @@ def _lauf_projekt(tmp_path, monkeypatch, **wie):
     for n in ("a.mp3", "b.mp3"):
         (proj / "audio" / n).write_bytes(b"x")
     monkeypatch.setattr(transcribe, "PROJEKTE", str(tmp_path))
+    # `transcribe.PROJEKTE` allein reicht NICHT (CodeRabbit-Bot): `_datei_sprachwahl` ruft
+    # `webtool.projekt.datei_einstellungen`, und das liest `paths.projekte_root()` — also
+    # TRANSKRIBOR_PROJEKTE, nicht das gepatchte Modulattribut. Ohne die Variable liefert ein
+    # gleichnamiges echtes Projekt „P" des Entwicklers seine Sprache und Mehrsprachigkeit in
+    # diesen Testlauf. Dieselbe Falle wie TRANSKRIBOR_SETTINGS, nur eine Ebene tiefer.
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    monkeypatch.setenv("TRANSKRIBOR_SETTINGS", str(tmp_path / "settings.json"))
     return proj, _faster_attrappe(monkeypatch, **wie)
 
 

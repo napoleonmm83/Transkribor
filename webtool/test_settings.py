@@ -302,18 +302,32 @@ def test_parallel_ok_grenzen(wert, gut):
     assert settings.parallel_ok(wert) is gut
 
 
-def test_parallel_unbrauchbarer_wert_faellt_auf_default(tmp_path):
+@pytest.mark.parametrize("in_datei,erwartet", [
+    ("10000", str(settings.PARALLEL_MAX)),   # zu gross -> geklemmt, NICHT auf 3 zurueck
+    ("0", "1"),                              # zu klein -> Untergrenze
+    ("viele", "3"),                          # unlesbar -> Rueckfall
+    ("03", "3"),                             # gueltig, aber unkanonisch -> normalisiert
+    ("  6  ", "6"),                          # dito
+    ("8", "8"),                              # kanonisch -> unveraendert
+])
+def test_parallel_wird_beim_lesen_normalisiert(in_datei, erwartet, tmp_path):
     """Der LESEpfad. Die Datei liegt im Nutzerprofil und ist von Hand editierbar;
     `correct.py` faengt nur den ValueError eines Tippfehlers ab, nicht eine gueltige Zahl.
 
-    Hier stand „startete dort 10000 Threads" — das stimmt mechanisch NICHT: beide ThreadPools
-    sind auf `min(len(…), CLAUDE_PARALLEL)` begrenzt, es gibt nie mehr Threads als Dateien
-    bzw. Bloecke. Was wegfaellt, ist der DECKEL: ein Semaphore mit 10000 Plaetzen laesst
-    jede Datei und jeden Block gleichzeitig los — bei 50 Aufnahmen also 50 `claude -p`
-    mit je eigenem node."""
-    p = tmp_path / "settings.json"
-    p.write_text(json.dumps({"parallel": "10000"}), encoding="utf-8")
-    assert settings.load()["parallel"] == "3"
+    NORMALISIERT statt nur validiert, und das schliesst zwei Loecher (CodeRabbit-Bot):
+    `"03"` ist fuer `parallel_ok` gueltig, matchte aber KEINE Option der Auswahlliste
+    (`"1"`…`"16"`) — das Feld stand leer da. Und `"10000"` fiel hier auf 3 zurueck, waehrend
+    der Umgebungs-Weg auf 16 klemmt: zwei Regeln fuer dieselbe Frage. Jetzt geht auch dieser
+    Weg durch `parallel_wirksam`.
+
+    Der Wert `"8"` steht MIT im Satz: eine Normalisierung, die alles auf denselben Wert
+    zieht, waere derselbe Schaden von der anderen Seite.
+
+    Hier stand einmal „startete dort 10000 Threads" — das stimmt mechanisch NICHT: beide
+    ThreadPools sind auf `min(len(…), CLAUDE_PARALLEL)` begrenzt. Was wegfaellt, ist der
+    DECKEL."""
+    (tmp_path / "settings.json").write_text(json.dumps({"parallel": in_datei}), encoding="utf-8")
+    assert settings.load()["parallel"] == erwartet
 
 
 def test_job_env_exportiert_den_deckel():
