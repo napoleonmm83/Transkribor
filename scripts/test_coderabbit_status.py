@@ -106,3 +106,39 @@ def test_ignores_foreign_comments():
     assert len(res["failed_pre_merge_checks"]) == 0
     assert len(res["actionable_comments"]) == 0
 
+
+def test_rejects_non_allowlisted_login_containing_coderabbit():
+    # Login enthält "coderabbit", gehört aber nicht zur exakten Allowlist
+    fake_comments = [
+        {"author": {"login": "coderabbit-helper"}, "body": "<!-- rate limited by coderabbit.ai -->\nReview limit reached"},
+        {"author": {"login": "fake-coderabbit"}, "body": "Pre-merge checks\nFailed checks\n| Readme | ⚠️ | x | y |"},
+    ]
+    fake_inline = [
+        {"id": 100, "user": {"login": "coderabbit-imposter"}, "path": "test.py", "line": 1, "body": "**Imposter**"}
+    ]
+    res = coderabbit_status.analyze_coderabbit(
+        pr_info={"comments": fake_comments, "statusCheckRollup": []},
+        inline_comments=fake_inline,
+    )
+    assert res["status"] == "NOT_STARTED"
+    assert res["rate_limited"] is False
+    assert len(res["failed_pre_merge_checks"]) == 0
+    assert len(res["actionable_comments"]) == 0
+
+
+def test_completed_check_without_comments_is_activity():
+    # CodeRabbit Check abgeschlossen, aber 0 Befunde und 0 Kommentare -> COMPLETED statt NOT_STARTED
+    checks = [
+        {"name": "CodeRabbit", "status": "COMPLETED", "conclusion": "SUCCESS"}
+    ]
+    res = coderabbit_status.analyze_coderabbit(
+        pr_info={"comments": [], "statusCheckRollup": checks},
+        inline_comments=[],
+    )
+    assert res["status"] == "COMPLETED"
+    assert res["in_progress"] is False
+    assert len(res["actionable_comments"]) == 0
+    assert len(res["failed_pre_merge_checks"]) == 0
+    assert "abgeschlossen" in res["message"]
+
+

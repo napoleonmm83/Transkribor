@@ -19,6 +19,13 @@ import subprocess
 import sys
 
 
+CODERABBIT_LOGINS = {"coderabbitai", "coderabbitai[bot]"}
+
+
+def _is_coderabbit_author(login: str) -> bool:
+    return (login or "").strip().lower() in CODERABBIT_LOGINS
+
+
 def analyze_coderabbit(pr_info: dict, inline_comments: list) -> dict:
     """Klassifiziert den aktuellen Zustand von CodeRabbit anhand der PR-Kommentare und Checks."""
     comments = pr_info.get("comments", []) or []
@@ -27,7 +34,7 @@ def analyze_coderabbit(pr_info: dict, inline_comments: list) -> dict:
     # 1. Prüfen auf Rate-Limit
     for c in comments:
         author = c.get("author", {}).get("login", "")
-        if "coderabbit" in author.lower():
+        if _is_coderabbit_author(author):
             body = c.get("body", "")
             if "rate limited by coderabbit.ai" in body or "Review limit reached" in body:
                 wait_match = re.search(r"Next included review available in (\d+)\s+minutes", body, re.IGNORECASE)
@@ -63,7 +70,7 @@ def analyze_coderabbit(pr_info: dict, inline_comments: list) -> dict:
     failed_checks = []
     for c in comments:
         author = c.get("author", {}).get("login", "")
-        if "coderabbit" not in author.lower():
+        if not _is_coderabbit_author(author):
             continue
         body = c.get("body", "")
         if "Pre-merge checks" in body and "Failed checks" in body:
@@ -90,7 +97,7 @@ def analyze_coderabbit(pr_info: dict, inline_comments: list) -> dict:
     actionable = []
     for c in inline_comments:
         author = c.get("user", {}).get("login", "") or c.get("author", {}).get("login", "")
-        if "coderabbit" not in author.lower():
+        if not _is_coderabbit_author(author):
             continue
         body = c.get("body", "")
         # Titel aus **...** extrahieren
@@ -104,7 +111,12 @@ def analyze_coderabbit(pr_info: dict, inline_comments: list) -> dict:
             "body": body,
         })
 
-    has_activity = bool(actionable or failed_checks or any("coderabbit" in (c.get("author", {}).get("login", "").lower()) for c in comments))
+    has_completed_check = any(
+        "coderabbit" in (chk.get("name", "") or chk.get("context", "")).lower()
+        and (chk.get("status") or chk.get("state") or "").upper() == "COMPLETED"
+        for chk in checks
+    )
+    has_activity = bool(actionable or failed_checks or has_completed_check or any(_is_coderabbit_author(c.get("author", {}).get("login", "")) for c in comments))
 
     return {
         "status": "COMPLETED" if has_activity else "NOT_STARTED",
