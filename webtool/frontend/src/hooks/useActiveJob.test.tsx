@@ -237,4 +237,38 @@ describe('mergePhases', () => {
     expect(m.globalPerBase?.A).toBe('glossary')
     expect(m.global).toBe('download')
   })
+
+  it('adoptiert mit initialen bases und setzt scope sofort ab Millisekunde 0', async () => {
+    function ScopedProbe() {
+      const { jobs, adopt } = useActiveJob()
+      const phases = mergePhases(jobs.filter(j => j.status === 'running'))
+      return (
+        <div>
+          <button onClick={() => adopt('j_scoped', 'Demo', 'transcribe', ['Audio1'])}>adopt_scoped</button>
+          <span data-testid="scope">{phases.scope ? Array.from(phases.scope).join(',') : 'all'}</span>
+        </div>
+      )
+    }
+    vi.mocked(api.getJob).mockResolvedValue({ status: 'running', lines: [], bases: ['Audio1'] })
+    render(<JobProvider intervalMs={5}><ScopedProbe /></JobProvider>)
+    fireEvent.click(screen.getByText('adopt_scoped'))
+    expect(screen.getByTestId('scope').textContent).toBe('Audio1')
+  })
+
+  it('verwendet r.bases als Fallback wenn noch kein [scope] im Log steht', async () => {
+    function FallbackProbe() {
+      const { jobs, adopt } = useActiveJob()
+      const phases = mergePhases(jobs.filter(j => j.status === 'running'))
+      return (
+        <div>
+          <button onClick={() => adopt('j_fb', 'Demo', 'correct')}>adopt_fb</button>
+          <span data-testid="scope">{phases.scope ? Array.from(phases.scope).join(',') : 'all'}</span>
+        </div>
+      )
+    }
+    vi.mocked(api.getJob).mockResolvedValueOnce({ status: 'running', lines: ['starte…'], bases: ['FileX'] })
+    render(<JobProvider intervalMs={5}><FallbackProbe /></JobProvider>)
+    fireEvent.click(screen.getByText('adopt_fb'))
+    await waitFor(() => expect(screen.getByTestId('scope').textContent).toBe('FileX'))
+  })
 })

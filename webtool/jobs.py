@@ -296,7 +296,7 @@ def betrifft(project: str, base: str, active_only: bool = False) -> dict | None:
 
 
 def active_for(project: str) -> list:
-    """[{'id','kind'}, …] der laufenden Jobs des Projekts — transcribe und correct duerfen
+    """[{'id','kind', 'bases'}, …] der laufenden Jobs des Projekts — transcribe und correct duerfen
     gleichzeitig laufen, deshalb eine Liste."""
     with _lock:
         out = []
@@ -305,5 +305,8 @@ def active_for(project: str) -> list:
                 continue
             r = _jobs.get(jid)
             if r is not None and r["status"] == "running":
-                out.append({"id": r["id"], "kind": r["kind"]})
+                item = {"id": r["id"], "kind": r["kind"]}
+                if r.get("bases") is not None:
+                    item["bases"] = list(r["bases"])
+                out.append(item)
         return sorted(out, key=lambda j: j["kind"])

@@ -14,10 +14,9 @@ const STATE = {
   // 'Fertig' nimmt sich bewusst zurueck: erledigt ist der Ruhezustand. Das Auge soll zu dem
   // springen, was NICHT fertig ist — ein gruener Haken pro Zeile faerbt die Liste zu und
   // macht den einen Fehlschlag darin unsichtbar.
-  done: { icon: Check, label: 'Fertig', klasse: 'text-muted-foreground' },
   skipped: { icon: SkipForward, label: 'Übersprungen', klasse: 'text-muted-foreground' },
   failed: { icon: TriangleAlert, label: 'Fehler', klasse: 'text-destructive' },
-} satisfies Record<FileState, { icon: typeof Check; label: string; klasse: string }>
+} satisfies Record<Exclude<FileState, 'done'>, { icon: typeof Check; label: string; klasse: string }>
 
 const GLOBAL_WAIT: Record<GlobalPhase, string> = {
   glossary: 'Glossar wird erstellt…',
@@ -58,7 +57,7 @@ export function FileStatusPill({ file, active, pct, detail, state, jobRunning, i
    *  die 260px-Seitenleiste des Editors nicht. */
   mitText?: boolean
 }) {
-  if (state) {
+  if (state && state !== 'done') {
     const { icon: Icon, label, klasse } = STATE[state]
     return (
       <span className={`inline-flex items-center gap-1.5 text-xs ${klasse}`}>
