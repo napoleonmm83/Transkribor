@@ -19,6 +19,8 @@ def _cache_leeren():
 def cfg(monkeypatch, tmp_path):
     """Einstellungen ins tmp_path — nie die echte Datei des Entwicklers anfassen."""
     monkeypatch.setenv("TRANSKRIBOR_SETTINGS", str(tmp_path / "settings.json"))
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path / "projekte"))
+    monkeypatch.setenv("TRANSKRIBOR_YTDLP_UPDATE", "0")
     # Isoliere auch Whisper-Umgebungsvariablen, sonst sind die Tests nichtdeterministisch
     # auf einer Maschine, wo .env oder die Shell diese setzen.
     for name in ("WHISPER_MODEL", "WHISPER_LANG"):
@@ -437,11 +439,28 @@ def test_nicht_dekodierbare_eingabedatei_wird_zur_llmerror(tmp_path):
 
 # --- SSL-Kontext & Google-Provider (#385) ------------------------------------
 
-def test_ssl_kontext_nutzt_certifi():
-    ctx = llm._ssl_kontext()
-    assert ctx is not None
+def test_ssl_kontext_nutzt_certifi(monkeypatch):
     import ssl
-    assert isinstance(ctx, ssl.SSLContext)
+    import sys
+    aufrufe = {}
+
+    class FakeCertifi:
+        @staticmethod
+        def where():
+            return "/pfad/zu/fake-ca.pem"
+
+    fake_ctx = object()
+
+    def fake_create_default_context(cafile=None):
+        aufrufe["cafile"] = cafile
+        return fake_ctx
+
+    monkeypatch.setitem(sys.modules, "certifi", FakeCertifi)
+    monkeypatch.setattr(ssl, "create_default_context", fake_create_default_context)
+
+    ctx = llm._ssl_kontext()
+    assert ctx is fake_ctx
+    assert aufrufe["cafile"] == "/pfad/zu/fake-ca.pem"
 
 
 def test_ssl_kontext_ohne_certifi_faellt_auf_die_vorgabe(monkeypatch):
@@ -452,6 +471,8 @@ def test_ssl_kontext_ohne_certifi_faellt_auf_die_vorgabe(monkeypatch):
 
 def test_request_uebergibt_ssl_kontext(monkeypatch):
     gesehen = {}
+    fake_kontext = object()
+    monkeypatch.setattr(llm, "_ssl_kontext", lambda: fake_kontext)
 
     class DummyResponse:
         def __enter__(self):
@@ -470,12 +491,10 @@ def test_request_uebergibt_ssl_kontext(monkeypatch):
     monkeypatch.setattr(llm.urllib.request, "urlopen", fake_urlopen)
     res = llm._request("https://example.com/api", {"header": "val"})
     assert res == {"ok": True}
-    assert gesehen["context"] is not None
-    import ssl
-    assert isinstance(gesehen["context"], ssl.SSLContext)
+    assert gesehen["context"] is fake_kontext
 
 
-def test_google_provider_hat_default_model(cfg):
+def test_google_provider_hat_default_model():
     nach_id = {p["id"]: p for p in llm.provider_list()}
     assert nach_id["google"]["default_model"] == "gemini-flash-latest"
 
