@@ -553,11 +553,11 @@ def _datei_weg(project: str, base: str, mit_audio: bool) -> int:
     als Zeichenklasse und findet die Datei nicht. Der literale Punkt im Muster trennt
     sauber: "Timeline 1.*" trifft `Timeline 1.json`, aber nicht `Timeline 10.json`."""
     muster = os.path.join(paths.transkripte_dir(project), glob.escape(base) + ".*")
-    treffer = glob.glob(muster)
+    treffer = [p for p in glob.glob(muster) if os.path.isfile(p) and not p.endswith(".lock")]
     if mit_audio:
         adir = paths.audio_dir(project)
         treffer += [os.path.join(adir, base + ext) for ext in AUDIO_EXT
-                    if os.path.exists(os.path.join(adir, base + ext))]
+                    if os.path.isfile(os.path.join(adir, base + ext))]
     for p in treffer:
         os.remove(p)
     return len(treffer)
@@ -566,15 +566,14 @@ def _datei_weg(project: str, base: str, mit_audio: bool) -> int:
 _KIND_TEXT = {"transcribe": "Transkription", "correct": "Korrektur", "fetch": "Import"}
 
 
-def _keine_jobs(project: str, base: str = None) -> None:
+def _keine_jobs(project: str, base: str = None, active_only: bool = False) -> None:
     """Dateien wegzuraeumen, waehrend ein Lauf sie schreibt, ist ein Datenrennen: die
     Korrektur haelt Pfade ueber Minuten offen und schriebe die geloeschte edit.json neu.
 
     Mit `base` gilt die Sperre nur fuer diese Aufnahme — die uebrigen bleiben bedienbar,
-    auch waehrend eine Korrektur ueber ein grosses Projekt zwanzig Minuten laeuft. Welche
-    Aufnahmen ein Lauf anfasst, meldet er selbst (`jobs.SCOPE_PREFIX`); ohne diese Meldung
-    gilt er weiterhin als allumfassend. Ohne `base` (Projekt umbenennen) bleibt die grobe
-    Sperre richtig: dort wandert der ganze Ordner.
+    auch waehrend eine Korrektur ueber ein grosses Projekt zwanzig Minuten laeuft.
+    Mit `active_only=True` (beim Loeschen) wird nur blockiert, wenn genau diese Datei
+    in diesem Moment aktiv gerechnet/geschrieben wird.
 
     Der Text nennt den Grund und rät NICHT zum Abbrechen — bei einem Lauf, der die Aufnahme
     gerade schreibt, ist Warten fast immer die richtige Reaktion."""
@@ -582,7 +581,7 @@ def _keine_jobs(project: str, base: str = None) -> None:
         offen = jobs.active_for(project)
         laufend, wen = (offen[0] if offen else None), "Im Projekt wird"
     else:
-        laufend, wen = jobs.betrifft(project, base), f"„{base}“ wird"
+        laufend, wen = jobs.betrifft(project, base, active_only=active_only), f"„{base}“ wird"
     if laufend:
         was = _KIND_TEXT.get(laufend["kind"], laufend["kind"])
         raise HTTPException(status_code=409,
@@ -593,10 +592,18 @@ def _keine_jobs(project: str, base: str = None) -> None:
 def delete_file(project: str, base: str):
     """Eine einzelne Aufnahme samt Audio loeschen (das Projekt bleibt)."""
     _validate(project, base)
-    _keine_jobs(project, base)
-    n = _datei_weg(project, base, mit_audio=True)
-    if not n:
-        raise HTTPException(status_code=404, detail=f"keine Datei: {base}")
+    epath = _edit_path(project, base)
+    tdir = paths.transkripte_dir(project)
+    os.makedirs(tdir, exist_ok=True)
+    with sperre.datei(epath) as gehalten:
+        if not gehalten:
+            raise HTTPException(status_code=503,
+                                detail="Datei kann gerade nicht sicher gelöscht werden")
+        _keine_jobs(project, base, active_only=True)
+        n = _datei_weg(project, base, mit_audio=True)
+        if not n:
+            raise HTTPException(status_code=404, detail=f"keine Datei: {base}")
+        jobs.remove_base(project, base)
     return {"ok": True, "geloescht": n}
 
 

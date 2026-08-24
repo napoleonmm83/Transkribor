@@ -9,6 +9,7 @@ from webtool import correct, paths
 def project(monkeypatch, tmp_path):
     monkeypatch.setenv("TRANSKRIBOR_DIARIZE", "0")   # hermetisch: kein Test rührt echtes pyannote an
     monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    monkeypatch.setenv("TRANSKRIBOR_YTDLP_UPDATE", "0")
     # Sonst entschiede die echte Einstellungsdatei des Entwicklers, ob die Tests den Abo- oder
     # den API-Weg nehmen — und mit hinterlegtem Key gingen sie gegen einen echten Anbieter.
     monkeypatch.setenv("TRANSKRIBOR_SETTINGS", str(tmp_path / "settings.json"))
@@ -1523,4 +1524,62 @@ def test_main_meldet_konkrete_diagnose_beim_scheitern(project, capsys, monkeypat
     out = capsys.readouterr().out
     assert "Guthaben aufgebraucht" in out
     assert "Bitte beim Anbieter aufladen" in out
+
+
+def test_diarize_meldet_active_done_und_ueberspringt_geloeschte_dateien(project, capsys, monkeypatch):
+    _root, t = project
+    monkeypatch.setenv("TRANSKRIBOR_DIARIZE", "1")
+    # S2 anlegen
+    (_root / "Demo" / "audio" / "S2.mp3").write_bytes(b"x")
+    raw = {"language": "de", "segments": [{"id": 0, "start": 0.0, "end": 1.0, "text": "Hallo"}]}
+    (t / "S2.json").write_text(json.dumps(raw), encoding="utf-8")
+
+    from webtool import diarize as diar
+    def fake_diarize(audio, min_speakers=2, num_speakers=None, diagnose=None):
+        if "S1" in audio:
+            # Waehrend S1 diarisiert wird, loescht Nutzer S2
+            (t / "S2.json").unlink()
+            (_root / "Demo" / "audio" / "S2.mp3").unlink()
+        return [{"start": 0.0, "end": 1.0, "cluster": "SPEAKER_00"}]
+
+    monkeypatch.setattr(diar, "diarize_file", fake_diarize)
+    assert correct.cmd_diarize("Demo") == 1
+    out = capsys.readouterr().out
+    assert "[active] S1" in out
+    assert "[done] S1" in out
+    assert "[active] S2" not in out
+
+
+def test_correct_run_meldet_active_done_und_ueberspringt_geloeschte_dateien(project, capsys, monkeypatch):
+    _root, t = project
+    monkeypatch.setattr(correct.llm, "use_api", lambda: True)
+    monkeypatch.setattr(correct, "CLAUDE_PARALLEL", 1)
+    # S2 anlegen
+    (_root / "Demo" / "audio" / "S2.mp3").write_bytes(b"x")
+    raw = {"language": "de", "segments": [{"id": 0, "start": 0.0, "end": 1.0, "text": "Hallo"}]}
+    (t / "S2.json").write_text(json.dumps(raw), encoding="utf-8")
+    (t / "S2.raw.txt").write_text("Hallo\n", encoding="utf-8")
+
+    def fake_correct_file(project, b, gjson, context, verify, force, **kw):
+        if b == "S1" and (t / "S2.json").exists():
+            (t / "S2.json").unlink()
+        (t / f"{b}.correction.json").write_text(json.dumps({
+            "language": "de",
+            "segments": [{"id": 0, "text": "Hallo korrigiert"}]
+        }), encoding="utf-8")
+
+    monkeypatch.setattr(correct, "_correct_file", fake_correct_file)
+    monkeypatch.setattr(correct, "_glossary", lambda *a: "")
+
+    correct.cmd_run("Demo", force=True)
+    out = capsys.readouterr().out
+    assert "[scope] S1\tS2" in out or "[scope] S2\tS1" in out
+    assert "[active] S1" in out
+    assert "[done] S1" in out
+    assert "[active] S2" not in out
+    assert (t / "S1.edit.json").exists()
+    assert not (t / "S2.correction.json").exists()
+    assert not (t / "S2.edit.json").exists()
+
+
 

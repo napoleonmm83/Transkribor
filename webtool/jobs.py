@@ -27,6 +27,8 @@ _PRUNE_AGE = 3600          # fertige Jobs nach 1h vergessen
 # gebraucht wird, was er noch anfassen WIRD. Tab als Trenner, weil Dateinamen alles andere
 # enthalten dürfen (der URL-Import legt "Video [dQw4w9].m4a" an), aber keinen Tabulator.
 SCOPE_PREFIX = "[scope] "
+ACTIVE_PREFIX = "[active] "
+DONE_PREFIX = "[done] "
 
 
 def _popen_kwargs() -> dict:
@@ -66,6 +68,7 @@ def start(project: str, cmd: list, cwd, kind: str, then=None, env=None):
                       # None = Wirkungsbereich noch unbekannt (Zeile noch nicht gedruckt)
                       # -> gilt als "faesst alles an". Siehe SCOPE_PREFIX.
                       "bases": None,
+                      "active_bases": set(),
                       "lines": [], "returncode": None, "started": time.time(),
                       "ended": None, "pid": None, "cancelled": False,
                       "then": [then] if then else []}
@@ -162,6 +165,14 @@ def _run_proc(jid, cmd, cwd, env=None):
                 # spaeter kaeme sie hoechstens aus Transkripttext, der so beginnt.
                 if _jobs[jid]["bases"] is None and line.startswith(SCOPE_PREFIX):
                     _jobs[jid]["bases"] = {b for b in line[len(SCOPE_PREFIX):].split("\t") if b}
+                elif line.startswith(ACTIVE_PREFIX):
+                    b = line[len(ACTIVE_PREFIX):].strip()
+                    if b:
+                        _jobs[jid]["active_bases"].add(b)
+                elif line.startswith(DONE_PREFIX):
+                    b = line[len(DONE_PREFIX):].strip()
+                    if b:
+                        _jobs[jid]["active_bases"].discard(b)
         proc.wait()
         with _lock:
             _jobs[jid]["returncode"] = proc.returncode
@@ -233,20 +244,37 @@ def get(job_id: str):
         snap["lines"] = list(r["lines"])
         snap.pop("proc", None)                # Popen-Handle ist nicht JSON-serialisierbar
         snap.pop("then", None)                # Callables sind nicht JSON-serialisierbar
+        snap.pop("active_bases", None)        # Set ist nicht JSON-serialisierbar
+        if isinstance(snap.get("bases"), set):
+            snap["bases"] = list(snap["bases"])
         return snap
 
 
-def betrifft(project: str, base: str) -> dict | None:
+def remove_base(project: str, base: str) -> None:
+    """Entfernt eine gelöschte Aufnahme sofort aus dem Wirkungsbereich aller laufenden Jobs."""
+    with _lock:
+        for (proj, _kind), jid in _active.items():
+            if proj != project:
+                continue
+            r = _jobs.get(jid)
+            if r is not None:
+                if r.get("bases") is not None:
+                    r["bases"].discard(base)
+                if r.get("active_bases") is not None:
+                    r["active_bases"].discard(base)
+
+
+def betrifft(project: str, base: str, active_only: bool = False) -> dict | None:
     """Der laufende Job, der GENAU DIESE Aufnahme anfasst — sonst None.
 
     Ein Lauf druckt seinen Wirkungsbereich als erste Zeile (`SCOPE_PREFIX`), bevor er
     arbeitet: `transcribe` die noch nicht transkribierten Aufnahmen, `correct` die des
-    Laufs, `fetch` gar keine (er legt neue an). Damit darf gelöscht/umbenannt werden, was
-    der Lauf nachweislich nicht anfasst — vorher sperrte jeder Job das ganze Projekt.
+    Laufs, `fetch` gar keine (er legt neue an).
 
-    Solange die Zeile fehlt (`bases is None`), gilt der Job als allumfassend. Das ist die
-    sichere Richtung: die ersten Sekunden eines Laufs kosten eine Rückfrage, ein zu früh
-    freigegebenes Löschen kostet die Datei."""
+    Mit `active_only=True` (für `delete_file`) wird nur blockiert, wenn die Aufnahme
+    in genau diesem Moment aktiv bearbeitet/geschrieben wird (`[active]`).
+    Mit `active_only=False` (für `rename_file`, `retranscribe_file`) gilt der gesamte geplante Scope.
+    """
     with _lock:
         for (proj, _kind), jid in _active.items():
             if proj != project:
@@ -254,8 +282,12 @@ def betrifft(project: str, base: str) -> dict | None:
             r = _jobs.get(jid)
             if r is None or r["status"] != "running":
                 continue
-            if r["bases"] is None or base in r["bases"]:
-                return {"id": r["id"], "kind": r["kind"]}
+            if active_only:
+                if base in r.get("active_bases", set()):
+                    return {"id": r["id"], "kind": r["kind"]}
+            else:
+                if r["bases"] is None or base in r["bases"]:
+                    return {"id": r["id"], "kind": r["kind"]}
     return None
 
 

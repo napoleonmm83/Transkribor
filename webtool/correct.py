@@ -254,6 +254,8 @@ def cmd_diarize(project: str, only_bases: list = None) -> int:
     for base in (only_bases if only_bases is not None else bases(project)):
         dpath = os.path.join(tdir, base + ".diar.json")
         raw_json = os.path.join(tdir, base + ".json")
+        if not os.path.exists(raw_json):
+            continue
         from . import projekt as _pj          # lazy wie in `_ziel_dialekt` (s. dort)
         sprecher = _pj.datei_sprecher(project, base)
         try:
@@ -272,7 +274,7 @@ def cmd_diarize(project: str, only_bases: list = None) -> int:
                 print(f"↷ nutze vorhandene {base}.diar.json", flush=True)
                 continue
             audio = _audio_path(project, base)
-            if not audio:
+            if not audio or not os.path.exists(audio):
                 print(f"diarize: SKIP {base} (kein Audio gefunden)", flush=True)
                 continue
             from . import diarize                       # lazy: zieht torch/pyannote erst hier
@@ -292,6 +294,7 @@ def cmd_diarize(project: str, only_bases: list = None) -> int:
                 with contextlib.suppress(OSError):   # best effort; sonst ueberschreibt unten ohnehin
                     os.remove(dpath)
             wieviele = f" ({sprecher} Sprecher)" if sprecher else ""
+            print(f"[active] {base}", flush=True)
             print(f"→ Diarisiere {base}{wieviele} …", flush=True)
             diagnose: dict = {}
             t0 = time.monotonic()
@@ -300,6 +303,7 @@ def cmd_diarize(project: str, only_bases: list = None) -> int:
             dt = time.monotonic() - t0
             if not turns:
                 print(f"diarize: SKIP {base} (keine Sprecher erkannt)", flush=True)
+                print(f"[done] {base}", flush=True)
                 continue
             seg_speakers = diarize.assign_clusters(raw, turns)
             # `min_speakers` nur, wenn es auch gewirkt hat: bei gesetzter Sprecherzahl geht
@@ -321,6 +325,7 @@ def cmd_diarize(project: str, only_bases: list = None) -> int:
             # jobPhases.ts endet auf `$`. Das ⏱-Praefix faengt dort keiner der Regexe —
             # unbekannte Zeilen ignoriert der Parser bewusst (Kommentar am Ende der Schleife).
             print(f"⏱ {base}: Diarisierung {dt:.0f}s", flush=True)
+            print(f"[done] {base}", flush=True)
             n += 1
         # BEWUSST nicht auf ValueError geweitet (#190): ein UnicodeDecodeError landet eine
         # Zeile tiefer im Exception-Zweig und wird dort korrekt gemeldet — dieser Lauf
@@ -328,8 +333,10 @@ def cmd_diarize(project: str, only_bases: list = None) -> int:
         # `diarize.*` und beschriftete ihn als "Roh-JSON unlesbar", was er nicht ist.
         except json.JSONDecodeError as e:               # nur die Roh-JSON parst nicht
             print(f"diarize: SKIP {base} (Roh-JSON unlesbar: {e})", flush=True)
+            print(f"[done] {base}", flush=True)
         except Exception as e:                          # pyannote/Token/GPU/HF-403 (erbt OSError!) — NIE den Lauf killen
             print(f"diarize: SKIP {base} ({type(e).__name__}: {e}) — Korrektur ohne Cluster", flush=True)
+            print(f"[done] {base}", flush=True)
     # Anhang, kein Umbau: `/^diarize: \d+ Datei/` in jobPhases.ts hat keinen $-Anker.
     print(f"diarize: {n} Datei(en) diarisiert in {time.monotonic() - t_phase:.0f}s", flush=True)
     return n
@@ -356,7 +363,11 @@ def cmd_apply(project: str, base: str, force: bool = False) -> str:
     if not os.path.exists(cpath):
         print(f"apply: FEHLT {base}.correction.json - erst Korrektur-Workflow laufen lassen")
         return "missing"
-    raw = _load(os.path.join(tdir, base + ".json"))
+    raw_path = os.path.join(tdir, base + ".json")
+    if not os.path.exists(raw_path):
+        print(f"apply: FEHLT {base}.json - Roh-Transkript nicht gefunden")
+        return "missing"
+    raw = _load(raw_path)
     correction = _load(cpath)
     doc = apply_correction(raw, correction, base=base, project=project,
                            audio=_audio_name(project, base))
@@ -1024,10 +1035,13 @@ def cmd_run(project: str, base: str = None, force: bool = False, verify: bool = 
     t_gloss = time.monotonic()
 
     def one(b: str) -> bool:
+        raw_json = os.path.join(tdir, b + ".json")
+        if not os.path.exists(raw_json):
+            return False
+        epath = os.path.join(tdir, b + ".edit.json")
+        cpath = os.path.join(tdir, b + ".correction.json")
+        print(f"[active] {b}", flush=True)
         try:  # eine kaputte Datei darf den Batch nicht abbrechen
-            epath = os.path.join(tdir, b + ".edit.json")
-            cpath = os.path.join(tdir, b + ".correction.json")
-            raw_json = os.path.join(tdir, b + ".json")
             if _is_human_edited(epath) and not force:
                 print(f"↷ SKIP {b} (human_edited=true; --force zum Neu-Korrigieren)", flush=True)
                 return False
@@ -1058,6 +1072,8 @@ def cmd_run(project: str, base: str = None, force: bool = False, verify: bool = 
         except Exception as e:
             print(f"✗ Fehler bei {b}: {e} — überspringe", flush=True)
             return False
+        finally:
+            print(f"[done] {b}", flush=True)
 
     # Dateien sind nach dem Glossar voneinander unabhängig -> parallel. Die Threads warten fast
     # nur auf Opus; wie viele davon wirklich gleichzeitig laufen, regelt _claude_slots.

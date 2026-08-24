@@ -472,7 +472,9 @@ Ordner dorthin kopierst.
 Transkribor löscht nichts von allein. Transkript und Korrekturen bleiben erhalten, bis du eine
 Aufnahme **neu transkribierst** oder ihre **Sprache änderst**: dann wird das Transkript aus
 dem Audio neu erstellt, das bisherige Transkript samt Korrekturen fällt dabei weg (das Audio
-bleibt). Löschen kannst du nur du selbst, bewusst über das ⋯-Menü.
+bleibt). Löschen kannst du nur du selbst, bewusst über das ⋯-Menü. Auch während im Projekt andere
+Aufnahmen transkribiert oder korrigiert werden, kannst du einzelne, nicht gerade aktiv berechnete
+Dateien jederzeit löschen.
 
 </details>
 
