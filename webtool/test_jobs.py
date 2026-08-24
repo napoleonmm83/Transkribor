@@ -415,3 +415,59 @@ def test_eine_spaetere_scope_zeile_aendert_den_bereich_nicht():
     finally:
         jobs.cancel(jid)
         _wait(jid)
+
+
+def test_active_zeilen_aktualisieren_active_bases():
+    """[active] S1 setzt S1 als aktiv, [done] S1 entfernt es wieder."""
+    code = (
+        "import sys, time\n"
+        "print('[scope] S1\\tS2', flush=True)\n"
+        "print('[active] S1', flush=True)\n"
+        "time.sleep(30)\n"
+    )
+    jid, _ = jobs.start("P_dyn", [sys.executable, "-c", code], cwd=None, kind="transcribe")
+    try:
+        _warte_auf_zeilen(jid, 2)
+        # S1 ist aktiv, S2 steht in der Warteschlange
+        assert jobs.betrifft("P_dyn", "S1", active_only=True) is not None
+        assert jobs.betrifft("P_dyn", "S2", active_only=True) is None
+        # Ohne active_only sind beide im Scope
+        assert jobs.betrifft("P_dyn", "S1") is not None
+        assert jobs.betrifft("P_dyn", "S2") is not None
+    finally:
+        jobs.cancel(jid)
+        _wait(jid)
+
+
+def test_done_entfernt_aufnahme_aus_active_bases():
+    """[done] S1 nimmt die Aufnahme wieder aus active_bases und bases."""
+    code = (
+        "import sys, time\n"
+        "print('[scope] S1\\tS2', flush=True)\n"
+        "print('[active] S1', flush=True)\n"
+        "print('[done] S1', flush=True)\n"
+        "print('warte', flush=True)\n"
+        "time.sleep(30)\n"
+    )
+    jid, _ = jobs.start("P_dyn_done", [sys.executable, "-c", code], cwd=None, kind="transcribe")
+    try:
+        _warte_auf_zeilen(jid, 4)
+        assert jobs.betrifft("P_dyn_done", "S1", active_only=True) is None
+    finally:
+        jobs.cancel(jid)
+        _wait(jid)
+
+
+def test_remove_base_entfernt_datei_aus_job_scope():
+    """jobs.remove_base entfernt eine geloeschte Datei sofort aus dem Scope."""
+    jid, _ = jobs.start("P_rem", _scope_cmd(["[scope] S1\tS2", "warte"]), cwd=None, kind="correct")
+    try:
+        _warte_auf_zeilen(jid, 2)
+        assert jobs.betrifft("P_rem", "S2") is not None
+        jobs.remove_base("P_rem", "S2")
+        assert jobs.betrifft("P_rem", "S2") is None
+        assert jobs.betrifft("P_rem", "S1") is not None
+    finally:
+        jobs.cancel(jid)
+        _wait(jid)
+

@@ -514,10 +514,14 @@ def transcribe_project(name, model, language, only=None):
 
     for f in files:
         base = os.path.splitext(os.path.basename(f))[0]
+        if not os.path.exists(f):
+            print(f"[{name}] skip (Audio nicht mehr vorhanden): {base}", flush=True)
+            continue
         out_json = os.path.join(out_dir, base + ".json")
         if os.path.exists(out_json):
             print(f"[{name}] skip (vorhanden): {base}", flush=True)
             continue
+        print(f"[active] {base}", flush=True)
         print(f"[{name}] -> transkribiere {base} …", flush=True)
         t0 = time.monotonic()
         try:
@@ -534,34 +538,36 @@ def transcribe_project(name, model, language, only=None):
             if m is None and _braucht_faster_whisper(engine, mehr):
                 m = _modell(model, devicemod.pick_asr())
             result = _transkribiere_datei(m, engine, f, sprache, mehr, model)
+            dt = time.monotonic() - t0
+            # EINE Stelle fuer beide Engines: hier laufen der faster-whisper- und der
+            # whisper.cpp-Pfad zusammen, und hier wird geschrieben. In `_transkribiere_datei`
+            # stuende die Wache vor der Verzweigung — oder zweimal.
+            result["luecken"] = luecken(result.get("segments") or [], result.get("duration"))
+            with open(out_json, "w", encoding="utf-8") as fh:
+                json.dump(result, fh, ensure_ascii=False, indent=1)
+            with open(os.path.join(out_dir, base + ".raw.txt"), "w", encoding="utf-8") as fh:
+                fh.write(result["text"].strip() + "\n")
+            with open(os.path.join(out_dir, base + ".segments.txt"), "w", encoding="utf-8") as fh:
+                for seg in result["segments"]:
+                    fh.write(f"[{fmt(seg['start'])} - {fmt(seg['end'])}] {seg['text'].strip()}\n")
+            # `duration` ist die Laenge der AUFNAHME. Bis eben stand hier das Ende des letzten
+            # Segments unter der Beschriftung „Audio" — fehlen die letzten Fenster, meldet das
+            # genau die zu kurze Zahl, die den Verlust verdeckt. Der Rueckfall gilt Laeufen ohne
+            # das Feld (alte Roh-JSON, whisper.cpp ohne lesbare WAV).
+            dur = result.get("duration") or (result["segments"][-1]["end"] if result["segments"] else 0)
+            n_ok += 1
+            audio_gesamt += dur
+            print(f"[{name}] fertig {base}: {dt:.0f}s, {len(result['segments'])} Segmente, "
+                  f"Audio {fmt(dur)}, {dur/max(dt,1):.1f}x", flush=True)
+            if result["luecken"]:
+                orte = ", ".join(f"{fmt(x['start'])}-{fmt(x['end'])}" for x in result["luecken"])
+                print(f"[{name}] ⚠ {base}: {len(result['luecken'])} Abschnitt(e) ohne Transkript "
+                      f"({orte}) — bitte im Ton gegenhoeren", flush=True)
         except Exception as e:
             print(f"[{name}] FEHLER {base}: {e}", flush=True)
             continue
-        dt = time.monotonic() - t0
-        # EINE Stelle fuer beide Engines: hier laufen der faster-whisper- und der
-        # whisper.cpp-Pfad zusammen, und hier wird geschrieben. In `_transkribiere_datei`
-        # stuende die Wache vor der Verzweigung — oder zweimal.
-        result["luecken"] = luecken(result.get("segments") or [], result.get("duration"))
-        with open(out_json, "w", encoding="utf-8") as fh:
-            json.dump(result, fh, ensure_ascii=False, indent=1)
-        with open(os.path.join(out_dir, base + ".raw.txt"), "w", encoding="utf-8") as fh:
-            fh.write(result["text"].strip() + "\n")
-        with open(os.path.join(out_dir, base + ".segments.txt"), "w", encoding="utf-8") as fh:
-            for seg in result["segments"]:
-                fh.write(f"[{fmt(seg['start'])} - {fmt(seg['end'])}] {seg['text'].strip()}\n")
-        # `duration` ist die Laenge der AUFNAHME. Bis eben stand hier das Ende des letzten
-        # Segments unter der Beschriftung „Audio" — fehlen die letzten Fenster, meldet das
-        # genau die zu kurze Zahl, die den Verlust verdeckt. Der Rueckfall gilt Laeufen ohne
-        # das Feld (alte Roh-JSON, whisper.cpp ohne lesbare WAV).
-        dur = result.get("duration") or (result["segments"][-1]["end"] if result["segments"] else 0)
-        n_ok += 1
-        audio_gesamt += dur
-        print(f"[{name}] fertig {base}: {dt:.0f}s, {len(result['segments'])} Segmente, "
-              f"Audio {fmt(dur)}, {dur/max(dt,1):.1f}x", flush=True)
-        if result["luecken"]:
-            orte = ", ".join(f"{fmt(x['start'])}-{fmt(x['end'])}" for x in result["luecken"])
-            print(f"[{name}] ⚠ {base}: {len(result['luecken'])} Abschnitt(e) ohne Transkript "
-                  f"({orte}) — bitte im Ton gegenhoeren", flush=True)
+        finally:
+            print(f"[done] {base}", flush=True)
 
     # Der Faktor gilt dem GANZEN Lauf, Modell-Ladezeit eingerechnet — er ist damit kleiner
     # als die Einzelwerte oben und genau deshalb der ehrliche Vergleichswert.

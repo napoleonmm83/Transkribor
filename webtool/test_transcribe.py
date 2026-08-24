@@ -827,3 +827,36 @@ def test_alle_drei_laeufer_konfigurieren_ihren_stdout_um(monkeypatch):
             m.main()
         assert merker.aufrufe, f"{modul}.main() konfiguriert sys.stdout nicht um"
         assert merker.aufrufe[0]["encoding"] == "utf-8", modul
+
+
+def test_transcribe_project_meldet_active_done_und_ueberspringt_geloeschtes_audio(monkeypatch, tmp_path, capsys):
+    proj_dir = tmp_path / "Demo"
+    audio_dir = proj_dir / "audio"
+    audio_dir.mkdir(parents=True)
+    f1 = audio_dir / "S1.mp3"
+    f1.write_bytes(b"audio1")
+    f2 = audio_dir / "S2.mp3"
+    f2.write_bytes(b"audio2")
+
+    monkeypatch.setattr(transcribe, "PROJEKTE", str(tmp_path))
+    monkeypatch.setattr(transcribe, "_modell", lambda *a, **kw: "fake_model")
+    
+    # S2 vor der Transkription loeschen, um Loeschung waehrend Batch zu simulieren
+    def fake_transkribiere(m, engine, audio_file, sprache, mehr, model):
+        if "S1" in audio_file:
+            # Wenn S1 laeuft, loescht der Nutzer S2
+            if f2.exists():
+                f2.unlink()
+        return {"text": "Hallo", "segments": [{"id": 0, "start": 0.0, "end": 1.0, "text": "Hallo"}], "duration": 1.0}
+
+    monkeypatch.setattr(transcribe, "_transkribiere_datei", fake_transkribiere)
+
+    transcribe.transcribe_project("Demo", "tiny", "de")
+    out = capsys.readouterr().out
+    assert "[scope] S1\tS2" in out
+    assert "[active] S1" in out
+    assert "[done] S1" in out
+    assert "skip (Audio nicht mehr vorhanden): S2" in out
+    assert (proj_dir / "transkripte" / "S1.json").exists()
+    assert not (proj_dir / "transkripte" / "S2.json").exists()
+
