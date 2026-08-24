@@ -610,7 +610,7 @@ Die Roh-Transkription bleibt unangetastet: Korrekturen liegen in `<base>.edit.js
 Messungen dahinter — steht in [`CLAUDE.md`](CLAUDE.md), Entwürfe in
 [`docs/superpowers/specs/`](docs/superpowers/specs/).
 
-**Technisch drunter:** Whisper `large-v3` über faster-whisper (CUDA) bzw. whisper.cpp (Metal, mit `-mc 64` und Repetition-Penalty gegen Halluzinations- und Wiederholungsschleifen bei Hintergrundmusik/Stille),
+**Technisch drunter:** Whisper `large-v3` über faster-whisper (CUDA, mit `repetition_penalty=1.1`) bzw. whisper.cpp (Metal, mit `-mc 64`), automatischer Bereinigung von Wiederholungsschleifen bei Hintergrundmusik/Stille,
 Sprechertrennung mit pyannote, Korrektur über einen frei wählbaren LLM-Anbieter, Oberfläche
 als React 19 + Vite + TypeScript + Tailwind v4 + shadcn/ui, Backend FastAPI, Desktop-Hülle
 Electron mit Auto-Update.
