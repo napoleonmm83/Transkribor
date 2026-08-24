@@ -31,8 +31,10 @@ const BASIS: Settings = {
   ytdlp: { version: '2026.8.12', unlesbar: false, geprueft: '2026-08-13', auto: true, env: false, laeuft: false, ergebnis: '', ungeschuetzt: false, unterbrochen: false, ejs_unlesbar: false },
   providers: [
     { id: 'claude-cli', label: 'Claude Code Abo (kein Key)', needs_key: false, cli: true, base: '', default_model: 'opus', keys_url: '', hint: 'Nutzt das Abo.' },
-    { id: 'codex-cli', label: 'ChatGPT-Abo (Codex CLI, kein Key)', needs_key: false, cli: true, base: '', default_model: '', keys_url: '', hint: 'Nutzt das ChatGPT-Abo.' },
+    { id: 'codex-cli', label: 'ChatGPT-Abo (Codex CLI, kein Key)', needs_key: false, cli: true, base: '', default_model: 'gpt-4o', keys_url: '', hint: 'Nutzt das ChatGPT-Abo.' },
     { id: 'anthropic', label: 'Anthropic (Claude)', needs_key: true, cli: false, base: 'https://api.anthropic.com/v1', default_model: 'claude-opus-5', keys_url: 'https://x', hint: '' },
+    { id: 'openai', label: 'OpenAI', needs_key: true, cli: false, base: 'https://api.openai.com/v1', default_model: 'gpt-4o', keys_url: 'https://x', hint: '' },
+    { id: 'custom', label: 'Anderer (OpenAI-kompatibel)', needs_key: false, cli: false, base: '', default_model: '', keys_url: '', hint: '' },
   ],
 }
 
@@ -179,12 +181,26 @@ describe('SettingsPage', () => {
   })
 
   it('bleibt beim Textfeld, wenn der Anbieter keine Liste kennt', async () => {
-    // Codex hat keinen Befehl, der Modelle auflistet — die leere Liste ist hier kein
-    // Fehler, sondern die Wahrheit. Leer lassen heisst: Voreinstellung der CLI.
     vi.mocked(api.listModels).mockResolvedValue([])
-    zeige({ provider: 'codex-cli' })
+    zeige({ provider: 'custom' })
     await waitFor(() => expect(api.listModels).toHaveBeenCalled())
     expect(await screen.findByPlaceholderText('Modellname')).toBeInTheDocument()
+  })
+
+  it('zeigt beim Codex-Abo und OpenAI ein Modell-Auswahl-Dropdown', async () => {
+    vi.mocked(api.listModels).mockResolvedValue([
+      { id: 'gpt-4o', label: 'gpt-4o' },
+      { id: 'gpt-4o-mini', label: 'gpt-4o-mini' },
+      { id: 'o3-mini', label: 'o3-mini' },
+    ])
+    const { unmount } = zeige({ provider: 'codex-cli', model: 'gpt-4o' })
+    await waitFor(() => expect(api.listModels).toHaveBeenCalled())
+    expect(await screen.findByRole('combobox', { name: /Modell/ })).toBeInTheDocument()
+    unmount()
+
+    zeige({ provider: 'openai', has_key: true, model: 'gpt-4o' })
+    await waitFor(() => expect(api.listModels).toHaveBeenCalled())
+    expect(await screen.findByRole('combobox', { name: /Modell/ })).toBeInTheDocument()
   })
 
   it('bleibt beim Textfeld, wenn das automatische Laden scheitert — ohne Fehlblase', async () => {

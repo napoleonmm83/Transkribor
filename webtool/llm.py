@@ -46,21 +46,29 @@ PROVIDERS = {
                    "default_model": "opus",
                    "hint": "Nutzt das angemeldete Claude-Code-Abo auf diesem Rechner."},
     "codex-cli": {"label": "ChatGPT-Abo (Codex CLI, kein Key)", "shape": "codex",
-                  "needs_key": False, "bin": "codex", "models": [],
+                  "needs_key": False, "bin": "codex",
+                  "models": ["gpt-4o", "gpt-4o-mini", "o3-mini", "o1", "o1-mini", "gpt-4.5-preview"],
+                  "default_model": "gpt-4o",
                   "hint": "Nutzt das angemeldete ChatGPT-Abo auf diesem Rechner "
-                          "(einmalig `codex login`). Modell leer lassen = Codex' Voreinstellung."},
+                          "(einmalig `codex login`)."},
     "anthropic": {"label": "Anthropic (Claude)", "shape": "anthropic", "needs_key": True,
                   "base": "https://api.anthropic.com/v1", "default_model": "claude-opus-5",
+                  "models": ["claude-opus-5", "claude-3-7-sonnet-latest", "claude-3-5-sonnet-latest", "claude-3-5-haiku-latest"],
                   "keys_url": "https://console.anthropic.com/settings/keys"},
     "openai": {"label": "OpenAI", "shape": "openai", "needs_key": True,
                "base": "https://api.openai.com/v1",
+               "default_model": "gpt-4o",
+               "models": ["gpt-4o", "gpt-4o-mini", "o3-mini", "o1", "o1-mini", "gpt-4-turbo"],
                "keys_url": "https://platform.openai.com/api-keys"},
     "google": {"label": "Google (Gemini)", "shape": "openai", "needs_key": True,
                "base": "https://generativelanguage.googleapis.com/v1beta/openai",
                "default_model": "gemini-flash-latest",
+               "models": ["gemini-flash-latest", "gemini-1.5-pro-latest", "gemini-2.0-flash", "gemini-2.0-pro-exp-02-05"],
                "keys_url": "https://aistudio.google.com/apikey"},
     "openrouter": {"label": "OpenRouter (viele Modelle, ein Key)", "shape": "openai", "needs_key": True,
                    "base": "https://openrouter.ai/api/v1",
+                   "default_model": "anthropic/claude-3.5-sonnet",
+                   "models": ["anthropic/claude-3.5-sonnet", "openai/gpt-4o", "google/gemini-2.0-flash-001", "deepseek/deepseek-chat"],
                    "keys_url": "https://openrouter.ai/keys"},
     "custom": {"label": "Anderer (OpenAI-kompatibel)", "shape": "openai", "needs_key": False,
                "base": "", "hint": "Eigene Basis-URL, z.B. http://localhost:11434/v1 (Ollama) "
@@ -334,20 +342,36 @@ def list_models() -> list:
     cfg, prov = _cfg()
     if prov["shape"] in ("cli", "codex"):
         # Die Aliase aus PROVIDERS — es gibt keine Quelle, die man fragen koennte (siehe
-        # den Kommentar dort). Leere Liste heisst: Modellname von Hand, oder leer lassen.
+        # den Kommentar dort).
         return [{"id": m, "label": m} for m in prov.get("models", ())]
     base = _base_url(cfg, prov)
     if not base:
         raise LLMError("Keine Basis-URL eingestellt")
     if prov["needs_key"] and not cfg["api_key"]:
         raise LLMError(f"Kein API-Key fuer {prov['label']} hinterlegt")
-    r = _request(f"{base}/models", _headers(cfg, prov), None, 30)
-    out = []
-    for m in (r.get("data") or []):
-        mid = m.get("id")
-        if mid:
+    try:
+        r = _request(f"{base}/models", _headers(cfg, prov), None, 30)
+        out = []
+        for m in (r.get("data") or []):
+            mid = m.get("id")
+            if not mid:
+                continue
+            # OpenAI / generische OpenAI-Dialekte: Ausschluss von Embeddings / Whisper / TTS
+            if prov.get("shape") == "openai" and "openai.com" in base:
+                mid_low = mid.lower()
+                if not re.match(r"^(gpt-|o\d|chatgpt)", mid_low):
+                    continue
+                if any(x in mid_low for x in ("audio", "realtime", "transcription", "tts", "search", "embedding", "instruct")):
+                    continue
             out.append({"id": mid, "label": m.get("display_name") or mid})
-    return sorted(out, key=lambda m: m["id"])
+        if out:
+            return sorted(out, key=lambda m: m["id"])
+    except Exception:
+        models = prov.get("models", ())
+        if models:
+            return [{"id": m, "label": m} for m in models]
+        raise
+    return [{"id": m, "label": m} for m in prov.get("models", ())]
 
 
 _FENCE = re.compile(r"^\s*```(?:json)?\s*|\s*```\s*$")
