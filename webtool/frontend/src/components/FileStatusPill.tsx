@@ -57,67 +57,77 @@ export function FileStatusPill({ file, active, pct, detail, state, jobRunning, i
    *  die 260px-Seitenleiste des Editors nicht. */
   mitText?: boolean
 }) {
-  if (state && state !== 'done') {
-    const { icon: Icon, label, klasse } = STATE[state]
-    return (
-      <span className={`inline-flex items-center gap-1.5 text-xs ${klasse}`}>
-        <Icon className="size-3.5 shrink-0" aria-hidden="true" />
-        {label}
-      </span>
-    )
-  }
-
-  if (active && state !== 'done') {
-    const label = `${PHASE_LABEL[active]} ${detail ?? (pct != null ? `${pct}%` : '…')}`
-    return (
-      // aria-live: der Fortschritt aendert sich ohne Zutun des Nutzers, ein Screenreader
-      // erfaehrt sonst nie, dass die Datei durch ist.
-      // tabular-nums am Elternteil statt einer <span> um die Zahl: gleiche Ziffernbreite,
-      // aber der Text bleibt EIN Knoten — sonst zerfaellt "Korrigieren 45%" in zwei Stuecke.
-      <span className="inline-flex items-center gap-1.5 text-xs font-medium tabular-nums text-primary"
-        aria-live="polite">
-        <Loader2 className="size-3.5 shrink-0 animate-spin" aria-hidden="true" />
-        {label}
-      </span>
-    )
-  }
-
-  // Nur Dateien, die im Scope des laufenden Jobs liegen, zeigen Wartestatus.
-  // Wenn inScope explizit false ist oder die Datei bereits fertig (state === 'done') ist,
-  // bleibt der echte Ruhezustand der Datei erhalten.
-  const betrifft = inScope ?? jobRunning
-  if (jobRunning && betrifft && !state) {
-    if (globalPhase && GLOBAL_WAIT[globalPhase]) {
-      const gLabel = GLOBAL_WAIT[globalPhase]
+  const inhalt = () => {
+    if (state && state !== 'done') {
+      const { icon: Icon, label, klasse } = STATE[state]
       return (
-        <span className="inline-flex items-center gap-1.5 text-xs font-medium text-primary" aria-live="polite">
-          <Loader2 className="size-3.5 shrink-0 animate-spin" aria-hidden="true" />
-          {gLabel}
+        <span className={`inline-flex items-center gap-1.5 text-xs ${klasse}`}>
+          <Icon className="size-3.5 shrink-0" aria-hidden="true" />
+          {label}
         </span>
       )
     }
 
-    const wLabel = 'In Warteschlange…'
+    if (active && state !== 'done') {
+      const label = `${PHASE_LABEL[active]} ${detail ?? (pct != null ? `${pct}%` : '…')}`
+      return (
+        // tabular-nums am Elternteil statt einer <span> um die Zahl: gleiche Ziffernbreite,
+        // aber der Text bleibt EIN Knoten — sonst zerfaellt "Korrigieren 45%" in zwei Stuecke.
+        <span className="inline-flex items-center gap-1.5 text-xs font-medium tabular-nums text-primary">
+          <Loader2 className="size-3.5 shrink-0 animate-spin" aria-hidden="true" />
+          {label}
+        </span>
+      )
+    }
+
+    // Nur Dateien, die im Scope des laufenden Jobs liegen, zeigen Wartestatus.
+    // Wenn inScope explizit false ist oder die Datei bereits fertig (state === 'done') ist,
+    // bleibt der echte Ruhezustand der Datei erhalten.
+    const betrifft = inScope ?? jobRunning
+    if (jobRunning && betrifft && !state) {
+      if (globalPhase && GLOBAL_WAIT[globalPhase]) {
+        const gLabel = GLOBAL_WAIT[globalPhase]
+        return (
+          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-primary">
+            <Loader2 className="size-3.5 shrink-0 animate-spin" aria-hidden="true" />
+            {gLabel}
+          </span>
+        )
+      }
+
+      const wLabel = 'In Warteschlange…'
+      return (
+        <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Clock className="size-3.5 shrink-0 animate-pulse" aria-hidden="true" />
+          {wLabel}
+        </span>
+      )
+    }
+
+    const r = ruhe(file)
+    if (!r) return null
+    if (mitText) return (
+      <span className="inline-flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
+        <r.icon className="size-3.5" aria-hidden="true" /> {r.label}
+      </span>
+    )
+    // Ohne Text: der Name steckt in aria-label (Screenreader) und title (Maus) — ein nacktes
+    // Symbol waere beides nicht. Beides am Wrapper, weil lucide-Icons kein title-Prop annehmen.
     return (
-      <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground" aria-live="polite">
-        <Clock className="size-3.5 shrink-0 animate-pulse" aria-hidden="true" />
-        {wLabel}
+      <span role="img" aria-label={r.label} title={r.label} className="inline-flex shrink-0 text-muted-foreground">
+        <r.icon className="size-3.5" aria-hidden="true" />
       </span>
     )
   }
 
-  const r = ruhe(file)
-  if (!r) return null
-  if (mitText) return (
-    <span className="inline-flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
-      <r.icon className="size-3.5" aria-hidden="true" /> {r.label}
-    </span>
-  )
-  // Ohne Text: der Name steckt in aria-label (Screenreader) und title (Maus) — ein nacktes
-  // Symbol waere beides nicht. Beides am Wrapper, weil lucide-Icons kein title-Prop annehmen.
+  const node = inhalt()
+  if (!node) return null
+  // aria-live: der Fortschritt aendert sich ohne Zutun des Nutzers. Der aeussere Knoten
+  // behaelt aria-live auch beim Wechsel auf den Ruhezustand (Fertig), damit Screenreader
+  // den Abschluss ansagen (#380).
   return (
-    <span role="img" aria-label={r.label} title={r.label} className="inline-flex shrink-0 text-muted-foreground">
-      <r.icon className="size-3.5" aria-hidden="true" />
+    <span aria-live="polite" className="inline-flex items-center">
+      {node}
     </span>
   )
 }

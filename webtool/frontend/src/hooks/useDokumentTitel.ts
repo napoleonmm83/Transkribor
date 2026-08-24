@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { useMatch } from 'react-router-dom'
 import { useDateien } from './useProjektDaten'
 import { mergePhases, useActiveJob } from './useActiveJob'
-import { describePhases } from '@/lib/jobPhases'
+import { describePhases, KIND_LABEL } from '@/lib/jobPhases'
 
 const APP = 'Transkribor'
 
@@ -36,7 +36,9 @@ export function useDokumentTitel(): string {
   // NUR die Jobs dieses Projekts: Basisnamen wiederholen sich ueber Projekte hinweg, und
   // mergePhases ist nach Basisnamen indiziert (siehe dessen Kommentar).
   const meine = jobs.filter(j => j.project === projekt && j.status === 'running')
-  const lauf = meine.length ? describePhases(mergePhases(meine)) : ''
+  const lauf = meine.length
+    ? (describePhases(mergePhases(meine)) || (KIND_LABEL[meine[0].kind] ?? 'läuft…'))
+    : ''
   const ort = !projekt ? '' : datei ? `${projekt} · ${datei}` : projekt
 
   const titel = fensterTitel(ort, lauf)

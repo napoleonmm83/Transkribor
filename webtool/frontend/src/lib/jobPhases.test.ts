@@ -256,6 +256,23 @@ describe('URL-Import', () => {
     expect(p.global).toBe('download')
     expect(p.active).toEqual({})
   })
+  it('Projekt mit Name "fetch" wird bei transcribe nicht als Download-Phase fehlinterpretiert (#379)', () => {
+    const p = parseJobPhases('transcribe', [
+      '[fetch] -> transkribiere audio_01 …',
+      '45%|',
+    ])
+    expect(p.global).toBeNull()
+    expect(p.active).toEqual({ audio_01: { phase: 'transcribe', pct: 45 } })
+  })
+  it('Projekt mit Name "fetch" markiert transkribiere-FEHLER, fertig und skip korrekt (#379)', () => {
+    const p = parseJobPhases('transcribe', [
+      '[fetch] fertig audio_01: 12s',
+      '[fetch] skip (vorhanden): audio_02',
+      '[fetch] FEHLER audio_03: broken pipe',
+    ])
+    expect(p.perBase).toEqual({ audio_01: 'done', audio_02: 'skipped', audio_03: 'failed' })
+    expect(p.global).toBeNull()
+  })
 })
 
 describe('parseJobPhases — scope', () => {
