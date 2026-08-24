@@ -582,6 +582,122 @@ def test_fuege_zeile_an_schuetzt_initiale_zeilen_bei_ueberlauf():
     assert lines[-1] == f"logzeile {jobs.MAX_JOB_LINES + 49}"
 
 
+def test_request_verzoegert_then_bis_alle_pending_jobs_fertig_sind():
+    """Wenn bei laufendem Job 1 ein Nachlauf (Job 2) vorgemerkt wird, feuert `then`
+    nicht nach Job 1, sondern wird an Job 2 weitergereicht und erst am Ende der Kette
+    genau EINMAL ausgeführt (#Option1)."""
+    ergebnisse = []
+
+    def log_nachlauf():
+        with jobs._lock:
+            act = ("P_defer", "transcribe") in jobs._active
+            pend = any(k[0] == "P_defer" for k in jobs._pending)
+        ergebnisse.append({"active": act, "pending": pend})
+
+    # Job 1 starten
+    jid1, s1 = jobs.request("P_defer", _echo_cmd(2), cwd=None, kind="transcribe", then=log_nachlauf)
+    assert s1 is True
+
+    # Job 2 sofort anfordern (wird vorgemerkt)
+    jid2, s2 = jobs.request("P_defer", _echo_cmd(2), cwd=None, kind="transcribe", then=log_nachlauf)
+    assert s2 is False
+
+    # Warten bis Job 1 und der nachfolgende Job 2 beendet sind
+    _wait(jid1)
+    deadline = time.time() + 5.0
+    while time.time() < deadline:
+        with jobs._lock:
+            if ("P_defer", "transcribe") not in jobs._active and not any(k[0] == "P_defer" for k in jobs._pending):
+                if ergebnisse:
+                    break
+        time.sleep(0.02)
+
+    # `then` darf genau EINMAL am Ende gefeuert haben
+    assert len(ergebnisse) == 1
+    assert ergebnisse[0] == {"active": False, "pending": False}
+
+
+def test_request_mehrere_dateien_verzoegern_then_bis_zum_letzten_nachlauf():
+    """Batch-Upload-Simulation: 3 Dateien werden angefordert. `then` feuert erst nach
+    dem letzten Nachlauf und findet alle Jobs abgeschlossen vor (#Option1)."""
+    ergebnisse = []
+
+    def autocorrect_cb():
+        with jobs._lock:
+            act = ("P_batch", "transcribe") in jobs._active
+            pend = any(k[0] == "P_batch" for k in jobs._pending)
+        ergebnisse.append({"active": act, "pending": pend})
+
+    # Datei 1 startet Transkription
+    jid1, s1 = jobs.request("P_batch", _echo_cmd(3), cwd=None, kind="transcribe", then=autocorrect_cb)
+    assert s1 is True
+
+    # Datei 2 und 3 werden währenddessen hochgeladen
+    jid2, s2 = jobs.request("P_batch", _echo_cmd(2), cwd=None, kind="transcribe", then=autocorrect_cb)
+    jid3, s3 = jobs.request("P_batch", _echo_cmd(2), cwd=None, kind="transcribe", then=autocorrect_cb)
+    assert s2 is False
+    assert s3 is False
+
+    _wait(jid1)
+    deadline = time.time() + 6.0
+    while time.time() < deadline:
+        with jobs._lock:
+            if ("P_batch", "transcribe") not in jobs._active and not any(k[0] == "P_batch" for k in jobs._pending):
+                if ergebnisse:
+                    break
+        time.sleep(0.02)
+
+    assert len(ergebnisse) == 1
+    assert ergebnisse[0] == {"active": False, "pending": False}
+
+
+def test_get_ist_json_serialisierbar_auch_mit_next_runs():
+    """jobs.get(jid) muss strikt JSON-serialisierbar sein, auch wenn next_runs Funktionen enthält."""
+    import json
+    jid1, s1 = jobs.start("P_json", _echo_cmd(5), cwd=None, kind="transcribe")
+    assert s1 is True
+    # Nachlauf registrieren -> next_runs wird befüllt
+    jid2, s2 = jobs.request("P_json", _echo_cmd(1), cwd=None, kind="transcribe")
+    assert s2 is False
+    try:
+        snap = jobs.get(jid1)
+        assert snap is not None
+        assert "next_runs" not in snap
+        assert "then" not in snap
+        # JSON-Serialisierung darf keine TypeError-Exception werfen (HTTP 500 Verhinderung)
+        dumped = json.dumps(snap)
+        assert isinstance(dumped, str)
+    finally:
+        jobs.cancel(jid1)
+        _wait(jid1)
+
+
+def test_request_mit_lambdas_feuert_am_ende():
+    """Auch bei dynamisch erzeugten Lambda-Instanzen feuert das final-then am Ende."""
+    ergebnisse = []
+    # 3x Request mit verschiedenen Lambda-Instanzen
+    jid1, s1 = jobs.request("P_lambda", _echo_cmd(2), cwd=None, kind="transcribe",
+                            then=lambda: ergebnisse.append("fertig"))
+    assert s1 is True
+    jid2, s2 = jobs.request("P_lambda", _echo_cmd(2), cwd=None, kind="transcribe",
+                            then=lambda: ergebnisse.append("fertig"))
+    assert s2 is False
+
+    _wait(jid1)
+    deadline = time.time() + 6.0
+    while time.time() < deadline:
+        with jobs._lock:
+            if ("P_lambda", "transcribe") not in jobs._active and not any(k[0] == "P_lambda" for k in jobs._pending):
+                if ergebnisse:
+                    break
+        time.sleep(0.02)
+
+    assert len(ergebnisse) >= 1
+
+
+
+
+
 
 
 
