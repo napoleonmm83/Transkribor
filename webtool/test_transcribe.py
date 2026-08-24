@@ -958,3 +958,205 @@ def test_transcribe_project_autocorrect_streaming_pipeline(monkeypatch, tmp_path
     assert ai_max > 1
 
 
+def test_transcribe_project_staggered_order_exact_sequence(monkeypatch, tmp_path):
+    """Prüft die exakte chronologische Überlappung:
+    Datei 1 wird transkribiert -> diarisiert -> KI übergeben.
+    Datei 2 wird transkribiert & diarisiert WÄHREND Datei 1 noch in der KI-Korrektur rechnet."""
+    import time
+    from webtool import correct, llm
+
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    monkeypatch.setattr(transcribe, "PROJEKTE", str(tmp_path))
+    monkeypatch.setattr(transcribe, "_modell", lambda *a, **kw: "fake_model")
+    monkeypatch.setattr(llm, "available", lambda: (True, ""))
+    monkeypatch.setattr(correct, "CLAUDE_PARALLEL", 4)
+    monkeypatch.setattr(correct, "diarize_enabled", lambda: True)
+
+    proj_dir = tmp_path / "StaggerDemo"
+    audio_dir = proj_dir / "audio"
+    audio_dir.mkdir(parents=True)
+    tdir = proj_dir / "transkripte"
+    tdir.mkdir(parents=True)
+
+    for b in ("D1", "D2"):
+        (audio_dir / f"{b}.mp3").write_bytes(b"audio")
+
+    events = []
+
+    def fake_transkribiere(_m, _engine, audio_file, _sprache, _mehr, _model):
+        base = os.path.splitext(os.path.basename(audio_file))[0]
+        events.append(f"start_transcribe_{base}")
+        time.sleep(0.04)
+        events.append(f"end_transcribe_{base}")
+        return {"text": "Text", "segments": [{"id": 0, "start": 0.0, "end": 1.0, "text": "Text"}], "duration": 1.0}
+
+    def fake_diarize(project, only_bases=None):
+        base = only_bases[0] if only_bases else "all"
+        events.append(f"start_diarize_{base}")
+        time.sleep(0.04)
+        events.append(f"end_diarize_{base}")
+        return 1
+
+    def fake_correct_ai_single(project, b, **kw):
+        events.append(f"start_ai_{b}")
+        # KI braucht länger (120ms), sodass D2 während D1-KI transkribiert und diarisiert wird
+        time.sleep(0.12)
+        events.append(f"end_ai_{b}")
+        return True
+
+    monkeypatch.setattr(transcribe, "_transkribiere_datei", fake_transkribiere)
+    monkeypatch.setattr(correct, "cmd_diarize", fake_diarize)
+    monkeypatch.setattr(correct, "correct_ai_single", fake_correct_ai_single)
+
+    transcribe.transcribe_project("StaggerDemo", "tiny", "de", autocorrect=True)
+
+    # Prüfen, dass start_transcribe_D2 und start_diarize_D2 VOR end_ai_D1 stattfinden!
+    idx_end_ai_d1 = events.index("end_ai_D1")
+    idx_start_transcribe_d2 = events.index("start_transcribe_D2")
+    idx_start_diarize_d2 = events.index("start_diarize_D2")
+
+    assert idx_start_transcribe_d2 < idx_end_ai_d1, "Transkription D2 muss starten, bevor KI D1 fertig ist"
+    assert idx_start_diarize_d2 < idx_end_ai_d1, "Diarisierung D2 muss starten, bevor KI D1 fertig ist"
+
+    # Reihenfolge pro Datei strikt: Transcribe D1 -> Diarize D1 -> AI D1
+    assert events.index("end_transcribe_D1") < events.index("start_diarize_D1")
+    assert events.index("end_diarize_D1") < events.index("start_ai_D1")
+    # Und D2 erst nach Diarize D1:
+    assert events.index("end_diarize_D1") < events.index("start_transcribe_D2")
+
+
+def test_transcribe_project_dynamically_picks_up_new_uploads(monkeypatch, tmp_path):
+    """Simuliert den Fall, dass während der Transkription von D1 eine neue Datei D2 hochgeladen wird."""
+    import time
+    from webtool import correct, llm
+
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    monkeypatch.setattr(transcribe, "PROJEKTE", str(tmp_path))
+    monkeypatch.setattr(transcribe, "_modell", lambda *a, **kw: "fake_model")
+    monkeypatch.setattr(llm, "available", lambda: (True, ""))
+    monkeypatch.setattr(correct, "CLAUDE_PARALLEL", 4)
+    monkeypatch.setattr(correct, "diarize_enabled", lambda: True)
+
+    proj_dir = tmp_path / "DynamicDemo"
+    audio_dir = proj_dir / "audio"
+    audio_dir.mkdir(parents=True)
+    tdir = proj_dir / "transkripte"
+    tdir.mkdir(parents=True)
+
+    # Initial nur D1 vorhanden
+    (audio_dir / "D1.mp3").write_bytes(b"audio")
+
+    processed = []
+
+    def fake_transkribiere(_m, _engine, audio_file, _sprache, _mehr, _model):
+        base = os.path.splitext(os.path.basename(audio_file))[0]
+        processed.append(base)
+        if base == "D1":
+            # Während D1 transkribiert wird, trifft D2 ein (z.B. zweiter File-Upload)
+            (audio_dir / "D2.mp3").write_bytes(b"audio")
+        return {"text": f"Text {base}", "segments": [{"id": 0, "start": 0.0, "end": 1.0, "text": f"Text {base}"}], "duration": 1.0}
+
+    monkeypatch.setattr(transcribe, "_transkribiere_datei", fake_transkribiere)
+    monkeypatch.setattr(correct, "cmd_diarize", lambda *a, **kw: 1)
+    monkeypatch.setattr(correct, "correct_ai_single", lambda *a, **kw: True)
+
+    transcribe.transcribe_project("DynamicDemo", "tiny", "de", autocorrect=True)
+
+    assert "D1" in processed
+    assert "D2" in processed, "D2 wurde während des Laufs hochgeladen und muss dynamisch mitverarbeitet werden"
+    assert (tdir / "D1.json").exists()
+    assert (tdir / "D2.json").exists()
+
+
+def test_transcribe_project_diarize_error_does_not_block_next_file(monkeypatch, tmp_path, capsys):
+    """Wenn bei D1 die Diarisierung fehlschlägt, muss D2 trotzdem transkribiert und diarisiert werden."""
+    from webtool import correct, llm
+
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    monkeypatch.setattr(transcribe, "PROJEKTE", str(tmp_path))
+    monkeypatch.setattr(transcribe, "_modell", lambda *a, **kw: "fake_model")
+    monkeypatch.setattr(llm, "available", lambda: (True, ""))
+    monkeypatch.setattr(correct, "CLAUDE_PARALLEL", 4)
+    monkeypatch.setattr(correct, "diarize_enabled", lambda: True)
+
+    proj_dir = tmp_path / "ErrDemo"
+    audio_dir = proj_dir / "audio"
+    audio_dir.mkdir(parents=True)
+    tdir = proj_dir / "transkripte"
+    tdir.mkdir(parents=True)
+
+    for b in ("D1", "D2"):
+        (audio_dir / f"{b}.mp3").write_bytes(b"audio")
+
+    def fake_transkribiere(_m, _engine, audio_file, _sprache, _mehr, _model):
+        base = os.path.splitext(os.path.basename(audio_file))[0]
+        return {"text": f"Text {base}", "segments": [{"id": 0, "start": 0.0, "end": 1.0, "text": f"Text {base}"}], "duration": 1.0}
+
+    def fake_diarize(project, only_bases=None):
+        base = only_bases[0] if only_bases else "all"
+        if base == "D1":
+            raise RuntimeError("GPU out of memory in diarize D1")
+        return 1
+
+    corrected = []
+
+    def fake_correct_ai_single(project, b, **kw):
+        corrected.append(b)
+        return True
+
+    monkeypatch.setattr(transcribe, "_transkribiere_datei", fake_transkribiere)
+    monkeypatch.setattr(correct, "cmd_diarize", fake_diarize)
+    monkeypatch.setattr(correct, "correct_ai_single", fake_correct_ai_single)
+
+    transcribe.transcribe_project("ErrDemo", "tiny", "de", autocorrect=True)
+    out = capsys.readouterr().out
+
+    assert "Autocorrect-Fehler bei D1: GPU out of memory" in out
+    assert (tdir / "D1.json").exists()
+    assert (tdir / "D2.json").exists()
+    assert "D2" in corrected
+
+
+def test_transcribe_project_diarize_runs_even_if_ai_unavailable(monkeypatch, tmp_path):
+    """Wenn KI nicht erreichbar ist (z.B. Offline / kein API-Key), soll Diarisierung auf der GPU trotzdem pro Datei laufen."""
+    from webtool import correct, llm
+
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    monkeypatch.setattr(transcribe, "PROJEKTE", str(tmp_path))
+    monkeypatch.setattr(transcribe, "_modell", lambda *a, **kw: "fake_model")
+    monkeypatch.setattr(llm, "available", lambda: (False, "kein KI-Anbieter konfiguriert"))
+    monkeypatch.setattr(correct, "CLAUDE_PARALLEL", 4)
+    monkeypatch.setattr(correct, "diarize_enabled", lambda: True)
+
+    proj_dir = tmp_path / "OfflineDemo"
+    audio_dir = proj_dir / "audio"
+    audio_dir.mkdir(parents=True)
+    tdir = proj_dir / "transkripte"
+    tdir.mkdir(parents=True)
+
+    for b in ("D1", "D2"):
+        (audio_dir / f"{b}.mp3").write_bytes(b"audio")
+
+    diarized = []
+
+    def fake_transkribiere(_m, _engine, audio_file, _sprache, _mehr, _model):
+        base = os.path.splitext(os.path.basename(audio_file))[0]
+        return {"text": f"Text {base}", "segments": [{"id": 0, "start": 0.0, "end": 1.0, "text": f"Text {base}"}], "duration": 1.0}
+
+    def fake_diarize(project, only_bases=None):
+        base = only_bases[0] if only_bases else "all"
+        diarized.append(base)
+        return 1
+
+    monkeypatch.setattr(transcribe, "_transkribiere_datei", fake_transkribiere)
+    monkeypatch.setattr(correct, "cmd_diarize", fake_diarize)
+
+    transcribe.transcribe_project("OfflineDemo", "tiny", "de", autocorrect=True)
+
+    assert diarized == ["D1", "D2"]
+    assert (tdir / "D1.json").exists()
+    assert (tdir / "D2.json").exists()
+
+
+
+

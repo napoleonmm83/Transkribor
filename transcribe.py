@@ -492,26 +492,44 @@ def transcribe_project(name, model, language, only=None, autocorrect: bool = Fal
 
     ai_pool = None
     ai_futures = []
+    _wait_futures = None
     if autocorrect:
         try:
             from webtool import llm, correct as _correct
             ok_ai, _ = llm.available()
             if ok_ai:
-                from concurrent.futures import ThreadPoolExecutor
-                ai_pool = ThreadPoolExecutor(max_workers=min(len(files), _correct.CLAUDE_PARALLEL))
+                from concurrent.futures import ThreadPoolExecutor, wait as _wait_futures
+                ai_pool = ThreadPoolExecutor(max_workers=_correct.CLAUDE_PARALLEL)
         except Exception:
             pass
 
+    initial_files = list(files)
+    processed = set()
+    failed_bases = set()
     try:
-        for f in files:
+        while True:
+            current_files = find_audio(proj_dir, only)
+            all_known = set(current_files)
+            for f in initial_files:
+                base = os.path.splitext(os.path.basename(f))[0]
+                if base not in processed and base not in failed_bases and not os.path.exists(f):
+                    all_known.add(f)
+            pending = [
+                f for f in all_known
+                if os.path.splitext(os.path.basename(f))[0] not in processed
+                and os.path.splitext(os.path.basename(f))[0] not in failed_bases
+                and not os.path.exists(os.path.join(out_dir, os.path.splitext(os.path.basename(f))[0] + ".json"))
+            ]
+            if not pending:
+                break
+            pending.sort(key=lambda p: os.path.basename(p))
+            f = pending[0]
             base = os.path.splitext(os.path.basename(f))[0]
             if not os.path.exists(f):
                 print(f"[{name}] skip (Audio nicht mehr vorhanden): {base}", flush=True)
+                failed_bases.add(base)
                 continue
             out_json = os.path.join(out_dir, base + ".json")
-            if os.path.exists(out_json):
-                print(f"[{name}] skip (vorhanden): {base}", flush=True)
-                continue
             print(f"[active] {base}", flush=True)
             print(f"[{name}] -> transkribiere {base} …", flush=True)
             t0 = time.monotonic()
@@ -539,27 +557,30 @@ def transcribe_project(name, model, language, only=None, autocorrect: bool = Fal
                     print(f"[{name}] ⚠ {base}: {len(result['luecken'])} Abschnitt(e) ohne Transkript "
                           f"({orte}) — bitte im Ton gegenhoeren", flush=True)
 
-                if ai_pool is not None:
+                if autocorrect:
                     try:
                         from webtool import correct as _correct
                         # 1. Diarisierung & Prep direkt auf der GPU in der Hauptschleife (Hardware geschützt):
                         _correct.cmd_diarize(name, [base])
                         _correct.prep_single(name, base)
                         # 2. Datei sofort parallel an den Cloud-KI-Threadpool übergeben:
-                        ai_futures.append(ai_pool.submit(_correct.correct_ai_single, name, base))
+                        if ai_pool is not None:
+                            ai_futures.append(ai_pool.submit(_correct.correct_ai_single, name, base))
                     except Exception as ex:
                         print(f"[{name}] Autocorrect-Fehler bei {base}: {ex}", flush=True)
             except Exception as e:
                 print(f"[{name}] FEHLER {base}: {e}", flush=True)
+                failed_bases.add(base)
                 continue
             finally:
+                processed.add(base)
                 print(f"[done] {base}", flush=True)
     finally:
         if ai_pool is not None:
             if ai_futures:
                 print(f"[{name}] Warte auf verbleibende KI-Korrekturen…", flush=True)
-                import concurrent.futures
-                concurrent.futures.wait(ai_futures)
+                if _wait_futures is not None:
+                    _wait_futures(ai_futures)
             ai_pool.shutdown(wait=True)
 
     # Der Faktor gilt dem GANZEN Lauf, Modell-Ladezeit eingerechnet — er ist damit kleiner
