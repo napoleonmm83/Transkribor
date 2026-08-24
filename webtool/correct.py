@@ -698,7 +698,7 @@ Projekt-Kontext: {context or _default_context(ziel, dialekt, mehrsprachig)}
 1) Lies die Rohsegmente (Read-Tool): {tagged_path}
 2) KORRIGIERE NUR offensichtliche ASR-Fehler und Eigennamen{norm_satz} KEIN Umschreiben, keine Dialekt-Glättung, keine Normalisierung. Entferne [[...]]-Markierungen.
 3) SPRECHER: vergib pro (Sprecher N)-Cluster einen konsistenten Namen (meist „Interviewer" und die befragte Person). {CLUSTER_REGEL} Gib JEDEM Segment einen speaker.
-4) SUMMARY: eine Inhalts-Zusammenfassung (3-5 Sätze).
+4) SUMMARY: eine Inhalts-Zusammenfassung (3-5 Sätze; nur echter Gesprächsinhalt, keine Berichte über ASR-Fehler oder leere Abschnitte).
 
 Schema (Write-Tool nach {cpath}):
 {{"base":"{base}","context":"1-2 Sätze","speakers":["…"],
@@ -717,7 +717,7 @@ def _summary_prompt(base: str, tagged_path: str, cpath: str, context: str,
 Projekt-Kontext: {context or _default_context(ziel, dialekt)}
 1) Lies die Rohsegmente (Read-Tool): {tagged_path}
 2) SPRECHER: vergib pro (Sprecher N)-Cluster einen konsistenten Namen. {CLUSTER_REGEL} JEDES Segment bekommt einen speaker — KEIN Text-Feld (der Roh-Inhalt bleibt unveraendert, uebernimm nur id und speaker).
-3) SUMMARY: eine Inhalts-Zusammenfassung (3-5 Sätze) in {ziel or 'der Originalsprache'}.
+3) SUMMARY: eine Inhalts-Zusammenfassung (3-5 Sätze; nur echter Gesprächsinhalt, keine Berichte über ASR-Fehler oder leere Abschnitte) in {ziel or 'der Originalsprache'}.
 
 Schema (Write-Tool nach {cpath}):
 {{"base":"{base}","context":"1-2 Sätze","speakers":["…"],
@@ -790,9 +790,19 @@ def _ist_reiner_halluzinations_kommentar(text: str) -> bool:
     hinweise = (
         "halluzinations-schleife", "halluzinationsschleife", "asr-halluzination",
         "keinen verwertbaren inhalt mehr", "enthält keinen gesprächsinhalt mehr",
-        "wiederholungsschleife des satzes", "keinen inhalt mehr",
+        "enthält keinen inhalt mehr", "wiederholungsschleife des satzes",
+        "keinen gesprächsinhalt",
     )
     return any(h in t for h in hinweise)
+
+
+def bereinige_summary(text: str) -> str:
+    """Entfernt Meta-Kommentare über leere Blöcke oder Halluzinationsschleifen aus der Zusammenfassung."""
+    if not text:
+        return ""
+    saetze = [s.strip() for s in re.split(r"(?<=[.!?])\s+", text) if s.strip()]
+    saetze_bereinigt = [s for s in saetze if not _ist_reiner_halluzinations_kommentar(s)]
+    return " ".join(saetze_bereinigt).strip()
 
 
 def _merge_parts(docs: list, base: str) -> dict:
@@ -820,9 +830,7 @@ def _merge_parts(docs: list, base: str) -> dict:
             if not val:
                 continue
             if feld == "summary":
-                saetze = [s.strip() for s in re.split(r"(?<=[.!?])\s+", val) if s.strip()]
-                saetze_bereinigt = [s for s in saetze if not _ist_reiner_halluzinations_kommentar(s)]
-                val = " ".join(saetze_bereinigt).strip()
+                val = bereinige_summary(val)
                 if not val:
                     continue
             if val not in eintraege:

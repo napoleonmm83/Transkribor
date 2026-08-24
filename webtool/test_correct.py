@@ -686,10 +686,30 @@ def test_merge_parts_filtert_halluzinations_metakommentare_in_summary():
     assert "keinen verwertbaren Inhalt" not in m["summary"]
 
 
+def test_bereinige_summary_filtert_einzelne_meta_saetze():
+    roh = "Das Gespräch dreht sich um das Pokalturnier. In diesem Block liefert die Tonspur allerdings keinen verwertbaren Inhalt mehr. Die Teilnehmenden freuen sich."
+    sauber = correct.bereinige_summary(roh)
+    assert sauber == "Das Gespräch dreht sich um das Pokalturnier. Die Teilnehmenden freuen sich."
+
+
+def test_bereinige_summary_schont_legitime_inhalte():
+    roh = "Der Befragte erklärt, dass der Behälter keinen Inhalt mehr hatte."
+    sauber = correct.bereinige_summary(roh)
+    assert sauber == "Der Befragte erklärt, dass der Behälter keinen Inhalt mehr hatte."
+
+
 def test_correct_prompt_warnt_vor_halluzinations_kommentaren_in_summary():
     prompt = correct._correct_prompt("base", "tagged.txt", "c.json", "{}", "Kontext")
     assert "HALLUZINATION" in prompt.upper() or "WIEDERHOLUNG" in prompt.upper()
     assert "nur echter Inhalt" in prompt or "kein Bericht über Korrekturen" in prompt or "AUSSCHLIESSLICH den echten Gesprächsinhalt" in prompt
+
+
+def test_light_und_summary_prompts_enthalten_hinweis_fuer_echten_inhalt():
+    light = correct._light_prompt("base", "tagged.txt", "c.json", "Kontext")
+    summ = correct._summary_prompt("base", "tagged.txt", "c.json", "Kontext")
+    assert "echter" in light.lower() or "inhalt" in light.lower()
+    assert "echter" in summ.lower() or "inhalt" in summ.lower()
+
 
 
 

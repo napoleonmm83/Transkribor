@@ -36,7 +36,7 @@ def build_edit_doc(raw: dict, *, base: str, project: str, audio: str) -> dict:
     for seg in raw.get("segments", []):
         text = (seg.get("text") or "").strip()
         norm = re.sub(r"[^\w\s]", "", text.lower()).strip()
-        is_repeat = bool(norm and norm == letzter_norm)
+        is_repeat = bool(norm and norm == letzter_norm and (len(norm.split()) > 1 or len(norm) > 4))
         letzter_norm = norm if norm else None
         segments.append({
             "id": seg.get("id"),
@@ -105,6 +105,26 @@ def tag_uncertain_segments(raw: dict, threshold: float = UNCERTAIN_TAG_THRESHOLD
     return out
 
 
+def _ist_reiner_halluzinations_kommentar(text: str) -> bool:
+    t = text.lower()
+    hinweise = (
+        "halluzinations-schleife", "halluzinationsschleife", "asr-halluzination",
+        "keinen verwertbaren inhalt mehr", "enthält keinen gesprächsinhalt mehr",
+        "enthält keinen inhalt mehr", "wiederholungsschleife des satzes",
+        "keinen gesprächsinhalt",
+    )
+    return any(h in t for h in hinweise)
+
+
+def bereinige_summary(text: str) -> str:
+    """Entfernt Meta-Kommentare über leere Blöcke oder Halluzinationsschleifen aus der Zusammenfassung."""
+    if not text:
+        return ""
+    saetze = [s.strip() for s in re.split(r"(?<=[.!?])\s+", text) if s.strip()]
+    saetze_bereinigt = [s for s in saetze if not _ist_reiner_halluzinations_kommentar(s)]
+    return " ".join(saetze_bereinigt).strip()
+
+
 def apply_correction(raw: dict, correction: dict, *, base: str, project: str, audio: str) -> dict:
     """edit.json aus Roh bauen und die segment-genaue Korrektur (Text/Sprecher je id)
     sowie context/speakers/annotations einweben. Nicht korrigierte Segmente behalten Rohtext."""
@@ -113,7 +133,7 @@ def apply_correction(raw: dict, correction: dict, *, base: str, project: str, au
     # summary fiel bisher still heraus: die correction.json hatte es, die edit.json nie —
     # der Korrektur-Pass schrieb also 14 von 14 Zusammenfassungen in den Papierkorb.
     # `verification` bleibt bewusst in der correction.json: das ist Prüfprotokoll, kein Inhalt.
-    doc["summary"] = (correction.get("summary") or "").strip()
+    doc["summary"] = bereinige_summary((correction.get("summary") or "").strip())
     doc["speakers"] = list(correction.get("speakers") or [])
     doc["annotations"] = [str(a).strip() for a in (correction.get("annotations") or []) if a is not None and str(a).strip()]
     by_id = {c.get("id"): c for c in (correction.get("segments") or [])}

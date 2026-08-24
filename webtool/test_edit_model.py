@@ -44,6 +44,21 @@ def test_build_edit_doc_flags_consecutive_repetitions():
     assert doc["segments"][2]["flags"]["hallucination"] is True
 
 
+def test_build_edit_doc_schont_kurze_einzelwort_interjektionen():
+    raw = {
+        "language": "de",
+        "segments": [
+            {"id": 0, "start": 0.0, "end": 1.0, "text": "Ja.", "compression_ratio": 0.8, "avg_logprob": -0.2},
+            {"id": 1, "start": 1.0, "end": 2.0, "text": "Ja.", "compression_ratio": 0.8, "avg_logprob": -0.2},
+        ]
+    }
+    doc = em.build_edit_doc(raw, base="B", project="P", audio="B.mp3")
+    # Kurze Einzelwörter wie "Ja." sollen nicht sofort als Halluzination markiert werden
+    assert doc["segments"][0]["flags"]["hallucination"] is False
+    assert doc["segments"][1]["flags"]["hallucination"] is False
+
+
+
 
 def test_build_edit_doc_shape():
     raw = {
