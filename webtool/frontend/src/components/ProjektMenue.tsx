@@ -1,9 +1,11 @@
 import { useState } from 'react'
-import { Languages, MoreHorizontal, Pencil, Trash2 } from 'lucide-react'
+import { FileArchive, FolderDown, Languages, MoreHorizontal, Pencil, Trash2 } from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { exportProjectMarkdownToDownloads, projectMarkdownZipUrl, triggerDownload } from '@/lib/api'
 import { ProjektUmbenennen } from './ProjektUmbenennen'
 import { DeleteProjectDialog } from './DeleteProjectDialog'
 import { ProjektEinstellungenDialog } from './ProjektEinstellungenDialog'
@@ -30,6 +32,24 @@ export function ProjektMenue({ project, onUmbenannt, onGeloescht, onEinstellunge
 }) {
   const [zeige, setZeige] = useState<'umbenennen' | 'loeschen' | 'einstellungen' | null>(null)
 
+  const exportDownloads = async () => {
+    try {
+      const res = await exportProjectMarkdownToDownloads(project)
+      if (res.anzahl === 0) {
+        toast.info('Keine fertigen Markdown-Transkripte im Projekt gefunden.')
+      } else {
+        toast.success(`${res.anzahl} Markdown-Datei${res.anzahl === 1 ? '' : 'en'} in „Downloads/${project}“ abgelegt`)
+      }
+    } catch (e) {
+      toast.error(`Export fehlgeschlagen: ${(e as Error).message}`)
+    }
+  }
+
+  const exportZip = () => {
+    triggerDownload(projectMarkdownZipUrl(project), `${project}_markdown.zip`)
+    toast.success('ZIP-Download gestartet')
+  }
+
   return (
     <>
       {/* stopPropagation + preventDefault: in der Uebersicht liegt das Menue neben einem Link,
@@ -48,6 +68,13 @@ export function ProjektMenue({ project, onUmbenannt, onGeloescht, onEinstellunge
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => setZeige('einstellungen')}>
               <Languages /> Sprache &amp; Korrektur
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onSelect={exportDownloads}>
+              <FolderDown /> Markdown in Downloads ablegen
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={exportZip}>
+              <FileArchive /> Markdown als ZIP herunterladen
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" onSelect={() => setZeige('loeschen')}>

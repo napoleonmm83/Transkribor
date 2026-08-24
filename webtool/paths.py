@@ -9,6 +9,11 @@ def projekte_root() -> str:
     return os.environ.get("TRANSKRIBOR_PROJEKTE") or os.path.join(ROOT, "projekte")
 
 
+def downloads_dir() -> str:
+    """Standard-Downloads-Verzeichnis des Nutzers."""
+    return os.environ.get("TRANSKRIBOR_DOWNLOADS") or os.path.join(os.path.expanduser("~"), "Downloads")
+
+
 def safe_name(name: str) -> str:
     # "." / ".." resolven auf Eltern-/Self-Verzeichnis -> dürfen project_dir()
     # nie erreichen (sonst rmtree auf projekte_root() selbst, siehe Task 4 Review).
