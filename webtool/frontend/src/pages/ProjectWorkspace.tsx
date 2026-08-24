@@ -292,9 +292,9 @@ export function ProjectWorkspace() {
         {dateien.length > 0 && (
           <ul className="blatt divide-y divide-border overflow-hidden">
             {dateien.map(f => {
-              const active = running ? phases.active[f.base] : undefined
-              const state = running ? phases.perBase[f.base] : undefined
               const inScope = running ? (phases.scope ? phases.scope.has(f.base) : true) : false
+              const active = inScope ? phases.active[f.base] : undefined
+              const state = inScope ? phases.perBase[f.base] : undefined
               return (
                 <li key={f.base} className="px-3 py-2.5 transition-colors hover:bg-muted/60">
                   <div className="flex items-center gap-3">

@@ -1377,13 +1377,24 @@ def test_projekt_umbenennen_bleibt_grob_gesperrt(client, monkeypatch):
     assert r.status_code == 409 and "Transkription" in r.json()["detail"]
 
 
-def test_neu_transkribieren_raeumt_transkripte_weg_und_startet_den_lauf(client, tmp_path):
+def test_neu_transkribieren_raeumt_transkripte_weg_und_startet_den_lauf(client, tmp_path, monkeypatch):
     t = _artefakte(tmp_path)
+    aufrufe = []
+    import webtool.jobs as jobs_mod
+    orig_request = jobs_mod.request
+    def mock_request(project, cmd, cwd, kind, then=None, base=None):
+        aufrufe.append((project, cmd, kind, base))
+        return orig_request(project, cmd, cwd, kind, then=then, base=base)
+    monkeypatch.setattr(jobs_mod, "request", mock_request)
     r = client.post("/api/projects/Demo/files/S1/transcribe")
     assert r.status_code == 200 and r.json()["started"] is True
     # Die abgeleiteten MUESSEN mit weg: load_or_build_doc bevorzugt edit.json vor der Roh-JSON.
     assert list(t.iterdir()) == []
     assert (tmp_path / "Demo" / "audio" / "S1.mp3").exists()          # Audio bleibt
+    assert len(aufrufe) == 1
+    assert aufrufe[0][0] == "Demo"
+    assert "--only" in aufrufe[0][1] and "S1" in aufrufe[0][1]
+    assert aufrufe[0][3] == "S1"
 
 
 def test_neu_transkribieren_ohne_audio_gibt_404_und_laesst_das_transkript_stehen(client, tmp_path):

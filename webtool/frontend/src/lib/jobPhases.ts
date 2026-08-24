@@ -28,6 +28,7 @@ export function parseJobPhases(kind: string, lines: string[]): JobPhases {
   let scope: Set<string> | undefined
 
   const terminal = (base: string, state: FileState) => {
+    if (scope && !scope.has(base)) return
     perBase[base] = state
     delete active[base]
     delete blocks[base]
