@@ -290,6 +290,27 @@ describe('SettingsPage', () => {
     expect(screen.queryByPlaceholderText(/Code aus dem Browser/)).not.toBeInTheDocument()
   })
 
+  it('erlaubt das Kopieren des Codex-Codes per Klick', async () => {
+    Object.assign(navigator, {
+      clipboard: {
+        writeText: vi.fn().mockResolvedValue(undefined),
+      },
+    })
+    vi.mocked(api.getAuth).mockResolvedValue({
+      unterstuetzt: true, angemeldet: false, detail: 'Not logged in' })
+    vi.mocked(api.startLogin).mockResolvedValue({
+      laeuft: true, url: 'https://auth.openai.com/device', code: 'ABCD-1234', braucht_code: false })
+    zeige({ provider: 'codex-cli' })
+    const knopf = await screen.findByRole('button', { name: /^Anmelden/ })
+    await act(async () => { fireEvent.click(knopf) })
+    expect(await screen.findByText('ABCD-1234')).toBeInTheDocument()
+
+    const kopierKnopf = screen.getByRole('button', { name: /kopieren/i })
+    await act(async () => { fireEvent.click(kopierKnopf) })
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith('ABCD-1234')
+    expect(await screen.findByText(/Kopiert/i)).toBeInTheDocument()
+  })
+
   it('zeigt die Whisper-Qualitätsstufe und das aktive Gerät', async () => {
     zeige()
     expect(await screen.findByText(/Qualität der Transkription/i)).toBeInTheDocument()
