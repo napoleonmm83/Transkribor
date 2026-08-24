@@ -868,3 +868,93 @@ def test_transcribe_project_meldet_active_done_und_ueberspringt_geloeschtes_audi
     assert not (proj_dir / "transkripte" / "S2.json").exists()
 
 
+def test_transcribe_project_autocorrect_streaming_pipeline(monkeypatch, tmp_path, capsys):
+    """Verifiziert die End-to-End Streaming-Pipeline in transcribe_project(autocorrect=True):
+    - Whisper und Diarisierung laufen sequenziell (max_hw == 1).
+    - Sobald eine Datei lokal fertig ist, startet ihr KI-Call sofort parallel zu nachfolgenden Dateien."""
+    import threading
+    import time
+    from webtool import correct, llm
+
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    monkeypatch.setenv("TRANSKRIBOR_SETTINGS", str(tmp_path / "settings.json"))
+    monkeypatch.setattr(transcribe, "PROJEKTE", str(tmp_path))
+    monkeypatch.setattr(transcribe, "_modell", lambda *a, **kw: "fake_model")
+    monkeypatch.setattr(llm, "available", lambda: (True, ""))
+    monkeypatch.setattr(correct, "CLAUDE_PARALLEL", 4)
+    monkeypatch.setattr(correct, "diarize_enabled", lambda: True)
+
+    proj_dir = tmp_path / "Demo"
+    audio_dir = proj_dir / "audio"
+    audio_dir.mkdir(parents=True)
+    tdir = proj_dir / "transkripte"
+    tdir.mkdir(parents=True)
+
+    for b in ("S1", "S2"):
+        (audio_dir / f"{b}.mp3").write_bytes(b"audio")
+
+    hw_active = 0
+    hw_max = 0
+    hw_lock = threading.Lock()
+
+    ai_active = 0
+    ai_max = 0
+    ai_lock = threading.Lock()
+
+    def fake_transkribiere(_m, _engine, audio_file, _sprache, _mehr, _model):
+        nonlocal hw_active, hw_max
+        with hw_lock:
+            hw_active += 1
+            if hw_active > hw_max:
+                hw_max = hw_active
+        time.sleep(0.05)
+        with hw_lock:
+            hw_active -= 1
+        return {"text": "Hallo", "segments": [{"id": 0, "start": 0.0, "end": 1.0, "text": "Hallo"}], "duration": 1.0}
+
+    def fake_diarize(project, only_bases=None):
+        nonlocal hw_active, hw_max
+        with hw_lock:
+            hw_active += 1
+            if hw_active > hw_max:
+                hw_max = hw_active
+        time.sleep(0.03)
+        with hw_lock:
+            hw_active -= 1
+        return 1
+
+    def fake_correct_ai_single(project, b, **kw):
+        nonlocal ai_active, ai_max
+        with ai_lock:
+            ai_active += 1
+            if ai_active > ai_max:
+                ai_max = ai_active
+        time.sleep(0.1)
+        (tdir / f"{b}.edit.json").write_text(json.dumps({"segments": [{"id": 0, "text": "Korrigiert"}]}), encoding="utf-8")
+        with ai_lock:
+            ai_active -= 1
+        return True
+
+    monkeypatch.setattr(transcribe, "_transkribiere_datei", fake_transkribiere)
+    monkeypatch.setattr(correct, "cmd_diarize", fake_diarize)
+    monkeypatch.setattr(correct, "correct_ai_single", fake_correct_ai_single)
+
+    transcribe.transcribe_project("Demo", "tiny", "de", autocorrect=True)
+    out = capsys.readouterr().out
+    assert "[scope] S1\tS2" in out
+    assert "[active] S1" in out
+    assert "[done] S1" in out
+    assert "[active] S2" in out
+    assert "[done] S2" in out
+
+    assert (tdir / "S1.json").exists()
+    assert (tdir / "S2.json").exists()
+    assert (tdir / "S1.edit.json").exists()
+    assert (tdir / "S2.edit.json").exists()
+
+    # Hardware war streng serialisiert (Whisper + Diarisierung sequenziell)
+    assert hw_max == 1
+    # Cloud-KI lief überlappend/parallel
+    assert ai_max > 1
+
+

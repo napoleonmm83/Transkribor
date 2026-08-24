@@ -447,7 +447,7 @@ def _transkribiere_datei(m, engine, f, sprache, mehr, model):
     return result
 
 
-def transcribe_project(name, model, language, only=None):
+def transcribe_project(name, model, language, only=None, autocorrect: bool = False):
     proj_dir = os.path.join(PROJEKTE, name)
     if not os.path.isdir(proj_dir):
         print(f"Projekt nicht gefunden: {name}", file=sys.stderr)
@@ -477,97 +477,90 @@ def transcribe_project(name, model, language, only=None):
     if engine == "whisper.cpp":
         # Apple Silicon: Metal statt CPU. Gemessen 5.29x gegen 0.81x realtime — die
         # Begruendung steht in webtool/whispercpp.py.
-        #
-        # KEIN `and not mehr` hier: die Engine-Entscheidung faellt VOR der Schleife, `mehr`
-        # gibt es erst pro Datei. Der Rueckfall gemischter Dateien auf faster-whisper liegt
-        # in _transkribiere_datei und gehoert genau dorthin. Eine Bedingung mit `mehr` an
-        # dieser Stelle stirbt mit UnboundLocalError — und zwar VOR dem try/except der
-        # Schleife, also ohne ein einziges Transkript. Auf Windows/Linux faellt das nie auf,
-        # weil `engine != "whisper.cpp"` das `and` kurzschliesst.
         print(f"[{name}] engine=whisper.cpp (Metal)", flush=True)
     else:
         device = devicemod.pick_asr()
         info = devicemod.describe(model)
-        # Auf einem Mac ohne whisper.cpp meldet describe() "mps" (das gilt der
-        # Diarisierung), die ASR laeuft aber auf der CPU. Das gehoert ins Log, sonst
-        # sucht der Nutzer den Fehler bei sich.
         warum = (" — CTranslate2 kennt kein MPS, ASR rechnet auf der CPU"
                  if info["device"] == "mps" else "")
         print(f"[{name}] device={device} ({info['name']}){warum}", flush=True)
     print(f"[{name}] Modell {model}, {len(files)} Datei(en)", flush=True)
-    # Das Modell erst laden, wenn feststeht, dass gerechnet wird — bei whisper.cpp
-    # uebernimmt das transkribiere() pro Datei (der Unterprozess haelt nichts vor).
-    # Phasenuhr fuer den ganzen Lauf. Die Einzeldauern unten gibt es laengst; was fehlte,
-    # ist die Summe — nur sie laesst sich mit der Korrekturphase (`⏱ Phasen:` in correct.py)
-    # vergleichen. Die Marke steht VOR dem Modell-Laden, denn die ~30 s fallen real an und
-    # gehoeren zu dem, was der Nutzer wartet.
-    #
-    # `monotonic`, nicht `time.time()` — wie der Zwilling in correct.py. Ein
-    # NTP-Sprung waehrend eines langen Laufs macht die Differenz sonst negativ, und
-    # `max(dt_phase, 1)` unten druckt daraus einen absurden Faktor: eine falsche Zahl
-    # in genau der Zeile, die zum Messen gebaut ist. Die drei Stellen darunter
-    # (Einzeldauer je Datei) sind aus demselben Grund mitgezogen — dieselbe Frage an
-    # der Nachbarstelle.
+
     t_phase = time.monotonic()
     n_ok = audio_gesamt = 0
     m = None if engine == "whisper.cpp" else _modell(model, device)
 
-    for f in files:
-        base = os.path.splitext(os.path.basename(f))[0]
-        if not os.path.exists(f):
-            print(f"[{name}] skip (Audio nicht mehr vorhanden): {base}", flush=True)
-            continue
-        out_json = os.path.join(out_dir, base + ".json")
-        if os.path.exists(out_json):
-            print(f"[{name}] skip (vorhanden): {base}", flush=True)
-            continue
-        print(f"[active] {base}", flush=True)
-        print(f"[{name}] -> transkribiere {base} …", flush=True)
-        t0 = time.monotonic()
+    ai_pool = None
+    ai_futures = []
+    if autocorrect:
         try:
-            # Der ganze MPS-Rueckfall stand hier: Modell auf CPU neu laden, pruefen ob es an
-            # MPS oder an der Datei lag, Geraet wiederherstellen. Mit CTranslate2 gibt es den
-            # Fall nicht mehr — pick_asr() liefert nur cuda oder cpu, und beide koennen alles.
-            # Bleibt die Regel, die davon uebrig ist: eine kaputte Datei ueberspringen, der
-            # Lauf geht weiter. Fuer whisper.cpp gilt sie genauso.
-            sprache, mehr = _datei_sprachwahl(proj_dir, base, language)
-            # Das Modell hier laden, nicht in _transkribiere_datei: geht der Lauf dort schief,
-            # ginge es sonst mit der ausgefallenen Tupel-Zuweisung verloren und die naechste
-            # Datei laed erneut ~3 GB. Auf einem whisper.cpp-Lauf entsteht es genau dann, wenn
-            # die erste gemischte Datei kommt.
-            if m is None and _braucht_faster_whisper(engine, mehr):
-                m = _modell(model, devicemod.pick_asr())
-            result = _transkribiere_datei(m, engine, f, sprache, mehr, model)
-            dt = time.monotonic() - t0
-            # EINE Stelle fuer beide Engines: hier laufen der faster-whisper- und der
-            # whisper.cpp-Pfad zusammen, und hier wird geschrieben. In `_transkribiere_datei`
-            # stuende die Wache vor der Verzweigung — oder zweimal.
-            result["luecken"] = luecken(result.get("segments") or [], result.get("duration"))
-            with open(os.path.join(out_dir, base + ".raw.txt"), "w", encoding="utf-8") as fh:
-                fh.write(result["text"].strip() + "\n")
-            with open(os.path.join(out_dir, base + ".segments.txt"), "w", encoding="utf-8") as fh:
-                for seg in result["segments"]:
-                    fh.write(f"[{fmt(seg['start'])} - {fmt(seg['end'])}] {seg['text'].strip()}\n")
-            with open(out_json, "w", encoding="utf-8") as fh:
-                json.dump(result, fh, ensure_ascii=False, indent=1)
-            # `duration` ist die Laenge der AUFNAHME. Bis eben stand hier das Ende des letzten
-            # Segments unter der Beschriftung „Audio" — fehlen die letzten Fenster, meldet das
-            # genau die zu kurze Zahl, die den Verlust verdeckt. Der Rueckfall gilt Laeufen ohne
-            # das Feld (alte Roh-JSON, whisper.cpp ohne lesbare WAV).
-            dur = result.get("duration") or (result["segments"][-1]["end"] if result["segments"] else 0)
-            n_ok += 1
-            audio_gesamt += dur
-            print(f"[{name}] fertig {base}: {dt:.0f}s, {len(result['segments'])} Segmente, "
-                  f"Audio {fmt(dur)}, {dur/max(dt,1):.1f}x", flush=True)
-            if result["luecken"]:
-                orte = ", ".join(f"{fmt(x['start'])}-{fmt(x['end'])}" for x in result["luecken"])
-                print(f"[{name}] ⚠ {base}: {len(result['luecken'])} Abschnitt(e) ohne Transkript "
-                      f"({orte}) — bitte im Ton gegenhoeren", flush=True)
-        except Exception as e:
-            print(f"[{name}] FEHLER {base}: {e}", flush=True)
-            continue
-        finally:
-            print(f"[done] {base}", flush=True)
+            from webtool import llm, correct as _correct
+            ok_ai, _ = llm.available()
+            if ok_ai:
+                from concurrent.futures import ThreadPoolExecutor
+                ai_pool = ThreadPoolExecutor(max_workers=min(len(files), _correct.CLAUDE_PARALLEL))
+        except Exception:
+            pass
+
+    try:
+        for f in files:
+            base = os.path.splitext(os.path.basename(f))[0]
+            if not os.path.exists(f):
+                print(f"[{name}] skip (Audio nicht mehr vorhanden): {base}", flush=True)
+                continue
+            out_json = os.path.join(out_dir, base + ".json")
+            if os.path.exists(out_json):
+                print(f"[{name}] skip (vorhanden): {base}", flush=True)
+                continue
+            print(f"[active] {base}", flush=True)
+            print(f"[{name}] -> transkribiere {base} …", flush=True)
+            t0 = time.monotonic()
+            try:
+                sprache, mehr = _datei_sprachwahl(proj_dir, base, language)
+                if m is None and _braucht_faster_whisper(engine, mehr):
+                    m = _modell(model, devicemod.pick_asr())
+                result = _transkribiere_datei(m, engine, f, sprache, mehr, model)
+                dt = time.monotonic() - t0
+                result["luecken"] = luecken(result.get("segments") or [], result.get("duration"))
+                with open(os.path.join(out_dir, base + ".raw.txt"), "w", encoding="utf-8") as fh:
+                    fh.write(result["text"].strip() + "\n")
+                with open(os.path.join(out_dir, base + ".segments.txt"), "w", encoding="utf-8") as fh:
+                    for seg in result["segments"]:
+                        fh.write(f"[{fmt(seg['start'])} - {fmt(seg['end'])}] {seg['text'].strip()}\n")
+                with open(out_json, "w", encoding="utf-8") as fh:
+                    json.dump(result, fh, ensure_ascii=False, indent=1)
+                dur = result.get("duration") or (result["segments"][-1]["end"] if result["segments"] else 0)
+                n_ok += 1
+                audio_gesamt += dur
+                print(f"[{name}] fertig {base}: {dt:.0f}s, {len(result['segments'])} Segmente, "
+                      f"Audio {fmt(dur)}, {dur/max(dt,1):.1f}x", flush=True)
+                if result["luecken"]:
+                    orte = ", ".join(f"{fmt(x['start'])}-{fmt(x['end'])}" for x in result["luecken"])
+                    print(f"[{name}] ⚠ {base}: {len(result['luecken'])} Abschnitt(e) ohne Transkript "
+                          f"({orte}) — bitte im Ton gegenhoeren", flush=True)
+
+                if ai_pool is not None:
+                    try:
+                        from webtool import correct as _correct
+                        # 1. Diarisierung & Prep direkt auf der GPU in der Hauptschleife (Hardware geschützt):
+                        _correct.cmd_diarize(name, [base])
+                        _correct.prep_single(name, base)
+                        # 2. Datei sofort parallel an den Cloud-KI-Threadpool übergeben:
+                        ai_futures.append(ai_pool.submit(_correct.correct_ai_single, name, base))
+                    except Exception as ex:
+                        print(f"[{name}] Autocorrect-Fehler bei {base}: {ex}", flush=True)
+            except Exception as e:
+                print(f"[{name}] FEHLER {base}: {e}", flush=True)
+                continue
+            finally:
+                print(f"[done] {base}", flush=True)
+    finally:
+        if ai_pool is not None:
+            if ai_futures:
+                print(f"[{name}] Warte auf verbleibende KI-Korrekturen…", flush=True)
+                import concurrent.futures
+                concurrent.futures.wait(ai_futures)
+            ai_pool.shutdown(wait=True)
 
     # Der Faktor gilt dem GANZEN Lauf, Modell-Ladezeit eingerechnet — er ist damit kleiner
     # als die Einzelwerte oben und genau deshalb der ehrliche Vergleichswert.
@@ -578,18 +571,6 @@ def transcribe_project(name, model, language, only=None):
 
 
 def main():
-    # Dieselben drei Zeilen wie in `correct.main` und `fetch.main` — dieser Laeufer war der
-    # EINZIGE ohne sie, und das war ein echter Abbruch, kein Schoenheitsfehler: bei
-    # umgeleitetem stdout auf Windows ist `sys.stdout.encoding` die ANSI-Codepage (gemessen
-    # cp1252), und die Phasenzeile am Ende von `transcribe_project` traegt U+23F1. Der Lauf
-    # schrieb also alle Transkripte, warf dann `UnicodeEncodeError` und endete mit Exit 1 —
-    # wer den Exitcode auswertet, haelt einen fertigen Lauf fuer gescheitert. Gemessen mit
-    # `PYTHONUTF8=0`; eine Umgebung MIT der Variable maskiert den Fall vollstaendig.
-    #
-    # Die Zeile mit dem Warnzeichen (Luecken im Transkript) hatte dieselbe Falle schon
-    # vorher, nur hinter einem `if`; deshalb wird hier der WEG repariert und nicht das eine
-    # Zeichen ersetzt. `fetch.py` ruft `transcribe_project` ebenfalls, geht aber durch sein
-    # eigenes `main()` und war nie betroffen.
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     except (AttributeError, ValueError):
@@ -599,6 +580,8 @@ def main():
     ap.add_argument("--all", action="store_true", help="alle Projekte")
     ap.add_argument("--list", action="store_true", help="Projekte auflisten")
     ap.add_argument("--only", help="nur diese Datei (Basisname) transkribieren")
+    ap.add_argument("--autocorrect", action="store_true",
+                    help="Nach Whisper sofort Diarisierung und parallele KI-Korrektur streamen")
     ap.add_argument("--model", default=os.environ.get("WHISPER_MODEL", "large-v3"))
     ap.add_argument("--language", default=os.environ.get("WHISPER_LANG", "de"))
     args = ap.parse_args()
@@ -611,9 +594,10 @@ def main():
     ensure_ffmpeg()
     if args.all:
         for p in list_projects():
-            transcribe_project(p, args.model, args.language)
+            transcribe_project(p, args.model, args.language, autocorrect=args.autocorrect)
     elif args.projekt:
-        transcribe_project(args.projekt, args.model, args.language, only=args.only)
+        transcribe_project(args.projekt, args.model, args.language, only=args.only,
+                           autocorrect=args.autocorrect)
     else:
         ap.print_help()
 

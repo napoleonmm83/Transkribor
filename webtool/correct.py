@@ -1002,6 +1002,51 @@ def _summary_only_file(project: str, base: str, ziel: str, context: str,
     _ask_llm(_summary_prompt(base, tagged, target, context, ziel, dialekt), [tagged], target)
 
 
+def correct_ai_single(project: str, b: str, gjson: str = "", context: str = None,
+                      verify: bool = True, force: bool = False, base_explicit: str = None) -> bool:
+    """Führt die Cloud-KI-Korrektur und Finalisierung (cmd_apply) für eine vorbereitete Datei aus."""
+    tdir = paths.transkripte_dir(project)
+    raw_json = os.path.join(tdir, b + ".json")
+    if not os.path.exists(raw_json):
+        return False
+    epath = os.path.join(tdir, b + ".edit.json")
+    cpath = os.path.join(tdir, b + ".correction.json")
+    if _is_human_edited(epath) and not force:
+        print(f"↷ SKIP {b} (human_edited=true; --force zum Neu-Korrigieren)", flush=True)
+        return False
+    print(f"[active] {b}", flush=True)
+    try:  # eine kaputte Datei darf den Batch nicht abbrechen
+        from . import projekt as _pj
+        if context is None:
+            context = _context(project)
+        reuse = (base_explicit is None and not force
+                 and os.path.exists(cpath) and os.path.getmtime(cpath) >= os.path.getmtime(raw_json))
+        if reuse:
+            print(f"↷ nutze vorhandene {b}.correction.json", flush=True)
+        else:
+            # Tiefe pro Datei: voll-Dateien laufen wie bisher (Glossar + Verify),
+            # leicht/zusammenfassung sind einzelne LLM-Aufrufe ohne Treue-Pass.
+            tiefe = _pj.tiefe_effektiv(project, b)
+            ziel, dialekt, mehr = _ziel_dialekt(project, b)
+            if tiefe in ("voll", "voll_dialekt"):
+                _correct_file(project, b, gjson, context, verify, force,
+                              ziel=ziel, dialekt=dialekt, mehrsprachig=mehr)
+            elif tiefe == "leicht":
+                _light_correct_file(project, b, ziel, dialekt, context, mehrsprachig=mehr)
+            else:  # zusammenfassung
+                _summary_only_file(project, b, ziel, context, dialekt)
+        if not _valid_correction(cpath):
+            print(f"✗ FEHLT/ungültig: {b}.correction.json — überspringe", flush=True)
+            return False
+        cmd_apply(project, b, force=force)           # force überschreibt human_edited edit.json
+        return True
+    except Exception as e:
+        print(f"✗ Fehler bei {b}: {e} — überspringe", flush=True)
+        return False
+    finally:
+        print(f"[done] {b}", flush=True)
+
+
 def cmd_run(project: str, base: str = None, force: bool = False, verify: bool = True) -> int:
     """Führt den Korrekturlauf für ein Projekt oder eine Einzeldatei im Streaming-Pipeline-Verfahren aus.
 
@@ -1040,7 +1085,6 @@ def cmd_run(project: str, base: str = None, force: bool = False, verify: bool = 
         if not os.path.exists(raw_json):
             return False
         epath = os.path.join(tdir, b + ".edit.json")
-        cpath = os.path.join(tdir, b + ".correction.json")
         if _is_human_edited(epath) and not force:
             print(f"↷ SKIP {b} (human_edited=true; --force zum Neu-Korrigieren)", flush=True)
             return False
@@ -1053,36 +1097,10 @@ def cmd_run(project: str, base: str = None, force: bool = False, verify: bool = 
                 return False
         if not os.path.exists(raw_json):
             return False
-        print(f"[active] {b}", flush=True)
-        try:  # eine kaputte Datei darf den Batch nicht abbrechen
-            # 2. Lokaler GPU-Schritt fertig -> Hardware-Lock freigegeben für nächste Datei.
-            # 3. Sofortige Cloud-KI-Phase (parallel über _claude_slots)
-            reuse = (base is None and not force
-                     and os.path.exists(cpath) and os.path.getmtime(cpath) >= os.path.getmtime(raw_json))
-            if reuse:
-                print(f"↷ nutze vorhandene {b}.correction.json", flush=True)
-            else:
-                # Tiefe pro Datei: voll-Dateien laufen wie bisher (Glossar + Verify),
-                # leicht/zusammenfassung sind einzelne LLM-Aufrufe ohne Treue-Pass.
-                tiefe = _pj.tiefe_effektiv(project, b)
-                ziel, dialekt, mehr = _ziel_dialekt(project, b)
-                if tiefe in ("voll", "voll_dialekt"):
-                    _correct_file(project, b, gjson, context, verify, force,
-                                  ziel=ziel, dialekt=dialekt, mehrsprachig=mehr)
-                elif tiefe == "leicht":
-                    _light_correct_file(project, b, ziel, dialekt, context, mehrsprachig=mehr)
-                else:  # zusammenfassung
-                    _summary_only_file(project, b, ziel, context, dialekt)
-            if not _valid_correction(cpath):
-                print(f"✗ FEHLT/ungültig: {b}.correction.json — überspringe", flush=True)
-                return False
-            cmd_apply(project, b, force=force)           # force überschreibt human_edited edit.json
-            return True
-        except Exception as e:
-            print(f"✗ Fehler bei {b}: {e} — überspringe", flush=True)
-            return False
-        finally:
-            print(f"[done] {b}", flush=True)
+        # 2. Lokaler GPU-Schritt fertig -> Hardware-Lock freigegeben für nächste Datei.
+        # 3. Sofortige Cloud-KI-Phase (parallel über _claude_slots)
+        return correct_ai_single(project, b, gjson=gjson, context=context,
+                                 verify=verify, force=force, base_explicit=base)
 
     # Dateien streamen durch die Hardware- und KI-Pipeline -> bis zu CLAUDE_PARALLEL Threads.
     # Der Hardware-Lock serialisiert GPU-Phasen, während Netzwerk-LLM-Aufrufe parallel laufen.
