@@ -539,6 +539,10 @@ def test_diagnose_fehler_erkennt_guthaben_leer():
     d2 = llm.diagnose_fehler("You exceeded your current quota, please check your plan and billing details (insufficient_quota)")
     assert d2["kategorie"] == "quota"
 
+    # OpenAI liefert HTTP 429 fuer insufficient_quota — muss als quota klassifiziert werden
+    d3 = llm.diagnose_fehler("HTTP 429 von https://api.openai.com/v1/chat/completions: You exceeded your current quota, please check your plan and billing details. (insufficient_quota)")
+    assert d3["kategorie"] == "quota"
+
 
 def test_diagnose_fehler_erkennt_auth_fehler():
     d1 = llm.diagnose_fehler("HTTP 401 von https://api.anthropic.com: Invalid API Key")
@@ -550,6 +554,9 @@ def test_diagnose_fehler_erkennt_auth_fehler():
 
     d3 = llm.diagnose_fehler("Angemeldet? Einmalig `codex login` ausfuehren.")
     assert d3["kategorie"] == "auth"
+
+    d4 = llm.diagnose_fehler("Not logged in. Please run `claude login` to authenticate.")
+    assert d4["kategorie"] == "auth"
 
 
 def test_diagnose_fehler_erkennt_modell_fehler():

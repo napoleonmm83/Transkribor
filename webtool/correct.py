@@ -956,6 +956,8 @@ def _summary_only_file(project: str, base: str, ziel: str, context: str,
 
 
 def cmd_run(project: str, base: str = None, force: bool = False, verify: bool = True) -> int:
+    global _letzte_diagnose
+    _letzte_diagnose = None
     tdir = paths.transkripte_dir(project)
     all_bases = bases(project)
     if base is not None:                               # expliziter Einzel-Datei-Lauf (Per-Datei-✎)

@@ -102,7 +102,7 @@ const GRUND_FRIST_MS = 3000
  * Protokolls (der Transkriptionslauf endet mit seinem Wurf, dort ist das richtig).
  */
 function grund(lines: string[]): string {
-  const nicht_leer = lines.filter(l => l.trim())
+  const nicht_leer = lines.map(l => l.trim()).filter(Boolean)
 
   // Strukturierte Diagnose aus dem Korrekturlauf (`[diagnose] <kategorie>\t<titel>\t<hinweis>`)
   for (let i = nicht_leer.length - 1; i >= 0; i--) {

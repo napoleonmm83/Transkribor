@@ -444,7 +444,24 @@ def diagnose_fehler(fehler: str | Exception) -> dict:
     text = str(fehler or "").strip()
     low = text.lower()
 
-    # 1. Rate-Limit / Kontingent-Limit
+    # 1. Guthaben erschöpft (Payment / Quota) — vor 429 prüfen, da OpenAI 429 für insufficient_quota nutzt
+    if (
+        "402" in text
+        or "insufficient_quota" in low
+        or "out of credits" in low
+        or "payment required" in low
+        or "credit balance" in low
+        or "guthaben" in low
+        or "plan and billing" in low
+    ):
+        return {
+            "kategorie": "quota",
+            "titel": "Guthaben aufgebraucht",
+            "hinweis": "Das Guthaben für diesen API-Schlüssel ist erschöpft. Bitte beim Anbieter aufladen.",
+            "kurz": "Guthaben aufgebraucht: Bitte beim Anbieter aufladen",
+        }
+
+    # 2. Rate-Limit / Kontingent-Limit
     if (
         "429" in text
         or "rate_limit" in low
@@ -463,23 +480,6 @@ def diagnose_fehler(fehler: str | Exception) -> dict:
             "kurz": "Anfrage-Limit erreicht: Bitte 1–2 Min. warten",
         }
 
-    # 2. Guthaben erschöpft (Payment / Quota)
-    if (
-        "402" in text
-        or "insufficient_quota" in low
-        or "out of credits" in low
-        or "payment required" in low
-        or "credit balance" in low
-        or "guthaben" in low
-        or "plan and billing" in low
-    ):
-        return {
-            "kategorie": "quota",
-            "titel": "Guthaben aufgebraucht",
-            "hinweis": "Das Guthaben für diesen API-Schlüssel ist erschöpft. Bitte beim Anbieter aufladen.",
-            "kurz": "Guthaben aufgebraucht: Bitte beim Anbieter aufladen",
-        }
-
     # 3. Authentifizierung / API-Key
     if (
         "401" in text
@@ -487,9 +487,14 @@ def diagnose_fehler(fehler: str | Exception) -> dict:
         or "invalid_api_key" in low
         or "unauthorized" in low
         or "authentication" in low
+        or "authenticate" in low
+        or "not logged in" in low
+        or "logged in" in low
         or "kein api-key" in low
         or "nicht angemeldet" in low
         or "codex login" in low
+        or "claude login" in low
+        or "oauth" in low
     ):
         return {
             "kategorie": "auth",
