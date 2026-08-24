@@ -63,8 +63,8 @@ Auch mit **Schweizerdeutsch** kommt es zurecht.
    Hintergrund-Jobs präzise und animiert an, woran gerade gerechnet wird: Globale
    Zwischenschritte wie die Glossar-Erstellung werden direkt bei den betroffenen
    Dateien genannt, während unbeteiligte Aufnahmen ihren echten Ruhezustand behalten —
-   ab `v0.38.0` auch lückenlos ab der ersten Millisekunde bei Einzeldatei-Aktionen wie
-   „Neu transkribieren“ und mit durchgehend einheitlichen Statusbegriffen.)
+   auch bei Einzeldatei-Aktionen wie „Neu transkribieren“ und mit durchgehend
+   einheitlichen Statusbegriffen.)
 
 > [!WARNING]
 > **Beim ersten Öffnen warnt das Betriebssystem.** Der Installer ist nicht bei Microsoft bzw.
