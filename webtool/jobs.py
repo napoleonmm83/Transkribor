@@ -86,7 +86,7 @@ def request(project: str, cmd: list, cwd, kind: str, then=None, base: str = None
     Uploads fuenf Whisper-Laeufe hinter dem laufenden aufreihen — einer reicht, er sieht
     ohnehin alle inzwischen dazugekommenen Dateien.
     """
-    key = (project, kind)
+    key = (project, kind, base)
     for _ in range(10):
         if base is not None:
             jid, started = start(project, cmd, cwd, kind, then=then, base=base)
