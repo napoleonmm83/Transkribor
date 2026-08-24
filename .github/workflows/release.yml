@@ -251,24 +251,30 @@ jobs:
       - name: Release anlegen oder Artefakte hochladen
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.name.outputs.tag }}
+          IS_TEST: ${{ steps.name.outputs.test }}
+          ZUSATZ: ${{ steps.name.outputs.zusatz }}
         shell: bash
         run: |
+          set -euo pipefail
           ls -la artefakte/
-          tag="${{ steps.name.outputs.tag }}"
-          if [ "${{ steps.name.outputs.test }}" = "true" ]; then
+
+          if [ "$IS_TEST" = "true" ]; then
             kopf="Unsignierte Testbauten aus \`${GITHUB_REF_NAME}\` (${GITHUB_SHA:0:7}) — kein Release."
           else
-            kopf="Transkribor $tag"
+            kopf="Transkribor $TAG"
           fi
 
-          if gh release view "$tag" >/dev/null 2>&1; then
-            echo "Release $tag existiert bereits — lade gebaute Installer hoch..."
-            gh release upload "$tag" artefakte/* --clobber
-          else
-            echo "Erstelle neues Release $tag mit Build-Artefakten..."
-            gh release create "$tag" \
-              ${{ steps.name.outputs.zusatz }} \
-              --title "Transkribor $tag" \
+          view_out=""
+          if view_out=$(gh release view "$TAG" 2>&1); then
+            echo "Release $TAG existiert bereits — lade gebaute Installer hoch..."
+            gh release upload "$TAG" artefakte/* --clobber
+          elif echo "$view_out" | grep -qiE "release not found|404"; then
+            echo "Erstelle neues Release $TAG mit Build-Artefakten..."
+            # shellcheck disable=SC2086
+            gh release create "$TAG" \
+              $ZUSATZ \
+              --title "Transkribor $TAG" \
               --notes "$kopf
 
           **macOS:** ad-hoc signiert, nicht notarisiert — beim ersten Start blockt Gatekeeper. Rechtsklick auf die App > *Öffnen*; wird das nicht angeboten (macOS 15+), einmal starten und dann *Systemeinstellungen > Datenschutz & Sicherheit > Dennoch öffnen*.
@@ -276,4 +282,8 @@ jobs:
 
           Beim ersten Start richtet die App die Python-Seite selbst ein (mehrere GB, 10–30 Minuten)." \
               artefakte/*
+          else
+            echo "Fehler beim Prüfen des Release-Tags $TAG:"
+            echo "$view_out"
+            exit 1
           fi
