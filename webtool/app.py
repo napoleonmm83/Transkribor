@@ -844,8 +844,7 @@ def export_file(project: str, base: str):
     _validate(project, base)
     doc = load_or_build_doc(project, base)
     md = render_md(doc)
-    with open(_md_path(project, base), "w", encoding="utf-8") as fh:
-        fh.write(md)
+    paths.atomic_write(_md_path(project, base), md)
     return {"md": md}
 
 
@@ -911,9 +910,10 @@ def export_project_downloads(project: str):
         base = f["base"]
         md = _get_or_render_md(project, base)
         if md is not None:
-            dest = os.path.join(target_dir, f"{base}.md")
+            safe_base = paths.safe_name(base)
+            dest = os.path.join(target_dir, f"{safe_base}.md")
             paths.atomic_write(dest, md)
-            exported.append(f"{base}.md")
+            exported.append(f"{safe_base}.md")
     return {
         "ok": True,
         "ziel": target_dir,
@@ -935,7 +935,8 @@ def export_project_zip(project: str):
             base = f["base"]
             md = _get_or_render_md(project, base)
             if md is not None:
-                zf.writestr(f"{base}.md", md.encode("utf-8"))
+                safe_base = paths.safe_name(base)
+                zf.writestr(f"{safe_base}.md", md.encode("utf-8"))
     buf.seek(0)
     filename = f"{paths.safe_name(project)}_markdown.zip"
     return StreamingResponse(

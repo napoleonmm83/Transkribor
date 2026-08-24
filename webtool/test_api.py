@@ -2688,3 +2688,13 @@ def test_export_file_md_unknown_404(client):
     r = client.get("/api/projects/Demo/files/unbekannt_xyz/export/md")
     assert r.status_code == 404
 
+
+def test_export_project_downloads_unknown_project_404(client):
+    r = client.post("/api/projects/Unbekannt_xyz/export/downloads")
+    assert r.status_code == 404
+
+
+def test_export_project_zip_unknown_project_404(client):
+    r = client.get("/api/projects/Unbekannt_xyz/export/zip")
+    assert r.status_code == 404
+
