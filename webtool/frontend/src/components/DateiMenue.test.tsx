@@ -256,4 +256,13 @@ describe('Sprache, Sprecher & Korrektur', () => {
     expect(api.startRetranscribeFile).not.toHaveBeenCalled()
     expect(api.startCorrectFile).not.toHaveBeenCalled()
   })
+
+  it('triggert Markdown-Download für transkribierte Datei', async () => {
+    vi.mocked(api.fileMarkdownUrl).mockReturnValue('/api/projects/P/files/a/export/md')
+    zeigen(datei({ has_raw: true }))
+    await menueOeffnen()
+    fireEvent.click(await screen.findByRole('menuitem', { name: /Markdown herunterladen/ }))
+    expect(api.fileMarkdownUrl).toHaveBeenCalledWith('P', 'a')
+    expect(api.triggerDownload).toHaveBeenCalledWith('/api/projects/P/files/a/export/md', 'a.md')
+  })
 })

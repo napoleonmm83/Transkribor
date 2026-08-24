@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { useMatch, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
-import { Bot, Languages, MoreHorizontal, Pencil, RotateCcw, Trash2 } from 'lucide-react'
+import { Bot, FileDown, Languages, MoreHorizontal, Pencil, RotateCcw, Trash2 } from 'lucide-react'
 import type { ProjectFile } from '@/lib/types'
-import { deleteFile, getDoc, renameFile, startCorrectFile, startRetranscribeFile } from '@/lib/api'
+import { deleteFile, fileMarkdownUrl, getDoc, renameFile, startCorrectFile, startRetranscribeFile, triggerDownload } from '@/lib/api'
 import { UmbenennenDialog, sprecherNamen } from './UmbenennenDialog'
 import { DateiEinstellungenDialog } from './DateiEinstellungenDialog'
 import { useActiveJob } from '@/hooks/useActiveJob'
@@ -192,6 +192,13 @@ export function DateiMenue({ project, file, aiReason }: {
             <DropdownMenuItem onSelect={() => setEinstellungen(true)}>
               <Languages /> Sprache, Sprecher &amp; Korrektur
             </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <span title={file.has_raw || file.has_edit ? undefined : 'Noch kein Transkript vorhanden'} className="block">
+              <DropdownMenuItem disabled={!file.has_raw && !file.has_edit}
+                onSelect={() => triggerDownload(fileMarkdownUrl(project, file.base), `${file.base}.md`)}>
+                <FileDown /> Markdown herunterladen (.md)
+              </DropdownMenuItem>
+            </span>
             <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" onSelect={() => waehlen('delete')}>
               <Trash2 /> Löschen

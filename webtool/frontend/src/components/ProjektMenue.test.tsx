@@ -54,4 +54,24 @@ describe('ProjektMenue', () => {
     fireEvent.click(await screen.findByRole('menuitem', { name: /Löschen/ }))
     await waitFor(() => expect(screen.getByText(/unwiderruflich/)).toBeInTheDocument())
   })
+
+  it('führt „Markdown in Downloads ablegen" aus', async () => {
+    vi.mocked(api.exportProjectMarkdownToDownloads).mockResolvedValue({
+      ok: true, ziel: '/Users/test/Downloads/Demo', anzahl: 3, dateien: ['a.md', 'b.md', 'c.md'],
+    })
+    render(<Huelle><ProjektMenue project="Demo" onUmbenannt={() => {}} onGeloescht={() => {}} /></Huelle>)
+    await menueOeffnen()
+    fireEvent.click(await screen.findByRole('menuitem', { name: /Markdown in Downloads ablegen/ }))
+    await waitFor(() => expect(api.exportProjectMarkdownToDownloads).toHaveBeenCalledWith('Demo'))
+  })
+
+  it('führt „Markdown als ZIP herunterladen" aus', async () => {
+    vi.mocked(api.projectMarkdownZipUrl).mockReturnValue('/api/projects/Demo/export/zip')
+    render(<Huelle><ProjektMenue project="Demo" onUmbenannt={() => {}} onGeloescht={() => {}} /></Huelle>)
+    await menueOeffnen()
+    fireEvent.click(await screen.findByRole('menuitem', { name: /Markdown als ZIP herunterladen/ }))
+    expect(api.projectMarkdownZipUrl).toHaveBeenCalledWith('Demo')
+    expect(api.triggerDownload).toHaveBeenCalledWith('/api/projects/Demo/export/zip', 'Demo_markdown.zip')
+  })
 })
+

@@ -1,14 +1,16 @@
 """FastAPI-Backend für den Transkribor-Editor (Stufe 1)."""
 import glob
+import io
 import json
 import os
 import shutil
 import sys
+import zipfile
 from contextlib import asynccontextmanager
 from urllib.parse import urlparse
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel, StrictInt
 
@@ -858,6 +860,89 @@ def export_srt(project: str, base: str, sprecher: bool = True):
     srt = render_srt(load_or_build_doc(project, base), sprecher)
     paths.atomic_write(_srt_path(project, base), srt)
     return {"srt": srt}
+
+
+def _get_or_render_md(project: str, base: str) -> str | None:
+    """Holt fertiges Markdown oder rendert es aus dem Dokument."""
+    md_p = _md_path(project, base)
+    if os.path.exists(md_p):
+        try:
+            with open(md_p, "r", encoding="utf-8") as fh:
+                return fh.read()
+        except OSError:
+            pass
+    if os.path.exists(_edit_path(project, base)) or os.path.exists(_raw_path(project, base)):
+        doc = load_or_build_doc(project, base)
+        md = render_md(doc)
+        try:
+            paths.atomic_write(md_p, md)
+        except OSError:
+            pass
+        return md
+    return None
+
+
+@app.get("/api/projects/{project}/files/{base}/export/md")
+def export_file_md(project: str, base: str):
+    """Direkter Download der Markdown-Fassung einer einzelnen Datei."""
+    _validate(project, base)
+    md = _get_or_render_md(project, base)
+    if md is None:
+        raise HTTPException(status_code=404, detail=f"kein Transkript vorhanden: {base}")
+    filename = f"{paths.safe_name(base)}.md"
+    return Response(
+        content=md.encode("utf-8"),
+        media_type="text/markdown; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@app.post("/api/projects/{project}/export/downloads")
+def export_project_downloads(project: str):
+    """Exportiert alle Markdown-Dateien des Projekts direkt in den Downloads-Ordner."""
+    _validate(project)
+    if not os.path.isdir(paths.project_dir(project)):
+        raise HTTPException(status_code=404, detail="Projekt nicht gefunden")
+    dateien = _projekt_dateien(project)
+    target_dir = os.path.join(paths.downloads_dir(), paths.safe_name(project))
+    os.makedirs(target_dir, exist_ok=True)
+    exported = []
+    for f in dateien:
+        base = f["base"]
+        md = _get_or_render_md(project, base)
+        if md is not None:
+            dest = os.path.join(target_dir, f"{base}.md")
+            paths.atomic_write(dest, md)
+            exported.append(f"{base}.md")
+    return {
+        "ok": True,
+        "ziel": target_dir,
+        "anzahl": len(exported),
+        "dateien": exported,
+    }
+
+
+@app.get("/api/projects/{project}/export/zip")
+def export_project_zip(project: str):
+    """Packt alle Markdown-Dateien des Projekts in ein ZIP-Archiv zum Download."""
+    _validate(project)
+    if not os.path.isdir(paths.project_dir(project)):
+        raise HTTPException(status_code=404, detail="Projekt nicht gefunden")
+    dateien = _projekt_dateien(project)
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for f in dateien:
+            base = f["base"]
+            md = _get_or_render_md(project, base)
+            if md is not None:
+                zf.writestr(f"{base}.md", md.encode("utf-8"))
+    buf.seek(0)
+    filename = f"{paths.safe_name(project)}_markdown.zip"
+    return StreamingResponse(
+        buf,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 def _autocorrect_enabled() -> bool:

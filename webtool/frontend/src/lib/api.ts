@@ -177,6 +177,35 @@ export async function exportText(
     `/api/projects/${enc(project)}/files/${enc(base)}/export${pfad}`,
     { method: 'POST' })))[fmt]
 }
+
+export type ExportDownloadsErgebnis = {
+  ok: boolean
+  ziel: string
+  anzahl: number
+  dateien: string[]
+}
+
+export async function exportProjectMarkdownToDownloads(project: string): Promise<ExportDownloadsErgebnis> {
+  return jn(await post(`/api/projects/${enc(project)}/export/downloads`))
+}
+
+export function projectMarkdownZipUrl(project: string): string {
+  return `/api/projects/${enc(project)}/export/zip`
+}
+
+export function fileMarkdownUrl(project: string, base: string): string {
+  return `/api/projects/${enc(project)}/files/${enc(base)}/export/md`
+}
+
+export function triggerDownload(url: string, filename?: string) {
+  const a = document.createElement('a')
+  a.href = url
+  if (filename) a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+}
+
 /** Body ist optional: fast alle POSTs hier sind reine Auslöser ohne Nutzlast. */
 const post = (u: string, body?: unknown) => fetch(u, {
   method: 'POST',

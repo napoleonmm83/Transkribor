@@ -2643,3 +2643,48 @@ def test_fetch_filtert_urls_und_sprachen_PAARWEISE(client, monkeypatch):
                           "sprache": ["ch", "de", "en"]})
     assert r.status_code == 200
     assert gesehen["TRANSKRIBOR_FETCH_SPRACHE"] == "ch,en"
+
+
+def test_export_project_downloads_erstellt_ordner_und_dateien(client, tmp_path, monkeypatch):
+    """POST /api/projects/{p}/export/downloads legt Downloads/<Projekt> an und speichert alle .md-Dateien."""
+    monkeypatch.setenv("TRANSKRIBOR_DOWNLOADS", str(tmp_path / "Downloads"))
+    r = client.post("/api/projects/Demo/export/downloads")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["ok"] is True
+    assert data["anzahl"] >= 1
+    assert "S1.md" in data["dateien"]
+    ziel_ordner = tmp_path / "Downloads" / "Demo"
+    assert ziel_ordner.is_dir()
+    md_file = ziel_ordner / "S1.md"
+    assert md_file.is_file()
+    assert len(md_file.read_text(encoding="utf-8")) > 0
+
+
+def test_export_project_zip_liefert_archiv(client):
+    """GET /api/projects/{p}/export/zip liefert ein gueltiges ZIP mit den .md-Dateien."""
+    import zipfile, io
+    r = client.get("/api/projects/Demo/export/zip")
+    assert r.status_code == 200
+    assert r.headers["content-type"] == "application/zip"
+    assert 'attachment; filename="Demo_markdown.zip"' in r.headers["content-disposition"]
+    zf = zipfile.ZipFile(io.BytesIO(r.content))
+    namelist = zf.namelist()
+    assert "S1.md" in namelist
+    content = zf.read("S1.md").decode("utf-8")
+    assert len(content) > 0
+
+
+def test_export_file_md_download(client):
+    """GET /api/projects/{p}/files/{b}/export/md liefert das einzelne Markdown-Dokument als Download."""
+    r = client.get("/api/projects/Demo/files/S1/export/md")
+    assert r.status_code == 200
+    assert "text/markdown" in r.headers["content-type"]
+    assert 'attachment; filename="S1.md"' in r.headers["content-disposition"]
+    assert len(r.text) > 0
+
+
+def test_export_file_md_unknown_404(client):
+    r = client.get("/api/projects/Demo/files/unbekannt_xyz/export/md")
+    assert r.status_code == 404
+
