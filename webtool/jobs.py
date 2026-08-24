@@ -50,7 +50,7 @@ def _prune_locked():
         _jobs.pop(jid, None)
 
 
-def start(project: str, cmd: list, cwd, kind: str, then=None, env=None):
+def start(project: str, cmd: list, cwd, kind: str, then=None, env=None, base: str = None, bases: set = None):
     """Startet den Job. `then` laeuft NACH erfolgreichem Abschluss (status 'done') im
     Job-Thread — damit haengt die Auto-Korrektur nach der Transkription nicht am Browser.
     `env` (dict) wird in die Subprozess-Umgebung gemischt; default None aendert nichts."""
@@ -64,10 +64,11 @@ def start(project: str, cmd: list, cwd, kind: str, then=None, env=None):
             if busy is not None:
                 return busy, False  # Einzel-GPU: nur ein Whisper-Lauf zugleich
         jid = uuid.uuid4().hex[:12]
+        initial_bases = set(bases) if bases is not None else ({base} if base else None)
         _jobs[jid] = {"id": jid, "project": project, "kind": kind, "status": "running",
                       # None = Wirkungsbereich noch unbekannt (Zeile noch nicht gedruckt)
                       # -> gilt als "faesst alles an". Siehe SCOPE_PREFIX.
-                      "bases": None,
+                      "bases": initial_bases,
                       "active_bases": set(),
                       "lines": [], "returncode": None, "started": time.time(),
                       "ended": None, "pid": None, "cancelled": False,
@@ -77,7 +78,7 @@ def start(project: str, cmd: list, cwd, kind: str, then=None, env=None):
     return jid, True
 
 
-def request(project: str, cmd: list, cwd, kind: str, then=None):
+def request(project: str, cmd: list, cwd, kind: str, then=None, base: str = None):
     """Startet den Job — oder merkt genau EINEN Nachlauf vor, wenn der Slot belegt ist.
 
     Ein Upload/Import soll immer zu einer Verarbeitung fuehren, auch wenn gerade eine laeuft:
@@ -87,7 +88,10 @@ def request(project: str, cmd: list, cwd, kind: str, then=None):
     """
     key = (project, kind)
     for _ in range(10):
-        jid, started = start(project, cmd, cwd, kind, then=then)
+        if base is not None:
+            jid, started = start(project, cmd, cwd, kind, then=then, base=base)
+        else:
+            jid, started = start(project, cmd, cwd, kind, then=then)
         if started:
             return jid, True
         with _lock:
@@ -98,7 +102,7 @@ def request(project: str, cmd: list, cwd, kind: str, then=None):
         def rerun(_key=key):
             with _lock:
                 _pending.discard(_key)
-            request(project, cmd, cwd, kind, then=then)
+            request(project, cmd, cwd, kind, then=then, base=base)
 
         if when_done(jid, rerun):
             return jid, False

@@ -163,6 +163,18 @@ describe('parseJobPhases — transcribe', () => {
     expect(p.active).toEqual({ C: { phase: 'transcribe' } })
     expect(p.perBase).toEqual({ A: 'done', B: 'skipped' })
   })
+  it('ignoriert skip (vorhanden) fuer Dateien ausserhalb des Scopes', () => {
+    const p = parseJobPhases('transcribe', [
+      '[scope] B',
+      '[Demo] skip (vorhanden): A',
+      '[Demo] -> transkribiere B …',
+      '[Demo] skip (vorhanden): C',
+    ])
+    expect(p.scope).toEqual(new Set(['B']))
+    expect(p.active).toEqual({ B: { phase: 'transcribe' } })
+    // A und C duerfen NICHT in perBase auftauchen
+    expect(p.perBase).toEqual({})
+  })
   it('FEHLER -> failed', () => {
     expect(parseJobPhases('transcribe', ['[Demo] FEHLER A: broken pipe']).perBase).toEqual({ A: 'failed' })
   })

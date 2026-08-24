@@ -98,6 +98,12 @@ def test_find_audio_mit_only_filtert_auf_basisnamen(tmp_path):
     assert namen == ["b.m4a", "c.wav"]
 
 
+def test_find_audio_mit_einzelnem_string_only(tmp_path):
+    proj = _projekt(tmp_path, "interview.mp3", "andere.mp3")
+    got = transcribe.find_audio(proj, only="interview")
+    assert [os.path.basename(f) for f in got] == ["interview.mp3"]
+
+
 def test_find_audio_mit_leerem_only_liefert_nichts(tmp_path):
     # Wichtig: fuehrt in transcribe_project zum fruehen Ausstieg VOR whisper.load_model()
     proj = _projekt(tmp_path, "a.mp3")

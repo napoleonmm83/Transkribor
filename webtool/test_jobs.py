@@ -472,3 +472,18 @@ def test_remove_base_entfernt_datei_aus_job_scope():
         jobs.cancel(jid)
         _wait(jid)
 
+
+def test_jobs_start_mit_initialem_base_scope():
+    """jobs.start mit base= setzt den Scope ab Millisekunde 0."""
+    jid, started = jobs.start("P_single", _scope_cmd(["warte"]), cwd=None, kind="correct", base="DateiA")
+    try:
+        assert started is True
+        snap = jobs.get(jid)
+        assert snap["bases"] == ["DateiA"]
+        assert jobs.betrifft("P_single", "DateiA") is not None
+        assert jobs.betrifft("P_single", "DateiB") is None
+    finally:
+        jobs.cancel(jid)
+        _wait(jid)
+
+

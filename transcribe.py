@@ -75,7 +75,7 @@ def find_audio(proj_dir, only=None):
     files = [f for f in sorted(glob.glob(os.path.join(ad, "*")))
              if f.lower().endswith(AUDIO_EXT)]
     if only is not None:
-        want = set(only)
+        want = {only} if isinstance(only, str) else set(only)
         files = [f for f in files
                  if os.path.splitext(os.path.basename(f))[0] in want]
     return files
@@ -598,6 +598,7 @@ def main():
     ap.add_argument("projekt", nargs="?", help="Projektname (Ordner in projekte/)")
     ap.add_argument("--all", action="store_true", help="alle Projekte")
     ap.add_argument("--list", action="store_true", help="Projekte auflisten")
+    ap.add_argument("--only", help="nur diese Datei (Basisname) transkribieren")
     ap.add_argument("--model", default=os.environ.get("WHISPER_MODEL", "large-v3"))
     ap.add_argument("--language", default=os.environ.get("WHISPER_LANG", "de"))
     args = ap.parse_args()
@@ -612,7 +613,7 @@ def main():
         for p in list_projects():
             transcribe_project(p, args.model, args.language)
     elif args.projekt:
-        transcribe_project(args.projekt, args.model, args.language)
+        transcribe_project(args.projekt, args.model, args.language, only=args.only)
     else:
         ap.print_help()
 

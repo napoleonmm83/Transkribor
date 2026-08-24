@@ -609,10 +609,8 @@ def delete_file(project: str, base: str):
 
 @app.post("/api/projects/{project}/files/{base}/transcribe")
 def retranscribe_file(project: str, base: str):
-    """Transkript neu erzeugen: Artefakte weg, dann der normale Projektlauf.
+    """Transkript neu erzeugen: Artefakte weg, dann gezielter Einzeldatei-Lauf.
 
-    Kein eigener CLI-Schalter noetig — transcribe.py ueberspringt vorhandene <base>.json,
-    macht also genau die eine fehlende Datei und zieht per then= die Autokorrektur nach.
     Die abgeleiteten Dateien MUESSEN mit weg: load_or_build_doc bevorzugt <base>.edit.json
     vor der Roh-JSON, ein Neu-Transkribieren zeigte sonst weiter den alten Text."""
     _validate(project, base)
@@ -620,7 +618,7 @@ def retranscribe_file(project: str, base: str):
         raise HTTPException(status_code=404, detail=f"kein Audio: {base}")
     _keine_jobs(project, base)
     _datei_weg(project, base, mit_audio=False)
-    job_id, started = _start_transcribe(project)
+    job_id, started = _start_transcribe(project, base=base)
     return {"job_id": job_id, "started": started}
 
 
@@ -866,7 +864,7 @@ def _autocorrect_enabled() -> bool:
     return (os.environ.get("TRANSKRIBOR_AUTOCORRECT") or "1").lower() not in ("0", "false", "no")
 
 
-def _autocorrect(project: str) -> None:
+def _autocorrect(project: str, base: str | None = None) -> None:
     """Korrektur nach der Transkription. Laeuft im Job-Thread, nicht im Browser — ein
     geschlossener Tab darf die Kette nicht unterbrechen. `correct run` ist idempotent, holt
     also genau die neu transkribierten Dateien nach."""
@@ -878,14 +876,20 @@ def _autocorrect(project: str) -> None:
         # nutzbar, es fehlt nur die Korrektur. Eine Zeile ins Log, kein Fehlerzustand.
         print(f"[autocorrect] uebersprungen — {grund}", flush=True)
         return
-    jobs.request(project, [sys.executable, "-m", "webtool.correct", "run", project],
-                 paths.ROOT, "correct")
+    cmd = [sys.executable, "-m", "webtool.correct", "run", project]
+    if base:
+        cmd.append(base)
+    jobs.request(project, cmd, paths.ROOT, "correct", base=base)
 
 
-def _start_transcribe(project: str):
+def _start_transcribe(project: str, base: str | None = None):
     """Transkription anstossen; danach automatisch korrigieren."""
-    return jobs.request(project, [sys.executable, os.path.join(paths.ROOT, "transcribe.py"), project],
-                        paths.ROOT, "transcribe", then=lambda: _autocorrect(project))
+    cmd = [sys.executable, os.path.join(paths.ROOT, "transcribe.py"), project]
+    if base:
+        cmd.extend(["--only", base])
+    return jobs.request(project, cmd, paths.ROOT, "transcribe",
+                        base=base,
+                        then=lambda: _autocorrect(project, base=base))
 
 
 @app.post("/api/projects/{project}/transcribe")

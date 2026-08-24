@@ -168,8 +168,8 @@ export function Sidebar({
                       <FileRow key={f.base} project={p.name} file={f}
                         active={active?.project === p.name && active?.base === f.base}
                         onOpen={() => onOpen({ project: p.name, base: f.base })}
-                        phase={jobRunning ? phases?.active[f.base]?.phase : undefined}
-                        state={jobRunning ? phases?.perBase[f.base] : undefined}
+                        phase={inScope ? phases?.active[f.base]?.phase : undefined}
+                        state={inScope ? phases?.perBase[f.base] : undefined}
                         inScope={inScope}
                         globalPhase={jobRunning ? (phases?.globalPerBase?.[f.base] ?? (phases?.scope === undefined ? phases?.global : null)) : null}
                         jobRunning={jobRunning} aiReason={aiReason} />
