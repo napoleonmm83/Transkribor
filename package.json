@@ -1,7 +1,7 @@
 {
   "name": "transkribor",
   "productName": "Transkribor",
-  "version": "0.33.0",
+  "version": "0.34.0",
   "private": true,
   "license": "MIT",
   "description": "Interview-Transkription (Whisper, lokal) mit KI-Korrektur und Sprecher-Labeling",
