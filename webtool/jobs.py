@@ -4,6 +4,7 @@ threading + subprocess.Popen; kein asyncio/Celery/Redis. Ein einzelner lokaler N
 Fortschritt = stdout-Zeilen im Job-Log; via GET /api/jobs/{id} gepollt.
 """
 import os
+import re
 import signal
 import subprocess
 import sys
@@ -29,6 +30,26 @@ _PRUNE_AGE = 3600          # fertige Jobs nach 1h vergessen
 SCOPE_PREFIX = "[scope] "
 ACTIVE_PREFIX = "[active] "
 DONE_PREFIX = "[done] "
+
+_PROZENT_RE = re.compile(r"^\d+%(?:\||\s|$)")
+MAX_JOB_LINES = 10_000
+
+
+def ist_fortschrittszeile(zeile: str) -> bool:
+    """Erkennt flüchtige tqdm-Fortschrittszeilen (z. B. '45%|...')."""
+    return bool(_PROZENT_RE.match(zeile.strip()))
+
+
+def fuege_zeile_an(lines: list, line: str) -> None:
+    """Fügt eine Zeile an den Puffer an. Flüchtige Fortschrittszeilen (tqdm)
+    werden in-place aktualisiert (#371)."""
+    if lines and ist_fortschrittszeile(lines[-1]) and ist_fortschrittszeile(line):
+        lines[-1] = line
+        return
+    if len(lines) >= MAX_JOB_LINES:
+        # Erste 10 Zeilen (inkl. [scope]) schützen, älteste Zwischenzeile verwerfen
+        del lines[10:11]
+    lines.append(line)
 
 
 def _popen_kwargs() -> dict:
@@ -139,7 +160,7 @@ def _run(jid, cmd, cwd, env):
             with _lock:
                 r = _jobs.get(jid)            # der Nachlauf dauert Minuten — der Job kann
                 if r is not None:             # zwischenzeitlich weggepruned worden sein
-                    r["lines"].append(f"NACHLAUF-FEHLER: {e}")
+                    fuege_zeile_an(r["lines"], f"NACHLAUF-FEHLER: {e}")
 
 
 def _run_proc(jid, cmd, cwd, env=None):
@@ -164,7 +185,7 @@ def _run_proc(jid, cmd, cwd, env=None):
         for line in proc.stdout:
             line = line.rstrip("\n")
             with _lock:
-                _jobs[jid]["lines"].append(line)
+                fuege_zeile_an(_jobs[jid]["lines"], line)
                 # Nur die ERSTE Zeile zaehlt: der Lauf druckt sie, bevor er arbeitet, und
                 # spaeter kaeme sie hoechstens aus Transkripttext, der so beginnt.
                 if _jobs[jid]["bases"] is None and line.startswith(SCOPE_PREFIX):
@@ -185,7 +206,7 @@ def _run_proc(jid, cmd, cwd, env=None):
             _jobs[jid]["ended"] = time.time()
     except Exception as e:  # Launch-Fehler etc. -> kein Zombie 'running'
         with _lock:
-            _jobs[jid]["lines"].append(f"JOB-FEHLER: {e}")
+            fuege_zeile_an(_jobs[jid]["lines"], f"JOB-FEHLER: {e}")
             _jobs[jid]["status"] = "cancelled" if _jobs[jid]["cancelled"] else "error"
             _jobs[jid]["ended"] = time.time()
     finally:
