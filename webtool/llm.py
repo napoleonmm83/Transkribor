@@ -489,7 +489,8 @@ def diagnose_fehler(fehler: str | Exception) -> dict:
         or "authentication" in low
         or "authenticate" in low
         or "not logged in" in low
-        or "logged in" in low
+        or "please log in" in low
+        or "login required" in low
         or "kein api-key" in low
         or "nicht angemeldet" in low
         or "codex login" in low
@@ -507,9 +508,9 @@ def diagnose_fehler(fehler: str | Exception) -> dict:
     if (
         "404" in text
         or "model_not_found" in low
-        or "not found" in low
         or "no longer available" in low
         or "kein modell" in low
+        or ("not found" in low and ("model" in low or "404" in text))
     ):
         return {
             "kategorie": "model",

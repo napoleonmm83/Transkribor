@@ -470,10 +470,14 @@ def _run_claude(prompt: str, workdir: str) -> None:
     (Prompt-Injection über den Audioinhalt, z.B. aus einem URL-Import), und ein präpariertes
     Transkript konnte damit in die Transkripte JEDES anderen Projekts schreiben. Der eigene
     Quellcode lag schon vorher ausserhalb."""
+    global _letzte_diagnose
     try:
         exe = _claude_exe()
     except FileNotFoundError as e:
+        diag = llm.diagnose_fehler(str(e))
+        _letzte_diagnose = diag
         print(f"  {e}", flush=True)
+        print(f"  [diagnose] {diag['kategorie']}\t{diag['titel']}\t{diag['hinweis']}", flush=True)
         return
     # Ohne MCP-Server: 16,3s -> 7,7s Startup je Aufruf (gemessen). Die Korrektur braucht nur
     # Read/Write — und sie verarbeitet nicht vertrauenswürdigen Transkripttext, da haben die
@@ -498,7 +502,6 @@ def _run_claude(prompt: str, workdir: str) -> None:
         if r.returncode != 0:
             tail = ((r.stdout or "") + (r.stderr or "")).strip()[-500:]
             diag = llm.diagnose_fehler(tail)
-            global _letzte_diagnose
             _letzte_diagnose = diag
             print(f"  claude exit {r.returncode}: {tail}", flush=True)
             print(f"  [diagnose] {diag['kategorie']}\t{diag['titel']}\t{diag['hinweis']}", flush=True)
@@ -518,6 +521,7 @@ def _ask_llm(prompt: str, inputs: list, output: str) -> None:
     Dateien anfasst; `llm.use_api()` beantwortet genau das.
     In beiden Faellen gilt: Erfolg wird an der geschriebenen Datei gemessen, ein Fehler wird
     nur geloggt — eine Datei darf den Batch nicht abbrechen."""
+    global _letzte_diagnose
     if not llm.use_api():
         # Ein- und Ausgaben eines Aufrufs liegen IMMER im selben transkripte-Ordner (alle
         # Aufrufer bauen ihre Pfade aus paths.transkripte_dir) — daraus faellt die
@@ -529,7 +533,6 @@ def _ask_llm(prompt: str, inputs: list, output: str) -> None:
             llm.complete_to_file(prompt, inputs, output)
         except llm.LLMError as e:
             diag = llm.diagnose_fehler(e)
-            global _letzte_diagnose
             _letzte_diagnose = diag
             print(f"  KI-Anbieter: {e}", flush=True)
             print(f"  [diagnose] {diag['kategorie']}\t{diag['titel']}\t{diag['hinweis']}", flush=True)
