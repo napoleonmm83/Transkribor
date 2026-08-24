@@ -433,6 +433,12 @@ def env_key_hint() -> str:
     return ""
 
 
+def _has_status(text: str, code: str) -> bool:
+    """Prüft auf echte HTTP-/Statuscodes (z. B. 'HTTP 404', 'Status 404', isoliert '404'),
+    verhindert aber Fehlmatches bei IDs wie 'req_4042' oder 'doc_401'."""
+    return bool(re.search(rf"(?<![a-zA-Z0-9_]){code}(?![a-zA-Z0-9_])", text))
+
+
 def diagnose_fehler(fehler: str | Exception) -> dict:
     """Klassifiziert einen Fehler bei der LLM-Korrektur und liefert verständliche
     Diagnose- und Hilfetexte für den Benutzer.
@@ -446,7 +452,7 @@ def diagnose_fehler(fehler: str | Exception) -> dict:
 
     # 1. Guthaben erschöpft (Payment / Quota) — vor 429 prüfen, da OpenAI 429 für insufficient_quota nutzt
     if (
-        "402" in text
+        _has_status(text, "402")
         or "insufficient_quota" in low
         or "out of credits" in low
         or "payment required" in low
@@ -463,7 +469,7 @@ def diagnose_fehler(fehler: str | Exception) -> dict:
 
     # 2. Rate-Limit / Kontingent-Limit
     if (
-        "429" in text
+        _has_status(text, "429")
         or "rate_limit" in low
         or "ratelimit" in low
         or "rate limit" in low
@@ -482,7 +488,7 @@ def diagnose_fehler(fehler: str | Exception) -> dict:
 
     # 3. Authentifizierung / API-Key
     if (
-        "401" in text
+        _has_status(text, "401")
         or "invalid api key" in low
         or "invalid_api_key" in low
         or "unauthorized" in low
@@ -506,11 +512,11 @@ def diagnose_fehler(fehler: str | Exception) -> dict:
 
     # 4. Modell nicht verfügbar / veraltet
     if (
-        "404" in text
+        _has_status(text, "404")
         or "model_not_found" in low
         or "no longer available" in low
         or "kein modell" in low
-        or ("not found" in low and ("model" in low or "404" in text))
+        or ("not found" in low and ("model" in low or _has_status(text, "404")))
     ):
         return {
             "kategorie": "model",

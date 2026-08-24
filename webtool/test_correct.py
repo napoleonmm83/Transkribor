@@ -1468,4 +1468,5 @@ def test_main_meldet_konkrete_diagnose_beim_scheitern(project, capsys, monkeypat
         correct.main(["run", "Demo", "--force"])
     out = capsys.readouterr().out
     assert "Guthaben aufgebraucht" in out
+    assert "Bitte beim Anbieter aufladen" in out
 

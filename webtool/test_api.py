@@ -1046,7 +1046,8 @@ def test_settings_test_meldet_fehler_statt_zu_500en(client, monkeypatch):
     r = client.post("/api/settings/test")
     assert r.status_code == 200
     assert r.json()["ok"] is False
-    assert "Limit" in r.json()["detail"]
+    assert r.json()["detail"] == ("Anfrage-Limit erreicht (Rate Limit): "
+                                 "Der Anbieter bittet um eine kurze Pause. Bitte in 1–2 Minuten erneut auf „Korrigieren“ klicken.")
 
 
 # --- Hardware und Whisper-Einstellungen (Task 6) ---

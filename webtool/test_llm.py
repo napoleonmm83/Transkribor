@@ -583,3 +583,12 @@ def test_diagnose_fehler_erkennt_timeout():
     assert "Timeout" in d["titel"] or "Zeitüberschreitung" in d["titel"]
 
 
+def test_diagnose_fehler_ignoriert_teilstrings_in_ids():
+    # IDs wie req_4042 oder user_4010 dürfen nicht fälschlich als HTTP-Status erkannt werden
+    assert llm.diagnose_fehler("Fehler in request_id=req_4042 aufgetreten")["kategorie"] == "unbekannt"
+    assert llm.diagnose_fehler("Vorgang user_4010 fehlgeschlagen")["kategorie"] == "unbekannt"
+    assert llm.diagnose_fehler("Objekt order_4020 nicht bereit")["kategorie"] == "unbekannt"
+    assert llm.diagnose_fehler("Trace item_4290 fehlerhaft")["kategorie"] == "unbekannt"
+
+
+

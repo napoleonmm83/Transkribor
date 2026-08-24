@@ -1,0 +1,76 @@
+import json
+import sys
+from pathlib import Path
+import pytest
+
+sys.path.insert(0, str(Path(__file__).parent))
+import coderabbit_status
+
+
+def test_parse_rate_limited_comment():
+    comment_body = """
+<!-- This is an auto-generated comment: summarize by coderabbit.ai -->
+<!-- This is an auto-generated comment: rate limited by coderabbit.ai -->
+
+> [!WARNING]
+> ## Review limit reached
+> 
+> **Next included review available in 19 minutes.**
+> 
+> <details>
+> <summary>View limit details</summary>
+> 
+> **Limit details:** You’ve used all 3 included reviews currently available.
+"""
+    comments = [{"author": {"login": "coderabbitai"}, "body": comment_body}]
+    res = coderabbit_status.analyze_coderabbit(pr_info={"comments": comments, "statusCheckRollup": []}, inline_comments=[])
+    assert res["status"] == "RATE_LIMITED"
+    assert res["rate_limited"] is True
+    assert res["wait_minutes"] == 19
+    assert "19" in res["message"]
+
+
+def test_parse_in_progress_check():
+    checks = [
+        {"name": "CodeRabbit", "status": "IN_PROGRESS", "conclusion": None}
+    ]
+    res = coderabbit_status.analyze_coderabbit(pr_info={"comments": [], "statusCheckRollup": checks}, inline_comments=[])
+    assert res["status"] == "IN_PROGRESS"
+    assert res["in_progress"] is True
+
+
+def test_parse_completed_with_comments_and_pre_merge_warnings():
+    summary_body = """
+<!-- pre_merge_checks_walkthrough_start -->
+<details>
+<summary>🚥 Pre-merge checks | ✅ 6 | ❌ 1</summary>
+
+### ❌ Failed checks (1 warnings)
+
+| Check name | Status | Explanation | Resolution |
+| :---: | :--- | :--- | :--- |
+| Readme Bei Nutzer-Sichtbarer Aenderung | ⚠️ Warning | README unveraendert | README aktualisieren |
+
+</details>
+<!-- pre_merge_checks_walkthrough_end -->
+"""
+    comments = [{"author": {"login": "coderabbitai"}, "body": summary_body}]
+    inline = [
+        {
+            "id": 12345,
+            "path": "webtool/llm.py",
+            "line": 449,
+            "body": "_🎯 Functional Correctness_ | _🟡 Minor_\n\n**HTTP-Statuscodes nur im Statuskontext erkennen.**\n\nErkenne 402 nur als Statuscode.",
+        }
+    ]
+    res = coderabbit_status.analyze_coderabbit(
+        pr_info={"comments": comments, "statusCheckRollup": [{"name": "CodeRabbit", "status": "COMPLETED", "conclusion": "SUCCESS"}]},
+        inline_comments=inline,
+    )
+    assert res["status"] == "COMPLETED"
+    assert len(res["actionable_comments"]) == 1
+    assert res["actionable_comments"][0]["path"] == "webtool/llm.py"
+    assert res["actionable_comments"][0]["line"] == 449
+    assert "HTTP-Statuscodes" in res["actionable_comments"][0]["title"]
+    assert len(res["failed_pre_merge_checks"]) == 1
+    assert res["failed_pre_merge_checks"][0]["name"] == "Readme Bei Nutzer-Sichtbarer Aenderung"
