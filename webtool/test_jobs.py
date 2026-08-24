@@ -534,5 +534,54 @@ def test_active_for_enthaelt_bases_fuer_scoped_jobs():
         _wait(jid)
 
 
+def test_ist_fortschrittszeile_erkennt_tqdm_muster():
+    assert jobs.ist_fortschrittszeile("12%|###       | 12/100 [00:01<00:09, 9.50it/s]") is True
+    assert jobs.ist_fortschrittszeile("100%|") is True
+    assert jobs.ist_fortschrittszeile(" 45%| ") is True
+    assert jobs.ist_fortschrittszeile("[Demo] -> transkribiere audio_01 …") is False
+    assert jobs.ist_fortschrittszeile("[scope] S1\tS2") is False
+    assert jobs.ist_fortschrittszeile("✓ fertig") is False
+    assert jobs.ist_fortschrittszeile("FEHLER: timeout") is False
+
+
+def test_fuege_zeile_an_kompaktiert_fluechtige_prozentzeilen():
+    lines = []
+    jobs.fuege_zeile_an(lines, "[scope] S1\tS2")
+    jobs.fuege_zeile_an(lines, "[Demo] -> transkribiere S1 …")
+    jobs.fuege_zeile_an(lines, "10%|#         | 10/100")
+    jobs.fuege_zeile_an(lines, "20%|##        | 20/100")
+    jobs.fuege_zeile_an(lines, "30%|###       | 30/100")
+    assert lines == [
+        "[scope] S1\tS2",
+        "[Demo] -> transkribiere S1 …",
+        "30%|###       | 30/100",
+    ]
+    jobs.fuege_zeile_an(lines, "[Demo] fertig S1: 10s")
+    jobs.fuege_zeile_an(lines, "[Demo] -> transkribiere S2 …")
+    jobs.fuege_zeile_an(lines, "15%|#         | 15/100")
+    jobs.fuege_zeile_an(lines, "50%|#####     | 50/100")
+    assert lines == [
+        "[scope] S1\tS2",
+        "[Demo] -> transkribiere S1 …",
+        "30%|###       | 30/100",
+        "[Demo] fertig S1: 10s",
+        "[Demo] -> transkribiere S2 …",
+        "50%|#####     | 50/100",
+    ]
+
+
+def test_fuege_zeile_an_schuetzt_initiale_zeilen_bei_ueberlauf():
+    lines = [f"[scope] S{i}" for i in range(10)]
+    for i in range(jobs.MAX_JOB_LINES + 50):
+        jobs.fuege_zeile_an(lines, f"logzeile {i}")
+    assert len(lines) == jobs.MAX_JOB_LINES
+    # Die ersten 10 Zeilen bleiben geschützt
+    assert lines[0] == "[scope] S0"
+    assert lines[9] == "[scope] S9"
+    # Die neueste Zeile ist am Ende
+    assert lines[-1] == f"logzeile {jobs.MAX_JOB_LINES + 49}"
+
+
+
 
 
