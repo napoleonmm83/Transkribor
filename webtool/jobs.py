@@ -93,7 +93,8 @@ def start(project: str, cmd: list, cwd, kind: str, then=None, env=None, base: st
                       "active_bases": set(),
                       "lines": [], "returncode": None, "started": time.time(),
                       "ended": None, "pid": None, "cancelled": False,
-                      "then": [then] if then else []}
+                      "then": [then] if then else [],
+                      "next_runs": []}
         _active[(project, kind)] = jid
     threading.Thread(target=_run, args=(jid, cmd, cwd, env), daemon=True).start()
     return jid, True
@@ -141,7 +142,7 @@ def when_done(job_id: str, fn) -> bool:
         r = _jobs.get(job_id)
         if r is None or r["status"] != "running":
             return False
-        r["then"].append(fn)
+        r.setdefault("next_runs", []).append(fn)
         return True
 
 
@@ -152,14 +153,44 @@ def _run(jid, cmd, cwd, env):
     # aussperren. Und ausserhalb von _lock, sonst blockiert es jobs.start() im Callback.
     with _lock:
         r = _jobs.get(jid)
-        callbacks = list(r["then"]) if r and r["status"] == "done" else []
-    for fn in callbacks:
+        if not r or r["status"] != "done":
+            return
+        next_runs = list(r.get("next_runs", []))
+        then_callbacks = list(r.get("then", []))
+        project = r["project"]
+        kind = r["kind"]
+
+    # 1. Zuerst Folge-Läufe (rerun) ausführen, um den nächsten Batch-Teilschritt zu starten
+    for fn in next_runs:
         try:
             fn()
-        except Exception as e:                # ein kaputter Nachlauf darf den Job nicht faerben
+        except Exception as e:
             with _lock:
-                r = _jobs.get(jid)            # der Nachlauf dauert Minuten — der Job kann
-                if r is not None:             # zwischenzeitlich weggepruned worden sein
+                r = _jobs.get(jid)
+                if r is not None:
+                    fuege_zeile_an(r["lines"], f"NACHLAUF-FEHLER: {e}")
+
+    # 2. Prüfen, ob noch Folge-Läufe für (Projekt, Art) aktiv oder vorgemerkt sind
+    with _lock:
+        folge_jid = _active.get((project, kind))
+        hat_pending = any(k[0] == project and k[1] == kind for k in _pending)
+        if (folge_jid or hat_pending) and folge_jid != jid:
+            # Nachlauf existiert -> `then` an den Folge-Job weiterreichen, damit autocorrect
+            # erst nach Abschluss ALLER Transkriptionen des Projekts feuert (#Option1)
+            if folge_jid and folge_jid in _jobs:
+                for fn in then_callbacks:
+                    if fn not in _jobs[folge_jid]["then"]:
+                        _jobs[folge_jid]["then"].append(fn)
+                then_callbacks = []
+
+    # 3. Wenn die Kette komplett abgeschlossen ist: finale `then`-Callbacks ausführen
+    for fn in then_callbacks:
+        try:
+            fn()
+        except Exception as e:
+            with _lock:
+                r = _jobs.get(jid)
+                if r is not None:
                     fuege_zeile_an(r["lines"], f"NACHLAUF-FEHLER: {e}")
 
 
@@ -269,6 +300,7 @@ def get(job_id: str):
         snap["lines"] = list(r["lines"])
         snap.pop("proc", None)                # Popen-Handle ist nicht JSON-serialisierbar
         snap.pop("then", None)                # Callables sind nicht JSON-serialisierbar
+        snap.pop("next_runs", None)           # Callables sind nicht JSON-serialisierbar
         snap.pop("active_bases", None)        # Set ist nicht JSON-serialisierbar
         if isinstance(snap.get("bases"), set):
             snap["bases"] = list(snap["bases"])
