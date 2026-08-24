@@ -248,24 +248,32 @@ jobs:
             echo "test=true" >> "$GITHUB_OUTPUT"
             echo "zusatz=--draft --prerelease --target ${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
           fi
-      - name: Release anlegen
+      - name: Release anlegen oder Artefakte hochladen
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
           ls -la artefakte/
+          tag="${{ steps.name.outputs.tag }}"
           if [ "${{ steps.name.outputs.test }}" = "true" ]; then
             kopf="Unsignierte Testbauten aus \`${GITHUB_REF_NAME}\` (${GITHUB_SHA:0:7}) — kein Release."
           else
-            kopf="Transkribor ${{ steps.name.outputs.tag }}"
+            kopf="Transkribor $tag"
           fi
-          gh release create "${{ steps.name.outputs.tag }}" \
-            ${{ steps.name.outputs.zusatz }} \
-            --title "Transkribor ${{ steps.name.outputs.tag }}" \
-            --notes "$kopf
+
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Release $tag existiert bereits — lade gebaute Installer hoch..."
+            gh release upload "$tag" artefakte/* --clobber
+          else
+            echo "Erstelle neues Release $tag mit Build-Artefakten..."
+            gh release create "$tag" \
+              ${{ steps.name.outputs.zusatz }} \
+              --title "Transkribor $tag" \
+              --notes "$kopf
 
           **macOS:** ad-hoc signiert, nicht notarisiert — beim ersten Start blockt Gatekeeper. Rechtsklick auf die App > *Öffnen*; wird das nicht angeboten (macOS 15+), einmal starten und dann *Systemeinstellungen > Datenschutz & Sicherheit > Dennoch öffnen*.
           **Windows:** unsigniert — SmartScreen zeigt *Weitere Informationen* > *Trotzdem ausführen*.
 
           Beim ersten Start richtet die App die Python-Seite selbst ein (mehrere GB, 10–30 Minuten)." \
-            artefakte/*
+              artefakte/*
+          fi
