@@ -308,7 +308,7 @@ export function ProjectWorkspace() {
                     </button>
                     <FileStatusPill file={f} active={active?.phase} pct={active?.pct} detail={active?.detail}
                       state={state} jobRunning={running} inScope={inScope}
-                      globalPhase={running ? (phases.globalPerBase?.[f.base] ?? phases.global) : null} mitText />
+                      globalPhase={running ? (phases.globalPerBase?.[f.base] ?? (phases.scope === undefined ? phases.global : null)) : null} mitText />
                     <DateiMenue project={project!} file={f} aiReason={aiReason} />
                   </div>
                   {active?.pct != null && (

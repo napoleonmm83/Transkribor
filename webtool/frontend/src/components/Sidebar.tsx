@@ -171,7 +171,7 @@ export function Sidebar({
                         phase={jobRunning ? phases?.active[f.base]?.phase : undefined}
                         state={jobRunning ? phases?.perBase[f.base] : undefined}
                         inScope={inScope}
-                        globalPhase={jobRunning ? (phases?.globalPerBase?.[f.base] ?? phases?.global) : null}
+                        globalPhase={jobRunning ? (phases?.globalPerBase?.[f.base] ?? (phases?.scope === undefined ? phases?.global : null)) : null}
                         jobRunning={jobRunning} aiReason={aiReason} />
                     )
                   })}
