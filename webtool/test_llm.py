@@ -433,3 +433,56 @@ def test_nicht_dekodierbare_eingabedatei_wird_zur_llmerror(tmp_path):
     with pytest.raises(llm.LLMError) as e:
         llm._with_files("prompt", [str(p)])
     assert "UnicodeDecodeError" in str(e.value)
+
+
+# --- SSL-Kontext & Google-Provider (#385) ------------------------------------
+
+def test_ssl_kontext_nutzt_certifi():
+    ctx = llm._ssl_kontext()
+    assert ctx is not None
+    import ssl
+    assert isinstance(ctx, ssl.SSLContext)
+
+
+def test_ssl_kontext_ohne_certifi_faellt_auf_die_vorgabe(monkeypatch):
+    import sys
+    monkeypatch.setitem(sys.modules, "certifi", None)
+    assert llm._ssl_kontext() is None
+
+
+def test_request_uebergibt_ssl_kontext(monkeypatch):
+    gesehen = {}
+
+    class DummyResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def read(self):
+            return b'{"ok": true}'
+
+    def fake_urlopen(req, timeout=60, context=None):
+        gesehen["context"] = context
+        return DummyResponse()
+
+    monkeypatch.setattr(llm.urllib.request, "urlopen", fake_urlopen)
+    res = llm._request("https://example.com/api", {"header": "val"})
+    assert res == {"ok": True}
+    assert gesehen["context"] is not None
+    import ssl
+    assert isinstance(gesehen["context"], ssl.SSLContext)
+
+
+def test_google_provider_hat_default_model(cfg):
+    nach_id = {p["id"]: p for p in llm.provider_list()}
+    assert nach_id["google"]["default_model"] == "gemini-flash-latest"
+
+
+def test_env_key_hint_erkennt_google_api_key(monkeypatch):
+    for k in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY"):
+        monkeypatch.delenv(k, raising=False)
+    monkeypatch.setenv("GOOGLE_API_KEY", "AIzaSyTest")
+    assert llm.env_key_hint() == "GOOGLE_API_KEY"
+
