@@ -1620,6 +1620,20 @@ def test_streaming_pipeline_hardware_sequential_and_ai_parallel(project, monkeyp
             hw_active -= 1
         return 1
 
+    real_prep_single = correct.prep_single
+
+    def fake_prep_single(project, b):
+        nonlocal hw_active, hw_max
+        with hw_lock:
+            hw_active += 1
+            if hw_active > hw_max:
+                hw_max = hw_active
+        time.sleep(0.02)
+        res = real_prep_single(project, b)
+        with hw_lock:
+            hw_active -= 1
+        return res
+
     def fake_correct_file(project, b, gjson, context, verify, force, **kw):
         nonlocal ai_active, ai_max
         with ai_lock:
@@ -1635,6 +1649,7 @@ def test_streaming_pipeline_hardware_sequential_and_ai_parallel(project, monkeyp
             ai_active -= 1
 
     monkeypatch.setattr(correct, "cmd_diarize", fake_diarize)
+    monkeypatch.setattr(correct, "prep_single", fake_prep_single)
     monkeypatch.setattr(correct, "_correct_file", fake_correct_file)
     monkeypatch.setattr(correct, "_glossary", lambda *a: "")
 

@@ -64,7 +64,10 @@ Auch mit **Schweizerdeutsch** kommt es zurecht.
    Zwischenschritte wie die Glossar-Erstellung werden direkt bei den betroffenen
    Dateien genannt, während unbeteiligte Aufnahmen ihren echten Ruhezustand behalten —
    auch bei Einzeldatei-Aktionen wie „Neu transkribieren“ und mit durchgehend
-   einheitlichen Statusbegriffen.)
+   einheitlichen Statusbegriffen. Ab `v0.44.0` streamt die Korrektur-Pipeline Hardware-
+   und KI-Phasen je Datei: Lokale rechenintensive Schritte wie Diarisierung laufen
+   schonend nacheinander, während fertige Dateien sofort parallel an die Cloud-KI
+   übergeben und schrittweise fertiggestellt werden.)
 
 > [!WARNING]
 > **Beim ersten Öffnen warnt das Betriebssystem.** Der Installer ist nicht bei Microsoft bzw.

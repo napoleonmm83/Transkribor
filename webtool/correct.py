@@ -1003,6 +1003,13 @@ def _summary_only_file(project: str, base: str, ziel: str, context: str,
 
 
 def cmd_run(project: str, base: str = None, force: bool = False, verify: bool = True) -> int:
+    """Führt den Korrekturlauf für ein Projekt oder eine Einzeldatei im Streaming-Pipeline-Verfahren aus.
+
+    - Glossar wird vorab korpusweit aus allen .raw.txt erstellt.
+    - Lokale Hardware-Phasen (Diarisierung + Prep) laufen geschützt unter _hardware_lock streng sequenziell.
+    - Cloud-KI-Phasen laufen nach Abschluss der lokalen Phase sofort parallel (bis zu CLAUDE_PARALLEL Slots).
+    - Abgeschlossene Dateien werden sofort finalisiert (cmd_apply) und stehen im Frontend bereit.
+    """
     global _letzte_diagnose
     _letzte_diagnose = None
     tdir = paths.transkripte_dir(project)
@@ -1042,7 +1049,8 @@ def cmd_run(project: str, base: str = None, force: bool = False, verify: bool = 
             if not os.path.exists(raw_json):
                 return False
             cmd_diarize(project, [b])
-            prep_single(project, b)
+            if not prep_single(project, b):
+                return False
         if not os.path.exists(raw_json):
             return False
         print(f"[active] {b}", flush=True)
