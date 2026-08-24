@@ -22,12 +22,12 @@ describe('FileStatusPill', () => {
   })
   it('Terminal-Status zeigt konsistenten Dateizustand auch bei laufendem Job im Scope', () => {
     render(<FileStatusPill file={f({ has_edit: true })} state="done" jobRunning inScope mitText />)
-    expect(screen.getByText('Korrigiert')).toBeInTheDocument()
+    expect(screen.getByText('Fertig')).toBeInTheDocument()
     expect(screen.queryByText(/Warteschlange/)).toBeNull()
   })
   it('Terminal-Status done sticht noch vorhandene active-Phase aus', () => {
     render(<FileStatusPill file={f({ has_edit: true })} active="correct" state="done" jobRunning inScope mitText />)
-    expect(screen.getByText('Korrigiert')).toBeInTheDocument()
+    expect(screen.getByText('Fertig')).toBeInTheDocument()
     expect(screen.queryByText(/Korrigieren/)).toBeNull()
   })
   it('In Warteschlange, wenn Job laeuft und Datei im Scope ist', () => {
@@ -44,7 +44,7 @@ describe('FileStatusPill', () => {
   })
   it('Datei ausserhalb des Job-Scopes behaelt ihren Ruhezustand', () => {
     render(<FileStatusPill file={f({ has_edit: true })} jobRunning inScope={false} mitText />)
-    expect(screen.getByText('Korrigiert')).toBeInTheDocument()
+    expect(screen.getByText('Fertig')).toBeInTheDocument()
     expect(screen.queryByText(/Warteschlange/)).toBeNull()
     expect(screen.queryByText(/Wartet/)).toBeNull()
   })
@@ -56,7 +56,7 @@ describe('FileStatusPill', () => {
   // des Glyphs — genau das, was das Emoji nicht hatte.
   it('statisches Badge ohne Job traegt einen Namen', () => {
     render(<FileStatusPill file={f({ has_edit: true })} />)
-    expect(screen.getByLabelText('Korrigiert')).toBeInTheDocument()
+    expect(screen.getByLabelText('Fertig')).toBeInTheDocument()
   })
   it('Audio ohne Transkript ist als solches erkennbar', () => {
     render(<FileStatusPill file={f({ has_raw: false })} />)
