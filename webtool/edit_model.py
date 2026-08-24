@@ -16,31 +16,33 @@ COMPRESSION_RATIO_THRESHOLD = 2.4
 LOGPROB_THRESHOLD = -1.0
 
 
-def compute_flags(segment: dict) -> dict:
+def compute_flags(segment: dict, *, is_repeat: bool = False) -> dict:
     """Auffälligkeiten je Segment für die Editor-Anzeige.
 
-    Es gab hier eine dritte Flagge "silence" (`no_speech_prob > 0.6 AND avg_logprob < -1.0`).
-    Die konnte **nie** anschlagen, und zwar nicht aus Zufall: Whisper überspringt genau diese
-    Segmente selbst (`whisper/transcribe.py`, `should_skip` — `no_speech_prob > 0.6`, aufgehoben
-    nur bei `avg_logprob > -1.0`, der Skip greift also ab `<= -1.0`). Unsere Bedingung war die
-    echte Teilmenge davon; was sie erfüllt hätte, hatte der Decoder schon weggeworfen, bevor er
-    die JSON schrieb. Wir haben die Upstream-Schwelle abgeschrieben, ohne zu prüfen, ob Upstream
-    schon danach filtert. Über 2472 echte Rohsegmente: 0 Treffer,
-    während "hallucination" 27 und "low_conf" 9 mal ansprang. Ein Symbol in der Legende, das
-    kein Nutzer je zu sehen bekommt, ist schlimmer als keines — es lässt ihn suchen.
+    - "hallucination": compression_ratio > 2.4 ODER aufeinanderfolgende Textwiederholung (ASR-Loop)
+    - "low_conf": avg_logprob < -1.0
     """
     cr = segment.get("compression_ratio", 0.0)
     alp = segment.get("avg_logprob", 0.0)
     return {
-        "hallucination": cr > COMPRESSION_RATIO_THRESHOLD,
+        "hallucination": bool(is_repeat or cr > COMPRESSION_RATIO_THRESHOLD),
         "low_conf": alp < LOGPROB_THRESHOLD,
     }
 
 
 def build_edit_doc(raw: dict, *, base: str, project: str, audio: str) -> dict:
     segments = []
+    letzter_norm = None
+    wiederholungs_zaehler = 0
     for seg in raw.get("segments", []):
         text = (seg.get("text") or "").strip()
+        norm = re.sub(r"[^\w\s]", "", text.lower()).strip()
+        if norm and norm == letzter_norm:
+            wiederholungs_zaehler += 1
+        else:
+            letzter_norm = norm if norm else None
+            wiederholungs_zaehler = 0
+        is_repeat = bool(wiederholungs_zaehler >= 2 and (len(norm.split()) > 1 or len(norm) > 4))
         segments.append({
             "id": seg.get("id"),
             "start": seg.get("start"),
@@ -53,7 +55,7 @@ def build_edit_doc(raw: dict, *, base: str, project: str, audio: str) -> dict:
                  "end": w.get("end"), "probability": w.get("probability", 1.0)}
                 for w in seg.get("words", [])
             ],
-            "flags": compute_flags(seg),
+            "flags": compute_flags(seg, is_repeat=is_repeat),
             "note": "",
         })
     return {
@@ -108,6 +110,26 @@ def tag_uncertain_segments(raw: dict, threshold: float = UNCERTAIN_TAG_THRESHOLD
     return out
 
 
+_META_PATTERNS = [
+    re.compile(r"\b(halluzinations[- ]?schleife|asr[- ]?halluzination|wiederholungsschleife des satzes)\b", re.I),
+    re.compile(r"\b(in diesem block|dieser abschnitt|dieser teil).*(keinen verwertbaren inhalt|keinen gesprächsinhalt|keinen inhalt)\b", re.I),
+    re.compile(r"\b(tonspur|transkription).*(keinen verwertbaren inhalt|halluzination)\b", re.I),
+]
+
+
+def _ist_reiner_halluzinations_kommentar(text: str) -> bool:
+    return any(p.search(text) for p in _META_PATTERNS)
+
+
+def bereinige_summary(text: str) -> str:
+    """Entfernt Meta-Kommentare über leere Blöcke oder Halluzinationsschleifen aus der Zusammenfassung."""
+    if not text:
+        return ""
+    saetze = [s.strip() for s in re.split(r"(?<=[.!?])\s+", text) if s.strip()]
+    saetze_bereinigt = [s for s in saetze if not _ist_reiner_halluzinations_kommentar(s)]
+    return " ".join(saetze_bereinigt).strip()
+
+
 def apply_correction(raw: dict, correction: dict, *, base: str, project: str, audio: str) -> dict:
     """edit.json aus Roh bauen und die segment-genaue Korrektur (Text/Sprecher je id)
     sowie context/speakers/annotations einweben. Nicht korrigierte Segmente behalten Rohtext."""
@@ -116,7 +138,7 @@ def apply_correction(raw: dict, correction: dict, *, base: str, project: str, au
     # summary fiel bisher still heraus: die correction.json hatte es, die edit.json nie —
     # der Korrektur-Pass schrieb also 14 von 14 Zusammenfassungen in den Papierkorb.
     # `verification` bleibt bewusst in der correction.json: das ist Prüfprotokoll, kein Inhalt.
-    doc["summary"] = (correction.get("summary") or "").strip()
+    doc["summary"] = bereinige_summary((correction.get("summary") or "").strip())
     doc["speakers"] = list(correction.get("speakers") or [])
     doc["annotations"] = [str(a).strip() for a in (correction.get("annotations") or []) if a is not None and str(a).strip()]
     by_id = {c.get("id"): c for c in (correction.get("segments") or [])}

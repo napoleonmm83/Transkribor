@@ -674,6 +674,60 @@ def test_merge_haengt_zusammenfassungen_aller_bloecke_aneinander():
     assert m["verification"] == "nichts geaendert. Segment 5 zurueckgeholt."
 
 
+def test_merge_parts_filtert_halluzinations_metakommentare_in_summary():
+    docs = [
+        {"summary": "Die Reportage begleitet den Rhyathlon 2026 am Baggersee Kriessern."},
+        {"summary": "In diesem Block liefert die Tonspur allerdings keinen verwertbaren Inhalt mehr: Die Transkription besteht durchgehend aus einer Halluzinations-Schleife des Satzes «Das war's mit dem Tandem.»"},
+        {"summary": "Dieser Abschnitt des Transkripts selbst enthält keinen Gesprächsinhalt mehr, sondern nur die Fortsetzung einer ASR-Halluzinationsschleife."},
+    ]
+    m = correct._merge_parts(docs, "S1")
+    assert m["summary"] == "Die Reportage begleitet den Rhyathlon 2026 am Baggersee Kriessern."
+    assert "Halluzinations" not in m["summary"]
+    assert "keinen verwertbaren Inhalt" not in m["summary"]
+
+
+def test_merge_parts_dedupliziert_identische_inhalte():
+    docs = [
+        {"summary": "Thema A.", "verification": "keine Änderung"},
+        {"summary": "Thema A.", "verification": "keine Änderung"},
+        {"summary": "Thema B.", "verification": "Seg 2 korrigiert."},
+    ]
+    m = correct._merge_parts(docs, "S1")
+    assert m["summary"] == "Thema A. Thema B."
+    assert m["verification"] == "keine Änderung Seg 2 korrigiert."
+
+
+def test_bereinige_summary_filtert_einzelne_meta_saetze():
+    roh = "Das Gespräch dreht sich um das Pokalturnier. In diesem Block liefert die Tonspur allerdings keinen verwertbaren Inhalt mehr. Die Teilnehmenden freuen sich."
+    sauber = correct.bereinige_summary(roh)
+    assert sauber == "Das Gespräch dreht sich um das Pokalturnier. Die Teilnehmenden freuen sich."
+
+
+def test_bereinige_summary_schont_legitime_inhalte():
+    roh = "Die Redakteurin erklärt, dass der Entwurf keinen Gesprächsinhalt mehr enthält."
+    sauber = correct.bereinige_summary(roh)
+    assert sauber == "Die Redakteurin erklärt, dass der Entwurf keinen Gesprächsinhalt mehr enthält."
+
+    roh2 = "Der Befragte erklärt, dass der Behälter keinen Inhalt mehr hatte."
+    assert correct.bereinige_summary(roh2) == "Der Befragte erklärt, dass der Behälter keinen Inhalt mehr hatte."
+
+
+def test_correct_prompt_warnt_vor_halluzinations_kommentaren_in_summary():
+    prompt = correct._correct_prompt("base", "tagged.txt", "c.json", "{}", "Kontext")
+    assert "AUSSCHLIESSLICH den echten Gesprächsinhalt" in prompt
+    assert "keine Halluzinationsschleifen" in prompt
+    assert "kein Bericht über Korrekturen oder ASR-Fehler" in prompt
+
+
+def test_light_und_summary_prompts_enthalten_hinweis_fuer_echten_inhalt():
+    light = correct._light_prompt("base", "tagged.txt", "c.json", "Kontext")
+    summ = correct._summary_prompt("base", "tagged.txt", "c.json", "Kontext")
+    assert "nur echter Gesprächsinhalt, keine Berichte über ASR-Fehler oder leere Abschnitte" in light
+    assert "nur echter Gesprächsinhalt, keine Berichte über ASR-Fehler oder leere Abschnitte" in summ
+
+
+
+
 def test_chunked_file_merges_all_blocks(project, monkeypatch):
     _root, t = project
     _write_raw(t, "S1", 6)

@@ -38,6 +38,39 @@ def test_opts_haelt_den_fortschrittsbalken_an():
     assert transcribe._opts("de")["log_progress"] is True
 
 
+def test_opts_setzt_repetition_penalty():
+    """repetition_penalty verhindert, dass Whisper bei Hintergrundmusik/Stille in endlose Schleifen verfaellt."""
+    assert transcribe._opts("de")["repetition_penalty"] == 1.1
+
+
+def test_bereinige_wiederholungs_schleifen_kappt_ausufernde_wiederholungen():
+    """300 aufeinanderfolgende Kopien desselben Satzes muessen auf die ersten 2 reduziert werden."""
+    segs = [{"id": 0, "text": "Hallo Welt", "start": 0.0, "end": 2.0}]
+    for i in range(1, 301):
+        segs.append({"id": i, "text": " Das war's mit dem Tandem.", "start": float(i), "end": float(i + 1)})
+    segs.append({"id": 301, "text": "Abschlusswort", "start": 302.0, "end": 303.0})
+
+    bereinigt = transcribe.bereinige_wiederholungs_schleifen(segs, max_wiederholungen=2)
+    texte = [s["text"].strip() for s in bereinigt]
+    assert texte.count("Das war's mit dem Tandem.") == 2
+    assert texte[0] == "Hallo Welt"
+    assert texte[-1] == "Abschlusswort"
+    assert len(bereinigt) == 4
+    assert [s["id"] for s in bereinigt] == [0, 1, 2, 3]
+
+
+def test_bereinige_wiederholungs_schleifen_schont_kurze_und_unterschiedliche_texte():
+    segs = [
+        {"id": 0, "text": "Ja", "start": 0.0, "end": 1.0},
+        {"id": 1, "text": "Ja", "start": 1.0, "end": 2.0},
+        {"id": 2, "text": "Nein", "start": 2.0, "end": 3.0},
+        {"id": 3, "text": "Ja", "start": 3.0, "end": 4.0},
+    ]
+    bereinigt = transcribe.bereinige_wiederholungs_schleifen(segs, max_wiederholungen=2)
+    assert len(bereinigt) == 4
+
+
+
 def test_opts_schaltet_vad_aus():
     """VAD wuerde Stille ueberspringen und die Segmentzeiten gegen das Audio verschieben —
     der Editor synchronisiert Text und Wiedergabe ueber genau diese Zeiten."""

@@ -13,7 +13,7 @@ initial_prompt kostete er ganze Passagen, siehe _opts), sondern nur in die LLM-K
 
 Umgebungsvariablen: WHISPER_MODEL (default large-v3), WHISPER_LANG (default de).
 """
-import sys, os, json, glob, math, time, argparse
+import sys, os, json, glob, math, time, argparse, re
 from shutil import which
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -220,12 +220,47 @@ def _opts(language, mehrsprachig=False):
         word_timestamps=True, beam_size=5, best_of=5,
         temperature=(0.0, 0.2, 0.4, 0.6, 0.8, 1.0),
         condition_on_previous_text=True,
+        repetition_penalty=1.1,
         vad_filter=False, log_progress=True,
     )
     if mehrsprachig:
         o["multilingual"] = True
         o["condition_on_previous_text"] = False
     return o
+
+
+def bereinige_wiederholungs_schleifen(segmente: list, max_wiederholungen: int = 2) -> list:
+    """Filtert ausufernde ASR-Wiederholungsschleifen (Halluzinationen über Musik/Stille).
+
+    Behaelt bis zu `max_wiederholungen` aufeinanderfolgende Kopien eines identischen Satzes,
+    kappt darueber hinausgehende Wiederholungen und nummeriert die Segment-IDs durchgehend neu.
+    """
+    if not segmente:
+        return []
+    out = []
+    letzter_norm = None
+    wiederholungs_zaehler = 0
+
+    for seg in segmente:
+        norm = re.sub(r"[^\w\s]", "", (seg.get("text") or "").lower()).strip()
+        if not norm:
+            out.append(seg)
+            letzter_norm = None
+            wiederholungs_zaehler = 0
+            continue
+        if norm == letzter_norm:
+            wiederholungs_zaehler += 1
+            if wiederholungs_zaehler < max_wiederholungen:
+                out.append(seg)
+        else:
+            letzter_norm = norm
+            wiederholungs_zaehler = 0
+            out.append(seg)
+
+    for i, s in enumerate(out):
+        if isinstance(s, dict) and "id" in s:
+            s["id"] = i
+    return out
 
 
 def _cuda_dlls_auf_pfad():
@@ -273,6 +308,7 @@ def _ergebnis(segmente, info):
     `asdict` uebernimmt auch seek/tokens/temperature, damit nichts still wegfaellt."""
     from dataclasses import asdict
     segs = [asdict(s) for s in segmente]        # ERST hier laeuft die Transkription (lazy)
+    segs = bereinige_wiederholungs_schleifen(segs)
     return {"text": "".join(s["text"] for s in segs),
             "segments": segs,
             "language": info.language,

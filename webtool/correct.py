@@ -611,7 +611,7 @@ Gemeinsames Glossar (für konsistente Schreibweisen — nutze es, ergänze nicht
 4) SPRECHER: Das akustische (Sprecher N)-Präfix sagt, WANN die Stimme wechselt — vergib pro Cluster GENAU EINEN konsistenten Namen: meist „Interviewer“ (stellt Fragen) und die befragte Person (Name/Betrieb falls genannt, sonst „Befragte Person“). {CLUSTER_REGEL} Eine Cluster-Grenze nur überschreiben, wenn sie offensichtlich falsch ist (z.B. ein einzelnes Rückkanal-Wort). Fehlt das Präfix, ordne nach Inhalt zu (wie bisher). Gib JEDEM Segment einen Sprecher.
 5) UNSICHER: wirklich unklare Stellen NICHT raten — nah am Original belassen und unter annotations vermerken.
 6) MUSIK/GESANG: Whisper "hört" in gesungenen Passagen sicher klingenden Unsinn (typisch: dieselbe kurze Zeile mehrfach hintereinander, fremdsprachig wirkende Wortfetzen, Text der zum Gespräch nicht passt). Bei GESUNGENEN Stellen und bei Segmenten ohne verständliche Sprache (Musik, Jubel, Applaus) schreibe als text exakt „[Musik]“ — nicht raten, was gesungen wurde. GESPROCHENE Bühnenansagen sind KEINE Musik, die bleiben Text.
-7) ASR-ARTEFAKTE: Segmente, deren Text nachweislich nicht aus dem Ton stammt, sondern aus Whispers Trainingsdaten (Untertitel-Floskeln wie „ARD Text im Auftrag von Funk“, „Untertitelung des ZDF“, „Vielen Dank fürs Zuschauen“), bekommen einen LEEREN text (""). Sie verschwinden damit aus dem Transkript. Regel 6 und 7 gelten nur, wenn du dir sicher bist — im Zweifel Text belassen und unter annotations vermerken.
+7) ASR-ARTEFAKTE & HALLUZINATIONSSCHLEIFEN: Segmente, deren Text nachweislich nicht aus dem Ton stammt (Untertitel-Floskeln wie „ARD Text im Auftrag von Funk“, „Untertitelung des ZDF“, „Vielen Dank fürs Zuschauen“ sowie endlose ASR-Wiederholungsschleifen desselben Satzes über Musik/Stille), bekommen einen LEEREN text (""). In summary fasst du AUSSCHLIESSLICH den echten Gesprächsinhalt zusammen — beschreibe dort KEINE ASR-Fehler, keine leeren Blöcke und keine Halluzinationsschleifen. Regel 6 und 7 gelten nur, wenn du dir sicher bist — im Zweifel Text belassen und unter annotations vermerken.
 
 Schreibe das Ergebnis mit dem Write-Tool als JSON nach GENAU diesem Pfad:
 {cpath}
@@ -623,7 +623,7 @@ Exaktes Schema (Pflicht — sonst bleibt der Text auf dem Rohstand):
   "speakers": ["Interviewer", "..."],
   "segments": [{{"id": <zahl>, "speaker": "...", "text": "..."}}],
   "annotations": ["..."],
-  "summary": "3-5 Sätze: worum es im Gespräch INHALTLICH geht (kein Bericht über deine Korrekturen)"
+  "summary": "3-5 Sätze: worum es im Gespräch INHALTLICH geht (nur echter Inhalt, kein Bericht über Korrekturen oder ASR-Fehler)"
 }}
 Gib ausser der geschriebenen Datei nichts weiter aus."""
 
@@ -656,7 +656,7 @@ Projekt-Kontext: {context or _default_context(ziel, dialekt)}
 
 Prüfe kritisch gegen das ROH — konservativ, im Zweifel näher am Original:
 - HALLUZINATION/DRIFT: Inhalt hinzugefügt/weggelassen/im Sinn verändert, der nicht im Roh steht? Übermässiges Umschreiben? → näher ans Original zurück.
-- MUSIK/ARTEFAKTE sind ERLAUBTE Entscheidungen, KEINE Auslassung: „[Musik]“ steht für eine gesungene oder sprachlose Stelle, ein leerer text ("") für ein reines ASR-Artefakt aus Whispers Trainingsdaten (Untertitel-Floskeln wie „ARD Text im Auftrag von Funk“). Beides NICHT zurückdrehen — nur prüfen, ob es zutrifft: gesprochene Bühnenansagen gehören zurück in Text, und umgekehrt gehört sicher klingender Unsinn über einer gesungenen Passage (dieselbe kurze Zeile mehrfach hintereinander, Wortfetzen ohne Bezug zum Gespräch) auf „[Musik]“.{mehr_regel}
+- MUSIK/ARTEFAKTE/SCHLEIFEN sind ERLAUBTE Entscheidungen, KEINE Auslassung: „[Musik]“ steht für eine gesungene oder sprachlose Stelle, ein leerer text ("") für ein reines ASR-Artefakt oder eine ASR-Wiederholungsschleife über Musik/Stille. Beides NICHT zurückdrehen — nur prüfen, ob es zutrifft: gesprochene Bühnenansagen gehören zurück in Text, und umgekehrt gehört sicher klingender Unsinn über einer gesungenen Passage (dieselbe kurze Zeile mehrfach hintereinander, Wortfetzen ohne Bezug zum Gespräch) auf „[Musik]“.{mehr_regel}
 - VOLLSTÄNDIGKEIT: für JEDE Roh-Segment-ID {scope} genau ein Eintrag? Fehlende ergänzen (Text nah am Roh), zusammengefasste auftrennen.
 - SPRECHER: konsistent pro akustischem (Sprecher N)-Cluster und plausibel (Interviewer stellt Fragen; Antworten korrekt zugeordnet)? {CLUSTER_REGEL} Fehlzuordnungen korrigieren — einzelne Segmente ebenso wie einen durchgehend falsch benannten Cluster; zwei Cluster mit demselben Namen aber NICHT auseinanderziehen.
 - RESTFEHLER: offensichtliche verbleibende ASR-Fehler nur wenn eindeutig (konservativ).
@@ -672,7 +672,7 @@ Schema:
   "speakers": ["Interviewer", "..."],
   "segments": [{{"id": <zahl>, "speaker": "...", "text": "..."}}],
   "annotations": ["..."],
-  "summary": "3-5 Sätze: worum es im Gespräch INHALTLICH geht. Übernimm die vorhandene Zusammenfassung, wenn sie stimmt; schreibe hier NICHT, was du geändert hast",
+  "summary": "3-5 Sätze: worum es im Gespräch INHALTLICH geht (nur echter Inhalt). Übernimm die vorhandene Zusammenfassung, wenn sie stimmt; schreibe hier NICHT, was du geändert hast",
   "verification": "was du geändert hast, oder 'keine Änderung'"
 }}
 Ändere NUR, was wirklich nötig ist; unproblematische Segmente unverändert übernehmen. Gib ausser der geschriebenen Datei nichts weiter aus."""
@@ -698,7 +698,7 @@ Projekt-Kontext: {context or _default_context(ziel, dialekt, mehrsprachig)}
 1) Lies die Rohsegmente (Read-Tool): {tagged_path}
 2) KORRIGIERE NUR offensichtliche ASR-Fehler und Eigennamen{norm_satz} KEIN Umschreiben, keine Dialekt-Glättung, keine Normalisierung. Entferne [[...]]-Markierungen.
 3) SPRECHER: vergib pro (Sprecher N)-Cluster einen konsistenten Namen (meist „Interviewer" und die befragte Person). {CLUSTER_REGEL} Gib JEDEM Segment einen speaker.
-4) SUMMARY: eine Inhalts-Zusammenfassung (3-5 Sätze).
+4) SUMMARY: eine Inhalts-Zusammenfassung (3-5 Sätze; nur echter Gesprächsinhalt, keine Berichte über ASR-Fehler oder leere Abschnitte).
 
 Schema (Write-Tool nach {cpath}):
 {{"base":"{base}","context":"1-2 Sätze","speakers":["…"],
@@ -717,7 +717,7 @@ def _summary_prompt(base: str, tagged_path: str, cpath: str, context: str,
 Projekt-Kontext: {context or _default_context(ziel, dialekt)}
 1) Lies die Rohsegmente (Read-Tool): {tagged_path}
 2) SPRECHER: vergib pro (Sprecher N)-Cluster einen konsistenten Namen. {CLUSTER_REGEL} JEDES Segment bekommt einen speaker — KEIN Text-Feld (der Roh-Inhalt bleibt unveraendert, uebernimm nur id und speaker).
-3) SUMMARY: eine Inhalts-Zusammenfassung (3-5 Sätze) in {ziel or 'der Originalsprache'}.
+3) SUMMARY: eine Inhalts-Zusammenfassung (3-5 Sätze; nur echter Gesprächsinhalt, keine Berichte über ASR-Fehler oder leere Abschnitte) in {ziel or 'der Originalsprache'}.
 
 Schema (Write-Tool nach {cpath}):
 {{"base":"{base}","context":"1-2 Sätze","speakers":["…"],
@@ -785,6 +785,26 @@ def _speaker_hint(docs: list, clusters: dict) -> str:
     return ", ".join(names)
 
 
+_META_PATTERNS = [
+    re.compile(r"\b(halluzinations[- ]?schleife|asr[- ]?halluzination|wiederholungsschleife des satzes)\b", re.I),
+    re.compile(r"\b(in diesem block|dieser abschnitt|dieser teil).*(keinen verwertbaren inhalt|keinen gesprächsinhalt|keinen inhalt)\b", re.I),
+    re.compile(r"\b(tonspur|transkription).*(keinen verwertbaren inhalt|halluzination)\b", re.I),
+]
+
+
+def _ist_reiner_halluzinations_kommentar(text: str) -> bool:
+    return any(p.search(text) for p in _META_PATTERNS)
+
+
+def bereinige_summary(text: str) -> str:
+    """Entfernt Meta-Kommentare über leere Blöcke oder Halluzinationsschleifen aus der Zusammenfassung."""
+    if not text:
+        return ""
+    saetze = [s.strip() for s in re.split(r"(?<=[.!?])\s+", text) if s.strip()]
+    saetze_bereinigt = [s for s in saetze if not _ist_reiner_halluzinations_kommentar(s)]
+    return " ".join(saetze_bereinigt).strip()
+
+
 def _merge_parts(docs: list, base: str) -> dict:
     """Block-Korrekturen zu EINER correction.json vereinen (IDs aufsteigend, Sprecher-Liste
     vereinigt, Anmerkungen aneinandergehängt).
@@ -804,7 +824,18 @@ def _merge_parts(docs: list, base: str) -> dict:
     segs.sort(key=lambda s: s.get("id") if isinstance(s.get("id"), int) else 0)
 
     def verbinde(feld):
-        return " ".join(str(d.get(feld)).strip() for d in docs if str(d.get(feld) or "").strip())
+        eintraege = []
+        for d in docs:
+            val = str(d.get(feld) or "").strip()
+            if not val:
+                continue
+            if feld == "summary":
+                val = bereinige_summary(val)
+                if not val:
+                    continue
+            if val not in eintraege:
+                eintraege.append(val)
+        return " ".join(eintraege)
 
     return {"base": base,
             "context": next((d.get("context") for d in docs if d.get("context")), ""),

@@ -275,6 +275,36 @@ def wav_dauer(pfad: str):
     return roh / 32000 if roh > 0 else None
 
 
+def bereinige_wiederholungs_schleifen(segmente: list, max_wiederholungen: int = 2) -> list:
+    """Filtert ausufernde ASR-Wiederholungsschleifen (Halluzinationen über Musik/Stille)."""
+    if not segmente:
+        return []
+    out = []
+    letzter_norm = None
+    wiederholungs_zaehler = 0
+
+    for seg in segmente:
+        norm = re.sub(r"[^\w\s]", "", (seg.get("text") or "").lower()).strip()
+        if not norm:
+            out.append(seg)
+            letzter_norm = None
+            wiederholungs_zaehler = 0
+            continue
+        if norm == letzter_norm:
+            wiederholungs_zaehler += 1
+            if wiederholungs_zaehler < max_wiederholungen:
+                out.append(seg)
+        else:
+            letzter_norm = norm
+            wiederholungs_zaehler = 0
+            out.append(seg)
+
+    for i, s in enumerate(out):
+        if isinstance(s, dict) and "id" in s:
+            s["id"] = i
+    return out
+
+
 def ergebnis(roh: dict, sprache: str, dauer=None) -> dict:
     """whisper.cpp-JSON -> exakt das Dokument, das transcribe._ergebnis() sonst aus
     faster-whisper baut. Reine Funktion, damit der Adapter ohne Binary pruefbar ist.
@@ -284,6 +314,7 @@ def ergebnis(roh: dict, sprache: str, dauer=None) -> dict:
     die Prompt-Zielsprache der Korrektur — fehlt es (oder result), gilt 'de' als
     Fallback, wie edit_model es bei fehlender Sprache ohnehin tun wuerde."""
     segmente = [_segment(i, s) for i, s in enumerate(roh.get("transcription", []))]
+    segmente = bereinige_wiederholungs_schleifen(segmente)
     sprache = sprache or (roh.get("result") or {}).get("language") or "de"
     return {"text": "".join(s["text"] for s in segmente),
             "segments": segmente,
@@ -298,7 +329,7 @@ def _cmd(binaer_pfad: str, gguf: str, wav: str, praefix: str, sprache) -> list:
     cmd = [binaer_pfad, "-m", gguf, "-f", wav]
     if sprache:
         cmd += ["-l", sprache]
-    cmd += ["-bs", "5", "-bo", "5", "-pp", "-ojf", "-of", praefix]
+    cmd += ["-bs", "5", "-bo", "5", "-mc", "64", "-pp", "-ojf", "-of", praefix]
     return cmd
 
 
