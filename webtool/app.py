@@ -595,7 +595,10 @@ def delete_file(project: str, base: str):
     epath = _edit_path(project, base)
     tdir = paths.transkripte_dir(project)
     os.makedirs(tdir, exist_ok=True)
-    with sperre.datei(epath):
+    with sperre.datei(epath) as gehalten:
+        if not gehalten:
+            raise HTTPException(status_code=503,
+                                detail="Datei kann gerade nicht sicher gelöscht werden")
         _keine_jobs(project, base, active_only=True)
         n = _datei_weg(project, base, mit_audio=True)
         if not n:

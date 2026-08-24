@@ -1355,6 +1355,18 @@ def test_datei_loeschen_ruft_remove_base_auf(client, monkeypatch, tmp_path):
     assert entfernt == [("Demo", "S1")]
 
 
+def test_datei_loeschen_ohne_sperre_gibt_503(client, monkeypatch, tmp_path):
+    from webtool import sperre
+    import contextlib
+    @contextlib.contextmanager
+    def fake_sperre(pfad, **kw):
+        yield False
+    monkeypatch.setattr(sperre, "datei", fake_sperre)
+    r = client.delete("/api/projects/Demo/files/S1")
+    assert r.status_code == 503
+    assert (tmp_path / "Demo" / "transkripte" / "S1.json").exists()
+
+
 def test_projekt_umbenennen_bleibt_grob_gesperrt(client, monkeypatch):
     """Ohne `base` bleibt die alte Sperre richtig: beim Umbenennen wandert der ganze Ordner,
     da hilft es nicht, dass der Lauf nur eine einzelne Aufnahme anfasst."""
