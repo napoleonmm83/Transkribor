@@ -36,12 +36,14 @@ def test_build_edit_doc_flags_consecutive_repetitions():
             {"id": 0, "start": 0.0, "end": 1.0, "text": "Hallo", "compression_ratio": 0.8, "avg_logprob": -0.2},
             {"id": 1, "start": 1.0, "end": 2.0, "text": " Das war's mit dem Tandem.", "compression_ratio": 0.8, "avg_logprob": -0.1},
             {"id": 2, "start": 2.0, "end": 3.0, "text": "Das war's mit dem Tandem!", "compression_ratio": 0.8, "avg_logprob": -0.05},
+            {"id": 3, "start": 3.0, "end": 4.0, "text": "Das war's mit dem Tandem.", "compression_ratio": 0.8, "avg_logprob": -0.05},
         ]
     }
     doc = em.build_edit_doc(raw, base="B", project="P", audio="B.mp3")
     assert doc["segments"][0]["flags"]["hallucination"] is False
     assert doc["segments"][1]["flags"]["hallucination"] is False
-    assert doc["segments"][2]["flags"]["hallucination"] is True
+    assert doc["segments"][2]["flags"]["hallucination"] is False
+    assert doc["segments"][3]["flags"]["hallucination"] is True
 
 
 def test_build_edit_doc_schont_kurze_einzelwort_interjektionen():

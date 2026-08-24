@@ -33,11 +33,16 @@ def compute_flags(segment: dict, *, is_repeat: bool = False) -> dict:
 def build_edit_doc(raw: dict, *, base: str, project: str, audio: str) -> dict:
     segments = []
     letzter_norm = None
+    wiederholungs_zaehler = 0
     for seg in raw.get("segments", []):
         text = (seg.get("text") or "").strip()
         norm = re.sub(r"[^\w\s]", "", text.lower()).strip()
-        is_repeat = bool(norm and norm == letzter_norm and (len(norm.split()) > 1 or len(norm) > 4))
-        letzter_norm = norm if norm else None
+        if norm and norm == letzter_norm:
+            wiederholungs_zaehler += 1
+        else:
+            letzter_norm = norm if norm else None
+            wiederholungs_zaehler = 0
+        is_repeat = bool(wiederholungs_zaehler >= 2 and (len(norm.split()) > 1 or len(norm) > 4))
         segments.append({
             "id": seg.get("id"),
             "start": seg.get("start"),
@@ -105,15 +110,15 @@ def tag_uncertain_segments(raw: dict, threshold: float = UNCERTAIN_TAG_THRESHOLD
     return out
 
 
+_META_PATTERNS = [
+    re.compile(r"\b(halluzinations[- ]?schleife|asr[- ]?halluzination|wiederholungsschleife des satzes)\b", re.I),
+    re.compile(r"\b(in diesem block|dieser abschnitt|dieser teil).*(keinen verwertbaren inhalt|keinen gesprächsinhalt|keinen inhalt)\b", re.I),
+    re.compile(r"\b(tonspur|transkription).*(keinen verwertbaren inhalt|halluzination)\b", re.I),
+]
+
+
 def _ist_reiner_halluzinations_kommentar(text: str) -> bool:
-    t = text.lower()
-    hinweise = (
-        "halluzinations-schleife", "halluzinationsschleife", "asr-halluzination",
-        "keinen verwertbaren inhalt mehr", "enthält keinen gesprächsinhalt mehr",
-        "enthält keinen inhalt mehr", "wiederholungsschleife des satzes",
-        "keinen gesprächsinhalt",
-    )
-    return any(h in t for h in hinweise)
+    return any(p.search(text) for p in _META_PATTERNS)
 
 
 def bereinige_summary(text: str) -> str:

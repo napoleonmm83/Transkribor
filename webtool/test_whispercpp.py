@@ -158,8 +158,9 @@ def test_ergebnis_bereinigt_wiederholungs_schleifen():
     transcription = [_seg(" Das war's mit dem Tandem.", tokens, von=i * 1000, bis=(i + 1) * 1000) for i in range(20)]
     roh = {"transcription": transcription, "result": {"language": "de"}}
     res = w.ergebnis(roh, "de")
-    assert len(res["segments"]) <= 3
-    assert [s["id"] for s in res["segments"]] == list(range(len(res["segments"])))
+    assert len(res["segments"]) == 2
+    assert [s["id"] for s in res["segments"]] == [0, 1]
+    assert [s["text"] for s in res["segments"]] == [" Das war's mit dem Tandem.", " Das war's mit dem Tandem."]
 
 
 

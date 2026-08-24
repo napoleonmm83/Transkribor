@@ -46,9 +46,9 @@ def test_opts_setzt_repetition_penalty():
 def test_bereinige_wiederholungs_schleifen_kappt_ausufernde_wiederholungen():
     """300 aufeinanderfolgende Kopien desselben Satzes muessen auf die ersten 2 reduziert werden."""
     segs = [{"id": 0, "text": "Hallo Welt", "start": 0.0, "end": 2.0}]
-    for i in range(1, 50):
+    for i in range(1, 301):
         segs.append({"id": i, "text": " Das war's mit dem Tandem.", "start": float(i), "end": float(i + 1)})
-    segs.append({"id": 50, "text": "Abschlusswort", "start": 51.0, "end": 52.0})
+    segs.append({"id": 301, "text": "Abschlusswort", "start": 302.0, "end": 303.0})
 
     bereinigt = transcribe.bereinige_wiederholungs_schleifen(segs, max_wiederholungen=2)
     texte = [s["text"].strip() for s in bereinigt]
