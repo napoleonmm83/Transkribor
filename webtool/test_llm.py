@@ -507,3 +507,72 @@ def test_env_key_hint_erkennt_google_api_key(monkeypatch):
     monkeypatch.setenv("GOOGLE_API_KEY", "AIzaSyTest")
     assert llm.env_key_hint() == "GOOGLE_API_KEY"
 
+
+# --- Fehlerdiagnostik & Limit-Erkennung ---------------------------------------
+
+def test_diagnose_fehler_erkennt_ratelimit():
+    # HTTP 429
+    d1 = llm.diagnose_fehler("HTTP 429 von https://api.openai.com/v1/chat/completions: Rate limit reached")
+    assert d1["kategorie"] == "ratelimit"
+    assert "Limit" in d1["titel"]
+    assert "Pause" in d1["hinweis"]
+
+    # Google RESOURCE_EXHAUSTED
+    d2 = llm.diagnose_fehler("HTTP 429: Quota exceeded for quota metric 'Generate Content API requests'")
+    assert d2["kategorie"] == "ratelimit"
+
+    # Claude CLI / Codex CLI
+    d3 = llm.diagnose_fehler("You've reached your usage limit until 3:00 PM")
+    assert d3["kategorie"] == "ratelimit"
+
+    d4 = llm.diagnose_fehler("Rate limit reached for default model")
+    assert d4["kategorie"] == "ratelimit"
+
+
+def test_diagnose_fehler_erkennt_guthaben_leer():
+    # HTTP 402 / insufficient_quota
+    d1 = llm.diagnose_fehler("HTTP 402: Payment Required (Out of credits)")
+    assert d1["kategorie"] == "quota"
+    assert "Guthaben" in d1["titel"]
+    assert "aufladen" in d1["hinweis"]
+
+    d2 = llm.diagnose_fehler("You exceeded your current quota, please check your plan and billing details (insufficient_quota)")
+    assert d2["kategorie"] == "quota"
+
+
+def test_diagnose_fehler_erkennt_auth_fehler():
+    d1 = llm.diagnose_fehler("HTTP 401 von https://api.anthropic.com: Invalid API Key")
+    assert d1["kategorie"] == "auth"
+    assert "Schlüssel" in d1["titel"] or "Anmeldung" in d1["titel"]
+
+    d2 = llm.diagnose_fehler("Kein API-Key fuer Google (Gemini) hinterlegt")
+    assert d2["kategorie"] == "auth"
+
+    d3 = llm.diagnose_fehler("Angemeldet? Einmalig `codex login` ausfuehren.")
+    assert d3["kategorie"] == "auth"
+
+
+def test_diagnose_fehler_erkennt_modell_fehler():
+    d1 = llm.diagnose_fehler("HTTP 404: models/gemini-1.5-flash is no longer available to new users")
+    assert d1["kategorie"] == "model"
+    assert "Modell" in d1["titel"]
+
+    d2 = llm.diagnose_fehler("Kein Modell ausgewaehlt")
+    assert d2["kategorie"] == "model"
+
+
+def test_diagnose_fehler_erkennt_netzwerk_und_ssl():
+    d1 = llm.diagnose_fehler("[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed")
+    assert d1["kategorie"] == "network"
+    assert "Verbindung" in d1["titel"]
+
+    d2 = llm.diagnose_fehler("Kein Kontakt zu https://generativelanguage.googleapis.com: Connection refused")
+    assert d2["kategorie"] == "network"
+
+
+def test_diagnose_fehler_erkennt_timeout():
+    d = llm.diagnose_fehler("Claude Code Abo hat nach 1800s nicht geantwortet")
+    assert d["kategorie"] == "timeout"
+    assert "Timeout" in d["titel"] or "Zeitüberschreitung" in d["titel"]
+
+

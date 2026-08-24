@@ -1042,9 +1042,11 @@ def test_settings_modelle_ohne_key_400(client):
 
 def test_settings_test_meldet_fehler_statt_zu_500en(client, monkeypatch):
     from webtool import llm
-    monkeypatch.setattr(llm, "check", lambda: (_ for _ in ()).throw(llm.LLMError("kein Netz")))
+    monkeypatch.setattr(llm, "check", lambda: (_ for _ in ()).throw(llm.LLMError("HTTP 429: Rate limit reached")))
     r = client.post("/api/settings/test")
-    assert r.status_code == 200 and r.json() == {"ok": False, "detail": "kein Netz"}
+    assert r.status_code == 200
+    assert r.json()["ok"] is False
+    assert "Limit" in r.json()["detail"]
 
 
 # --- Hardware und Whisper-Einstellungen (Task 6) ---

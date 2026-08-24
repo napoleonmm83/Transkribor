@@ -431,3 +431,123 @@ def env_key_hint() -> str:
         if os.environ.get(name):
             return name
     return ""
+
+
+def diagnose_fehler(fehler: str | Exception) -> dict:
+    """Klassifiziert einen Fehler bei der LLM-Korrektur und liefert verständliche
+    Diagnose- und Hilfetexte für den Benutzer.
+
+    Rückgabe:
+        {"kategorie": "ratelimit"|"quota"|"auth"|"model"|"network"|"timeout"|"unbekannt",
+         "titel": str, "hinweis": str, "kurz": str}
+    """
+    text = str(fehler or "").strip()
+    low = text.lower()
+
+    # 1. Rate-Limit / Kontingent-Limit
+    if (
+        "429" in text
+        or "rate_limit" in low
+        or "ratelimit" in low
+        or "rate limit" in low
+        or "resource_exhausted" in low
+        or "too many requests" in low
+        or "usage limit" in low
+        or "quota exceeded" in low
+        or "anfrage-limit" in low
+    ):
+        return {
+            "kategorie": "ratelimit",
+            "titel": "Anfrage-Limit erreicht (Rate Limit)",
+            "hinweis": "Der Anbieter bittet um eine kurze Pause. Bitte in 1–2 Minuten erneut auf „Korrigieren“ klicken.",
+            "kurz": "Anfrage-Limit erreicht: Bitte 1–2 Min. warten",
+        }
+
+    # 2. Guthaben erschöpft (Payment / Quota)
+    if (
+        "402" in text
+        or "insufficient_quota" in low
+        or "out of credits" in low
+        or "payment required" in low
+        or "credit balance" in low
+        or "guthaben" in low
+        or "plan and billing" in low
+    ):
+        return {
+            "kategorie": "quota",
+            "titel": "Guthaben aufgebraucht",
+            "hinweis": "Das Guthaben für diesen API-Schlüssel ist erschöpft. Bitte beim Anbieter aufladen.",
+            "kurz": "Guthaben aufgebraucht: Bitte beim Anbieter aufladen",
+        }
+
+    # 3. Authentifizierung / API-Key
+    if (
+        "401" in text
+        or "invalid api key" in low
+        or "invalid_api_key" in low
+        or "unauthorized" in low
+        or "authentication" in low
+        or "kein api-key" in low
+        or "nicht angemeldet" in low
+        or "codex login" in low
+    ):
+        return {
+            "kategorie": "auth",
+            "titel": "Anmeldung / API-Schlüssel ungültig",
+            "hinweis": "Der API-Schlüssel ist ungültig oder die CLI-Sitzung ist abgelaufen. Bitte in den Einstellungen prüfen.",
+            "kurz": "API-Schlüssel ungültig oder nicht angemeldet",
+        }
+
+    # 4. Modell nicht verfügbar / veraltet
+    if (
+        "404" in text
+        or "model_not_found" in low
+        or "not found" in low
+        or "no longer available" in low
+        or "kein modell" in low
+    ):
+        return {
+            "kategorie": "model",
+            "titel": "Modell nicht verfügbar",
+            "hinweis": "Das gewählte Modell wird vom Anbieter nicht mehr unterstützt. Bitte in den Einstellungen ein anderes Modell wählen.",
+            "kurz": "Modell nicht verfügbar: Bitte in den Einstellungen ändern",
+        }
+
+    # 5. Netzwerk & SSL
+    if (
+        "ssl" in low
+        or "certificate_verify_failed" in low
+        or "connection refused" in low
+        or "name or service not known" in low
+        or "getaddrinfo failed" in low
+        or "kein netz" in low
+        or "kein kontakt" in low
+    ):
+        return {
+            "kategorie": "network",
+            "titel": "Keine Verbindung zum Anbieter",
+            "hinweis": "Der Server konnte nicht erreicht werden. Bitte Internetverbindung prüfen.",
+            "kurz": "Keine Verbindung zum Anbieter",
+        }
+
+    # 6. Timeout
+    if (
+        "timeout" in low
+        or "timed out" in low
+        or "hat nach" in low
+        or "zeitüberschreitung" in low
+    ):
+        return {
+            "kategorie": "timeout",
+            "titel": "Zeitüberschreitung (Timeout)",
+            "hinweis": "Der Anbieter hat nicht rechtzeitig geantwortet. Bitte erneut versuchen.",
+            "kurz": "Zeitüberschreitung beim Anbieter",
+        }
+
+    # 7. Unbekannt / Fallback
+    return {
+        "kategorie": "unbekannt",
+        "titel": "Fehler bei der KI-Korrektur",
+        "hinweis": text or "Unbekannter Fehler beim Aufruf des Sprachmodells.",
+        "kurz": text or "Unbekannter Fehler",
+    }

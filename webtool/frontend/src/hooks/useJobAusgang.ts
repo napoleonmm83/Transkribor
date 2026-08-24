@@ -103,6 +103,15 @@ const GRUND_FRIST_MS = 3000
  */
 function grund(lines: string[]): string {
   const nicht_leer = lines.filter(l => l.trim())
+
+  // Strukturierte Diagnose aus dem Korrekturlauf (`[diagnose] <kategorie>\t<titel>\t<hinweis>`)
+  for (let i = nicht_leer.length - 1; i >= 0; i--) {
+    const m = nicht_leer[i].match(/\[diagnose\]\s*([^\t]+)\t([^\t]+)\t(.+)/)
+    if (m) {
+      return `${m[2]}: ${m[3]}`
+    }
+  }
+
   const fehlerzeilen = nicht_leer.filter(l => /FEHLER|Fehler|Error|Traceback/.test(l))
   return (fehlerzeilen.length ? fehlerzeilen : nicht_leer).slice(-3).join(' · ')
 }

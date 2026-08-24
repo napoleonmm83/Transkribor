@@ -70,6 +70,7 @@ if _ROH_PARALLEL:
               f"nehme {CLAUDE_PARALLEL} (erlaubt 1…{settings.PARALLEL_MAX})",
               file=sys.stderr, flush=True)
 _claude_slots = threading.Semaphore(CLAUDE_PARALLEL)
+_letzte_diagnose: dict | None = None
 _CREATE_NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 
 
@@ -496,9 +497,16 @@ def _run_claude(prompt: str, workdir: str) -> None:
                                creationflags=_CREATE_NO_WINDOW)
         if r.returncode != 0:
             tail = ((r.stdout or "") + (r.stderr or "")).strip()[-500:]
+            diag = llm.diagnose_fehler(tail)
+            global _letzte_diagnose
+            _letzte_diagnose = diag
             print(f"  claude exit {r.returncode}: {tail}", flush=True)
+            print(f"  [diagnose] {diag['kategorie']}\t{diag['titel']}\t{diag['hinweis']}", flush=True)
     except subprocess.TimeoutExpired:
+        diag = llm.diagnose_fehler(f"claude Timeout nach {CLAUDE_TIMEOUT}s")
+        _letzte_diagnose = diag
         print(f"  claude Timeout nach {CLAUDE_TIMEOUT}s", flush=True)
+        print(f"  [diagnose] {diag['kategorie']}\t{diag['titel']}\t{diag['hinweis']}", flush=True)
 
 
 def _ask_llm(prompt: str, inputs: list, output: str) -> None:
@@ -520,7 +528,11 @@ def _ask_llm(prompt: str, inputs: list, output: str) -> None:
         try:
             llm.complete_to_file(prompt, inputs, output)
         except llm.LLMError as e:
+            diag = llm.diagnose_fehler(e)
+            global _letzte_diagnose
+            _letzte_diagnose = diag
             print(f"  KI-Anbieter: {e}", flush=True)
+            print(f"  [diagnose] {diag['kategorie']}\t{diag['titel']}\t{diag['hinweis']}", flush=True)
 
 
 def _glossary_prompt(gpath: str, raw_files: list, context: str,
@@ -1060,9 +1072,12 @@ def main(argv=None):
         if attempted and not done:
             # Anbieterneutral: beim API-Weg heisst der Anbieter vielleicht OpenAI, und wer nur
             # die letzte Zeile liest, sucht sonst bei claude. Der echte Grund steht als
-            # "KI-Anbieter: …" weiter oben — dorthin zeigen, statt ihn zu erraten.
+            # "KI-Anbieter: …" bzw. "[diagnose] …" weiter oben — hier direkt benennen.
+            grund_text = (f"{_letzte_diagnose['titel']} · {_letzte_diagnose['hinweis']}"
+                          if _letzte_diagnose
+                          else "KI-Anbieter nicht erreichbar oder ohne Ausgabe — siehe die Zeilen oben")
             print(f"run: FEHLER — 0 von {attempted} versuchten Datei(en) korrigiert "
-                  f"(KI-Anbieter nicht erreichbar oder ohne Ausgabe — siehe die Zeilen oben)",
+                  f"({grund_text})",
                   flush=True)
             raise SystemExit(1)
     else:
