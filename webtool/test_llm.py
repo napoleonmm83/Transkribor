@@ -372,7 +372,7 @@ def test_abo_modelle_sind_aliase_ohne_netz(cfg, monkeypatch):
     settings.save({"provider": "claude-cli"})
     assert [m["id"] for m in llm.list_models()] == ["opus", "sonnet", "haiku", "fable"]
     settings.save({"provider": "codex-cli"})
-    assert llm.list_models() == []
+    assert [m["id"] for m in llm.list_models()] == ["gpt-4o", "gpt-4o-mini", "o3-mini", "o1", "o1-mini", "gpt-4.5-preview"]
 
 
 def test_provider_list_nennt_die_abo_clis(cfg):
@@ -499,6 +499,36 @@ def test_request_uebergibt_ssl_kontext(monkeypatch):
 def test_google_provider_hat_default_model():
     nach_id = {p["id"]: p for p in llm.provider_list()}
     assert nach_id["google"]["default_model"] == "gemini-flash-latest"
+    assert nach_id["codex-cli"]["default_model"] == "gpt-4o"
+    assert nach_id["openai"]["default_model"] == "gpt-4o"
+
+
+def test_openai_list_models_mit_filter(cfg, monkeypatch):
+    settings.save({"provider": "openai", "model": "gpt-4o", "api_key": "sk-test"})
+    _antwort(monkeypatch, {"data": [
+        {"id": "text-embedding-3-small"},
+        {"id": "whisper-1"},
+        {"id": "gpt-4o-mini", "display_name": "GPT-4o Mini"},
+        {"id": "gpt-4o", "display_name": "GPT-4o"},
+        {"id": "o3-mini", "display_name": "o3-mini"},
+        {"id": "tts-1"},
+    ]})
+    modelle = llm.list_models()
+    ids = [m["id"] for m in modelle]
+    assert "gpt-4o" in ids
+    assert "gpt-4o-mini" in ids
+    assert "o3-mini" in ids
+    assert "whisper-1" not in ids
+    assert "text-embedding-3-small" not in ids
+
+
+def test_list_models_faellt_bei_netzfehler_auf_voreinstellung_zurueck(cfg, monkeypatch):
+    settings.save({"provider": "openai", "model": "gpt-4o", "api_key": "sk-test"})
+    def fehlschlag(*a, **k):
+        raise llm.LLMError("HTTP 500 Server Error")
+    monkeypatch.setattr(llm, "_request", fehlschlag)
+    modelle = llm.list_models()
+    assert [m["id"] for m in modelle] == ["gpt-4o", "gpt-4o-mini", "o3-mini", "o1", "o1-mini", "gpt-4-turbo"]
 
 
 def test_env_key_hint_erkennt_google_api_key(monkeypatch):
