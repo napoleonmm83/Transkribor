@@ -674,6 +674,25 @@ def test_merge_haengt_zusammenfassungen_aller_bloecke_aneinander():
     assert m["verification"] == "nichts geaendert. Segment 5 zurueckgeholt."
 
 
+def test_merge_parts_filtert_halluzinations_metakommentare_in_summary():
+    docs = [
+        {"summary": "Die Reportage begleitet den Rhyathlon 2026 am Baggersee Kriessern."},
+        {"summary": "In diesem Block liefert die Tonspur allerdings keinen verwertbaren Inhalt mehr: Die Transkription besteht durchgehend aus einer Halluzinations-Schleife des Satzes «Das war's mit dem Tandem.»"},
+        {"summary": "Dieser Abschnitt des Transkripts selbst enthält keinen Gesprächsinhalt mehr, sondern nur die Fortsetzung einer ASR-Halluzinationsschleife."},
+    ]
+    m = correct._merge_parts(docs, "S1")
+    assert m["summary"] == "Die Reportage begleitet den Rhyathlon 2026 am Baggersee Kriessern."
+    assert "Halluzinations" not in m["summary"]
+    assert "keinen verwertbaren Inhalt" not in m["summary"]
+
+
+def test_correct_prompt_warnt_vor_halluzinations_kommentaren_in_summary():
+    prompt = correct._correct_prompt("base", "tagged.txt", "c.json", "{}", "Kontext")
+    assert "HALLUZINATION" in prompt.upper() or "WIEDERHOLUNG" in prompt.upper()
+    assert "nur echter Inhalt" in prompt or "kein Bericht über Korrekturen" in prompt or "AUSSCHLIESSLICH den echten Gesprächsinhalt" in prompt
+
+
+
 def test_chunked_file_merges_all_blocks(project, monkeypatch):
     _root, t = project
     _write_raw(t, "S1", 6)

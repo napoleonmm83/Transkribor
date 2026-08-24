@@ -24,6 +24,27 @@ def test_compute_flags_low_conf_only():
     assert f == {"hallucination": False, "low_conf": True}
 
 
+def test_compute_flags_is_repeat():
+    seg = {"compression_ratio": 0.8, "no_speech_prob": 0.0, "avg_logprob": -0.1}
+    assert em.compute_flags(seg, is_repeat=True) == {"hallucination": True, "low_conf": False}
+
+
+def test_build_edit_doc_flags_consecutive_repetitions():
+    raw = {
+        "language": "de",
+        "segments": [
+            {"id": 0, "start": 0.0, "end": 1.0, "text": "Hallo", "compression_ratio": 0.8, "avg_logprob": -0.2},
+            {"id": 1, "start": 1.0, "end": 2.0, "text": " Das war's mit dem Tandem.", "compression_ratio": 0.8, "avg_logprob": -0.1},
+            {"id": 2, "start": 2.0, "end": 3.0, "text": "Das war's mit dem Tandem!", "compression_ratio": 0.8, "avg_logprob": -0.05},
+        ]
+    }
+    doc = em.build_edit_doc(raw, base="B", project="P", audio="B.mp3")
+    assert doc["segments"][0]["flags"]["hallucination"] is False
+    assert doc["segments"][1]["flags"]["hallucination"] is False
+    assert doc["segments"][2]["flags"]["hallucination"] is True
+
+
+
 def test_build_edit_doc_shape():
     raw = {
         "language": "de",

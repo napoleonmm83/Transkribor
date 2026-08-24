@@ -16,31 +16,28 @@ COMPRESSION_RATIO_THRESHOLD = 2.4
 LOGPROB_THRESHOLD = -1.0
 
 
-def compute_flags(segment: dict) -> dict:
+def compute_flags(segment: dict, *, is_repeat: bool = False) -> dict:
     """Auffälligkeiten je Segment für die Editor-Anzeige.
 
-    Es gab hier eine dritte Flagge "silence" (`no_speech_prob > 0.6 AND avg_logprob < -1.0`).
-    Die konnte **nie** anschlagen, und zwar nicht aus Zufall: Whisper überspringt genau diese
-    Segmente selbst (`whisper/transcribe.py`, `should_skip` — `no_speech_prob > 0.6`, aufgehoben
-    nur bei `avg_logprob > -1.0`, der Skip greift also ab `<= -1.0`). Unsere Bedingung war die
-    echte Teilmenge davon; was sie erfüllt hätte, hatte der Decoder schon weggeworfen, bevor er
-    die JSON schrieb. Wir haben die Upstream-Schwelle abgeschrieben, ohne zu prüfen, ob Upstream
-    schon danach filtert. Über 2472 echte Rohsegmente: 0 Treffer,
-    während "hallucination" 27 und "low_conf" 9 mal ansprang. Ein Symbol in der Legende, das
-    kein Nutzer je zu sehen bekommt, ist schlimmer als keines — es lässt ihn suchen.
+    - "hallucination": compression_ratio > 2.4 ODER aufeinanderfolgende Textwiederholung (ASR-Loop)
+    - "low_conf": avg_logprob < -1.0
     """
     cr = segment.get("compression_ratio", 0.0)
     alp = segment.get("avg_logprob", 0.0)
     return {
-        "hallucination": cr > COMPRESSION_RATIO_THRESHOLD,
+        "hallucination": bool(is_repeat or cr > COMPRESSION_RATIO_THRESHOLD),
         "low_conf": alp < LOGPROB_THRESHOLD,
     }
 
 
 def build_edit_doc(raw: dict, *, base: str, project: str, audio: str) -> dict:
     segments = []
+    letzter_norm = None
     for seg in raw.get("segments", []):
         text = (seg.get("text") or "").strip()
+        norm = re.sub(r"[^\w\s]", "", text.lower()).strip()
+        is_repeat = bool(norm and norm == letzter_norm)
+        letzter_norm = norm if norm else None
         segments.append({
             "id": seg.get("id"),
             "start": seg.get("start"),
@@ -53,7 +50,7 @@ def build_edit_doc(raw: dict, *, base: str, project: str, audio: str) -> dict:
                  "end": w.get("end"), "probability": w.get("probability", 1.0)}
                 for w in seg.get("words", [])
             ],
-            "flags": compute_flags(seg),
+            "flags": compute_flags(seg, is_repeat=is_repeat),
             "note": "",
         })
     return {

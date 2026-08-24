@@ -139,10 +139,28 @@ def test_cmd_ohne_sprache_laesst_l_weg():
     assert cmd[0] == "/p/whisper-cli"
 
 
+def test_cmd_setzt_max_context():
+    """-mc 64 begrenzt den Kontextspeicher gegen endlose Feedback-Schleifen."""
+    cmd = w._cmd("/p/whisper-cli", "ggml.bin", "a.wav", "/tmp/out", "de")
+    assert "-mc" in cmd
+    assert cmd[cmd.index("-mc") + 1] == "64"
+
+
 def test_cmd_mit_sprache_setzt_l():
     cmd = w._cmd("/p/whisper-cli", "ggml.bin", "a.wav", "/tmp/out", "en")
     assert "-l" in cmd
     assert cmd[cmd.index("-l") + 1] == "en"
+
+
+def test_ergebnis_bereinigt_wiederholungs_schleifen():
+    tokens = [_tok(" Das"), _tok(" war's")]
+    # 20 identische Segmente
+    transcription = [_seg(" Das war's mit dem Tandem.", tokens, von=i * 1000, bis=(i + 1) * 1000) for i in range(20)]
+    roh = {"transcription": transcription, "result": {"language": "de"}}
+    res = w.ergebnis(roh, "de")
+    assert len(res["segments"]) <= 3
+    assert [s["id"] for s in res["segments"]] == list(range(len(res["segments"])))
+
 
 
 def test_ergebnis_liest_sprache_aus_result_bei_auto():
