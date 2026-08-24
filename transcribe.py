@@ -543,13 +543,13 @@ def transcribe_project(name, model, language, only=None):
             # whisper.cpp-Pfad zusammen, und hier wird geschrieben. In `_transkribiere_datei`
             # stuende die Wache vor der Verzweigung — oder zweimal.
             result["luecken"] = luecken(result.get("segments") or [], result.get("duration"))
-            with open(out_json, "w", encoding="utf-8") as fh:
-                json.dump(result, fh, ensure_ascii=False, indent=1)
             with open(os.path.join(out_dir, base + ".raw.txt"), "w", encoding="utf-8") as fh:
                 fh.write(result["text"].strip() + "\n")
             with open(os.path.join(out_dir, base + ".segments.txt"), "w", encoding="utf-8") as fh:
                 for seg in result["segments"]:
                     fh.write(f"[{fmt(seg['start'])} - {fmt(seg['end'])}] {seg['text'].strip()}\n")
+            with open(out_json, "w", encoding="utf-8") as fh:
+                json.dump(result, fh, ensure_ascii=False, indent=1)
             # `duration` ist die Laenge der AUFNAHME. Bis eben stand hier das Ende des letzten
             # Segments unter der Beschriftung „Audio" — fehlen die letzten Fenster, meldet das
             # genau die zu kurze Zahl, die den Verlust verdeckt. Der Rueckfall gilt Laeufen ohne

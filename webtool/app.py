@@ -553,11 +553,11 @@ def _datei_weg(project: str, base: str, mit_audio: bool) -> int:
     als Zeichenklasse und findet die Datei nicht. Der literale Punkt im Muster trennt
     sauber: "Timeline 1.*" trifft `Timeline 1.json`, aber nicht `Timeline 10.json`."""
     muster = os.path.join(paths.transkripte_dir(project), glob.escape(base) + ".*")
-    treffer = glob.glob(muster)
+    treffer = [p for p in glob.glob(muster) if os.path.isfile(p) and not p.endswith(".lock")]
     if mit_audio:
         adir = paths.audio_dir(project)
         treffer += [os.path.join(adir, base + ext) for ext in AUDIO_EXT
-                    if os.path.exists(os.path.join(adir, base + ext))]
+                    if os.path.isfile(os.path.join(adir, base + ext))]
     for p in treffer:
         os.remove(p)
     return len(treffer)
@@ -592,11 +592,15 @@ def _keine_jobs(project: str, base: str = None, active_only: bool = False) -> No
 def delete_file(project: str, base: str):
     """Eine einzelne Aufnahme samt Audio loeschen (das Projekt bleibt)."""
     _validate(project, base)
-    _keine_jobs(project, base, active_only=True)
-    n = _datei_weg(project, base, mit_audio=True)
-    if not n:
-        raise HTTPException(status_code=404, detail=f"keine Datei: {base}")
-    jobs.remove_base(project, base)
+    epath = _edit_path(project, base)
+    tdir = paths.transkripte_dir(project)
+    os.makedirs(tdir, exist_ok=True)
+    with sperre.datei(epath):
+        _keine_jobs(project, base, active_only=True)
+        n = _datei_weg(project, base, mit_audio=True)
+        if not n:
+            raise HTTPException(status_code=404, detail=f"keine Datei: {base}")
+        jobs.remove_base(project, base)
     return {"ok": True, "geloescht": n}
 
 

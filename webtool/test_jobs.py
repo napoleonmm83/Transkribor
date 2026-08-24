@@ -440,7 +440,7 @@ def test_active_zeilen_aktualisieren_active_bases():
 
 
 def test_done_entfernt_aufnahme_aus_active_bases():
-    """[done] S1 nimmt die Aufnahme wieder aus active_bases und bases."""
+    """[done] S1 nimmt die Aufnahme wieder aus active_bases, belaesst sie aber im Gesamtscope."""
     code = (
         "import sys, time\n"
         "print('[scope] S1\\tS2', flush=True)\n"
@@ -453,6 +453,7 @@ def test_done_entfernt_aufnahme_aus_active_bases():
     try:
         _warte_auf_zeilen(jid, 4)
         assert jobs.betrifft("P_dyn_done", "S1", active_only=True) is None
+        assert jobs.betrifft("P_dyn_done", "S1", active_only=False) is not None
     finally:
         jobs.cancel(jid)
         _wait(jid)
