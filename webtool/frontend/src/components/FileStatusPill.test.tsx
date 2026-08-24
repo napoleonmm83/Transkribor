@@ -20,9 +20,10 @@ describe('FileStatusPill', () => {
     render(<FileStatusPill file={f()} active="correct" pct={25} detail="Block 2/4" jobRunning />)
     expect(screen.getByText(/Korrigieren Block 2\/4/)).toBeInTheDocument()
   })
-  it('Terminal-Status zeigt konsistenten Dateizustand', () => {
-    render(<FileStatusPill file={f({ has_edit: true })} state="done" mitText />)
+  it('Terminal-Status zeigt konsistenten Dateizustand auch bei laufendem Job im Scope', () => {
+    render(<FileStatusPill file={f({ has_edit: true })} state="done" jobRunning inScope mitText />)
     expect(screen.getByText('Korrigiert')).toBeInTheDocument()
+    expect(screen.queryByText(/Warteschlange/)).toBeNull()
   })
   it('In Warteschlange, wenn Job laeuft und Datei im Scope ist', () => {
     render(<FileStatusPill file={f()} jobRunning inScope mitText />)
