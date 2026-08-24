@@ -70,6 +70,7 @@ if _ROH_PARALLEL:
               f"nehme {CLAUDE_PARALLEL} (erlaubt 1…{settings.PARALLEL_MAX})",
               file=sys.stderr, flush=True)
 _claude_slots = threading.Semaphore(CLAUDE_PARALLEL)
+_hardware_lock = threading.Lock()
 _letzte_diagnose: dict | None = None
 _CREATE_NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 
@@ -165,31 +166,32 @@ def _load_diar_clusters(tdir: str, base: str) -> dict:
     return {s.get("id"): s.get("speaker") for s in segs if s.get("speaker")}
 
 
+def prep_single(project: str, base: str) -> bool:
+    """Bereitet EINE Datei fuer die Korrektur vor -> <base>.tagged.txt (#StreamingPipeline)."""
+    tdir = paths.transkripte_dir(project)
+    raw_path = os.path.join(tdir, base + ".json")
+    if not os.path.exists(raw_path):
+        return False
+    try:
+        raw = _load(raw_path)
+        segs = tag_uncertain_segments(raw)
+        clusters = _load_diar_clusters(tdir, base) if diarize_enabled() else {}
+        lines = []
+        for s in segs:
+            spk = clusters.get(s["id"])
+            prefix = f"({spk}) " if spk else ""
+            lines.append(f"[{s['id']}] {prefix}{s['tagged_text']}")
+        paths.atomic_write(os.path.join(tdir, base + ".tagged.txt"), "\n".join(lines) + "\n")
+        return True
+    except (OSError, ValueError) as e:
+        print(f"prep: SKIP {base} ({type(e).__name__}: {e})", flush=True)
+        return False
+
+
 def cmd_prep(project: str) -> int:
     tdir = paths.transkripte_dir(project)
-    n = 0
-    for base in bases(project):
-        try:  # eine kaputte/gesperrte Roh-JSON darf den Batch nicht stoppen
-            raw = _load(os.path.join(tdir, base + ".json"))
-            segs = tag_uncertain_segments(raw)
-            # Kill-Switch muss auch die KONSUMPTION eines evtl. liegen gebliebenen Sidecars
-            # unterdrücken, nicht nur dessen Erzeugung — sonst injiziert ein altes
-            # <base>.diar.json trotz TRANSKRIBOR_DIARIZE=0 weiterhin das (Sprecher N)-Präfix.
-            clusters = _load_diar_clusters(tdir, base) if diarize_enabled() else {}
-            lines = []
-            for s in segs:
-                spk = clusters.get(s["id"])
-                prefix = f"({spk}) " if spk else ""
-                lines.append(f"[{s['id']}] {prefix}{s['tagged_text']}")
-            paths.atomic_write(os.path.join(tdir, base + ".tagged.txt"), "\n".join(lines) + "\n")
-            n += 1
-        except (OSError, ValueError) as e:     # ValueError deckt auch UnicodeDecodeError (#190)
-            # Keine Ursachenbehauptung mehr, nur der Typ: dieser `try` umspannt den ganzen
-            # Schleifenkoerper — auch den `atomic_write`, der an einem einzelnen Surrogat in
-            # der Roh-JSON mit UnicodeEncodeError stirbt (gemessen). "Roh-JSON unlesbar" war
-            # dort schlicht falsch, und `str(e)` nennt den Typ bei keiner dieser Klassen.
-            print(f"prep: SKIP {base} ({type(e).__name__}: {e})", flush=True)
-    print(f"prep: {n} Datei(en) getaggt in {tdir}")
+    n = sum(1 for base in bases(project) if prep_single(project, base))
+    print(f"prep: {n} Datei(en) getaggt in {tdir}", flush=True)
     return n
 
 
@@ -1001,6 +1003,13 @@ def _summary_only_file(project: str, base: str, ziel: str, context: str,
 
 
 def cmd_run(project: str, base: str = None, force: bool = False, verify: bool = True) -> int:
+    """Führt den Korrekturlauf für ein Projekt oder eine Einzeldatei im Streaming-Pipeline-Verfahren aus.
+
+    - Glossar wird vorab korpusweit aus allen .raw.txt erstellt.
+    - Lokale Hardware-Phasen (Diarisierung + Prep) laufen geschützt unter _hardware_lock streng sequenziell.
+    - Cloud-KI-Phasen laufen nach Abschluss der lokalen Phase sofort parallel (bis zu CLAUDE_PARALLEL Slots).
+    - Abgeschlossene Dateien werden sofort finalisiert (cmd_apply) und stehen im Frontend bereit.
+    """
     global _letzte_diagnose
     _letzte_diagnose = None
     tdir = paths.transkripte_dir(project)
@@ -1017,15 +1026,7 @@ def cmd_run(project: str, base: str = None, force: bool = False, verify: bool = 
     # gibt danach alle uebrigen Aufnahmen zum Loeschen/Umbenennen frei (Issue #80).
     print("[scope] " + "\t".join(all_bases), flush=True)
     print(f"run: {len(all_bases)} Datei(en) in Projekt {project!r}", flush=True)
-    # Phasenuhren. Ohne sie war nur die Transkription vermessen (transcribe.py druckt `dt`
-    # je Datei) — wie sich die Wandzeit auf Diarisieren/Vorbereiten/Glossar/Korrigieren
-    # verteilt, war Vermutung. Der Deckel steht mit in der Zeile: zwei Laeufe sind sonst
-    # nicht vergleichbar, und genau das ist der Zweck der Messung.
     t_start = time.monotonic()
-    cmd_diarize(project, all_bases)                    # -> <base>.diar.json (best-effort, GPU); scoped auf all_bases
-    t_diar = time.monotonic()
-    cmd_prep(project)                                  # -> <base>.tagged.txt (Cluster-Präfix falls diarisiert)
-    t_prep = time.monotonic()
     from . import projekt as _pj
     context = _context(project)
     # Glossar nur bauen, wenn mind. eine Datei im Voll-Modus laeuft -- leicht/zusammenfassung
@@ -1040,14 +1041,22 @@ def cmd_run(project: str, base: str = None, force: bool = False, verify: bool = 
             return False
         epath = os.path.join(tdir, b + ".edit.json")
         cpath = os.path.join(tdir, b + ".correction.json")
+        if _is_human_edited(epath) and not force:
+            print(f"↷ SKIP {b} (human_edited=true; --force zum Neu-Korrigieren)", flush=True)
+            return False
+        # 1. Lokale Hardware-Phase (Diarisierung + Vorbereitung): genau 1 Thread zeitgleich
+        with _hardware_lock:
+            if not os.path.exists(raw_json):
+                return False
+            cmd_diarize(project, [b])
+            if not prep_single(project, b):
+                return False
+        if not os.path.exists(raw_json):
+            return False
         print(f"[active] {b}", flush=True)
         try:  # eine kaputte Datei darf den Batch nicht abbrechen
-            if _is_human_edited(epath) and not force:
-                print(f"↷ SKIP {b} (human_edited=true; --force zum Neu-Korrigieren)", flush=True)
-                return False
-            # correction nur im Batch (kein explizites base) und nicht erzwungen wiederverwenden — ein
-            # expliziter Einzel-Datei-Lauf korrigiert bewusst neu. Reuse setzt zudem voraus, dass die
-            # correction neuer als die Roh-JSON ist (sonst nach Neu-Transkription veraltet).
+            # 2. Lokaler GPU-Schritt fertig -> Hardware-Lock freigegeben für nächste Datei.
+            # 3. Sofortige Cloud-KI-Phase (parallel über _claude_slots)
             reuse = (base is None and not force
                      and os.path.exists(cpath) and os.path.getmtime(cpath) >= os.path.getmtime(raw_json))
             if reuse:
@@ -1075,14 +1084,13 @@ def cmd_run(project: str, base: str = None, force: bool = False, verify: bool = 
         finally:
             print(f"[done] {b}", flush=True)
 
-    # Dateien sind nach dem Glossar voneinander unabhängig -> parallel. Die Threads warten fast
-    # nur auf Opus; wie viele davon wirklich gleichzeitig laufen, regelt _claude_slots.
+    # Dateien streamen durch die Hardware- und KI-Pipeline -> bis zu CLAUDE_PARALLEL Threads.
+    # Der Hardware-Lock serialisiert GPU-Phasen, während Netzwerk-LLM-Aufrufe parallel laufen.
     with ThreadPoolExecutor(max_workers=min(len(all_bases), CLAUDE_PARALLEL)) as ex:
         done = sum(ex.map(one, all_bases))
     t_ende = time.monotonic()
     print(f"run: fertig — {done}/{len(all_bases)} Datei(en) korrigiert", flush=True)
-    print(f"⏱ Phasen: diarisieren {t_diar - t_start:.0f}s · vorbereiten {t_prep - t_diar:.0f}s · "
-          f"glossar {t_gloss - t_prep:.0f}s · korrigieren {t_ende - t_gloss:.0f}s · "
+    print(f"⏱ Phasen: glossar {t_gloss - t_start:.0f}s · pipeline {t_ende - t_gloss:.0f}s · "
           f"gesamt {t_ende - t_start:.0f}s (parallel={CLAUDE_PARALLEL})", flush=True)
     return done
 

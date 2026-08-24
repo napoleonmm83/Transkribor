@@ -1582,4 +1582,84 @@ def test_correct_run_meldet_active_done_und_ueberspringt_geloeschte_dateien(proj
     assert not (t / "S2.edit.json").exists()
 
 
+def test_streaming_pipeline_hardware_sequential_and_ai_parallel(project, monkeypatch):
+    """Verifiziert das Streaming-Pipelining:
+    - Lokale Hardware-Schritte (Diarisierung + Prep) laufen streng sequenziell (max_hw <= 1).
+    - Sobald eine Datei fertig diarisiert ist, startet ihr LLM-Aufruf sofort parallel zu
+      den folgenden Dateien (max_ai > 1)."""
+    import threading
+    import time
+    _root, t = project
+    monkeypatch.setattr(correct.llm, "use_api", lambda: True)
+    monkeypatch.setattr(correct, "CLAUDE_PARALLEL", 4)
+    monkeypatch.setattr(correct, "diarize_enabled", lambda: True)
+
+    # 3 Dateien anlegen
+    for b in ("S1", "S2", "S3"):
+        (_root / "Demo" / "audio" / f"{b}.mp3").write_bytes(b"x")
+        raw = {"language": "de", "segments": [{"id": 0, "start": 0.0, "end": 1.0, "text": f"Text {b}"}]}
+        (t / f"{b}.json").write_text(json.dumps(raw), encoding="utf-8")
+        (t / f"{b}.raw.txt").write_text(f"Text {b}\n", encoding="utf-8")
+
+    hw_active = 0
+    hw_max = 0
+    hw_lock = threading.Lock()
+
+    ai_active = 0
+    ai_max = 0
+    ai_lock = threading.Lock()
+
+    def fake_diarize(project, only_bases=None):
+        nonlocal hw_active, hw_max
+        with hw_lock:
+            hw_active += 1
+            if hw_active > hw_max:
+                hw_max = hw_active
+        time.sleep(0.05)
+        with hw_lock:
+            hw_active -= 1
+        return 1
+
+    real_prep_single = correct.prep_single
+
+    def fake_prep_single(project, b):
+        nonlocal hw_active, hw_max
+        with hw_lock:
+            hw_active += 1
+            if hw_active > hw_max:
+                hw_max = hw_active
+        time.sleep(0.02)
+        res = real_prep_single(project, b)
+        with hw_lock:
+            hw_active -= 1
+        return res
+
+    def fake_correct_file(project, b, gjson, context, verify, force, **kw):
+        nonlocal ai_active, ai_max
+        with ai_lock:
+            ai_active += 1
+            if ai_active > ai_max:
+                ai_max = ai_active
+        time.sleep(0.1)
+        (t / f"{b}.correction.json").write_text(json.dumps({
+            "language": "de",
+            "segments": [{"id": 0, "text": f"Text {b} korrigiert"}]
+        }), encoding="utf-8")
+        with ai_lock:
+            ai_active -= 1
+
+    monkeypatch.setattr(correct, "cmd_diarize", fake_diarize)
+    monkeypatch.setattr(correct, "prep_single", fake_prep_single)
+    monkeypatch.setattr(correct, "_correct_file", fake_correct_file)
+    monkeypatch.setattr(correct, "_glossary", lambda *a: "")
+
+    done = correct.cmd_run("Demo", force=True)
+    assert done == 3
+    # Lokale Hardware-Schritte waren exklusiv serialisiert
+    assert hw_max == 1
+    # KI-Korrekturen liefen überlappend/parallel
+    assert ai_max > 1
+
+
+
 
