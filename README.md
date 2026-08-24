@@ -59,7 +59,10 @@ Auch mit **Schweizerdeutsch** kommt es zurecht.
    bleibt dabei auch bei zwanzig Aufnahmen das Feld zum Hineinziehen sichtbar —
    geblättert wird nur in der Liste. Ab `v0.29.0` gilt dasselbe im zweiten
    Schritt: der Abspieler mit der Tonspur bleibt beim Blättern stehen, statt nach oben
-   aus dem Bild zu wandern.)
+   aus dem Bild zu wandern. Ab `v0.36.0` zeigt die Dateiliste während laufender
+   Hintergrund-Jobs präzise und animiert an, woran gerade gerechnet wird: Globale
+   Zwischenschritte wie die Glossar-Erstellung werden direkt bei den betroffenen
+   Dateien genannt, während unbeteiligte Aufnahmen ihren echten Ruhezustand behalten.)
 
 > [!WARNING]
 > **Beim ersten Öffnen warnt das Betriebssystem.** Der Installer ist nicht bei Microsoft bzw.

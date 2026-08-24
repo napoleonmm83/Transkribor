@@ -196,4 +196,16 @@ describe('mergePhases', () => {
     const j2 = job('j2', 'transcribe', { global: null, scope: new Set(['B', 'C']), active: {}, perBase: {} })
     expect(mergePhases([j1, j2]).scope).toEqual(new Set(['A', 'B', 'C']))
   })
+
+  it('erhaelt globale Phase pro Scope bei parallelen Jobs (Korrektur im Glossar, Transkription aktiv)', () => {
+    // Job 1: Korrektur fuer Datei A im Schritt "glossary"
+    const c = job('j1', 'correct', { global: 'glossary', scope: new Set(['A']), active: {}, perBase: {} })
+    // Job 2: Transkription fuer Datei B aktiv
+    const t = job('j2', 'transcribe', { global: null, scope: new Set(['B']), active: { B: { phase: 'transcribe', pct: 40 } }, perBase: {} })
+    const m = mergePhases([c, t])
+    expect(m.active).toEqual({ B: { phase: 'transcribe', pct: 40 } })
+    // Datei A erhaelt ihre globale Phase 'glossary' trotz aktiver Datei B im parallelen Job
+    expect(m.globalPerBase?.A).toBe('glossary')
+    expect(m.globalPerBase?.B).toBeUndefined()
+  })
 })
