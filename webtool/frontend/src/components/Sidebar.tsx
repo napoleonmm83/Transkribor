@@ -162,14 +162,19 @@ export function Sidebar({
                   {dateienLaden && dateien.length === 0 && (
                     <p className="px-2 py-1 text-sm text-muted-foreground">lädt…</p>
                   )}
-                  {dateien.map(f => (
-                    <FileRow key={f.base} project={p.name} file={f}
-                      active={active?.project === p.name && active?.base === f.base}
-                      onOpen={() => onOpen({ project: p.name, base: f.base })}
-                      phase={jobRunning ? phases?.active[f.base]?.phase : undefined}
-                      state={jobRunning ? phases?.perBase[f.base] : undefined}
-                      jobRunning={jobRunning} aiReason={aiReason} />
-                  ))}
+                  {dateien.map(f => {
+                    const inScope = jobRunning ? (phases?.scope ? phases.scope.has(f.base) : true) : false
+                    return (
+                      <FileRow key={f.base} project={p.name} file={f}
+                        active={active?.project === p.name && active?.base === f.base}
+                        onOpen={() => onOpen({ project: p.name, base: f.base })}
+                        phase={jobRunning ? phases?.active[f.base]?.phase : undefined}
+                        state={jobRunning ? phases?.perBase[f.base] : undefined}
+                        inScope={inScope}
+                        globalPhase={jobRunning ? (phases?.globalPerBase?.[f.base] ?? (phases?.scope === undefined ? phases?.global : null)) : null}
+                        jobRunning={jobRunning} aiReason={aiReason} />
+                    )
+                  })}
                 </div>
               )}
             </div>

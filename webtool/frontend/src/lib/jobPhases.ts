@@ -25,6 +25,7 @@ export function parseJobPhases(kind: string, lines: string[]): JobPhases {
   let global: GlobalPhase | null = null
   let cursor: string | null = null            // transcribe: die eine laufende Datei
   let bilanz: JobPhases['bilanz']
+  let scope: Set<string> | undefined
 
   const terminal = (base: string, state: FileState) => {
     perBase[base] = state
@@ -45,6 +46,12 @@ export function parseJobPhases(kind: string, lines: string[]): JobPhases {
   for (const rawLine of lines) {
     const l = rawLine.trim()
     let m: RegExpMatchArray | null
+
+    if (l.startsWith('[scope]')) {
+      const payload = l.slice(7).trim()
+      scope = new Set(payload ? payload.split('\t').filter(Boolean) : [])
+      continue
+    }
 
     // 'fetch' ist der reine Download-Job (app.py: eigene Art, damit er keinen GPU-Slot belegt).
     // Er sendet nur '[fetch] …'-Zeilen, teilt sich das Format aber mit dem CLI-Aufruf, bei dem
@@ -104,7 +111,7 @@ export function parseJobPhases(kind: string, lines: string[]): JobPhases {
     // reuse / diarize-SKIP / prep-SKIP / "Diarisierung deaktiviert" -> bewusst ignoriert
   }
 
-  return { global: Object.keys(active).length ? null : global, active, perBase, bilanz }
+  return { global: Object.keys(active).length ? null : global, scope, active, perBase, bilanz }
 }
 
 /** Einzeiler fuer Toast & Co. — nie rohe Log-Zeilen anzeigen, die sind fuer den Parser, nicht fuer Menschen. */

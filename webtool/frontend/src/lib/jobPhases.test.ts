@@ -245,3 +245,20 @@ describe('URL-Import', () => {
     expect(p.active).toEqual({})
   })
 })
+
+describe('parseJobPhases — scope', () => {
+  it('parst [scope] mit Tab-getrennten Dateinamen', () => {
+    const p = parseJobPhases('correct', ['[scope] S1\tS2\tTimeline 1', '→ Glossar …'])
+    expect(p.scope).toEqual(new Set(['S1', 'S2', 'Timeline 1']))
+    expect(p.global).toBe('glossary')
+  })
+  it('parst leeren [scope] (z.B. URL-Import / fetch mit noch keinen Dateien)', () => {
+    const p = parseJobPhases('fetch', ['[scope] ', '[fetch] lade Video …'])
+    expect(p.scope).toEqual(new Set())
+    expect(p.global).toBe('download')
+  })
+  it('bleibt undefined wenn kein [scope] gesendet wurde', () => {
+    const p = parseJobPhases('transcribe', ['[Demo] -> transkribiere A …'])
+    expect(p.scope).toBeUndefined()
+  })
+})

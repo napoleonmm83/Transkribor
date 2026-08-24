@@ -190,4 +190,51 @@ describe('mergePhases', () => {
     expect(mergePhases([job('j1', 'correct', { global: 'glossary', active: {}, perBase: {} })]).global)
       .toBe('glossary')
   })
+
+  it('fuehrt Scopes aller laufenden Jobs zusammen', () => {
+    const j1 = job('j1', 'correct', { global: null, scope: new Set(['A', 'B']), active: {}, perBase: {} })
+    const j2 = job('j2', 'transcribe', { global: null, scope: new Set(['B', 'C']), active: {}, perBase: {} })
+    expect(mergePhases([j1, j2]).scope).toEqual(new Set(['A', 'B', 'C']))
+  })
+
+  it('erhaelt globale Phase pro Scope bei parallelen Jobs (Korrektur im Glossar, Transkription aktiv)', () => {
+    // Job 1: Korrektur fuer Datei A im Schritt "glossary"
+    const c = job('j1', 'correct', { global: 'glossary', scope: new Set(['A']), active: {}, perBase: {} })
+    // Job 2: Transkription fuer Datei B aktiv
+    const t = job('j2', 'transcribe', { global: null, scope: new Set(['B']), active: { B: { phase: 'transcribe', pct: 40 } }, perBase: {} })
+    const m = mergePhases([c, t])
+    expect(m.active).toEqual({ B: { phase: 'transcribe', pct: 40 } })
+    // Datei A erhaelt ihre globale Phase 'glossary' trotz aktiver Datei B im parallelen Job
+    expect(m.globalPerBase?.A).toBe('glossary')
+    expect(m.globalPerBase?.B).toBeUndefined()
+    expect(m.global).toBeNull()
+  })
+
+  it('wartende Datei B ausserhalb des Glossar-Scopes erhaelt kein Glossar', () => {
+    // Job 1: Korrektur fuer Datei A im Schritt "glossary"
+    const c = job('j1', 'correct', { global: 'glossary', scope: new Set(['A']), active: {}, perBase: {} })
+    // Job 2: Transkription fuer Datei B wartend (noch nicht aktiv)
+    const t = job('j2', 'transcribe', { global: null, scope: new Set(['B']), active: {}, perBase: {} })
+    const m = mergePhases([c, t])
+    expect(m.scope).toEqual(new Set(['A', 'B']))
+    expect(m.globalPerBase?.A).toBe('glossary')
+    expect(m.globalPerBase?.B).toBeUndefined()
+    expect(m.global).toBeNull()
+  })
+
+  it('Job ohne Scope (scope: undefined) gilt fuer alle Dateien und liefert global', () => {
+    const fetchJob = job('j1', 'fetch', { global: 'download', scope: undefined, active: {}, perBase: {} })
+    const m = mergePhases([fetchJob])
+    expect(m.scope).toBeUndefined()
+    expect(m.global).toBe('download')
+  })
+
+  it('Mischung aus Scoped und Unscoped Job laesst scope undefined', () => {
+    const scopedJob = job('j1', 'correct', { global: 'glossary', scope: new Set(['A']), active: {}, perBase: {} })
+    const unscopedJob = job('j2', 'fetch', { global: 'download', scope: undefined, active: {}, perBase: {} })
+    const m = mergePhases([scopedJob, unscopedJob])
+    expect(m.scope).toBeUndefined()
+    expect(m.globalPerBase?.A).toBe('glossary')
+    expect(m.global).toBe('download')
+  })
 })

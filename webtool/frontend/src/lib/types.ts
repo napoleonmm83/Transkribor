@@ -229,6 +229,9 @@ export type FileState = 'done' | 'skipped' | 'failed';
 export type FileWork = { phase: FilePhase; pct?: number; detail?: string };
 export type JobPhases = {
   global: GlobalPhase | null;
+  /** Basisname -> globale Phase (z.B. glossary, prep), in der diese Datei gerade wartet. */
+  globalPerBase?: Record<string, GlobalPhase>;
+  scope?: Set<string>;
   /** Basisname -> was daran gerade laeuft. Mehrere Eintraege, weil correct parallel arbeitet. */
   active: Record<string, FileWork>;
   perBase: Record<string, FileState>;

@@ -37,4 +37,19 @@ describe('FileRow Live-Status', () => {
     render(<Huelle><FileRow project="P" file={live} active={false} onOpen={vi.fn()} phase="correct" jobRunning /></Huelle>)
     expect(screen.getByText(/Korrigieren/)).toBeInTheDocument()
   })
+
+  it('zeigt Glossar-Status bei wartender Datei im Scope', () => {
+    render(<Huelle><FileRow project="P" file={live} active={false} onOpen={vi.fn()} jobRunning inScope globalPhase="glossary" /></Huelle>)
+    expect(screen.getByText('Glossar wird erstellt…')).toBeInTheDocument()
+  })
+
+  it('zeigt Warteschlange bei wartender Datei im Scope', () => {
+    render(<Huelle><FileRow project="P" file={live} active={false} onOpen={vi.fn()} jobRunning inScope /></Huelle>)
+    expect(screen.getByText('In Warteschlange…')).toBeInTheDocument()
+  })
+
+  it('zeigt Ruhezustand wenn Datei nicht im Scope ist', () => {
+    render(<Huelle><FileRow project="P" file={{ ...live, has_edit: true }} active={false} onOpen={vi.fn()} jobRunning inScope={false} /></Huelle>)
+    expect(screen.getByLabelText('Korrigiert')).toBeInTheDocument()
+  })
 })

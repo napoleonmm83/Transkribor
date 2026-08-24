@@ -1,5 +1,5 @@
-import { AudioLines, Check, CircleDashed, FileCheck, FileText, Loader2, SkipForward, TriangleAlert } from 'lucide-react'
-import type { FilePhase, FileState, ProjectFile } from '@/lib/types'
+import { AudioLines, Check, Clock, FileCheck, FileText, Loader2, SkipForward, TriangleAlert } from 'lucide-react'
+import type { FilePhase, FileState, GlobalPhase, ProjectFile } from '@/lib/types'
 import { PHASE_LABEL } from '@/lib/jobPhases'
 
 /**
@@ -18,6 +18,13 @@ const STATE = {
   skipped: { icon: SkipForward, label: 'Übersprungen', klasse: 'text-muted-foreground' },
   failed: { icon: TriangleAlert, label: 'Fehler', klasse: 'text-destructive' },
 } satisfies Record<FileState, { icon: typeof Check; label: string; klasse: string }>
+
+const GLOBAL_WAIT: Record<GlobalPhase, string> = {
+  glossary: 'Glossar wird erstellt…',
+  prep: 'Vorbereiten…',
+  diarize: 'Diarisieren…',
+  download: 'Herunterladen…',
+}
 
 /**
  * Ruhezustand ohne laufenden Job: wie weit ist diese Datei gediehen?
@@ -38,8 +45,15 @@ function ruhe(file: ProjectFile) {
   return null
 }
 
-export function FileStatusPill({ file, active, pct, detail, state, jobRunning, mitText }: {
-  file: ProjectFile; active?: FilePhase; pct?: number; detail?: string; state?: FileState; jobRunning?: boolean
+export function FileStatusPill({ file, active, pct, detail, state, jobRunning, inScope, globalPhase, mitText }: {
+  file: ProjectFile
+  active?: FilePhase
+  pct?: number
+  detail?: string
+  state?: FileState
+  jobRunning?: boolean
+  inScope?: boolean
+  globalPhase?: GlobalPhase | null
   /** Ruhezustand mit Wort statt nur Symbol. Die Arbeitsflaeche hat die Breite dafuer,
    *  die 260px-Seitenleiste des Editors nicht. */
   mitText?: boolean
@@ -55,6 +69,7 @@ export function FileStatusPill({ file, active, pct, detail, state, jobRunning, m
   }
 
   if (active) {
+    const label = `${PHASE_LABEL[active]} ${detail ?? (pct != null ? `${pct}%` : '…')}`
     return (
       // aria-live: der Fortschritt aendert sich ohne Zutun des Nutzers, ein Screenreader
       // erfaehrt sonst nie, dass die Datei durch ist.
@@ -63,17 +78,33 @@ export function FileStatusPill({ file, active, pct, detail, state, jobRunning, m
       <span className="inline-flex items-center gap-1.5 text-xs font-medium tabular-nums text-primary"
         aria-live="polite">
         <Loader2 className="size-3.5 shrink-0 animate-spin" aria-hidden="true" />
-        {PHASE_LABEL[active]} {detail ?? (pct != null ? `${pct}%` : '…')}
+        {label}
       </span>
     )
   }
 
-  if (jobRunning) return (
-    <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-      <CircleDashed className="size-3.5 shrink-0" aria-hidden="true" />
-      Wartet…
-    </span>
-  )
+  // Nur Dateien, die im Scope des laufenden Jobs liegen, zeigen Wartestatus.
+  // Wenn inScope explizit false ist, bleibt der echte Ruhezustand der Datei erhalten.
+  const betrifft = inScope ?? jobRunning
+  if (jobRunning && betrifft) {
+    if (globalPhase && GLOBAL_WAIT[globalPhase]) {
+      const gLabel = GLOBAL_WAIT[globalPhase]
+      return (
+        <span className="inline-flex items-center gap-1.5 text-xs font-medium text-primary" aria-live="polite">
+          <Loader2 className="size-3.5 shrink-0 animate-spin" aria-hidden="true" />
+          {gLabel}
+        </span>
+      )
+    }
+
+    const wLabel = 'In Warteschlange…'
+    return (
+      <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground" aria-live="polite">
+        <Clock className="size-3.5 shrink-0 animate-pulse" aria-hidden="true" />
+        {wLabel}
+      </span>
+    )
+  }
 
   const r = ruhe(file)
   if (!r) return null

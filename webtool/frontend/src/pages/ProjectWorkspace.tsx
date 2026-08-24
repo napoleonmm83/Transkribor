@@ -294,6 +294,7 @@ export function ProjectWorkspace() {
             {dateien.map(f => {
               const active = running ? phases.active[f.base] : undefined
               const state = running ? phases.perBase[f.base] : undefined
+              const inScope = running ? (phases.scope ? phases.scope.has(f.base) : true) : false
               return (
                 <li key={f.base} className="px-3 py-2.5 transition-colors hover:bg-muted/60">
                   <div className="flex items-center gap-3">
@@ -306,7 +307,8 @@ export function ProjectWorkspace() {
                       {f.base}
                     </button>
                     <FileStatusPill file={f} active={active?.phase} pct={active?.pct} detail={active?.detail}
-                      state={state} jobRunning={running} mitText />
+                      state={state} jobRunning={running} inScope={inScope}
+                      globalPhase={running ? (phases.globalPerBase?.[f.base] ?? (phases.scope === undefined ? phases.global : null)) : null} mitText />
                     <DateiMenue project={project!} file={f} aiReason={aiReason} />
                   </div>
                   {active?.pct != null && (

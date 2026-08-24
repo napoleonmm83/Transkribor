@@ -24,9 +24,27 @@ describe('FileStatusPill', () => {
     render(<FileStatusPill file={f()} state="done" />)
     expect(screen.getByText(/Fertig/)).toBeInTheDocument()
   })
-  it('Wartet, wenn Job laeuft aber Datei noch nicht dran', () => {
-    render(<FileStatusPill file={f()} jobRunning />)
-    expect(screen.getByText(/Wartet/)).toBeInTheDocument()
+  it('In Warteschlange, wenn Job laeuft und Datei im Scope ist', () => {
+    render(<FileStatusPill file={f()} jobRunning inScope mitText />)
+    expect(screen.getByText(/In Warteschlange…/)).toBeInTheDocument()
+  })
+  it('Glossar-Phase wird bei wartender Datei im Scope angezeigt', () => {
+    render(<FileStatusPill file={f()} jobRunning inScope globalPhase="glossary" mitText />)
+    expect(screen.getByText(/Glossar wird erstellt…/)).toBeInTheDocument()
+  })
+  it('Vorbereiten-Phase wird angezeigt', () => {
+    render(<FileStatusPill file={f()} jobRunning inScope globalPhase="prep" mitText />)
+    expect(screen.getByText(/Vorbereiten…/)).toBeInTheDocument()
+  })
+  it('Datei ausserhalb des Job-Scopes behaelt ihren Ruhezustand', () => {
+    render(<FileStatusPill file={f({ has_edit: true })} jobRunning inScope={false} mitText />)
+    expect(screen.getByText('Korrigiert')).toBeInTheDocument()
+    expect(screen.queryByText(/Warteschlange/)).toBeNull()
+    expect(screen.queryByText(/Wartet/)).toBeNull()
+  })
+  it('Glossar-Phase wird auch ohne explizites mitText angezeigt', () => {
+    render(<FileStatusPill file={f()} jobRunning inScope globalPhase="glossary" />)
+    expect(screen.getByText('Glossar wird erstellt…')).toBeInTheDocument()
   })
   // Frueher stand hier ein Emoji ('✎'). Der Test prueft jetzt den zugaenglichen Namen statt
   // des Glyphs — genau das, was das Emoji nicht hatte.
