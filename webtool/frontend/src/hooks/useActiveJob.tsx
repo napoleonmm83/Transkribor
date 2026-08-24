@@ -45,7 +45,12 @@ export function mergePhases(jobs: Job[]): JobPhases {
   const active: JobPhases['active'] = {}
   const perBase: JobPhases['perBase'] = {}
   let global: JobPhases['global'] = null
+  let scope: Set<string> | undefined
   for (const j of jobs) {
+    if (j.phases.scope) {
+      scope = scope ?? new Set()
+      for (const b of j.phases.scope) scope.add(b)
+    }
     for (const [base, work] of Object.entries(j.phases.active)) {
       if (base in active && j.kind !== 'transcribe') continue
       active[base] = work
@@ -64,7 +69,7 @@ export function mergePhases(jobs: Job[]): JobPhases {
   // LAUFENDE, der Provider behaelt terminale Jobs), und gelesen hat es ohnehin niemand —
   // die Zeile zu entfernen liess alle Tests gruen. Erster-gewinnt haette bei terminalem
   // Eingang die Bilanz des AELTESTEN Laufs gemeldet.
-  return { global: Object.keys(active).length ? null : global, active, perBase }
+  return { global: Object.keys(active).length ? null : global, scope, active, perBase }
 }
 
 export function JobProvider({ children, intervalMs = 1500 }: { children: ReactNode; intervalMs?: number }) {

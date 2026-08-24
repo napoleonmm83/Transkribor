@@ -190,4 +190,10 @@ describe('mergePhases', () => {
     expect(mergePhases([job('j1', 'correct', { global: 'glossary', active: {}, perBase: {} })]).global)
       .toBe('glossary')
   })
+
+  it('fuehrt Scopes aller laufenden Jobs zusammen', () => {
+    const j1 = job('j1', 'correct', { global: null, scope: new Set(['A', 'B']), active: {}, perBase: {} })
+    const j2 = job('j2', 'transcribe', { global: null, scope: new Set(['B', 'C']), active: {}, perBase: {} })
+    expect(mergePhases([j1, j2]).scope).toEqual(new Set(['A', 'B', 'C']))
+  })
 })
