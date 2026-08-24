@@ -19,6 +19,8 @@ def _cache_leeren():
 def cfg(monkeypatch, tmp_path):
     """Einstellungen ins tmp_path — nie die echte Datei des Entwicklers anfassen."""
     monkeypatch.setenv("TRANSKRIBOR_SETTINGS", str(tmp_path / "settings.json"))
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path / "projekte"))
+    monkeypatch.setenv("TRANSKRIBOR_YTDLP_UPDATE", "0")
     # Isoliere auch Whisper-Umgebungsvariablen, sonst sind die Tests nichtdeterministisch
     # auf einer Maschine, wo .env oder die Shell diese setzen.
     for name in ("WHISPER_MODEL", "WHISPER_LANG"):
@@ -433,3 +435,75 @@ def test_nicht_dekodierbare_eingabedatei_wird_zur_llmerror(tmp_path):
     with pytest.raises(llm.LLMError) as e:
         llm._with_files("prompt", [str(p)])
     assert "UnicodeDecodeError" in str(e.value)
+
+
+# --- SSL-Kontext & Google-Provider (#385) ------------------------------------
+
+def test_ssl_kontext_nutzt_certifi(monkeypatch):
+    import ssl
+    import sys
+    aufrufe = {}
+
+    class FakeCertifi:
+        @staticmethod
+        def where():
+            aufrufe["where"] = aufrufe.get("where", 0) + 1
+            return "/pfad/zu/fake-ca.pem"
+
+    fake_ctx = object()
+
+    def fake_create_default_context(cafile=None):
+        aufrufe["cafile"] = cafile
+        return fake_ctx
+
+    monkeypatch.setitem(sys.modules, "certifi", FakeCertifi)
+    monkeypatch.setattr(ssl, "create_default_context", fake_create_default_context)
+
+    ctx = llm._ssl_kontext()
+    assert ctx is fake_ctx
+    assert aufrufe["where"] == 1
+    assert aufrufe["cafile"] == "/pfad/zu/fake-ca.pem"
+
+
+def test_ssl_kontext_ohne_certifi_faellt_auf_die_vorgabe(monkeypatch):
+    import sys
+    monkeypatch.setitem(sys.modules, "certifi", None)
+    assert llm._ssl_kontext() is None
+
+
+def test_request_uebergibt_ssl_kontext(monkeypatch):
+    gesehen = {}
+    fake_kontext = object()
+    monkeypatch.setattr(llm, "_ssl_kontext", lambda: fake_kontext)
+
+    class DummyResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def read(self):
+            return b'{"ok": true}'
+
+    def fake_urlopen(req, timeout=60, context=None):
+        gesehen["context"] = context
+        return DummyResponse()
+
+    monkeypatch.setattr(llm.urllib.request, "urlopen", fake_urlopen)
+    res = llm._request("https://example.com/api", {"header": "val"})
+    assert res == {"ok": True}
+    assert gesehen["context"] is fake_kontext
+
+
+def test_google_provider_hat_default_model():
+    nach_id = {p["id"]: p for p in llm.provider_list()}
+    assert nach_id["google"]["default_model"] == "gemini-flash-latest"
+
+
+def test_env_key_hint_erkennt_google_api_key(monkeypatch):
+    for k in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY"):
+        monkeypatch.delenv(k, raising=False)
+    monkeypatch.setenv("GOOGLE_API_KEY", "AIzaSyTest")
+    assert llm.env_key_hint() == "GOOGLE_API_KEY"
+

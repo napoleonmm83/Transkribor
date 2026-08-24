@@ -57,6 +57,7 @@ PROVIDERS = {
                "keys_url": "https://platform.openai.com/api-keys"},
     "google": {"label": "Google (Gemini)", "shape": "openai", "needs_key": True,
                "base": "https://generativelanguage.googleapis.com/v1beta/openai",
+               "default_model": "gemini-flash-latest",
                "keys_url": "https://aistudio.google.com/apikey"},
     "openrouter": {"label": "OpenRouter (viele Modelle, ein Key)", "shape": "openai", "needs_key": True,
                    "base": "https://openrouter.ai/api/v1",
@@ -253,12 +254,28 @@ def _base_url(cfg: dict, prov: dict) -> str:
     return (cfg["base_url"] or prov.get("base", "")).rstrip("/")
 
 
+def _ssl_kontext():
+    """CA-Bundle fuer HTTP-Anfragen an API-Anbieter (Anthropic, OpenAI, Google etc.).
+
+    Von python.org installiertes Python nutzt auf macOS NICHT die System-Keychain,
+    sondern ein eigenes Bundle, das ohne den Schritt "Install Certificates.command"
+    fehlt. urlopen scheitert dort mit CERTIFICATE_VERIFY_FAILED — und genau so ein
+    Python legt electron/setup.js in der venv an (#385).
+    """
+    try:
+        import certifi
+        import ssl
+    except ImportError:
+        return None
+    return ssl.create_default_context(cafile=certifi.where())
+
+
 def _request(url: str, headers: dict, body=None, timeout: int = 60):
     data = json.dumps(body).encode("utf-8") if body is not None else None
     req = urllib.request.Request(url, data=data, headers=headers,
                                  method="POST" if data else "GET")
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as r:
+        with urllib.request.urlopen(req, timeout=timeout, context=_ssl_kontext()) as r:
             return json.loads(r.read().decode("utf-8", "replace"))
     except urllib.error.HTTPError as e:
         detail = e.read().decode("utf-8", "replace")[:400] if e.fp else ""
@@ -410,7 +427,7 @@ def auth_detail() -> str:
 
 def env_key_hint() -> str:
     """Bereits gesetzte Umgebungsvariable als Vorschlag (einmal-Einrichtung leichter machen)."""
-    for name in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "GEMINI_API_KEY"):
+    for name in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY"):
         if os.environ.get(name):
             return name
     return ""
