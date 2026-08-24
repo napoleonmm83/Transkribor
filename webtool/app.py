@@ -1235,7 +1235,9 @@ def settings_test():
     try:
         return llm.check()
     except llm.LLMError as e:
-        return {"ok": False, "detail": str(e)}
+        diag = llm.diagnose_fehler(e)
+        detail = f"{diag['titel']}: {diag['hinweis']}" if diag["kategorie"] != "unbekannt" else str(e)
+        return {"ok": False, "detail": detail}
 
 
 @app.get("/api/settings/auth")

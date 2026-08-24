@@ -70,6 +70,7 @@ if _ROH_PARALLEL:
               f"nehme {CLAUDE_PARALLEL} (erlaubt 1…{settings.PARALLEL_MAX})",
               file=sys.stderr, flush=True)
 _claude_slots = threading.Semaphore(CLAUDE_PARALLEL)
+_letzte_diagnose: dict | None = None
 _CREATE_NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 
 
@@ -469,10 +470,14 @@ def _run_claude(prompt: str, workdir: str) -> None:
     (Prompt-Injection über den Audioinhalt, z.B. aus einem URL-Import), und ein präpariertes
     Transkript konnte damit in die Transkripte JEDES anderen Projekts schreiben. Der eigene
     Quellcode lag schon vorher ausserhalb."""
+    global _letzte_diagnose
     try:
         exe = _claude_exe()
     except FileNotFoundError as e:
+        diag = llm.diagnose_fehler(str(e))
+        _letzte_diagnose = diag
         print(f"  {e}", flush=True)
+        print(f"  [diagnose] {diag['kategorie']}\t{diag['titel']}\t{diag['hinweis']}", flush=True)
         return
     # Ohne MCP-Server: 16,3s -> 7,7s Startup je Aufruf (gemessen). Die Korrektur braucht nur
     # Read/Write — und sie verarbeitet nicht vertrauenswürdigen Transkripttext, da haben die
@@ -496,9 +501,15 @@ def _run_claude(prompt: str, workdir: str) -> None:
                                creationflags=_CREATE_NO_WINDOW)
         if r.returncode != 0:
             tail = ((r.stdout or "") + (r.stderr or "")).strip()[-500:]
+            diag = llm.diagnose_fehler(tail)
+            _letzte_diagnose = diag
             print(f"  claude exit {r.returncode}: {tail}", flush=True)
+            print(f"  [diagnose] {diag['kategorie']}\t{diag['titel']}\t{diag['hinweis']}", flush=True)
     except subprocess.TimeoutExpired:
+        diag = llm.diagnose_fehler(f"claude Timeout nach {CLAUDE_TIMEOUT}s")
+        _letzte_diagnose = diag
         print(f"  claude Timeout nach {CLAUDE_TIMEOUT}s", flush=True)
+        print(f"  [diagnose] {diag['kategorie']}\t{diag['titel']}\t{diag['hinweis']}", flush=True)
 
 
 def _ask_llm(prompt: str, inputs: list, output: str) -> None:
@@ -510,6 +521,7 @@ def _ask_llm(prompt: str, inputs: list, output: str) -> None:
     Dateien anfasst; `llm.use_api()` beantwortet genau das.
     In beiden Faellen gilt: Erfolg wird an der geschriebenen Datei gemessen, ein Fehler wird
     nur geloggt — eine Datei darf den Batch nicht abbrechen."""
+    global _letzte_diagnose
     if not llm.use_api():
         # Ein- und Ausgaben eines Aufrufs liegen IMMER im selben transkripte-Ordner (alle
         # Aufrufer bauen ihre Pfade aus paths.transkripte_dir) — daraus faellt die
@@ -520,7 +532,10 @@ def _ask_llm(prompt: str, inputs: list, output: str) -> None:
         try:
             llm.complete_to_file(prompt, inputs, output)
         except llm.LLMError as e:
+            diag = llm.diagnose_fehler(e)
+            _letzte_diagnose = diag
             print(f"  KI-Anbieter: {e}", flush=True)
+            print(f"  [diagnose] {diag['kategorie']}\t{diag['titel']}\t{diag['hinweis']}", flush=True)
 
 
 def _glossary_prompt(gpath: str, raw_files: list, context: str,
@@ -944,6 +959,8 @@ def _summary_only_file(project: str, base: str, ziel: str, context: str,
 
 
 def cmd_run(project: str, base: str = None, force: bool = False, verify: bool = True) -> int:
+    global _letzte_diagnose
+    _letzte_diagnose = None
     tdir = paths.transkripte_dir(project)
     all_bases = bases(project)
     if base is not None:                               # expliziter Einzel-Datei-Lauf (Per-Datei-✎)
@@ -1060,9 +1077,12 @@ def main(argv=None):
         if attempted and not done:
             # Anbieterneutral: beim API-Weg heisst der Anbieter vielleicht OpenAI, und wer nur
             # die letzte Zeile liest, sucht sonst bei claude. Der echte Grund steht als
-            # "KI-Anbieter: …" weiter oben — dorthin zeigen, statt ihn zu erraten.
+            # "KI-Anbieter: …" bzw. "[diagnose] …" weiter oben — hier direkt benennen.
+            grund_text = (f"{_letzte_diagnose['titel']} · {_letzte_diagnose['hinweis']}"
+                          if _letzte_diagnose
+                          else "KI-Anbieter nicht erreichbar oder ohne Ausgabe — siehe die Zeilen oben")
             print(f"run: FEHLER — 0 von {attempted} versuchten Datei(en) korrigiert "
-                  f"(KI-Anbieter nicht erreichbar oder ohne Ausgabe — siehe die Zeilen oben)",
+                  f"({grund_text})",
                   flush=True)
             raise SystemExit(1)
     else:

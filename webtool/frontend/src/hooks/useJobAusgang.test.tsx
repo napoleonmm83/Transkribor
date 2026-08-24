@@ -115,6 +115,22 @@ describe('useJobAusgang (#376)', () => {
     expect(toastMock.warning.mock.calls.at(-1)?.[1]?.description).toContain('Video nicht verfuegbar')
   })
 
+  it('erkennt eine strukturierte Diagnose (z. B. Rate-Limit) und zeigt konkreten Hinweis', async () => {
+    vi.mocked(api.getJob).mockResolvedValue({
+      status: 'error', kind: 'correct',
+      lines: [
+        'prep: 1 Datei(en)',
+        '  KI-Anbieter: HTTP 429: Rate limit reached',
+        '  [diagnose] ratelimit\tAnfrage-Limit erreicht (Rate Limit)\tDer Anbieter bittet um eine kurze Pause. Bitte in 1–2 Minuten erneut auf „Korrigieren“ klicken.',
+        'run: FEHLER — 0 von 1 versuchten Datei(en) korrigiert (Anfrage-Limit erreicht (Rate Limit) · Der Anbieter bittet um eine kurze Pause. Bitte in 1–2 Minuten erneut auf „Korrigieren“ klicken.)',
+      ],
+    })
+    await laufen()
+    await act(async () => { await new Promise(r => setTimeout(r, 20)) })
+    const letzter = toastMock.error.mock.calls.at(-1)
+    expect(letzter?.[1]?.description).toBe('Anfrage-Limit erreicht (Rate Limit): Der Anbieter bittet um eine kurze Pause. Bitte in 1–2 Minuten erneut auf „Korrigieren“ klicken.')
+  })
+
   it('ein ganz gescheiterter Lauf meldet einen Fehler', async () => {
     vi.mocked(api.getJob).mockResolvedValue({ status: 'error', kind: 'transcribe', lines: [] })
     await laufen('transcribe')

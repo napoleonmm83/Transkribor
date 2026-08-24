@@ -1446,3 +1446,27 @@ def test_scheiternde_diarisierung_laesst_kein_veraltetes_sidecar_zurueck(project
                         lambda audio, min_speakers=2, num_speakers=None, diagnose=None: _fake_turns())
     assert correct.cmd_diarize("Demo") == 1
     assert correct.cmd_diarize("Demo") == 0                    # konvergiert, kein Dauerlauf
+
+
+def test_ask_llm_loggt_diagnose_bei_fehler(capsys, monkeypatch):
+    monkeypatch.setattr(correct.llm, "use_api", lambda: True)
+    def fake_complete(prompt, inputs, output):
+        raise correct.llm.LLMError("HTTP 429: Rate limit reached")
+    monkeypatch.setattr(correct.llm, "complete_to_file", fake_complete)
+    correct._ask_llm("prompt", ["in.txt"], "out.json")
+    out = capsys.readouterr().out
+    assert "[diagnose] ratelimit\tAnfrage-Limit erreicht" in out
+
+
+def test_main_meldet_konkrete_diagnose_beim_scheitern(project, capsys, monkeypatch):
+    _root, t = project
+    monkeypatch.setattr(correct.llm, "use_api", lambda: True)
+    def fake_complete(prompt, inputs, output):
+        raise correct.llm.LLMError("HTTP 402: Payment Required (insufficient_quota)")
+    monkeypatch.setattr(correct.llm, "complete_to_file", fake_complete)
+    with pytest.raises(SystemExit):
+        correct.main(["run", "Demo", "--force"])
+    out = capsys.readouterr().out
+    assert "Guthaben aufgebraucht" in out
+    assert "Bitte beim Anbieter aufladen" in out
+
