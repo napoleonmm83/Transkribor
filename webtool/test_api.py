@@ -302,7 +302,10 @@ def test_correct_invalid_name_400(client):
 def test_correct_file_starts_scoped_job(client, monkeypatch, mit_anbieter):
     calls = {}
     def fake_start(project, cmd, cwd, kind, **kw):
-        calls["cmd"] = cmd; calls["kind"] = kind; calls["project"] = project; calls["base"] = kw.get("base")
+        calls["cmd"] = cmd
+        calls["kind"] = kind
+        calls["project"] = project
+        calls["base"] = kw.get("base")
         return "cf1", True
     import webtool.jobs as jobs_mod
     monkeypatch.setattr(jobs_mod, "start", fake_start)

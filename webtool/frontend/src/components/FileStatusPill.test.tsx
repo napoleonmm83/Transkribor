@@ -25,6 +25,11 @@ describe('FileStatusPill', () => {
     expect(screen.getByText('Korrigiert')).toBeInTheDocument()
     expect(screen.queryByText(/Warteschlange/)).toBeNull()
   })
+  it('Terminal-Status done sticht noch vorhandene active-Phase aus', () => {
+    render(<FileStatusPill file={f({ has_edit: true })} active="correct" state="done" jobRunning inScope mitText />)
+    expect(screen.getByText('Korrigiert')).toBeInTheDocument()
+    expect(screen.queryByText(/Korrigieren/)).toBeNull()
+  })
   it('In Warteschlange, wenn Job laeuft und Datei im Scope ist', () => {
     render(<FileStatusPill file={f()} jobRunning inScope mitText />)
     expect(screen.getByText(/In Warteschlange…/)).toBeInTheDocument()

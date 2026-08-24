@@ -67,7 +67,7 @@ export function FileStatusPill({ file, active, pct, detail, state, jobRunning, i
     )
   }
 
-  if (active) {
+  if (active && state !== 'done') {
     const label = `${PHASE_LABEL[active]} ${detail ?? (pct != null ? `${pct}%` : '…')}`
     return (
       // aria-live: der Fortschritt aendert sich ohne Zutun des Nutzers, ein Screenreader

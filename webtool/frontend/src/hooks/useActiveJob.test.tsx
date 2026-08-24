@@ -271,4 +271,21 @@ describe('mergePhases', () => {
     fireEvent.click(screen.getByText('adopt_fb'))
     await waitFor(() => expect(screen.getByTestId('scope').textContent).toBe('FileX'))
   })
+
+  it('expliziter [scope] im Log hat Vorrang vor r.bases', async () => {
+    function LogScopeProbe() {
+      const { jobs, adopt } = useActiveJob()
+      const phases = mergePhases(jobs.filter(j => j.status === 'running'))
+      return (
+        <div>
+          <button onClick={() => adopt('j_log', 'Demo', 'correct')}>adopt_log</button>
+          <span data-testid="scope">{phases.scope ? Array.from(phases.scope).join(',') : 'all'}</span>
+        </div>
+      )
+    }
+    vi.mocked(api.getJob).mockResolvedValueOnce({ status: 'running', lines: ['[scope] LogFileA\tLogFileB'], bases: ['DifferentBase'] })
+    render(<JobProvider intervalMs={5}><LogScopeProbe /></JobProvider>)
+    fireEvent.click(screen.getByText('adopt_log'))
+    await waitFor(() => expect(screen.getByTestId('scope').textContent).toBe('LogFileA,LogFileB'))
+  })
 })
