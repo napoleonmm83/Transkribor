@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
-import { FolderOpen, KeyRound, Loader2, LogIn, RefreshCw } from 'lucide-react'
+import { Check, Copy, FolderOpen, KeyRound, Loader2, LogIn, RefreshCw } from 'lucide-react'
 import {
   cancelLogin, getAuth, getHardware, getSettings, listModels, loginState,
   saveSettings, startLogin, submitLoginCode, testSettings, updateYtdlp, verwerfeKaputt,
@@ -84,6 +84,7 @@ function AnmeldungAbo({ status, neuPruefen }: { status: AuthStatus; neuPruefen: 
   const [lauf, setLauf] = useState<LoginState | null>(null)
   const [code, setCode] = useState('')
   const [busy, setBusy] = useState(false)
+  const [kopiert, setKopiert] = useState(false)
   // Dieselbe Klasse wie beim yt-dlp-Poll (#247): zwei überholende Runden meldeten hier doppelt
   // UND riefen `neuPruefen()` zweimal. Nicht gemeldet worden, aber dieselbe Ursache — wer nur
   // die eine Stelle repariert, lässt den Nachbarn stehen.
@@ -124,6 +125,17 @@ function AnmeldungAbo({ status, neuPruefen }: { status: AuthStatus; neuPruefen: 
   }
   const abbrechen = async () => { setLauf(await cancelLogin().catch(() => null)); neuPruefen() }
 
+  const codeKopieren = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      setKopiert(true)
+      toast.success('Code in die Zwischenablage kopiert')
+      setTimeout(() => setKopiert(false), 2000)
+    } catch {
+      toast.error('Kopieren fehlgeschlagen')
+    }
+  }
+
   if (!status.unterstuetzt) return null
 
   return (
@@ -155,7 +167,20 @@ function AnmeldungAbo({ status, neuPruefen }: { status: AuthStatus; neuPruefen: 
 
           {/* Codex zeigt den Einmalcode an — der gehoert auf die Webseite, nicht hierher. */}
           {lauf.code && (
-            <p>Code auf der Seite eingeben: <code className="rounded bg-muted px-1.5 py-0.5 font-mono">{lauf.code}</code></p>
+            <div className="flex flex-wrap items-center gap-2">
+              <span>Code auf der Seite eingeben:</span>
+              <code className="rounded bg-muted px-1.5 py-0.5 font-mono font-medium">{lauf.code}</code>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 px-2 text-xs"
+                onClick={() => { if (lauf.code) codeKopieren(lauf.code) }}
+                title="Code kopieren"
+              >
+                {kopiert ? <Check className="size-3.5 text-green-600" /> : <Copy className="size-3.5" />}
+                {kopiert ? 'Kopiert' : 'Kopieren'}
+              </Button>
+            </div>
           )}
 
           {/* Claude wartet umgekehrt auf den Code, den der Browser ausgibt. */}
