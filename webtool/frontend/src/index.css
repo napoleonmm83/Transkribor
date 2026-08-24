@@ -78,6 +78,7 @@
    Woerter, s. .u-yellow/.u-red). Indigo liegt weit genug davon entfernt, dass die Markierung
    im Text auch neben einem blauen Knopf noch als Warnung liest. */
 :root {
+    --titelzeile: 0px;                       /* 40px unter Electron via AppShell (#332) */
     --radius: 0.5rem;                        /* 8px */
     --measure: 68ch;                         /* Lesebreite; darueber verliert das Auge die Zeile */
     --background: #FAFAFA;

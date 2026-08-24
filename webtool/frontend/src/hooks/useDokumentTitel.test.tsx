@@ -1,8 +1,9 @@
+import { useEffect } from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { ProjektDatenProvider } from './useProjektDaten'
-import { JobProvider } from './useActiveJob'
+import { JobProvider, useActiveJob } from './useActiveJob'
 import { fensterTitel, useDokumentTitel } from './useDokumentTitel'
 import * as api from '@/lib/api'
 
@@ -21,6 +22,7 @@ describe('useDokumentTitel', () => {
     vi.resetAllMocks()
     vi.mocked(api.listProjects).mockResolvedValue([])
     vi.mocked(api.getProjectFiles).mockResolvedValue({ name: 'Alpha', files: [] })
+    vi.mocked(api.getJob).mockResolvedValue({ status: 'running', lines: [] })
   })
 
   it('nennt nur die App auf der Startseite', async () => {
@@ -36,6 +38,21 @@ describe('useDokumentTitel', () => {
   it('nennt Projekt und Datei im Editor', async () => {
     zeigen('/p/Alpha/audio_02')
     await waitFor(() => expect(document.title).toBe('Alpha · audio_02 — Transkribor'))
+  })
+
+  it('zeigt KIND_LABEL-Fallback, wenn Job läuft aber Phasen noch leer sind', async () => {
+    function JobProbe() {
+      const { adopt } = useActiveJob()
+      useEffect(() => { adopt('job-1', 'Alpha', 'transcribe') }, [adopt])
+      useDokumentTitel()
+      return null
+    }
+    render(
+      <MemoryRouter initialEntries={['/p/Alpha']}>
+        <JobProvider><ProjektDatenProvider><JobProbe /></ProjektDatenProvider></JobProvider>
+      </MemoryRouter>,
+    )
+    await waitFor(() => expect(document.title).toBe('Transkribieren… — Alpha — Transkribor'))
   })
 })
 

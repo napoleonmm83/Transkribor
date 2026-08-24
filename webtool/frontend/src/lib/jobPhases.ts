@@ -60,15 +60,28 @@ export function parseJobPhases(kind: string, lines: string[]): JobPhases {
     if (kind === 'transcribe' || kind === 'fetch') {
       // MUSS vor den Regexen unten stehen: '[fetch] FEHLER <url>: …' wuerde sonst von
       // /^\[.+?\] FEHLER (.+?): / als Datei-Fehlschlag mit der URL als Basisnamen gelesen.
+      // Aber: Heisst das Projekt 'fetch', sind '[fetch] -> transkribiere/fertig/skip/FEHLER <base>'
+      // echte Transkriptionszeilen und keine Download-Zeilen (#379).
       if (l.startsWith('[fetch] ')) {
-        // Die Bilanzzeile ist die EINZIGE Auskunft dieses Laufs ueber Erfolg und Misserfolg:
-        // Basisnamen gibt es hier nicht (die Datei entsteht erst beim Laden), und der Zweig
-        // hier verwirft jede andere `[fetch]`-Zeile bewusst — sonst laese die FEHLER-Regex
-        // die URL als Dateinamen. Ohne sie meldet ein Import, bei dem 2 von 5 Videos tot
-        // sind, glatten Erfolg: `fetch.py:576` wirft nur, wenn GAR nichts geladen wurde.
-        if ((m = l.match(/^\[fetch\] (\d+) von (\d+) geladen$/))) { bilanz = { ok: +m[1], gesamt: +m[2] }; global = null }
-        else { cursor = null; global = 'download' }
-        continue
+        if ((m = l.match(/^\[fetch\] (\d+) von (\d+) geladen$/))) {
+          bilanz = { ok: +m[1], gesamt: +m[2] }
+          global = null
+          continue
+        }
+        if (l.match(/^\[fetch\] FEHLER https?:\/\//)) {
+          global = 'download'
+          continue
+        }
+        if (l.match(/^\[fetch\] lade /)) {
+          cursor = null
+          global = 'download'
+          continue
+        }
+        if (kind === 'fetch') {
+          cursor = null
+          global = 'download'
+          continue
+        }
       }
       // Whispers tqdm-Balken (stderr, in jobs.py in stdout gemergt). Jedes \r-Refresh kommt
       // dank Universal-Newlines als eigene Zeile an -> einzige Prozentquelle der Transkription.

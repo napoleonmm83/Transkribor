@@ -42,7 +42,7 @@ describe('Dialog-Hoehendeckel (#283)', () => {
       </Dialog>,
     )
     const inhalt = document.querySelector('[data-slot="dialog-content"]')!
-    expect(inhalt.className).toContain('max-h-[calc(100dvh-2rem)]')
+    expect(inhalt.className).toContain('max-h-[calc(100dvh-2rem-var(--titelzeile,0px))]')
     expect(inhalt.className).toContain('overflow-y-auto')
   })
 
@@ -55,7 +55,7 @@ describe('Dialog-Hoehendeckel (#283)', () => {
       </AlertDialog>,
     )
     const inhalt = document.querySelector('[data-slot="alert-dialog-content"]')!
-    expect(inhalt.className).toContain('max-h-[calc(100dvh-2rem)]')
+    expect(inhalt.className).toContain('max-h-[calc(100dvh-2rem-var(--titelzeile,0px))]')
     expect(inhalt.className).toContain('overflow-y-auto')
   })
 

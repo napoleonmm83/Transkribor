@@ -131,6 +131,9 @@ function Rahmen({ children }: { children: ReactNode }) {
   // React Router setzt das absichtlich nicht selbst zurueck — es weiss nicht, welches
   // Element scrollt. `?.` an scrollTo, weil jsdom Element.scrollTo nicht kennt.
   useEffect(() => { inhalt.current?.scrollTo?.({ top: 0 }) }, [pathname])
+  useEffect(() => {
+    document.documentElement.style.setProperty('--titelzeile', hatTitelzeile() ? '40px' : '0px')
+  }, [])
   return (
     <>
       {/* Erstes fokussierbares Element der Seite. Die Leiste steht seit dieser Aenderung VOR

@@ -17,8 +17,9 @@ def downloads_dir() -> str:
 def safe_name(name: str) -> str:
     # "." / ".." resolven auf Eltern-/Self-Verzeichnis -> dürfen project_dir()
     # nie erreichen (sonst rmtree auf projekte_root() selbst, siehe Task 4 Review).
+    # Steuerzeichen (\t, \r, \n, ord < 32, ord == 127) zerbrechen Protokoll- und Scope-Zeilen (#378).
     if (not name or name in (".", "..") or "/" in name or "\\" in name
-            or ":" in name or ".." in name or "\x00" in name):
+            or ":" in name or ".." in name or any(ord(c) < 32 or ord(c) == 127 for c in name)):
         raise ValueError(f"unsicherer Name: {name!r}")
     return name
 
