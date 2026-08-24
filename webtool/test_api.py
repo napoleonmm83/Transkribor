@@ -273,8 +273,8 @@ def test_transcribe_starts_job(client, monkeypatch):
     assert r.status_code == 200
     assert r.json() == {"job_id": "job123", "started": True}
     assert calls["kind"] == "transcribe" and calls["project"] == "Demo"
-    assert calls["cmd"][-1] == "Demo" and calls["cmd"][1].endswith("transcribe.py")
-    assert callable(calls["then"])                # Auto-Korrektur haengt am Job, nicht am Browser
+    assert "Demo" in calls["cmd"] and calls["cmd"][1].endswith("transcribe.py")
+    assert "--autocorrect" in calls["cmd"]
 
 
 def test_transcribe_invalid_name_400(client):
@@ -389,7 +389,7 @@ def test_upload_startet_transkription(client, monkeypatch):
     assert r.status_code == 200
     assert r.json()["job_id"] == "upl1" and r.json()["started"] is True
     assert calls["kind"] == "transcribe" and calls["cmd"][1].endswith("transcribe.py")
-    assert callable(calls["then"])              # und danach automatisch korrigieren
+    assert "--autocorrect" in calls["cmd"]              # Streaming-Pipeline streamt Korrektur direkt je Datei
 
 
 def test_upload_ohne_job_start_bleibt_erfolgreich(client, monkeypatch):
