@@ -1,4 +1,4 @@
-import { AudioLines, Check, Clock, FileCheck, FileText, Loader2, SkipForward, TriangleAlert } from 'lucide-react'
+import { AudioLines, Check, Clock, FileText, Loader2, SkipForward, TriangleAlert } from 'lucide-react'
 import type { FilePhase, FileState, GlobalPhase, ProjectFile } from '@/lib/types'
 import { PHASE_LABEL } from '@/lib/jobPhases'
 
@@ -37,7 +37,7 @@ const GLOBAL_WAIT: Record<GlobalPhase, string> = {
  * der aussieht wie die Schaltflaeche daneben, laedt zum Klicken auf eine Anzeige ein.
  */
 function ruhe(file: ProjectFile) {
-  if (file.has_edit) return { icon: FileCheck, label: 'Korrigiert' }
+  if (file.has_edit) return { icon: Check, label: 'Fertig' }
   if (file.has_md) return { icon: Check, label: 'Export vorhanden' }
   if (file.has_raw) return { icon: FileText, label: 'Transkribiert — noch nicht korrigiert' }
   if (file.has_audio) return { icon: AudioLines, label: 'Nur Audio — noch nicht transkribiert' }

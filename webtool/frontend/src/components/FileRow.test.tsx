@@ -50,6 +50,6 @@ describe('FileRow Live-Status', () => {
 
   it('zeigt Ruhezustand wenn Datei nicht im Scope ist', () => {
     render(<Huelle><FileRow project="P" file={{ ...live, has_edit: true }} active={false} onOpen={vi.fn()} jobRunning inScope={false} /></Huelle>)
-    expect(screen.getByLabelText('Korrigiert')).toBeInTheDocument()
+    expect(screen.getByLabelText('Fertig')).toBeInTheDocument()
   })
 })
