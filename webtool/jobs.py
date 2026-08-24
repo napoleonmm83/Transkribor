@@ -64,7 +64,7 @@ def start(project: str, cmd: list, cwd, kind: str, then=None, env=None, base: st
             if busy is not None:
                 return busy, False  # Einzel-GPU: nur ein Whisper-Lauf zugleich
         jid = uuid.uuid4().hex[:12]
-        initial_bases = set(bases) if bases is not None else ({base} if base else None)
+        initial_bases = set(bases) if bases is not None else ({base} if base is not None else None)
         _jobs[jid] = {"id": jid, "project": project, "kind": kind, "status": "running",
                       # None = Wirkungsbereich noch unbekannt (Zeile noch nicht gedruckt)
                       # -> gilt als "faesst alles an". Siehe SCOPE_PREFIX.

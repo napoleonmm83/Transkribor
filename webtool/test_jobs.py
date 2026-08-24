@@ -488,31 +488,35 @@ def test_jobs_start_mit_initialem_base_scope():
 
 
 def test_request_merkt_unterschiedliche_basen_vor():
-    """Unterschiedliche Dateien (S2, S3) werden bei laufendem S1 beide vorgemerkt und nicht verworfen."""
-    gestartet = []
-    import threading
-    lock = threading.Lock()
+    """Unterschiedliche Dateien (S2, S3) werden bei laufendem S1 beide vorgemerkt und abgearbeitet."""
+    # Job S1 starten (kurzer Job)
+    jid1, s1 = jobs.start("P_multi", _echo_cmd(1), cwd=None, kind="correct", base="S1")
+    assert s1 is True
+    # Request für S2 (Slot belegt -> vorgemerkt)
+    _, s2 = jobs.request("P_multi", _echo_cmd(1), cwd=None, kind="correct", base="S2")
+    assert s2 is False
+    assert ("P_multi", "correct", "S2") in jobs._pending
 
-    # Job S1 starten
-    jid1, s1 = jobs.start("P_multi", _scope_cmd(["warte"]), cwd=None, kind="correct", base="S1")
-    try:
-        assert s1 is True
-        # Request für S2 (Slot belegt -> vorgemerkt)
-        jid2, s2 = jobs.request("P_multi", _scope_cmd(["S2"]), cwd=None, kind="correct", base="S2")
-        assert s2 is False
-        assert ("P_multi", "correct", "S2") in jobs._pending
+    # Request für S3 (anderer Basisname -> ebenfalls vorgemerkt)
+    _, s3 = jobs.request("P_multi", _echo_cmd(1), cwd=None, kind="correct", base="S3")
+    assert s3 is False
+    assert ("P_multi", "correct", "S3") in jobs._pending
 
-        # Request für S3 (anderer Basisname -> ebenfalls vorgemerkt)
-        jid3, s3 = jobs.request("P_multi", _scope_cmd(["S3"]), cwd=None, kind="correct", base="S3")
-        assert s3 is False
-        assert ("P_multi", "correct", "S3") in jobs._pending
+    # Nochmaliger Request für S2 (identischer Basisname -> dedupliziert)
+    _, s2_dup = jobs.request("P_multi", _echo_cmd(1), cwd=None, kind="correct", base="S2")
+    assert s2_dup is False
 
-        # Nochmaliger Request für S2 (identischer Basisname -> dedupliziert)
-        jid2_dup, s2_dup = jobs.request("P_multi", _scope_cmd(["S2"]), cwd=None, kind="correct", base="S2")
-        assert s2_dup is False
-    finally:
-        jobs.cancel(jid1)
-        _wait(jid1)
+    # Warten bis S1 beendet ist
+    _wait(jid1)
+    # Warten bis auch die vorgemerkten Jobs abgearbeitet sind
+    deadline = time.time() + 5.0
+    while time.time() < deadline:
+        with jobs._lock:
+            if not any(k[0] == "P_multi" for k in jobs._pending):
+                break
+        time.sleep(0.02)
+    with jobs._lock:
+        assert not any(k[0] == "P_multi" for k in jobs._pending)
 
 
 
