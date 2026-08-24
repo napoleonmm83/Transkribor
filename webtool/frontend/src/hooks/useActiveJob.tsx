@@ -6,7 +6,7 @@ import type { FileState, GlobalPhase, JobPhases } from '@/lib/types'
 export type Job = { id: string; project: string; kind: string; status: string; phases: JobPhases }
 type Ctx = {
   jobs: Job[]
-  adopt: (id: string, project: string, kind: string) => void
+  adopt: (id: string, project: string, kind: string, bases?: string[]) => void
   // Nutzlast statt leerem Aufruf: ein Zuhoerer, der wissen muss WAS terminal wurde, kann sich
   // nicht auf `jobs` aus seinem eigenen Render-Closure verlassen -- der Aufruf unten kommt
   // synchron vor dem eigenen Rerender, der Closure-Stand ist zu diesem Zeitpunkt noch alt.
@@ -102,9 +102,12 @@ export function JobProvider({ children, intervalMs = 1500 }: { children: ReactNo
   // `jobs` in den Deps setzte der Poll bei jeder Phasenaenderung neu auf).
   const letztePhasen = useRef<Record<string, JobPhases>>({})
 
-  const adopt = useCallback((id: string, project: string, kind: string) => {
+  const adopt = useCallback((id: string, project: string, kind: string, bases?: string[]) => {
+    const initPhases: JobPhases = bases && bases.length > 0
+      ? { ...EMPTY, scope: new Set(bases) }
+      : EMPTY
     setJobs(prev => prev.some(j => j.id === id) ? prev
-      : [...prev, { id, project, kind, status: 'running', phases: EMPTY }])
+      : [...prev, { id, project, kind, status: 'running', phases: initPhases }])
   }, [])
 
   const onSettled = useCallback((fn: (beendet: Job[]) => void) => {
@@ -154,7 +157,13 @@ export function JobProvider({ children, intervalMs = 1500 }: { children: ReactNo
       const phasen: Record<string, JobPhases> = {}
       for (const j of jobs) {
         const r = ergebnis.get(j.id)
-        if (r) letztePhasen.current[j.id] = phasen[j.id] = parseJobPhases(j.kind, r.lines)
+        if (r) {
+          const parsed = parseJobPhases(j.kind, r.lines)
+          if (!parsed.scope && r.bases && r.bases.length > 0) {
+            parsed.scope = new Set(r.bases)
+          }
+          letztePhasen.current[j.id] = phasen[j.id] = parsed
+        }
       }
       setJobs(prev => prev.map(j => {
         if (!(j.id in neu)) return j

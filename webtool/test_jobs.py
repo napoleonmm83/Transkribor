@@ -519,4 +519,20 @@ def test_request_merkt_unterschiedliche_basen_vor():
         assert not any(k[0] == "P_multi" for k in jobs._pending)
 
 
+def test_active_for_enthaelt_bases_fuer_scoped_jobs():
+    """jobs.active_for liefert bases fuer scoped jobs, damit das Frontend sie direkt adoptieren kann."""
+    jid, started = jobs.start("P_act", _scope_cmd(["warte"]), cwd=None, kind="correct", base="DateiZ")
+    try:
+        assert started is True
+        aktive = jobs.active_for("P_act")
+        assert len(aktive) == 1
+        assert aktive[0]["id"] == jid
+        assert aktive[0]["kind"] == "correct"
+        assert aktive[0]["bases"] == ["DateiZ"]
+    finally:
+        jobs.cancel(jid)
+        _wait(jid)
+
+
+
 

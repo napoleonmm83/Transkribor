@@ -65,7 +65,7 @@ export function DateiMenue({ project, file, aiReason }: {
 
   const jobStarten = (fn: () => Promise<{ job_id: string; started: boolean }>, kind: string,
                       label: string) =>
-    start(() => fn().then(res => { if (res.started) adopt(res.job_id, project, kind); return res }),
+    start(() => fn().then(res => { if (res.started) adopt(res.job_id, project, kind, [file.base]); return res }),
       label, nachladen)
 
   const ausfuehren = async (was: Aktion) => {

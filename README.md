@@ -62,7 +62,9 @@ Auch mit **Schweizerdeutsch** kommt es zurecht.
    aus dem Bild zu wandern. Ab `v0.36.0` zeigt die Dateiliste während laufender
    Hintergrund-Jobs präzise und animiert an, woran gerade gerechnet wird: Globale
    Zwischenschritte wie die Glossar-Erstellung werden direkt bei den betroffenen
-   Dateien genannt, während unbeteiligte Aufnahmen ihren echten Ruhezustand behalten.)
+   Dateien genannt, während unbeteiligte Aufnahmen ihren echten Ruhezustand behalten —
+   auch bei Einzeldatei-Aktionen wie „Neu transkribieren“ und mit durchgehend
+   einheitlichen Statusbegriffen.)
 
 > [!WARNING]
 > **Beim ersten Öffnen warnt das Betriebssystem.** Der Installer ist nicht bei Microsoft bzw.

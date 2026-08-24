@@ -934,7 +934,7 @@ def correct_file(project: str, base: str, force: bool = False):
     cmd = [sys.executable, "-m", "webtool.correct", "run", project, base]
     if force:
         cmd.append("--force")                     # nur nach expliziter UI-Bestätigung (human_edited)
-    job_id, started = jobs.start(project, cmd, paths.ROOT, "correct")
+    job_id, started = jobs.start(project, cmd, paths.ROOT, "correct", base=base)
     return {"job_id": job_id, "started": started}
 
 

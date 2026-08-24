@@ -41,7 +41,7 @@ export function ProjektDatenProvider({ children }: { children: ReactNode }) {
   const aktive = projekte.projects.flatMap(p => (p.active_jobs ?? []).map(j => ({ ...j, project: p.name })))
   const signatur = aktive.map(j => `${j.project}/${j.id}`).join(',')
   useEffect(() => {
-    for (const j of aktive) adopt(j.id, j.project, j.kind)
+    for (const j of aktive) adopt(j.id, j.project, j.kind, j.bases)
   }, [signatur, adopt])   // eslint-disable-line react-hooks/exhaustive-deps
 
   // Zweiter Anlass neben dem Summenpoll-Waechter: wird ein Job dieses Prozesses terminal, ist

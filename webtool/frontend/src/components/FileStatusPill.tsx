@@ -14,10 +14,9 @@ const STATE = {
   // 'Fertig' nimmt sich bewusst zurueck: erledigt ist der Ruhezustand. Das Auge soll zu dem
   // springen, was NICHT fertig ist — ein gruener Haken pro Zeile faerbt die Liste zu und
   // macht den einen Fehlschlag darin unsichtbar.
-  done: { icon: Check, label: 'Fertig', klasse: 'text-muted-foreground' },
   skipped: { icon: SkipForward, label: 'Übersprungen', klasse: 'text-muted-foreground' },
   failed: { icon: TriangleAlert, label: 'Fehler', klasse: 'text-destructive' },
-} satisfies Record<FileState, { icon: typeof Check; label: string; klasse: string }>
+} satisfies Record<Exclude<FileState, 'done'>, { icon: typeof Check; label: string; klasse: string }>
 
 const GLOBAL_WAIT: Record<GlobalPhase, string> = {
   glossary: 'Glossar wird erstellt…',
@@ -58,7 +57,7 @@ export function FileStatusPill({ file, active, pct, detail, state, jobRunning, i
    *  die 260px-Seitenleiste des Editors nicht. */
   mitText?: boolean
 }) {
-  if (state) {
+  if (state && state !== 'done') {
     const { icon: Icon, label, klasse } = STATE[state]
     return (
       <span className={`inline-flex items-center gap-1.5 text-xs ${klasse}`}>
@@ -68,7 +67,7 @@ export function FileStatusPill({ file, active, pct, detail, state, jobRunning, i
     )
   }
 
-  if (active) {
+  if (active && state !== 'done') {
     const label = `${PHASE_LABEL[active]} ${detail ?? (pct != null ? `${pct}%` : '…')}`
     return (
       // aria-live: der Fortschritt aendert sich ohne Zutun des Nutzers, ein Screenreader
@@ -84,9 +83,10 @@ export function FileStatusPill({ file, active, pct, detail, state, jobRunning, i
   }
 
   // Nur Dateien, die im Scope des laufenden Jobs liegen, zeigen Wartestatus.
-  // Wenn inScope explizit false ist, bleibt der echte Ruhezustand der Datei erhalten.
+  // Wenn inScope explizit false ist oder die Datei bereits fertig (state === 'done') ist,
+  // bleibt der echte Ruhezustand der Datei erhalten.
   const betrifft = inScope ?? jobRunning
-  if (jobRunning && betrifft) {
+  if (jobRunning && betrifft && !state) {
     if (globalPhase && GLOBAL_WAIT[globalPhase]) {
       const gLabel = GLOBAL_WAIT[globalPhase]
       return (
