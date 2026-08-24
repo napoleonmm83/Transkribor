@@ -447,6 +447,7 @@ def test_ssl_kontext_nutzt_certifi(monkeypatch):
     class FakeCertifi:
         @staticmethod
         def where():
+            aufrufe["where"] = aufrufe.get("where", 0) + 1
             return "/pfad/zu/fake-ca.pem"
 
     fake_ctx = object()
@@ -460,6 +461,7 @@ def test_ssl_kontext_nutzt_certifi(monkeypatch):
 
     ctx = llm._ssl_kontext()
     assert ctx is fake_ctx
+    assert aufrufe["where"] == 1
     assert aufrufe["cafile"] == "/pfad/zu/fake-ca.pem"
 
 
