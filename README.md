@@ -536,10 +536,10 @@ durchgelaufen, einzelne Aufnahmen sind dabei liegengeblieben — such bei diesen
 
 Eine **rote** Meldung heisst: der Lauf als Ganzes ist gescheitert. Entweder konnte er gar nicht
 arbeiten — das Spracherkennungs-Modell liess sich nicht laden, der KI-Dienst war nicht
-erreichbar — oder es gelang keine einzige Datei. Transkribor analysiert den Fehler automatisch
-und nennt die genaue Ursache samt Handlungsempfehlung (z. B. Rate-Limit mit Wartezeit, aufgebrauchtes
-Guthaben, abgelaufene Anmeldung oder ungültiger API-Schlüssel) direkt in der Meldung und im
-Verbindungstest der Einstellungen.
+erreichbar — oder es gelang keine einzige Datei. Für erkannte Fehler nennt Transkribor automatisch
+die Ursache samt Handlungsempfehlung (z. B. Rate-Limit mit Wartezeit, aufgebrauchtes Guthaben,
+abgelaufene Anmeldung oder ungültiger API-Schlüssel) in der Meldung und im Verbindungstest der
+Einstellungen. Nicht erkannte Fehler zeigt Transkribor mit dem technischen Fehlertext an.
 
 
 </details>

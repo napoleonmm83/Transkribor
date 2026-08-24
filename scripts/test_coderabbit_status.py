@@ -58,6 +58,7 @@ def test_parse_completed_with_comments_and_pre_merge_warnings():
     inline = [
         {
             "id": 12345,
+            "user": {"login": "coderabbitai[bot]"},
             "path": "webtool/llm.py",
             "line": 449,
             "body": "_🎯 Functional Correctness_ | _🟡 Minor_\n\n**HTTP-Statuscodes nur im Statuskontext erkennen.**\n\nErkenne 402 nur als Statuscode.",
@@ -74,3 +75,34 @@ def test_parse_completed_with_comments_and_pre_merge_warnings():
     assert "HTTP-Statuscodes" in res["actionable_comments"][0]["title"]
     assert len(res["failed_pre_merge_checks"]) == 1
     assert res["failed_pre_merge_checks"][0]["name"] == "Readme Bei Nutzer-Sichtbarer Aenderung"
+
+
+def test_parse_rate_limited_without_wait_minutes():
+    comment_body = "<!-- rate limited by coderabbit.ai -->\n## Review limit reached"
+    comments = [{"author": {"login": "coderabbitai"}, "body": comment_body}]
+    res = coderabbit_status.analyze_coderabbit(pr_info={"comments": comments, "statusCheckRollup": []}, inline_comments=[])
+    assert res["status"] == "RATE_LIMITED"
+    assert res["wait_minutes"] is None
+    report = coderabbit_status.format_report({"number": 1, "title": "Test"}, res)
+    assert "None" not in report
+    assert "nicht verfügbar" in report
+
+
+def test_ignores_foreign_comments():
+    # Kommentare von normalen Benutzern (z.B. Alice) dürfen weder Rate-Limit noch Pre-Merge noch Befunde triggern
+    foreign_comments = [
+        {"author": {"login": "alice"}, "body": "<!-- rate limited by coderabbit.ai -->\nReview limit reached"},
+        {"author": {"login": "bob"}, "body": "Pre-merge checks\nFailed checks\n| Readme | ⚠️ | x | y |"},
+    ]
+    foreign_inline = [
+        {"id": 99, "user": {"login": "charlie"}, "path": "test.py", "line": 1, "body": "**Human comment**"}
+    ]
+    res = coderabbit_status.analyze_coderabbit(
+        pr_info={"comments": foreign_comments, "statusCheckRollup": []},
+        inline_comments=foreign_inline,
+    )
+    assert res["status"] == "NOT_STARTED"
+    assert res["rate_limited"] is False
+    assert len(res["failed_pre_merge_checks"]) == 0
+    assert len(res["actionable_comments"]) == 0
+

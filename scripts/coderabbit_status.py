@@ -26,9 +26,9 @@ def analyze_coderabbit(pr_info: dict, inline_comments: list) -> dict:
 
     # 1. Prüfen auf Rate-Limit
     for c in comments:
-        body = c.get("body", "")
         author = c.get("author", {}).get("login", "")
-        if "coderabbit" in author.lower() or "coderabbit.ai" in body:
+        if "coderabbit" in author.lower():
+            body = c.get("body", "")
             if "rate limited by coderabbit.ai" in body or "Review limit reached" in body:
                 wait_match = re.search(r"Next included review available in (\d+)\s+minutes", body, re.IGNORECASE)
                 wait_min = int(wait_match.group(1)) if wait_match else None
@@ -62,6 +62,9 @@ def analyze_coderabbit(pr_info: dict, inline_comments: list) -> dict:
     # 3. CodeRabbit abgeschlossen: Befunde und Pre-Merge Checks extrahieren
     failed_checks = []
     for c in comments:
+        author = c.get("author", {}).get("login", "")
+        if "coderabbit" not in author.lower():
+            continue
         body = c.get("body", "")
         if "Pre-merge checks" in body and "Failed checks" in body:
             # Tabelle extrahieren
@@ -86,6 +89,9 @@ def analyze_coderabbit(pr_info: dict, inline_comments: list) -> dict:
 
     actionable = []
     for c in inline_comments:
+        author = c.get("user", {}).get("login", "") or c.get("author", {}).get("login", "")
+        if "coderabbit" not in author.lower():
+            continue
         body = c.get("body", "")
         # Titel aus **...** extrahieren
         title_match = re.search(r"\*\*(.*?)\*\*", body)
@@ -98,7 +104,7 @@ def analyze_coderabbit(pr_info: dict, inline_comments: list) -> dict:
             "body": body,
         })
 
-    has_activity = bool(inline_comments or failed_checks or any("coderabbit" in (c.get("author", {}).get("login", "").lower()) for c in comments))
+    has_activity = bool(actionable or failed_checks or any("coderabbit" in (c.get("author", {}).get("login", "").lower()) for c in comments))
 
     return {
         "status": "COMPLETED" if has_activity else "NOT_STARTED",
@@ -135,7 +141,10 @@ def format_report(pr_data: dict, analysis: dict) -> str:
     lines.append(f"Meldung: {analysis['message']}\n")
 
     if analysis["rate_limited"]:
-        lines.append(f"⏳ RATE LIMITED: Bitte ca. {analysis['wait_minutes']} Minuten warten.")
+        if analysis["wait_minutes"] is None:
+            lines.append("⏳ RATE LIMITED: Die verbleibende Wartezeit ist nicht verfügbar.")
+        else:
+            lines.append(f"⏳ RATE LIMITED: Bitte ca. {analysis['wait_minutes']} Minuten warten.")
         return "\n".join(lines)
 
     if analysis["in_progress"]:
