@@ -969,13 +969,11 @@ def _autocorrect(project: str, base: str | None = None) -> None:
 
 
 def _start_transcribe(project: str, base: str | None = None):
-    """Transkription anstossen; bei verfügbarer KI läuft die End-to-End Streaming-Pipeline."""
-    ok, _ = llm.available()
+    """Transkription anstossen; danach automatisch korrigieren via Streaming-Pipeline."""
     cmd = [sys.executable, os.path.join(paths.ROOT, "transcribe.py"), project]
     if base:
         cmd.extend(["--only", base])
-    if ok:
-        cmd.append("--autocorrect")
+    cmd.append("--autocorrect")
     return jobs.request(project, cmd, paths.ROOT, "transcribe", base=base)
 
 
