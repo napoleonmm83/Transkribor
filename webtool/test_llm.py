@@ -340,10 +340,17 @@ def test_codex_ohne_modell_laesst_die_cli_entscheiden(cfg, monkeypatch):
 
 
 def test_codex_mit_modell_reicht_es_durch(cfg, monkeypatch):
-    settings.save({"provider": "codex-cli", "model": "gpt-5"})
+    # Benutzerdefiniertes/valides Modell wird durchgereicht
+    settings.save({"provider": "codex-cli", "model": "custom-model"})
     gesehen = _codex(monkeypatch, cfg, antwort="ok")
     llm.complete("hi")
-    assert gesehen["cmd"][gesehen["cmd"].index("-m") + 1] == "gpt-5"
+    assert gesehen["cmd"][gesehen["cmd"].index("-m") + 1] == "custom-model"
+
+    # Inkompatibles ChatGPT-Modell (z. B. gpt-4o) wird nicht als -m übergeben, damit das Abo nicht mit 400 scheitert
+    settings.save({"provider": "codex-cli", "model": "gpt-4o"})
+    gesehen = _codex(monkeypatch, cfg, antwort="ok")
+    llm.complete("hi")
+    assert "-m" not in gesehen["cmd"]
 
 
 def test_codex_ohne_antwort_meldet_sich_trotz_exitcode_null(cfg, monkeypatch):
@@ -372,7 +379,7 @@ def test_abo_modelle_sind_aliase_ohne_netz(cfg, monkeypatch):
     settings.save({"provider": "claude-cli"})
     assert [m["id"] for m in llm.list_models()] == ["opus", "sonnet", "haiku", "fable"]
     settings.save({"provider": "codex-cli"})
-    assert [m["id"] for m in llm.list_models()] == ["gpt-4o", "gpt-4o-mini", "o3-mini", "o1", "o1-mini", "gpt-4.5-preview"]
+    assert [m["id"] for m in llm.list_models()] == []
 
 
 def test_provider_list_nennt_die_abo_clis(cfg):
@@ -499,7 +506,7 @@ def test_request_uebergibt_ssl_kontext(monkeypatch):
 def test_google_provider_hat_default_model():
     nach_id = {p["id"]: p for p in llm.provider_list()}
     assert nach_id["google"]["default_model"] == "gemini-flash-latest"
-    assert nach_id["codex-cli"]["default_model"] == "gpt-4o"
+    assert nach_id["codex-cli"]["default_model"] == ""
     assert nach_id["openai"]["default_model"] == "gpt-4o"
 
 
@@ -596,6 +603,9 @@ def test_diagnose_fehler_erkennt_modell_fehler():
 
     d2 = llm.diagnose_fehler("Kein Modell ausgewaehlt")
     assert d2["kategorie"] == "model"
+
+    d3 = llm.diagnose_fehler("The 'gpt-4o' model is not supported when using Codex with a ChatGPT account.")
+    assert d3["kategorie"] == "model"
 
 
 def test_diagnose_fehler_erkennt_netzwerk_und_ssl():

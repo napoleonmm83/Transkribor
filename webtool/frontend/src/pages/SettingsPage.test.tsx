@@ -31,7 +31,7 @@ const BASIS: Settings = {
   ytdlp: { version: '2026.8.12', unlesbar: false, geprueft: '2026-08-13', auto: true, env: false, laeuft: false, ergebnis: '', ungeschuetzt: false, unterbrochen: false, ejs_unlesbar: false },
   providers: [
     { id: 'claude-cli', label: 'Claude Code Abo (kein Key)', needs_key: false, cli: true, base: '', default_model: 'opus', keys_url: '', hint: 'Nutzt das Abo.' },
-    { id: 'codex-cli', label: 'ChatGPT-Abo (Codex CLI, kein Key)', needs_key: false, cli: true, base: '', default_model: 'gpt-4o', keys_url: '', hint: 'Nutzt das ChatGPT-Abo.' },
+    { id: 'codex-cli', label: 'ChatGPT-Abo (Codex CLI, kein Key)', needs_key: false, cli: true, base: '', default_model: '', keys_url: '', hint: 'Nutzt das ChatGPT-Abo.' },
     { id: 'anthropic', label: 'Anthropic (Claude)', needs_key: true, cli: false, base: 'https://api.anthropic.com/v1', default_model: 'claude-opus-5', keys_url: 'https://x', hint: '' },
     { id: 'openai', label: 'OpenAI', needs_key: true, cli: false, base: 'https://api.openai.com/v1', default_model: 'gpt-4o', keys_url: 'https://x', hint: '' },
     { id: 'custom', label: 'Anderer (OpenAI-kompatibel)', needs_key: false, cli: false, base: '', default_model: '', keys_url: '', hint: '' },

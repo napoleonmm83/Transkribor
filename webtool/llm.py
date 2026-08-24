@@ -47,10 +47,9 @@ PROVIDERS = {
                    "hint": "Nutzt das angemeldete Claude-Code-Abo auf diesem Rechner."},
     "codex-cli": {"label": "ChatGPT-Abo (Codex CLI, kein Key)", "shape": "codex",
                   "needs_key": False, "bin": "codex",
-                  "models": ["gpt-4o", "gpt-4o-mini", "o3-mini", "o1", "o1-mini", "gpt-4.5-preview"],
-                  "default_model": "gpt-4o",
+                  "default_model": "",
                   "hint": "Nutzt das angemeldete ChatGPT-Abo auf diesem Rechner "
-                          "(einmalig `codex login`)."},
+                          "(einmalig `codex login`). Das Modell wird automatisch vom Abo verwaltet."},
     "anthropic": {"label": "Anthropic (Claude)", "shape": "anthropic", "needs_key": True,
                   "base": "https://api.anthropic.com/v1", "default_model": "claude-opus-5",
                   "models": ["claude-opus-5", "claude-3-7-sonnet-latest", "claude-3-5-sonnet-latest", "claude-3-5-haiku-latest"],
@@ -230,8 +229,12 @@ def _run_codex(cfg: dict, prov: dict, prompt: str) -> str:
         ziel = os.path.join(tmp, "antwort.txt")
         cmd = [exe, "exec", "--sandbox", "read-only", "--skip-git-repo-check",
                "--ignore-user-config", "-o", ziel]
-        if cfg["model"]:
-            cmd += ["-m", cfg["model"]]
+        # ChatGPT-Abo laesst keine API-Modell-Overrides (wie 'gpt-4o') zu und wirft 400.
+        # Nur wenn ein explizit benutzerdefiniertes Modell eingestellt ist, wird -m uebergeben.
+        m = (cfg.get("model") or "").strip()
+        incompatible = {"default", "standard", "gpt-4o", "gpt-4o-mini", "o3-mini", "o1", "o1-mini", "gpt-4.5-preview"}
+        if m and m.lower() not in incompatible:
+            cmd += ["-m", m]
         cmd.append("-")
         try:
             p = subprocess.run(cmd, input=prompt, capture_output=True, text=True,
@@ -539,6 +542,7 @@ def diagnose_fehler(fehler: str | Exception) -> dict:
         _has_status(text, "404")
         or "model_not_found" in low
         or "no longer available" in low
+        or "not supported" in low
         or "kein modell" in low
         or ("not found" in low and ("model" in low or _has_status(text, "404")))
     ):
