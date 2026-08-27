@@ -457,8 +457,8 @@ const INVENTAR: Record<string, Eintrag> = {
   },
   '[{}] -> {}': { art: 'ignoriert', beispiel: '[Demo] -> /x/projekte/Demo/transkripte' },
   '[{}] Autocorrect-Fehler bei {}: {}': {
-    art: 'gelesen_anderswo', notiz: GRUND, beispiel: '[Demo] Autocorrect-Fehler bei A: RuntimeError',
-    notiz: 'die Datei IST transkribiert — nur die angehaengte Korrektur scheiterte',
+    art: 'gelesen_anderswo', beispiel: '[Demo] Autocorrect-Fehler bei A: RuntimeError',
+    notiz: `${GRUND}. Die Datei IST transkribiert — nur die angehaengte Korrektur scheiterte`,
   },
   '[{}] Korrektur: {} von {} Datei(en) korrigiert': {
     art: 'ignoriert', beispiel: '[Demo] Korrektur: 3 von 5 Datei(en) korrigiert',
@@ -600,7 +600,7 @@ describe('Vertrag: gedruckte Statuszeilen <-> jobPhases.ts (#375)', () => {
     // ueber den Test darunter an ihrer geernteten Form, und die haengt ueber den ersten Test
     // am Quelltext. Damit reicht die Kette vom Regex bis zum `print(` — ohne eine einzige
     // Stelle, an der jemand zwei Seiten von Hand gleichhalten muss.
-    const quelle = fs.readFileSync(path.join(HIER, 'src', 'lib', 'jobPhases.ts'), 'utf-8')
+    const quelle = fs.readFileSync(path.join(HIER, PARSER), 'utf-8')
     const muster = parserMuster(quelle)
     // Genau der Zeilenschnitt, den parseJobPhases vorne macht — sonst faende kein Muster die
     // eingerueckten Blockzeilen.
