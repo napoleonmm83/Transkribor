@@ -291,3 +291,112 @@ describe('parseJobPhases — scope', () => {
     expect(p.scope).toBeUndefined()
   })
 })
+
+// Die Formen unten stammen alle aus einer vollstaendigen Gegenueberstellung Druckzeile <->
+// Regex (#374/#375). Sie sind NICHT abgetippt, sondern an den f-Strings in correct.py und
+// transcribe.py abgelesen und danach gegen den echten Parser gemessen — handgetippte Fixtures
+// bestaetigen genau die Annahme, die man beim Schreiben hatte.
+describe('parseJobPhases — Druckformen, die der Parser nicht kannte (#374)', () => {
+  it('die Diarisierungs-Phase ueberlebt den Sprecherzahl-Zusatz', () => {
+    // correct.py haengt seit #264 ` ({n} Sprecher)` an. Das gierige `(.+)` machte daraus den
+    // Schluessel "Timeline 13 (5 Sprecher)"; beide Verbraucher schlagen aber mit dem exakten
+    // Basisnamen nach, die Phase war also unsichtbar. Der Schnitt endet VOR `→ Korrigiere`:
+    // das setzt `active` neu und machte die Wirkung dieser Zeile unsichtbar.
+    const p = parseJobPhases('correct', ['→ Diarisiere Timeline 13 (5 Sprecher) …'])
+    expect(p.active).toEqual({ 'Timeline 13': { phase: 'diarize' } })
+  })
+  it('… und die Form OHNE Zusatz bleibt unveraendert', () => {
+    // Negativkontrolle: der optionale Teil darf keiner Datei ohne Sprecherzahl etwas abschneiden.
+    const p = parseJobPhases('correct', ['→ Diarisiere Timeline 13 …'])
+    expect(p.active).toEqual({ 'Timeline 13': { phase: 'diarize' } })
+  })
+
+  it('beide Schutzpfade von `apply: SKIP` beenden die Datei', () => {
+    // correct.py druckt DREI Begruendungen; der Parser kannte nur `human_edited=`. Die beiden
+    // anderen sind die Schutzpfade aus #190 und #278 — beide heissen "deine Fassung bleibt
+    // stehen", und beide liessen die Datei bis Jobende auf einem Spinner stehen.
+    const p = parseJobPhases('correct', [
+      '→ Korrigiere A …', '→ Korrigiere B …',
+      'apply: SKIP A (A.edit.json nicht lesbar: JSONDecodeError: Expecting value; --force zum Ueberschreiben)',
+      'apply: SKIP B (waehrend des Laufs handbearbeitet; --force zum Ueberschreiben)',
+    ])
+    expect(p.perBase).toEqual({ A: 'skipped', B: 'skipped' })
+    expect(p.active).toEqual({})
+  })
+
+  it('die leichten Korrektur-Tiefen erzeugen eine Phase statt „Vorbereiten…"', () => {
+    // In einem Lauf ohne `voll*`-Datei wurde nie ein active-Eintrag gesetzt, `global` blieb
+    // ueber die gesamte LLM-Dauer auf 'prep' — und genau das ist bei diesen Tiefen die ganze
+    // Arbeit (ein Aufruf je Datei, ohne Glossar und Treue-Pass).
+    const leicht = parseJobPhases('correct', ['prep: 1 Datei(en) getaggt in /x', '→ Leichte Korrektur A …'])
+    expect(leicht.active).toEqual({ A: { phase: 'correct' } })
+    expect(leicht.global).toBeNull()
+    const kurz = parseJobPhases('correct', ['prep: 1 Datei(en) getaggt in /x', '→ Nur Zusammenfassung B …'])
+    expect(kurz.active).toEqual({ B: { phase: 'correct' } })
+    expect(kurz.global).toBeNull()
+  })
+})
+
+describe('parseJobPhases — Robustheit gegen echte Namen und Zeilen (#379)', () => {
+  it('ein Projekt namens „scope" verliert nicht seinen ganzen Status', () => {
+    // transcribe.py praefixt JEDE Zeile mit dem Projektnamen, und `safe_name('scope')` liefert
+    // 'scope' (gemessen). Ohne "nur die erste [scope]-Zeile zaehlt" las der Parser jede davon
+    // als Bereichsmeldung; `terminal()` verwarf danach jeden echten Dateistatus — gemessen kam
+    // `perBase: {}` heraus statt `{S1:'done'}`. Dieselbe Falle, die #396 fuer 'fetch' schloss.
+    const p = parseJobPhases('transcribe', [
+      '[scope] S1\tS2',
+      '[scope] Modell large-v3, 2 Datei(en)',
+      '[scope] -> transkribiere S1 …',
+      '[scope] fertig S1: 12s, 30 Segmente, 1.2x',
+    ])
+    expect(p.scope).toEqual(new Set(['S1', 'S2']))
+    expect(p.perBase).toEqual({ S1: 'done' })
+  })
+
+  it('ein Basisname mit Leerzeichen am Ende bleibt EIN Eintrag', () => {
+    // `safe_name('Interview ')` laesst den Namen unveraendert (gemessen). Mit `trim()` ergab
+    // die ankerlose skip-Zeile "Interview" und die fertig-Zeile "Interview " — dieselbe Datei
+    // unter zwei Schluesseln, einer davon ein Phantom, das nie mehr verschwindet.
+    // BEIDE Zeilen sind noetig, und das ist der Kern: `trim()` wirkt nur an den ZEILENENDEN.
+    // In der fertig-Zeile steht der Name mitten drin (`(.+?): ` faengt das Leerzeichen mit),
+    // nur die skip-Zeile endet auf ihm ($-Anker, `(.+)$`). Ein Test allein auf der fertig-Zeile
+    // bleibt gruen, auch wenn man `trim()` zurueckbaut — genau so vacuous war der erste Versuch,
+    // gemessen an der Mutation.
+    const p = parseJobPhases('transcribe', [
+      '[P] skip (vorhanden): Interview ',
+      '[P] fertig Interview : 3s, 4 Segmente, 1.0x',
+    ])
+    expect(Object.keys(p.perBase)).toEqual(['Interview '])
+  })
+
+  it('eingerueckte Diagnosezeilen bleiben folgenlos', () => {
+    // Negativkontrolle zur Zeile darueber: vorne wird weiterhin abgeschnitten. correct.py
+    // druckt eingerueckte Diagnosezeilen; keine davon darf ein Datei-Ereignis erzeugen.
+    const p = parseJobPhases('correct', [
+      '→ Korrigiere A …', '  claude exit 1: irgendwas', '  [diagnose] limit\tKontingent\tspaeter',
+    ])
+    expect(p.active).toEqual({ A: { phase: 'correct' } })
+    expect(p.perBase).toEqual({})
+  })
+
+  it('`[done]` beendet die Diarisierung EINER Datei, nicht erst die ganze Phase', () => {
+    // Bisher raeumte nur der Phasen-Sweep auf: bei N Aufnahmen standen bis zu N-1 Spinner ueber
+    // laengst fertigen Dateien, ueber die teuerste Phase des Prep-Schritts. `[done] {base}`
+    // folgt auf JEDEN Ausgang der Schleife (Erfolg, "keine Sprecher", unlesbar, Ausnahme).
+    const p = parseJobPhases('correct', [
+      '→ Diarisiere A …', '→ Diarisiere B …', '⏱ A: Diarisierung 45s', '[done] A',
+    ])
+    expect(p.active).toEqual({ B: { phase: 'diarize' } })
+    // `global` ist null, solange eine Datei aktiv ist (Rueckgabe unten in jobPhases.ts) — die
+    // Aussage dieses Tests steckt allein in `active`.
+    expect(p.global).toBeNull()
+  })
+
+  it('`[done]` beendet KEINE laufende Korrektur', () => {
+    // Negativkontrolle: correct.py druckt `[done] {base}` auch am Ende der KI-Phase. Wuerde es
+    // dort den active-Eintrag loeschen, verschwaende der Korrektur-Spinner, bevor `apply` den
+    // Terminal-Status setzt — die Datei sieht dann fertig aus, obwohl nichts geschrieben ist.
+    const p = parseJobPhases('correct', ['→ Korrigiere A …', '[done] A'])
+    expect(p.active).toEqual({ A: { phase: 'correct' } })
+  })
+})

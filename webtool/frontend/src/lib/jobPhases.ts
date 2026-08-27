@@ -45,10 +45,23 @@ export function parseJobPhases(kind: string, lines: string[]): JobPhases {
   const blockDone = (base: string, nr: number) => { blocks[base]?.done.add(nr) }
 
   for (const rawLine of lines) {
-    const l = rawLine.trim()
+    // Nur Einrueckung und Zeilenrest weg, NICHT die Leerzeichen am Ende: `safe_name('Interview ')`
+    // laesst den Namen unveraendert, und `trim()` machte daraus zwei Schluessel — "Interview" aus
+    // der ankerlosen skip-Zeile, "Interview " aus der fertig-Zeile (gemessen). Dieselbe Datei,
+    // ein Phantom-Eintrag dazu. Die fuehrende Einrueckung faellt weiter, und sie MUSS fallen:
+    // correct.py druckt die Blockzeilen ("  ✓ {base} · Block 1/4 fertig") und die Diagnosen
+    // ("  [diagnose] …") mit zwei Leerzeichen davor. Vorne geht dabei nichts Gemeintes
+    // verloren — ein Basisname steht in KEINER Zeile am Anfang.
+    const l = rawLine.replace(/^\s+/, '').replace(/[\r\n]+$/, '')
     let m: RegExpMatchArray | null
 
-    if (l.startsWith('[scope]')) {
+    // Nur die ERSTE [scope]-Zeile zaehlt — dieselbe Regel wie im Backend (jobs.py: `bases is
+    // None`). Ohne sie kippt ein Projekt namens "scope" den GANZEN Lauf: transcribe.py praefixt
+    // jede Zeile mit dem Projektnamen (`[{name}] …`), jede davon wuerde hier als Bereichsmeldung
+    // gelesen, und `terminal()` verwuerfe danach jeden echten Dateistatus (gemessen: perBase leer
+    // statt {S1:'done'}). Spaetere [scope]-Zeilen fallen durch zu den Regexen unten und werden
+    // dort korrekt als Projektzeilen gelesen — dieselbe Falle, die #396 fuer 'fetch' schloss.
+    if (scope === undefined && l.startsWith('[scope]')) {
       const payload = l.slice(7).trim()
       scope = new Set(payload ? payload.split('\t').filter(Boolean) : [])
       continue
@@ -95,23 +108,45 @@ export function parseJobPhases(kind: string, lines: string[]): JobPhases {
       }
       else if ((m = l.match(/^\[.+?\] fertig (.+?): /))) terminal(m[1], 'done')
       else if ((m = l.match(/^\[.+?\] skip \(vorhanden\): (.+)$/))) terminal(m[1], 'skipped')
+      // 'failed', nicht 'skipped': transcribe.py legt diese Datei in dieselbe `failed_bases`
+      // wie den FEHLER-Pfad — sie wurde NICHT transkribiert. Ungelesen blieb sie bis Jobende
+      // auf ihrem letzten Zustand stehen, obwohl der Lauf sie laengst aufgegeben hat.
+      else if ((m = l.match(/^\[.+?\] skip \(Audio nicht mehr vorhanden\): (.+)$/))) terminal(m[1], 'failed')
       else if ((m = l.match(/^\[.+?\] FEHLER (.+?): /))) terminal(m[1], 'failed')
       continue
     }
 
     if (kind !== 'correct') continue
 
-    if ((m = l.match(/^→ Diarisiere (.+) …$/))) { active[m[1]] = { phase: 'diarize' }; global = 'diarize' }
+    // `(.+?)` + optionaler Zusatz: correct.py haengt seit #264 ` ({n} Sprecher)` an, das gierige
+    // `(.+)` verschluckte ihn -> Schluessel "Timeline 13 (5 Sprecher)". Beide Verbraucher schlagen
+    // mit dem EXAKTEN Basisnamen nach (ProjectWorkspace, Sidebar), die Phase war damit bei jeder
+    // Datei mit gesetzter Sprecherzahl unsichtbar — dieselbe Form, die `→ Korrigiere` schon nutzt.
+    if ((m = l.match(/^→ Diarisiere (.+?)(?: \(\d+ Sprecher\))? …$/))) { active[m[1]] = { phase: 'diarize' }; global = 'diarize' }
+    // `[done] {base}` folgt auf JEDEN Ausgang der Diarisierungsschleife (Erfolg, "keine Sprecher",
+    // Roh-JSON unlesbar, Ausnahme) und ist damit das einzige Terminal je Datei. Aufgeraeumt wurde
+    // bisher erst am Phasen-Sweep unten — bei N Aufnahmen standen bis zu N-1 Spinner ueber laengst
+    // fertigen Dateien, ueber die teuerste Phase des Prep-Schritts (#379).
+    else if ((m = l.match(/^\[done\] (.+)$/))) { if (active[m[1]]?.phase === 'diarize') delete active[m[1]] }
     else if ((m = l.match(/^(.+?): \d+ Segmente → (\d+) Blöcke/))) blocks[m[1]] = { done: new Set(), total: +m[2] }
     // ✓ / ↷ / ✗ heissen alle "laeuft nicht mehr" — ob der Block geglueckt ist, sagt am Ende
     // der Terminal-Status der Datei, nicht der Balken.
     else if ((m = l.match(/^[✓✗↷] (.+?) · Block (\d+)\/\d+ (fertig|ohne|schon)/))) blockDone(m[1], +m[2])
-    else if ((m = l.match(/^→ Korrigiere (.+?)(?: · Block \d+\/\d+)? …$/)))
+    // `leicht`/`zusammenfassung` sind EIN LLM-Aufruf je Datei und tragen dieselbe Phase: fuer den
+    // Nutzer ist es die Korrektur, nur ohne Glossar und Treue-Pass. Ohne sie blieb `global` in
+    // einem Lauf ohne `voll*`-Datei ueber die gesamte LLM-Dauer auf 'Vorbereiten…' (#374).
+    else if ((m = l.match(/^→ (?:Korrigiere|Leichte Korrektur|Nur Zusammenfassung) (.+?)(?: · Block \d+\/\d+)? …$/)))
       { active[m[1]] = { phase: 'correct', ...prog(m[1]) }; global = null }
     else if ((m = l.match(/^→ Verifiziere (.+?)(?: · Block \d+\/\d+)? \(Treue gegen Roh\) …$/)))
       { active[m[1]] = { phase: 'verify', ...prog(m[1]) }; global = null }
     else if ((m = l.match(/^apply: (.+) -> edit\.json/))) terminal(m[1], 'done')
-    else if ((m = l.match(/^apply: SKIP (.+) \(human_edited=/))) terminal(m[1], 'skipped')
+    // Alle DREI Begruendungen, die correct.py druckt — nicht nur `human_edited=`. Die beiden
+    // anderen sind die Schutzpfade ("edit.json nicht lesbar" aus #190, "waehrend des Laufs
+    // handbearbeitet" aus #278): beide heissen "deine Fassung bleibt stehen", und beide liessen
+    // die Datei bis Jobende auf einem Spinner stehen. Der Grund fuer den Anker an der Begruendung
+    // bleibt: ein Basisname darf Klammern enthalten, das greedy `(.+)` braucht also ein Ende.
+    else if ((m = l.match(/^apply: SKIP (.+) \((?:human_edited=|waehrend des Laufs |.+? nicht lesbar: )/)))
+      terminal(m[1], 'skipped')
     else if ((m = l.match(/^↷ SKIP (.+) \(human_edited=/))) terminal(m[1], 'skipped')
     else if ((m = l.match(/^apply: FEHLT (.+?)\.correction\.json/))) terminal(m[1], 'failed')
     else if ((m = l.match(/^✗ FEHLT\/ungültig: (.+?)\.correction\.json/))) terminal(m[1], 'failed')
