@@ -1236,3 +1236,81 @@ def test_autocorrect_an_kennt_alle_dokumentierten_schreibweisen(monkeypatch, wer
     else:
         monkeypatch.setenv("TRANSKRIBOR_AUTOCORRECT", wert)
     assert transcribe._autocorrect_an() is an
+
+
+def test_autocorrect_grund_kann_keine_statuszeile_vortaeuschen(monkeypatch, tmp_path, capsys):
+    """Der Grund im `[autocorrect]`-Protokoll ist FREMDTEXT — Anbietermeldung oder Ausnahme.
+
+    Er steht zwar am Zeilenende, hinter einem festen Praefix, und alle Muster in
+    `jobPhases.ts` sind mit `^` verankert. Ein ZEILENUMBRUCH darin hebt genau das auf: aus
+    einer Zeile werden zwei, und die zweite beginnt mit fremdem Inhalt am Zeilenanfang. Die
+    fuenf Gruende aus `llm.available()` sind heute einzeilige Literale — ein Ausnahmetext ist
+    es nicht zwingend, und beide gehen durch dieselbe Zeile.
+    """
+    from webtool import correct, llm
+
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    monkeypatch.setattr(transcribe, "PROJEKTE", str(tmp_path))
+    monkeypatch.setattr(transcribe, "_modell", lambda *a, **kw: "fake_model")
+    monkeypatch.setattr(llm, "available",
+                        lambda *_a: (False,
+                                     "kein Anbieter" + chr(10) +
+                                     "→ Diarisiere Eingeschmuggelt …"))
+    monkeypatch.setattr(correct, "diarize_enabled", lambda: False)
+    monkeypatch.setattr(correct, "cmd_diarize", lambda *a, **k: 0)
+    monkeypatch.setattr(correct, "prep_single", lambda *a, **k: None)
+
+    proj_dir = tmp_path / "InjektDemo"
+    (proj_dir / "audio").mkdir(parents=True)
+    (proj_dir / "transkripte").mkdir(parents=True)
+    (proj_dir / "audio" / "I1.mp3").write_bytes(b"audio")
+    monkeypatch.setattr(transcribe, "_transkribiere_datei", lambda *a: {
+        "text": "T", "segments": [{"id": 0, "start": 0.0, "end": 1.0, "text": "T"}], "duration": 1.0})
+
+    transcribe.transcribe_project("InjektDemo", "tiny", "de", autocorrect=True)
+    zeilen = capsys.readouterr().out.splitlines()
+
+    vorgetaeuscht = [z for z in zeilen if z.startswith("→ Diarisiere")]
+    assert vorgetaeuscht == [], f"Fremdtext hat eine Statuszeile gestellt: {vorgetaeuscht}"
+    # Verschluckt wird der Grund NICHT — er steht vollstaendig auf einer Zeile.
+    assert ("[autocorrect] KI-Phase uebersprungen — kein Anbieter → Diarisiere Eingeschmuggelt …"
+            in zeilen)
+
+
+def test_autocorrect_ausnahmetext_kann_keine_statuszeile_vortaeuschen(monkeypatch, tmp_path, capsys):
+    """Der Zwilling des Tests darueber — fuer den `except`-Zweig, nicht fuer `llm.available()`.
+
+    Es braucht ihn, weil die Mutationsprobe es gezeigt hat: `{ex}` ungefiltert zu drucken
+    liess den Grund-Test GRUEN. Zwei Interpolationen, zwei Wege, zwei Sensoren — der zweite
+    ist ausgerechnet der gefaehrlichere, denn ein Ausnahmetext ist unbegrenzt, waehrend die
+    fuenf Gruende aus `llm.available()` einzeilige Literale sind.
+    """
+    from webtool import correct, llm
+
+    def platzt(*_a):
+        raise RuntimeError("Paket kaputt" + chr(10) + "→ Diarisiere Eingeschmuggelt …")
+
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    monkeypatch.setattr(transcribe, "PROJEKTE", str(tmp_path))
+    monkeypatch.setattr(transcribe, "_modell", lambda *a, **kw: "fake_model")
+    monkeypatch.setattr(llm, "available", platzt)
+    monkeypatch.setattr(correct, "diarize_enabled", lambda: False)
+    monkeypatch.setattr(correct, "cmd_diarize", lambda *a, **k: 0)
+    monkeypatch.setattr(correct, "prep_single", lambda *a, **k: None)
+
+    proj_dir = tmp_path / "WurfDemo"
+    (proj_dir / "audio").mkdir(parents=True)
+    (proj_dir / "transkripte").mkdir(parents=True)
+    (proj_dir / "audio" / "W1.mp3").write_bytes(b"audio")
+    monkeypatch.setattr(transcribe, "_transkribiere_datei", lambda *a: {
+        "text": "T", "segments": [{"id": 0, "start": 0.0, "end": 1.0, "text": "T"}], "duration": 1.0})
+
+    transcribe.transcribe_project("WurfDemo", "tiny", "de", autocorrect=True)
+    zeilen = capsys.readouterr().out.splitlines()
+
+    vorgetaeuscht = [z for z in zeilen if z.startswith("→ Diarisiere")]
+    assert vorgetaeuscht == [], f"Ausnahmetext hat eine Statuszeile gestellt: {vorgetaeuscht}"
+    assert ("[autocorrect] KI-Phase uebersprungen — Paket kaputt → Diarisiere Eingeschmuggelt …"
+            in zeilen)
+    # Und der Wurf bleibt ein Wurf: die Transkription selbst laeuft weiter.
+    assert (proj_dir / "transkripte" / "W1.json").exists()

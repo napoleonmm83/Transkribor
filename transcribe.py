@@ -447,6 +447,20 @@ def _transkribiere_datei(m, engine, f, sprache, mehr, model):
     return result
 
 
+def _einzeilig(text) -> str:
+    """Fremdtext auf EINE Zeile zwingen, bevor er in einen Job-Strom geht.
+
+    `jobPhases.ts` liest die Job-Ausgabe zeilenweise und verankert jedes seiner ~20 Muster mit
+    `^`. Ein Zeilenumbruch in einer Anbietermeldung oder einem Ausnahmetext macht aus einer
+    Zeile zwei — und die zweite begaenne mit FREMDEM Inhalt am Zeilenanfang, koennte also eine
+    Statuszeile vortaeuschen und eine Datei in der Oberflaeche in einen falschen Zustand
+    setzen. Die Gruende aus `llm.available()` sind heute einzeilige Literale (alle fuenf
+    nachgesehen); ein Ausnahmetext ist es nicht zwingend, und beide gehen hier durch dieselbe
+    Zeile. Deshalb der Riegel an der Zeile, nicht an einer der beiden Quellen.
+    """
+    return " ".join(str(text).split())
+
+
 def _autocorrect_an() -> bool:
     """`TRANSKRIBOR_AUTOCORRECT` — der dokumentierte Kill-Switch der Korrektur nach der
     Transkription. Gelesen wird er im Subprozess, nicht im Server: `jobs._run_proc` reicht
@@ -523,11 +537,11 @@ def transcribe_project(name, model, language, only=None, autocorrect: bool = Fal
                 # dem spaeteren `correct run` genau diese GPU-Minuten
                 # (test_transcribe_project_diarize_runs_even_if_ai_unavailable haelt das fest).
                 # Nur die LLM-Phase faellt aus — und sie sagt, warum. Vorher schwieg sie.
-                print(f"[autocorrect] KI-Phase uebersprungen — {grund_ai}", flush=True)
+                print(f"[autocorrect] KI-Phase uebersprungen — {_einzeilig(grund_ai)}", flush=True)
         except Exception as ex:
             # transcribe.py laeuft auch ohne das webtool-Paket; frueher verschwand dieser
             # Fall in einem `pass` und schlug erst je Datei als "Autocorrect-Fehler" auf.
-            print(f"[autocorrect] KI-Phase uebersprungen — {ex}", flush=True)
+            print(f"[autocorrect] KI-Phase uebersprungen — {_einzeilig(ex)}", flush=True)
 
     initial_files = list(files)
     processed = set()
