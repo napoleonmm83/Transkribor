@@ -190,10 +190,14 @@ const INVENTAR: Record<string, Eintrag> = {
   '[active] {}': { art: 'gelesen_anderswo', notiz: 'jobs.py (Backend): welche Datei gerade geschrieben wird' },
   '  [diagnose] {}\\t{}\\t{}': { art: 'gelesen_anderswo', notiz: 'useJobAusgang.ts: Grund einer gescheiterten Korrektur' },
 
-  // ── bekannte Luecke, bewusst nicht in diesem PR ───────────────────────────────────────
   'apply: FEHLT {}.json - Roh-Transkript nicht gefunden': {
-    art: 'luecke', notiz: 'Zwilling der Zeile darueber, aber vom Regex nicht gedeckt (er verlangt '
-      + '.correction.json) -> die Datei bliebe bis Jobende auf einem Spinner stehen',
+    art: 'gelesen', beispiel: 'apply: FEHLT A.json - Roh-Transkript nicht gefunden', basis: 'A',
+    notiz: 'Erreichbar nur ueber ein TOCTOU-Fenster — und ueber ein WEITES: correct_ai_single '
+      + 'prueft die Roh-JSON beim Eintritt (correct.py:1009) und steigt aus, bevor [active] '
+      + 'gedruckt wird; dazwischen liegt die ganze KI-Korrektur samt Treue-Pass, also Minuten. '
+      + 'Ungelesen war das nicht bloss ein Spinner: cmd_apply liefert "missing", correct_ai_single '
+      + 'verwirft den Rueckgabewert (correct.py:1041) und meldet True — ohne perBase-Eintrag faellt '
+      + 'ausgang() auf {art:"erfolg"}, also ERFOLG ueber eine nie geschriebene edit.json',
   },
 
   // ── bewusst ignoriert: Umgebung, Messung, Diagnose — kein Datei-Ereignis ───────────────

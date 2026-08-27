@@ -340,6 +340,44 @@ describe('parseJobPhases — Druckformen, die der Parser nicht kannte (#374)', (
     }
   })
 
+  it('`apply: FEHLT {base}.json` beendet die Datei — sonst meldet der Lauf ERFOLG', () => {
+    // Codex-Befund [high] am Bündel, nachgemessen und bestätigt. Ungelesen war diese Zeile
+    // nicht bloss ein hängender Spinner: `cmd_apply` gibt "missing" zurück, `correct_ai_single`
+    // verwirft den Wert (correct.py:1041 `cmd_apply(...)`, :1042 `return True`), und ohne
+    // perBase-Eintrag findet `ausgang()` kein `misslungen` und keine `bilanz` — der Lauf meldete
+    // {art:'erfolg'} über eine edit.json, die nie geschrieben wurde.
+    const p = parseJobPhases('correct', [
+      '→ Korrigiere A …',
+      'apply: FEHLT A.json - Roh-Transkript nicht gefunden',
+      '[done] A',
+    ])
+    expect(p.perBase).toEqual({ A: 'failed' })
+    expect(p.active).toEqual({})   // `[done]` räumt nur diarize — ohne den Zweig bliebe der Spinner
+  })
+
+  it('… und ein Basisname, der SELBST auf `.json` endet, überlebt beide FEHLT-Formen', () => {
+    // Der Grund, den Zweig in #407 zu parken: die naheliegende Weitung
+    // `(.+?)\.(?:correction\.)?json` hätte `daten.json` auf "daten" verkürzt. Der Anker ist
+    // hier nicht der Rückverweis aus I1 (der Name steht nur EINMAL in der Zeile), sondern der
+    // feste SCHLUSSTEXT — er lässt genau eine Zerlegung der Zeile zu.
+    // Was diese Zusicherung NICHT belegt: die Wahl des Quantors. Gierig und faul liefern hier
+    // überall dasselbe (gemessen, 0 Unterschiede auf 400 000 Zufallseingaben) — sie ist
+    // Regressionsschutz gegen die genannte Weitung, kein Beleg für `(.+)`.
+    const b = 'daten.json'
+    const roh = parseJobPhases('correct', [`apply: FEHLT ${b}.json - Roh-Transkript nicht gefunden`])
+    expect(roh.perBase).toEqual({ [b]: 'failed' })
+    // Negativkontrolle zur Reihenfolge: der spezifischere Zweig darf den Zwilling nicht schlucken.
+    const korr = parseJobPhases('correct', ['apply: FEHLT A.correction.json - erst Korrektur-Workflow laufen lassen'])
+    expect(korr.perBase).toEqual({ A: 'failed' })
+    // Und die Gegenrichtung — der EINZIGE Fall, in dem die Reihenfolge der beiden Zweige
+    // wirklich entscheidet. Ein Basisname auf `.correction` ergibt dieselbe Zeichenfolge
+    // `.correction.json`; steht der kürzere Zweig vorn, kappt sein `(.+?)` den Namen zu "A".
+    // Ohne diese Zusicherung wäre der Reihenfolge-Kommentar im Code eine Behauptung, die
+    // keine Mutation rot bekommt.
+    const heikel = parseJobPhases('correct', ['apply: FEHLT A.correction.json - Roh-Transkript nicht gefunden'])
+    expect(heikel.perBase).toEqual({ 'A.correction': 'failed' })
+  })
+
   it('beide Schutzpfade von `apply: SKIP` beenden die Datei', () => {
     // correct.py druckt DREI Begruendungen; der Parser kannte nur `human_edited=`. Die beiden
     // anderen sind die Schutzpfade aus #190 und #278 — beide heissen "deine Fassung bleibt
