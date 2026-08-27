@@ -12,12 +12,13 @@ import transcribe
 
 
 @pytest.fixture(autouse=True)
-def _autocorrect_an(monkeypatch):
+def _autocorrect_pin(monkeypatch):
     """Der Kill-Switch wird seit #406 im Lauf selbst gelesen — ohne dieses Pinnen haengen
     alle autocorrect-Tests dieser Datei daran, ob der Entwickler gerade
     `TRANSKRIBOR_AUTOCORRECT=0` in der Shell stehen hat. Sie waeren dort gruen, ohne die
     Kette je zu erreichen (dieselbe Falle, die `test_api.py` beim Anbieter-Gate benennt).
     Ein Test, der den Schalter selbst prueft, setzt ihn im Rumpf — der spaetere Aufruf gewinnt.
+    (Heisst bewusst NICHT wie `transcribe._autocorrect_an`: gleicher Name, anderes Ding.)
     """
     monkeypatch.setenv("TRANSKRIBOR_AUTOCORRECT", "1")
 
