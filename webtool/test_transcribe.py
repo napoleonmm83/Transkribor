@@ -1218,3 +1218,21 @@ def test_autocorrect_faellt_bei_kill_switch_ganz_aus(monkeypatch, tmp_path, caps
     assert "[autocorrect] uebersprungen — TRANSKRIBOR_AUTOCORRECT=0" in out
     # Gegenkontrolle: der Schalter stoppt die KORREKTUR, nicht die Transkription.
     assert (tdir / "K1.json").exists()
+
+
+@pytest.mark.parametrize("wert,an", [
+    (None, True), ("", True), ("1", True), ("ja", True),
+    ("0", False), ("false", False), ("FALSE", False), ("no", False),
+])
+def test_autocorrect_an_kennt_alle_dokumentierten_schreibweisen(monkeypatch, wert, an):
+    """Der Schalter hat vier Aus-Schreibweisen, nicht eine — `0`/`false`/`no`, Gross egal.
+
+    Der Verhaltenstest oben faehrt nur `0` durch. Eine Vereinfachung auf `== "0"` bliebe
+    dort gruen und liesse `TRANSKRIBOR_AUTOCORRECT=false` still wirkungslos werden — genau
+    die Klasse Fehler, aus der #406 entstand.
+    """
+    if wert is None:
+        monkeypatch.delenv("TRANSKRIBOR_AUTOCORRECT", raising=False)
+    else:
+        monkeypatch.setenv("TRANSKRIBOR_AUTOCORRECT", wert)
+    assert transcribe._autocorrect_an() is an
