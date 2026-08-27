@@ -138,4 +138,47 @@ describe('HomeGallery', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Erneut versuchen' }))
     await waitFor(() => expect(vi.mocked(api.listProjects).mock.calls.length).toBeGreaterThan(versuche))
   })
+  // ── #70: bei wenigen Projekten Karten statt der dichten Zeilenliste ───────────
+  const ruhig = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({
+      name: `P${i + 1}`, dateien: 4, fertig: 2, geaendert: 1000 - i, active_jobs: [],
+    }))
+
+  it('zeigt bei wenigen Projekten KARTEN — sonst stehen dort fuenf Zeilen und ~450 px Leere', async () => {
+    // Erkennungsmerkmal ist der Fortschrittsbalken: die dichte Zeile hat keinen. An der
+    // Ueberschrift waere nichts zu messen, die ist in beiden Faellen dieselbe.
+    vi.mocked(api.listProjects).mockResolvedValue(ruhig(3))
+    zeigen()
+    await screen.findByText('P1')
+    expect(screen.getAllByRole('progressbar')).toHaveLength(3)
+  })
+
+  it('an der Schwelle (8) noch Karten, darueber wieder Zeilen — und dann hoechstens fuenf', async () => {
+    // Beide Haelften in einem Test, weil die Grenze die Aussage IST: `<=` gegen `<` faellt
+    // sonst durch (bei 8 gaebe es dann Zeilen, und der Kartentest oben mit 3 bliebe gruen).
+    vi.mocked(api.listProjects).mockResolvedValue(ruhig(8))
+    const acht = zeigen()
+    await screen.findByText('P1')
+    expect(screen.getAllByRole('progressbar')).toHaveLength(8)
+    acht.unmount()
+
+    vi.mocked(api.listProjects).mockResolvedValue(ruhig(9))
+    zeigen()
+    await screen.findByText('P1')
+    expect(screen.queryAllByRole('progressbar')).toHaveLength(0)
+    expect(screen.queryByText('P6')).not.toBeInTheDocument()
+  })
+
+  it('ein laufendes Projekt steht oben als Karte und NICHT noch einmal darunter', async () => {
+    // Der Ausschluss galt schon fuer die Zeilenliste; seit beide Abschnitte dasselbe
+    // Bauteil rendern, saehe eine Dublette identisch aus und fiele niemandem auf.
+    vi.mocked(api.listProjects).mockResolvedValue([
+      { name: 'Laeuft', dateien: 4, fertig: 1, geaendert: 5, active_jobs: [{ id: '1', kind: 'transcribe' }] },
+      { name: 'Ruht', dateien: 2, fertig: 2, geaendert: 4, active_jobs: [] },
+    ])
+    zeigen()
+    await screen.findByText('Laeuft')
+    expect(screen.getAllByText('Laeuft')).toHaveLength(1)
+    expect(screen.getByText(/Läuft gerade · 1/)).toBeInTheDocument()
+  })
 })
