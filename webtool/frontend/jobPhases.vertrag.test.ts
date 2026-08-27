@@ -464,9 +464,24 @@ const INVENTAR: Record<string, Eintrag> = {
     art: 'ignoriert', beispiel: '[ytdlp] ok: Successfully installed yt-dlp-2026.7.4',
   },
   '[{}] -> {}': { art: 'ignoriert', beispiel: '[Demo] -> /x/projekte/Demo/transkripte' },
+  // Seit #405/#421 vom Parser GELESEN, nicht mehr nur vom Toast: ein Wurf in der Vorbereitung
+  // mit stehendem KI-Pool ist ein gescheiterter Korrekturversuch und faerbt die Aufnahme
+  // 'failed' — dieselbe Aussage, die die Bilanz im Backend seit #417 trifft. `gelesen`
+  // schlaegt `gelesen_anderswo`: es ist die staerkere Zusage, der Toast liest sie weiterhin
+  // mit (deshalb bleibt der GRUND-Hinweis in der Notiz stehen).
   '[{}] Autocorrect-Fehler bei {}: {}': {
-    art: 'gelesen_anderswo', beispiel: '[Demo] Autocorrect-Fehler bei A: RuntimeError',
+    art: 'gelesen', kind: 'transcribe', beispiel: '[Demo] Autocorrect-Fehler bei A: RuntimeError',
+    basis: 'A',
     notiz: `${GRUND}. Die Datei IST transkribiert — nur die angehaengte Korrektur scheiterte`,
+  },
+  // Der Zwilling ohne KI-Pool. Er sieht wie eine Verlegenheit aus und ist der Kern von #421:
+  // aus der frueheren, GEMEINSAMEN Zeile war nicht entscheidbar, ob die Korrektur scheiterte
+  // oder gar nicht angefordert war — und seit der Parser sie liest, waere das der Unterschied
+  // zwischen „Aufnahme gescheitert" und einer Falschaussage ueber einen Schritt, den niemand
+  // wollte. Bewusst NICHT vom Parser gelesen.
+  '[{}] Vorbereitung gescheitert bei {} ': {
+    art: 'gelesen_anderswo', notiz: GRUND,
+    beispiel: '[Demo] Vorbereitung gescheitert bei A (ohne KI-Phase): RuntimeError',
   },
   '[{}] Korrektur: {} von {} Datei(en) korrigiert': {
     art: 'ignoriert', beispiel: '[Demo] Korrektur: 3 von 5 Datei(en) korrigiert',

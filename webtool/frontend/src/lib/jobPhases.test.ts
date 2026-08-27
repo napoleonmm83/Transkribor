@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { describePhases, parseJobPhases } from './jobPhases'
+// Der Ausgang gehoert zum Befund: ein richtig geparster Zustand nuetzt nichts, wenn die
+// Meldung daraus weiterhin „fertig" sagt (#405 + #376).
+import { ausgang } from './jobAusgang'
 
 describe('parseJobPhases — correct', () => {
   it('aktive Datei + Phase, sequentiell', () => {
@@ -278,6 +281,125 @@ describe('URL-Import', () => {
     ])
     expect(p.perBase).toEqual({ audio_01: 'done', audio_02: 'failed', audio_03: 'failed' })
     expect(p.global).toBeNull()
+  })
+})
+
+describe('parseJobPhases — die gestaffelte Pipeline (#405)', () => {
+  // Seit v0.48.0 (10098e4) laeuft die Korrektur INNERHALB des Transkriptions-Jobs. Der Parser
+  // stieg fuer `kind === 'transcribe'` aber vor dem gesamten correct-Dialekt aus — Diarisieren,
+  // Korrigieren, Verifizieren und Anwenden waren damit unsichtbar, und eine gescheiterte
+  // Korrektur meldete `done`, weil der Zustand aus der Transkription stehenblieb.
+  //
+  // Die Zeilen unten sind KEINE Erfindung: sie stammen aus einem echten Lauf auf der GPU
+  // (faster-whisper tiny, echtes pyannote, Anbieter `custom` auf einen toten Loopback-Port —
+  // damit ist `llm.available()` gruen und jeder Aufruf scheitert). Nur die Warnungen von
+  // torch/pyannote sind weggelassen; sie stehen im echten Strom mit drin und sind fuer jedes
+  // Muster folgenlos (der Test darunter prueft genau das).
+  const ECHT = [
+    '[scope] AufnahmeC',
+    '[Probe] device=cuda (NVIDIA GeForce RTX 5080)',
+    '[Probe] Modell tiny, 3 Datei(en)',
+    '[active] AufnahmeC',
+    '[Probe] -> transkribiere AufnahmeC …',
+    '[Probe] fertig AufnahmeC: 0s, 0 Segmente, Audio 0:03, 3.0x',
+    '[active] AufnahmeC',
+    '→ Diarisiere AufnahmeC …',
+    '⏱ AufnahmeC: Diarisierung 4s',
+    '[done] AufnahmeC',
+    'diarize: 1 Datei(en) diarisiert in 4s',
+    '[done] AufnahmeC',
+    '[active] AufnahmeC',
+    '→ Korrigiere AufnahmeC …',
+    '[Probe] Warte auf verbleibende KI-Korrekturen…',
+    '  KI-Anbieter: Kein Kontakt zu http://127.0.0.1:9/v1/chat/completions',
+    '  [diagnose] network\tKeine Verbindung zum Anbieter\tBitte Internetverbindung pruefen.',
+    '⏱ AufnahmeC: Korrektur 2s',
+    '✗ FEHLT/ungültig: AufnahmeC.correction.json — überspringe',
+    '[done] AufnahmeC',
+    '[Probe] Korrektur: 0 von 1 Datei(en) korrigiert',
+    '⏱ [Probe]: 1 Datei(en) transkribiert in 9s (Audio 0:03, 0.4x)',
+  ]
+
+  it('eine gescheiterte Korrektur meldet nicht mehr „fertig"', () => {
+    // DER Befund aus #405. Vorher: perBase {AufnahmeC:'done'} — Erfolg ueber einen Lauf, der
+    // die Korrektur weggeworfen hat. An genau diesen Zeilen mit beiden Parsern gemessen:
+    // der Stand vor dieser Reparatur liefert 'done', dieser hier 'failed'.
+    expect(parseJobPhases('transcribe', ECHT).perBase).toEqual({ AufnahmeC: 'failed' })
+  })
+
+  it('…und der Lauf meldet dem Nutzer keinen Erfolg mehr', () => {
+    // Die zweite Haelfte, und die erst macht den Befund zu einem Schaden: `ausgang()` las
+    // `perBase` und fand nichts Gescheitertes, also `{art:'erfolg'}` — der Toast sagte
+    // „fertig" ueber einen Lauf mit Exitcode 1. Ohne diese Zusicherung koennte der Parser
+    // richtig liegen und die Meldung trotzdem falsch bleiben.
+    expect(ausgang({ status: 'done', phases: parseJobPhases('transcribe', ECHT) }))
+      .toEqual({ art: 'teil', misslungen: ['AufnahmeC'], versucht: 1 })
+  })
+
+  it('waehrend Diarisierung und Korrektur steht die richtige Phase da', () => {
+    // Zweite Haelfte von #405: die Dateizeile zeigte waehrend der teuersten Minuten den
+    // Zustand aus der Transkription, also „fertig", waehrend die Arbeit noch lief.
+    const bis = (n: number) => parseJobPhases('transcribe', ECHT.slice(0, n))
+    expect(bis(9).active).toEqual({ AufnahmeC: { phase: 'diarize' } })
+    // `global` bleibt dabei null, und das ist kein Mangel: die Rueckgabe unterdrueckt die
+    // globale Phase, solange eine Datei aktiv ist (eine Datei-Phase ist die genauere
+    // Auskunft). Hier stand zuerst `toBe('diarize')` — die Behauptung war meine, nicht die
+    // des Codes.
+    expect(bis(9).global).toBeNull()
+    expect(bis(15).active).toEqual({ AufnahmeC: { phase: 'correct' } })
+    // …und am Ende raeumt der Terminalzustand den Spinner ab.
+    expect(parseJobPhases('transcribe', ECHT).active).toEqual({})
+  })
+
+  it('die Warnungen von torch/pyannote im selben Strom aendern nichts', () => {
+    // `jobs.py` mergt stderr nach stdout — im echten Job stehen zwischen den Zeilen oben
+    // mehrzeilige Tracebacks. Ein Muster, das daran haengenbleibt, erfaende eine Datei.
+    const laerm = [
+      'W0827 21:23:19.042000 126312 torch\\utils\\flop_counter.py:29] triton not found',
+      'Traceback (most recent call last):',
+      '  File "E:\\...\\torch\\_ops.py", line 1503, in load_library',
+      'OSError: Could not load this library: libtorchcodec_core8.dll',
+      '  warnings.warn(',
+    ]
+    const mit = parseJobPhases('transcribe', [...ECHT.slice(0, 8), ...laerm, ...ECHT.slice(8)])
+    expect(mit.perBase).toEqual({ AufnahmeC: 'failed' })
+    expect(mit.active).toEqual({})
+  })
+
+  it('ein Wurf in der Vorbereitung OHNE KI-Pool faerbt die Aufnahme NICHT rot (#421)', () => {
+    // Die Gegenrichtung, und sie ist der Grund fuer die zweite Zeilenform in transcribe.py.
+    // Ohne Anbieter ist die Korrektur bewusst aus; ein Wurf in Diarisierung oder Prep darf
+    // einen absichtlich ausgelassenen Schritt nicht nachtraeglich als Fehlschlag melden —
+    // spiegelverkehrt derselbe Fehler wie ein rotes Exitcode fuer eine geschuetzte
+    // `human_edited`-Datei (#417-Review).
+    const ohne = parseJobPhases('transcribe', [
+      '[scope] A', '[Probe] -> transkribiere A …', '[Probe] fertig A: 1s, 2 Segmente, 1.0x',
+      '[autocorrect] KI-Phase uebersprungen — kein KI-Anbieter eingestellt',
+      '[Probe] Vorbereitung gescheitert bei A (ohne KI-Phase): RuntimeError: CUDA out of memory',
+    ])
+    expect(ohne.perBase).toEqual({ A: 'done' })
+
+    // …MIT Pool dagegen schon: dieselbe Ursache, andere Bedeutung, andere Zeile.
+    const mit = parseJobPhases('transcribe', [
+      '[scope] A', '[Probe] -> transkribiere A …', '[Probe] fertig A: 1s, 2 Segmente, 1.0x',
+      '[Probe] Autocorrect-Fehler bei A: RuntimeError: CUDA out of memory',
+    ])
+    expect(mit.perBase).toEqual({ A: 'failed' })
+  })
+
+  it('ein fetch-Job faellt NICHT in den correct-Dialekt', () => {
+    // Der Riegel, der vom frueheren unbedingten `continue` uebrigbleibt. Ein Download-Job hat
+    // keine Korrekturphase (`app.py` haengt immer `--download-only` an); faellt er trotzdem
+    // durch, liest `^\[[^\]]+\] FEHLER (.+?): ` die URL einer `[fetch] FEHLER`-Zeile als
+    // Basisnamen — die Falle aus #379, die den `continue` ueberhaupt begruendet hat.
+    const p = parseJobPhases('fetch', [
+      '[fetch] lade https://x/y …',
+      '→ Korrigiere Video …',
+      'apply: Video -> edit.json + md (3 Segmente)',
+      '[fetch] FEHLER https://x/y: tot',
+    ])
+    expect(p.perBase).toEqual({})
+    expect(p.active).toEqual({})
   })
 })
 

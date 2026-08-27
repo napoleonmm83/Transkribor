@@ -678,22 +678,36 @@ def transcribe_project(name, model, language, only=None, autocorrect: bool = Fal
                             ai_futures.append((base, ai_pool.submit(_correct.correct_ai_single,
                                                                     name, base)))
                     except Exception as ex:
-                        # Derselbe Riegel wie oben, und hier naeher am Angreifer: `cmd_diarize`/
-                        # `prep_single` lesen Transkripte, ein Wurf kann deren Inhalt zitieren.
-                        print(f"[{name}] Autocorrect-Fehler bei {base}: {_einzeilig(ex)}", flush=True)
-                        # Und er zaehlt als GESCHEITERTER VERSUCH — dieselbe Regel wie beim Drain
-                        # unten („ein Wurf IST ein gescheiterter Versuch"). Ohne diese Zeile war
-                        # der Fehler eine Phase FRUEHER genau der, den dieser Zweig schliesst:
-                        # wirft `prep_single` fuer ALLE Dateien, blieb `ai_futures` leer, die
-                        # Funktion lieferte `(0, 0)` und der Lauf endete mit Exitcode 0 — gemessen.
-                        # `cmd_run.one()` wertet einen Prep-Ausfall ebenso als Fehlschlag.
+                        # ZWEI Zeilenformen fuer ZWEI Bedeutungen (#421) — vorher stand hier eine
+                        # fuer beide, und der Unterschied lebte nur im Zaehler daneben.
                         #
-                        # NUR bei stehendem Pool: ohne Anbieter ist die LLM-Phase bewusst
-                        # abgeschaltet, und ein Wurf in der Vorbereitung darf einen absichtlich
-                        # ausgelassenen Schritt nicht nachtraeglich rot faerben (dieselbe Regel
-                        # wie beim Kill-Switch).
+                        # Steht der Pool, ist der Wurf ein GESCHEITERTER VERSUCH: dieselbe Regel
+                        # wie beim Drain unten („ein Wurf IST ein gescheiterter Versuch"). Ohne
+                        # diese Zeile war der Fehler eine Phase FRUEHER genau der, den dieser
+                        # Zweig schliesst: wirft `prep_single` fuer ALLE Dateien, blieb
+                        # `ai_futures` leer, die Funktion lieferte `(0, 0)` und der Lauf endete
+                        # mit Exitcode 0 — gemessen. `cmd_run.one()` wertet einen Prep-Ausfall
+                        # ebenso als Fehlschlag.
+                        #
+                        # Steht KEIN Pool, ist die LLM-Phase bewusst abgeschaltet, und ein Wurf
+                        # in der Vorbereitung darf einen absichtlich ausgelassenen Schritt nicht
+                        # nachtraeglich rot faerben (dieselbe Regel wie beim Kill-Switch). Das
+                        # galt fuer die BILANZ schon immer; seit die Oberflaeche die Korrektur
+                        # je Datei liest (#405), muss es auch fuer die ZEILE gelten — sonst
+                        # meldete der Parser eine Aufnahme als gescheitert, deren Korrektur
+                        # niemand angefordert hat. Aus der alten, gemeinsamen Form ist das nicht
+                        # entscheidbar: sie ist in beiden Faellen byteweise dieselbe.
+                        #
+                        # Beide zitieren fremden Ausnahmetext hinter einem Klammerpraefix
+                        # (`cmd_diarize`/`prep_single` lesen Transkripte) — der Riegel dagegen
+                        # liegt im Parser (`[^\]]+`, #413), nicht hier.
                         if ai_pool is not None:
+                            print(f"[{name}] Autocorrect-Fehler bei {base}: {_einzeilig(ex)}",
+                                  flush=True)
                             ki_versucht += 1
+                        else:
+                            print(f"[{name}] Vorbereitung gescheitert bei {base} "
+                                  f"(ohne KI-Phase): {_einzeilig(ex)}", flush=True)
             except Exception as e:
                 print(f"[{name}] FEHLER {base}: {_einzeilig(e)}", flush=True)
                 failed_bases.add(base)
