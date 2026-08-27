@@ -257,7 +257,19 @@ const INVENTAR: Record<string, Eintrag> = {
   'diarize: SKIP {} (keine Sprecher erkannt)': { art: 'ignoriert' },
   'diarize: SKIP {} ({}: {}) — Korrektur ohne Cluster': { art: 'ignoriert' },
   'prep: SKIP {} ({}: {})': { art: 'ignoriert' },
-  'run: FEHLER — 0 von {} versuchten Datei(en) korrigiert ': { art: 'ignoriert' },
+  // Steht hier statt oben bei seinem Zwilling, weil die Liste alphabetisch laeuft — die
+  // Klassifikation ist dieselbe, und das ist der Punkt: sie war es bis zum #417-Review NICHT.
+  // Die Form ist bytegleich zum `korrektur: FEHLER …`-Eintrag oben und wird vom selben
+  // Verbraucher gelesen (`useJobAusgang.grund()`, generischer /FEHLER/-Filter) — es gibt sogar
+  // einen Test dafuer (`useJobAusgang.test.tsx`, „ohne Dateinamen wird der GRUND nachgereicht"
+  // #376/B2). Als `ignoriert` behauptete die Tabelle, die Zeile werde nirgends gelesen; wer
+  // sie so las, haette sie beim naechsten Umbau bedenkenlos umformuliert.
+  'run: FEHLER — 0 von {} versuchten Datei(en) korrigiert ': {
+    art: 'gelesen_anderswo',
+    notiz: 'useJobAusgang.grund(): Begruendung im Toast, wenn keine Dateinamen bekannt sind. '
+      + 'Zwilling der korrektur:-Form oben — zwei bytegleiche Zeilen muessen dieselbe '
+      + 'Klassifikation tragen, sonst ist die Tabelle selbst die Falschaussage',
+  },
   'run: fertig — {}/{} Datei(en) korrigiert': { art: 'ignoriert' },
   'run: keine Roh-Transkripte — erst transkribieren': { art: 'ignoriert' },
   'run: keine solche Datei: {}': { art: 'ignoriert' },

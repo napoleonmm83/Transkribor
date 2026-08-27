@@ -1531,3 +1531,76 @@ def test_spaet_eingestellter_anbieter_greift_noch_im_selben_lauf(monkeypatch, tm
     assert [z for z in zeilen if z.startswith("[autocorrect] ")] == [
         "[autocorrect] KI-Phase uebersprungen — kein KI-Anbieter konfiguriert"
     ], zeilen
+
+
+def test_geschuetzte_datei_faerbt_den_lauf_NICHT_rot(monkeypatch, tmp_path, capsys):
+    """Ein Schutzpfad ist kein Fehlschlag — auch nicht im Nenner (#417-Review, I1).
+
+    `correct_ai_single` steigt vor jeder Arbeit aus, wenn die `edit.json` `human_edited=true`
+    traegt. Das meldete es als `False`, und die Bilanz zaehlte JEDE uebergebene Datei: eine
+    einzelne geschuetzte Aufnahme ergab `0 von 1`, `transcribe.main` schloss daraus auf einen
+    Totalausfall und beendete mit **Exitcode 1 dafuer, dass die Handarbeit des Nutzers
+    erfolgreich geschuetzt wurde**. Gemessen, bevor dieser Test entstand.
+
+    Es ist derselbe Fehler wie der, den #412 sechs Zeilen weiter unten gerade vermieden hatte
+    (`!= "missing"` statt `!= "written"`), nur spiegelverkehrt — und er stand damit INNERHALB
+    einer Funktion, in genau der, die dieser Fix dafuer angefasst hat. `correct.main` rechnet
+    seit jeher richtig: sein `attempted` zieht die Schutz-Skips aus dem Nenner.
+
+    Erreichbar, wenn die Roh-`.json` verschwindet und die `edit.json` bleibt — von Hand
+    aufgeraeumt, ein halb abgebrochenes Loeschen, eine Wiederherstellung aus einer Sicherung.
+    Der Knopf im Browser raeumt beides zusammen weg (`app._datei_weg`), ueber ihn entsteht der
+    Fall also nicht.
+
+    Der Test prueft BEIDE Zaehler: `(0, 0)` statt `(0, 1)`. Nur den Exitcode zu pruefen
+    genuegte nicht — ein Nenner, der die Datei mitzaehlt, aber `ki_ok` faelschlich erhoeht,
+    waere ebenfalls gruen und trotzdem falsch.
+    """
+    from webtool import correct, llm
+
+    _ki_projekt(monkeypatch, tmp_path, "SchutzDemo", bases=("X",))
+    monkeypatch.setattr(llm, "available", lambda: (True, ""))
+    # Die Roh-JSON fehlt (sie entsteht erst im Lauf), die handbearbeitete edit.json liegt da.
+    (tmp_path / "SchutzDemo" / "transkripte" / "X.edit.json").write_text(
+        json.dumps({"human_edited": True, "segments": []}), encoding="utf-8")
+
+    assert transcribe.transcribe_project("SchutzDemo", "tiny", "de", autocorrect=True) == (0, 0)
+    out = capsys.readouterr().out
+    assert "↷ SKIP X (human_edited=true" in out, "Vorbedingung: der Schutzpfad hat gegriffen"
+    # Keine Bilanzzeile: es wurde nichts versucht, und „0 von 0" waere eine Meldung ueber nichts.
+    assert "Korrektur:" not in out, out
+
+    monkeypatch.setattr(transcribe, "ensure_ffmpeg", lambda: None)
+    monkeypatch.setattr(sys, "argv", ["transcribe.py", "SchutzDemo", "--autocorrect",
+                                      "--model", "tiny"])
+    transcribe.main()                    # kein SystemExit — der Schutz IST der Erfolg
+    assert "korrektur: FEHLER" not in capsys.readouterr().out
+
+
+def test_correct_ai_single_trennt_nicht_versucht_von_gescheitert(monkeypatch, tmp_path):
+    """Der dritte Rueckgabewert direkt an der Quelle — die Zusicherung, auf der die Bilanz steht.
+
+    Der Test darueber misst die Wirkung ueber den ganzen Lauf; dieser nagelt den Vertrag fest,
+    damit ein spaeterer vierter Ausstieg nicht still auf `False` faellt. `None` heisst „gar
+    nicht erst versucht", `False` heisst „versucht und gescheitert" — die Unterscheidung ist
+    der Unterschied zwischen einem gruenen und einem roten Lauf.
+    """
+    from webtool import correct
+
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    tdir = tmp_path / "P" / "transkripte"
+    tdir.mkdir(parents=True)
+
+    # 1. kein Roh-Transkript -> nicht versucht
+    assert correct.correct_ai_single("P", "A") is None
+
+    # 2. human_edited -> nicht versucht (und der Wert ist NICHT False)
+    (tdir / "B.json").write_text(json.dumps({"segments": []}), encoding="utf-8")
+    (tdir / "B.edit.json").write_text(json.dumps({"human_edited": True}), encoding="utf-8")
+    assert correct.correct_ai_single("P", "B") is None
+
+    # 3. versucht und gescheitert -> False, nicht None
+    (tdir / "C.json").write_text(json.dumps({"segments": []}), encoding="utf-8")
+    monkeypatch.setattr(correct, "_context", lambda *a: "")
+    monkeypatch.setattr(correct, "_correct_file", lambda *a, **kw: None)   # schreibt nichts
+    assert correct.correct_ai_single("P", "C") is False

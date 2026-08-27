@@ -530,7 +530,7 @@ def transcribe_project(name, model, language, only=None, autocorrect: bool = Fal
 
     ai_pool = None
     ai_futures = []      # (base, Future) — der Basisname wird fuer die Fehlerzeile gebraucht
-    ki_ok = 0
+    ki_ok = ki_versucht = 0
     if autocorrect and not _autocorrect_an():
         # Der Riegel sass bis v0.48.0 in `app._autocorrect`; die gestaffelte Pipeline haengt
         # die Korrektur seitdem direkt hier an und liess ihn dabei fallen (#406). Er gehoert
@@ -562,6 +562,13 @@ def transcribe_project(name, model, language, only=None, autocorrect: bool = Fal
         Gefragt wird nur, solange KEIN Pool steht. Ein offener Pool bleibt offen, auch wenn der
         Anbieter spaeter wegfaellt — das faengt `correct_ai_single` je Datei selbst ab, und ihn
         zu schliessen riesse laufende Korrekturen mit.
+
+        Die Kosten sind gedeckelt: `llm.available()` cached den Abo-Zweig (`llm._VERFUEGBAR_TTL`),
+        die API-Zweige sind reine Konfigurationspruefungen. Kein `auth.STATUS_TIMEOUT` je Aufnahme.
+
+        GENANNTER PREIS: der Grund wird genau EINMAL gedruckt. Aendert er sich im Lauf („kein
+        Anbieter" → spaeter „nicht angemeldet"), bleibt der zweite ungesagt. Bewusst so — eine
+        Zeile je Aufnahme deckte genau die Zeilen zu, wegen derer man ins Protokoll sieht.
         """
         nonlocal ai_pool, ai_grund_gemeldet
         if ai_pool is not None:
@@ -681,15 +688,14 @@ def transcribe_project(name, model, language, only=None, autocorrect: bool = Fal
                 print(f"[{name}] Warte auf verbleibende KI-Korrekturen…", flush=True)
             # `shutdown(wait=True)` wartet auf alle uebergebenen Aufgaben — das getrennte
             # `wait(...)` davor war doppelt gemoppelt und hat nichts gelesen. Genau das war
-            # #417: `correct_ai_single` meldet an vier Stellen `False` (fehlende Vorbereitung,
-            # ungueltige `correction.json`, gescheitertes Apply, Ausnahme), und dieser Wert fiel
-            # ersatzlos in den Papierkorb. Ein Lauf, in dem JEDE Korrektur scheiterte, endete
-            # mit Exitcode 0 → `jobs.py` machte daraus `done` → die Oberflaeche meldete Erfolg.
+            # #417: `correct_ai_single` meldet einen Fehlschlag als `False`, und dieser Wert
+            # fiel ersatzlos in den Papierkorb. Ein Lauf, in dem JEDE Korrektur scheiterte,
+            # endete mit Exitcode 0 → `jobs.py` machte daraus `done` → die Oberflaeche meldete
+            # Erfolg.
             ai_pool.shutdown(wait=True)
             for ai_base, fut in ai_futures:
                 try:
-                    if fut.result():
-                        ki_ok += 1
+                    ausgang = fut.result()
                 except Exception as ex:
                     # `correct_ai_single` faengt selbst breit; hier landet, was DAVOR wirft
                     # (`paths.transkripte_dir` auf einem unsicheren Namen, OSError am Sidecar).
@@ -697,8 +703,20 @@ def transcribe_project(name, model, language, only=None, autocorrect: bool = Fal
                     # nicht sterben. Dieselbe Zeilenform wie im Schleifenrumpf, damit fremder
                     # Ausnahmetext auch hier auf EINER Zeile bleibt.
                     print(f"[{name}] Autocorrect-Fehler bei {ai_base}: {_einzeilig(ex)}", flush=True)
-            if ai_futures:
-                print(f"[{name}] Korrektur: {ki_ok} von {len(ai_futures)} Datei(en) korrigiert",
+                    ausgang = False        # ein Wurf IST ein gescheiterter Versuch
+                # `None` heisst „gar nicht erst versucht" (kein Roh-Transkript, oder
+                # `human_edited`) und zaehlt in KEINEN der beiden Zaehler — dieselbe Rechnung
+                # wie `correct.main`, das die Schutz-Skips aus seinem Nenner zieht. Zaehlte der
+                # Nenner jede uebergebene Datei, faerbte eine einzelne geschuetzte Aufnahme den
+                # ganzen Lauf ROT: Exitcode 1 dafuer, dass die Handarbeit des Nutzers erfolgreich
+                # geschuetzt wurde (im Review gemessen).
+                if ausgang is None:
+                    continue
+                ki_versucht += 1
+                if ausgang:
+                    ki_ok += 1
+            if ki_versucht:
+                print(f"[{name}] Korrektur: {ki_ok} von {ki_versucht} Datei(en) korrigiert",
                       flush=True)
 
     # Der Faktor gilt dem GANZEN Lauf, Modell-Ladezeit eingerechnet — er ist damit kleiner
@@ -707,7 +725,7 @@ def transcribe_project(name, model, language, only=None, autocorrect: bool = Fal
     print(f"⏱ [{name}]: {n_ok} Datei(en) transkribiert in {dt_phase:.0f}s "
           f"(Audio {fmt(audio_gesamt)}, {audio_gesamt/max(dt_phase, 1):.1f}x)", flush=True)
     print(f"[{name}] -> {out_dir}", flush=True)
-    return ki_ok, len(ai_futures)
+    return ki_ok, ki_versucht
 
 
 def main():

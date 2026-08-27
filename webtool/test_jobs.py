@@ -730,10 +730,17 @@ def test_vorgemerkter_nachlauf_laeuft_auch_nach_einem_GESCHEITERTEN_lauf():
     Erreichbar wurde es mit #417: seitdem endet ein Lauf auch dann rot, wenn nur die
     KI-Korrektur ausgefallen ist — ein Anbieterausfall ist Alltag, ein Absturz nicht.
 
+    Es traf ausserdem PROJEKTUEBERGREIFEND, was der erste Befundtext noch nicht sah (Review zu
+    diesem PR, unabhaengig nachgemessen): `start()` gibt fuer `GPU_KINDS` den belegenden jid
+    eines FREMDEN Projekts zurueck — die Vormerkung von Projekt P hing damit am Lauf von
+    Projekt Q, und endete Q rot, fiel P ersatzlos aus. Dieser Test faehrt EIN Projekt, weil das
+    der engere und haeufigere Fall ist; die Klasse ist die groessere.
+
     Die Art ist `correct` und nicht `transcribe`, obwohl der Anlassfall ein Upload waehrend
-    einer Transkription ist: `GPU_KINDS` serialisiert `transcribe` PROJEKTUEBERGREIFEND, der
-    Test haenge damit am Nachhall fremder Tests (gemessen: `request` gab `started=False`, der
-    Test mass nichts mehr). Der Mechanismus sitzt in `_run` und kennt die Art nicht.
+    einer Transkription ist: eben WEIL `GPU_KINDS` `transcribe` projektuebergreifend
+    serialisiert, haenge der Test sonst am Nachhall fremder Tests (gemessen: `request` gab
+    `started=False`, der Test mass nichts mehr). Der Mechanismus sitzt in `_run` und kennt die
+    Art nicht.
     """
     gelaufen = []
     orig_start = jobs.start
@@ -741,7 +748,11 @@ def test_vorgemerkter_nachlauf_laeuft_auch_nach_einem_GESCHEITERTEN_lauf():
     def zaehl_start(project, cmd, cwd, kind, then=None, env=None, base=None, bases=None):
         jid, started = orig_start(project, cmd, cwd, kind, then=then, env=env,
                                   base=base, bases=bases)
-        if started:
+        # NUR das eigene Projekt zaehlen: `jobs.start` ist ein Modulglobal und `_jobs`/`_pending`
+        # sind prozessweiter Zustand — ein Nachhall-Thread eines frueheren Tests, der in diesem
+        # Fenster startet, landete sonst im Zaehler. Die Asserts sind strikt, der Fehlerfall
+        # waere also rot statt falsch-gruen; der Filter kostet nichts und nimmt die Klasse weg.
+        if started and project == "P_rot":
             gelaufen.append(jid)
         return jid, started
 
@@ -777,7 +788,11 @@ def test_abbruch_startet_KEINEN_nachlauf():
     def zaehl_start(project, cmd, cwd, kind, then=None, env=None, base=None, bases=None):
         jid, started = orig_start(project, cmd, cwd, kind, then=then, env=env,
                                   base=base, bases=bases)
-        if started:
+        # NUR das eigene Projekt zaehlen: `jobs.start` ist ein Modulglobal und `_jobs`/`_pending`
+        # sind prozessweiter Zustand — ein Nachhall-Thread eines frueheren Tests, der in diesem
+        # Fenster startet, landete sonst im Zaehler. Die Asserts sind strikt, der Fehlerfall
+        # waere also rot statt falsch-gruen; der Filter kostet nichts und nimmt die Klasse weg.
+        if started and project == "P_abbr":
             gelaufen.append(jid)
         return jid, started
 
@@ -840,7 +855,11 @@ def test_abbruch_hinterlaesst_keine_tote_vormerkung():
     def zaehl_start(project, cmd, cwd, kind, then=None, env=None, base=None, bases=None):
         jid, started = orig_start(project, cmd, cwd, kind, then=then, env=env,
                                   base=base, bases=bases)
-        if started:
+        # NUR das eigene Projekt zaehlen: `jobs.start` ist ein Modulglobal und `_jobs`/`_pending`
+        # sind prozessweiter Zustand — ein Nachhall-Thread eines frueheren Tests, der in diesem
+        # Fenster startet, landete sonst im Zaehler. Die Asserts sind strikt, der Fehlerfall
+        # waere also rot statt falsch-gruen; der Filter kostet nichts und nimmt die Klasse weg.
+        if started and project == "P_leck":
             gelaufen.append(jid)
         return jid, started
 

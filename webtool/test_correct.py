@@ -1696,8 +1696,10 @@ def test_correct_ai_single_liest_cmd_apply_und_nur_missing_ist_ein_fehler(
     Datenverlust rote Zeilen in der Bilanz. Ohne die "skipped"-Zeile hier waere dieser Fall
     unbewacht — und er ist der, den man nicht falsch haben darf.
     """
+    # Nur die Env-Variable — `paths` hat KEIN modulweites `PROJEKTE`, nur `projekte_root()`,
+    # das sie liest. Ein `setattr(paths, "PROJEKTE", …, raising=False)` legte das Attribut neu
+    # an, niemand laese es, und `raising=False` verdeckte genau das.
     monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
-    monkeypatch.setattr(paths, "PROJEKTE", str(tmp_path), raising=False)
     tdir = tmp_path / "P" / "transkripte"
     tdir.mkdir(parents=True)
     (tdir / "A.json").write_text(json.dumps({"segments": []}), encoding="utf-8")
@@ -1711,3 +1713,31 @@ def test_correct_ai_single_liest_cmd_apply_und_nur_missing_ist_ein_fehler(
 
     assert correct.correct_ai_single("P", "A", force=True) is erwartet
     assert gerufen, "cmd_apply wurde gar nicht gerufen — der Test misst nichts"
+
+
+def test_cmd_run_ueberlebt_ein_nicht_versucht(monkeypatch, tmp_path):
+    """`cmd_run` zaehlt mit `sum(ex.map(one, …))` — ein `None` darin waere ein TypeError.
+
+    Seit `correct_ai_single` drei Ausgaenge hat (`True`/`False`/`None`), normalisiert `one()`
+    mit `bool(...)`. Im Normalfall kann `None` dort nicht ankommen: `one()` prueft Roh-JSON und
+    `human_edited` selbst, sechs Zeilen vorher. Es bleibt ein TOCTOU-Fenster — die Datei
+    verschwindet dazwischen —, und ohne die Normalisierung riesse dieser seltene Fall den
+    GANZEN Lauf mit, statt eine Datei zu ueberspringen.
+
+    Ohne diesen Test waere `bool(...)` ein Waechter, den keine Mutation rot bekommt.
+    """
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    tdir = tmp_path / "P" / "transkripte"
+    tdir.mkdir(parents=True)
+    for b in ("A", "B"):
+        (tdir / f"{b}.json").write_text(json.dumps({"segments": []}), encoding="utf-8")
+        (tdir / f"{b}.raw.txt").write_text("text", encoding="utf-8")
+        (tdir / f"{b}.segments.txt").write_text("[0:00 - 0:01] text", encoding="utf-8")
+
+    monkeypatch.setattr(correct, "_glossary", lambda *a: "")
+    monkeypatch.setattr(correct, "_context", lambda *a: "")
+    monkeypatch.setattr(correct, "cmd_diarize", lambda *a, **kw: 0)
+    monkeypatch.setattr(correct, "prep_single", lambda *a, **kw: True)
+    monkeypatch.setattr(correct, "correct_ai_single", lambda *a, **kw: None)
+
+    assert correct.cmd_run("P") == 0        # kein TypeError, und nichts faelschlich gezaehlt
