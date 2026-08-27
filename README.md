@@ -537,9 +537,12 @@ Unter **Version** (in der Fusszeile auf die Versionsnummer `v…` klicken) steht
 Abschnitt „Etwas geht schief?“ mit zwei Knöpfen.
 
 **„Fehlerbericht schreiben“** öffnet eine vorbereitete E-Mail in deinem Mailprogramm: mit der
-Fassung, deinem Betriebssystem und den letzten **aussagekräftigen** Zeilen aus dem Protokoll —
-routinemässige „alles in Ordnung“-Zeilen lässt Transkribor weg, sonst bestünde der Bericht nur
-aus ihnen. Schreib oben hinein, was passiert ist, und schick sie ab.
+Fassung, deinem Betriebssystem und den letzten **aussagekräftigen** Zeilen aus dem Protokoll.
+Weggelassen wird genau dreierlei: leere Zeilen, die lange `PATH`-Zeile (siehe unten) und die
+Zeilen, mit denen die App laufend ihren eigenen, erfolgreichen Betrieb protokolliert —
+die machen **neun von zehn** Zeilen aus, ohne sie bestünde der Bericht nur daraus. Meldungen
+über Fehlschläge bleiben ausdrücklich drin. Schreib oben hinein, was passiert ist, und schick
+sie ab.
 
 Hast du gar kein Mailprogramm eingerichtet, sagt dir Transkribor das. Die Protokolldatei wird
 in dem Fall trotzdem angezeigt — schick sie dann von Hand an die Adresse aus dem Fenster.
