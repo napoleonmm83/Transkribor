@@ -541,7 +541,9 @@ Fassung, deinem Betriebssystem und den letzten **aussagekräftigen** Zeilen aus 
 Weggelassen wird genau dreierlei: leere Zeilen, die lange `PATH`-Zeile (siehe unten) und die
 Zeilen, mit denen die App laufend ihren eigenen, erfolgreichen Betrieb protokolliert —
 die machen **neun von zehn** Zeilen aus, ohne sie bestünde der Bericht nur daraus. Meldungen
-über Fehlschläge bleiben ausdrücklich drin. Schreib oben hinein, was passiert ist, und schick
+über Fehlschläge bleiben ausdrücklich drin. Und weil eine E-Mail nur begrenzt lang sein darf,
+fallen von den übrigen Zeilen notfalls die **ältesten** weg — die Mail sagt dir das dann an,
+und die vollständige Datei liegt daneben. Schreib oben hinein, was passiert ist, und schick
 sie ab.
 
 Hast du gar kein Mailprogramm eingerichtet, sagt dir Transkribor das. Die Protokolldatei wird
