@@ -1686,6 +1686,45 @@ def test_wurf_in_der_vorbereitung_OHNE_anbieter_bleibt_gruen(monkeypatch, tmp_pa
     assert "Korrektur:" not in out, out
 
 
+def test_anbieterlage_wird_VOR_der_vorbereitung_gefragt(monkeypatch, tmp_path, capsys):
+    """Die Zusage „je Datei neu gefragt" (#414) galt im WURF-Pfad nicht.
+
+    `_ai_pool_oeffnen()` stand hinter `cmd_diarize`/`prep_single`. Wirft eine der beiden, ist
+    der Pool noch zu — und der except-Zweig druckt „ohne KI-Phase", auch wenn der Anbieter
+    inzwischen verfuegbar ist. Gemessen: `available()` wurde in einem Lauf ueber zwei Dateien
+    GENAU EINMAL gerufen (der Vorablauf am Anfang), beide Dateien falsch beschriftet.
+
+    Die Richtung war sicher (nie ein falsches Rot), die Beschriftung nicht. Und seit die
+    Oberflaeche die Korrektur je Datei liest (#405), ist die Beschriftung der Unterschied
+    zwischen „Aufnahme gescheitert" und „Korrektur war gar nicht angefordert".
+    """
+    from webtool import correct, llm
+
+    _ki_projekt(monkeypatch, tmp_path, "SpaetDemo")
+    gefragt = []
+
+    def lage():
+        gefragt.append(1)
+        # Beim Laufstart noch kein Anbieter, ab der ersten Datei schon.
+        return (len(gefragt) > 1, "" if len(gefragt) > 1 else "kein KI-Anbieter konfiguriert")
+
+    monkeypatch.setattr(llm, "available", lage)
+    monkeypatch.setattr(correct, "cmd_diarize", _wirf("GPU weg"))
+
+    transcribe.transcribe_project("SpaetDemo", "tiny", "de", autocorrect=True)
+    out = capsys.readouterr().out
+    assert len(gefragt) >= 2, f"nur {len(gefragt)}x gefragt — die Lage wird nicht je Datei geholt"
+    # Der Pool steht ab der ersten Datei, also ist der Wurf ein VERSUCH und wird so benannt.
+    assert "Autocorrect-Fehler bei S1: GPU weg" in out, out
+    assert "Vorbereitung gescheitert" not in out, out
+
+
+def _wirf(text):
+    def platzt(*_a, **_kw):
+        raise RuntimeError(text)
+    return platzt
+
+
 def test_all_verrechnet_projekte_nicht_gegeneinander(monkeypatch, tmp_path, capsys):
     """`--all`: ein erfolgreiches Projekt darf den Totalausfall eines anderen nicht zudecken.
 
