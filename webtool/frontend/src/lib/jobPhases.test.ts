@@ -387,6 +387,36 @@ describe('parseJobPhases — die gestaffelte Pipeline (#405)', () => {
     expect(mit.perBase).toEqual({ A: 'failed' })
   })
 
+  it('ein SCHWAECHERES Urteil ueberschreibt kein staerkeres (#405/B1)', () => {
+    // Der gestaffelte Lauf ist die erste Stelle, an der eine Aufnahme in EINEM Job zwei
+    // Terminalurteile bekommt. `apply: SKIP … (human_edited=true)` schuetzt die Handarbeit
+    // des Nutzers und heisst 'skipped' — ungefiltert stand die gerade transkribierte
+    // Aufnahme danach auf „Uebersprungen".
+    const p = parseJobPhases('transcribe', [
+      '[scope] A\tB',
+      '[P] -> transkribiere A …', '[P] fertig A: 1s, 2 Segmente, 1.0x',
+      'apply: SKIP A (human_edited=true; --force zum Ueberschreiben)',
+      '[P] -> transkribiere B …', '[P] fertig B: 1s, 2 Segmente, 1.0x',
+      '✗ FEHLT/ungültig: B.correction.json — überspringe',
+    ])
+    expect(p.perBase).toEqual({ A: 'done', B: 'failed' })
+    // Und DAS ist der Schaden, den es anrichtete: `ausgang()` zieht die uebersprungenen aus
+    // dem NENNER, also meldete ein Lauf ueber zwei Aufnahmen „1 von 1 fehlgeschlagen".
+    expect(ausgang({ status: 'done', phases: p }))
+      .toEqual({ art: 'teil', misslungen: ['B'], versucht: 2 })
+
+    // Gegenrichtung, und sie ist der Zweck dieses ganzen PR: 'done' -> 'failed' MUSS
+    // durchgehen. Eine Rangregel, die auch das blockt, macht #405 wieder zu.
+    const q = parseJobPhases('transcribe', [
+      '[scope] A', '[P] -> transkribiere A …', '[P] fertig A: 1s, 2 Segmente, 1.0x',
+      '✗ FEHLT/ungültig: A.correction.json — überspringe',
+    ])
+    expect(q.perBase).toEqual({ A: 'failed' })
+
+    // …und der Spinner ist trotzdem weg, auch wenn das Urteil verworfen wurde.
+    expect(p.active).toEqual({})
+  })
+
   it('ein fetch-Job faellt NICHT in den correct-Dialekt', () => {
     // Der Riegel, der vom frueheren unbedingten `continue` uebrigbleibt. Ein Download-Job hat
     // keine Korrekturphase (`app.py` haengt immer `--download-only` an); faellt er trotzdem

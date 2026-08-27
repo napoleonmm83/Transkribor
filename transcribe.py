@@ -668,12 +668,20 @@ def transcribe_project(name, model, language, only=None, autocorrect: bool = Fal
                 if autocorrect:
                     try:
                         from webtool import correct as _correct
+                        # Die Anbieterlage wird je Datei neu gefragt, nicht nur am Laufstart
+                        # (#414) — und ZUERST, nicht erst hinter der Vorbereitung. Sie stand
+                        # frueher unter Punkt 2, also HINTER `cmd_diarize`/`prep_single`;
+                        # warf eine der beiden, war der Pool noch zu, und der except-Zweig
+                        # unten druckte „ohne KI-Phase" auch dann, wenn der Anbieter
+                        # inzwischen verfuegbar war. Gemessen: `available()` genau EINMAL
+                        # gerufen, beide Dateien falsch beschriftet. Die Reihenfolge kostet
+                        # nichts — die Pruefung ist eine Konfigurationsfrage plus (beim Abo)
+                        # ein `auth.status()`, keine GPU-Arbeit.
+                        _ai_pool_oeffnen()
                         # 1. Diarisierung & Prep direkt auf der GPU in der Hauptschleife (Hardware geschützt):
                         _correct.cmd_diarize(name, [base])
                         _correct.prep_single(name, base)
                         # 2. Datei sofort parallel an den Cloud-KI-Threadpool übergeben.
-                        # Die Anbieterlage wird HIER neu gefragt, nicht nur am Laufstart (#414).
-                        _ai_pool_oeffnen()
                         if ai_pool is not None:
                             ai_futures.append((base, ai_pool.submit(_correct.correct_ai_single,
                                                                     name, base)))

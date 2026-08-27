@@ -11,6 +11,17 @@ export const KIND_LABEL: Record<string, string> = {
   transcribe: 'Transkribieren…', correct: 'Korrigieren…', fetch: 'Herunterladen…',
 }
 
+/** Schwere der Endzustaende. Ein Fehlschlag darf NIE von etwas Harmlosem verdeckt werden;
+ *  zwischen 'done' und 'skipped' gewinnt 'done', weil „in diesem Lauf gemacht" mehr aussagt
+ *  als „es gab nichts zu tun".
+ *
+ *  STAND BIS #405 NUR IN `useActiveJob.tsx` und galt damit nur ZWISCHEN Jobs. Innerhalb eines
+ *  Jobs gab es den Fall nicht: eine Aufnahme bekam genau ein Terminalurteil. Der gestaffelte
+ *  Lauf ist die erste Stelle, an der sie zwei bekommt (Transkription, dann Korrektur) — und
+ *  `terminal()` nahm schlicht das letzte. Jetzt ist die Regel hier zuhause und beide fragen
+ *  dieselbe; zwei Orte mit derselben Regel driften auseinander. */
+export const RANG: Record<FileState, number> = { failed: 3, done: 2, skipped: 1 }
+
 // Der correct-Treiber arbeitet Dateien UND Bloecke parallel (correct.py: ThreadPoolExecutor,
 // gedeckelt durch _claude_slots) -> mehrere gleichzeitig aktive Dateien, und die stdout-Zeilen
 // verschraenken sich. `active` ist darum nach Basisnamen indiziert; jede Zeile traegt ihren
@@ -29,7 +40,22 @@ export function parseJobPhases(kind: string, lines: string[]): JobPhases {
 
   const terminal = (base: string, state: FileState) => {
     if (scope && !scope.has(base)) return
-    perBase[base] = state
+    // Ein SCHWAECHERES Urteil ueberschreibt kein staerkeres — dieselbe Rangfolge, die
+    // `mergePhases` zwischen Jobs anwendet (#377). Innerhalb eines Jobs war das bis #405
+    // gegenstandslos: jede Aufnahme bekam genau ein Terminalurteil. Der gestaffelte Lauf
+    // gibt ihr zwei — erst die Transkription, dann die Korrektur —, und die zweite ist nicht
+    // immer die schwerere: `apply: SKIP … (human_edited=true)` schuetzt die Handarbeit des
+    // Nutzers und heisst 'skipped'. Ungefiltert stand eine gerade frisch transkribierte
+    // Aufnahme danach auf „Uebersprungen", und weil `ausgang()` die uebersprungenen aus dem
+    // NENNER zieht, meldete ein Lauf ueber zwei Aufnahmen „1 von 1 fehlgeschlagen" (an einem
+    // echten Lauf gemessen). `done -> failed` bleibt erlaubt und ist der Normalfall dieses
+    // Fixes: die Transkription gelang, die Korrektur nicht.
+    // `active`/`blocks`/`cursor` werden IMMER geraeumt, auch wenn das Urteil nicht gilt —
+    // die Datei laeuft nicht mehr, und ein stehenbleibender Spinner waere der #379-Zustand.
+    // `>=` gegen `>` ist ein AEQUIVALENTER Mutant (nachgemessen, gruen): `RANG` bildet jeden
+    // Zustand auf eine eigene Zahl ab, gleicher Rang heisst also derselbe Zustand, und die
+    // Zuweisung waere ein No-op. Steht hier, damit es niemand fuer eine Luecke haelt.
+    if (!(base in perBase) || RANG[state] >= RANG[perBase[base]]) perBase[base] = state
     delete active[base]
     delete blocks[base]
     if (cursor === base) cursor = null

@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { getJob } from '@/lib/api'
-import { parseJobPhases } from '@/lib/jobPhases'
-import type { FileState, GlobalPhase, JobPhases } from '@/lib/types'
+import { parseJobPhases, RANG } from '@/lib/jobPhases'
+import type { GlobalPhase, JobPhases } from '@/lib/types'
 
 export type Job = { id: string; project: string; kind: string; status: string; phases: JobPhases }
 type Ctx = {
@@ -15,10 +15,9 @@ type Ctx = {
 const EMPTY: JobPhases = { global: null, active: {}, perBase: {} }
 const JobContext = createContext<Ctx | null>(null)
 
-/** Schwere der Endzustaende. Ein Fehlschlag darf NIE von etwas Harmlosem verdeckt werden;
- *  zwischen 'done' und 'skipped' gewinnt 'done', weil "in diesem Lauf gemacht" mehr aussagt
- *  als "es gab nichts zu tun". */
-const RANG: Record<FileState, number> = { failed: 3, done: 2, skipped: 1 }
+// `RANG` steht seit #405 in `lib/jobPhases.ts`: dieselbe Regel gilt jetzt auch INNERHALB
+// eines Laufs (der gestaffelte Job gibt einer Aufnahme zwei Terminalurteile), und zwei Orte
+// mit derselben Regel driften auseinander.
 
 /** Transkription und Korrektur duerfen gleichzeitig laufen (jobs.py: Dedupe je Projekt UND Art),
  *  also mehrere Jobs zusammenfuehren. NUR Jobs EINES Projekts hineingeben — `active` ist nach

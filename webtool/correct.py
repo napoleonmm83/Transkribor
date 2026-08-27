@@ -71,6 +71,32 @@ if _ROH_PARALLEL:
               file=sys.stderr, flush=True)
 _claude_slots = threading.Semaphore(CLAUDE_PARALLEL)
 _hardware_lock = threading.Lock()
+def _einzeilig(text) -> str:
+    r"""Fremdtext auf EINE Zeile zwingen, bevor er in einen Job-Strom geht.
+
+    ZWILLING von `transcribe._einzeilig`, und die Doppelung ist gewollt: `transcribe.py`
+    laeuft ohne das `webtool`-Paket (es importiert nichts davon auf Modulebene, `device` und
+    `correct` erst lazy im Lauf). Ein gemeinsames Modul dort zu importieren naehme ihm genau
+    diese Eigenschaft. `test_correct.py` haelt beide Fassungen an derselben Batterie
+    aneinander — driften sie, wird der Test rot.
+
+    WARUM ES HIER SEIT #405 ZAEHLT: bis dahin las `jobPhases.ts` den correct-Dialekt nur in
+    einem Job der Art `correct`. Seit die Korrektur INNERHALB des Transkriptions-Jobs laeuft
+    und dort gelesen wird, gilt fuer diese Druckstellen dieselbe Regel wie fuer die in
+    `transcribe.py`. Gemessen an einem echten Lauf gegen einen HTTP-500-Server: `llm.py`
+    uebernimmt bis zu 400 Zeichen rohen Antwortrumpf in die Fehlermeldung (`llm.py:292`),
+    Umbrueche inklusive — eine erfundene Aufnahme hing danach bis Jobende im Spinner, und
+    eine eingeschleuste `apply: … -> edit.json`-Zeile meldete eine fremde Aufnahme als
+    fertig.
+
+    Der Parser-Riegel `^\[[^\]]+\] ` (#413) hilft dagegen NICHT: er deckt die andere Klasse
+    (ein `]` in einzeiligem Fremdtext). Ein Zeilenumbruch gibt dem Fremdtext den
+    ZEILENANFANG, und daran haengen die praefixlosen Muster (`^apply:`, `^→ Diarisiere`,
+    `^✗ FEHLT/ungueltig:`) sowie `jobs.py`s `[scope]`/`[active]`/`[done]`.
+    """
+    return " ".join(str(text).split())
+
+
 _letzte_diagnose: dict | None = None
 _CREATE_NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 
@@ -184,7 +210,7 @@ def prep_single(project: str, base: str) -> bool:
         paths.atomic_write(os.path.join(tdir, base + ".tagged.txt"), "\n".join(lines) + "\n")
         return True
     except (OSError, ValueError) as e:
-        print(f"prep: SKIP {base} ({type(e).__name__}: {e})", flush=True)
+        print(f"prep: SKIP {base} ({type(e).__name__}: {_einzeilig(e)})", flush=True)
         return False
 
 
@@ -334,10 +360,11 @@ def cmd_diarize(project: str, only_bases: list = None) -> int:
         # bricht also nicht ab. Geweitet faenge dieser Zweig auch jeden ValueError aus
         # `diarize.*` und beschriftete ihn als "Roh-JSON unlesbar", was er nicht ist.
         except json.JSONDecodeError as e:               # nur die Roh-JSON parst nicht
-            print(f"diarize: SKIP {base} (Roh-JSON unlesbar: {e})", flush=True)
+            print(f"diarize: SKIP {base} (Roh-JSON unlesbar: {_einzeilig(e)})", flush=True)
             print(f"[done] {base}", flush=True)
         except Exception as e:                          # pyannote/Token/GPU/HF-403 (erbt OSError!) — NIE den Lauf killen
-            print(f"diarize: SKIP {base} ({type(e).__name__}: {e}) — Korrektur ohne Cluster", flush=True)
+            print(f"diarize: SKIP {base} ({type(e).__name__}: {_einzeilig(e)}) — Korrektur ohne Cluster",
+                  flush=True)
             print(f"[done] {base}", flush=True)
     # Anhang, kein Umbau: `/^diarize: \d+ Datei/` in jobPhases.ts hat keinen $-Anker.
     print(f"diarize: {n} Datei(en) diarisiert in {time.monotonic() - t_phase:.0f}s", flush=True)
@@ -425,7 +452,7 @@ def _context(project: str) -> str:
             # NACH diarize + prep: ein Wurf verwirft GPU-Minuten und den ganzen Lauf, statt
             # eine Datei zu ueberspringen. Also weiter ohne Kontext — aber laut, denn ohne
             # ihn faellt die Korrektur messbar schlechter aus.
-            print(f"⚠ kontext.md nicht lesbar ({type(e).__name__}: {e}) — fahre ohne "
+            print(f"⚠ kontext.md nicht lesbar ({type(e).__name__}: {_einzeilig(e)}) — fahre ohne "
                   f"Projektkontext fort", flush=True)
     return ""
 
@@ -448,7 +475,7 @@ def _is_human_edited(epath: str) -> bool:
     except FileNotFoundError:
         return False
     except (OSError, ValueError) as e:     # ValueError deckt auch UnicodeDecodeError (#190)
-        print(f"⚠ {os.path.basename(epath)} nicht lesbar ({type(e).__name__}: {e}) — gilt "
+        print(f"⚠ {os.path.basename(epath)} nicht lesbar ({type(e).__name__}: {_einzeilig(e)}) — gilt "
               f"als handbearbeitet, wird NICHT ueberschrieben (--force erzwingt es)",
               flush=True)
         return True
@@ -489,7 +516,7 @@ def _run_claude(prompt: str, workdir: str) -> None:
     except FileNotFoundError as e:
         diag = llm.diagnose_fehler(str(e))
         _letzte_diagnose = diag
-        print(f"  {e}", flush=True)
+        print(f"  {_einzeilig(e)}", flush=True)
         print(f"  [diagnose] {diag['kategorie']}\t{diag['titel']}\t{diag['hinweis']}", flush=True)
         return
     # Ohne MCP-Server: 16,3s -> 7,7s Startup je Aufruf (gemessen). Die Korrektur braucht nur
@@ -547,7 +574,7 @@ def _ask_llm(prompt: str, inputs: list, output: str) -> None:
         except llm.LLMError as e:
             diag = llm.diagnose_fehler(e)
             _letzte_diagnose = diag
-            print(f"  KI-Anbieter: {e}", flush=True)
+            print(f"  KI-Anbieter: {_einzeilig(e)}", flush=True)
             print(f"  [diagnose] {diag['kategorie']}\t{diag['titel']}\t{diag['hinweis']}", flush=True)
 
 
@@ -1078,7 +1105,7 @@ def correct_ai_single(project: str, b: str, gjson: str = "", context: str = None
         # stillen Datenverlust rote Zeilen in der Bilanz.
         return cmd_apply(project, b, force=force) != "missing"
     except Exception as e:
-        print(f"✗ Fehler bei {b}: {e} — überspringe", flush=True)
+        print(f"✗ Fehler bei {b}: {_einzeilig(e)} — überspringe", flush=True)
         return False
     finally:
         print(f"[done] {b}", flush=True)
