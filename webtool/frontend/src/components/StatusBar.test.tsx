@@ -22,6 +22,9 @@ function bruecke(zustand: UpdateZustand) {
       pruefen: () => Promise.resolve(), laden: () => Promise.resolve(), installieren: () => Promise.resolve(),
     },
     protokollOeffnen: () => Promise.resolve(''),
+    // Pflichtfeld der Bruecke seit #372 — eine Attrappe, die es weglaesst, behauptet einen
+    // Vertrag, den es nicht gibt (dieselbe Regel wie bei `as Settings`).
+    fehlerbericht: () => Promise.resolve({ pfad: '', verwendet: 0, gekuerzt: false }),
     on: () => () => {},
   }
 }

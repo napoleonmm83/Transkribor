@@ -537,8 +537,12 @@ Unter **Version** (in der Fusszeile auf die Versionsnummer `v…` klicken) steht
 Abschnitt „Etwas geht schief?“ mit zwei Knöpfen.
 
 **„Fehlerbericht schreiben“** öffnet eine vorbereitete E-Mail in deinem Mailprogramm: mit der
-Fassung, deinem Betriebssystem und den letzten Zeilen aus dem Protokoll. Schreib oben hinein,
-was passiert ist, und schick sie ab.
+Fassung, deinem Betriebssystem und den letzten **aussagekräftigen** Zeilen aus dem Protokoll —
+routinemässige „alles in Ordnung“-Zeilen lässt Transkribor weg, sonst bestünde der Bericht nur
+aus ihnen. Schreib oben hinein, was passiert ist, und schick sie ab.
+
+Hast du gar kein Mailprogramm eingerichtet, sagt dir Transkribor das. Die Protokolldatei wird
+in dem Fall trotzdem angezeigt — schick sie dann von Hand an die Adresse aus dem Fenster.
 
 **Du siehst alles, bevor du sendest** — die Mail geht nicht von selbst raus, und du kannst
 jede Zeile löschen, die du nicht mitschicken willst. Das ist die eigentliche Zusage hier: nicht
