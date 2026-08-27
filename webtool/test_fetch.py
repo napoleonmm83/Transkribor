@@ -5,7 +5,7 @@ import sys
 import pytest
 
 import transcribe as transcribe_mod
-from webtool import fetch
+from webtool import fetch, jobs
 
 
 # --- check_url ---------------------------------------------------------------
@@ -1010,3 +1010,36 @@ def test_wiederholung_nach_der_selbstheilung_traegt_die_SPRACHE_auch_ein(projekt
     # ausgeloest wuerde — er pruefte dann nur den ersten Versuch.
     assert versuche["n"] == 2, "der Wiederholungsversuch lief gar nicht — Test misst nichts"
     assert projekt_mod.datei_ansicht("Demo", "Mein Interview")["sprache"] == "en"
+
+
+def test_fetch_meldet_einen_LEEREN_bereich_VOR_dem_ersten_download(projekt, monkeypatch, capsys):
+    """Das vierte `[scope]`-Literal hatte als einziges keinen Test (#375).
+
+    CLAUDE.md haelt fest: „wer das Praefix aendert, aendert es an vier Stellen." Drei davon
+    sind bewacht; eine Mutation in `fetch.py` blieb gruen — und baute die Bereichsmeldung
+    still auf den Zustand vor #80 zurueck, womit der Job als allumfassend gaelte
+    (`jobs.py`: `bases is None`) und waehrend des ganzen Downloads jede Aufnahme des
+    Projekts fuer Loeschen und Umbenennen sperrte.
+
+    Geprueft wird gegen `jobs.SCOPE_PREFIX`, nicht gegen ein viertes abgetipptes Literal:
+    ein Test mit eigener Kopie waere genau die fuenfte Stelle, die auseinanderlaufen kann.
+    """
+    def merken(project, url, sprecher=None, sprache=None):
+        print(f"[fetch] lade {url} …", flush=True)
+        return "base1"
+
+    monkeypatch.setattr(fetch, "download_one", merken)
+    monkeypatch.setenv("TRANSKRIBOR_YTDLP_UPDATE", "0")
+    fetch.main(["--download-only", "Demo", "https://youtu.be/aaa"])
+
+    zeilen = capsys.readouterr().out.splitlines()
+    treffer = [(i, z) for i, z in enumerate(zeilen) if z.startswith(jobs.SCOPE_PREFIX)]
+    assert len(treffer) == 1, f"genau eine Bereichszeile erwartet, gefunden: {treffer}"
+    i_scope, zeile = treffer[0]
+
+    # LEER, nicht fehlend: der Import legt neue Aufnahmen an und fasst keine vorhandene an.
+    assert {b for b in zeile[len(jobs.SCOPE_PREFIX):].split("\t") if b} == set()
+
+    # Und vor der Arbeit — dieselbe Eigenschaft, die der correct-Lauf zusichert.
+    i_arbeit = next(i for i, z in enumerate(zeilen) if z.startswith("[fetch] lade "))
+    assert i_scope < i_arbeit, f"[scope] bei {i_scope}, erster Download bei {i_arbeit}"

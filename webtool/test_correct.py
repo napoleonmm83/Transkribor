@@ -2,7 +2,7 @@ import json
 import os
 import re
 import pytest
-from webtool import correct, paths
+from webtool import correct, jobs, paths
 
 
 @pytest.fixture
@@ -1574,6 +1574,14 @@ def test_correct_run_meldet_active_done_und_ueberspringt_geloeschte_dateien(proj
     correct.cmd_run("Demo", force=True)
     out = capsys.readouterr().out
     assert "[scope] S1\tS2" in out or "[scope] S2\tS1" in out
+    # Die Zeile muss VOR der Arbeit stehen, nicht bloss irgendwo — darauf ruht die 409-Sperre
+    # der Endpunkte: `jobs.betrifft` kann erst antworten, wenn der Bereich bekannt ist, und
+    # bis dahin gilt der Lauf als allumfassend (`bases is None`). Ein blosses `in out` liess
+    # genau diese Eigenschaft unbewacht — sie stand nur im Assert-Text (#375).
+    zeilen = out.splitlines()
+    i_scope = next(i for i, z in enumerate(zeilen) if z.startswith(jobs.SCOPE_PREFIX))
+    i_arbeit = next(i for i, z in enumerate(zeilen) if z.startswith(jobs.ACTIVE_PREFIX))
+    assert i_scope < i_arbeit, f"[scope] bei {i_scope}, erste Arbeit bei {i_arbeit}"
     assert "[active] S1" in out
     assert "[done] S1" in out
     assert "[active] S2" not in out
