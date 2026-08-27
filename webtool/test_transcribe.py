@@ -1659,6 +1659,13 @@ def test_wurf_in_der_vorbereitung_OHNE_anbieter_bleibt_gruen(monkeypatch, tmp_pa
     ein absichtlich ausgelassener Schritt ist nie ein Fehlschlag (dieselbe Regel wie beim
     Kill-Switch). Ohne diese Zeile waere `ki_versucht += 1` im except ein Zaehler, der einen
     abgeschalteten Weg anklagt.
+
+    SEIT #405/#421 GILT DAS AUCH FUER DIE ZEILE, nicht nur fuer den Zaehler. Beide Faelle
+    druckten dieselbe Form; solange der Parser sie ignorierte, war das folgenlos. Seit die
+    Oberflaeche die Korrektur je Datei liest, meldete sie damit eine Aufnahme als gescheitert,
+    deren Korrektur niemand angefordert hat — spiegelverkehrt derselbe Fehler wie ein rotes
+    Exitcode fuer eine geschuetzte `human_edited`-Datei. Aus der gemeinsamen Form ist der
+    Unterschied nicht entscheidbar: sie ist in beiden Faellen byteweise dieselbe.
     """
     from webtool import correct, llm
 
@@ -1672,7 +1679,10 @@ def test_wurf_in_der_vorbereitung_OHNE_anbieter_bleibt_gruen(monkeypatch, tmp_pa
 
     assert transcribe.transcribe_project("WurfOhneDemo", "tiny", "de", autocorrect=True) == (0, 0)
     out = capsys.readouterr().out
-    assert "Autocorrect-Fehler bei S1: GPU weg" in out, "Vorbedingung: der Wurf ist passiert"
+    assert ("[WurfOhneDemo] Vorbereitung gescheitert bei S1 (ohne KI-Phase): GPU weg" in out), \
+        "Vorbedingung: der Wurf ist passiert — und er sagt es"
+    # Die eigentliche Zusicherung: NICHT die Form, die der Parser als Fehlschlag liest.
+    assert "Autocorrect-Fehler" not in out, out
     assert "Korrektur:" not in out, out
 
 

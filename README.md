@@ -562,6 +562,16 @@ Korrektur, meldete Transkribor „fertig“. Die Transkripte waren da, die Korre
 Meldung in diesem Fall rot. Eine Aufnahme, die du im Editor bearbeitet hast, zählt dabei nicht
 als Fehlschlag: die lässt Transkribor bewusst in Ruhe.
 
+**In Fassungen bis einschliesslich `v0.48.1` galt dasselbe auch für einen TEIL-Ausfall der
+Korrektur — ab der nächsten Fassung nicht mehr.** Klappten drei von fünf Korrekturen nicht,
+sagte die Meldung trotzdem „fertig“, und die drei Aufnahmen lagen unkorrigiert da. Ab der
+nächsten Fassung nennt Transkribor sie beim Namen, wie bei einem Fehlschlag beim Abhören auch.
+
+Aus demselben Grund siehst du ab der nächsten Fassung auch **während** der Korrektur wieder,
+woran Transkribor gerade arbeitet: Sprecher trennen, Korrigieren, Prüfen, Anwenden. In
+`v0.48.0` und `v0.48.1` stand bei jeder Aufnahme schon „fertig“, sobald das Abhören durch
+war — obwohl die eigentliche Arbeit noch minutenlang lief.
+
 
 </details>
 
