@@ -359,6 +359,22 @@ describe('parseJobPhases — Druckformen, die der Parser nicht kannte (#374)', (
     expect(q.active).toEqual({})
   })
 
+  it('… aber bei ECHTER Zweideutigkeit gewinnt die gekürzte Form', () => {
+    // Was die Bereichsrettung NEU erlaubt hat (CodeRabbit-Bot am PR): liegen `Runde 2` UND
+    // `Runde 2 (3 Sprecher)` im selben Projekt und ist für `Runde 2` die Zahl 3 gesetzt, dann
+    // steht der volle Text wegen der FREMDEN Datei im Bereich — die Phase landete unter dem
+    // falschen Namen, und `[done] Runde 2` traf ihn nicht mehr. Vor der Rettung war die
+    // Paarung richtig, weil immer gekürzt wurde.
+    // Stehen beide Lesarten im Bereich, ist die Zeile wirklich nicht entscheidbar. Dann gilt
+    // die gekürzte Form: das ist das bisherige Verhalten und der häufigere der beiden Fälle.
+    const p = parseJobPhases('correct', [
+      '[scope] Runde 2\tRunde 2 (3 Sprecher)',
+      '→ Diarisiere Runde 2 (3 Sprecher) …',
+      '[done] Runde 2',
+    ])
+    expect(p.active).toEqual({})
+  })
+
   it('… und der HÄUFIGE Fall bleibt unberührt: gesetzte Sprecherzahl wird weiter abgeschnitten', () => {
     // Die Negativkontrolle zur Zeile darüber. Ohne sie wäre der Fix eine Regression an genau
     // der Stelle, die #374 Punkt 1 behoben hat — die Datei steht MIT ihrem echten Namen im

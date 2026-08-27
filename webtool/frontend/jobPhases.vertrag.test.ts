@@ -266,6 +266,15 @@ describe('Vertrag: gedruckte Statuszeilen <-> jobPhases.ts (#375)', () => {
     // Ohne diesen Test waere „gelesen" eine Behauptung. Gemessen wird die einzige Frage, auf die
     // es ankommt: aendert die Zeile den geparsten Zustand? Genau das taten die vier Formen aus
     // #374 nicht — sie standen im Protokoll und liefen ins Leere.
+    // `luecke` ist eine ABSICHT, kein Ruhezustand — und seit der letzte Eintrag auf `gelesen`
+    // umgestellt wurde, ist die Art ein TOTER SCHALTER: die Schleife darunter ueberspringt
+    // alles ausser `gelesen`, wer ein bekanntes Loch so markiert, bleibt also gruen. Test 1
+    // zaehlt die Form als klassifiziert, dieser hier prueft sie nicht — der Vertrag verloere
+    // seinen Druck genau dort, wo er gebraucht wird. Deshalb muss die Liste LEER bleiben:
+    // wer wieder etwas parken will, kommt hier vorbei und entscheidet bewusst.
+    // (Gefunden vom CodeRabbit-Bot; die Art wurde in DIESEM PR verwaist.)
+    expect(Object.entries(INVENTAR).filter(([, e]) => e.art === 'luecke').map(([s]) => s)).toEqual([])
+
     const tot: string[] = []
     for (const [sig, e] of Object.entries(INVENTAR)) {
       if (e.art !== 'gelesen') continue
