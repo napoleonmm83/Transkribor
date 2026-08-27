@@ -1003,17 +1003,43 @@ def _summary_only_file(project: str, base: str, ziel: str, context: str,
 
 
 def correct_ai_single(project: str, b: str, gjson: str = "", context: str = None,
-                      verify: bool = True, force: bool = False, base_explicit: str = None) -> bool:
-    """Führt die Cloud-KI-Korrektur und Finalisierung (cmd_apply) für eine vorbereitete Datei aus."""
+                      verify: bool = True, force: bool = False,
+                      base_explicit: str = None) -> bool | None:
+    """Führt die Cloud-KI-Korrektur und Finalisierung (cmd_apply) für eine vorbereitete Datei aus.
+
+    DREI Ausgänge, nicht zwei — dieselbe Unterscheidung, die `cmd_apply` über seine drei
+    Zeichenketten trifft (`"skipped"`/`"missing"`/`"written"`):
+
+    | Rückgabe | Bedeutung |
+    |---|---|
+    | `True`  | korrigiert |
+    | `False` | **versucht und gescheitert** |
+    | `None`  | **gar nicht erst versucht** — kein Roh-Transkript, oder `human_edited` |
+
+    Der dritte Wert ist nicht Kosmetik, er war ein falsches ROT (#417-Review, gemessen).
+    Vorher meldeten beide Schutz-Ausstiege `False`, und die Bilanz des gestaffelten Laufs
+    zählt jede übergebene Datei: eine Aufnahme mit `human_edited=true` ergab `0 von 1`, und
+    `transcribe.main` schloss daraus auf einen Totalausfall — **Exitcode 1 dafür, dass die
+    Handarbeit des Nutzers erfolgreich geschützt wurde.** Genau der Fehler, den #412 sechs
+    Zeilen weiter unten gerade vermieden hatte (`!= "missing"` statt `!= "written"`), nur
+    spiegelverkehrt. `correct.main` rechnet seit jeher richtig: sein `attempted` zieht die
+    Schutz-Skips aus dem Nenner, und sein Docstring sagt „nichts zu tun … ist kein Fehler".
+    Erreichbar ist der Fall, wenn die Roh-`.json` verschwindet und die `edit.json` bleibt —
+    von Hand aufgeräumt, ein halb abgebrochenes Löschen, eine Wiederherstellung aus einer
+    Sicherung. Der Knopf im Browser räumt beides zusammen weg (`app._datei_weg`).
+
+    **Wer hier einen vierten Ausstieg einbaut, beantwortet zuerst: versucht oder nicht?**
+    Ein `False` an der falschen Stelle färbt einen ganzen Lauf rot.
+    """
     tdir = paths.transkripte_dir(project)
     raw_json = os.path.join(tdir, b + ".json")
     if not os.path.exists(raw_json):
-        return False
+        return None
     epath = os.path.join(tdir, b + ".edit.json")
     cpath = os.path.join(tdir, b + ".correction.json")
     if _is_human_edited(epath) and not force:
         print(f"↷ SKIP {b} (human_edited=true; --force zum Neu-Korrigieren)", flush=True)
-        return False
+        return None
     print(f"[active] {b}", flush=True)
     try:  # eine kaputte Datei darf den Batch nicht abbrechen
         from . import projekt as _pj
@@ -1110,8 +1136,13 @@ def cmd_run(project: str, base: str = None, force: bool = False, verify: bool = 
             return False
         # 2. Lokaler GPU-Schritt fertig -> Hardware-Lock freigegeben für nächste Datei.
         # 3. Sofortige Cloud-KI-Phase (parallel über _claude_slots)
-        return correct_ai_single(project, b, gjson=gjson, context=context,
-                                 verify=verify, force=force, base_explicit=base)
+        # `bool(...)` faengt das `None` ab: `cmd_run` zaehlt seine Bilanz mit `sum(ex.map(one, …))`,
+        # und ein `None` darin waere ein TypeError statt einer Zahl. Der Unterschied
+        # „nicht versucht" vs. „gescheitert" geht hier nichts verloren, was nicht schon weg
+        # waere — `one()` filtert beide Faelle sechs Zeilen weiter oben selbst, und
+        # `correct.main` zieht die Schutz-Skips ohnehin aus seinem eigenen Nenner.
+        return bool(correct_ai_single(project, b, gjson=gjson, context=context,
+                                      verify=verify, force=force, base_explicit=base))
 
     # Dateien streamen durch die Hardware- und KI-Pipeline -> bis zu CLAUDE_PARALLEL Threads.
     # Der Hardware-Lock serialisiert GPU-Phasen, während Netzwerk-LLM-Aufrufe parallel laufen.

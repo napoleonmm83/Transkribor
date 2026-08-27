@@ -154,7 +154,15 @@ def request(project: str, cmd: list, cwd, kind: str, then=None, base: str = None
 
 def when_done(job_id: str, fn) -> bool:
     """Haengt `fn` an einen LAUFENDEN Job. False, wenn er unbekannt oder schon terminal ist —
-    dann muss der Aufrufer selbst entscheiden (z.B. sofort erneut versuchen)."""
+    dann muss der Aufrufer selbst entscheiden (z.B. sofort erneut versuchen).
+
+    **`fn` feuert bei JEDEM terminalen Ausgang — `done`, `error` UND `cancelled`.** Das ist
+    nicht der Vertrag von `then` (das bleibt auf `done`) und war bis #417 auch nicht der von
+    hier; wer den Rueckruf nur bei Erfolg laufen lassen will, fragt den Status SELBST ab.
+    Heute ist das gefahrlos, weil es genau EINEN Produktivaufrufer gibt (`request`s `rerun`,
+    der genau das tut) — der zweite erbt die Eigenschaft sonst still. Der Grund steht in
+    `_run`: `rerun` raeumt seine Vormerkung aus `_pending`, und die muss auch nach einem
+    Abbruch weg, sonst ist der Nachlauf-Weg dauerhaft vergiftet."""
     with _lock:
         r = _jobs.get(job_id)
         if r is None or r["status"] != "running":
