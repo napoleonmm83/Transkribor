@@ -121,9 +121,26 @@ def request(project: str, cmd: list, cwd, kind: str, then=None, base: str = None
                 return jid, False        # schon vorgemerkt -> der Nachlauf nimmt die neuen Dateien mit
             _pending.add(key)
 
-        def rerun(_key=key):
+        def rerun(_key=key, _jid=jid):
+            # Die Vormerkung wird IMMER geraeumt, der Neustart nur ausserhalb eines Abbruchs —
+            # und die Reihenfolge ist der ganze Punkt. Bliebe der Schluessel liegen, waere der
+            # Weg DAUERHAFT vergiftet: die Zeile `if key in _pending: return jid, False` weiter
+            # oben steigt dann sofort aus, OHNE einen neuen Nachlauf zu registrieren. Gemessen —
+            # nach einem Abbruch lag `('P','correct',None)` noch im Set, und jeder spaetere
+            # Upload waehrend eines laufenden Laufs desselben Projekts wurde still verworfen,
+            # bis zum Neustart des Servers. Es war also nicht EIN verlorener Nachlauf, sondern
+            # jeder folgende.
+            #
+            # Der Abbruch-Riegel sitzt HIER und nicht in `_run`: dort ist der Schluessel nicht
+            # bekannt (er steckt in diesem Abschluss), und ein Aufraeumen ueber `(projekt, art)`
+            # traefe auch Vormerkungen fremder Basisnamen. Ein Abbruch ist eine Entscheidung —
+            # denselben Lauf danach neu zu starten waere das Gegenteil dessen, worum gebeten
+            # wurde; seine Vormerkung zu behalten waere schlicht ein Leck.
             with _lock:
                 _pending.discard(_key)
+                abgebrochen = (_jobs.get(_jid) or {}).get("status") == "cancelled"
+            if abgebrochen:
+                return
             request(project, cmd, cwd, kind, then=then, base=base)
 
         if when_done(jid, rerun):
@@ -167,12 +184,15 @@ def _run(jid, cmd, cwd, env):
     # Modell-Laden reichte); erreichbar wurde es mit #417, seit ein blosser Anbieterausfall
     # den Lauf rot enden laesst — und der ist Alltag, ein Absturz nicht.
     #
-    # `cancelled` ist die Ausnahme und kein Versehen: ein Abbruch ist eine ENTSCHEIDUNG.
-    # Danach denselben Lauf noch einmal zu starten, waere das Gegenteil dessen, worum
-    # gebeten wurde.
+    # `cancelled` gehoert zu `next_runs` DAZU, obwohl danach nichts neu starten soll: der
+    # Rueckruf raeumt seine Vormerkung aus `_pending`, und die muss auch nach einem Abbruch
+    # weg (sonst ist der Weg dauerhaft vergiftet — die Begruendung samt Messung steht in
+    # `request.rerun`, wo der Schluessel bekannt ist). Ob er danach neu startet, entscheidet
+    # er selbst. Hier stehenzubleiben hiesse, den Riegel an der Stelle zu setzen, an der die
+    # noetige Information fehlt.
     with _lock:
         r = _jobs.get(jid)
-        if not r or r["status"] == "cancelled":
+        if not r:
             return
         next_runs = list(r.get("next_runs", []))
         then_callbacks = list(r.get("then", [])) if r["status"] == "done" else []
