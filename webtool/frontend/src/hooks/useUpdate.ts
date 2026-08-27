@@ -9,6 +9,8 @@ type Bruecke = {
     installieren: () => Promise<void>
   }
   protokollOeffnen: () => Promise<string>
+  /** #372: baut den Bericht im Hauptprozess und oeffnet ihn im Mailprogramm. */
+  fehlerbericht: () => Promise<{ pfad: string; verwendet: number; gekuerzt: boolean }>
   on: (kanal: string, fn: (z: UpdateZustand) => void) => () => void   // Rueckgabe: Abmelden
 }
 
@@ -36,6 +38,7 @@ export function useUpdate() {
   const laden = useCallback(() => { bruecke()?.update.laden().catch(() => {}) }, [])
   const installieren = useCallback(() => { bruecke()?.update.installieren().catch(() => {}) }, [])
   const protokollOeffnen = useCallback(() => { bruecke()?.protokollOeffnen().catch(() => {}) }, [])
+  const fehlerbericht = useCallback(() => { bruecke()?.fehlerbericht().catch(() => {}) }, [])
 
-  return { zustand, pruefen, laden, installieren, protokollOeffnen }
+  return { zustand, pruefen, laden, installieren, protokollOeffnen, fehlerbericht }
 }

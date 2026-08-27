@@ -64,6 +64,14 @@ test('projekteOeffnen ruft den Hauptprozess OHNE Argument (#218)', async () => {
   assert.deepStrictEqual(aufrufe.at(-1), ['projekteOeffnen'])
 })
 
+test('fehlerbericht ruft den Hauptprozess OHNE Argument (#372)', async () => {
+  // Dieselbe Zusicherung wie bei `projekteOeffnen`: naehme der Kanal einen Rumpf oder einen
+  // Empfaenger entgegen, waere aus der schmalen Bruecke ein „oeffne beliebige URL" geworden
+  // — fuer alles, was in diesem Fenster laeuft.
+  await freigegeben.fehlerbericht()
+  assert.deepStrictEqual(aufrufe.at(-1), ['fehlerbericht'])
+})
+
 test('plattform ist die process.platform des Hauptprozesses', () => {
   // Der Renderer kennt process.platform wegen contextIsolation nicht selbst -- die
   // Bruecke muss ihn deshalb als Wert (nicht als Funktion) mitgeben.

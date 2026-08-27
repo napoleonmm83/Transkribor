@@ -16,6 +16,7 @@ function bruecke(start: UpdateZustand | null) {
       installieren: vi.fn().mockResolvedValue(undefined),
     },
     protokollOeffnen: vi.fn().mockResolvedValue('C:\\log.txt'),
+    fehlerbericht: vi.fn().mockResolvedValue({ pfad: 'C:\\log.txt', verwendet: 12, gekuerzt: false }),
     on: (kanal: string, fn: (z: UpdateZustand) => void) => {
       if (kanal === 'update') melden = fn
       return abmelden
@@ -56,6 +57,14 @@ describe('useUpdate', () => {
     await waitFor(() => expect(result.current.zustand?.art).toBe('verfuegbar'))
     act(() => result.current.laden())
     expect(api.update.laden).toHaveBeenCalled()
+  })
+
+  it('reicht fehlerbericht durch (#372)', async () => {
+    const { api } = bruecke(AKTUELL)
+    const { result } = renderHook(() => useUpdate())
+    await waitFor(() => expect(result.current.zustand).toEqual(AKTUELL))
+    act(() => result.current.fehlerbericht())
+    expect(api.fehlerbericht).toHaveBeenCalled()
   })
 
   it('reicht protokollOeffnen durch — der Weg aus dem Fehlerzustand', async () => {

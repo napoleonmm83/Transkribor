@@ -45,7 +45,7 @@ function mb(bytes: number, stellen = 0) {
  * geht niemand, der die App benutzt, um nicht mit Dateien zu hantieren.
  */
 export function VersionPage() {
-  const { zustand: upd, pruefen, laden, installieren, protokollOeffnen } = useUpdate()
+  const { zustand: upd, pruefen, laden, installieren, protokollOeffnen, fehlerbericht } = useUpdate()
   // Ausserhalb von Electron gibt es keinen Update-Zustand — dann ist der zur Bauzeit
   // eingesetzte Wert die einzige (und richtige) Quelle, wie in der Fusszeile.
   const version = upd?.version ?? __APP_VERSION__
@@ -164,6 +164,24 @@ export function VersionPage() {
           </p>
         )}
       </Abschnitt>
+
+      {/* Nur in der App: der Bericht lebt vom Protokoll, und das gibt es im Browser nicht
+          (`upd === null` heisst „keine Bruecke", dieselbe Weiche wie oben). */}
+      {upd && (
+        <Abschnitt titel="Etwas geht schief?">
+          <p className="text-sm text-muted-foreground">
+            Der Bericht öffnet eine vorbereitete E-Mail mit Fassung, Betriebssystem und den
+            letzten Zeilen des Protokolls. <strong className="font-medium text-foreground">Du
+            siehst alles im Mailprogramm, bevor du sendest</strong> — und kannst jede Zeile
+            löschen. Das vollständige Protokoll wird daneben im Dateimanager gezeigt; hänge es
+            an, wenn du magst.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button variant="secondary" onClick={fehlerbericht}>Fehlerbericht schreiben</Button>
+            <Button variant="ghost" onClick={protokollOeffnen}>Protokoll anzeigen</Button>
+          </div>
+        </Abschnitt>
+      )}
 
       <Abschnitt titel="Versionsverlauf">
         {!verlauf && !fehler && (
