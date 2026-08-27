@@ -21,7 +21,7 @@
  *   (Text-Abschneiden), jeder Treffer waere Rauschen — dieselbe Abgrenzung wie im
  *   Hüllen-Test.
  *
- * Drei weitere Vektoren (heute null Fundstellen im Korpus, bewusst nur dokumentiert —
+ * Vier weitere Vektoren (heute null Fundstellen im Korpus, bewusst nur dokumentiert —
  * ein Kommentar-Stripper oder Breakpoint-Paar-Scanner waere der Ueberbau fuer 4 Stellen):
  * - FALSCH ROT: auskommentierter Code mit `"… overflow-auto …"` matcht weiter. Seit #366
  *   ist der Vektor BREITER (jede Zeichenkette im Kommentar, nicht nur ein className-JSX);
@@ -32,6 +32,12 @@
  *   sind im Rohquelltext kein bare Token, obwohl der Anker zur Laufzeit existiert.
  * - FALSCH ROT: responsive Varianten (`md:overflow-auto md:relative`) — der Anker muesste
  *   paarweise je Breakpoint stehen, das kann ein Token-Vergleich nicht ausdruecken.
+ * - FALSCH ROT: komponierte Argumente (`cn("overflow-auto", "relative")`) — jedes Literal
+ *   wird einzeln bewertet, der Anker im Nachbar-Literal zaehlt nicht (Codex-Befund am
+ *   Rebase-Stand). Die gruene Anker-Zusicherung unten IST hier die Korpus-Messung: gaebe
+ *   es den Fall, waere sie rot. Ausdrucks-Gruppierung waere der zweite Parser, den (1)
+ *   ablehnt — und eine naive `cn\(([^)]*)\)`-Klammer bricht an Ternaries mit Calls.
+ *   Getragene Grenze; ihr Sensor ist der Test "komponierte cn-Argumente" unten.
  */
 import { describe, it, expect } from 'vitest'
 import { render } from '@testing-library/react'
@@ -179,6 +185,16 @@ describe('Quellbaum: jeder Bildlaufbehaelter hat einen Bezugsrahmen (#209)', () 
     ['ohne Bildlauf gar nichts', '<div className="relative flex p-2" />', 0],
   ])('Sammellogik: %s', (_name, quelle, erwartet) => {
     expect(klassenlisten(quelle as string)).toHaveLength(erwartet as number)
+  })
+
+  it('komponierte cn-Argumente: der Anker im Nachbar-Literal zaehlt NICHT (getragene Grenze)', () => {
+    // Codex-Befund am Rebase-Stand — eine GRENZE, kein gewollter Vertrag (dieselbe
+    // Rahmung wie der Klammer-Preis in jobPhases, #416): heute hat der Korpus null
+    // komponierte Bildlauf-Listen, die gruene Anker-Zusicherung unten belegt es. Wer
+    // Ausdrucks-Gruppierung baut, macht diesen Test BEWUSST rot — und zieht dann den
+    // Doku-Block oben und die Fixture-Liste nach, statt die Grenze still zu verschieben.
+    expect(klassenlisten('<div className={cn("overflow-auto", "relative")} />'))
+      .toEqual(['overflow-auto'])
   })
 
   it('jeder Bildlaufbehaelter im Quellbaum traegt einen Anker', () => {
