@@ -225,8 +225,8 @@ entfällt nur die Korrektur.
 
 Fällt dir erst mitten in einem langen Lauf auf, dass noch kein Sprachmodell eingestellt ist:
 trag es einfach ein. Die Aufnahmen, die danach noch drankommen, werden korrigiert — du musst
-den Lauf nicht abbrechen und neu starten. (In Fassungen bis einschliesslich `v0.48.1` wirkte
-die Einstellung erst beim nächsten Lauf.)
+den Lauf nicht abbrechen und neu starten. (In den Fassungen `v0.48.0` und `v0.48.1`
+wirkte die Einstellung erst beim nächsten Lauf; davor gab es das Problem nicht.)
 
 ---
 
@@ -556,9 +556,9 @@ die Ursache samt Handlungsempfehlung (z. B. Rate-Limit mit Wartezeit, aufgebrauc
 abgelaufene Anmeldung oder ungültiger API-Schlüssel) in der Meldung und im Verbindungstest der
 Einstellungen. Nicht erkannte Fehler zeigt Transkribor mit dem technischen Fehlertext an.
 
-Ein Sonderfall davon war bis einschliesslich `v0.48.1` grün statt rot: gingen beim Abhören alle
-Aufnahmen durch und scheiterte dabei jede einzelne Korrektur, meldete Transkribor „fertig“. Die
-Transkripte waren da, die Korrektur fehlte vollständig — und nichts sagte es. Jetzt ist die
+Ein Sonderfall davon war in den Fassungen `v0.48.0` und `v0.48.1` grün statt rot (davor
+nicht): gingen beim Abhören alle Aufnahmen durch und scheiterte dabei jede einzelne
+Korrektur, meldete Transkribor „fertig“. Die Transkripte waren da, die Korrektur fehlte vollständig — und nichts sagte es. Jetzt ist die
 Meldung in diesem Fall rot. Eine Aufnahme, die du im Editor bearbeitet hast, zählt dabei nicht
 als Fehlschlag: die lässt Transkribor bewusst in Ruhe.
 

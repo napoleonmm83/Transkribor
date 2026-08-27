@@ -1604,3 +1604,92 @@ def test_correct_ai_single_trennt_nicht_versucht_von_gescheitert(monkeypatch, tm
     monkeypatch.setattr(correct, "_context", lambda *a: "")
     monkeypatch.setattr(correct, "_correct_file", lambda *a, **kw: None)   # schreibt nichts
     assert correct.correct_ai_single("P", "C") is False
+
+
+def test_wurf_in_der_vorbereitung_zaehlt_als_gescheiterter_versuch(monkeypatch, tmp_path, capsys):
+    """Der Totalausfall EINE PHASE FRUEHER — gefunden vom kalten Zweitleser zu diesem PR.
+
+    Der Fix las die Ergebnisse der KI-Futures aus. Wirft aber schon die VORBEREITUNG
+    (`cmd_diarize` / `prep_single`), wird die Datei nie an den Pool uebergeben: `ai_futures`
+    blieb leer, `transcribe_project` lieferte `(0, 0)`, `main()` endete mit 0, der Job stand
+    auf `done`. Also genau die Falschmeldung, gegen die dieser Zweig angetreten ist — nur vor
+    der Stelle, die er repariert hatte. GEMESSEN, bevor dieser Test entstand: zwei Dateien,
+    `cmd_diarize` wirft fuer beide, Rueckgabe `(0, 0)`.
+
+    Der Kommentar im Drain-Zweig sagte laengst „ein Wurf IST ein gescheiterter Versuch", und
+    `cmd_run.one()` wertet einen Prep-Ausfall ebenso — der Widerspruch stand innerhalb
+    derselben Funktion.
+    """
+    from webtool import correct, llm
+
+    _ki_projekt(monkeypatch, tmp_path, "WurfVorDemo")
+    monkeypatch.setattr(llm, "available", lambda: (True, ""))
+
+    def platzt(*_a, **_kw):
+        raise RuntimeError("GPU weg")
+
+    monkeypatch.setattr(correct, "cmd_diarize", platzt)
+    monkeypatch.setattr(correct, "correct_ai_single", lambda *a, **kw: True)
+
+    assert transcribe.transcribe_project("WurfVorDemo", "tiny", "de", autocorrect=True) == (0, 2)
+    out = capsys.readouterr().out
+    assert "[WurfVorDemo] Autocorrect-Fehler bei S1: GPU weg" in out
+    assert "[WurfVorDemo] Korrektur: 0 von 2 Datei(en) korrigiert" in out
+
+
+def test_wurf_in_der_vorbereitung_OHNE_anbieter_bleibt_gruen(monkeypatch, tmp_path, capsys):
+    """Negativkontrolle — und sie ist die teurere Haelfte.
+
+    Ohne nutzbaren Anbieter ist die LLM-Phase BEWUSST abgeschaltet; Diarisierung und Prep
+    laufen trotzdem, weil ihr Sidecar idempotent ist und dem spaeteren `correct run` GPU-Minuten
+    spart. Wirft die Vorbereitung in diesem Zustand, darf das den Lauf NICHT rot faerben —
+    ein absichtlich ausgelassener Schritt ist nie ein Fehlschlag (dieselbe Regel wie beim
+    Kill-Switch). Ohne diese Zeile waere `ki_versucht += 1` im except ein Zaehler, der einen
+    abgeschalteten Weg anklagt.
+    """
+    from webtool import correct, llm
+
+    _ki_projekt(monkeypatch, tmp_path, "WurfOhneDemo")
+    monkeypatch.setattr(llm, "available", lambda: (False, "kein KI-Anbieter konfiguriert"))
+
+    def platzt(*_a, **_kw):
+        raise RuntimeError("GPU weg")
+
+    monkeypatch.setattr(correct, "cmd_diarize", platzt)
+
+    assert transcribe.transcribe_project("WurfOhneDemo", "tiny", "de", autocorrect=True) == (0, 0)
+    out = capsys.readouterr().out
+    assert "Autocorrect-Fehler bei S1: GPU weg" in out, "Vorbedingung: der Wurf ist passiert"
+    assert "Korrektur:" not in out, out
+
+
+def test_all_verrechnet_projekte_nicht_gegeneinander(monkeypatch, tmp_path, capsys):
+    """`--all`: ein erfolgreiches Projekt darf den Totalausfall eines anderen nicht zudecken.
+
+    Summiert man ueber alle Projekte, ergibt „A: 0 von 1" plus „B: 1 von 1" zusammen
+    `ki_ok=1, ki_versucht=2` — und die Schwelle „versucht und keine gelang" greift nicht mehr.
+    Exitcode 0, obwohl in A keine einzige Korrektur gelang. Dieselbe Verrechnung, gegen die
+    dieser Zweig angetreten ist, eine Ebene hoeher; nur der CLI-Weg ist betroffen (Server-Jobs
+    laufen je Projekt).
+
+    Gezaehlt werden deshalb nur die Versuche der Projekte OHNE einen einzigen Erfolg — damit
+    bleibt die Meldung „0 von N versuchten" auch bei `--all` woertlich wahr.
+    """
+    from webtool import correct, llm
+
+    _ki_projekt(monkeypatch, tmp_path, "AAusfall", bases=("A1",))
+    _ki_projekt(monkeypatch, tmp_path, "BErfolg", bases=("B1",))
+    monkeypatch.setattr(llm, "available", lambda: (True, ""))
+    # A scheitert, B gelingt — in der Summe waere das "1 von 2" und damit gruen.
+    monkeypatch.setattr(correct, "correct_ai_single", lambda _p, b, **_kw: b == "B1")
+    monkeypatch.setattr(transcribe, "ensure_ffmpeg", lambda: None)
+    monkeypatch.setattr(sys, "argv", ["transcribe.py", "--all", "--autocorrect",
+                                      "--model", "tiny"])
+
+    with pytest.raises(SystemExit) as ex:
+        transcribe.main()
+    assert ex.value.code == 1
+    out = capsys.readouterr().out
+    assert "korrektur: FEHLER — 0 von 1 versuchten Datei(en) korrigiert" in out, out
+    # Gegenprobe: B wurde trotzdem transkribiert — der Lauf bricht nicht beim ersten Ausfall ab.
+    assert (tmp_path / "BErfolg" / "transkripte" / "B1.json").exists()
