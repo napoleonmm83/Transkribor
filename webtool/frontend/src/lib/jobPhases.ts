@@ -153,7 +153,15 @@ export function parseJobPhases(kind: string, lines: string[]): JobPhases {
     // und auf ihre Reihenfolge zu wetten. `scope` ist eine Menge und braucht beides nicht.
     // Ungemessen; wer sie doch nehmen will, misst zuerst.
     if ((m = l.match(/^→ Diarisiere ((.+?)(?: \(\d+ Sprecher\))?) …$/))) {
-      const base = scope?.has(m[1]) ? m[1] : m[2]
+      // `!scope.has(m[2])` ist Pflicht, nicht Feinschliff — und es ist die Antwort auf „was
+      // erlaubt die Rettung NEU?" (CodeRabbit-Bot am PR, hier mit einem roten Test bestaetigt).
+      // Liegen `Runde 2` UND `Runde 2 (3 Sprecher)` im selben Projekt und ist fuer `Runde 2`
+      // die Zahl 3 gesetzt, steht der volle Text wegen der FREMDEN Datei im Bereich: die Phase
+      // landete unter dem falschen Namen, `[done] Runde 2` traf ihn nicht, und die echte Datei
+      // zeigte gar keine Phase. Stehen BEIDE Lesarten im Bereich, ist die Zeile wirklich nicht
+      // entscheidbar — dann gilt die gekuerzte Form: bisheriges Verhalten, und der haeufigere
+      // der beiden Faelle.
+      const base = scope?.has(m[1]) && !scope.has(m[2]) ? m[1] : m[2]
       active[base] = { phase: 'diarize' }; global = 'diarize'
     }
     // `[done] {base}` folgt auf JEDEN Ausgang der Diarisierungsschleife (Erfolg, "keine Sprecher",
