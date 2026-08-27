@@ -390,6 +390,26 @@ describe('parseJobPhases — Druckformen, die der Parser nicht kannte (#374)', (
     expect(ohne.active).toEqual({ 'Timeline 13': { phase: 'diarize' } })
   })
 
+  it('fremder Text hinter einem Klammerpräfix kann keine Datei-Meldung fälschen', () => {
+    // Gemeldet von einem Parallelstrang (#413), hier nachgemessen. `.+?` ist faul, backtrackt
+    // aber über die ganze Zeile bis zu einem SPÄTEREN `]` — das `^` schützt nicht, weil das
+    // echte Präfix den Anker selbst erfüllt. Mehrere Druckstellen setzen rohen Ausnahmetext
+    // hinter ein Klammerpräfix, der Weg ist also erreichbar.
+    const gefaelscht = parseJobPhases('transcribe', ['[x] kaputt] skip (Audio nicht mehr vorhanden): D1'])
+    expect(gefaelscht.perBase).toEqual({})
+
+    // Positivkontrolle — ohne sie wäre eine Regex, die GAR nichts mehr fängt, ebenfalls grün.
+    // Und zwar mit dem Randleerzeichen-Namen, den dieser Stand anderswo verteidigt.
+    const echt = parseJobPhases('transcribe', ['[P] skip (Audio nicht mehr vorhanden): Interview '])
+    expect(echt.perBase).toEqual({ 'Interview ': 'failed' })
+
+    // Der getragene Preis: `paths.safe_name` lässt `]` durch (gemessen, `A]B` kommt unverändert
+    // heraus), ein Projektname mit Klammer verliert also die Anzeige für diese Zeile. Das ist
+    // eine Entscheidung, kein Versehen — hier festgehalten, damit sie niemand als Bug „behebt".
+    const preis = parseJobPhases('transcribe', ['[A]B] skip (Audio nicht mehr vorhanden): D1'])
+    expect(preis.perBase).toEqual({})
+  })
+
   it('`apply: FEHLT {base}.json` beendet die Datei — sonst meldet der Lauf ERFOLG', () => {
     // Codex-Befund [high] am Bündel, nachgemessen und bestätigt. Ungelesen war diese Zeile
     // nicht bloss ein hängender Spinner: `cmd_apply` gibt "missing" zurück, `correct_ai_single`
