@@ -1570,11 +1570,21 @@ def test_geschuetzte_datei_faerbt_den_lauf_NICHT_rot(monkeypatch, tmp_path, caps
     # Keine Bilanzzeile: es wurde nichts versucht, und „0 von 0" waere eine Meldung ueber nichts.
     assert "Korrektur:" not in out, out
 
+    # FRISCHES Projekt fuer den `main()`-Durchgang. „SchutzDemo" ist oben durchgelaufen; ein
+    # zweiter Lauf darueber stiege bei „nichts zu tun" aus (transcribe.py:502-509), noch bevor
+    # die Bilanzrechnung erreicht waere — die Zusicherung darunter bliebe dann auch bei
+    # kaputtem Zaehler gruen. Genau diese Falle steht in `test_totalausfall_…` als Warnung, und
+    # genau hier war sie nicht befolgt (CodeRabbit-Bot am PR).
+    _ki_projekt(monkeypatch, tmp_path, "SchutzMain", bases=("Y",))
+    (tmp_path / "SchutzMain" / "transkripte" / "Y.edit.json").write_text(
+        json.dumps({"human_edited": True, "segments": []}), encoding="utf-8")
     monkeypatch.setattr(transcribe, "ensure_ffmpeg", lambda: None)
-    monkeypatch.setattr(sys, "argv", ["transcribe.py", "SchutzDemo", "--autocorrect",
+    monkeypatch.setattr(sys, "argv", ["transcribe.py", "SchutzMain", "--autocorrect",
                                       "--model", "tiny"])
     transcribe.main()                    # kein SystemExit — der Schutz IST der Erfolg
-    assert "korrektur: FEHLER" not in capsys.readouterr().out
+    out2 = capsys.readouterr().out
+    assert "↷ SKIP Y (human_edited=true" in out2, "Vorbedingung: der Lauf hat Y ueberhaupt erreicht"
+    assert "korrektur: FEHLER" not in out2
 
 
 def test_correct_ai_single_trennt_nicht_versucht_von_gescheitert(monkeypatch, tmp_path):
@@ -1588,6 +1598,9 @@ def test_correct_ai_single_trennt_nicht_versucht_von_gescheitert(monkeypatch, tm
     from webtool import correct
 
     monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    # Pflicht laut CLAUDE.md, auch wenn heute kein Zweig hier einen Anbieter ruft: sonst
+    # entscheidet die echte Einstellungsdatei des Entwicklers ueber den KI-Anbieter.
+    monkeypatch.setenv("TRANSKRIBOR_SETTINGS", str(tmp_path / "settings.json"))
     tdir = tmp_path / "P" / "transkripte"
     tdir.mkdir(parents=True)
 
