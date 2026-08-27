@@ -130,7 +130,20 @@ export function parseJobPhases(kind: string, lines: string[]): JobPhases {
       // 'failed', nicht 'skipped': transcribe.py legt diese Datei in dieselbe `failed_bases`
       // wie den FEHLER-Pfad — sie wurde NICHT transkribiert. Ungelesen blieb sie bis Jobende
       // auf ihrem letzten Zustand stehen, obwohl der Lauf sie laengst aufgegeben hat.
-      else if ((m = l.match(/^\[.+?\] skip \(Audio nicht mehr vorhanden\): (.+)$/))) terminal(m[1], 'failed')
+      // `[^\]]+` statt `.+?` — und das ist KEINE Kosmetik. `.+?` ist faul, backtrackt aber
+      // ueber die ganze Zeile bis zu einem SPAETEREN `]`; fremder Text hinter einem
+      // Klammerpraefix kann damit eine Datei-Meldung FAELSCHEN. Gemessen:
+      //   `[x] kaputt] skip (Audio nicht mehr vorhanden): D1` -> terminal("D1", 'failed')
+      // Das `^` schuetzt nicht, weil das echte Praefix den Anker selbst erfuellt. Erreichbar
+      // ist das, weil mehrere Druckstellen rohen Ausnahmetext hinter ein Praefix setzen.
+      // Hier steht NUR diese eine Zeile gehaertet: sie ist in diesem Stand neu dazugekommen,
+      // die vier Geschwister (`-> transkribiere`, `fertig`, `skip (vorhanden)`, `FEHLER`)
+      // gehoeren zu #413 und werden dort gemeinsam behandelt — zwei Straenge an denselben
+      // Zeilen waeren ein Konflikt ohne Gewinn.
+      // Getragener Preis, benannt statt verschwiegen: `paths.safe_name` laesst `]` durch
+      // (gemessen: `A]B` kommt unveraendert heraus), ein Projektname mit Klammer verliert
+      // also seine Live-Anzeige fuer diese Zeile. Gegenkontrolle im Test.
+      else if ((m = l.match(/^\[[^\]]+\] skip \(Audio nicht mehr vorhanden\): (.+)$/))) terminal(m[1], 'failed')
       else if ((m = l.match(/^\[.+?\] FEHLER (.+?): /))) terminal(m[1], 'failed')
       continue
     }
