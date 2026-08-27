@@ -140,20 +140,44 @@ export function parseJobPhases(kind: string, lines: string[]): JobPhases {
       // und eine Injektion auf der Zeile NICHT unterscheidbar — die Behebung liegt beim
       // Producer und steht als #416. Bis dahin wiegt „keine Falschaussage" schwerer.
       if ((m = l.match(/^\[[^\]]+\] -> transkribiere (.+) …$/))) {
-        cursor = m[1]; active[cursor] = { phase: 'transcribe' }; global = null
+        cursor = m[1]; active[cursor] = { phase: 'transcribe' }; global = null; continue
       }
-      else if ((m = l.match(/^\[[^\]]+\] fertig (.+?): /))) terminal(m[1], 'done')
+      // Der Wurf aus der Vorbereitung, und NUR der mit stehendem KI-Pool: `transcribe.py`
+      // druckt fuer den Fall ohne Anbieter eine eigene Form, weil die Korrektur dort
+      // absichtlich ausfaellt — sie als Fehlschlag zu melden waere dieselbe Falschaussage
+      // wie ein rotes Exitcode fuer eine geschuetzte `human_edited`-Datei (#417-Review).
+      else if ((m = l.match(/^\[[^\]]+\] Autocorrect-Fehler bei (.+?): /))) {
+        terminal(m[1], 'failed'); continue
+      }
+      else if ((m = l.match(/^\[[^\]]+\] fertig (.+?): /))) { terminal(m[1], 'done'); continue }
       // 'failed', nicht 'skipped': transcribe.py legt diese Datei in dieselbe `failed_bases`
       // wie den FEHLER-Pfad — sie wurde NICHT transkribiert. Ungelesen blieb sie bis Jobende
       // auf ihrem letzten Zustand stehen, obwohl der Lauf sie laengst aufgegeben hat.
       // Diese Zeile war zuerst gehaertet (sie kam mit dem Buendel neu dazu); ihre vier
       // Geschwister sind es seit #413 ebenfalls — die Klasse ist damit geschlossen.
-      else if ((m = l.match(/^\[[^\]]+\] skip \(Audio nicht mehr vorhanden\): (.+)$/))) terminal(m[1], 'failed')
-      else if ((m = l.match(/^\[[^\]]+\] FEHLER (.+?): /))) terminal(m[1], 'failed')
-      continue
+      else if ((m = l.match(/^\[[^\]]+\] skip \(Audio nicht mehr vorhanden\): (.+)$/))) {
+        terminal(m[1], 'failed'); continue
+      }
+      else if ((m = l.match(/^\[[^\]]+\] FEHLER (.+?): /))) { terminal(m[1], 'failed'); continue }
+      // HIER endete der Zweig frueher mit einem unbedingten `continue` — und damit war der
+      // correct-Dialekt fuer einen Transkriptions-Job unerreichbar. Seit v0.48.0 (10098e4)
+      // laeuft die Korrektur INNERHALB dieses Jobs (gestaffelte Pipeline), also liefen
+      // Diarisieren, Korrigieren, Verifizieren und Anwenden ohne jede Phasenanzeige — und
+      // eine gescheiterte Korrektur meldete `done`, weil der Zustand aus der Transkription
+      // stehenblieb. Am echten Lauf gemessen (#405).
     }
 
-    if (kind !== 'correct') continue
+    // WELCHE Job-Arten den correct-Dialekt lesen, entscheidet GENAU DIESE Zeile.
+    // `transcribe` faellt seit #405 hierher durch (die Korrektur laeuft in seinem Lauf),
+    // `fetch` nicht: der Job faehrt immer `--download-only` (app.py) und hat keine
+    // Korrekturphase. Das haelt zugleich die Begruendung des frueheren `continue` aufrecht —
+    // er stand wegen `[fetch] FEHLER <url>: …` da (#379).
+    //
+    // Ein zweiter Riegel `if (kind === 'fetch') continue` stand kurz eine Zeile hoeher und
+    // ist WIEDER RAUS: er war redundant, und die Mutationsprobe hat es gezeigt — entfernt
+    // blieb jeder Test gruen, weil diese Zeile denselben Fall schon abfaengt. Ein Waechter,
+    // den keine Mutation rot bekommt, sieht aus wie Schutz und ist keiner.
+    if (kind !== 'correct' && kind !== 'transcribe') continue
 
     // `(.+?)` + optionaler Zusatz: correct.py haengt seit #264 ` ({n} Sprecher)` an, das gierige
     // `(.+)` verschluckte ihn -> Schluessel "Timeline 13 (5 Sprecher)". Beide Verbraucher schlagen
