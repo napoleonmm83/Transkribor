@@ -1700,6 +1700,9 @@ def test_correct_ai_single_liest_cmd_apply_und_nur_missing_ist_ein_fehler(
     # das sie liest. Ein `setattr(paths, "PROJEKTE", …, raising=False)` legte das Attribut neu
     # an, niemand laese es, und `raising=False` verdeckte genau das.
     monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    # Siehe CLAUDE.md: ohne diese Zeile entscheidet die echte Einstellungsdatei des
+    # Entwicklers ueber den KI-Anbieter.
+    monkeypatch.setenv("TRANSKRIBOR_SETTINGS", str(tmp_path / "settings.json"))
     tdir = tmp_path / "P" / "transkripte"
     tdir.mkdir(parents=True)
     (tdir / "A.json").write_text(json.dumps({"segments": []}), encoding="utf-8")
@@ -1727,6 +1730,7 @@ def test_cmd_run_ueberlebt_ein_nicht_versucht(monkeypatch, tmp_path):
     Ohne diesen Test waere `bool(...)` ein Waechter, den keine Mutation rot bekommt.
     """
     monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    monkeypatch.setenv("TRANSKRIBOR_SETTINGS", str(tmp_path / "settings.json"))
     tdir = tmp_path / "P" / "transkripte"
     tdir.mkdir(parents=True)
     for b in ("A", "B"):
