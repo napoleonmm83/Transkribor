@@ -403,11 +403,19 @@ describe('parseJobPhases — Druckformen, die der Parser nicht kannte (#374)', (
     const echt = parseJobPhases('transcribe', ['[P] skip (Audio nicht mehr vorhanden): Interview '])
     expect(echt.perBase).toEqual({ 'Interview ': 'failed' })
 
-    // Der getragene Preis: `paths.safe_name` lässt `]` durch (gemessen, `A]B` kommt unverändert
-    // heraus), ein Projektname mit Klammer verliert also die Anzeige für diese Zeile. Das ist
-    // eine Entscheidung, kein Versehen — hier festgehalten, damit sie niemand als Bug „behebt".
-    const preis = parseJobPhases('transcribe', ['[A]B] skip (Audio nicht mehr vorhanden): D1'])
-    expect(preis.perBase).toEqual({})
+    // KEIN gewollter Vertrag, sondern ein GETRAGENER DEFEKT — festgehalten, damit eine
+    // Änderung bewusst passiert, nicht damit sie unterbleibt. Die eigentliche Behebung liegt
+    // beim Producer und steht als #416: solange `paths.safe_name` `[`/`]` durchlässt (gemessen,
+    // `A]B` kommt unverändert heraus), sind ein Projektname mit Klammer und eine Injektion auf
+    // der Zeile NICHT unterscheidbar — beide ergeben dieselbe Form, und `scope` hilft hier
+    // nicht, weil ein Angreifer als Basisnamen einfach eine echte Datei des Laufs wählt.
+    // Der Parser muss sich also entscheiden, und „keine Falschaussage" wiegt schwerer als
+    // „Live-Anzeige für einen ungewöhnlichen Namen". Begrenzt ist der Verlust auch: ohne
+    // gesetzten `state` greift `ruhe(file)` in `FileStatusPill` und zeigt den echten
+    // Ruhezustand — es fehlt die Phase WÄHREND des Laufs, kein Zustand danach.
+    // Wer #416 löst, dreht diese Zusicherung um.
+    const getragen = parseJobPhases('transcribe', ['[A]B] skip (Audio nicht mehr vorhanden): D1'])
+    expect(getragen.perBase).toEqual({})
   })
 
   it('`apply: FEHLT {base}.json` beendet die Datei — sonst meldet der Lauf ERFOLG', () => {
