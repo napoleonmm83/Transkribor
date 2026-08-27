@@ -815,3 +815,66 @@ def test_then_feuert_NICHT_nach_einem_gescheiterten_lauf():
     assert _wait(jid)["status"] == "error", "Vorbedingung: der Lauf endet ROT"
     time.sleep(0.3)                      # dem Rueckruf Zeit geben, falsch zu feuern
     assert gefeuert == [], "then ist nach einem gescheiterten Lauf gefeuert"
+
+
+def test_abbruch_hinterlaesst_keine_tote_vormerkung():
+    """Der Folgeschaden des Abbruchs — und er ist groesser als der Abbruch selbst.
+
+    `request` merkt einen Nachlauf in `_pending` vor und raeumt den Schluessel im Rueckruf
+    wieder weg. Lief der Rueckruf nach einem Abbruch nie, blieb der Schluessel LIEGEN — und
+    die Zeile `if key in _pending: return jid, False` steigt dann bei JEDEM spaeteren Aufruf
+    sofort aus, **ohne einen neuen Nachlauf zu registrieren**. Es war also nicht ein
+    verlorener Upload, sondern jeder folgende: der Weg blieb bis zum Serverneustart tot.
+
+    Gemessen vor dem Fix: nach einem Abbruch stand `('P_leak','correct',None)` noch im Set,
+    und die zweite Anfrage im NAECHSTEN Lauf meldete „schon vorgemerkt" — ohne dass etwas
+    vorgemerkt war.
+
+    Der Test prueft beide Haelften. Die zweite ist die wichtigere: ein blosser Blick auf
+    `_pending` bliebe gruen, wenn jemand den Schluessel raeumt und dabei die Registrierung
+    verliert.
+    """
+    orig_start = jobs.start
+    gelaufen = []
+
+    def zaehl_start(project, cmd, cwd, kind, then=None, env=None, base=None, bases=None):
+        jid, started = orig_start(project, cmd, cwd, kind, then=then, env=env,
+                                  base=base, bases=bases)
+        if started:
+            gelaufen.append(jid)
+        return jid, started
+
+    jobs.start = zaehl_start
+    try:
+        jid1, s1 = jobs.request("P_leck", _echo_cmd(1), cwd=None, kind="correct")
+        assert s1 is True
+        _, s2 = jobs.request("P_leck", _echo_cmd(1), cwd=None, kind="correct")
+        assert s2 is False, "Slot war nicht belegt — der Test misst die Vormerkung gar nicht"
+
+        jobs.cancel(jid1)
+        assert _wait(jid1)["status"] == "cancelled"
+        frist = time.time() + 3.0
+        while time.time() < frist:
+            with jobs._lock:
+                if not any(k[0] == "P_leck" for k in jobs._pending):
+                    break
+            time.sleep(0.02)
+        with jobs._lock:
+            rest = [k for k in jobs._pending if k[0] == "P_leck"]
+        assert rest == [], f"Vormerkung nach dem Abbruch liegengeblieben: {rest}"
+
+        # Zweite Haelfte: der Weg muss WIEDER funktionieren.
+        vorher = len(gelaufen)
+        jid3, s3 = jobs.request("P_leck", _fail_cmd(2), cwd=None, kind="correct")
+        assert s3 is True
+        _, s4 = jobs.request("P_leck", _echo_cmd(1), cwd=None, kind="correct")
+        assert s4 is False
+        _wait(jid3)
+        frist = time.time() + 5.0
+        while time.time() < frist and len(gelaufen) < vorher + 2:
+            time.sleep(0.02)
+    finally:
+        jobs.start = orig_start
+
+    assert len(gelaufen) == vorher + 2, ("der Nachlauf nach dem Abbruch kam nicht mehr zustande "
+                                         f"— der Weg blieb vergiftet (gelaufen={gelaufen})")
