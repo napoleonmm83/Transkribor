@@ -58,13 +58,24 @@ describe('useJobAusgang (#376)', () => {
   })
 
   it('der Nenner zaehlt nur die VERSUCHTEN, nicht die uebersprungenen (#376/B7)', async () => {
-    // Ein Lauf ueber ein gewachsenes Projekt druckt fuer jede schon fertige Datei
-    // `skip (vorhanden)`. Zaehlte der Nenner die mit, hiesse es „1 von 4 fehlgeschlagen"
-    // — und der Nutzer sucht drei Aufnahmen, die nie angefasst wurden.
-    vi.mocked(api.getJob).mockResolvedValue({ status: 'done', kind: 'transcribe',
-      lines: ['[P] skip (vorhanden): alt1', '[P] skip (vorhanden): alt2',
-              '[P] fertig neu1: 10 Segmente', '[P] FEHLER neu2: kaputt'] })
-    await laufen('transcribe')
+    // „Absichtlich in Ruhe gelassen ist nicht versucht": zaehlte der Nenner die
+    // uebersprungenen mit, hiesse es „1 von 4 fehlgeschlagen" — und der Nutzer sucht zwei
+    // Aufnahmen, die nie angefasst wurden.
+    //
+    // TRAEGER IST EIN correct-LAUF, und das ist kein Geschmack. Bis #408 stand hier ein
+    // transcribe-Lauf mit `skip (vorhanden)` — dessen Parser-Zweig ist mit dem Wegfall der
+    // Druckform entfernt worden, womit die beiden Zeilen NICHTS mehr erzeugten: der Nenner
+    // war 2, ob `jobAusgang.ts:42` die uebersprungenen herausrechnet oder nicht. Der
+    // Waechter war blind, und zwar erst durch jene Reparatur (Negativkontrolle: dieselbe
+    // Mutation ist auf dem Elterncommit rot). 'skipped' kommt heute aus `correct`s
+    // `apply: SKIP …` („deine Handarbeit bleibt stehen") — genau das steht auch in der
+    // Begruendung in `jobAusgang.ts` selbst.
+    vi.mocked(api.getJob).mockResolvedValue({ status: 'done', kind: 'correct',
+      lines: ['apply: SKIP alt1 (human_edited=true; --force zum Ueberschreiben)',
+              'apply: SKIP alt2 (human_edited=true; --force zum Ueberschreiben)',
+              'apply: neu1 -> edit.json + md (12 Segmente)',
+              '✗ Fehler bei neu2: kaputt — überspringe'] })
+    await laufen('correct')
     expect(toastMock.warning.mock.calls[0][0]).toContain('1 von 2')
   })
 
