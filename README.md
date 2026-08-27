@@ -223,6 +223,11 @@ Anthropic, OpenAI, Google oder OpenRouter — oder ein Modell, das lokal auf dei
 läuft (z. B. Ollama). **Ohne Sprachmodell funktioniert das Transkribieren vollständig**, es
 entfällt nur die Korrektur.
 
+Fällt dir erst mitten in einem langen Lauf auf, dass noch kein Sprachmodell eingestellt ist:
+trag es einfach ein. Die Aufnahmen, die danach noch drankommen, werden korrigiert — du musst
+den Lauf nicht abbrechen und neu starten. (In Fassungen bis einschliesslich `v0.48.1` wirkte
+die Einstellung erst beim nächsten Lauf.)
+
 ---
 
 ## Gefällt es dir?
@@ -546,7 +551,10 @@ durchgelaufen, einzelne Aufnahmen sind dabei liegengeblieben — such bei diesen
 
 Eine **rote** Meldung heisst: der Lauf als Ganzes ist gescheitert. Entweder konnte er gar nicht
 arbeiten — das Spracherkennungs-Modell liess sich nicht laden, der KI-Dienst war nicht
-erreichbar — oder es gelang keine einzige Datei. Für erkannte Fehler nennt Transkribor automatisch
+erreichbar — oder es gelang keine einzige Datei. (Ein Sonderfall davon war bis einschliesslich
+`v0.48.1` grün statt rot: gingen beim Abhören alle Aufnahmen durch und scheiterte danach jede
+einzelne Korrektur, meldete Transkribor „fertig“. Die Transkripte waren da, die Korrektur
+fehlte vollständig — und nichts sagte es. Jetzt ist die Meldung in diesem Fall rot.) Für erkannte Fehler nennt Transkribor automatisch
 die Ursache samt Handlungsempfehlung (z. B. Rate-Limit mit Wartezeit, aufgebrauchtes Guthaben,
 abgelaufene Anmeldung oder ungültiger API-Schlüssel) in der Meldung und im Verbindungstest der
 Einstellungen. Nicht erkannte Fehler zeigt Transkribor mit dem technischen Fehlertext an.
