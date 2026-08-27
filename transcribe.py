@@ -563,8 +563,14 @@ def transcribe_project(name, model, language, only=None, autocorrect: bool = Fal
         Anbieter spaeter wegfaellt — das faengt `correct_ai_single` je Datei selbst ab, und ihn
         zu schliessen riesse laufende Korrekturen mit.
 
-        Die Kosten sind gedeckelt: `llm.available()` cached den Abo-Zweig (`llm._VERFUEGBAR_TTL`),
-        die API-Zweige sind reine Konfigurationspruefungen. Kein `auth.STATUS_TIMEOUT` je Aufnahme.
+        Was das KOSTET, und zwar ehrlich: bei den API-Anbietern nichts (reine
+        Konfigurationspruefung). Beim Abo zahlt **jede Aufnahme** einen `auth.status()`-Aufruf —
+        der Cache in `llm` haelt nur `_VERFUEGBAR_TTL` = 5 s, und zwischen zwei Dateien liegen
+        Minuten. Das sind gemessene 0,27 s (claude) bzw. 0,09 s (codex) gegen einen
+        Whisper-Lauf von Minuten, also vertretbar; im Haengefall greift `auth.STATUS_TIMEOUT`
+        = 30 s. (Eine fruehere Fassung dieses Absatzes behauptete „kein `STATUS_TIMEOUT` je
+        Aufnahme" — das war die Behauptung schaerfer als der Code: 5 s Cache decken einen
+        Minutenabstand nicht.)
 
         GENANNTER PREIS: der Grund wird genau EINMAL gedruckt. Aendert er sich im Lauf („kein
         Anbieter" → spaeter „nicht angemeldet"), bleibt der zweite ungesagt. Bewusst so — eine
@@ -675,6 +681,19 @@ def transcribe_project(name, model, language, only=None, autocorrect: bool = Fal
                         # Derselbe Riegel wie oben, und hier naeher am Angreifer: `cmd_diarize`/
                         # `prep_single` lesen Transkripte, ein Wurf kann deren Inhalt zitieren.
                         print(f"[{name}] Autocorrect-Fehler bei {base}: {_einzeilig(ex)}", flush=True)
+                        # Und er zaehlt als GESCHEITERTER VERSUCH — dieselbe Regel wie beim Drain
+                        # unten („ein Wurf IST ein gescheiterter Versuch"). Ohne diese Zeile war
+                        # der Fehler eine Phase FRUEHER genau der, den dieser Zweig schliesst:
+                        # wirft `prep_single` fuer ALLE Dateien, blieb `ai_futures` leer, die
+                        # Funktion lieferte `(0, 0)` und der Lauf endete mit Exitcode 0 — gemessen.
+                        # `cmd_run.one()` wertet einen Prep-Ausfall ebenso als Fehlschlag.
+                        #
+                        # NUR bei stehendem Pool: ohne Anbieter ist die LLM-Phase bewusst
+                        # abgeschaltet, und ein Wurf in der Vorbereitung darf einen absichtlich
+                        # ausgelassenen Schritt nicht nachtraeglich rot faerben (dieselbe Regel
+                        # wie beim Kill-Switch).
+                        if ai_pool is not None:
+                            ki_versucht += 1
             except Exception as e:
                 print(f"[{name}] FEHLER {base}: {_einzeilig(e)}", flush=True)
                 failed_bases.add(base)
@@ -750,15 +769,24 @@ def main():
             print(f"  {p}  ({n} Audio)")
         return
     ensure_ffmpeg()
-    ki_ok = ki_versucht = 0
+    # Gezaehlt werden die Versuche der Projekte, in denen KEINE EINZIGE Korrektur gelang.
+    # Je Projekt geurteilt, nicht ueber die Summe: bei `--all` deckte ein erfolgreiches
+    # Projekt B den Totalausfall von Projekt A zu (zusammen "1 von 2 gelungen" ⇒ Exitcode 0),
+    # obwohl in A nichts gelang — genau die Verrechnung, gegen die dieser Zweig angetreten ist,
+    # eine Ebene hoeher. Nur der CLI-Weg ist betroffen; Server-Jobs laufen je Projekt.
+    # Weitergearbeitet wird trotzdem: die Transkripte der uebrigen Projekte sind der Ertrag,
+    # um den es geht.
+    ki_versucht = 0
     if args.all:
         for p in list_projects():
             a, b = transcribe_project(p, args.model, args.language, autocorrect=args.autocorrect)
-            ki_ok += a
-            ki_versucht += b
+            if b and not a:
+                ki_versucht += b
     elif args.projekt:
-        ki_ok, ki_versucht = transcribe_project(args.projekt, args.model, args.language,
-                                                only=args.only, autocorrect=args.autocorrect)
+        a, b = transcribe_project(args.projekt, args.model, args.language,
+                                  only=args.only, autocorrect=args.autocorrect)
+        if b and not a:
+            ki_versucht += b
     else:
         ap.print_help()
         return
@@ -777,7 +805,7 @@ def main():
     # `^\[[^\]]+\] FEHLER (.+?): ` als Datei-Fehlschlag und legte sonst einen perBase-Eintrag
     # unter einem Basisnamen an, den es nicht gibt. `useJobAusgang.grund()` findet die Zeile
     # ueber das blosse Wort "FEHLER" und macht sie zur Begruendung im Toast.
-    if ki_versucht and not ki_ok:
+    if ki_versucht:
         print(f"korrektur: FEHLER — 0 von {ki_versucht} versuchten Datei(en) korrigiert "
               f"(die Transkripte sind geschrieben — siehe die Zeilen oben)", flush=True)
         raise SystemExit(1)
