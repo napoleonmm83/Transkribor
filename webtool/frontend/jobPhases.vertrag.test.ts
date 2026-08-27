@@ -189,15 +189,25 @@ const INVENTAR: Record<string, Eintrag> = {
   // ── gelesen, aber von einem ANDEREN Verbraucher ───────────────────────────────────────
   '[active] {}': { art: 'gelesen_anderswo', notiz: 'jobs.py (Backend): welche Datei gerade geschrieben wird' },
   '  [diagnose] {}\\t{}\\t{}': { art: 'gelesen_anderswo', notiz: 'useJobAusgang.ts: Grund einer gescheiterten Korrektur' },
+  'korrektur: FEHLER — 0 von {} versuchten Datei(en) korrigiert ': {
+    art: 'gelesen_anderswo',
+    notiz: 'Bilanz-Riegel des gestaffelten Laufs (#417). Der KANAL ist nicht diese Zeile, sondern '
+      + 'das SystemExit(1) dahinter: jobs.py macht daraus status=error, ausgang() {art:"fehler"}. '
+      + 'useJobAusgang.grund() zieht sie zusaetzlich als Begruendung in den Toast (generischer '
+      + '/FEHLER/-Filter, keine eigene Regex). Bewusst OHNE [{}]-Praefix und ohne ": " hinter '
+      + 'FEHLER — ^\\[[^\\]]+\\] FEHLER (.+?): legte sonst einen perBase-Eintrag unter einem '
+      + 'Basisnamen an, den es gar nicht gibt',
+  },
 
   'apply: FEHLT {}.json - Roh-Transkript nicht gefunden': {
     art: 'gelesen', beispiel: 'apply: FEHLT A.json - Roh-Transkript nicht gefunden', basis: 'A',
     notiz: 'Erreichbar nur ueber ein TOCTOU-Fenster — und ueber ein WEITES: correct_ai_single '
       + 'prueft die Roh-JSON beim Eintritt (correct.py:1009) und steigt aus, bevor [active] '
       + 'gedruckt wird; dazwischen liegt die ganze KI-Korrektur samt Treue-Pass, also Minuten. '
-      + 'Ungelesen war das nicht bloss ein Spinner: cmd_apply liefert "missing", correct_ai_single '
-      + 'verwirft den Rueckgabewert (correct.py:1041) und meldet True — ohne perBase-Eintrag faellt '
-      + 'ausgang() auf {art:"erfolg"}, also ERFOLG ueber eine nie geschriebene edit.json',
+      + 'Ungelesen war das nicht bloss ein Spinner: cmd_apply liefert "missing", und '
+      + 'correct_ai_single VERWARF den Rueckgabewert — ohne perBase-Eintrag fiel ausgang() auf '
+      + '{art:"erfolg"}, also ERFOLG ueber eine nie geschriebene edit.json. Die Backend-Haelfte '
+      + 'ist seit #412 zu (`!= "missing"`), dieser Zweig bleibt die Anzeige-Haelfte (#407)',
   },
 
   // ── bewusst ignoriert: Umgebung, Messung, Diagnose — kein Datei-Ereignis ───────────────
@@ -226,6 +236,14 @@ const INVENTAR: Record<string, Eintrag> = {
   '[{}] -> {}': { art: 'ignoriert' },
   '[{}] Autocorrect-Fehler bei {}: {}': {
     art: 'ignoriert', notiz: 'die Datei IST transkribiert — nur die angehaengte Korrektur scheiterte',
+  },
+  '[{}] Korrektur: {} von {} Datei(en) korrigiert': {
+    art: 'ignoriert',
+    notiz: 'Bilanz der angehaengten Korrektur je Projekt (#417). GETRAGENE GRENZE: ein TEILausfall '
+      + '(3 von 5) bleibt damit gruen — die Zeile nennt ihn, gelesen wird sie nicht. Sie in '
+      + 'phases.bilanz zu ziehen ginge, macht aber die in jobAusgang.ts:51 benannte Reihenfolge '
+      + 'scharf (perBase schlaegt Bilanz, und ein transcribe-Lauf kann BEIDES haben) — das ist '
+      + 'eine eigene Entscheidung, sie steht als #421',
   },
   '[{}] Modell {}, {} Datei(en)': { art: 'ignoriert' },
   '[{}] Warte auf verbleibende KI-Korrekturen…': { art: 'ignoriert' },

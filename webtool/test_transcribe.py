@@ -1386,3 +1386,148 @@ def test_transkriptionsfehler_bleibt_auf_einer_zeile(monkeypatch, tmp_path, caps
 
     assert "] fertig Q1: x" not in zeilen, "Dekodierfehler hat eine eigene Zeile bekommen"
     assert any(z.endswith("FEHLER Q1: Dekodierfehler ] fertig Q1: x") for z in zeilen), zeilen
+
+
+# ─────────────────────────────────────────────────────────────────────────────────────────
+# Der Ausgang des gestaffelten Laufs (#417/#414). Die Fixture ist dreimal dieselbe: ein
+# Projekt, zwei Aufnahmen, gefaelschtes Whisper — was sich unterscheidet, ist einzig, was
+# `correct_ai_single` zurueckgibt und wann `llm.available()` gruen wird.
+# ─────────────────────────────────────────────────────────────────────────────────────────
+
+def _ki_projekt(monkeypatch, tmp_path, name, bases=("S1", "S2")):
+    """Zwei Aufnahmen, gefaelschtes Whisper, gefaelschte Diarisierung — bereit fuer autocorrect."""
+    from webtool import correct
+
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    monkeypatch.setenv("TRANSKRIBOR_SETTINGS", str(tmp_path / "settings.json"))
+    monkeypatch.setattr(transcribe, "PROJEKTE", str(tmp_path))
+    monkeypatch.setattr(transcribe, "_modell", lambda *a, **kw: "fake_model")
+    monkeypatch.setattr(transcribe, "_transkribiere_datei", lambda *a, **kw: {
+        "text": "Hallo", "segments": [{"id": 0, "start": 0.0, "end": 1.0, "text": "Hallo"}],
+        "duration": 1.0,
+    })
+    monkeypatch.setattr(correct, "cmd_diarize", lambda *a, **kw: 1)
+    monkeypatch.setattr(correct, "prep_single", lambda *a, **kw: True)
+    monkeypatch.setattr(correct, "CLAUDE_PARALLEL", 2)
+
+    proj = tmp_path / name
+    (proj / "audio").mkdir(parents=True)
+    (proj / "transkripte").mkdir(parents=True)
+    for b in bases:
+        (proj / "audio" / f"{b}.mp3").write_bytes(b"audio")
+    return proj
+
+
+def test_totalausfall_der_korrektur_endet_rot(monkeypatch, tmp_path, capsys):
+    """#417 — der Kern: `_wait_futures` wartete, las aber nie `future.result()`.
+
+    `correct_ai_single` meldet an vier Stellen False; der Wert fiel ersatzlos weg. Ein Lauf,
+    in dem JEDE Korrektur scheiterte, endete mit Exitcode 0 -> `jobs.py` machte daraus `done`
+    -> die Oberflaeche meldete den Lauf als vollstaendig durchgelaufen. Der einzige Hinweis
+    waren einzelne `✗`-Zeilen, die niemand liest, der auf den gruenen Zustand schaut. Das ist
+    eine Regression gegen den Weg vor v0.48.0: damals lief die Korrektur als eigener Job ueber
+    `correct.main`, und der wirft `SystemExit(1)`, sobald Dateien versucht wurden und keine gelang.
+
+    Gedeckt sind BEIDE Ausfallformen in einem Lauf, weil sie zwei verschiedene Zeilen im Code
+    sind: S1 meldet regulaer False (der haeufige Fall — ungueltige `correction.json`, Apply
+    gescheitert), S2 WIRFT. Der Wurf landet nicht in `correct_ai_single`s eigenem `except`,
+    sondern erst in `fut.result()` — ohne den `try` dort risse er die Bilanz mit, also genau
+    die Zeile, die den Ausfall meldet.
+    """
+    from webtool import correct, llm
+
+    _ki_projekt(monkeypatch, tmp_path, "RotDemo")
+    monkeypatch.setattr(llm, "available", lambda: (True, ""))
+
+    def ki(_project, b, **_kw):
+        if b == "S2":
+            raise RuntimeError("Anbieter weg")
+        return False
+
+    monkeypatch.setattr(correct, "correct_ai_single", ki)
+
+    assert transcribe.transcribe_project("RotDemo", "tiny", "de", autocorrect=True) == (0, 2)
+    out = capsys.readouterr().out
+    assert "[RotDemo] Korrektur: 0 von 2 Datei(en) korrigiert" in out
+    assert "[RotDemo] Autocorrect-Fehler bei S2: Anbieter weg" in out
+    # Die Transkription selbst IST gelungen und ihr Ergebnis liegt auf der Platte — der rote
+    # Ausgang gilt der Korrektur, nicht ihr.
+    assert (tmp_path / "RotDemo" / "transkripte" / "S1.json").exists()
+
+    # Und derselbe Zustand ueber `main()` — dort wird aus der Bilanz der Exitcode, den `jobs.py`
+    # auf `error` abbildet. EIGENES Projekt: „RotDemo" ist oben durchgelaufen, ein zweiter Lauf
+    # darueber stiege bei „nichts zu tun" aus und der Test waere vacuous gruen (passiert).
+    _ki_projekt(monkeypatch, tmp_path, "RotMain")
+    monkeypatch.setattr(transcribe, "ensure_ffmpeg", lambda: None)
+    monkeypatch.setattr(sys, "argv", ["transcribe.py", "RotMain", "--autocorrect",
+                                      "--model", "tiny"])
+    with pytest.raises(SystemExit) as ex:
+        transcribe.main()
+    assert ex.value.code == 1
+    assert "korrektur: FEHLER — 0 von 2 versuchten Datei(en) korrigiert" in capsys.readouterr().out
+
+
+def test_teilausfall_der_korrektur_bleibt_gruen(monkeypatch, tmp_path, capsys):
+    """Negativkontrolle zum Test darueber — ohne sie waere „jeder Fehlschlag macht rot" ein
+    genauso guter Fix, und er waere falsch.
+
+    Die Schwelle ist dieselbe wie in `correct.main`: rot NUR, wenn Dateien versucht wurden und
+    KEINE gelang. Ein Teilausfall bleibt gruen; er steht in der Bilanzzeile, und die Oberflaeche
+    fuehrt die einzelne Datei ueber ihre eigenen `✗`-Zeilen. (Dass die Bilanz selbst noch
+    ungelesen ist, steht als getragene Grenze im INVENTAR und als #421.)
+    """
+    from webtool import correct, llm
+
+    _ki_projekt(monkeypatch, tmp_path, "TeilDemo")
+    monkeypatch.setattr(llm, "available", lambda: (True, ""))
+    monkeypatch.setattr(correct, "correct_ai_single", lambda _p, b, **_kw: b == "S1")
+
+    assert transcribe.transcribe_project("TeilDemo", "tiny", "de", autocorrect=True) == (1, 2)
+    assert "[TeilDemo] Korrektur: 1 von 2 Datei(en) korrigiert" in capsys.readouterr().out
+
+    # Ueber `main()` derselbe Ausgang, an einem FRISCHEN Projekt (siehe Begruendung oben).
+    _ki_projekt(monkeypatch, tmp_path, "TeilMain")
+    monkeypatch.setattr(transcribe, "ensure_ffmpeg", lambda: None)
+    monkeypatch.setattr(sys, "argv", ["transcribe.py", "TeilMain", "--autocorrect",
+                                      "--model", "tiny"])
+    transcribe.main()                                        # kein SystemExit
+    out = capsys.readouterr().out
+    assert "[TeilMain] Korrektur: 1 von 2 Datei(en) korrigiert" in out   # der Lauf hat gearbeitet
+    assert "korrektur: FEHLER" not in out
+
+
+def test_spaet_eingestellter_anbieter_greift_noch_im_selben_lauf(monkeypatch, tmp_path, capsys):
+    """#414 — die Anbieterlage wurde nur EINMAL am Laufstart gelesen.
+
+    Sie steht aber in einer Datei, die der Server jederzeit neu schreibt. Wer einen langen Lauf
+    startet, dabei merkt, dass kein Anbieter eingestellt ist, und ihn WAEHREND des Laufs
+    konfiguriert, bekam fuer diesen Lauf keine Korrektur — auch nicht fuer Dateien, die er
+    danach hochlaedt und die dieselbe Schleife noch aufnimmt (sie ruft `find_audio` in jeder
+    Runde neu). Bis v0.48.0 galt das von selbst: die Korrektur hing als eigener Job am ENDE.
+
+    Gemessen wird beides, was der Fix verspricht: die zweite Datei wird korrigiert (S2 in
+    `gesehen`), UND der Grund steht trotz Pruefung je Datei nur EINMAL im Protokoll — sonst
+    waere aus dem Fix eine Zeile je Aufnahme geworden, die genau die Zeilen zudeckt, wegen
+    derer man ins Protokoll sieht.
+    """
+    from webtool import correct, llm
+
+    _ki_projekt(monkeypatch, tmp_path, "SpaetDemo")
+    runden = []
+
+    def available():
+        runden.append(1)
+        # Erst ab der dritten Frage gruen: einmal vorab, einmal fuer S1 — S2 bekommt ihn.
+        return (len(runden) >= 3, "kein KI-Anbieter konfiguriert")
+
+    gesehen = []
+    monkeypatch.setattr(llm, "available", available)
+    monkeypatch.setattr(correct, "correct_ai_single",
+                        lambda _p, b, **_kw: (gesehen.append(b), True)[1])
+
+    assert transcribe.transcribe_project("SpaetDemo", "tiny", "de", autocorrect=True) == (1, 1)
+    assert gesehen == ["S2"], gesehen
+    zeilen = capsys.readouterr().out.splitlines()
+    assert [z for z in zeilen if z.startswith("[autocorrect] ")] == [
+        "[autocorrect] KI-Phase uebersprungen — kein KI-Anbieter konfiguriert"
+    ], zeilen
