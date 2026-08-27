@@ -701,3 +701,117 @@ def test_request_mit_lambdas_feuert_am_ende():
 
 
 
+
+
+def _fail_cmd(n=2):
+    """Wie `_echo_cmd`, endet aber mit Exitcode 1 — der Job wird `error`."""
+    code = ("import sys\n" + f"for i in range({n}):\n    print(f'zeile {{i}}', flush=True)\n"
+            + "import time; time.sleep(0.4)\nsys.exit(1)\n")
+    return [sys.executable, "-c", code]
+
+
+def test_vorgemerkter_nachlauf_laeuft_auch_nach_einem_GESCHEITERTEN_lauf():
+    """Der vorgemerkte Nachlauf haengt an einer FREMDEN Datei, nicht am Ausgang dieses Laufs.
+
+    `jobs.request` merkt genau einen Nachlauf vor, wenn der Slot belegt ist — das ist der
+    Weg, auf dem ein Upload WAEHREND eines laufenden Laufs trotzdem verarbeitet wird
+    (`app.py:1410`). `_run` gatete beides, `next_runs` UND `then`, auf `status == "done"`.
+    Damit ging der Nachlauf verloren, sobald der laufende Job rot endete: die eben
+    hochgeladene Aufnahme wurde NIE transkribiert, ohne eine einzige Zeile darueber.
+
+    Die beiden Rueckrufe haben verschiedene Vertraege, und genau das war die Verwechslung:
+    `then` heisst „bei Erfolg weiter in der Kette" (fetch -> transcribe, `app.py:1123`) und
+    bleibt auf `done` — eine Transkription ueber Dateien, die gar nicht geladen wurden, waere
+    sinnlos. `next_runs` heisst „jemand anders braucht einen Lauf, du warst besetzt", und
+    dafuer ist der Ausgang DIESES Laufs ohne Bedeutung; nach einem Fehlschlag ist der zweite
+    Anlauf sogar der wichtigere.
+
+    Das Loch gibt es seit es `request` gibt (ein Absturz beim Modell-Laden reichte).
+    Erreichbar wurde es mit #417: seitdem endet ein Lauf auch dann rot, wenn nur die
+    KI-Korrektur ausgefallen ist — ein Anbieterausfall ist Alltag, ein Absturz nicht.
+
+    Die Art ist `correct` und nicht `transcribe`, obwohl der Anlassfall ein Upload waehrend
+    einer Transkription ist: `GPU_KINDS` serialisiert `transcribe` PROJEKTUEBERGREIFEND, der
+    Test haenge damit am Nachhall fremder Tests (gemessen: `request` gab `started=False`, der
+    Test mass nichts mehr). Der Mechanismus sitzt in `_run` und kennt die Art nicht.
+    """
+    gelaufen = []
+    orig_start = jobs.start
+
+    def zaehl_start(project, cmd, cwd, kind, then=None, env=None, base=None, bases=None):
+        jid, started = orig_start(project, cmd, cwd, kind, then=then, env=env,
+                                  base=base, bases=bases)
+        if started:
+            gelaufen.append(jid)
+        return jid, started
+
+    jobs.start = zaehl_start
+    try:
+        jid1, s1 = jobs.request("P_rot", _fail_cmd(2), cwd=None, kind="correct")
+        assert s1 is True
+        jid2, s2 = jobs.request("P_rot", _echo_cmd(1), cwd=None, kind="correct")
+        assert s2 is False, "Slot war nicht belegt — der Test misst den Nachlauf gar nicht"
+
+        assert _wait(jid1)["status"] == "error", "Vorbedingung: der erste Lauf endet ROT"
+        frist = time.time() + 5.0
+        while time.time() < frist and len(gelaufen) < 2:
+            time.sleep(0.02)
+    finally:
+        jobs.start = orig_start
+
+    assert len(gelaufen) == 2, ("der vorgemerkte Nachlauf ist ausgefallen — die zweite "
+                                f"Aufnahme waere nie transkribiert worden (gelaufen={gelaufen})")
+
+
+def test_abbruch_startet_KEINEN_nachlauf():
+    """Negativkontrolle zum Test darueber — und die teurere Haelfte.
+
+    Ein Abbruch ist eine ENTSCHEIDUNG, kein Unfall. Waere `next_runs` schlicht ungegatet,
+    startete ein Cancel genau den Lauf neu, den jemand eben gestoppt hat — auf der GPU, mit
+    dem Modell, ueber Minuten. Ohne diese Zeile hier waere `status == "cancelled"` ein
+    Wächter, den kein Test rot bekommt.
+    """
+    gelaufen = []
+    orig_start = jobs.start
+
+    def zaehl_start(project, cmd, cwd, kind, then=None, env=None, base=None, bases=None):
+        jid, started = orig_start(project, cmd, cwd, kind, then=then, env=env,
+                                  base=base, bases=bases)
+        if started:
+            gelaufen.append(jid)
+        return jid, started
+
+    jobs.start = zaehl_start
+    try:
+        jid1, s1 = jobs.request("P_abbr", _fail_cmd(2), cwd=None, kind="correct")
+        assert s1 is True
+        jid2, s2 = jobs.request("P_abbr", _echo_cmd(1), cwd=None, kind="correct")
+        assert s2 is False, "Slot war nicht belegt — der Test misst den Nachlauf gar nicht"
+
+        jobs.cancel(jid1)
+        assert _wait(jid1)["status"] == "cancelled", "Vorbedingung: der Lauf gilt als abgebrochen"
+        frist = time.time() + 2.0
+        while time.time() < frist and len(gelaufen) < 2:
+            time.sleep(0.02)
+    finally:
+        jobs.start = orig_start
+
+    assert gelaufen == [jid1], f"ein Abbruch hat einen Nachlauf gestartet (gelaufen={gelaufen})"
+
+
+def test_then_feuert_NICHT_nach_einem_gescheiterten_lauf():
+    """Die andere Haelfte der Aufspaltung: `then` bleibt auf `done`.
+
+    Sein einziger Produktivnutzer ist `app.py:1123` (fetch -> transcribe). Scheitert der
+    Download, gibt es nichts zu transkribieren — ein `then` auf `error` startete einen Lauf
+    ueber Dateien, die nie ankamen. Ohne diesen Test waere die Aufspaltung nur zur Haelfte
+    bewacht, und die Mutation `then_callbacks = list(r.get("then", []))` (also ungegatet)
+    bliebe gruen.
+    """
+    gefeuert = []
+    jid, s = jobs.start("P_thenrot", _fail_cmd(1), cwd=None, kind="fetch",
+                        then=lambda: gefeuert.append(True))
+    assert s is True
+    assert _wait(jid)["status"] == "error", "Vorbedingung: der Lauf endet ROT"
+    time.sleep(0.3)                      # dem Rueckruf Zeit geben, falsch zu feuern
+    assert gefeuert == [], "then ist nach einem gescheiterten Lauf gefeuert"

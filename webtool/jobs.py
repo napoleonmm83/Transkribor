@@ -151,12 +151,31 @@ def _run(jid, cmd, cwd, env):
     # Nachlauf AUSSERHALB von _run_proc: dessen finally hat den Slot in _active schon
     # freigegeben, sonst wuerde ein `then`, das denselben Projekt-Job startet, sich selbst
     # aussperren. Und ausserhalb von _lock, sonst blockiert es jobs.start() im Callback.
+    # ZWEI Rueckrufarten, ZWEI Vertraege — sie hingen bis #417 an derselben Bedingung
+    # (`status != "done"` -> return), und das war eine Verwechslung mit Datenverlust:
+    #
+    # `then` heisst „bei Erfolg weiter in der Kette". Der einzige Produktivnutzer ist
+    # `app.py:1123` (fetch -> transcribe); eine Transkription ueber Dateien, die gar nicht
+    # geladen wurden, waere sinnlos. Bleibt auf `done`.
+    #
+    # `next_runs` heisst „jemand anders braucht einen Lauf, du warst besetzt" (`request`).
+    # Das ist der Weg, auf dem ein Upload WAEHREND eines laufenden Laufs ueberhaupt
+    # verarbeitet wird — `app.py:1410`. Der Ausgang DIESES Laufs ist dafuer ohne Bedeutung:
+    # der Nachlauf haengt an einer FREMDEN Datei. Endete der laufende Job rot, ging er
+    # ersatzlos verloren und die eben hochgeladene Aufnahme wurde nie transkribiert, ohne
+    # eine Zeile darueber. Das Loch gibt es seit es `request` gibt (ein Absturz beim
+    # Modell-Laden reichte); erreichbar wurde es mit #417, seit ein blosser Anbieterausfall
+    # den Lauf rot enden laesst — und der ist Alltag, ein Absturz nicht.
+    #
+    # `cancelled` ist die Ausnahme und kein Versehen: ein Abbruch ist eine ENTSCHEIDUNG.
+    # Danach denselben Lauf noch einmal zu starten, waere das Gegenteil dessen, worum
+    # gebeten wurde.
     with _lock:
         r = _jobs.get(jid)
-        if not r or r["status"] != "done":
+        if not r or r["status"] == "cancelled":
             return
         next_runs = list(r.get("next_runs", []))
-        then_callbacks = list(r.get("then", []))
+        then_callbacks = list(r.get("then", [])) if r["status"] == "done" else []
         project = r["project"]
         kind = r["kind"]
 
