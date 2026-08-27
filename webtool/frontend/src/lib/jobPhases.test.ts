@@ -154,21 +154,27 @@ describe('parseJobPhases — correct', () => {
 })
 
 describe('parseJobPhases — transcribe', () => {
-  it('aktive + fertige + skip', () => {
+  it('aktive + fertige + aufgegebene Aufnahme', () => {
+    // Traeger war `skip (vorhanden)`, bis #408 den Zweig als tot entlarvte: seit 10098e4
+    // druckt transcribe.py die Form nicht mehr (die schon fertigen Dateien filtert `offen`
+    // heraus, sie erreichen die Schleife gar nicht). Die geprueften Eigenschaften — Cursor
+    // wandert weiter, Terminalzustaende sammeln sich — sind dieselben, nur ueber die Form,
+    // die es wirklich gibt. Sie zaehlt 'failed', nicht 'skipped' (transcribe.py legt die
+    // Datei in `failed_bases`).
     const p = parseJobPhases('transcribe', [
       '[Demo] Modell large-v3, 3 Datei(en)',
       '[Demo] -> transkribiere A …', '[Demo] fertig A: 12s, 40 Segmente, Audio 2:00, 10.0x',
-      '[Demo] skip (vorhanden): B', '[Demo] -> transkribiere C …',
+      '[Demo] skip (Audio nicht mehr vorhanden): B', '[Demo] -> transkribiere C …',
     ])
     expect(p.active).toEqual({ C: { phase: 'transcribe' } })
-    expect(p.perBase).toEqual({ A: 'done', B: 'skipped' })
+    expect(p.perBase).toEqual({ A: 'done', B: 'failed' })
   })
-  it('ignoriert skip (vorhanden) fuer Dateien ausserhalb des Scopes', () => {
+  it('ignoriert Terminalzeilen fuer Dateien ausserhalb des Scopes', () => {
     const p = parseJobPhases('transcribe', [
       '[scope] B',
-      '[Demo] skip (vorhanden): A',
+      '[Demo] skip (Audio nicht mehr vorhanden): A',
       '[Demo] -> transkribiere B …',
-      '[Demo] skip (vorhanden): C',
+      '[Demo] skip (Audio nicht mehr vorhanden): C',
     ])
     expect(p.scope).toEqual(new Set(['B']))
     expect(p.active).toEqual({ B: { phase: 'transcribe' } })
@@ -267,10 +273,10 @@ describe('URL-Import', () => {
   it('Projekt mit Name "fetch" markiert transkribiere-FEHLER, fertig und skip korrekt (#379)', () => {
     const p = parseJobPhases('transcribe', [
       '[fetch] fertig audio_01: 12s',
-      '[fetch] skip (vorhanden): audio_02',
+      '[fetch] skip (Audio nicht mehr vorhanden): audio_02',
       '[fetch] FEHLER audio_03: broken pipe',
     ])
-    expect(p.perBase).toEqual({ audio_01: 'done', audio_02: 'skipped', audio_03: 'failed' })
+    expect(p.perBase).toEqual({ audio_01: 'done', audio_02: 'failed', audio_03: 'failed' })
     expect(p.global).toBeNull()
   })
 })
@@ -507,9 +513,10 @@ describe('parseJobPhases — Robustheit gegen echte Namen und Zeilen (#379)', ()
     // Leerzeichen mit), nur die skip-Zeile endet auf ihm. Ein Test allein auf der fertig-Zeile
     // bleibt gruen, auch wenn man `trim()` zurueckbaut — genau so vacuous war der erste Versuch,
     // gemessen an der Mutation.
-    // Der $-verankerte Traeger ist BEWUSST `skip (Audio nicht mehr vorhanden)` und nicht
-    // `skip (vorhanden)`: letzteres druckt seit dem gestaffelten Lauf niemand mehr, ein Test
-    // darauf sicherte die Eigenschaft ueber einen Kanal, den es nicht gibt.
+    // Der $-verankerte Traeger ist `skip (Audio nicht mehr vorhanden)`. Der frueher
+    // naheliegende Zwilling `skip (vorhanden)` scheidet aus: seine Druckform ist seit dem
+    // gestaffelten Lauf weg, und seit #408 auch der Parser-Zweig — ein Test darauf sicherte
+    // die Eigenschaft ueber einen Kanal, den es nicht gibt.
     const p = parseJobPhases('transcribe', [
       '[P] skip (Audio nicht mehr vorhanden): Interview ',
       '[P] fertig Interview : 3s, 4 Segmente, 1.0x',
@@ -644,9 +651,9 @@ describe('parseJobPhases — Zeilen-Injektion durch fremden Text (#413)', () => 
     const p = parseJobPhases('transcribe', [
       '[scope]	A	B	C',
       '[Demo] -> transkribiere A …', '[Demo] fertig A: 12s, 30 Segmente',
-      '[Demo] skip (vorhanden): B',
+      '[Demo] skip (Audio nicht mehr vorhanden): B',
       '[Demo] FEHLER C: kaputt',
     ])
-    expect(p.perBase).toEqual({ A: 'done', B: 'skipped', C: 'failed' })
+    expect(p.perBase).toEqual({ A: 'done', B: 'failed', C: 'failed' })
   })
 })

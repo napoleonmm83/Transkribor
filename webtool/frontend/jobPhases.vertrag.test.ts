@@ -35,19 +35,30 @@ import { parseJobPhases } from './src/lib/jobPhases'
 //     Druckform verschwindet, faellt hier nicht auf (genau das ist `skip (vorhanden)` passiert,
 //     entfernt in 10098e4). Die Gegenrichtung braeuchte eine Liste der Zweige, und die waere
 //     wieder von Hand gepflegt.
-// (2) Geerntet werden die DREI Laufskripte. In dieselben Job-Stroeme drucken auch
-//     `ytdlp_update.py` (`[ytdlp] …`, ueber `fetch.py`), `sperre.py` (`[sperre] …`, ueber
-//     `cmd_apply`) und die Pfad-/Einstellungsmodule. Keine ihrer heutigen Formen kollidiert mit
-//     einem Parser-Regex (einzeln gegengeprueft) — aber der Waechter unten sagt "jede gedruckte
-//     Form", und gemeint ist "jede aus QUELLEN".
+// (2) Geerntet wird, was in QUELLEN steht — seit #409 die drei Laufskripte PLUS
+//     `ytdlp_update.py` und `sperre.py`. Draussen bleiben `paths.py`, `projekt.py` und
+//     `settings.py`; die Begruendung steht bei QUELLEN. Der Waechter unten sagt weiterhin
+//     "jede gedruckte Form", und gemeint ist "jede aus QUELLEN".
 // ─────────────────────────────────────────────────────────────────────────────────────────
 
 const HIER = path.dirname(fileURLToPath(import.meta.url))
 const WURZEL = path.resolve(HIER, '..', '..')
-const QUELLEN = ['transcribe.py', 'webtool/correct.py', 'webtool/fetch.py']
+// Die drei Laufskripte PLUS die beiden Module, die nachweislich in einen Job-Strom drucken:
+// `ytdlp_update.py` erreicht den fetch-Job ueber `fetch.py` (`ytdlp_update.automatisch`),
+// `sperre.py` den correct-Job ueber `cmd_apply` (`sperre.datei`). Vorher standen hier nur die
+// drei, waehrend der Waechter unten „jede gedruckte Form" behauptete (#409).
+// NICHT aufgenommen: `paths.py`, `projekt.py`, `settings.py`. Sie drucken auch AUSSERHALB von
+// Jobs (Pfad- und Einstellungsmodule laufen im Server), ihre Formen haetten mit der
+// Statusanzeige nichts zu tun, und jede Aenderung dort machte diesen Test rot. Die Grenze ist
+// damit eine HANDentscheidung — genau das, was diese Datei sonst vermeidet. Was sie deckt,
+// deckt seit #422 der vierte Test: eine Form, die versehentlich an einem Muster haengenbleibt,
+// faellt dort auf, statt nur hier gezaehlt zu werden.
+const QUELLEN = ['transcribe.py', 'webtool/correct.py', 'webtool/fetch.py',
+                 'webtool/ytdlp_update.py', 'webtool/sperre.py']
 
-/** Die erste Zeichenkette eines print(...) — f-String oder normal, so wie sie im Quelltext steht. */
-function ersteZeichenkette(zeile: string): string | null {
+/** Die erste Zeichenkette eines print(...) — f-String oder normal, so wie sie im Quelltext steht.
+ *  Exportiert fuer den Ernter-Test (#410): der UNLESBAR-Zweig hat sonst keinen Sensor. */
+export function ersteZeichenkette(zeile: string): string | null {
   const i = zeile.indexOf('print(')
   if (i < 0) return null
   let j = i + 'print('.length
@@ -73,22 +84,71 @@ function ersteZeichenkette(zeile: string): string | null {
 // einem Kommentar WIRD geerntet).
 const UNLESBAR = '<<print( ohne lesbare Zeichenkette>>'
 
-/** Signatur = Literal mit allen Platzhaltern auf `{}` normalisiert -> stabil gegen Umbenennungen. */
+/** Die Formen EINER Datei, in eine bestehende Karte hinein.
+ *  Signatur = Literal mit allen Platzhaltern auf `{}` normalisiert -> stabil gegen Umbenennungen.
+ *
+ *  HERAUSGELOEST, damit der UNLESBAR-Zweig einen Sensor bekommt (#410): `ernte()` liest die
+ *  echten Quellen, und dort loest er heute 0-mal aus — an ihnen ist er nicht pruefbar. Mit
+ *  synthetischen Zeilen schon, und genau das tut der Test unten. */
+export function formenAusZeilen(datei: string, zeilen: string[], formen: Map<string, string[]>): void {
+  zeilen.forEach((zeile, nr) => {
+    const lit = ersteZeichenkette(zeile)
+    if (lit === null) {
+      if (zeile.includes('print(')) formen.set(UNLESBAR, [...(formen.get(UNLESBAR) ?? []), `${datei}:${nr + 1}`])
+      return
+    }
+    const sig = lit.replace(/\{[^{}]*\}/g, '{}')
+    formen.set(sig, [...(formen.get(sig) ?? []), `${datei}:${nr + 1}`])
+  })
+}
+
 function ernte(): Map<string, string[]> {
   const formen = new Map<string, string[]>()
   for (const datei of QUELLEN) {
-    const zeilen = fs.readFileSync(path.join(WURZEL, datei), 'utf-8').split(/\r?\n/)
-    zeilen.forEach((zeile, nr) => {
-      const lit = ersteZeichenkette(zeile)
-      if (lit === null) {
-        if (zeile.includes('print(')) formen.set(UNLESBAR, [...(formen.get(UNLESBAR) ?? []), `${datei}:${nr + 1}`])
-        return
-      }
-      const sig = lit.replace(/\{[^{}]*\}/g, '{}')
-      formen.set(sig, [...(formen.get(sig) ?? []), `${datei}:${nr + 1}`])
-    })
+    formenAusZeilen(datei, fs.readFileSync(path.join(WURZEL, datei), 'utf-8').split(/\r?\n/), formen)
   }
   return formen
+}
+
+const PARSER = 'src/lib/jobPhases.ts'
+
+/** Die Regex-Literale, die `parseJobPhases` wirklich auf eine Zeile anwendet.
+ *
+ *  GEERNTET, nicht gelistet — aus demselben Grund wie auf der Python-Seite: eine Liste von
+ *  Zweigen waere wieder von Hand gepflegt, also genau die Fehlerklasse, gegen die diese Datei
+ *  gebaut ist. Genommen werden nur `^`-verankerte Literale (alle Zeilenmuster sind es) in
+ *  einer der drei Verwendungen `.match(/…/)`, `/…/.test(…)` und `.replace(/…/)`; die letzte
+ *  wird VERWORFEN — sie ist der Zeilenschnitt, kein Zweig.
+ *
+ *  Der Preis steht in #366: ein Quelltext-Scanner liest an einer Umschreibung vorbei. Wer die
+ *  Muster kuenftig in eine Tabelle legt oder per `new RegExp` baut, faellt hier nicht auf —
+ *  dagegen steht die Untergrenze in der letzten Zusicherung des Tests, nicht mehr. */
+export function parserMuster(quelle: string): string[] {
+  const raus: string[] = []
+  for (let p = quelle.indexOf('/^'); p >= 0; p = quelle.indexOf('/^', p + 1)) {
+    let k = p + 1, klasse = false
+    for (; k < quelle.length; k++) {
+      const c = quelle[k]
+      if (c === '\\') { k++; continue }
+      if (c === '[') klasse = true
+      else if (c === ']') klasse = false
+      else if (c === '/' && !klasse) break
+    }
+    if (k >= quelle.length) continue
+    const davor = quelle.slice(Math.max(0, p - 7), p)
+    const danach = quelle.slice(k + 1, k + 7)
+    if (davor.endsWith('.match(') || danach.startsWith('.test(')) raus.push(quelle.slice(p + 1, k))
+    p = k
+  }
+  return raus
+}
+
+// Parser-Zweige OHNE Druckform in QUELLEN — jeder mit Grund. Ein Eintrag hier ist eine
+// Ausnahme von der Gegenrichtung und muss sie begruenden, sonst waere die Liste der bequeme
+// Weg, einen toten Zweig am Waechter vorbeizubekommen.
+const OHNE_DRUCKFORM: Record<string, string> = {
+  '^(\\d+)%\\|': 'Whispers tqdm-Balken auf stderr (in jobs.py nach stdout gemergt) — kein print() '
+    + 'in unseren Quellen, und die einzige Prozentquelle der Transkription',
 }
 
 type Art = 'gelesen' | 'gelesen_anderswo' | 'ignoriert' | 'luecke'
@@ -216,47 +276,150 @@ const INVENTAR: Record<string, Eintrag> = {
   // nicht erst laeuft, und eine Datei-Meldung daraus waere eine Falschaussage. Dass sie an
   // keinem Muster haengenbleiben, ist seit #413 auch strukturell zu: `^\[[^\]]+\] ` laesst
   // den fremden Grund hinter dem Praefix nicht mehr an die Datei-Muster heran.
-  '[autocorrect] uebersprungen — TRANSKRIBOR_AUTOCORRECT=0': { art: 'ignoriert' },
-  '[autocorrect] KI-Phase uebersprungen — {}': { art: 'ignoriert' },
-  '  KI-Anbieter: {}': { art: 'ignoriert' },
-  '  claude Timeout nach {}s': { art: 'ignoriert' },
-  '  claude exit {}: {}': { art: 'ignoriert' },
-  '  keine .raw.txt gefunden — überspringe Glossar': { art: 'ignoriert' },
-  '  {}': { art: 'ignoriert' },
-  '  {}  ({} Audio)': { art: 'ignoriert' },
-  '  {}: {} Fenster, ': { art: 'ignoriert' },
-  '  ⚠ {}: {} Segment(e) ohne Korrektur — bleiben auf Rohstand': { art: 'ignoriert' },
-  '  ✓ {}: {} Blöcke zusammengeführt ({} Segmente)': { art: 'ignoriert' },
-  '  ✗ {}: Block 1 gescheitert — die weiteren Blöcke braeuchten seine ': { art: 'ignoriert' },
-  '  ✗ {}: {} von {} Blöcken fehlgeschlagen — Teil-Dateien ': { art: 'ignoriert' },
-  'Projekt nicht gefunden: {}': { art: 'ignoriert' },
-  'TRANSKRIBOR_PARALLEL={} ist nicht der wirksame Wert — ': { art: 'ignoriert' },
-  'WARN: ffmpeg nicht gefunden. Installiere: winget install Gyan.FFmpeg': { art: 'ignoriert' },
-  'WARN: ffmpeg nicht gefunden. Installiere: {}': { art: 'ignoriert' },
-  '[{}] -> {}': { art: 'ignoriert' },
+  '[autocorrect] uebersprungen — TRANSKRIBOR_AUTOCORRECT=0': {
+    art: 'ignoriert', beispiel: '[autocorrect] uebersprungen — TRANSKRIBOR_AUTOCORRECT=0',
+  },
+  '[autocorrect] KI-Phase uebersprungen — {}': {
+    art: 'ignoriert', beispiel: '[autocorrect] KI-Phase uebersprungen — kein KI-Anbieter eingestellt',
+  },
+  '  KI-Anbieter: {}': { art: 'ignoriert', beispiel: '  KI-Anbieter: Anthropic (claude-opus-5)' },
+  '  claude Timeout nach {}s': { art: 'ignoriert', beispiel: '  claude Timeout nach 600s' },
+  '  claude exit {}: {}': { art: 'ignoriert', beispiel: '  claude exit 1: nicht angemeldet' },
+  '  keine .raw.txt gefunden — überspringe Glossar': {
+    art: 'ignoriert', beispiel: '  keine .raw.txt gefunden — überspringe Glossar',
+  },
+  '  {}': { art: 'ignoriert', beispiel: '  claude nicht gefunden auf dem PATH' },
+  '  {}  ({} Audio)': { art: 'ignoriert', beispiel: '  Demo  (3 Audio)' },
+  '  {}: {} Fenster, ': { art: 'ignoriert', beispiel: '  A: 28 Fenster, davon 2 englisch erkannt' },
+  '  ⚠ {}: {} Segment(e) ohne Korrektur — bleiben auf Rohstand': {
+    art: 'ignoriert', beispiel: '  ⚠ A: 4 Segment(e) ohne Korrektur — bleiben auf Rohstand',
+  },
+  '  ✓ {}: {} Blöcke zusammengeführt ({} Segmente)': {
+    art: 'ignoriert', beispiel: '  ✓ A: 4 Blöcke zusammengeführt (540 Segmente)',
+  },
+  '  ✗ {}: Block 1 gescheitert — die weiteren Blöcke braeuchten seine ': {
+    art: 'ignoriert', beispiel: '  ✗ A: Block 1 gescheitert — die weiteren Blöcke braeuchten seine Sprecherzuordnung',
+  },
+  '  ✗ {}: {} von {} Blöcken fehlgeschlagen — Teil-Dateien ': {
+    art: 'ignoriert', beispiel: '  ✗ A: 2 von 4 Blöcken fehlgeschlagen — Teil-Dateien bleiben liegen',
+  },
+  'Projekt nicht gefunden: {}': { art: 'ignoriert', beispiel: 'Projekt nicht gefunden: Demo' },
+  'TRANSKRIBOR_PARALLEL={} ist nicht der wirksame Wert — ': {
+    art: 'ignoriert', beispiel: 'TRANSKRIBOR_PARALLEL=99 ist nicht der wirksame Wert — es gilt 3',
+  },
+  'WARN: ffmpeg nicht gefunden. Installiere: winget install Gyan.FFmpeg': {
+    art: 'ignoriert', beispiel: 'WARN: ffmpeg nicht gefunden. Installiere: winget install Gyan.FFmpeg',
+  },
+  'WARN: ffmpeg nicht gefunden. Installiere: {}': {
+    art: 'ignoriert', beispiel: 'WARN: ffmpeg nicht gefunden. Installiere: brew install ffmpeg',
+  },
+  // Die 19 Formen der beiden Module aus #409. Alle 'ignoriert': sie melden Umgebung und
+  // Sperrzustand, kein Datei-Ereignis. Dass sie an keinem Muster haengenbleiben, behauptet die
+  // Tabelle nicht mehr nur — der vierte Test misst es (#422), in BEIDEN kind-Zweigen.
+  '[sperre] warte auf {} (raeume nach {}s auf, falls ': {
+    art: 'ignoriert', beispiel: '[sperre] warte auf /x/settings.json.lock (raeume nach 65s auf, falls verwaist)',
+  },
+  '[sperre] {} ist kein Verzeichnis — ungeschuetzt weiter': {
+    art: 'ignoriert', beispiel: '[sperre] /x/settings.json.lock ist kein Verzeichnis — ungeschuetzt weiter',
+  },
+  '[sperre] {} laesst sich nicht uebernehmen — ungeschuetzt ': {
+    art: 'ignoriert', beispiel: '[sperre] /x/settings.json.lock laesst sich nicht uebernehmen — ungeschuetzt weiter',
+  },
+  '[sperre] {} nicht anlegbar ({}) — ungeschuetzt weiter': {
+    art: 'ignoriert', beispiel: '[sperre] /x/settings.json.lock nicht anlegbar (PermissionError) — ungeschuetzt weiter',
+  },
+  '[sperre] {} wird uebernommen (der gemeldete Halter haelt laenger, ': {
+    art: 'ignoriert',
+    beispiel: '[sperre] /x/settings.json.lock wird uebernommen (der gemeldete Halter haelt laenger, '
+      + 'als sein Abschnitt dauern darf)',
+  },
+  '[ytdlp] Anforderungen von yt-dlp unlesbar: {}: {}': {
+    art: 'ignoriert', beispiel: '[ytdlp] Anforderungen von yt-dlp unlesbar: UnicodeDecodeError: invalid start byte',
+  },
+  '[ytdlp] Hintergrundlauf abgebrochen: {}: {}': {
+    art: 'ignoriert', beispiel: '[ytdlp] Hintergrundlauf abgebrochen: OSError: Zugriff verweigert',
+  },
+  '[ytdlp] Kalenderpruefung beim Start uebersprungen ': {
+    art: 'ignoriert', beispiel: '[ytdlp] Kalenderpruefung beim Start uebersprungen (OSError: kein Zugriff)',
+  },
+  '[ytdlp] Kalenderpruefung uebersprungen — es aktualisiert schon jemand': {
+    art: 'ignoriert', beispiel: '[ytdlp] Kalenderpruefung uebersprungen — es aktualisiert schon jemand',
+  },
+  '[ytdlp] Marker unlesbar ({}): {}: {}': {
+    art: 'ignoriert', beispiel: "[ytdlp] Marker unlesbar ('/x/ytdlp.geprueft'): ValueError: kaputt",
+  },
+  '[ytdlp] Merker fuer den pip-Lauf nicht loeschbar: {} — die Faelligkeit ': {
+    art: 'ignoriert',
+    beispiel: '[ytdlp] Merker fuer den pip-Lauf nicht loeschbar: PermissionError — die Faelligkeit '
+      + 'entscheidet der Kalender',
+  },
+  '[ytdlp] Metadaten von yt-dlp unlesbar: {}: {}': {
+    art: 'ignoriert', beispiel: '[ytdlp] Metadaten von yt-dlp unlesbar: PackageNotFoundError: yt-dlp',
+  },
+  '[ytdlp] Metadaten von {} unlesbar: {}: {}': {
+    art: 'ignoriert', beispiel: '[ytdlp] Metadaten von yt-dlp-ejs unlesbar: UnicodeDecodeError: invalid start byte',
+  },
+  '[ytdlp] Sperrverzeichnis nicht anlegbar: {}': {
+    art: 'ignoriert', beispiel: '[ytdlp] Sperrverzeichnis nicht anlegbar: PermissionError',
+  },
+  '[ytdlp] Update fehlgeschlagen: {}': {
+    art: 'ignoriert', beispiel: '[ytdlp] Update fehlgeschlagen: TimeoutExpired',
+  },
+  '[ytdlp] aktualisiere (installiert: {}) …': {
+    art: 'ignoriert', beispiel: '[ytdlp] aktualisiere (installiert: 2026.7.4) …',
+  },
+  '[ytdlp] uebersprungen — inzwischen hat ein anderer Lauf aktualisiert': {
+    art: 'ignoriert', beispiel: '[ytdlp] uebersprungen — inzwischen hat ein anderer Lauf aktualisiert',
+  },
+  '[ytdlp] {} nicht schreibbar: {}': {
+    art: 'ignoriert', beispiel: '[ytdlp] /x/ytdlp.geprueft nicht schreibbar: PermissionError',
+  },
+  // Der erste Platzhalter ist gebunden ('ok' bzw. 'fehlgeschlagen'), der zweite ist die letzte
+  // pip-Zeile — fremder Text hinter einem Klammerpraefix, also die Klasse aus #413.
+  '[ytdlp] {}: {}': {
+    art: 'ignoriert', beispiel: '[ytdlp] ok: Successfully installed yt-dlp-2026.7.4',
+  },
+  '[{}] -> {}': { art: 'ignoriert', beispiel: '[Demo] -> /x/projekte/Demo/transkripte' },
   '[{}] Autocorrect-Fehler bei {}: {}': {
-    art: 'ignoriert', notiz: 'die Datei IST transkribiert — nur die angehaengte Korrektur scheiterte',
+    art: 'ignoriert', beispiel: '[Demo] Autocorrect-Fehler bei A: RuntimeError',
+    notiz: 'die Datei IST transkribiert — nur die angehaengte Korrektur scheiterte',
   },
   '[{}] Korrektur: {} von {} Datei(en) korrigiert': {
-    art: 'ignoriert',
+    art: 'ignoriert', beispiel: '[Demo] Korrektur: 3 von 5 Datei(en) korrigiert',
     notiz: 'Bilanz der angehaengten Korrektur je Projekt (#417). GETRAGENE GRENZE: ein TEILausfall '
       + '(3 von 5) bleibt damit gruen — die Zeile nennt ihn, gelesen wird sie nicht. Sie in '
       + 'phases.bilanz zu ziehen ginge, macht aber die in jobAusgang.ts:51 benannte Reihenfolge '
       + 'scharf (perBase schlaegt Bilanz, und ein transcribe-Lauf kann BEIDES haben) — das ist '
       + 'eine eigene Entscheidung, sie steht als #421',
   },
-  '[{}] Modell {}, {} Datei(en)': { art: 'ignoriert' },
-  '[{}] Warte auf verbleibende KI-Korrekturen…': { art: 'ignoriert' },
-  '[{}] device={} ({}){}': { art: 'ignoriert' },
-  '[{}] engine=whisper.cpp (Metal)': { art: 'ignoriert' },
-  '[{}] keine Audiodateien in {}': { art: 'ignoriert' },
-  '[{}] nichts zu tun — {} Datei(en) bereits transkribiert': { art: 'ignoriert' },
-  '[{}] ⚠ {}: {} Abschnitt(e) ohne Transkript ': { art: 'ignoriert' },
-  'diarize: SKIP {} (Roh-JSON unlesbar: {})': { art: 'ignoriert' },
-  'diarize: SKIP {} (kein Audio gefunden)': { art: 'ignoriert' },
-  'diarize: SKIP {} (keine Sprecher erkannt)': { art: 'ignoriert' },
-  'diarize: SKIP {} ({}: {}) — Korrektur ohne Cluster': { art: 'ignoriert' },
-  'prep: SKIP {} ({}: {})': { art: 'ignoriert' },
+  '[{}] Modell {}, {} Datei(en)': { art: 'ignoriert', beispiel: '[Demo] Modell large-v3, 3 Datei(en)' },
+  '[{}] Warte auf verbleibende KI-Korrekturen…': {
+    art: 'ignoriert', beispiel: '[Demo] Warte auf verbleibende KI-Korrekturen…',
+  },
+  '[{}] device={} ({}){}': { art: 'ignoriert', beispiel: '[Demo] device=cuda (NVIDIA GeForce RTX 5080)' },
+  '[{}] engine=whisper.cpp (Metal)': { art: 'ignoriert', beispiel: '[Demo] engine=whisper.cpp (Metal)' },
+  '[{}] keine Audiodateien in {}': {
+    art: 'ignoriert', beispiel: '[Demo] keine Audiodateien in /x/projekte/Demo/audio',
+  },
+  '[{}] nichts zu tun — {} Datei(en) bereits transkribiert': {
+    art: 'ignoriert', beispiel: '[Demo] nichts zu tun — 3 Datei(en) bereits transkribiert',
+  },
+  '[{}] ⚠ {}: {} Abschnitt(e) ohne Transkript ': {
+    art: 'ignoriert', beispiel: '[Demo] ⚠ A: 2 Abschnitt(e) ohne Transkript (0:12-0:30) — bitte im Ton gegenhoeren',
+  },
+  'diarize: SKIP {} (Roh-JSON unlesbar: {})': {
+    art: 'ignoriert', beispiel: 'diarize: SKIP A (Roh-JSON unlesbar: JSONDecodeError)',
+  },
+  'diarize: SKIP {} (kein Audio gefunden)': {
+    art: 'ignoriert', beispiel: 'diarize: SKIP A (kein Audio gefunden)',
+  },
+  'diarize: SKIP {} (keine Sprecher erkannt)': {
+    art: 'ignoriert', beispiel: 'diarize: SKIP A (keine Sprecher erkannt)',
+  },
+  'diarize: SKIP {} ({}: {}) — Korrektur ohne Cluster': {
+    art: 'ignoriert', beispiel: 'diarize: SKIP A (RuntimeError: CUDA out of memory) — Korrektur ohne Cluster',
+  },
+  'prep: SKIP {} ({}: {})': { art: 'ignoriert', beispiel: 'prep: SKIP A (OSError: kein Zugriff)' },
   // Steht hier statt oben bei seinem Zwilling, weil die Liste alphabetisch laeuft — die
   // Klassifikation ist dieselbe, und das ist der Punkt: sie war es bis zum #417-Review NICHT.
   // Die Form ist bytegleich zum `korrektur: FEHLER …`-Eintrag oben und wird vom selben
@@ -270,21 +433,39 @@ const INVENTAR: Record<string, Eintrag> = {
       + 'Zwilling der korrektur:-Form oben — zwei bytegleiche Zeilen muessen dieselbe '
       + 'Klassifikation tragen, sonst ist die Tabelle selbst die Falschaussage',
   },
-  'run: fertig — {}/{} Datei(en) korrigiert': { art: 'ignoriert' },
-  'run: keine Roh-Transkripte — erst transkribieren': { art: 'ignoriert' },
-  'run: keine solche Datei: {}': { art: 'ignoriert' },
-  'run: {} Datei(en) in Projekt {}': { art: 'ignoriert' },
-  '↷ Diarisierung deaktiviert (TRANSKRIBOR_DIARIZE=0)': { art: 'ignoriert' },
-  '↷ nutze vorhandene {}.correction.json': { art: 'ignoriert' },
-  '↷ nutze vorhandene {}.diar.json': { art: 'ignoriert' },
-  '⏱ Phasen: glossar {}s · pipeline {}s · ': { art: 'ignoriert' },
-  '⏱ [{}]: {} Datei(en) transkribiert in {}s ': { art: 'ignoriert' },
-  '⏱ {}: Diarisierung {}s': { art: 'ignoriert' },
-  '⏱ {}{}: Korrektur {}s{}': { art: 'ignoriert' },
-  '⚠ Glossar fehlt/ungültig — fahre ohne gemeinsames Glossar fort': { art: 'ignoriert' },
-  '⚠ Verifikation ungültig — behalte unverifizierte {}.correction.json': { art: 'ignoriert' },
-  '⚠ kontext.md nicht lesbar ({}: {}) — fahre ohne ': { art: 'ignoriert' },
-  '⚠ {} nicht lesbar ({}: {}) — gilt ': { art: 'ignoriert' },
+  'run: fertig — {}/{} Datei(en) korrigiert': {
+    art: 'ignoriert', beispiel: 'run: fertig — 3/5 Datei(en) korrigiert',
+  },
+  'run: keine Roh-Transkripte — erst transkribieren': {
+    art: 'ignoriert', beispiel: 'run: keine Roh-Transkripte — erst transkribieren',
+  },
+  'run: keine solche Datei: {}': { art: 'ignoriert', beispiel: 'run: keine solche Datei: A' },
+  'run: {} Datei(en) in Projekt {}': { art: 'ignoriert', beispiel: 'run: 5 Datei(en) in Projekt Demo' },
+  '↷ Diarisierung deaktiviert (TRANSKRIBOR_DIARIZE=0)': {
+    art: 'ignoriert', beispiel: '↷ Diarisierung deaktiviert (TRANSKRIBOR_DIARIZE=0)',
+  },
+  '↷ nutze vorhandene {}.correction.json': { art: 'ignoriert', beispiel: '↷ nutze vorhandene A.correction.json' },
+  '↷ nutze vorhandene {}.diar.json': { art: 'ignoriert', beispiel: '↷ nutze vorhandene A.diar.json' },
+  '⏱ Phasen: glossar {}s · pipeline {}s · ': {
+    art: 'ignoriert', beispiel: '⏱ Phasen: glossar 12s · pipeline 340s · apply 2s',
+  },
+  '⏱ [{}]: {} Datei(en) transkribiert in {}s ': {
+    art: 'ignoriert', beispiel: '⏱ [Demo]: 3 Datei(en) transkribiert in 54s (Audio 9:27, 10.5x)',
+  },
+  '⏱ {}: Diarisierung {}s': { art: 'ignoriert', beispiel: '⏱ A: Diarisierung 45s' },
+  '⏱ {}{}: Korrektur {}s{}': { art: 'ignoriert', beispiel: '⏱ A: Korrektur 25s' },
+  '⚠ Glossar fehlt/ungültig — fahre ohne gemeinsames Glossar fort': {
+    art: 'ignoriert', beispiel: '⚠ Glossar fehlt/ungültig — fahre ohne gemeinsames Glossar fort',
+  },
+  '⚠ Verifikation ungültig — behalte unverifizierte {}.correction.json': {
+    art: 'ignoriert', beispiel: '⚠ Verifikation ungültig — behalte unverifizierte A.correction.json',
+  },
+  '⚠ kontext.md nicht lesbar ({}: {}) — fahre ohne ': {
+    art: 'ignoriert', beispiel: '⚠ kontext.md nicht lesbar (OSError: kein Zugriff) — fahre ohne Kontext fort',
+  },
+  '⚠ {} nicht lesbar ({}: {}) — gilt ': {
+    art: 'ignoriert', beispiel: '⚠ /x/A.edit.json nicht lesbar (JSONDecodeError: x) — gilt als handbearbeitet',
+  },
 }
 
 const fest = (w: unknown) => JSON.stringify(w, (_k, v) => (v instanceof Set ? [...v].sort() : v))
@@ -326,6 +507,71 @@ describe('Vertrag: gedruckte Statuszeilen <-> jobPhases.ts (#375)', () => {
     expect(tot).toEqual([])
   })
 
+  it('jeder Parser-Zweig hat noch eine lebende Druckform (#408)', () => {
+    // Die GEGENRICHTUNG. Der erste Test geht von der Druckseite zum Parser; ein Regex-Zweig,
+    // dessen Druckform verschwindet, faellt dort nicht auf — und genau das ist passiert:
+    // `skip (vorhanden)` ist in 10098e4 (v0.48.0) ersatzlos entfallen, der Zweig dafuer lebte
+    // bis #408 weiter. Ein toter Zweig ist nicht bloss Ballast: er traegt Fixtures, die eine
+    // nicht mehr existierende Wirklichkeit beschreiben, und Kommentare, die dadurch falsch
+    // werden.
+    //
+    // Gemessen wird an den BEISPIELZEILEN, nicht an einer zweiten Liste von Hand: sie haengen
+    // ueber den Test darunter an ihrer geernteten Form, und die haengt ueber den ersten Test
+    // am Quelltext. Damit reicht die Kette vom Regex bis zum `print(` — ohne eine einzige
+    // Stelle, an der jemand zwei Seiten von Hand gleichhalten muss.
+    const quelle = fs.readFileSync(path.join(HIER, 'src', 'lib', 'jobPhases.ts'), 'utf-8')
+    const muster = parserMuster(quelle)
+    // Genau der Zeilenschnitt, den parseJobPhases vorne macht — sonst faende kein Muster die
+    // eingerueckten Blockzeilen.
+    const zeilen = Object.values(INVENTAR)
+      .filter((e) => e.art === 'gelesen' && e.beispiel)
+      .map((e) => e.beispiel!.replace(/^ {0,2}/, ''))
+
+    const tot = muster.filter((m) => !(m in OHNE_DRUCKFORM) && !zeilen.some((z) => new RegExp(m).test(z)))
+    expect(tot).toEqual([])
+
+    // Negativkontrolle zum Scanner selbst: liest er nichts mehr (umgebautes jobPhases.ts,
+    // kaputter Pfad), waere die Zusicherung darueber leer gegen leer — gruen, ohne je etwas
+    // geprueft zu haben. Dieselbe Falle wie ein Fixture, das nie geladen wird.
+    expect(muster.length).toBeGreaterThanOrEqual(20)
+    // Und die Ausnahmeliste darf nicht selbst verwaisen: ein Eintrag fuer einen Zweig, den es
+    // nicht mehr gibt, ist eine Begruendung ohne Gegenstand — und der naechste Leser haelt ihn
+    // fuer geprueft.
+    expect(Object.keys(OHNE_DRUCKFORM).filter((m) => !muster.includes(m))).toEqual([])
+  })
+
+  it('jede als „ignoriert" markierte Form bleibt im Parser wirklich wirkungslos (#422)', () => {
+    // Spiegelbild des Tests darueber. `ignoriert` ist eine ZUSICHERUNG — die Zeilen duerfen
+    // KEINE Phase setzen, weil sie von Umgebung, Messung oder Sperrzustand handeln und eine
+    // Datei-Meldung daraus eine Falschaussage waere. Geprueft hat das bisher niemand: der
+    // zweite Test filtert auf `gelesen`, fuer die ~66 `ignoriert`-Formen gab es kein
+    // Gegenstueck. Genau diese Klasse hat das Repo zweimal getroffen (#413: `^\[.+?\]`
+    // backtrackt und meldete eine erfundene Datei als FERTIG; die `apply: SKIP`-Zerlegung).
+    //
+    // ALLE DREI kind-Zweige, nicht nur einer: die Muster unterscheiden sich, und seit #405
+    // faellt ein `transcribe`-Job zusaetzlich in den correct-Dialekt durch. Waere dieser Test
+    // auf `correct` beschraenkt, deckte er ausgerechnet den Zweig nicht, den #405 neu oeffnet.
+    //
+    // Was er NICHT kann, und das ist der Preis der Methode: die Beispielzeilen setzen fuer
+    // jeden Platzhalter EINEN Wert ein. Wo der Platzhalter gebunden ist (`{}` = 'ok' bzw.
+    // 'fehlgeschlagen'), ist das vollstaendig; wo fremder Text steht (Ausnahmemeldungen,
+    // Basisnamen), ist es eine Stichprobe. Absichtlich boesartige Werte gehoeren nicht
+    // hierher — sie pruefen die Haertung der Muster (#413/#416), nicht diese Zusicherung.
+    const haengt: string[] = []
+    const leer = { transcribe: fest(parseJobPhases('transcribe', [])),
+                   correct: fest(parseJobPhases('correct', [])),
+                   fetch: fest(parseJobPhases('fetch', [])) }
+    for (const [sig, e] of Object.entries(INVENTAR)) {
+      if (e.art !== 'ignoriert') continue
+      expect(e.beispiel, `Beispielzeile fehlt fuer ${sig}`).toBeTruthy()
+      for (const kind of ['transcribe', 'correct', 'fetch'] as const) {
+        const mit = fest(parseJobPhases(kind, [e.beispiel!]))
+        if (mit !== leer[kind]) haengt.push(`${sig} (${kind}) -> ${mit}`)
+      }
+    }
+    expect(haengt).toEqual([])
+  })
+
   it('jede Beispielzeile passt noch zu ihrer geernteten Form', () => {
     // Bindet die von Hand geschriebenen Beispiele an die geerntete Wahrheit: die festen Teile
     // der Signatur muessen der Reihe nach im Beispiel vorkommen. Ohne das koennte ein Beispiel
@@ -345,12 +591,41 @@ describe('Vertrag: gedruckte Statuszeilen <-> jobPhases.ts (#375)', () => {
     expect(schief).toEqual([])
   })
 
-  it('die geernteten Formen stammen aus allen drei Laufskripten', () => {
+  it('die geernteten Formen stammen aus JEDER Quelle', () => {
     // Negativkontrolle zur Ernte selbst: ein kaputter Pfad oder ein zu enger Parser liefert
     // eine leere oder halbe Menge, und die beiden Tests darueber waeren dann gruen, ohne je
     // etwas geprueft zu haben — dieselbe Falle wie ein Fixture, das nie geladen wird.
+    // Je Datei geprueft, nicht ueber die Summe: eine unlesbare Quelle verschwaende sonst hinter
+    // den 90+ Fundstellen der anderen (seit #409 sind es fuenf statt drei).
     const orte = [...ernte().values()].flat()
     for (const datei of QUELLEN) expect(orte.some((o) => o.startsWith(datei))).toBe(true)
     expect(orte.length).toBeGreaterThan(80)
+  })
+
+  it('eine unlesbare print(-Form wird gemeldet statt still verschluckt (#410)', () => {
+    // Der UNLESBAR-Sentinel war ein WAECHTER OHNE SENSOR: 95 print(-Zeilen in den QUELLEN, alle
+    // 95 lesbar geerntet, 0 Ausloeser — und die Gegenprobe (Zweig ersatzlos entfernt) liess alle
+    // vier Tests gruen. Er ist auch fuer den Build unsichtbar, weil diese Datei in keinem
+    // tsconfig-`include` steht. Geprueft wird deshalb der ERNTER, nicht die Quellen: haengte der
+    // Waechter daran, dass irgendwann jemand ein `print(meldung)` schreibt, waere er wieder
+    // ungeprueft, bis genau das passiert.
+    expect(ersteZeichenkette('    print(meldung)')).toBeNull()
+    expect(ersteZeichenkette('    print(')).toBeNull()
+    // PFLICHT, keine Zugabe: ohne sie bliebe der Test gruen, wenn der Ernter gar nichts mehr
+    // liest — und dann waere jede Form unklassifiziert, ohne dass ein Test es sagt.
+    expect(ersteZeichenkette('    print(f"[{name}] fertig")')).toBe('[{name}] fertig')
+
+    // Zweite Haelfte: der Ernter muss den Sentinel auch WIRKLICH eintragen. Die drei
+    // Zusicherungen oben pruefen nur `ersteZeichenkette`; der Zweig, der daraus einen
+    // Inventareintrag macht, bliebe ohne diese Zeilen genauso unbeobachtet wie zuvor.
+    const formen = new Map<string, string[]>()
+    formenAusZeilen('x.py', ['    print(meldung)', '    print(f"[{n}] fertig {b}: {s}")'], formen)
+    expect(formen.get(UNLESBAR)).toEqual(['x.py:1'])
+    expect(formen.get('[{}] fertig {}: {}')).toEqual(['x.py:2'])
+
+    // Und die dritte Haelfte der Zusage: der Sentinel darf NICHT im INVENTAR stehen. Stuende er
+    // dort, waere er klassifiziert — der Gleichheitstest oben bliebe bei einer unlesbaren Form
+    // gruen, und genau das soll er nicht.
+    expect(Object.keys(INVENTAR)).not.toContain(UNLESBAR)
   })
 })

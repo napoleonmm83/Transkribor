@@ -143,7 +143,6 @@ export function parseJobPhases(kind: string, lines: string[]): JobPhases {
         cursor = m[1]; active[cursor] = { phase: 'transcribe' }; global = null
       }
       else if ((m = l.match(/^\[[^\]]+\] fertig (.+?): /))) terminal(m[1], 'done')
-      else if ((m = l.match(/^\[[^\]]+\] skip \(vorhanden\): (.+)$/))) terminal(m[1], 'skipped')
       // 'failed', nicht 'skipped': transcribe.py legt diese Datei in dieselbe `failed_bases`
       // wie den FEHLER-Pfad — sie wurde NICHT transkribiert. Ungelesen blieb sie bis Jobende
       // auf ihrem letzten Zustand stehen, obwohl der Lauf sie laengst aufgegeben hat.
