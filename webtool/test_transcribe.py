@@ -11,6 +11,17 @@ import pytest
 import transcribe
 
 
+@pytest.fixture(autouse=True)
+def _autocorrect_an(monkeypatch):
+    """Der Kill-Switch wird seit #406 im Lauf selbst gelesen — ohne dieses Pinnen haengen
+    alle autocorrect-Tests dieser Datei daran, ob der Entwickler gerade
+    `TRANSKRIBOR_AUTOCORRECT=0` in der Shell stehen hat. Sie waeren dort gruen, ohne die
+    Kette je zu erreichen (dieselbe Falle, die `test_api.py` beim Anbieter-Gate benennt).
+    Ein Test, der den Schalter selbst prueft, setzt ihn im Rumpf — der spaetere Aufruf gewinnt.
+    """
+    monkeypatch.setenv("TRANSKRIBOR_AUTOCORRECT", "1")
+
+
 def test_opts_reicht_die_sprache_durch():
     o = transcribe._opts("en")
     assert o["language"] == "en"
@@ -1117,7 +1128,7 @@ def test_transcribe_project_diarize_error_does_not_block_next_file(monkeypatch, 
     assert "D2" in corrected
 
 
-def test_transcribe_project_diarize_runs_even_if_ai_unavailable(monkeypatch, tmp_path):
+def test_transcribe_project_diarize_runs_even_if_ai_unavailable(monkeypatch, tmp_path, capsys):
     """Wenn KI nicht erreichbar ist (z.B. Offline / kein API-Key), soll Diarisierung auf der GPU trotzdem pro Datei laufen."""
     from webtool import correct, llm
 
@@ -1152,11 +1163,58 @@ def test_transcribe_project_diarize_runs_even_if_ai_unavailable(monkeypatch, tmp
     monkeypatch.setattr(correct, "cmd_diarize", fake_diarize)
 
     transcribe.transcribe_project("OfflineDemo", "tiny", "de", autocorrect=True)
+    out = capsys.readouterr().out
 
     assert diarized == ["D1", "D2"]
+    # #406: der Ausfall der KI-Phase war STILL. Die Diarisierung laeuft weiter (ihr Sidecar
+    # spart dem spaeteren `correct run` die GPU-Minuten), aber der Grund gehoert ins Protokoll.
+    assert "[autocorrect] KI-Phase uebersprungen — kein KI-Anbieter konfiguriert" in out
     assert (tdir / "D1.json").exists()
     assert (tdir / "D2.json").exists()
 
 
 
 
+
+
+def test_autocorrect_faellt_bei_kill_switch_ganz_aus(monkeypatch, tmp_path, capsys):
+    """#406: `TRANSKRIBOR_AUTOCORRECT=0` war auf dem Live-Weg wirkungslos.
+
+    Bis v0.48.0 las den Schalter `app._autocorrect`; die gestaffelte Pipeline haengt die
+    Korrektur seitdem direkt hier an und fragte ihn nirgends mehr — `_autocorrect` hatte
+    danach keinen einzigen Aufrufer. Geprueft wird die GANZE Kette, nicht nur der LLM-Aufruf:
+    `cmd_diarize` kostet pyannote-Minuten auf der GPU, und wer den Schalter setzt, um die
+    Maschine ohne KI zu fahren, will genau die nicht.
+
+    `llm.available` steht bewusst auf TRUE — sonst wuerde der Anbieter-Riegel die Kette
+    anhalten und der Test bliebe gruen, ohne den Schalter je zu beruehren.
+    """
+    from webtool import correct, llm
+
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    monkeypatch.setenv("TRANSKRIBOR_AUTOCORRECT", "0")
+    monkeypatch.setattr(transcribe, "PROJEKTE", str(tmp_path))
+    monkeypatch.setattr(transcribe, "_modell", lambda *a, **kw: "fake_model")
+    monkeypatch.setattr(llm, "available", lambda *_a: (True, ""))
+    monkeypatch.setattr(correct, "diarize_enabled", lambda: True)
+
+    proj_dir = tmp_path / "AusDemo"
+    (proj_dir / "audio").mkdir(parents=True)
+    tdir = proj_dir / "transkripte"
+    tdir.mkdir(parents=True)
+    (proj_dir / "audio" / "K1.mp3").write_bytes(b"audio")
+
+    angefasst = []
+    monkeypatch.setattr(transcribe, "_transkribiere_datei", lambda *a: {
+        "text": "Text", "segments": [{"id": 0, "start": 0.0, "end": 1.0, "text": "Text"}], "duration": 1.0})
+    monkeypatch.setattr(correct, "cmd_diarize", lambda *a, **k: angefasst.append("diarize"))
+    monkeypatch.setattr(correct, "prep_single", lambda *a, **k: angefasst.append("prep"))
+    monkeypatch.setattr(correct, "correct_ai_single", lambda *a, **k: angefasst.append("ki"))
+
+    transcribe.transcribe_project("AusDemo", "tiny", "de", autocorrect=True)
+    out = capsys.readouterr().out
+
+    assert angefasst == [], f"Kill-Switch gesetzt, trotzdem gelaufen: {angefasst}"
+    assert "[autocorrect] uebersprungen — TRANSKRIBOR_AUTOCORRECT=0" in out
+    # Gegenkontrolle: der Schalter stoppt die KORREKTUR, nicht die Transkription.
+    assert (tdir / "K1.json").exists()
