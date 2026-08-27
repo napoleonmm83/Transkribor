@@ -340,6 +340,40 @@ describe('parseJobPhases — Druckformen, die der Parser nicht kannte (#374)', (
     }
   })
 
+  it('ein Basisname, der SELBST auf `(N Sprecher)` endet, wird an der Bereichszeile gerettet', () => {
+    // Von Subagent (M1) UND CodeRabbit-CLI unabhängig gefunden. Aus der Zeile allein ist der
+    // Fall NICHT entscheidbar — `correct.py:298-300` hängt den Zusatz an, beide Lesarten
+    // ergeben dieselben Bytes. Die zweite Quelle ist `[scope]` mit den echten Basisnamen.
+    const p = parseJobPhases('correct', [
+      '[scope] Runde 2 (3 Sprecher)',
+      '→ Diarisiere Runde 2 (3 Sprecher) …',
+    ])
+    expect(p.active).toEqual({ 'Runde 2 (3 Sprecher)': { phase: 'diarize' } })
+    // … und `[done]` findet denselben Schlüssel wieder. Vorher stand dort der gekürzte Name,
+    // `[done]` druckt aber den rohen — der Spinner blieb bis zum Phasen-Sweep stehen.
+    const q = parseJobPhases('correct', [
+      '[scope] Runde 2 (3 Sprecher)',
+      '→ Diarisiere Runde 2 (3 Sprecher) …',
+      '[done] Runde 2 (3 Sprecher)',
+    ])
+    expect(q.active).toEqual({})
+  })
+
+  it('… und der HÄUFIGE Fall bleibt unberührt: gesetzte Sprecherzahl wird weiter abgeschnitten', () => {
+    // Die Negativkontrolle zur Zeile darüber. Ohne sie wäre der Fix eine Regression an genau
+    // der Stelle, die #374 Punkt 1 behoben hat — die Datei steht MIT ihrem echten Namen im
+    // Bereich, der Zusatz gehört ihr also nicht.
+    const p = parseJobPhases('correct', [
+      '[scope] Timeline 13',
+      '→ Diarisiere Timeline 13 (5 Sprecher) …',
+    ])
+    expect(p.active).toEqual({ 'Timeline 13': { phase: 'diarize' } })
+    // Und ohne Bereichszeile bleibt es beim bisherigen Verhalten — der Rückfall darf den
+    // Normalfall nicht plötzlich anders lesen.
+    const ohne = parseJobPhases('correct', ['→ Diarisiere Timeline 13 (5 Sprecher) …'])
+    expect(ohne.active).toEqual({ 'Timeline 13': { phase: 'diarize' } })
+  })
+
   it('`apply: FEHLT {base}.json` beendet die Datei — sonst meldet der Lauf ERFOLG', () => {
     // Codex-Befund [high] am Bündel, nachgemessen und bestätigt. Ungelesen war diese Zeile
     // nicht bloss ein hängender Spinner: `cmd_apply` gibt "missing" zurück, `correct_ai_single`
