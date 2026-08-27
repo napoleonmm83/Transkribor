@@ -489,6 +489,31 @@ describe('parseJobPhases — Robustheit gegen echte Namen und Zeilen (#379)', ()
     expect(Object.keys(p.perBase)).toEqual(['Interview '])
   })
 
+  it('… und die BEREICHSZEILE frisst die Randleerzeichen auch nicht', () => {
+    // Dieselbe Klasse wie der Zeilenschnitt darüber, nur eine Zeile höher gedacht — und
+    // genau deshalb übersehen: `l.slice(7).trim()` schnitt an den ENDEN der ganzen Nutzlast,
+    // also am ersten und am letzten Basisnamen. Ein Name mittendrin blieb heil, die Ränder
+    // nicht. Folge: `terminal()` filtert die Datei über `scope.has(base)` weg — kein
+    // perBase-Eintrag, kein Aufräumen von `active`. Sie hängt bis Jobende auf dem Spinner
+    // UND fehlt in der Bilanz, also wieder der #376-Zustand.
+    // Geschnitten wird jetzt genau EIN Trennleerzeichen hinter `[scope]`, mehr nicht.
+    const hinten = parseJobPhases('transcribe', [
+      '[scope] Zweite\tInterview ',
+      '[P] skip (Audio nicht mehr vorhanden): Interview ',
+    ])
+    expect(hinten.perBase).toEqual({ 'Interview ': 'failed' })
+
+    const vorne = parseJobPhases('transcribe', [
+      '[scope]  Interview\tZweite',
+      '[P] skip (Audio nicht mehr vorhanden):  Interview',
+    ])
+    expect(vorne.perBase).toEqual({ ' Interview': 'failed' })
+
+    // Negativkontrolle: der leere Bereich des fetch-Laufs bleibt ein leeres Set — er ist
+    // truthy und lässt `terminal()` bewusst ALLES verwerfen (siehe Kommentar am fetch-Zweig).
+    expect(parseJobPhases('fetch', ['[scope] ']).scope).toEqual(new Set())
+  })
+
   it('… und `[done]` findet denselben Namen wieder', () => {
     // Zweiter lebender Traeger derselben Eigenschaft, und er gehoert zum Zweig, den dieser
     // Stand gerade eingefuehrt hat: `[done] {base}` ist $-verankert. Getrimmt trifft es den

@@ -67,7 +67,17 @@ export function parseJobPhases(kind: string, lines: string[]): JobPhases {
     // statt {S1:'done'}). Spaetere [scope]-Zeilen fallen durch zu den Regexen unten und werden
     // dort korrekt als Projektzeilen gelesen — dieselbe Falle, die #396 fuer 'fetch' schloss.
     if (scope === undefined && l.startsWith('[scope]')) {
-      const payload = l.slice(7).trim()
+      // Geschnitten wird GENAU das eine Trennleerzeichen hinter `[scope]`, nicht `trim()`.
+      // `trim()` schnitt an den Enden der ganzen Nutzlast, also am ersten und am letzten
+      // Basisnamen — ein Name mittendrin blieb heil, die Raender nicht. Und `safe_name` laesst
+      // Randleerzeichen durch: `terminal()` filterte die Datei dann ueber `scope.has(base)`
+      // weg, es entstand kein perBase-Eintrag und `active` wurde nicht geraeumt. Sie hing bis
+      // Jobende auf dem Spinner UND fehlte in der Bilanz — derselbe #376-Zustand, gegen den
+      // dieser Stand angetreten ist, nur eine Zeile hoeher als der Zeilenschnitt.
+      // Ein Zeilenumbruch ist hier nicht abzuschneiden: `jobs.py` liest mit Universal Newlines
+      // und `rstrip("\n")` (dieselbe Begruendung wie beim Zeilenschnitt).
+      const roh = l.slice(7)
+      const payload = roh.startsWith(' ') ? roh.slice(1) : roh
       scope = new Set(payload ? payload.split('\t').filter(Boolean) : [])
       continue
     }
