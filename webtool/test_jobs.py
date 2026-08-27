@@ -710,6 +710,27 @@ def _fail_cmd(n=2):
     return [sys.executable, "-c", code]
 
 
+def _raeume_ab(jids):
+    """Jeden beobachteten Job zu Ende laufen lassen, bevor der Test zurueckkehrt.
+
+    Die vier Nachlauf-Tests loesen einen ZWEITEN Job aus, auf den ihre Zusicherung nicht mehr
+    wartet: sie ist erfuellt, sobald er GESTARTET ist. Der Prozess laeuft danach weiter, und
+    `_active` haelt seinen Slot. Bei `kind="transcribe"` ist das kein Schoenheitsfehler —
+    `GPU_KINDS` serialisiert projektuebergreifend, der naechste Test bekaeme also
+    `started=False` und faellt. GEMESSEN, dreimal in Folge:
+    `_active bei Testende: {('P_eigen','transcribe'): '…'}`, Job-Status `running`.
+
+    Bewusst fuer ALLE vier, nicht nur den gemessenen: die `correct`-Faelle sind heute
+    harmlos (keine GPU-Serialisierung), tragen aber dieselbe Bauart — und „ein Fix an einer
+    Stelle ist kein Fix der Klasse".
+
+    Das `assert` ist der Sensor der Aufraeumung selbst: liefe `_wait` in seine Frist, bliebe
+    der Job stehen und die Helferin schwiege — genau der Zustand, den sie verhindern soll.
+    """
+    for j in jids:
+        assert _wait(j)["status"] != "running", f"Job {j} laeuft ueber das Testende hinaus"
+
+
 def test_vorgemerkter_nachlauf_laeuft_auch_nach_einem_GESCHEITERTEN_lauf():
     """Der vorgemerkte Nachlauf haengt an einer FREMDEN Datei, nicht am Ausgang dieses Laufs.
 
@@ -769,6 +790,7 @@ def test_vorgemerkter_nachlauf_laeuft_auch_nach_einem_GESCHEITERTEN_lauf():
             time.sleep(0.02)
     finally:
         jobs.start = orig_start
+        _raeume_ab(gelaufen)
 
     assert len(gelaufen) == 2, ("der vorgemerkte Nachlauf ist ausgefallen — die zweite "
                                 f"Aufnahme waere nie transkribiert worden (gelaufen={gelaufen})")
@@ -810,6 +832,7 @@ def test_abbruch_startet_KEINEN_nachlauf():
             time.sleep(0.02)
     finally:
         jobs.start = orig_start
+        _raeume_ab(gelaufen)
 
     assert gelaufen == [jid1], f"ein Abbruch hat einen Nachlauf gestartet (gelaufen={gelaufen})"
 
@@ -901,6 +924,7 @@ def test_abbruch_hinterlaesst_keine_tote_vormerkung():
             time.sleep(0.02)
     finally:
         jobs.start = orig_start
+        _raeume_ab(gelaufen)
 
     assert len(gelaufen) == vorher + 2, ("der Nachlauf nach dem Abbruch kam nicht mehr zustande "
                                          f"— der Weg blieb vergiftet (gelaufen={gelaufen})")
@@ -926,6 +950,7 @@ def test_abbruch_eines_FREMDEN_projekts_verwirft_den_eigenen_nachlauf_nicht():
     Slot gerade anders belegt ist.
     """
     gestartet = []
+    jids = []
     orig_start = jobs.start
 
     def zaehl_start(project, cmd, cwd, kind, then=None, env=None, base=None, bases=None):
@@ -933,6 +958,7 @@ def test_abbruch_eines_FREMDEN_projekts_verwirft_den_eigenen_nachlauf_nicht():
                                   base=base, bases=bases)
         if started and project in ("Q_fremd", "P_eigen"):
             gestartet.append(project)
+            jids.append(jid)
         return jid, started
 
     jobs.start = zaehl_start
@@ -953,6 +979,7 @@ def test_abbruch_eines_FREMDEN_projekts_verwirft_den_eigenen_nachlauf_nicht():
             time.sleep(0.02)
     finally:
         jobs.start = orig_start
+        _raeume_ab(jids)
 
     assert "P_eigen" in gestartet, (
         "der Abbruch eines FREMDEN Projekts hat den eigenen Nachlauf mitgenommen — die "
