@@ -76,6 +76,11 @@ function ProjektKarte({ p, refresh }: { p: Project; refresh: () => void }) {
         <p className="mt-1 text-sm tabular-nums text-muted-foreground">
           {p.dateien} Datei{p.dateien === 1 ? '' : 'en'}
           {p.dateien > 0 && ` · ${done} fertig`}
+          {' · '}
+          {/* Ohne die Zeitangabe stuende die Ueberschrift "Zuletzt geaendert" ueber Kacheln,
+              an denen nirgends steht, wann — im dreispaltigen Raster ist die Reihenfolge
+              allein keine Anzeige mehr (Reviewbefund B6). */}
+          <time dateTime={new Date(p.geaendert * 1000).toISOString()}>{relativeTime(p.geaendert)}</time>
         </p>
 
         {/* Fortschritt des Projekts auf einen Blick: die Uebersicht beantwortet damit
@@ -126,7 +131,16 @@ export function HomeGallery() {
   // bleibt es bei den letzten fuenf Zeilen: die vollstaendige Liste steht dann in der
   // Seitenleiste, und diese Seite beantwortet wieder "woran war ich dran", nicht "was gibt
   // es alles".
-  const karten = ruhende.length <= KARTEN_BIS
+  //
+  // Gezaehlt werden ALLE Projekte, nicht die ruhenden — sonst haengt der Aufbau der Seite an
+  // FREMDEN Jobs: Jobs starten seit dem Auto-Trigger ohne Klick, `useProjekte` pollt alle 4 s,
+  // und bei genau neun Projekten kippte die untere Haelfte bei jedem Start und Ende. Der Preis
+  // waere nicht Optik gewesen: React sieht an derselben Stelle `ProjektKarte` gegen `<li>`,
+  // wirft den Teilbaum weg und mountet `ProjektMenue` neu — ein offener Umbenennen-Dialog
+  // samt getipptem Namen verschwindet, ausgeloest von einem Job auf einem anderen Projekt
+  // (Reviewbefund B3, mit einem Wegwerf-Test nachgemessen). Die Frage lautet "wie viele
+  // Projekte hat der Nutzer", und die aendert sich nicht von selbst.
+  const karten = projects.length <= KARTEN_BIS
   const juengste = useMemo(
     () => (karten ? ruhende : ruhende.slice(0, ZEILEN)),
     [ruhende, karten])

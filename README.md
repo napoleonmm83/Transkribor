@@ -541,14 +541,20 @@ Fassung, deinem Betriebssystem und den letzten Zeilen aus dem Protokoll. Schreib
 was passiert ist, und schick sie ab.
 
 **Du siehst alles, bevor du sendest** — die Mail geht nicht von selbst raus, und du kannst
-jede Zeile löschen, die du nicht mitschicken willst. Was in diesen Zeilen stehen kann: Namen
-deiner Aufnahmedateien und Fehlermeldungen aus dem Korrekturlauf, in denen auch Teile eines
-Transkripts vorkommen können. Der Suchpfad deines Rechners (er enthält deinen Benutzernamen)
-wird bewusst weggelassen, API-Schlüssel werden unkenntlich gemacht.
+jede Zeile löschen, die du nicht mitschicken willst. Das ist die eigentliche Zusage hier: nicht
+ein Filter, dem du vertrauen musst, sondern die Vorschau.
 
-**„Protokoll anzeigen“** zeigt dir die vollständige Protokolldatei im Dateimanager. Sie ist
-länger als das, was in die Mail passt — häng sie an, wenn du magst. Auch hier gilt: erst
-hineinschauen, dann verschicken.
+Was in diesen Zeilen stehen kann: **Pfade auf deinem Rechner, und die enthalten deinen
+Benutzernamen** (`C:\Users\…`). Sie stehen bewusst drin — ohne sie ist kaum ein Fehler
+auffindbar. Dazu Namen deiner Aufnahmedateien und Fehlermeldungen aus dem Korrekturlauf, in
+denen auch Teile eines Transkripts vorkommen können. Schlüssel in den gängigen Formaten
+(`sk-…`, `AIza…`, `gsk_…`, `hf_…`) werden unkenntlich gemacht. Der vollständige Suchpfad
+(`PATH`) bleibt draussen — er ist über tausend Zeichen lang und würde den Platz auffressen,
+den die eigentlichen Meldungen brauchen.
+
+**„Protokoll anzeigen“** zeigt dir die Protokolldatei im Dateimanager. Sie ist länger als das,
+was in die Mail passt — häng sie an, wenn du magst. Ist sie sehr gross geworden, liegen die
+älteren Teile als `.1` bis `.3` daneben. Auch hier gilt: erst hineinschauen, dann verschicken.
 
 </details>
 

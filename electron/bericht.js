@@ -33,13 +33,16 @@ const ZEILEN = 60
 /**
  * Zeilen, die NIE in den Rumpf gehen.
  *
- * Bisher genau eine: die PATH-Zeile aus `protokoll.kopf`. Zwei Gruende, und der zweite
- * allein wuerde schon reichen:
- * 1. Sie traegt den Benutzernamen — und der Kopf steht bei jedem Start im Protokoll, bei
- *    einem frisch gestarteten Programm also unter den letzten Zeilen.
- * 2. Sie ist auf dieser Maschine ueber 1000 Zeichen lang und fraesse den halben
- *    URL-Deckel fuer eine Auskunft, die in der DATEI danebensteht.
- * Die Datei behaelt sie: wer sie anhaengt, entscheidet sich dafuer.
+ * Bisher genau eine: die PATH-Zeile aus `protokoll.kopf`. **Der tragende Grund ist die
+ * LAENGE**: sie ist auf dieser Maschine ueber 1000 Zeichen lang und fraesse den halben
+ * URL-Deckel fuer eine Auskunft, die in der DATEI danebensteht.
+ *
+ * Dass sie zusaetzlich den Benutzernamen traegt, ist ein Nebeneffekt und **kein**
+ * Datenschutzversprechen — das waere am echten Protokoll gemessen falsch: der Benutzername
+ * steht ueber `logpfad`, `stempelPfad`, `venvPfad` und `projektePfad` ohnehin viermal im
+ * Rumpf (Reviewbefund B2), und der `Umgebungsbefund`, aus dem sie stammen, ist der
+ * nuetzlichste Block darin. Die Zusage dieses Features ist die VORSCHAU, nicht ein Filter.
+ * Die Datei behaelt die Zeile: wer sie anhaengt, entscheidet sich dafuer.
  *
  * Die zweite ist GEMESSEN, nicht vermutet, und ohne sie waere dieses Feature wirkungslos:
  * an einem echten Protokoll dieser Maschine (484 KB, 5113 Zeilen) sind **89,1 %**
@@ -91,19 +94,30 @@ function kopf({ version, plattform, arch, electron, node, gepackt }) {
  * Fassung und Plattform ist mehr als keine.
  */
 function mailto({ empfaenger, betreff, kopf: kopfzeilen, zeilen, logpfad, maxUrl = MAX_URL }) {
+  // `paket.author` darf laut npm auch ein STRING sein — dann ist `.email` undefined und die
+  // URL waere `mailto:undefined?…`: ein Mailfenster an niemanden, das aussieht, als haette es
+  // geklappt. Lieber ein Wurf, den der Toast im Fenster nennt (Reviewbefund B5).
+  if (!empfaenger) throw new Error('Kein Empfaenger fuer den Fehlerbericht hinterlegt')
   const bauen = (verwendet, gekuerzt) => [
     ...kopfzeilen,
     '',
     'Was ist passiert?',
     '',
     '',
-    logpfad ? `Vollstaendiges Protokoll (zum Anhaengen): ${logpfad}` : '',
+    // NICHT "vollstaendiges Protokoll": `protokoll.js` rotiert bei 2 MB ueber bis zu drei
+    // Generationen, direkt nach einer Rotation ist diese Datei fast leer (Reviewbefund B4).
+    logpfad ? `Protokolldatei (zum Anhaengen; aeltere Teile liegen als .1 bis .3 daneben):\n${logpfad}` : null,
     '',
     gekuerzt ? `— letzte ${verwendet.length} Protokollzeilen (gekuerzt) —` : '— Protokoll —',
     ...verwendet,
   ].filter(z => z !== null).join('\n')
 
-  const url = rumpf => 'mailto:' + encodeURIComponent(empfaenger)
+  // Das `@` bleibt ROH. Nach RFC 6068 ist es in `addr-spec` ein Trenner; prozentkodiert ist
+  // `mailto:a%40b.c` streng gelesen eine local-part ohne Domain (RFC 3986 §2.4: ein kodiertes
+  // reserviertes Zeichen bedeutet nicht dasselbe wie das rohe). Die meisten Clients dekodieren
+  // vorher — **hier nicht nachgemessen**, es gibt in dieser Umgebung kein Mailprogramm. Die
+  // Adresse ist eine Konstante aus der package.json, die sichere Fassung kostet also nichts.
+  const url = rumpf => 'mailto:' + encodeURIComponent(empfaenger).replace(/%40/g, '@')
     + '?subject=' + encodeURIComponent(betreff)
     + '&body=' + encodeURIComponent(rumpf)
 

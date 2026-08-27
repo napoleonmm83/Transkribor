@@ -38,7 +38,11 @@ export function useUpdate() {
   const laden = useCallback(() => { bruecke()?.update.laden().catch(() => {}) }, [])
   const installieren = useCallback(() => { bruecke()?.update.installieren().catch(() => {}) }, [])
   const protokollOeffnen = useCallback(() => { bruecke()?.protokollOeffnen().catch(() => {}) }, [])
-  const fehlerbericht = useCallback(() => { bruecke()?.fehlerbericht().catch(() => {}) }, [])
+  // Reicht das Versprechen DURCH, anders als die vier darueber: `openExternal` lehnt ab, wenn
+  // kein Mailprogramm registriert ist, und das ist keine Randlage (frische Windows-
+  // Installation, Linux ohne xdg-Handler). Blind geschluckt taete der Knopf sichtbar nichts,
+  // waehrend die Seite eine Zeile darueber eine vorbereitete Mail verspricht.
+  const fehlerbericht = useCallback(() => bruecke()?.fehlerbericht(), [])
 
   return { zustand, pruefen, laden, installieren, protokollOeffnen, fehlerbericht }
 }

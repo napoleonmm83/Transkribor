@@ -5,14 +5,22 @@ import { MemoryRouter } from 'react-router-dom'
 import { VersionPage } from './VersionPage'
 import type { UpdateZustand } from '@/lib/types'
 import type { Release } from '@/lib/releases'
+import { toast } from 'sonner'
 
 vi.mock('@/hooks/useUpdate', () => ({
-  useUpdate: vi.fn(() => ({ zustand: null, pruefen: vi.fn(), laden: vi.fn(), installieren: vi.fn(), protokollOeffnen: vi.fn(), fehlerbericht: vi.fn() })),
+  useUpdate: vi.fn(() => ({ zustand: null, pruefen: vi.fn(), laden: vi.fn(), installieren: vi.fn(), protokollOeffnen: vi.fn(), fehlerbericht: vi.fn(() => Promise.resolve(BERICHT)) })),
 }))
 vi.mock('@/lib/releases', () => ({ holeReleases: vi.fn() }))
+// Ohne die Attrappe ist `toast.error` in jsdom kein Beobachtungspunkt — dieselbe Falle wie
+// bei `toast.info` in #174.
+vi.mock('sonner', () => ({ toast: { error: vi.fn(), success: vi.fn(), info: vi.fn(), warning: vi.fn() } }))
 
 import { useUpdate } from '@/hooks/useUpdate'
 import { holeReleases } from '@/lib/releases'
+
+/** Rueckgabe des Fehlerbericht-Kanals — die Attrappe muss die VOLLE Form liefern, sonst
+ *  behauptet der Test einen Vertrag, den es nicht gibt (dieselbe Falle wie `as Settings`). */
+const BERICHT = { pfad: 'C:\\log.txt', verwendet: 13, gekuerzt: true }
 
 const RELEASE: Release = {
   version: '0.29.0', tag: 'v0.29.0', datum: '2026-08-21',
@@ -21,7 +29,7 @@ const RELEASE: Release = {
 
 /** Seite mit einem Update-Zustand zeigen. `null` = kein Electron (reiner Browser). */
 function zeigeMit(zustand: UpdateZustand | null, releases: Release[] = []) {
-  const spies = { pruefen: vi.fn(), laden: vi.fn(), installieren: vi.fn(), protokollOeffnen: vi.fn(), fehlerbericht: vi.fn() }
+  const spies = { pruefen: vi.fn(), laden: vi.fn(), installieren: vi.fn(), protokollOeffnen: vi.fn(), fehlerbericht: vi.fn(() => Promise.resolve(BERICHT)) }
   vi.mocked(useUpdate).mockReturnValue({ zustand, ...spies })
   vi.mocked(holeReleases).mockResolvedValue(releases)
   return { ...render(<MemoryRouter><VersionPage /></MemoryRouter>), spies }
@@ -139,6 +147,24 @@ describe('VersionPage — diese Fassung', () => {
     expect(spies.fehlerbericht).toHaveBeenCalled()
   })
 
+  it('scheitert das Oeffnen der Mail, sagt es die Seite (Reviewbefund B1)', async () => {
+    // `openExternal` lehnt ohne registriertes Mailprogramm ab — auf einer frischen
+    // Windows-Installation der Normalfall. Ohne diesen Zweig taete der Knopf sichtbar
+    // nichts, waehrend die Zeile darueber eine vorbereitete Mail verspricht.
+    const { spies } = zeigeMit({ version: '0.2.1', art: 'aktuell' })
+    spies.fehlerbericht.mockRejectedValue(new Error('Kein Programm fuer mailto'))
+    fireEvent.click(await screen.findByRole('button', { name: /Fehlerbericht schreiben/ }))
+    await waitFor(() => expect(toast.error).toHaveBeenCalled())
+  })
+
+  it('bei Erfolg gibt es KEINE Fehlermeldung', async () => {
+    // Gegenrichtung: ein Toast, der immer kommt, ist derselbe Schaden von der anderen Seite.
+    zeigeMit({ version: '0.2.1', art: 'aktuell' })
+    fireEvent.click(await screen.findByRole('button', { name: /Fehlerbericht schreiben/ }))
+    await waitFor(() => expect(screen.getByRole('button', { name: /Fehlerbericht schreiben/ })).toBeTruthy())
+    expect(toast.error).not.toHaveBeenCalled()
+  })
+
   it('sagt VOR dem Klick, was mitgeht — das ist die Antwort auf „was darf mit?"', async () => {
     // Der Kern von #372: gezeigt statt gefiltert. Ein Knopf, der wortlos eine Mail mit
     // Protokollzeilen aufmacht, waere genau das, was die README-Zusage verletzt.
@@ -219,7 +245,7 @@ describe('VersionPage — Versionsverlauf', () => {
   it('sagt es, wenn der Verlauf nicht ladbar ist — samt Grund und Weg zu GitHub', async () => {
     // Kein Netz ist der Normalfall auf einem Rechner ohne Verbindung; eine leere Flaeche
     // liesse den Leser raten, ob es keine Fassungen gibt oder die Abfrage scheiterte.
-    vi.mocked(useUpdate).mockReturnValue({ zustand: null, pruefen: vi.fn(), laden: vi.fn(), installieren: vi.fn(), protokollOeffnen: vi.fn(), fehlerbericht: vi.fn() })
+    vi.mocked(useUpdate).mockReturnValue({ zustand: null, pruefen: vi.fn(), laden: vi.fn(), installieren: vi.fn(), protokollOeffnen: vi.fn(), fehlerbericht: vi.fn(() => Promise.resolve(BERICHT)) })
     vi.mocked(holeReleases).mockRejectedValue(new Error('GitHub antwortet 403'))
     render(<MemoryRouter><VersionPage /></MemoryRouter>)
     expect(await screen.findByText(/GitHub antwortet 403/)).toBeTruthy()
@@ -247,7 +273,7 @@ describe('VersionPage — Versionsverlauf', () => {
     // was der catch tut. Scharf wird es nur im StrictMode: mount→unmount→mount auf
     // DERSELBEN Fiber, der erste Abruf lehnt ab, die Seite steht danach aber da.
     let n = 0
-    vi.mocked(useUpdate).mockReturnValue({ zustand: null, pruefen: vi.fn(), laden: vi.fn(), installieren: vi.fn(), protokollOeffnen: vi.fn(), fehlerbericht: vi.fn() })
+    vi.mocked(useUpdate).mockReturnValue({ zustand: null, pruefen: vi.fn(), laden: vi.fn(), installieren: vi.fn(), protokollOeffnen: vi.fn(), fehlerbericht: vi.fn(() => Promise.resolve(BERICHT)) })
     vi.mocked(holeReleases).mockImplementation((signal?: AbortSignal) => {
       n += 1
       if (n === 1) {

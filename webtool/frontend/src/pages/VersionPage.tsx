@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { ChevronRight, Loader2 } from 'lucide-react'
+import { toast } from 'sonner'
 import { useUpdate } from '@/hooks/useUpdate'
 import { PageHeader } from '@/components/PageHeader'
 import { Abschnitt } from '@/components/Abschnitt'
@@ -49,6 +50,14 @@ export function VersionPage() {
   // Ausserhalb von Electron gibt es keinen Update-Zustand — dann ist der zur Bauzeit
   // eingesetzte Wert die einzige (und richtige) Quelle, wie in der Fusszeile.
   const version = upd?.version ?? __APP_VERSION__
+  /** Ohne registriertes Mailprogramm lehnt `openExternal` ab — das muss ankommen, sonst sieht
+   *  der Knopf aus, als haette er nichts getan. Die Protokolldatei zeigt der Hauptprozess
+   *  VORHER, der Satz stimmt also auch im Fehlerfall. */
+  const berichtSchreiben = () => {
+    fehlerbericht()?.catch(() => toast.error(
+      'Es liess sich kein Mailprogramm öffnen. Das Protokoll ist trotzdem geöffnet — '
+      + 'schick es von Hand an marcusmartini83@gmail.com.'))
+  }
   const [verlauf, setVerlauf] = useState<Release[] | null>(null)
   const [fehler, setFehler] = useState('')
 
@@ -177,7 +186,7 @@ export function VersionPage() {
             an, wenn du magst.
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
-            <Button variant="secondary" onClick={fehlerbericht}>Fehlerbericht schreiben</Button>
+            <Button variant="secondary" onClick={berichtSchreiben}>Fehlerbericht schreiben</Button>
             <Button variant="ghost" onClick={protokollOeffnen}>Protokoll anzeigen</Button>
           </div>
         </Abschnitt>

@@ -29,6 +29,8 @@ const fs = require('node:fs')
 
 // Die gerade geladene Welt — der `Module._load`-Patch steht global, die Attrappen wechseln.
 let welt = null
+/** Wegwerf-Verzeichnisse der Tests, die eine echte Protokolldatei brauchen. */
+const temps = []
 
 const echtesLaden = Module._load
 Module._load = (req, ...rest) => {
@@ -109,7 +111,10 @@ function attrappen(opt = {}) {
     shell: {
       showItemInFolder: p => w.spur.push(`zeigen:${p}`),
       openPath: async p => { w.spur.push(`openPath:${p}`); return opt.openPathFehler || '' },
-      openExternal: u => w.spur.push(`extern:${u}`),
+      openExternal: u => {
+        w.spur.push(`extern:${u}`)
+        return opt.externFehler ? Promise.reject(new Error(opt.externFehler)) : Promise.resolve()
+      },
     },
     nativeTheme: { shouldUseDarkColors: !!opt.dunkel },
     net: { isOnline: () => w.online },
@@ -141,7 +146,7 @@ function attrappen(opt = {}) {
   const logpfad = opt.logtext === undefined
     ? '/pfad/zu/transkribor.log'
     : path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'tk-log-')), 'transkribor.log')
-  if (opt.logtext !== undefined) fs.writeFileSync(logpfad, opt.logtext)
+  if (opt.logtext !== undefined) { fs.writeFileSync(logpfad, opt.logtext); temps.push(path.dirname(logpfad)) }
   w.logpfad = logpfad
   w.protokoll = {
     pfad: () => logpfad,
@@ -184,6 +189,9 @@ async function laden(opt = {}) {
   const vorherigeExit = process.listeners('exit')
   // Der 6-Stunden-Takt entsteht erst IN `starten()`; der Griff bleibt deshalb bis nach dem
   // Abwarten liegen und wird sofort danach zurueckgegeben — `node:test` benutzt selbst Timer.
+  // Dass in diesem Fenster kein fremder Timer entsteht, haengt daran, dass JEDER Wartepunkt
+  // darin ein Microtask ist. Wer in `starten()` ein `await new Promise(r => setTimeout(r))`
+  // einbaut, bricht das hier — und nicht dort, wo er es sucht.
   const echterTakt = globalThis.setInterval
   globalThis.setInterval = fn => { welt.takt = fn; return { unref: () => { welt.taktUnref = true } } }
   try {
@@ -203,7 +211,10 @@ async function laden(opt = {}) {
   return w
 }
 
-test.after(() => { Module._load = echtesLaden })
+test.after(() => {
+  Module._load = echtesLaden
+  for (const d of temps) { try { fs.rmSync(d, { recursive: true, force: true }) } catch { /* egal */ } }
+})
 
 // ── Instanzsperre (#231) ──────────────────────────────────────────────────────
 test('ohne Instanzsperre wird beendet — und NICHTS gestartet', async () => {
@@ -399,6 +410,16 @@ test('die Marke steht NACH dem Lesen — sie verdraengt keine echte Zeile', asyn
   assert.ok(!rumpf.includes('Fehlerbericht vom Nutzer erstellt'))
   assert.ok(w.protokollzeilen.some(z => z.includes('Fehlerbericht vom Nutzer erstellt')),
     'in der DATEI steht sie sehr wohl')
+})
+
+test('scheitert das Oeffnen der Mail, erfaehrt es der Nutzer — und die Datei liegt trotzdem da', async () => {
+  // Ohne registrierten mailto-Handler ist das der NORMALFALL, nicht der Randfall. Ohne den
+  // Wurf taete der Knopf sichtbar nichts, waehrend die Seite eine Mail verspricht.
+  const w = await laden({ logtext: 'zeile\n', externFehler: 'Kein Programm fuer mailto' })
+  await assert.rejects(() => w.ruf('fehlerbericht'), /Kein Programm fuer mailto/)
+  // Die zweite Haelfte ist die eigentliche Zusage der Reihenfolge: der Weg, der immer geht,
+  // ist VORHER gegangen worden.
+  assert.ok(w.spur.includes(`zeigen:${w.logpfad}`))
 })
 
 // ── Update ────────────────────────────────────────────────────────────────────
