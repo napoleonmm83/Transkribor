@@ -45,14 +45,19 @@ export function parseJobPhases(kind: string, lines: string[]): JobPhases {
   const blockDone = (base: string, nr: number) => { blocks[base]?.done.add(nr) }
 
   for (const rawLine of lines) {
-    // Nur Einrueckung und Zeilenrest weg, NICHT die Leerzeichen am Ende: `safe_name('Interview ')`
-    // laesst den Namen unveraendert, und `trim()` machte daraus zwei Schluessel — "Interview" aus
-    // der ankerlosen skip-Zeile, "Interview " aus der fertig-Zeile (gemessen). Dieselbe Datei,
-    // ein Phantom-Eintrag dazu. Die fuehrende Einrueckung faellt weiter, und sie MUSS fallen:
-    // correct.py druckt die Blockzeilen ("  ✓ {base} · Block 1/4 fertig") und die Diagnosen
-    // ("  [diagnose] …") mit zwei Leerzeichen davor. Vorne geht dabei nichts Gemeintes
-    // verloren — ein Basisname steht in KEINER Zeile am Anfang.
-    const l = rawLine.replace(/^\s+/, '').replace(/[\r\n]+$/, '')
+    // NICHT `trim()`: die Leerzeichen am Zeilenende gehoeren zum Basisnamen. `safe_name('Interview ')`
+    // laesst den Namen unveraendert, und getrimmt zerfaellt dieselbe Datei in zwei Schluessel —
+    // "Interview" aus einer $-verankerten Zeile, "Interview " aus einer mittigen (gemessen).
+    // Am Zeilenende ist sonst nichts abzuschneiden: `jobs.py` liest mit `text=True` (Universal
+    // Newlines) und `rstrip("\n")` — ein `\r` erreicht diese Funktion nie, ein `[\r\n]+$`
+    // waere ein Zweig, den kein Test rot bekommt (nachgemessen).
+    // Vorne wird GENAU die Einrueckung abgeschnitten, die correct.py setzt: zwei Leerzeichen vor
+    // den Blockzeilen ("  ✓ {base} · Block 1/4 fertig") und den Diagnosen. `/^\s+/` waere hier
+    // zu gierig — bei einem Basisnamen mit FUEHRENDEM Leerzeichen (` Interview`, kommt durch
+    // `safe_name`) frisst es dessen erstes Zeichen mit, und der Blockbalken faende seinen
+    // Eintrag nicht mehr: die eingerueckte Bloecke-Zeile ergaebe "Interview", die nicht
+    // eingerueckte `→ Korrigiere`-Zeile " Interview". Dieselbe Spaltung wie oben, andere Kante.
+    const l = rawLine.replace(/^ {0,2}/, '')
     let m: RegExpMatchArray | null
 
     // Nur die ERSTE [scope]-Zeile zaehlt — dieselbe Regel wie im Backend (jobs.py: `bases is
@@ -68,8 +73,12 @@ export function parseJobPhases(kind: string, lines: string[]): JobPhases {
     }
 
     // 'fetch' ist der reine Download-Job (app.py: eigene Art, damit er keinen GPU-Slot belegt).
-    // Er sendet nur '[fetch] …'-Zeilen, teilt sich das Format aber mit dem CLI-Aufruf, bei dem
-    // Download und Transkription noch im selben Job stecken.
+    // Er sendet nur '[fetch] …'-Zeilen. Den kombinierten CLI-Lauf (Download UND Transkription in
+    // einem Strom) trug dieser Zweig frueher mit; seit "nur die erste [scope]-Zeile zaehlt" tut
+    // er es nicht mehr — dort kaeme zuerst `fetch.py`s LEERE Bereichszeile, und ein leeres Set
+    // liesse `terminal()` danach jeden Dateistatus der Transkription verwerfen. Kein Defekt:
+    // `app.py` haengt an den Job immer `--download-only`, der kombinierte Lauf wird nie zum Job
+    // (und `jobs.py` haette dieselbe Luecke). Benannt, damit es niemand als Zusage liest.
     if (kind === 'transcribe' || kind === 'fetch') {
       // MUSS vor den Regexen unten stehen: '[fetch] FEHLER <url>: …' wuerde sonst von
       // /^\[.+?\] FEHLER (.+?): / als Datei-Fehlschlag mit der URL als Basisnamen gelesen.
@@ -121,12 +130,18 @@ export function parseJobPhases(kind: string, lines: string[]): JobPhases {
     // `(.+?)` + optionaler Zusatz: correct.py haengt seit #264 ` ({n} Sprecher)` an, das gierige
     // `(.+)` verschluckte ihn -> Schluessel "Timeline 13 (5 Sprecher)". Beide Verbraucher schlagen
     // mit dem EXAKTEN Basisnamen nach (ProjectWorkspace, Sidebar), die Phase war damit bei jeder
-    // Datei mit gesetzter Sprecherzahl unsichtbar — dieselbe Form, die `→ Korrigiere` schon nutzt.
+    // Datei mit gesetzter Sprecherzahl unsichtbar. Der Preis ist derselbe, den `→ Korrigiere`
+    // fuer seinen Blockzusatz schon zahlt, und er ist gemessen: eine Aufnahme, die selbst
+    // "Runde 2 (3 Sprecher)" heisst, wird OHNE gesetzte Sprecherzahl zu "Runde 2" gekuerzt.
+    // Vorher war dieser Fall richtig — getragen, weil der Name absurd und der Normalfall haeufig ist.
     if ((m = l.match(/^→ Diarisiere (.+?)(?: \(\d+ Sprecher\))? …$/))) { active[m[1]] = { phase: 'diarize' }; global = 'diarize' }
     // `[done] {base}` folgt auf JEDEN Ausgang der Diarisierungsschleife (Erfolg, "keine Sprecher",
-    // Roh-JSON unlesbar, Ausnahme) und ist damit das einzige Terminal je Datei. Aufgeraeumt wurde
-    // bisher erst am Phasen-Sweep unten — bei N Aufnahmen standen bis zu N-1 Spinner ueber laengst
-    // fertigen Dateien, ueber die teuerste Phase des Prep-Schritts (#379).
+    // Roh-JSON unlesbar, Ausnahme) und ist damit das einzige Terminal je Datei; aufgeraeumt wurde
+    // sonst erst am Phasen-Sweep unten (#379).
+    // KEINE Wirkungsbehauptung dazu: die Sammelform „bis zu N-1 Spinner" stammt aus der Zeit der
+    // Batch-Diarisierung. Beide lebenden Pfade rufen `cmd_diarize` heute je EINER Datei, die
+    // Sweep-Zeile folgt eine Zeile spaeter — mehr als ein Spinner steht nur im CLI-Unterbefehl an,
+    // und der wird nie zum Job. Der Zweig bleibt, weil er billig ist und die Zusage einloest.
     else if ((m = l.match(/^\[done\] (.+)$/))) { if (active[m[1]]?.phase === 'diarize') delete active[m[1]] }
     else if ((m = l.match(/^(.+?): \d+ Segmente → (\d+) Blöcke/))) blocks[m[1]] = { done: new Set(), total: +m[2] }
     // ✓ / ↷ / ✗ heissen alle "laeuft nicht mehr" — ob der Block geglueckt ist, sagt am Ende
@@ -143,9 +158,14 @@ export function parseJobPhases(kind: string, lines: string[]): JobPhases {
     // Alle DREI Begruendungen, die correct.py druckt — nicht nur `human_edited=`. Die beiden
     // anderen sind die Schutzpfade ("edit.json nicht lesbar" aus #190, "waehrend des Laufs
     // handbearbeitet" aus #278): beide heissen "deine Fassung bleibt stehen", und beide liessen
-    // die Datei bis Jobende auf einem Spinner stehen. Der Grund fuer den Anker an der Begruendung
-    // bleibt: ein Basisname darf Klammern enthalten, das greedy `(.+)` braucht also ein Ende.
-    else if ((m = l.match(/^apply: SKIP (.+) \((?:human_edited=|waehrend des Laufs |.+? nicht lesbar: )/)))
+    // die Datei bis Jobende auf einem Spinner stehen.
+    // Die dritte Alternative ist ein RUECKVERWEIS, kein `.+?`, und das ist der Unterschied
+    // zwischen Anker und Leerlauf: correct.py druckt dort `{base}.edit.json` (os.path.basename
+    // von epath), der Basisname steht also ein zweites Mal in der Zeile. Mit `.+?` lief das
+    // greedy `(.+)` bei jedem Namen, der " (" enthaelt, ueber sein Ende hinaus — gemessen an
+    // `Interview (Teil 1)`: Schluessel "Interview (Teil 1) (Interview" UND der Spinner blieb
+    // stehen, also genau der Zustand, den dieser Zweig beheben soll.
+    else if ((m = l.match(/^apply: SKIP (.+) \((?:human_edited=|waehrend des Laufs |\1\.edit\.json nicht lesbar: )/)))
       terminal(m[1], 'skipped')
     else if ((m = l.match(/^↷ SKIP (.+) \(human_edited=/))) terminal(m[1], 'skipped')
     else if ((m = l.match(/^apply: FEHLT (.+?)\.correction\.json/))) terminal(m[1], 'failed')

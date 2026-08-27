@@ -311,6 +311,35 @@ describe('parseJobPhases — Druckformen, die der Parser nicht kannte (#374)', (
     expect(p.active).toEqual({ 'Timeline 13': { phase: 'diarize' } })
   })
 
+  it('`skip (Audio nicht mehr vorhanden)` ist ein FEHLSCHLAG, kein Uebersprungen', () => {
+    // Die einzige inhaltliche Entscheidung dieses Stands, und sie war ungetestet: die Mutation
+    // 'failed' -> 'skipped' blieb ueber alle 731 Tests gruen. Sie zaehlt, weil `jobAusgang.ts`
+    // 'skipped' aus dem Nenner der versuchten Dateien nimmt und nicht als misslungen fuehrt —
+    // aus einer verlorenen Aufnahme wuerde wieder eine stille. `transcribe.py` legt sie in
+    // dieselbe `failed_bases` wie den FEHLER-Pfad; die Anzeige folgt dem Lauf, nicht umgekehrt.
+    const p = parseJobPhases('transcribe', ['[P] skip (Audio nicht mehr vorhanden): A'])
+    expect(p.perBase).toEqual({ A: 'failed' })
+  })
+
+  it('ein Basisname mit Klammern ueberlebt ALLE DREI `apply: SKIP`-Formen', () => {
+    // Der bestehende Klammer-Test deckt nur `human_edited=`. Bei der Form "… nicht lesbar:"
+    // stand zuerst ein `.+?` statt eines Ankers, und damit lief das greedy `(.+)` ueber das
+    // Ende des Namens hinaus: gemessen an `Interview (Teil 1)` kam der Schluessel
+    // "Interview (Teil 1) (Interview" heraus UND der Spinner blieb stehen — also genau der
+    // Zustand, den dieser Zweig beheben soll. Der Rueckverweis `\1` bindet die Begruendung an
+    // den Namen, den sie wiederholt (correct.py druckt dort `{base}.edit.json`).
+    const b = 'Interview (Teil 1)'
+    for (const grund of [
+      '(human_edited=true; --force zum Ueberschreiben)',
+      `(${b}.edit.json nicht lesbar: JSONDecodeError: Expecting value; --force zum Ueberschreiben)`,
+      '(waehrend des Laufs handbearbeitet; --force zum Ueberschreiben)',
+    ]) {
+      const p = parseJobPhases('correct', [`→ Korrigiere ${b} …`, `apply: SKIP ${b} ${grund}`])
+      expect(p.perBase, grund).toEqual({ [b]: 'skipped' })
+      expect(p.active, grund).toEqual({})
+    }
+  })
+
   it('beide Schutzpfade von `apply: SKIP` beenden die Datei', () => {
     // correct.py druckt DREI Begruendungen; der Parser kannte nur `human_edited=`. Die beiden
     // anderen sind die Schutzpfade aus #190 und #278 — beide heissen "deine Fassung bleibt
@@ -354,19 +383,44 @@ describe('parseJobPhases — Robustheit gegen echte Namen und Zeilen (#379)', ()
   })
 
   it('ein Basisname mit Leerzeichen am Ende bleibt EIN Eintrag', () => {
-    // `safe_name('Interview ')` laesst den Namen unveraendert (gemessen). Mit `trim()` ergab
-    // die ankerlose skip-Zeile "Interview" und die fertig-Zeile "Interview " — dieselbe Datei
-    // unter zwei Schluesseln, einer davon ein Phantom, das nie mehr verschwindet.
-    // BEIDE Zeilen sind noetig, und das ist der Kern: `trim()` wirkt nur an den ZEILENENDEN.
-    // In der fertig-Zeile steht der Name mitten drin (`(.+?): ` faengt das Leerzeichen mit),
-    // nur die skip-Zeile endet auf ihm ($-Anker, `(.+)$`). Ein Test allein auf der fertig-Zeile
+    // `safe_name('Interview ')` laesst den Namen unveraendert (gemessen). Getrimmt zerfaellt
+    // dieselbe Datei in zwei Schluessel: "Interview" aus einer $-verankerten Zeile, "Interview "
+    // aus einer mittigen — ein Phantom-Eintrag, der nie mehr verschwindet.
+    // BEIDE Zeilenformen sind noetig, und das ist der Kern: der Schnitt wirkt nur an den
+    // ZEILENENDEN. In der fertig-Zeile steht der Name mitten drin (`(.+?): ` faengt das
+    // Leerzeichen mit), nur die skip-Zeile endet auf ihm. Ein Test allein auf der fertig-Zeile
     // bleibt gruen, auch wenn man `trim()` zurueckbaut — genau so vacuous war der erste Versuch,
     // gemessen an der Mutation.
+    // Der $-verankerte Traeger ist BEWUSST `skip (Audio nicht mehr vorhanden)` und nicht
+    // `skip (vorhanden)`: letzteres druckt seit dem gestaffelten Lauf niemand mehr, ein Test
+    // darauf sicherte die Eigenschaft ueber einen Kanal, den es nicht gibt.
     const p = parseJobPhases('transcribe', [
-      '[P] skip (vorhanden): Interview ',
+      '[P] skip (Audio nicht mehr vorhanden): Interview ',
       '[P] fertig Interview : 3s, 4 Segmente, 1.0x',
     ])
     expect(Object.keys(p.perBase)).toEqual(['Interview '])
+  })
+
+  it('… und `[done]` findet denselben Namen wieder', () => {
+    // Zweiter lebender Traeger derselben Eigenschaft, und er gehoert zum Zweig, den dieser
+    // Stand gerade eingefuehrt hat: `[done] {base}` ist $-verankert. Getrimmt trifft es den
+    // active-Eintrag nicht mehr, und der Diarisierungs-Spinner klemmt bis zum Phasen-Sweep.
+    const p = parseJobPhases('correct', ['→ Diarisiere Interview  …', '[done] Interview '])
+    expect(p.active).toEqual({})
+  })
+
+  it('ein Basisname mit Leerzeichen am ANFANG behaelt seinen Blockfortschritt', () => {
+    // Die Gegenkante: die Einrueckung muss fallen (correct.py setzt vor Block- und
+    // Diagnosezeilen genau zwei Leerzeichen), ein drittes Leerzeichen gehoert aber schon zum
+    // Namen. `/^\s+/` frass es mit — die eingerueckte Bloecke-Zeile ergab dann "Interview",
+    // die nicht eingerueckte `→ Korrigiere`-Zeile " Interview", und der Balken fand seinen
+    // Eintrag nicht mehr. Sichtbar wird das NUR an pct/detail, nicht am Schluessel.
+    const p = parseJobPhases('correct', [
+      '   Interview: 540 Segmente → 4 Blöcke à max. 150',
+      '  ✓  Interview · Block 1/4 fertig',
+      '→ Korrigiere  Interview · Block 2/4 …',
+    ])
+    expect(p.active).toEqual({ ' Interview': { phase: 'correct', pct: 25, detail: '1/4 Blöcke' } })
   })
 
   it('eingerueckte Diagnosezeilen bleiben folgenlos', () => {

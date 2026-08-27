@@ -22,15 +22,24 @@ import { parseJobPhases } from './src/lib/jobPhases'
 //
 // WARUM DIESE DATEI IM FRONTEND-STAMM LIEGT und nicht unter `src/`: sie liest die
 // Python-Quellen ueber `node:fs`, und `tsconfig.app.json` fuehrt bewusst `"types":
-// ["vite/client"]` — App-Code soll keine node-APIs importieren koennen. Diese Grenze
-// einzureissen waere der teurere Preis; `rollbalken.test.ts` liegt aus verwandtem Grund
-// ebenfalls hier. Preis, benannt statt verschwiegen: der Stamm ist in keinem tsconfig
-// `include`, diese Datei wird also von `npm run build` NICHT typgeprueft.
+// ["vite/client"]` — App-Code soll keine node-APIs importieren koennen.
+// Preis, benannt statt verschwiegen: diese Datei wird von `npm run build` NICHT typgeprueft.
+// `rollbalken.test.ts` liegt zwar auch hier, ist aber KEIN Praezedenzfall, sondern der
+// Gegenfall: es steht in `tsconfig.node.json`s `include` und wird typgeprueft — weil es
+// nichts aus `src/` importiert. Diese Datei tut das (`parseJobPhases`), und sie dorthin
+// aufzunehmen zoege `src/lib/jobPhases.ts` samt `./types` in das node-Projekt (TS2835,
+// nachgemessen). Der Preis ist also echt, nur nicht aus dem Grund, der hier zuerst stand.
 //
-// GRENZE, die diese Datei NICHT deckt: sie geht nur in EINE Richtung — von der Druckseite zum
-// Parser. Ein Regex-Zweig, dessen Druckform verschwindet, faellt hier nicht auf (genau das ist
-// `skip (vorhanden)` passiert, entfernt in 10098e4). Die Gegenrichtung braeuchte eine Liste der
-// Zweige, und die waere wieder von Hand gepflegt.
+// ZWEI GRENZEN, die diese Datei NICHT deckt:
+// (1) Sie geht nur in EINE Richtung — von der Druckseite zum Parser. Ein Regex-Zweig, dessen
+//     Druckform verschwindet, faellt hier nicht auf (genau das ist `skip (vorhanden)` passiert,
+//     entfernt in 10098e4). Die Gegenrichtung braeuchte eine Liste der Zweige, und die waere
+//     wieder von Hand gepflegt.
+// (2) Geerntet werden die DREI Laufskripte. In dieselben Job-Stroeme drucken auch
+//     `ytdlp_update.py` (`[ytdlp] …`, ueber `fetch.py`), `sperre.py` (`[sperre] …`, ueber
+//     `cmd_apply`) und die Pfad-/Einstellungsmodule. Keine ihrer heutigen Formen kollidiert mit
+//     einem Parser-Regex (einzeln gegengeprueft) — aber der Waechter unten sagt "jede gedruckte
+//     Form", und gemeint ist "jede aus QUELLEN".
 // ─────────────────────────────────────────────────────────────────────────────────────────
 
 const HIER = path.dirname(fileURLToPath(import.meta.url))
@@ -54,6 +63,16 @@ function ersteZeichenkette(zeile: string): string | null {
   return null
 }
 
+// Was `ersteZeichenkette` nicht lesen kann, bekommt DIESE Signatur — sie steht bewusst nicht im
+// INVENTAR, der Gleichheitstest wird also rot. Ohne sie waere ein `print(meldung)` oder ein
+// `print(` mit der Zeichenkette in der naechsten Zeile eine Form, die der Ernter still
+// ueberspringt: Test gruen, Form unklassifiziert — genau das Loch, gegen das diese Datei gebaut
+// ist. Die Form gibt es im Repo bereits (`webtool/whispercpp.py`: `lambda z: print(z, …)`), nur
+// heute in keiner der QUELLEN. Preis, benannt: ein `print(` in einem Kommentar loest jetzt
+// Fehlalarm aus — die umgekehrte Fehlbarkeit steckt ohnehin schon drin (ein `print("x")` in
+// einem Kommentar WIRD geerntet).
+const UNLESBAR = '<<print( ohne lesbare Zeichenkette>>'
+
 /** Signatur = Literal mit allen Platzhaltern auf `{}` normalisiert -> stabil gegen Umbenennungen. */
 function ernte(): Map<string, string[]> {
   const formen = new Map<string, string[]>()
@@ -61,7 +80,10 @@ function ernte(): Map<string, string[]> {
     const zeilen = fs.readFileSync(path.join(WURZEL, datei), 'utf-8').split(/\r?\n/)
     zeilen.forEach((zeile, nr) => {
       const lit = ersteZeichenkette(zeile)
-      if (lit === null) return
+      if (lit === null) {
+        if (zeile.includes('print(')) formen.set(UNLESBAR, [...(formen.get(UNLESBAR) ?? []), `${datei}:${nr + 1}`])
+        return
+      }
       const sig = lit.replace(/\{[^{}]*\}/g, '{}')
       formen.set(sig, [...(formen.get(sig) ?? []), `${datei}:${nr + 1}`])
     })
