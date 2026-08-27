@@ -447,6 +447,14 @@ def _transkribiere_datei(m, engine, f, sprache, mehr, model):
     return result
 
 
+def _autocorrect_an() -> bool:
+    """`TRANSKRIBOR_AUTOCORRECT` — der dokumentierte Kill-Switch der Korrektur nach der
+    Transkription. Gelesen wird er im Subprozess, nicht im Server: `jobs._run_proc` reicht
+    `os.environ` durch, und `settings.job_env()` fasst die Variable nicht an — der Lauf sieht
+    also denselben Wert wie der Server, und der CLI-Weg sieht ihn ebenfalls."""
+    return (os.environ.get("TRANSKRIBOR_AUTOCORRECT") or "1").lower() not in ("0", "false", "no")
+
+
 def transcribe_project(name, model, language, only=None, autocorrect: bool = False):
     proj_dir = os.path.join(PROJEKTE, name)
     if not os.path.isdir(proj_dir):
@@ -493,15 +501,33 @@ def transcribe_project(name, model, language, only=None, autocorrect: bool = Fal
     ai_pool = None
     ai_futures = []
     _wait_futures = None
+    if autocorrect and not _autocorrect_an():
+        # Der Riegel sass bis v0.48.0 in `app._autocorrect`; die gestaffelte Pipeline haengt
+        # die Korrektur seitdem direkt hier an und liess ihn dabei fallen (#406). Er gehoert
+        # hierher und nicht in `app._start_transcribe`: der CLI-Weg
+        # (`transcribe.py <projekt> --autocorrect`) geht nicht durch den Server, und ein Grund
+        # im Protokoll ist mehr wert als ein weggelassenes Flag, das niemand sieht.
+        # Abgeschaltet heisst die GANZE Kette: `cmd_diarize` kostet pyannote-Minuten auf der
+        # GPU, und wer die Maschine ohne KI faehrt, will genau die nicht.
+        print("[autocorrect] uebersprungen — TRANSKRIBOR_AUTOCORRECT=0", flush=True)
+        autocorrect = False
     if autocorrect:
         try:
             from webtool import llm, correct as _correct
-            ok_ai, _ = llm.available()
+            ok_ai, grund_ai = llm.available()
             if ok_ai:
                 from concurrent.futures import ThreadPoolExecutor, wait as _wait_futures
                 ai_pool = ThreadPoolExecutor(max_workers=_correct.CLAUDE_PARALLEL)
-        except Exception:
-            pass
+            else:
+                # Diarisierung und Prep laufen weiter: ihr Sidecar ist idempotent und spart
+                # dem spaeteren `correct run` genau diese GPU-Minuten
+                # (test_transcribe_project_diarize_runs_even_if_ai_unavailable haelt das fest).
+                # Nur die LLM-Phase faellt aus — und sie sagt, warum. Vorher schwieg sie.
+                print(f"[autocorrect] KI-Phase uebersprungen — {grund_ai}", flush=True)
+        except Exception as ex:
+            # transcribe.py laeuft auch ohne das webtool-Paket; frueher verschwand dieser
+            # Fall in einem `pass` und schlug erst je Datei als "Autocorrect-Fehler" auf.
+            print(f"[autocorrect] KI-Phase uebersprungen — {ex}", flush=True)
 
     initial_files = list(files)
     processed = set()

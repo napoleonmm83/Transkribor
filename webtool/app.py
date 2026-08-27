@@ -946,30 +946,13 @@ def export_project_zip(project: str):
     )
 
 
-def _autocorrect_enabled() -> bool:
-    return (os.environ.get("TRANSKRIBOR_AUTOCORRECT") or "1").lower() not in ("0", "false", "no")
-
-
-def _autocorrect(project: str, base: str | None = None) -> None:
-    """Korrektur nach der Transkription. Laeuft im Job-Thread, nicht im Browser — ein
-    geschlossener Tab darf die Kette nicht unterbrechen. `correct run` ist idempotent, holt
-    also genau die neu transkribierten Dateien nach."""
-    if not _autocorrect_enabled():
-        return
-    ok, grund = llm.available()
-    if not ok:
-        # Kein Job statt eines Jobs, der scheitert: die Transkription ist fertig und
-        # nutzbar, es fehlt nur die Korrektur. Eine Zeile ins Log, kein Fehlerzustand.
-        print(f"[autocorrect] uebersprungen — {grund}", flush=True)
-        return
-    cmd = [sys.executable, "-m", "webtool.correct", "run", project]
-    if base:
-        cmd.append(base)
-    jobs.request(project, cmd, paths.ROOT, "correct", base=base)
-
-
 def _start_transcribe(project: str, base: str | None = None):
-    """Transkription anstossen; danach automatisch korrigieren via Streaming-Pipeline."""
+    """Transkription anstossen; danach automatisch korrigieren via Streaming-Pipeline.
+
+    `--autocorrect` haengt hier bedingungslos dran, und das ist Absicht: ueber den Kill-Switch
+    `TRANSKRIBOR_AUTOCORRECT` und den Anbieter entscheidet der LAUF (#406). Ein hier
+    weggelassenes Flag waere fuer den Nutzer ununterscheidbar von "es lief einfach nichts";
+    der Lauf schreibt stattdessen den Grund ins Protokoll."""
     cmd = [sys.executable, os.path.join(paths.ROOT, "transcribe.py"), project]
     if base:
         cmd.extend(["--only", base])
@@ -985,7 +968,9 @@ def transcribe(project: str):
 
 
 def _require_ai():
-    """Kein Korrektur-Job ohne nutzbaren Anbieter — derselbe Riegel, den `_autocorrect` hat.
+    """Kein Korrektur-Job ohne nutzbaren Anbieter — der Riegel des automatischen Wegs steht
+    seit #406 in `transcribe._autocorrect_an` bzw. direkt vor der KI-Phase in
+    `transcribe.transcribe_project`.
 
     Ohne ihn laeuft erst `cmd_diarize` (pyannote, GPU, Minuten) und `cmd_prep` durch, bevor
     der erste LLM-Aufruf scheitert: Rechenzeit fuer ein Ergebnis, das nach der ersten Zeile

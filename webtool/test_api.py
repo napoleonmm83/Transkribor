@@ -525,66 +525,14 @@ def test_spa_serves_index_for_deep_link(client):
 
 @pytest.fixture
 def mit_anbieter(monkeypatch):
-    """_autocorrect bricht seit dem ai_ready-Gate ab, wenn `llm.available()` falsch ist.
+    """`_require_ai` weist die Korrektur-Endpunkte ab, wenn `llm.available()` falsch ist.
 
     Ohne diesen Patch haengen die Tests daran, ob auf dem Rechner `claude` installiert ist:
-    beim Entwickler ist es das, auf dem CI-Runner nicht. Dort brachen sie in Zeile 1 von
-    _autocorrect ab und pruefte keiner mehr, was er behauptet — gruen aus dem falschen Grund.
+    beim Entwickler ist es das, auf dem CI-Runner nicht. Dort brachen sie am Riegel ab und
+    pruefte keiner mehr, was er behauptet — gruen aus dem falschen Grund.
     """
     from webtool import app as app_mod
     monkeypatch.setattr(app_mod.llm, "available", lambda *_a: (True, ""))
-
-
-def test_autocorrect_startet_correct_run(client, monkeypatch, mit_anbieter):
-    from webtool import app as app_mod
-    gestartet = {}
-    monkeypatch.setattr(app_mod.jobs, "start",
-                        lambda project, cmd, cwd, kind, then=None:
-                        gestartet.update(project=project, cmd=cmd, kind=kind) or ("j1", True))
-    app_mod._autocorrect("Demo")
-    assert gestartet["kind"] == "correct"
-    assert gestartet["cmd"][-3:] == ["webtool.correct", "run", "Demo"]
-
-
-def test_autocorrect_abschaltbar(client, monkeypatch):
-    from webtool import app as app_mod
-    monkeypatch.setenv("TRANSKRIBOR_AUTOCORRECT", "0")
-    monkeypatch.setattr(app_mod.jobs, "start",
-                        lambda *a, **k: pytest.fail("darf nicht starten"))
-    app_mod._autocorrect("Demo")
-
-
-def test_autocorrect_reiht_sich_hinter_eine_laufende_korrektur(client, monkeypatch, mit_anbieter):
-    """Die laufende Runde kennt die eben transkribierten Dateien nicht — also anhaengen,
-    statt die Auto-Korrektur stillschweigend fallen zu lassen."""
-    from webtool import app as app_mod
-    versuche, angehaengt = [], []
-
-    def fake_start(project, cmd, cwd, kind, then=None):
-        versuche.append(kind)
-        return ("laeuft_schon", False) if len(versuche) == 1 else ("j2", True)
-
-    monkeypatch.setattr(app_mod.jobs, "start", fake_start)
-    monkeypatch.setattr(app_mod.jobs, "when_done",
-                        lambda jid, fn: angehaengt.append((jid, fn)) or True)
-    app_mod._autocorrect("Demo")
-    assert len(versuche) == 1 and angehaengt[0][0] == "laeuft_schon"
-    angehaengt[0][1]()                                  # der blockierende Job ist fertig
-    assert versuche == ["correct", "correct"]           # zweiter Versuch lief
-
-
-def test_autocorrect_versucht_sofort_neu_wenn_der_blocker_schon_weg_ist(client, monkeypatch, mit_anbieter):
-    from webtool import app as app_mod
-    versuche = []
-
-    def fake_start(project, cmd, cwd, kind, then=None):
-        versuche.append(kind)
-        return ("weg", False) if len(versuche) == 1 else ("j2", True)
-
-    monkeypatch.setattr(app_mod.jobs, "start", fake_start)
-    monkeypatch.setattr(app_mod.jobs, "when_done", lambda jid, fn: False)   # schon terminal
-    app_mod._autocorrect("Demo")
-    assert versuche == ["correct", "correct"]
 
 
 # --- Einstellungen (KI-Anbieter) ---------------------------------------------
@@ -1117,30 +1065,6 @@ def test_settings_lehnt_unbekanntes_whisper_modell_ab(client):
 
 
 # --- Auto-Korrektur mit Anbieter-Gate (Task 8) ---
-
-def test_autocorrect_startet_nicht_ohne_anbieter(client, monkeypatch):
-    """Sonst scheitert nach jedem Upload ein Korrektur-Job — der erste Eindruck der App."""
-    from webtool import app as appmod
-    gestartet = []
-    # Ohne das Setzen waere der Test auf einem Rechner mit TRANSKRIBOR_AUTOCORRECT=0
-    # gruen, ohne das Anbieter-Gate ueberhaupt zu erreichen.
-    monkeypatch.setenv("TRANSKRIBOR_AUTOCORRECT", "1")
-    monkeypatch.setattr(appmod.llm, "available", lambda *_a: (False, "kein claude"))
-    monkeypatch.setattr(appmod.jobs, "request",
-                        lambda *a, **k: gestartet.append(a) or ("id", True))
-    appmod._autocorrect("Testprojekt")
-    assert gestartet == []
-
-
-def test_autocorrect_startet_mit_anbieter(client, monkeypatch):
-    from webtool import app as appmod
-    gestartet = []
-    monkeypatch.setenv("TRANSKRIBOR_AUTOCORRECT", "1")
-    monkeypatch.setattr(appmod.llm, "available", lambda *_a: (True, ""))
-    monkeypatch.setattr(appmod.jobs, "request",
-                        lambda *a, **k: gestartet.append(a) or ("id", True))
-    appmod._autocorrect("Testprojekt")
-    assert len(gestartet) == 1
 
 
 def test_start_stoesst_die_ytdlp_kalenderpruefung_an(monkeypatch, tmp_path):
