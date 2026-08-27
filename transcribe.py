@@ -478,16 +478,24 @@ def _autocorrect_an() -> bool:
 
 
 def transcribe_project(name, model, language, only=None, autocorrect: bool = False):
+    """Transkribiert ein Projekt und liefert die Bilanz der angehaengten KI-Korrektur
+    als `(gelungen, versucht)`.
+
+    Der Ausgang wird hier nur GEMELDET, nicht entschieden: `main()` macht daraus den Exitcode.
+    Sonst risse der erste Totalausfall bei `--all` die uebrigen Projekte mit — und die
+    Transkription selbst ist ja gelungen, ihr Ergebnis liegt auf der Platte. Dieselbe
+    Arbeitsteilung wie `correct.cmd_run` → `correct.main` (#417).
+    """
     proj_dir = os.path.join(PROJEKTE, name)
     if not os.path.isdir(proj_dir):
         print(f"Projekt nicht gefunden: {name}", file=sys.stderr)
-        return
+        return 0, 0
     out_dir = os.path.join(proj_dir, "transkripte")
     os.makedirs(out_dir, exist_ok=True)
     files = find_audio(proj_dir, only)
     if not files:
         print(f"[{name}] keine Audiodateien in {audio_dir(proj_dir)}")
-        return
+        return 0, 0
     # Angefasst werden nur die Aufnahmen OHNE .json — die uebrigen ueberspringt die Schleife
     # unten ohnehin. Genau diese Liste meldet der Lauf als seinen Wirkungsbereich, bevor er
     # anfaengt: jobs.py laesst danach das Loeschen/Umbenennen aller anderen zu (Issue #80).
@@ -498,7 +506,7 @@ def transcribe_project(name, model, language, only=None, autocorrect: bool = Fal
     # selbst ausloest, laufen Leerlauf-Runden regelmaessig, und load_model kostet ~30s + 3 GB.
     if not offen:
         print(f"[{name}] nichts zu tun — {len(files)} Datei(en) bereits transkribiert", flush=True)
-        return
+        return 0, 0
 
     # kontext.md wird hier NICHT mehr gelesen: als Whisper-Prompt kostete sie Inhalt
     # (Begruendung samt Messung in _opts). Fuer die Korrektur liest correct.py sie selbst.
@@ -521,8 +529,8 @@ def transcribe_project(name, model, language, only=None, autocorrect: bool = Fal
     m = None if engine == "whisper.cpp" else _modell(model, device)
 
     ai_pool = None
-    ai_futures = []
-    _wait_futures = None
+    ai_futures = []      # (base, Future) — der Basisname wird fuer die Fehlerzeile gebraucht
+    ki_ok = 0
     if autocorrect and not _autocorrect_an():
         # Der Riegel sass bis v0.48.0 in `app._autocorrect`; die gestaffelte Pipeline haengt
         # die Korrektur seitdem direkt hier an und liess ihn dabei fallen (#406). Er gehoert
@@ -533,26 +541,62 @@ def transcribe_project(name, model, language, only=None, autocorrect: bool = Fal
         # GPU, und wer die Maschine ohne KI faehrt, will genau die nicht.
         print("[autocorrect] uebersprungen — TRANSKRIBOR_AUTOCORRECT=0", flush=True)
         autocorrect = False
-    if autocorrect:
+    ai_grund_gemeldet = False
+
+    def _ai_pool_oeffnen():
+        """Anbieterlage pruefen und den KI-Pool anlegen — gefragt wird JE DATEI, nicht nur
+        am Laufstart (#414).
+
+        Die Lage steht in einer Datei, die der Server jederzeit neu schreibt (`settings.load()`
+        liest bei jedem Zugriff frisch). Wer einen langen Lauf startet, dabei merkt, dass kein
+        Anbieter eingestellt ist, und ihn WAEHREND des Laufs konfiguriert, bekam die Korrektur
+        fuer diesen Lauf nicht mehr — auch nicht fuer Dateien, die er danach hochlaedt und die
+        dieselbe Schleife noch aufnimmt. Bis v0.48.0 galt das von selbst: die Korrektur hing als
+        eigener Job am ENDE (`then=` → `app._autocorrect`), die Pruefung lief also spaet. Die
+        gestaffelte Pipeline zog sie an den Laufanfang; das hier holt die alte Eigenschaft zurueck.
+
+        Der Env-Schalter `TRANSKRIBOR_AUTOCORRECT` bleibt bewusst DAVOR und einmalig: die
+        Subprozess-Umgebung ist bei `Popen` eingefroren, ein zweiter Lesevorgang saehe zwingend
+        denselben Wert — dort waere eine Pruefung je Datei reine Dekoration.
+
+        Gefragt wird nur, solange KEIN Pool steht. Ein offener Pool bleibt offen, auch wenn der
+        Anbieter spaeter wegfaellt — das faengt `correct_ai_single` je Datei selbst ab, und ihn
+        zu schliessen riesse laufende Korrekturen mit.
+        """
+        nonlocal ai_pool, ai_grund_gemeldet
+        if ai_pool is not None:
+            return
         try:
             from webtool import llm, correct as _correct
             ok_ai, grund_ai = llm.available()
             if ok_ai:
-                from concurrent.futures import ThreadPoolExecutor, wait as _wait_futures
+                from concurrent.futures import ThreadPoolExecutor
                 ai_pool = ThreadPoolExecutor(max_workers=_correct.CLAUDE_PARALLEL)
-            else:
-                # Diarisierung und Prep laufen weiter: ihr Sidecar ist idempotent und spart
-                # dem spaeteren `correct run` genau diese GPU-Minuten
-                # (test_transcribe_project_diarize_runs_even_if_ai_unavailable haelt das fest).
-                # Nur die LLM-Phase faellt aus — und sie sagt, warum. Vorher schwieg sie.
-                print(f"[autocorrect] KI-Phase uebersprungen — {_einzeilig(grund_ai)}", flush=True)
+                return
+            grund = _einzeilig(grund_ai)
         except Exception as ex:
             # Gefangen wird hier ein Wurf aus `llm.available()` oder ein Importfehler von
             # `webtool.correct` — NICHT ein fehlendes webtool-Paket: `webtool.device` wird
-            # 33 Zeilen weiter oben bedingungslos importiert, ohne das Paket stirbt der Lauf
-            # also laengst davor. Frueher verschwand der Fall in einem `pass` und schlug erst
-            # je Datei als "Autocorrect-Fehler" auf.
-            print(f"[autocorrect] KI-Phase uebersprungen — {_einzeilig(ex)}", flush=True)
+            # weiter oben bedingungslos importiert, ohne das Paket stirbt der Lauf also
+            # laengst davor. Frueher verschwand der Fall in einem `pass` und schlug erst je
+            # Datei als "Autocorrect-Fehler" auf.
+            grund = _einzeilig(ex)
+        # Diarisierung und Prep laufen weiter: ihr Sidecar ist idempotent und spart dem
+        # spaeteren `correct run` genau diese GPU-Minuten
+        # (test_transcribe_project_diarize_runs_even_if_ai_unavailable haelt das fest).
+        # Nur die LLM-Phase faellt aus — und sie sagt, warum. Vorher schwieg sie.
+        #
+        # EINMAL, nicht je Datei: die Frage wird jetzt in jeder Runde neu gestellt, die Antwort
+        # ist im Normalfall dieselbe. Eine Zeile je Aufnahme waere Rauschen, das genau die
+        # Zeilen zudeckt, wegen derer man ins Protokoll sieht.
+        if not ai_grund_gemeldet:
+            print(f"[autocorrect] KI-Phase uebersprungen — {grund}", flush=True)
+            ai_grund_gemeldet = True
+
+    if autocorrect:
+        # Einmal vorab, damit der Grund am ANFANG des Protokolls steht und nicht erst hinter
+        # der ersten Transkription — die dauert Minuten, und wer zusieht, sieht bis dahin nichts.
+        _ai_pool_oeffnen()
 
     initial_files = list(files)
     processed = set()
@@ -614,9 +658,12 @@ def transcribe_project(name, model, language, only=None, autocorrect: bool = Fal
                         # 1. Diarisierung & Prep direkt auf der GPU in der Hauptschleife (Hardware geschützt):
                         _correct.cmd_diarize(name, [base])
                         _correct.prep_single(name, base)
-                        # 2. Datei sofort parallel an den Cloud-KI-Threadpool übergeben:
+                        # 2. Datei sofort parallel an den Cloud-KI-Threadpool übergeben.
+                        # Die Anbieterlage wird HIER neu gefragt, nicht nur am Laufstart (#414).
+                        _ai_pool_oeffnen()
                         if ai_pool is not None:
-                            ai_futures.append(ai_pool.submit(_correct.correct_ai_single, name, base))
+                            ai_futures.append((base, ai_pool.submit(_correct.correct_ai_single,
+                                                                    name, base)))
                     except Exception as ex:
                         # Derselbe Riegel wie oben, und hier naeher am Angreifer: `cmd_diarize`/
                         # `prep_single` lesen Transkripte, ein Wurf kann deren Inhalt zitieren.
@@ -632,9 +679,27 @@ def transcribe_project(name, model, language, only=None, autocorrect: bool = Fal
         if ai_pool is not None:
             if ai_futures:
                 print(f"[{name}] Warte auf verbleibende KI-Korrekturen…", flush=True)
-                if _wait_futures is not None:
-                    _wait_futures(ai_futures)
+            # `shutdown(wait=True)` wartet auf alle uebergebenen Aufgaben — das getrennte
+            # `wait(...)` davor war doppelt gemoppelt und hat nichts gelesen. Genau das war
+            # #417: `correct_ai_single` meldet an vier Stellen `False` (fehlende Vorbereitung,
+            # ungueltige `correction.json`, gescheitertes Apply, Ausnahme), und dieser Wert fiel
+            # ersatzlos in den Papierkorb. Ein Lauf, in dem JEDE Korrektur scheiterte, endete
+            # mit Exitcode 0 → `jobs.py` machte daraus `done` → die Oberflaeche meldete Erfolg.
             ai_pool.shutdown(wait=True)
+            for ai_base, fut in ai_futures:
+                try:
+                    if fut.result():
+                        ki_ok += 1
+                except Exception as ex:
+                    # `correct_ai_single` faengt selbst breit; hier landet, was DAVOR wirft
+                    # (`paths.transkripte_dir` auf einem unsicheren Namen, OSError am Sidecar).
+                    # Die Transkription ist geschrieben und nutzbar — die Bilanz darf daran
+                    # nicht sterben. Dieselbe Zeilenform wie im Schleifenrumpf, damit fremder
+                    # Ausnahmetext auch hier auf EINER Zeile bleibt.
+                    print(f"[{name}] Autocorrect-Fehler bei {ai_base}: {_einzeilig(ex)}", flush=True)
+            if ai_futures:
+                print(f"[{name}] Korrektur: {ki_ok} von {len(ai_futures)} Datei(en) korrigiert",
+                      flush=True)
 
     # Der Faktor gilt dem GANZEN Lauf, Modell-Ladezeit eingerechnet — er ist damit kleiner
     # als die Einzelwerte oben und genau deshalb der ehrliche Vergleichswert.
@@ -642,6 +707,7 @@ def transcribe_project(name, model, language, only=None, autocorrect: bool = Fal
     print(f"⏱ [{name}]: {n_ok} Datei(en) transkribiert in {dt_phase:.0f}s "
           f"(Audio {fmt(audio_gesamt)}, {audio_gesamt/max(dt_phase, 1):.1f}x)", flush=True)
     print(f"[{name}] -> {out_dir}", flush=True)
+    return ki_ok, len(ai_futures)
 
 
 def main():
@@ -666,14 +732,37 @@ def main():
             print(f"  {p}  ({n} Audio)")
         return
     ensure_ffmpeg()
+    ki_ok = ki_versucht = 0
     if args.all:
         for p in list_projects():
-            transcribe_project(p, args.model, args.language, autocorrect=args.autocorrect)
+            a, b = transcribe_project(p, args.model, args.language, autocorrect=args.autocorrect)
+            ki_ok += a
+            ki_versucht += b
     elif args.projekt:
-        transcribe_project(args.projekt, args.model, args.language, only=args.only,
-                           autocorrect=args.autocorrect)
+        ki_ok, ki_versucht = transcribe_project(args.projekt, args.model, args.language,
+                                                only=args.only, autocorrect=args.autocorrect)
     else:
         ap.print_help()
+        return
+    # Exitcode fuers Job-Signal — dieselbe Schwelle wie `correct.main` (#417): Fehler nur, wenn
+    # Korrekturen VERSUCHT wurden und KEINE gelang. Bis v0.48.0 hing die Korrektur als eigener
+    # `correct`-Job hinten dran und brachte diese Eigenschaft mit; die gestaffelte Pipeline zog
+    # sie in den Transkriptionslauf und liess sie dabei fallen — ein Totalausfall (Anbieter tot,
+    # Kontingent leer, Login abgelaufen) endete mit 0 und `jobs.py` meldete `done`.
+    #
+    # GETRAGENE GRENZE, benannt statt verschwiegen: ein TEILausfall (3 von 5) bleibt gruen —
+    # genau wie er es vor v0.48.0 tat. Die Bilanzzeile oben nennt ihn, gelesen wird sie noch
+    # nicht (#421). Der `[{name}] Korrektur: …`-Eintrag im INVENTAR steht deshalb auf
+    # 'ignoriert', nicht auf 'gelesen'.
+    #
+    # KEIN `[{name}]`-Praefix und kein `: ` hinter dem Wort FEHLER: `jobPhases.ts` liest
+    # `^\[[^\]]+\] FEHLER (.+?): ` als Datei-Fehlschlag und legte sonst einen perBase-Eintrag
+    # unter einem Basisnamen an, den es nicht gibt. `useJobAusgang.grund()` findet die Zeile
+    # ueber das blosse Wort "FEHLER" und macht sie zur Begruendung im Toast.
+    if ki_versucht and not ki_ok:
+        print(f"korrektur: FEHLER — 0 von {ki_versucht} versuchten Datei(en) korrigiert "
+              f"(die Transkripte sind geschrieben — siehe die Zeilen oben)", flush=True)
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

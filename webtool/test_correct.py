@@ -1671,3 +1671,43 @@ def test_streaming_pipeline_hardware_sequential_and_ai_parallel(project, monkeyp
 
 
 
+
+
+@pytest.mark.parametrize("apply_ergebnis, erwartet", [
+    ("missing", False),     # nichts geschrieben -> echter Fehlschlag
+    ("written", True),
+    ("skipped", True),      # SCHUTZPFAD -> kein Fehlschlag
+])
+def test_correct_ai_single_liest_cmd_apply_und_nur_missing_ist_ein_fehler(
+        monkeypatch, tmp_path, apply_ergebnis, erwartet):
+    """#412 — `cmd_apply` hatte einen Rueckgabewert, und `correct_ai_single` warf ihn weg.
+
+    `cmd_apply` liefert "missing", wenn `{base}.correction.json` oder `{base}.json` fehlt: es
+    wurde **nichts geschrieben**. `correct_ai_single` meldete trotzdem True, `cmd_run` zaehlte
+    die Datei als korrigiert, und das Protokoll schloss mit `run: fertig — N/N korrigiert` ueber
+    eine Aufnahme, deren `edit.json` es nicht gibt. Die Oberflaeche fuehrte dieselbe Datei seit
+    #407 als gescheitert — Protokoll und Leiste im Widerspruch.
+
+    Die ZWEITE Richtung ist der teurere Teil dieses Tests, und sie ist der eigentliche Inhalt
+    von #412: die naheliegende Behebung (`!= "written"` als Fehler) waere ein SCHADEN. Die drei
+    "skipped"-Zweige sind die Schutzpfade dieses Repos — `human_edited=true`, `edit.json` nicht
+    lesbar (#190), Handarbeit unter der Sperre entdeckt (#278). Sie heissen „deine Fassung
+    bleibt stehen"; als Fehlschlag gemeldet wuerden aus genau den Waechtern gegen stillen
+    Datenverlust rote Zeilen in der Bilanz. Ohne die "skipped"-Zeile hier waere dieser Fall
+    unbewacht — und er ist der, den man nicht falsch haben darf.
+    """
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    monkeypatch.setattr(paths, "PROJEKTE", str(tmp_path), raising=False)
+    tdir = tmp_path / "P" / "transkripte"
+    tdir.mkdir(parents=True)
+    (tdir / "A.json").write_text(json.dumps({"segments": []}), encoding="utf-8")
+    (tdir / "A.correction.json").write_text(json.dumps({"segments": [{"id": 0}]}), encoding="utf-8")
+
+    gerufen = []
+    monkeypatch.setattr(correct, "_correct_file", lambda *a, **kw: None)
+    monkeypatch.setattr(correct, "_context", lambda *a: "")
+    monkeypatch.setattr(correct, "cmd_apply",
+                        lambda *a, **kw: (gerufen.append(a), apply_ergebnis)[1])
+
+    assert correct.correct_ai_single("P", "A", force=True) is erwartet
+    assert gerufen, "cmd_apply wurde gar nicht gerufen — der Test misst nichts"
