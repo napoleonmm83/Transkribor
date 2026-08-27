@@ -90,7 +90,7 @@ const KLASSENLISTE_RE = /"([^"\n]*)"|'([^'\n]*)'/g
  *  Listen traegt `overflow-auto/scroll`) — sie stellt Faehigkeit wieder her, statt
  *  Deckung hinzuzufuegen. Genau deshalb ist die synthetische Probe unten ihr EINZIGER
  *  Sensor: am Korpus gemessen waere sie rueckstandslos loeschbar. */
-const KLASSENLISTE_MEHRZEILIG_RE = /className\s*=\s*"([^"]*)"/g
+const KLASSENLISTE_MEHRZEILIG_RE = /className\s*=\s*(?:"([^"]*)"|'([^']*)')/g
 /** (3) Template-Literale NUR direkt am Attribut — bewusst nicht im breiten Durchgang.
  *  Gemessen: breit gescannt bringen Backticks **9 Fundstellen** dazu, allesamt Prosa aus
  *  den Doku-Kommentaren dieses Repos (`overflow-auto` in JSDoc/JSX-Kommentaren), und
@@ -180,6 +180,9 @@ describe('Quellbaum: jeder Bildlaufbehaelter hat einen Bezugsrahmen (#209)', () 
     ['cn(...) irgendwo im Ausdruck (#366)', '<div className={cn("overflow-auto relative", x && "p-2")} />', 1],
     // K1: der Ausdruck vor #366 konnte das — der breite Durchgang darf `\n` nicht.
     ['mehrzeilige Liste am Attribut (K1)', '<div\n  className="flex min-h-0\n    overflow-auto border"\n/>', 1],
+    // CLI-Befund: der mehrzeilige Durchgang kannte nur doppelte Anfuehrungszeichen —
+    // dieselbe Asymmetrie, die der breite Durchgang (1) nie hatte. Korpus heute: null.
+    ['mehrzeilige Liste in einfachen Anfuehrungszeichen (CLI)', "<div\n  className='flex min-h-0\n    overflow-auto border'\n/>", 1],
     // Die Backtick-Entscheidung: Prosa zitiert Klassennamen, das sind keine Klassenlisten.
     ['Prosa-Backtick im Kommentar', '// `overflow-auto` braucht einen Anker (#209)', 0],
     ['ohne Bildlauf gar nichts', '<div className="relative flex p-2" />', 0],
