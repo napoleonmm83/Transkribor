@@ -122,29 +122,35 @@ export function parseJobPhases(kind: string, lines: string[]): JobPhases {
         if (cursor) active[cursor] = { ...active[cursor], pct: +m[1] }
         continue
       }
-      if ((m = l.match(/^\[.+?\] -> transkribiere (.+) …$/))) {
+      // `[^\]]+` statt `.+?` ist der Riegel gegen Zeilen-Injektion, nicht Kosmetik (#413).
+      // `.+?` ist lazy und BACKTRACKT ueber die ganze Zeile bis zu einem spaeteren `]`: die
+      // Zeile `[autocorrect] KI-Phase uebersprungen — kaputt] fertig D1: x` erfuellte damit
+      // `^\[.+?\] fertig (.+?): ` und meldete D1 als FERTIG, obwohl sie es nicht ist. Das `^`
+      // schuetzt hier nichts — das echte Praefix erfuellt den Anker selbst. `[^\]]+` kann das
+      // erste `]` nicht ueberspringen, damit ist die Klasse fuer JEDE Zeile zu.
+      //
+      // Der Riegel gehoert hierher und nicht auf die Druckseite: 13 Druckstellen in
+      // transcribe.py, ytdlp_update.py und sperre.py setzen fremden Ausnahmetext hinter ein
+      // Klammerpraefix, und die letzten beiden erntet nicht einmal der Vertragstest (#409).
+      // Ein Riegel je Drucker waere 13 Riegel, von denen der naechste neue fehlt.
+      //
+      // Der Preis ist ein GETRAGENER DEFEKT, kein gewollter Vertrag: `paths.safe_name`
+      // laesst `]` durch (gemessen, `A]B` kommt unveraendert heraus), ein Projektname mit
+      // Klammer verliert also die Live-Anzeige. Solange das so ist, sind ein solcher Name
+      // und eine Injektion auf der Zeile NICHT unterscheidbar — die Behebung liegt beim
+      // Producer und steht als #416. Bis dahin wiegt „keine Falschaussage" schwerer.
+      if ((m = l.match(/^\[[^\]]+\] -> transkribiere (.+) …$/))) {
         cursor = m[1]; active[cursor] = { phase: 'transcribe' }; global = null
       }
-      else if ((m = l.match(/^\[.+?\] fertig (.+?): /))) terminal(m[1], 'done')
-      else if ((m = l.match(/^\[.+?\] skip \(vorhanden\): (.+)$/))) terminal(m[1], 'skipped')
+      else if ((m = l.match(/^\[[^\]]+\] fertig (.+?): /))) terminal(m[1], 'done')
+      else if ((m = l.match(/^\[[^\]]+\] skip \(vorhanden\): (.+)$/))) terminal(m[1], 'skipped')
       // 'failed', nicht 'skipped': transcribe.py legt diese Datei in dieselbe `failed_bases`
       // wie den FEHLER-Pfad — sie wurde NICHT transkribiert. Ungelesen blieb sie bis Jobende
       // auf ihrem letzten Zustand stehen, obwohl der Lauf sie laengst aufgegeben hat.
-      // `[^\]]+` statt `.+?` — und das ist KEINE Kosmetik. `.+?` ist faul, backtrackt aber
-      // ueber die ganze Zeile bis zu einem SPAETEREN `]`; fremder Text hinter einem
-      // Klammerpraefix kann damit eine Datei-Meldung FAELSCHEN. Gemessen:
-      //   `[x] kaputt] skip (Audio nicht mehr vorhanden): D1` -> terminal("D1", 'failed')
-      // Das `^` schuetzt nicht, weil das echte Praefix den Anker selbst erfuellt. Erreichbar
-      // ist das, weil mehrere Druckstellen rohen Ausnahmetext hinter ein Praefix setzen.
-      // Hier steht NUR diese eine Zeile gehaertet: sie ist in diesem Stand neu dazugekommen,
-      // die vier Geschwister (`-> transkribiere`, `fertig`, `skip (vorhanden)`, `FEHLER`)
-      // gehoeren zu #413 und werden dort gemeinsam behandelt — zwei Straenge an denselben
-      // Zeilen waeren ein Konflikt ohne Gewinn.
-      // Getragener Preis, benannt statt verschwiegen: `paths.safe_name` laesst `]` durch
-      // (gemessen: `A]B` kommt unveraendert heraus), ein Projektname mit Klammer verliert
-      // also seine Live-Anzeige fuer diese Zeile. Gegenkontrolle im Test.
+      // Diese Zeile war zuerst gehaertet (sie kam mit dem Buendel neu dazu); ihre vier
+      // Geschwister sind es seit #413 ebenfalls — die Klasse ist damit geschlossen.
       else if ((m = l.match(/^\[[^\]]+\] skip \(Audio nicht mehr vorhanden\): (.+)$/))) terminal(m[1], 'failed')
-      else if ((m = l.match(/^\[.+?\] FEHLER (.+?): /))) terminal(m[1], 'failed')
+      else if ((m = l.match(/^\[[^\]]+\] FEHLER (.+?): /))) terminal(m[1], 'failed')
       continue
     }
 

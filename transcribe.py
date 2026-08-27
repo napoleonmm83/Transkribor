@@ -455,15 +455,16 @@ def _einzeilig(text) -> str:
     begaenne mit FREMDEM Inhalt am Zeilenanfang, koennte also jedes der ~20 `^`-verankerten
     Muster bedienen. Das faellt hier weg.
 
-    WAS DAS NICHT DECKT, und das ist der wichtigere Teil: die Muster `^\[.+?\] fertig …` /
-    `FEHLER …` / `-> transkribiere …` backtracken ueber die GANZE Zeile, und das feste
-    Praefix `[autocorrect] ` erfuellt den Anker bereits. Ein einzeiliger Fremdtext, der
-    `] fertig D1: ` enthaelt, trifft also weiterhin — mit node nachgemessen, `terminal(D1,
-    done)`. Der vollstaendige Riegel gehoert deshalb ins Frontend (`^\[[^\]]+\] `, schliesst
-    die Klasse fuer jede Zeile) und ist als Issue notiert; hier faellt nur die Zwei-Zeilen-
-    Klasse. Heute ist beides nicht ausnutzbar — `grund_ai` sind fuenf statische Literale —,
-    ein Ausnahmetext aus `cmd_diarize`/`prep_single` kann aber Transkriptinhalt zitieren,
-    und der stammt womoeglich aus einem URL-Import.
+    DIE ZWEITE KLASSE liegt woanders und ist dort behoben: ein EINZEILIGER Fremdtext mit
+    einem `]` darin liess `^\[.+?\] fertig …` ueber das echte Praefix hinweg backtracken.
+    Dagegen half kein Falten — der Riegel sitzt jetzt im Parser (`^\[[^\]]+\] `,
+    `jobPhases.ts`), weil ihn dort EINE Aenderung fuer alle 13 Klammer-Drucker schliesst,
+    statt 13 Riegel zu brauchen, von denen der naechste neue fehlt.
+
+    Diese Funktion bleibt trotzdem noetig, und zwar fuer eine Klasse, die der Parser-Riegel
+    NICHT deckt: ein Zeilenumbruch gibt Fremdtext den ZEILENANFANG, und daran haengen die
+    praefixlosen Muster (`^apply:`, `^→ Diarisiere`, `^✗ FEHLT/ungueltig:`) sowie
+    `jobs.py`s `[scope]`/`[active]`/`[done]`. Zwei Schichten, zwei verschiedene Klassen.
     """
     return " ".join(str(text).split())
 
