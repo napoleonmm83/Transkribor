@@ -33,9 +33,13 @@ const RANG: Record<FileState, number> = { failed: 3, done: 2, skipped: 1 }
  *    `Object.assign`, also "der spaetere Job im Array" — und diese Reihenfolge ist nicht
  *    zufaellig, sondern systematisch die schlechte: `jobs.py:273` sortiert `active_for` nach
  *    `kind`, also `correct` vor `transcribe`, und `useProjektDaten` adoptiert in dieser
- *    Reihenfolge. Ein Transkriptionslauf druckt beim Start fuer JEDE bereits transkribierte
+ *    Reihenfolge. Ein Transkriptionslauf druckte beim Start fuer JEDE bereits transkribierte
  *    Datei `skip (vorhanden)` — womit sein 'skipped' jedes 'failed' des parallelen
  *    Korrekturlaufs ueberschrieb. Gemessen an genau dieser Paarung, beide Richtungen.
+ *    NACHTRAG: diese Druckform gibt es seit dem gestaffelten Lauf nicht mehr (die dynamische
+ *    `pending`-Liste filtert fertige Dateien vorher heraus, sie erzeugen gar keine Zeile).
+ *    Die Regel bleibt richtig und noetig — 'skipped' kommt jetzt aus `correct`s `apply: SKIP`
+ *    und kann dieselbe Kollision erzeugen —, nur der genannte Ausloeser ist historisch.
  *
  *  `global` bleibt reihenfolgeabhaengig (`?? `) und ist es bewusst: die globalen Phasen sind
  *  keine Rangfolge ("Glossar" ist nicht schwerer als "Vorbereiten"), und der erste laufende

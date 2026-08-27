@@ -32,10 +32,13 @@ export function ausgang(j: { status: string; phases: JobPhases }): Ausgang {
     .map(([base]) => base)
     .sort((a, b) => a.localeCompare(b, 'de'))
   if (misslungen.length) {
-    // Nenner sind die VERSUCHTEN, nicht alle Eintraege: ein Lauf ueber ein gewachsenes
-    // Projekt druckt fuer jede schon fertige Datei `skip (vorhanden)`. Zaehlte der Nenner die
-    // mit, hiesse es „1 von 14 fehlgeschlagen", und der Nutzer sucht dreizehn Aufnahmen, die
-    // nie angefasst wurden.
+    // Nenner sind die VERSUCHTEN, nicht alle Eintraege: sonst hiesse es „1 von 14
+    // fehlgeschlagen", und der Nutzer sucht dreizehn Aufnahmen, die nie angefasst wurden.
+    // Der urspruengliche Ausloeser war `skip (vorhanden)` — ein Lauf ueber ein gewachsenes
+    // Projekt druckte das fuer jede schon fertige Datei. Diese Form gibt es seit dem
+    // gestaffelten Lauf nicht mehr; 'skipped' kommt heute aus `correct`s `apply: SKIP …`
+    // („deine Handarbeit bleibt stehen"), und dafuer gilt dieselbe Rechnung: absichtlich in
+    // Ruhe gelassen ist nicht versucht.
     const versucht = Object.values(j.phases.perBase).filter(z => z !== 'skipped').length
     return { art: 'teil', misslungen, versucht }
   }
