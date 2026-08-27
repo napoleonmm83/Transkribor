@@ -167,10 +167,12 @@ describe('mergePhases', () => {
   it('kollidieren zwei TERMINALE Ausgaenge, gewinnt der schwerere — in BEIDEN Reihenfolgen (#377)', () => {
     // Hier stand ein `Object.assign`, also „der spaetere Job im Array gewinnt". Die
     // Reihenfolge ist aber nicht zufaellig, sondern systematisch die schlechte: `jobs.py`
-    // sortiert `active_for` nach `kind` (correct vor transcribe), und ein Transkriptionslauf
-    // druckt beim Start fuer JEDE bereits transkribierte Datei `skip (vorhanden)` -> 'skipped'.
-    // Sein harmloses 'skipped' ueberschrieb damit jedes 'failed' des parallel laufenden
-    // Korrekturlaufs — genau das Signal, das am wenigsten verschwinden darf.
+    // sortiert `active_for` nach `kind` (correct vor transcribe). Der urspruengliche Ausloeser
+    // war `skip (vorhanden)`, das ein Transkriptionslauf fuer jede schon fertige Datei druckte;
+    // diese Form ist seit dem gestaffelten Lauf weg und ihr Parser-Zweig seit #408 auch.
+    // Die Rangfolge bleibt noetig — 'skipped' entsteht heute aus `apply: SKIP …` im
+    // Korrekturlauf, und ein harmloses 'skipped' darf nie ein 'failed' ueberschreiben:
+    // genau das Signal, das am wenigsten verschwinden darf.
     const c = job('j1', 'correct', { global: null, active: {}, perBase: { A: 'failed' } })
     const t = job('j2', 'transcribe', { global: null, active: {}, perBase: { A: 'skipped' } })
     expect(mergePhases([c, t]).perBase.A).toBe('failed')   // die echte Adoptionsreihenfolge
