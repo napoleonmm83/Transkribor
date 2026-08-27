@@ -448,15 +448,22 @@ def _transkribiere_datei(m, engine, f, sprache, mehr, model):
 
 
 def _einzeilig(text) -> str:
-    """Fremdtext auf EINE Zeile zwingen, bevor er in einen Job-Strom geht.
+    r"""Fremdtext auf EINE Zeile zwingen, bevor er in einen Job-Strom geht.
 
-    `jobPhases.ts` liest die Job-Ausgabe zeilenweise und verankert jedes seiner ~20 Muster mit
-    `^`. Ein Zeilenumbruch in einer Anbietermeldung oder einem Ausnahmetext macht aus einer
-    Zeile zwei — und die zweite begaenne mit FREMDEM Inhalt am Zeilenanfang, koennte also eine
-    Statuszeile vortaeuschen und eine Datei in der Oberflaeche in einen falschen Zustand
-    setzen. Die Gruende aus `llm.available()` sind heute einzeilige Literale (alle fuenf
-    nachgesehen); ein Ausnahmetext ist es nicht zwingend, und beide gehen hier durch dieselbe
-    Zeile. Deshalb der Riegel an der Zeile, nicht an einer der beiden Quellen.
+    `jobPhases.ts` liest die Job-Ausgabe zeilenweise. Ein Zeilenumbruch in einer
+    Anbietermeldung oder einem Ausnahmetext macht aus einer Zeile zwei — und die zweite
+    begaenne mit FREMDEM Inhalt am Zeilenanfang, koennte also jedes der ~20 `^`-verankerten
+    Muster bedienen. Das faellt hier weg.
+
+    WAS DAS NICHT DECKT, und das ist der wichtigere Teil: die Muster `^\[.+?\] fertig …` /
+    `FEHLER …` / `-> transkribiere …` backtracken ueber die GANZE Zeile, und das feste
+    Praefix `[autocorrect] ` erfuellt den Anker bereits. Ein einzeiliger Fremdtext, der
+    `] fertig D1: ` enthaelt, trifft also weiterhin — mit node nachgemessen, `terminal(D1,
+    done)`. Der vollstaendige Riegel gehoert deshalb ins Frontend (`^\[[^\]]+\] `, schliesst
+    die Klasse fuer jede Zeile) und ist als Issue notiert; hier faellt nur die Zwei-Zeilen-
+    Klasse. Heute ist beides nicht ausnutzbar — `grund_ai` sind fuenf statische Literale —,
+    ein Ausnahmetext aus `cmd_diarize`/`prep_single` kann aber Transkriptinhalt zitieren,
+    und der stammt womoeglich aus einem URL-Import.
     """
     return " ".join(str(text).split())
 
@@ -539,8 +546,11 @@ def transcribe_project(name, model, language, only=None, autocorrect: bool = Fal
                 # Nur die LLM-Phase faellt aus — und sie sagt, warum. Vorher schwieg sie.
                 print(f"[autocorrect] KI-Phase uebersprungen — {_einzeilig(grund_ai)}", flush=True)
         except Exception as ex:
-            # transcribe.py laeuft auch ohne das webtool-Paket; frueher verschwand dieser
-            # Fall in einem `pass` und schlug erst je Datei als "Autocorrect-Fehler" auf.
+            # Gefangen wird hier ein Wurf aus `llm.available()` oder ein Importfehler von
+            # `webtool.correct` — NICHT ein fehlendes webtool-Paket: `webtool.device` wird
+            # 33 Zeilen weiter oben bedingungslos importiert, ohne das Paket stirbt der Lauf
+            # also laengst davor. Frueher verschwand der Fall in einem `pass` und schlug erst
+            # je Datei als "Autocorrect-Fehler" auf.
             print(f"[autocorrect] KI-Phase uebersprungen — {_einzeilig(ex)}", flush=True)
 
     initial_files = list(files)
@@ -607,9 +617,11 @@ def transcribe_project(name, model, language, only=None, autocorrect: bool = Fal
                         if ai_pool is not None:
                             ai_futures.append(ai_pool.submit(_correct.correct_ai_single, name, base))
                     except Exception as ex:
-                        print(f"[{name}] Autocorrect-Fehler bei {base}: {ex}", flush=True)
+                        # Derselbe Riegel wie oben, und hier naeher am Angreifer: `cmd_diarize`/
+                        # `prep_single` lesen Transkripte, ein Wurf kann deren Inhalt zitieren.
+                        print(f"[{name}] Autocorrect-Fehler bei {base}: {_einzeilig(ex)}", flush=True)
             except Exception as e:
-                print(f"[{name}] FEHLER {base}: {e}", flush=True)
+                print(f"[{name}] FEHLER {base}: {_einzeilig(e)}", flush=True)
                 failed_bases.add(base)
                 continue
             finally:

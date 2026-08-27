@@ -1238,14 +1238,20 @@ def test_autocorrect_an_kennt_alle_dokumentierten_schreibweisen(monkeypatch, wer
     assert transcribe._autocorrect_an() is an
 
 
-def test_autocorrect_grund_kann_keine_statuszeile_vortaeuschen(monkeypatch, tmp_path, capsys):
-    """Der Grund im `[autocorrect]`-Protokoll ist FREMDTEXT — Anbietermeldung oder Ausnahme.
+def test_autocorrect_grund_bleibt_auf_einer_zeile(monkeypatch, tmp_path, capsys):
+    r"""Der Grund im `[autocorrect]`-Protokoll ist FREMDTEXT — eine Anbietermeldung.
 
-    Er steht zwar am Zeilenende, hinter einem festen Praefix, und alle Muster in
-    `jobPhases.ts` sind mit `^` verankert. Ein ZEILENUMBRUCH darin hebt genau das auf: aus
-    einer Zeile werden zwei, und die zweite beginnt mit fremdem Inhalt am Zeilenanfang. Die
-    fuenf Gruende aus `llm.available()` sind heute einzeilige Literale — ein Ausnahmetext ist
-    es nicht zwingend, und beide gehen durch dieselbe Zeile.
+    Gedeckt ist GENAU EINE Klasse: ein Zeilenumbruch darin machte aus einer Zeile zwei, und
+    die zweite begaenne mit fremdem Inhalt am Zeilenanfang — sie koennte also jedes der
+    `^`-verankerten Muster in `jobPhases.ts` bedienen. Nach dem Falten gibt es keine zweite
+    Zeile mehr.
+
+    NICHT gedeckt, und der Test behauptet es auch nicht: dieselbe Nutzlast EINZEILIG trifft
+    weiterhin. `^\[.+?\] fertig (.+?): ` backtrackt ueber die ganze Zeile, und das feste
+    Praefix `[autocorrect] ` erfuellt den Anker schon — mit node nachgemessen, Ergebnis
+    `terminal("D1", "done")`. Der vollstaendige Riegel gehoert ins Frontend
+    (`^\[[^\]]+\] `) und ist als Issue notiert. Die Nutzlast traegt deshalb absichtlich die
+    ECHTE gefaehrliche Form statt einer harmlosen Marke.
     """
     from webtool import correct, llm
 
@@ -1254,8 +1260,7 @@ def test_autocorrect_grund_kann_keine_statuszeile_vortaeuschen(monkeypatch, tmp_
     monkeypatch.setattr(transcribe, "_modell", lambda *a, **kw: "fake_model")
     monkeypatch.setattr(llm, "available",
                         lambda *_a: (False,
-                                     "kein Anbieter" + chr(10) +
-                                     "→ Diarisiere Eingeschmuggelt …"))
+                                     "kein Anbieter" + chr(10) + "] fertig D1: x"))
     monkeypatch.setattr(correct, "diarize_enabled", lambda: False)
     monkeypatch.setattr(correct, "cmd_diarize", lambda *a, **k: 0)
     monkeypatch.setattr(correct, "prep_single", lambda *a, **k: None)
@@ -1270,25 +1275,24 @@ def test_autocorrect_grund_kann_keine_statuszeile_vortaeuschen(monkeypatch, tmp_
     transcribe.transcribe_project("InjektDemo", "tiny", "de", autocorrect=True)
     zeilen = capsys.readouterr().out.splitlines()
 
-    vorgetaeuscht = [z for z in zeilen if z.startswith("→ Diarisiere")]
-    assert vorgetaeuscht == [], f"Fremdtext hat eine Statuszeile gestellt: {vorgetaeuscht}"
-    # Verschluckt wird der Grund NICHT — er steht vollstaendig auf einer Zeile.
-    assert ("[autocorrect] KI-Phase uebersprungen — kein Anbieter → Diarisiere Eingeschmuggelt …"
-            in zeilen)
+    assert "] fertig D1: x" not in zeilen, "Fremdtext hat eine eigene Zeile bekommen"
+    # Verschluckt wird der Grund NICHT — er steht vollstaendig auf EINER Zeile.
+    assert "[autocorrect] KI-Phase uebersprungen — kein Anbieter ] fertig D1: x" in zeilen
 
 
-def test_autocorrect_ausnahmetext_kann_keine_statuszeile_vortaeuschen(monkeypatch, tmp_path, capsys):
-    """Der Zwilling des Tests darueber — fuer den `except`-Zweig, nicht fuer `llm.available()`.
+def test_autocorrect_ausnahmetext_bleibt_auf_einer_zeile(monkeypatch, tmp_path, capsys):
+    """Der Zwilling des Tests darueber — fuer den `except`-Zweig.
 
     Es braucht ihn, weil die Mutationsprobe es gezeigt hat: `{ex}` ungefiltert zu drucken
-    liess den Grund-Test GRUEN. Zwei Interpolationen, zwei Wege, zwei Sensoren — der zweite
-    ist ausgerechnet der gefaehrlichere, denn ein Ausnahmetext ist unbegrenzt, waehrend die
-    fuenf Gruende aus `llm.available()` einzeilige Literale sind.
+    liess den Grund-Test GRUEN. Zwei Interpolationen, zwei Wege, zwei Sensoren — und der
+    zweite ist der gefaehrlichere: ein Ausnahmetext ist unbegrenzt, waehrend die fuenf
+    Gruende aus `llm.available()` einzeilige Literale sind. Gedeckt und NICHT gedeckt genau
+    wie im Test darueber.
     """
     from webtool import correct, llm
 
     def platzt(*_a):
-        raise RuntimeError("Paket kaputt" + chr(10) + "→ Diarisiere Eingeschmuggelt …")
+        raise RuntimeError("Paket kaputt" + chr(10) + "] fertig W1: x")
 
     monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
     monkeypatch.setattr(transcribe, "PROJEKTE", str(tmp_path))
@@ -1308,9 +1312,7 @@ def test_autocorrect_ausnahmetext_kann_keine_statuszeile_vortaeuschen(monkeypatc
     transcribe.transcribe_project("WurfDemo", "tiny", "de", autocorrect=True)
     zeilen = capsys.readouterr().out.splitlines()
 
-    vorgetaeuscht = [z for z in zeilen if z.startswith("→ Diarisiere")]
-    assert vorgetaeuscht == [], f"Ausnahmetext hat eine Statuszeile gestellt: {vorgetaeuscht}"
-    assert ("[autocorrect] KI-Phase uebersprungen — Paket kaputt → Diarisiere Eingeschmuggelt …"
-            in zeilen)
+    assert "] fertig W1: x" not in zeilen, "Ausnahmetext hat eine eigene Zeile bekommen"
+    assert "[autocorrect] KI-Phase uebersprungen — Paket kaputt ] fertig W1: x" in zeilen
     # Und der Wurf bleibt ein Wurf: die Transkription selbst laeuft weiter.
     assert (proj_dir / "transkripte" / "W1.json").exists()
