@@ -7,7 +7,7 @@ import type { UpdateZustand } from '@/lib/types'
 import type { Release } from '@/lib/releases'
 
 vi.mock('@/hooks/useUpdate', () => ({
-  useUpdate: vi.fn(() => ({ zustand: null, pruefen: vi.fn(), laden: vi.fn(), installieren: vi.fn(), protokollOeffnen: vi.fn() })),
+  useUpdate: vi.fn(() => ({ zustand: null, pruefen: vi.fn(), laden: vi.fn(), installieren: vi.fn(), protokollOeffnen: vi.fn(), fehlerbericht: vi.fn() })),
 }))
 vi.mock('@/lib/releases', () => ({ holeReleases: vi.fn() }))
 
@@ -21,7 +21,7 @@ const RELEASE: Release = {
 
 /** Seite mit einem Update-Zustand zeigen. `null` = kein Electron (reiner Browser). */
 function zeigeMit(zustand: UpdateZustand | null, releases: Release[] = []) {
-  const spies = { pruefen: vi.fn(), laden: vi.fn(), installieren: vi.fn(), protokollOeffnen: vi.fn() }
+  const spies = { pruefen: vi.fn(), laden: vi.fn(), installieren: vi.fn(), protokollOeffnen: vi.fn(), fehlerbericht: vi.fn() }
   vi.mocked(useUpdate).mockReturnValue({ zustand, ...spies })
   vi.mocked(holeReleases).mockResolvedValue(releases)
   return { ...render(<MemoryRouter><VersionPage /></MemoryRouter>), spies }
@@ -114,16 +114,46 @@ describe('VersionPage — diese Fassung', () => {
     // ausgeblendet, ohne diesen Knopf gibt es keinen Weg ins Protokoll.
     const { spies } = zeigeMit({ version: '0.2.1', art: 'nicht_moeglich', grund: 'kein-updater' })
     expect(await screen.findByText(/konnte nicht gestartet werden/)).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: /Protokoll/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Protokoll' }))
     expect(spies.protokollOeffnen).toHaveBeenCalled()
   })
 
   it('bietet den Protokoll-Knopf NUR bei kein-updater an', async () => {
     // Gegenprobe: bei „Entwicklungsmodus" gibt es nichts nachzusehen — ein Knopf, der
     // ueberall steht, ist derselbe Schaden von der anderen Seite.
+    //
+    // Gemeint ist der Knopf IM Satz („Einzelheiten stehen im Protokoll"), Name genau
+    // `Protokoll`. Seit #372 steht darunter ein DAUERHAFTER Abschnitt mit „Protokoll
+    // anzeigen" — das ist kein Rueckschritt, sondern der Punkt jenes Issues: der Weg zum
+    // Protokoll darf nicht nur ueber einen Fehlerzustand fuehren. `/Protokoll/` traefe
+    // beide, deshalb der genaue Name.
     zeigeMit({ version: '0.2.1', art: 'nicht_moeglich', grund: 'entwicklung' })
     await screen.findByText(/Entwicklungsmodus/)
-    expect(screen.queryByRole('button', { name: /Protokoll/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Protokoll' })).toBeNull()
+    expect(screen.getByRole('button', { name: /Protokoll anzeigen/ })).toBeInTheDocument()
+  })
+
+  it('schreibt einen Fehlerbericht (#372)', async () => {
+    const { spies } = zeigeMit({ version: '0.2.1', art: 'aktuell' })
+    fireEvent.click(await screen.findByRole('button', { name: /Fehlerbericht schreiben/ }))
+    expect(spies.fehlerbericht).toHaveBeenCalled()
+  })
+
+  it('sagt VOR dem Klick, was mitgeht — das ist die Antwort auf „was darf mit?"', async () => {
+    // Der Kern von #372: gezeigt statt gefiltert. Ein Knopf, der wortlos eine Mail mit
+    // Protokollzeilen aufmacht, waere genau das, was die README-Zusage verletzt.
+    zeigeMit({ version: '0.2.1', art: 'aktuell' })
+    expect(await screen.findByText(/letzten Zeilen des Protokolls/)).toBeTruthy()
+    expect(screen.getByText(/bevor du sendest/)).toBeTruthy()
+  })
+
+  it('im reinen Browser gibt es den Abschnitt NICHT', async () => {
+    // Gegenprobe: ohne Bruecke gibt es kein Protokoll — ein Knopf, der dort nichts tut,
+    // waere ein Versprechen ohne Deckung (dieselbe Regel wie beim Update-Teil darueber).
+    zeigeMit(null)
+    await screen.findByText(__APP_VERSION__)
+    expect(screen.queryByRole('button', { name: /Fehlerbericht/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Protokoll anzeigen/ })).toBeNull()
   })
 
   it('zeigt einen Fehler samt Weg zum Protokoll', async () => {
@@ -135,7 +165,7 @@ describe('VersionPage — diese Fassung', () => {
     const { spies } = zeigeMit({ version: '0.2.1', art: 'fehler', text: '404 releases.atom' })
     await screen.findByText(/404 releases\.atom/)
     expect(screen.getByRole('button', { name: /Nach Updates suchen/ })).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: /Protokoll/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Protokoll' }))
     expect(spies.protokollOeffnen).toHaveBeenCalled()
   })
 
@@ -189,7 +219,7 @@ describe('VersionPage — Versionsverlauf', () => {
   it('sagt es, wenn der Verlauf nicht ladbar ist — samt Grund und Weg zu GitHub', async () => {
     // Kein Netz ist der Normalfall auf einem Rechner ohne Verbindung; eine leere Flaeche
     // liesse den Leser raten, ob es keine Fassungen gibt oder die Abfrage scheiterte.
-    vi.mocked(useUpdate).mockReturnValue({ zustand: null, pruefen: vi.fn(), laden: vi.fn(), installieren: vi.fn(), protokollOeffnen: vi.fn() })
+    vi.mocked(useUpdate).mockReturnValue({ zustand: null, pruefen: vi.fn(), laden: vi.fn(), installieren: vi.fn(), protokollOeffnen: vi.fn(), fehlerbericht: vi.fn() })
     vi.mocked(holeReleases).mockRejectedValue(new Error('GitHub antwortet 403'))
     render(<MemoryRouter><VersionPage /></MemoryRouter>)
     expect(await screen.findByText(/GitHub antwortet 403/)).toBeTruthy()
@@ -217,7 +247,7 @@ describe('VersionPage — Versionsverlauf', () => {
     // was der catch tut. Scharf wird es nur im StrictMode: mount→unmount→mount auf
     // DERSELBEN Fiber, der erste Abruf lehnt ab, die Seite steht danach aber da.
     let n = 0
-    vi.mocked(useUpdate).mockReturnValue({ zustand: null, pruefen: vi.fn(), laden: vi.fn(), installieren: vi.fn(), protokollOeffnen: vi.fn() })
+    vi.mocked(useUpdate).mockReturnValue({ zustand: null, pruefen: vi.fn(), laden: vi.fn(), installieren: vi.fn(), protokollOeffnen: vi.fn(), fehlerbericht: vi.fn() })
     vi.mocked(holeReleases).mockImplementation((signal?: AbortSignal) => {
       n += 1
       if (n === 1) {

@@ -12,6 +12,7 @@ const fs = require('fs')
 const backend = require('./backend')
 const setup = require('./setup')
 const protokoll = require('./protokoll')
+const bericht = require('./bericht')
 const updater = require('./updater')
 const { fensterOptionen, TITELLEISTE_HOEHE, farbeGueltig, fortschrittGueltig } = require('./fenster')
 
@@ -90,6 +91,50 @@ ipcMain.handle('protokollOeffnen', () => {
   protokoll.schreiben('— Protokoll vom Nutzer geoeffnet —')
   shell.showItemInFolder(protokoll.pfad())
   return protokoll.pfad()
+})
+
+/**
+ * Fehlerbericht per Mail (#372) — der zweite Halbschritt zu `protokollOeffnen` darueber.
+ *
+ * `mailto:` statt eines eigenen Dienstes: kein Konto, kein Empfaengerserver, keine
+ * Aufbewahrungsfrage — und die VORSCHAU ist gratis, weil der Text im Mailprogramm des
+ * Nutzers steht, bevor er sendet. Das ist die Antwort auf „was darf mit?" aus dem Issue:
+ * gezeigt statt gefiltert.
+ *
+ * Die Protokolldatei geht daneben im Dateimanager auf — `mailto` kann keine Anhaenge, und
+ * die vollstaendige Spur ist genau das, was man anhaengen will. Der Rumpf nennt deshalb
+ * ihren Pfad.
+ *
+ * Eine Leitung: was mitgeht und wie gekuerzt wird, entscheidet `bericht.js` (mit Tests).
+ * Die Zeilen laufen trotzdem noch einmal durch `protokoll.maskiere` — geschrieben werden
+ * sie zwar schon maskiert, aber eine rotierte Datei kann aus einer Fassung vor #371
+ * stammen, und ein durchgerutschter Schluessel waere hier in einer Mail.
+ */
+ipcMain.handle('fehlerbericht', () => {
+  const pfad = protokoll.pfad()
+  let text = ''
+  try { text = fs.readFileSync(pfad, 'utf8') } catch { /* kein Protokoll: Kopf allein reicht */ }
+  // Erst lesen, dann die Marke: sonst stuende sie als juengste Zeile im eigenen Bericht und
+  // verdraengte dort eine echte.
+  protokoll.schreiben('— Fehlerbericht vom Nutzer erstellt —')
+  const paket = require('../package.json')
+  const { url, verwendet, gekuerzt } = bericht.mailto({
+    empfaenger: paket.author && paket.author.email,
+    betreff: `Fehlerbericht Transkribor ${app.getVersion()}`,
+    kopf: bericht.kopf({
+      version: app.getVersion(),
+      plattform: process.platform,
+      arch: process.arch,
+      electron: process.versions.electron,
+      node: process.versions.node,
+      gepackt: app.isPackaged,
+    }),
+    zeilen: bericht.letzteZeilen(text).map(protokoll.maskiere),
+    logpfad: pfad,
+  })
+  shell.openExternal(url)
+  shell.showItemInFolder(pfad)
+  return { pfad, verwendet, gekuerzt }
 })
 
 /**

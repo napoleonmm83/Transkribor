@@ -528,6 +528,31 @@ speicherst, wandert sie als `<Name>.edit.json.kaputt` zur Seite und bleibt im Or
 </details>
 
 <details>
+<summary><strong>Etwas geht schief — wie melde ich das?</strong></summary>
+
+*(Ab der nächsten Fassung; in `v0.48.1` und davor führt der Weg nur über die Protokolldatei,
+siehe unten.)*
+
+Unter **Version** (in der Fusszeile auf die Versionsnummer `v…` klicken) steht der
+Abschnitt „Etwas geht schief?“ mit zwei Knöpfen.
+
+**„Fehlerbericht schreiben“** öffnet eine vorbereitete E-Mail in deinem Mailprogramm: mit der
+Fassung, deinem Betriebssystem und den letzten Zeilen aus dem Protokoll. Schreib oben hinein,
+was passiert ist, und schick sie ab.
+
+**Du siehst alles, bevor du sendest** — die Mail geht nicht von selbst raus, und du kannst
+jede Zeile löschen, die du nicht mitschicken willst. Was in diesen Zeilen stehen kann: Namen
+deiner Aufnahmedateien und Fehlermeldungen aus dem Korrekturlauf, in denen auch Teile eines
+Transkripts vorkommen können. Der Suchpfad deines Rechners (er enthält deinen Benutzernamen)
+wird bewusst weggelassen, API-Schlüssel werden unkenntlich gemacht.
+
+**„Protokoll anzeigen“** zeigt dir die vollständige Protokolldatei im Dateimanager. Sie ist
+länger als das, was in die Mail passt — häng sie an, wenn du magst. Auch hier gilt: erst
+hineinschauen, dann verschicken.
+
+</details>
+
+<details>
 <summary><strong>„2 von 5 fehlgeschlagen“ — und vorher stand da „fertig“?</strong></summary>
 
 Ein Lauf über mehrere Aufnahmen bricht nicht ab, wenn eine davon nicht klappt — er überspringt
