@@ -27,6 +27,41 @@ def project(monkeypatch, tmp_path):
     return tmp_path, t
 
 
+def test_einzeilig_ist_der_zwilling_von_transcribe_und_faltet_umbrueche():
+    r"""Fremdtext auf EINE Zeile — und die Doppelung mit `transcribe._einzeilig` festgenagelt.
+
+    `correct.py` kann `transcribe._einzeilig` nicht importieren: das Grundskript laeuft ohne
+    das `webtool`-Paket (es hat keinen Modulimport davon), ein gemeinsames Modul dort naehme
+    ihm genau diese Eigenschaft. Also zwei Fassungen — und dann muss ein Test sie
+    aneinanderhalten, sonst driften sie.
+
+    Warum es hier zaehlt: seit #405 liest `jobPhases.ts` den correct-Dialekt AUCH in einem
+    Transkriptions-Job. `llm.py:292` uebernimmt bis zu 400 Zeichen rohen HTTP-Rumpf in die
+    Fehlermeldung; ein Umbruch darin gibt Fremdtext den ZEILENANFANG, und daran haengen die
+    praefixlosen Muster (`^apply:`, `^✗ FEHLT/ungueltig:`) sowie `jobs.py`s `[active]`/`[done]`.
+    An einem echten Lauf gegen einen HTTP-500-Server gemessen: eine erfundene Aufnahme hing
+    bis Jobende im Spinner, und eine eingeschleuste `apply:`-Zeile meldete eine fremde
+    Aufnahme als fertig.
+
+    Der Parser-Riegel `^\[[^\]]+\] ` (#413) deckt das NICHT — er gilt der anderen Klasse
+    (ein `]` in einzeiligem Fremdtext).
+    """
+    import transcribe as _t
+
+    faelle = [
+        "harmlos",
+        'HTTP 500 von http://x/v1: {\n  "error": "boom"\n}',
+        "erste\n[active] GEISTERDATEI\napply: V2 -> edit.json + md (3 Segmente)",
+        "\r\n  viel   Leerraum \t dazwischen  ",
+        "",
+        RuntimeError("mit\nUmbruch"),
+    ]
+    for f in faelle:
+        a, b = correct._einzeilig(f), _t._einzeilig(f)
+        assert a == b, f"Zwillinge driften bei {f!r}: {a!r} != {b!r}"
+        assert "\n" not in a and "\r" not in a, f"Umbruch ueberlebt in {a!r}"
+
+
 def test_prep_writes_tagged(project):
     _root, t = project
     n = correct.cmd_prep("Demo")
