@@ -98,7 +98,7 @@ function mailto({ empfaenger, betreff, kopf: kopfzeilen, zeilen, logpfad, maxUrl
   // URL waere `mailto:undefined?…`: ein Mailfenster an niemanden, das aussieht, als haette es
   // geklappt. Lieber ein Wurf, den der Toast im Fenster nennt (Reviewbefund B5).
   if (!empfaenger) throw new Error('Kein Empfaenger fuer den Fehlerbericht hinterlegt')
-  const bauen = (verwendet, gekuerzt) => [
+  const bauen = (verwendet, gekuerzt, mitPfad = true) => [
     ...kopfzeilen,
     '',
     'Was ist passiert?',
@@ -106,7 +106,7 @@ function mailto({ empfaenger, betreff, kopf: kopfzeilen, zeilen, logpfad, maxUrl
     '',
     // NICHT "vollstaendiges Protokoll": `protokoll.js` rotiert bei 2 MB ueber bis zu drei
     // Generationen, direkt nach einer Rotation ist diese Datei fast leer (Reviewbefund B4).
-    logpfad ? `Protokolldatei (zum Anhaengen; aeltere Teile liegen als .1 bis .3 daneben):\n${logpfad}` : null,
+    logpfad && mitPfad ? `Protokolldatei (zum Anhaengen; aeltere Teile liegen als .1 bis .3 daneben):\n${logpfad}` : null,
     '',
     gekuerzt ? `— letzte ${verwendet.length} Protokollzeilen (gekuerzt) —` : '— Protokoll —',
     ...verwendet,
@@ -121,11 +121,18 @@ function mailto({ empfaenger, betreff, kopf: kopfzeilen, zeilen, logpfad, maxUrl
     + '?subject=' + encodeURIComponent(betreff)
     + '&body=' + encodeURIComponent(rumpf)
 
+  // **Der Dateipfad wird ZUERST geprueft, nicht zuletzt.** Er ist der einzige Teil, dessen
+  // Laenge wir nicht in der Hand haben (tiefe Ordner, langer Benutzername, Netzlaufwerk);
+  // ohne diese Frage leerte die Schleife erst alle Protokollzeilen und gaebe DANN immer noch
+  // eine URL ueber dem Deckel zurueck (CodeRabbit-Bot) — die schneidet Windows selbst ab, an
+  // beliebiger Stelle. Passt er nicht einmal mit NULL Zeilen, ist er der Ballast, nicht sie:
+  // im Dateimanager steht er ohnehin vor dem Nutzer, die Protokollzeilen bekaeme er nirgends.
+  const mitPfad = !!logpfad && url(bauen([], true)).length <= maxUrl
   let verwendet = zeilen.slice()
-  let fertig = url(bauen(verwendet, false))
+  let fertig = url(bauen(verwendet, false, mitPfad))
   while (fertig.length > maxUrl && verwendet.length > 0) {
     verwendet = verwendet.slice(1)
-    fertig = url(bauen(verwendet, true))
+    fertig = url(bauen(verwendet, true, mitPfad))
   }
   return { url: fertig, verwendet: verwendet.length, gekuerzt: verwendet.length < zeilen.length }
 }

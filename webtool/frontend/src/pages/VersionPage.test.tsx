@@ -159,9 +159,13 @@ describe('VersionPage — diese Fassung', () => {
 
   it('bei Erfolg gibt es KEINE Fehlermeldung', async () => {
     // Gegenrichtung: ein Toast, der immer kommt, ist derselbe Schaden von der anderen Seite.
-    zeigeMit({ version: '0.2.1', art: 'aktuell' })
+    const { spies } = zeigeMit({ version: '0.2.1', art: 'aktuell' })
     fireEvent.click(await screen.findByRole('button', { name: /Fehlerbericht schreiben/ }))
-    await waitFor(() => expect(screen.getByRole('button', { name: /Fehlerbericht schreiben/ })).toBeTruthy())
+    // Auf das VERSPRECHEN der Attrappe warten, nicht auf einen Knopf, der schon vor dem Klick
+    // dasteht: sonst kehrt `waitFor` beim ersten Versuch zurueck, die Promise-Kette aus
+    // `berichtSchreiben` ist noch gar nicht gelaufen, und ein irrtuemlicher Toast entstuende
+    // erst danach — der Test bliebe gruen (CodeRabbit-Bot).
+    await spies.fehlerbericht.mock.results[0].value
     expect(toast.error).not.toHaveBeenCalled()
   })
 
@@ -169,7 +173,7 @@ describe('VersionPage — diese Fassung', () => {
     // Der Kern von #372: gezeigt statt gefiltert. Ein Knopf, der wortlos eine Mail mit
     // Protokollzeilen aufmacht, waere genau das, was die README-Zusage verletzt.
     zeigeMit({ version: '0.2.1', art: 'aktuell' })
-    expect(await screen.findByText(/letzten Zeilen des Protokolls/)).toBeTruthy()
+    expect(await screen.findByText(/letzten aussagekräftigen Zeilen des Protokolls/)).toBeTruthy()
     expect(screen.getByText(/bevor du sendest/)).toBeTruthy()
   })
 

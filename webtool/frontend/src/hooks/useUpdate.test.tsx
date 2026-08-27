@@ -72,6 +72,17 @@ describe('useUpdate', () => {
     expect(api.fehlerbericht).toHaveBeenCalled()
   })
 
+  it('reicht die ABLEHNUNG durch — daran haengt der Toast der Seite', async () => {
+    // Der Test darueber misst nur, DASS gerufen wird. Ein `.catch(() => {})` im Hook bliebe
+    // damit gruen, und der Toast in VersionPage waere tot, ohne dass ein Test faellt
+    // (CodeRabbit-Bot). Die Zusage ist das durchgereichte Versprechen, nicht der Aufruf.
+    const { api } = bruecke(AKTUELL)
+    api.fehlerbericht.mockRejectedValue(new Error('Kein Programm fuer mailto'))
+    const { result } = renderHook(() => useUpdate())
+    await waitFor(() => expect(result.current.zustand).toEqual(AKTUELL))
+    await expect(result.current.fehlerbericht()).rejects.toThrow(/mailto/)
+  })
+
   it('reicht protokollOeffnen durch — der Weg aus dem Fehlerzustand', async () => {
     const { api } = bruecke(AKTUELL)
     const { result } = renderHook(() => useUpdate())

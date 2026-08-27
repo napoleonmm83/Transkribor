@@ -134,3 +134,26 @@ test('ohne Empfaenger wird geworfen statt eine Mail an niemanden zu oeffnen', ()
   assert.throws(() => mailto({ empfaenger: undefined, betreff: 'x', kopf: K, zeilen: [] }),
     /Kein Empfaenger/)
 })
+
+test('ein sehr langer Dateipfad sprengt den Deckel NICHT — er faellt zuletzt weg', () => {
+  // Der einzige Teil, dessen Laenge wir nicht in der Hand haben: tiefe Ordner, langer
+  // Benutzername, Netzlaufwerk. Ohne den letzten Schritt gab die Schleife nach der letzten
+  // Protokollzeile eine URL ueber dem Deckel zurueck (CodeRabbit-Bot).
+  const lang = 'C:\\' + 'sehr-tiefer-ordner\\'.repeat(120) + 'transkribor.log'
+  const { url, verwendet } = mailto({ empfaenger: 'a@b.c', betreff: 'x', kopf: K,
+    zeilen: ['eine Zeile'], logpfad: lang })
+  assert.ok(url.length <= MAX_URL, `URL ist ${url.length} Zeichen`)
+  const rumpf = decodeURIComponent(url.split('&body=')[1])
+  assert.ok(!rumpf.includes('sehr-tiefer-ordner'), 'der Pfad ist weg')
+  // Und die Protokollzeile ueberlebt: der Pfad geht ZULETZT, nicht zuerst.
+  assert.strictEqual(verwendet, 1)
+  assert.ok(rumpf.includes('eine Zeile'))
+})
+
+test('ein normaler Pfad bleibt drin — die Notbremse greift nicht immer', () => {
+  // Gegenrichtung: faellt der Pfad grundsaetzlich weg, verliert der Bericht den Hinweis,
+  // was der Nutzer anhaengen kann.
+  const { url } = mailto({ empfaenger: 'a@b.c', betreff: 'x', kopf: K, zeilen: ['x'],
+    logpfad: 'C:\\Users\\m\\AppData\\Roaming\\Transkribor\\transkribor.log' })
+  assert.ok(decodeURIComponent(url.split('&body=')[1]).includes('transkribor.log'))
+})

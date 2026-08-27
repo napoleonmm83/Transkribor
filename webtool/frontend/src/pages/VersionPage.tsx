@@ -55,8 +55,8 @@ export function VersionPage() {
    *  VORHER, der Satz stimmt also auch im Fehlerfall. */
   const berichtSchreiben = () => {
     fehlerbericht()?.catch(() => toast.error(
-      'Es liess sich kein Mailprogramm öffnen. Das Protokoll ist trotzdem geöffnet — '
-      + 'schick es von Hand an marcusmartini83@gmail.com.'))
+      'Es liess sich kein Mailprogramm öffnen. Die Protokolldatei wird trotzdem im '
+      + 'Dateimanager gezeigt — schick sie von Hand an marcusmartini83@gmail.com.'))
   }
   const [verlauf, setVerlauf] = useState<Release[] | null>(null)
   const [fehler, setFehler] = useState('')
@@ -180,10 +180,10 @@ export function VersionPage() {
         <Abschnitt titel="Etwas geht schief?">
           <p className="text-sm text-muted-foreground">
             Der Bericht öffnet eine vorbereitete E-Mail mit Fassung, Betriebssystem und den
-            letzten Zeilen des Protokolls. <strong className="font-medium text-foreground">Du
+            letzten aussagekräftigen Zeilen des Protokolls. <strong className="font-medium text-foreground">Du
             siehst alles im Mailprogramm, bevor du sendest</strong> — und kannst jede Zeile
-            löschen. Das vollständige Protokoll wird daneben im Dateimanager gezeigt; hänge es
-            an, wenn du magst.
+            löschen. Die Protokolldatei wird daneben im Dateimanager gezeigt; hänge sie an,
+            wenn du magst (ältere Teile liegen als <code>.1</code> bis <code>.3</code> daneben).
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
             <Button variant="secondary" onClick={berichtSchreiben}>Fehlerbericht schreiben</Button>
