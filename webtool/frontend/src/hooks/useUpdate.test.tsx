@@ -63,7 +63,12 @@ describe('useUpdate', () => {
     const { api } = bruecke(AKTUELL)
     const { result } = renderHook(() => useUpdate())
     await waitFor(() => expect(result.current.zustand).toEqual(AKTUELL))
-    act(() => result.current.fehlerbericht())
+    // Geschweifte Klammern, NICHT `act(() => result.current.fehlerbericht())`: seit der Hook
+    // sein Versprechen durchreicht (Reviewbefund B1), gaebe der Pfeil ein Promise zurueck —
+    // und `act` haelt einen zurueckgegebenen Thenable fuer einen ASYNC act, den niemand
+    // abwartet. Gemessen: die drei FOLGENDEN Tests dieser Datei fielen daraufhin mit
+    // „Cannot read properties of null (reading 'zustand')" um, nicht dieser hier.
+    act(() => { result.current.fehlerbericht() })
     expect(api.fehlerbericht).toHaveBeenCalled()
   })
 

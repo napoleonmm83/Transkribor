@@ -112,8 +112,25 @@ test('Sonderzeichen aus dem Protokoll brechen die URL nicht', () => {
   assert.ok(decodeURIComponent(teile[1]).includes('a&b=c ?d #e'))
 })
 
+test('nur das @ bleibt roh — der Rest der Adresse wird weiter kodiert', () => {
+  // Die Gegenrichtung zu B5: ein blankes `empfaenger` ohne Kodierung waere die Tuer, durch
+  // die ein `?` oder `&` in der Adresse ein zweites Feld aufmachte.
+  const { url } = mailto({ empfaenger: 'a b&c@x.y', betreff: 'x', kopf: K, zeilen: [] })
+  assert.ok(url.startsWith('mailto:a%20b%26c@x.y?subject='), url.slice(0, 40))
+  assert.strictEqual(url.split('&body=').length, 2, 'genau EIN &body=')
+})
+
 test('ohne Protokollzeilen kommt trotzdem eine brauchbare Mail', () => {
   const { url, gekuerzt } = mailto({ empfaenger: 'a@b.c', betreff: 'x', kopf: K, zeilen: [] })
   assert.strictEqual(gekuerzt, false)
-  assert.ok(url.startsWith('mailto:a%40b.c?subject=x&body='))
+  // `@` bleibt roh (Reviewbefund B5): prozentkodiert ist `mailto:a%40b.c` streng gelesen eine
+  // local-part ohne Domain. Der Rest der Adresse geht weiter durch encodeURIComponent.
+  assert.ok(url.startsWith('mailto:a@b.c?subject=x&body='), url.slice(0, 40))
+})
+
+test('ohne Empfaenger wird geworfen statt eine Mail an niemanden zu oeffnen', () => {
+  // `paket.author` darf ein String sein; `.email` waere dann undefined und die URL
+  // `mailto:undefined?…` — ein Fenster, das aussieht, als haette es geklappt.
+  assert.throws(() => mailto({ empfaenger: undefined, betreff: 'x', kopf: K, zeilen: [] }),
+    /Kein Empfaenger/)
 })

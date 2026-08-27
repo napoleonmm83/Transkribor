@@ -110,7 +110,7 @@ ipcMain.handle('protokollOeffnen', () => {
  * sie zwar schon maskiert, aber eine rotierte Datei kann aus einer Fassung vor #371
  * stammen, und ein durchgerutschter Schluessel waere hier in einer Mail.
  */
-ipcMain.handle('fehlerbericht', () => {
+ipcMain.handle('fehlerbericht', async () => {
   const pfad = protokoll.pfad()
   let text = ''
   try { text = fs.readFileSync(pfad, 'utf8') } catch { /* kein Protokoll: Kopf allein reicht */ }
@@ -132,8 +132,14 @@ ipcMain.handle('fehlerbericht', () => {
     zeilen: bericht.letzteZeilen(text).map(protokoll.maskiere),
     logpfad: pfad,
   })
-  shell.openExternal(url)
+  // Reihenfolge: erst der Weg, der IMMER geht. `openExternal` lehnt ab, wenn kein
+  // `mailto:`-Handler registriert ist (frische Windows-Installation ohne Mailprogramm, Linux
+  // ohne xdg-Handler) — dann hat der Nutzer wenigstens die Datei vor sich.
   shell.showItemInFolder(pfad)
+  // Die Ablehnung wird DURCHGEREICHT, nicht geschluckt — dieselbe Regel wie bei
+  // `projekteOeffnen` (#218/I1): ohne sie tut der Knopf sichtbar nichts, waehrend die Seite
+  // eine Zeile darueber eine vorbereitete Mail verspricht.
+  await shell.openExternal(url)
   return { pfad, verwendet, gekuerzt }
 })
 

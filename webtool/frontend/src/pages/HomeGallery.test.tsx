@@ -6,6 +6,7 @@ import { ProjektDatenProvider } from '@/hooks/useProjektDaten'
 import { JobProvider } from '@/hooks/useActiveJob'
 import { EditorBrueckeProvider } from '@/hooks/useEditorBruecke'
 import * as api from '@/lib/api'
+import type { Project } from '@/lib/types'
 
 vi.mock('@/lib/api')
 
@@ -139,7 +140,9 @@ describe('HomeGallery', () => {
     await waitFor(() => expect(vi.mocked(api.listProjects).mock.calls.length).toBeGreaterThan(versuche))
   })
   // ── #70: bei wenigen Projekten Karten statt der dichten Zeilenliste ───────────
-  const ruhig = (n: number) =>
+  // `Project[]`, nicht abgeleitet: ohne die Annotation faellt `active_jobs: []` auf `never[]`,
+  // und der Test, der EINEN Job einsetzt, scheitert erst an `tsc -b` — nicht in vitest.
+  const ruhig = (n: number): Project[] =>
     Array.from({ length: n }, (_, i) => ({
       name: `P${i + 1}`, dateien: 4, fertig: 2, geaendert: 1000 - i, active_jobs: [],
     }))
@@ -151,6 +154,9 @@ describe('HomeGallery', () => {
     zeigen()
     await screen.findByText('P1')
     expect(screen.getAllByRole('progressbar')).toHaveLength(3)
+    // Und die Karte sagt WANN — sonst stuende "Zuletzt geaendert" ueber Kacheln, an denen
+    // die Sortierung die einzige Auskunft darueber waere (Reviewbefund B6).
+    expect(document.querySelectorAll('time')).toHaveLength(3)
   })
 
   it('an der Schwelle (8) noch Karten, darueber wieder Zeilen — und dann hoechstens fuenf', async () => {
@@ -167,6 +173,22 @@ describe('HomeGallery', () => {
     await screen.findByText('P1')
     expect(screen.queryAllByRole('progressbar')).toHaveLength(0)
     expect(screen.queryByText('P6')).not.toBeInTheDocument()
+  })
+
+  it('ein FREMDER Job kippt den Aufbau der Seite nicht (#70, Reviewbefund B3)', async () => {
+    // Gezaehlt werden alle Projekte, nicht die ruhenden. Sonst entscheidet "wie viele rechnen
+    // gerade nicht" ueber die Darstellung — und das aendert sich ohne Zutun (Auto-Trigger,
+    // 4-s-Poll). Bei genau neun Projekten kippte die untere Haelfte bei jedem Jobstart von
+    // fuenf Zeilen auf acht Karten und zurueck; React wirft dabei den Teilbaum weg und
+    // mountet ProjektMenue neu, samt offenem Umbenennen-Dialog.
+    const neun = ruhig(9)
+    neun[0] = { ...neun[0], active_jobs: [{ id: '1', kind: 'transcribe' }] }
+    vi.mocked(api.listProjects).mockResolvedValue(neun)
+    zeigen()
+    await screen.findByText('P1')
+    // Genau EIN Fortschrittsbalken: der des laufenden Projekts oben. Mit `ruhende.length`
+    // waeren es neun (acht Karten unten plus die eine oben).
+    expect(screen.getAllByRole('progressbar')).toHaveLength(1)
   })
 
   it('ein laufendes Projekt steht oben als Karte und NICHT noch einmal darunter', async () => {
