@@ -1247,12 +1247,10 @@ def test_autocorrect_grund_bleibt_auf_einer_zeile(monkeypatch, tmp_path, capsys)
     `^`-verankerten Muster in `jobPhases.ts` bedienen. Nach dem Falten gibt es keine zweite
     Zeile mehr.
 
-    NICHT gedeckt, und der Test behauptet es auch nicht: dieselbe Nutzlast EINZEILIG trifft
-    weiterhin. `^\[.+?\] fertig (.+?): ` backtrackt ueber die ganze Zeile, und das feste
-    Praefix `[autocorrect] ` erfuellt den Anker schon — mit node nachgemessen, Ergebnis
-    `terminal("D1", "done")`. Der vollstaendige Riegel gehoert ins Frontend
-    (`^\[[^\]]+\] `) und ist als Issue notiert. Die Nutzlast traegt deshalb absichtlich die
-    ECHTE gefaehrliche Form statt einer harmlosen Marke.
+    Die EINZEILIGE Variante derselben Nutzlast deckt dieser Test nicht — sie wird im Parser
+    abgewehrt (`^\[[^\]]+\] ` in `jobPhases.ts`, eigener Test dort). Die Nutzlast traegt
+    hier trotzdem die ECHTE gefaehrliche Form statt einer harmlosen Marke, damit beide
+    Schichten an derselben Zeichenkette gemessen werden.
     """
     from webtool import correct, llm
 

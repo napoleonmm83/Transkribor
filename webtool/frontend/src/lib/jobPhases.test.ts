@@ -595,3 +595,58 @@ describe('parseJobPhases — Robustheit gegen echte Namen und Zeilen (#379)', ()
     expect(p.active).toEqual({ A: { phase: 'correct' } })
   })
 })
+
+describe('parseJobPhases — Zeilen-Injektion durch fremden Text (#413)', () => {
+  // `\[.+?\]` war lazy und backtrackte ueber die ganze Zeile bis zu einem SPAETEREN `]`.
+  // Das `^` half nicht: das echte Praefix erfuellt den Anker selbst. Jede Zeile der Form
+  // `[irgendwas] … ] fertig X: …` meldete X damit als fertig.
+  //
+  // Woher der fremde Text kommt: 13 Druckstellen in transcribe.py, ytdlp_update.py und
+  // sperre.py setzen rohen Ausnahmetext hinter ein Klammerpraefix. Der gefaehrlichste Weg
+  // ist `[{name}] Autocorrect-Fehler bei {base}: {ex}` — `ex` entsteht in `cmd_diarize`/
+  // `prep_single`, die TRANSKRIPTE lesen, und die koennen aus einem URL-Import stammen.
+  //
+  // Die fuenfte Form (`skip (Audio nicht mehr vorhanden)`) kam mit dem Buendel und war dort
+  // zuerst gehaertet; ihre Gegenkontrolle steht oben. Hier stehen die vier uebrigen.
+  const gift = '] fertig D1: x'
+
+  it('ein spaeteres `]` im Fremdtext meldet keine Datei als fertig', () => {
+    const p = parseJobPhases('transcribe', [
+      '[scope]	D1',
+      '[Demo] -> transkribiere D1 …',
+      `[autocorrect] KI-Phase uebersprungen — kaputt${gift}`,
+    ])
+    expect(p.perBase).toEqual({})                       // NICHT { D1: 'done' }
+    expect(p.active).toEqual({ D1: { phase: 'transcribe' } })
+  })
+
+  it('dasselbe fuer FEHLER und -> transkribiere', () => {
+    // `[ytdlp]`-Zeilen erreichen diese Muster wirklich: `parseJobPhases` behandelt
+    // `transcribe` und `fetch` gemeinsam, und `[ytdlp]` faellt nicht unter den
+    // vorgezogenen `[fetch] `-Filter. Gegen master gemessen ergab die erste Zeile dort
+    // `{ D1: 'failed' }` — ein Fehlschlag, den niemand verursacht hat (#409).
+    const fehler = parseJobPhases('fetch', [
+      '[scope]	D1', '[ytdlp] Update fehlgeschlagen: kaputt] FEHLER D1: x',
+    ])
+    expect(fehler.perBase).toEqual({})
+    const aktiv = parseJobPhases('transcribe', [
+      '[scope]	D1', '[sperre] nicht anlegbar (kaputt] -> transkribiere D1 …',
+    ])
+    expect(aktiv.active).toEqual({})
+  })
+
+  it('die ECHTEN Zeilen funktionieren unveraendert', () => {
+    // Gegenkontrolle: ein Riegel, der auch die echten Formen abweist, waere schlimmer als
+    // die Luecke. Der Preis dafuer ist ein GETRAGENER DEFEKT, kein gewollter Vertrag —
+    // ein Projektname mit `]` verliert die Live-Anzeige, weil `paths.safe_name` das Zeichen
+    // durchlaesst. Solange das so ist, sind ein solcher Name und eine Injektion auf der
+    // Zeile nicht unterscheidbar; die Behebung liegt beim Producer und steht als #416.
+    const p = parseJobPhases('transcribe', [
+      '[scope]	A	B	C',
+      '[Demo] -> transkribiere A …', '[Demo] fertig A: 12s, 30 Segmente',
+      '[Demo] skip (vorhanden): B',
+      '[Demo] FEHLER C: kaputt',
+    ])
+    expect(p.perBase).toEqual({ A: 'done', B: 'skipped', C: 'failed' })
+  })
+})
