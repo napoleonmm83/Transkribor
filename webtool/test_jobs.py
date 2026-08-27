@@ -865,7 +865,14 @@ def test_abbruch_hinterlaesst_keine_tote_vormerkung():
 
     jobs.start = zaehl_start
     try:
-        jid1, s1 = jobs.request("P_leck", _echo_cmd(1), cwd=None, kind="correct")
+        # Garantierte Laufzeit: `_echo_cmd` endet sofort, `jobs.cancel` traefe den Job
+        # dann schon terminal. GEMESSEN, welche Richtung das nimmt: der Test wird ROT
+        # ("assert 'done' == 'cancelled'"), nicht still gruen — die Vorbedingung faengt
+        # es ab. Trotzdem behoben: ein sprunghaft roter Test kostet Vertrauen wie ein
+        # falsch gruener. (CodeRabbit-CLI-Befund; seine Richtungsangabe "flaky Richtung
+        # gruen" ist damit widerlegt, der Befund selbst nicht.)
+        langsam = [sys.executable, "-c", "import time; time.sleep(0.6)"]
+        jid1, s1 = jobs.request("P_leck", langsam, cwd=None, kind="correct")
         assert s1 is True
         _, s2 = jobs.request("P_leck", _echo_cmd(1), cwd=None, kind="correct")
         assert s2 is False, "Slot war nicht belegt — der Test misst die Vormerkung gar nicht"
@@ -897,3 +904,56 @@ def test_abbruch_hinterlaesst_keine_tote_vormerkung():
 
     assert len(gelaufen) == vorher + 2, ("der Nachlauf nach dem Abbruch kam nicht mehr zustande "
                                          f"— der Weg blieb vergiftet (gelaufen={gelaufen})")
+
+
+def test_abbruch_eines_FREMDEN_projekts_verwirft_den_eigenen_nachlauf_nicht():
+    """Der Abbruch-Riegel darf nur greifen, wenn der Abbruch DIESE Arbeit gemeint hat.
+
+    `start()` gibt fuer `GPU_KINDS` den laufenden Whisper-Job eines BELIEBIGEN Projekts als
+    Blocker zurueck (`jobs.py:82-86`, Einzel-GPU). `request` haengt seinen Nachlauf damit an
+    einen FREMDEN jid — Projekt P wartet auf den Lauf von Projekt Q. Der Riegel aus dem
+    Abbruch-Fix las genau diesen fremden Status: brach der Nutzer Q ab, galt auch P als
+    abgebrochen, obwohl er ueber P nichts gesagt hat. Seine eben hochgeladene Aufnahme wurde
+    nie transkribiert, ohne eine Zeile darueber.
+
+    Gemessen, bevor der Riegel verengt wurde: `gestartete Jobs: [('Q', …)]` — P fehlte.
+
+    „Ein Abbruch ist eine Entscheidung" gilt also nur fuer die Arbeit, die abgebrochen wurde.
+    Fuer alles, was bloss dahinter in der Schlange stand, ist er eine fremde Nachricht.
+
+    Der Test braucht `kind="transcribe"`: der fremde Blocker entsteht NUR fuer GPU-Arten. Die
+    Vorbedingung wird deshalb hart geprueft (`jp == jq`) — ohne sie maesse er nichts, wenn der
+    Slot gerade anders belegt ist.
+    """
+    gestartet = []
+    orig_start = jobs.start
+
+    def zaehl_start(project, cmd, cwd, kind, then=None, env=None, base=None, bases=None):
+        jid, started = orig_start(project, cmd, cwd, kind, then=then, env=env,
+                                  base=base, bases=bases)
+        if started and project in ("Q_fremd", "P_eigen"):
+            gestartet.append(project)
+        return jid, started
+
+    jobs.start = zaehl_start
+    try:
+        # Garantierte Laufzeit, siehe die Begruendung im Vormerkungs-Test.
+        langsam = [sys.executable, "-c", "import time; time.sleep(0.6)"]
+        jq, sq = jobs.request("Q_fremd", langsam, cwd=None, kind="transcribe")
+        assert sq is True, "Vorbedingung: der GPU-Slot war schon belegt, der Test misst nichts"
+        jp, sp = jobs.request("P_eigen", _echo_cmd(1), cwd=None, kind="transcribe")
+        assert sp is False and jp == jq, (
+            "Vorbedingung: P muss sich an Q's jid haengen (Einzel-GPU), sonst gibt es den "
+            f"fremden Blocker gar nicht (jp={jp}, jq={jq})")
+
+        jobs.cancel(jq)
+        assert _wait(jq)["status"] == "cancelled"
+        frist = time.time() + 6.0
+        while time.time() < frist and "P_eigen" not in gestartet:
+            time.sleep(0.02)
+    finally:
+        jobs.start = orig_start
+
+    assert "P_eigen" in gestartet, (
+        "der Abbruch eines FREMDEN Projekts hat den eigenen Nachlauf mitgenommen — die "
+        f"hochgeladene Aufnahme waere nie transkribiert worden (gestartet={gestartet})")

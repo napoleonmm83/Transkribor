@@ -136,9 +136,25 @@ def request(project: str, cmd: list, cwd, kind: str, then=None, base: str = None
             # traefe auch Vormerkungen fremder Basisnamen. Ein Abbruch ist eine Entscheidung —
             # denselben Lauf danach neu zu starten waere das Gegenteil dessen, worum gebeten
             # wurde; seine Vormerkung zu behalten waere schlicht ein Leck.
+            #
+            # ER GILT ABER NUR FUER DIE EIGENE ARBEIT, und das ist keine Feinheit: `start()`
+            # gibt fuer `GPU_KINDS` den laufenden Whisper-Job eines BELIEBIGEN Projekts als
+            # Blocker zurueck (Einzel-GPU, `:82-86`) — `_jid` ist dann ein FREMDER Job. Ohne
+            # den Projekt-/Art-Vergleich nahm der Abbruch von Projekt Q den vorgemerkten Lauf
+            # von Projekt P mit, ueber das der Nutzer gar nichts gesagt hat: dessen eben
+            # hochgeladene Aufnahme wurde nie transkribiert, ohne eine Zeile darueber.
+            # Gemessen (Codex-Gegenreview): `gestartete Jobs: [('Q', …)]`, P fehlte.
+            # „Ein Abbruch ist eine Entscheidung" gilt fuer die abgebrochene Arbeit; fuer alles,
+            # was bloss dahinter in der Schlange stand, ist er eine fremde Nachricht.
+            #
+            # `base` wird BEWUSST nicht verglichen: innerhalb desselben (Projekt, Art) ist der
+            # Blocker per Dedupe genau der Lauf, den der Nutzer gemeint hat.
             with _lock:
                 _pending.discard(_key)
-                abgebrochen = (_jobs.get(_jid) or {}).get("status") == "cancelled"
+                blocker = _jobs.get(_jid) or {}
+                abgebrochen = (blocker.get("status") == "cancelled"
+                               and blocker.get("project") == project
+                               and blocker.get("kind") == kind)
             if abgebrochen:
                 return
             request(project, cmd, cwd, kind, then=then, base=base)
