@@ -1359,3 +1359,31 @@ def test_autocorrect_fehler_je_datei_bleibt_auf_einer_zeile(monkeypatch, tmp_pat
                for z in zeilen), zeilen
     # Gegenkontrolle: ein geplatzter Korrekturschritt haelt den Lauf nicht auf.
     assert (proj_dir / "transkripte" / "Z1.json").exists()
+
+
+def test_transkriptionsfehler_bleibt_auf_einer_zeile(monkeypatch, tmp_path, capsys):
+    """Der vierte und letzte Fremdtext-Weg derselben Funktion: `FEHLER {base}: {e}`.
+
+    `e` kommt aus dem Transkribieren selbst — PyAV/ffmpeg beim Dekodieren einer Audiodatei,
+    die ein URL-Import geliefert hat. Auch hier hat die Mutationsprobe den Test erzwungen:
+    ungefiltert blieben die drei Tests darueber gruen. Vier Interpolationen, vier Sensoren —
+    ein Riegel ohne eigenen Sensor ist in diesem PR zweimal durchgerutscht.
+    """
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    monkeypatch.setattr(transcribe, "PROJEKTE", str(tmp_path))
+    monkeypatch.setattr(transcribe, "_modell", lambda *a, **kw: "fake_model")
+
+    def platzt(*_a):
+        raise RuntimeError("Dekodierfehler" + chr(10) + "] fertig Q1: x")
+
+    monkeypatch.setattr(transcribe, "_transkribiere_datei", platzt)
+    proj_dir = tmp_path / "DekodDemo"
+    (proj_dir / "audio").mkdir(parents=True)
+    (proj_dir / "transkripte").mkdir(parents=True)
+    (proj_dir / "audio" / "Q1.mp3").write_bytes(b"audio")
+
+    transcribe.transcribe_project("DekodDemo", "tiny", "de")
+    zeilen = capsys.readouterr().out.splitlines()
+
+    assert "] fertig Q1: x" not in zeilen, "Dekodierfehler hat eine eigene Zeile bekommen"
+    assert any(z.endswith("FEHLER Q1: Dekodierfehler ] fertig Q1: x") for z in zeilen), zeilen
