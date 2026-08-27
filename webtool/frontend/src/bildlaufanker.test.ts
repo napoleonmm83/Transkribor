@@ -52,42 +52,72 @@ const quellDateien: Record<string, string> = {
   ...import.meta.glob('./**/*.tsx', { query: '?raw', import: 'default', eager: true }),
 }
 
-/** JEDE Zeichenkette in Anfuehrungszeichen, nicht nur die direkt am Attribut (#366).
- *  `className="…"` und `className={'…'}` fallen weiterhin darunter — der alte Ausdruck
- *  war eine echte Teilmenge dieses hier (CodeRabbit-Fund PR #291 bleibt gedeckt).
+/** (1) JEDE einzeilige Zeichenkette in Anfuehrungszeichen — ueberall, nicht nur direkt
+ *  am Attribut (#366). `cn("… overflow-y-auto …", …)` ist die Form, die `components/ui/`
+ *  durchweg benutzt; der alte Scanner sah dort **0 von 4** Bildlaufbehaeltern, blind
+ *  ausgerechnet bei den GETEILTEN Bauteilen, die jede Seite erbt. `cva`-Varianten,
+ *  Arrays und Ternary-Zweige fallen mit ab: dieselbe Zeichenkette, nur ein anderer
+ *  Aufrufer. Ein `cn(`-Sonderfall waere ein zweiter Parser fuer denselben Zweck gewesen.
  *
- *  Der Grund fuer die Weitung: `cn("… overflow-y-auto …", …)` ist die Form, die
- *  `components/ui/` durchweg benutzt. Am Korpus dieses Commits gemessen sah der alte
- *  Scanner dort **0 von 4** Bildlaufbehaeltern — blind ausgerechnet bei den GETEILTEN
- *  Bauteilen, die jede Seite erbt. Ternaries, Arrays und `cva`-Varianten fallen als
- *  Nebenwirkung mit ab: es ist dieselbe Zeichenkette, nur ein anderer Aufrufer. Ein
- *  `cn(`-Sonderfall waere ein zweiter Parser fuer denselben Zweck gewesen.
- *
- *  `\n` als Ausschluss ist nicht Zierrat, sondern die Klammer um den breiten Durchgang.
- *  Am Attribut war der Ausdruck von selbst begrenzt; frei im Text ist er es nicht — und
- *  die Anfuehrungszeichen-Paritaet gewoehnlichen Codes ist keine Zusicherung, weil die
- *  beiden Alternativen einander die Zeichen wegnehmen. OHNE die Klammer gemessen (Mutation
- *  am Korpus dieses Commits): ein Treffer der `'`-Alternative lief in `MaterialDialog.tsx`
- *  ab Zeile 300 ueber **3868 Zeichen** und rund 40 Zeilen JSX und Kommentar hinweg, zog
- *  ein `overflow-y-auto` ohne Anker mit herein — und machte den Waechter an voellig
- *  gesundem Code rot. Ein Waechter mit Fehlalarmen wird weggeklickt. */
+ *  `\n` als Ausschluss ist HIER tragend, weil dieser Ausdruck frei im Text steht und ihn
+ *  nichts bindet: die Anfuehrungszeichen-Paritaet gewoehnlichen Codes ist keine
+ *  Zusicherung, weil die beiden Alternativen einander die Zeichen wegnehmen. Ohne die
+ *  Klammer gemessen: ZWEI ankerlose Runaways in `MaterialDialog.tsx` — ab Zeile 300
+ *  (3921 Zeichen mit CRLF, 3868 mit LF; 54 Zeilen) und ab Zeile 429 (3995; 52 Zeilen).
+ *  Beide zogen ein `overflow-y-auto` ohne Anker herein und machten den Waechter an
+ *  voellig gesundem Code rot. Ein Waechter mit Fehlalarmen wird weggeklickt. */
 const KLASSENLISTE_RE = /"([^"\n]*)"|'([^'\n]*)'/g
-/** Template-Literale NUR direkt am Attribut — bewusst nicht im breiten Durchgang.
+/** (2) Die MEHRZEILIGE Klassenliste — nur am Attribut, wo `className=` sie bindet und
+ *  sie deshalb nicht davonlaufen kann.
+ *
+ *  Ohne diese Zeile waere #366 ein Tausch statt eines Gewinns: der Ausdruck VOR #366
+ *  erlaubte `\n` innerhalb der Anfuehrungszeichen, der breite Durchgang (1) tut es aus
+ *  gutem Grund nicht — der Scanner haette also gekonnt, was er vorher konnte, verloren.
+ *  Am Korpus stehen **20** solche Listen (u.a. HomeGallery 4x, StatusBar 3x,
+ *  MaterialZeile 3x), eine davon traegt bereits ein `overflow-hidden`: ein Wort vom
+ *  Ernstfall entfernt. Sonde in ihrem Stil (mehrzeilig, `overflow-auto`, ohne Anker):
+ *  alter Scanner ROT, Scanner ohne diese Zeile GRUEN. Review-Befund K1 — und genau die
+ *  Mutationsklasse, die dieses Repo als teuerste fuehrt: ein Waechter, der leiser wird
+ *  und dabei gruen bleibt.
+ *
+ *  Am heutigen Korpus bringt die Zeile **null** zusaetzliche Fundstellen (keine der 20
+ *  Listen traegt `overflow-auto/scroll`) — sie stellt Faehigkeit wieder her, statt
+ *  Deckung hinzuzufuegen. Genau deshalb ist die synthetische Probe unten ihr EINZIGER
+ *  Sensor: am Korpus gemessen waere sie rueckstandslos loeschbar. */
+const KLASSENLISTE_MEHRZEILIG_RE = /className\s*=\s*"([^"]*)"/g
+/** (3) Template-Literale NUR direkt am Attribut — bewusst nicht im breiten Durchgang.
  *  Gemessen: breit gescannt bringen Backticks **9 Fundstellen** dazu, allesamt Prosa aus
  *  den Doku-Kommentaren dieses Repos (`overflow-auto` in JSDoc/JSX-Kommentaren), und
- *  KEINE davon traegt einen Anker — der Waechter ginge also am DOKUMENTIEREN rot. Ein
- *  Waechter mit Fehlalarmen wird weggeklickt, und dann ist er schlechter als keiner. */
+ *  KEINE davon traegt einen Anker — der Waechter ginge also am DOKUMENTIEREN rot. */
 const TEMPLATE_AM_ATTRIBUT_RE = /className\s*=\s*\{`([^`]*)`\}/g
+
+/** Die Klassenlisten EINER Datei. Als Funktion, damit die synthetische Fixture unten
+ *  durch dieselbe Logik geht wie der Korpus — ein zweiter Sammelpfad waere ein Test,
+ *  der etwas anderes prueft als das, was laeuft.
+ *
+ *  Das `Set` raeumt die Dubletten weg, die (1) und (2) auf einzeiligen Attribut-Listen
+ *  zwangslaeufig erzeugen; sie stoerten sonst nur die Fehlermeldung.
+ *
+ *  Die drei Ausdruecke sind modulweit und tragen `g` — das ist nur deshalb harmlos,
+ *  weil `matchAll` den Regex KLONT und `lastIndex` der Vorlage nicht zurueckschreibt
+ *  (nachgemessen: zwei Durchlaeufe ueber den Korpus, identische Zahlen, `lastIndex`
+ *  danach 0). Ein Umbau auf `.exec()`/`.test()` mit denselben Objekten uebersaehe jede
+ *  zweite Fundstelle — und bliebe gruen. */
+function klassenlisten(inhalt: string): string[] {
+  const treffer = new Set<string>()
+  for (const re of [KLASSENLISTE_RE, KLASSENLISTE_MEHRZEILIG_RE, TEMPLATE_AM_ATTRIBUT_RE]) {
+    for (const m of inhalt.matchAll(re)) {
+      const klassen = m[1] ?? m[2] ?? ''
+      if (/overflow-(x-|y-)?(auto|scroll)/.test(klassen)) treffer.add(klassen)
+    }
+  }
+  return [...treffer]
+}
 
 const fundstellen: { datei: string; klassen: string }[] = []
 for (const [pfad, inhalt] of Object.entries(quellDateien)) {
   if (KEIN_QUELLCODE.test(pfad)) continue
-  for (const re of [KLASSENLISTE_RE, TEMPLATE_AM_ATTRIBUT_RE]) {
-    for (const treffer of inhalt.matchAll(re)) {
-      const klassen = treffer[1] ?? treffer[2] ?? ''
-      if (/overflow-(x-|y-)?(auto|scroll)/.test(klassen)) fundstellen.push({ datei: pfad, klassen })
-    }
-  }
+  for (const klassen of klassenlisten(inhalt)) fundstellen.push({ datei: pfad, klassen })
 }
 
 describe('Quellbaum: jeder Bildlaufbehaelter hat einen Bezugsrahmen (#209)', () => {
@@ -110,8 +140,45 @@ describe('Quellbaum: jeder Bildlaufbehaelter hat einen Bezugsrahmen (#209)', () 
     const ui = fundstellen.filter(f => f.datei.includes('/components/ui/'))
     expect(
       ui.length,
-      'keine Bildlaufbehaelter in components/ui/ — sieht der Scanner cn(...) nicht mehr?',
+      'keine Bildlaufbehaelter in components/ui/ — sieht der Scanner cn(...) nicht mehr? '
+        + '(oder wurde das Verzeichnis umbenannt — dann zeigt diese Meldung falsch)',
     ).toBeGreaterThan(0)
+  })
+
+  it('und sieht weiterhin die Literale am Attribut (Gegenrichtung zu #366)', () => {
+    // Spiegelbild des Tests darueber: der faengt das Schrumpfen Richtung Attribut, dieser
+    // das Schrumpfen Richtung `cn(`. Ohne ihn faenge nichts die zweite Richtung — das
+    // waere #366 gespiegelt, im selben Waechter, eine Zeile neben der Warnung davor.
+    //
+    // Was ihn TOETET, ist gemessen und nicht das Naheliegende: eine Verengung des
+    // breiten Durchgangs auf `cn(` reicht NICHT mehr: seit K1 sehen ZWEI Ausdruecke die
+    // Attribut-Literale, und `KLASSENLISTE_MEHRZEILIG_RE` faengt AppShell, Sidebar,
+    // EditorView und MaterialDialog weiterhin ein (der Ertrag der Doppeldeckung). Rot
+    // wird er, wenn der Korpus selbst schrumpft — nachgestellt mit einem
+    // `if (!pfad.includes('/components/ui/')) continue` in der Sammelschleife.
+    const ausserUi = fundstellen.filter(f => !f.datei.includes('/components/ui/'))
+    expect(
+      ausserUi.length,
+      'nur noch Fundstellen in components/ui/ — schrumpft der Scanner?',
+    ).toBeGreaterThan(0)
+  })
+
+  it.each([
+    // Der Korpus deckt heute NUR die "…"-Alternative ab: `'…'` und Backtick-am-Attribut
+    // haben dort null Fundstellen, beide liessen sich rueckstandslos loeschen, ohne dass
+    // ein Test rot wird (Review-Befund W3). Diese Proben sind ihr einziger Sensor. Sie
+    // gehen durch `klassenlisten()`, also durch DIESELBE Logik wie der Korpus.
+    ['Literal am Attribut', '<div className="overflow-auto relative" />', 1],
+    ['einfache Anfuehrungszeichen (PR #291)', "<div className={'overflow-auto relative'} />", 1],
+    ['Template-Literal am Attribut', '<div className={`overflow-auto relative`} />', 1],
+    ['cn(...) irgendwo im Ausdruck (#366)', '<div className={cn("overflow-auto relative", x && "p-2")} />', 1],
+    // K1: der Ausdruck vor #366 konnte das — der breite Durchgang darf `\n` nicht.
+    ['mehrzeilige Liste am Attribut (K1)', '<div\n  className="flex min-h-0\n    overflow-auto border"\n/>', 1],
+    // Die Backtick-Entscheidung: Prosa zitiert Klassennamen, das sind keine Klassenlisten.
+    ['Prosa-Backtick im Kommentar', '// `overflow-auto` braucht einen Anker (#209)', 0],
+    ['ohne Bildlauf gar nichts', '<div className="relative flex p-2" />', 0],
+  ])('Sammellogik: %s', (_name, quelle, erwartet) => {
+    expect(klassenlisten(quelle as string)).toHaveLength(erwartet as number)
   })
 
   it('jeder Bildlaufbehaelter im Quellbaum traegt einen Anker', () => {
