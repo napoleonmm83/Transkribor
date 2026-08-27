@@ -410,9 +410,9 @@ describe('parseJobPhases — Druckformen, die der Parser nicht kannte (#374)', (
     // `(.+?)\.(?:correction\.)?json` hätte `daten.json` auf "daten" verkürzt. Der Anker ist
     // hier nicht der Rückverweis aus I1 (der Name steht nur EINMAL in der Zeile), sondern der
     // feste SCHLUSSTEXT — er lässt genau eine Zerlegung der Zeile zu.
-    // Was diese Zusicherung NICHT belegt: die Wahl des Quantors. Gierig und faul liefern hier
-    // überall dasselbe (gemessen, 0 Unterschiede auf 400 000 Zufallseingaben) — sie ist
-    // Regressionsschutz gegen die genannte Weitung, kein Beleg für `(.+)`.
+    // Was diese Zusicherung NICHT belegt: die Wahl des Quantors. Fester Schlusstext plus `$`
+    // lassen nur eine Zerlegung zu, gierig und faul liefern hier also überall dasselbe — die
+    // Zusicherung ist Regressionsschutz gegen die genannte Weitung, kein Beleg für `(.+)`.
     const b = 'daten.json'
     const roh = parseJobPhases('correct', [`apply: FEHLT ${b}.json - Roh-Transkript nicht gefunden`])
     expect(roh.perBase).toEqual({ [b]: 'failed' })

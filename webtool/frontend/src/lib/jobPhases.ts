@@ -205,9 +205,12 @@ export function parseJobPhases(kind: string, lines: string[]): JobPhases {
     // `\.json - Roh-Transkript nicht gefunden` laesst genau eine Zerlegung zu; damit ueberlebt
     // auch ein Basisname, der selbst auf `.json` endet (`daten.json` -> "daten.json", nicht
     // "daten"). Genau diese Falle war der Grund, den Zweig in #407 zu parken.
-    // **`(.+)` und `$` sind daneben REDUNDANT, und das ist gemessen:** gierig und faul liefern
-    // auf 11 Handfaellen und 400 000 Zufallseingaben dasselbe — `(.+?)` waere ein AEQUIVALENTER
-    // Mutant, kein Defekt. Erst wenn BEIDE Anker fallen, bricht etwas, und nur bei einem
+    // **`(.+)` und `$` sind daneben REDUNDANT**, und das ist am Ausdruck selbst nachlesbar:
+    // fester Schlusstext PLUS `$` lassen nur eine Zerlegung zu, und wo es nur eine gibt, ist
+    // die Rueckzugsrichtung des Quantors bedeutungslos — `(.+?)` waere ein AEQUIVALENTER
+    // Mutant, kein Defekt. (Empirisch gegengeprueft, aber das Argument steht ohne die Zahl:
+    // wer es nachrechnen will, liest den Ausdruck.)
+    // Erst wenn BEIDE Anker fallen, bricht etwas, und nur bei einem
     // Basisnamen, der den Schlusstext selbst enthaelt. Beide bleiben stehen, weil sie nichts
     // kosten; dass kein Test sie rot bekommt, steht hier, damit es niemand fuer eine Luecke
     // haelt. (Die erste Fassung dieses Kommentars schrieb das Ueberleben der GIER zu — falsch,
