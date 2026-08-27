@@ -42,7 +42,7 @@ describe('Schliesskreuz im gerollten Dialog (#330)', () => {
     expect(x.className).not.toContain('top-4')
   })
 
-  it('die Huelle steht in BEIDEN Layouts vorn — `order-first`, nicht nur die Grid-Zeile', () => {
+  it('die Huelle steht in BEIDEN Layouts vorn — `order-first` traegt das ALLEIN', () => {
     render(
       <Dialog open>
         <DialogContent>
@@ -52,15 +52,21 @@ describe('Schliesskreuz im gerollten Dialog (#330)', () => {
     )
     const huelle = document.querySelector('[data-slot="dialog-close-huelle"]')!
     // Der teuerste Befund dieser Arbeit, und NUR im Browser gefunden: `MaterialDialog`
-    // ersetzt `grid` durch `flex flex-col`. Dort ist die Zeilenangabe wirkungslos, die
+    // ersetzt `grid` durch `flex flex-col`. Dort sind Grid-Zeilenangaben wirkungslos, die
     // Huelle landete als letztes Flex-Kind UNTEN und der ✕ bei 615 von 648 px.
-    // `order-first` wirkt in beiden Layouts; die Zeilenangabe gibt dem `sticky` im Grid
-    // zusaetzlich den vollhohen Bezugsrahmen (`1 / -1`), ohne den es nach Zeile 1 loesst.
     expect(huelle.className).toContain('order-first')
-    expect(huelle.className).toContain('row-start-1')
-    expect(huelle.className).toContain('row-end-[-1]')
     // `h-0`: die Huelle darf keine Hoehe verbrauchen.
     expect(huelle.className).toContain('h-0')
+    // **Hier stand zusaetzlich `row-start-1 row-end-[-1]` samt der Begruendung, `sticky`
+    // brauche einen vollhohen Bezugsrahmen — beides FALSCH, im Review nachgemessen.** In
+    // der echten App klebt der ✕ mit `1/-1`, mit `row-start-1` und ganz ohne Zeilenangabe
+    // identisch (16,67 an jedem Rollstand); nur ohne `order` wandert er (548 -> 255).
+    // `-1` zaehlt ab dem EXPLIZITEN Raster, das `DialogContent` nicht hat. Die Angabe war
+    // also wirkungslos — und eine Falle: sobald ein Verbraucher `grid-rows-*` setzt,
+    // greift sie und die `gap`-Luecke ist zurueck (580 -> 596, gemessen). Ein Test, der
+    // totes Verhalten festnagelt, sperrt das Aufraeumen, statt etwas zu schuetzen —
+    // deshalb steht hier KEINE Zeilen-Assertion mehr.
+    expect(huelle.className).not.toContain('row-end-[-1]')
   })
 
   it('die Huelle kostet keine Hoehe — der `gap`-Ausgleich haengt an `:has()`', () => {
@@ -105,9 +111,12 @@ describe('Schliesskreuz im gerollten Dialog (#330)', () => {
     const inhalt = document.querySelector('[data-slot="dialog-content"]')!
     // Die Basis gleicht mit `-top-2 -right-2` das uebliche `p-6` aus, weil die Huelle ab
     // dem INHALTSRAND rechnet. `CommandDialog` setzt `p-0` — dort zeigt der Ausgleich ins
-    // Leere: gemessen hing der ✕ bei -7,3/-7,3, sichtbar AUSSERHALB des Dialogs. Mit
-    // diesen zwei Klassen steht er wieder bei 16,7/16,7 wie vor dem Fix.
-    // Zweiter Verbraucher mit eigener Polsterung ⇒ dieselbe Zeile, sonst haengt sein ✕ raus.
+    // Leere: der ✕ landete bei -7,3/-7,3. Er war dabei NICHT ausserhalb sichtbar (hier
+    // stand das zuerst, im Review widerlegt): `overflow-hidden` klemmt ihn an der Kante
+    // weg — in der ✕-Mitte antwortete `elementFromPoint` mit dem Overlay, erreichbar
+    // blieben 61 von 256 px. Mit diesen zwei Klassen: 16,7/16,7 und 255 von 256 px.
+    // Zweiter Verbraucher mit eigener Polsterung ⇒ dieselbe Zeile, sonst wird sein ✕
+    // unbrauchbar.
     expect(inhalt.className).toContain('[&_[data-slot=dialog-close]]:top-4')
     expect(inhalt.className).toContain('[&_[data-slot=dialog-close]]:right-4')
   })

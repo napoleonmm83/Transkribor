@@ -52,9 +52,15 @@ function CommandDialog({
         // #330: der ✕ sitzt seit der Bildlauf-Reparatur in einer Huelle IM Inhaltsfluss,
         // rechnet also ab dem INHALTSRAND — die Basis gleicht dafuer das uebliche `p-6`
         // mit `-top-2 -right-2` aus. Hier ist die Polsterung `p-0`, der Ausgleich zeigt
-        // also ins Leere: gemessen hing der ✕ bei -7,3/-7,3, sichtbar AUSSERHALB des
-        // Dialogs. Ohne Polsterung ist der normale Versatz der richtige. Der
-        // Nachfahren-Selektor schlaegt die Basisklasse (Spezifitaet 0,2,0 gegen 0,1,0).
+        // also ins Leere: der ✕ landete bei -7,3/-7,3. Er war damit nicht etwa ausserhalb
+        // SICHTBAR — `overflow-hidden` klemmt ihn an der Kante weg: in der ✕-Mitte
+        // antwortete `elementFromPoint` mit dem Overlay, und erreichbar blieben **61 von
+        // 256 px** (mit dieser Zeile: 255 von 256, Mitte trifft). Ohne Polsterung ist der
+        // normale Versatz der richtige. Der Nachfahren-Selektor schlaegt die Basisklasse
+        // (Spezifitaet 0,2,0 gegen 0,1,0 — im Browser bestaetigt).
+        // Nebenwirkung, heute ohne Verbraucher: `DialogClose` traegt dasselbe `data-slot`,
+        // ein solches Element in einem `CommandDialog` bekaeme die Regel also mit — an
+        // einem statischen Element sind `top`/`right` wirkungslos.
         className={cn(
           "overflow-hidden p-0 [&_[data-slot=dialog-close]]:top-4 [&_[data-slot=dialog-close]]:right-4",
           className
