@@ -49,7 +49,16 @@ function CommandDialog({
         <DialogDescription>{description}</DialogDescription>
       </DialogHeader>
       <DialogContent
-        className={cn("overflow-hidden p-0", className)}
+        // #330: der ✕ sitzt seit der Bildlauf-Reparatur in einer Huelle IM Inhaltsfluss,
+        // rechnet also ab dem INHALTSRAND — die Basis gleicht dafuer das uebliche `p-6`
+        // mit `-top-2 -right-2` aus. Hier ist die Polsterung `p-0`, der Ausgleich zeigt
+        // also ins Leere: gemessen hing der ✕ bei -7,3/-7,3, sichtbar AUSSERHALB des
+        // Dialogs. Ohne Polsterung ist der normale Versatz der richtige. Der
+        // Nachfahren-Selektor schlaegt die Basisklasse (Spezifitaet 0,2,0 gegen 0,1,0).
+        className={cn(
+          "overflow-hidden p-0 [&_[data-slot=dialog-close]]:top-4 [&_[data-slot=dialog-close]]:right-4",
+          className
+        )}
         showCloseButton={showCloseButton}
       >
         <Command className="**:data-[slot=command-input-wrapper]:h-12 [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group]]:px-2 [&_[cmdk-group]:not([hidden])_~[cmdk-group]]:pt-0 [&_[cmdk-input-wrapper]_svg]:h-5 [&_[cmdk-input-wrapper]_svg]:w-5 [&_[cmdk-input]]:h-12 [&_[cmdk-item]]:px-2 [&_[cmdk-item]]:py-3 [&_[cmdk-item]_svg]:h-5 [&_[cmdk-item]_svg]:w-5">
