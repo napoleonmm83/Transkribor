@@ -163,8 +163,16 @@ export function parserMuster(quelle: string): string[] {
       else if (c === '/' && !klasse) break
     }
     if (k >= quelle.length) continue
+    // Flags gehoeren zum Literal: bei `/^x/i.test(l)` zeigte `danach` sonst auf 'i.test',
+    // die Verwendungspruefung schluege fehl, und der Zweig fiele STILL aus der Ernte —
+    // dieselbe Verlustklasse wie beim Kommentar-Slash unten, nur unauffaelliger.
+    // Heute traegt kein Muster in jobPhases.ts ein Flag (gegruept), der Pfad ist also latent.
+    // Genau deshalb steht in der Probe des Tests eine Zeile MIT Flag: sonst waere die
+    // Erkennung eine Wache, die erst beim ersten `i` gebraucht wird und dann nicht da ist.
+    let f = k + 1
+    while (f < quelle.length && 'dgimsuvy'.includes(quelle[f])) f++
     const davor = quelle.slice(Math.max(0, p - 7), p)
-    const danach = quelle.slice(k + 1, k + 7)
+    const danach = quelle.slice(f, f + 7)
     if (!davor.endsWith('.match(') && !danach.startsWith('.test(')) continue
     raus.push(quelle.slice(p + 1, k))
     // Weitergesprungen wird NUR ueber einen angenommenen Fund — sonst frisst ein `/^` in
@@ -626,9 +634,12 @@ describe('Vertrag: gedruckte Statuszeilen <-> jobPhases.ts (#375)', () => {
       '// Prosa ueber ein Muster: /^ ohne Ende',
       "if ((m = l.match(/^\\[[^\\]]+\\] fertig (.+?): /))) terminal(m[1], 'done')",
       "else if (/^prep: \\d+ Datei/.test(l)) { global = 'prep' }",
+      "else if (/^glossar: \\d+/iu.test(l)) { global = 'glossary' }",
       "const l = rawLine.replace(/^ {0,2}/, '')",
     ].join('\n')
-    expect(parserMuster(probe)).toEqual(['^\\[[^\\]]+\\] fertig (.+?): ', '^prep: \\d+ Datei'])
+    expect(parserMuster(probe)).toEqual([
+      '^\\[[^\\]]+\\] fertig (.+?): ', '^prep: \\d+ Datei', '^glossar: \\d+',
+    ])
   })
 
   it('was der Toast dem Nutzer zeigt, ist nicht „ignoriert" (#422/B5)', () => {
@@ -690,7 +701,7 @@ describe('Vertrag: gedruckte Statuszeilen <-> jobPhases.ts (#375)', () => {
     for (const [sig, e] of Object.entries(INVENTAR)) {
       // BEIDE Arten: 'gelesen_anderswo' heisst „ein ANDERER Verbraucher liest das" — fuer
       // `parseJobPhases` ist die Zeile genauso wirkungslos, und ohne diese Zeile verloeren
-      // die 15 Formen aus #422/B5 ihre Abdeckung genau durch ihre Umklassifizierung.
+      // die 16 Formen aus #422/B5 ihre Abdeckung genau durch ihre Umklassifizierung.
       if (e.art !== 'ignoriert' && e.art !== 'gelesen_anderswo') continue
       expect(e.beispiel, `Beispielzeile fehlt fuer ${sig}`).toBeTruthy()
       for (const kind of ['transcribe', 'correct', 'fetch'] as const) {
@@ -725,7 +736,7 @@ describe('Vertrag: gedruckte Statuszeilen <-> jobPhases.ts (#375)', () => {
     // eine leere oder halbe Menge, und die beiden Tests darueber waeren dann gruen, ohne je
     // etwas geprueft zu haben — dieselbe Falle wie ein Fixture, das nie geladen wird.
     // Je Datei geprueft, nicht ueber die Summe: eine unlesbare Quelle verschwaende sonst hinter
-    // den 90+ Fundstellen der anderen (seit #409 sind es fuenf statt drei).
+    // den 90+ Fundstellen der anderen (seit #409 sind es sechs statt drei).
     const orte = [...ernte().values()].flat()
     for (const { datei } of QUELLEN) expect(orte.some((o) => o.startsWith(datei))).toBe(true)
     expect(orte.length).toBeGreaterThan(80)
@@ -751,6 +762,19 @@ describe('Vertrag: gedruckte Statuszeilen <-> jobPhases.ts (#375)', () => {
     formenAusZeilen('x.py', ['    print(meldung)', '    print(f"[{n}] fertig {b}: {s}")'], formen)
     expect(formen.get(UNLESBAR)).toEqual(['x.py:1'])
     expect(formen.get('[{}] fertig {}: {}')).toEqual(['x.py:2'])
+
+    // Der EMITTER-Parameter hat einen eigenen Offsetpfad (`j = i + ruf.length`), und mit
+    // `print(` allein faellt ein Fehler dort nicht auf — `sag(` ist zwei Zeichen kuerzer.
+    // Dazu die Grenze, die bei QUELLEN beschrieben steht: die Default-SENKE von `sag`
+    // enthaelt zwar `print(`, ist aber keine Meldungsform und darf den Sentinel NICHT
+    // ausloesen — sonst waere der Test fuer whispercpp.py dauerhaft rot.
+    const sag = new Map<string, string[]>()
+    formenAusZeilen('w.py', [
+      '    sag(f"{pct}%| {modell}")',
+      '    sag = onLine or (lambda z: print(z, flush=True))',
+    ], sag, 'sag(')
+    expect(sag.get('{}%| {}')).toEqual(['w.py:1'])
+    expect(sag.has(UNLESBAR)).toBe(false)
 
     // Und die dritte Haelfte der Zusage: der Sentinel darf NICHT im INVENTAR stehen. Stuende er
     // dort, waere er klassifiziert — der Gleichheitstest oben bliebe bei einer unlesbaren Form
