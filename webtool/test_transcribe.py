@@ -1316,3 +1316,46 @@ def test_autocorrect_ausnahmetext_bleibt_auf_einer_zeile(monkeypatch, tmp_path, 
     assert "[autocorrect] KI-Phase uebersprungen — Paket kaputt ] fertig W1: x" in zeilen
     # Und der Wurf bleibt ein Wurf: die Transkription selbst laeuft weiter.
     assert (proj_dir / "transkripte" / "W1.json").exists()
+
+
+def test_autocorrect_fehler_je_datei_bleibt_auf_einer_zeile(monkeypatch, tmp_path, capsys):
+    """Der dritte Fremdtext-Weg — und der einzige, der einen ANGREIFER hat.
+
+    `{ex}` an den beiden Stellen oben entsteht am Laufstart aus Import- und
+    Verfuegbarkeitsfehlern, bevor irgendein Transkript gelesen ist. Hier nicht: `cmd_diarize`
+    und `prep_single` LESEN Transkriptdateien, und die koennen aus einem URL-Import stammen.
+    Ein UnicodeDecodeError oder KeyError traegt dann Inhaltsfragmente — samt Umbruechen.
+
+    Die Mutationsprobe hat den Test erzwungen: `{ex}` hier ungefiltert zu drucken liess die
+    beiden Tests darueber GRUEN. Dritte Interpolation, dritter Sensor.
+    """
+    from webtool import correct, llm
+
+    def platzt(*_a, **_k):
+        raise RuntimeError("Transkript kaputt" + chr(10) + "] fertig Z1: x")
+
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    monkeypatch.setattr(transcribe, "PROJEKTE", str(tmp_path))
+    monkeypatch.setattr(transcribe, "_modell", lambda *a, **kw: "fake_model")
+    monkeypatch.setattr(llm, "available", lambda *_a: (True, ""))
+    monkeypatch.setattr(correct, "CLAUDE_PARALLEL", 1)
+    monkeypatch.setattr(correct, "diarize_enabled", lambda: True)
+    monkeypatch.setattr(correct, "cmd_diarize", platzt)
+    monkeypatch.setattr(correct, "prep_single", lambda *a, **k: None)
+    monkeypatch.setattr(correct, "correct_ai_single", lambda *a, **k: True)
+
+    proj_dir = tmp_path / "PlatzDemo"
+    (proj_dir / "audio").mkdir(parents=True)
+    (proj_dir / "transkripte").mkdir(parents=True)
+    (proj_dir / "audio" / "Z1.mp3").write_bytes(b"audio")
+    monkeypatch.setattr(transcribe, "_transkribiere_datei", lambda *a: {
+        "text": "T", "segments": [{"id": 0, "start": 0.0, "end": 1.0, "text": "T"}], "duration": 1.0})
+
+    transcribe.transcribe_project("PlatzDemo", "tiny", "de", autocorrect=True)
+    zeilen = capsys.readouterr().out.splitlines()
+
+    assert "] fertig Z1: x" not in zeilen, "Fremdtext aus dem Transkript hat eine eigene Zeile bekommen"
+    assert any(z.endswith("Autocorrect-Fehler bei Z1: Transkript kaputt ] fertig Z1: x")
+               for z in zeilen), zeilen
+    # Gegenkontrolle: ein geplatzter Korrekturschritt haelt den Lauf nicht auf.
+    assert (proj_dir / "transkripte" / "Z1.json").exists()
