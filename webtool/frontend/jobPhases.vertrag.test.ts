@@ -201,6 +201,13 @@ const INVENTAR: Record<string, Eintrag> = {
   },
 
   // ── bewusst ignoriert: Umgebung, Messung, Diagnose — kein Datei-Ereignis ───────────────
+  // Die zwei Meldungen des Autocorrect-Riegels (#406). 'ignoriert' ist hier eine ZUSICHERUNG,
+  // keine Verlegenheit: sie duerfen KEINE Phase setzen — sie sagen, dass die Korrektur gar
+  // nicht erst laeuft, und eine Datei-Meldung daraus waere eine Falschaussage. Dass sie an
+  // keinem Muster haengenbleiben, ist seit #413 auch strukturell zu: `^\[[^\]]+\] ` laesst
+  // den fremden Grund hinter dem Praefix nicht mehr an die Datei-Muster heran.
+  '[autocorrect] uebersprungen — TRANSKRIBOR_AUTOCORRECT=0': { art: 'ignoriert' },
+  '[autocorrect] KI-Phase uebersprungen — {}': { art: 'ignoriert' },
   '  KI-Anbieter: {}': { art: 'ignoriert' },
   '  claude Timeout nach {}s': { art: 'ignoriert' },
   '  claude exit {}: {}': { art: 'ignoriert' },
