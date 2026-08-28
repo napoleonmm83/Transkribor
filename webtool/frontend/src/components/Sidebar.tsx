@@ -7,6 +7,7 @@ import { NewProjectDialog } from './NewProjectDialog'
 import { DeleteProjectDialog } from './DeleteProjectDialog'
 import { ProjektUmbenennen } from './ProjektUmbenennen'
 import { FileRow } from './FileRow'
+import { imBereich, zugelassen } from '@/lib/jobPhases'
 
 type Sel = { project: string; base: string } | null
 /** Nur die Zusammenfassung: die Leiste zeigt alle Projekte, aber Dateien nur fuer das
@@ -163,21 +164,17 @@ export function Sidebar({
                     <p className="px-2 py-1 text-sm text-muted-foreground">lädt…</p>
                   )}
                   {dateien.map(f => {
-                    // ZWEITER Ort desselben Filters (#431). Der Parser laesst das Urteil einer
-                    // mitten im Lauf hochgeladenen Aufnahme seit dem Fix durch - ohne dieselbe
-                    // Erweiterung HIER warf die Zeile es gleich wieder weg, und die Aufnahme
-                    // blieb ohne Phase und ohne Zustand. Am echten Lauf gemessen: der Fix im
-                    // Parser allein aendert an der Anzeige nichts.
-                    const inScope = jobRunning
-                      ? (phases?.scope ? (phases.scope.has(f.base) || (phases.gesehen?.has(f.base) ?? false)) : true)
-                      : false
+                    // Zwei Fragen, EINE Quelle (lib/jobPhases.ts) -- der Unterschied zwischen
+                    // Zusage und Beobachtung steht dort.
+                    const darfWarten = imBereich(phases, f.base, !!jobRunning)
+                    const darfZustand = zugelassen(phases, f.base, !!jobRunning)
                     return (
                       <FileRow key={f.base} project={p.name} file={f}
                         active={active?.project === p.name && active?.base === f.base}
                         onOpen={() => onOpen({ project: p.name, base: f.base })}
-                        phase={inScope ? phases?.active[f.base]?.phase : undefined}
-                        state={inScope ? phases?.perBase[f.base] : undefined}
-                        inScope={inScope}
+                        phase={darfZustand ? phases?.active[f.base]?.phase : undefined}
+                        state={darfZustand ? phases?.perBase[f.base] : undefined}
+                        inScope={darfWarten}
                         globalPhase={jobRunning ? (phases?.globalPerBase?.[f.base] ?? (phases?.scope === undefined ? phases?.global : null)) : null}
                         jobRunning={jobRunning} aiReason={aiReason} />
                     )

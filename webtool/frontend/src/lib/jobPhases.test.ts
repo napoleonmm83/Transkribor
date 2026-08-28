@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { describePhases, parseJobPhases } from './jobPhases'
+import { describePhases, parseJobPhases , imBereich, zugelassen } from './jobPhases'
 // Der Ausgang gehoert zum Befund: ein richtig geparster Zustand nuetzt nichts, wenn die
 // Meldung daraus weiterhin „fertig" sagt (#405 + #376).
 import { ausgang } from './jobAusgang'
@@ -846,5 +846,62 @@ describe('parseJobPhases - Aufnahme kommt mitten im Lauf dazu (#431)', () => {
       '[Demo] fertig B: 1s, 2 Segmente, 1.0x',
     ])
     expect(p.perBase).toEqual({ B: 'done' })
+  })
+})
+
+describe('parseJobPhases - ein Projekt namens "active" (#431, Review-Befund A1)', () => {
+  // `transcribe.py` praefixt JEDE Zeile mit `[{Projektname}] `. Die erste Fassung des Fixes
+  // stellte den `[active]`-Zweig VOR die Dialekt-Regexe und frass sie damit alle - gemessen
+  // ergab das `perBase={}` statt `{B:'done'}`. Dieselbe Falle wie beim Projekt namens "scope"
+  // und wie #379 fuer "fetch"; deshalb steht der Zweig jetzt ZULETZT.
+  it('liest die Projektzeilen, statt sie als Bereichsmeldung zu fressen', () => {
+    const p = parseJobPhases('transcribe', [
+      '[scope] B',
+      '[active] -> transkribiere B ...',
+      '[active] fertig B: 1s, 2 Segmente, 1.0x',
+    ])
+    expect(p.perBase).toEqual({ B: 'done' })
+  })
+
+  // Gegenrichtung: die ECHTE Marke wird weiterhin gelesen. Ohne sie waere der Test oben auch
+  // dann gruen, wenn der Zweig ganz fehlte.
+  it('liest eine echte [active]-Marke weiterhin', () => {
+    const p = parseJobPhases('transcribe', ['[scope] A', '[active] B'])
+    expect(p.gesehen).toEqual(new Set(['B']))
+  })
+})
+
+describe('imBereich / zugelassen - die EINE Quelle der drei Filterstellen (#431)', () => {
+  const ph = (scope?: string[], gesehen?: string[]) => ({
+    global: null, active: {}, perBase: {},
+    ...(scope ? { scope: new Set(scope) } : {}),
+    ...(gesehen ? { gesehen: new Set(gesehen) } : {}),
+  })
+
+  it('Bereich erlaubt BEIDES - Prognose und Zustand', () => {
+    expect(imBereich(ph(['a']), 'a', true)).toBe(true)
+    expect(zugelassen(ph(['a']), 'a', true)).toBe(true)
+  })
+
+  // Der Kern des Review-Befunds A2: das Glossar meldet seit #450 KORPUSWEIT `[active]`.
+  // Duerfte `gesehen` auch die Prognose stellen, stuende bei einem Einzeldatei-Lauf der
+  // ganze Korpus auf "In Warteschlange..." (gemessen: 3 statt 1).
+  it('Beobachtung erlaubt den Zustand, aber KEINE Warte-Prognose', () => {
+    expect(zugelassen(ph(['a'], ['b']), 'b', true)).toBe(true)
+    expect(imBereich(ph(['a'], ['b']), 'b', true)).toBe(false)
+  })
+
+  it('weder noch: beides falsch', () => {
+    expect(zugelassen(ph(['a']), 'fremd', true)).toBe(false)
+    expect(imBereich(ph(['a']), 'fremd', true)).toBe(false)
+  })
+
+  it('ohne Bereichszeile gilt alles als drin - bisheriges Verhalten', () => {
+    expect(imBereich(ph(), 'x', true)).toBe(true)
+  })
+
+  it('ohne laufenden Job ist beides falsch', () => {
+    expect(imBereich(ph(['a'], ['a']), 'a', false)).toBe(false)
+    expect(zugelassen(ph(['a'], ['a']), 'a', false)).toBe(false)
   })
 })
