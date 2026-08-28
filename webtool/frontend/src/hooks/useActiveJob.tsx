@@ -51,7 +51,16 @@ export function mergePhases(jobs: Job[]): JobPhases {
   let global: JobPhases['global'] = null
   let allScoped = jobs.length > 0
   let scope: Set<string> | undefined
+  // Rein additiv, ohne `allScoped`-Vorbehalt: `scope` ist eine ZUSAGE ueber den ganzen Lauf
+  // (faellt sie bei einem Job weg, taugt die vereinigte Menge nicht mehr als Filter),
+  // `gesehen` dagegen ist eine BEOBACHTUNG je Datei - die bleibt wahr, egal was die anderen
+  // Jobs melden.
+  let gesehen: Set<string> | undefined
   for (const j of jobs) {
+    if (j.phases.gesehen) {
+      gesehen = gesehen ?? new Set()
+      for (const b of j.phases.gesehen) gesehen.add(b)
+    }
     if (j.phases.scope) {
       scope = scope ?? new Set()
       for (const b of j.phases.scope) {
@@ -91,6 +100,7 @@ export function mergePhases(jobs: Job[]): JobPhases {
     global: Object.keys(active).length ? null : global,
     globalPerBase,
     scope: allScoped ? scope : undefined,
+    gesehen,
     active,
     perBase,
   }

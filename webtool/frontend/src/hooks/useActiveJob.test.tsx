@@ -291,3 +291,27 @@ describe('mergePhases', () => {
     await waitFor(() => expect(screen.getByTestId('scope').textContent).toBe('LogFileA,LogFileB'))
   })
 })
+
+describe('mergePhases - gesehen (#431)', () => {
+  const job = (id: string, kind: string, phases: JobPhases): Job =>
+    ({ id, kind, project: 'P', status: 'running', phases })
+
+  it('vereinigt `gesehen` ueber mehrere Jobs', () => {
+    const m = mergePhases([
+      job('j1', 'transcribe', { global: null, active: {}, perBase: {}, scope: new Set(['A']), gesehen: new Set(['B']) }),
+      job('j2', 'correct', { global: null, active: {}, perBase: {}, scope: new Set(['A']), gesehen: new Set(['C']) }),
+    ])
+    expect(m.gesehen).toEqual(new Set(['B', 'C']))
+  })
+
+  // Anders als `scope`: das ist eine ZUSAGE ueber den ganzen Lauf und faellt weg, sobald EIN
+  // Job sie nicht gibt (`allScoped`). `gesehen` ist eine Beobachtung je Datei - sie bleibt
+  // wahr, auch wenn der andere Job nichts dazu sagt.
+  it('behaelt `gesehen` auch wenn ein anderer Job keines mitbringt', () => {
+    const m = mergePhases([
+      job('j1', 'transcribe', { global: null, active: {}, perBase: {}, gesehen: new Set(['B']) }),
+      job('j2', 'correct', { global: null, active: {}, perBase: {} }),
+    ])
+    expect(m.gesehen).toEqual(new Set(['B']))
+  })
+})

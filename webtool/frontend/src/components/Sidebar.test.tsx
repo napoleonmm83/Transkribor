@@ -231,3 +231,25 @@ describe('Sidebar', () => {
     expect(b.queryByRole('link', { name: /Projekt unterstützen/ })).not.toBeNull()
   })
 })
+
+describe('Sidebar - Zulassung fuer eine mitten im Lauf dazugekommene Aufnahme (#431)', () => {
+  // ZWEITER Ort desselben Filters. Der Parser laesst das Urteil seit dem Fix durch; ohne die
+  // gleiche Erweiterung hier warf `inScope` es sofort wieder weg - am echten Lauf gemessen
+  // aenderte der Parser-Fix allein an der Anzeige NICHTS.
+  const phasen = (gesehen?: string[]) => ({
+    global: null, active: {}, perBase: { b: 'failed' as const },
+    scope: new Set(['a']), ...(gesehen ? { gesehen: new Set(gesehen) } : {}),
+  })
+
+  it('zeigt den Zustand einer Aufnahme, die nur ueber `gesehen` zugelassen ist', () => {
+    zeigen({ offen: 'Alpha', dateien: DATEIEN, jobRunning: true, phases: phasen(['b']) })
+    expect(screen.getByText('Fehler')).toBeInTheDocument()
+  })
+
+  // Gegenrichtung: ohne die Zulassung bleibt es beim alten Verhalten. Ohne diesen Test waere
+  // der obige auch dann gruen, wenn `inScope` gar nicht mehr filterte.
+  it('zeigt ihn NICHT, solange sie weder im Bereich steht noch angefasst wurde', () => {
+    zeigen({ offen: 'Alpha', dateien: DATEIEN, jobRunning: true, phases: phasen() })
+    expect(screen.queryByText('Fehler')).not.toBeInTheDocument()
+  })
+})

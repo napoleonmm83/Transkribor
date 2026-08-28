@@ -163,7 +163,14 @@ export function Sidebar({
                     <p className="px-2 py-1 text-sm text-muted-foreground">lädt…</p>
                   )}
                   {dateien.map(f => {
-                    const inScope = jobRunning ? (phases?.scope ? phases.scope.has(f.base) : true) : false
+                    // ZWEITER Ort desselben Filters (#431). Der Parser laesst das Urteil einer
+                    // mitten im Lauf hochgeladenen Aufnahme seit dem Fix durch - ohne dieselbe
+                    // Erweiterung HIER warf die Zeile es gleich wieder weg, und die Aufnahme
+                    // blieb ohne Phase und ohne Zustand. Am echten Lauf gemessen: der Fix im
+                    // Parser allein aendert an der Anzeige nichts.
+                    const inScope = jobRunning
+                      ? (phases?.scope ? (phases.scope.has(f.base) || (phases.gesehen?.has(f.base) ?? false)) : true)
+                      : false
                     return (
                       <FileRow key={f.base} project={p.name} file={f}
                         active={active?.project === p.name && active?.base === f.base}

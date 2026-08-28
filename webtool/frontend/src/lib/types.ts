@@ -232,6 +232,11 @@ export type JobPhases = {
   /** Basisname -> globale Phase (z.B. glossary, prep), in der diese Datei gerade wartet. */
   globalPerBase?: Record<string, GlobalPhase>;
   scope?: Set<string>;
+  /** Aufnahmen, die der Lauf nachweislich angefasst hat (aus `[active]`). Zweite Zulassung
+   *  neben `scope` (#431): eine WAEHREND des Laufs hochgeladene Aufnahme steht nie im Bereich,
+   *  der ist gedruckt, bevor die Schleife das erste Mal nach Audio sieht. Undefined, solange
+   *  keine solche Zeile kam - dann gilt allein `scope`, wie vorher. */
+  gesehen?: Set<string>;
   /** Basisname -> was daran gerade laeuft. Mehrere Eintraege, weil correct parallel arbeitet. */
   active: Record<string, FileWork>;
   perBase: Record<string, FileState>;
