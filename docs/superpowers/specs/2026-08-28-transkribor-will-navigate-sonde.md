@@ -133,10 +133,20 @@ einzige Fall, den es allein abdeckt, bekommt den Preload gar nicht.
 ```
 
 **`will-navigate` ist hauptrahmen-only, `will-redirect` nicht.** Ohne
-`if (e.isMainFrame === false) return` erreichte ein umleitendes iframe den Wächter und löste
-`shell.openExternal` aus — ohne Skript, ohne Nutzergeste. Das ist eine Fähigkeit, die es vor
-dem Fix nicht gab, und sie widersprach der eigenen Begründung für das Weglassen von
-`will-frame-navigate`.
+`if (e.isMainFrame === false) return` erreichte ein umleitendes iframe den Wächter — und griffe
+er dort ein, bekäme der Rahmen ein `preventDefault()` samt Abweisungszeile, wo er vor #434
+dem Redirect einfach in sich selbst folgte. Eine stille Verhaltensänderung an einem Rahmen,
+der den Preload gar nicht bekommt.
+
+> **Korrektur (dritte Reviewrunde).** Hier stand „…und löste `shell.openExternal` aus — ohne
+> Skript, ohne Nutzergeste", und derselbe Satz steht im Commit-Text von `ae02400` und stand in
+> `main.js`. Er ist **falsch, seit es die Trennung im nächsten Absatz gibt**: `will-redirect`
+> läuft als `navigationPruefen(false)`, damit bleibt `ziel` null und die Umleitung wird
+> abgewiesen. Der Satz galt der ersten Fassung, in der beide Ereignisse mit `externesZiel`
+> bewertet wurden — die Trennung hat ihn überholt, und er blieb an drei Stellen stehen. Die
+> Rahmen-Wache ist **Tiefenverteidigung**, kein Riegel vor dem Systembrowser. Dass sie
+> trotzdem bleibt, begründet der Absatz darüber; der Commit-Text von `ae02400` lässt sich
+> nicht mehr ändern (das wäre ein Force-Push), diese Zeile ist seine Richtigstellung.
 
 Aus derselben Zeile folgt die zweite Trennung: bei einer **Umleitung** wählt ein SERVER das
 Ziel, nicht der Nutzer. Deshalb öffnet nur `will-navigate` den Browser (`extern`), während
@@ -202,8 +212,19 @@ Nicht in der Sonde, sondern direkt gegen `eigeneHerkunft` gemessen
 
 `node --test electron/*.test.js` zählt **alle** Tests aller `electron/*.test.js`-Dateien, nicht
 nur die neuen. Die im PR genannten Zahlen sind die Zeile `# tests` dieses Laufs:
-**168 vor** dem Fix (Stand `094de8d`), **183 danach**. Die Differenz von 15 sind 11 Tests aus
-der ersten Fassung plus 4 aus den beiden Reviewrunden.
+**168 vor** dem Fix (Stand `094de8d`), **184 danach**. Die Differenz von **16** verteilt sich
+auf die beiden geänderten Testdateien — gezählt am Branch, nicht aus dem Kopf
+(`grep -c '^test('` gegen `git show origin/master:…`):
+
+| Datei | master | Branch | neu |
+|---|---|---|---|
+| `electron/main.test.js` | 37 | 47 | **+10** |
+| `electron/fenster.test.js` | 7 | 13 | **+6** |
+
+Hier stand bis zur dritten Reviewrunde „183, Differenz 15 = 11 + 4". Das war die Zahl der
+zweiten Fassung, die mit jeder Reviewrunde weiterwuchs — der `e.url`-Test aus der letzten
+kam nicht mehr an. **Eine Testzahl in einer Spec ist ein Messwert mit Verfallsdatum:** wer
+sie schreibt, fährt den Lauf, und wer eine Reviewrunde dranhängt, fährt ihn erneut.
 
 ## Mutationsprobe
 

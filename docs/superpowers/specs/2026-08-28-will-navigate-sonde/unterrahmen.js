@@ -41,10 +41,16 @@ app.whenReady().then(async () => {
     })
   }
 
-  // Der echte Waechter aus main.js, wortgleich — misst, ob der Rahmen ihn noch erreicht.
-  // `e.url ?? urlVeraltet` wie dort: das Details-Ereignis ist der zugesagte Weg, das
-  // positionale Argument ist `@deprecated` und nur der Rueckfall. Weicht die Sonde hier ab,
-  // misst sie einen anderen Waechter als den ausgelieferten.
+  // Nachbau des Waechters aus main.js — **szenariospezifisch, nicht wortgleich**, und der
+  // Unterschied gehoert benannt: die Herkunftsliste traegt hier NUR `A + '/'`, waehrend
+  // `main.js` und `navigation.js` zusaetzlich `pathToFileURL(SETUP_HTML).href` fuehren. Diese
+  // Sonde misst die RAHMENfrage (erreicht ein Unterrahmen den Waechter?), nicht die
+  // Datei-Herkunft; setup.html kommt in ihrem Szenario nicht vor, und eine zweite Herkunft
+  // ohne Fall waere Beiwerk, das man fuer gemessen haelt.
+  //
+  // Die ENTSCHEIDUNGEN sind dieselben: `e.url ?? urlVeraltet` (das Details-Ereignis ist der
+  // zugesagte Weg, das positionale Argument `@deprecated` und nur der Rueckfall), Ausstieg
+  // bei `isMainFrame === false`, und `externesZiel` nur bei `will-navigate`.
   const { eigeneHerkunft, externesZiel } = require(require('node:path').join(__dirname, '..', '..', '..', '..', 'electron', 'fenster.js'))
   const pruefen = extern => (e, urlVeraltet) => {
     const url = e.url ?? urlVeraltet
@@ -68,7 +74,14 @@ app.whenReady().then(async () => {
   await win.webContents.executeJavaScript('location.href = ' + JSON.stringify(A + '/topred'), true)
   await warte(1200)
 
+  // Der Satz „…und damit shell.openExternal" stand hier bis zur dritten Reviewrunde und ist
+  // seit der Umleitungs-Trennung FALSCH: `pruefen(false)` setzt `ziel = null`, ein
+  // Unterrahmen-Redirect wuerde also abgewiesen, nicht in den Browser geschickt. Er galt der
+  // ERSTEN Fassung, in der beide Ereignisse mit `externesZiel` bewertet wurden.
   console.log('\nFazit: `will-redirect` feuert mit isMainFrame=false, ein UNTERRAHMEN erreicht also')
-  console.log('den Waechter — ohne die Wache dagegen auch shell.openExternal.')
+  console.log('den Waechter. Ohne die Wache dagegen wuerde er ABGEWIESEN (nicht in den Browser')
+  console.log('geschickt — `will-redirect` laeuft als `pruefen(false)`, ziel bleibt null): der')
+  console.log('Rahmen folgte dem Redirect dann nicht mehr in sich selbst, was er vor #434 tat.')
+  console.log('Die Wache ist damit heute Tiefenverteidigung, kein Riegel vor dem Systembrowser.')
   app.quit()
 })
