@@ -1,10 +1,10 @@
-=== 2026-08-28T12:21:58Z · Electron v43.4.1 · Windows 11
+=== 2026-08-28T12:47:27Z · Electron v43.4.1 · Windows 11
 
 $ ./node_modules/.bin/electron docs/superpowers/specs/2026-08-28-will-navigate-sonde/navigation.js
 
 
-eigene Herkunft {EIGEN} = http://127.0.0.1:61983
-fremde Herkunft {FREMD} = http://127.0.0.1:61982
+eigene Herkunft {EIGEN} = http://127.0.0.1:49680
+fremde Herkunft {FREMD} = http://127.0.0.1:49679
 Waechter: AUS (Ist-Zustand)
 
 ── (c) loadFile(setup.html) aus dem Hauptprozess
@@ -72,8 +72,8 @@ Leseform: `e.url` == positionales Argument in 20 von 20 Ereignissen
 $ ./node_modules/.bin/electron docs/superpowers/specs/2026-08-28-will-navigate-sonde/navigation.js --mit-waechter
 
 
-eigene Herkunft {EIGEN} = http://127.0.0.1:65503
-fremde Herkunft {FREMD} = http://127.0.0.1:65502
+eigene Herkunft {EIGEN} = http://127.0.0.1:49278
+fremde Herkunft {FREMD} = http://127.0.0.1:49277
 Waechter: AN (nach dem Fix)
 
 ── (c) loadFile(setup.html) aus dem Hauptprozess
@@ -153,4 +153,7 @@ $ ./node_modules/.bin/electron docs/superpowers/specs/2026-08-28-will-navigate-s
   >>> WAECHTER greift: abgewiesen + protokolliert — {FREMD}/aus-dem-hauptrahmen
 
 Fazit: `will-redirect` feuert mit isMainFrame=false, ein UNTERRAHMEN erreicht also
-den Waechter — ohne die Wache dagegen auch shell.openExternal.
+den Waechter. Ohne die Wache dagegen wuerde er ABGEWIESEN (nicht in den Browser
+geschickt — `will-redirect` laeuft als `pruefen(false)`, ziel bleibt null): der
+Rahmen folgte dem Redirect dann nicht mehr in sich selbst, was er vor #434 tat.
+Die Wache ist damit heute Tiefenverteidigung, kein Riegel vor dem Systembrowser.

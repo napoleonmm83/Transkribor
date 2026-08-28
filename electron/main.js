@@ -164,11 +164,18 @@ function fenster() {
     const url = e.url ?? urlVeraltet
     // **Nur der Hauptrahmen.** `will-navigate` feuert ohnehin nur dort, `will-redirect` aber
     // AUCH fuer Unterrahmen (gemessen: `isMainFrame=false` beim Redirect eines iframes). Ohne
-    // diese Zeile taete der Waechter genau das, was die Begruendung unten fuer
-    // `will-frame-navigate` ausschliesst — und zwar das Aggressivste, was er kann: ein
-    // umleitendes iframe oeffnete den SYSTEM-Browser, ohne Skript und ohne Nutzergeste. Vor
-    // #434 folgte der Rahmen dem Redirect einfach in sich selbst. Eine Faehigkeit, die der Fix
-    // NEU aufmacht, ist kein Nebenertrag, sondern sein Preis — und dieser ist es nicht wert.
+    // diese Zeile griffe der Waechter in eine Navigation ein, die ihn nichts angeht: der
+    // Unterrahmen bekaeme ein `preventDefault()` und eine Abweisungszeile, waehrend er vor
+    // #434 dem Redirect einfach in sich selbst folgte — eine stille Verhaltensaenderung an
+    // einem Rahmen, der den Preload gar nicht bekommt (`window.transkribor` dort `undefined`).
+    //
+    // **Der SYSTEM-Browser ginge dabei NICHT auf**, und hier stand bis zur dritten
+    // Reviewrunde das Gegenteil: `will-redirect` laeuft als `navigationPruefen(false)`, damit
+    // ist `ziel` null und die Umleitung wird abgewiesen (siehe die `extern`-Begruendung
+    // unten). Der Satz galt der ERSTEN Fassung, in der beide Ereignisse mit `externesZiel`
+    // bewertet wurden; die Trennung sechs Zeilen tiefer hat ihn ueberholt, und er blieb
+    // stehen — zwei Begruendungen in derselben Funktion, die einander widersprachen. Die
+    // Wache ist damit Tiefenverteidigung, kein Riegel vor dem Systembrowser.
     // `=== false`, nicht `!`: fehlt die Angabe, MUSS der Waechter greifen. Ein unbekannter
     // Wert darf eine Wache nie stillschweigend abschalten (dieselbe Richtung wie bei #266).
     if (e.isMainFrame === false) return
