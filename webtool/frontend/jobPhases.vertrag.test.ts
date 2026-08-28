@@ -320,8 +320,19 @@ const INVENTAR: Record<string, Eintrag> = {
 
   // ── gelesen, aber von einem ANDEREN Verbraucher ───────────────────────────────────────
   '[active] {}': {
-    art: 'gelesen_anderswo', beispiel: '[active] A',
-    notiz: 'jobs.py (Backend): welche Datei gerade geschrieben wird',
+    art: 'gelesen', kind: 'transcribe', beispiel: '[active] A', basis: 'A',
+    // Die Wirkung entsteht NUR IM VERBUND, deshalb `vor`/`nach`: die Zeile allein aendert den
+    // geparsten Zustand nicht - sie laesst das FOLGENDE Endurteil durch, das sonst an `scope`
+    // haengenbliebe. `vor` setzt einen Bereich, in dem `A` NICHT steht; ohne `[active] A`
+    // faellt `fertig A` damit weg, mit ihr nicht. Genau das misst der Wirkungstest.
+    vor: ['[scope] B'],
+    nach: ['[Demo] fertig A: 1s, 2 Segmente, 1.0x'],
+    // ZWEI Verbraucher, seit #431. jobs.py fuehrt daraus `active_bases` (welche Datei gerade
+    // geschrieben wird, Grundlage der 409-Sperre); jobPhases.ts fuehrt daraus `gesehen` - die
+    // Zulassung fuer eine Aufnahme, die erst WAEHREND des Laufs dazukam und deshalb nie im
+    // `[scope]` steht. Die Umklassifizierung ist Pflicht, nicht Kosmetik: als
+    // 'gelesen_anderswo' behauptete der Eintrag, die Zeile sei fuer den Parser wirkungslos.
+    notiz: 'jobs.py (welche Datei gerade geschrieben wird) UND jobPhases.ts (Zulassung, #431)',
   },
   // Die Beispielzeile traegt `\\t` als ZWEI Zeichen, nicht als Tabulator — die geerntete
   // Signatur tut es auch (der Ernter behaelt Escapes roh), und der dritte Test bindet das

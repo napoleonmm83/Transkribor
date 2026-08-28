@@ -37,9 +37,18 @@ export function parseJobPhases(kind: string, lines: string[]): JobPhases {
   let cursor: string | null = null            // transcribe: die eine laufende Datei
   let bilanz: JobPhases['bilanz']
   let scope: Set<string> | undefined
+  // Aufnahmen, die der Lauf nachweislich angefasst hat (aus `[active]`, siehe unten).
+  // Waechst nur, wird nie geleert: der Lauf gibt eine Aufnahme per `[done]` wieder frei, aber
+  // "gehoerte zum Lauf" bleibt danach wahr - und genau das ist hier die Frage.
+  const gesehen = new Set<string>()
 
   const terminal = (base: string, state: FileState) => {
-    if (scope && !scope.has(base)) return
+    // `gesehen` ist die zweite Zulassung neben `scope` (#431): eine Aufnahme, die WAEHREND des
+    // Laufs hochgeladen wird, steht nie im Bereich - der ist gedruckt, bevor die Schleife in
+    // `transcribe_project` das erste Mal `find_audio` ruft. Verarbeitet wurde sie vollstaendig;
+    // ohne diese Bedingung fiel JEDES ihrer Urteile weg: kein perBase-Eintrag, `active` nie
+    // geraeumt, Spinner bis Jobende, in der Bilanz nicht vorhanden.
+    if (scope && !scope.has(base) && !gesehen.has(base)) return
     // Ein SCHWAECHERES Urteil ueberschreibt kein staerkeres — dieselbe Rangfolge, die
     // `mergePhases` zwischen Jobs anwendet (#377). Innerhalb eines Jobs war das bis #405
     // gegenstandslos: jede Aufnahme bekam genau ein Terminalurteil. Der gestaffelte Lauf
@@ -105,6 +114,39 @@ export function parseJobPhases(kind: string, lines: string[]): JobPhases {
       const roh = l.slice(7)
       const payload = roh.startsWith(' ') ? roh.slice(1) : roh
       scope = new Set(payload ? payload.split('\t').filter(Boolean) : [])
+      continue
+    }
+
+    // `[active] {base}` - die zweite Quelle fuer "diese Aufnahme gehoert zum Lauf", und seit
+    // #431 die einzige fuer eine, die erst waehrend des Laufs dazukam.
+    //
+    // Eine MENGE, die nur waechst: kein Zustand ueber Zeilen hinweg, keine Wette auf ihre
+    // Reihenfolge. Der Kommentar am `Diarisiere`-Zweig lehnt dieselbe Quelle ab, weil "ihre
+    // Bedeutung ueber den Lauf wechselt" - das trifft dort zu, wo der WERT der Zeile gebraucht
+    // wird (welche Phase). Hier zaehlt nur ihre Existenz, und die wechselt nicht.
+    //
+    // GEMESSEN, weil derselbe Kommentar es verlangt ("Ungemessen; wer sie doch nehmen will,
+    // misst zuerst"): DREI Endurteile haben KEIN vorangehendes `[active]` fuer ihren Basisnamen
+    // - `skip (Audio nicht mehr vorhanden)` in `transcribe_project` (steht VOR dem `[active]`)
+    // und zweimal `SKIP (human_edited=true)` in `correct.py` (beide kehren vor ihrem `[active]`
+    // zurueck). Fuer Aufnahmen aus dem `[scope]` ist das folgenlos, die passieren ueber
+    // `scope.has`. Fuer spaeter dazugekommene bleibt der erste Fall ungefixt: unveraendert zu
+    // vorher, nicht schlechter - als getragene Grenze benannt statt stillschweigend.
+    //
+    // NICHT getrimmt, anders als `jobs.buche_aktive` es tut: `safe_name` laesst Randleerzeichen
+    // durch, und die Endurteil-Regexe fangen den Namen roh ein. Ein getrimmtes `gesehen` traefe
+    // den ungetrimmten Schluessel nicht - dieselbe Kante, an der der Zeilenschnitt bei `[scope]`
+    // eine Zeile hoeher schon einmal haengengeblieben ist.
+    //
+    // Was das NEU erlaubt: die Oberflaeche liest `[active]` bis hierher GAR NICHT (im INVENTAR
+    // stand es als `gelesen_anderswo`). Zwei praeparierte Zeilen - `[active] Foo` plus ein
+    // Endurteil fuer `Foo` - erzeugen jetzt eine Geisterzeile fuer eine Datei, die es nicht
+    // gibt; kein Datenverlust, kein Dateizugriff. Die verworfene Alternative (spaetere
+    // `[scope]`-Zeilen zulassen) haette mit EINER Zeile die ECHTE Dateiliste ersetzt. Strikt
+    // kleiner, aber vorhanden - deshalb steht es hier.
+    if (l.startsWith('[active] ')) {
+      const b = l.slice(9)
+      if (b) gesehen.add(b)
       continue
     }
 
