@@ -24,7 +24,26 @@ new BrowserWindow({ show: false, webPreferences: { preload: PRELOAD, contextIsol
 **Sonde 1** (`navigation.js`) fährt je Fall: eigene Seite laden → Ereignisse
 zurücksetzen → Fall im Renderer auslösen (`webContents.executeJavaScript`) → 900 ms warten →
 `location.href` und `typeof window.transkribor` abfragen. Mit `--mit-waechter` hängt sie den
-Wächter aus `fenster.js` davor und misst dieselben Fälle erneut.
+Wächter davor und misst dieselben Fälle erneut.
+
+**Der Sonden-Wächter ist ein SPIEGEL von `main.js navigationPruefen`, kein eigener Entwurf —
+und zwar in der ENTSCHEIDUNG zeilengleich, in der HANDLUNG bewusst nicht.** Importiert wird er
+nicht: `main.js` hat kein `module.exports` (nachgemessen) und startet beim `require` die App.
+Der Nachbau liest deshalb `e.url ?? urlVeraltet`, steigt bei `isMainFrame === false` aus, prüft
+dieselbe Herkunftsliste, ruft `preventDefault` und fragt `externesZiel` nur bei
+`will-navigate` — **nachgemessen: diese sechs Zeilen sind identisch**, es unterscheiden sich
+nur der Funktionsname und die zweite eigene Herkunft (`backend.url()` gibt es hier nicht).
+
+Danach trennen sie sich, und das ist Absicht: `main.js` öffnet den Browser oder protokolliert,
+die Sonde ruft `shell.openExternal` **nie** und schreibt stattdessen mit, welcher Zweig
+gegriffen hätte — so steht es in ihrem Modulkopf. Wer den Spiegel anfasst, misst die sechs
+Entscheidungszeilen nach; weicht eine ab, misst die Sonde einen anderen Wächter als den
+ausgelieferten. Genau das war der Bot-Befund am PR.
+
+**Die Leseform ist gemessen, nicht behauptet.** Jedes Ereignis vergleicht `e.url` mit dem
+`@deprecated` positionalen Argument; eine Abweichung erschiene inline in derselben Zeile, und
+unter der BILANZ steht die Zahl. Im Lauf unten: **20 von 20 Ereignissen gleich**, in beiden
+Durchgängen.
 
 **Sonde 2** (`unterrahmen.js`) beantwortet nur die Rahmenfrage: eine Seite mit einem
 `<iframe>`, ein Pfad `/rahmenred`, der mit 302 auf `{FREMD}` umleitet, und derselbe Redirect
@@ -44,7 +63,7 @@ node docs/superpowers/specs/2026-08-28-will-navigate-sonde/mutationsprobe.js
 | `2026-08-28-will-navigate-sonde/navigation.js` | Sonde 1, alle Wege; `--mit-waechter` hängt den Fix davor |
 | `2026-08-28-will-navigate-sonde/unterrahmen.js` | Sonde 2, iframe vs. Hauptrahmen, druckt `isMainFrame` |
 | `2026-08-28-will-navigate-sonde/mutationsprobe.js` | die Mutationsserie (aus dem Repo-Stamm starten) |
-| `2026-08-28-will-navigate-sonde/rohausgabe.txt` | die **ungekürzten** Ausgaben aller drei Läufe |
+| `2026-08-28-will-navigate-sonde/rohausgabe.txt` | die **ungekürzten** Ausgaben aller drei Läufe — erzeugt, nie von Hand redigiert; die Kopfzeile trägt Zeitstempel und Electron-Fassung des Laufs (aktuell `2026-08-28T12:21:58Z · Electron v43.4.1`) |
 
 Die Pfade darin sind repo-relativ (`__dirname`), nicht auf diesen Rechner verdrahtet; die
 Rohausgabe stammt aus einem Lauf **von genau diesen Dateien**. Die Zitate unten sind Auszüge
@@ -189,7 +208,12 @@ der ersten Fassung plus 4 aus den beiden Reviewrunden.
 ## Mutationsprobe
 
 `2026-08-28-will-navigate-sonde/mutationsprobe.js` — je Mutation anwenden, Suite fahren, **Namen** der roten Tests
-melden, zurückspielen. **18 Mutationen, 0 unbewacht** (Stand `rohausgabe.txt`; die Zahl waechst mit jeder Reviewrunde — massgeblich ist der Lauf, nicht diese Zeile). Zwei Fallen dabei, die allgemein gelten:
+melden, zurückspielen. **18 Mutationen, 0 unbewacht** — neu gefahren am 2026-08-28 gegen den
+Stand dieses Branches, nicht aus einer früheren Runde übernommen (`grep -cE '^── '` ⇒ 18,
+`grep -c '   ROT:'` ⇒ 61 rote Testnamen, keine Mutation ohne roten Test). Die Zahl waechst mit
+jeder Reviewrunde — massgeblich ist der Lauf, nicht diese Zeile. Sie faehrt gegen den
+PRODUKTIONScode (`electron/main.js`, `electron/fenster.js`), nicht gegen die Sonden; eine
+Aenderung an den Sonden allein bewegt sie also nicht. Zwei Fallen dabei, die allgemein gelten:
 
 - **Die Dateien haben CRLF.** Ein Anker mit `\n` findet nichts, und ohne die
   Anker-Eindeutigkeitsprüfung im Läufer wäre daraus ein grüner Lauf geworden, der „unbewacht"
