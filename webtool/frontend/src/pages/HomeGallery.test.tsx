@@ -203,4 +203,52 @@ describe('HomeGallery', () => {
     expect(screen.getAllByText('Laeuft')).toHaveLength(1)
     expect(screen.getByText(/Läuft gerade · 1/)).toBeInTheDocument()
   })
+
+  // ── #428: ohne Zeigegeraet gibt es kein Hover ────────────────────────────────
+  // ZWEI Tests statt eines, weil Karte und Zeile auf demselben Schirm stehen und sich
+  // gleich verhalten muessen: eine Regel, die nur an einer der beiden Flaechen haengt,
+  // faellt niemandem auf — man sieht immer nur eine davon.
+  //
+  // Geprueft wird die KLASSE, nicht die Sichtbarkeit: jsdom rechnet keine Media Queries,
+  // `toBeVisible()` waere blind fuer genau die Regel, um die es geht (dieselbe Falle wie
+  // beim md:hidden-Test oben). Ob die Klasse ueberhaupt ins CSS kompiliert wird, kann
+  // dieser Test ebenfalls nicht sehen — das beantwortet der Build-Grep, nicht vitest.
+  const zeigerlosSichtbar = (start: HTMLElement) => {
+    // Aufsteigend gesucht wird das Element, das die Flaeche VERSTECKT (`opacity-0`) — und
+    // die Override-Klasse muss GENAU DORT sitzen. Die erste Fassung liess sie an jedem
+    // Vorfahren gelten und deckte damit nur ihre Anwesenheit, nicht ihren Ort: im Review
+    // gegengemessen blieb sie gruen, als die Klasse testweise aufs <li> wanderte, wo sie
+    // wirkungslos ist (15 passed im kaputten Zustand). So deckt der Waechter BEIDE
+    // Mutationen — Klasse entfernt UND Klasse verschoben.
+    //
+    // Kein CSS-Selektor: die Doppelpunkte in `any-pointer-coarse:opacity-100` muessten
+    // dort maskiert werden, und ein falsch maskierter Selektor findet schlicht nichts —
+    // ein Test, der aus dem falschen Grund rot wird.
+    let el: HTMLElement | null = start
+    while (el && !el.classList.contains('opacity-0')) el = el.parentElement
+    return !!el && el.classList.contains('any-pointer-coarse:opacity-100')
+  }
+
+  it('haelt den ⋯-Knopf der KARTE ohne Zeigegeraet sichtbar (#428)', async () => {
+    // Ohne Hover ist der Knopf hier unsichtbar. Nicht unerreichbar — Umbenennen und
+    // Loeschen gibt es auch in der geoeffneten Projektseite und ab `md` in der
+    // Seitenleiste; der Fix stellt ihn dort her, wo man ihn sucht.
+    vi.mocked(api.listProjects).mockResolvedValue(ruhig(3))
+    zeigen()
+    await screen.findByText('P1')
+    // Erst belegen, dass wir wirklich in der Kartenansicht sind: der Fortschrittsbalken
+    // ist das Erkennungsmerkmal (die dichte Zeile hat keinen). Ohne diese Zeile koennte
+    // der Test die Zeilenliste messen und trotzdem gruen sein.
+    expect(screen.getAllByRole('progressbar')).toHaveLength(3)
+    expect(zeigerlosSichtbar(screen.getByLabelText('Aktionen für „P1“'))).toBe(true)
+  })
+
+  it('haelt den ⋯-Knopf der ZEILE ohne Zeigegeraet sichtbar (#428)', async () => {
+    // Ab neun Projekten kippt die Uebersicht auf die dichte Zeilenliste (#70).
+    vi.mocked(api.listProjects).mockResolvedValue(ruhig(9))
+    zeigen()
+    await screen.findByText('P1')
+    expect(screen.queryAllByRole('progressbar')).toHaveLength(0)
+    expect(zeigerlosSichtbar(screen.getByLabelText('Aktionen für „P1“'))).toBe(true)
+  })
 })

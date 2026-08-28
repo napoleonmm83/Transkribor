@@ -52,9 +52,12 @@ export function SpeakerTurn({ turn, activeId, onPlaySeg, onPlayTurn, updateSegme
       <div>
         {turn.segments.map(s => (
           <div key={s.id} className="group">
+            {/* any-pointer-coarse: ohne Zeiger ist hier nicht ein Aktionsmenue unerreichbar,
+                sondern die SPRECHERWAHL selbst (#428). Im Issue-Text fehlte diese Fundstelle;
+                sie kam beim Nachmessen dazu. Begruendung der Variante: HomeGallery.tsx. */}
             <SpeakerCombobox value={s.speaker} options={speakerOptions}
               onChange={v => updateSegment(s.id, { speaker: v })}
-              className="opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100" />
+              className="opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 any-pointer-coarse:opacity-100 data-[state=open]:opacity-100" />
             <SegmentView seg={s} active={activeId === s.id}
               dimmen={sucheAktiv && !trefferIds.has(s.id)} aktiverTreffer={suchAktivId === s.id}
               onPlay={() => onPlaySeg(s)} updateSegment={updateSegment} />

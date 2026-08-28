@@ -30,3 +30,24 @@ describe('SpeakerTurn Suche', () => {
     expect(document.querySelector('[data-seg-id="1"]')).not.toHaveClass('opacity-40')
   })
 })
+
+describe('SpeakerTurn Sprecherwahl', () => {
+  it('bleibt ohne Zeigegeraet sichtbar (#428)', () => {
+    // Hier ist ohne Zeiger nicht ein Aktionsmenue unerreichbar, sondern die SPRECHERWAHL
+    // selbst — die Kernfunktion des Editors. Im Issue-Text fehlte diese Fundstelle; sie
+    // kam beim Nachmessen dazu.
+    //
+    // Geprueft wird die KLASSE, nicht die Sichtbarkeit: jsdom rechnet keine Media Queries,
+    // `toBeVisible()` waere blind fuer genau die Regel, um die es geht.
+    //
+    // Angefasst wird ueber `data-seg-id` statt ueber den Text: der Sprechername 'A' steht
+    // auch in der Kopfzeile des Redebeitrags, `getByText('A')` waere mehrdeutig. Die
+    // Sprecherwahl ist das Geschwister VOR der Segmentzeile.
+    const turn: Turn = { key: 'k', speaker: 'A', segments: [mkSeg(1, 'Aras')] }
+    render(<TooltipProvider><SpeakerTurn turn={turn} activeId={null}
+      onPlaySeg={vi.fn()} onPlayTurn={vi.fn()} updateSegment={vi.fn()} renameSpeaker={vi.fn()} speakerOptions={['A']} /></TooltipProvider>)
+    const wahl = document.querySelector('[data-seg-id="1"]')?.previousElementSibling
+    expect(wahl).not.toBeNull()
+    expect(wahl?.classList.contains('any-pointer-coarse:opacity-100')).toBe(true)
+  })
+})
