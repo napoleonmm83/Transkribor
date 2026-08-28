@@ -798,12 +798,24 @@ Gib ausser der Datei nichts aus."""
 
 
 def _glossary(project: str, context: str) -> str:
-    """Ein claude-Aufruf über alle .raw.txt -> _glossar.json. Gibt das Glossar als
-    JSON-Text zurück (leer, wenn es fehlschlägt -> Korrektur läuft ohne Glossar weiter)."""
+    """Ein claude-Aufruf über alle .raw.txt -> _glossar.json. Gibt das Glossar als JSON-Text
+    zurück; leer heisst „die Korrektur läuft ohne gemeinsames Glossar weiter".
+
+    „Leer" deckt den ANBIETER-Fehler (`_ask_llm` fängt `llm.LLMError`) und ein unlesbares
+    Ergebnis (`_load` -> `OSError`/`ValueError`). Es deckt NICHT jeden Fehlschlag: ein
+    OS-Fehler aus dem Schreibweg (`paths.atomic_write` in `llm.complete_to_file`) geht
+    hindurch und bricht den GANZEN Lauf ab, keine einzige Datei wird korrigiert.
+    Vorbestehend — hier benannt, weil der Satz vorher das Gegenteil versprach und das
+    `finally` unten genau von diesem Weg lebt (ein Test schreibt ihn fest). Ob ein OS-Fehler
+    den Lauf abbrechen SOLL, statt nur das Glossar zu überspringen, ist eine offene
+    Entscheidung (#455)."""
     tdir = paths.transkripte_dir(project)
     gpath = os.path.abspath(os.path.join(tdir, "_glossar.json"))
-    raw_files = [os.path.abspath(os.path.join(tdir, b + ".raw.txt")) for b in bases(project)]
-    raw_files = [f for f in raw_files if os.path.exists(f)]
+    # Basisname NEBEN dem Pfad fuehren, statt ihn unten aus dem Dateinamen zurueckzurechnen:
+    # ein Basisname darf Punkte tragen (`Timeline 1.2`), und die Marken brauchen ihn exakt.
+    gelesen = {b: os.path.abspath(os.path.join(tdir, b + ".raw.txt")) for b in bases(project)}
+    gelesen = {b: f for b, f in gelesen.items() if os.path.exists(f)}
+    raw_files = list(gelesen.values())
     if not raw_files:
         print("  keine .raw.txt gefunden — überspringe Glossar", flush=True)
         return ""
@@ -813,9 +825,68 @@ def _glossary(project: str, context: str) -> str:
         print("↷ nutze vorhandenes _glossar.json", flush=True)
     else:
         print("→ Glossar (gemeinsame Namen/Begriffe) …", flush=True)
-        # ziel="" + dialekt=False: das Glossar ist sprachneutral (Spec F2) -- sonst
-        # leaked der Default "lesbarem Standarddeutsch" in jedes Projekt, auch Englisches.
-        _ask_llm(_glossary_prompt(gpath, raw_files, context, ziel=""), raw_files, gpath)
+        # #450: Dieser Schritt liest die `.raw.txt` JEDER Aufnahme des Projekts — auf dem
+        # API-/Codex-Weg oeffnet `llm._with_files` sie im Job-Prozess selbst, auf dem
+        # `claude -p`-Weg der CLI-Enkel. Ohne Marken ist `active_bases` dabei LEER
+        # (`[scope]` fuellt `bases`, NICHT `active_bases`), und `DELETE …/files/{base}`
+        # prueft mit `active_only=True` — es kam also durch, mitten in den offenen Griff.
+        #
+        # GEMESSEN, A/B am echten Pfad — Basis `f92b9cf` gegen diesen Stand, laufender
+        # Server, Wegwerf-Projekt, `TRANSKRIBOR_PARALLEL=1`, Anbieter `custom` auf einem
+        # toten Loopback-Port, EINZELDATEI-Lauf auf `B_lauf`, `A_fremd.raw.txt` 150 MB (so
+        # lange dauert das Lesen messbar), `DELETE A_fremd` ausgeloest vom EREIGNIS
+        # „Glossar (gemeinsame" im Protokoll, nicht von einer Uhr:
+        #   `f92b9cf`: `DELETE` -> **500** (`PermissionError [WinError 32]` auf
+        #              `A_fremd.raw.txt` in `app._datei_weg`), und `A_fremd.json` ist
+        #              danach WEG, waehrend `.raw.txt`, `.segments.txt` und `.wav`
+        #              stehenbleiben — eine halb geloeschte Aufnahme.
+        #   dieser Stand: `DELETE` -> **409** mit Begruendung, alle vier Dateien noch da.
+        #   Negativkontrolle je Lauf (derselbe Loeschweg, kein Job) -> 200.
+        #
+        # Die Klammer deckt ALLE gelesenen Dateien ab, nicht nur die des Laufs (Entscheidung
+        # Marcus, 2026-08-28). Beim Projektlauf sind beide Mengen dieselben; beim
+        # Einzeldatei-Lauf ist es der Unterschied zwischen „behoben" und „behoben ausser
+        # dort" — gemessen wurde genau dieser Fall, `[scope]` trug nur `B_lauf`.
+        # GETRAGENER PREIS, benannt: fuer die Dauer dieses einen Aufrufs reicht die
+        # Loeschsperre weiter als die `[scope]`-Zeile des Laufs. Damit gilt erstmals
+        # `active_bases ⊆ bases` NICHT mehr — und `betrifft` fragt die Menge bei
+        # `active_only=False` ueberhaupt nicht, weshalb `rename_file` und
+        # `retranscribe_file` weiter durchkommen und an derselben offenen Datei zerbrechen
+        # wie das DELETE vorher (rename sogar mitten in der `os.rename`-Schleife: halb
+        # umbenannt). Das liest sich leicht als „Loeschen ist zu streng"; die Messung sagt
+        # das Gegenteil — die anderen beiden sind zu lasch. Die Begruendung „die Datei wird
+        # in diesem Moment wirklich gelesen" traegt fuer alle drei. Vorbestehend (beide
+        # pruefen nur `bases`, das aendert dieser Diff nicht), Weg steht in #451.
+        #
+        # WIE LANGE die Sperre steht, misst die A/B-Messung oben ausdruecklich NICHT: sie
+        # faehrt gegen einen toten Port und zeigt damit nur das Lesefenster. Der Deckel ist
+        # 900 s (`CLAUDE_TIMEOUT` bzw. `llm.TIMEOUT`) — auf dem Abo-Weg ein echter
+        # (`subprocess.run(timeout=)`), auf dem API-Weg ein SOCKET-Timeout je blockierender
+        # Operation, ein troepfelndes Gegenueber haelt die Klammer also laenger offen. Auf
+        # dem API-Weg ist der Griff zudem frueher zu als die Klammer (`llm._with_files`
+        # liest mit `with open(...)` und ist fertig, bevor `complete()` startet). BEWUSST
+        # nicht aufgeteilt: `_ask_llm` verbirgt gerade, WELCHER Weg laeuft, und auf dem
+        # Abo-Weg liest `claude` zu unbekannten Zeitpunkten waehrend des ganzen Aufrufs —
+        # zwei Klammer-Semantiken fuer einen Aufruf waeren teurer als die zu lange Sperre.
+        #
+        # NUR um diesen Zweig, nicht um die ganze Funktion: der Wiederverwendungs-Zweig
+        # darueber liest keine `.raw.txt`, nur `getmtime` (kein Griff) — dort zu sperren
+        # waere eine Sperre ohne Grund. Negativkontrolle im Test.
+        #
+        # Das `finally` ist UNBEDINGT — die #444-Lehre: wer eine Sperre setzt, uebernimmt
+        # damit die Pflicht, sie auf JEDEM Ausgang wieder zu loesen, auch dem, den eine
+        # Ausnahme nimmt. Hier ist das kein Vorrat: `_ask_llm` faengt nur `llm.LLMError`,
+        # `_run_claude` nur `FileNotFoundError` und `TimeoutExpired` — jeder andere
+        # `OSError` (auch der aus `paths.atomic_write`) geht glatt hindurch.
+        for b in gelesen:
+            print(f"[active] {b}", flush=True)
+        try:
+            # ziel="" + dialekt=False: das Glossar ist sprachneutral (Spec F2) -- sonst
+            # leaked der Default "lesbarem Standarddeutsch" in jedes Projekt, auch Englisches.
+            _ask_llm(_glossary_prompt(gpath, raw_files, context, ziel=""), raw_files, gpath)
+        finally:
+            for b in gelesen:
+                print(f"[done] {b}", flush=True)
     try:
         g = _load(gpath)
     except (OSError, ValueError):     # ValueError deckt auch UnicodeDecodeError (#190)
