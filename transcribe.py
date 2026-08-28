@@ -680,7 +680,18 @@ def transcribe_project(name, model, language, only=None, autocorrect: bool = Fal
                         _ai_pool_oeffnen()
                         # 1. Diarisierung & Prep direkt auf der GPU in der Hauptschleife (Hardware geschützt):
                         _correct.cmd_diarize(name, [base])
-                        _correct.prep_single(name, base)
+                        # `prep_single` liefert `bool` und MELDET seinen Fehlschlag nur als
+                        # `prep: SKIP …` — eine Zeile, die der Parser bewusst ignoriert. Der
+                        # Rueckgabewert fiel hier weg (CodeRabbit an PR #433), womit der
+                        # except-Zweig unten samt seinen ZWEI Zeilenformen (#421) uebersprungen
+                        # wurde: die Datei ging unvorbereitet an den Pool, `correct_ai_single`
+                        # scheiterte dort am fehlenden `.tagged.txt` und verbrannte einen
+                        # LLM-Slot fuer ein Ergebnis, das nach der ersten Zeile feststand.
+                        # Der Wurf statt einer eigenen Meldung ist Absicht: die Fehlerbehandlung
+                        # existiert schon, sie war nur nicht erreichbar — so bleibt es bei den
+                        # bestehenden Druckformen, also ohne INVENTAR-Eingriff.
+                        if not _correct.prep_single(name, base):
+                            raise RuntimeError("Vorbereitung fehlgeschlagen")
                         # 2. Datei sofort parallel an den Cloud-KI-Threadpool übergeben.
                         if ai_pool is not None:
                             ai_futures.append((base, ai_pool.submit(_correct.correct_ai_single,
