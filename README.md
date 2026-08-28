@@ -172,11 +172,19 @@ unter **Einstellungen › Video-Import**.
 
 </details>
 
+**Auf einen Blick, solange es überschaubar bleibt.** Hast du bis zu acht Projekte, zeigt dir
+die Startseite jedes davon als eigene Kachel statt einer schmalen Zeile mit viel Leerraum
+darunter: mit Anzahl der Aufnahmen, wie viele davon schon fertig sind, einem Fortschrittsbalken
+für den Stand des Projekts und — läuft gerade etwas — womit Transkribor gerade beschäftigt ist.
+Kommen mehr Projekte dazu, wechselt die Übersicht ab dem neunten wieder auf eine knappe Liste
+der letzten fünf; alle deine Projekte findest du dann jederzeit vollständig in der Seitenleiste.
+*(Ab `v0.49.0`.)*
+
 **Ordnung, auch nach hundert Aufnahmen.** Projekte und Aufnahmen lassen sich jederzeit
 umbenennen — beim Umbenennen einer Aufnahme bietet dir Transkribor die Namen der Sprecher an,
 sodass aus `01172464` ein „Hans Müller, Garage Rüthi“ wird. Suchfeld und `Strg+K` führen dich
 auch in grossen Sammlungen mit einem Griff zum richtigen Projekt. Am Tablet und am
-Touch-Bildschirm sind die `⋯`-Knöpfe ab der nächsten Fassung dauerhaft sichtbar: bisher
+Touch-Bildschirm sind die `⋯`-Knöpfe ab `v0.49.0` dauerhaft sichtbar: bisher
 erschienen sie nur beim Darüberfahren mit der Maus oder wenn du sie mit der Tastatur
 ansteuertest — mit dem Finger allein waren sie nicht zu sehen, und zum Umbenennen oder
 Löschen musstest du das Projekt erst öffnen. Dasselbe gilt für die Sprecherauswahl im
@@ -535,7 +543,7 @@ speicherst, wandert sie als `<Name>.edit.json.kaputt` zur Seite und bleibt im Or
 <details>
 <summary><strong>Etwas geht schief — wie melde ich das?</strong></summary>
 
-*(Ab der nächsten Fassung; in `v0.48.1` und davor führt der Weg nur über die Protokolldatei,
+*(Ab `v0.49.0`; in `v0.48.1` und davor führt der Weg nur über die Protokolldatei,
 siehe unten.)*
 
 Unter **Version** (in der Fusszeile auf die Versionsnummer `v…` klicken) steht der
@@ -550,8 +558,9 @@ die machen **neun von zehn** Zeilen aus, ohne sie bestünde der Bericht nur dara
 weggelassen: zeigt sie auf eine Datei auf deinem Rechner — etwa weil ein Link dorthin verwies,
 den Transkribor nicht geöffnet hat —, bleibt der Hinweis stehen, während Ort und Name **dieser
 einen** Datei wegfallen — und mit ihnen alles, was in derselben Zeile noch dahinter stand.
-Was **davor** steht, bleibt, und alle **anderen** Zeilen bleiben ohnehin unverändert; was in
-denen alles auftauchen kann, steht ein paar Absätze weiter unten. In der Protokolldatei stehen
+Was **davor** steht, bleibt; die übrigen Zeilen ändert die Kürzung nicht — welche der Filter
+von vornherein weglässt, steht oben, und was in den verbleibenden alles auftauchen kann, ein
+paar Absätze weiter unten. In der Protokolldatei stehen
 Ort und Name weiter, bei sehr langen Pfaden dort allerdings ebenfalls gekürzt.
 Und weil eine E-Mail nur begrenzt lang sein darf,
 fallen von den übrigen Zeilen notfalls die **ältesten** weg — die Mail sagt dir das dann an,
@@ -616,11 +625,11 @@ Meldung in diesem Fall rot. Eine Aufnahme, die du im Editor bearbeitet hast, zä
 als Fehlschlag: die lässt Transkribor bewusst in Ruhe.
 
 **In Fassungen bis einschliesslich `v0.48.1` galt dasselbe auch für einen TEIL-Ausfall der
-Korrektur — ab der nächsten Fassung nicht mehr.** Klappten drei von fünf Korrekturen nicht,
-sagte die Meldung trotzdem „fertig“, und die drei Aufnahmen lagen unkorrigiert da. Ab der
-nächsten Fassung nennt Transkribor sie beim Namen, wie bei einem Fehlschlag beim Abhören auch.
+Korrektur — ab `v0.49.0` nicht mehr.** Klappten drei von fünf Korrekturen nicht,
+sagte die Meldung trotzdem „fertig“, und die drei Aufnahmen lagen unkorrigiert da. Ab `v0.49.0`
+nennt Transkribor sie beim Namen, wie bei einem Fehlschlag beim Abhören auch.
 
-Aus demselben Grund siehst du ab der nächsten Fassung auch **während** der Korrektur wieder,
+Aus demselben Grund siehst du ab `v0.49.0` auch **während** der Korrektur wieder,
 woran Transkribor gerade arbeitet: Sprecher trennen, Korrigieren, Prüfen, Anwenden — je
 nachdem, was für diese Aufnahme eingestellt ist. Bei einer leichten Korrektur oder einer
 reinen Zusammenfassung entfällt das Prüfen, und wer die Sprechertrennung abgeschaltet hat,
