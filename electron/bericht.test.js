@@ -46,6 +46,63 @@ test('erfolgreiche Zugriffszeilen fallen raus, gescheiterte NICHT', () => {
   ])
 })
 
+test('der Pfad hinter einem file:-Schema faellt raus, der Hinweis bleibt (#447)', () => {
+  // Seit dem will-navigate-Waechter (#434) protokolliert ein Fehlwurf beim Drag & Drop den
+  // vollen Pfad der Aufnahme — und die Zeile faehrt in der Fehlerbericht-Mail mit. Der Pfad
+  // hat dort keinen Diagnosewert (WELCHE Datei jemand danebenwarf, hilft niemandem), die
+  // Zeile selbst schon: sie ist die einzige Antwort auf „ich habe etwas ins Fenster gezogen
+  // und es passiert nichts".
+  const z = letzteZeilen(
+    '[t] Navigation abgewiesen (Schema nicht erlaubt): file:///C:/Users/marcu/Videos/Interview%20Meier.mp3')
+  assert.deepStrictEqual(z,
+    ['[t] Navigation abgewiesen (Schema nicht erlaubt): file:///… (Pfad entfernt)'])
+  // Jede Schreibweise, die ein lokaler Pfad annehmen kann. Die einschraegige Form und den
+  // Rueckstrich kanonisiert Chromium heute weg, und Schemata liefert es klein — genau darauf
+  // soll sich diese Wache nicht verlassen, derselbe Grund wie beim Leerzeichen unten.
+  // `FILE:///` ist der EINZIGE Fall, der das `i` festnagelt: ohne ihn blieb die Suite bei
+  // entferntem Flag 20/20 gruen (Mutationsprobe des gegnerischen Reviews).
+  for (const roh of ['file:///C:/x/Meier.mp3', 'file://nas/x/Meier.mp3', 'file:/C:/x/Meier.mp3',
+    'file:\\C:\\x\\Meier.mp3', 'FILE:///C:/x/Meier.mp3'])
+    assert.deepStrictEqual(letzteZeilen('[t] abgewiesen: ' + roh),
+      ['[t] abgewiesen: file:///… (Pfad entfernt)'], roh)
+})
+
+test('auch ein Pfad MIT Leerzeichen hinterlaesst keinen Rest (#447)', () => {
+  // Der Grund fuer `.*` statt `\S*`: bei `\S*` endete die Ersetzung am ersten Leerzeichen und
+  // ausgerechnet der Dateiname bliebe stehen. Chromium normalisiert zwar zu %20 — aber dann
+  // haengt die Wache an einer fremden Zusicherung statt an sich selbst.
+  const z = letzteZeilen(
+    '[t] Externer Link abgewiesen (Schema nicht erlaubt): file:///C:/My Videos/Interview Meier.mp3')
+  assert.ok(!z[0].includes('Meier'), 'kein Rest hinter der Ersetzung')
+  assert.deepStrictEqual(z,
+    ['[t] Externer Link abgewiesen (Schema nicht erlaubt): file:///… (Pfad entfernt)'])
+})
+
+test('ein Pfad OHNE file:-Schema bleibt unangetastet — die Kuerzung ist eng (#447)', () => {
+  // Gegenrichtung, und sie ist die teurere: `C:\Users\…` steht bewusst im Rumpf (der
+  // Benutzername ist getragen und im Kopf dieser Datei begruendet), und eine 500er-Zeile mit
+  // Projekt- und Basisnamen ist genau die, wegen der jemand schreibt. Wer hier breiter
+  // kuerzt, nimmt die Auskunft mit. Die PATH-Zeile faellt weiter GANZ raus — Kuerzen und
+  // Weglassen sind zwei verschiedene Behandlungen.
+  const z = letzteZeilen([
+    '[t] PATH      : C:\\Windows;C:\\Users\\marcu\\bin',
+    '[t] venvPfad = C:\\Users\\marcu\\AppData\\Roaming\\Transkribor\\venv',
+    '[t] INFO:     127.0.0.1:60884 - "POST /api/projects/X/audio HTTP/1.1" 500 Internal Server Error',
+    // Das `file:` OHNE Trenner ist die eine Grenze der Kuerzung: hier IST der Pfad die
+    // Diagnose. Wer das Muster auf `\bfile:` verbreitert, macht diese Zeile rot.
+    '[t] could not open file: C:/Users/marcu/Videos/Interview Meier.mp3',
+    // Und `profile:` ist die andere: die Regel gilt dem SCHEMA `file:`, nicht der Zeichenfolge.
+    // Wer das `\b` streicht, macht diese Zeile rot.
+    '[t] profile://default/x',
+  ].join('\n'))
+  assert.deepStrictEqual(z, [
+    '[t] venvPfad = C:\\Users\\marcu\\AppData\\Roaming\\Transkribor\\venv',
+    '[t] INFO:     127.0.0.1:60884 - "POST /api/projects/X/audio HTTP/1.1" 500 Internal Server Error',
+    '[t] could not open file: C:/Users/marcu/Videos/Interview Meier.mp3',
+    '[t] profile://default/x',
+  ])
+})
+
 test('der Kopf nennt Fassung, Plattform und ob gepackt', () => {
   const t = K.join('\n')
   for (const stueck of ['0.48.1', 'win32', '43.3.0', 'true']) assert.ok(t.includes(stueck), stueck)
@@ -156,4 +213,21 @@ test('ein normaler Pfad bleibt drin — die Notbremse greift nicht immer', () =>
   const { url } = mailto({ empfaenger: 'a@b.c', betreff: 'x', kopf: K, zeilen: ['x'],
     logpfad: 'C:\\Users\\m\\AppData\\Roaming\\Transkribor\\transkribor.log' })
   assert.ok(decodeURIComponent(url.split('&body=')[1]).includes('transkribor.log'))
+})
+
+test('der Name einer Aufnahme steht in der FERTIGEN URL nicht mehr (#447)', () => {
+  // Der Weg, den es wirklich gibt: Protokollzeile -> letzteZeilen -> mailto -> das, was der
+  // Nutzer im Mailfenster sieht. Die Tests darueber pruefen ein Zwischenergebnis; dieser
+  // prueft das Ergebnis.
+  const zeilen = letzteZeilen(
+    '[t] Navigation abgewiesen (Schema nicht erlaubt): file:///C:/Users/marcu/Videos/Interview%20Meier.mp3')
+  const { url } = mailto({ empfaenger: 'a@b.c', betreff: 'x', kopf: K, zeilen,
+    logpfad: 'C:\\Users\\m\\AppData\\Roaming\\Transkribor\\transkribor.log' })
+  // BEIDE Schreibweisen: der Rumpf wird kodiert, aus `Interview%20Meier` wuerde dabei
+  // `Interview%2520Meier` — eine Suche allein in der rohen URL waere immer gruen.
+  assert.ok(!url.includes('Meier'), 'kein Aufnahmename in der rohen URL')
+  const rumpf = decodeURIComponent(url.split('&body=')[1])
+  assert.ok(!rumpf.includes('Meier'), 'auch nicht im dekodierten Rumpf')
+  // Positivkontrolle, sonst prueft dieser Test auch dann nichts, wenn die Zeile GANZ fehlt.
+  assert.ok(rumpf.includes('Navigation abgewiesen'), 'der Hinweis selbst bleibt stehen')
 })
