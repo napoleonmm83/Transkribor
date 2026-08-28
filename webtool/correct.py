@@ -1193,15 +1193,16 @@ def correct_ai_single(project: str, b: str, gjson: str = "", context: str = None
         if not _valid_correction(cpath):
             print(f"✗ FEHLT/ungültig: {b}.correction.json — überspringe", flush=True)
             return False
-        # `cmd_apply` hat DREI Ausgaenge (:347) und nur EINER ist ein Fehlschlag: `"missing"`
+        # `cmd_apply` hat DREI Ausgaenge (seine drei `return`-Zeichenketten) und nur EINER ist
+        # ein Fehlschlag: `"missing"`
         # heisst, es wurde **nichts geschrieben** (fehlende `correction.json` bzw. Roh-JSON).
         # Bis #412 fiel der Rueckgabewert ersatzlos weg — eine nie geschriebene `edit.json`
         # zaehlte in `run: fertig — N/M korrigiert` als Erfolg, waehrend die Oberflaeche
         # dieselbe Datei seit #407 als gescheitert fuehrte: Protokoll und Leiste im Widerspruch.
         #
         # `!= "written"` waere hier der SCHADEN, nicht die Behebung (so lautete die
-        # Codex-Empfehlung, am Quelltext widerlegt): die drei `"skipped"` (:354, :363, :404)
-        # sind die Schutzpfade dieses Repos — `human_edited=true`, `edit.json` nicht lesbar
+        # Codex-Empfehlung, am Quelltext widerlegt): die drei `"skipped"`-Ausgaenge in
+        # `cmd_apply` sind die Schutzpfade dieses Repos — `human_edited=true`, `edit.json` nicht lesbar
         # (#190), Handarbeit unter der Sperre entdeckt (#278). Sie heissen „deine Fassung
         # bleibt stehen"; als Fehlschlag gemeldet wuerden aus genau den Waechtern gegen
         # stillen Datenverlust rote Zeilen in der Bilanz.

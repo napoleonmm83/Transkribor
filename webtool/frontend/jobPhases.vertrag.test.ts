@@ -346,7 +346,7 @@ const INVENTAR: Record<string, Eintrag> = {
   'apply: FEHLT {}.json - Roh-Transkript nicht gefunden': {
     art: 'gelesen', beispiel: 'apply: FEHLT A.json - Roh-Transkript nicht gefunden', basis: 'A',
     notiz: 'Erreichbar nur ueber ein TOCTOU-Fenster — und ueber ein WEITES: correct_ai_single '
-      + 'prueft die Roh-JSON beim Eintritt (correct.py:1009) und steigt aus, bevor [active] '
+      + 'prueft die Roh-JSON beim Eintritt und steigt aus, bevor [active] '
       + 'gedruckt wird; dazwischen liegt die ganze KI-Korrektur samt Treue-Pass, also Minuten. '
       + 'Ungelesen war das nicht bloss ein Spinner: cmd_apply liefert "missing", und '
       + 'correct_ai_single VERWARF den Rueckgabewert — ohne perBase-Eintrag fiel ausgang() auf '
