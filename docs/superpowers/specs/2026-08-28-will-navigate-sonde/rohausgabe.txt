@@ -1,9 +1,10 @@
-=== 2026-08-28T10:47:08Z · Electron 43.4.1 · Windows 11
+=== 2026-08-28T12:21:58Z · Electron v43.4.1 · Windows 11
 
 $ ./node_modules/.bin/electron docs/superpowers/specs/2026-08-28-will-navigate-sonde/navigation.js
 
-eigene Herkunft {EIGEN} = http://127.0.0.1:62955
-fremde Herkunft {FREMD} = http://127.0.0.1:62954
+
+eigene Herkunft {EIGEN} = http://127.0.0.1:61983
+fremde Herkunft {FREMD} = http://127.0.0.1:61982
 Waechter: AUS (Ist-Zustand)
 
 ── (c) loadFile(setup.html) aus dem Hauptprozess
@@ -66,10 +67,13 @@ Fall                                     will-navigate  gelandet  Bruecke
 (c) location.reload() im Renderer        JA             eigen     object/12
 (c) eigene Herkunft, anderer Pfad        JA             eigen     object/12
 
+Leseform: `e.url` == positionales Argument in 20 von 20 Ereignissen
+
 $ ./node_modules/.bin/electron docs/superpowers/specs/2026-08-28-will-navigate-sonde/navigation.js --mit-waechter
 
-eigene Herkunft {EIGEN} = http://127.0.0.1:65349
-fremde Herkunft {FREMD} = http://127.0.0.1:65348
+
+eigene Herkunft {EIGEN} = http://127.0.0.1:65503
+fremde Herkunft {FREMD} = http://127.0.0.1:65502
 Waechter: AN (nach dem Fix)
 
 ── (c) loadFile(setup.html) aus dem Hauptprozess
@@ -95,7 +99,7 @@ Waechter: AN (nach dem Fix)
    gelandet:   eigen   ·   window.transkribor: object (12 Schluessel)
 
 ── (b5) 302-Redirect EIGEN -> FREMD
-   Ereignisse: will-frame-navigate -> {EIGEN}/weiter | will-navigate -> {EIGEN}/weiter | will-redirect -> {FREMD}/ziel |   [WAECHTER blockt] (ginge in den Browser) -> {FREMD}/ziel
+   Ereignisse: will-frame-navigate -> {EIGEN}/weiter | will-navigate -> {EIGEN}/weiter | will-redirect -> {FREMD}/ziel |   [WAECHTER blockt] (abgewiesen) -> {FREMD}/ziel
    gelandet:   eigen   ·   window.transkribor: object (12 Schluessel)
 
 ── (e) Steuerzeichen vor der URL
@@ -132,7 +136,10 @@ Fall                                     will-navigate  gelandet  Bruecke
 (c) location.reload() im Renderer        JA             eigen     object/12
 (c) eigene Herkunft, anderer Pfad        JA             eigen     object/12
 
+Leseform: `e.url` == positionales Argument in 20 von 20 Ereignissen
+
 $ ./node_modules/.bin/electron docs/superpowers/specs/2026-08-28-will-navigate-sonde/unterrahmen.js
+
 
 
 ── iframe navigiert auf einen Pfad, der 302 auf FREMD umleitet

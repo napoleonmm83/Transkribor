@@ -57,6 +57,12 @@ const seiteB = () => '<!doctype html><meta charset=utf-8><title>FREMD</title><bo
 
 // ── Ereignis-Aufzeichnung ────────────────────────────────────────────────────
 let lauf = []
+// Zaehler ueber ALLE Faelle: liefert das Details-Ereignis dieselbe URL wie das @deprecated
+// positionale Argument? `main.js` verlaesst sich darauf, dass beides heute uebereinstimmt,
+// liest aber bewusst `e.url ?? urlVeraltet` — die Zahl unter der BILANZ belegt das oder
+// widerlegt es.
+let leseformGleich = 0
+let leseformAbweichend = 0
 const merken = (art, url, extra) => lauf.push(art + (extra || '') + ' -> ' + url)
 const kurz = u => String(u).split(A).join('{EIGEN}').split(B).join('{FREMD}')
 const warte = ms => new Promise(r => setTimeout(r, ms))
@@ -97,18 +103,44 @@ app.whenReady().then(async () => {
     webPreferences: { preload: PRELOAD, contextIsolation: true },
   })
 
+  // Die Mitschreiber lesen das @deprecated POSITIONALE Argument — und vergleichen es bei
+  // jedem Ereignis mit `e.url` aus dem Details-Objekt. `main.js` behauptet „heute liefern
+  // beide dasselbe, aber nur einer ist der zugesagte Weg"; ohne diesen Vergleich waere das
+  // eine Behauptung, mit ihm ist es die Zahl unter der BILANZ. Weichen sie je ab, steht es
+  // markiert in derselben Zeile statt in einer Fussnote.
   for (const art of ['will-navigate', 'will-frame-navigate', 'will-redirect'])
-    win.webContents.on(art, (e, url) => merken(art, url))
+    win.webContents.on(art, (e, urlVeraltet) => {
+      const gleich = e.url === urlVeraltet
+      gleich ? leseformGleich++ : leseformAbweichend++
+      merken(art, urlVeraltet + (gleich ? '' : '  [!! e.url WEICHT AB: ' + e.url + ']'))
+    })
 
   if (MIT_WAECHTER) {
     const { eigeneHerkunft, externesZiel } = require(path.join(REPO, 'electron', 'fenster.js'))
-    const pruefen = (e, url) => {
+    // SPIEGEL von `main.js navigationPruefen` — in der ENTSCHEIDUNG zeilengleich, in der
+    // HANDLUNG bewusst nicht. Nachgemessen: die sechs Zeilen bis einschliesslich
+    // `const ziel = …` sind identisch (nur Funktionsname und die zweite eigene Herkunft
+    // unterscheiden sich, die es hier nicht gibt). Danach oeffnet `main.js` den Browser oder
+    // protokolliert; diese Sonde ruft `shell.openExternal` NIE — sie schreibt mit, welcher
+    // Zweig gegriffen haette. Das ist die Zusage in ihrem Modulkopf, kein Nachlassen.
+    //
+    // Importiert wird nicht: `main.js` hat **kein `module.exports`** (nachgemessen), es ist
+    // der Electron-Einstiegspunkt und startet beim `require` die App. Also Nachbau — aber
+    // dann Zeile fuer Zeile derselbe, sonst misst diese Sonde einen ANDEREN Waechter als den
+    // ausgelieferten. Genau das war der Botbefund am PR: die erste Fassung las nur das
+    // positionale Argument, pruefte `isMainFrame` nicht und bewertete auch `will-redirect`
+    // mit `externesZiel` — worauf sie bei (b5) „ginge in den Browser" meldete, wo
+    // `main.js` abweist.
+    const pruefen = extern => (e, urlVeraltet) => {
+      const url = e.url ?? urlVeraltet
+      if (e.isMainFrame === false) return
       if (eigeneHerkunft(url, [pathToFileURL(SETUP_HTML).href, A + '/'])) return
       e.preventDefault()
-      merken('  [WAECHTER blockt]', url, externesZiel(url) ? ' (ginge in den Browser)' : ' (abgewiesen)')
+      const ziel = extern ? externesZiel(url) : null
+      merken('  [WAECHTER blockt]', url, ziel ? ' (ginge in den Browser)' : ' (abgewiesen)')
     }
-    win.webContents.on('will-navigate', pruefen)
-    win.webContents.on('will-redirect', pruefen)
+    win.webContents.on('will-navigate', pruefen(true))
+    win.webContents.on('will-redirect', pruefen(false))
   }
 
   console.log('eigene Herkunft {EIGEN} = ' + A)
@@ -174,5 +206,9 @@ app.whenReady().then(async () => {
     const wn = e.lauf.some(z => z.indexOf('will-navigate') === 0) ? 'JA' : 'nein'
     console.log(e.name.padEnd(41) + wn.padEnd(15) + e.gelandet.padEnd(10) + e.bruecke + '/' + e.schluessel)
   }
+  const ereignisse = leseformGleich + leseformAbweichend
+  console.log('\nLeseform: `e.url` == positionales Argument in ' + leseformGleich + ' von '
+    + ereignisse + ' Ereignissen'
+    + (leseformAbweichend ? '  — ' + leseformAbweichend + ' ABWEICHUNGEN, oben markiert' : ''))
   app.quit()
 })

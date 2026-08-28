@@ -32,15 +32,22 @@ app.whenReady().then(async () => {
 
   const win = new BrowserWindow({ show: false, webPreferences: { contextIsolation: true } })
   const kurz = u => String(u).split(A).join('{EIGEN}').split(B).join('{FREMD}')
+  // Mitschreiber am POSITIONALEN Argument, mit Abweichungsmarke gegen `e.url` — dieselbe
+  // Messung wie in navigation.js, hier nur je Zeile statt gezaehlt.
   for (const art of ['will-navigate', 'will-frame-navigate', 'will-redirect']) {
-    win.webContents.on(art, (e, url) => {
-      console.log(`  ${art.padEnd(20)} isMainFrame=${String(e.isMainFrame).padEnd(9)} ${kurz(url)}`)
+    win.webContents.on(art, (e, urlVeraltet) => {
+      const marke = e.url === urlVeraltet ? '' : `  [!! e.url WEICHT AB: ${kurz(e.url)}]`
+      console.log(`  ${art.padEnd(20)} isMainFrame=${String(e.isMainFrame).padEnd(9)} ${kurz(urlVeraltet)}${marke}`)
     })
   }
 
   // Der echte Waechter aus main.js, wortgleich — misst, ob der Rahmen ihn noch erreicht.
+  // `e.url ?? urlVeraltet` wie dort: das Details-Ereignis ist der zugesagte Weg, das
+  // positionale Argument ist `@deprecated` und nur der Rueckfall. Weicht die Sonde hier ab,
+  // misst sie einen anderen Waechter als den ausgelieferten.
   const { eigeneHerkunft, externesZiel } = require(require('node:path').join(__dirname, '..', '..', '..', '..', 'electron', 'fenster.js'))
-  const pruefen = extern => (e, url) => {
+  const pruefen = extern => (e, urlVeraltet) => {
+    const url = e.url ?? urlVeraltet
     if (e.isMainFrame === false) return
     if (eigeneHerkunft(url, [A + '/'])) return
     e.preventDefault()
