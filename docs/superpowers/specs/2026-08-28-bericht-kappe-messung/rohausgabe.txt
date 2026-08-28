@@ -1,0 +1,8 @@
+Lauf: 2026-08-28T17:24:45Z · v22.23.2 · commit e0d0c68 · Branch s2/bericht-kappe
+Aufruf: node docs/superpowers/specs/2026-08-28-bericht-kappe-messung/monotonie.js
+
+  1) Normalfall: 60 Zeilen, Mittel 88 Zeichen -> 0.4469 ms je Aufruf
+  2) Monotonie ueber 172 Fuelllaengen: 68x mehr Zeilen, 0x weniger, 104x gleich
+  3) encodeURIComponent-Aufrufe fuer EINE 2-MB-Zeile: 26  (log2(2^21) = 21 Halbierungen)
+
+Hinweis: 1) schwankt mit der Rechnerlast, 2) und 3) sind deterministisch (je dreimal gefahren).

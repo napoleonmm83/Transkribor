@@ -31,6 +31,103 @@ const MAX_URL = 1900
 const ZEILEN = 60
 
 /**
+ * Deckel fuer eine EINZELNE Zeile — ebenfalls kodiert gemessen (#435).
+ *
+ * **Warum es die Konstante gibt.** `mailto` kuerzte von OBEN, bis die URL passt. Sprengte
+ * eine einzelne Zeile den Deckel schon allein, lief die Schleife bis auf NULL: der Nutzer
+ * schickte einen Bericht ohne eine einzige Protokollzeile ab. Gemessen war die Zahl der
+ * Ueberlebenden **exakt die Zahl der Zeilen DAHINTER** — Position 0 von 21 ⇒ 20 ueberleben,
+ * Position 20 ⇒ keine. Der Extremfall ist dabei der Normalfall: Protokollzeilen werden
+ * angehaengt, eine ueberlange kommt also als juengste an. Ausloesbar mit EINEM `window.open`
+ * (#426: die URL kommt mit bis zu 2 MB am Handler an).
+ *
+ * Mit dieser Kappe gilt: keine Zeile ist laenger als 600 kodiert, der Kopf braucht rund 450,
+ * `MAX_URL` sind 1900 ⇒ **es passt immer mindestens eine Zeile**, gleich welche Zeichen darin
+ * stehen. Das ist die Zusicherung, nicht die Kuerzung selbst. Sie haengt am Dateipfad, und
+ * genau deshalb reserviert `mitPfad` weiter unten Platz fuer eine gekappte Zeile — ohne das
+ * waere „immer" falsch, und der Pfad ist laut dem Kommentar dort der eine unkontrollierte
+ * Wert („tiefe Ordner, langer Benutzername, Netzlaufwerk").
+ *
+ * **Der Preis, und er ist der eigentliche neue Weg dieses Fixes:** vor der Kappe ueberlebte
+ * eine ueberlange Zeile **nie** — die Schleife raeumte sie mit ab. Der leere Bericht war damit
+ * nebenbei ein Filter, ausgerechnet fuer die Klasse, in der am ehesten ein Abzug steht
+ * (`protokoll.befund`, Kommando-Echos, pip-Ausgaben, Server-stdout). Ab jetzt gehen die ersten
+ * ~600 kodierten Zeichen solcher Zeilen mit. `protokoll.maskiere` laeuft davor und kennt fuenf
+ * Schluesselformen (`sk-`, `sk-ant-`, `AIzaSy`, `gsk_`, `hf_`); alles andere passiert sie —
+ * gemessen an einem Lizenzschluessel ohne bekanntes Muster: vorher 0 Zeilen und kein Geheimnis
+ * in der Mail, nachher 11 Zeilen und das Geheimnis darin. **Kein Fehler des Fixes** (ein
+ * Bericht ohne Protokoll ist wertlos, und die Zusage dieses Features ist die VORSCHAU vor dem
+ * Senden), aber die ehrliche Antwort auf „was erlaubt er neu". Wer den Preis senken will, hat
+ * einen billigen Hebel: 530 statt 600 traefe weiterhin null echte Zeilen — die laengste misst
+ * 526 kodiert — und gaebe im krankhaften Fall 12 % weniger preis. 600 ist die getroffene
+ * Entscheidung, nicht das Optimum.
+ *
+ * **Die Kappe macht den Bericht nie schlechter** (gemessen ueber 172 Fuelllaengen gegen die
+ * nachgebaute Vorfassung: 68-mal mehr Zeilen, **0-mal weniger**, 104-mal gleich) — anders als
+ * die `file:`-Ersetzung darunter, die ausdruecklich nicht monoton ist.
+ * Nachfahrbar: `node docs/superpowers/specs/2026-08-28-bericht-kappe-messung/monotonie.js`,
+ * Rohausgabe liegt daneben. Hier stand bis zuletzt „75-mal": die Zahl war gewandert, als der
+ * Doppelpunkt aus `PFAD_AB_SCHEMA` fiel, und niemand konnte es sehen, weil das Messskript nur
+ * im Wegwerf-Verzeichnis lag. Wer an Kappung, Maskierung oder Pfad-Ersetzung etwas aendert,
+ * laesst es laufen und zieht die Zahlen hier nach.
+ *
+ * **600 KODIERT, nicht roh — und der Unterschied ist der ganze Punkt.** Eine Kappe auf die
+ * rohe Laenge haelt die Zusicherung NICHT: 500 rohe Umlaute werden kodiert 3000 Zeichen lang,
+ * und `verwendet` fiel damit wieder auf 0 (gefahren). Dieselbe Falle, vor der `MAX_URL` oben
+ * warnt, eine Ebene tiefer.
+ *
+ * **Der Wert kostet heute nichts.** In den echten Protokollen dieser Maschine misst die
+ * laengste mail-taugliche Zeile 373 roh / **526 kodiert**; ueber 600 liegt keine, ueber 500
+ * genau eine. 600 trifft also **null** echte Zeilen und greift nur im krankhaften Fall.
+ * (Gemessen am 28.08.2026 an lokalen, nicht versionierten Protokollen — sie tragen
+ * Nutzerpfade und Aufnahmenamen und koennen deshalb nicht ins Repo; eine erfundene Fixture
+ * belegte nur, dass niemand `file://` hineingeschrieben hat. Drei unabhaengig gebaute
+ * Herleitungen: node mit dem echten Filter, grep/awk mit nachgebautem, python mit eigenen
+ * Regexen.)
+ */
+const MAX_ZEILE = 600
+
+/** Die gekappte Zeile sagt es an — ein stillschweigend halber Bericht sieht aus wie ein ganzer. */
+const KAPPMARKE = ' […]'
+
+/**
+ * Kappt EINE Zeile auf `max` KODIERTE Zeichen und haengt die Marke an.
+ *
+ * **Ueber Codepoints, nicht ueber `slice()`.** `'abc😀def'.slice(0, 4)` trennt ein
+ * Ersatzzeichenpaar, und `encodeURIComponent` wirft darauf `URIError: URI malformed`
+ * (gefahren) — ein Absturz in genau der Funktion, die den Fehlerbericht rettet.
+ *
+ * **Binaere Suche, nicht zeichenweise schrumpfen.** Der krankhafte Fall ist 2 MB gross;
+ * einmal kodieren kostet dort ~4 ms, ein `while`-Schrumpfen mit Neu-Kodieren waere
+ * quadratisch. So sind es **rund 20** statt Millionen — `log2` der Codepoint-Zahl, bei 2 MB
+ * also 21 Halbierungen (nachgezaehlt mit einem zaehlenden `encodeURIComponent`: 26 im ganzen
+ * `mailto`-Lauf, davon 6 im URL-Bau). Der eine Ort in dieser Datei, an dem der Aufwand belegt
+ * ist und nicht vermutet.
+ *
+ * **Gekappt wird der SCHWANZ — eine Richtungsentscheidung, die hier benannt gehoert.**
+ * `mailto` kuerzt bewusst von OBEN, mit dem Argument „die juengsten Zeilen stehen dem Fehler am
+ * naechsten". Innerhalb einer Zeile gilt das spiegelverkehrt: bei `CalledProcessError: Command
+ * '[…]' returned non-zero exit status 1` oder `…: No such file or directory` steht das Urteil
+ * HINTEN. Die Kappe wirft es weg. Getragen, weil die Zeile vor diesem Fix ueberhaupt nicht
+ * mitkam — aber es ist eine Entscheidung, keine Selbstverstaendlichkeit. Wer sie umdreht:
+ * Kopf plus Marke plus ein Stueck Schwanz.
+ */
+function kappen(zeile, max = MAX_ZEILE) {
+  if (encodeURIComponent(zeile).length <= max) return zeile
+  const budget = max - encodeURIComponent(KAPPMARKE).length
+  const zeichen = Array.from(zeile)
+  const passt = n => encodeURIComponent(zeichen.slice(0, n).join('')).length <= budget
+  let lo = 0
+  let hi = zeichen.length
+  while (lo < hi) {
+    const mitte = Math.ceil((lo + hi) / 2)
+    if (passt(mitte)) lo = mitte
+    else hi = mitte - 1
+  }
+  return zeichen.slice(0, lo).join('') + KAPPMARKE
+}
+
+/**
  * Zeilen, die NIE in den Rumpf gehen.
  *
  * Bisher genau eine: die PATH-Zeile aus `protokoll.kopf`. **Der tragende Grund ist die
@@ -108,8 +205,36 @@ const AUSSORTIEREN = [
  * Absatz darueber das Gegenteil versprach. Nicht der Code war zu eng, die Behauptung war zu
  * breit — dieselbe Fehlerklasse, die dieses Repo am haeufigsten trifft.
  *
- * Deshalb `(^|[^A-Za-z0-9+.\-])` statt `\b`. Das eingefangene Zeichen kommt ueber `$1`
- * zurueck, sonst frisst die Ersetzung das Leerzeichen vor der URL gleich mit.
+ * Deshalb ein Praefix-Riegel statt `\b`; die Klasse steht unten am Muster, damit dieser Text
+ * sie nicht ein zweites Mal — und womoeglich falsch — behauptet. (Hier stand eine Fassung mit
+ * `…` als Auslassungszeichen: wer sie als Zeichenklasse liest, bekommt die UMGEKEHRTE
+ * Auskunft, denn eine Zeile mit `…` vor `file:` wird sehr wohl gekuerzt.) Das eingefangene
+ * Zeichen kommt ueber `$1` zurueck, sonst frisst die Ersetzung das Leerzeichen vor der URL
+ * gleich mit.
+ *
+ * **Und dieselbe Luecke eine Runde spaeter noch einmal: `/` und `\` gehoeren mit
+ * ausgeschlossen** (CodeRabbit-Bot an PR #457). Nach einem Trennzeichen steht `file:` gar
+ * nicht an einer Schema-Position — dort ist es Host oder Pfadsegment. Gemessen:
+ *
+ *     https://file:///C:/…/Interview.mp3        wurde gekuerzt, "file" ist der HOST
+ *     https://beispiel.test/a/file:///x         wurde gekuerzt, / mitten im Pfad
+ *     C:\file:///x                              wurde gekuerzt
+ *
+ * **Der Doppelpunkt gehoert AUSDRUECKLICH NICHT dazu — eine Kehrtwende innerhalb derselben
+ * Runde.** Der Bot hatte ihn mitvermutet (`mailto:file:///x`), gemessen stimmte es, und er
+ * stand hier eine Fassung lang im Ausschluss. Die CodeRabbit-CLI hielt dagegen, mit dem
+ * staerkeren Argument: ein Doppelpunkt ist im Deutschen gewoehnliche Zeichensetzung. Mit ihm
+ * im Riegel blieb `Quelle:file:///C:/Users/<name>/Interview.mp3` **ungekuerzt stehen**
+ * (gefahren) — ein echter lokaler Pfad samt Aufnahmenamen, also genau der Abfluss, den diese
+ * Kuerzung verhindern soll. Der Preis der Rueckkehr ist `mailto:file:///x`, das nun
+ * mitgekuerzt wird: dessen Rumpf ist der undurchsichtige Teil einer Mailadresse und traegt
+ * keinen lokalen Pfad. **Die Fehlerrichtung entscheidet** — zu viel kuerzen kostet Diagnose,
+ * zu wenig kuerzen kostet die Zusage.
+ *
+ * Bemerkenswert ist die Wiederholung: beim ersten Mal fehlten die Schema-Zeichen `+.-`, beim
+ * zweiten die Trennzeichen, beim dritten war einer davon zu viel — dieselbe Frage („steht
+ * `file:` hier ueberhaupt am Anfang eines Schemas?"), dreimal anders beantwortet. Jede Form
+ * hat eine eigene Zeile im Test, in beide Richtungen.
  *
  * **Das `i` ist kein Schmuck — es hat einen eigenen Testfall, weil es sonst keinen haette.**
  * Bei entferntem Flag blieb die Suite 20/20 gruen (Mutation C des gegnerischen Reviews); ein
@@ -124,7 +249,7 @@ const AUSSORTIEREN = [
  * Zugriffszeilen (`POST /api/projects/X/audio … 500`). Das ist die Zeile, wegen der jemand
  * schreibt, sie bleibt bewusst — so steht es auch in der README.
  */
-const PFAD_AB_SCHEMA = /(^|[^A-Za-z0-9+.\-])file:[\/\\]{1,3}.*/i
+const PFAD_AB_SCHEMA = /(^|[^A-Za-z0-9+.\-/\\])file:[\/\\]{1,3}.*/i
 const PFAD_ERSATZ = '$1file:///… (Pfad entfernt)'
 
 /** Die letzten `n` verwertbaren Zeilen, in Originalreihenfolge. */
@@ -194,14 +319,36 @@ function mailto({ empfaenger, betreff, kopf: kopfzeilen, zeilen, logpfad, maxUrl
   // eine URL ueber dem Deckel zurueck (CodeRabbit-Bot) — die schneidet Windows selbst ab, an
   // beliebiger Stelle. Passt er nicht einmal mit NULL Zeilen, ist er der Ballast, nicht sie:
   // im Dateimanager steht er ohnehin vor dem Nutzer, die Protokollzeilen bekaeme er nirgends.
-  const mitPfad = !!logpfad && url(bauen([], true)).length <= maxUrl
-  let verwendet = zeilen.slice()
+  //
+  // **Und er wird mit PLATZ FUER EINE ZEILE geprueft, nicht mit null** (#435, Kalt-Review).
+  // Die Frage „passt der Pfad?" wurde bis dahin an einem Rumpf OHNE Protokollzeilen gemessen.
+  // Ein Pfad, der allein passt, aber weniger Luft laesst als eine gekappte Zeile braucht,
+  // verdraengte damit ALLE Zeilen — das #435-Symptom durch die andere Tuer, und die Zusicherung
+  // an `MAX_ZEILE` („es passt immer mindestens eine") war schlicht falsch. Gefahren, mit Zeilen
+  // an der Kappungsgrenze: ab 688 Zeichen Pfad kamen null Protokollzeilen mit, waehrend die
+  // URL nur 1306 von 1900 Zeichen nutzte. Reserviert werden `MAX_ZEILE` plus 3 fuer den
+  // `%0A`-Umbruch, der die Zeile an den Rumpf haengt.
+  //
+  // Die Richtung ist dieselbe wie im Absatz darueber: im Zweifel gewinnen die Protokollzeilen,
+  // weil der Pfad ohnehin im Dateimanager vor dem Nutzer steht.
+  const mitPfad = !!logpfad
+    && url(bauen([], true)).length <= maxUrl - (zeilen.length ? MAX_ZEILE + 3 : 0)
+  // `z => kappen(z)`, NICHT `.map(kappen)`: `map` reicht den Index als zweites Argument
+  // durch, und der landete als `max` in der Kappe — Zeile 0 waere auf 0 Zeichen gekuerzt.
+  let verwendet = zeilen.map(z => kappen(z))
   let fertig = url(bauen(verwendet, false, mitPfad))
   while (fertig.length > maxUrl && verwendet.length > 0) {
     verwendet = verwendet.slice(1)
     fertig = url(bauen(verwendet, true, mitPfad))
   }
+  // **`gekuerzt` meldet WEGGELASSENE Zeilen, nicht innerlich gekappte.** Wurde nur gekappt, ist
+  // es `false` und die Ueberschrift lautet „— Protokoll —". Fuer den Nutzer gedeckt: die Marke
+  // ` […]` steht in der Zeile, die er im Mailfenster vor sich hat. Der Rueckgabewert hat heute
+  // keinen Verbraucher, der daran haengt (`VersionPage.berichtSchreiben` wirft ihn weg) — wer
+  // daraus einmal „Bericht vollstaendig" baut, braucht ein drittes Feld `gekappt`.
   return { url: fertig, verwendet: verwendet.length, gekuerzt: verwendet.length < zeilen.length }
 }
 
-module.exports = { letzteZeilen, kopf, mailto, MAX_URL, ZEILEN, AUSSORTIEREN }
+// `MAX_ZEILE` wird exportiert, damit der Test die Invariante gegen DIE Konstante pruefen kann
+// statt gegen eine abgeschriebene 600 — sonst waere er nach der ersten Wertaenderung stumm.
+module.exports = { letzteZeilen, kopf, mailto, MAX_URL, MAX_ZEILE, ZEILEN, AUSSORTIEREN }
