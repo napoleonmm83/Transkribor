@@ -61,9 +61,31 @@ function ProjektKarte({ p, refresh }: { p: Project; refresh: () => void }) {
       {/* has-[[data-state=open]]: waehrend das Menue offen steht, muss sein
           Knopf sichtbar bleiben. focus-within reicht NICHT — Radix schiebt den
           Fokus in den portalierten Inhalt ausserhalb dieser Zeile, der Anker
-          verschwand also genau dann, wenn er gebraucht wird (im Bild geprueft). */}
+          verschwand also genau dann, wenn er gebraucht wird (im Bild geprueft).
+
+          any-pointer-coarse: ohne Zeigegeraet gibt es keinen Hover — der Knopf war hier
+          also unsichtbar (#428). NICHT unerreichbar, und der Unterschied ist im Review
+          gemessen worden: Umbenennen und Loeschen gibt es ausserdem in der geoeffneten
+          Projektseite (`ProjectWorkspace.tsx:234`, dauerhaft sichtbar) und ab `md` in der
+          Seitenleiste (`Sidebar.tsx:157`, per Klick). Der Fix behebt, dass der Knopf da
+          fehlte, wo man ihn sucht — nicht, dass die Funktion fehlte.
+
+          `any-pointer`, nicht `pointer` und nicht `hover: none`, und der Grund ist
+          HERGELEITET, nicht gemessen: nach Media Queries Level 4 beschreiben
+          `pointer`/`hover` nur das PRIMAERE Eingabegeraet, `any-*` dagegen jedes
+          vorhandene. Ein Notebook mit Touchscreen UND Maus meldete demnach
+          `pointer: fine`/`hover: hover` und bliebe unter den beiden anderen Varianten
+          kaputt — genau das Geraet nennt das Issue ("trifft nicht nur Tablets").
+          An echter Hybrid-Hardware ist das NICHT nachgeprueft: Playwright schaltet
+          nur binaer zwischen "nur Touch" und "kein Zeigegeraet", und ein CDP-Override
+          fuer pointer/hover lief wirkungslos durch (browserbeleg-428.md). Wer ein
+          solches Geraet hat, misst es nach.
+
+          Gemessen ist die Wirkung selbst, an allen drei Flaechen mit Gegenprobe:
+          grober Zeiger => opacity 1 ohne Hover, kein grobes Zeigegeraet => opacity 0. */}
       <div className="absolute right-2 top-2 z-10 opacity-0 transition-opacity
                       group-hover:opacity-100 focus-within:opacity-100
+                      any-pointer-coarse:opacity-100
                       has-[[data-state=open]]:opacity-100">
         <ProjektMenue project={p.name} onUmbenannt={refresh} onGeloescht={refresh} />
       </div>
@@ -240,9 +262,12 @@ export function HomeGallery() {
                       </Link>
                       {/* Geschwister des Links, nicht sein Kind: ein <button> in einem <a> ist
                           ungueltiges HTML und der Klick landete zusaetzlich im Link. */}
-                      {/* has-[[data-state=open]]: Begruendung wie bei den Karten oben. */}
+                      {/* has-[[data-state=open]] und any-pointer-coarse: Begruendung wie bei
+                          den Karten oben. Karte und Zeile MUESSEN sich gleich verhalten —
+                          sie stehen auf demselben Schirm. */}
                       <div className="shrink-0 px-3 opacity-0 transition-opacity
                                       group-hover:opacity-100 focus-within:opacity-100
+                                      any-pointer-coarse:opacity-100
                                       has-[[data-state=open]]:opacity-100">
                         <ProjektMenue project={p.name} onUmbenannt={refresh} onGeloescht={refresh} />
                       </div>

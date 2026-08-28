@@ -175,7 +175,12 @@ unter **Einstellungen › Video-Import**.
 **Ordnung, auch nach hundert Aufnahmen.** Projekte und Aufnahmen lassen sich jederzeit
 umbenennen — beim Umbenennen einer Aufnahme bietet dir Transkribor die Namen der Sprecher an,
 sodass aus `01172464` ein „Hans Müller, Garage Rüthi“ wird. Suchfeld und `Strg+K` führen dich
-auch in grossen Sammlungen mit einem Griff zum richtigen Projekt.
+auch in grossen Sammlungen mit einem Griff zum richtigen Projekt. Am Tablet und am
+Touch-Bildschirm sind die `⋯`-Knöpfe ab der nächsten Fassung dauerhaft sichtbar: bisher
+erschienen sie nur beim Darüberfahren mit der Maus oder wenn du sie mit der Tastatur
+ansteuertest — mit dem Finger allein waren sie nicht zu sehen, und zum Umbenennen oder
+Löschen musstest du das Projekt erst öffnen. Dasselbe gilt für die Sprecherauswahl im
+Editor.
 
 **Es wartet nicht auf dich.** Aufnahmen werden nacheinander abgehört, die Korrektur läuft
 danach für mehrere gleichzeitig, und mehrere Projekte laufen ohnehin nebeneinander — du
