@@ -1801,3 +1801,176 @@ def test_all_verrechnet_projekte_nicht_gegeneinander(monkeypatch, tmp_path, caps
     assert "korrektur: FEHLER — 0 von 1 versuchten Datei(en) korrigiert" in out, out
     # Gegenprobe: B wurde trotzdem transkribiert — der Lauf bricht nicht beim ersten Ausfall ab.
     assert (tmp_path / "BErfolg" / "transkripte" / "B1.json").exists()
+
+
+def test_done_kommt_erst_nach_der_inline_korrektur(monkeypatch, tmp_path, capsys):
+    """`[done]` gibt die Aufnahme frei — und darf das erst, wenn NIEMAND mehr schreibt (#418).
+
+    `jobs.py` nimmt den Basisnamen bei dieser Zeile aus `active_bases`, und
+    `betrifft(..., active_only=True)` haengt daran: die 409-Sperre von
+    `DELETE .../files/{base}`. Bis zu diesem Fix stand die Zeile bedingungslos im `finally`
+    der Schleife, also unmittelbar hinter `ai_pool.submit(...)` — die Aufnahme galt damit
+    schon als frei, waehrend sie noch in der Poolschlange auf einen Arbeiter wartete.
+
+    Dieser Test sichert NUR die verschobene Freigabe. Er allein genuegt nicht: mit
+    eingeschalteter Diarisierung gibt `cmd_diarize` die Aufnahme schon vorher frei, und dann
+    ist das Verschieben wirkungslos. Diese Haelfte deckt
+    `test_aufnahme_bleibt_bis_zum_ende_der_korrektur_gesperrt` ab — die beiden gehoeren
+    zusammen, und genau die Luecke dazwischen ist im Review aufgefallen.
+
+    Die Waise aus der Ausgangsmeldung entsteht NICHT (`correct_ai_single` prueft die Roh-JSON
+    beim Eintritt selbst). Gesichert wird die Sperr-Semantik, kein belegter Datenverlust.
+
+    Der Sensor ist die REIHENFOLGE auf stdout, nicht die blosse Anwesenheit der Zeile — genau
+    die war vorher schon da. `KI-FERTIG` druckt die Attrappe als LETZTES, aus demselben
+    Poolthread, der gleich darauf den Rueckruf ausloest; die Ordnung ist damit zugesichert und
+    nicht vom Scheduler geliehen.
+    """
+    import time
+    from webtool import correct, llm
+
+    _ki_projekt(monkeypatch, tmp_path, "FreigabeDemo", bases=("S1",))
+    monkeypatch.setattr(llm, "available", lambda: (True, ""))
+
+    def langsame_korrektur(project, b, **kw):
+        time.sleep(0.15)          # das Fenster, in dem frueher geloescht werden konnte
+        print(f"KI-FERTIG {b}", flush=True)
+        return True
+
+    monkeypatch.setattr(correct, "correct_ai_single", langsame_korrektur)
+
+    transcribe.transcribe_project("FreigabeDemo", "tiny", "de", autocorrect=True)
+    out = capsys.readouterr().out
+    assert "KI-FERTIG S1" in out, out
+    assert "[done] S1" in out, out
+    assert out.index("[done] S1") > out.index("KI-FERTIG S1"), (
+        "die Aufnahme wurde freigegeben, waehrend die Korrektur noch schrieb: " + out)
+
+
+def test_ohne_future_wird_die_aufnahme_trotzdem_freigegeben(monkeypatch, tmp_path, capsys):
+    """Die Gegenrichtung zu #418 — und der teurere Fall.
+
+    Haelt kein Future die Datei, gibt es auch niemanden, der sie spaeter freigibt: dann MUSS
+    das `finally` drucken. Ohne diese Haelfte bliebe ein Fix gruen, der die Aufnahme bis
+    Jobende in `active_bases` stehen laesst — ihr Loeschen antwortete dauerhaft mit 409, und
+    zwar ausgerechnet dort, wo gar nichts mehr an ihr arbeitet.
+
+    Beide Gruende, aus denen kein Future entsteht, sonst ist die halbe Regel unbewacht.
+    """
+    from webtool import correct, llm
+
+    # (1) Pool steht, aber die Vorbereitung scheitert -> `submit` wird nie erreicht.
+    #     `_ki_projekt` setzt `prep_single` SELBST auf True, die Attrappe muss also DANACH
+    #     kommen — sonst nimmt die Fixture dem Test seinen Sensor.
+    _ki_projekt(monkeypatch, tmp_path, "OhneFutureDemo", bases=("S1",))
+    monkeypatch.setattr(llm, "available", lambda: (True, ""))
+    monkeypatch.setattr(correct, "prep_single", lambda *a, **kw: False)
+    gerufen = []
+    monkeypatch.setattr(correct, "correct_ai_single",
+                        lambda *a, **kw: gerufen.append(1) or True)
+
+    transcribe.transcribe_project("OhneFutureDemo", "tiny", "de", autocorrect=True)
+    out = capsys.readouterr().out
+    assert not gerufen, "Vorbedingung: ohne Vorbereitung geht nichts an den Pool"
+    assert "[done] S1" in out, out
+
+
+
+def test_ohne_anbieter_wird_die_aufnahme_trotzdem_freigegeben(monkeypatch, tmp_path, capsys):
+    """Zweiter Grund, aus dem kein Future entsteht: es gibt ueberhaupt keinen Pool.
+
+    Eigener Test statt eines zweiten Blocks im vorigen (Review M4): faellt er, soll der Name
+    sagen, WELCHE Haelfte — und die Attrappen der einen Haelfte sollen nicht in die andere
+    lecken.
+    """
+    from webtool import llm
+
+    _ki_projekt(monkeypatch, tmp_path, "OhneKiDemo", bases=("S1",))
+    monkeypatch.setattr(llm, "available", lambda: (False, "kein KI-Anbieter konfiguriert"))
+
+    transcribe.transcribe_project("OhneKiDemo", "tiny", "de", autocorrect=True)
+    out = capsys.readouterr().out
+    assert "[done] S1" in out, out
+
+
+def test_aufnahme_bleibt_bis_zum_ende_der_korrektur_gesperrt(monkeypatch, tmp_path, capsys):
+    """Der Standardpfad — und der Test, der in der ersten Fassung dieses Fixes FEHLTE.
+
+    `cmd_diarize` druckt auf jedem Pfad, auf dem es die Datei wirklich anfasst, ein eigenes
+    `[active]`/`[done]`-Paar (`correct.py:325` und `:334`/`:356`/`:364`/`:368`; seine vier
+    stillen Ausstiege drucken beides nicht und sind damit unschaedlich). Bei ihm heisst `[done]` „dieser Schritt ist fertig",
+    `jobs.py` liest aber „der Lauf ist mit der Datei fertig" und verwirft sie aus
+    `active_bases`. Die Aufnahme war damit frei, waehrend sie noch in der Poolschlange auf
+    einen Arbeiter wartete — und das blosse Verschieben des `finally`-Drucks aendert daran
+    NICHTS, weil dort nur ein zweites Mal verworfen wurde, was laengst weg war.
+
+    WARUM DAS AN DEN VORHANDENEN TESTS VORBEILIEF: `_ki_projekt` faelscht `cmd_diarize` mit
+    einer STUMMEN Attrappe. Die Fixture nimmt dem Test damit genau den Sensor, um den es
+    hier geht. Deshalb druckt die Attrappe unten die echten Zeilenformen.
+
+    Und die Buchung laeuft durch `jobs.buche_aktive` — dieselbe Funktion, die der Server in
+    `_run` fahrt. Die Regel im Test nachzubauen hiesse, die Attrappe gegen die Attrappe zu
+    pruefen.
+    """
+    import threading
+    from webtool import correct, jobs, llm
+
+    _ki_projekt(monkeypatch, tmp_path, "SperrDemo", bases=("S1", "S2"))
+    monkeypatch.setattr(llm, "available", lambda: (True, ""))
+    monkeypatch.setattr(correct, "CLAUDE_PARALLEL", 1)   # S2 MUSS in der Schlange warten
+
+    s2_vorbereitet = threading.Event()
+
+    def diarize_wie_echt(project, only_bases=None):
+        for b in (only_bases or []):
+            print(f"[active] {b}", flush=True)
+            print(f"→ Diarisiere {b} …", flush=True)
+            print(f"[done] {b}", flush=True)         # <- gibt frei, correct.py:356
+        return len(only_bases or [])
+
+    def prep_wie_echt(project, b, **kw):
+        if b == "S2":
+            s2_vorbereitet.set()
+        return True
+
+    def korrektur_wie_echt(project, b, **kw):
+        print(f"[active] {b}", flush=True)           # correct.py:1076
+        if b == "S1":
+            # Deterministisch statt per Uhr: S1 haelt den einzigen Arbeiter besetzt, bis S2
+            # die Vorbereitung durch hat und in der Schlange steht.
+            assert s2_vorbereitet.wait(10), "Vorbedingung: S2 erreichte die Schlange nicht"
+        print(f"apply: {b} -> edit.json + md (1 Segmente)", flush=True)
+        print(f"[done] {b}", flush=True)             # correct.py:1117 (finally)
+        return True
+
+    monkeypatch.setattr(correct, "cmd_diarize", diarize_wie_echt)
+    monkeypatch.setattr(correct, "prep_single", prep_wie_echt)
+    monkeypatch.setattr(correct, "correct_ai_single", korrektur_wie_echt)
+
+    transcribe.transcribe_project("SperrDemo", "tiny", "de", autocorrect=True)
+    zeilen = capsys.readouterr().out.splitlines()
+
+    aktive = set()
+    verlauf = []
+    for zeile in zeilen:
+        jobs.buche_aktive(aktive, zeile)
+        verlauf.append((zeile, set(aktive)))
+
+    # Vorbedingung: S2 war fertig diarisiert, BEVOR S1s Korrektur endete. Ohne sie waere die
+    # Zusicherung unten vacuous — dann haette S2 die Schlange nie erreicht.
+    idx_diar_s2 = [i for i, (z, _) in enumerate(verlauf) if z == "→ Diarisiere S2 …"]
+    idx_apply_s1 = [i for i, (z, _) in enumerate(verlauf)
+                    if z == "apply: S1 -> edit.json + md (1 Segmente)"]
+    assert idx_diar_s2 and idx_apply_s1, zeilen
+    assert idx_diar_s2[0] < idx_apply_s1[0], (
+        "Vorbedingung: S2 muss die Schlange erreichen, waehrend S1 noch korrigiert wird")
+
+    # DIE ZUSICHERUNG: mitten in S1s Korrektur wartet S2 in der Schlange — und gilt als
+    # bearbeitet. Vor dem Fix war sie hier frei, `DELETE` kam mit 200 durch.
+    _, zustand = verlauf[idx_apply_s1[0]]
+    assert "S2" in zustand, (
+        "S2 wartet in der Poolschlange und gilt trotzdem als frei — genau das Loch aus #418."
+        + chr(10) + chr(10).join(f"{z!r} -> {sorted(a)}" for z, a in verlauf))
+
+    # Und am Ende ist wirklich alles freigegeben — sonst bliebe Loeschen dauerhaft bei 409.
+    assert verlauf[-1][1] == set(), verlauf[-1]

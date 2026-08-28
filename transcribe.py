@@ -606,6 +606,69 @@ def transcribe_project(name, model, language, only=None, autocorrect: bool = Fal
             print(f"[autocorrect] KI-Phase uebersprungen — {grund}", flush=True)
             ai_grund_gemeldet = True
 
+    def _freigeben(b):
+        """`[done] {b}` — gibt die Aufnahme in `jobs.active_bases` frei, und daran haengt die
+        409-Sperre von `DELETE .../files/{base}` (`betrifft(..., active_only=True)`).
+
+        Bis #418 stand die Zeile bedingungslos im `finally` des Schleifenrumpfs, also
+        unmittelbar hinter `ai_pool.submit(...)`. Zusammen mit dem `[active]`, das oben nach
+        `cmd_diarize` wieder gesetzt wird, deckt `active_bases` jetzt durchgehend ab, was der
+        Lauf noch anfassen wird: Vorbereitung, Wartezeit in der Poolschlange und Korrektur.
+        Beide Haelften gehoeren zusammen — die eine allein bringt nichts (siehe oben).
+
+        GEMESSEN, A/B gegen master, echter Pfad, Standardkonfiguration `TRANSKRIBOR_DIARIZE=1`,
+        `TRANSKRIBOR_PARALLEL=1`, zwei Aufnahmen: die zweite wartet in der Schlange, waehrend
+        die erste korrigiert wird. Vorher war sie dort nicht in `active_bases` und `DELETE` kam
+        mit 200 durch; nachher bleibt sie es und `DELETE` antwortet 409.
+
+        Eine fruehere Fassung dieses Absatzes mass mit `TRANSKRIBOR_DIARIZE=0` und schrieb das
+        Ergebnis als Aussage ueber den Normalfall auf. Das war falsch, und es steht hier samt
+        Zahlen, damit es niemand wiederholt.
+
+        Jene Messung: Basis `454bedd` gegen die damalige Fassung `a17e7c6`, `DIARIZE=0`,
+        `PARALLEL=1`, zwei Aufnahmen, laufender Server, Loeschen der zweiten waehrend die erste
+        korrigiert wird. Auf `454bedd` stand `[done] probeB` im Protokoll und `DELETE` kam mit
+        200 durch; auf `a17e7c6` fehlte die Zeile und `DELETE` antwortete 409 — der Fix schien
+        also zu wirken. **Dieselbe Fassung `a17e7c6` lieferte mit `DIARIZE=1` weiterhin 200**,
+        und das ist der Beleg fuer „halber Fix": ohne Diarisierung wirkt schon das blosse
+        Verschieben dieser Zeile, mit ihr nicht.
+
+        Wer an dieser Buchfuehrung misst, misst deshalb mit EINGESCHALTETER Diarisierung und
+        mit ZWEI Aufnahmen — sonst misst er den einen Zweig, in dem die halbe Reparatur genuegt.
+
+        WAS DIE MESSUNG NICHT ZEIGTE, obwohl die Ausgangsmeldung es vorhersagt: die Waise
+        („Aufnahme ohne Ton, aber mit Transkript") entstand NICHT. `correct_ai_single` prueft
+        beim Eintritt selbst, ob die Roh-JSON noch da ist (`correct.py:1068`), und steigt mit
+        `None` aus — der Loeschvorgang blieb sauber. Der Rest-Weg zu einer Waise ist die
+        Handvoll Anweisungen zwischen dieser Pruefung und ihrem eigenen `[active]`
+        (`correct.py:1076`), also ein echtes Millisekundenrennen. Repariert wird hier die
+        SPERR-SEMANTIK — dass eine Aufnahme als frei gilt, die der Lauf noch anfassen wird —,
+        nicht ein belegter Datenverlust.
+
+        Warum der Rueckruf noetig ist und ein blosses Weglassen im `finally` nicht reicht:
+        `correct_ai_single` raeumt in ihrem `finally` selbst ab, aber ihre ZWEI fruehen
+        Ausstiege (Roh-JSON weg, `human_edited`) drucken weder `[active]` noch `[done]`. Ohne
+        den Rueckruf bliebe die Aufnahme dort bis Jobende in `active_bases` haengen: Loeschen
+        dauerhaft 409, ausgerechnet dort, wo gar nichts mehr an ihr arbeitet.
+
+        GETRAGENER PREIS: eine korrigierte Datei meldet `[done]` DREIMAL — aus `cmd_diarize`,
+        aus `correct_ai_single`s `finally` und aus dem Rueckruf (ohne Diarisierung zweimal).
+        Das ist in beiden Konfigurationen die Zahl von master, nur anders verteilt; bei den
+        Schutz-Ausstiegen ist es ein Tausch (Schleife → Rueckruf), keine Vermehrung. `jobs.py`
+        fasst `active_bases` ausschliesslich mit `add`/`discard` an (`buche_aktive` und
+        `remove_base`, kein `remove`), `jobPhases.ts:252` raeumt nur eine Diarisierungsphase
+        und ist gegen das wiederholte `[done]` durch Optional-Chaining doppelt abgesichert.
+
+        Den Rueckruf an `fut.result() is None` zu haengen ergaebe genau eine Zeile, wuerde aber
+        `None` eine zweite, unsichtbare Bedeutung aufladen („hat nicht selbst gemeldet") — der
+        naechste vierte Ausstieg in `correct_ai_single` braeche es still.
+
+        EINE Funktion statt mehrerer `print`-Zeilen desselben Wortlauts: die Druckformen dieses
+        Laufs werden von `webtool/frontend/jobPhases.vertrag.test.ts` aus dem Quelltext
+        geerntet.
+        """
+        print(f"[done] {b}", flush=True)
+
     if autocorrect:
         # Einmal vorab, damit der Grund am ANFANG des Protokolls steht und nicht erst hinter
         # der ersten Transkription — die dauert Minuten, und wer zusieht, sieht bis dahin nichts.
@@ -638,6 +701,8 @@ def transcribe_project(name, model, language, only=None, autocorrect: bool = Fal
                 failed_bases.add(base)
                 continue
             out_json = os.path.join(out_dir, base + ".json")
+            # Haelt ein Future die Datei, gibt ER sie frei — nicht das `finally` (#418).
+            ki_uebergeben = False
             print(f"[active] {base}", flush=True)
             print(f"[{name}] -> transkribiere {base} …", flush=True)
             t0 = time.monotonic()
@@ -680,6 +745,36 @@ def transcribe_project(name, model, language, only=None, autocorrect: bool = Fal
                         _ai_pool_oeffnen()
                         # 1. Diarisierung & Prep direkt auf der GPU in der Hauptschleife (Hardware geschützt):
                         _correct.cmd_diarize(name, [base])
+                        # #418/C1: `cmd_diarize` druckt auf jedem Pfad, auf dem es die Datei
+                        # WIRKLICH anfasst, ein eigenes `[active]`/`[done]`-Paar
+                        # (`correct.py:325` und `:334`/`:356`/`:364`/`:368`) — bei ihm heisst das
+                        # "dieser SCHRITT ist fertig", `jobs.py` liest aber "der Lauf ist mit
+                        # der Datei fertig" und verwirft sie aus `active_bases`. Ab hier waere
+                        # die Aufnahme also frei: waehrend `prep_single`, waehrend der ganzen
+                        # Wartezeit in der Poolschlange, bis `correct_ai_single` sie mit ihrem
+                        # eigenen `[active]` (`correct.py:1076`) wieder eintraegt. Das Weglassen
+                        # des `finally`-Drucks allein aendert daran NICHTS — dort wurde nur ein
+                        # zweites Mal verworfen, was laengst weg war.
+                        #
+                        # VIER Ausstiege von `cmd_diarize` drucken dagegen GAR NICHTS
+                        # (Kill-Switch `:281`, Roh-JSON fehlt `:285`, Sidecar-Wiederverwendung
+                        # `:303`, kein Audio `:306`). Dort ist die Aufnahme nach `cmd_diarize`
+                        # NICHT frei — die Paarung stimmt, es fehlen beide Zeilen. Die Marke
+                        # unten ist dann ein No-op. Wer die `[done]`-Duplikate zaehlt, rechnet
+                        # nur auf den anfassenden Pfaden mit dreien.
+                        #
+                        # Der Klammerdruck von `cmd_diarize` kann nicht weg: im eigenstaendigen
+                        # `correct run` raeumt sein `[done]` die Diarisierungsphase in
+                        # `jobPhases.ts:252`. Also stellen wir hier wieder scharf. Kostenlos in
+                        # beiden Vertraegen — `jobPhases.ts` hat fuer `[active]` gar keinen
+                        # Zweig, und der Wortlaut steht im INVENTAR bereits als
+                        # `gelesen_anderswo` (`jobPhases.vertrag.test.ts:322`).
+                        #
+                        # NACH `cmd_diarize` statt nach `prep_single` (so lautete die
+                        # Review-Empfehlung): `prep_single` druckt weder `[active]` noch
+                        # `[done]` (nachgesehen), liegt aber im offenen Fenster. Hier gesetzt
+                        # deckt die Marke auch sie ab; eine Zeile spaeter nicht.
+                        print(f"[active] {base}", flush=True)
                         # `prep_single` liefert `bool` und MELDET seinen Fehlschlag nur als
                         # `prep: SKIP …` — eine Zeile, die der Parser bewusst ignoriert. Der
                         # Rueckgabewert fiel hier weg (CodeRabbit an PR #433), womit der
@@ -694,8 +789,20 @@ def transcribe_project(name, model, language, only=None, autocorrect: bool = Fal
                             raise RuntimeError("Vorbereitung fehlgeschlagen")
                         # 2. Datei sofort parallel an den Cloud-KI-Threadpool übergeben.
                         if ai_pool is not None:
-                            ai_futures.append((base, ai_pool.submit(_correct.correct_ai_single,
-                                                                    name, base)))
+                            fut = ai_pool.submit(_correct.correct_ai_single, name, base)
+                            ai_futures.append((base, fut))
+                            # `add_done_callback` feuert auf JEDEM Ausgang, auch auf einer
+                            # Ausnahme — sonst bliebe die Aufnahme bis Jobende in
+                            # `active_bases` und ihr Loeschen dauerhaft bei 409 haengen.
+                            # Der Rueckruf laeuft im Poolthread; aus dem drucken die
+                            # Korrekturzeilen ohnehin schon.
+                            fut.add_done_callback(lambda _f, b=base: _freigeben(b))
+                            # ERST hier, nicht vor der Registrierung (Review M1): wirft
+                            # `add_done_callback`, gibt weder Rueckruf noch `finally` die
+                            # Aufnahme je frei. Feuert der Rueckruf sofort, weil der Future
+                            # schon fertig ist, wird die Marke danach trotzdem gesetzt und das
+                            # `finally` schweigt korrekt — die Reihenfolge ist gleichwertig.
+                            ki_uebergeben = True
                     except Exception as ex:
                         # ZWEI Zeilenformen fuer ZWEI Bedeutungen (#421) — vorher stand hier eine
                         # fuer beide, und der Unterschied lebte nur im Zaehler daneben.
@@ -733,7 +840,10 @@ def transcribe_project(name, model, language, only=None, autocorrect: bool = Fal
                 continue
             finally:
                 processed.add(base)
-                print(f"[done] {base}", flush=True)
+                # Ohne Future gibt es niemanden, der spaeter freigibt: KI aus, kein Anbieter,
+                # Diarisierung/Prep gescheitert, Transkription gescheitert.
+                if not ki_uebergeben:
+                    _freigeben(base)
     finally:
         if ai_pool is not None:
             if ai_futures:
