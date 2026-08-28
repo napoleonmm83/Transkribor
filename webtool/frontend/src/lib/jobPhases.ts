@@ -117,39 +117,6 @@ export function parseJobPhases(kind: string, lines: string[]): JobPhases {
       continue
     }
 
-    // `[active] {base}` - die zweite Quelle fuer "diese Aufnahme gehoert zum Lauf", und seit
-    // #431 die einzige fuer eine, die erst waehrend des Laufs dazukam.
-    //
-    // Eine MENGE, die nur waechst: kein Zustand ueber Zeilen hinweg, keine Wette auf ihre
-    // Reihenfolge. Der Kommentar am `Diarisiere`-Zweig lehnt dieselbe Quelle ab, weil "ihre
-    // Bedeutung ueber den Lauf wechselt" - das trifft dort zu, wo der WERT der Zeile gebraucht
-    // wird (welche Phase). Hier zaehlt nur ihre Existenz, und die wechselt nicht.
-    //
-    // GEMESSEN, weil derselbe Kommentar es verlangt ("Ungemessen; wer sie doch nehmen will,
-    // misst zuerst"): DREI Endurteile haben KEIN vorangehendes `[active]` fuer ihren Basisnamen
-    // - `skip (Audio nicht mehr vorhanden)` in `transcribe_project` (steht VOR dem `[active]`)
-    // und zweimal `SKIP (human_edited=true)` in `correct.py` (beide kehren vor ihrem `[active]`
-    // zurueck). Fuer Aufnahmen aus dem `[scope]` ist das folgenlos, die passieren ueber
-    // `scope.has`. Fuer spaeter dazugekommene bleibt der erste Fall ungefixt: unveraendert zu
-    // vorher, nicht schlechter - als getragene Grenze benannt statt stillschweigend.
-    //
-    // NICHT getrimmt, anders als `jobs.buche_aktive` es tut: `safe_name` laesst Randleerzeichen
-    // durch, und die Endurteil-Regexe fangen den Namen roh ein. Ein getrimmtes `gesehen` traefe
-    // den ungetrimmten Schluessel nicht - dieselbe Kante, an der der Zeilenschnitt bei `[scope]`
-    // eine Zeile hoeher schon einmal haengengeblieben ist.
-    //
-    // Was das NEU erlaubt: die Oberflaeche liest `[active]` bis hierher GAR NICHT (im INVENTAR
-    // stand es als `gelesen_anderswo`). Zwei praeparierte Zeilen - `[active] Foo` plus ein
-    // Endurteil fuer `Foo` - erzeugen jetzt eine Geisterzeile fuer eine Datei, die es nicht
-    // gibt; kein Datenverlust, kein Dateizugriff. Die verworfene Alternative (spaetere
-    // `[scope]`-Zeilen zulassen) haette mit EINER Zeile die ECHTE Dateiliste ersetzt. Strikt
-    // kleiner, aber vorhanden - deshalb steht es hier.
-    if (l.startsWith('[active] ')) {
-      const b = l.slice(9)
-      if (b) gesehen.add(b)
-      continue
-    }
-
     // 'fetch' ist der reine Download-Job (app.py: eigene Art, damit er keinen GPU-Slot belegt).
     // Er sendet nur '[fetch] …'-Zeilen. Den kombinierten CLI-Lauf (Download UND Transkription in
     // einem Strom) trug dieser Zweig frueher mit; seit "nur die erste [scope]-Zeile zaehlt" tut
@@ -345,6 +312,41 @@ export function parseJobPhases(kind: string, lines: string[]): JobPhases {
     }
     else if (/^prep: \d+ Datei/.test(l)) { global = 'prep' }
     else if (/^(→ Glossar|✓ Glossar|↷ nutze vorhandenes _glossar)/.test(l)) { global = 'glossary' }
+    // `[active] {base}` - die zweite Quelle fuer "diese Aufnahme gehoert zum Lauf", und seit
+    // #431 die einzige fuer eine, die erst waehrend des Laufs dazukam.
+    //
+    // ZULETZT im Zweig, nicht zuerst - und das ist die Antwort auf einen GEMESSENEN Fehler der
+    // ersten Fassung: dort stand er vor den Dialekt-Regexen und frass mit `continue` jede Zeile,
+    // die mit `[active] ` beginnt. In einem Projekt namens "active" praefixt `transcribe.py`
+    // JEDE Zeile so; gemessen ergab das `perBase={}` statt `{B:'done'}`, und `gesehen` fuellte
+    // sich mit Bruchstuecken. Dieselbe Falle wie beim Projekt namens "scope" weiter oben und wie
+    // #379 fuer "fetch" - hier gespiegelt geloest: die spezifischen Formen gewinnen, diese
+    // greift nur, wenn keine andere passt.
+    //
+    // Eine MENGE, die nur waechst: kein Zustand ueber Zeilen hinweg, keine Wette auf ihre
+    // Reihenfolge. Der Kommentar am `Diarisiere`-Zweig lehnt dieselbe Quelle ab, weil "ihre
+    // Bedeutung ueber den Lauf wechselt" - das trifft dort zu, wo der WERT der Zeile gebraucht
+    // wird (welche Phase). Hier zaehlt nur ihre Existenz, und die wechselt nicht.
+    //
+    // GEMESSEN, weil derselbe Kommentar es verlangt ("Ungemessen; wer sie doch nehmen will,
+    // misst zuerst"): DREI Endurteile haben KEIN vorangehendes `[active]` fuer ihren Basisnamen
+    // - `skip (Audio nicht mehr vorhanden)` in `transcribe_project` (steht VOR dem `[active]`)
+    // und zweimal `SKIP (human_edited=true)` in `correct.py` (beide kehren vor ihrem `[active]`
+    // zurueck). Fuer Aufnahmen aus dem `[scope]` ist das folgenlos. Fuer spaeter dazugekommene
+    // bleibt der erste Fall ungefixt: unveraendert zu vorher, als getragene Grenze benannt.
+    //
+    // NICHT getrimmt, anders als `jobs.buche_aktive` es tut: `safe_name` laesst Randleerzeichen
+    // durch, und die Endurteil-Regexe fangen den Namen roh ein.
+    //
+    // Was das NEU erlaubt: die Oberflaeche liest `[active]` bis hierher GAR NICHT. Zwei
+    // praeparierte Zeilen erzeugen jetzt eine Geisterzeile fuer eine Datei, die es nicht gibt -
+    // kein Datenverlust, kein Dateizugriff. Und die Zulassung rechtfertigt einen ZUSTAND, nie
+    // eine Prognose: die Warteschlangen-Anzeige haengt weiter allein am `scope` (siehe Sidebar
+    // und ProjectWorkspace), weil das Glossar seit #450 KORPUSWEIT `[active]` meldet.
+    else if (l.startsWith('[active] ')) {
+      const b = l.slice(9)
+      if (b) gesehen.add(b)
+    }
     // reuse / diarize-SKIP / prep-SKIP / "Diarisierung deaktiviert" -> bewusst ignoriert
   }
 
@@ -352,6 +354,28 @@ export function parseJobPhases(kind: string, lines: string[]): JobPhases {
   // eine Feldaenderung in JEDER Antwort, fuer einen Fall, den es meist gar nicht gibt.
   return { global: Object.keys(active).length ? null : global, scope,
            gesehen: gesehen.size ? gesehen : undefined, active, perBase, bilanz }
+}
+
+/** Zwei Fragen, die drei Oberflaechen-Stellen bisher je selbst beantwortet haben (#431) --
+ *  und genau deshalb dreimal: Sidebar, ProjectWorkspace und der Parser. Zwei davon standen
+ *  falsch, die dritte fand erst ein Review. Hier stehen sie einmal.
+ *
+ *  Der Unterschied ist keine Feinheit, sondern der Kern:
+ *  - `scope` ist eine ZUSAGE ueber den ganzen Lauf ("diese Aufnahmen fasse ich an"). Sie
+ *    rechtfertigt eine PROGNOSE: "steht in der Warteschlange".
+ *  - `gesehen` ist eine BEOBACHTUNG je Datei ("diese habe ich angefasst"). Sie rechtfertigt
+ *    einen ZUSTAND, aber keine Prognose -- das Glossar meldet seit #450 KORPUSWEIT `[active]`,
+ *    ein Einzeldatei-Korrekturlauf stellte sonst den ganzen Korpus auf "In Warteschlange..."
+ *    (gemessen: 3 statt 1). */
+export function imBereich(phases: JobPhases | undefined, base: string, jobRunning: boolean): boolean {
+  if (!jobRunning) return false
+  return phases?.scope ? phases.scope.has(base) : true
+}
+
+/** Darf fuer `base` ein ZUSTAND (Phase, Endurteil) angezeigt werden? Bereich ODER Beobachtung. */
+export function zugelassen(phases: JobPhases | undefined, base: string, jobRunning: boolean): boolean {
+  if (!jobRunning) return false
+  return imBereich(phases, base, jobRunning) || (phases?.gesehen?.has(base) ?? false)
 }
 
 /** Einzeiler fuer Toast & Co. — nie rohe Log-Zeilen anzeigen, die sind fuer den Parser, nicht fuer Menschen. */

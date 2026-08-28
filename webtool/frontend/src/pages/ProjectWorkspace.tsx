@@ -14,7 +14,7 @@ import { nurAudio } from '@/lib/materialZeilen'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { startTranscribe, startCorrect, cancelJob, getProjektEinstellungen } from '@/lib/api'
-import { describePhases, KIND_LABEL } from '@/lib/jobPhases'
+import { describePhases, KIND_LABEL, imBereich, zugelassen } from '@/lib/jobPhases'
 import { cn } from '@/lib/utils'
 import type { ProjectEinstellungen, StartJob } from '@/lib/types'
 
@@ -292,9 +292,13 @@ export function ProjectWorkspace() {
         {dateien.length > 0 && (
           <ul className="blatt divide-y divide-border overflow-hidden">
             {dateien.map(f => {
-              const inScope = running ? (phases.scope ? phases.scope.has(f.base) : true) : false
-              const active = inScope ? phases.active[f.base] : undefined
-              const state = inScope ? phases.perBase[f.base] : undefined
+              // DRITTER Ort desselben Filters (#431, erst vom Review gefunden). Die
+              // Arbeitsflaeche ist die Seite, auf der hochgeladen wird -- hier faellt es
+              // zuerst auf. Seitdem EINE Quelle: lib/jobPhases.ts.
+              const darfWarten = imBereich(phases, f.base, running)
+              const darfZustand = zugelassen(phases, f.base, running)
+              const active = darfZustand ? phases.active[f.base] : undefined
+              const state = darfZustand ? phases.perBase[f.base] : undefined
               return (
                 <li key={f.base} className="px-3 py-2.5 transition-colors hover:bg-muted/60">
                   <div className="flex items-center gap-3">
@@ -307,7 +311,7 @@ export function ProjectWorkspace() {
                       {f.base}
                     </button>
                     <FileStatusPill file={f} active={active?.phase} pct={active?.pct} detail={active?.detail}
-                      state={state} jobRunning={running} inScope={inScope}
+                      state={state} jobRunning={running} inScope={darfWarten}
                       globalPhase={running ? (phases.globalPerBase?.[f.base] ?? (phases.scope === undefined ? phases.global : null)) : null} mitText />
                     <DateiMenue project={project!} file={f} aiReason={aiReason} />
                   </div>

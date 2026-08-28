@@ -253,3 +253,14 @@ describe('Sidebar - Zulassung fuer eine mitten im Lauf dazugekommene Aufnahme (#
     expect(screen.queryByText('Fehler')).not.toBeInTheDocument()
   })
 })
+
+describe('Sidebar - Beobachtung stellt keine Warte-Prognose (#431, Review-Befund A2)', () => {
+  it('zeigt die Warteschlange nur fuer Dateien AUS DEM BEREICH', () => {
+    // `a` steht im Bereich und hat keinen Zustand -> Warteschlange. `b` ist nur beobachtet
+    // (Glossar meldet seit #450 korpusweit) -> KEINE Prognose. Gemessen war es vorher 3 statt 1.
+    zeigen({ offen: 'Alpha', dateien: DATEIEN, jobRunning: true,
+      phases: { global: null, active: {}, perBase: {},
+                scope: new Set(['a']), gesehen: new Set(['a', 'b']) } })
+    expect(screen.getAllByText('In Warteschlange…')).toHaveLength(1)
+  })
+})
