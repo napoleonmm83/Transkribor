@@ -92,10 +92,16 @@ function fortschrittGueltig(anteil) {
  *
  * **Warum das ZIEL zurueckkommt und nicht ja/nein:** mit einem Praedikat prueft der Aufrufer
  * die GEPARSTE URL und oeffnet die ROHE. Gemessen bestehen `"\0https://x"`, `"https\t://x"`
- * und `"ht\ntps://x"` die Pruefung, weil der WHATWG-Parser Steuerzeichen streicht. Heute nicht
- * erreichbar — Chromium kanonisiert vor dem Handler (zweimal unabhaengig gemessen) —, aber
- * erreichbar beim ZWEITEN Aufrufer, und der ist mit dem `will-navigate`-Waechter aus #434 schon
- * vorgeschlagen. Wer den Wert zurueckgibt, kann die Luecke gar nicht mehr aufmachen.
+ * und `"ht\ntps://x"` die Pruefung, weil der WHATWG-Parser Steuerzeichen streicht.
+ *
+ * **Der ZWEITE Aufrufer ist seit #434 da — und die Erwartung an ihn war falsch.** Hier stand,
+ * die Luecke werde „erreichbar beim ZWEITEN Aufrufer, und der ist mit dem `will-navigate`-
+ * Waechter aus #434 schon vorgeschlagen". Am laufenden Fenster nachgemessen: ein
+ * `location.href = "\0http://…"` erreicht `will-navigate` bereits **ohne** das Steuerzeichen —
+ * Chromium kanonisiert vor BEIDEN Ereignissen, nicht nur vor dem Fensteroeffner. Die Bauform
+ * bleibt richtig (wer den Wert zurueckgibt, kann die Luecke gar nicht erst aufmachen); was sich
+ * aendert, ist ihr Status: Vorsorge, kein gedeckter Weg. Erst ein Aufrufer, der seine URL NICHT
+ * von Chromium bekommt, macht sie scharf.
  *
  * Der `try` ist die Vertrauensgrenze, **nicht** ein Produktionsfall: aus dem echten Handler
  * kommt nie eine unparsebare URL an (gemessen: `window.open('nicht mal eine url')` erreicht ihn
@@ -111,4 +117,77 @@ function externesZiel(url) {
   } catch { return null }
 }
 
-module.exports = { fensterOptionen, TITELLEISTE_HOEHE, farbeGueltig, fortschrittGueltig, externesZiel }
+/**
+ * Gehoert `url` zu einer der Herkuenfte, die die App SELBST laedt (#434)?
+ *
+ * `setWindowOpenHandler` daneben sieht nur NEUE Fenster. Navigiert das bestehende Fenster weg,
+ * laeuft `preload.js` auf der Zielseite erneut — und legt `window.transkribor` dorthin. Das
+ * stand im Issue als Herleitung aus Electrons Doku; am laufenden Fenster nachgemessen ist es
+ * wahr und schlimmer, als eine Herleitung klingt: auf der fremden Herkunft steht die Bruecke
+ * mit **12 Schluesseln** (`einrichten`, `logs`, `protokollOeffnen`, `fehlerbericht`,
+ * `projekteOeffnen`, die Update-Kanaele) — nicht ein einzelner Aufruf wie bei #426, sondern
+ * dauerhafter Zugriff.
+ *
+ * Vier Dinge, die man nicht aus dem Diff liest — alle an einem echten Fenster gemessen.
+ * **Aufbau, Kommandos und Rohausgaben stehen in
+ * `docs/superpowers/specs/2026-08-28-transkribor-will-navigate-sonde.md`**; die Zahlen hier
+ * sind Verweise darauf, keine Behauptungen:
+ *
+ * **Die eigene Herkunft MUSS durchkommen, und das ist kein Vorbehalt, sondern ein Fall.** Ein
+ * `loadFile`/`loadURL` aus dem Hauptprozess feuert **kein `will-navigate`** (gemessen; fuer
+ * `will-redirect` gilt das nicht — ein Server-Redirect innerhalb eines Hauptprozess-Ladevorgangs
+ * erreicht den Waechter sehr wohl, hier folgenlos, weil das Backend nur auf sich selbst
+ * umleitet). Ein `location.reload()` im Renderer feuert dagegen
+ * sehr wohl, mit der EIGENEN URL. Fuer die Statusseite ist genau das ein dokumentierter
+ * Nutzerweg: „Ctrl+R laedt `setup.html` mitten im Lauf neu" steht in `electron/CLAUDE.md` als
+ * der Grund, warum `einrichtungLaeuft` im Hauptprozess sitzt. Der `file:`-Arm hier traegt also
+ * eine echte Bedienung, keine Theorie.
+ *
+ * **`file:` hat KEINE Herkunft.** `new URL('file:///x').origin` ist der String `'null'`, und
+ * zwar fuer JEDE `file:`-URL. Ein reiner `origin`-Vergleich haette damit
+ * `file:///C:/Windows/System32/calc.exe` fuer „unsere setup.html" gehalten — der teuerste
+ * Einzelfehler, den diese Funktion machen kann, und er sieht im Code aus wie die kuerzere
+ * Fassung. Deshalb der Pfadvergleich, und deshalb faellt alles andere ohne echte Herkunft
+ * (`data:`, `about:`) hart durch.
+ *
+ * **`blob:` gehoert ausdruecklich NICHT in diese Aufzaehlung** — hier stand es zuerst, und das
+ * war falsch (gemessen: `blob:http://127.0.0.1:8000/…` hat die Herkunft
+ * `http://127.0.0.1:8000` und kommt durch). Ein Blob traegt die Herkunft seines ERZEUGERS,
+ * und erzeugen kann einen mit unserer Herkunft nur unsere eigene Seite. Das Verhalten ist
+ * richtig und muss so bleiben: `useDoc.ts` und `api.ts` bauen die Export-Downloads genau so.
+ * Ein `blob:` fremder Herkunft faellt dagegen durch, und `blob:file:///…` ebenfalls.
+ *
+ * **Die Liste kommt zur LAUFZEIT.** `backend.url()` steht beim Fensterbau noch nicht fest (der
+ * Port entsteht erst mit dem Server, `backend.js:112`). Beim Anhaengen eingeschlossen sperrte
+ * der Waechter die eigene App aus, sobald sie vom Startbildschirm zum Server wechselt — und
+ * das faellt erst im gepackten Lauf auf.
+ *
+ * **Boolean statt Wert, anders als `externesZiel` daneben.** Der Grund dort ist, dass der
+ * Aufrufer die geparste Form prueft und die rohe WEITERREICHT. Auf dem Durchlass-Pfad hier
+ * wird nichts weitergereicht: der Waechter kehrt um, und Chromium navigiert mit der URL, die
+ * es ohnehin schon haelt. Es gibt keine Roh/geparst-Luecke, die ein Rueckgabewert schliessen
+ * koennte.
+ */
+function eigeneHerkunft(url, eigene) {
+  let u
+  try { u = new URL(String(url)) } catch { return false }
+  return (eigene || []).some(e => {
+    let o
+    try { o = new URL(String(e)) } catch { return false }
+    // Der HOST gehoert mitverglichen, auch wenn `file:`-URLs meist keinen haben: eine
+    // UNC-Referenz auf einen FREMDEN Rechner (`file://server/E:/…/setup.html`) traegt denselben
+    // Pfad und galt ohne diese Haelfte als unsere Statusseite (gemessen, Kalt-Review zu #434).
+    // `pathToFileURL` liefert immer `''`, und `file://localhost/…` normalisiert der Parser
+    // selbst darauf — die beiden echten Formen kostet der Vergleich also nichts.
+    if (o.protocol === 'file:') {
+      return u.protocol === 'file:' && u.host === o.host && u.pathname === o.pathname
+    }
+    // Ohne echte Herkunft gibt es nichts zu vergleichen — `'null' === 'null'` waere sonst wahr.
+    if (o.origin === 'null') return false
+    return u.origin === o.origin
+  })
+}
+
+module.exports = {
+  fensterOptionen, TITELLEISTE_HOEHE, farbeGueltig, fortschrittGueltig, externesZiel, eigeneHerkunft,
+}

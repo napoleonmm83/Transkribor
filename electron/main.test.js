@@ -26,6 +26,7 @@ const assert = require('node:assert')
 const os = require('node:os')
 const path = require('node:path')
 const fs = require('node:fs')
+const { pathToFileURL } = require('node:url')
 
 // Die gerade geladene Welt — der `Module._load`-Patch steht global, die Attrappen wechseln.
 let welt = null
@@ -54,6 +55,10 @@ function attrappen(opt = {}) {
     protokollzeilen: [],
     gesendet: [],
     kanaele: new Map(),
+    // Die Navigationshoerer aus #434 (`will-navigate`/`will-redirect`). Ohne diese Attrappe
+    // wirft `fenster()` — beim Bau des Fixes wurden davon 36 Tests rot, was nebenbei belegt,
+    // dass die Verdrahtung hier wirklich erreicht wird.
+    navHoerer: new Map(),
     appEreignisse: new Map(),
     fenster: [],
     quits: 0,
@@ -64,6 +69,7 @@ function attrappen(opt = {}) {
     startFehler: opt.startFehler || null,
     einrichtErgebnis: opt.einrichtErgebnis || { ok: true },
     updateZustand: opt.updateZustand || { art: 'kein-update' },
+    serverLaeuft: false,     // erst nach `backend.start` kennt `url()` den echten Port
     online: opt.online !== false,
     sollPruefen: opt.sollPruefen !== false,
     erstellenWirft: !!opt.erstellenWirft,
@@ -86,6 +92,7 @@ function attrappen(opt = {}) {
       webContents: {
         send: (kanal, nutzlast) => w.gesendet.push({ kanal, nutzlast }),
         setWindowOpenHandler: fn => { w.oeffnenHandler = fn },
+        on: (art, fn) => { w.navHoerer.set(art, fn) },
       },
     }
     return scheibe
@@ -124,10 +131,16 @@ function attrappen(opt = {}) {
     start: onLine => {
       w.spur.push('backend.start')
       if (opt.logZeile) onLine(opt.logZeile)
-      return w.startFehler ? Promise.reject(w.startFehler) : Promise.resolve()
+      if (w.startFehler) return Promise.reject(w.startFehler)
+      // Der Port entsteht IM Start (backend.js:78) — vorher liefert `url()` einen Platzhalter.
+      // Eine Attrappe, die immer denselben Wert liefert, macht die Zusicherung „die eigenen
+      // Herkuenfte werden zur LAUFZEIT erfragt" unpruefbar: gemessen blieben mit ihr 55 von 55
+      // Tests gruen, als die Liste versuchsweise beim Fensterbau eingefroren wurde.
+      w.serverLaeuft = true
+      return Promise.resolve()
     },
     stop: () => w.spur.push('backend.stop'),
-    url: () => 'http://127.0.0.1:8000/',
+    url: () => (w.serverLaeuft ? 'http://127.0.0.1:8000/' : 'http://127.0.0.1:0/'),
     projektePfad: async () => { w.spur.push('backend.projektePfad'); return '/pfad/zu/projekte' },
     log: () => ['zeile'],
   }
@@ -555,6 +568,166 @@ test('nach 20 Abweisungen schweigt das Protokoll — mit einer letzten Zeile (#4
   assert.strictEqual(abgewiesen.length, 20, 'genau der Deckel, nicht mehr')
   const schluss = w.protokollzeilen.filter(z => z.startsWith('Weitere abgewiesene Links'))
   assert.strictEqual(schluss.length, 1, 'die Unterdrueckung wird EINMAL angesagt, nicht 30-mal')
+})
+
+// ── Navigationswaechter (#434) ───────────────────────────────────────────────
+// Der Gegenpart zu #426: dort ging es um ein NEUES Fenster, hier um das bestehende, das selbst
+// wegnavigiert. `./fenster` bleibt auch hier echt — geprueft wird also, dass `main.js` den
+// Waechter wirklich davorhaengt, nicht nur, dass es ihn gibt.
+//
+// Was diese Tests NICHT koennen (dieselbe Grenze wie im Modulkopf): sie sagen nicht, ob
+// Electron das Ereignis ueberhaupt feuert. Das ist an einem laufenden Fenster gemessen — alle
+// vier Wege des Issues (location.href, Link ohne target, form GET und POST) feuern
+// `will-navigate`, der 302-Redirect feuert `will-navigate` mit der EIGENEN und erst
+// `will-redirect` mit der fremden URL.
+
+/**
+ * Ein Navigationsereignis wie Electron es liefert; zurueck kommt, ob es verhindert wurde.
+ * Vorgabe ist der Normalfall (Hauptrahmen); die anderen Belegungen kommen als `ereignis`.
+ *
+ * **Kein Vorgabewert fuer `isMainFrame` als Parameter** — genau das hatte diese Hilfe zuerst,
+ * und der Fall „das Feld fehlt ganz" war damit unpruefbar: ein ausdruecklich uebergebenes
+ * `undefined` loest in JavaScript den Vorgabewert aus, der Test bekam also `true` und mass
+ * nichts. Aufgefallen ist es erst an der Mutation `=== false` → `!` (blieb gruen).
+ */
+function navigieren(w, url, art = 'will-navigate', ereignis = { isMainFrame: true }) {
+  let verhindert = false
+  const hoerer = w.navHoerer.get(art)
+  assert.ok(hoerer, `kein Hoerer fuer ${art} registriert`)
+  // Die ECHTE Form: Details-Ereignis mit `url`/`isMainFrame` als erstes Argument, die
+  // `@deprecated` positionale URL dahinter. `ereignis` darf beides ueberschreiben — nur so
+  // laesst sich pruefen, aus welcher der zwei Quellen der Waechter wirklich liest.
+  hoerer({ preventDefault: () => { verhindert = true }, url, ...ereignis }, url)
+  return verhindert
+}
+
+test('der Navigationswaechter haengt an will-navigate UND will-redirect (#434)', async () => {
+  const w = await laden()
+  // Beide einzeln: nur `will-navigate` liesse den Redirect-Weg offen (gemessen), nur
+  // `will-redirect` den direkten.
+  assert.ok(w.navHoerer.has('will-navigate'), 'ohne will-navigate ist der direkte Weg offen')
+  assert.ok(w.navHoerer.has('will-redirect'), 'ohne will-redirect landet ein 302 auf der fremden Seite')
+})
+
+test('die eigenen Herkuenfte navigieren ungehindert (#434)', async () => {
+  const w = await laden()
+  // Der Loopback-Server mit beliebigem Pfad — und die Statusseite, die der Nutzer mitten in
+  // der Einrichtung per Ctrl+R neu laedt (dokumentierter Weg, s. electron/CLAUDE.md).
+  for (const eigen of [
+    'http://127.0.0.1:8000/p/Projekt/datei',
+    'http://127.0.0.1:8000/',
+    pathToFileURL(path.join(__dirname, 'setup.html')).href,
+  ]) {
+    assert.strictEqual(navigieren(w, eigen), false, `${eigen} ist die eigene App`)
+  }
+  assert.ok(!w.spur.some(s => s.startsWith('extern:')), 'die eigene App gehoert nicht in den Browser')
+  assert.deepStrictEqual(w.protokollzeilen.filter(z => z.includes('abgewiesen')), [],
+    'ein Reload der eigenen Seite ist kein Vorfall und fuellt das Protokoll nicht')
+})
+
+test('eine fremde Herkunft wird abgefangen und geht in den Browser (#434)', async () => {
+  const w = await laden()
+  const NUL = String.fromCharCode(0)
+  assert.strictEqual(navigieren(w, `${NUL}https://example.org/doku`), true,
+    'ohne preventDefault navigiert das Fenster weg — samt preload-Bruecke')
+  // Wie bei #426: hinaus geht die GEPRUEFTE Form, nie die rohe Eingabe.
+  assert.ok(w.spur.includes('extern:https://example.org/doku'))
+  assert.ok(!w.spur.some(s => s.startsWith('extern:') && s.includes(NUL)))
+})
+
+test('ein fremdes Schema erreicht weder Fenster noch Betriebssystem (#434)', async () => {
+  const w = await laden()
+  assert.strictEqual(navigieren(w, 'file:///C:/Windows/System32/calc.exe'), true)
+  assert.ok(!w.spur.some(s => s.startsWith('extern:')),
+    'shell.openExternal darf mit einer file:-URL gar nicht erst gerufen werden')
+  assert.ok(w.protokollzeilen.some(z => z.startsWith('Navigation abgewiesen') && z.includes('calc.exe')),
+    'im Protokoll muss stehen, dass hier NAVIGIERT werden sollte, nicht dass ein Link aufging')
+})
+
+test('der Redirect-Weg haengt am selben Waechter — aber OHNE den Browser (#434)', async () => {
+  const w = await laden()
+  // Gemessen: bei einem 302 von der eigenen auf eine fremde Herkunft sieht `will-navigate` nur
+  // die eigene URL. Ohne diesen Hoerer landete das Fenster auf der fremden Seite.
+  assert.strictEqual(navigieren(w, 'http://127.0.0.1:8000/weiter', 'will-redirect'), false)
+  assert.strictEqual(navigieren(w, 'https://example.org/ziel', 'will-redirect'), true)
+
+  // Und hier endet die Gemeinsamkeit mit `will-navigate`: das Ziel einer Umleitung waehlt ein
+  // SERVER, nicht der Nutzer. Ginge es in den Browser, genuegte eine 302 auf der eigenen
+  // Herkunft, um `shell.openExternal` mit einer beliebigen fremden URL zu feuern — ohne Klick.
+  assert.ok(!w.spur.some(s => s.startsWith('extern:')),
+    'eine Umleitung darf den System-Browser NICHT oeffnen')
+  assert.ok(w.protokollzeilen.some(z => z.startsWith('Weiterleitung abgewiesen') && z.includes('example.org')),
+    'sie wird stattdessen protokolliert, und zwar als Weiterleitung — nicht als Navigation')
+})
+
+test('Fensteroeffner und Navigation teilen EINEN Deckel und EINE Bremse (#434)', async () => {
+  const w = await laden()
+  // Der teuerste Befund an #426 war ein ungebremster Schreibweg ins Protokoll — `bericht.mailto`
+  // kuerzt von oben und entleert den naechsten Fehlerbericht still. Ein EIGENER Zaehler fuer den
+  // neuen Pfad haette dieselbe Luecke wieder aufgemacht, nur halb so schnell.
+  for (let i = 0; i < 15; i++) w.oeffnenHandler({ url: `file:///x${i}` })
+  for (let i = 0; i < 15; i++) navigieren(w, `file:///y${i}`)
+  const abgewiesen = w.protokollzeilen.filter(z => z.includes(' abgewiesen (Schema nicht erlaubt): '))
+  assert.strictEqual(abgewiesen.length, 20, `30 Abweisungen ueber beide Wege ergaben ${abgewiesen.length} Zeilen — der Deckel ist nicht geteilt`)
+  const schluss = w.protokollzeilen.filter(z => z.startsWith('Weitere abgewiesene Links'))
+  assert.strictEqual(schluss.length, 1, 'die Unterdrueckung wird EINMAL angesagt, nicht je Weg einmal')
+})
+
+test('die URL kommt aus dem Details-Ereignis, nicht aus dem veralteten Argument (#434)', async () => {
+  const w = await laden()
+  // `electron.d.ts` markiert die positionalen Parameter von `will-navigate`/`will-redirect` als
+  // `@deprecated`; zugesagt ist `details.url`. Heute liefern beide dasselbe — deshalb ist das
+  // ein VERTRAGSTEST: er laesst sie auseinanderlaufen und haelt fest, welcher gilt.
+  assert.strictEqual(
+    navigieren(w, 'http://127.0.0.1:8000/', 'will-navigate', { isMainFrame: true, url: 'https://boese.example/' }),
+    true, 'gepruefte werden muss die URL aus dem Details-Ereignis')
+  assert.ok(w.spur.includes('extern:https://boese.example/'))
+  assert.ok(!w.spur.some(s => s === 'extern:http://127.0.0.1:8000/'),
+    'der veraltete positionale Wert darf die Entscheidung nicht tragen')
+})
+
+test('ein UNTERRAHMEN erreicht den Waechter nicht — und damit nicht den Browser (#434)', async () => {
+  const w = await laden()
+  // Gemessen: `will-redirect` feuert AUCH fuer iframes (`isMainFrame=false`). Ohne diese Wache
+  // oeffnete ein umleitendes iframe den SYSTEM-Browser — ohne Skript, ohne Nutzergeste. Vor
+  // #434 folgte der Rahmen dem Redirect einfach in sich selbst; das waere eine Faehigkeit, die
+  // erst der Fix aufmacht, und zwar in genau dem Fall, den seine eigene Begruendung ausschliesst.
+  assert.strictEqual(
+    navigieren(w, 'https://example.org/aus-dem-iframe', 'will-redirect', { isMainFrame: false }), false,
+    'der Rahmen darf seinem Redirect folgen wie vorher')
+  assert.ok(!w.spur.some(s => s.startsWith('extern:')), 'ein Rahmen gibt nichts ans Betriebssystem')
+  assert.deepStrictEqual(w.protokollzeilen.filter(z => z.includes('abgewiesen')), [],
+    'und er zahlt auch nicht auf den geteilten Deckel ein')
+
+  // Gegenrichtung, und sie ist der Grund fuer `=== false` statt `!`: fehlt die Angabe ganz,
+  // MUSS der Waechter greifen. Ein unbekannter Wert darf eine Wache nie stillschweigend
+  // abschalten — mit `!e.isMainFrame` waere hier alles durchgelaufen.
+  assert.strictEqual(navigieren(w, 'https://example.org/ohne-angabe', 'will-redirect', {}), true,
+    'ohne Angabe wird geprueft, nicht durchgewunken')
+})
+
+test('die eigenen Herkuenfte werden zur LAUFZEIT erfragt, nicht beim Fensterbau (#434)', async () => {
+  // Der Entwurfshaken aus dem Issue. `backend.url()` steht beim Anhaengen des Hoerers noch
+  // nicht fest; eine dort eingefrorene Liste truege fuer immer den Platzhalter-Port. Der
+  // Schaden waere nutzersichtbar und faellt sonst erst im gepackten Lauf auf: jedes Ctrl+R auf
+  // der Server-Seite gaelte als fremd — und weil `http:` erlaubt ist, wuerde die eigene
+  // App-URL im SYSTEM-Browser aufgehen, statt im Fenster neu zu laden.
+  const w = await laden({ status: { venv: false } })       // ohne venv startet kein Server
+  assert.strictEqual(navigieren(w, 'http://127.0.0.1:8000/'), true,
+    'solange kein Server laeuft, ist dieser Port fremd')
+
+  await w.kanaele.get('einrichten')()                      // Einrichtung -> Server -> Port steht
+  assert.strictEqual(w.backend.url(), 'http://127.0.0.1:8000/', 'Vorbedingung: der Port steht jetzt')
+  assert.strictEqual(navigieren(w, 'http://127.0.0.1:8000/'), false,
+    'dieselbe URL, dasselbe Fenster — nur eine zur Laufzeit erfragte Liste kann das')
+})
+
+test('auch die Navigations-Abweisung ist gedeckelt (#434)', async () => {
+  const w = await laden()
+  navigieren(w, `zzz:${'A'.repeat(5000)}`)
+  const zeile = w.protokollzeilen.find(z => z.startsWith('Navigation abgewiesen'))
+  assert.ok(zeile, 'protokolliert wird sie weiterhin')
+  assert.ok(zeile.length < 400, `Zeile ist ${zeile.length} Zeichen — der Deckel greift auf diesem Weg nicht`)
 })
 
 test('HTTP/2 wird abgeschaltet, BEVOR irgendetwas laeuft (#150)', async () => {
