@@ -9,12 +9,21 @@
 const { app, BrowserWindow, ipcMain, shell, nativeTheme, net } = require('electron')
 const path = require('path')
 const fs = require('fs')
+// Nur fuer den Vergleich in `navigationPruefen`: die Statusseite laedt `loadFile` mit einem
+// PFAD, am Waechter kommt sie als `file:`-URL an. Beide Formen muessen aus derselben Quelle
+// stammen, sonst sperrt der Waechter ausgerechnet die Einrichtungsseite aus.
+const { pathToFileURL } = require('url')
 const backend = require('./backend')
 const setup = require('./setup')
 const protokoll = require('./protokoll')
 const bericht = require('./bericht')
 const updater = require('./updater')
-const { fensterOptionen, TITELLEISTE_HOEHE, farbeGueltig, fortschrittGueltig, externesZiel } = require('./fenster')
+const {
+  fensterOptionen, TITELLEISTE_HOEHE, farbeGueltig, fortschrittGueltig, externesZiel, eigeneHerkunft,
+} = require('./fenster')
+
+/** Die EINE Quelle fuer die Statusseite — `loadFile` und der Navigationswaechter (#434). */
+const SETUP_HTML = path.join(__dirname, 'setup.html')
 
 // Vor app.whenReady: HTTP/2 abschalten. autoUpdater.checkForUpdates() nutzt Electrons
 // net = HTTP/2, und GitHub/Fastly verweigert dessen Stream sporadisch/persistent mit
@@ -68,10 +77,24 @@ function senden(kanal, nutzlast) {
  */
 const ABWEISUNGEN_MAX = 20
 let abweisungen = 0
-function abweisungProtokollieren(url) {
+/**
+ * `was` unterscheidet die beiden Absender (#434) — sonst steht im Protokoll nicht, ob ein
+ * FENSTER aufgehen wollte oder das bestehende wegnavigieren. Zaehler, Deckel und Bremse bleiben
+ * dabei **geteilt**, und das ist die eigentliche Zusicherung: ein zweiter, eigener Schreibweg
+ * waere genau der Fehler, den #426 hier schon einmal gemacht hat — ein Renderer, der beide Wege
+ * abwechselnd flutet, haette sonst wieder den doppelten Deckel und entleerte den naechsten
+ * Fehlerbericht auf „letzte 0 Protokollzeilen".
+ *
+ * **Der Preis gehoert dazu:** `abweisungen` wird nie zurueckgesetzt, 20 ist also ein
+ * LEBENSZEIT-Budget — und die App bleibt bei langen Transkriptionen tagelang offen. Seit #434
+ * zahlen zwei Erzeuger darauf ein: eine Flut auf dem Navigationsweg legt damit auch die
+ * Diagnose des Fensteroeffners still. Das ist die bewusste Seite des Tauschs (lieber eine
+ * stumme Diagnose als ein entleerter Fehlerbericht), nicht ein uebersehener Nebeneffekt.
+ */
+function abweisungProtokollieren(url, was = 'Externer Link') {
   abweisungen += 1
   if (abweisungen <= ABWEISUNGEN_MAX) {
-    protokoll.schreiben('Externer Link abgewiesen (Schema nicht erlaubt): ' + String(url).slice(0, 200))
+    protokoll.schreiben(was + ' abgewiesen (Schema nicht erlaubt): ' + String(url).slice(0, 200))
   } else if (abweisungen === ABWEISUNGEN_MAX + 1) {
     protokoll.schreiben(`Weitere abgewiesene Links werden nicht mehr protokolliert (Deckel: ${ABWEISUNGEN_MAX}).`)
   }
@@ -92,7 +115,7 @@ function fenster() {
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true },
   })
   win.setMenuBarVisibility(false)
-  win.loadFile(path.join(__dirname, 'setup.html'))
+  win.loadFile(SETUP_HTML)
   // Externe Links (Key erstellen, Doku) gehoeren in den Browser, nicht in die App — aber nur
   // die, deren Schema `externesZiel` kennt (#426). Die URL kommt vom Renderer; ungeprueft war
   // diese Zeile ein "oeffne beliebige URL" fuers Betriebssystem, also genau das, was
@@ -105,6 +128,73 @@ function fenster() {
     else abweisungProtokollieren(url)
     return { action: 'deny' }
   })
+  /**
+   * Der Gegenpart dazu (#434): der Handler darueber sieht nur NEUE Fenster, nicht das
+   * bestehende, das selbst wegnavigiert. Tut es das auf eine fremde Herkunft, laeuft
+   * `preload.js` dort erneut — gemessen liegt `window.transkribor` dann mit 12 Schluesseln auf
+   * der fremden Seite. Nicht ein einzelner Aufruf wie bei #426, sondern dauerhafter Zugriff.
+   *
+   * **Beide Ereignisse, und der Grund ist gemessen, nicht vorsorglich:** bei einem
+   * 302-Redirect von der eigenen auf eine fremde Herkunft feuert `will-navigate` mit der
+   * EIGENEN URL (der Waechter laesst sie zu Recht durch) und erst `will-redirect` mit der
+   * fremden. Nur mit `will-navigate` landete das Fenster also auf der fremden Seite — der
+   * „Redirect"-Weg aus dem Issue waere ungedeckt geblieben.
+   *
+   * **`will-frame-navigate` bewusst NICHT**, ebenfalls gemessen: es feuert bei jeder
+   * Hauptrahmen-Navigation ZUSAETZLICH (jede Abweisung zaehlte doppelt gegen den geteilten
+   * Deckel), und im einzigen Fall, den es allein abdeckt — ein iframe auf fremde Herkunft —
+   * bekommt der Rahmen den Preload gar nicht (`window.transkribor` dort `undefined`). Es
+   * schuetzt hier also nichts und kostet die halbe Protokollbremse.
+   *
+   * Die eigenen Herkuenfte werden bei JEDEM Ereignis neu erfragt: `backend.url()` steht beim
+   * Fensterbau noch nicht fest (der Port entsteht erst mit dem Server).
+   *
+   * Alle Zahlen dieses Blocks stammen aus der Sonde in
+   * `docs/superpowers/specs/2026-08-28-transkribor-will-navigate-sonde.md` (Aufbau, Kommandos,
+   * Rohausgaben) — hier stehen Verweise darauf, keine Behauptungen.
+   */
+  const navigationPruefen = extern => (e, urlVeraltet) => {
+    // **Die Angaben stehen im ERSTEN Argument.** Seit Electron 25 ist das ein Details-Ereignis
+    // (`electron.d.ts`: `on(event: 'will-navigate', listener: (details:
+    // Event<WebContentsWillNavigateEventParams>, …`), und `WebContentsWillNavigateEventParams`
+    // traegt `url` und `isMainFrame` — dieselbe Form bei `will-redirect`. Die positionalen
+    // Parameter dahinter sind dort ausdruecklich `@deprecated`, werden aber weiter uebergeben.
+    // Deshalb das Details-Feld zuerst und der positionale Wert nur als Rueckfall: heute liefern
+    // beide dasselbe, aber nur einer davon ist der zugesagte Weg.
+    const url = e.url ?? urlVeraltet
+    // **Nur der Hauptrahmen.** `will-navigate` feuert ohnehin nur dort, `will-redirect` aber
+    // AUCH fuer Unterrahmen (gemessen: `isMainFrame=false` beim Redirect eines iframes). Ohne
+    // diese Zeile taete der Waechter genau das, was die Begruendung unten fuer
+    // `will-frame-navigate` ausschliesst — und zwar das Aggressivste, was er kann: ein
+    // umleitendes iframe oeffnete den SYSTEM-Browser, ohne Skript und ohne Nutzergeste. Vor
+    // #434 folgte der Rahmen dem Redirect einfach in sich selbst. Eine Faehigkeit, die der Fix
+    // NEU aufmacht, ist kein Nebenertrag, sondern sein Preis — und dieser ist es nicht wert.
+    // `=== false`, nicht `!`: fehlt die Angabe, MUSS der Waechter greifen. Ein unbekannter
+    // Wert darf eine Wache nie stillschweigend abschalten (dieselbe Richtung wie bei #266).
+    if (e.isMainFrame === false) return
+    if (eigeneHerkunft(url, [pathToFileURL(SETUP_HTML).href, backend.url()])) return
+    e.preventDefault()
+    // Derselbe Weg wie ein externer Link, dieselbe Weissliste, derselbe Zaehler — ein Link
+    // ohne `target` gehoert in den Browser, nicht in dieses Fenster.
+    //
+    // **Aber nur bei `will-navigate` (`extern`).** Dort hat der Renderer das Ziel gewaehlt: ein
+    // Klick, ein `location.href`. Bei `will-redirect` waehlt es ein SERVER — dieselbe Frage wie
+    // beim Unterrahmen oben, nur eine Ebene hoeher: eine 302 auf der eigenen Herkunft genuegte
+    // sonst, um `shell.openExternal` mit einer beliebigen fremden http(s)-URL zu feuern, ohne
+    // Klick und ohne Nutzergeste. **Heute nicht ausloesbar** (gemessen: `RedirectResponse` und
+    // explizite 3xx kommen in `webtool/` nicht vor, nur Starlettes Schraegstrich-Umleitung auf
+    // dieselbe Herkunft) — aber eine Faehigkeit ohne Nutzer laesst man nicht offen, und genau
+    // mit dieser Begruendung fehlt `mailto:` in `externesZiel` und faellt der Unterrahmen raus.
+    // Der Preis ist benannt: leitete unser Server je absichtlich nach draussen um, wuerde die
+    // Umleitung abgewiesen statt geoeffnet — fail-safe, und im Protokoll steht warum.
+    const ziel = extern ? externesZiel(url) : null
+    if (ziel) shell.openExternal(ziel)
+    else abweisungProtokollieren(url, extern ? 'Navigation' : 'Weiterleitung')
+  }
+  // Zwei Marken statt einer: im Protokoll steht damit auch, WELCHES Ereignis gefeuert hat —
+  // bei einer Umleitungskette ist genau das die Information, die man sucht.
+  win.webContents.on('will-navigate', navigationPruefen(true))
+  win.webContents.on('will-redirect', navigationPruefen(false))
   win.on('closed', () => { win = null })
 }
 

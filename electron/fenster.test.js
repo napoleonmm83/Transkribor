@@ -1,7 +1,9 @@
 'use strict'
 const test = require('node:test')
 const assert = require('node:assert')
-const { fensterOptionen, TITELLEISTE_HOEHE, farbeGueltig, fortschrittGueltig, externesZiel } = require('./fenster')
+const {
+  fensterOptionen, TITELLEISTE_HOEHE, farbeGueltig, fortschrittGueltig, externesZiel, eigeneHerkunft,
+} = require('./fenster')
 
 test('Windows und Linux bekommen ein Overlay mit nativen Knoepfen', () => {
   for (const p of ['win32', 'linux']) {
@@ -79,7 +81,9 @@ test('zurueck kommt die GEPARSTE URL, nicht die rohe Eingabe (#426)', () => {
   // Der WHATWG-Parser streicht Steuerzeichen — ein Praedikat haette hier `true` gesagt, und
   // der Aufrufer haette die ROHE Zeichenkette ans Betriebssystem gereicht. Genau diese
   // Bauform-Luecke schliesst die Rueckgabe des Wertes. Aus dem heutigen Handler unerreichbar
-  // (Chromium kanonisiert vorher); der zweite Aufrufer aus #434 ist schon vorgeschlagen.
+  // (Chromium kanonisiert vorher) — und seit #434 ist gemessen, dass der ZWEITE Aufrufer daran
+  // nichts aendert: `will-navigate` bekommt die URL ebenfalls schon kanonisiert. Der Test bleibt
+  // trotzdem, er bewacht die BAUFORM; nur die Erwartung „bald erreichbar" war falsch.
   for (const [roh, erwartet] of [
     ['\u0000https://example.org/doku', 'https://example.org/doku'],
     ['https\t://example.org/doku', 'https://example.org/doku'],
@@ -88,5 +92,85 @@ test('zurueck kommt die GEPARSTE URL, nicht die rohe Eingabe (#426)', () => {
   ]) {
     assert.strictEqual(externesZiel(roh), erwartet, JSON.stringify(roh))
     assert.notStrictEqual(externesZiel(roh), roh, 'die rohe Form darf NIE zurueckkommen')
+  }
+})
+
+// ── eigeneHerkunft (#434) ────────────────────────────────────────────────────
+// Die beiden Herkuenfte, die die App selbst laedt: die Statusseite als Datei und der
+// Loopback-Server. Beide Formen stehen hier so, wie sie am Waechter ankommen — am laufenden
+// Fenster nachgemessen, nicht nachgebaut.
+const EIGEN = ['file:///E:/Git/Transkribor/electron/setup.html', 'http://127.0.0.1:8000/']
+
+test('die eigene App gilt als eigene Herkunft (#434)', () => {
+  for (const gut of [
+    'http://127.0.0.1:8000/',
+    'http://127.0.0.1:8000/p/Projekt/datei?x=1#y',   // Deep-Link nach einem Reload
+    'file:///E:/Git/Transkribor/electron/setup.html',
+    'file:///E:/Git/Transkribor/electron/setup.html#neu',   // Reload behaelt den Hash
+  ]) {
+    assert.strictEqual(eigeneHerkunft(gut, EIGEN), true, gut)
+  }
+})
+
+test('alles andere ist FREMD — auch was der eigenen Adresse aehnelt (#434)', () => {
+  const fremd = [
+    'https://example.org/',
+    'http://127.0.0.1:8001/',                     // anderer Port ist eine andere Herkunft
+    'https://127.0.0.1:8000/',                    // anderes Schema ebenso
+    'http://localhost:8000/',                     // die App laedt nur 127.0.0.1
+    'http://127.0.0.1:8000@example.org/',         // Benutzername-Falle: der Wirt ist example.org
+    'http://127.0.0.1.example.org/',              // Praefix-Falle
+    'file:///C:/Windows/System32/calc.exe',       // s.u. — der teuerste Einzelfehler
+    'data:text/html,<script>alert(1)</script>',
+    'about:blank',
+    'nicht mal eine url', '', ' ', null, undefined, 42, {}, [],
+  ]
+  for (const schrott of fremd) {
+    assert.strictEqual(eigeneHerkunft(schrott, EIGEN), false, String(schrott))
+  }
+})
+
+test('file: hat KEINE Herkunft — der Pfad entscheidet, nicht origin (#434)', () => {
+  // `new URL('file:///x').origin` ist fuer JEDE file:-URL der String 'null'. Ein
+  // origin-Vergleich haette also jede beliebige lokale Datei fuer unsere setup.html gehalten —
+  // der Fehler sieht im Code aus wie die kuerzere Fassung und ist der teuerste dieser Funktion.
+  assert.strictEqual(new URL('file:///x').origin, 'null', 'Praemisse des Tests')
+  assert.strictEqual(new URL('file:///y').origin, new URL('file:///z').origin, 'Praemisse des Tests')
+  assert.strictEqual(eigeneHerkunft('file:///E:/anderes/verzeichnis/boese.html', EIGEN), false)
+  assert.strictEqual(eigeneHerkunft('file:///E:/Git/Transkribor/electron/preload.js', EIGEN), false,
+    'auch eine Nachbardatei im selben Ordner ist nicht die Statusseite')
+})
+
+test('bei file: zaehlt auch der HOST, nicht nur der Pfad (#434)', () => {
+  // Aus dem Kalt-Review: eine UNC-Referenz auf einen FREMDEN Rechner traegt denselben Pfad.
+  // Ohne den Host-Vergleich galt sie als unsere Statusseite — und zwar an genau der Stelle,
+  // deren Dichtheit der Kommentar darueber zusichert.
+  assert.strictEqual(eigeneHerkunft('file://evil.example.com/E:/Git/Transkribor/electron/setup.html', EIGEN), false)
+  // Gegenrichtung, sonst waere der Vergleich zu scharf und sperrte die eigene Seite aus:
+  // `pathToFileURL` liefert immer den leeren Host, und `localhost` normalisiert der Parser
+  // selbst darauf — beide echten Formen muessen weiterhin durchkommen.
+  assert.strictEqual(new URL(EIGEN[0]).host, '', 'Praemisse: unsere eigene file:-URL hat keinen Host')
+  assert.strictEqual(eigeneHerkunft('file://localhost/E:/Git/Transkribor/electron/setup.html', EIGEN), true,
+    'file://localhost/ IST die lokale Datei — der Parser normalisiert den Host auf leer')
+})
+
+test('ein blob: der eigenen Seite IST die eigene Herkunft (#434)', () => {
+  // Der Kommentar zaehlte `blob:` zuerst unter „faellt hart durch" — falsch: ein Blob traegt
+  // die Herkunft seines ERZEUGERS, und einen mit unserer Herkunft erzeugt nur unsere eigene
+  // Seite. Das VERHALTEN muss so bleiben, `useDoc.ts`/`api.ts` bauen die Export-Downloads so;
+  // festgehalten wird hier die wahre Regel, nicht die falsche Aufzaehlung.
+  assert.strictEqual(eigeneHerkunft('blob:http://127.0.0.1:8000/abc-123', EIGEN), true)
+  assert.strictEqual(eigeneHerkunft('blob:https://example.org/abc-123', EIGEN), false,
+    'ein Blob FREMDER Herkunft bleibt fremd')
+  assert.strictEqual(eigeneHerkunft('blob:file:///E:/Git/Transkribor/electron/setup.html', EIGEN), false,
+    'ein Blob mit file:-Innerem hat die undurchsichtige Herkunft')
+})
+
+test('eine Liste ohne echte Herkunft laesst nichts durch (#434)', () => {
+  // Kein Produktionsfall, sondern die Vertrauensgrenze fuer kuenftige Aufrufer: stuende in der
+  // Liste etwas Undurchsichtiges, machte `'null' === 'null'` daraus ein Scheunentor.
+  for (const kaputt of [['data:text/html,x'], ['about:blank'], ['keine url'], [], null, undefined]) {
+    assert.strictEqual(eigeneHerkunft('data:text/html,y', kaputt), false, JSON.stringify(kaputt))
+    assert.strictEqual(eigeneHerkunft('https://example.org/', kaputt), false, JSON.stringify(kaputt))
   }
 })

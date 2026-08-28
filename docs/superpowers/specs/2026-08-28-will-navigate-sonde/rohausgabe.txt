@@ -1,0 +1,149 @@
+=== 2026-08-28T10:47:08Z · Electron 43.4.1 · Windows 11
+
+$ ./node_modules/.bin/electron docs/superpowers/specs/2026-08-28-will-navigate-sonde/navigation.js
+
+eigene Herkunft {EIGEN} = http://127.0.0.1:62955
+fremde Herkunft {FREMD} = http://127.0.0.1:62954
+Waechter: AUS (Ist-Zustand)
+
+── (c) loadFile(setup.html) aus dem Hauptprozess
+   Ereignisse: (KEINES)
+   window.transkribor auf setup.html: object (12 Schluessel)
+── (c) loadURL(eigene Herkunft) aus dem Hauptprozess
+   Ereignisse: (KEINES)
+
+── (b1) location.href = FREMD
+   Ereignisse: will-frame-navigate -> {FREMD}/ziel | will-navigate -> {FREMD}/ziel
+   gelandet:   FREMD   ·   window.transkribor: object (12 Schluessel)
+
+── (b2) Link ohne target, geklickt
+   Ereignisse: will-frame-navigate -> {FREMD}/ziel | will-navigate -> {FREMD}/ziel
+   gelandet:   FREMD   ·   window.transkribor: object (12 Schluessel)
+
+── (b3) form action, GET
+   Ereignisse: will-frame-navigate -> {FREMD}/ziel?a=1 | will-navigate -> {FREMD}/ziel?a=1
+   gelandet:   FREMD   ·   window.transkribor: object (12 Schluessel)
+
+── (b4) form action, POST
+   Ereignisse: will-frame-navigate -> {FREMD}/ziel | will-navigate -> {FREMD}/ziel
+   gelandet:   FREMD   ·   window.transkribor: object (12 Schluessel)
+
+── (b5) 302-Redirect EIGEN -> FREMD
+   Ereignisse: will-frame-navigate -> {EIGEN}/weiter | will-navigate -> {EIGEN}/weiter | will-redirect -> {FREMD}/ziel
+   gelandet:   FREMD   ·   window.transkribor: object (12 Schluessel)
+
+── (e) Steuerzeichen vor der URL
+   Ereignisse: will-frame-navigate -> {FREMD}/ziel | will-navigate -> {FREMD}/ziel
+   gelandet:   FREMD   ·   window.transkribor: object (12 Schluessel)
+
+── (c) location.reload() im Renderer
+   Ereignisse: will-frame-navigate -> {EIGEN}/ | will-navigate -> {EIGEN}/
+   gelandet:   eigen   ·   window.transkribor: object (12 Schluessel)
+
+── (c) eigene Herkunft, anderer Pfad
+   Ereignisse: will-frame-navigate -> {EIGEN}/andere/seite?x=1#y | will-navigate -> {EIGEN}/andere/seite?x=1#y
+   gelandet:   eigen   ·   window.transkribor: object (12 Schluessel)
+
+── (c2) location.reload() AUF setup.html (Ctrl+R waehrend der Einrichtung)
+   Ereignisse (ROHE URL): will-frame-navigate -> file:///E:/Git/Transkribor-agent2/electron/setup.html | will-navigate -> file:///E:/Git/Transkribor-agent2/electron/setup.html
+   erwartete eigene URL:  will-navigate -> file:///E:/Git/Transkribor-agent2/electron/setup.html
+   gelandet: file:///E:/Git/Transkribor-agent2/electron/setup.html
+
+── (d) IFRAME auf fremde Herkunft
+   Ereignisse: will-frame-navigate -> {FREMD}/ziel
+   Rahmen-URL: {FREMD}/ziel   ·   window.transkribor im Rahmen: undefined (0 Schluessel)
+
+
+=== BILANZ ===
+Fall                                     will-navigate  gelandet  Bruecke
+---------------------------------------- -------------  --------  -------
+(b1) location.href = FREMD               JA             FREMD     object/12
+(b2) Link ohne target, geklickt          JA             FREMD     object/12
+(b3) form action, GET                    JA             FREMD     object/12
+(b4) form action, POST                   JA             FREMD     object/12
+(b5) 302-Redirect EIGEN -> FREMD         JA             FREMD     object/12
+(e) Steuerzeichen vor der URL            JA             FREMD     object/12
+(c) location.reload() im Renderer        JA             eigen     object/12
+(c) eigene Herkunft, anderer Pfad        JA             eigen     object/12
+
+$ ./node_modules/.bin/electron docs/superpowers/specs/2026-08-28-will-navigate-sonde/navigation.js --mit-waechter
+
+eigene Herkunft {EIGEN} = http://127.0.0.1:65349
+fremde Herkunft {FREMD} = http://127.0.0.1:65348
+Waechter: AN (nach dem Fix)
+
+── (c) loadFile(setup.html) aus dem Hauptprozess
+   Ereignisse: (KEINES)
+   window.transkribor auf setup.html: object (12 Schluessel)
+── (c) loadURL(eigene Herkunft) aus dem Hauptprozess
+   Ereignisse: (KEINES)
+
+── (b1) location.href = FREMD
+   Ereignisse: will-frame-navigate -> {FREMD}/ziel | will-navigate -> {FREMD}/ziel |   [WAECHTER blockt] (ginge in den Browser) -> {FREMD}/ziel
+   gelandet:   eigen   ·   window.transkribor: object (12 Schluessel)
+
+── (b2) Link ohne target, geklickt
+   Ereignisse: will-frame-navigate -> {FREMD}/ziel | will-navigate -> {FREMD}/ziel |   [WAECHTER blockt] (ginge in den Browser) -> {FREMD}/ziel
+   gelandet:   eigen   ·   window.transkribor: object (12 Schluessel)
+
+── (b3) form action, GET
+   Ereignisse: will-frame-navigate -> {FREMD}/ziel?a=1 | will-navigate -> {FREMD}/ziel?a=1 |   [WAECHTER blockt] (ginge in den Browser) -> {FREMD}/ziel?a=1
+   gelandet:   eigen   ·   window.transkribor: object (12 Schluessel)
+
+── (b4) form action, POST
+   Ereignisse: will-frame-navigate -> {FREMD}/ziel | will-navigate -> {FREMD}/ziel |   [WAECHTER blockt] (ginge in den Browser) -> {FREMD}/ziel
+   gelandet:   eigen   ·   window.transkribor: object (12 Schluessel)
+
+── (b5) 302-Redirect EIGEN -> FREMD
+   Ereignisse: will-frame-navigate -> {EIGEN}/weiter | will-navigate -> {EIGEN}/weiter | will-redirect -> {FREMD}/ziel |   [WAECHTER blockt] (ginge in den Browser) -> {FREMD}/ziel
+   gelandet:   eigen   ·   window.transkribor: object (12 Schluessel)
+
+── (e) Steuerzeichen vor der URL
+   Ereignisse: will-frame-navigate -> {FREMD}/ziel | will-navigate -> {FREMD}/ziel |   [WAECHTER blockt] (ginge in den Browser) -> {FREMD}/ziel
+   gelandet:   eigen   ·   window.transkribor: object (12 Schluessel)
+
+── (c) location.reload() im Renderer
+   Ereignisse: will-frame-navigate -> {EIGEN}/ | will-navigate -> {EIGEN}/
+   gelandet:   eigen   ·   window.transkribor: object (12 Schluessel)
+
+── (c) eigene Herkunft, anderer Pfad
+   Ereignisse: will-frame-navigate -> {EIGEN}/andere/seite?x=1#y | will-navigate -> {EIGEN}/andere/seite?x=1#y
+   gelandet:   eigen   ·   window.transkribor: object (12 Schluessel)
+
+── (c2) location.reload() AUF setup.html (Ctrl+R waehrend der Einrichtung)
+   Ereignisse (ROHE URL): will-frame-navigate -> file:///E:/Git/Transkribor-agent2/electron/setup.html | will-navigate -> file:///E:/Git/Transkribor-agent2/electron/setup.html
+   erwartete eigene URL:  will-navigate -> file:///E:/Git/Transkribor-agent2/electron/setup.html
+   gelandet: file:///E:/Git/Transkribor-agent2/electron/setup.html
+
+── (d) IFRAME auf fremde Herkunft
+   Ereignisse: will-frame-navigate -> {FREMD}/ziel
+   Rahmen-URL: {FREMD}/ziel   ·   window.transkribor im Rahmen: undefined (0 Schluessel)
+
+
+=== BILANZ ===
+Fall                                     will-navigate  gelandet  Bruecke
+---------------------------------------- -------------  --------  -------
+(b1) location.href = FREMD               JA             eigen     object/12
+(b2) Link ohne target, geklickt          JA             eigen     object/12
+(b3) form action, GET                    JA             eigen     object/12
+(b4) form action, POST                   JA             eigen     object/12
+(b5) 302-Redirect EIGEN -> FREMD         JA             eigen     object/12
+(e) Steuerzeichen vor der URL            JA             eigen     object/12
+(c) location.reload() im Renderer        JA             eigen     object/12
+(c) eigene Herkunft, anderer Pfad        JA             eigen     object/12
+
+$ ./node_modules/.bin/electron docs/superpowers/specs/2026-08-28-will-navigate-sonde/unterrahmen.js
+
+
+── iframe navigiert auf einen Pfad, der 302 auf FREMD umleitet
+  will-frame-navigate  isMainFrame=false     {EIGEN}/rahmenred
+  will-redirect        isMainFrame=false     {FREMD}/aus-dem-iframe
+
+── zum Vergleich: derselbe Redirect im HAUPTRAHMEN
+  will-frame-navigate  isMainFrame=true      {EIGEN}/topred
+  will-navigate        isMainFrame=true      {EIGEN}/topred
+  will-redirect        isMainFrame=true      {FREMD}/aus-dem-hauptrahmen
+  >>> WAECHTER greift: abgewiesen + protokolliert — {FREMD}/aus-dem-hauptrahmen
+
+Fazit: `will-redirect` feuert mit isMainFrame=false, ein UNTERRAHMEN erreicht also
+den Waechter — ohne die Wache dagegen auch shell.openExternal.
