@@ -809,3 +809,42 @@ describe('parseJobPhases — Zeilen-Injektion durch fremden Text (#413)', () => 
     expect(p.perBase).toEqual({ A: 'done', B: 'failed', C: 'failed' })
   })
 })
+describe('parseJobPhases - Aufnahme kommt mitten im Lauf dazu (#431)', () => {
+  // `[scope]` steht fest, bevor `transcribe_project` das erste Mal `find_audio` ruft. Eine
+  // waehrend des Laufs hochgeladene Aufnahme steht also nie darin - verarbeitet wird sie
+  // trotzdem, und der Lauf kuendigt sie mit `[active]` an.
+  it('laesst das Urteil einer Aufnahme durch, die erst per [active] auftaucht', () => {
+    const p = parseJobPhases('transcribe', [
+      '[scope] A',
+      '[Demo] -> transkribiere A ...', '[Demo] fertig A: 1s, 2 Segmente, 1.0x',
+      '[active] B',
+      '[Demo] -> transkribiere B ...', '[Demo] fertig B: 1s, 2 Segmente, 1.0x',
+    ])
+    expect(p.perBase).toEqual({ A: 'done', B: 'done' })
+  })
+
+  // Die Gegenrichtung, und ohne sie waere der Test darueber auch dann gruen, wenn `terminal()`
+  // GAR NICHT mehr filterte. Der `scope`-Riegel ist die Wache gegen ein Projekt namens
+  // "scope", dessen eigene Fortschrittszeilen sonst als Bereichsmeldung gelesen wuerden -
+  // gemessen blieb perBase danach leer.
+  it('verwirft weiterhin ein Urteil ohne [scope]- UND ohne [active]-Zulassung', () => {
+    const p = parseJobPhases('transcribe', [
+      '[scope] A',
+      '[Demo] fertig A: 1s, 2 Segmente, 1.0x',
+      '[Demo] fertig Fremd: 1s, 2 Segmente, 1.0x',
+    ])
+    expect(p.perBase).toEqual({ A: 'done' })
+  })
+
+  // `[done] {base}` ist fuer den Parser heute eine No-op-Zeile (nur `jobs.py` liest sie, um
+  // `active_bases` zu raeumen). Der Test haelt fest, dass sie das fuer `gesehen` auch BLEIBEN
+  // muss: wer sie eines Tages hier verarbeitet und dabei die Zulassung zuruecknimmt, laesst
+  // genau das Urteil wieder fallen, das eine Zeile spaeter kommt.
+  it('behaelt die Zulassung ueber ein [done] hinweg', () => {
+    const p = parseJobPhases('transcribe', [
+      '[scope] A', '[active] B', '[done] B',
+      '[Demo] fertig B: 1s, 2 Segmente, 1.0x',
+    ])
+    expect(p.perBase).toEqual({ B: 'done' })
+  })
+})
