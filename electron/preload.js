@@ -14,6 +14,10 @@ contextBridge.exposeInMainWorld('transkribor', {
   // und was mitgeht, entscheidet der Hauptprozess. Ein durchgereichter Rumpf waere ein
   // „oeffne beliebige URL" fuer alles, was in diesem Fenster laeuft — und dort laeuft
   // Transkripttext, der aus einem URL-Import stammen kann.
+  // Seit #426 traegt diese Zusage auch neben sich: `setWindowOpenHandler` in `main.js` laesst
+  // nur noch Ziele durch, die `fenster.externesZiel` akzeptiert. Vorher stand sie hier
+  // und war eine Datei weiter oben offen — eine Zusicherung, die im selben Modul unterlaufen
+  // wird, ist keine.
   fehlerbericht: () => ipcRenderer.invoke('fehlerbericht'),
   // Ohne Argument, und das ist der Punkt (#218): der Hauptprozess kennt das Verzeichnis
   // selbst. Naehme der Kanal einen Pfad entgegen, waere aus der schmalen Bruecke ein

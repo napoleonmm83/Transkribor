@@ -14,7 +14,7 @@ const setup = require('./setup')
 const protokoll = require('./protokoll')
 const bericht = require('./bericht')
 const updater = require('./updater')
-const { fensterOptionen, TITELLEISTE_HOEHE, farbeGueltig, fortschrittGueltig } = require('./fenster')
+const { fensterOptionen, TITELLEISTE_HOEHE, farbeGueltig, fortschrittGueltig, externesZiel } = require('./fenster')
 
 // Vor app.whenReady: HTTP/2 abschalten. autoUpdater.checkForUpdates() nutzt Electrons
 // net = HTTP/2, und GitHub/Fastly verweigert dessen Stream sporadisch/persistent mit
@@ -42,6 +42,41 @@ function senden(kanal, nutzlast) {
   if (win && !win.isDestroyed()) win.webContents.send(kanal, nutzlast)
 }
 
+/**
+ * Die Abweisung gehoert ins Protokoll — sonst tut ein Link sichtbar nichts und niemand findet
+ * den Grund. Der Rueckkanal zum Renderer fehlt dabei ("dieselbe Regel wie beim
+ * `fehlerbericht`-Wurf" stand hier zuerst und stimmt NICHT: dort wird die Ablehnung
+ * durchgereicht und als Toast gezeigt, `setWindowOpenHandler` ist synchron und kennt keinen).
+ * Diagnostizierbar wird es, sichtbar nicht.
+ *
+ * **Deckel und Bremse sind der Pflichtteil, nicht die Vorsicht** — beides an echtem Electron
+ * gemessen, nachdem die erste Fassung dieser Zeile ungebremst schrieb:
+ *   - Eine einzelne `window.open`-URL kommt mit bis zu **2 MB** am Handler an
+ *     (Chromiums `kMaxURLChars`), und `protokoll.MAX` sind 2 MB. **Vier** Aufrufe draengten
+ *     40 echte FEHLER-Zeilen aus dem Protokoll, **zwoelf** loeschten alle vier Generationen
+ *     (15,26 MB auf der Platte statt der in `protokoll.js` zugesagten 8).
+ *   - Schlimmer als der Datenverlust ist der stille: `bericht.mailto` kuerzt von OBEN und
+ *     bricht ab, sobald keine Zeile mehr uebrig ist. **Ein** Aufruf mit ~1800 Zeichen
+ *     entleerte den naechsten Fehlerbericht auf "letzte 0 Protokollzeilen" — der Nutzer
+ *     schickt eine Mail ohne seinen Fehler ab und merkt nichts.
+ *   - Gebremst wird nichts von selbst: 20 000 Aufrufe ohne Nutzergeste kamen alle an
+ *     (~4200/s), Electron hat keinen Popup-Blocker.
+ * Der Deckel allein reicht nicht (er macht aus 2 MB ~250 Byte, die Rate bleibt), die Bremse
+ * allein auch nicht. Kein `replace` fuer Zeilenumbrueche: zweimal unabhaengig gemessen, dass
+ * Chromium CR/LF/TAB vor dem Handler entfernt — eine Wache dagegen waere Code fuer einen Fall,
+ * den es nicht gibt, mit einem Test, der immer gruen ist.
+ */
+const ABWEISUNGEN_MAX = 20
+let abweisungen = 0
+function abweisungProtokollieren(url) {
+  abweisungen += 1
+  if (abweisungen <= ABWEISUNGEN_MAX) {
+    protokoll.schreiben('Externer Link abgewiesen (Schema nicht erlaubt): ' + String(url).slice(0, 200))
+  } else if (abweisungen === ABWEISUNGEN_MAX + 1) {
+    protokoll.schreiben(`Weitere abgewiesene Links werden nicht mehr protokolliert (Deckel: ${ABWEISUNGEN_MAX}).`)
+  }
+}
+
 function fenster() {
   const dunkel = nativeTheme.shouldUseDarkColors
   // fensterOptionen entscheidet die Startfarbe selbst -- dieselbe Quelle wie backgroundColor
@@ -58,8 +93,18 @@ function fenster() {
   })
   win.setMenuBarVisibility(false)
   win.loadFile(path.join(__dirname, 'setup.html'))
-  // Externe Links (Key erstellen, Doku) gehoeren in den Browser, nicht in die App.
-  win.webContents.setWindowOpenHandler(({ url }) => { shell.openExternal(url); return { action: 'deny' } })
+  // Externe Links (Key erstellen, Doku) gehoeren in den Browser, nicht in die App — aber nur
+  // die, deren Schema `externesZiel` kennt (#426). Die URL kommt vom Renderer; ungeprueft war
+  // diese Zeile ein "oeffne beliebige URL" fuers Betriebssystem, also genau das, was
+  // `preload.js` fuer den Kanal daneben ausdruecklich ausschliesst.
+  // Geoeffnet wird der ZURUECKGEGEBENE Wert, nie `url`: geprueft wurde die geparste Form, und
+  // nur sie darf hinausgehen (Begruendung in fenster.js).
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    const ziel = externesZiel(url)
+    if (ziel) shell.openExternal(ziel)
+    else abweisungProtokollieren(url)
+    return { action: 'deny' }
+  })
   win.on('closed', () => { win = null })
 }
 

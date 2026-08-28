@@ -1,7 +1,7 @@
 'use strict'
 const test = require('node:test')
 const assert = require('node:assert')
-const { fensterOptionen, TITELLEISTE_HOEHE, farbeGueltig, fortschrittGueltig } = require('./fenster')
+const { fensterOptionen, TITELLEISTE_HOEHE, farbeGueltig, fortschrittGueltig, externesZiel } = require('./fenster')
 
 test('Windows und Linux bekommen ein Overlay mit nativen Knoepfen', () => {
   for (const p of ['win32', 'linux']) {
@@ -46,5 +46,47 @@ test('nur -1 oder 0..1 gilt als Fortschritt', () => {
   // 2 schaltet Electron auf einen unbestimmten Dauerbalken -- der Grund fuer die Obergrenze.
   for (const schlecht of [2, -0.5, -2, NaN, Infinity, '0.5', null, undefined]) {
     assert.strictEqual(fortschrittGueltig(schlecht), false, String(schlecht))
+  }
+})
+
+test('nur harmlose Schemata duerfen ans Betriebssystem (#426)', () => {
+  // Was die App wirklich schickt: elf target="_blank"-Anker, acht mit fester https-Adresse;
+  // von den drei fremdbestimmten laesst Notizen.tsx ausdruecklich auch http zu.
+  for (const gut of ['https://example.org/doku', 'http://example.org'])
+    assert.ok(externesZiel(gut), gut)
+
+  // Der Grund, warum es diesen Waechter gibt: shell.openExternal geht ans BETRIEBSSYSTEM,
+  // nicht in den Browser — diese Schemata erreichen dort einen Handler, keinen Tab.
+  const schlecht = [
+    'file:///C:/Windows/System32/calc.exe',
+    'ms-msdt:/id PCWDiagnostic',                  // Follina-Klasse
+    'search-ms:query=geheim',
+    'shell:startup',
+    'javascript:alert(1)',
+    'vbscript:msgbox(1)',
+    'data:text/html,<script>alert(1)</script>',
+    'about:blank',                                // window.open() ohne Argument
+    // mailto: ist bewusst NICHT erlaubt — kein Link der App braucht es ueber DIESEN Weg,
+    // und der Renderer duerfte sonst Empfaenger, Betreff und Rumpf frei komponieren.
+    'mailto:opfer@example.org?subject=x&body=y',
+    'nicht mal eine url', '', ' ', null, undefined, 42, {}, [],
+  ]
+  for (const schrott of schlecht)
+    assert.strictEqual(externesZiel(schrott), null, String(schrott))
+})
+
+test('zurueck kommt die GEPARSTE URL, nicht die rohe Eingabe (#426)', () => {
+  // Der WHATWG-Parser streicht Steuerzeichen — ein Praedikat haette hier `true` gesagt, und
+  // der Aufrufer haette die ROHE Zeichenkette ans Betriebssystem gereicht. Genau diese
+  // Bauform-Luecke schliesst die Rueckgabe des Wertes. Aus dem heutigen Handler unerreichbar
+  // (Chromium kanonisiert vorher); der zweite Aufrufer aus #434 ist schon vorgeschlagen.
+  for (const [roh, erwartet] of [
+    ['\u0000https://example.org/doku', 'https://example.org/doku'],
+    ['https\t://example.org/doku', 'https://example.org/doku'],
+    ['ht\ntps://example.org/doku', 'https://example.org/doku'],
+    ['  https://example.org/doku  ', 'https://example.org/doku'],
+  ]) {
+    assert.strictEqual(externesZiel(roh), erwartet, JSON.stringify(roh))
+    assert.notStrictEqual(externesZiel(roh), roh, 'die rohe Form darf NIE zurueckkommen')
   }
 })
