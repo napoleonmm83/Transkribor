@@ -694,6 +694,7 @@ Transkribor/
 ├── webtool/             # FastAPI-Backend + React-Editor (Frontend in webtool/frontend/)
 ├── electron/            # Desktop-Hülle: Ersteinrichtung, Server-Start, Auto-Update
 ├── models/              # mitgeliefertes Sprechertrennungs-Modell (CC-BY-4.0)
+├── RELEASE-NOTIZEN.md   # wird beim Release zum Text auf der Releases-Seite
 ├── CLAUDE.md            # Arbeitsanleitung + das gesammelte Warum hinter den Entscheidungen
 └── projekte/<Name>/
     ├── audio/           # Aufnahmen
@@ -705,6 +706,17 @@ Die Roh-Transkription bleibt unangetastet: Korrekturen liegen in `<base>.edit.js
 (`.md`, `.srt`) werden daraus erzeugt. Warum die Dinge so sind, wie sie sind — inklusive der
 Messungen dahinter — steht in [`CLAUDE.md`](CLAUDE.md), Entwürfe in
 [`docs/superpowers/specs/`](docs/superpowers/specs/).
+
+**Was ein Nutzer merkt, bekommt eine Zeile in
+[`RELEASE-NOTIZEN.md`](RELEASE-NOTIZEN.md)** — unter `## Unveröffentlicht`, im selben PR wie
+die Änderung, in der Sprache der Nutzerin statt in der des Codes. Beim Freigeben über den
+Release-Workflow wandert der Abschnitt automatisch unter die neue Versionsnummer und wird zum
+Text der Release-Seite; `## Unveröffentlicht` bleibt leer zurück. Ein von Hand gesetzter
+`v*`-Tag rotiert dagegen **nicht** — er veröffentlicht `## Unveröffentlicht` und lässt es
+stehen. Steht dort nichts, veröffentlicht der Workflow ersatzweise die Commit-Titel seit der
+letzten Fassung — und zwar dieselbe Auswahl, die auch die Versionsnummer hebt (`feat`, `fix`,
+`perf` und alles mit `!` bzw. `BREAKING CHANGE`); Aufräumarbeiten stehen also nicht darin.
+Dazu schreibt er, dass eine Notiz gefehlt hat.
 
 **Technisch drunter:** Whisper `large-v3` über faster-whisper (CUDA, mit `repetition_penalty=1.1`) bzw. whisper.cpp (Metal, mit `-mc 64`), automatischer Bereinigung von Wiederholungsschleifen bei Hintergrundmusik/Stille,
 Sprechertrennung mit pyannote, Korrektur über einen frei wählbaren LLM-Anbieter, Oberfläche

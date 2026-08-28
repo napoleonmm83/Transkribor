@@ -3,6 +3,12 @@
 # scripts/versionshoehe.test.sh auf allen drei Plattformen aus.
 *.sh text eol=lf
 
+# Dieselbe Begruendung eine Ebene weiter: notizen.sh vergleicht Ueberschriften in dieser
+# Datei zeichengenau. Mit CRLF traegt "## Unveröffentlicht" ein unsichtbares \r am Ende,
+# die Rotation trifft sie nicht mehr — und ein Entwickler auf Windows saehe nur, dass
+# nichts passiert. Der Release-Lauf selbst ist nicht betroffen (Linux), der Mensch schon.
+RELEASE-NOTIZEN.md text eol=lf
+
 # Modellgewichte: -text schaltet JEDE Zeilenende-Umwandlung ab. Git erkennt Binaerdateien
 # sonst per Heuristik (NUL-Byte in den ersten 8000 Bytes) — bei 26 MB Tensoren ist das eine
 # Wette, und ein einziges umgewandeltes \n macht das Modell unbrauchbar, ohne dass es
