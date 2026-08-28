@@ -560,7 +560,9 @@ den Transkribor nicht geöffnet hat —, bleibt der Hinweis stehen, während Ort
 einen** Datei wegfallen — und mit ihnen alles, was in derselben Zeile noch dahinter stand.
 Was **davor** steht, bleibt; die übrigen Zeilen ändert die Kürzung nicht — welche der Filter
 von vornherein weglässt, steht oben, und was in den verbleibenden alles auftauchen kann, ein
-paar Absätze weiter unten. In der Protokolldatei stehen
+paar Absätze weiter unten. Und eine einzelne, sehr lange Zeile wird hinten gekürzt und als
+gekürzt markiert (`[…]`) — früher verdrängte so eine Zeile den ganzen Rest, und der Bericht
+kam ohne Protokoll bei uns an. In der Protokolldatei stehen
 Ort und Name weiter, bei sehr langen Pfaden dort allerdings ebenfalls gekürzt.
 Und weil eine E-Mail nur begrenzt lang sein darf,
 fallen von den übrigen Zeilen notfalls die **ältesten** weg — die Mail sagt dir das dann an,
