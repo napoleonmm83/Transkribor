@@ -608,9 +608,12 @@ sagte die Meldung trotzdem „fertig“, und die drei Aufnahmen lagen unkorrigie
 nächsten Fassung nennt Transkribor sie beim Namen, wie bei einem Fehlschlag beim Abhören auch.
 
 Aus demselben Grund siehst du ab der nächsten Fassung auch **während** der Korrektur wieder,
-woran Transkribor gerade arbeitet: Sprecher trennen, Korrigieren, Prüfen, Anwenden. In
-`v0.48.0` und `v0.48.1` stand bei jeder Aufnahme schon „fertig“, sobald das Abhören durch
-war — obwohl die eigentliche Arbeit noch minutenlang lief.
+woran Transkribor gerade arbeitet: Sprecher trennen, Korrigieren, Prüfen, Anwenden — je
+nachdem, was für diese Aufnahme eingestellt ist. Bei einer leichten Korrektur oder einer
+reinen Zusammenfassung entfällt das Prüfen, und wer die Sprechertrennung abgeschaltet hat,
+sieht auch den ersten Schritt nicht. In `v0.48.0` und `v0.48.1` stand bei jeder Aufnahme
+schon „fertig“, sobald das Abhören durch war — obwohl die eigentliche Arbeit noch
+minutenlang lief.
 
 
 </details>

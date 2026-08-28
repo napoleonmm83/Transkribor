@@ -415,6 +415,38 @@ def test_run_claude_nonzero_returncode_logs(project, monkeypatch, capsys):
     assert "claude exit 2" in capsys.readouterr().out
 
 
+def test_run_claude_fehlerausgabe_bleibt_EINE_zeile(project, monkeypatch, capsys):
+    r"""Der Fehlerauszug des claude-Prozesses darf dem Parser keinen ZEILENANFANG schenken.
+
+    NEUNTE Fremdtext-Druckstelle: die acht anderen bekamen `_einzeilig` mit dem B2-Fix,
+    diese blieb uebrig (CodeRabbit an PR #433). `tail` sind bis zu 500 Zeichen roher
+    stdout+stderr eines Prozesses, der nicht vertrauenswuerdigen Transkripttext verarbeitet.
+
+    Der INVENTAR-Eintrag `'  claude exit {}: {}'` steht auf `ignoriert` und schuetzt hier
+    NICHT: nicht diese Zeile ist die Gefahr, sondern der eingebettete Umbruch — danach traegt
+    FREMDTEXT den Zeilenanfang, und daran haengen die praefixlosen Muster (`^apply:`) sowie
+    `jobs.py`s `[done]`. Scharf ist der Weg seit v0.48.0, weil die Korrektur INNERHALB des
+    Transkriptions-Jobs laeuft, dessen stdout `jobPhases.ts` liest.
+    """
+    class _R:
+        returncode = 2
+        stdout = "boom\napply: Fremd -> edit.json"
+        stderr = "\n[done] Fremd"
+
+    monkeypatch.setattr(correct, "_claude_exe", lambda: "claude")
+    monkeypatch.setattr(correct.subprocess, "run", lambda *a, **k: _R())
+    correct._run_claude("x", ".")
+    zeilen = capsys.readouterr().out.splitlines()
+    exit_zeilen = [z for z in zeilen if "claude exit 2" in z]
+    assert len(exit_zeilen) == 1                       # Positivkontrolle: die Zeile kam ueberhaupt
+    # Der Fremdtext steht IN der Zeile, nicht darunter — ohne `_einzeilig` waere er eine
+    # eigene physische Zeile und diese Zusicherung rot.
+    assert "apply: Fremd -> edit.json" in exit_zeilen[0]
+    assert "[done] Fremd" in exit_zeilen[0]
+    # ... und keine Zeile faengt mit einem Muster an, das ein Verbraucher liest.
+    assert not any(z.startswith("apply:") or z.startswith("[done]") for z in zeilen)
+
+
 def test_run_claude_timeout_is_caught(project, monkeypatch, capsys):
     def boom(*a, **k):
         raise correct.subprocess.TimeoutExpired(cmd="claude", timeout=correct.CLAUDE_TIMEOUT)

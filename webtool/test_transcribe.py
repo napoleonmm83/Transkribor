@@ -1209,7 +1209,7 @@ def test_autocorrect_faellt_bei_kill_switch_ganz_aus(monkeypatch, tmp_path, caps
     monkeypatch.setattr(transcribe, "_transkribiere_datei", lambda *a: {
         "text": "Text", "segments": [{"id": 0, "start": 0.0, "end": 1.0, "text": "Text"}], "duration": 1.0})
     monkeypatch.setattr(correct, "cmd_diarize", lambda *a, **k: angefasst.append("diarize"))
-    monkeypatch.setattr(correct, "prep_single", lambda *a, **k: angefasst.append("prep"))
+    monkeypatch.setattr(correct, "prep_single", lambda *a, **k: angefasst.append("prep") or True)
     monkeypatch.setattr(correct, "correct_ai_single", lambda *a, **k: angefasst.append("ki"))
 
     transcribe.transcribe_project("AusDemo", "tiny", "de", autocorrect=True)
@@ -1262,7 +1262,7 @@ def test_autocorrect_grund_bleibt_auf_einer_zeile(monkeypatch, tmp_path, capsys)
                                      "kein Anbieter" + chr(10) + "] fertig D1: x"))
     monkeypatch.setattr(correct, "diarize_enabled", lambda: False)
     monkeypatch.setattr(correct, "cmd_diarize", lambda *a, **k: 0)
-    monkeypatch.setattr(correct, "prep_single", lambda *a, **k: None)
+    monkeypatch.setattr(correct, "prep_single", lambda *a, **k: True)
 
     proj_dir = tmp_path / "InjektDemo"
     (proj_dir / "audio").mkdir(parents=True)
@@ -1299,7 +1299,7 @@ def test_autocorrect_ausnahmetext_bleibt_auf_einer_zeile(monkeypatch, tmp_path, 
     monkeypatch.setattr(llm, "available", platzt)
     monkeypatch.setattr(correct, "diarize_enabled", lambda: False)
     monkeypatch.setattr(correct, "cmd_diarize", lambda *a, **k: 0)
-    monkeypatch.setattr(correct, "prep_single", lambda *a, **k: None)
+    monkeypatch.setattr(correct, "prep_single", lambda *a, **k: True)
 
     proj_dir = tmp_path / "WurfDemo"
     (proj_dir / "audio").mkdir(parents=True)
@@ -1340,7 +1340,7 @@ def test_autocorrect_fehler_je_datei_bleibt_auf_einer_zeile(monkeypatch, tmp_pat
     monkeypatch.setattr(correct, "CLAUDE_PARALLEL", 1)
     monkeypatch.setattr(correct, "diarize_enabled", lambda: True)
     monkeypatch.setattr(correct, "cmd_diarize", platzt)
-    monkeypatch.setattr(correct, "prep_single", lambda *a, **k: None)
+    monkeypatch.setattr(correct, "prep_single", lambda *a, **k: True)
     monkeypatch.setattr(correct, "correct_ai_single", lambda *a, **k: True)
 
     proj_dir = tmp_path / "PlatzDemo"
@@ -1682,6 +1682,52 @@ def test_wurf_in_der_vorbereitung_OHNE_anbieter_bleibt_gruen(monkeypatch, tmp_pa
     assert ("[WurfOhneDemo] Vorbereitung gescheitert bei S1 (ohne KI-Phase): GPU weg" in out), \
         "Vorbedingung: der Wurf ist passiert — und er sagt es"
     # Die eigentliche Zusicherung: NICHT die Form, die der Parser als Fehlschlag liest.
+    assert "Autocorrect-Fehler" not in out, out
+    assert "Korrektur:" not in out, out
+
+
+def test_prep_single_False_geht_denselben_weg_wie_ein_wurf(monkeypatch, tmp_path, capsys):
+    """`prep_single` MELDET seinen Fehlschlag nicht durch eine Ausnahme, sondern per `bool`.
+
+    Der Rueckgabewert fiel weg (CodeRabbit an PR #433) — damit war der except-Zweig darunter
+    samt seinen ZWEI Zeilenformen (#421) fuer diesen Weg unerreichbar, obwohl `prep_single`
+    genau hier `False` liefert (`OSError`/`ValueError` beim Lesen des Transkripts). Seine
+    eigene Meldung `prep: SKIP …` wird vom Parser BEWUSST ignoriert, half also nicht.
+
+    Folge vorher: die Datei ging unvorbereitet an den Pool, `correct_ai_single` scheiterte am
+    fehlenden `.tagged.txt` und verbrannte einen LLM-Slot fuer ein Ergebnis, das nach der
+    ersten Zeile feststand.
+
+    BEIDE Richtungen, sonst ist die halbe Regel unbewacht — die zweite ist die teurere: ohne
+    Anbieter ist die LLM-Phase bewusst aus, und ein absichtlich ausgelassener Schritt darf den
+    Lauf nicht rot faerben (dieselbe Regel wie beim Kill-Switch).
+    """
+    from webtool import correct, llm
+
+    # (1) Pool steht: gescheiterter VERSUCH — Zeile UND Zaehler.
+    _ki_projekt(monkeypatch, tmp_path, "PrepFalschDemo")
+    monkeypatch.setattr(llm, "available", lambda: (True, ""))
+    monkeypatch.setattr(correct, "cmd_diarize", lambda *a, **kw: None)
+    monkeypatch.setattr(correct, "prep_single", lambda *a, **kw: False)
+    monkeypatch.setattr(correct, "correct_ai_single", lambda *a, **kw: True)
+
+    assert transcribe.transcribe_project("PrepFalschDemo", "tiny", "de", autocorrect=True) == (0, 2)
+    out = capsys.readouterr().out
+    assert "[PrepFalschDemo] Autocorrect-Fehler bei S1: Vorbereitung fehlgeschlagen" in out, out
+    assert "[PrepFalschDemo] Korrektur: 0 von 2 Datei(en) korrigiert" in out, out
+
+    # (2) Kein Anbieter: BEWUSST ausgelassen — nicht die Form, die der Parser als Fehlschlag liest.
+    # `_ki_projekt` setzt `prep_single` SELBST auf True (Zeile 1410) — die Attrappe muss also
+    # DANACH kommen, sonst nimmt die Fixture dem zweiten Teil seinen Sensor und er ist vacuous.
+    _ki_projekt(monkeypatch, tmp_path, "PrepFalschOhneDemo")
+    monkeypatch.setattr(llm, "available", lambda: (False, "kein KI-Anbieter konfiguriert"))
+    monkeypatch.setattr(correct, "prep_single", lambda *a, **kw: False)
+
+    assert transcribe.transcribe_project("PrepFalschOhneDemo", "tiny", "de",
+                                         autocorrect=True) == (0, 0)
+    out = capsys.readouterr().out
+    assert ("[PrepFalschOhneDemo] Vorbereitung gescheitert bei S1 (ohne KI-Phase)" in out), \
+        "Vorbedingung: die Vorbereitung ist gescheitert — und sie sagt es"
     assert "Autocorrect-Fehler" not in out, out
     assert "Korrektur:" not in out, out
 

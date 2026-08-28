@@ -474,7 +474,15 @@ def diagnose_fehler(fehler: str | Exception) -> dict:
         {"kategorie": "ratelimit"|"quota"|"auth"|"model"|"network"|"timeout"|"unbekannt",
          "titel": str, "hinweis": str, "kurz": str}
     """
-    text = str(fehler or "").strip()
+    # EINE Zeile, schon hier: der `unbekannt`-Zweig unten reicht `text` unveraendert als
+    # `hinweis`/`kurz` durch, und `correct.py` druckt `hinweis` an VIER Stellen in einen
+    # Job-Strom, den `jobPhases.ts` und `useJobAusgang.ts` zeilenweise lesen. Ein Umbruch
+    # darin gibt Fremdtext den ZEILENANFANG — dieselbe Klasse wie bei `_einzeilig`, nur eine
+    # Ebene tiefer. Gefunden an PR #433, als der Test zur neunten Druckstelle die zehnte
+    # mit aufdeckte; die Wurzel hier zu fassen deckt alle vier Aufrufer auf einmal.
+    # `.split()` statt `.strip()` ist fuer die Klassifikation unschaedlich: sie sucht
+    # Teilzeichenketten und Statuscodes (`_has_status`, Lookarounds statt Zeilenanker).
+    text = " ".join(str(fehler or "").split())
     low = text.lower()
 
     # 1. Guthaben erschöpft (Payment / Quota) — vor 429 prüfen, da OpenAI 429 für insufficient_quota nutzt

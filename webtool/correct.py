@@ -543,7 +543,13 @@ def _run_claude(prompt: str, workdir: str) -> None:
             tail = ((r.stdout or "") + (r.stderr or "")).strip()[-500:]
             diag = llm.diagnose_fehler(tail)
             _letzte_diagnose = diag
-            print(f"  claude exit {r.returncode}: {tail}", flush=True)
+            # NEUNTE Fremdtext-Druckstelle — die acht anderen bekamen `_einzeilig` mit dem
+            # B2-Fix, diese wurde uebersehen (CodeRabbit an PR #433). `tail` sind bis zu
+            # 500 Zeichen roher stdout+stderr des `claude`-Prozesses, Umbrueche inklusive.
+            # Der INVENTAR-Eintrag `'  claude exit {}: {}'` steht auf `ignoriert` und schuetzt
+            # NICHT: die Gefahr ist nicht diese Zeile, sondern der eingebettete Umbruch — die
+            # FOLGEzeile traegt dann den Zeilenanfang und kann `apply: … -> edit.json` sein.
+            print(f"  claude exit {r.returncode}: {_einzeilig(tail)}", flush=True)
             print(f"  [diagnose] {diag['kategorie']}\t{diag['titel']}\t{diag['hinweis']}", flush=True)
     except subprocess.TimeoutExpired:
         diag = llm.diagnose_fehler(f"claude Timeout nach {CLAUDE_TIMEOUT}s")
