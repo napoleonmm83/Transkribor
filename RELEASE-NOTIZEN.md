@@ -31,6 +31,10 @@ hat. Lesbar, aber unschön — das ist Absicht.
 **Neu**
 - Die Release-Seite sagt jetzt, was sich in der Fassung geändert hat, statt nur den Hinweis zu Gatekeeper und SmartScreen zu zeigen.
 
+**Behoben**
+- Eine einzelne, sehr lange Protokollzeile leert den Fehlerbericht nicht mehr — sie wird gekürzt und als gekürzt markiert.
+- Löschen, Umbenennen oder Neu-Transkribieren einer Aufnahme, die gerade bearbeitet wird, meldet „wird gerade bearbeitet — bitte warten" statt eines Fehlers und lässt die Aufnahme nie halb zurück.
+
 ## v0.49.1 — 2026-08-28
 
 **Neu**
