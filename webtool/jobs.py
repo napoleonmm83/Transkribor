@@ -31,6 +31,29 @@ SCOPE_PREFIX = "[scope] "
 ACTIVE_PREFIX = "[active] "
 DONE_PREFIX = "[done] "
 
+
+def buche_aktive(aktive: set, line: str) -> None:
+    """Eine Protokollzeile auf die Menge der GERADE bearbeiteten Aufnahmen anwenden.
+
+    Herausgezogen aus `_run` (#418), damit ein Test dieselbe Regel fahren kann wie der
+    Server. Nachgebaut im Test waere sie wertlos: genau daran ist #418 vorbeigelaufen —
+    die vorhandenen Tests faelschen `cmd_diarize` mit einer stummen Attrappe und konnten
+    deshalb nicht sehen, dass die echte Funktion die Aufnahme mit ihrem eigenen `[done]`
+    freigibt, bevor sie in die Poolschlange kommt.
+
+    Mehrere Drucker bedienen dieselbe Menge (`transcribe.py`, `correct.py` in beiden
+    Phasen), und derselbe Basisname kommt darin mehrfach vor — deshalb `discard` und nicht
+    `remove`: ein zweites `[done]` ist folgenlos, kein KeyError.
+    """
+    if line.startswith(ACTIVE_PREFIX):
+        b = line[len(ACTIVE_PREFIX):].strip()
+        if b:
+            aktive.add(b)
+    elif line.startswith(DONE_PREFIX):
+        b = line[len(DONE_PREFIX):].strip()
+        if b:
+            aktive.discard(b)
+
 _PROZENT_RE = re.compile(r"^\d+%(?:\||\s|$)")
 MAX_JOB_LINES = 10_000
 
@@ -284,14 +307,8 @@ def _run_proc(jid, cmd, cwd, env=None):
                 # spaeter kaeme sie hoechstens aus Transkripttext, der so beginnt.
                 if _jobs[jid]["bases"] is None and line.startswith(SCOPE_PREFIX):
                     _jobs[jid]["bases"] = {b for b in line[len(SCOPE_PREFIX):].split("\t") if b}
-                elif line.startswith(ACTIVE_PREFIX):
-                    b = line[len(ACTIVE_PREFIX):].strip()
-                    if b:
-                        _jobs[jid]["active_bases"].add(b)
-                elif line.startswith(DONE_PREFIX):
-                    b = line[len(DONE_PREFIX):].strip()
-                    if b:
-                        _jobs[jid]["active_bases"].discard(b)
+                else:
+                    buche_aktive(_jobs[jid]["active_bases"], line)
         proc.wait()
         with _lock:
             _jobs[jid]["returncode"] = proc.returncode
