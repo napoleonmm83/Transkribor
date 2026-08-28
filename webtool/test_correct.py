@@ -1830,8 +1830,12 @@ def test_cmd_run_ueberlebt_ein_nicht_versucht(monkeypatch, tmp_path):
 # startet leer. Der zweite Test faehrt genau diesen Fall.
 
 
-def _sperr_projekt(monkeypatch, tmp_path, name="Sperr", welche=("S1",), mit_audio=False):
-    """Kleinstes Projekt, das `cmd_run` durchlaeuft — ohne Glossar- und Kontext-Aufruf."""
+def _sperr_projekt(monkeypatch, tmp_path, name="Sperr", welche=("S1",), mit_audio=False,
+                   mit_glossar=False):
+    """Kleinstes Projekt, das `cmd_run` durchlaeuft — ohne Glossar- und Kontext-Aufruf.
+
+    `mit_glossar=True` laesst das ECHTE `_glossary` laufen (#450) — dann faelscht der Test
+    stattdessen `_ask_llm`, sonst ginge er in einen echten Anbieter-Aufruf."""
     monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
     monkeypatch.setenv("TRANSKRIBOR_SETTINGS", str(tmp_path / "settings.json"))
     tdir = tmp_path / name / "transkripte"
@@ -1846,7 +1850,8 @@ def _sperr_projekt(monkeypatch, tmp_path, name="Sperr", welche=("S1",), mit_audi
         (tdir / f"{b}.segments.txt").write_text("[0:00 - 0:01] hallo", encoding="utf-8")
         if mit_audio:
             (tmp_path / name / "audio" / f"{b}.mp3").write_bytes(b"x")
-    monkeypatch.setattr(correct, "_glossary", lambda *a, **kw: "")
+    if not mit_glossar:
+        monkeypatch.setattr(correct, "_glossary", lambda *a, **kw: "")
     monkeypatch.setattr(correct, "_context", lambda *a, **kw: "")
     return tdir
 
@@ -2077,3 +2082,110 @@ def test_diarize_meldet_sich_bevor_es_das_alte_sidecar_loescht(monkeypatch, tmp_
         "cmd_diarize loescht das alte Sidecar, bevor es die Aufnahme als bearbeitet meldet."
         + chr(10) + _zeige(verlauf))
     assert verlauf[-1][1] == set(), _zeige(verlauf)    # `[active]`/`[done]` bleiben gepaart
+
+
+# --- #450: die Klammer um den Glossar-Schritt -----------------------------------------------
+# Eigener Block, weil hier eine ANDERE Menge gesperrt wird als im Rest der Datei: `_glossary`
+# liest korpusweit (`bases(project)`), nicht den Umfang des Laufs. Genau deshalb fahren die
+# Tests einen EINZELDATEI-Lauf — bei einem Projektlauf sind beide Mengen dieselben, und der
+# Unterschied, um den es geht, waere unbeobachtbar.
+
+
+def _glossar_projekt(monkeypatch, tmp_path):
+    """Zwei Aufnahmen, ECHTES `_glossary`, gefaelschte Pipeline dahinter."""
+    tdir = _sperr_projekt(monkeypatch, tmp_path, welche=("A_fremd", "B_lauf"), mit_glossar=True)
+    monkeypatch.setattr(correct, "cmd_diarize", lambda *a, **kw: 0)
+    monkeypatch.setattr(correct, "prep_single", lambda *a, **kw: True)
+
+    def korrektur_wie_echt(project, b, **kw):
+        print(f"[active] {b}", flush=True)
+        print(f"[done] {b}", flush=True)
+        return True
+
+    monkeypatch.setattr(correct, "correct_ai_single", korrektur_wie_echt)
+    return tdir
+
+
+def test_glossar_sperrt_alle_gelesenen_aufnahmen(monkeypatch, tmp_path, capsys):
+    """Waehrend das Glossar liest, ist JEDE gelesene Aufnahme gesperrt — auch die fremde (#450).
+
+    `_glossary` liest die `.raw.txt` des ganzen Korpus; `llm._with_files` haelt dabei je einen
+    Griff offen. Ohne Marken ist `active_bases` leer (`[scope]` fuellt `bases`), `DELETE
+    …/files/{base}` kommt mit `active_only=True` durch und stirbt in `app._datei_weg` am
+    `PermissionError` — halb geloescht. Am echten Pfad gemessen: vorher 500 + Waise, jetzt 409.
+    """
+    _glossar_projekt(monkeypatch, tmp_path)
+    marke = "marke: _ask_llm liest die .raw.txt"
+
+    def ask_llm_mit_marke(prompt, inputs, output):
+        print(marke, flush=True)
+        with open(output, "w", encoding="utf-8") as fh:
+            json.dump({"proper_nouns": [], "likely_corrections": []}, fh)
+
+    monkeypatch.setattr(correct, "_ask_llm", ask_llm_mit_marke)
+
+    correct.cmd_run("Sperr", "B_lauf")                    # EINZELDATEI-Lauf
+    verlauf = _replay(capsys.readouterr().out.splitlines())
+    zeilen = [z for z, _ in verlauf]
+
+    # Vorbedingung: der Lauf meldet als Wirkungsbereich NUR die eine Datei. Ohne sie waere die
+    # Zusicherung unten auch dann erfuellt, wenn die Klammer bloss dem Umfang folgte — der
+    # Unterschied ist die getroffene Entscheidung.
+    assert "[scope] B_lauf" in zeilen, _zeige(verlauf)
+    assert marke in zeilen, _zeige(verlauf)
+
+    assert verlauf[zeilen.index(marke)][1] == {"A_fremd", "B_lauf"}, (
+        "die fremde Aufnahme wird gelesen, gilt aber als frei — genau das Loch aus #450."
+        + chr(10) + _zeige(verlauf))
+    assert verlauf[-1][1] == set(), _zeige(verlauf)       # und am Ende ist nichts mehr gesperrt
+
+
+def test_glossar_gibt_die_aufnahmen_auch_bei_einer_ausnahme_frei(monkeypatch, tmp_path, capsys):
+    """Das `[done]` steht im `finally` — die #444-Lehre auf den neuen Ausgang angewandt.
+
+    Kein Vorrat: `_ask_llm` faengt nur `llm.LLMError`, `_run_claude` nur `FileNotFoundError`
+    und `TimeoutExpired`. Ein `OSError` geht hindurch, und ohne das `finally` blieben BEIDE
+    Aufnahmen bis Jobende gesperrt — Loeschen dauerhaft 409, wo nichts mehr an ihnen arbeitet.
+    """
+    _glossar_projekt(monkeypatch, tmp_path)
+
+    def ask_llm_wirft(prompt, inputs, output):
+        raise OSError("Platte voll")
+
+    monkeypatch.setattr(correct, "_ask_llm", ask_llm_wirft)
+
+    with pytest.raises(OSError):
+        correct.cmd_run("Sperr", "B_lauf")
+    verlauf = _replay(capsys.readouterr().out.splitlines())
+    zeilen = [z for z, _ in verlauf]
+
+    assert "[active] A_fremd" in zeilen, _zeige(verlauf)  # Vorbedingung: gesperrt wurde ueberhaupt
+    assert verlauf[-1][1] == set(), (
+        "eine Ausnahme aus `_ask_llm` laesst die Aufnahmen gesperrt zurueck."
+        + chr(10) + _zeige(verlauf))
+
+
+def test_glossar_sperrt_nicht_wenn_es_wiederverwendet_wird(monkeypatch, tmp_path, capsys):
+    """Negativkontrolle: der Wiederverwendungs-Zweig liest keine `.raw.txt`, nur `getmtime`.
+
+    Eine Klammer um die ganze Funktion statt um den einen Zweig waere eine Sperre ohne Grund —
+    und eine Daueralarm-Sperre ist derselbe Schaden von der anderen Seite.
+    """
+    tdir = _glossar_projekt(monkeypatch, tmp_path)
+    gpath = tdir / "_glossar.json"
+    gpath.write_text(json.dumps({"proper_nouns": [], "likely_corrections": []}), encoding="utf-8")
+    neuer = max(os.path.getmtime(str(tdir / (b + ".raw.txt")))
+                for b in ("A_fremd", "B_lauf")) + 10
+    os.utime(str(gpath), (neuer, neuer))                  # deterministisch neuer als jede raw
+
+    def ask_llm_verboten(*a, **kw):
+        raise AssertionError("Glossar neu gebaut, obwohl es frisch ist — Test misst nichts")
+
+    monkeypatch.setattr(correct, "_ask_llm", ask_llm_verboten)
+
+    correct.cmd_run("Sperr", "B_lauf")
+    zeilen = [z for z, _ in _replay(capsys.readouterr().out.splitlines())]
+
+    assert any("nutze vorhandenes _glossar.json" in z for z in zeilen), zeilen  # Vorbedingung
+    assert "[active] A_fremd" not in zeilen, (
+        "ohne Lesevorgang gibt es nichts zu sperren." + chr(10) + chr(10).join(zeilen))
