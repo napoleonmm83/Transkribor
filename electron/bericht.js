@@ -61,11 +61,65 @@ const AUSSORTIEREN = [
   / - "(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS) [^"]*" [23]\d\d/,
 ]
 
+/**
+ * Was GEKUERZT statt weggelassen wird: der Pfad hinter einem `file:`-Schema (#447).
+ *
+ * Seit dem `will-navigate`-Waechter (#434) protokolliert ein Fehlwurf beim Drag & Drop die
+ * abgewiesene Navigation — samt Ort UND Namen der Aufnahme, und die Zeile faehrt hier mit.
+ * Der Pfad hat in der Mail keinen Diagnosewert: WELCHE Datei jemand danebenwarf, hilft
+ * niemandem. Die Zeile selbst schon — sie ist die einzige Antwort auf „ich habe etwas ins
+ * Fenster gezogen und es passiert nichts". Deshalb kuerzen und nicht aussortieren.
+ *
+ * **Bis ZEILENENDE, nicht bis zum naechsten Leerzeichen.** Mit `\S*` endete die Ersetzung bei
+ * `file:///C:/My Videos/Interview Meier.mp3` nach `My` — und ausgerechnet der Dateiname bliebe
+ * stehen. Chromium normalisiert Leerzeichen zwar zu `%20`, aber dann haengt diese Wache an
+ * einer fremden Zusicherung statt an sich selbst. Der Preis (Text HINTER einer `file:`-URL
+ * faellt mit weg) ist gemessen null: in 49 035 echten Protokollzeilen dieser Maschine
+ * (`transkribor.log` + `.1` + `.2`) kommt `file://` **0-mal** vor — und der Sensor konnte den
+ * Fall sehen: **775** pip-Zeilen liegen darin (768 „Requirement already satisfied" + 6
+ * „Looking in" + 1), und pips `Requirement already satisfied: x from file:///…` ist der
+ * plausibelste Erzeuger von Text HINTER einer `file:`-URL. Keine einzige traegt eine.
+ *
+ * **„Null" gilt dem TEXT, nicht der Zeilenzahl.** Der Ersatz ist kodiert 45 Zeichen lang, eine
+ * kuerzere `file:`-URL macht die Zeile also laenger — und `mailto` deckelt kodiert. Gemessen
+ * ueber 81 Fuelllaengen: beim echten Ablagepfad passt in 20 Faellen eine Zeile MEHR in die Mail
+ * und nie eine weniger; bei einer nackten `file:///`-URL genau eine weniger. Netto ein Gewinn,
+ * aber nicht monoton.
+ *
+ * **Ein bis drei Trenner, Schraegstrich ODER Rueckstrich, aus demselben Grund.** `new URL()`
+ * macht aus `file:/C:/x` und `file:C:/x` beides `file:///C:/x` (gemessen), und `file:\C:\x` ist
+ * dieselbe Frage mit dem Windows-Trenner — verlassen wollen wir uns darauf so wenig wie beim
+ * Leerzeichen, sonst haengt die Wache doch wieder an Chromium. **Der blosse `file:` ohne Trenner
+ * bleibt bewusst draussen:** englische Fehlertexte lauten „could not open file: C:\…", und
+ * dieser Pfad ist die Diagnose, nicht der Abfluss. Beide Richtungen im Test.
+ *
+ * **Das `\b` gehoert dazu und bleibt.** Es macht aus dem Muster eine Regel ueber das SCHEMA
+ * `file:` statt ueber die Zeichenfolge `file:`; `logfile:///…` und `profile://…` sind ANDERE
+ * Schemata und gehen diese Kuerzung nichts an (Negativkontrolle im Test). Ohne `\b` kuerzte die
+ * Wache jedes Wort mit, das zufaellig auf `file` endet — und liesse sich nicht mehr in einem
+ * Satz sagen.
+ *
+ * **Das `i` ist kein Schmuck — es hat einen eigenen Testfall, weil es sonst keinen haette.**
+ * Bei entferntem Flag blieb die Suite 20/20 gruen (Mutation C des gegnerischen Reviews); ein
+ * Waechter, der auch ohne seine Logik gruen bleibt, ist Dekoration. Schemata sind nach
+ * RFC 3986 §3.1 gross-/kleinschreibungsunabhaengig — dass Chromium sie klein liefert, ist
+ * wieder nur eine fremde Zusicherung.
+ *
+ * **Nicht in `protokoll.SENSIBLE_MUSTER`**, obwohl dort schon maskiert wird: das greift beim
+ * SCHREIBEN, und das lokale Protokoll soll den Pfad behalten. Die Zusage gilt der Mail.
+ *
+ * Die Grenze gehoert dazu: Projekt- und Basisnamen stehen weiter in gescheiterten
+ * Zugriffszeilen (`POST /api/projects/X/audio … 500`). Das ist die Zeile, wegen der jemand
+ * schreibt, sie bleibt bewusst — so steht es auch in der README.
+ */
+const PFAD_AB_SCHEMA = /\bfile:[\/\\]{1,3}.*/i
+
 /** Die letzten `n` verwertbaren Zeilen, in Originalreihenfolge. */
 function letzteZeilen(text, n = ZEILEN) {
   const alle = String(text || '').split(/\r?\n/)
     .filter(z => z.trim() !== '' && !AUSSORTIEREN.some(r => r.test(z)))
   return alle.slice(Math.max(0, alle.length - n))
+    .map(z => z.replace(PFAD_AB_SCHEMA, 'file:///… (Pfad entfernt)'))
 }
 
 /**

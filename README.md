@@ -546,7 +546,13 @@ Fassung, deinem Betriebssystem und den letzten **aussagekräftigen** Zeilen aus 
 Weggelassen wird genau dreierlei: leere Zeilen, die lange `PATH`-Zeile (siehe unten) und die
 Zeilen, mit denen die App laufend ihren eigenen, erfolgreichen Betrieb protokolliert —
 die machen **neun von zehn** Zeilen aus, ohne sie bestünde der Bericht nur daraus. Meldungen
-über Fehlschläge bleiben ausdrücklich drin. Und weil eine E-Mail nur begrenzt lang sein darf,
+über Fehlschläge bleiben ausdrücklich drin. Eine Zeile wird ausserdem **gekürzt** statt
+weggelassen: zeigt sie auf eine Datei auf deinem Rechner — etwa weil ein Link dorthin verwies,
+den Transkribor nicht geöffnet hat —, bleibt der Hinweis stehen, während Ort und Name **dieser
+einen** Datei wegfallen. In der Protokolldatei stehen sie weiter, bei sehr langen Pfaden dort
+allerdings ebenfalls gekürzt. Alle **übrigen** Pfade bleiben in der Mail unverändert stehen —
+was da alles auftauchen kann, steht ein paar Absätze weiter unten.
+Und weil eine E-Mail nur begrenzt lang sein darf,
 fallen von den übrigen Zeilen notfalls die **ältesten** weg — die Mail sagt dir das dann an,
 und die vollständige Datei liegt daneben. Schreib oben hinein, was passiert ist, und schick
 sie ab.
@@ -560,8 +566,9 @@ ein Filter, dem du vertrauen musst, sondern die Vorschau.
 
 Was in diesen Zeilen stehen kann: **Pfade auf deinem Rechner, und die enthalten deinen
 Benutzernamen** (`C:\Users\…`). Sie stehen bewusst drin — ohne sie ist kaum ein Fehler
-auffindbar. Dazu Namen deiner Aufnahmedateien und Fehlermeldungen aus dem Korrekturlauf, in
-denen auch Teile eines Transkripts vorkommen können. Schlüssel in den gängigen Formaten
+auffindbar. Dazu Namen deiner Aufnahmedateien — sie stehen in **Fehlermeldungen**, etwa wenn
+das Hochladen einer Datei scheitert; genau diese Zeilen sind der Grund, warum du schreibst —
+und Meldungen aus dem Korrekturlauf, in denen auch Teile eines Transkripts vorkommen können. Schlüssel in den gängigen Formaten
 (`sk-…`, `AIza…`, `gsk_…`, `hf_…`) werden unkenntlich gemacht. Der vollständige Suchpfad
 (`PATH`) bleibt draussen — er ist über tausend Zeichen lang und würde den Platz auffressen,
 den die eigentlichen Meldungen brauchen.
