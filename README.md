@@ -502,7 +502,7 @@ bleibt). Löschen kannst du nur du selbst, bewusst über das ⋯-Menü. Auch wä
 Aufnahmen transkribiert oder korrigiert werden, kannst du einzelne, nicht gerade aktiv berechnete
 Dateien jederzeit löschen.
 
-**Ab der nächsten Fassung** gilt dasselbe fürs **Umbenennen** und fürs **Neu-Transkribieren**:
+**Ab `v0.50.0`** gilt dasselbe fürs **Umbenennen** und fürs **Neu-Transkribieren**:
 ist eine Aufnahme gerade dran, sagt Transkribor „wird gerade bearbeitet — bitte warten“ und
 ändert nichts. Du kannst es dann später einfach noch einmal versuchen. Und der Versuch bricht
 nicht mehr auf halbem Weg ab: im Regelfall wird entweder die ganze Aufnahme angefasst oder gar
