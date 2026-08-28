@@ -305,6 +305,32 @@ def cmd_diarize(project: str, only_bases: list = None) -> int:
             if not audio or not os.path.exists(audio):
                 print(f"diarize: SKIP {base} (kein Audio gefunden)", flush=True)
                 continue
+            # VOR dem ersten Schreibzugriff, nicht erst vor „→ Diarisiere …" (#444). Zwischen der
+            # Audio-Pruefung und der alten Stelle liegt `os.remove(dpath)` — und im eigenstaendigen
+            # `correct run` ist die Aufnahme hier wirklich frei: `[scope]` fuellt `bases`, NICHT
+            # `active_bases` (`jobs.py:308-311`), und die Menge startet leer (`jobs.py:116`). Ein
+            # `DELETE` in diesem Fenster wird also nicht abgewiesen, und die Diarisierung schreibt
+            # danach ein Sidecar fuer eine geloeschte Aufnahme — dieselbe Waise wie in
+            # `cmd_run.one()`, nur mit anderem Suffix. Im gestaffelten Lauf ist es folgenlos
+            # (`transcribe.transcribe_project` hat sie in der Transkriptionsphase laengst
+            # eingetragen) und die Zeile dort ein `add` auf
+            # ein Set.
+            #
+            # ABGRENZUNG, damit hier niemand mehr liest, als dasteht: die REIHENFOLGE ist
+            # gemessen (mutationsgeprueft, `test_diarize_meldet_sich_bevor_es_das_alte_sidecar_
+            # loescht`) und die Freiheit der Aufnahme am Quelltext belegt. Ein A/B-Lauf am echten
+            # Pfad wie beim Fenster in `cmd_run.one()` ist fuer DIESES Fenster NICHT gefahren —
+            # es liesse sich ohne eine Protokollzeile davor nicht an ein Ereignis haengen, und
+            # eine Messung nach der Uhr waere die Sorte, die dieses Repo sonst zurueckweist.
+            #
+            # OBERHALB der Audio-Pruefung waere falsch: ihr `continue` ist einer der VIER stillen
+            # Ausstiege (Kill-Switch, Roh-JSON fehlt, Sidecar-Wiederverwendung, kein Audio), und
+            # die sind gerade dadurch unschaedlich, dass BEIDE Zeilen fehlen.
+            #
+            # Mitgenommen: die beiden Ausnahmezweige unten drucken `[done]`, und wenn `_load` oder
+            # der pyannote-Import warf, geschah das bisher OHNE vorheriges `[active]`. Folgenlos
+            # (`discard`), aber unpaarig — jetzt nicht mehr.
+            print(f"[active] {base}", flush=True)
             from . import diarize                       # lazy: zieht torch/pyannote erst hier
             raw = _load(raw_json)
             # Das ueberholte Sidecar geht VOR dem Rechnen weg, nicht erst durch das
@@ -322,7 +348,6 @@ def cmd_diarize(project: str, only_bases: list = None) -> int:
                 with contextlib.suppress(OSError):   # best effort; sonst ueberschreibt unten ohnehin
                     os.remove(dpath)
             wieviele = f" ({sprecher} Sprecher)" if sprecher else ""
-            print(f"[active] {base}", flush=True)
             print(f"→ Diarisiere {base}{wieviele} …", flush=True)
             diagnose: dict = {}
             t0 = time.monotonic()
@@ -1158,24 +1183,100 @@ def cmd_run(project: str, base: str = None, force: bool = False, verify: bool = 
         if _is_human_edited(epath) and not force:
             print(f"↷ SKIP {b} (human_edited=true; --force zum Neu-Korrigieren)", flush=True)
             return False
-        # 1. Lokale Hardware-Phase (Diarisierung + Vorbereitung): genau 1 Thread zeitgleich
-        with _hardware_lock:
+        # `gemeldet` ist der Riegel, den der Kalt-Review an fbb6a22 gefordert hat: das `try`
+        # muss VOR dem `with` beginnen, weil `prep_single` nur `(OSError, ValueError)` faengt
+        # (s. dort) — eine Roh-JSON, die als Objekt parst, aber falsche Typen traegt
+        # (`{"segments": "kaputt"}`), wirft `AttributeError` glatt hindurch. Lag das `try`
+        # erst hinter dem Hardware-Block, lief das `finally` in genau dem Fall NICHT, und die
+        # Aufnahme blieb bis Jobende in `active_bases` haengen — Loeschen dauerhaft 409, wo
+        # nichts mehr an ihr arbeitet. Reproduziert, A/B: auf diesem Stand ohne den Riegel
+        # `{'S1'}`, auf `41e40a3` `set()` — die Reparatur hatte den Weg selbst aufgemacht
+        # (auf master gibt es kein `[active]`, das haengenbleiben koennte).
+        #
+        # Und das Flag statt eines unbedingten Drucks, weil der Ausstieg im `with` VOR dem
+        # `[active]` liegt: dort waere `[done]` eine unpaarige Zeile ueber eine Aufnahme, die
+        # nie eingetragen wurde.
+        gemeldet = False
+        try:
+            # 1. Lokale Hardware-Phase (Diarisierung + Vorbereitung): genau 1 Thread zeitgleich
+            with _hardware_lock:
+                if not os.path.exists(raw_json):
+                    return False                       # noch vor `[active]` — es gibt nichts freizugeben
+                cmd_diarize(project, [b])
+                # #444: `cmd_diarize` druckt auf jedem Pfad, auf dem es die Datei WIRKLICH anfasst,
+                # ein eigenes `[active]`/`[done]`-Paar (das `[active]` hinter seiner Audio-Pruefung,
+                # die vier `[done]` am Erfolgsende, am Ausstieg „keine Sprecher erkannt" und in den
+                # beiden Ausnahmezweigen). Bei ihm heisst `[done]` „dieser SCHRITT ist fertig",
+                # `jobs.py` liest aber „der Lauf ist mit der Datei fertig" und verwirft sie aus
+                # `active_bases`. Ab hier waere die Aufnahme also frei — waehrend `prep_single` noch
+                # ihre `.tagged.txt` schreibt, bis `correct_ai_single` sie mit ihrem eigenen
+                # `[active]` wieder eintraegt.
+                #
+                # GEMESSEN, A/B am echten Pfad — Basis `41e40a3` gegen diesen Stand, laufender
+                # Server, Wegwerf-Projekt, `TRANSKRIBOR_DIARIZE=1` (echtes pyannote),
+                # `TRANSKRIBOR_PARALLEL=1`, zwei Aufnahmen zu je 60 000 Segmenten (so lange
+                # dauert die Vorbereitung messbar), `DELETE` ausgeloest vom ERSTEN `[done]` im
+                # Protokoll, nicht von einer Uhr:
+                #   `41e40a3`: Fenster **0,26-0,28 s**, `DELETE` kommt durch die 409-Sperre und
+                #              endet mit **500** — `app._datei_weg` faellt beim `os.remove` der
+                #              Roh-JSON auf `PermissionError [WinError 32]`, weil `prep_single`
+                #              sie offen haelt. Die `.tagged.txt` steht danach als Waise da.
+                #   dieser Stand: Fenster **0,00 s**, `DELETE` -> **409** mit Begruendung, keine
+                #              Waise. Negativkontrolle (derselbe Loeschweg, kein Job) -> 200.
+                # Auf einem kleinen Transkript ist die Roh-JSON schneller wieder zu; dann traegt
+                # dasselbe Fenster ein stilles 200 samt Waise statt des 500. Gemessen ist der
+                # grosse Fall.
+                #
+                # „0,00 s" heisst VERKLEINERT, nicht strukturell geschlossen — und das ist der
+                # Zins auf den `[done]`-Preis unten. `cmd_diarize`s `[done]` und dieses `[active]`
+                # sind zwei getrennte Schreibvorgaenge auf derselben Pipe, und `jobs._run` nimmt
+                # sein `_lock` JE ZEILE: ein `DELETE`, dessen `betrifft()` genau dazwischen an
+                # das Lock kommt, saehe die Menge weiterhin leer. Wirklich zu waere es erst, wenn
+                # `active_bases` ein ZAEHLER statt einer Menge waere — dann heben sich die Marken
+                # verschachtelter Drucker sauber auf. Der Preis dafuer (`buche_aktive` samt allen
+                # vier druckenden Quellen) steht in keinem Verhaeltnis zu einem Fenster von zwei
+                # benachbarten Schreibvorgaengen. Benannt statt behauptet.
+                #
+                # Das ist der Zwilling des #418-Fixes in `transcribe.transcribe_project` (dort das
+                # `[active]` direkt nach `cmd_diarize`) — dieselbe Klasse, der
+                # andere Pfad. Nur: DORT ist die Aufnahme auf `cmd_diarize`s vier stillen Ausstiegen
+                # nicht frei (die Transkriptionsphase dort hat sie eingetragen),
+                # HIER schon: `[scope]` fuellt `bases`, NICHT `active_bases` (`jobs.py:308-311`), und
+                # die Menge startet leer (`jobs.py:116`). Im `correct run` ist diese Zeile also die
+                # ERSTE Eintragung, kein Duplikat — der Fix deckt damit auch die Laeufe mit
+                # `TRANSKRIBOR_DIARIZE=0` und die mit wiederverwendetem Sidecar.
+                print(f"[active] {b}", flush=True)
+                gemeldet = True
+                if not prep_single(project, b):
+                    return False
+            # 2. Lokaler GPU-Schritt fertig -> Hardware-Lock freigegeben für nächste Datei.
+            # 3. Sofortige Cloud-KI-Phase (parallel über _claude_slots)
             if not os.path.exists(raw_json):
                 return False
-            cmd_diarize(project, [b])
-            if not prep_single(project, b):
-                return False
-        if not os.path.exists(raw_json):
-            return False
-        # 2. Lokaler GPU-Schritt fertig -> Hardware-Lock freigegeben für nächste Datei.
-        # 3. Sofortige Cloud-KI-Phase (parallel über _claude_slots)
-        # `bool(...)` faengt das `None` ab: `cmd_run` zaehlt seine Bilanz mit `sum(ex.map(one, …))`,
-        # und ein `None` darin waere ein TypeError statt einer Zahl. Der Unterschied
-        # „nicht versucht" vs. „gescheitert" geht hier nichts verloren, was nicht schon weg
-        # waere — `one()` filtert beide Faelle sechs Zeilen weiter oben selbst, und
-        # `correct.main` zieht die Schutz-Skips ohnehin aus seinem eigenen Nenner.
-        return bool(correct_ai_single(project, b, gjson=gjson, context=context,
-                                      verify=verify, force=force, base_explicit=base))
+            # `bool(...)` faengt das `None` ab: `cmd_run` zaehlt seine Bilanz mit `sum(ex.map(one, …))`,
+            # und ein `None` darin waere ein TypeError statt einer Zahl. Der Unterschied
+            # „nicht versucht" vs. „gescheitert" geht hier nichts verloren, was nicht schon weg
+            # waere — `one()` filtert beide Faelle sechs Zeilen weiter oben selbst, und
+            # `correct.main` zieht die Schutz-Skips ohnehin aus seinem eigenen Nenner.
+            return bool(correct_ai_single(project, b, gjson=gjson, context=context,
+                                          verify=verify, force=force, base_explicit=base))
+        finally:
+            # UNBEDINGT, weil FUENF Ausgaenge dahinter weder `[active]` noch `[done]` drucken:
+            # `prep_single` = False, ein WURF aus `prep_single` (es faengt nur
+            # `(OSError, ValueError)`), die TOCTOU-Pruefung, und `correct_ai_single`s ZWEI
+            # Schutz-Ausstiege (Roh-JSON weg, `human_edited`) — die beiden liegen VOR ihrem
+            # eigenen `[active]` und drucken nichts. Ohne dieses `finally` bliebe die Aufnahme
+            # dort bis Jobende in `active_bases` haengen: Loeschen dauerhaft 409, ausgerechnet
+            # dort, wo gar nichts mehr an ihr arbeitet. Und „bis Jobende" ist nicht „gleich":
+            # `ex.map` hat alle Aufgaben eingereiht, der Executor wartet sie ab.
+            #
+            # GETRAGENER PREIS: eine korrigierte Datei meldet `[done]` dreimal — aus
+            # `cmd_diarize`, aus `correct_ai_single`s `finally` und hier. `jobs.buche_aktive`
+            # fasst die Menge ausschliesslich mit `add`/`discard` an (sein Docstring sagt genau
+            # das), und `jobPhases.ts:252` raeumt per Optional-Chaining nur eine
+            # DIARISIERUNGSphase — die ist zu diesem Zeitpunkt laengst weg.
+            if gemeldet:
+                print(f"[done] {b}", flush=True)
 
     # Dateien streamen durch die Hardware- und KI-Pipeline -> bis zu CLAUDE_PARALLEL Threads.
     # Der Hardware-Lock serialisiert GPU-Phasen, während Netzwerk-LLM-Aufrufe parallel laufen.
