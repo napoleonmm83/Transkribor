@@ -348,7 +348,10 @@ export function parseJobPhases(kind: string, lines: string[]): JobPhases {
     // reuse / diarize-SKIP / prep-SKIP / "Diarisierung deaktiviert" -> bewusst ignoriert
   }
 
-  return { global: Object.keys(active).length ? null : global, scope, active, perBase, bilanz }
+  // `gesehen` nur, wenn wirklich etwas darin steht: ein immer vorhandenes leeres Set waere
+  // eine Feldaenderung in JEDER Antwort, fuer einen Fall, den es meist gar nicht gibt.
+  return { global: Object.keys(active).length ? null : global, scope,
+           gesehen: gesehen.size ? gesehen : undefined, active, perBase, bilanz }
 }
 
 /** Einzeiler fuer Toast & Co. — nie rohe Log-Zeilen anzeigen, die sind fuer den Parser, nicht fuer Menschen. */
