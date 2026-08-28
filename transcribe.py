@@ -638,10 +638,11 @@ def transcribe_project(name, model, language, only=None, autocorrect: bool = Fal
 
         WAS DIE MESSUNG NICHT ZEIGTE, obwohl die Ausgangsmeldung es vorhersagt: die Waise
         („Aufnahme ohne Ton, aber mit Transkript") entstand NICHT. `correct_ai_single` prueft
-        beim Eintritt selbst, ob die Roh-JSON noch da ist (`correct.py:1068`), und steigt mit
+        beim Eintritt selbst, ob die Roh-JSON noch da ist (Eintrittspruefung in
+        `correct.correct_ai_single`), und steigt mit
         `None` aus — der Loeschvorgang blieb sauber. Der Rest-Weg zu einer Waise ist die
         Handvoll Anweisungen zwischen dieser Pruefung und ihrem eigenen `[active]`
-        (`correct.py:1076`), also ein echtes Millisekundenrennen. Repariert wird hier die
+        (in `correct.correct_ai_single`), also ein echtes Millisekundenrennen. Repariert wird hier die
         SPERR-SEMANTIK — dass eine Aufnahme als frei gilt, die der Lauf noch anfassen wird —,
         nicht ein belegter Datenverlust.
 
@@ -747,12 +748,14 @@ def transcribe_project(name, model, language, only=None, autocorrect: bool = Fal
                         _correct.cmd_diarize(name, [base])
                         # #418/C1: `cmd_diarize` druckt auf jedem Pfad, auf dem es die Datei
                         # WIRKLICH anfasst, ein eigenes `[active]`/`[done]`-Paar
-                        # (`correct.py:325` und `:334`/`:356`/`:364`/`:368`) — bei ihm heisst das
+                        # (in `correct.cmd_diarize`: das `[active]` hinter seiner Audio-Pruefung,
+                        # die vier `[done]` am Erfolgsende, beim Ausstieg "keine Sprecher
+                        # erkannt" und in beiden Ausnahmezweigen) — bei ihm heisst das
                         # "dieser SCHRITT ist fertig", `jobs.py` liest aber "der Lauf ist mit
                         # der Datei fertig" und verwirft sie aus `active_bases`. Ab hier waere
                         # die Aufnahme also frei: waehrend `prep_single`, waehrend der ganzen
                         # Wartezeit in der Poolschlange, bis `correct_ai_single` sie mit ihrem
-                        # eigenen `[active]` (`correct.py:1076`) wieder eintraegt. Das Weglassen
+                        # eigenen `[active]` wieder eintraegt. Das Weglassen
                         # des `finally`-Drucks allein aendert daran NICHTS — dort wurde nur ein
                         # zweites Mal verworfen, was laengst weg war.
                         #

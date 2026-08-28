@@ -1812,3 +1812,268 @@ def test_cmd_run_ueberlebt_ein_nicht_versucht(monkeypatch, tmp_path):
     monkeypatch.setattr(correct, "correct_ai_single", lambda *a, **kw: None)
 
     assert correct.cmd_run("P") == 0        # kein TypeError, und nichts faelschlich gezaehlt
+
+
+# ── #444: die Aufnahme bleibt gesperrt, solange `correct run` sie anfasst ────────────────────
+#
+# Zwillinge der #418-Tests in `test_transcribe.py`, fuer den EIGENSTAENDIGEN Korrekturlauf.
+# Zwei Dinge sind hier anders als dort, und beide entscheiden ueber die Aussagekraft:
+#
+# 1. Die Attrappen DRUCKEN die echten Zeilenformen. `_ki_projekt` faelscht `cmd_diarize` stumm
+#    (#443: 15 Attrappen im Repo, genau EINE druckt echt) — eine stumme Attrappe nimmt genau
+#    den Sensor weg, um den es geht, und daran ist #418 einmal vorbeigelaufen.
+# 2. Gebucht wird durch das ECHTE `jobs.buche_aktive`. Die Regel im Test nachzubauen hiesse,
+#    die Attrappe gegen die Attrappe zu pruefen.
+#
+# Und anders als im gestaffelten Lauf ist die Aufnahme hier auf `cmd_diarize`s vier STILLEN
+# Ausstiegen ebenfalls frei: `[scope]` fuellt `bases`, nicht `active_bases`, und die Menge
+# startet leer. Der zweite Test faehrt genau diesen Fall.
+
+
+def _sperr_projekt(monkeypatch, tmp_path, name="Sperr", welche=("S1",), mit_audio=False):
+    """Kleinstes Projekt, das `cmd_run` durchlaeuft — ohne Glossar- und Kontext-Aufruf."""
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    monkeypatch.setenv("TRANSKRIBOR_SETTINGS", str(tmp_path / "settings.json"))
+    tdir = tmp_path / name / "transkripte"
+    tdir.mkdir(parents=True)
+    if mit_audio:
+        (tmp_path / name / "audio").mkdir(parents=True)
+    for b in welche:
+        (tdir / f"{b}.json").write_text(json.dumps(
+            {"language": "de", "segments": [{"id": 0, "start": 0.0, "end": 1.0, "text": "hallo"}]}),
+            encoding="utf-8")
+        (tdir / f"{b}.raw.txt").write_text("hallo", encoding="utf-8")
+        (tdir / f"{b}.segments.txt").write_text("[0:00 - 0:01] hallo", encoding="utf-8")
+        if mit_audio:
+            (tmp_path / name / "audio" / f"{b}.mp3").write_bytes(b"x")
+    monkeypatch.setattr(correct, "_glossary", lambda *a, **kw: "")
+    monkeypatch.setattr(correct, "_context", lambda *a, **kw: "")
+    return tdir
+
+
+def _replay(zeilen):
+    """[(Zeile, Zustand von `active_bases` NACH ihr)] — durch die echte Buchungsregel."""
+    aktive, verlauf = set(), []
+    for z in zeilen:
+        jobs.buche_aktive(aktive, z)
+        verlauf.append((z, set(aktive)))
+    return verlauf
+
+
+def _zeige(verlauf):
+    return chr(10).join(f"{z!r} -> {sorted(a)}" for z, a in verlauf)
+
+
+def test_run_sperrt_die_aufnahme_ueber_die_vorbereitung(monkeypatch, tmp_path, capsys):
+    """`cmd_diarize`s `[done]` gab die Aufnahme frei, waehrend `prep_single` noch schrieb (#444).
+
+    Bei `cmd_diarize` heisst `[done]` „dieser SCHRITT ist fertig"; `jobs.py` liest „der Lauf ist
+    mit der Datei fertig" und verwirft sie aus `active_bases`. In dem Fenster kam
+    `DELETE …/files/{base}` mit 200 durch, und die gerade geschriebene `.tagged.txt` blieb als
+    Waise stehen. Die Markenzeile steht fuer genau diesen Schreibvorgang.
+    """
+    _sperr_projekt(monkeypatch, tmp_path)
+    marke = "marke: prep schreibt S1.tagged.txt"
+
+    def diarize_wie_echt(project, only_bases=None):
+        for b in (only_bases or []):
+            print(f"[active] {b}", flush=True)
+            print(f"→ Diarisiere {b} …", flush=True)
+            print(f"[done] {b}", flush=True)          # <- gibt frei, das ist der Defekt
+        return len(only_bases or [])
+
+    def prep_mit_marke(project, b, **kw):
+        print(marke, flush=True)
+        return True
+
+    def korrektur_wie_echt(project, b, **kw):
+        print(f"[active] {b}", flush=True)
+        print(f"apply: {b} -> edit.json + md (1 Segmente)", flush=True)
+        print(f"[done] {b}", flush=True)
+        return True
+
+    monkeypatch.setattr(correct, "cmd_diarize", diarize_wie_echt)
+    monkeypatch.setattr(correct, "prep_single", prep_mit_marke)
+    monkeypatch.setattr(correct, "correct_ai_single", korrektur_wie_echt)
+
+    correct.cmd_run("Sperr")
+    verlauf = _replay(capsys.readouterr().out.splitlines())
+    zeilen = [z for z, _ in verlauf]
+
+    # Vorbedingung: die Diarisierung hat wirklich freigegeben. Ohne sie waere die Zusicherung
+    # unten vacuous — dann haette nie jemand die Aufnahme aus der Menge geworfen.
+    assert zeilen.index("[done] S1") < zeilen.index(marke), _zeige(verlauf)
+
+    # DIE ZUSICHERUNG: waehrend `prep_single` schreibt, gilt die Aufnahme als bearbeitet.
+    assert "S1" in verlauf[zeilen.index(marke)][1], (
+        "die Aufnahme ist waehrend der Vorbereitung frei — genau das Loch aus #444."
+        + chr(10) + _zeige(verlauf))
+    assert verlauf[-1][1] == set(), _zeige(verlauf)    # und am Ende ist sie es nicht mehr
+
+
+def test_run_gibt_die_aufnahme_frei_wenn_die_korrektur_sich_nie_meldet(monkeypatch, tmp_path,
+                                                                      capsys):
+    """Das `[done]` im `finally` ist UNBEDINGT — sonst bliebe die Sperre bis Jobende stehen.
+
+    Gefahren auf einem der vier STILLEN Ausstiege von `cmd_diarize` (hier: Kill-Switch bzw.
+    wiederverwendetes Sidecar — die Attrappe druckt nichts). Anders als im gestaffelten Lauf
+    ist die Aufnahme dort NICHT schon eingetragen: `[scope]` fuellt `bases`, nicht
+    `active_bases` (`jobs.py`), und die Menge startet leer. Das `[active]` aus dem Fix ist hier
+    also die ERSTE Eintragung — und dann muss auch jemand wieder aufraeumen.
+
+    `correct_ai_single` tut das auf ihren zwei Schutz-Ausstiegen (Roh-JSON weg, `human_edited`)
+    gerade NICHT: beide liegen vor ihrem eigenen `[active]` und drucken nichts. Ohne das
+    `finally` haenge die Aufnahme bis Jobende in `active_bases` — Loeschen dauerhaft 409,
+    ausgerechnet dort, wo gar nichts mehr an ihr arbeitet.
+    """
+    _sperr_projekt(monkeypatch, tmp_path)
+
+    monkeypatch.setattr(correct, "cmd_diarize", lambda *a, **kw: 0)      # stiller Ausstieg
+    monkeypatch.setattr(correct, "prep_single", lambda *a, **kw: True)
+    monkeypatch.setattr(correct, "correct_ai_single", lambda *a, **kw: None)   # meldet nichts
+
+    correct.cmd_run("Sperr")
+    verlauf = _replay(capsys.readouterr().out.splitlines())
+    zeilen = [z for z, _ in verlauf]
+
+    # Vorbedingung: der Lauf hat die Aufnahme ueberhaupt eingetragen. Ohne sie waere die leere
+    # Menge unten kein Freigeben, sondern ein „war nie drin" — dieselbe Zusicherung ohne Sensor.
+    assert "[active] S1" in zeilen, _zeige(verlauf)
+    assert zeilen.count("[done] S1") == 1, (
+        "genau EIN [done] erwartet: die Korrektur-Attrappe meldet sich nicht, es kann nur aus "
+        "dem finally kommen." + chr(10) + _zeige(verlauf))
+    assert verlauf[-1][1] == set(), (
+        "die Aufnahme bleibt bis Jobende gesperrt, obwohl niemand mehr an ihr arbeitet."
+        + chr(10) + _zeige(verlauf))
+
+
+def test_run_gibt_die_aufnahme_frei_wenn_die_vorbereitung_wirft(monkeypatch, tmp_path, capsys):
+    """Die Antwort auf „was erlaubt die Reparatur NEU?" — und sie kam vom Kalt-Review.
+
+    `prep_single` faengt nur `(OSError, ValueError)`. Eine Roh-JSON, die als Objekt parst, aber
+    falsche Typen traegt (`{"segments": "kaputt"}`), wirft `AttributeError` glatt hindurch —
+    kein `ValueError`, also kein Schutz. Lag das `try` erst HINTER dem Hardware-Block, stand das
+    `[active]` aus dem Fix schon im Protokoll, das `finally` lief aber nie: die Aufnahme blieb
+    bis Jobende in `active_bases`, Loeschen antwortete dauerhaft 409, obwohl nichts mehr an ihr
+    arbeitete. Und „bis Jobende" ist nicht „gleich" — `ex.map` hat alle Aufgaben eingereiht.
+
+    Den Zustand gab es auf `41e40a3` NICHT: dort druckt `one()` gar kein `[active]`, es kann
+    also auch nichts haengenbleiben. Reproduziert, A/B am echten `cmd_run` mit einer echten
+    kaputten Roh-JSON: mit dem Fix ohne Riegel `{'S1'}`, auf `41e40a3` `set()`.
+    """
+    _sperr_projekt(monkeypatch, tmp_path)
+
+    def prep_wirft(project, b, **kw):
+        # Genau die Form, die `tag_uncertain_segments` bei `"segments": "kaputt"` wirft.
+        raise AttributeError("'str' object has no attribute 'get'")
+
+    monkeypatch.setattr(correct, "cmd_diarize", lambda *a, **kw: 0)
+    monkeypatch.setattr(correct, "prep_single", prep_wirft)
+    monkeypatch.setattr(correct, "correct_ai_single", lambda *a, **kw: True)
+
+    with pytest.raises(AttributeError):
+        correct.cmd_run("Sperr")
+    verlauf = _replay(capsys.readouterr().out.splitlines())
+
+    # Vorbedingung: der Lauf hat die Aufnahme eingetragen — sonst waere unten nichts freizugeben
+    # und die Zusicherung eine Aussage ueber einen Zustand, den es gar nicht gibt.
+    assert "[active] S1" in [z for z, _ in verlauf], _zeige(verlauf)
+    assert verlauf[-1][1] == set(), (
+        "die Vorbereitung ist geflogen und die Aufnahme bleibt gesperrt — der Weg, den erst die "
+        "Reparatur aufgemacht hat." + chr(10) + _zeige(verlauf))
+
+
+def test_run_meldet_nichts_wenn_die_aufnahme_vor_dem_lock_verschwindet(monkeypatch, tmp_path,
+                                                                      capsys):
+    """Die ZWEITE Haelfte des `if gemeldet:` — ohne diesen Test ist der Riegel Dekoration.
+
+    Gemessen vom gegnerischen Review an genau diesem Stand: `if gemeldet:` ersatzlos entfernt
+    (also IMMER drucken) ⇒ **alle 109 Tests blieben gruen**. Die Zusicherung stand im
+    Kommentar, ihre Pruefung nirgends.
+
+    Es gibt genau EINEN Ausgang, an dem `gemeldet` False bleibt und das `finally` trotzdem
+    laeuft: die TOCTOU-Pruefung IM `with`. Die Aufnahme verschwindet, waehrend wir auf den
+    Hardware-Lock warten — `remove_base` hat sie beim Loeschen laengst aus `active_bases`
+    geworfen, und ein `[done]` waere hier eine unpaarige Zeile ueber eine Aufnahme, die dieser
+    Lauf nie eingetragen hat.
+
+    Hergestellt wird der Ausgang ueber den Lock selbst, nicht ueber ein Rennen zweier Faeden:
+    das Loeschen faellt per Konstruktion zwischen die beiden `os.path.exists`-Pruefungen,
+    dazwischen liegt im Original nichts anderes als das Warten auf den Lock.
+    """
+    tdir = _sperr_projekt(monkeypatch, tmp_path)
+
+    class LockDerDazwischenLoescht:
+        """`with`-Ersatz fuer `_hardware_lock`: das Loeschen kommt an, waehrend wir warten."""
+
+        def __enter__(self):
+            os.remove(os.path.join(tdir, "S1.json"))
+
+        def __exit__(self, *_):
+            return False
+
+    monkeypatch.setattr(correct, "_hardware_lock", LockDerDazwischenLoescht())
+    monkeypatch.setattr(correct, "cmd_diarize", lambda *a, **kw: 0)      # darf nie drankommen
+    monkeypatch.setattr(correct, "prep_single", lambda *a, **kw: True)   # dito
+    monkeypatch.setattr(correct, "correct_ai_single", lambda *a, **kw: True)
+
+    assert correct.cmd_run("Sperr") == 0
+    verlauf = _replay(capsys.readouterr().out.splitlines())
+    zeilen = [z for z, _ in verlauf]
+
+    # Vorbedingungen: der Lauf ist ueberhaupt bis in `one()` gekommen UND hat den Ausgang VOR
+    # dem `[active]` genommen. Ohne beide waere die Zusicherung unten eine Aussage ueber nichts.
+    assert "[scope] S1" in zeilen, _zeige(verlauf)
+    assert "[active] S1" not in zeilen, _zeige(verlauf)
+
+    assert zeilen.count("[done] S1") == 0, (
+        "unpaariges [done] fuer eine Aufnahme, die dieser Lauf nie eingetragen hat."
+        + chr(10) + _zeige(verlauf))
+
+
+def test_diarize_meldet_sich_bevor_es_das_alte_sidecar_loescht(monkeypatch, tmp_path, capsys):
+    """Das zweite Fenster derselben Klasse: `cmd_diarize` schrieb vor seinem eigenen `[active]`.
+
+    Zwischen der Audio-Pruefung und der alten Stelle des `[active]` liegt `os.remove(dpath)` —
+    das ueberholte Sidecar geht dort weg (#264), und die Diarisierung schreibt danach ein neues.
+    Faellt ein `DELETE` in dieses Fenster, entsteht eine verwaiste `.diar.json`: dieselbe Waise
+    wie beim Fenster oben, nur mit anderem Suffix.
+
+    Der Sensor MUSS am `os.remove` haengen, nicht an `_load`: eine Marke davor bliebe gruen,
+    wenn jemand das `[active]` spaeter wieder zwischen Laden und Loeschen schoebe.
+    """
+    monkeypatch.setenv("TRANSKRIBOR_DIARIZE", "1")
+    tdir = _sperr_projekt(monkeypatch, tmp_path, mit_audio=True)
+    from webtool import diarize as _diar
+
+    # Vorbedingung fuer den Loeschzweig: das Sidecar ist AELTER als die Roh-JSON, der
+    # Wiederverwendungs-Skip greift also nicht (`mtime(dpath) >= mtime(raw_json)`).
+    dpath = tdir / "S1.diar.json"
+    dpath.write_text(json.dumps({"base": "S1", "turns": [], "segments": []}), encoding="utf-8")
+    alt = os.path.getmtime(tdir / "S1.json") - 60
+    os.utime(dpath, (alt, alt))
+
+    echt_remove = os.remove
+    marke = "marke: os.remove(S1.diar.json)"
+
+    def remove_mit_marke(pfad, *a, **kw):
+        if str(pfad).endswith(".diar.json"):
+            print(marke, flush=True)
+        return echt_remove(pfad, *a, **kw)
+
+    monkeypatch.setattr(correct.os, "remove", remove_mit_marke)
+    monkeypatch.setattr(_diar, "diarize_file",
+                        lambda *a, **kw: [{"start": 0.0, "end": 1.0, "speaker": "SPEAKER_00"}])
+    monkeypatch.setattr(_diar, "assign_clusters", lambda raw, turns: {0: "Sprecher 1"})
+
+    correct.cmd_diarize("Sperr", ["S1"])
+    verlauf = _replay(capsys.readouterr().out.splitlines())
+    zeilen = [z for z, _ in verlauf]
+
+    # Vorbedingung: der Loeschzweig wurde wirklich betreten — sonst misst der Test nichts.
+    assert marke in zeilen, _zeige(verlauf)
+
+    assert "S1" in verlauf[zeilen.index(marke)][1], (
+        "cmd_diarize loescht das alte Sidecar, bevor es die Aufnahme als bearbeitet meldet."
+        + chr(10) + _zeige(verlauf))
+    assert verlauf[-1][1] == set(), _zeige(verlauf)    # `[active]`/`[done]` bleiben gepaart
