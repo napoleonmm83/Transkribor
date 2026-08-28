@@ -410,7 +410,24 @@ def betrifft(project: str, base: str, active_only: bool = False) -> dict | None:
 
     Mit `active_only=True` (für `delete_file`) wird nur blockiert, wenn die Aufnahme
     in genau diesem Moment aktiv bearbeitet/geschrieben wird (`[active]`).
-    Mit `active_only=False` (für `rename_file`, `retranscribe_file`) gilt der gesamte geplante Scope.
+    Mit `active_only=False` (für `rename_file`, `retranscribe_file`) gilt der gesamte geplante
+    Scope UND die gerade aktiven Aufnahmen — `active_only=False` ist die OBERMENGE von
+    `active_only=True`, nicht der andere Zweig.
+
+    Dass das eine Obermenge sein MUSS, ist neu und gemessen (#451): bis #450 galt
+    `active_bases ⊆ bases`, seitdem nicht mehr — der Glossar-Schritt meldet korpusweit
+    `[active]`, während `[scope]` bei einem Einzeldatei-Lauf nur die eine Aufnahme trägt.
+    Ohne den dritten Term kam `POST …/files/{base}/transcribe` bzw. `…/rename` für eine
+    solche Aufnahme durch und zerbrach an der offenen Datei: 500, halb gelöscht bzw. halb
+    umbenannt (beides am echten Pfad reproduziert). Die engere Frage durfte nie mehr
+    sperren als die weitere.
+
+    PREIS, und er trifft POSIX HÄRTER als Windows: der Schaden, gegen den gesperrt wird, ist
+    Windows-eigen (dort verhindert ein offener Griff rename und unlink, auf macOS/Linux nicht).
+    Diese Sperre wirkt aber plattformunabhängig — auf macOS/Linux bekommen `rename_file` und
+    `retranscribe_file` während des Glossar-Lesefensters jetzt 409 für Aufnahmen, an denen dort
+    nie etwas kaputtgehen konnte. Bewusst so: EIN Verhalten auf allen Plattformen ist mehr wert
+    als ein Zweig, den niemand testet, und die Datei WIRD in dem Moment gelesen.
     """
     with _lock:
         for (proj, _kind), jid in _active.items():
@@ -423,7 +440,8 @@ def betrifft(project: str, base: str, active_only: bool = False) -> dict | None:
                 if base in r.get("active_bases", set()):
                     return {"id": r["id"], "kind": r["kind"]}
             else:
-                if r["bases"] is None or base in r["bases"]:
+                if (r["bases"] is None or base in r["bases"]
+                        or base in r.get("active_bases", set())):
                     return {"id": r["id"], "kind": r["kind"]}
     return None
 

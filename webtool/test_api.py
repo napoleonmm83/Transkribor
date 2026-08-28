@@ -1,4 +1,5 @@
 import json
+import errno
 import os
 import threading
 import time
@@ -2622,3 +2623,643 @@ def test_export_project_zip_unknown_project_404(client):
     r = client.get("/api/projects/Unbekannt_xyz/export/zip")
     assert r.status_code == 404
 
+
+
+# ---- #451: eine Aufnahme wird GANZ angefasst oder gar nicht ----
+# Drei Endpunkte fassen die Dateien EINER Aufnahme in einer Schleife an. Haelt ein Lauf eine
+# davon offen, brach die Schleife mittendrin ab: 500, und die Aufnahme gab es halb (gemessen —
+# beim Umbenennen lag `A_fremd_neu.json` neben `A_fremd.raw.txt`).
+#
+# WARUM `os.rename` gefaelscht wird statt ein echtes Handle zu halten: die Sperre gibt es NUR
+# auf Windows. Auf POSIX verhindert ein offener Griff weder rename noch unlink, die Schleife
+# gelingt dort immer — ein Test mit echtem Handle waere in der Linux-CI still gruen, ohne je
+# den Zweig zu betreten, um den es geht. Gefaelscht wird deshalb die Grenze, an der unsere
+# Logik haengt; die Wirklichkeit dahinter deckt der Windows-Test darunter und die Messung am
+# echten Pfad ab.
+
+
+def _rename_faellt_aus_bei(monkeypatch, name_teil):
+    """Echtes `os.rename`, aber fuer eine bestimmte Datei `PermissionError` — wie WinError 32.
+    Der Ruecklauf laeuft ueber dieselbe Funktion und muss durchkommen: er benennt die schon
+    beiseitegelegten Dateien zurueck, deren Quellname den Teil nicht traegt."""
+    echt = os.rename
+    versucht = []
+
+    def fake(src, dst):
+        versucht.append(os.path.basename(src))
+        if os.path.basename(src).startswith(name_teil):
+            raise PermissionError(32, "Der Prozess kann nicht auf die Datei zugreifen")
+        return echt(src, dst)
+
+    monkeypatch.setattr(os, "rename", fake)
+    return versucht
+
+
+def _bestand(tmp_path):
+    p = tmp_path / "Demo"
+    return sorted([f.name for f in (p / "transkripte").iterdir()]
+                  + [f.name for f in (p / "audio").iterdir()])
+
+
+def test_loeschen_bei_belegter_datei_gibt_409_und_dreht_zurueck(client, monkeypatch, tmp_path):
+    """Die Roh-JSON wird beiseitegelegt, das Audio ist belegt -> NICHTS darf weg sein."""
+    vorher = _bestand(tmp_path)
+    assert "S1.json" in vorher and "S1.mp3" in vorher      # Vorbedingung: zwei Dateien
+    versucht = _rename_faellt_aus_bei(monkeypatch, "S1.mp3")
+
+    r = client.delete("/api/projects/Demo/files/S1")
+
+    assert r.status_code == 409, r.text
+    assert "S1" in r.json()["detail"] and "Benutzung" in r.json()["detail"]
+    # Vorbedingung: es wurde wirklich erst umbenannt und dann zurueckgedreht — sonst
+    # zeigte der Bestand unten nur, dass gar nichts passiert ist.
+    assert len(versucht) >= 3, versucht
+    assert _bestand(tmp_path) == vorher, "Ruecklauf unvollstaendig — halb geloeschte Aufnahme"
+
+
+def test_neu_transkribieren_bei_belegter_datei_gibt_409_und_dreht_zurueck(client, monkeypatch,
+                                                                         tmp_path):
+    """Derselbe Loeschpfad, anderer Endpunkt (#451: `retranscribe_file` ruft `_datei_weg`).
+
+    Hier raeumt `_datei_weg` mit `mit_audio=False` — das Audio bleibt absichtlich stehen, es
+    wird ja gleich wieder transkribiert. Der Test legt deshalb ein ZWEITES Transkript-Artefakt
+    an: sonst gaebe es nur eine Datei, der Ruecklauf haette nichts zu tun und die Zusicherung
+    unten waere die halbe."""
+    (tmp_path / "Demo" / "transkripte" / "S1.edit.json").write_text("{}", encoding="utf-8")
+    vorher = _bestand(tmp_path)
+    # `_datei_weg` sortiert seine Trefferliste, `S1.edit.json` kommt also vor `S1.json` —
+    # verlassen darf man sich darauf erst, seit dort `sorted()` steht: `glob.glob` liefert
+    # laut Doku eine beliebige, dateisystemabhaengige Reihenfolge.
+    versucht = _rename_faellt_aus_bei(monkeypatch, "S1.json")
+
+    r = client.post("/api/projects/Demo/files/S1/transcribe")
+
+    assert r.status_code == 409, r.text
+    assert len(versucht) >= 3, versucht          # beiseitegelegt, gescheitert, zurueckgedreht
+    assert _bestand(tmp_path) == vorher, "halb geloeschte Aufnahme beim Neu-Transkribieren"
+
+
+def test_umbenennen_bei_belegter_datei_gibt_409_und_dreht_zurueck(client, monkeypatch, tmp_path):
+    """Der schlimmste der drei: hier entstand eine Aufnahme, die es ZWEIMAL HALB gab —
+    `S1_neu.json` neben `S1.mp3`. Genau das schliesst der Docstring von `rename_file` aus."""
+    vorher = _bestand(tmp_path)
+    _rename_faellt_aus_bei(monkeypatch, "S1.mp3")
+
+    r = client.post("/api/projects/Demo/files/S1/rename", json={"name": "S1_neu"})
+
+    assert r.status_code == 409, r.text
+    assert _bestand(tmp_path) == vorher, "Aufnahme liegt halb unter dem neuen Namen"
+    assert not any(n.startswith("S1_neu") for n in _bestand(tmp_path))
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Nur Windows sperrt offene Dateien (POSIX nicht)")
+def test_loeschen_bei_ECHT_offener_datei_gibt_409(client, tmp_path):
+    """Wirklichkeitsprobe ohne Attrappe — laeuft in der Linux-CI nie (dort gibt es die Sperre
+    nicht). Gemessen: ein offener Lesegriff laesst weder rename noch unlink zu, beide mit
+    `PermissionError [WinError 32]`."""
+    vorher = _bestand(tmp_path)
+    with open(tmp_path / "Demo" / "transkripte" / "S1.json", encoding="utf-8"):
+        r = client.delete("/api/projects/Demo/files/S1")
+    assert r.status_code == 409, r.text
+    assert _bestand(tmp_path) == vorher
+
+
+def test_loeschen_raeumt_liegengebliebene_reservierung_der_audio_seite_weg(client, tmp_path):
+    """Ein abgestuerzter Loeschlauf laesst `S1.mp3.<id>.weg` im audio-Ordner liegen.
+
+    Die Aufraeum-Regel der Transkriptseite (`<base>.*`) laeuft nur ueber `transkripte/`, und
+    `find_audio` sucht exakte `base + ext`-Namen — ohne eine eigene Regel bliebe ausgerechnet
+    die groesste Datei einer Aufnahme unsichtbar und dauerhaft liegen.
+    """
+    adir = tmp_path / "Demo" / "audio"
+    (adir / "S1.mp3.deadbeef.weg").write_bytes(b"grosse Tonspur aus einem abgestuerzten Lauf")
+    # BEIDE Seiten, denn es sind zwei getrennte Codezweige: der transkripte-Rest faellt aus dem
+    # `<base>.*`-Glob, der audio-Rest aus einem eigenen Muster. Nur einen zu pruefen liesse den
+    # anderen unbewacht — bei der Mutationsprobe genau so aufgefallen.
+    (tmp_path / "Demo" / "transkripte" / "S1.json.cafe1234.weg").write_text("{}", encoding="utf-8")
+
+    r = client.delete("/api/projects/Demo/files/S1")
+
+    assert r.status_code == 200, r.text
+    rest = [p.name for p in adir.iterdir()]
+    assert rest == [], f"Reservierung im audio-Ordner liegengeblieben: {rest}"
+    trest = [p.name for p in (tmp_path / "Demo" / "transkripte").iterdir()]
+    assert trest == [], f"Reservierung im transkripte-Ordner liegengeblieben: {trest}"
+    # Der Rest wird WEGGERAEUMT, aber NICHT MITGEZAEHLT: `geloescht` beschreibt die Dateien der
+    # Aufnahme (S1.json + S1.mp3), nicht Ueberbleibsel eines frueheren Laufs. An derselben Zahl
+    # haengt die 404-Entscheidung — eine Aufnahme, von der nur noch Reste da sind, meldete sonst
+    # „1 geloescht" statt 404 (Bot-Befund an #460).
+    assert r.json()["geloescht"] == 2, r.json()
+
+
+def test_loeschen_wiederholt_ein_voruebergehend_gesperrtes_entfernen(client, monkeypatch,
+                                                                    tmp_path):
+    """Ein Scanner greift die eben umbenannte Datei — das ist auf Windows der Normalfall unter
+    Konkurrenz, kein Defekt (dieselbe Regel wie `sperre._HAKELIG_S`). Ohne Wiederholung bliebe
+    sie als unsichtbarer Rest liegen (#459)."""
+    echt_remove = os.remove
+    geklemmt = []
+
+    def flaky(pfad, *a, **kw):
+        if str(pfad).endswith(".weg") and len(geklemmt) < 2:
+            geklemmt.append(str(pfad))
+            raise PermissionError(32, "kurz belegt")
+        return echt_remove(pfad, *a, **kw)
+
+    monkeypatch.setattr(os, "remove", flaky)
+
+    r = client.delete("/api/projects/Demo/files/S1")
+
+    assert r.status_code == 200, r.text
+    # Vorbedingung: es hat wirklich geklemmt — sonst misst der Test die Wiederholung nicht.
+    assert len(geklemmt) == 2, geklemmt
+    assert _bestand(tmp_path) == [], f"Rest trotz Wiederholung: {_bestand(tmp_path)}"
+
+
+def test_ruecklauf_ueberschreibt_eine_neu_entstandene_datei_nicht(client, monkeypatch, tmp_path):
+    """Der Ruecklauf ist der einzige neue SCHREIBpfad — er darf nichts ueberbuegeln.
+
+    Ein Autosave (alle 800 ms) kann in das Fenster zwischen Reservierung und Fehlschlag eine
+    frische `edit.json` schreiben — und zwar TROTZ der Sperre, die `retranscribe_file` seit
+    Runde 6 haelt (`app.py:861`): der Autosave schreibt nicht gegen ein Lock, sondern gegen den
+    PFAD. Bis Runde 7 stand hier „`retranscribe_file` nimmt keine `sperre.datei`"; das war seit
+    Runde 6 falsch und widersprach `test_neu_transkribieren_ohne_sperre_gibt_503` zwei
+    Bildschirme weiter unten. Auf POSIX
+    ersetzt `os.rename` ein vorhandenes Ziel STILL, der Ruecklauf naehme die frische Fassung
+    also mit. Der Test bildet diese POSIX-Semantik auf Windows nach (dort wuerde `os.rename`
+    von sich aus scheitern) — sonst waere er auf der einen Plattform gruen und auf der anderen
+    blind fuer genau den Fall, um den es geht."""
+    tdir = tmp_path / "Demo" / "transkripte"
+    (tdir / "S1.edit.json").write_text('{"alt": true}', encoding="utf-8")
+    echt_rename, echt_replace = os.rename, os.replace
+
+    def fake(src, dst):
+        name = os.path.basename(src)
+        if name.startswith("S1.json"):                 # zweite Reservierung scheitert
+            raise PermissionError(32, "belegt")
+        if name.endswith(".weg"):                      # RUECKLAUF: POSIX-Semantik nachbilden
+            return echt_replace(src, dst)
+        echt_rename(src, dst)
+        if name == "S1.edit.json":                     # fremder Schreibvorgang im Fenster
+            (tdir / "S1.edit.json").write_text('{"frisch": true}', encoding="utf-8")
+
+    monkeypatch.setattr(os, "rename", fake)
+
+    r = client.post("/api/projects/Demo/files/S1/transcribe")
+
+    assert r.status_code == 409, r.text
+    inhalt = (tdir / "S1.edit.json").read_text(encoding="utf-8")
+    assert "frisch" in inhalt, f"Ruecklauf hat den fremden Schreibvorgang ueberbuegelt: {inhalt}"
+
+
+def test_ein_anderer_fehler_wird_nicht_als_in_benutzung_beschriftet(client, monkeypatch,
+                                                                   tmp_path):
+    """Nur ein BELEGTER Zugriff bekommt „bitte warten" — der Rat muss stimmen.
+
+    Die Reservierung haengt 13 Zeichen an (`.<8hex>.weg`); eine Datei nahe der 260er-Pfadgrenze
+    liess sich vorher loeschen und scheiterte danach bei JEDEM Versuch. Als 409 „bitte warten"
+    beschriftet waere das ein dauerhaft falscher Rat — dieselbe Lehre, die `_dateistand` in
+    dieser Datei schon einmal bezahlt hat (`except OSError` deckte auch einen zu langen Pfad).
+    Der Ruecklauf gilt trotzdem: Atomik darf nicht von der Ursache abhaengen.
+    """
+    import errno as _errno
+    echt_rename = os.rename
+
+    def fake(src, dst):
+        if os.path.basename(src).startswith("S1.mp3"):
+            # EIO, NICHT ENAMETOOLONG: fuer den langen Pfad gibt es seit dem Bot-Befund
+            # einen eigenen Rueckfall (direkt loeschen). Hier geht es um „jeder ANDERE
+            # OSError fliegt weiter" — dafuer braucht es einen Fehler ohne Sonderweg.
+            raise OSError(_errno.EIO, "Ein-/Ausgabefehler")
+        return echt_rename(src, dst)
+
+    monkeypatch.setattr(os, "rename", fake)
+    vorher = _bestand(tmp_path)
+
+    with pytest.raises(OSError) as fehler:
+        client.delete("/api/projects/Demo/files/S1")
+
+    # Der ORIGINALFEHLER muss unveraendert durchkommen. `isinstance(..., PermissionError)`
+    # waere hier eine Zusicherung ueber NICHTS: Python bildet `ENAMETOOLONG` auf keine
+    # OSError-Unterklasse ab, die Zeile koennte also gar nicht rot werden (Bot-Befund an #460).
+    assert fehler.value.errno == _errno.EIO, fehler.value
+    assert _bestand(tmp_path) == vorher, "Ruecklauf muss auch bei fremdem Fehler laufen"
+
+
+def test_ruecklauf_legt_beim_umbenennen_unsichtbar_beiseite(client, monkeypatch, tmp_path):
+    """Ein übersprungener Rücklauf darf keine SICHTBARE halbe Aufnahme hinterlassen.
+
+    `rename_file` gibt Ziele OHNE `.weg` herein. Ist der alte Platz beim Rücklauf wieder belegt,
+    wird nicht zurückbenannt (sonst überbügelte man den fremden Schreibvorgang) — die schon
+    umbenannte Datei bliebe dann aber unter dem NEUEN Namen in jeder Auflistung stehen, also
+    genau der Zustand, den `_umbenennen_oder_keines` ausschliesst. Sie gehört in den
+    unsichtbaren Namensraum, und der Fall gehört ins Protokoll (Bot-Befund an #460).
+    """
+    tdir = tmp_path / "Demo" / "transkripte"
+    (tdir / "S1.edit.json").write_text('{"alt": true}', encoding="utf-8")
+    echt_rename = os.rename
+
+    def fake(src, dst):
+        name = os.path.basename(src)
+        if name.startswith("S1.json"):                 # zweite Reservierung scheitert
+            raise PermissionError(32, "belegt")
+        echt_rename(src, dst)
+        if name == "S1.edit.json":                     # fremder Schreibvorgang belegt den Platz
+            (tdir / "S1.edit.json").write_text('{"frisch": true}', encoding="utf-8")
+
+    monkeypatch.setattr(os, "rename", fake)
+
+    r = client.post("/api/projects/Demo/files/S1/rename", json={"name": "S1_neu"})
+
+    assert r.status_code == 409, r.text
+    namen = sorted(p.name for p in tdir.iterdir())
+    # Vorbedingung: der fremde Schreibvorgang steht noch — sonst misst der Test den anderen Zweig.
+    assert "frisch" in (tdir / "S1.edit.json").read_text(encoding="utf-8")
+    assert not any(n.startswith("S1_neu") for n in namen), f"sichtbare halbe Aufnahme: {namen}"
+    assert any(n.endswith(".weg") for n in namen), f"nicht beiseitegelegt: {namen}"
+
+
+# `glob.glob` liefert laut Doku eine BELIEBIGE Reihenfolge; gemessen liefert ext4 die
+# Anlage-Reihenfolge und NTFS die alphabetische. Ein Test, der sich auf die Reihenfolge des
+# WIRTS verlaesst, ist auf einer Plattform gruen und auf der anderen rot — genau so ist die
+# fehlende Sortierung in `rename_file` durch Windows-Tests UND einen gruenen CodeRabbit-Lauf
+# gerutscht und erst im ubuntu-Bein aufgefallen. Die beiden Tests hier geben die Reihenfolge
+# deshalb VERDREHT vor und pruefen, dass der Code sie sortiert: damit haengt der Sensor an
+# keiner Plattform mehr.
+
+def _glob_verdreht(monkeypatch):
+    """Kehrt die Reihenfolge jedes glob-Ergebnisses um — der ungünstigste Wirt."""
+    from webtool import app as app_mod
+    echt = app_mod.glob.glob
+    monkeypatch.setattr(app_mod.glob, "glob",
+                        lambda *a, **kw: list(reversed(sorted(echt(*a, **kw)))))
+
+
+def _rename_reihenfolge(monkeypatch):
+    """Protokolliert, in welcher Reihenfolge tatsaechlich umbenannt wird."""
+    reihenfolge = []
+    echt = os.rename
+
+    def merken(src, dst):
+        reihenfolge.append(os.path.basename(src))
+        return echt(src, dst)
+
+    monkeypatch.setattr(os, "rename", merken)
+    return reihenfolge
+
+
+def test_umbenennen_sortiert_die_trefferliste_unabhaengig_vom_wirt(client, monkeypatch, tmp_path):
+    """`rename_file` muss die Reihenfolge selbst festlegen, nicht das Dateisystem."""
+    (tmp_path / "Demo" / "transkripte" / "S1.edit.json").write_text("{}", encoding="utf-8")
+    _glob_verdreht(monkeypatch)
+    reihenfolge = _rename_reihenfolge(monkeypatch)
+
+    r = client.post("/api/projects/Demo/files/S1/rename", json={"name": "S1_neu"})
+
+    assert r.status_code == 200, r.text
+    assert reihenfolge[0] == "S1.edit.json", (
+        f"nicht sortiert — die Reihenfolge kam vom Wirt: {reihenfolge}")
+
+
+def test_loeschen_sortiert_die_trefferliste_unabhaengig_vom_wirt(client, monkeypatch, tmp_path):
+    """Dasselbe fuer `_datei_weg` — zwei getrennte Globs, zwei getrennte Sensoren."""
+    (tmp_path / "Demo" / "transkripte" / "S1.edit.json").write_text("{}", encoding="utf-8")
+    _glob_verdreht(monkeypatch)
+    reihenfolge = _rename_reihenfolge(monkeypatch)
+
+    r = client.delete("/api/projects/Demo/files/S1")
+
+    assert r.status_code == 200, r.text
+    assert reihenfolge[0] == "S1.edit.json", (
+        f"nicht sortiert — die Reihenfolge kam vom Wirt: {reihenfolge}")
+
+
+def test_umbenennen_zaehlt_liegengebliebene_reste_nicht_mit(client, tmp_path):
+    """Ein `.weg`-Rest wandert MIT, zaehlt aber nicht als Datei der Aufnahme.
+
+    Mitwandern ist Absicht und nicht der naheliegende Weg: nimmt man ihn aus der Liste, bleibt
+    er unter dem ALTEN Basisnamen liegen, waehrend die Aufnahme unter dem neuen weiterlebt — und
+    da den alten Namen niemand je wieder loescht, waere er dauerhaft verwaist (#459). `umbenannt`
+    nennt dem Nutzer trotzdem nur SEINE Dateien, dieselbe Regel wie `geloescht` in `_datei_weg`.
+    """
+    tdir = tmp_path / "Demo" / "transkripte"
+    (tdir / "S1.json.cafe1234.weg").write_text("{}", encoding="utf-8")
+
+    r = client.post("/api/projects/Demo/files/S1/rename", json={"name": "S1_neu"})
+
+    assert r.status_code == 200, r.text
+    assert r.json()["umbenannt"] == 2, r.json()          # S1.json + S1.mp3, NICHT der Rest
+    namen = sorted(p.name for p in tdir.iterdir())
+    assert namen == ["S1_neu.json", "S1_neu.json.cafe1234.weg"], namen
+
+
+def test_loeschen_bei_zu_langem_pfad_loescht_direkt_statt_500(client, monkeypatch, tmp_path):
+    """Die Reservierung haengt 13 Zeichen an — nahe der 260er-Pfadgrenze kippt sie, waehrend
+    `os.remove` noch ginge. Vor dem Rueckfall war die Aufnahme damit dauerhaft unloeschbar
+    (Bot-Befund an #460). Der Preis ist benannt: fuer DIESEN Fall gilt Alles-oder-nichts nicht."""
+    import errno as _errno
+    echt_rename = os.rename
+
+    def zu_lang(src, dst):
+        if dst.endswith(".weg"):
+            raise OSError(_errno.ENAMETOOLONG, "Dateiname zu lang")
+        return echt_rename(src, dst)
+
+    monkeypatch.setattr(os, "rename", zu_lang)
+
+    r = client.delete("/api/projects/Demo/files/S1")
+
+    assert r.status_code == 200, r.text
+    assert _bestand(tmp_path) == [], f"nicht geloescht: {_bestand(tmp_path)}"
+
+
+def test_neu_transkribieren_ohne_sperre_gibt_503(client, monkeypatch, tmp_path):
+    """`retranscribe_file` haelt seit dem `.weg`-Namensraum dieselbe Sperre wie `delete_file`:
+    `_keine_jobs` schuetzt gegen JOBS, nicht gegen den anderen ENDPUNKT — ein gleichzeitiges
+    DELETE koennte sonst die laufende Reservierung wegraeumen (Bot-Befund an #460)."""
+    import contextlib
+    from webtool import sperre
+
+    @contextlib.contextmanager
+    def keine_sperre(pfad, **kw):
+        yield False
+
+    monkeypatch.setattr(sperre, "datei", keine_sperre)
+
+    r = client.post("/api/projects/Demo/files/S1/transcribe")
+
+    assert r.status_code == 503, r.text
+    assert (tmp_path / "Demo" / "transkripte" / "S1.json").exists(), "nichts angefasst"
+
+
+def test_loeschen_deckelt_die_gesamte_wiederholungszeit(client, monkeypatch, tmp_path):
+    """Die Wiederholungen laufen UNTER `sperre.datei`, und `stale` ist eine Zusage ueber die
+    Haltedauer (#207). Ein Deckel je Datei reicht nicht — die Zahl der Artefakte ist durch
+    `<base>.*` unbegrenzt. Hier klemmen fuenf Dateien; nach dem ERSTEN Schlaf ist das
+    Gesamtbudget ueberschritten, danach darf nicht mehr gewartet werden."""
+    from webtool import app as app_mod
+    tdir = tmp_path / "Demo" / "transkripte"
+    for i in range(5):
+        (tdir / f"S1.teil{i}.json").write_text("{}", encoding="utf-8")
+    echt_remove = os.remove
+
+    def immer_belegt(pfad, *a, **kw):
+        if str(pfad).endswith(".weg"):
+            raise PermissionError(32, "belegt")
+        return echt_remove(pfad, *a, **kw)
+
+    uhr, schlaefe = {"t": 0.0}, []
+    # `app_mod.time` IST das globale time-Modul — die Attrappe wirkt also prozessweit. Deshalb
+    # ein eigener `MonkeyPatch.context()`: er raeumt am Ende des `with` auf, VOR jedem
+    # Fixture-Teardown. Ohne ihn liefe der `client`-Teardown (`_warte`) noch mit gefaelschter
+    # Uhr, und dessen Zusicherung „Modulzustand leckt nicht" maesse nichts mehr.
+    # Die zweite prozessweite Beruehrung — `sperre.datei` schlaeft in seiner Warteschleife —
+    # kommt hier nicht vor: die Sperre ist in einem frischen tmp_path unbestritten und
+    # schlaeft deshalb kein einziges Mal. Das ist eine Eigenschaft der Fixture, keine
+    # Zusicherung dieses Tests; wer die Fixture aendert, prueft es nach.
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(os, "remove", immer_belegt)
+        mp.setattr(app_mod.time, "monotonic", lambda: uhr["t"])
+        mp.setattr(app_mod.time, "sleep",
+                   lambda s: (schlaefe.append(s), uhr.__setitem__("t", uhr["t"] + 10.0)))
+
+        r = client.delete("/api/projects/Demo/files/S1")
+
+    assert r.status_code == 200, r.text
+    # Vorbedingung: es hat ueberhaupt geklemmt (sonst waere die Zusicherung leer).
+    assert schlaefe, "kein einziger Wiederholungsversuch — der Test misst nichts"
+    assert len(schlaefe) == 1, (
+        f"nach dem Ueberschreiten des Budgets wurde weiter gewartet: {len(schlaefe)} Schlafphasen")
+
+
+def test_umbenennen_faellt_nicht_ueber_lock_und_verzeichnis(client, tmp_path):
+    """Der Glob trifft auch `<base>.edit.json.lock` (ein VERZEICHNIS, von `sperre` angelegt)
+    und beliebige Unterordner — umbenannt werden duerfen sie nicht (Bot-Befund an #460)."""
+    tdir = tmp_path / "Demo" / "transkripte"
+    # NICHT `S1.edit.json.lock` nehmen — das ist seit Runde 7 der EIGENE Sperrpfad dieses
+    # Endpunkts (`sperre.datei(_edit_path(...))`). Als Attrappe angelegt sieht er wie ein
+    # verwaistes Lock aus: `sperre` sitzt die volle Frist ab (`STALTES_ALTER`, 60 s), greift
+    # erzwungen zu und raeumt das Verzeichnis beim Freigeben weg — gemessen lief die Datei
+    # dadurch 62 s statt 3 s, und die Zusicherung darunter fiel um. Ein `.lock` eines ANDEREN
+    # Zielnamens prueft denselben Filter, ohne mit dem Mechanismus zu kollidieren.
+    (tdir / "S1.md.lock").mkdir()                 # so legt `sperre.datei` es an: VERZEICHNIS
+    (tdir / "S1.unterordner").mkdir()
+    # Und eine `.lock`-DATEI. Ohne sie waere die `.lock`-Haelfte des Filters unbewacht: ein
+    # Verzeichnis faellt schon an `os.path.isfile` heraus, `not p.endswith(".lock")` koennte
+    # also entfernt werden und der Test bliebe gruen. Der Fall ist real — `sperre.py` behandelt
+    # ausdruecklich „am Lock-Pfad liegt eine DATEI" (Sync-Client, Quarantaene).
+    (tdir / "S1.raw.txt.lock").write_text("", encoding="utf-8")
+
+    r = client.post("/api/projects/Demo/files/S1/rename", json={"name": "S1_neu"})
+
+    assert r.status_code == 200, r.text
+    assert (tdir / "S1.md.lock").is_dir(), "Sperrverzeichnis wurde angefasst"
+    assert (tdir / "S1.unterordner").is_dir(), "fremdes Verzeichnis wurde umbenannt"
+    assert (tdir / "S1.raw.txt.lock").is_file(), "Sperr-DATEI wurde umbenannt"
+    assert r.json()["umbenannt"] == 2, r.json()
+
+
+def test_os_rename_behaelt_die_mtime(tmp_path):
+    """Der Beleg fuer die Begruendung des Ruecklauf-Waechters — als Sensor statt als Behauptung.
+
+    `_umbenennen_oder_keines` benennt nur zurueck, wenn der alte Platz noch frei ist. Die
+    naheliegende Alternative waere eine ALTERSpruefung („ist die `.weg`-Datei alt genug, um sie
+    gefahrlos anzufassen?") — und die traegt nicht, weil `os.rename` die mtime der Datei
+    behaelt: eine soeben angelegte Reservierung sieht damit beliebig alt aus. Der Kommentar in
+    `app.py` nennt das gemessen; hier steht die Messung, damit sie nicht bloss eine Behauptung
+    im Fliesstext ist. Gilt auf beiden Plattformen — deshalb kein `skipif`.
+    """
+    import time as _time
+    a, b = tmp_path / "a.txt", tmp_path / "b.txt"
+    a.write_text("x", encoding="utf-8")
+    vorher = a.stat().st_mtime
+    _time.sleep(0.02)                     # echte Zeit vergeht zwischen Anlegen und Rename
+
+    os.rename(a, b)
+
+    assert abs(b.stat().st_mtime - vorher) < 0.001, (
+        f"mtime nach dem Rename veraendert: {b.stat().st_mtime} statt {vorher} — "
+        f"dann waere eine Alterspruefung doch moeglich und der Kommentar falsch")
+
+
+def test_neu_transkribieren_ohne_transkripte_ordner_klappt(client, tmp_path):
+    """Der Normalfall „noch nie transkribiert": `create_project` legt NUR `audio/` an.
+
+    Die Sperre aus Runde 3 legt ihr Lock neben die `edit.json` und braucht dafuer das
+    Elternverzeichnis — ohne `makedirs` scheitert `os.mkdir(lockdir)` mit `FileNotFoundError`,
+    und ausgerechnet die ERSTE Transkription eines frisch hochgeladenen Projekts antwortete
+    mit 503. `delete_file` legt das Verzeichnis seit je vorher an; beim Einbau der Sperre ist
+    das Muster untergegangen (Bot-Befund an #460, Regression aus meiner eigenen Runde 3).
+    """
+    p = tmp_path / "NurAudio"
+    (p / "audio").mkdir(parents=True)
+    (p / "audio" / "A1.mp3").write_bytes(b"ID3fakeaudio")
+    # Vorbedingung: es gibt WIRKLICH kein transkripte/ — sonst misst der Test nichts.
+    assert not (p / "transkripte").exists()
+
+    r = client.post("/api/projects/NurAudio/files/A1/transcribe")
+
+    assert r.status_code == 200, r.text
+
+
+def test_zu_langer_pfad_meldet_keinen_erfolg_wenn_nichts_verschwindet(client, monkeypatch,
+                                                                     tmp_path):
+    """Der `ENAMETOOLONG`-Rueckfall loescht direkt — dort behalten die Dateien ihre SICHTBAREN
+    Namen. Scheitert das Loeschen, darf nicht „geloescht: N" gemeldet werden: im Hauptpfad
+    traegt ein Rest einen `.weg`-Namen, den keine Auflistung kennt, hier steht die Aufnahme
+    weiterhin vollstaendig da (Bot-Befund an #460)."""
+    import errno as _errno
+    echt_rename = os.rename
+
+    def zu_lang(src, dst):
+        if dst.endswith(".weg"):
+            raise OSError(_errno.ENAMETOOLONG, "Dateiname zu lang")
+        return echt_rename(src, dst)
+
+    monkeypatch.setattr(os, "rename", zu_lang)
+    echt_remove = os.remove
+
+    def belegt(pfad, *a, **kw):
+        # NUR die Dateien der Aufnahme klemmen. `sperre.datei` raeumt sein eigenes Lock
+        # ebenfalls ueber `os.remove` ab — eine pauschale Attrappe liesse das Lock stehen
+        # und der Test maesse den Riegel statt des Rueckfalls.
+        if ".lock" in str(pfad):
+            return echt_remove(pfad, *a, **kw)
+        raise PermissionError(32, "belegt")
+
+    monkeypatch.setattr(os, "remove", belegt)
+    vorher = _bestand(tmp_path)
+
+    r = client.delete("/api/projects/Demo/files/S1")
+
+    assert r.status_code == 404, f"Erfolg gemeldet, obwohl nichts weg ist: {r.text}"
+    assert _bestand(tmp_path) == vorher, "Bestand veraendert, obwohl 404"
+
+
+def _oserror_mit_winerror(code):
+    """Ein `OSError`, der `winerror` traegt — auf BEIDEN Plattformen.
+
+    Auf Windows ueber die 4-Argument-Form, die `errno` aus `winerror` ableitet, genau wie
+    CPython es im Ernstfall tut (`PC/errmap.h`). Auf POSIX gibt es die Form nicht, dort wird
+    das Attribut gesetzt — damit laeuft der Test auch im ubuntu-Bein der CI und ist nicht der
+    naechste Windows-Waechter, den dort nie jemand ausfuehrt (dieselbe Luecke wie #201).
+    """
+    if os.name == "nt":
+        return OSError(0, "Zielname unbrauchbar", None, code)
+    e = OSError(errno.EINVAL, "Zielname unbrauchbar")
+    e.winerror = code
+    return e
+
+
+@pytest.mark.parametrize("winerror", [123, 206])
+def test_unbrauchbarer_zielname_faellt_auf_direktes_loeschen_zurueck(client, monkeypatch,
+                                                                    tmp_path, winerror):
+    """Windows meldet einen zu langen Zielnamen NIE als `ENAMETOOLONG`.
+
+    GEMESSEN auf dieser Maschine (Python 3.13.15, Windows 11): `os.rename` auf eine
+    300-Zeichen-Komponente gibt `errno=22 (EINVAL)` mit `winerror=123`. Die urspruengliche
+    Bedingung `e.errno == errno.ENAMETOOLONG` griff dort also NIE — der Rueckfall war auf der
+    Plattform, fuer die er gebaut wurde, toter Code, und `delete_file` antwortete 500.
+    206 (`ERROR_FILENAME_EXCED_RANGE`, laut `PC/errmap.h` auf `errno=ENOENT` abgebildet) ist
+    der Gesamtpfad-Fall und HERGELEITET — auf dieser Maschine gelingt ein 276-Zeichen-Ziel,
+    er ist hier also nicht herstellbar. Beide Codes muessen den Rueckfall ausloesen.
+    """
+    echt_rename = os.rename
+
+    def zielname_unbrauchbar(src, dst):
+        if dst.endswith(".weg"):
+            raise _oserror_mit_winerror(winerror)
+        return echt_rename(src, dst)
+
+    monkeypatch.setattr(os, "rename", zielname_unbrauchbar)
+    if os.name == "nt":                      # die Abbildung selbst festhalten, nicht glauben
+        assert _oserror_mit_winerror(206).errno == errno.ENOENT
+        assert _oserror_mit_winerror(123).errno == errno.EINVAL
+
+    r = client.delete("/api/projects/Demo/files/S1")
+
+    assert r.status_code == 200, f"kein Rueckfall — {r.status_code}: {r.text}"
+    assert r.json()["geloescht"] >= 1, r.json()
+    assert not (tmp_path / "Demo" / "transkripte" / "S1.json").exists()
+
+
+def test_umbenennen_ohne_sperre_gibt_503(client, monkeypatch, tmp_path):
+    """`rename_file` haelt seit Runde 7 dieselbe `sperre.datei` wie die zwei Nachbarendpunkte.
+
+    Ohne sie teilten zwei HTTP-Anfragen auf dieselbe Aufnahme kein Schloss: ein gleichzeitiges
+    DELETE raeumt eine Datei zwischen `_ziel_frei` und dem `os.rename` weg, das Umbenennen
+    scheitert mit `FileNotFoundError` — kein `PermissionError`, also 500 statt 409 — und der
+    Ruecklauf schreibt in einen Platz zurueck, den der andere Endpunkt gerade freigab.
+    """
+    from webtool import sperre
+    import contextlib
+
+    @contextlib.contextmanager
+    def fake_sperre(pfad, **kw):
+        yield False
+
+    monkeypatch.setattr(sperre, "datei", fake_sperre)
+    vorher = _bestand(tmp_path)
+
+    r = client.post("/api/projects/Demo/files/S1/rename", json={"name": "S1_neu"})
+
+    assert r.status_code == 503, r.text
+    assert _bestand(tmp_path) == vorher, "trotz 503 wurde umbenannt"
+
+
+def test_umbenennen_ohne_transkripte_ordner_klappt(client, tmp_path):
+    """Dasselbe wie beim Neu-Transkribieren (Runde 6), jetzt fuer `rename_file`.
+
+    Mit der Sperre kam die Vorbedingung „Elternverzeichnis existiert" mit — und
+    `create_project` legt nur `audio/` an. Ohne `os.makedirs` scheitert `os.mkdir(lockdir)`
+    mit `FileNotFoundError`, und eine noch nie transkribierte Aufnahme liesse sich nicht mehr
+    umbenennen. Der Fix von Runde 6 waere sonst genau einen Endpunkt weit gegangen.
+    """
+    p = tmp_path / "NurAudio2"
+    (p / "audio").mkdir(parents=True)
+    (p / "audio" / "B1.mp3").write_bytes(b"ID3fakeaudio")
+    assert not (p / "transkripte").exists()
+
+    r = client.post("/api/projects/NurAudio2/files/B1/rename", json={"name": "B1_neu"})
+
+    assert r.status_code == 200, r.text
+    assert (p / "audio" / "B1_neu.mp3").exists()
+
+
+def test_umbenennen_fragt_nach_jobs_innerhalb_der_sperre(client, monkeypatch, tmp_path):
+    """Die Job-Frage muss INNERHALB der Sperre stehen, nicht davor.
+
+    Vor der Sperre gefragt lag zwischen Antwort und `os.rename` frueher nur die Trefferliste.
+    Seit `rename_file` eine `sperre.datei` haelt, liegt dort eine Wartezeit von bis zu
+    `sperre.STALTES_ALTER` (60 s) — die Sperre selbst hat das Fenster also erst geschaffen.
+    Startet darin ein Lauf fuer denselben Basisnamen, benennt `_umbenennen_oder_keines`
+    Dateien um, die ein Job gerade schreibt.
+
+    Der Sensor bildet genau das ab: der Job erscheint erst, WAEHREND die Sperre gehalten wird.
+    Steht `_keine_jobs` davor, sieht es ihn nicht, der Endpunkt antwortet 200 — und der Test
+    wird rot.
+    """
+    import contextlib
+    from webtool import sperre
+    import webtool.jobs as jobs_mod
+
+    im_kritischen_abschnitt = []
+
+    @contextlib.contextmanager
+    def sperre_in_der_ein_job_startet(pfad, **kw):
+        im_kritischen_abschnitt.append(True)     # ab hier laeuft ein Lauf fuer denselben Namen
+        try:
+            yield True
+        finally:
+            im_kritischen_abschnitt.clear()
+
+    monkeypatch.setattr(sperre, "datei", sperre_in_der_ein_job_startet)
+    monkeypatch.setattr(jobs_mod, "betrifft",
+                        lambda name, base, **kw: ({"id": "j1", "kind": "transcribe"}
+                                                  if im_kritischen_abschnitt else None))
+    vorher = _bestand(tmp_path)
+
+    r = client.post("/api/projects/Demo/files/S1/rename", json={"name": "S1_neu"})
+
+    assert r.status_code == 409, f"Job im Fenster nicht gesehen — {r.status_code}: {r.text}"
+    assert _bestand(tmp_path) == vorher, "trotz 409 wurde umbenannt"

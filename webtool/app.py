@@ -1,12 +1,15 @@
 """FastAPI-Backend für den Transkribor-Editor (Stufe 1)."""
+import errno
 import glob
 import io
 import json
 import os
 import shutil
 import sys
+import time
+import uuid
 import zipfile
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from urllib.parse import urlparse
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
@@ -543,8 +546,144 @@ def delete_project(project: str):
     return {"ok": True}
 
 
+# Kurze Wiederholung beim abschliessenden Loeschen: ein voruebergehender `PermissionError` ist
+# auf Windows unter Konkurrenz der Normalfall (dieselbe Regel und dieselbe Groessenordnung wie
+# `sperre._HAKELIG_S`). HERGELEITET, nicht gemessen: als Ausloeser gilt uns ein Scanner, der
+# die eben umbenannte Datei greift — belegt ist nur, DASS ein voruebergehender
+# `PermissionError` auf Windows unter Konkurrenz vorkommt (`sperre.py` hat die Zahlen dazu),
+# nicht wie oft und wie lange. Deshalb ein Budget und keine feste Wartezeit.
+_WEG_VERSUCHE, _WEG_PAUSE_S = 3, 0.1
+# Gesamtbudget ueber ALLE Dateien einer Aufnahme, weil die Wiederholungen unter der Sperre von
+# `delete_file` laufen. Wie lange ein fremder Griff eine Datei haelt, ist hier NICHT gemessen —
+# gewaehlt ist der Wert an der einzigen Zahl, die feststeht: er liegt um Groessenordnungen unter
+# `sperre.STALTES_ALTER` (60 s), der Frist, ab der ein Warter das Lock erzwungen uebernimmt.
+# Reicht er nicht, ist die Antwort 409 „in Benutzung" — kein Verlust, ein zweiter Versuch.
+_WEG_GESAMT_S = 2.0
+
+
+def _umbenennen_oder_keines(paare: list, base: str) -> None:
+    """Alle Paare umbenennen — oder KEINES. Bei einer belegten Datei 409, ohne Spur.
+
+    Der Basisname ist die einzige Verbindung zwischen Ton und Transkript. Eine Schleife, die
+    auf halbem Weg abbricht, zerreisst sie: gemessen am echten Pfad (#451) blieb nach einem
+    fehlgeschlagenen Umbenennen `A_fremd_neu.json` neben `A_fremd.raw.txt` liegen — die
+    Aufnahme gab es danach zweimal halb. Beim Loeschen dasselbe Bild mit der Roh-JSON.
+
+    WARUM Umbenennen die richtige Reservierung ist, gemessen statt angenommen: Windows
+    verweigert Umbenennen UND Loeschen einer offen gehaltenen Datei mit demselben
+    `PermissionError [WinError 32]` — im eigenen wie im fremden Prozess, und ohne Griff
+    gelingt beides. Das Umbenennen stellt also GENAU dieselbe Frage wie die Tat, ist aber
+    umkehrbar. Gelingt es fuer alle Dateien, gehoert die Aufnahme uns; scheitert eines,
+    drehen wir die schon gemachten zurueck und niemand sieht einen halben Zustand.
+
+    `os.rename`, NICHT `os.replace` — aber der Unterschied traegt nur auf EINER Plattform, und
+    das gehoert dazugesagt: `os.replace` ueberschreibt ein vorhandenes Ziel ueberall still,
+    `os.rename` tut das auf POSIX GENAUSO und wirft nur auf Windows `FileExistsError`.
+    `rename_file` hat seine Kollisionspruefung (`_ziel_frei`) davor; zwischen Pruefung und Tat
+    liegt ein Fenster, und eine dort entstandene Zieldatei endet auf Windows im Fehlschlag samt
+    Ruecklauf, auf macOS/Linux dagegen still ueberschrieben. Das ist keine Verschlechterung
+    (der Altcode rief dasselbe `os.rename`), aber auch keine Zusage, die ueberall gilt.
+
+    AUF POSIX gibt es diese Sperre nicht: ein offener Griff verhindert dort weder rename noch
+    unlink, die Schleife gelingt immer, und das Problem existiert gar nicht. Deshalb ist das
+    hier KEIN Plattform-Zweig — derselbe Code, der nur auf Windows ueberhaupt ausloesen kann.
+    Die CI (ubuntu) sieht diesen Pfad also nie scharf; der plattformunabhaengige Test
+    faelscht deshalb `os.rename`, statt sich auf ein echtes Handle zu verlassen.
+
+    GETRAGENER PREIS, benannt: zwischen zwei Umbenennungen kann ein neuer Griff entstehen.
+    Dann laeuft der Ruecklauf — und scheitert der ebenfalls, ist der Zustand nicht schlimmer
+    als vor diesem Fix. Dass er seltener eintritt, ist HERGELEITET und nicht gemessen: ein
+    `os.rename` atomar ueber mehrere Dateien gibt es nicht, das Fenster schrumpft aber von der
+    ganzen Lesedauer auf zwei benachbarte Systemaufrufe.
+    """
+    gemacht = []
+    for p, ziel in paare:
+        try:
+            os.rename(p, ziel)
+        except OSError as e:
+            for q, qziel in reversed(gemacht):
+                # NUR zurueckbenennen, wenn der alte Platz noch frei ist. Auf POSIX ersetzt
+                # `os.rename` ein vorhandenes Ziel STILL — GEMESSEN in WSL: Ziel trug
+                # "FRISCH-getippt", nach `os.rename(alt, ziel)` steht "ALT" darin, keine
+                # Ausnahme. Auf Windows wirft dieselbe Zeile `FileExistsError`. Steht dort
+                # wieder etwas, ist das ein FREMDER Schreibvorgang, und der Ruecklauf wuerde
+                # ihn ueberbuegeln — ein Autosave (alle 800 ms) kann in genau dieses Fenster
+                # eine frische `edit.json` schreiben. Dann ist die `.weg`-Datei der bessere
+                # Aufbewahrungsort als ein stilles Ueberschreiben.
+                #
+                # Der Weg ueber `retranscribe_file` stand hier bis zur dritten Bot-Runde als
+                # Beispiel, `rename_file` bis zur siebten — beide halten jetzt dieselbe
+                # `sperre.datei` wie `delete_file`. Was bleibt, ist der Autosave: der schreibt
+                # nicht gegen ein Lock, sondern gegen den PFAD, und ein Schreiber ausserhalb
+                # dieses Prozesses (Virenscanner, Explorer) ohnehin.
+                if not os.path.exists(q):
+                    with suppress(OSError):           # best effort — mehr geht hier nicht
+                        os.rename(qziel, q)
+                elif not qziel.endswith(".weg"):
+                    # Der alte Platz ist belegt, ABER `rename_file` gibt Ziele ohne `.weg`
+                    # herein: `qziel` traegt hier den NEUEN Namen und bliebe als SICHTBARE
+                    # halbe Aufnahme in jeder Auflistung stehen — genau der Zustand, den diese
+                    # Funktion ausschliesst. Also in den unsichtbaren Namensraum legen statt
+                    # liegenlassen, und den Fall MELDEN: die Datei ist danach unsichtbar, die
+                    # Protokollzeile ist die einzige Spur, die von ihr bleibt. (Aus `_datei_weg`
+                    # traegt `qziel` schon `.weg` — dort ist
+                    # es bereits unsichtbar und bleibt, wo es ist.)
+                    with suppress(OSError):
+                        os.rename(qziel, f"{q}.{uuid.uuid4().hex[:8]}.weg")
+                    print(f"[dateiop] {os.path.basename(q)} war beim Ruecklauf wieder belegt — "
+                          f"{os.path.basename(qziel)} beiseitegelegt", flush=True)
+            # Der RUECKLAUF gilt jedem `OSError` — Atomik darf nicht von der Ursache abhaengen.
+            # Die BESCHRIFTUNG dagegen nur dem belegten Zugriff: „bitte warten" ist ein Rat, und
+            # ein Rat, der nie hilft, ist schlimmer als ein ehrlicher Fehler. Diese Datei hat die
+            # Lehre schon einmal bezahlt (`_dateistand`: „`except OSError` deckte auch
+            # `PermissionError`, `EIO` und einen zu langen Pfad").
+            #
+            # Konkret hinge sonst genau EIN Fall dauerhaft: die Reservierung haengt 13 Zeichen an
+            # (`.<8hex>.weg`), eine Datei nahe der 260er-Pfadgrenze liess sich vorher loeschen und
+            # scheiterte danach bei JEDEM Versuch — mit dem Rat zu warten. Das waere die einzige
+            # Stelle, an der dieser Fix etwas WEGNIMMT, was vorher ging.
+            if not isinstance(e, PermissionError):
+                print(f"[loeschpfad] {type(e).__name__} (errno={e.errno}) auf "
+                      f"{os.path.basename(p)} — zurueckgedreht, kein 409", flush=True)
+                raise
+            raise HTTPException(
+                status_code=409,
+                detail=f"„{base}“ ist gerade in Benutzung ({os.path.basename(p)}) — "
+                       f"bitte warten und noch einmal versuchen") from None
+        gemacht.append((p, ziel))
+
+
+# Windows meldet einen unbrauchbaren Zielnamen NICHT als `ENAMETOOLONG` — der POSIX-Code kommt
+# dort gar nicht vor. GEMESSEN auf dieser Maschine (Python 3.13.15, Windows 11, `os.rename` auf
+# eine 300-Zeichen-Komponente): `errno=22 (EINVAL)`, `winerror=123 (ERROR_INVALID_NAME)` — also
+# weder mein urspruengliches `ENAMETOOLONG` noch die im Review vorgeschlagene 206. Fuer einen
+# Gesamtpfad ueber MAX_PATH nennt CPythons `PC/errmap.h` `ERROR_FILENAME_EXCED_RANGE` (206) mit
+# `errno=ENOENT`; das ist HERGELEITET und hier NICHT reproduzierbar (ein 276-Zeichen-Ziel gelingt
+# auf dieser Maschine). Beide Codes stehen aufgenommen, weil sie dasselbe heissen.
+#
+# Warum 123 hier „zu lang" heisst und nicht „ungueltiges Zeichen", obwohl der Code beides deckt:
+# die Quellpfade kommen aus einem `glob` ueber vorhandene Dateien, sind also gueltige Namen;
+# unbrauchbar wird erst das um 13 Zeichen laengere Ziel. Ein anderer Weg zu 123 existiert an
+# dieser Stelle nicht.
+_ZU_LANG_WINERROR = (123, 206)
+
+
+def _name_zu_lang(e: OSError) -> bool:
+    """Heisst `e` „der ZIELNAME geht nicht" (Laenge) statt „die Datei ist belegt"?
+
+    Getrennte Funktion, weil die Antwort plattformabhaengig ist und an genau EINER Stelle
+    stehen soll: ein zweiter Vergleich anderswo wuerde beim naechsten Umbau auseinanderlaufen.
+    """
+    return e.errno == errno.ENAMETOOLONG or getattr(e, "winerror", None) in _ZU_LANG_WINERROR
+
+
 def _datei_weg(project: str, base: str, mit_audio: bool) -> int:
     """Alle Dateien EINER Aufnahme entfernen; gibt zurueck, wie viele es waren.
+
+    Die Zahl meint die Dateien der AUFNAHME. Nebenher raeumt die Funktion auch `.weg`-Reste
+    eines frueher abgebrochenen Laufs weg — die zaehlen NICHT mit, denn an der Zahl haengt
+    ausser der Antwort auch die 404-Entscheidung in `delete_file`, und eine Aufnahme, von der
+    nur noch Reste dalagen, ist keine Aufnahme mehr.
 
     `transkripte/<base>.*` deckt raw/edit/md/srt/correction/tagged/diar/segments und die
     `.partN.correction.json`-Zwischenstaende in einem Rutsch ab — eine Aufzaehlung waere
@@ -555,13 +694,97 @@ def _datei_weg(project: str, base: str, mit_audio: bool) -> int:
     als Zeichenklasse und findet die Datei nicht. Der literale Punkt im Muster trennt
     sauber: "Timeline 1.*" trifft `Timeline 1.json`, aber nicht `Timeline 10.json`."""
     muster = os.path.join(paths.transkripte_dir(project), glob.escape(base) + ".*")
-    treffer = [p for p in glob.glob(muster) if os.path.isfile(p) and not p.endswith(".lock")]
+    # `sorted`, weil `glob.glob` laut Doku eine BELIEBIGE Reihenfolge liefert — sie haengt am
+    # Dateisystem. GEMESSEN (WSL/ext4, 5 frische Verzeichnisse, Dateien in der Reihenfolge
+    # `S1.json`, `S1.edit.json` angelegt): glob liefert **5/5** `['S1.json', 'S1.edit.json']`,
+    # also die ANLAGE-Reihenfolge; NTFS liefert dieselben zwei alphabetisch, also umgekehrt.
+    # Fuer die Produktion ist das gleichgueltig; fuer einen Test, der eine bestimmte Datei
+    # belegt, nicht: er waere auf einer Plattform gruen und auf der anderen rot, ohne dass sich
+    # am Verhalten etwas aendert. Deterministisch ist billiger als ein Test, der nach Wirt
+    # schwankt.
+    gefunden = [p for p in glob.glob(muster) if os.path.isfile(p) and not p.endswith(".lock")]
+    # `.weg`-Reste sind KEINE Dateien der Aufnahme mehr, sondern Ueberbleibsel eines frueheren,
+    # abgebrochenen Laufs. Sie wandern in `reste` statt in `treffer`, und das ist keine Kosmetik:
+    # `len(treffer)` ist der Rueckgabewert, und `delete_file` liest ihn ZWEIMAL — als Zahl in der
+    # Antwort („geloescht: N") und als 404-Entscheidung. In `treffer` gezaehlt meldete eine
+    # Aufnahme, von der nur noch Reste da sind, ein munteres „1 geloescht" statt des richtigen
+    # 404, und die Zahl behauptete Dateien, die es als Aufnahme nicht mehr gab.
+    treffer = sorted(p for p in gefunden if not p.endswith(".weg"))
+    reste = sorted(p for p in gefunden if p.endswith(".weg"))
     if mit_audio:
         adir = paths.audio_dir(project)
         treffer += [os.path.join(adir, base + ext) for ext in AUDIO_EXT
                     if os.path.isfile(os.path.join(adir, base + ext))]
+        # Liegengebliebene Reservierungen der AUDIO-Seite aus einem abgestuerzten Lauf: das
+        # `<base>.*`-Glob oben erreicht sie NICHT (anderer Ordner), und `find_audio` sucht
+        # exakte `base + ext`-Namen. Ohne diese Zeile bliebe eine grosse Tonspur unsichtbar und
+        # dauerhaft liegen — der teuerste Rest von allen.
+        reste += sorted(p for p in glob.glob(os.path.join(adir, glob.escape(base) + ".*.weg"))
+                        if os.path.isfile(p))
+    # Reste brauchen keine Reservierung: sie tragen bereits einen Namen, den keine Auflistung
+    # kennt. Scheitert das Entfernen, bleibt genau der Zustand, der ohnehin schon bestand.
+    for p in reste:
+        with suppress(OSError):
+            os.remove(p)
+    # Zweistufig: erst ALLE beiseitebenennen (das ist die Reservierung und die Probe in einem),
+    # dann loeschen. Der Suffix ist je Aufruf eindeutig, damit ein liegengebliebener Rest aus
+    # einem frueheren Lauf das `os.rename` nicht mit FileExistsError kippt — der waere hier als
+    # „in Benutzung" beschriftet und damit eine falsche Auskunft.
+    weg = f".{uuid.uuid4().hex[:8]}.weg"
+    try:
+        _umbenennen_oder_keines([(p, p + weg) for p in treffer], base)
+    except OSError as e:
+        if not _name_zu_lang(e):
+            raise
+        # Der Suffix haengt 13 Zeichen an; nahe der 260er-Pfadgrenze kippt damit das
+        # `os.rename`, waehrend `os.remove` noch ginge — vor diesem Fix liess sich die Aufnahme
+        # also loeschen und danach nie wieder. Deshalb hier direkt loeschen.
+        # GETRAGENER PREIS, benannt statt versteckt: fuer diesen einen Fall degradiert die
+        # Alles-oder-nichts-Zusage zu best effort. Das ist die richtige Richtung — die
+        # Alternative ist eine Aufnahme, die der Nutzer dauerhaft nicht loeschen kann.
+        print(f"[loeschpfad] Pfad zu lang fuer die Reservierung ({base}) — direkt geloescht, "
+              f"ohne Alles-oder-nichts", flush=True)
+        # Gezaehlt wird hier, was WIRKLICH verschwunden ist — anders als im Hauptpfad unten.
+        # Dort tragen Reste schon einen `.weg`-Namen, den keine Auflistung kennt; die Zahl
+        # beschreibt also weiterhin die Sicht des Nutzers. HIER behalten sie ihre SICHTBAREN
+        # Namen: `len(treffer)` meldete 200 und „geloescht: N", waehrend alles noch dasteht.
+        # Mit der echten Zahl fuehrt ein vollstaendiger Fehlschlag ueber `delete_file` zu 404.
+        entfernt = 0
+        for p in treffer:
+            with suppress(OSError):
+                os.remove(p)
+                entfernt += 1
+        return entfernt
+    # Die Wiederholungen unten laufen UNTER der Sperre von `delete_file`, und `stale` ist eine
+    # Zusage ueber die HALTEDAUER (#207): wer sie ueberzieht, dem nimmt ein Warter das Lock
+    # erzwungen ab — dann sind zwei Prozesse im kritischen Abschnitt, also genau der Schaden,
+    # gegen den es die Sperre gibt. Ein Deckel JE DATEI reicht dafuer nicht: die Zahl der
+    # Artefakte ist durch `<base>.*` unbegrenzt (`.partN.correction.json` je Block, dazu Reste),
+    # und 0,2 s mal genug Dateien sprengen die 60 s aus `sperre.STALTES_ALTER`. Deshalb ein
+    # GESAMTbudget ueber alle Dateien, geprueft vor jedem Schlafen.
+    schluss = time.monotonic() + _WEG_GESAMT_S
     for p in treffer:
-        os.remove(p)
+        # Ab hier ist die Aufnahme aus Sicht des Nutzers weg: die Dateien liegen unter einem
+        # Namen, den keine Auflistung kennt (`transcript_bases`, `_audio_bases`, `find_audio`
+        # und die Galerie filtern alle auf echte Endungen). Schiefgehen kann trotzdem etwas —
+        # ein Virenscanner greift eine eben umbenannte Datei moeglicherweise genau jetzt
+        # (HERGELEITET — die Haeufigkeit ist hier nicht gemessen).
+        #
+        # Deshalb NICHT nur `suppress`: erst ein paar kurze Versuche (dieselbe Regel wie in
+        # `sperre.py` — ein voruebergehender `PermissionError` ist auf Windows unter Konkurrenz
+        # der NORMALFALL, kein Defekt). Bleibt danach eine liegen, faengt sie ein spaeterer
+        # `_datei_weg`-Lauf DERSELBEN Aufnahme ein (`<base>.*` im transkripte-Ordner, das
+        # `.weg`-Muster im audio-Ordner) — nach einem vollstaendigen `delete_file` gibt es
+        # diesen Basisnamen aber nicht mehr, also nie. Der Rest ist dann unsichtbar belegter
+        # Plattenplatz: benannt als #459, nicht behauptet als geheilt.
+        for versuch in range(_WEG_VERSUCHE):
+            try:
+                os.remove(p + weg)
+                break
+            except OSError:
+                if versuch + 1 == _WEG_VERSUCHE or time.monotonic() >= schluss:
+                    break                     # aufgeben — die Aufnahme ist trotzdem weg
+                time.sleep(_WEG_PAUSE_S)
     return len(treffer)
 
 
@@ -614,13 +837,34 @@ def retranscribe_file(project: str, base: str):
     """Transkript neu erzeugen: Artefakte weg, dann gezielter Einzeldatei-Lauf.
 
     Die abgeleiteten Dateien MUESSEN mit weg: load_or_build_doc bevorzugt <base>.edit.json
-    vor der Roh-JSON, ein Neu-Transkribieren zeigte sonst weiter den alten Text."""
+    vor der Roh-JSON, ein Neu-Transkribieren zeigte sonst weiter den alten Text.
+
+    DIESELBE `sperre.datei` wie `delete_file` — und sie ist hier erst mit dem `.weg`-Namensraum
+    noetig geworden. `_keine_jobs` schuetzt gegen laufende JOBS, nicht gegen den anderen
+    ENDPUNKT: zwei HTTP-Anfragen auf dieselbe Aufnahme teilten sich bis hierher kein Schloss.
+    Seit `_datei_weg` liegengebliebene `.weg`-Dateien einsammelt, kann ein gleichzeitiges
+    `DELETE` die laufende RESERVIERUNG dieser Neu-Transkription wegraeumen — und der Ruecklauf
+    findet dann nichts mehr, was er zurueckbenennen koennte. Eine Alterspruefung waere kein
+    Ersatz: `os.rename` behaelt die alte mtime (gemessen), eine frische Reservierung sieht also
+    beliebig alt aus.
+    Preis, benannt: der Endpunkt kann jetzt 503 antworten, wenn die Sperre nicht zu holen ist —
+    genau wie `delete_file` seit je."""
     _validate(project, base)
     if not find_audio(project, base):
         raise HTTPException(status_code=404, detail=f"kein Audio: {base}")
-    _keine_jobs(project, base)
-    _datei_weg(project, base, mit_audio=False)
-    job_id, started = _start_transcribe(project, base=base)
+    # `sperre.datei` legt sein Lock NEBEN die Datei und braucht das Elternverzeichnis —
+    # `create_project` legt aber nur `audio/` an. Ein Projekt mit Ton, aber ohne `transkripte/`
+    # (Upload ohne Lauf, von Hand angelegt) bekaeme sonst `FileNotFoundError` und damit 503:
+    # ausgerechnet die erste Transkription waere unmoeglich. `delete_file` macht es seit je so;
+    # das Muster gehoerte mit der Sperre hierher und ist beim Einbau untergegangen.
+    os.makedirs(paths.transkripte_dir(project), exist_ok=True)
+    with sperre.datei(_edit_path(project, base)) as gehalten:
+        if not gehalten:
+            raise HTTPException(status_code=503,
+                                detail="Aufnahme kann gerade nicht sicher neu transkribiert werden")
+        _keine_jobs(project, base)
+        _datei_weg(project, base, mit_audio=False)
+        job_id, started = _start_transcribe(project, base=base)
     return {"job_id": job_id, "started": started}
 
 
@@ -699,29 +943,76 @@ def rename_file(project: str, base: str, body: RenameBody):
     auf halbem Weg abzubrechen liesse eine Aufnahme zurueck, die es zweimal halb gibt."""
     _validate(project, base)
     neu = _neuer_name(body.name)
-    _keine_jobs(project, base)
-    tdir = paths.transkripte_dir(project)
-    # glob.escape wie in _datei_weg: safe_name laesst `[` durch, der URL-Import legt
-    # "Video [dQw4w9].m4a" an, und ungeschuetzt liest glob das `[` als Zeichenklasse.
-    treffer = glob.glob(os.path.join(tdir, glob.escape(base) + ".*"))
-    adir = paths.audio_dir(project)
-    treffer += [os.path.join(adir, base + ext) for ext in AUDIO_EXT
-                if os.path.exists(os.path.join(adir, base + ext))]
-    if not treffer:
-        raise HTTPException(status_code=404, detail=f"keine Datei: {base}")
-    paare = []
-    for p in treffer:
-        rest = os.path.basename(p)[len(base):]      # ".edit.json", ".mp3", ".part1.correction.json"
-        ziel = os.path.join(os.path.dirname(p), neu + rest)
-        if not _ziel_frei(p, ziel):
-            raise HTTPException(status_code=409, detail=f"gibt es schon: {neu + rest}")
-        paare.append((p, ziel))
-    for p, ziel in paare:
-        os.rename(p, ziel)
-    audio = find_audio(project, neu)
-    _doc_felder(_edit_path(project, neu), base=neu,
-                audio=os.path.basename(audio) if audio else "")
-    return {"ok": True, "name": neu, "umbenannt": len(paare)}
+    # DIESELBE `sperre.datei` wie `delete_file` und `retranscribe_file` — der dritte Endpunkt
+    # fehlte, und `_keine_jobs` schuetzt nur gegen JOBS, nicht gegen den Nachbar-ENDPUNKT.
+    # Konkret: ein gleichzeitiges DELETE raeumt eine Datei zwischen `_ziel_frei` und dem
+    # `os.rename` weg; das Umbenennen scheitert dann mit `FileNotFoundError` — ein `OSError`,
+    # aber KEIN `PermissionError`, also 500 statt 409 — und der Ruecklauf schriebe in einen
+    # Platz zurueck, den der andere Endpunkt gerade freigegeben hat.
+    # `os.makedirs` VOR der Sperre ist die Lehre aus Runde 6: `sperre.datei` braucht das
+    # Elternverzeichnis, und `create_project` legt nur `audio/` an.
+    os.makedirs(paths.transkripte_dir(project), exist_ok=True)
+    with sperre.datei(_edit_path(project, base)) as gehalten:
+        if not gehalten:
+            raise HTTPException(status_code=503,
+                                detail="Aufnahme kann gerade nicht sicher umbenannt werden")
+        # INNERHALB der Sperre, wie bei `delete_file` und `retranscribe_file` — und das ist
+        # keine Kosmetik, sondern die Antwort auf „was erlaubt die Reparatur NEU?": VOR der
+        # Sperre gefragt lag zwischen Antwort und `os.rename` frueher nur die Trefferliste,
+        # seit der Sperre aber eine Wartezeit von bis zu `sperre.STALTES_ALTER` (60 s). In
+        # diesem Fenster kann ein Lauf fuer denselben Basisnamen starten, und dann benennt
+        # `_umbenennen_oder_keines` Dateien um, die ein Job gerade schreibt — genau das
+        # Rennen, das `_keine_jobs` ausschliessen soll. Die Sperre hat das Fenster also erst
+        # geschaffen; sie schliesst es nur, wenn die Frage INNERHALB gestellt wird.
+        # Die `HTTPException` verlaesst das `with` und gibt die Sperre frei — dasselbe
+        # Verhalten wie bei den zwei Nachbarn, nichts Neues.
+        _keine_jobs(project, base)
+        tdir = paths.transkripte_dir(project)
+        # glob.escape wie in _datei_weg: safe_name laesst `[` durch, der URL-Import legt
+        # "Video [dQw4w9].m4a" an, und ungeschuetzt liest glob das `[` als Zeichenklasse.
+        # `sorted` aus demselben Grund wie in `_datei_weg` — und diese Zeile fehlte dort zuerst:
+        # der Fix ging in EINE der beiden Globs und liess die andere zufaellig. Auf ext4 liefert
+        # `glob.glob` die Anlage-Reihenfolge (5/5 gemessen), auf NTFS die alphabetische; damit
+        # entschied das Dateisystem, WELCHE Datei zuerst umbenannt wird und welche bei einem
+        # Fehlschlag im Ruecklauf landet. Der eigene Test fiel darueber im ubuntu-Bein der CI um.
+        # Es haengt aber mehr daran als ein Test: zwei gleichzeitige Anfragen auf dieselbe Aufnahme
+        # enden nur dann sauber, wenn BEIDE dieselbe Reihenfolge gehen — der Verlierer scheitert
+        # dann an Datei 1 mit leerem `gemacht`. Bei zufaelliger Reihenfolge ist das nicht zugesichert.
+        # Derselbe Filter wie in `_datei_weg`: `.lock` gehoert der Sperre und keiner Aufnahme, und
+        # ein VERZEICHNIS mit passendem Namen wuerde hier mitumbenannt. `.weg`-Reste bleiben drin —
+        # sie sollen mitwandern (siehe die Begruendung an `umbenannt` unten).
+        treffer = sorted(p for p in glob.glob(os.path.join(tdir, glob.escape(base) + ".*"))
+                         if os.path.isfile(p) and not p.endswith(".lock"))
+        adir = paths.audio_dir(project)
+        treffer += [os.path.join(adir, base + ext) for ext in AUDIO_EXT
+                    if os.path.exists(os.path.join(adir, base + ext))]
+        if not treffer:
+            raise HTTPException(status_code=404, detail=f"keine Datei: {base}")
+        paare = []
+        for p in treffer:
+            rest = os.path.basename(p)[len(base):]      # ".edit.json", ".mp3", ".part1.correction.json"
+            ziel = os.path.join(os.path.dirname(p), neu + rest)
+            if not _ziel_frei(p, ziel):
+                raise HTTPException(status_code=409, detail=f"gibt es schon: {neu + rest}")
+            paare.append((p, ziel))
+        # Die Kollisionspruefung oben beantwortet „ist der Zielname frei?" — sie sieht keine
+        # offenen Griffe. Genau daran zerbrach die Schleife: gemessen blieb `A_fremd_neu.json`
+        # neben `A_fremd.raw.txt` liegen, die Aufnahme gab es zweimal halb (#451). Alles oder
+        # nichts, mit Ruecklauf.
+        _umbenennen_oder_keines(paare, base)
+        audio = find_audio(project, neu)
+        _doc_felder(_edit_path(project, neu), base=neu,
+                    audio=os.path.basename(audio) if audio else "")
+        # `.weg`-Reste eines abgebrochenen Laufs wandern MIT (sie tragen den Basisnamen und werden
+        # vom Glob getroffen), zaehlen aber NICHT: `umbenannt` nennt dem Nutzer die Dateien SEINER
+        # Aufnahme, nicht unsichtbare Ueberbleibsel — dieselbe Regel wie `geloescht` in `_datei_weg`.
+        #
+        # BEWUSST anders als der Reviewvorschlag, sie ganz aus der Liste zu nehmen: dann bliebe der
+        # Rest unter dem ALTEN Basisnamen liegen, waehrend die Aufnahme unter dem neuen weiterlebt —
+        # und da niemand den alten Namen je wieder loescht, waere er dauerhaft verwaist (#459).
+        # Mitgenommen faengt ihn das naechste Loeschen der Aufnahme ein.
+        return {"ok": True, "name": neu,
+                "umbenannt": sum(1 for p, _ in paare if not p.endswith(".weg"))}
 
 
 @app.get("/api/projects/{project}/files/{base}")

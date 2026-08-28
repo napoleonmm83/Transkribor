@@ -984,3 +984,42 @@ def test_abbruch_eines_FREMDEN_projekts_verwirft_den_eigenen_nachlauf_nicht():
     assert "P_eigen" in gestartet, (
         "der Abbruch eines FREMDEN Projekts hat den eigenen Nachlauf mitgenommen — die "
         f"hochgeladene Aufnahme waere nie transkribiert worden (gestartet={gestartet})")
+
+
+def test_aktive_aufnahme_ausserhalb_des_scopes_sperrt_auch_ohne_active_only():
+    """`active_only=False` muss die OBERMENGE von `active_only=True` sein (#451).
+
+    Seit #450 kann eine Aufnahme `[active]` sein, ohne im `[scope]` zu stehen: der
+    Glossar-Schritt meldet korpusweit, waehrend `[scope]` bei einem Einzeldatei-Lauf nur die
+    eine Datei traegt. `rename_file` und `retranscribe_file` fragen mit `active_only=False` —
+    ohne den dritten Term kamen sie durch und zerbrachen an der offenen Datei: 500, halb
+    geloescht bzw. halb umbenannt, beides am echten Pfad reproduziert.
+
+    KEIN bestehender Test nagelte diese Enge fest (die Alt-Tests pruefen nur Bases, die
+    ohnehin im Scope stehen) — der Superset waere also ohne Sensor gefahren.
+    """
+    code = (
+        "import sys, time\n"
+        "print('[scope] S1', flush=True)\n"           # NUR S1 im Wirkungsbereich
+        "print('[active] A_fremd', flush=True)\n"     # aber A_fremd wird gerade gelesen
+        "print('warte', flush=True)\n"
+        "time.sleep(30)\n"
+    )
+    jid, _ = jobs.start("P_super", [sys.executable, "-c", code], cwd=None, kind="correct")
+    try:
+        _warte_auf_zeilen(jid, 3)
+        # Vorbedingung: A_fremd steht wirklich NICHT im Scope — sonst waere die Zusicherung
+        # unten auch ohne den Fix erfuellt.
+        assert jobs.get(jid)["bases"] == ["S1"]
+        assert jobs.betrifft("P_super", "A_fremd", active_only=True) is not None
+
+        # DIE ZUSICHERUNG
+        assert jobs.betrifft("P_super", "A_fremd", active_only=False) is not None, (
+            "Umbenennen/Neu-Transkribieren kommen durch, waehrend die Datei offen ist (#451)")
+
+        # Gegenprobe: weder im Scope noch aktiv -> weiterhin frei. Ohne sie waere ein
+        # `return {...}` ohne jede Bedingung ebenfalls gruen.
+        assert jobs.betrifft("P_super", "S9", active_only=False) is None
+    finally:
+        jobs.cancel(jid)
+        _wait(jid)
