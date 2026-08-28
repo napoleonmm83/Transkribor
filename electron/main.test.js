@@ -331,14 +331,52 @@ test('Abbrechen ohne laufende Einrichtung ist wirkungslos', async () => {
   assert.ok(!w.spur.includes('setup.abbrechen'))
 })
 
+/**
+ * `process.platform` ist read-only — fuer den Test kurz umbiegen und sicher zuruecksetzen.
+ * Dasselbe Muster wie in `setup.test.js` und wie weiter unten fuer `process.resourcesPath`.
+ *
+ * **Synchron, und das ist hier keine Schlamperei, sondern Bedingung:** `w.ruf` ruft den
+ * IPC-Handler direkt auf, und der Rumpf von `titelleisteFarbe` enthaelt kein `await`. Die
+ * umgebogene Plattform umschliesst ihn also vollstaendig. Wer hier ein `await` hineinsetzt,
+ * gibt die Plattform zurueck, BEVOR der Handler sie liest.
+ */
+function aufPlattform(p, fn) {
+  const echt = process.platform
+  Object.defineProperty(process, 'platform', { value: p, configurable: true })
+  try { return fn() } finally {
+    Object.defineProperty(process, 'platform', { value: echt, configurable: true })
+  }
+}
+
 // ── Die beiden Kanaele mit Nutzlast vom Renderer (Vertrauensgrenze) ───────────
-test('titelleisteFarbe reicht nur geprueftes Hex durch', async () => {
+//
+// **Beide Zweige werden auf JEDER Plattform geprueft**, und das ist der Grund, warum dieser
+// Test seit #251 zweigeteilt ist: er verlangte den `overlay:`-Eintrag plattformBLIND und lief
+// dabei nie auf einem Mac — das PR-CI-Bein „Electron" laeuft auf `ubuntu-latest`. Aufgefallen
+// ist es erst im Release-Lauf 33183032424, wo der macOS-Bau daran scheiterte und **kein
+// Release** herauskam. Kein Produktfehler: `main.js` steigt auf `darwin` bewusst aus, weil es
+// dort keine Overlay-Titelleiste gibt (`hiddenInset`, s. fenster.js).
+test('titelleisteFarbe reicht nur geprueftes Hex durch — ausserhalb von macOS', async () => {
   const w = await laden()
-  await w.ruf('titelleisteFarbe', null)
-  await w.ruf('titelleisteFarbe', { color: 'red', symbolColor: '#FAFAFA' })
-  assert.ok(!w.spur.some(s => s.startsWith('overlay:')), 'ungeprueft wirft `f.color` bei null')
-  await w.ruf('titelleisteFarbe', { color: '#0b0b0f', symbolColor: '#fafafa' })
-  assert.ok(w.spur.includes('overlay:#0b0b0f/#fafafa/40'), 'die Hoehe kommt aus fenster.js')
+  aufPlattform('win32', () => {
+    w.ruf('titelleisteFarbe', null)
+    w.ruf('titelleisteFarbe', { color: 'red', symbolColor: '#FAFAFA' })
+    assert.ok(!w.spur.some(s => s.startsWith('overlay:')), 'ungeprueft wirft `f.color` bei null')
+    w.ruf('titelleisteFarbe', { color: '#0b0b0f', symbolColor: '#fafafa' })
+    assert.ok(w.spur.includes('overlay:#0b0b0f/#fafafa/40'), 'die Hoehe kommt aus fenster.js')
+  })
+})
+
+test('auf macOS setzt titelleisteFarbe KEIN Overlay — die Wache ist das Verhalten', async () => {
+  // Bis zu diesem Test hatte die `darwin`-Wache in `main.js` **keinen Sensor**: sie fiel nur
+  // im Release-Lauf auf, und zwar als roter Test statt als roter Waechter. Entfernt man sie,
+  // wird genau diese Zeile rot — auf jeder Plattform, auch auf Windows.
+  const w = await laden()
+  aufPlattform('darwin', () => {
+    w.ruf('titelleisteFarbe', { color: '#0b0b0f', symbolColor: '#fafafa' })
+  })
+  assert.ok(!w.spur.some(s => s.startsWith('overlay:')),
+    'macOS hat keine Overlay-Titelleiste (hiddenInset) — der Handler steigt vorher aus')
 })
 
 test('fortschritt: -1 raeumt ab, 0..1 zeigt, alles andere wird abgewiesen', async () => {
