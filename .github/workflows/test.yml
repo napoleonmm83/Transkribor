@@ -105,6 +105,12 @@ jobs:
   electron:
     name: Electron
     runs-on: ubuntu-latest
+    # Der Job liest nur das Repository: `npm ci`, die node:test-Suite und die beiden
+    # Skript-Tests. `notizen.test.sh` faelscht `gh` und braucht kein Token. Ohne Block gilt
+    # die Repo-Vorgabe, die Schreibrechte enthalten kann (zizmor: excessive-permissions).
+    # `python` und `frontend` haben dieselbe Luecke — eigenes Issue, nicht dieser PR.
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -120,3 +126,8 @@ jobs:
       # Veroeffentlichen nicht zurueckholt. Lief bisher nur im Release-Workflow — also erst,
       # wenn ein Fehler darin schon teuer geworden waere.
       - run: bash scripts/versionshoehe.test.sh
+
+      # Dieselbe Begruendung: notizen.sh SCHREIBT in den Release-Commit (die Rotation) und
+      # liefert den Text, den der Nutzer auf der Releases-Seite liest. Beides ist nach dem
+      # Push nicht mehr still zu korrigieren.
+      - run: bash scripts/notizen.test.sh

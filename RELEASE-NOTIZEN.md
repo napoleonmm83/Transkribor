@@ -1,0 +1,50 @@
+# Release-Notizen
+
+**Eine Zeile je Änderung, in der Sprache der Nutzerin.** Was sie davon hat, nicht was im Code
+passiert ist — „Auf Touch-Geräten sind die ⋯-Menüs wieder sichtbar", nicht „opacity-Klasse für
+`any-pointer:coarse` ergänzt". Ein Satz reicht; wer zwei braucht, hat wahrscheinlich zwei
+Änderungen.
+
+Sie gehört unter `## Unveröffentlicht`, in **einen** der drei Blöcke — `**Neu**`, `**Behoben**`,
+`**Sicherheit**` —, und zwar im selben PR wie die Änderung. Beim nächsten Release über den
+Workflow wandert der ganze Abschnitt automatisch unter die neue Versionsnummer und landet als
+Release-Text auf GitHub; `## Unveröffentlicht` bleibt leer zurück. (Ein von Hand gesetzter Tag
+ist der Sonderweg: er veröffentlicht diese Zeilen, rotiert sie aber nicht — sie kommen beim
+nächsten regulären Release also noch einmal mit.) Interne Umbauten, Testarbeit und
+Abhängigkeits-Updates brauchen keine Zeile — dort ändert sich für niemanden etwas.
+
+Scheitert ein Release-Lauf nach dem Rotieren, ist nichts verloren: das nächste Release hängt
+die Abschnitte an, zu denen es kein veröffentlichtes Release gibt (ein liegengebliebener
+Entwurf zählt als keines).
+
+**Keine `##`-Überschriften innerhalb eines Abschnitts** — jede beginnt einen neuen. Alles
+dahinter bliebe beim Rotieren als heimatloser Abschnitt in dieser Datei zurück und käme in
+kein Release. Fettzeilen (`**Neu**`) sind genau dafür da.
+
+Steht beim Freigeben nichts hier, veröffentlicht der Workflow ersatzweise die Commit-Titel
+seit der letzten Fassung — dieselbe Auswahl, die auch die Versionsnummer hebt (`feat`, `fix`,
+`perf` und alles mit `!` bzw. `BREAKING CHANGE`) — und schreibt dazu, dass eine Notiz gefehlt
+hat. Lesbar, aber unschön — das ist Absicht.
+
+## Unveröffentlicht
+
+**Neu**
+- Die Release-Seite sagt jetzt, was sich in der Fassung geändert hat, statt nur den Hinweis zu Gatekeeper und SmartScreen zu zeigen.
+
+## v0.49.1 — 2026-08-28
+
+**Neu**
+- Fehlerbericht direkt aus der App (unter *Version*): vorbereitete E-Mail mit Protokollauszug, Vorschau vor dem Senden.
+- Startseite zeigt bis zu acht Projekte als Karten mit Fortschritt.
+
+**Behoben**
+- Auf Touch-Geräten sind die `⋯`-Menüs und die Sprecherauswahl wieder sichtbar.
+- Das Schliesskreuz bleibt in gescrollten Dialogen oben.
+- Die Anzeige während eines Laufs zeigt die Korrekturphasen wieder; ein Totalausfall der Korrektur endet rot statt „fertig".
+- Eine während eines Laufs hinzugefügte Aufnahme geht bei Fehlschlag oder Abbruch nicht mehr verloren.
+- Löschen einer Aufnahme in Bearbeitung meldet „bitte warten" statt einen Fehler mit halb gelöschter Aufnahme.
+
+**Sicherheit (Desktop-App)**
+- Links aus Transkripten öffnen nur noch normale Web-Adressen; das Fenster kann nicht mehr auf fremde Seiten umgelenkt werden.
+
+`v0.49.0` ist nur eine Markierung ohne Download — inhaltlich gleich.

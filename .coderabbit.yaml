@@ -195,6 +195,25 @@ reviews:
           Formulierungen wie "gemessen", "kostet X ms", "tritt nie auf", "wirft" ohne Zahl,
           Datei:Zeile oder Reproduktion. Das ist die haeufigste Fehlerklasse dieses Repos:
           eine Aussage, die schaerfer ist als der Code, den sie beschreibt.
+      # Dieselbe Begruendung wie beim README-Check oben: die Notiz entsteht im PR oder gar
+      # nicht. Vor #466 wurden die Release-Texte zu v0.48.0, v0.48.1 und v0.49.1 ALLE von Hand
+      # nachgetragen.
+      #
+      # ZWEI Zeilen je EINTRAG, nicht drei — und das widerspricht Issue #466 nicht, es ist
+      # eine andere EINHEIT: dort stehen „1–3 Zeilen" je PR, also je Notiz als Ganzes; hier
+      # geht es um den einzelnen Eintrag. Marcus hat danach zusaetzlich entschieden („keine
+      # lange Textwand"): ein Satz je Eintrag. Zwei ist die Obergrenze, nicht das Ziel.
+      - name: "Release-Notiz bei Nutzer-sichtbarer Aenderung"
+        mode: warning
+        instructions: >-
+          Aendert der PR etwas, das ein Nutzer ohne Quellcode merkt (Oberflaeche, Bedienung,
+          neue Funktion, behobener Fehler, Sicherheit), muss RELEASE-NOTIZEN.md im selben PR
+          eine Zeile unter "## Unveröffentlicht" bekommen, in einem der Bloecke "**Neu**",
+          "**Behoben**" oder "**Sicherheit**". Ausgenommen ist, was auch die README-Regel
+          ausnimmt: interne Umbauten, Testarbeit, Abhaengigkeits-Updates, Marker "[intern]".
+          Melde ausserdem die LAENGE und die Sprache: mehr als zwei Zeilen je Eintrag, ein
+          Eintrag ohne erkennbaren Nutzen fuer den Leser ("Refactoring von X"), oder
+          Code-Bezeichner statt Klartext. Der Release-Text ist eine Liste, keine Textwand.
 
   tools:
     ruff: { enabled: true }          # laeuft ohnehin; hier explizit, damit es sichtbar ist

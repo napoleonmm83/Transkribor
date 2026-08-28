@@ -66,7 +66,12 @@ jobs:
             exit 0
           fi
 
-          letzter="$(git describe --tags --abbrev=0 2>/dev/null || true)"
+          # `--match "v[0-9]*"`, weil hier NICHT jeder Tag eine Fassung ist: `modelle-v1`
+          # existiert (auf demselben Commit wie v0.5.0) und traegt die Sprechertrennungs-
+          # Modelle. Heute liefert `describe` trotzdem v0.49.1 — der naechste Modell-Tag laege
+          # aber VOR der letzten Fassung, und dann rechnete `versionshoehe.sh` seinen Sprung
+          # aus dem falschen Bereich. Latent, nicht harmlos: den Praezedenzfall gibt es schon.
+          letzter="$(git describe --tags --abbrev=0 --match 'v[0-9]*' 2>/dev/null || true)"
           if [ -z "$letzter" ]; then
             # Ohne Ausgangspunkt muesste man die GESAMTE Historie auswerten. Den Anfang
             # setzt ein Mensch: einmal `git tag v0.2.0 && git push --tags`.
@@ -85,11 +90,45 @@ jobs:
             exit 1
           fi
 
+          # Die beiden Skripte werden HIER geprueft, nicht erst im Bau-Job. `bauen` haengt an
+          # `version` — dort liefe der Test also erst, nachdem dieser Job Version UND
+          # rotierte Notizdatei schon nach master gepusst hat. Eine Wache hinter dem, was sie
+          # bewachen soll, ist keine. Beide Laeufe zusammen kosten 1–5 s (gemessen am Schritt
+          # „Release-Skripte pruefen" der Testbauten 33193601556 und 33194321729, sechs
+          # Matrix-Jobs; lokal 4,9 s).
+          bash scripts/versionshoehe.test.sh >/dev/null
+          bash scripts/notizen.test.sh >/dev/null
+
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          neu="$(npm version "$hoehe" -m 'chore(release): %s' | tail -1)"
+          # `npm version` kann die Notizdatei NICHT mitnehmen: es verlangt ein sauberes
+          # Arbeitsverzeichnis und kennt in dieser Fassung kein `--force` (nachgesehen in
+          # `npm version --help`). Also erst nur die Version bumpen, dann rotieren, dann EIN
+          # Commit mit beidem. Waere die Rotation ein zweiter Commit, stuende im Tag eine
+          # Notizdatei, deren Abschnitt fuer genau diese Fassung noch fehlt — und der
+          # Veroeffentlichungs-Job liest ihn aus genau diesem Tag.
+          neu="$(npm version "$hoehe" --no-git-tag-version | tail -1)"
+          bash scripts/notizen.sh rotieren RELEASE-NOTIZEN.md "$neu" "$(date -u +%F)"
+          git add package.json package-lock.json RELEASE-NOTIZEN.md
+          git commit -q -m "chore(release): ${neu#v}"
+          # `-a`, und der Tag wird AUSDRUECKLICH gepusht — beides gegen dieselbe Falle.
+          # `npm version` erzeugte frueher einen ANNOTIERTEN Tag (nachgemessen: `git cat-file -t`
+          # sagt fuer v0.48.1, v0.49.0 und v0.49.1 jeweils `tag`). `--no-git-tag-version` plus
+          # ein blosses `git tag` macht einen LEICHTGEWICHTIGEN — und `--follow-tags` pusht nur
+          # annotierte. Der Commit laege dann auf master, der Tag nur im Laeufer; `bauen` und
+          # `veroeffentlichen` checken `ref: $neu` aus und sterben mit
+          # `couldn't find remote ref` (in einer Sandbox mit Bare-Remote nachgestellt, rc=128).
+          # Und der zweite Anlauf waere schlimmer als der erste: er zaehlt ab dem letzten
+          # ECHTEN Tag erneut hoch, und die eben rotierten Notizen stehen nicht mehr unter
+          # `## Unveröffentlicht`.
+          # `--atomic` schliesst den Halbzustand ganz: entweder Commit UND Tag landen, oder
+          # keines von beidem. Danach wird nachgesehen statt angenommen — ein fehlender Tag
+          # soll hier scheitern, nicht drei Bau-Jobs spaeter.
+          git tag -a "$neu" -m "chore(release): ${neu#v}"
           echo "Seit $letzter: $hoehe -> $neu"
-          git push origin "HEAD:${GITHUB_REF_NAME}" --follow-tags
+          git push --atomic origin "HEAD:${GITHUB_REF_NAME}" "refs/tags/$neu"
+          git ls-remote --exit-code --tags origin "refs/tags/$neu" >/dev/null \
+            || { echo "Der Tag $neu ist nicht auf dem Remote angekommen — Abbruch vor dem Bau."; exit 1; }
           schreib art release; schreib tag "$neu"; schreib ref "$neu"
 
   bauen:
@@ -148,10 +187,13 @@ jobs:
       - run: npm run test:electron        # billig, und schlaegt vor dem teuren Bau fehl
 
       # Die Versionslogik entscheidet ueber Nummern, die man nach dem Veroeffentlichen nicht
-      # mehr zurueckholt — sie wird mitgeprueft, nicht nur benutzt.
-      - name: Versionslogik pruefen
+      # mehr zurueckholt — sie wird mitgeprueft, nicht nur benutzt. Dasselbe gilt fuer die
+      # Notiz-Rotation: sie schreibt in den Release-Commit, und der liegt danach auf master.
+      - name: Release-Skripte pruefen
         shell: bash
-        run: bash scripts/versionshoehe.test.sh
+        run: |
+          bash scripts/versionshoehe.test.sh
+          bash scripts/notizen.test.sh
 
       # electron-updater vergleicht die Version aus der package.json, NICHT den Tag. Ein Tag
       # v0.2.0 auf einer package.json mit 0.1.0 baut Installer, die sich als 0.1.0 ausgeben —
@@ -229,6 +271,16 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ needs.version.outputs.ref }}
+          # Ohne Historie gibt es kein `git describe` — und das braucht der Rueckfall, wenn
+          # niemand eine Release-Notiz geschrieben hat: dann entsteht der Text aus den
+          # Commit-Betreffen seit dem vorigen Tag. Der Regelfall liest nur eine Datei und
+          # kaeme mit Tiefe 1 aus; die Tiefe zahlt also fuer den Fall, der nicht eintreten soll.
+          fetch-depth: 0
+          # Dieser Job PUSHT nicht — er liest Historie und ruft `gh`, das seinen Token aus der
+          # Schritt-Umgebung nimmt (`GH_TOKEN` weiter unten). Ohne diese Zeile bliebe der
+          # Checkout-Token in `.git/config` liegen, waehrend der naechste Schritt fremd
+          # erzeugte Artefakte in denselben Arbeitsordner entpackt (zizmor: artipacked).
+          persist-credentials: false
       - uses: actions/download-artifact@v8
         with:
           path: artefakte
@@ -259,10 +311,63 @@ jobs:
           set -euo pipefail
           ls -la artefakte/
 
+          # Bei einem echten Release traegt der TITEL schon „Transkribor <Tag>" — eine
+          # Wiederholung im Rumpf waere die erste Zeile Textwand. Beim Testbau steht dort
+          # etwas, das man sonst nirgends sieht (Branch und SHA), also bleibt sie.
           if [ "$IS_TEST" = "true" ]; then
             kopf="Unsignierte Testbauten aus \`${GITHUB_REF_NAME}\` (${GITHUB_SHA:0:7}) — kein Release."
           else
-            kopf="Transkribor $TAG"
+            kopf=""
+          fi
+
+          # Der Release-Text kommt aus RELEASE-NOTIZEN.md — drei Wege, in dieser Reihenfolge:
+          #
+          #  1. der Abschnitt DIESER Fassung. Der Regelfall: der version-Job hat ihn eben
+          #     angelegt, und wir haben genau diesen Tag ausgecheckt.
+          #  2. `## Unveröffentlicht`. Greift bei einem von Hand gesetzten Tag (dort rotiert
+          #     niemand) UND beim Testbau (dort gibt es noch keinen Abschnitt) — Letzteres ist
+          #     der Weg, auf dem sich diese Mechanik ohne echtes Release pruefen laesst.
+          #     Der Preis ist benannt, nicht uebersehen: ein Hand-Tag VEROEFFENTLICHT diese
+          #     Zeilen, ROTIERT sie aber nicht — das naechste regulaere Release bringt
+          #     dieselben Zeilen also ein zweites Mal. So entschieden (ein Hand-Tag ist ein
+          #     Sonderweg und soll nichts auf master umschreiben); wer das aendert, aendert
+          #     damit auch, was ein Hand-Tag auf master anfasst.
+          #  3. die Commit-Betreffe seit dem vorigen Tag, ausdruecklich als Ersatz markiert.
+          #     Nicht schoen, und das ist Absicht: die Luecke soll im Release sichtbar sein,
+          #     statt dass jemand Stunden spaeter von Hand nachtraegt (Issue #466).
+          #
+          # Gehoben wird BYTE-GENAU. Der Workflow formuliert nichts um — was in der Datei
+          # steht, hat ein Mensch fuer Menschen geschrieben.
+          # Weg 1 sammelt mit: `body` liefert den eigenen Abschnitt PLUS jeden aelteren, zu dem
+          # es kein Release gibt. Ein gescheiterter Bau hat den Release-Commit samt Rotation
+          # naemlich schon auf master — ohne das Einsammeln waeren jene Notizen fuer immer weg,
+          # weil die naechste Rotation nur nimmt, was SEITDEM dazukam. Die Entscheidung steht
+          # in scripts/notizen.sh, damit scripts/notizen.test.sh genau das prueft, was hier
+          # laeuft — dieselbe Begruendung wie bei versionshoehe.sh im version-Job.
+          # Bei unklarer API-Antwort endet `body` mit 1; `set -e` bricht den Lauf dann ab,
+          # und das ist gewollt: lieber kein Release als eines mit falschem Text.
+          notiz="$(bash scripts/notizen.sh body RELEASE-NOTIZEN.md "$TAG")"
+          [ -n "$notiz" ] || notiz="$(bash scripts/notizen.sh lesen RELEASE-NOTIZEN.md 'Unveröffentlicht')"
+          if [ -z "$notiz" ]; then
+            # `HEAD^` NUR beim echten Release: dort zeigt der eben gepusste Tag auf HEAD, und
+            # `describe HEAD` gaebe genau ihn zurueck — der Bereich waere leer. Beim Testbau
+            # ist `ref` leer, der Checkout landet auf dem Branch-Kopf; laege dort der letzte
+            # Release-Tag (direkt nach einem Release-Commit ohne weiteren Push), lieferte
+            # `HEAD^` die VORVORIGE Fassung, und die Ersatzliste zaehlte die Aenderungen eines
+            # bereits veroeffentlichten Releases erneut auf.
+            if [ "$IS_TEST" = "true" ]; then bezug=HEAD; else bezug=HEAD^; fi
+            vorher="$(git describe --tags --abbrev=0 --match 'v[0-9]*' "$bezug" 2>/dev/null || true)"
+            if [ -n "$vorher" ]; then bereich="$vorher..HEAD"; else bereich="HEAD"; fi
+            notiz="$(bash scripts/notizen.sh ersatzliste "$bereich")"
+          fi
+
+          # Der Plattform-Hinweis steht in EINER Zeile hinter einem Trenner — er gilt jeder
+          # Fassung gleich und soll die Notiz nicht zudecken (Marcus: „keine lange Textwand").
+          plattform='**macOS:** ad-hoc signiert — beim ersten Start Rechtsklick > *Öffnen* (macOS 15+: *Systemeinstellungen > Datenschutz & Sicherheit > Dennoch öffnen*). **Windows:** unsigniert — SmartScreen: *Weitere Informationen* > *Trotzdem ausführen*. Erster Start richtet die Python-Seite ein (mehrere GB, 10–30 Minuten).'
+          if [ -n "$kopf" ]; then
+            rumpf="$(printf '%s\n\n%s\n\n---\n%s\n' "$kopf" "$notiz" "$plattform")"
+          else
+            rumpf="$(printf '%s\n\n---\n%s\n' "$notiz" "$plattform")"
           fi
 
           view_out=""
@@ -275,12 +380,7 @@ jobs:
             gh release create "$TAG" \
               $ZUSATZ \
               --title "Transkribor $TAG" \
-              --notes "$kopf
-
-          **macOS:** ad-hoc signiert, nicht notarisiert — beim ersten Start blockt Gatekeeper. Rechtsklick auf die App > *Öffnen*; wird das nicht angeboten (macOS 15+), einmal starten und dann *Systemeinstellungen > Datenschutz & Sicherheit > Dennoch öffnen*.
-          **Windows:** unsigniert — SmartScreen zeigt *Weitere Informationen* > *Trotzdem ausführen*.
-
-          Beim ersten Start richtet die App die Python-Seite selbst ein (mehrere GB, 10–30 Minuten)." \
+              --notes "$rumpf" \
               artefakte/*
           else
             echo "Fehler beim Prüfen des Release-Tags $TAG:"
