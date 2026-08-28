@@ -509,6 +509,54 @@ test('externe Links gehen in den Browser, nicht in die App', async () => {
   assert.ok(w.spur.includes('extern:https://example.org/doku'))
 })
 
+// Der Gegenpart, und der eigentliche Punkt von #426: geprueft wird die VERDRAHTUNG, nicht die
+// reine Funktion. `./fenster` bleibt in dieser Datei absichtlich ECHT (siehe Modulkopf) — hier
+// steht also, dass main.js den Waechter tatsaechlich davorhaengt, nicht nur, dass es ihn gibt.
+test('ein fremdes Schema erreicht das Betriebssystem NICHT — und sagt es (#426)', async () => {
+  const w = await laden()
+  const antwort = w.oeffnenHandler({ url: 'file:///C:/Windows/System32/calc.exe' })
+  assert.deepStrictEqual(antwort, { action: 'deny' })
+  assert.ok(!w.spur.some(s => s.startsWith('extern:')),
+    'shell.openExternal darf mit einer file:-URL gar nicht erst gerufen werden')
+  // Stille Abweisung waere ein Link, der sichtbar nichts tut und keine Spur hinterlaesst.
+  assert.ok(w.protokollzeilen.some(z => z.includes('abgewiesen') && z.includes('file:')),
+    'die Abweisung gehoert ins Protokoll')
+})
+
+test('ans Betriebssystem geht die GEPRUEFTE Form, nicht die rohe (#426)', async () => {
+  const w = await laden()
+  // Als Zeichen gebaut statt als Escape-Folge: ein rohes NUL im Quelltext macht die Datei
+  // fuer git zu einer BINAERdatei, und der Diff ist danach nicht mehr lesbar (einmal passiert).
+  const NUL = String.fromCharCode(0)
+  w.oeffnenHandler({ url: NUL + 'https://example.org/doku' })
+  assert.ok(w.spur.includes('extern:https://example.org/doku'),
+    'das Steuerzeichen darf nicht mitreisen — geprueft wurde die geparste Form')
+  assert.ok(!w.spur.some(s => s.startsWith('extern:') && s.includes(NUL)))
+})
+
+// Die beiden folgenden Waechter stehen fuer einen Befund an DIESEM Fix, nicht am Bestand:
+// die Protokollzeile war der erste Weg, auf dem der Renderer Text FREIER LAENGE in die Datei
+// schreiben konnte, aus der `bericht.js` die Fehlerbericht-Mail baut.
+test('eine ueberlange abgewiesene URL wird gedeckelt (#426)', async () => {
+  const w = await laden()
+  // Gemessen kommt eine window.open-URL mit bis zu 2 MB am Handler an. Ohne Deckel entleerte
+  // EIN solcher Aufruf den naechsten Fehlerbericht auf "letzte 0 Protokollzeilen".
+  w.oeffnenHandler({ url: 'zzz:' + 'A'.repeat(5000) })
+  const zeile = w.protokollzeilen.find(z => z.includes('abgewiesen'))
+  assert.ok(zeile, 'protokolliert wird sie weiterhin')
+  assert.ok(zeile.length < 400, `Zeile ist ${zeile.length} Zeichen — der Deckel greift nicht`)
+})
+
+test('nach 20 Abweisungen schweigt das Protokoll — mit einer letzten Zeile (#426)', async () => {
+  const w = await laden()
+  // Ohne Bremse: 20 000 Aufrufe ohne Nutzergeste kamen alle an (~4200/s, kein Popup-Blocker).
+  for (let i = 0; i < 50; i++) w.oeffnenHandler({ url: 'file:///x' + i })
+  const abgewiesen = w.protokollzeilen.filter(z => z.startsWith('Externer Link abgewiesen'))
+  assert.strictEqual(abgewiesen.length, 20, 'genau der Deckel, nicht mehr')
+  const schluss = w.protokollzeilen.filter(z => z.startsWith('Weitere abgewiesene Links'))
+  assert.strictEqual(schluss.length, 1, 'die Unterdrueckung wird EINMAL angesagt, nicht 30-mal')
+})
+
 test('HTTP/2 wird abgeschaltet, BEVOR irgendetwas laeuft (#150)', async () => {
   const w = await laden()
   assert.strictEqual(w.spur[0], 'schalter:disable-http2',
