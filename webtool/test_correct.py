@@ -2189,3 +2189,62 @@ def test_glossar_sperrt_nicht_wenn_es_wiederverwendet_wird(monkeypatch, tmp_path
     assert any("nutze vorhandenes _glossar.json" in z for z in zeilen), zeilen  # Vorbedingung
     assert "[active] A_fremd" not in zeilen, (
         "ohne Lesevorgang gibt es nichts zu sperren." + chr(10) + chr(10).join(zeilen))
+
+
+def test_glossar_sperrt_waehrend_die_datei_wirklich_gelesen_wird(monkeypatch, tmp_path, capsys):
+    """Der Sensor am ECHTEN Lesevorgang — die offene Zeile aus dem Bot-Review zu PR #456.
+
+    Der Test weiter oben nagelt die Klammer um `_ask_llm` fest, nicht um das LESEN. Zieht ein
+    Umbau die `.raw.txt` vor das `[active]` (Inhalte vorab laden), bliebe er gruen, obwohl die
+    Luecke aus #450 zurueck waere. GEMESSEN: die naheliegende Loesung — die Attrappe die
+    `inputs` lesen zu lassen — aendert daran NICHTS, denn was die Attrappe oeffnet, ist eine
+    Handlung des TESTS, keine Beobachtung der Produktion (Loch eingebaut, Test mit und ohne
+    Vorschlag je gruen).
+
+    Deshalb laeuft hier das ECHTE `_ask_llm`: gefaelscht wird eine Ebene tiefer (`llm.complete`),
+    damit `llm._with_files` die Dateien wirklich oeffnet. Jedes Oeffnen einer `.raw.txt` faellt
+    als Marke ins Protokoll, und `jobs.buche_aktive` sagt, ob die Aufnahme in genau dem Moment
+    gesperrt war.
+    """
+    import builtins
+    from webtool import llm as _llm
+
+    _glossar_projekt(monkeypatch, tmp_path)
+    monkeypatch.setattr(_llm, "use_api", lambda: True)
+    monkeypatch.setattr(_llm, "complete",
+                        lambda *a, **kw: '{"proper_nouns": [], "likely_corrections": []}')
+
+    echt_open = builtins.open
+
+    def open_mit_marke(datei, *a, **kw):
+        # Die Marke faellt NACH dem erfolgreichen `open` — vorher gedruckt behauptete sie einen
+        # Griff, den es bei einem Fehlschlag nie gab. Der GRIFF ist das Ereignis, auf das es
+        # ankommt (er ist es, der auf Windows Umbenennen und Loeschen verweigert), nicht ein
+        # spaeteres `read()`.
+        fh = echt_open(datei, *a, **kw)
+        name = os.path.basename(str(datei))
+        if name.endswith(".raw.txt"):
+            print(f"marke: liest {name[:-len('.raw.txt')]}", flush=True)
+        return fh
+
+    monkeypatch.setattr(builtins, "open", open_mit_marke)
+    correct.cmd_run("Sperr", "B_lauf")                     # EINZELDATEI-Lauf
+    monkeypatch.setattr(builtins, "open", echt_open)       # vor capsys wieder echt
+
+    verlauf = _replay(capsys.readouterr().out.splitlines())
+    zeilen = [z for z, _ in verlauf]
+    marken = [i for i, z in enumerate(zeilen) if z.startswith("marke: liest ")]
+
+    # Vorbedingung: es wurde wirklich gelesen — und zwar BEIDE Aufnahmen. `len(marken) >= 2`
+    # waere auch erfuellt, wenn `B_lauf.raw.txt` zweimal geoeffnet wird und `A_fremd` nie, also
+    # genau dann, wenn der korpusweite Lesevorgang kaputt ist, um den es hier geht. Gefragt ist
+    # die MENGE, nicht die Anzahl (Bot-Befund an #460).
+    gelesen = {zeilen[i][len("marke: liest "):] for i in marken}
+    assert gelesen == {"A_fremd", "B_lauf"}, f"gelesen: {gelesen}, Zeilen: {zeilen}"
+
+    for i in marken:
+        base = zeilen[i][len("marke: liest "):]
+        assert base in verlauf[i][1], (
+            f"{base} wird in diesem Moment GELESEN, gilt aber als frei."
+            + chr(10) + _zeige(verlauf))
+    assert verlauf[-1][1] == set(), _zeige(verlauf)
