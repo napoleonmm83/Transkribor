@@ -549,9 +549,10 @@ die machen **neun von zehn** Zeilen aus, ohne sie bestünde der Bericht nur dara
 über Fehlschläge bleiben ausdrücklich drin. Eine Zeile wird ausserdem **gekürzt** statt
 weggelassen: zeigt sie auf eine Datei auf deinem Rechner — etwa weil ein Link dorthin verwies,
 den Transkribor nicht geöffnet hat —, bleibt der Hinweis stehen, während Ort und Name **dieser
-einen** Datei wegfallen. In der Protokolldatei stehen sie weiter, bei sehr langen Pfaden dort
-allerdings ebenfalls gekürzt. Alle **übrigen** Pfade bleiben in der Mail unverändert stehen —
-was da alles auftauchen kann, steht ein paar Absätze weiter unten.
+einen** Datei wegfallen — und mit ihnen alles, was in derselben Zeile noch dahinter stand.
+Was **davor** steht, bleibt, und alle **anderen** Zeilen bleiben ohnehin unverändert; was in
+denen alles auftauchen kann, steht ein paar Absätze weiter unten. In der Protokolldatei stehen
+Ort und Name weiter, bei sehr langen Pfaden dort allerdings ebenfalls gekürzt.
 Und weil eine E-Mail nur begrenzt lang sein darf,
 fallen von den übrigen Zeilen notfalls die **ältesten** weg — die Mail sagt dir das dann an,
 und die vollständige Datei liegt daneben. Schreib oben hinein, was passiert ist, und schick

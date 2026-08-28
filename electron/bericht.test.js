@@ -91,16 +91,39 @@ test('ein Pfad OHNE file:-Schema bleibt unangetastet — die Kuerzung ist eng (#
     // Das `file:` OHNE Trenner ist die eine Grenze der Kuerzung: hier IST der Pfad die
     // Diagnose. Wer das Muster auf `\bfile:` verbreitert, macht diese Zeile rot.
     '[t] could not open file: C:/Users/marcu/Videos/Interview Meier.mp3',
-    // Und `profile:` ist die andere: die Regel gilt dem SCHEMA `file:`, nicht der Zeichenfolge.
-    // Wer das `\b` streicht, macht diese Zeile rot.
+    // Und die andere Grenze: die Regel gilt dem SCHEMA `file:`, nicht der Zeichenfolge.
+    // `profile:` faengt ein blosses `\b` noch ab — die drei darunter NICHT: nach RFC 3986 §3.1
+    // gehoeren `+`, `-` und `.` zu den Schema-Zeichen, und zwischen `-` und `f` liegt eine
+    // Wortgrenze (CodeRabbit am PR, nachgemessen). Wer den Praefix-Riegel auf `\b`
+    // zurueckdreht, macht genau diese drei Zeilen rot.
     '[t] profile://default/x',
+    '[t] profile-file:///C:/Users/marcu/Videos/Interview Meier.mp3',
+    '[t] x+file:///C:/Users/marcu/Videos/Interview Meier.mp3',
+    '[t] a.file:///C:/Users/marcu/Videos/Interview Meier.mp3',
   ].join('\n'))
   assert.deepStrictEqual(z, [
     '[t] venvPfad = C:\\Users\\marcu\\AppData\\Roaming\\Transkribor\\venv',
     '[t] INFO:     127.0.0.1:60884 - "POST /api/projects/X/audio HTTP/1.1" 500 Internal Server Error',
     '[t] could not open file: C:/Users/marcu/Videos/Interview Meier.mp3',
     '[t] profile://default/x',
+    '[t] profile-file:///C:/Users/marcu/Videos/Interview Meier.mp3',
+    '[t] x+file:///C:/Users/marcu/Videos/Interview Meier.mp3',
+    '[t] a.file:///C:/Users/marcu/Videos/Interview Meier.mp3',
   ])
+})
+
+test('new URL kanonisiert die Schreibweisen — der Sensor unter dem „(gemessen)" (#447)', () => {
+  // Der Kommentar in bericht.js begruendet `[\/\\]{1,3}` damit, dass die Plattform `file:/x`
+  // und `file:C:/x` heute zu `file:///x` kanonisiert — und dass die Wache sich darauf gerade
+  // NICHT verlassen soll. Ohne diesen Test war „(gemessen)" eine Behauptung ohne Sensor
+  // (CodeRabbit-Vorabcheck am PR). Aendert eine Node- oder Electron-Fassung das Verhalten,
+  // wird hier rot, statt dass der Kommentar still falsch wird.
+  assert.strictEqual(new URL('file:/C:/x').href, 'file:///C:/x')
+  assert.strictEqual(new URL('file:C:/x').href, 'file:///C:/x')
+  assert.strictEqual(new URL('file:///C:/x').href, 'file:///C:/x')
+  // Die Gegenrichtung, sonst laese sich der Test als „alles wird zu file:///" missverstehen:
+  // ein Host bleibt erhalten, die UNC-Form ist KEIN Sonderfall der drei Schraegstriche.
+  assert.strictEqual(new URL('file://nas/x').href, 'file://nas/x')
 })
 
 test('der Kopf nennt Fassung, Plattform und ob gepackt', () => {

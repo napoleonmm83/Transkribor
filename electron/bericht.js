@@ -89,15 +89,27 @@ const AUSSORTIEREN = [
  * **Ein bis drei Trenner, Schraegstrich ODER Rueckstrich, aus demselben Grund.** `new URL()`
  * macht aus `file:/C:/x` und `file:C:/x` beides `file:///C:/x` (gemessen), und `file:\C:\x` ist
  * dieselbe Frage mit dem Windows-Trenner — verlassen wollen wir uns darauf so wenig wie beim
- * Leerzeichen, sonst haengt die Wache doch wieder an Chromium. **Der blosse `file:` ohne Trenner
- * bleibt bewusst draussen:** englische Fehlertexte lauten „could not open file: C:\…", und
- * dieser Pfad ist die Diagnose, nicht der Abfluss. Beide Richtungen im Test.
+ * Leerzeichen, sonst haengt die Wache doch wieder an Chromium. Das „(gemessen)" hat seit dem
+ * Bot-Vorabcheck einen Sensor: `test_url_kanonisiert_die_schreibweisen` schickt genau diese
+ * Eingaben durch `new URL()` und sichert die Ausgaben zu — aendert eine Node- oder
+ * Electron-Fassung das Verhalten, wird der Test rot statt der Kommentar still falsch.
+ * **Der blosse `file:` ohne Trenner bleibt bewusst draussen:** englische Fehlertexte lauten
+ * „could not open file: C:\…", und dieser Pfad ist die Diagnose, nicht der Abfluss. Beide
+ * Richtungen im Test.
  *
- * **Das `\b` gehoert dazu und bleibt.** Es macht aus dem Muster eine Regel ueber das SCHEMA
- * `file:` statt ueber die Zeichenfolge `file:`; `logfile:///…` und `profile://…` sind ANDERE
- * Schemata und gehen diese Kuerzung nichts an (Negativkontrolle im Test). Ohne `\b` kuerzte die
- * Wache jedes Wort mit, das zufaellig auf `file` endet — und liesse sich nicht mehr in einem
- * Satz sagen.
+ * **Der Praefix-Riegel macht aus dem Muster eine Regel ueber das SCHEMA statt ueber die
+ * Zeichenfolge.** `logfile:///…` und `profile://…` sind ANDERE Schemata und gehen diese
+ * Kuerzung nichts an (Negativkontrollen im Test).
+ *
+ * Hier stand zuerst ein blosses `\b`, und das war **zu wenig** — gefunden vom CodeRabbit-Bot
+ * am PR, nachgemessen: ein Schema darf nach RFC 3986 §3.1 ausser Buchstaben und Ziffern auch
+ * `+`, `-` und `.` enthalten, und zwischen `-` und `f` gibt es eine Wortgrenze.
+ * `profile-file:///C:/…`, `x+file:///…` und `a.file:///…` wurden also gekuerzt, obwohl der
+ * Absatz darueber das Gegenteil versprach. Nicht der Code war zu eng, die Behauptung war zu
+ * breit — dieselbe Fehlerklasse, die dieses Repo am haeufigsten trifft.
+ *
+ * Deshalb `(^|[^A-Za-z0-9+.\-])` statt `\b`. Das eingefangene Zeichen kommt ueber `$1`
+ * zurueck, sonst frisst die Ersetzung das Leerzeichen vor der URL gleich mit.
  *
  * **Das `i` ist kein Schmuck — es hat einen eigenen Testfall, weil es sonst keinen haette.**
  * Bei entferntem Flag blieb die Suite 20/20 gruen (Mutation C des gegnerischen Reviews); ein
@@ -112,14 +124,15 @@ const AUSSORTIEREN = [
  * Zugriffszeilen (`POST /api/projects/X/audio … 500`). Das ist die Zeile, wegen der jemand
  * schreibt, sie bleibt bewusst — so steht es auch in der README.
  */
-const PFAD_AB_SCHEMA = /\bfile:[\/\\]{1,3}.*/i
+const PFAD_AB_SCHEMA = /(^|[^A-Za-z0-9+.\-])file:[\/\\]{1,3}.*/i
+const PFAD_ERSATZ = '$1file:///… (Pfad entfernt)'
 
 /** Die letzten `n` verwertbaren Zeilen, in Originalreihenfolge. */
 function letzteZeilen(text, n = ZEILEN) {
   const alle = String(text || '').split(/\r?\n/)
     .filter(z => z.trim() !== '' && !AUSSORTIEREN.some(r => r.test(z)))
   return alle.slice(Math.max(0, alle.length - n))
-    .map(z => z.replace(PFAD_AB_SCHEMA, 'file:///… (Pfad entfernt)'))
+    .map(z => z.replace(PFAD_AB_SCHEMA, PFAD_ERSATZ))
 }
 
 /**
