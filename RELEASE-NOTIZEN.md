@@ -28,6 +28,8 @@ hat. Lesbar, aber unschön — das ist Absicht.
 
 ## Unveröffentlicht
 
+## v0.50.0 — 2026-08-28
+
 **Neu**
 - Die Release-Seite sagt jetzt, was sich in der Fassung geändert hat, statt nur den Hinweis zu Gatekeeper und SmartScreen zu zeigen.
 
