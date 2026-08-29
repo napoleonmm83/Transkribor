@@ -1951,9 +1951,10 @@ def test_aufnahme_bleibt_bis_zum_ende_der_korrektur_gesperrt(monkeypatch, tmp_pa
     zeilen = capsys.readouterr().out.splitlines()
 
     aktive = set()
+    gesehen = set()
     verlauf = []
     for zeile in zeilen:
-        jobs.buche_aktive(aktive, zeile)
+        jobs.buche_aktive(aktive, zeile, gesehen)
         verlauf.append((zeile, set(aktive)))
 
     # Vorbedingung: S2 war fertig diarisiert, BEVOR S1s Korrektur endete. Ohne sie waere die
@@ -1974,3 +1975,9 @@ def test_aufnahme_bleibt_bis_zum_ende_der_korrektur_gesperrt(monkeypatch, tmp_pa
 
     # Und am Ende ist wirklich alles freigegeben — sonst bliebe Loeschen dauerhaft bei 409.
     assert verlauf[-1][1] == set(), verlauf[-1]
+
+    # Die ZWEITE Menge gegen dieselbe echte Druckfolge (#475): sie darf am Ende gerade NICHT
+    # leer sein. Der synthetische Drucker in test_jobs.py prueft die Buchung, dieser hier
+    # prueft sie gegen die Zeilen, die `transcribe_project` wirklich schreibt -- genau die
+    # Luecke, an der #418 vorbeilief.
+    assert {"S1", "S2"} <= gesehen, sorted(gesehen)

@@ -905,3 +905,35 @@ describe('imBereich / zugelassen - die EINE Quelle der drei Filterstellen (#431)
     expect(zugelassen(ph(['a'], ['a']), 'a', false)).toBe(false)
   })
 })
+
+describe('parseJobPhases - Vorbelegung aus der Server-Buchfuehrung (#475)', () => {
+  // Der Server bucht jede `[active]`-Zeile, BEVOR sie in den bei MAX_JOB_LINES gedeckelten
+  // Puffer wandert, und gibt die Menge im Schnappschuss mit. Faellt die Zeile aus dem Puffer,
+  // ist sie die einzige verbliebene Zulassung.
+  const lines = ['[scope] Frueh', '[Demo] FEHLER Spaet: Tonspur unlesbar']
+
+  it('kippt den AUSGANG des Laufs, nicht nur die Pille', () => {
+    // Ohne Vorbelegung faellt der Fehlschlag der spaet dazugekommenen Aufnahme weg -- der
+    // Lauf meldete "fertig", obwohl eine Datei gescheitert ist.
+    expect(ausgang({ status: 'done', phases: parseJobPhases('transcribe', lines) }))
+      .toEqual({ art: 'erfolg' })
+    // Mit Vorbelegung meldet derselbe Lauf ihn. Das ist die ZWEITE Verhaltensaenderung des
+    // Fixes -- sie haengt an Toast und Betriebssystem-Meldung, nicht nur an der Anzeige, und
+    // stand vor diesem Test nirgends.
+    expect(ausgang({ status: 'done', phases: parseJobPhases('transcribe', lines, ['Spaet']) }))
+      .toEqual({ art: 'teil', misslungen: ['Spaet'], versucht: 1 })
+  })
+
+  it('schaltet den Bereichsfilter mit einer LEEREN Vorbelegung nicht ab', () => {
+    // Der Server schickt das Feld IMMER mit, auch leer -- und keine Attrappe im Bestand trug
+    // es. Gemessen: eine Vereinfachung, die den Parameter als truthy liest und damit den
+    // Bereichsfilter fuer JEDEN Lauf abschaltet, blieb ueber alle 802 Tests gruen. Diese
+    // Zusicherung ist der Sensor dafuer.
+    const p = parseJobPhases('transcribe', [
+      '[scope] A',
+      '[Demo] fertig A: 1s, 2 Segmente, 1.0x',
+      '[Demo] fertig Fremd: 1s, 2 Segmente, 1.0x',
+    ], [])
+    expect(p.perBase).toEqual({ A: 'done' })
+  })
+})
