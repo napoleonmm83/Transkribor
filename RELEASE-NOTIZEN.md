@@ -28,6 +28,9 @@ hat. Lesbar, aber unschön — das ist Absicht.
 
 ## Unveröffentlicht
 
+**Behoben**
+- Eine während eines laufenden Projektlaufs hinzugefügte Aufnahme zeigt jetzt ihren Fortschritt, statt bis zum Ende des Laufs auf dem Wartesymbol zu stehen.
+
 ## v0.50.0 — 2026-08-28
 
 **Neu**

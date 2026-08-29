@@ -14,6 +14,8 @@ type Sel = { project: string; base: string } | null
  *  aufgeklappte — die Dateiliste kommt getrennt herein (GET /api/projects/{p}). */
 type SidebarProjekt = { name: string; dateien: number; geaendert: number; active_jobs?: ActiveJob[] }
 
+/** Die Projektleiste: alle Projekte, Dateien nur fuer das aufgeklappte — und je Datei der
+ *  Stand des laufenden Jobs, gefiltert ueber `imBereich`/`zugelassen` aus `lib/jobPhases`. */
 export function Sidebar({
   projekte, loading, fehler, offen, dateien, dateienLaden, onWaehlen, onAngelegt,
   active, onOpen, onUpload, onTranscribe, onCorrect, onGeloescht, onUmbenannt,

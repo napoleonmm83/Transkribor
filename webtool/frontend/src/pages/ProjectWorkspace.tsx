@@ -34,6 +34,8 @@ function meldeLadefehler(e: unknown) {
   toast.error(`Projekt-Einstellungen laden fehlgeschlagen: ${(e as Error).message}`)
 }
 
+/** Die Arbeitsflaeche eines Projekts: Material hinzufuegen, Laeufe anstossen und je Aufnahme
+ *  ihren Stand zeigen — dieselbe Zulassung wie die Seitenleiste (`imBereich`/`zugelassen`). */
 export function ProjectWorkspace() {
   const { project } = useParams<{ project: string }>()
   const navigate = useNavigate()
