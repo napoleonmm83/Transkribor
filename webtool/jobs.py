@@ -59,11 +59,23 @@ def buche_aktive(aktive: set, line: str, gesehen: set | None = None) -> None:
     fuer X - gemessen war die Menge in genau dem Moment leer. Deshalb zwei Mengen.
     """
     if line.startswith(ACTIVE_PREFIX):
-        b = line[len(ACTIVE_PREFIX):].strip()
+        roh = line[len(ACTIVE_PREFIX):]
+        b = roh.strip()
         if b:
             aktive.add(b)
-            if gesehen is not None:
-                gesehen.add(b)
+        # `gesehen` bekommt den UNGESTUTZTEN Namen, `aktive` den gestutzten -- und das ist
+        # keine Schlamperei, sondern die Bedingung dafuer, dass der Rueckweg ueberhaupt
+        # traegt. Die beiden Mengen haben verschiedene Leser: `aktive` treibt `betrifft()`,
+        # das gegen einen HTTP-Pfadparameter vergleicht; `gesehen` reist ins Frontend und
+        # wird dort gegen Namen gehalten, die die Endurteil-Regexe ROH aus der Zeile fangen
+        # (`jobPhases.ts:348`, ausdruecklich ungetrimmt: "safe_name laesst Randleerzeichen
+        # durch"). Gestutzt gesetzt, kaeme fuer eine Datei " Probe" der Seed als "Probe" an,
+        # das Urteil aber als " Probe" -- und `terminal()` verwuerfe es. Genau der Zustand,
+        # den dieser Rueckweg schliessen soll. Die Truthy-Pruefung spiegelt die des
+        # Frontends (`if (b) gesehen.add(b)` auf dem rohen `slice(9)`): ein Name aus lauter
+        # Leerzeichen ist dort wahr, hier auch.
+        if gesehen is not None and roh:
+            gesehen.add(roh)
     elif line.startswith(DONE_PREFIX):
         b = line[len(DONE_PREFIX):].strip()
         if b:
