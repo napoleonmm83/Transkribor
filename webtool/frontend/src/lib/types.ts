@@ -48,7 +48,10 @@ export type ActiveJob = { id: string; kind: string; bases?: string[] };
 /** Nur die Zusammenfassung fuer die Galerie -- die Dateiliste kommt seit Task 3 nur noch
  *  ueber getProjectFiles (GET /api/projects/{project}), nicht mehr mit hier drin. */
 export type Project = { name: string; dateien: number; fertig: number; geaendert: number; active_jobs?: ActiveJob[] };
-export type JobStatus = { status: 'running' | 'done' | 'error' | 'cancelled'; lines: string[]; kind?: string; bases?: string[] };
+/** `gesehen`: die Basisnamen, fuer die der Lauf eine `[active]`-Zeile gedruckt hat -- vom
+ *  Server gefuehrt, nicht aus `lines` gelesen. Rueckweg fuer den Fall, dass der gedeckelte
+ *  Zeilenpuffer genau diese Zeile verdraengt hat (#475), Gegenstueck zu `bases`/`scope`. */
+export type JobStatus = { status: 'running' | 'done' | 'error' | 'cancelled'; lines: string[]; kind?: string; bases?: string[]; gesehen?: string[] };
 export type StartJob = { job_id: string; started: boolean };
 /** `cli`: laeuft ueber ein lokales Programm mit eigener Anmeldung (Claude-Code- oder
  *  ChatGPT-Abo) — dort gibt es kein Key-Feld, ein Modell aber sehr wohl. */

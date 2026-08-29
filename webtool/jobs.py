@@ -32,7 +32,7 @@ ACTIVE_PREFIX = "[active] "
 DONE_PREFIX = "[done] "
 
 
-def buche_aktive(aktive: set, line: str) -> None:
+def buche_aktive(aktive: set, line: str, gesehen: set | None = None) -> None:
     """Eine Protokollzeile auf die Menge der GERADE bearbeiteten Aufnahmen anwenden.
 
     Herausgezogen aus `_run` (#418), damit ein Test dieselbe Regel fahren kann wie der
@@ -44,11 +44,26 @@ def buche_aktive(aktive: set, line: str) -> None:
     Mehrere Drucker bedienen dieselbe Menge (`transcribe.py`, `correct.py` in beiden
     Phasen), und derselbe Basisname kommt darin mehrfach vor — deshalb `discard` und nicht
     `remove`: ein zweites `[done]` ist folgenlos, kein KeyError.
+
+    `gesehen` ist die ZWEITE Menge und die Gegenrichtung: sie waechst nur (#475). Sie
+    beantwortet "gehoerte zu diesem Lauf", nicht "wird gerade bearbeitet" - die Frage, an
+    der seit #431 die Zustandsanzeige einer WAEHREND des Laufs hochgeladenen Aufnahme
+    haengt. Das Frontend liest sie sonst aus der `[active]`-Zeile im Protokoll, und die ist
+    nicht sicher: `fuege_zeile_an` deckelt den Puffer bei MAX_JOB_LINES und verdraengt
+    Zeilen aus der MITTE. Gemessen an 10.560 Zeilen - `[scope]` ueberlebt (die ersten zehn
+    sind geschuetzt), `[active] Spaet` ist weg, das Urteil steht noch da und wurde ohne
+    Zulassung verworfen: der #431-Zustand, still zurueck.
+
+    `active_bases` kann das nicht leisten, obwohl es naheliegt und im Issue als Weg 1 stand:
+    es wird bei `[done]` geraeumt, und die echte Reihenfolge ist `[done] X` VOR dem Urteil
+    fuer X - gemessen war die Menge in genau dem Moment leer. Deshalb zwei Mengen.
     """
     if line.startswith(ACTIVE_PREFIX):
         b = line[len(ACTIVE_PREFIX):].strip()
         if b:
             aktive.add(b)
+            if gesehen is not None:
+                gesehen.add(b)
     elif line.startswith(DONE_PREFIX):
         b = line[len(DONE_PREFIX):].strip()
         if b:
@@ -114,6 +129,8 @@ def start(project: str, cmd: list, cwd, kind: str, then=None, env=None, base: st
                       # -> gilt als "faesst alles an". Siehe SCOPE_PREFIX.
                       "bases": initial_bases,
                       "active_bases": set(),
+                      # Waechst nur, wird nie geraeumt - siehe buche_aktive (#475).
+                      "gesehen": set(),
                       "lines": [], "returncode": None, "started": time.time(),
                       "ended": None, "pid": None, "cancelled": False,
                       "then": [then] if then else [],
@@ -308,7 +325,8 @@ def _run_proc(jid, cmd, cwd, env=None):
                 if _jobs[jid]["bases"] is None and line.startswith(SCOPE_PREFIX):
                     _jobs[jid]["bases"] = {b for b in line[len(SCOPE_PREFIX):].split("\t") if b}
                 else:
-                    buche_aktive(_jobs[jid]["active_bases"], line)
+                    buche_aktive(_jobs[jid]["active_bases"], line,
+                                 _jobs[jid]["gesehen"])
         proc.wait()
         with _lock:
             _jobs[jid]["returncode"] = proc.returncode
@@ -384,6 +402,11 @@ def get(job_id: str):
         snap.pop("active_bases", None)        # Set ist nicht JSON-serialisierbar
         if isinstance(snap.get("bases"), set):
             snap["bases"] = list(snap["bases"])
+        # `gesehen` geht MIT (anders als active_bases): es ist der Rueckweg des Frontends,
+        # wenn die `[active]`-Zeile aus dem gedeckelten Puffer gefallen ist (#475).
+        # Sortiert, damit dieselbe Menge nicht bei jedem Poll anders herum ankommt.
+        if isinstance(snap.get("gesehen"), set):
+            snap["gesehen"] = sorted(snap["gesehen"])
         return snap
 
 
@@ -397,6 +420,10 @@ def remove_base(project: str, base: str) -> None:
             if r is not None:
                 if r.get("bases") is not None:
                     r["bases"].discard(base)
+                # `gesehen` bleibt bewusst stehen: das ist eine Historie ("gehoerte zu
+                # diesem Lauf"), kein Wirkungsbereich - sie aendert sich nicht dadurch,
+                # dass eine Datei geloescht wird, und kein Riegel haengt daran
+                # (`zugelassen()` im Frontend ist reine Anzeige).
                 if r.get("active_bases") is not None:
                     r["active_bases"].discard(base)
 

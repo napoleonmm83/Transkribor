@@ -171,7 +171,7 @@ export function JobProvider({ children, intervalMs = 1500 }: { children: ReactNo
       for (const j of jobs) {
         const r = ergebnis.get(j.id)
         if (r) {
-          const parsed = parseJobPhases(j.kind, r.lines)
+          const parsed = parseJobPhases(j.kind, r.lines, r.gesehen)
           if (!parsed.scope && r.bases && r.bases.length > 0) {
             parsed.scope = new Set(r.bases)
           }

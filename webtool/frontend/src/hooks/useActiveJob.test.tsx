@@ -290,6 +290,31 @@ describe('mergePhases', () => {
     fireEvent.click(screen.getByText('adopt_log'))
     await waitFor(() => expect(screen.getByTestId('scope').textContent).toBe('LogFileA,LogFileB'))
   })
+
+  it('nimmt r.gesehen als Rueckweg, wenn die [active]-Zeile aus dem Puffer gefallen ist (#475)', async () => {
+    function DeckelProbe() {
+      const { jobs, adopt } = useActiveJob()
+      const phases = mergePhases(jobs.filter(j => j.status === 'running'))
+      return (
+        <div>
+          <button onClick={() => adopt('j_deckel', 'Demo', 'transcribe')}>adopt_deckel</button>
+          <span data-testid="urteil">{phases.perBase['Spaet'] ?? 'keins'}</span>
+        </div>
+      )
+    }
+    // Das Protokoll traegt den Bereich und das Urteil -- die `[active] Spaet`-Zeile hat der
+    // Zeilendeckel verdraengt (gemessen an 10.560 Zeilen). Ohne den Rueckweg verwirft
+    // `terminal()` das Urteil: kein Zustand, Spinner bis Jobende, der #431-Zustand.
+    vi.mocked(api.getJob).mockResolvedValue({
+      status: 'running',
+      lines: ['[scope] Frueh', '[Demo] fertig Spaet: 1s, 2 Segmente, 1.0x'],
+      bases: ['Frueh'],
+      gesehen: ['Spaet'],
+    })
+    render(<JobProvider intervalMs={5}><DeckelProbe /></JobProvider>)
+    fireEvent.click(screen.getByText('adopt_deckel'))
+    await waitFor(() => expect(screen.getByTestId('urteil').textContent).toBe('done'))
+  })
 })
 
 describe('mergePhases - gesehen (#431)', () => {

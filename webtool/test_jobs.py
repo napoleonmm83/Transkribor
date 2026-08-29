@@ -459,6 +459,44 @@ def test_done_entfernt_aufnahme_aus_active_bases():
         _wait(jid)
 
 
+def test_gesehen_ueberlebt_den_zeilendeckel():
+    """Die `[active]`-Zeile faellt aus dem gedeckelten Puffer -- der Job weiss sie
+    trotzdem, und `get()` gibt sie mit (#475).
+
+    Der echte Weg, nicht die Attrappe: `fuege_zeile_an` verdraengt Zeilen aus der MITTE,
+    geschuetzt sind nur die ersten zehn -- deshalb der Vorlauf im Skript: eine WAEHREND
+    des Laufs hochgeladene Aufnahme meldet sich nie als zweite Zeile. Genau dahinter, in
+    der verdraengbaren Mitte, steht die Anmeldung einer
+    Aufnahme, die WAEHREND des Laufs hochgeladen wurde -- und ohne sie verwirft
+    `jobPhases.terminal()` ihr Urteil: der #431-Zustand, still zurueck.
+    """
+    rauschen = jobs.MAX_JOB_LINES + 600
+    code = f"""
+import sys
+print('[scope] Frueh', flush=True)
+for i in range(30):
+    print('[Demo] vorlauf', i)
+print('[active] Spaet', flush=True)
+for i in range({rauschen}):
+    print('[Demo] rauschen', i)
+print('[done] Spaet', flush=True)
+print('[Demo] fertig Spaet: 1s, 2 Segmente, 1.0x', flush=True)
+"""
+    jid, _ = jobs.start("P_deckel", [sys.executable, "-c", code], cwd=None, kind="correct")
+    r = _wait(jid, timeout=60)
+    assert r["status"] == "done", r["lines"][-3:]
+    # (1) Die Verdraengung ist wirklich eingetreten. Ohne diese drei Zusicherungen bliebe
+    #     der Test gruen, wenn der Deckel je steigt -- und maesse dann gar nichts mehr.
+    assert "[active] Spaet" not in r["lines"]
+    assert "[scope] Frueh" in r["lines"]
+    assert "[Demo] fertig Spaet: 1s, 2 Segmente, 1.0x" in r["lines"]
+    # (2) Der Rueckweg traegt: das Urteil ohne Anmeldezeile bekommt seine Zulassung.
+    assert "Spaet" in r["gesehen"]
+    # (3) `active_bases` kann ihn nicht ersetzen -- `[done]` hat es geraeumt, und es
+    #     verlaesst den Server ohnehin nicht (Weg 1 aus dem Issue, gemessen widerlegt).
+    assert "active_bases" not in r
+
+
 def test_remove_base_entfernt_datei_aus_job_scope():
     """jobs.remove_base entfernt eine geloeschte Datei sofort aus dem Scope."""
     jid, _ = jobs.start("P_rem", _scope_cmd(["[scope] S1\tS2", "warte"]), cwd=None, kind="correct")
