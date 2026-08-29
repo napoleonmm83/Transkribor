@@ -196,9 +196,9 @@ kannst weiterarbeiten oder das Fenster zumachen.
 
 Neue Aufnahmen kannst du dabei jederzeit dazulegen — auch mitten in einem laufenden Lauf.
 **Ab der nächsten Fassung** siehst du auch bei diesen Aufnahmen in der Liste, woran
-Transkribor gerade arbeitet. In Fassungen bis einschliesslich `v0.50.0` drehte sich bei
-ihnen bis zum Ende des ganzen Laufs nur das Wartesymbol, obwohl sie längst abgehört und
-korrigiert wurden; erst wenn alles fertig war, sprang die Anzeige auf ihren echten Stand.
+Transkribor gerade arbeitet. In Fassungen bis einschliesslich `v0.50.0` stand bei ihnen bis
+zum Ende des ganzen Laufs nur das Wartesymbol, obwohl sie längst abgehört und korrigiert
+wurden — und in der Meldung am Ende des Laufs tauchten sie gar nicht erst auf.
 
 Wie viele Aufnahmen gleichzeitig korrigiert werden, stellst du seit `v0.32.0` selbst ein,
 unter **Einstellungen › Tempo der Korrektur** (in Fassungen bis einschliesslich `v0.31.0`
