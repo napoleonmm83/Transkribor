@@ -504,6 +504,37 @@ print('[Demo] fertig Spaet: 1s, 2 Segmente, 1.0x', flush=True)
     assert "active_bases" not in r
 
 
+def test_gesehen_bleibt_leer_fuer_einen_fetch_lauf():
+    """Ein `fetch`-Lauf bucht nichts in `gesehen` (#475, Reviewbefund B1).
+
+    `jobPhases.ts` liest `[active]` fuer diese Art bewusst NIE (Art-Filter am Schleifenkopf).
+    Und `fetch.py` ist der Weg, auf dem FREMDER Text in den Strom kommt: yt-dlp druckt die
+    Rohausgabe eines importierten Videos mit, Titel eingeschlossen. Ohne den Filter reiste
+    das in eine Menge, die der Parser sonst sehr vorsichtig fuellt.
+    """
+    code = """
+import sys, time
+print('[active] Fremdtitel', flush=True)
+print('los', flush=True)
+time.sleep(30)
+"""
+    jid, _ = jobs.start("P_fetch_gesehen", [sys.executable, "-c", code], cwd=None, kind="fetch")
+    try:
+        _warte_auf_zeilen(jid, 2)
+        assert jobs.get(jid)["gesehen"] == []
+        # Gegenprobe: dieselbe Zeile, andere Art -> die Buchung findet statt. Ohne sie bliebe
+        # der Test gruen, wenn `gesehen` aus einem ganz anderen Grund nie gefuellt wuerde.
+        jid2, _ = jobs.start("P_correct_gesehen", [sys.executable, "-c", code], cwd=None,
+                             kind="correct")
+        try:
+            _warte_auf_zeilen(jid2, 2)
+            assert jobs.get(jid2)["gesehen"] == ["Fremdtitel"]
+        finally:
+            jobs.cancel(jid2); _wait(jid2)
+    finally:
+        jobs.cancel(jid); _wait(jid)
+
+
 def test_remove_base_entfernt_datei_aus_job_scope():
     """jobs.remove_base entfernt eine geloeschte Datei sofort aus dem Scope."""
     jid, _ = jobs.start("P_rem", _scope_cmd(["[scope] S1\tS2", "warte"]), cwd=None, kind="correct")
