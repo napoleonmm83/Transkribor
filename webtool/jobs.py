@@ -441,7 +441,14 @@ def get(job_id: str):
             snap["bases"] = list(snap["bases"])
         # `gesehen` geht MIT (anders als active_bases): es ist der Rueckweg des Frontends,
         # wenn die `[active]`-Zeile aus dem gedeckelten Puffer gefallen ist (#475).
-        # Sortiert, damit dieselbe Menge nicht bei jedem Poll anders herum ankommt.
+        #
+        # `sorted()` ist hier TRAGEND, nicht Kosmetik: `snap = dict(r)` ist flach, im Rumpf
+        # laege sonst das LEBENDE Set. FastAPI serialisiert es ausserhalb von `_lock`,
+        # waehrend `_run_proc` weiterschreibt -- gemessen (Block entfernt, echter Subprozess
+        # mit 200.000 `[active]`-Zeilen, Dauerpoll): `RuntimeError: Set changed size during
+        # iteration`. Wer die Umwandlung aus dem Lock HERAUSschoebe, statt sie zu entfernen,
+        # bekaeme dasselbe Rennen bei gruener Suite zurueck. Dass die Reihenfolge dabei
+        # stabil wird, ist die Zugabe.
         if isinstance(snap.get("gesehen"), set):
             snap["gesehen"] = sorted(snap["gesehen"])
         return snap

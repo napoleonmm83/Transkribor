@@ -29,7 +29,7 @@ hat. Lesbar, aber unschön — das ist Absicht.
 ## Unveröffentlicht
 
 **Behoben**
-- Eine während eines laufenden Projektlaufs hinzugefügte Aufnahme zeigt jetzt ihren Fortschritt, statt bis zum Ende des Laufs auf dem Wartesymbol zu stehen — auch bei sehr langen Läufen mit vielen Aufnahmen.
+- Eine während eines laufenden Projektlaufs hinzugefügte Aufnahme zeigt jetzt ihren Fortschritt, statt bis zum Ende des Laufs auf dem Wartesymbol zu stehen — auch bei sehr langen Läufen mit vielen Aufnahmen, und scheitert sie, sagt die Abschlussmeldung das jetzt ebenfalls.
 
 ## v0.50.0 — 2026-08-28
 

@@ -1856,11 +1856,15 @@ def _sperr_projekt(monkeypatch, tmp_path, name="Sperr", welche=("S1",), mit_audi
     return tdir
 
 
-def _replay(zeilen):
-    """[(Zeile, Zustand von `active_bases` NACH ihr)] — durch die echte Buchungsregel."""
+def _replay(zeilen, gesehen=None):
+    """[(Zeile, Zustand von `active_bases` NACH ihr)] — durch die echte Buchungsregel.
+
+    `gesehen` ist optional und wird nur durchgereicht: die zweite, nur wachsende Menge
+    (#475). Wer sie mitgibt, uebt die Zulassungs-Haelfte gegen dieselbe ECHTE Druckfolge.
+    """
     aktive, verlauf = set(), []
     for z in zeilen:
-        jobs.buche_aktive(aktive, z)
+        jobs.buche_aktive(aktive, z, gesehen)
         verlauf.append((z, set(aktive)))
     return verlauf
 
@@ -1902,7 +1906,8 @@ def test_run_sperrt_die_aufnahme_ueber_die_vorbereitung(monkeypatch, tmp_path, c
     monkeypatch.setattr(correct, "correct_ai_single", korrektur_wie_echt)
 
     correct.cmd_run("Sperr")
-    verlauf = _replay(capsys.readouterr().out.splitlines())
+    gesehen = set()
+    verlauf = _replay(capsys.readouterr().out.splitlines(), gesehen)
     zeilen = [z for z, _ in verlauf]
 
     # Vorbedingung: die Diarisierung hat wirklich freigegeben. Ohne sie waere die Zusicherung
@@ -1914,6 +1919,12 @@ def test_run_sperrt_die_aufnahme_ueber_die_vorbereitung(monkeypatch, tmp_path, c
         "die Aufnahme ist waehrend der Vorbereitung frei — genau das Loch aus #444."
         + chr(10) + _zeige(verlauf))
     assert verlauf[-1][1] == set(), _zeige(verlauf)    # und am Ende ist sie es nicht mehr
+
+    # Die ZWEITE Menge (#475) gegen dieselbe echte Druckfolge: `active_bases` ist am Ende
+    # leer, `gesehen` gerade NICHT — sonst haette die Aufnahme nach dem Lauf keine Zulassung
+    # mehr und ihr Urteil fiele aus der Anzeige. Die beiden Zeilen nebeneinander sind der
+    # Unterschied zwischen den zwei Mengen, an derselben Stelle gemessen.
+    assert "S1" in gesehen, sorted(gesehen)
 
 
 def test_run_gibt_die_aufnahme_frei_wenn_die_korrektur_sich_nie_meldet(monkeypatch, tmp_path,
