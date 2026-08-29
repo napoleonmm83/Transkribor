@@ -26,6 +26,8 @@ export const RANG: Record<FileState, number> = { failed: 3, done: 2, skipped: 1 
 // gedeckelt durch _claude_slots) -> mehrere gleichzeitig aktive Dateien, und die stdout-Zeilen
 // verschraenken sich. `active` ist darum nach Basisnamen indiziert; jede Zeile traegt ihren
 // Basisnamen, sonst liesse sie sich keinem Lauf zuordnen. transcribe bleibt sequentiell (eine GPU).
+/** Liest die stdout-Zeilen EINES Laufs in den Anzeigezustand: welche Aufnahme wo steht
+ *  (`perBase`/`active`), was der Lauf anfasst (`scope`/`gesehen`) und wie er ausging (`bilanz`). */
 export function parseJobPhases(kind: string, lines: string[]): JobPhases {
   const perBase: Record<string, FileState> = {}
   const active: Record<string, FileWork> = {}

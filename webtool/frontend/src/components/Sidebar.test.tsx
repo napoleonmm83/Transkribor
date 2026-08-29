@@ -234,8 +234,15 @@ describe('Sidebar', () => {
 
 describe('Sidebar - Zulassung fuer eine mitten im Lauf dazugekommene Aufnahme (#431)', () => {
   // ZWEITER Ort desselben Filters. Der Parser laesst das Urteil seit dem Fix durch; ohne die
-  // gleiche Erweiterung hier warf `inScope` es sofort wieder weg - am echten Lauf gemessen
-  // aenderte der Parser-Fix allein an der Anzeige NICHTS.
+  // gleiche Erweiterung hier warf `inScope` es sofort wieder weg.
+  //
+  // Wo die Behauptung "der Parser-Fix allein aenderte an der Anzeige NICHTS" herkommt, damit
+  // sie nicht als unbelegt dasteht (CodeRabbit hat sie an PR #476 genau so beanstandet):
+  // GEMESSEN im BROWSER waehrend PR #476 - Wegwerf-Projekt, uvicorn, zweiter Upload waehrend
+  // eines laufenden Laufs, Seitenleiste vorher nur Wellen-Symbol / nachher Spinner. DIESER
+  // TEST beweist das nicht: er baut `phasen` von Hand und fasst den Parser gar nicht an. Die
+  // Beleg-Screenshots liegen nicht im Repo - Belege werden hier grundsaetzlich nicht
+  // committet (`git ls-files` zeigt ausser Doku- und Marken-Bildern keine).
   const phasen = (gesehen?: string[]) => ({
     global: null, active: {}, perBase: { b: 'failed' as const },
     scope: new Set(['a']), ...(gesehen ? { gesehen: new Set(gesehen) } : {}),
