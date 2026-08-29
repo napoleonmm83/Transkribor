@@ -194,7 +194,7 @@ Editor.
 danach für mehrere gleichzeitig, und mehrere Projekte laufen ohnehin nebeneinander — du
 kannst weiterarbeiten oder das Fenster zumachen.
 
-Neue Aufnahmen dazulegen kannst du dabei jederzeit — auch mitten in einem laufenden Lauf.
+Neue Aufnahmen kannst du dabei jederzeit dazulegen — auch mitten in einem laufenden Lauf.
 **Ab der nächsten Fassung** siehst du auch bei diesen Aufnahmen in der Liste, woran
 Transkribor gerade arbeitet. In Fassungen bis einschliesslich `v0.50.0` drehte sich bei
 ihnen bis zum Ende des ganzen Laufs nur das Wartesymbol, obwohl sie längst abgehört und
