@@ -477,6 +477,7 @@ print('[scope] Frueh', flush=True)
 for i in range(30):
     print('[Demo] vorlauf', i)
 print('[active] Spaet', flush=True)
+print('[active]  Rand', flush=True)
 for i in range({rauschen}):
     print('[Demo] rauschen', i)
 print('[done] Spaet', flush=True)
@@ -492,6 +493,12 @@ print('[Demo] fertig Spaet: 1s, 2 Segmente, 1.0x', flush=True)
     assert "[Demo] fertig Spaet: 1s, 2 Segmente, 1.0x" in r["lines"]
     # (2) Der Rueckweg traegt: das Urteil ohne Anmeldezeile bekommt seine Zulassung.
     assert "Spaet" in r["gesehen"]
+    # (3) UNGESTUTZT. `safe_name` laesst Randleerzeichen durch, und die Endurteil-Regexe im
+    #     Frontend fangen den Namen roh (`jobPhases.ts:348`). Gestutzt gebucht, verwirft
+    #     `terminal()` das Urteil einer Datei " Rand" -- der Rueckweg waere fuer genau diese
+    #     Namensklasse wirkungslos, und zwar still.
+    assert " Rand" in r["gesehen"], r["gesehen"]
+    assert "Rand" not in r["gesehen"], r["gesehen"]
     # (3) `active_bases` kann ihn nicht ersetzen -- `[done]` hat es geraeumt, und es
     #     verlaesst den Server ohnehin nicht (Weg 1 aus dem Issue, gemessen widerlegt).
     assert "active_bases" not in r
