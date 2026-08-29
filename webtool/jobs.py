@@ -50,13 +50,22 @@ def buche_aktive(aktive: set, line: str, gesehen: set | None = None) -> None:
     der seit #431 die Zustandsanzeige einer WAEHREND des Laufs hochgeladenen Aufnahme
     haengt. Das Frontend liest sie sonst aus der `[active]`-Zeile im Protokoll, und die ist
     nicht sicher: `fuege_zeile_an` deckelt den Puffer bei MAX_JOB_LINES und verdraengt
-    Zeilen aus der MITTE. Gemessen an 10.560 Zeilen - `[scope]` ueberlebt (die ersten zehn
-    sind geschuetzt), `[active] Spaet` ist weg, das Urteil steht noch da und wurde ohne
-    Zulassung verworfen: der #431-Zustand, still zurueck.
+    Zeilen aus der MITTE. Ueber dem Deckel ueberlebt `[scope]` (die ersten zehn Zeilen sind
+    geschuetzt), die `[active]`-Zeile nicht - das Urteil steht noch da und wird ohne
+    Zulassung verworfen: der #431-Zustand, still zurueck. Die Zahlen dazu stehen NICHT hier,
+    sondern in `test_gesehen_ueberlebt_den_zeilendeckel`: eine Zahl im Kommentar driftet
+    unsichtbar, ein Test laeuft mit.
 
-    `active_bases` kann das nicht leisten, obwohl es naheliegt und im Issue als Weg 1 stand:
-    es wird bei `[done]` geraeumt, und die echte Reihenfolge ist `[done] X` VOR dem Urteil
-    fuer X - gemessen war die Menge in genau dem Moment leer. Deshalb zwei Mengen.
+    `active_bases` kann das nicht leisten, obwohl es naheliegt und im Issue als Weg 1 stand -
+    und zwar aus einem Grund, der von keiner Druckreihenfolge abhaengt: es ist eine
+    LIVE-Menge, die Zulassung braucht eine MONOTONE. `jobPhases.test.ts` nagelt das als
+    Vertrag fest ("behaelt die Zulassung ueber ein [done] hinweg"); dazu liest der Browser
+    einen bis zu 1,5 s alten Schnappschuss und nach dem Lauf gar keinen mehr, waehrend das
+    Urteil dauerhaft angezeigt bleiben muss. (Hier stand zuerst "die echte Reihenfolge ist
+    [done] X VOR dem Urteil fuer X - gemessen". Das war FALSCH: gemessen war nur ein selbst
+    gebauter Drucker, dessen Reihenfolge aus einer Testfixture stammte. Die echten Drucker
+    machen es andersherum - `transcribe.py` druckt `fertig base` VOR `[done]`. Gefunden vom
+    Review, und es ist genau die Fehlerklasse, die dieses Repo als seine haeufigste fuehrt.)
     """
     if line.startswith(ACTIVE_PREFIX):
         roh = line[len(ACTIVE_PREFIX):]
@@ -111,6 +120,20 @@ def _popen_kwargs() -> dict:
 # haengt fast nur an Opus und braucht die GPU nur fuer den kurzen pyannote-Schritt — es hier
 # mitzufuehren hiesse, dass eine 25-Minuten-Korrektur jede Transkription blockiert.
 GPU_KINDS = ("transcribe",)
+
+# Welche Job-Arten `[active]` ueberhaupt bedeuten duerfen - dieselbe Menge, die
+# `jobPhases.ts` am Anfang seiner Schleife durchlaesst. Ohne diesen Filter buchte auch ein
+# `fetch`-Lauf in `gesehen`, und genau dort kommt FREMDER Text in den Strom (yt-dlp-Rohausgabe,
+# Videotitel eines importierten Videos). Der Parser liest `[active]` fuer diese Art bewusst
+# nie; die Serverseite spiegelt das, statt ihm etwas zu schicken, was er wegwirft.
+#
+# GETRAGENE GRENZE, benannt statt behoben: `jobs.py` kennt den Fortschritts-Dialekt bewusst
+# nicht (siehe SCOPE_PREFIX). In einem Projekt namens `active` praefixt `transcribe.py` JEDE
+# Zeile mit `[active] `, und dann sammelt `gesehen` auch Zeilenbruchstuecke - das Frontend
+# traegt dieselbe Verschmutzung seit #431 dokumentiert. Anzeige-Folgen hat das keine (die
+# Muellschluessel treffen keinen Basisnamen), die Nutzlast je Poll waechst aber, und `gesehen`
+# ist die einzige ungedeckelte Sammlung im Datensatz. Siehe Issue.
+ZULASSUNGS_KINDS = ("transcribe", "correct")
 
 
 def _prune_locked():
@@ -326,6 +349,9 @@ def _run_proc(jid, cmd, cwd, env=None):
             _jobs[jid]["pid"] = proc.pid
             _jobs[jid]["proc"] = proc            # Handle für cancel() (nicht via get() ausgeliefert)
             cancelled = _jobs[jid]["cancelled"]
+            # Einmal gelesen, die Art aendert sich ueber den Lauf nicht.
+            zulassung = (_jobs[jid]["gesehen"]
+                         if _jobs[jid]["kind"] in ZULASSUNGS_KINDS else None)
         if cancelled:                            # cancel() kam an, bevor die pid gesetzt war -> selbst killen
             _kill_tree(proc)
         for line in proc.stdout:
@@ -337,8 +363,7 @@ def _run_proc(jid, cmd, cwd, env=None):
                 if _jobs[jid]["bases"] is None and line.startswith(SCOPE_PREFIX):
                     _jobs[jid]["bases"] = {b for b in line[len(SCOPE_PREFIX):].split("\t") if b}
                 else:
-                    buche_aktive(_jobs[jid]["active_bases"], line,
-                                 _jobs[jid]["gesehen"])
+                    buche_aktive(_jobs[jid]["active_bases"], line, zulassung)
         proc.wait()
         with _lock:
             _jobs[jid]["returncode"] = proc.returncode
