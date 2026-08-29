@@ -28,7 +28,8 @@ export const RANG: Record<FileState, number> = { failed: 3, done: 2, skipped: 1 
 // Basisnamen, sonst liesse sie sich keinem Lauf zuordnen. transcribe bleibt sequentiell (eine GPU).
 /** Liest die stdout-Zeilen EINES Laufs in den Anzeigezustand: welche Aufnahme wo steht
  *  (`perBase`/`active`), was der Lauf anfasst (`scope`/`gesehen`) und wie er ausging (`bilanz`). */
-export function parseJobPhases(kind: string, lines: string[]): JobPhases {
+export function parseJobPhases(kind: string, lines: string[],
+                               gesehenVomServer?: Iterable<string>): JobPhases {
   const perBase: Record<string, FileState> = {}
   const active: Record<string, FileWork> = {}
   // Blocknummern statt Zaehler: ein wiederverwendeter Block meldet '↷ schon vorhanden' UND
@@ -42,7 +43,14 @@ export function parseJobPhases(kind: string, lines: string[]): JobPhases {
   // Aufnahmen, die der Lauf nachweislich angefasst hat (aus `[active]`, siehe unten).
   // Waechst nur, wird nie geleert: der Lauf gibt eine Aufnahme per `[done]` wieder frei, aber
   // "gehoerte zum Lauf" bleibt danach wahr - und genau das ist hier die Frage.
-  const gesehen = new Set<string>()
+  // Vorbelegt aus der Buchfuehrung des Servers, wo sie vorliegt (#475): er sieht jede
+  // Zeile, BEVOR sie in den bei MAX_JOB_LINES gedeckelten Puffer wandert, und die
+  // Verdraengung trifft die Mitte -- also genau die Anmeldung einer spaet hinzugekommenen
+  // Aufnahme. Die Vorbelegung muss HIER stehen und nicht am Ergebnis: `terminal()` prueft
+  // die Zulassung waehrend der Schleife und hat das Urteil laengst verworfen, wenn jemand
+  // hinterher `phases.gesehen` setzt. Beim `scope`-Rueckweg in `useActiveJob` faellt das
+  // nicht auf -- ein FEHLENDER Bereich filtert gar nicht --, hier ist der Bereich da.
+  const gesehen = new Set<string>(gesehenVomServer)
 
   const terminal = (base: string, state: FileState) => {
     // `gesehen` ist die zweite Zulassung neben `scope` (#431): eine Aufnahme, die WAEHREND des
