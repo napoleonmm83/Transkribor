@@ -224,6 +224,11 @@ type Eintrag = {
 const INVENTAR: Record<string, Eintrag> = {
   // ── gelesen von parseJobPhases ────────────────────────────────────────────────────────
   '[scope] ': { art: 'gelesen', beispiel: '[scope] A\tB' },
+  // Der Nachtrag zum Wirkungsbereich. `vor` ist PFLICHT und nicht Kosmetik: beide Leser
+  // ergaenzen nur einen BESTEHENDEN Bereich (`scope !== undefined` bzw. `bases is not None`) —
+  // ohne die `[scope]`-Zeile davor ist die Zeile folgenlos und der Wirkungstest waere rot,
+  // obwohl der Zweig lebt. Dieselbe Bauart wie bei `[done] ` mit seinem `→ Diarisiere`.
+  '[scope+] ': { art: 'gelesen', beispiel: '[scope+] C', vor: ['[scope] A\tB'] },
   '[{}] -> transkribiere {} …': { art: 'gelesen', kind: 'transcribe', beispiel: '[Demo] -> transkribiere A …', basis: 'A' },
   '[{}] fertig {}: {}s, {} Segmente, ': {
     art: 'gelesen', kind: 'transcribe', beispiel: '[Demo] fertig A: 12s, 30 Segmente, 1.2x Echtzeit', basis: 'A',

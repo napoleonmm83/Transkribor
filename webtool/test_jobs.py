@@ -417,6 +417,47 @@ def test_eine_spaetere_scope_zeile_aendert_den_bereich_nicht():
         _wait(jid)
 
 
+def test_scope_nachtrag_erweitert_den_bereich():
+    """`[scope+]` traegt nach, was der Lauf ZUSAETZLICH anfassen wird.
+
+    `transcribe_project` scannt in jeder Runde neu und nimmt waehrend des Laufs hochgeladene
+    Aufnahmen mit; seine eine `[scope]`-Zeile ist da laengst gedruckt. Ohne den Nachtrag galt
+    eine solche Aufnahme als nicht gemeldet — die Oberflaeche zeigte sie auf ihrem
+    Ruhezustand, obwohl der Lauf sie sicher noch verarbeitet.
+    """
+    jid, _ = jobs.start("P_nach", _scope_cmd(["[scope] S1", "[scope+] S2\tS3", "los"]),
+                        cwd=None, kind="transcribe")
+    try:
+        _warte_auf_zeilen(jid, 3)
+        assert jobs.betrifft("P_nach", "S1") is not None, "der Erstbereich bleibt stehen"
+        assert jobs.betrifft("P_nach", "S2") is not None
+        assert jobs.betrifft("P_nach", "S3") is not None
+        assert jobs.betrifft("P_nach", "S4") is None, "nachgetragen heisst additiv, nicht offen"
+    finally:
+        jobs.cancel(jid)
+        _wait(jid)
+
+
+def test_scope_nachtrag_ohne_erstbereich_macht_keinen_halben_bereich():
+    """Ein Nachtrag ohne `[scope]` davor darf NICHT zum Erstbereich werden.
+
+    Die Fehlerrichtung ist der Punkt: `bases is None` heisst fuer `betrifft()`
+    „allumfassend" — die vorsichtige Seite. Wuerde der Nachtrag den Bereich eroeffnen, gaelte
+    plotzlich nur noch seine Handvoll Namen als gesperrt, und alles andere waere zum Loeschen
+    freigegeben, obwohl der Lauf nie eine Zusage darueber gemacht hat. Der Sensor ist deshalb
+    ein FREMDER Name: bliebe `bases` bei None, ist er weiter gesperrt.
+    """
+    jid, _ = jobs.start("P_nur_nach", _scope_cmd(["[scope+] S1", "los"]),
+                        cwd=None, kind="transcribe")
+    try:
+        _warte_auf_zeilen(jid, 2)
+        assert jobs.betrifft("P_nur_nach", "fremd") is not None, \
+            "ohne Erstbereich bleibt der Lauf allumfassend"
+    finally:
+        jobs.cancel(jid)
+        _wait(jid)
+
+
 def test_active_zeilen_aktualisieren_active_bases():
     """[active] S1 setzt S1 als aktiv, [done] S1 entfernt es wieder."""
     code = (

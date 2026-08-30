@@ -678,6 +678,10 @@ def transcribe_project(name, model, language, only=None, autocorrect: bool = Fal
     initial_files = list(files)
     processed = set()
     failed_bases = set()
+    # Was der Lauf bereits als seinen Wirkungsbereich GEMELDET hat. Startwert ist die
+    # `[scope]`-Zeile oben; alles, was die Schleife spaeter zusaetzlich findet, wird
+    # nachgemeldet (`[scope+]`, siehe unten).
+    angekuendigt = set(offen)
     try:
         while True:
             current_files = find_audio(proj_dir, only)
@@ -695,6 +699,32 @@ def transcribe_project(name, model, language, only=None, autocorrect: bool = Fal
             if not pending:
                 break
             pending.sort(key=lambda p: os.path.basename(p))
+            # BEREICHS-NACHTRAG: die `[scope]`-Zeile oben ist gedruckt, BEVOR die Schleife das
+            # erste Mal `find_audio` ruft — eine waehrend des Laufs hochgeladene Aufnahme steht
+            # also nie darin, wird hier aber sehr wohl verarbeitet. Fuer die Oberflaeche war sie
+            # damit weder im Bereich noch (bis zum ersten `[active]`) gesehen: sie stand auf
+            # ihrem Ruhezustand „Nur Audio — noch nicht transkribiert“, waehrend der Lauf sie
+            # sicher noch anfasst.
+            #
+            # Warum eine EIGENE Marke und nicht noch eine `[scope]`-Zeile: beide Leser nehmen
+            # dort bewusst nur die ERSTE (`jobs.py`: `bases is None`, `jobPhases.ts`:
+            # `scope === undefined`) — die Haertung gegen ein Projekt namens „scope“, dessen
+            # Zeilenpraefix sonst den ganzen Lauf kippt. Eine zweite `[scope]`-Zeile waere
+            # wirkungslos, das Aufweichen der Regel waere ein Rueckschritt.
+            #
+            # `scope` ist die ZUSAGE ueber den Lauf („diese Aufnahmen fasse ich an“) und
+            # rechtfertigt die Prognose „In Warteschlange“; `gesehen` ist die BEOBACHTUNG je
+            # Datei und rechtfertigt nur einen Zustand. Ein Nachtrag ist eine Zusage, also
+            # gehoert er an `scope` — nicht an `gesehen`.
+            #
+            # Nur die NEUEN, in sortierter Reihenfolge: eine schon angekuendigte Aufnahme ein
+            # zweites Mal zu melden waere fuer die additiven Leser folgenlos, aber es machte den
+            # Druck des Laufs von der Rundenzahl abhaengig und damit unpruefbar.
+            neu = [b for b in (os.path.splitext(os.path.basename(p))[0] for p in pending)
+                   if b not in angekuendigt]
+            if neu:
+                angekuendigt.update(neu)
+                print("[scope+] " + "\t".join(neu), flush=True)
             f = pending[0]
             base = os.path.splitext(os.path.basename(f))[0]
             if not os.path.exists(f):
