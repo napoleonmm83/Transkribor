@@ -237,6 +237,11 @@ def _rohmeldung(exc: Exception) -> str:
 
 def _human_error(exc: Exception) -> str:
     """yt-dlp-Rauschen -> ein Satz, der Marcus sagt, was zu tun ist."""
+    # Eigene Vorbedingungen kommen UNVERAENDERT durch: sie sind bereits als Satz
+    # formuliert (#173) — der pip-Hinweis darunter riete zu einem Update bei einem
+    # Namen, den wir selbst abgelehnt haben (K1-Glied-1-Review, Minor).
+    if isinstance(exc, Vorbedingung):
+        return str(exc)
     roh = str(exc).strip()
     msg = roh.splitlines()[-1] if roh else exc.__class__.__name__
     if _LOGIN_RE.search(msg):

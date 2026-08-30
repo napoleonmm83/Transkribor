@@ -25,8 +25,8 @@ def safe_name(name: str) -> str:
 
 
 # Abgeleitet aus den KONSUMENTEN des Zeilenstroms, nicht geraten: jobs.py parst
-# scope/scope+/active/done (jobs.py:30-37), jobPhases.ts ausserdem fetch
-# (:163-188, dort mit eigenem Warnkommentar zum gleichnamigen Projekt). NICHT
+# scope/scope+/active/done (Präfix-Konstanten jobs.py:31-41), jobPhases.ts ausserdem
+# fetch (:163-188, dort mit eigenem Warnkommentar zum gleichnamigen Projekt). NICHT
 # reserviert sind die nur druckenden Marken ohne Parse-Zweig (autocorrect, ytdlp,
 # sperre). Wer beim Parser eine Marke dazubaut, nimmt das Wort hier mit — und
 # umgekehrt. Exakt und kleingeschrieben: die Parser matchen case-sensitiv, ein
