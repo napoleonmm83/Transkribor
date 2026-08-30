@@ -77,9 +77,13 @@ export function parseJobPhases(kind: string, lines: string[],
     // Fixes: die Transkription gelang, die Korrektur nicht.
     // `active`/`blocks`/`cursor` werden IMMER geraeumt, auch wenn das Urteil nicht gilt —
     // die Datei laeuft nicht mehr, und ein stehenbleibender Spinner waere der #379-Zustand.
-    // `>=` gegen `>` ist ein AEQUIVALENTER Mutant (nachgemessen, gruen): `RANG` bildet jeden
-    // Zustand auf eine eigene Zahl ab, gleicher Rang heisst also derselbe Zustand, und die
-    // Zuweisung waere ein No-op. Steht hier, damit es niemand fuer eine Luecke haelt.
+    // `>=` gegen `>` ist ein AEQUIVALENTER Mutant: `RANG` bildet jeden Zustand auf eine eigene
+    // Zahl ab, gleicher Rang heisst also derselbe Zustand, und die Zuweisung waere ein No-op.
+    // Steht hier, damit es niemand fuer eine Luecke haelt.
+    // GEMESSEN (2026-08-30, der Kommentar sagte „nachgemessen" ohne Beleg): diese Zeile auf `>`
+    // geaendert, `npx vitest run` ⇒ 826 von 826 gruen. Wer das Argument pruefen will, mutiert
+    // genau diese Zeile; wer `RANG` um zwei Zustaende GLEICHEN Rangs erweitert, macht den
+    // Mutanten damit nicht-aequivalent und braucht dann einen Test.
     if (!(base in perBase) || RANG[state] >= RANG[perBase[base]]) perBase[base] = state
     // Der Beleg folgt NICHT dem RANG: er sagt, was auf der Platte liegt, nicht wie der Lauf
     // ausging. Er folgt der ZEILENREIHENFOLGE — die spaetere Zeile ist der frischere Beweis.
