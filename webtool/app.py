@@ -1304,9 +1304,6 @@ def correct(project: str):
 @app.post("/api/projects/{project}/files/{base}/correct")
 def correct_file(project: str, base: str, force: bool = False):
     _validate(project, base)
-    if not os.path.exists(_raw_path(project, base)):
-        raise HTTPException(status_code=404, detail=f"kein Roh-Transkript: {base}")
-    _require_ai()
     # Zwei Schreiber auf derselben edit.json verhindern (#441, Einzeldatei-Haelfte):
     # seit der gestaffelten Pipeline (v0.48.0) korrigiert der transcribe-Job selbst mit,
     # und die Job-Dedupe je (Projekt, Art) sieht keinen Konflikt zwischen "transcribe"
@@ -1315,7 +1312,16 @@ def correct_file(project: str, base: str, force: bool = False):
     # TRANSKRIBOR_AUTOCORRECT=0 (neben einer laufenden Transkription korrigieren)
     # bleibt frei. Der projektweite Endpunkt oben bleibt ohne Riegel, bis es ein
     # positives Merkmal gibt ("korrigiert der Lauf selbst mit?"), siehe #441/Glied 4.
+    #
+    # Der Riegel steht VOR dem 404 (wie bei delete_file): waehrend der Lauf die Datei
+    # aktiv schreibt, existiert die Roh-JSON noch NICHT — "gerade bearbeitet" ist die
+    # genauere Auskunft, "kein Roh-Transkript" hiesse "erst transkribieren", waehrend
+    # genau das laeuft. Am echten Pfad gemessen (Beleglauf 08-30): der 404 schlug den
+    # 409 und machte den Riegel im einzigen Fenster, das er decken soll, unerreichbar.
     _keine_jobs(project, base, active_only=True)
+    if not os.path.exists(_raw_path(project, base)):
+        raise HTTPException(status_code=404, detail=f"kein Roh-Transkript: {base}")
+    _require_ai()
     cmd = [sys.executable, "-m", "webtool.correct", "run", project, base]
     if force:
         cmd.append("--force")                     # nur nach expliziter UI-Bestätigung (human_edited)
