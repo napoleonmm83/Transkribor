@@ -227,6 +227,11 @@ def test_download_one_mit_reserviertem_projektnamen_ist_vorbedingung(projekt, mo
     fest), sonst erschoepfe er sich erst nach einem faelschlichen Download."""
     monkeypatch.setattr(_FakeYDL, "extract_info",
                         lambda *a, **k: pytest.fail("reservierter Name darf nichts laden"))
+    # Reihenfolge hart gesichert (Bot-Befund #491): die projekt-Fixture steht schon auf
+    # ensure_ffmpeg=True — rutschte der Riegel HINTER den ffmpeg-Check, bliebe der Test
+    # gruen. Dieser Patch macht genau diese Mutation rot.
+    monkeypatch.setattr(transcribe_mod, "ensure_ffmpeg",
+                        lambda: pytest.fail("Namensriegel muss VOR ensure_ffmpeg stehen"))
     with pytest.raises(fetch.Vorbedingung, match="reserviert"):
         fetch.download_one("active", "https://youtu.be/vid123")
     # Und es bleibt kein Ordner: der Riegel sitzt vor dem makedirs in download_one

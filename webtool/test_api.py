@@ -555,6 +555,21 @@ def test_datei_endpunkte_legen_kein_reserviertes_projekt_an(client, tmp_path):
     assert not (tmp_path / "active").exists()
 
 
+def test_jobstart_endpunkte_geriegelt_fuer_reservierte_projekte(client, tmp_path):
+    """Bot-Befund #491 (Minor, berechtigt): transcribe/correct/correct_file/
+    retranscribe ERZEUGEN den vergifteten Zeilenstrom selbst — ohne Riegel liefe
+    ein Altprojekt "active" weiter und fuelle gesehen/bases mit Muell (#478/#487).
+    Ein Altprojekt ist damit stillgelegt: lesen, umbenennen, loeschen geht,
+    kein neuer Lauf."""
+    for pfad in ("/api/projects/active/transcribe",
+                 "/api/projects/active/correct",
+                 "/api/projects/active/files/S1/correct",
+                 "/api/projects/active/files/S1/transcribe"):
+        r = client.post(pfad)
+        assert r.status_code == 400 and "reserviert" in r.json()["detail"], pfad
+    assert not (tmp_path / "active").exists()
+
+
 def test_delete_project_ok(client, tmp_path):
     assert (tmp_path / "Demo").is_dir()
     r = client.delete("/api/projects/Demo")
