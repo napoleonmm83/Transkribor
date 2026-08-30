@@ -26,7 +26,10 @@ Die Huelle sammelt **je Thread** bis zum Umbruch und reicht die fertige Zeile in
 weiter. Sie aendert damit nur die GRUPPIERUNG der Schreibvorgaenge; Kodierung,
 Fehlerbehandlung und Zeilenenden bleiben die des umhuellten Stroms.
 
-Warum eine Huelle und nicht 132 umgeschriebene Druckstellen: `jobPhases.vertrag.test.ts` erntet
+Warum eine Huelle und nicht ueber hundert umgeschriebene Druckstellen (die genaue Zahl haengt
+an der Zaehlweise -- 106 `print(`-Zeilen allein in den drei Laeufern, 168 ueber alle
+git-verfolgten `*.py` ohne Tests; hier stand eine Zahl ohne Grundgesamtheit):
+`jobPhases.vertrag.test.ts` erntet
 die Meldungsformen aus dem Quelltext ueber `print(`. Eine auf `sys.stdout.write` umgestellte
 Zeile faellt aus dieser Ernte — bei einer Form mit mehreren Druckstellen (`[done]` hat acht,
 `[active]` sechs) **ohne dass der Test rot wird**. Die Huelle laesst die Druckstellen in Ruhe,
@@ -43,7 +46,9 @@ GRENZEN, benannt statt verschwiegen:
   vier `file=sys.stderr`-Drucker tragen keine Marke; der faster-whisper-Fortschrittsbalken
   (`log_progress=True`) dagegen schreibt `\\r`-praefigierte Bruchstuecke OHNE Zeilenende, und
   eine Marke, die dort hineinfaellt, kommt als `67%|… [done] X` beim Leser an. Dieselbe
-  Fehlerklasse, von dieser Huelle prinzipiell NICHT gedeckt — eigener Punkt.
+  Fehlerklasse, von dieser Huelle prinzipiell NICHT gedeckt: das Problem ist nicht die
+  Gruppierung UNSERER Schreibvorgaenge, sondern ein zweiter Schreiber auf derselben Pipe, der
+  legitim Bruchstuecke ohne Zeilenende erzeugt. **#481**, mit Messung und Vorbehalt.
 * **`pytest -s`.** Dort setzt pytest `sys.stdout` nicht je Test zurueck, die Huelle bleibt also
   ueber Testgrenzen stehen. Die CI faehrt `-rs` (Skip-Report), nicht `-s`; kosmetisch.
 * **Die Teilzeile eines ARBEITSthreads gehoert ihm allein.** `threading.local` ist thread-lokal

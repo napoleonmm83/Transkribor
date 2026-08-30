@@ -1,7 +1,8 @@
 """Die Huelle aus #344: eine Zeile ist EIN Schreibvorgang, und zwei Threads verschraenken sich
 nicht.
 
-Alle vier Tests sind DETERMINISTISCH — keiner haengt an einem Rennen. Das ist Absicht: der
+Kein Test haengt an einem Rennen (eine Zahl stand hier und war nach zwei Reviewrunden falsch —
+in einem Kommentar driftet sie unsichtbar). Das ist Absicht: der
 Fehler, den die Huelle behebt, IST ein Rennen, und ein Test, der ihn per Rennen nachstellt,
 waere in der CI mal gruen und mal rot. Gemessen wird stattdessen die Eigenschaft, die das
 Rennen ueberhaupt erst moeglich macht — die Zahl der Schreibvorgaenge.

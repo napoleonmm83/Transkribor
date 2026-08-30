@@ -509,8 +509,7 @@ Aufnahmen transkribiert oder korrigiert werden, kannst du einzelne, nicht gerade
 Dateien jederzeit löschen. **Ab der nächsten Fassung** gilt das auch, während du mehrere
 Aufnahmen auf einmal korrigieren lässt: bis dahin konnte dabei eine Aufnahme bis zum Ende des
 Laufs als „wird gerade bearbeitet“ gelten, obwohl an ihr längst nichts mehr passierte — löschen
-liess sie sich dann nicht. Läuft gleichzeitig eine Transkription, kann das in seltenen Fällen
-noch vorkommen.
+liess sie sich dann nicht. Läuft gleichzeitig eine Transkription, kann es noch vorkommen.
 
 **Ab `v0.50.0`** gilt dasselbe fürs **Umbenennen** und fürs **Neu-Transkribieren**:
 ist eine Aufnahme gerade dran, sagt Transkribor „wird gerade bearbeitet — bitte warten“ und
