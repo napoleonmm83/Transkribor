@@ -1169,7 +1169,6 @@ def test_transcribe_project_meldet_eine_zurueckgekehrte_aufnahme_erneut(monkeypa
       Runde 3: D3                                    -> `[scope+] D3`
       Runde 4: D4                                    -> nichts (unveraendert)
     """
-    import time
     from webtool import correct, jobs, llm
 
     monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
@@ -1192,10 +1191,11 @@ def test_transcribe_project_meldet_eine_zurueckgekehrte_aufnahme_erneut(monkeypa
                 (audio_dir / f"{n}.mp3").write_bytes(b"audio")
         elif base == "D2":
             # Geloescht waehrend sie wartet UND unter demselben Namen neu hochgeladen —
-            # beides in derselben Runde, die Schleife sieht die Luecke also nie.
+            # beides in derselben Runde, die Schleife sieht die Luecke also nie. Die neue
+            # Datei ist ANDERS LANG, damit sich die Kennung deterministisch unterscheidet
+            # (keine Annahme ueber Inode-Wiederverwendung oder mtime-Aufloesung).
             (audio_dir / "D3.mp3").unlink()
-            time.sleep(0.01)                          # damit st_mtime_ns sicher wechselt
-            (audio_dir / "D3.mp3").write_bytes(b"anderes audio")
+            (audio_dir / "D3.mp3").write_bytes(b"anderes, laengeres audio")
         return {"text": f"Text {base}",
                 "segments": [{"id": 0, "start": 0.0, "end": 1.0, "text": f"Text {base}"}],
                 "duration": 1.0}
@@ -1224,16 +1224,19 @@ def test_kennung_unterscheidet_austausch_und_schweigt_bei_fehlern(tmp_path):
     - und ein fehlender Pfad wirft nicht, sondern liefert `None` — die Funktion laeuft im
       Schleifenrumpf eines Laufs, ein Wurf risse ihn ab.
     """
-    import time
-
     p = tmp_path / "A.mp3"
     p.write_bytes(b"eins")
     erst = transcribe._kennung(str(p))
     assert erst is not None and transcribe._kennung(str(p)) == erst, "stabil bei gleicher Datei"
 
+    # Die neue Datei ist ANDERS LANG — damit unterscheidet sich die Kennung deterministisch,
+    # ohne Annahme ueber Inode-Wiederverwendung oder mtime-Aufloesung. Ein `time.sleep()` stand
+    # hier zuerst mit dem Kommentar „damit st_mtime_ns sicher wechselt": das ist eine
+    # Behauptung ueber das Dateisystem, keine Messung (Vorab-Check des Bots) — auf einer
+    # Ablage mit grober Zeitaufloesung waere der Test damit flatterhaft geworden. In der
+    # Wirklichkeit tragen Inode und Zeit die Unterscheidung, hier traegt sie die Groesse.
     p.unlink()
-    time.sleep(0.01)
-    p.write_bytes(b"zwei")
+    p.write_bytes(b"zwei und laenger")
     assert transcribe._kennung(str(p)) != erst, "ausgetauscht heisst andere Kennung"
 
     assert transcribe._kennung(str(tmp_path / "gibtsnicht.mp3")) is None, "wirft nicht"
