@@ -153,6 +153,37 @@ describe('ProjectWorkspace (Stub)', () => {
     expect(screen.getByRole('button', { name: /Abbrechen/ })).toBeInTheDocument()
   })
 
+  // Die VERDRAHTUNG des Belegs (#erreicht), nicht seine Regel — die steht in
+  // `jobPhases.test.ts` und `FileStatusPill.test.tsx`. Ohne diesen Test liesse sich das Prop
+  // hier ersatzlos streichen: es ist optional, also typkonform weglassbar, und kein
+  // Pillen-Test sieht die Aufrufstelle. Genau das ist die Stelle, an der der ganze Fix
+  // rueckstandslos abklemmbar waere.
+  it('reicht den Beleg aus dem Job an die Dateizeile durch', async () => {
+    vi.mocked(api.listProjects).mockResolvedValue([
+      { name: 'Demo', dateien: 0, fertig: 0, geaendert: 0, active_jobs: [{ id: 'j1', kind: 'transcribe' }] },
+    ])
+    // Die Dateiliste ist ALT — genau der Zustand, um den es geht: sie kennt das Transkript
+    // noch nicht, obwohl der Lauf es laengst geschrieben hat.
+    vi.mocked(api.getProjectFiles).mockResolvedValue({ name: 'Demo',
+      files: [{ base: 'S1', has_audio: true, has_raw: false, has_edit: false, has_md: false }] })
+    vi.mocked(api.getJob).mockResolvedValue({ status: 'running',
+      lines: ['[scope] S1', '[Demo] fertig S1: 12s, 30 Segmente, 1.2x'] })
+    const { JobProvider } = await import('@/hooks/useActiveJob')
+    render(
+      <MemoryRouter initialEntries={['/p/Demo']}>
+        <JobProvider intervalMs={5}>
+          <ProjektDatenProvider>
+            <EditorBrueckeProvider>
+            <Routes><Route path="/p/:project" element={<ProjectWorkspace />} /></Routes>
+            </EditorBrueckeProvider>
+          </ProjektDatenProvider>
+        </JobProvider>
+      </MemoryRouter>,
+    )
+    expect(await screen.findByText(/Transkribiert — noch nicht korrigiert/)).toBeInTheDocument()
+    expect(screen.queryByText(/Nur Audio/)).toBeNull()
+  })
+
   it('verfolgt Transkription und Korrektur desselben Projekts nebeneinander', async () => {
     vi.mocked(api.listProjects).mockResolvedValue([
       { name: 'Demo', dateien: 0, fertig: 0, geaendert: 0,

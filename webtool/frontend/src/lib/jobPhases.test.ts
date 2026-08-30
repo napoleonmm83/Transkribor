@@ -1031,6 +1031,20 @@ describe('parseJobPhases - was das Endurteil ueber die Platte beweist (`erreicht
     expect(p.erreicht).toEqual({ A: 'raw' })
   })
 
+  it('ein geschuetzter `apply: SKIP` belegt die edit.json trotzdem', () => {
+    // Hier stand zuerst „SKIP traegt nichts ein, denn 'skipped' rendert ueber STATE[]" — das
+    // gilt nur fuer den reinen `correct`-Job. Im GESTAFFELTEN Lauf kommt vorher `fertig X:`
+    // ('done', RANG 2), und das folgende 'skipped' (RANG 1) wird von der Rangregel
+    // verschluckt: der Zustand bleibt 'done', und 'done' faellt sehr wohl auf `ruhe()` durch.
+    // Deshalb ist die Reihenfolge hier der Kern des Tests, nicht Beiwerk.
+    const p = parseJobPhases('transcribe', [
+      '[Demo] fertig A: 12s, 30 Segmente, 1.2x',
+      'apply: SKIP A (waehrend des Laufs handbearbeitet)',
+    ])
+    expect(p.perBase).toEqual({ A: 'done' })        // 'skipped' verschluckt, wie dokumentiert
+    expect(p.erreicht).toEqual({ A: 'edit' })       // die edit.json ist trotzdem da
+  })
+
   it('eine NICHT zugelassene Aufnahme bekommt keinen Beleg', () => {
     // Dieselbe Wache wie fuer `perBase`: steht ein Bereich und gehoert die Aufnahme weder zu
     // ihm noch zu `gesehen`, ist die Zeile nicht ueber sie. Ohne das koennte fremder Text in

@@ -306,9 +306,6 @@ export function parseJobPhases(kind: string, lines: string[],
       { active[m[1]] = { phase: 'verify', ...prog(m[1]) }; global = null }
     // 'edit': `cmd_apply` druckt diese Zeile erst nach dem Schreiben der edit.json — das ist
     // der Fall aus Marcus' Meldung („fertig korrigiertes File wechselt erst auf Audio …").
-    // Die drei `apply: SKIP`-Zweige unten belegen ebenfalls eine edit.json, tragen aber
-    // nichts ein: sie enden auf 'skipped', und 'skipped' rendert ueber `STATE[]` — `ruhe()`
-    // und damit die Untergrenze erreicht dort niemand. Ein Eintrag waere Logik ohne Leser.
     else if ((m = l.match(/^apply: (.+) -> edit\.json/))) terminal(m[1], 'done', 'edit')
     // Alle DREI Begruendungen, die correct.py druckt — nicht nur `human_edited=`. Die beiden
     // anderen sind die Schutzpfade ("edit.json nicht lesbar" aus #190, "waehrend des Laufs
@@ -320,9 +317,21 @@ export function parseJobPhases(kind: string, lines: string[],
     // greedy `(.+)` bei jedem Namen, der " (" enthaelt, ueber sein Ende hinaus — gemessen an
     // `Interview (Teil 1)`: Schluessel "Interview (Teil 1) (Interview" UND der Spinner blieb
     // stehen, also genau der Zustand, den dieser Zweig beheben soll.
+    // 'edit' auch hier, und das ist eine KORREKTUR: hier stand „SKIP traegt nichts ein, denn
+    // 'skipped' rendert ueber STATE[] und erreicht `ruhe()` nie". Das gilt nur fuer den reinen
+    // `correct`-Job. Im gestaffelten Lauf hat dieselbe Aufnahme vorher `fertig X:` bekommen
+    // ('done', RANG 2); das folgende 'skipped' (RANG 1) wird von der Rangregel oben
+    // VERSCHLUCKT, der Zustand bleibt 'done' — und 'done' faellt sehr wohl auf `ruhe()` durch.
+    // Es gab den Leser also, die alte Begruendung war falsch.
+    //
+    // Alle drei Gruende belegen eine edit.json: `human_edited=true` und die unlesbare Fassung
+    // (#190) existieren VOR dem Lauf, „waehrend des Laufs handbearbeitet" (#278) ist gerade
+    // vom Editor geschrieben worden — und genau der ist der Fall, den die Dateiliste noch
+    // nicht kennt. `has_edit` im Backend ist reine Existenz, eine unlesbare Datei zaehlt dort
+    // mit; 'edit' sagt damit dasselbe wie die Liste, nur frueher.
     else if ((m = l.match(/^apply: SKIP (.+) \((?:human_edited=|waehrend des Laufs |\1\.edit\.json nicht lesbar: )/)))
-      terminal(m[1], 'skipped')
-    else if ((m = l.match(/^↷ SKIP (.+) \(human_edited=/))) terminal(m[1], 'skipped')
+      terminal(m[1], 'skipped', 'edit')
+    else if ((m = l.match(/^↷ SKIP (.+) \(human_edited=/))) terminal(m[1], 'skipped', 'edit')
     // Der Zwilling MUSS vor der Zeile darunter stehen. Er ist der spezifischere Ausdruck
     // (voller Grundtext, $-verankert); andersherum riesse die kuerzere Regex einen Basisnamen
     // auseinander, der selbst auf `.correction` endet.
@@ -379,7 +388,16 @@ export function parseJobPhases(kind: string, lines: string[],
     //
     // Was das NEU erlaubt: die Oberflaeche liest `[active]` bis hierher GAR NICHT. Zwei
     // praeparierte Zeilen erzeugen jetzt eine Geisterzeile fuer eine Datei, die es nicht gibt -
-    // kein Datenverlust, kein Dateizugriff. Und die Zulassung rechtfertigt einen ZUSTAND, nie
+    // kein Datenverlust, kein Dateizugriff.
+    //
+    // NACHGEZOGEN, seit es `erreicht` gibt: „Geisterzeile fuer eine Datei, die es nicht gibt"
+    // untertreibt seitdem. Dieselben zwei Zeilen (`[active] X` + `apply: X -> edit.json`)
+    // buchen einen BELEG fuer X - und der dreht die Ruheanzeige einer ECHTEN Datei gegen die
+    // Platte („Fertig" ueber Nur-Audio), waehrend ein gefaelschtes `done` allein vorher an
+    // `ruhe(file)` folgenlos verpuffte. Der WEG ist unveraendert (dieselbe Wache wie fuer
+    // `state`), der SCHADEN dahinter ist neu. Die Wurzel bleibt die #416/#413-Klasse - der
+    // Erzeuger, der fremden Text hinter ein Klammerpraefix setzt -, und die lebenden Drucker
+    // flachen ihn heute mit `_einzeilig` ab; ungeerntete Drucker (#409) bleiben der Restweg. Und die Zulassung rechtfertigt einen ZUSTAND, nie
     // eine Prognose: die Warteschlangen-Anzeige haengt weiter allein am `scope` (siehe Sidebar
     // und ProjectWorkspace), weil das Glossar seit #450 KORPUSWEIT `[active]` meldet.
     else if (l.startsWith('[active] ')) {

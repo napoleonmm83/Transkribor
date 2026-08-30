@@ -261,6 +261,20 @@ describe('Sidebar - Zulassung fuer eine mitten im Lauf dazugekommene Aufnahme (#
   })
 })
 
+describe('Sidebar - der Beleg des Laufs erreicht die Zeile', () => {
+  // Erstes Glied der Kette Seitenleiste → FileRow → Pille. `erreicht` ist optional; ohne
+  // diesen Test liesse sich das Prop hier ersatzlos streichen, ohne dass etwas rot wird —
+  // und die Seitenleiste ist der Ort, an dem die Pille NUR als Symbol erscheint, ihr
+  // Etikett also allein im `aria-label` steht.
+  it('zeigt „Fertig" fuer eine Aufnahme, deren edit.json die Dateiliste noch nicht kennt', () => {
+    zeigen({ offen: 'Alpha', dateien: DATEIEN, jobRunning: true,
+      phases: { global: null, active: {}, perBase: { b: 'done' as const },
+                scope: new Set(['b']), erreicht: { b: 'edit' as const } } })
+    expect(screen.getByLabelText('Fertig')).toBeInTheDocument()
+    expect(screen.queryByLabelText(/Nur Audio/)).toBeNull()
+  })
+})
+
 describe('Sidebar - Beobachtung stellt keine Warte-Prognose (#431, Review-Befund A2)', () => {
   it('zeigt die Warteschlange nur fuer Dateien AUS DEM BEREICH', () => {
     // `a` steht im Bereich und hat keinen Zustand -> Warteschlange. `b` ist nur beobachtet
