@@ -81,7 +81,10 @@ def test_zwei_threads_verschraenken_sich_nicht():
         h.write("\n")
 
     t1, t2 = threading.Thread(target=eins), threading.Thread(target=zwei)
-    t1.start(); t2.start(); t1.join(5); t2.join(5)
+    t1.start()
+    t2.start()
+    t1.join(5)
+    t2.join(5)
 
     assert s.stuecke == ["[done] A\n", "[done] B\n"]
     # Und die Eigenschaft, an der der 409-Riegel haengt, ausdruecklich: keine Marke steht
