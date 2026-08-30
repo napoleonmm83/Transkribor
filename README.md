@@ -53,7 +53,9 @@ Auch mit **Schweizerdeutsch** kommt es zurecht.
    Aufnahme Sprache und Anzahl Sprecher einstellen und **kurz reinhören** kannst — dreimal
    klicken, dann läuft alles von allein, und du siehst live, wie weit es ist. (Ein paar
    Projektnamen wie `active` oder `done` sind für die Fortschrittsanzeige reserviert — die
-   App lehnt sie mit einer Meldung ab; eckige Klammern im Namen gehen ebenso nicht. Ab
+   App lehnt sie mit einer Meldung ab; eckige Klammern im Namen gehen ebenso nicht. Hat ein
+   Projekt aus einer älteren Fassung so einen Namen, einmal umbenennen — sonst lassen sich
+   seine Aufnahmen dort nicht bearbeiten. Ab
    `v0.26.0`; in `v0.25.0` und älter liegen diese Felder direkt auf der Seite.) Ab
    `v0.27.0` steht schon im ersten Schritt, **was** du gewählt hast — Dateien mit
    Namen und Grösse, Video-Links mit ihrer Adresse; eine versehentlich mitgenommene nimmst
