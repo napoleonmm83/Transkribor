@@ -61,7 +61,14 @@ export function FileStatusPill({ file, active, pct, detail, state, erreicht, job
   detail?: string
   state?: FileState
   /** Untergrenze aus dem laufenden Job — siehe `ruhe`. Am selben Riegel wie `state`
-   *  durchgereicht (`zugelassen`), gilt also nur waehrend eines Laufs. */
+   *  durchgereicht (`zugelassen`), gilt also nur waehrend eines Laufs.
+   *
+   *  Dieser Riegel ist heute REDUNDANT, und das ist gemessen (Mutation an beiden
+   *  Aufrufstellen: 821 von 821 Tests bleiben gruen): `terminal()` bucht ohnehin nur
+   *  zugelassene Basen, und beide Verbraucher mergen nur LAUFENDE Jobs. Er bleibt trotzdem
+   *  stehen, weil `state` denselben traegt und aus demselben Grund unerreichbar ist — faellt
+   *  eine der beiden Voraussetzungen weg, braucht ihn diese Zeile genauso wie die daneben.
+   *  Steht hier, damit ihn niemand fuer einen scharfen Schutz haelt. */
   erreicht?: Erreicht
   jobRunning?: boolean
   inScope?: boolean
