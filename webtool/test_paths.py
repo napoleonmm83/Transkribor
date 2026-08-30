@@ -28,6 +28,31 @@ def test_safe_name_rejects_bare_dot_and_dotdot():
         paths.safe_name("..")
 
 
+def test_sicherer_projektname_strip_dann_pruefen():
+    """Kaltleser-Befund zu PR #491: das strip-then-check-Verhalten pinnt kein Test.
+    Der Streich liegt VOR der Mengenpruefung — " active " ist also reserviert, nicht
+    ein Whitespace-Zwilling; und getrimmte saubere Namen kommen normalisiert zurueck."""
+    with pytest.raises(ValueError, match="reserviert"):
+        paths.sicherer_projektname(" active ")
+    assert paths.sicherer_projektname("  Weisstannen ") == "Weisstannen"
+    with pytest.raises(ValueError, match="Klammern"):
+        paths.sicherer_projektname("A]B")
+    # Nur-druckende Marken ohne Parse-Zweig und Gross-/Kleinschreibung kommen durch:
+    assert paths.sicherer_projektname("Active") == "Active"
+    assert paths.sicherer_projektname("autocorrect") == "autocorrect"
+
+
+def test_reservierte_namen_entsprechen_den_parser_marken():
+    """Vertrag (Kaltleser-Befund zu PR #491): die Menge ist aus den KONSUMENTEN
+    abgeleitet — jobs.py parst die vier Marken, jobPhases.ts ausserdem [fetch].
+    Baut jemand eine Marke im Parser dazu, ohne sie hier aufzunehmen, reisst dieser
+    Test — dieselbe Form wie das INVENTAR des Vertragstests (Druckform <-> Parser)."""
+    from webtool import jobs
+    aus_marken = {p.strip("[] ") for p in (jobs.SCOPE_PREFIX, jobs.SCOPE_ADD_PREFIX,
+                                           jobs.ACTIVE_PREFIX, jobs.DONE_PREFIX)}
+    assert paths.RESERVIERTE_NAMEN == aus_marken | {"fetch"}
+
+
 def test_projekte_root_respects_env(monkeypatch, tmp_path):
     monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
     assert paths.projekte_root() == str(tmp_path)
