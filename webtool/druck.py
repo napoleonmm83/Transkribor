@@ -35,6 +35,20 @@ Zeile faellt aus dieser Ernte — bei einer Form mit mehreren Druckstellen (`[do
 `[active]` sechs) **ohne dass der Test rot wird**. Die Huelle laesst die Druckstellen in Ruhe,
 also auch die Ernte.
 
+EIN GEMEINSAMES LOCK BRAUCHT ES NICHT, und das ist gemessen, nicht geschlossen (Bot-Befund
+"Python 3.13 sagt fuer `TextIOWrapper` keine Thread-Sicherheit zu", HERGELEITET). Die Zusage
+ruht auf drei Stufen, von denen uns nur die erste gehoert: (1) die Huelle macht aus jeder Zeile
+EINEN `TextIOWrapper.write`, (2) unter `-u` ist der Binaerlayer roh, also ist das EIN `os.write`
+der ganzen Zeile, (3) ein Pipe-Schreibvorgang bis `PIPE_BUF` ist atomar. Gegenprobe mit
+16 Threads x 500 Zeilen durch einen Elternprozess mit den Bedingungen aus `jobs.py:341-345`::
+
+    ohne Huelle:  8000 erwartet | gut 1622 | KAPUTT 2575 | leer 3803
+    mit  Huelle:  8000 erwartet | gut 8000 | KAPUTT    0 | leer    0
+
+Die Negativkontrolle zeigt, dass der Aufbau die Beschaedigung sieht. Ein Lock waere damit ein
+zweiter Mechanismus fuer etwas, das die drei Stufen schon leisten -- und er verschoebe die
+Grenze nicht, denn die liegt bei (3), nicht bei der Thread-Sicherheit.
+
 GRENZEN, benannt statt verschwiegen:
 
 * **`PIPE_BUF`.** Atomar ist ein Pipe-Schreibvorgang nur bis 4096 Byte (Linux). Die laengste
