@@ -1102,7 +1102,13 @@ def test_transcribe_project_meldet_spaete_uploads_als_bereichs_nachtrag(monkeypa
 
     Zwei Haelften, und die zweite ist die wichtigere: der Nachtrag nennt NUR die neue Datei.
     Wuerde er in jeder Runde den ganzen offenen Rest melden, haenge der Druck des Laufs an
-    seiner Rundenzahl statt an dem, was wirklich dazukam — und kein Test bekaeme das je rot.
+    seiner Rundenzahl statt an dem, was wirklich dazukam.
+
+    Deshalb kommen ZWEI Dateien spaet dazu und nicht eine — Befund des CodeRabbit-Bots, und
+    er trifft: mit nur D2 faellt „alle offenen melden" mit „nur die neuen melden" zusammen,
+    sobald D1 durch ist (offen ist dann genau D2). Der Waechter war damit auf ein Zufallsdetail
+    angewiesen. Mit D2 UND D3 meldet die kaputte Fassung D3 in der dritten Runde ein zweites
+    Mal — das sieht der Test.
     """
     from webtool import correct, jobs, llm
 
@@ -1123,6 +1129,7 @@ def test_transcribe_project_meldet_spaete_uploads_als_bereichs_nachtrag(monkeypa
         base = os.path.splitext(os.path.basename(audio_file))[0]
         if base == "D1":
             (audio_dir / "D2.mp3").write_bytes(b"audio")
+            (audio_dir / "D3.mp3").write_bytes(b"audio")
         return {"text": f"Text {base}",
                 "segments": [{"id": 0, "start": 0.0, "end": 1.0, "text": f"Text {base}"}],
                 "duration": 1.0}
@@ -1137,9 +1144,10 @@ def test_transcribe_project_meldet_spaete_uploads_als_bereichs_nachtrag(monkeypa
     erst = [z for z in zeilen if z.startswith(jobs.SCOPE_PREFIX)]
     nach = [z for z in zeilen if z.startswith(jobs.SCOPE_ADD_PREFIX)]
     assert len(erst) == 1 and erst[0][len(jobs.SCOPE_PREFIX):].split("\t") == ["D1"]
-    assert len(nach) == 1, f"genau ein Nachtrag erwartet, nicht {nach}"
-    assert nach[0][len(jobs.SCOPE_ADD_PREFIX):].split("\t") == ["D2"], \
-        "nur die NEUE Aufnahme — D1 wurde bereits gemeldet"
+    assert len(nach) == 1, \
+        f"genau EIN Nachtrag erwartet — ein zweiter hiesse, D3 wurde doppelt gemeldet: {nach}"
+    assert nach[0][len(jobs.SCOPE_ADD_PREFIX):].split("\t") == ["D2", "D3"], \
+        "nur die NEUEN Aufnahmen, sortiert — D1 wurde bereits gemeldet"
 
 
 def test_transcribe_project_diarize_error_does_not_block_next_file(monkeypatch, tmp_path, capsys):

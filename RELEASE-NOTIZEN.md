@@ -31,7 +31,7 @@ hat. Lesbar, aber unschön — das ist Absicht.
 **Behoben**
 - Eine während eines laufenden Projektlaufs hinzugefügte Aufnahme zeigt jetzt ihren Fortschritt, statt bis zum Ende des Laufs auf dem Wartesymbol zu stehen — auch bei sehr langen Läufen mit vielen Aufnahmen, und scheitert sie, sagt die Abschlussmeldung das jetzt ebenfalls.
 - Lässt du mehrere Aufnahmen auf einmal korrigieren, bleibt keine mehr fälschlich als „in Arbeit“ stehen — sie zeigt wieder ihren richtigen Stand und lässt sich auch wieder löschen. Läuft gleichzeitig eine Transkription, kann es noch vorkommen.
-- Lädst du weitere Aufnahmen hoch, während schon eine Transkription läuft, stehen sie sofort als „In Warteschlange“ in der Liste, statt bis zu ihrem Beginn wie unbearbeitetes Audio auszusehen.
+- Lädst du weitere Aufnahmen hoch, während schon eine Transkription läuft, stehen sie als „In Warteschlange“ in der Liste, sobald die gerade laufende Aufnahme fertig ist — statt bis zu ihrem eigenen Beginn wie unbearbeitetes Audio auszusehen.
 
 ## v0.50.0 — 2026-08-28
 
