@@ -417,7 +417,22 @@ def test_eine_spaetere_scope_zeile_aendert_den_bereich_nicht():
         _wait(jid)
 
 
-def test_scope_nachtrag_erweitert_den_bereich():
+def _eigener_transcribe_lauf(monkeypatch):
+    """Nimmt die projektUEBERGREIFENDE GPU-Serialisierung aus dem Weg.
+
+    `jobs.start` gibt fuer `GPU_KINDS` den laufenden Whisper-Job eines BELIEBIGEN Projekts
+    als Blocker zurueck (`started=False`). Ein Test, der `transcribe` fahren muss, bekommt
+    dann die jid eines FREMDEN Laufs, misst dessen Zeilen — und sein `finally` bricht ihn ab.
+    Die Nachbartests fahren aus genau diesem Grund `correct`; die Nachtrags-Tests koennen das
+    nicht, weil `NACHTRAG_KINDS` die Art auf `transcribe` einschraenkt.
+
+    Befund des gegnerischen Reviews, dort am echten Registry-Zustand gemessen. Der `assert
+    gestartet` daneben ist die zweite Haelfte: ohne ihn faellt ein fremder Lauf lautlos durch.
+    """
+    monkeypatch.setattr(jobs, "GPU_KINDS", ())
+
+
+def test_scope_nachtrag_erweitert_den_bereich(monkeypatch):
     """`[scope+]` traegt nach, was der Lauf ZUSAETZLICH anfassen wird.
 
     `transcribe_project` scannt in jeder Runde neu und nimmt waehrend des Laufs hochgeladene
@@ -425,8 +440,10 @@ def test_scope_nachtrag_erweitert_den_bereich():
     eine solche Aufnahme als nicht gemeldet — die Oberflaeche zeigte sie auf ihrem
     Ruhezustand, obwohl der Lauf sie sicher noch verarbeitet.
     """
-    jid, _ = jobs.start("P_nach", _scope_cmd(["[scope] S1", "[scope+] S2\tS3", "los"]),
-                        cwd=None, kind="transcribe")
+    _eigener_transcribe_lauf(monkeypatch)
+    jid, gestartet = jobs.start("P_nach", _scope_cmd(["[scope] S1", "[scope+] S2\tS3", "los"]),
+                                cwd=None, kind="transcribe")
+    assert gestartet, "eigener Lauf, nicht der Nachhall eines fremden"
     try:
         _warte_auf_zeilen(jid, 3)
         assert jobs.betrifft("P_nach", "S1") is not None, "der Erstbereich bleibt stehen"
@@ -438,7 +455,7 @@ def test_scope_nachtrag_erweitert_den_bereich():
         _wait(jid)
 
 
-def test_scope_nachtrag_ohne_erstbereich_macht_keinen_halben_bereich():
+def test_scope_nachtrag_ohne_erstbereich_macht_keinen_halben_bereich(monkeypatch):
     """Ein Nachtrag ohne `[scope]` davor darf NICHT zum Erstbereich werden.
 
     Die Fehlerrichtung ist der Punkt: `bases is None` heisst fuer `betrifft()`
@@ -447,8 +464,10 @@ def test_scope_nachtrag_ohne_erstbereich_macht_keinen_halben_bereich():
     freigegeben, obwohl der Lauf nie eine Zusage darueber gemacht hat. Der Sensor ist deshalb
     ein FREMDER Name: bliebe `bases` bei None, ist er weiter gesperrt.
     """
-    jid, _ = jobs.start("P_nur_nach", _scope_cmd(["[scope+] S1", "los"]),
-                        cwd=None, kind="transcribe")
+    _eigener_transcribe_lauf(monkeypatch)
+    jid, gestartet = jobs.start("P_nur_nach", _scope_cmd(["[scope+] S1", "los"]),
+                                cwd=None, kind="transcribe")
+    assert gestartet, "eigener Lauf, nicht der Nachhall eines fremden"
     try:
         _warte_auf_zeilen(jid, 2)
         assert jobs.betrifft("P_nur_nach", "fremd") is not None, \
@@ -479,7 +498,7 @@ def test_ein_fetch_lauf_bucht_keinen_bereichs_nachtrag():
         _wait(jid)
 
 
-def test_projekt_namens_scope_plus_verliert_seine_buchfuehrung_nicht():
+def test_projekt_namens_scope_plus_verliert_seine_buchfuehrung_nicht(monkeypatch):
     """`paths.safe_name` laesst `+` durch, und `transcribe.py` praefixt JEDE Zeile mit
     `[{name}] ` — ein Projekt namens „scope+" erzeugt also Zeilen, die wie ein Nachtrag
     aussehen. Dieselbe Klasse wie ein Projekt namens „scope" (dort traegt es „nur die erste
@@ -501,10 +520,12 @@ def test_projekt_namens_scope_plus_verliert_seine_buchfuehrung_nicht():
     gemessen blieb der Waechter unter der Mutation „Zweig ersetzt statt ergaenzt" gruen,
     obwohl der Bereich weg war — er lebte vom `[active] S1` daneben. S2 steht nur im Bereich.
     """
-    jid, _ = jobs.start(
+    _eigener_transcribe_lauf(monkeypatch)
+    jid, gestartet = jobs.start(
         "P_plus",
         _scope_cmd(["[scope] S1\tS2", "[scope+] Modell large-v3, 2 Datei(en)", "[active] S1", "los"]),
         cwd=None, kind="transcribe")
+    assert gestartet, "eigener Lauf, nicht der Nachhall eines fremden"
     try:
         _warte_auf_zeilen(jid, 4)
         assert jobs.betrifft("P_plus", "S2") is not None, \

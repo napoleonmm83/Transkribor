@@ -373,8 +373,16 @@ export function parseJobPhases(kind: string, lines: string[],
     // laesst `+` durch (nur Steuerzeichen, Trenner und `..` fliegen raus), ein Projekt namens
     // "scope+" praefixt also JEDE Zeile von transcribe.py so. Weiter oben mit `continue`
     // gestellt frasse dieser Zweig sie alle. Der Restschaden ist hier kleiner als beim
-    // ersetzenden `[scope]`: additiv kommt hoechstens ein Phantomschluessel dazu, der auf
+    // ersetzenden `[scope]`: additiv kommt je ZEILE ein Phantomschluessel dazu, der auf
     // keine Datei passt - die echten Basisnamen bleiben stehen. Negativkontrolle im Test.
+    //
+    // "Je Zeile" und nicht "hoechstens einer" - hier stand zuerst das Zweite, und es ist
+    // falsch: ueber den ganzen Lauf waechst die Menge unbegrenzt (gemessen vom kalten
+    // Diff-Leser: Erstbereich plus 500 Projektzeilen ergaben 501 Eintraege). Der Zeilenpuffer
+    // ist bei MAX_JOB_LINES gedeckelt, diese Menge nicht. Anzeigefolgen hat sie keine, aber
+    // die Wurzel gehoert dem Erzeuger (#416), und die serverseitige Schwester in `jobs.bases`
+    // treibt zusaetzlich den 409-Riegel und reist bei jedem Poll mit - als eigener Punkt
+    // festgehalten, Geschwister von #478.
     //
     // NUR wenn der Bereich schon steht - dieselbe Bedingung wie serverseitig in `jobs.py`
     // (`bases is not None`). `scope === undefined` heisst fuer `imBereich` "gilt fuer alle";
