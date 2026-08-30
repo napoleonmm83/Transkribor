@@ -1215,6 +1215,30 @@ def test_transcribe_project_meldet_eine_zurueckgekehrte_aufnahme_erneut(monkeypa
         f"die Rueckkehr muss erneut gemeldet werden, sonst fehlt sie im Bereich: {nach}"
 
 
+def test_kennung_unterscheidet_austausch_und_schweigt_bei_fehlern(tmp_path):
+    """`_kennung` direkt — der Test daneben faelscht die Funktion ganz und uebt ihren
+    `except OSError`-Pfad deshalb NICHT aus (CodeRabbit-Bot). Beide Richtungen:
+
+    - dieselbe Datei ergibt denselben Wert (sonst meldete jede Runde einen Nachtrag),
+    - eine unter demselben Namen NEU angelegte Datei einen anderen (das ist der Zweck),
+    - und ein fehlender Pfad wirft nicht, sondern liefert `None` — die Funktion laeuft im
+      Schleifenrumpf eines Laufs, ein Wurf risse ihn ab.
+    """
+    import time
+
+    p = tmp_path / "A.mp3"
+    p.write_bytes(b"eins")
+    erst = transcribe._kennung(str(p))
+    assert erst is not None and transcribe._kennung(str(p)) == erst, "stabil bei gleicher Datei"
+
+    p.unlink()
+    time.sleep(0.01)
+    p.write_bytes(b"zwei")
+    assert transcribe._kennung(str(p)) != erst, "ausgetauscht heisst andere Kennung"
+
+    assert transcribe._kennung(str(tmp_path / "gibtsnicht.mp3")) is None, "wirft nicht"
+
+
 def test_transcribe_project_meldet_auch_bei_unlesbarer_kennung(monkeypatch, tmp_path, capsys):
     """`_kennung` liefert `None`, wenn `os.stat` wirft — und „nie gemeldet" darf davon nicht
     ununterscheidbar werden.

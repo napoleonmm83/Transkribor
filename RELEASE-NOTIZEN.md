@@ -28,6 +28,9 @@ hat. Lesbar, aber unschön — das ist Absicht.
 
 ## Unveröffentlicht
 
+**Behoben**
+- Löschst du eine wartende Aufnahme und lädst sofort eine gleichnamige neu hoch, während ein Lauf läuft, gilt sie wieder als Teil des Laufs — Umbenennen und Neu-Transkribieren warten dann korrekt, statt der laufenden Verarbeitung in die Quere zu kommen.
+
 ## v0.50.1 — 2026-08-30
 
 **Behoben**
