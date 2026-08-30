@@ -555,18 +555,26 @@ def test_datei_endpunkte_legen_kein_reserviertes_projekt_an(client, tmp_path):
     assert not (tmp_path / "active").exists()
 
 
-def test_jobstart_endpunkte_geriegelt_fuer_reservierte_projekte(client, tmp_path):
+def test_jobstart_endpunkte_geriegelt_fuer_reservierte_projekte(client, tmp_path, monkeypatch):
     """Bot-Befund #491 (Minor, berechtigt): transcribe/correct/correct_file/
     retranscribe ERZEUGEN den vergifteten Zeilenstrom selbst — ohne Riegel liefe
     ein Altprojekt "active" weiter und fuelle gesehen/bases mit Muell (#478/#487).
     Ein Altprojekt ist damit stillgelegt: lesen, umbenennen, loeschen geht,
     kein neuer Lauf."""
+    import webtool.jobs as jobs_mod
+    gestartet = []
+    monkeypatch.setattr(jobs_mod, "start",
+                        lambda *a, **k: gestartet.append(("start", a)) or ("x", True))
+    monkeypatch.setattr(jobs_mod, "request",
+                        lambda *a, **k: gestartet.append(("request", a)) or ("x", True))
     for pfad in ("/api/projects/active/transcribe",
                  "/api/projects/active/correct",
                  "/api/projects/active/files/S1/correct",
                  "/api/projects/active/files/S1/transcribe"):
         r = client.post(pfad)
-        assert r.status_code == 400 and "reserviert" in r.json()["detail"], pfad
+        assert r.status_code == 400, pfad
+        assert "reserviert" in r.json()["detail"], pfad
+    assert gestartet == [], "400 darf nie neben einem gestarteten Job stehen (Bot R2)"
     assert not (tmp_path / "active").exists()
 
 
