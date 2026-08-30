@@ -24,6 +24,38 @@ def safe_name(name: str) -> str:
     return name
 
 
+# Abgeleitet aus den KONSUMENTEN des Zeilenstroms, nicht geraten: jobs.py parst
+# scope/scope+/active/done (jobs.py:30-37), jobPhases.ts ausserdem fetch
+# (:163-188, dort mit eigenem Warnkommentar zum gleichnamigen Projekt). NICHT
+# reserviert sind die nur druckenden Marken ohne Parse-Zweig (autocorrect, ytdlp,
+# sperre). Wer beim Parser eine Marke dazubaut, nimmt das Wort hier mit — und
+# umgekehrt. Exakt und kleingeschrieben: die Parser matchen case-sensitiv, ein
+# Projekt "Active" kollidiert mit der Marke "[active] " nicht.
+RESERVIERTE_NAMEN = {"scope", "scope+", "active", "done", "fetch"}
+
+
+def sicherer_projektname(roh: str) -> str:
+    """safe_name PLUS Namensraum-Riegel — NUR fuer Anlege-/Umbenennpfade (#416).
+
+    Markenraum und Projektnamensraum sind derselbe: die Laefe praefixen gewoehnliche
+    Zeilen mit "[{Projektname}] ", die Marken ([active] …, [done] …, [scope] …,
+    [scope+] …) aber ohne Projektnamen. Ein Projekt namens "active" ist damit
+    zeilengleich mit der Marke und vergiftet Buchfuehrung und Anzeige (#478/#487).
+    Eckige Klammern machen die Zeile zusaetzlich fuer den Parser mehrdeutig (#416).
+
+    Der LESEPFAD (jeder Endpunkt auf ein bestehendes Projekt) bleibt bei safe_name:
+    dort verschaeft hiesse ein Altprojekt "active", dass sich der Nutzer von seinen
+    eigenen Daten aussperrt. Umbenennen auf einen sauberen Namen ist der Reparaturweg
+    (rename_project prueft nur den ZIELnamen). ValueError mit benanntem Grund.
+    """
+    name = safe_name(roh.strip())
+    if "[" in name or "]" in name:
+        raise ValueError(f"Projektname darf keine eckigen Klammern enthalten: {name!r}")
+    if name in RESERVIERTE_NAMEN:
+        raise ValueError(f"Projektname ist reserviert (Protokoll-Marke): {name!r}")
+    return name
+
+
 def project_dir(project: str) -> str:
     return os.path.join(projekte_root(), safe_name(project))
 

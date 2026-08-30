@@ -216,6 +216,22 @@ def _validate(*names: str) -> None:
         raise HTTPException(status_code=400, detail="ungültiger Name")
 
 
+def _sicherer_projektname(roh: str) -> str:
+    """Namensraum-Riegel als 400 (K1 Glied 1, #416): ein Projektname, der einer
+    Protokoll-Marke gleicht ([active], [done], [scope], [scope+], [fetch]) oder
+    eckige Klammern trägt, macht Job-Zeilen für die Konsumenten mehrdeutig.
+
+    Nur auf ANLEGE-/UMBENENNWEGEN (diese Funktion) — der Lesepfad bleibt bei
+    ``_validate``/``safe_name``, sonst sperrte ein Altprojekt ``active`` den
+    Nutzer von seinen eigenen Daten aus. Reparaturweg für Altprojekte:
+    Umbenennen auf einen sauberen Namen (rename_project prüft nur das Ziel).
+    """
+    try:
+        return paths.sicherer_projektname(roh)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 def _json_objekt(pfad: str) -> dict:
     """`json.load`, aber ein Nicht-Objekt gilt als kaputt — als `ValueError`.
 
@@ -438,6 +454,7 @@ def projekteinstellungen(project: str):
 @app.put("/api/projects/{project}/einstellungen")
 def projekteinstellungen_speichern(project: str, body: EinstellungenBody):
     _validate(project)
+    _sicherer_projektname(project)   # speichern() legt den Projektordner selbst an
     fehler = _sprachen.pruef_fehler(sprache=body.sprache, korrektur=body.korrektur,
                                     mehrsprachig=body.mehrsprachig)
     if fehler:
@@ -495,6 +512,7 @@ def dateieinstellungen_speichern(project: str, base: str, body: DateiEinstellung
     bestehenden ``…/transcribe``/``…/correct``-Endpunkte an — die ihrerseits ``_keine_jobs``
     prüfen. Siehe Spec #135."""
     _validate(project, base)
+    _sicherer_projektname(project)   # setze_datei legt den Projektordner selbst an
     fehler = _sprachen.pruef_fehler(sprache=body.sprache, korrektur=body.korrektur,
                                     mehrsprachig=body.mehrsprachig, sprecher=body.sprecher)
     if fehler:
@@ -523,10 +541,7 @@ class NewProject(BaseModel):
 
 @app.post("/api/projects")
 def create_project(body: NewProject):
-    try:
-        name = paths.safe_name(body.name.strip())
-    except ValueError:
-        raise HTTPException(status_code=400, detail="ungültiger Name")
+    name = _sicherer_projektname(body.name)   # strip macht der Riegel selbst
     pdir = paths.project_dir(name)
     if os.path.exists(pdir):
         raise HTTPException(status_code=409, detail="Projekt existiert bereits")
@@ -919,7 +934,7 @@ def rename_project(project: str, body: RenameBody):
     gerechnet — der Projektname steht nirgends ausser im Ordnernamen und in `project` der
     edit.json."""
     _validate(project)
-    neu = _neuer_name(body.name)
+    neu = _sicherer_projektname(body.name)   # Zielname im Markenraum? (#416)
     _keine_jobs(project)
     alt_dir = paths.project_dir(project)
     if not os.path.isdir(alt_dir):
@@ -1292,6 +1307,15 @@ def correct_file(project: str, base: str, force: bool = False):
     if not os.path.exists(_raw_path(project, base)):
         raise HTTPException(status_code=404, detail=f"kein Roh-Transkript: {base}")
     _require_ai()
+    # Zwei Schreiber auf derselben edit.json verhindern (#441, Einzeldatei-Haelfte):
+    # seit der gestaffelten Pipeline (v0.48.0) korrigiert der transcribe-Job selbst mit,
+    # und die Job-Dedupe je (Projekt, Art) sieht keinen Konflikt zwischen "transcribe"
+    # und "correct". active_only=True wie beim Loeschen: die Datei ist nur gesperrt,
+    # WAHREND der Lauf sie schreibt — der vorgesehene Parallelweg mit
+    # TRANSKRIBOR_AUTOCORRECT=0 (neben einer laufenden Transkription korrigieren)
+    # bleibt frei. Der projektweite Endpunkt oben bleibt ohne Riegel, bis es ein
+    # positives Merkmal gibt ("korrigiert der Lauf selbst mit?"), siehe #441/Glied 4.
+    _keine_jobs(project, base, active_only=True)
     cmd = [sys.executable, "-m", "webtool.correct", "run", project, base]
     if force:
         cmd.append("--force")                     # nur nach expliziter UI-Bestätigung (human_edited)
@@ -1322,6 +1346,7 @@ class FetchBody(BaseModel):
 def fetch_urls(project: str, body: FetchBody):
     """URL-Import: laedt Audio von YouTube/Instagram und transkribiert genau diese Dateien."""
     _validate(project)
+    _sicherer_projektname(project)   # der Subprozess legt den Projektordner an (fetch.py)
     # Laenge VOR dem Filtern pruefen: danach ist die Zuordnung schon verloren.
     sprecher_roh = body.sprecher if body.sprecher is not None else [None] * len(body.urls)
     if len(sprecher_roh) != len(body.urls):
@@ -1667,6 +1692,7 @@ def cancel_job(job_id: str):
 def upload_audio(project: str, file: UploadFile = File(...), sprache: str = Form(None),
                  mehrsprachig: bool = Form(None), sprecher: int = Form(None)):
     _validate(project)
+    _sicherer_projektname(project)   # VOR makedirs: Upload legt sonst still ein Projekt an
     name = os.path.basename(file.filename or "")           # vom Browser mitgesendete Pfade entfernen
     base, ext = os.path.splitext(name)
     ext = ext.lower()

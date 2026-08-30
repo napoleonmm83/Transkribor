@@ -29,6 +29,8 @@ hat. Lesbar, aber unschön — das ist Absicht.
 ## Unveröffentlicht
 
 **Behoben**
+- Projektnamen, die wie Protokoll-Schlagwörter aussehen (zum Beispiel „active"), werden abgelehnt — sie verstellten vorher Fortschrittsanzeige und Dateisperren.
+- Der „Korrigieren"-Knopf einer einzelnen Aufnahme wartet jetzt, während dieselbe Aufnahme gerade von einem laufenden Auftrag geschrieben wird, statt daneben her zu korrigieren.
 - Löschst du eine wartende Aufnahme und lädst sofort eine gleichnamige neu hoch, während ein Lauf läuft, gilt sie wieder als Teil des Laufs — Umbenennen und Neu-Transkribieren warten dann korrekt, statt der laufenden Verarbeitung in die Quere zu kommen.
 - Eine Aufnahme, die während eines laufenden Projektlaufs fertig wird, zeigt sofort ihren richtigen Stand, statt bis zu vier Sekunden lang „Nur Audio — noch nicht transkribiert“ zu behaupten.
 

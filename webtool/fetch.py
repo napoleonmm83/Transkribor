@@ -410,6 +410,14 @@ def _sprache_aus_env(roh, i: int):
 
 def download_one(project: str, url: str, sprecher=None, sprache=None) -> str:
     """Laedt die Tonspur nach projekte/<project>/audio/. Liefert den Basisnamen."""
+    # Namensraum-Riegel (#416), als ERSTE Vorbedingung — er steht ohne jede Wartezeit
+    # fest (billiger als ffmpeg und yt-dlp darunter): der CLI-Weg legt das Projekt
+    # selbst an, der Endpunkt prueft denselben Namen vorher. Vorbedingung statt
+    # Rohwurf (#173): kein pip, kein Wiederholungsdownload.
+    try:
+        paths.sicherer_projektname(project)
+    except ValueError as e:
+        raise Vorbedingung(f"Projektname unzulässig: {e}")
     # Der FFmpegExtractAudio-Postprocessor laeuft im extract_info(download=True) unten und
     # sucht ffmpeg auf PATH. ensure_ffmpeg() legt den winget-Pfad dorthin — muss also HIER
     # stehen, nicht erst vor dem Whisper-Lauf in main(). Findet es nichts, lieber sofort
