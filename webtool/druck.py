@@ -66,10 +66,16 @@ class Zeilenweise:
     """Sammelt je Thread bis zum Zeilenumbruch und schreibt die Zeile mit EINEM `write`."""
 
     def __init__(self, strom):
+        """`strom` ist der echte Textstrom; die Huelle reicht alles an ihn durch."""
         self._strom = strom
         self._offen = threading.local()      # je Thread ein eigener Rest -> keine Verschraenkung
 
     def write(self, text):
+        """Sammelt bis zum letzten Umbruch und gibt alles bis dahin in EINEM `write` weiter.
+
+        Rueckgabe ist die Zahl der uebergebenen Zeichen (TextIOBase-Vertrag), nicht die der
+        weitergereichten -- ein Aufrufer, der zaehlt, soll nicht merken, dass gepuffert wird.
+        """
         rest = getattr(self._offen, "text", "") + text
         i = rest.rfind("\n")
         if i < 0:                            # noch keine ganze Zeile -> zurueckhalten
@@ -80,12 +86,14 @@ class Zeilenweise:
         return len(text)
 
     def writelines(self, zeilen):
-        # Nicht an den Strom durchreichen: das ginge am Puffer vorbei und koennte eine
-        # zurueckgehaltene Teilzeile ueberholen.
+        """Wie `write` je Zeile — NICHT an den Strom durchgereicht."""
+        # Durchgereicht ginge es am Puffer vorbei und koennte eine zurueckgehaltene Teilzeile
+        # ueberholen.
         for z in zeilen:
             self.write(z)
 
     def flush(self):
+        """Gibt einen angefangenen Rest DIESES Threads heraus und leert den echten Strom."""
         # Eine Teilzeile (`print(..., end="")`) geht beim flush raus statt verloren.
         #
         # GENAU LESEN: beim Herunterfahren ruft CPython `sys.stdout.flush()` im HAUPTthread,
@@ -101,6 +109,7 @@ class Zeilenweise:
         self._strom.flush()
 
     def __getattr__(self, name):
+        """Alles, was die Huelle nicht selbst kennt, gehoert dem umhuellten Strom."""
         # Alles Uebrige (encoding, errors, fileno, isatty, reconfigure …) gehoert dem
         # umhuellten Strom. `self.__dict__["_strom"]` statt `self._strom`: fehlte das Attribut,
         # riefe der Zugriff wieder `__getattr__` und liefe in eine Rekursion.
