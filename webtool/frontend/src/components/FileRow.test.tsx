@@ -52,4 +52,16 @@ describe('FileRow Live-Status', () => {
     render(<Huelle><FileRow project="P" file={{ ...live, has_edit: true }} active={false} onOpen={vi.fn()} jobRunning inScope={false} /></Huelle>)
     expect(screen.getByLabelText('Fertig')).toBeInTheDocument()
   })
+
+  // Die VERDRAHTUNG, nicht die Regel: `erreicht` ist optional, ein weggelassenes Prop hier
+  // waere typkonform und von keinem Pillen-Test unterscheidbar — der Fix liesse sich an
+  // dieser Stelle rueckstandslos abklemmen, ohne dass etwas rot wird. Diese Zeile ist das
+  // zweite Glied der Kette Seitenleiste → FileRow → Pille; die Seitenleiste ist der einzige
+  // Ort, an dem die Pille NUR als Symbol mit `aria-label` erscheint.
+  it('reicht den Beleg des Laufs an die Pille durch', () => {
+    render(<Huelle><FileRow project="P" file={{ ...live, has_raw: false, has_edit: false }}
+      active={false} onOpen={vi.fn()} state="done" erreicht="edit" jobRunning inScope /></Huelle>)
+    expect(screen.getByLabelText('Fertig')).toBeInTheDocument()
+    expect(screen.queryByLabelText(/Nur Audio/)).toBeNull()
+  })
 })
