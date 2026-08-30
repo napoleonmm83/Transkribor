@@ -69,4 +69,39 @@ describe('FileStatusPill', () => {
     expect(screen.getByLabelText(/Transkribiert/)).toBeInTheDocument()
     expect(screen.queryByLabelText(/Nur Audio/)).toBeNull()
   })
+
+  // Der gemeldete Fall: „manchmal, aber nicht immer, wechselt ein fertig korrigiertes File
+  // erst auf ‚Audio …' und danach auf ‚Fertig'". Beim Endurteil faellt die Pille auf `ruhe()`
+  // durch, und `file` ist dort der aeltere Stand — die Dateiliste wird nicht gepollt, und ein
+  // geschriebenes Roh-`.json` aendert die Zaehler der Zusammenfassung nicht, stoesst also auch
+  // den Summenpoll-Waechter nicht an. `erreicht` ist die Untergrenze aus dem laufenden Job.
+  it('done + Beleg edit: „Fertig", auch wenn die Dateiliste noch nichts weiss', () => {
+    render(<FileStatusPill file={f({ has_raw: false, has_edit: false })}
+      state="done" erreicht="edit" jobRunning inScope mitText />)
+    expect(screen.getByText('Fertig')).toBeInTheDocument()
+    expect(screen.queryByText(/Nur Audio/)).toBeNull()
+  })
+
+  it('done + Beleg raw: „Transkribiert", nicht „Nur Audio"', () => {
+    render(<FileStatusPill file={f({ has_raw: false, has_edit: false })}
+      state="done" erreicht="raw" jobRunning inScope mitText />)
+    expect(screen.getByText(/Transkribiert — noch nicht korrigiert/)).toBeInTheDocument()
+    expect(screen.queryByText(/Nur Audio/)).toBeNull()
+  })
+
+  // Negativkontrolle: die Untergrenze wirkt nur nach OBEN. Ein `raw`-Beleg darf eine Datei,
+  // die laut Liste schon eine edit.json hat, nicht auf „Transkribiert" zurueckstufen — sonst
+  // waere der Fix derselbe Ruecksprung, nur in die andere Richtung.
+  it('der Beleg stuft nie ZURUECK', () => {
+    render(<FileStatusPill file={f({ has_edit: true })} state="done" erreicht="raw" jobRunning inScope mitText />)
+    expect(screen.getByText('Fertig')).toBeInTheDocument()
+  })
+
+  // Und ohne Beleg bleibt alles wie vorher — sonst haenge das richtige Etikett am Zufall,
+  // dass irgendein Job gerade laeuft.
+  it('ohne Beleg entscheidet weiterhin allein die Dateiliste', () => {
+    render(<FileStatusPill file={f({ has_raw: false, has_edit: false })}
+      state="done" jobRunning inScope mitText />)
+    expect(screen.getByText(/Nur Audio/)).toBeInTheDocument()
+  })
 })

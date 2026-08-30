@@ -1,5 +1,5 @@
 import { AudioLines, Check, Clock, FileText, Loader2, SkipForward, TriangleAlert } from 'lucide-react'
-import type { FilePhase, FileState, GlobalPhase, ProjectFile } from '@/lib/types'
+import type { Erreicht, FilePhase, FileState, GlobalPhase, ProjectFile } from '@/lib/types'
 import { PHASE_LABEL } from '@/lib/jobPhases'
 
 /**
@@ -35,21 +35,34 @@ const GLOBAL_WAIT: Record<GlobalPhase, string> = {
  *
  * Kein Stift-Symbol: der steht in derselben Zeile als Knopf fuer "korrigieren". Ein Status,
  * der aussieht wie die Schaltflaeche daneben, laedt zum Klicken auf eine Anzeige ein.
+ *
+ * `erreicht` ist die UNTERGRENZE aus dem laufenden Job (jobPhases). Sie ist noetig, weil `file`
+ * hier die aeltere der zwei Quellen ist: die Dateiliste wird NICHT gepollt (`useProjectFiles`),
+ * sondern nur bei Job-Ende und wenn der 4-s-Summenpoll `dateien`/`fertig` wechseln sieht — und
+ * ein geschriebenes Roh-`<base>.json` aendert KEINEN der beiden Zaehler (app.py:341-369).
+ * Genau im Moment des Endurteils (`state==='done'` faellt hierher durch) behauptete die Zeile
+ * deshalb „Nur Audio — noch nicht transkribiert" ueber eine fertige Aufnahme. Im Browser
+ * gemessen; Gegenprobe: bei laufendem Job allein neu geladen, stand dasselbe Etikett richtig.
+ *
+ * Nur nach OBEN, nie nach unten: fehlt der Beleg, entscheidet der Schnappschuss wie bisher.
  */
-function ruhe(file: ProjectFile) {
-  if (file.has_edit) return { icon: Check, label: 'Fertig' }
+function ruhe(file: ProjectFile, erreicht?: Erreicht) {
+  if (file.has_edit || erreicht === 'edit') return { icon: Check, label: 'Fertig' }
   if (file.has_md) return { icon: Check, label: 'Export vorhanden' }
-  if (file.has_raw) return { icon: FileText, label: 'Transkribiert — noch nicht korrigiert' }
+  if (file.has_raw || erreicht) return { icon: FileText, label: 'Transkribiert — noch nicht korrigiert' }
   if (file.has_audio) return { icon: AudioLines, label: 'Nur Audio — noch nicht transkribiert' }
   return null
 }
 
-export function FileStatusPill({ file, active, pct, detail, state, jobRunning, inScope, globalPhase, mitText }: {
+export function FileStatusPill({ file, active, pct, detail, state, erreicht, jobRunning, inScope, globalPhase, mitText }: {
   file: ProjectFile
   active?: FilePhase
   pct?: number
   detail?: string
   state?: FileState
+  /** Untergrenze aus dem laufenden Job — siehe `ruhe`. Am selben Riegel wie `state`
+   *  durchgereicht (`zugelassen`), gilt also nur waehrend eines Laufs. */
+  erreicht?: Erreicht
   jobRunning?: boolean
   inScope?: boolean
   globalPhase?: GlobalPhase | null
@@ -104,7 +117,7 @@ export function FileStatusPill({ file, active, pct, detail, state, jobRunning, i
       )
     }
 
-    const r = ruhe(file)
+    const r = ruhe(file, erreicht)
     if (!r) return null
     if (mitText) return (
       <span className="inline-flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">

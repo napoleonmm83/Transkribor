@@ -986,3 +986,55 @@ describe('parseJobPhases - Vorbelegung aus der Server-Buchfuehrung (#475)', () =
     expect(p.perBase).toEqual({ A: 'done' })
   })
 })
+
+describe('parseJobPhases - was das Endurteil ueber die Platte beweist (`erreicht`)', () => {
+  // Die Untergrenze fuer `ruhe()` in FileStatusPill. Ohne sie faellt die Pille im Moment des
+  // Endurteils auf die Dateiliste zurueck, und die ist dort zwingend die aeltere Quelle: sie
+  // wird nicht gepollt, und ein geschriebenes Roh-`<base>.json` aendert weder `dateien` noch
+  // `fertig` in der Zusammenfassung, stoesst also auch den Summenpoll-Waechter nicht an.
+  // Im Browser gemessen: „Nur Audio - noch nicht transkribiert" ueber eine Aufnahme, deren
+  // `[done]` und deren `<base>.json` beide schon da waren.
+  it('`fertig X:` beweist das Roh-Transkript', () => {
+    const p = parseJobPhases('transcribe', ['[Demo] fertig A: 12s, 30 Segmente, 1.2x'])
+    expect(p.erreicht).toEqual({ A: 'raw' })
+  })
+
+  it('`apply: X -> edit.json` beweist die Editordatei', () => {
+    const p = parseJobPhases('correct', ['apply: A -> edit.json'])
+    expect(p.erreicht).toEqual({ A: 'edit' })
+  })
+
+  it('der gestaffelte Lauf hebt `raw` auf `edit` - und nie zurueck', () => {
+    // Reihenfolge im echten Lauf: erst die Transkription, dann die Korrektur derselben Datei.
+    const hoch = parseJobPhases('transcribe', [
+      '[Demo] fertig A: 12s, 30 Segmente, 1.2x',
+      'apply: A -> edit.json',
+    ])
+    expect(hoch.erreicht).toEqual({ A: 'edit' })
+    // Und die Gegenrichtung: eine geschriebene edit.json verschwindet nicht mehr, auch wenn
+    // danach noch ein `fertig`-Urteil fuer dieselbe Aufnahme kaeme.
+    const runter = parseJobPhases('transcribe', [
+      'apply: A -> edit.json',
+      '[Demo] fertig A: 12s, 30 Segmente, 1.2x',
+    ])
+    expect(runter.erreicht).toEqual({ A: 'edit' })
+  })
+
+  it('eine NICHT zugelassene Aufnahme bekommt keinen Beleg', () => {
+    // Dieselbe Wache wie fuer `perBase`: steht ein Bereich und gehoert die Aufnahme weder zu
+    // ihm noch zu `gesehen`, ist die Zeile nicht ueber sie. Ohne das koennte fremder Text in
+    // einem Transkript eine Datei als „fertig" ausweisen, die der Lauf nie angefasst hat.
+    const p = parseJobPhases('transcribe', [
+      '[scope] A',
+      '[Demo] fertig Fremd: 12s, 30 Segmente, 1.2x',
+    ])
+    expect(p.erreicht).toBeUndefined()
+  })
+
+  it('ohne Endurteil gibt es das Feld gar nicht', () => {
+    // Wie `gesehen`: ein immer vorhandenes leeres Objekt waere eine Feldaenderung in jeder
+    // Antwort, fuer einen Fall, den es meist nicht gibt.
+    const p = parseJobPhases('transcribe', ['[Demo] -> transkribiere A …'])
+    expect(p.erreicht).toBeUndefined()
+  })
+})

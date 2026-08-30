@@ -1,4 +1,4 @@
-import type { FilePhase, FileState, FileWork, GlobalPhase, JobPhases } from './types'
+import type { Erreicht, FilePhase, FileState, FileWork, GlobalPhase, JobPhases } from './types'
 
 export const PHASE_LABEL: Record<FilePhase, string> = {
   diarize: 'Diarisieren', correct: 'Korrigieren', verify: 'Verifizieren', transcribe: 'Transkribieren',
@@ -51,8 +51,14 @@ export function parseJobPhases(kind: string, lines: string[],
   // hinterher `phases.gesehen` setzt. Beim `scope`-Rueckweg in `useActiveJob` faellt das
   // nicht auf -- ein FEHLENDER Bereich filtert gar nicht --, hier ist der Bereich da.
   const gesehen = new Set<string>(gesehenVomServer)
+  // Was ein Endurteil ueber die PLATTE beweist. Die Pille faellt bei `done` auf `ruhe(file)`
+  // durch, und `file` kommt aus der ungepollten Dateiliste — im Moment des Urteils also aus
+  // einem Schnappschuss, der aelter ist als die Zeile, die das Urteil erzeugt hat. Ohne diese
+  // Untergrenze stand „Nur Audio — noch nicht transkribiert" ueber einer gerade fertigen
+  // Aufnahme, bis der 4-s-Summenpoll zufaellig etwas nachlud (im Browser gemessen).
+  const erreicht: Record<string, Erreicht> = {}
 
-  const terminal = (base: string, state: FileState) => {
+  const terminal = (base: string, state: FileState, beleg?: Erreicht) => {
     // `gesehen` ist die zweite Zulassung neben `scope` (#431): eine Aufnahme, die WAEHREND des
     // Laufs hochgeladen wird, steht nie im Bereich - der ist gedruckt, bevor die Schleife in
     // `transcribe_project` das erste Mal `find_audio` ruft. Verarbeitet wurde sie vollstaendig;
@@ -75,6 +81,11 @@ export function parseJobPhases(kind: string, lines: string[],
     // Zustand auf eine eigene Zahl ab, gleicher Rang heisst also derselbe Zustand, und die
     // Zuweisung waere ein No-op. Steht hier, damit es niemand fuer eine Luecke haelt.
     if (!(base in perBase) || RANG[state] >= RANG[perBase[base]]) perBase[base] = state
+    // Der Beleg folgt NICHT dem RANG: er sagt, was auf der Platte liegt, nicht wie der Lauf
+    // ausging. Im gestaffelten Lauf kommt erst `fertig X:` ('raw'), dann `apply: X -> edit.json`
+    // ('edit') — und eine geschriebene edit.json verschwindet nicht mehr, auch wenn ein
+    // spaeteres Urteil derselben Aufnahme schwaecher ausfaellt. Nur aufwaerts.
+    if (beleg && erreicht[base] !== 'edit') erreicht[base] = beleg
     delete active[base]
     delete blocks[base]
     if (cursor === base) cursor = null
@@ -194,7 +205,9 @@ export function parseJobPhases(kind: string, lines: string[],
       else if ((m = l.match(/^\[[^\]]+\] Autocorrect-Fehler bei (.+?): /))) {
         terminal(m[1], 'failed'); continue
       }
-      else if ((m = l.match(/^\[[^\]]+\] fertig (.+?): /))) { terminal(m[1], 'done'); continue }
+      // 'raw': die Zeile wird gedruckt, NACHDEM `<base>.json` geschrieben ist. Damit ist
+      // „noch nicht transkribiert" ab hier beweisbar falsch, egal wie alt die Dateiliste ist.
+      else if ((m = l.match(/^\[[^\]]+\] fertig (.+?): /))) { terminal(m[1], 'done', 'raw'); continue }
       // 'failed', nicht 'skipped': transcribe.py legt diese Datei in dieselbe `failed_bases`
       // wie den FEHLER-Pfad — sie wurde NICHT transkribiert. Ungelesen blieb sie bis Jobende
       // auf ihrem letzten Zustand stehen, obwohl der Lauf sie laengst aufgegeben hat.
@@ -280,7 +293,12 @@ export function parseJobPhases(kind: string, lines: string[],
       { active[m[1]] = { phase: 'correct', ...prog(m[1]) }; global = null }
     else if ((m = l.match(/^→ Verifiziere (.+?)(?: · Block \d+\/\d+)? \(Treue gegen Roh\) …$/)))
       { active[m[1]] = { phase: 'verify', ...prog(m[1]) }; global = null }
-    else if ((m = l.match(/^apply: (.+) -> edit\.json/))) terminal(m[1], 'done')
+    // 'edit': `cmd_apply` druckt diese Zeile erst nach dem Schreiben der edit.json — das ist
+    // der Fall aus Marcus' Meldung („fertig korrigiertes File wechselt erst auf Audio …").
+    // Die drei `apply: SKIP`-Zweige unten belegen ebenfalls eine edit.json, tragen aber
+    // nichts ein: sie enden auf 'skipped', und 'skipped' rendert ueber `STATE[]` — `ruhe()`
+    // und damit die Untergrenze erreicht dort niemand. Ein Eintrag waere Logik ohne Leser.
+    else if ((m = l.match(/^apply: (.+) -> edit\.json/))) terminal(m[1], 'done', 'edit')
     // Alle DREI Begruendungen, die correct.py druckt — nicht nur `human_edited=`. Die beiden
     // anderen sind die Schutzpfade ("edit.json nicht lesbar" aus #190, "waehrend des Laufs
     // handbearbeitet" aus #278): beide heissen "deine Fassung bleibt stehen", und beide liessen
@@ -400,7 +418,9 @@ export function parseJobPhases(kind: string, lines: string[],
   // `gesehen` nur, wenn wirklich etwas darin steht: ein immer vorhandenes leeres Set waere
   // eine Feldaenderung in JEDER Antwort, fuer einen Fall, den es meist gar nicht gibt.
   return { global: Object.keys(active).length ? null : global, scope,
-           gesehen: gesehen.size ? gesehen : undefined, active, perBase, bilanz }
+           gesehen: gesehen.size ? gesehen : undefined,
+           erreicht: Object.keys(erreicht).length ? erreicht : undefined,
+           active, perBase, bilanz }
 }
 
 /** Zwei Fragen, die drei Oberflaechen-Stellen bisher je selbst beantwortet haben (#431) --

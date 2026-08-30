@@ -56,7 +56,14 @@ export function mergePhases(jobs: Job[]): JobPhases {
   // `gesehen` dagegen ist eine BEOBACHTUNG je Datei - die bleibt wahr, egal was die anderen
   // Jobs melden.
   let gesehen: Set<string> | undefined
+  // Wie `gesehen` rein additiv und ohne `allScoped`-Vorbehalt: ein Beweis ueber die Platte
+  // bleibt wahr, egal was die anderen Jobs melden. `edit` schlaegt `raw` (Reihenfolge der
+  // Jobs im Array ist keine Rangfolge).
+  const erreicht: NonNullable<JobPhases['erreicht']> = {}
   for (const j of jobs) {
+    for (const [base, e] of Object.entries(j.phases.erreicht ?? {})) {
+      if (erreicht[base] !== 'edit') erreicht[base] = e
+    }
     if (j.phases.gesehen) {
       gesehen = gesehen ?? new Set()
       for (const b of j.phases.gesehen) gesehen.add(b)
@@ -101,6 +108,9 @@ export function mergePhases(jobs: Job[]): JobPhases {
     globalPerBase,
     scope: allScoped ? scope : undefined,
     gesehen,
+    // Bewusst NICHT ueber `active` geraeumt wie `perBase` gleich darueber: das Urteil weicht,
+    // wenn die Datei wieder laeuft, der geschriebene Inhalt auf der Platte nicht.
+    erreicht: Object.keys(erreicht).length ? erreicht : undefined,
     active,
     perBase,
   }
