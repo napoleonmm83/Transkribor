@@ -195,12 +195,12 @@ danach für mehrere gleichzeitig, und mehrere Projekte laufen ohnehin nebeneinan
 kannst weiterarbeiten oder das Fenster zumachen.
 
 Neue Aufnahmen kannst du dabei jederzeit dazulegen — auch mitten in einem laufenden Lauf.
-**Ab der nächsten Fassung** siehst du auch bei diesen Aufnahmen in der Liste, woran
+**Ab `v0.50.1`** siehst du auch bei diesen Aufnahmen in der Liste, woran
 Transkribor gerade arbeitet. In Fassungen bis einschliesslich `v0.50.0` stand bei ihnen bis
 zum Ende des ganzen Laufs nur das Wartesymbol, obwohl sie längst abgehört und korrigiert
 wurden — und in der Meldung am Ende des Laufs tauchten sie gar nicht erst auf.
 
-Auch **bevor** sie an der Reihe sind, stehen sie ab der nächsten Fassung als „In
+Auch **bevor** sie an der Reihe sind, stehen sie ab `v0.50.1` als „In
 Warteschlange“ in der Liste statt weiter wie unbearbeitetes Audio auszusehen. Das greift,
 sobald die Aufnahme fertig ist, an der Transkribor gerade arbeitet — bei einer langen
 Aufnahme kann das also ein paar Minuten dauern. Solange eine solche Aufnahme zum laufenden
@@ -514,7 +514,7 @@ Aufnahme **neu transkribierst** oder ihre **Sprache änderst**: dann wird das Tr
 dem Audio neu erstellt, das bisherige Transkript samt Korrekturen fällt dabei weg (das Audio
 bleibt). Löschen kannst du nur du selbst, bewusst über das ⋯-Menü. Auch während im Projekt andere
 Aufnahmen transkribiert oder korrigiert werden, kannst du einzelne, nicht gerade aktiv berechnete
-Dateien jederzeit löschen. **Ab der nächsten Fassung** stimmt dabei auch der angezeigte Stand,
+Dateien jederzeit löschen. **Ab `v0.50.1`** stimmt dabei auch der angezeigte Stand,
 wenn mehrere Aufnahmen auf einmal korrigiert werden: bis dahin konnte eine davon bis zum Ende
 des Laufs als „wird gerade bearbeitet“ gelten, obwohl an ihr längst nichts mehr passierte —
 löschen liess sie sich dann nicht. Läuft gleichzeitig eine Transkription, kann das noch
