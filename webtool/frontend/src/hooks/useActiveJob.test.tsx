@@ -274,21 +274,54 @@ describe('mergePhases', () => {
     await waitFor(() => expect(screen.getByTestId('scope').textContent).toBe('FileX'))
   })
 
-  it('expliziter [scope] im Log hat Vorrang vor r.bases', async () => {
+  // BEWUSSTE VERHALTENSAENDERUNG. Hier stand „expliziter [scope] im Log hat VORRANG vor
+  // r.bases". Das war richtig, solange `bases` aus derselben einen Zeile stammte wie
+  // `parsed.scope` — die Vereinigung haette nichts hinzufuegen koennen. Seit dem
+  // Bereichs-Nachtrag (`[scope+]`, transcribe.py) ist `bases` eine OBERMENGE und oft die
+  // aktuellere Quelle: die Nachtragszeile wird MITTEN im Lauf gedruckt und faellt bei
+  // > MAX_JOB_LINES aus dem Puffer, waehrend `jobs.bases` sie dauerhaft haelt.
+  it('vereinigt die Serverbuchfuehrung mit dem [scope] aus dem Log, statt sie zu verwerfen', async () => {
     function LogScopeProbe() {
       const { jobs, adopt } = useActiveJob()
       const phases = mergePhases(jobs.filter(j => j.status === 'running'))
       return (
         <div>
           <button onClick={() => adopt('j_log', 'Demo', 'correct')}>adopt_log</button>
-          <span data-testid="scope">{phases.scope ? Array.from(phases.scope).join(',') : 'all'}</span>
+          <span data-testid="scope">{phases.scope ? Array.from(phases.scope).sort().join(',') : 'all'}</span>
         </div>
       )
     }
     vi.mocked(api.getJob).mockResolvedValueOnce({ status: 'running', lines: ['[scope] LogFileA\tLogFileB'], bases: ['DifferentBase'] })
     render(<JobProvider intervalMs={5}><LogScopeProbe /></JobProvider>)
     fireEvent.click(screen.getByText('adopt_log'))
-    await waitFor(() => expect(screen.getByTestId('scope').textContent).toBe('LogFileA,LogFileB'))
+    await waitFor(() => expect(screen.getByTestId('scope').textContent).toBe('DifferentBase,LogFileA,LogFileB'))
+  })
+
+  // Der Waechter, den der gegnerische Review als fehlend benannt hat: er haelt `jobs.bases`
+  // gegen `parseJobPhases(...).scope`. Ohne ihn war der Bereichs-Nachtrag ueber dem
+  // Zeilendeckel wirkungslos — die `[scope]`-Zeile ist geschuetzt und besetzte `parsed.scope`,
+  // also feuerte der frueher hier stehende Rueckfall (`!parsed.scope`) NIE, und die
+  // Serverwahrheit wurde weggeworfen. Dieselbe Fehlerklasse wie #475, eine Marke weiter.
+  it('nimmt r.bases als Rueckweg, wenn die [scope+]-Zeile aus dem Puffer gefallen ist', async () => {
+    function NachtragProbe() {
+      const { jobs, adopt } = useActiveJob()
+      const phases = mergePhases(jobs.filter(j => j.status === 'running'))
+      return (
+        <div>
+          <button onClick={() => adopt('j_nach', 'Demo', 'transcribe')}>adopt_nach</button>
+          <span data-testid="scope">{phases.scope ? Array.from(phases.scope).sort().join(',') : 'all'}</span>
+        </div>
+      )
+    }
+    // Der Puffer traegt nur noch die geschuetzte [scope]-Zeile; `[scope+] Spaet` ist beim
+    // Deckel aus der Mitte verdraengt worden. Der Server weiss es trotzdem.
+    vi.mocked(api.getJob).mockResolvedValueOnce({
+      status: 'running', lines: ['[scope] Frueh', '[Demo] -> transkribiere Frueh …'],
+      bases: ['Frueh', 'Spaet'],
+    })
+    render(<JobProvider intervalMs={5}><NachtragProbe /></JobProvider>)
+    fireEvent.click(screen.getByText('adopt_nach'))
+    await waitFor(() => expect(screen.getByTestId('scope').textContent).toBe('Frueh,Spaet'))
   })
 
   it('nimmt r.gesehen als Rueckweg, wenn die [active]-Zeile aus dem Puffer gefallen ist (#475)', async () => {

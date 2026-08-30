@@ -172,8 +172,24 @@ export function JobProvider({ children, intervalMs = 1500 }: { children: ReactNo
         const r = ergebnis.get(j.id)
         if (r) {
           const parsed = parseJobPhases(j.kind, r.lines, r.gesehen)
-          if (!parsed.scope && r.bases && r.bases.length > 0) {
-            parsed.scope = new Set(r.bases)
+          // Die Serverbuchfuehrung ERGAENZT den Zeilenpuffer, sie springt nicht nur ein,
+          // wenn er leer ist — und das ist seit dem Bereichs-Nachtrag Pflicht, nicht
+          // Feinschliff. `[scope]` ist die erste Zeile des Laufs und damit von
+          // `fuege_zeile_an` geschuetzt (die ersten zehn bleiben stehen); `[scope+]` wird per
+          // Konstruktion MITTEN im Lauf gedruckt und faellt bei > MAX_JOB_LINES aus der Mitte
+          // heraus. Als blosser Rueckfall (`!parsed.scope`) kam die Serverwahrheit dort NIE
+          // zum Zug, weil die geschuetzte `[scope]`-Zeile `parsed.scope` immer besetzt — der
+          // Nachtrag war ueber dem Deckel also dauerhaft weg, nicht nur kurz. Genau der
+          // Mechanismus, gegen den `gesehen` eine Zeile tiefer angetreten ist (#475).
+          //
+          // Die frueher hier festgehaltene Regel „expliziter [scope] hat VORRANG vor r.bases"
+          // ist damit bewusst aufgegeben. Sie war richtig, solange `bases` aus derselben einen
+          // Zeile stammte wie `parsed.scope` — dann konnte die Vereinigung nichts hinzufuegen.
+          // Seit dem Nachtrag ist `bases` eine OBERMENGE und oft die aktuellere.
+          // Rueckwaertskompatibel: ohne `[scope]` im Puffer ergibt die Vereinigung genau die
+          // Menge, die der Rueckfall vorher gesetzt hat.
+          if (r.bases && r.bases.length > 0) {
+            parsed.scope = new Set([...(parsed.scope ?? []), ...r.bases])
           }
           letztePhasen.current[j.id] = phasen[j.id] = parsed
         }
