@@ -450,6 +450,55 @@ describe('parseJobPhases — scope', () => {
   })
 })
 
+describe('parseJobPhases — Bereichs-Nachtrag [scope+]', () => {
+  it('erweitert den Bereich um eine waehrend des Laufs hochgeladene Aufnahme', () => {
+    // Der Fall aus dem Alltag: `[scope]` steht, bevor die Schleife das erste Mal
+    // `find_audio` ruft — C existiert da noch nicht, wird aber verarbeitet.
+    const p = parseJobPhases('transcribe', ['[scope] A\tB', '[scope+] C'])
+    expect(p.scope).toEqual(new Set(['A', 'B', 'C']))
+  })
+
+  it('macht aus dem Nachtrag KEINEN Erstbereich', () => {
+    // Die Fehlerrichtung ist der Punkt, und sie ist dieselbe wie serverseitig in `jobs.py`:
+    // `scope === undefined` heisst fuer `imBereich` „gilt fuer alle" — die vorsichtige Seite.
+    // Wuerde der Nachtrag den Bereich eroeffnen, verwuerfe `terminal()` ab da jedes Urteil
+    // einer Aufnahme, ueber die der Lauf nie eine Zusage gemacht hat.
+    const p = parseJobPhases('transcribe', [
+      '[scope+] C',
+      '[Demo] fertig A: 1s, 2 Segmente, 1.0x',
+    ])
+    expect(p.scope).toBeUndefined()
+    expect(p.perBase).toEqual({ A: 'done' })
+  })
+
+  it('laesst die Zulassung fuer die nachgetragene Aufnahme gelten', () => {
+    // Der eigentliche Zweck: `zugelassen` entscheidet, ob die Zeile ihren Zustand zeigt,
+    // `imBereich` zusaetzlich, ob sie „In Warteschlange…" sagen darf. Ohne den Nachtrag war
+    // beides false und die Zeile fiel auf „Nur Audio — noch nicht transkribiert" zurueck.
+    const p = parseJobPhases('transcribe', ['[scope] A', '[scope+] C'])
+    expect(imBereich(p, 'C', true)).toBe(true)
+    expect(zugelassen(p, 'C', true)).toBe(true)
+    expect(imBereich(p, 'Fremd', true)).toBe(false)
+  })
+
+  it('ein Projekt namens „scope+" verliert nicht seinen Status', () => {
+    // `safe_name` laesst `+` durch (nur Steuerzeichen, Trenner und `..` fliegen raus), also
+    // praefixt transcribe.py in einem so benannten Projekt JEDE Zeile mit `[scope+] `.
+    // Dagegen tragen zwei Dinge: der Zweig steht ZULETZT (die spezifischen Formen gewinnen
+    // vorher), und er ist ADDITIV — anders als beim ersetzenden `[scope]` bleiben die echten
+    // Basisnamen also stehen, und was dazukommt, passt auf keine Datei.
+    const p = parseJobPhases('transcribe', [
+      '[scope] S1\tS2',
+      '[scope+] Modell large-v3, 2 Datei(en)',
+      '[scope+] -> transkribiere S1 …',
+      '[scope+] fertig S1: 12s, 30 Segmente, 1.2x',
+    ])
+    expect(p.perBase).toEqual({ S1: 'done' })
+    expect(p.scope?.has('S1')).toBe(true)
+    expect(p.scope?.has('S2')).toBe(true)
+  })
+})
+
 // Die Formen unten stammen alle aus einer vollstaendigen Gegenueberstellung Druckzeile <->
 // Regex (#374/#375). Sie sind NICHT abgetippt, sondern an den f-Strings in correct.py und
 // transcribe.py abgelesen und danach gegen den echten Parser gemessen — handgetippte Fixtures

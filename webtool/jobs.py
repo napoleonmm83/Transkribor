@@ -28,6 +28,11 @@ _PRUNE_AGE = 3600          # fertige Jobs nach 1h vergessen
 # gebraucht wird, was er noch anfassen WIRD. Tab als Trenner, weil Dateinamen alles andere
 # enthalten dürfen (der URL-Import legt "Video [dQw4w9].m4a" an), aber keinen Tabulator.
 SCOPE_PREFIX = "[scope] "
+# Der NACHTRAG zum Wirkungsbereich. `transcribe_project` scannt in jeder Runde neu und nimmt
+# waehrend des Laufs hochgeladene Aufnahmen mit; die eine `[scope]`-Zeile ist da laengst
+# gedruckt. Eine zweite `[scope]`-Zeile ginge nicht: beide Leser nehmen dort bewusst nur die
+# erste (Haertung gegen ein Projekt namens "scope"). Additiv, nie ersetzend.
+SCOPE_ADD_PREFIX = "[scope+] "
 ACTIVE_PREFIX = "[active] "
 DONE_PREFIX = "[done] "
 
@@ -362,6 +367,13 @@ def _run_proc(jid, cmd, cwd, env=None):
                 # spaeter kaeme sie hoechstens aus Transkripttext, der so beginnt.
                 if _jobs[jid]["bases"] is None and line.startswith(SCOPE_PREFIX):
                     _jobs[jid]["bases"] = {b for b in line[len(SCOPE_PREFIX):].split("\t") if b}
+                # Nachtrag: NUR wenn der Erstbereich schon steht. Ohne ihn gibt es nichts zu
+                # ergaenzen, und ein Nachtrag als Erstbereich waere eine Zusage, die der Lauf
+                # nie gegeben hat — `bases is None` heisst fuer `betrifft()` "allumfassend",
+                # also die vorsichtige Seite; ein halber Bereich waere die unvorsichtige.
+                elif _jobs[jid]["bases"] is not None and line.startswith(SCOPE_ADD_PREFIX):
+                    _jobs[jid]["bases"].update(
+                        b for b in line[len(SCOPE_ADD_PREFIX):].split("\t") if b)
                 else:
                     buche_aktive(_jobs[jid]["active_bases"], line, zulassung)
         proc.wait()

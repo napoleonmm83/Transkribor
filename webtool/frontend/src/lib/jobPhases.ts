@@ -357,6 +357,35 @@ export function parseJobPhases(kind: string, lines: string[],
       const b = l.slice(9)
       if (b) gesehen.add(b)
     }
+    // `[scope+] b1\tb2` - der NACHTRAG zum Wirkungsbereich (transcribe.py). Die eine
+    // `[scope]`-Zeile ist gedruckt, BEVOR die Schleife das erste Mal `find_audio` ruft; eine
+    // waehrend des Laufs hochgeladene Aufnahme wird aber sehr wohl noch verarbeitet. Ohne
+    // diesen Zweig war sie weder im Bereich noch (bis zu ihrem ersten `[active]`) gesehen und
+    // stand auf ihrem Ruhezustand "Nur Audio - noch nicht transkribiert", waehrend der Lauf
+    // sie sicher noch anfasst.
+    //
+    // An `scope` und NICHT an `gesehen`: `scope` ist die ZUSAGE ueber den Lauf und
+    // rechtfertigt die Prognose "In Warteschlange", `gesehen` ist die Beobachtung je Datei
+    // und rechtfertigt nur einen Zustand (siehe `imBereich`/`zugelassen` unten). Ein Nachtrag
+    // ist eine Zusage.
+    //
+    // ZULETZT im Zweig, aus demselben gemessenen Grund wie `[active]` daruber: `safe_name`
+    // laesst `+` durch (nur Steuerzeichen, Trenner und `..` fliegen raus), ein Projekt namens
+    // "scope+" praefixt also JEDE Zeile von transcribe.py so. Weiter oben mit `continue`
+    // gestellt frasse dieser Zweig sie alle. Der Restschaden ist hier kleiner als beim
+    // ersetzenden `[scope]`: additiv kommt hoechstens ein Phantomschluessel dazu, der auf
+    // keine Datei passt - die echten Basisnamen bleiben stehen. Negativkontrolle im Test.
+    //
+    // NUR wenn der Bereich schon steht - dieselbe Bedingung wie serverseitig in `jobs.py`
+    // (`bases is not None`). `scope === undefined` heisst fuer `imBereich` "gilt fuer alle";
+    // aus einem Nachtrag einen Erstbereich zu machen kehrte das in "gilt nur fuer diese paar"
+    // um und verwuerfe die Urteile aller uebrigen. Zwei Leser, eine Regel.
+    else if (scope !== undefined && l.startsWith('[scope+] ')) {
+      // Wie bei `[scope]`: GENAU das eine Trennleerzeichen hinter der Marke, nie `trim()` -
+      // `safe_name` laesst Randleerzeichen durch, und getrimmt zerfiele dieselbe Datei in
+      // zwei Schluessel.
+      for (const b of l.slice(9).split('\t')) if (b) scope.add(b)
+    }
     // reuse / diarize-SKIP / prep-SKIP / "Diarisierung deaktiviert" -> bewusst ignoriert
   }
 

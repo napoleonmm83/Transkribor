@@ -1091,6 +1091,57 @@ def test_transcribe_project_dynamically_picks_up_new_uploads(monkeypatch, tmp_pa
     assert (tdir / "D2.json").exists()
 
 
+def test_transcribe_project_meldet_spaete_uploads_als_bereichs_nachtrag(monkeypatch, tmp_path, capsys):
+    """Der Lauf traegt nach, was er ZUSAETZLICH anfassen wird (`[scope+]`).
+
+    `[scope]` wird EINMAL gedruckt, bevor die Schleife das erste Mal `find_audio` ruft —
+    D2 existiert da noch nicht. Verarbeitet wird sie trotzdem (der Test darueber misst genau
+    das). Fuer die Oberflaeche war sie damit weder im Bereich noch (bis zu ihrem ersten
+    `[active]`) gesehen und stand auf „Nur Audio — noch nicht transkribiert", waehrend der
+    Lauf sie sicher noch verarbeitet.
+
+    Zwei Haelften, und die zweite ist die wichtigere: der Nachtrag nennt NUR die neue Datei.
+    Wuerde er in jeder Runde den ganzen offenen Rest melden, haenge der Druck des Laufs an
+    seiner Rundenzahl statt an dem, was wirklich dazukam — und kein Test bekaeme das je rot.
+    """
+    from webtool import correct, jobs, llm
+
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    monkeypatch.setattr(transcribe, "PROJEKTE", str(tmp_path))
+    monkeypatch.setattr(transcribe, "_modell", lambda *a, **kw: "fake_model")
+    monkeypatch.setattr(llm, "available", lambda: (True, ""))
+    monkeypatch.setattr(correct, "CLAUDE_PARALLEL", 4)
+    monkeypatch.setattr(correct, "diarize_enabled", lambda: True)
+
+    proj_dir = tmp_path / "NachtragDemo"
+    audio_dir = proj_dir / "audio"
+    audio_dir.mkdir(parents=True)
+    (proj_dir / "transkripte").mkdir(parents=True)
+    (audio_dir / "D1.mp3").write_bytes(b"audio")
+
+    def fake_transkribiere(_m, _engine, audio_file, _sprache, _mehr, _model):
+        base = os.path.splitext(os.path.basename(audio_file))[0]
+        if base == "D1":
+            (audio_dir / "D2.mp3").write_bytes(b"audio")
+        return {"text": f"Text {base}",
+                "segments": [{"id": 0, "start": 0.0, "end": 1.0, "text": f"Text {base}"}],
+                "duration": 1.0}
+
+    monkeypatch.setattr(transcribe, "_transkribiere_datei", fake_transkribiere)
+    monkeypatch.setattr(correct, "cmd_diarize", lambda *a, **kw: 1)
+    monkeypatch.setattr(correct, "correct_ai_single", lambda *a, **kw: True)
+
+    transcribe.transcribe_project("NachtragDemo", "tiny", "de", autocorrect=True)
+
+    zeilen = capsys.readouterr().out.splitlines()
+    erst = [z for z in zeilen if z.startswith(jobs.SCOPE_PREFIX)]
+    nach = [z for z in zeilen if z.startswith(jobs.SCOPE_ADD_PREFIX)]
+    assert len(erst) == 1 and erst[0][len(jobs.SCOPE_PREFIX):].split("\t") == ["D1"]
+    assert len(nach) == 1, f"genau ein Nachtrag erwartet, nicht {nach}"
+    assert nach[0][len(jobs.SCOPE_ADD_PREFIX):].split("\t") == ["D2"], \
+        "nur die NEUE Aufnahme — D1 wurde bereits gemeldet"
+
+
 def test_transcribe_project_diarize_error_does_not_block_next_file(monkeypatch, tmp_path, capsys):
     """Wenn bei D1 die Diarisierung fehlschlägt, muss D2 trotzdem transkribiert und diarisiert werden."""
     from webtool import correct, llm
