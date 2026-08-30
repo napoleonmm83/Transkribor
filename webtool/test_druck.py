@@ -91,6 +91,13 @@ def test_teilzeile_geht_beim_flush_raus():
     assert s.stuecke == ["halbe Zeile"]
 
 
+def test_ohne_strom_wird_nicht_umhuellt():
+    """Unter `pythonw.exe` ist `sys.stdout` None und `print` ein stiller No-op. Umhuellt
+    stirbt stattdessen jeder `print`, und der Flush beim Herunterfahren macht aus einem
+    sauberen Lauf Exit 120 — gemessen, auch ohne einen einzigen `print`."""
+    assert druck.zeilenweise(None) is None
+
+
 def test_zweimal_umhuellen_ergibt_eine_huelle():
     """Die drei `main()` laufen in Tests mehrfach; ohne die Wache stapelten sich die Lagen."""
     s = Sammler()

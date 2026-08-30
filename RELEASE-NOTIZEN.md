@@ -30,7 +30,7 @@ hat. Lesbar, aber unschön — das ist Absicht.
 
 **Behoben**
 - Eine während eines laufenden Projektlaufs hinzugefügte Aufnahme zeigt jetzt ihren Fortschritt, statt bis zum Ende des Laufs auf dem Wartesymbol zu stehen — auch bei sehr langen Läufen mit vielen Aufnahmen, und scheitert sie, sagt die Abschlussmeldung das jetzt ebenfalls.
-- Werden mehrere Aufnahmen gleichzeitig korrigiert, bleibt keine mehr fälschlich als „in Arbeit" stehen — sie zeigt wieder ihren richtigen Stand und lässt sich auch wieder löschen.
+- Lässt du mehrere Aufnahmen auf einmal korrigieren, bleibt keine mehr fälschlich als „in Arbeit" stehen — sie zeigt wieder ihren richtigen Stand und lässt sich auch wieder löschen.
 
 ## v0.50.0 — 2026-08-28
 

@@ -35,7 +35,10 @@ also auch die Ernte.
 GRENZEN, benannt statt verschwiegen:
 
 * **`PIPE_BUF`.** Atomar ist ein Pipe-Schreibvorgang nur bis 4096 Byte (Linux). Die laengste
-  Zeile ist `[scope]` mit allen Basisnamen — sie wird gedruckt, bevor ein zweiter Thread laeuft.
+  BEKANNTE Zeile ist `[scope]` mit allen Basisnamen, und die ist unkritisch: sie wird
+  gedruckt, bevor ein zweiter Thread laeuft (`transcribe.py:504` vor `:587`, `correct.py:1240`
+  vor `:1356`). Was NICHT gemessen ist: Fehlerzeilen mit eingebetteter Ausnahme (`{e}`) — die
+  laufen sehr wohl neben Poolthreads, und ihre Laenge haengt an fremdem Text.
 * **stderr bleibt aussen vor.** `jobs.py` mischt es per `stderr=STDOUT` in dieselbe Pipe. Die
   vier `file=sys.stderr`-Drucker tragen keine Marke; der faster-whisper-Fortschrittsbalken
   (`log_progress=True`) dagegen schreibt `\\r`-praefigierte Bruchstuecke OHNE Zeilenende, und
@@ -71,8 +74,14 @@ class Zeilenweise:
             self.write(z)
 
     def flush(self):
-        # Eine Teilzeile (`print(..., end="")`) geht beim flush raus statt verloren. Beim
-        # Herunterfahren ruft CPython `sys.stdout.flush()`, der Rest ist also nie verloren.
+        # Eine Teilzeile (`print(..., end="")`) geht beim flush raus statt verloren.
+        #
+        # GENAU LESEN: beim Herunterfahren ruft CPython `sys.stdout.flush()` im HAUPTthread,
+        # und `threading.local` eines Arbeitsthreads ist von dort aus unsichtbar. Die
+        # Teilzeile eines Arbeitsthreads, der ohne eigenen `flush` endet, ginge also
+        # verloren. Heute unerreichbar (kein `print(..., end="")` auf stdout im Produktivcode,
+        # gegrept) -- aber "der Rest ist nie verloren" gilt nur fuer den Hauptthread, und so
+        # stand es hier zuerst.
         rest = getattr(self._offen, "text", "")
         if rest:
             self._offen.text = ""
@@ -87,9 +96,17 @@ class Zeilenweise:
 
 
 def zeilenweise(strom):
-    """Huelle um `strom` — idempotent: zweimal aufgerufen entsteht keine zweite Lage.
+    """Huelle um `strom` — idempotent, und ohne Strom passiert gar nichts.
 
-    Die Wache ist noetig, weil die drei `main()` in Tests mehrfach laufen; ohne sie
-    stapelten sich die Huellen ueber einen Testlauf hinweg.
+    `None` kommt vor: unter `pythonw.exe` (kein Konsolen-Handle) ist `sys.stdout` None, und
+    `print` ist dort ein stiller No-op. Umhuellt stirbt stattdessen JEDER `print` mit einem
+    `AttributeError`, und der Flush beim Herunterfahren macht aus einem sauberen Lauf
+    **Exit 120 — auch ohne einen einzigen `print`** (gemessen: vorher Exit 0). Ein Lauf ohne
+    Ausgabe ist kein Grund fuer einen Fehlschlag; hier gibt es schlicht nichts zu buendeln.
+
+    Die Idempotenz-Wache daneben ist noetig, weil die drei `main()` in Tests mehrfach
+    laufen; ohne sie stapelten sich die Huellen ueber einen Testlauf hinweg.
     """
+    if strom is None:
+        return None
     return strom if isinstance(strom, Zeilenweise) else Zeilenweise(strom)
