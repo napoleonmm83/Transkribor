@@ -11,6 +11,17 @@ import threading
 from . import druck
 
 
+class _Binaer:
+    """Der `buffer`-Zweig eines Textstroms — der Weg, den `yt_dlp.utils.write_string` nimmt."""
+
+    def __init__(self, oben):
+        self._oben = oben
+
+    def write(self, roh):
+        self._oben.stuecke.append(roh.decode("utf-8"))
+        return len(roh)
+
+
 class Sammler:
     """Zeichnet JEDEN einzelnen `write` auf — genau die Aufloesung, um die es geht.
 
@@ -22,6 +33,7 @@ class Sammler:
         self.stuecke = []
         self.fluesse = 0
         self.encoding = "utf-8"
+        self.buffer = _Binaer(self)
 
     def write(self, text):
         self.stuecke.append(text)
@@ -78,8 +90,11 @@ def test_zwei_threads_verschraenken_sich_nicht():
 
 
 def test_teilzeile_geht_beim_flush_raus():
-    """Eine Zeile ohne Umbruch (`print(..., end="")`) darf nicht im Puffer verhungern. Beim
-    Herunterfahren ruft CPython `sys.stdout.flush()` — damit ist auch der letzte Rest sicher."""
+    """Eine Zeile ohne Umbruch (`print(..., end="")`) darf nicht im Puffer verhungern.
+
+    GENAU LESEN: das gilt fuer den Thread, der auch flusht. Der Flush beim Herunterfahren
+    laeuft im HAUPTthread und erreicht die Teilzeile eines Arbeitsthreads nicht — dafuer der
+    Test darunter, der diese Grenze festhaelt statt sie zu behaupten."""
     s = Sammler()
     h = druck.zeilenweise(s)
     h.write("halbe Zeile")
@@ -105,6 +120,36 @@ def test_zweimal_umhuellen_ergibt_eine_huelle():
     assert druck.zeilenweise(h) is h
     # Und alles, was die Huelle nicht selbst kennt, gehoert dem umhuellten Strom.
     assert h.encoding == "utf-8"
+
+
+def test_teilzeile_eines_arbeitsthreads_bleibt_liegen():
+    """Eine gemessene GRENZE, kein Wunsch — festgehalten, damit sie sichtbar bleibt.
+
+    `threading.local` ist thread-lokal, und genau das ist der Zweck. Die Folge: die Teilzeile
+    eines Arbeitsthreads erreicht kein `flush()` aus einem anderen Thread — auch nicht der
+    Flush beim Herunterfahren, der im Hauptthread laeuft. Endet ein Poolthread mit einer
+    Teilzeile, ist sie weg. Heute unerreichbar (kein Drucker ohne Umbruch auf stdout); wer
+    einen einbaut, macht diesen Test hoffentlich zuerst rot.
+    """
+    s = Sammler()
+    h = druck.zeilenweise(s)
+    t = threading.Thread(target=lambda: h.write("Rest ohne Umbruch"))
+    t.start()
+    t.join(5)
+    h.flush()                          # Hauptthread — sieht den fremden Rest NICHT
+    assert s.stuecke == []
+    assert s.fluesse == 1              # geflusht wurde, es war nur nichts da
+
+
+def test_buffer_ueberholt_die_teilzeile_nicht():
+    """`yt_dlp.utils.write_string` schreibt ueber `out.buffer` — an der Huelle vorbei. `YoutubeDL`
+    laeuft in-process (`fetch.py:449/456`), gebaut NACH der Umhuellung in `fetch.main`. Ohne
+    Leeren vor der Herausgabe ueberholte die direkt geschriebene Zeile unsere Teilzeile."""
+    s = Sammler()
+    h = druck.zeilenweise(s)
+    h.write("Teilzeile")               # zurueckgehalten
+    h.buffer.write("direkt\n".encode("utf-8"))
+    assert s.stuecke == ["Teilzeile", "direkt\n"]
 
 
 def test_writelines_geht_durch_den_puffer():
