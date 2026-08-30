@@ -220,6 +220,17 @@ def test_download_one_ohne_yt_dlp_meldet_klar(projekt, monkeypatch):
         fetch.download_one("Demo", "https://youtu.be/vid123")
 
 
+def test_download_one_mit_reserviertem_projektnamen_ist_vorbedingung(projekt, monkeypatch):
+    """#416 (K1 Glied 1): der CLI-Weg legt das Projekt selbst an — ein Projekt
+    "active" waere zeilengleich mit der Protokoll-Marke. Der Riegel steht als
+    ERSTE Vorbedingung (vor ffmpeg und yt-dlp: er steht ohne jede Wartezeit
+    fest), sonst erschoepfe er sich erst nach einem faelschlichen Download."""
+    monkeypatch.setattr(_FakeYDL, "extract_info",
+                        lambda *a, **k: pytest.fail("reservierter Name darf nichts laden"))
+    with pytest.raises(fetch.Vorbedingung, match="reserviert"):
+        fetch.download_one("active", "https://youtu.be/vid123")
+
+
 def test_main_transkribiert_nur_die_geladenen(projekt, monkeypatch):
     gerufen = {}
     monkeypatch.setattr(transcribe_mod, "transcribe_project",

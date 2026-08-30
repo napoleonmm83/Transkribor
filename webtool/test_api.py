@@ -330,6 +330,36 @@ def test_correct_file_invalid_name_400(client):
     assert client.post("/api/projects/Demo/files/a:b/correct").status_code == 400
 
 
+def test_correct_file_409_waehrend_der_lauf_die_datei_schreibt(client, monkeypatch, mit_anbieter):
+    """#441, Einzeldatei-Haelfte: seit der gestaffelten Pipeline (v0.48.0) korrigiert der
+    transcribe-Job selbst mit, und die Job-Dedupe je (Projekt, Art) sieht den Konflikt
+    zwischen "transcribe" und "correct" nicht — zwei Schreiber auf derselben edit.json.
+    Gesperrt wird nur, WAHREND die Datei aktiv geschrieben wird ([active] … [done],
+    active_only=True): der vorgesehene Parallelweg mit TRANSKRIBOR_AUTOCORRECT=0 —
+    neben einer laufenden Transkription korrigieren — bleibt frei."""
+    import webtool.jobs as jobs_mod
+    jid = "t441"
+    # Echter Registry-Eintrag statt betrifft-Attrappe: der Test soll die Trennung
+    # messen, die active_only verspricht, nicht eine Kopie ihrer Behauptung.
+    jobs_mod._active[("Demo", "transcribe")] = jid
+    jobs_mod._jobs[jid] = {"id": jid, "kind": "transcribe", "status": "running",
+                           "bases": None, "active_bases": {"S1"}}
+    try:
+        r = client.post("/api/projects/Demo/files/S1/correct")
+        assert r.status_code == 409
+        assert "gerade bearbeitet" in r.json()["detail"]
+        # Nach dem [done] der Aufnahme (nicht mehr aktiv) ist der Weg frei.
+        gestartet = []
+        monkeypatch.setattr(jobs_mod, "start",
+                            lambda *a, **k: gestartet.append(a) or ("x", True))
+        jobs_mod._jobs[jid]["active_bases"] = set()
+        r2 = client.post("/api/projects/Demo/files/S1/correct")
+        assert r2.status_code == 200 and gestartet, "frei nach [done]"
+    finally:
+        jobs_mod._active.pop(("Demo", "transcribe"), None)
+        jobs_mod._jobs.pop(jid, None)
+
+
 def test_korrektur_ohne_anbieter_409_statt_job(client, monkeypatch):
     """Ohne nutzbaren Anbieter darf KEIN Job entstehen: sonst laeuft erst die Diarisierung
     (GPU, Minuten) durch, bevor der erste LLM-Aufruf scheitert."""
@@ -431,6 +461,63 @@ def test_create_project_ok_and_duplicate_409(client, tmp_path):
 def test_create_project_invalid_name_400(client):
     assert client.post("/api/projects", json={"name": "a/b"}).status_code == 400
     assert client.post("/api/projects", json={"name": ""}).status_code == 400
+
+
+def test_create_project_reservierter_name_400(client, tmp_path):
+    """K1 Glied 1 (#416/#478/#487): Markenraum und Projektnamensraum sind derselbe —
+    die Laeufe praefixen gewoehnliche Zeilen mit "[{name}] ", die Marken ([active] …,
+    [done] …, [scope] …, [scope+] …) stehen ohne Projektnamen im Strom. Ein Projekt
+    namens "active" ist zeilengleich mit der Marke und vergiftet Buchfuehrung und
+    Anzeige; "fetch" zusaetzlich, weil auch der Frontend-Parser ihn liest."""
+    for name in ("active", "done", "scope", "scope+", "fetch"):
+        assert client.post("/api/projects", json={"name": name}).status_code == 400, name
+        assert not (tmp_path / name).exists(), name
+    # Gross-/Kleinschreibung und nur-druckende Marken kommen durch: die Parser
+    # matchen case-sensitiv, und "autocorrect" hat keinen Parse-Zweig (bewusst
+    # nicht reserviert — sonst muessten es ytdlp und sperre auch sein).
+    for name in ("Active", "autocorrect", "Weisstannen"):
+        assert client.post("/api/projects", json={"name": name}).status_code == 200, name
+    # Eckige Klammern machen die Protokollzeile fuer den Parser mehrdeutig (#416).
+    for name in ("A]B", "a[b"):
+        assert client.post("/api/projects", json={"name": name}).status_code == 400, name
+
+
+def test_projekt_umbenennen_reserviertes_ziel_400_reparaturweg_frei(client, tmp_path):
+    """Der Zielname steht im Markenraum wie ein neuer Name. Der ALTE Name wird
+    bewusst nicht geprueft: ein vor dem Riegel angelegtes Projekt "active" bleibt
+    lesbar (Lesepfad) und laesst sich auf einen sauberen Namen umbenennen —
+    Umbenennen IST der Reparaturweg, kein Altprojekt ist eingesperrt."""
+    assert client.post("/api/projects/Demo/rename", json={"name": "scope"}).status_code == 400
+    assert client.post("/api/projects/Demo/rename", json={"name": "active"}).status_code == 400
+    assert (tmp_path / "Demo").is_dir()
+    alt = tmp_path / "active"
+    (alt / "audio").mkdir(parents=True)          # Dateisystem-Attrappe: vor dem Riegel angelegt
+    r = client.post("/api/projects/active/rename", json={"name": "active-alt"})
+    assert r.status_code == 200
+    assert (tmp_path / "active-alt").is_dir() and not alt.exists()
+
+
+def test_upload_auf_reservierten_projektnamen_400(client, tmp_path):
+    """upload_audio legt das Projekt sonst STILL an (os.makedirs) — der Riegel steht
+    vor dem Datei-Schreiben, sonst laege eine orphan-Audiodatei auf der Platte."""
+    r = client.post("/api/projects/active/audio",
+                    files={"file": ("S1.mp3", b"ID3fakeaudio", "audio/mpeg")})
+    assert r.status_code == 400 and "reserviert" in r.json()["detail"]
+    assert not (tmp_path / "active").exists()
+
+
+def test_fetch_und_einstellungs_puts_legen_kein_reserviertes_projekt_an(client, tmp_path):
+    """Drei weitere Anlegewege: der fetch-Subprozess (fetch.py) und die beiden
+    Einstellungs-PUTs, deren projekt.speichern/setze_datei den Projektordner als
+    Nebeneffekt selbst anlegen (projekt.py) — ein PUT auf ein nicht vorhandenes
+    "active" erschuenge sonst ein sichtbares Galerie-Projekt mit vergiftetem Namen."""
+    r = client.post("/api/projects/active/fetch", json={"urls": ["https://youtu.be/x"]})
+    assert r.status_code == 400
+    r = client.put("/api/projects/active/einstellungen", json={"sprache": "de"})
+    assert r.status_code == 400
+    r = client.put("/api/projects/active/files/S1/einstellungen", json={"sprache": "de"})
+    assert r.status_code == 400
+    assert not (tmp_path / "active").exists()
 
 
 def test_delete_project_ok(client, tmp_path):
