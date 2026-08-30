@@ -45,6 +45,16 @@ const GLOBAL_WAIT: Record<GlobalPhase, string> = {
  * gemessen; Gegenprobe: bei laufendem Job allein neu geladen, stand dasselbe Etikett richtig.
  *
  * Nur nach OBEN, nie nach unten: fehlt der Beleg, entscheidet der Schnappschuss wie bisher.
+ *
+ * GETRAGENE GRENZE, gemessen: am JOBENDE bleibt ein Rest-Ruecksprung. Der Job faellt aus dem
+ * `running`-Filter (`erreicht` und `state` sind damit weg), waehrend `onSettled` den
+ * Dateilisten-Abruf erst ANSTOESST — dazwischen rendert diese Funktion noch einmal auf dem
+ * alten Schnappschuss. Am echten Pfad gemessen (Einzeldatei, Autocorrect aus): „Transkribiert"
+ * → „Nur Audio" → „Transkribiert", die mittlere Stufe **13 ms** lang, also unter einem Frame.
+ * Nicht behoben, weil die naheliegende Abhilfe — den Beleg ueber die Job-Grenze hinaus halten —
+ * ihn genau dort am Leben liesse, wo er falsch werden kann (geloeschte und gleichnamig neu
+ * hochgeladene Aufnahme). Gefunden vom kalten Zweitleser, der die Behauptung der Release-Notiz
+ * gegen den Code gehalten hat.
  */
 function ruhe(file: ProjectFile, erreicht?: Erreicht) {
   if (file.has_edit || erreicht === 'edit') return { icon: Check, label: 'Fertig' }

@@ -57,8 +57,16 @@ export function mergePhases(jobs: Job[]): JobPhases {
   // Jobs melden.
   let gesehen: Set<string> | undefined
   // Wie `gesehen` rein additiv und ohne `allScoped`-Vorbehalt: ein Beweis ueber die Platte
-  // bleibt wahr, egal was die anderen Jobs melden. `edit` schlaegt `raw` (Reihenfolge der
-  // Jobs im Array ist keine Rangfolge).
+  // bleibt wahr, egal was die anderen Jobs melden.
+  //
+  // `edit` schlaegt `raw` — und das ist hier ein TIE-BREAK, keine Regel wie in `terminal()`.
+  // Dort entscheidet die Zeilenreihenfolge (die spaetere Zeile ist der frischere Beweis);
+  // ueber JOBS hinweg gibt es keine solche Ordnung, `jobs.py:273` sortiert nach `kind` und
+  // die Adoptionsreihenfolge sagt nichts ueber die Zeit. Der Fall ist praktisch unerreichbar:
+  // ein Projektlauf fasst nur Aufnahmen OHNE `.json` an, kann also keinen `raw`-Beleg fuer
+  // eine Datei erzeugen, die ein parallel laufender `correct`-Job gerade beschreibt; und der
+  // Loesch-plus-Neu-Upload-Weg landet entweder im SELBEN Strom (dann entscheidet `terminal`)
+  // oder in einem Job, der erst startet, wenn dieser hier laengst terminal ist.
   const erreicht: NonNullable<JobPhases['erreicht']> = {}
   for (const j of jobs) {
     for (const [base, e] of Object.entries(j.phases.erreicht ?? {})) {

@@ -1004,20 +1004,31 @@ describe('parseJobPhases - was das Endurteil ueber die Platte beweist (`erreicht
     expect(p.erreicht).toEqual({ A: 'edit' })
   })
 
-  it('der gestaffelte Lauf hebt `raw` auf `edit` - und nie zurueck', () => {
+  it('der gestaffelte Lauf hebt `raw` auf `edit`', () => {
     // Reihenfolge im echten Lauf: erst die Transkription, dann die Korrektur derselben Datei.
-    const hoch = parseJobPhases('transcribe', [
+    const p = parseJobPhases('transcribe', [
       '[Demo] fertig A: 12s, 30 Segmente, 1.2x',
       'apply: A -> edit.json',
     ])
-    expect(hoch.erreicht).toEqual({ A: 'edit' })
-    // Und die Gegenrichtung: eine geschriebene edit.json verschwindet nicht mehr, auch wenn
-    // danach noch ein `fertig`-Urteil fuer dieselbe Aufnahme kaeme.
-    const runter = parseJobPhases('transcribe', [
+    expect(p.erreicht).toEqual({ A: 'edit' })
+  })
+
+  it('ein spaeteres `fertig` senkt den Beleg wieder auf `raw`', () => {
+    // Die Gegenrichtung, und sie ist NICHT theoretisch: `delete_file` prueft `active_only`
+    // und gibt eine Aufnahme nach ihrem `[done]` frei (#485). Wer sie loescht und gleichnamig
+    // neu hochlaedt, bekommt im selben Strom ein zweites `fertig A:` — das beweist ein
+    // frisches Roh-Transkript und widerlegt die alte edit.json.
+    //
+    // Mit der urspruenglichen „nur aufwaerts"-Regel stand hier `{A: 'edit'}`, und die Zeile
+    // haette bis Jobende „Fertig" ueber eine Aufnahme behauptet, die nur Audio ist — ohne
+    // jede Selbstheilung. Ein `raw` NACH einem `edit` kann im normalen Lauf gar nicht
+    // vorkommen (`transcribe_project` fasst nur Aufnahmen ohne `.json` an), die Reihenfolge
+    // ist also selbst das Signal.
+    const p = parseJobPhases('transcribe', [
       'apply: A -> edit.json',
       '[Demo] fertig A: 12s, 30 Segmente, 1.2x',
     ])
-    expect(runter.erreicht).toEqual({ A: 'edit' })
+    expect(p.erreicht).toEqual({ A: 'raw' })
   })
 
   it('eine NICHT zugelassene Aufnahme bekommt keinen Beleg', () => {
