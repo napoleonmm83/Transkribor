@@ -422,7 +422,7 @@ def download_one(project: str, url: str, sprecher=None, sprache=None) -> str:
     try:
         paths.sicherer_projektname(project)
     except ValueError as e:
-        raise Vorbedingung(f"Projektname unzulässig: {e}")
+        raise Vorbedingung(f"Projektname unzulässig: {e}") from e
     # Der FFmpegExtractAudio-Postprocessor laeuft im extract_info(download=True) unten und
     # sucht ffmpeg auf PATH. ensure_ffmpeg() legt den winget-Pfad dorthin — muss also HIER
     # stehen, nicht erst vor dem Whisper-Lauf in main(). Findet es nichts, lieber sofort

@@ -866,6 +866,7 @@ def retranscribe_file(project: str, base: str):
     Preis, benannt: der Endpunkt kann jetzt 503 antworten, wenn die Sperre nicht zu holen ist —
     genau wie `delete_file` seit je."""
     _validate(project, base)
+    _sicherer_projektname(project)   # ein Lauf ERZEUGT den vergifteten Strom (#416)
     if not find_audio(project, base):
         raise HTTPException(status_code=404, detail=f"kein Audio: {base}")
     # `sperre.datei` legt sein Lock NEBEN die Datei und braucht das Elternverzeichnis —
@@ -1276,6 +1277,7 @@ def _start_transcribe(project: str, base: str | None = None):
 @app.post("/api/projects/{project}/transcribe")
 def transcribe(project: str):
     _validate(project)
+    _sicherer_projektname(project)   # ein Lauf ERZEUGT den vergifteten Strom (#416)
     job_id, started = _start_transcribe(project)
     return {"job_id": job_id, "started": started}
 
@@ -1302,6 +1304,7 @@ def _require_ai():
 @app.post("/api/projects/{project}/correct")
 def correct(project: str):
     _validate(project)
+    _sicherer_projektname(project)   # ein Lauf ERZEUGT den vergifteten Strom (#416)
     _require_ai()
     job_id, started = jobs.request(project, [sys.executable, "-m", "webtool.correct", "run", project],
                                    paths.ROOT, "correct")
@@ -1311,6 +1314,7 @@ def correct(project: str):
 @app.post("/api/projects/{project}/files/{base}/correct")
 def correct_file(project: str, base: str, force: bool = False):
     _validate(project, base)
+    _sicherer_projektname(project)   # ein Lauf ERZEUGT den vergifteten Strom (#416)
     # Zwei Schreiber auf derselben edit.json verhindern (#441, Einzeldatei-Haelfte):
     # seit der gestaffelten Pipeline (v0.48.0) korrigiert der transcribe-Job selbst mit,
     # und die Job-Dedupe je (Projekt, Art) sieht keinen Konflikt zwischen "transcribe"
