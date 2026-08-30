@@ -209,7 +209,10 @@ export function parseJobPhases(kind: string, lines: string[],
       // laesst `]` durch (gemessen, `A]B` kommt unveraendert heraus), ein Projektname mit
       // Klammer verliert also die Live-Anzeige. Solange das so ist, sind ein solcher Name
       // und eine Injektion auf der Zeile NICHT unterscheidbar — die Behebung liegt beim
-      // Producer und steht als #416. Bis dahin wiegt „keine Falschaussage" schwerer.
+      // Producer. #416 ist seit dem Namensraum-Riegel (Anlegepfad) geschlossen: NEUE
+      // Projekte mit Klammer gibt es nicht mehr, dieser Zweig bleibt der Vorbehalt fuer
+      // Namen, die vor dem Riegel angelegt wurden. Bis dahin wiegt „keine Falschaussage"
+      // schwerer.
       if ((m = l.match(/^\[[^\]]+\] -> transkribiere (.+) …$/))) {
         cursor = m[1]; active[cursor] = { phase: 'transcribe' }; global = null; continue
       }

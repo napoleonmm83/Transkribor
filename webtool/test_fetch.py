@@ -229,6 +229,18 @@ def test_download_one_mit_reserviertem_projektnamen_ist_vorbedingung(projekt, mo
                         lambda *a, **k: pytest.fail("reservierter Name darf nichts laden"))
     with pytest.raises(fetch.Vorbedingung, match="reserviert"):
         fetch.download_one("active", "https://youtu.be/vid123")
+    # Und es bleibt kein Ordner: der Riegel sitzt vor dem makedirs in download_one
+    # (waere er dahinter, klange der Test gruen und der Geisterordner stünde da).
+    import webtool.paths as paths_mod
+    assert not (pathlib.Path(paths_mod.projekte_root()) / "active").exists()
+
+
+def test_human_error_laesst_vorbedingungen_unveraendert():
+    """K1-Glied-1-Review (Minor): der pip-Hinweis aus dem Fallback riete zu einem
+    Update bei einem Namen, den wir selbst abgelehnt haben — eigene Vorbedingungen
+    sind bereits als Satz formuliert (#173) und kommen unverändert durch."""
+    v = fetch.Vorbedingung("Projektname unzulässig: 'active'")
+    assert fetch._human_error(v) == "Projektname unzulässig: 'active'"
 
 
 def test_main_transkribiert_nur_die_geladenen(projekt, monkeypatch):

@@ -539,6 +539,22 @@ def test_fetch_und_einstellungs_puts_legen_kein_reserviertes_projekt_an(client, 
     assert not (tmp_path / "active").exists()
 
 
+def test_datei_endpunkte_legen_kein_reserviertes_projekt_an(client, tmp_path):
+    """K1-Glied-1-Review (was-erlaubt-der-fix-neu, CONFIRMED): die makedirs in
+    save_file/delete_file/rename_file legen bei nicht vorhandenem Projekt einen
+    Ordner an — save_file schreibt sogar INHALT (edit.json + .md). Ein Stale-Editor-
+    Tab, das nach dem Umbenennen eines Altprojekts "active" weiterspeichert, wuerde
+    das vergiftete Projekt sonst samt Inhalt WIEDER aufstehen lassen; die Galerie
+    listet jeden Ordner unter projekte/."""
+    r = client.put("/api/projects/active/files/S1", json={"segments": []})
+    assert r.status_code == 400 and "reserviert" in r.json()["detail"]
+    r = client.delete("/api/projects/active/files/S1")
+    assert r.status_code == 400
+    r = client.post("/api/projects/active/files/S1/rename", json={"name": "Neu"})
+    assert r.status_code == 400
+    assert not (tmp_path / "active").exists()
+
+
 def test_delete_project_ok(client, tmp_path):
     assert (tmp_path / "Demo").is_dir()
     r = client.delete("/api/projects/Demo")

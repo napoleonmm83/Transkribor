@@ -832,6 +832,7 @@ def _keine_jobs(project: str, base: str = None, active_only: bool = False) -> No
 def delete_file(project: str, base: str):
     """Eine einzelne Aufnahme samt Audio loeschen (das Projekt bleibt)."""
     _validate(project, base)
+    _sicherer_projektname(project)   # sonst legt das makedirs unten ein Geisterprojekt an
     epath = _edit_path(project, base)
     tdir = paths.transkripte_dir(project)
     os.makedirs(tdir, exist_ok=True)
@@ -957,6 +958,7 @@ def rename_file(project: str, base: str, body: RenameBody):
     zerreisst sie. Erst wird die ganze Liste auf Kollisionen geprueft und dann umbenannt:
     auf halbem Weg abzubrechen liesse eine Aufnahme zurueck, die es zweimal halb gibt."""
     _validate(project, base)
+    _sicherer_projektname(project)   # sonst legt das makedirs unten ein Geisterprojekt an
     neu = _neuer_name(body.name)
     # DIESELBE `sperre.datei` wie `delete_file` und `retranscribe_file` — der dritte Endpunkt
     # fehlte, und `_keine_jobs` schuetzt nur gegen JOBS, nicht gegen den Nachbar-ENDPUNKT.
@@ -1097,6 +1099,11 @@ def _pruefe_und_schreibe(project: str, base: str, doc: dict, erwartet) -> str:
 @app.put("/api/projects/{project}/files/{base}")
 async def save_file(project: str, base: str, request: Request):
     _validate(project, base)
+    # Der schreibende Anlegeweg mit INHALT (K1-Glied-1-Review): ein Stale-Editor-Tab,
+    # das nach dem Umbenennen eines Altprojekts "active" weiterspeichert, wuerde das
+    # Projekt sonst samt edit.json WIEDER aufstehen lassen — makedirs + atomic_write
+    # legen bedingungslos an, und die Galerie listet jeden Ordner unter projekte/.
+    _sicherer_projektname(project)
     doc = await request.json()
     # Trust-Boundary: der Rumpf kommt vom Client. Ein JSON-Array kam bisher bis zum
     # `doc["human_edited"] = True` durch und endete als 500 (TypeError) — dieselbe Wache wie
