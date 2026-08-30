@@ -229,6 +229,9 @@ export type Turn = { key: string; speaker: string; segments: Segment[] };
 export type FilePhase = 'diarize' | 'correct' | 'verify' | 'transcribe';
 export type GlobalPhase = 'diarize' | 'prep' | 'glossary' | 'download';
 export type FileState = 'done' | 'skipped' | 'failed';
+/** Was eine Endurteil-Zeile ueber die PLATTE beweist: `raw` = `<base>.json` geschrieben,
+ *  `edit` = `<base>.edit.json` geschrieben. Monoton, `edit` schlaegt `raw`. */
+export type Erreicht = 'raw' | 'edit';
 export type FileWork = { phase: FilePhase; pct?: number; detail?: string };
 export type JobPhases = {
   global: GlobalPhase | null;
@@ -243,6 +246,14 @@ export type JobPhases = {
   /** Basisname -> was daran gerade laeuft. Mehrere Eintraege, weil correct parallel arbeitet. */
   active: Record<string, FileWork>;
   perBase: Record<string, FileState>;
+  /** Basisname -> was der Lauf fuer diese Aufnahme nachweislich auf die Platte geschrieben hat.
+   *  Untergrenze fuer den Ruhezustand der Pille: `state==='done'` faellt dort auf `ruhe(file)`
+   *  durch, und `file` stammt aus der Dateiliste, die NICHT gepollt wird (`useProjectFiles`) —
+   *  im Moment des Endurteils ist sie also zwingend die aeltere der beiden Quellen und
+   *  behauptete „Nur Audio — noch nicht transkribiert" ueber eine gerade fertige Aufnahme
+   *  (im Browser gemessen, Gegenprobe: ein blosses Neuladen macht dasselbe Etikett richtig).
+   *  Undefined, solange kein Endurteil etwas bewiesen hat — wie `gesehen`. */
+  erreicht?: Record<string, Erreicht>;
   /** Nur der URL-Import: „N von M geladen". Er kennt KEINE Basisnamen — der Parser verwirft
    *  jede `[fetch] `-Zeile bewusst (sonst laese er die URL als Dateinamen), also entsteht dort
    *  nie ein `perBase`-Eintrag. Ohne diese Bilanz sieht ein Teilfehlschlag des Imports von

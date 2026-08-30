@@ -176,6 +176,7 @@ export function Sidebar({
                         onOpen={() => onOpen({ project: p.name, base: f.base })}
                         phase={darfZustand ? phases?.active[f.base]?.phase : undefined}
                         state={darfZustand ? phases?.perBase[f.base] : undefined}
+                        erreicht={darfZustand ? phases?.erreicht?.[f.base] : undefined}
                         inScope={darfWarten}
                         globalPhase={jobRunning ? (phases?.globalPerBase?.[f.base] ?? (phases?.scope === undefined ? phases?.global : null)) : null}
                         jobRunning={jobRunning} aiReason={aiReason} />

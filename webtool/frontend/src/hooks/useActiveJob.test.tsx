@@ -373,3 +373,37 @@ describe('mergePhases - gesehen (#431)', () => {
     expect(m.gesehen).toEqual(new Set(['B']))
   })
 })
+
+describe('mergePhases - erreicht', () => {
+  const job = (id: string, kind: string, phases: JobPhases): Job =>
+    ({ id, kind, project: 'P', status: 'running', phases })
+
+  it('vereinigt die Belege, `edit` schlaegt `raw`', () => {
+    // Die Reihenfolge der Jobs im Array ist keine Rangfolge (`jobs.active_for` sortiert nach
+    // `kind`, also `correct` vor `transcribe`) - `Object.assign` haette hier je nach Sortierung
+    // die geschriebene edit.json wieder auf „nur Roh" zurueckgestuft.
+    const m = mergePhases([
+      job('j1', 'correct', { global: null, active: {}, perBase: {}, erreicht: { A: 'edit' } }),
+      job('j2', 'transcribe', { global: null, active: {}, perBase: {}, erreicht: { A: 'raw', B: 'raw' } }),
+    ])
+    expect(m.erreicht).toEqual({ A: 'edit', B: 'raw' })
+  })
+
+  it('behaelt den Beleg, wenn dieselbe Datei wieder laeuft', () => {
+    // `perBase` weicht hier bewusst (das URTEIL gilt nicht mehr, die Datei laeuft ja wieder);
+    // der Beleg NICHT - was auf der Platte liegt, verschwindet dadurch nicht. Sonst faellt die
+    // Pille in genau dem Moment, in dem der Nachfolgejob die Datei aufgreift, wieder auf den
+    // veralteten Schnappschuss zurueck, und der Ruecksprung ist zurueck.
+    const m = mergePhases([
+      job('j1', 'transcribe', { global: null, active: {}, perBase: { A: 'done' }, erreicht: { A: 'raw' } }),
+      job('j2', 'correct', { global: null, active: { A: { phase: 'correct' } }, perBase: {} }),
+    ])
+    expect(m.perBase).toEqual({})
+    expect(m.erreicht).toEqual({ A: 'raw' })
+  })
+
+  it('ohne Belege gibt es das Feld nicht', () => {
+    const m = mergePhases([job('j1', 'transcribe', { global: null, active: {}, perBase: {} })])
+    expect(m.erreicht).toBeUndefined()
+  })
+})
