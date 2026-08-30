@@ -360,6 +360,25 @@ def test_correct_file_409_waehrend_der_lauf_die_datei_schreibt(client, monkeypat
         jobs_mod._jobs.pop(jid, None)
 
 
+def test_correct_file_409_vor_dem_404_wenn_der_lauf_gerade_schreibt(client, monkeypatch,
+                                                                     mit_anbieter):
+    """Am echten Pfad gemessen (Beleglauf 08-30): waehrend der Lauf die Datei aktiv
+    transkribiert, existiert die Roh-JSON noch NICHT — staende der 404 davor, schluege
+    er den 409 und der Riegel waere im einzigen Fenster, das er decken soll,
+    unerreichbar. „gerade bearbeitet" ist die genauere Auskunft."""
+    import webtool.jobs as jobs_mod
+    jid = "t441b"
+    jobs_mod._active[("Demo", "transcribe")] = jid
+    jobs_mod._jobs[jid] = {"id": jid, "kind": "transcribe", "status": "running",
+                           "bases": None, "active_bases": {"Neu1"}}
+    try:
+        r = client.post("/api/projects/Demo/files/Neu1/correct")   # Neu1 hat KEINE Raw-Datei
+        assert r.status_code == 409 and "gerade bearbeitet" in r.json()["detail"]
+    finally:
+        jobs_mod._active.pop(("Demo", "transcribe"), None)
+        jobs_mod._jobs.pop(jid, None)
+
+
 def test_korrektur_ohne_anbieter_409_statt_job(client, monkeypatch):
     """Ohne nutzbaren Anbieter darf KEIN Job entstehen: sonst laeuft erst die Diarisierung
     (GPU, Minuten) durch, bevor der erste LLM-Aufruf scheitert."""
