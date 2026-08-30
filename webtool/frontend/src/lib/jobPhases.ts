@@ -82,10 +82,21 @@ export function parseJobPhases(kind: string, lines: string[],
     // Zuweisung waere ein No-op. Steht hier, damit es niemand fuer eine Luecke haelt.
     if (!(base in perBase) || RANG[state] >= RANG[perBase[base]]) perBase[base] = state
     // Der Beleg folgt NICHT dem RANG: er sagt, was auf der Platte liegt, nicht wie der Lauf
-    // ausging. Im gestaffelten Lauf kommt erst `fertig X:` ('raw'), dann `apply: X -> edit.json`
-    // ('edit') — und eine geschriebene edit.json verschwindet nicht mehr, auch wenn ein
-    // spaeteres Urteil derselben Aufnahme schwaecher ausfaellt. Nur aufwaerts.
-    if (beleg && erreicht[base] !== 'edit') erreicht[base] = beleg
+    // ausging. Er folgt der ZEILENREIHENFOLGE — die spaetere Zeile ist der frischere Beweis.
+    //
+    // Hier stand zuerst „nur aufwaerts" (`erreicht[base] !== 'edit'`), begruendet mit „eine
+    // geschriebene edit.json verschwindet nicht mehr". Das ist FALSCH, und der Fall, in dem es
+    // falsch ist, ist genau der, den #485 ausdruecklich zulaesst: `delete_file` prueft
+    // `active_only=True` und gibt eine Aufnahme nach ihrem `[done]` frei — wer sie loescht und
+    // gleichnamig neu hochlaedt, bekommt spaeter im SELBEN Strom ein zweites `fertig X:`. Das
+    // beweist ein frisches Roh-Transkript und widerlegt die alte edit.json; „nur aufwaerts"
+    // liess das Urteil dagegen nicht mehr sinken — die Zeile haette bis Jobende „Fertig" ueber
+    // einer Aufnahme behauptet, die nur Audio ist, OHNE Selbstheilung.
+    //
+    // Ein `raw` NACH einem `edit` gibt es im normalen Lauf nicht: `transcribe_project` fasst
+    // nur Aufnahmen ohne `.json` an, `fertig X:` kommt also immer VOR `apply: X`. Die
+    // umgekehrte Reihenfolge ist damit selbst schon das Signal „diese Datei ist eine andere".
+    if (beleg) erreicht[base] = beleg
     delete active[base]
     delete blocks[base]
     if (cursor === base) cursor = null
