@@ -140,6 +140,14 @@ GPU_KINDS = ("transcribe",)
 # ist die einzige ungedeckelte Sammlung im Datensatz. Siehe Issue.
 ZULASSUNGS_KINDS = ("transcribe", "correct")
 
+# Welche Job-Arten einen Bereichs-NACHTRAG drucken duerfen. Nur `transcribe_project` tut es
+# (`correct.cmd_run` baut seine Liste einmal und scannt nicht neu), und `fetch` ist genau die
+# Art, in der FREMDER Text im Strom steht — yt-dlp-Rohausgabe, Videotitel eines importierten
+# Videos. Dieselbe Begruendung und dieselbe Form wie `ZULASSUNGS_KINDS` daruber; ein
+# Injektionsweg ueber eine `fetch`-Zeile liess sich nicht demonstrieren, aber der Zweig war
+# fuer diese Art scharf, ohne dass sie ihn je bedienen kann (Befund des kalten Diff-Lesers).
+NACHTRAG_KINDS = ("transcribe",)
+
 
 def _prune_locked():
     now = time.time()
@@ -357,6 +365,7 @@ def _run_proc(jid, cmd, cwd, env=None):
             # Einmal gelesen, die Art aendert sich ueber den Lauf nicht.
             zulassung = (_jobs[jid]["gesehen"]
                          if _jobs[jid]["kind"] in ZULASSUNGS_KINDS else None)
+            nachtrag_an = _jobs[jid]["kind"] in NACHTRAG_KINDS
         if cancelled:                            # cancel() kam an, bevor die pid gesetzt war -> selbst killen
             _kill_tree(proc)
         for line in proc.stdout:
@@ -371,7 +380,8 @@ def _run_proc(jid, cmd, cwd, env=None):
                 # ergaenzen, und ein Nachtrag als Erstbereich waere eine Zusage, die der Lauf
                 # nie gegeben hat — `bases is None` heisst fuer `betrifft()` "allumfassend",
                 # also die vorsichtige Seite; ein halber Bereich waere die unvorsichtige.
-                elif _jobs[jid]["bases"] is not None and line.startswith(SCOPE_ADD_PREFIX):
+                elif (nachtrag_an and _jobs[jid]["bases"] is not None
+                      and line.startswith(SCOPE_ADD_PREFIX)):
                     _jobs[jid]["bases"].update(
                         b for b in line[len(SCOPE_ADD_PREFIX):].split("\t") if b)
                 else:

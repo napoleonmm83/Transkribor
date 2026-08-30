@@ -477,6 +477,35 @@ def _autocorrect_an() -> bool:
     return (os.environ.get("TRANSKRIBOR_AUTOCORRECT") or "1").lower() not in ("0", "false", "no")
 
 
+# Eigener Platzhalter statt `None`: `_kennung` LIEFERT `None`, wenn `os.stat` wirft. Mit
+# `angekuendigt.get(b)` als Default waere „nie gemeldet" von „gemeldet, aber unlesbar" nicht
+# zu unterscheiden — und eine nie gemeldete Aufnahme mit unlesbarer Datei bekaeme dann gar
+# keine Meldung. Der Sentinel ist NIE gleich einem echten Wert, die sichere Richtung.
+_UNBEKANNT = object()
+
+
+def _kennung(pfad):
+    """Dateiidentitaet fuer den Bereichs-Nachtrag — ANWESENHEIT ist zu wenig.
+
+    `jobs.remove_base` nimmt eine geloeschte Aufnahme aus `bases`, und Loeschen ist waehrend
+    des Laufs erlaubt, solange nicht gerade an ihr gerechnet wird. Legt jemand danach eine
+    Datei DESSELBEN Namens neu an, ist es fuer den Leser eine NEUE Aufnahme — der Lauf muss
+    sie also erneut melden. Am blossen Namen ist das nicht zu sehen; erst recht nicht, wenn
+    Loeschen und Neuanlegen in dieselbe Runde fallen (der Lauf steckt dann minutenlang in
+    Whisper und sieht die Luecke nie). Deshalb wird die IDENTITAET verglichen.
+
+    Dieselben drei Felder wie `edit_model`s `dateistand`: `st_ino` traegt die Eindeutigkeit,
+    Zeit und Groesse fangen den Fall ab, in dem ein Dateisystem die Inode wiederverwendet.
+    Ein Wurf ist kein Fehler, sondern „ich weiss es nicht" — der Vergleich schlaegt dann fehl
+    und meldet lieber einmal zu viel als einmal zu wenig; beide Leser sind additiv.
+    """
+    try:
+        s = os.stat(pfad)
+        return (s.st_ino, s.st_mtime_ns, s.st_size)
+    except OSError:
+        return None
+
+
 def transcribe_project(name, model, language, only=None, autocorrect: bool = False):
     """Transkribiert ein Projekt und liefert die Bilanz der angehaengten KI-Korrektur
     als `(gelungen, versucht)`.
@@ -499,8 +528,9 @@ def transcribe_project(name, model, language, only=None, autocorrect: bool = Fal
     # Angefasst werden nur die Aufnahmen OHNE .json — die uebrigen ueberspringt die Schleife
     # unten ohnehin. Genau diese Liste meldet der Lauf als seinen Wirkungsbereich, bevor er
     # anfaengt: jobs.py laesst danach das Loeschen/Umbenennen aller anderen zu (Issue #80).
-    offen = [b for b in (os.path.splitext(os.path.basename(f))[0] for f in files)
-             if not os.path.exists(os.path.join(out_dir, b + ".json"))]
+    offen_paare = [(b, f) for f, b in ((f, os.path.splitext(os.path.basename(f))[0]) for f in files)
+                   if not os.path.exists(os.path.join(out_dir, b + ".json"))]
+    offen = [b for b, _ in offen_paare]
     print("[scope] " + "\t".join(offen), flush=True)
     # Vor dem Modell pruefen, ob ueberhaupt etwas offen ist: seit ein Upload die Transkription
     # selbst ausloest, laufen Leerlauf-Runden regelmaessig, und load_model kostet ~30s + 3 GB.
@@ -681,7 +711,7 @@ def transcribe_project(name, model, language, only=None, autocorrect: bool = Fal
     # Was der Lauf bereits als seinen Wirkungsbereich GEMELDET hat. Startwert ist die
     # `[scope]`-Zeile oben; alles, was die Schleife spaeter zusaetzlich findet, wird
     # nachgemeldet (`[scope+]`, siehe unten).
-    angekuendigt = set(offen)
+    angekuendigt = {b: _kennung(f) for b, f in offen_paare}
     try:
         while True:
             current_files = find_audio(proj_dir, only)
@@ -720,10 +750,26 @@ def transcribe_project(name, model, language, only=None, autocorrect: bool = Fal
             # Nur die NEUEN, in sortierter Reihenfolge: eine schon angekuendigte Aufnahme ein
             # zweites Mal zu melden waere fuer die additiven Leser folgenlos, aber es machte den
             # Druck des Laufs von der Rundenzahl abhaengig und damit unpruefbar.
-            neu = [b for b in (os.path.splitext(os.path.basename(p))[0] for p in pending)
-                   if b not in angekuendigt]
+            #
+            # Verglichen wird die IDENTITAET, nicht die Anwesenheit — Begruendung in
+            # `_kennung`. Ein Name, der geloescht und unter demselben Namen neu angelegt
+            # wurde, ist fuer den Leser eine neue Aufnahme (`jobs.remove_base` hat ihn aus
+            # `bases` genommen) und wird deshalb erneut gemeldet; sonst saehe `betrifft()`
+            # eine Aufnahme als frei, die der Lauf gerade schreibt, und die Zusage der README
+            # (409 beim Umbenennen und Neu-Transkribieren) haelt auf diesem Pfad nicht.
+            #
+            # Die erste Fassung dieses Blocks verglich nur die ANWESENHEIT und liess damit ein
+            # Fenster offen: faellt Loeschen und Neuanlegen in DIESELBE Runde, sieht die
+            # Schleife die Luecke nie (sie steckt minutenlang in Whisper). Die Identitaet
+            # kennt dieses Fenster nicht — sie vergleicht Zustaende, keine Ereignisse.
+            neu = []
+            for p in pending:
+                b = os.path.splitext(os.path.basename(p))[0]
+                k = _kennung(p)
+                if angekuendigt.get(b, _UNBEKANNT) != k:
+                    angekuendigt[b] = k
+                    neu.append(b)
             if neu:
-                angekuendigt.update(neu)
                 print("[scope+] " + "\t".join(neu), flush=True)
             f = pending[0]
             base = os.path.splitext(os.path.basename(f))[0]

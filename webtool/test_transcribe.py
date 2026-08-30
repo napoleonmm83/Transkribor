@@ -1150,6 +1150,118 @@ def test_transcribe_project_meldet_spaete_uploads_als_bereichs_nachtrag(monkeypa
         "nur die NEUEN Aufnahmen, sortiert — D1 wurde bereits gemeldet"
 
 
+def test_transcribe_project_meldet_eine_zurueckgekehrte_aufnahme_erneut(monkeypatch, tmp_path, capsys):
+    """Die Merkliste des Nachtrags muss vergessen, was der LESER vergessen hat.
+
+    Befund des kalten Diff-Lesers. `jobs.remove_base` nimmt eine geloeschte Aufnahme aus
+    `bases`, und Loeschen ist waehrend des Laufs erlaubt, solange gerade nicht an ihr
+    gerechnet wird. Legt jemand danach eine Datei DESSELBEN Namens neu an, verarbeitet die
+    Schleife sie wieder — ohne diesen Fix unterdrueckte `angekuendigt` aber die zweite
+    Meldung, und nichts truege sie in `bases` zurueck. `betrifft()` saehe sie als frei,
+    waehrend der Lauf sie schreibt; die README-Zusage (409 beim Umbenennen und
+    Neu-Transkribieren) haelt auf diesem Pfad dann nicht.
+
+    Der Ablauf legt den Austausch bewusst in EINE Runde — der schwere Fall, den eine
+    Anwesenheits-Pruefung nicht sehen kann (die Schleife steckt dann in Whisper und die
+    Luecke existiert fuer sie nie). Verglichen wird deshalb die IDENTITAET (`_kennung`):
+      Runde 1: D1  (legt D2, D3, D4 an)              -> `[scope+] D2 D3 D4`
+      Runde 2: D2  (loescht D3 UND legt es neu an)   -> Identitaet von D3 wechselt
+      Runde 3: D3                                    -> `[scope+] D3`
+      Runde 4: D4                                    -> nichts (unveraendert)
+    """
+    import time
+    from webtool import correct, jobs, llm
+
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    monkeypatch.setattr(transcribe, "PROJEKTE", str(tmp_path))
+    monkeypatch.setattr(transcribe, "_modell", lambda *a, **kw: "fake_model")
+    monkeypatch.setattr(llm, "available", lambda: (True, ""))
+    monkeypatch.setattr(correct, "CLAUDE_PARALLEL", 4)
+    monkeypatch.setattr(correct, "diarize_enabled", lambda: True)
+
+    proj_dir = tmp_path / "RueckkehrDemo"
+    audio_dir = proj_dir / "audio"
+    audio_dir.mkdir(parents=True)
+    (proj_dir / "transkripte").mkdir(parents=True)
+    (audio_dir / "D1.mp3").write_bytes(b"audio")
+
+    def fake_transkribiere(_m, _engine, audio_file, _sprache, _mehr, _model):
+        base = os.path.splitext(os.path.basename(audio_file))[0]
+        if base == "D1":
+            for n in ("D2", "D3", "D4"):
+                (audio_dir / f"{n}.mp3").write_bytes(b"audio")
+        elif base == "D2":
+            # Geloescht waehrend sie wartet UND unter demselben Namen neu hochgeladen —
+            # beides in derselben Runde, die Schleife sieht die Luecke also nie.
+            (audio_dir / "D3.mp3").unlink()
+            time.sleep(0.01)                          # damit st_mtime_ns sicher wechselt
+            (audio_dir / "D3.mp3").write_bytes(b"anderes audio")
+        return {"text": f"Text {base}",
+                "segments": [{"id": 0, "start": 0.0, "end": 1.0, "text": f"Text {base}"}],
+                "duration": 1.0}
+
+    monkeypatch.setattr(transcribe, "_transkribiere_datei", fake_transkribiere)
+    monkeypatch.setattr(correct, "cmd_diarize", lambda *a, **kw: 1)
+    monkeypatch.setattr(correct, "correct_ai_single", lambda *a, **kw: True)
+
+    transcribe.transcribe_project("RueckkehrDemo", "tiny", "de", autocorrect=True)
+
+    nach = [z[len(jobs.SCOPE_ADD_PREFIX):].split("\t")
+            for z in capsys.readouterr().out.splitlines()
+            if z.startswith(jobs.SCOPE_ADD_PREFIX)]
+    assert (proj_dir / "transkripte" / "D3.json").exists(), \
+        "Vorbedingung: der Lauf hat die zurueckgekehrte Aufnahme wirklich verarbeitet"
+    assert nach == [["D2", "D3", "D4"], ["D3"]], \
+        f"die Rueckkehr muss erneut gemeldet werden, sonst fehlt sie im Bereich: {nach}"
+
+
+def test_transcribe_project_meldet_auch_bei_unlesbarer_kennung(monkeypatch, tmp_path, capsys):
+    """`_kennung` liefert `None`, wenn `os.stat` wirft — und „nie gemeldet" darf davon nicht
+    ununterscheidbar werden.
+
+    Ohne den eigenen Platzhalter (`angekuendigt.get(b)` statt `get(b, _UNBEKANNT)`) waere der
+    Vergleich `None != None` falsch, und eine NIE gemeldete Aufnahme mit unlesbarer Datei
+    bekaeme gar keine Meldung — sie fehlte im Bereich, obwohl der Lauf sie anfasst. Die
+    Mutationsprobe fand genau diese Zeile zuerst unbewacht.
+    """
+    from webtool import correct, jobs, llm
+
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    monkeypatch.setattr(transcribe, "PROJEKTE", str(tmp_path))
+    monkeypatch.setattr(transcribe, "_modell", lambda *a, **kw: "fake_model")
+    monkeypatch.setattr(transcribe, "_kennung", lambda _p: None)   # jede Kennung unlesbar
+    monkeypatch.setattr(llm, "available", lambda: (True, ""))
+    monkeypatch.setattr(correct, "CLAUDE_PARALLEL", 4)
+    monkeypatch.setattr(correct, "diarize_enabled", lambda: True)
+
+    proj_dir = tmp_path / "UnlesbarDemo"
+    audio_dir = proj_dir / "audio"
+    audio_dir.mkdir(parents=True)
+    (proj_dir / "transkripte").mkdir(parents=True)
+    (audio_dir / "D1.mp3").write_bytes(b"audio")
+
+    def fake_transkribiere(_m, _engine, audio_file, _sprache, _mehr, _model):
+        base = os.path.splitext(os.path.basename(audio_file))[0]
+        if base == "D1":
+            (audio_dir / "D2.mp3").write_bytes(b"audio")
+        return {"text": f"Text {base}",
+                "segments": [{"id": 0, "start": 0.0, "end": 1.0, "text": f"Text {base}"}],
+                "duration": 1.0}
+
+    monkeypatch.setattr(transcribe, "_transkribiere_datei", fake_transkribiere)
+    monkeypatch.setattr(correct, "cmd_diarize", lambda *a, **kw: 1)
+    monkeypatch.setattr(correct, "correct_ai_single", lambda *a, **kw: True)
+
+    transcribe.transcribe_project("UnlesbarDemo", "tiny", "de", autocorrect=True)
+
+    nach = [z[len(jobs.SCOPE_ADD_PREFIX):].split("\t")
+            for z in capsys.readouterr().out.splitlines()
+            if z.startswith(jobs.SCOPE_ADD_PREFIX)]
+    assert (proj_dir / "transkripte" / "D2.json").exists(), "Vorbedingung: D2 wurde verarbeitet"
+    assert ["D2"] in nach, \
+        f"eine nie gemeldete Aufnahme muss auch mit unlesbarer Kennung gemeldet werden: {nach}"
+
+
 def test_transcribe_project_diarize_error_does_not_block_next_file(monkeypatch, tmp_path, capsys):
     """Wenn bei D1 die Diarisierung fehlschlägt, muss D2 trotzdem transkribiert und diarisiert werden."""
     from webtool import correct, llm
@@ -1983,6 +2095,7 @@ def test_aufnahme_bleibt_bis_zum_ende_der_korrektur_gesperrt(monkeypatch, tmp_pa
     pruefen.
     """
     import threading
+    import time
     from webtool import correct, jobs, llm
 
     _ki_projekt(monkeypatch, tmp_path, "SperrDemo", bases=("S1", "S2"))
