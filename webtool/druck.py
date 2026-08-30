@@ -46,6 +46,13 @@ GRENZEN, benannt statt verschwiegen:
   Fehlerklasse, von dieser Huelle prinzipiell NICHT gedeckt — eigener Punkt.
 * **`pytest -s`.** Dort setzt pytest `sys.stdout` nicht je Test zurueck, die Huelle bleibt also
   ueber Testgrenzen stehen. Die CI faehrt `-rs` (Skip-Report), nicht `-s`; kosmetisch.
+* **Die Teilzeile eines ARBEITSthreads gehoert ihm allein.** `threading.local` ist thread-lokal
+  (das ist der Zweck) -- weder ein `flush()` aus einem anderen Thread noch der Flush beim
+  Herunterfahren, der im HAUPTthread laeuft, erreicht sie. Endet ein Poolthread mit einer
+  Teilzeile im Puffer, ist sie weg. Heute unerreichbar (kein `print(..., end="")` und kein
+  `sys.stdout.write` ohne Umbruch im Produktivcode, gegrept), als Test festgehalten.
+* **`isinstance(sys.stdout, io.TextIOBase)` ist ab jetzt `False`.** Im Repo fragt das niemand
+  (gegrept); eine fremde Bibliothek koennte es.
 """
 import threading
 
@@ -89,9 +96,19 @@ class Zeilenweise:
         self._strom.flush()
 
     def __getattr__(self, name):
-        # Alles Uebrige (encoding, errors, fileno, isatty, reconfigure, buffer …) gehoert dem
+        # Alles Uebrige (encoding, errors, fileno, isatty, reconfigure …) gehoert dem
         # umhuellten Strom. `self.__dict__["_strom"]` statt `self._strom`: fehlte das Attribut,
         # riefe der Zugriff wieder `__getattr__` und liefe in eine Rekursion.
+        #
+        # `buffer` ist der eine Sonderfall: wer ihn holt, schreibt an der Huelle VORBEI und
+        # ueberholte damit eine zurueckgehaltene Teilzeile. Der Weg ist nicht theoretisch --
+        # `yt_dlp.utils.write_string` nimmt genau ihn, und `YoutubeDL` laeuft in-process
+        # (`fetch.py:449/456`), gebaut NACH der Umhuellung in `fetch.main`. Heute folgenlos
+        # (`_ydl_opts` setzt quiet/no_warnings/noprogress, `fetch.main` ist einthreadig) --
+        # aber das ist Konfiguration, nicht Konstruktion. Vor der Herausgabe wird deshalb
+        # geleert; danach gibt es nichts mehr zu ueberholen.
+        if name == "buffer":
+            self.flush()
         return getattr(self.__dict__["_strom"], name)
 
 
