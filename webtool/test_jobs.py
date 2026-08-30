@@ -458,6 +458,27 @@ def test_scope_nachtrag_ohne_erstbereich_macht_keinen_halben_bereich():
         _wait(jid)
 
 
+def test_ein_fetch_lauf_bucht_keinen_bereichs_nachtrag():
+    """Dieselbe Regel und derselbe Grund wie `ZULASSUNGS_KINDS` fuer `[active]`: nur
+    `transcribe_project` scannt neu und darf nachtragen. `fetch` ist die Art, in der FREMDER
+    Text im Strom steht (yt-dlp-Rohausgabe, Videotitel eines importierten Videos) — der Zweig
+    war fuer sie scharf, ohne dass sie ihn je bedienen kann. Befund des kalten Diff-Lesers.
+
+    Gemessen wird an S2 (nur ueber `bases` erreichbar), nicht an einer aktiven Aufnahme —
+    dieselbe Falle wie beim `scope+`-Waechter darunter.
+    """
+    jid, _ = jobs.start("P_fetch", _scope_cmd(["[scope] S1", "[scope+] S2", "los"]),
+                        cwd=None, kind="fetch")
+    try:
+        _warte_auf_zeilen(jid, 3)
+        assert jobs.betrifft("P_fetch", "S1") is not None, "der Erstbereich gilt auch fuer fetch"
+        assert jobs.betrifft("P_fetch", "S2") is None, \
+            "ein fetch-Lauf traegt nichts nach — er kann die Zeile gar nicht drucken"
+    finally:
+        jobs.cancel(jid)
+        _wait(jid)
+
+
 def test_projekt_namens_scope_plus_verliert_seine_buchfuehrung_nicht():
     """`paths.safe_name` laesst `+` durch, und `transcribe.py` praefixt JEDE Zeile mit
     `[{name}] ` — ein Projekt namens „scope+" erzeugt also Zeilen, die wie ein Nachtrag
