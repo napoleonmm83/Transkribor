@@ -458,6 +458,45 @@ def test_scope_nachtrag_ohne_erstbereich_macht_keinen_halben_bereich():
         _wait(jid)
 
 
+def test_projekt_namens_scope_plus_verliert_seine_buchfuehrung_nicht():
+    """`paths.safe_name` laesst `+` durch, und `transcribe.py` praefixt JEDE Zeile mit
+    `[{name}] ` — ein Projekt namens „scope+" erzeugt also Zeilen, die wie ein Nachtrag
+    aussehen. Dieselbe Klasse wie ein Projekt namens „scope" (dort traegt es „nur die erste
+    Zeile zaehlt"), und dieselbe getragene Wurzel: die Mehrdeutigkeit sitzt beim Erzeuger,
+    der fremden Text hinter ein Klammerpraefix setzt (#416).
+
+    Gemessen und hier festgenagelt ist, was der additive Nachtrag daran BEGRENZT:
+    die echten Basisnamen bleiben stehen (anders als beim ERSETZENDEN `[scope]`, wo derselbe
+    Name den ganzen Lauf kippte), und die `[active]`/`[done]`-Buchfuehrung wird nicht
+    verschluckt — der Zweig kann sie nicht treffen, weil eine Zeile nicht mit zwei
+    verschiedenen Praefixen beginnen kann. Was bleibt, sind Phantomeintraege in `bases`, die
+    auf keine Datei passen.
+
+    Wer den Zweig eines Tages VOR `buche_aktive` verallgemeinert oder ihn ersetzend macht,
+    bekommt genau hier ein rotes Ergebnis.
+
+    Gemessen wird an S2 und NICHT an S1, und das ist keine Kosmetik: `betrifft` faellt bei
+    `active_only=False` auch ueber `active_bases` durch (`jobs.py`, das zweite `or`). An S1
+    gemessen blieb der Waechter unter der Mutation „Zweig ersetzt statt ergaenzt" gruen,
+    obwohl der Bereich weg war — er lebte vom `[active] S1` daneben. S2 steht nur im Bereich.
+    """
+    jid, _ = jobs.start(
+        "P_plus",
+        _scope_cmd(["[scope] S1\tS2", "[scope+] Modell large-v3, 2 Datei(en)", "[active] S1", "los"]),
+        cwd=None, kind="transcribe")
+    try:
+        _warte_auf_zeilen(jid, 4)
+        assert jobs.betrifft("P_plus", "S2") is not None, \
+            "der echte Basisname bleibt im Bereich — nur ueber `bases` erreichbar"
+        assert jobs.betrifft("P_plus", "S1", active_only=True) is not None, \
+            "die [active]-Marke wurde nicht verschluckt"
+        assert jobs.betrifft("P_plus", "Fremd") is None, \
+            "der Bereich wird nicht allumfassend — er waechst nur"
+    finally:
+        jobs.cancel(jid)
+        _wait(jid)
+
+
 def test_active_zeilen_aktualisieren_active_bases():
     """[active] S1 setzt S1 als aktiv, [done] S1 entfernt es wieder."""
     code = (
