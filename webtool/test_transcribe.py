@@ -846,6 +846,17 @@ def test_alle_drei_laeufer_konfigurieren_ihren_stdout_um(monkeypatch):
         assert merker.aufrufe, f"{modul}.main() konfiguriert sys.stdout nicht um"
         assert merker.aufrufe[0]["encoding"] == "utf-8", modul
 
+        # Dieselbe Frage fuer die Huelle aus #344 (EIN write je Zeile): auch sie ist eine
+        # Zeile, die in EINEM der drei Laeufer fehlen kann, ohne dass sonst etwas auffaellt
+        # — dieselbe Fehlerklasse, deretwegen dieser Test alle drei prueft. Abgegriffen
+        # wird INNERHALB des Laufs; `monkeypatch` stellt danach das alte Objekt zurueck.
+        from webtool import druck
+        assert isinstance(m.sys.stdout, druck.Zeilenweise), (
+            f"{modul}.main() legt die Zeilen-Huelle nicht um sys.stdout (#344)")
+        # ... und zwar um GENAU diesen Strom. Ohne die zweite Zusicherung waere ein
+        # `sys.stdout = druck.zeilenweise(irgendwas)` gruen.
+        assert m.sys.stdout.__dict__["_strom"] is merker, modul
+
 
 def test_transcribe_project_meldet_active_done_und_ueberspringt_geloeschtes_audio(monkeypatch, tmp_path, capsys):
     monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
