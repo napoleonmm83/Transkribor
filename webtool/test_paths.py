@@ -1,4 +1,5 @@
 import os
+import pathlib
 import pytest
 from webtool import paths
 
@@ -37,6 +38,8 @@ def test_sicherer_projektname_strip_dann_pruefen():
     assert paths.sicherer_projektname("  Weisstannen ") == "Weisstannen"
     with pytest.raises(ValueError, match="Klammern"):
         paths.sicherer_projektname("A]B")
+    with pytest.raises(ValueError, match="Klammern"):
+        paths.sicherer_projektname("A[B")
     # Nur-druckende Marken ohne Parse-Zweig und Gross-/Kleinschreibung kommen durch:
     assert paths.sicherer_projektname("Active") == "Active"
     assert paths.sicherer_projektname("autocorrect") == "autocorrect"
@@ -44,13 +47,20 @@ def test_sicherer_projektname_strip_dann_pruefen():
 
 def test_reservierte_namen_entsprechen_den_parser_marken():
     """Vertrag (Kaltleser-Befund zu PR #491): die Menge ist aus den KONSUMENTEN
-    abgeleitet — jobs.py parst die vier Marken, jobPhases.ts ausserdem [fetch].
-    Baut jemand eine Marke im Parser dazu, ohne sie hier aufzunehmen, reisst dieser
-    Test — dieselbe Form wie das INVENTAR des Vertragstests (Druckform <-> Parser)."""
+    abgeleitet — Backend UND Frontend. jobs.py parst vier Marken (Konstanten),
+    jobPhases.ts ausserdem [fetch]; die Frontend-Seite wird aus dem QUELLTEXT
+    geerntet (startsWith('[marke]'-Literale), nicht abgeschrieben — dieselbe Form
+    wie das INVENTAR des Vertragstests. Baut jemand eine Marke in einem der beiden
+    Parser dazu, ohne sie hier aufzunehmen, wird dieser Test rot — und umgekehrt."""
+    import re
     from webtool import jobs
     aus_marken = {p.strip("[] ") for p in (jobs.SCOPE_PREFIX, jobs.SCOPE_ADD_PREFIX,
                                            jobs.ACTIVE_PREFIX, jobs.DONE_PREFIX)}
-    assert paths.RESERVIERTE_NAMEN == aus_marken | {"fetch"}
+    ts = (pathlib.Path(__file__).parent / "frontend" / "src" / "lib" / "jobPhases.ts"
+          ).read_text(encoding="utf-8")
+    aus_frontend = set(re.findall(r"startsWith\('\[([^\]]+)\]", ts))
+    assert aus_frontend, "Ernte leer — hat jobPhases.ts die Literale gewandelt?"
+    assert paths.RESERVIERTE_NAMEN == aus_marken | aus_frontend
 
 
 def test_projekte_root_respects_env(monkeypatch, tmp_path):
