@@ -506,7 +506,10 @@ Aufnahme **neu transkribierst** oder ihre **Sprache änderst**: dann wird das Tr
 dem Audio neu erstellt, das bisherige Transkript samt Korrekturen fällt dabei weg (das Audio
 bleibt). Löschen kannst du nur du selbst, bewusst über das ⋯-Menü. Auch während im Projekt andere
 Aufnahmen transkribiert oder korrigiert werden, kannst du einzelne, nicht gerade aktiv berechnete
-Dateien jederzeit löschen.
+Dateien jederzeit löschen. **Ab der nächsten Fassung** ist das auch dann verlässlich, wenn viele
+Aufnahmen gleichzeitig korrigiert werden: bis dahin konnte eine davon bis zum Ende des Laufs als
+„wird gerade bearbeitet“ gelten, obwohl an ihr längst nichts mehr passierte — löschen liess sie
+sich dann nicht.
 
 **Ab `v0.50.0`** gilt dasselbe fürs **Umbenennen** und fürs **Neu-Transkribieren**:
 ist eine Aufnahme gerade dran, sagt Transkribor „wird gerade bearbeitet — bitte warten“ und

@@ -22,6 +22,7 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 
+from . import druck
 from . import llm
 from . import paths
 from . import settings
@@ -1366,6 +1367,7 @@ def main(argv=None):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     except (AttributeError, ValueError):
         pass
+    sys.stdout = druck.zeilenweise(sys.stdout)   # EIN write je Zeile (#344)
     ap = argparse.ArgumentParser(description="Transkribor Korrektur-CLI (Stufe 1.5 + 2b)")
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("prep"); p.add_argument("project")

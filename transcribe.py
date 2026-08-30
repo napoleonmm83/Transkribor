@@ -898,6 +898,15 @@ def main():
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     except (AttributeError, ValueError):
         pass
+    try:  # Lazy wie alle webtool-Importe hier — das Grund-Skript laeuft ohne das Paket.
+        from webtool import druck
+    except ImportError:
+        # Kein stiller Rueckfall, sondern ein folgenloser: ohne `webtool` gibt es hier
+        # auch keinen Korrektur-Pool (`from webtool import llm, correct` weiter unten),
+        # also keinen zweiten Schreiber, der sich einmischen koennte.
+        pass
+    else:
+        sys.stdout = druck.zeilenweise(sys.stdout)   # EIN write je Zeile (#344)
     ap = argparse.ArgumentParser(description="Whisper-Transkription pro Projekt")
     ap.add_argument("projekt", nargs="?", help="Projektname (Ordner in projekte/)")
     ap.add_argument("--all", action="store_true", help="alle Projekte")
