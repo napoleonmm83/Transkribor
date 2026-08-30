@@ -230,7 +230,17 @@ export type FilePhase = 'diarize' | 'correct' | 'verify' | 'transcribe';
 export type GlobalPhase = 'diarize' | 'prep' | 'glossary' | 'download';
 export type FileState = 'done' | 'skipped' | 'failed';
 /** Was eine Endurteil-Zeile ueber die PLATTE beweist: `raw` = `<base>.json` geschrieben,
- *  `edit` = `<base>.edit.json` geschrieben. Monoton, `edit` schlaegt `raw`. */
+ *  `edit` = `<base>.edit.json` geschrieben.
+ *
+ *  **Es gibt KEINE Rangfolge zwischen den beiden** — hier stand „monoton, `edit` schlaegt
+ *  `raw`", und das war nach dem Umbau auf die Zeilenreihenfolge falsch. Zwei Regeln,
+ *  getrennt zu lesen:
+ *  - **innerhalb eines Laufs** (`parseJobPhases`) entscheidet die ZEILENREIHENFOLGE: die
+ *    spaetere Zeile ist der frischere Beweis. Ein `raw` nach einem `edit` senkt den Beleg
+ *    also wieder — im normalen Lauf kommt das gar nicht vor, und genau deshalb ist es das
+ *    Signal „diese Datei ist eine andere" (geloescht und gleichnamig neu hochgeladen).
+ *  - **ueber Jobs hinweg** (`mergePhases`) gewinnt `edit` — dort als TIE-BREAK, weil es
+ *    keine Zeilenordnung gibt, nicht als Rangfolge. */
 export type Erreicht = 'raw' | 'edit';
 export type FileWork = { phase: FilePhase; pct?: number; detail?: string };
 export type JobPhases = {
