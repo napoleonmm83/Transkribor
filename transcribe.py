@@ -641,10 +641,13 @@ def transcribe_project(name, model, language, only=None, autocorrect: bool = Fal
         409-Sperre von `DELETE .../files/{base}` (`betrifft(..., active_only=True)`).
 
         Bis #418 stand die Zeile bedingungslos im `finally` des Schleifenrumpfs, also
-        unmittelbar hinter `ai_pool.submit(...)`. Zusammen mit dem `[active]`, das oben nach
-        `cmd_diarize` wieder gesetzt wird, deckt `active_bases` jetzt durchgehend ab, was der
-        Lauf noch anfassen wird: Vorbereitung, Wartezeit in der Poolschlange und Korrektur.
-        Beide Haelften gehoeren zusammen — die eine allein bringt nichts (siehe oben).
+        unmittelbar hinter `ai_pool.submit(...)`. Zusammen mit dem `[active]` vor der
+        Transkription deckt `active_bases` durchgehend ab, was der Lauf noch anfassen wird:
+        Vorbereitung, Wartezeit in der Poolschlange und Korrektur. Seit #452 zaehlt
+        `buche_aktive` — das `[active]` vor der Transkription uebersteht `cmd_diarize`s
+        eigenes Paar, ohne dass danach neu gesetzt werden muesste; diese Freigabe ist der
+        eine Abzug, der das Fenster schliesst. Beide Haelften gehoeren zusammen — die eine
+        allein bringt nichts (siehe oben).
 
         GEMESSEN, A/B gegen master, echter Pfad, Standardkonfiguration `TRANSKRIBOR_DIARIZE=1`,
         `TRANSKRIBOR_PARALLEL=1`, zwei Aufnahmen: die zweite wartet in der Schlange, waehrend
@@ -686,8 +689,8 @@ def transcribe_project(name, model, language, only=None, autocorrect: bool = Fal
         aus `correct_ai_single`s `finally` und aus dem Rueckruf (ohne Diarisierung zweimal).
         Das ist in beiden Konfigurationen die Zahl von master, nur anders verteilt; bei den
         Schutz-Ausstiegen ist es ein Tausch (Schleife → Rueckruf), keine Vermehrung. `jobs.py`
-        fasst `active_bases` ausschliesslich mit `add`/`discard` an (`buche_aktive` und
-        `remove_base`, kein `remove`), `jobPhases.ts:252` raeumt nur eine Diarisierungsphase
+        bucht zaehlend und mit Boden 0 (`buche_aktive`, `remove_base`), so heben sich die drei
+        sauber auf; `jobPhases.ts:252` raeumt nur eine Diarisierungsphase
         und ist gegen das wiederholte `[done]` durch Optional-Chaining doppelt abgesichert.
 
         Den Rueckruf an `fut.result() is None` zu haengen ergaebe genau eine Zeile, wuerde aber
@@ -822,38 +825,25 @@ def transcribe_project(name, model, language, only=None, autocorrect: bool = Fal
                         _ai_pool_oeffnen()
                         # 1. Diarisierung & Prep direkt auf der GPU in der Hauptschleife (Hardware geschützt):
                         _correct.cmd_diarize(name, [base])
-                        # #418/C1: `cmd_diarize` druckt auf jedem Pfad, auf dem es die Datei
-                        # WIRKLICH anfasst, ein eigenes `[active]`/`[done]`-Paar
-                        # (in `correct.cmd_diarize`: das `[active]` hinter seiner Audio-Pruefung,
-                        # die vier `[done]` am Erfolgsende, beim Ausstieg "keine Sprecher
-                        # erkannt" und in beiden Ausnahmezweigen) — bei ihm heisst das
-                        # "dieser SCHRITT ist fertig", `jobs.py` liest aber "der Lauf ist mit
-                        # der Datei fertig" und verwirft sie aus `active_bases`. Ab hier waere
-                        # die Aufnahme also frei: waehrend `prep_single`, waehrend der ganzen
-                        # Wartezeit in der Poolschlange, bis `correct_ai_single` sie mit ihrem
-                        # eigenen `[active]` wieder eintraegt. Das Weglassen
-                        # des `finally`-Drucks allein aendert daran NICHTS — dort wurde nur ein
-                        # zweites Mal verworfen, was laengst weg war.
+                        # #452: `cmd_diarize` druckt auf jedem anfassenden Pfad ein eigenes
+                        # `[active]`/`[done]`-Paar, auf seinen VIER stillen Ausstiegen
+                        # (Kill-Switch, Roh-JSON fehlt, Sidecar-Wiederverwendung, kein Audio)
+                        # nichts. Seit `buche_aktive` ein ZAEHLER ist (#452), ist dieses Paar
+                        # harmlos IN das Fenster der Transkription geschachtelt — die Marke
+                        # oben (vor der Transkription) uebersteht sein `[done]`.
                         #
-                        # VIER Ausstiege von `cmd_diarize` drucken dagegen GAR NICHTS
-                        # (Kill-Switch `:281`, Roh-JSON fehlt `:285`, Sidecar-Wiederverwendung
-                        # `:303`, kein Audio `:306`). Dort ist die Aufnahme nach `cmd_diarize`
-                        # NICHT frei — die Paarung stimmt, es fehlen beide Zeilen. Die Marke
-                        # unten ist dann ein No-op. Wer die `[done]`-Duplikate zaehlt, rechnet
-                        # nur auf den anfassenden Pfaden mit dreien.
+                        # BIS #452 stand hier eine Wiederbewaffnung (`[active]` direkt hinter
+                        # `cmd_diarize`): als MENGE hob jedes innere `[done]` die Marke des
+                        # aeusseren Druckers auf, also musste neu gesetzt werden. Als Zaehler
+                        # waere genau dieses Neusetzen ein FEHLER: ein aktive ohne done, die
+                        # Bilanz bliebe auf 1 und die Aufnahme bis Jobende gesperrt. Der
+                        # Zaehler traegt die Verschachtelung selbst — nichts nachsetzen.
                         #
-                        # Der Klammerdruck von `cmd_diarize` kann nicht weg: im eigenstaendigen
-                        # `correct run` raeumt sein `[done]` die Diarisierungsphase in
-                        # `jobPhases.ts:252`. Also stellen wir hier wieder scharf. Kostenlos in
-                        # beiden Vertraegen — `jobPhases.ts` hat fuer `[active]` gar keinen
-                        # Zweig, und der Wortlaut steht im INVENTAR bereits als
-                        # `gelesen_anderswo` (`jobPhases.vertrag.test.ts:322`).
-                        #
-                        # NACH `cmd_diarize` statt nach `prep_single` (so lautete die
-                        # Review-Empfehlung): `prep_single` druckt weder `[active]` noch
-                        # `[done]` (nachgesehen), liegt aber im offenen Fenster. Hier gesetzt
-                        # deckt die Marke auch sie ab; eine Zeile spaeter nicht.
-                        print(f"[active] {base}", flush=True)
+                        # Der Klammerdruck von `cmd_diarize` bleibt wie er ist: im
+                        # eigenstaendigen `correct run` raeumt sein `[done]` die
+                        # Diarisierungsphase in `jobPhases.ts:252`. `jobPhases.ts` hat fuer
+                        # `[active]` gar keinen Zweig; das Weglassen hier aendert fuer den
+                        # Parser nichts.
                         # `prep_single` liefert `bool` und MELDET seinen Fehlschlag nur als
                         # `prep: SKIP …` — eine Zeile, die der Parser bewusst ignoriert. Der
                         # Rueckgabewert fiel hier weg (CodeRabbit an PR #433), womit der
