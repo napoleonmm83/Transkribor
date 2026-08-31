@@ -361,6 +361,7 @@ describe('mergePhases', () => {
       return (
         <div>
           <button onClick={() => adopt('j_entf', 'Demo', 'transcribe')}>adopt_entf</button>
+          <span data-testid="bereich">{phases.scope ? Array.from(phases.scope).join(',') : 'all'}</span>
           <span data-testid="urteil">{phases.perBase['X'] ?? 'keins'}</span>
         </div>
       )
@@ -379,9 +380,14 @@ describe('mergePhases', () => {
     })
     render(<JobProvider intervalMs={5}><EntferntProbe /></JobProvider>)
     fireEvent.click(screen.getByText('adopt_entf'))
+    // ZWEI Schritte, und der erste ist die Positivkontrolle: 'keins' gilt auch VOR dem
+    // ersten Poll (Anfangszustand). Ohne den wartenden Griff auf den Bereich waere der Test
+    // vacuous — unter der Mutation `r.entfernt nicht gereicht` lief er GRUEN, weil er den
+    // Anfangszustand als Erfolg las (Mutationsprobe M6, 2026-08-31).
+    await waitFor(() => expect(screen.getByTestId('bereich').textContent).toBe('X'))
     // 'keins' statt 'done': Urteil UND Beleg sind unterdrueckt — die gleichnamig neu
     // hochgeladene Datei zeigt ihren echten Plattenzustand statt „Fertig".
-    await waitFor(() => expect(screen.getByTestId('urteil').textContent).toBe('keins'))
+    expect(screen.getByTestId('urteil').textContent).toBe('keins')
   })
 })
 
