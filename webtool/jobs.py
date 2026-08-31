@@ -37,7 +37,7 @@ ACTIVE_PREFIX = "[active] "
 DONE_PREFIX = "[done] "
 
 
-def buche_aktive(aktive: set, line: str, gesehen: set | None = None) -> None:
+def buche_aktive(aktive: dict, line: str, gesehen: set | None = None) -> None:
     """Eine Protokollzeile auf die Menge der GERADE bearbeiteten Aufnahmen anwenden.
 
     Herausgezogen aus `_run` (#418), damit ein Test dieselbe Regel fahren kann wie der
@@ -46,9 +46,14 @@ def buche_aktive(aktive: set, line: str, gesehen: set | None = None) -> None:
     deshalb nicht sehen, dass die echte Funktion die Aufnahme mit ihrem eigenen `[done]`
     freigibt, bevor sie in die Poolschlange kommt.
 
-    Mehrere Drucker bedienen dieselbe Menge (`transcribe.py`, `correct.py` in beiden
-    Phasen), und derselbe Basisname kommt darin mehrfach vor — deshalb `discard` und nicht
-    `remove`: ein zweites `[done]` ist folgenlos, kein KeyError.
+    Mehrere Drucker bedienen dieselbe Buchung (`transcribe.py`, `correct.py` in beiden
+    Phasen), und dieselbe Aufnahme ist VERSCHACHTELT in ihnen aktiv — die Transkription
+    haelt das Fenster, `cmd_diarize` und die KI-Korrektur je ein eigenes Paar darin. Als
+    Menge hob jedes innere `[done]` die Marke des aeusseren Druckers auf: das Fenster
+    zwischen zwei benachbarten Schreibvorgangen, gemessen 0,00 s, aber real (#452). Als
+    ZAEHLER heben sie sich erst gemeinsam auf. Der Boden bei 0 ist der Nachfolger der
+    alten `discard`-Idempotenz: ein unpaariges `[done]` ist folgenlos und vergiftet
+    spaetere `[active]` nicht.
 
     `gesehen` ist die ZWEITE Menge und die Gegenrichtung: sie waechst nur (#475). Sie
     beantwortet "gehoerte zu diesem Lauf", nicht "wird gerade bearbeitet" - die Frage, an
@@ -74,26 +79,27 @@ def buche_aktive(aktive: set, line: str, gesehen: set | None = None) -> None:
     """
     if line.startswith(ACTIVE_PREFIX):
         roh = line[len(ACTIVE_PREFIX):]
-        b = roh.strip()
-        if b:
-            aktive.add(b)
-        # `gesehen` bekommt den UNGESTUTZTEN Namen, `aktive` den gestutzten -- und das ist
-        # keine Schlamperei, sondern die Bedingung dafuer, dass der Rueckweg ueberhaupt
-        # traegt. Die beiden Mengen haben verschiedene Leser: `aktive` treibt `betrifft()`,
-        # das gegen einen HTTP-Pfadparameter vergleicht; `gesehen` reist ins Frontend und
-        # wird dort gegen Namen gehalten, die die Endurteil-Regexe ROH aus der Zeile fangen
-        # (`jobPhases.ts:348`, ausdruecklich ungetrimmt: "safe_name laesst Randleerzeichen
-        # durch"). Gestutzt gesetzt, kaeme fuer eine Datei " Probe" der Seed als "Probe" an,
-        # das Urteil aber als " Probe" -- und `terminal()` verwuerfe es. Genau der Zustand,
-        # den dieser Rueckweg schliessen soll. Die Truthy-Pruefung spiegelt die des
-        # Frontends (`if (b) gesehen.add(b)` auf dem rohen `slice(9)`): ein Name aus lauter
-        # Leerzeichen ist dort wahr, hier auch.
+        if roh:
+            aktive[roh] = aktive.get(roh, 0) + 1
+        # BEIDE Mengen bekommen denselben UNGESTUTZTEN Namen (#477). Bis dahin buchte
+        # `aktive` gestutzt, `gesehen` roh -- und genau diese Asymmetrie war der Riegel-Loch:
+        # `aktive` treibt `betrifft()`, das gegen einen HTTP-Pfadparameter vergleicht, und
+        # der kommt ROH an (`safe_name` laesst Randleerzeichen durch). Fuer eine Datei
+        # " Probe" war `" Probe" in {"Probe"}` False -- der 409-Riegel griff fuer diese
+        # Namensklasse nie, still. `gesehen` (Frontend-Rueckweg; die Endurteil-Regexe faengt
+        # den Namen ROH aus der Zeile, `jobPhases.ts:348`) bucht schon seit #475 roh; jetzt
+        # gilt fuer beide dasselbe Wort: der Schluessel ist der rohe Rest der Zeile. Die
+        # Truthy-Pruefung spiegelt weiterhin die des Frontends (`if (b) gesehen.add(b)` auf
+        # dem rohen `slice(9)`): ein Name aus lauter Leerzeichen ist dort wahr, hier auch.
         if gesehen is not None and roh:
             gesehen.add(roh)
     elif line.startswith(DONE_PREFIX):
-        b = line[len(DONE_PREFIX):].strip()
-        if b:
-            aktive.discard(b)
+        roh = line[len(DONE_PREFIX):]
+        if roh:
+            if aktive.get(roh, 0) <= 1:
+                aktive.pop(roh, None)   # Boden 0 — Nachfolger der alten discard-Idempotenz
+            else:
+                aktive[roh] -= 1
 
 _PROZENT_RE = re.compile(r"^\d+%(?:\||\s|$)")
 MAX_JOB_LINES = 10_000
@@ -176,7 +182,7 @@ def start(project: str, cmd: list, cwd, kind: str, then=None, env=None, base: st
                       # None = Wirkungsbereich noch unbekannt (Zeile noch nicht gedruckt)
                       # -> gilt als "faesst alles an". Siehe SCOPE_PREFIX.
                       "bases": initial_bases,
-                      "active_bases": set(),
+                      "active_bases": {},             # Zaehler je rohem Basisname (#452)
                       # Waechst nur, wird nie geraeumt - siehe buche_aktive (#475).
                       "gesehen": set(),
                       "lines": [], "returncode": None, "started": time.time(),
@@ -458,7 +464,8 @@ def get(job_id: str):
         snap.pop("proc", None)                # Popen-Handle ist nicht JSON-serialisierbar
         snap.pop("then", None)                # Callables sind nicht JSON-serialisierbar
         snap.pop("next_runs", None)           # Callables sind nicht JSON-serialisierbar
-        snap.pop("active_bases", None)        # Set ist nicht JSON-serialisierbar
+        snap.pop("active_bases", None)        # Zaehler-dict ist nicht JSON-serialisierbar
+                                               # und verlaesst den Server nie (test_jobs.py)
         if isinstance(snap.get("bases"), set):
             snap["bases"] = list(snap["bases"])
         # `gesehen` geht MIT (anders als active_bases): es ist der Rueckweg des Frontends,
@@ -491,7 +498,7 @@ def remove_base(project: str, base: str) -> None:
                 # dass eine Datei geloescht wird, und kein Riegel haengt daran
                 # (`zugelassen()` im Frontend ist reine Anzeige).
                 if r.get("active_bases") is not None:
-                    r["active_bases"].discard(base)
+                    r["active_bases"].pop(base, None)
 
 
 def betrifft(project: str, base: str, active_only: bool = False) -> dict | None:
@@ -530,11 +537,11 @@ def betrifft(project: str, base: str, active_only: bool = False) -> dict | None:
             if r is None or r["status"] != "running":
                 continue
             if active_only:
-                if base in r.get("active_bases", set()):
+                if base in r.get("active_bases", {}):
                     return {"id": r["id"], "kind": r["kind"]}
             else:
                 if (r["bases"] is None or base in r["bases"]
-                        or base in r.get("active_bases", set())):
+                        or base in r.get("active_bases", {})):
                     return {"id": r["id"], "kind": r["kind"]}
     return None
 
