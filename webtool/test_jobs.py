@@ -1322,3 +1322,37 @@ def test_stderr_zeilen_bleiben_im_protokoll():
     finally:
         jobs.cancel(jid)
         _wait(jid)
+
+
+def test_stderr_faden_beendet_den_job_statt_ihn_haengen_zulassen(monkeypatch):
+    """Kaltreview zu #481: endet der stderr-Leser durch eine AUSNAHME statt EOF, laeuft
+    die Pipe voll, der Kindprozess blockiert im naechsten stderr-write, der stdout-Loop
+    erreicht nie EOF — der Job bliebe dauerhaft `running`, und die 409-Riegel stünden.
+    Genau der Zombie, den der Kommentar "kein Zombie 'running'" verspricht; der
+    Hauptpfad verhindert ihn (sein except setzt einen terminalen Status), der Faden
+    muss dasselbe tun: den Prozessbaum killen, damit stdout endet und der aeussere
+    Handler uebernimmt. Heute wirft kein Callee — der Test simuliert den ersten
+    kuenftigen (ein werfendes buche_aktive nur fuer die stderr-Zeile)."""
+    code = (
+        "import sys, time\n"
+        "sys.stderr.write('boese\\n')\n"
+        "sys.stderr.flush()\n"
+        "sys.stdout.write('gut\\n')\n"
+        "sys.stdout.flush()\n"
+        "time.sleep(30)\n"
+    )
+    echt = jobs.buche_aktive
+
+    def kaputt(aktive, line, gesehen=None):
+        if line == "boese":
+            raise RuntimeError("der erste kuenftige werfende Callee")
+        return echt(aktive, line, gesehen)
+
+    monkeypatch.setattr(jobs, "buche_aktive", kaputt)
+    jid, _ = jobs.start("P_stderr_wurf", [sys.executable, "-c", code], cwd=None,
+                        kind="correct")
+    r = _wait(jid, timeout=15)
+    assert r is not None and r["status"] != "running", (
+        "Job haengt im running-Zustand, obwohl der stderr-Faden gestorben ist "
+        f"(status={r['status'] if r else 'kein Record'}) — die Pipe laeuft voll und der "
+        "Kind blockiert; nur ein manueller Abbruch wuerde ihn loesen")
