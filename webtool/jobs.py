@@ -360,7 +360,13 @@ def _run_proc(jid, cmd, cwd, env=None):
                     "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8",
                     **(env or {})}
         proc = subprocess.Popen(
-            cmd, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            # stderr AM EIGENEN FADEN (#481), nicht mehr in stdout gemergt: tqdm schreibt
+            # \r-Fragmente OHNE Zeilenende, und eine stdout-Marke, die auf gemergter Pipe in
+            # ein offenes Fragment fiel, kam als `5%|… [done] X` an — discard ins Leere,
+            # Aufnahme bis Jobende gesperrt. Getrennte Ströme teilen sich keine Zeile mehr;
+            # das Fragment bleibt im Protokoll (Prozentquelle von jobPhases.ts). Gezahlter
+            # Preis: die Reihenfolge zwischen den Strömen ist nicht mehr die des Kernels.
+            cmd, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             text=True, encoding="utf-8", errors="replace", bufsize=1,
             creationflags=_CREATE_NO_WINDOW, env=full_env, **_popen_kwargs(),
         )
@@ -374,7 +380,8 @@ def _run_proc(jid, cmd, cwd, env=None):
             nachtrag_an = _jobs[jid]["kind"] in NACHTRAG_KINDS
         if cancelled:                            # cancel() kam an, bevor die pid gesetzt war -> selbst killen
             _kill_tree(proc)
-        for line in proc.stdout:
+
+        def _verarbeite(line):
             line = line.rstrip("\n")
             with _lock:
                 fuege_zeile_an(_jobs[jid]["lines"], line)
@@ -392,6 +399,25 @@ def _run_proc(jid, cmd, cwd, env=None):
                         b for b in line[len(SCOPE_ADD_PREFIX):].split("\t") if b)
                 else:
                     buche_aktive(_jobs[jid]["active_bases"], line, zulassung)
+
+        def _lese_stderr():
+            try:
+                for line in proc.stderr:
+                    _verarbeite(line)
+            except Exception as e:   # dasselbe Muster wie der Hauptpfad: kein Zombie 'running'
+                with _lock:
+                    r = _jobs.get(jid)
+                    if r is not None:
+                        fuege_zeile_an(r["lines"], f"JOB-FEHLER: {e}")
+
+        stderr_faden = threading.Thread(target=_lese_stderr, daemon=True)
+        stderr_faden.start()
+        for line in proc.stdout:
+            _verarbeite(line)
+        # joined VOR proc.wait(): ein volles stderr-Pipe wuerde den Kindprozess blockieren
+        # und wait kehrte nie zurueck. Der Timeout ist ein Deckel gegen einen haengenden
+        # Faden (EOF endet ihn eigentlich; ein Join OHNE Deckel waere ein neuer Hänger-Typ).
+        stderr_faden.join(timeout=30)
         proc.wait()
         with _lock:
             _jobs[jid]["returncode"] = proc.returncode
