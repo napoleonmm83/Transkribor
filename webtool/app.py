@@ -46,6 +46,14 @@ from .edit_model import build_edit_doc
 from .render_md import render_md
 from .render_srt import render_srt
 
+# `as _transcribe` aus demselben Grund wie `correct as _correct` oben: weiter unten
+# steht `def transcribe(project)` (der Endpunkt), ein blanker `import transcribe`
+# wuerde davon still ueberschrieben. Der Import ist gratis — fetch_mod laedt das
+# Modul ohnehin (fetch.py importiert es am Kopf), und transcribe.py importiert am
+# Kopf nur stdlib. Gebraucht wird `_autocorrect_an`, die EINE Quelle des
+# Kill-Switches (#441): Server und Lauf sehen dieselbe Variable.
+import transcribe as _transcribe
+
 # Vor allem anderen: die .env kann TRANSKRIBOR_PROJEKTE & Co. setzen, und die liest
 # jeder folgende Zugriff aus os.environ. Frueher taten das die Launcher (webtool.ps1,
 # electron/backend.js) — damit sah ein von Hand gestartetes uvicorn die Datei nie.
@@ -828,6 +836,31 @@ def _keine_jobs(project: str, base: str = None, active_only: bool = False) -> No
                             detail=f"{wen} gerade bearbeitet ({was} läuft) — bitte warten")
 
 
+def _laeuft_mitkorrektur(project: str) -> None:
+    """#441, projektweite Haelfte: seit der gestaffelten Pipeline (v0.48.0) korrigiert der
+    transcribe-Job selbst mit, und die Job-Dedupe je (Projekt, Art) sieht den Konflikt
+    nicht — ein manueller Korrekturlauf startete parallel auf dieselben Dateien, und
+    mitten im Schreiben gibt es noch keine correction.json, also griff auch kein Skip.
+
+    Gesperrt wird NUR, wenn der Lauf selbst korrigieren WILL: `_autocorrect_an` ist
+    dieselbe Quelle, die der Lauf befragt (ihre Docstring traegt die Praemisse — der
+    Server sieht dieselbe Variable). Mit TRANSKRIBOR_AUTOCORRECT=0 bleibt der manuelle
+    Korrekturlauf neben der laufenden Transkription der VORGESEHENE Weg (GPU_KINDS in
+    jobs.py) und wird nicht ueberblockiert. Die Anbieterlage zaehlt bewusst nicht: sie
+    wird je Datei neu gefragt (#414) und waere ein Rennen — konservativ sperren, wenn
+    der Lauf korrigieren will; der Fall „Kill-Switch an, aber kein Anbieter" scheitert
+    ohnehin an _require_ai, sobald der Lauf vorbei ist.
+
+    Kein drittes Flag an _keine_jobs: base=None bedeutet dort „jeder Job sperrt"
+    (rename_project-Semantik), und diese Bedingung hier ist eine andere."""
+    if not _transcribe._autocorrect_an():
+        return
+    if any(j["kind"] == "transcribe" for j in jobs.active_for(project)):
+        raise HTTPException(status_code=409,
+                            detail="Im Projekt läuft gerade eine Transkription, die selbst "
+                                   "korrigiert — bitte warten")
+
+
 @app.delete("/api/projects/{project}/files/{base}")
 def delete_file(project: str, base: str):
     """Eine einzelne Aufnahme samt Audio loeschen (das Projekt bleibt)."""
@@ -1305,6 +1338,9 @@ def _require_ai():
 def correct(project: str):
     _validate(project)
     _sicherer_projektname(project)   # ein Lauf ERZEUGT den vergifteten Strom (#416)
+    # Vor _require_ai wie beim Einzeldatei-Riegel: der laufende Konflikt ist die
+    # aktuellere Auskunft als die Anbieterfrage (#441, projektweite Haelfte).
+    _laeuft_mitkorrektur(project)
     _require_ai()
     job_id, started = jobs.request(project, [sys.executable, "-m", "webtool.correct", "run", project],
                                    paths.ROOT, "correct")
@@ -1321,8 +1357,9 @@ def correct_file(project: str, base: str, force: bool = False):
     # und "correct". active_only=True wie beim Loeschen: die Datei ist nur gesperrt,
     # WAHREND der Lauf sie schreibt — der vorgesehene Parallelweg mit
     # TRANSKRIBOR_AUTOCORRECT=0 (neben einer laufenden Transkription korrigieren)
-    # bleibt frei. Der projektweite Endpunkt oben bleibt ohne Riegel, bis es ein
-    # positives Merkmal gibt ("korrigiert der Lauf selbst mit?"), siehe #441/Glied 4.
+    # bleibt frei. Die projektweite Haelfte dieses Schutzes traegt der Endpunkt oben
+    # als _laeuft_mitkorrektur (#441, Glied 4): Merkmal ist der Kill-Switch, nicht
+    # die aktive Datei.
     #
     # Der Riegel steht VOR dem 404 (wie bei delete_file): waehrend der Lauf die Datei
     # aktiv schreibt, existiert die Roh-JSON noch NICHT — "gerade bearbeitet" ist die
