@@ -13,6 +13,20 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Alle drei Jobs LESEN nur: pytest, Vitest/tsc, die node:test-Suite und die drei
+# Skript-Tests (`notizen.test.sh` faelscht `gh` und braucht kein Token).
+#
+# Ohne Block gilt die Vorgabe des REPOSITORYS — und die ist eine Einstellung, die ein
+# Klick umlegt, kein Bestandteil dieses Workflows. Heute steht sie auf read: gemessen am
+# Lauf 33417474238 bekamen `Python` und `Frontend` `Contents: read · Metadata: read ·
+# Packages: read`, `Electron` (der als einziger einen Block hatte) nur die ersten beiden.
+# Der Block hier schliesst also kein offenes Schreibrecht — er macht den Workflow von der
+# Einstellung unabhaengig und nimmt das ungenutzte `Packages: read` weg
+# (zizmor: excessive-permissions, gefunden an PR #468). Workflow-weit statt je Job, damit
+# ein kuenftiger vierter Job ihn nicht vergessen kann.
+permissions:
+  contents: read
+
 jobs:
   # Namen bewusst ohne Testzahlen: die erste Zahl war nach einem einzigen PR falsch (242 -> 244),
   # und ein Jobname, der luegt, ist schlechter als einer, der nichts verspricht.
@@ -105,12 +119,9 @@ jobs:
   electron:
     name: Electron
     runs-on: ubuntu-latest
-    # Der Job liest nur das Repository: `npm ci`, die node:test-Suite und die beiden
-    # Skript-Tests. `notizen.test.sh` faelscht `gh` und braucht kein Token. Ohne Block gilt
-    # die Repo-Vorgabe, die Schreibrechte enthalten kann (zizmor: excessive-permissions).
-    # `python` und `frontend` haben dieselbe Luecke — eigenes Issue, nicht dieser PR.
-    permissions:
-      contents: read
+    # Der job-eigene `permissions`-Block stand bis #470 hier und ist in den
+    # workflow-weiten oben aufgegangen — er sagte dasselbe, und zwei Stellen fuer eine
+    # Regel driften.
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -131,3 +142,8 @@ jobs:
       # liefert den Text, den der Nutzer auf der Releases-Seite liest. Beides ist nach dem
       # Push nicht mehr still zu korrigieren.
       - run: bash scripts/notizen.test.sh
+
+      # Und aus demselben Grund fassung.sh: es waehlt den Tag, ab dem versionshoehe.sh
+      # rechnet. Ein Fehler darin verschiebt eine Versionsnummer, die nach dem
+      # Veroeffentlichen niemand mehr zurueckholt.
+      - run: bash scripts/fassung.test.sh

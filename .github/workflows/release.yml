@@ -48,7 +48,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          fetch-depth: 0     # ohne Historie und Tags gibt es kein `git describe`
+          fetch-depth: 0     # ohne Historie und Tags findet scripts/fassung.sh nichts
       - id: plan
         shell: bash
         run: |
@@ -66,12 +66,13 @@ jobs:
             exit 0
           fi
 
-          # `--match "v[0-9]*"`, weil hier NICHT jeder Tag eine Fassung ist: `modelle-v1`
-          # existiert (auf demselben Commit wie v0.5.0) und traegt die Sprechertrennungs-
-          # Modelle. Heute liefert `describe` trotzdem v0.49.1 — der naechste Modell-Tag laege
-          # aber VOR der letzten Fassung, und dann rechnete `versionshoehe.sh` seinen Sprung
-          # aus dem falschen Bereich. Latent, nicht harmlos: den Praezedenzfall gibt es schon.
-          letzter="$(git describe --tags --abbrev=0 --match 'v[0-9]*' 2>/dev/null || true)"
+          # Welcher Tag eine Fassung IST, entscheidet scripts/fassung.sh. Dort steht auch,
+          # warum ein Glob das nicht kann: `modelle-v1` traegt die Sprechertrennungs-Modelle,
+          # und die Testbau-Releases heissen `v<version>-build<Laufnummer>` — beides keine
+          # Fassung, das zweite aber von `--match "v[0-9]*"` nicht zu trennen (#472).
+          # Eigene Datei, damit fassung.test.sh genau das prueft, was hier laeuft —
+          # dieselbe Begruendung wie bei versionshoehe.sh eine Zeile weiter unten.
+          letzter="$(bash scripts/fassung.sh)"
           if [ -z "$letzter" ]; then
             # Ohne Ausgangspunkt muesste man die GESAMTE Historie auswerten. Den Anfang
             # setzt ein Mensch: einmal `git tag v0.2.0 && git push --tags`.
@@ -90,14 +91,17 @@ jobs:
             exit 1
           fi
 
-          # Die beiden Skripte werden HIER geprueft, nicht erst im Bau-Job. `bauen` haengt an
+          # Die drei Skripte werden HIER geprueft, nicht erst im Bau-Job. `bauen` haengt an
           # `version` — dort liefe der Test also erst, nachdem dieser Job Version UND
           # rotierte Notizdatei schon nach master gepusst hat. Eine Wache hinter dem, was sie
-          # bewachen soll, ist keine. Beide Laeufe zusammen kosten 1–5 s (gemessen am Schritt
-          # „Release-Skripte pruefen" der Testbauten 33193601556 und 33194321729, sechs
-          # Matrix-Jobs; lokal 4,9 s).
+          # bewachen soll, ist keine. Die ersten beiden Laeufe zusammen kosten 1–5 s (gemessen
+          # am Schritt „Release-Skripte pruefen" der Testbauten 33193601556 und 33194321729,
+          # sechs Matrix-Jobs; lokal 4,9 s); fassung.test.sh legt zwei Wegwerf-Repos mit
+          # Tags an und kostet lokal 1,44 s (Windows/Git Bash, Minimum aus drei Laeufen —
+          # auf Linux weniger, dort sind die git-Aufrufe billiger).
           bash scripts/versionshoehe.test.sh >/dev/null
           bash scripts/notizen.test.sh >/dev/null
+          bash scripts/fassung.test.sh >/dev/null
 
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -160,6 +164,16 @@ jobs:
               dist/*.deb
               dist/latest-linux.yml
     runs-on: ${{ matrix.os }}
+    # Dieser Job SCHREIBT nichts am Repository: er checkt aus, faehrt `npm ci`, die
+    # Testsuiten und `npm run dist` (= `electron-builder --publish never`, package.json)
+    # und laedt die Artefakte hoch — der Artefakt-Upload nimmt den Laufzeit-Token, nicht
+    # GITHUB_TOKEN. Ohne diesen Block erbt er das workflow-weite `contents: write`, und
+    # gemessen tat er das auch (Lauf 33310938957: `Contents: write` in allen drei
+    # Matrix-Jobs). Genau hier laeuft fremder Code — `npm ci` fuehrt die
+    # Installationsskripte jeder Abhaengigkeit aus. Ein Schreibrecht daneben ist die
+    # teuerste der drei Stellen, an denen es ueberfluessig war.
+    permissions:
+      contents: read
     steps:
       # Bei einem Release den frisch gesetzten Tag auschecken, nicht den Stand von vorher —
       # sonst baut die Matrix die alte Versionsnummer in die Installer.
@@ -194,6 +208,7 @@ jobs:
         run: |
           bash scripts/versionshoehe.test.sh
           bash scripts/notizen.test.sh
+          bash scripts/fassung.test.sh
 
       # electron-updater vergleicht die Version aus der package.json, NICHT den Tag. Ein Tag
       # v0.2.0 auf einer package.json mit 0.1.0 baut Installer, die sich als 0.1.0 ausgeben —
@@ -271,7 +286,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ needs.version.outputs.ref }}
-          # Ohne Historie gibt es kein `git describe` — und das braucht der Rueckfall, wenn
+          # Ohne Historie und Tags findet scripts/fassung.sh nichts — und das braucht der Rueckfall, wenn
           # niemand eine Release-Notiz geschrieben hat: dann entsteht der Text aus den
           # Commit-Betreffen seit dem vorigen Tag. Der Regelfall liest nur eine Datei und
           # kaeme mit Tiefe 1 aus; die Tiefe zahlt also fuer den Fall, der nicht eintreten soll.
@@ -350,13 +365,13 @@ jobs:
           [ -n "$notiz" ] || notiz="$(bash scripts/notizen.sh lesen RELEASE-NOTIZEN.md 'Unveröffentlicht')"
           if [ -z "$notiz" ]; then
             # `HEAD^` NUR beim echten Release: dort zeigt der eben gepusste Tag auf HEAD, und
-            # `describe HEAD` gaebe genau ihn zurueck — der Bereich waere leer. Beim Testbau
+            # `fassung.sh HEAD` gaebe genau ihn zurueck — der Bereich waere leer. Beim Testbau
             # ist `ref` leer, der Checkout landet auf dem Branch-Kopf; laege dort der letzte
             # Release-Tag (direkt nach einem Release-Commit ohne weiteren Push), lieferte
             # `HEAD^` die VORVORIGE Fassung, und die Ersatzliste zaehlte die Aenderungen eines
             # bereits veroeffentlichten Releases erneut auf.
             if [ "$IS_TEST" = "true" ]; then bezug=HEAD; else bezug=HEAD^; fi
-            vorher="$(git describe --tags --abbrev=0 --match 'v[0-9]*' "$bezug" 2>/dev/null || true)"
+            vorher="$(bash scripts/fassung.sh "$bezug")"
             if [ -n "$vorher" ]; then bereich="$vorher..HEAD"; else bereich="HEAD"; fi
             notiz="$(bash scripts/notizen.sh ersatzliste "$bereich")"
           fi
