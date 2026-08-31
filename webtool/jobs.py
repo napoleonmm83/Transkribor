@@ -146,7 +146,8 @@ GPU_KINDS = ("transcribe",)
 # Zeile mit `[active] `, und dann sammelt `gesehen` auch Zeilenbruchstuecke - das Frontend
 # traegt dieselbe Verschmutzung seit #431 dokumentiert. Anzeige-Folgen hat das keine (die
 # Muellschluessel treffen keinen Basisnamen), die Nutzlast je Poll waechst aber, und `gesehen`
-# ist die einzige ungedeckelte Sammlung im Datensatz. Siehe Issue.
+# war bis K1 Glied 3 die einzige ungedeckelte Sammlung im Datensatz — seitdem gibt es mit
+# `entfernt` eine zweite (gleiches Wachstum, gleiche Nutzlast-Frage). Siehe Issue.
 ZULASSUNGS_KINDS = ("transcribe", "correct")
 
 # Welche Job-Arten einen Bereichs-NACHTRAG drucken duerfen. Nur `transcribe_project` tut es
@@ -188,9 +189,11 @@ def start(project: str, cmd: list, cwd, kind: str, then=None, env=None, base: st
                       "active_bases": {},             # Zaehler je rohem Basisname (#452)
                       # Waechst nur, wird nie geraeumt - siehe buche_aktive (#475).
                       "gesehen": set(),
-                      # Geloeschte Aufnahmen (remove_base) - monoton wie `gesehen`, aber die
-                      # GEGENRICHTUNG: sie nimmt Urteile aus dem Strom, statt Anwesenheit
-                      # zuzulassen (#479/#489).
+                      # Geloeschte Aufnahmen (remove_base) - die GEGENRICHTUNG zu `gesehen`:
+                      # sie nimmt Urteile aus dem Strom, statt Anwesenheit zuzulassen
+                      # (#479/#489). #490-ENTSCHEIDUNG: eine kuenftige serverseitige Heilung
+                      # der perBase-Verdraengung muss `erreicht` UND diese Unterdrueckung
+                      # mitnehmen — beides liegt damit schon serverseitig.
                       "entfernt": set(),
                       "lines": [], "returncode": None, "started": time.time(),
                       "ended": None, "pid": None, "cancelled": False,
