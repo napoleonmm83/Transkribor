@@ -314,8 +314,7 @@ def cmd_diarize(project: str, only_bases: list = None) -> int:
             # danach ein Sidecar fuer eine geloeschte Aufnahme — dieselbe Waise wie in
             # `cmd_run.one()`, nur mit anderem Suffix. Im gestaffelten Lauf ist es folgenlos
             # (`transcribe.transcribe_project` hat sie in der Transkriptionsphase laengst
-            # eingetragen) und die Zeile dort ein `add` auf
-            # ein Set.
+            # eingetragen) und die Zeile dort ein Zaehler-Increment auf dem dortigen Fenster.
             #
             # ABGRENZUNG, damit hier niemand mehr liest, als dasteht: die REIHENFOLGE ist
             # gemessen (mutationsgeprueft, `test_diarize_meldet_sich_bevor_es_das_alte_sidecar_
@@ -1330,8 +1329,8 @@ def cmd_run(project: str, base: str = None, force: bool = False, verify: bool = 
             #
             # GETRAGENER PREIS: eine korrigierte Datei meldet `[done]` dreimal — aus
             # `cmd_diarize`, aus `correct_ai_single`s `finally` und hier. `jobs.buche_aktive`
-            # fasst die Menge ausschliesslich mit `add`/`discard` an (sein Docstring sagt genau
-            # das), und `jobPhases.ts:252` raeumt per Optional-Chaining nur eine
+            # bucht zaehlend mit Boden 0 (siehe ihr Docstring), die drei heben sich sauber
+            # auf, und `jobPhases.ts:252` raeumt per Optional-Chaining nur eine
             # DIARISIERUNGSphase — die ist zu diesem Zeitpunkt laengst weg.
             if gemeldet:
                 print(f"[done] {b}", flush=True)
