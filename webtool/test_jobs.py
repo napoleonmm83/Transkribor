@@ -581,6 +581,55 @@ def test_done_entfernt_aufnahme_aus_active_bases():
         _wait(jid)
 
 
+def test_verschachtelte_marken_heben_sich_nur_gemeinsam_auf():
+    """#452 — `cmd_diarize`s `[done]` darf die Marke des aeusseren Druckers nicht aufheben.
+
+    Seit #418/#444 drucken MEHRERE Stellen dieselbe Aufnahme: `transcribe_project` oeffnet
+    das Fenster, `cmd_diarize` und `correct_ai_single` je ein eigenes Paar darin. Als MENGE
+    hob jedes innere `[done]` die Marke des aeusseren auf — das Fenster zwischen zwei
+    benachbarten Schreibvorgangen, gemessen 0,00 s, aber real (#452). Als ZAEHLER heben sie
+    sich erst gemeinsam auf. Der Boden bei 0 ist kein Kosmetikdetail: ein fremdes `[done]`
+    (unpaarige Zeile aus einem Ausnahmezweig) darf spaetere `[active]` nicht schwaechen.
+    """
+    aktive, gesehen = {}, set()
+    for z in ["[active] S1", "[active] S1", "[done] S1"]:
+        jobs.buche_aktive(aktive, z, gesehen)
+    assert "S1" in aktive, "innerer Drucker fertig, der aeussere haelt die Aufnahme noch"
+    jobs.buche_aktive(aktive, "[done] S1", gesehen)
+    assert aktive == {}
+    assert gesehen == {"S1"}
+
+
+def test_fremdes_done_vergiftet_die_buchung_nicht():
+    """Boden bei 0: ein `[done]` ohne `[active]` darf spaetere `[active]` nicht schwaechen.
+
+    Mit naivem Dekrement stünde der Zaehler danach auf -1, das naechste `[active]` brächte
+    ihn auf 0 — die Aufnahme waere gebucht und trotzdem `betrifft()`-frei. Der Nachfolger
+    der alten `discard`-Idempotenz: ein zweites `[done]` ist folgenlos.
+    """
+    aktive = {}
+    jobs.buche_aktive(aktive, "[done] X")
+    assert "X" not in aktive, "ein fremdes [done] darf keinen Schluessel mit Zaehler <= 0 hinterlassen"
+    jobs.buche_aktive(aktive, "[active] X")
+    assert aktive.get("X") == 1, "und das folgende [active] muss voll zaehlen, nicht auf 0 stehen"
+
+
+def test_aktive_bucht_den_namen_roh():
+    """#477 — `betrifft()` vergleicht gegen den rohen HTTP-Pfadparameter, also wird roh gebucht.
+
+    `safe_name` laesst Randleerzeichen durch, und der Pfad-Parameter kommt unveraendert
+    an. Gestutzt gebucht waere `" Probe" in {"Probe"}` False — der 409-Riegel griffe fuer
+    diese Namensklasse nie. `gesehen` bucht seit #475 ohnehin roh; dieser Test nagelt die
+    SYMMETRIE fest ( dieselbe Zeile, derselbe Schluessel, beide Mengen ).
+    """
+    aktive, gesehen = {}, set()
+    jobs.buche_aktive(aktive, "[active]  Rand", gesehen)
+    assert " Rand" in aktive and "Rand" not in aktive
+    assert " Rand" in gesehen
+    jobs.buche_aktive(aktive, "[done]  Rand", gesehen)
+    assert aktive == {}
+
+
 def test_gesehen_ueberlebt_den_zeilendeckel():
     """Die `[active]`-Zeile faellt aus dem gedeckelten Puffer -- der Job weiss sie
     trotzdem, und `get()` gibt sie mit (#475).
