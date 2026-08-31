@@ -379,6 +379,73 @@ def test_correct_file_409_vor_dem_404_wenn_der_lauf_gerade_schreibt(client, monk
         jobs_mod._jobs.pop(jid, None)
 
 
+def test_correct_409_wenn_transkription_mitkorrigiert(client, monkeypatch, mit_anbieter):
+    """#441, projektweite Haelfte: der „Alles korrigieren"-Knopf muss sperren, wenn die
+    laufende Transkription selbst korrigiert — zwei Korrekturlaeufe auf denselben
+    Dateien, und mitten im Schreiben gibt es keine correction.json, die ein Skip
+    retten wuerde. TRANSKRIBOR_AUTOCORRECT wird JE Test gepinnt: die client-Fixture
+    fasst ihn nicht an, sonst entschiede eine .env-Altlast ueber rot und gruen."""
+    import webtool.jobs as jobs_mod
+    monkeypatch.setenv("TRANSKRIBOR_AUTOCORRECT", "1")
+    jid = "t441p"
+    jobs_mod._active[("Demo", "transcribe")] = jid
+    jobs_mod._jobs[jid] = {"id": jid, "kind": "transcribe", "status": "running"}
+    gestartet = []
+    monkeypatch.setattr(jobs_mod, "request",
+                        lambda *a, **k: gestartet.append(a) or ("x", True))
+    try:
+        r = client.post("/api/projects/Demo/correct")
+        assert r.status_code == 409
+        assert "selbst korrigiert" in r.json()["detail"]
+        assert gestartet == [], "kein Job trotz laufender Mitkorrektur"
+    finally:
+        jobs_mod._active.pop(("Demo", "transcribe"), None)
+        jobs_mod._jobs.pop(jid, None)
+
+
+def test_correct_startet_trotz_laufender_transkription_ohne_autocorrect(
+        client, monkeypatch, mit_anbieter):
+    """Die Zusicherung gegen Ueberblockieren: mit TRANSKRIBOR_AUTOCORRECT=0 ist der
+    manuelle Korrekturlauf neben der laufenden Transkription der VORGESEHENE Weg
+    (GPU_KINDS in jobs.py) — ein blankes _keine_jobs(project) wuerde ihn sperren,
+    genau die Verhaltensaenderung, die #441 verbietet."""
+    import webtool.jobs as jobs_mod
+    monkeypatch.setenv("TRANSKRIBOR_AUTOCORRECT", "0")
+    jid = "t441q"
+    jobs_mod._active[("Demo", "transcribe")] = jid
+    jobs_mod._jobs[jid] = {"id": jid, "kind": "transcribe", "status": "running"}
+    gestartet = []
+    monkeypatch.setattr(jobs_mod, "request",
+                        lambda *a, **k: gestartet.append(a) or ("x", True))
+    try:
+        r = client.post("/api/projects/Demo/correct")
+        assert r.status_code == 200 and gestartet, "Parallelweg bleibt frei"
+    finally:
+        jobs_mod._active.pop(("Demo", "transcribe"), None)
+        jobs_mod._jobs.pop(jid, None)
+
+
+def test_correct_nicht_gesperrt_von_eigenem_correct_job(client, monkeypatch, mit_anbieter):
+    """Nur transcribe sperrt, nicht jeder Job (Abgrenzung zur rename_project-Semantik
+    von _keine_jobs mit base=None). jobs.request ist ein RECORDER, kein echter Aufruf:
+    der wuerde _pending[("Demo","correct",None)] belegen und den Key nach Testende
+    liegenlassen (die Vergiftungsfalle aus jobs.request)."""
+    import webtool.jobs as jobs_mod
+    monkeypatch.setenv("TRANSKRIBOR_AUTOCORRECT", "1")
+    jid = "t441r"
+    jobs_mod._active[("Demo", "correct")] = jid
+    jobs_mod._jobs[jid] = {"id": jid, "kind": "correct", "status": "running"}
+    gestartet = []
+    monkeypatch.setattr(jobs_mod, "request",
+                        lambda *a, **k: gestartet.append(a) or ("x", True))
+    try:
+        r = client.post("/api/projects/Demo/correct")
+        assert r.status_code == 200 and gestartet, "eigener correct-Job sperrt nicht"
+    finally:
+        jobs_mod._active.pop(("Demo", "correct"), None)
+        jobs_mod._jobs.pop(jid, None)
+
+
 def test_korrektur_ohne_anbieter_409_statt_job(client, monkeypatch):
     """Ohne nutzbaren Anbieter darf KEIN Job entstehen: sonst laeuft erst die Diarisierung
     (GPU, Minuten) durch, bevor der erste LLM-Aufruf scheitert."""
