@@ -52,8 +52,11 @@ def buche_aktive(aktive: dict, line: str, gesehen: set | None = None) -> None:
     Menge hob jedes innere `[done]` die Marke des aeusseren Druckers auf: das Fenster
     zwischen zwei benachbarten Schreibvorgangen, gemessen 0,00 s, aber real (#452). Als
     ZAEHLER heben sie sich erst gemeinsam auf. Der Boden bei 0 ist der Nachfolger der
-    alten `discard`-Idempotenz: ein unpaariges `[done]` ist folgenlos und vergiftet
-    spaetere `[active]` nicht.
+    alten `discard`-Idempotenz: ein unpaariges `[done]` bei Stand 0 ist folgenlos und
+    vergiftet spaetere `[active]` nicht. Getragene Restgrenze: im VERSCHACHTELTEN Fenster
+    (Stand >= 1) hebt ein unpaariges inneres `[done]` die aeussere Buchung frueher auf —
+    erreichbar nur ueber eine verlorene/verstümmelte Marke (der Print ist einzeln
+    zeilengebündelt), praktisch verstopft, aber nicht strukturell ausgeschlossen.
 
     `gesehen` ist die ZWEITE Menge und die Gegenrichtung: sie waechst nur (#475). Sie
     beantwortet "gehoerte zu diesem Lauf", nicht "wird gerade bearbeitet" - die Frage, an
@@ -420,9 +423,11 @@ def _run_proc(jid, cmd, cwd, env=None):
         stderr_faden.start()
         for line in proc.stdout:
             _verarbeite(line)
-        # joined VOR proc.wait(): ein volles stderr-Pipe wuerde den Kindprozess blockieren
-        # und wait kehrte nie zurueck. Der Timeout ist ein Deckel gegen einen haengenden
-        # Faden (EOF endet ihn eigentlich; ein Join OHNE Deckel waere ein neuer Hänger-Typ).
+        # joined VOR proc.wait() der Ordnung halber: die letzten stderr-Zeilen sollen den
+        # Statuswechsel typischerweise nicht ueberdauern. Ein Deadlock kann aus der
+        # Reihenfolge NICHT entstehen — der Daemon-Faden entleert die Pipe unabhängig vom
+        # Join, und der Timeout deckelt ihn gegen einen haengenden Enkel, der das
+        # stderr-Handle offen haelt (EOF kaeme dann erst nach dem Kind).
         stderr_faden.join(timeout=30)
         proc.wait()
         with _lock:

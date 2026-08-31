@@ -56,13 +56,14 @@ GRENZEN, benannt statt verschwiegen:
   gedruckt, bevor ein zweiter Thread laeuft (`transcribe.py:504` vor `:587`, `correct.py:1240`
   vor `:1356`). Was NICHT gemessen ist: Fehlerzeilen mit eingebetteter Ausnahme (`{e}`) — die
   laufen sehr wohl neben Poolthreads, und ihre Laenge haengt an fremdem Text.
-* **stderr bleibt aussen vor.** `jobs.py` mischt es per `stderr=STDOUT` in dieselbe Pipe. Die
-  vier `file=sys.stderr`-Drucker tragen keine Marke; der faster-whisper-Fortschrittsbalken
-  (`log_progress=True`) dagegen schreibt `\\r`-praefigierte Bruchstuecke OHNE Zeilenende, und
-  eine Marke, die dort hineinfaellt, kommt als `67%|… [done] X` beim Leser an. Dieselbe
-  Fehlerklasse, von dieser Huelle prinzipiell NICHT gedeckt: das Problem ist nicht die
-  Gruppierung UNSERER Schreibvorgaenge, sondern ein zweiter Schreiber auf derselben Pipe, der
-  legitim Bruchstuecke ohne Zeilenende erzeugt. **#481**, mit Messung und Vorbehalt.
+* **stderr — geschlossen seit #481, Restgrenze benannt.** Bis #481 mischte `jobs.py` es per
+  `stderr=STDOUT` in dieselbe Pipe: der faster-whisper-Fortschrittsbalken
+  (`log_progress=True`) schreibt `\\r`-praefigierte Bruchstuecke OHNE Zeilenende, und eine
+  Marke, die dort hineinfiel, kam als `67%|… [done] X` beim Leser an. Jetzt liest `jobs.py`
+  stderr am eigenen Faden — getrennte Stroeme teilen sich keine Zeile mehr (Echtlauf-Beleg in
+  .code-guardian-evidence/k1-glied2/). Restgrenze der Trennung: die Reihenfolge zwischen den
+  Stroemen ist nicht mehr die des Kernels, ein Prozent-Refresh kann seiner Marke vorangehen
+  (anzeigeseitig, ohne Buchungsfolge).
 * **`pytest -s`.** Dort setzt pytest `sys.stdout` nicht je Test zurueck, die Huelle bleibt also
   ueber Testgrenzen stehen. Die CI faehrt `-rs` (Skip-Report), nicht `-s`; kosmetisch.
 * **Die Teilzeile eines ARBEITSthreads gehoert ihm allein.** `threading.local` ist thread-lokal

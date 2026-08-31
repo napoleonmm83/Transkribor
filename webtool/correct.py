@@ -1284,6 +1284,9 @@ def cmd_run(project: str, base: str = None, force: bool = False, verify: bool = 
                 # (gemessen 0,00 s, s. #444) — ein `DELETE` dazwischen sah die Aufnahme als
                 # frei. Der Zaehler schließt es strukturell; ein erneutes Setzen hinter
                 # `cmd_diarize` waere jetzt ein aktive ohne done und liesse die Bilanz auf 1.
+                # (Restgrenze, benannt statt behauptet: ein VERLORENES inneres `[done]`
+                # wuerde die Buchung frueher freigeben — praktisch verstopft, solange jede
+                # Marke als ganze Zeile druckt; siehe jobs.buche_aktive.)
                 #
                 # GEMESSEN, A/B am echten Pfad (Basis `41e40a3` gegen den #444-Stand, laufender
                 # Server, Wegwerf-Projekt, `TRANSKRIBOR_DIARIZE=1`, zwei Aufnahmen zu je
