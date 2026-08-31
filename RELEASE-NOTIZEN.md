@@ -29,7 +29,7 @@ hat. Lesbar, aber unschön — das ist Absicht.
 ## Unveröffentlicht
 
 **Behoben**
-- Aufnahmen bleiben nicht mehr versehentlich bis zum Ende eines Auftrags gesperrt (Löschen wurde immer wieder mit „läuft gerade" abgewiesen), wenn der Fortschrittsbalken oder ein Fehler die interne Buchhaltung durcheinanderbringt.
+- Aufnahmen bleiben nicht mehr versehentlich bis zum Ende eines Auftrags gesperrt (Löschen wurde immer wieder mit „läuft gerade“ abgewiesen), wenn der Fortschrittsbalken oder ein Fehler die interne Buchhaltung durcheinanderbringt.
 - Projektnamen, die wie Protokoll-Schlagwörter aussehen (zum Beispiel „active"), und Namen mit eckigen Klammern werden abgelehnt — sie verstellten vorher Fortschrittsanzeige und Dateisperren. Ein altes Projekt mit so einem Namen bleibt nur lesbar, bis es einmal umbenannt ist.
 - Der „Korrigieren"-Knopf einer einzelnen Aufnahme wird abgewiesen, solange dieselbe Aufnahme gerade von einem laufenden Auftrag geschrieben wird — statt daneben her zu korrigieren.
 - Löschst du eine wartende Aufnahme und lädst sofort eine gleichnamige neu hoch, während ein Lauf läuft, gilt sie wieder als Teil des Laufs — Umbenennen und Neu-Transkribieren warten dann korrekt, statt der laufenden Verarbeitung in die Quere zu kommen.
