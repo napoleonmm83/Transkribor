@@ -400,10 +400,23 @@ def _run_proc(jid, cmd, cwd, env=None):
                 # ergaenzen, und ein Nachtrag als Erstbereich waere eine Zusage, die der Lauf
                 # nie gegeben hat — `bases is None` heisst fuer `betrifft()` "allumfassend",
                 # also die vorsichtige Seite; ein halber Bereich waere die unvorsichtige.
+                #
+                # Gleichzeitig die REAKTIVIERUNG von `entfernt` (#479/#489) — und zwar HIER
+                # und nicht im Parser: ein parser-seitiges Lift an der Marke war ordnungsblind
+                # (Review W1 zu K1 Glied 3): im zweiten Loeschzyklus stand die Marke des
+                # ERSTEN Reuploads noch im Puffer, hob beim Replay die frisch gebuchte
+                # Unterdrueckung der ZWEITEN Loeschung auf, und die Aufnahme dahinter erbte
+                # wieder ein Fremd-Urteil (am echten Parser gemessen: erreicht 'edit' ueber
+                # Nur-Audio). Der Server sieht jede Zeile, BEVOR sie in den gedeckelten Puffer
+                # wandert — sein discard ist deckelfest und gilt ab EINTREFFEN der Marke; der
+                # Parser tilgt an derselben Marke alles bis dahin und braucht kein Lift mehr.
                 elif (nachtrag_an and _jobs[jid]["bases"] is not None
                       and line.startswith(SCOPE_ADD_PREFIX)):
                     _jobs[jid]["bases"].update(
                         b for b in line[len(SCOPE_ADD_PREFIX):].split("\t") if b)
+                    for b in line[len(SCOPE_ADD_PREFIX):].split("\t"):
+                        if b:
+                            _jobs[jid]["entfernt"].discard(b)
                 else:
                     buche_aktive(_jobs[jid]["active_bases"], line, zulassung)
 
@@ -537,10 +550,12 @@ def remove_base(project: str, base: str) -> None:
     `entfernt` ist die GEGENRICHTUNG zu `gesehen` (#479/#489): der Zeilenpuffer behält die
     Urteile der gelöschten Aufnahme (`fertig X:`, `apply: X -> edit.json`), und der Parser
     liest den GANZEN Puffer neu, nicht nur den Schwanz — ohne diese Menge erbte eine unter
-    gleichem Namen neu hochgeladene Datei das Urteil der alten. Sie wird durch NICHTS
-    geräumt, auch nicht durch das `[scope+]`-Reannoncement: die Reaktivierung ist
-    Parser-Sache (dort tilgt die Marke alles, was VOR ihr gebucht war); räumte der Server,
-    käme über den verbliebenen Puffer das ALTE Urteil zurück.
+    gleichem Namen neu hochgeladene Datei das Urteil der alten. Gültig bis zum
+    `[scope+]`-REANNONCEMENT: `_verarbeite` räumt die Base beim EINTREFFEN der Marke aus
+    der Menge (deckelfest — der Server sieht jede Zeile, BEVOR sie in den gedeckelten
+    Puffer wandert). Ein Räumen im Parser an der Puffer-Marke wäre ordnungsblind gewesen:
+    im zweiten Löschzyklus hätte die alte Marke des ersten Reuploads die frisch gebuchte
+    Unterdrückung wieder aufgehoben (Review W1, am echten Parser gemessen).
     """
     with _lock:
         for (proj, _kind), jid in _active.items():
