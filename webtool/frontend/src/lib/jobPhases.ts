@@ -186,9 +186,10 @@ export function parseJobPhases(kind: string, lines: string[],
           continue
         }
       }
-      // Whispers tqdm-Balken (stderr, in jobs.py in stdout gemergt). Jedes \r-Refresh kommt
-      // dank Universal-Newlines als eigene Zeile an -> einzige Prozentquelle der Transkription.
-      // Whisper haengt UserWarnings OHNE Umbruch an, darum kein $-Anker.
+      // Whispers tqdm-Balken (stderr, in jobs.py am eigenen Faden gelesen — seit #481
+      // getrennt von stdout, teilt sich keine Zeile mehr mit einer Marke). Jedes \r-Refresh
+      // kommt dank Universal-Newlines als eigene Zeile an -> einzige Prozentquelle der
+      // Transkription. Whisper haengt UserWarnings OHNE Umbruch an, darum kein $-Anker.
       if ((m = l.match(/^(\d+)%\|/))) {
         if (cursor) active[cursor] = { ...active[cursor], pct: +m[1] }
         continue

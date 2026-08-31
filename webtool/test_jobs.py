@@ -1270,3 +1270,55 @@ def test_aktive_aufnahme_ausserhalb_des_scopes_sperrt_auch_ohne_active_only():
     finally:
         jobs.cancel(jid)
         _wait(jid)
+
+
+def test_stderr_fragment_klebt_marke_nicht_mehr():
+    """#481 — tqdm schreibt \\r-Fragmente OHNE Zeilenende auf stderr; solange stderr in
+    stdout GEMERGT war, fiel eine stdout-Marke genau in ein offenes Fragment und kam als
+    `  5%|… [done] S03` beim Leser an: discard ins Leere, Aufnahme bis Jobende gesperrt.
+
+    Der Fix liest stderr am eigenen Faden — gleiche Zeilenliste, getrennte Ströme. Das
+    Fragment bleibt im Protokoll (jobPhases.ts liest die Prozentzeile als EINZIGE
+    Prozentquelle der Transkription), aber es teilt sich keine Zeile mehr mit einer Marke.
+    """
+    code = (
+        "import sys, time\n"
+        "sys.stderr.write('  5%| 30/600 [00:00<00:10]')\n"
+        "sys.stderr.flush()\n"
+        "sys.stdout.write('[done] S03\\n')\n"
+        "sys.stdout.flush()\n"
+        "time.sleep(30)\n"
+    )
+    jid, _ = jobs.start("P_klebe", [sys.executable, "-c", code], cwd=None, kind="transcribe")
+    try:
+        _warte_auf_zeilen(jid, 1)
+        r = jobs.get(jid)
+        assert "[done] S03" in r["lines"], r["lines"]
+        assert not any("[done]" in z and not z.startswith("[done]") for z in r["lines"]), (
+            "Marke klebt an einer stderr-Zeile — der #481-Zustand: " + repr(r["lines"]))
+    finally:
+        jobs.cancel(jid)
+        _wait(jid)
+    # Nach dem Ende ist das Fragment geflusht und IM Protokoll — der Balken darf dem
+    # Nutzer nicht genommen werden, nur die Klebung weg.
+    r = jobs.get(jid)
+    assert any("%|" in z for z in r["lines"]), r["lines"]
+
+
+def test_stderr_zeilen_bleiben_im_protokoll():
+    """stderr geht NICHT verloren (der zweite Preis von #481): Tracebacks, Warnungen und
+    der TRANSKRIBOR_PARALLEL-Hinweis (correct.py) laufen dort — sie muessen im Job-Log
+    sichtbar bleiben, nur nicht mehr auf derselben Zeile wie stdout-Marken."""
+    code = (
+        "import sys, time\n"
+        "print('nachricht-auf-stderr', file=sys.stderr, flush=True)\n"
+        "time.sleep(30)\n"
+    )
+    jid, _ = jobs.start("P_stderr_log", [sys.executable, "-c", code], cwd=None,
+                        kind="transcribe")
+    try:
+        _warte_auf_zeilen(jid, 1)
+        assert "nachricht-auf-stderr" in jobs.get(jid)["lines"]
+    finally:
+        jobs.cancel(jid)
+        _wait(jid)
