@@ -34,6 +34,7 @@ hat. Lesbar, aber unschön — das ist Absicht.
 - Der „Korrigieren"-Knopf einer einzelnen Aufnahme wird abgewiesen, solange dieselbe Aufnahme gerade von einem laufenden Auftrag geschrieben wird — statt daneben her zu korrigieren.
 - Löschst du eine wartende Aufnahme und lädst sofort eine gleichnamige neu hoch, während ein Lauf läuft, gilt sie wieder als Teil des Laufs — Umbenennen und Neu-Transkribieren warten dann korrekt, statt der laufenden Verarbeitung in die Quere zu kommen.
 - Eine Aufnahme, die während eines laufenden Projektlaufs fertig wird, zeigt sofort ihren richtigen Stand, statt bis zu vier Sekunden lang „Nur Audio — noch nicht transkribiert“ zu behaupten.
+- Eine während eines Laufs gelöschte und gleichnamig neu hochgeladene Aufnahme zeigt ihren echten Stand statt „Fertig“ oder „Fehler“ aus dem Lauf der gelöschten Datei — auch dann, wenn der Lauf sie erst Minuten später erneut erreicht.
 
 ## v0.50.1 — 2026-08-30
 
