@@ -1655,7 +1655,11 @@ def test_ki_projekt_kann_diarize_marken_drucken(monkeypatch, tmp_path, capsys):
     from webtool import correct
     correct.cmd_diarize("FixturDemo", ["S1", "S2"])
     out = capsys.readouterr().out
-    assert "[active] S1" in out and "[done] S2" in out
+    # PAAR je Datei (Bot an PR #493): nur [active] S1 + [done] S2 bliebe auch gruen, wenn
+    # S1 nie freigibt und S2 sich nie meldet — dann wuesste der Waechter nichts ueber
+    # die Paarform, an der die Buchfuehrung haengt.
+    for b in ("S1", "S2"):
+        assert f"[active] {b}" in out and f"[done] {b}" in out, out
 
 
 def test_ki_projekt_ist_standardmaessig_stumm(monkeypatch, tmp_path, capsys):
