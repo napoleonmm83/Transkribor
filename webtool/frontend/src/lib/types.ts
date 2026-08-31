@@ -51,7 +51,7 @@ export type Project = { name: string; dateien: number; fertig: number; geaendert
 /** `gesehen`: die Basisnamen, fuer die der Lauf eine `[active]`-Zeile gedruckt hat -- vom
  *  Server gefuehrt, nicht aus `lines` gelesen. Rueckweg fuer den Fall, dass der gedeckelte
  *  Zeilenpuffer genau diese Zeile verdraengt hat (#475), Gegenstueck zu `bases`/`scope`. */
-export type JobStatus = { status: 'running' | 'done' | 'error' | 'cancelled'; lines: string[]; kind?: string; bases?: string[]; gesehen?: string[] };
+export type JobStatus = { status: 'running' | 'done' | 'error' | 'cancelled'; lines: string[]; kind?: string; bases?: string[]; gesehen?: string[]; entfernt?: string[] };
 export type StartJob = { job_id: string; started: boolean };
 /** `cli`: laeuft ueber ein lokales Programm mit eigener Anmeldung (Claude-Code- oder
  *  ChatGPT-Abo) — dort gibt es kein Key-Feld, ein Modell aber sehr wohl. */

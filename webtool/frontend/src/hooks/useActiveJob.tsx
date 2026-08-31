@@ -67,6 +67,14 @@ export function mergePhases(jobs: Job[]): JobPhases {
   // eine Datei erzeugen, die ein parallel laufender `correct`-Job gerade beschreibt; und der
   // Loesch-plus-Neu-Upload-Weg landet entweder im SELBEN Strom (dann entscheidet `terminal`)
   // oder in einem Job, der erst startet, wenn dieser hier laengst terminal ist.
+  //
+  // TRAGENDE INVARIANTE (kalter Plan-Review zu K1 Glied 3): diese Vereinigung darf nur
+  // LAUFENDE Jobs sehen — alle drei Konsumenten filtern vorher auf `running`
+  // (ProjectWorkspace.tsx, AppShell.tsx, useDokumentTitel.ts). Ein kuenftiger Konsument,
+  // der ueber ALLE Jobs merged, holte `erreicht[X]='edit'` aus einem terminalen
+  // Vorlaeufer zurueck, und der TIE-BREAK darunter (`edit` schlaegt `raw`) machte es
+  // schlimmer: genau der Beleg, den `parseJobPhases` fuer geloeschte Aufnahmen tilgt,
+  // kaeme hier ein zweites Mal herein.
   const erreicht: NonNullable<JobPhases['erreicht']> = {}
   for (const j of jobs) {
     for (const [base, e] of Object.entries(j.phases.erreicht ?? {})) {
@@ -189,7 +197,13 @@ export function JobProvider({ children, intervalMs = 1500 }: { children: ReactNo
       for (const j of jobs) {
         const r = ergebnis.get(j.id)
         if (r) {
-          const parsed = parseJobPhases(j.kind, r.lines, r.gesehen)
+          // `r.entfernt` ist der dritte Rueckweg neben `r.bases` und `r.gesehen`: das
+          // Loeschen einer Aufnahme druckt keine Zeile in den Strom, aber der Parser liest
+          // den GANZEN Puffer neu — ohne diese Menge erbte eine unter gleichem Namen neu
+          // hochgeladene Datei die Urteile der geloeschten (#479/#489). Verdrahtungs-Test
+          // in useActiveJob.test.tsx: ein weggelassenes viertes Argument wuerde den Fix
+          // still abschalten (die #488-Lehre: kein Test sah das fehlende Prop).
+          const parsed = parseJobPhases(j.kind, r.lines, r.gesehen, r.entfernt)
           // Die Serverbuchfuehrung ERGAENZT den Zeilenpuffer, sie springt nicht nur ein,
           // wenn er leer ist — und das ist seit dem Bereichs-Nachtrag Pflicht, nicht
           // Feinschliff. `[scope]` ist die erste Zeile des Laufs und damit von

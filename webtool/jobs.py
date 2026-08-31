@@ -188,6 +188,10 @@ def start(project: str, cmd: list, cwd, kind: str, then=None, env=None, base: st
                       "active_bases": {},             # Zaehler je rohem Basisname (#452)
                       # Waechst nur, wird nie geraeumt - siehe buche_aktive (#475).
                       "gesehen": set(),
+                      # Geloeschte Aufnahmen (remove_base) - monoton wie `gesehen`, aber die
+                      # GEGENRICHTUNG: sie nimmt Urteile aus dem Strom, statt Anwesenheit
+                      # zuzulassen (#479/#489).
+                      "entfernt": set(),
                       "lines": [], "returncode": None, "started": time.time(),
                       "ended": None, "pid": None, "cancelled": False,
                       "then": [then] if then else [],
@@ -517,11 +521,27 @@ def get(job_id: str):
         # stabil wird, ist die Zugabe.
         if isinstance(snap.get("gesehen"), set):
             snap["gesehen"] = sorted(snap["gesehen"])
+        # `entfernt` reist mit, aus demselben Grund wie `gesehen`: der Parser liest den
+        # gedeckelten Puffer neu, das Loeschen selbst druckt aber KEINE Zeile — ohne diesen
+        # Rueckweg bliebe das Fenster bis zum `[scope+]`-Reannoncement offen (Minuten,
+        # #479/#489). `sorted()` im Lock, aus demselben tragenden Grund wie eine Zeile
+        # hoeher.
+        if isinstance(snap.get("entfernt"), set):
+            snap["entfernt"] = sorted(snap["entfernt"])
         return snap
 
 
 def remove_base(project: str, base: str) -> None:
-    """Entfernt eine gelöschte Aufnahme sofort aus dem Wirkungsbereich aller laufenden Jobs."""
+    """Entfernt eine gelöschte Aufnahme sofort aus dem Wirkungsbereich aller laufenden Jobs.
+
+    `entfernt` ist die GEGENRICHTUNG zu `gesehen` (#479/#489): der Zeilenpuffer behält die
+    Urteile der gelöschten Aufnahme (`fertig X:`, `apply: X -> edit.json`), und der Parser
+    liest den GANZEN Puffer neu, nicht nur den Schwanz — ohne diese Menge erbte eine unter
+    gleichem Namen neu hochgeladene Datei das Urteil der alten. Sie wird durch NICHTS
+    geräumt, auch nicht durch das `[scope+]`-Reannoncement: die Reaktivierung ist
+    Parser-Sache (dort tilgt die Marke alles, was VOR ihr gebucht war); räumte der Server,
+    käme über den verbliebenen Puffer das ALTE Urteil zurück.
+    """
     with _lock:
         for (proj, _kind), jid in _active.items():
             if proj != project:
@@ -536,6 +556,10 @@ def remove_base(project: str, base: str) -> None:
                 # (`zugelassen()` im Frontend ist reine Anzeige).
                 if r.get("active_bases") is not None:
                     r["active_bases"].pop(base, None)
+                # Bedingungslos, auch wenn die Base nie in `bases` stand: ein correct-Lauf
+                # ohne diese Aufnahme im Bereich soll trotzdem nichts Altes über ihren
+                # Namen zeigen.
+                r["entfernt"].add(base)
 
 
 def betrifft(project: str, base: str, active_only: bool = False) -> dict | None:
