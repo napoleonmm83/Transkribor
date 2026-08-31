@@ -66,6 +66,34 @@ jobs:
             exit 0
           fi
 
+          # Die drei Skripte werden HIER geprueft — VOR ihrer ersten Benutzung, nicht erst
+          # vor dem Push. `bauen` haengt an `version`, dort liefe der Test also erst, nachdem
+          # dieser Job Version UND rotierte Notizdatei schon nach master gepusst hat: eine
+          # Wache hinter dem, was sie bewachen soll, ist keine. Bis #472 standen sie zwar vor
+          # dem Push, aber HINTER den beiden Auswertungen darunter — ein defektes
+          # `fassung.sh` haette dann bei „Noch kein v-Tag" abgebrochen und dem Menschen
+          # geraten, von Hand zu taggen, waehrend der Test, der genau das gefangen haette,
+          # nie lief (in einer Sandbox mit sabotiertem Ausdruck nachgestellt, rc=1 ohne einen
+          # Hinweis auf die Ursache). Dasselbe galt vorbestehend fuer versionshoehe.sh.
+          #
+          # Die Ausgabe wird aufgehoben und NUR im Fehlerfall gedruckt: die Diagnosezeilen
+          # („FEHL … erwartet X, bekommen Y") gehen auf stdout, ein blosses `>/dev/null`
+          # liesse den Job mit rc=1 und ohne jede Begruendung stehen — und der Bau-Job, wo
+          # die Tests sichtbar laufen, kommt dann nie dran.
+          #
+          # Kosten: die ersten beiden zusammen 1–5 s (gemessen am Schritt „Release-Skripte
+          # pruefen" der Testbauten 33193601556 und 33194321729, sechs Matrix-Jobs; lokal
+          # 4,9 s); fassung.test.sh legt drei Wegwerf-Repos mit Tags an und kostet lokal
+          # 2,4 s (Windows/Git Bash, Minimum aus drei Laeufen — auf Linux weniger, dort
+          # sind die vielen kleinen git-Aufrufe billiger).
+          for t in versionshoehe notizen fassung; do
+            if ! aus="$(bash "scripts/$t.test.sh" 2>&1)"; then
+              printf '%s\n' "$aus"
+              echo "scripts/$t.test.sh ist rot — Abbruch vor jeder Auswertung."
+              exit 1
+            fi
+          done
+
           # Welcher Tag eine Fassung IST, entscheidet scripts/fassung.sh. Dort steht auch,
           # warum ein Glob das nicht kann: `modelle-v1` traegt die Sprechertrennungs-Modelle,
           # und die Testbau-Releases heissen `v<version>-build<Laufnummer>` — beides keine
@@ -90,18 +118,6 @@ jobs:
             echo "Seit $letzter nur chore/docs/ci/test — es gibt nichts zu veroeffentlichen."
             exit 1
           fi
-
-          # Die drei Skripte werden HIER geprueft, nicht erst im Bau-Job. `bauen` haengt an
-          # `version` — dort liefe der Test also erst, nachdem dieser Job Version UND
-          # rotierte Notizdatei schon nach master gepusst hat. Eine Wache hinter dem, was sie
-          # bewachen soll, ist keine. Die ersten beiden Laeufe zusammen kosten 1–5 s (gemessen
-          # am Schritt „Release-Skripte pruefen" der Testbauten 33193601556 und 33194321729,
-          # sechs Matrix-Jobs; lokal 4,9 s); fassung.test.sh legt zwei Wegwerf-Repos mit
-          # Tags an und kostet lokal 1,44 s (Windows/Git Bash, Minimum aus drei Laeufen —
-          # auf Linux weniger, dort sind die git-Aufrufe billiger).
-          bash scripts/versionshoehe.test.sh >/dev/null
-          bash scripts/notizen.test.sh >/dev/null
-          bash scripts/fassung.test.sh >/dev/null
 
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -166,12 +182,15 @@ jobs:
     runs-on: ${{ matrix.os }}
     # Dieser Job SCHREIBT nichts am Repository: er checkt aus, faehrt `npm ci`, die
     # Testsuiten und `npm run dist` (= `electron-builder --publish never`, package.json)
-    # und laedt die Artefakte hoch — der Artefakt-Upload nimmt den Laufzeit-Token, nicht
-    # GITHUB_TOKEN. Ohne diesen Block erbt er das workflow-weite `contents: write`, und
-    # gemessen tat er das auch (Lauf 33310938957: `Contents: write` in allen drei
-    # Matrix-Jobs). Genau hier laeuft fremder Code — `npm ci` fuehrt die
+    # und laedt die Artefakte hoch. Ohne diesen Block erbt er das workflow-weite
+    # `contents: write`, und gemessen tat er das auch (Lauf 33310938957: `Contents: write`
+    # in allen drei Matrix-Jobs). Genau hier laeuft fremder Code — `npm ci` fuehrt die
     # Installationsskripte jeder Abhaengigkeit aus. Ein Schreibrecht daneben ist die
     # teuerste der drei Stellen, an denen es ueberfluessig war.
+    #
+    # GEMESSEN ist das Ergebnis, nicht der Mechanismus: im Testbau 33429119333 lief der
+    # ganze Job mit `Contents: read` durch, Artefakte inklusive. Dass der Upload seinen
+    # eigenen Laufzeit-Token nimmt, ist die Erklaerung dafuer — hergeleitet, nicht gemessen.
     permissions:
       contents: read
     steps:
@@ -180,6 +199,11 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ needs.version.outputs.ref }}
+          # Derselbe Grund wie im Veroeffentlichen-Job, nur schaerfer: dieser Job fasst git
+          # nach dem Auschecken nicht mehr an, faehrt aber `npm ci` — fremde
+          # Installationsskripte im selben Arbeitsordner, in dessen `.git/config` der
+          # Checkout-Token sonst liegen bliebe (zizmor: artipacked).
+          persist-credentials: false
       - uses: actions/setup-node@v7
         with:
           node-version: 24
@@ -286,10 +310,11 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ needs.version.outputs.ref }}
-          # Ohne Historie und Tags findet scripts/fassung.sh nichts — und das braucht der Rueckfall, wenn
-          # niemand eine Release-Notiz geschrieben hat: dann entsteht der Text aus den
-          # Commit-Betreffen seit dem vorigen Tag. Der Regelfall liest nur eine Datei und
-          # kaeme mit Tiefe 1 aus; die Tiefe zahlt also fuer den Fall, der nicht eintreten soll.
+          # Ohne Historie und Tags findet scripts/fassung.sh nichts — und die braucht
+          # der Rueckfall, wenn niemand eine Release-Notiz geschrieben hat: dann entsteht
+          # der Text aus den Commit-Betreffen seit dem vorigen Tag. Der Regelfall liest
+          # nur eine Datei und kaeme mit Tiefe 1 aus; die Tiefe zahlt also fuer den Fall,
+          # der nicht eintreten soll.
           fetch-depth: 0
           # Dieser Job PUSHT nicht — er liest Historie und ruft `gh`, das seinen Token aus der
           # Schritt-Umgebung nimmt (`GH_TOKEN` weiter unten). Ohne diese Zeile bliebe der
