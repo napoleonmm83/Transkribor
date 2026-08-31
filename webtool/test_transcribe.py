@@ -920,9 +920,8 @@ def test_transcribe_project_autocorrect_streaming_pipeline(monkeypatch, tmp_path
     hw_max = 0
     hw_lock = threading.Lock()
 
-    ai_active = 0
-    ai_max = 0
-    ai_lock = threading.Lock()
+    ki_trafen = threading.Barrier(2, timeout=2)
+    ki_getroffen = threading.Event()
 
     def fake_transkribiere(_m, _engine, audio_file, _sprache, _mehr, _model):
         nonlocal hw_active, hw_max
@@ -947,15 +946,17 @@ def test_transcribe_project_autocorrect_streaming_pipeline(monkeypatch, tmp_path
         return 1
 
     def fake_correct_ai_single(project, b, **kw):
-        nonlocal ai_active, ai_max
-        with ai_lock:
-            ai_active += 1
-            if ai_active > ai_max:
-                ai_max = ai_active
-        time.sleep(0.1)
+        # #461: Überlappung ERZWUNGEN statt per Schlafzeiten erhofft. Das alte Fenster
+        # war 20 ms breit (KI 0,10 s gegen Hardware 0,08 s je Datei) und kippte auf
+        # ausgelasteten Läufern, obwohl die Zusicherung stimmte — CI 33175210498,
+        # 1 failed/1075 passed, ubuntu-Bein grün, Re-Run grün. BrokenBarrierError
+        # (Dritter/Durchhänger) ist geschluckt: das Urteil trägt ki_getroffen.
+        try:
+            ki_trafen.wait()
+            ki_getroffen.set()
+        except threading.BrokenBarrierError:
+            pass
         (tdir / f"{b}.edit.json").write_text(json.dumps({"segments": [{"id": 0, "text": "Korrigiert"}]}), encoding="utf-8")
-        with ai_lock:
-            ai_active -= 1
         return True
 
     monkeypatch.setattr(transcribe, "_transkribiere_datei", fake_transkribiere)
@@ -977,8 +978,8 @@ def test_transcribe_project_autocorrect_streaming_pipeline(monkeypatch, tmp_path
 
     # Hardware war streng serialisiert (Whisper + Diarisierung sequenziell)
     assert hw_max == 1
-    # Cloud-KI lief überlappend/parallel
-    assert ai_max > 1
+    # Cloud-KI lief überlappend/parallel — ERZWUNGEN per Barrier, nicht erhofft (#461)
+    assert ki_getroffen.is_set(), "die KI-Phasen beider Dateien muessen sich ueberlappen"
 
 
 def test_transcribe_project_staggered_order_exact_sequence(monkeypatch, tmp_path):

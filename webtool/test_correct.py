@@ -1680,9 +1680,8 @@ def test_streaming_pipeline_hardware_sequential_and_ai_parallel(project, monkeyp
     hw_max = 0
     hw_lock = threading.Lock()
 
-    ai_active = 0
-    ai_max = 0
-    ai_lock = threading.Lock()
+    ki_trafen = threading.Barrier(2, timeout=2)
+    ki_getroffen = threading.Event()
 
     def fake_diarize(project, only_bases=None):
         nonlocal hw_active, hw_max
@@ -1710,18 +1709,18 @@ def test_streaming_pipeline_hardware_sequential_and_ai_parallel(project, monkeyp
         return res
 
     def fake_correct_file(project, b, gjson, context, verify, force, **kw):
-        nonlocal ai_active, ai_max
-        with ai_lock:
-            ai_active += 1
-            if ai_active > ai_max:
-                ai_max = ai_active
-        time.sleep(0.1)
+        # #461: Überlappung ERZWUNGEN statt per Schlafzeiten erhofft (20-ms-Fenster,
+        # s. Zwilling in test_transcribe.py). BrokenBarrierError beim dritten
+        # Durchhänger ist geschluckt: das Urteil trägt ki_getroffen.
+        try:
+            ki_trafen.wait()
+            ki_getroffen.set()
+        except threading.BrokenBarrierError:
+            pass
         (t / f"{b}.correction.json").write_text(json.dumps({
             "language": "de",
             "segments": [{"id": 0, "text": f"Text {b} korrigiert"}]
         }), encoding="utf-8")
-        with ai_lock:
-            ai_active -= 1
 
     monkeypatch.setattr(correct, "cmd_diarize", fake_diarize)
     monkeypatch.setattr(correct, "prep_single", fake_prep_single)
@@ -1732,8 +1731,8 @@ def test_streaming_pipeline_hardware_sequential_and_ai_parallel(project, monkeyp
     assert done == 3
     # Lokale Hardware-Schritte waren exklusiv serialisiert
     assert hw_max == 1
-    # KI-Korrekturen liefen überlappend/parallel
-    assert ai_max > 1
+    # KI-Korrekturen liefen überlappend/parallel — ERZWUNGEN per Barrier (#461)
+    assert ki_getroffen.is_set(), "die KI-Phasen muessen sich ueberlappen"
 
 
 
