@@ -80,7 +80,11 @@ export function parseJobPhases(kind: string, lines: string[],
     // GETRAGENE GRENZE: `ausgang()` zaehlt eine so unterdrueckte Aufnahme weder als
     // misslungen noch als versucht — ein Lauf, dessen einzige Misslungene die geloeschte
     // war, meldet `erfolg` statt `teil`. Ehrlich: das Urteil gehoerte einer Datei, die es
-    // nicht mehr gibt.
+    // nicht mehr gibt. GILT NICHT im Ghost-Pfad (was-erlaubt-Review, 2026-08-31): war die
+    // geloeschte Aufnahme noch nicht verarbeitet, haelt der Initialdateien-Ghost sie in
+    // `pending`, `_kennung` liefert None ≠ altes Tupel, und der Lauf druckt `[scope+] X`
+    // AUCH OHNE neue Datei — der Server reaktiviert (discard), das folgende `skip (Audio
+    // nicht mehr vorhanden)` bucht ganz normal 'failed' (Vorverhalten).
     if (ungueltig.has(base)) {
       delete active[base]
       delete blocks[base]
