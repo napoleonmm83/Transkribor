@@ -48,8 +48,14 @@ else echo "  FEHL leerer Fall endet mit $rc"; FEHLER=1; fi
 
 git tag v0.9.0
 commit "fix: weiter"; git tag v0.10.0
-# Versionssortierung, nicht alphabetisch: lexikografisch waere v0.9.0 groesser.
-pruef "v0.10.0" "" "v0.10.0 schlaegt v0.9.0 (Versionssortierung)"
+pruef "v0.10.0" "" "der naehere Tag gewinnt"
+
+# Gleichstand: zwei Fassungen auf DEMSELBEN Commit. Dann entscheidet die Sortierung, und
+# sie muss nach Version gehen, nicht alphabetisch — lexikografisch waere v0.9.1 groesser
+# als v0.10.1, und die Auswahl haenge sonst an der Auflistungsreihenfolge.
+git tag v0.9.1; git tag v0.10.1
+pruef "v0.10.1" "" "Gleichstand: die hoehere Fassung gewinnt (Versionssortierung)"
+git tag -d v0.9.1 >/dev/null; git tag -d v0.10.1 >/dev/null
 
 git checkout -q -b seite
 commit "feat: nur auf dem Zweig"; git tag v9.9.9
@@ -58,6 +64,18 @@ git checkout -q -
 # Vorfahren. Ohne das Flag gewaenne der hoechste Tag des ganzen Repos.
 pruef "v0.10.0" "" "Tag auf unfusioniertem Zweig zaehlt nicht"
 
-cd /; rm -rf "$R1" "$R2"
+# ---- Repo 3: der hoehere Tag ist der AELTERE -----------------------------------
+# Der eine Fall, der „naechstgelegen" von „hoechste Fassung" unterscheidet — und ohne ihn
+# ist die Auswahl unbewacht: eine Fassung dieses Skripts mit `--sort=-v:refname | head -n 1`
+# liess ALLE anderen Faelle gruen. Entsteht durch einen Vertipper oder einen von Hand
+# gesetzten Tag (`on: push: tags: ['v*']` unterstuetzt das). `describe` verhaelt sich hier
+# genauso, und genau deshalb steht diese Zeile hier: sie haelt fest, dass #472 nur den
+# FILTER verschaerft hat und nicht die Auswahl.
+neues_repo; R3="$W"
+commit "chore: start";  git tag v2.0.0     # zu hoch, aus Versehen
+commit "fix: danach";   git tag v1.5.0     # die richtige, aktuelle Fassung
+pruef "v1.5.0" "" "der naechstgelegene gewinnt, auch wenn ein aelterer Tag hoeher ist"
+
+cd /; rm -rf "$R1" "$R2" "$R3"
 if [ "$FEHLER" = 0 ]; then echo "fassung: alle Faelle ok"; else echo "fassung: FEHLGESCHLAGEN"; fi
 exit "$FEHLER"
