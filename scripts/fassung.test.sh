@@ -71,9 +71,12 @@ pruef "v0.10.0" "" "Tag auf unfusioniertem Zweig zaehlt nicht"
 # gesetzten Tag (`on: push: tags: ['v*']` unterstuetzt das). `describe` verhaelt sich hier
 # genauso, und genau deshalb steht diese Zeile hier: sie haelt fest, dass #472 nur den
 # FILTER verschaerft hat und nicht die Auswahl.
+# Hier ANNOTIERT getaggt, weil die echten Release-Tags es sind (`git tag -a`,
+# release.yml) — die anderen Faelle oben nutzen leichtgewichtige, damit beide Sorten
+# vorkommen.
 neues_repo; R3="$W"
-commit "chore: start";  git tag v2.0.0     # zu hoch, aus Versehen
-commit "fix: danach";   git tag v1.5.0     # die richtige, aktuelle Fassung
+commit "chore: start";  git tag -a v2.0.0 -m v2.0.0   # zu hoch, aus Versehen
+commit "fix: danach";   git tag -a v1.5.0 -m v1.5.0   # die richtige, aktuelle Fassung
 pruef "v1.5.0" "" "der naechstgelegene gewinnt, auch wenn ein aelterer Tag hoeher ist"
 
 cd /; rm -rf "$R1" "$R2" "$R3"
