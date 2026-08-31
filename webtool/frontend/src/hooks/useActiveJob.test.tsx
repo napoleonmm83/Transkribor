@@ -363,6 +363,9 @@ describe('mergePhases', () => {
           <button onClick={() => adopt('j_entf', 'Demo', 'transcribe')}>adopt_entf</button>
           <span data-testid="bereich">{phases.scope ? Array.from(phases.scope).join(',') : 'all'}</span>
           <span data-testid="urteil">{phases.perBase['X'] ?? 'keins'}</span>
+          {/* Der BELEG ist die #489-Haelfte: ein Mutation, die nur perBase tilgt und
+              erreicht stehen laesst, bliebe sonst gruen (Bot-Minor, PR #494). */}
+          <span data-testid="beleg">{phases.erreicht?.['X'] ?? 'keiner'}</span>
         </div>
       )
     }
@@ -385,9 +388,11 @@ describe('mergePhases', () => {
     // vacuous — unter der Mutation `r.entfernt nicht gereicht` lief er GRUEN, weil er den
     // Anfangszustand als Erfolg las (Mutationsprobe M6, 2026-08-31).
     await waitFor(() => expect(screen.getByTestId('bereich').textContent).toBe('X'))
-    // 'keins' statt 'done': Urteil UND Beleg sind unterdrueckt — die gleichnamig neu
-    // hochgeladene Datei zeigt ihren echten Plattenzustand statt „Fertig".
+    // 'keins' statt 'done' UND 'keiner' statt 'edit': Urteil UND Beleg sind unterdrueckt —
+    // die gleichnamig neu hochgeladene Datei zeigt ihren echten Plattenzustand statt
+    // „Fertig" (#489 ist der Beleg, #479 das Urteil — beide Haelften geprueft).
     expect(screen.getByTestId('urteil').textContent).toBe('keins')
+    expect(screen.getByTestId('beleg').textContent).toBe('keiner')
   })
 })
 
