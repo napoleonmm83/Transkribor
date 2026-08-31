@@ -409,6 +409,12 @@ def _run_proc(jid, cmd, cwd, env=None):
                     r = _jobs.get(jid)
                     if r is not None:
                         fuege_zeile_an(r["lines"], f"JOB-FEHLER: {e}")
+                # Endet der Faden hier, laeuft die stderr-Pipe voll und der Kind blockiert
+                # im naechsten write — der stdout-Loop erreichte nie EOF, der Job bliebe
+                # dauerhaft 'running' (409-Riegel stehen). Also den Baum killen: stdout
+                # endet, und der aeussere Handler setzt den terminalen Status (Kaltreview
+                # zu #481; Wächter: test_stderr_faden_beendet_den_job_statt_ihn_haengen_zulassen).
+                _kill_tree(proc)
 
         stderr_faden = threading.Thread(target=_lese_stderr, daemon=True)
         stderr_faden.start()
