@@ -487,23 +487,23 @@ export function parseJobPhases(kind: string, lines: string[],
         // REANNONCEMENT = Identitaetssignal (#479/#489): transcribe.py meldet eine Base nur
         // nach, wenn ihre Datei-IDENTITAET (`_kennung`) von der zuletzt angekuendigten
         // abweicht — steht die Base schon im Bereich, ist diese Marke der Beweis „eine
-        // ANDERE Datei unter diesem Namen". WAS DIE TILGUNG WIRKLICH SICHER MACHT, ist
-        // eine zweite Invariante (gegnerisches Review B4): eine Base mit Urteil im Puffer
-        // ist in `processed` oder `failed_bases` und damit NIE wieder `pending` — und nur
-        // `pending`-Basen werden re-annonciert. `_kennung` ueberfeuert bewusst (None bei
-        // unlesbarer Datei, „lieber einmal zu viel"), aber das trifft ausschliesslich
-        // urteilslose Basen: die Tilgung kann kein ehrliches Urteil toeten. Wer die
-        // Druckbedingung je erweitert (z.B. auf mtime-Touch), hebt diese Invariante auf.
-        // Getilgt wird hier und nicht am Ende: die
-        // ZEILENORDNUNG ist der einzige Unterschied zwischen alt und neu — ein ranghohes
-        // altes Urteil ('failed') ueberlebte das neue 'done' sonst bis zum Jobende, und
-        // der alte 'edit'-Beleg die Aufnahme genauso. Ein zweites Reannoncement tilgt
-        // nochmals (Loeschen/Neu-Anlegen kann sich wiederholen). Eine NEU angemeldete
-        // Base hat nichts zu tilgen. Faellt die Marke nach >10 000 Zeilen selbst aus dem
-        // Puffer, ist das folgenlos: die von ihr entwerteten Zeilen waren aelter und sind
-        // laengst verdraengt (`fuege_zeile_an` verwirft die aelteste ungeschuetzte Zeile
-        // zuerst), und die Reaktivierung der Unterdrueckung geschah ohnehin SERVERSEITIG
-        // beim Eintreffen der Marke.
+        // ANDERE Datei unter diesem Namen".
+        //
+        // DIE TILGUNG IST DEFENSIV, NICHT TRAGEND (kalter Zweitleser, 2026-08-31): eine
+        // Base mit Urteil im Puffer ist in `processed` oder `failed_bases` und damit NIE
+        // wieder `pending` — und nur `pending`-Basen werden re-annonciert. Ein Produzent
+        // druckt die Sequenz Urteil-dann-Marke also NICHT; die Erbschafts-Vermeidung von
+        // #479/#489 traegt heute ausschliesslich `entfernt` samt serverseitigem discard.
+        // Die Tilgung hier wacht ueber den Fall, dass jemand die Druckbedingung kuenftig
+        // erweitert (z.B. auf mtime-Touch — dann waere die Sequenz erreichbar, und ohne
+        // Tilgung ueberstuende ein ranghohes altes 'failed' das neue 'done' bis zum
+        // Jobende). `_kennung` ueberfeuert bewusst (None bei unlesbarer Datei), trifft
+        // aber ausschliesslich urteilslose Basen: die Tilgung kann kein ehrliches Urteil
+        // toeten. Ein zweites Reannoncement tilgt nochmals; eine NEU angemeldete Base hat
+        // nichts zu tilgen. Faellt die Marke nach >10 000 Zeilen selbst aus dem Puffer,
+        // ist das folgenlos: alles, was sie entwertet haette, war aelter und laengst
+        // verdraengt, und die Reaktivierung der Unterdrueckung geschah ohnehin
+        // SERVERSEITIG beim Eintreffen der Marke.
         if (scope.has(b)) {
           delete perBase[b]
           delete erreicht[b]

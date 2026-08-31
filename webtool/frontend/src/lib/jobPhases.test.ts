@@ -1113,10 +1113,12 @@ describe('parseJobPhases: geloeschte Aufnahmen erben keine Urteile (#479/#489)',
     expect(p.perBase).toEqual({ Y: 'done' })
   })
 
-  it('Fenster B: das Reannoncement tilgt altes Urteil, altes `failed` UND den alten Beleg', () => {
-    // Das RANG-Problem in rein Form: `failed` (RANG 3) ueberlebt das neuere `done` (RANG 2)
-    // bis zum Jobende — auch OHNE Loeschen. Das Reannoncement bricht diese Kette, weil es
-    // die Basis bis zur Marke entwertet und die Zeilen DANACH neu buchen.
+  it('Fenster B (Parser-Regel): das Reannoncement tilgt ein altes Urteil bis zur Marke', () => {
+    // KEIN Produzent druckt diese Sequenz heute (kalter Zweitleser: Base mit Urteil ist in
+    // processed/failed_bases, nie wieder pending, wird also nie re-annonciert) — der Test
+    // uebt die PARSER-REGEL, nicht einen realen Strom: tilgt die Marke nicht, gewinnt das
+    // ranghohe alte 'failed' gegen das neuere 'done'. Die Regel ist Defensive gegen eine
+    // kuenftige Erweiterung der Druckbedingung (Kommentar am [scope+]-Zweig).
     const p = parseJobPhases('transcribe', [
       '[scope] X',
       '[Demo] FEHLER X: kaputt',
@@ -1126,12 +1128,10 @@ describe('parseJobPhases: geloeschte Aufnahmen erben keine Urteile (#479/#489)',
     expect(p.perBase).toEqual({ X: 'done' })
   })
 
-  it('Fenster B: der alte edit-Beleg stirbt am Reannoncement — auch OHNE neuen Beleg danach', () => {
-    // #489 in der schaerfen Form (gegnerisches Review B2): die neue Datei FAILT, ihr Urteil
-    // traegt KEINEN Beleg. Ohne die Tilgung bliebe der alte `edit` stehen — die Zeilenfolge
-    // allein heilt das NICHT (der erste Entwurf dieses Tests haengte ein `fertig X:` mit
-    // `raw`-Beleg an und war unter der Mutation gruen: die spaetere Zeile ueberschreibt
-    // sowieso). Erst die Marke tilgt, und ohne nachfolgenden Beleg bleibt erreicht leer.
+  it('Fenster B (Parser-Regel): der alte edit-Beleg stirbt an der Marke — auch OHNE neuen Beleg', () => {
+    // Parser-Ebene wie der Nachbar-Test (kein Produzent druckt Urteil-dann-Marke); hier
+    // die Beleg-Haelfte: tilgt die Marke nicht, bliebe der alte `edit` stehen, und ohne
+    // nachfolgenden Beleg heilt auch die Zeilenfolge nichts — #489 in der schaerfen Form.
     const p = parseJobPhases('transcribe', [
       '[scope] X',
       'apply: X -> edit.json',
