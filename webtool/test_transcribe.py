@@ -1619,6 +1619,10 @@ def _ki_projekt(monkeypatch, tmp_path, name, bases=("S1", "S2"), diarize_druckt=
 
     monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
     monkeypatch.setenv("TRANSKRIBOR_SETTINGS", str(tmp_path / "settings.json"))
+    # CLAUDE.md-Regel: sonst kann ein Testlauf echtes pip gegen die venv des Entwicklers
+    # starten (keine conftest, der Schutz ist je Test/Fixture — der Nachbar-Test uebernimmt
+    # dieselbe Zeile). Bot an PR #493.
+    monkeypatch.setenv("TRANSKRIBOR_YTDLP_UPDATE", "0")
     monkeypatch.setattr(transcribe, "PROJEKTE", str(tmp_path))
     monkeypatch.setattr(transcribe, "_modell", lambda *a, **kw: "fake_model")
     monkeypatch.setattr(transcribe, "_transkribiere_datei", lambda *a, **kw: {
@@ -1657,9 +1661,11 @@ def test_ki_projekt_kann_diarize_marken_drucken(monkeypatch, tmp_path, capsys):
     out = capsys.readouterr().out
     # PAAR je Datei (Bot an PR #493): nur [active] S1 + [done] S2 bliebe auch gruen, wenn
     # S1 nie freigibt und S2 sich nie meldet — dann wuesste der Waechter nichts ueber
-    # die Paarform, an der die Buchfuehrung haengt.
+    # die Paarform, an der die Buchfuehrung haengt. Reihenfolge MITgeprueft: [active]
+    # vor [done] je Datei, sonst waere auch ein inverser Drucker „echt".
     for b in ("S1", "S2"):
         assert f"[active] {b}" in out and f"[done] {b}" in out, out
+        assert out.index(f"[active] {b}") < out.index(f"[done] {b}"), out
 
 
 def test_ki_projekt_ist_standardmaessig_stumm(monkeypatch, tmp_path, capsys):
