@@ -1275,51 +1275,36 @@ def cmd_run(project: str, base: str = None, force: bool = False, verify: bool = 
             with _hardware_lock:
                 if not os.path.exists(raw_json):
                     return False                       # noch vor `[active]` — es gibt nichts freizugeben
-                cmd_diarize(project, [b])
-                # #444: `cmd_diarize` druckt auf jedem Pfad, auf dem es die Datei WIRKLICH anfasst,
-                # ein eigenes `[active]`/`[done]`-Paar (das `[active]` hinter seiner Audio-Pruefung,
-                # die vier `[done]` am Erfolgsende, am Ausstieg „keine Sprecher erkannt" und in den
-                # beiden Ausnahmezweigen). Bei ihm heisst `[done]` „dieser SCHRITT ist fertig",
-                # `jobs.py` liest aber „der Lauf ist mit der Datei fertig" und verwirft sie aus
-                # `active_bases`. Ab hier waere die Aufnahme also frei — waehrend `prep_single` noch
-                # ihre `.tagged.txt` schreibt, bis `correct_ai_single` sie mit ihrem eigenen
-                # `[active]` wieder eintraegt.
+                # #452: DIESE Marke steht absichtlich VOR `cmd_diarize`. Seit `buche_aktive`
+                # zaehlt, ist `cmd_diarize`s eigenes `[active]`/`[done]`-Paar harmlos IN dieses
+                # Fenster geschachtelt — sein `[done]` zaehlt den Zähler nur von 2 auf 1
+                # herunter, die Aufnahme bleibt gebucht, bis das `finally` unten das letzte
+                # `[done]` druckt. Bis #452 stand die Marke HINTER `cmd_diarize` (der #444-Fix):
+                # als Menge hob jedes innere `[done]` die Marke auf, und das Wiederbewaffnen
+                # dahinter liess genau das Fenster von zwei benachbarten Schreibvorgängen
+                # (gemessen 0,00 s, s. #444) — ein `DELETE` dazwischen sah die Aufnahme als
+                # frei. Der Zaehler schließt es strukturell; ein erneutes Setzen hinter
+                # `cmd_diarize` waere jetzt ein aktive ohne done und liesse die Bilanz auf 1.
                 #
-                # GEMESSEN, A/B am echten Pfad — Basis `41e40a3` gegen diesen Stand, laufender
-                # Server, Wegwerf-Projekt, `TRANSKRIBOR_DIARIZE=1` (echtes pyannote),
-                # `TRANSKRIBOR_PARALLEL=1`, zwei Aufnahmen zu je 60 000 Segmenten (so lange
-                # dauert die Vorbereitung messbar), `DELETE` ausgeloest vom ERSTEN `[done]` im
-                # Protokoll, nicht von einer Uhr:
-                #   `41e40a3`: Fenster **0,26-0,28 s**, `DELETE` kommt durch die 409-Sperre und
-                #              endet mit **500** — `app._datei_weg` faellt beim `os.remove` der
-                #              Roh-JSON auf `PermissionError [WinError 32]`, weil `prep_single`
-                #              sie offen haelt. Die `.tagged.txt` steht danach als Waise da.
-                #   dieser Stand: Fenster **0,00 s**, `DELETE` -> **409** mit Begruendung, keine
-                #              Waise. Negativkontrolle (derselbe Loeschweg, kein Job) -> 200.
-                # Auf einem kleinen Transkript ist die Roh-JSON schneller wieder zu; dann traegt
-                # dasselbe Fenster ein stilles 200 samt Waise statt des 500. Gemessen ist der
-                # grosse Fall.
+                # GEMESSEN, A/B am echten Pfad (Basis `41e40a3` gegen den #444-Stand, laufender
+                # Server, Wegwerf-Projekt, `TRANSKRIBOR_DIARIZE=1`, zwei Aufnahmen zu je
+                # 60 000 Segmenten, `DELETE` vom ERSTEN `[done]` im Protokoll ausgeloest):
+                #   `41e40a3`: Fenster 0,26-0,28 s, `DELETE` -> 500 (PermissionError auf der
+                #              Roh-JSON, `.tagged.txt` als Waise).
+                #   #444-Stand: Fenster 0,00 s, `DELETE` -> 409, keine Waise.
+                # „0,00 s" hiess damals VERKLEINERT, nicht geschlossen — genau deshalb dieser
+                # Zaehler-Umbau (#452).
                 #
-                # „0,00 s" heisst VERKLEINERT, nicht strukturell geschlossen — und das ist der
-                # Zins auf den `[done]`-Preis unten. `cmd_diarize`s `[done]` und dieses `[active]`
-                # sind zwei getrennte Schreibvorgaenge auf derselben Pipe, und `jobs._run` nimmt
-                # sein `_lock` JE ZEILE: ein `DELETE`, dessen `betrifft()` genau dazwischen an
-                # das Lock kommt, saehe die Menge weiterhin leer. Wirklich zu waere es erst, wenn
-                # `active_bases` ein ZAEHLER statt einer Menge waere — dann heben sich die Marken
-                # verschachtelter Drucker sauber auf. Der Preis dafuer (`buche_aktive` samt allen
-                # vier druckenden Quellen) steht in keinem Verhaeltnis zu einem Fenster von zwei
-                # benachbarten Schreibvorgaengen. Benannt statt behauptet.
-                #
-                # Das ist der Zwilling des #418-Fixes in `transcribe.transcribe_project` (dort das
-                # `[active]` direkt nach `cmd_diarize`) — dieselbe Klasse, der
-                # andere Pfad. Nur: DORT ist die Aufnahme auf `cmd_diarize`s vier stillen Ausstiegen
-                # nicht frei (die Transkriptionsphase dort hat sie eingetragen),
-                # HIER schon: `[scope]` fuellt `bases`, NICHT `active_bases` (`jobs.py:308-311`), und
-                # die Menge startet leer (`jobs.py:116`). Im `correct run` ist diese Zeile also die
-                # ERSTE Eintragung, kein Duplikat — der Fix deckt damit auch die Laeufe mit
-                # `TRANSKRIBOR_DIARIZE=0` und die mit wiederverwendetem Sidecar.
+                # Zwilling des same Fix in `transcribe.transcribe_project` (dort faellt das
+                # Wiederbewaffnen ganz weg, weil die Transkriptionsphase die Marke laengst
+                # gesetzt hat). Hier ist diese Zeile die ERSTE Eintragung der Datei — `[scope]`
+                # fuellt `bases`, nicht `active_bases` — und deckt damit auch die Laeufe mit
+                # `TRANSKRIBOR_DIARIZE=0`, mit wiederverwendetem Sidecar und `cmd_diarize`s
+                # VIER stille Ausstiege (dort druckt das Paar gar nicht, die Marke oben
+                # traegt allein).
                 print(f"[active] {b}", flush=True)
                 gemeldet = True
+                cmd_diarize(project, [b])
                 if not prep_single(project, b):
                     return False
             # 2. Lokaler GPU-Schritt fertig -> Hardware-Lock freigegeben für nächste Datei.

@@ -1862,10 +1862,10 @@ def _replay(zeilen, gesehen=None):
     `gesehen` ist optional und wird nur durchgereicht: die zweite, nur wachsende Menge
     (#475). Wer sie mitgibt, uebt die Zulassungs-Haelfte gegen dieselbe ECHTE Druckfolge.
     """
-    aktive, verlauf = set(), []
+    aktive, verlauf = {}, []
     for z in zeilen:
         jobs.buche_aktive(aktive, z, gesehen)
-        verlauf.append((z, set(aktive)))
+        verlauf.append((z, dict(aktive)))
     return verlauf
 
 
@@ -1914,11 +1914,20 @@ def test_run_sperrt_die_aufnahme_ueber_die_vorbereitung(monkeypatch, tmp_path, c
     # unten vacuous — dann haette nie jemand die Aufnahme aus der Menge geworfen.
     assert zeilen.index("[done] S1") < zeilen.index(marke), _zeige(verlauf)
 
+    # #452-Waechter: das diarize-[done] darf die Buchung UEBERHAUPT nicht leeren — `one()`s
+    # `[active]` steht seit dem Zaehler-Umbau VOR `cmd_diarize`, das Paar ist ineinander
+    # geschachtelt. Vor #444/#452 war genau hier das Fenster von zwei benachbarten
+    # Schreibvorgaengen (gemessen 0,00 s): Menge leer zwischen diarize-done und dem
+    # Wiederbewaffnen. Ein `DELETE` in diesem Fenster sah die Aufnahme als frei.
+    assert "S1" in verlauf[zeilen.index("[done] S1")][1], (
+        "one()s [active] muss VOR cmd_diarize stehen — das diarize-[done] darf die Buchung "
+        "nicht leeren (#452). " + _zeige(verlauf))
+
     # DIE ZUSICHERUNG: waehrend `prep_single` schreibt, gilt die Aufnahme als bearbeitet.
     assert "S1" in verlauf[zeilen.index(marke)][1], (
         "die Aufnahme ist waehrend der Vorbereitung frei — genau das Loch aus #444."
         + chr(10) + _zeige(verlauf))
-    assert verlauf[-1][1] == set(), _zeige(verlauf)    # und am Ende ist sie es nicht mehr
+    assert verlauf[-1][1] == {}, _zeige(verlauf)    # und am Ende ist sie es nicht mehr
 
     # Die ZWEITE Menge (#475) gegen dieselbe echte Druckfolge: `active_bases` ist am Ende
     # leer, `gesehen` gerade NICHT — sonst haette die Aufnahme nach dem Lauf keine Zulassung
@@ -1958,7 +1967,7 @@ def test_run_gibt_die_aufnahme_frei_wenn_die_korrektur_sich_nie_meldet(monkeypat
     assert zeilen.count("[done] S1") == 1, (
         "genau EIN [done] erwartet: die Korrektur-Attrappe meldet sich nicht, es kann nur aus "
         "dem finally kommen." + chr(10) + _zeige(verlauf))
-    assert verlauf[-1][1] == set(), (
+    assert verlauf[-1][1] == {}, (
         "die Aufnahme bleibt bis Jobende gesperrt, obwohl niemand mehr an ihr arbeitet."
         + chr(10) + _zeige(verlauf))
 
@@ -1994,7 +2003,7 @@ def test_run_gibt_die_aufnahme_frei_wenn_die_vorbereitung_wirft(monkeypatch, tmp
     # Vorbedingung: der Lauf hat die Aufnahme eingetragen — sonst waere unten nichts freizugeben
     # und die Zusicherung eine Aussage ueber einen Zustand, den es gar nicht gibt.
     assert "[active] S1" in [z for z, _ in verlauf], _zeige(verlauf)
-    assert verlauf[-1][1] == set(), (
+    assert verlauf[-1][1] == {}, (
         "die Vorbereitung ist geflogen und die Aufnahme bleibt gesperrt — der Weg, den erst die "
         "Reparatur aufgemacht hat." + chr(10) + _zeige(verlauf))
 
@@ -2092,7 +2101,7 @@ def test_diarize_meldet_sich_bevor_es_das_alte_sidecar_loescht(monkeypatch, tmp_
     assert "S1" in verlauf[zeilen.index(marke)][1], (
         "cmd_diarize loescht das alte Sidecar, bevor es die Aufnahme als bearbeitet meldet."
         + chr(10) + _zeige(verlauf))
-    assert verlauf[-1][1] == set(), _zeige(verlauf)    # `[active]`/`[done]` bleiben gepaart
+    assert verlauf[-1][1] == {}, _zeige(verlauf)    # `[active]`/`[done]` bleiben gepaart
 
 
 # --- #450: die Klammer um den Glossar-Schritt -----------------------------------------------
@@ -2145,10 +2154,10 @@ def test_glossar_sperrt_alle_gelesenen_aufnahmen(monkeypatch, tmp_path, capsys):
     assert "[scope] B_lauf" in zeilen, _zeige(verlauf)
     assert marke in zeilen, _zeige(verlauf)
 
-    assert verlauf[zeilen.index(marke)][1] == {"A_fremd", "B_lauf"}, (
+    assert set(verlauf[zeilen.index(marke)][1]) == {"A_fremd", "B_lauf"}, (
         "die fremde Aufnahme wird gelesen, gilt aber als frei — genau das Loch aus #450."
         + chr(10) + _zeige(verlauf))
-    assert verlauf[-1][1] == set(), _zeige(verlauf)       # und am Ende ist nichts mehr gesperrt
+    assert verlauf[-1][1] == {}, _zeige(verlauf)       # und am Ende ist nichts mehr gesperrt
 
 
 def test_glossar_gibt_die_aufnahmen_auch_bei_einer_ausnahme_frei(monkeypatch, tmp_path, capsys):
@@ -2171,7 +2180,7 @@ def test_glossar_gibt_die_aufnahmen_auch_bei_einer_ausnahme_frei(monkeypatch, tm
     zeilen = [z for z, _ in verlauf]
 
     assert "[active] A_fremd" in zeilen, _zeige(verlauf)  # Vorbedingung: gesperrt wurde ueberhaupt
-    assert verlauf[-1][1] == set(), (
+    assert verlauf[-1][1] == {}, (
         "eine Ausnahme aus `_ask_llm` laesst die Aufnahmen gesperrt zurueck."
         + chr(10) + _zeige(verlauf))
 
@@ -2258,4 +2267,4 @@ def test_glossar_sperrt_waehrend_die_datei_wirklich_gelesen_wird(monkeypatch, tm
         assert base in verlauf[i][1], (
             f"{base} wird in diesem Moment GELESEN, gilt aber als frei."
             + chr(10) + _zeige(verlauf))
-    assert verlauf[-1][1] == set(), _zeige(verlauf)
+    assert verlauf[-1][1] == {}, _zeige(verlauf)
