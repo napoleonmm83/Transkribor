@@ -29,7 +29,8 @@ export const RANG: Record<FileState, number> = { failed: 3, done: 2, skipped: 1 
 /** Liest die stdout-Zeilen EINES Laufs in den Anzeigezustand: welche Aufnahme wo steht
  *  (`perBase`/`active`), was der Lauf anfasst (`scope`/`gesehen`) und wie er ausging (`bilanz`). */
 export function parseJobPhases(kind: string, lines: string[],
-                               gesehenVomServer?: Iterable<string>): JobPhases {
+                               gesehenVomServer?: Iterable<string>,
+                               entferntVomServer?: Iterable<string>): JobPhases {
   const perBase: Record<string, FileState> = {}
   const active: Record<string, FileWork> = {}
   // Blocknummern statt Zaehler: ein wiederverwendeter Block meldet '↷ schon vorhanden' UND
@@ -51,6 +52,13 @@ export function parseJobPhases(kind: string, lines: string[],
   // hinterher `phases.gesehen` setzt. Beim `scope`-Rueckweg in `useActiveJob` faellt das
   // nicht auf -- ein FEHLENDER Bereich filtert gar nicht --, hier ist der Bereich da.
   const gesehen = new Set<string>(gesehenVomServer)
+  // Aufnahmen, die der Server als geloescht gebucht hat (`jobs.remove_base` -> `entfernt`,
+  // #479/#489) — IDENTITAET statt ANWESENHEIT: ein Name, unter dem eine NEUE Datei liegt,
+  // darf Urteile und Belege der alten nicht erben. Das Loeschen druckt keine Zeile, also
+  // ist der Server der einzige Rueckweg dafuer; die Menge deckelt das Fenster zwischen
+  // Loeschen und Reannoncement (andernfalls Minuten, bis der Lauf die Datei wieder
+  // erreicht). Reaktiviert wird am `[scope+]`-Zweig unten — dort steht die Begründung.
+  const ungueltig = new Set<string>(entferntVomServer ?? [])
   // Was ein Endurteil ueber die PLATTE beweist. Die Pille faellt bei `done` auf `ruhe(file)`
   // durch, und `file` kommt aus der ungepollten Dateiliste — im Moment des Urteils also aus
   // einem Schnappschuss, der aelter ist als die Zeile, die das Urteil erzeugt hat. Ohne diese
@@ -59,6 +67,21 @@ export function parseJobPhases(kind: string, lines: string[],
   const erreicht: Record<string, Erreicht> = {}
 
   const terminal = (base: string, state: FileState, beleg?: Erreicht) => {
+    // Geloescht und (noch) nicht re-angekuendigt: kein Urteil, kein Beleg — die Zeile
+    // spricht von einer Datei, die es nicht mehr gibt. Steht VOR der Zulassung, denn
+    // `gesehen` bleibt wahr (Historie) und wuerde das alte Urteil sonst durchlassen.
+    // Geraeumt wird trotzdem wie im Zulassungsfilter darunter: die Datei laeuft nicht
+    // mehr, ein stehenbleibender Spinner waere der #379-Zustand.
+    // GETRAGENE GRENZE: `ausgang()` zaehlt eine so unterdrueckte Aufnahme weder als
+    // misslungen noch als versucht — ein Lauf, dessen einzige Misslungene die geloeschte
+    // war, meldet `erfolg` statt `teil`. Ehrlich: das Urteil gehoerte einer Datei, die es
+    // nicht mehr gibt.
+    if (ungueltig.has(base)) {
+      delete active[base]
+      delete blocks[base]
+      if (cursor === base) cursor = null
+      return
+    }
     // `gesehen` ist die zweite Zulassung neben `scope` (#431): eine Aufnahme, die WAEHREND des
     // Laufs hochgeladen wird, steht nie im Bereich - der ist gedruckt, bevor die Schleife in
     // `transcribe_project` das erste Mal `find_audio` ruft. Verarbeitet wurde sie vollstaendig;
@@ -450,7 +473,31 @@ export function parseJobPhases(kind: string, lines: string[],
       // Wie bei `[scope]`: GENAU das eine Trennleerzeichen hinter der Marke, nie `trim()` -
       // `safe_name` laesst Randleerzeichen durch, und getrimmt zerfiele dieselbe Datei in
       // zwei Schluessel.
-      for (const b of l.slice(9).split('\t')) if (b) scope.add(b)
+      for (const b of l.slice(9).split('\t')) {
+        if (!b) continue
+        // REANNONCEMENT = Identitaetssignal (#479/#489): transcribe.py meldet eine Base nur
+        // nach, wenn ihre Datei-IDENTITAET (`_kennung`) von der zuletzt angekuendigten
+        // abweicht — steht die Base schon im Bereich, ist diese Marke der Beweis „eine
+        // ANDERE Datei unter diesem Namen". Getilgt wird hier und nicht am Ende: die
+        // ZEILENORDNUNG ist der einzige Unterschied zwischen alt und neu — ein ranghohes
+        // altes Urteil ('failed') ueberlebte das neue 'done' sonst bis zum Jobende, und
+        // der alte 'edit'-Beleg die Aufnahme genauso. Ein zweites Reannoncement tilgt
+        // nochmals (Loeschen/Neu-Anlegen kann sich wiederholen). Eine NEU angemeldete
+        // Base hat nichts zu tilgen. Die Marke selbst ist deckelfest gegen die Zeilen,
+        // die sie entwertet: `fuege_zeile_an` verdraengt die aelteste ungeschuetzte Zeile
+        // zuerst, die Marke ist juenger als alles, was sie tilgt. Faellt sie nach >10 000
+        // Zeilen selbst, haelt die serverseitige `entfernt`-Menge die Unterdrueckung
+        // (sicherere Richtung: die Datei zeigt ihren echten Plattenzustand).
+        if (scope.has(b)) {
+          delete perBase[b]
+          delete erreicht[b]
+          delete active[b]
+          delete blocks[b]
+          if (cursor === b) cursor = null
+        }
+        ungueltig.delete(b)
+        scope.add(b)
+      }
     }
     // reuse / diarize-SKIP / prep-SKIP / "Diarisierung deaktiviert" -> bewusst ignoriert
   }

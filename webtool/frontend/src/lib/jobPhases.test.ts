@@ -1063,3 +1063,109 @@ describe('parseJobPhases - was das Endurteil ueber die Platte beweist (`erreicht
     expect(p.erreicht).toBeUndefined()
   })
 })
+
+// IDENTITAET STATT ANWESENHEIT (#479/#489): eine waehrend eines Laufs geloeschte und
+// gleichnamig neu hochgeladene Aufnahme darf die Urteile der alten nicht erben. Zwei
+// Signale tragen das: die serverseitige `entfernt`-Menge (Fenster A — das Loeschen druckt
+// keine Zeile, der Server ist der einzige Rueckweg) und das `[scope+]`-REANNONCEMENT
+// (Fenster B — transcribe.py meldet nur nach, wenn die Datei-IDENTITAET `_kennung` von der
+// zuletzt angekuendigten abweicht; die Marke ist der parser-sichtbare Beweis „eine ANDERE
+// Datei unter diesem Namen").
+describe('parseJobPhases: geloeschte Aufnahmen erben keine Urteile (#479/#489)', () => {
+  // Der Ablauf aus #489: fertig korrigiert -> [done] -> geloescht -> gleichnamig neu
+  // hochgeladen. Im Puffer stehen noch die alten Zeilen; der Server hat `entfernt:['X']`.
+  const PUFFER = [
+    '[scope] X',
+    '[Demo] -> transkribiere X …',
+    '[Demo] fertig X: 12s, 30 Segmente, 1.2x',
+    'apply: X -> edit.json',
+    '[done] X',
+  ]
+
+  it('Fenster A: serverseitiges entfernt unterdrueckt Urteil UND Beleg sofort', () => {
+    // Ohne diesen Rueckweg stuende hier {X:'done'} / {X:'edit'} — die Pille zeigte „Fertig"
+    // ueber einer Aufnahme, die nur Audio ist, bis der Lauf sie wieder erreicht (Minuten).
+    const p = parseJobPhases('transcribe', PUFFER, undefined, ['X'])
+    expect(p.perBase).toEqual({})
+    expect(p.erreicht).toBeUndefined()
+  })
+
+  it('Fenster A raeumt auch einen haengenden Spinner (#379-Halbsatz)', () => {
+    // Ein `[active] X` ohne `[done]` (abgebrochener Lauf) liess active[X] stehen. Auch das
+    // gehoert zur geloeschten Datei — der Unterdrueckungszweig raeumt wie der Filter.
+    const p = parseJobPhases('transcribe', ['[scope] X', '[active] X'], undefined, ['X'])
+    expect(p.active).toEqual({})
+  })
+
+  it('nur die geloeschte Aufnahme ist betroffen; `gesehen`-Zulassung ueberlebt fuer andere', () => {
+    const p = parseJobPhases('transcribe', [
+      ...PUFFER,
+      '[Demo] fertig Y: 9s, 12 Segmente, 1.0x',
+    ], ['Y'], ['X'])
+    expect(p.perBase).toEqual({ Y: 'done' })
+  })
+
+  it('Fenster B: das Reannoncement tilgt altes Urteil, altes `failed` UND den alten Beleg', () => {
+    // Das RANG-Problem in rein Form: `failed` (RANG 3) ueberlebt das neuere `done` (RANG 2)
+    // bis zum Jobende — auch OHNE Loeschen. Das Reannoncement bricht diese Kette, weil es
+    // die Basis bis zur Marke entwertet und die Zeilen DANACH neu buchen.
+    const p = parseJobPhases('transcribe', [
+      '[scope] X',
+      '[Demo] FEHLER X: kaputt',
+      '[scope+] X',
+      '[Demo] fertig X: 5s, 8 Segmente, 1.0x',
+    ])
+    expect(p.perBase).toEqual({ X: 'done' })
+  })
+
+  it('Fenster B: der alte edit-Beleg stirbt am Reannoncement, der neue lebt', () => {
+    // #489 in einer Zeile: `edit` vor der Marke (geloeschte Datei), `raw` danach (die neue).
+    // Ohne Tilgung gewönne hier der TIE-BREAK `edit` — oder die Reihenfolgeregel liesse
+    // je nach Reihenfolge das falsche stehen.
+    const p = parseJobPhases('transcribe', [
+      '[scope] X',
+      'apply: X -> edit.json',
+      '[scope+] X',
+      '[Demo] fertig X: 5s, 8 Segmente, 1.0x',
+    ])
+    expect(p.erreicht).toEqual({ X: 'raw' })
+  })
+
+  it('Fenster B hebt die entfernt-Unterdrueckung auf — die neue Datei kriegt ihre Urteile', () => {
+    // Der Doppelgriff: geloescht (Server-Menge) UND re-angekuendigt (Marke im Puffer). Erst
+    // die Marke nimmt die Unterdrueckung zurueck; Urteile vor ihr bleiben trotzdem tot.
+    const p = parseJobPhases('transcribe', [
+      ...PUFFER,
+      '[scope+] X',
+      '[Demo] fertig X: 5s, 8 Segmente, 1.0x',
+    ], undefined, ['X'])
+    expect(p.perBase).toEqual({ X: 'done' })
+    expect(p.erreicht).toEqual({ X: 'raw' })
+  })
+
+  it('Doppel-Zyklus: ein zweites Reannoncement tilgt die Urteile des ersten', () => {
+    // Loeschen/Neu-Anlegen kann sich wiederholen. Jede Marke entwertet alles bis zu ihr —
+    // sonst stuende am Ende das `failed` des ersten Reuploads ueber der zweiten neuen Datei.
+    const p = parseJobPhases('transcribe', [
+      '[scope] X',
+      '[scope+] X',
+      '[Demo] FEHLER X: wieder kaputt',
+      '[scope+] X',
+      '[Demo] fertig X: 4s, 6 Segmente, 1.0x',
+    ])
+    expect(p.perBase).toEqual({ X: 'done' })
+  })
+
+  it('ein [scope+] einer NEUEN Aufnahme tilgt nichts', () => {
+    // Der Normalfall des Nachtrags (#431): eine Base, die noch nie im Bereich stand, hat
+    // keine Vergangenheit. Die Erweiterung des Zweigs darf diesen Weg nicht veraendern.
+    const p = parseJobPhases('transcribe', [
+      '[scope] A',
+      '[Demo] fertig A: 3s, 4 Segmente, 1.0x',
+      '[scope+] B',
+      '[Demo] fertig B: 2s, 2 Segmente, 1.0x',
+    ])
+    expect(p.perBase).toEqual({ A: 'done', B: 'done' })
+    expect(p.erreicht).toEqual({ A: 'raw', B: 'raw' })
+  })
+})

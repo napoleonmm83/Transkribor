@@ -348,6 +348,41 @@ describe('mergePhases', () => {
     fireEvent.click(screen.getByText('adopt_deckel'))
     await waitFor(() => expect(screen.getByTestId('urteil').textContent).toBe('done'))
   })
+
+  // VERDRAHTUNGS-WAECHTER (#479/#489, die #488-Lehre: kein Test sah das fehlende Prop):
+  // `r.entfernt` muss im Aufruf ankommen. Ein weggelassenes viertes Argument schaltet den
+  // Fix STILL ab — der Attrappen-Rueckweg sieht partout gruen aus, weil `parseJobPhases`
+  // ohne den Parameter gar nicht unterdrueckt. Gemessen wird deshalb das ERGEBNIS durch
+  // den Provider, nicht der Aufruf selbst.
+  it('reicht r.entfernt an den Parser durch: geloeschte Aufnahme verliert ihr Urteil (#479)', async () => {
+    function EntferntProbe() {
+      const { jobs, adopt } = useActiveJob()
+      const phases = mergePhases(jobs.filter(j => j.status === 'running'))
+      return (
+        <div>
+          <button onClick={() => adopt('j_entf', 'Demo', 'transcribe')}>adopt_entf</button>
+          <span data-testid="urteil">{phases.perBase['X'] ?? 'keins'}</span>
+        </div>
+      )
+    }
+    // Das Protokoll der GELÖSCHTEN Datei steht noch komplett im Puffer — inklusive ihres
+    // `apply`-Belegs (#489). Der Server hat die Löschung gebucht.
+    vi.mocked(api.getJob).mockResolvedValue({
+      status: 'running',
+      lines: [
+        '[scope] X',
+        '[Demo] fertig X: 1s, 2 Segmente, 1.0x',
+        'apply: X -> edit.json',
+        '[done] X',
+      ],
+      entfernt: ['X'],
+    })
+    render(<JobProvider intervalMs={5}><EntferntProbe /></JobProvider>)
+    fireEvent.click(screen.getByText('adopt_entf'))
+    // 'keins' statt 'done': Urteil UND Beleg sind unterdrueckt — die gleichnamig neu
+    // hochgeladene Datei zeigt ihren echten Plattenzustand statt „Fertig".
+    await waitFor(() => expect(screen.getByTestId('urteil').textContent).toBe('keins'))
+  })
 })
 
 describe('mergePhases - gesehen (#431)', () => {

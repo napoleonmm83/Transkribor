@@ -720,6 +720,62 @@ def test_remove_base_entfernt_datei_aus_job_scope():
         _wait(jid)
 
 
+def test_remove_base_bucht_entfernt_bedingungslos_und_get_liefert_eine_kopie():
+    """`entfernt` ist die Gegenrichtung zu `gesehen` (#479/#489): der Parser verwirft darueber
+    die Urteile der geloeschten Aufnahme. Bedingungslos gebucht, auch wenn die Base nie in
+    `bases` stand -- ein correct-Lauf neben dem transcribe-Lauf desselben Projekts soll
+    trotzdem nichts Altes ueber den Namen zeigen."""
+    jid, _ = jobs.start("P_entf", _scope_cmd(["[scope] S1", "warte"]), cwd=None, kind="correct")
+    try:
+        _warte_auf_zeilen(jid, 2)
+        jobs.remove_base("P_entf", "X")     # stand nie in diesem Bereich
+        jobs.remove_base("P_entf", "A")
+        snap = jobs.get(jid)
+        # Sortiert (stabile Antwort) und nur die geloeschten Aufnahmen.
+        assert snap["entfernt"] == ["A", "X"]
+        assert "X" not in snap["bases"]
+        # Die Momentaufnahme ist eine KOPIE: eine spaetere Buchung erscheint nicht im schon
+        # geholten Snap. `dict(r)` ist flach -- ohne die Umwandlung im Lock laege das
+        # LEBENDE Set im Rumpf und wuesste mit (derselbe tragende Grund wie bei `gesehen`).
+        jobs.remove_base("P_entf", "B")
+        assert snap["entfernt"] == ["A", "X"]
+        assert jobs.get(jid)["entfernt"] == ["A", "B", "X"]
+    finally:
+        jobs.cancel(jid)
+        _wait(jid)
+
+
+def test_reannoncement_raeumt_die_server_menge_nicht():
+    """`entfernt` ist MONOTON (#479/#489): das `[scope+]`-Reannoncement der geloeschten und
+    gleichnamig neu angelegten Datei raeumt die Server-Menge nicht.
+
+    Wuerde der Server hier zuruecksetzen, kaeme ueber den Zeilenpuffer das ALTE Urteil
+    zurueck -- der Parser liest den GANZEN Puffer neu, nicht nur den Schwanz hinter der
+    Marke. Die Reaktivierung ist Parser-Sache: dort tilgt das Reannoncement alles, was VOR
+    ihm gebucht war, und laesst die Zeilen DANACH gelten. Faellt die Marke spaeter selbst
+    aus dem gedeckelten Puffer, haelt diese Menge die Unterdrueckung -- die Datei zeigt
+    ihren echten Plattenzustand statt eines Fremd-Urteils."""
+    code = ("import sys, time\n"
+            "print('[scope] X', flush=True)\n"
+            "time.sleep(1.0)\n"
+            "print('[scope+] X', flush=True)\n"
+            "time.sleep(30)\n")
+    jid, _ = jobs.start("P_entf_mon", [sys.executable, "-c", code], cwd=None, kind="transcribe")
+    try:
+        _warte_auf_zeilen(jid, 1)
+        jobs.remove_base("P_entf_mon", "X")
+        _warte_auf_zeilen(jid, 2)
+        snap = jobs.get(jid)
+        # Das Reannoncement ist durch den Strom gegangen: `bases` hat die Base wieder
+        # (remove_base hatte sie herausgenommen) -- die Zeile kam also wirklich an.
+        assert snap["bases"] == ["X"]
+        # ... und trotzdem bleibt die Menge stehen.
+        assert snap["entfernt"] == ["X"]
+    finally:
+        jobs.cancel(jid)
+        _wait(jid)
+
+
 def test_jobs_start_mit_initialem_base_scope():
     """jobs.start mit base= setzt den Scope ab Millisekunde 0."""
     jid, started = jobs.start("P_single", _scope_cmd(["warte"]), cwd=None, kind="correct", base="DateiA")
