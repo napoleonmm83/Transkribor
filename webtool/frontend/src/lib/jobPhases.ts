@@ -57,7 +57,12 @@ export function parseJobPhases(kind: string, lines: string[],
   // darf Urteile und Belege der alten nicht erben. Das Loeschen druckt keine Zeile, also
   // ist der Server der einzige Rueckweg dafuer; die Menge deckelt das Fenster zwischen
   // Loeschen und Reannoncement (andernfalls Minuten, bis der Lauf die Datei wieder
-  // erreicht). Reaktiviert wird am `[scope+]`-Zweig unten — dort steht die Begründung.
+  // erreicht). Die REAKTIVIERUNG ist SERVERSEITIG: jobs.py raeumt die Base beim
+  // EINTREFFEN der `[scope+]`-Marke aus der Menge — deckelfest, denn der Server sieht
+  // jede Zeile, BEVOR sie in den gedeckelten Puffer wandert. Ein Lift HIER an der
+  // Puffer-Marke ware ordnungsblind gewesen (Review W1): im zweiten Loeschzyklus hob die
+  // alte Marke des ersten Reuploads die frisch gebuchte Unterdrueckung auf, und die
+  // naechste Aufnahme erbte wieder ein Fremd-Urteil (am echten Parser gemessen).
   const ungueltig = new Set<string>(entferntVomServer ?? [])
   // Was ein Endurteil ueber die PLATTE beweist. Die Pille faellt bei `done` auf `ruhe(file)`
   // durch, und `file` kommt aus der ungepollten Dateiliste — im Moment des Urteils also aus
@@ -478,16 +483,23 @@ export function parseJobPhases(kind: string, lines: string[],
         // REANNONCEMENT = Identitaetssignal (#479/#489): transcribe.py meldet eine Base nur
         // nach, wenn ihre Datei-IDENTITAET (`_kennung`) von der zuletzt angekuendigten
         // abweicht — steht die Base schon im Bereich, ist diese Marke der Beweis „eine
-        // ANDERE Datei unter diesem Namen". Getilgt wird hier und nicht am Ende: die
+        // ANDERE Datei unter diesem Namen". WAS DIE TILGUNG WIRKLICH SICHER MACHT, ist
+        // eine zweite Invariante (gegnerisches Review B4): eine Base mit Urteil im Puffer
+        // ist in `processed` oder `failed_bases` und damit NIE wieder `pending` — und nur
+        // `pending`-Basen werden re-annonciert. `_kennung` ueberfeuert bewusst (None bei
+        // unlesbarer Datei, „lieber einmal zu viel"), aber das trifft ausschliesslich
+        // urteilslose Basen: die Tilgung kann kein ehrliches Urteil toeten. Wer die
+        // Druckbedingung je erweitert (z.B. auf mtime-Touch), hebt diese Invariante auf.
+        // Getilgt wird hier und nicht am Ende: die
         // ZEILENORDNUNG ist der einzige Unterschied zwischen alt und neu — ein ranghohes
         // altes Urteil ('failed') ueberlebte das neue 'done' sonst bis zum Jobende, und
         // der alte 'edit'-Beleg die Aufnahme genauso. Ein zweites Reannoncement tilgt
         // nochmals (Loeschen/Neu-Anlegen kann sich wiederholen). Eine NEU angemeldete
-        // Base hat nichts zu tilgen. Die Marke selbst ist deckelfest gegen die Zeilen,
-        // die sie entwertet: `fuege_zeile_an` verdraengt die aelteste ungeschuetzte Zeile
-        // zuerst, die Marke ist juenger als alles, was sie tilgt. Faellt sie nach >10 000
-        // Zeilen selbst, haelt die serverseitige `entfernt`-Menge die Unterdrueckung
-        // (sicherere Richtung: die Datei zeigt ihren echten Plattenzustand).
+        // Base hat nichts zu tilgen. Faellt die Marke nach >10 000 Zeilen selbst aus dem
+        // Puffer, ist das folgenlos: die von ihr entwerteten Zeilen waren aelter und sind
+        // laengst verdraengt (`fuege_zeile_an` verwirft die aelteste ungeschuetzte Zeile
+        // zuerst), und die Reaktivierung der Unterdrueckung geschah ohnehin SERVERSEITIG
+        // beim Eintreffen der Marke.
         if (scope.has(b)) {
           delete perBase[b]
           delete erreicht[b]
@@ -495,7 +507,9 @@ export function parseJobPhases(kind: string, lines: string[],
           delete blocks[b]
           if (cursor === b) cursor = null
         }
-        ungueltig.delete(b)
+        // KEIN `ungueltig.delete(b)` hier — die Reaktivierung ist SERVERSEITIG (siehe
+        // Seed-Kommentar oben): nur der Server weiss, ob diese Marke VOR oder NACH der
+        // letzten Loeschung angekommen ist.
         scope.add(b)
       }
     }

@@ -745,32 +745,38 @@ def test_remove_base_bucht_entfernt_bedingungslos_und_get_liefert_eine_kopie():
         _wait(jid)
 
 
-def test_reannoncement_raeumt_die_server_menge_nicht():
-    """`entfernt` ist MONOTON (#479/#489): das `[scope+]`-Reannoncement der geloeschten und
-    gleichnamig neu angelegten Datei raeumt die Server-Menge nicht.
+def test_reannoncement_reaktiviert_die_server_menge_deckelfest():
+    """Das `[scope+]`-Reannoncement raeumt die Base aus `entfernt` — SERVERSEITIG, beim
+    EINTREFFEN der Zeile (Review W1 zu K1 Glied 3).
 
-    Wuerde der Server hier zuruecksetzen, kaeme ueber den Zeilenpuffer das ALTE Urteil
-    zurueck -- der Parser liest den GANZEN Puffer neu, nicht nur den Schwanz hinter der
-    Marke. Die Reaktivierung ist Parser-Sache: dort tilgt das Reannoncement alles, was VOR
-    ihm gebucht war, und laesst die Zeilen DANACH gelten. Faellt die Marke spaeter selbst
-    aus dem gedeckelten Puffer, haelt diese Menge die Unterdrueckung -- die Datei zeigt
-    ihren echten Plattenzustand statt eines Fremd-Urteils."""
+    Ein parser-seitiges Lift an der Puffer-Marke ware ordnungsblind gewesen: im zweiten
+    Loeschzyklus hob die alte Marke des ersten Reuploads die frisch gebuchte Unterdrueckung
+    der ZWEITEN Loeschung auf, und die naechste Aufnahme erbte wieder ein Fremd-Urteil
+    (erreicht 'edit' ueber Nur-Audio, am echten Parser gemessen). Der Server sieht jede
+    Zeile, BEVOR sie in den gedeckelten Puffer wandert — sein discard ist deckelfest und
+    gilt ab Eintreffen; der Parser tilgt an derselben Marke nur rueckblickend."""
     code = ("import sys, time\n"
             "print('[scope] X', flush=True)\n"
             "time.sleep(1.0)\n"
             "print('[scope+] X', flush=True)\n"
+            "time.sleep(1.0)\n"
+            "print('[scope+] X', flush=True)\n"
             "time.sleep(30)\n")
-    jid, _ = jobs.start("P_entf_mon", [sys.executable, "-c", code], cwd=None, kind="transcribe")
+    jid, _ = jobs.start("P_entf_rea", [sys.executable, "-c", code], cwd=None, kind="transcribe")
     try:
         _warte_auf_zeilen(jid, 1)
-        jobs.remove_base("P_entf_mon", "X")
-        _warte_auf_zeilen(jid, 2)
+        jobs.remove_base("P_entf_rea", "X")
+        _warte_auf_zeilen(jid, 2)          # erste Marke angekommen
         snap = jobs.get(jid)
-        # Das Reannoncement ist durch den Strom gegangen: `bases` hat die Base wieder
-        # (remove_base hatte sie herausgenommen) -- die Zeile kam also wirklich an.
-        assert snap["bases"] == ["X"]
-        # ... und trotzdem bleibt die Menge stehen.
-        assert snap["entfernt"] == ["X"]
+        assert snap["bases"] == ["X"]      # die Marke kam wirklich durch den Strom
+        assert snap["entfernt"] == []      # ... und hat die Unterdrueckung aufgehoben
+        # ZWEITER Loeschzyklus: die Buchung greift erneut (remove_base ist bedingungslos),
+        # bis die ZWEITE Marke eintrifft — genau die Kombination, an der das parser-seitige
+        # Lift scheiterte.
+        jobs.remove_base("P_entf_rea", "X")
+        assert jobs.get(jid)["entfernt"] == ["X"]
+        _warte_auf_zeilen(jid, 3)
+        assert jobs.get(jid)["entfernt"] == []
     finally:
         jobs.cancel(jid)
         _wait(jid)

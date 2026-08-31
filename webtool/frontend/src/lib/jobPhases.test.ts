@@ -1090,10 +1090,18 @@ describe('parseJobPhases: geloeschte Aufnahmen erben keine Urteile (#479/#489)',
     expect(p.erreicht).toBeUndefined()
   })
 
-  it('Fenster A raeumt auch einen haengenden Spinner (#379-Halbsatz)', () => {
-    // Ein `[active] X` ohne `[done]` (abgebrochener Lauf) liess active[X] stehen. Auch das
-    // gehoert zur geloeschten Datei — der Unterdrueckungszweig raeumt wie der Filter.
-    const p = parseJobPhases('transcribe', ['[scope] X', '[active] X'], undefined, ['X'])
+  it('Fenster A raeumt Urteil UND Spinner am unterdrueckten Endurteil (#379-Halbsatz)', () => {
+    // Der Spinner entsteht durch die PHASEN-Zeile (`-> transkribiere X`), das Raeumen durch
+    // das ENDURTEIL — beides muss im Puffer stehen, sonst misst der Test einen Zustand, den
+    // kein Lauf druckt (gegnerisches Review B1: die erste Fassung hatte nur [active] X und
+    // war unter der Mutation still gruen — die Phase bucht active, aber nichts rief terminal).
+    const p = parseJobPhases('transcribe', [
+      '[scope] X',
+      '[active] X',
+      '[Demo] -> transkribiere X …',
+      '[Demo] fertig X: 1s, 2 Segmente, 1.0x',
+    ], undefined, ['X'])
+    expect(p.perBase).toEqual({})
     expect(p.active).toEqual({})
   })
 
@@ -1118,27 +1126,48 @@ describe('parseJobPhases: geloeschte Aufnahmen erben keine Urteile (#479/#489)',
     expect(p.perBase).toEqual({ X: 'done' })
   })
 
-  it('Fenster B: der alte edit-Beleg stirbt am Reannoncement, der neue lebt', () => {
-    // #489 in einer Zeile: `edit` vor der Marke (geloeschte Datei), `raw` danach (die neue).
-    // Ohne Tilgung gewönne hier der TIE-BREAK `edit` — oder die Reihenfolgeregel liesse
-    // je nach Reihenfolge das falsche stehen.
+  it('Fenster B: der alte edit-Beleg stirbt am Reannoncement — auch OHNE neuen Beleg danach', () => {
+    // #489 in der schaerfen Form (gegnerisches Review B2): die neue Datei FAILT, ihr Urteil
+    // traegt KEINEN Beleg. Ohne die Tilgung bliebe der alte `edit` stehen — die Zeilenfolge
+    // allein heilt das NICHT (der erste Entwurf dieses Tests haengte ein `fertig X:` mit
+    // `raw`-Beleg an und war unter der Mutation gruen: die spaetere Zeile ueberschreibt
+    // sowieso). Erst die Marke tilgt, und ohne nachfolgenden Beleg bleibt erreicht leer.
     const p = parseJobPhases('transcribe', [
       '[scope] X',
       'apply: X -> edit.json',
       '[scope+] X',
-      '[Demo] fertig X: 5s, 8 Segmente, 1.0x',
+      '[Demo] FEHLER X: kaputt',
     ])
-    expect(p.erreicht).toEqual({ X: 'raw' })
+    expect(p.erreicht).toBeUndefined()
+    expect(p.perBase).toEqual({ X: 'failed' })
   })
 
-  it('Fenster B hebt die entfernt-Unterdrueckung auf — die neue Datei kriegt ihre Urteile', () => {
-    // Der Doppelgriff: geloescht (Server-Menge) UND re-angekuendigt (Marke im Puffer). Erst
-    // die Marke nimmt die Unterdrueckung zurueck; Urteile vor ihr bleiben trotzdem tot.
+  it('Zweitloeschung nach der Marke: die Unterdrueckung HAELT (Reaktivierung ist serverseitig)', () => {
+    // Review W1: die Server-Realitaet nach der Zweitloeschung ist Seed {X} PLUS die Marke
+    // des ERSTEN Reuploads im Puffer — der Server hat X neu gebucht und raeumt erst bei
+    // der NAECHSTEN Marke. Ein parser-seitiges Lift an der Marke hob hier die frisch
+    // gebuchte Unterdrueckung auf, und die Aufnahme dahinter erbte X2s Urteile
+    // (erreicht 'edit' ueber Nur-Audio, am echten Parser gemessen). Der Parser darf die
+    // Marke NUR zum rueckblickenden Tilgen nutzen — nie zur Reaktivierung.
     const p = parseJobPhases('transcribe', [
       ...PUFFER,
       '[scope+] X',
       '[Demo] fertig X: 5s, 8 Segmente, 1.0x',
     ], undefined, ['X'])
+    expect(p.perBase).toEqual({})
+    expect(p.erreicht).toBeUndefined()
+  })
+
+  it('nach der ZWEITEN Marke gilt der neue Stand wieder (Doppelzyklus, Reaktivierung serverseitig)', () => {
+    // Der Server hat bei der zweiten Marke gebucht (discard), der Seed kommt also leer —
+    // der Parser tilgt an BEIDEN Marken und laesst nur den letzten Stand gelten.
+    const p = parseJobPhases('transcribe', [
+      ...PUFFER,
+      '[scope+] X',
+      '[Demo] fertig X: 5s, 8 Segmente, 1.0x',
+      '[scope+] X',
+      '[Demo] fertig X: 4s, 6 Segmente, 1.0x',
+    ], undefined, [])
     expect(p.perBase).toEqual({ X: 'done' })
     expect(p.erreicht).toEqual({ X: 'raw' })
   })
