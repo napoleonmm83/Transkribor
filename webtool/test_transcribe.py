@@ -1603,8 +1603,17 @@ def test_transkriptionsfehler_bleibt_auf_einer_zeile(monkeypatch, tmp_path, caps
 # `correct_ai_single` zurueckgibt und wann `llm.available()` gruen wird.
 # ─────────────────────────────────────────────────────────────────────────────────────────
 
-def _ki_projekt(monkeypatch, tmp_path, name, bases=("S1", "S2")):
-    """Zwei Aufnahmen, gefaelschtes Whisper, gefaelschte Diarisierung — bereit fuer autocorrect."""
+def _ki_projekt(monkeypatch, tmp_path, name, bases=("S1", "S2"), diarize_druckt=False):
+    """Zwei Aufnahmen, gefaelschtes Whisper, gefaelschte Diarisierung — bereit fuer autocorrect.
+
+    `diarize_druckt=True` laesst die Attrappe die ECHTEN Zeilenformen von `cmd_diarize`
+    drucken (`[active]`/`[done]` je Datei) — #443: die stumme Grundform nahm Tests genau den
+    Sensor, an dem die #418/#444-Buchfuehrung haengt, und genau daran lief der erste
+    #418-Fix unbemerkt wirkungslos vorbei. Der Default bleibt stumm, weil 14 der 18 Tests
+    auf dieser Fixture Reihenfolgen und Zeilenformen zaehlen (z.B. `out.index("[done] …")`,
+    das dann diarizes Marke faengt statt der der Freigabe) — wer BUCHFUEHRUNG misst,
+    schaltet zu; beide Richtungen haben einen eigenen Waechter direkt unter dieser Fixture.
+    """
     from webtool import correct
 
     monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
@@ -1615,7 +1624,16 @@ def _ki_projekt(monkeypatch, tmp_path, name, bases=("S1", "S2")):
         "text": "Hallo", "segments": [{"id": 0, "start": 0.0, "end": 1.0, "text": "Hallo"}],
         "duration": 1.0,
     })
-    monkeypatch.setattr(correct, "cmd_diarize", lambda *a, **kw: 1)
+
+    def _diarize_druckt_attrappe(_proj, only_bases, **kw):
+        for b in (only_bases or []):
+            print(f"[active] {b}", flush=True)
+            print(f"[done] {b}", flush=True)
+        return len(only_bases or [])
+
+    monkeypatch.setattr(correct, "cmd_diarize",
+                        _diarize_druckt_attrappe if diarize_druckt else
+                        (lambda *a, **kw: 1))
     monkeypatch.setattr(correct, "prep_single", lambda *a, **kw: True)
     monkeypatch.setattr(correct, "CLAUDE_PARALLEL", 2)
 
@@ -1625,6 +1643,27 @@ def _ki_projekt(monkeypatch, tmp_path, name, bases=("S1", "S2")):
     for b in bases:
         (proj / "audio" / f"{b}.mp3").write_bytes(b"audio")
     return proj
+
+
+def test_ki_projekt_kann_diarize_marken_drucken(monkeypatch, tmp_path, capsys):
+    """#443-Waechter: die Fixture KANN die echten Marken — die Faehigkeit darf nicht
+    still verschwinden. Genau eine durchgaengig stumme Attrappe nahm jedem Test den
+    Sensor fuer die [active]/[done]-Buchfuehrung; der erste #418-Fix lief daran
+    unbemerkt wirkungslos vorbei (14 Tests, alle gruen)."""
+    _ki_projekt(monkeypatch, tmp_path, "FixturDemo", diarize_druckt=True)
+    from webtool import correct
+    correct.cmd_diarize("FixturDemo", ["S1", "S2"])
+    out = capsys.readouterr().out
+    assert "[active] S1" in out and "[done] S2" in out
+
+
+def test_ki_projekt_ist_standardmaessig_stumm(monkeypatch, tmp_path, capsys):
+    """Gegenprobe: der Default bleibt stumm — 14 der 18 Tests zaehlen Reihenfolgen und
+    Zeilenformen; ungefragte Marken wuerden ihre Indizes verschieben (kein Daueralarm)."""
+    _ki_projekt(monkeypatch, tmp_path, "FixturStumm")
+    from webtool import correct
+    correct.cmd_diarize("FixturStumm", ["S1"])
+    assert capsys.readouterr().out == ""
 
 
 def test_totalausfall_der_korrektur_endet_rot(monkeypatch, tmp_path, capsys):
