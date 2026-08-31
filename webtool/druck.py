@@ -12,9 +12,9 @@ Zwischen den beiden kann die GIL wechseln — zwei Threads schreiben ineinander,
 die `jobs.py` liest, gehoert keinem von beiden.
 
 **Das ist nicht nur Anzeige.** Seit #418 bucht `jobs.buche_aktive` `[active]`/`[done]` in
-`active_bases`, und `betrifft(..., active_only=True)` ist der 409-Riegel von
-`DELETE /api/projects/{p}/files/{base}`. Eine zerlegte `[done]`-Zeile trifft
-`startswith(DONE_PREFIX)` noch, aber der Rest ist kein Basisname mehr — das `discard` laeuft ins
+`active_bases` (seit #452 zaehlend, mit Boden 0), und `betrifft(..., active_only=True)` ist der
+409-Riegel von `DELETE /api/projects/{p}/files/{base}`. Eine zerlegte `[done]`-Zeile trifft
+`startswith(DONE_PREFIX)` noch, aber der Rest ist kein Basisname mehr — der Abzug laeuft ins
 Leere, und **die Aufnahme bleibt bis Jobende gesperrt**. Ein verschlucktes `[active]` ist
 derselbe Fall spiegelverkehrt: die Sperre fehlt still.
 

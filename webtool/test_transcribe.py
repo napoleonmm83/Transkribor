@@ -2160,12 +2160,12 @@ def test_aufnahme_bleibt_bis_zum_ende_der_korrektur_gesperrt(monkeypatch, tmp_pa
     transcribe.transcribe_project("SperrDemo", "tiny", "de", autocorrect=True)
     zeilen = capsys.readouterr().out.splitlines()
 
-    aktive = set()
+    aktive = {}
     gesehen = set()
     verlauf = []
     for zeile in zeilen:
         jobs.buche_aktive(aktive, zeile, gesehen)
-        verlauf.append((zeile, set(aktive)))
+        verlauf.append((zeile, dict(aktive)))
 
     # Vorbedingung: S2 war fertig diarisiert, BEVOR S1s Korrektur endete. Ohne sie waere die
     # Zusicherung unten vacuous — dann haette S2 die Schlange nie erreicht.
@@ -2176,6 +2176,15 @@ def test_aufnahme_bleibt_bis_zum_ende_der_korrektur_gesperrt(monkeypatch, tmp_pa
     assert idx_diar_s2[0] < idx_apply_s1[0], (
         "Vorbedingung: S2 muss die Schlange erreichen, waehrend S1 noch korrigiert wird")
 
+    # #452-Waechter: das diarize-[done] darf die Buchung nicht leeren — die Transkription
+    # (ihr [active] VOR der Transkription) haelt die Aufnahme noch. Auf der Menge war genau
+    # hier das Loch aus zwei benachbarten Schreibvorgangen; der Zaehler traegt die
+    # Verschachtelung. Das ERSTE "[done] S1" ist diarizes (die Korrektur folgt spaeter).
+    i_diar_done_s1 = zeilen.index("[done] S1")
+    assert "S1" in verlauf[i_diar_done_s1][1], (
+        "diarize-[done] leert die Buchung, obwohl der aeussere Drucker haelt — #452"
+        + chr(10) + chr(10).join(f"{z!r} -> {sorted(a)}" for z, a in verlauf[:i_diar_done_s1 + 1]))
+
     # DIE ZUSICHERUNG: mitten in S1s Korrektur wartet S2 in der Schlange — und gilt als
     # bearbeitet. Vor dem Fix war sie hier frei, `DELETE` kam mit 200 durch.
     _, zustand = verlauf[idx_apply_s1[0]]
@@ -2184,7 +2193,9 @@ def test_aufnahme_bleibt_bis_zum_ende_der_korrektur_gesperrt(monkeypatch, tmp_pa
         + chr(10) + chr(10).join(f"{z!r} -> {sorted(a)}" for z, a in verlauf))
 
     # Und am Ende ist wirklich alles freigegeben — sonst bliebe Loeschen dauerhaft bei 409.
-    assert verlauf[-1][1] == set(), verlauf[-1]
+    # Als Zaehler-Bilanz ist das zugleich der Wächter gegen ein drittes [active] ohne
+    # [done]: jedes unpaarige active bliebe hier sichtbar stehen (#452).
+    assert verlauf[-1][1] == {}, verlauf[-1]
 
     # Die ZWEITE Menge gegen dieselbe echte Druckfolge (#475): sie darf am Ende gerade NICHT
     # leer sein. Der synthetische Drucker in test_jobs.py prueft die Buchung, dieser hier
