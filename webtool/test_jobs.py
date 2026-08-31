@@ -745,7 +745,7 @@ def test_remove_base_bucht_entfernt_bedingungslos_und_get_liefert_eine_kopie():
         _wait(jid)
 
 
-def test_reannoncement_reaktiviert_die_server_menge_deckelfest():
+def test_reannoncement_reaktiviert_die_server_menge_deckelfest(tmp_path):
     """Das `[scope+]`-Reannoncement raeumt die Base aus `entfernt` — SERVERSEITIG, beim
     EINTREFFEN der Zeile (Review W1 zu K1 Glied 3).
 
@@ -754,18 +754,27 @@ def test_reannoncement_reaktiviert_die_server_menge_deckelfest():
     der ZWEITEN Loeschung auf, und die naechste Aufnahme erbte wieder ein Fremd-Urteil
     (erreicht 'edit' ueber Nur-Audio, am echten Parser gemessen). Der Server sieht jede
     Zeile, BEVOR sie in den gedeckelten Puffer wandert — sein discard ist deckelfest und
-    gilt ab Eintreffen; der Parser tilgt an derselben Marke nur rueckblickend."""
-    code = ("import sys, time\n"
+    gilt ab Eintreffen; der Parser tilgt an derselben Marke nur rueckblickend.
+
+    Die Marken sind an SENTINEL-DATEIEN gekoppelt, nicht an Schlaf-Fristen (CodeRabbit-CLI,
+    Major): jede Buchung muss VOR ihrer Marke landen, ein Zeitfenster macht den Test unter
+    Last haarig — dieselbe Klasse wie die #461-Barrier."""
+    tor1 = tmp_path / "marke1.jetzt"
+    tor2 = tmp_path / "marke2.jetzt"
+    code = ("import os, sys, time\n"
+            f"tor1 = {str(tor1)!r}\n"
+            f"tor2 = {str(tor2)!r}\n"
             "print('[scope] X', flush=True)\n"
-            "time.sleep(1.0)\n"
+            "while not os.path.exists(tor1): time.sleep(0.05)\n"
             "print('[scope+] X', flush=True)\n"
-            "time.sleep(1.0)\n"
+            "while not os.path.exists(tor2): time.sleep(0.05)\n"
             "print('[scope+] X', flush=True)\n"
             "time.sleep(30)\n")
     jid, _ = jobs.start("P_entf_rea", [sys.executable, "-c", code], cwd=None, kind="transcribe")
     try:
         _warte_auf_zeilen(jid, 1)
-        jobs.remove_base("P_entf_rea", "X")
+        jobs.remove_base("P_entf_rea", "X")   # ERSTE Loeschung, vor der ersten Marke
+        tor1.write_text("jetzt")
         _warte_auf_zeilen(jid, 2)          # erste Marke angekommen
         snap = jobs.get(jid)
         assert snap["bases"] == ["X"]      # die Marke kam wirklich durch den Strom
@@ -775,6 +784,7 @@ def test_reannoncement_reaktiviert_die_server_menge_deckelfest():
         # Lift scheiterte.
         jobs.remove_base("P_entf_rea", "X")
         assert jobs.get(jid)["entfernt"] == ["X"]
+        tor2.write_text("jetzt")
         _warte_auf_zeilen(jid, 3)
         assert jobs.get(jid)["entfernt"] == []
     finally:
