@@ -48,10 +48,11 @@ from .render_srt import render_srt
 
 # `as _transcribe` aus demselben Grund wie `correct as _correct` oben: weiter unten
 # steht `def transcribe(project)` (der Endpunkt), ein blanker `import transcribe`
-# wuerde davon still ueberschrieben. Der Import ist gratis — fetch_mod laedt das
-# Modul ohnehin (fetch.py importiert es am Kopf), und transcribe.py importiert am
-# Kopf nur stdlib. Gebraucht wird `_autocorrect_an`, die EINE Quelle des
-# Kill-Switches (#441): Server und Lauf sehen dieselbe Variable.
+# wuerde davon still ueberschrieben. Der Aufruf hier ist nur ein sys.modules-Treffer:
+# fetch_mod laedt das Modul ohnehin (fetch.py importiert es am Kopf), und
+# transcribe.py importiert am Kopf nur stdlib — es gibt also nichts neu zu laden.
+# Gebraucht wird `_autocorrect_an`, die EINE Quelle des Kill-Switches (#441):
+# Server und Lauf sehen dieselbe Variable.
 import transcribe as _transcribe
 
 # Vor allem anderen: die .env kann TRANSKRIBOR_PROJEKTE & Co. setzen, und die liest
