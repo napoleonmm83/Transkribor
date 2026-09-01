@@ -154,16 +154,22 @@ export function FileStatusPill({ file, active, pct, detail, state, erreicht, job
       // mehrere Dateien gleichzeitig; „noch N vor dieser" bleibt dabei wahr, „Platz N von M"
       // waere ein Versprechen, das der Lauf nicht gibt.
       //
-      // Die Zahl nur mit `mitText`: dieselbe Begruendung wie am Prop selbst — die
-      // Arbeitsflaeche hat die Breite dafuer, die 260px-Seitenleiste des Editors nicht.
+      // Die ganze Auskunft haengt an `mitText`, nicht nur die Zahl — und das ist im Browser
+      // GEMESSEN, nicht abgeschaetzt. Die 260px-Seitenleiste teilt sich Name, Pille und
+      // ⋯-Menue; am selben Lauf mit nur ausgetauschtem Etikett stand dort mit dem alten Text
+      // „Intervi…", mit „Wartet auf Transkription" nur noch „I…". Aus drei Dateien wurden
+      // damit drei ununterscheidbare Zeilen — der Name ist in einer Dateiliste aber die
+      // Hauptinformation, keine Nebensache. Die Kuerzung selbst ist aelter als diese Zeile;
+      // neu waere nur gewesen, sie bis zur Unkenntlichkeit zu treiben.
+      //
       // Bei `vor === 0` entfaellt der Zusatz: „noch 0 vor dieser" ist keine Auskunft.
       //
       // Ohne `warten` bleibt der bisherige Text stehen. Das ist kein Randfall, sondern die
       // gewollte sichere Richtung: der URL-Import kennt keine Basisnamen, und ein Lauf ohne
       // `[scope]`-Zeile im Puffer hat keine Grundlage fuer eine Zahl. Lieber kein Wert als
       // ein geratener.
-      const wLabel = warten
-        ? WARTE_LABEL[warten.art] + (mitText && warten.vor > 0 ? ` · noch ${warten.vor} vor dieser` : '')
+      const wLabel = warten && mitText
+        ? WARTE_LABEL[warten.art] + (warten.vor > 0 ? ` · noch ${warten.vor} vor dieser` : '')
         : 'In Warteschlange…'
       return (
         <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">

@@ -43,9 +43,14 @@ describe('FileStatusPill', () => {
     render(<FileStatusPill file={f()} jobRunning inScope mitText warten={{ art: 'correct', vor: 3 }} />)
     expect(screen.getByText('Wartet auf Korrektur · noch 3 vor dieser')).toBeInTheDocument()
   })
-  it('ohne mitText bleibt die Zahl weg — die 260px-Leiste hat den Platz nicht', () => {
+  it('ohne mitText bleibt es beim kurzen Text — die 260px-Leiste hat den Platz nicht', () => {
+    // Im Browser gemessen, gleicher Lauf, nur das Etikett ausgetauscht: mit „In
+    // Warteschlange…" zeigte die Seitenleiste „Intervi…", mit „Wartet auf Transkription"
+    // nur noch „I…" — drei Dateien wurden zu drei ununterscheidbaren Zeilen. In einer
+    // Dateiliste ist der NAME die Hauptinformation; der Status darf ihn nicht auffressen.
     render(<FileStatusPill file={f()} jobRunning inScope warten={{ art: 'transcribe', vor: 3 }} />)
-    expect(screen.getByText('Wartet auf Transkription')).toBeInTheDocument()
+    expect(screen.getByText(/In Warteschlange…/)).toBeInTheDocument()
+    expect(screen.queryByText(/Wartet auf/)).toBeNull()
     expect(screen.queryByText(/vor dieser/)).toBeNull()
   })
   it('„noch 0 vor dieser" waere keine Auskunft und entfaellt', () => {
