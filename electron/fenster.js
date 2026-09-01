@@ -109,31 +109,36 @@ function fortschrittGueltig(anteil) {
  */
 const EXTERN_ERLAUBT = new Set(['https:', 'http:'])
 
-/** Die gepruefte, kanonisierte URL — oder `null`. Absichtlich der WERT statt ja/nein. */
-function externesZiel(url) {
-  try {
-    const u = new URL(String(url))
-    return EXTERN_ERLAUBT.has(u.protocol) ? u.href : null
-  } catch { return null }
-}
-
 /**
- * WARUM `externesZiel` daneben `null` geliefert hat — fuer die Protokollzeile (#458).
+ * Die EINE Klassifikation: Urteil und Begruendung entstehen an derselben Stelle (#458).
  *
- * **Vorbedingung: nur fragen, wenn `externesZiel` schon `null` gesagt hat.** Diese Funktion
- * entscheidet nichts; sie beschriftet eine Entscheidung, die oben fiel. Wer sie ohne diese
- * Vorbedingung ruft, bekommt fuer eine gueltige `https:`-URL „Schema nicht erlaubt".
+ * Rueckgabe `{ziel, grund}` — genau eines von beiden ist gesetzt. Diese Funktion ist bewusst
+ * NICHT exportiert: nach aussen gehen die zwei schmalen Sichten darunter, damit der Vertrag
+ * von `externesZiel` (`string | null`) unveraendert bleibt. Ein exportiertes Objekt waere im
+ * Ablehnungsfall **truthy**, und beide Aufrufer in `main.js` pruefen mit `if (ziel)` — aus
+ * einer Diagnose-Verbesserung wuerde ein stiller Durchlass fuer abgewiesene URLs.
  *
- * **Warum daneben und nicht als erweiterter Rueckgabewert von `externesZiel`.** Ein
- * `{ziel, grund}` waere im Ablehnungsfall **truthy** — und beide Aufrufer in `main.js` pruefen
- * mit `if (ziel)`. Aus einer Diagnose-Verbesserung waere damit ein stiller Durchlass fuer
- * abgewiesene URLs geworden. `externesZiel` ist die Vertrauensgrenze; ihr Vertrag
- * `string | null` bleibt unangetastet, damit genau das nicht passieren kann.
+ * **Warum EINE Funktion und nicht zwei nebeneinander.** Die erste Fassung dieses Fixes hatte
+ * `abweisungsGrund` als eigenstaendigen Zwilling mit eigenem `try`, und der Docstring behauptete,
+ * ein Tabellentest ueber dieselbe Eingabeliste fange die Drift. **Das ist widerlegt** (kalter
+ * Zweitleser, ausgefuehrt): ein dritter Ablehnungszweig — probiert mit
+ * `if (u.username || u.password) return null` — liess alle 15 Tests der Datei GRUEN, und der
+ * Zwilling schrieb fuer die so abgewiesene URL weiter „Schema nicht erlaubt" ins Protokoll,
+ * also genau die Luege, die #458 beheben sollte.
  *
- * **Der Preis gehoert dazu:** zwei Stellen, die zusammenpassen muessen. Kommt in `externesZiel`
- * je ein dritter Ablehnungsgrund dazu, luegt diese Funktion **still**. Dagegen steht der
- * Tabellentest in `fenster.test.js`, der BEIDE ueber dieselbe Eingabeliste faehrt — ein neuer
- * Grund ohne Eintrag hier macht ihn rot.
+ * **Was der Umbau bringt, und was NICHT — beides gemessen, damit hier nicht zum zweiten Mal
+ * eine zu grosse Zusage steht:**
+ *   - GEWINN: Urteil und Begruendung entstehen aus EINEM Parse an EINER Stelle. Fuer dieselbe
+ *     Eingabe koennen sie nicht mehr auseinanderlaufen — das konnten die zwei `try` vorher.
+ *   - GEWINN: ein Zweig, der `grund` vergisst, faellt LAUT aus. `return null` statt eines
+ *     Objekts ergibt beim ersten Aufruf `TypeError` (ausgefuehrt: `externesZiel` und
+ *     `abweisungsGrund` warfen beide fuer `https://user:pw@x.test/`), statt still einen
+ *     falschen Grund zu protokollieren.
+ *   - KEIN GEWINN: die TESTSUITE bleibt trotzdem gruen. Dieselbe Mutation gegen den Umbau
+ *     gefahren ergab wieder 15/15 — kein Test kennt eine URL mit Zugangsdaten, also betritt
+ *     keiner den neuen Zweig. Einen Test fuer einen Zweig, den es noch nicht gibt, kann es
+ *     nicht geben; **ein dritter Ablehnungsgrund ist eine Reviewfrage, keine Testfrage.**
+ *     Wer einen einbaut, klassifiziert ihn hier UND legt eine Zeile in `ABWEISUNGEN` an.
  *
  * **`nicht lesbar` ist wie der `try` oben KEIN Produktionsfall.** Aus `setWindowOpenHandler`,
  * `will-navigate` und `will-redirect` kommt nie eine unparsebare URL an — Chromium reicht
@@ -142,9 +147,22 @@ function externesZiel(url) {
  * bei einer Weiterleitung mit ERLAUBTEM Schema, wo die Zeile bisher einen Grund behauptete,
  * den es nicht gab.
  */
+function pruefen(url) {
+  let u
+  try { u = new URL(String(url)) } catch { return { ziel: null, grund: 'nicht lesbar' } }
+  return EXTERN_ERLAUBT.has(u.protocol)
+    ? { ziel: u.href, grund: null }
+    : { ziel: null, grund: 'Schema nicht erlaubt' }
+}
+
+/** Die gepruefte, kanonisierte URL — oder `null`. Absichtlich der WERT statt ja/nein. */
+function externesZiel(url) {
+  return pruefen(url).ziel
+}
+
+/** WARUM `externesZiel` abgelehnt hat — oder `null`, wenn sie es gar nicht getan hat (#458). */
 function abweisungsGrund(url) {
-  try { new URL(String(url)) } catch { return 'nicht lesbar' }
-  return 'Schema nicht erlaubt'
+  return pruefen(url).grund
 }
 
 /**

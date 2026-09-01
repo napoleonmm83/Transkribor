@@ -7,13 +7,18 @@ const {
 } = require('./fenster')
 
 // ── Abweisungsgrund (#458) ───────────────────────────────────────────────────
-// EINE Eingabeliste fuer BEIDE Funktionen, und das ist der Zweck dieser Tabelle, nicht ihr
-// Nebeneffekt: `abweisungsGrund` sitzt NEBEN `externesZiel` statt darin (Begruendung im
-// Docstring dort — ein erweiterter Rueckgabewert waere im Ablehnungsfall truthy gewesen, und
-// beide Aufrufer in `main.js` pruefen mit `if (ziel)`). Zwei Stellen koennen auseinanderlaufen:
-// kommt in `externesZiel` je ein dritter Ablehnungsgrund dazu, den `abweisungsGrund` nicht
-// kennt, wird diese Tabelle rot. Das ist die einzige Sicherung dagegen — deshalb laufen beide
-// Funktionen ueber DIESELBE Liste und nicht ueber je eine eigene.
+// **Diese Tabelle ist NICHT die Drift-Sicherung** — das stand hier in der ersten Fassung und
+// war falsch. Der kalte Zweitleser hat es ausgefuehrt: mit einem dritten Ablehnungszweig in
+// `externesZiel` (`if (u.username || u.password) return null`) blieben alle 15 Tests dieser
+// Datei GRUEN, waehrend der damalige Zwilling `abweisungsGrund` fuer die so abgewiesene URL
+// weiter „Schema nicht erlaubt" meldete. Eine statische Tabelle kann einen Zweig nicht kennen,
+// den es beim Schreiben der Tabelle nicht gab.
+//
+// Der Umbau auf EINE Klassifikation (`pruefen`) macht daraus einen LAUTEN Ausfall statt einer
+// stillen Luege — aber er macht diese Suite nicht klueger: dieselbe Mutation gegen den Umbau
+// gefahren ergab wieder 15/15 gruen, weil kein Test eine URL mit Zugangsdaten kennt. Ein
+// dritter Ablehnungsgrund bleibt eine REVIEWFRAGE. Diese Tabelle prueft, was sie wirklich
+// pruefen kann: dass die beiden Sichten fuer jede bekannte Eingabe zueinander passen.
 //
 // Die Faelle sind die in #458 am Ist-Code GEMESSENEN, plus zwei Schema-Faelle aus dem Alltag.
 const ABWEISUNGEN = [
@@ -30,18 +35,26 @@ test('abweisungsGrund nennt den Grund, aus dem externesZiel abgelehnt hat (#458)
   for (const { roh, durchgelassen, grund } of ABWEISUNGEN) {
     assert.strictEqual(externesZiel(roh) !== null, durchgelassen,
       `externesZiel(${JSON.stringify(roh)}) — die Tabelle beschreibt den falschen Pfad`)
-    if (durchgelassen) continue
-    assert.strictEqual(abweisungsGrund(roh), grund, JSON.stringify(roh))
+    assert.strictEqual(abweisungsGrund(roh), durchgelassen ? null : grund, JSON.stringify(roh))
   }
 })
 
-test('abweisungsGrund ist eine Beschriftung, KEIN zweiter Waechter (#458)', () => {
-  // Die Vorbedingung aus dem Docstring, hier festgenagelt: fuer eine ERLAUBTE URL antwortet die
-  // Funktion trotzdem etwas — sie kennt die Frage nicht, nur die Ablehnung. Wer sie fuer eine
-  // Entscheidung benutzt statt fuer deren Beschriftung, bekommt „Schema nicht erlaubt" fuer ein
-  // erlaubtes Schema. Der Test steht hier, damit niemand sie fuer eine Wache haelt.
-  assert.strictEqual(externesZiel('https://gut.test/'), 'https://gut.test/')
-  assert.strictEqual(abweisungsGrund('https://gut.test/'), 'Schema nicht erlaubt')
+test('genau eines von beiden: entweder Ziel oder Grund, nie beides und nie keines (#458)', () => {
+  // Der Vertrag der einen Klassifikation, ueber dieselbe Liste geprueft. Ohne diese Zusicherung
+  // koennte ein kuenftiger Zweig `{ziel: null, grund: null}` liefern — im Protokoll stuende
+  // dann „abgewiesen (null)", und die Tabelle oben saehe nichts davon, solange sie den Zweig
+  // nicht kennt.
+  for (const { roh } of ABWEISUNGEN) {
+    const ziel = externesZiel(roh)
+    const grund = abweisungsGrund(roh)
+    const lage = `${JSON.stringify(roh)} -> ziel=${JSON.stringify(ziel)} grund=${JSON.stringify(grund)}`
+    // Auf `typeof === 'string'` geprueft, nicht auf `!== null`: ein `undefined` (Zweig ohne
+    // `grund`) erfuellt `!== null` NICHT, aber es erfuellt auch die XOR-Bedingung — die erste
+    // Fassung dieses Tests liess `{ziel: null}` ohne Grund durch und haette „abgewiesen
+    // (undefined)" im Protokoll nicht bemerkt.
+    if (ziel === null) assert.strictEqual(typeof grund, 'string', 'Ablehnung ohne Grund: ' + lage)
+    else assert.strictEqual(grund, null, 'Durchlass MIT Grund: ' + lage)
+  }
 })
 
 test('Windows und Linux bekommen ein Overlay mit nativen Knoepfen', () => {
