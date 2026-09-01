@@ -80,6 +80,10 @@ const WURZEL = path.resolve(HIER, '..', '..')
 // Die Default-SENKE von `sag` in whispercpp.py: der `onLine or`-Rueckfall. Eine Meldungsform
 // enthaelt diese Zeichen nie; die Senke ist per Definition der Fallback des Emitters. Zeilen,
 // die hierauf passen, werden NUR im `print(`-Eintrag derselben Datei uebersprungen.
+// RANDFALL, benannt statt verschwiegen (Review zu #432): die Selbstueberwachung gilt in der
+// gefaehrlichen Richtung — verliert der Matcher die Senke, schlaegt UNLESBAR. Verliert die
+// SENKE ihr `print(` (etwa `sag = onLine or _schreibe`), altert der Matcher STILL — dann
+// aber harmlos, weil nichts mehr da ist, das er ueberspringen muesste.
 const SENKE = /onLine or \(?lambda/
 
 const QUELLEN: { datei: string; ruf: string; senke?: RegExp }[] = [
@@ -115,8 +119,10 @@ export function ersteZeichenkette(zeile: string, ruf = 'print('): string | null 
 // INVENTAR, der Gleichheitstest wird also rot. Ohne sie waere ein `print(meldung)` oder ein
 // `print(` mit der Zeichenkette in der naechsten Zeile eine Form, die der Ernter still
 // ueberspringt: Test gruen, Form unklassifiziert — genau das Loch, gegen das diese Datei gebaut
-// ist. Die Form gibt es im Repo bereits (`webtool/whispercpp.py`: `lambda z: print(z, …)`), nur
-// heute in keiner der QUELLEN. Preis, benannt: ein `print(` in einem Kommentar loest jetzt
+// ist. Die Form gibt es im Repo (`webtool/whispercpp.py`: `lambda z: print(z, …)`) — seit #432
+// sogar in einer QUELLE, aber als SENKE uebersprungen: gerade deshalb schlaegt sie KEINEN
+// Sentinel an, und der Ernter-Test unten pinnt genau diese Unterscheidung. Preis, benannt: ein
+// `print(` in einem Kommentar loest jetzt
 // Fehlalarm aus — die umgekehrte Fehlbarkeit steckt ohnehin schon drin (ein `print("x")` in
 // einem Kommentar WIRD geerntet).
 const UNLESBAR = '<<print( ohne lesbare Zeichenkette>>'
@@ -825,9 +831,13 @@ describe('Vertrag: gedruckte Statuszeilen <-> jobPhases.ts (#375)', () => {
     // Grenze (c) des Issues: je Platzhalter steht EIN Wert, und `Demo` vertritt den
     // PROJEKTNAMEN. Gemessen (Issue): heisst das Projekt `fetch`, setzt dieselbe Form unter
     // kind `fetch` `global:'download'` — die Werte tragen die Aussage. Gesondert werden die
-    // Namen aus paths.RESERVIERTE_NAMEN (paths.py:34, hier gespiegelt — der Test kann kein
-    // Python lesen): seit dem Namensraum-Riegel (K1 Glied 1) legt keiner von ihnen ein NEUES
-    // Projekt mehr an, Altprojekte tragen sie weiter, und ihre Klammerpraefixe sind
+    // Namen aus paths.RESERVIERTE_NAMEN — GEERNETET, nicht gespiegelt (Review F1 zu #432):
+    // das Mengen-Literal in paths.py liest derselbe node:fs-Griff wie die Druckformen, und
+    // der Gleichheits-Pin darunter macht die Richtung Python->TS LAUT — legt K1 ein sechstes
+    // reserviertes Wort an (der Kommentar dort rechnet ausdrücklich mit Wachstum), wird dieser
+    // Test rot, bis jemand seine Erwartungszeile bewusst anlegt. Seit dem Namensraum-Riegel
+    // (K1 Glied 1) legt keiner der Namen ein NEUES Projekt mehr an, Altprojekte tragen sie
+    // weiter, und ihre Klammerpraefixe sind
     // zeilengleich mit Parser-Marken bzw. der Job-Art — die Klasse aus #379/#396/#478.
     //
     // DIE STRUKTUR STATT DER LISTE: die Kollision ist formenhaft — sie haengt daran, DASS
@@ -856,10 +866,21 @@ describe('Vertrag: gedruckte Statuszeilen <-> jobPhases.ts (#375)', () => {
       // Der [fetch]-Zweig stellt global auf 'download' — nur im eigenen kind, und nur
       // isoliert sichtbar (mit laufender Aufnahme maskiert active das global-Feld).
       fetch: ['fetch/isoliert'],
-      // `[done] x` raeumt nur eine laufende Diarisierung des GENAUEN Namens auf; der
-      // Zeilenrest hinter dem Praefix ist nie ein Basisname — still in jeder Kombination.
+      // `[done] x` raeumt nur eine laufende Diarisierung des GENAUEN Namens auf — der
+      // Zeilenrest WIRD als Basisname gelesen (jobPhases.ts loescht active[rest]), ist nur
+      // im Pruefharness nie der eine diarisierende Basis 'B'. Die Leerzeile ist damit
+      // HARNESS-AKZIDENTELL, nicht formenhaft wie bei den Geschwistern: eine kuenftige
+      // Form, deren Klammerrest ein nacktes Wort ist, dreht diese Zeile rot — dann bewusst
+      // entscheiden, nicht die Begründung hier verbiegen (Review F3 zu #432).
       done: [],
     }
+    // Der Ernte-Pin: ERWARTETs Schluessel MUESSEN der Python-Menge entsprechen. Sensor
+    // gegen die leere Ernte inklusive (kaputter Pfad, umgebautes Literal ⇒ rot statt still).
+    const reserviertQuelle = fs.readFileSync(path.join(WURZEL, 'webtool', 'paths.py'), 'utf-8')
+      .match(/RESERVIERTE_NAMEN = \{([^}]*)\}/)?.[1] ?? ''
+    const reserviert = [...reserviertQuelle.matchAll(/["']([^"']+)["']/g)].map((m) => m[1])
+    expect(reserviert.length).toBeGreaterThanOrEqual(5)
+    expect(Object.keys(ERWARTET).sort()).toEqual([...reserviert].sort())
     const sondiert = Object.entries(INVENTAR)
       .filter(([sig, e]) => (e.art === 'ignoriert' || e.art === 'gelesen_anderswo') && sig.startsWith('[{}] '))
       .map(([sig]) => sig)
