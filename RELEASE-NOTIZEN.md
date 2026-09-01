@@ -28,6 +28,14 @@ hat. Lesbar, aber unschön — das ist Absicht.
 
 ## Unveröffentlicht
 
+**Neu**
+- Wartende Aufnahmen sagen jetzt, worauf sie warten und wie viele noch davor liegen — statt nur „In Warteschlange".
+
+**Behoben**
+- Der Fortschrittsbalken einer gestückelten Korrektur bleibt am Ende nicht mehr eine Stufe zu niedrig stehen.
+- Eine Aufnahme, deren Handarbeit geschützt wurde, heisst nicht mehr „Übersprungen" — das las sich, als sei sie liegen geblieben.
+- Die Meldung beim Löschen einer laufenden Aufnahme spricht nicht mehr von „Transkription", wenn gerade korrigiert wird.
+
 ## v0.50.2 — 2026-09-01
 
 **Behoben**

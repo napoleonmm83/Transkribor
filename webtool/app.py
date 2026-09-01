@@ -812,7 +812,16 @@ def _datei_weg(project: str, base: str, mit_audio: bool) -> int:
     return len(treffer)
 
 
-_KIND_TEXT = {"transcribe": "Transkription", "correct": "Korrektur", "fetch": "Import"}
+# „Verarbeitung" fuer transcribe, nicht „Transkription" (#442). Der Job traegt seit der
+# gestaffelten Pipeline (v0.48.0) BEIDE Arbeiten: er transkribiert und korrigiert danach
+# selbst. Die Sperrmeldung sagte deshalb „Transkription laeuft", waehrend die Transkription
+# laengst fertig war und gerade korrigiert wurde — wer eine falsch hochgeladene Aufnahme
+# loswerden wollte, las etwas Falsches.
+#
+# Eine phasengenaue Meldung waere kein Wortwechsel, sondern neuer Serverzustand: hier ist nur
+# die Job-ART bekannt, die Phase steht allein im Zeilenstrom und wird im Frontend geparst.
+# `correct` und `fetch` behalten ihre genauen Woerter, weil die dort stimmen.
+_KIND_TEXT = {"transcribe": "Verarbeitung", "correct": "Korrektur", "fetch": "Import"}
 
 
 def _keine_jobs(project: str, base: str = None, active_only: bool = False) -> None:

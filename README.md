@@ -204,13 +204,20 @@ Transkribor gerade arbeitet. In Fassungen bis einschliesslich `v0.50.0` stand be
 zum Ende des ganzen Laufs nur das Wartesymbol, obwohl sie längst abgehört und korrigiert
 wurden — und in der Meldung am Ende des Laufs tauchten sie gar nicht erst auf.
 
-Auch **bevor** sie an der Reihe sind, stehen sie ab `v0.50.1` als „In
-Warteschlange“ in der Liste statt weiter wie unbearbeitetes Audio auszusehen. Das greift,
-sobald die Aufnahme fertig ist, an der Transkribor gerade arbeitet — bei einer langen
-Aufnahme kann das also ein paar Minuten dauern. Solange eine solche Aufnahme zum laufenden
-Lauf gehört, lässt sie sich nicht umbenennen und nicht neu transkribieren; Transkribor sagt
-dann „wird gerade bearbeitet — bitte warten“. Löschen geht weiterhin, solange gerade nicht
-an ihr gerechnet wird.
+Auch **bevor** sie an der Reihe sind, stehen sie ab `v0.50.1` als wartend in der Liste
+statt weiter wie unbearbeitetes Audio auszusehen. Das greift, sobald die Aufnahme fertig
+ist, an der Transkribor gerade arbeitet — bei einer langen Aufnahme kann das also ein paar
+Minuten dauern.
+
+**Ab der nächsten Fassung** sagt diese Zeile auch, *worauf* gewartet wird und wie viel noch
+davor liegt: „Wartet auf Korrektur · noch 3 vor dieser“. In Fassungen bis einschliesslich
+`v0.50.2` stand dort nur „In Warteschlange“ — bei fünfzehn Aufnahmen sah die erste damit
+genauso aus wie die letzte. Die Zahl ist eine Menge, keine Platznummer: beim Korrigieren
+arbeitet Transkribor mehrere Aufnahmen gleichzeitig.
+
+Solange eine solche Aufnahme zum laufenden Lauf gehört, lässt sie sich nicht umbenennen und
+nicht neu transkribieren; Transkribor sagt dann „wird gerade bearbeitet — bitte warten“.
+Löschen geht weiterhin, solange gerade nicht an ihr gerechnet wird.
 
 Wie viele Aufnahmen gleichzeitig korrigiert werden, stellst du seit `v0.32.0` selbst ein,
 unter **Einstellungen › Tempo der Korrektur** (in Fassungen bis einschliesslich `v0.31.0`

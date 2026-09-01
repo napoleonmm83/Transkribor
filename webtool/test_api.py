@@ -348,6 +348,11 @@ def test_correct_file_409_waehrend_der_lauf_die_datei_schreibt(client, monkeypat
         r = client.post("/api/projects/Demo/files/S1/correct")
         assert r.status_code == 409
         assert "gerade bearbeitet" in r.json()["detail"]
+        # #442: der transcribe-Job korrigiert seit v0.48.0 selbst mit — „Transkription laeuft"
+        # war waehrend seiner Korrekturphase eine Falschaussage. Der Server kennt nur die
+        # Job-ART, nicht die Phase; „Verarbeitung" deckt beide Haelften ehrlich ab.
+        assert "Verarbeitung" in r.json()["detail"]
+        assert "Transkription" not in r.json()["detail"]
         # Nach dem [done] der Aufnahme (nicht mehr aktiv) ist der Weg frei.
         gestartet = []
         monkeypatch.setattr(jobs_mod, "start",
@@ -1516,7 +1521,10 @@ def test_projekt_umbenennen_bleibt_grob_gesperrt(client, monkeypatch):
     monkeypatch.setattr(jobs_mod, "betrifft", lambda name, base, **kw: None)   # keine Datei betroffen
     monkeypatch.setattr(jobs_mod, "active_for", lambda name: [{"id": "j1", "kind": "transcribe"}])
     r = client.post("/api/projects/Demo/rename", json={"name": "Neu"})
-    assert r.status_code == 409 and "Transkription" in r.json()["detail"]
+    # „Verarbeitung" seit #442 — der transcribe-Job korrigiert mit, „Transkription" war
+    # waehrend seiner Korrekturphase falsch. Der Test misst die SPERRE, das Wort steht hier
+    # nur mit; es bleibt trotzdem eine Zusicherung und wird deshalb nachgezogen statt gelockert.
+    assert r.status_code == 409 and "Verarbeitung" in r.json()["detail"]
 
 
 def test_neu_transkribieren_raeumt_transkripte_weg_und_startet_den_lauf(client, tmp_path, monkeypatch):
