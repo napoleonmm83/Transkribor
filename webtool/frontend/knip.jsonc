@@ -10,7 +10,21 @@
   "entry": ["version.config.ts"],
   "project": ["src/**/*.ts", "src/**/*.tsx", "*.ts"],
 
-  // tw-animate-css wird ausschliesslich per @import in src/index.css geladen.
-  // knip folgt CSS-Importen nicht und wuerde es sonst als unbenutzt melden.
-  "ignoreDependencies": ["tw-animate-css"]
+  "ignoreDependencies": [
+    // knip folgt CSS-Importen nicht. Diese drei werden ausschliesslich per
+    // @import in src/index.css geladen — nachpruefbar mit
+    //   grep -n "@import" src/index.css
+    // und waeren sonst dauerhaft als unbenutzt gemeldet.
+    "tw-animate-css",
+    "tailwindcss",
+    "shadcn",
+
+    // Absichtlich schon installiert, aber noch ohne Verwender: der erste
+    // Eigenschaftstest ist noch nicht geschrieben. Ohne diese zwei Zeilen ist
+    // knip ab dem Tag seiner Einfuehrung rot, und ein Detektor, der von Anfang
+    // an rot steht, wird nicht gelesen. Beim ersten echten Eigenschaftstest
+    // ersatzlos streichen.
+    "fast-check",
+    "@fast-check/vitest"
+  ]
 }

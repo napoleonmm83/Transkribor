@@ -2,14 +2,27 @@
 #
 # Bewusst OHNE [project] und OHNE [build-system]: Transkribor wird nicht als
 # Python-Paket gebaut und installiert. Die Laufzeit-Abhängigkeiten stehen
-# weiterhin in requirements.txt — diese Datei konfiguriert ausschließlich
-# ruff, mypy, pytest und mutmut.
+# weiterhin in requirements.txt — diese Datei konfiguriert die Werkzeuge und
+# benennt sie (siehe [dependency-groups] unten).
+
+# Die Analyse-Werkzeuge, damit ein frischer Clone dieselben Fassungen bekommt.
+# PEP 735; braucht kein [project] und wird von pip ab 25.1 verstanden:
+#   .venv/bin/pip install --group dev
+# Exakt gepinnt, weil ein Linter mit anderer Fassung andere Befunde meldet —
+# und ein Riegel, der je Rechner anders urteilt, ist kein Riegel.
+[dependency-groups]
+dev = [
+  "ruff==0.16.5",
+  "mypy==2.3.1",
+  "pytest==9.1.1",
+  "hypothesis==6.167.1",
+  "mutmut==3.7.0",
+]
 
 [tool.ruff]
 line-length = 100
 # Gemessen, nicht geraten: .github/workflows/test.yml fährt python-version 3.13,
-# die Projekt-venv ist 3.13.5. Die Skill-Vorlage schlägt py39 vor — das würde
-# ruff Modernisierungen (UP) vorenthalten, die hier längst erlaubt sind.
+# die Projekt-venv ist 3.13.5.
 target-version = "py313"
 extend-exclude = [".venv", "node_modules", "webtool/frontend"]
 
@@ -43,18 +56,26 @@ ignore_missing_imports = true
 exclude = "^(\\.venv|node_modules|webtool/frontend)/"
 
 [tool.pytest.ini_options]
-# Genau die Pfade, die .github/workflows/test.yml fährt (`pytest webtool build`).
 # `build` steht in pytests eingebauter norecursedirs-Liste und wird ohne
 # ausdrückliche Nennung NIE gesammelt — deshalb steht es hier explizit.
-# Die Skill-Vorlage schlägt testpaths = ["tests"] vor; ein solches Verzeichnis
-# gibt es hier nicht, ein blankes `pytest` hätte danach null Tests gesammelt.
-testpaths = ["webtool", "build"]
-addopts = "-q"
+# `scripts` steht hier, weil ein blankes `pytest` an der Wurzel vor Einführung
+# dieser Datei rekursiv auch scripts/ einsammelte (13 Tests). Ohne die Zeile
+# hätte diese Datei sie still stillgelegt.
+# Gemessen: pytest --collect-only -q → 1139 ohne scripts, 1152 mit.
+testpaths = ["webtool", "build", "scripts"]
+# KEIN addopts = "-q": test.yml ruft bereits mit -q auf, und zusammen ergäbe
+# das -qq. Ab verbosity < -1 unterdrückt pytest die Zusammenfassungszeile
+# ("1134 passed, 5 skipped") vollständig — genau die Zeile, auf die sich die
+# Messungen in den CI-Kommentaren stützen.
 
 [tool.mutmut]
 # Beratend, kein Riegel: mutmut kennt nur Pfade, nicht geänderte Zeilen — ein
 # Gate, das bei jeder Änderung das halbe Projekt mutiert, läuft Minuten und
 # wird abgeschaltet.
-paths_to_mutate = ["webtool/"]
-tests_dir = "webtool/"
+#
+# source_paths statt des älteren paths_to_mutate, und beide Werte sind LISTEN:
+# mutmut 3.7 rechnet intern [] + <wert>, ein String bricht das Laden der
+# Konfiguration mit TypeError ab.
+source_paths = ["webtool/"]
+pytest_add_cli_args_test_selection = ["webtool/"]
 do_not_mutate = ["*/test_*.py"]
