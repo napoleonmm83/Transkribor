@@ -30,6 +30,15 @@ describe('FileStatusPill', () => {
     expect(screen.getByText('Fertig')).toBeInTheDocument()
     expect(screen.queryByText(/Korrigieren/)).toBeNull()
   })
+  it('skipped heisst „Handarbeit behalten", nicht „Uebersprungen" (#368)', () => {
+    // Das Wort war bis hierher UNBEWACHT: kein Test der Suite nannte es, ein Rueckdrehen
+    // waere lautlos durchgegangen (gemessen — die Zeichenkette kam ausserhalb der Komponente
+    // in keiner Datei vor). Der Zustand entsteht nur noch aus den zwei Handarbeits-Schutz-
+    // pfaden der Korrektur; „Uebersprungen" verschwieg dort den Grund.
+    render(<FileStatusPill file={f({ has_edit: true })} state="skipped" jobRunning inScope mitText />)
+    expect(screen.getByText('Handarbeit behalten')).toBeInTheDocument()
+    expect(screen.queryByText(/Übersprungen/)).toBeNull()
+  })
   it('In Warteschlange, wenn Job laeuft und Datei im Scope ist', () => {
     render(<FileStatusPill file={f()} jobRunning inScope mitText />)
     expect(screen.getByText(/In Warteschlange…/)).toBeInTheDocument()

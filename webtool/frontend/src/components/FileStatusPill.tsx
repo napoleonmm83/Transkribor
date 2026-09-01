@@ -1,4 +1,4 @@
-import { AudioLines, Check, Clock, FileText, Loader2, SkipForward, TriangleAlert } from 'lucide-react'
+import { AudioLines, Check, Clock, FileText, Loader2, ShieldCheck, TriangleAlert } from 'lucide-react'
 import type { Erreicht, FilePhase, FileState, GlobalPhase, ProjectFile } from '@/lib/types'
 import { PHASE_LABEL } from '@/lib/jobPhases'
 
@@ -14,7 +14,25 @@ const STATE = {
   // 'Fertig' nimmt sich bewusst zurueck: erledigt ist der Ruhezustand. Das Auge soll zu dem
   // springen, was NICHT fertig ist — ein gruener Haken pro Zeile faerbt die Liste zu und
   // macht den einen Fehlschlag darin unsichtbar.
-  skipped: { icon: SkipForward, label: 'Übersprungen', klasse: 'text-muted-foreground' },
+  // 'Handarbeit behalten', nicht 'Uebersprungen' (#368). Der urspruengliche Befund des Issues
+  // — dass auch schon FERTIGE Dateien so markiert wurden — ist entfallen: die Druckform
+  // `skip (vorhanden)` gibt es seit dem gestaffelten Lauf (10098e4) nicht mehr, weil
+  // `transcribe.py` fertige Aufnahmen schon beim Aufbau seiner `pending`-Liste herausfiltert
+  // (`transcribe.py:730`) und fuer sie GAR KEINE Zeile mehr druckt.
+  //
+  // Uebrig bleiben genau zwei Quellen fuer 'skipped', und beide sind SCHUTZPFADE: `apply: SKIP`
+  // und `↷ SKIP` (jobPhases.ts:376/377) fuer `human_edited=true`, fuer eine waehrend des Laufs
+  // im Editor angefasste Datei (#278) und fuer eine unlesbare `edit.json` (#190). Das alte Wort
+  // verschwieg, dass hier etwas BEWAHRT wurde, und der Vorspul-Pfeil las sich wie „liegen
+  // geblieben".
+  //
+  // GENAUIGKEITSGRENZE, benannt statt uebergangen (kalter Plan-Reviewer): im #190-Fall ist
+  // nichts von Hand gemacht worden — dort gilt eine unlesbare Datei ABSICHTLICH als
+  // handbearbeitet (`_is_human_edited`: wer die Zusage nicht LESEN kann, darf sie nicht
+  // ueberschreiben). Das Etikett sagt dann „bewahrt", obwohl die Datei kaputt ist. Ein eigener
+  // dritter Zustand dafuer waere richtiger; er braucht aber ein eigenes Urteil im Parser, und
+  // die Schutzwirkung ist in beiden Faellen dieselbe.
+  skipped: { icon: ShieldCheck, label: 'Handarbeit behalten', klasse: 'text-muted-foreground' },
   failed: { icon: TriangleAlert, label: 'Fehler', klasse: 'text-destructive' },
 } satisfies Record<Exclude<FileState, 'done'>, { icon: typeof Check; label: string; klasse: string }>
 

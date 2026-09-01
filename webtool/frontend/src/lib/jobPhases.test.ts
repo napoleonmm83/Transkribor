@@ -126,18 +126,27 @@ describe('parseJobPhases — correct', () => {
     ])
     expect(p.active.A).toEqual({ phase: 'correct', pct: 100, detail: '2/2 Blöcke' })
   })
-  it('eine Blockzeile NACH dem Endurteil belebt den Eintrag nicht wieder (#347)', () => {
-    // Die Kehrseite des Nachziehens: `terminal()` raeumt `active` und `blocks`. Ohne den
-    // Riegel `if (active[base])` legte `blockDone` einen Eintrag OHNE `phase` neu an — die
-    // Pille zeigte wieder einen Spinner (#379-Zustand), und `PHASE_LABEL[undefined]` haette
-    // ihn nicht einmal beschriften koennen.
+  it('ein RESUME-Lauf legt keinen Eintrag ohne Phase an (#347)', () => {
+    // Der Riegel `if (active[base])` in `blockDone`, gemessen am ECHTEN Strom statt an einer
+    // gebauten Sequenz: `correct.py:1062` druckt im Wiederaufnahme-Zweig `↷ … schon vorhanden`
+    // und danach `✓ … fertig`, ruft aber `_correct_one` NICHT — es gibt also KEINE
+    // `→ Korrigiere`-Zeile, die `active` anlegt. Ohne den Riegel entstuende hier ein Eintrag
+    // aus `pct`/`detail` OHNE `phase`: die Pille beschriftete ihn mit `PHASE_LABEL[undefined]`,
+    // und `global` faellt auf null, weil `parseJobPhases` am Ende `Object.keys(active).length`
+    // fragt — die Vorbereiten-Phase verschwaende also mit.
+    //
+    // Die erste Fassung dieses Tests haengte eine Blockzeile hinter `apply:`. Das ist
+    // AEQUIVALENT gedacht und im Strom unerreichbar: `cmd_run` sammelt alle Bloecke, bevor
+    // `cmd_apply` laeuft (correct.py:1343). Ein Waechter auf einer Sequenz, die kein Drucker
+    // erzeugt, deckt den Fall nicht, den er decken soll — gefunden vom kalten Plan-Reviewer.
     const p = parseJobPhases('correct', [
-      'A: 300 Segmente → 2 Blöcke à max. 150', '→ Korrigiere A · Block 1/2 …',
-      'apply: A -> edit.json + md (300 Segmente)',
-      '✓ A · Block 2/2 fertig',
+      'prep: 1 Datei(en) vorbereitet',
+      'A: 300 Segmente → 2 Blöcke à max. 150',
+      '  ↷ A · Block 1/2 schon vorhanden', '  ✓ A · Block 1/2 fertig',
+      '  ↷ A · Block 2/2 schon vorhanden', '  ✓ A · Block 2/2 fertig',
     ])
     expect(p.active).toEqual({})
-    expect(p.perBase).toEqual({ A: 'done' })
+    expect(p.global).toBe('prep')
   })
   it('uebersprungene und gescheiterte Bloecke zaehlen auch als erledigt', () => {
     const p = parseJobPhases('correct', [
