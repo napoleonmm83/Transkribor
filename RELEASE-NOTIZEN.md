@@ -28,6 +28,8 @@ hat. Lesbar, aber unschön — das ist Absicht.
 
 ## Unveröffentlicht
 
+## v0.50.2 — 2026-09-01
+
 **Behoben**
 - Aufnahmen bleiben nicht mehr versehentlich bis zum Ende eines Auftrags gesperrt (Löschen wurde immer wieder mit „läuft gerade“ abgewiesen), wenn der Fortschrittsbalken oder ein Fehler die interne Buchhaltung durcheinanderbringt.
 - Projektnamen, die wie Protokoll-Schlagwörter aussehen (zum Beispiel „active"), und Namen mit eckigen Klammern werden abgelehnt — sie verstellten vorher Fortschrittsanzeige und Dateisperren. Ein altes Projekt mit so einem Namen bleibt nur lesbar, bis es einmal umbenannt ist.
