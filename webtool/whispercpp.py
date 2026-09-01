@@ -343,9 +343,29 @@ def transkribiere(audio: str, modell: str, sprache: str, onLine=None) -> dict:
 
     Und kein `--prompt`: er beendet ein 30-Sekunden-Fenster vorzeitig, worauf der Lesezeiger
     um das ganze Fenster weiterrueckt und die restliche Sprache darin nie gelesen wird
-    (Messung in transcribe._opts). whisper.cpp implementiert denselben Algorithmus, die
-    Messung selbst stammt aber vom faster-whisper-Pfad — hier ist es mitgezogen, nicht
-    nachgemessen: fuer Apple Silicon fehlt die Hardware (Issue #36).
+    (Messung in transcribe._opts).
+
+    **Auf diesem Pfad war das zuerst nur MITGEZOGEN** — die Messung stammte ausschliesslich
+    vom faster-whisper-Pfad auf CUDA, und auf Apple Silicon laeuft ausschliesslich dieser
+    hier. Am 2026-09-02 auf einem M1 Pro nachgemessen (#84): dieselbe Datei wie in PR #82
+    (C0761, 54,77 s), dieselben Decoder-Einstellungen, je zwei Laeufe — beide Varianten
+    lieferten zweimal exakt dasselbe Ergebnis, mit `-bs 5` ist der Lauf deterministisch:
+
+        mit --prompt   22 Segmente   49,76 s Abdeckung (90,9 %)   143 Woerter
+        ohne --prompt  26 Segmente   52,30 s Abdeckung (95,5 %)   160 Woerter
+
+    Es ist DIESELBE Signatur wie dort und sie trifft dieselbe Stelle: mit Prompt fehlt der
+    Soundcheck am Anfang des ersten Fensters vollstaendig („Ja, wir hoeren uns an. Ist gut?
+    Ja."), und der Satz davor wird verstuemmelt. Auf dem faster-whisper-Pfad zaehlte dieselbe
+    Datei 140 -> 158 Woerter, hier 143 -> 160 — Richtung und Groesse stimmen ueberein.
+
+    Bemerkenswert: `transcribe.luecken` meldet in KEINER der beiden Varianten eine Luecke ab
+    15 s. Der Verlust ist hier also nicht ein durchgeschobenes 30-Sekunden-Fenster wie bei
+    C0709, sondern verteiltes Abschneiden — die Abdeckung sieht ihn, der Lueckenwaechter
+    nicht. Wer diesen Pfad kuenftig misst, misst deshalb die Abdeckung, nicht nur `luecken`.
+
+    Waechter gegen den Wiedereinbau: `test_cmd_gibt_whisper_cpp_KEINEN_prompt`, Gegenstueck
+    zu `test_opts_gibt_whisper_KEINEN_initial_prompt` auf dem faster-whisper-Pfad.
     """
     sag = onLine or (lambda z: print(z, flush=True))
     gguf = modell_datei(modell, sag)
