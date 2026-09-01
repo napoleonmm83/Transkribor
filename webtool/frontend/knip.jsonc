@@ -1,0 +1,16 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+
+  // Findet Dateien, Exporte und Abhaengigkeiten, die niemand mehr benutzt.
+  // Speist den CLEANUP MODE des Code Guardian.
+  //
+  // Die entry-Liste ist bewusst kurz: knip leitet src/main.tsx, die vite- und
+  // vitest-Configs, setupTests.ts und die Testdateien von allein ab. Sie noch
+  // einmal aufzuzaehlen meldet knip selbst als redundant.
+  "entry": ["version.config.ts"],
+  "project": ["src/**/*.ts", "src/**/*.tsx", "*.ts"],
+
+  // tw-animate-css wird ausschliesslich per @import in src/index.css geladen.
+  // knip folgt CSS-Importen nicht und wuerde es sonst als unbenutzt melden.
+  "ignoreDependencies": ["tw-animate-css"]
+}

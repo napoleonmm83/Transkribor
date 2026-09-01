@@ -1,0 +1,60 @@
+# Werkzeug-Konfiguration für Transkribor.
+#
+# Bewusst OHNE [project] und OHNE [build-system]: Transkribor wird nicht als
+# Python-Paket gebaut und installiert. Die Laufzeit-Abhängigkeiten stehen
+# weiterhin in requirements.txt — diese Datei konfiguriert ausschließlich
+# ruff, mypy, pytest und mutmut.
+
+[tool.ruff]
+line-length = 100
+# Gemessen, nicht geraten: .github/workflows/test.yml fährt python-version 3.13,
+# die Projekt-venv ist 3.13.5. Die Skill-Vorlage schlägt py39 vor — das würde
+# ruff Modernisierungen (UP) vorenthalten, die hier längst erlaubt sind.
+target-version = "py313"
+extend-exclude = [".venv", "node_modules", "webtool/frontend"]
+
+[tool.ruff.lint]
+# Einstiegssatz, bewusst schmal: E/F Syntax und echte Fehler, I Import-Ordnung,
+# UP veraltete Schreibweisen, B die Bugbear-Fallen, S die Sicherheitsformen.
+# Erweitert wird, wenn dieser Satz sauber ist — nicht vorher.
+select = ["E", "F", "I", "UP", "B", "S"]
+ignore = ["E501"]   # Zeilenlänge ist Sache des Formatierers, nicht des Linters
+
+[tool.ruff.lint.per-file-ignores]
+# assert IST der Zweck eines Tests, kein Sicherheitsrisiko. Ohne diese Zeilen
+# meldet ruff 2357 S101-Befunde aus den Testdateien — 95 % aller Funde — und
+# ein Gate, das zu 95 % aus Rauschen besteht, wird abgeschaltet.
+# Gemessen: ruff check --select E,F,I,UP,B,S --ignore E501 . → 2486 Funde,
+# davon 2357 S101.
+#
+# Die Muster stehen so, weil dieses Projekt KEIN tests/-Verzeichnis hat:
+# die 23 Suiten liegen als webtool/test_*.py neben dem Code, eine weitere
+# als build/test_bilder.py, zwei als scripts/test_*.py.
+"**/test_*.py" = ["S101"]
+"**/*_test.py" = ["S101"]
+
+[tool.mypy]
+python_version = "3.13"
+# NICHT strict beim ersten Mal. strict = true auf einem Bestandsprojekt erzeugt
+# hunderte Befunde, und ein Gate mit hunderten Befunden ist kein Gate.
+warn_return_any = true
+warn_unused_ignores = true
+ignore_missing_imports = true
+exclude = "^(\\.venv|node_modules|webtool/frontend)/"
+
+[tool.pytest.ini_options]
+# Genau die Pfade, die .github/workflows/test.yml fährt (`pytest webtool build`).
+# `build` steht in pytests eingebauter norecursedirs-Liste und wird ohne
+# ausdrückliche Nennung NIE gesammelt — deshalb steht es hier explizit.
+# Die Skill-Vorlage schlägt testpaths = ["tests"] vor; ein solches Verzeichnis
+# gibt es hier nicht, ein blankes `pytest` hätte danach null Tests gesammelt.
+testpaths = ["webtool", "build"]
+addopts = "-q"
+
+[tool.mutmut]
+# Beratend, kein Riegel: mutmut kennt nur Pfade, nicht geänderte Zeilen — ein
+# Gate, das bei jeder Änderung das halbe Projekt mutiert, läuft Minuten und
+# wird abgeschaltet.
+paths_to_mutate = ["webtool/"]
+tests_dir = "webtool/"
+do_not_mutate = ["*/test_*.py"]

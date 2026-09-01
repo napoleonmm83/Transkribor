@@ -22,3 +22,10 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Werkzeug-Ausgaben (Code Guardian Toolchain, 01.09.2026)
+# Stryker (Mutationstests) und Vitest-Coverage schreiben Berichte in den
+# Arbeitsbaum. Sie sind Messergebnisse eines Laufs, keine Quellen.
+reports/
+.stryker-tmp/
+coverage/
