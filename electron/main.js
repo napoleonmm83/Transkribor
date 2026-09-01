@@ -96,18 +96,50 @@ let fensterStart = 0
  * Diagnose bis zum Neustart. Genau dann fehlte sie, wenn jemand meldet „ich klicke auf den
  * Link und es passiert nichts". Jetzt beginnt der Zaehler jede Stunde neu.
  *
- * **Was das NEU erlaubt, benannt statt uebersehen:** an einer Fenstergrenze sind im Extremfall
- * 40 Zeilen in kurzer Folge moeglich (20 am Ende von Fenster N, 20 am Anfang von N+1). Der
- * gemessene Schaden von #426 kam von UNGEKAPPTEN URLs — eine mit 2 MB entleerte den naechsten
- * Fehlerbericht, zwoelf loeschten alle vier Protokollgenerationen. Seit dem 200-Zeichen-Deckel
- * eine Zeile weiter unten sind 40 Zeilen rund 8 KB; der Flutschutz bleibt damit intakt. Wer
- * `ABWEISUNGEN_FENSTER_MS` verkleinert, rechnet das nach.
+ * **Was das NEU erlaubt, benannt statt uebersehen — und die Rechnung geht nur fuer die PLATTE
+ * auf.** An einer Fenstergrenze sind im Extremfall 40 Zeilen in kurzer Folge moeglich (20 am
+ * Ende von Fenster N, 20 am Anfang von N+1). Der gemessene Schaden von #426 kam von
+ * UNGEKAPPTEN URLs — eine mit 2 MB entleerte den naechsten Fehlerbericht, zwoelf loeschten alle
+ * vier Protokollgenerationen. Seit dem 200-Zeichen-Deckel eine Zeile weiter unten sind 40
+ * Zeilen rund **11 KB** (277 Byte je Zeile, gemessen; hier stand zuerst „8 KB", geschaetzt),
+ * und bis 2 MB dauert es in dem Tempo Tage. Fuer Platte und Rotation bleibt der Flutschutz
+ * also intakt. Wer `ABWEISUNGEN_FENSTER_MS` verkleinert, rechnet das nach.
+ *
+ * **Fuer den FEHLERBERICHT gilt das NICHT — und das ist der Preis dieses Fixes, nicht eine
+ * Randnotiz.** Drei Reviewstufen haben es unabhaengig am echten `bericht.js` gemessen:
+ * `bericht.mailto` kuerzt von OBEN, `AUSSORTIEREN` filtert Abweisungszeilen nicht, und der
+ * Bericht traegt ohnehin nur 2-14 Zeilen — **drei bis fuenf** Abweisungen am Protokollende
+ * genuegen also, damit die naechste Mail NULL echte Zeilen enthaelt. Genau diesen Kanal nennt
+ * der Absatz weiter oben den STILLEN Schadensweg.
+ *
+ * Der Unterschied ist die Dauer, nicht die Moeglichkeit: vorher waren es 20 Schuss je App-Lauf
+ * — einmal verbraucht, und jede spaetere echte Zeile schob die Abweisungen aus dem
+ * Mail-Ausschnitt heraus. Jetzt kann ein dauerhaft flutender Renderer das Protokollende
+ * **stuendlich neu** belegen (~96-160 Vergiftungen am Tag), und der Zustand heilt nicht mehr
+ * von selbst aus. Das ist bewusst in Kauf genommen: die Alternative waere die stumme Diagnose
+ * aus #448, und der Hebel dagegen liegt ohnehin nicht hier, sondern in `bericht.js`
+ * (Abweisungszeilen aus `AUSSORTIEREN` heraushalten) — eigener Mechanismus, eigenes Issue,
+ * verwandt mit #435.
  *
  * **Die Schlusszeile feuert je Fenster erneut** — gewollt: sie sagt, ab wo geschwiegen wurde,
  * und das gilt pro Stunde neu.
+ *
+ * **`grund` hat bewusst KEINEN Vorgabewert.** Er hatte einen (`'Schema nicht erlaubt'`), und der
+ * war nach diesem Fix tot: beide Aufrufer setzen ihn. Ein toter Vorgabewert genau dieses Textes
+ * ist aber kein Komfort, sondern eine Falle — der naechste Aufrufer, der ihn vergisst, stellt
+ * #458 wieder her, und zwar STILL. Ohne Vorgabewert steht im Protokoll „abgewiesen (undefined)":
+ * sofort sichtbar falsch statt plausibel falsch. `was` behaelt seinen, weil ein fehlendes `was`
+ * nur unspezifisch ist und nicht luegt.
  */
-function abweisungProtokollieren(url, was = 'Externer Link', grund = 'Schema nicht erlaubt') {
-  const jetzt = Date.now()
+function abweisungProtokollieren(url, was = 'Externer Link', grund) {
+  // `performance.now()`, NICHT `Date.now()`: die Wanduhr springt (NTP, Handkorrektur,
+  // VM-Snapshot). Ausgefuehrt gemessen: bei einem Ruecksprung um 24 h schwieg die Diagnose
+  // 25 h statt einer Stunde, 24 von 30 Abweisungen gingen verloren — und der Satz „beginnt
+  // jede Stunde neu" waere unwahr. Sommerzeit und Zeitzone sind kein Fall (UTC-Epoche).
+  // `performance.now()` laeuft ab Prozessstart monoton; `fensterStart = 0` heisst damit
+  // „erstes Fenster endet eine Stunde nach dem START", nicht „nach der ersten Abweisung" —
+  // folgenlos, weil `abweisungen` beim Start ohnehin 0 ist.
+  const jetzt = performance.now()
   if (jetzt - fensterStart >= ABWEISUNGEN_FENSTER_MS) { fensterStart = jetzt; abweisungen = 0 }
   abweisungen += 1
   if (abweisungen <= ABWEISUNGEN_MAX) {

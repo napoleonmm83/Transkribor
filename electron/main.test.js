@@ -725,21 +725,29 @@ test('die Abweisungszeile nennt den echten Grund, nicht immer das Schema (#458)'
 
 test('der Deckel ist ein Zeitfenster, kein Lebenszeit-Budget (#448)', async () => {
   const w = await laden()
-  // `Date.now` direkt gestubbt statt `mock.timers`: drei Zeilen, unabhaengig von der
-  // Node-Fassung des Laeufers, und die Uhr steht nur fuer diesen Test still.
-  const echt = Date.now
+  // `performance.now` direkt gestubbt statt `mock.timers`: drei Zeilen, unabhaengig von der
+  // Node-Fassung des Laeufers, und die Uhr steht nur fuer diesen Test still. Gestubbt wird
+  // GENAU die Uhr, die `abweisungProtokollieren` liest — eine monotone, keine Wanduhr; wer das
+  // hier auf `Date.now` zurueckdreht, misst danach eine Uhr, die die Funktion nie fragt, und
+  // der Test wird gruen, ohne etwas zu pruefen.
+  const echt = performance.now
   try {
-    let jetzt = echt.call(Date)
-    Date.now = () => jetzt
+    let jetzt = echt.call(performance)
+    performance.now = () => jetzt
     for (let i = 0; i < 30; i++) w.oeffnenHandler({ url: 'file:///a' + i })
     assert.strictEqual(w.protokollzeilen.filter(z => z.startsWith('Externer Link abgewiesen')).length,
       20, 'innerhalb der Stunde bleibt es beim Deckel — sonst misst der Test nur, DASS etwas zuruecksetzt')
+    // Die Schlusszeile muss sagen, dass der Deckel ein FENSTER ist. Ohne diese Zusicherung stand
+    // „je Stunde" ungedeckt im Code (`grep "je Stunde" electron/*.test.js` war leer) — ein
+    // Zusatz, den niemand rot bekommt, ist eine Behauptung, keine Zusicherung.
+    assert.ok(w.protokollzeilen.some(z => z.startsWith('Weitere abgewiesene Links') && z.includes('je Stunde')),
+      'die Schlusszeile nennt den Deckel als Stundenwert, nicht als Lebenszeit-Budget')
 
     jetzt += 60 * 60 * 1000 + 1
     w.oeffnenHandler({ url: 'file:///nach-einer-stunde' })
     assert.ok(w.protokollzeilen.some(z => z.includes('nach-einer-stunde')),
       'nach einer ruhigen Stunde schreibt die App wieder mit; vorher schwieg sie bis zum Neustart (#448)')
-  } finally { Date.now = echt }
+  } finally { performance.now = echt }
 })
 
 test('Fensteroeffner und Navigation teilen EINEN Deckel und EINE Bremse (#434)', async () => {
