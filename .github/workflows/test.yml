@@ -116,12 +116,45 @@ jobs:
       - run: npm run build
         working-directory: webtool/frontend
 
+  # Drei Plattformen, und der Anlass ist gemessen: am 2026-08-28 starb der Release-Lauf
+  # 33183032424 im Job „bauen (macos-latest)" an genau dieser Suite — 189 Tests, 1 fail
+  # (`titelleisteFarbe reicht nur geprueftes Hex durch`, ein plattformblinder Test gegen die
+  # `darwin`-Wache in fenster.js). Bis dahin lief das Bein im PR nur auf ubuntu, waehrend
+  # dieselbe Suite im Release-Workflow auf der vollen Matrix laeuft (release.yml:123,
+  # `runs-on: ${{ matrix.os }}`) — der Release-Lauf war also der ERSTE Mac-Test, nach dem
+  # Merge UND nach dem Versions-Tag. Das ist die teuerste denkbare Stelle dafuer:
+  # `veroeffentlichen` wird uebersprungen, aber Tag und Versions-Commit stehen bereits auf
+  # master, und der naechste Anlauf braucht eine neue Versionsnummer (#464).
+  #
+  # **Warum die vorhandenen Stubs das nicht ersetzen.** setup.test.js tauscht
+  # `process.platform` per `aufPlattform()` aus und deckt damit die VERZWEIGUNG ab — nicht
+  # die Plattform. Was ein Stub nicht mitdreht: `path.sep`, die fs-Semantik, das Verhalten
+  # von `spawn` und die plattformabhaengigen Teile von Node selbst. `paths.venvPython`
+  # (paths.js:33-37) ist das saubere Beispiel: der Stub waehlt zwar den win32-Zweig,
+  # `path.join(venvDir, 'Scripts', 'python.exe')` liefert auf einem Linux-Laeufer trotzdem
+  # `/`-Trenner. Acht Stellen lesen `process.platform` direkt gegen 'win32'
+  # (paths.js:34, backend.js:102, setup.js:137/195/232/234/251/424), drei gegen 'darwin'
+  # (setup.js:42/110, main.js:360) und eine gegen 'linux' (setup.js:116).
+  #
+  # **Und es kostet hier nichts.** Das Repo ist oeffentlich, GitHub rechnet Standard-Laeufer
+  # dort mit null ab — gemessen am Timing-API des Release-Laufs 33552444910:
+  # `MACOS.billable.total_ms = 0`, ebenso WINDOWS und UBUNTU. Der 10-fach-Faktor, mit dem
+  # #464 noch rechnete, gilt fuer bezahlte Minuten und nicht fuer dieses Repo. Die Suite
+  # selbst dauert 1,3 s (auf einem M1 Pro gemessen); die Laufzeit des Beins ist `npm ci`.
+  #
+  # `fail-fast: false` aus demselben Grund wie oben bei python: WELCHE Plattform umfaellt,
+  # ist die ganze Information.
+  #
+  # Der job-eigene `permissions`-Block stand bis #470 hier und ist in den
+  # workflow-weiten oben aufgegangen — er sagte dasselbe, und zwei Stellen fuer eine
+  # Regel driften.
   electron:
-    name: Electron
-    runs-on: ubuntu-latest
-    # Der job-eigene `permissions`-Block stand bis #470 hier und ist in den
-    # workflow-weiten oben aufgegangen — er sagte dasselbe, und zwei Stellen fuer eine
-    # Regel driften.
+    name: Electron (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -131,19 +164,34 @@ jobs:
 
       - run: npm ci --no-audit --fund=false
 
+      # `node --test electron/*.test.js`: npm faehrt Skripte auf Windows durch cmd.exe, und
+      # cmd expandiert keine Globs — node bekommt das Muster dann woertlich und loest es
+      # selbst auf (seit Node 22). Nachgestellt, nicht gehofft: `node --test
+      # 'electron/*.test.js'` (in Anfuehrungszeichen, damit die Shell nichts expandiert)
+      # sammelt dieselben 197 Tests.
       - run: npm run test:electron
 
+      # Die drei Skripttests bleiben auf ubuntu — sie pruefen Release-WERKZEUG, nicht
+      # Plattformverhalten, und tragen eine POSIX-Annahme: notizen.test.sh legt ein
+      # gefaelschtes `gh` mit Shebang an und macht es per `chmod +x` ausfuehrbar. Sie auf
+      # drei Laeufern zu wiederholen fuegte kein Wissen hinzu, koennte aber auf Windows aus
+      # einem Umgebungsgrund rot werden — und ein rotes Bein, das nichts ueber das Produkt
+      # sagt, ist genau die Sorte Waechter, die man nach zwei Wochen abschaltet.
+      #
       # Prueft die Versionslogik, die ueber Nummern entscheidet, die man nach dem
       # Veroeffentlichen nicht zurueckholt. Lief bisher nur im Release-Workflow — also erst,
       # wenn ein Fehler darin schon teuer geworden waere.
-      - run: bash scripts/versionshoehe.test.sh
+      - if: runner.os == 'Linux'
+        run: bash scripts/versionshoehe.test.sh
 
       # Dieselbe Begruendung: notizen.sh SCHREIBT in den Release-Commit (die Rotation) und
       # liefert den Text, den der Nutzer auf der Releases-Seite liest. Beides ist nach dem
       # Push nicht mehr still zu korrigieren.
-      - run: bash scripts/notizen.test.sh
+      - if: runner.os == 'Linux'
+        run: bash scripts/notizen.test.sh
 
       # Und aus demselben Grund fassung.sh: es waehlt den Tag, ab dem versionshoehe.sh
       # rechnet. Ein Fehler darin verschiebt eine Versionsnummer, die nach dem
       # Veroeffentlichen niemand mehr zurueckholt.
-      - run: bash scripts/fassung.test.sh
+      - if: runner.os == 'Linux'
+        run: bash scripts/fassung.test.sh
