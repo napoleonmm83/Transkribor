@@ -207,14 +207,20 @@ describe('mergePhases', () => {
                               Z: { art: 'transcribe', vor: 2 } })
   })
 
-  it('wer laeuft oder fertig ist, wartet nicht mehr — auch ueber Jobs hinweg', () => {
-    // Dieselbe Aufraeumregel wie fuer `globalPerBase` daneben: die Karte entsteht je Job und
-    // weiss nichts davon, dass ein ANDERER Job dieselbe Aufnahme gerade anfasst.
+  it('was in einem ANDEREN Job fertig wurde, faellt raus — und die Zahl wird neu gezaehlt', () => {
+    // Zwei Regeln in einem Fall, und die erste Fassung hatte BEIDE falsch:
+    //
+    // (1) FERTIG raus, LAUFEND drin. Die laufende Aufnahme liegt VOR den wartenden, sie
+    //     gehoert in die Zaehlung; ihre Pille zeigt ohnehin die Phase, nicht den Wartetext.
+    //     Hier stand `delete warten[base]` auch fuer `active` — dann fehlte A.
+    // (2) Nach dem Raeumen NEU durchzaehlen. `warteKarte` vergibt die Positionen je Job; wird
+    //     B danach herausgenommen, bliebe C sonst auf `vor: 2` stehen, obwohl nur noch A vor
+    //     ihm liegt. Genau dieses Beispiel hat der Bot gemeldet.
     const m = mergePhases([
       job('j1', 'correct', { global: null, scope: new Set(['A', 'B', 'C']), active: {}, perBase: {} }),
       job('j2', 'transcribe', { global: null, active: { A: { phase: 'transcribe' } }, perBase: { B: 'done' } }),
     ])
-    expect(m.warten).toEqual({ C: { art: 'correct', vor: 2 } })
+    expect(m.warten).toEqual({ A: { art: 'correct', vor: 0 }, C: { art: 'correct', vor: 1 } })
   })
 
   it('eine Aufnahme namens constructor bekommt ihre Warteauskunft wie jede andere', () => {

@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { getJob } from '@/lib/api'
-import { parseJobPhases, RANG, warteKarte } from '@/lib/jobPhases'
+import { laufOrdnung, parseJobPhases, RANG, warteKarte } from '@/lib/jobPhases'
 import type { GlobalPhase, JobPhases, Warten } from '@/lib/types'
 
 export type Job = { id: string; project: string; kind: string; status: string; phases: JobPhases }
@@ -129,11 +129,28 @@ export function mergePhases(jobs: Job[]): JobPhases {
   for (const base of Object.keys(active)) {
     delete perBase[base]
     delete globalPerBase[base]
-    delete warten[base]
+    // `warten` wird hier BEWUSST NICHT geraeumt, anders als `globalPerBase` daneben — und die
+    // erste Fassung tat es, was ein Rechenfehler war (Bot-Befund): die laufende Aufnahme LIEGT
+    // VOR den wartenden, sie gehoert also in die Zaehlung. Ihre Pille zeigt ohnehin die Phase,
+    // nicht den Wartetext (`FileStatusPill` prueft `active` vor dem Wartezweig) — die
+    // Anwesenheit im Datensatz kostet nichts und haelt die Zahl richtig. `warteKarte` fuehrt
+    // die laufende Datei aus demselben Grund innerhalb eines Jobs mit.
   }
   for (const base of Object.keys(perBase)) {
     delete globalPerBase[base]
-    delete warten[base]
+    delete warten[base]     // fertig heisst: liegt vor niemandem mehr
+  }
+  // Nach dem Raeumen NEU durchzaehlen. `warteKarte` vergibt die Positionen je Job, die
+  // Raeumung darueber nimmt einzelne Basen heraus — die Luecke bliebe sonst als zu grosse Zahl
+  // stehen. Gemeldet vom Bot mit genau diesem Beispiel: Bereich A/B/C, B in einem zweiten Job
+  // fertig ⇒ C behielt `vor: 2`, obwohl nur noch A vor ihm liegt.
+  //
+  // Je ART getrennt, weil zwei Laeufe zwei Schlangen sind. Dass ihre Bereiche disjunkt sind
+  // (transcribe nimmt die Aufnahmen OHNE Roh-JSON, correct die MIT), macht die Trennung nicht
+  // ueberfluessig: sie ist der Grund, warum hier ueberhaupt nach `art` gruppiert werden DARF.
+  for (const art of ['transcribe', 'correct'] as const) {
+    laufOrdnung(Object.keys(warten).filter(b => warten[b].art === art))
+      .forEach((b, i) => { warten[b] = { art, vor: i } })
   }
   // KEINE `bilanz` im Ergebnis, und das ist Absicht: sie gehoert EINEM Lauf (dem URL-Import),
   // und ihr einziger Leser — der Ausgang — bekommt ihn einzeln aus der `onSettled`-Nutzlast.
