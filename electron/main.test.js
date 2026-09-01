@@ -696,6 +696,50 @@ test('der Redirect-Weg haengt am selben Waechter — aber OHNE den Browser (#434
     'eine Umleitung darf den System-Browser NICHT oeffnen')
   assert.ok(w.protokollzeilen.some(z => z.startsWith('Weiterleitung abgewiesen') && z.includes('example.org')),
     'sie wird stattdessen protokolliert, und zwar als Weiterleitung — nicht als Navigation')
+  // #458: `https://example.org/ziel` traegt ein ERLAUBTES Schema. Bis dahin stand unter dieser
+  // Zeile trotzdem „(Schema nicht erlaubt)" — dieser Test fuhr den Fehler also die ganze Zeit
+  // und behauptete nur den Zeilenanfang. Jetzt behauptet er auch den Grund.
+  assert.ok(w.protokollzeilen.some(z => z.includes('(Weiterleitung folgt keinem Link)')),
+    'abgewiesen wird hier, WEIL ein Server das Ziel waehlt — nicht wegen des Schemas')
+})
+
+test('die Abweisungszeile nennt den echten Grund, nicht immer das Schema (#458)', async () => {
+  const w = await laden()
+  // Alle drei Gruende in EINEM Test, weil der Punkt ihre UNTERSCHEIDBARKEIT ist: je einzeln
+  // geprueft bliebe unbemerkt, wenn zwei davon denselben Text traegen.
+  w.oeffnenHandler({ url: 'ht!tp://kaputt' })
+  navigieren(w, 'javascript:alert(1)')
+  navigieren(w, 'https://example.org/ziel', 'will-redirect')
+
+  const zeile = teil => w.protokollzeilen.find(z => z.includes(teil)) || `(keine Zeile mit ${teil})`
+  assert.match(zeile('kaputt'), /^Externer Link abgewiesen \(nicht lesbar\): /)
+  assert.match(zeile('javascript:'), /^Navigation abgewiesen \(Schema nicht erlaubt\): /)
+  assert.match(zeile('example.org'), /^Weiterleitung abgewiesen \(Weiterleitung folgt keinem Link\): /)
+
+  const gruende = new Set(w.protokollzeilen
+    .filter(z => z.includes(' abgewiesen ('))
+    .map(z => z.match(/ abgewiesen \(([^)]+)\)/)[1]))
+  assert.strictEqual(gruende.size, 3,
+    `drei verschiedene Ablehnungen muessen drei verschiedene Gruende nennen, gesehen: ${[...gruende]}`)
+})
+
+test('der Deckel ist ein Zeitfenster, kein Lebenszeit-Budget (#448)', async () => {
+  const w = await laden()
+  // `Date.now` direkt gestubbt statt `mock.timers`: drei Zeilen, unabhaengig von der
+  // Node-Fassung des Laeufers, und die Uhr steht nur fuer diesen Test still.
+  const echt = Date.now
+  try {
+    let jetzt = echt.call(Date)
+    Date.now = () => jetzt
+    for (let i = 0; i < 30; i++) w.oeffnenHandler({ url: 'file:///a' + i })
+    assert.strictEqual(w.protokollzeilen.filter(z => z.startsWith('Externer Link abgewiesen')).length,
+      20, 'innerhalb der Stunde bleibt es beim Deckel — sonst misst der Test nur, DASS etwas zuruecksetzt')
+
+    jetzt += 60 * 60 * 1000 + 1
+    w.oeffnenHandler({ url: 'file:///nach-einer-stunde' })
+    assert.ok(w.protokollzeilen.some(z => z.includes('nach-einer-stunde')),
+      'nach einer ruhigen Stunde schreibt die App wieder mit; vorher schwieg sie bis zum Neustart (#448)')
+  } finally { Date.now = echt }
 })
 
 test('Fensteroeffner und Navigation teilen EINEN Deckel und EINE Bremse (#434)', async () => {

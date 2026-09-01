@@ -118,6 +118,36 @@ function externesZiel(url) {
 }
 
 /**
+ * WARUM `externesZiel` daneben `null` geliefert hat — fuer die Protokollzeile (#458).
+ *
+ * **Vorbedingung: nur fragen, wenn `externesZiel` schon `null` gesagt hat.** Diese Funktion
+ * entscheidet nichts; sie beschriftet eine Entscheidung, die oben fiel. Wer sie ohne diese
+ * Vorbedingung ruft, bekommt fuer eine gueltige `https:`-URL „Schema nicht erlaubt".
+ *
+ * **Warum daneben und nicht als erweiterter Rueckgabewert von `externesZiel`.** Ein
+ * `{ziel, grund}` waere im Ablehnungsfall **truthy** — und beide Aufrufer in `main.js` pruefen
+ * mit `if (ziel)`. Aus einer Diagnose-Verbesserung waere damit ein stiller Durchlass fuer
+ * abgewiesene URLs geworden. `externesZiel` ist die Vertrauensgrenze; ihr Vertrag
+ * `string | null` bleibt unangetastet, damit genau das nicht passieren kann.
+ *
+ * **Der Preis gehoert dazu:** zwei Stellen, die zusammenpassen muessen. Kommt in `externesZiel`
+ * je ein dritter Ablehnungsgrund dazu, luegt diese Funktion **still**. Dagegen steht der
+ * Tabellentest in `fenster.test.js`, der BEIDE ueber dieselbe Eingabeliste faehrt — ein neuer
+ * Grund ohne Eintrag hier macht ihn rot.
+ *
+ * **`nicht lesbar` ist wie der `try` oben KEIN Produktionsfall.** Aus `setWindowOpenHandler`,
+ * `will-navigate` und `will-redirect` kommt nie eine unparsebare URL an — Chromium reicht
+ * aufgeloeste URLs durch (gemessen, siehe Kommentar ueber `EXTERN_ERLAUBT`). Der Zweig deckt
+ * Unit-Tests und kuenftige Aufrufer. Der produktiv sichtbare Gewinn von #458 liegt woanders:
+ * bei einer Weiterleitung mit ERLAUBTEM Schema, wo die Zeile bisher einen Grund behauptete,
+ * den es nicht gab.
+ */
+function abweisungsGrund(url) {
+  try { new URL(String(url)) } catch { return 'nicht lesbar' }
+  return 'Schema nicht erlaubt'
+}
+
+/**
  * Gehoert `url` zu einer der Herkuenfte, die die App SELBST laedt (#434)?
  *
  * `setWindowOpenHandler` daneben sieht nur NEUE Fenster. Navigiert das bestehende Fenster weg,
@@ -189,5 +219,6 @@ function eigeneHerkunft(url, eigene) {
 }
 
 module.exports = {
-  fensterOptionen, TITELLEISTE_HOEHE, farbeGueltig, fortschrittGueltig, externesZiel, eigeneHerkunft,
+  fensterOptionen, TITELLEISTE_HOEHE, farbeGueltig, fortschrittGueltig, externesZiel,
+  abweisungsGrund, eigeneHerkunft,
 }
