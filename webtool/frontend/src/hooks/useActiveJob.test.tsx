@@ -217,6 +217,16 @@ describe('mergePhases', () => {
     expect(m.warten).toEqual({ C: { art: 'correct', vor: 2 } })
   })
 
+  it('eine Aufnahme namens constructor bekommt ihre Warteauskunft wie jede andere', () => {
+    // Die stille Haelfte des Prototyp-Befunds: im Parser WIRFT er, hier verschwindet nur die
+    // Auskunft. `'constructor' in warten` ist ueber den Prototyp wahr, die Kollisionsregel
+    // greift, und die Datei faellt aus der Karte. Gefunden von der CodeRabbit-CLI.
+    const m = mergePhases([job('j1', 'correct',
+      { global: null, scope: new Set(['constructor', 'B']), active: {}, perBase: {} })])
+    expect(m.warten).toEqual({ B: { art: 'correct', vor: 0 },
+                              constructor: { art: 'correct', vor: 1 } })
+  })
+
   it('ohne wartende Aufnahme gibt es das Feld gar nicht', () => {
     expect(mergePhases([job('j1', 'correct', { global: null, active: {}, perBase: {} })]).warten)
       .toBeUndefined()

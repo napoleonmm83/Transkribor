@@ -29,7 +29,7 @@ hat. Lesbar, aber unschön — das ist Absicht.
 ## Unveröffentlicht
 
 **Neu**
-- Wartende Aufnahmen sagen jetzt, worauf sie warten und wie viele noch davor liegen — statt nur „In Warteschlange".
+- Wartende Aufnahmen sagen jetzt, worauf sie warten und wie viele noch davor liegen — statt nur „In Warteschlange“.
 
 **Behoben**
 - Der Fortschrittsbalken einer gestückelten Korrektur bleibt am Ende nicht mehr eine Stufe zu niedrig stehen.

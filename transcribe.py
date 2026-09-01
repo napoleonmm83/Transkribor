@@ -747,7 +747,12 @@ def transcribe_project(name, model, language, only=None, autocorrect: bool = Fal
             # dasselbe fuer `Meeting 2026.01` / `Meeting 2026.01.15`. Eine Anzeige, die den
             # Sortierschluessel des Erzeugers nachbauen muss, ist die falsche Bauform — der
             # Erzeuger nennt ihn jetzt selbst.
-            pending.sort(key=lambda p: os.path.splitext(os.path.basename(p))[0])
+            # Der PFAD als zweiter Schluessel: teilen sich zwei Dateien eine Base
+            # (`Interview.mp3` und `Interview.wav`), entschiede sonst allein die Stabilitaet
+            # der Sortierung, also die Reihenfolge aus `find_audio`. Die ist heute
+            # deterministisch (`sorted(glob(...))`), aber das ist eine Eigenschaft, auf die
+            # sich diese Zeile nicht verlassen muss (CodeRabbit-CLI).
+            pending.sort(key=lambda p: (os.path.splitext(os.path.basename(p))[0], p))
             # BEREICHS-NACHTRAG: die `[scope]`-Zeile oben ist gedruckt, BEVOR die Schleife das
             # erste Mal `find_audio` ruft — eine waehrend des Laufs hochgeladene Aufnahme steht
             # also nie darin, wird hier aber sehr wohl verarbeitet. Fuer die Oberflaeche war sie
