@@ -152,6 +152,27 @@ def test_cmd_mit_sprache_setzt_l():
     assert cmd[cmd.index("-l") + 1] == "en"
 
 
+def test_cmd_gibt_whisper_cpp_KEINEN_prompt():
+    """Gegenstueck zu test_opts_gibt_whisper_KEINEN_initial_prompt (#82) — hier nachgemessen.
+
+    Bis #84 war die Entfernung auf diesem Pfad nur MITGEZOGEN: gemessen worden war sie am
+    faster-whisper-Pfad auf CUDA, waehrend auf Apple Silicon ausschliesslich whisper.cpp
+    laeuft. Am 2026-09-02 auf einem M1 Pro nachgeholt, C0761 aus PR #82 (54,77 s), je zwei
+    deterministische Laeufe: mit --prompt 49,76 s Abdeckung und 143 Woerter, ohne --prompt
+    52,30 s und 160 Woerter — mit Prompt fehlt der Soundcheck am Anfang des ersten Fensters
+    ganz. Dieselbe Richtung und Groesse wie dort (140 -> 158).
+
+    Ohne diesen Waechter kaeme `--prompt` beim naechsten „Kontext hilft doch bestimmt"
+    zurueck, und der Verlust waere wieder unsichtbar: es entsteht kein falsches Wort,
+    sondern gar keines.
+    """
+    # "/p/out" statt "/tmp/out" wie bei den Nachbarn: derselbe Fake-Praefix wie
+    # "/p/whisper-cli", und ruffs S108 waechst sonst ohne Gegenwert um einen Eintrag.
+    cmd = w._cmd("/p/whisper-cli", "ggml.bin", "a.wav", "/p/out", "de")
+    assert "--prompt" not in cmd
+    assert not any(a.startswith("--prompt") for a in cmd)
+
+
 def test_ergebnis_bereinigt_wiederholungs_schleifen():
     tokens = [_tok(" Das"), _tok(" war's")]
     # 20 identische Segmente
