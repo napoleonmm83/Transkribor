@@ -1,13 +1,18 @@
-import type { Erreicht, FilePhase, FileState, GlobalPhase, ProjectFile, Warten } from '@/lib/types'
+import type { Erreicht, FilePhase, FileState, GlobalPhase, ProjectFile } from '@/lib/types'
 import { DateiMenue } from '@/components/DateiMenue'
 import { FileStatusPill } from '@/components/FileStatusPill'
 import { cn } from '@/lib/utils'
 
-export function FileRow({ project, file, active, onOpen, phase, state, erreicht, jobRunning, inScope, warten, globalPhase, aiReason }: {
+/** KEIN `warten`-Prop, und das ist eine Entscheidung: die Seitenleiste ist 260px breit und
+ *  zeigt die Warteauskunft bewusst NICHT (im Browser gemessen — der laengere Text presste die
+ *  Dateinamen auf ein Zeichen). Ein Durchreichen waere deshalb toter Code gewesen; schlimmer,
+ *  es waere die Zuendschnur dafuer, dass ein spaeter ergaenztes `mitText` die verworfene
+ *  Anzeige STILL wieder einschaltet. Wer sie hier will, misst vorher die Breite. */
+export function FileRow({ project, file, active, onOpen, phase, state, erreicht, jobRunning, inScope, globalPhase, aiReason }: {
   project: string; file: ProjectFile; active: boolean;
   onOpen: () => void;
   phase?: FilePhase; state?: FileState; erreicht?: Erreicht; jobRunning?: boolean;
-  inScope?: boolean; warten?: Warten; globalPhase?: GlobalPhase | null;
+  inScope?: boolean; globalPhase?: GlobalPhase | null;
   /** Nicht leer = kein nutzbarer KI-Anbieter: Korrigieren deaktiviert, Text als Tooltip. */
   aiReason?: string;
 }) {
@@ -21,7 +26,7 @@ export function FileRow({ project, file, active, onOpen, phase, state, erreicht,
         'transition-colors hover:bg-muted/60 outline-none focus-visible:ring-2 focus-visible:ring-ring',
         active && 'bg-accent text-accent-foreground hover:bg-accent')}>
       <span className="min-w-0 flex-1 truncate">{file.base}</span>
-      <FileStatusPill file={file} active={phase} state={state} erreicht={erreicht} jobRunning={jobRunning} inScope={inScope} warten={warten} globalPhase={globalPhase} />
+      <FileStatusPill file={file} active={phase} state={state} erreicht={erreicht} jobRunning={jobRunning} inScope={inScope} globalPhase={globalPhase} />
       <DateiMenue project={project} file={file} aiReason={aiReason} />
     </div>
   )

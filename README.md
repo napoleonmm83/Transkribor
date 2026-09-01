@@ -209,11 +209,14 @@ statt weiter wie unbearbeitetes Audio auszusehen. Das greift, sobald die Aufnahm
 ist, an der Transkribor gerade arbeitet — bei einer langen Aufnahme kann das also ein paar
 Minuten dauern.
 
-**Ab der nächsten Fassung** sagt diese Zeile auch, *worauf* gewartet wird und wie viel noch
-davor liegt: „Wartet auf Korrektur · noch 3 vor dieser“. In Fassungen bis einschliesslich
-`v0.50.2` stand dort nur „In Warteschlange“ — bei fünfzehn Aufnahmen sah die erste damit
-genauso aus wie die letzte. Die Zahl ist eine Menge, keine Platznummer: beim Korrigieren
-arbeitet Transkribor mehrere Aufnahmen gleichzeitig.
+**Ab der nächsten Fassung** sagt diese Zeile in der Dateiliste des Projekts auch, *worauf*
+gewartet wird und wie viel noch davor liegt: „Wartet auf Transkription · noch 3 vor dieser“ —
+und entsprechend „Wartet auf Korrektur“, wenn du die Korrektur von Hand angestossen hast. In
+Fassungen bis einschliesslich `v0.50.2` stand dort nur „In Warteschlange“; bei fünfzehn
+Aufnahmen sah die erste damit genauso aus wie die letzte. Die Zahl ist eine Menge, keine
+Platznummer: beim Korrigieren arbeitet Transkribor mehrere Aufnahmen gleichzeitig. In der
+schmalen Dateileiste des Editors bleibt es beim kurzen „In Warteschlange“ — dort würde der
+längere Text die Dateinamen verdrängen.
 
 Solange eine solche Aufnahme zum laufenden Lauf gehört, lässt sie sich nicht umbenennen und
 nicht neu transkribieren; Transkribor sagt dann „wird gerade bearbeitet — bitte warten“.

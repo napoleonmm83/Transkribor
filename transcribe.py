@@ -731,7 +731,23 @@ def transcribe_project(name, model, language, only=None, autocorrect: bool = Fal
             ]
             if not pending:
                 break
-            pending.sort(key=lambda p: os.path.basename(p))
+            # Sortiert nach BASISNAME OHNE ENDUNG, nicht nach dem Dateinamen. Das AENDERT die
+            # Reihenfolge, und zwar sichtbar: `Interview` laeuft jetzt vor `Interview-2`, vorher
+            # war es umgekehrt ('-' ist 45, '.' ist 46). Folgenlos ist nur, WELCHE Reihenfolge
+            # es ist — jede ist gleich gut, solange sie feststeht. Gewonnen wird dafuer, dass
+            # die Reihenfolge fuer die Oberflaeche ABLEITBAR wird:
+            # `[scope]` und `[scope+]` tragen die Basen ohne Endung, und `correct.py` arbeitet
+            # seine Dateien ohnehin in genau dieser Ordnung ab (`paths.transcript_bases` endet
+            # auf `sorted(out)`). Damit gibt es EINEN Schluessel fuer beide Laeufe.
+            #
+            # Vorher stand hier `key=os.path.basename`, und die Warteanzeige musste ihn aus den
+            # endungslosen Basen erraten (`base + "."`). Das ist fuer `Interview` / `Interview-2`
+            # richtig und fuer jede Base MIT PUNKT falsch — gemessen: `Aufnahme.wav` und
+            # `Aufnahme.1.wav` laufen als `Aufnahme.1`, `Aufnahme`, geraten aber andersherum;
+            # dasselbe fuer `Meeting 2026.01` / `Meeting 2026.01.15`. Eine Anzeige, die den
+            # Sortierschluessel des Erzeugers nachbauen muss, ist die falsche Bauform — der
+            # Erzeuger nennt ihn jetzt selbst.
+            pending.sort(key=lambda p: os.path.splitext(os.path.basename(p))[0])
             # BEREICHS-NACHTRAG: die `[scope]`-Zeile oben ist gedruckt, BEVOR die Schleife das
             # erste Mal `find_audio` ruft — eine waehrend des Laufs hochgeladene Aufnahme steht
             # also nie darin, wird hier aber sehr wohl verarbeitet. Fuer die Oberflaeche war sie
