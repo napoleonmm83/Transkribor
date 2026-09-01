@@ -118,8 +118,8 @@ let fensterStart = 0
  * **stuendlich neu** belegen (~96-160 Vergiftungen am Tag), und der Zustand heilt nicht mehr
  * von selbst aus. Das ist bewusst in Kauf genommen: die Alternative waere die stumme Diagnose
  * aus #448, und der Hebel dagegen liegt ohnehin nicht hier, sondern in `bericht.js`
- * (Abweisungszeilen aus `AUSSORTIEREN` heraushalten) — eigener Mechanismus, eigenes Issue,
- * verwandt mit #435.
+ * (Abweisungszeilen deckeln oder aus `AUSSORTIEREN` heraushalten) — eigener Mechanismus,
+ * eigener Pruefstand: **#506**, verwandt mit #435 und #436.
  *
  * **Die Schlusszeile feuert je Fenster erneut** — gewollt: sie sagt, ab wo geschwiegen wurde,
  * und das gilt pro Stunde neu.
