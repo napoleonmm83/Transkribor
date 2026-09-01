@@ -621,7 +621,7 @@ export function warteKarte(phases: JobPhases, kind: string): Record<string, Wart
   // Loeschen EINER fertigen Aufnahme verlaengerte die Warteschlange aller uebrigen, dauerhaft)
   // · (3) der Zeilendeckel hat ihr Urteil verdraengt (siehe `schonDurch`).
   const ausstehend = laufOrdnung(phases.scope).filter(
-    b => !(b in phases.perBase) && !phases.entfernt?.has(b) && !schonDurch(phases, kind, b))
+    b => !Object.hasOwn(phases.perBase, b) && !phases.entfernt?.has(b) && !schonDurch(phases, kind, b))
   const karte: Record<string, Warten> = Object.create(null)
   ausstehend.forEach((base, i) => { karte[base] = { art: kind, vor: i } })
   return karte
@@ -646,7 +646,7 @@ export function warteKarte(phases: JobPhases, kind: string): Record<string, Wart
  *  KORPUSWEIT `[active]` — dort waere jede Aufnahme von der ersten Sekunde an „gesehen", und
  *  die Karte bliebe fuer immer leer. */
 function schonDurch(phases: JobPhases, kind: string, base: string): boolean {
-  return kind === 'transcribe' && !!phases.gesehen?.has(base) && !(base in phases.active)
+  return kind === 'transcribe' && !!phases.gesehen?.has(base) && !Object.hasOwn(phases.active, base)
 }
 
 /** Einzeiler fuer Toast & Co. — nie rohe Log-Zeilen anzeigen, die sind fuer den Parser, nicht fuer Menschen. */

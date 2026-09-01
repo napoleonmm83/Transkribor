@@ -45,10 +45,15 @@ const JobContext = createContext<Ctx | null>(null)
  *  Job ist die naheliegendste Auskunft. Der Satz "ohne die Regeln haenge die Anzeige von der
  *  Reihenfolge ab" galt hier nie — er stand trotzdem da. */
 export function mergePhases(jobs: Job[]): JobPhases {
-  const active: JobPhases['active'] = {}
-  const perBase: JobPhases['perBase'] = {}
-  const globalPerBase: Record<string, GlobalPhase> = {}
-  const warten: Record<string, Warten> = {}
+  // `Object.create(null)` aus demselben Grund wie in `parseJobPhases` — und die Stelle war
+  // beim ersten Anlauf uebersehen: dort ist der Schaden ein Wurf, hier ist er STILL. Fuer eine
+  // Aufnahme namens `constructor` ist `base in warten` ueber den Prototyp wahr, die
+  // Kollisionsregel eine Zeile darunter greift, und die Datei bekaeme gar keine Warteauskunft.
+  // Gefunden von der CodeRabbit-CLI, nachdem der kalte Diff-Leser die Klasse im Parser fand.
+  const active: JobPhases['active'] = Object.create(null)
+  const perBase: JobPhases['perBase'] = Object.create(null)
+  const globalPerBase: Record<string, GlobalPhase> = Object.create(null)
+  const warten: Record<string, Warten> = Object.create(null)
   let global: JobPhases['global'] = null
   let allScoped = jobs.length > 0
   let scope: Set<string> | undefined
@@ -76,7 +81,7 @@ export function mergePhases(jobs: Job[]): JobPhases {
   // Vorlaeufer zurueck, und der TIE-BREAK darunter (`edit` schlaegt `raw`) machte es
   // schlimmer: genau der Beleg, den `parseJobPhases` fuer geloeschte Aufnahmen tilgt,
   // kaeme hier ein zweites Mal herein.
-  const erreicht: NonNullable<JobPhases['erreicht']> = {}
+  const erreicht: NonNullable<JobPhases['erreicht']> = Object.create(null)
   for (const j of jobs) {
     for (const [base, e] of Object.entries(j.phases.erreicht ?? {})) {
       if (erreicht[base] !== 'edit') erreicht[base] = e
@@ -89,7 +94,7 @@ export function mergePhases(jobs: Job[]): JobPhases {
       scope = scope ?? new Set()
       for (const b of j.phases.scope) {
         scope.add(b)
-        if (j.phases.global && !j.phases.active[b] && !j.phases.perBase[b]) {
+        if (j.phases.global && !Object.hasOwn(j.phases.active, b) && !Object.hasOwn(j.phases.perBase, b)) {
           globalPerBase[b] = j.phases.global
         }
       }
@@ -98,7 +103,7 @@ export function mergePhases(jobs: Job[]): JobPhases {
       global = global ?? j.phases.global
     }
     for (const [base, work] of Object.entries(j.phases.active)) {
-      if (base in active && j.kind !== 'transcribe') continue
+      if (Object.hasOwn(active, base) && j.kind !== 'transcribe') continue
       active[base] = work
     }
     for (const [base, zustand] of Object.entries(j.phases.perBase)) {
@@ -117,7 +122,7 @@ export function mergePhases(jobs: Job[]): JobPhases {
     // Aufnahmen OHNE Roh-JSON, der Korrekturlauf die MIT), steht aber da, damit die
     // Reihenfolge der Jobs nie entscheidet.
     for (const [base, eintrag] of Object.entries(warteKarte(j.phases, j.kind))) {
-      if (base in warten && j.kind !== 'transcribe') continue
+      if (Object.hasOwn(warten, base) && j.kind !== 'transcribe') continue
       warten[base] = eintrag
     }
   }
