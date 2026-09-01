@@ -1317,8 +1317,15 @@ describe('laufOrdnung / warteKarte (#370, #442)', () => {
   it('ein Basisname wie constructor bringt den Parser nicht zu Fall', () => {
     // `safe_name` laesst `constructor`, `toString`, `valueOf` durch. In einem gewoehnlichen
     // Objekt findet `blocks['constructor']` den PROTOTYP — truthy, aber ohne `done`, und
-    // `prog()` wirft. Der Wurf steigt bis in `JobProvider.tick()` auf, VOR dem naechsten
-    // `setTimeout`: das Polling ALLER Jobs des Projekts stuende danach still.
+    // `prog()` wirft.
+    //
+    // GEMESSEN ist der WURF: `blocks` zurueck auf `{}` gesetzt (Mutation M16) macht genau
+    // diesen Test rot, mit `TypeError: Cannot read properties of undefined (reading 'size')`.
+    // HERGELEITET, nicht gemessen, ist die FOLGE: `parseJobPhases` wird in
+    // `JobProvider.tick()` ohne eigenes try/catch gerufen, und der naechste `setTimeout` steht
+    // dahinter — daraus folgt gelesen, dass das Polling aller Jobs des Projekts stehenbliebe.
+    // Ein Test dafuer muesste den Provider mit einer solchen Aufnahme laufen lassen und das
+    // AUSBLEIBEN weiterer Abfragen zeigen; das ist nicht gebaut.
     // Vorbestehend, gefunden vom kalten Diff-Leser.
     expect(() => parseJobPhases('correct',
       ['[scope] constructor\tB', '→ Korrigiere constructor · Block 1/2 …'])).not.toThrow()

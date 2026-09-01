@@ -279,9 +279,10 @@ export type JobPhases = {
    *  Undefined, solange kein Endurteil etwas bewiesen hat — wie `gesehen`. */
   erreicht?: Record<string, Erreicht>;
   /** Basisname -> worauf diese Aufnahme wartet (#370/#442). Entsteht NICHT im Parser, sondern
-   *  in `mergePhases` — und das ist eine gemessene Bedingung, keine Geschmacksfrage: der
-   *  Bereich wird erst DANACH mit der Serverbuchführung vereinigt (`useActiveJob`, gegen den
-   *  Zeilendeckel aus #475/#483). Im Parser gerechnet kennte die Karte genau die Aufnahmen
+   *  in `mergePhases`, und das ist eine Bedingung, keine Geschmacksfrage: AM CODE BELEGT
+   *  (`useActiveJob`, die `r.bases`-Vereinigung nach dem `parseJobPhases`-Aufruf) wird der
+   *  Bereich erst DANACH mit der Serverbuchführung ergänzt — dem Rückweg gegen den
+   *  Zeilendeckel aus #475/#483. Im Parser gerechnet kennte die Karte genau die Aufnahmen
    *  nicht, für die es diesen Rückweg gibt. Undefined, solange kein Bereich vorliegt — dann
    *  fällt die Anzeige auf ihren bisherigen Text zurück, dieselbe sichere Richtung wie
    *  `imBereich`. */
