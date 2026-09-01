@@ -31,12 +31,23 @@ export const RANG: Record<FileState, number> = { failed: 3, done: 2, skipped: 1 
 export function parseJobPhases(kind: string, lines: string[],
                                gesehenVomServer?: Iterable<string>,
                                entferntVomServer?: Iterable<string>): JobPhases {
-  const perBase: Record<string, FileState> = {}
-  const active: Record<string, FileWork> = {}
+  // `Object.create(null)` statt `{}` — und das ist kein Stil, sondern ein gemessener Absturz:
+  // ein Basisname wie `constructor`, `toString` oder `valueOf` kommt durch `safe_name` und
+  // findet in einem gewoehnlichen Objekt den PROTOTYP. `blocks['constructor']` ist dann eine
+  // Funktion, also truthy, `prog()` liest `b.done.size` und wirft — der Wurf steigt aus
+  // `parseJobPhases` bis in `JobProvider.tick()` auf, VOR dem naechsten `setTimeout`: das
+  // Polling ALLER Jobs des Projekts steht danach still, die Live-Anzeige ist fuer den Rest des
+  // Laufs tot. Gemessen: `TypeError: Cannot read properties of undefined (reading 'size')`.
+  // Bei `perBase`/`warten` ist die Wirkung leiser und deshalb schlimmer — dort schluckt ein
+  // `in` die Datei still als „hat schon ein Urteil".
+  // Vorbestehend (der kalte Diff-Leser fand es an diesem PR), hier mitgenommen, weil dieselben
+  // Zeilen angefasst wurden und die neue Karte die Angriffsflaeche sonst vergroessert haette.
+  const perBase: Record<string, FileState> = Object.create(null)
+  const active: Record<string, FileWork> = Object.create(null)
   // Blocknummern statt Zaehler: ein wiederverwendeter Block meldet '↷ schon vorhanden' UND
   // '✓ fertig' (correct.py faellt nach dem Reuse in dieselbe Pruefung) — ein ++ zaehlte ihn
   // doppelt und der Balken schoesse ueber 100%.
-  const blocks: Record<string, { done: Set<number>; total: number }> = {}
+  const blocks: Record<string, { done: Set<number>; total: number }> = Object.create(null)
   let global: GlobalPhase | null = null
   let cursor: string | null = null            // transcribe: die eine laufende Datei
   let bilanz: JobPhases['bilanz']
@@ -69,7 +80,7 @@ export function parseJobPhases(kind: string, lines: string[],
   // einem Schnappschuss, der aelter ist als die Zeile, die das Urteil erzeugt hat. Ohne diese
   // Untergrenze stand „Nur Audio — noch nicht transkribiert" ueber einer gerade fertigen
   // Aufnahme, bis der 4-s-Summenpoll zufaellig etwas nachlud (im Browser gemessen).
-  const erreicht: Record<string, Erreicht> = {}
+  const erreicht: Record<string, Erreicht> = Object.create(null)
 
   const terminal = (base: string, state: FileState, beleg?: Erreicht) => {
     // Geloescht und (noch) nicht re-angekuendigt: kein Urteil, kein Beleg — die Zeile
@@ -536,6 +547,7 @@ export function parseJobPhases(kind: string, lines: string[],
   // eine Feldaenderung in JEDER Antwort, fuer einen Fall, den es meist gar nicht gibt.
   return { global: Object.keys(active).length ? null : global, scope,
            gesehen: gesehen.size ? gesehen : undefined,
+           entfernt: ungueltig.size ? ungueltig : undefined,
            erreicht: Object.keys(erreicht).length ? erreicht : undefined,
            active, perBase, bilanz }
 }
@@ -566,30 +578,29 @@ export const WARTE_LABEL: Record<Warten['art'], string> = {
   transcribe: 'Wartet auf Transkription', correct: 'Wartet auf Korrektur',
 }
 
-/** Die Reihenfolge, in der ein Lauf seine Aufnahmen abarbeitet — GEMESSEN an den beiden
- *  Laeufen, nicht aus der Reihenfolge der `[scope]`-Zeile geschlossen.
+/** Die Reihenfolge, in der ein Lauf seine Aufnahmen abarbeitet.
  *
  *  Die naheliegende Annahme („das Set bewahrt die Einfuegereihenfolge, also steht dort die
  *  Laufordnung") ist FALSCH, und zwar genau fuer den Standardweg dieser App:
- *  `transcribe.py:734` sortiert seine `pending`-Liste in JEDER Runde neu, eine waehrend des
- *  Laufs hochgeladene Aufnahme wird also einsortiert — der Leser haengt sie per `[scope+]`
- *  aber ans ENDE. Dazu vereinigt `useActiveJob` den Bereich mit `r.bases`, und das ist
- *  serverseitig ein Set (`jobs.py`), kommt also in Hash-Ordnung an. Beides gemessen.
+ *  `transcribe.py` sortiert seine `pending`-Liste in JEDER Runde neu, eine waehrend des Laufs
+ *  hochgeladene Aufnahme wird also einsortiert — der Leser haengt sie per `[scope+]` aber ans
+ *  ENDE. Dazu vereinigt `useActiveJob` den Bereich mit `r.bases`, und das ist serverseitig ein
+ *  Set (`jobs.py`), kommt also in Hash-Ordnung an. Beides gemessen. Sortiert wird deshalb hier.
  *
- *  Sortiert wird deshalb selbst — mit dem Schluessel des jeweiligen Laufs:
- *  - `transcribe`/`fetch` sortieren nach DATEINAME MIT ENDUNG (`pending.sort(key=basename)`).
- *    Deshalb `base + "."`: der Punkt steht an genau der Stelle, an der im echten Dateinamen
- *    die Endung beginnt. Ohne ihn dreht sich das Paar `Interview` / `Interview-2` um ('-' ist
- *    45, '.' ist 46) — und genau dieses Paar erzeugt der URL-Import mit `unique_base`
- *    systematisch. Nachgerechnet: `sorted(['Interview.wav','Interview-2.wav'], key=basename)`
- *    ergibt `Interview-2` zuerst, `sorted(['Interview','Interview-2'])` das Gegenteil.
- *  - `correct` sortiert die ENDUNGSLOSEN Basen (`paths.transcript_bases` endet auf
- *    `sorted(out)`, `cmd_run` reicht sie unveraendert an `ex.map`).
+ *  EIN Schluessel fuer beide Laeufe, und das ist keine Vereinfachung, sondern die Reparatur
+ *  einer geratenen: hier stand `base + "."` fuer transcribe, weil dessen Schleife nach
+ *  DATEINAME MIT ENDUNG sortierte. Das ist fuer `Interview` / `Interview-2` richtig und fuer
+ *  jede Base MIT PUNKT falsch (`Aufnahme` / `Aufnahme.1` laeuft andersherum, gemessen) — und
+ *  die Endung kennt die Oberflaeche gar nicht, `ProjectFile` traegt nur die Base. Statt den
+ *  Schluessel des Erzeugers nachzubauen, sortiert der Erzeuger jetzt selbst nach der Base
+ *  (`transcribe.py`, `pending.sort(key=splitext(basename)[0])`); `correct.py` tat es ohnehin
+ *  (`paths.transcript_bases` endet auf `sorted(out)`). Gefunden vom kalten Diff-Leser.
  *
- *  Zwei Laeufe, zwei Schluessel — wer das zusammenlegt, macht eine der beiden Zahlen falsch. */
-export function laufOrdnung(bases: Iterable<string>, art: Warten['art']): string[] {
-  const schluessel = art === 'correct' ? (b: string) => b : (b: string) => b + '.'
-  return [...bases].sort((a, b) => (schluessel(a) < schluessel(b) ? -1 : schluessel(a) > schluessel(b) ? 1 : 0))
+ *  GETRAGENE GRENZE: JS vergleicht UTF-16-Code-UNITS, Python Code-POINTS. Fuer Zeichen
+ *  oberhalb der BMP (Emoji im Dateinamen) koennen die Ordnungen auseinanderlaufen; ein
+ *  code-point-genauer Vergleicher waere mehr Code als der Fall wert ist. */
+export function laufOrdnung(bases: Iterable<string>): string[] {
+  return [...bases].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
 }
 
 /** Worauf die noch nicht begonnenen Aufnahmen EINES Laufs warten, und wie viele vor ihnen
@@ -604,10 +615,38 @@ export function laufOrdnung(bases: Iterable<string>, art: Warten['art']): string
  *  `[fetch] `-Zeile), also gibt es dort nichts zu zaehlen. */
 export function warteKarte(phases: JobPhases, kind: string): Record<string, Warten> {
   if (!phases.scope || (kind !== 'transcribe' && kind !== 'correct')) return {}
-  const ausstehend = laufOrdnung(phases.scope, kind).filter(b => !(b in phases.perBase))
-  const karte: Record<string, Warten> = {}
+  // Drei Gruende, NICHT mehr zu warten — und alle drei sind noetig:
+  // (1) ein Endurteil im Puffer · (2) die Aufnahme ist geloescht (dann unterdrueckt `terminal()`
+  // ihr Urteil, und die blosse Abwesenheit hiesse sonst „steht noch aus" — gemessen: das
+  // Loeschen EINER fertigen Aufnahme verlaengerte die Warteschlange aller uebrigen, dauerhaft)
+  // · (3) der Zeilendeckel hat ihr Urteil verdraengt (siehe `schonDurch`).
+  const ausstehend = laufOrdnung(phases.scope).filter(
+    b => !(b in phases.perBase) && !phases.entfernt?.has(b) && !schonDurch(phases, kind, b))
+  const karte: Record<string, Warten> = Object.create(null)
   ausstehend.forEach((base, i) => { karte[base] = { art: kind, vor: i } })
   return karte
+}
+
+/** Zweiter Beleg dafuer, dass eine Aufnahme NICHT mehr wartet — neben ihrem Endurteil.
+ *
+ *  Noetig wegen des Zeilendeckels: `fuege_zeile_an` verdraengt bei MAX_JOB_LINES aus der
+ *  MITTE des Puffers, und an einem echten Lauf sind 10.560 Zeilen gemessen (#475). Genau die
+ *  `fertig X:`-Zeilen frueher Aufnahmen fallen dort heraus — `perBase` verliert sie, und ohne
+ *  diese zweite Frage zaehlte die Karte laengst FERTIGE Dateien als wartend: sie bekaemen
+ *  „Wartet auf Transkription", und die wirklich wartende Datei bekaeme eine zu grosse Zahl.
+ *  Aus einem fehlenden Etikett wuerde damit eine falsche Zahl. Gefunden vom kalten Diff-Leser,
+ *  am echten Parser gemessen.
+ *
+ *  Der Rueckweg ist derselbe, den #475 dafuer gebaut hat: `gesehen` kommt aus der
+ *  Serverbuchfuehrung, waechst nur und ueberlebt den Deckel.
+ *
+ *  NUR fuer `transcribe`, und das ist die ganze Feinheit: dort ist `[active] X` gleichbedeutend
+ *  mit „diese eine Datei ist jetzt dran" (der Lauf ist sequentiell, eine GPU), „gesehen und
+ *  nicht mehr aktiv" heisst also „durch". Im `correct`-Lauf meldet das Glossar seit #450
+ *  KORPUSWEIT `[active]` — dort waere jede Aufnahme von der ersten Sekunde an „gesehen", und
+ *  die Karte bliebe fuer immer leer. */
+function schonDurch(phases: JobPhases, kind: string, base: string): boolean {
+  return kind === 'transcribe' && !!phases.gesehen?.has(base) && !(base in phases.active)
 }
 
 /** Einzeiler fuer Toast & Co. — nie rohe Log-Zeilen anzeigen, die sind fuer den Parser, nicht fuer Menschen. */

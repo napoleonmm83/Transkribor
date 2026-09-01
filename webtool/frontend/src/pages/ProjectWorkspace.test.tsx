@@ -184,6 +184,39 @@ describe('ProjectWorkspace (Stub)', () => {
     expect(screen.queryByText(/Nur Audio/)).toBeNull()
   })
 
+  // Der Zwilling des Tests darueber, fuer die Warteauskunft (#370/#442) — und er ist an
+  // genau derselben Luecke gemessen: der gegnerische Pruefer entfernte `warten={…}` aus
+  // dieser Datei und ALLE 854 Tests blieben gruen. Das ist die EINZIGE Stelle, die die
+  // Wartezeile je rendert (die Seitenleiste bekommt sie bewusst nicht), das ganze Feature
+  // war also rueckstandslos abklemmbar. Dieselbe #488-Lehre, zum zweiten Mal an derselben
+  // Komponente: ein optionales Prop faellt lautlos weg.
+  it('reicht die Warteauskunft aus dem Job an die Dateizeile durch', async () => {
+    vi.mocked(api.listProjects).mockResolvedValue([
+      { name: 'Demo', dateien: 0, fertig: 0, geaendert: 0, active_jobs: [{ id: 'j1', kind: 'transcribe' }] },
+    ])
+    vi.mocked(api.getProjectFiles).mockResolvedValue({ name: 'Demo', files: [
+      { base: 'S1', has_audio: true, has_raw: false, has_edit: false, has_md: false },
+      { base: 'S2', has_audio: true, has_raw: false, has_edit: false, has_md: false },
+    ] })
+    vi.mocked(api.getJob).mockResolvedValue({ status: 'running',
+      lines: ['[scope] S1\tS2', '[active] S1', '[Demo] -> transkribiere S1 …'] })
+    const { JobProvider } = await import('@/hooks/useActiveJob')
+    render(
+      <MemoryRouter initialEntries={['/p/Demo']}>
+        <JobProvider intervalMs={5}>
+          <ProjektDatenProvider>
+            <EditorBrueckeProvider>
+            <Routes><Route path="/p/:project" element={<ProjectWorkspace />} /></Routes>
+            </EditorBrueckeProvider>
+          </ProjektDatenProvider>
+        </JobProvider>
+      </MemoryRouter>,
+    )
+    // S1 laeuft, S2 wartet — mit der Zahl, nicht mit dem alten blanken Text.
+    expect(await screen.findByText('Wartet auf Transkription · noch 1 vor dieser')).toBeInTheDocument()
+    expect(screen.queryByText(/In Warteschlange/)).toBeNull()
+  })
+
   it('verfolgt Transkription und Korrektur desselben Projekts nebeneinander', async () => {
     vi.mocked(api.listProjects).mockResolvedValue([
       { name: 'Demo', dateien: 0, fertig: 0, geaendert: 0,

@@ -120,11 +120,19 @@ describe('parseJobPhases — correct', () => {
     // 194 Tests in src/lib fiel genau EINER, die Positivkontrolle oben). Beim LETZTEN Block
     // gibt es diese Zeile nicht: danach kommt `apply:`. Genau dort war der Balken sichtbar zu
     // niedrig, und genau das misst dieser Fall.
+    // Die Zeilenfolge ist die ECHTE: `_correct_file` druckt je Block Korrigieren, Verifizieren
+    // und danach sein ✓ (correct.py). Die erste Fassung dieses Tests stellte `→ Korrigiere 2/2`
+    // VOR `✓ 1/2` — scharf, aber eine Folge, die kein Drucker erzeugt (gegnerischer Pruefer).
     const p = parseJobPhases('correct', [
       'A: 300 Segmente → 2 Blöcke à max. 150',
-      '→ Korrigiere A · Block 2/2 …', '✓ A · Block 1/2 fertig', '✓ A · Block 2/2 fertig',
+      '→ Korrigiere A · Block 1/2 …', '→ Verifiziere A · Block 1/2 (Treue gegen Roh) …',
+      '✓ A · Block 1/2 fertig',
+      '→ Korrigiere A · Block 2/2 …', '→ Verifiziere A · Block 2/2 (Treue gegen Roh) …',
+      '✓ A · Block 2/2 fertig',
     ])
-    expect(p.active.A).toEqual({ phase: 'correct', pct: 100, detail: '2/2 Blöcke' })
+    // Ohne den Nachzug staende hier 1/2: die letzte Phasenzeile ist `→ Verifiziere 2/2`, und
+    // die wurde ausgewertet, als erst ein Block fertig war.
+    expect(p.active.A).toEqual({ phase: 'verify', pct: 100, detail: '2/2 Blöcke' })
   })
   it('ein RESUME-Lauf legt keinen Eintrag ohne Phase an (#347)', () => {
     // Der Riegel `if (active[base])` in `blockDone`, gemessen am ECHTEN Strom statt an einer
@@ -1235,15 +1243,42 @@ describe('parseJobPhases: geloeschte Aufnahmen erben keine Urteile (#479/#489)',
 })
 
 describe('laufOrdnung / warteKarte (#370, #442)', () => {
-  it('transcribe sortiert nach DATEINAME MIT ENDUNG, correct nach der blossen Base', () => {
-    // Der teuerste Fall dieser Funktion, und er ist nachgerechnet: `transcribe.py:734` macht
-    // `pending.sort(key=basename)`, vergleicht also „Interview-2.wav" gegen „Interview.wav" —
-    // '-' (45) vor '.' (46), die ZWEI laeuft zuerst. Wer nur die Basen sortiert, dreht das um.
-    // Und genau dieses Paar erzeugt der URL-Import mit `unique_base` von selbst.
-    // `correct` hat den anderen Schluessel: `paths.transcript_bases` endet auf `sorted(out)`
-    // ueber die endungslosen Namen.
-    expect(laufOrdnung(['Interview', 'Interview-2'], 'transcribe')).toEqual(['Interview-2', 'Interview'])
-    expect(laufOrdnung(['Interview', 'Interview-2'], 'correct')).toEqual(['Interview', 'Interview-2'])
+  it('EIN Schluessel fuer beide Laeufe — die Basen, wie beide Erzeuger sie sortieren', () => {
+    // Hier stand ein Zwei-Schluessel-Entwurf: `base + "."` fuer transcribe, weil dessen
+    // Schleife nach Dateiname MIT Endung sortierte. Das war fuer `Interview` / `Interview-2`
+    // richtig und fuer jede Base MIT PUNKT falsch — nachgerechnet laufen `Aufnahme.wav` und
+    // `Aufnahme.1.wav` als `Aufnahme.1`, `Aufnahme`, der geratene Schluessel dreht sie um.
+    // Behoben an der WURZEL: `transcribe.py` sortiert jetzt selbst nach der Base, `correct.py`
+    // tat es ohnehin. Die Oberflaeche raet nichts mehr.
+    expect(laufOrdnung(['Interview-2', 'Interview'])).toEqual(['Interview', 'Interview-2'])
+    expect(laufOrdnung(['Aufnahme.1', 'Aufnahme'])).toEqual(['Aufnahme', 'Aufnahme.1'])
+  })
+
+  it('unter dem Zeilendeckel zaehlt eine FERTIGE Aufnahme nicht mehr als wartend', () => {
+    // `fuege_zeile_an` verdraengt bei MAX_JOB_LINES aus der MITTE (an einem echten Lauf sind
+    // 10.560 Zeilen gemessen, #475) — genau die `fertig X:`-Zeilen frueher Aufnahmen fallen
+    // heraus. Allein an `perBase` gemessen bekaemen A und B „Wartet auf Transkription", und D
+    // stuende auf „noch 3" statt „noch 1": aus einem fehlenden Etikett wuerde eine falsche
+    // Zahl. Der Rueckweg ist die Serverbuchfuehrung `gesehen` (vierter Parameter), die den
+    // Deckel ueberlebt.
+    const gedeckelt = parseJobPhases('transcribe',
+      ['[scope] A\tB\tC\tD', '[active] C', '[Demo] -> transkribiere C …'], ['A', 'B', 'C'])
+    expect(gedeckelt.perBase).toEqual({})           // die Urteile sind aus dem Puffer gefallen
+    const karte = warteKarte(gedeckelt, 'transcribe')
+    expect(Object.keys(karte).sort()).toEqual(['C', 'D'])   // A und B sind durch, nicht wartend
+    // C ist die LAUFENDE Datei: sie gehoert in die Menge (sie liegt vor D), zeigt aber nie
+    // eine Wartezeile — die Pille prueft die aktive Phase vor dem Wartezweig.
+    expect(karte.D).toEqual({ art: 'transcribe', vor: 1 })
+  })
+
+  it('im correct-Lauf gilt der Rueckweg NICHT — dort meldet das Glossar korpusweit', () => {
+    // Die Gegenrichtung, und ohne sie waere der Riegel oben ein Totalausfall: seit #450 druckt
+    // der Glossar-Schritt `[active]` fuer JEDE Aufnahme des Korpus. Auf `correct` angewandt
+    // waere damit alles „schon durch" und die Karte bliebe fuer immer leer.
+    const p = parseJobPhases('correct', ['[scope] A\tB\tC'], ['A', 'B', 'C'])
+    expect(warteKarte(p, 'correct')).toEqual({ A: { art: 'correct', vor: 0 },
+                                               B: { art: 'correct', vor: 1 },
+                                               C: { art: 'correct', vor: 2 } })
   })
 
   it('die Zahl kommt aus der LAUFordnung, nicht aus der Reihenfolge des Bereichs', () => {
@@ -1266,6 +1301,27 @@ describe('laufOrdnung / warteKarte (#370, #442)', () => {
   it('die LAUFENDE Datei zaehlt mit — sie liegt vor den wartenden', () => {
     const phasen = parseJobPhases('correct', ['[scope] A\tB', '→ Korrigiere A …'])
     expect(warteKarte(phasen, 'correct').B).toEqual({ art: 'correct', vor: 1 })
+  })
+
+  it('eine GELOESCHTE Aufnahme verlaengert die Schlange der uebrigen nicht', () => {
+    // `terminal()` unterdrueckt das Urteil einer geloeschten Aufnahme (#479/#489) — richtig,
+    // die Datei gibt es nicht mehr. Ohne den eigenen Riegel lese die Karte diese Abwesenheit
+    // als „steht noch aus": das Loeschen EINER fertigen Aufnahme machte die Warteschlange
+    // aller uebrigen um eins laenger, und zwar dauerhaft (A ist in `processed`, wird nie
+    // re-annonciert). Gefunden von der Was-erlaubt-Linse, am echten Parser gemessen.
+    const p = parseJobPhases('correct', ['[scope] A\tB\tC'], undefined, ['A'])
+    expect(warteKarte(p, 'correct')).toEqual({ B: { art: 'correct', vor: 0 },
+                                               C: { art: 'correct', vor: 1 } })
+  })
+
+  it('ein Basisname wie constructor bringt den Parser nicht zu Fall', () => {
+    // `safe_name` laesst `constructor`, `toString`, `valueOf` durch. In einem gewoehnlichen
+    // Objekt findet `blocks['constructor']` den PROTOTYP — truthy, aber ohne `done`, und
+    // `prog()` wirft. Der Wurf steigt bis in `JobProvider.tick()` auf, VOR dem naechsten
+    // `setTimeout`: das Polling ALLER Jobs des Projekts stuende danach still.
+    // Vorbestehend, gefunden vom kalten Diff-Leser.
+    expect(() => parseJobPhases('correct',
+      ['[scope] constructor\tB', '→ Korrigiere constructor · Block 1/2 …'])).not.toThrow()
   })
 
   it('ohne Bereich und fuer den URL-Import entsteht gar keine Karte', () => {

@@ -261,6 +261,12 @@ export type JobPhases = {
    *  der ist gedruckt, bevor die Schleife das erste Mal nach Audio sieht. Undefined, solange
    *  keine solche Zeile kam - dann gilt allein `scope`, wie vorher. */
   gesehen?: Set<string>;
+  /** Aufnahmen, die der Server als geloescht gebucht hat (#479/#489) — durchgereicht, weil die
+   *  Warteauskunft sie braucht: `terminal()` unterdrueckt ihr Urteil (richtig, die Datei gibt es
+   *  nicht mehr), und ohne diese Menge lese die Karte die Abwesenheit als „steht noch aus".
+   *  Gemessen: das Loeschen EINER fertigen Aufnahme verlaengerte die Warteschlange aller
+   *  uebrigen um eins, dauerhaft. Undefined, solange nichts geloescht wurde. */
+  entfernt?: Set<string>;
   /** Basisname -> was daran gerade laeuft. Mehrere Eintraege, weil correct parallel arbeitet. */
   active: Record<string, FileWork>;
   perBase: Record<string, FileState>;
