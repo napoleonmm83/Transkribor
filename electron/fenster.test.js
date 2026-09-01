@@ -2,8 +2,47 @@
 const test = require('node:test')
 const assert = require('node:assert')
 const {
-  fensterOptionen, TITELLEISTE_HOEHE, farbeGueltig, fortschrittGueltig, externesZiel, eigeneHerkunft,
+  fensterOptionen, TITELLEISTE_HOEHE, farbeGueltig, fortschrittGueltig, externesZiel,
+  abweisungsGrund, eigeneHerkunft,
 } = require('./fenster')
+
+// ── Abweisungsgrund (#458) ───────────────────────────────────────────────────
+// EINE Eingabeliste fuer BEIDE Funktionen, und das ist der Zweck dieser Tabelle, nicht ihr
+// Nebeneffekt: `abweisungsGrund` sitzt NEBEN `externesZiel` statt darin (Begruendung im
+// Docstring dort — ein erweiterter Rueckgabewert waere im Ablehnungsfall truthy gewesen, und
+// beide Aufrufer in `main.js` pruefen mit `if (ziel)`). Zwei Stellen koennen auseinanderlaufen:
+// kommt in `externesZiel` je ein dritter Ablehnungsgrund dazu, den `abweisungsGrund` nicht
+// kennt, wird diese Tabelle rot. Das ist die einzige Sicherung dagegen — deshalb laufen beide
+// Funktionen ueber DIESELBE Liste und nicht ueber je eine eigene.
+//
+// Die Faelle sind die in #458 am Ist-Code GEMESSENEN, plus zwei Schema-Faelle aus dem Alltag.
+const ABWEISUNGEN = [
+  { roh: 'http://x.test/a', durchgelassen: true },
+  { roh: 'HTTPS://X.test', durchgelassen: true },
+  { roh: 'ht!tp://kaputt', durchgelassen: false, grund: 'nicht lesbar' },
+  { roh: '', durchgelassen: false, grund: 'nicht lesbar' },
+  { roh: 'javascript:alert(1)', durchgelassen: false, grund: 'Schema nicht erlaubt' },
+  { roh: 'file:///C:/x', durchgelassen: false, grund: 'Schema nicht erlaubt' },
+  { roh: 'mailto:a@b.c', durchgelassen: false, grund: 'Schema nicht erlaubt' },
+]
+
+test('abweisungsGrund nennt den Grund, aus dem externesZiel abgelehnt hat (#458)', () => {
+  for (const { roh, durchgelassen, grund } of ABWEISUNGEN) {
+    assert.strictEqual(externesZiel(roh) !== null, durchgelassen,
+      `externesZiel(${JSON.stringify(roh)}) — die Tabelle beschreibt den falschen Pfad`)
+    if (durchgelassen) continue
+    assert.strictEqual(abweisungsGrund(roh), grund, JSON.stringify(roh))
+  }
+})
+
+test('abweisungsGrund ist eine Beschriftung, KEIN zweiter Waechter (#458)', () => {
+  // Die Vorbedingung aus dem Docstring, hier festgenagelt: fuer eine ERLAUBTE URL antwortet die
+  // Funktion trotzdem etwas — sie kennt die Frage nicht, nur die Ablehnung. Wer sie fuer eine
+  // Entscheidung benutzt statt fuer deren Beschriftung, bekommt „Schema nicht erlaubt" fuer ein
+  // erlaubtes Schema. Der Test steht hier, damit niemand sie fuer eine Wache haelt.
+  assert.strictEqual(externesZiel('https://gut.test/'), 'https://gut.test/')
+  assert.strictEqual(abweisungsGrund('https://gut.test/'), 'Schema nicht erlaubt')
+})
 
 test('Windows und Linux bekommen ein Overlay mit nativen Knoepfen', () => {
   for (const p of ['win32', 'linux']) {

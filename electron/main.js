@@ -19,7 +19,8 @@ const protokoll = require('./protokoll')
 const bericht = require('./bericht')
 const updater = require('./updater')
 const {
-  fensterOptionen, TITELLEISTE_HOEHE, farbeGueltig, fortschrittGueltig, externesZiel, eigeneHerkunft,
+  fensterOptionen, TITELLEISTE_HOEHE, farbeGueltig, fortschrittGueltig, externesZiel,
+  abweisungsGrund, eigeneHerkunft,
 } = require('./fenster')
 
 /** Die EINE Quelle fuer die Statusseite — `loadFile` und der Navigationswaechter (#434). */
@@ -76,27 +77,43 @@ function senden(kanal, nutzlast) {
  * den es nicht gibt, mit einem Test, der immer gruen ist.
  */
 const ABWEISUNGEN_MAX = 20
+const ABWEISUNGEN_FENSTER_MS = 60 * 60 * 1000
 let abweisungen = 0
+let fensterStart = 0
 /**
  * `was` unterscheidet die beiden Absender (#434) — sonst steht im Protokoll nicht, ob ein
- * FENSTER aufgehen wollte oder das bestehende wegnavigieren. Zaehler, Deckel und Bremse bleiben
- * dabei **geteilt**, und das ist die eigentliche Zusicherung: ein zweiter, eigener Schreibweg
- * waere genau der Fehler, den #426 hier schon einmal gemacht hat — ein Renderer, der beide Wege
- * abwechselnd flutet, haette sonst wieder den doppelten Deckel und entleerte den naechsten
- * Fehlerbericht auf „letzte 0 Protokollzeilen".
+ * FENSTER aufgehen wollte oder das bestehende wegnavigieren. `grund` sagt daneben, WARUM
+ * abgewiesen wurde (#458): der Klammerzusatz war eine Konstante und stand unter drei
+ * verschiedenen Gruenden. Zaehler, Deckel und Bremse bleiben **geteilt**, und das ist die
+ * eigentliche Zusicherung: ein zweiter, eigener Schreibweg waere genau der Fehler, den #426
+ * hier schon einmal gemacht hat — ein Renderer, der beide Wege abwechselnd flutet, haette
+ * sonst wieder den doppelten Deckel und entleerte den naechsten Fehlerbericht auf
+ * „letzte 0 Protokollzeilen".
  *
- * **Der Preis gehoert dazu:** `abweisungen` wird nie zurueckgesetzt, 20 ist also ein
- * LEBENSZEIT-Budget — und die App bleibt bei langen Transkriptionen tagelang offen. Seit #434
- * zahlen zwei Erzeuger darauf ein: eine Flut auf dem Navigationsweg legt damit auch die
- * Diagnose des Fensteroeffners still. Das ist die bewusste Seite des Tauschs (lieber eine
- * stumme Diagnose als ein entleerter Fehlerbericht), nicht ein uebersehener Nebeneffekt.
+ * **Der Deckel ist ein Zeitfenster, kein Lebenszeit-Budget (#448).** Bis dahin wurde
+ * `abweisungen` nie zurueckgesetzt: nach 20 abgewiesenen Zielen — verteilt ueber beliebig
+ * viele Tage, und die App bleibt bei langen Transkriptionen tagelang offen — schwieg die
+ * Diagnose bis zum Neustart. Genau dann fehlte sie, wenn jemand meldet „ich klicke auf den
+ * Link und es passiert nichts". Jetzt beginnt der Zaehler jede Stunde neu.
+ *
+ * **Was das NEU erlaubt, benannt statt uebersehen:** an einer Fenstergrenze sind im Extremfall
+ * 40 Zeilen in kurzer Folge moeglich (20 am Ende von Fenster N, 20 am Anfang von N+1). Der
+ * gemessene Schaden von #426 kam von UNGEKAPPTEN URLs — eine mit 2 MB entleerte den naechsten
+ * Fehlerbericht, zwoelf loeschten alle vier Protokollgenerationen. Seit dem 200-Zeichen-Deckel
+ * eine Zeile weiter unten sind 40 Zeilen rund 8 KB; der Flutschutz bleibt damit intakt. Wer
+ * `ABWEISUNGEN_FENSTER_MS` verkleinert, rechnet das nach.
+ *
+ * **Die Schlusszeile feuert je Fenster erneut** — gewollt: sie sagt, ab wo geschwiegen wurde,
+ * und das gilt pro Stunde neu.
  */
-function abweisungProtokollieren(url, was = 'Externer Link') {
+function abweisungProtokollieren(url, was = 'Externer Link', grund = 'Schema nicht erlaubt') {
+  const jetzt = Date.now()
+  if (jetzt - fensterStart >= ABWEISUNGEN_FENSTER_MS) { fensterStart = jetzt; abweisungen = 0 }
   abweisungen += 1
   if (abweisungen <= ABWEISUNGEN_MAX) {
-    protokoll.schreiben(was + ' abgewiesen (Schema nicht erlaubt): ' + String(url).slice(0, 200))
+    protokoll.schreiben(was + ' abgewiesen (' + grund + '): ' + String(url).slice(0, 200))
   } else if (abweisungen === ABWEISUNGEN_MAX + 1) {
-    protokoll.schreiben(`Weitere abgewiesene Links werden nicht mehr protokolliert (Deckel: ${ABWEISUNGEN_MAX}).`)
+    protokoll.schreiben(`Weitere abgewiesene Links werden nicht mehr protokolliert (Deckel: ${ABWEISUNGEN_MAX} je Stunde).`)
   }
 }
 
@@ -125,7 +142,7 @@ function fenster() {
   win.webContents.setWindowOpenHandler(({ url }) => {
     const ziel = externesZiel(url)
     if (ziel) shell.openExternal(ziel)
-    else abweisungProtokollieren(url)
+    else abweisungProtokollieren(url, 'Externer Link', abweisungsGrund(url))
     return { action: 'deny' }
   })
   /**
@@ -194,9 +211,17 @@ function fenster() {
     // mit dieser Begruendung fehlt `mailto:` in `externesZiel` und faellt der Unterrahmen raus.
     // Der Preis ist benannt: leitete unser Server je absichtlich nach draussen um, wuerde die
     // Umleitung abgewiesen statt geoeffnet — fail-safe, und im Protokoll steht warum.
+    //
+    // **Der Grund haengt an genau dieser Verzweigung (#458).** Bei `extern` hat `externesZiel`
+    // geurteilt, also weiss `abweisungsGrund` warum. Bei einer Weiterleitung wird gar nicht
+    // erst gefragt — abgewiesen wird dort, WEIL ein Server das Ziel waehlt, nicht wegen des
+    // Schemas. Das Protokoll behauptete hier bis #458 „Schema nicht erlaubt" auch fuer ein
+    // voellig erlaubtes `https:` und schickte jeden Leser ans falsche Ende; der Satz eine
+    // Zeile weiter oben stimmt also erst seit diesem Fix.
     const ziel = extern ? externesZiel(url) : null
     if (ziel) shell.openExternal(ziel)
-    else abweisungProtokollieren(url, extern ? 'Navigation' : 'Weiterleitung')
+    else abweisungProtokollieren(url, extern ? 'Navigation' : 'Weiterleitung',
+      extern ? abweisungsGrund(url) : 'Weiterleitung folgt keinem Link')
   }
   // Zwei Marken statt einer: im Protokoll steht damit auch, WELCHES Ereignis gefeuert hat —
   // bei einer Umleitungskette ist genau das die Information, die man sucht.
