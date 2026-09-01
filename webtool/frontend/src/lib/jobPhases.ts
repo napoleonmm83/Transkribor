@@ -1,4 +1,4 @@
-import type { Erreicht, FilePhase, FileState, FileWork, GlobalPhase, JobPhases } from './types'
+import type { Erreicht, FilePhase, FileState, FileWork, GlobalPhase, JobPhases, Warten } from './types'
 
 export const PHASE_LABEL: Record<FilePhase, string> = {
   diarize: 'Diarisieren', correct: 'Korrigieren', verify: 'Verifizieren', transcribe: 'Transkribieren',
@@ -560,6 +560,54 @@ export function imBereich(phases: JobPhases | undefined, base: string, jobRunnin
 export function zugelassen(phases: JobPhases | undefined, base: string, jobRunning: boolean): boolean {
   if (!jobRunning) return false
   return imBereich(phases, base, jobRunning) || (phases?.gesehen?.has(base) ?? false)
+}
+
+export const WARTE_LABEL: Record<Warten['art'], string> = {
+  transcribe: 'Wartet auf Transkription', correct: 'Wartet auf Korrektur',
+}
+
+/** Die Reihenfolge, in der ein Lauf seine Aufnahmen abarbeitet — GEMESSEN an den beiden
+ *  Laeufen, nicht aus der Reihenfolge der `[scope]`-Zeile geschlossen.
+ *
+ *  Die naheliegende Annahme („das Set bewahrt die Einfuegereihenfolge, also steht dort die
+ *  Laufordnung") ist FALSCH, und zwar genau fuer den Standardweg dieser App:
+ *  `transcribe.py:734` sortiert seine `pending`-Liste in JEDER Runde neu, eine waehrend des
+ *  Laufs hochgeladene Aufnahme wird also einsortiert — der Leser haengt sie per `[scope+]`
+ *  aber ans ENDE. Dazu vereinigt `useActiveJob` den Bereich mit `r.bases`, und das ist
+ *  serverseitig ein Set (`jobs.py`), kommt also in Hash-Ordnung an. Beides gemessen.
+ *
+ *  Sortiert wird deshalb selbst — mit dem Schluessel des jeweiligen Laufs:
+ *  - `transcribe`/`fetch` sortieren nach DATEINAME MIT ENDUNG (`pending.sort(key=basename)`).
+ *    Deshalb `base + "."`: der Punkt steht an genau der Stelle, an der im echten Dateinamen
+ *    die Endung beginnt. Ohne ihn dreht sich das Paar `Interview` / `Interview-2` um ('-' ist
+ *    45, '.' ist 46) — und genau dieses Paar erzeugt der URL-Import mit `unique_base`
+ *    systematisch. Nachgerechnet: `sorted(['Interview.wav','Interview-2.wav'], key=basename)`
+ *    ergibt `Interview-2` zuerst, `sorted(['Interview','Interview-2'])` das Gegenteil.
+ *  - `correct` sortiert die ENDUNGSLOSEN Basen (`paths.transcript_bases` endet auf
+ *    `sorted(out)`, `cmd_run` reicht sie unveraendert an `ex.map`).
+ *
+ *  Zwei Laeufe, zwei Schluessel — wer das zusammenlegt, macht eine der beiden Zahlen falsch. */
+export function laufOrdnung(bases: Iterable<string>, art: Warten['art']): string[] {
+  const schluessel = art === 'correct' ? (b: string) => b : (b: string) => b + '.'
+  return [...bases].sort((a, b) => (schluessel(a) < schluessel(b) ? -1 : schluessel(a) > schluessel(b) ? 1 : 0))
+}
+
+/** Worauf die noch nicht begonnenen Aufnahmen EINES Laufs warten, und wie viele vor ihnen
+ *  liegen (#370/#442).
+ *
+ *  Ausstehend heisst: im Bereich UND ohne Endurteil. Die gerade laufende Datei zaehlt MIT —
+ *  sie liegt vor den wartenden, auch wenn sie selbst keine Wartezeile zeigt.
+ *
+ *  Ohne Bereich entsteht nichts: `imBereich` liest ein fehlendes `scope` als „gilt fuer alle",
+ *  und daraus liesse sich keine Zahl bilden, die nicht geraten waere. Der URL-Import faellt
+ *  aus demselben Grund heraus — er kennt gar keine Basisnamen (`jobPhases` verwirft jede
+ *  `[fetch] `-Zeile), also gibt es dort nichts zu zaehlen. */
+export function warteKarte(phases: JobPhases, kind: string): Record<string, Warten> {
+  if (!phases.scope || (kind !== 'transcribe' && kind !== 'correct')) return {}
+  const ausstehend = laufOrdnung(phases.scope, kind).filter(b => !(b in phases.perBase))
+  const karte: Record<string, Warten> = {}
+  ausstehend.forEach((base, i) => { karte[base] = { art: kind, vor: i } })
+  return karte
 }
 
 /** Einzeiler fuer Toast & Co. — nie rohe Log-Zeilen anzeigen, die sind fuer den Parser, nicht fuer Menschen. */

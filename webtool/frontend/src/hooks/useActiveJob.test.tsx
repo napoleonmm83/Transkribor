@@ -193,6 +193,35 @@ describe('mergePhases', () => {
       .toBe('glossary')
   })
 
+  it('die Warteauskunft entsteht HIER und sieht damit die Serverbuchfuehrung (#370/#442)', () => {
+    // Der Grund, warum `warteKarte` nicht im Parser laeuft, als Zusicherung: `useActiveJob`
+    // vereinigt `parsed.scope` mit `r.bases`, BEVOR gemergt wird (der Rueckweg gegen den
+    // Zeilendeckel, #475/#483). Hier steht der Bereich also schon vollstaendig da — im Parser
+    // gerechnet fehlte genau die spaet dazugekommene Aufnahme, und zwei Dateien im selben
+    // Wartezustand truegen zwei verschiedene Texte. Gefunden vom kalten Plan-Reviewer.
+    const m = mergePhases([job('j1', 'transcribe',
+      { global: null, scope: new Set(['B', 'Z', 'A']), active: {}, perBase: {} })])
+    // Sortiert nach LAUFordnung, nicht nach Mengenreihenfolge:
+    expect(m.warten).toEqual({ A: { art: 'transcribe', vor: 0 },
+                              B: { art: 'transcribe', vor: 1 },
+                              Z: { art: 'transcribe', vor: 2 } })
+  })
+
+  it('wer laeuft oder fertig ist, wartet nicht mehr — auch ueber Jobs hinweg', () => {
+    // Dieselbe Aufraeumregel wie fuer `globalPerBase` daneben: die Karte entsteht je Job und
+    // weiss nichts davon, dass ein ANDERER Job dieselbe Aufnahme gerade anfasst.
+    const m = mergePhases([
+      job('j1', 'correct', { global: null, scope: new Set(['A', 'B', 'C']), active: {}, perBase: {} }),
+      job('j2', 'transcribe', { global: null, active: { A: { phase: 'transcribe' } }, perBase: { B: 'done' } }),
+    ])
+    expect(m.warten).toEqual({ C: { art: 'correct', vor: 2 } })
+  })
+
+  it('ohne wartende Aufnahme gibt es das Feld gar nicht', () => {
+    expect(mergePhases([job('j1', 'correct', { global: null, active: {}, perBase: {} })]).warten)
+      .toBeUndefined()
+  })
+
   it('fuehrt Scopes aller laufenden Jobs zusammen', () => {
     const j1 = job('j1', 'correct', { global: null, scope: new Set(['A', 'B']), active: {}, perBase: {} })
     const j2 = job('j2', 'transcribe', { global: null, scope: new Set(['B', 'C']), active: {}, perBase: {} })

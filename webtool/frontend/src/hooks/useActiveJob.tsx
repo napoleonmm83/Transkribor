@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { getJob } from '@/lib/api'
-import { parseJobPhases, RANG } from '@/lib/jobPhases'
-import type { GlobalPhase, JobPhases } from '@/lib/types'
+import { parseJobPhases, RANG, warteKarte } from '@/lib/jobPhases'
+import type { GlobalPhase, JobPhases, Warten } from '@/lib/types'
 
 export type Job = { id: string; project: string; kind: string; status: string; phases: JobPhases }
 type Ctx = {
@@ -48,6 +48,7 @@ export function mergePhases(jobs: Job[]): JobPhases {
   const active: JobPhases['active'] = {}
   const perBase: JobPhases['perBase'] = {}
   const globalPerBase: Record<string, GlobalPhase> = {}
+  const warten: Record<string, Warten> = {}
   let global: JobPhases['global'] = null
   let allScoped = jobs.length > 0
   let scope: Set<string> | undefined
@@ -104,13 +105,30 @@ export function mergePhases(jobs: Job[]): JobPhases {
       const da = perBase[base]
       if (!da || RANG[zustand] > RANG[da]) perBase[base] = zustand
     }
+    // Die Warteauskunft entsteht HIER und nicht im Parser (#370/#442) — Pflicht, nicht
+    // Geschmack: `parsed.scope` wird eine Handvoll Zeilen weiter oben mit `r.bases`
+    // VEREINIGT (der Rueckweg gegen den Zeilendeckel, #475/#483). Im Parser gerechnet
+    // kennte die Karte genau die Aufnahmen nicht, fuer die es diesen Rueckweg gibt, und
+    // zwei Dateien im selben Wartezustand traegen zwei verschiedene Texte.
+    //
+    // Je Job, weil nur der Job die ART seiner Arbeit kennt (`j.kind`) — nach dem Merge ist
+    // sie weg. Kollisionsregel wie bei `active` daneben: `transcribe` gewinnt. Sie ist
+    // heute unerreichbar (die Bereiche sind disjunkt: der Transkriptionslauf nimmt die
+    // Aufnahmen OHNE Roh-JSON, der Korrekturlauf die MIT), steht aber da, damit die
+    // Reihenfolge der Jobs nie entscheidet.
+    for (const [base, eintrag] of Object.entries(warteKarte(j.phases, j.kind))) {
+      if (base in warten && j.kind !== 'transcribe') continue
+      warten[base] = eintrag
+    }
   }
   for (const base of Object.keys(active)) {
     delete perBase[base]
     delete globalPerBase[base]
+    delete warten[base]
   }
   for (const base of Object.keys(perBase)) {
     delete globalPerBase[base]
+    delete warten[base]
   }
   // KEINE `bilanz` im Ergebnis, und das ist Absicht: sie gehoert EINEM Lauf (dem URL-Import),
   // und ihr einziger Leser — der Ausgang — bekommt ihn einzeln aus der `onSettled`-Nutzlast.
@@ -127,6 +145,10 @@ export function mergePhases(jobs: Job[]): JobPhases {
     // Bewusst NICHT ueber `active` geraeumt wie `perBase` gleich darueber: das Urteil weicht,
     // wenn die Datei wieder laeuft, der geschriebene Inhalt auf der Platte nicht.
     erreicht: Object.keys(erreicht).length ? erreicht : undefined,
+    // Wie `gesehen`/`erreicht` nur, wenn wirklich etwas darin steht — ein immer vorhandenes
+    // leeres Objekt waere eine Feldaenderung in JEDER Antwort, fuer einen Fall, den es meist
+    // gar nicht gibt (kein Bereich, kein wartender Rest).
+    warten: Object.keys(warten).length ? warten : undefined,
     active,
     perBase,
   }

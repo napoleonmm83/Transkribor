@@ -243,6 +243,14 @@ export type FileState = 'done' | 'skipped' | 'failed';
  *    keine Zeilenordnung gibt, nicht als Rangfolge. */
 export type Erreicht = 'raw' | 'edit';
 export type FileWork = { phase: FilePhase; pct?: number; detail?: string };
+/** Worauf eine noch nicht begonnene Aufnahme wartet — und wie viele des Laufs vor ihr liegen.
+ *
+ *  `art` ist die Arbeit des LAUFS, nicht eine Phase der Datei: ein Transkriptionslauf hat für
+ *  eine noch unangefasste Aufnahme nichts anderes vor als sie zu transkribieren.
+ *  `vor` ist eine MENGE, keine Position — der Korrekturlauf arbeitet mehrere Dateien
+ *  gleichzeitig (`TRANSKRIBOR_PARALLEL`), „drei vor dieser" heisst dort drei Dateien, nicht
+ *  drei Runden. */
+export type Warten = { art: 'transcribe' | 'correct'; vor: number };
 export type JobPhases = {
   global: GlobalPhase | null;
   /** Basisname -> globale Phase (z.B. glossary, prep), in der diese Datei gerade wartet. */
@@ -264,6 +272,14 @@ export type JobPhases = {
    *  (im Browser gemessen, Gegenprobe: ein blosses Neuladen macht dasselbe Etikett richtig).
    *  Undefined, solange kein Endurteil etwas bewiesen hat — wie `gesehen`. */
   erreicht?: Record<string, Erreicht>;
+  /** Basisname -> worauf diese Aufnahme wartet (#370/#442). Entsteht NICHT im Parser, sondern
+   *  in `mergePhases` — und das ist eine gemessene Bedingung, keine Geschmacksfrage: der
+   *  Bereich wird erst DANACH mit der Serverbuchführung vereinigt (`useActiveJob`, gegen den
+   *  Zeilendeckel aus #475/#483). Im Parser gerechnet kennte die Karte genau die Aufnahmen
+   *  nicht, für die es diesen Rückweg gibt. Undefined, solange kein Bereich vorliegt — dann
+   *  fällt die Anzeige auf ihren bisherigen Text zurück, dieselbe sichere Richtung wie
+   *  `imBereich`. */
+  warten?: Record<string, Warten>;
   /** Nur der URL-Import: „N von M geladen". Er kennt KEINE Basisnamen — der Parser verwirft
    *  jede `[fetch] `-Zeile bewusst (sonst laese er die URL als Dateinamen), also entsteht dort
    *  nie ein `perBase`-Eintrag. Ohne diese Bilanz sieht ein Teilfehlschlag des Imports von

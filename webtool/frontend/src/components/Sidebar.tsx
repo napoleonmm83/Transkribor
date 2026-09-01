@@ -178,6 +178,7 @@ export function Sidebar({
                         state={darfZustand ? phases?.perBase[f.base] : undefined}
                         erreicht={darfZustand ? phases?.erreicht?.[f.base] : undefined}
                         inScope={darfWarten}
+                        warten={darfWarten ? phases?.warten?.[f.base] : undefined}
                         globalPhase={jobRunning ? (phases?.globalPerBase?.[f.base] ?? (phases?.scope === undefined ? phases?.global : null)) : null}
                         jobRunning={jobRunning} aiReason={aiReason} />
                     )
