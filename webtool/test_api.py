@@ -1524,7 +1524,8 @@ def test_projekt_umbenennen_bleibt_grob_gesperrt(client, monkeypatch):
     # „Verarbeitung" seit #442 — der transcribe-Job korrigiert mit, „Transkription" war
     # waehrend seiner Korrekturphase falsch. Der Test misst die SPERRE, das Wort steht hier
     # nur mit; es bleibt trotzdem eine Zusicherung und wird deshalb nachgezogen statt gelockert.
-    assert r.status_code == 409 and "Verarbeitung" in r.json()["detail"]
+    assert r.status_code == 409
+    assert "Verarbeitung" in r.json()["detail"]
 
 
 def test_neu_transkribieren_raeumt_transkripte_weg_und_startet_den_lauf(client, tmp_path, monkeypatch):
