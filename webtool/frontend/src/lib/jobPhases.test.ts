@@ -64,11 +64,11 @@ describe('parseJobPhases — correct', () => {
     ]
     expect(parseJobPhases('correct', mit)).toEqual(parseJobPhases('correct', ohne))
     // Positivkontrolle: der Vergleich oben waere auch dann gruen, wenn BEIDE Laeufe nichts
-    // ergaeben. `0/2` und nicht `1/2`, obwohl Block 1 fertig gemeldet ist: `prog()` wird beim
-    // Betreten der Phase ausgewertet (`→ Korrigiere`), ein spaeteres `✓ fertig` rechnet den
-    // Eintrag nicht nach. Beim Messen dieses Tests aufgefallen — hier festgehalten, damit der
-    // naechste Leser es nicht fuer einen Tippfehler haelt.
-    expect(parseJobPhases('correct', mit).active).toEqual({ A: { phase: 'correct', pct: 0, detail: '0/2 Blöcke' } })
+    // ergaeben. `1/2`, weil `blockDone` den laufenden Eintrag seit #347 nachrechnet — bis
+    // dahin stand hier `0/2` mit der Begruendung, `prog()` werde nur beim BETRETEN der Phase
+    // ausgewertet. Genau das war der Fehler: beim letzten Block folgt kein `→ Korrigiere`
+    // mehr, sondern `apply:`, der Balken blieb also bis zum Schluss eine Stufe zu niedrig.
+    expect(parseJobPhases('correct', mit).active).toEqual({ A: { phase: 'correct', pct: 50, detail: '1/2 Blöcke' } })
   })
 
   it('mehrere Dateien gleichzeitig — verschraenkte Zeilen bleiben getrennt', () => {
@@ -112,6 +112,32 @@ describe('parseJobPhases — correct', () => {
       '→ Korrigiere A · Block 2/4 …', '→ Korrigiere A · Block 3/4 …',
     ])
     expect(p.active).toEqual({ A: { phase: 'correct', pct: 25, detail: '1/4 Blöcke' } })
+  })
+  it('der letzte Block zieht den Balken SOFORT nach, ohne folgende Korrigiere-Zeile (#347)', () => {
+    // Die unterscheidende Zusicherung fuer #347, und der Grund, warum sie eigens dasteht:
+    // JEDER andere Blocktest dieser Datei endet auf einer weiteren `→ Korrigiere`-Zeile, die
+    // `prog()` ohnehin neu auswertet — sie waeren also auch ohne den Fix gruen (gemessen: von
+    // 194 Tests in src/lib fiel genau EINER, die Positivkontrolle oben). Beim LETZTEN Block
+    // gibt es diese Zeile nicht: danach kommt `apply:`. Genau dort war der Balken sichtbar zu
+    // niedrig, und genau das misst dieser Fall.
+    const p = parseJobPhases('correct', [
+      'A: 300 Segmente → 2 Blöcke à max. 150',
+      '→ Korrigiere A · Block 2/2 …', '✓ A · Block 1/2 fertig', '✓ A · Block 2/2 fertig',
+    ])
+    expect(p.active.A).toEqual({ phase: 'correct', pct: 100, detail: '2/2 Blöcke' })
+  })
+  it('eine Blockzeile NACH dem Endurteil belebt den Eintrag nicht wieder (#347)', () => {
+    // Die Kehrseite des Nachziehens: `terminal()` raeumt `active` und `blocks`. Ohne den
+    // Riegel `if (active[base])` legte `blockDone` einen Eintrag OHNE `phase` neu an — die
+    // Pille zeigte wieder einen Spinner (#379-Zustand), und `PHASE_LABEL[undefined]` haette
+    // ihn nicht einmal beschriften koennen.
+    const p = parseJobPhases('correct', [
+      'A: 300 Segmente → 2 Blöcke à max. 150', '→ Korrigiere A · Block 1/2 …',
+      'apply: A -> edit.json + md (300 Segmente)',
+      '✓ A · Block 2/2 fertig',
+    ])
+    expect(p.active).toEqual({})
+    expect(p.perBase).toEqual({ A: 'done' })
   })
   it('uebersprungene und gescheiterte Bloecke zaehlen auch als erledigt', () => {
     const p = parseJobPhases('correct', [

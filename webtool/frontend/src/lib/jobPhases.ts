@@ -145,7 +145,19 @@ export function parseJobPhases(kind: string, lines: string[],
     const fertig = Math.min(b.done.size, b.total)
     return { pct: Math.round((fertig / b.total) * 100), detail: `${fertig}/${b.total} Blöcke` }
   }
-  const blockDone = (base: string, nr: number) => { blocks[base]?.done.add(nr) }
+  // Der Balken zog frueher erst bei der NAECHSTEN `→ Korrigiere`-Zeile nach, weil `prog()` nur
+  // beim Betreten einer Phase ausgewertet wurde (#347). Sichtbar blieb das beim LETZTEN Block:
+  // dort folgt kein `→ Korrigiere` mehr, sondern `apply:`, das die Datei terminal macht — der
+  // Balken stand also bis zum Schluss eine Stufe zu niedrig.
+  //
+  // `if (active[base])` ist tragend, nicht Kosmetik: `terminal()` raeumt `active` UND `blocks`,
+  // eine nachlaufende Blockzeile darf den Eintrag nicht WIEDERBELEBEN — das waere der
+  // #379-Zustand (Spinner bis Jobende) mit umgekehrtem Vorzeichen. Ohne den Riegel entstuende
+  // dabei sogar ein Eintrag ohne `phase`, den `PHASE_LABEL[undefined]` nicht beschriften kann.
+  const blockDone = (base: string, nr: number) => {
+    blocks[base]?.done.add(nr)
+    if (active[base]) active[base] = { ...active[base], ...prog(base) }
+  }
 
   for (const rawLine of lines) {
     // NICHT `trim()`: die Leerzeichen am Zeilenende gehoeren zum Basisnamen. `safe_name('Interview ')`

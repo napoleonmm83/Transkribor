@@ -815,8 +815,13 @@ describe('Vertrag: gedruckte Statuszeilen <-> jobPhases.ts (#375)', () => {
     // Prozent-Zweig: schreibt in active[cursor] — ohne cursor wirkungslos.
     expect(parseJobPhases('transcribe', [...prae, '45%| m']).active.B).toMatchObject({ pct: 45 })
     expect(parseJobPhases('transcribe', ['45%| m']).active.B).toBeUndefined()
-    // blockDone: braucht einen Blöcke-Eintrag; sichtbar wird er erst über die folgende
-    // Korrigiere-Zeile (prog liest blocks), deshalb die Zusatzzeile in BEIDEN Armen.
+    // blockDone: braucht einen Blöcke-Eintrag (den setzt das Präludium). Seit #347 rechnet er
+    // den laufenden Eintrag SOFORT nach — bis dahin wurde er erst über die folgende
+    // Korrigiere-Zeile sichtbar, und genau darauf war die Zusatzzeile begründet. Sie bleibt
+    // stehen, aber aus dem anderen Grund: der OHNE-Arm braucht sie, um überhaupt ein `pct` zu
+    // haben (das Präludium endet auf 'diarize', also ohne Blockfortschritt). Die
+    // unterscheidende Zusicherung für #347 selbst — Balken ohne folgende Korrigiere-Zeile —
+    // steht in `src/lib/jobPhases.test.ts`, sie gehört zum Parser, nicht zum Vertrag.
     const mitBlock = parseJobPhases('transcribe',
       [...prae, '  ✓ B · Block 1/2 fertig', '→ Korrigiere B · Block 2/2 …'])
     const ohneBlock = parseJobPhases('transcribe', [...prae, '→ Korrigiere B · Block 2/2 …'])
