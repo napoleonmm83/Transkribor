@@ -45,7 +45,9 @@ import { parseJobPhases } from './src/lib/jobPhases'
 // (2) Die Beispielzeilen setzen je Platzhalter EINEN Wert ein. Wo der Platzhalter gebunden
 //     ist, ist das vollstaendig; wo fremder Text steht (Ausnahmemeldungen, Basisnamen), ist
 //     es eine Stichprobe — sowohl fuer die Wirkungslosigkeit als auch fuer die Frage, ob der
-//     Toast die Zeile zeigt.
+//     Toast die Zeile zeigt. Seit #432 ist die teuerste Dimension gesondert: der
+//     PROJEKTNAME (reservierte Altprojekt-Namen, eigener Test). Ausnahmetext und Basisnamen
+//     bleiben Stichprobe.
 // (3) Der Regex-Scanner liest an einer Umschreibung vorbei (#366): wer die Muster in eine
 //     Tabelle legt oder per `new RegExp` baut, faellt nicht auf. Dagegen steht nur die
 //     Untergrenze von 20 Mustern.
@@ -62,10 +64,12 @@ const WURZEL = path.resolve(HIER, '..', '..')
 //
 // `ruf` ist der EMITTER der Datei, nicht immer `print(`: in `whispercpp.py` heisst er `sag`,
 // und die beiden `print(` darin sind dessen Default-SENKE (`lambda z: print(z, …)`), keine
-// Meldungsform — geerntet gehoeren die Zeichenketten an `sag(…)`. Der Preis ist benannt: ein
-// direktes `print(` in `whispercpp.py` faellt aus der Ernte. Es gibt heute keines (gegruept),
-// und die Alternative waere schlechter — beide Formen zu scannen liesse die Senke als
-// UNLESBAR anschlagen, also den Test dauerhaft rot.
+// Meldungsform. Seit #432 steht whispercpp.py ZWEIMAL in QUELLEN — `sag(` fuer die
+// Meldungsformen und `print(` fuer alles, was kuenftig direkt gedruckt wird; die Senke ist
+// die einzige Ausnahme (`senke`), und sie ist SELBSTUEBERWACHEND: wird die Senkenzeile
+// umgebaut oder der Matcher daneben, faellt die Zeile in die Ernte, `ersteZeichenkette`
+// sieht mit `print(` kein Anfuehrungszeichen (erstes Argument ist `z`) ⇒ UNLESBAR ⇒ Test rot.
+// Der Ausnahme kann nicht still verfallen — genau die Tuer, die #432 hier offen fand.
 //
 // NICHT aufgenommen: `paths.py`, `projekt.py`, `settings.py`. Sie schreiben auch AUSSERHALB
 // von Jobs (Pfad- und Einstellungsmodule laufen im Server), ihre Formen haetten mit der
@@ -73,13 +77,19 @@ const WURZEL = path.resolve(HIER, '..', '..')
 // damit eine HANDentscheidung — genau das, was diese Datei sonst vermeidet. Was sie deckt,
 // deckt seit #422 der vierte Test: eine Form, die versehentlich an einem Muster haengenbleibt,
 // faellt dort auf, statt nur hier gezaehlt zu werden.
-const QUELLEN: { datei: string; ruf: string }[] = [
+// Die Default-SENKE von `sag` in whispercpp.py: der `onLine or`-Rueckfall. Eine Meldungsform
+// enthaelt diese Zeichen nie; die Senke ist per Definition der Fallback des Emitters. Zeilen,
+// die hierauf passen, werden NUR im `print(`-Eintrag derselben Datei uebersprungen.
+const SENKE = /onLine or \(?lambda/
+
+const QUELLEN: { datei: string; ruf: string; senke?: RegExp }[] = [
   { datei: 'transcribe.py', ruf: 'print(' },
   { datei: 'webtool/correct.py', ruf: 'print(' },
   { datei: 'webtool/fetch.py', ruf: 'print(' },
   { datei: 'webtool/ytdlp_update.py', ruf: 'print(' },
   { datei: 'webtool/sperre.py', ruf: 'print(' },
   { datei: 'webtool/whispercpp.py', ruf: 'sag(' },
+  { datei: 'webtool/whispercpp.py', ruf: 'print(', senke: SENKE },
 ]
 
 /** Die erste Zeichenkette eines `ruf(...)` — f-String oder normal, so wie sie im Quelltext
@@ -116,10 +126,16 @@ const UNLESBAR = '<<print( ohne lesbare Zeichenkette>>'
  *
  *  HERAUSGELOEST, damit der UNLESBAR-Zweig einen Sensor bekommt (#410): `ernte()` liest die
  *  echten Quellen, und dort loest er heute 0-mal aus — an ihnen ist er nicht pruefbar. Mit
- *  synthetischen Zeilen schon, und genau das tut der Test unten. */
+ *  synthetischen Zeilen schon, und genau das tut der Test unten.
+ *
+ *  `senke` ueberspringt Zeilen, die die Default-Senke des Emitters definieren (whispercpps
+ *  `sag = onLine or (lambda z: print(z, …))`, #432): sie sind kein Druck, sondern der
+ *  Rueckfall, hinter dem Druck steht. Das Ueberspringen ist an die echte Senkenform
+ *  gekoppelt — passt der Matcher nicht mehr, wird die Zeile geerntet und schlaegt UNLESBAR. */
 export function formenAusZeilen(datei: string, zeilen: string[], formen: Map<string, string[]>,
-                                ruf = 'print('): void {
+                                ruf = 'print(', senke?: RegExp): void {
   zeilen.forEach((zeile, nr) => {
+    if (senke?.test(zeile)) return
     const lit = ersteZeichenkette(zeile, ruf)
     if (lit === null) {
       if (zeile.includes(ruf)) formen.set(UNLESBAR, [...(formen.get(UNLESBAR) ?? []), `${datei}:${nr + 1}`])
@@ -132,8 +148,8 @@ export function formenAusZeilen(datei: string, zeilen: string[], formen: Map<str
 
 function ernte(): Map<string, string[]> {
   const formen = new Map<string, string[]>()
-  for (const { datei, ruf } of QUELLEN) {
-    formenAusZeilen(datei, fs.readFileSync(path.join(WURZEL, datei), 'utf-8').split(/\r?\n/), formen, ruf)
+  for (const { datei, ruf, senke } of QUELLEN) {
+    formenAusZeilen(datei, fs.readFileSync(path.join(WURZEL, datei), 'utf-8').split(/\r?\n/), formen, ruf, senke)
   }
   return formen
 }
@@ -590,6 +606,23 @@ const GRUND_FILTER = /FEHLER|Fehler|Error|Traceback/
 
 const fest = (w: unknown) => JSON.stringify(w, (_k, v) => (v instanceof Set ? [...v].sort() : v))
 
+// Vorzustand fuer die Wirkungslos-Messung (#432): drei Parser-Zweige wirken nur MIT
+// Vorzustand — der Prozent-Zweig schreibt in active[cursor], blockDone braucht einen
+// Bloecke-Eintrag, [done] eine laufende Diarisierung. Gegen den LEEREN Zustand gemessen
+// kann eine Zeile wirkungslos aussehen und im Lauf doch etwas tun; die Messung dazu war
+// bis #432 ein Einzelstück und mit dem Pruefstand verschwunden. `B` als Basisname steht
+// in KEINEM Beispiel des INVENTAR (die heissen A oder Demo), kein Beispiel kann ihn also
+// zufaellig treffen. Zwei Lagen wie in jener Messung: mit `[scope]` (terminal() filtert
+// dann) und ohne.
+const PRAELUDIUM = (kind: string, mitScope: boolean): string[] => {
+  const zeilen: string[] = []
+  if (mitScope) zeilen.push('[scope] B')
+  if (kind === 'transcribe' || kind === 'fetch') zeilen.push('[Demo] -> transkribiere B …')
+  if (kind === 'correct' || kind === 'transcribe')
+    zeilen.push('B: 4 Segmente → 2 Blöcke à max. 150', '→ Korrigiere B · Block 1/2 …', '→ Diarisiere B …')
+  return zeilen
+}
+
 describe('Vertrag: gedruckte Statuszeilen <-> jobPhases.ts (#375)', () => {
   it('jede gedruckte Form ist klassifiziert — und keine klassifizierte ist verschwunden', () => {
     // Der eigentliche Waechter. Eine NEUE Druckzeile ist hier unbekannt und macht den Test rot;
@@ -711,18 +744,20 @@ describe('Vertrag: gedruckte Statuszeilen <-> jobPhases.ts (#375)', () => {
     // faellt ein `transcribe`-Job zusaetzlich in den correct-Dialekt durch. Waere dieser Test
     // auf `correct` beschraenkt, deckte er ausgerechnet den Zweig nicht, den #405 neu oeffnet.
     //
-    // DREI Grenzen, alle nachgemessen und keine davon behoben:
+    // DREI Grenzen aus #432 — (b) und (c) sind seit #432 geschlossen, (a) bleibt:
     // (a) Die Beispielzeilen setzen je Platzhalter EINEN Wert ein. Wo der gebunden ist
     //     (`{}` = 'ok' bzw. 'fehlgeschlagen'), ist das vollstaendig; wo fremder Text steht
-    //     (Ausnahmemeldungen, Basisnamen), ist es eine Stichprobe.
-    // (b) Gemessen wird ISOLIERT, eine Zeile gegen den leeren Zustand. Drei Parser-Zweige
-    //     wirken nur mit Vorzustand (`blockDone` braucht eine Bloecke-Zeile, der
-    //     Prozent-Zweig einen `cursor`, `[done]` eine laufende Diarisierung) — an ihnen kann
-    //     eine Zeile isoliert wirkungslos aussehen und im Lauf doch etwas tun. Mit
-    //     Praeludium nachgemessen: heute 0 Treffer, mit und ohne `[scope]`.
-    // (c) Der Stichprobenwert `Demo` steht fuer den PROJEKTNAMEN. Heisst das Projekt `fetch`,
-    //     setzt dieselbe Form unter kind `fetch` `global:'download'` (gemessen) — das ist
-    //     nicht Boesartigkeit, sondern die bekannte Namenskollision aus #379/#396.
+    //     (Ausnahmemeldungen, Basisnamen), ist es eine Stichprobe. Den AUSNAHMETEXT
+    //     erschöpfend zu sondieren geht nicht — das bleibt Grenze. Fuer Basisnamen ist die
+    //     einzige bekannte Schadensklasse die Namenskollision, und die ist gesondert
+    //     (Test darunter); fiesere Basen (Randleerzeichen, `]`) tragen eigene Tests im
+    //     Parser-Test.
+    // (b) GESCHLOSSEN: gemessen wird seit #432 auch MIT Vorzustand — der zweite Durchgang
+    //     unten samt PRAELUDIUM-Positivkontrolle deckt die drei zustandsabhängigen Zweige
+    //     dauerhaft, statt in der Einzelstück-Messung zu #422 zu ruhen.
+    // (c) GESCHLOSSEN: der Stichprobenwert `Demo` vertritt den Projektnamen; unter den
+    //     reservierten Altprojekt-Namen ist die Kollisionsfläche festgenagelt (Test
+    //     darunter: je Name, kind und Lage alle oder keine).
     // Absichtlich boesartige Werte gehoeren NICHT hierher: sie pruefen die Haertung der
     // Muster (#413/#416), nicht die Zusicherung 'ignoriert'.
     const haengt: string[] = []
@@ -741,6 +776,112 @@ describe('Vertrag: gedruckte Statuszeilen <-> jobPhases.ts (#375)', () => {
       }
     }
     expect(haengt).toEqual([])
+
+    // ZWEITER DURCHGANG, MIT VORZUSTAND (#432): derselbe Vergleich, aber gegen das Präludium
+    // — der drei zustandsabhängigen Zweige wegen (siehe PRAELUDIUM). Beide Lagen wie in der
+    // Einzelstück-Messung: mit und ohne `[scope]`. Bis #432 stand das als Grenze (b) im
+    // Kommentar; jetzt ist es eine dauerhafte Messung mit eigener Positivkontrolle (Test
+    // darüber) — der Kommentar hält den nächsten Leser fest, dieser Durchgang den nächsten
+    // Umbau.
+    const praehaengt: string[] = []
+    for (const [sig, e] of Object.entries(INVENTAR)) {
+      if (e.art !== 'ignoriert' && e.art !== 'gelesen_anderswo') continue
+      for (const kind of ['transcribe', 'correct', 'fetch'] as const) {
+        for (const mitScope of [true, false]) {
+          const prae = PRAELUDIUM(kind, mitScope)
+          const mit = fest(parseJobPhases(kind, [...prae, e.beispiel!]))
+          const basis = fest(parseJobPhases(kind, prae))
+          if (mit !== basis) praehaengt.push(`${sig} (${kind}${mitScope ? '' : ', ohne scope'})`)
+        }
+      }
+    }
+    expect(praehaengt).toEqual([])
+  })
+
+  it('das Präludium der Wirkungslos-Messung stellt den Vorzustand wirklich her (#432)', () => {
+    // Die Positivkontrolle zum zweiten Durchgang darunter: verlöre eine Präludium-Zeile
+    // ihre Wirkung (Druckform geändert, Zweig umgebaut), maesse der Durchgang wieder gegen
+    // den leeren Zustand und bliebe gruen. JEDER der drei zustandsabhängigen Zweige muss
+    // unter dem Präludium feuern — gemessen an seiner WIRKUNG, nicht an seiner Zeile, und
+    // je mit der isolierten Zeile daneben, die nichts bewirkt (sonst wäre der Kontrast
+    // eine Behauptung).
+    const prae = PRAELUDIUM('transcribe', true)
+    // Prozent-Zweig: schreibt in active[cursor] — ohne cursor wirkungslos.
+    expect(parseJobPhases('transcribe', [...prae, '45%| m']).active.B).toMatchObject({ pct: 45 })
+    expect(parseJobPhases('transcribe', ['45%| m']).active.B).toBeUndefined()
+    // blockDone: braucht einen Blöcke-Eintrag; sichtbar wird er erst über die folgende
+    // Korrigiere-Zeile (prog liest blocks), deshalb die Zusatzzeile in BEIDEN Armen.
+    const mitBlock = parseJobPhases('transcribe',
+      [...prae, '  ✓ B · Block 1/2 fertig', '→ Korrigiere B · Block 2/2 …'])
+    const ohneBlock = parseJobPhases('transcribe', [...prae, '→ Korrigiere B · Block 2/2 …'])
+    expect(mitBlock.active.B?.pct).toBe(50)
+    expect(ohneBlock.active.B?.pct).toBe(0)
+    // [done]: räumt nur eine laufende DIARISIERUNG auf — das Präludium endet auf 'diarize'.
+    expect(parseJobPhases('transcribe', [...prae, '[done] B']).active.B).toBeUndefined()
+    expect(parseJobPhases('transcribe', prae).active.B).toBeDefined()
+  })
+
+  it('Stichprobenwerte: „ignoriert" gilt für den Wert Demo, nicht für jeden Projektnamen — die Kombinationen stehen fest (#432)', () => {
+    // Grenze (c) des Issues: je Platzhalter steht EIN Wert, und `Demo` vertritt den
+    // PROJEKTNAMEN. Gemessen (Issue): heisst das Projekt `fetch`, setzt dieselbe Form unter
+    // kind `fetch` `global:'download'` — die Werte tragen die Aussage. Gesondert werden die
+    // Namen aus paths.RESERVIERTE_NAMEN (paths.py:34, hier gespiegelt — der Test kann kein
+    // Python lesen): seit dem Namensraum-Riegel (K1 Glied 1) legt keiner von ihnen ein NEUES
+    // Projekt mehr an, Altprojekte tragen sie weiter, und ihre Klammerpraefixe sind
+    // zeilengleich mit Parser-Marken bzw. der Job-Art — die Klasse aus #379/#396/#478.
+    //
+    // DIE STRUKTUR STATT DER LISTE: die Kollision ist formenhaft — sie haengt daran, DASS
+    // eine Form mit `[<name>] ` beginnt, nicht an ihrem Inhalt. Eine Liste aller ~100
+    // einzelnen Treffer waere Churn ohne Bewusstsein (jede INVENTAR-Aenderung schreibt sie
+    // um). Festgenagelt ist deshalb je (Name, kind, Lage), OB alle sondierten Formen
+    // kollidieren — und der Waechter feuert, wenn eine Form von ihren Geschwistern
+    // ABWEICHT (Zweig geaendert, Form anders gebaut) oder eine bisher stille Kombination
+    // zu kollidieren anfaengt (neues Parser-Verhalten).
+    // Bewusst NICHT gesondert: der Ausnahmetext in den Platzhaltern. Er kann den
+    // /FEHLER|Fehler|Error|Traceback/-Filter des Toasts treffen oder nicht — fremden Text
+    // erschöpfend zu sondieren geht nicht, und die Klammer-Substitution aendert an ihm
+    // nichts (`[fetch]` enthaelt keines der vier Woerter). Das bleibt die benannte Grenze.
+    const ERWARTET: Record<string, string[]> = {
+      // Die Erstbereichszeile frisst die ERSTE Projektzeile — der Zweig steht vor der
+      // kind-Weiche, also in jedem kind; nur isoliert, mit Praeludium steht der echte
+      // Bereich schon und spaetere [scope]-Zeilen fallen durch.
+      scope: ['transcribe/isoliert', 'correct/isoliert', 'fetch/isoliert'],
+      // Der Nachtrag wirkt nur mit GESETZTEM Bereich und steht hinter der kind-Weiche —
+      // also die zwei correct-Dialekt-kinds, nur mit Vorzustand.
+      'scope+': ['transcribe/mit Vorzustand', 'correct/mit Vorzustand'],
+      // `[active] x` buchtet den Zeilenrest in `gesehen` — hinter der kind-Weiche, in
+      // beiden Lagen (der Zweig braucht keinen Vorzustand, wird aber vom leeren Ergebnis
+      // genauso getragen wie vom vollen).
+      active: ['transcribe/isoliert', 'correct/isoliert', 'transcribe/mit Vorzustand', 'correct/mit Vorzustand'],
+      // Der [fetch]-Zweig stellt global auf 'download' — nur im eigenen kind, und nur
+      // isoliert sichtbar (mit laufender Aufnahme maskiert active das global-Feld).
+      fetch: ['fetch/isoliert'],
+      // `[done] x` raeumt nur eine laufende Diarisierung des GENAUEN Namens auf; der
+      // Zeilenrest hinter dem Praefix ist nie ein Basisname — still in jeder Kombination.
+      done: [],
+    }
+    const sondiert = Object.entries(INVENTAR)
+      .filter(([sig, e]) => (e.art === 'ignoriert' || e.art === 'gelesen_anderswo') && sig.startsWith('[{}] '))
+      .map(([sig]) => sig)
+    // Sensor gegen die leere Sonde: gaebe es nichts zu sondieren, stünde gruen gegen gruen.
+    expect(sondiert.length).toBeGreaterThanOrEqual(10)
+    const alle = [...sondiert].sort()
+    for (const [name, kombis] of Object.entries(ERWARTET)) {
+      for (const kind of ['transcribe', 'correct', 'fetch'] as const) {
+        for (const mitVorzustand of [false, true]) {
+          const lage = `${kind}/${mitVorzustand ? 'mit Vorzustand' : 'isoliert'}`
+          const treffer: string[] = []
+          for (const sig of sondiert) {
+            const sonde = INVENTAR[sig].beispiel!.replace(/^\[[^\]]*\]/, `[${name}]`)
+            const prae = PRAELUDIUM(kind, true)
+            const mit = fest(mitVorzustand ? parseJobPhases(kind, [...prae, sonde]) : parseJobPhases(kind, [sonde]))
+            const basis = fest(mitVorzustand ? parseJobPhases(kind, prae) : parseJobPhases(kind, []))
+            if (mit !== basis) treffer.push(sig)
+          }
+          expect(treffer.sort(), `Projekt '${name}', ${lage}`).toEqual(kombis.includes(lage) ? alle : [])
+        }
+      }
+    }
   })
 
   it('jede Beispielzeile passt noch zu ihrer geernteten Form', () => {
@@ -796,9 +937,6 @@ describe('Vertrag: gedruckte Statuszeilen <-> jobPhases.ts (#375)', () => {
 
     // Der EMITTER-Parameter hat einen eigenen Offsetpfad (`j = i + ruf.length`), und mit
     // `print(` allein faellt ein Fehler dort nicht auf — `sag(` ist zwei Zeichen kuerzer.
-    // Dazu die Grenze, die bei QUELLEN beschrieben steht: die Default-SENKE von `sag`
-    // enthaelt zwar `print(`, ist aber keine Meldungsform und darf den Sentinel NICHT
-    // ausloesen — sonst waere der Test fuer whispercpp.py dauerhaft rot.
     const sag = new Map<string, string[]>()
     formenAusZeilen('w.py', [
       '    sag(f"{pct}%| {modell}")',
@@ -806,6 +944,24 @@ describe('Vertrag: gedruckte Statuszeilen <-> jobPhases.ts (#375)', () => {
     ], sag, 'sag(')
     expect(sag.get('{}%| {}')).toEqual(['w.py:1'])
     expect(sag.has(UNLESBAR)).toBe(false)
+
+    // Die zweite Haelfte von #432: die Senke ist kein blinder Fleck mehr, sondern wird im
+    // `print(`-Eintrag derselben Datei UEBERSPRUNGEN. Drei Zusicherungen, jede mit eigener
+    // Mutation: (1) die Senkenzeile loest KEINEN Sentinel aus und hinterlaesst GAR KEINEN
+    // Eintrag, (2) ein echtes direktes `print(f"…")` daneben wird geerntet — die Tuer, die
+    // bis #432 offen stand —, (3) ein `print(meldung)` ohne Anfuehrungszeichen schlaegt
+    // weiter an. Und der Matcher ist selbstueberwachend: passt er nicht mehr auf die
+    // Senkenform, faellt die Zeile in die Ernte und schlaegt UNLESBAR (Test 1 rot) — die
+    // Ausnahme kann nicht still verfallen.
+    const druck = new Map<string, string[]>()
+    formenAusZeilen('w.py', [
+      '    sag = onLine or (lambda z: print(z, flush=True))',
+      '    print(f"[{name}] fertig")',
+      '    print(meldung)',
+    ], druck, 'print(', SENKE)
+    expect(druck.get(UNLESBAR)).toEqual(['w.py:3'])
+    expect(druck.get('[{}] fertig')).toEqual(['w.py:2'])
+    expect(druck.size).toBe(2)
 
     // Und die dritte Haelfte der Zusage: der Sentinel darf NICHT im INVENTAR stehen. Stuende er
     // dort, waere er klassifiziert — der Gleichheitstest oben bliebe bei einer unlesbaren Form
