@@ -612,14 +612,14 @@ const GRUND_FILTER = /FEHLER|Fehler|Error|Traceback/
 
 const fest = (w: unknown) => JSON.stringify(w, (_k, v) => (v instanceof Set ? [...v].sort() : v))
 
-// Vorzustand fuer die Wirkungslos-Messung (#432): drei Parser-Zweige wirken nur MIT
-// Vorzustand — der Prozent-Zweig schreibt in active[cursor], blockDone braucht einen
-// Bloecke-Eintrag, [done] eine laufende Diarisierung. Gegen den LEEREN Zustand gemessen
-// kann eine Zeile wirkungslos aussehen und im Lauf doch etwas tun; die Messung dazu war
-// bis #432 ein Einzelstück und mit dem Pruefstand verschwunden. `B` als Basisname steht
-// in KEINEM Beispiel des INVENTAR (die heissen A oder Demo), kein Beispiel kann ihn also
-// zufaellig treffen. Zwei Lagen wie in jener Messung: mit `[scope]` (terminal() filtert
-// dann) und ohne.
+/** Vorzustand fuer die Wirkungslos-Messung (#432): drei Parser-Zweige wirken nur MIT
+ *  Vorzustand — der Prozent-Zweig schreibt in active[cursor], blockDone braucht einen
+ *  Bloecke-Eintrag, [done] eine laufende Diarisierung. Gegen den LEEREN Zustand gemessen
+ *  kann eine Zeile wirkungslos aussehen und im Lauf doch etwas tun; die Messung dazu war
+ *  bis #432 ein Einzelstück und mit dem Pruefstand verschwunden. `B` als Basisname steht
+ *  in KEINEM Beispiel des INVENTAR (die heissen A oder Demo), kein Beispiel kann ihn also
+ *  zufaellig treffen. Zwei Lagen wie in jener Messung: mit `[scope]` (terminal() filtert
+ *  dann) und ohne. */
 const PRAELUDIUM = (kind: string, mitScope: boolean): string[] => {
   const zeilen: string[] = []
   if (mitScope) zeilen.push('[scope] B')
@@ -881,6 +881,12 @@ describe('Vertrag: gedruckte Statuszeilen <-> jobPhases.ts (#375)', () => {
     const reserviert = [...reserviertQuelle.matchAll(/["']([^"']+)["']/g)].map((m) => m[1])
     expect(reserviert.length).toBeGreaterThanOrEqual(5)
     expect(Object.keys(ERWARTET).sort()).toEqual([...reserviert].sort())
+    // Beleg der zitierten Messung (Bot-Warnung „Behauptung Oder Messung" zu PR #498): der
+    // Kommentar oben nennt als Mechanismus global:'download' — die Matrix darunter misst
+    // nur DASS sich der Zustand aendert. Hier ist der Mechanismus selbst gepinnt, mit der
+    // Form, die das Issue dafür gemessen hat.
+    const fetchSonde = INVENTAR['[{}] -> {}'].beispiel!.replace(/^\[[^\]]*\]/, '[fetch]')
+    expect(parseJobPhases('fetch', [fetchSonde]).global).toBe('download')
     const sondiert = Object.entries(INVENTAR)
       .filter(([sig, e]) => (e.art === 'ignoriert' || e.art === 'gelesen_anderswo') && sig.startsWith('[{}] '))
       .map(([sig]) => sig)
