@@ -1,6 +1,6 @@
 import { AudioLines, Check, Clock, FileText, Loader2, ShieldCheck, TriangleAlert } from 'lucide-react'
-import type { Erreicht, FilePhase, FileState, GlobalPhase, ProjectFile } from '@/lib/types'
-import { PHASE_LABEL } from '@/lib/jobPhases'
+import type { Erreicht, FilePhase, FileState, GlobalPhase, ProjectFile, Warten } from '@/lib/types'
+import { PHASE_LABEL, WARTE_LABEL } from '@/lib/jobPhases'
 
 /**
  * Vorher standen hier Emoji (✓ ↷ ✗ ○ ✎ ●). Die rendern auf jedem System in einer anderen
@@ -82,7 +82,7 @@ function ruhe(file: ProjectFile, erreicht?: Erreicht) {
   return null
 }
 
-export function FileStatusPill({ file, active, pct, detail, state, erreicht, jobRunning, inScope, globalPhase, mitText }: {
+export function FileStatusPill({ file, active, pct, detail, state, erreicht, jobRunning, inScope, warten, globalPhase, mitText }: {
   file: ProjectFile
   active?: FilePhase
   pct?: number
@@ -100,6 +100,12 @@ export function FileStatusPill({ file, active, pct, detail, state, erreicht, job
   erreicht?: Erreicht
   jobRunning?: boolean
   inScope?: boolean
+  /** Worauf diese Aufnahme wartet, und wie viele des Laufs vor ihr liegen (#370/#442).
+   *  Haengt am selben Riegel wie `inScope` (`imBereich`), NICHT an `zugelassen` — es ist
+   *  eine PROGNOSE ueber den Lauf, und die rechtfertigt allein der Bereich. Ueber `gesehen`
+   *  durchgereicht stellte ein Einzeldatei-Korrekturlauf den ganzen Korpus auf „wartet",
+   *  weil das Glossar seit #450 korpusweit `[active]` meldet. */
+  warten?: Warten
   globalPhase?: GlobalPhase | null
   /** Ruhezustand mit Wort statt nur Symbol. Die Arbeitsflaeche hat die Breite dafuer,
    *  die 260px-Seitenleiste des Editors nicht. */
@@ -143,7 +149,22 @@ export function FileStatusPill({ file, active, pct, detail, state, erreicht, job
         )
       }
 
-      const wLabel = 'In Warteschlange…'
+      // „Wartet auf Korrektur · noch 3 vor dieser" statt des blanken „In Warteschlange…"
+      // (#370/#442). Die Zahl ist eine MENGE, keine Position — der Korrekturlauf arbeitet
+      // mehrere Dateien gleichzeitig; „noch N vor dieser" bleibt dabei wahr, „Platz N von M"
+      // waere ein Versprechen, das der Lauf nicht gibt.
+      //
+      // Die Zahl nur mit `mitText`: dieselbe Begruendung wie am Prop selbst — die
+      // Arbeitsflaeche hat die Breite dafuer, die 260px-Seitenleiste des Editors nicht.
+      // Bei `vor === 0` entfaellt der Zusatz: „noch 0 vor dieser" ist keine Auskunft.
+      //
+      // Ohne `warten` bleibt der bisherige Text stehen. Das ist kein Randfall, sondern die
+      // gewollte sichere Richtung: der URL-Import kennt keine Basisnamen, und ein Lauf ohne
+      // `[scope]`-Zeile im Puffer hat keine Grundlage fuer eine Zahl. Lieber kein Wert als
+      // ein geratener.
+      const wLabel = warten
+        ? WARTE_LABEL[warten.art] + (mitText && warten.vor > 0 ? ` · noch ${warten.vor} vor dieser` : '')
+        : 'In Warteschlange…'
       return (
         <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
           <Clock className="size-3.5 shrink-0 animate-pulse" aria-hidden="true" />

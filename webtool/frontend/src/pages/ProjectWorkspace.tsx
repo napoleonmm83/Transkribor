@@ -315,6 +315,7 @@ export function ProjectWorkspace() {
                     <FileStatusPill file={f} active={active?.phase} pct={active?.pct} detail={active?.detail}
                       state={state} erreicht={darfZustand ? phases.erreicht?.[f.base] : undefined}
                       jobRunning={running} inScope={darfWarten}
+                      warten={darfWarten ? phases.warten?.[f.base] : undefined}
                       globalPhase={running ? (phases.globalPerBase?.[f.base] ?? (phases.scope === undefined ? phases.global : null)) : null} mitText />
                     <DateiMenue project={project!} file={f} aiReason={aiReason} />
                   </div>

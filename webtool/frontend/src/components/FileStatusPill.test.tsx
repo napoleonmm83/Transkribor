@@ -39,6 +39,30 @@ describe('FileStatusPill', () => {
     expect(screen.getByText('Handarbeit behalten')).toBeInTheDocument()
     expect(screen.queryByText(/Übersprungen/)).toBeNull()
   })
+  it('die Wartezeile nennt die ARBEIT und die Menge davor (#370/#442)', () => {
+    render(<FileStatusPill file={f()} jobRunning inScope mitText warten={{ art: 'correct', vor: 3 }} />)
+    expect(screen.getByText('Wartet auf Korrektur · noch 3 vor dieser')).toBeInTheDocument()
+  })
+  it('ohne mitText bleibt die Zahl weg — die 260px-Leiste hat den Platz nicht', () => {
+    render(<FileStatusPill file={f()} jobRunning inScope warten={{ art: 'transcribe', vor: 3 }} />)
+    expect(screen.getByText('Wartet auf Transkription')).toBeInTheDocument()
+    expect(screen.queryByText(/vor dieser/)).toBeNull()
+  })
+  it('„noch 0 vor dieser" waere keine Auskunft und entfaellt', () => {
+    render(<FileStatusPill file={f()} jobRunning inScope mitText warten={{ art: 'correct', vor: 0 }} />)
+    expect(screen.getByText('Wartet auf Korrektur')).toBeInTheDocument()
+    expect(screen.queryByText(/vor dieser/)).toBeNull()
+  })
+  it('ohne warten bleibt der bisherige Text stehen — lieber kein Wert als ein geratener', () => {
+    render(<FileStatusPill file={f()} jobRunning inScope mitText />)
+    expect(screen.getByText(/In Warteschlange…/)).toBeInTheDocument()
+  })
+  it('eine globale Phase schlaegt die Wartezeile — sie sagt mehr als eine Zahl', () => {
+    render(<FileStatusPill file={f()} jobRunning inScope mitText globalPhase="glossary"
+      warten={{ art: 'correct', vor: 2 }} />)
+    expect(screen.getByText(/Glossar wird erstellt/)).toBeInTheDocument()
+    expect(screen.queryByText(/vor dieser/)).toBeNull()
+  })
   it('In Warteschlange, wenn Job laeuft und Datei im Scope ist', () => {
     render(<FileStatusPill file={f()} jobRunning inScope mitText />)
     expect(screen.getByText(/In Warteschlange…/)).toBeInTheDocument()

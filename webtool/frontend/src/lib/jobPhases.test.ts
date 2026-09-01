@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { describePhases, parseJobPhases , imBereich, zugelassen } from './jobPhases'
+import { describePhases, parseJobPhases , imBereich, zugelassen, laufOrdnung, warteKarte } from './jobPhases'
 // Der Ausgang gehoert zum Befund: ein richtig geparster Zustand nuetzt nichts, wenn die
 // Meldung daraus weiterhin „fertig" sagt (#405 + #376).
 import { ausgang } from './jobAusgang'
@@ -1231,5 +1231,48 @@ describe('parseJobPhases: geloeschte Aufnahmen erben keine Urteile (#479/#489)',
     ])
     expect(p.perBase).toEqual({ A: 'done', B: 'done' })
     expect(p.erreicht).toEqual({ A: 'raw', B: 'raw' })
+  })
+})
+
+describe('laufOrdnung / warteKarte (#370, #442)', () => {
+  it('transcribe sortiert nach DATEINAME MIT ENDUNG, correct nach der blossen Base', () => {
+    // Der teuerste Fall dieser Funktion, und er ist nachgerechnet: `transcribe.py:734` macht
+    // `pending.sort(key=basename)`, vergleicht also „Interview-2.wav" gegen „Interview.wav" —
+    // '-' (45) vor '.' (46), die ZWEI laeuft zuerst. Wer nur die Basen sortiert, dreht das um.
+    // Und genau dieses Paar erzeugt der URL-Import mit `unique_base` von selbst.
+    // `correct` hat den anderen Schluessel: `paths.transcript_bases` endet auf `sorted(out)`
+    // ueber die endungslosen Namen.
+    expect(laufOrdnung(['Interview', 'Interview-2'], 'transcribe')).toEqual(['Interview-2', 'Interview'])
+    expect(laufOrdnung(['Interview', 'Interview-2'], 'correct')).toEqual(['Interview', 'Interview-2'])
+  })
+
+  it('die Zahl kommt aus der LAUFordnung, nicht aus der Reihenfolge des Bereichs', () => {
+    // Der Befund des kalten Plan-Reviewers, als Zusicherung: eine waehrend des Laufs
+    // hochgeladene Aufnahme haengt der Parser per `[scope+]` ans ENDE der Menge, der Lauf
+    // sortiert sie aber ein. Aus der Mengenreihenfolge gerechnet waere die Zahl fuer beide
+    // falsch — fuer die Nachzuegler-Datei zu gross, fuer ihre Nachbarin zu klein.
+    const phasen = parseJobPhases('transcribe', ['[scope] B\tZ', '[Demo] fertig B: 1s', '[scope+] A'])
+    expect([...(phasen.scope ?? [])]).toEqual(['B', 'Z', 'A'])   // Mengenreihenfolge: A hinten
+    expect(warteKarte(phasen, 'transcribe')).toEqual({ A: { art: 'transcribe', vor: 0 },
+                                                      Z: { art: 'transcribe', vor: 1 } })
+  })
+
+  it('eine Aufnahme mit Endurteil liegt vor niemandem mehr', () => {
+    const phasen = parseJobPhases('correct', ['[scope] A\tB\tC', 'apply: A -> edit.json + md (3 Segmente)'])
+    expect(warteKarte(phasen, 'correct')).toEqual({ B: { art: 'correct', vor: 0 },
+                                                   C: { art: 'correct', vor: 1 } })
+  })
+
+  it('die LAUFENDE Datei zaehlt mit — sie liegt vor den wartenden', () => {
+    const phasen = parseJobPhases('correct', ['[scope] A\tB', '→ Korrigiere A …'])
+    expect(warteKarte(phasen, 'correct').B).toEqual({ art: 'correct', vor: 1 })
+  })
+
+  it('ohne Bereich und fuer den URL-Import entsteht gar keine Karte', () => {
+    // Beide Rueckfaelle sind die sichere Richtung: `imBereich` liest ein fehlendes `scope`
+    // als „gilt fuer alle", daraus liesse sich nur eine geratene Zahl bilden; und der
+    // URL-Import kennt ueberhaupt keine Basisnamen.
+    expect(warteKarte(parseJobPhases('transcribe', ['[Demo] -> transkribiere A …']), 'transcribe')).toEqual({})
+    expect(warteKarte(parseJobPhases('fetch', ['[scope] A\tB']), 'fetch')).toEqual({})
   })
 })
