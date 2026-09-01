@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Vitest-Coverage schreibt seinen Bericht in den Arbeitsbaum. Das ist das
+# Messergebnis eines Laufs, keine Quelle.
+coverage/

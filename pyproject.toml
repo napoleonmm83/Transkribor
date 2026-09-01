@@ -1,0 +1,81 @@
+# Werkzeug-Konfiguration für Transkribor.
+#
+# Bewusst OHNE [project] und OHNE [build-system]: Transkribor wird nicht als
+# Python-Paket gebaut und installiert. Die Laufzeit-Abhängigkeiten stehen
+# weiterhin in requirements.txt — diese Datei konfiguriert die Werkzeuge und
+# benennt sie (siehe [dependency-groups] unten).
+
+# Die Analyse-Werkzeuge, damit ein frischer Clone dieselben Fassungen bekommt.
+# PEP 735; braucht kein [project] und wird von pip ab 25.1 verstanden:
+#   .venv/bin/pip install --group dev
+# Exakt gepinnt, weil ein Linter mit anderer Fassung andere Befunde meldet —
+# und ein Riegel, der je Rechner anders urteilt, ist kein Riegel.
+[dependency-groups]
+dev = [
+  "ruff==0.16.5",
+  "mypy==2.3.1",
+  "pytest==9.1.1",
+  "hypothesis==6.167.1",
+  "mutmut==3.7.0",
+]
+
+[tool.ruff]
+line-length = 100
+# Gemessen, nicht geraten: .github/workflows/test.yml fährt python-version 3.13,
+# die Projekt-venv ist 3.13.5.
+target-version = "py313"
+extend-exclude = [".venv", "node_modules", "webtool/frontend"]
+
+[tool.ruff.lint]
+# Einstiegssatz, bewusst schmal: E/F Syntax und echte Fehler, I Import-Ordnung,
+# UP veraltete Schreibweisen, B die Bugbear-Fallen, S die Sicherheitsformen.
+# Erweitert wird, wenn dieser Satz sauber ist — nicht vorher.
+select = ["E", "F", "I", "UP", "B", "S"]
+ignore = ["E501"]   # Zeilenlänge ist Sache des Formatierers, nicht des Linters
+
+[tool.ruff.lint.per-file-ignores]
+# assert IST der Zweck eines Tests, kein Sicherheitsrisiko. Ohne diese Zeilen
+# meldet ruff 2357 S101-Befunde aus den Testdateien — 95 % aller Funde — und
+# ein Gate, das zu 95 % aus Rauschen besteht, wird abgeschaltet.
+# Gemessen: ruff check --select E,F,I,UP,B,S --ignore E501 . → 2486 Funde,
+# davon 2357 S101.
+#
+# Die Muster stehen so, weil dieses Projekt KEIN tests/-Verzeichnis hat:
+# die 23 Suiten liegen als webtool/test_*.py neben dem Code, eine weitere
+# als build/test_bilder.py, zwei als scripts/test_*.py.
+"**/test_*.py" = ["S101"]
+"**/*_test.py" = ["S101"]
+
+[tool.mypy]
+python_version = "3.13"
+# NICHT strict beim ersten Mal. strict = true auf einem Bestandsprojekt erzeugt
+# hunderte Befunde, und ein Gate mit hunderten Befunden ist kein Gate.
+warn_return_any = true
+warn_unused_ignores = true
+ignore_missing_imports = true
+exclude = "^(\\.venv|node_modules|webtool/frontend)/"
+
+[tool.pytest.ini_options]
+# `build` steht in pytests eingebauter norecursedirs-Liste und wird ohne
+# ausdrückliche Nennung NIE gesammelt — deshalb steht es hier explizit.
+# `scripts` steht hier, weil ein blankes `pytest` an der Wurzel vor Einführung
+# dieser Datei rekursiv auch scripts/ einsammelte (13 Tests). Ohne die Zeile
+# hätte diese Datei sie still stillgelegt.
+# Gemessen: pytest --collect-only -q → 1139 ohne scripts, 1152 mit.
+testpaths = ["webtool", "build", "scripts"]
+# KEIN addopts = "-q": test.yml ruft bereits mit -q auf, und zusammen ergäbe
+# das -qq. Ab verbosity < -1 unterdrückt pytest die Zusammenfassungszeile
+# ("1134 passed, 5 skipped") vollständig — genau die Zeile, auf die sich die
+# Messungen in den CI-Kommentaren stützen.
+
+[tool.mutmut]
+# Beratend, kein Riegel: mutmut kennt nur Pfade, nicht geänderte Zeilen — ein
+# Gate, das bei jeder Änderung das halbe Projekt mutiert, läuft Minuten und
+# wird abgeschaltet.
+#
+# source_paths statt des älteren paths_to_mutate, und beide Werte sind LISTEN:
+# mutmut 3.7 rechnet intern [] + <wert>, ein String bricht das Laden der
+# Konfiguration mit TypeError ab.
+source_paths = ["webtool/"]
+pytest_add_cli_args_test_selection = ["webtool/"]
+do_not_mutate = ["*/test_*.py"]
