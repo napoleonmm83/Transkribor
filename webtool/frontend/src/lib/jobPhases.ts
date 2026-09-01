@@ -582,10 +582,21 @@ export const WARTE_LABEL: Record<Warten['art'], string> = {
  *
  *  Die naheliegende Annahme („das Set bewahrt die Einfuegereihenfolge, also steht dort die
  *  Laufordnung") ist FALSCH, und zwar genau fuer den Standardweg dieser App:
- *  `transcribe.py` sortiert seine `pending`-Liste in JEDER Runde neu, eine waehrend des Laufs
- *  hochgeladene Aufnahme wird also einsortiert — der Leser haengt sie per `[scope+]` aber ans
- *  ENDE. Dazu vereinigt `useActiveJob` den Bereich mit `r.bases`, und das ist serverseitig ein
- *  Set (`jobs.py`), kommt also in Hash-Ordnung an. Beides gemessen. Sortiert wird deshalb hier.
+ *  `transcribe.py` sortiert seine `pending`-Liste in JEDER Runde neu (`pending.sort(...)` in
+ *  `transcribe_project`), eine waehrend des Laufs hochgeladene Aufnahme wird also einsortiert —
+ *  der Leser haengt sie per `[scope+]` aber ans ENDE (`scope.add(b)` im `[scope+]`-Zweig
+ *  weiter oben). Dazu vereinigt `useActiveJob` den Bereich mit `r.bases`, und das ist
+ *  serverseitig ein Set (`jobs.bases`), kommt also in Hash-Ordnung an.
+ *
+ *  Belege, getrennt nach Herkunft — der Satz „beides gemessen" stand hier ohne sie:
+ *  - GEMESSEN am laufenden Server (Wegwerf-Projekt, 3 Aufnahmen): `GET /api/projects` lieferte
+ *    `bases` als `["Interview-2","Zebra","Interview"]`, also weder Alphabet noch Laufordnung.
+ *  - GEMESSEN am Erzeuger: `sorted(['Interview.wav','Interview-2.wav'], key=basename)` ergibt
+ *    `Interview-2` zuerst, `sorted(['Interview','Interview-2'])` das Gegenteil.
+ *  - AM CODE BELEGT (nicht zur Laufzeit ausgefuehrt): dass `[scope+]` ans Ende haengt, steht
+ *    im Zweig oben; dass die Schleife neu sortiert, in `transcribe.py`.
+ *
+ *  Sortiert wird deshalb hier.
  *
  *  EIN Schluessel fuer beide Laeufe, und das ist keine Vereinfachung, sondern die Reparatur
  *  einer geratenen: hier stand `base + "."` fuer transcribe, weil dessen Schleife nach
