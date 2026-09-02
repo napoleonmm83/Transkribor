@@ -514,6 +514,89 @@ def test_run_single_base_unknown_returns_zero(project, monkeypatch):
     assert all(".correction.json" not in c for c in calls)    # keine Korrektur ausgelöst
 
 
+@pytest.mark.parametrize("wann,erwartet_scope,erwartet_done", [
+    # POSITIVKONTROLLE: liegt S2 schon da, WENN der Bereich fixiert wird, nimmt der Lauf es
+    # mit. Ohne sie belegte der Nullbefund unten nichts — der Sensor muss die zweite Datei
+    # sehen KOENNEN.
+    ("vorher", ["S1", "S2"], 2),
+    # Die eigentliche Zusicherung: dieselbe Roh-JSON, aber erst NACH der `[scope]`-Zeile.
+    ("waehrend", ["S1"], 1),
+])
+def test_cmd_run_fixiert_seinen_bereich_beim_start(project, monkeypatch, capsys,
+                                                   wann, erwartet_scope, erwartet_done):
+    """`cmd_run` fixiert seine SCHREIBmenge EINMAL — eine Haelfte der Disjunktheit (#496).
+
+    Beide Laeufe eines Projekts koennen gleichzeitig arbeiten: fuenf Tueren stossen eine
+    Transkription mit `--autocorrect` an, ohne einen laufenden Korrekturlauf zu fragen. Dass
+    sie sich trotzdem meist nicht dieselbe Aufnahme teilen, ist heute EMERGENT aus zwei
+    unabhaengigen Entscheidungen — `cmd_run` fixiert seine Schreibmenge beim Start (`bases()`
+    = `paths.transcript_bases`, also Basen MIT Roh-JSON), und `transcribe_project` nimmt
+    umgekehrt keine Base MIT Roh-JSON (Zwilling: `test_transcribe.py`,
+    `test_transcribe_project_nimmt_keine_base_mit_vorhandener_roh_json`).
+
+    Festgehalten hat das nichts. Baut jemand `cmd_run` auf Rundenscan um — spiegelbildlich zu
+    `transcribe_project`, das seit der gestaffelten Pipeline genau das tut —, faellt die
+    Disjunktheit STILL, und #496 ist auf einen Schlag real: zwei Laeufe korrigieren dieselbe
+    Aufnahme und schreiben ihre `edit.json` uebereinander.
+
+    DIESER TEST NAGELT DIE ZWEI STELLEN FEST — NICHT DIE DISJUNKTHEIT ALS SYSTEMEIGENSCHAFT.
+    Der Unterschied ist gemessen, nicht vorsichtshalber formuliert:
+
+    * **Der Rueckweg ist ueber `delete_file` OFFEN** (#523). Es fragt
+      `_keine_jobs(..., active_only=True)`, und dieser Zweig sieht in `jobs.betrifft` nur
+      `active_bases`, nie `bases` — der BEREICH eines laufenden `correct run` sperrt das
+      Loeschen also nicht (bewusst so, #80). Verschwindet die Roh-JSON einer fixierten Base
+      und wird die Aufnahme gleichnamig neu hochgeladen, nimmt der Transkriptionslauf sie
+      (keine Roh-JSON) und `cmd_run` korrigiert sie trotzdem mit, sobald sie wieder da ist:
+      seine beiden Pruefungen (`:1252`, `:1314`) fragen nur nach Existenz. Der frueher hier
+      stehende Satz „eine Base wandert nur in EINE Richtung" war damit falsch; der
+      Issue-Kommentar zu #496 hat den Weg mit dem falschen Praedikat (`active_only=False`,
+      also `retranscribe_file`) als geschlossen gemessen.
+    * **Es ist die SCHREIBmenge, nicht „der Lauf".** `_glossary` (`:816`) scannt selbst noch
+      einmal — davon haengt ab, welche `.raw.txt` es liest und fuer welche Basen es
+      `[active]` bucht; folgenlos fuer das, was geschrieben wird, aber es ist ein zweiter
+      Scan. Und `main` (`:1383`) scannt nach dem Lauf ein drittes Mal fuer den Exitcode
+      (#524) — dieser Test faehrt `cmd_run`, nicht `main`.
+
+    WO DIE MESSUNGEN LIEGEN — nachpruefbar, nicht als Zusicherung hier behauptet: die
+    Zwei-Lauf-Messung (zwei echte Laeufe nebeneinander, Wegwerf-Projekt im Systemtemp,
+    Schreibmengen aus den `[scope]`-Zeilen, mit Positivkontrolle „`A.json` mitten im Lauf
+    entfernt") steht in Issue #496, Kommentar `issuecomment-5509089921`; die Korrektur dazu
+    (`delete_file` ist bereichsblind, Kommentar `issuecomment-5511239990`) nennt die Grenze
+    dieser Messung. Der Test hier prueft NICHT die Kollision — er prueft die eine Eigenschaft
+    von `cmd_run`, auf der sie im Normalfall scheitert, und nur die.
+    """
+    _root, t = project
+    if wann == "vorher":
+        _add_S2(t)
+    calls = []
+    echt = _fake_claude(t, calls)
+
+    def mit_nachschub(prompt, workdir):
+        """`_run_claude`-Ersatz, der im Fall `waehrend` eine zweite Roh-JSON einschleust.
+
+        Der Glossar-Aufruf ist die erste lange Arbeit NACH der `[scope]`-Zeile — genau das
+        Fenster, in dem ein paralleler `transcribe_project` seine Roh-JSON schreibt. Der
+        Einstieg haengt damit an einem EREIGNIS, nicht an einer Uhr; ein Timer traefe das
+        Fenster nur zufaellig.
+        """
+        if wann == "waehrend" and "_glossar.json" in prompt:
+            _add_S2(t)
+        return echt(prompt, workdir)
+
+    monkeypatch.setattr(correct, "_run_claude", mit_nachschub)
+    assert correct.cmd_run("Demo") == erwartet_done
+    aus = capsys.readouterr().out
+    assert (t / "S2.json").exists()                    # der Nachschub kam in BEIDEN Faellen an
+    assert [z for z in aus.splitlines() if z.startswith("[scope] ")] == \
+        ["[scope] " + "\t".join(erwartet_scope)]
+    assert (t / "S2.edit.json").exists() == (wann == "vorher")
+    assert any("S2.correction.json" in c for c in calls) == (wann == "vorher")
+    # Der Nenner ist die Bereichsgroesse VOM START. Er darf nicht mitwachsen — sonst haette
+    # der Lauf nachgescannt, und die Zeile meldete einen Bereich, den `[scope]` nie nannte.
+    assert f"run: fertig — {erwartet_done}/{len(erwartet_scope)} Datei(en) korrigiert" in aus
+
+
 def test_run_single_base_force_recorrects_human_edited(project, monkeypatch):
     _root, t = project
     (t / "S1.edit.json").write_text(json.dumps(
