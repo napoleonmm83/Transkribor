@@ -904,7 +904,7 @@ def test_jede_route_die_einen_job_startet_traegt_den_namensraum_riegel():
                                           ast.Lambda, ast.ClassDef)):
                 stapel.extend(ast.iter_child_nodes(k))
 
-    def bezuege(fn, tief: bool = True) -> list:
+    def bezuege(fn) -> list:
         """(Name, Zeile) jeder Nennung — Aufruf ODER blosse Referenz.
 
         Die Referenz zaehlt mit, weil sie genauso einen Job startet: `run_in_threadpool(
@@ -917,7 +917,7 @@ def test_jede_route_die_einen_job_startet_traegt_den_namensraum_riegel():
         """
         gebunden = lokale(fn)
         raus = []
-        for k in knoten(fn, tief):
+        for k in knoten(fn, tief=True):
             if isinstance(k, ast.Attribute):
                 raus.append((punktname(k), k.lineno))
             elif (isinstance(k, ast.Name) and isinstance(k.ctx, ast.Load)
@@ -955,11 +955,20 @@ def test_jede_route_die_einen_job_startet_traegt_den_namensraum_riegel():
     assert {"transcribe", "correct", "correct_file", "retranscribe_file",
             "fetch_urls", "upload_audio"} <= routen, sorted(routen)
 
-    # Der Riegel zaehlt nur aus dem RUMPF der Route (`tief=False`), der Start aus allem
-    # (eine Lambda startet genauso). Siehe `knoten`.
-    bezug_rumpf = {f.name: bezuege(f, tief=False) for f in funktionen}
     for n in sorted(routen):
-        riegel = [z for b, z in bezug_rumpf[n] if b == "_sicherer_projektname"]
+        # Der Riegel zaehlt nur als AUFRUF und nur aus dem RUMPF der Route; der Start
+        # dagegen aus allem, eine Lambda startet genauso (siehe `knoten`).
+        #
+        # Auf `bezuege` gestuetzt war das ein Loch, und zwar eines, das die HAERTUNG erst
+        # aufgemacht hat (Bot-Befund an diesem PR): dort zaehlt auch eine blosse Referenz
+        # mit. `guard = _sicherer_projektname` frueh in der Funktion erfuellte damit
+        # `riegel`, ein Aufruf NACH `jobs.start` erfuellte `argumente` — beide Zusicherungen
+        # gruen, waehrend der Job vor der Pruefung startet. Riegel UND Argumentpruefung
+        # kommen deshalb aus derselben Knotenliste.
+        rufe = [k for k in knoten(nach_namen[n], tief=False)
+                if isinstance(k, ast.Call) and isinstance(k.func, ast.Name)
+                and k.func.id == "_sicherer_projektname"]
+        riegel = [k.lineno for k in rufe]
         start = [z for b, z in bezug[n] if ist_start(b) or b in starter - {n}]
         assert riegel, (
             f"app.py:{n} startet einen Job, ruft aber keinen _sicherer_projektname — ein "
@@ -972,9 +981,7 @@ def test_jede_route_die_einen_job_startet_traegt_den_namensraum_riegel():
             f"den Job aber schon in Zeile {min(start)} — der Riegel kommt zu spaet.")
         # ... und auf dem PROJEKTNAMEN. Auf ein anderes Argument gelegt blieb der Waechter
         # ebenfalls gruen (F2, Probe M-F).
-        argumente = [k.args[0] for k in knoten(nach_namen[n], tief=False)
-                     if isinstance(k, ast.Call) and isinstance(k.func, ast.Name)
-                     and k.func.id == "_sicherer_projektname" and k.args]
+        argumente = [k.args[0] for k in rufe if k.args]
         assert any(isinstance(a, ast.Name) and a.id == "project" for a in argumente), (
             f"app.py:{n} ruft _sicherer_projektname, aber nicht auf `project` — der Riegel "
             f"prueft dann einen anderen Wert als den, unter dem der Lauf druckt.")
