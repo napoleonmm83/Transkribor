@@ -820,13 +820,28 @@ def test_jede_route_die_einen_job_startet_traegt_den_namensraum_riegel():
     for p in sorted(pathlib.Path(__file__).parent.glob("*.py")):
         if p.name in ("app.py", "jobs.py", "conftest.py") or p.name.startswith("test_"):
             continue
-        for k in ast.walk(ast.parse(p.read_text(encoding="utf-8"))):
-            if (isinstance(k, ast.Attribute)
-                    and ist_start(punktname(k))):
+        fremdbaum = ast.parse(p.read_text(encoding="utf-8"))
+        # Erst nachsehen, unter WELCHEM Namen das Modul dort gebunden ist. Auf `jobs.start`
+        # zu vergleichen war zu wenig: `from webtool import jobs as j` + `j.start(…)` ging
+        # still durch (Bot-Befund an diesem PR). In `app.py` ist die Alias-Form durch die
+        # Zusicherungen oben verboten — im Fremdmodul nicht, dort muss aufgeloest werden.
+        alias = set()
+        for k in ast.walk(fremdbaum):
+            if isinstance(k, ast.Import):
+                for a in k.names:
+                    if a.name.split(".")[-1] == "jobs":
+                        alias.add((a.asname or a.name).split(".")[0])
+            elif isinstance(k, ast.ImportFrom):
+                for a in k.names:
+                    if a.name == "jobs":
+                        alias.add(a.asname or a.name)
+                    elif ((k.module or "").split(".")[-1] == "jobs"
+                            and a.name in ("start", "request")):
+                        fremd.append(f"{p.name}:{k.lineno} (Direktimport {a.name})")
+        for k in ast.walk(fremdbaum):
+            teile = punktname(k).split(".") if isinstance(k, ast.Attribute) else []
+            if len(teile) >= 2 and teile[0] in alias and teile[-1] in ("start", "request"):
                 fremd.append(f"{p.name}:{k.lineno}")
-            elif (isinstance(k, ast.ImportFrom) and (k.module or "").endswith("jobs")
-                    and any(a.name in ("start", "request") for a in k.names)):
-                fremd.append(f"{p.name}:{k.lineno} (Import)")
     assert not fremd, (
         f"{fremd} startet Jobs an app.py vorbei — dieser Waechter liest nur app.py und "
         f"pruefte den Namensraum-Riegel dort nicht.")
@@ -872,7 +887,24 @@ def test_jede_route_die_einen_job_startet_traegt_den_namensraum_riegel():
                                                      # Name-Knoten — sonst falsch-rot
         return raus
 
-    def bezuege(fn) -> list:
+    def knoten(fn, tief: bool):
+        """Alle Knoten unter `fn` — mit `tief=False` OHNE verschachtelte Bereiche.
+
+        Die beiden Seiten brauchen VERSCHIEDENE Tiefen, und das ist der ganze Punkt
+        (Bot-Befund an diesem PR): ein START zaehlt auch aus einem Lambda — `fetch_urls`
+        reicht seinen Nachlauf als `then=lambda: _start_transcribe(…)` weiter. Ein RIEGEL
+        in einer inneren Funktion laeuft dagegen nie, wenn die Route ihn nicht ruft; als
+        Schutz gezaehlt waere er ein gruener Waechter ueber einer offenen Tuer.
+        """
+        stapel = list(ast.iter_child_nodes(fn))
+        while stapel:
+            k = stapel.pop()
+            yield k
+            if tief or not isinstance(k, (ast.FunctionDef, ast.AsyncFunctionDef,
+                                          ast.Lambda, ast.ClassDef)):
+                stapel.extend(ast.iter_child_nodes(k))
+
+    def bezuege(fn, tief: bool = True) -> list:
         """(Name, Zeile) jeder Nennung — Aufruf ODER blosse Referenz.
 
         Die Referenz zaehlt mit, weil sie genauso einen Job startet: `run_in_threadpool(
@@ -885,7 +917,7 @@ def test_jede_route_die_einen_job_startet_traegt_den_namensraum_riegel():
         """
         gebunden = lokale(fn)
         raus = []
-        for k in ast.walk(fn):
+        for k in knoten(fn, tief):
             if isinstance(k, ast.Attribute):
                 raus.append((punktname(k), k.lineno))
             elif (isinstance(k, ast.Name) and isinstance(k.ctx, ast.Load)
@@ -923,8 +955,11 @@ def test_jede_route_die_einen_job_startet_traegt_den_namensraum_riegel():
     assert {"transcribe", "correct", "correct_file", "retranscribe_file",
             "fetch_urls", "upload_audio"} <= routen, sorted(routen)
 
+    # Der Riegel zaehlt nur aus dem RUMPF der Route (`tief=False`), der Start aus allem
+    # (eine Lambda startet genauso). Siehe `knoten`.
+    bezug_rumpf = {f.name: bezuege(f, tief=False) for f in funktionen}
     for n in sorted(routen):
-        riegel = [z for b, z in bezug[n] if b == "_sicherer_projektname"]
+        riegel = [z for b, z in bezug_rumpf[n] if b == "_sicherer_projektname"]
         start = [z for b, z in bezug[n] if ist_start(b) or b in starter - {n}]
         assert riegel, (
             f"app.py:{n} startet einen Job, ruft aber keinen _sicherer_projektname — ein "
@@ -937,7 +972,7 @@ def test_jede_route_die_einen_job_startet_traegt_den_namensraum_riegel():
             f"den Job aber schon in Zeile {min(start)} — der Riegel kommt zu spaet.")
         # ... und auf dem PROJEKTNAMEN. Auf ein anderes Argument gelegt blieb der Waechter
         # ebenfalls gruen (F2, Probe M-F).
-        argumente = [k.args[0] for k in ast.walk(nach_namen[n])
+        argumente = [k.args[0] for k in knoten(nach_namen[n], tief=False)
                      if isinstance(k, ast.Call) and isinstance(k.func, ast.Name)
                      and k.func.id == "_sicherer_projektname" and k.args]
         assert any(isinstance(a, ast.Name) and a.id == "project" for a in argumente), (
