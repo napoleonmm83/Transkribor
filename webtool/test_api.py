@@ -1299,9 +1299,16 @@ def test_start_stoesst_die_ytdlp_kalenderpruefung_an(monkeypatch, tmp_path):
     Profil des Entwicklers. Heute folgenlos (`_lauf["laeuft"]` ist False, der Aufruf schliesst
     kurz), aber es ist dieselbe Familie, die bei #253 einen echten pip-Lauf gegen die
     Entwickler-venv gekostet hat: ein Test, der den Lifespan betritt, gehoert isoliert.
+
+    **`TRANSKRIBOR_PROJEKTE` ist seit #459 aus demselben Grund Pflicht — und diesmal LOESCHT
+    es.** Der Lifespan stoesst den `.weg`-Aufraeumlauf an; ohne Umlenkung faellt
+    `paths.projekte_root()` auf `<repo>/projekte` zurueck, und der Faden entfernte dort jeden
+    Rest aelter als 10 Minuten. Heute liegt in den echten Projekten keiner — also gruen, bis
+    er einmal trifft. Genau der Befund, den der kalte Plan-Reviewer aufgemacht hat.
     """
     from webtool import app as appmod
     monkeypatch.setenv("TRANSKRIBOR_SETTINGS", str(tmp_path / "settings.json"))
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path / "projekte"))
     gerufen = []
     monkeypatch.setattr(appmod.ytdlp_update, "beim_start",
                         lambda: gerufen.append(True) or False)
@@ -3702,3 +3709,30 @@ def test_aufraeumlauf_liest_die_wurzel_aus_dem_argument_nicht_aus_der_umgebung(t
     monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path / "ganz-woanders"))
 
     assert appmod._weg_reste_aufraeumen(str(tmp_path)) == 1, "die Umgebung hat gewonnen"
+
+
+def test_der_serverstart_raeumt_liegengebliebene_reste_weg(monkeypatch, tmp_path):
+    """Die VERDRAHTUNG, nicht die Regel — die steht in den Tests darueber.
+
+    Ohne diesen Test liesse sich `_weg_aufraeumen_starten()` aus dem Lifespan ersatzlos
+    streichen: die Funktion bliebe getestet, der Aufraeumlauf faende nie statt, und keine
+    Zusicherung waere rot. Dieselbe Luecke, die #488 an einem optionalen Prop gekostet hat.
+
+    Die `client`-Fixture wird bewusst NICHT genommen (sie betritt den Lifespan gar nicht — sie
+    yieldet `TestClient(app)` ohne `with`); dafuer wird hier beides umgebogen, was der Start
+    anfasst."""
+    from webtool import app as appmod
+    monkeypatch.setenv("TRANSKRIBOR_SETTINGS", str(tmp_path / "settings.json"))
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    monkeypatch.setattr(appmod.ytdlp_update, "beim_start", lambda: False)
+    alt = _weg_datei(tmp_path / "Demo" / "transkripte", "S1.json", 3600)
+    frisch = _weg_datei(tmp_path / "Demo" / "transkripte", "S2.json", 5)
+
+    with TestClient(appmod.app):
+        pass
+    assert appmod._weg_faden is not None, "der Start hat gar keinen Aufraeumfaden angestossen"
+    appmod._weg_faden.join(10.0)
+    assert not appmod._weg_faden.is_alive(), "der Aufraeumfaden lief nach 10 s noch"
+
+    assert not alt.exists(), "der alte Rest ueberlebte den Serverstart"
+    assert frisch.exists(), "eine frische Reservierung wurde vom Serverstart weggeraeumt"
