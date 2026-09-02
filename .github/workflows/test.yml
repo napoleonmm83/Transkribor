@@ -88,6 +88,18 @@ jobs:
       # Vorbild scripts/versionshoehe.test.sh im Job electron.
       - run: python scripts/test_osv_freeze.py
 
+      # Derselbe Grund fuer den zweiten scripts/-Waechter — aber NICHT dieselbe Form.
+      # test_weg_benchmark.py ist pytest-Stil (tmp_path-Fixture, kein Hauptblock): direkt mit
+      # python aufgerufen wie der Nachbar darueber laeuft er mit Exitcode 0 und NULL Tests
+      # durch — nachgestellt, nicht vermutet. Er kam mit #508 ins Repo und lief bis hierher
+      # in KEINEM Workflow; ein Waechter ohne Aufrufweg ist keiner.
+      #
+      # Er braucht den Repo-Stamm als Arbeitsverzeichnis (`import webtool.app` fuer
+      # `_weg_alter`) und die pip-Zeile oben. Ohne `if`, wie der osv-Nachbar: die drei Faelle
+      # dauern zusammen 8,5 s (auf Windows gemessen), und .weg-Reste sind gerade der
+      # Windows-Fall aus #459.
+      - run: python -m pytest scripts/test_weg_benchmark.py -q
+
       # `build` muss explizit dastehen: der Ordnername steht in pytests
       # norecursedirs, ein blankes `pytest` sammelt build/test_bilder.py NIE.
       # Als Pfadangabe wird die Regel ausgehebelt. Genau dafuer kommt der Test
