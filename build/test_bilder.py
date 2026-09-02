@@ -7,6 +7,7 @@ eine 32-bit-BMP oder eine um einen Pixel falsche Groesse nimmt NSIS wortlos hin
 und zeigt Muell.
 """
 import struct
+import zlib
 from pathlib import Path
 
 BUILD = Path(__file__).resolve().parent
@@ -18,6 +19,63 @@ def png_masse(pfad):
     kopf = pfad.read_bytes()[:24]
     assert kopf[:8] == b"\x89PNG\r\n\x1a\n", f"{pfad.name} ist kein PNG"
     return struct.unpack(">II", kopf[16:24])
+
+
+def png_alpha_rand(pfad):
+    """Wie breit ist der vollstaendig durchsichtige Rand rundum? — ohne PIL.
+
+    Eine reine Masspruefung genuegt hier NICHT: das fehlerhafte Icon aus #503 war
+    ebenfalls 1024x1024, es fuellte die Leinwand nur randlos. Geprueft werden muss
+    der Alphakanal, und dafuer fuehrt kein Weg an den Bilddaten vorbei.
+
+    Die Datei parst Kopfdaten ohnehin von Hand (IHDR, DIB) — das hier ist derselbe
+    Griff eine Ebene tiefer: IDAT zusammensetzen, entpacken, die PNG-Zeilenfilter
+    zuruecknehmen (Spezifikation Abschnitt 9.2). Nur RGBA/8 bit, mehr liefert
+    marke.py nicht.
+    """
+    roh = pfad.read_bytes()
+    breite, hoehe = struct.unpack(">II", roh[16:24])
+    tiefe, farbtyp = roh[24], roh[25]
+    assert (tiefe, farbtyp) == (8, 6), f"{pfad.name}: erwartet 8-bit RGBA, ist {tiefe}/{farbtyp}"
+
+    # Chunks durchlaufen und alle IDAT einsammeln — Pillow schreibt oft mehrere.
+    daten, pos = bytearray(), 8
+    while pos < len(roh):
+        laenge, typ = struct.unpack(">I", roh[pos:pos + 4])[0], roh[pos + 4:pos + 8]
+        if typ == b"IDAT":
+            daten += roh[pos + 8:pos + 8 + laenge]
+        pos += 12 + laenge                      # Laenge + Typ + Daten + CRC
+    roh_zeilen = zlib.decompress(bytes(daten))
+
+    def paeth(a, b, c):
+        p = a + b - c
+        pa, pb, pc = abs(p - a), abs(p - b), abs(p - c)
+        return a if pa <= pb and pa <= pc else (b if pb <= pc else c)
+
+    schritt = breite * 4                        # RGBA
+    vorige, alpha = bytearray(schritt), []
+    for y in range(hoehe):
+        anfang = y * (schritt + 1)
+        filt, zeile = roh_zeilen[anfang], bytearray(roh_zeilen[anfang + 1:anfang + 1 + schritt])
+        for i in range(schritt):
+            a = zeile[i - 4] if i >= 4 else 0
+            b = vorige[i]
+            c = vorige[i - 4] if i >= 4 else 0
+            if filt == 1:   zeile[i] = (zeile[i] + a) & 0xFF
+            elif filt == 2: zeile[i] = (zeile[i] + b) & 0xFF
+            elif filt == 3: zeile[i] = (zeile[i] + (a + b) // 2) & 0xFF
+            elif filt == 4: zeile[i] = (zeile[i] + paeth(a, b, c)) & 0xFF
+        vorige = zeile
+        alpha.append(zeile[3::4])
+
+    def leer(werte):
+        return not any(werte)
+
+    oben = next(y for y in range(hoehe) if not leer(alpha[y]))
+    unten = hoehe - 1 - next(y for y in range(hoehe - 1, -1, -1) if not leer(alpha[y]))
+    links = next(x for x in range(breite) if any(z[x] for z in alpha))
+    rechts = breite - 1 - next(x for x in range(breite - 1, -1, -1) if any(z[x] for z in alpha))
+    return oben, links, unten, rechts
 
 
 def bmp_masse(pfad):
@@ -32,6 +90,23 @@ def bmp_masse(pfad):
 def test_app_icon_ist_1024_quadratisch():
     # electron-builder leitet .ico/.icns/Linux-Groessen hieraus ab; kleiner waere unscharf.
     assert png_masse(BUILD / "icon.png") == (1024, 1024)
+
+
+def test_mac_icon_hat_apples_rand():
+    # macOS setzt den Koerper auf 824x824 mittig in 1024x1024. Randlos erscheint das
+    # Symbol im Dock um 1024/824 = 1,243 groesser als jedes Nachbarsymbol (#503).
+    # Geprueft wird der Alphakanal, nicht das Mass: das fehlerhafte Icon war ebenfalls
+    # 1024x1024 — eine Masspruefung allein waere hier blind.
+    assert png_masse(BUILD / "icon-mac.png") == (1024, 1024)
+    assert png_alpha_rand(BUILD / "icon-mac.png") == (100, 100, 100, 100)
+
+
+def test_windows_und_linux_icon_bleibt_randlos():
+    # Gegenrichtung: dort gibt es Apples Raster nicht, dort ist randlos richtig. Ein Fix,
+    # der icon.png mitbepolstert, macht die beiden anderen Plattformen kaputt — deshalb
+    # zwei Dateien und dieser Waechter.
+    assert png_masse(BUILD / "icon.png") == (1024, 1024)
+    assert png_alpha_rand(BUILD / "icon.png") == (0, 0, 0, 0)
 
 
 def test_zeichen_fuer_das_einrichtungsfenster():
