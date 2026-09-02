@@ -97,7 +97,17 @@ def _weg_aufraeumen_starten() -> "threading.Thread":
     root = paths.projekte_root()
 
     def lauf() -> None:
-        n = _weg_reste_aufraeumen(root)
+        # Der Rumpf faengt ALLES, und das ist die Bedingung dafuer, dass er hier stehen darf:
+        # ein Wurf im Daemon-Faden endet als Traceback ohne Adressaten, und der Rest des
+        # Durchgangs — alle weiteren Projekte dieses Starts — faellt still aus. `os.scandir`
+        # kann auf einer Netzfreigabe werfen, und `_weg_alter` bekommt seinen Namen vom
+        # Dateisystem, nicht von uns. Dieselbe Regel wie `beim_start()`: ein kaputter
+        # Nebenlauf laesst den Server trotzdem hochkommen.
+        try:
+            n = _weg_reste_aufraeumen(root)
+        except Exception as e:                                    # noqa: BLE001 — siehe oben
+            print(f"[aufraeumen] uebersprungen ({type(e).__name__}: {e})", flush=True)
+            return
         if n:
             print(f"[aufraeumen] {n} liegengebliebene Datei(en) aus abgebrochenen "
                   f"Loeschvorgaengen entfernt", flush=True)
@@ -715,7 +725,7 @@ def _umbenennen_oder_keines(paare: list, base: str) -> None:
             # Lehre schon einmal bezahlt (`_dateistand`: „`except OSError` deckte auch
             # `PermissionError`, `EIO` und einen zu langen Pfad").
             #
-            # Konkret hinge sonst genau EIN Fall dauerhaft: die Reservierung haengt 13 Zeichen an
+            # Konkret hinge sonst genau EIN Fall dauerhaft: die Reservierung haengt 24 Zeichen an
             # (`.<8hex>.weg`), eine Datei nahe der 260er-Pfadgrenze liess sich vorher loeschen und
             # scheiterte danach bei JEDEM Versuch — mit dem Rat zu warten. Das waere die einzige
             # Stelle, an der dieser Fix etwas WEGNIMMT, was vorher ging.
@@ -740,7 +750,7 @@ def _umbenennen_oder_keines(paare: list, base: str) -> None:
 #
 # Warum 123 hier „zu lang" heisst und nicht „ungueltiges Zeichen", obwohl der Code beides deckt:
 # die Quellpfade kommen aus einem `glob` ueber vorhandene Dateien, sind also gueltige Namen;
-# unbrauchbar wird erst das um 13 Zeichen laengere Ziel. Ein anderer Weg zu 123 existiert an
+# unbrauchbar wird erst das um 24 Zeichen laengere Ziel. Ein anderer Weg zu 123 existiert an
 # dieser Stelle nicht.
 _ZU_LANG_WINERROR = (123, 206)
 
@@ -842,15 +852,25 @@ def _weg_reste_aufraeumen(root: str, max_alter: float = _WEG_REST_ALTER) -> int:
     einem Hintergrundfaden: laeuft der nach einem `monkeypatch`-Teardown noch, zeigte sein
     naechster Aufruf auf die ECHTE Projektwurzel. Genau dieser Weg war im Plan-Review der
     schwerste Befund — der eine Test, der den Lifespan betritt
-    (`test_start_stoesst_die_ytdlp_kalenderpruefung_an`), nimmt die `client`-Fixture bewusst
-    NICHT und setzt `TRANSKRIBOR_PROJEKTE` nicht; die Wurzel faellt dort auf `<repo>/projekte`
+    (`test_start_stoesst_die_ytdlp_kalenderpruefung_an`), nahm die `client`-Fixture bewusst
+    NICHT und setzte `TRANSKRIBOR_PROJEKTE` nicht; die Wurzel fiel dort auf `<repo>/projekte`
     zurueck. Ein Loeschlauf in echten Daten, gruen bis er einmal trifft. Einmal aufgeloest und
     weitergereicht ist der Faden von der Umgebung entkoppelt.
+    Der Fall selbst ist repariert (der Test setzt die Wurzel), die KLASSE seit #459 auch:
+    `webtool/conftest.py` legt sie fuer JEDEN Test auf ein Wegwerf-Verzeichnis, damit der
+    naechste Lifespan-Test von sich aus sicher ist statt sich erinnern zu muessen.
 
-    WAS ER ANFASST: ausschliesslich Namen auf `.weg` in `transkripte/` und `audio/` je Projekt.
-    Was aelter ist als `max_alter`, faellt weg; ein Name ohne lesbaren Stempel (`_weg_alter`
-    liefert None) gilt als ALT — er stammt aus der Zeit vor dem Stempel und kann keine laufende
-    Reservierung sein.
+    WAS ER ANFASST: ausschliesslich Namen auf `.weg` in `transkripte/`, `audio/` und im
+    Projektstamm. Was aelter ist als `max_alter`, faellt weg; ein Name ohne lesbaren Stempel
+    (`_weg_alter` liefert None) gilt als ALT — er stammt aus der Zeit vor dem Stempel und kann
+    keine laufende Reservierung sein.
+
+    GETRAGENE GRENZE, hergeleitet und benannt: der Stempel vergleicht die Uhr des SCHREIBERS
+    mit der des LESERS. Liegt die Projektwurzel auf einer Netzfreigabe und laufen zwei Rechner
+    mit ueber zehn Minuten Uhrversatz darauf, kann dieser Lauf eine noch laufende Reservierung
+    wegnehmen. Trifft es den Ruecklauf, endet das in einem geschluckten `FileNotFoundError`
+    und der Nutzer sieht 409 „bitte warten" fuer eine Datei, die weg ist. Nicht gemessen —
+    zwei Rechner auf einer Freigabe sind hier kein bekannter Aufbau.
 
     ZWEI ROLLEN, EINE REGEL (Entscheidung Marcus, 2026-09-02): der Name traegt nicht nur
     Reservierungen, sondern auch die Sicherungskopie aus dem Ruecklauf von
@@ -889,7 +909,19 @@ def _weg_reste_aufraeumen(root: str, max_alter: float = _WEG_REST_ALTER) -> int:
             for p in glob.glob(os.path.join(glob.escape(os.path.join(eintrag.path, unter)),
                                             "*.weg")):
                 alter = _weg_alter(p)
-                if alter is not None and alter < max_alter:
+                # `0 <= alter` ist kein Feinschliff: ein Stempel in der ZUKUNFT ergibt ein
+                # negatives Alter, und ohne die Untergrenze waere die Datei DAUERHAFT immun —
+                # jeder kuenftige Start uebersprænge sie, also genau das Leck, das #459
+                # schliessen soll, nur festgeschrieben. Erreichbar ohne fremdes Zutun: die
+                # RTC steht beim Hochfahren vor, NTP korrigiert danach nach unten; ein
+                # ausgesetzter Laptop oder eine VM tut dasselbe. Gemessen vom
+                # Was-erlaubt-Reviewer: zwei Laeufe hintereinander, beide Male blieb sie liegen.
+                #
+                # Ein unglaubwuerdiger Stempel schuetzt also NICHT — dieselbe Richtung wie
+                # `None` (kein Stempel) eine Zeile weiter oben. Der Preis steht im Docstring:
+                # schreibt ein zweiter Rechner mit vorlaufender Uhr auf dieselbe Freigabe, kann
+                # das eine laufende Reservierung treffen. Das ist die seltenere Lage.
+                if alter is not None and 0 <= alter < max_alter:
                     continue                  # koennte eine laufende Reservierung sein
                 with suppress(OSError):
                     os.remove(p)
@@ -956,7 +988,10 @@ def _datei_weg(project: str, base: str, mit_audio: bool) -> int:
     except OSError as e:
         if not _name_zu_lang(e):
             raise
-        # Der Suffix haengt 13 Zeichen an; nahe der 260er-Pfadgrenze kippt damit das
+        # Der Suffix haengt 24 Zeichen an (gemessen: '.1788314009.9e5252e2.weg'; seit #459
+        # traegt er den Zeitstempel, vorher waren es 13). Der Ausweichpfad hier oeffnet damit
+        # 11 Zeichen FRUEHER als bisher — benannt, weil an ihm die Alles-oder-nichts-Zusage
+        # haengt. Nahe der 260er-Pfadgrenze kippt damit das
         # `os.rename`, waehrend `os.remove` noch ginge — vor diesem Fix liess sich die Aufnahme
         # also loeschen und danach nie wieder. Deshalb hier direkt loeschen.
         # GETRAGENER PREIS, benannt statt versteckt: fuer diesen einen Fall degradiert die

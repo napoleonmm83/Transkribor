@@ -527,8 +527,10 @@ Transkribor löscht nichts von allein — mit einer Ausnahme, die **ab der näch
 gilt und nur Dinge betrifft, die es aus deiner Sicht schon nicht mehr gibt: Bricht ein Löschen
 mittendrin ab (ein Virenscanner greift zu, der Rechner geht aus), kann ein unsichtbarer Rest
 der bereits gelöschten Aufnahme liegen bleiben und Platz belegen — bei Interviewton schnell
-hunderte Megabyte. Beim nächsten Start räumt Transkribor solche Reste weg. Nichts, was in
-deiner Dateiliste steht, ist davon betroffen.
+hunderte Megabyte. Transkribor räumt solche Reste beim Start weg, sobald sie ein paar Minuten
+alt sind; startest du direkt nach dem Abbruch neu, bleiben sie also noch einen Start liegen.
+Das ist Absicht: ein Rest, der gerade erst entstanden ist, könnte zu einem Löschvorgang
+gehören, der noch läuft. Nichts, was in deiner Dateiliste steht, ist davon betroffen.
 
 Transkript und Korrekturen bleiben erhalten, bis du eine
 Aufnahme **neu transkribierst** oder ihre **Sprache änderst**: dann wird das Transkript aus

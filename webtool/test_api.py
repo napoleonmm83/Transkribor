@@ -3104,7 +3104,21 @@ def test_ruecklauf_legt_beim_umbenennen_unsichtbar_beiseite(client, monkeypatch,
     # Vorbedingung: der fremde Schreibvorgang steht noch — sonst misst der Test den anderen Zweig.
     assert "frisch" in (tdir / "S1.edit.json").read_text(encoding="utf-8")
     assert not any(n.startswith("S1_neu") for n in namen), f"sichtbare halbe Aufnahme: {namen}"
-    assert any(n.endswith(".weg") for n in namen), f"nicht beiseitegelegt: {namen}"
+    beiseite = [n for n in namen if n.endswith(".weg")]
+    assert beiseite, f"nicht beiseitegelegt: {namen}"
+    # Und der Name kommt aus DERSELBEN Quelle wie die Reservierung (#459) — hier gemessen am
+    # VERHALTEN, nicht am Quelltext. Der erste Versuch zaehlte `_weg_suffix()`-Vorkommen im
+    # Modul und war VACUOUS: die `def`-Zeile zaehlt mit, `>= 2` hielt also schon mit einem
+    # einzigen Aufrufer. Der gegnerische Pruefer hat die Mutation gefahren (Ruecklauf mit
+    # eigenem Literal) und den Test gruen gesehen.
+    #
+    # Ohne den Stempel faende der Aufraeumlauf diese Datei zwar auch (kein Stempel = alt),
+    # aber sofort statt nach der Frist — die Sicherungskopie waere beim naechsten Start weg,
+    # egal wie frisch sie ist.
+    import webtool.app as _appmod
+    alter = _appmod._weg_alter(beiseite[0])
+    assert alter is not None, f"der Ruecklauf baut den Namen selbst: {beiseite[0]}"
+    assert alter < 60, f"Stempel unplausibel alt: {alter}"
 
 
 # `glob.glob` liefert laut Doku eine BELIEBIGE Reihenfolge; gemessen liefert ext4 die
@@ -3618,18 +3632,21 @@ def test_reservierungsname_traegt_einen_lesbaren_zeitstempel():
     assert appmod._weg_alter("x.json" + s) < 5.0, "frisch gebauter Suffix gilt als alt"
 
 
-def test_beide_erzeuger_gehen_ueber_dieselbe_quelle():
+def test_es_gibt_nur_EINEN_erzeuger_des_weg_namens():
     """Der `.weg`-Name wird an ZWEI Stellen vergeben — Reservierung in `_datei_weg` und
     Beiseitelegen im Ruecklauf von `_umbenennen_oder_keines`. Zwei Literale liefen beim
     naechsten Umbau auseinander, und der Aufraeumlauf kennte eine der Formen nicht.
 
-    Gemessen am Quelltext, weil die Alternative waere, beide Pfade einzeln auszuloesen und aus
-    dem Ergebnis auf die Bauform zu schliessen — das misst dann die Bauform nicht."""
+    Hier steht nur noch die EINE Zusicherung, die am Quelltext ueberhaupt scharf ist: es gibt
+    genau einen Zufallserzeuger. Die zweite („beide Aufrufer nutzen die Quelle") war VACUOUS —
+    `count("_weg_suffix()")` zaehlt die `def`-Zeile mit, `>= 2` hielt also schon mit einem
+    einzigen Aufrufer, und die Mutation „Ruecklauf mit eigenem Literal" blieb gruen
+    (gegnerischer Pruefer). Den Ruecklauf misst jetzt
+    `test_ruecklauf_legt_beim_umbenennen_unsichtbar_beiseite` am VERHALTEN: der beiseitegelegte
+    Name muss einen lesbaren Stempel tragen."""
     import inspect
     import webtool.app as appmod
-    quelle = inspect.getsource(appmod)
-    assert quelle.count("uuid.uuid4") == 1, "ein zweiter uuid-Erzeuger ist zurueck"
-    assert quelle.count("_weg_suffix()") >= 2, "nicht beide Erzeuger nutzen die Quelle"
+    assert inspect.getsource(appmod).count("uuid.uuid4") == 1, "ein zweiter Erzeuger ist zurueck"
 
 
 def test_weg_alter_liest_rechtsverankert_und_ueberlebt_das_umbenennen():
@@ -3756,6 +3773,12 @@ def test_der_serverstart_raeumt_liegengebliebene_reste_weg(monkeypatch, tmp_path
     monkeypatch.setenv("TRANSKRIBOR_SETTINGS", str(tmp_path / "settings.json"))
     monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
     monkeypatch.setattr(appmod.ytdlp_update, "beim_start", lambda: False)
+    # `_weg_faden` ist MODULZUSTAND und ueberlebt fremde Tests. Ohne das Zuruecksetzen waren
+    # die beiden Zusicherungen darunter unter der Mutation „Aufruf aus dem Lifespan entfernt"
+    # blind — sie sahen den Faden eines frueheren Lifespan-Eintritts und blieben gruen
+    # (Was-erlaubt-Linse). Rot wurde nur die Datei-Zusicherung; der Test war also schaerfer,
+    # als seine Zwischenschritte belegten.
+    monkeypatch.setattr(appmod, "_weg_faden", None)
     alt = _weg_datei(tmp_path / "Demo" / "transkripte", "S1.json", 3600)
     frisch = _weg_datei(tmp_path / "Demo" / "transkripte", "S2.json", 5)
 
@@ -3834,3 +3857,20 @@ def test_weg_alter_faellt_nicht_ueber_hochgestellte_ziffern():
     # Die Praemisse selbst, sonst prueft der Test eine Falle, die es vielleicht gar nicht gibt:
     assert "²²".isdigit() and not "²²".isdecimal(), "Praemisse der Falle stimmt nicht mehr"
     assert appmod._weg_alter("S1.json.²².abc12345.weg") is None
+
+
+def test_ein_stempel_in_der_zukunft_macht_einen_rest_nicht_unsterblich(tmp_path):
+    """Der Fund der Was-erlaubt-Linse, und er ist der teuerste dieses PRs: ein Stempel in der
+    ZUKUNFT ergibt ein negatives Alter. Ohne die Untergrenze `0 <=` waere `alter < max_alter`
+    wahr, die Datei also DAUERHAFT immun — genau das Leck, das #459 schliessen soll, nur im
+    Namen festgeschrieben.
+
+    Erreichbar ohne fremdes Zutun: die RTC steht beim Hochfahren vor, NTP korrigiert danach
+    nach unten; ein ausgesetzter Laptop oder eine VM tut dasselbe. Ein unglaubwuerdiger
+    Stempel schuetzt deshalb NICHT — dieselbe Richtung wie ein fehlender."""
+    import webtool.app as appmod
+    zukunft = _weg_datei(tmp_path / "Demo" / "transkripte", "S1.json", -3600)
+
+    assert appmod._weg_alter(str(zukunft)) < 0, "Praemisse: der Stempel liegt in der Zukunft"
+    assert appmod._weg_reste_aufraeumen(str(tmp_path)) == 1
+    assert not zukunft.exists(), "ein Zukunfts-Stempel machte den Rest unsterblich"
