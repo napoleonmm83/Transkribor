@@ -37,6 +37,19 @@ test('die uebrigen Pfade des Servers bleiben gesetzt', () => {
   }
 })
 
+test('der Server schreibt keinen Bytecode neben die Anwendung (#505)', () => {
+  // Gemessen am gebauten Paket, nicht hergeleitet: eine frisch nach /Applications
+  // installierte .app hatte nach EINEM Start 21 .pyc in Contents/Resources/py und
+  // `codesign --verify --deep --strict` sagte "a sealed resource is missing or invalid".
+  // Mit dieser Variablen: 0 Dateien, Signatur gueltig.
+  //
+  // Der Test haengt an `serverEnv`, weil dort die eine Stelle ist, die zaehlt: jobs.py
+  // startet transcribe.py und die Korrektur mit {**os.environ}, erbt die Umgebung des
+  // Servers also — ein Unterprozess, der die Variable NICHT erbt, schriebe den Cache
+  // weiter ins Bundle und braeche das Siegel genauso.
+  assert.strictEqual(serverEnv('exe').PYTHONDONTWRITEBYTECODE, '1')
+})
+
 // ── projektePfad (#218) ────────────────────────────────────────────────────────
 // Gegen einen ECHTEN lokalen HTTP-Server, nicht gegen eine Attrappe von `http`: die
 // Zusicherung ist „wir fragen den Server und glauben ihm", und dazu gehoert der Weg durch
