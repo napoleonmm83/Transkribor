@@ -42,6 +42,7 @@ hat. Lesbar, aber unschön — das ist Absicht.
 - Die Meldung beim Löschen einer laufenden Aufnahme spricht nicht mehr von „Transkription", wenn gerade korrigiert wird.
 - Wenn die App einen Link nicht öffnet, steht im Protokoll jetzt der richtige Grund — vorher hiess es immer „Schema nicht erlaubt", auch wenn das gar nicht stimmte.
 - Diese Meldung verstummt nicht mehr bis zum Neustart: bisher schwieg sie nach 20 abgelehnten Links, egal wie viel Zeit verging.
+- Auf dem Mac verändert Transkribor sich beim ersten Start nicht mehr selbst — bisher legte es dabei Zwischendateien in sein eigenes Programmpaket und machte dessen Signatur ungültig.
 
 ## v0.50.2 — 2026-09-01
 

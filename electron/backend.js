@@ -42,6 +42,21 @@ function serverEnv(exe = process.execPath) {
     ...S.spawnEnv(),
     PYTHONUNBUFFERED: '1',
     PYTHONIOENCODING: 'utf-8',
+    // Kein Bytecode neben die Anwendung (#505) — dieselbe Hausregel wie TRANSKRIBOR_PROJEKTE
+    // weiter unten, nur fuer das, was nicht wir schreiben, sondern der Interpreter. CPython
+    // legt `__pycache__` NEBEN die .py, gepackt also ins Bundle; auf macOS bricht das die
+    // Signatur, und eine frisch installierte .app ist nach dem ERSTEN Start nicht mehr
+    // siegelgueltig ("a sealed resource is missing or invalid"). Damit waere der Weg zur
+    // Notarisierung zu — und mit ihm der Auto-Update-Pfad, der auf dem Mac genau deshalb
+    // heute manuell ist (updater.js).
+    //
+    // Den Cache stattdessen wandern zu lassen (PYTHONPYCACHEPREFIX nach userData) ist der
+    // naheliegendere Weg und gemessen der schlechtere: er legt 457 Dateien Dauerzustand in
+    // userData an und kauft dafuer 39 ms je Start zurueck — weniger als die Streuung der
+    // Startzeit selbst. Der Grund steht in der Verteilung: von 16 235 .pyc liegen 16 214 in
+    // der venv, die schreibbar ist und die KEINER der beiden Wege anfasst. Im Bundle liegen
+    // 21 Module, und die kompiliert CPython in 39 ms.
+    PYTHONDONTWRITEBYTECODE: '1',
     // Die .env parst der Server selbst (webtool/settings.py:load_env) — hier nur noch
     // sagen, WO sie liegt: gepackt in userData, im Repo neben webtool.ps1.
     TRANSKRIBOR_ENV: P.envDatei,
