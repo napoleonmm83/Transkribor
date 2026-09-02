@@ -3736,3 +3736,40 @@ def test_der_serverstart_raeumt_liegengebliebene_reste_weg(monkeypatch, tmp_path
 
     assert not alt.exists(), "der alte Rest ueberlebte den Serverstart"
     assert frisch.exists(), "eine frische Reservierung wurde vom Serverstart weggeraeumt"
+
+
+def test_die_wurzel_wird_VOR_dem_faden_aufgeloest_nicht_darin(monkeypatch, tmp_path):
+    """Der eigentliche Schutz hinter #459s schwerstem Befund — und er war zuerst UNBEWACHT:
+    die Mutation „Wurzel im Faden statt davor" liess alle 254 Tests gruen.
+
+    Warum die naheliegenden Tests ihn nicht sehen: sie setzen die Umgebung einmal und aendern
+    sie nicht mehr — dann liefert `paths.projekte_root()` drinnen wie draussen dasselbe. Der
+    Unterschied zeigt sich nur, wenn sich die Umgebung ZWISCHEN Fadenstart und Fadenlauf
+    aendert, und genau das passiert im echten Fall: `monkeypatch` raeumt beim Teardown auf,
+    waehrend ein Daemon-Faden noch laeuft.
+
+    Deterministisch gemacht, indem der Faden NICHT gestartet, sondern sein Rumpf gefangen und
+    spaeter von Hand gerufen wird — mit einer echten Uhr waere der Test ein Rennen."""
+    from webtool import app as appmod
+    gefangen = {}
+
+    class FadenAttrappe:
+        def __init__(self, target, name=None, daemon=None):
+            gefangen["rumpf"] = target
+        def start(self):
+            pass                     # NICHT laufen lassen — der Rumpf kommt spaeter dran
+
+    monkeypatch.setattr(appmod.threading, "Thread", FadenAttrappe)
+    echt = tmp_path / "echt"
+    spaeter = tmp_path / "spaeter"
+    alt_echt = _weg_datei(echt / "Demo" / "transkripte", "S1.json", 3600)
+    alt_spaeter = _weg_datei(spaeter / "Demo" / "transkripte", "S1.json", 3600)
+
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(echt))
+    appmod._weg_aufraeumen_starten()                      # loest die Wurzel HIER auf
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(spaeter))
+    gefangen["rumpf"]()                                   # der Faden laeuft ERST JETZT
+
+    assert not alt_echt.exists(), "der Faden hat die Wurzel vom Startzeitpunkt nicht benutzt"
+    assert alt_spaeter.exists(), "der Faden hat die spaetere Umgebung gelesen — genau der Weg " \
+                                 "in die echten Projekte"
