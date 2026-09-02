@@ -526,9 +526,10 @@ Ordner dorthin kopierst.
 Transkribor löscht nichts von allein — mit einer Ausnahme, die **ab der nächsten Fassung**
 gilt und nur Dinge betrifft, die es aus deiner Sicht schon nicht mehr gibt: Bricht ein Löschen
 mittendrin ab (ein Virenscanner greift zu, der Rechner geht aus), kann ein unsichtbarer Rest
-der bereits gelöschten Aufnahme liegen bleiben und Platz belegen — bei Interviewton schnell
-hunderte Megabyte. Transkribor räumt solche Reste beim Start weg, sobald sie etwa zehn Minuten
-alt sind; startest du kurz nach dem Abbruch neu, bleiben sie also noch einen Start liegen.
+der bereits gelöschten Aufnahme liegen bleiben und Platz belegen — bei einer langen Aufnahme
+mehrere hundert Megabyte. Transkribor versucht, solche Reste beim Start freizugeben, sobald sie
+etwa zehn Minuten alt sind; startest du kurz nach dem Abbruch neu, bleiben sie also noch einen
+Start liegen.
 Das ist Absicht: ein Rest, der gerade erst entstanden ist, könnte zu einem Löschvorgang
 gehören, der noch läuft. Nichts, was in deiner Dateiliste steht, ist davon betroffen.
 
