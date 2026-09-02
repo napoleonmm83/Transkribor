@@ -3162,13 +3162,19 @@ def test_loeschen_sortiert_die_trefferliste_unabhaengig_vom_wirt(client, monkeyp
         f"nicht sortiert — die Reihenfolge kam vom Wirt: {reihenfolge}")
 
 
-def test_umbenennen_zaehlt_liegengebliebene_reste_nicht_mit(client, tmp_path):
-    """Ein `.weg`-Rest wandert MIT, zaehlt aber nicht als Datei der Aufnahme.
+def test_umbenennen_laesst_liegengebliebene_reste_liegen(client, tmp_path):
+    """Ein `.weg`-Rest wandert seit #459 NICHT mehr mit — und das ist die Ruecknahme einer
+    frueheren Entscheidung mit ihrer eigenen Begruendung.
 
-    Mitwandern ist Absicht und nicht der naheliegende Weg: nimmt man ihn aus der Liste, bleibt
-    er unter dem ALTEN Basisnamen liegen, waehrend die Aufnahme unter dem neuen weiterlebt — und
-    da den alten Namen niemand je wieder loescht, waere er dauerhaft verwaist (#459). `umbenannt`
-    nennt dem Nutzer trotzdem nur SEINE Dateien, dieselbe Regel wie `geloescht` in `_datei_weg`.
+    Er wanderte mit, WEIL er sonst unter dem alten Basisnamen dauerhaft verwaist waere
+    („niemand loescht den alten Namen je wieder"). Diese Praemisse hat der Aufraeumlauf
+    aufgehoben: er faengt Reste unabhaengig vom Basisnamen.
+
+    Und das Mitwandern war seitdem nicht nur ueberfluessig, sondern SCHAEDLICH: der Startlauf
+    loescht ohne die `sperre.datei` dieses Endpunkts. Raeumt er einen Rest zwischen Glob und
+    `os.rename` weg, wirft `_umbenennen_oder_keines` einen `FileNotFoundError` — kein
+    `PermissionError`, also 500 fuer ein Umbenennen, das ohne den Rest gelungen waere. Der
+    kalte Diff-Leser hat dieses Interleaving deterministisch erzwungen und den 500er gemessen.
     """
     tdir = tmp_path / "Demo" / "transkripte"
     (tdir / "S1.json.cafe1234.weg").write_text("{}", encoding="utf-8")
@@ -3176,9 +3182,34 @@ def test_umbenennen_zaehlt_liegengebliebene_reste_nicht_mit(client, tmp_path):
     r = client.post("/api/projects/Demo/files/S1/rename", json={"name": "S1_neu"})
 
     assert r.status_code == 200, r.text
-    assert r.json()["umbenannt"] == 2, r.json()          # S1.json + S1.mp3, NICHT der Rest
+    assert r.json()["umbenannt"] == 2, r.json()          # S1.json + S1.mp3
     namen = sorted(p.name for p in tdir.iterdir())
-    assert namen == ["S1_neu.json", "S1_neu.json.cafe1234.weg"], namen
+    assert namen == ["S1.json.cafe1234.weg", "S1_neu.json"], namen
+
+
+def test_ein_verschwindender_rest_kippt_das_umbenennen_nicht(client, tmp_path, monkeypatch):
+    """Die Zusicherung hinter der Aenderung darueber, am Mechanismus statt am Ergebnis: raeumt
+    der Aufraeumlauf mitten im Umbenennen einen Rest weg, darf das den Endpunkt nicht kippen.
+
+    Nachgestellt, indem der Rest zwischen Glob und `os.rename` verschwindet — genau das
+    Interleaving, das der kalte Diff-Leser erzwungen hat. Steht der Rest nicht mehr in
+    `paare`, ist es folgenlos; stuende er drin, gaebe es hier einen 500er."""
+    tdir = tmp_path / "Demo" / "transkripte"
+    rest = tdir / "S1.json.cafe1234.weg"
+    rest.write_text("{}", encoding="utf-8")
+    echt_rename = os.rename
+
+    def raeumt_dazwischen(src, dst):
+        if rest.exists():
+            rest.unlink()            # der Startfaden schlaegt zu
+        return echt_rename(src, dst)
+
+    monkeypatch.setattr(os, "rename", raeumt_dazwischen)
+
+    r = client.post("/api/projects/Demo/files/S1/rename", json={"name": "S1_neu"})
+
+    assert r.status_code == 200, f"ein weggeraeumter Rest hat das Umbenennen gekippt: {r.text}"
+    assert sorted(p.name for p in tdir.iterdir()) == ["S1_neu.json"]
 
 
 def test_loeschen_bei_zu_langem_pfad_loescht_direkt_statt_500(client, monkeypatch, tmp_path):
@@ -3773,3 +3804,33 @@ def test_die_wurzel_wird_VOR_dem_faden_aufgeloest_nicht_darin(monkeypatch, tmp_p
     assert not alt_echt.exists(), "der Faden hat die Wurzel vom Startzeitpunkt nicht benutzt"
     assert alt_spaeter.exists(), "der Faden hat die spaetere Umgebung gelesen — genau der Weg " \
                                  "in die echten Projekte"
+
+
+def test_aufraeumlauf_erreicht_auch_den_projektstamm(tmp_path):
+    """Ein von Hand angelegtes Projekt OHNE `audio/`-Unterordner: `paths.audio_dir` faellt dann
+    auf den PROJEKTSTAMM zurueck, `_datei_weg` legt seine Audio-Reservierung also dort ab.
+
+    Zwei Ebenen liessen dort ausgerechnet die groesste Datei der Aufnahme fuer immer liegen —
+    genau den Fall, den README und Release-Notiz als behoben melden. Gefunden vom kalten
+    Diff-Leser, der den liegenbleibenden Rest vorgefuehrt hat."""
+    import webtool.app as appmod
+    p = tmp_path / "Handgemacht"
+    p.mkdir()
+    (p / "transkripte").mkdir()
+    stamm = _weg_datei(p, "S1.mp3", 3600)
+
+    assert appmod._weg_reste_aufraeumen(str(tmp_path)) == 1
+    assert not stamm.exists(), "der Rest im Projektstamm blieb liegen"
+
+
+def test_weg_alter_faellt_nicht_ueber_hochgestellte_ziffern():
+    """`isdigit()` ist fuer hochgestellte Ziffern True, `int()` wirft darauf. Der Aufruf steht
+    AUSSERHALB des `suppress` — im Daemon-Faden waere das ein Traceback ohne Adressaten, und
+    der Aufraeumlauf braeche fuer alle restlichen Projekte dieses Starts ab.
+
+    Dieselbe Falle fuehrt `webtool/CLAUDE.md` fuer `ytdlp_update` bereits als Lehre
+    („`isdecimal()`, nicht `isdigit()`") — hier war sie zurueck."""
+    import webtool.app as appmod
+    # Die Praemisse selbst, sonst prueft der Test eine Falle, die es vielleicht gar nicht gibt:
+    assert "²²".isdigit() and not "²²".isdecimal(), "Praemisse der Falle stimmt nicht mehr"
+    assert appmod._weg_alter("S1.json.²².abc12345.weg") is None
