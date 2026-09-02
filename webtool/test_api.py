@@ -3562,3 +3562,143 @@ def test_windows_sonderzeichen_werden_nicht_als_zu_lang_beschriftet(client, monk
     detail = r.json()["detail"]
     assert "Windows" in detail and "?" in detail, detail
     assert "zu lang" not in detail, f"falsche Begruendung: {detail}"
+
+
+def test_reservierungsname_traegt_einen_lesbaren_zeitstempel():
+    """#459: der Aufraeumlauf muss frische Reservierungen von alten Resten unterscheiden — und
+    das Dateisystem gibt die Antwort nicht her. GEMESSEN auf beiden Wirten:
+
+        NTFS (Windows)   mtime geaendert = False   ctime geaendert = False
+        ext4 (WSL)       mtime geaendert = False   ctime geaendert = True
+
+    `os.rename` behaelt also die mtime, und `st_ctime` waere ein Sensor, der auf Linux liefe
+    und auf WINDOWS still ausfiele — auf der Hauptplattform. Deshalb steht die Zeit im NAMEN."""
+    import webtool.app as appmod
+    s = appmod._weg_suffix()
+    assert s.endswith(".weg")
+    assert appmod._weg_alter("x.json" + s) is not None
+    assert appmod._weg_alter("x.json" + s) < 5.0, "frisch gebauter Suffix gilt als alt"
+
+
+def test_beide_erzeuger_gehen_ueber_dieselbe_quelle():
+    """Der `.weg`-Name wird an ZWEI Stellen vergeben — Reservierung in `_datei_weg` und
+    Beiseitelegen im Ruecklauf von `_umbenennen_oder_keines`. Zwei Literale liefen beim
+    naechsten Umbau auseinander, und der Aufraeumlauf kennte eine der Formen nicht.
+
+    Gemessen am Quelltext, weil die Alternative waere, beide Pfade einzeln auszuloesen und aus
+    dem Ergebnis auf die Bauform zu schliessen — das misst dann die Bauform nicht."""
+    import inspect
+    import webtool.app as appmod
+    quelle = inspect.getsource(appmod)
+    assert quelle.count("uuid.uuid4") == 1, "ein zweiter uuid-Erzeuger ist zurueck"
+    assert quelle.count("_weg_suffix()") >= 2, "nicht beide Erzeuger nutzen die Quelle"
+
+
+def test_weg_alter_liest_rechtsverankert_und_ueberlebt_das_umbenennen():
+    """Ein Rest wandert beim Umbenennen der Aufnahme MIT und heisst danach
+    `Neu.json.<epoch>.<uuid>.weg`. Der Stempel muss von RECHTS gelesen werden — ein Basisname
+    darf beliebig viele Punkte tragen (`Meeting 2026.01.15`), und „der erste Zahlenabschnitt"
+    faende dort die falsche Zahl."""
+    import webtool.app as appmod
+    jetzt = 2_000_000_000.0
+    assert appmod._weg_alter(f"Meeting 2026.01.15.json.{int(jetzt) - 42}.abc12345.weg",
+                             jetzt=jetzt) == 42
+
+
+def test_ein_name_ohne_stempel_gilt_als_alt():
+    """Das ALTE Format (`<name>.<uuid>.weg`) hat an der Stempelstelle eine Dateiendung. Solche
+    Namen stammen zwangslaeufig aus der Zeit vor dieser Aenderung, koennen also keine laufende
+    Reservierung sein — `None` heisst fuer den Aufrufer ALT. Das ist die ganze Migration."""
+    import webtool.app as appmod
+    assert appmod._weg_alter("S1.mp3.deadbeef.weg") is None
+    assert appmod._weg_alter("S1.json.cafe1234.weg") is None
+
+
+def _weg_datei(ordner, name, alter_s):
+    """Legt einen `.weg`-Rest mit einem Stempel an, der `alter_s` Sekunden zurueckliegt."""
+    import time as _t
+    ordner.mkdir(parents=True, exist_ok=True)
+    p = ordner / f"{name}.{int(_t.time()) - int(alter_s)}.abc12345.weg"
+    p.write_bytes(b"x")
+    return p
+
+
+def test_aufraeumlauf_entfernt_alte_reste_und_laesst_frische_stehen(tmp_path):
+    """#459: der Kern in beiden Richtungen. Ohne die Gegenrichtung waere ein Lauf, der ALLES
+    wegraeumt, gruen — und der raeumte die Reservierung eines gerade laufenden Loeschvorgangs
+    mit weg, also genau den Schaden, gegen den die Frist da ist."""
+    import webtool.app as appmod
+    p = tmp_path / "Demo"
+    alt = _weg_datei(p / "transkripte", "S1.json", 3600)
+    frisch = _weg_datei(p / "transkripte", "S2.json", 5)
+    alt_audio = _weg_datei(p / "audio", "S1.mp3", 3600)
+
+    n = appmod._weg_reste_aufraeumen(str(tmp_path))
+
+    assert n == 2, f"erwartet 2 entfernte, bekam {n}"
+    assert not alt.exists() and not alt_audio.exists()
+    assert frisch.exists(), "eine frische Reservierung wurde weggeraeumt"
+
+
+def test_aufraeumlauf_nimmt_reste_ohne_stempel_mit(tmp_path):
+    """Das ALTE Namensformat hat keinen Stempel — solche Reste stammen zwangslaeufig aus der
+    Zeit vor dieser Aenderung und koennen keine laufende Reservierung sein. `None` heisst ALT;
+    das ist die ganze Migration."""
+    import webtool.app as appmod
+    p = tmp_path / "Demo" / "transkripte"
+    p.mkdir(parents=True)
+    (p / "S1.json.cafe1234.weg").write_bytes(b"x")
+
+    assert appmod._weg_reste_aufraeumen(str(tmp_path)) == 1
+    assert not (p / "S1.json.cafe1234.weg").exists()
+
+
+def test_aufraeumlauf_fasst_nur_weg_dateien_an(tmp_path):
+    """Der Lauf loescht. Ohne diesen Waechter waere ein zu weites Glob ein Datenverlust, den
+    keine Ansicht meldet — die echten Dateien sind sichtbar, ihr Verschwinden nicht erklaerbar."""
+    import webtool.app as appmod
+    t = tmp_path / "Demo" / "transkripte"
+    a = tmp_path / "Demo" / "audio"
+    t.mkdir(parents=True)
+    a.mkdir(parents=True)
+    (t / "S1.json").write_bytes(b"echt")
+    (t / "S1.edit.json").write_bytes(b"echt")
+    (a / "S1.mp3").write_bytes(b"echt")
+    _weg_datei(t, "S9.json", 3600)
+
+    assert appmod._weg_reste_aufraeumen(str(tmp_path)) == 1
+    assert sorted(x.name for x in t.iterdir()) == ["S1.edit.json", "S1.json"]
+    assert [x.name for x in a.iterdir()] == ["S1.mp3"]
+
+
+def test_aufraeumlauf_ueberlebt_eine_fehlende_wurzel_und_einen_sperrigen_rest(tmp_path, monkeypatch):
+    """Zwei Ausfaelle, die den Lauf nicht aufhalten duerfen — er haengt an einem Daemon-Faden
+    beim Serverstart, ein Wurf endet dort als Traceback ohne Adressaten.
+
+    Die fehlende Wurzel ist der Fall der frischen Installation; das `suppress` je Datei deckt
+    sie NICHT, weil `os.scandir` eine Ebene darueber wirft (Plan-Review)."""
+    import webtool.app as appmod
+    assert appmod._weg_reste_aufraeumen(str(tmp_path / "gibtsnicht")) == 0
+
+    t = tmp_path / "Demo" / "transkripte"
+    alt = _weg_datei(t, "S1.json", 3600)
+    zweiter = _weg_datei(t, "S2.json", 3600)
+    echt_remove = os.remove
+    monkeypatch.setattr(os, "remove",
+                        lambda p: (_ for _ in ()).throw(PermissionError(13, "in Benutzung"))
+                        if str(p) == str(alt) else echt_remove(p))
+
+    assert appmod._weg_reste_aufraeumen(str(tmp_path)) == 1, "der zweite Rest wurde nicht erreicht"
+    assert alt.exists() and not zweiter.exists()
+
+
+def test_aufraeumlauf_liest_die_wurzel_aus_dem_argument_nicht_aus_der_umgebung(tmp_path, monkeypatch):
+    """Der schwerste Befund des Plan-Reviews, als Zusicherung: `paths.projekte_root()` liest
+    `os.environ` bei JEDEM Aufruf. Haengt der Lauf daran, zeigt er nach einem
+    monkeypatch-Teardown auf die ECHTE Projektwurzel — und der eine Test, der den Lifespan
+    betritt, setzt `TRANSKRIBOR_PROJEKTE` gar nicht."""
+    import webtool.app as appmod
+    _weg_datei(tmp_path / "Demo" / "transkripte", "S1.json", 3600)
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path / "ganz-woanders"))
+
+    assert appmod._weg_reste_aufraeumen(str(tmp_path)) == 1, "die Umgebung hat gewonnen"

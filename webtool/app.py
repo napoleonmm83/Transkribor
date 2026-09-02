@@ -652,8 +652,15 @@ def _umbenennen_oder_keines(paare: list, base: str) -> None:
                     # Protokollzeile ist die einzige Spur, die von ihr bleibt. (Aus `_datei_weg`
                     # traegt `qziel` schon `.weg` — dort ist
                     # es bereits unsichtbar und bleibt, wo es ist.)
+                    #
+                    # WIE LANGE sie bleibt, sagt dieser Kommentar seit #459 dazu — vorher hiess
+                    # sie „der bessere Aufbewahrungsort" ohne Frist, und das stimmte auch nicht:
+                    # `_datei_weg` raeumte sie schon immer beim naechsten Loeschen DERSELBEN
+                    # Aufnahme weg. Seit dem Aufraeumlauf ist die Haltedauer benannt statt
+                    # zufaellig: `_WEG_REST_ALTER` (10 min), danach der naechste Serverstart.
+                    # Ein Name fuer beide Rollen — Entscheidung Marcus, 2026-09-02.
                     with suppress(OSError):
-                        os.rename(qziel, f"{q}.{uuid.uuid4().hex[:8]}.weg")
+                        os.rename(qziel, q + _weg_suffix())
                     print(f"[dateiop] {os.path.basename(q)} war beim Ruecklauf wieder belegt — "
                           f"{os.path.basename(qziel)} beiseitegelegt", flush=True)
             # Der RUECKLAUF gilt jedem `OSError` — Atomik darf nicht von der Ursache abhaengen.
@@ -705,6 +712,54 @@ def _name_zu_lang(e: OSError) -> bool:
 # denn auf POSIX sind sie gueltig, und ein Riegel machte dort legale Namen unmoeglich.
 _WIN_VERBOTEN = '?*<>|"'
 
+# Wie lange ein unsichtbarer `.weg`-Name als „koennte noch in Arbeit sein" gilt (#459).
+# HERGELEITET, nicht gegriffen: das Fenster zwischen Reservierung und Loeschen ist durch
+# `_WEG_GESAMT_S` (2 s) gedeckelt, die umgebende Sperre durch `sperre.frist()` (60 + 5 s).
+# Zehn Minuten liegen eine Groessenordnung darueber und decken auch einen Prozess, der
+# zwischendurch schlaeft.
+_WEG_REST_ALTER = 600.0
+
+
+def _weg_suffix() -> str:
+    """Der unsichtbare Namenszusatz: `.<epoch>.<uuid8>.weg`.
+
+    EINE Quelle fuer beide Erzeuger — die Reservierung in `_datei_weg` und das Beiseitelegen im
+    Ruecklauf von `_umbenennen_oder_keines`. Zwei Literale liefen beim naechsten Umbau
+    auseinander, und der Aufraeumlauf kennte dann eine der beiden Formen nicht.
+
+    WARUM DIE ZEIT IM NAMEN STEHT und nicht aus dem Dateisystem kommt: `os.rename` behaelt die
+    mtime. Gemessen auf beiden Wirten —
+
+        NTFS (Windows)   mtime geaendert = False   ctime geaendert = False
+        ext4 (WSL)       mtime geaendert = False   ctime geaendert = True
+
+    — eine frische Reservierung sieht ueber die mtime also beliebig alt aus, und die
+    naheliegende Ausweichloesung `st_ctime` liefe auf Linux und fiele auf WINDOWS still aus,
+    also auf der Hauptplattform. Genau die Fehlerform „Plattform traegt die Wache anders":
+    gruen im einen Wirt, wirkungslos im anderen, ohne dass ein Test es zeigt.
+
+    Wanduhrzeit, nicht `monotonic`: der Wert muss einen Prozessneustart ueberdauern.
+    """
+    return f".{int(time.time())}.{uuid.uuid4().hex[:8]}.weg"
+
+
+def _weg_alter(pfad: str, jetzt: float | None = None) -> float | None:
+    """Wie alt ist der Stempel in diesem `.weg`-Namen — oder None, wenn keiner lesbar ist.
+
+    RECHTSVERANKERT gelesen (`[-3]`), nicht „der erste Zahlenabschnitt": ein Rest wandert beim
+    Umbenennen der Aufnahme MIT und heisst danach `Neu.json.<epoch>.<uuid>.weg` — der Stempel
+    bleibt am Ende, der Basisname davor darf beliebig viele Punkte tragen.
+
+    None bei einem Namen im ALTEN Format (`<name>.<uuid>.weg`): dort steht an `[-3]` eine
+    Dateiendung. Solche Namen stammen zwangslaeufig aus der Zeit vor dieser Aenderung, koennen
+    also keine laufende Reservierung sein — der Aufrufer behandelt None deshalb als ALT. Das
+    ist zugleich die ganze Migration.
+    """
+    teile = os.path.basename(pfad).split(".")
+    if len(teile) < 3 or not teile[-3].isdigit():
+        return None
+    return (time.time() if jetzt is None else jetzt) - int(teile[-3])
+
 
 def _unbrauchbarer_zielname(e: OSError, name: str) -> str | None:
     """Beschriftung fuer einen Zielnamen, den das Dateisystem ablehnt — oder None.
@@ -731,6 +786,57 @@ def _unbrauchbarer_zielname(e: OSError, name: str) -> str | None:
         return ("Name enthält ein Zeichen, das Windows in Dateinamen nicht erlaubt: "
                 + " ".join(schlecht))
     return "Name zu lang"
+
+
+def _weg_reste_aufraeumen(root: str, max_alter: float = _WEG_REST_ALTER) -> int:
+    """Liegengebliebene `.weg`-Dateien aller Projekte entfernen; gibt zurueck, wie viele (#459).
+
+    DIE WURZEL KOMMT ALS ARGUMENT, nicht aus `paths.projekte_root()` — und das ist kein Stil.
+    Die Funktion liest `os.environ` bei JEDEM Aufruf (`paths.py`), und dieser Lauf haengt an
+    einem Hintergrundfaden: laeuft der nach einem `monkeypatch`-Teardown noch, zeigte sein
+    naechster Aufruf auf die ECHTE Projektwurzel. Genau dieser Weg war im Plan-Review der
+    schwerste Befund — der eine Test, der den Lifespan betritt
+    (`test_start_stoesst_die_ytdlp_kalenderpruefung_an`), nimmt die `client`-Fixture bewusst
+    NICHT und setzt `TRANSKRIBOR_PROJEKTE` nicht; die Wurzel faellt dort auf `<repo>/projekte`
+    zurueck. Ein Loeschlauf in echten Daten, gruen bis er einmal trifft. Einmal aufgeloest und
+    weitergereicht ist der Faden von der Umgebung entkoppelt.
+
+    WAS ER ANFASST: ausschliesslich Namen auf `.weg` in `transkripte/` und `audio/` je Projekt.
+    Was aelter ist als `max_alter`, faellt weg; ein Name ohne lesbaren Stempel (`_weg_alter`
+    liefert None) gilt als ALT — er stammt aus der Zeit vor dem Stempel und kann keine laufende
+    Reservierung sein.
+
+    ZWEI ROLLEN, EINE REGEL (Entscheidung Marcus, 2026-09-02): der Name traegt nicht nur
+    Reservierungen, sondern auch die Sicherungskopie aus dem Ruecklauf von
+    `_umbenennen_oder_keines` — eine aeltere Fassung des Nutzertexts, wenn der alte Platz
+    inzwischen wieder belegt war. Auch sie verfaellt nach der Frist. Der Kommentar dort sagt
+    das jetzt, statt einen unbefristeten Aufbewahrungsort zu behaupten.
+
+    `isdir`-Wache und das Ueberspringen un-nennbarer Ordner nach dem Muster von
+    `list_projects`: eine fehlende Wurzel (frische Installation) laesst `os.scandir` sonst
+    werfen, und im Daemon-Faden endet das als Traceback ohne Adressaten. Das `suppress` je
+    Datei deckt das NICHT — es sitzt eine Ebene tiefer.
+    """
+    entfernt = 0
+    if not os.path.isdir(root):
+        return entfernt
+    for eintrag in os.scandir(root):
+        if not eintrag.is_dir():
+            continue
+        for unter in ("transkripte", "audio"):
+            # Direkt zusammengesetzt statt ueber `paths.audio_dir`: das faellt bei fehlendem
+            # `audio/` auf den PROJEKTORDNER zurueck, und dann liefe derselbe Glob zweimal
+            # ueber verschiedene Ebenen. Fuer `*.weg` folgenlos, aber „zwei getrennte Ordner"
+            # soll hier auch wirklich stimmen.
+            for p in glob.glob(os.path.join(glob.escape(os.path.join(eintrag.path, unter)),
+                                            "*.weg")):
+                alter = _weg_alter(p)
+                if alter is not None and alter < max_alter:
+                    continue                  # koennte eine laufende Reservierung sein
+                with suppress(OSError):
+                    os.remove(p)
+                    entfernt += 1
+    return entfernt
 
 
 def _datei_weg(project: str, base: str, mit_audio: bool) -> int:
@@ -786,7 +892,7 @@ def _datei_weg(project: str, base: str, mit_audio: bool) -> int:
     # dann loeschen. Der Suffix ist je Aufruf eindeutig, damit ein liegengebliebener Rest aus
     # einem frueheren Lauf das `os.rename` nicht mit FileExistsError kippt — der waere hier als
     # „in Benutzung" beschriftet und damit eine falsche Auskunft.
-    weg = f".{uuid.uuid4().hex[:8]}.weg"
+    weg = _weg_suffix()
     try:
         _umbenennen_oder_keines([(p, p + weg) for p in treffer], base)
     except OSError as e:
