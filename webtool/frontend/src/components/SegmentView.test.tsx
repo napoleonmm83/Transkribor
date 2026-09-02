@@ -47,6 +47,40 @@ describe('SegmentView', () => {
     render(<TooltipProvider><SegmentView seg={seg} active={false} onPlay={vi.fn()} updateSegment={vi.fn()} /></TooltipProvider>)
     expect(screen.queryByTitle('Roh-Wörter anzeigen')).toBeNull()
   })
+
+  /**
+   * Waechter zu #439: beide Knoepfe standen auf `opacity-30` und wurden erst durch
+   * `hover:` voll sichtbar. Auf einem Geraet OHNE Zeiger gibt es kein Hover — dort
+   * blieben sie dauerhaft blass, waehrend die zwei vergleichbaren Knoepfe (Abspielen im
+   * selben Bauteil, Redebeitrag abspielen in `SpeakerTurn`) bei 60 % und 50 % stehen.
+   * Die Grenze „ohne Zeiger sichtbar genug" wird an allen vier Stellen gleich gezogen.
+   *
+   * ZWEI Tests, nicht einer: faellt die Deckkraft an EINEM Knopf zurueck, muss GENAU
+   * dessen Test rot werden — sonst deckt der Zwilling die Luecke beilaeufig zu.
+   *
+   * `not.toHaveClass('opacity-30')` ist nicht redundant: `opacity-60` daneben stehen zu
+   * lassen wuerde die erste Zusicherung erfuellen, und welche der beiden Regeln dann
+   * gilt, entschiede die Reihenfolge im Stylesheet statt der Quelltext.
+   *
+   * Was diese Tests NICHT koennen: jsdom wertet kein Stylesheet aus — geprueft ist die
+   * Klassenangabe, nicht die gerechnete Deckkraft. Der Browser-Beleg gehoert in die
+   * PR-Beschreibung. Dass aus einer Klasse ueberhaupt eine Regel wird, deckt fuer die
+   * coarse-Variante seit #438 `scripts/pruefe-coarse.mjs` ab.
+   */
+  it('der Roh-Woerter-Knopf steht ohne Hover bei 60 %, nicht bei 30 % (#439)', () => {
+    const seg = mkSeg({ text: 'korrigierter Text' })
+    render(<TooltipProvider><SegmentView seg={seg} active={false} onPlay={vi.fn()} updateSegment={vi.fn()} /></TooltipProvider>)
+    const knopf = screen.getByTitle('Roh-Wörter anzeigen')
+    expect(knopf).toHaveClass('opacity-60')
+    expect(knopf).not.toHaveClass('opacity-30')
+  })
+
+  it('der Notiz-Knopf steht ohne Hover bei 60 %, nicht bei 30 % (#439)', () => {
+    render(<TooltipProvider><SegmentView seg={mkSeg({})} active={false} onPlay={vi.fn()} updateSegment={vi.fn()} /></TooltipProvider>)
+    const knopf = screen.getByTitle('Notiz hinzufügen')
+    expect(knopf).toHaveClass('opacity-60')
+    expect(knopf).not.toHaveClass('opacity-30')
+  })
   it('unveraendert wieder zugeklickt schreibt gar nichts', () => {
     // Der haeufigere Weg als die Kopffelder: bei 400 Segmenten passiert der Fehlklick staendig.
     // Ein Schreibvorgang setzt serverseitig human_edited=true, und `correct.py` nimmt die Datei

@@ -196,7 +196,9 @@ Touch-Bildschirm sind die `⋯`-Knöpfe ab `v0.49.0` dauerhaft sichtbar: bisher
 erschienen sie nur beim Darüberfahren mit der Maus oder wenn du sie mit der Tastatur
 ansteuertest — mit dem Finger allein waren sie nicht zu sehen, und zum Umbenennen oder
 Löschen musstest du das Projekt erst öffnen. Dasselbe gilt für die Sprecherauswahl im
-Editor.
+Editor. **Ab der nächsten Fassung** stehen auch die beiden kleinen Symbole am Satz
+kräftiger da — Roh-Wörter anzeigen und Notiz anlegen: sie waren blass angelegt und wurden
+erst beim Darüberfahren mit der Maus voll sichtbar, am Tablet also kaum zu erkennen.
 
 **Es wartet nicht auf dich.** Aufnahmen werden nacheinander abgehört, die Korrektur läuft
 danach für mehrere gleichzeitig, und mehrere Projekte laufen ohnehin nebeneinander — du

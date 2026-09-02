@@ -85,9 +85,16 @@ export function SegmentView({ seg, active, onPlay, updateSegment, dimmen = false
             onCancel={() => setEditing(false)}
             onVerworfen={() => toast.info(EINGABE_VERWORFEN)} />
         : <span onClick={() => setEditing(true)} className="lesesatz cursor-text">{body}</span>}
+      {/* opacity-60 statt 30 an diesem und am Notiz-Knopf (#439): dieselbe Stufe wie der
+          Abspielknopf oben. Auf einem Gerät ohne Zeiger gibt es kein `hover:` — bei 30 %
+          blieben die beiden dort dauerhaft blass, während die zwei vergleichbaren Knöpfe
+          bei 60 % und 50 % stehen. Die Grenze „ohne Zeiger sichtbar genug“ wird an allen
+          vier Stellen gleich gezogen.
+          `opacity-100` daneben wirkt weiter: kein `cn`, also entscheidet die Reihenfolge
+          im Stylesheet, und dort steht `.opacity-100` hinter `.opacity-60`. */}
       {corrected &&
         <button onClick={() => setShowRaw(v => !v)} title="Roh-Wörter anzeigen" aria-pressed={showRaw}
-          className={`ml-1.5 align-top opacity-30 transition-opacity hover:opacity-100 ${showRaw ? 'opacity-100' : ''} ${focusRing}`}>
+          className={`ml-1.5 align-top opacity-60 transition-opacity hover:opacity-100 ${showRaw ? 'opacity-100' : ''} ${focusRing}`}>
           <ScanSearch className="inline size-3.5" aria-hidden="true" />
         </button>}
       {/* Die Notiz am Segment (#112). `segments[].note` ging seit je in den Export („##
@@ -97,7 +104,7 @@ export function SegmentView({ seg, active, onPlay, updateSegment, dimmen = false
           sie, wie bei den Anmerkungen. */}
       {!seg.note && !notiz &&
         <button onClick={() => setNotiz(true)} title="Notiz hinzufügen" aria-label="Notiz hinzufügen"
-          className={`ml-1.5 align-top opacity-30 transition-opacity hover:opacity-100 ${focusRing}`}>
+          className={`ml-1.5 align-top opacity-60 transition-opacity hover:opacity-100 ${focusRing}`}>
           {/* Bei 14 px im echten Zeilenkontext gegen StickyNote, Asterisk, NotebookPen und die
               blosse MessageSquare verglichen (nicht nach Namen gewaehlt): StickyNote ist dort
               eine Seite mit Eselsohr — dasselbe Bild wie das Datei-Symbol der Seitenleiste;
