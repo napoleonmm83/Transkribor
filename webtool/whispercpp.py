@@ -341,31 +341,51 @@ def transkribiere(audio: str, modell: str, sprache: str, onLine=None) -> dict:
     Stille ueberspringen und die Segmentzeiten gegen das Audio verschieben, ueber die der
     Editor synchronisiert.
 
-    Und kein `--prompt`: er beendet ein 30-Sekunden-Fenster vorzeitig, worauf der Lesezeiger
-    um das ganze Fenster weiterrueckt und die restliche Sprache darin nie gelesen wird
-    (Messung in transcribe._opts).
+    Und kein `--prompt`. Auf dem faster-whisper-Pfad ist der Grund ein MECHANISMUS: der
+    Prompt beendet ein 30-Sekunden-Fenster vorzeitig, der Lesezeiger rueckt um das ganze
+    Fenster weiter, und die restliche Sprache darin wird nie gelesen (Messung in
+    transcribe._opts).
 
-    **Auf diesem Pfad war das zuerst nur MITGEZOGEN** — die Messung stammte ausschliesslich
-    vom faster-whisper-Pfad auf CUDA, und auf Apple Silicon laeuft ausschliesslich dieser
-    hier. Am 2026-09-02 auf einem M1 Pro nachgemessen (#84): dieselbe Datei wie in PR #82
-    (C0761, 54,77 s), dieselben Decoder-Einstellungen, je zwei Laeufe — beide Varianten
-    lieferten zweimal exakt dasselbe Ergebnis, mit `-bs 5` ist der Lauf deterministisch:
+    **Auf DIESEM Pfad war das zuerst nur MITGEZOGEN** — die Messung stammte ausschliesslich
+    vom faster-whisper-Pfad auf CUDA, waehrend auf Apple Silicon ausschliesslich dieser hier
+    laeuft. Am 2026-09-02 auf einem M1 Pro nachgeholt (#84): C0761 aus PR #82 (54,77 s),
+    dieselben Decoder-Einstellungen, je zwei Laeufe:
 
         mit --prompt   22 Segmente   49,76 s Abdeckung (90,9 %)   143 Woerter
         ohne --prompt  26 Segmente   52,30 s Abdeckung (95,5 %)   160 Woerter
 
-    Es ist DIESELBE Signatur wie dort und sie trifft dieselbe Stelle: mit Prompt fehlt der
-    Soundcheck am Anfang des ersten Fensters vollstaendig („Ja, wir hoeren uns an. Ist gut?
-    Ja."), und der Satz davor wird verstuemmelt. Auf dem faster-whisper-Pfad zaehlte dieselbe
-    Datei 140 -> 158 Woerter, hier 143 -> 160 — Richtung und Groesse stimmen ueberein.
+    **Was das belegt:** den VERLUST. 17 Woerter und 2,5 s Abdeckung, dieselbe Richtung und
+    Groessenordnung wie auf dem faster-whisper-Pfad (dort 140 -> 158 an derselben Datei).
+    Die Frage aus #84 — folgenlos oder echte Verbesserung — ist damit in Richtung echte
+    Verbesserung entschieden. Mit Prompt fehlt der Soundcheck am Anfang („Ja, wir hoeren uns
+    an. Ist gut? Ja."), und der Satz davor wird verstuemmelt.
 
-    Bemerkenswert: `transcribe.luecken` meldet in KEINER der beiden Varianten eine Luecke ab
-    15 s. Der Verlust ist hier also nicht ein durchgeschobenes 30-Sekunden-Fenster wie bei
-    C0709, sondern verteiltes Abschneiden — die Abdeckung sieht ihn, der Lueckenwaechter
-    nicht. Wer diesen Pfad kuenftig misst, misst deshalb die Abdeckung, nicht nur `luecken`.
+    **Was es NICHT belegt: den Mechanismus.** Die Signatur des uebersprungenen Fensters fehlt
+    — das erste Wort liegt in BEIDEN Varianten bei 0,00 s (bei C0709 auf dem
+    faster-whisper-Pfad waren es 8,82 gegen 10,04 s), `transcribe.luecken` meldet in keiner
+    Variante etwas, und der Gesamtverlust betraegt 5,01 s statt eines ganzen 30-s-Fensters.
+    Der Verlust ist hier verteiltes Abschneiden. Ausgerechnet C0761 ist dabei die EINE Datei
+    aus PR #82, die auch dort keinen Fenstersprung zeigte (transcribe.py:189, Abdeckung
+    45 s -> 45 s bei 140 -> 158 Woertern). Der Seek-Weg existiert in whisper.cpp
+    (`single_timestamp_ending` in src/whisper.cpp rueckt um das ganze Fenster weiter),
+    gemessen ist er auf diesem Pfad weiterhin nicht.
 
-    Waechter gegen den Wiedereinbau: `test_cmd_gibt_whisper_cpp_KEINEN_prompt`, Gegenstueck
-    zu `test_opts_gibt_whisper_KEINEN_initial_prompt` auf dem faster-whisper-Pfad.
+    **Wer ihn nachweisen will**, nimmt eine Datei, bei der er auf dem anderen Pfad AUFTRAT
+    (C0709, dort war das ganze erste Fenster weg) und misst Wortzahl UND Abdeckung UND den
+    Text. Keines der drei allein reicht: an C0761 sah die Abdeckung auf dem
+    faster-whisper-Pfad die 18 verlorenen Woerter NICHT, und `luecken` (Schwelle 15 s) sieht
+    bei 5 s Gesamtverlust ohnehin nichts — „keine Luecke gemeldet" ist dort keine Aussage,
+    sondern eine Tautologie.
+
+    Reproduzierbar ist der Lauf, weil whisper.cpp einen festen RNG-Seed setzt
+    (`std::mt19937(j)`), nicht wegen `-bs 5`; je zwei Laeufe lieferten dasselbe Ergebnis.
+
+    Waechter gegen den Wiedereinbau, an ZWEI Stellen: `test_cmd_gibt_whisper_cpp_KEINEN_prompt`
+    fuer den cmd-Bau (beide Sprachzweige) und eine Zusicherung in
+    `test_transkribiere_RECHNET_die_dauer_aus_und_reicht_sie_durch` fuer die AUFRUFSTELLE.
+    Die zweite ist nicht doppelt gemoppelt: ein Prompt, der erst am Popen-Aufruf an die Liste
+    kommt — oder ueber einen optionalen `prompt`-Parameter von `_cmd` —, laeuft an der ersten
+    vorbei. Beides mit Popen-Sonde nachgestellt, beides kam durch.
     """
     sag = onLine or (lambda z: print(z, flush=True))
     gguf = modell_datei(modell, sag)

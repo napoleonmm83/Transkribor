@@ -168,9 +168,13 @@ def test_cmd_gibt_whisper_cpp_KEINEN_prompt():
     """
     # "/p/out" statt "/tmp/out" wie bei den Nachbarn: derselbe Fake-Praefix wie
     # "/p/whisper-cli", und ruffs S108 waechst sonst ohne Gegenwert um einen Eintrag.
-    cmd = w._cmd("/p/whisper-cli", "ggml.bin", "a.wav", "/p/out", "de")
-    assert "--prompt" not in cmd
-    assert not any(a.startswith("--prompt") for a in cmd)
+    # BEIDE Sprachzweige: `_cmd` verzweigt an `if sprache`, und ein `--prompt`, das nur im
+    # auto-Zweig steht, kaeme an einer Pruefung mit fester Sprache vorbei (mit einer Mutation
+    # nachgestellt: 42 Tests blieben gruen).
+    for sprache in ("de", None):
+        cmd = w._cmd("/p/whisper-cli", "ggml.bin", "a.wav", "/p/out", sprache)
+        assert "--prompt" not in cmd
+        assert not any(a.startswith("--prompt") for a in cmd)
 
 
 def test_ergebnis_bereinigt_wiederholungs_schleifen():
@@ -401,8 +405,11 @@ def test_transkribiere_RECHNET_die_dauer_aus_und_reicht_sie_durch(monkeypatch, t
     monkeypatch.setattr(w, "_wav",
                         lambda audio, ziel: open(ziel, "wb").write(b"\0" * (44 + 32000 * 7)))
 
+    gesehen = []
+
     class FakeProc:
         def __init__(self, cmd, **kw):
+            gesehen.append(cmd)
             # whisper-cli schreibt sein JSON nach `-of <praefix>.json`; die Attrappe tut dasselbe,
             # damit der Lesepfad darunter echt bleibt.
             with open(cmd[cmd.index("-of") + 1] + ".json", "w", encoding="utf-8") as fh:
@@ -418,3 +425,9 @@ def test_transkribiere_RECHNET_die_dauer_aus_und_reicht_sie_durch(monkeypatch, t
     # Und die Kette bis zum Ende: 2 s Transkript in 7 s Aufnahme ist noch keine Luecke,
     # 2 s in 300 s waere eine — geprueft wird hier die Verdrahtung, nicht die Schwelle.
     assert d["segments"][0]["end"] == 2.0
+    # Die zweite Haelfte des --prompt-Waechters, und die teurere: test_cmd_gibt_whisper_cpp_
+    # KEINEN_prompt prueft den cmd-BAU, diese Zeile die AUFRUFSTELLE. Ein Prompt, der erst
+    # hier an die Liste kommt, oder ein optionaler prompt-Parameter von _cmd, der in
+    # transkribiere verdrahtet wird, laeuft an der ersten Pruefung vorbei — mit einer
+    # Popen-Sonde nachgestellt, beides kam durch (42 Tests gruen, Popen sah --prompt).
+    assert "--prompt" not in gesehen[0]
