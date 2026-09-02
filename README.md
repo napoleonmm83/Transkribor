@@ -523,7 +523,14 @@ Ordner dorthin kopierst.
 <details>
 <summary><strong>Was passiert mit meinen Dateien?</strong></summary>
 
-Transkribor löscht nichts von allein. Transkript und Korrekturen bleiben erhalten, bis du eine
+Transkribor löscht nichts von allein — mit einer Ausnahme, die **ab der nächsten Fassung**
+gilt und nur Dinge betrifft, die es aus deiner Sicht schon nicht mehr gibt: Bricht ein Löschen
+mittendrin ab (ein Virenscanner greift zu, der Rechner geht aus), kann ein unsichtbarer Rest
+der bereits gelöschten Aufnahme liegen bleiben und Platz belegen — bei Interviewton schnell
+hunderte Megabyte. Beim nächsten Start räumt Transkribor solche Reste weg. Nichts, was in
+deiner Dateiliste steht, ist davon betroffen.
+
+Transkript und Korrekturen bleiben erhalten, bis du eine
 Aufnahme **neu transkribierst** oder ihre **Sprache änderst**: dann wird das Transkript aus
 dem Audio neu erstellt, das bisherige Transkript samt Korrekturen fällt dabei weg (das Audio
 bleibt). Löschen kannst du nur du selbst, bewusst über das ⋯-Menü. Auch während im Projekt andere
