@@ -48,6 +48,7 @@ def png_alpha_rand(pfad):
     roh_zeilen = zlib.decompress(bytes(daten))
 
     def paeth(a, b, c):
+        """Der Paeth-Praediktor aus Spezifikation 9.4 — links, oben, oben-links."""
         p = a + b - c
         pa, pb, pc = abs(p - a), abs(p - b), abs(p - c)
         return a if pa <= pb and pa <= pc else (b if pb <= pc else c)
@@ -61,14 +62,19 @@ def png_alpha_rand(pfad):
             a = zeile[i - 4] if i >= 4 else 0
             b = vorige[i]
             c = vorige[i - 4] if i >= 4 else 0
-            if filt == 1:   zeile[i] = (zeile[i] + a) & 0xFF
-            elif filt == 2: zeile[i] = (zeile[i] + b) & 0xFF
-            elif filt == 3: zeile[i] = (zeile[i] + (a + b) // 2) & 0xFF
-            elif filt == 4: zeile[i] = (zeile[i] + paeth(a, b, c)) & 0xFF
+            if filt == 1:
+                zeile[i] = (zeile[i] + a) & 0xFF
+            elif filt == 2:
+                zeile[i] = (zeile[i] + b) & 0xFF
+            elif filt == 3:
+                zeile[i] = (zeile[i] + (a + b) // 2) & 0xFF
+            elif filt == 4:
+                zeile[i] = (zeile[i] + paeth(a, b, c)) & 0xFF
         vorige = zeile
         alpha.append(zeile[3::4])
 
     def leer(werte):
+        """Ist diese Zeile vollstaendig durchsichtig? Ein einziges Alpha > 0 genuegt."""
         return not any(werte)
 
     oben = next(y for y in range(hoehe) if not leer(alpha[y]))

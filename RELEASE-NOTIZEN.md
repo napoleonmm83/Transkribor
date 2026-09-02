@@ -28,6 +28,9 @@ hat. Lesbar, aber unschön — das ist Absicht.
 
 ## Unveröffentlicht
 
+**Behoben**
+- Das App-Symbol hat auf dem Mac jetzt die richtige Grösse — im Dock und im Programme-Ordner stand es bisher rund ein Viertel grösser da als seine Nachbarn.
+
 ## v0.51.0 — 2026-09-02
 
 **Neu**
