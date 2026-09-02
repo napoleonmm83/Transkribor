@@ -1,0 +1,37 @@
+
+===== Unterrahmen — http://127.0.0.1:61071 =====
+CHECK media :: eigen=false -> false :: herkunft="" :: requestingUrl="" :: isMainFrame=true
+CHECK media :: eigen=false -> false :: herkunft="" :: requestingUrl="" :: isMainFrame=true
+CHECK web-app-installation :: eigen=false -> false :: herkunft="" :: requestingUrl="" :: isMainFrame=true
+CHECK geolocation :: eigen=false -> false :: herkunft="" :: requestingUrl="" :: isMainFrame=true
+CHECK media :: eigen=false -> false :: herkunft="http://127.0.0.1:61071/" :: requestingUrl="" :: isMainFrame=false
+CHECK media :: eigen=false -> false :: herkunft="http://127.0.0.1:61071/" :: requestingUrl="" :: isMainFrame=false
+CHECK web-app-installation :: eigen=false -> false :: herkunft="http://127.0.0.1:61071/" :: requestingUrl="" :: isMainFrame=false
+CHECK geolocation :: eigen=false -> false :: herkunft="http://127.0.0.1:61071/" :: requestingUrl="" :: isMainFrame=false
+CHECK media :: eigen=false -> false :: herkunft="http://127.0.0.1:61071/" :: requestingUrl="" :: isMainFrame=false
+CHECK media :: eigen=false -> false :: herkunft="http://127.0.0.1:61071/" :: requestingUrl="" :: isMainFrame=false
+CHECK web-app-installation :: eigen=false -> false :: herkunft="http://127.0.0.1:61071/" :: requestingUrl="" :: isMainFrame=false
+CHECK geolocation :: eigen=false -> false :: herkunft="http://127.0.0.1:61071/" :: requestingUrl="" :: isMainFrame=false
+CHECK media :: eigen=false -> false :: herkunft="http://127.0.0.1:61071/" :: requestingUrl="" :: isMainFrame=false
+CHECK media :: eigen=false -> false :: herkunft="http://127.0.0.1:61071/" :: requestingUrl="" :: isMainFrame=false
+CHECK web-app-installation :: eigen=false -> false :: herkunft="http://127.0.0.1:61071/" :: requestingUrl="" :: isMainFrame=false
+CHECK geolocation :: eigen=false -> false :: herkunft="http://127.0.0.1:61071/" :: requestingUrl="" :: isMainFrame=false
+CHECK notifications :: eigen=false -> false :: herkunft="http://127.0.0.1:61071/" :: requestingUrl="about:srcdoc" :: isMainFrame=false
+CHECK geolocation :: eigen=false -> false :: herkunft="http://127.0.0.1:61071/" :: requestingUrl="about:srcdoc" :: isMainFrame=false
+CHECK notifications :: eigen=false -> false :: herkunft="http://127.0.0.1:61071/" :: requestingUrl="about:srcdoc" :: isMainFrame=false
+CHECK notifications :: eigen=false -> false :: herkunft="" :: requestingUrl="data:text/html,<script>navigator.permissions.query({name:%22notifications%22})</script>" :: isMainFrame=false
+CHECK notifications :: eigen=false -> false :: herkunft="http://127.0.0.1:61069/" :: requestingUrl="http://127.0.0.1:61069/kind" :: isMainFrame=false
+CHECK geolocation :: eigen=false -> false :: herkunft="http://127.0.0.1:61071/" :: requestingUrl="about:srcdoc" :: isMainFrame=false
+CHECK notifications :: eigen=false -> false :: herkunft="" :: requestingUrl="data:text/html,<script>navigator.permissions.query({name:%22notifications%22})</script>" :: isMainFrame=false
+CHECK notifications :: eigen=false -> false :: herkunft="http://127.0.0.1:61069/" :: requestingUrl="http://127.0.0.1:61069/kind" :: isMainFrame=false
+
+--- nach dem Laden: 24 Pruefungen ---
+--- nach 20 s Leerlauf: 0 weitere ---
+
+===== Protokollzeilen, die `main.js` geschrieben haette =====
+Berechtigungspruefung abgewiesen (ohne Seitenangabe): media von http://127.0.0.1:61071
+Berechtigungspruefung abgewiesen (ohne Seitenangabe): web-app-installation von http://127.0.0.1:61071
+Berechtigungspruefung abgewiesen (ohne Seitenangabe): geolocation von http://127.0.0.1:61071
+Berechtigungspruefung abgewiesen (fremde Herkunft): notifications von about:
+
+===== 4 Arten: geolocation, media, notifications, web-app-installation =====
