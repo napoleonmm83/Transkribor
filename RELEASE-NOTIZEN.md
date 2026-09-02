@@ -33,6 +33,7 @@ hat. Lesbar, aber unschön — das ist Absicht.
 - Die Symbole für Roh-Wörter und Notiz stehen im Transkript kräftiger da — auf Tablets waren sie kaum zu erkennen, weil es dort kein Darüberfahren mit der Maus gibt.
 - Ein Fehlerbericht enthält jetzt auch dann noch deine eigentliche Fehlermeldung, wenn Transkribor kurz davor viele Links abgewiesen hat — vorher konnte die Mail ganz ohne den Fehler abgehen, wegen dem du schreibst.
 - Die Protokolldateien halten jetzt die vorgesehene Grösse ein — bei sehr langen Einträgen wuchsen sie bisher auf fast das Doppelte an.
+- Auf dem Mac legt Transkribor beim ersten Start keine Python-Zwischendateien mehr in seinem eigenen Programmpaket ab — dadurch bleibt dessen Signatur gültig.
 
 **Sicherheit**
 - Das Programmfenster bekommt keine Systemrechte mehr zugesprochen, die Transkribor nicht braucht (Kamera, Mikrofon, Standort und ähnliche) — die Fertig-Meldung und das Kopieren des Lizenzschlüssels funktionieren weiterhin.
@@ -51,7 +52,6 @@ hat. Lesbar, aber unschön — das ist Absicht.
 - Die Meldung beim Löschen einer laufenden Aufnahme spricht nicht mehr von „Transkription", wenn gerade korrigiert wird.
 - Wenn die App einen Link nicht öffnet, steht im Protokoll jetzt der richtige Grund — vorher hiess es immer „Schema nicht erlaubt", auch wenn das gar nicht stimmte.
 - Diese Meldung verstummt nicht mehr bis zum Neustart: bisher schwieg sie nach 20 abgelehnten Links, egal wie viel Zeit verging.
-- Auf dem Mac legt Transkribor beim ersten Start keine Python-Zwischendateien mehr in seinem eigenen Programmpaket ab — dadurch bleibt dessen Signatur gültig.
 
 ## v0.50.2 — 2026-09-01
 

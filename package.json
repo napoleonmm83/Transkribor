@@ -83,6 +83,7 @@
         "deb"
       ],
       "category": "AudioVideo",
+      "icon": "build/icon.png",
       "synopsis": "Interview-Transkription mit Whisper, lokal",
       "artifactName": "${productName}.${ext}"
     },

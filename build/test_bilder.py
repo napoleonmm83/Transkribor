@@ -6,6 +6,7 @@ wird: die Kopfdaten der fertigen Dateien. Das ist auch die schaerfere Pruefung �
 eine 32-bit-BMP oder eine um einen Pixel falsche Groesse nimmt NSIS wortlos hin
 und zeigt Muell.
 """
+import json
 import struct
 import zlib
 from pathlib import Path
@@ -37,6 +38,12 @@ def png_alpha_rand(pfad):
     breite, hoehe = struct.unpack(">II", roh[16:24])
     tiefe, farbtyp = roh[24], roh[25]
     assert (tiefe, farbtyp) == (8, 6), f"{pfad.name}: erwartet 8-bit RGBA, ist {tiefe}/{farbtyp}"
+    # Interlace MUSS geprueft werden, nicht nur Tiefe und Farbtyp: bei Adam7 (Byte 28 == 1)
+    # stehen die Bilddaten in sieben verschachtelten Durchgaengen, der Dekoder unten liest
+    # sie als fortlaufende Zeilen und liefert dann STILL einen falschen Rand. Fuer icon.png,
+    # wo (0,0,0,0) erwartet wird, waere ein interlaced UND gepolstertes Bild damit
+    # faelschlich gruen. Ein Bildoptimierer mit -i1 genuegt, um das auszuloesen.
+    assert roh[28] == 0, f"{pfad.name}: interlaced PNG (Adam7) — dieser Dekoder liest nur Interlace 0"
 
     # Chunks durchlaufen und alle IDAT einsammeln — Pillow schreibt oft mehrere.
     daten, pos = bytearray(), 8
@@ -105,6 +112,25 @@ def test_mac_icon_hat_apples_rand():
     # 1024x1024 — eine Masspruefung allein waere hier blind.
     assert png_masse(BUILD / "icon-mac.png") == (1024, 1024)
     assert png_alpha_rand(BUILD / "icon-mac.png") == (100, 100, 100, 100)
+
+
+def test_jede_plattform_zeigt_auf_ihr_eigenes_icon():
+    """Der eigentliche Waechter fuer #503 — er prueft die KONFIGURATION, nicht die Datei.
+
+    Der Test darunter bewacht `icon.png`, und das genuegte nicht: electron-builder loest
+    Linux als `[linux.icon, mac.icon ?? config.icon]` auf (LinuxTargetHelper,
+    computeDesktopIcons). Ohne eigenen `linux.icon`-Eintrag faellt Linux also auf das
+    GEPOLSTERTE macOS-Bild zurueck — AppImage und deb waeren rund 20 % zu klein, und der
+    Datei-Waechter bliebe dabei gruen, weil er eine Datei prueft, die Linux gar nicht mehr
+    benutzt. Genau so ist der Fehler beim ersten Anlauf durchgerutscht.
+
+    Windows hat den Sonderfall nicht (platformPackager.getOrConvertIcon nimmt
+    `win.icon || config.icon`, nie `mac.icon`) und braucht deshalb keinen Eintrag.
+    """
+    b = json.loads((WURZEL / "package.json").read_text(encoding="utf-8"))["build"]
+    assert b["mac"]["icon"] == "build/icon-mac.png", "macOS muss auf das gepolsterte Icon zeigen"
+    assert b["linux"]["icon"] == "build/icon.png", \
+        "linux.icon fehlt — Linux faellt sonst auf mac.icon zurueck und bekommt den Rand"
 
 
 def test_windows_und_linux_icon_bleibt_randlos():
