@@ -28,6 +28,8 @@ hat. Lesbar, aber unschön — das ist Absicht.
 
 ## Unveröffentlicht
 
+## v0.51.0 — 2026-09-02
+
 **Neu**
 - Wartende Aufnahmen sagen jetzt, worauf sie warten und wie viele noch davor liegen — statt nur „In Warteschlange“.
 
