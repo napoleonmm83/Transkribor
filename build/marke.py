@@ -81,8 +81,23 @@ def mac_zeichen():
     DMG-Fenster um den Faktor 1024/824 = 1,243 groesser als jedes Nachbarsymbol —
     gemessen an der ausgelieferten v0.50.2, nicht gerechnet.
 
-    Eigene Datei statt Ueberschreiben von icon.png: `build.win` und `build.linux`
-    leiten weiterhin aus dem randlosen Bild ab, nur `build.mac.icon` zeigt hierher.
+    Eigene Datei statt Ueberschreiben von icon.png: Windows und Linux leiten weiterhin
+    aus dem randlosen Bild ab, nur `build.mac.icon` zeigt hierher.
+
+    **Fuer Linux genuegt es NICHT, `build.linux.icon` einfach wegzulassen** — das war der
+    erste Anlauf und er war falsch. electron-builder loest Linux so auf
+    (`app-builder-lib/out/targets/LinuxTargetHelper.js`, computeDesktopIcons):
+
+        sources = [linux.icon, config.mac?.icon ?? config.icon]
+
+    Ohne eigenen Eintrag faellt Linux also auf `mac.icon` zurueck und bekaeme das
+    GEPOLSTERTE Bild — AppImage und deb waeren dann rund 20 % zu klein, der gespiegelte
+    Fehler von #503. Deshalb steht `build.linux.icon` ausdruecklich in der package.json,
+    und `test_bilder.py` bewacht die Konfiguration statt der Datei: der fruehere Waechter
+    prueft `icon.png`, die Datei, die Linux in diesem Fall gar nicht mehr benutzt haette.
+    Windows braucht den Eintrag nicht (`sources` beginnt dort mit `win.icon` und faellt
+    auf `config.icon` zurueck, nicht auf `mac.icon`) — er steht trotzdem nicht da, weil
+    der Rueckfall dort schon vorher stimmte.
     """
     rand = (MAC_LEINWAND - MAC_KOERPER) // 2
     if rand * 2 + MAC_KOERPER != MAC_LEINWAND:
@@ -90,7 +105,16 @@ def mac_zeichen():
 
     leinwand = Image.new("RGBA", (MAC_LEINWAND, MAC_LEINWAND), (0, 0, 0, 0))
     koerper = zeichen(MAC_KOERPER)
-    leinwand.paste(koerper, (rand, rand), koerper)
+    # OHNE Maske. Der erste Anlauf uebergab `koerper` auch als Maske, und das war falsch:
+    # PIL rechnet dann ALLE vier Kanaele ueber die Maske, der Alphakanal also gegen sich
+    # selbst -- alpha_neu = alpha^2 / 255. Auf einer leeren Leinwand ist das reiner
+    # Verlust: gemessen 3253 Kantenpixel der abgerundeten Ecken, bis zu 64 von 255
+    # Deckung weniger, und weil auch RGB mitmultipliziert wird, saeumt sich die Kante
+    # dunkel. Die Leinwand ist leer, eine direkte Kopie ist exakt.
+    #
+    # Weder die getbbox()-Gegenprobe unten noch der Alphakanal-Waechter in test_bilder.py
+    # haetten das gefangen: beide messen den RAND, nicht die Kantenqualitaet.
+    leinwand.paste(koerper, (rand, rand))
 
     # Gegenprobe an der fertigen Leinwand, nicht an der Absicht: `zeichen()` fuellt seine
     # Kante randlos, aber das ist eine Annahme ueber eine andere Funktion. Faellt sie
