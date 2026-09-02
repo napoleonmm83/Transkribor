@@ -3484,3 +3484,81 @@ def test_umbenennen_fragt_nach_jobs_innerhalb_der_sperre(client, monkeypatch, tm
 
     assert r.status_code == 409, f"Job im Fenster nicht gesehen — {r.status_code}: {r.text}"
     assert _bestand(tmp_path) == vorher, "trotz 409 wurde umbenannt"
+
+
+def test_umbenennen_bei_zu_langem_namen_gibt_400_statt_500(client, monkeypatch, tmp_path):
+    """#467: `rename_file` prueft Kollisionen, aber nicht die Laenge — und
+    `_umbenennen_oder_keines` reicht jeden Nicht-`PermissionError` durch. Der Endpunkt
+    antwortete damit 500, also „im Server ist etwas kaputt", obwohl der Nutzer nur einen Namen
+    eingegeben hat, den das Dateisystem nicht annimmt.
+
+    Der Fall wird ueber ein praepariertes `os.rename` hergestellt, nicht ueber einen echten
+    300-Zeichen-Namen: die Grenze haengt an Pfadtiefe und Plattform, ein echter Name waere auf
+    einem Wirt rot und auf dem anderen gruen. Dieselbe Vorlage wie im Loeschpfad
+    (`test_loeschen_bei_zu_langem_pfad_loescht_direkt_statt_500`)."""
+    import errno as _errno
+    monkeypatch.setattr(os, "rename",
+                        lambda src, dst: (_ for _ in ()).throw(
+                            OSError(_errno.ENAMETOOLONG, "Dateiname zu lang")))
+    vorher = _bestand(tmp_path)
+
+    r = client.post("/api/projects/Demo/files/S1/rename", json={"name": "S1_neu"})
+
+    assert r.status_code == 400, f"erwartet 400, bekam {r.status_code}: {r.text}"
+    assert "zu lang" in r.json()["detail"]
+    assert _bestand(tmp_path) == vorher, "trotz Fehlschlag wurde etwas umbenannt"
+
+
+def test_projekt_umbenennen_bei_zu_langem_namen_gibt_400_statt_500(client, monkeypatch):
+    """Die NACHBARSTELLE zu #467, und sie steht in keinem Issue: `rename_project` hatte
+    dieselbe ungeschuetzte `os.rename`-Zeile. Ein Fix an einer Stelle ist kein Fix der Klasse.
+
+    Gemessen: ein zu langer VERZEICHNISname wirft auf NTFS denselben `errno=22 / winerror=123`
+    wie ein Dateiname, auf ext4 dasselbe `ENAMETOOLONG` — der Fall verhaelt sich nicht anders,
+    nur die Wache fehlte."""
+    import errno as _errno
+    monkeypatch.setattr(os, "rename",
+                        lambda src, dst: (_ for _ in ()).throw(
+                            OSError(_errno.ENAMETOOLONG, "Verzeichnisname zu lang")))
+
+    r = client.post("/api/projects/Demo/rename", json={"name": "Demo_neu"})
+
+    assert r.status_code == 400, f"erwartet 400, bekam {r.status_code}: {r.text}"
+    assert "zu lang" in r.json()["detail"]
+
+
+def test_ein_anderer_oserror_beim_umbenennen_bleibt_500(client, monkeypatch):
+    """Die GEGENRICHTUNG, ohne die der Fang eine Wache waere, die alles durchwinkt: ein Fehler,
+    der NICHT „Zielname unbrauchbar" heisst, muss weiterhin durchschlagen. Sonst beschriftete
+    der Endpunkt jeden Plattenfehler als Eingabefehler des Nutzers."""
+    import errno as _errno
+    monkeypatch.setattr(os, "rename",
+                        lambda src, dst: (_ for _ in ()).throw(
+                            OSError(_errno.ENOSPC, "kein Platz mehr")))
+
+    with pytest.raises(OSError):
+        client.post("/api/projects/Demo/files/S1/rename", json={"name": "S1_neu"})
+
+
+@pytest.mark.skipif(os.name != "nt", reason="die Zeichenklasse ist Windows-spezifisch")
+def test_windows_sonderzeichen_werden_nicht_als_zu_lang_beschriftet(client, monkeypatch):
+    """Der Befund des kalten Plan-Reviewers: `paths.safe_name` laesst `? * < > | "` durch, und
+    `os.rename` wirft darauf auf NTFS `errno=22 / winerror=123` — genau den Code, den
+    `_name_zu_lang` als Laenge liest. Wer eine Aufnahme in „Was?" umbenennt, bekaeme 400 mit
+    der FALSCHEN Begruendung.
+
+    Abgelehnt werden die Zeichen NICHT: auf POSIX sind sie gueltig, ein Riegel machte einen
+    legalen Namen plattformabhaengig unmoeglich. Also richtig beschriften statt verbieten."""
+    def unbrauchbar(src, dst):
+        e = OSError(22, "Der Dateiname ist ungueltig")
+        e.winerror = 123
+        raise e
+
+    monkeypatch.setattr(os, "rename", unbrauchbar)
+
+    r = client.post("/api/projects/Demo/files/S1/rename", json={"name": "Was?"})
+
+    assert r.status_code == 400, r.text
+    detail = r.json()["detail"]
+    assert "Windows" in detail and "?" in detail, detail
+    assert "zu lang" not in detail, f"falsche Begruendung: {detail}"

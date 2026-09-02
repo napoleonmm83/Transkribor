@@ -701,6 +701,38 @@ def _name_zu_lang(e: OSError) -> bool:
     return e.errno == errno.ENAMETOOLONG or getattr(e, "winerror", None) in _ZU_LANG_WINERROR
 
 
+# Zeichen, die Windows in Dateinamen verbietet, `paths.safe_name` aber durchlaesst — bewusst,
+# denn auf POSIX sind sie gueltig, und ein Riegel machte dort legale Namen unmoeglich.
+_WIN_VERBOTEN = '?*<>|"'
+
+
+def _unbrauchbarer_zielname(e: OSError, name: str) -> str | None:
+    """Beschriftung fuer einen Zielnamen, den das Dateisystem ablehnt — oder None.
+
+    `_name_zu_lang` heisst im LOESCHpfad wirklich „zu lang", und der Kommentar an
+    `_ZU_LANG_WINERROR` sagt auch warum: die Quellpfade kommen dort aus einem `glob` ueber
+    vorhandene Dateien, sind also gueltig, und unbrauchbar wird erst das laengere Ziel.
+
+    BEIM UMBENENNEN GILT DAS NICHT — hier ist der Zielname NUTZEREINGABE. Gemessen auf NTFS
+    (Py 3.13.15, Datei UND Verzeichnis): `os.rename` auf `Na?me.json`, `Na*me`, `Na<me`,
+    `Na|me`, `Na"me` wirft jeweils `errno=22 / winerror=123` — exakt den Code, den
+    `_name_zu_lang` als Laenge liest. Wer eine Aufnahme in „Was?" umbenennt, bekaeme also
+    400 mit der falschen Begruendung. Gefunden vom kalten Plan-Reviewer.
+
+    Die Zeichen deshalb ABZULEHNEN waere die schlechtere Antwort: auf POSIX sind sie gueltig,
+    ein Riegel machte einen legalen Namen plattformabhaengig unmoeglich — und ein Projekt, das
+    auf Linux entsteht, waere nach einem Plattformwechsel nicht mehr zu oeffnen. Also nicht
+    ablehnen, sondern richtig beschriften: wo wir den Fall unterscheiden koennen, sagen wir ihn.
+    """
+    if not _name_zu_lang(e):
+        return None
+    schlecht = sorted({z for z in name if z in _WIN_VERBOTEN})
+    if schlecht and os.name == "nt":
+        return ("Name enthält ein Zeichen, das Windows in Dateinamen nicht erlaubt: "
+                + " ".join(schlecht))
+    return "Name zu lang"
+
+
 def _datei_weg(project: str, base: str, mit_audio: bool) -> int:
     """Alle Dateien EINER Aufnahme entfernen; gibt zurueck, wie viele es waren.
 
@@ -988,7 +1020,19 @@ def rename_project(project: str, body: RenameBody):
     if not _ziel_frei(alt_dir, neu_dir):
         raise HTTPException(status_code=409, detail="Projekt existiert bereits")
     if neu != project:
-        os.rename(alt_dir, neu_dir)
+        # Dieselbe Wache wie beim Umbenennen einer Aufnahme (#467) — die NACHBARSTELLE, denn
+        # ein Fix an einer Stelle ist kein Fix der Klasse: auch hier ist der Zielname
+        # Nutzereingabe, auch hier lief der `OSError` bisher ungefangen in einen 500er.
+        # Gemessen: ein zu langer VERZEICHNISname wirft auf NTFS denselben `errno=22 /
+        # winerror=123` wie ein Dateiname, auf ext4 dasselbe `ENAMETOOLONG` — der Fall
+        # verhaelt sich also nicht anders, nur die Wache fehlte.
+        try:
+            os.rename(alt_dir, neu_dir)
+        except OSError as e:
+            grund = _unbrauchbarer_zielname(e, neu)
+            if grund is None:
+                raise
+            raise HTTPException(status_code=400, detail=grund) from None
     for b in paths.transcript_bases(neu):
         _doc_felder(_edit_path(neu, b), project=neu)
     return {"ok": True, "name": neu}
@@ -1060,7 +1104,19 @@ def rename_file(project: str, base: str, body: RenameBody):
         # offenen Griffe. Genau daran zerbrach die Schleife: gemessen blieb `A_fremd_neu.json`
         # neben `A_fremd.raw.txt` liegen, die Aufnahme gab es zweimal halb (#451). Alles oder
         # nichts, mit Ruecklauf.
-        _umbenennen_oder_keines(paare, base)
+        # #467: ohne diesen Fang reicht `_umbenennen_oder_keines` jeden Nicht-`PermissionError`
+        # durch, und der Endpunkt antwortet 500 — „im Server ist etwas kaputt", obwohl der
+        # Nutzer nur einen Namen eingegeben hat, den das Dateisystem nicht annimmt. Der
+        # Rueckzug ist zu diesem Zeitpunkt bereits gelaufen (die Funktion dreht vor dem
+        # `raise` zurueck), es liegt also nichts halb um. `HTTPException` ist kein `OSError`
+        # und faellt an diesem Fang vorbei — der 409 aus dem belegten Zugriff bleibt.
+        try:
+            _umbenennen_oder_keines(paare, base)
+        except OSError as e:
+            grund = _unbrauchbarer_zielname(e, neu)
+            if grund is None:
+                raise
+            raise HTTPException(status_code=400, detail=grund) from None
         audio = find_audio(project, neu)
         _doc_felder(_edit_path(project, neu), base=neu,
                     audio=os.path.basename(audio) if audio else "")
