@@ -352,7 +352,9 @@ function aufPlattform(p, fn) {
 //
 // **Beide Zweige werden auf JEDER Plattform geprueft**, und das ist der Grund, warum dieser
 // Test seit #251 zweigeteilt ist: er verlangte den `overlay:`-Eintrag plattformBLIND und lief
-// dabei nie auf einem Mac — das PR-CI-Bein „Electron" laeuft auf `ubuntu-latest`. Aufgefallen
+// dabei nie auf einem Mac — das PR-CI-Bein „Electron" lief damals nur auf `ubuntu-latest`.
+// Seit #464 ist es eine Matrix ueber ubuntu, windows und macos; der Satz beschreibt also den
+// Zustand VOR diesem Umbau, nicht den heutigen. Aufgefallen
 // ist es erst im Release-Lauf 33183032424, wo der macOS-Bau daran scheiterte und **kein
 // Release** herauskam. Kein Produktfehler: `main.js` steigt auf `darwin` bewusst aus, weil es
 // dort keine Overlay-Titelleiste gibt (`hiddenInset`, s. fenster.js).
