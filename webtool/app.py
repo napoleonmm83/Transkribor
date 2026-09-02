@@ -112,8 +112,35 @@ def _weg_aufraeumen_starten() -> "threading.Thread":
             print(f"[aufraeumen] {n} liegengebliebene Datei(en) aus abgebrochenen "
                   f"Loeschvorgaengen entfernt", flush=True)
 
-    _weg_faden = threading.Thread(target=lauf, name="weg-reste", daemon=True)
-    _weg_faden.start()
+    # DER START SELBST GEHOERT IN DEN try, nicht nur der Rumpf — und das ist ein
+    # Bot-Befund (Major), keine Vorsicht. Der `try` in `lauf()` deckt den RUMPF; ein
+    # `threading.Thread(...).start()` kann selbst werfen (`RuntimeError: can't start new
+    # thread`), und dieser Aufruf steht im Lifespan VOR dem `yield`: der Server kaeme dann
+    # gar nicht erst hoch — wegen reiner Aufraeumarbeit. Genau die Klasse, die
+    # `ytdlp_update.starte_hintergrund` eine Datei weiter schon ausbuchstabiert
+    # („die Kosten des Fehlers, nicht seine Wahrscheinlichkeit"); dort wird der Wurf
+    # weitergereicht, weil ein Endpunkt ihn melden soll, hier geschluckt, weil niemand auf
+    # das Ergebnis wartet.
+    #
+    # Der Riegel sitzt HIER und nicht am Aufrufort: die Zusage „ein kaputter Nebenlauf
+    # laesst den Server trotzdem hochkommen" steht im Docstring DIESER Funktion, also muss
+    # sie an ihrer Grenze halten — sonst traegt sie nur der eine Aufrufer, der daran
+    # gedacht hat. Dieselbe Regel wie bei `sperre`: eine Wache wirkt nur, wenn sie nicht
+    # jeder Aufrufer neu setzen muss.
+    #
+    # `_weg_faden` bleibt None, wenn der Start scheitert — das Feld heisst „ein Faden, der
+    # LAEUFT", und ein nie gestartetes Thread-Objekt darin liesse den Verdrahtungstest
+    # gruen fuer einen Durchgang, den es nicht gibt.
+    faden = threading.Thread(target=lauf, name="weg-reste", daemon=True)
+    try:
+        faden.start()
+    except Exception as e:                                        # noqa: BLE001 — siehe oben
+        # NICHT `BaseException`: ein `KeyboardInterrupt` waehrend des Starts ist eine
+        # Abbruchentscheidung und gehoert weitergereicht, kein Aufraeumfehler.
+        print(f"[aufraeumen] nicht angestossen ({type(e).__name__}: {e})", flush=True)
+        _weg_faden = None
+        return None
+    _weg_faden = faden
     return _weg_faden
 
 
@@ -726,7 +753,7 @@ def _umbenennen_oder_keines(paare: list, base: str) -> None:
             # `PermissionError`, `EIO` und einen zu langen Pfad").
             #
             # Konkret hinge sonst genau EIN Fall dauerhaft: die Reservierung haengt 24 Zeichen an
-            # (`.<8hex>.weg`), eine Datei nahe der 260er-Pfadgrenze liess sich vorher loeschen und
+            # (`.<epoch>.<8hex>.weg`), eine Datei nahe der 260er-Pfadgrenze liess sich vorher loeschen und
             # scheiterte danach bei JEDEM Versuch — mit dem Rat zu warten. Das waere die einzige
             # Stelle, an der dieser Fix etwas WEGNIMMT, was vorher ging.
             if not isinstance(e, PermissionError):
@@ -1336,12 +1363,11 @@ def rename_file(project: str, base: str, body: RenameBody):
         audio = find_audio(project, neu)
         _doc_felder(_edit_path(project, neu), base=neu,
                     audio=os.path.basename(audio) if audio else "")
-        # `.weg`-Reste eines abgebrochenen Laufs wandern MIT (sie tragen den Basisnamen und werden
-        # vom Glob getroffen), zaehlen aber NICHT: `umbenannt` nennt dem Nutzer die Dateien SEINER
-        # Aufnahme, nicht unsichtbare Ueberbleibsel — dieselbe Regel wie `geloescht` in `_datei_weg`.
+        # `umbenannt` nennt dem Nutzer die Dateien SEINER Aufnahme, nicht unsichtbare
+        # Ueberbleibsel — dieselbe Regel wie `geloescht` in `_datei_weg`.
         #
         # SEIT #459 kommen `.weg`-Reste gar nicht mehr in `paare` (siehe den Glob oben), der
-        # Filter hier ist also redundant. Er bleibt trotzdem stehen: `umbannt` beschreibt eine
+        # Filter hier ist also redundant. Er bleibt trotzdem stehen: `umbenannt` beschreibt eine
         # ZUSAGE an den Nutzer („die Dateien DEINER Aufnahme"), und die soll auch dann halten,
         # wenn jemand den Glob spaeter wieder weitet. Dass er heute nichts filtert, steht hier,
         # damit ihn niemand fuer einen scharfen Schutz haelt — die Mutationsprobe bekommt ihn
