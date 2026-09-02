@@ -15,7 +15,7 @@
     "start": "npm run build:frontend && electron .",
     "dist": "npm run build:frontend && electron-builder --publish never",
     "release": "npm run build:frontend && electron-builder --publish always",
-    "test:electron": "node --test electron/*.test.js"
+    "test:electron": "node scripts/testlauf.mjs electron/*.test.js && node scripts/testlauf.mjs scripts/testlauf.test.mjs"
   },
   "devDependencies": {
     "electron": "^43.3.0",
