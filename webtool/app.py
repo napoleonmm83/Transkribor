@@ -81,15 +81,23 @@ def _weg_aufraeumen_starten() -> "threading.Thread":
     sähe sonst die ECHTE Projektwurzel und loeschte darin. Das war der schwerste Befund des
     kalten Plan-Reviews.
 
-    WARUM UEBERHAUPT EIN FADEN, obwohl es billig ist: GEMESSEN an 300 Projekten mit 3605
-    Dateien, gegen DIESE Funktion (nicht gegen den Nachbau aus der Planphase — der Bot hat
-    zu Recht bemaengelt, dass die Zahl unbelegt dastand, und der Plan hatte die Nachmessung
-    ausdruecklich zugesagt): **32 ms** im Normalfall, in dem nichts wegzuraeumen ist
-    (31,6 / 32,2 / 41,0), und **129 ms** im schlechtesten, mit 900 Loeschungen in einem
-    Durchgang (109,1 / 128,5 / 130,2). Der Normalfall ist der Alltag — ein Start findet in
-    aller Regel null Reste —, und er liegt unter `list_projects` mit seinen 50-115 ms, das
-    bei JEDEM Poll laeuft. Die 31 ms des Nachbaus waren also richtig, aber nur fuer eine
-    Haelfte; die zweite stand nirgends.
+    WARUM UEBERHAUPT EIN FADEN, obwohl es billig ist — und die Zahl dazu ist NACHFAHRBAR,
+    nicht behauptet: `scripts/weg_benchmark.py` baut 300 Projekte mit 3605 Dateien und misst
+    GENAU DIESE Funktion. Auf dieser Maschine (Py 3.13.15, win32, warme lokale Platte,
+    Median aus drei Laeufen): **36 ms**, wenn nichts wegzuraeumen ist, **139 ms** im
+    schlechtesten Fall mit 605 Loeschungen in einem Durchgang.
+
+    Der Normalfall ist der Alltag — ein Start findet in aller Regel null Reste —, und er
+    liegt unter `list_projects` mit seinen 50-115 ms, das bei JEDEM Poll laeuft.
+
+    ZUR HERKUNFT DIESER ZEILE, weil sie eine Lehre traegt: hier standen zuerst 31 ms,
+    gemessen an einem NACHBAU aus der Planphase. Der Plan hatte die Nachmessung gegen die
+    echte Funktion ausdruecklich zugesagt; sie unterblieb. Aufgefallen ist es dem
+    Bot-Vorabcheck „Behauptung oder Messung", nicht dem Autor. Die alte Zahl war fuer den
+    Normalfall sogar richtig — der schlechteste Fall, das Vierfache, stand nirgends. Darum
+    liegt die Messung jetzt als Skript im Repo: eine Zahl im Kommentar ohne Skript daneben
+    driftet unsichtbar (#463).
+
     Alles auf einer warmen lokalen Platte. `TRANSKRIBOR_PROJEKTE` darf aber auf eine Netzfreigabe zeigen (dieselbe Annahme,
     die `sperre.py` bei `O_NONBLOCK` traegt), und dort ist dieselbe Schleife um
     Groessenordnungen teurer. Ein Startpfad, der auf ein Netz wartet, ist genau der Fehler,
