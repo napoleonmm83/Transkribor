@@ -983,8 +983,12 @@ def _datei_weg(project: str, base: str, mit_audio: bool) -> int:
         # der NORMALFALL, kein Defekt). Bleibt danach eine liegen, faengt sie ein spaeterer
         # `_datei_weg`-Lauf DERSELBEN Aufnahme ein (`<base>.*` im transkripte-Ordner, das
         # `.weg`-Muster im audio-Ordner) — nach einem vollstaendigen `delete_file` gibt es
-        # diesen Basisnamen aber nicht mehr, also nie. Der Rest ist dann unsichtbar belegter
-        # Plattenplatz: benannt als #459, nicht behauptet als geheilt.
+        # diesen Basisnamen aber nicht mehr, also nie.
+        #
+        # SEIT #459 ist das nicht mehr das Ende: `_weg_reste_aufraeumen` laeuft beim
+        # Serverstart ueber ALLE Projekte und nimmt mit, was aelter als `_WEG_REST_ALTER` ist.
+        # Der Rest ueberlebt also hoechstens bis zum naechsten Start, statt fuer immer als
+        # unsichtbar belegter Plattenplatz liegenzubleiben.
         for versuch in range(_WEG_VERSUCHE):
             try:
                 os.remove(p + weg)
