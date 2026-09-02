@@ -82,9 +82,15 @@ def _weg_aufraeumen_starten() -> "threading.Thread":
     kalten Plan-Reviews.
 
     WARUM UEBERHAUPT EIN FADEN, obwohl es billig ist: GEMESSEN an 300 Projekten mit 3605
-    Dateien braucht der Durchgang **31 ms** (drei Laeufe: 31,2 / 31,3 / 33,1) — weniger als
-    `list_projects` mit seinen 50-115 ms, das bei jedem Poll laeuft. Auf einer warmen lokalen
-    Platte. `TRANSKRIBOR_PROJEKTE` darf aber auf eine Netzfreigabe zeigen (dieselbe Annahme,
+    Dateien, gegen DIESE Funktion (nicht gegen den Nachbau aus der Planphase — der Bot hat
+    zu Recht bemaengelt, dass die Zahl unbelegt dastand, und der Plan hatte die Nachmessung
+    ausdruecklich zugesagt): **32 ms** im Normalfall, in dem nichts wegzuraeumen ist
+    (31,6 / 32,2 / 41,0), und **129 ms** im schlechtesten, mit 900 Loeschungen in einem
+    Durchgang (109,1 / 128,5 / 130,2). Der Normalfall ist der Alltag — ein Start findet in
+    aller Regel null Reste —, und er liegt unter `list_projects` mit seinen 50-115 ms, das
+    bei JEDEM Poll laeuft. Die 31 ms des Nachbaus waren also richtig, aber nur fuer eine
+    Haelfte; die zweite stand nirgends.
+    Alles auf einer warmen lokalen Platte. `TRANSKRIBOR_PROJEKTE` darf aber auf eine Netzfreigabe zeigen (dieselbe Annahme,
     die `sperre.py` bei `O_NONBLOCK` traegt), und dort ist dieselbe Schleife um
     Groessenordnungen teurer. Ein Startpfad, der auf ein Netz wartet, ist genau der Fehler,
     den `beim_start` schon einmal gemacht hat.

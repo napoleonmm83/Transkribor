@@ -32,8 +32,9 @@ hat. Lesbar, aber unschön — das ist Absicht.
 - Wartende Aufnahmen sagen jetzt, worauf sie warten und wie viele noch davor liegen — statt nur „In Warteschlange“.
 
 **Behoben**
-- Bricht ein Löschen mittendrin ab, bleibt kein unsichtbarer Rest mehr für immer liegen — Transkribor gibt den Platz beim Start wieder frei, sobald der Rest etwa zehn Minuten alt ist.
+- Bricht ein Löschen mittendrin ab, versucht Transkribor den Platz beim nächsten Start wieder freizugeben, sobald der Rest etwa zehn Minuten alt ist — vorher blieb er unsichtbar liegen.
 - Ein zu langer Name beim Umbenennen meldet jetzt „Name zu lang“ statt eines Serverfehlers.
+- Enthält der neue Name ein Zeichen, das Windows nicht erlaubt, steht das jetzt in der Meldung — vorher hiess es dort fälschlich „Name zu lang“.
 - Der Fortschrittsbalken einer gestückelten Korrektur bleibt am Ende nicht mehr eine Stufe zu niedrig stehen.
 - Eine Aufnahme, deren Handarbeit geschützt wurde, heisst nicht mehr „Übersprungen" — das las sich, als sei sie liegen geblieben.
 - Die Meldung beim Löschen einer laufenden Aufnahme spricht nicht mehr von „Transkription", wenn gerade korrigiert wird.
