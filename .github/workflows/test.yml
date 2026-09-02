@@ -200,12 +200,18 @@ jobs:
 
       - run: npm ci --no-audit --fund=false
 
-      # `node --test electron/*.test.js`: npm faehrt Skripte auf Windows durch cmd.exe, und
-      # cmd expandiert keine Globs — node bekommt das Muster dann woertlich und loest es
-      # selbst auf (seit Node 21.0.0, `test_runner: support passing globs`, nodejs/node#47653
-      # — nicht erst seit 22). Nachgestellt, nicht gehofft: `node --test
-      # 'electron/*.test.js'` (in Anfuehrungszeichen, damit die Shell nichts expandiert)
-      # sammelt dieselben 197 Tests.
+      # `node scripts/testlauf.mjs electron/*.test.js && node scripts/testlauf.mjs
+      # scripts/testlauf.test.mjs`: npm faehrt Skripte auf Windows durch cmd.exe, und cmd
+      # expandiert keine Globs — node bekommt das Muster dann woertlich und loest es selbst
+      # auf (seit Node 21.0.0, `test_runner: support passing globs`, nodejs/node#47653 —
+      # nicht erst seit 22). Beide Wege sind inzwischen nachgestellt, nicht gehofft: in
+      # Anfuehrungszeichen (Shell expandiert nichts) und ueber `npm run` unter cmd.exe
+      # sammelt der Lauf je dieselben Tests, 217 + 5.
+      #
+      # Die Huelle statt `node --test` direkt, weil ein Glob ohne Treffer sonst `tests 0` mit
+      # Exitcode 0 meldet — 217 Waechter waeren ein gruener Haken (#510). Zwei Aufrufe statt
+      # zwei Muster in einem: sonst halten die Selbsttests die Summe ueber null,
+      # waehrend die Electron-Suite verschwindet.
       - run: npm run test:electron
 
   # Die drei Release-Skripttests stehen in einem EIGENEN Job, und zwar aus zwei Gruenden, die
