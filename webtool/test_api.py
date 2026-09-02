@@ -3874,3 +3874,76 @@ def test_ein_stempel_in_der_zukunft_macht_einen_rest_nicht_unsterblich(tmp_path)
     assert appmod._weg_alter(str(zukunft)) < 0, "Praemisse: der Stempel liegt in der Zukunft"
     assert appmod._weg_reste_aufraeumen(str(tmp_path)) == 1
     assert not zukunft.exists(), "ein Zukunfts-Stempel machte den Rest unsterblich"
+
+
+def test_ein_gescheiterter_fadenstart_haelt_den_server_nicht_auf(monkeypatch, tmp_path, capsys):
+    """Bot-Befund (Major): der `try` in `lauf()` deckt den RUMPF — `Thread.start()` selbst
+    lief ungeschuetzt, und der Aufruf steht im Lifespan VOR dem `yield`. Ein
+    `RuntimeError: can't start new thread` haette den Server also gar nicht erst hochkommen
+    lassen, wegen reiner Aufraeumarbeit.
+
+    Die Klasse ist im Haus bekannt: `ytdlp_update.starte_hintergrund` buchstabiert sie aus
+    („die Kosten des Fehlers, nicht seine Wahrscheinlichkeit") und faengt dort ebenfalls am
+    Start. Der Unterschied ist die Richtung — dort wird weitergereicht, weil ein Endpunkt
+    den Fehler melden soll, hier geschluckt, weil niemand auf das Ergebnis wartet.
+
+    Gefaelscht wird NUR `appmod.threading`, nicht `threading.Thread` global: das globale
+    Attribut traefe die Faden-Verwaltung des TestClients (dieselbe Begruendung wie beim
+    ytdlp-Zwilling). `app.py` zieht aus `threading` ausschliesslich diesen einen Faden —
+    nachgesehen, nicht angenommen.
+
+    Mutation, die ihn rot macht: `try`/`except` um `faden.start()` entfernen ⇒ der
+    `RuntimeError` verlaesst `_lifespan` und `TestClient.__enter__` wirft.
+    """
+    import webtool.app as appmod
+
+    class _Fadenlos:
+        class Thread:
+            def __init__(self, *a, **k):
+                pass
+
+            def start(self):
+                raise RuntimeError("can't start new thread")
+
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    monkeypatch.setattr(appmod.ytdlp_update, "beim_start", lambda: False)
+    monkeypatch.setattr(appmod, "_weg_faden", None)
+    monkeypatch.setattr(appmod, "threading", _Fadenlos)
+    rest = _weg_datei(tmp_path / "Demo" / "transkripte", "S1.json", 3600)
+
+    with TestClient(appmod.app):          # der eigentliche Beweis: das hier wirft nicht
+        pass
+
+    assert appmod._weg_faden is None, "ein nie gestarteter Faden darf nicht als laufend gelten"
+    assert rest.exists(), "ohne Faden raeumt niemand — die Datei muss liegen bleiben"
+    assert "[aufraeumen] nicht angestossen" in capsys.readouterr().out, \
+        "der Ausfall ist still geblieben"
+
+
+def test_unbrauchbarer_zielname_trennt_zeichen_von_laenge(monkeypatch):
+    """Bot-Befund: die Unterscheidung selbst ist reine Python-Logik, ihr einziger Test hing
+    aber an `skipif(os.name != "nt")` — auf dem ubuntu-Laeufer lief er NIE, und die Mutation
+    `os.name == "nt"` → `"posix"` blieb dort gruen. Der Endpunkt-Test daneben braucht sein
+    `skipif` zu Recht (`os.rename` verhaelt sich plattformabhaengig); diese Funktion nicht.
+
+    Geprueft werden BEIDE Richtungen plus der Nicht-Laengenfall — eine Beschriftung, die
+    immer „Zeichen" sagt, ist derselbe Schaden von der anderen Seite.
+    """
+    import errno as _errno
+
+    import webtool.app as appmod
+    e = OSError(22, "ungueltig")
+    e.winerror = 123
+
+    monkeypatch.setattr(appmod.os, "name", "nt")
+    assert "Windows" in (appmod._unbrauchbarer_zielname(e, "Was?") or "")
+    assert appmod._unbrauchbarer_zielname(e, "Sauber") == "Name zu lang"
+
+    # Gegenrichtung: auf POSIX gibt es diese Zeichenklasse nicht, `Was?` ist ein legaler Name.
+    monkeypatch.setattr(appmod.os, "name", "posix")
+    assert appmod._unbrauchbarer_zielname(e, "Was?") == "Name zu lang"
+
+    # Und ein Fehler OHNE Laengenbezug bleibt None — sonst beschriftete die Funktion
+    # jeden beliebigen OSError als Namensproblem.
+    monkeypatch.setattr(appmod.os, "name", "nt")
+    assert appmod._unbrauchbarer_zielname(OSError(_errno.ENOSPC, "voll"), "Was?") is None
