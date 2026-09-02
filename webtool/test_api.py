@@ -885,6 +885,17 @@ def test_jede_route_die_einen_job_startet_traegt_den_namensraum_riegel():
             elif isinstance(k, ast.ExceptHandler) and k.name:
                 raus.add(k.name)                     # `except E as x` ist ein STRING, kein
                                                      # Name-Knoten — sonst falsch-rot
+            elif isinstance(k, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and k is not fn:
+                raus.add(k.name)                     # `def x` / `class x` binden ebenfalls
+                                                     # lokal — und AUCH ueber `.name`, nicht
+                                                     # ueber einen Name-Store-Knoten. Ohne
+                                                     # diesen Zweig war `lokale()` fuer die
+                                                     # zwei haeufigsten Bindungsformen blind
+                                                     # (Bot-Major an diesem PR, Proben
+                                                     # CR-7/CR-8): eine Route konnte
+                                                     # `_sicherer_projektname` als inneres
+                                                     # `def` bzw. `class` definieren und
+                                                     # damit den Riegel vortaeuschen.
         return raus
 
     def knoten(fn, tief: bool):
@@ -904,7 +915,7 @@ def test_jede_route_die_einen_job_startet_traegt_den_namensraum_riegel():
                                           ast.Lambda, ast.ClassDef)):
                 stapel.extend(ast.iter_child_nodes(k))
 
-    def bezuege(fn, tief: bool = True) -> list:
+    def bezuege(fn) -> list:
         """(Name, Zeile) jeder Nennung — Aufruf ODER blosse Referenz.
 
         Die Referenz zaehlt mit, weil sie genauso einen Job startet: `run_in_threadpool(
@@ -917,7 +928,7 @@ def test_jede_route_die_einen_job_startet_traegt_den_namensraum_riegel():
         """
         gebunden = lokale(fn)
         raus = []
-        for k in knoten(fn, tief):
+        for k in knoten(fn, tief=True):
             if isinstance(k, ast.Attribute):
                 raus.append((punktname(k), k.lineno))
             elif (isinstance(k, ast.Name) and isinstance(k.ctx, ast.Load)
@@ -955,11 +966,38 @@ def test_jede_route_die_einen_job_startet_traegt_den_namensraum_riegel():
     assert {"transcribe", "correct", "correct_file", "retranscribe_file",
             "fetch_urls", "upload_audio"} <= routen, sorted(routen)
 
-    # Der Riegel zaehlt nur aus dem RUMPF der Route (`tief=False`), der Start aus allem
-    # (eine Lambda startet genauso). Siehe `knoten`.
-    bezug_rumpf = {f.name: bezuege(f, tief=False) for f in funktionen}
     for n in sorted(routen):
-        riegel = [z for b, z in bezug_rumpf[n] if b == "_sicherer_projektname"]
+        # Der Riegel zaehlt nur als AUFRUF und nur aus dem RUMPF der Route; der Start
+        # dagegen aus allem, eine Lambda startet genauso (siehe `knoten`).
+        #
+        # Auf `bezuege` gestuetzt war das ein Loch, und zwar eines, das die HAERTUNG erst
+        # aufgemacht hat (Bot-Befund an diesem PR): dort zaehlt auch eine blosse Referenz
+        # mit. `guard = _sicherer_projektname` frueh in der Funktion erfuellte damit
+        # `riegel`, ein Aufruf NACH `jobs.start` erfuellte `argumente` — beide Zusicherungen
+        # gruen, waehrend der Job vor der Pruefung startet. Riegel UND Argumentpruefung
+        # kommen deshalb aus derselben Knotenliste.
+        #
+        # `lokale()` bleibt dabei in Kraft, und das ist die Korrektur eines eigenen Fehlers:
+        # `bezuege` verwarf lokal gebundene Namen, die erste Fassung von `rufe` nicht mehr.
+        # Damit erfuellte eine ATTRAPPE den Riegel — `_sicherer_projektname = lambda p: p`
+        # plus Aufruf, und der Waechter meldete gruen (gemessen an einer praeparierten
+        # `transcribe`-Route: ohne die Zeile gruen, mit ihr rot; Probe CR-6). Gefunden haben
+        # das der gegnerische Subagent und die CodeRabbit-CLI unabhaengig voneinander.
+        #
+        # DER PREIS, benannt statt verschwiegen: ein route-lokaler Alias auf die ECHTE
+        # Funktion (`_sicherer_projektname = paths.sicherer_projektname`) faellt damit
+        # ebenfalls durch, obwohl er schuetzt — ein Fehlalarm. Das ist die gewollte
+        # Richtung: ein falsches ROT ist laut und wird repariert, ein falsches GRUEN ist
+        # still, und ein gruener Struktur-Waechter ueber einer offenen Tuer ist schlimmer
+        # als gar keiner. Heute gibt es die Form nicht (alle 14 Aufrufstellen in `app.py`
+        # sind schlichte Namensaufrufe); kommt sie, ist die Antwort, den Alias
+        # aufzuloesen — nicht, die Zeile wieder zu entfernen.
+        gebunden_hier = lokale(nach_namen[n])
+        rufe = [k for k in knoten(nach_namen[n], tief=False)
+                if isinstance(k, ast.Call) and isinstance(k.func, ast.Name)
+                and k.func.id == "_sicherer_projektname"
+                and k.func.id not in gebunden_hier]
+        riegel = [k.lineno for k in rufe]
         start = [z for b, z in bezug[n] if ist_start(b) or b in starter - {n}]
         assert riegel, (
             f"app.py:{n} startet einen Job, ruft aber keinen _sicherer_projektname — ein "
@@ -972,9 +1010,7 @@ def test_jede_route_die_einen_job_startet_traegt_den_namensraum_riegel():
             f"den Job aber schon in Zeile {min(start)} — der Riegel kommt zu spaet.")
         # ... und auf dem PROJEKTNAMEN. Auf ein anderes Argument gelegt blieb der Waechter
         # ebenfalls gruen (F2, Probe M-F).
-        argumente = [k.args[0] for k in knoten(nach_namen[n], tief=False)
-                     if isinstance(k, ast.Call) and isinstance(k.func, ast.Name)
-                     and k.func.id == "_sicherer_projektname" and k.args]
+        argumente = [k.args[0] for k in rufe if k.args]
         assert any(isinstance(a, ast.Name) and a.id == "project" for a in argumente), (
             f"app.py:{n} ruft _sicherer_projektname, aber nicht auf `project` — der Riegel "
             f"prueft dann einen anderen Wert als den, unter dem der Lauf druckt.")

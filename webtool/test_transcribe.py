@@ -891,6 +891,66 @@ def test_transcribe_project_meldet_active_done_und_ueberspringt_geloeschtes_audi
     assert not (proj_dir / "transkripte" / "S2.json").exists()
 
 
+@pytest.mark.parametrize("roh_da,erwartet_scope,erwartet_gesehen,erwartet_ki", [
+    # POSITIVKONTROLLE: ohne fremde Roh-JSON nimmt der Lauf `b` sehr wohl mit — der Sensor
+    # sieht die zweite Aufnahme also, und der Nullbefund darunter ist etwas wert.
+    (False, ["a", "b"], ["a.mp3", "b.mp3"], ["a", "b"]),
+    # Die eigentliche Zusicherung: `b.json` liegt schon da (ein `correct run` haette es also
+    # in seinem Bereich) — `b` bleibt vollstaendig draussen.
+    (True, ["a"], ["a.mp3"], ["a"]),
+])
+def test_transcribe_project_nimmt_keine_base_mit_vorhandener_roh_json(
+        tmp_path, monkeypatch, capsys, roh_da, erwartet_scope, erwartet_gesehen, erwartet_ki):
+    """Die andere Haelfte der Disjunktheit zu `correct.cmd_run` (#496).
+
+    `cmd_run` fixiert seinen Bereich beim Start auf die Basen MIT Roh-JSON (Zwilling:
+    `test_correct.py`, `test_cmd_run_fixiert_seinen_bereich_beim_start`). Damit die beiden
+    Laeufe eines Projekts sich nie dieselbe Aufnahme teilen, muss `transcribe_project` die
+    Gegenrichtung halten: keine Base MIT Roh-JSON — weder transkribieren noch korrigieren.
+
+    Geprueft werden deshalb DREI Stellen, denn jede fuer sich koennte fallen:
+      * `[scope]` (`transcribe.py`, `offen_paare`) — was der Lauf als Bereich MELDET; danach
+        gibt `jobs.py` alle uebrigen Aufnahmen zum Loeschen/Umbenennen frei (#80).
+      * `gesehen` (der `pending`-Filter der Runde) — was er wirklich ANFASST. Faellt nur
+        dieser, ueberschreibt der Lauf eine fremde Roh-JSON, waehrend `[scope]` noch schweigt.
+      * die KI-Uebergabe (`ai_pool.submit(correct_ai_single, …)`) — der Pool bekommt nur, was
+        DIESE Schleife frisch transkribiert hat. Ein spaeterer „am Ende alles korrigieren"-Pass
+        liesse die beiden oberen gruen und kollidierte trotzdem mit `cmd_run`.
+    Dazu die Unversehrtheit der fremden Datei: sie ist der Schaden, um den es in #496 geht.
+
+    `transcribe_project` scannt in JEDER Runde neu (anders als `cmd_run`) — die Disjunktheit
+    haengt auf dieser Seite also allein an diesem Filter.
+    """
+    from webtool import correct as _c
+    from webtool import llm
+    proj, gesehen = _lauf_projekt(tmp_path, monkeypatch)
+    tdir = proj / "transkripte"
+    tdir.mkdir(parents=True, exist_ok=True)
+    fremd = {"language": "de", "segments": [], "text": "fremde Roh-JSON"}
+    if roh_da:
+        (tdir / "b.json").write_text(json.dumps(fremd), encoding="utf-8")
+    monkeypatch.setenv("TRANSKRIBOR_DIARIZE", "0")     # hermetisch: kein echtes pyannote
+    monkeypatch.setattr(llm, "available", lambda: (True, ""))
+    ki = []
+    monkeypatch.setattr(_c, "prep_single", lambda p, b: True)
+    monkeypatch.setattr(_c, "correct_ai_single", lambda p, b, **kw: (ki.append(b), True)[1])
+
+    transcribe.transcribe_project("P", "large-v3", "de", autocorrect=True)
+
+    aus = capsys.readouterr().out
+    if roh_da:
+        # ZUERST, nicht zuletzt. Das ist der SCHADEN aus #496 — eine fremde Roh-JSON wird
+        # ueberschrieben —, und `gesehen` darunter ist nur sein Symptom. Als LETZTE der vier
+        # Zusicherungen war die Zeile unerreichbar: wer `b` ueberschreibt, muss `b`
+        # transkribieren, und dann faellt `gesehen` vorher. Sie benennt jetzt beim
+        # Fehlschlag die Sache statt des Anzeichens.
+        assert json.loads((tdir / "b.json").read_text(encoding="utf-8")) == fremd
+    assert [z for z in aus.splitlines() if z.startswith("[scope] ")] == \
+        ["[scope] " + "\t".join(erwartet_scope)]
+    assert gesehen == erwartet_gesehen
+    assert sorted(ki) == erwartet_ki                   # Poolreihenfolge ist nicht zugesichert
+
+
 def test_transcribe_project_autocorrect_streaming_pipeline(monkeypatch, tmp_path, capsys):
     """Verifiziert die End-to-End Streaming-Pipeline in transcribe_project(autocorrect=True):
     - Whisper und Diarisierung laufen sequenziell (max_hw == 1).
