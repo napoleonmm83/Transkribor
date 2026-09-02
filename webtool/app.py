@@ -6,6 +6,7 @@ import json
 import os
 import shutil
 import sys
+import threading
 import time
 import uuid
 import zipfile
@@ -62,6 +63,50 @@ for _name in settings.load_env():
     print(f"[.env] {_name}", flush=True)
 
 
+# Der zuletzt gestartete Aufraeumfaden — nur damit ein Test ihn abwarten kann. Die
+# `client`-Fixture wartet im Teardown ausschliesslich auf ytdlps Faden; ein zweiter, der noch
+# laeuft, waere sonst nicht einholbar.
+_weg_faden: "threading.Thread | None" = None
+
+
+def _weg_aufraeumen_starten() -> "threading.Thread":
+    """Den `.weg`-Aufraeumlauf im Hintergrund anstossen (#459).
+
+    EIGENER Faden, nicht `ytdlp_update.starte_hintergrund`: das ist keine wiederverwendbare
+    Hausform, sondern ytdlps eigene Zustandsmaschine (`_lauf`, `_lauf_sperre`, ein
+    `finally`-Vertrag). Der Lifespan-Kommentar sagt selbst „Im Faden laeuft nur das pip".
+
+    DIE WURZEL WIRD HIER AUFGELOEST, vor dem Start — nicht im Faden. `paths.projekte_root()`
+    liest `os.environ` bei jedem Aufruf; ein Faden, der einen `monkeypatch`-Teardown ueberlebt,
+    sähe sonst die ECHTE Projektwurzel und loeschte darin. Das war der schwerste Befund des
+    kalten Plan-Reviews.
+
+    WARUM UEBERHAUPT EIN FADEN, obwohl es billig ist: GEMESSEN an 300 Projekten mit 3605
+    Dateien braucht der Durchgang **31 ms** (drei Laeufe: 31,2 / 31,3 / 33,1) — weniger als
+    `list_projects` mit seinen 50-115 ms, das bei jedem Poll laeuft. Auf einer warmen lokalen
+    Platte. `TRANSKRIBOR_PROJEKTE` darf aber auf eine Netzfreigabe zeigen (dieselbe Annahme,
+    die `sperre.py` bei `O_NONBLOCK` traegt), und dort ist dieselbe Schleife um
+    Groessenordnungen teurer. Ein Startpfad, der auf ein Netz wartet, ist genau der Fehler,
+    den `beim_start` schon einmal gemacht hat.
+
+    Der Faden ist `daemon=True`: stirbt er beim Interpreter-Ende mittendrin, bleibt nichts
+    Halbes zurueck — er loescht nur, `os.remove` ist je Datei atomar, und was uebrig ist, holt
+    der naechste Start.
+    """
+    global _weg_faden
+    root = paths.projekte_root()
+
+    def lauf() -> None:
+        n = _weg_reste_aufraeumen(root)
+        if n:
+            print(f"[aufraeumen] {n} liegengebliebene Datei(en) aus abgebrochenen "
+                  f"Loeschvorgaengen entfernt", flush=True)
+
+    _weg_faden = threading.Thread(target=lauf, name="weg-reste", daemon=True)
+    _weg_faden.start()
+    return _weg_faden
+
+
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
     # #253: die faellige yt-dlp-Kalenderpruefung gehoert HIERHER, nicht vor jeden URL-Import.
@@ -78,6 +123,7 @@ async def _lifespan(app: FastAPI):
     # Selbstaktualisierer laesst den Server trotzdem hochkommen.
     if ytdlp_update.beim_start():
         print("[ytdlp] Kalenderpruefung faellig — aktualisiere im Hintergrund", flush=True)
+    _weg_aufraeumen_starten()
     yield
     # Beim Herunterfahren die Kinder mitnehmen. Die Desktop-App schickt dem Server beim
     # Beenden ein SIGTERM — das erreicht auf POSIX nur uvicorn, whisper/claude sitzen in
