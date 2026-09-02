@@ -66,6 +66,42 @@ def zeichen(kante):
     return _zeichen_roh(kante * UEBER).resize((kante, kante), Image.LANCZOS)
 
 
+# macOS setzt jedes App-Icon in ein festes Raster: der sichtbare Koerper misst 824 px
+# mittig in 1024, ringsum bleiben also 100 px Luft. Windows und Linux kennen dieses
+# Raster nicht — dort ist randlos richtig, und deshalb bleibt icon.png, wie es ist.
+MAC_LEINWAND = 1024
+MAC_KOERPER = 824
+
+
+def mac_zeichen():
+    """Das Zeichen mit Apples Rand — 824 mittig auf transparenten 1024 (#503).
+
+    `electron-builder` wandelt die Vorlage nur nach `.icns` um und ergaenzt nichts.
+    Ein randloses 1024er erscheint deshalb im Dock, im Programme-Ordner und im
+    DMG-Fenster um den Faktor 1024/824 = 1,243 groesser als jedes Nachbarsymbol —
+    gemessen an der ausgelieferten v0.50.2, nicht gerechnet.
+
+    Eigene Datei statt Ueberschreiben von icon.png: `build.win` und `build.linux`
+    leiten weiterhin aus dem randlosen Bild ab, nur `build.mac.icon` zeigt hierher.
+    """
+    rand = (MAC_LEINWAND - MAC_KOERPER) // 2
+    if rand * 2 + MAC_KOERPER != MAC_LEINWAND:
+        raise ValueError(f"Koerper {MAC_KOERPER} sitzt nicht mittig in {MAC_LEINWAND}")
+
+    leinwand = Image.new("RGBA", (MAC_LEINWAND, MAC_LEINWAND), (0, 0, 0, 0))
+    koerper = zeichen(MAC_KOERPER)
+    leinwand.paste(koerper, (rand, rand), koerper)
+
+    # Gegenprobe an der fertigen Leinwand, nicht an der Absicht: `zeichen()` fuellt seine
+    # Kante randlos, aber das ist eine Annahme ueber eine andere Funktion. Faellt sie
+    # irgendwann, waere das Ergebnis stillschweigend wieder zu gross — dieselbe Klasse
+    # Fehler, die dieses Icon ueberhaupt erst hatte.
+    erwartet = (rand, rand, rand + MAC_KOERPER, rand + MAC_KOERPER)
+    if leinwand.getbbox() != erwartet:
+        raise ValueError(f"Sichtbarer Koerper sitzt bei {leinwand.getbbox()}, erwartet {erwartet}")
+    return leinwand
+
+
 def sidebar():
     """164x314 — steht auf der Willkommens- und der Abschlussseite des Assistenten."""
     b, h, u = 164, 314, UEBER
@@ -202,6 +238,7 @@ def dmg_hintergrund():
 
 if __name__ == "__main__":
     zeichen(1024).save(BUILD / "icon.png")
+    mac_zeichen().save(BUILD / "icon-mac.png")
     zeichen(128).save(WURZEL / "electron" / "marke.png")
     sidebar().save(BUILD / "installerSidebar.bmp", "BMP")
     header().save(BUILD / "installerHeader.bmp", "BMP")
@@ -210,5 +247,5 @@ if __name__ == "__main__":
     gross.save(BUILD / "background@2x.png")
     gross.resize((BREITE, HOEHE), Image.LANCZOS).save(BUILD / "background.png")
 
-    print("geschrieben: icon.png, electron/marke.png, installerSidebar.bmp, installerHeader.bmp, "
+    print("geschrieben: icon.png, icon-mac.png, electron/marke.png, installerSidebar.bmp, installerHeader.bmp, "
           "background.png, background@2x.png")
