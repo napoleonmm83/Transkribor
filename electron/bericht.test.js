@@ -1,7 +1,7 @@
 'use strict'
 const test = require('node:test')
 const assert = require('node:assert')
-const { letzteZeilen, kopf, mailto, MAX_URL, MAX_ZEILE } = require('./bericht')
+const { letzteZeilen, kopf, mailto, MAX_URL, MAX_ZEILE, ABWEISUNG, ABWEISUNGEN_IM_BERICHT } = require('./bericht')
 
 const K = kopf({ version: '0.48.1', plattform: 'win32', arch: 'x64', electron: '43.3.0', node: '22.18.0', gepackt: true })
 
@@ -44,6 +44,97 @@ test('erfolgreiche Zugriffszeilen fallen raus, gescheiterte NICHT', () => {
     '[t] INFO:     127.0.0.1:60884 - "GET /api/settings HTTP/1.1" 403 Forbidden',
     '[t] FEHLER: irgendwas',
   ])
+})
+
+test('20 Abweisungszeilen verdraengen die echten FEHLER-Zeilen nicht mehr (#506)', () => {
+  // Das Fertig-wenn aus dem Issue, woertlich. Gemessen VOR dem Fix an genau diesem Aufbau:
+  // 11 Zeilen im Rumpf, davon **0** echte — `mailto` kuerzt von OBEN, und die Abweisungen
+  // stehen als juengste Zeilen ganz unten.
+  const echt = Array.from({ length: 40 }, (_, i) => `[t] FEHLER: Ausfall Nummer ${i}`)
+  const abgewiesen = Array.from({ length: 20 },
+    (_, i) => `[t] Externer Link abgewiesen (Schema nicht erlaubt): javascript:boese(${i})`)
+  const zeilen = letzteZeilen([...echt, ...abgewiesen].join('\n'))
+  const { url, verwendet } = mailto({
+    empfaenger: 'a@b.c', betreff: 'T', kopf: K, zeilen, logpfad: 'C:/x/transkribor.log',
+  })
+  const rumpf = decodeURIComponent(url.split('&body=')[1])
+  const echteImRumpf = (rumpf.match(/FEHLER:/g) || []).length
+  assert.ok(echteImRumpf >= 1,
+    `mindestens eine echte Zeile muss mit — es sind ${echteImRumpf} von ${verwendet}`)
+})
+
+test('auch ein LANGER Ablagepfad laesst die echte Zeile durch (#506)', () => {
+  // Die Zusage aus dem Test darueber haengt nicht am Deckel allein, sondern daran, dass
+  // `mailto` Platz fuer ZWEI Zeilen reserviert. Mit nur einer Reserve trug der Rumpf ab
+  // 294 Zeichen Pfad genau eine Zeile — und das war die juengste, also die Abweisung
+  // (gemessen ueber 117 Pfadlaengen: 66 davon ohne eine einzige echte Zeile).
+  const lang = 'x'.repeat(700)                 // ueber der 600er-Kappe, wird gekappt
+  const echt = Array.from({ length: 40 }, () => '[t] FEHLER: ' + lang)
+  const abgewiesen = Array.from({ length: 20 },
+    () => '[t] Externer Link abgewiesen (Schema nicht erlaubt): ' + lang)
+  const zeilen = letzteZeilen([...echt, ...abgewiesen].join('\n'))
+  const { url } = mailto({
+    empfaenger: 'a@b.c', betreff: 'T', kopf: K,
+    logpfad: 'C:/' + 'o'.repeat(400) + '/transkribor.log', zeilen,
+  })
+  const rumpf = decodeURIComponent(url.split('&body=')[1])
+  assert.ok((rumpf.match(/FEHLER:/g) || []).length >= 1,
+    'bei langem Pfad blieb sonst nur die Abweisung uebrig')
+  assert.ok(url.length <= MAX_URL, `URL ist ${url.length} Zeichen`)
+})
+
+test('genau die JUENGSTE Abweisungszeile bleibt (#506)', () => {
+  // Gedeckelt statt aussortiert: die Diagnose „ich klicke auf einen Link und es passiert
+  // nichts" ueberlebt, sie darf nur nicht mehr den ganzen Rumpf belegen.
+  const zeilen = letzteZeilen([
+    '[t] FEHLER: echt',
+    '[t] Externer Link abgewiesen (Schema nicht erlaubt): ftp://alt',
+    '[t] Navigation abgewiesen (Schema nicht erlaubt): ftp://neu',
+  ].join('\n'))
+  assert.deepStrictEqual(zeilen, [
+    '[t] FEHLER: echt',
+    '[t] Navigation abgewiesen (Schema nicht erlaubt): ftp://neu',
+  ])
+  // Gegen DIE Konstante, nicht gegen eine abgeschriebene 1 — sonst ist der Test nach der
+  // ersten Wertaenderung stumm (dieselbe Regel wie bei MAX_ZEILE).
+  assert.strictEqual(zeilen.filter(z => ABWEISUNG.some(r => r.test(z))).length, ABWEISUNGEN_IM_BERICHT)
+})
+
+test('die Schlusszeile des Deckels zaehlt in DIESELBE Gruppe (#506)', () => {
+  // Gemessen am kleinsten Rumpf, den es gibt: bei 600 Zeichen langen Zeilen passen genau ZWEI
+  // in die Mail. Zaehlte die Schlusszeile separat, stuenden dort zwei Diagnosezeilen und die
+  // Zusage fiele durch die andere Tuer — deshalb `n = 2` und nicht der Vorgabewert.
+  //
+  // Und deshalb `deepStrictEqual` statt eines Zaehlers gegen `ABWEISUNG`: ein Test, der die
+  // GRUPPE mit derselben Konstante misst, die er bewacht, bleibt gruen, wenn die Konstante
+  // schrumpft (gemessen — genau diese Fassung ueberlebte die Mutation).
+  const zeilen = letzteZeilen([
+    '[t] FEHLER: echt',
+    '[t] Externer Link abgewiesen (Schema nicht erlaubt): ftp://alt',
+    '[t] Weitere Abweisungen werden nicht mehr protokolliert (Deckel: 20 je Stunde; die naechste war: Externer Link, Schema nicht erlaubt, ftp://neu)',
+  ].join('\n'), 2)
+  assert.deepStrictEqual(zeilen, [
+    '[t] FEHLER: echt',
+    '[t] Weitere Abweisungen werden nicht mehr protokolliert (Deckel: 20 je Stunde; die naechste war: Externer Link, Schema nicht erlaubt, ftp://neu)',
+  ])
+})
+
+test('die Schlusszeile ueberlebt die file:-Kuerzung mit ihrer Aussage (#506, #447)', () => {
+  // Zwei Wachen treffen sich hier: die Schlusszeile traegt seit #506 den unterdrueckten
+  // Vorgang mit, und #447 schneidet ab `file:` bis Zeilenende weg. Die Reihenfolge im Text
+  // entscheidet, ob danach noch etwas Brauchbares steht — deshalb steht die URL HINTEN.
+  const z = letzteZeilen('[t] Weitere Abweisungen werden nicht mehr protokolliert (Deckel: 20 je '
+    + 'Stunde; die naechste war: Externer Link, Schema nicht erlaubt, '
+    + 'file:///C:/Users/marcu/Videos/Interview.mp3)')
+  assert.match(z[0], /Deckel: 20 je Stunde/)
+  assert.match(z[0], /Externer Link, Schema nicht erlaubt/)
+  assert.doesNotMatch(z[0], /Interview/)
+})
+
+test('ohne Abweisungen aendert der Deckel nichts (#506)', () => {
+  // Gegenrichtung: die Auswahl von hinten darf die gewoehnliche Reihenfolge nicht antasten.
+  const text = Array.from({ length: 80 }, (_, i) => `[t] Zeile ${i}`).join('\n')
+  assert.deepStrictEqual(letzteZeilen(text, 3), ['[t] Zeile 77', '[t] Zeile 78', '[t] Zeile 79'])
 })
 
 test('der Pfad hinter einem file:-Schema faellt raus, der Hinweis bleibt (#447)', () => {

@@ -159,6 +159,68 @@ const AUSSORTIEREN = [
 ]
 
 /**
+ * Abweisungs-Diagnose aus `main.js` — gedeckelt statt aussortiert (#506).
+ *
+ * **Das Problem war die Verdraengung, nicht die Zeile.** `mailto` kuerzt von OBEN, die
+ * Abweisungszeilen stehen als juengste ganz unten, und der Rumpf traegt wenig: gemessen an
+ * diesem `bericht.js` (echter Kopf, echter Logpfad) passen je nach Zeilenlaenge **2 bis 22**
+ * Zeilen hinein — 50 Zeichen ⇒ 22, 200 ⇒ 6, 600 ⇒ 2. Mit 40 FEHLER- und danach 20
+ * Abweisungszeilen kamen **0 von 11** echten Zeilen in der Mail an.
+ *
+ * **Deshalb 1 und nicht 3.** Der kleinste gemessene Rumpf traegt zwei Zeilen; jeder Deckel
+ * ueber 1 kann ihn also vollstaendig belegen, und die Zusage („mindestens eine echte Zeile")
+ * gaelte nur im guenstigen Fall. Mit 1 bleibt die juengste Abweisung erhalten — die Antwort
+ * auf „ich klicke auf einen Link und es passiert nichts" — und daneben ist echte Spur.
+ *
+ * **Der Deckel allein reicht dafuer NICHT, und das ist die eigentliche Zusicherung.** „Zwei
+ * Zeilen passen" ist keine Eigenschaft der Auswahl hier, sondern eine von `mailto`: die
+ * ueberlebende Abweisung ist die JUENGSTE und steht ganz unten, also genau dort, wo das
+ * Kuerzen von oben aufhoert. Erst weil `mitPfad` weiter unten Platz fuer ZWEI Zeilen
+ * reserviert, gilt der Satz — bei langem Ablagepfad trug der Rumpf sonst eine einzige Zeile,
+ * und das war die Abweisung (gemessen, Einzelheiten dort).
+ *
+ * **Nicht aussortiert**, obwohl das eine Zeile weniger waere: die Diagnose ist der einzige
+ * Grund, aus dem ein abgewiesener Link je auffaellt. Gedeckelt behaelt sie beides.
+ *
+ * **Beide Formen gehoeren in DIESELBE Gruppe.** `abweisungProtokollieren` schreibt ab dem
+ * 21. Ziel die Schlusszeile „Weitere Abweisungen …" — zaehlte sie separat, stuenden im
+ * 2-Zeilen-Rumpf zwei Diagnosezeilen und die Zusage fiele durch die andere Tuer.
+ *
+ * **Im Flutfall ist die juengste Abweisung genau diese Schlusszeile** — gemessen: 20
+ * Abweisungen plus Schlusszeile ergeben hier die Schlusszeile, nicht die letzte echte. Das
+ * ist gewollt (sie sagt, dass ab hier geschwiegen wird), war aber inhaltsleer: sie nannte
+ * weder Art noch Ziel noch Grund. Seit #506 traegt sie den ersten unterdrueckten Vorgang mit,
+ * womit die eine ueberlebende Zeile auch im Flutfall eine Auskunft ist. **Was sie NICHT
+ * heilt:** wer nach der Flut auf einen Link klickt, hinterlaesst fuer den Rest der Stunde
+ * ueberhaupt keine Zeile — der geteilte Deckel laesst eine Art die andere verstummen. Das ist
+ * eine getragene Grenze mit eigenem Mechanismus, kein Versehen (#520).
+ * Das Muster trifft ueber `… abgewiesen (…): …` auch die Berechtigungs- und
+ * webview-Abweisungen aus #446, und genau so ist es gemeint: ein Berechtigungssturm darf den
+ * Fehlerbericht so wenig vergiften wie eine Linkflut.
+ *
+ * **Es ist bewusst ein INHALTSMUSTER und bewusst breit.** Es kennt keine Absenderliste, also
+ * traefe es auch eine kuenftige fremde Zeile der Form „Job abgewiesen (Sperre aktiv): x" —
+ * die fiele ab der zweiten still aus dem Bericht. Heute gibt es dafuer keinen Erzeuger
+ * (gegrept ueber `webtool/` und `electron/`), und die Fehlerrichtung ist die gewollte:
+ * dieselbe Regel wie `=== false` statt `!` bei den Navigationswachen (#266) — ein unbekannter
+ * Wert darf eine Bremse nie stillschweigend abschalten. Eine Praefixliste
+ * (`Externer Link|Navigation|…`) waere praeziser und genau deshalb schlechter: eine neue
+ * Abweisungsart entkaeme dem Deckel, ohne dass es jemand merkt.
+ *
+ * **Und die Auswahl reicht weiter zurueck als `n` Eintraege.** Ueberspringt sie Abweisungen,
+ * fuellt sie die frei gewordenen Plaetze mit AELTEREN Zeilen — nach einer Flut also mit
+ * Zeilen von weiter oben (`Umgebungsbefund`, pip-Ausgaben, der Kopf eines frueheren Laufs).
+ * Gewollt: ein leerer Platz waere schlechter als eine aeltere echte Zeile. Der Preis ist, dass
+ * die bekannte Grenze von `protokoll.maskiere` (fuenf Schluesselformen, #435) jetzt weiter
+ * zurueck reicht — dieselbe Klasse, groesseres Fenster.
+ */
+const ABWEISUNG = [
+  / abgewiesen \([^)]*\): /,
+  /Weitere Abweisungen werden nicht mehr protokolliert/,
+]
+const ABWEISUNGEN_IM_BERICHT = 1
+
+/**
  * Was GEKUERZT statt weggelassen wird: der Pfad hinter einem `file:`-Schema (#447).
  *
  * Seit dem `will-navigate`-Waechter (#434) protokolliert ein Fehlwurf beim Drag & Drop die
@@ -252,11 +314,23 @@ const AUSSORTIEREN = [
 const PFAD_AB_SCHEMA = /(^|[^A-Za-z0-9+.\-/\\])file:[\/\\]{1,3}.*/i
 const PFAD_ERSATZ = '$1file:///… (Pfad entfernt)'
 
-/** Die letzten `n` verwertbaren Zeilen, in Originalreihenfolge. */
+/**
+ * Die letzten `n` verwertbaren Zeilen, in Originalreihenfolge.
+ *
+ * Gewaehlt wird von HINTEN, weil der Deckel aus `ABWEISUNGEN_IM_BERICHT` die juengste
+ * Abweisungszeile behalten soll und die aelteren wegfallen (#506). Ein blosses `slice` vom
+ * Ende koennte das nicht: es nimmt einen Block, keine Auswahl.
+ */
 function letzteZeilen(text, n = ZEILEN) {
   const alle = String(text || '').split(/\r?\n/)
     .filter(z => z.trim() !== '' && !AUSSORTIEREN.some(r => r.test(z)))
-  return alle.slice(Math.max(0, alle.length - n))
+  const gewaehlt = []
+  let abweisungen = 0
+  for (let i = alle.length - 1; i >= 0 && gewaehlt.length < n; i--) {
+    if (ABWEISUNG.some(r => r.test(alle[i])) && ++abweisungen > ABWEISUNGEN_IM_BERICHT) continue
+    gewaehlt.push(alle[i])
+  }
+  return gewaehlt.reverse()
     .map(z => z.replace(PFAD_AB_SCHEMA, PFAD_ERSATZ))
 }
 
@@ -331,8 +405,23 @@ function mailto({ empfaenger, betreff, kopf: kopfzeilen, zeilen, logpfad, maxUrl
   //
   // Die Richtung ist dieselbe wie im Absatz darueber: im Zweifel gewinnen die Protokollzeilen,
   // weil der Pfad ohnehin im Dateimanager vor dem Nutzer steht.
+  //
+  // **Reserviert werden ZWEI Zeilen, sobald es zwei gibt (#506).** Mit EINER Reserve sicherte
+  // `mailto` baulich genau EINE Zeile zu — und seit dem Abweisungs-Deckel eine Zeile weiter
+  // oben ist das zu wenig: die eine ueberlebende Abweisung ist die JUENGSTE, steht also ganz
+  // unten und ist damit genau die Zeile, die das Kuerzen von oben stehen laesst. Die Zusage
+  // „mindestens eine echte Zeile" fiel damit durch die Hintertuer. Gemessen ueber 117
+  // Pfadlaengen von 20 bis 619 Zeichen (40 FEHLER-Zeilen + 20 Abweisungen, alle an der
+  // 600er-Kappe): **ab 294 Zeichen Pfad trug der Rumpf nur noch eine Zeile und keine echte**,
+  // 66 der 117 Laengen waren betroffen; mit der Reserve auf zwei sind es **0 von 117**. Der
+  // Preis ist benannt und derselbe Grundsatz wie oben: bei so langen Pfaden faellt der Pfad
+  // aus der Mail — im Dateimanager steht er ohnehin vor dem Nutzer.
+  //
+  // `Math.min(zeilen.length, 2)`, nicht pauschal zwei: gibt es nur EINE Zeile, kann sie auch
+  // nur eine sein, und eine unnoetig grosse Reserve wuerfe den Pfad grundlos hinaus (die
+  // Gegenrichtung hat einen eigenen Test).
   const mitPfad = !!logpfad
-    && url(bauen([], true)).length <= maxUrl - (zeilen.length ? MAX_ZEILE + 3 : 0)
+    && url(bauen([], true)).length <= maxUrl - Math.min(zeilen.length, 2) * (MAX_ZEILE + 3)
   // `z => kappen(z)`, NICHT `.map(kappen)`: `map` reicht den Index als zweites Argument
   // durch, und der landete als `max` in der Kappe — Zeile 0 waere auf 0 Zeichen gekuerzt.
   let verwendet = zeilen.map(z => kappen(z))
@@ -351,4 +440,7 @@ function mailto({ empfaenger, betreff, kopf: kopfzeilen, zeilen, logpfad, maxUrl
 
 // `MAX_ZEILE` wird exportiert, damit der Test die Invariante gegen DIE Konstante pruefen kann
 // statt gegen eine abgeschriebene 600 — sonst waere er nach der ersten Wertaenderung stumm.
-module.exports = { letzteZeilen, kopf, mailto, MAX_URL, MAX_ZEILE, ZEILEN, AUSSORTIEREN }
+module.exports = {
+  letzteZeilen, kopf, mailto, MAX_URL, MAX_ZEILE, ZEILEN, AUSSORTIEREN,
+  ABWEISUNG, ABWEISUNGEN_IM_BERICHT,
+}

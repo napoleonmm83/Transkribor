@@ -131,6 +131,27 @@ let fensterStart = 0
  * sofort sichtbar falsch statt plausibel falsch. `was` behaelt seinen, weil ein fehlendes `was`
  * nur unspezifisch ist und nicht luegt.
  */
+/**
+ * Von einer FREMDEN URL geht nur die Herkunft ins Protokoll (CodeRabbit-Bot an PR #522).
+ *
+ * Die drei alten Wege (#426, #434) protokollieren die volle URL, und das bleibt richtig: dort
+ * hat der NUTZER das Ziel gewaehlt, und „welcher Link ging nicht auf" ist die Frage, wegen der
+ * jemand schreibt — genau so steht es in der README. Bei den beiden Wegen aus #446 ist es
+ * umgekehrt: gefragt hat eine fremde Seite, und die Antwort auf „wer" ist die Herkunft. Pfad,
+ * Query und Fragment tragen dort nichts bei, koennen aber ein Token oder einen OAuth-Code
+ * fuehren — und der Rumpf faehrt ueber `bericht.letzteZeilen` in eine Mail.
+ *
+ * `origin` ist bei `file:`, `data:` und Co. die Zeichenkette `'null'`; dann sagt das SCHEMA
+ * mehr als nichts. Unlesbares wird benannt statt verschwiegen — eine leere Klammer laesst den
+ * Leser glauben, es sei nichts angekommen.
+ */
+function nurHerkunft(url) {
+  try {
+    const u = new URL(String(url))
+    return u.origin === 'null' ? u.protocol : u.origin
+  } catch { return '(unlesbare Herkunft)' }
+}
+
 function abweisungProtokollieren(url, was = 'Externer Link', grund) {
   // `performance.now()`, NICHT `Date.now()`: die Wanduhr springt (NTP, Handkorrektur,
   // VM-Snapshot). Ausgefuehrt gemessen: bei einem Ruecksprung um 24 h schwieg die Diagnose
@@ -145,9 +166,24 @@ function abweisungProtokollieren(url, was = 'Externer Link', grund) {
   if (abweisungen <= ABWEISUNGEN_MAX) {
     protokoll.schreiben(was + ' abgewiesen (' + grund + '): ' + String(url).slice(0, 200))
   } else if (abweisungen === ABWEISUNGEN_MAX + 1) {
-    protokoll.schreiben(`Weitere abgewiesene Links werden nicht mehr protokolliert (Deckel: ${ABWEISUNGEN_MAX} je Stunde).`)
+    // **Nicht mehr „Links" (#446) und nicht mehr leer (#506).** Seit die Berechtigungs- und
+    // webview-Wachen ueber denselben Zaehler melden, sind es nicht zwangslaeufig Links; und
+    // weil `bericht.letzteZeilen` genau EINE Zeile dieser Gruppe in die Fehlermail laesst, ist
+    // im Flutfall GENAU DIESE Zeile die einzige Auskunft ueber Abweisungen, die der Nutzer
+    // mitschickt. Ohne den Zusatz nennt sie weder Art noch Ziel noch Grund — gemessen am
+    // echten `bericht.js`: acht echte Zeilen, 20 Abweisungen, eine Schlusszeile, und was
+    // ankommt, ist die Schlusszeile. Sie traegt deshalb den Vorgang mit, der als erster
+    // unterdrueckt wurde; derselbe 200-Zeichen-Deckel wie oben.
+    protokoll.schreiben(`Weitere Abweisungen werden nicht mehr protokolliert (Deckel: ${ABWEISUNGEN_MAX} je Stunde; die naechste war: ${was}, ${grund}, ${String(url).slice(0, 200)})`)
   }
 }
+
+/**
+ * Was der Renderer an Berechtigungen bekommen darf (#446) — heute genau zwei, und beide sind
+ * am laufenden Fenster GEMESSEN, nicht aus dem Code geschlossen. Die Begruendung steht am
+ * Handler in `fenster()`.
+ */
+const BERECHTIGUNGEN_ERLAUBT = new Set(['notifications', 'clipboard-sanitized-write'])
 
 function fenster() {
   const dunkel = nativeTheme.shouldUseDarkColors
@@ -259,6 +295,86 @@ function fenster() {
   // bei einer Umleitungskette ist genau das die Information, die man sucht.
   win.webContents.on('will-navigate', navigationPruefen(true))
   win.webContents.on('will-redirect', navigationPruefen(false))
+  /**
+   * Der dritte und vierte Weg, auf dem dieses Fenster Faehigkeiten bekaeme (#446) — dieselbe
+   * Frage wie bei #426 und #434, nur fuer BERECHTIGUNGEN und `<webview>`. Ohne sie entscheidet
+   * Chromiums Voreinstellung, und die Fenster-Faehigkeiten waeren nur zu drei Vierteln hier.
+   *
+   * **Der Handler haengt an der SESSION, nicht an `webContents`.** Das Issue nennt
+   * `win.webContents.setPermissionRequestHandler` — diese Methode gibt es nicht; gemessen in
+   * `node_modules/electron/electron.d.ts` steht `setPermissionRequestHandler` unter `Session`.
+   * `win.webContents.session` ist dabei ohne `partition` die **Standard-Session**, also
+   * prozessweit geteilt und nicht fensterlokal. Folgenlos und an der d.ts belegt: der Handler
+   * ist EIN Slot („To clear the handler, call `setPermissionRequestHandler(null)`") — ein
+   * zweiter `fenster()`-Lauf ueber `app.on('activate')` ERSETZT ihn, es haengen nie zwei, und
+   * die Closure traegt keinen Fensterzustand.
+   *
+   * **Die Weissliste ist GEMESSEN, nicht hergeleitet — und die Messung hat die Herleitung
+   * widerlegt.** Am laufenden Fenster (eigenes `--user-data-dir`, CDP, echte Handler) kamen
+   * DREI Anfragen am Handler an: `media`, `geolocation` und **`clipboard-sanitized-write`**.
+   * Die dritte war der Fund: der Plan hatte sie beim *Check*-Handler vermutet, sie laeuft aber
+   * durch DIESEN. Ein Deny-all haette damit zwei echte Funktionen still abgeschaltet —
+   * `Notification.requestPermission()` fuer die Fertigmeldung (#376, `useOsFortschritt.ts`)
+   * und `navigator.clipboard.writeText` fuer „Lizenzschluessel kopieren"
+   * (`SettingsPage.tsx`). Genau davor warnt das Issue („sonst sperrt der Fix etwas, das die App
+   * braucht, und das faellt erst beim Nutzer auf"). Alles andere fragt die App nicht an, und was
+   * sie nicht anfragt, bekommt sie auch nicht — dieselbe Regel wie die Schema-Weissliste in
+   * `fenster.externesZiel`.
+   *
+   * **`setPermissionCheckHandler` bewusst NICHT — eine benannte Grenze, kein Versehen.**
+   * Electron schreibt selbst, dass fuer vollstaendige Behandlung beide noetig sind: ein
+   * `navigator.permissions.query(...)` bekommt hier weiterhin Chromiums Vorgabeantwort. Das
+   * ist ein eigener Waechter mit eigenem Pruefstand — er braucht eine eigene Messung, WELCHE
+   * Pruefungen im Normalbetrieb auflaufen (der Request-Handler hat gerade gezeigt, wie weit
+   * eine Vermutung darueber danebenliegt), und #446 verbietet ausdruecklich, unabhaengige
+   * Waechter in einen PR zu werfen.
+   *
+   * **`<webview>` ist heute ohnehin aus** — `webviewTag` steht seit Electron 5 auf `false` und
+   * die `webPreferences` oben setzen es nicht. Der Hoerer ist die zweite Sperre gegen den
+   * einzigen Weg, auf dem in diesem Fenster doch ein Kontext MIT Preload entstuende: bei einem
+   * `iframe` ist das gemessen nicht so (`window.transkribor` dort `undefined`, #434).
+   *
+   * **Beide melden ueber `abweisungProtokollieren`** — geteilter Zaehler, geteilter Deckel,
+   * geteilte Bremse. Ein zweiter, eigener Schreibweg waere genau der Fehler aus #426; und die
+   * Zeilen fallen so nebenbei unter den Abweisungs-Deckel des Fehlerberichts (#506), ein
+   * Berechtigungssturm kann die naechste Fehlermail also nicht entleeren.
+   */
+  win.webContents.session.setPermissionRequestHandler((_inhalt, art, erlauben, angaben) => {
+    // **Die HERKUNFT zaehlt mit, nicht nur die Art** — dieselbe Liste und dieselbe
+    // Laufzeit-Abfrage wie bei den Navigationswachen oben, weil `backend.url()` beim
+    // Fensterbau noch nicht feststeht. `details` traegt `requestingUrl` bei den DREI
+    // gemessenen Anfragearten (`notifications`, `clipboard-sanitized-write`, `media` — je mit
+    // `isMainFrame`). Fuer die uebrigen rund zwanzig aus der Typdeklaration ist es nicht
+    // gemessen, und darauf ist der Handler eingerichtet: fehlt die Angabe, wirft
+    // `eigeneHerkunft` nicht, sondern liefert `false`, und die Anfrage wird abgelehnt. Das ist
+    // die richtige Fehlerrichtung — ein unbekannter Wert darf eine Wache nie stillschweigend
+    // abschalten (#266) —, aber es ist eine Annahme ueber den ungemessenen Rest.
+    //
+    // **Und der Handler darf NICHT werfen.** Eine geworfene Ausnahme darin lehnt still JEDE
+    // Berechtigung ab — die Zwischenablage kippte dadurch von `OK` auf `NotAllowedError`, und
+    // im Protokoll stand KEINE einzige Zeile, weder eine Sonden- noch eine Abweisungszeile.
+    // `eigeneHerkunft` faengt sein `new URL` selbst ab, `Set.prototype.has` kann nicht werfen.
+    //
+    // Alle Rohausgaben dieses Blocks — welche Berechtigungen ankommen, was in `details` steht,
+    // und der Wurf-Fall — stehen in
+    // `docs/superpowers/specs/2026-09-02-transkribor-berechtigungs-sonde.md` samt Aufbau,
+    // Kommandos und den Grenzen der Messung. Hier stehen Verweise darauf, keine Behauptungen.
+    const eigen = eigeneHerkunft(angaben?.requestingUrl,
+      [pathToFileURL(SETUP_HTML).href, backend.url()])
+    const erlaubt = eigen && BERECHTIGUNGEN_ERLAUBT.has(art)
+    if (!erlaubt) {
+      // Bei fremder Herkunft faehrt sie mit: „media abgelehnt" allein sagt nicht, WER gefragt
+      // hat, und genau das ist dort die Information. Der 200-Zeichen-Deckel gilt wie ueberall.
+      abweisungProtokollieren(eigen ? art : `${art} von ${nurHerkunft(angaben?.requestingUrl)}`,
+        'Berechtigung', eigen ? 'nicht in der Weissliste' : 'fremde Herkunft')
+    }
+    erlauben(erlaubt)
+  })
+  win.webContents.on('will-attach-webview', (e, _einstellungen, angaben) => {
+    e.preventDefault()
+    abweisungProtokollieren(angaben?.src ? nurHerkunft(angaben.src) : '(ohne src)',
+      'Eingebettete Ansicht', 'webview ist in dieser App nicht vorgesehen')
+  })
   win.on('closed', () => { win = null })
 }
 

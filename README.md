@@ -612,7 +612,12 @@ Fassung, deinem Betriebssystem und den letzten **aussagekräftigen** Zeilen aus 
 Weggelassen wird genau dreierlei: leere Zeilen, die lange `PATH`-Zeile (siehe unten) und die
 Zeilen, mit denen die App laufend ihren eigenen, erfolgreichen Betrieb protokolliert —
 die machen **neun von zehn** Zeilen aus, ohne sie bestünde der Bericht nur daraus. Meldungen
-über Fehlschläge bleiben ausdrücklich drin. Eine Zeile wird ausserdem **gekürzt** statt
+über Fehlschläge bleiben ausdrücklich drin. Von den Meldungen über **abgewiesene Vorgänge** —
+ein Link, eine Weiterleitung, eine Rechte-Anfrage der Programmoberfläche — kommt nur die
+jüngste mit: davon können in kurzer Zeit viele entstehen, und weil in eine E-Mail nur wenige
+Zeilen passen, schoben sie den eigentlichen Fehler sonst ganz aus dem Bericht heraus —
+in der Protokolldatei stehen sie weiterhin (bis zu zwanzig je Stunde, siehe weiter unten).
+Eine Zeile wird ausserdem **gekürzt** statt
 weggelassen: zeigt sie auf eine Datei auf deinem Rechner — etwa weil ein Link dorthin verwies,
 den Transkribor nicht geöffnet hat —, bleibt der Hinweis stehen, während Ort und Name **dieser
 einen** Datei wegfallen — und mit ihnen alles, was in derselben Zeile noch dahinter stand.

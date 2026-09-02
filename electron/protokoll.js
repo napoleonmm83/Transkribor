@@ -15,7 +15,23 @@ const path = require('path')
 const P = require('./paths')
 
 const MAX = 2 * 1024 * 1024        // darueber wird rotiert — ein Log fuellt nie die Platte
-const MAX_GENERATIONEN = 3          // bis zu .3 beiseitelegen -> max 8 MB auf der Platte (#371)
+/**
+ * Bis zu `.3` beiseitelegen — vier Generationen à `MAX` ⇒ max 8 MB auf der Platte (#371).
+ *
+ * **Diese Zusage stimmte bis #436 nicht.** `rotieren` prueft die Groesse VOR dem Anhaengen:
+ * eine Datei knapp unter `MAX` bestand die Pruefung, und die naechste Zeile kam in voller
+ * Laenge obendrauf — jede Generation konnte `MAX + Zeilenlaenge` gross werden. Gemessen an
+ * zwoelf `window.open`-Aufrufen mit je einer 2-MB-URL (#426): **15,26 MB statt der zugesagten
+ * 8**. Seitdem bekommt `rotieren` die Laenge der Zeile mit, die gleich angehaengt wird, und
+ * rotiert, BEVOR sie den Deckel sprengt.
+ *
+ * **Der eine Rest, benannt statt verschwiegen:** eine EINZELNE Zeile groesser als `MAX` passt
+ * in keine Generation und steht dann allein in ihrer eigenen. Die Grenze ist also genau
+ * `4 × max(MAX, laengste geschriebene Zeile)`. Der laengste bekannte Erzeuger ist eine
+ * `window.open`-URL mit Chromiums Obergrenze von 2 MB — also `MAX` selbst, und seit #426
+ * ohnehin auf 200 Zeichen gedeckelt. Fuer jede heute geschriebene Zeile halten die 8 MB.
+ */
+const MAX_GENERATIONEN = 3
 
 const SENSIBLE_MUSTER = [
   /sk-[a-zA-Z0-9_-]{12,}/g,          // OpenAI / OpenRouter / generic API keys
@@ -39,10 +55,35 @@ function maskiere(zeile) {
   return ergebnis
 }
 
-/** Ueber MAX: bis zu MAX_GENERATIONEN rotieren (.3 <- .2 <- .1 <- .log). */
-function rotieren(datei) {
+/**
+ * Ueber MAX: bis zu MAX_GENERATIONEN rotieren (.3 <- .2 <- .1 <- .log).
+ *
+ * `zusatz` ist die Laenge der Zeile, die gleich angehaengt wird, und sie zaehlt MIT (#436) —
+ * sonst rotiert erst die Datei, die den Deckel bereits gerissen hat. `groesse === 0` haelt
+ * eine leere Datei zurueck: eine ueberlange erste Zeile legte sonst eine 0 Byte grosse
+ * Generation `.1` an und schoebe damit eine echte aus dem Fenster.
+ *
+ * **Der Preis, gemessen und benannt statt verschwiegen:** eine Zeile groesser als `MAX` kostet
+ * jetzt ZWEI Generationen statt einer — eine Rotation davor (sie passt nicht mehr dazu) und
+ * eine beim naechsten Schreiben (sie hat den Deckel allein schon gerissen). Vorher wurde sie
+ * einfach angehaengt und kostete nur die eine Rotation danach. Die `groesse === 0`-Wache nimmt
+ * davon ausschliesslich die LEERE Datei aus; schon bei einem Byte wird die Generation
+ * weggedreht. Bewusst nicht verallgemeinert: eine Schwelle „ab wann lohnt das Wegdrehen" waere
+ * geraten, und einen Erzeuger fuer Zeilen ueber `MAX` gibt es heute nicht (200-Zeichen-Deckel
+ * in `main.js`). Die Wache bleibt, weil sie einen echten, wenn auch seltenen Verlust
+ * verhindert — sie deckt nur eben nicht den ganzen Fall ab, und genau das steht hier.
+ *
+ * **Im Normalbetrieb aendert sich dadurch nichts**, und das ist der Befund, der die Aenderung
+ * traegt: bei 60 000 Zeilen à 200 Byte liegen alt 7 745 478 und neu 7 745 876 Byte auf der
+ * Platte (gemessen gegen `880e2d7:electron/protokoll.js`). Erst bei Zeilen im MB-Bereich
+ * faellt der Rueckhalt — bei zwoelf 2-MB-Zeilen von 16 777 208 auf 8 388 604 Byte. Das ist
+ * genau der Sinn von #436 und zugleich sein Preis: die Obergrenze wird eingehalten, indem
+ * weniger Spur aufbewahrt wird.
+ */
+function rotieren(datei, zusatz = 0) {
   try {
-    if (fs.statSync(datei).size <= MAX) return
+    const groesse = fs.statSync(datei).size
+    if (groesse === 0 || groesse + zusatz <= MAX) return
     for (let i = MAX_GENERATIONEN - 1; i >= 1; i--) {
       const alt = `${datei}.${i}`
       const neu = `${datei}.${i + 1}`
@@ -62,9 +103,12 @@ function rotieren(datei) {
 function schreiben(zeile) {
   const datei = pfad()
   try {
+    const text = `[${new Date().toISOString()}] ${maskiere(zeile)}\n`
     fs.mkdirSync(path.dirname(datei), { recursive: true })
-    rotieren(datei)
-    fs.appendFileSync(datei, `[${new Date().toISOString()}] ${maskiere(zeile)}\n`)
+    // BYTES, nicht Zeichen: geschrieben wird UTF-8, `.length` zaehlt UTF-16-Einheiten — ein
+    // Umlaut waere um ein Byte zu klein gerechnet, ein Emoji um zwei (#436).
+    rotieren(datei, Buffer.byteLength(text))
+    fs.appendFileSync(datei, text)
   } catch { /* siehe Modulkopf */ }
 }
 
