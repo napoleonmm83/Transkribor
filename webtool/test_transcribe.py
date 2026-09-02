@@ -1680,8 +1680,10 @@ def _ki_projekt(monkeypatch, tmp_path, name, bases=("S1", "S2"), diarize_druckt=
     monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
     monkeypatch.setenv("TRANSKRIBOR_SETTINGS", str(tmp_path / "settings.json"))
     # CLAUDE.md-Regel: sonst kann ein Testlauf echtes pip gegen die venv des Entwicklers
-    # starten (keine conftest, der Schutz ist je Test/Fixture — der Nachbar-Test uebernimmt
-    # dieselbe Zeile). Bot an PR #493.
+    # starten. Bot an PR #493. Seit dem 02.09.2026 setzt `conftest._wegwerf_projektwurzel`
+    # den Schalter fuer JEDEN Test — diese Zeile ist damit redundant und bleibt nur als
+    # lokale Begruendung stehen. Der Klammersatz, der hier stand („keine conftest, der
+    # Schutz ist je Test/Fixture"), war schon seit #459 falsch.
     monkeypatch.setenv("TRANSKRIBOR_YTDLP_UPDATE", "0")
     monkeypatch.setattr(transcribe, "PROJEKTE", str(tmp_path))
     monkeypatch.setattr(transcribe, "_modell", lambda *a, **kw: "fake_model")
@@ -2312,3 +2314,127 @@ def test_aufnahme_bleibt_bis_zum_ende_der_korrektur_gesperrt(monkeypatch, tmp_pa
     # prueft sie gegen die Zeilen, die `transcribe_project` wirklich schreibt -- genau die
     # Luecke, an der #418 vorbeilief.
     assert {"S1", "S2"} <= gesehen, sorted(gesehen)
+
+
+# --------------------------------------------------------------------------------------
+# Die zwei Riegel aus `webtool/conftest.py`: kein Testlauf startet echtes pip.
+#
+# Sie stehen HIER, weil diese Datei den Anlass traegt: `_lauf_projekt` war die Vorrichtung
+# ohne den Schalter, und zwei Tests weiter oben (`:864`, `:1685`) setzen ihn seit dem
+# Bot-Befund an PR #493 von Hand. Eine eigene `test_conftest.py` waere die sauberere
+# Ablage und ein vierter Ort fuer dieselbe Sache — bewusst nicht gebaut.
+# --------------------------------------------------------------------------------------
+
+
+def test_conftest_haelt_den_automatischen_ytdlp_weg_an(monkeypatch):
+    """Vorkehrung (a): der Schalter steht, und OHNE ihn kaeme wirklich pip.
+
+    Die zweite Haelfte ist die Positivkontrolle und traegt den ganzen Test: dass
+    `automatisch()` False liefert, koennte auch daran liegen, dass der Weg gar nicht bis pip
+    fuehrt. Erst der Vergleich mit dem entriegelten Zustand zeigt, dass hier etwas verhindert
+    wird (Lehre `messung-ohne-fund-belegt-nichts`).
+
+    **Die Mutationsprobe zu diesem Test MUSS `env -u TRANSKRIBOR_YTDLP_UPDATE` verwenden.**
+    Fixture-Wert und Shell-Export sind fuer `env_override()` ununterscheidbar — wer die
+    conftest-Zeile in einer Shell entfernt, die die Variable exportiert, sieht einen gruenen
+    Test und haelt ihn fuer einen Beweis. Im Wegwerf-Repo nachgebaut: ohne `env -u` bleibt
+    genau diese Mutation gruen.
+    """
+    from webtool import ytdlp_update as yu
+
+    assert yu.env_override() == "0"
+    assert yu.auto_an() is False
+    # Kein Subprozess: `automatisch` schliesst in `auto_an()` kurz, vor Sperre und Merker.
+    # Dass hier NICHTS passiert, ist selbst die Zusicherung — waere ein Prozess gestartet
+    # worden, haette die Wache aus der conftest den Test bereits rot gemacht.
+    assert yu.automatisch(erzwingen=True) is False
+
+    # Positivkontrolle — ohne den Schalter laeuft derselbe Aufruf in die Wache.
+    monkeypatch.delenv("TRANSKRIBOR_YTDLP_UPDATE")
+    assert yu.auto_an() is True
+    with pytest.raises(pytest.fail.Exception) as fehler:
+        yu.automatisch(erzwingen=True)
+    assert "pip" in str(fehler.value)
+
+
+def test_conftest_faengt_auch_den_weg_ab_den_der_schalter_nicht_deckt():
+    """Vorkehrung (b): `aktualisiere()` fragt den Schalter NICHT — die Wache ist dort alles.
+
+    Das ist der Weg des Knopfes „Jetzt aktualisieren" (`POST /api/settings/ytdlp/update`
+    -> `starte_hintergrund` -> `_im_hintergrund` -> `aktualisiere`). Ein kuenftiger Test
+    gegen diesen Endpunkt ohne eigene Attrappe startete echtes pip, obwohl der Schalter steht
+    — gefunden vom kalten Plan-Reviewer, nicht beim Schreiben.
+    """
+    from webtool import ytdlp_update as yu
+
+    assert yu.env_override() == "0"          # der Schalter steht — und deckt diesen Weg nicht
+    with pytest.raises(pytest.fail.Exception):
+        yu.aktualisiere()
+
+
+def test_die_wache_bleibt_eine_klasse_und_laesst_sich_beerben():
+    """Was die Wache NEU erlauben koennte: sie steht an der Stelle von `subprocess.Popen`.
+
+    `yt_dlp/utils/_utils.py:842` macht `class Popen(subprocess.Popen)` — beim IMPORT, also
+    lange bevor jemand einen Prozess startet. Als Funktion an dieser Stelle bricht das mit
+    `TypeError: function() argument 'code' must be code, not str`, und zwar **nur dort, wo
+    yt-dlp installiert ist**: in der CI gaebe es stattdessen `ImportError` und der Fall bliebe
+    unsichtbar. Der Test bildet genau den Mechanismus nach (Erben zur Klassen-Bauzeit), statt
+    yt-dlp zu brauchen — damit traegt er auf beiden Seiten.
+
+    Gefunden vom gegnerischen Pruefer am fertigen Diff, ausgefuehrt statt gelesen.
+    """
+    import subprocess as sp
+
+    class EigenePopen(sp.Popen):                    # genau die Form aus yt_dlp
+        pass
+
+    assert isinstance(sp.Popen, type), "die Wache muss eine Klasse bleiben"
+    assert issubclass(EigenePopen, sp.Popen)
+
+
+def test_die_wache_nimmt_das_kommando_auch_als_schluesselwort():
+    """`Popen(args=[…])` ist zulaessig — die Huelle darf den Aufruf nicht verengen.
+
+    Kein Aufrufer im Repo oder in site-packages nutzt diese Form heute (per Suche geprueft),
+    aber vorher verbot sie nichts. Gemessen wird an einem Kommando, das kein pip ist: es muss
+    ganz normal durchlaufen.
+    """
+    import subprocess as sp
+
+    p = sp.Popen(args=[sys.executable, "-c", "pass"])
+    assert p.wait() == 0
+
+
+# Gegenbeispiele in BEIDE Richtungen. Ein Muster, das nur an seinen Treffern gemessen wird,
+# ist keine Wache: zu eng laesst es pip durch (still), zu weit macht es fremde Tests rot
+# (laut). Die bytes-Zeile stand am Anfang auf FEHL — `str(b"pip")` ergibt `"b'pip'"`, und
+# genau daran waere ein echtes pip an einer gruen meldenden Wache vorbeigelaufen.
+@pytest.mark.parametrize("kommando", [
+    [sys.executable, "-m", "pip", "install", "-U", "--retries", "1", "yt-dlp[default]"],
+    "python -m pip install -U yt-dlp",                      # shell=True als Zeichenkette
+    [r"C:\Git\Transkribor\.venv\Scripts\pip.exe", "install", "x"],
+    ["pip3.13", "uninstall", "-y", "yt-dlp"],
+    [b"python", b"-m", b"pip", b"install", b"x"],
+])
+def test_pip_erkennung_trifft_die_installierenden_formen(kommando):
+    from webtool.conftest import _ist_pip_installation
+    assert _ist_pip_installation(kommando) is True
+
+
+@pytest.mark.parametrize("kommando", [
+    ["pip", "list"],                                        # liest nur
+    ["pip", "--version"],
+    ["python", "-m", "pip", "download", "x"],               # veraendert die venv nicht
+    ["npm", "install"],                                     # „install" OHNE pip-Wort
+    ["pipx", "install", "x"],                               # anderes Werkzeug, andere venv
+    ["git", "clone", "https://pip.install"],
+    [sys.executable, "-m", "webtool.correct", "run", "P"],  # echter Job-Subprozess
+    ["whisper-cli", "-m", "modell.bin"],
+    ["taskkill", "/F", "/T", "/PID", "123"],
+    None,                                                   # nicht iterierbar: darf nicht werfen
+    'echo "unbalanciert',                                   # kaputtes Quoting: darf nicht werfen
+])
+def test_pip_erkennung_laesst_alles_andere_durch(kommando):
+    from webtool.conftest import _ist_pip_installation
+    assert _ist_pip_installation(kommando) is False

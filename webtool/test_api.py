@@ -774,6 +774,11 @@ def test_jede_route_die_einen_job_startet_traegt_den_namensraum_riegel():
     START = {("jobs", "start"), ("jobs", "request")}
 
     def ist_start(name: str) -> bool:
+        """Startet dieser punktierte Name einen Job? (`jobs.start` / `jobs.request`)
+
+        Verglichen werden die letzten ZWEI Glieder, damit auch ein Alias-Import
+        (`from webtool import jobs as j` -> `j.start`) trifft.
+        """
         return tuple(name.split(".")[-2:]) in START
 
     # Der Waechter folgt dem AUFRUFGRAPH ab `@app.<verb>` und erkennt den Start an der
@@ -946,6 +951,7 @@ def test_jede_route_die_einen_job_startet_traegt_den_namensraum_riegel():
         starter |= neu
 
     def ist_route(fn) -> bool:
+        """Traegt `fn` einen `@app.<verb>`-Dekorator, ist sie also von aussen erreichbar?"""
         for dek in fn.decorator_list:
             f = dek.func if isinstance(dek, ast.Call) else dek
             # `api_route` mit `methods=[…]` ist derselbe Weg unter anderem Namen (F1, M-D).
@@ -989,7 +995,7 @@ def test_jede_route_die_einen_job_startet_traegt_den_namensraum_riegel():
         # ebenfalls durch, obwohl er schuetzt — ein Fehlalarm. Das ist die gewollte
         # Richtung: ein falsches ROT ist laut und wird repariert, ein falsches GRUEN ist
         # still, und ein gruener Struktur-Waechter ueber einer offenen Tuer ist schlimmer
-        # als gar keiner. Heute gibt es die Form nicht (alle 14 Aufrufstellen in `app.py`
+        # als gar keiner. Heute gibt es die Form nicht (die 13 Aufrufstellen in `app.py`
         # sind schlichte Namensaufrufe); kommt sie, ist die Antwort, den Alias
         # aufzuloesen — nicht, die Zeile wieder zu entfernen.
         gebunden_hier = lokale(nach_namen[n])
