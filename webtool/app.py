@@ -802,7 +802,7 @@ def _weg_alter(pfad: str, jetzt: float | None = None) -> float | None:
     ist zugleich die ganze Migration.
     """
     teile = os.path.basename(pfad).split(".")
-    if len(teile) < 3 or not teile[-3].isdigit():
+    if len(teile) < 3 or not teile[-3].isdecimal():
         return None
     return (time.time() if jetzt is None else jetzt) - int(teile[-3])
 
@@ -858,10 +858,15 @@ def _weg_reste_aufraeumen(root: str, max_alter: float = _WEG_REST_ALTER) -> int:
     inzwischen wieder belegt war. Auch sie verfaellt nach der Frist. Der Kommentar dort sagt
     das jetzt, statt einen unbefristeten Aufbewahrungsort zu behaupten.
 
-    `isdir`-Wache und das Ueberspringen un-nennbarer Ordner nach dem Muster von
-    `list_projects`: eine fehlende Wurzel (frische Installation) laesst `os.scandir` sonst
-    werfen, und im Daemon-Faden endet das als Traceback ohne Adressaten. Das `suppress` je
-    Datei deckt das NICHT — es sitzt eine Ebene tiefer.
+    `isdir`-Wache wie in `list_projects`: eine fehlende Wurzel (frische Installation) laesst
+    `os.scandir` sonst werfen, und im Daemon-Faden endet das als Traceback ohne Adressaten.
+    Das `suppress` je Datei deckt das NICHT — es sitzt eine Ebene tiefer.
+
+    Das `_validate`-Ueberspringen un-nennbarer Ordner aus `list_projects` wird BEWUSST NICHT
+    uebernommen, und der erste Docstring behauptete es faelschlich mit (kalter Diff-Leser).
+    Dort schuetzt es die Antwort vor einem 500er; hier gibt es nichts zu schuetzen — ein Glob
+    fragt nicht nach der Nennbarkeit —, und Ueberspringen hiesse, die Reste eines Altprojekts
+    mit unzulaessigem Namen nie wieder loszuwerden.
     """
     entfernt = 0
     if not os.path.isdir(root):
@@ -869,11 +874,18 @@ def _weg_reste_aufraeumen(root: str, max_alter: float = _WEG_REST_ALTER) -> int:
     for eintrag in os.scandir(root):
         if not eintrag.is_dir():
             continue
-        for unter in ("transkripte", "audio"):
-            # Direkt zusammengesetzt statt ueber `paths.audio_dir`: das faellt bei fehlendem
-            # `audio/` auf den PROJEKTORDNER zurueck, und dann liefe derselbe Glob zweimal
-            # ueber verschiedene Ebenen. Fuer `*.weg` folgenlos, aber „zwei getrennte Ordner"
-            # soll hier auch wirklich stimmen.
+        # DREI Ebenen, nicht zwei — der Projektstamm gehoert dazu, und das ist gemessen:
+        # `_datei_weg` legt die Audio-Reservierung ueber `paths.audio_dir` an, und das faellt
+        # bei einem Projekt OHNE `audio/`-Unterordner auf den PROJEKTSTAMM zurueck
+        # (`paths.py`; `find_audio` unterstuetzt diese von Hand angelegte Form). Zwei Ebenen
+        # liessen dort ausgerechnet die groesste Datei der Aufnahme fuer immer liegen — also
+        # genau den Fall, den README und Release-Notiz als behoben melden. Der erste Kommentar
+        # hier nannte das „fuer `*.weg` folgenlos"; der kalte Diff-Leser hat es widerlegt und
+        # den liegenbleibenden Rest vorgefuehrt.
+        #
+        # Direkt zusammengesetzt statt ueber `paths.audio_dir`: sonst liefe derselbe Glob
+        # zweimal ueber dieselbe Ebene, und die Zaehlung stimmte nicht mehr.
+        for unter in ("transkripte", "audio", ""):
             for p in glob.glob(os.path.join(glob.escape(os.path.join(eintrag.path, unter)),
                                             "*.weg")):
                 alter = _weg_alter(p)
@@ -1240,10 +1252,23 @@ def rename_file(project: str, base: str, body: RenameBody):
         # enden nur dann sauber, wenn BEIDE dieselbe Reihenfolge gehen — der Verlierer scheitert
         # dann an Datei 1 mit leerem `gemacht`. Bei zufaelliger Reihenfolge ist das nicht zugesichert.
         # Derselbe Filter wie in `_datei_weg`: `.lock` gehoert der Sperre und keiner Aufnahme, und
-        # ein VERZEICHNIS mit passendem Namen wuerde hier mitumbenannt. `.weg`-Reste bleiben drin —
-        # sie sollen mitwandern (siehe die Begruendung an `umbenannt` unten).
+        # ein VERZEICHNIS mit passendem Namen wuerde hier mitumbenannt.
+        #
+        # `.weg`-RESTE BLEIBEN SEIT #459 DRAUSSEN, und das ist die Ruecknahme einer frueheren
+        # Entscheidung mit ihrer eigenen Begruendung: sie wanderten mit, WEIL sie sonst unter
+        # dem alten Basisnamen dauerhaft verwaist waeren („niemand loescht den alten Namen je
+        # wieder"). Diese Praemisse hat der Aufraeumlauf aufgehoben — er faengt Reste
+        # unabhaengig vom Basisnamen.
+        #
+        # Und das Mitwandern ist seitdem nicht nur ueberfluessig, sondern SCHAEDLICH: der
+        # Startlauf loescht OHNE die `sperre.datei`, unter der dieser Endpunkt steht. Raeumt er
+        # einen Rest zwischen diesem Glob und dem `os.rename` weg, wirft `_umbenennen_oder_keines`
+        # einen `FileNotFoundError` — kein `PermissionError`, also 500 fuer ein Umbenennen, das
+        # ohne den Rest gelungen waere. Der kalte Diff-Leser hat das Interleaving deterministisch
+        # erzwungen und den 500er gemessen; der Ruecklauf blieb dabei sauber, es waere also ein
+        # Fehlschlag ohne Schaden — aber ein unerklaerlicher.
         treffer = sorted(p for p in glob.glob(os.path.join(tdir, glob.escape(base) + ".*"))
-                         if os.path.isfile(p) and not p.endswith(".lock"))
+                         if os.path.isfile(p) and not p.endswith((".lock", ".weg")))
         adir = paths.audio_dir(project)
         treffer += [os.path.join(adir, base + ext) for ext in AUDIO_EXT
                     if os.path.exists(os.path.join(adir, base + ext))]
@@ -1280,10 +1305,12 @@ def rename_file(project: str, base: str, body: RenameBody):
         # vom Glob getroffen), zaehlen aber NICHT: `umbenannt` nennt dem Nutzer die Dateien SEINER
         # Aufnahme, nicht unsichtbare Ueberbleibsel — dieselbe Regel wie `geloescht` in `_datei_weg`.
         #
-        # BEWUSST anders als der Reviewvorschlag, sie ganz aus der Liste zu nehmen: dann bliebe der
-        # Rest unter dem ALTEN Basisnamen liegen, waehrend die Aufnahme unter dem neuen weiterlebt —
-        # und da niemand den alten Namen je wieder loescht, waere er dauerhaft verwaist (#459).
-        # Mitgenommen faengt ihn das naechste Loeschen der Aufnahme ein.
+        # SEIT #459 kommen `.weg`-Reste gar nicht mehr in `paare` (siehe den Glob oben), der
+        # Filter hier ist also redundant. Er bleibt trotzdem stehen: `umbannt` beschreibt eine
+        # ZUSAGE an den Nutzer („die Dateien DEINER Aufnahme"), und die soll auch dann halten,
+        # wenn jemand den Glob spaeter wieder weitet. Dass er heute nichts filtert, steht hier,
+        # damit ihn niemand fuer einen scharfen Schutz haelt — die Mutationsprobe bekommt ihn
+        # nicht rot.
         return {"ok": True, "name": neu,
                 "umbenannt": sum(1 for p, _ in paare if not p.endswith(".weg"))}
 
