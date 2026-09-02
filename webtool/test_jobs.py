@@ -639,6 +639,13 @@ def test_ein_projekt_namens_active_bucht_je_ZEILE_statt_je_AUFNAHME():
     mit der Zahl der ZEILEN statt der Aufnahmen. Die Zeilenformen unten sind die echten
     (`transcribe.py:555/807/808/827/979`), nicht erfundene.
 
+    EHRLICHE GRENZE: die Zeilen sind hier von Hand gebaut, `buche_aktive` wird direkt
+    gerufen. Aendert jemand eine Druckform in `transcribe.py`, wird dieser Test davon NICHT
+    rot — er nagelt den LESER fest, nicht den Drucker. Den echten Drucker deckt der
+    Vertragstest `jobPhases.vertrag.test.ts` (Ernte aller `print(`-Zeilen gegen ein
+    Inventar); der ganze Weg vom Subprozess bis in den Job-Datensatz wurde fuer diesen PR
+    ueber den `messstand`-Skill einmal gefahren und kam auf dieselben 11.
+
     Gebucht wird dabei NICHT nur die Anzeige: `active_bases` treibt `betrifft()` und damit
     den 409-Riegel — der Issue-Kommentar zu #478 nennt das ausdruecklich. Deshalb steht es
     hier mit drin.
@@ -663,7 +670,10 @@ def test_ein_projekt_namens_active_bucht_je_ZEILE_statt_je_AUFNAHME():
                    f"[active] -> transkribiere {b} …",           # [{name}] -> transkribiere …
                    f"[active] fertig {b}: 18s, 42 Segmente, Audio 3:12, 1.0x",
                    f"[done] {b}"]
-    zeilen.append("[active] -> transkripte")
+    # `transcribe.py:979` druckt den VOLLEN Ausgabepfad (`-> {out_dir}`), nicht das blosse
+    # Wort — Bot-Befund an diesem PR. Zaehlerisch derselbe eine Eintrag, aber die Behauptung
+    # „das sind die echten Formen" stimmt erst so.
+    zeilen.append(r"[active] -> C:\Wegwerf\projekte\active\transkripte")
 
     aktive, gesehen = {}, set()
     for z in zeilen:

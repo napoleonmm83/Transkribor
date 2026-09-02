@@ -754,7 +754,27 @@ def test_jede_route_die_einen_job_startet_traegt_den_namensraum_riegel():
     import pathlib
     quelltext = (pathlib.Path(__file__).parent / "app.py").read_text(encoding="utf-8")
     baum = ast.parse(quelltext)
-    START = {"jobs.start", "jobs.request"}      # woran ein Start erkannt wird
+    def punktname(k) -> str:
+        """Der VOLLE punktierte Name einer Attributkette: `webtool.jobs.start`, nicht `.start`.
+
+        Die einstufige Fassung las nur `k.value.id` und war damit blind fuer zwei Formen
+        (Bot-Befund an diesem PR): `import webtool.jobs` + `webtool.jobs.start(…)` lieferte
+        `.start`, und `@app.router.post` wurde gar nicht als Route erkannt.
+        """
+        teile = []
+        while isinstance(k, ast.Attribute):
+            teile.append(k.attr)
+            k = k.value
+        if isinstance(k, ast.Name):
+            teile.append(k.id)
+        return ".".join(reversed(teile))
+
+    # Woran ein Start erkannt wird — an den LETZTEN zwei Gliedern, damit die Tiefe des
+    # Imports (`jobs.start` wie `webtool.jobs.start`) keine Rolle spielt.
+    START = {("jobs", "start"), ("jobs", "request")}
+
+    def ist_start(name: str) -> bool:
+        return tuple(name.split(".")[-2:]) in START
 
     # Der Waechter folgt dem AUFRUFGRAPH ab `@app.<verb>` und erkennt den Start an der
     # Schreibweise `jobs.start`/`jobs.request`. Das sind zwei ANNAHMEN ueber app.py, und
@@ -802,7 +822,7 @@ def test_jede_route_die_einen_job_startet_traegt_den_namensraum_riegel():
             continue
         for k in ast.walk(ast.parse(p.read_text(encoding="utf-8"))):
             if (isinstance(k, ast.Attribute)
-                    and f"{getattr(k.value, 'id', '')}.{k.attr}" in START):
+                    and ist_start(punktname(k))):
                 fremd.append(f"{p.name}:{k.lineno}")
             elif (isinstance(k, ast.ImportFrom) and (k.module or "").endswith("jobs")
                     and any(a.name in ("start", "request") for a in k.names)):
@@ -867,7 +887,7 @@ def test_jede_route_die_einen_job_startet_traegt_den_namensraum_riegel():
         raus = []
         for k in ast.walk(fn):
             if isinstance(k, ast.Attribute):
-                raus.append((f"{getattr(k.value, 'id', '')}.{k.attr}", k.lineno))
+                raus.append((punktname(k), k.lineno))
             elif (isinstance(k, ast.Name) and isinstance(k.ctx, ast.Load)
                     and k.id in nach_namen and k.id not in gebunden):
                 raus.append((k.id, k.lineno))
@@ -875,7 +895,7 @@ def test_jede_route_die_einen_job_startet_traegt_den_namensraum_riegel():
 
     bezug = {f.name: bezuege(f) for f in funktionen}
     namen = {n: {b for b, _ in v} for n, v in bezug.items()}
-    starter = {n for n, v in namen.items() if START & v}
+    starter = {n for n, v in namen.items() if any(ist_start(b) for b in v)}
     while True:                                   # transitiver Abschluss ueber die Helfer
         neu = {n for n, v in namen.items() if v & starter} - starter
         if not neu:
@@ -886,8 +906,11 @@ def test_jede_route_die_einen_job_startet_traegt_den_namensraum_riegel():
         for dek in fn.decorator_list:
             f = dek.func if isinstance(dek, ast.Call) else dek
             # `api_route` mit `methods=[…]` ist derselbe Weg unter anderem Namen (F1, M-D).
-            if (isinstance(f, ast.Attribute) and getattr(f.value, "id", "") == "app"
-                    and f.attr in ("get", "post", "put", "delete", "patch", "api_route")):
+            # Voller punktierter Name: `@app.router.post` ist derselbe Weg eine Ebene
+            # tiefer und wurde einstufig gar nicht als Route erkannt (Bot-Befund).
+            teile = punktname(f).split(".")
+            if (len(teile) >= 2 and teile[0] == "app"
+                    and teile[-1] in ("get", "post", "put", "delete", "patch", "api_route")):
                 return True
         return False
 
@@ -902,7 +925,7 @@ def test_jede_route_die_einen_job_startet_traegt_den_namensraum_riegel():
 
     for n in sorted(routen):
         riegel = [z for b, z in bezug[n] if b == "_sicherer_projektname"]
-        start = [z for b, z in bezug[n] if b in START or b in starter - {n}]
+        start = [z for b, z in bezug[n] if ist_start(b) or b in starter - {n}]
         assert riegel, (
             f"app.py:{n} startet einen Job, ruft aber keinen _sicherer_projektname — ein "
             f"Projekt namens `active`/`scope+` kaeme darueber in einen Lauf und fuellte "
