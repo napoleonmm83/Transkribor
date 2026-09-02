@@ -1,0 +1,32 @@
+
+===== gebaute Oberflaeche — http://127.0.0.1:56613 =====
+CHECK media :: eigen=false -> false :: herkunft="" :: requestingUrl="" :: isMainFrame=true
+CHECK media :: eigen=false -> false :: herkunft="" :: requestingUrl="" :: isMainFrame=true
+CHECK web-app-installation :: eigen=false -> false :: herkunft="" :: requestingUrl="" :: isMainFrame=true
+CHECK geolocation :: eigen=false -> false :: herkunft="" :: requestingUrl="" :: isMainFrame=true
+CHECK media :: eigen=true -> false :: herkunft="http://127.0.0.1:56613/" :: requestingUrl="http://127.0.0.1:56613/" :: isMainFrame=true
+CHECK media :: eigen=true -> false :: herkunft="http://127.0.0.1:56613/" :: requestingUrl="http://127.0.0.1:56613/" :: isMainFrame=true
+CHECK web-app-installation :: eigen=true -> false :: herkunft="http://127.0.0.1:56613/" :: requestingUrl="http://127.0.0.1:56613/" :: isMainFrame=true
+CHECK geolocation :: eigen=true -> false :: herkunft="http://127.0.0.1:56613/" :: requestingUrl="http://127.0.0.1:56613/" :: isMainFrame=true
+CHECK background-sync :: eigen=true -> false :: herkunft="http://127.0.0.1:56613/" :: requestingUrl="http://127.0.0.1:56613/" :: isMainFrame=true
+Error occurred in handler for 'update:status': Error: No handler registered for 'update:status'
+    at Session.<anonymous> (node:electron/js2c/browser_init:2:118484)
+    at Session.emit (node:events:509:28)
+CHECK notifications :: eigen=true -> true :: herkunft="http://127.0.0.1:56613/" :: requestingUrl="http://127.0.0.1:56613/" :: isMainFrame=true
+Error occurred in handler for 'fortschritt': Error: No handler registered for 'fortschritt'
+    at Session.<anonymous> (node:electron/js2c/browser_init:2:118484)
+    at Session.emit (node:events:509:28)
+Error occurred in handler for 'titelleisteFarbe': Error: No handler registered for 'titelleisteFarbe'
+    at Session.<anonymous> (node:electron/js2c/browser_init:2:118484)
+    at Session.emit (node:events:509:28)
+
+--- nach dem Laden: 10 Pruefungen ---
+--- nach 20 s Leerlauf: 0 weitere ---
+
+===== Protokollzeilen, die `main.js` geschrieben haette =====
+Berechtigungspruefung abgewiesen (nicht in der Weissliste): media
+Berechtigungspruefung abgewiesen (nicht in der Weissliste): web-app-installation
+Berechtigungspruefung abgewiesen (nicht in der Weissliste): geolocation
+Berechtigungspruefung abgewiesen (nicht in der Weissliste): background-sync
+
+===== 5 Arten: background-sync, geolocation, media, notifications, web-app-installation =====

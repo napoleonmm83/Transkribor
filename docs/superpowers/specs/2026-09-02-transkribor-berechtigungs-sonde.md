@@ -217,16 +217,60 @@ Prüfungen. Nachgezählt vom gegnerischen Prüfer an derselben Rohausgabe.)
 
 ### Messung 5 — die echte Oberfläche steuert eine 15. Art bei
 
-Der gegnerische Prüfer hat die Grenze „geht hier nicht" widerlegt, die unten stand: die
-**gebaute** Oberfläche (`webtool/static`) lässt sich mit einem gewöhnlichen node-HTTP-Server
-ausliefern — SPA-Rückfall, `/api/*` auf 404 —, ganz ohne venv und torch. `AppShell.tsx` lädt
-dann echt, und damit auch `useOsFortschritt`.
+Zweite Sonde, `oberflaeche.js` daneben, Rohausgabe `rohausgabe-oberflaeche.txt`:
+
+```
+npx electron docs/superpowers/specs/2026-09-02-berechtigungs-check-sonde/oberflaeche.js --oberflaeche
+```
+
+Sie widerlegt die Grenze „geht hier nicht", die unten stand: die **gebaute** Oberfläche
+(`webtool/static`) läuft über jeden Server mit SPA-Rückfall — hier ein node-`http`-Server, der
+`/api/*` mit 404 beantwortet —, ganz ohne venv und torch. Die frühere Begründung galt dem
+**Python-Server**, nicht der Oberfläche. `AppShell` lädt dann echt, und damit auch
+`useOsFortschritt`.
 
 Dabei kam eine Art auf, die in **keiner** der beiden Rohausgaben oben vorkommt:
-**`background-sync`** — ausgelöst von einem gewöhnlichen `fetch()` (Variantensonde: eine Seite
-nur mit `fetch` ja; leere Seite, nur `localStorage`, nur `<script>`, nur `<input type=file>`
-nein), und sie erscheint **ausschliesslich** beim Check-Handler. Sie steht damit auch nicht in
-den 19 Arten der Typdeklaration.
+**`background-sync`** — ausgelöst von einem gewöhnlichen `fetch()` (Variantensonde des
+gegnerischen Prüfers: eine Seite nur mit `fetch` ja; leere Seite, nur `localStorage`, nur
+`<script>`, nur `<input type=file>` nein), und sie erscheint **ausschliesslich** beim
+Check-Handler. Sie steht damit auch nicht in den 19 Arten der Typdeklaration.
+
+Gemessen: **10 Prüfungen nach dem Laden, 0 weitere in 20 s Leerlauf** — die Annahme, der
+Handler laufe im Polling mit, ist damit widerlegt; `Notification.permission` wird beim
+Aufbau und je beendetem Job gelesen, nicht in einer Schleife. Vier Zeilen schreibt der
+Handler dabei:
+
+```
+Berechtigungspruefung abgewiesen (nicht in der Weissliste): media
+Berechtigungspruefung abgewiesen (nicht in der Weissliste): web-app-installation
+Berechtigungspruefung abgewiesen (nicht in der Weissliste): geolocation
+Berechtigungspruefung abgewiesen (nicht in der Weissliste): background-sync
+```
+
+### Messung 6 — der Unterrahmen, und warum es drei Gründe gibt
+
+Dieselbe Sonde mit `--rahmen` (Rohausgabe `rohausgabe-rahmen.txt`): eine eigene Seite mit drei
+Unterrahmen — fremdes `http`, `data:` und `srcdoc`.
+
+```
+CHECK media         :: herkunft="http://127.0.0.1:61071/" :: requestingUrl=""            :: isMainFrame=false
+CHECK notifications :: herkunft="http://127.0.0.1:61071/" :: requestingUrl="about:srcdoc" :: isMainFrame=false
+```
+
+Das **Startdokument** eines Rahmens trägt `requestingUrl=""` **und die Herkunft des Elterns**,
+also unsere eigene. Mit nur zwei Gründen im Protokoll stünde dort „fremde Herkunft: media von
+&lt;unsere eigene Adresse&gt;" — die Ablehnung wäre richtig, das Etikett gelogen. Deshalb der
+dritte Grund:
+
+```
+Berechtigungspruefung abgewiesen (ohne Seitenangabe): media von http://127.0.0.1:61071
+Berechtigungspruefung abgewiesen (fremde Herkunft): notifications von about:
+```
+
+Die zweite Zeile zeigt zugleich, dass `nurHerkunft` trägt: `about:srcdoc` hat die Herkunft
+`'null'`, und dort sagt das **Schema** mehr als nichts. In dieser App ist der Fall heute
+unerreichbar — sie hat keinen `<iframe>` —, aber die Wache soll nicht erst dann stimmen, wenn
+jemand einen einbaut.
 
 **Nichts bricht daran** (ebenfalls gemessen): `<audio>.play()`, `decodeAudioData`,
 `localStorage`, ein `blob:`-Download und `Notification.permission === 'granted'` laufen bei
