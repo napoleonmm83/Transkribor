@@ -84,32 +84,47 @@ jobs:
       # den Job weiterhin umfallen. ~60 MB, kein GB-Sprung.
       - run: pip install fastapi python-multipart pytest httpx scipy scikit-learn
 
-      # `build` UND `scripts` muessen explizit dastehen — aus zwei verschiedenen Gruenden.
+      # KEINE Pfadangaben mehr — und das ist der Fix, nicht Kosmetik.
       #
-      # `build`: der Ordnername steht in pytests norecursedirs, ein blankes `pytest` sammelt
-      # build/test_bilder.py NIE. Als Pfadangabe wird die Regel ausgehebelt. Genau dafuer
-      # kommt der Test ohne PIL aus.
+      # `pyproject.toml` deklariert `testpaths = ["webtool", "build", "scripts"]`, mit einer
+      # Begruendung je Eintrag. Diese Zeile nannte davon ZWEI, und pytest ignoriert
+      # `testpaths`, sobald Pfade auf der Kommandozeile stehen — die dritte fiel damit still
+      # heraus. Zwei Stellen fuer eine Regel driften; die Reparatur nimmt die zweite weg,
+      # statt sie nachzuziehen (dieselbe Entscheidung wie beim permissions-Block oben, #470).
       #
-      # `scripts`: dort liegen DREI Testdateien, und bis hierher lief nur eine davon —
+      # GEMESSEN, alle drei am selben Baum (`--collect-only -q` auf master):
+      #     ohne Pfadangaben               1176
+      #     webtool build scripts          1176   <- gleichwertig, nur eine zweite Liste
+      #     webtool build (bisherige CI)   1160   <- 16 Tests fehlten
+      #
+      # Die 16 sind die drei Testdateien in scripts/, von denen bis hierher nur EINE lief:
       # test_osv_freeze.py, ueber einen eigenen `python scripts/test_osv_freeze.py`-Schritt.
-      # Der Schritt ist entfallen: sein Hauptblock ruft genau die `test_*`-Funktionen auf,
-      # die pytest ohnehin einsammelt, er lief also doppelt. Die anderen beiden —
-      # test_weg_benchmark.py (#508) und test_coderabbit_status.py — sind pytest-Stil OHNE
-      # Hauptblock und liefen in KEINEM Workflow; direkt mit python aufgerufen enden sie mit
-      # Exitcode 0 und NULL Tests, nachgestellt und nicht vermutet. Ein Waechter ohne
-      # Aufrufweg ist keiner, und ein Extra-Schritt je Datei waere ein Fix an einer Stelle
-      # statt an der Klasse gewesen — die naechste hinzukommende Testdatei faellt sonst
-      # wieder heraus. Gemessen: ohne `scripts` 1157 passed, mit 1173 (16 Tests: 3 weg,
-      # 7 coderabbit_status, 6 osv).
+      # Der ist entfallen — sein Hauptblock ruft genau die `test_*`-Funktionen auf, die
+      # pytest ohnehin einsammelt, er lief also doppelt. Die anderen beiden,
+      # test_coderabbit_status.py und test_weg_benchmark.py (#508), sind pytest-Stil OHNE
+      # Hauptblock: direkt mit python aufgerufen enden sie mit Exitcode 0 und NULL Tests,
+      # nachgestellt und nicht vermutet. Ein Waechter ohne Aufrufweg ist keiner.
       #
-      # **`python -m` ist tragend, nicht Stil.** Es legt das Arbeitsverzeichnis auf
-      # sys.path; test_weg_benchmark.py importiert `webtool.app` fuer `_weg_alter`. Ein
-      # nacktes `pytest webtool build scripts` aus demselben Verzeichnis faellt mit
-      # ModuleNotFoundError. Wer die Zeile spaeter „vereinfacht", macht beide Matrix-Beine rot.
+      # WORAN die Zahlen haengen: test_weg_benchmark.py kam mit #508 auf master und liegt
+      # NICHT auf dem Zweig dieses PR. Die CI laeuft auf `refs/pull/N/merge` und sieht sie;
+      # wer den Zweig allein auscheckt, zaehlt 13 statt 16. Nach dem Rebase-Merge ist der
+      # Unterschied weg.
       #
-      # Preis: die weg-Faelle bauen je Lauf 14.420 Dateien; lokal auf Windows 40 s -> 63 s
-      # fuer die ganze Zeile. Die Zahl vom Laeufer ist noch nicht gemessen.
-      - run: python -m pytest webtool build scripts -q -rs
+      # **`python -m` ist hier NICHT tragend** — und das gehoert dazu, weil es so AUSSIEHT:
+      # test_weg_benchmark.py importiert `webtool.app`, und `pytest scripts` allein faellt
+      # damit auf die Nase (gemessen: 1 failed, ModuleNotFoundError). In DIESEM Lauf traegt
+      # es `webtool/__init__.py` — pytest legt beim Sammeln den Paket-Stamm auf sys.path,
+      # also den Repo-Stamm, und danach findet auch scripts/ das Paket (gemessen: nacktes
+      # `pytest` 1173 passed). Das `python -m` bleibt trotzdem stehen: es kostet nichts und
+      # macht die Zeile von dieser Feinheit unabhaengig.
+      #
+      # Preis, am Laeufer gemessen (Python windows-latest): der pytest-Schritt 33,87 s ->
+      # 47,14 s. Das ist NICHT rein die Pfadaenderung — derselbe Lauf bekam ueber den Merge
+      # auch #508s eigene Tests dazu (1135 -> 1172 passed). Isoliert am selben Baum, lokal:
+      # 1157 -> 1173 Tests, 40 s -> 63 s. Der Aufwand steckt in den weg-Faellen, die
+      # Wegwerf-Baeume aus je 3.605 Dateien und 900 Ordnern anlegen (`DATEIEN`/`PROJEKTE`
+      # in scripts/weg_benchmark.py), mehrfach je Lauf.
+      - run: python -m pytest -q -rs
 
   frontend:
     name: Frontend
@@ -201,6 +216,8 @@ jobs:
   # `ubuntu-latest` je die Liste — Umbenennung, Ausmusterung, Umbau der Matrix —, werden drei
   # Waechter zu `skipped`, und der Job bleibt gruen. Vorher liefen sie bedingungslos; eine
   # Verschaerfung der Plattformabdeckung darf keine Abschwaechung der Waechter einschleusen.
+  # Das ist HERGELEITET aus GitHubs `if`-Semantik, nicht gemessen — nachstellen liesse es
+  # sich nur, indem man die Matrix wirklich aendert.
   # Nebenbei braucht der Job weder setup-node noch `npm ci` — von den 30 s des electron-Beins
   # sind 19 s Ruestzeit, die hier ersatzlos wegfaellt.
   #
