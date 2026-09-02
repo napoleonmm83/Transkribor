@@ -56,6 +56,12 @@ function serverEnv(exe = process.execPath) {
     // Startzeit selbst. Der Grund steht in der Verteilung: von 16 235 .pyc liegen 16 214 in
     // der venv, die schreibbar ist und die KEINER der beiden Wege anfasst. Im Bundle liegen
     // 21 Module, und die kompiliert CPython in 39 ms.
+    //
+    // Bewusst OHNE Unterscheidung zwischen gepackt und Entwicklung (Reviewbefund): eine
+    // Variable, die nur im Paket gilt, erzeugt genau die Fehlerklasse, wegen der es #36
+    // ueberhaupt gibt — im Repo unsichtbar, nur am Verpackten sichtbar. Der Entwicklung
+    // nimmt es nichts: dieselben 39 ms, und `__pycache__` steht dort ohnehin in
+    // .gitignore.
     PYTHONDONTWRITEBYTECODE: '1',
     // Die .env parst der Server selbst (webtool/settings.py:load_env) — hier nur noch
     // sagen, WO sie liegt: gepackt in userData, im Repo neben webtool.ps1.

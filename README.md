@@ -78,6 +78,10 @@ Auch mit **Schweizerdeutsch** kommt es zurecht.
 > Apple registriert — das kostet Jahresgebühren, die ein kostenloses Projekt nicht trägt.
 > Windows: *Weitere Informationen* → *Trotzdem ausführen*. macOS: Rechtsklick auf die App →
 > *Öffnen*.
+>
+> An dieser Warnung ändert sich vorerst nichts — sie kommt allein daher, dass der Installer
+> nicht registriert ist. Was sich geändert hat: die App legt beim Start keine Dateien mehr in
+> ihrem eigenen Programmpaket ab, ihre Signatur bleibt also nach dem ersten Öffnen gültig.
 
 <img src="docs/bilder/arbeitsflaeche.png" alt="Die Arbeitsfläche eines Projekts: oben der Knopf „+ Material“, darunter die Dateiliste mit dem Stand jeder Aufnahme.">
 
