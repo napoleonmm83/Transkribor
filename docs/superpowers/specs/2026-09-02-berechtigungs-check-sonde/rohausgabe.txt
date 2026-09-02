@@ -1,0 +1,213 @@
+
+
+===== Herkunft: file: setup.html =====
+CHECK media :: herkunft= :: requestingUrl= :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|mediaType|requestingUrl
+CHECK media :: herkunft= :: requestingUrl= :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|mediaType|requestingUrl
+CHECK web-app-installation :: herkunft= :: requestingUrl= :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK geolocation :: herkunft= :: requestingUrl= :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+Error occurred in handler for 'status': Error: No handler registered for 'status'
+    at Session.<anonymous> (node:electron/js2c/browser_init:2:118484)
+    at Session.emit (node:events:509:28)
+CHECK notifications :: herkunft=file:/// :: requestingUrl=file:///E:/Git/Transkribor-agent2/electron/setup.html :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+REQUEST notifications :: requestingUrl=file:///E:/Git/Transkribor-agent2/electron/setup.html
+CHECK notifications :: herkunft=file:/// :: requestingUrl=file:///E:/Git/Transkribor-agent2/electron/setup.html :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+REQUEST clipboard-sanitized-write :: requestingUrl=file:///E:/Git/Transkribor-agent2/electron/setup.html
+CHECK notifications :: herkunft=file:/// :: requestingUrl=file:///E:/Git/Transkribor-agent2/electron/setup.html :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK notifications :: herkunft=file:/// :: requestingUrl=file:///E:/Git/Transkribor-agent2/electron/setup.html :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+REQUEST notifications :: requestingUrl=file:///E:/Git/Transkribor-agent2/electron/setup.html
+REQUEST clipboard-read :: requestingUrl=file:///E:/Git/Transkribor-agent2/electron/setup.html
+CHECK geolocation :: herkunft=file:/// :: requestingUrl=file:///E:/Git/Transkribor-agent2/electron/setup.html :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK geolocation :: herkunft=file:/// :: requestingUrl=file:///E:/Git/Transkribor-agent2/electron/setup.html :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK notifications :: herkunft=file:/// :: requestingUrl=file:///E:/Git/Transkribor-agent2/electron/setup.html :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK notifications :: herkunft=file:/// :: requestingUrl=file:///E:/Git/Transkribor-agent2/electron/setup.html :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK media :: herkunft=file:/// :: requestingUrl=file:///E:/Git/Transkribor-agent2/electron/setup.html :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|mediaType|requestingUrl
+CHECK media :: herkunft=file:/// :: requestingUrl=file:///E:/Git/Transkribor-agent2/electron/setup.html :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|mediaType|requestingUrl
+CHECK media :: herkunft=file:/// :: requestingUrl=file:///E:/Git/Transkribor-agent2/electron/setup.html :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|mediaType|requestingUrl
+CHECK media :: herkunft=file:/// :: requestingUrl=file:///E:/Git/Transkribor-agent2/electron/setup.html :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|mediaType|requestingUrl
+CHECK clipboard-read :: herkunft=file:/// :: requestingUrl=file:///E:/Git/Transkribor-agent2/electron/setup.html :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK clipboard-read :: herkunft=file:/// :: requestingUrl=file:///E:/Git/Transkribor-agent2/electron/setup.html :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK clipboard-sanitized-write :: herkunft=file:/// :: requestingUrl=file:///E:/Git/Transkribor-agent2/electron/setup.html :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK midi :: herkunft=file:/// :: requestingUrl=file:///E:/Git/Transkribor-agent2/electron/setup.html :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK clipboard-sanitized-write :: herkunft=file:/// :: requestingUrl=file:///E:/Git/Transkribor-agent2/electron/setup.html :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK storage-access :: herkunft=file:/// :: requestingUrl=file:///E:/Git/Transkribor-agent2/electron/setup.html :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK midi :: herkunft=file:/// :: requestingUrl=file:///E:/Git/Transkribor-agent2/electron/setup.html :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK idle-detection :: herkunft=file:/// :: requestingUrl=file:///E:/Git/Transkribor-agent2/electron/setup.html :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK storage-access :: herkunft=file:/// :: requestingUrl=file:///E:/Git/Transkribor-agent2/electron/setup.html :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK idle-detection :: herkunft=file:/// :: requestingUrl=file:///E:/Git/Transkribor-agent2/electron/setup.html :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK screen-wake-lock :: herkunft=file:/// :: requestingUrl=file:///E:/Git/Transkribor-agent2/electron/setup.html :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK window-management :: herkunft=file:/// :: requestingUrl=file:///E:/Git/Transkribor-agent2/electron/setup.html :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK screen-wake-lock :: herkunft=file:/// :: requestingUrl=file:///E:/Git/Transkribor-agent2/electron/setup.html :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK local-fonts :: herkunft=file:/// :: requestingUrl=file:///E:/Git/Transkribor-agent2/electron/setup.html :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK window-management :: herkunft=file:/// :: requestingUrl=file:///E:/Git/Transkribor-agent2/electron/setup.html :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK persistent-storage :: herkunft=file:/// :: requestingUrl=file:///E:/Git/Transkribor-agent2/electron/setup.html :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK local-fonts :: herkunft=file:/// :: requestingUrl=file:///E:/Git/Transkribor-agent2/electron/setup.html :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK persistent-storage :: herkunft=file:/// :: requestingUrl=file:///E:/Git/Transkribor-agent2/electron/setup.html :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+REQUEST media :: requestingUrl=file:///E:/Git/Transkribor-agent2/electron/setup.html
+CHECK media :: herkunft=file:/// :: requestingUrl=file:///E:/Git/Transkribor-agent2/electron/setup.html :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK media :: herkunft=file:/// :: requestingUrl=file:///E:/Git/Transkribor-agent2/electron/setup.html :: isMainFrame=true :: keys=isMainFrame|mediaType|requestingUrl|securityOrigin
+CHECK speaker-selection :: herkunft=file:/// :: requestingUrl=file:///E:/Git/Transkribor-agent2/electron/setup.html :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+REQUEST geolocation :: requestingUrl=file:///E:/Git/Transkribor-agent2/electron/setup.html
+--- was die Seite gesehen hat ---
+Notification.permission (lesen) -> granted
+Notification.requestPermission() -> granted
+Notification.permission (nach) -> granted
+new Notification -> OK
+clipboard.writeText -> OK
+clipboard.readText -> "probe"
+permissions.query geolocation -> granted
+permissions.query notifications -> granted
+permissions.query camera -> granted
+permissions.query microphone -> granted
+permissions.query clipboard-read -> granted
+permissions.query clipboard-write -> granted
+permissions.query midi -> granted
+permissions.query storage-access -> granted
+permissions.query top-level-storage-access -> FEHLER TypeError
+permissions.query idle-detection -> granted
+permissions.query screen-wake-lock -> granted
+permissions.query window-management -> granted
+permissions.query local-fonts -> granted
+permissions.query persistent-storage -> granted
+getUserMedia(audio) -> OK
+geolocation -> OK
+
+===== Herkunft: http EIGEN =====
+CHECK media :: herkunft=file:/// :: requestingUrl=file:///E:/Git/Transkribor-agent2/electron/setup.html :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|mediaType|requestingUrl
+CHECK media :: herkunft=file:/// :: requestingUrl=file:///E:/Git/Transkribor-agent2/electron/setup.html :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|mediaType|requestingUrl
+CHECK web-app-installation :: herkunft=file:/// :: requestingUrl=file:///E:/Git/Transkribor-agent2/electron/setup.html :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK geolocation :: herkunft=file:/// :: requestingUrl=file:///E:/Git/Transkribor-agent2/electron/setup.html :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK notifications :: herkunft=http://127.0.0.1:53014/ :: requestingUrl=http://127.0.0.1:53014/ :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+REQUEST notifications :: requestingUrl=http://127.0.0.1:53014/
+CHECK notifications :: herkunft=http://127.0.0.1:53014/ :: requestingUrl=http://127.0.0.1:53014/ :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK notifications :: herkunft=http://127.0.0.1:53014/ :: requestingUrl=http://127.0.0.1:53014/ :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+REQUEST clipboard-sanitized-write :: requestingUrl=http://127.0.0.1:53014/
+CHECK notifications :: herkunft=http://127.0.0.1:53014/ :: requestingUrl=http://127.0.0.1:53014/ :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+REQUEST notifications :: requestingUrl=http://127.0.0.1:53014/
+REQUEST clipboard-read :: requestingUrl=http://127.0.0.1:53014/
+CHECK geolocation :: herkunft=http://127.0.0.1:53014/ :: requestingUrl=http://127.0.0.1:53014/ :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK geolocation :: herkunft=http://127.0.0.1:53014/ :: requestingUrl=http://127.0.0.1:53014/ :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK notifications :: herkunft=http://127.0.0.1:53014/ :: requestingUrl=http://127.0.0.1:53014/ :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK notifications :: herkunft=http://127.0.0.1:53014/ :: requestingUrl=http://127.0.0.1:53014/ :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK media :: herkunft=http://127.0.0.1:53014/ :: requestingUrl=http://127.0.0.1:53014/ :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|mediaType|requestingUrl
+CHECK media :: herkunft=http://127.0.0.1:53014/ :: requestingUrl=http://127.0.0.1:53014/ :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|mediaType|requestingUrl
+CHECK media :: herkunft=http://127.0.0.1:53014/ :: requestingUrl=http://127.0.0.1:53014/ :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|mediaType|requestingUrl
+CHECK media :: herkunft=http://127.0.0.1:53014/ :: requestingUrl=http://127.0.0.1:53014/ :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|mediaType|requestingUrl
+CHECK clipboard-read :: herkunft=http://127.0.0.1:53014/ :: requestingUrl=http://127.0.0.1:53014/ :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK clipboard-sanitized-write :: herkunft=http://127.0.0.1:53014/ :: requestingUrl=http://127.0.0.1:53014/ :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK clipboard-read :: herkunft=http://127.0.0.1:53014/ :: requestingUrl=http://127.0.0.1:53014/ :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK clipboard-sanitized-write :: herkunft=http://127.0.0.1:53014/ :: requestingUrl=http://127.0.0.1:53014/ :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK midi :: herkunft=http://127.0.0.1:53014/ :: requestingUrl=http://127.0.0.1:53014/ :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK storage-access :: herkunft=http://127.0.0.1:53014/ :: requestingUrl=http://127.0.0.1:53014/ :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK midi :: herkunft=http://127.0.0.1:53014/ :: requestingUrl=http://127.0.0.1:53014/ :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK idle-detection :: herkunft=http://127.0.0.1:53014/ :: requestingUrl=http://127.0.0.1:53014/ :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK storage-access :: herkunft=http://127.0.0.1:53014/ :: requestingUrl=http://127.0.0.1:53014/ :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK screen-wake-lock :: herkunft=http://127.0.0.1:53014/ :: requestingUrl=http://127.0.0.1:53014/ :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK idle-detection :: herkunft=http://127.0.0.1:53014/ :: requestingUrl=http://127.0.0.1:53014/ :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK window-management :: herkunft=http://127.0.0.1:53014/ :: requestingUrl=http://127.0.0.1:53014/ :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK screen-wake-lock :: herkunft=http://127.0.0.1:53014/ :: requestingUrl=http://127.0.0.1:53014/ :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK local-fonts :: herkunft=http://127.0.0.1:53014/ :: requestingUrl=http://127.0.0.1:53014/ :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK window-management :: herkunft=http://127.0.0.1:53014/ :: requestingUrl=http://127.0.0.1:53014/ :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK persistent-storage :: herkunft=http://127.0.0.1:53014/ :: requestingUrl=http://127.0.0.1:53014/ :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK local-fonts :: herkunft=http://127.0.0.1:53014/ :: requestingUrl=http://127.0.0.1:53014/ :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK persistent-storage :: herkunft=http://127.0.0.1:53014/ :: requestingUrl=http://127.0.0.1:53014/ :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+REQUEST media :: requestingUrl=http://127.0.0.1:53014/
+CHECK media :: herkunft=http://127.0.0.1:53014/ :: requestingUrl=http://127.0.0.1:53014/ :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK media :: herkunft=http://127.0.0.1:53014/ :: requestingUrl=http://127.0.0.1:53014/ :: isMainFrame=true :: keys=isMainFrame|mediaType|requestingUrl|securityOrigin
+CHECK speaker-selection :: herkunft=http://127.0.0.1:53014/ :: requestingUrl=http://127.0.0.1:53014/ :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+REQUEST geolocation :: requestingUrl=http://127.0.0.1:53014/
+--- was die Seite gesehen hat ---
+Notification.permission (lesen) -> granted
+Notification.requestPermission() -> granted
+Notification.permission (nach) -> granted
+new Notification -> OK
+clipboard.writeText -> OK
+clipboard.readText -> "probe"
+permissions.query geolocation -> granted
+permissions.query notifications -> granted
+permissions.query camera -> granted
+permissions.query microphone -> granted
+permissions.query clipboard-read -> granted
+permissions.query clipboard-write -> granted
+permissions.query midi -> granted
+permissions.query storage-access -> granted
+permissions.query top-level-storage-access -> FEHLER TypeError
+permissions.query idle-detection -> granted
+permissions.query screen-wake-lock -> granted
+permissions.query window-management -> granted
+permissions.query local-fonts -> granted
+permissions.query persistent-storage -> granted
+getUserMedia(audio) -> OK
+geolocation -> OK
+
+===== Herkunft: http FREMD =====
+CHECK media :: herkunft=http://127.0.0.1:53014/ :: requestingUrl=http://127.0.0.1:53014/ :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|mediaType|requestingUrl
+CHECK media :: herkunft=http://127.0.0.1:53014/ :: requestingUrl=http://127.0.0.1:53014/ :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|mediaType|requestingUrl
+CHECK web-app-installation :: herkunft=http://127.0.0.1:53014/ :: requestingUrl=http://127.0.0.1:53014/ :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK geolocation :: herkunft=http://127.0.0.1:53014/ :: requestingUrl=http://127.0.0.1:53014/ :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK notifications :: herkunft=http://127.0.0.1:53015/ :: requestingUrl=http://127.0.0.1:53015/ :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+REQUEST notifications :: requestingUrl=http://127.0.0.1:53015/
+CHECK notifications :: herkunft=http://127.0.0.1:53015/ :: requestingUrl=http://127.0.0.1:53015/ :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+REQUEST clipboard-sanitized-write :: requestingUrl=http://127.0.0.1:53015/
+CHECK notifications :: herkunft=http://127.0.0.1:53015/ :: requestingUrl=http://127.0.0.1:53015/ :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK notifications :: herkunft=http://127.0.0.1:53015/ :: requestingUrl=http://127.0.0.1:53015/ :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+REQUEST notifications :: requestingUrl=http://127.0.0.1:53015/
+REQUEST clipboard-read :: requestingUrl=http://127.0.0.1:53015/
+CHECK geolocation :: herkunft=http://127.0.0.1:53015/ :: requestingUrl=http://127.0.0.1:53015/ :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK geolocation :: herkunft=http://127.0.0.1:53015/ :: requestingUrl=http://127.0.0.1:53015/ :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK notifications :: herkunft=http://127.0.0.1:53015/ :: requestingUrl=http://127.0.0.1:53015/ :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK media :: herkunft=http://127.0.0.1:53015/ :: requestingUrl=http://127.0.0.1:53015/ :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|mediaType|requestingUrl
+CHECK notifications :: herkunft=http://127.0.0.1:53015/ :: requestingUrl=http://127.0.0.1:53015/ :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK media :: herkunft=http://127.0.0.1:53015/ :: requestingUrl=http://127.0.0.1:53015/ :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|mediaType|requestingUrl
+CHECK media :: herkunft=http://127.0.0.1:53015/ :: requestingUrl=http://127.0.0.1:53015/ :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|mediaType|requestingUrl
+CHECK clipboard-read :: herkunft=http://127.0.0.1:53015/ :: requestingUrl=http://127.0.0.1:53015/ :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK media :: herkunft=http://127.0.0.1:53015/ :: requestingUrl=http://127.0.0.1:53015/ :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|mediaType|requestingUrl
+CHECK clipboard-sanitized-write :: herkunft=http://127.0.0.1:53015/ :: requestingUrl=http://127.0.0.1:53015/ :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK clipboard-read :: herkunft=http://127.0.0.1:53015/ :: requestingUrl=http://127.0.0.1:53015/ :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK midi :: herkunft=http://127.0.0.1:53015/ :: requestingUrl=http://127.0.0.1:53015/ :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK clipboard-sanitized-write :: herkunft=http://127.0.0.1:53015/ :: requestingUrl=http://127.0.0.1:53015/ :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK storage-access :: herkunft=http://127.0.0.1:53015/ :: requestingUrl=http://127.0.0.1:53015/ :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK midi :: herkunft=http://127.0.0.1:53015/ :: requestingUrl=http://127.0.0.1:53015/ :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK storage-access :: herkunft=http://127.0.0.1:53015/ :: requestingUrl=http://127.0.0.1:53015/ :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK idle-detection :: herkunft=http://127.0.0.1:53015/ :: requestingUrl=http://127.0.0.1:53015/ :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK screen-wake-lock :: herkunft=http://127.0.0.1:53015/ :: requestingUrl=http://127.0.0.1:53015/ :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK idle-detection :: herkunft=http://127.0.0.1:53015/ :: requestingUrl=http://127.0.0.1:53015/ :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK window-management :: herkunft=http://127.0.0.1:53015/ :: requestingUrl=http://127.0.0.1:53015/ :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK screen-wake-lock :: herkunft=http://127.0.0.1:53015/ :: requestingUrl=http://127.0.0.1:53015/ :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK local-fonts :: herkunft=http://127.0.0.1:53015/ :: requestingUrl=http://127.0.0.1:53015/ :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK window-management :: herkunft=http://127.0.0.1:53015/ :: requestingUrl=http://127.0.0.1:53015/ :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK persistent-storage :: herkunft=http://127.0.0.1:53015/ :: requestingUrl=http://127.0.0.1:53015/ :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK local-fonts :: herkunft=http://127.0.0.1:53015/ :: requestingUrl=http://127.0.0.1:53015/ :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK persistent-storage :: herkunft=http://127.0.0.1:53015/ :: requestingUrl=http://127.0.0.1:53015/ :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+REQUEST media :: requestingUrl=http://127.0.0.1:53015/
+CHECK media :: herkunft=http://127.0.0.1:53015/ :: requestingUrl=http://127.0.0.1:53015/ :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+CHECK media :: herkunft=http://127.0.0.1:53015/ :: requestingUrl=http://127.0.0.1:53015/ :: isMainFrame=true :: keys=isMainFrame|mediaType|requestingUrl|securityOrigin
+CHECK speaker-selection :: herkunft=http://127.0.0.1:53015/ :: requestingUrl=http://127.0.0.1:53015/ :: isMainFrame=true :: keys=embeddingOrigin|isMainFrame|requestingUrl
+REQUEST geolocation :: requestingUrl=http://127.0.0.1:53015/
+--- was die Seite gesehen hat ---
+Notification.permission (lesen) -> granted
+Notification.requestPermission() -> granted
+Notification.permission (nach) -> granted
+new Notification -> OK
+clipboard.writeText -> OK
+clipboard.readText -> "probe"
+permissions.query geolocation -> granted
+permissions.query notifications -> granted
+permissions.query camera -> granted
+permissions.query microphone -> granted
+permissions.query clipboard-read -> granted
+permissions.query clipboard-write -> granted
+permissions.query midi -> granted
+permissions.query storage-access -> granted
+permissions.query top-level-storage-access -> FEHLER TypeError
+permissions.query idle-detection -> granted
+permissions.query screen-wake-lock -> granted
+permissions.query window-management -> granted
+permissions.query local-fonts -> granted
+permissions.query persistent-storage -> granted
+getUserMedia(audio) -> OK
+geolocation -> OK
+
+===== Zusammenfassung =====
+Beim CHECK-Handler aufgelaufen:   clipboard-read, clipboard-sanitized-write, geolocation, idle-detection, local-fonts, media, midi, notifications, persistent-storage, screen-wake-lock, speaker-selection, storage-access, web-app-installation, window-management
+Beim REQUEST-Handler aufgelaufen: clipboard-read, clipboard-sanitized-write, geolocation, media, notifications
+Nie gesehen (von 19 Check-Arten der Typdeklaration): fullscreen, hid, mediaKeySystem, midiSysex, openExternal, pointerLock, serial, top-level-storage-access, usb, deprecated-sync-clipboard-read, fileSystem
