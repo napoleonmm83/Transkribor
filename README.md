@@ -634,6 +634,26 @@ was in die Mail passt — häng sie an, wenn du magst. Ist sie sehr gross geword
 </details>
 
 <details>
+<summary><strong>Ich klicke auf einen Link und es passiert nichts</strong></summary>
+
+Transkribor öffnet nicht jeden Link. Adressen, die nicht in den Browser führen, sondern ein
+Programm auf deinem Rechner starten würden, weist die App ab — sie kann nicht wissen, ob so
+eine Adresse von dir stammt oder aus einem Transkript, das jemand anders geschrieben hat.
+
+Warum ein bestimmter Link abgewiesen wurde, steht in der Protokolldatei („Protokoll anzeigen“,
+siehe oben). Dort findest du eine Zeile wie `Externer Link abgewiesen (…)`, und in der Klammer
+steht der Grund — etwa dass die Adresse gar nicht in ein Browserfenster führt, oder dass eine
+Weiterleitung dahintersteckte, die ein Server ausgesucht hat und nicht du.
+
+*(Ab der nächsten Fassung nennt die Klammer den tatsächlichen Grund; in Fassungen bis
+einschliesslich `v0.50.2` stand dort immer derselbe Text, auch wenn er nicht passte. Und die
+Meldung verstummte früher, sobald in einer Sitzung zwanzig Links abgewiesen worden waren —
+jetzt wird sie stündlich wieder aufgezeichnet, du findest sie also auch dann noch, wenn die
+App schon länger offen ist.)*
+
+</details>
+
+<details>
 <summary><strong>„2 von 5 fehlgeschlagen“ — und vorher stand da „fertig“?</strong></summary>
 
 Ein Lauf über mehrere Aufnahmen bricht nicht ab, wenn eine davon nicht klappt — er überspringt
