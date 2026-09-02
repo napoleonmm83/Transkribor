@@ -93,6 +93,11 @@ function attrappen(opt = {}) {
         send: (kanal, nutzlast) => w.gesendet.push({ kanal, nutzlast }),
         setWindowOpenHandler: fn => { w.oeffnenHandler = fn },
         on: (art, fn) => { w.navHoerer.set(art, fn) },
+        // Der Berechtigungs-Handler haengt an der SESSION, nicht an `webContents` (#446) —
+        // `electron.d.ts` fuehrt `setPermissionRequestHandler` unter `Session`. Die Attrappe
+        // bildet genau diesen Umweg nach; haenge ihn jemand ans falsche Objekt, wirft der
+        // Fensterbau, statt still nichts zu tun.
+        session: { setPermissionRequestHandler: fn => { w.berechtigungHandler = fn } },
       },
     }
     return scheibe
@@ -606,8 +611,12 @@ test('nach 20 Abweisungen schweigt das Protokoll — mit einer letzten Zeile (#4
   for (let i = 0; i < 50; i++) w.oeffnenHandler({ url: 'file:///x' + i })
   const abgewiesen = w.protokollzeilen.filter(z => z.startsWith('Externer Link abgewiesen'))
   assert.strictEqual(abgewiesen.length, 20, 'genau der Deckel, nicht mehr')
-  const schluss = w.protokollzeilen.filter(z => z.startsWith('Weitere abgewiesene Links'))
+  const schluss = w.protokollzeilen.filter(z => z.startsWith('Weitere Abweisungen'))
   assert.strictEqual(schluss.length, 1, 'die Unterdrueckung wird EINMAL angesagt, nicht 30-mal')
+  // Sie muss den Vorgang mitnennen (#506): `bericht.letzteZeilen` laesst genau EINE Zeile
+  // dieser Gruppe in die Fehlermail, und im Flutfall ist das GENAU diese. Ohne Art, Grund und
+  // Ziel schickt der Nutzer eine Zeile ab, aus der sich nichts rekonstruieren laesst.
+  assert.match(schluss[0], /die naechste war: Externer Link, Schema nicht erlaubt, file:\/\/\/x20/)
 })
 
 // ── Navigationswaechter (#434) ───────────────────────────────────────────────
@@ -742,7 +751,7 @@ test('der Deckel ist ein Zeitfenster, kein Lebenszeit-Budget (#448)', async () =
     // Die Schlusszeile muss sagen, dass der Deckel ein FENSTER ist. Ohne diese Zusicherung stand
     // „je Stunde" ungedeckt im Code (`grep "je Stunde" electron/*.test.js` war leer) — ein
     // Zusatz, den niemand rot bekommt, ist eine Behauptung, keine Zusicherung.
-    assert.ok(w.protokollzeilen.some(z => z.startsWith('Weitere abgewiesene Links') && z.includes('je Stunde')),
+    assert.ok(w.protokollzeilen.some(z => z.startsWith('Weitere Abweisungen') && z.includes('je Stunde')),
       'die Schlusszeile nennt den Deckel als Stundenwert, nicht als Lebenszeit-Budget')
 
     jetzt += 60 * 60 * 1000 + 1
@@ -761,7 +770,7 @@ test('Fensteroeffner und Navigation teilen EINEN Deckel und EINE Bremse (#434)',
   for (let i = 0; i < 15; i++) navigieren(w, `file:///y${i}`)
   const abgewiesen = w.protokollzeilen.filter(z => z.includes(' abgewiesen (Schema nicht erlaubt): '))
   assert.strictEqual(abgewiesen.length, 20, `30 Abweisungen ueber beide Wege ergaben ${abgewiesen.length} Zeilen — der Deckel ist nicht geteilt`)
-  const schluss = w.protokollzeilen.filter(z => z.startsWith('Weitere abgewiesene Links'))
+  const schluss = w.protokollzeilen.filter(z => z.startsWith('Weitere Abweisungen'))
   assert.strictEqual(schluss.length, 1, 'die Unterdrueckung wird EINMAL angesagt, nicht je Weg einmal')
 })
 
@@ -820,6 +829,121 @@ test('auch die Navigations-Abweisung ist gedeckelt (#434)', async () => {
   const zeile = w.protokollzeilen.find(z => z.startsWith('Navigation abgewiesen'))
   assert.ok(zeile, 'protokolliert wird sie weiterhin')
   assert.ok(zeile.length < 400, `Zeile ist ${zeile.length} Zeichen — der Deckel greift auf diesem Weg nicht`)
+})
+
+// ── Berechtigungen und <webview> (#446) ──────────────────────────────────────
+// Die dritte und vierte Fenster-Faehigkeit. Dieselbe Grenze wie bei #434: diese Tests sagen
+// nicht, ob Chromium die Anfrage ueberhaupt stellt — dafuer gibt es den Lauf am echten
+// Fenster. Sie sagen, dass `main.js` den Waechter davorhaengt und wie er urteilt.
+
+/**
+ * Ruft den Berechtigungs-Handler wie Electron und gibt zurueck, was er erlaubt hat.
+ *
+ * `angaben` ist der VIERTE Parameter — an einem laufenden Fenster gemessen traegt er
+ * `requestingUrl` und `isMainFrame` bei den drei Anfragearten, die dort auflaufen
+ * (`notifications`, `clipboard-sanitized-write`, `media`); fuer die uebrigen ist es nicht
+ * gemessen, und der Handler lehnt ohne die Angabe ab. Vorgabe ist die eigene Statusseite;
+ * ein Test, der die fremde Herkunft prueft, uebergibt seine eigene.
+ */
+const EIGENE_SEITE = pathToFileURL(path.join(__dirname, 'setup.html')).href
+function berechtigungFragen(w, art, angaben = { requestingUrl: EIGENE_SEITE, isMainFrame: true }) {
+  assert.ok(w.berechtigungHandler, 'kein Berechtigungs-Handler an der Session registriert')
+  let erlaubt = null
+  w.berechtigungHandler({}, art, ok => { erlaubt = ok }, angaben)
+  return erlaubt
+}
+
+test('was die App wirklich braucht, kommt durch (#446, #376)', async () => {
+  const w = await laden()
+  // Beide am LAUFENDEN Fenster gemessen, nicht aus dem Code geschlossen: `notifications` fuer
+  // die Fertigmeldung (#376, `useOsFortschritt.ts`) und `clipboard-sanitized-write` fuer
+  // „Lizenzschluessel kopieren" (`SettingsPage.tsx`). Die zweite lief entgegen der Annahme des
+  // Plans durch den REQUEST-Handler — ein Deny-all haette den Knopf still abgeschaltet.
+  assert.strictEqual(berechtigungFragen(w, 'notifications'), true)
+  assert.strictEqual(berechtigungFragen(w, 'clipboard-sanitized-write'), true)
+  assert.deepStrictEqual(w.protokollzeilen.filter(z => z.startsWith('Berechtigung abgewiesen')), [],
+    'was erlaubt ist, ist kein Vorfall und fuellt das Protokoll nicht')
+})
+
+test('jede andere Berechtigung wird abgelehnt UND protokolliert (#446)', async () => {
+  const w = await laden()
+  // Die App fragt heute keine davon an. Ohne Handler entschiede Chromiums Voreinstellung —
+  // eine Injektion koennte einen Systemdialog ausloesen, den der Nutzer fuer die App haelt.
+  // `clipboard-read` steht bewusst dabei: die App schreibt in die Zwischenablage, sie liest
+  // nie daraus. Ohne diesen Fall bestuende die Weissliste auch als „alles mit clipboard".
+  const verboten = ['media', 'geolocation', 'midi', 'pointerLock', 'display-capture', 'clipboard-read']
+  for (const art of verboten) {
+    assert.strictEqual(berechtigungFragen(w, art), false, `${art} gehoert nicht durch`)
+  }
+  const zeilen = w.protokollzeilen.filter(z => z.startsWith('Berechtigung abgewiesen'))
+  assert.strictEqual(zeilen.length, verboten.length,
+    'still abgelehnt waere schlimmer als gar nicht abgelehnt')
+  assert.ok(zeilen[0].includes('media'), 'im Protokoll muss stehen, WELCHE Berechtigung')
+})
+
+test('eine FREMDE Herkunft bekommt auch die erlaubten Rechte nicht (#446)', async () => {
+  const w = await laden()
+  // Die Weissliste allein reichte nicht: sie fragt WAS, nicht WER. Dieselbe Liste und
+  // dieselbe Laufzeit-Abfrage wie bei den Navigationswachen (#434).
+  for (const art of ['notifications', 'clipboard-sanitized-write']) {
+    assert.strictEqual(berechtigungFragen(w, art, { requestingUrl: 'https://boese.example/x' }), false,
+      `${art} ist erlaubt — aber nicht fuer eine fremde Seite`)
+  }
+  assert.ok(w.protokollzeilen.some(z =>
+    z.startsWith('Berechtigung abgewiesen (fremde Herkunft)') && z.includes('boese.example')),
+  'im Protokoll muss stehen, WER gefragt hat — sonst sagt „media abgelehnt" nichts')
+  // Fehlt die Angabe ganz, wird abgelehnt: ein unbekannter Wert schaltet keine Wache ab (#266).
+  assert.strictEqual(berechtigungFragen(w, 'notifications', {}), false)
+})
+
+test('von einer fremden URL geht nur die HERKUNFT ins Protokoll (#446, Bot an PR #522)', async () => {
+  const w = await laden()
+  // Benutzerteil, Pfad, Query und Fragment tragen hier nichts bei — koennen aber ein Token oder
+  // einen OAuth-Code fuehren, und die Zeile faehrt ueber `bericht.letzteZeilen` in eine Mail.
+  //
+  // **Der Fixture-Wert ist absichtlich KEIN Zugangsdaten-Muster** (Benutzerteil ohne Kennwort,
+  // harmloser Abfrageparameter). Mit einem echten `benutzer:kennwort@` schlug der
+  // Geheimnis-Scanner am PR an — GitGuardian meldete „1 secret uncovered", und ein Wecker, der
+  // bei Testdaten laeutet, wird weggeklickt. Geprueft ist derselbe Mechanismus: `origin`
+  // schneidet ALLES ausser Schema, Host und Port ab, gleich was darin stand.
+  berechtigungFragen(w, 'media',
+    { requestingUrl: 'https://gast@boese.example:8443/pfad?sitzung=beispiel#frag' })
+  const zeile = w.protokollzeilen.find(z => z.startsWith('Berechtigung abgewiesen (fremde Herkunft)'))
+  assert.ok(zeile.includes('https://boese.example:8443'), `Herkunft fehlt: ${zeile}`)
+  for (const weg of ['gast@', 'sitzung=beispiel', '/pfad', '#frag']) {
+    assert.ok(!zeile.includes(weg), `${weg} gehoert nicht ins Protokoll: ${zeile}`)
+  }
+  // Auch der webview-Weg, und beide Randfaelle: `file:` hat gar keine Herkunft (`origin`
+  // waere die Zeichenkette 'null'), Unlesbares wird benannt statt verschwiegen.
+  const hoerer = w.navHoerer.get('will-attach-webview')
+  hoerer({ preventDefault: () => {} }, {}, { src: 'file:///C:/Users/marcu/Videos/Interview.mp3' })
+  hoerer({ preventDefault: () => {} }, {}, { src: 'kein=url' })
+  const webview = w.protokollzeilen.filter(z => z.startsWith('Eingebettete Ansicht abgewiesen'))
+  assert.ok(webview[0].endsWith('file:'), `Schema statt Pfad erwartet: ${webview[0]}`)
+  assert.ok(!webview[0].includes('Interview'), 'der Aufnahmename gehoert nicht in die Zeile')
+  assert.ok(webview[1].includes('(unlesbare Herkunft)'), `benannt statt leer: ${webview[1]}`)
+})
+
+test('ein <webview> kommt gar nicht erst zustande (#446)', async () => {
+  const w = await laden()
+  const hoerer = w.navHoerer.get('will-attach-webview')
+  assert.ok(hoerer, 'ohne Hoerer darf ein <webview> eigene webPreferences mitbringen')
+  let verhindert = false
+  hoerer({ preventDefault: () => { verhindert = true } }, {}, { src: 'https://boese.example/x' })
+  assert.ok(verhindert, 'das ist der einzige Weg zu einem Kontext MIT preload in diesem Fenster')
+  assert.ok(w.protokollzeilen.some(z =>
+    z.startsWith('Eingebettete Ansicht abgewiesen') && z.includes('boese.example')),
+  'sonst tut die Seite sichtbar nichts und niemand findet den Grund')
+})
+
+test('Berechtigungen teilen den Deckel der Linkabweisungen (#446, #426)', async () => {
+  const w = await laden()
+  // Ein zweiter, eigener Schreibweg waere genau der Fehler aus #426: ein Renderer, der beide
+  // Wege abwechselnd flutet, haette sonst den doppelten Deckel.
+  for (let i = 0; i < 15; i++) berechtigungFragen(w, 'media')
+  for (let i = 0; i < 15; i++) w.oeffnenHandler({ url: 'file:///x' + i })
+  const abgewiesen = w.protokollzeilen.filter(z => z.includes(' abgewiesen ('))
+  assert.strictEqual(abgewiesen.length, 20, 'EIN geteilter Deckel, nicht zwei mal 20')
 })
 
 test('HTTP/2 wird abgeschaltet, BEVOR irgendetwas laeuft (#150)', async () => {

@@ -69,6 +69,45 @@ test('rotiert ueber mehrere Generationen bis MAX_GENERATIONEN (#371)', () => {
   assert.ok(!fsEcht.existsSync(protokoll.pfad() + '.4'), 'Generation .4 darf nicht angelegt werden')
 })
 
+test('die Zeile, die gleich kommt, zaehlt beim Rotieren MIT (#436)', () => {
+  frisch()
+  // Der Fehler war die Reihenfolge, nicht die Grenze: `rotieren` prueft VOR dem Anhaengen.
+  // Eine Datei knapp unter MAX bestand die Pruefung, und die naechste Zeile kam in voller
+  // Laenge obendrauf — jede Generation wurde `MAX + Zeilenlaenge` gross, gemessen 16,00 MB
+  // statt der am `MAX_GENERATIONEN`-Kommentar zugesagten 8.
+  fsEcht.writeFileSync(protokoll.pfad(), 'x'.repeat(protokoll.MAX - 10))
+  protokoll.schreiben('y'.repeat(1000))
+  assert.ok(fsEcht.existsSync(protokoll.pfad() + '.1'), 'die volle Generation gehoert beiseite')
+  const groesse = fsEcht.statSync(protokoll.pfad()).size
+  assert.ok(groesse <= protokoll.MAX,
+    `die neue Generation haelt MAX (${protokoll.MAX}), ist aber ${groesse} Byte`)
+  // Gegenrichtung: die Zeile ist auch wirklich angekommen und nicht bloss verschwunden.
+  assert.match(fsEcht.readFileSync(protokoll.pfad(), 'utf8'), /yyy/)
+})
+
+test('gemessen wird in BYTES, nicht in Zeichen (#436)', () => {
+  frisch()
+  // Der Kommentar an `rotieren` behauptet das — ohne diesen Test bliebe die Behauptung
+  // unbewacht: mit `.length` statt `Buffer.byteLength` blieben alle uebrigen Tests gruen
+  // (gemessen, kalter Zweitleser). Ein Umlaut ist EIN Zeichen und ZWEI Byte, ein Emoji
+  // zwei Zeichen und vier Byte — die Datei wird UTF-8 geschrieben.
+  fsEcht.writeFileSync(protokoll.pfad(), 'x'.repeat(protokoll.MAX - 60))
+  protokoll.schreiben('ä'.repeat(30))     // 30 Zeichen (+Zeitstempel) passten, 60 Byte nicht
+  assert.ok(fsEcht.existsSync(protokoll.pfad() + '.1'),
+    'nach Zeichen gerechnet haette die Zeile noch hineingepasst — nach Byte nicht')
+  assert.ok(fsEcht.statSync(protokoll.pfad()).size <= protokoll.MAX)
+})
+
+test('eine ueberlange Zeile rotiert keine LEERE Generation weg (#436)', () => {
+  frisch()
+  // Die Datei muss EXISTIEREN und leer sein — sonst wirft `statSync` und der Test waere
+  // vacuous: ohne Datei rotiert auch die mutierte Fassung nicht.
+  fsEcht.writeFileSync(protokoll.pfad(), '')
+  protokoll.schreiben('z'.repeat(protokoll.MAX + 1))
+  assert.ok(!fsEcht.existsSync(protokoll.pfad() + '.1'),
+    'eine 0-Byte-Generation .1 schoebe eine echte aus dem Fenster, ohne etwas zu retten')
+})
+
 test('maskiert sensible API-Keys und Token (#371)', () => {
   frisch()
   const textMitKeys = 'Fehler mit OpenAI sk-proj-1234567890abcdef1234 und Anthropic sk-ant-api03-abcdef1234567890 sowie Google AIzaSyD1234567890abcdef1234567890 sowie Groq gsk_1234567890abcdef1234567890 und HF hf_1234567890abcdef1234567890'
