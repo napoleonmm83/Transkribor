@@ -321,13 +321,9 @@ function fenster() {
    * sie nicht anfragt, bekommt sie auch nicht — dieselbe Regel wie die Schema-Weissliste in
    * `fenster.externesZiel`.
    *
-   * **`setPermissionCheckHandler` bewusst NICHT — eine benannte Grenze, kein Versehen.**
-   * Electron schreibt selbst, dass fuer vollstaendige Behandlung beide noetig sind: ein
-   * `navigator.permissions.query(...)` bekommt hier weiterhin Chromiums Vorgabeantwort. Das
-   * ist ein eigener Waechter mit eigenem Pruefstand — er braucht eine eigene Messung, WELCHE
-   * Pruefungen im Normalbetrieb auflaufen (der Request-Handler hat gerade gezeigt, wie weit
-   * eine Vermutung darueber danebenliegt), und #446 verbietet ausdruecklich, unabhaengige
-   * Waechter in einen PR zu werfen.
+   * **`setPermissionCheckHandler` haengt seit #518 daneben** — bis dahin eine benannte Grenze
+   * dieses Handlers, denn Electron schreibt selbst, dass fuer vollstaendige Behandlung beide
+   * noetig sind. Seine Begruendung steht an ihm selbst, ein paar Zeilen weiter unten.
    *
    * **`<webview>` ist heute ohnehin aus** — `webviewTag` steht seit Electron 5 auf `false` und
    * die `webPreferences` oben setzen es nicht. Der Hoerer ist die zweite Sperre gegen den
@@ -369,6 +365,108 @@ function fenster() {
         'Berechtigung', eigen ? 'nicht in der Weissliste' : 'fremde Herkunft')
     }
     erlauben(erlaubt)
+  })
+  /**
+   * Der Gegenpart (#518). Ohne ihn beantwortet Chromiums Voreinstellung jedes
+   * `navigator.permissions.query(...)`, und die Auskunft an die Seite kann von der
+   * Entscheidung abweichen, die der Handler darueber dann faellt.
+   *
+   * **Dieselbe Weissliste — und das ist gemessen, nicht angenommen.** Am laufenden Fenster
+   * (eigenes `userData`, echte Handler, `setup.html` und ein lokaler Server als zweite
+   * Herkunft) kamen beim CHECK-Handler VIERZEHN Arten an, beim Request-Handler fuenf — und
+   * die gebaute Oberflaeche steuert eine FUENFZEHNTE bei, `background-sync`, ausgeloest von
+   * einem gewoehnlichen `fetch()` und nur hier sichtbar. Die
+   * beiden, die diese App wirklich braucht, sind auf beiden Seiten dieselben:
+   * `notifications` — schon das blosse LESEN von `Notification.permission` laeuft hier durch,
+   * und `useOsFortschritt.ts` liest es vor jeder Fertigmeldung — und
+   * `clipboard-sanitized-write` fuer „Lizenzschluessel kopieren". Alles andere fragt die App
+   * nicht an.
+   *
+   * **Die Typdeklaration ist unvollstaendig, verlassen kann man sich nur auf die Messung.**
+   * `electron.d.ts` fuehrt fuer den Check 19 Arten; SECHS der gemessenen stehen dort nicht
+   * (`web-app-installation`, `speaker-selection`, `window-management`, `screen-wake-lock`,
+   * `local-fonts`, `persistent-storage`). Eine Weissliste aus der Typdeklaration waere also
+   * eine Liste ueber einen Teil der Wirklichkeit. Weil hier abgelehnt wird, was nicht
+   * dasteht, ist die Richtung trotzdem richtig: eine unbekannte Art bekommt nichts.
+   *
+   * **Vier Pruefungen laufen VOR jeder Seiteninteraktion auf, mit LEERER Herkunft**
+   * (`media` zweimal, `web-app-installation`, `geolocation` — `requestingUrl` ist dann der
+   * leere String). `eigeneHerkunft` wirft darauf nicht, sondern liefert `false`, und die
+   * Pruefung wird abgelehnt. Das ist die richtige Fehlerrichtung (#266) und derselbe Griff
+   * wie oben.
+   *
+   * **Entschieden wird an `requestingUrl`, nicht an `requestingOrigin`.** Bei einer
+   * `file:`-Seite ist die Herkunft `file:///` — sie kann `setup.html` von jeder anderen
+   * lokalen Datei nicht unterscheiden, waehrend `requestingUrl` die zuletzt geladene URL des
+   * Rahmens traegt (beides gemessen). Ist sie leer, wird abgelehnt; im PROTOKOLL darf dann
+   * die Herkunft den Namen liefern, denn dort geht es nur darum, WER gefragt hat.
+   *
+   * **Die Typdeklaration sagt, `requestingUrl` fehle im Unterrahmen fremder Herkunft — das
+   * ist an Electron 43 gemessen NICHT so.** Der Schluessel kommt immer (leer, wenn unbekannt),
+   * und im fremden Unterrahmen sogar mit voller URL. Der Handler behandelt beide Formen
+   * gleich, weil eine leere Angabe und eine fehlende dieselbe Antwort verdienen — aber der
+   * Vergleich ist `||`, nicht `??`: gegen den leeren String traegt `??` nicht.
+   *
+   * **Gemeldet wird nur der ERSTE Fall je Art, und daran haengt der Fehlerbericht.** Auf
+   * 18 Anfragen kamen 111 Pruefungen — sechsmal so viele. Ungebremst waere der gemeinsame
+   * Abweisungs-Deckel (#426) nach wenigen Sekunden voll, und genau der entscheidet, was von
+   * einem Fehlerbericht uebrig bleibt (#506): eine Fehlermail ohne den Fehler war der Anlass
+   * dieser Regel. Die Merkliste haengt an DIESEM Fensterlauf; ein zweiter `fenster()`-Lauf
+   * ersetzt Handler und Liste gemeinsam (der Handler ist ein Slot, siehe oben).
+   *
+   * Rohausgaben, Aufbau und Grenzen der Messung:
+   * `docs/superpowers/specs/2026-09-02-transkribor-berechtigungs-sonde.md`, Messung 4.
+   */
+  const berechtigungGemeldet = new Set()
+  win.webContents.session.setPermissionCheckHandler((_inhalt, art, herkunft, angaben) => {
+    const eigen = eigeneHerkunft(angaben?.requestingUrl,
+      [pathToFileURL(SETUP_HTML).href, backend.url()])
+    const erlaubt = eigen && BERECHTIGUNGEN_ERLAUBT.has(art)
+    // **Chromium prueft ZWEIMAL je Dokument, und nur die erste Runde schweigt.** Beim
+    // Startdokument des FENSTERS kommen `media` (zweimal), `web-app-installation` und
+    // `geolocation` ohne jede Angabe — Herkunft UND `requestingUrl` leer; dafuer gibt es
+    // keinen Frager, also auch keine Zeile (die Ablehnung bleibt). Nur dort: das
+    // Startdokument eines UNTERRAHMENS traegt die Herkunft des Elterns und wird deshalb
+    // protokolliert, mit dem dritten Grund unten. Danach kommt dieselbe
+    // Gruppe je geladenem Dokument NOCH EINMAL, diesmal mit der Seiten-URL, also als eigene
+    // Herkunft. **Gemessen stehen nach einem App-Start damit vier Zeilen im Protokoll**
+    // (`media`, `web-app-installation`, `geolocation`, `background-sync`), nicht null — und
+    // wer hier „gespart" liest, liest falsch: gespart ist das falsche Etikett, nicht die
+    // Zeile.
+    //
+    // **Dass sie bleiben, ist eine Entscheidung mit Preis.** Sie kosten vier der zwanzig
+    // Deckelplaetze je Fensterlauf, und in einer kurzen Sitzung traegt die Fehlermail eine
+    // davon (`bericht.ABWEISUNGEN_IM_BERICHT` = 1, gewaehlt von hinten — jede spaetere echte
+    // Abweisung verdraengt sie wieder). Dafuer sind sie der EINZIGE Kanal fuer die Arten, die
+    // nur hier auflaufen: `background-sync` ist genau so gefunden worden — es erscheint nie
+    // beim Request-Handler, wird von einem gewoehnlichen `fetch()` ausgeloest, und heute
+    // bricht daran nichts. Ohne die Zeile waere die naechste solche Art unsichtbar.
+    //
+    // Der Marker traegt beide Haelften: eine eigene und eine fremde Abweisung derselben Art
+    // sind zwei Vorgaenge. Zaehlte er nur die Art, waere nach dem Start eine ECHTE fremde
+    // Anfrage mit `media` oder `geolocation` nie mehr protokolliert worden (gemessen).
+    //
+    // **Die HERKUNFT gehoert bewusst NICHT in den Marker** (Vorschlag der CodeRabbit-CLI an
+    // diesem PR, abgelehnt mit Grund): sie ist der einzige Teil, den eine Seite frei
+    // variieren kann. Ein Marker je Herkunft waere eine unbegrenzte Menge und ein
+    // Schreibweg, der den gemeinsamen Deckel (#426) in Sekunden leerraeumt — genau der
+    // Ausfall, gegen den #506 gebaut wurde. Der Preis ist benannt: eine ZWEITE fremde
+    // Herkunft mit derselben Art bleibt hier stumm. Verloren geht dabei nichts, was wirklich
+    // angefragt wurde — der Request-Handler daneben entdoppelt gar nicht und nennt jede
+    // Herkunft einzeln; stumm bleibt nur die zusaetzliche Nachfrage einer zweiten Seite.
+    const wer = angaben?.requestingUrl || herkunft
+    const marke = `${art}|${eigen}`
+    if (!erlaubt && wer && !berechtigungGemeldet.has(marke)) {
+      berechtigungGemeldet.add(marke)
+      // Drei Gruende, nicht zwei: das Startdokument eines Unterrahmens kommt ohne
+      // `requestingUrl`, aber mit der Herkunft des ELTERN — also unserer eigenen. „fremde
+      // Herkunft: media von <unsere Adresse>" waere dort schlicht gelogen (gemessen an einer
+      // Rahmen-Sonde; in dieser App heute unerreichbar, sie hat kein `<iframe>`).
+      abweisungProtokollieren(eigen ? art : `${art} von ${nurHerkunft(wer)}`,
+        'Berechtigungspruefung',
+        eigen ? 'nicht in der Weissliste' : angaben?.requestingUrl ? 'fremde Herkunft' : 'ohne Seitenangabe')
+    }
+    return erlaubt
   })
   win.webContents.on('will-attach-webview', (e, _einstellungen, angaben) => {
     e.preventDefault()

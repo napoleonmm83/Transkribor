@@ -1,0 +1,211 @@
+
+
+===== Herkunft: file: setup.html =====
+CHECK(waechter) media :: eigen=false -> false
+CHECK(waechter) media :: eigen=false -> false
+CHECK(waechter) web-app-installation :: eigen=false -> false
+CHECK(waechter) geolocation :: eigen=false -> false
+Error occurred in handler for 'status': Error: No handler registered for 'status'
+    at Session.<anonymous> (node:electron/js2c/browser_init:2:118484)
+    at Session.emit (node:events:509:28)
+CHECK(waechter) notifications :: eigen=true -> true
+REQUEST notifications :: requestingUrl=file:///E:/Git/Transkribor-agent2/electron/setup.html
+CHECK(waechter) notifications :: eigen=true -> true
+REQUEST clipboard-sanitized-write :: requestingUrl=file:///E:/Git/Transkribor-agent2/electron/setup.html
+CHECK(waechter) notifications :: eigen=true -> true
+CHECK(waechter) notifications :: eigen=true -> true
+REQUEST notifications :: requestingUrl=file:///E:/Git/Transkribor-agent2/electron/setup.html
+REQUEST clipboard-read :: requestingUrl=file:///E:/Git/Transkribor-agent2/electron/setup.html
+CHECK(waechter) geolocation :: eigen=true -> false
+CHECK(waechter) geolocation :: eigen=true -> false
+CHECK(waechter) notifications :: eigen=true -> true
+CHECK(waechter) notifications :: eigen=true -> true
+CHECK(waechter) media :: eigen=true -> false
+CHECK(waechter) media :: eigen=true -> false
+CHECK(waechter) media :: eigen=true -> false
+CHECK(waechter) media :: eigen=true -> false
+CHECK(waechter) clipboard-read :: eigen=true -> false
+CHECK(waechter) clipboard-read :: eigen=true -> false
+CHECK(waechter) clipboard-sanitized-write :: eigen=true -> true
+CHECK(waechter) midi :: eigen=true -> false
+CHECK(waechter) clipboard-sanitized-write :: eigen=true -> true
+CHECK(waechter) storage-access :: eigen=true -> false
+CHECK(waechter) midi :: eigen=true -> false
+CHECK(waechter) storage-access :: eigen=true -> false
+CHECK(waechter) idle-detection :: eigen=true -> false
+CHECK(waechter) idle-detection :: eigen=true -> false
+CHECK(waechter) screen-wake-lock :: eigen=true -> false
+CHECK(waechter) window-management :: eigen=true -> false
+CHECK(waechter) screen-wake-lock :: eigen=true -> false
+CHECK(waechter) local-fonts :: eigen=true -> false
+CHECK(waechter) window-management :: eigen=true -> false
+CHECK(waechter) local-fonts :: eigen=true -> false
+CHECK(waechter) persistent-storage :: eigen=true -> false
+CHECK(waechter) persistent-storage :: eigen=true -> false
+REQUEST media :: requestingUrl=file:///E:/Git/Transkribor-agent2/electron/setup.html
+CHECK(waechter) media :: eigen=true -> false
+CHECK(waechter) media :: eigen=true -> false
+CHECK(waechter) speaker-selection :: eigen=true -> false
+REQUEST geolocation :: requestingUrl=file:///E:/Git/Transkribor-agent2/electron/setup.html
+--- was die Seite gesehen hat ---
+Notification.permission (lesen) -> granted
+Notification.requestPermission() -> granted
+Notification.permission (nach) -> granted
+new Notification -> OK
+clipboard.writeText -> OK
+clipboard.readText -> "probe"
+permissions.query geolocation -> denied
+permissions.query notifications -> granted
+permissions.query camera -> denied
+permissions.query microphone -> denied
+permissions.query clipboard-read -> denied
+permissions.query clipboard-write -> granted
+permissions.query midi -> denied
+permissions.query storage-access -> denied
+permissions.query top-level-storage-access -> FEHLER TypeError
+permissions.query idle-detection -> denied
+permissions.query screen-wake-lock -> denied
+permissions.query window-management -> denied
+permissions.query local-fonts -> denied
+permissions.query persistent-storage -> denied
+getUserMedia(audio) -> OK
+geolocation -> OK
+
+===== Herkunft: http EIGEN =====
+CHECK(waechter) media :: eigen=true -> false
+CHECK(waechter) media :: eigen=true -> false
+CHECK(waechter) web-app-installation :: eigen=true -> false
+CHECK(waechter) geolocation :: eigen=true -> false
+CHECK(waechter) notifications :: eigen=true -> true
+REQUEST notifications :: requestingUrl=http://127.0.0.1:50817/
+CHECK(waechter) notifications :: eigen=true -> true
+REQUEST clipboard-sanitized-write :: requestingUrl=http://127.0.0.1:50817/
+CHECK(waechter) notifications :: eigen=true -> true
+CHECK(waechter) notifications :: eigen=true -> true
+REQUEST notifications :: requestingUrl=http://127.0.0.1:50817/
+REQUEST clipboard-read :: requestingUrl=http://127.0.0.1:50817/
+CHECK(waechter) geolocation :: eigen=true -> false
+CHECK(waechter) geolocation :: eigen=true -> false
+CHECK(waechter) notifications :: eigen=true -> true
+CHECK(waechter) notifications :: eigen=true -> true
+CHECK(waechter) media :: eigen=true -> false
+CHECK(waechter) media :: eigen=true -> false
+CHECK(waechter) media :: eigen=true -> false
+CHECK(waechter) media :: eigen=true -> false
+CHECK(waechter) clipboard-read :: eigen=true -> false
+CHECK(waechter) clipboard-read :: eigen=true -> false
+CHECK(waechter) clipboard-sanitized-write :: eigen=true -> true
+CHECK(waechter) clipboard-sanitized-write :: eigen=true -> true
+CHECK(waechter) midi :: eigen=true -> false
+CHECK(waechter) midi :: eigen=true -> false
+CHECK(waechter) storage-access :: eigen=true -> false
+CHECK(waechter) storage-access :: eigen=true -> false
+CHECK(waechter) idle-detection :: eigen=true -> false
+CHECK(waechter) idle-detection :: eigen=true -> false
+CHECK(waechter) screen-wake-lock :: eigen=true -> false
+CHECK(waechter) screen-wake-lock :: eigen=true -> false
+CHECK(waechter) window-management :: eigen=true -> false
+CHECK(waechter) local-fonts :: eigen=true -> false
+CHECK(waechter) window-management :: eigen=true -> false
+CHECK(waechter) persistent-storage :: eigen=true -> false
+CHECK(waechter) local-fonts :: eigen=true -> false
+CHECK(waechter) persistent-storage :: eigen=true -> false
+REQUEST media :: requestingUrl=http://127.0.0.1:50817/
+CHECK(waechter) media :: eigen=true -> false
+CHECK(waechter) media :: eigen=true -> false
+CHECK(waechter) speaker-selection :: eigen=true -> false
+REQUEST geolocation :: requestingUrl=http://127.0.0.1:50817/
+--- was die Seite gesehen hat ---
+Notification.permission (lesen) -> granted
+Notification.requestPermission() -> granted
+Notification.permission (nach) -> granted
+new Notification -> OK
+clipboard.writeText -> OK
+clipboard.readText -> "probe"
+permissions.query geolocation -> denied
+permissions.query notifications -> granted
+permissions.query camera -> denied
+permissions.query microphone -> denied
+permissions.query clipboard-read -> denied
+permissions.query clipboard-write -> granted
+permissions.query midi -> denied
+permissions.query storage-access -> denied
+permissions.query top-level-storage-access -> FEHLER TypeError
+permissions.query idle-detection -> denied
+permissions.query screen-wake-lock -> denied
+permissions.query window-management -> denied
+permissions.query local-fonts -> denied
+permissions.query persistent-storage -> denied
+getUserMedia(audio) -> OK
+geolocation -> OK
+
+===== Herkunft: http FREMD =====
+CHECK(waechter) media :: eigen=true -> false
+CHECK(waechter) media :: eigen=true -> false
+CHECK(waechter) web-app-installation :: eigen=true -> false
+CHECK(waechter) geolocation :: eigen=true -> false
+CHECK(waechter) notifications :: eigen=false -> false
+REQUEST notifications :: requestingUrl=http://127.0.0.1:50818/
+CHECK(waechter) notifications :: eigen=false -> false
+REQUEST clipboard-sanitized-write :: requestingUrl=http://127.0.0.1:50818/
+CHECK(waechter) notifications :: eigen=false -> false
+REQUEST clipboard-read :: requestingUrl=http://127.0.0.1:50818/
+CHECK(waechter) geolocation :: eigen=false -> false
+CHECK(waechter) geolocation :: eigen=false -> false
+CHECK(waechter) notifications :: eigen=false -> false
+CHECK(waechter) notifications :: eigen=false -> false
+CHECK(waechter) media :: eigen=false -> false
+CHECK(waechter) media :: eigen=false -> false
+CHECK(waechter) media :: eigen=false -> false
+CHECK(waechter) clipboard-read :: eigen=false -> false
+CHECK(waechter) media :: eigen=false -> false
+CHECK(waechter) clipboard-sanitized-write :: eigen=false -> false
+CHECK(waechter) clipboard-read :: eigen=false -> false
+CHECK(waechter) clipboard-sanitized-write :: eigen=false -> false
+CHECK(waechter) midi :: eigen=false -> false
+CHECK(waechter) midi :: eigen=false -> false
+CHECK(waechter) storage-access :: eigen=false -> false
+CHECK(waechter) storage-access :: eigen=false -> false
+CHECK(waechter) idle-detection :: eigen=false -> false
+CHECK(waechter) screen-wake-lock :: eigen=false -> false
+CHECK(waechter) idle-detection :: eigen=false -> false
+CHECK(waechter) screen-wake-lock :: eigen=false -> false
+CHECK(waechter) window-management :: eigen=false -> false
+CHECK(waechter) local-fonts :: eigen=false -> false
+CHECK(waechter) window-management :: eigen=false -> false
+CHECK(waechter) persistent-storage :: eigen=false -> false
+CHECK(waechter) local-fonts :: eigen=false -> false
+CHECK(waechter) persistent-storage :: eigen=false -> false
+REQUEST media :: requestingUrl=http://127.0.0.1:50818/
+CHECK(waechter) media :: eigen=false -> false
+CHECK(waechter) media :: eigen=false -> false
+CHECK(waechter) speaker-selection :: eigen=false -> false
+REQUEST geolocation :: requestingUrl=http://127.0.0.1:50818/
+--- was die Seite gesehen hat ---
+Notification.permission (lesen) -> denied
+Notification.requestPermission() -> granted
+Notification.permission (nach) -> denied
+new Notification -> OK
+clipboard.writeText -> OK
+clipboard.readText -> "probe"
+permissions.query geolocation -> denied
+permissions.query notifications -> denied
+permissions.query camera -> denied
+permissions.query microphone -> denied
+permissions.query clipboard-read -> denied
+permissions.query clipboard-write -> denied
+permissions.query midi -> denied
+permissions.query storage-access -> denied
+permissions.query top-level-storage-access -> FEHLER TypeError
+permissions.query idle-detection -> denied
+permissions.query screen-wake-lock -> denied
+permissions.query window-management -> denied
+permissions.query local-fonts -> denied
+permissions.query persistent-storage -> denied
+getUserMedia(audio) -> OK
+geolocation -> OK
+
+===== Zusammenfassung =====
+Beim CHECK-Handler aufgelaufen:   clipboard-read, clipboard-sanitized-write, geolocation, idle-detection, local-fonts, media, midi, notifications, persistent-storage, screen-wake-lock, speaker-selection, storage-access, web-app-installation, window-management
+Beim REQUEST-Handler aufgelaufen: clipboard-read, clipboard-sanitized-write, geolocation, media, notifications
+Nie gesehen (von 19 Check-Arten der Typdeklaration): fullscreen, hid, mediaKeySystem, midiSysex, openExternal, pointerLock, serial, top-level-storage-access, usb, deprecated-sync-clipboard-read, fileSystem

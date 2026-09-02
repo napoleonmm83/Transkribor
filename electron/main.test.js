@@ -97,7 +97,13 @@ function attrappen(opt = {}) {
         // `electron.d.ts` fuehrt `setPermissionRequestHandler` unter `Session`. Die Attrappe
         // bildet genau diesen Umweg nach; haenge ihn jemand ans falsche Objekt, wirft der
         // Fensterbau, statt still nichts zu tun.
-        session: { setPermissionRequestHandler: fn => { w.berechtigungHandler = fn } },
+        // Beide Handler, weil `fenster()` beide haengt (#518): der zweite ist der Gegenpart
+        // fuer `navigator.permissions.query(...)`. Dass sein Fehlen den Fensterbau wirft und
+        // nicht still nichts tut, ist gemessen — ohne diese Zeile fallen 61 der 62 Tests um.
+        session: {
+          setPermissionRequestHandler: fn => { w.berechtigungHandler = fn },
+          setPermissionCheckHandler: fn => { w.berechtigungPruefer = fn },
+        },
       },
     }
     return scheibe
@@ -944,6 +950,106 @@ test('Berechtigungen teilen den Deckel der Linkabweisungen (#446, #426)', async 
   for (let i = 0; i < 15; i++) w.oeffnenHandler({ url: 'file:///x' + i })
   const abgewiesen = w.protokollzeilen.filter(z => z.includes(' abgewiesen ('))
   assert.strictEqual(abgewiesen.length, 20, 'EIN geteilter Deckel, nicht zwei mal 20')
+})
+
+// ── Berechtigungs-PRUEFUNGEN (#518) ──────────────────────────────────────────
+// Der Gegenpart zum Handler oben: er beantwortet `navigator.permissions.query(...)` und laeuft
+// bei jedem Lesen von `Notification.permission` mit. Andere Signatur (Rueckgabewert statt
+// Rueckruf), dritter Parameter ist die HERKUNFT als Zeichenkette, vierter die Angaben.
+
+/** Ruft den Check-Handler wie Electron und gibt zurueck, was er geantwortet hat. */
+function pruefungFragen(w, art, angaben = { requestingUrl: EIGENE_SEITE, isMainFrame: true },
+  herkunft = 'file:///') {
+  assert.ok(w.berechtigungPruefer, 'kein Check-Handler an der Session registriert')
+  return w.berechtigungPruefer({}, art, herkunft, angaben)
+}
+const pruefzeilen = w => w.protokollzeilen.filter(z => z.startsWith('Berechtigungspruefung abgewiesen'))
+
+test('die Pruefung laesst genau das durch, was die App braucht (#518)', async () => {
+  const w = await laden()
+  // Am laufenden Fenster gemessen: das blosse LESEN von `Notification.permission` laeuft durch
+  // diesen Handler, und `useOsFortschritt.ts` liest es vor jeder Fertigmeldung. Ein Deny-all
+  // haette die Fertigmeldung abgeschaltet, ohne dass ein Request-Handler je gefragt worden waere.
+  assert.strictEqual(pruefungFragen(w, 'notifications'), true)
+  assert.strictEqual(pruefungFragen(w, 'clipboard-sanitized-write'), true)
+  assert.deepStrictEqual(pruefzeilen(w), [], 'was erlaubt ist, ist kein Vorfall')
+})
+
+test('alles andere wird abgelehnt — auch was die Typdeklaration nicht kennt (#518)', async () => {
+  const w = await laden()
+  // Die ersten vier stehen in der Check-Union von `electron.d.ts`, die letzten drei NICHT —
+  // und trotzdem sind sie am laufenden Fenster aufgelaufen. Eine Weissliste aus der
+  // Typdeklaration waere eine Liste ueber einen Teil der Wirklichkeit; abgelehnt wird deshalb,
+  // was nicht dasteht, nicht was dort verboten ist.
+  const verboten = ['media', 'geolocation', 'clipboard-read', 'storage-access',
+    'web-app-installation', 'window-management', 'screen-wake-lock']
+  for (const art of verboten) {
+    assert.strictEqual(pruefungFragen(w, art), false, `${art} gehoert nicht durch`)
+  }
+  assert.strictEqual(pruefzeilen(w).length, verboten.length)
+  assert.ok(pruefzeilen(w)[0].includes('media'), 'im Protokoll muss stehen, WELCHE Pruefung')
+})
+
+test('je Art nur EINE Zeile — sonst frisst die Pruefung den Fehlerbericht (#518, #506)', async () => {
+  const w = await laden()
+  // Gemessen kamen auf 18 Anfragen 111 Pruefungen. Ungebremst waere der gemeinsame Deckel
+  // (#426) nach Sekunden voll — und der entscheidet, was von einer Fehlermail uebrig bleibt.
+  for (let i = 0; i < 40; i++) pruefungFragen(w, 'media')
+  for (let i = 0; i < 40; i++) pruefungFragen(w, 'geolocation')
+  assert.deepStrictEqual(pruefzeilen(w).length, 2, '80 Pruefungen, zwei Arten, zwei Zeilen')
+  // Der Deckel bleibt trotzdem geteilt: die Pruefung schreibt ueber denselben Zaehler.
+  for (let i = 0; i < 25; i++) w.oeffnenHandler({ url: 'file:///x' + i })
+  assert.strictEqual(w.protokollzeilen.filter(z => z.includes(' abgewiesen (')).length, 20)
+})
+
+test('eine fremde Herkunft bekommt auch die erlaubten Rechte nicht (#518)', async () => {
+  const w = await laden()
+  for (const art of ['notifications', 'clipboard-sanitized-write']) {
+    assert.strictEqual(pruefungFragen(w, art, { requestingUrl: 'https://boese.example/x' }), false,
+      `${art} ist erlaubt — aber nicht fuer eine fremde Seite`)
+  }
+  assert.ok(pruefzeilen(w).some(z => z.includes('fremde Herkunft') && z.includes('boese.example')))
+})
+
+test('eine leere requestingUrl genuegt nicht — auch nicht mit eigener Herkunft daneben (#518)', async () => {
+  const w = await laden()
+  // Electron 43 liefert den Schluessel IMMER, leer wenn unbekannt — die Typdeklaration
+  // behauptet etwas anderes („not provided for cross-origin sub frames"), gemessen kommt er
+  // dort sogar mit voller URL. Entschieden wird trotzdem an ihm: `file:///` als Herkunft kann
+  // die Statusseite von keiner anderen lokalen Datei unterscheiden. Wer die Herkunft hilfsweise
+  // fuer die ENTSCHEIDUNG heranzieht, laesst eine leere Angabe durch, sobald sie passt — und
+  // genau diese Zusicherung fehlte, bis der kalte Leser sie gemessen hat.
+  assert.strictEqual(pruefungFragen(w, 'notifications', { requestingUrl: '', isMainFrame: false },
+    'http://127.0.0.1:8000/'), false, 'die eigene Herkunft ersetzt die fehlende Angabe NICHT')
+  assert.strictEqual(pruefungFragen(w, 'media', { requestingUrl: '' }), false)
+  // Fuers PROTOKOLL darf die Herkunft einspringen — dort geht es nur um „wer hat gefragt".
+  pruefungFragen(w, 'midi', { requestingUrl: '' }, 'https://boese.example')
+  const zeile = pruefzeilen(w).find(z => z.includes('boese.example'))
+  assert.ok(zeile, `Herkunft fehlt in: ${pruefzeilen(w).join(' | ')}`)
+  // Aber NICHT als „fremde Herkunft": das Startdokument eines Unterrahmens kommt ohne
+  // `requestingUrl` und mit der Herkunft des ELTERN — also unserer eigenen. Das Etikett
+  // „fremd" waere dort gelogen (an einer Rahmen-Sonde gemessen).
+  assert.match(zeile, /ohne Seitenangabe/, `falsches Etikett: ${zeile}`)
+})
+
+test('Chromiums Vorab-Pruefungen ohne Frager melden nichts — und verdecken den echten Fall nicht (#518)', async () => {
+  const w = await laden()
+  // Bei JEDEM Seitenladen prueft Chromium viermal von sich aus, mit leerer Herkunft UND leerer
+  // `requestingUrl` (gemessen: `media` zweimal, `web-app-installation`, `geolocation`). Als
+  // Zeile waere das ein falsches Etikett — gefragt hat niemand — und es kostete drei der
+  // zwanzig Deckelplaetze bei jedem App-Start.
+  for (const art of ['media', 'web-app-installation', 'geolocation']) {
+    assert.strictEqual(pruefungFragen(w, art, { requestingUrl: '' }, ''), false, `${art} bleibt abgelehnt`)
+  }
+  assert.deepStrictEqual(pruefzeilen(w), [], 'ohne Frager gibt es nichts zu melden')
+  // Der schwerere Teil: die Merkliste zaehlt je Art — haetten die Vorab-Pruefungen sie
+  // gefuellt, waere die ECHTE fremde Anfrage danach nie im Protokoll gelandet.
+  pruefungFragen(w, 'media', { requestingUrl: 'https://boese.example/x' })
+  assert.ok(pruefzeilen(w).some(z => z.includes('boese.example')),
+    `der echte Fall fehlt: ${pruefzeilen(w).join(' | ')}`)
+  // Und eine eigene Abweisung derselben Art ist ein zweiter Vorgang, kein Doppel.
+  pruefungFragen(w, 'media')
+  assert.strictEqual(pruefzeilen(w).length, 2, 'eigen und fremd sind zwei Zeilen, nicht eine')
 })
 
 test('HTTP/2 wird abgeschaltet, BEVOR irgendetwas laeuft (#150)', async () => {
