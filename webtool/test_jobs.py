@@ -630,6 +630,74 @@ def test_aktive_bucht_den_namen_roh():
     assert aktive == {}
 
 
+def test_ein_projekt_namens_active_bucht_je_ZEILE_statt_je_AUFNAHME():
+    """Die Messung, die den Namensraum-Riegel begruendet — am ECHTEN `buche_aktive`
+    statt im Kommentar (#478/#487).
+
+    `transcribe.py` praefixt JEDE gewoehnliche Zeile mit `[{Projektname}] `. Heisst das
+    Projekt „active", ist jede davon zeilengleich mit der Marke, und beide Mengen wachsen
+    mit der Zahl der ZEILEN statt der Aufnahmen. Die Zeilenformen unten sind die echten
+    (`transcribe.py:555/807/808/827/979`), nicht erfundene.
+
+    Gebucht wird dabei NICHT nur die Anzeige: `active_bases` treibt `betrifft()` und damit
+    den 409-Riegel — der Issue-Kommentar zu #478 nennt das ausdruecklich. Deshalb steht es
+    hier mit drin.
+
+    **Und der Leser bekommt dagegen bewusst KEINEN Deckel.** Richtung 1 und 3 aus #478
+    (Deckel bzw. Kandidatenfilter) sind verworfen; geschlossen ist die TUER, nicht der
+    Eimer — `paths.sicherer_projektname` laesst so ein Projekt ueber keinen App-Weg mehr
+    entstehen (`test_api.test_kein_lauf_startet_fuer_ein_projekt_das_eine_marke_nachahmt`
+    haelt das fest). Wer hier einen Deckel einbaut, aendert die Richtung und bekommt genau
+    an dieser Stelle ein rotes Ergebnis — bis `MAX_JOB_LINES` hinauf, und dafuer misst die
+    zweite Haelfte unten so weit. Ein Deckel OBERHALB davon bliebe gruen; er koennte dann
+    aber auch nichts mehr begrenzen, was der Zeilenpuffer nicht schon begrenzt.
+
+    Fuer `bases` wird dieselbe Messung nicht wiederholt: den additiven `[scope+]`-Nachtrag
+    faehrt `test_projekt_namens_scope_plus_verliert_seine_buchfuehrung_nicht` bereits am
+    echten Subprozess.
+    """
+    basen = ["D0", "D1", "D2"]
+    zeilen = ["[active] Modell large-v3, 3 Datei(en)"]
+    for b in basen:
+        zeilen += [f"[active] {b}",                              # die ECHTE Marke
+                   f"[active] -> transkribiere {b} …",           # [{name}] -> transkribiere …
+                   f"[active] fertig {b}: 18s, 42 Segmente, Audio 3:12, 1.0x",
+                   f"[done] {b}"]
+    zeilen.append("[active] -> transkripte")
+
+    aktive, gesehen = {}, set()
+    for z in zeilen:
+        jobs.buche_aktive(aktive, z, gesehen)
+
+    # 11 statt 3: 1 Kopfzeile + je Aufnahme 3 (Marke + zwei Fortschrittszeilen) + 1 Fusszeile.
+    # Die `[done]`-Zeilen buchen in `gesehen` nicht — sie ist die monotone Menge.
+    assert len(gesehen) == 11, sorted(gesehen)
+    assert set(basen) <= gesehen                       # die echten Namen sind auch dabei
+    assert "fertig D0: 18s, 42 Segmente, Audio 3:12, 1.0x" in gesehen, \
+        "Zeilenbruchstueck, kein Basisname"
+    # `active_bases` ebenso — und dort bleibt der Muell stehen, weil kein `[done]` ihn
+    # paart: 8 Phantomschluessel, die `betrifft()` und damit den 409-Riegel mitfuehrt.
+    assert sorted(aktive) == sorted(gesehen - set(basen)), aktive
+    assert len(aktive) == 8
+
+    # UND UEBER 10 000 ZEILEN — die Zahl steht so in #478 („Ein Lauf … ueber 10 000
+    # Zeilen"), und ohne sie waere der Pin oben eine leere Behauptung: gemessen vom Review
+    # liessen `len(gesehen) < 100` UND `len(gesehen) < 10000` die ganze Suite gruen. Ein
+    # Deckel, den jemand gegen Speicherdruck wirklich baute, laege bei MAX_JOB_LINES — die
+    # 11 oben haetten ihn nie gesehen. Jetzt faellt jeder Deckel bis MAX_JOB_LINES hier auf.
+    #
+    # BEIDE Haelften bleiben stehen, sie fangen VERSCHIEDENE Richtungen: die 11 gemischten
+    # Zeilen oben (Marke + Fortschrittsbruchstuecke + Fusszeile) fangen einen KANDIDATEN-
+    # FILTER (Richtung 3 aus #478, „nur echte Basisnamen buchen"), fuer den 10 001
+    # gleichfoermige Zeilen unsichtbar waeren; diese hier fangen den DECKEL (Richtung 1).
+    viele, aktive2, gesehen2 = jobs.MAX_JOB_LINES + 1, {}, set()
+    for i in range(viele):
+        jobs.buche_aktive(aktive2, f"[active] fertig D{i}: 18s, 42 Segmente, Audio 3:12, 1.0x",
+                          gesehen2)
+    assert len(gesehen2) == viele, len(gesehen2)
+    assert len(aktive2) == viele, len(aktive2)
+
+
 def test_gesehen_ueberlebt_den_zeilendeckel():
     """Die `[active]`-Zeile faellt aus dem gedeckelten Puffer -- der Job weiss sie
     trotzdem, und `get()` gibt sie mit (#475).

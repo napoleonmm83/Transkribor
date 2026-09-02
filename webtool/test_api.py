@@ -650,6 +650,281 @@ def test_jobstart_endpunkte_geriegelt_fuer_reservierte_projekte(client, tmp_path
     assert not (tmp_path / "active").exists()
 
 
+def _parser_marken() -> set:
+    """Die Marken-Woerter aus den BEIDEN Parsern ernten — `jobs.py` (Praefix-Konstanten)
+    und `jobPhases.ts` (die `startsWith('[…]')`-Literale).
+
+    Bewusst NICHT aus `paths.RESERVIERTE_NAMEN`: die Menge ist das, was geprueft wird.
+    Kaeme die Schleife von dort, fiele bei der Mutation „eine Marke aus der Menge nehmen"
+    der Name einfach aus der Schleife und der Waechter bliebe gruen.
+
+    Dieselbe Ernte fuehrt `test_paths.test_reservierte_namen_entsprechen_den_parser_marken`.
+    Zwei Stellen bleiben unter der Rule of Three — und driftet eine Marke, wird dort der
+    Mengenvergleich zuerst rot.
+    """
+    import pathlib
+    import re
+
+    from webtool import jobs as jobs_mod
+    # Ueber die Konstanten-NAMEN statt ueber ein festes Vierertupel (Reviewbefund F4): ein
+    # neu dazugebautes `NEU_PREFIX = "[neu] "` waere sonst still nicht abgedeckt.
+    marken = {v.strip("[] ") for n, v in vars(jobs_mod).items()
+              if n.endswith("_PREFIX") and isinstance(v, str) and v.startswith("[")}
+    assert len(marken) >= 4, f"Ernte aus jobs.py verkuemmert: {marken}"
+    ts = (pathlib.Path(__file__).parent / "frontend" / "src" / "lib" / "jobPhases.ts"
+          ).read_text(encoding="utf-8")
+    marken |= set(re.findall(r"startsWith\('\[([^\]]+)\]", ts))
+    return marken
+
+
+# ALLE sechs Wege, auf denen `jobs.start`/`jobs.request` erreichbar ist — nicht nur die vier
+# offensichtlichen (Notiz des kalten Diff-Lesers): `fetch` und der Upload-Auto-Trigger starten
+# ebenso einen Lauf und waren nur fuer den Namen "active" durch aeltere Tests gedeckt.
+_JOBSTART_WEGE: tuple[tuple[str, dict], ...] = (
+    ("/api/projects/{p}/transcribe", {}),
+    ("/api/projects/{p}/correct", {}),
+    ("/api/projects/{p}/files/S1/correct", {}),
+    ("/api/projects/{p}/files/S1/transcribe", {}),
+    ("/api/projects/{p}/fetch", {"json": {"urls": ["https://youtu.be/x"]}}),
+    ("/api/projects/{p}/audio",
+     {"files": {"file": ("S1.mp3", b"ID3fakeaudio", "audio/mpeg")}}),
+)
+
+
+def test_kein_lauf_startet_fuer_ein_projekt_das_eine_marke_nachahmt(client, tmp_path, monkeypatch):
+    """#478/#487 — die GEWAEHLTE Richtung als Waechter: ein Projekt, das eine Protokoll-Marke
+    nachahmt, kann `gesehen` und `bases` nicht mehr unbegrenzt fuellen, weil es gar nicht
+    erst in einen Lauf kommt. Verworfen wurden Deckel und Kandidatenfilter im Leser
+    (Richtung 1/3 aus #478): geschlossen ist die Tuer, nicht der Eimer.
+
+    Die andere Haelfte des Belegs — dass hinter der Tuer wirklich etwas waechst — steht in
+    `test_jobs.test_ein_projekt_namens_active_bucht_je_ZEILE_statt_je_AUFNAHME`.
+
+    Der Nachbar darueber prueft dieselben vier Endpunkte fest verdrahtet fuer „active" und
+    haelt zusaetzlich den Bot-Befund R2 fest. Dieser hier prueft ALLE Marken, und zwar
+    geerntet (siehe `_parser_marken`) — nur so ist die Mutationsprobe „eine Marke aus
+    `RESERVIERTE_NAMEN` nehmen" hier sichtbar.
+    """
+    import webtool.jobs as jobs_mod
+    marken = _parser_marken()
+    assert len(marken) >= 5, f"Ernte verkuemmert ({marken}) — der Waechter maesse nichts"
+    gestartet = []
+    monkeypatch.setattr(jobs_mod, "start",
+                        lambda *a, **k: gestartet.append(("start", a)) or ("x", True))
+    monkeypatch.setattr(jobs_mod, "request",
+                        lambda *a, **k: gestartet.append(("request", a)) or ("x", True))
+    for name in sorted(marken):
+        for muster, wie in _JOBSTART_WEGE:
+            r = client.post(muster.format(p=name), **wie)
+            assert r.status_code == 400, (name, muster, r.text)
+            detail = r.json()["detail"]
+            assert "reserviert" in detail, (name, muster, detail)
+            # Der Server hat GENAU diesen Namen gesehen. Ohne diese Zeile bliebe der Test
+            # gruen, wenn "scope+" unterwegs zu "scope " verstuemmelte und der Riegel ueber
+            # den falschen Namen griffe — die Mutation an "scope+" waere dann unsichtbar.
+            assert repr(name) in detail, (name, muster, detail)
+    assert gestartet == [], gestartet
+    assert not any(p.name in marken for p in tmp_path.iterdir())
+    # Positivkontrolle: der Riegel matcht exakt und kleingeschrieben. Ohne sie waere der Test
+    # auch dann gruen, wenn diese Endpunkte pauschal 400 gaeben. Geprueft wird der GRUND, nicht
+    # der Code: die sechs Wege antworten je nach Zustand legitim 200/404/409 (und `fetch` auch
+    # 400, wenn ihm die URL nicht passt) — nur „reserviert" darf nicht dabei sein.
+    for muster, wie in _JOBSTART_WEGE:
+        r = client.post(muster.format(p="Active"), **wie)
+        assert "reserviert" not in r.text, (muster, r.text)
+
+
+def test_jede_route_die_einen_job_startet_traegt_den_namensraum_riegel():
+    """Der Riegel liegt in den AUFRUFERN von `jobs.start`/`jobs.request`, nicht in
+    `jobs.start` selbst. Heute ist keiner vergessen — aber nichts hielt fest, dass ein
+    SIEBTER Start-Endpunkt ihn auch traegt, und gefangen haette ihn niemand: der Test
+    darueber zaehlt vier Pfade von Hand auf, und `.coderabbit.yaml` kennt die Regel nicht
+    (gemessen: `grep -i reserv .coderabbit.yaml` ist leer).
+
+    Gelesen wird der QUELLTEXT von `app.py` per `ast` — welche Funktionen erreichen
+    `jobs.start`/`jobs.request`, transitiv (`_start_transcribe` ist ein privater Helfer
+    ohne eigenen Riegel; seine drei Aufrufer tragen ihn) — und jede ROUTE in diesem
+    Abschluss muss `_sicherer_projektname` rufen.
+
+    Ein Backstop IN `jobs.start` waere die staerkere Fassung und ist verworfen: der
+    `messstand`-Skill koennte dann genau die Messung nicht mehr fahren, aus der #478
+    stammt, und der Fall kaeme als 500 statt als 400 heraus.
+    """
+    import ast
+    import pathlib
+    quelltext = (pathlib.Path(__file__).parent / "app.py").read_text(encoding="utf-8")
+    baum = ast.parse(quelltext)
+    START = {"jobs.start", "jobs.request"}      # woran ein Start erkannt wird
+
+    # Der Waechter folgt dem AUFRUFGRAPH ab `@app.<verb>` und erkennt den Start an der
+    # Schreibweise `jobs.start`/`jobs.request`. Das sind zwei ANNAHMEN ueber app.py, und
+    # BEIDE wurden im Review als gruene Umgehung vorgefuehrt. Sie werden deshalb geprueft
+    # statt geglaubt — ein Waechter, der „geprueft" meldet, ohne es zu sein, ist schlimmer
+    # als die vorherige, offen von Hand gezaehlte Liste.
+    # Am SYNTAXBAUM, nicht am Text. Die Textfassung war eine Substring-Suche ueber die ganze
+    # Datei und machte damit den ersten Reflex eines Lesers rot: einen Kommentar „bewusst
+    # kein APIRouter, der Waechter sieht nur @app.<verb>". Dieselbe Klasse wie der
+    # Docstring-Treffer in druck.py weiter unten — zweimal am selben Tag.
+    verstoss = []
+    for k in ast.walk(baum):
+        if isinstance(k, ast.Name) and k.id == "APIRouter":
+            verstoss.append(f"APIRouter (Zeile {k.lineno})")
+        elif isinstance(k, ast.Attribute) and k.attr in ("add_api_route", "include_router"):
+            verstoss.append(f"{k.attr} (Zeile {k.lineno})")
+        elif isinstance(k, ast.Import):
+            for a in k.names:
+                if a.name.split(".")[-1] == "jobs" and a.asname not in (None, "jobs"):
+                    verstoss.append(f"jobs unter Alias {a.asname} (Zeile {k.lineno})")
+        elif isinstance(k, ast.ImportFrom):
+            for a in k.names:
+                if a.name == "APIRouter":
+                    verstoss.append(f"APIRouter-Import (Zeile {k.lineno})")
+                elif a.name == "jobs" and a.asname not in (None, "jobs"):
+                    verstoss.append(f"jobs unter Alias {a.asname} (Zeile {k.lineno})")
+                elif (k.module or "").split(".")[-1] == "jobs" and a.name in ("start", "request"):
+                    verstoss.append(f"{a.name} direkt importiert (Zeile {k.lineno})")
+    assert not verstoss, (
+        f"app.py: {verstoss}. Dieser Waechter erkennt Routen an `@app.<verb>` und den Start "
+        f"an `jobs.start`/`jobs.request` — diese Formen sieht er NICHT. Er ist die Stelle, "
+        f"die mitwandern muss, bevor sie benutzt werden (#416/#478/#487).")
+
+    # Und der Start darf nur aus app.py kommen: ein `jobs.start` in einem anderen
+    # Servermodul umginge diesen Waechter ganz, denn er liest ausschliesslich app.py.
+    #
+    # Ueber den SYNTAXBAUM, nicht ueber den Text: die erste Fassung suchte den String und
+    # schlug auf `druck.py` an, das `jobs.start()` in einem DOCSTRING erwaehnt — ein
+    # Fehlalarm auf unveraendertem Code, und ein Waechter mit Fehlalarmen wird weggeklickt.
+    # `auth.py` importiert uebrigens legitim andere Namen aus `jobs`; gesucht sind nur
+    # `start`/`request`.
+    fremd = []
+    for p in sorted(pathlib.Path(__file__).parent.glob("*.py")):
+        if p.name in ("app.py", "jobs.py", "conftest.py") or p.name.startswith("test_"):
+            continue
+        for k in ast.walk(ast.parse(p.read_text(encoding="utf-8"))):
+            if (isinstance(k, ast.Attribute)
+                    and f"{getattr(k.value, 'id', '')}.{k.attr}" in START):
+                fremd.append(f"{p.name}:{k.lineno}")
+            elif (isinstance(k, ast.ImportFrom) and (k.module or "").endswith("jobs")
+                    and any(a.name in ("start", "request") for a in k.names)):
+                fremd.append(f"{p.name}:{k.lineno} (Import)")
+    assert not fremd, (
+        f"{fremd} startet Jobs an app.py vorbei — dieser Waechter liest nur app.py und "
+        f"pruefte den Namensraum-Riegel dort nicht.")
+
+    # `ast.AsyncFunctionDef` ist KEINE Unterklasse von `ast.FunctionDef`: ohne sie fiel ein
+    # `async def`-Startendpunkt ohne Riegel still durch (F1, Probe M-A).
+    DEFS = (ast.FunctionDef, ast.AsyncFunctionDef)
+    # Nur Modulebene. `ast.walk` faende auch INNERE `def`s, und zwei Routen mit je einem
+    # inneren `_fmt` machten die Eindeutigkeitspruefung falsch-rot (F3) — ein Waechter mit
+    # Fehlalarmen wird weggeklickt. Aufrufe innerhalb einer Funktion sieht die Ernte
+    # trotzdem, denn sie walkt den Rumpf.
+    funktionen = [k for k in baum.body if isinstance(k, DEFS)]
+    assert len({f.name for f in funktionen}) == len(funktionen), \
+        "gleichnamige Funktionen auf Modulebene in app.py — die Namensabbildung waere mehrdeutig"
+    nach_namen = {f.name: f for f in funktionen}
+
+    def lokale(fn) -> set:
+        """Namen, die in `fn` LOKAL gebunden sind — Parameter, Zuweisungen, Schleifen,
+        Comprehensions, with/except/import-Alias.
+
+        Ohne diese Menge zieht die Ernte unten jede Funktion in den Starter-Abschluss, die
+        ein gewoehnliches Wort dieses Projekts benutzt: die Startrouten heissen `transcribe`,
+        `correct`, `fetch_urls`, `upload_audio`, und schon ein Parameter `correct: bool` in
+        einer LESE-Route genuegte, damit der Waechter ihr „startet einen Job" vorwirft. Der
+        billigste Weg zu Gruen waere dann ein `_sicherer_projektname` auf dem Lesepfad —
+        und genau das verbietet `paths.sicherer_projektname` in seinem Docstring, weil es
+        ein Altprojekt `active` von seinen eigenen Daten aussperrte.
+        """
+        raus = {a.arg for a in fn.args.args + fn.args.kwonlyargs + fn.args.posonlyargs}
+        for x in (fn.args.vararg, fn.args.kwarg):
+            if x is not None:
+                raus.add(x.arg)
+        for k in ast.walk(fn):
+            if isinstance(k, ast.Name) and isinstance(k.ctx, (ast.Store, ast.Del)):
+                raus.add(k.id)                       # Zuweisung, for-Ziel, Comprehension,
+                                                     # und `with … as x` (ist auch ein Store)
+            elif isinstance(k, ast.alias):
+                raus.add((k.asname or k.name).split(".")[0])
+            elif isinstance(k, ast.arg):
+                raus.add(k.arg)                      # Lambda- und Nested-def-Parameter
+            elif isinstance(k, ast.ExceptHandler) and k.name:
+                raus.add(k.name)                     # `except E as x` ist ein STRING, kein
+                                                     # Name-Knoten — sonst falsch-rot
+        return raus
+
+    def bezuege(fn) -> list:
+        """(Name, Zeile) jeder Nennung — Aufruf ODER blosse Referenz.
+
+        Die Referenz zaehlt mit, weil sie genauso einen Job startet: `run_in_threadpool(
+        jobs.start, …)` uebergibt die Funktion, ruft sie aber nicht — und app.py reicht
+        heute schon Funktionen so weiter. Ohne diesen Zweig blieb der Waechter gruen
+        (F1, Probe M-C).
+
+        Blosse NAMEN nur, wenn sie eine Funktion auf Modulebene benennen und in dieser
+        Funktion nicht lokal gebunden sind (siehe `lokale`).
+        """
+        gebunden = lokale(fn)
+        raus = []
+        for k in ast.walk(fn):
+            if isinstance(k, ast.Attribute):
+                raus.append((f"{getattr(k.value, 'id', '')}.{k.attr}", k.lineno))
+            elif (isinstance(k, ast.Name) and isinstance(k.ctx, ast.Load)
+                    and k.id in nach_namen and k.id not in gebunden):
+                raus.append((k.id, k.lineno))
+        return raus
+
+    bezug = {f.name: bezuege(f) for f in funktionen}
+    namen = {n: {b for b, _ in v} for n, v in bezug.items()}
+    starter = {n for n, v in namen.items() if START & v}
+    while True:                                   # transitiver Abschluss ueber die Helfer
+        neu = {n for n, v in namen.items() if v & starter} - starter
+        if not neu:
+            break
+        starter |= neu
+
+    def ist_route(fn) -> bool:
+        for dek in fn.decorator_list:
+            f = dek.func if isinstance(dek, ast.Call) else dek
+            # `api_route` mit `methods=[…]` ist derselbe Weg unter anderem Namen (F1, M-D).
+            if (isinstance(f, ast.Attribute) and getattr(f.value, "id", "") == "app"
+                    and f.attr in ("get", "post", "put", "delete", "patch", "api_route")):
+                return True
+        return False
+
+    routen = {n for n in starter if ist_route(nach_namen[n])}
+    # Positivkontrolle: die sechs bekannten Startwege sind wirklich im Abschluss. Sie faengt
+    # das TOTALE Leerlaufen der Erkennung — mehr nicht, und das ist ausdruecklich gesagt,
+    # weil der erste Kommentar hier zu viel behauptete: eine EINZELNE neue Route mit einer
+    # anderen Schreibweise laesst sie gruen, solange die sechs bekannten weiter `jobs.`
+    # schreiben. Dagegen stehen die Quelltext-Zusicherungen oben, nicht diese Zeile.
+    assert {"transcribe", "correct", "correct_file", "retranscribe_file",
+            "fetch_urls", "upload_audio"} <= routen, sorted(routen)
+
+    for n in sorted(routen):
+        riegel = [z for b, z in bezug[n] if b == "_sicherer_projektname"]
+        start = [z for b, z in bezug[n] if b in START or b in starter - {n}]
+        assert riegel, (
+            f"app.py:{n} startet einen Job, ruft aber keinen _sicherer_projektname — ein "
+            f"Projekt namens `active`/`scope+` kaeme darueber in einen Lauf und fuellte "
+            f"`gesehen`/`bases` je ZEILE (#416/#478/#487).")
+        # VOR dem Start, nicht bloss irgendwo in der Funktion: dahinter verschoben blieb
+        # dieser Waechter gruen, waehrend der Riegel wirkungslos war (F2, Probe M-E).
+        assert min(riegel) < min(start), (
+            f"app.py:{n} ruft _sicherer_projektname erst in Zeile {min(riegel)}, startet "
+            f"den Job aber schon in Zeile {min(start)} — der Riegel kommt zu spaet.")
+        # ... und auf dem PROJEKTNAMEN. Auf ein anderes Argument gelegt blieb der Waechter
+        # ebenfalls gruen (F2, Probe M-F).
+        argumente = [k.args[0] for k in ast.walk(nach_namen[n])
+                     if isinstance(k, ast.Call) and isinstance(k.func, ast.Name)
+                     and k.func.id == "_sicherer_projektname" and k.args]
+        assert any(isinstance(a, ast.Name) and a.id == "project" for a in argumente), (
+            f"app.py:{n} ruft _sicherer_projektname, aber nicht auf `project` — der Riegel "
+            f"prueft dann einen anderen Wert als den, unter dem der Lauf druckt.")
+    # EHRLICHE GRENZE: geprueft werden Anwesenheit, Reihenfolge und Argumentname im
+    # QUELLTEXT — nicht die Wirkung zur Laufzeit. Ein Riegel hinter einem `if False:`
+    # bliebe hier gruen; dagegen steht der Waechter darueber, der die Endpunkte faehrt.
+
+
 def test_delete_project_ok(client, tmp_path):
     assert (tmp_path / "Demo").is_dir()
     r = client.delete("/api/projects/Demo")
