@@ -285,7 +285,7 @@ jobs:
   #
   # `pip install --group dev` statt `pip install ruff==…`: die Fassung steht damit an EINER
   # Stelle. Zwei Stellen fuer eine Regel driften — dieselbe Entscheidung wie beim
-  # permissions-Block oben und bei den pytest-Pfaden weiter unten im python-Job.
+  # permissions-Block oben und bei den pytest-Pfaden weiter oben im python-Job.
   lint:
     name: Ruff
     runs-on: ubuntu-latest

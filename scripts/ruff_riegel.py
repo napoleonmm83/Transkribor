@@ -48,9 +48,22 @@ from pathlib import Path
 STAMM = Path(__file__).resolve().parent.parent
 BASELINE = STAMM / ".ruff-baseline.txt"
 
-# `pfad:zeile:spalte: REGEL Rest`. Der Pfad ist nicht-gierig, damit ein
+# `pfad:zeile:spalte: KENNUNG Rest`. Der Pfad ist nicht-gierig, damit ein
 # Laufwerksbuchstabe (`E:\Git\...`) nicht als Zeilennummer durchgeht.
-_BEFUND = re.compile(r"^(?P<pfad>.+?):\d+:\d+: (?P<regel>[A-Z]+\d+)\b")
+#
+# Die KENNUNG ist bewusst NICHT `[A-Z]+\d+`. Ein Syntaxfehler heisst bei ruff
+# `invalid-syntax` und traegt gar keinen Regelcode — gemessen:
+#     syntax.py:1:12: invalid-syntax: Expected a parameter or the end of the …
+#     Found 2 errors.                                   (ruff rc = 1)
+# Mit dem engen Muster fiel diese Zeile aus dem Vergleich, `ruff_lauf()` nahm
+# rc 1 als „es gibt eben Befunde" hin, und der Riegel meldete „keine neuen" mit
+# rc 0. Eine .py mit Syntaxfehler, die kein Test importiert, waere gruen durch
+# die CI gegangen (gefunden vom kalten Zweitleser, 2026-09-03, mit Beleg).
+_BEFUND = re.compile(r"^(?P<pfad>.+?):\d+:\d+: (?P<regel>[A-Za-z][A-Za-z0-9-]*)\b")
+
+# Ruffs Schlusszeile — der Gegenzeuge zum Muster darueber. Ohne sie heisst es
+# „All checks passed!", dann sind es null.
+_SUMME = re.compile(r"^Found (?P<zahl>\d+) errors?\.$")
 
 
 def schluessel(zeile: str) -> str | None:
@@ -69,6 +82,26 @@ def schluessel(zeile: str) -> str | None:
 def schluessel_liste(ausgabe: str) -> list[str]:
     """Die ganze ruff-Ausgabe in die sortierte Schluesselliste."""
     return sorted(s for s in map(schluessel, ausgabe.splitlines()) if s)
+
+
+def gemeldete_zahl(ausgabe: str) -> int:
+    """Was RUFF selbst zaehlt. Ohne Summenzeile null (`All checks passed!`)."""
+    for zeile in ausgabe.splitlines():
+        treffer = _SUMME.match(zeile.strip())
+        if treffer:
+            return int(treffer["zahl"])
+    return 0
+
+
+def fehlende_zeilen(ausgabe: str, befunde: list[str]) -> int:
+    """Wie viele Befunde ruff meldet, die der Riegel NICHT verstanden hat.
+
+    Der eigentliche Riegel gegen die eigene Blindheit: ein Muster, das eine
+    Ausgabeform nicht kennt, laesst sie lautlos verschwinden — und ein leiser
+    Riegel ist gruen, weil er nichts gesehen hat. Ruffs eigene Summenzeile ist
+    der Gegenzeuge; weichen die Zahlen ab, bricht der Lauf ab, statt zu urteilen.
+    """
+    return gemeldete_zahl(ausgabe) - len(befunde)
 
 
 # ponytail: Schluessel ist (Datei, Regel) mit Vielfachheit — ein TAUSCH innerhalb
@@ -105,7 +138,18 @@ def ruff_lauf() -> str:
 
 
 def main(argv: list[str]) -> int:
-    befunde = schluessel_liste(ruff_lauf())
+    ausgabe = ruff_lauf()
+    befunde = schluessel_liste(ausgabe)
+
+    fehlend = fehlende_zeilen(ausgabe, befunde)
+    if fehlend != 0:
+        sys.stderr.write(
+            f"ruff meldet {gemeldete_zahl(ausgabe)} Befunde, verstanden wurden "
+            f"{len(befunde)} — der Riegel kennt eine Ausgabeform nicht und wuerde "
+            "sie stillschweigend uebergehen. Muster in scripts/ruff_riegel.py "
+            "nachziehen.\n"
+        )
+        return 2
 
     if "--schreiben" in argv:
         BASELINE.write_text("\n".join(befunde) + "\n", encoding="utf-8", newline="\n")
