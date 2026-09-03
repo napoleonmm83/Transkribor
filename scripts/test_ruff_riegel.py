@@ -9,6 +9,8 @@ Befund in einer Form, die das Muster fressen muss.
 import sys
 from pathlib import Path
 
+import pytest
+
 # Der Pfad muss VOR dem Import stehen — E402/I001 sind hier die Folge der
 # Reihenfolge, nicht der Unordnung. Dieselbe Form wie in test_coderabbit_status.py.
 sys.path.insert(0, str(Path(__file__).parent))
@@ -179,3 +181,95 @@ def test_zeilenverschiebung_allein_erzeugt_keinen_befund():
     alt = ruff_riegel.schluessel_liste("webtool/whispercpp.py:356:16: S603 subprocess")
     neu = ruff_riegel.schluessel_liste("webtool/whispercpp.py:396:16: S603 subprocess")
     assert ruff_riegel.vergleich(neu, alt) == ([], [])
+
+
+# --- Die ENTSCHEIDUNG: was der Riegel am Ende zurueckgibt ------------------
+#
+# Bis hierher war sie unbewacht, und das war messbar: an der Vorfassung liessen
+# sechs Mutationen alle Tests gruen — darunter `return 1` -> `return 0` beim
+# Fund und das Abschalten der Zaehlprobe selbst (gegnerischer Pruefer, F3).
+# Getestet wird ueber `ruff_lauf`, damit kein ruff noetig ist.
+
+
+def _riegel(monkeypatch, tmp_path, ausgabe, baseline, argv=()):
+    ziel = tmp_path / "baseline.txt"
+    ziel.write_text("".join(f"{z}\n" for z in baseline), encoding="utf-8")
+    monkeypatch.setattr(ruff_riegel, "BASELINE", ziel)
+    monkeypatch.setattr(ruff_riegel, "ruff_lauf", lambda: ausgabe)
+    return ruff_riegel.main(list(argv)), ziel
+
+
+def test_neuer_befund_macht_rot(monkeypatch, tmp_path):
+    rc, _ = _riegel(
+        monkeypatch,
+        tmp_path,
+        "a.py:1:1: I001 x\nb.py:2:2: F401 y\nFound 2 errors.\n",
+        ["a.py:I001"],
+    )
+    assert rc == 1
+
+
+def test_nur_behobenes_bleibt_gruen(monkeypatch, tmp_path):
+    rc, _ = _riegel(
+        monkeypatch, tmp_path, "a.py:1:1: I001 x\nFound 1 error.\n", ["a.py:I001", "b.py:F401"]
+    )
+    assert rc == 0
+
+
+def test_unveraendert_bleibt_gruen(monkeypatch, tmp_path):
+    rc, _ = _riegel(monkeypatch, tmp_path, "a.py:1:1: I001 x\nFound 1 error.\n", ["a.py:I001"])
+    assert rc == 0
+
+
+def test_unverstandene_zeile_bricht_mit_zwei_ab(monkeypatch, tmp_path):
+    # Nicht rc 1: „ich habe eine Form nicht verstanden" ist kein Lint-Befund,
+    # sondern ein Defekt des Riegels — und muss anders aussehen.
+    rc, _ = _riegel(
+        monkeypatch,
+        tmp_path,
+        "a.py:1:1: I001 x\nb.py: ohne Zeile und Spalte\nFound 2 errors.\n",
+        ["a.py:I001"],
+    )
+    assert rc == 2
+
+
+def test_schreiben_legt_die_baseline_neu_an(monkeypatch, tmp_path):
+    rc, ziel = _riegel(
+        monkeypatch,
+        tmp_path,
+        "b.py:2:2: F401 y\na.py:1:1: I001 x\nFound 2 errors.\n",
+        ["voellig:ANDERS"],
+        argv=["--schreiben"],
+    )
+    assert rc == 0
+    assert ziel.read_text(encoding="utf-8") == "a.py:I001\nb.py:F401\n"
+
+
+def test_fehlendes_ruff_bricht_ab_statt_alles_als_behoben_zu_melden(monkeypatch):
+    # GEMESSEN: `python -m ruff` ohne installiertes ruff endet mit rc 1 und
+    # LEEREM stdout ("No module named ruff" geht nach stderr) — derselbe Code
+    # wie „es gibt Lint-Befunde". Ohne die Stimmigkeitsprobe waere `befunde`
+    # leer, die ganze Baseline gaelte als behoben, und der Riegel meldete rc 0.
+    class Lauf:
+        returncode = 1
+        stdout = ""
+        stderr = "python.exe: No module named ruff\n"
+
+    monkeypatch.setattr(ruff_riegel.subprocess, "run", lambda *a, **k: Lauf())
+    with pytest.raises(SystemExit) as ausgang:
+        ruff_riegel.ruff_lauf()
+    assert ausgang.value.code == 2
+
+
+def test_stimmige_ausgabe_geht_durch():
+    # Negativkontrolle zum Test darueber: ohne sie belegte er nur, dass
+    # `unstimmig` irgendetwas ablehnt.
+    assert ruff_riegel.unstimmig(1, "a.py:1:1: I001 x\nFound 1 error.\n") is None
+    assert ruff_riegel.unstimmig(0, "All checks passed!\n") is None
+
+
+def test_summenzeile_unterscheidet_null_von_schweigen():
+    # `gemeldete_zahl` wirft diesen Unterschied weg — genau daran haette die
+    # Zaehlprobe allein das fehlende ruff nicht erkannt.
+    assert ruff_riegel.summenzeile("All checks passed!\n") is None
+    assert ruff_riegel.summenzeile("Found 0 errors.\n") == 0
