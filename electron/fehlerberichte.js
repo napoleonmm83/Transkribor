@@ -245,6 +245,9 @@ function optionen({ dsn, version, gepackt, ctx, ipcMode }) {
     release: `transkribor@${version}`,
     environment: gepackt ? 'gepackt' : 'dev',
     sendDefaultPii: false,
+    // Die Electron-SDK erzwingt das selbst (main/sdk.js, NACH dem userOptions-Spread) — der
+    // Rechnername ist PII. Die Zeile hier haelt, falls die Vorgabe mit einem Upgrade kippt.
+    includeServerName: false,
     maxValueLength: Math.max(bericht.MAX_ZEILE + 100, 700),
     beforeBreadcrumb: () => null,
     ...(ipcMode !== undefined ? { ipcMode } : {}),

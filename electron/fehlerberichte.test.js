@@ -254,6 +254,7 @@ test('optionen: ohne DSN ist das SDK aus, mit DSN an — und die Vorgaben stehen
   assert.strictEqual(aus.enabled, false)
   assert.strictEqual(aus.dsn, undefined)
   const an = fb.optionen({ dsn: 'http://k@127.0.0.1:8123/1', version: '1.2.3', gepackt: false, ctx })
+  assert.strictEqual(an.includeServerName, false, 'Rechnername (server_name) geht nie mit')
   assert.strictEqual(an.enabled, true)
   assert.strictEqual(an.release, 'transkribor@1.2.3')
   assert.strictEqual(an.environment, 'dev')
