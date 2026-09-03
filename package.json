@@ -140,8 +140,5 @@
         "repo": "Transkribor"
       }
     ]
-  },
-  "allowScripts": {
-    "electron@43.3.0": true
   }
 }

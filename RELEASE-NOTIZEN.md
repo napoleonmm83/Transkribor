@@ -28,6 +28,9 @@ hat. Lesbar, aber unschön — das ist Absicht.
 
 ## Unveröffentlicht
 
+**Neu**
+- Auf dem Mac braucht Transkribor ab dieser Fassung macOS 13 oder neuer — wer noch macOS 12 hat, bleibt bei v0.52.0; Windows und Linux sind nicht betroffen.
+
 ## v0.52.0 — 2026-09-03
 
 **Neu**
