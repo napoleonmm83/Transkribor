@@ -2396,14 +2396,50 @@ def test_die_wache_bleibt_eine_klasse_und_laesst_sich_beerben():
 def test_die_wache_nimmt_das_kommando_auch_als_schluesselwort():
     """`Popen(args=[…])` ist zulaessig — die Huelle darf den Aufruf nicht verengen.
 
-    Kein Aufrufer im Repo oder in site-packages nutzt diese Form heute (per Suche geprueft),
-    aber vorher verbot sie nichts. Gemessen wird an einem Kommando, das kein pip ist: es muss
+    Kein Aufrufer im Repo oder in site-packages nutzt diese Form heute — gemessen 2026-09-03:
+    `grep -rn "Popen(args=" webtool transcribe.py scripts build --include=*.py` -> 0 Treffer,
+    `grep -rln "Popen(args=" .venv/Lib/site-packages --include=*.py` -> 0 Dateien — aber
+    vorher verbot sie nichts. Gemessen wird an einem Kommando, das kein pip ist: es muss
     ganz normal durchlaufen.
     """
     import subprocess as sp
 
     p = sp.Popen(args=[sys.executable, "-c", "pass"])
     assert p.wait() == 0
+
+
+def test_die_wache_ueberlebt_ein_undo_des_test_monkeypatch(monkeypatch):
+    """Beide Riegel haengen an EIGENEN `MonkeyPatch`-Kontexten, nicht am `monkeypatch` des Tests.
+
+    `test_transcribe.py:664/677/688` rufen `monkeypatch.undo()` mitten im Test. Hingen die
+    autouse-Fixtures am selben Objekt, naehme das `undo()` Schalter UND Wache mit — gemessen
+    mit `monkeypatch` als Fixture-Parameter: `subprocess.Popen` war danach das Original, und
+    ein pip-Aufruf dahinter liefe ins Echte (CodeRabbit-Bot, Major, PR #529). Die
+    Mutationsprobe dazu: in `webtool/conftest.py` die eigenen Kontexte wieder durch den
+    `monkeypatch`-Parameter ersetzen — dieser Test wird rot.
+    """
+    import subprocess as sp
+
+    monkeypatch.setenv("TRANSKRIBOR_TESTMARKE", "1")
+    monkeypatch.undo()
+    assert "TRANSKRIBOR_TESTMARKE" not in os.environ          # das undo() hat gewirkt …
+    assert os.environ.get("TRANSKRIBOR_YTDLP_UPDATE") == "0"  # … und den Schalter nicht erreicht
+    # `--dry-run --no-index`: sollte der Aufruf je an der Wache vorbeikommen (genau das prueft
+    # die Mutationsprobe), aendert er die venv nicht und braucht kein Netz.
+    with pytest.raises(pytest.fail.Exception):                # … und die Wache auch nicht
+        sp.Popen([sys.executable, "-m", "pip", "install", "--dry-run", "--no-index", "nichts"])
+
+
+def test_die_wache_sieht_auch_das_programm_aus_executable():
+    """`executable=` ersetzt das Programm aus `args[0]` — ohne die Zeile in der Wache startet
+    `Popen(["egal", "install", "x"], executable=".../pip")` echtes pip, weil `args` das Wort
+    nicht traegt. Der Pfad hier existiert nicht: ohne Wache endet der Aufruf in
+    `FileNotFoundError`, mit Wache in `pytest.fail` VOR dem Start (CodeRabbit-Bot, Major,
+    PR #529)."""
+    import subprocess as sp
+
+    with pytest.raises(pytest.fail.Exception):
+        sp.Popen(["egal", "install", "x"], executable="/nirgends/pip")
 
 
 # Gegenbeispiele in BEIDE Richtungen. Ein Muster, das nur an seinen Treffern gemessen wird,
