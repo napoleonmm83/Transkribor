@@ -542,6 +542,7 @@ async function zustimmungFragen() {
  *  zu messen — der einzige Weg dorthin ohne Testcode in der Oberflaeche. */
 function fehlerprobe() {
   if (!fehlerberichte.fehlerprobeGewuenscht(process.env)) return
+  protokoll.schreiben('Fehlerprobe: wirft jetzt absichtlich (TRANSKRIBOR_FEHLERPROBE)')
   setImmediate(() => { throw new Error(fehlerberichte.FEHLERPROBE) })
 }
 
@@ -553,8 +554,11 @@ function serverStarten() {
       bereit = true
       if (win) win.loadURL(backend.url())
       backend.projektePfad().then(p => { if (p) projekteWurzel = p }).catch(() => { /* P.projekte bleibt */ })
-      zustimmungFragen().catch(e => protokoll.schreiben(`FEHLER: Nachfrage Fehlerberichte: ${e.message || e}`))
-      fehlerprobe()
+      // Die Probe erst NACH der Antwort: vorher steht der Schalter auf AUS (Vorgabe), und ein
+      // TRANSKRIBOR_FEHLERPROBE=1 beim allerersten Start liefe trotz „Ja“ still ins Leere (Bot-Review #531).
+      zustimmungFragen()
+        .catch(e => protokoll.schreiben(`FEHLER: Nachfrage Fehlerberichte: ${e.message || e}`))
+        .finally(fehlerprobe)
     },
     e => { startLaeuft = null; senden('fehler', String(e.message || e)) },   // Retry erlauben
   )

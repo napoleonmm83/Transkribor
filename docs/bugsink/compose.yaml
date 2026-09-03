@@ -24,6 +24,9 @@ services:
     environment:
       - SERVICE_FQDN_WEB_8000
       - SECRET_KEY=${SERVICE_BASE64_64_SECRETKEY}
+      # Nur fuer den ERSTEN Start: Bugsink legt das Konto einmal an und ignoriert die Variable danach.
+      # Nach dem ersten Login die Variable in Coolify loeschen und `web` neu starten — ein Passwort,
+      # das nichts mehr tut, hat in der Container-Umgebung nichts verloren (Bot-Review PR #531).
       - CREATE_SUPERUSER=${BUGSINK_SUPERUSER}
       - PORT=8000
       - DATABASE_URL=postgresql://bugsink:${SERVICE_PASSWORD_BUGSINKDB}@db:5432/bugsink
@@ -37,6 +40,23 @@ services:
       timeout: 20s
       retries: 10
       start_period: 30s
+
+  # MAX_EVENT_AGE_DAYS loescht NICHT von selbst: Bugsink wendet den Deckel nur in
+  # `bugsink-manage delete_old_events` (und `vacuum --old-events`) an — Doku, Abschnitt Settings.
+  # Dieser Dienst faehrt den Lauf taeglich, versioniert HIER statt als Coolify-Task, damit eine neue
+  # oder wiederhergestellte Bereitstellung die 90-Tage-Zusage der README nicht still verliert.
+  aufraeumer:
+    image: bugsink/bugsink:2
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - SECRET_KEY=${SERVICE_BASE64_64_SECRETKEY}
+      - DATABASE_URL=postgresql://bugsink:${SERVICE_PASSWORD_BUGSINKDB}@db:5432/bugsink
+      - BASE_URL=https://bugsink.martini.digital
+      - MAX_EVENT_AGE_DAYS=90
+    entrypoint: ["sh", "-c", "while true; do bugsink-manage delete_old_events; sleep 86400; done"]
 
 volumes:
   db-data:
