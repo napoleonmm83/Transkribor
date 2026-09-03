@@ -121,14 +121,66 @@ def test_diarize_file_waehlt_num_speakers_ODER_min_speakers(monkeypatch):
         def itertracks(self, yield_label=True):
             return []
 
-    monkeypatch.setattr(diarize, "_load_waveform", lambda p: "audio")
-    monkeypatch.setattr(diarize, "_pipeline",
-                        lambda: lambda wave, **kw: gesehen.update(kw) or _Ann())
+    wellen = []
+    wellenform = {"waveform": object(), "sample_rate": 16000}   # was _load_waveform liefert
+
+    def pipe(wave, **kw):
+        gesehen.update(kw)
+        wellen.append(wave)
+        return _Ann()
+
+    monkeypatch.setattr(diarize, "_load_waveform", lambda p: wellenform)
+    monkeypatch.setattr(diarize, "_pipeline", lambda: pipe)
     diarize.diarize_file("x.m4a", min_speakers=2, num_speakers=5)
     assert gesehen == {"num_speakers": 5}          # exakt, und kein min_speakers daneben
+    # Die Pipeline bekommt GENAU das Objekt aus `_load_waveform` — nicht den Pfad (#517: der
+    # torchcodec-Bypass ist die in-memory-Uebergabe; mit dem Pfad liefe pyannote wieder in
+    # seinen eigenen, auf frischen Installationen kaputten Decoder).
+    assert wellen == [wellenform] and wellen[0] is wellenform
     gesehen.clear()
     diarize.diarize_file("x.m4a", min_speakers=2, num_speakers=None)
     assert gesehen == {"min_speakers": 2}          # ohne Einstellung unveraendert wie vor #264
+
+
+def test_load_waveform_liefert_die_wellenform_in_memory(monkeypatch):
+    """Der torchcodec-Bypass IST die in-memory-Uebergabe (#517): `_load_waveform` dekodiert
+    ueber `faster_whisper.decode_audio` (PyAV, in-process, 16 kHz mono) und reicht einen
+    Tensor weiter — pyannotes eigener Decoder wird nie gefragt. Der scheitert auf frischen
+    macOS-Installationen (torchcodec 0.16.0, `ffmpeg_major_version` None) genauso wie auf
+    Windows; die Messung steht im Docstring dort.
+
+    Beide lokalen Importe (`torch`, `faster_whisper`) werden ueber `sys.modules` gefaelscht:
+    der CI-Python-Job installiert BEWUSST keins von beiden (test.yml), und die Attrappe
+    muss an `faster_whisper.decode_audio` haengen, weil der Import IN der Funktion steht.
+    """
+    import sys
+    import types
+    gerufen = []
+    roh = object()                                # das Array aus decode_audio
+    markiert = object()                           # der Tensor nach unsqueeze(0)
+
+    class _Tensor:
+        def __init__(self, quelle):
+            assert quelle is roh, "from_numpy bekam nicht das dekodierte Array"
+
+        def unsqueeze(self, dim):
+            assert dim == 0
+            return markiert
+
+    def decode_audio(pfad, sampling_rate=None):
+        gerufen.append((pfad, sampling_rate))
+        return roh
+
+    fake_torch = types.ModuleType("torch")
+    fake_torch.from_numpy = _Tensor
+    fake_fw = types.ModuleType("faster_whisper")
+    fake_fw.decode_audio = decode_audio
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
+    monkeypatch.setitem(sys.modules, "faster_whisper", fake_fw)
+
+    aus = diarize._load_waveform("x.m4a")
+    assert gerufen == [("x.m4a", 16000)]          # in-process dekodiert, 16 kHz
+    assert aus == {"waveform": markiert, "sample_rate": 16000}
 
 
 # --- verfuegbar() (#270): pyannote-Verfügbarkeit für den Datei-Dialog ---------------
