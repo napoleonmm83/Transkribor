@@ -28,6 +28,8 @@ hat. Lesbar, aber unschön — das ist Absicht.
 
 ## Unveröffentlicht
 
+## v0.53.0 — 2026-09-03
+
 **Neu**
 - Die Frage, ob Fehler automatisch gemeldet werden dürfen, erscheint jetzt im Fenster von Transkribor statt in einem grauen Kasten des Betriebssystems.
 - Auf dem Mac braucht Transkribor ab dieser Fassung macOS 13 oder neuer — mit macOS 12 bleibt v0.52.0 die letzte nutzbare Fassung, auch wenn die App eine neuere meldet; Windows und Linux sind nicht betroffen.
