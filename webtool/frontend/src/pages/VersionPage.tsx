@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { ChevronRight, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useUpdate } from '@/hooks/useUpdate'
+import { useFehlerberichte } from '@/hooks/useFehlerberichte'
 import { PageHeader } from '@/components/PageHeader'
 import { Abschnitt } from '@/components/Abschnitt'
 import { Notizen } from '@/components/Notizen'
@@ -11,6 +12,8 @@ import type { UpdateZustand } from '@/lib/types'
 import { tag } from '@/lib/utils'
 
 const RELEASES = 'https://github.com/napoleonmm83/Transkribor/releases'
+/** Der README-Abschnitt, der aufzählt, was ein automatischer Fehlerbericht trägt (#530). */
+const README_FEHLERBERICHTE = 'https://github.com/napoleonmm83/Transkribor#fehlerberichte'
 
 /**
  * Der Grund kommt als Code aus Electron — der Satz gehört hierher, wo Umlaute erlaubt sind.
@@ -47,6 +50,7 @@ function mb(bytes: number, stellen = 0) {
  */
 export function VersionPage() {
   const { zustand: upd, pruefen, laden, installieren, protokollOeffnen, fehlerbericht } = useUpdate()
+  const fb = useFehlerberichte()
   // Ausserhalb von Electron gibt es keinen Update-Zustand — dann ist der zur Bauzeit
   // eingesetzte Wert die einzige (und richtige) Quelle, wie in der Fusszeile.
   const version = upd?.version ?? __APP_VERSION__
@@ -189,6 +193,32 @@ export function VersionPage() {
             <Button variant="secondary" onClick={berichtSchreiben}>Fehlerbericht schreiben</Button>
             <Button variant="ghost" onClick={protokollOeffnen}>Protokoll anzeigen</Button>
           </div>
+          {/* Der Opt-in-Schalter (#530) — nur, wenn die App-Hülle ihn kennt (`fb === null` heisst:
+              ältere Hülle oder Browser). Natives Checkbox-Muster wie in den Einstellungen. */}
+          {fb && (
+            <label className="mt-4 flex cursor-pointer items-start gap-2.5 text-sm">
+              <input
+                type="checkbox"
+                className="mt-0.5 size-4 accent-primary"
+                checked={fb.zustand?.automatisch ?? false}
+                disabled={!fb.zustand}
+                onChange={e => {
+                  fb.setzen(e.target.checked)
+                    .catch(() => toast.error('Der Schalter liess sich nicht speichern — bitte noch einmal versuchen.'))
+                }}
+              />
+              <span>
+                <span className="font-medium">Fehler automatisch an uns senden</span>
+                <span className="mt-1 block text-xs text-muted-foreground">
+                  Ohne Mailprogramm und ohne Klick: die Fehlermeldung mit Stelle im Programm, die Fassung, dein
+                  Betriebssystem und die letzten Protokollzeilen. Benutzername, Projekt- und Aufnahmenamen werden
+                  vorher unkenntlich gemacht; Aufnahmen und Transkripte gehen nie mit.{' '}
+                  <a className="underline underline-offset-2 hover:text-foreground" href={README_FEHLERBERICHTE}
+                    target="_blank" rel="noreferrer">Was genau mitgeht</a>
+                </span>
+              </span>
+            </label>
+          )}
         </Abschnitt>
       )}
 

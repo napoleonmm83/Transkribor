@@ -269,9 +269,16 @@ jobs:
       # KEIN Oeffnen-trotzdem an. `mac.identity: "-"` (package.json) signiert
       # stattdessen ad-hoc — ohne Zertifikat, aber gueltig. Signatur mit Developer
       # ID + Notarisierung bleibt eine eigene, spaetere Spec.
-      - run: npm run dist
+      # Der Bugsink-DSN (#530) kommt aus dem Secret in die gepackte package.json
+      # (`extraMetadata`, gelesen in electron/main.js). Ein Client-Schluessel, kein
+      # Geheimnis — aber nicht im oeffentlichen Repo. Fehlt das Secret (Fork), ist der Wert
+      # leer und das SDK in der App aus. `shell: bash`, weil der Schritt sonst auf Windows
+      # in pwsh liefe und "$BUGSINK_DSN" dort nicht expandiert.
+      - shell: bash
+        run: npm run dist -- -c.extraMetadata.bugsinkDsn="$BUGSINK_DSN"
         env:
           DEBUG: electron-builder          # jeder Schritt benannt, statt nur "exit 1"
+          BUGSINK_DSN: ${{ secrets.BUGSINK_DSN }}
 
       # Was ist tatsaechlich entstanden? Ohne diese Liste raet man bei einem leeren Upload.
       - name: Inhalt von dist/

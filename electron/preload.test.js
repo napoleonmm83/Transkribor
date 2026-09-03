@@ -91,3 +91,15 @@ test('fortschritt reicht Anteil und Modus an den Hauptprozess weiter', async () 
   await freigegeben.fortschritt(0.5, 'error')
   assert.deepStrictEqual(aufrufe.at(-1), ['fortschritt', 0.5, 'error'])
 })
+
+test('fehlerberichte: status ohne Argument, setzen reicht NUR ein echtes true durch (#530)', async () => {
+  await freigegeben.fehlerberichte.status()
+  assert.deepStrictEqual(aufrufe.at(-1), ['fehlerberichte:status'])
+  await freigegeben.fehlerberichte.setzen(true)
+  assert.deepStrictEqual(aufrufe.at(-1), ['fehlerberichte:setzen', true])
+  // Alles andere kommt als `false` an — die Bruecke komponiert nichts (#218), sie normiert.
+  for (const wert of ['ja', 1, {}, undefined]) {
+    await freigegeben.fehlerberichte.setzen(wert)
+    assert.deepStrictEqual(aufrufe.at(-1), ['fehlerberichte:setzen', false], String(wert))
+  }
+})
