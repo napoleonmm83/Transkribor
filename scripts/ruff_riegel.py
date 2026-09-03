@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Ruff-Riegel: rot, sobald ein NEUER Lint-Befund dazukommt.
+"""Ruff-Riegel: rot bei Lint-Befunden, die die Baseline nicht kennt.
+
+(Die erste Fassung dieser Zeile sagte „rot, sobald ein NEUER Befund dazukommt" —
+schaerfer als der Code. Der Riegel zaehlt je (Datei, Regel); steigt die Zahl
+nicht, sieht er nichts. Die Decke steht weiter unten, aber die Ueberschrift
+liest man zuerst. Angemerkt vom kalten Zweitleser, 2026-09-03.)
 
 Bis hierher lief ruff in diesem Repo nirgends automatisch — nicht in
 `.github/workflows/`, nicht im `pre-commit`-Hook, nicht in einem npm-Skript.
