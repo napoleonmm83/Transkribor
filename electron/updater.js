@@ -85,20 +85,31 @@ function parseLatestMac(text) {
 /**
  * Darwin-Hauptversion (aus `os.release()`, z.B. "22.6.0") -> macOS-Hauptversion.
  *
- * TABELLE, keine Rechnung: der Versatz von 9 hielt von macOS 11 bis 15, aber er ist keine
- * Zusage — Apple hat die Zaehlung schon einmal umgestellt. Eine Tabelle ist an der Stelle
- * falsch, an der sie falsch ist; eine Formel ist ueberall dort falsch, wo niemand hinsieht.
+ * TABELLE, keine Rechnung — und das ist keine Vorsicht, sondern gemessen: der Versatz von 9 hielt
+ * von macOS 11 (Darwin 20) bis 15 (Darwin 24), dann sprang macOS auf 26 (Tahoe) bei Darwin 25,
+ * der Versatz ist dort also 1. Apple hat die Zaehlung inzwischen ZWEIMAL umgestellt. Eine Tabelle
+ * ist genau an der Stelle falsch, an der sie falsch ist; eine Formel ist ueberall dort falsch,
+ * wo niemand hinsieht.
+ *
+ * Alles VOR Darwin 20 ist macOS 10.x — eine echte Zuordnung, keine Naeherung, und sie macht den
+ * Satz unten wahr, statt ihn nur zu behaupten. Erreichbar ist sie nicht (Electron 38+ verlangt
+ * macOS 12), sie kostet aber eine Zeile.
  *
  * Eine unbekannte Zahl liefert `null`, und `null` heisst spaeter ANBIETEN, nicht sperren. Die
- * Richtung ist Absicht: unbekannt sind nur NEUERE Systeme (alles Aeltere steht in der Tabelle,
- * und Electron 44 startet dort ohnehin nicht) — und ein neueres System erfuellt jede
- * Mindestforderung. Ein Update zu verweigern, weil wir eine Zahl nicht deuten koennen, waere
- * der teurere Fehler.
+ * Richtung ist Absicht: unbekannt ist damit nur noch, was NEUER als die Tabelle ist — und ein
+ * neueres System erfuellt jede Mindestforderung, die die Tabelle noch kennt. Ein Update zu
+ * verweigern, weil wir eine Zahl nicht deuten koennen, waere der teurere Fehler.
+ *
+ * **Die Luecke, die daraus folgt, faengt ein Test statt eines Kommentars:** steigt
+ * `build.mac.minimumSystemVersion` ueber den hoechsten Tabellenwert, faellt ein Mac mit genau
+ * dazwischenliegendem macOS in den null-Zweig — und bekommt wieder eine Fassung angeboten, die
+ * er nicht starten kann, also #536 von vorn. `updater.test.js` bindet beides aneinander.
  */
-const DARWIN_ZU_MACOS = Object.freeze({ 20: 11, 21: 12, 22: 13, 23: 14, 24: 15 })
+const DARWIN_ZU_MACOS = Object.freeze({ 20: 11, 21: 12, 22: 13, 23: 14, 24: 15, 25: 26 })
 function macosAusDarwin(release) {
   const m = /^(\d+)(?:\.|$)/.exec(String(release || ''))
   if (!m) return null
+  if (+m[1] < 20) return 10
   const macos = DARWIN_ZU_MACOS[+m[1]]
   return macos === undefined ? null : macos
 }

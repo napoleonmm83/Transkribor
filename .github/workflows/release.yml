@@ -81,6 +81,10 @@ jobs:
           # liesse den Job mit rc=1 und ohne jede Begruendung stehen — und der Bau-Job, wo
           # die Tests sichtbar laufen, kommt dann nie dran.
           #
+          # Seit #536 sind es VIER Skripte: `macos-mindest.sh` schreibt die Mindest-macOS-Version
+          # in die `latest-mac.yml`, und was der Update-Feed sagt, holt nach dem Veroeffentlichen
+          # ebenfalls niemand zurueck.
+          #
           # Kosten: die ersten beiden zusammen 1–5 s (gemessen am Schritt „Release-Skripte
           # pruefen" der Testbauten 33193601556 und 33194321729, sechs Matrix-Jobs; lokal
           # 4,9 s); fassung.test.sh legt drei Wegwerf-Repos mit Tags an und kostet lokal
