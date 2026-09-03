@@ -49,16 +49,19 @@ stirbt jeder Subprozess, hier nur der, der Pakete installiert. Gemessen, dass da
 bricht: dieselbe Wache lief ueber die volle Suite (`webtool/` 1159 bestanden, alle testpaths
 1183 bestanden), beide Male mit null abgefangenen pip-Aufrufen.
 
+Eine dritte Grenze ist seit dem Bot-Review GESCHLOSSEN: ein `monkeypatch.undo()` im Test nahm
+**BEIDE** Riegel zurueck, weil alle Fixtures eines Tests dieselbe `MonkeyPatch`-Instanz
+teilen — nach `undo()` war `subprocess.Popen` wieder das Original (gemessen; hier stand zuerst
+„entwertet (a), nicht (b)", falsch, gefunden vom gegnerischen Pruefer).
+`test_transcribe.py:664/677/688` rufen `undo()` mitten im Test. Deshalb haengen beide Riegel
+jetzt an EIGENEN `pytest.MonkeyPatch.context()`-Instanzen, die ein Test-`undo()` nicht
+erreicht (`test_die_wache_ueberlebt_ein_undo_des_test_monkeypatch`).
+
 **Zwei benannte Grenzen**, damit niemand mehr erwartet, als hier steht:
 
 * `settings.load_env()` schreibt beim Import von `webtool.app` direkt in `os.environ` und
   laesst die `.env` gegen einen gesetzten Wert gewinnen. Das entwertet **(a)**, und **(b)**
   faengt es trotzdem ab — das ist der zweite Grund fuer die Wache.
-* Ein `monkeypatch.undo()` im Test nimmt dagegen **BEIDE** zurueck: alle Fixtures eines Tests
-  teilen sich dieselbe `MonkeyPatch`-Instanz, nach `undo()` ist `subprocess.Popen` wieder das
-  Original (gemessen). Hier stand zuerst „entwertet (a), nicht (b)" — falsch, gefunden vom
-  gegnerischen Pruefer. `test_transcribe.py:664/677/688` rufen `undo()` mitten im Test; heute
-  folgenlos, weil dort kein pip-Weg liegt.
 * `testpaths` umfasst auch `build/` und `scripts/`; dorthin reicht diese Datei nicht. Und dort
   LIEGT ein pip-Weg — `scripts/osv_freeze.py:93` ruft `pip install --dry-run --report`; er
   wird von `test_osv_freeze.py` heute nur nicht erreicht. Die tragfaehige Aussage ist also
@@ -95,8 +98,11 @@ def _ist_pip_installation(kommando) -> bool:
     `[sys.executable, "-m", "pip", "install", "-U", …, "yt-dlp[default]"]`. Eine Zeichenkette
     (`shell=True`) wird zerlegt, sonst rutschte sie am Listenvergleich vorbei.
 
-    Wirft nie: die Wache liegt auf JEDEM `subprocess.run` der Suite, ein Fehler hier machte
-    beliebige fremde Tests rot — im Zweifel gilt „kein pip" und der Aufruf laeuft durch.
+    Wirft bei den geprueften Eingaben nicht (`None`, `bytes`, unbalancierte
+    Anfuehrungszeichen, nicht iterierbar — die Tabelle in `test_pip_erkennung_laesst_alles_andere_durch`):
+    die Wache liegt vor JEDEM `subprocess.Popen` der Suite, ein Fehler hier machte beliebige
+    fremde Tests rot — im Zweifel gilt „kein pip" und der Aufruf laeuft durch. Ein Iterable,
+    das beim Durchlaufen selbst wirft, reicht seine Ausnahme durch; das ist nicht abgedeckt.
     """
     if isinstance(kommando, (str, bytes)):
         text = kommando.decode(errors="replace") if isinstance(kommando, bytes) else kommando
@@ -124,8 +130,28 @@ def _ist_pip_installation(kommando) -> bool:
     return any(_PIP_WORT.match(w) for w in worte) and bool(_PIP_VERBEN.intersection(worte))
 
 
+def _mit_executable(args, executable):
+    """`executable=` ersetzt das Programm aus `args[0]` (POSIX: execvpe-Verhalten) — ein
+    `Popen(["egal", "install", "x"], executable=".../pip")` startet also pip, ohne dass `args`
+    das Wort traegt. Fuer die Erkennung wird das Programm an die Wortliste gehaengt. Bei einer
+    Zeichenkette (`shell=True`) ist `executable` die Shell und traegt nichts bei
+    (CodeRabbit-Bot, Major, PR #529)."""
+    if executable is None or isinstance(args, (str, bytes)):
+        return args
+    try:
+        return [*args, executable]
+    except TypeError:                           # kein iterables Kommando
+        return args
+
+
+# Beide Riegel haengen an EIGENEN `MonkeyPatch`-Kontexten, nicht am `monkeypatch` des Tests:
+# alle Fixtures eines Tests teilen sich sonst dieselbe Instanz, und `test_transcribe.py:664/
+# 677/688` rufen `monkeypatch.undo()` mitten im Test — gemessen nahm das Schalter UND Wache
+# mit, `subprocess.Popen` war danach das Original (CodeRabbit-Bot, Major, PR #529). Ein
+# pip-Aufruf hinter so einem `undo()` liefe ins Echte. `test_die_wache_ueberlebt_ein_undo_des_
+# test_monkeypatch` haelt das fest.
 @pytest.fixture(autouse=True)
-def _wegwerf_projektwurzel(monkeypatch, tmp_path):
+def _wegwerf_projektwurzel(tmp_path):
     """Jeder Test bekommt eine Wegwerf-Projektwurzel, auch wenn er keine anfordert.
 
     Ohne Zutun des Tests, weil genau das Zutun die Luecke war. `TRANSKRIBOR_SETTINGS` gleich
@@ -134,13 +160,15 @@ def _wegwerf_projektwurzel(monkeypatch, tmp_path):
     Docstring desselben Tests). `TRANSKRIBOR_YTDLP_UPDATE` ist Vorkehrung (a) aus dem
     Docstring dieser Datei — dieselbe Familie ein drittes Mal.
     """
-    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path / "_wegwerf_projekte"))
-    monkeypatch.setenv("TRANSKRIBOR_SETTINGS", str(tmp_path / "_wegwerf_settings.json"))
-    monkeypatch.setenv("TRANSKRIBOR_YTDLP_UPDATE", "0")
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path / "_wegwerf_projekte"))
+        mp.setenv("TRANSKRIBOR_SETTINGS", str(tmp_path / "_wegwerf_settings.json"))
+        mp.setenv("TRANSKRIBOR_YTDLP_UPDATE", "0")
+        yield
 
 
 @pytest.fixture(autouse=True)
-def _kein_echtes_pip(monkeypatch):
+def _kein_echtes_pip():
     """Vorkehrung (b): ein Test, der pip starten wollte, wird ROT statt die venv zu aendern.
 
     Abgefangen wird **nur `subprocess.Popen`**, und das ist keine Sparsamkeit, sondern die
@@ -173,10 +201,12 @@ def _kein_echtes_pip(monkeypatch):
     den Faden ab — deshalb wird ein Treffer aus einem Nebenfaden aufgezeichnet und beim Abbau
     geprueft.
 
-    **Was die Wache NICHT leistet, gemessen statt behauptet:** ein Faden aus Test A, der
-    waehrend Test B feuert, macht **B** rot, nicht A; und ein Faden, der nach dem letzten Test
-    feuert, laeuft in das echte `Popen`. Die Zusage lautet also „rot, solange der eigene Test
-    lebt", nicht „nie". Dieselbe Grenze hatte die file-lokale `isoliert`-Fixture schon immer.
+    **Was die Wache NICHT leistet — hergeleitet aus der Lebensdauer der Fixture, nicht
+    gemessen:** ein Faden aus Test A, der waehrend Test B feuert, macht **B** rot, nicht A
+    (die Wache ist zu dem Zeitpunkt die von B); und ein Faden, der nach dem letzten Test
+    feuert, laeuft in das echte `Popen` (die Fixture ist abgebaut). Die Zusage lautet also
+    „rot, solange der eigene Test lebt", nicht „nie". Dieselbe Grenze hatte die file-lokale
+    `isoliert`-Fixture schon immer; einen Test dafuer gibt es nicht.
     Ebenfalls offen: `jobs._run_proc` faengt beim Start `except Exception` — `pytest.fail`
     kommt zwar durch, der Job bliebe aber `running`, und ein pollender Test haenge statt rot
     zu werden. Trifft nur ein pip-foermiges JOB-Kommando; heute gibt es keines.
@@ -190,7 +220,7 @@ def _kein_echtes_pip(monkeypatch):
         _child_created = False
 
         def __init__(self, args, *rest, **kwargs):
-            if _ist_pip_installation(args):
+            if _ist_pip_installation(_mit_executable(args, kwargs.get("executable"))):
                 if threading.current_thread() is not threading.main_thread():
                     # Im Hauptfaden traegt `pytest.fail` allein; aufgezeichnet wird nur, was
                     # sonst still bliebe — sonst meldete derselbe Treffer FAILED *und* ERROR.
@@ -200,6 +230,7 @@ def _kein_echtes_pip(monkeypatch):
                             "von webtool/conftest.py.")
             super().__init__(args, *rest, **kwargs)
 
-    monkeypatch.setattr(subprocess, "Popen", Wache)
-    yield
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(subprocess, "Popen", Wache)
+        yield
     assert not versuche, "pip-Aufruf aus einem Nebenfaden: " + " | ".join(versuche)

@@ -776,8 +776,11 @@ def test_jede_route_die_einen_job_startet_traegt_den_namensraum_riegel():
     def ist_start(name: str) -> bool:
         """Startet dieser punktierte Name einen Job? (`jobs.start` / `jobs.request`)
 
-        Verglichen werden die letzten ZWEI Glieder, damit auch ein Alias-Import
-        (`from webtool import jobs as j` -> `j.start`) trifft.
+        Verglichen werden die letzten ZWEI Glieder, damit die Tiefe des Imports
+        (`jobs.start` wie `webtool.jobs.start`) keine Rolle spielt. Ein Alias-Import
+        (`from webtool import jobs as j` -> `j.start`) wuerde NICHT erkannt — `app.py`
+        importiert `jobs` unter seinem Namen (`from . import jobs`, gemessen: Zeile 38), und
+        der Waechter unten haelt genau diese Annahme fest (CodeRabbit-Bot, PR #529).
         """
         return tuple(name.split(".")[-2:]) in START
 
