@@ -99,6 +99,11 @@ def _einzeilig(text) -> str:
 
 
 _letzte_diagnose: dict | None = None
+# Der Bereich, den `cmd_run` beim Start fixiert hat — `main` urteilt darueber, statt nach dem
+# Lauf ein zweites Mal zu scannen (#524): eine Roh-JSON, die ein paralleler
+# `transcribe_project` WAEHREND des Laufs schreibt, staende sonst im Nenner des Exitcodes,
+# obwohl der Lauf sie nie versucht hat. `None` heisst „kein Bereich fixiert" (fruehe Ausgaenge).
+_letzter_bereich: list | None = None
 _CREATE_NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 
 
@@ -1222,8 +1227,9 @@ def cmd_run(project: str, base: str = None, force: bool = False, verify: bool = 
     - Cloud-KI-Phasen laufen nach Abschluss der lokalen Phase sofort parallel (bis zu CLAUDE_PARALLEL Slots).
     - Abgeschlossene Dateien werden sofort finalisiert (cmd_apply) und stehen im Frontend bereit.
     """
-    global _letzte_diagnose
+    global _letzte_diagnose, _letzter_bereich
     _letzte_diagnose = None
+    _letzter_bereich = None
     tdir = paths.transkripte_dir(project)
     all_bases = bases(project)
     if base is not None:                               # expliziter Einzel-Datei-Lauf (Per-Datei-✎)
@@ -1234,6 +1240,9 @@ def cmd_run(project: str, base: str = None, force: bool = False, verify: bool = 
     if not all_bases:
         print("run: keine Roh-Transkripte — erst transkribieren", flush=True)
         return 0
+    # Ab hier ist der Bereich fixiert — dieselbe Menge, die `[scope]` gleich meldet. `main`
+    # liest sie fuer den Exitcode (#524), statt nach dem Lauf neu zu scannen.
+    _letzter_bereich = list(all_bases)
     # Wirkungsbereich melden, bevor die erste lange Arbeit (Diarisierung) beginnt — jobs.py
     # gibt danach alle uebrigen Aufnahmen zum Loeschen/Umbenennen frei (Issue #80).
     print("[scope] " + "\t".join(all_bases), flush=True)
@@ -1374,15 +1383,26 @@ def main(argv=None):
         # (Env greift server-weit — der Job-Subprozess erbt die uvicorn-Umgebung, kein Browser-Toggle).
         verify = (os.environ.get("TRANSKRIBOR_VERIFY", "1").strip().lower()
                   not in ("0", "false", "no")) and not args.no_verify
+        # Selbst zuruecksetzen, nicht nur in `cmd_run`: ersetzt ein Test `cmd_run` durch eine
+        # Attrappe, laeuft der Reset dort nie, und `main` urteilte ueber den Bereich des
+        # VORIGEN Laufs (kalter Plan-Reviewer, ausgefuehrt).
+        global _letzter_bereich
+        _letzter_bereich = None
         done = cmd_run(args.project, args.base, args.force, verify)
         # Exitcode fürs Job-Signal: Fehler nur, wenn Dateien VERSUCHT wurden aber KEINE gelang —
-        # sonst wäre der Job „done“ trotz Totalausfall (z.B. claude fehlt auf PATH). Scope = eine
-        # Datei (Per-Datei-Lauf) oder alle; „nichts zu tun“ (human_edited ohne --force / keine bzw.
-        # unbekannte Datei) ist kein Fehler.
+        # sonst wäre der Job „done“ trotz Totalausfall (z.B. claude fehlt auf PATH). „nichts zu
+        # tun“ (human_edited ohne --force / keine bzw. unbekannte Datei) ist kein Fehler.
+        #
+        # Der Nenner ist der Bereich, den `cmd_run` beim Start fixiert hat — NICHT ein zweiter
+        # Scan (#524): eine Roh-JSON, die ein paralleler `transcribe_project` waehrend des Laufs
+        # ablegt, zaehlte sonst als „versucht", obwohl der Lauf sie nie im Bereich hatte, und
+        # kippte einen sauberen Lauf (alle eigenen Dateien zu Recht uebersprungen) auf
+        # SystemExit(1) — mit einer Begruendung, die auf den KI-Anbieter zeigt. Eine mitten im
+        # Lauf GELOESCHTE Base zaehlt weiterhin nicht (Roh-JSON weg), wie vorher.
         tdir = paths.transkripte_dir(args.project)
-        present = bases(args.project)
-        scope = [args.base] if args.base else present
-        attempted = sum(1 for b in scope if b in present
+        scope = _letzter_bereich or []
+        attempted = sum(1 for b in scope
+                        if os.path.exists(os.path.join(tdir, b + ".json"))
                         and (args.force or not _is_human_edited(os.path.join(tdir, b + ".edit.json"))))
         if attempted and not done:
             # Anbieterneutral: beim API-Weg heisst der Anbieter vielleicht OpenAI, und wer nur

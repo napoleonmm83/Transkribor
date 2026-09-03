@@ -475,6 +475,37 @@ def test_run_cli_ok_when_all_human_edited(project, monkeypatch):
     correct.main(["run", "Demo"])                        # alles uebersprungen -> kein Fehlalarm
 
 
+@pytest.mark.parametrize("fremd", [True, False], ids=["FREMD=1", "FREMD=0"])
+def test_run_cli_ok_wenn_fremddatei_waehrend_des_laufs_entsteht(project, monkeypatch, fremd):
+    """`main` urteilt ueber den Bereich, den `cmd_run` fixiert hat — nicht ueber einen zweiten
+    Scan (#524).
+
+    Aufbau wie im Issue: S1 ist `human_edited` (wird zu Recht uebersprungen), und WAEHREND des
+    Laufs legt ein paralleler Transkriptionslauf eine fremde Roh-JSON `F.json` ab — hier am
+    EREIGNIS „Glossar-Aufruf" eingeschleust (dasselbe Muster wie `mit_nachschub` weiter
+    unten), nicht an einer Uhr. Vorher stand `F` im Nenner des Exitcodes („0 von 1 versuchten
+    Datei(en) korrigiert") und der Job wurde rot, mit einer Begruendung, die auf den
+    KI-Anbieter zeigte. FREMD=0 ist die Negativkontrolle: derselbe Lauf ohne Fremddatei war
+    schon immer gruen. Die Positivkontrolle des Fehlerpfads bleibt
+    `test_run_cli_exits_nonzero_when_nothing_corrected`.
+
+    Mutationsprobe: `main` zurueck auf `present = bases(...)` — der FREMD=1-Fall wird rot.
+    """
+    _root, t = project
+    (t / "S1.edit.json").write_text(json.dumps(
+        {"human_edited": True, "segments": [{"id": 0, "text": "Von Hand."}]}), encoding="utf-8")
+
+    def anbieter_tot_mit_nachschub(prompt, workdir):
+        if fremd and "_glossar.json" in prompt:          # das Fenster nach `[scope]`
+            _dump(str(t / "F.json"), {"language": "de", "segments": [
+                {"id": 0, "start": 0.0, "end": 1.0, "text": "Fremd."}]})
+        return None                                      # der Anbieter liefert nie etwas
+
+    monkeypatch.setattr(correct, "_run_claude", anbieter_tot_mit_nachschub)
+    correct.main(["run", "Demo"])                        # kein SystemExit: F war nie im Bereich
+    assert (t / "F.json").exists() == fremd              # der Nachschub kam wirklich an (bzw. nicht)
+
+
 def test_run_cli_ok_on_success(project, monkeypatch):
     _root, t = project
     monkeypatch.setattr(correct, "_run_claude", _fake_claude(t, []))
@@ -555,8 +586,10 @@ def test_cmd_run_fixiert_seinen_bereich_beim_start(project, monkeypatch, capsys,
     * **Es ist die SCHREIBmenge, nicht „der Lauf".** `_glossary` (`:816`) scannt selbst noch
       einmal — davon haengt ab, welche `.raw.txt` es liest und fuer welche Basen es
       `[active]` bucht; folgenlos fuer das, was geschrieben wird, aber es ist ein zweiter
-      Scan. Und `main` (`:1383`) scannt nach dem Lauf ein drittes Mal fuer den Exitcode
-      (#524) — dieser Test faehrt `cmd_run`, nicht `main`.
+      Scan. `main` scannte nach dem Lauf ein drittes Mal fuer den Exitcode — seit #524 nicht
+      mehr, es urteilt ueber `_letzter_bereich` (Test
+      `test_run_cli_ok_wenn_fremddatei_waehrend_des_laufs_entsteht`); dieser Test hier faehrt
+      `cmd_run`, nicht `main`.
 
     WO DIE MESSUNGEN LIEGEN — nachpruefbar, nicht als Zusicherung hier behauptet: die
     Zwei-Lauf-Messung (zwei echte Laeufe nebeneinander, Wegwerf-Projekt im Systemtemp,
