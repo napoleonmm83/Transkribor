@@ -42,6 +42,9 @@ Module._load = (req, ...rest) => {
   if (req === './setup') return welt.setup
   if (req === './protokoll') return welt.protokoll
   if (req === './updater') return welt.updater
+  // Das echte SDK stirbt unter node an `process.versions.electron` und greift auf
+  // `app.getAppPath`, `protocol`, `crashReporter`, `session` — die Attrappe zeichnet nur auf.
+  if (req === '@sentry/electron/main') return welt.sentry
   // `./fenster` bleibt ECHT: `farbeGueltig`/`fortschrittGueltig` sind die Waechter, deren
   // Anwendung hier geprueft wird — mit einer Attrappe pruefte der Test seine eigene Zusage.
   return echtesLaden(req, ...rest)
@@ -55,6 +58,11 @@ function attrappen(opt = {}) {
     protokollzeilen: [],
     gesendet: [],
     kanaele: new Map(),
+    // Jeder Lauf bekommt sein eigenes userData (#530): der Opt-in-Schalter liegt dort als
+    // Datei, und `os.tmpdir()` direkt liesse jeden Test den Zustand des vorigen erben.
+    // `opt.daten` teilt ein Verzeichnis absichtlich — fuer den „zweiten Start".
+    daten: opt.daten || (() => { const d = fs.mkdtempSync(path.join(os.tmpdir(), 'transkribor-main-')); temps.push(d); return d })(),
+    dialoge: [],
     // Die Navigationshoerer aus #434 (`will-navigate`/`will-redirect`). Ohne diese Attrappe
     // wirft `fenster()` — beim Bau des Fixes wurden davon 36 Tests rot, was nebenbei belegt,
     // dass die Verdrahtung hier wirklich erreicht wird.
@@ -113,7 +121,7 @@ function attrappen(opt = {}) {
     app: {
       isPackaged: !!opt.gepackt,
       commandLine: { appendSwitch: s => w.spur.push(`schalter:${s}`) },
-      getPath: () => os.tmpdir(),
+      getPath: () => w.daten,
       getVersion: () => '9.9.9',
       requestSingleInstanceLock: () => opt.sperre !== false,
       quit: () => { w.quits++ },
@@ -136,11 +144,23 @@ function attrappen(opt = {}) {
     },
     nativeTheme: { shouldUseDarkColors: !!opt.dunkel },
     net: { isOnline: () => w.online },
+    // Das Zustimmungsfenster (#530): `opt.antwort` 0 = Ja, sonst Nein (Vorgabe wie `cancelId`).
+    dialog: {
+      showMessageBox: async (_win, o) => { w.dialoge.push(o); return { response: opt.antwort ?? 1 } },
+    },
   }
   w.electronUpdater = { autoUpdater: {} }
+  // Ohne Spur-Eintrag: `init` laeuft VOR `appendSwitch`, und die Zusicherung „HTTP/2 ist das
+  // Erste in der Spur" (#150) soll davon unberuehrt bleiben. Ob init vor whenReady lief,
+  // sagt `sentryVorReady` — `w.starten` entsteht erst mit dem whenReady-Abonnement.
+  w.sentry = {
+    init: o => { w.sentryOptionen = o; w.sentryVorReady = !w.starten },
+    close: async () => { w.spur.push('sentry.close'); return true },
+  }
   w.backend = {
-    start: onLine => {
+    start: (onLine, extra) => {
       w.spur.push('backend.start')
+      w.startExtras = extra
       if (opt.logZeile) onLine(opt.logZeile)
       if (w.startFehler) return Promise.reject(w.startFehler)
       // Der Port entsteht IM Start (backend.js:78) — vorher liefert `url()` einen Platzhalter.
@@ -274,6 +294,9 @@ test('nur log und fehler landen im Protokoll — phase und status nicht', async 
   // erreichbar: `status` schickt 'status', `serverStarten` schickt 'phase', und die
   // Rueckmeldung von `backend.start` schickt 'log'.
   const w = await laden({ logZeile: 'uvicorn laeuft' })
+  // Die Nachfrage zu den Fehlerberichten (#530) schreibt ihre Antwort NACH dem Start — erst
+  // abwarten, sonst zaehlt die Liste unten mal eine, mal zwei Zeilen.
+  await kurzWarten()
   assert.ok(w.protokollzeilen.includes('uvicorn laeuft'))
   const kanaeleAnDenRenderer = w.gesendet.map(g => g.kanal)
   assert.ok(kanaeleAnDenRenderer.includes('phase') && kanaeleAnDenRenderer.includes('status'),
@@ -281,7 +304,8 @@ test('nur log und fehler landen im Protokoll — phase und status nicht', async 
   // ERSCHOEPFEND, nicht „enthaelt nicht": hier stand zuerst eine Suche nach dem Wortlaut der
   // Phase — und die blieb gruen, als die Mutation JEDEN Kanal mitschrieb, weil ein Objekt
   // als `[object Object]` landet und nach nichts aussieht, wonach man sucht.
-  assert.deepStrictEqual(w.protokollzeilen, ['uvicorn laeuft'],
+  assert.deepStrictEqual(w.protokollzeilen,
+    ['uvicorn laeuft', '— Fehlerberichte automatisch: aus (Nachfrage beim Start) —'],
     'Anzeigezustand (phase/status) gehoert nicht in die Datei')
 })
 
@@ -1056,4 +1080,71 @@ test('HTTP/2 wird abgeschaltet, BEVOR irgendetwas laeuft (#150)', async () => {
   const w = await laden()
   assert.strictEqual(w.spur[0], 'schalter:disable-http2',
     'nach dem ready-Event waere der Schalter wirkungslos')
+})
+
+// ── Opt-in Fehlerberichte (#530) ──────────────────────────────────────────────
+/** Erst NACH `laden()` anfordern: beim Auswerten der Datei ist `welt` noch null, und dann
+ *  zoege `./fehlerberichte` ueber `./protokoll` und `./paths` das ECHTE electron — unter
+ *  node nur ein Pfad, `app.getPath` wirft. Der Cache haelt danach die attrappierte Fassung. */
+const fb = () => require('./fehlerberichte')
+/** Die Nachfrage haengt an einem nicht abgewarteten Versprechen hinter `serverStarten` —
+ *  ein Makrotask reicht, damit Dialog und Datei durch sind. */
+const kurzWarten = () => new Promise(r => setImmediate(r))
+
+test('das SDK wird VOR whenReady initialisiert und ist ohne DSN aus', async () => {
+  const w = await laden()
+  assert.ok(w.sentryOptionen, 'init wurde nicht gerufen')
+  assert.strictEqual(w.sentryVorReady, true, 'init muss vor dem whenReady-Abonnement laufen')
+  assert.strictEqual(w.sentryOptionen.enabled, false, 'die package.json des Repos traegt keinen DSN')
+  assert.strictEqual(w.sentryOptionen.release, 'transkribor@9.9.9')
+  assert.strictEqual(w.sentryOptionen.environment, 'dev')
+  assert.strictEqual(w.sentryOptionen.sendDefaultPii, false)
+})
+
+test('beim ersten Start fragt das Fenster genau einmal — Ja schaltet an, und die Antwort steht in der Datei', async () => {
+  const w = await laden({ antwort: 0 })
+  await kurzWarten()
+  assert.strictEqual(w.dialoge.length, 1, 'genau eine Nachfrage')
+  assert.strictEqual(w.dialoge[0].buttons[0], fb().FENSTER.ja)
+  assert.strictEqual(w.dialoge[0].cancelId, 1, 'Schliessen heisst Nein')
+  const z = fb().lesen(fb().pfad(w.daten))
+  assert.strictEqual(z.automatisch, true)
+  assert.ok(z.gefragt, 'gefragt ist gesetzt')
+  assert.ok(w.protokollzeilen.some(l => l.includes('Fehlerberichte automatisch: an')))
+})
+
+test('Nein bleibt aus — und ein zweiter Start mit derselben Ablage fragt nicht mehr', async () => {
+  const w1 = await laden({ antwort: 1 })
+  await kurzWarten()
+  assert.strictEqual(w1.dialoge.length, 1)
+  assert.strictEqual(fb().lesen(fb().pfad(w1.daten)).automatisch, false)
+  const w2 = await laden({ daten: w1.daten, antwort: 0 })
+  await kurzWarten()
+  assert.strictEqual(w2.dialoge.length, 0, 'einmal gefragt ist gefragt')
+  assert.strictEqual(fb().lesen(fb().pfad(w2.daten)).automatisch, false, 'die Antwort bleibt')
+})
+
+test('fehlerberichte:status und :setzen — nur ein echtes true schaltet an', async () => {
+  const w = await laden({ antwort: 1 })
+  await kurzWarten()
+  assert.strictEqual((await w.ruf('fehlerberichte:status')).automatisch, false)
+  assert.strictEqual((await w.ruf('fehlerberichte:setzen', true)).automatisch, true)
+  assert.strictEqual((await w.ruf('fehlerberichte:status')).automatisch, true)
+  assert.strictEqual((await w.ruf('fehlerberichte:setzen', 'ja')).automatisch, false, 'ein String ist kein Ja')
+  assert.strictEqual((await w.ruf('fehlerberichte:setzen', 1)).automatisch, false, 'eine Zahl auch nicht')
+  assert.ok(w.protokollzeilen.some(l => l.includes('Fehlerberichte automatisch: an')))
+})
+
+test('der Server bekommt DSN, Fassung und den Pfad der Schalterdatei mit', async () => {
+  const w = await laden()
+  assert.deepStrictEqual(w.startExtras, {
+    bugsinkDsn: '', version: '9.9.9', fehlerberichte: path.join(w.daten, fb().DATEI),
+  })
+})
+
+test('before-quit schliesst das SDK, nachdem der Server steht', async () => {
+  const w = await laden()
+  w.appEreignisse.get('before-quit')()
+  assert.ok(w.spur.includes('sentry.close'))
+  assert.ok(w.spur.indexOf('backend.stop') < w.spur.indexOf('sentry.close'))
 })

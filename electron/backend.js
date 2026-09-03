@@ -33,7 +33,7 @@ function freierPort() {
  * `exe` ist das Electron-Binary (`process.execPath`, gepackt also Transkribor.exe bzw.
  * Transkribor.app/Contents/MacOS/Transkribor).
  */
-function serverEnv(exe = process.execPath) {
+function serverEnv(exe = process.execPath, extra = {}) {
   return {
     // spawnEnv statt process.env: auf macOS steht Homebrew sonst nicht im PATH des
     // Servers — und jeder Job erbt diese Umgebung (jobs.py startet mit {**os.environ}).
@@ -82,6 +82,13 @@ function serverEnv(exe = process.execPath) {
     // es in der Umgebung des Servers, und `jobs.py` reicht die an jeden Subprozess weiter —
     // gebraucht wird es nur von dem einen node-Aufruf, den yt-dlp startet.
     TRANSKRIBOR_JS_RUNTIME: exe,
+    // Opt-in Fehlerberichte (#530): der Python-Teil bekommt DSN, Fassung (er kennt sie sonst
+    // nicht) und den Pfad der Schalterdatei — und liest den Schalter je Ereignis selbst (PR b).
+    // Nur gesetzt, wenn der Hauptprozess sie mitgibt: ein leerer Schluessel waere im Browser-
+    // Betrieb eine Variable ohne Sinn.
+    ...(extra.bugsinkDsn ? { TRANSKRIBOR_BUGSINK_DSN: extra.bugsinkDsn } : {}),
+    ...(extra.version ? { TRANSKRIBOR_VERSION: extra.version } : {}),
+    ...(extra.fehlerberichte ? { TRANSKRIBOR_FEHLERBERICHTE: extra.fehlerberichte } : {}),
   }
 }
 
@@ -95,7 +102,7 @@ function erreichbar(p) {
 }
 
 /** Startet den Server und loest erst auf, wenn er antwortet. */
-async function start(onLine) {
+async function start(onLine, extra = {}) {
   port = await freierPort()
   const merke = z => { log.push(z); if (log.length > 200) log.shift(); onLine && onLine(z) }
   proc = spawn(P.venvPython(P.venv),
@@ -103,7 +110,7 @@ async function start(onLine) {
     {
       cwd: P.pyRoot,
       windowsHide: true,
-      env: serverEnv(),
+      env: serverEnv(process.execPath, extra),
     })
   proc.stdout.on('data', b => String(b).split(/\r?\n/).filter(Boolean).forEach(merke))
   proc.stderr.on('data', b => String(b).split(/\r?\n/).filter(Boolean).forEach(merke))

@@ -441,6 +441,6 @@ function mailto({ empfaenger, betreff, kopf: kopfzeilen, zeilen, logpfad, maxUrl
 // `MAX_ZEILE` wird exportiert, damit der Test die Invariante gegen DIE Konstante pruefen kann
 // statt gegen eine abgeschriebene 600 — sonst waere er nach der ersten Wertaenderung stumm.
 module.exports = {
-  letzteZeilen, kopf, mailto, MAX_URL, MAX_ZEILE, ZEILEN, AUSSORTIEREN,
+  letzteZeilen, kopf, mailto, kappen, MAX_URL, MAX_ZEILE, ZEILEN, AUSSORTIEREN,
   ABWEISUNG, ABWEISUNGEN_IM_BERICHT,
 }

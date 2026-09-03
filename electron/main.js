@@ -6,7 +6,7 @@
  * Das Fenster kommt ZUERST, nicht der Server: die Einrichtung dauert beim ersten Mal Minuten,
  * und ein Nutzer, der so lange auf nichts schaut, haelt die App fuer kaputt.
  */
-const { app, BrowserWindow, ipcMain, shell, nativeTheme, net } = require('electron')
+const { app, BrowserWindow, ipcMain, shell, nativeTheme, net, dialog } = require('electron')
 const path = require('path')
 const fs = require('fs')
 // Nur fuer den Vergleich in `navigationPruefen`: die Statusseite laedt `loadFile` mit einem
@@ -18,6 +18,8 @@ const setup = require('./setup')
 const protokoll = require('./protokoll')
 const bericht = require('./bericht')
 const updater = require('./updater')
+const fehlerberichte = require('./fehlerberichte')
+const P = require('./paths')
 const {
   fensterOptionen, TITELLEISTE_HOEHE, farbeGueltig, fortschrittGueltig, externesZiel,
   abweisungsGrund, eigeneHerkunft,
@@ -25,6 +27,37 @@ const {
 
 /** Die EINE Quelle fuer die Statusseite — `loadFile` und der Navigationswaechter (#434). */
 const SETUP_HTML = path.join(__dirname, 'setup.html')
+
+/**
+ * Die package.json der App — gepackt liegt sie im asar, und electron-builder legt dort per
+ * `-c.extraMetadata.bugsinkDsn=…` (release.yml) den DSN hinein. Ein DSN ist ein
+ * Client-Schluessel, kein Geheimnis: er steckt in jeder ausgelieferten App. Im Repo steht er
+ * nicht (oeffentlich, und GitGuardian kennt die Form); ohne ihn ist das SDK aus.
+ */
+const paket = require('../package.json')
+
+/** Der Opt-in-Schalter lebt in `userData` (#530). Zur LAUFZEIT aufgeloest, nicht beim Laden,
+ *  damit die Tests je Lauf ein frisches Verzeichnis geben koennen. */
+function schalterPfad() { return fehlerberichte.pfad(app.getPath('userData')) }
+
+// Opt-in Fehlerberichte (#530): das SDK VOR allem anderen — es haengt sich an
+// `uncaughtException` und `unhandledRejection`, was davor wirft, sieht es nicht. Ohne DSN
+// (Entwicklerlauf, Testbau ohne Secret) ist es `enabled: false`; und mit DSN verlaesst kein
+// Byte die Maschine, solange der Schalter AUS ist — das entscheidet `fehlerberichte.beforeSend`
+// je Ereignis, nicht ein Zweig hier.
+const Sentry = require('@sentry/electron/main')
+Sentry.init(fehlerberichte.optionen({
+  dsn: paket.bugsinkDsn,
+  version: app.getVersion(),
+  gepackt: app.isPackaged,
+  ctx: {
+    home: fehlerberichte._home(),
+    daten: P.daten,
+    projekte: P.projekte,
+    schalterPfad,
+    protokollPfad: () => protokoll.pfad(),
+  },
+}))
 
 // Vor app.whenReady: HTTP/2 abschalten. autoUpdater.checkForUpdates() nutzt Electrons
 // net = HTTP/2, und GitHub/Fastly verweigert dessen Stream sporadisch/persistent mit
@@ -476,11 +509,46 @@ function fenster() {
   win.on('closed', () => { win = null })
 }
 
+/** Was der Python-Server ueber Fehlerberichte wissen muss (PR b liest es): DSN, Fassung, Schalterdatei. */
+function serverExtras() {
+  return { bugsinkDsn: paket.bugsinkDsn || '', version: app.getVersion(), fehlerberichte: schalterPfad() }
+}
+
+/**
+ * Einmal fragen (#530, D1) — erst wenn der Server steht, nie waehrend der Einrichtung, und
+ * nur wenn es ein Fenster gibt. Beide Antworten schreiben `gefragt`; danach entscheidet der
+ * Haken unter „Version". Kommt der Server nie hoch, wird nie gefragt: Vorgabe AUS.
+ */
+async function zustimmungFragen() {
+  const pfad = schalterPfad()
+  if (fehlerberichte.lesen(pfad).gefragt || !win) return
+  const F = fehlerberichte.FENSTER
+  const { response } = await dialog.showMessageBox(win, {
+    type: 'question', buttons: [F.ja, F.nein], defaultId: 1, cancelId: 1, noLink: true,
+    title: F.titel, message: F.frage, detail: F.details,
+  })
+  const an = response === 0
+  fehlerberichte.schreiben(pfad, { automatisch: an, gefragt: new Date().toISOString() })
+  protokoll.schreiben(`— Fehlerberichte automatisch: ${an ? 'an' : 'aus'} (Nachfrage beim Start) —`)
+}
+
+/** `TRANSKRIBOR_FEHLERPROBE=1`: einmal absichtlich werfen, um den Berichtsweg im GEPACKTEN Lauf
+ *  zu messen — der einzige Weg dorthin ohne Testcode in der Oberflaeche. */
+function fehlerprobe() {
+  if (!fehlerberichte.fehlerprobeGewuenscht(process.env)) return
+  setImmediate(() => { throw new Error(fehlerberichte.FEHLERPROBE) })
+}
+
 function serverStarten() {
   if (startLaeuft) return startLaeuft
   senden('phase', { schritt: 'Server starten' })
-  startLaeuft = backend.start(z => senden('log', z)).then(
-    () => { bereit = true; if (win) win.loadURL(backend.url()) },
+  startLaeuft = backend.start(z => senden('log', z), serverExtras()).then(
+    () => {
+      bereit = true
+      if (win) win.loadURL(backend.url())
+      zustimmungFragen().catch(e => protokoll.schreiben(`FEHLER: Nachfrage Fehlerberichte: ${e.message || e}`))
+      fehlerprobe()
+    },
     e => { startLaeuft = null; senden('fehler', String(e.message || e)) },   // Retry erlauben
   )
   return startLaeuft
@@ -504,6 +572,20 @@ ipcMain.handle('protokollOeffnen', () => {
   protokoll.schreiben('— Protokoll vom Nutzer geoeffnet —')
   shell.showItemInFolder(protokoll.pfad())
   return protokoll.pfad()
+})
+
+// Der Opt-in-Schalter (#530): lesen und setzen. Das Argument ist ein Boolean und sonst nichts —
+// alles andere heisst AUS; der Hauptprozess entscheidet, wo die Datei liegt.
+ipcMain.handle('fehlerberichte:status', () => fehlerberichte.lesen(schalterPfad()))
+ipcMain.handle('fehlerberichte:setzen', (_e, an) => {
+  const pfad = schalterPfad()
+  const vorher = fehlerberichte.lesen(pfad)
+  const jetzt = fehlerberichte.schreiben(pfad, {
+    automatisch: an === true,
+    gefragt: vorher.gefragt || new Date().toISOString(),
+  })
+  protokoll.schreiben(`— Fehlerberichte automatisch: ${jetzt.automatisch ? 'an' : 'aus'} —`)
+  return jetzt
 })
 
 /**
@@ -530,7 +612,6 @@ ipcMain.handle('fehlerbericht', async () => {
   // Erst lesen, dann die Marke: sonst stuende sie als juengste Zeile im eigenen Bericht und
   // verdraengte dort eine echte.
   protokoll.schreiben('— Fehlerbericht vom Nutzer erstellt —')
-  const paket = require('../package.json')
   const { url, verwendet, gekuerzt } = bericht.mailto({
     empfaenger: paket.author && paket.author.email,
     betreff: `Fehlerbericht Transkribor ${app.getVersion()}`,
@@ -714,7 +795,6 @@ async function starten() {
   // nicht wiederfindet, gibt es bewusst nicht mehr.
   try {
     const { autoUpdater } = require('electron-updater')
-    const paket = require('../package.json')
     // app-update.yml ist die EINZIGE Publish-Quelle, die das Packen ueberlebt: electron-builder
     // loescht `build` aus der package.json, die es in die App legt (app-builder-lib/out/
     // fileTransformer.js, `ignoredPackageMetadataProperties`). Ohne sie stand auf macOS in
@@ -786,7 +866,9 @@ async function starten() {
 }
 
 app.on('window-all-closed', () => { backend.stop(); app.quit() })
-app.on('before-quit', () => backend.stop())
+// `Sentry.close` raeumt den Transport auf; was jetzt nicht mehr rausgeht, liegt in der
+// Offline-Warteschlange auf Platte und geht beim naechsten Start.
+app.on('before-quit', () => { backend.stop(); Sentry.close(2000).catch(() => {}) })
 // Der Server ueberlebt einen harten Abbruch sonst als Waise mit belegter GPU.
 process.on('exit', () => backend.stop())
 

@@ -91,7 +91,9 @@ Auch mit **Schweizerdeutsch** kommt es zurecht.
 
 **Deine Aufnahmen bleiben bei dir.** Das Zuhören und Mitschreiben passiert vollständig auf
 deinem Rechner — ohne Konto, ohne Cloud, ohne Upload der Aufnahme. Nur wenn du die Korrektur
-über einen Onlinedienst laufen lässt, verlässt der *Text* deinen Rechner.
+über einen Onlinedienst laufen lässt, verlässt der *Text* deinen Rechner. Und Fehlerberichte
+gehen nur, wenn du es ausdrücklich einschaltest, an einen Server, den wir selbst betreiben —
+nie mit Aufnahmen oder Transkripten darin (siehe „Etwas geht schief“ weiter unten).
 
 <details>
 <summary>Und die Textkorrektur?</summary>
@@ -601,11 +603,30 @@ speicherst, wandert sie als `<Name>.edit.json.kaputt` zur Seite und bleibt im Or
 <details>
 <summary><strong>Etwas geht schief — wie melde ich das?</strong></summary>
 
-*(Ab `v0.49.0`; in `v0.48.1` und davor führt der Weg nur über die Protokolldatei,
-siehe unten.)*
+<a id="fehlerberichte"></a>
+
+*(Der Mail-Bericht ab `v0.49.0`; das automatische Melden ab der nächsten Fassung nach
+`v0.51.0` — in `v0.51.0` und davor gibt es den Haken noch nicht.)*
 
 Unter **Version** (in der Fusszeile auf die Versionsnummer `v…` klicken) steht der
-Abschnitt „Etwas geht schief?“ mit zwei Knöpfen.
+Abschnitt „Etwas geht schief?“ mit zwei Knöpfen und einem Haken.
+
+**„Fehler automatisch an uns senden“** — der Haken. Beim ersten Start nach dem Update fragt
+Transkribor dich einmal, ob Fehler von selbst gemeldet werden dürfen; die Antwort stellst du
+hier jederzeit um. Vorgabe ist **aus**. Ist er an, geht ein Bericht ohne dein Zutun an einen
+Server, den wir selbst betreiben, sobald im Programm etwas Unerwartetes schiefgeht — kein
+Mailprogramm, kein Klick.
+
+Was so ein Bericht trägt: die Fehlermeldung mit der Stelle im Programm, die Fassung von
+Transkribor, dein Betriebssystem und die letzten aussagekräftigen Zeilen aus dem Protokoll
+(dieselbe Auswahl wie in der Mail unten). Was er **nicht** trägt: deine Aufnahmen, deine
+Transkripte, deine Einstellungen, deine Schlüssel, deinen Benutzernamen und die Namen deiner
+Projekte und Aufnahmen — Pfade und Namen werden vor dem Senden durch Platzhalter wie `<home>`,
+`<projekt>` und `<datei>.m4a` ersetzt, Schlüssel unkenntlich gemacht. Eine Grenze, ehrlich
+gesagt: Fehlermeldungen fremder Bausteine können Text enthalten, den keine Liste kennt — die
+Platzhalter greifen für Namen und Pfade, nicht für beliebigen Text. Wer das nicht möchte, lässt
+den Haken aus; dann verlässt kein Byte den Rechner, und der Mail-Bericht unten steht weiter
+bereit. Die Berichte werden nach 90 Tagen gelöscht.
 
 **„Fehlerbericht schreiben“** öffnet eine vorbereitete E-Mail in deinem Mailprogramm: mit der
 Fassung, deinem Betriebssystem und den letzten **aussagekräftigen** Zeilen aus dem Protokoll.
@@ -636,8 +657,10 @@ Hast du gar kein Mailprogramm eingerichtet, sagt dir Transkribor das. Die Protok
 in dem Fall trotzdem angezeigt — schick sie dann von Hand an die Adresse aus dem Fenster.
 
 **Du siehst alles, bevor du sendest** — die Mail geht nicht von selbst raus, und du kannst
-jede Zeile löschen, die du nicht mitschicken willst. Das ist die eigentliche Zusage hier: nicht
-ein Filter, dem du vertrauen musst, sondern die Vorschau.
+jede Zeile löschen, die du nicht mitschicken willst. Das ist die Zusage des Mail-Berichts:
+nicht ein Filter, dem du vertrauen musst, sondern die Vorschau. Für den automatischen Bericht
+gilt sie nicht — dort ersetzen die Platzhalter oben die Vorschau, und der Haken ist deine
+Zustimmung.
 
 Was in diesen Zeilen stehen kann: **Pfade auf deinem Rechner, und die enthalten deinen
 Benutzernamen** (`C:\Users\…`). Sie stehen bewusst drin — ohne sie ist kaum ein Fehler
@@ -646,7 +669,8 @@ das Hochladen einer Datei scheitert; genau diese Zeilen sind der Grund, warum du
 und Meldungen aus dem Korrekturlauf, in denen auch Teile eines Transkripts vorkommen können. Schlüssel in den gängigen Formaten
 (`sk-…`, `AIza…`, `gsk_…`, `hf_…`) werden unkenntlich gemacht. Der vollständige Suchpfad
 (`PATH`) bleibt draussen — er ist über tausend Zeichen lang und würde den Platz auffressen,
-den die eigentlichen Meldungen brauchen.
+den die eigentlichen Meldungen brauchen. Im automatischen Bericht sind Pfade und Namen an
+genau diesen Stellen durch Platzhalter ersetzt.
 
 **„Protokoll anzeigen“** zeigt dir die Protokolldatei im Dateimanager. Sie ist länger als das,
 was in die Mail passt — häng sie an, wenn du magst. Ist sie sehr gross geworden, liegen die
@@ -762,6 +786,17 @@ Die Desktop-App ist der empfohlene Weg; alles darin läuft aber auch direkt aus 
 Frontend mit Hot-Reload: `npm --prefix webtool/frontend run dev` (Vite auf :5173, `/api` wird
 zum FastAPI-Backend auf :8000 durchgereicht). Installer selbst bauen:
 `npm install && npm run dist` → `dist\` (Windows `.exe`, macOS `.dmg`, Linux `AppImage`/`.deb`).
+
+**Automatische Fehlerberichte (Bugsink, #530):** Die App meldet an ein selbst gehostetes
+[Bugsink](https://www.bugsink.com/) (Sentry-kompatibel, `@sentry/electron` im Hauptprozess).
+Der DSN kommt beim Release aus dem GitHub-Secret `BUGSINK_DSN` per
+`electron-builder -c.extraMetadata.bugsinkDsn=…` in die gepackte `package.json`; ohne DSN ist
+das SDK aus. Lokal messen: `python docs/bugsink/envelope-sammler.py` (legt jedes Envelope als
+Datei ab), dann `npm run dist -- -c.extraMetadata.bugsinkDsn=http://k@127.0.0.1:8123/1` und
+den gepackten Lauf mit `TRANSKRIBOR_FEHLERPROBE=1` starten — er wirft einmal absichtlich. Der
+Python-Server bekommt `TRANSKRIBOR_BUGSINK_DSN`, `TRANSKRIBOR_VERSION` und
+`TRANSKRIBOR_FEHLERBERICHTE` (Pfad der Schalterdatei `fehlerberichte.json` in `userData`).
+Die Compose für den Server liegt in `docs/bugsink/compose.yaml` (Coolify, Postgres 17).
 
 **Ohne Oberfläche, direkt auf der Kommandozeile:**
 

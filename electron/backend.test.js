@@ -37,6 +37,19 @@ test('die uebrigen Pfade des Servers bleiben gesetzt', () => {
   }
 })
 
+test('Fehlerberichte (#530): DSN, Fassung und Schalterdatei reisen nur mit, wenn der Hauptprozess sie gibt', () => {
+  const ohne = serverEnv('exe')
+  for (const k of ['TRANSKRIBOR_BUGSINK_DSN', 'TRANSKRIBOR_VERSION', 'TRANSKRIBOR_FEHLERBERICHTE']) {
+    assert.strictEqual(ohne[k], undefined, `${k} darf ohne Angabe nicht gesetzt sein`)
+  }
+  const mit = serverEnv('exe', { bugsinkDsn: 'http://k@127.0.0.1:8123/1', version: '0.52.0', fehlerberichte: '/daten/fehlerberichte.json' })
+  assert.strictEqual(mit.TRANSKRIBOR_BUGSINK_DSN, 'http://k@127.0.0.1:8123/1')
+  assert.strictEqual(mit.TRANSKRIBOR_VERSION, '0.52.0')
+  assert.strictEqual(mit.TRANSKRIBOR_FEHLERBERICHTE, '/daten/fehlerberichte.json')
+  // Ein leerer DSN (Bau ohne Secret) setzt die Variable NICHT — leer waere ein Wert.
+  assert.strictEqual(serverEnv('exe', { bugsinkDsn: '', version: '1' }).TRANSKRIBOR_BUGSINK_DSN, undefined)
+})
+
 test('der Server schreibt keinen Bytecode neben die Anwendung (#505)', () => {
   // Gemessen am gebauten Paket, nicht hergeleitet: eine frisch nach /Applications
   // installierte .app hatte nach EINEM Start 21 .pyc in Contents/Resources/py und

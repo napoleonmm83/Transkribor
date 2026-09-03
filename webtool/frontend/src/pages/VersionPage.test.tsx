@@ -11,11 +11,15 @@ vi.mock('@/hooks/useUpdate', () => ({
   useUpdate: vi.fn(() => ({ zustand: null, pruefen: vi.fn(), laden: vi.fn(), installieren: vi.fn(), protokollOeffnen: vi.fn(), fehlerbericht: vi.fn(() => Promise.resolve(BERICHT)) })),
 }))
 vi.mock('@/lib/releases', () => ({ holeReleases: vi.fn() }))
+// Der Opt-in-Schalter (#530): ohne Bruecke liefert der Hook `null`, und so bleibt es fuer die
+// bestehenden Tests — nur der eigene Block unten setzt ihn.
+vi.mock('@/hooks/useFehlerberichte', () => ({ useFehlerberichte: vi.fn(() => null) }))
 // Ohne die Attrappe ist `toast.error` in jsdom kein Beobachtungspunkt — dieselbe Falle wie
 // bei `toast.info` in #174.
 vi.mock('sonner', () => ({ toast: { error: vi.fn(), success: vi.fn(), info: vi.fn(), warning: vi.fn() } }))
 
 import { useUpdate } from '@/hooks/useUpdate'
+import { useFehlerberichte } from '@/hooks/useFehlerberichte'
 import { holeReleases } from '@/lib/releases'
 
 /** Rueckgabe des Fehlerbericht-Kanals — die Attrappe muss die VOLLE Form liefern, sonst
@@ -301,5 +305,43 @@ describe('VersionPage — Versionsverlauf', () => {
     expect(signal.aborted).toBe(false)
     unmount()
     expect(signal.aborted).toBe(true)
+  })
+})
+
+describe('VersionPage — automatische Fehlerberichte (#530)', () => {
+  beforeEach(() => vi.clearAllMocks())
+  afterEach(cleanup)
+  const STAND: UpdateZustand = { version: '0.2.1', art: 'aktuell' }
+  const HAKEN = /Fehler automatisch an uns senden/
+
+  it('ohne Schalter in der App-Huelle gibt es keinen Haken', () => {
+    vi.mocked(useFehlerberichte).mockReturnValue(null)
+    zeigeMit(STAND)
+    expect(screen.queryByLabelText(HAKEN)).toBeNull()
+  })
+
+  it('mit Schalter: der Haken zeigt den Zustand, ein Klick ruft setzen mit dem NEUEN Wert', () => {
+    const setzen = vi.fn(() => Promise.resolve({ automatisch: true, gefragt: 'x' }))
+    vi.mocked(useFehlerberichte).mockReturnValue({ zustand: { automatisch: false, gefragt: 'x' }, setzen })
+    zeigeMit(STAND)
+    const haken = screen.getByLabelText(HAKEN) as HTMLInputElement
+    expect(haken.checked).toBe(false)
+    expect(haken.disabled).toBe(false)
+    fireEvent.click(haken)
+    expect(setzen).toHaveBeenCalledWith(true)
+  })
+
+  it('bis der Hauptprozess geantwortet hat, ist der Haken gesperrt', () => {
+    vi.mocked(useFehlerberichte).mockReturnValue({ zustand: null, setzen: vi.fn() })
+    zeigeMit(STAND)
+    expect((screen.getByLabelText(HAKEN) as HTMLInputElement).disabled).toBe(true)
+  })
+
+  it('ein Fehlschlag beim Speichern wird gemeldet statt geschluckt', async () => {
+    const setzen = vi.fn(() => Promise.reject(new Error('Platte voll')))
+    vi.mocked(useFehlerberichte).mockReturnValue({ zustand: { automatisch: false, gefragt: 'x' }, setzen })
+    zeigeMit(STAND)
+    fireEvent.click(screen.getByLabelText(HAKEN))
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/nicht speichern/)))
   })
 })

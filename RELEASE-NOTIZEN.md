@@ -28,6 +28,9 @@ hat. Lesbar, aber unschön — das ist Absicht.
 
 ## Unveröffentlicht
 
+**Neu**
+- Fehler können auf Wunsch automatisch an uns gehen, ganz ohne Mailprogramm: beim ersten Start fragt Transkribor einmal, danach entscheidet ein Haken unter „Version" — Namen von Projekten, Aufnahmen und Benutzer werden vorher unkenntlich gemacht.
+
 **Behoben**
 - Das App-Symbol hat auf dem Mac jetzt die richtige Grösse — im Dock und im Programme-Ordner stand es bisher rund ein Viertel grösser da als seine Nachbarn.
 - Die Symbole für Roh-Wörter und Notiz stehen im Transkript kräftiger da — auf Tablets waren sie kaum zu erkennen, weil es dort kein Darüberfahren mit der Maus gibt.
