@@ -198,6 +198,41 @@ def test_run_full_flow(project, monkeypatch):
     assert "verifiziert (Fake)" in (t / "S1.md").read_text(encoding="utf-8")         # -> ## Anmerkungen
 
 
+def test_run_laesst_eine_ausgetauschte_aufnahme_liegen(project, monkeypatch):
+    """#523: der Bereich ist ein Bereich von NAMEN, und ein Name ist wiederverwendbar.
+
+    Loeschen ist waehrend des Laufs erlaubt (#80), Hochladen legt gleichnamig neu an — und
+    bis hierher fragte `one()` nur, OB eine Roh-JSON da ist. Der Lauf korrigierte damit eine
+    ANDERE Aufnahme als die, die er in seinen Bereich genommen hat, mit dem Glossar eines
+    Bestands, zu dem sie nie gehoert hat. Ueber die Oberflaeche erreichbar, ohne Umbau.
+
+    Der Austausch passiert beim Glossar-Aufruf: der laeuft NACH dem Fixieren des Bereichs
+    und VOR `one()` — genau das Fenster, um das es geht. Der Zeitpunkt haengt damit an einem
+    EREIGNIS im Ablauf, nicht an einer Uhr.
+
+    Positivkontrolle ist `test_run_full_flow` daneben: dieselbe Anlage ohne Austausch
+    korrigiert die Datei normal (1 statt 0). Ohne sie belegte dieser Test nur, dass
+    irgendetwas nicht korrigiert wurde."""
+    _root, t = project
+    calls = []
+    echt = _fake_claude(t, calls)
+
+    def fake(prompt, workdir):
+        if "_glossar.json" in prompt:
+            # Loeschen + gleichnamig neu anlegen — andere Bytes, andere Identitaet.
+            roh = t / "S1.json"
+            alt = json.loads(roh.read_text(encoding="utf-8"))
+            roh.unlink()
+            alt["segments"] = [dict(s, text="voellig andere Aufnahme") for s in alt["segments"]]
+            _dump(str(roh), alt)
+        return echt(prompt, workdir)
+
+    monkeypatch.setattr(correct, "_run_claude", fake)
+    assert correct.cmd_run("Demo") == 0, "die ausgetauschte Aufnahme wird nicht korrigiert"
+    assert not (t / "S1.correction.json").exists()
+    assert not (t / "S1.edit.json").exists(), "und es wird auch nichts angewendet"
+
+
 def test_run_no_verify_skips_verify(project, monkeypatch):
     _root, t = project
     calls = []

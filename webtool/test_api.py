@@ -265,9 +265,9 @@ def test_invalid_project_name_400(client):
 
 def test_transcribe_starts_job(client, monkeypatch):
     calls = {}
-    def fake_start(project, cmd, cwd, kind, then=None):
+    def fake_start(project, cmd, cwd, kind, then=None, env=None):
         calls["project"] = project; calls["kind"] = kind; calls["cmd"] = cmd
-        calls["then"] = then
+        calls["then"] = then; calls["env"] = env
         return "job123", True
     import webtool.jobs as jobs_mod
     monkeypatch.setattr(jobs_mod, "start", fake_start)
@@ -285,7 +285,7 @@ def test_transcribe_invalid_name_400(client):
 
 def test_correct_starts_job(client, monkeypatch, mit_anbieter):
     calls = {}
-    def fake_start(project, cmd, cwd, kind, then=None):
+    def fake_start(project, cmd, cwd, kind, then=None, env=None):
         calls["project"] = project; calls["kind"] = kind; calls["cmd"] = cmd
         return "corr123", True
     import webtool.jobs as jobs_mod
@@ -395,7 +395,12 @@ def test_correct_409_wenn_transkription_mitkorrigiert(client, monkeypatch, mit_a
     monkeypatch.setenv("TRANSKRIBOR_AUTOCORRECT", "1")
     jid = "t441p"
     jobs_mod._active[("Demo", "transcribe")] = jid
-    jobs_mod._jobs[jid] = {"id": jid, "kind": "transcribe", "status": "running"}
+    # `mitkorrektur` ist seit #496 Teil des Job-Satzes und die Frage, die der Riegel stellt —
+    # `jobs.start` setzt es aus Kommando und Umgebung. Hier steht der Satz von Hand, also
+    # gehoert das Feld hin; ohne es prueft der Test den Riegel gegen einen Zustand, den die
+    # Produktion nie erzeugt. Die Gegenrichtung (`False`) hat einen eigenen Test.
+    jobs_mod._jobs[jid] = {"id": jid, "kind": "transcribe", "status": "running",
+                           "mitkorrektur": True}
     gestartet = []
     monkeypatch.setattr(jobs_mod, "request",
                         lambda *a, **k: gestartet.append(a) or ("x", True))
@@ -426,6 +431,108 @@ def test_correct_startet_trotz_laufender_transkription_ohne_autocorrect(
     try:
         r = client.post("/api/projects/Demo/correct")
         assert r.status_code == 200 and gestartet, "Parallelweg bleibt frei"
+    finally:
+        jobs_mod._active.pop(("Demo", "transcribe"), None)
+        jobs_mod._jobs.pop(jid, None)
+
+
+@pytest.mark.parametrize("pfad,kwargs", [
+    ("/api/projects/Demo/transcribe", {}),
+    ("/api/projects/Demo/audio",
+     {"files": {"file": ("N1.mp3", b"ID3fakeaudio", "audio/mpeg")}}),
+])
+def test_transcribe_entwaffnet_die_mitkorrektur_waehrend_eines_correct_laufs(
+        client, monkeypatch, pfad, kwargs):
+    """#496, die Gegenrichtung zu #441: laeuft im Projekt ein Korrekturlauf, darf die
+    frisch gestartete Transkription NICHT selbst mitkorrigieren — sonst schreiben zwei
+    Prozesse dieselbe Datei, und mitten im Schreiben gibt es keine correction.json, an
+    der ein Skip greifen koennte.
+
+    Geprueft wird die UMGEBUNG, nicht das Kommando: `--autocorrect` bleibt bewusst dran,
+    damit der Lauf den GRUND druckt statt stumm nichts zu tun (Begruendung im Docstring
+    von `_start_transcribe`).
+
+    Zwei Tueren statt aller vier, mit Absicht: alle gehen durch `_start_transcribe`, und
+    dass keine daran vorbeikommt, haelt der Strukturwaechter
+    `test_jede_route_die_einen_job_startet_traegt_den_namensraum_riegel` fest. Hier steht
+    der billigste Weg (Projekt-Endpunkt) neben dem haeufigsten (Upload)."""
+    import webtool.jobs as jobs_mod
+    jid = "c496"
+    jobs_mod._active[("Demo", "correct")] = jid
+    jobs_mod._jobs[jid] = {"id": jid, "kind": "correct", "status": "running"}
+    gesehen = {}
+    monkeypatch.setattr(jobs_mod, "request",
+                        lambda *a, **k: gesehen.update(k) or ("x", True))
+    try:
+        r = client.post(pfad, **kwargs)
+        assert r.status_code == 200
+        assert gesehen.get("env", {}).get(jobs_mod.AUTOCORRECT_AUS), \
+            "der Lauf muss den Grund mitbekommen, warum er nicht mitkorrigiert"
+    finally:
+        jobs_mod._active.pop(("Demo", "correct"), None)
+        jobs_mod._jobs.pop(jid, None)
+
+
+def test_transcribe_korrigiert_normal_mit_wenn_kein_correct_lauf_laeuft(client, monkeypatch):
+    """Die Negativkontrolle zum Test darueber — ohne sie belegt er nichts.
+
+    Ein Riegel, der IMMER entwaffnet, waere derselbe Schaden von der anderen Seite: die
+    Autokorrektur nach dem Hochladen ist der Standardweg dieses Programms, und sie fiele
+    still aus."""
+    import webtool.jobs as jobs_mod
+    gesehen = {}
+    monkeypatch.setattr(jobs_mod, "request",
+                        lambda *a, **k: gesehen.update(k) or ("x", True))
+    r = client.post("/api/projects/Demo/transcribe")
+    assert r.status_code == 200
+    assert gesehen.get("env") is None, "ohne Korrekturlauf bleibt die Mitkorrektur scharf"
+
+
+def test_correct_409_auch_wenn_die_transkription_erst_VORGEMERKT_ist(
+        client, monkeypatch, mit_anbieter):
+    """#496, die andere Haelfte — und die, die man nicht sieht.
+
+    Ein vorgemerkter Nachlauf traegt sein Kommando EINGEFROREN: er wurde gebaut, als noch
+    kein Korrekturlauf lief, und startet spaeter unveraendert. Ohne ihn in dieser Antwort
+    koennte ein Korrekturlauf genau in dieses Fenster hineinstarten und traefe den Nachlauf
+    bewaffnet an — die Entwaffnung oben ginge ins Leere.
+
+    Erreichbar ist das Fenster ueber die Einzel-GPU-Sperre: `jobs.start` gibt fuer
+    GPU_KINDS den laufenden Whisper-Lauf eines FREMDEN Projekts als Blocker zurueck, dann
+    hat Demo eine Vormerkung, ohne dass in Demo ein transcribe-Job laeuft."""
+    import webtool.jobs as jobs_mod
+    monkeypatch.setenv("TRANSKRIBOR_AUTOCORRECT", "1")
+    schluessel = ("Demo", "transcribe", None)
+    jobs_mod._pending[schluessel] = True          # vorgemerkt UND bewaffnet
+    gestartet = []
+    monkeypatch.setattr(jobs_mod, "request",
+                        lambda *a, **k: gestartet.append(a) or ("x", True))
+    try:
+        r = client.post("/api/projects/Demo/correct")
+        assert r.status_code == 409, "die Vormerkung sperrt wie ein laufender Job"
+        assert gestartet == []
+    finally:
+        jobs_mod._pending.pop(schluessel, None)
+
+
+def test_correct_laeuft_neben_einer_ENTWAFFNETEN_transkription(client, monkeypatch, mit_anbieter):
+    """Die zweite Praezisierung aus #496, und ihre Negativkontrolle.
+
+    Ein transcribe-Job, dessen Mitkorrektur `_start_transcribe` gerade abgeschaltet hat,
+    schreibt keine Korrektur — es gibt nichts zu schuetzen, und ihn trotzdem zu sperren
+    waere Ueberblockieren. Vorher fragte der Riegel nur die Job-ART und sperrte auch hier."""
+    import webtool.jobs as jobs_mod
+    monkeypatch.setenv("TRANSKRIBOR_AUTOCORRECT", "1")
+    jid = "t496e"
+    jobs_mod._active[("Demo", "transcribe")] = jid
+    jobs_mod._jobs[jid] = {"id": jid, "kind": "transcribe", "status": "running",
+                           "mitkorrektur": False}
+    gestartet = []
+    monkeypatch.setattr(jobs_mod, "request",
+                        lambda *a, **k: gestartet.append(a) or ("x", True))
+    try:
+        r = client.post("/api/projects/Demo/correct")
+        assert r.status_code == 200 and gestartet, "entwaffnet heisst: kein Konflikt"
     finally:
         jobs_mod._active.pop(("Demo", "transcribe"), None)
         jobs_mod._jobs.pop(jid, None)
@@ -503,7 +610,7 @@ def test_upload_ok_and_duplicate_409(client, tmp_path):
 def test_upload_startet_transkription(client, monkeypatch):
     """Hochladen IST der Trigger — ohne den muesste der Nutzer zusaetzlich auf 'Transkribieren'."""
     calls = {}
-    def fake_start(project, cmd, cwd, kind, then=None):
+    def fake_start(project, cmd, cwd, kind, then=None, env=None):
         calls["kind"] = kind; calls["cmd"] = cmd; calls["then"] = then
         return "upl1", True
     import webtool.jobs as jobs_mod
@@ -2187,9 +2294,9 @@ def test_neu_transkribieren_raeumt_transkripte_weg_und_startet_den_lauf(client, 
     aufrufe = []
     import webtool.jobs as jobs_mod
     orig_request = jobs_mod.request
-    def mock_request(project, cmd, cwd, kind, then=None, base=None):
+    def mock_request(project, cmd, cwd, kind, then=None, base=None, env=None):
         aufrufe.append((project, cmd, kind, base))
-        return orig_request(project, cmd, cwd, kind, then=then, base=base)
+        return orig_request(project, cmd, cwd, kind, then=then, base=base, env=env)
     monkeypatch.setattr(jobs_mod, "request", mock_request)
     r = client.post("/api/projects/Demo/files/S1/transcribe")
     assert r.status_code == 200 and r.json()["started"] is True
