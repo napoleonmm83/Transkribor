@@ -1,6 +1,7 @@
 import json
 import errno
 import os
+import re
 import threading
 import time
 import pytest
@@ -1073,11 +1074,14 @@ def test_jede_route_die_einen_job_startet_traegt_den_namensraum_riegel():
 # Die Probenreihe des Waechters — je EINE synthetische Route hinter dem echten `app.py`
 # (Namen wie dort: `app`, `jobs`, `paths`, `run_in_threadpool`, `_sicherer_projektname`,
 # `_start_transcribe`). ROT heisst: der Waechter muss anschlagen; GRUEN: er muss schweigen.
-# Die 17 aus PR #525 (CR-5…CR-8, M-A/E/F/G, BOT-1..3, K-1..3) liefen dort als Skript
-# ausserhalb des Repos und sind hier aus den Beschreibungen rekonstruiert; CR-9/CR-9' sind
-# die Loecher aus #526, G-1..G-3 der benannte PREIS ihres Fixes (siehe `lokale`).
+# Die 17 aus PR #525 (CR-5…CR-8, M-A/E/F/G, BOT-1..3, K-1..3) liefen dort ueber ein
+# Sitzungsskript, das nie ins Repo kam — hier sind sie aus den Beschreibungen des PR-Texts
+# rekonstruiert (Name, erwartete Farbe, Mechanismus), nicht aus dem Skript. CR-9/CR-9' sind
+# die Loecher aus #526, G-1..G-3 der benannte PREIS ihres Fixes (siehe `lokale`), P-1/P-4 die
+# Nachlese des gegnerischen Pruefers. Je Probe steht die erwartete ZUSICHERUNG mit (None =
+# gruen), damit eine Probe nicht aus dem falschen Grund rot ist.
 _PROBEN = {
-    "CR-5 fruehe Referenz + spaeter Aufruf": (True, '''
+    "CR-5 fruehe Referenz + spaeter Aufruf": ('der Riegel kommt zu spaet', '''
 @app.post("/api/probe/{project}")
 def probe(project: str):
     guard = _sicherer_projektname
@@ -1085,34 +1089,34 @@ def probe(project: str):
     _sicherer_projektname(project)
     return {"job_id": job_id, "g": guard}
 '''),
-    "CR-5' nur die Referenz, gar kein Aufruf": (True, '''
+    "CR-5' nur die Referenz, gar kein Aufruf": ('ruft aber keinen _sicherer_projektname', '''
 @app.post("/api/probe/{project}")
 def probe(project: str):
     guard = _sicherer_projektname
     return {"r": _start_transcribe(project), "g": guard}
 '''),
-    "CR-5'' Aufruf VOR dem Start, Referenz daneben": (False, '''
+    "CR-5'' Aufruf VOR dem Start, Referenz daneben": (None, '''
 @app.post("/api/probe/{project}")
 def probe(project: str):
     _sicherer_projektname(project)
     guard = _sicherer_projektname
     return {"r": _start_transcribe(project), "g": guard}
 '''),
-    "CR-6 lokale ATTRAPPE (Zuweisung) als Riegel": (True, '''
+    "CR-6 lokale ATTRAPPE (Zuweisung) als Riegel": ('ruft aber keinen _sicherer_projektname', '''
 @app.post("/api/probe/{project}")
 def probe(project: str):
     _sicherer_projektname = lambda p: p
     _sicherer_projektname(project)
     return _start_transcribe(project)
 '''),
-    "CR-6' lokaler Alias auf die ECHTE Funktion (der Preis)": (True, '''
+    "CR-6' lokaler Alias auf die ECHTE Funktion (der Preis)": ('ruft aber keinen _sicherer_projektname', '''
 @app.post("/api/probe/{project}")
 def probe(project: str):
     _sicherer_projektname = paths.sicherer_projektname
     _sicherer_projektname(project)
     return _start_transcribe(project)
 '''),
-    "CR-7 lokale def-ATTRAPPE als Riegel": (True, '''
+    "CR-7 lokale def-ATTRAPPE als Riegel": ('ruft aber keinen _sicherer_projektname', '''
 @app.post("/api/probe/{project}")
 def probe(project: str):
     def _sicherer_projektname(p):
@@ -1120,7 +1124,7 @@ def probe(project: str):
     _sicherer_projektname(project)
     return _start_transcribe(project)
 '''),
-    "CR-8 lokale class-ATTRAPPE als Riegel": (True, '''
+    "CR-8 lokale class-ATTRAPPE als Riegel": ('ruft aber keinen _sicherer_projektname', '''
 @app.post("/api/probe/{project}")
 def probe(project: str):
     class _sicherer_projektname:
@@ -1129,59 +1133,59 @@ def probe(project: str):
     _sicherer_projektname(project)
     return _start_transcribe(project)
 '''),
-    "M-A async def ohne Riegel": (True, '''
+    "M-A async def ohne Riegel": ('ruft aber keinen _sicherer_projektname', '''
 @app.post("/api/probe/{project}")
 async def probe(project: str):
     return _start_transcribe(project)
 '''),
-    "M-E Riegel NACH dem Start": (True, '''
+    "M-E Riegel NACH dem Start": ('der Riegel kommt zu spaet', '''
 @app.post("/api/probe/{project}")
 def probe(project: str):
     r = _start_transcribe(project)
     _sicherer_projektname(project)
     return r
 '''),
-    "M-F Riegel auf dem falschen Argument": (True, '''
+    "M-F Riegel auf dem falschen Argument": ('aber nicht auf `project`', '''
 @app.post("/api/probe/{project}/{base}")
 def probe(project: str, base: str):
     _sicherer_projektname(base)
     return _start_transcribe(project, base)
 '''),
-    "M-G Startroute ganz ohne Riegel": (True, '''
+    "M-G Startroute ganz ohne Riegel": ('ruft aber keinen _sicherer_projektname', '''
 @app.post("/api/probe/{project}")
 def probe(project: str):
     return _start_transcribe(project)
 '''),
-    "BOT-1 @app.router.post ohne Riegel": (True, '''
+    "BOT-1 @app.router.post ohne Riegel": ('ruft aber keinen _sicherer_projektname', '''
 @app.router.post("/api/probe/{project}")
 def probe(project: str):
     return _start_transcribe(project)
 '''),
-    "BOT-2 run_in_threadpool(jobs.start) ohne Riegel": (True, '''
+    "BOT-2 run_in_threadpool(jobs.start) ohne Riegel": ('ruft aber keinen _sicherer_projektname', '''
 @app.post("/api/probe/{project}")
 async def probe(project: str):
     return await run_in_threadpool(jobs.start, project, "transcribe", [])
 '''),
-    "BOT-3 Start in einer Lambda, Riegel NUR darin": (True, '''
+    "BOT-3 Start in einer Lambda, Riegel NUR darin": ('ruft aber keinen _sicherer_projektname', '''
 @app.post("/api/probe/{project}")
 def probe(project: str):
     f = lambda: (_sicherer_projektname(project), _start_transcribe(project))
     return f()
 '''),
-    "K-1 async def MIT Riegel (Kontrolle)": (False, '''
+    "K-1 async def MIT Riegel (Kontrolle)": (None, '''
 @app.post("/api/probe/{project}")
 async def probe(project: str):
     _sicherer_projektname(project)
     return _start_transcribe(project)
 '''),
-    "K-2 Start in einer Lambda, Riegel im Rumpf (Kontrolle)": (False, '''
+    "K-2 Start in einer Lambda, Riegel im Rumpf (Kontrolle)": (None, '''
 @app.post("/api/probe/{project}")
 def probe(project: str):
     _sicherer_projektname(project)
     f = lambda: _start_transcribe(project)
     return f()
 '''),
-    "K-3 innere def daneben, Riegel gesetzt (Kontrolle F3)": (False, '''
+    "K-3 innere def daneben, Riegel gesetzt (Kontrolle F3)": (None, '''
 @app.post("/api/probe/{project}")
 def probe(project: str):
     _sicherer_projektname(project)
@@ -1192,7 +1196,7 @@ def probe(project: str):
     # #526: eine Bindung in einem INNEREN Bereich galt als Bindung der Route — die Route
     # war damit kein Starter mehr, der Waechter schwieg (falsches GRUEN ueber einer offenen
     # Tuer). CR-9' ist die Gegenprobe, dass das VOR der def/class-Erweiterung schon so war.
-    "CR-9 verschachteltes def _start_transcribe, kein Riegel": (True, '''
+    "CR-9 verschachteltes def _start_transcribe, kein Riegel": ('ruft aber keinen _sicherer_projektname', '''
 @app.post("/api/probe/{project}")
 def probe(project: str):
     def helfer():
@@ -1201,7 +1205,7 @@ def probe(project: str):
         return helfer
     return _start_transcribe(project)
 '''),
-    "CR-9' innere Zuweisung _start_transcribe = ..., kein Riegel": (True, '''
+    "CR-9' innere Zuweisung _start_transcribe = ..., kein Riegel": ('ruft aber keinen _sicherer_projektname', '''
 @app.post("/api/probe/{project}")
 def probe(project: str):
     def helfer():
@@ -1217,14 +1221,14 @@ def probe(project: str):
     # nicht (der Grundlauf ist gruen); kommt sie, ist die Antwort, den inneren Namen
     # umzubenennen — ein falsches Rot ist laut, ein falsches Gruen still (dieselbe Richtung
     # wie CR-6'). Kalter Plan-Reviewer, ausgefuehrt: alt=gruen, neu=rot.
-    "G-1 Leseroute mit innerem def f(correct) (Preis)": (True, '''
+    "G-1 Leseroute mit innerem def f(correct) (Preis)": ('ruft aber keinen _sicherer_projektname', '''
 @app.get("/api/probe/{project}")
 def probe(project: str):
     def f(correct):
         return correct
     return {"x": f(1)}
 '''),
-    "G-2 Leseroute mit innerer Zuweisung transcribe = 1 (Preis)": (True, '''
+    "G-2 Leseroute mit innerer Zuweisung transcribe = 1 (Preis)": ('ruft aber keinen _sicherer_projektname', '''
 @app.get("/api/probe/{project}")
 def probe(project: str):
     def helfer():
@@ -1232,7 +1236,7 @@ def probe(project: str):
         return transcribe
     return {"x": helfer()}
 '''),
-    "G-3 Leseroute mit f = lambda correct: correct (Preis)": (True, '''
+    "G-3 Leseroute mit f = lambda correct: correct (Preis)": ('ruft aber keinen _sicherer_projektname', '''
 @app.get("/api/probe/{project}")
 def probe(project: str):
     f = lambda correct: correct
@@ -1243,7 +1247,7 @@ def probe(project: str):
     # einen Namen, der ihm lokal nicht gebunden ist, und der Waechter zaehlte den Aufruf als
     # echten Riegel. Alt (ast.walk) rot, flach ohne Gegenmassnahme gruen; jetzt faengt es der
     # Datei-Waechter ueber `ast.Global`.
-    "P-1 inneres def mit global _sicherer_projektname = Attrappe": (True, '''
+    "P-1 inneres def mit global _sicherer_projektname = Attrappe": ('global _sicherer_projektname', '''
 @app.post("/api/probe/{project}")
 def probe(project: str):
     def attrappe():
@@ -1256,7 +1260,7 @@ def probe(project: str):
     # ... und die Kontrolle dazu: eine unbenutzte Attrappe ZWEI Ebenen tief bindet den Namen
     # nur dort; der echte Aufruf im Rumpf trifft die Modulfunktion. Alt war das ein
     # FALSCHES Rot (ast.walk sah die innere Bindung), jetzt zu Recht gruen.
-    "P-4 unbenutzte innere Attrappe zwei Ebenen tief, echter Aufruf im Rumpf (Kontrolle)": (False, '''
+    "P-4 unbenutzte innere Attrappe zwei Ebenen tief, echter Aufruf im Rumpf (Kontrolle)": (None, '''
 @app.post("/api/probe/{project}")
 def probe(project: str):
     def helfer():
@@ -1279,10 +1283,15 @@ def test_waechter_proben(probe):
     Mutationsprobe: `knoten(fn, tief=False)` in `lokale` zurueck auf `ast.walk(fn)` — CR-9,
     CR-9' und G-1..G-3 werden gruen, also dieser Test rot.
     """
-    rot, quelle = _PROBEN[probe]
+    erwartung, quelle = _PROBEN[probe]
     text = _app_quelltext() + "\n\n# --- synthetische Probe ---\n" + quelle
-    if rot:
-        with pytest.raises(AssertionError):
+    if erwartung:
+        # `match=` bindet den roten Zweig an die Zusicherung, die die Probe MEINT (fehlender
+        # Riegel / Riegel zu spaet / falsches Argument / `global`): ein nacktes
+        # `pytest.raises(AssertionError)` liesse jeden fremden Ausloeser durch — etwa die
+        # Datei-Pruefung statt des Routen-Riegels (CodeRabbit-Bot an PR #538). Ein
+        # Syntaxfehler im Probentext waere ohnehin kein AssertionError.
+        with pytest.raises(AssertionError, match=re.escape(erwartung)):
             _starter_riegel_pruefen(text)
     else:
         _starter_riegel_pruefen(text)
