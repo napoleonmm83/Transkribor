@@ -410,7 +410,7 @@ jobs:
 
           # Der Plattform-Hinweis steht in EINER Zeile hinter einem Trenner — er gilt jeder
           # Fassung gleich und soll die Notiz nicht zudecken (Marcus: „keine lange Textwand").
-          plattform='**macOS:** ad-hoc signiert — beim ersten Start Rechtsklick > *Öffnen* (macOS 15+: *Systemeinstellungen > Datenschutz & Sicherheit > Dennoch öffnen*). **Windows:** unsigniert — SmartScreen: *Weitere Informationen* > *Trotzdem ausführen*. Erster Start richtet die Python-Seite ein (mehrere GB, 10–30 Minuten).'
+          plattform='**macOS:** braucht macOS 13 oder neuer; ad-hoc signiert — beim ersten Start Rechtsklick > *Öffnen* (macOS 15+: *Systemeinstellungen > Datenschutz & Sicherheit > Dennoch öffnen*). **Windows:** unsigniert — SmartScreen: *Weitere Informationen* > *Trotzdem ausführen*. Erster Start richtet die Python-Seite ein (mehrere GB, 10–30 Minuten).'
           if [ -n "$kopf" ]; then
             rumpf="$(printf '%s\n\n%s\n\n---\n%s\n' "$kopf" "$notiz" "$plattform")"
           else

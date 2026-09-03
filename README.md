@@ -263,7 +263,7 @@ unterwegs ist.
 | Dein Rechner | Was du vorbereiten musst | Eine Stunde Audio dauert dann |
 |---|---|---|
 | **Windows/Linux** mit NVIDIA-Grafikkarte | nichts | wenige Minuten |
-| **Mac** mit Apple Silicon (M1+) | [Homebrew](https://brew.sh), falls noch nicht da | gut zehn Minuten |
+| **Mac** mit Apple Silicon (M1+), ab v0.53.0 mit macOS 13 oder neuer | [Homebrew](https://brew.sh), falls noch nicht da | gut zehn Minuten |
 | ohne Grafikbeschleunigung | nichts — kleinere Qualitätsstufe wählen | deutlich länger |
 
 Für die Korrektur und die Sprechernamen braucht es zusätzlich ein Sprachmodell: entweder ein
