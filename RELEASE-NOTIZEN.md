@@ -31,6 +31,9 @@ hat. Lesbar, aber unschön — das ist Absicht.
 **Neu**
 - Auf dem Mac braucht Transkribor ab dieser Fassung macOS 13 oder neuer — mit macOS 12 bleibt v0.52.0 die letzte nutzbare Fassung, auch wenn die App eine neuere meldet; Windows und Linux sind nicht betroffen.
 
+**Behoben**
+- Ein Korrekturlauf meldet nicht mehr fälschlich „fehlgeschlagen", wenn nebenbei eine Transkription eine neue Aufnahme ablegt — vorher zählte die fremde Datei als versucht und die Meldung schob es dem KI-Anbieter zu.
+
 ## v0.52.0 — 2026-09-03
 
 **Neu**
