@@ -144,7 +144,7 @@ function attrappen(opt = {}) {
     },
     nativeTheme: { shouldUseDarkColors: !!opt.dunkel },
     net: { isOnline: () => w.online },
-    // Die Attrappe bleibt, obwohl der Hauptprozess seit v0.53.0 KEIN natives Fenster mehr oeffnet
+    // Die Attrappe bleibt, obwohl der Hauptprozess KEIN natives Fenster mehr oeffnet
     // (#530): sie ist jetzt der Sensor dafuer. Ohne sie waere „es erscheint kein Systemkasten"
     // eine Behauptung — mit ihr faellt ein wieder eingebautes `showMessageBox` sofort auf.
     dialog: { showMessageBox: async (_win, o) => { w.dialoge.push(o); return { response: 1 } } },
@@ -1139,7 +1139,32 @@ test('die Erstantwort aus der Oberflaeche setzt gefragt — danach fragt sie nic
   assert.strictEqual(w2.dialoge.length, 0)
   const z2 = fb().lesen(fb().pfad(w2.daten))
   assert.strictEqual(z2.automatisch, false, 'die Antwort bleibt')
-  assert.strictEqual(z2.gefragt, z1.gefragt, 'und der Zeitpunkt der Nachfrage wird nicht neu gesetzt')
+  assert.strictEqual(z2.gefragt, z1.gefragt, 'ein zweiter START setzt den Zeitpunkt nicht neu')
+
+  // Und das ist der Fall, den das Etikett oben eigentlich meint: ein SPAETERER Klick auf den
+  // Haken darf `gefragt` nicht neu setzen. Ohne diese Zeile haette das `||` in
+  // `gefragt: vorher.gefragt || new Date()...` in KEINEM Test eine Zusicherung — der Vergleich
+  // darueber misst nur, dass der Start nichts schreibt (gegnerisches Review, Befund 3).
+  await w2.ruf('fehlerberichte:setzen', true)
+  assert.strictEqual(fb().lesen(fb().pfad(w2.daten)).gefragt, z1.gefragt,
+    'ein spaeterer Klick auf den Haken behaelt den Zeitpunkt der ersten Antwort')
+})
+
+test('ein fehlgeschlagener Schreibvorgang steht im Protokoll — sonst hinterlaesst er keine Spur', async () => {
+  // Der alte Weg protokollierte den Fehlschlag am `catch` von `zustimmungFragen`. Faellt die
+  // Zeile weg, sieht der Nutzer nur einen Toast, und der Fehlerbericht — der aus genau diesem
+  // Protokoll gebaut wird — enthaelt zu „es fragt mich bei jedem Start" nichts.
+  // Eine DATEI als Datenverzeichnis laesst `mkdirSync` in `schreiben()` werfen.
+  const alsDatei = path.join(os.tmpdir(), `fb-datei-${Date.now()}`)
+  fs.writeFileSync(alsDatei, 'keine Ablage, eine Datei')
+  const w = await laden({ daten: alsDatei })
+  await kurzWarten()
+  // `async` um den Aufruf: `w.ruf` ruft den Handler direkt, der Wurf ist synchron — ohne die
+  // Huelle sieht `assert.rejects` keine Ablehnung, sondern bekommt die Ausnahme roh.
+  await assert.rejects(async () => w.ruf('fehlerberichte:setzen', true), /EEXIST|ENOTDIR|EPERM/,
+    'der Fehlschlag wird durchgereicht statt geschluckt')
+  assert.ok(w.protokollzeilen.some(l => l.startsWith('FEHLER: Fehlerberichte-Schalter:')),
+    'und er steht als FEHLER-Zeile in der Datei')
 })
 
 test('fehlerberichte:status und :setzen — nur ein echtes true schaltet an', async () => {

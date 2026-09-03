@@ -264,12 +264,10 @@ function optionen({ dsn, version, gepackt, ctx, ipcMode }) {
   }
 }
 
-/**
- * Der Text der Nachfrage stand bis v0.52.0 hier (`FENSTER`), weil ein natives
- * `dialog.showMessageBox` ihn brauchte. Seit die Nachfrage im Design der App erscheint, lebt er
- * dort, wo er gezeigt wird: `webtool/frontend/src/components/FehlerberichteFrage.tsx`. Diese
- * Datei entscheidet weiterhin, WAS mitgeht — der Text sagt es nur.
- */
+// Der Text der Nachfrage stand bis v0.52.0 hier (`FENSTER`), weil ein natives
+// `dialog.showMessageBox` ihn brauchte. Seit die Nachfrage im Design der App erscheint, lebt er
+// dort, wo er gezeigt wird: `webtool/frontend/src/components/FehlerberichteFrage.tsx`. Diese
+// Datei entscheidet weiterhin, WAS mitgeht — der Text sagt es nur.
 
 /** Text der absichtlichen Ausnahme (`TRANSKRIBOR_FEHLERPROBE=1`) — daran erkennt man sie in Bugsink. */
 const FEHLERPROBE = 'Fehlerprobe: absichtlich geworfen (TRANSKRIBOR_FEHLERPROBE=1)'

@@ -41,6 +41,15 @@ describe('FehlerberichteFrage', () => {
     expect(screen.getByText(FRAGE)).toBeTruthy()
   })
 
+  it('der Fokus liegt beim Öffnen auf Nein — Enter darf nicht ins Opt-in durchwinken', async () => {
+    // Das ist `defaultId: 1` des alten Systemfensters. Radix legt den Fokus in `onOpenAutoFocus`
+    // auf `AlertDialogCancel`; die Zusicherung schützt gegen genau eine Änderung — Knopfreihenfolge
+    // tauschen oder den Cancel durch einen gewöhnlichen Button ersetzen. Dann läge der Fokus auf
+    // „Ja", und Enter wäre ein Durchwinken (gegnerisches Review, Befund 2).
+    await zeigen(NIE_GEFRAGT)
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Nein' }))
+  })
+
   it('fragt nicht mehr, sobald eine Antwort in der Datei steht', async () => {
     await zeigen(SCHON_GEFRAGT)
     expect(screen.queryByText(FRAGE)).toBeNull()
@@ -110,6 +119,12 @@ describe('FehlerberichteFrage', () => {
     // gruen (gemessen in der Mutationsprobe: `setBeantwortet(true)` entfernt, Test blieb gruen).
     // Mit haengender Antwort steht der Dialog wie im Ernstfall waehrend des ipc-Rundlaufs, und
     // ein Escape darin schriebe ohne Riegel ein Nein ueber das eben gegebene Ja.
+    // **Wofuer jsdom hier blind ist:** im echten Browser bleibt der Inhalt nach `open=false` noch
+    // 200 ms fuer die Schliessanimation gemountet (Radix Presence), samt DismissableLayer — dass
+    // daraus kein zweites `setzen(false)` wird, haelt dort zusaetzlich die Dedupe in
+    // `useControllableState` (`value !== prop`). jsdom kennt keine Animation und haengt sofort
+    // aus. Im Browser gemessen (Ja klicken, sofort Escape, 300 ms Latenz-Attrappe): genau
+    // `[true]` (gegnerisches Review, Befund 6).
     const api = await zeigen(NIE_GEFRAGT)
     api.fehlerberichte.setzen.mockReturnValueOnce(new Promise(() => {}))
     await act(async () => { screen.getByRole('button', { name: 'Ja, automatisch senden' }).click() })

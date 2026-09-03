@@ -541,7 +541,7 @@ function serverStarten() {
       bereit = true
       if (win) win.loadURL(backend.url())
       backend.projektePfad().then(p => { if (p) projekteWurzel = p }).catch(() => { /* P.projekte bleibt */ })
-      // Die Nachfrage stellt seit v0.53.0 die Oberflaeche (`FehlerberichteFrage.tsx`) — sie sieht
+      // Die Nachfrage stellt jetzt die Oberflaeche (`FehlerberichteFrage.tsx`) — sie sieht
       // an `gefragt: null` selbst, dass noch nie gefragt wurde, und antwortet ueber
       // `fehlerberichte:setzen`. Hier bleibt nur die Ordnung, die daran hing: die Probe erst NACH
       // der Antwort, denn vorher steht der Schalter auf AUS (Vorgabe) und ein
@@ -580,10 +580,21 @@ ipcMain.handle('fehlerberichte:status', () => fehlerberichte.lesen(schalterPfad(
 ipcMain.handle('fehlerberichte:setzen', (_e, an) => {
   const pfad = schalterPfad()
   const vorher = fehlerberichte.lesen(pfad)
-  const jetzt = fehlerberichte.schreiben(pfad, {
-    automatisch: an === true,
-    gefragt: vorher.gefragt || new Date().toISOString(),
-  })
+  let jetzt
+  try {
+    jetzt = fehlerberichte.schreiben(pfad, {
+      automatisch: an === true,
+      gefragt: vorher.gefragt || new Date().toISOString(),
+    })
+  } catch (e) {
+    // Der alte Weg hatte diese Zeile (`FEHLER: Nachfrage Fehlerberichte: …` am `catch` von
+    // `zustimmungFragen`); mit dem Umzug in die Oberflaeche waere sie ersatzlos entfallen. Der
+    // Nutzer sieht dann zwar einen Toast, aber im PROTOKOLL stuende nichts — und genau das
+    // Protokoll ist die Quelle des Fehlerberichts. „Es fragt mich bei jedem Start" haette dann
+    // keine einzige Zeile hinterlassen (gegnerisches Review, Befund 4).
+    protokoll.schreiben(`FEHLER: Fehlerberichte-Schalter: ${e.message || e}`)
+    throw e
+  }
   protokoll.schreiben(`— Fehlerberichte automatisch: ${jetzt.automatisch ? 'an' : 'aus'} —`)
   // War `gefragt` leer, ist dies die erste Antwort ueberhaupt — und erst jetzt darf die
   // Fehlerprobe werfen (siehe `serverStarten`): vorher stand der Schalter auf AUS.
