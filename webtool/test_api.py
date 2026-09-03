@@ -734,25 +734,17 @@ def test_kein_lauf_startet_fuer_ein_projekt_das_eine_marke_nachahmt(client, tmp_
         assert "reserviert" not in r.text, (muster, r.text)
 
 
-def test_jede_route_die_einen_job_startet_traegt_den_namensraum_riegel():
-    """Der Riegel liegt in den AUFRUFERN von `jobs.start`/`jobs.request`, nicht in
-    `jobs.start` selbst. Heute ist keiner vergessen — aber nichts hielt fest, dass ein
-    SIEBTER Start-Endpunkt ihn auch traegt, und gefangen haette ihn niemand: der Test
-    darueber zaehlt vier Pfade von Hand auf, und `.coderabbit.yaml` kennt die Regel nicht
-    (gemessen: `grep -i reserv .coderabbit.yaml` ist leer).
-
-    Gelesen wird der QUELLTEXT von `app.py` per `ast` — welche Funktionen erreichen
-    `jobs.start`/`jobs.request`, transitiv (`_start_transcribe` ist ein privater Helfer
-    ohne eigenen Riegel; seine drei Aufrufer tragen ihn) — und jede ROUTE in diesem
-    Abschluss muss `_sicherer_projektname` rufen.
-
-    Ein Backstop IN `jobs.start` waere die staerkere Fassung und ist verworfen: der
-    `messstand`-Skill koennte dann genau die Messung nicht mehr fahren, aus der #478
-    stammt, und der Fall kaeme als 500 statt als 400 heraus.
+def _starter_riegel_pruefen(quelltext: str) -> None:
+    """Der Startrouten-Waechter als Funktion ueber dem QUELLTEXT — wirft `AssertionError`
+    wie ein Test. Zwei Aufrufer: `test_jede_route_die_einen_job_startet_traegt_den_
+    namensraum_riegel` (ueber das echte `app.py`) und `test_waechter_proben` (ueber
+    `app.py` plus je EINE synthetische Route, #526). Vorher lag alles im Test selbst, und
+    die Probenreihe lief ausserhalb des Repos — je Probe eine Route an `app.py`
+    angehaengt, der Test gefahren, die Datei wiederhergestellt (PR #525). Das ist als
+    pytest nicht abbildbar; als Funktion ueber dem Text schon.
     """
     import ast
     import pathlib
-    quelltext = (pathlib.Path(__file__).parent / "app.py").read_text(encoding="utf-8")
     baum = ast.parse(quelltext)
     def punktname(k) -> str:
         """Der VOLLE punktierte Name einer Attributkette: `webtool.jobs.start`, nicht `.start`.
@@ -882,14 +874,26 @@ def test_jede_route_die_einen_job_startet_traegt_den_namensraum_riegel():
         for x in (fn.args.vararg, fn.args.kwarg):
             if x is not None:
                 raus.add(x.arg)
-        for k in ast.walk(fn):
+        # NUR der eigene Bereich (#526). `ast.walk` stieg in alle inneren Bereiche hinab,
+        # und eine Bindung DORT galt damit als Bindung der Route: ein inneres
+        # `def _start_transcribe` oder `_start_transcribe = …` in einer Hilfsfunktion machte
+        # die Route unsichtbar fuer die Starter-Erkennung — falsches GRUEN ueber einer
+        # offenen Tuer (Proben CR-9/CR-9'; CR-9' zeigt, dass das schon VOR der def/class-
+        # Erweiterung so war). `knoten(tief=False)` liefert innere def/class-Knoten selbst
+        # (ihr NAME bindet hier), steigt aber nicht hinein. Der Preis steht in
+        # `test_waechter_proben` (G-1..G-3): `bezuege` bleibt tief, eine Bindung in einem
+        # inneren Bereich einer Leseroute kann sie jetzt faelschlich zum Starter machen —
+        # laut, nicht still.
+        for k in knoten(fn, tief=False):
             if isinstance(k, ast.Name) and isinstance(k.ctx, (ast.Store, ast.Del)):
                 raus.add(k.id)                       # Zuweisung, for-Ziel, Comprehension,
                                                      # und `with … as x` (ist auch ein Store)
             elif isinstance(k, ast.alias):
                 raus.add((k.asname or k.name).split(".")[0])
             elif isinstance(k, ast.arg):
-                raus.add(k.arg)                      # Lambda- und Nested-def-Parameter
+                raus.add(k.arg)                      # eigene Parameter (die von Lambdas und
+                                                     # inneren defs liegen in deren Bereich
+                                                     # und zaehlen seit #526 nicht mehr)
             elif isinstance(k, ast.ExceptHandler) and k.name:
                 raus.add(k.name)                     # `except E as x` ist ein STRING, kein
                                                      # Name-Knoten — sonst falsch-rot
@@ -1026,6 +1030,222 @@ def test_jede_route_die_einen_job_startet_traegt_den_namensraum_riegel():
     # EHRLICHE GRENZE: geprueft werden Anwesenheit, Reihenfolge und Argumentname im
     # QUELLTEXT — nicht die Wirkung zur Laufzeit. Ein Riegel hinter einem `if False:`
     # bliebe hier gruen; dagegen steht der Waechter darueber, der die Endpunkte faehrt.
+
+
+def _app_quelltext() -> str:
+    import pathlib
+    return (pathlib.Path(__file__).parent / "app.py").read_text(encoding="utf-8")
+
+
+def test_jede_route_die_einen_job_startet_traegt_den_namensraum_riegel():
+    """Der Riegel liegt in den AUFRUFERN von `jobs.start`/`jobs.request`, nicht in
+    `jobs.start` selbst. Heute ist keiner vergessen — aber nichts hielt fest, dass ein
+    SIEBTER Start-Endpunkt ihn auch traegt, und gefangen haette ihn niemand: der Test
+    darueber zaehlt vier Pfade von Hand auf, und `.coderabbit.yaml` kennt die Regel nicht
+    (gemessen: `grep -i reserv .coderabbit.yaml` ist leer).
+
+    Gelesen wird der QUELLTEXT von `app.py` per `ast` — welche Funktionen erreichen
+    `jobs.start`/`jobs.request`, transitiv (`_start_transcribe` ist ein privater Helfer
+    ohne eigenen Riegel; seine drei Aufrufer tragen ihn) — und jede ROUTE in diesem
+    Abschluss muss `_sicherer_projektname` rufen. Die Pruefung selbst steht in
+    `_starter_riegel_pruefen`, damit `test_waechter_proben` sie ueber synthetische Routen
+    fahren kann.
+
+    Ein Backstop IN `jobs.start` waere die staerkere Fassung und ist verworfen: der
+    `messstand`-Skill koennte dann genau die Messung nicht mehr fahren, aus der #478
+    stammt, und der Fall kaeme als 500 statt als 400 heraus.
+    """
+    _starter_riegel_pruefen(_app_quelltext())
+
+
+# Die Probenreihe des Waechters — je EINE synthetische Route hinter dem echten `app.py`
+# (Namen wie dort: `app`, `jobs`, `paths`, `run_in_threadpool`, `_sicherer_projektname`,
+# `_start_transcribe`). ROT heisst: der Waechter muss anschlagen; GRUEN: er muss schweigen.
+# Die 17 aus PR #525 (CR-5…CR-8, M-A/E/F/G, BOT-1..3, K-1..3) liefen dort als Skript
+# ausserhalb des Repos und sind hier aus den Beschreibungen rekonstruiert; CR-9/CR-9' sind
+# die Loecher aus #526, G-1..G-3 der benannte PREIS ihres Fixes (siehe `lokale`).
+_PROBEN = {
+    "CR-5 fruehe Referenz + spaeter Aufruf": (True, '''
+@app.post("/api/probe/{project}")
+def probe(project: str):
+    guard = _sicherer_projektname
+    job_id, started = _start_transcribe(project)
+    _sicherer_projektname(project)
+    return {"job_id": job_id, "g": guard}
+'''),
+    "CR-5' nur die Referenz, gar kein Aufruf": (True, '''
+@app.post("/api/probe/{project}")
+def probe(project: str):
+    guard = _sicherer_projektname
+    return {"r": _start_transcribe(project), "g": guard}
+'''),
+    "CR-5'' Aufruf VOR dem Start, Referenz daneben": (False, '''
+@app.post("/api/probe/{project}")
+def probe(project: str):
+    _sicherer_projektname(project)
+    guard = _sicherer_projektname
+    return {"r": _start_transcribe(project), "g": guard}
+'''),
+    "CR-6 lokale ATTRAPPE (Zuweisung) als Riegel": (True, '''
+@app.post("/api/probe/{project}")
+def probe(project: str):
+    _sicherer_projektname = lambda p: p
+    _sicherer_projektname(project)
+    return _start_transcribe(project)
+'''),
+    "CR-6' lokaler Alias auf die ECHTE Funktion (der Preis)": (True, '''
+@app.post("/api/probe/{project}")
+def probe(project: str):
+    _sicherer_projektname = paths.sicherer_projektname
+    _sicherer_projektname(project)
+    return _start_transcribe(project)
+'''),
+    "CR-7 lokale def-ATTRAPPE als Riegel": (True, '''
+@app.post("/api/probe/{project}")
+def probe(project: str):
+    def _sicherer_projektname(p):
+        return p
+    _sicherer_projektname(project)
+    return _start_transcribe(project)
+'''),
+    "CR-8 lokale class-ATTRAPPE als Riegel": (True, '''
+@app.post("/api/probe/{project}")
+def probe(project: str):
+    class _sicherer_projektname:
+        def __init__(self, p):
+            pass
+    _sicherer_projektname(project)
+    return _start_transcribe(project)
+'''),
+    "M-A async def ohne Riegel": (True, '''
+@app.post("/api/probe/{project}")
+async def probe(project: str):
+    return _start_transcribe(project)
+'''),
+    "M-E Riegel NACH dem Start": (True, '''
+@app.post("/api/probe/{project}")
+def probe(project: str):
+    r = _start_transcribe(project)
+    _sicherer_projektname(project)
+    return r
+'''),
+    "M-F Riegel auf dem falschen Argument": (True, '''
+@app.post("/api/probe/{project}/{base}")
+def probe(project: str, base: str):
+    _sicherer_projektname(base)
+    return _start_transcribe(project, base)
+'''),
+    "M-G Startroute ganz ohne Riegel": (True, '''
+@app.post("/api/probe/{project}")
+def probe(project: str):
+    return _start_transcribe(project)
+'''),
+    "BOT-1 @app.router.post ohne Riegel": (True, '''
+@app.router.post("/api/probe/{project}")
+def probe(project: str):
+    return _start_transcribe(project)
+'''),
+    "BOT-2 run_in_threadpool(jobs.start) ohne Riegel": (True, '''
+@app.post("/api/probe/{project}")
+async def probe(project: str):
+    return await run_in_threadpool(jobs.start, project, "transcribe", [])
+'''),
+    "BOT-3 Start in einer Lambda, Riegel NUR darin": (True, '''
+@app.post("/api/probe/{project}")
+def probe(project: str):
+    f = lambda: (_sicherer_projektname(project), _start_transcribe(project))
+    return f()
+'''),
+    "K-1 async def MIT Riegel (Kontrolle)": (False, '''
+@app.post("/api/probe/{project}")
+async def probe(project: str):
+    _sicherer_projektname(project)
+    return _start_transcribe(project)
+'''),
+    "K-2 Start in einer Lambda, Riegel im Rumpf (Kontrolle)": (False, '''
+@app.post("/api/probe/{project}")
+def probe(project: str):
+    _sicherer_projektname(project)
+    f = lambda: _start_transcribe(project)
+    return f()
+'''),
+    "K-3 innere def daneben, Riegel gesetzt (Kontrolle F3)": (False, '''
+@app.post("/api/probe/{project}")
+def probe(project: str):
+    _sicherer_projektname(project)
+    def _fmt(x):
+        return x
+    return _fmt(_start_transcribe(project))
+'''),
+    # #526: eine Bindung in einem INNEREN Bereich galt als Bindung der Route — die Route
+    # war damit kein Starter mehr, der Waechter schwieg (falsches GRUEN ueber einer offenen
+    # Tuer). CR-9' ist die Gegenprobe, dass das VOR der def/class-Erweiterung schon so war.
+    "CR-9 verschachteltes def _start_transcribe, kein Riegel": (True, '''
+@app.post("/api/probe/{project}")
+def probe(project: str):
+    def helfer():
+        def _start_transcribe(p):
+            return p
+        return helfer
+    return _start_transcribe(project)
+'''),
+    "CR-9' innere Zuweisung _start_transcribe = ..., kein Riegel": (True, '''
+@app.post("/api/probe/{project}")
+def probe(project: str):
+    def helfer():
+        _start_transcribe = None
+        return _start_transcribe
+    return _start_transcribe(project)
+'''),
+    # Der PREIS des #526-Fixes, benannt statt verschwiegen: `bezuege` walkt weiter tief
+    # (ein Start aus einer Lambda zaehlt, K-2), `lokale` nur noch flach. Ein Name, der in
+    # einem inneren Bereich einer LESE-Route gebunden ist und wie eine Startroute heisst
+    # (`correct`, `transcribe`, …), gilt ab jetzt als Nennung der Modulfunktion — die
+    # Leseroute wird faelschlich zum Starter und ROT. Heute gibt es die Form in `app.py`
+    # nicht (der Grundlauf ist gruen); kommt sie, ist die Antwort, den inneren Namen
+    # umzubenennen — ein falsches Rot ist laut, ein falsches Gruen still (dieselbe Richtung
+    # wie CR-6'). Kalter Plan-Reviewer, ausgefuehrt: alt=gruen, neu=rot.
+    "G-1 Leseroute mit innerem def f(correct) (Preis)": (True, '''
+@app.get("/api/probe/{project}")
+def probe(project: str):
+    def f(correct):
+        return correct
+    return {"x": f(1)}
+'''),
+    "G-2 Leseroute mit innerer Zuweisung transcribe = 1 (Preis)": (True, '''
+@app.get("/api/probe/{project}")
+def probe(project: str):
+    def helfer():
+        transcribe = 1
+        return transcribe
+    return {"x": helfer()}
+'''),
+    "G-3 Leseroute mit f = lambda correct: correct (Preis)": (True, '''
+@app.get("/api/probe/{project}")
+def probe(project: str):
+    f = lambda correct: correct
+    return {"x": f(1)}
+'''),
+}
+
+
+@pytest.mark.parametrize("probe", list(_PROBEN), ids=lambda p: p.split(" ")[0])
+def test_waechter_proben(probe):
+    """Die Probenreihe des Startrouten-Waechters, dauerhaft (#526).
+
+    Vorher lief sie als Skript ausserhalb des Repos (17 Proben, PR #525); der Fix an
+    `lokale()` (eigener Bereich statt `ast.walk`) braucht sie in BEIDE Richtungen — zu
+    wenig sammeln erzeugt Fehlalarme (F3), zu viel schweigt ueber offene Tueren (CR-9).
+    Mutationsprobe: `knoten(fn, tief=False)` in `lokale` zurueck auf `ast.walk(fn)` — CR-9,
+    CR-9' und G-1..G-3 werden gruen, also dieser Test rot.
+    """
+    rot, quelle = _PROBEN[probe]
+    text = _app_quelltext() + "\n\n# --- synthetische Probe ---\n" + quelle
+    if rot:
+        with pytest.raises(AssertionError):
+            _starter_riegel_pruefen(text)
+    else:
+        _starter_riegel_pruefen(text)
 
 
 def test_delete_project_ok(client, tmp_path):
