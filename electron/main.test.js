@@ -1157,6 +1157,9 @@ test('ein fehlgeschlagener Schreibvorgang steht im Protokoll — sonst hinterlae
   // Eine DATEI als Datenverzeichnis laesst `mkdirSync` in `schreiben()` werfen.
   const alsDatei = path.join(os.tmpdir(), `fb-datei-${Date.now()}`)
   fs.writeFileSync(alsDatei, 'keine Ablage, eine Datei')
+  // In `temps`, sonst raeumt das `after` sie nicht weg: `laden({daten})` legt nichts selbst an,
+  // und jeder Lauf liesse eine Datei im Temp-Ordner liegen (kalter Diff-Review, gemessen 7 -> 8).
+  temps.push(alsDatei)
   const w = await laden({ daten: alsDatei })
   await kurzWarten()
   // `async` um den Aufruf: `w.ruf` ruft den Handler direkt, der Wurf ist synchron — ohne die
