@@ -28,6 +28,8 @@ hat. Lesbar, aber unschön — das ist Absicht.
 
 ## Unveröffentlicht
 
+## v0.52.0 — 2026-09-03
+
 **Neu**
 - Fehler können auf Wunsch automatisch an uns gehen, ganz ohne Mailprogramm: beim ersten Start fragt Transkribor einmal, danach entscheidet ein Haken unter „Version" — Namen von Projekten, Aufnahmen und Benutzer werden vorher unkenntlich gemacht.
 
