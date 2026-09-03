@@ -264,3 +264,6 @@ jobs:
       - run: bash scripts/versionshoehe.test.sh
       - run: bash scripts/notizen.test.sh
       - run: bash scripts/fassung.test.sh
+      # macos-mindest.sh schreibt in die latest-mac.yml, die der Mac-Updater liest — dieselbe
+      # Klasse wie die drei darueber: was es entscheidet, holt nach dem Release niemand zurueck.
+      - run: bash scripts/macos-mindest.test.sh

@@ -29,6 +29,10 @@ function updateHinweis(z: UpdateZustand | null): string | null {
     return 'Updates nicht möglich'
   }
   if (z.art === 'verfuegbar' || z.art === 'verfuegbar_manuell') return `Update ${z.neue} verfügbar`
+  // Kein „Update verfügbar": es ist keines, das dieser Mac starten könnte. Der Satz nennt die
+  // Zahl, weil „nicht möglich" ohne sie zum Suchen einlädt — die Einzelheiten stehen auf der
+  // Versionsseite, wie bei jedem anderen Zustand auch (#536).
+  if (z.art === 'zu_altes_os') return `Update ${z.neue} braucht macOS ${z.braucht}`
   if (z.art === 'laedt') return `Update lädt · ${Math.round(z.prozent)} %`
   if (z.art === 'bereit') return `Update ${z.neue} bereit`
   if (z.art === 'fehler') return 'Update-Prüfung fehlgeschlagen'

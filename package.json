@@ -73,6 +73,7 @@
         }
       ],
       "category": "public.app-category.productivity",
+      "minimumSystemVersion": "13.0",
       "icon": "build/icon-mac.png",
       "identity": "-",
       "hardenedRuntime": false,

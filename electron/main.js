@@ -9,6 +9,7 @@
 const { app, BrowserWindow, ipcMain, shell, nativeTheme, net } = require('electron')
 const path = require('path')
 const fs = require('fs')
+const os = require('os')
 // Nur fuer den Vergleich in `navigationPruefen`: die Statusseite laedt `loadFile` mit einem
 // PFAD, am Waechter kommt sie als `file:`-URL an. Beide Formen muessen aus derselben Quelle
 // stammen, sonst sperrt der Waechter ausgerechnet die Einrichtungsseite aus.
@@ -845,6 +846,10 @@ async function starten() {
       openExternal: shell.openExternal,
       feedUrl: macUrls && macUrls.feed,
       releaseUrl: macUrls && macUrls.release,
+      // Hereingereicht wie `hole`/`openExternal`, aus demselben Grund: sonst liesse sich der
+      // Mac-Zweig nur auf einem Mac pruefen. `os.release()` liefert die DARWIN-Version
+      // ("22.6.0" = macOS 13); die Umrechnung macht `updater.macosAusDarwin` (#536).
+      osRelease: () => os.release(),
       aendert: z => {
         if (z.art === 'fehler') protokoll.schreiben(`Update-Pruefung fehlgeschlagen: ${z.text}`)
         if (win && !win.isDestroyed()) win.webContents.send('update', z)
