@@ -1145,7 +1145,7 @@ def _summary_only_file(project: str, base: str, ziel: str, context: str,
 
 def correct_ai_single(project: str, b: str, gjson: str = "", context: str = None,
                       verify: bool = True, force: bool = False,
-                      base_explicit: str = None) -> bool | None:
+                      base_explicit: str = None, pruefe=None) -> bool | None:
     """Führt die Cloud-KI-Korrektur und Finalisierung (cmd_apply) für eine vorbereitete Datei aus.
 
     DREI Ausgänge, nicht zwei — dieselbe Unterscheidung, die `cmd_apply` über seine drei
@@ -1205,6 +1205,25 @@ def correct_ai_single(project: str, b: str, gjson: str = "", context: str = None
         if not _valid_correction(cpath):
             print(f"✗ FEHLT/ungültig: {b}.correction.json — überspringe", flush=True)
             return False
+        # LETZTE Identitaetspruefung, unmittelbar vor dem Schreiben (#523, CodeRabbit-CLI).
+        #
+        # Zwischen der Pruefung in `one()` und dieser Zeile liegt die ganze KI-Phase — das
+        # LAENGSTE Fenster des Laufs, Minuten je Datei. Wird die Aufnahme darin ausgetauscht,
+        # schriebe `cmd_apply` die Korrektur der ALTEN Aufnahme in die `edit.json` der NEUEN.
+        # Das ist genau der Schaden aus #523, nur durch die letzte offene Tuer.
+        #
+        # Die `correction.json` MUSS dabei weg, und das ist der Teil, den man leicht uebersieht:
+        # sie ist der Resume-Anker (`one()` ueberspringt eine Datei, die schon eine hat) —
+        # liegengelassen wuerde sie beim naechsten Lauf auf die neue Aufnahme angewendet, also
+        # dasselbe Ergebnis mit einem Lauf Verspaetung.
+        #
+        # `pruefe=None` heisst „kein Vergleich moeglich": so ruft `transcribe_project` die
+        # Funktion (die Mitkorrektur hat keinen fixierten Bereich, ihre Dateien sind neu).
+        if pruefe is not None and not pruefe():
+            with contextlib.suppress(OSError):
+                os.remove(cpath)
+            print(f"↷ SKIP {b} (Roh-Transkript waehrend des Laufs ausgetauscht)", flush=True)
+            return None
         # `cmd_apply` hat DREI Ausgaenge (seine drei `return`-Zeichenketten) und nur EINER ist
         # ein Fehlschlag: `"missing"`
         # heisst, es wurde **nichts geschrieben** (fehlende `correction.json` bzw. Roh-JSON).
@@ -1373,7 +1392,8 @@ def cmd_run(project: str, base: str = None, force: bool = False, verify: bool = 
             # waere — `one()` filtert beide Faelle sechs Zeilen weiter oben selbst, und
             # `correct.main` zieht die Schutz-Skips ohnehin aus seinem eigenen Nenner.
             return bool(correct_ai_single(project, b, gjson=gjson, context=context,
-                                          verify=verify, force=force, base_explicit=base))
+                                          verify=verify, force=force, base_explicit=base,
+                                          pruefe=lambda: unveraendert(b, raw_json)))
         finally:
             # UNBEDINGT, weil FUENF Ausgaenge dahinter weder `[active]` noch `[done]` drucken:
             # `prep_single` = False, ein WURF aus `prep_single` (es faengt nur
