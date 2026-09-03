@@ -600,10 +600,9 @@ speicherst, wandert sie als `<Name>.edit.json.kaputt` zur Seite und bleibt im Or
 
 </details>
 
+<a id="fehlerberichte"></a>
 <details>
 <summary><strong>Etwas geht schief — wie melde ich das?</strong></summary>
-
-<a id="fehlerberichte"></a>
 
 *(Der Mail-Bericht ab `v0.49.0`; das automatische Melden ab der nächsten Fassung nach
 `v0.51.0` — in `v0.51.0` und davor gibt es den Haken noch nicht.)*

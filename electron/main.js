@@ -40,6 +40,11 @@ const paket = require('../package.json')
  *  damit die Tests je Lauf ein frisches Verzeichnis geben koennen. */
 function schalterPfad() { return fehlerberichte.pfad(app.getPath('userData')) }
 
+/** Die Projekte-Wurzel, wie der SERVER sie kennt — die `.env` darf `TRANSKRIBOR_PROJEKTE`
+ *  ueberschreiben (#218), und dann laese die Namensmaske aus `P.projekte` einen leeren Ordner.
+ *  Bis der Server geantwortet hat, gilt `P.projekte`. */
+let projekteWurzel = null
+
 // Opt-in Fehlerberichte (#530): das SDK VOR allem anderen — es haengt sich an
 // `uncaughtException` und `unhandledRejection`, was davor wirft, sieht es nicht. Ohne DSN
 // (Entwicklerlauf, Testbau ohne Secret) ist es `enabled: false`; und mit DSN verlaesst kein
@@ -53,7 +58,7 @@ Sentry.init(fehlerberichte.optionen({
   ctx: {
     home: fehlerberichte._home(),
     daten: P.daten,
-    projekte: P.projekte,
+    projekte: () => projekteWurzel || P.projekte,
     schalterPfad,
     protokollPfad: () => protokoll.pfad(),
   },
@@ -546,6 +551,7 @@ function serverStarten() {
     () => {
       bereit = true
       if (win) win.loadURL(backend.url())
+      backend.projektePfad().then(p => { if (p) projekteWurzel = p }).catch(() => { /* P.projekte bleibt */ })
       zustimmungFragen().catch(e => protokoll.schreiben(`FEHLER: Nachfrage Fehlerberichte: ${e.message || e}`))
       fehlerprobe()
     },

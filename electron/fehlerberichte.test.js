@@ -67,11 +67,34 @@ test('namen: Projekte und Basisnamen, laengste zuerst; Kurznamen und Dateien im 
   datei(d, 'ab/audio/xy.m4a')                 // Projekt- und Basisname zu kurz
   datei(d, 'Zwei/audio/Kurz.m4a')
   fs.writeFileSync(path.join(d, 'notiz.txt'), '')   // kein Ordner, kein Projekt
+  // `.segments.txt` liefert ZWEI Praefixe (bis zum ersten und bis zum zweiten Punkt) — beide
+  // gehoeren in die Liste, die laengere zuerst.
   assert.deepStrictEqual(fb.namen(d), {
     projekte: ['Interview Mueller', 'Zwei'],
-    dateien: ['2026-01-01 Gespraech Mueller', 'Kurz'],
+    dateien: ['2026-01-01 Gespraech Mueller.segments', '2026-01-01 Gespraech Mueller', 'Kurz'],
   })
   assert.deepStrictEqual(fb.namen(path.join(d, 'gibt-es-nicht')), { projekte: [], dateien: [] })
+})
+
+test('namen: ein Punkt im Namen (Anrede, Datum) schneidet den Namen nicht ab (Kalt-Review)', () => {
+  const d = tmp()
+  datei(d, 'Projekt Mueller/audio/Dr. Mueller Interview.m4a')
+  datei(d, 'Projekt Mueller/audio/Interview 12.03.2026.m4a')
+  const n = fb.namen(d)
+  assert.ok(n.dateien.includes('Dr. Mueller Interview'), n.dateien.join(' | '))
+  assert.ok(n.dateien.includes('Interview 12.03.2026'), n.dateien.join(' | '))
+  assert.ok(!n.dateien.includes('Dr'), 'Kurzpraefix bleibt unter MIN_NAME weg')
+  const ctx = { ...CTX, namen: { projekte: n.projekte, dateien: n.dateien } }
+  assert.strictEqual(fb.maskiere('Datei Dr. Mueller Interview.m4a nicht lesbar', ctx), 'Datei <datei>.m4a nicht lesbar')
+  assert.strictEqual(fb.maskiere('Interview 12.03.2026.m4a fehlt', ctx), '<datei>.m4a fehlt')
+})
+
+test('maskiere: URL-kodierte Namen in uvicorn-Zeilen (4xx bleiben im Bericht) fallen ebenfalls (Kalt-Review)', () => {
+  const zeile = 'INFO: 127.0.0.1:51234 - "GET /api/projects/Interview%20Mueller/files/2026-01-01%20Gespraech%20Mueller HTTP/1.1" 404 Not Found'
+  const m = fb.maskiere(zeile, CTX)
+  assert.ok(!m.includes('Mueller'), m)
+  assert.strictEqual(m, 'INFO: 127.0.0.1:51234 - "GET /api/projects/<projekt>/files/<datei> HTTP/1.1" 404 Not Found')
+  assert.deepStrictEqual(fb.protokollZeilen(zeile, CTX), [m], 'die 404-Zeile bleibt, aber maskiert')
 })
 
 // ---------------------------------------------------------------- Maskierung
@@ -239,6 +262,16 @@ test('optionen: ohne DSN ist das SDK aus, mit DSN an — und die Vorgaben stehen
   assert.ok(an.maxValueLength >= bericht.MAX_ZEILE, 'eine Protokollzeile passt ungekappt in ein extra-Feld')
   assert.strictEqual(an.beforeBreadcrumb({ category: 'console' }), null)
   assert.strictEqual(typeof an.beforeSend, 'function')
+})
+
+test('optionen: auch der Offline-Transport liest den Schalter — beim Ablegen und beim Senden (Kalt-Review)', () => {
+  const { ctx } = welt(true)
+  const an = fb.optionen({ dsn: 'x', version: '1', gepackt: true, ctx })
+  assert.strictEqual(an.transportOptions.shouldStore(), true)
+  assert.strictEqual(an.transportOptions.shouldSend(), true)
+  fb.schreiben(ctx.schalterPfad(), { automatisch: false })
+  assert.strictEqual(an.transportOptions.shouldStore(), false, 'nichts mehr auf die Platte')
+  assert.strictEqual(an.transportOptions.shouldSend(), false, 'nichts aus der Schlange raus')
 })
 
 test('optionen: der Integrationsfilter wirft genau RAUS und laesst den Rest', () => {
