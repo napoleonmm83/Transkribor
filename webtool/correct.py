@@ -104,6 +104,13 @@ _letzte_diagnose: dict | None = None
 # `transcribe_project` WAEHREND des Laufs schreibt, staende sonst im Nenner des Exitcodes,
 # obwohl der Lauf sie nie versucht hat. `None` heisst „kein Bereich fixiert" (fruehe Ausgaenge).
 _letzter_bereich: list | None = None
+# Dazu die IDENTITAETEN dieses Bereichs (#523). Der Nenner des Exitcodes fragt sonst wieder
+# nur nach Anwesenheit — und eine mitten im Lauf AUSGETAUSCHTE Aufnahme ist anwesend. Sie
+# zaehlte damit als „versucht", waehrend `one()` sie zu Recht ueberspringt: 0 von 1, also
+# SystemExit(1) mit einer Begruendung, die auf den KI-Anbieter zeigt. Genau die #524-Klasse,
+# durch den #523-Pfad neu aufgemacht (kalter Diff-Leser, mit Reproduktion).
+# `None` heisst „kein Bereich fixiert" (fruehe Ausgaenge), wie beim Bereich daneben.
+_letzte_kennungen: dict | None = None
 _CREATE_NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 
 
@@ -1227,9 +1234,10 @@ def cmd_run(project: str, base: str = None, force: bool = False, verify: bool = 
     - Cloud-KI-Phasen laufen nach Abschluss der lokalen Phase sofort parallel (bis zu CLAUDE_PARALLEL Slots).
     - Abgeschlossene Dateien werden sofort finalisiert (cmd_apply) und stehen im Frontend bereit.
     """
-    global _letzte_diagnose, _letzter_bereich
+    global _letzte_diagnose, _letzter_bereich, _letzte_kennungen
     _letzte_diagnose = None
     _letzter_bereich = None
+    _letzte_kennungen = None
     tdir = paths.transkripte_dir(project)
     all_bases = bases(project)
     if base is not None:                               # expliziter Einzel-Datei-Lauf (Per-Datei-✎)
@@ -1254,6 +1262,7 @@ def cmd_run(project: str, base: str = None, force: bool = False, verify: bool = 
     # `transcript_bases` listet nur Namen MIT vorhandener `<base>.json`, hier steht also je
     # Base eine echte Kennung — `None` heisst „os.stat hat geworfen", nicht „gibt es nicht".
     kennungen = {b: paths.kennung(os.path.join(tdir, b + ".json")) for b in all_bases}
+    _letzte_kennungen = dict(kennungen)      # `main` braucht sie fuer den Nenner, s. oben
 
     def unveraendert(b: str, raw_json: str) -> bool:
         """Ist das noch DIESELBE Datei wie beim Fixieren des Bereichs? (#523)
@@ -1265,9 +1274,20 @@ def cmd_run(project: str, base: str = None, force: bool = False, verify: bool = 
         **Die Richtung des Zweifels ist ueberspringen**, und sie ist hier anders als bei
         `transcribe._kennung` (das meldet im Zweifel einmal zu viel): eine nicht korrigierte
         Aufnahme holt der naechste Lauf, eine falsch korrigierte ueberschreibt Nutzertext.
-        Deshalb faellt auch eine unlesbare Kennung — auf beiden Seiten — nach False."""
+        Deshalb faellt auch eine unlesbare Kennung — auf beiden Seiten — nach False.
+
+        **Der Austausch bekommt eine ZEILE, das Verschwinden nicht** (kalter Diff-Leser).
+        Eine geloeschte Aufnahme war hier immer schon ein stiller Ausstieg, und der Nutzer hat
+        sie selbst geloescht — er weiss davon. Ein Austausch dagegen sieht fuer ihn aus wie
+        „hochgeladen, und dann ist nichts passiert"; ohne Zeile bliebe die einzige Spur ein
+        fehlendes Ergebnis. Gedruckt wird in der Form der Nachbarzeile (`↷ SKIP …`), damit
+        `jobPhases.ts` sie wie die uebrigen Schutz-Skips liest."""
         jetzt = paths.kennung(raw_json)
-        return jetzt is not None and kennungen.get(b) == jetzt
+        if jetzt is not None and kennungen.get(b) == jetzt:
+            return True
+        if jetzt is not None:                # da, aber eine andere Datei
+            print(f"↷ SKIP {b} (Roh-Transkript waehrend des Laufs ausgetauscht)", flush=True)
+        return False
     # Wirkungsbereich melden, bevor die erste lange Arbeit (Diarisierung) beginnt — jobs.py
     # gibt danach alle uebrigen Aufnahmen zum Loeschen/Umbenennen frei (Issue #80).
     print("[scope] " + "\t".join(all_bases), flush=True)
@@ -1411,8 +1431,9 @@ def main(argv=None):
         # Selbst zuruecksetzen, nicht nur in `cmd_run`: ersetzt ein Test `cmd_run` durch eine
         # Attrappe, laeuft der Reset dort nie, und `main` urteilte ueber den Bereich des
         # VORIGEN Laufs (kalter Plan-Reviewer, ausgefuehrt).
-        global _letzter_bereich
+        global _letzter_bereich, _letzte_kennungen
         _letzter_bereich = None
+        _letzte_kennungen = None
         done = cmd_run(args.project, args.base, args.force, verify)
         # Exitcode fürs Job-Signal: Fehler nur, wenn Dateien VERSUCHT wurden aber KEINE gelang —
         # sonst wäre der Job „done“ trotz Totalausfall (z.B. claude fehlt auf PATH). „nichts zu
@@ -1424,10 +1445,23 @@ def main(argv=None):
         # kippte einen sauberen Lauf (alle eigenen Dateien zu Recht uebersprungen) auf
         # SystemExit(1) — mit einer Begruendung, die auf den KI-Anbieter zeigt. Eine mitten im
         # Lauf GELOESCHTE Base zaehlt weiterhin nicht (Roh-JSON weg), wie vorher.
+        # Und eine mitten im Lauf AUSGETAUSCHTE zaehlt seit #523 ebenfalls nicht: sie ist
+        # anwesend, aber `one()` ueberspringt sie zu Recht — als „versucht" gezaehlt ergaebe
+        # ein Ein-Datei-Bereich `0 von 1` und damit SystemExit(1) mit einer Begruendung, die
+        # auf den KI-Anbieter zeigt. Dieselbe Klasse wie #524, nur durch die andere Tuer;
+        # gefunden vom kalten Diff-Leser, mit Reproduktion. Gefragt wird dieselbe Kennung, die
+        # der Lauf beim Fixieren des Bereichs genommen hat — nicht ein zweiter Scan.
+        #
+        # Der Vergleich steht damit an ZWEI Stellen (hier und in `cmd_run.unveraendert`), und
+        # das ist Absicht statt Nachlaessigkeit: dort entscheidet er ueber das SCHREIBEN einer
+        # Datei, hier ueber den EXITCODE eines Laufs. Sie muessen dieselbe Antwort geben —
+        # wer eine aendert, aendert beide; ein Test haelt genau diese Paarung fest.
         tdir = paths.transkripte_dir(args.project)
         scope = _letzter_bereich or []
+        kennungen = _letzte_kennungen or {}
         attempted = sum(1 for b in scope
-                        if os.path.exists(os.path.join(tdir, b + ".json"))
+                        if (k := paths.kennung(os.path.join(tdir, b + ".json"))) is not None
+                        and k == kennungen.get(b)
                         and (args.force or not _is_human_edited(os.path.join(tdir, b + ".edit.json"))))
         if attempted and not done:
             # Anbieterneutral: beim API-Weg heisst der Anbieter vielleicht OpenAI, und wer nur

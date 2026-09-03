@@ -1140,18 +1140,21 @@ def _laeuft_mitkorrektur(project: str) -> None:
     Kein drittes Flag an _keine_jobs: base=None bedeutet dort „jeder Job sperrt"
     (rename_project-Semantik), und diese Bedingung hier ist eine andere.
 
-    **Seit #496 fragt die zweite Haelfte den JOB, nicht mehr bloss die Job-ART.** Zwei
-    Praezisierungen in einem Aufruf: ein transcribe-Lauf, dessen Mitkorrektur `_start_transcribe`
-    gerade abgeschaltet hat, sperrt nicht mehr (er schreibt keine Korrektur, es gibt nichts zu
-    schuetzen) — und ein VORGEMERKTER Nachlauf sperrt jetzt sehr wohl. Der zweite Punkt ist der
-    wichtigere: sein Kommando ist eingefroren, er startet spaeter unveraendert, und ohne ihn
-    koennte ein Korrekturlauf genau in dieses Fenster hineinstarten. Erreichbar ueber die
-    Einzel-GPU-Sperre, wenn der Blocker aus einem FREMDEN Projekt kommt."""
+    **Seit #496 zaehlt auch der VORGEMERKTE Nachlauf.** `active_for` liest nur `_active`; ein
+    bei belegtem Slot vorgemerkter transcribe-Lauf steht dort nicht, und ein Korrekturlauf
+    konnte genau in dieses Fenster hineinstarten — er traf den Nachlauf dann spaeter an. Das
+    ist der einzige Teil von #496, der nach der Praemisse-Pruefung uebrig bleibt; warum die
+    Entwaffnung NICHT kam, steht in `_start_transcribe`.
+
+    **Der Text sagt „oder ist vorgemerkt", und das ist kein Wortgeklingel** (Reviewbefund B5):
+    im Vormerkungsfall zeigt `GET /api/projects` fuer dieses Projekt `active_jobs: []` — der
+    Blocker ist der Whisper-Lauf eines FREMDEN Projekts. „Laeuft gerade" waere eine Absage,
+    die die Oberflaeche nicht stuetzt, und sie kann so lange gelten wie der fremde Lauf."""
     if not _transcribe._autocorrect_an():
         return
-    if jobs.mitkorrektur_aktiv(project):
+    if jobs.transcribe_laeuft_oder_wartet(project):
         raise HTTPException(status_code=409,
-                            detail="Im Projekt läuft gerade eine Transkription, die selbst "
+                            detail="Im Projekt läuft oder wartet eine Transkription, die selbst "
                                    "korrigiert — bitte warten")
 
 
@@ -1633,31 +1636,27 @@ def _start_transcribe(project: str, base: str | None = None):
     weggelassenes Flag waere fuer den Nutzer ununterscheidbar von "es lief einfach nichts";
     der Lauf schreibt stattdessen den Grund ins Protokoll.
 
-    **Laeuft im Projekt schon ein Korrekturlauf, wird die Mitkorrektur abgeschaltet (#496)** —
-    ueber die Umgebung, aus genau dem Grund im Absatz darueber: das Flag bleibt am Kommando,
-    der Lauf druckt den Grund. Sonst schrieben zwei Prozesse dieselbe Datei; mitten im
-    Schreiben gibt es keine `correction.json`, also greift auch kein Skip.
+    **BEWUSST NICHT entwaffnet, wenn im Projekt ein Korrekturlauf laeuft (#496,**
+    **Entscheidung Marcus 2026-09-03 nach dem Review).** Der Entwurf tat genau das; die
+    Praemisse traegt aber nicht: `correct.cmd_run` nimmt nur Aufnahmen MIT Roh-JSON in seinen
+    Bereich (`paths.transcript_bases`, einmal fixiert), die Mitkorrektur fasst nur Aufnahmen
+    OHNE an (`transcribe_project`s `offen`). Die Schreibmengen sind disjunkt — der einzige
+    Weg, auf dem sie sich treffen, ist Loeschen plus gleichnamiges Neu-Anlegen, und den
+    schliesst seit #523 die Identitaetspruefung in `cmd_run.one()`. Ein geteiltes
+    `_glossar.json` gibt es nicht: `transcribe_project` uebergibt `correct_ai_single` kein
+    `gjson` (gemessen), und ohne `gjson` baut sie keines.
 
-    **Der Riegel sitzt HIER und nicht an den vier Tueren.** Retranscribe, Projekt-Endpunkt,
-    fetch-Nachlauf und Upload gehen alle hier durch; vier Kopien waeren
-    `fix-an-einer-stelle-ist-kein-fix-der-klasse` und verfehlten den vorgemerkten Nachlauf
-    ohnehin, der sein Kommando eingefroren traegt.
+    Entwaffnen haette also keinen Konflikt verhindert und einen Preis gehabt: die waehrend
+    eines Korrekturlaufs hochgeladene Aufnahme bliebe roh liegen, bis jemand von Hand
+    korrigiert — und das ist der Standardweg des Programms (Hochladen IST der Startschuss).
+    Gefunden vom Reviewer-Subagenten (`review-buendel-a-neuweg.md`, B3), am Code nachgemessen.
 
-    **ABGELEHNT: 409 an den Endpunkten** (die andere vertretbare Richtung, Entscheidung Marcus
-    2026-09-03). Ein Korrekturlauf ueber zwanzig Aufnahmen dauert Stunden — so lange nichts
-    hochladen zu koennen ist teurer als eine Aufnahme, die erst der naechste Lauf korrigiert.
-
-    **Die Gegenrichtung schliesst `_laeuft_mitkorrektur`**, nicht diese Zeile: startet der
-    Korrekturlauf NACH dieser Entscheidung, kaeme der Nachlauf bewaffnet los. Deshalb fragt
-    jener Riegel seit #496 auch die Vormerkung."""
+    Was von #496 bleibt, steht in `_laeuft_mitkorrektur`: die VORMERKUNG."""
     cmd = [sys.executable, os.path.join(paths.ROOT, "transcribe.py"), project]
     if base:
         cmd.extend(["--only", base])
     cmd.append("--autocorrect")
-    env = None
-    if any(j["kind"] == "correct" for j in jobs.active_for(project)):
-        env = {jobs.AUTOCORRECT_AUS: "im Projekt laeuft bereits ein Korrekturlauf"}
-    return jobs.request(project, cmd, paths.ROOT, "transcribe", base=base, env=env)
+    return jobs.request(project, cmd, paths.ROOT, "transcribe", base=base)
 
 
 @app.post("/api/projects/{project}/transcribe")

@@ -34,7 +34,7 @@ hat. Lesbar, aber unschön — das ist Absicht.
 
 **Behoben**
 - Ein Korrekturlauf meldet nicht mehr fälschlich „fehlgeschlagen", wenn nebenbei eine Transkription eine neue Aufnahme ablegt — vorher zählte die fremde Datei als versucht und die Meldung schob es dem KI-Anbieter zu.
-- Wer während eines laufenden Korrekturlaufs eine Aufnahme hochlädt, bekommt sie jetzt sauber transkribiert und beim nächsten Korrekturlauf mitkorrigiert, statt dass zwei Läufe gleichzeitig an derselben Datei schreiben.
+- Wer eine Aufnahme während eines laufenden Korrekturlaufs löscht und gleich wieder hochlädt, bekommt sie jetzt sauber neu verarbeitet — vorher konnte der alte Lauf noch über die neue Aufnahme schreiben.
 
 ## v0.52.0 — 2026-09-03
 

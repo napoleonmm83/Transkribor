@@ -336,6 +336,21 @@ const INVENTAR: Record<string, Eintrag> = {
   '↷ SKIP {} (human_edited=true; --force zum Neu-Korrigieren)': {
     art: 'gelesen', beispiel: '↷ SKIP A (human_edited=true; --force zum Neu-Korrigieren)', basis: 'A',
   },
+  // #523: die Aufnahme wurde waehrend des Laufs geloescht und gleichnamig neu angelegt — der
+  // Lauf laesst sie in Ruhe. Die Zeile gibt es NUR fuer den Austausch, nicht fuer das blosse
+  // Verschwinden (das war hier immer schon ein stiller Ausstieg).
+  //
+  // `ignoriert`, NICHT `gelesen` wie der Schutz-Skip zwei Zeilen darueber — und der
+  // Unterschied ist der ganze Punkt. Jener sagt etwas ueber DIE Datei, an der der Lauf
+  // gerade war; diese sagt etwas ueber eine Datei, die es unter diesem Namen nicht mehr
+  // gibt. Ein `skipped`-Urteil daraus stuende ueber der NEUEN Aufnahme, die in diesem
+  // Moment von ihrem eigenen Transkriptionslauf bearbeitet wird — genau das veraltete
+  // Fremd-Urteil, gegen das #479/#489 die `entfernt`-Menge gebaut haben. Der erste Entwurf
+  // trug hier `gelesen`; der Vertragswaechter meldete ihn als „ohne Wirkung", und beim
+  // Nachsehen war nicht der Parser zu eng, sondern die Einstufung falsch.
+  '↷ SKIP {} (Roh-Transkript waehrend des Laufs ausgetauscht)': {
+    art: 'ignoriert', beispiel: '↷ SKIP A (Roh-Transkript waehrend des Laufs ausgetauscht)',
+  },
   '✗ FEHLT/ungültig: {}.correction.json — überspringe': {
     art: 'gelesen', beispiel: '✗ FEHLT/ungültig: A.correction.json — überspringe', basis: 'A',
   },
@@ -403,13 +418,6 @@ const INVENTAR: Record<string, Eintrag> = {
   },
   '[autocorrect] KI-Phase uebersprungen — {}': {
     art: 'ignoriert', beispiel: '[autocorrect] KI-Phase uebersprungen — kein KI-Anbieter eingestellt',
-  },
-  // #496: der Server schaltet die Mitkorrektur EINES Laufs ab und gibt den Grund mit —
-  // dieselbe Zeilenform wie die beiden darueber und aus demselben Grund `ignoriert`: sie
-  // gehoert dem LAUF, nicht einer Datei. Der Vertragswaechter hat sie beim Bau selbst
-  // gemeldet, das ist genau seine Aufgabe.
-  '[autocorrect] uebersprungen — {}': {
-    art: 'ignoriert', beispiel: '[autocorrect] uebersprungen — im Projekt laeuft bereits ein Korrekturlauf',
   },
   '  KI-Anbieter: {}': { art: 'ignoriert', beispiel: '  KI-Anbieter: Anthropic (claude-opus-5)' },
   '  claude Timeout nach {}s': { art: 'ignoriert', beispiel: '  claude Timeout nach 600s' },
