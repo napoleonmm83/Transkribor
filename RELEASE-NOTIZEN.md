@@ -35,6 +35,7 @@ hat. Lesbar, aber unschön — das ist Absicht.
 **Behoben**
 - Ein Korrekturlauf meldet nicht mehr fälschlich „fehlgeschlagen", wenn nebenbei eine Transkription eine neue Aufnahme ablegt — vorher zählte die fremde Datei als versucht und die Meldung schob es dem KI-Anbieter zu.
 - Wer eine Aufnahme während eines laufenden Korrekturlaufs löscht und gleich wieder hochlädt, bekommt sie jetzt sauber neu verarbeitet — vorher konnte der alte Lauf noch über die neue Aufnahme schreiben.
+- Auf dem Mac wird eine Fassung, die das laufende macOS gar nicht starten kann, nicht mehr zum Laden angeboten, sondern erklärt, welche macOS-Version sie braucht — beim Sprung von v0.52.0 auf diese Fassung greift das noch nicht, weil dort die alte App entscheidet.
 
 ## v0.52.0 — 2026-09-03
 
