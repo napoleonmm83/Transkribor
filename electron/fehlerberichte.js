@@ -78,9 +78,16 @@ function schreiben(schalterPfad, zustand) {
   return wert
 }
 
-function ohneEndung(name) {
-  const i = name.indexOf('.')
-  return i > 0 ? name.slice(0, i) : name
+/**
+ * Alle Punkt-Praefixe eines Dateinamens, nicht nur der bis zum ersten Punkt: `Dr. Mueller
+ * Interview.m4a` traegt seinen Namen HINTER einem Punkt, `Interview 12.03.2026.m4a` mitten in
+ * einer Zahl — der erste Punkt allein liess beide unmaskiert durch (Kalt-Review). Die
+ * Laengste-zuerst-Sortierung in `namen()` ersetzt dann `Dr. Mueller Interview` vor `Dr`.
+ */
+function basen(name) {
+  const aus = []
+  for (let i = name.indexOf('.'); i > 0; i = name.indexOf('.', i + 1)) aus.push(name.slice(0, i))
+  return aus.length ? aus : [name]
 }
 
 /**
@@ -101,8 +108,7 @@ function namen(projekteDir) {
       let eintraege = []
       try { eintraege = fs.readdirSync(path.join(projekteDir, e.name, unter)) } catch { continue }
       for (const datei of eintraege) {
-        const basis = ohneEndung(datei)
-        if (basis.length >= MIN_NAME) dateien.add(basis)
+        for (const basis of basen(datei)) if (basis.length >= MIN_NAME) dateien.add(basis)
       }
     }
   }
@@ -136,10 +142,13 @@ function maskiere(text, ctx = {}) {
     .sort((a, b) => ctx[b[0]].length - ctx[a[0]].length)
   for (const [k, ersatz] of pfade) t = t.replace(pfadMuster(ctx[k]), ersatz)
   // Die Laengengrenze gilt HIER, nicht nur beim Sammeln: die Liste kann von anderswo kommen.
+  // Und jeder Name in BEIDEN Formen: in den uvicorn-Zeilen (4xx/5xx bleiben im Bericht) steht
+  // er URL-kodiert — `Interview%20Mueller` traf die Rohform nicht (Kalt-Review).
   const n = ctx.namen || {}
   const brauchbar = liste => (liste || []).filter(name => typeof name === 'string' && name.length >= MIN_NAME)
-  for (const name of brauchbar(n.dateien)) t = t.split(name).join('<datei>')
-  for (const name of brauchbar(n.projekte)) t = t.split(name).join('<projekt>')
+  const formen = name => [...new Set([name, encodeURIComponent(name)])]
+  for (const name of brauchbar(n.dateien)) for (const f of formen(name)) t = t.split(f).join('<datei>')
+  for (const name of brauchbar(n.projekte)) for (const f of formen(name)) t = t.split(f).join('<projekt>')
   return t
 }
 
@@ -218,6 +227,14 @@ function optionen({ dsn, version, gepackt, ctx }) {
     beforeBreadcrumb: () => null,
     integrations: vorgaben => vorgaben.filter(i => !RAUS.includes(i.name)),
     beforeSend: beforeSend(ctx),
+    // Der Transport ist ein OFFLINE-Transport mit Warteschlange auf Platte: ein Ereignis, das
+    // bei AN ohne Netz erfasst wurde, ginge nach einem spaeteren AUS beim naechsten Start
+    // trotzdem raus (Kalt-Review). Deshalb liest auch der Transport den Schalter — beim
+    // Ablegen UND beim Senden; `shouldSend` allein liesse es in der Schlange kreisen.
+    transportOptions: {
+      shouldStore: () => lesen(wert(ctx.schalterPfad)).automatisch,
+      shouldSend: () => lesen(wert(ctx.schalterPfad)).automatisch,
+    },
   }
 }
 

@@ -1,6 +1,6 @@
 """Envelope-Sammler: nimmt Sentry-Envelopes an und legt jedes als Datei ab.
 
-Aufruf: python envelope-sink.py [port] [ausgabeordner]
+Aufruf: python envelope-sammler.py [port] [ausgabeordner]
 DSN dazu: http://k@127.0.0.1:<port>/1
 Antwortet auf jeden POST mit 200 {} und zaehlt in <ausgabeordner>/zaehler.txt mit.
 """

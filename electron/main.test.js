@@ -1142,6 +1142,13 @@ test('der Server bekommt DSN, Fassung und den Pfad der Schalterdatei mit', async
   })
 })
 
+test('nach dem Serverstart wird die Projekte-Wurzel beim SERVER erfragt — fuer die Namensmaske (#218)', async () => {
+  const w = await laden()
+  await kurzWarten()
+  assert.ok(w.spur.includes('backend.projektePfad'), 'die .env darf TRANSKRIBOR_PROJEKTE ueberschreiben')
+  assert.ok(w.spur.indexOf('backend.start') < w.spur.indexOf('backend.projektePfad'))
+})
+
 test('before-quit schliesst das SDK, nachdem der Server steht', async () => {
   const w = await laden()
   w.appEreignisse.get('before-quit')()
