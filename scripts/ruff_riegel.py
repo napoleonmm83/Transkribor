@@ -6,11 +6,14 @@ schaerfer als der Code. Der Riegel zaehlt je (Datei, Regel); steigt die Zahl
 nicht, sieht er nichts. Die Decke steht weiter unten, aber die Ueberschrift
 liest man zuerst. Angemerkt vom kalten Zweitleser, 2026-09-03.)
 
-Bis hierher lief ruff in diesem Repo nirgends automatisch — nicht in
+Bis hierher lief ruff in diesem Repo nirgends als RIEGEL — nicht in
 `.github/workflows/`, nicht im `pre-commit`-Hook, nicht in einem npm-Skript.
+(„Nirgends automatisch" waere zu scharf und stand so in der ersten Fassung:
+`.coderabbit.yaml:219` schaltet `tools.ruff` ein, er lief also als BOT-KOMMENTAR
+am PR — ohne die Faehigkeit, rot zu werden, und ohne je auf einem Entwickler-
+rechner anzuschlagen. Angemerkt vom gegnerischen Pruefer, 2026-09-03, F6.)
 Gepinnt war er trotzdem (`pyproject.toml`, `[dependency-groups]`), und Renovate
-hat die Fassung gepflegt: zuletzt #543 auf 0.16.6. Ein Werkzeug, dessen Fassung
-gepflegt wird und das nie laeuft, ist Dekoration.
+hat die Fassung gepflegt: zuletzt #543 auf 0.16.6.
 
 Warum eine Baseline und nicht schlicht `ruff check .` als Riegel: der Baum traegt
 132 Befunde (I001 51 · E702 20 · S603 13 · E401 10 · B904 9 · F401 6 · Rest 23,
@@ -89,13 +92,44 @@ def schluessel_liste(ausgabe: str) -> list[str]:
     return sorted(s for s in map(schluessel, ausgabe.splitlines()) if s)
 
 
-def gemeldete_zahl(ausgabe: str) -> int:
-    """Was RUFF selbst zaehlt. Ohne Summenzeile null (`All checks passed!`)."""
+def summenzeile(ausgabe: str) -> int | None:
+    """Ruffs eigene Zahl — oder None, wenn er gar keine Summenzeile gedruckt hat.
+
+    Der Unterschied zwischen „null Befunde" und „hat nichts gesagt" traegt den
+    Riegel gegen ein fehlendes ruff (siehe `unstimmig`); `gemeldete_zahl` wirft
+    ihn absichtlich weg, die Stimmigkeitsprobe braucht ihn.
+    """
     for zeile in ausgabe.splitlines():
         treffer = _SUMME.match(zeile.strip())
         if treffer:
             return int(treffer["zahl"])
-    return 0
+    return None
+
+
+def gemeldete_zahl(ausgabe: str) -> int:
+    """Was RUFF selbst zaehlt. Ohne Summenzeile null (`All checks passed!`)."""
+    zahl = summenzeile(ausgabe)
+    return 0 if zahl is None else zahl
+
+
+def unstimmig(rc: int, ausgabe: str) -> str | None:
+    """Passt ruffs Rueckgabecode zu dem, was er gedruckt hat? Sonst der Grund.
+
+    `python -m ruff` OHNE installiertes ruff endet mit **rc 1 und leerem
+    stdout** — gemessen, und genau derselbe Code wie „es gibt Lint-Befunde".
+    Ohne diese Probe waere `befunde` leer, die ganze Baseline gaelte als
+    „behoben", und der Riegel meldete rc 0. Die Zaehlprobe in `fehlende_zeilen`
+    hilft dagegen NICHT: ohne Summenzeile ist auch die erwartete Zahl null.
+    Gefunden vom gegnerischen Pruefer, 2026-09-03 (F2).
+    """
+    if rc == 1 and summenzeile(ausgabe) is None:
+        return (
+            "ruff endete mit 1, druckte aber keine Zeile `Found N errors.` — so "
+            "sieht ein fehlendes Modul aus, nicht ein Lint-Befund"
+        )
+    if rc == 0 and "All checks passed!" not in ausgabe:
+        return "ruff endete mit 0, druckte aber kein `All checks passed!`"
+    return None
 
 
 def fehlende_zeilen(ausgabe: str, befunde: list[str]) -> int:
@@ -114,6 +148,9 @@ def fehlende_zeilen(ausgabe: str, befunde: list[str]) -> int:
 # statt der Regel allein; der macht dann aber JEDE Umformatierung einer Zeile mit
 # bekanntem Befund rot, und webtool/app.py traegt 13 davon. Genau daran stirbt ein
 # Riegel. Umbauen, wenn so ein Tausch real passiert ist — nicht vorher.
+# Ein UMZUG einer Datei macht dagegen rot (alle Schluessel weg, alle neu) und
+# schickt zu `--schreiben`; das ist gewollt und gemessen (`git mv` eines Skripts
+# mit drei Befunden: 3 behoben + 3 NEU, rc 1).
 def vergleich(neu: list[str], alt: list[str]) -> tuple[list[str], list[str]]:
     """(neue, entfallene) — mit Vielfachheit, damit ein zweiter S603 zaehlt."""
     n, a = Counter(neu), Counter(alt)
@@ -123,20 +160,27 @@ def vergleich(neu: list[str], alt: list[str]) -> tuple[list[str], list[str]]:
 def ruff_lauf() -> str:
     """ruff im Repo-Stamm fahren und seine Befundausgabe zurueckgeben."""
     # Feste Argumentliste, eigener Interpreter, keine Shell, keine Eingabe von
-    # aussen — deshalb ist S603 hier nachweislich kein Fund, sondern Rauschen.
-    lauf = subprocess.run(  # noqa: S603
+    # aussen. (Ein `# noqa: S603` stand hier und war ueberfluessig: 0.16.6
+    # meldet diesen Aufruf gar nicht — gemessen, `All checks passed!`. Eine
+    # Unterdrueckung, die nichts unterdrueckt, behauptet eine Gefahr, die der
+    # Linter nicht sieht.)
+    lauf = subprocess.run(
         [sys.executable, "-m", "ruff", "check", ".", "--output-format=concise"],
         cwd=STAMM,
         capture_output=True,
         text=True,
         check=False,
     )
-    # 0 = sauber, 1 = Befunde. Alles andere ist ein Fehler von ruff SELBST
-    # (kaputte Konfiguration, fehlende Fassung, unbekannter Schalter) — und ein
-    # Riegel, der das als "keine Befunde" liest, ist gruen, weil er nichts
-    # gesehen hat. Das ist die Fehlerklasse hinter `CodeRabbit pass` bei
-    # erschoepftem Kontingent und hinter `tests 0` in scripts/testlauf.mjs.
-    if lauf.returncode not in (0, 1):
+    # 0 = sauber, 1 = Befunde — aber NUR, wenn die Ausgabe dazu passt. Alles
+    # andere ist ein Fehler von ruff SELBST (kaputte Konfiguration, fehlende
+    # Fassung, unbekannter Schalter), und ein Riegel, der das als "keine
+    # Befunde" liest, ist gruen, weil er nichts gesehen hat. Das ist die
+    # Fehlerklasse hinter `CodeRabbit pass` bei erschoepftem Kontingent und
+    # hinter `tests 0` in scripts/testlauf.mjs.
+    grund = unstimmig(lauf.returncode, lauf.stdout)
+    if lauf.returncode not in (0, 1) or grund:
+        if grund:
+            sys.stderr.write(grund + "\n")
         sys.stderr.write(lauf.stderr or lauf.stdout)
         raise SystemExit(2)
     return lauf.stdout
