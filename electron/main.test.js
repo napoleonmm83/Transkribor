@@ -1158,7 +1158,9 @@ test('ein fehlgeschlagener Schreibvorgang steht im Protokoll — sonst hinterlae
   const alsDatei = path.join(os.tmpdir(), `fb-datei-${Date.now()}`)
   fs.writeFileSync(alsDatei, 'keine Ablage, eine Datei')
   // In `temps`, sonst raeumt das `after` sie nicht weg: `laden({daten})` legt nichts selbst an,
-  // und jeder Lauf liesse eine Datei im Temp-Ordner liegen (kalter Diff-Review, gemessen 7 -> 8).
+  // und jeder Lauf liesse eine Datei im Temp-Ordner des Entwicklers liegen. Nachpruefbar, ohne
+  // dass man es glauben muss: die Dateien heissen `fb-datei-*` im OS-Temp — vor und nach einem
+  // Lauf zaehlen, die Zahl darf nicht steigen (so vom kalten Diff-Review gefunden).
   temps.push(alsDatei)
   const w = await laden({ daten: alsDatei })
   await kurzWarten()
