@@ -24,22 +24,27 @@ const protokoll = require('./protokoll')
 const DATEI = 'fehlerberichte.json'
 
 /**
- * Integrationen, die das SDK per Vorgabe mitbringt und die hier NICHT laufen. Die Namen sind
- * die des installierten 7.18.0 (`main/sdk.js`), nicht die der Doku — `fehlerberichte.test.js`
- * prueft jeden gegen den Quelltext im Paket, sonst waere ein Filter auf einen umbenannten
- * Namen still ein No-op.
- *   SentryMinidump          native Abstuerze — Bugsink kennt keine Minidumps
- *   MainProcessSession      eine Sitzung je Start — Telemetrie ohne Fehler waere Tracking
- *   PreloadInjection        Renderer-Anbindung — kommt erst mit PR (c)
- *   ElectronBreadcrumbs, ElectronNet, Console, NodeFetch — Breadcrumbs (URLs tragen Projektnamen)
- *   LocalVariables          lokale Variablen in Frames — tragen Dateinamen und Text
- *   Screenshots             das Fenster zeigt Transkripttext
- *   RendererEventLoopBlock  Renderer-Haenger — erst mit PR (c)
+ * Die Integrationen, die laufen DUERFEN — eine Erlaubnisliste, keine Verbotsliste. Die erste
+ * Fassung verbot Namen (`LocalVariables`, …) und liess damit `LocalVariablesAsync` durch: auf
+ * Node >= 19 installiert das SDK die Async-Variante unter anderem Namen, und im gepackten
+ * Envelope stand sie in `sdk.integrations` (gegnerisches Review). Eine Verbotsliste veraltet
+ * mit jedem SDK-Update still; eine Erlaubnisliste laesst Neues erst durch, wenn jemand es
+ * hier eintraegt. Gemessene Vorgabe-Liste des 7.18.0 im gepackten Lauf, minus die eine:
+ *   ElectronContext, Context, AdditionalContext, GpuContext  Geraet, OS, App, GPU — kein Nutzertext
+ *   OnUncaughtException, OnUnhandledRejection               der Zweck
+ *   ChildProcess                                             Electrons eigene Kindprozesse (GPU, Utility)
+ *   EventFilters, LinkedErrors, FunctionToString, ContextLines, NormalizePaths  Aufbereitung
+ * Bewusst NICHT dabei: SentryMinidump (Bugsink kann keine Minidumps), MainProcessSession
+ * (eine Sitzung je Start waere Tracking), PreloadInjection und RendererEventLoopBlock (Renderer
+ * erst mit PR c), ElectronBreadcrumbs/ElectronNet/Console/NodeFetch (Breadcrumbs mit URLs),
+ * LocalVariables UND LocalVariablesAsync (Variablenwerte tragen Text), Screenshots (das Fenster
+ * zeigt Transkript). `fehlerberichte.test.js` prueft jeden erlaubten Namen gegen den
+ * Paketquelltext und die beiden Variablen-Namen gegen die Liste.
  */
-const RAUS = Object.freeze([
-  'SentryMinidump', 'MainProcessSession', 'PreloadInjection', 'ElectronBreadcrumbs',
-  'ElectronNet', 'Console', 'NodeFetch', 'LocalVariables', 'Screenshots',
-  'RendererEventLoopBlock',
+const ERLAUBT = Object.freeze([
+  'ElectronContext', 'Context', 'AdditionalContext', 'GpuContext',
+  'OnUncaughtException', 'OnUnhandledRejection', 'ChildProcess',
+  'EventFilters', 'LinkedErrors', 'FunctionToString', 'ContextLines', 'NormalizePaths',
 ])
 
 /** Namen kuerzer als das werden nicht maskiert — `ab` in jedem Wort zu ersetzen hilft niemandem. */
@@ -119,14 +124,28 @@ function namen(projekteDir) {
 function regexFrei(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') }
 
 /**
- * Ein Pfad kommt in drei Schreibweisen vor: wie notiert, mit `/` statt `\`, und
- * JSON-kodiert mit `\\` — eine Fehlermeldung aus einem `JSON.stringify` traegt die dritte.
- * Windows-Pfade unterscheiden keine Gross-/Kleinschreibung, also `i` nur dort.
+ * Ein Pfad kommt in vier Schreibweisen vor: wie notiert, mit `/` statt `\`, JSON-kodiert mit
+ * `\\` (eine Meldung aus `JSON.stringify`) und URL-kodiert (`C:%5CUsers%5C…` in einer
+ * Zugriffszeile). Windows-Pfade unterscheiden keine Gross-/Kleinschreibung, also `i` nur dort.
  */
 function pfadMuster(p) {
-  const formen = new Set([p, p.replace(/\\/g, '/'), p.replace(/\\/g, '\\\\')])
+  const vorwaerts = p.replace(/\\/g, '/')
+  // URL-kodiert in beiden Lesarten: `encodeURIComponent` kodiert auch den Doppelpunkt (`C%3A`),
+  // eine Zugriffszeile traegt ihn meist roh (`C:%5CUsers`).
+  const kodiert = [p, vorwaerts].flatMap(f => [encodeURIComponent(f), encodeURIComponent(f).replace(/%3A/g, ':')])
+  const formen = new Set([p, vorwaerts, p.replace(/\\/g, '\\\\'), ...kodiert])
   const flags = process.platform === 'win32' ? 'gi' : 'g'
   return new RegExp([...formen].map(regexFrei).join('|'), flags)
+}
+
+/**
+ * Ein Name in allen Formen, in denen er in einer Meldung stehen kann: roh, NFC und NFD (macOS
+ * legt Dateinamen zerlegt ab, eine Meldung aus dem Server kann sie zusammengesetzt tragen)
+ * und jede davon URL-kodiert (Zugriffszeilen mit 4xx/5xx bleiben im Bericht).
+ */
+function namensFormen(name) {
+  const roh = [name, name.normalize('NFC'), name.normalize('NFD')]
+  return [...new Set([...roh, ...roh.map(encodeURIComponent)])]
 }
 
 /**
@@ -146,9 +165,8 @@ function maskiere(text, ctx = {}) {
   // er URL-kodiert — `Interview%20Mueller` traf die Rohform nicht (Kalt-Review).
   const n = ctx.namen || {}
   const brauchbar = liste => (liste || []).filter(name => typeof name === 'string' && name.length >= MIN_NAME)
-  const formen = name => [...new Set([name, encodeURIComponent(name)])]
-  for (const name of brauchbar(n.dateien)) for (const f of formen(name)) t = t.split(f).join('<datei>')
-  for (const name of brauchbar(n.projekte)) for (const f of formen(name)) t = t.split(f).join('<projekt>')
+  for (const name of brauchbar(n.dateien)) for (const f of namensFormen(name)) t = t.split(f).join('<datei>')
+  for (const name of brauchbar(n.projekte)) for (const f of namensFormen(name)) t = t.split(f).join('<projekt>')
   return t
 }
 
@@ -213,10 +231,14 @@ function beforeSend(ctx) {
 /**
  * Die SDK-Optionen. Ohne DSN ist das SDK aus (`enabled: false`) — so laeuft der
  * Entwicklerbetrieb und jeder Testbau ohne Secret, ohne dass irgendwo ein Zweig fehlt.
- * `maxValueLength` 700 statt 250, weil eine Protokollzeile bis 600 Zeichen lang ist
- * (`bericht.MAX_ZEILE`) und die Liste sonst still gekappt wuerde.
+ * `maxValueLength` kuerzt im SDK nur `message`, `exception.values[].value` und `request.url`
+ * (`extra` bleibt ungekuerzt) — 700 statt 250, damit eine Fehlermeldung in Laenge einer
+ * Protokollzeile (`bericht.MAX_ZEILE`) ganz ankommt.
+ * `ipcMode` kommt vom Hauptprozess (`Sentry.IPCMode.Classic`): die Vorgabe `Both` registriert
+ * ein privilegiertes `sentry-ipc://`-Schema fuer die ganze Session; ohne Renderer-SDK (PR c)
+ * braucht das niemand, also bleibt die Flaeche zu.
  */
-function optionen({ dsn, version, gepackt, ctx }) {
+function optionen({ dsn, version, gepackt, ctx, ipcMode }) {
   return {
     dsn: dsn || undefined,
     enabled: !!dsn,
@@ -225,7 +247,8 @@ function optionen({ dsn, version, gepackt, ctx }) {
     sendDefaultPii: false,
     maxValueLength: Math.max(bericht.MAX_ZEILE + 100, 700),
     beforeBreadcrumb: () => null,
-    integrations: vorgaben => vorgaben.filter(i => !RAUS.includes(i.name)),
+    ...(ipcMode !== undefined ? { ipcMode } : {}),
+    integrations: vorgaben => vorgaben.filter(i => ERLAUBT.includes(i.name)),
     beforeSend: beforeSend(ctx),
     // Der Transport ist ein OFFLINE-Transport mit Warteschlange auf Platte: ein Ereignis, das
     // bei AN ohne Netz erfasst wurde, ginge nach einem spaeteren AUS beim naechsten Start
@@ -262,8 +285,8 @@ const FEHLERPROBE = 'Fehlerprobe: absichtlich geworfen (TRANSKRIBOR_FEHLERPROBE=
 function fehlerprobeGewuenscht(env) { return !!env && env.TRANSKRIBOR_FEHLERPROBE === '1' }
 
 module.exports = {
-  DATEI, RAUS, MIN_NAME, FENSTER, FEHLERPROBE, INHALTSFELDER, pfad, lesen, schreiben, namen,
-  maskiere, maskiereTief, ereignisMaskieren, protokollZeilen, beforeSend, optionen,
+  DATEI, ERLAUBT, MIN_NAME, FENSTER, FEHLERPROBE, INHALTSFELDER, pfad, lesen, schreiben, namen,
+  namensFormen, maskiere, maskiereTief, ereignisMaskieren, protokollZeilen, beforeSend, optionen,
   fehlerprobeGewuenscht,
   _home: () => os.homedir(),
 }

@@ -259,7 +259,7 @@ test('optionen: ohne DSN ist das SDK aus, mit DSN an — und die Vorgaben stehen
   assert.strictEqual(an.environment, 'dev')
   assert.strictEqual(fb.optionen({ dsn: 'x', version: '1', gepackt: true, ctx }).environment, 'gepackt')
   assert.strictEqual(an.sendDefaultPii, false)
-  assert.ok(an.maxValueLength >= bericht.MAX_ZEILE, 'eine Protokollzeile passt ungekappt in ein extra-Feld')
+  assert.ok(an.maxValueLength >= bericht.MAX_ZEILE, 'eine Fehlermeldung in Zeilenlaenge kommt ganz an (maxValueLength kuerzt message/value, nicht extra)')
   assert.strictEqual(an.beforeBreadcrumb({ category: 'console' }), null)
   assert.strictEqual(typeof an.beforeSend, 'function')
 })
@@ -274,18 +274,37 @@ test('optionen: auch der Offline-Transport liest den Schalter — beim Ablegen u
   assert.strictEqual(an.transportOptions.shouldSend(), false, 'nichts aus der Schlange raus')
 })
 
-test('optionen: der Integrationsfilter wirft genau RAUS und laesst den Rest', () => {
+test('optionen: der Integrationsfilter ist eine ERLAUBNISLISTE — Unbekanntes bleibt draussen', () => {
   const an = fb.optionen({ dsn: 'x', version: '1', gepackt: true, ctx: welt(true).ctx })
-  const vorgaben = ['SentryMinidump', 'OnUncaughtException', 'Console', 'MainProcessSession', 'GpuContext', 'Screenshots']
+  // Die gemessene Vorgabe-Liste des gepackten 7.18.0 (sdk.integrations im Envelope) plus zwei
+  // Namen, die es je nach Node-Version oder SDK-Update geben kann: beide muessen draussen bleiben.
+  const vorgaben = ['ElectronContext', 'ChildProcess', 'OnUncaughtException', 'AdditionalContext',
+    'GpuContext', 'EventFilters', 'FunctionToString', 'LinkedErrors', 'OnUnhandledRejection',
+    'ContextLines', 'LocalVariablesAsync', 'Context', 'NormalizePaths',
+    'LocalVariables', 'SentryMinidump', 'MainProcessSession', 'Screenshots', 'NeuMitUpdate']
     .map(name => ({ name }))
-  assert.deepStrictEqual(an.integrations(vorgaben).map(i => i.name), ['OnUncaughtException', 'GpuContext'])
+  const bleibt = an.integrations(vorgaben).map(i => i.name)
+  assert.deepStrictEqual(bleibt, ['ElectronContext', 'ChildProcess', 'OnUncaughtException', 'AdditionalContext',
+    'GpuContext', 'EventFilters', 'FunctionToString', 'LinkedErrors', 'OnUnhandledRejection',
+    'ContextLines', 'Context', 'NormalizePaths'])
+  for (const verboten of ['LocalVariables', 'LocalVariablesAsync', 'SentryMinidump', 'MainProcessSession', 'Screenshots', 'PreloadInjection']) {
+    assert.ok(!fb.ERLAUBT.includes(verboten), `${verboten} darf nie in ERLAUBT stehen`)
+  }
+})
+
+test('optionen: ipcMode wird durchgereicht, ohne Angabe bleibt die SDK-Vorgabe unberuehrt', () => {
+  const ctx = welt(true).ctx
+  assert.strictEqual(fb.optionen({ dsn: 'x', version: '1', gepackt: true, ctx, ipcMode: 1 }).ipcMode, 1)
+  assert.ok(!('ipcMode' in fb.optionen({ dsn: 'x', version: '1', gepackt: true, ctx })))
 })
 
 /**
- * Der Filter greift nur, wenn die Namen die des INSTALLIERTEN SDK sind — die Doku nennt andere
- * (`InboundFilters`, `GPUContext`, `ScopeToMain`), und ein Filter auf einen Namen, den es nicht
- * gibt, ist still ein No-op. Sensor: jeder RAUS-Name kommt als String-Literal im Paketquelltext
- * vor; ein erfundener Name darf es NICHT (Positivkontrolle des Sensors).
+ * Die Erlaubnisliste greift nur, wenn die Namen die des INSTALLIERTEN SDK sind — die Doku nennt
+ * andere (`InboundFilters`, `GPUContext`), und ein Name, den es nicht gibt, ist still ein Loch
+ * in der Liste (die Integration bliebe draussen, ohne dass es jemand merkt). Sensor: jeder
+ * erlaubte Name kommt als String-Literal im Paketquelltext vor; ein erfundener darf es NICHT
+ * (Positivkontrolle des Sensors). Ob die Liste im GEPACKTEN Lauf wirkt, misst
+ * docs/bugsink/envelope-sammler.py am Envelope (`sdk.integrations`).
  */
 function quelltextTraegt(name) {
   // ALLE @sentry-Pakete, nicht eine geratene Auswahl: `LocalVariables` lebt in `node-core`,
@@ -316,7 +335,17 @@ test('fehlerprobeGewuenscht: nur der Wert 1 zaehlt', () => {
   assert.strictEqual(fb.fehlerprobeGewuenscht(undefined), false)
 })
 
-test('RAUS: jeder gefilterte Name steht im Quelltext des installierten SDK — ein erfundener nicht', () => {
-  for (const name of fb.RAUS) assert.ok(quelltextTraegt(name), `${name} fehlt im SDK — umbenannt? Dann ist der Filter ein No-op`)
+test('ERLAUBT: jeder erlaubte Name steht im Quelltext des installierten SDK — ein erfundener nicht', () => {
+  for (const name of fb.ERLAUBT) assert.ok(quelltextTraegt(name), `${name} fehlt im SDK — umbenannt? Dann faellt die Integration still weg`)
   assert.strictEqual(quelltextTraegt('GibtEsNichtIntegration'), false, 'Positivkontrolle des Sensors')
+  assert.ok(quelltextTraegt('LocalVariablesAsync'), 'die Async-Variante existiert im SDK — genau die, die die Verbotsliste uebersah')
+})
+
+test('namensFormen: NFD/NFC und URL-kodiert, jede Form maskiert', () => {
+  const nfd = 'Gespräch Müller'          // so legt macOS den Namen ab
+  const nfc = nfd.normalize('NFC')
+  const ctx = { ...CTX, namen: { projekte: [], dateien: [nfd] } }
+  assert.strictEqual(fb.maskiere(`Datei ${nfc}.m4a fehlt`, ctx), 'Datei <datei>.m4a fehlt')
+  assert.strictEqual(fb.maskiere(`GET /files/${encodeURIComponent(nfc)} 404`, ctx), 'GET /files/<datei> 404')
+  assert.strictEqual(fb.maskiere(`x C:%5CUsers%5Cmarcus%5Cy`, CTX), 'x <home>%5Cy', 'auch der Pfad URL-kodiert')
 })

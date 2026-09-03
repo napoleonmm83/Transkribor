@@ -154,8 +154,14 @@ function attrappen(opt = {}) {
   // Erste in der Spur" (#150) soll davon unberuehrt bleiben. Ob init vor whenReady lief,
   // sagt `sentryVorReady` — `w.starten` entsteht erst mit dem whenReady-Abonnement.
   w.sentry = {
-    init: o => { w.sentryOptionen = o; w.sentryVorReady = !w.starten },
+    init: o => {
+      w.sentryOptionen = o
+      w.sentryVorReady = !w.starten
+      // VOR `appendSwitch`, nicht nur vor whenReady: was davor wirft, sieht das SDK nicht.
+      w.sentryVorSchalter = !w.spur.includes('schalter:disable-http2')
+    },
     close: async () => { w.spur.push('sentry.close'); return true },
+    IPCMode: { Classic: 1, Protocol: 2, Both: 3 },
   }
   w.backend = {
     start: (onLine, extra) => {
@@ -1095,6 +1101,8 @@ test('das SDK wird VOR whenReady initialisiert und ist ohne DSN aus', async () =
   const w = await laden()
   assert.ok(w.sentryOptionen, 'init wurde nicht gerufen')
   assert.strictEqual(w.sentryVorReady, true, 'init muss vor dem whenReady-Abonnement laufen')
+  assert.strictEqual(w.sentryVorSchalter, true, 'init muss vor appendSwitch stehen — vor allem anderen')
+  assert.strictEqual(w.sentryOptionen.ipcMode, 1, 'IPCMode.Classic: kein sentry-ipc://-Schema ohne Renderer-SDK')
   assert.strictEqual(w.sentryOptionen.enabled, false, 'die package.json des Repos traegt keinen DSN')
   assert.strictEqual(w.sentryOptionen.release, 'transkribor@9.9.9')
   assert.strictEqual(w.sentryOptionen.environment, 'dev')
@@ -1107,6 +1115,7 @@ test('beim ersten Start fragt das Fenster genau einmal — Ja schaltet an, und d
   assert.strictEqual(w.dialoge.length, 1, 'genau eine Nachfrage')
   assert.strictEqual(w.dialoge[0].buttons[0], fb().FENSTER.ja)
   assert.strictEqual(w.dialoge[0].cancelId, 1, 'Schliessen heisst Nein')
+  assert.strictEqual(w.dialoge[0].defaultId, 1, 'Enter heisst Nein — opt-in bleibt eine Entscheidung')
   const z = fb().lesen(fb().pfad(w.daten))
   assert.strictEqual(z.automatisch, true)
   assert.ok(z.gefragt, 'gefragt ist gesetzt')
