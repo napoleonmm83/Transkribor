@@ -1243,6 +1243,31 @@ def cmd_run(project: str, base: str = None, force: bool = False, verify: bool = 
     # Ab hier ist der Bereich fixiert — dieselbe Menge, die `[scope]` gleich meldet. `main`
     # liest sie fuer den Exitcode (#524), statt nach dem Lauf neu zu scannen.
     _letzter_bereich = list(all_bases)
+    # …und mit dem Bereich wird die IDENTITAET der Roh-Transkripte fixiert (#523).
+    #
+    # Der Bereich ist ein Bereich von NAMEN, und ein Name ist wiederverwendbar: Loeschen ist
+    # waehrend des Laufs erlaubt (#80), Hochladen legt gleichnamig neu an, und `one()` fragte
+    # danach nur, OB eine Roh-JSON da ist. Damit korrigierte der Lauf eine andere Aufnahme als
+    # die, die er in seinen Bereich genommen hat — mit dem Glossar eines Bestands, zu dem sie
+    # nie gehoert hat. Ueber die Oberflaeche erreichbar, ohne jeden Umbau.
+    #
+    # `transcript_bases` listet nur Namen MIT vorhandener `<base>.json`, hier steht also je
+    # Base eine echte Kennung — `None` heisst „os.stat hat geworfen", nicht „gibt es nicht".
+    kennungen = {b: paths.kennung(os.path.join(tdir, b + ".json")) for b in all_bases}
+
+    def unveraendert(b: str, raw_json: str) -> bool:
+        """Ist das noch DIESELBE Datei wie beim Fixieren des Bereichs? (#523)
+
+        Ersetzt die frueheren `os.path.exists`-Fragen an drei Stellen in `one()`. Fuer den
+        Normalfall identisch (Datei unveraendert ⇒ True, Datei weg ⇒ False); neu ist allein
+        der ausgetauschte Fall.
+
+        **Die Richtung des Zweifels ist ueberspringen**, und sie ist hier anders als bei
+        `transcribe._kennung` (das meldet im Zweifel einmal zu viel): eine nicht korrigierte
+        Aufnahme holt der naechste Lauf, eine falsch korrigierte ueberschreibt Nutzertext.
+        Deshalb faellt auch eine unlesbare Kennung — auf beiden Seiten — nach False."""
+        jetzt = paths.kennung(raw_json)
+        return jetzt is not None and kennungen.get(b) == jetzt
     # Wirkungsbereich melden, bevor die erste lange Arbeit (Diarisierung) beginnt — jobs.py
     # gibt danach alle uebrigen Aufnahmen zum Loeschen/Umbenennen frei (Issue #80).
     print("[scope] " + "\t".join(all_bases), flush=True)
@@ -1258,7 +1283,7 @@ def cmd_run(project: str, base: str = None, force: bool = False, verify: bool = 
 
     def one(b: str) -> bool:
         raw_json = os.path.join(tdir, b + ".json")
-        if not os.path.exists(raw_json):
+        if not unveraendert(b, raw_json):
             return False
         epath = os.path.join(tdir, b + ".edit.json")
         if _is_human_edited(epath) and not force:
@@ -1281,7 +1306,7 @@ def cmd_run(project: str, base: str = None, force: bool = False, verify: bool = 
         try:
             # 1. Lokale Hardware-Phase (Diarisierung + Vorbereitung): genau 1 Thread zeitgleich
             with _hardware_lock:
-                if not os.path.exists(raw_json):
+                if not unveraendert(b, raw_json):
                     return False                       # noch vor `[active]` — es gibt nichts freizugeben
                 # #452: DIESE Marke steht absichtlich VOR `cmd_diarize`. Seit `buche_aktive`
                 # zaehlt, ist `cmd_diarize`s eigenes `[active]`/`[done]`-Paar harmlos IN dieses
@@ -1320,7 +1345,7 @@ def cmd_run(project: str, base: str = None, force: bool = False, verify: bool = 
                     return False
             # 2. Lokaler GPU-Schritt fertig -> Hardware-Lock freigegeben für nächste Datei.
             # 3. Sofortige Cloud-KI-Phase (parallel über _claude_slots)
-            if not os.path.exists(raw_json):
+            if not unveraendert(b, raw_json):
                 return False
             # `bool(...)` faengt das `None` ab: `cmd_run` zaehlt seine Bilanz mit `sum(ex.map(one, …))`,
             # und ein `None` darin waere ein TypeError statt einer Zahl. Der Unterschied

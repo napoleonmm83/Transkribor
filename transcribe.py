@@ -477,6 +477,21 @@ def _autocorrect_an() -> bool:
     return (os.environ.get("TRANSKRIBOR_AUTOCORRECT") or "1").lower() not in ("0", "false", "no")
 
 
+def _autocorrect_aus_grund() -> str:
+    """Der Server kann die Mitkorrektur EINES Laufs abschalten und den Grund mitgeben (#496).
+
+    Zwei Variablen statt einer, und das ist der Punkt: `TRANSKRIBOR_AUTOCORRECT` beschreibt die
+    UMGEBUNG (der Nutzer hat die Korrektur abgestellt, dauerhaft, fuer alles), diese hier
+    beschreibt DIESEN LAUF (der Server weiss von einem Konflikt, den der Lauf nicht sehen kann).
+    Eine gemeinsame Variable haette den Kill-Switch fuer den Nutzer unsichtbar umgeschrieben —
+    und `app._laeuft_mitkorrektur` fragt den Kill-Switch weiterhin selbst.
+
+    Leer bzw. nur Leerraum heisst „nicht gesetzt": der Subprozess erbt `os.environ` des Servers,
+    und eine leere Zeile aus einer `.env` waere sonst ein stiller Dauer-Aus-Schalter. Dieselbe
+    Null-Richtung wie `fetch._mehrsprachig_aus_env` (#298)."""
+    return (os.environ.get("TRANSKRIBOR_AUTOCORRECT_AUS") or "").strip()
+
+
 # Eigener Platzhalter statt `None`: `_kennung` LIEFERT `None`, wenn `os.stat` wirft. Mit
 # `angekuendigt.get(b)` als Default waere „nie gemeldet" von „gemeldet, aber unlesbar" nicht
 # zu unterscheiden — und eine nie gemeldete Aufnahme mit unlesbarer Datei bekaeme dann gar
@@ -498,12 +513,17 @@ def _kennung(pfad):
     Zeit und Groesse fangen den Fall ab, in dem ein Dateisystem die Inode wiederverwendet.
     Ein Wurf ist kein Fehler, sondern „ich weiss es nicht" — der Vergleich schlaegt dann fehl
     und meldet lieber einmal zu viel als einmal zu wenig; beide Leser sind additiv.
+
+    **Die Regel selbst steht seit #523 in `webtool.paths.kennung`**, weil `correct.cmd_run`
+    denselben Vergleich braucht. Dieser Name bleibt: er ist der, den die Aufrufer und die
+    Tests kennen, und die RICHTUNG DES ZWEIFELS ist hier eine andere als dort (additiv, nicht
+    ueberspringend) — sie steht in dem Absatz darueber und gehoert damit hierher.
+
+    Der Import ist verzoegert wie jeder `webtool`-Zugriff in dieser Datei; der Aufrufer in
+    `transcribe_project` hat das Paket eine Zeile spaeter ohnehin unbedingt geladen.
     """
-    try:
-        s = os.stat(pfad)
-        return (s.st_ino, s.st_mtime_ns, s.st_size)
-    except OSError:
-        return None
+    from webtool import paths as _p
+    return _p.kennung(pfad)
 
 
 def transcribe_project(name, model, language, only=None, autocorrect: bool = False):
@@ -540,7 +560,11 @@ def transcribe_project(name, model, language, only=None, autocorrect: bool = Fal
 
     # kontext.md wird hier NICHT mehr gelesen: als Whisper-Prompt kostete sie Inhalt
     # (Begruendung samt Messung in _opts). Fuer die Korrektur liest correct.py sie selbst.
-    from webtool import device as devicemod
+    # `paths` kommt hier mit, nicht an einer eigenen Stelle: der Import daneben ist
+    # UNBEDINGT, ein fehlendes `webtool` waere also schon eine Zeile frueher aufgefallen.
+    # Der Vorbehalt „das Grund-Skript laeuft ohne das Paket" (s. `_datei_sprachwahl`) gilt
+    # fuer die OPTIONALEN Leser, nicht fuer diesen Pfad.
+    from webtool import device as devicemod, paths as _paths
     engine = devicemod.asr_engine(model)
     if engine == "whisper.cpp":
         # Apple Silicon: Metal statt CPU. Gemessen 5.29x gegen 0.81x realtime — die
@@ -570,6 +594,16 @@ def transcribe_project(name, model, language, only=None, autocorrect: bool = Fal
         # Abgeschaltet heisst die GANZE Kette: `cmd_diarize` kostet pyannote-Minuten auf der
         # GPU, und wer die Maschine ohne KI faehrt, will genau die nicht.
         print("[autocorrect] uebersprungen — TRANSKRIBOR_AUTOCORRECT=0", flush=True)
+        autocorrect = False
+    elif autocorrect and _autocorrect_aus_grund():
+        # #496: der Server hat die Mitkorrektur fuer DIESEN Lauf abgeschaltet, weil im Projekt
+        # schon ein Korrekturlauf arbeitet. Dieselbe Stelle und dieselbe Zeilenform wie der
+        # Kill-Switch darueber — und aus demselben Grund hier statt in `app._start_transcribe`:
+        # ein weggelassenes Flag saehe fuer den Nutzer aus wie „es lief einfach nichts".
+        #
+        # `elif`, nicht `if`: bei gesetztem Kill-Switch waeren es sonst ZWEI Zeilen fuer
+        # dieselbe Tatsache, und die Umgebung ist die allgemeinere Auskunft.
+        print(f"[autocorrect] uebersprungen — {_autocorrect_aus_grund()}", flush=True)
         autocorrect = False
     ai_grund_gemeldet = False
 
@@ -814,13 +848,22 @@ def transcribe_project(name, model, language, only=None, autocorrect: bool = Fal
                 result = _transkribiere_datei(m, engine, f, sprache, mehr, model)
                 dt = time.monotonic() - t0
                 result["luecken"] = luecken(result.get("segments") or [], result.get("duration"))
-                with open(os.path.join(out_dir, base + ".raw.txt"), "w", encoding="utf-8") as fh:
-                    fh.write(result["text"].strip() + "\n")
-                with open(os.path.join(out_dir, base + ".segments.txt"), "w", encoding="utf-8") as fh:
-                    for seg in result["segments"]:
-                        fh.write(f"[{fmt(seg['start'])} - {fmt(seg['end'])}] {seg['text'].strip()}\n")
-                with open(out_json, "w", encoding="utf-8") as fh:
-                    json.dump(result, fh, ensure_ascii=False, indent=1)
+                # Alle drei ueber `paths.atomic_write` (erst .tmp, dann os.replace), nicht
+                # direkt an ihren Platz. Der Leser, der das braucht, ist `correct.cmd_run.one()`:
+                # es fragt `os.path.exists(raw_json)` und liest die Datei dann — ein direktes
+                # `open(..., "w")` laesst ihn den halb geschriebenen Stand sehen, und der Fall
+                # ist seit der gestaffelten Pipeline erreichbar (ein `correct run` kann neben
+                # einer Transkription laufen, mit TRANSKRIBOR_AUTOCORRECT=0 sogar als der
+                # VORGESEHENE Weg — `jobs.GPU_KINDS` serialisiert nur transcribe gegen sich
+                # selbst). Die Roh-JSON ist dabei die teuerste der drei: an ihrer Existenz
+                # haengt, ob eine Aufnahme als transkribiert gilt.
+                _paths.atomic_write(os.path.join(out_dir, base + ".raw.txt"),
+                                    result["text"].strip() + "\n")
+                _paths.atomic_write(
+                    os.path.join(out_dir, base + ".segments.txt"),
+                    "".join(f"[{fmt(seg['start'])} - {fmt(seg['end'])}] {seg['text'].strip()}\n"
+                            for seg in result["segments"]))
+                _paths.atomic_write(out_json, json.dumps(result, ensure_ascii=False, indent=1))
                 dur = result.get("duration") or (result["segments"][-1]["end"] if result["segments"] else 0)
                 n_ok += 1
                 audio_gesamt += dur

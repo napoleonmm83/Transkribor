@@ -16,7 +16,12 @@ from . import settings
 
 _jobs = {}                 # job_id -> record
 _active = {}               # (project, kind) -> job_id (Dedupe: je Art einer pro Projekt)
-_pending = set()           # (project, kind) mit genau EINEM vorgemerkten Nachlauf
+_pending = {}              # (project, kind, base) -> mitkorrektur; genau EIN vorgemerkter Nachlauf
+                           # Der Wert ist kein Beiwerk: ein vorgemerkter Nachlauf hat noch
+                           # keinen Job-Satz, an dem `mitkorrektur_aktiv` ihn sehen koennte
+                           # (#496). Bis dahin war das Set der Schluessel; ein dict traegt
+                           # dieselben Operationen (`in`, Iteration ueber Schluessel) und
+                           # zusaetzlich die Antwort auf „wuerde der laufen und korrigieren?".
 _lock = threading.Lock()
 
 _CREATE_NO_WINDOW = 0x08000000 if os.name == "nt" else 0
@@ -130,6 +135,16 @@ def _popen_kwargs() -> dict:
     Kinder (whisper, claude). Auf Windows leistet das taskkill /T, siehe _kill_tree."""
     return {} if os.name == "nt" else {"start_new_session": True}
 
+# Der Weg des Servers, die Mitkorrektur EINES Laufs abzuschalten (#496) — gesetzt von
+# `app._start_transcribe`, gelesen von `transcribe.transcribe_project`. Der Name steht HIER
+# und nicht bei einem der beiden: `_mitkorrektur` unten ist der dritte Leser, und drei
+# Literale fuer eine Variable laufen beim naechsten Umbau auseinander.
+#
+# Warum eine Umgebungsvariable und nicht ein weggelassenes `--autocorrect`: der Lauf soll den
+# GRUND drucken. Die Begruendung steht ausformuliert in `transcribe.transcribe_project` —
+# "ein Grund im Protokoll ist mehr wert als ein weggelassenes Flag, das niemand sieht".
+AUTOCORRECT_AUS = "TRANSKRIBOR_AUTOCORRECT_AUS"
+
 # Nur Whisper belegt die GPU dauerhaft und gross (large-v3, ganze Audiolaenge). `correct`
 # haengt fast nur an Opus und braucht die GPU nur fuer den kurzen pyannote-Schritt — es hier
 # mitzufuehren hiesse, dass eine 25-Minuten-Korrektur jede Transkription blockiert.
@@ -167,6 +182,47 @@ def _prune_locked():
         _jobs.pop(jid, None)
 
 
+def _mitkorrektur(kind: str, cmd: list, env: dict | None) -> bool:
+    """Wuerde DIESER Lauf nach der Transkription selbst korrigieren? (#496)
+
+    Abgeleitet, nicht uebergeben: die Antwort steht im Kommando und in der Umgebung, die der
+    Lauf gleich bekommt — ein zusaetzlicher Parameter koennte von beidem abweichen, und genau
+    solche zwei Quellen fuer eine Frage sind hier schon einmal auseinandergelaufen.
+
+    Die Umgebungsvariable ist der Weg des Servers, die Mitkorrektur EINES Laufs abzuschalten,
+    waehrend `--autocorrect` am Kommando bleibt. Das Flag bleibt bewusst dran: der Lauf soll
+    den GRUND drucken (`transcribe.transcribe_project`, dort steht die Begruendung), statt
+    dass ein weggelassenes Flag stumm nichts tut.
+
+    Der Kill-Switch `TRANSKRIBOR_AUTOCORRECT` zaehlt hier NICHT mit: er beschreibt die
+    Umgebung des Servers, nicht diesen Lauf, und `app._laeuft_mitkorrektur` fragt ihn
+    weiterhin selbst — dieselbe Arbeitsteilung wie bisher."""
+    return (kind == "transcribe" and "--autocorrect" in cmd
+            and not (env or {}).get(AUTOCORRECT_AUS))
+
+
+def mitkorrektur_aktiv(project: str) -> bool:
+    """Laeuft im Projekt ein transcribe-Job, der selbst korrigiert — oder ist einer vorgemerkt?
+
+    Die zweite Haelfte ist der Grund fuer diese Funktion (#496). Ein vorgemerkter Nachlauf
+    traegt sein Kommando EINGEFROREN: er wurde gebaut, als noch kein Korrekturlauf lief, und
+    startet spaeter unveraendert. Ohne die Vormerkung in dieser Antwort koennte ein
+    Korrekturlauf genau in dieses Fenster hineinstarten und traefe den Nachlauf bewaffnet an.
+
+    Erreichbar ist das Fenster ueber die Einzel-GPU-Sperre: `start()` gibt fuer GPU_KINDS den
+    laufenden Whisper-Job eines FREMDEN Projekts als Blocker zurueck (:82-86). Dann hat
+    Projekt P einen vorgemerkten Nachlauf, ohne dass in P ein transcribe-Job laeuft."""
+    with _lock:
+        for (proj, kind), jid in _active.items():
+            if proj != project or kind != "transcribe":
+                continue
+            r = _jobs.get(jid)
+            if r is not None and r["status"] == "running" and r.get("mitkorrektur"):
+                return True
+        return any(k[0] == project and k[1] == "transcribe" and mit
+                   for k, mit in _pending.items())
+
+
 def start(project: str, cmd: list, cwd, kind: str, then=None, env=None, base: str = None, bases: set = None):
     """Startet den Job. `then` laeuft NACH erfolgreichem Abschluss (status 'done') im
     Job-Thread — damit haengt die Auto-Korrektur nach der Transkription nicht am Browser.
@@ -195,6 +251,11 @@ def start(project: str, cmd: list, cwd, kind: str, then=None, env=None, base: st
                       # der perBase-Verdraengung muss `erreicht` UND diese Unterdrueckung
                       # mitnehmen — beides liegt damit schon serverseitig.
                       "entfernt": set(),
+                      # Korrigiert DIESER Lauf selbst mit? (#496) Abgeleitet aus Kommando und
+                      # Umgebung, siehe `_mitkorrektur`. `app._laeuft_mitkorrektur` fragt es —
+                      # vorher fragte er nur die Umgebungsvariable und sperrte damit auch
+                      # gegen einen Lauf, dessen Mitkorrektur gerade abgeschaltet wurde.
+                      "mitkorrektur": _mitkorrektur(kind, cmd, env),
                       "lines": [], "returncode": None, "started": time.time(),
                       "ended": None, "pid": None, "cancelled": False,
                       "then": [then] if then else [],
@@ -204,7 +265,7 @@ def start(project: str, cmd: list, cwd, kind: str, then=None, env=None, base: st
     return jid, True
 
 
-def request(project: str, cmd: list, cwd, kind: str, then=None, base: str = None):
+def request(project: str, cmd: list, cwd, kind: str, then=None, base: str = None, env=None):
     """Startet den Job — oder merkt genau EINEN Nachlauf vor, wenn der Slot belegt ist.
 
     Ein Upload/Import soll immer zu einer Verarbeitung fuehren, auch wenn gerade eine laeuft:
@@ -215,15 +276,18 @@ def request(project: str, cmd: list, cwd, kind: str, then=None, base: str = None
     key = (project, kind, base)
     for _ in range(10):
         if base is not None:
-            jid, started = start(project, cmd, cwd, kind, then=then, base=base)
+            jid, started = start(project, cmd, cwd, kind, then=then, base=base, env=env)
         else:
-            jid, started = start(project, cmd, cwd, kind, then=then)
+            jid, started = start(project, cmd, cwd, kind, then=then, env=env)
         if started:
             return jid, True
         with _lock:
             if key in _pending:
                 return jid, False        # schon vorgemerkt -> der Nachlauf nimmt die neuen Dateien mit
-            _pending.add(key)
+            # Der Wert reist mit, weil der Nachlauf sein Kommando EINGEFROREN traegt: er
+            # startet spaeter unveraendert, und bis dahin ist er der einzige transcribe-Lauf
+            # des Projekts, den `mitkorrektur_aktiv` sehen kann (#496).
+            _pending[key] = _mitkorrektur(kind, cmd, env)
 
         def rerun(_key=key, _jid=jid):
             # Die Vormerkung wird IMMER geraeumt, der Neustart nur ausserhalb eines Abbruchs —
@@ -254,19 +318,19 @@ def request(project: str, cmd: list, cwd, kind: str, then=None, base: str = None
             # `base` wird BEWUSST nicht verglichen: innerhalb desselben (Projekt, Art) ist der
             # Blocker per Dedupe genau der Lauf, den der Nutzer gemeint hat.
             with _lock:
-                _pending.discard(_key)
+                _pending.pop(_key, None)
                 blocker = _jobs.get(_jid) or {}
                 abgebrochen = (blocker.get("status") == "cancelled"
                                and blocker.get("project") == project
                                and blocker.get("kind") == kind)
             if abgebrochen:
                 return
-            request(project, cmd, cwd, kind, then=then, base=base)
+            request(project, cmd, cwd, kind, then=then, base=base, env=env)
 
         if when_done(jid, rerun):
             return jid, False
         with _lock:                       # jid wurde eben terminal -> Slot frei, gleich nochmal
-            _pending.discard(key)
+            _pending.pop(key, None)
         time.sleep(0.05)
     print(f"Nachlauf fuer {project!r}/{kind} aufgegeben: Slot blieb belegt", file=sys.stderr)
     return None, False

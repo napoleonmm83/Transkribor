@@ -93,6 +93,35 @@ def atomic_write(path: str, text: str) -> None:
     os.replace(tmp, path)
 
 
+def kennung(pfad: str):
+    """Dateiidentitaet — ANWESENHEIT ist zu wenig. `None`, wenn `os.stat` wirft.
+
+    Loeschen ist waehrend eines Laufs erlaubt, solange nicht gerade an der Aufnahme gerechnet
+    wird (#80). Legt jemand danach eine Datei DESSELBEN Namens neu an, ist es fuer jeden Leser
+    eine NEUE Aufnahme — am blossen Namen ist das nicht zu sehen, und erst recht nicht, wenn
+    Loeschen und Neuanlegen in dieselbe Runde fallen (der Lauf steckt dann minutenlang in
+    Whisper und sieht die Luecke nie).
+
+    Dieselben drei Felder wie `edit_model`s `dateistand`: `st_ino` traegt die Eindeutigkeit,
+    Zeit und Groesse fangen den Fall ab, in dem ein Dateisystem die Inode wiederverwendet.
+    Ein Wurf ist kein Fehler, sondern „ich weiss es nicht".
+
+    **Die Richtung des Zweifels ist beim AUFRUFER, nicht hier** — und sie ist bei den beiden
+    Lesern verschieden, deshalb steht sie nicht in dieser Funktion:
+    `transcribe._kennung` (Bereichs-Nachtrag, #485) meldet bei `None` lieber einmal zu viel;
+    `correct.cmd_run` (#523) ueberspringt dann lieber eine Datei, denn eine nicht korrigierte
+    Aufnahme holt der naechste Lauf, eine falsch korrigierte ueberschreibt Nutzertext.
+
+    Hier statt in `transcribe.py`, seit `correct.py` derselbe Vergleich braucht (#523):
+    `correct` importiert `paths` ohnehin, `transcribe` importiert `webtool` nur verzoegert —
+    andersherum haette einer der beiden eine zweite Fassung derselben Regel bekommen."""
+    try:
+        s = os.stat(pfad)
+        return (s.st_ino, s.st_mtime_ns, s.st_size)
+    except OSError:
+        return None
+
+
 def beiseitelegen(pfad: str) -> str:
     """Eine nicht lesbare Datei retten, BEVOR ein Read-Modify-Write sie mit Defaults ersetzt.
 

@@ -1138,10 +1138,18 @@ def _laeuft_mitkorrektur(project: str) -> None:
     ohnehin an _require_ai, sobald der Lauf vorbei ist.
 
     Kein drittes Flag an _keine_jobs: base=None bedeutet dort „jeder Job sperrt"
-    (rename_project-Semantik), und diese Bedingung hier ist eine andere."""
+    (rename_project-Semantik), und diese Bedingung hier ist eine andere.
+
+    **Seit #496 fragt die zweite Haelfte den JOB, nicht mehr bloss die Job-ART.** Zwei
+    Praezisierungen in einem Aufruf: ein transcribe-Lauf, dessen Mitkorrektur `_start_transcribe`
+    gerade abgeschaltet hat, sperrt nicht mehr (er schreibt keine Korrektur, es gibt nichts zu
+    schuetzen) — und ein VORGEMERKTER Nachlauf sperrt jetzt sehr wohl. Der zweite Punkt ist der
+    wichtigere: sein Kommando ist eingefroren, er startet spaeter unveraendert, und ohne ihn
+    koennte ein Korrekturlauf genau in dieses Fenster hineinstarten. Erreichbar ueber die
+    Einzel-GPU-Sperre, wenn der Blocker aus einem FREMDEN Projekt kommt."""
     if not _transcribe._autocorrect_an():
         return
-    if any(j["kind"] == "transcribe" for j in jobs.active_for(project)):
+    if jobs.mitkorrektur_aktiv(project):
         raise HTTPException(status_code=409,
                             detail="Im Projekt läuft gerade eine Transkription, die selbst "
                                    "korrigiert — bitte warten")
@@ -1623,12 +1631,33 @@ def _start_transcribe(project: str, base: str | None = None):
     `--autocorrect` haengt hier bedingungslos dran, und das ist Absicht: ueber den Kill-Switch
     `TRANSKRIBOR_AUTOCORRECT` und den Anbieter entscheidet der LAUF (#406). Ein hier
     weggelassenes Flag waere fuer den Nutzer ununterscheidbar von "es lief einfach nichts";
-    der Lauf schreibt stattdessen den Grund ins Protokoll."""
+    der Lauf schreibt stattdessen den Grund ins Protokoll.
+
+    **Laeuft im Projekt schon ein Korrekturlauf, wird die Mitkorrektur abgeschaltet (#496)** —
+    ueber die Umgebung, aus genau dem Grund im Absatz darueber: das Flag bleibt am Kommando,
+    der Lauf druckt den Grund. Sonst schrieben zwei Prozesse dieselbe Datei; mitten im
+    Schreiben gibt es keine `correction.json`, also greift auch kein Skip.
+
+    **Der Riegel sitzt HIER und nicht an den vier Tueren.** Retranscribe, Projekt-Endpunkt,
+    fetch-Nachlauf und Upload gehen alle hier durch; vier Kopien waeren
+    `fix-an-einer-stelle-ist-kein-fix-der-klasse` und verfehlten den vorgemerkten Nachlauf
+    ohnehin, der sein Kommando eingefroren traegt.
+
+    **ABGELEHNT: 409 an den Endpunkten** (die andere vertretbare Richtung, Entscheidung Marcus
+    2026-09-03). Ein Korrekturlauf ueber zwanzig Aufnahmen dauert Stunden — so lange nichts
+    hochladen zu koennen ist teurer als eine Aufnahme, die erst der naechste Lauf korrigiert.
+
+    **Die Gegenrichtung schliesst `_laeuft_mitkorrektur`**, nicht diese Zeile: startet der
+    Korrekturlauf NACH dieser Entscheidung, kaeme der Nachlauf bewaffnet los. Deshalb fragt
+    jener Riegel seit #496 auch die Vormerkung."""
     cmd = [sys.executable, os.path.join(paths.ROOT, "transcribe.py"), project]
     if base:
         cmd.extend(["--only", base])
     cmd.append("--autocorrect")
-    return jobs.request(project, cmd, paths.ROOT, "transcribe", base=base)
+    env = None
+    if any(j["kind"] == "correct" for j in jobs.active_for(project)):
+        env = {jobs.AUTOCORRECT_AUS: "im Projekt laeuft bereits ein Korrekturlauf"}
+    return jobs.request(project, cmd, paths.ROOT, "transcribe", base=base, env=env)
 
 
 @app.post("/api/projects/{project}/transcribe")

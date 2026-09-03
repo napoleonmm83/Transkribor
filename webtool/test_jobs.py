@@ -248,7 +248,7 @@ def test_request_gibt_pending_frei_wenn_der_blocker_schon_weg_ist(monkeypatch):
     versuche = []
     echt_start = jobs.start
 
-    def fake_start(project, cmd, cwd, kind, then=None):
+    def fake_start(project, cmd, cwd, kind, then=None, env=None):
         versuche.append(kind)
         if len(versuche) == 1:
             return "weg", False

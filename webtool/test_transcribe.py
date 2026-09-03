@@ -1491,6 +1491,125 @@ def test_autocorrect_faellt_bei_kill_switch_ganz_aus(monkeypatch, tmp_path, caps
     assert (tdir / "K1.json").exists()
 
 
+def test_autocorrect_faellt_mit_grund_aus_wenn_der_server_ihn_mitgibt(monkeypatch, tmp_path, capsys):
+    """#496: der Server schaltet die Mitkorrektur EINES Laufs ab und gibt den Grund mit.
+
+    Zwei Variablen statt einer, und der Test prueft genau den Unterschied:
+    `TRANSKRIBOR_AUTOCORRECT` steht hier auf „1" (der Nutzer hat nichts abgeschaltet), und
+    trotzdem laeuft die Kette nicht — weil `TRANSKRIBOR_AUTOCORRECT_AUS` einen Grund traegt.
+    Eine gemeinsame Variable haette den Kill-Switch des Nutzers still umgeschrieben.
+
+    Der GRUND im Protokoll ist die Zusicherung, nicht bloss das Ausbleiben: ein weggelassenes
+    `--autocorrect` waere fuer den Nutzer ununterscheidbar von „es lief einfach nichts"
+    (so steht es seit #406 im Docstring von `app._start_transcribe`).
+
+    Gegenkontrolle wie beim Kill-Switch-Test daneben: die TRANSKRIPTION laeuft weiter."""
+    from webtool import correct, llm
+
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    monkeypatch.setenv("TRANSKRIBOR_AUTOCORRECT", "1")
+    monkeypatch.setenv("TRANSKRIBOR_AUTOCORRECT_AUS", "im Projekt laeuft bereits ein Korrekturlauf")
+    monkeypatch.setattr(transcribe, "PROJEKTE", str(tmp_path))
+    monkeypatch.setattr(transcribe, "_modell", lambda *a, **kw: "fake_model")
+    monkeypatch.setattr(llm, "available", lambda *_a: (True, ""))
+    monkeypatch.setattr(correct, "diarize_enabled", lambda: True)
+
+    proj_dir = tmp_path / "GrundDemo"
+    (proj_dir / "audio").mkdir(parents=True)
+    tdir = proj_dir / "transkripte"
+    tdir.mkdir(parents=True)
+    (proj_dir / "audio" / "K1.mp3").write_bytes(b"audio")
+
+    angefasst = []
+    monkeypatch.setattr(transcribe, "_transkribiere_datei", lambda *a: {
+        "text": "Text", "segments": [{"id": 0, "start": 0.0, "end": 1.0, "text": "Text"}], "duration": 1.0})
+    monkeypatch.setattr(correct, "cmd_diarize", lambda *a, **k: angefasst.append("diarize"))
+    monkeypatch.setattr(correct, "prep_single", lambda *a, **k: angefasst.append("prep") or True)
+    monkeypatch.setattr(correct, "correct_ai_single", lambda *a, **k: angefasst.append("ki"))
+
+    transcribe.transcribe_project("GrundDemo", "tiny", "de", autocorrect=True)
+    out = capsys.readouterr().out
+
+    assert angefasst == [], f"Grund gesetzt, trotzdem gelaufen: {angefasst}"
+    assert "[autocorrect] uebersprungen — im Projekt laeuft bereits ein Korrekturlauf" in out
+    assert "TRANSKRIBOR_AUTOCORRECT=0" not in out, "der Kill-Switch war gar nicht gesetzt"
+    assert (tdir / "K1.json").exists()
+
+
+@pytest.mark.parametrize("wert", ["", "   "])
+def test_leerer_grund_laesst_die_mitkorrektur_scharf(monkeypatch, tmp_path, capsys, wert):
+    """Die Negativkontrolle zum Test darueber, und sie ist kein Formalismus.
+
+    Der Subprozess erbt `os.environ` des Servers; eine leere Zeile aus einer `.env` waere
+    sonst ein stiller Dauer-Aus-Schalter fuer die Autokorrektur — dieselbe Null-Richtung,
+    die `fetch._mehrsprachig_aus_env` seit #298 erzwingt. Leer heisst „nicht gesetzt"."""
+    from webtool import correct, llm
+
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    monkeypatch.setenv("TRANSKRIBOR_AUTOCORRECT", "1")
+    monkeypatch.setenv("TRANSKRIBOR_AUTOCORRECT_AUS", wert)
+    monkeypatch.setattr(transcribe, "PROJEKTE", str(tmp_path))
+    monkeypatch.setattr(transcribe, "_modell", lambda *a, **kw: "fake_model")
+    monkeypatch.setattr(llm, "available", lambda *_a: (True, ""))
+    monkeypatch.setattr(correct, "diarize_enabled", lambda: True)
+
+    proj_dir = tmp_path / "LeerDemo"
+    (proj_dir / "audio").mkdir(parents=True)
+    (proj_dir / "transkripte").mkdir(parents=True)
+    (proj_dir / "audio" / "K1.mp3").write_bytes(b"audio")
+
+    angefasst = []
+    monkeypatch.setattr(transcribe, "_transkribiere_datei", lambda *a: {
+        "text": "Text", "segments": [{"id": 0, "start": 0.0, "end": 1.0, "text": "Text"}], "duration": 1.0})
+    monkeypatch.setattr(correct, "cmd_diarize", lambda *a, **k: angefasst.append("diarize"))
+    monkeypatch.setattr(correct, "prep_single", lambda *a, **k: angefasst.append("prep") or True)
+    monkeypatch.setattr(correct, "correct_ai_single", lambda *a, **k: angefasst.append("ki"))
+
+    transcribe.transcribe_project("LeerDemo", "tiny", "de", autocorrect=True)
+
+    assert angefasst, "leerer Grund darf die Mitkorrektur nicht abschalten"
+    assert "[autocorrect] uebersprungen" not in capsys.readouterr().out
+
+
+def test_roh_transkript_und_nebendateien_werden_atomar_geschrieben(monkeypatch, tmp_path):
+    """#523-Nebenbefund: ein Leser, der nur auf Vorhandensein prueft, darf keinen halb
+    geschriebenen Stand sehen.
+
+    Genau so prueft `correct.cmd_run.one()` — und ein `correct run` kann neben einer
+    Transkription laufen (`jobs.GPU_KINDS` serialisiert nur transcribe gegen sich selbst;
+    mit TRANSKRIBOR_AUTOCORRECT=0 ist es sogar der VORGESEHENE Weg). Die Roh-JSON ist dabei
+    die teuerste der drei: an ihrer Existenz haengt, ob eine Aufnahme als transkribiert gilt.
+
+    Geprueft wird der WEG, nicht das Ergebnis — dass am Ende die richtigen Bytes dastehen,
+    gilt fuer ein direktes `open(..., "w")` genauso; „nie halb geschrieben" ist nicht am
+    fertigen Zustand ablesbar."""
+    from webtool import paths as _paths
+
+    ueber_atomic = []
+    echt = _paths.atomic_write
+    monkeypatch.setattr(_paths, "atomic_write",
+                        lambda p, t: ueber_atomic.append(os.path.basename(p)) or echt(p, t))
+
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    monkeypatch.setattr(transcribe, "PROJEKTE", str(tmp_path))
+    monkeypatch.setattr(transcribe, "_modell", lambda *a, **kw: "fake_model")
+    monkeypatch.setattr(transcribe, "_transkribiere_datei", lambda *a: {
+        "text": "Text", "segments": [{"id": 0, "start": 0.0, "end": 1.0, "text": "Text"}], "duration": 1.0})
+
+    proj_dir = tmp_path / "AtomDemo"
+    (proj_dir / "audio").mkdir(parents=True)
+    tdir = proj_dir / "transkripte"
+    tdir.mkdir(parents=True)
+    (proj_dir / "audio" / "K1.mp3").write_bytes(b"audio")
+
+    transcribe.transcribe_project("AtomDemo", "tiny", "de")
+
+    assert set(ueber_atomic) >= {"K1.json", "K1.raw.txt", "K1.segments.txt"}, \
+        f"nicht alle drei gingen ueber atomic_write: {ueber_atomic}"
+    assert not list(tdir.glob("*.tmp")), "keine Zwischendatei bleibt liegen"
+    assert json.loads((tdir / "K1.json").read_text(encoding="utf-8"))["text"] == "Text"
+
+
 @pytest.mark.parametrize("wert,an", [
     (None, True), ("", True), ("1", True), ("ja", True),
     ("0", False), ("false", False), ("FALSE", False), ("no", False),
