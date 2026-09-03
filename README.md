@@ -531,8 +531,8 @@ Ordner dorthin kopierst.
 <details>
 <summary><strong>Was passiert mit meinen Dateien?</strong></summary>
 
-Transkribor löscht nichts von allein — mit einer Ausnahme, die **ab der nächsten Fassung**
-gilt und nur Dinge betrifft, die es aus deiner Sicht schon nicht mehr gibt: Bricht ein Löschen
+Transkribor löscht nichts von allein — mit einer Ausnahme, die seit `v0.51.0` gilt und nur
+Dinge betrifft, die es aus deiner Sicht schon nicht mehr gibt: Bricht ein Löschen
 mittendrin ab (ein Virenscanner greift zu, der Rechner geht aus), kann ein unsichtbarer Rest
 der bereits gelöschten Aufnahme liegen bleiben und Platz belegen — bei einer langen Aufnahme
 mehrere hundert Megabyte. Transkribor versucht, solche Reste beim Start freizugeben, sobald sie
@@ -604,8 +604,8 @@ speicherst, wandert sie als `<Name>.edit.json.kaputt` zur Seite und bleibt im Or
 <details>
 <summary><strong>Etwas geht schief — wie melde ich das?</strong></summary>
 
-*(Der Mail-Bericht ab `v0.49.0`; das automatische Melden ab der nächsten Fassung nach
-`v0.51.0` — in `v0.51.0` und davor gibt es den Haken noch nicht.)*
+*(Der Mail-Bericht ab `v0.49.0`; das automatische Melden ab `v0.52.0` — in `v0.51.0` und
+davor gibt es den Haken noch nicht.)*
 
 Unter **Version** (in der Fusszeile auf die Versionsnummer `v…` klicken) steht der
 Abschnitt „Etwas geht schief?“ mit zwei Knöpfen und einem Haken.
