@@ -189,8 +189,9 @@ def ruff_lauf() -> str:
 def main(argv: list[str]) -> int:
     """Der Riegel. Rueckgabecode ist der Vertrag, drei Reviewrunden haben ihn geformt:
 
-    0 — keine Befunde ausserhalb der Baseline (Behobenes wird gemeldet, macht nicht rot)
-    1 — mindestens ein Befund, den die Baseline nicht kennt
+    0 — kein Schluessel haeufiger als in der Baseline (Behobenes wird gemeldet,
+        macht nicht rot)
+    1 — mindestens ein Schluessel `pfad:REGEL` haeufiger als in der Baseline
     2 — der Riegel selbst ist nicht urteilsfaehig: ruff fehlt oder bricht ab
         (`unstimmig`), eine Ausgabeform wurde nicht verstanden (`fehlende_zeilen`),
         oder es gibt noch gar keine Baseline
@@ -198,6 +199,13 @@ def main(argv: list[str]) -> int:
     Die Trennung von 1 und 2 ist der Kern: „ich habe einen Fehler gefunden" und
     „ich konnte nicht hinsehen" duerfen nicht gleich aussehen — sonst ist ein
     kaputter Riegel von einem sauberen Baum nicht zu unterscheiden.
+
+    „Haeufiger als in der Baseline" ist woertlich zu nehmen und NICHT dasselbe
+    wie „ein Befund, den die Baseline nicht kennt": ein TAUSCH innerhalb eines
+    Schluessels laesst die Zahl gleich und damit den Riegel gruen. Die erste
+    Fassung dieses Docstrings sagte das Schaerfere — beanstandet vom
+    CodeRabbit-Bot an PR #547, und zu Recht. Warum die Position trotzdem nicht
+    in den Schluessel wandert, steht bei `vergleich`.
     """
     ausgabe = ruff_lauf()
     befunde = schluessel_liste(ausgabe)
