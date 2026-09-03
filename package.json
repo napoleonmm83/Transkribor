@@ -18,7 +18,7 @@
     "test:electron": "node scripts/testlauf.mjs electron/*.test.js && node scripts/testlauf.mjs scripts/testlauf.test.mjs"
   },
   "devDependencies": {
-    "electron": "^43.3.0",
+    "electron": "^44.0.0",
     "electron-builder": "^26.15.3"
   },
   "dependencies": {
