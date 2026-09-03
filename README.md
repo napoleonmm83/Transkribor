@@ -198,7 +198,7 @@ Touch-Bildschirm sind die `⋯`-Knöpfe ab `v0.49.0` dauerhaft sichtbar: bisher
 erschienen sie nur beim Darüberfahren mit der Maus oder wenn du sie mit der Tastatur
 ansteuertest — mit dem Finger allein waren sie nicht zu sehen, und zum Umbenennen oder
 Löschen musstest du das Projekt erst öffnen. Dasselbe gilt für die Sprecherauswahl im
-Editor. **Ab der nächsten Fassung** stehen auch die beiden kleinen Symbole am Satz
+Editor. **Ab `v0.52.0`** stehen auch die beiden kleinen Symbole am Satz
 kräftiger da — Roh-Wörter anzeigen und Notiz anlegen: sie waren blass angelegt und wurden
 erst beim Darüberfahren mit der Maus voll sichtbar, am Tablet also kaum zu erkennen.
 
@@ -217,7 +217,7 @@ statt weiter wie unbearbeitetes Audio auszusehen. Das greift, sobald die Aufnahm
 ist, an der Transkribor gerade arbeitet — bei einer langen Aufnahme kann das also ein paar
 Minuten dauern.
 
-**Ab der nächsten Fassung** sagt diese Zeile in der Dateiliste des Projekts auch, *worauf*
+**Seit `v0.51.0`** sagt diese Zeile in der Dateiliste des Projekts auch, *worauf*
 gewartet wird und wie viel noch davor liegt: „Wartet auf Transkription · noch 3 vor dieser“ —
 und entsprechend „Wartet auf Korrektur“, wenn du die Korrektur von Hand angestossen hast. In
 Fassungen bis einschliesslich `v0.50.2` stand dort nur „In Warteschlange“; bei fünfzehn
@@ -689,7 +689,7 @@ siehe oben). Dort findest du eine Zeile wie `Externer Link abgewiesen (…)`, un
 steht der Grund — etwa dass die Adresse gar nicht in ein Browserfenster führt, oder dass eine
 Weiterleitung dahintersteckte, die ein Server ausgesucht hat und nicht du.
 
-*(Ab der nächsten Fassung nennt die Klammer den tatsächlichen Grund; in Fassungen bis
+*(Seit `v0.51.0` nennt die Klammer den tatsächlichen Grund; in Fassungen bis
 einschliesslich `v0.50.2` stand dort immer derselbe Text, auch wenn er nicht passte. Und die
 Meldung verstummte früher, sobald in einer Sitzung zwanzig Links abgewiesen worden waren —
 jetzt wird sie stündlich wieder aufgezeichnet, du findest sie also auch dann noch, wenn die
