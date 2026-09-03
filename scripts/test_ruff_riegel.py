@@ -113,6 +113,23 @@ def test_zweiter_befund_derselben_regel_in_derselben_datei_zaehlt():
     assert entfallene == []
 
 
+def test_tausch_innerhalb_derselben_datei_und_regel_bleibt_unsichtbar():
+    # BENANNTE DECKE, kein Versehen (CodeRabbit-CLI, 2026-09-03; Begruendung an
+    # vergleich() im Riegel). Die Eingaben unterscheiden sich real — Zeile 396
+    # faellt weg, dafuer kommt ein ANDERER subprocess-Aufruf in Zeile 512 dazu —
+    # und der Riegel sieht es trotzdem nicht. Wer den Schluessel je aendert, muss
+    # diesen Test anfassen und liest dabei, warum er so steht.
+    vorher = ruff_riegel.schluessel_liste(
+        "webtool/whispercpp.py:174:5: S603 subprocess call\n"
+        "webtool/whispercpp.py:396:16: S603 subprocess call\n"
+    )
+    nachher = ruff_riegel.schluessel_liste(
+        "webtool/whispercpp.py:174:5: S603 subprocess call\n"
+        "webtool/whispercpp.py:512:9: S603 subprocess call\n"
+    )
+    assert ruff_riegel.vergleich(nachher, vorher) == ([], [])
+
+
 def test_zeilenverschiebung_allein_erzeugt_keinen_befund():
     # Derselbe Fund, andere Zeile — genau der Fall, an dem ein
     # zeilennummern-basierter Vergleich in review-502 F5 angeschlagen haette.

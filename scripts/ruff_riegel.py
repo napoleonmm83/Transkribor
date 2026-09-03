@@ -21,6 +21,13 @@ Verschiebung anschlaegt, meldet Rauschen und wird weggeklickt. Der Schluessel is
 deshalb `pfad:REGEL`, aber MIT Vielfachheit: ein ZWEITER S603 in derselben Datei
 ist ein neuer Eintrag.
 
+Der Preis dafuer, benannt statt verschwiegen (CodeRabbit-CLI, 2026-09-03): ein
+TAUSCH innerhalb derselben (Datei, Regel) bleibt unsichtbar. Wer einen S603 in
+`whispercpp.py` entfernt und an anderer Stelle derselben Datei einen neuen
+einbaut, laesst die Zahl gleich — und den Riegel gruen. Festgenagelt in
+`test_tausch_innerhalb_derselben_datei_und_regel_bleibt_unsichtbar`, damit die
+Entscheidung beim naechsten Umbau gelesen statt neu getroffen wird.
+
 Warum Vorwaerts-Schraegstriche: ruff druckt auf Windows `webtool\\app.py`, auf Linux
 `webtool/app.py`. Ohne Normalisierung waeren ALLE Zeilen ungleich, sobald Baseline
 und Riegel auf verschiedenen Plattformen laufen — genau so ist der erste Diff in
@@ -64,6 +71,11 @@ def schluessel_liste(ausgabe: str) -> list[str]:
     return sorted(s for s in map(schluessel, ausgabe.splitlines()) if s)
 
 
+# ponytail: Schluessel ist (Datei, Regel) mit Vielfachheit — ein TAUSCH innerhalb
+# eines Schluessels faellt durch. Der Ausweg waere ein Fingerabdruck der Quellzeile
+# statt der Regel allein; der macht dann aber JEDE Umformatierung einer Zeile mit
+# bekanntem Befund rot, und webtool/app.py traegt 13 davon. Genau daran stirbt ein
+# Riegel. Umbauen, wenn so ein Tausch real passiert ist — nicht vorher.
 def vergleich(neu: list[str], alt: list[str]) -> tuple[list[str], list[str]]:
     """(neue, entfallene) — mit Vielfachheit, damit ein zweiter S603 zaehlt."""
     n, a = Counter(neu), Counter(alt)
