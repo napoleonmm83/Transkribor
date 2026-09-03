@@ -207,8 +207,20 @@ def _Sonden(pipe, diagnose: dict):
 
 def _load_waveform(audio_path: str) -> dict:
     """Audio -> {'waveform': (1,time) float32-Tensor, 'sample_rate': 16000} via
-    faster_whisper.decode_audio. Umgeht das auf Windows kaputte torchcodec-Decoding
-    von pyannote.
+    faster_whisper.decode_audio. Umgeht das kaputte torchcodec-Decoding von pyannote —
+    auf JEDER Plattform, nicht nur auf Windows (#517).
+
+    Bis #517 stand hier „auf Windows kaputt", und das war eine Falle: wer daraus schloss,
+    der Umweg sei auf macOS verzichtbar, braeche jede frische Installation dort. Gemessen
+    auf Apple Silicon, frische venv aus der Ersteinrichtung (2026-09-02): torchcodec 0.16.0,
+    `torchcodec.ffmpeg_major_version` ist None, `AudioDecoder(...)` wirft `RuntimeError:
+    Could not load libtorchcodec` — obwohl Homebrew-ffmpeg 8.1.2 installiert ist (die
+    gewachsene venv derselben Maschine mit 0.15.0 fand es noch). pyannotes eigene Wache
+    (`pyannote/audio/core/io.py:42-54`) faengt nur einen fehlschlagenden IMPORT; der gelingt,
+    erst der Decoder scheitert — `TORCHCODEC_AVAILABLE` bleibt True, keine Warnung, leeres
+    stderr. Linux ist ungeprueft, dieselbe Ursache liegt nahe. Der Test
+    `test_load_waveform_liefert_die_wellenform_in_memory` haelt fest, dass die Wellenform
+    hier in-memory entsteht und `diarize_file` genau sie an die Pipeline reicht.
 
     Vorher lief das ueber whisper.load_audio, das ffmpeg als BINARY per subprocess rief —
     weshalb hier ein eigenes _ensure_ffmpeg stand (winget legt fuer Gyan.FFmpeg keinen
@@ -225,7 +237,7 @@ def diarize_file(audio_path: str, min_speakers: int = 2, num_speakers: int | Non
                  diagnose: dict | None = None) -> list:
     """Diarisiert eine Audiodatei -> [{'start','end','cluster'}] (zeitlich sortiert).
     'cluster' ist das rohe pyannote-Label (z.B. 'SPEAKER_00'). Audio wird in-memory
-    geladen (torchcodec-Bypass, siehe _load_waveform).
+    geladen (torchcodec-Bypass, auf jeder Plattform noetig — siehe _load_waveform, #517).
 
     `num_speakers` ist die vom Nutzer angegebene EXAKTE Sprecherzahl; `None` laesst pyannote
     schaetzen (Verhalten wie bisher).
