@@ -271,7 +271,8 @@ def request(project: str, cmd: list, cwd, kind: str, then=None, base: str = None
             #
             # ER GILT ABER NUR FUER DIE EIGENE ARBEIT, und das ist keine Feinheit: `start()`
             # gibt fuer `GPU_KINDS` den laufenden Whisper-Job eines BELIEBIGEN Projekts als
-            # Blocker zurueck (Einzel-GPU, `:82-86`) — `_jid` ist dann ein FREMDER Job. Ohne
+            # Blocker zurueck (Einzel-GPU, siehe `GPU_KINDS` in `start()`) — `_jid` ist dann ein
+            # FREMDER Job. Ohne
             # den Projekt-/Art-Vergleich nahm der Abbruch von Projekt Q den vorgemerkten Lauf
             # von Projekt P mit, ueber das der Nutzer gar nichts gesagt hat: dessen eben
             # hochgeladene Aufnahme wurde nie transkribiert, ohne eine Zeile darueber.
