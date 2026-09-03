@@ -24,7 +24,12 @@ line-length = 100
 # Gemessen, nicht geraten: .github/workflows/test.yml fährt python-version 3.13,
 # die Projekt-venv ist 3.13.5.
 target-version = "py313"
-extend-exclude = [".venv", "node_modules", "webtool/frontend"]
+# `.code-guardian-evidence` ist der untracked Ablageordner des Guardians: in der CI
+# gibt es ihn gar nicht, lokal steuerte er 67 der 199 Befunde bei (gemessen
+# 2026-09-03). Ohne den Ausschluss urteilt `scripts/ruff_riegel.py` auf dem Rechner
+# des Entwicklers anders als in der CI — und ein Riegel, der je Ort anders urteilt,
+# ist keiner (dieselbe Begruendung wie beim exakten Fassungs-Pin oben).
+extend-exclude = [".venv", "node_modules", "webtool/frontend", ".code-guardian-evidence"]
 
 [tool.ruff.lint]
 # Einstiegssatz, bewusst schmal: E/F Syntax und echte Fehler, I Import-Ordnung,

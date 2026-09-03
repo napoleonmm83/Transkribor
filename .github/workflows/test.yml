@@ -269,3 +269,32 @@ jobs:
       # macos-mindest.sh schreibt in die latest-mac.yml, die der Mac-Updater liest — dieselbe
       # Klasse wie die drei darueber: was es entscheidet, holt nach dem Release niemand zurueck.
       - run: bash scripts/macos-mindest.test.sh
+
+  # Bis einschliesslich #543 (ruff 0.16.5 -> 0.16.6) pflegte Renovate die Fassung eines
+  # Werkzeugs, das NIRGENDS lief: nicht hier, nicht im pre-commit-Hook (6 Zeilen, kein ruff),
+  # nicht in package.json. Der Pin in pyproject.toml begruendet sich mit „ein Riegel, der je
+  # Rechner anders urteilt, ist kein Riegel" — und beschrieb damit einen Riegel, den es nicht
+  # gab. Dieser Job ist er.
+  #
+  # NUR ubuntu, und das ist gemessen statt gespart: ruff urteilt plattformgleich, der einzige
+  # Unterschied ist der Pfadtrenner (`webtool\app.py` gegen `webtool/app.py`) — und den
+  # normalisiert scripts/ruff_riegel.py weg. Genau dieser Windows-Fall ist in
+  # scripts/test_ruff_riegel.py festgenagelt, und dieser Test laeuft im `python`-Job auf
+  # BEIDEN Plattformen mit. Eine zweite Matrix-Achse pruefte hier also nichts, was nicht
+  # ohnehin geprueft ist.
+  #
+  # `pip install --group dev` statt `pip install ruff==…`: die Fassung steht damit an EINER
+  # Stelle. Zwei Stellen fuer eine Regel driften — dieselbe Entscheidung wie beim
+  # permissions-Block oben und bei den pytest-Pfaden weiter unten im python-Job.
+  lint:
+    name: Ruff
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+      - run: pip install --group dev
+      # Rot nur bei NEUEN Befunden gegen .ruff-baseline.txt. Der Baum traegt 132 bekannte;
+      # ein Riegel, der ab Tag eins rot ist, wird abgeschaltet statt gelesen.
+      - run: python scripts/ruff_riegel.py
