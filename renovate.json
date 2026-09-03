@@ -34,6 +34,25 @@
       "matchManagers": ["github-actions"],
       "matchDepNames": ["python"],
       "enabled": false
+    },
+    {
+      "description": [
+        "Das Postgres-Abbild in docs/bugsink/compose.yaml bekommt keine Major-Vorschlaege mehr.",
+        "Die Datei ist die Wiederherstellungsvorlage des Bugsink-Servers (Coolify), der live mit",
+        "Daten auf Postgres 17 laeuft. Ein Datenbank-Hauptversionssprung ist kein Neustart: ein",
+        "18er-Server oeffnet ein 17er-Datenverzeichnis nicht (pg_upgrade bzw. Sicherung +",
+        "Wiederherstellung noetig). Ein gemergter Vorschlag deployt zwar nichts (Coolify liest",
+        "die Compose nicht aus dem Repo), aber die naechste Wiederherstellung aus der Datei liefe",
+        "gegen die alten Daten und bliebe stehen. Renovate-PR #533 (17 -> 18) wurde deshalb",
+        "geschlossen. Das Upgrade ist eine Wartungsaufgabe mit Sicherung, nicht ein Merge.",
+        "bugsink/bugsink bleibt bewusst draussen: ein Anwendungs-Major fuehrt seine eigenen",
+        "Migrationen aus und ist ein gewollter Upgrade-Weg, den man mit Changelog sehen will",
+        "(Entscheidung Marcus, 2026-09-03)."
+      ],
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["postgres"],
+      "matchUpdateTypes": ["major"],
+      "enabled": false
     }
   ]
 }
