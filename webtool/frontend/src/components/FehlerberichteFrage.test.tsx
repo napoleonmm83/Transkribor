@@ -94,7 +94,8 @@ describe('FehlerberichteFrage', () => {
     // unterdrueckt `onInteractOutside`, ein `DialogContent` nicht. Die Mutation, die ihn rot
     // macht, ist entsprechend der Bauteil-Tausch AlertDialog -> Dialog. Er steht hier, weil der
     // Kommentar in der Komponente zuerst das Gegenteil behauptete („Klick daneben schreibt
-    // Nein") — im Browser gemessen: der Klick auf die Ueberlagerung ruft `setzen` NICHT.
+    // Nein"). Was DIESER Test belegt, steht unter ihm; der Gegenbeweis am laufenden Browser ist
+    // im Text von PR #542 protokolliert und hier nicht nachvollziehbar — jsdom ist kein Browser.
     const api = await zeigen(NIE_GEFRAGT)
     const ueberlagerung = document.querySelector('[data-slot=alert-dialog-overlay]')!
     await act(async () => {
@@ -120,11 +121,13 @@ describe('FehlerberichteFrage', () => {
     // Mit haengender Antwort steht der Dialog wie im Ernstfall waehrend des ipc-Rundlaufs, und
     // ein Escape darin schriebe ohne Riegel ein Nein ueber das eben gegebene Ja.
     // **Wofuer jsdom hier blind ist:** im echten Browser bleibt der Inhalt nach `open=false` noch
-    // 200 ms fuer die Schliessanimation gemountet (Radix Presence), samt DismissableLayer — dass
-    // daraus kein zweites `setzen(false)` wird, haelt dort zusaetzlich die Dedupe in
-    // `useControllableState` (`value !== prop`). jsdom kennt keine Animation und haengt sofort
-    // aus. Im Browser gemessen (Ja klicken, sofort Escape, 300 ms Latenz-Attrappe): genau
-    // `[true]` (gegnerisches Review, Befund 6).
+    // fuer die Schliessanimation gemountet (Radix Presence, `duration-200` in `alert-dialog.tsx`),
+    // samt DismissableLayer — dass daraus kein zweites `setzen(false)` wird, haelt dort
+    // ZUSAETZLICH die Dedupe in `useControllableState` (`value !== prop`), nicht nur der Riegel
+    // hier. jsdom kennt keine Animation und haengt sofort aus, sieht dieses Fenster also nie.
+    // Wer den Riegel im Browser nachpruefen will, faehrt den Weg von Hand: Ja klicken, sofort
+    // Escape, Schalterdatei lesen (so in PR #542 geschehen; ein Skript dafuer liegt nicht im
+    // Repo, und ohne das waere jede Zahl hier eine Behauptung).
     const api = await zeigen(NIE_GEFRAGT)
     api.fehlerberichte.setzen.mockReturnValueOnce(new Promise(() => {}))
     await act(async () => { screen.getByRole('button', { name: 'Ja, automatisch senden' }).click() })
