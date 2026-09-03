@@ -331,6 +331,38 @@ def test_identitaet_wird_auch_nach_der_diarisierung_geprueft(project, monkeypatc
     assert vorbereitet == [1], "Stelle 3 liegt HINTER der Vorbereitung — sonst traf der Test Stelle 2"
 
 
+def test_identitaet_wird_vor_dem_schreiben_noch_einmal_geprueft(project, monkeypatch, capsys):
+    """CodeRabbit-CLI, Major — die vierte und teuerste Stelle.
+
+    Zwischen der letzten Pruefung in `one()` und `cmd_apply` liegt die GANZE KI-Phase, also
+    Minuten je Datei. Wird die Aufnahme darin ausgetauscht, schriebe `cmd_apply` die Korrektur
+    der ALTEN Aufnahme in die `edit.json` der NEUEN — der Schaden aus #523 durch die letzte
+    offene Tuer, und durch das mit Abstand groesste Fenster.
+
+    Zwei Zusicherungen, und die zweite ist die, die man uebersieht: die `correction.json` muss
+    WEG sein. Sie ist der Resume-Anker (`one()` ueberspringt eine Datei, die schon eine hat) —
+    liegengelassen wuerde sie beim naechsten Lauf auf die neue Aufnahme angewendet, also
+    dasselbe Ergebnis mit einem Lauf Verspaetung.
+
+    Mutationsprobe: die Pruefung vor `cmd_apply` entfernt ⇒ `S1.edit.json` entsteht ⇒ rot."""
+    _root, t = project
+    echt = _fake_claude(t, [])
+
+    def fake(prompt, workdir):
+        ergebnis = echt(prompt, workdir)
+        if ".correction.json" in prompt and "TREUE-CHECK" not in prompt:
+            _austausch(t)                    # der Tausch passiert WAEHREND der KI-Phase
+        return ergebnis
+
+    monkeypatch.setattr(correct, "_run_claude", fake)
+    assert correct.cmd_run("Demo") == 0
+    out = capsys.readouterr().out
+    assert "↷ SKIP S1 (Roh-Transkript waehrend des Laufs ausgetauscht)" in out
+    assert not (t / "S1.edit.json").exists(), "die fremde Korrektur darf nicht geschrieben werden"
+    assert not (t / "S1.correction.json").exists(), \
+        "der Resume-Anker muss weg — sonst wendet ihn der naechste Lauf an"
+
+
 def test_run_no_verify_skips_verify(project, monkeypatch):
     _root, t = project
     calls = []

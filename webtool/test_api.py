@@ -266,8 +266,10 @@ def test_invalid_project_name_400(client):
 def test_transcribe_starts_job(client, monkeypatch):
     calls = {}
     def fake_start(project, cmd, cwd, kind, then=None, env=None):
-        calls["project"] = project; calls["kind"] = kind; calls["cmd"] = cmd
-        calls["then"] = then; calls["env"] = env
+        calls["project"] = project
+        calls["kind"] = kind
+        calls["cmd"] = cmd
+        calls["then"] = then
         return "job123", True
     import webtool.jobs as jobs_mod
     monkeypatch.setattr(jobs_mod, "start", fake_start)
