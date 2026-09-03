@@ -1,129 +1,132 @@
-build/marke.py:51:5: E731 Do not assign a `lambda` expression, use a `def`
-scripts/coderabbit_status.py:136:11: S603 `subprocess` call: check for execution of untrusted input
-scripts/coderabbit_status.py:142:15: S603 `subprocess` call: check for execution of untrusted input
-scripts/coderabbit_status.py:15:1: I001 [*] Import block is un-sorted or un-formatted
-scripts/osv_freeze.py:93:5: S603 `subprocess` call: check for execution of untrusted input
-scripts/test_coderabbit_status.py:1:1: I001 [*] Import block is un-sorted or un-formatted
-scripts/test_coderabbit_status.py:1:8: F401 [*] `json` imported but unused
-scripts/test_coderabbit_status.py:4:8: F401 [*] `pytest` imported but unused
-tools/diar_eval.py:411:13: B904 Within an `except` clause, raise exceptions with `raise ... from err` or `raise ... from None` to distinguish them from errors in exception handling
-transcribe.py:16:1: E401 [*] Multiple imports on one line
-transcribe.py:16:1: I001 [*] Import block is un-sorted or un-formatted
-transcribe.py:389:9: I001 [*] Import block is un-sorted or un-formatted
-transcribe.py:613:13: I001 [*] Import block is un-sorted or un-formatted
-webtool/app.py:1217:29: UP015 [*] Unnecessary mode argument
-webtool/app.py:1439:9: B904 Within an `except` clause, raise exceptions with `raise ... from err` or `raise ... from None` to distinguish them from errors in exception handling
-webtool/app.py:1447:9: E741 Ambiguous variable name: `l`
-webtool/app.py:1464:70: E741 Ambiguous variable name: `l`
-webtool/app.py:1682:9: B904 Within an `except` clause, raise exceptions with `raise ... from err` or `raise ... from None` to distinguish them from errors in exception handling
-webtool/app.py:1707:9: B904 Within an `except` clause, raise exceptions with `raise ... from err` or `raise ... from None` to distinguish them from errors in exception handling
-webtool/app.py:1723:9: B904 Within an `except` clause, raise exceptions with `raise ... from err` or `raise ... from None` to distinguish them from errors in exception handling
-webtool/app.py:1747:51: B008 Do not perform function call `File` in argument defaults; instead, perform the call within the function, or read the default from a module-level singleton variable
-webtool/app.py:1769:9: B904 Within an `except` clause, raise exceptions with `raise ... from err` or `raise ... from None` to distinguish them from errors in exception handling
-webtool/app.py:2:1: I001 [*] Import block is un-sorted or un-formatted
-webtool/app.py:225:9: B904 Within an `except` clause, raise exceptions with `raise ... from err` or `raise ... from None` to distinguish them from errors in exception handling
-webtool/app.py:241:9: B904 Within an `except` clause, raise exceptions with `raise ... from err` or `raise ... from None` to distinguish them from errors in exception handling
-webtool/app.py:930:9: B904 Within an `except` clause, raise exceptions with `raise ... from err` or `raise ... from None` to distinguish them from errors in exception handling
-webtool/auth.py:194:16: S603 `subprocess` call: check for execution of untrusted input
-webtool/auth.py:92:13: S603 `subprocess` call: check for execution of untrusted input
-webtool/correct.py:13:1: I001 [*] Import block is un-sorted or un-formatted
-webtool/correct.py:1360:31: E702 Multiple statements on one line (semicolon)
-webtool/correct.py:1361:32: E702 Multiple statements on one line (semicolon)
-webtool/correct.py:1361:59: E702 Multiple statements on one line (semicolon)
-webtool/correct.py:1363:30: E702 Multiple statements on one line (semicolon)
-webtool/correct.py:1364:38: E702 Multiple statements on one line (semicolon)
-webtool/correct.py:142:5: I001 [*] Import block is un-sorted or un-formatted
-webtool/correct.py:288:9: I001 [*] Import block is un-sorted or un-formatted
-webtool/correct.py:334:13: I001 [*] Import block is un-sorted or un-formatted
-webtool/correct.py:564:17: S603 `subprocess` call: check for execution of untrusted input
-webtool/diarize.py:128:5: S110 `try`-`except`-`pass` detected, consider logging the exception
-webtool/jobs.py:372:16: S603 `subprocess` call: check for execution of untrusted input
-webtool/jobs.py:474:24: S607 Starting a process with a partial executable path
-webtool/jobs.py:474:9: S603 `subprocess` call: check for execution of untrusted input
-webtool/llm.py:17:1: I001 [*] Import block is un-sorted or un-formatted
-webtool/llm.py:173:9: I001 [*] Import block is un-sorted or un-formatted
-webtool/llm.py:240:17: S603 `subprocess` call: check for execution of untrusted input
-webtool/llm.py:277:9: I001 [*] Import block is un-sorted or un-formatted
-webtool/llm.py:286:11: S310 Audit URL open for permitted schemes. Allowing use of `file:` or custom schemes is often unexpected.
-webtool/llm.py:289:14: S310 Audit URL open for permitted schemes. Allowing use of `file:` or custom schemes is often unexpected.
-webtool/projekt.py:5:1: E401 [*] Multiple imports on one line
-webtool/projekt.py:5:1: I001 [*] Import block is un-sorted or un-formatted
-webtool/settings.py:11:1: I001 [*] Import block is un-sorted or un-formatted
-webtool/test_api.py:1:1: I001 [*] Import block is un-sorted or un-formatted
-webtool/test_api.py:1501:5: I001 [*] Import block is un-sorted or un-formatted
-webtool/test_api.py:2140:5: I001 [*] Import block is un-sorted or un-formatted
-webtool/test_api.py:2574:5: I001 [*] Import block is un-sorted or un-formatted
-webtool/test_api.py:268:35: E702 Multiple statements on one line (semicolon)
-webtool/test_api.py:268:57: E702 Multiple statements on one line (semicolon)
-webtool/test_api.py:2803:5: E401 [*] Multiple imports on one line
-webtool/test_api.py:2803:5: I001 [*] Import block is un-sorted or un-formatted
-webtool/test_api.py:288:35: E702 Multiple statements on one line (semicolon)
-webtool/test_api.py:288:57: E702 Multiple statements on one line (semicolon)
-webtool/test_api.py:3192:5: I001 [*] Import block is un-sorted or un-formatted
-webtool/test_api.py:3406:5: I001 [*] Import block is un-sorted or un-formatted
-webtool/test_api.py:3454:5: I001 [*] Import block is un-sorted or un-formatted
-webtool/test_api.py:452:5: E401 [*] Multiple imports on one line
-webtool/test_api.py:452:5: I001 [*] Import block is un-sorted or un-formatted
-webtool/test_api.py:501:29: E702 Multiple statements on one line (semicolon)
-webtool/test_api.py:501:49: E702 Multiple statements on one line (semicolon)
-webtool/test_api.py:771:5: I001 [*] Import block is un-sorted or un-formatted
-webtool/test_auth.py:9:8: F401 [*] `subprocess` imported but unused
-webtool/test_correct.py:1:1: I001 [*] Import block is un-sorted or un-formatted
-webtool/test_correct.py:1131:54: E702 Multiple statements on one line (semicolon)
-webtool/test_correct.py:1150:5: E731 Do not assign a `lambda` expression, use a `def`
-webtool/test_correct.py:1158:54: E702 Multiple statements on one line (semicolon)
-webtool/test_correct.py:2228:5: I001 [*] Import block is un-sorted or un-formatted
-webtool/test_correct.py:236:34: E702 Multiple statements on one line (semicolon)
-webtool/test_correct.py:237:49: E702 Multiple statements on one line (semicolon)
-webtool/test_correct.py:239:34: E702 Multiple statements on one line (semicolon)
-webtool/test_correct.py:831:5: E401 [*] Multiple imports on one line
-webtool/test_correct.py:831:5: I001 [*] Import block is un-sorted or un-formatted
-webtool/test_correct.py:873:5: E401 [*] Multiple imports on one line
-webtool/test_correct.py:873:5: I001 [*] Import block is un-sorted or un-formatted
-webtool/test_diarize.py:1:1: I001 [*] Import block is un-sorted or un-formatted
-webtool/test_diarize.py:136:1: E402 Module level import not at top of file
-webtool/test_diarize.py:278:5: E401 [*] Multiple imports on one line
-webtool/test_diarize.py:278:5: I001 [*] Import block is un-sorted or un-formatted
-webtool/test_diarize.py:386:5: E401 [*] Multiple imports on one line
-webtool/test_diarize.py:386:5: I001 [*] Import block is un-sorted or un-formatted
-webtool/test_diarize.py:69:5: I001 [*] Import block is un-sorted or un-formatted
-webtool/test_druck.py:155:20: UP012 [*] Unnecessary call to `encode` as UTF-8
-webtool/test_fetch.py:1:1: I001 [*] Import block is un-sorted or un-formatted
-webtool/test_fetch.py:1022:5: I001 [*] Import block is un-sorted or un-formatted
-webtool/test_fetch.py:916:5: I001 [*] Import block is un-sorted or un-formatted
-webtool/test_jobs.py:1:1: I001 [*] Import block is un-sorted or un-formatted
-webtool/test_jobs.py:107:16: E702 Multiple statements on one line (semicolon)
-webtool/test_jobs.py:12:15: S603 `subprocess` call: check for execution of untrusted input
-webtool/test_jobs.py:12:30: S607 Starting a process with a partial executable path
-webtool/test_jobs.py:120:16: E702 Multiple statements on one line (semicolon)
-webtool/test_jobs.py:704:30: E702 Multiple statements on one line (semicolon)
-webtool/test_jobs.py:706:25: E702 Multiple statements on one line (semicolon)
-webtool/test_jobs.py:99:16: E702 Multiple statements on one line (semicolon)
-webtool/test_llm.py:1:1: I001 [*] Import block is un-sorted or un-formatted
-webtool/test_llm.py:162:34: E702 Multiple statements on one line (semicolon)
-webtool/test_paths.py:1:1: I001 [*] Import block is un-sorted or un-formatted
-webtool/test_paths.py:55:5: I001 [*] Import block is un-sorted or un-formatted
-webtool/test_projekt.py:1:1: E401 [*] Multiple imports on one line
-webtool/test_projekt.py:1:1: I001 [*] Import block is un-sorted or un-formatted
-webtool/test_projekt.py:12:5: E401 [*] Multiple imports on one line
-webtool/test_projekt.py:12:5: I001 [*] Import block is un-sorted or un-formatted
-webtool/test_projekt.py:26:16: E701 Multiple statements on one line (colon)
-webtool/test_projekt.py:27:16: E701 Multiple statements on one line (colon)
-webtool/test_projekt.py:404:22: UP031 Use format specifiers instead of percent format
-webtool/test_transcribe.py:1054:12: F401 [*] `time` imported but unused
-webtool/test_transcribe.py:1054:5: I001 [*] Import block is un-sorted or un-formatted
-webtool/test_transcribe.py:1818:25: F401 [*] `webtool.correct` imported but unused
-webtool/test_transcribe.py:2088:5: I001 [*] Import block is un-sorted or un-formatted
-webtool/test_transcribe.py:2174:5: I001 [*] Import block is un-sorted or un-formatted
-webtool/test_transcribe.py:2175:12: F401 [*] `time` imported but unused
-webtool/test_transcribe.py:623:5: I001 [*] Import block is un-sorted or un-formatted
-webtool/test_transcribe.py:898:5: I001 [*] Import block is un-sorted or un-formatted
-webtool/test_transcribe.py:989:5: I001 [*] Import block is un-sorted or un-formatted
-webtool/test_whispercpp.py:137:57: S108 Probable insecure usage of temporary file or directory: "/tmp/out"
-webtool/test_whispercpp.py:144:57: S108 Probable insecure usage of temporary file or directory: "/tmp/out"
-webtool/test_whispercpp.py:150:57: S108 Probable insecure usage of temporary file or directory: "/tmp/out"
-webtool/whispercpp.py:140:14: S310 Audit URL open for permitted schemes. Allowing use of `file:` or custom schemes is often unexpected.
-webtool/whispercpp.py:174:20: S607 Starting a process with a partial executable path
-webtool/whispercpp.py:174:5: S603 `subprocess` call: check for execution of untrusted input
-webtool/whispercpp.py:356:16: S603 `subprocess` call: check for execution of untrusted input
-webtool/ytdlp_update.py:1052:17: S603 `subprocess` call: check for execution of untrusted input
+build/marke.py:E731
+scripts/coderabbit_status.py:I001
+scripts/coderabbit_status.py:S603
+scripts/coderabbit_status.py:S603
+scripts/osv_freeze.py:S603
+scripts/test_coderabbit_status.py:F401
+scripts/test_coderabbit_status.py:F401
+scripts/test_coderabbit_status.py:I001
+scripts/test_weg_benchmark.py:I001
+tools/diar_eval.py:B904
+transcribe.py:E401
+transcribe.py:I001
+transcribe.py:I001
+transcribe.py:I001
+transcribe.py:I001
+webtool/app.py:B008
+webtool/app.py:B904
+webtool/app.py:B904
+webtool/app.py:B904
+webtool/app.py:B904
+webtool/app.py:B904
+webtool/app.py:B904
+webtool/app.py:B904
+webtool/app.py:B904
+webtool/app.py:E741
+webtool/app.py:E741
+webtool/app.py:I001
+webtool/app.py:UP015
+webtool/auth.py:S603
+webtool/auth.py:S603
+webtool/conftest.py:S101
+webtool/correct.py:E702
+webtool/correct.py:E702
+webtool/correct.py:E702
+webtool/correct.py:E702
+webtool/correct.py:E702
+webtool/correct.py:I001
+webtool/correct.py:I001
+webtool/correct.py:I001
+webtool/correct.py:I001
+webtool/correct.py:S603
+webtool/diarize.py:S110
+webtool/jobs.py:S603
+webtool/jobs.py:S603
+webtool/jobs.py:S607
+webtool/llm.py:I001
+webtool/llm.py:I001
+webtool/llm.py:I001
+webtool/llm.py:S310
+webtool/llm.py:S310
+webtool/llm.py:S603
+webtool/projekt.py:E401
+webtool/projekt.py:I001
+webtool/settings.py:I001
+webtool/test_api.py:E401
+webtool/test_api.py:E401
+webtool/test_api.py:E702
+webtool/test_api.py:E702
+webtool/test_api.py:E702
+webtool/test_api.py:E702
+webtool/test_api.py:I001
+webtool/test_api.py:I001
+webtool/test_api.py:I001
+webtool/test_api.py:I001
+webtool/test_api.py:I001
+webtool/test_api.py:I001
+webtool/test_api.py:I001
+webtool/test_api.py:I001
+webtool/test_api.py:I001
+webtool/test_api.py:I001
+webtool/test_api.py:I001
+webtool/test_auth.py:F401
+webtool/test_correct.py:E401
+webtool/test_correct.py:E401
+webtool/test_correct.py:E702
+webtool/test_correct.py:E702
+webtool/test_correct.py:E702
+webtool/test_correct.py:E702
+webtool/test_correct.py:E702
+webtool/test_correct.py:E731
+webtool/test_correct.py:I001
+webtool/test_correct.py:I001
+webtool/test_correct.py:I001
+webtool/test_correct.py:I001
+webtool/test_diarize.py:E401
+webtool/test_diarize.py:E401
+webtool/test_diarize.py:E402
+webtool/test_diarize.py:I001
+webtool/test_diarize.py:I001
+webtool/test_diarize.py:I001
+webtool/test_diarize.py:I001
+webtool/test_druck.py:UP012
+webtool/test_fetch.py:I001
+webtool/test_fetch.py:I001
+webtool/test_fetch.py:I001
+webtool/test_jobs.py:E702
+webtool/test_jobs.py:E702
+webtool/test_jobs.py:E702
+webtool/test_jobs.py:E702
+webtool/test_jobs.py:E702
+webtool/test_jobs.py:I001
+webtool/test_jobs.py:S603
+webtool/test_jobs.py:S607
+webtool/test_llm.py:E702
+webtool/test_llm.py:I001
+webtool/test_paths.py:I001
+webtool/test_paths.py:I001
+webtool/test_projekt.py:E401
+webtool/test_projekt.py:E401
+webtool/test_projekt.py:E701
+webtool/test_projekt.py:E701
+webtool/test_projekt.py:I001
+webtool/test_projekt.py:I001
+webtool/test_projekt.py:UP031
+webtool/test_transcribe.py:F401
+webtool/test_transcribe.py:F401
+webtool/test_transcribe.py:F401
+webtool/test_transcribe.py:I001
+webtool/test_transcribe.py:I001
+webtool/test_transcribe.py:I001
+webtool/test_transcribe.py:I001
+webtool/test_transcribe.py:I001
+webtool/test_transcribe.py:I001
+webtool/test_transcribe.py:S607
+webtool/test_whispercpp.py:S108
+webtool/test_whispercpp.py:S108
+webtool/test_whispercpp.py:S108
+webtool/whispercpp.py:S310
+webtool/whispercpp.py:S603
+webtool/whispercpp.py:S603
+webtool/whispercpp.py:S607
+webtool/ytdlp_update.py:S603
