@@ -135,10 +135,17 @@ export function VersionPage() {
           // ersetzt hat, steht ohne lauffaehige da. Der Satz nennt beide Zahlen, damit der Weg
           // nach vorn erkennbar ist (macOS aktualisieren), und die Releases-Seite bleibt
           // erreichbar: aeltere Fassungen liegen dort weiterhin.
+          //
+          // Er sagt ausdruecklich NICHT, dies sei die letzte startfaehige Fassung — das waere
+          // eine Behauptung ueber Daten, die es hier nicht gibt: der Zustand traegt `neue`,
+          // `braucht` und `hat`, aber keine ZWISCHENfassungen. Zwischen der laufenden und der
+          // neuesten koennte durchaus eine liegen, die auf diesem macOS noch startet
+          // (CodeRabbit am PR, gegen `updater.js` und `types.ts` belegt). Wahr und belegbar ist
+          // nur: die installierte laeuft — sie laeuft ja gerade.
           <p className="mt-3 text-sm text-muted-foreground">
             Fassung {upd.neue} gibt es, aber sie braucht macOS {upd.braucht} oder neuer — auf
-            diesem Mac läuft macOS {upd.hat}. Solange bleibt diese Fassung hier die letzte, die
-            startet.{' '}
+            diesem Mac läuft macOS {upd.hat}. Die installierte Fassung {upd.version} startet
+            weiterhin.{' '}
             <a className="underline underline-offset-2 hover:text-foreground" href={RELEASES}
               target="_blank" rel="noreferrer">Alle Fassungen</a>
           </p>

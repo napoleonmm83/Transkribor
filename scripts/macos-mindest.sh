@@ -2,10 +2,12 @@
 # Traegt die Mindest-macOS-Version in eine `latest-mac.yml` ein (#536).
 # Aufruf: bash scripts/macos-mindest.sh <latest-mac.yml> [package.json]
 #
-# WARUM es dieses Skript gibt: electron-builder schreibt kein solches Feld — gemessen, in
-# `app-builder-lib/out/publish/updateInfoBuilder.js` kommt `minimumSystemVersion` nicht vor.
-# Ohne den Eintrag weiss der Mac-Zweig des Updaters nicht, dass eine Fassung auf diesem
-# Rechner gar nicht startet, und bietet sie trotzdem an (#536).
+# WARUM es dieses Skript gibt: electron-builder schreibt kein solches Feld. Nachpruefbar mit
+#   grep -rn "minimumSystemVersion" node_modules/app-builder-lib/out/publish/updateInfoBuilder.js
+# (kein Treffer, gemessen an 26.15.3). Zum Vergleich: `macPackager.js` kennt das Feld sehr wohl,
+# schreibt es aber nur ins Info.plist und nur, wenn man es konfiguriert. Ohne den Eintrag in der
+# yml weiss der Mac-Zweig des Updaters nicht, dass eine Fassung auf diesem Rechner gar nicht
+# startet, und bietet sie trotzdem an (#536).
 #
 # WARUM als Skript und nicht als Zeilen im Workflow: dieselbe Begruendung wie bei
 # `versionshoehe.sh`, `notizen.sh` und `fassung.sh` — nur so prueft `macos-mindest.test.sh`
@@ -29,11 +31,14 @@ PAKET="${2:-$(cd "$(dirname "$0")/.." && pwd)/package.json}"
 # Ueber `process.argv` statt in den JS-Quelltext interpoliert: ein Pfad mit Anfuehrungszeichen
 # oder Backslash zerlegte sonst das Programm, statt gelesen zu werden.
 #
-# `readFileSync`, NICHT `require`: gemessen scheitert `require('p.json')` an einem relativen
-# Pfad mit „Cannot find module" — es verlangt `./` oder absolut. Der Aufrufer soll den Pfad
-# aber schreiben duerfen, wie er will. Und der Fehlerkanal bleibt OFFEN: mit `2>/dev/null`
-# sah ein Lesefehler aus wie „Feld fehlt", und genau daran ging die erste Fassung dieses
-# Skripts in die Irre.
+# `readFileSync`, NICHT `require`: `require` verlangt bei einem relativen Pfad ein `./` und
+# scheitert sonst mit „Cannot find module". Nachpruefbar in einem leeren Verzeichnis mit einer
+# `p.json` darin:
+#   node -e 'try{require(process.argv[1])}catch(e){console.log(e.message.split("\n")[0])}' p.json
+# Der Aufrufer soll den Pfad aber schreiben duerfen, wie er will — `macos-mindest.test.sh`
+# uebergibt genau solche relativen Pfade, der Fall ist also nicht theoretisch. Und der
+# Fehlerkanal bleibt OFFEN: mit `2>/dev/null` sah ein Lesefehler aus wie „Feld fehlt", und
+# genau daran ging die erste Fassung dieses Skripts in die Irre (Testfall 7b haelt es fest).
 MELDUNG="$(mktemp)"
 voll="$(node -e 'const fs=require("fs");const d=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));process.stdout.write(String((((d.build||{}).mac||{}).minimumSystemVersion)||""))' "$PAKET" 2>"$MELDUNG")"
 node_rc=$?

@@ -109,6 +109,10 @@ describe('VersionPage — diese Fassung', () => {
     const { spies } = zeigeMit({ version: '0.52.0', art: 'zu_altes_os', neue: '0.53.0', braucht: 13, hat: 12 })
     expect(await screen.findByText(/braucht macOS 13 oder neuer/)).toBeTruthy()
     expect(screen.getByText(/läuft macOS 12/)).toBeTruthy()
+    // Der Satz sagt nur, was der Zustand hergibt: die installierte Fassung laeuft. Eine
+    // Aussage ueber die LETZTE startfaehige Fassung waere unbelegbar — Zwischenfassungen
+    // kennt der Zustand nicht (CodeRabbit am PR).
+    expect(screen.getByText(/Die installierte Fassung 0\.52\.0 startet weiterhin/)).toBeTruthy()
     expect(screen.queryByRole('button', { name: /herunterladen/i })).toBeNull()
     expect(spies.laden).not.toHaveBeenCalled()
     expect(screen.getByRole('link', { name: /Alle Fassungen/ })).toBeTruthy()
