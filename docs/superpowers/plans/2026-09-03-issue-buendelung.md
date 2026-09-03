@@ -5,8 +5,16 @@
 > Nachfolger des Plans `docs/superpowers/plans/2026-08-22-issue-buendelung.md` (Fassung 4),
 > dessen Kriterium unverändert weitergilt.
 
-**Stand:** master `84b6437`, v0.52.0 live (2026-09-03 08:01Z), **29 offene Issues**,
-**1 offener PR** (#540, vitest v5).
+**Stand bei der Freigabe:** master `84b6437`, v0.52.0 live (2026-09-03 08:01Z),
+**29 offene Issues**, **1 offener PR** (#540, vitest v5).
+
+**Nachgeführt 2026-09-03 abends, nach v0.53.0** (master `1df12c0`, Release 20:25:33Z):
+**27 offene Issues**, 2 offene PRs (#540 vitest v5, #543 ruff) — beide Renovate.
+**Bündel A ist abgearbeitet** (PR #544): #523 zu, #496 zu, letzteres mit der Messung statt mit
+einem Fix — die Prämisse trug nicht (Abschnitt A unten trägt die Korrektur). Aus der
+Parallelarbeit an #536 kam **#541** dazu und liegt jetzt in C2.
+Die Zahlen in diesem Kopf sind der Stand ihrer Zeile, nicht der von heute: wer daraus etwas
+ableitet, zählt vorher nach (`gh issue list --state open --json number --jq 'length'`).
 
 ## Context — warum dieser Plan
 
@@ -116,8 +124,15 @@ Browser-Sitzung mit absichtlich weggenommenem Server, dieselbe Hook-Familie
 `webtool/correct.py`, `webtool/fetch.py`, `webtool/jobs.py`) plus Testriegel. Prüfstand ist der
 **Messstand**, nicht der gepackte Lauf — deshalb eigenes Paket.
 
-**C2 — #530 (c) → #519 → #520.** Ein gepackter Electron-Lauf deckt alle drei
+**C2 — #530 (c) → #519 → #520 → #541.** Ein gepackter Electron-Lauf deckt alle vier
 (`electron/main.js`, `electron/bericht.js`, `electron/fehlerberichte.js`).
+
+**#541 kam nach dem Release dazu** (Fehlerberichte-Schalter: Dialog und Haken halten getrennte
+Zustandskopien, der Haken zeigt nach der Antwort das Gegenteil der Datei) und gehört hierher
+statt in ein eigenes Paket: dieselbe Dateimenge, derselbe teure Prüfstand. Es ist der Beleg
+für das Kriterium dieses Plans in der Gegenrichtung — ein Issue, das **thematisch** zum
+#530-Komplex gehört UND die Prüfkosten teilt, und deshalb zu Recht dort landet, während #442
+und #509 aus Bündel A herausfielen, obwohl sie dieselbe Datei berührten.
 
 **Die Reihenfolge in C2 ist keine Vorliebe, sondern eine Abhängigkeit:** #530 (c) baut den
 manuellen Bericht mit Vorschau, #519 baut den manuellen Bericht ohne mailto-Längengrenze. Wird
