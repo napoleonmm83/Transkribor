@@ -55,6 +55,49 @@ def test_regelkuerzel_aller_laengen():
         assert ruff_riegel.schluessel(zeile) == f"transcribe.py:{kuerzel}"
 
 
+def test_syntaxfehler_ist_ein_befund():
+    # Ein Syntaxfehler traegt bei ruff GAR KEINEN Regelcode, sondern die Kennung
+    # `invalid-syntax` (gemessen mit 0.16.6). Mit dem urspruenglichen Muster
+    # `[A-Z]+\d+` fiel die Zeile lautlos aus dem Vergleich — eine .py, die kein
+    # Test importiert, waere gruen durch die CI gegangen, obwohl ruff rot war.
+    zeile = "scripts/x.py:1:12: invalid-syntax: Expected a parameter or the end"
+    assert ruff_riegel.schluessel(zeile) == "scripts/x.py:invalid-syntax"
+
+
+# --- Der Gegenzeuge: ruffs eigene Summenzeile -----------------------------
+
+
+def test_gemeldete_zahl_liest_die_summenzeile():
+    assert ruff_riegel.gemeldete_zahl("a.py:1:1: F401 x\nFound 1 error.\n") == 1
+    assert ruff_riegel.gemeldete_zahl("Found 199 errors.\n") == 199
+
+
+def test_ohne_summenzeile_sind_es_null():
+    assert ruff_riegel.gemeldete_zahl("All checks passed!\n") == 0
+
+
+def test_verstandene_ausgabe_hat_keine_fehlenden_zeilen():
+    ausgabe = (
+        "webtool/a.py:3:1: I001 unsorted\n"
+        "scripts/x.py:1:12: invalid-syntax: Expected a parameter\n"
+        "Found 2 errors.\n"
+    )
+    assert ruff_riegel.fehlende_zeilen(ausgabe, ruff_riegel.schluessel_liste(ausgabe)) == 0
+
+
+def test_unverstandene_zeile_faellt_auf_statt_zu_verschwinden():
+    # Eine Ausgabeform ohne Zeile:Spalte — wie sie eine kuenftige ruff-Fassung
+    # bringen koennte. Der Riegel darf sie NICHT stillschweigend uebergehen:
+    # ein Muster, das eine Form nicht kennt, ist sonst gruen, weil es nichts sah.
+    ausgabe = (
+        "webtool/a.py:3:1: I001 unsorted\n"
+        "webtool/b.py: etwas ohne Zeile und Spalte\n"
+        "Found 2 errors.\n"
+    )
+    assert ruff_riegel.schluessel_liste(ausgabe) == ["webtool/a.py:I001"]
+    assert ruff_riegel.fehlende_zeilen(ausgabe, ruff_riegel.schluessel_liste(ausgabe)) == 1
+
+
 # --- Das Muster: was es NICHT fangen darf ---------------------------------
 
 
