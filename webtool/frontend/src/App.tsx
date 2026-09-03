@@ -5,6 +5,7 @@ import { EditorView } from '@/pages/EditorView'
 import { SettingsPage } from '@/pages/SettingsPage'
 import { VersionPage } from '@/pages/VersionPage'
 import { ProjektPalette } from '@/components/ProjektPalette'
+import { FehlerberichteFrage } from '@/components/FehlerberichteFrage'
 import { AppShell } from '@/components/AppShell'
 
 export default function App() {
@@ -17,6 +18,10 @@ export default function App() {
   return (
     <AppShell>
       <ProjektPalette />
+      {/* Die einmalige Nachfrage zu Fehlerberichten (#530) — hier aus demselben Grund wie die
+          Palette: oberste Stelle innerhalb der AppShell, damit sie auf jeder Route greift.
+          Sie zeigt sich nur, solange der Hauptprozess `gefragt: null` meldet. */}
+      <FehlerberichteFrage />
       <Routes>
         <Route path="/" element={<HomeGallery />} />
         <Route path="/einstellungen" element={<SettingsPage />} />

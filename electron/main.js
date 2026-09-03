@@ -6,7 +6,7 @@
  * Das Fenster kommt ZUERST, nicht der Server: die Einrichtung dauert beim ersten Mal Minuten,
  * und ein Nutzer, der so lange auf nichts schaut, haelt die App fuer kaputt.
  */
-const { app, BrowserWindow, ipcMain, shell, nativeTheme, net, dialog } = require('electron')
+const { app, BrowserWindow, ipcMain, shell, nativeTheme, net } = require('electron')
 const path = require('path')
 const fs = require('fs')
 // Nur fuer den Vergleich in `navigationPruefen`: die Statusseite laedt `loadFile` mit einem
@@ -520,24 +520,6 @@ function serverExtras() {
   return { bugsinkDsn: paket.bugsinkDsn || '', version: app.getVersion(), fehlerberichte: schalterPfad() }
 }
 
-/**
- * Einmal fragen (#530, D1) — erst wenn der Server steht, nie waehrend der Einrichtung, und
- * nur wenn es ein Fenster gibt. Beide Antworten schreiben `gefragt`; danach entscheidet der
- * Haken unter „Version". Kommt der Server nie hoch, wird nie gefragt: Vorgabe AUS.
- */
-async function zustimmungFragen() {
-  const pfad = schalterPfad()
-  if (fehlerberichte.lesen(pfad).gefragt || !win) return
-  const F = fehlerberichte.FENSTER
-  const { response } = await dialog.showMessageBox(win, {
-    type: 'question', buttons: [F.ja, F.nein], defaultId: 1, cancelId: 1, noLink: true,
-    title: F.titel, message: F.frage, detail: F.details,
-  })
-  const an = response === 0
-  fehlerberichte.schreiben(pfad, { automatisch: an, gefragt: new Date().toISOString() })
-  protokoll.schreiben(`— Fehlerberichte automatisch: ${an ? 'an' : 'aus'} (Nachfrage beim Start) —`)
-}
-
 /** `TRANSKRIBOR_FEHLERPROBE=1`: einmal absichtlich werfen, um den Berichtsweg im GEPACKTEN Lauf
  *  zu messen — der einzige Weg dorthin ohne Testcode in der Oberflaeche. */
 function fehlerprobe() {
@@ -554,11 +536,13 @@ function serverStarten() {
       bereit = true
       if (win) win.loadURL(backend.url())
       backend.projektePfad().then(p => { if (p) projekteWurzel = p }).catch(() => { /* P.projekte bleibt */ })
-      // Die Probe erst NACH der Antwort: vorher steht der Schalter auf AUS (Vorgabe), und ein
-      // TRANSKRIBOR_FEHLERPROBE=1 beim allerersten Start liefe trotz „Ja“ still ins Leere (Bot-Review #531).
-      zustimmungFragen()
-        .catch(e => protokoll.schreiben(`FEHLER: Nachfrage Fehlerberichte: ${e.message || e}`))
-        .finally(fehlerprobe)
+      // Die Nachfrage stellt seit v0.53.0 die Oberflaeche (`FehlerberichteFrage.tsx`) — sie sieht
+      // an `gefragt: null` selbst, dass noch nie gefragt wurde, und antwortet ueber
+      // `fehlerberichte:setzen`. Hier bleibt nur die Ordnung, die daran hing: die Probe erst NACH
+      // der Antwort, denn vorher steht der Schalter auf AUS (Vorgabe) und ein
+      // TRANSKRIBOR_FEHLERPROBE=1 beim allerersten Start liefe trotz „Ja“ still ins Leere
+      // (Bot-Review #531). Beim ersten Start zuendet sie deshalb der ipc-Handler, nicht diese Zeile.
+      if (fehlerberichte.lesen(schalterPfad()).gefragt) fehlerprobe()
     },
     e => { startLaeuft = null; senden('fehler', String(e.message || e)) },   // Retry erlauben
   )
@@ -595,7 +579,11 @@ ipcMain.handle('fehlerberichte:setzen', (_e, an) => {
     automatisch: an === true,
     gefragt: vorher.gefragt || new Date().toISOString(),
   })
-  protokoll.schreiben(`— Fehlerberichte automatisch: ${jetzt.automatisch ? 'an' : 'aus'} —`)
+  protokoll.schreiben(`— Fehlerberichte automatisch: ${jetzt.automatisch ? 'an' : 'aus'}`
+    + `${vorher.gefragt ? '' : ' (Nachfrage beim Start)'} —`)
+  // War `gefragt` leer, ist das die Erstantwort aus der Nachfrage — und erst jetzt darf die
+  // Fehlerprobe werfen (siehe `serverStarten`): vorher stand der Schalter auf AUS.
+  if (!vorher.gefragt) fehlerprobe()
   return jetzt
 })
 

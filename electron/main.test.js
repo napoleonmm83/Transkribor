@@ -144,16 +144,10 @@ function attrappen(opt = {}) {
     },
     nativeTheme: { shouldUseDarkColors: !!opt.dunkel },
     net: { isOnline: () => w.online },
-    // Das Zustimmungsfenster (#530): `opt.antwort` 0 = Ja, sonst Nein (Vorgabe wie `cancelId`).
-    dialog: {
-      // `opt.dialogHalten`: das Fenster bleibt offen, bis der Test `w.dialogFrei()` ruft — fuer die
-      // Reihenfolge Nachfrage -> Fehlerprobe.
-      showMessageBox: async (_win, o) => {
-        w.dialoge.push(o)
-        if (opt.dialogHalten) await new Promise(r => { w.dialogFrei = r })
-        return { response: opt.antwort ?? 1 }
-      },
-    },
+    // Die Attrappe bleibt, obwohl der Hauptprozess seit v0.53.0 KEIN natives Fenster mehr oeffnet
+    // (#530): sie ist jetzt der Sensor dafuer. Ohne sie waere „es erscheint kein Systemkasten"
+    // eine Behauptung — mit ihr faellt ein wieder eingebautes `showMessageBox` sofort auf.
+    dialog: { showMessageBox: async (_win, o) => { w.dialoge.push(o); return { response: 1 } } },
   }
   w.electronUpdater = { autoUpdater: {} }
   // Ohne Spur-Eintrag: `init` laeuft VOR `appendSwitch`, und die Zusicherung „HTTP/2 ist das
@@ -306,8 +300,9 @@ test('nur log und fehler landen im Protokoll — phase und status nicht', async 
   // erreichbar: `status` schickt 'status', `serverStarten` schickt 'phase', und die
   // Rueckmeldung von `backend.start` schickt 'log'.
   const w = await laden({ logZeile: 'uvicorn laeuft' })
-  // Die Nachfrage zu den Fehlerberichten (#530) schreibt ihre Antwort NACH dem Start — erst
-  // abwarten, sonst zaehlt die Liste unten mal eine, mal zwei Zeilen.
+  // Der Serverstart stoesst noch Asynchrones an — erst abwarten, dann erschoepfend vergleichen.
+  // (Bis v0.52.0 schrieb hier ausserdem die Nachfrage zu den Fehlerberichten ihre Antwort hin;
+  // die stellt seit dem Umzug in die Oberflaeche beim Start nichts mehr ins Protokoll.)
   await kurzWarten()
   assert.ok(w.protokollzeilen.includes('uvicorn laeuft'))
   const kanaeleAnDenRenderer = w.gesendet.map(g => g.kanal)
@@ -316,8 +311,7 @@ test('nur log und fehler landen im Protokoll — phase und status nicht', async 
   // ERSCHOEPFEND, nicht „enthaelt nicht": hier stand zuerst eine Suche nach dem Wortlaut der
   // Phase — und die blieb gruen, als die Mutation JEDEN Kanal mitschrieb, weil ein Objekt
   // als `[object Object]` landet und nach nichts aussieht, wonach man sucht.
-  assert.deepStrictEqual(w.protokollzeilen,
-    ['uvicorn laeuft', '— Fehlerberichte automatisch: aus (Nachfrage beim Start) —'],
+  assert.deepStrictEqual(w.protokollzeilen, ['uvicorn laeuft'],
     'Anzeigezustand (phase/status) gehoert nicht in die Datei')
 })
 
@@ -1115,32 +1109,36 @@ test('das SDK wird VOR whenReady initialisiert und ist ohne DSN aus', async () =
   assert.strictEqual(w.sentryOptionen.sendDefaultPii, false)
 })
 
-test('beim ersten Start fragt das Fenster genau einmal — Ja schaltet an, und die Antwort steht in der Datei', async () => {
-  const w = await laden({ antwort: 0 })
+test('der Hauptprozess oeffnet KEIN Systemfenster mehr — und schreibt vor der Antwort nichts', async () => {
+  const w = await laden()
   await kurzWarten()
-  assert.strictEqual(w.dialoge.length, 1, 'genau eine Nachfrage')
-  assert.strictEqual(w.dialoge[0].buttons[0], fb().FENSTER.ja)
-  assert.strictEqual(w.dialoge[0].cancelId, 1, 'Schliessen heisst Nein')
-  assert.strictEqual(w.dialoge[0].defaultId, 1, 'Enter heisst Nein — opt-in bleibt eine Entscheidung')
+  assert.strictEqual(w.dialoge.length, 0, 'die Nachfrage stellt die Oberflaeche, nicht das Betriebssystem')
   const z = fb().lesen(fb().pfad(w.daten))
-  assert.strictEqual(z.automatisch, true)
-  assert.ok(z.gefragt, 'gefragt ist gesetzt')
-  assert.ok(w.protokollzeilen.some(l => l.includes('Fehlerberichte automatisch: an')))
+  assert.strictEqual(z.gefragt, null, 'unbeantwortet — genau daran erkennt die Oberflaeche, dass sie fragen muss')
+  assert.strictEqual(z.automatisch, false, 'Vorgabe bleibt AUS, solange niemand geantwortet hat')
 })
 
-test('Nein bleibt aus — und ein zweiter Start mit derselben Ablage fragt nicht mehr', async () => {
-  const w1 = await laden({ antwort: 1 })
+test('die Erstantwort aus der Oberflaeche setzt gefragt — danach fragt sie nicht mehr', async () => {
+  const w1 = await laden()
   await kurzWarten()
-  assert.strictEqual(w1.dialoge.length, 1)
-  assert.strictEqual(fb().lesen(fb().pfad(w1.daten)).automatisch, false)
-  const w2 = await laden({ daten: w1.daten, antwort: 0 })
+  assert.strictEqual(fb().lesen(fb().pfad(w1.daten)).gefragt, null)
+  await w1.ruf('fehlerberichte:setzen', false)          // „Nein" aus dem Dialog
+  const z1 = fb().lesen(fb().pfad(w1.daten))
+  assert.strictEqual(z1.automatisch, false)
+  assert.ok(z1.gefragt, 'gefragt ist gesetzt — die Oberflaeche zeigt den Dialog danach nicht mehr')
+  assert.ok(w1.protokollzeilen.some(l => l.includes('Fehlerberichte automatisch: aus (Nachfrage beim Start)')),
+    'die Erstantwort wird als Nachfrage protokolliert, spaetere Klicks auf den Haken nicht')
+
+  const w2 = await laden({ daten: w1.daten })
   await kurzWarten()
-  assert.strictEqual(w2.dialoge.length, 0, 'einmal gefragt ist gefragt')
-  assert.strictEqual(fb().lesen(fb().pfad(w2.daten)).automatisch, false, 'die Antwort bleibt')
+  assert.strictEqual(w2.dialoge.length, 0)
+  const z2 = fb().lesen(fb().pfad(w2.daten))
+  assert.strictEqual(z2.automatisch, false, 'die Antwort bleibt')
+  assert.strictEqual(z2.gefragt, z1.gefragt, 'und der Zeitpunkt der Nachfrage wird nicht neu gesetzt')
 })
 
 test('fehlerberichte:status und :setzen — nur ein echtes true schaltet an', async () => {
-  const w = await laden({ antwort: 1 })
+  const w = await laden()
   await kurzWarten()
   assert.strictEqual((await w.ruf('fehlerberichte:status')).automatisch, false)
   assert.strictEqual((await w.ruf('fehlerberichte:setzen', true)).automatisch, true)
@@ -1178,15 +1176,33 @@ test('die Fehlerprobe wirft erst, wenn die Nachfrage beantwortet ist — vorher 
   global.setImmediate = (fn, ...a) => echt(() => { try { fn() } catch (e) { geworfen.push(e.message) } }, ...a)
   process.env.TRANSKRIBOR_FEHLERPROBE = '1'
   try {
-    const w = await laden({ antwort: 0, dialogHalten: true })
+    // Erster Start: die Oberflaeche hat noch nicht geantwortet (`gefragt: null`). Wuerfe die Probe
+    // hier, liefe sie bei AUS still ins Leere — das war der Anlass fuer diese Ordnung (#531), und
+    // sie ueberlebt den Umzug der Nachfrage in die Oberflaeche nur, weil sie hier gemessen wird.
+    const w = await laden()
     for (let i = 0; i < 3; i++) await kurzWarten()
-    assert.strictEqual(w.dialoge.length, 1, 'die Nachfrage steht offen')
+    assert.strictEqual(w.dialoge.length, 0, 'kein Systemfenster mehr — die Oberflaeche fragt')
     assert.deepStrictEqual(geworfen, [], 'vor der Antwort darf die Probe nicht werfen')
-    w.dialogFrei()
+
+    // Die Antwort kommt jetzt ueber den ipc-Kanal statt aus dem Systemfenster — und zuendet sie.
+    await w.ruf('fehlerberichte:setzen', true)
     for (let i = 0; i < 3; i++) await kurzWarten()
     assert.deepStrictEqual(geworfen, [fb().FEHLERPROBE], 'nach der Antwort wirft sie genau einmal')
     assert.strictEqual(fb().lesen(fb().pfad(w.daten)).automatisch, true)
     assert.ok(w.protokollzeilen.some(l => l.includes('Fehlerprobe: wirft')), 'die Probe meldet sich im Protokoll')
+
+    // Ein spaeterer Klick auf den Haken ist keine Erstantwort mehr und wirft nicht noch einmal.
+    await w.ruf('fehlerberichte:setzen', false)
+    await w.ruf('fehlerberichte:setzen', true)
+    for (let i = 0; i < 3; i++) await kurzWarten()
+    assert.deepStrictEqual(geworfen, [fb().FEHLERPROBE], 'genau einmal, nicht bei jedem Umschalten')
+
+    // Zweiter Start mit derselben Ablage: `gefragt` steht, also wirft sie beim Serverstart.
+    const w2 = await laden({ daten: w.daten })
+    for (let i = 0; i < 3; i++) await kurzWarten()
+    assert.deepStrictEqual(geworfen, [fb().FEHLERPROBE, fb().FEHLERPROBE],
+      'bei bereits beantworteter Nachfrage wirft sie wieder beim Start')
+    assert.strictEqual(w2.dialoge.length, 0)
   } finally {
     delete process.env.TRANSKRIBOR_FEHLERPROBE
     global.setImmediate = echt

@@ -264,22 +264,12 @@ function optionen({ dsn, version, gepackt, ctx, ipcMode }) {
   }
 }
 
-/** Was das Zustimmungsfenster sagt — an EINER Stelle, damit README und Fenster nicht driften. */
-const FENSTER = Object.freeze({
-  titel: 'Fehler automatisch melden?',
-  frage: 'Darf Transkribor Fehler automatisch an uns senden?',
-  details: [
-    'Mitgeschickt werden: die Fehlermeldung mit Stelle im Programm, die Fassung, dein',
-    'Betriebssystem und die letzten Protokollzeilen — Benutzername, Projekt- und',
-    'Aufnahmenamen werden vorher unkenntlich gemacht.',
-    '',
-    'Nie mitgeschickt: Aufnahmen, Transkripte, Einstellungen, Schluessel.',
-    '',
-    'Du kannst das jederzeit unter „Version" umstellen.',
-  ].join('\n'),
-  ja: 'Ja, automatisch senden',
-  nein: 'Nein',
-})
+/**
+ * Der Text der Nachfrage stand bis v0.52.0 hier (`FENSTER`), weil ein natives
+ * `dialog.showMessageBox` ihn brauchte. Seit die Nachfrage im Design der App erscheint, lebt er
+ * dort, wo er gezeigt wird: `webtool/frontend/src/components/FehlerberichteFrage.tsx`. Diese
+ * Datei entscheidet weiterhin, WAS mitgeht — der Text sagt es nur.
+ */
 
 /** Text der absichtlichen Ausnahme (`TRANSKRIBOR_FEHLERPROBE=1`) — daran erkennt man sie in Bugsink. */
 const FEHLERPROBE = 'Fehlerprobe: absichtlich geworfen (TRANSKRIBOR_FEHLERPROBE=1)'
@@ -288,7 +278,7 @@ const FEHLERPROBE = 'Fehlerprobe: absichtlich geworfen (TRANSKRIBOR_FEHLERPROBE=
 function fehlerprobeGewuenscht(env) { return !!env && env.TRANSKRIBOR_FEHLERPROBE === '1' }
 
 module.exports = {
-  DATEI, ERLAUBT, MIN_NAME, FENSTER, FEHLERPROBE, INHALTSFELDER, pfad, lesen, schreiben, namen,
+  DATEI, ERLAUBT, MIN_NAME, FEHLERPROBE, INHALTSFELDER, pfad, lesen, schreiben, namen,
   namensFormen, maskiere, maskiereTief, ereignisMaskieren, protokollZeilen, beforeSend, optionen,
   fehlerprobeGewuenscht,
   _home: () => os.homedir(),
