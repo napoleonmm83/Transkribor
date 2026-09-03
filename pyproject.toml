@@ -62,7 +62,8 @@ exclude = "^(\\.venv|node_modules|webtool/frontend)/"
 # dieser Datei rekursiv auch scripts/ einsammelte (13 Tests). Ohne die Zeile
 # hätte diese Datei sie still stillgelegt.
 # Gemessen: pytest --collect-only -q → 1139 ohne scripts, 1152 mit.
-testpaths = ["webtool", "build", "scripts"]
+# `docs` seit PR #531: docs/bugsink/ traegt den Envelope-Sammler samt Test.
+testpaths = ["webtool", "build", "scripts", "docs"]
 # KEIN addopts = "-q": test.yml ruft bereits mit -q auf, und zusammen ergäbe
 # das -qq. Ab verbosity < -1 unterdrückt pytest die Zusammenfassungszeile
 # ("1134 passed, 5 skipped") vollständig — genau die Zeile, auf die sich die

@@ -5,18 +5,17 @@ DSN dazu: http://k@127.0.0.1:<port>/1
 Antwortet auf jeden POST mit 200 {} und zaehlt in <ausgabeordner>/zaehler.txt mit.
 """
 import gzip
-import io
 import os
 import sys
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
-PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8123
-ORDNER = sys.argv[2] if len(sys.argv) > 2 else os.path.join(os.path.dirname(os.path.abspath(__file__)), "envelopes")
-os.makedirs(ORDNER, exist_ok=True)
-
 
 class Sammler(BaseHTTPRequestHandler):
+    # Klassenattribut statt Modulzustand: das Modul hat beim Import keinen Nebeneffekt (der Test
+    # laedt es), und `__main__` setzt den Ordner aus der Kommandozeile.
+    ordner = os.path.join(os.path.dirname(os.path.abspath(__file__)), "envelopes")
+
     def rumpf_lesen(self):
         """Content-Length ODER chunked — das Node-SDK schickt chunked, dann ist Content-Length leer."""
         if "chunked" in self.headers.get("Transfer-Encoding", "").lower():
@@ -40,10 +39,10 @@ class Sammler(BaseHTTPRequestHandler):
             except OSError:
                 pass
         stempel = time.strftime("%Y%m%d-%H%M%S") + f"-{int(time.time()*1000)%1000:03d}"
-        pfad = os.path.join(ORDNER, f"envelope-{stempel}.txt")
-        with io.open(pfad, "wb") as f:
+        pfad = os.path.join(self.ordner, f"envelope-{stempel}.txt")
+        with open(pfad, "wb") as f:
             f.write(f"PATH {self.path}\n".encode() + b"".join(f"{k}: {v}\n".encode() for k, v in self.headers.items()) + b"\n" + roh)
-        with io.open(os.path.join(ORDNER, "zaehler.txt"), "a", encoding="utf-8") as z:
+        with open(os.path.join(self.ordner, "zaehler.txt"), "a", encoding="utf-8") as z:
             z.write(f"{stempel} {self.path} {len(roh)}\n")
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
@@ -60,5 +59,9 @@ class Sammler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    print(f"envelope-sink auf 127.0.0.1:{PORT}, Ablage {ORDNER}", flush=True)
-    HTTPServer(("127.0.0.1", PORT), Sammler).serve_forever()
+    port = int(sys.argv[1]) if len(sys.argv) > 1 else 8123
+    if len(sys.argv) > 2:
+        Sammler.ordner = sys.argv[2]
+    os.makedirs(Sammler.ordner, exist_ok=True)
+    print(f"envelope-sink auf 127.0.0.1:{port}, Ablage {Sammler.ordner}", flush=True)
+    HTTPServer(("127.0.0.1", port), Sammler).serve_forever()

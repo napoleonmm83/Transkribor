@@ -146,7 +146,13 @@ function attrappen(opt = {}) {
     net: { isOnline: () => w.online },
     // Das Zustimmungsfenster (#530): `opt.antwort` 0 = Ja, sonst Nein (Vorgabe wie `cancelId`).
     dialog: {
-      showMessageBox: async (_win, o) => { w.dialoge.push(o); return { response: opt.antwort ?? 1 } },
+      // `opt.dialogHalten`: das Fenster bleibt offen, bis der Test `w.dialogFrei()` ruft — fuer die
+      // Reihenfolge Nachfrage -> Fehlerprobe.
+      showMessageBox: async (_win, o) => {
+        w.dialoge.push(o)
+        if (opt.dialogHalten) await new Promise(r => { w.dialogFrei = r })
+        return { response: opt.antwort ?? 1 }
+      },
     },
   }
   w.electronUpdater = { autoUpdater: {} }
@@ -1163,4 +1169,26 @@ test('before-quit schliesst das SDK, nachdem der Server steht', async () => {
   w.appEreignisse.get('before-quit')()
   assert.ok(w.spur.includes('sentry.close'))
   assert.ok(w.spur.indexOf('backend.stop') < w.spur.indexOf('sentry.close'))
+})
+
+test('die Fehlerprobe wirft erst, wenn die Nachfrage beantwortet ist — vorher fiele sie bei AUS still weg', async () => {
+  const echt = global.setImmediate
+  const geworfen = []
+  // Immediates, die werfen, landen hier statt im Testlaeufer; alle anderen laufen normal durch.
+  global.setImmediate = (fn, ...a) => echt(() => { try { fn() } catch (e) { geworfen.push(e.message) } }, ...a)
+  process.env.TRANSKRIBOR_FEHLERPROBE = '1'
+  try {
+    const w = await laden({ antwort: 0, dialogHalten: true })
+    for (let i = 0; i < 3; i++) await kurzWarten()
+    assert.strictEqual(w.dialoge.length, 1, 'die Nachfrage steht offen')
+    assert.deepStrictEqual(geworfen, [], 'vor der Antwort darf die Probe nicht werfen')
+    w.dialogFrei()
+    for (let i = 0; i < 3; i++) await kurzWarten()
+    assert.deepStrictEqual(geworfen, [fb().FEHLERPROBE], 'nach der Antwort wirft sie genau einmal')
+    assert.strictEqual(fb().lesen(fb().pfad(w.daten)).automatisch, true)
+    assert.ok(w.protokollzeilen.some(l => l.includes('Fehlerprobe: wirft')), 'die Probe meldet sich im Protokoll')
+  } finally {
+    delete process.env.TRANSKRIBOR_FEHLERPROBE
+    global.setImmediate = echt
+  }
 })
