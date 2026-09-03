@@ -80,6 +80,23 @@ describe('FehlerberichteFrage', () => {
     await waitFor(() => expect(screen.queryByText(FRAGE)).toBeNull())
   })
 
+  it('ein Klick daneben tut nichts — ein AlertDialog schliesst nicht nach draussen', async () => {
+    // Der Test nagelt einen VERTRAG von Radix fest, nicht eigene Logik: `AlertDialogContent`
+    // unterdrueckt `onInteractOutside`, ein `DialogContent` nicht. Die Mutation, die ihn rot
+    // macht, ist entsprechend der Bauteil-Tausch AlertDialog -> Dialog. Er steht hier, weil der
+    // Kommentar in der Komponente zuerst das Gegenteil behauptete („Klick daneben schreibt
+    // Nein") — im Browser gemessen: der Klick auf die Ueberlagerung ruft `setzen` NICHT.
+    const api = await zeigen(NIE_GEFRAGT)
+    const ueberlagerung = document.querySelector('[data-slot=alert-dialog-overlay]')!
+    await act(async () => {
+      fireEvent.pointerDown(ueberlagerung)
+      fireEvent.pointerUp(ueberlagerung)
+      fireEvent.click(ueberlagerung)
+    })
+    expect(api.fehlerberichte.setzen).not.toHaveBeenCalled()
+    expect(screen.getByText(FRAGE)).toBeTruthy()
+  })
+
   it('Escape heisst Nein — wie das cancelId des alten Systemfensters', async () => {
     const api = await zeigen(NIE_GEFRAGT)
     await act(async () => { fireEvent.keyDown(document, { key: 'Escape' }) })

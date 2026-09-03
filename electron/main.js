@@ -521,9 +521,14 @@ function serverExtras() {
 }
 
 /** `TRANSKRIBOR_FEHLERPROBE=1`: einmal absichtlich werfen, um den Berichtsweg im GEPACKTEN Lauf
- *  zu messen — der einzige Weg dorthin ohne Testcode in der Oberflaeche. */
+ *  zu messen — der einzige Weg dorthin ohne Testcode in der Oberflaeche.
+ *  Der Riegel haelt es bei EINEM Wurf je Prozess: seit die Nachfrage aus der Oberflaeche kommt,
+ *  gibt es zwei Zuendstellen (Serverstart bei gesetztem `gefragt`, ipc-Handler bei der ersten
+ *  Antwort). Wird die Schalterdatei zur Laufzeit geloescht, treffen beide im selben Lauf zu. */
+let probeGeworfen = false
 function fehlerprobe() {
-  if (!fehlerberichte.fehlerprobeGewuenscht(process.env)) return
+  if (probeGeworfen || !fehlerberichte.fehlerprobeGewuenscht(process.env)) return
+  probeGeworfen = true
   protokoll.schreiben('Fehlerprobe: wirft jetzt absichtlich (TRANSKRIBOR_FEHLERPROBE)')
   setImmediate(() => { throw new Error(fehlerberichte.FEHLERPROBE) })
 }
@@ -579,10 +584,15 @@ ipcMain.handle('fehlerberichte:setzen', (_e, an) => {
     automatisch: an === true,
     gefragt: vorher.gefragt || new Date().toISOString(),
   })
-  protokoll.schreiben(`— Fehlerberichte automatisch: ${jetzt.automatisch ? 'an' : 'aus'}`
-    + `${vorher.gefragt ? '' : ' (Nachfrage beim Start)'} —`)
-  // War `gefragt` leer, ist das die Erstantwort aus der Nachfrage — und erst jetzt darf die
+  protokoll.schreiben(`— Fehlerberichte automatisch: ${jetzt.automatisch ? 'an' : 'aus'} —`)
+  // War `gefragt` leer, ist dies die erste Antwort ueberhaupt — und erst jetzt darf die
   // Fehlerprobe werfen (siehe `serverStarten`): vorher stand der Schalter auf AUS.
+  // **Der ABSENDER steht hier nicht fest, deshalb steht er auch nicht in der Zeile.** Der
+  // Handler sieht nur den Dateizustand; schlug das Schreiben der Dialog-Antwort fehl, ist die
+  // erste Antwort der Haken unter „Version". Ein Zusatz wie „(Nachfrage beim Start)" waere dann
+  // eine Behauptung ueber etwas, das nicht stattfand — und sie bliebe nicht hier: `AUSSORTIEREN`
+  // filtert sie nicht, sie faehrt ueber `bericht.letzteZeilen` in die Fehlermail und ueber
+  // `fehlerberichte.protokollZeilen` in den Bugsink-Bericht (gegnerisches Review, Befund 2).
   if (!vorher.gefragt) fehlerprobe()
   return jetzt
 })

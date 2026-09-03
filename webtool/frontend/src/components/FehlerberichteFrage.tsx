@@ -20,8 +20,11 @@ import {
  * beendet die Frage also von selbst, in derselben Datei wie vorher.
  *
  * Drei Eigenschaften des alten Fensters bleiben, weil sie Entscheidungen waren:
- *   1. `cancelId: 1` — Schliessen heisst **Nein**. Hier faellt jeder Weg hinaus (Nein-Knopf,
- *      Escape, Klick daneben) durch dasselbe `onOpenChange` und schreibt Nein.
+ *   1. `cancelId: 1` — Schliessen heisst **Nein**. Es gibt genau ZWEI Wege hinaus, und beide
+ *      fallen durch dasselbe `onOpenChange`: der Nein-Knopf und Escape. Ein Klick DANEBEN tut
+ *      nichts — ein `AlertDialog` unterdrueckt `onInteractOutside` von sich aus, anders als ein
+ *      `Dialog`. Das ist das bessere Verhalten (kein versehentliches Nein), aber es ist nicht
+ *      dasselbe wie „jeder Weg hinaus"; hier stand die falsche Fassung, bis das Review sie fand.
  *   2. `defaultId: 1` — Enter heisst **Nein**. Radix legt den Fokus von sich aus auf
  *      `AlertDialogCancel`; Opt-in bleibt damit eine Entscheidung, kein Durchwinken.
  *   3. Vorgabe **aus**: schlaegt das Schreiben fehl, steht nichts in der Datei — dann fragt
