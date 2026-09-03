@@ -299,6 +299,11 @@ export type UpdateZustand =
   | { version: string; art: 'verfuegbar'; neue: string; groesse: number | null }
   /** Mac: Update erkannt, aber Auto-Update ohne Notarisierung nicht moeglich -> manueller Download. */
   | { version: string; art: 'verfuegbar_manuell'; neue: string; groesse: number | null }
+  /** Mac: es GIBT eine neuere Fassung, aber sie braucht ein neueres macOS als das laufende
+   *  (#536). `braucht` und `hat` sind macOS-Hauptversionen, keine Darwin-Zahlen. Eigene Art und
+   *  nicht ein Grund unter `nicht_moeglich`: dort steht, was diese INSTALLATION dauerhaft nicht
+   *  kann — hier geht es um DIESE eine Fassung. */
+  | { version: string; art: 'zu_altes_os'; neue: string; braucht: number; hat: number }
   | { version: string; art: 'laedt'; prozent: number; geladen: number; gesamt: number; tempo: number }
   | { version: string; art: 'bereit'; neue: string }
   | { version: string; art: 'fehler'; text: string }

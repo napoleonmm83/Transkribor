@@ -2,7 +2,7 @@
 const test = require('node:test')
 const assert = require('node:assert')
 const { nichtMoeglich, sollPruefen, erstellen, macUrls, istNeuer, parseLatestMac,
-  ersatz: erstellenErsatz, nachFehler } = require('./updater')
+  ersatz: erstellenErsatz, nachFehler, macosAusDarwin } = require('./updater')
 
 test('Entwicklungsmodus kann sich nicht selbst aktualisieren', () => {
   assert.strictEqual(nichtMoeglich('win32', false, false), 'entwicklung')
@@ -28,7 +28,9 @@ test('die Hintergrund-Pruefung ruht, sobald es etwas zu tun gibt', () => {
   // in der das gefundene Update steht.
   for (const art of ['unbekannt', 'aktuell', 'fehler'])
     assert.strictEqual(sollPruefen({ art }), true, art)
-  for (const art of ['prueft', 'verfuegbar', 'verfuegbar_manuell', 'laedt', 'bereit', 'nicht_moeglich', 'neuartig'])
+  // `zu_altes_os` gehoert bewusst dazu: ein Update, das dieser Mac nicht starten kann, alle
+  // sechs Stunden erneut zu holen, aendert nichts — ausser dass es die Anzeige ueberschreibt.
+  for (const art of ['prueft', 'verfuegbar', 'verfuegbar_manuell', 'laedt', 'bereit', 'nicht_moeglich', 'zu_altes_os', 'neuartig'])
     assert.strictEqual(sollPruefen({ art }), false, art)
   assert.strictEqual(sollPruefen(null), false, 'kein Automat gebaut')
 })
@@ -153,7 +155,7 @@ test('istNeuer liefert null bei ungueltigem Format', () => {
 
 test('parseLatestMac liest Version und size', () => {
   const yml = 'version: 0.17.0\nfiles:\n  - url: X.dmg\n    size: 149843177\npath: X.dmg\n'
-  assert.deepStrictEqual(parseLatestMac(yml), { version: '0.17.0', groesse: 149843177 })
+  assert.deepStrictEqual(parseLatestMac(yml), { version: '0.17.0', groesse: 149843177, mindestMacos: null })
 })
 
 test('parseLatestMac ohne Version -> null, size optional', () => {
@@ -161,10 +163,36 @@ test('parseLatestMac ohne Version -> null, size optional', () => {
   assert.strictEqual(parseLatestMac('version: 0.17.0\n').groesse, null)
 })
 
+test('parseLatestMac liest minimumMacosVersion — und FEHLEND heisst null, nicht 0', () => {
+  // `scripts/macos-mindest.sh` schreibt die Zeile beim Bau (#536). Eine Fassung aus der Zeit
+  // davor traegt sie nicht — dort muss `null` herauskommen, sonst verglichen wir spaeter gegen
+  // eine 0 und boeten nie wieder etwas an.
+  assert.strictEqual(parseLatestMac('version: 0.53.0\nminimumMacosVersion: 13\n').mindestMacos, 13)
+  assert.strictEqual(parseLatestMac('version: 0.52.0\n').mindestMacos, null)
+})
+
+test('macosAusDarwin: die Tabelle, und Unbekanntes bleibt unbekannt', () => {
+  // Der Versatz von 9 stimmt heute — als Formel waere er ueberall dort falsch, wo niemand
+  // hinsieht. Die Tabelle ist nur dort falsch, wo sie falsch ist.
+  assert.strictEqual(macosAusDarwin('20.6.0'), 11)
+  assert.strictEqual(macosAusDarwin('21.0.0'), 12)
+  assert.strictEqual(macosAusDarwin('22.6.0'), 13)
+  assert.strictEqual(macosAusDarwin('23.5.0'), 14)
+  assert.strictEqual(macosAusDarwin('24.0.0'), 15)
+  assert.strictEqual(macosAusDarwin('22'), 13, 'auch ohne Unterversionen')
+  // Alles Unbekannte ist NEUER als die Tabelle (Aelteres startet ohnehin nicht) — und `null`
+  // heisst weiter unten „anbieten". Ein Update zu verweigern, weil wir eine Zahl nicht deuten
+  // koennen, waere der teurere Fehler.
+  assert.strictEqual(macosAusDarwin('99.0.0'), null, 'kuenftige Darwin-Zahl')
+  assert.strictEqual(macosAusDarwin(''), null)
+  assert.strictEqual(macosAusDarwin(undefined), null)
+  assert.strictEqual(macosAusDarwin('kaputt'), null)
+})
+
 // --- Mac-Automat: manuelle Pruefung am autoUpdater vorbei ---
 
 /** Attrappe fuer den Mac-Pfad: `hole` als Fake-fetch, `openExternal` protokolliert. */
-function bauenMac({ yml, fehler, version = '0.16.0' } = {}) {
+function bauenMac({ yml, fehler, version = '0.16.0', darwin = '24.0.0' } = {}) {
   const ereignisse = []
   const openExternal = (...a) => ereignisse.push(['openExternal', ...a])
   const hole = async () => {
@@ -175,6 +203,9 @@ function bauenMac({ yml, fehler, version = '0.16.0' } = {}) {
     autoUpdater: attrappe(), version, plattform: 'darwin', gepackt: true, appimage: false,
     hole, openExternal,
     feedUrl: 'https://x/latest-mac.yml', releaseUrl: 'https://x/releases/latest',
+    // Vorgabe ist ein NEUES System (Darwin 24 = macOS 15): so bleiben die Tests, die es
+    // nichts angeht, von der #536-Pruefung unberuehrt, und wer sie messen will, setzt `darwin`.
+    osRelease: () => darwin,
     aendert: z => ereignisse.push([z]),
   })
   return { u, ereignisse }
@@ -197,6 +228,48 @@ test('Mac: neuere Version -> verfuegbar_manuell mit Groesse', async () => {
   assert.strictEqual(u.zustand().art, 'verfuegbar_manuell')
   assert.strictEqual(u.zustand().neue, '0.17.0')
   assert.strictEqual(u.zustand().groesse, 149843177)
+})
+
+test('Mac: eine Fassung, die dieser Mac nicht starten kann, wird NICHT angeboten (#536)', async () => {
+  // Der Kern des Fixes. Ohne ihn stuende hier `verfuegbar_manuell`, der Nutzer laedt die DMG,
+  // legt sie ueber die alte App — und hat danach keine lauffaehige Fassung mehr.
+  const { u } = bauenMac({
+    version: '0.52.0', darwin: '21.6.0',                       // macOS 12 (Monterey)
+    yml: 'version: 0.53.0\nminimumMacosVersion: 13\n  size: 99\n',
+  })
+  u.pruefen(); await settles()
+  assert.strictEqual(u.zustand().art, 'zu_altes_os')
+  assert.strictEqual(u.zustand().neue, '0.53.0')
+  assert.strictEqual(u.zustand().braucht, 13)
+  assert.strictEqual(u.zustand().hat, 12, 'die LAUFENDE macOS-Zahl, nicht die Darwin-Zahl')
+})
+
+test('Mac: reicht das System, wird ganz normal angeboten', async () => {
+  const { u } = bauenMac({
+    version: '0.52.0', darwin: '22.6.0',                       // macOS 13, genau die Grenze
+    yml: 'version: 0.53.0\nminimumMacosVersion: 13\n  size: 99\n',
+  })
+  u.pruefen(); await settles()
+  assert.strictEqual(u.zustand().art, 'verfuegbar_manuell', 'gleich alt ist alt genug')
+})
+
+test('Mac: ohne Angabe in der yml bleibt alles wie vorher', async () => {
+  // Eine Fassung von vor dem Fix darf den Updater nicht lahmlegen — sonst haetten wir ihn
+  // repariert, indem wir ihn kaputtmachen.
+  const { u } = bauenMac({ version: '0.16.0', darwin: '21.6.0', yml: 'version: 0.17.0\n' })
+  u.pruefen(); await settles()
+  assert.strictEqual(u.zustand().art, 'verfuegbar_manuell')
+})
+
+test('Mac: eine undeutbare Darwin-Zahl sperrt NICHT', async () => {
+  // Unbekannt sind nur neuere Systeme. Wer daraus eine Sperre macht, nimmt kuenftigen Macs
+  // die Updates weg — die Fehlerrichtung ist deshalb „anbieten".
+  const { u } = bauenMac({
+    version: '0.52.0', darwin: '99.0.0',
+    yml: 'version: 0.53.0\nminimumMacosVersion: 13\n',
+  })
+  u.pruefen(); await settles()
+  assert.strictEqual(u.zustand().art, 'verfuegbar_manuell')
 })
 
 test('Mac: gleiche Version -> aktuell', async () => {

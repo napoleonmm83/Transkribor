@@ -129,6 +129,21 @@ export function VersionPage() {
           </div>
         )}
 
+        {upd?.art === 'zu_altes_os' && (
+          // #536: kein Herunterladen-Knopf, und das ist der ganze Zweck. Die Fassung liesse sich
+          // laden und installieren — sie startet danach nur nicht mehr, und wer die alte App
+          // ersetzt hat, steht ohne lauffaehige da. Der Satz nennt beide Zahlen, damit der Weg
+          // nach vorn erkennbar ist (macOS aktualisieren), und die Releases-Seite bleibt
+          // erreichbar: aeltere Fassungen liegen dort weiterhin.
+          <p className="mt-3 text-sm text-muted-foreground">
+            Fassung {upd.neue} gibt es, aber sie braucht macOS {upd.braucht} oder neuer — auf
+            diesem Mac läuft macOS {upd.hat}. Solange bleibt diese Fassung hier die letzte, die
+            startet.{' '}
+            <a className="underline underline-offset-2 hover:text-foreground" href={RELEASES}
+              target="_blank" rel="noreferrer">Alle Fassungen</a>
+          </p>
+        )}
+
         {upd?.art === 'laedt' && (
           <div className="mt-3">
             <div className="h-2 w-full overflow-hidden rounded-full bg-muted" role="progressbar"

@@ -125,6 +125,16 @@ describe('StatusBar', () => {
     expect(await screen.findByRole('link', { name: /Updates nicht möglich/ })).toBeTruthy()
   })
 
+  it('sagt bei zu altem macOS die Anforderung an, nicht „Update verfügbar" (#536)', async () => {
+    // Der Unterschied ist die ganze Zusicherung: „Update 0.53.0 verfügbar" führte den Nutzer
+    // zu einer Fassung, die sein Mac nicht startet. Der Satz nennt deshalb die Zahl.
+    vi.mocked(api.getHardware).mockRejectedValue(new Error('weg'))
+    bruecke({ version: '0.52.0', art: 'zu_altes_os', neue: '0.53.0', braucht: 13, hat: 12 })
+    zeigen()
+    expect(await screen.findByRole('link', { name: /braucht macOS 13/ })).toBeTruthy()
+    expect(screen.queryByText(/verfügbar/)).toBeNull()
+  })
+
   it('schweigt bei den anderen Gruenden, warum Updates nicht moeglich sind', async () => {
     // Gegenprobe: ein Daueralarm im Entwicklungsbetrieb waere derselbe Schaden von der
     // anderen Seite.

@@ -103,6 +103,17 @@ describe('VersionPage — diese Fassung', () => {
     expect(screen.queryByRole('button', { name: /^Herunterladen/ })).toBeNull()   // kein Auto-Knopf
   })
 
+  it('zu altes macOS: erklaert die Anforderung und bietet KEINEN Download an (#536)', async () => {
+    // Der fehlende Knopf ist der Fix. Die Fassung liesse sich laden und installieren — sie
+    // startet danach nur nicht mehr, und wer die alte App ersetzt hat, steht ohne da.
+    const { spies } = zeigeMit({ version: '0.52.0', art: 'zu_altes_os', neue: '0.53.0', braucht: 13, hat: 12 })
+    expect(await screen.findByText(/braucht macOS 13 oder neuer/)).toBeTruthy()
+    expect(screen.getByText(/läuft macOS 12/)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /herunterladen/i })).toBeNull()
+    expect(spies.laden).not.toHaveBeenCalled()
+    expect(screen.getByRole('link', { name: /Alle Fassungen/ })).toBeTruthy()
+  })
+
   it('kennt alle drei Gruende, warum Updates nicht moeglich sind', async () => {
     // `keine-quelle` ist der Zustand aus dem macOS-Fehler: beide Quellen fuer die Feed-URL
     // leer. Ohne eigenen Satz staende dort der Sammeltext ohne Ausweg.

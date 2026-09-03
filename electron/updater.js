@@ -68,13 +68,39 @@ function istNeuer(a, b) {
   return false
 }
 
-/** Liest {version, groesse} aus einer latest-mac.yml; null, falls keine version-Zeile.
- *  size ist optional (groesse dann null — nicht "0 MB" erfunden, dieselbe Regel wie 'verfuegbar'). */
+/** Liest {version, groesse, mindestMacos} aus einer latest-mac.yml; null, falls keine version-Zeile.
+ *  size ist optional (groesse dann null — nicht "0 MB" erfunden, dieselbe Regel wie 'verfuegbar').
+ *
+ *  `minimumMacosVersion` schreibt `scripts/macos-mindest.sh` beim Bau hinein (#536) —
+ *  electron-builder kennt das Feld nicht. FEHLT es, bleibt `mindestMacos` null und alles laeuft
+ *  wie vorher: eine Fassung aus der Zeit vor diesem Fix darf den Updater nicht lahmlegen. */
 function parseLatestMac(text) {
   const v = /^version:\s*(\S+)/m.exec(text)
   if (!v) return null
   const s = /^[\s-]*size:\s*(\d+)/m.exec(text)
-  return { version: v[1], groesse: s ? +s[1] : null }
+  const m = /^minimumMacosVersion:\s*(\d+)/m.exec(text)
+  return { version: v[1], groesse: s ? +s[1] : null, mindestMacos: m ? +m[1] : null }
+}
+
+/**
+ * Darwin-Hauptversion (aus `os.release()`, z.B. "22.6.0") -> macOS-Hauptversion.
+ *
+ * TABELLE, keine Rechnung: der Versatz von 9 hielt von macOS 11 bis 15, aber er ist keine
+ * Zusage — Apple hat die Zaehlung schon einmal umgestellt. Eine Tabelle ist an der Stelle
+ * falsch, an der sie falsch ist; eine Formel ist ueberall dort falsch, wo niemand hinsieht.
+ *
+ * Eine unbekannte Zahl liefert `null`, und `null` heisst spaeter ANBIETEN, nicht sperren. Die
+ * Richtung ist Absicht: unbekannt sind nur NEUERE Systeme (alles Aeltere steht in der Tabelle,
+ * und Electron 44 startet dort ohnehin nicht) — und ein neueres System erfuellt jede
+ * Mindestforderung. Ein Update zu verweigern, weil wir eine Zahl nicht deuten koennen, waere
+ * der teurere Fehler.
+ */
+const DARWIN_ZU_MACOS = Object.freeze({ 20: 11, 21: 12, 22: 13, 23: 14, 24: 15 })
+function macosAusDarwin(release) {
+  const m = /^(\d+)(?:\.|$)/.exec(String(release || ''))
+  if (!m) return null
+  const macos = DARWIN_ZU_MACOS[+m[1]]
+  return macos === undefined ? null : macos
 }
 
 /**
@@ -136,7 +162,7 @@ function nachFehler(vorhanden, version) {
  * Baut den Automaten. `aendert` wird bei jeder Zustandsaenderung gerufen — daran haengt
  * die Anzeige im Fenster.
  */
-function erstellen({ autoUpdater, version, plattform, gepackt, appimage, aendert, hole, openExternal, feedUrl, releaseUrl }) {
+function erstellen({ autoUpdater, version, plattform, gepackt, appimage, aendert, hole, openExternal, feedUrl, releaseUrl, osRelease }) {
   const grund = nichtMoeglich(plattform, gepackt, appimage)
   let stand = grund ? { version, art: 'nicht_moeglich', grund } : { version, art: 'unbekannt' }
 
@@ -164,7 +190,18 @@ function erstellen({ autoUpdater, version, plattform, gepackt, appimage, aendert
           if (!gelesen) return setzen({ art: 'fehler', text: 'latest-mac.yml ohne Version' })
           const neu = istNeuer(gelesen.version, version)
           if (neu === null) return setzen({ art: 'fehler', text: `Version nicht lesbar: ${gelesen.version}` })
-          if (neu) return setzen({ art: 'verfuegbar_manuell', neue: gelesen.version, groesse: gelesen.groesse })
+          if (neu) {
+            // #536: eine Fassung anzubieten, die dieser Mac nicht STARTEN kann, ist schlimmer
+            // als keine anzubieten — wer die DMG ueber die alte App legt, steht danach ohne
+            // lauffaehige Fassung da. Geprueft wird nur, wenn BEIDE Zahlen bekannt sind:
+            // fehlt das Feld (Fassung von vor dem Fix) oder laesst sich die Darwin-Zahl nicht
+            // deuten (neueres System), wird angeboten wie bisher.
+            const laeuft = macosAusDarwin(osRelease && osRelease())
+            if (gelesen.mindestMacos && laeuft && laeuft < gelesen.mindestMacos) {
+              return setzen({ art: 'zu_altes_os', neue: gelesen.version, braucht: gelesen.mindestMacos, hat: laeuft })
+            }
+            return setzen({ art: 'verfuegbar_manuell', neue: gelesen.version, groesse: gelesen.groesse })
+          }
           setzen({ art: 'aktuell' })
         }).catch(e => setzen({ art: 'fehler', text: (e && e.message) || String(e) }))
       },
@@ -213,4 +250,4 @@ function erstellen({ autoUpdater, version, plattform, gepackt, appimage, aendert
   }
 }
 
-module.exports = { nichtMoeglich, sollPruefen, erstellen, ersatz, nachFehler, macUrls, istNeuer, parseLatestMac, publishAusYml }
+module.exports = { nichtMoeglich, sollPruefen, erstellen, ersatz, nachFehler, macUrls, istNeuer, parseLatestMac, publishAusYml, macosAusDarwin }

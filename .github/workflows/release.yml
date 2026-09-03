@@ -86,7 +86,7 @@ jobs:
           # 4,9 s); fassung.test.sh legt drei Wegwerf-Repos mit Tags an und kostet lokal
           # 2,4 s (Windows/Git Bash, Minimum aus drei Laeufen — auf Linux weniger, dort
           # sind die vielen kleinen git-Aufrufe billiger).
-          for t in versionshoehe notizen fassung; do
+          for t in versionshoehe notizen fassung macos-mindest; do
             if ! aus="$(bash "scripts/$t.test.sh" 2>&1)"; then
               printf '%s\n' "$aus"
               echo "scripts/$t.test.sh ist rot — Abbruch vor jeder Auswertung."
@@ -233,6 +233,7 @@ jobs:
           bash scripts/versionshoehe.test.sh
           bash scripts/notizen.test.sh
           bash scripts/fassung.test.sh
+          bash scripts/macos-mindest.test.sh
 
       # electron-updater vergleicht die Version aus der package.json, NICHT den Tag. Ein Tag
       # v0.2.0 auf einer package.json mit 0.1.0 baut Installer, die sich als 0.1.0 ausgeben —
@@ -279,6 +280,16 @@ jobs:
         env:
           DEBUG: electron-builder          # jeder Schritt benannt, statt nur "exit 1"
           BUGSINK_DSN: ${{ secrets.BUGSINK_DSN }}
+
+      # Die Mindest-macOS-Version in die `latest-mac.yml`, BEVOR sie hochgeladen wird (#536).
+      # electron-builder schreibt das Feld nicht (gemessen: `minimumSystemVersion` kommt in
+      # `app-builder-lib/out/publish/updateInfoBuilder.js` nicht vor), und ohne das Feld bietet
+      # der Mac-Zweig des Updaters eine Fassung an, die auf einem zu alten macOS gar nicht
+      # startet. Nur hier: `latest-mac.yml` entsteht ausschliesslich im macOS-Job.
+      - name: Mindest-macOS-Version in latest-mac.yml
+        if: matrix.name == 'macos'
+        shell: bash
+        run: bash scripts/macos-mindest.sh dist/latest-mac.yml
 
       # Was ist tatsaechlich entstanden? Ohne diese Liste raet man bei einem leeren Upload.
       - name: Inhalt von dist/
