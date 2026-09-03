@@ -91,6 +91,11 @@ function parseLatestMac(text) {
  * ist genau an der Stelle falsch, an der sie falsch ist; eine Formel ist ueberall dort falsch,
  * wo niemand hinsieht.
  *
+ * QUELLE der Zuordnung, damit die Zahlen nachpruefbar sind statt geglaubt: die
+ * Darwin-Versionstabelle unter https://en.wikipedia.org/wiki/Darwin_(operating_system) —
+ * 20.0.0 = macOS 11, 21 = 12, 22 = 13, 23 = 14, 24 = 15, 25.0.0 = macOS 26 (Tahoe, ab
+ * 15.09.2025). Wer die Tabelle erweitert, prueft dort nach; die Tests wiederholen die Werte nur.
+ *
  * Alles VOR Darwin 20 ist macOS 10.x — eine echte Zuordnung, keine Naeherung, und sie macht den
  * Satz unten wahr, statt ihn nur zu behaupten. Erreichbar ist sie nicht (Electron 38+ verlangt
  * macOS 12), sie kostet aber eine Zeile.
