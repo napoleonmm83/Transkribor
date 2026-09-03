@@ -179,7 +179,11 @@ test('macosAusDarwin: die Tabelle, und Unbekanntes bleibt unbekannt', () => {
   assert.strictEqual(macosAusDarwin('22.6.0'), 13)
   assert.strictEqual(macosAusDarwin('23.5.0'), 14)
   assert.strictEqual(macosAusDarwin('24.0.0'), 15)
+  // Hier springt Apple: macOS 26 (Tahoe) laeuft auf Darwin 25, der Versatz ist 1 statt 9.
+  // Genau daran stirbt jede Formel — und genau das fehlte in der ersten Fassung dieser Tabelle.
+  assert.strictEqual(macosAusDarwin('25.0.0'), 26)
   assert.strictEqual(macosAusDarwin('22'), 13, 'auch ohne Unterversionen')
+  assert.strictEqual(macosAusDarwin('19.6.0'), 10, 'alles vor Darwin 20 ist macOS 10.x')
   // Alles Unbekannte ist NEUER als die Tabelle (Aelteres startet ohnehin nicht) — und `null`
   // heisst weiter unten „anbieten". Ein Update zu verweigern, weil wir eine Zahl nicht deuten
   // koennen, waere der teurere Fehler.
@@ -187,6 +191,22 @@ test('macosAusDarwin: die Tabelle, und Unbekanntes bleibt unbekannt', () => {
   assert.strictEqual(macosAusDarwin(''), null)
   assert.strictEqual(macosAusDarwin(undefined), null)
   assert.strictEqual(macosAusDarwin('kaputt'), null)
+})
+
+test('die Tabelle muss mindestens bis zur eigenen Mindestversion reichen', () => {
+  // Der STILLE Ausfall, den nur dieser Test faengt: steigt `build.mac.minimumSystemVersion` ueber
+  // den hoechsten Tabellenwert, faellt ein Mac mit genau dazwischenliegendem macOS in den
+  // null-Zweig — und bekommt wieder eine Fassung angeboten, die er nicht starten kann. Das ist
+  // #536 von vorn, und kein anderer Test wuerde dabei rot. Gefunden vom gegnerischen Pruefer,
+  // nachdem die erste Tabelle bei Darwin 24 endete, waehrend macOS 26 laengst ausgeliefert wurde.
+  const paket = require('../package.json')
+  const mindest = +String(paket.build.mac.minimumSystemVersion).split('.')[0]
+  // Der hoechste Tabellenwert wird ueber die oeffentliche Funktion gemessen, nicht ueber ein
+  // exportiertes Innenleben — sonst pruefte der Test eine Kopie statt der Sache.
+  let hoechste = 0
+  for (let d = 20; d <= 80; d++) { const m = macosAusDarwin(`${d}.0.0`); if (m) hoechste = Math.max(hoechste, m) }
+  assert.ok(hoechste >= mindest,
+    `DARWIN_ZU_MACOS reicht bis macOS ${hoechste}, die App verlangt aber ${mindest} — Tabelle nachziehen`)
 })
 
 // --- Mac-Automat: manuelle Pruefung am autoUpdater vorbei ---

@@ -239,8 +239,10 @@ jobs:
   # Kosten: alle drei zusammen 1 s auf ubuntu (Lauf 33567187248); release.yml beziffert
   # Windows/Git Bash mit 1–5 s plus 2,4 s fuer fassung.test.sh.
   #
-  # Was sie pruefen, ist in allen drei Faellen dasselbe: Logik, die ueber Versionsnummern und
-  # Release-Text entscheidet — und beides holt nach dem Veroeffentlichen niemand zurueck.
+  # Was sie pruefen, ist in allen VIER Faellen dasselbe: Logik, die ueber Versionsnummern,
+  # Release-Text und den Update-Feed entscheidet — und all das holt nach dem Veroeffentlichen
+  # niemand zurueck. (Seit #536 sind es vier statt drei; `macos-mindest.sh` braucht als einziges
+  # `node` — der Job installiert es nicht, die Runner-Images bringen es mit.)
   # versionshoehe.sh waehlt die Nummer, notizen.sh SCHREIBT in den Release-Commit (die
   # Rotation) und liefert den Text auf der Releases-Seite, fassung.sh waehlt den Tag, ab dem
   # versionshoehe.sh ueberhaupt rechnet.
