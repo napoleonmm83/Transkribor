@@ -1126,8 +1126,13 @@ test('die Erstantwort aus der Oberflaeche setzt gefragt — danach fragt sie nic
   const z1 = fb().lesen(fb().pfad(w1.daten))
   assert.strictEqual(z1.automatisch, false)
   assert.ok(z1.gefragt, 'gefragt ist gesetzt — die Oberflaeche zeigt den Dialog danach nicht mehr')
-  assert.ok(w1.protokollzeilen.some(l => l.includes('Fehlerberichte automatisch: aus (Nachfrage beim Start)')),
-    'die Erstantwort wird als Nachfrage protokolliert, spaetere Klicks auf den Haken nicht')
+  // Die Zeile traegt KEINEN Zusatz ueber die Herkunft — der Handler sieht nur den Dateizustand,
+  // nicht den Absender. Schlaegt das Schreiben der Dialog-Antwort fehl, ist die erste Antwort der
+  // Haken unter „Version"; ein „(Nachfrage beim Start)" waere dann eine Behauptung ueber etwas,
+  // das nicht stattfand — und faehrt ueber `bericht.letzteZeilen` in die Fehlermail.
+  assert.ok(w1.protokollzeilen.includes('— Fehlerberichte automatisch: aus —'))
+  assert.ok(!w1.protokollzeilen.some(l => l.includes('Nachfrage')),
+    'keine Zeile behauptet eine Nachfrage, die dieser Handler nicht gesehen haben kann')
 
   const w2 = await laden({ daten: w1.daten })
   await kurzWarten()
@@ -1203,6 +1208,15 @@ test('die Fehlerprobe wirft erst, wenn die Nachfrage beantwortet ist — vorher 
     assert.deepStrictEqual(geworfen, [fb().FEHLERPROBE, fb().FEHLERPROBE],
       'bei bereits beantworteter Nachfrage wirft sie wieder beim Start')
     assert.strictEqual(w2.dialoge.length, 0)
+
+    // Seit die Nachfrage aus der Oberflaeche kommt, gibt es ZWEI Zuendstellen. Verschwindet die
+    // Schalterdatei zur Laufzeit, treffen im selben Lauf beide zu — ohne Riegel wuerfe die Probe
+    // dann zweimal (gegnerisches Review, Befund 2b).
+    fs.unlinkSync(fb().pfad(w2.daten))
+    await w2.ruf('fehlerberichte:setzen', true)
+    for (let i = 0; i < 3; i++) await kurzWarten()
+    assert.deepStrictEqual(geworfen, [fb().FEHLERPROBE, fb().FEHLERPROBE],
+      'hoechstens ein Wurf je Lauf, auch wenn die Schalterdatei zwischendurch verschwindet')
   } finally {
     delete process.env.TRANSKRIBOR_FEHLERPROBE
     global.setImmediate = echt
