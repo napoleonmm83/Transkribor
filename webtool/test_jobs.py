@@ -240,7 +240,9 @@ def test_request_haengt_genau_einen_nachlauf_an():
     nachlaeufe = [r for r in jobs._jobs.values()
                   if r["project"] == "P_req1" and r["id"] != jid]
     assert len(nachlaeufe) == 1, f"genau ein Nachlauf erwartet, waren {len(nachlaeufe)}"
-    assert ("P_req1", "transcribe") not in jobs._pending   # Vormerkung wieder freigegeben
+    # DREITUPEL — `_pending` traegt `(project, kind, base)`. Als Zweitupel gefragt war die
+    # Zusicherung immer wahr und konnte nie rot werden (gegnerischer Pruefer, vorbestehend).
+    assert ("P_req1", "transcribe", None) not in jobs._pending   # Vormerkung wieder freigegeben
 
 
 def test_request_gibt_pending_frei_wenn_der_blocker_schon_weg_ist(monkeypatch):
@@ -259,7 +261,7 @@ def test_request_gibt_pending_frei_wenn_der_blocker_schon_weg_ist(monkeypatch):
     jid, started = jobs.request("P_req2", _echo_cmd(1), cwd=None, kind="correct")
     assert started is True and versuche == ["correct", "correct"]
     _wait(jid)
-    assert ("P_req2", "correct") not in jobs._pending
+    assert ("P_req2", "correct", None) not in jobs._pending
 
 
 def test_popen_startet_eigene_sitzung_auf_posix(monkeypatch):

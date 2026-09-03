@@ -477,19 +477,6 @@ def _autocorrect_an() -> bool:
     return (os.environ.get("TRANSKRIBOR_AUTOCORRECT") or "1").lower() not in ("0", "false", "no")
 
 
-def _autocorrect_aus_grund() -> str:
-    """Der Server kann die Mitkorrektur EINES Laufs abschalten und den Grund mitgeben (#496).
-
-    Zwei Variablen statt einer, und das ist der Punkt: `TRANSKRIBOR_AUTOCORRECT` beschreibt die
-    UMGEBUNG (der Nutzer hat die Korrektur abgestellt, dauerhaft, fuer alles), diese hier
-    beschreibt DIESEN LAUF (der Server weiss von einem Konflikt, den der Lauf nicht sehen kann).
-    Eine gemeinsame Variable haette den Kill-Switch fuer den Nutzer unsichtbar umgeschrieben —
-    und `app._laeuft_mitkorrektur` fragt den Kill-Switch weiterhin selbst.
-
-    Leer bzw. nur Leerraum heisst „nicht gesetzt": der Subprozess erbt `os.environ` des Servers,
-    und eine leere Zeile aus einer `.env` waere sonst ein stiller Dauer-Aus-Schalter. Dieselbe
-    Null-Richtung wie `fetch._mehrsprachig_aus_env` (#298)."""
-    return (os.environ.get("TRANSKRIBOR_AUTOCORRECT_AUS") or "").strip()
 
 
 # Eigener Platzhalter statt `None`: `_kennung` LIEFERT `None`, wenn `os.stat` wirft. Mit
@@ -594,16 +581,6 @@ def transcribe_project(name, model, language, only=None, autocorrect: bool = Fal
         # Abgeschaltet heisst die GANZE Kette: `cmd_diarize` kostet pyannote-Minuten auf der
         # GPU, und wer die Maschine ohne KI faehrt, will genau die nicht.
         print("[autocorrect] uebersprungen — TRANSKRIBOR_AUTOCORRECT=0", flush=True)
-        autocorrect = False
-    elif autocorrect and _autocorrect_aus_grund():
-        # #496: der Server hat die Mitkorrektur fuer DIESEN Lauf abgeschaltet, weil im Projekt
-        # schon ein Korrekturlauf arbeitet. Dieselbe Stelle und dieselbe Zeilenform wie der
-        # Kill-Switch darueber — und aus demselben Grund hier statt in `app._start_transcribe`:
-        # ein weggelassenes Flag saehe fuer den Nutzer aus wie „es lief einfach nichts".
-        #
-        # `elif`, nicht `if`: bei gesetztem Kill-Switch waeren es sonst ZWEI Zeilen fuer
-        # dieselbe Tatsache, und die Umgebung ist die allgemeinere Auskunft.
-        print(f"[autocorrect] uebersprungen — {_autocorrect_aus_grund()}", flush=True)
         autocorrect = False
     ai_grund_gemeldet = False
 
@@ -849,14 +826,17 @@ def transcribe_project(name, model, language, only=None, autocorrect: bool = Fal
                 dt = time.monotonic() - t0
                 result["luecken"] = luecken(result.get("segments") or [], result.get("duration"))
                 # Alle drei ueber `paths.atomic_write` (erst .tmp, dann os.replace), nicht
-                # direkt an ihren Platz. Der Leser, der das braucht, ist `correct.cmd_run.one()`:
-                # es fragt `os.path.exists(raw_json)` und liest die Datei dann — ein direktes
-                # `open(..., "w")` laesst ihn den halb geschriebenen Stand sehen, und der Fall
-                # ist seit der gestaffelten Pipeline erreichbar (ein `correct run` kann neben
-                # einer Transkription laufen, mit TRANSKRIBOR_AUTOCORRECT=0 sogar als der
-                # VORGESEHENE Weg — `jobs.GPU_KINDS` serialisiert nur transcribe gegen sich
-                # selbst). Die Roh-JSON ist dabei die teuerste der drei: an ihrer Existenz
-                # haengt, ob eine Aufnahme als transkribiert gilt.
+                # direkt an ihren Platz — sonst kann ein zweiter Prozess den halb geschriebenen
+                # Stand lesen. Erreichbar ist das, seit ein `correct run` neben einer
+                # Transkription laufen kann (`jobs.GPU_KINDS` serialisiert nur transcribe gegen
+                # sich selbst; mit TRANSKRIBOR_AUTOCORRECT=0 ist es sogar der VORGESEHENE Weg).
+                #
+                # Der Leser, den es wirklich trifft, ist `correct._glossary`: es liest ALLE
+                # `.raw.txt` des Projekts, auch die einer Aufnahme, die dieser Lauf gerade
+                # schreibt. (Hier stand zuerst `cmd_run.one()` — falsch: das fragt seit #523
+                # eine Kennung und nicht mehr blosse Anwesenheit. Fund des gegnerischen
+                # Pruefers.) Die Roh-JSON kommt mit, weil an ihrer Existenz haengt, ob eine
+                # Aufnahme ueberhaupt als transkribiert gilt.
                 _paths.atomic_write(os.path.join(out_dir, base + ".raw.txt"),
                                     result["text"].strip() + "\n")
                 _paths.atomic_write(

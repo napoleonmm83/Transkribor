@@ -233,6 +233,104 @@ def test_run_laesst_eine_ausgetauschte_aufnahme_liegen(project, monkeypatch):
     assert not (t / "S1.edit.json").exists(), "und es wird auch nichts angewendet"
 
 
+def test_ausgetauschte_aufnahme_kippt_den_lauf_nicht_auf_rot(project, monkeypatch, capsys):
+    """Befund des kalten Diff-Lesers zu #523 — dieselbe Klasse wie #524, andere Tuer.
+
+    `main` zaehlte den Nenner des Exitcodes ueber `os.path.exists`. Eine ausgetauschte
+    Aufnahme ist ANWESEND, wird von `one()` aber zu Recht uebersprungen: bei einem
+    Ein-Datei-Bereich also `0 von 1 versucht` ⇒ SystemExit(1) ⇒ Job rot in der Oberflaeche,
+    mit einer Begruendung, die auf den KI-Anbieter zeigt, der gar nichts damit zu tun hat.
+
+    Der Lauf hat hier NICHTS falsch gemacht — er hat eine Aufnahme in Ruhe gelassen, die
+    nicht mehr die seine war. Das ist kein Fehler, und es darf keinen melden.
+
+    Zweite Zusicherung: der Austausch bekommt eine ZEILE. Ohne sie waere die einzige Spur
+    ein fehlendes Ergebnis, und der Lauf meldete „fertig — 0/1" ohne jeden Grund.
+
+    Mutationsprobe: `attempted` zurueck auf `os.path.exists` ⇒ SystemExit(1) ⇒ dieser Test
+    rot; die `↷ SKIP`-Zeile entfernt ⇒ die zweite Zusicherung rot."""
+    _root, t = project
+
+    def anbieter_tot_mit_austausch(prompt, workdir):
+        if "_glossar.json" in prompt:                    # das Fenster nach `[scope]`
+            roh = t / "S1.json"
+            alt = json.loads(roh.read_text(encoding="utf-8"))
+            roh.unlink()
+            alt["segments"] = [dict(s, text="andere Aufnahme") for s in alt["segments"]]
+            _dump(str(roh), alt)
+        return None                                      # der Anbieter liefert nie etwas
+
+    monkeypatch.setattr(correct, "_run_claude", anbieter_tot_mit_austausch)
+    correct.main(["run", "Demo", "S1"])                  # kein SystemExit: S1 war nicht mehr S1
+    out = capsys.readouterr().out
+    assert "↷ SKIP S1 (Roh-Transkript waehrend des Laufs ausgetauscht)" in out
+    assert "run: FEHLER" not in out, "der Lauf hat nichts falsch gemacht"
+
+
+def _austausch(t, base="S1"):
+    """Dieselbe Aufnahme loeschen und gleichnamig neu anlegen — andere Bytes, andere Identitaet."""
+    roh = t / f"{base}.json"
+    alt = json.loads(roh.read_text(encoding="utf-8"))
+    roh.unlink()
+    alt["segments"] = [dict(s, text="andere Aufnahme") for s in alt["segments"]]
+    _dump(str(roh), alt)
+
+
+def test_identitaet_wird_auch_am_hardware_lock_geprueft(project, monkeypatch, capsys):
+    """Befund des gegnerischen Pruefers (Mc): `one()` fragt an DREI Stellen, der bisherige Test
+    traf nur die erste — die anderen beiden blieben unter der Mutation gruen.
+
+    Diese hier ist Stelle 2: zwischen der ersten Pruefung und ihr liegt allein das Warten auf
+    `_hardware_lock`, und genau dort kann waehrend eines echten Laufs Zeit vergehen (eine
+    andere Datei diarisiert gerade). Getroffen wird sie deterministisch, indem der Austausch
+    im `__enter__` des Locks passiert — kein Faden, kein Zeitfenster, kein Zufall.
+
+    Der Sensor ist die VORBEREITUNG, nicht die `[active]`-Zeile: Stelle 2 liegt vor
+    `cmd_diarize`/`prep_single`, Stelle 3 dahinter. Die `[active]`-Marke taugt dafuer NICHT —
+    der projektweite Diarisierungs-Schritt vor dem Glossar druckt sein eigenes Paar fuer
+    dieselbe Aufnahme, und der erste Entwurf dieses Tests ist genau darauf hereingefallen
+    (gemessen: `[active] S1` stand da, obwohl Stelle 2 richtig gegriffen hatte)."""
+    _root, t = project
+
+    class LockDasTauscht:
+        def __enter__(self):
+            _austausch(t)                      # zwischen Pruefung 1 und Pruefung 2
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    vorbereitet = []
+    monkeypatch.setattr(correct, "_hardware_lock", LockDasTauscht())
+    monkeypatch.setattr(correct, "prep_single", lambda *a, **k: vorbereitet.append(1) or True)
+    monkeypatch.setattr(correct, "_run_claude", _fake_claude(t, []))
+    assert correct.cmd_run("Demo") == 0
+    out = capsys.readouterr().out
+    assert "↷ SKIP S1 (Roh-Transkript waehrend des Laufs ausgetauscht)" in out
+    assert vorbereitet == [], "Stelle 2 liegt VOR der Vorbereitung — sonst traf der Test Stelle 3"
+
+
+def test_identitaet_wird_auch_nach_der_diarisierung_geprueft(project, monkeypatch, capsys):
+    """Befund des gegnerischen Pruefers (Md) — dieselbe Luecke, Stelle 3.
+
+    Sie liegt hinter dem Hardware-Lock: Diarisierung und Vorbereitung dieser Datei sind durch,
+    die KI-Phase steht an. Das ist das LAENGSTE der drei Fenster (pyannote braucht Minuten auf
+    der GPU) und damit das, in dem ein Austausch am ehesten passiert. Getroffen, indem
+    `cmd_diarize` selbst tauscht.
+
+    Gegenprobe zur Nachbarstelle: die Vorbereitung MUSS hier gelaufen sein — der Lauf war
+    schon an der Datei. Lief sie nicht, hat der Test Stelle 2 getroffen und Stelle 3 wieder nicht."""
+    _root, t = project
+    vorbereitet = []
+    monkeypatch.setattr(correct, "cmd_diarize", lambda *a, **k: _austausch(t))
+    monkeypatch.setattr(correct, "prep_single", lambda *a, **k: vorbereitet.append(1) or True)
+    monkeypatch.setattr(correct, "_run_claude", _fake_claude(t, []))
+    assert correct.cmd_run("Demo") == 0
+    out = capsys.readouterr().out
+    assert "↷ SKIP S1 (Roh-Transkript waehrend des Laufs ausgetauscht)" in out
+    assert vorbereitet == [1], "Stelle 3 liegt HINTER der Vorbereitung — sonst traf der Test Stelle 2"
+
+
 def test_run_no_verify_skips_verify(project, monkeypatch):
     _root, t = project
     calls = []
