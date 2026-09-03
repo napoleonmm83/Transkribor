@@ -791,6 +791,14 @@ def _starter_riegel_pruefen(quelltext: str) -> None:
             verstoss.append(f"APIRouter (Zeile {k.lineno})")
         elif isinstance(k, ast.Attribute) and k.attr in ("add_api_route", "include_router"):
             verstoss.append(f"{k.attr} (Zeile {k.lineno})")
+        elif isinstance(k, ast.Global) and "_sicherer_projektname" in k.names:
+            # Was der #526-Fix NEU erlaubte (gegnerischer Pruefer, Probe P-1): ein inneres
+            # `def` mit `global _sicherer_projektname` bindet den Riegel zur Laufzeit auf eine
+            # Attrappe um — die Route ruft danach im Rumpf einen Namen, der ihr lokal nicht
+            # gebunden ist, und der Waechter zaehlte den Aufruf als echten Riegel (frueher fing
+            # `ast.walk` den inneren Store zufaellig mit). Ein `global` auf diesen Namen hat in
+            # app.py keinen legitimen Zweck; er ist ein Verstoss, nicht eine Bindung.
+            verstoss.append(f"global _sicherer_projektname (Zeile {k.lineno})")
         elif isinstance(k, ast.Import):
             for a in k.names:
                 if a.name.split(".")[-1] == "jobs" and a.asname not in (None, "jobs"):
@@ -874,16 +882,20 @@ def _starter_riegel_pruefen(quelltext: str) -> None:
         for x in (fn.args.vararg, fn.args.kwarg):
             if x is not None:
                 raus.add(x.arg)
-        # NUR der eigene Bereich (#526). `ast.walk` stieg in alle inneren Bereiche hinab,
+        # Nicht mehr in innere def/class/Lambda hinabsteigen (#526). `ast.walk` tat das,
         # und eine Bindung DORT galt damit als Bindung der Route: ein inneres
         # `def _start_transcribe` oder `_start_transcribe = …` in einer Hilfsfunktion machte
         # die Route unsichtbar fuer die Starter-Erkennung — falsches GRUEN ueber einer
         # offenen Tuer (Proben CR-9/CR-9'; CR-9' zeigt, dass das schon VOR der def/class-
         # Erweiterung so war). `knoten(tief=False)` liefert innere def/class-Knoten selbst
-        # (ihr NAME bindet hier), steigt aber nicht hinein. Der Preis steht in
-        # `test_waechter_proben` (G-1..G-3): `bezuege` bleibt tief, eine Bindung in einem
-        # inneren Bereich einer Leseroute kann sie jetzt faelschlich zum Starter machen —
-        # laut, nicht still.
+        # (ihr NAME bindet hier), steigt aber nicht hinein. Comprehensions gelten hier
+        # weiter als Teil des Bereichs, obwohl sie in Python 3 ein eigener sind — vorbestehend
+        # und bewusst (ihre Zielnamen wie lokale zu behandeln ist die Ueberapproximation,
+        # die Fehlalarme an Leserouten verhindert; Probe P-7 des Pruefers ist alt wie neu
+        # gruen). Der Preis steht in `test_waechter_proben` (G-1..G-3): `bezuege` bleibt
+        # tief, eine Bindung in einem inneren Bereich einer Leseroute kann sie jetzt
+        # faelschlich zum Starter machen — laut, nicht still. Und ein `global` auf den Riegel
+        # in einer inneren Funktion faengt der Datei-Waechter oben (P-1).
         for k in knoten(fn, tief=False):
             if isinstance(k, ast.Name) and isinstance(k.ctx, (ast.Store, ast.Del)):
                 raus.add(k.id)                       # Zuweisung, for-Ziel, Comprehension,
@@ -1225,6 +1237,34 @@ def probe(project: str):
 def probe(project: str):
     f = lambda correct: correct
     return {"x": f(1)}
+'''),
+    # Gegnerischer Pruefer am Diff: was der flache `lokale` NEU erlaubte — ein inneres `def`
+    # bindet den Riegel per `global` zur Laufzeit auf eine Attrappe um; der Rumpf ruft danach
+    # einen Namen, der ihm lokal nicht gebunden ist, und der Waechter zaehlte den Aufruf als
+    # echten Riegel. Alt (ast.walk) rot, flach ohne Gegenmassnahme gruen; jetzt faengt es der
+    # Datei-Waechter ueber `ast.Global`.
+    "P-1 inneres def mit global _sicherer_projektname = Attrappe": (True, '''
+@app.post("/api/probe/{project}")
+def probe(project: str):
+    def attrappe():
+        global _sicherer_projektname
+        _sicherer_projektname = lambda p: p
+    attrappe()
+    _sicherer_projektname(project)
+    return _start_transcribe(project)
+'''),
+    # ... und die Kontrolle dazu: eine unbenutzte Attrappe ZWEI Ebenen tief bindet den Namen
+    # nur dort; der echte Aufruf im Rumpf trifft die Modulfunktion. Alt war das ein
+    # FALSCHES Rot (ast.walk sah die innere Bindung), jetzt zu Recht gruen.
+    "P-4 unbenutzte innere Attrappe zwei Ebenen tief, echter Aufruf im Rumpf (Kontrolle)": (False, '''
+@app.post("/api/probe/{project}")
+def probe(project: str):
+    def helfer():
+        def _sicherer_projektname(p):
+            return p
+        return None
+    _sicherer_projektname(project)
+    return _start_transcribe(project)
 '''),
 }
 

@@ -208,7 +208,8 @@ def _Sonden(pipe, diagnose: dict):
 def _load_waveform(audio_path: str) -> dict:
     """Audio -> {'waveform': (1,time) float32-Tensor, 'sample_rate': 16000} via
     faster_whisper.decode_audio. Umgeht das kaputte torchcodec-Decoding von pyannote —
-    auf JEDER Plattform, nicht nur auf Windows (#517).
+    plattformunabhaengig, nicht als Windows-Sonderfall: auf Windows UND macOS gemessen,
+    Linux nicht (#517).
 
     Bis #517 stand hier „auf Windows kaputt", und das war eine Falle: wer daraus schloss,
     der Umweg sei auf macOS verzichtbar, braeche jede frische Installation dort. Gemessen

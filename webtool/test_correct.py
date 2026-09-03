@@ -506,6 +506,23 @@ def test_run_cli_ok_wenn_fremddatei_waehrend_des_laufs_entsteht(project, monkeyp
     assert (t / "F.json").exists() == fremd              # der Nachschub kam wirklich an (bzw. nicht)
 
 
+def test_main_setzt_den_bereich_selbst_zurueck(project, monkeypatch):
+    """`main` liest `_letzter_bereich` — und setzt ihn VOR `cmd_run` selbst auf None (#524).
+
+    Ersetzt ein Test `cmd_run` durch eine Attrappe (so `test_main_no_verify_flag_and_env`),
+    laeuft der Reset in `cmd_run` nie; `main` urteilte dann ueber den Bereich des VORIGEN
+    Laufs. Hier liegt ein liegengebliebenes `["S1"]`, S1 existiert und ist nicht
+    human_edited, die Attrappe meldet 0 korrigierte Dateien: ohne den Reset waere das
+    „0 von 1 versucht" und SystemExit(1). Gefunden vom gegnerischen Pruefer als Waechter ohne
+    Abdeckung (die Zeile entfernt, 118 Tests weiter gruen); Mutation: den Reset in `main`
+    streichen — dieser Test wird rot.
+    """
+    monkeypatch.setattr(correct, "_letzter_bereich", ["S1"])          # Rest eines frueheren Laufs
+    monkeypatch.setattr(correct, "cmd_run", lambda project, base=None, force=False, verify=True: 0)
+    correct.main(["run", "Demo"])                                     # kein SystemExit
+    assert correct._letzter_bereich is None
+
+
 def test_run_cli_ok_on_success(project, monkeypatch):
     _root, t = project
     monkeypatch.setattr(correct, "_run_claude", _fake_claude(t, []))
