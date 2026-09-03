@@ -48,4 +48,3 @@ torch-report.json
 # Freigabe-Protokoll des Code-Guardian-Dependency-Gates. Traegt einen Zeitstempel
 # und gilt nur 30 Minuten — ein Wegwerf-Beleg des jeweiligen Laufs, keine Quelle.
 .code-guardian-dependency-report.md
-.code-guardian-evidence/

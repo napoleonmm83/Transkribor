@@ -796,6 +796,9 @@ den gepackten Lauf mit `TRANSKRIBOR_FEHLERPROBE=1` starten — er wirft einmal a
 Python-Server bekommt `TRANSKRIBOR_BUGSINK_DSN`, `TRANSKRIBOR_VERSION` und
 `TRANSKRIBOR_FEHLERBERICHTE` (Pfad der Schalterdatei `fehlerberichte.json` in `userData`).
 Die Compose für den Server liegt in `docs/bugsink/compose.yaml` (Coolify, Postgres 17).
+`MAX_EVENT_AGE_DAYS=90` löscht nur, wenn `bugsink-manage delete_old_events` läuft — das tut in
+Coolify ein täglicher Scheduled Task (`0 3 * * *`, Container `web`); ohne ihn wäre die
+90-Tage-Zusage der README leer.
 
 **Ohne Oberfläche, direkt auf der Kommandozeile:**
 

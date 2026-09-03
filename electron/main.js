@@ -55,6 +55,7 @@ Sentry.init(fehlerberichte.optionen({
   dsn: paket.bugsinkDsn,
   version: app.getVersion(),
   gepackt: app.isPackaged,
+  ipcMode: Sentry.IPCMode.Classic,
   ctx: {
     home: fehlerberichte._home(),
     daten: P.daten,
@@ -872,8 +873,9 @@ async function starten() {
 }
 
 app.on('window-all-closed', () => { backend.stop(); app.quit() })
-// `Sentry.close` raeumt den Transport auf; was jetzt nicht mehr rausgeht, liegt in der
-// Offline-Warteschlange auf Platte und geht beim naechsten Start.
+// `Sentry.close` gibt dem Transport bis zu 2 s, was noch unterwegs ist. Nicht abgewartet:
+// Electron wartet hier ohnehin nicht, und ein Ereignis, das dabei verloren geht, ist eines
+// (die Offline-Warteschlange greift nur bei FEHLGESCHLAGENEM Senden, nicht beim Beenden).
 app.on('before-quit', () => { backend.stop(); Sentry.close(2000).catch(() => {}) })
 // Der Server ueberlebt einen harten Abbruch sonst als Waise mit belegter GPU.
 process.on('exit', () => backend.stop())
