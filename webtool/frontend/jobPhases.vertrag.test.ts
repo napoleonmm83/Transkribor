@@ -404,6 +404,13 @@ const INVENTAR: Record<string, Eintrag> = {
   '[autocorrect] KI-Phase uebersprungen — {}': {
     art: 'ignoriert', beispiel: '[autocorrect] KI-Phase uebersprungen — kein KI-Anbieter eingestellt',
   },
+  // #496: der Server schaltet die Mitkorrektur EINES Laufs ab und gibt den Grund mit —
+  // dieselbe Zeilenform wie die beiden darueber und aus demselben Grund `ignoriert`: sie
+  // gehoert dem LAUF, nicht einer Datei. Der Vertragswaechter hat sie beim Bau selbst
+  // gemeldet, das ist genau seine Aufgabe.
+  '[autocorrect] uebersprungen — {}': {
+    art: 'ignoriert', beispiel: '[autocorrect] uebersprungen — im Projekt laeuft bereits ein Korrekturlauf',
+  },
   '  KI-Anbieter: {}': { art: 'ignoriert', beispiel: '  KI-Anbieter: Anthropic (claude-opus-5)' },
   '  claude Timeout nach {}s': { art: 'ignoriert', beispiel: '  claude Timeout nach 600s' },
   '  claude exit {}: {}': { art: 'ignoriert', beispiel: '  claude exit 1: nicht angemeldet' },
