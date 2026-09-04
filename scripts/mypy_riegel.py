@@ -29,10 +29,15 @@ hat die Konfiguration nicht mitgenommen, nicht den Baum geaendert.
 
 DIE VIER MYPY-EIGENEN FALLEN, alle gemessen:
 
-1. `note:`-Zeilen tragen Klammercodes. Acht Zeilen dieses Baums enden auf
-   `[annotation-unchecked]` und sind KEINE Fehler — mypy zaehlt 65, ein Muster
-   auf `[code]` allein faende 73. Deshalb verlangt `_BEFUND` das woertliche
-   `: error: `; `note:` faellt damit von selbst heraus.
+1. `note:`-Zeilen enden auf eine eckige Klammer, die wie ein Fehlercode
+   aussieht. ACHT solche Zeilen traegt dieser Baum, SIEBEN davon
+   `[annotation-unchecked]` — die achte endet auf einen TYP:
+       webtool\\auth.py:92: note:     def __add__(self, list[str], /) -> list[str]
+   Keine davon ist ein Fehler; mypy zaehlt 65, ein Muster auf `[code]` allein
+   faende 73. Deshalb verlangt `_BEFUND` das woertliche `: error: `; `note:`
+   faellt damit von selbst heraus. (Die erste Fassung dieser Zeile schrieb alle
+   acht dem Code `annotation-unchecked` zu — die Summe stimmte, die Zuordnung
+   nicht. Nachgemessen vom kalten Review, F3.)
 
 2. Kein Spaltenwert. mypy druckt `pfad:zeile: error:`, ruff dagegen
    `pfad:zeile:spalte:`. Das Muster von `ruff_riegel.py` faende hier NICHTS,
@@ -98,6 +103,21 @@ _SUMME = re.compile(r"^Found (?P<zahl>\d+) errors? in \d+ files?\b")
 
 _SAUBER = "Success: no issues found"
 
+# Wie viele Dateien mypy ANGESEHEN hat. Zwei Formen, weil mypy die Zahl bei
+# Befunden in Klammern hinter die Summenzeile haengt und bei einem sauberen Baum
+# in den Erfolgssatz schreibt:
+#     Found 65 errors in 18 files (checked 60 source files)
+#     Success: no issues found in 60 source files
+# Beim Abbruch steht dort `(errors prevented further checking)` und gar keine
+# Zahl — dieser Fall faellt schon vorher durch `unstimmig`.
+_GEPRUEFT = re.compile(r"\(checked (?P<zahl>\d+) source files?\)")
+_GEPRUEFT_SAUBER = re.compile(r"^Success: no issues found in (?P<zahl>\d+) source files?")
+
+# Kopfzeile der Baseline. Sie traegt die Dateizahl des Laufs, aus dem die
+# Baseline stammt — der zweite Waechter neben der Befundmenge (siehe
+# `zu_wenig_gesehen`).
+_KOPF = re.compile(r"^# geprueft (?P<zahl>\d+) Dateien$")
+
 # mypys eigenes Abbruchwort. rc 2 faengt denselben Fall schon ab; diese Marke
 # ist der zweite Riegel fuer den Tag, an dem mypy dabei mit 1 endet.
 _ABBRUCH = "errors prevented further checking"
@@ -142,6 +162,67 @@ def summenzeile(ausgabe: str) -> int | None:
     return None
 
 
+def gepruefte_dateien(ausgabe: str) -> int | None:
+    """Wie viele Dateien mypy angesehen hat — oder None, wenn es das nicht sagt.
+
+    None ist die ehrliche Antwort und darf NICHT als 0 durchgehen: beim Abbruch
+    druckt mypy `(errors prevented further checking)` statt der Zahl, und 0
+    waere dort eine Behauptung ueber einen Lauf, der nichts gemessen hat.
+    """
+    for zeile in ausgabe.splitlines():
+        treffer = _GEPRUEFT.search(zeile) or _GEPRUEFT_SAUBER.match(zeile.strip())
+        if treffer:
+            return int(treffer["zahl"])
+    return None
+
+
+def zu_wenig_gesehen(ausgabe: str, kopfzahl: int | None) -> str | None:
+    """Hat mypy WENIGER Dateien angesehen als beim Erzeugen der Baseline? Dann der Grund.
+
+    Der vierte Fall, den der Riegel bis zum kalten Review (F2) nicht kannte —
+    und er ist nicht Schweigen, sondern LEISERES SPRECHEN: eine in sich stimmige
+    Summenzeile ueber einen kleineren Baum. Gemessen mit echtem mypy:
+
+        python -m mypy . --exclude '^webtool/' --follow-imports=silent
+        -> rc 1, `Found 5 errors in 2 files (checked 16 source files)`
+        -> Riegel ohne diesen Waechter: „60 Typfehler behoben … Kein Fehler", rc 0
+
+    Es braucht dafuer keinen Absturz, nur eine Zeile mehr in `[tool.mypy]`
+    (`exclude`, `files`, `follow_imports`) oder ein `# mypy: ignore-errors` am
+    Dateikopf. `unstimmig` sieht davon nichts, `fehlende_zeilen` auch nicht:
+    beide pruefen die FORM der Ausgabe, und die Form ist tadellos.
+
+    Dieselbe Konstruktion wie beim OSV-Scan (#284), aus demselben Grund: dort
+    stehen ZWEI Waechter — mindestens 100 Pakete UND das cu128-Suffix —, „weil
+    die Zahl nichts ueber die Eigenschaft sagt". Hier war es umgekehrt: der
+    Riegel hatte die Eigenschaft (stimmige Form) und keine Zahl.
+
+    Die Untergrenze steht in der Baseline-Kopfzeile und wird mit `--schreiben`
+    fortgeschrieben. Faellt die Zahl, weil jemand wirklich eine `.py` geloescht
+    hat, ist `--schreiben` die Antwort — dieselbe wie bei jeder anderen
+    gewollten Aenderung an der Baseline; die Meldung sagt das.
+    """
+    if kopfzahl is None:
+        return (
+            f"{BASELINE.name} hat keine Kopfzeile `# geprueft N Dateien` — sie "
+            "stammt aus einer aelteren Fassung des Riegels. Einmal mit "
+            "--schreiben erneuern."
+        )
+    jetzt = gepruefte_dateien(ausgabe)
+    if jetzt is None:
+        return "mypy hat nicht gesagt, wie viele Dateien es angesehen hat"
+    if jetzt < kopfzahl:
+        return (
+            f"mypy hat {jetzt} Dateien angesehen, die Baseline stammt aus einem "
+            f"Lauf ueber {kopfzahl}. Ein Lauf ueber weniger Dateien meldet die "
+            "fehlenden Befunde als behoben, und das ist kein Fortschritt, sondern "
+            "ein kleinerer Baum. Ursache suchen (exclude, files, follow_imports, "
+            "ein ignore-errors-Kommentar am Dateikopf); ist die Verkleinerung "
+            "gewollt, mit --schreiben nachziehen."
+        )
+    return None
+
+
 def gemeldete_zahl(ausgabe: str) -> int:
     """Was MYPY selbst zaehlt. Ohne Summenzeile null (`Success: …`)."""
     zahl = summenzeile(ausgabe)
@@ -151,7 +232,7 @@ def gemeldete_zahl(ausgabe: str) -> int:
 def unstimmig(rc: int, ausgabe: str) -> str | None:
     """Passt mypys Rueckgabecode zu dem, was er gedruckt hat? Sonst der Grund.
 
-    Drei Faelle, alle gemessen (2026-09-04, mypy 2.3.1):
+    Vier Faelle, alle gemessen (2026-09-04, mypy 2.3.1):
 
     * `python -m mypy` OHNE installiertes mypy endet mit **rc 1 und leerem
       stdout** — derselbe Code wie „es gibt Typfehler". Ohne diese Probe waere
@@ -163,11 +244,22 @@ def unstimmig(rc: int, ausgabe: str) -> str | None:
       fertig war (Syntaxfehler, Duplicate Module). Heute traegt so ein Lauf
       schon rc 2 und faellt ohnehin durch; die Marke ist der Riegel fuer den
       Tag, an dem mypy das aendert.
+    * **Jeder andere Rueckgabecode**, insbesondere rc 2 mit LEEREM stdout.
+      Nachtrag des kalten Reviews (F1), und er schliesst eine echte Luecke: eine
+      ungueltige Regex in `[tool.mypy] exclude` beendet mypy mit rc 2, stdout
+      leer, Meldung nur auf stderr — gemessen:
+          error: The exclude ^( is an invalid regular expression …
+      Der Fall hing sonst allein an `mypy_lauf`s `returncode not in (0, 1)`, und
+      der sieht neben `unstimmig` redundant aus. Faellt er bei einem Umbau,
+      meldet der Riegel „65 Typfehler behoben" und rc 0 — gruen, weil er nichts
+      gesehen hat. Jetzt hat die Entscheidung EINE Heimat, und die Meldung
+      benennt den Absturz, statt ueber ihn zu schweigen.
     """
     if rc == 1 and summenzeile(ausgabe) is None:
         return (
             "mypy endete mit 1, druckte aber keine Zeile `Found N errors in M "
-            "files` — so sieht ein fehlendes Modul aus, nicht ein Typfehler"
+            "files` — so sieht ein fehlendes Modul aus, nicht ein Typfehler "
+            "(oder eine Ausgabeform mit Farbcodes, etwa unter MYPY_FORCE_COLOR)"
         )
     if rc == 0 and _SAUBER not in ausgabe:
         return "mypy endete mit 0, druckte aber kein `Success: no issues found`"
@@ -175,6 +267,11 @@ def unstimmig(rc: int, ausgabe: str) -> str | None:
         return (
             "mypy meldet `errors prevented further checking` — der Lauf hat "
             "abgebrochen, statt den Baum zu pruefen"
+        )
+    if rc not in (0, 1):
+        return (
+            f"mypy endete mit {rc} — das ist kein Urteil ueber den Baum, sondern "
+            "ein Abbruch von mypy selbst (kaputte Konfiguration, unlesbare Datei)"
         )
     return None
 
@@ -254,7 +351,9 @@ def main(argv: list[str]) -> int:
     1 — mindestens ein Schluessel `pfad:CODE` haeufiger als in der Baseline
     2 — der Riegel selbst ist nicht urteilsfaehig: mypy fehlt oder bricht ab
         (`unstimmig`), eine Ausgabeform wurde nicht verstanden
-        (`fehlende_zeilen`), oder es gibt noch gar keine Baseline
+        (`fehlende_zeilen`), mypy hat WENIGER Dateien angesehen als beim
+        Erzeugen der Baseline (`zu_wenig_gesehen`), oder es gibt noch gar keine
+        Baseline
 
     Die Trennung von 1 und 2 ist der Kern: „ich habe einen Fehler gefunden" und
     „ich konnte nicht hinsehen" duerfen nicht gleich aussehen — sonst ist ein
@@ -282,15 +381,30 @@ def main(argv: list[str]) -> int:
         return 2
 
     if "--schreiben" in argv:
-        BASELINE.write_text("\n".join(befunde) + "\n", encoding="utf-8", newline="\n")
-        print(f"{BASELINE.name}: {len(befunde)} Eintraege geschrieben")
+        kopf = f"# geprueft {gepruefte_dateien(ausgabe)} Dateien"
+        BASELINE.write_text(
+            "\n".join([kopf, *befunde]) + "\n", encoding="utf-8", newline="\n"
+        )
+        print(f"{BASELINE.name}: {len(befunde)} Eintraege geschrieben ({kopf[2:]})")
         return 0
 
     if not BASELINE.exists():
         print(f"{BASELINE.name} fehlt — einmal mit --schreiben erzeugen.")
         return 2
 
-    alt = [z for z in BASELINE.read_text(encoding="utf-8").splitlines() if z.strip()]
+    zeilen = [z for z in BASELINE.read_text(encoding="utf-8").splitlines() if z.strip()]
+    kopftreffer = next((_KOPF.match(z) for z in zeilen if _KOPF.match(z)), None)
+    kopfzahl = int(kopftreffer["zahl"]) if kopftreffer else None
+
+    # ZWEITER Waechter neben der Befundmenge: hat mypy ueberhaupt so viel
+    # angesehen wie beim Erzeugen der Baseline? Ein Teil-Lauf ist in der Form
+    # tadellos und liest sich als Fortschritt (kalter Review, F2).
+    zu_wenig = zu_wenig_gesehen(ausgabe, kopfzahl)
+    if zu_wenig:
+        sys.stderr.write(zu_wenig + "\n")
+        return 2
+
+    alt = [z for z in zeilen if not z.startswith("#")]
     neue, entfallene = vergleich(befunde, alt)
 
     for eintrag in entfallene:

@@ -270,10 +270,18 @@ def test_zeilenverschiebung_allein_erzeugt_keinen_befund():
 # beim Fund. Getestet wird ueber `mypy_lauf`, damit kein mypy noetig ist.
 
 
-def _riegel(monkeypatch, tmp_path, ausgabe, baseline, argv=()):
+def _riegel(monkeypatch, tmp_path, ausgabe, baseline, argv=(), kopf=59):
+    """Der Riegel mit gefaelschtem mypy-Lauf und eigener Baseline.
+
+    `kopf` ist die Dateizahl in der Kopfzeile; 59 passt zu den Fixtures unten,
+    die alle `(checked 59 source files)` melden. `kopf=None` laesst die
+    Kopfzeile weg — das ist die alte Baseline-Form und muss abbrechen.
+    """
     ziel = tmp_path / "baseline.txt"
     if baseline is not None:
-        ziel.write_text("".join(f"{z}\n" for z in baseline), encoding="utf-8")
+        zeilen = [f"# geprueft {kopf} Dateien"] if kopf is not None else []
+        zeilen += list(baseline)
+        ziel.write_text("".join(f"{z}\n" for z in zeilen), encoding="utf-8")
     monkeypatch.setattr(mypy_riegel, "BASELINE", ziel)
     monkeypatch.setattr(mypy_riegel, "mypy_lauf", lambda: ausgabe)
     return mypy_riegel.main(list(argv)), ziel
@@ -328,6 +336,11 @@ def test_fehlende_baseline_bricht_mit_zwei_ab(monkeypatch, tmp_path):
 
 
 def test_schreiben_legt_die_baseline_neu_an(monkeypatch, tmp_path):
+    # BYTES, nicht read_text: `newline="\n"` im Riegel ist sonst unbewacht —
+    # `read_text` liest mit universellen Zeilenenden und macht aus CRLF still
+    # LF, der Test bliebe also auch ohne die Zusicherung gruen (kalter Review,
+    # F5). Mitgeprueft wird die Kopfzeile: sie traegt die Dateizahl des Laufs,
+    # aus dem die Baseline stammt.
     rc, ziel = _riegel(
         monkeypatch,
         tmp_path,
@@ -338,7 +351,155 @@ def test_schreiben_legt_die_baseline_neu_an(monkeypatch, tmp_path):
         argv=["--schreiben"],
     )
     assert rc == 0
-    assert ziel.read_text(encoding="utf-8") == "a.py:assignment\nb.py:union-attr\n"
+    assert ziel.read_bytes() == (
+        b"# geprueft 59 Dateien\na.py:assignment\nb.py:union-attr\n"
+    )
+
+
+def test_kopfzeile_gilt_nicht_als_befund(monkeypatch, tmp_path, capsys):
+    # Negativkontrolle zur Kopfzeile: sie steht in derselben Datei wie die
+    # Schluessel und darf im Vergleich nicht mitzaehlen — sonst waere sie
+    # dauerhaft ein entfallener Befund.
+    #
+    # Der Rueckgabecode allein REICHT HIER NICHT und der erste Entwurf pruefte
+    # nur ihn: Entfallenes macht nicht rot, der Test waere also auch dann gruen
+    # geblieben, wenn die Kopfzeile als Befund gezaehlt haette. Geprueft wird
+    # deshalb die Ausgabe.
+    rc, _ = _riegel(monkeypatch, tmp_path, _EIN_BEFUND, ["a.py:assignment"])
+    assert rc == 0
+    assert "behoben" not in capsys.readouterr().out
+
+
+def test_schreiben_laeuft_nicht_ueber_eine_unverstandene_ausgabe(monkeypatch, tmp_path):
+    # Die Zaehlprobe steht VOR dem Schreiben, und das ist die Absicht: eine
+    # Baseline aus einem Lauf, den der Riegel nicht ganz verstanden hat, waere
+    # dauerhaft falsch. Die Mutation `--schreiben` nach vorn zu ziehen ueberlebte
+    # bis hierher unbemerkt (kalter Review, F5).
+    ziel = tmp_path / "baseline.txt"
+    monkeypatch.setattr(mypy_riegel, "BASELINE", ziel)
+    monkeypatch.setattr(
+        mypy_riegel,
+        "mypy_lauf",
+        lambda: "a.py:1: error: x  [assignment]\n"
+        'webtool/__init__.py: error: Duplicate module named "webtool"\n'
+        "Found 2 errors in 2 files (checked 59 source files)\n",
+    )
+    assert mypy_riegel.main(["--schreiben"]) == 2
+    assert not ziel.exists()
+
+
+# --- Der VIERTE Fall: leiseres Sprechen statt Schweigen -------------------
+#
+# Beide Abschnitte sind Nachtraege des kalten Reviews. F1: der Rueckgabecode-
+# Riegel in `mypy_lauf` entschied in KEINEM Test — die Mutation
+# `returncode not in (0, 1) or grund` -> `grund` liess alle 34 gruen und meldete
+# mit der echten Baseline „65 behoben", rc 0. F2: ein Teil-Lauf ist in der Form
+# tadellos und liest sich als Fortschritt.
+
+
+def test_unerwarteter_rueckgabecode_ist_unstimmig():
+    # rc 2 mit leerem stdout: so endet mypy bei einer ungueltigen Regex in
+    # `[tool.mypy] exclude` (gemessen — die Meldung geht nach stderr).
+    grund = mypy_riegel.unstimmig(2, "")
+    assert grund is not None
+    assert "2" in grund
+
+
+def test_absturz_mit_leerem_stdout_bricht_ab(monkeypatch):
+    class Lauf:
+        returncode = 2
+        stdout = ""
+        stderr = "error: The exclude ^( is an invalid regular expression\n"
+
+    monkeypatch.setattr(mypy_riegel.subprocess, "run", lambda *a, **k: Lauf())
+    with pytest.raises(SystemExit) as ausgang:
+        mypy_riegel.mypy_lauf()
+    assert ausgang.value.code == 2
+
+
+def test_gepruefte_dateien_liest_beide_formen():
+    assert (
+        mypy_riegel.gepruefte_dateien(
+            "Found 65 errors in 18 files (checked 60 source files)"
+        )
+        == 60
+    )
+    assert (
+        mypy_riegel.gepruefte_dateien("Success: no issues found in 60 source files")
+        == 60
+    )
+    assert (
+        mypy_riegel.gepruefte_dateien("Found 1 error in 1 file (checked 1 source file)")
+        == 1
+    )
+
+
+def test_abbruch_traegt_keine_dateizahl():
+    # Beim Abbruch steht `(errors prevented further checking)` statt der Zahl.
+    # None und NICHT 0 — 0 waere eine Behauptung ueber einen Lauf, der nichts
+    # gemessen hat, und wuerde die Untergrenze scheinbar erfuellen.
+    assert (
+        mypy_riegel.gepruefte_dateien(
+            "Found 1 error in 1 file (errors prevented further checking)"
+        )
+        is None
+    )
+
+
+def test_teil_lauf_bricht_ab_statt_fortschritt_zu_melden(monkeypatch, tmp_path):
+    # Der Fall aus dem kalten Review, an echtem mypy gemessen:
+    #     mypy . --exclude '^webtool/' --follow-imports=silent
+    #     -> Found 5 errors in 2 files (checked 16 source files)
+    # Vorher meldete der Riegel „60 Typfehler behoben … Kein Fehler", rc 0.
+    rc, _ = _riegel(
+        monkeypatch,
+        tmp_path,
+        "a.py:1: error: x  [assignment]\n"
+        "Found 1 error in 1 file (checked 16 source files)\n",
+        ["a.py:assignment", "webtool/b.py:union-attr", "webtool/c.py:arg-type"],
+        kopf=59,
+    )
+    assert rc == 2
+
+
+def test_mehr_gesehene_dateien_sind_kein_fehler(monkeypatch, tmp_path):
+    # Negativkontrolle zum Test darueber — ohne sie belegte er nur, dass der
+    # Waechter irgendetwas ablehnt. Eine NEUE .py im Baum erhoeht die Zahl und
+    # darf nicht anschlagen.
+    rc, _ = _riegel(
+        monkeypatch,
+        tmp_path,
+        "a.py:1: error: x  [assignment]\n"
+        "Found 1 error in 1 file (checked 77 source files)\n",
+        ["a.py:assignment"],
+        kopf=59,
+    )
+    assert rc == 0
+
+
+def test_baseline_ohne_kopfzeile_bricht_ab(monkeypatch, tmp_path):
+    # Eine Baseline aus einer aelteren Fassung kennt die Dateizahl nicht. Der
+    # Waechter kann dann nicht urteilen — und ein Waechter, der still nicht
+    # laeuft, ist genau das, wogegen dieser Riegel gebaut ist.
+    rc, _ = _riegel(
+        monkeypatch, tmp_path, _EIN_BEFUND, ["a.py:assignment"], kopf=None
+    )
+    assert rc == 2
+
+
+def test_negative_differenz_bricht_ab(monkeypatch, tmp_path):
+    # `fehlend != 0`, nicht `fehlend > 0`: versteht der Riegel MEHR Zeilen als
+    # mypy zaehlt, ist ebenfalls etwas faul — sein Muster greift dann zu weit.
+    # Die Mutation auf `> 0` ueberlebte bis hierher (kalter Review, F5).
+    rc, _ = _riegel(
+        monkeypatch,
+        tmp_path,
+        "a.py:1: error: x  [assignment]\n"
+        "b.py:2: error: y  [union-attr]\n"
+        "Found 1 error in 1 file (checked 59 source files)\n",
+        ["a.py:assignment"],
+    )
+    assert rc == 2
 
 
 # --- Der Riegel gegen das eigene Schweigen --------------------------------
