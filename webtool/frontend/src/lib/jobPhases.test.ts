@@ -1434,8 +1434,13 @@ describe('korrekturSchlange — die Wartezeit im gestaffelten Lauf (#442)', () =
     expect(korrekturSchlange(roh(['→ Korrigiere A · Block 1/4 …']), 'transcribe')).toEqual({})
     // (2) `apply:` hat geschrieben — die Korrektur ist durch.
     expect(korrekturSchlange(roh(['apply: A -> edit.json']), 'transcribe')).toEqual({})
-    // (3) Sie ist gescheitert — es kommt keine Korrektur mehr.
+    // (3) Sie ist gescheitert — es kommt keine Korrektur mehr. BEIDE Wege, denn nur der
+    // zweite ist der Korrektur-Fehlerpfad (`jobPhases.ts:286`): mit dem allgemeinen
+    // FEHLER-Zweig allein bliebe der Test gruen, wenn die Erkennung von
+    // `Autocorrect-Fehler bei` ausfiele. (CodeRabbit-CLI am PR.)
     expect(korrekturSchlange(roh(['[Demo] FEHLER A: kein Anbieter']), 'transcribe')).toEqual({})
+    expect(korrekturSchlange(roh(['[Demo] Autocorrect-Fehler bei A: RuntimeError']), 'transcribe'))
+      .toEqual({})
     // Und der Normalfall dazwischen: sie wartet, mit dem `done` ihrer TRANSKRIPTION.
     expect(korrekturSchlange(roh([]), 'transcribe')).toEqual({ A: { art: 'correct', vor: 0 } })
   })
