@@ -1191,7 +1191,11 @@ function entschluesselt(s: string): string {
 function fixtureZeilen(datei: string): string[] {
   const quelle = fs.readFileSync(path.join(WURZEL, 'webtool', 'frontend', datei), 'utf8')
   const aus: string[] = []
-  for (const m of quelle.matchAll(/(?:parseJobPhases\(\s*'[a-z]+'\s*,\s*|\blines:\s*)\[/g)) {
+  // BEIDE Quotierungen am ersten Argument: heute schreibt jede Fixture `'correct'`, aber
+  // nichts erzwingt das (kein eslint/prettier im Frontend) — eine Datei mit `"correct"`
+  // faellt sonst still aus der Ernte, und die Wache meldete darueber Erfolg. Unabhaengig
+  // gefunden vom gegnerischen Pruefer (F6) und von der CodeRabbit-CLI.
+  for (const m of quelle.matchAll(/(?:parseJobPhases\(\s*['"][a-z]+['"]\s*,\s*|\blines:\s*)\[/g)) {
     aus.push(...literale(arrayAb(quelle, m.index + m[0].length - 1)))
   }
   return aus
