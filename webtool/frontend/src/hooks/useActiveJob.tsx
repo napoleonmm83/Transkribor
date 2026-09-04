@@ -176,9 +176,25 @@ export function mergePhases(jobs: Job[]): JobPhases {
   // Je ART getrennt, weil zwei Laeufe zwei Schlangen sind. Dass ihre Bereiche disjunkt sind
   // (transcribe nimmt die Aufnahmen OHNE Roh-JSON, correct die MIT), macht die Trennung nicht
   // ueberfluessig: sie ist der Grund, warum hier ueberhaupt nach `art` gruppiert werden DARF.
+  //
+  // ZWEI Ordnungen, nicht eine — und die zweite ist mit #442 dazugekommen. Die
+  // Transkriptions-Schlange sortiert nach NAMEN, weil ihr Erzeuger das tut
+  // (`transcribe.py`: `pending.sort(key=basename)`). Die Korrektur-Schlange darf das NICHT:
+  // dort arbeitet ein ThreadPoolExecutor nach SUBMIT-Reihenfolge, und eine waehrend des Laufs
+  // hochgeladene Aufnahme kann alphabetisch vorne stehen und trotzdem hinten anstehen. Ihre
+  // Ordnung steckt bereits im `vor`, das `korrekturSchlange` aus der Zeilenfolge gebildet hat
+  // — hier wird nur die LUECKE geschlossen, die eine herausgenommene Base hinterlaesst.
+  //
+  // Der Fehler war in `korrekturSchlange` unsichtbar: die Funktion lieferte die richtige
+  // Ordnung, diese Schleife warf sie danach weg. Gefunden von der CodeRabbit-CLI, festgehalten
+  // von einem Test AN DIESER Stelle — der an der Funktion allein blieb gruen.
+  const stabil = (b: string) => warten[b].vor
   for (const art of ['transcribe', 'correct'] as const) {
-    laufOrdnung(Object.keys(warten).filter(b => warten[b].art === art))
-      .forEach((b, i) => { warten[b] = { art, vor: i } })
+    const bases = Object.keys(warten).filter(b => warten[b].art === art)
+    const geordnet = art === 'transcribe'
+      ? laufOrdnung(bases)
+      : [...bases].sort((a, b) => stabil(a) - stabil(b))
+    geordnet.forEach((b, i) => { warten[b] = { art, vor: i } })
   }
   // KEINE `bilanz` im Ergebnis, und das ist Absicht: sie gehoert EINEM Lauf (dem URL-Import),
   // und ihr einziger Leser — der Ausgang — bekommt ihn einzeln aus der `onSettled`-Nutzlast.

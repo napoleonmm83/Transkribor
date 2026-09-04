@@ -282,6 +282,25 @@ describe('mergePhases', () => {
     expect(m.warten?.A).toBeUndefined()
   })
 
+  it('die Korrektur-Schlange behaelt ihre UEBERGABE-Reihenfolge auch nach dem Merge (#442)', () => {
+    /* Die Neu-Durchzaehlung am Ende von `mergePhases` sortierte BEIDE Schlangen nach Namen.
+       Fuer die Transkription ist das richtig (der Erzeuger sortiert selbst so), fuer die
+       Korrektur falsch: dort arbeitet ein ThreadPoolExecutor nach Submit-Reihenfolge, und
+       `AB` kann nach `B` eingereiht worden sein.
+
+       Der Fehler war in `korrekturSchlange` nicht sichtbar — die Funktion liefert die richtige
+       Ordnung, der Merge warf sie danach weg. Genau die Luecke, die dieses Repo als
+       „die VERDRAHTUNG braucht eigene Tests" fuehrt; gefunden von der CodeRabbit-CLI. */
+    const m = mergePhases([job('j1', 'transcribe', parseJobPhases('transcribe', [
+      '[scope] B', '[Demo] fertig B: 9s, 21 Segmente, 1.4x Echtzeit',
+      '→ Eingereiht B (Korrektur) …',
+      '[scope+] AB', '[Demo] fertig AB: 8s, 19 Segmente, 1.5x Echtzeit',
+      '→ Eingereiht AB (Korrektur) …',
+    ]))])
+    expect(m.warten?.B).toEqual({ art: 'correct', vor: 0 })
+    expect(m.warten?.AB).toEqual({ art: 'correct', vor: 1 })
+  })
+
   it('bei gleicher Datei in zwei Jobs gewinnt transcribe — unabhaengig von der Reihenfolge', () => {
     // Das Transkript wird gerade ersetzt, die Korrektur arbeitet auf gleich veralteten Daten.
     const t = job('j1', 'transcribe', { global: null, active: { A: { phase: 'transcribe', pct: 20 } }, perBase: {} })
