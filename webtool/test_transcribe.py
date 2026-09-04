@@ -4,6 +4,8 @@ import importlib
 import json
 import os
 import sys
+import threading
+import time
 import types
 
 import pytest
@@ -1468,28 +1470,62 @@ def test_transcribe_project_meldet_die_uebergabe_an_die_korrektur_schlange(monke
     monkeypatch.setattr(correct, "diarize_enabled", lambda: False)
     monkeypatch.setattr(correct, "cmd_diarize", lambda *a, **kw: 0)
     monkeypatch.setattr(correct, "prep_single", lambda *a, **kw: True)
-    # Der Arbeiter selbst darf nichts tun — gemessen wird die UEBERGABE, nicht die Korrektur.
-    monkeypatch.setattr(correct, "correct_ai_single", lambda *a, **kw: True)
+
+    # DREI Aufnahmen bei ZWEI Arbeitern, und die zwei ersten werden BLOCKIERT: sonst gibt es
+    # gar keine Warteschlange. Ein Arbeiter, der sofort zurueckkehrt, hat den Slot wieder frei,
+    # bevor die naechste Datei transkribiert ist — der Test pruefte dann nur, dass drei Zeilen
+    # gedruckt werden, nicht dass jemand ansteht. Dieselbe Lehre wie „Attrappe ohne Latenz hat
+    # die Luecke nicht"; gefunden von der CodeRabbit-CLI.
+    freigabe = threading.Event()
+    uebernommen = []
+
+    def fake_correct(_projekt, base):
+        uebernommen.append(base)
+        freigabe.wait(10)
+        return True
+
+    monkeypatch.setattr(correct, "correct_ai_single", fake_correct)
 
     proj_dir = tmp_path / "SchlangeDemo"
     (proj_dir / "audio").mkdir(parents=True)
     (proj_dir / "transkripte").mkdir(parents=True)
-    for b in ("E1", "E2"):
+    for b in ("E1", "E2", "E3"):
         (proj_dir / "audio" / f"{b}.mp3").write_bytes(b"audio")
 
     monkeypatch.setattr(transcribe, "_transkribiere_datei", lambda _m, _e, af, _s, _mh, _mo: {
         "text": "x", "duration": 1.0,
         "segments": [{"id": 0, "start": 0.0, "end": 1.0, "text": "x"}]})
 
-    transcribe.transcribe_project("SchlangeDemo", "tiny", "de", autocorrect=True)
-    out = capsys.readouterr().out
+    lauf = threading.Thread(
+        target=transcribe.transcribe_project,
+        args=("SchlangeDemo", "tiny", "de"), kwargs={"autocorrect": True}, daemon=True)
+    lauf.start()
 
-    assert "→ Eingereiht E1 (Korrektur) …" in out
-    assert "→ Eingereiht E2 (Korrektur) …" in out
+    # Warten, bis alle drei uebergeben sind. `submit` blockiert nicht — die Hauptschleife
+    # transkribiert und uebergibt weiter, waehrend die zwei Arbeiter haengen.
+    out = ""
+    frist = time.time() + 30
+    while "→ Eingereiht E3" not in out and time.time() < frist:
+        out += capsys.readouterr().out
+        time.sleep(0.05)
+
+    # DER eigentliche Befund: E3 ist eingereiht und hat KEINEN Arbeiter. Genau dieser Zustand
+    # ist in der Oberflaeche „Wartet auf Korrektur · noch N vor dieser" — und genau ihn hat
+    # die erste Fassung dieses Tests nicht hergestellt (zwei Dateien, zwei freie Arbeiter).
+    assert "→ Eingereiht E3 (Korrektur) …" in out, "die dritte Uebergabe fehlt"
+    assert sorted(uebernommen) == ["E1", "E2"], f"unerwartet uebernommen: {uebernommen}"
+
+    freigabe.set()
+    lauf.join(30)
+    assert not lauf.is_alive(), "der Lauf haengt"
+    out += capsys.readouterr().out
+
+    for b in ("E1", "E2", "E3"):
+        assert f"→ Eingereiht {b} (Korrektur) …" in out
     # Die Reihenfolge ist die Zusage, nicht nur die Anwesenheit: die Oberflaeche zaehlt daraus
     # `noch N vor dieser`. Nach Namen sortiert waere sie bei einer waehrend des Laufs
     # hochgeladenen Aufnahme falsch.
-    assert out.index("→ Eingereiht E1") < out.index("→ Eingereiht E2")
+    assert out.index("→ Eingereiht E1") < out.index("→ Eingereiht E2") < out.index("→ Eingereiht E3")
 
 
 
