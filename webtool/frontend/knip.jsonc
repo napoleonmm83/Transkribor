@@ -20,11 +20,18 @@
     "shadcn",
 
     // Absichtlich schon installiert, aber noch ohne Verwender: der erste
-    // Eigenschaftstest ist noch nicht geschrieben. Ohne diese zwei Zeilen ist
-    // knip ab dem Tag seiner Einfuehrung rot, und ein Detektor, der von Anfang
-    // an rot steht, wird nicht gelesen. Beim ersten echten Eigenschaftstest
+    // Eigenschaftstest ist noch nicht geschrieben. Ohne diese Zeile ist knip
+    // ab dem Tag seiner Einfuehrung rot, und ein Detektor, der von Anfang an
+    // rot steht, wird nicht gelesen. Beim ersten echten Eigenschaftstest
     // ersatzlos streichen.
-    "fast-check",
-    "@fast-check/vitest"
+    //
+    // Die Zuckerschicht @fast-check/vitest stand hier daneben und ist mit
+    // PR #540 raus: sie fixiert "vitest": "^4.1.0" als peer und blockierte
+    // damit den Sprung auf vitest 5 - fuer ein Paket, das kein einziger Test
+    // benutzt (npm ci endete mit ERESOLVE, gemessen im Frontend-Job).
+    // fast-check selbst hat KEINE peer-Abhaengigkeit; ein Eigenschaftstest
+    // wird deshalb als fc.assert(fc.property(...)) in einem gewoehnlichen
+    // it() geschrieben statt mit test.prop aus der Zuckerschicht.
+    "fast-check"
   ]
 }
