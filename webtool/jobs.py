@@ -202,6 +202,13 @@ def _prune_locked():
         if raus is None:
             break
         _vorgaenge.pop(raus, None)
+        # Ein Alias MUSS mit seinem Ziel gehen. Er bleibt `vorgemerkt` und ist damit oben
+        # immun, sein Ziel wird `gestartet` und damit raeumbar — bliebe er allein zurueck,
+        # zeigte er ins Leere: `vorgang()` faende nichts, der Endpunkt antwortete 404, und die
+        # Oberflaeche liesse die Nummer fallen. Also genau der stille Ausfall, gegen den die
+        # Nummer gebaut ist, durch die Hintertuer des Deckels. (CodeRabbit-Bot, major.)
+        for n in [n for n, v in _vorgaenge.items() if v.get("alias") == raus]:
+            _vorgaenge.pop(n, None)
 
 
 def _vorgang_setzen(nummer, zustand, job_id=None):
@@ -221,8 +228,10 @@ def vorgang(nummer: str):
     """Der Zustand einer Vormerkung, oder None. Reiner Lesepfad fuer die Oberflaeche.
 
     Sie erfaehrt damit die Kennung des Nachlaufs, sobald er existiert — heute erfaehrt sie sie
-    gar nicht: `request` liefert bei belegtem Slot die Kennung des BLOCKERS, und der gehoert
-    ueber die Einzel-GPU-Sperre oft einem fremden Projekt (#381).
+    gar nicht: `request` liefert bei belegtem Slot die Kennung des BLOCKERS, und der KANN ueber
+    die Einzel-GPU-Sperre einem fremden Projekt gehoeren (#381). „kann", nicht „oft": dass der
+    Weg erreichbar ist, steht am Code (`start()` gibt fuer `GPU_KINDS` den laufenden Job eines
+    BELIEBIGEN Projekts zurueck) — wie haeufig er vorkommt, hat niemand gemessen.
 
     Folgt einem `alias`: zwei Nummern koennen auf dieselbe Vormerkung zeigen, wenn im
     Sperrfenster von `rerun` eine andere Anfrage denselben Schluessel neu belegt hat (die

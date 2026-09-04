@@ -212,10 +212,11 @@ Transkribor gerade arbeitet. In Fassungen bis einschliesslich `v0.50.0` stand be
 zum Ende des ganzen Laufs nur das Wartesymbol, obwohl sie längst abgehört und korrigiert
 wurden — und in der Meldung am Ende des Laufs tauchten sie gar nicht erst auf.
 
-**Ab der nächsten Fassung** erfährst du bei diesen nachgelegten Aufnahmen auch, wie es ihnen
-ergangen ist. Bis dahin konnte eine von ihnen still liegenbleiben, wenn bei ihr etwas
+**Ab der nächsten Fassung** erfährst du bei einer Aufnahme, die du selbst dazulegst, auch, wie
+es ihr ergangen ist. Bis dahin konnte eine von ihnen still liegenbleiben, wenn bei ihr etwas
 schiefging: die Meldung am Ende gehörte dem Lauf davor, und für die nachgereichte Aufnahme kam
-gar keine.
+gar keine. Bei Aufnahmen, die Transkribor selbst von einer Adresse holt, kommt die Rückmeldung
+weiterhin erst mit der nächsten Aktualisierung der Liste.
 
 Auch **bevor** sie an der Reihe sind, stehen sie ab `v0.50.1` als wartend in der Liste
 statt weiter wie unbearbeitetes Audio auszusehen. Das greift, sobald die Aufnahme fertig

@@ -2101,7 +2101,7 @@ def vorgang_status(nummer: str):
     """Der Zustand einer Vormerkung (#381).
 
     Antwortet ein Lauf mit `started: false`, ist die mitgelieferte Job-Kennung die des
-    BLOCKERS — und der gehoert ueber die Einzel-GPU-Sperre oft einem fremden Projekt. Die
+    BLOCKERS — und der KANN ueber die Einzel-GPU-Sperre einem fremden Projekt gehoeren. Die
     Vorgangsnummer gehoert dagegen dem Anfordernden; unter ihr steht die Kennung des
     Nachlaufs, sobald er existiert. Reiner Lesepfad, wie `job_status`."""
     v = jobs.vorgang(nummer)
