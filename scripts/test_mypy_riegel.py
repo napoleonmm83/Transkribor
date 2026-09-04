@@ -388,6 +388,23 @@ def test_schreiben_laeuft_nicht_ueber_eine_unverstandene_ausgabe(monkeypatch, tm
     assert not ziel.exists()
 
 
+def test_schreiben_ohne_dateizahl_schreibt_nichts(monkeypatch, tmp_path):
+    # Ohne `(checked N source files)` gaebe es keine Untergrenze. Wuerde der
+    # Riegel trotzdem schreiben, entstuende `# geprueft None Dateien` — das
+    # matcht `_KOPF` nicht, der naechste Lauf schickte zu --schreiben, und der
+    # erzeugte denselben Kopf wieder. Eine Schleife, die wie ein Bedienfehler
+    # aussieht.
+    ziel = tmp_path / "baseline.txt"
+    monkeypatch.setattr(mypy_riegel, "BASELINE", ziel)
+    monkeypatch.setattr(
+        mypy_riegel,
+        "mypy_lauf",
+        lambda: "a.py:1: error: x  [assignment]\nFound 1 error in 1 file\n",
+    )
+    assert mypy_riegel.main(["--schreiben"]) == 2
+    assert not ziel.exists()
+
+
 # --- Der VIERTE Fall: leiseres Sprechen statt Schweigen -------------------
 #
 # Beide Abschnitte sind Nachtraege des kalten Reviews. F1: der Rueckgabecode-
