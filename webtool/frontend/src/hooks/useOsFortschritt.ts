@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { useActiveJob } from './useActiveJob'
+import { useActiveJob, zeigtLauf } from './useActiveJob'
 import { ausgang } from '@/lib/jobAusgang'
 import { useProjekte } from './useProjektDaten'
 import { KIND_LABEL } from '@/lib/jobPhases'
@@ -40,6 +40,11 @@ export function useOsFortschritt(): void {
       // schwersten — die OS-Meldung existiert fuer die Person, die NICHT hinsieht, und genau
       // die ist die Zielperson von #376.
       const a = ausgang(j)
+      // Ohne diese Zeile faellt jeder unbekannte Ausgang durch die Ternary-Kette bis zum
+      // Schluss und wird als „fehlgeschlagen" GEMELDET — als Systembenachrichtigung, also an
+      // die Person, die gerade nicht hinsieht. Das ist die Falschmeldung aus #382 in ihrer
+      // teuersten Form.
+      if (a.art === 'unbekannt') continue
       const [wie, body] = a.art === 'erfolg'
         ? ['fertig', 'Das Ergebnis liegt im Projekt.']
         : a.art === 'abbruch'
@@ -61,7 +66,7 @@ export function useOsFortschritt(): void {
     }
   }, [])
 
-  const laufend = jobs.filter(j => j.status === 'running')
+  const laufend = jobs.filter(j => zeigtLauf(j.status))
   const projekt = projects.find(p => p.name === laufend[0]?.project)
   /** Laeuft gerade nichts? DAS ist der Leerlauf — nicht „kein Balken zu zeichnen" (#76). */
   const leerlauf = laufend.length === 0

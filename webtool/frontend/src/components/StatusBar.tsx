@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Settings } from 'lucide-react'
 import { ThemeToggle } from './ThemeToggle'
-import { useActiveJob } from '@/hooks/useActiveJob'
+import { useActiveJob, zeigtLauf } from '@/hooks/useActiveJob'
 import { useUpdate } from '@/hooks/useUpdate'
 import { getHardware } from '@/lib/api'
 import { KIND_LABEL } from '@/lib/jobPhases'
@@ -57,7 +57,7 @@ export function StatusBar() {
   // ein Poll waere hier sinnlos, die Grafikkarte wechselt nicht zur Laufzeit.
   useEffect(() => { getHardware().then(h => setRechenwerk(h.asr)).catch(() => {}) }, [])
 
-  const laufend = jobs.filter(j => j.status === 'running')
+  const laufend = jobs.filter(j => zeigtLauf(j.status))
   const text = laufend.length === 0
     ? 'Bereit'
     : `${laufend.length} ${laufend.length === 1 ? 'Lauf' : 'Läufe'} · ` +

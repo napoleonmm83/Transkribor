@@ -1,7 +1,7 @@
 import { useEffect, useRef, type ReactNode } from 'react'
 import { useLocation, useMatch, useNavigate } from 'react-router-dom'
 import { ProjektDatenProvider, useProjekte, useDateien } from '@/hooks/useProjektDaten'
-import { mergePhases, useActiveJob } from '@/hooks/useActiveJob'
+import { mergePhases, useActiveJob, zeigtLauf } from '@/hooks/useActiveJob'
 import { useAiReady } from '@/hooks/useAiReady'
 import { EditorBrueckeProvider, useEditorBruecke } from '@/hooks/useEditorBruecke'
 import { useDokumentTitel } from '@/hooks/useDokumentTitel'
@@ -25,7 +25,7 @@ function Leiste() {
   const { start } = useJob()
   const aiReason = useAiReady()
 
-  const meine = jobs.filter(j => j.project === projekt && j.status === 'running')
+  const meine = jobs.filter(j => j.project === projekt && zeigtLauf(j.status))
   const phases = mergePhases(meine)     // nur eigenes Projekt, s. mergePhases
 
   const imEditor = useMatch('/p/:project/:base')

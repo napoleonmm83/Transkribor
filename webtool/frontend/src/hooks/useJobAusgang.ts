@@ -17,8 +17,10 @@ import { KIND_LABEL } from '@/lib/jobPhases'
  *
  * `onSettled` ist die einzige Stelle, die JEDEN Ausgang sieht: der `JobProvider` pollt alle
  * adoptierten Jobs, gleich wer sie gestartet hat. **Das setzt voraus, dass jeder Startweg
- * adoptiert** — sonst faellt die Meldung dort aus (siehe #381 fuer den einen Weg, der es
- * nicht kann).
+ * adoptiert** — sonst faellt die Meldung dort aus. Der eine Weg, der es NICHT konnte, war der
+ * vorgemerkte Nachlauf: seine Kennung entsteht erst spaeter, und niemand meldete sie. Seit
+ * #381 traegt die Vormerkung eine Nummer, unter der der Provider ihn findet und adoptiert —
+ * ab da ist er ein Lauf wie jeder andere, und dieser Weg hier bleibt der einzige Meldeweg.
  *
  * WAS gemeldet wird, entscheidet `lib/jobAusgang.ts` — dieselbe Funktion fragt der
  * OS-Zwilling `useOsFortschritt`. Hier steht nur, wie es im Fenster aussieht.
@@ -33,6 +35,12 @@ export function useJobAusgang(): void {
       const kopf = `${j.project}: ${(KIND_LABEL[j.kind] ?? j.kind).replace(/…$/, '')}`
       const a = ausgang(j)
 
+      if (a.art === 'unbekannt') {
+        // Nichts melden. Der Server kennt die Kennung nicht mehr; ueber den Ausgang wissen
+        // wir nichts, und der Sammelzweig unten haette daraus „undefined von undefined"
+        // gemacht (#382).
+        continue
+      }
       if (a.art === 'abbruch') {
         // Ein Abbruch ist eine Entscheidung, kein Unfall — und nachzulesen gibt es nichts.
         toast.warning(`${kopf} abgebrochen`, { duration: 4000 })

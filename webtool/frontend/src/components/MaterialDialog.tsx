@@ -211,7 +211,13 @@ export function MaterialDialog({ project, offen, vorbelegteDateien, sprachChoice
         // mit (#234/#166).
         const spr = z.sprache === projektSprache ? '' : z.sprache
         const r = await uploadAudio(project, z.datei!, spr, undefined, wahl)
-        if (r.job_id) { job = { job_id: r.job_id, started: !!r.started }; art = 'transcribe' }
+        // `vorgang` MUSS mit: hier wird das Antwortobjekt neu gebaut, und was hier nicht
+        // abgeschrieben wird, kommt beim Aufrufer nie an. Bei belegtem Slot ist die Nummer
+        // die einzige brauchbare Auskunft — `job_id` ist dann der Blocker (#381).
+        if (r.job_id) {
+          job = { job_id: r.job_id, started: !!r.started, vorgang: r.vorgang }
+          art = 'transcribe'
+        }
       } catch (e) {
         // „existiert bereits" ist KEIN wiederholbarer Fehlschlag — ein zweiter Versuch
         // endete wieder mit 409. Alles Stehenlassen liefe beim naechsten Klick in lauter 409er,

@@ -1,5 +1,6 @@
 import type {
   Project, ProjectFile, EditDoc, JobStatus, StartJob, Settings, ModelInfo, Hardware, AuthStatus, LoginState, YtdlpStand,
+  Vorgang,
   ProjectEinstellungen,
   EinstellungenWerte,
   DateiEinstellungen,
@@ -265,6 +266,11 @@ export async function fetchUrls(project: string, urls: string[],
 export async function getJob(jobId: string): Promise<JobStatus> {
   return jn(await fetch(`/api/jobs/${enc(jobId)}`))
 }
+/** Der Zustand einer Vormerkung (#381). Wirft wie `getJob` einen `HttpFehler` mit Status —
+ *  ein 404 heisst hier NICHT „Server weg", sondern „diese Nummer kennt er nicht (mehr)". */
+export async function getVorgang(nummer: string): Promise<Vorgang> {
+  return jn(await fetch(`/api/vorgaenge/${enc(nummer)}`))
+}
 export async function cancelJob(jobId: string): Promise<void> {
   await post(`/api/jobs/${enc(jobId)}/cancel`)
 }
@@ -273,7 +279,8 @@ export async function cancelJob(jobId: string): Promise<void> {
  *  `mehrsprachig` ebenso — undefined heisst „kein Datei-Override“, der Projektwert gilt. */
 export async function uploadAudio(project: string, file: File, sprache?: string,
                                   mehrsprachig?: boolean, sprecher?: number):
-  Promise<{ base: string; file: string; job_id?: string; started?: boolean }> {
+  Promise<{ base: string; file: string; job_id?: string; started?: boolean;
+            vorgang?: string | null }> {
   const fd = new FormData(); fd.append('file', file)
   if (sprache) fd.append('sprache', sprache)
   if (mehrsprachig !== undefined) fd.append('mehrsprachig', String(mehrsprachig))
