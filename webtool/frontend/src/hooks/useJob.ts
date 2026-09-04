@@ -21,7 +21,9 @@ export function useJob() {
         verfolge(res.vorgang)
         // Der alte Text („Es läuft bereits ein Job") sagte nur die halbe Wahrheit: er nannte
         // den Grund und verschwieg die Folge — dass die Arbeit vorgemerkt IST.
-        toast.info('Es läuft bereits etwas — deine Aufnahme kommt danach dran.')
+        // BEWUSST ohne „deine Aufnahme": dieser Weg traegt auch das projektweite
+        // „Korrigieren", bei dem gar nichts hochgeladen wurde.
+        toast.info('Es läuft bereits etwas — die Arbeit ist vorgemerkt und kommt danach dran.')
       } else {
         toast.warning('Es läuft bereits ein Job für dieses Projekt.')
       }

@@ -58,21 +58,24 @@ describe('useOsFortschritt', () => {
     expect(meldungen[0]).toContain('Alpha')
   })
 
-  it('meldet GAR NICHTS, wenn der Server die Kennung nicht mehr kennt (#382)', async () => {
+  it('meldet UNBEKANNT statt „fehlgeschlagen", wenn der Server die Kennung nicht kennt (#382)',
+     async () => {
     // Die teuerste Form der Falschmeldung: die Systembenachrichtigung geht an die Person, die
-    // gerade NICHT hinsieht. Ein 404 nach einem Serverneustart heisst „Ausgang unbekannt" —
-    // bis #382 fiel er durch die Ternary-Kette bis zum Schluss und meldete „fehlgeschlagen"
-    // ueber einen Lauf, der oft sauber durchgelaufen war.
+    // gerade NICHT hinsieht. Ein 404 nach einem Serverneustart fiel bis #382 durch die
+    // Ternary-Kette bis zum Schluss und meldete „fehlgeschlagen".
     //
-    // Ohne diesen Test ist der Riegel Dekoration: die Mutationsprobe schaltete ihn aus, und
-    // ALLE Tests blieben gruen.
+    // Geschwiegen wird trotzdem nicht — ausgerechnet diese Person erfuehre sonst gar nicht,
+    // dass ihre Aufnahme unverarbeitet blieb. Beide Richtungen im Test: es MUSS eine Meldung
+    // geben, und sie darf NICHT „fehlgeschlagen" heissen.
     vi.mocked(api.getJob).mockRejectedValue(
       Object.assign(new api.HttpFehler('kein Job', 404), { status: 404 }))
     zeigen()
     const adopt = (globalThis as unknown as { __adopt: (i: string, p: string, k: string) => void }).__adopt
     await act(async () => { adopt('j1', 'Alpha', 'correct') })
     await act(async () => { await new Promise(r => setTimeout(r, 40)) })
-    expect(meldungen).toHaveLength(0)
+    expect(meldungen).toHaveLength(1)
+    expect(meldungen[0]).toContain('unbekannt')
+    expect(meldungen[0]).not.toContain('fehlgeschlagen')
   })
 
   it('meldet einen TEILfehlschlag nicht als „fertig" (#376/B2)', async () => {

@@ -483,6 +483,23 @@ describe('ProjectWorkspace (Stub)', () => {
     await waitFor(() => expect(api.uploadAudio).toHaveBeenCalledWith('Demo', expect.any(File), '', undefined, undefined))
   })
 
+  it('verfolgt die Vormerkung, wenn der Upload auf einen belegten Slot trifft (#381)', async () => {
+    /* Das letzte Glied der Kette: `MaterialDialog` reicht die Nummer durch (dort geprueft),
+       und HIER muss sie beim Provider ankommen. Ohne diesen Test war der `verfolge`-Aufruf
+       ersatzlos entfernbar — alle 897 Tests blieben gruen (gegnerischer Pruefer, T1).
+       Dieselbe Lehre wie #488: eine Regel zu bauen reicht nicht, jedes Glied braucht seinen
+       eigenen Test.
+       Der Beleg ist die ABFRAGE der Nummer — die passiert nur, wenn `verfolge` lief. */
+    vi.mocked(api.uploadAudio).mockResolvedValue(
+      { base: 'a', file: 'a.mp3', job_id: 'fremder_blocker', started: false, vorgang: 'vg1' })
+    vi.mocked(api.getVorgang).mockResolvedValue({ vorgang: 'vg1', status: 'vorgemerkt',
+      job_id: null, project: 'Demo', kind: 'transcribe', base: null })
+    zeigen()
+    await screen.findByRole('button', { name: /^Material$/ })
+    await ladeHoch()
+    await waitFor(() => expect(api.getVorgang).toHaveBeenCalledWith('vg1'))
+  })
+
   it('meldet einen fehlgeschlagenen Einstellungs-GET, statt ihn zu verschlucken (#215)', async () => {
     /* Ohne Auswahl gilt stillschweigend der Projektstandard — die richtige Voreinstellung,
        aber ein FEHLENDES Bedienelement ist von „gibt es hier nicht" nicht zu unterscheiden.

@@ -223,7 +223,10 @@ export function JobProvider({ children, intervalMs = 1500 }: { children: ReactNo
 
   // Solange Vormerkungen offen sind, wird nach ihnen gefragt — im selben Takt wie die Jobs.
   // Sobald eine `gestartet` meldet, ist der Nachlauf ein Lauf wie jeder andere: adoptiert,
-  // gepollt, und sein Ausgang laeuft ueber `useJobAusgang`. KEIN zweiter Meldeweg.
+  // gepollt, und sein AUSGANG laeuft ueber `useJobAusgang` — dafuer gibt es keinen zweiten
+  // Meldeweg. Der `aufgegeben`-Hinweis unten ist die eine Ausnahme, und er ist auch keiner:
+  // dort ist nie ein Job entstanden, also hat `useJobAusgang` nichts, worueber es reden
+  // koennte.
   const offeneVorgaenge = vorgaenge.join(',')
   useEffect(() => {
     if (!offeneVorgaenge) return

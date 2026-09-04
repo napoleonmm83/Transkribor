@@ -24,9 +24,15 @@ export type Ausgang =
   | { art: 'unvollstaendig'; ok: number; gesamt: number }
   /** Der Lauf ist aus der Sicht der Oberflaeche zu Ende, sein Ausgang aber UNBEKANNT — der
    *  Server antwortet, kennt die Kennung nur nicht mehr (Registry im Arbeitsspeicher, ein
-   *  Neustart leert sie). Hier wird NICHTS gemeldet: bis #382 stand an dieser Stelle
-   *  „fehlgeschlagen", ueber einen Lauf, der oft sauber durchgelaufen war. Schweigen ist
-   *  keine Auskunft — aber eine erfundene Auskunft ist schlechter. */
+   *  Neustart leert sie).
+   *
+   *  GEMESSEN und deshalb hier benannt, statt schoenzureden: bei einem GEORDNETEN Neustart
+   *  ruft der Lifespan `jobs.cancel_all()` und toetet den Lauf samt Prozessbaum — auf Windows
+   *  tut `taskkill /F /T` dasselbe. In genau diesem Fall war das frueher gemeldete
+   *  „fehlgeschlagen" SACHLICH RICHTIG. Der Lauf ueberlebt nur einen Absturz oder Haenger.
+   *  Eine erste Fassung dieses Kommentars behauptete „ueber einen Lauf, der oft sauber
+   *  durchgelaufen war" — eine Haeufigkeitsbehauptung ohne Messung, die in die Gegenrichtung
+   *  zeigt (Befund des `was-erlaubt-der-fix-neu`-Pruefers). */
   | { art: 'unbekannt' }
 
 export function ausgang(j: { status: string; phases: JobPhases }): Ausgang {
