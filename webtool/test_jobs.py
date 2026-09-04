@@ -214,7 +214,7 @@ def test_active_for_running_then_none():
 
 
 def test_request_startet_sofort_wenn_frei():
-    jid, started = jobs.request("P_req", _echo_cmd(1), cwd=None, kind="transcribe")
+    jid, started, _ = jobs.request("P_req", _echo_cmd(1), cwd=None, kind="transcribe")
     assert started is True
     assert _wait(jid)["status"] == "done"
 
@@ -223,10 +223,10 @@ def test_request_haengt_genau_einen_nachlauf_an():
     """Fuenf Uploads waehrend eines laufenden Laufs duerfen nicht fuenf Laeufe aufreihen —
     einer reicht, er sieht ohnehin alle inzwischen dazugekommenen Dateien."""
     slow = [sys.executable, "-c", "import time; time.sleep(0.5)"]
-    jid, started = jobs.request("P_req1", slow, cwd=None, kind="transcribe")
+    jid, started, _ = jobs.request("P_req1", slow, cwd=None, kind="transcribe")
     assert started is True
     for _ in range(5):                       # alle waehrend des laufenden Jobs
-        jid2, ok = jobs.request("P_req1", _echo_cmd(1), cwd=None, kind="transcribe")
+        jid2, ok, _ = jobs.request("P_req1", _echo_cmd(1), cwd=None, kind="transcribe")
         assert ok is False and jid2 == jid   # eingereiht, nicht gestartet
     _wait(jid)
     # der eine vorgemerkte Nachlauf laeuft im Job-Thread an
@@ -258,10 +258,121 @@ def test_request_gibt_pending_frei_wenn_der_blocker_schon_weg_ist(monkeypatch):
 
     monkeypatch.setattr(jobs, "start", fake_start)
     monkeypatch.setattr(jobs, "when_done", lambda jid, fn: False)
-    jid, started = jobs.request("P_req2", _echo_cmd(1), cwd=None, kind="correct")
+    jid, started, _ = jobs.request("P_req2", _echo_cmd(1), cwd=None, kind="correct")
     assert started is True and versuche == ["correct", "correct"]
     _wait(jid)
     assert ("P_req2", "correct", None) not in jobs._pending
+
+
+def _vorgang_wartet_auf(nummer, zustand, timeout=5.0):
+    """Wartet, bis die Vormerkung den Zustand erreicht — und liefert sie zurueck."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        v = jobs.vorgang(nummer)
+        if v and v["status"] == zustand:
+            return v
+        time.sleep(0.02)
+    return jobs.vorgang(nummer)
+
+
+def test_vorgang_nennt_die_kennung_des_nachlaufs():
+    """Der Kern von #381: bei belegtem Slot ist die zurueckgegebene JOB-Kennung die des
+    BLOCKERS — unter der Vorgangsnummer steht dagegen der NACHLAUF, sobald er existiert.
+
+    Das ist zugleich der Mutationspunkt fuer das Durchreichen der Nummer durch `rerun`:
+    ohne `vorgang=_nummer` legt die Rekursion eine zweite Nummer an, und diese hier bliebe
+    fuer immer `vorgemerkt`."""
+    langsam = [sys.executable, "-c", "import time; time.sleep(0.4)"]
+    jid, started, _ = jobs.request("P_vg", langsam, cwd=None, kind="correct")
+    assert started is True
+
+    jid2, ok, nummer = jobs.request("P_vg", _echo_cmd(1), cwd=None, kind="correct")
+    assert ok is False
+    assert jid2 == jid, "die Job-Kennung ist die des Blockers — genau darum braucht es die Nummer"
+    assert nummer, "eine Vormerkung ohne Nummer waere unauffindbar"
+    v = jobs.vorgang(nummer)
+    assert v["status"] == "vorgemerkt" and v["job_id"] is None
+
+    _wait(jid)
+    v = _vorgang_wartet_auf(nummer, "gestartet")
+    assert v["status"] == "gestartet", f"Vormerkung blieb bei {v['status']!r}"
+    assert v["job_id"] and v["job_id"] != jid, "die Nummer muss den NACHLAUF nennen, nicht den Blocker"
+    _wait(v["job_id"])
+
+
+def test_zweite_anfrage_bekommt_DIESELBE_nummer():
+    """Fuenf Uploads waehrend eines Laufs sind EINE Vormerkung — also auch EINE Nummer.
+    Eine zweite Nummer waere eine zweite Wahrheit ueber denselben Nachlauf."""
+    langsam = [sys.executable, "-c", "import time; time.sleep(0.4)"]
+    jid, started, _ = jobs.request("P_vg2", langsam, cwd=None, kind="correct")
+    assert started is True
+    nummern = {jobs.request("P_vg2", _echo_cmd(1), cwd=None, kind="correct")[2] for _ in range(5)}
+    assert len(nummern) == 1, f"eine Vormerkung, eine Nummer — waren {len(nummern)}"
+    _wait(jid)
+    v = _vorgang_wartet_auf(nummern.pop(), "gestartet")
+    if v["job_id"]:
+        _wait(v["job_id"])
+
+
+def test_request_mit_nummer_schreibt_in_GENAU_diese(monkeypatch):
+    """So ruft `rerun` sich selbst: mit der Nummer der bestehenden Vormerkung."""
+    jobs._vorgaenge["fest_a1b2"] = {"vorgang": "fest_a1b2", "status": "vorgemerkt",
+                                    "job_id": None, "project": "P_fest", "kind": "correct",
+                                    "base": None}
+    jid, started, nummer = jobs.request("P_fest", _echo_cmd(1), cwd=None, kind="correct",
+                                        vorgang="fest_a1b2")
+    assert started is True and nummer == "fest_a1b2", "die mitgegebene Nummer bleibt die Nummer"
+    assert jobs.vorgang("fest_a1b2")["job_id"] == jid
+    assert jobs.vorgang("fest_a1b2")["status"] == "gestartet"
+    _wait(jid)
+
+
+def test_vorgang_wird_verworfen_wenn_der_blocker_abgebrochen_wird():
+    """Ein Abbruch ist eine Entscheidung — die Vormerkung ist danach erledigt, nicht offen.
+    Ohne diese Zeile fragte die Oberflaeche eine Nummer ab, die nie wieder etwas meldet."""
+    langsam = [sys.executable, "-c", "import time; time.sleep(9)"]
+    jid, started, _ = jobs.request("P_vgab", langsam, cwd=None, kind="correct")
+    assert started is True
+    _, ok, nummer = jobs.request("P_vgab", _echo_cmd(1), cwd=None, kind="correct")
+    assert ok is False and jobs.vorgang(nummer)["status"] == "vorgemerkt"
+
+    jobs.cancel(jid)
+    _wait(jid)
+    v = _vorgang_wartet_auf(nummer, "verworfen")
+    assert v["status"] == "verworfen", f"Vormerkung blieb bei {v['status']!r}"
+    assert v["job_id"] is None
+
+
+def test_vorgang_wird_aufgegeben_wenn_der_slot_belegt_bleibt(monkeypatch):
+    """Der Zehn-Versuche-Ausstieg schrieb bisher NUR eine stderr-Zeile — fuer den Nutzer
+    stumm. Jetzt traegt die Nummer den Ausgang."""
+    monkeypatch.setattr(jobs, "start", lambda *a, **k: ("dauerblocker", False))
+    monkeypatch.setattr(jobs, "when_done", lambda jid, fn: False)
+    monkeypatch.setattr(jobs.time, "sleep", lambda s: None)   # zehn Runden ohne Wanduhr
+    jid, started, nummer = jobs.request("P_vgauf", _echo_cmd(1), cwd=None, kind="correct")
+    assert jid is None and started is False
+    assert nummer, "auch der aufgegebene Weg muss eine Nummer nennen"
+    assert jobs.vorgang(nummer)["status"] == "aufgegeben"
+
+
+def test_vorgaenge_sind_gedeckelt():
+    """Die einzige Menge, die unbegrenzt wachsen koennte — ein Deckel nach ANZAHL, weil ein
+    `vorgemerkt` kein `ended` hat, an dem sich ein Alter messen liesse."""
+    sicherung = dict(jobs._vorgaenge)
+    try:
+        jobs._vorgaenge.clear()
+        for i in range(jobs._VORGAENGE_MAX + 25):
+            jobs._vorgaenge[f"n{i}"] = {"vorgang": f"n{i}", "status": "vorgemerkt",
+                                        "job_id": None, "project": "P", "kind": "correct",
+                                        "base": None}
+        with jobs._lock:
+            jobs._prune_locked()
+        assert len(jobs._vorgaenge) == jobs._VORGAENGE_MAX
+        assert "n0" not in jobs._vorgaenge, "die aeltesten fallen heraus"
+        assert f"n{jobs._VORGAENGE_MAX + 24}" in jobs._vorgaenge, "die juengsten bleiben"
+    finally:
+        jobs._vorgaenge.clear()
+        jobs._vorgaenge.update(sicherung)
 
 
 def test_popen_startet_eigene_sitzung_auf_posix(monkeypatch):
@@ -892,17 +1003,17 @@ def test_request_merkt_unterschiedliche_basen_vor():
     jid1, s1 = jobs.start("P_multi", _echo_cmd(1), cwd=None, kind="correct", base="S1")
     assert s1 is True
     # Request für S2 (Slot belegt -> vorgemerkt)
-    _, s2 = jobs.request("P_multi", _echo_cmd(1), cwd=None, kind="correct", base="S2")
+    _, s2, _ = jobs.request("P_multi", _echo_cmd(1), cwd=None, kind="correct", base="S2")
     assert s2 is False
     assert ("P_multi", "correct", "S2") in jobs._pending
 
     # Request für S3 (anderer Basisname -> ebenfalls vorgemerkt)
-    _, s3 = jobs.request("P_multi", _echo_cmd(1), cwd=None, kind="correct", base="S3")
+    _, s3, _ = jobs.request("P_multi", _echo_cmd(1), cwd=None, kind="correct", base="S3")
     assert s3 is False
     assert ("P_multi", "correct", "S3") in jobs._pending
 
     # Nochmaliger Request für S2 (identischer Basisname -> dedupliziert)
-    _, s2_dup = jobs.request("P_multi", _echo_cmd(1), cwd=None, kind="correct", base="S2")
+    _, s2_dup, _ = jobs.request("P_multi", _echo_cmd(1), cwd=None, kind="correct", base="S2")
     assert s2_dup is False
 
     # Warten bis S1 beendet ist
@@ -994,11 +1105,11 @@ def test_request_verzoegert_then_bis_alle_pending_jobs_fertig_sind():
         ergebnisse.append({"active": act, "pending": pend})
 
     # Job 1 starten
-    jid1, s1 = jobs.request("P_defer", _echo_cmd(2), cwd=None, kind="transcribe", then=log_nachlauf)
+    jid1, s1, _ = jobs.request("P_defer", _echo_cmd(2), cwd=None, kind="transcribe", then=log_nachlauf)
     assert s1 is True
 
     # Job 2 sofort anfordern (wird vorgemerkt)
-    jid2, s2 = jobs.request("P_defer", _echo_cmd(2), cwd=None, kind="transcribe", then=log_nachlauf)
+    jid2, s2, _ = jobs.request("P_defer", _echo_cmd(2), cwd=None, kind="transcribe", then=log_nachlauf)
     assert s2 is False
 
     # Warten bis Job 1 und der nachfolgende Job 2 beendet sind
@@ -1028,12 +1139,12 @@ def test_request_mehrere_dateien_verzoegern_then_bis_zum_letzten_nachlauf():
         ergebnisse.append({"active": act, "pending": pend})
 
     # Datei 1 startet Transkription
-    jid1, s1 = jobs.request("P_batch", _echo_cmd(3), cwd=None, kind="transcribe", then=autocorrect_cb)
+    jid1, s1, _ = jobs.request("P_batch", _echo_cmd(3), cwd=None, kind="transcribe", then=autocorrect_cb)
     assert s1 is True
 
     # Datei 2 und 3 werden währenddessen hochgeladen
-    jid2, s2 = jobs.request("P_batch", _echo_cmd(2), cwd=None, kind="transcribe", then=autocorrect_cb)
-    jid3, s3 = jobs.request("P_batch", _echo_cmd(2), cwd=None, kind="transcribe", then=autocorrect_cb)
+    jid2, s2, _ = jobs.request("P_batch", _echo_cmd(2), cwd=None, kind="transcribe", then=autocorrect_cb)
+    jid3, s3, _ = jobs.request("P_batch", _echo_cmd(2), cwd=None, kind="transcribe", then=autocorrect_cb)
     assert s2 is False
     assert s3 is False
 
@@ -1056,7 +1167,7 @@ def test_get_ist_json_serialisierbar_auch_mit_next_runs():
     jid1, s1 = jobs.start("P_json", _echo_cmd(5), cwd=None, kind="transcribe")
     assert s1 is True
     # Nachlauf registrieren -> next_runs wird befüllt
-    jid2, s2 = jobs.request("P_json", _echo_cmd(1), cwd=None, kind="transcribe")
+    jid2, s2, _ = jobs.request("P_json", _echo_cmd(1), cwd=None, kind="transcribe")
     assert s2 is False
     try:
         snap = jobs.get(jid1)
@@ -1075,10 +1186,10 @@ def test_request_mit_lambdas_feuert_am_ende():
     """Auch bei dynamisch erzeugten Lambda-Instanzen feuert das final-then am Ende."""
     ergebnisse = []
     # 3x Request mit verschiedenen Lambda-Instanzen
-    jid1, s1 = jobs.request("P_lambda", _echo_cmd(2), cwd=None, kind="transcribe",
+    jid1, s1, _ = jobs.request("P_lambda", _echo_cmd(2), cwd=None, kind="transcribe",
                             then=lambda: ergebnisse.append("fertig"))
     assert s1 is True
-    jid2, s2 = jobs.request("P_lambda", _echo_cmd(2), cwd=None, kind="transcribe",
+    jid2, s2, _ = jobs.request("P_lambda", _echo_cmd(2), cwd=None, kind="transcribe",
                             then=lambda: ergebnisse.append("fertig"))
     assert s2 is False
 
@@ -1178,9 +1289,9 @@ def test_vorgemerkter_nachlauf_laeuft_auch_nach_einem_GESCHEITERTEN_lauf():
 
     jobs.start = zaehl_start
     try:
-        jid1, s1 = jobs.request("P_rot", _fail_cmd(2), cwd=None, kind="correct")
+        jid1, s1, _ = jobs.request("P_rot", _fail_cmd(2), cwd=None, kind="correct")
         assert s1 is True
-        jid2, s2 = jobs.request("P_rot", _echo_cmd(1), cwd=None, kind="correct")
+        jid2, s2, _ = jobs.request("P_rot", _echo_cmd(1), cwd=None, kind="correct")
         assert s2 is False, "Slot war nicht belegt — der Test misst den Nachlauf gar nicht"
 
         assert _wait(jid1)["status"] == "error", "Vorbedingung: der erste Lauf endet ROT"
@@ -1219,9 +1330,9 @@ def test_abbruch_startet_KEINEN_nachlauf():
 
     jobs.start = zaehl_start
     try:
-        jid1, s1 = jobs.request("P_abbr", _fail_cmd(2), cwd=None, kind="correct")
+        jid1, s1, _ = jobs.request("P_abbr", _fail_cmd(2), cwd=None, kind="correct")
         assert s1 is True
-        jid2, s2 = jobs.request("P_abbr", _echo_cmd(1), cwd=None, kind="correct")
+        jid2, s2, _ = jobs.request("P_abbr", _echo_cmd(1), cwd=None, kind="correct")
         assert s2 is False, "Slot war nicht belegt — der Test misst den Nachlauf gar nicht"
 
         jobs.cancel(jid1)
@@ -1294,9 +1405,9 @@ def test_abbruch_hinterlaesst_keine_tote_vormerkung():
         # falsch gruener. (CodeRabbit-CLI-Befund; seine Richtungsangabe "flaky Richtung
         # gruen" ist damit widerlegt, der Befund selbst nicht.)
         langsam = [sys.executable, "-c", "import time; time.sleep(0.6)"]
-        jid1, s1 = jobs.request("P_leck", langsam, cwd=None, kind="correct")
+        jid1, s1, _ = jobs.request("P_leck", langsam, cwd=None, kind="correct")
         assert s1 is True
-        _, s2 = jobs.request("P_leck", _echo_cmd(1), cwd=None, kind="correct")
+        _, s2, _ = jobs.request("P_leck", _echo_cmd(1), cwd=None, kind="correct")
         assert s2 is False, "Slot war nicht belegt — der Test misst die Vormerkung gar nicht"
 
         jobs.cancel(jid1)
@@ -1313,9 +1424,9 @@ def test_abbruch_hinterlaesst_keine_tote_vormerkung():
 
         # Zweite Haelfte: der Weg muss WIEDER funktionieren.
         vorher = len(gelaufen)
-        jid3, s3 = jobs.request("P_leck", _fail_cmd(2), cwd=None, kind="correct")
+        jid3, s3, _ = jobs.request("P_leck", _fail_cmd(2), cwd=None, kind="correct")
         assert s3 is True
-        _, s4 = jobs.request("P_leck", _echo_cmd(1), cwd=None, kind="correct")
+        _, s4, _ = jobs.request("P_leck", _echo_cmd(1), cwd=None, kind="correct")
         assert s4 is False
         _wait(jid3)
         frist = time.time() + 5.0
@@ -1364,9 +1475,9 @@ def test_abbruch_eines_FREMDEN_projekts_verwirft_den_eigenen_nachlauf_nicht():
     try:
         # Garantierte Laufzeit, siehe die Begruendung im Vormerkungs-Test.
         langsam = [sys.executable, "-c", "import time; time.sleep(0.6)"]
-        jq, sq = jobs.request("Q_fremd", langsam, cwd=None, kind="transcribe")
+        jq, sq, _ = jobs.request("Q_fremd", langsam, cwd=None, kind="transcribe")
         assert sq is True, "Vorbedingung: der GPU-Slot war schon belegt, der Test misst nichts"
-        jp, sp = jobs.request("P_eigen", _echo_cmd(1), cwd=None, kind="transcribe")
+        jp, sp, _ = jobs.request("P_eigen", _echo_cmd(1), cwd=None, kind="transcribe")
         assert sp is False and jp == jq, (
             "Vorbedingung: P muss sich an Q's jid haengen (Einzel-GPU), sonst gibt es den "
             f"fremden Blocker gar nicht (jp={jp}, jq={jq})")

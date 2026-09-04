@@ -275,7 +275,7 @@ def test_transcribe_starts_job(client, monkeypatch):
     monkeypatch.setattr(jobs_mod, "start", fake_start)
     r = client.post("/api/projects/Demo/transcribe")
     assert r.status_code == 200
-    assert r.json() == {"job_id": "job123", "started": True}
+    assert r.json() == {"job_id": "job123", "started": True, "vorgang": None}
     assert calls["kind"] == "transcribe" and calls["project"] == "Demo"
     assert "Demo" in calls["cmd"] and calls["cmd"][1].endswith("transcribe.py")
     assert "--autocorrect" in calls["cmd"]
@@ -294,7 +294,7 @@ def test_correct_starts_job(client, monkeypatch, mit_anbieter):
     monkeypatch.setattr(jobs_mod, "start", fake_start)
     r = client.post("/api/projects/Demo/correct")
     assert r.status_code == 200
-    assert r.json() == {"job_id": "corr123", "started": True}
+    assert r.json() == {"job_id": "corr123", "started": True, "vorgang": None}
     assert calls["kind"] == "correct" and calls["project"] == "Demo"
     assert calls["cmd"][-3:] == ["webtool.correct", "run", "Demo"]
 
@@ -400,7 +400,7 @@ def test_correct_409_wenn_transkription_mitkorrigiert(client, monkeypatch, mit_a
     jobs_mod._jobs[jid] = {"id": jid, "kind": "transcribe", "status": "running"}
     gestartet = []
     monkeypatch.setattr(jobs_mod, "request",
-                        lambda *a, **k: gestartet.append(a) or ("x", True))
+                        lambda *a, **k: gestartet.append(a) or ("x", True, None))
     try:
         r = client.post("/api/projects/Demo/correct")
         assert r.status_code == 409
@@ -424,7 +424,7 @@ def test_correct_startet_trotz_laufender_transkription_ohne_autocorrect(
     jobs_mod._jobs[jid] = {"id": jid, "kind": "transcribe", "status": "running"}
     gestartet = []
     monkeypatch.setattr(jobs_mod, "request",
-                        lambda *a, **k: gestartet.append(a) or ("x", True))
+                        lambda *a, **k: gestartet.append(a) or ("x", True, None))
     try:
         r = client.post("/api/projects/Demo/correct")
         assert r.status_code == 200 and gestartet, "Parallelweg bleibt frei"
@@ -448,16 +448,16 @@ def test_correct_409_auch_wenn_die_transkription_erst_VORGEMERKT_ist(
     import webtool.jobs as jobs_mod
     monkeypatch.setenv("TRANSKRIBOR_AUTOCORRECT", "1")
     schluessel = ("Demo", "transcribe", None)
-    jobs_mod._pending.add(schluessel)             # vorgemerkt, aber nicht gestartet
+    jobs_mod._pending[schluessel] = "vg_test"     # vorgemerkt, aber nicht gestartet
     gestartet = []
     monkeypatch.setattr(jobs_mod, "request",
-                        lambda *a, **k: gestartet.append(a) or ("x", True))
+                        lambda *a, **k: gestartet.append(a) or ("x", True, None))
     try:
         r = client.post("/api/projects/Demo/correct")
         assert r.status_code == 409, "die Vormerkung sperrt wie ein laufender Job"
         assert gestartet == []
     finally:
-        jobs_mod._pending.discard(schluessel)
+        jobs_mod._pending.pop(schluessel, None)
 
 
 def test_correct_nicht_gesperrt_von_eigenem_correct_job(client, monkeypatch, mit_anbieter):
@@ -472,7 +472,7 @@ def test_correct_nicht_gesperrt_von_eigenem_correct_job(client, monkeypatch, mit
     jobs_mod._jobs[jid] = {"id": jid, "kind": "correct", "status": "running"}
     gestartet = []
     monkeypatch.setattr(jobs_mod, "request",
-                        lambda *a, **k: gestartet.append(a) or ("x", True))
+                        lambda *a, **k: gestartet.append(a) or ("x", True, None))
     try:
         r = client.post("/api/projects/Demo/correct")
         assert r.status_code == 200 and gestartet, "eigener correct-Job sperrt nicht"
@@ -668,7 +668,7 @@ def test_jobstart_endpunkte_geriegelt_fuer_reservierte_projekte(client, tmp_path
     monkeypatch.setattr(jobs_mod, "start",
                         lambda *a, **k: gestartet.append(("start", a)) or ("x", True))
     monkeypatch.setattr(jobs_mod, "request",
-                        lambda *a, **k: gestartet.append(("request", a)) or ("x", True))
+                        lambda *a, **k: gestartet.append(("request", a)) or ("x", True, None))
     for pfad in ("/api/projects/active/transcribe",
                  "/api/projects/active/correct",
                  "/api/projects/active/files/S1/correct",
@@ -742,7 +742,7 @@ def test_kein_lauf_startet_fuer_ein_projekt_das_eine_marke_nachahmt(client, tmp_
     monkeypatch.setattr(jobs_mod, "start",
                         lambda *a, **k: gestartet.append(("start", a)) or ("x", True))
     monkeypatch.setattr(jobs_mod, "request",
-                        lambda *a, **k: gestartet.append(("request", a)) or ("x", True))
+                        lambda *a, **k: gestartet.append(("request", a)) or ("x", True, None))
     for name in sorted(marken):
         for muster, wie in _JOBSTART_WEGE:
             r = client.post(muster.format(p=name), **wie)
@@ -2216,9 +2216,9 @@ def test_neu_transkribieren_raeumt_transkripte_weg_und_startet_den_lauf(client, 
     aufrufe = []
     import webtool.jobs as jobs_mod
     orig_request = jobs_mod.request
-    def mock_request(project, cmd, cwd, kind, then=None, base=None):
+    def mock_request(project, cmd, cwd, kind, then=None, base=None, vorgang=None):
         aufrufe.append((project, cmd, kind, base))
-        return orig_request(project, cmd, cwd, kind, then=then, base=base)
+        return orig_request(project, cmd, cwd, kind, then=then, base=base, vorgang=vorgang)
     monkeypatch.setattr(jobs_mod, "request", mock_request)
     r = client.post("/api/projects/Demo/files/S1/transcribe")
     assert r.status_code == 200 and r.json()["started"] is True

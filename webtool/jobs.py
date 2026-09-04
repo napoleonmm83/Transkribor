@@ -16,7 +16,22 @@ from . import settings
 
 _jobs = {}                 # job_id -> record
 _active = {}               # (project, kind) -> job_id (Dedupe: je Art einer pro Projekt)
-_pending = set()           # (project, kind, base) mit genau EINEM vorgemerkten Nachlauf
+# (project, kind, base) -> Vorgangsnummer. Genau EINE Vormerkung je Schluessel.
+#
+# Bis #381 war das ein `set`. Die Umstellung auf ein dict laesst JEDE bestehende Zusicherung
+# buchstabengleich: `key in _pending` (request) und die beiden Iterationen in
+# `transcribe_laeuft_oder_wartet` und `_nach_ende` lesen bei einem dict dieselben Schluessel
+# wie bei einem set. Aus `discard(key)` wird `pop(key, None)` — dieselbe Zusicherung
+# („weg, und es ist kein Fehler, wenn er schon weg war"), samt dem Leck-Riegel aus #417.
+# Der Wert ist neu und wird von der Sperrlogik nirgends gelesen.
+_pending = {}
+
+# Vorgangsnummer -> Zustand der Vormerkung. Die zweite Struktur ist noetig, weil ein
+# AUFGELOESTER Vorgang lesbar bleiben muss, nachdem `rerun` seinen Schluessel aus `_pending`
+# geraeumt hat — bliebe er dort stehen, hielte `key in _pending` eine neue Vormerkung fuer
+# schon vorhanden, und genau das ist die Zusicherung, die `_pending` traegt.
+_vorgaenge = {}
+_VORGAENGE_MAX = 200
                            # DREITUPEL, nicht (project, kind) — die Zeile sagte das Falsche,
                            # und zwei Zusicherungen in `test_jobs.py` sind darauf hereingefallen
                            # (sie fragen ein Zweitupel ab und koennen nie rot werden).
@@ -168,6 +183,56 @@ def _prune_locked():
             if r["status"] in ("done", "error", "cancelled") and r.get("ended") and now - r["ended"] > _PRUNE_AGE]
     for jid in dead:
         _jobs.pop(jid, None)
+    # Vorgaenge nach ANZAHL deckeln, nicht nach Alter: ein `vorgemerkt` hat kein `ended`, an
+    # dem sich ein Alter messen liesse, und es darf beliebig lange warten (der Blocker
+    # bestimmt, wie lange). Der Deckel wirft die aeltesten heraus — dict behaelt die
+    # Einfuegereihenfolge, seit 3.7 zugesichert.
+    while len(_vorgaenge) > _VORGAENGE_MAX:
+        _vorgaenge.pop(next(iter(_vorgaenge)), None)
+
+
+def _vorgang_setzen(nummer, zustand, job_id=None):
+    """Zustand einer Vormerkung fortschreiben. Aufrufer haelt `_lock` NICHT."""
+    if not nummer:
+        return
+    with _lock:
+        v = _vorgaenge.get(nummer)
+        if v is None:
+            return
+        v["status"] = zustand
+        if job_id is not None:
+            v["job_id"] = job_id
+
+
+def vorgang_an_job(jid, nummer):
+    """Haengt eine Vorgangsnummer an einen JOB-Datensatz.
+
+    Fuer den einen Weg, dessen Rueckgabewert niemand lesen kann: `fetch_urls` startet die
+    Transkription aus einem `then`-Rueckruf heraus, also lange nachdem seine Antwort beim
+    Browser war. Traeger ist der fetch-Job selbst — er gehoert UNS und ist adoptiert, anders
+    als der Blocker aus `request` (der ueber die Einzel-GPU-Sperre einem fremden Projekt
+    gehoeren kann).
+
+    GETRAGENE GRENZE: der Rueckruf laeuft, NACHDEM der Job terminal ist. Sieht die Oberflaeche
+    ihn in genau dem Millisekundenfenster davor, fehlt die Nummer und es bleibt beim
+    4-Sekunden-Weg von heute — kein Rueckschritt, aber auch keine Zusicherung."""
+    if not jid or not nummer:
+        return
+    with _lock:
+        r = _jobs.get(jid)
+        if r is not None:
+            r["vorgang"] = nummer
+
+
+def vorgang(nummer: str):
+    """Der Zustand einer Vormerkung, oder None. Reiner Lesepfad fuer die Oberflaeche.
+
+    Sie erfaehrt damit die Kennung des Nachlaufs, sobald er existiert — heute erfaehrt sie sie
+    gar nicht: `request` liefert bei belegtem Slot die Kennung des BLOCKERS, und der gehoert
+    ueber die Einzel-GPU-Sperre oft einem fremden Projekt (#381)."""
+    with _lock:
+        v = _vorgaenge.get(nummer)
+        return dict(v) if v else None
 
 
 def transcribe_laeuft_oder_wartet(project: str) -> bool:
@@ -232,28 +297,51 @@ def start(project: str, cmd: list, cwd, kind: str, then=None, env=None, base: st
     return jid, True
 
 
-def request(project: str, cmd: list, cwd, kind: str, then=None, base: str = None):
+def request(project: str, cmd: list, cwd, kind: str, then=None, base: str = None, vorgang: str = None):
     """Startet den Job — oder merkt genau EINEN Nachlauf vor, wenn der Slot belegt ist.
 
     Ein Upload/Import soll immer zu einer Verarbeitung fuehren, auch wenn gerade eine laeuft:
     die kennt die eben hochgeladene Datei nicht. Ohne die _pending-Sperre wuerden fuenf
     Uploads fuenf Whisper-Laeufe hinter dem laufenden aufreihen — einer reicht, er sieht
     ohnehin alle inzwischen dazugekommenen Dateien.
+
+    Liefert `(jid, started, vorgang)`. Bei `started` ist `jid` der gestartete Lauf; sonst ist
+    `jid` die Kennung des BLOCKERS — die dem Aufrufer nichts nuetzt, weil sie ueber die
+    Einzel-GPU-Sperre einem fremden Projekt gehoeren kann. Dafuer gibt es `vorgang`: eine
+    Nummer, die der Vormerkung gehoert und unter der die Oberflaeche die Kennung des
+    Nachlaufs erfaehrt, sobald er existiert (#381).
+
+    `vorgang` als PARAMETER ist der Weg durch die Rekursion: `rerun` ruft `request` erneut,
+    und ist der Slot dann wieder belegt, entstuende sonst eine ZWEITE Nummer fuer denselben
+    Schluessel — die erste, die die Oberflaeche kennt, bliebe ewig `vorgemerkt`. Am echten
+    Ablauf getraced (Q blockt P und R, danach blockt P das R): add-Zaehlung 2 fuer denselben
+    Schluessel, der zweite aus dem `_run`-Faden.
     """
     key = (project, kind, base)
+    nummer = vorgang
     for _ in range(10):
         if base is not None:
             jid, started = start(project, cmd, cwd, kind, then=then, base=base)
         else:
             jid, started = start(project, cmd, cwd, kind, then=then)
         if started:
-            return jid, True
+            # Traegt der Aufruf eine Nummer, ist er der Nachlauf DIESER Vormerkung — hier
+            # erfaehrt die Oberflaeche die Kennung, auf die sie wartet.
+            _vorgang_setzen(nummer, "gestartet", job_id=jid)
+            return jid, True, nummer
         with _lock:
             if key in _pending:
-                return jid, False        # schon vorgemerkt -> der Nachlauf nimmt die neuen Dateien mit
-            _pending.add(key)
+                # schon vorgemerkt -> der Nachlauf nimmt die neuen Dateien mit. Der Aufrufer
+                # bekommt die BESTEHENDE Nummer, nicht eine neue: es ist dieselbe Vormerkung.
+                return jid, False, _pending[key]
+            if nummer is None:
+                nummer = uuid.uuid4().hex[:12]
+            _pending[key] = nummer
+            _vorgaenge.setdefault(nummer, {"vorgang": nummer, "status": "vorgemerkt",
+                                           "job_id": None, "project": project,
+                                           "kind": kind, "base": base})
 
-        def rerun(_key=key, _jid=jid):
+        def rerun(_key=key, _jid=jid, _nummer=nummer):
             # Die Vormerkung wird IMMER geraeumt, der Neustart nur ausserhalb eines Abbruchs —
             # und die Reihenfolge ist der ganze Punkt. Bliebe der Schluessel liegen, waere der
             # Weg DAUERHAFT vergiftet: die Zeile `if key in _pending: return jid, False` weiter
@@ -283,22 +371,30 @@ def request(project: str, cmd: list, cwd, kind: str, then=None, base: str = None
             # `base` wird BEWUSST nicht verglichen: innerhalb desselben (Projekt, Art) ist der
             # Blocker per Dedupe genau der Lauf, den der Nutzer gemeint hat.
             with _lock:
-                _pending.discard(_key)
+                _pending.pop(_key, None)
                 blocker = _jobs.get(_jid) or {}
                 abgebrochen = (blocker.get("status") == "cancelled"
                                and blocker.get("project") == project
                                and blocker.get("kind") == kind)
             if abgebrochen:
+                # Der Nutzer hat DIESE Arbeit abgebrochen — der Vorgang ist damit erledigt,
+                # nicht offen. Ohne diese Zeile fragte die Oberflaeche eine Nummer ab, die nie
+                # wieder etwas meldet.
+                _vorgang_setzen(_nummer, "verworfen")
                 return
-            request(project, cmd, cwd, kind, then=then, base=base)
+            # Die Nummer reist MIT: sonst legt der Aufruf bei erneuter Blockierung eine zweite
+            # an, und die erste bleibt fuer immer `vorgemerkt` (siehe Docstring).
+            request(project, cmd, cwd, kind, then=then, base=base, vorgang=_nummer)
 
         if when_done(jid, rerun):
-            return jid, False
+            return jid, False, nummer
         with _lock:                       # jid wurde eben terminal -> Slot frei, gleich nochmal
-            _pending.discard(key)
+            _pending.pop(key, None)
         time.sleep(0.05)
     print(f"Nachlauf fuer {project!r}/{kind} aufgegeben: Slot blieb belegt", file=sys.stderr)
-    return None, False
+    # Bisher endete dieser Weg nur in einer stderr-Zeile, die der Nutzer nie sieht.
+    _vorgang_setzen(nummer, "aufgegeben")
+    return None, False, nummer
 
 
 def when_done(job_id: str, fn) -> bool:
