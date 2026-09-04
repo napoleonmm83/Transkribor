@@ -405,6 +405,11 @@ def test_vorgang_wird_aufgegeben_wenn_der_slot_belegt_bleibt(monkeypatch):
     assert jobs.vorgang(nummer)["status"] == "aufgegeben"
 
 
+def _vorgang_eintrag(n, status="vorgemerkt"):
+    return {"vorgang": n, "status": status, "job_id": None, "project": "P",
+            "kind": "correct", "base": None}
+
+
 def test_vorgaenge_sind_gedeckelt():
     """Die einzige Menge, die unbegrenzt wachsen koennte — ein Deckel nach ANZAHL, weil ein
     `vorgemerkt` kein `ended` hat, an dem sich ein Alter messen liesse."""
@@ -412,14 +417,33 @@ def test_vorgaenge_sind_gedeckelt():
     try:
         jobs._vorgaenge.clear()
         for i in range(jobs._VORGAENGE_MAX + 25):
-            jobs._vorgaenge[f"n{i}"] = {"vorgang": f"n{i}", "status": "vorgemerkt",
-                                        "job_id": None, "project": "P", "kind": "correct",
-                                        "base": None}
+            jobs._vorgaenge[f"n{i}"] = _vorgang_eintrag(f"n{i}", "gestartet")
         with jobs._lock:
             jobs._prune_locked()
         assert len(jobs._vorgaenge) == jobs._VORGAENGE_MAX
         assert "n0" not in jobs._vorgaenge, "die aeltesten fallen heraus"
         assert f"n{jobs._VORGAENGE_MAX + 24}" in jobs._vorgaenge, "die juengsten bleiben"
+    finally:
+        jobs._vorgaenge.clear()
+        jobs._vorgaenge.update(sicherung)
+
+
+def test_deckel_wirft_NIE_eine_offene_vormerkung_weg():
+    """Die Gegenrichtung, und die zaehlt mehr: eine offene Vormerkung ist per Konstruktion die
+    aelteste — sie WARTET ja. Ein rein zeitlicher Deckel haette ausgerechnet die geworfen, auf
+    deren Antwort noch jemand wartet; danach 404, und der Nachlauf faellt zurueck auf den
+    4-Sekunden-Weg. Von zwei Pruefern unabhaengig gefunden."""
+    sicherung = dict(jobs._vorgaenge)
+    try:
+        jobs._vorgaenge.clear()
+        jobs._vorgaenge["wartet_seit_langem"] = _vorgang_eintrag("wartet_seit_langem")
+        for i in range(jobs._VORGAENGE_MAX + 25):       # lauter juengere, alle abgeschlossen
+            jobs._vorgaenge[f"n{i}"] = _vorgang_eintrag(f"n{i}", "gestartet")
+        with jobs._lock:
+            jobs._prune_locked()
+        assert "wartet_seit_langem" in jobs._vorgaenge, "die offene Vormerkung wurde geworfen"
+        assert jobs.vorgang("wartet_seit_langem") is not None, "und sie ist noch abrufbar"
+        assert "n0" in jobs._vorgaenge or len(jobs._vorgaenge) <= jobs._VORGAENGE_MAX + 1
     finally:
         jobs._vorgaenge.clear()
         jobs._vorgaenge.update(sicherung)

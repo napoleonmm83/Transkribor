@@ -81,10 +81,10 @@ function Leiste() {
       // Summenpoll (bis 4 s) — ein Lauf, der frueher stirbt (Modell-Ladefehler), waere
       // wieder unsichtbar, also genau der Fall, den #376 schliesst.
       onTranscribe={p => start(() => startTranscribe(p).then(res => {
-        if (res.started) adopt(res.job_id, p, 'transcribe'); return res
+        if (res.started && res.job_id) adopt(res.job_id, p, 'transcribe'); return res
       }), `Transkribieren ${p}`, nachladen)}
       onCorrect={p => start(() => startCorrect(p).then(res => {
-        if (res.started) adopt(res.job_id, p, 'correct'); return res
+        if (res.started && res.job_id) adopt(res.job_id, p, 'correct'); return res
       }), `Korrigieren ${p}`, nachladen)}
       // Die Datei-Aktionen (korrigieren/neu transkribieren/loeschen) haengen nicht mehr hier:
       // sie stehen in DateiMenue, das sich Nachladen, Job-Adoption und die Editor-Bruecke selbst

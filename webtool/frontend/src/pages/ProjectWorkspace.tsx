@@ -137,7 +137,7 @@ export function ProjectWorkspace() {
       if (queues) refresh()
       return
     }
-    adopt(res.job_id, project!, kind)
+    if (res.job_id) adopt(res.job_id, project!, kind)
     toast.success(`${label} gestartet`)
   }
 
@@ -341,7 +341,7 @@ export function ProjectWorkspace() {
           refresh(); refreshFiles()
           // Sofort adoptieren statt auf den naechsten Poll zu warten — der Balken soll
           // direkt stehen.
-          if (job?.started) {
+          if (job?.started && job.job_id) {
             adopt(job.job_id, project!, art ?? 'transcribe')
             toast.success(art === 'fetch' ? 'Herunterladen gestartet — Transkription folgt automatisch'
                                           : 'Transkription gestartet')

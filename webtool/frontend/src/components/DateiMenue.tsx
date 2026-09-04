@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useMatch, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { Bot, FileDown, Languages, MoreHorizontal, Pencil, RotateCcw, Trash2 } from 'lucide-react'
-import type { ProjectFile } from '@/lib/types'
+import type { ProjectFile, StartJob } from '@/lib/types'
 import { deleteFile, fileMarkdownUrl, getDoc, renameFile, startCorrectFile, startRetranscribeFile, triggerDownload } from '@/lib/api'
 import { UmbenennenDialog, sprecherNamen } from './UmbenennenDialog'
 import { DateiEinstellungenDialog } from './DateiEinstellungenDialog'
@@ -63,9 +63,9 @@ export function DateiMenue({ project, file, aiReason }: {
    *  Nur wenn DIESE Datei offen ist: eine andere offene Datei darf nicht angestastet werden. */
   const editorVergessen = () => { if (offen) editor.current?.vergiss() }
 
-  const jobStarten = (fn: () => Promise<{ job_id: string; started: boolean }>, kind: string,
+  const jobStarten = (fn: () => Promise<StartJob>, kind: string,
                       label: string) =>
-    start(() => fn().then(res => { if (res.started) adopt(res.job_id, project, kind, [file.base]); return res }),
+    start(() => fn().then(res => { if (res.started && res.job_id) adopt(res.job_id, project, kind, [file.base]); return res }),
       label, nachladen)
 
   const ausfuehren = async (was: Aktion) => {
