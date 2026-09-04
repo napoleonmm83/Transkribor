@@ -30,7 +30,7 @@ _pending = {}
 # AUFGELOESTER Vorgang lesbar bleiben muss, nachdem `rerun` seinen Schluessel aus `_pending`
 # geraeumt hat — bliebe er dort stehen, hielte `key in _pending` eine neue Vormerkung fuer
 # schon vorhanden, und genau das ist die Zusicherung, die `_pending` traegt.
-_vorgaenge = {}
+_vorgaenge: dict[str, dict] = {}
 _VORGAENGE_MAX = 200
                            # DREITUPEL, nicht (project, kind) — die Zeile sagte das Falsche,
                            # und zwei Zusicherungen in `test_jobs.py` sind darauf hereingefallen
@@ -299,7 +299,8 @@ def start(project: str, cmd: list, cwd, kind: str, then=None, env=None, base: st
     return jid, True
 
 
-def request(project: str, cmd: list, cwd, kind: str, then=None, base: str = None, vorgang: str = None):
+def request(project: str, cmd: list, cwd, kind: str, then=None, base: str = None,
+            vorgang: str | None = None):
     """Startet den Job — oder merkt genau EINEN Nachlauf vor, wenn der Slot belegt ist.
 
     Ein Upload/Import soll immer zu einer Verarbeitung fuehren, auch wenn gerade eine laeuft:
