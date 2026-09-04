@@ -138,7 +138,17 @@ export function FileStatusPill({ file, active, pct, detail, state, erreicht, job
     // Wenn inScope explizit false ist oder die Datei bereits fertig (state === 'done') ist,
     // bleibt der echte Ruhezustand der Datei erhalten.
     const betrifft = inScope ?? jobRunning
-    if (jobRunning && betrifft && !state) {
+    // `!state` hat seit #442 eine Ausnahme, und sie ist eng gefasst: eine Aufnahme in der
+    // KORREKTUR-Schlange traegt per Konstruktion `state === 'done'` — das Urteil ihrer
+    // TRANSKRIPTION. Ohne die Ausnahme faellt sie auf `ruhe()` durch und zeigt „Transkribiert
+    // — noch nicht korrigiert": wahr, aber keine Warteauskunft, und genau der Zustand, gegen
+    // den dieser Fix gebaut ist.
+    //
+    // NUR fuer `art === 'correct'`, nicht fuer jedes `warten`: der #393-Grund („ein gruener
+    // Haken pro Zeile faerbt die Liste zu") bleibt damit unangetastet, und ein kuenftiger
+    // dritter Wartezustand muesste sich hier ausdruecklich eintragen statt still mitzufahren.
+    const nachUrteilWartend = warten?.art === 'correct' && state === 'done'
+    if (jobRunning && betrifft && (!state || nachUrteilWartend)) {
       if (globalPhase && GLOBAL_WAIT[globalPhase]) {
         const gLabel = GLOBAL_WAIT[globalPhase]
         return (

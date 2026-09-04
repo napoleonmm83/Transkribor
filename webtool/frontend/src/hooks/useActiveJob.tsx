@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
 import { getJob, getVorgang, HttpFehler } from '@/lib/api'
-import { laufOrdnung, parseJobPhases, RANG, warteKarte } from '@/lib/jobPhases'
+import { korrekturSchlange, laufOrdnung, parseJobPhases, RANG, warteKarte } from '@/lib/jobPhases'
 import type { GlobalPhase, JobPhases, Warten } from '@/lib/types'
 
 /** Zwei Zustaende, die der SERVER nie sendet — sie entstehen hier, aus dem Ausbleiben einer
@@ -70,6 +70,12 @@ export function mergePhases(jobs: Job[]): JobPhases {
   const perBase: JobPhases['perBase'] = Object.create(null)
   const globalPerBase: Record<string, GlobalPhase> = Object.create(null)
   const warten: Record<string, Warten> = Object.create(null)
+  // Getrennt gesammelt und ERST NACH der Raeumung eingemischt (#442): die Eintraege der
+  // Korrektur-Schlange tragen per Konstruktion ein Endurteil (`done` aus ihrer Transkription),
+  // die Schleife `for (base of keys(perBase)) delete warten[base]` weiter unten loeschte sie
+  // also samt und sonders wieder. Hier oben eingehaengt waere der ganze Fix wirkungslos —
+  // und zwar lautlos, weil das Ergebnis dann einfach dem Vorzustand gleicht.
+  const korrWarten: Record<string, Warten> = Object.create(null)
   let global: JobPhases['global'] = null
   let allScoped = jobs.length > 0
   let scope: Set<string> | undefined
@@ -141,6 +147,7 @@ export function mergePhases(jobs: Job[]): JobPhases {
       if (Object.hasOwn(warten, base) && j.kind !== 'transcribe') continue
       warten[base] = eintrag
     }
+    Object.assign(korrWarten, korrekturSchlange(j.phases, j.kind))
   }
   for (const base of Object.keys(active)) {
     delete perBase[base]
@@ -156,6 +163,11 @@ export function mergePhases(jobs: Job[]): JobPhases {
     delete globalPerBase[base]
     delete warten[base]     // fertig heisst: liegt vor niemandem mehr
   }
+  // ... ausser, die Aufnahme steht jetzt in der ZWEITEN Schlange (#442). Ihr Urteil `done`
+  // gilt der Transkription; auf ihre Korrektur wartet sie noch. `active` schlaegt das hier
+  // NICHT aus — `korrekturSchlange` hat aktive Aufnahmen bereits ausgenommen, und die
+  // Raeumung darueber fasst `warten` ohnehin nicht an.
+  Object.assign(warten, korrWarten)
   // Nach dem Raeumen NEU durchzaehlen. `warteKarte` vergibt die Positionen je Job, die
   // Raeumung darueber nimmt einzelne Basen heraus — die Luecke bliebe sonst als zu grosse Zahl
   // stehen. Gemeldet vom Bot mit genau diesem Beispiel: Bereich A/B/C, B in einem zweiten Job

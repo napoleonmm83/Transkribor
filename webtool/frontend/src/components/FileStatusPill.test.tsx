@@ -25,6 +25,27 @@ describe('FileStatusPill', () => {
     expect(screen.getByText('Fertig')).toBeInTheDocument()
     expect(screen.queryByText(/Warteschlange/)).toBeNull()
   })
+  it('wer auf einen Korrektur-Slot wartet, sagt das statt seines Ruhezustands (#442)', () => {
+    /* Der einzige Fall, in dem der Wartetext gegen `state === 'done'` gewinnt. Im gestaffelten
+       Lauf traegt eine Aufnahme in der Poolschlange laengst das Urteil ihrer TRANSKRIPTION;
+       ohne die Ausnahme faellt sie auf `ruhe()` durch und zeigt „Transkribiert — noch nicht
+       korrigiert" — wahr, aber keine Warteauskunft, und der Nutzer weiss nicht, ob er zehn
+       Sekunden oder zwei Stunden wartet. */
+    render(<FileStatusPill file={f()} state="done" erreicht="raw" jobRunning inScope mitText
+                           warten={{ art: 'correct', vor: 2 }} />)
+    expect(screen.getByText('Wartet auf Korrektur · noch 2 vor dieser')).toBeInTheDocument()
+    expect(screen.queryByText(/noch nicht korrigiert/)).toBeNull()
+  })
+  it('die Ausnahme gilt NUR der Korrektur-Schlange, nicht jedem Wartezustand (#442)', () => {
+    /* Die Gegenrichtung. Der #393-Grund („ein gruener Haken pro Zeile faerbt die Liste zu")
+       bleibt unangetastet: eine Aufnahme mit Endurteil, die auf eine TRANSKRIPTION wartet,
+       gibt es auf keinem Weg — und faende sich einer, zeigte sie weiter ihren Ruhezustand,
+       statt still mitzufahren. */
+    render(<FileStatusPill file={f({ has_edit: true })} state="done" jobRunning inScope mitText
+                           warten={{ art: 'transcribe', vor: 2 }} />)
+    expect(screen.getByText('Fertig')).toBeInTheDocument()
+    expect(screen.queryByText(/Wartet auf/)).toBeNull()
+  })
   it('Terminal-Status done sticht noch vorhandene active-Phase aus', () => {
     render(<FileStatusPill file={f({ has_edit: true })} active="correct" state="done" jobRunning inScope mitText />)
     expect(screen.getByText('Fertig')).toBeInTheDocument()

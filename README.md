@@ -225,7 +225,11 @@ Minuten dauern.
 
 **Seit `v0.51.0`** sagt diese Zeile in der Dateiliste des Projekts auch, *worauf*
 gewartet wird und wie viel noch davor liegt: „Wartet auf Transkription · noch 3 vor dieser“ —
-und entsprechend „Wartet auf Korrektur“, wenn du die Korrektur von Hand angestossen hast. In
+und entsprechend „Wartet auf Korrektur“. Letzteres stand in Fassungen bis einschliesslich
+`v0.53.0` nur, wenn du die Korrektur von Hand angestossen hattest; **ab der nächsten Fassung**
+auch beim gewöhnlichen Hochladen, wo Transkribor gleich selbst weiterkorrigiert. Dort ist die
+Wartezeit am längsten — Transkribor korrigiert drei Aufnahmen gleichzeitig, bei zwanzig warten
+also siebzehn hintereinander, und bislang sah man ihnen das nicht an. In
 Fassungen bis einschliesslich `v0.50.2` stand dort nur „In Warteschlange“; bei fünfzehn
 Aufnahmen sah die erste damit genauso aus wie die letzte. Die Zahl ist eine Menge, keine
 Platznummer: beim Korrigieren arbeitet Transkribor mehrere Aufnahmen gleichzeitig. In der

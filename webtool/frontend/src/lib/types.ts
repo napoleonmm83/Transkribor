@@ -285,6 +285,22 @@ export type JobPhases = {
    *  Gemessen: das Loeschen EINER fertigen Aufnahme verlaengerte die Warteschlange aller
    *  uebrigen um eins, dauerhaft. Undefined, solange nichts geloescht wurde. */
   entfernt?: Set<string>;
+  /** Belegt dieser Lauf, dass er mitkorrigiert? (#442)
+   *
+   *  Ein `transcribe`-Lauf korrigiert per Default selbst mit, aber `TRANSKRIBOR_AUTOCORRECT=0`
+   *  schaltet die ganze KI-Phase ab — dann wartet niemand auf eine Korrektur, und eine
+   *  Warteauskunft waere eine Zusage, die keiner einloest.
+   *
+   *  Beleg ist POSITIV und kommt aus Zeilen, die der Parser ohnehin liest: druckt der Lauf
+   *  fuer irgendeine Aufnahme eine Diarisierungs- oder Vorbereitungszeile, laeuft seine
+   *  KI-Phase. Beide stehen je Aufnahme VOR der Uebergabe an die Poolschlange
+   *  (`transcribe.py`: `cmd_diarize` und `prep_single` vor `ai_pool.submit`) — der Beleg
+   *  liegt also immer vor der ersten Wartezeit, die er rechtfertigen soll.
+   *
+   *  NICHT ueber die `[autocorrect]`-Zeile des Gegenfalls: die Marke haette damit erstmals
+   *  eine Bedeutung fuer die Oberflaeche und muesste nach `paths.RESERVIERTE_NAMEN` — ein
+   *  bestehendes Projekt dieses Namens koennte danach keinen Lauf mehr starten. */
+  korrigiertMit?: boolean;
   /** Basisname -> was daran gerade laeuft. Mehrere Eintraege, weil correct parallel arbeitet. */
   active: Record<string, FileWork>;
   perBase: Record<string, FileState>;

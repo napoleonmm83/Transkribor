@@ -242,6 +242,46 @@ describe('mergePhases', () => {
     expect(m.global).toBeNull()
   })
 
+  it('AUCH IM EINEN Job verdraengt die laufende Korrektur ihr Transkriptions-Urteil (#442)', () => {
+    /* Der Waechter darueber ist ein Zwei-Job-Fall, und sein Kommentar nennt die Regel
+       ausdruecklich cross-job („in einem anderen Job"). Er stammt aus 0cee148 (06.08.), also
+       DREI WOCHEN vor der gestaffelten Kette (#405, 27.08.), und traegt seither auch den
+       EINEN Job des Standardwegs — ohne dass das irgendwo stand.
+
+       Die Folge, gemessen vom Befund-Chef: eine „Praezisierung" auf cross-job liesse alle
+       Tests gruen und maskierte die laufende Korrektur wieder hinter „Transkribiert — noch
+       nicht korrigiert", genau auf dem Weg, den jeder Nutzer geht. Dieser Test ist der
+       fehlende rote Fall. */
+    const m = mergePhases([job('j1', 'transcribe', parseJobPhases('transcribe', [
+      '[scope] A',
+      '[Demo] fertig A: 12s, 30 Segmente, 1.2x Echtzeit',
+      '→ Korrigiere A · Block 1/4 …',
+    ]))])
+    expect(m.active).toEqual({ A: { phase: 'correct', detail: undefined, pct: undefined } })
+    expect(m.perBase).toEqual({})     // ohne den Riegel staende hier { A: 'done' }
+  })
+
+  it('die Korrektur-Schlange ueberlebt die Raeumung der fertigen Aufnahmen (#442)', () => {
+    /* Ihre Eintraege tragen PER KONSTRUKTION ein Endurteil — das ihrer Transkription. Die
+       Schleife `for (base of keys(perBase)) delete warten[base]` loeschte sie deshalb samt
+       und sonders, wenn man sie vor ihr einmischt; der Fix waere lautlos wirkungslos, weil
+       das Ergebnis dem Vorzustand gleicht. */
+    const m = mergePhases([job('j1', 'transcribe', parseJobPhases('transcribe', [
+      '[scope] A\tB\tC',
+      '[Demo] fertig A: 12s, 30 Segmente, 1.2x Echtzeit',
+      '→ Diarisiere A …', '[done] A', 'prep: 1 Datei(en) getaggt in /x',
+      '[Demo] fertig B: 9s, 21 Segmente, 1.4x Echtzeit',
+      '→ Diarisiere B …', '[done] B', 'prep: 1 Datei(en) getaggt in /x',
+      '→ Korrigiere A · Block 1/4 …',
+    ]))])
+    // B wartet auf seinen Korrektur-Slot, C noch auf die Transkription — zwei Schlangen,
+    // je eigene Zaehlung.
+    expect(m.warten?.B).toEqual({ art: 'correct', vor: 0 })
+    expect(m.warten?.C).toEqual({ art: 'transcribe', vor: 0 })
+    // A wird gerade korrigiert und zaehlt in der Transkriptions-Schlange nicht mehr mit.
+    expect(m.warten?.A).toBeUndefined()
+  })
+
   it('bei gleicher Datei in zwei Jobs gewinnt transcribe — unabhaengig von der Reihenfolge', () => {
     // Das Transkript wird gerade ersetzt, die Korrektur arbeitet auf gleich veralteten Daten.
     const t = job('j1', 'transcribe', { global: null, active: { A: { phase: 'transcribe', pct: 20 } }, perBase: {} })
