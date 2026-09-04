@@ -279,7 +279,7 @@ export async function cancelJob(jobId: string): Promise<void> {
  *  `mehrsprachig` ebenso — undefined heisst „kein Datei-Override“, der Projektwert gilt. */
 export async function uploadAudio(project: string, file: File, sprache?: string,
                                   mehrsprachig?: boolean, sprecher?: number):
-  Promise<{ base: string; file: string; job_id?: string; started?: boolean;
+  Promise<{ base: string; file: string; job_id?: string | null; started?: boolean;
             vorgang?: string | null }> {
   const fd = new FormData(); fd.append('file', file)
   if (sprache) fd.append('sprache', sprache)

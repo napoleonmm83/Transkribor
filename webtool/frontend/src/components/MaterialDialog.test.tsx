@@ -75,6 +75,24 @@ describe('MaterialDialog', () => {
     expect(onFertig.mock.calls[0][0]).toMatchObject({ started: false, vorgang: 'vg1' })
   })
 
+  it('reicht die Nummer auch OHNE Job-Kennung weiter (aufgegebener Nachlauf)', async () => {
+    /* Der Fall, den `if (r.job_id)` still verschluckte: gibt der Server den Nachlauf nach
+       zehn Versuchen auf, ist `job_id` NULL — und die Nummer ist dann das Einzige, was es
+       gibt. Ohne sie erfaehrt der Nutzer nie, dass aus seinem Upload nichts wird; genau
+       dieser Ausgang war vorher nur eine stderr-Zeile.
+
+       Von der CodeRabbit-CLI (major) und vom gegnerischen Pruefer (T5) unabhaengig gefunden. */
+    const onFertig = vi.fn()
+    vi.mocked(api.uploadAudio).mockResolvedValue(
+      { base: 'a', file: 'a.mp3', job_id: null, started: false, vorgang: 'vg9' })
+    render(<MaterialDialog {...basis} onFertig={onFertig} vorbelegteDateien={[datei('a.mp3')]} />)
+    fireEvent.click(screen.getByRole('button', { name: /Weiter/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Weiter/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Los geht/ }))
+    await waitFor(() => expect(onFertig).toHaveBeenCalled())
+    expect(onFertig.mock.calls[0][0]).toMatchObject({ job_id: null, vorgang: 'vg9' })
+  })
+
   it('erklaert EINMAL, warum die Sprache nicht waehlbar ist (#305)', () => {
     /* Der `title` an der Zeile erreicht nur die Maus, und bei zehn Aufnahmen staende
        zehnmal „Projekt-Standard" ohne Grund daneben. Der Satz gehoert deshalb ueber die

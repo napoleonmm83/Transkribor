@@ -56,7 +56,10 @@ export type JobStatus = { status: 'running' | 'done' | 'error' | 'cancelled'; li
  *  `job_id` ist in dem Fall der BLOCKER, und der gehoert ueber die Einzel-GPU-Sperre oft
  *  einem fremden Projekt (#381). Optional, weil zwei Endpunkte ueber `jobs.start` laufen
  *  (`correct_file`, `fetch_urls`) und dort gar keine Vormerkung entstehen kann. */
-export type StartJob = { job_id: string; started: boolean; vorgang?: string | null };
+/** `job_id` ist NULLBAR, und das ist kein Feinschliff: gibt `jobs.request` nach zehn
+ *  Versuchen auf, liefert es `(None, False, nummer)` — dann gibt es keinen Job, wohl aber
+ *  einen Vorgang, dessen Ausgang der Nutzer erfahren soll. */
+export type StartJob = { job_id: string | null; started: boolean; vorgang?: string | null };
 /** Zustand einer Vormerkung (`GET /api/vorgaenge/{nummer}`). `job_id` steht erst bei
  *  `gestartet` — vorher gibt es den Nachlauf schlicht noch nicht. */
 export type Vorgang = {

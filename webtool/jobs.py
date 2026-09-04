@@ -185,10 +185,23 @@ def _prune_locked():
         _jobs.pop(jid, None)
     # Vorgaenge nach ANZAHL deckeln, nicht nach Alter: ein `vorgemerkt` hat kein `ended`, an
     # dem sich ein Alter messen liesse, und es darf beliebig lange warten (der Blocker
-    # bestimmt, wie lange). Der Deckel wirft die aeltesten heraus — dict behaelt die
+    # bestimmt, wie lange). Geworfen wird der aelteste ABGESCHLOSSENE — dict behaelt die
     # Einfuegereihenfolge, seit 3.7 zugesichert.
+    #
+    # NIEMALS ein offenes `vorgemerkt`: das ist per Konstruktion das aelteste (es wartet ja),
+    # und ein rein zeitlicher Deckel haette ausgerechnet die Vormerkung geworfen, auf deren
+    # Antwort noch jemand wartet — danach 404, und der Nachlauf faellt zurueck auf den
+    # 4-Sekunden-Weg. Von zwei Pruefern unabhaengig gefunden (gegnerischer Subagent B3,
+    # CodeRabbit-CLI major).
+    #
+    # Preis, benannt: gibt es NUR offene Vormerkungen, waechst die Menge ueber den Deckel.
+    # Ihre Obergrenze ist dann die Zahl verschiedener (Projekt, Art, Base) — dieselbe Menge,
+    # die `_pending` ohnehin haelt, also nichts Neues.
     while len(_vorgaenge) > _VORGAENGE_MAX:
-        _vorgaenge.pop(next(iter(_vorgaenge)), None)
+        raus = next((n for n, v in _vorgaenge.items() if v["status"] != "vorgemerkt"), None)
+        if raus is None:
+            break
+        _vorgaenge.pop(raus, None)
 
 
 def _vorgang_setzen(nummer, zustand, job_id=None):

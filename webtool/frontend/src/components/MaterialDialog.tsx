@@ -214,8 +214,13 @@ export function MaterialDialog({ project, offen, vorbelegteDateien, sprachChoice
         // `vorgang` MUSS mit: hier wird das Antwortobjekt neu gebaut, und was hier nicht
         // abgeschrieben wird, kommt beim Aufrufer nie an. Bei belegtem Slot ist die Nummer
         // die einzige brauchbare Auskunft — `job_id` ist dann der Blocker (#381).
-        if (r.job_id) {
-          job = { job_id: r.job_id, started: !!r.started, vorgang: r.vorgang }
+        //
+        // Und die Bedingung fragt `job_id ODER vorgang`, nicht nur `job_id`: gibt der Server
+        // den Nachlauf nach zehn Versuchen auf, ist `job_id` NULL und die Nummer das Einzige,
+        // was es gibt. Mit dem alten `if (r.job_id)` fiel genau dieser Fall stumm heraus —
+        // von der CodeRabbit-CLI und vom gegnerischen Pruefer unabhaengig gefunden.
+        if (r.job_id || r.vorgang) {
+          job = { job_id: r.job_id ?? null, started: !!r.started, vorgang: r.vorgang }
           art = 'transcribe'
         }
       } catch (e) {
