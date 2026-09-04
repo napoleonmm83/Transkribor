@@ -381,7 +381,19 @@ def main(argv: list[str]) -> int:
         return 2
 
     if "--schreiben" in argv:
-        kopf = f"# geprueft {gepruefte_dateien(ausgabe)} Dateien"
+        dateien = gepruefte_dateien(ausgabe)
+        if dateien is None:
+            # Sonst entstuende `# geprueft None Dateien`, das `_KOPF` nicht
+            # matcht — der naechste Lauf schickte zu `--schreiben`, und der
+            # erzeugte denselben Kopf wieder. Eine Schleife, die aussieht wie
+            # ein Bedienfehler.
+            sys.stderr.write(
+                "mypy hat nicht gesagt, wie viele Dateien es angesehen hat — "
+                "ohne diese Zahl waere die Baseline ohne Untergrenze. Nicht "
+                "geschrieben.\n"
+            )
+            return 2
+        kopf = f"# geprueft {dateien} Dateien"
         BASELINE.write_text(
             "\n".join([kopf, *befunde]) + "\n", encoding="utf-8", newline="\n"
         )
