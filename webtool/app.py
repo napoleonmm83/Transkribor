@@ -1211,8 +1211,8 @@ def retranscribe_file(project: str, base: str):
                                 detail="Aufnahme kann gerade nicht sicher neu transkribiert werden")
         _keine_jobs(project, base)
         _datei_weg(project, base, mit_audio=False)
-        job_id, started = _start_transcribe(project, base=base)
-    return {"job_id": job_id, "started": started}
+        job_id, started, vorgang = _start_transcribe(project, base=base)
+    return {"job_id": job_id, "started": started, "vorgang": vorgang}
 
 
 class RenameBody(BaseModel):
@@ -1663,8 +1663,8 @@ def _start_transcribe(project: str, base: str | None = None):
 def transcribe(project: str):
     _validate(project)
     _sicherer_projektname(project)   # ein Lauf ERZEUGT den vergifteten Strom (#416)
-    job_id, started = _start_transcribe(project)
-    return {"job_id": job_id, "started": started}
+    job_id, started, vorgang = _start_transcribe(project)
+    return {"job_id": job_id, "started": started, "vorgang": vorgang}
 
 
 def _require_ai():
@@ -1694,9 +1694,9 @@ def correct(project: str):
     # aktuellere Auskunft als die Anbieterfrage (#441, projektweite Haelfte).
     _laeuft_mitkorrektur(project)
     _require_ai()
-    job_id, started = jobs.request(project, [sys.executable, "-m", "webtool.correct", "run", project],
-                                   paths.ROOT, "correct")
-    return {"job_id": job_id, "started": started}
+    job_id, started, vorgang = jobs.request(project, [sys.executable, "-m", "webtool.correct", "run", project],
+                                            paths.ROOT, "correct")
+    return {"job_id": job_id, "started": started, "vorgang": vorgang}
 
 
 @app.post("/api/projects/{project}/files/{base}/correct")
@@ -1841,8 +1841,18 @@ def fetch_urls(project: str, body: FetchBody):
     # jetzt auf dieselbe Null-Richtung umgestellt.
     env_sprache["TRANSKRIBOR_FETCH_SPRECHER"] = ",".join(
         "" if s is None else str(s) for s in sprecher)
-    job_id, started = jobs.start(project, cmd, paths.ROOT, "fetch",
-                                 then=lambda: _start_transcribe(project), env=env_sprache)
+    # Der `then`-Rueckruf ist der FUENFTE Weg, auf dem eine Vormerkung entsteht — und der
+    # einzige, dessen Rueckgabewert bisher niemand las: die Nummer entstuende, und keiner
+    # kaeme je an sie heran. Traeger ist deshalb der fetch-Job selbst; die Oberflaeche liest
+    # sie beim naechsten Tick. „Fix an einer Stelle ist kein Fix der Klasse."
+    fetch_ref = {}
+
+    def _dann():
+        _, _, vg = _start_transcribe(project)
+        jobs.vorgang_an_job(fetch_ref.get("id"), vg)
+
+    job_id, started = jobs.start(project, cmd, paths.ROOT, "fetch", then=_dann, env=env_sprache)
+    fetch_ref["id"] = job_id   # der Rueckruf laeuft erst nach dem Download, nie vor dieser Zeile
     return {"job_id": job_id, "started": started}
 
 
@@ -2087,6 +2097,20 @@ def job_status(job_id: str):
     return r
 
 
+@app.get("/api/vorgaenge/{nummer}")
+def vorgang_status(nummer: str):
+    """Der Zustand einer Vormerkung (#381).
+
+    Antwortet ein Lauf mit `started: false`, ist die mitgelieferte Job-Kennung die des
+    BLOCKERS — und der gehoert ueber die Einzel-GPU-Sperre oft einem fremden Projekt. Die
+    Vorgangsnummer gehoert dagegen dem Anfordernden; unter ihr steht die Kennung des
+    Nachlaufs, sobald er existiert. Reiner Lesepfad, wie `job_status`."""
+    v = jobs.vorgang(nummer)
+    if v is None:
+        raise HTTPException(status_code=404, detail="kein Vorgang")
+    return v
+
+
 @app.post("/api/jobs/{job_id}/cancel")
 def cancel_job(job_id: str):
     if jobs.cancel(job_id) is None:
@@ -2130,8 +2154,9 @@ def upload_audio(project: str, file: UploadFile = File(...), sprache: str = Form
                              sprecher=sprecher)
     # Hochladen IST der Startschuss: Transkription (und danach Korrektur) laufen von selbst an.
     # jobs.request() sorgt dafuer, dass ein Mehrfach-Upload hoechstens EINEN Nachlauf anhaengt.
-    job_id, started = _start_transcribe(project)
-    return {"ok": True, "base": base, "file": base + ext, "job_id": job_id, "started": started}
+    job_id, started, vorgang = _start_transcribe(project)
+    return {"ok": True, "base": base, "file": base + ext, "job_id": job_id, "started": started,
+            "vorgang": vorgang}
 
 
 _STATIC = os.path.join(os.path.dirname(__file__), "static")
