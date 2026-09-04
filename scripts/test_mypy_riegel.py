@@ -52,16 +52,22 @@ def test_meldung_mit_doppelpunkt_verwirrt_den_pfad_nicht():
     assert mypy_riegel.schluessel(zeile) == "webtool/render_md.py:var-annotated"
 
 
-def test_meldung_mit_klammern_verwirrt_den_code_nicht():
-    # DIE mypy-eigene Falle: `[<type>]` steht MITTEN in der Meldung. Ein Muster
-    # ohne `$`-Anker haette `<type>` als Fehlercode genommen — und damit einen
-    # Schluessel erzeugt, den keine Baseline je enthaelt. Rot ohne Grund, bei
-    # jedem `var-annotated`-Befund; der Baum traegt 14 davon.
+def test_typname_in_klammern_wird_nicht_fuer_den_fehlercode_gehalten():
+    # DIE mypy-eigene Falle, und der `$`-Anker in `_CODE` ist die Abwehr: ein
+    # Typname wie `Iterable[str]` steht MITTEN in der Meldung und sieht genauso
+    # aus wie ein Fehlercode. Ohne Anker liefert `search` hier `str` statt
+    # `arg-type` — ein Schluessel, den keine Baseline je enthaelt, also rot ohne
+    # Grund. Echte Zeile aus diesem Baum (webtool/auth.py, 2026-09-04).
+    #
+    # Die erste Fassung dieses Tests nahm `list[<type>]` aus einer
+    # var-annotated-Meldung und war damit VACUOUS: `<type>` faengt mit `<` an
+    # und matcht `[a-z][a-z0-9-]*` ohnehin nicht — der Test blieb ohne den Anker
+    # gruen. Aufgefallen erst beim Bauen der Mutationsprobe.
     zeile = (
-        'webtool/settings.py:54: error: Need type annotation for "gesetzt" '
-        '(hint: "gesetzt: list[<type>] = ...")  [var-annotated]'
+        'webtool/auth.py:186: error: Argument 1 to "join" of "str" has '
+        'incompatible type "object"; expected "Iterable[str]"  [arg-type]'
     )
-    assert mypy_riegel.schluessel(zeile).endswith(":var-annotated")
+    assert mypy_riegel.schluessel(zeile) == "webtool/auth.py:arg-type"
 
 
 def test_absoluter_windows_pfad_mit_laufwerksbuchstabe():
