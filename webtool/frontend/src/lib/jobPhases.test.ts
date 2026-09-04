@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { describePhases, parseJobPhases , imBereich, zugelassen, laufOrdnung, warteKarte } from './jobPhases'
+import { describePhases, parseJobPhases , imBereich, zugelassen, laufOrdnung, warteKarte, korrekturSchlange } from './jobPhases'
 // Der Ausgang gehoert zum Befund: ein richtig geparster Zustand nuetzt nichts, wenn die
 // Meldung daraus weiterhin „fertig" sagt (#405 + #376).
 import { ausgang } from './jobAusgang'
@@ -1337,5 +1337,91 @@ describe('laufOrdnung / warteKarte (#370, #442)', () => {
     // URL-Import kennt ueberhaupt keine Basisnamen.
     expect(warteKarte(parseJobPhases('transcribe', ['[Demo] -> transkribiere A …']), 'transcribe')).toEqual({})
     expect(warteKarte(parseJobPhases('fetch', ['[scope] A\tB']), 'fetch')).toEqual({})
+  })
+})
+
+describe('korrekturSchlange — die Wartezeit im gestaffelten Lauf (#442)', () => {
+  /* Der Standardweg: transkribieren, dann an den Korrektur-Pool uebergeben. Zwischen dem
+     `fertig X:` einer Aufnahme und ihrem `→ Korrigiere X` nennt KEINE Zeile ihren Namen —
+     der Pool-Submit druckt nichts. Die Aufnahme traegt in dieser Zeit `perBase='done'` aus
+     ihrer Transkription, faellt damit aus `warteKarte` heraus und zeigte bis hierher nur
+     ihren Ruhezustand. Zeilenformen aus dem INVENTAR von jobPhases.vertrag.test.ts. */
+  const GESTAFFELT = [
+    '[scope] A\tB\tC',
+    '[Demo] fertig A: 12s, 30 Segmente, 1.2x Echtzeit',
+    '→ Diarisiere A …', '[done] A', 'prep: 1 Datei(en) getaggt in /x',
+    '[Demo] fertig B: 9s, 21 Segmente, 1.4x Echtzeit',
+    '→ Diarisiere B …', '[done] B', 'prep: 1 Datei(en) getaggt in /x',
+    '→ Korrigiere A · Block 1/4 …',
+  ]
+
+  it('wer transkribiert ist und auf einen Slot wartet, steht in der Schlange', () => {
+    const p = parseJobPhases('transcribe', GESTAFFELT)
+    // A wird gerade korrigiert (`active`), B wartet, C ist noch gar nicht transkribiert.
+    expect(korrekturSchlange(p, 'transcribe')).toEqual({ B: { art: 'correct', vor: 0 } })
+    // Und die alte Karte bleibt zustaendig fuer die, die noch auf die TRANSKRIPTION wartet.
+    expect(warteKarte(p, 'transcribe')).toEqual({ C: { art: 'transcribe', vor: 0 } })
+  })
+
+  it('ohne Beleg fuer die Mitkorrektur entsteht KEINE Schlange', () => {
+    /* Die Gegenrichtung, und sie zaehlt genauso: mit TRANSKRIBOR_AUTOCORRECT=0 laeuft die
+       ganze KI-Phase nicht — dann druckt der Lauf weder eine Diarisierungs- noch eine
+       Vorbereitungszeile, und niemand wartet auf eine Korrektur. Eine Warteauskunft waere
+       dort eine Zusage, die keiner einloest, und zwar bis Jobende. */
+    // Die Zeilen stammen aus einem ECHTEN Lauf mit TRANSKRIBOR_AUTOCORRECT=0 (Messstand,
+    // 2026-09-04) — der erste Entwurf hatte die autocorrect-Zeile ERFUNDEN und lag daneben.
+    const ohne = parseJobPhases('transcribe', [
+      '[scope] A_erste\tB_zweite',
+      '[autocorrect] uebersprungen — TRANSKRIBOR_AUTOCORRECT=0',
+      '[active] A_erste',
+      '[Warteschlange] fertig A_erste: 0s, 0 Segmente, Audio 0:03, 3.0x',
+      '[done] A_erste',
+    ])
+    expect(ohne.korrigiertMit).toBeUndefined()
+    expect(korrekturSchlange(ohne, 'transcribe')).toEqual({})
+  })
+
+  it('der Beleg ist klebrig — er ueberlebt den Wechsel der globalen Phase', () => {
+    /* `global` faellt auf null zurueck, sobald eine Datei aktiv wird (`jobPhases.ts`, die
+       Rueckgabe). Haenge man den Beleg daran, verschwaende er genau dann, wenn die erste
+       Aufnahme in die Schlange geht — also im Moment seines Gebrauchs. */
+    const p = parseJobPhases('transcribe', GESTAFFELT)
+    expect(p.global).toBeNull()
+    expect(p.korrigiertMit).toBe(true)
+  })
+
+  it('jede der beiden Zeilen belegt die Mitkorrektur fuer sich', () => {
+    // Mit TRANSKRIBOR_DIARIZE=0 gibt es keine Diarisierungszeile, die Vorbereitung laeuft
+    // trotzdem — und umgekehrt. Ein Beleg, der BEIDE verlangte, fiele in beiden Faellen aus.
+    expect(parseJobPhases('transcribe', ['[scope] A', '→ Diarisiere A …']).korrigiertMit).toBe(true)
+    expect(parseJobPhases('transcribe', ['[scope] A', 'prep: 1 Datei(en) getaggt in /x']).korrigiertMit).toBe(true)
+  })
+
+  it('eine fertig korrigierte oder gescheiterte Aufnahme wartet nicht mehr', () => {
+    /* `erreicht === 'raw'` ist die tragende Haelfte: nach `apply:` steht dort `edit`, die
+       Korrektur ist also durch. Ohne diese Bedingung stuende die Warteauskunft bis Jobende
+       auf JEDER fertigen Aufnahme — schlimmer als der Zustand, den der Fix behebt. */
+    const fertig = parseJobPhases('transcribe', [
+      '[scope] A', '[Demo] fertig A: 12s, 30 Segmente, 1.2x Echtzeit',
+      '→ Diarisiere A …', '[done] A', 'apply: A -> edit.json',
+    ])
+    expect(fertig.erreicht?.A).toBe('edit')
+    expect(korrekturSchlange(fertig, 'transcribe')).toEqual({})
+
+    const kaputt = parseJobPhases('transcribe', [
+      '[scope] A', '[Demo] fertig A: 12s, 30 Segmente, 1.2x Echtzeit',
+      '→ Diarisiere A …', '[done] A', '[Demo] FEHLER A: kein Anbieter',
+    ])
+    expect(korrekturSchlange(kaputt, 'transcribe')).toEqual({})
+  })
+
+  it('der reine Korrekturlauf bleibt bei der alten Karte', () => {
+    // Dort gibt es kein vorangehendes Transkriptions-Urteil; `warteKarte` traegt den Fall
+    // seit K3. Zwei Karten fuer dieselbe Aufnahme waeren zwei Texte fuer einen Zustand.
+    const p = parseJobPhases('correct', ['[scope] A\tB', '→ Korrigiere A · Block 1/4 …'])
+    expect(korrekturSchlange(p, 'correct')).toEqual({})
+    // A steht mit drin, obwohl es gerade LAEUFT — so gewollt seit K3: es liegt vor B, und
+    // seine eigene Pille zeigt ohnehin die Phase, nicht den Wartetext.
+    expect(warteKarte(p, 'correct')).toEqual({ A: { art: 'correct', vor: 0 }, B: { art: 'correct', vor: 1 } })
   })
 })

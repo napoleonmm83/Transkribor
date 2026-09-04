@@ -49,6 +49,10 @@ export function parseJobPhases(kind: string, lines: string[],
   // doppelt und der Balken schoesse ueber 100%.
   const blocks: Record<string, { done: Set<number>; total: number }> = Object.create(null)
   let global: GlobalPhase | null = null
+  // KLEBRIG, nie zurueckgesetzt (#442): der Beleg gilt dem LAUF, nicht dem Augenblick. `global`
+  // faellt zurueck auf null, sobald eine Datei aktiv wird — daran haengen duerfte die Auskunft
+  // nicht, sonst verschwaende sie genau dann, wenn die erste Aufnahme in die Schlange geht.
+  let korrigiertMit = false
   let cursor: string | null = null            // transcribe: die eine laufende Datei
   let bilanz: JobPhases['bilanz']
   let scope: Set<string> | undefined
@@ -350,6 +354,7 @@ export function parseJobPhases(kind: string, lines: string[],
       // der beiden Faelle.
       const base = scope?.has(m[1]) && !scope.has(m[2]) ? m[1] : m[2]
       active[base] = { phase: 'diarize' }; global = 'diarize'
+      korrigiertMit = true
     }
     // `[done] {base}` folgt auf JEDEN Ausgang der Diarisierungsschleife (Erfolg, "keine Sprecher",
     // Roh-JSON unlesbar, Ausnahme) und ist damit das einzige Terminal je Datei; aufgeraeumt wurde
@@ -424,7 +429,7 @@ export function parseJobPhases(kind: string, lines: string[],
       for (const [b, a] of Object.entries(active)) if (a.phase === 'diarize') delete active[b]
       if (global === 'diarize') global = null
     }
-    else if (/^prep: \d+ Datei/.test(l)) { global = 'prep' }
+    else if (/^prep: \d+ Datei/.test(l)) { global = 'prep'; korrigiertMit = true }
     else if (/^(→ Glossar|✓ Glossar|↷ nutze vorhandenes _glossar)/.test(l)) { global = 'glossary' }
     // `[active] {base}` - die zweite Quelle fuer "diese Aufnahme gehoert zum Lauf", und seit
     // #431 die einzige fuer eine, die erst waehrend des Laufs dazukam.
@@ -549,6 +554,7 @@ export function parseJobPhases(kind: string, lines: string[],
            gesehen: gesehen.size ? gesehen : undefined,
            entfernt: ungueltig.size ? ungueltig : undefined,
            erreicht: Object.keys(erreicht).length ? erreicht : undefined,
+           korrigiertMit: korrigiertMit || undefined,
            active, perBase, bilanz }
 }
 
@@ -635,6 +641,37 @@ export function warteKarte(phases: JobPhases, kind: string): Record<string, Wart
     b => !Object.hasOwn(phases.perBase, b) && !phases.entfernt?.has(b) && !schonDurch(phases, kind, b))
   const karte: Record<string, Warten> = Object.create(null)
   ausstehend.forEach((base, i) => { karte[base] = { art: kind, vor: i } })
+  return karte
+}
+
+/** Wer im gestaffelten Lauf auf einen Korrektur-Slot wartet (#442).
+ *
+ *  Das ist ein Zustand NACH dem Endurteil, und deshalb steht er hier statt in `warteKarte`:
+ *  deren Vertrag lautet „ausstehend = im Bereich UND ohne Endurteil", und der ist richtig.
+ *  Eine Aufnahme, die auf ihre Korrektur wartet, hat ihr Transkriptions-Urteil dagegen
+ *  laengst (`fertig X:` ⇒ `done`/`raw`) — sie faellt aus `ausstehend` heraus, und genau das
+ *  war die getragene Grenze aus PR #500.
+ *
+ *  Vier Bedingungen, jede noetig:
+ *  - `perBase === 'done'` UND `erreicht === 'raw'`: die Transkription lief durch, die
+ *    `edit.json` steht noch aus. Ein `edit` heisst, die Korrektur ist fertig; ein `failed`
+ *    oder `skipped` heisst, dass keine mehr kommt.
+ *  - KEIN `active`-Eintrag: sonst arbeitet ein Arbeiter schon an ihr, und die Pille zeigt
+ *    ohnehin die Phase (der Riegel in `mergePhases` raeumt ihr `perBase` dafuer weg).
+ *  - `kind === 'transcribe'`: im reinen Korrekturlauf gibt es kein vorangehendes
+ *    Transkriptions-Urteil, dort traegt `warteKarte` den Fall schon.
+ *  - `korrigiertMit`: ohne Beleg keine Zusage (siehe den Typ-Kommentar dort).
+ *
+ *  GETRAGENE GRENZE: ein Lauf ohne Diarisierung UND ohne Vorbereitung hat keinen Beleg und
+ *  zeigt keine Warteauskunft. Auf dem Standardweg kommen beide Zeilen je Aufnahme; es ist
+ *  also kein Ausfall, den man erwarten muss, aber einer, den es geben kann. */
+export function korrekturSchlange(phases: JobPhases, kind: string): Record<string, Warten> {
+  if (kind !== 'transcribe' || !phases.korrigiertMit || !phases.scope) return {}
+  const wartend = laufOrdnung(phases.scope).filter(
+    b => phases.perBase[b] === 'done' && phases.erreicht?.[b] === 'raw'
+      && !Object.hasOwn(phases.active, b) && !phases.entfernt?.has(b))
+  const karte: Record<string, Warten> = Object.create(null)
+  wartend.forEach((base, i) => { karte[base] = { art: 'correct', vor: i } })
   return karte
 }
 

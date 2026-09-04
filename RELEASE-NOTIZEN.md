@@ -31,6 +31,7 @@ hat. Lesbar, aber unschön — das ist Absicht.
 **Behoben**
 - Eine Aufnahme, die du hochlädst, während schon etwas läuft, meldet ihr Ergebnis jetzt auch dann, wenn sie erst danach an die Reihe kommt.
 - Wenn Transkribor kurz nicht antwortet, wird der laufende Vorgang nicht mehr als „fehlgeschlagen" gemeldet: die Anzeige bleibt stehen und zeigt danach das richtige Ergebnis.
+- Nach dem Hochladen siehst du jetzt auch, welche Aufnahmen noch auf ihre Korrektur warten und wie viele vor ihnen liegen, statt nur „Transkribiert — noch nicht korrigiert".
 
 ## v0.53.0 — 2026-09-03
 
