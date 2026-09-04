@@ -1349,13 +1349,13 @@ describe('korrekturSchlange — die Wartezeit im gestaffelten Lauf (#442)', () =
   const GESTAFFELT = [
     '[scope] A\tB\tC',
     '[Demo] fertig A: 12s, 30 Segmente, 1.2x Echtzeit',
-    '→ Diarisiere A …', '[done] A', 'prep: 1 Datei(en) getaggt in /x',
+    '→ Diarisiere A …', '[done] A', '→ Eingereiht A (Korrektur) …',
     '[Demo] fertig B: 9s, 21 Segmente, 1.4x Echtzeit',
-    '→ Diarisiere B …', '[done] B', 'prep: 1 Datei(en) getaggt in /x',
+    '→ Diarisiere B …', '[done] B', '→ Eingereiht B (Korrektur) …',
     '→ Korrigiere A · Block 1/4 …',
   ]
 
-  it('wer transkribiert ist und auf einen Slot wartet, steht in der Schlange', () => {
+  it('wer eingereiht ist und noch keinen Arbeiter hat, steht in der Schlange', () => {
     const p = parseJobPhases('transcribe', GESTAFFELT)
     // A wird gerade korrigiert (`active`), B wartet, C ist noch gar nicht transkribiert.
     expect(korrekturSchlange(p, 'transcribe')).toEqual({ B: { art: 'correct', vor: 0 } })
@@ -1363,56 +1363,81 @@ describe('korrekturSchlange — die Wartezeit im gestaffelten Lauf (#442)', () =
     expect(warteKarte(p, 'transcribe')).toEqual({ C: { art: 'transcribe', vor: 0 } })
   })
 
-  it('ohne Beleg fuer die Mitkorrektur entsteht KEINE Schlange', () => {
-    /* Die Gegenrichtung, und sie zaehlt genauso: mit TRANSKRIBOR_AUTOCORRECT=0 laeuft die
-       ganze KI-Phase nicht — dann druckt der Lauf weder eine Diarisierungs- noch eine
-       Vorbereitungszeile, und niemand wartet auf eine Korrektur. Eine Warteauskunft waere
-       dort eine Zusage, die keiner einloest, und zwar bis Jobende. */
+  it('ohne Uebergabe entsteht KEINE Schlange — auch wenn diarisiert wurde', () => {
+    /* Die wichtigste Gegenrichtung, und der erste Entwurf lag hier falsch. Er leitete den
+       Wartezustand aus der Diarisierungs- und der Vorbereitungszeile ab. Beides trug nicht:
+       `prep_single` druckt bei Erfolg NICHTS (die `prep:`-Zeile kommt nur aus `cmd_prep`,
+       das der gestaffelte Lauf nie ruft), und `cmd_diarize` laeuft auch OHNE Anbieter weiter
+       (`transcribe.py`, eigener Test dort). Die Anzeige haette dann bis Jobende eine
+       Korrektur versprochen, die nie kommt — schlimmer als der Zustand, den der Fix behebt,
+       denn vorher stand dort die Wahrheit. Gefunden vom gegnerischen Pruefer. */
+    const ohneAnbieter = parseJobPhases('transcribe', [
+      '[scope] A\tB',
+      '[autocorrect] KI-Phase uebersprungen — kein Anbieter eingerichtet',
+      '[Demo] fertig A: 12s, 30 Segmente, 1.2x Echtzeit',
+      '→ Diarisiere A …', '[done] A',          // laeuft, obwohl nie korrigiert wird
+    ])
+    expect(ohneAnbieter.eingereiht).toBeUndefined()
+    expect(korrekturSchlange(ohneAnbieter, 'transcribe')).toEqual({})
+
     // Die Zeilen stammen aus einem ECHTEN Lauf mit TRANSKRIBOR_AUTOCORRECT=0 (Messstand,
-    // 2026-09-04) — der erste Entwurf hatte die autocorrect-Zeile ERFUNDEN und lag daneben.
-    const ohne = parseJobPhases('transcribe', [
+    // 2026-09-04) — ein frueherer Entwurf hatte die autocorrect-Zeile ERFUNDEN.
+    const abgeschaltet = parseJobPhases('transcribe', [
       '[scope] A_erste\tB_zweite',
       '[autocorrect] uebersprungen — TRANSKRIBOR_AUTOCORRECT=0',
       '[active] A_erste',
       '[Warteschlange] fertig A_erste: 0s, 0 Segmente, Audio 0:03, 3.0x',
       '[done] A_erste',
     ])
-    expect(ohne.korrigiertMit).toBeUndefined()
-    expect(korrekturSchlange(ohne, 'transcribe')).toEqual({})
+    expect(abgeschaltet.eingereiht).toBeUndefined()
+    expect(korrekturSchlange(abgeschaltet, 'transcribe')).toEqual({})
   })
 
-  it('der Beleg ist klebrig — er ueberlebt den Wechsel der globalen Phase', () => {
-    /* `global` faellt auf null zurueck, sobald eine Datei aktiv wird (`jobPhases.ts`, die
-       Rueckgabe). Haenge man den Beleg daran, verschwaende er genau dann, wenn die erste
-       Aufnahme in die Schlange geht — also im Moment seines Gebrauchs. */
-    const p = parseJobPhases('transcribe', GESTAFFELT)
-    expect(p.global).toBeNull()
-    expect(p.korrigiertMit).toBe(true)
-  })
-
-  it('jede der beiden Zeilen belegt die Mitkorrektur fuer sich', () => {
-    // Mit TRANSKRIBOR_DIARIZE=0 gibt es keine Diarisierungszeile, die Vorbereitung laeuft
-    // trotzdem — und umgekehrt. Ein Beleg, der BEIDE verlangte, fiele in beiden Faellen aus.
-    expect(parseJobPhases('transcribe', ['[scope] A', '→ Diarisiere A …']).korrigiertMit).toBe(true)
-    expect(parseJobPhases('transcribe', ['[scope] A', 'prep: 1 Datei(en) getaggt in /x']).korrigiertMit).toBe(true)
-  })
-
-  it('eine fertig korrigierte oder gescheiterte Aufnahme wartet nicht mehr', () => {
-    /* `erreicht === 'raw'` ist die tragende Haelfte: nach `apply:` steht dort `edit`, die
-       Korrektur ist also durch. Ohne diese Bedingung stuende die Warteauskunft bis Jobende
-       auf JEDER fertigen Aufnahme — schlimmer als der Zustand, den der Fix behebt. */
-    const fertig = parseJobPhases('transcribe', [
-      '[scope] A', '[Demo] fertig A: 12s, 30 Segmente, 1.2x Echtzeit',
-      '→ Diarisiere A …', '[done] A', 'apply: A -> edit.json',
+  it('die Reihenfolge ist die der UEBERGABE, nicht die der Namen', () => {
+    /* Der Pool arbeitet nach Submit-Reihenfolge. Eine waehrend des Laufs hochgeladene
+       Aufnahme haengt der Parser per `[scope+]` ans Ende, der Erzeuger sortiert sie aber
+       ein — nach Namen sortiert stuende sie also an der falschen Stelle. Hier: `AB` kommt
+       alphabetisch VOR `B`, wurde aber danach eingereiht. (Gegnerischer Pruefer, B4.) */
+    const p = parseJobPhases('transcribe', [
+      '[scope] B', '[Demo] fertig B: 9s, 21 Segmente, 1.4x Echtzeit',
+      '→ Eingereiht B (Korrektur) …',
+      '[scope+] AB', '[Demo] fertig AB: 8s, 19 Segmente, 1.5x Echtzeit',
+      '→ Eingereiht AB (Korrektur) …',
     ])
-    expect(fertig.erreicht?.A).toBe('edit')
-    expect(korrekturSchlange(fertig, 'transcribe')).toEqual({})
+    expect(p.eingereiht).toEqual(['B', 'AB'])
+    expect(korrekturSchlange(p, 'transcribe'))
+      .toEqual({ B: { art: 'correct', vor: 0 }, AB: { art: 'correct', vor: 1 } })
+    // Nach Namen sortiert stuende hier AB vor B — die alte Ordnung waere also falsch.
+    expect(laufOrdnung(['B', 'AB'])).toEqual(['AB', 'B'])
+  })
 
-    const kaputt = parseJobPhases('transcribe', [
-      '[scope] A', '[Demo] fertig A: 12s, 30 Segmente, 1.2x Echtzeit',
-      '→ Diarisiere A …', '[done] A', '[Demo] FEHLER A: kein Anbieter',
+  it('ein doppelter Name verschiebt die Zaehlung NICHT', () => {
+    /* Der Erzeuger druckt heute keine Dubletten (`processed` laesst jede Base einmal durch),
+       der Parser ist aber eine reine Funktion und sein Vertrag gilt unabhaengig davon. Die
+       WIRKUNG eines Duplikats waere still und dauerhaft: jeder Nachfolger rutschte um eins
+       nach hinten, aus „noch 1 vor dieser" wuerde „noch 2", und nichts sähe danach aus. */
+    const p = parseJobPhases('transcribe', [
+      '[scope] A\tB',
+      '→ Eingereiht A (Korrektur) …', '→ Eingereiht B (Korrektur) …',
+      '→ Eingereiht A (Korrektur) …',
     ])
-    expect(korrekturSchlange(kaputt, 'transcribe')).toEqual({})
+    expect(p.eingereiht).toEqual(['A', 'B'])
+    expect(korrekturSchlange(p, 'transcribe')?.B).toEqual({ art: 'correct', vor: 1 })
+  })
+
+  it('drei Wege aus der Schlange, und jeder braucht seine Bedingung', () => {
+    const roh = (extra: string[]) => parseJobPhases('transcribe', [
+      '[scope] A', '[Demo] fertig A: 12s, 30 Segmente, 1.2x Echtzeit',
+      '→ Eingereiht A (Korrektur) …', ...extra,
+    ])
+    // (1) Ein Arbeiter hat sie uebernommen — ihre Pille zeigt die Phase.
+    expect(korrekturSchlange(roh(['→ Korrigiere A · Block 1/4 …']), 'transcribe')).toEqual({})
+    // (2) `apply:` hat geschrieben — die Korrektur ist durch.
+    expect(korrekturSchlange(roh(['apply: A -> edit.json']), 'transcribe')).toEqual({})
+    // (3) Sie ist gescheitert — es kommt keine Korrektur mehr.
+    expect(korrekturSchlange(roh(['[Demo] FEHLER A: kein Anbieter']), 'transcribe')).toEqual({})
+    // Und der Normalfall dazwischen: sie wartet, mit dem `done` ihrer TRANSKRIPTION.
+    expect(korrekturSchlange(roh([]), 'transcribe')).toEqual({ A: { art: 'correct', vor: 0 } })
   })
 
   it('der reine Korrekturlauf bleibt bei der alten Karte', () => {

@@ -293,6 +293,18 @@ const INVENTAR: Record<string, Eintrag> = {
     art: 'gelesen', beispiel: '[done] A', vor: ['→ Diarisiere A …'],
     notiz: 'einziges Terminal je Datei in der Diarisierungsphase; jobs.py liest es ausserdem',
   },
+  // Die Uebergabe an den Korrektur-Pool (#442) — die einzige Zeile, die das Wartefenster
+  // zwischen `fertig A:` und `→ Korrigiere A` benennt. Sie setzt KEINE Phase (es arbeitet
+  // niemand an der Datei), nur die Reihenfolge der Schlange.
+  // KEIN `basis`, und das ist eine Aussage, kein Vergessen: der Wirkungstest prueft `basis`
+  // gegen `active` und `perBase`, und in KEINEM von beiden darf diese Zeile etwas anlegen —
+  // es arbeitet niemand an der Datei, und ein Urteil hat sie auch nicht. Ihr Basisname landet
+  // in `eingereiht`, was der Vertragstest nicht ausdruecken kann. Die Wirkung selbst ist
+  // gedeckt (`fest(mit) !== fest(ohne)` serialisiert den ganzen Zustand).
+  '→ Eingereiht {} (Korrektur) …': {
+    art: 'gelesen', kind: 'transcribe', beispiel: '→ Eingereiht A (Korrektur) …',
+    vor: ['[scope] A\tB'],
+  },
   '→ Diarisiere {}{} …': { art: 'gelesen', beispiel: '→ Diarisiere A (5 Sprecher) …', basis: 'A' },
   '→ Korrigiere {}{} …': { art: 'gelesen', beispiel: '→ Korrigiere A · Block 1/4 …', basis: 'A' },
   '→ Verifiziere {}{} (Treue gegen Roh) …': { art: 'gelesen', beispiel: '→ Verifiziere A (Treue gegen Roh) …', basis: 'A' },

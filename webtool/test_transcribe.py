@@ -1442,6 +1442,54 @@ def test_transcribe_project_diarize_runs_even_if_ai_unavailable(monkeypatch, tmp
     assert "[autocorrect] KI-Phase uebersprungen — kein KI-Anbieter konfiguriert" in out
     assert (tdir / "D1.json").exists()
     assert (tdir / "D2.json").exists()
+    # #442: und GENAU DESHALB darf hier keine Einreih-Zeile stehen. Dass die Diarisierung
+    # weiterlaeuft, heisst NICHT, dass korrigiert wird — der erste Entwurf der Warteauskunft
+    # leitete den Wartezustand aus der Diarisierungszeile ab und versprach dem Nutzer damit
+    # bis Jobende eine Korrektur, die nie kommt. Die Zeile steht hinter `ai_pool is not None`
+    # und ist damit per Konstruktion wahr; dieser Wächter haelt sie dort.
+    assert "→ Eingereiht" not in out
+
+
+def test_transcribe_project_meldet_die_uebergabe_an_die_korrektur_schlange(monkeypatch, tmp_path, capsys):
+    """Die Gegenrichtung zum Waechter darueber (#442).
+
+    Zwischen `ai_pool.submit` und der Uebernahme durch einen Arbeiter nennt sonst KEINE Zeile
+    den Basisnamen — bei drei Arbeitern und zwanzig Aufnahmen warten siebzehn davon unsichtbar.
+    Diese Zeile ist die einzige Quelle der Warteauskunft in der Oberflaeche, und ihre
+    REIHENFOLGE ist die der Schlange (der ThreadPoolExecutor arbeitet nach Submit-Reihenfolge).
+    """
+    from webtool import correct, llm
+
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    monkeypatch.setattr(transcribe, "PROJEKTE", str(tmp_path))
+    monkeypatch.setattr(transcribe, "_modell", lambda *a, **kw: "fake_model")
+    monkeypatch.setattr(llm, "available", lambda: (True, ""))
+    monkeypatch.setattr(correct, "CLAUDE_PARALLEL", 2)
+    monkeypatch.setattr(correct, "diarize_enabled", lambda: False)
+    monkeypatch.setattr(correct, "cmd_diarize", lambda *a, **kw: 0)
+    monkeypatch.setattr(correct, "prep_single", lambda *a, **kw: True)
+    # Der Arbeiter selbst darf nichts tun — gemessen wird die UEBERGABE, nicht die Korrektur.
+    monkeypatch.setattr(correct, "correct_ai_single", lambda *a, **kw: True)
+
+    proj_dir = tmp_path / "SchlangeDemo"
+    (proj_dir / "audio").mkdir(parents=True)
+    (proj_dir / "transkripte").mkdir(parents=True)
+    for b in ("E1", "E2"):
+        (proj_dir / "audio" / f"{b}.mp3").write_bytes(b"audio")
+
+    monkeypatch.setattr(transcribe, "_transkribiere_datei", lambda _m, _e, af, _s, _mh, _mo: {
+        "text": "x", "duration": 1.0,
+        "segments": [{"id": 0, "start": 0.0, "end": 1.0, "text": "x"}]})
+
+    transcribe.transcribe_project("SchlangeDemo", "tiny", "de", autocorrect=True)
+    out = capsys.readouterr().out
+
+    assert "→ Eingereiht E1 (Korrektur) …" in out
+    assert "→ Eingereiht E2 (Korrektur) …" in out
+    # Die Reihenfolge ist die Zusage, nicht nur die Anwesenheit: die Oberflaeche zaehlt daraus
+    # `noch N vor dieser`. Nach Namen sortiert waere sie bei einer waehrend des Laufs
+    # hochgeladenen Aufnahme falsch.
+    assert out.index("→ Eingereiht E1") < out.index("→ Eingereiht E2")
 
 
 
