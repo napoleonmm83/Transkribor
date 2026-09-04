@@ -323,13 +323,16 @@ jobs:
   # EIGENER Job statt eines zweiten Schritts im Ruff-Job oben: die beiden Riegel sollen
   # unabhaengig rot werden koennen. Als Schritt haette ein roter ruff den Lauf beendet,
   # bevor mypy ueberhaupt startet — man saehe den zweiten Befund erst nach dem Beheben des
-  # ersten. Der Preis ist ein zusaetzlicher Laeufer; er laeuft parallel und kostet damit
-  # keine Wartezeit.
+  # ersten. Der Preis ist ein zusaetzlicher Laeufer; die Wanduhr sieht ihn nicht — GEMESSEN
+  # am ersten Lauf dieses Jobs (33857436923, PR #550): der ganze Lauf 09:15:26Z→09:17:34Z
+  # = 2 min 08 s, gesetzt von `Python (windows-latest)` (2 min 02 s). `Mypy` lief
+  # 09:15:28Z→09:15:49Z = 21 s und war 1 min 44 s vor dem Lauf fertig.
   #
   # NUR ubuntu, obwohl `pyproject.toml` die Sicht auf `platform = "win32"` festnagelt: das
   # ist kein Widerspruch, sondern der Grund. `--platform` ist eine STATISCHE Annahme, kein
-  # Laufzeitmerkmal — mypy urteilt damit auf jedem Betriebssystem ueber dieselbe Sicht.
-  # Gemessen am selben Baum mit 2.3.1 (2026-09-04):
+  # Laufzeitmerkmal — mypy urteilt damit ueber dieselbe Sicht, egal worauf es laeuft. Belegt
+  # ist das fuer die zwei Plattformen, die hier vorkommen (Windows-Entwicklerrechner,
+  # ubuntu-Laeufer), nicht fuer beliebige; gemessen am selben Baum mit 2.3.1 (2026-09-04):
   #   Standard auf Windows        68 Befunde in 19 Dateien
   #   --platform linux            70   (+2 Fehlalarme ueber `ctypes.WinDLL` in sperre.py,
   #                                     also ueber Code, der nur unter Windows laeuft)
