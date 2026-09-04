@@ -1188,8 +1188,53 @@ function entschluesselt(s: string): string {
   return s.replace(/\\(.)/g, (_, c: string) => (c === 't' ? '\t' : c === 'n' ? '\n' : c))
 }
 
-function fixtureZeilen(datei: string): string[] {
-  const quelle = fs.readFileSync(path.join(WURZEL, 'webtool', 'frontend', datei), 'utf8')
+/** Ersetzt Kommentare durch Leerzeichen — LAENGENTREU, damit die Fundstellen der
+ *  Suchausdruecke weiter in denselben Text zeigen.
+ *
+ *  Ohne diesen Schritt ist die Ernte auf zwei Wegen blind, beide unabhaengig gefunden
+ *  (gegnerischer Pruefer F7, CodeRabbit-Bot als Major):
+ *    * ein Blockkommentar zwischen Komma und `[` laesst den Aufruf nicht finden, weil dort
+ *      nur Leerraum erlaubt ist (ein Beispiel steht im Test, nicht hier: das schliessende
+ *      Kommentarzeichen beendete diesen Absatz mittendrin — einmal passiert, Parse-Fehler,
+ *      und ALLE Tests der Datei liefen daraufhin gar nicht);
+ *    * `lines: ['gueltig', // ]` beendet die Klammerzaehlung im Kommentar — alles danach
+ *      faellt aus der Ernte, und die erfundene Zeile bleibt unentdeckt.
+ *  Beide sind heute in keiner Datei vorhanden; das ist der Zustand, nicht die Zusicherung. */
+export function ohneKommentare(quelle: string): string {
+  let aus = ''
+  for (let i = 0; i < quelle.length; i++) {
+    const c = quelle[i]
+    if (c === "'" || c === '"' || c === '`') {          // Zeichenkette unangetastet lassen
+      const q = c
+      aus += c
+      for (i++; i < quelle.length && quelle[i] !== q; i++) {
+        if (quelle[i] === '\\') { aus += quelle[i] + (quelle[i + 1] ?? ''); i++ }
+        else aus += quelle[i]
+      }
+      aus += quelle[i] ?? ''
+      continue
+    }
+    if (c === '/' && quelle[i + 1] === '/') {
+      while (i < quelle.length && quelle[i] !== '\n') { aus += ' '; i++ }
+      aus += quelle[i] ?? ''                             // der Umbruch bleibt stehen
+      continue
+    }
+    if (c === '/' && quelle[i + 1] === '*') {
+      const ende = quelle.indexOf('*/', i + 2)
+      const bis = ende < 0 ? quelle.length : ende + 2
+      for (; i < bis; i++) aus += quelle[i] === '\n' ? '\n' : ' '
+      i--
+      continue
+    }
+    aus += c
+  }
+  return aus
+}
+
+/** Die Protokoll-Literale einer Quelle. Getrennt von `fixtureZeilen`, damit die zwei
+ *  Kommentar-Faelle oben einen echten Test bekommen und nicht nur eine Behauptung. */
+export function zeilenAusQuelle(roh: string): string[] {
+  const quelle = ohneKommentare(roh)
   const aus: string[] = []
   // BEIDE Quotierungen am ersten Argument: heute schreibt jede Fixture `'correct'`, aber
   // nichts erzwingt das (kein eslint/prettier im Frontend) — eine Datei mit `"correct"`
@@ -1199,6 +1244,11 @@ function fixtureZeilen(datei: string): string[] {
     aus.push(...literale(arrayAb(quelle, m.index + m[0].length - 1)))
   }
   return aus
+}
+
+function fixtureZeilen(datei: string): string[] {
+  return zeilenAusQuelle(
+    fs.readFileSync(path.join(WURZEL, 'webtool', 'frontend', datei), 'utf8'))
 }
 
 describe('Fixture-Wache', () => {
@@ -1234,11 +1284,40 @@ describe('Fixture-Wache', () => {
       + `echte Lauf druckt (kopieren, nicht erinnern), oder die Zeile in FIXTURE_BASELINE `
       + `aufnehmen und dort begruenden:\n  ${neu.join('\n  ')}`).toEqual([])
 
+    // (Weiter unten steht der Kommentar-Test — er misst die Ernte selbst, nicht die Wache.)
+
     // Behobenes macht NICHT rot — ein Riegel, der das Aufraeumen bestraft, wird umgangen.
     const veraltet = [...FIXTURE_BASELINE].filter(z => !gesehen.has(z))
     if (veraltet.length) {
       console.warn(`Fixture-Baseline haengt hinterher: ${veraltet.length} Zeile(n) kommen `
         + `nicht mehr vor — ${veraltet.map(z => JSON.stringify(z)).join(', ')}`)
     }
+  })
+
+  it('ein Kommentar macht die Ernte nicht blind', () => {
+    // Zwei Wege, auf denen eine erfundene Zeile unentdeckt bliebe — beide unabhaengig
+    // gefunden (gegnerischer Pruefer F7, CodeRabbit-Bot als Major), beide heute in keiner
+    // Datei vorhanden. Genau deshalb braucht es den Test: ein Loch, das nur niemand
+    // benutzt, ist von einem geschlossenen nicht zu unterscheiden.
+    // DIESE Datei steht selbst in FIXTURE_DATEIEN — die Wache erntet also ihren eigenen
+    // Quelltext. Ein Beispiel, das den Ausloeser woertlich enthaelt, waere damit eine
+    // Fixture mit erfundenen Zeilen und machte den Test nebenan rot (passiert, zweimal).
+    // Deshalb entsteht der Ausloeser zur LAUFZEIT und steht nirgends zusammenhaengend da.
+    const RUF = "parseJobPhases('correct'," + ' '
+    const LIN = 'lines' + ': '
+
+    expect(zeilenAusQuelle(RUF + "/* Fixture */ ['→ Erfunden A …'])"))
+      .toContain('→ Erfunden A …')
+
+    const klammerImKommentar = [
+      'const j = { ' + LIN + "['[scope] A', // ]",
+      "  '→ Erfunden B …'] }",
+    ].join('\n')
+    expect(zeilenAusQuelle(klammerImKommentar)).toContain('→ Erfunden B …')
+
+    // Gegenprobe: eine Zeichenkette, die wie ein Kommentar AUSSIEHT, bleibt Inhalt —
+    // sonst waere die Bereinigung selbst der naechste blinde Fleck.
+    expect(zeilenAusQuelle(RUF + "['apply: A -> // kein Kommentar'])"))
+      .toEqual(['apply: A -> // kein Kommentar'])
   })
 })
