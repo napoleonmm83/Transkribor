@@ -1477,11 +1477,19 @@ def test_transcribe_project_meldet_die_uebergabe_an_die_korrektur_schlange(monke
     # gedruckt werden, nicht dass jemand ansteht. Dieselbe Lehre wie „Attrappe ohne Latenz hat
     # die Luecke nicht"; gefunden von der CodeRabbit-CLI.
     freigabe = threading.Event()
+    beide_da = threading.Event()          # gesetzt, sobald BEIDE Arbeiter drin sind
+    schloss = threading.Lock()
     uebernommen = []
 
     def fake_correct(_projekt, base):
-        uebernommen.append(base)
-        freigabe.wait(10)
+        with schloss:
+            uebernommen.append(base)
+            if len(uebernommen) == 2:
+                beide_da.set()
+        # Der Deckel bleibt drin, obwohl `freigabe` immer gesetzt wird: ein Haenger ist
+        # schlimmer als eine Ausnahme — kein except faengt ihn, und KEIN Test wird davon rot,
+        # er laesst die ganze Suite auslaufen (Repo-Lehre aus #191).
+        freigabe.wait(30)
         return True
 
     monkeypatch.setattr(correct, "correct_ai_single", fake_correct)
@@ -1503,19 +1511,30 @@ def test_transcribe_project_meldet_die_uebergabe_an_die_korrektur_schlange(monke
 
     # Warten, bis alle drei uebergeben sind. `submit` blockiert nicht — die Hauptschleife
     # transkribiert und uebergibt weiter, waehrend die zwei Arbeiter haengen.
+    #
+    # `try/finally` um den ganzen Block: schlaegt eine Zusicherung fehl, saessen die beiden
+    # Arbeiter sonst ihren vollen Deckel ab, und der Fehlschlag kaeme 30 s spaeter (CodeRabbit).
     out = ""
-    frist = time.time() + 30
-    while "→ Eingereiht E3" not in out and time.time() < frist:
-        out += capsys.readouterr().out
-        time.sleep(0.05)
+    try:
+        frist = time.time() + 30
+        while "→ Eingereiht E3" not in out and time.time() < frist:
+            out += capsys.readouterr().out
+            time.sleep(0.05)
+        # Auf BEIDE Arbeiter warten, nicht auf die gedruckte Zeile: die Uebergabe von E3 sagt
+        # nichts darueber, ob die zwei vorherigen ihre Eintraege schon geschrieben haben —
+        # ohne dieses Event ist die Zusicherung darunter ein Rennen und der Test flakig
+        # (CodeRabbit; dieselbe Klasse wie der test_auth-Flake aus #558).
+        beide_da.wait(30)
 
-    # DER eigentliche Befund: E3 ist eingereiht und hat KEINEN Arbeiter. Genau dieser Zustand
-    # ist in der Oberflaeche „Wartet auf Korrektur · noch N vor dieser" — und genau ihn hat
-    # die erste Fassung dieses Tests nicht hergestellt (zwei Dateien, zwei freie Arbeiter).
-    assert "→ Eingereiht E3 (Korrektur) …" in out, "die dritte Uebergabe fehlt"
-    assert sorted(uebernommen) == ["E1", "E2"], f"unerwartet uebernommen: {uebernommen}"
-
-    freigabe.set()
+        # DER eigentliche Befund: E3 ist eingereiht und hat KEINEN Arbeiter. Genau dieser
+        # Zustand ist in der Oberflaeche „Wartet auf Korrektur · noch N vor dieser" — und genau
+        # ihn stellte die erste Fassung dieses Tests nicht her (zwei Dateien, zwei freie
+        # Arbeiter).
+        assert "→ Eingereiht E3 (Korrektur) …" in out, "die dritte Uebergabe fehlt"
+        with schloss:
+            assert sorted(uebernommen) == ["E1", "E2"], f"unerwartet uebernommen: {uebernommen}"
+    finally:
+        freigabe.set()
     lauf.join(30)
     assert not lauf.is_alive(), "der Lauf haengt"
     out += capsys.readouterr().out
