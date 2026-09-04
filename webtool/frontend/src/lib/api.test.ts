@@ -185,4 +185,40 @@ describe('Zeitlimit beim Senden (#299)', () => {
     expect(spy).toHaveBeenCalledWith(30_000)
     expect(fm.mock.calls[0][1].signal).toBeInstanceOf(AbortSignal)
   })
+
+  /* Die beiden POLL-Wege. Sie sind der teurere Fall als die Sendewege darueber: haengt der
+     Server (statt abzulehnen), kehrt die Poll-Runde nie zurueck — und weil der naechste
+     Timer erst AM ENDE einer Runde gesetzt wird, ist der Poll danach nicht langsam, sondern
+     tot. Genau der Wiederanlauf nach einem Ausfall (#382) haette dann nicht mehr gegriffen.
+     (CodeRabbit-Bot, Major; Vorab-Check „Jeder Fix hat einen Test".) */
+  it('gibt getJob ein Zeitlimit mit', async () => {
+    const spy = vi.spyOn(AbortSignal, 'timeout')
+    const fm = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ status: 'running', lines: [] }) })
+    vi.stubGlobal('fetch', fm)
+    expect(await api.getJob('job/1')).toEqual({ status: 'running', lines: [] })
+    expect(fm.mock.calls[0][0]).toBe('/api/jobs/job%2F1')
+    expect(spy).toHaveBeenCalledWith(30_000)
+    expect(fm.mock.calls[0][1].signal).toBeInstanceOf(AbortSignal)
+  })
+
+  it('gibt getVorgang ein Zeitlimit mit', async () => {
+    const spy = vi.spyOn(AbortSignal, 'timeout')
+    const fm = vi.fn().mockResolvedValue(
+      { ok: true, json: async () => ({ vorgang: 'v1', status: 'vorgemerkt', job_id: null }) })
+    vi.stubGlobal('fetch', fm)
+    expect((await api.getVorgang('v 1')).status).toBe('vorgemerkt')
+    expect(fm.mock.calls[0][0]).toBe('/api/vorgaenge/v%201')
+    expect(spy).toHaveBeenCalledWith(30_000)
+    expect(fm.mock.calls[0][1].signal).toBeInstanceOf(AbortSignal)
+  })
+
+  it('laesst den 404 von getVorgang als HttpFehler mit Status durch', async () => {
+    /* Der Unterschied, an dem die ganze #382-Trennung haengt: 404 heisst „diese Nummer kennt
+       der Server nicht (mehr)" und beendet den Poll, jeder andere Fehler heisst „der Server
+       schweigt" und haelt ihn am Leben. Ohne den STATUS am Fehler faellt beides zusammen. */
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+      { ok: false, status: 404, json: async () => ({ detail: 'kein Vorgang' }) }))
+    await expect(api.getVorgang('weg')).rejects.toMatchObject(
+      { status: 404, message: 'kein Vorgang' })
+  })
 })

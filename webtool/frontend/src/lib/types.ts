@@ -53,8 +53,9 @@ export type Project = { name: string; dateien: number; fertig: number; geaendert
  *  Zeilenpuffer genau diese Zeile verdraengt hat (#475), Gegenstueck zu `bases`/`scope`. */
 export type JobStatus = { status: 'running' | 'done' | 'error' | 'cancelled'; lines: string[]; kind?: string; bases?: string[]; gesehen?: string[]; entfernt?: string[] };
 /** `vorgang` steht nur bei `started: false` und ist dann die einzige brauchbare Auskunft:
- *  `job_id` ist in dem Fall der BLOCKER, und der gehoert ueber die Einzel-GPU-Sperre oft
- *  einem fremden Projekt (#381). Optional, weil zwei Endpunkte ueber `jobs.start` laufen
+ *  `job_id` ist in dem Fall der BLOCKER, und der KANN ueber die Einzel-GPU-Sperre einem
+ *  fremden Projekt gehoeren (#381) — wie oft, ist nicht gemessen.
+ *  Optional, weil zwei Endpunkte ueber `jobs.start` laufen
  *  (`correct_file`, `fetch_urls`) und dort gar keine Vormerkung entstehen kann. */
 /** `job_id` ist NULLBAR, und das ist kein Feinschliff: gibt `jobs.request` nach zehn
  *  Versuchen auf, liefert es `(None, False, nummer)` — dann gibt es keinen Job, wohl aber
