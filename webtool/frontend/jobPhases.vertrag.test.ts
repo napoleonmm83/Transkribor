@@ -1061,13 +1061,18 @@ describe('Vertrag: gedruckte Statuszeilen <-> jobPhases.ts (#375)', () => {
 // eingefroren; NEUES wird rot; Behobenes meldet nur, dass die Baseline hinterherhaengt —
 // ein Riegel, der das Aufraeumen bestraft, wird umgangen.
 
-/** Testdateien, deren Protokoll-Fixtures gegen die Erzeuger gehalten werden. */
-const FIXTURE_DATEIEN = [
-  'jobPhases.vertrag.test.ts',
-  'src/lib/jobPhases.test.ts',
-  'src/hooks/useActiveJob.test.tsx',
-  'src/hooks/useJobAusgang.test.tsx',
-  'src/pages/ProjectWorkspace.test.tsx',
+/** Testdateien, deren Protokoll-Fixtures gegen die Erzeuger gehalten werden — mit einem
+ *  MINDESTERTRAG je Datei. Eine Summe reicht dafuer nicht: bei `gesamt > 300` duerfen vier
+ *  der fuenf Dateien einzeln stumm werden, weil `jobPhases.test.ts` allein 297 Zeilen
+ *  traegt. Genau diese Luecke hatte die erste Fassung, und die Mutationsprobe mass die
+ *  leichte Haelfte (sie benannte ausgerechnet die grosse Datei um). Die Zahlen sind heutige
+ *  Ertraege mit Luft nach unten; wer eine Datei umbaut, zieht sie mit. */
+const FIXTURE_DATEIEN: [string, number][] = [
+  ['jobPhases.vertrag.test.ts', 4],
+  ['src/lib/jobPhases.test.ts', 200],
+  ['src/hooks/useActiveJob.test.tsx', 25],
+  ['src/hooks/useJobAusgang.test.tsx', 12],
+  ['src/pages/ProjectWorkspace.test.tsx', 6],
 ]
 
 /** tqdm kommt von faster-whisper ueber stderr, nicht aus einem `print(` in QUELLEN — es KANN
@@ -1107,6 +1112,17 @@ const FIXTURE_BASELINE = new Set<string>([
   '[fetch] geladen: Drittes Video',
   'starte…',
   'spaet',
+  // Drei Zeilen, die vorher NUR ueber den Freibrief `'  {}'` durchkamen (Review F1) — sie
+  // sind der Preis dafuer, dass er weg ist, und jede ist eine echte Abweichung:
+  // DREI fuehrende Leerzeichen, correct.py:1063 druckt ZWEI.
+  '   Interview: 540 Segmente → 4 Blöcke à max. 150',
+  // Der Erzeuger schreibt `\t` als ESCAPE im Python-Quelltext; das INVENTAR erntet die
+  // Form woertlich und traegt darum zwei Zeichen, wo die Fixture einen echten Tabulator
+  // hat. Die Form kann diese Zeilen also nie treffen — eine Eigenschaft der Ernte, keine
+  // der Fixture. Als eigenes Issue festgehalten statt hier still geflickt.
+  '  [diagnose] limit\tKontingent\tspaeter',
+  '  [diagnose] ratelimit\tAnfrage-Limit erreicht (Rate Limit)\tDer Anbieter bittet um '
+    + 'eine kurze Pause. Bitte in 1–2 Minuten erneut auf „Korrigieren“ klicken.',
 ])
 
 /** Die Form als PRAEFIX der Zeile, Platzhalter frei. Praefix, weil ein INVENTAR-Schluessel
@@ -1118,6 +1134,20 @@ const FIXTURE_BASELINE = new Set<string>([
 function alsPraefix(form: string): RegExp {
   const teile = form.split('{}').map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
   return new RegExp('^' + teile.join('[^\\n]*'))
+}
+
+/** Eine Form, deren erstes festes Stueck nur aus Leerraum besteht, stellt ein Zertifikat
+ *  ueber JEDE eingerueckte Zeile aus: `'  {}'` (correct.py druckt so) wird zu `^  [^\n]*`,
+ *  und damit hat `'  Korrektur von A ist explodiert'` einen "Erzeuger". Betroffen waere die
+ *  ganze eingerueckte Formenfamilie aus correct.py — also genau die Blockzeilen, die die
+ *  Baseline fuellen. Der Docstring von `alsPraefix` wehrt dieses Problem fuer `{}%| {}`
+ *  ausdruecklich ab und hatte es hier uebersehen (gegnerischer Review, F1, gemessen).
+ *
+ *  Sie fliegen deshalb aus der Musterliste. Der Preis steht in der Baseline: die Zeilen,
+ *  die NUR ueber sie passten, brauchen dort einen Eintrag — lieber ein sichtbarer Eintrag
+ *  als ein unsichtbarer Freibrief. */
+function traegtEinFestesStueck(form: string): boolean {
+  return form.split('{}')[0].trim() !== ''
 }
 
 /** Das Array ab `pos` (zeigt auf `[`) bis zur passenden `]`. Ein Regex reicht hier NICHT:
@@ -1169,27 +1199,32 @@ function fixtureZeilen(datei: string): string[] {
 
 describe('Fixture-Wache', () => {
   it('jede Protokollzeile in einer Fixture hat einen Erzeuger', () => {
-    const muster = Object.keys(INVENTAR).map(alsPraefix)
+    const muster = Object.keys(INVENTAR).filter(traegtEinFestesStueck).map(alsPraefix)
     const gesehen = new Set<string>()
     const neu: string[] = []
-    let gesamt = 0
+    const duenn: string[] = []
 
-    for (const datei of FIXTURE_DATEIEN) {
+    for (const [datei, mindestens] of FIXTURE_DATEIEN) {
+      let ausDieser = 0
       for (const roh of fixtureZeilen(datei)) {
         const zeile = entschluesselt(roh)
         if (zeile.trim() === '' || FREMDZEILE.test(zeile)) continue
-        gesamt++
+        ausDieser++
         if (muster.some(m => m.test(zeile))) continue
         gesehen.add(zeile)
         if (!FIXTURE_BASELINE.has(zeile)) neu.push(`${datei}: ${JSON.stringify(zeile)}`)
       }
+      // Der Riegel gegen das eigene Schweigen, JE DATEI: eine kaputte Ernte (verschobene
+      // Bauform, umbenannte Datei) sieht von aussen aus wie ein sauberer Baum. Als Summe
+      // ueber alle Dateien traegt ihn allein die groesste — die vier uebrigen duerften
+      // stumm werden, ohne dass etwas rot wird.
+      if (ausDieser < mindestens) duenn.push(`${datei}: ${ausDieser} statt >= ${mindestens}`)
     }
 
-    // Der Riegel gegen das eigene Schweigen: eine kaputte Ernte (verschobene Bauform,
-    // umbenannte Datei) sieht von aussen genauso aus wie ein sauberer Baum. Erst die Zahl
-    // neben der Eigenschaft trennt "nichts gefunden" von "nichts angesehen".
     expect(muster.length).toBeGreaterThan(50)
-    expect(gesamt).toBeGreaterThan(300)
+    expect(duenn, `zu wenig geerntet — die Ernte passt nicht mehr auf die Bauform der `
+      + `Fixtures, und eine leere Ernte sieht aus wie ein sauberer Baum:\n  `
+      + `${duenn.join('\n  ')}`).toEqual([])
 
     expect(neu, `Fixture-Zeile(n) ohne Erzeuger-Form — im INVENTAR nachsehen, welche Form der `
       + `echte Lauf druckt (kopieren, nicht erinnern), oder die Zeile in FIXTURE_BASELINE `
