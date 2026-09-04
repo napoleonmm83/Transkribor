@@ -40,13 +40,16 @@ export function useOsFortschritt(): void {
       // schwersten — die OS-Meldung existiert fuer die Person, die NICHT hinsieht, und genau
       // die ist die Zielperson von #376.
       const a = ausgang(j)
-      // Ohne diese Zeile faellt jeder unbekannte Ausgang durch die Ternary-Kette bis zum
-      // Schluss und wird als „fehlgeschlagen" GEMELDET — als Systembenachrichtigung, also an
+      // `unbekannt` braucht einen EIGENEN Zweig, sonst faellt es durch die Kette bis zum
+      // Schluss und wird als „fehlgeschlagen" gemeldet — als Systembenachrichtigung, also an
       // die Person, die gerade nicht hinsieht. Das ist die Falschmeldung aus #382 in ihrer
-      // teuersten Form.
-      if (a.art === 'unbekannt') continue
+      // teuersten Form. Geschwiegen wird hier trotzdem nicht: bei einem geordneten Neustart
+      // ist der Lauf wirklich abgebrochen, und ausgerechnet diese Person erfuehre es sonst
+      // gar nicht.
       const [wie, body] = a.art === 'erfolg'
         ? ['fertig', 'Das Ergebnis liegt im Projekt.']
+        : a.art === 'unbekannt'
+        ? ['Ausgang unbekannt', 'Die Verbindung zum Lauf ist abgerissen.']
         : a.art === 'abbruch'
           ? ['abgebrochen', 'Der Lauf wurde auf deinen Wunsch beendet.']
           : a.art === 'teil'

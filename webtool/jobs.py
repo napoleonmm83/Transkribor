@@ -20,7 +20,7 @@ _active = {}               # (project, kind) -> job_id (Dedupe: je Art einer pro
 #
 # Bis #381 war das ein `set`. Die Umstellung auf ein dict laesst JEDE bestehende Zusicherung
 # buchstabengleich: `key in _pending` (request) und die beiden Iterationen in
-# `transcribe_laeuft_oder_wartet` und `_nach_ende` lesen bei einem dict dieselben Schluessel
+# `transcribe_laeuft_oder_wartet` und `_run` lesen bei einem dict dieselben Schluessel
 # wie bei einem set. Aus `discard(key)` wird `pop(key, None)` — dieselbe Zusicherung
 # („weg, und es ist kein Fehler, wenn er schon weg war"), samt dem Leck-Riegel aus #417.
 # Der Wert ist neu und wird von der Sperrlogik nirgends gelesen.

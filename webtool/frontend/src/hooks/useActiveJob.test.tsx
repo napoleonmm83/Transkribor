@@ -1,15 +1,19 @@
 import { StrictMode, useEffect } from 'react'
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, waitFor, fireEvent } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/react'
 import { JobProvider, mergePhases, useActiveJob, type Job } from './useActiveJob'
 import { parseJobPhases } from '@/lib/jobPhases'
-import type { JobPhases } from '@/lib/types'
+import type { JobPhases, Vorgang } from '@/lib/types'
 import * as api from '@/lib/api'
 
 vi.mock('@/lib/api')
+const toastMock = vi.hoisted(() => Object.assign(vi.fn(),
+  { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn(), dismiss: vi.fn(), loading: vi.fn() }))
+vi.mock('sonner', () => ({ toast: toastMock, Toaster: () => null }))
 
 function Probe({ beiSettled }: { beiSettled?: (beendet: Job[]) => void } = {}) {
-  const { jobs, adopt, onSettled } = useActiveJob()
+  const { jobs, adopt, verfolge, onSettled } = useActiveJob()
+  ;(globalThis as unknown as { __verfolge: typeof verfolge }).__verfolge = verfolge
   const phases = mergePhases(jobs.filter(j => j.status === 'running'))
   // GENAU wie ProjectWorkspace.tsx: der Verbraucher registriert sich in einem Effekt.
   useEffect(() => (beiSettled ? onSettled(beiSettled) : undefined), [onSettled, beiSettled])
@@ -127,6 +131,54 @@ describe('useActiveJob', () => {
     await waitFor(() => expect(settled).toHaveBeenCalled())
     const beendet = settled.mock.calls.at(-1)![0] as Job[]
     expect(beendet[0].status).toBe('done')
+  })
+
+  /** Die Vormerkungs-Haelfte von #381 hatte NULL Abdeckung: sechs Mutationen (adopt weg,
+   *  404-Ausstieg weg, aufgegeben-Toast weg, `verfolge` in useJob weg, `vorgang` in
+   *  MaterialDialog weg, `verfolge` in ProjectWorkspace weg) liessen alle 897 Tests gruen —
+   *  das ganze Feature war abklemmbar. Gefunden vom gegnerischen Pruefer. */
+  const holeVerfolge = () =>
+    (globalThis as unknown as { __verfolge: (n: string) => void }).__verfolge
+
+  // Richtig getypt statt per Cast durchgereicht: ein `as never` haette hier genau die
+  // Zusicherung stillgelegt, die der Test prueft — dass die Antwortform stimmt.
+  const vg = (status: Vorgang['status'], job_id: string | null): Vorgang =>
+    ({ vorgang: 'vg1', status, job_id, project: 'Demo', kind: 'transcribe', base: null })
+
+  it('verfolgt eine Vormerkung und ADOPTIERT den Nachlauf, sobald er existiert (#381)', async () => {
+    // Der Kern: die Oberflaeche kennt nur die Nummer — die Job-Kennung des Nachlaufs entsteht
+    // erst spaeter und wird ihr nie gemeldet. Ohne diesen Weg findet sie ihn erst ueber den
+    // 4-Sekunden-Sammelabruf, und ein Nachlauf, der vorher stirbt, meldet nichts.
+    vi.mocked(api.getVorgang)
+      .mockResolvedValueOnce(vg('vorgemerkt', null))
+      .mockResolvedValue(vg('gestartet', 'nachlauf1'))
+    vi.mocked(api.getJob).mockResolvedValue({ status: 'running', lines: [] })
+    render(<JobProvider intervalMs={5}><Probe /></JobProvider>)
+    await act(async () => { holeVerfolge()('vg1') })
+    // Der adoptierte Nachlauf taucht als laufender Job auf — vorher war die Liste leer.
+    await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('running'))
+  })
+
+  it('hoert auf zu fragen, wenn der Server die Nummer nicht kennt', async () => {
+    // Ohne diesen Ausstieg fragt die Oberflaeche die Nummer fuer die Lebensdauer des Tabs
+    // alle 1,5 s ab — ein Dauerpoll auf etwas, das nie wieder antwortet.
+    vi.mocked(api.getVorgang).mockRejectedValue(nichtGefunden())
+    render(<JobProvider intervalMs={5}><Probe /></JobProvider>)
+    await act(async () => { holeVerfolge()('vg1') })
+    await waitFor(() => expect(vi.mocked(api.getVorgang)).toHaveBeenCalled())
+    const bisher = vi.mocked(api.getVorgang).mock.calls.length
+    await act(async () => { await new Promise(r => setTimeout(r, 60)) })   // 12 Takte
+    expect(vi.mocked(api.getVorgang).mock.calls.length).toBe(bisher)
+  })
+
+  it('sagt an, wenn die Vormerkung aufgegeben wurde', async () => {
+    // Dieser Ausgang war bisher NUR eine stderr-Zeile: der Nutzer hat hochgeladen und haette
+    // nie erfahren, dass daraus nichts wird.
+    vi.mocked(api.getVorgang).mockResolvedValue(vg('aufgegeben', null))
+    render(<JobProvider intervalMs={5}><Probe /></JobProvider>)
+    await act(async () => { holeVerfolge()('vg1') })
+    await waitFor(() => expect(toastMock.warning).toHaveBeenCalled())
+    expect(String(toastMock.warning.mock.calls[0][0])).toContain('eingereiht')
   })
 
   it('pollt nach dem Terminal-Status nicht weiter', async () => {

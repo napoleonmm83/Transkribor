@@ -36,9 +36,17 @@ export function useJobAusgang(): void {
       const a = ausgang(j)
 
       if (a.art === 'unbekannt') {
-        // Nichts melden. Der Server kennt die Kennung nicht mehr; ueber den Ausgang wissen
-        // wir nichts, und der Sammelzweig unten haette daraus „undefined von undefined"
-        // gemacht (#382).
+        // Der DRITTE Weg zwischen Luege und Stille. Eine erste Fassung schwieg hier ganz —
+        // mit der Begruendung, ein „fehlgeschlagen" waere ueber einen sauber gelaufenen Job
+        // falsch. Die Begruendung traegt nicht: bei einem geordneten Neustart raeumt der
+        // Lifespan die Laeufe selbst ab (`app.py`, `cancel_all`), der Lauf ist also wirklich
+        // tot. Schweigen liesse den Nutzer mit einer unverarbeiteten Aufnahme zurueck, ohne
+        // ein Wort. Diese Meldung behauptet keinen Fehlschlag und verschweigt auch nichts.
+        toast.warning(`${kopf}: Ausgang unbekannt`, {
+          duration: 6000,
+          description: 'Die Verbindung zum Lauf ist abgerissen. Beim Beenden von Transkribor '
+                     + 'wird ein laufender Vorgang mit abgebrochen.',
+        })
         continue
       }
       if (a.art === 'abbruch') {

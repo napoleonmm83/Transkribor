@@ -56,6 +56,25 @@ describe('MaterialDialog', () => {
     expect(api.uploadAudio).toHaveBeenNthCalledWith(2, 'Demo', expect.any(File), 'en', undefined, undefined)
   })
 
+  it('reicht die Vorgangsnummer weiter, wenn der Slot belegt war (#381)', async () => {
+    /* Hier wird das Antwortobjekt NEU gebaut (`{ job_id, started, … }`) — was diese Zeile
+     * nicht abschreibt, kommt beim Aufrufer nie an. Genau daran haette der ganze
+     * #381-Upload-Weg still gehangen: das Feld ist optional, ein Weglassen kompiliert, und
+     * kein Test sah es (gegnerischer Pruefer, Befund T1).
+     *
+     * Bei belegtem Slot ist `job_id` die Kennung des BLOCKERS und damit wertlos — die Nummer
+     * ist die einzige brauchbare Auskunft. */
+    const onFertig = vi.fn()
+    vi.mocked(api.uploadAudio).mockResolvedValue(
+      { base: 'a', file: 'a.mp3', job_id: 'fremder_blocker', started: false, vorgang: 'vg1' })
+    render(<MaterialDialog {...basis} onFertig={onFertig} vorbelegteDateien={[datei('a.mp3')]} />)
+    fireEvent.click(screen.getByRole('button', { name: /Weiter/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Weiter/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Los geht/ }))
+    await waitFor(() => expect(onFertig).toHaveBeenCalled())
+    expect(onFertig.mock.calls[0][0]).toMatchObject({ started: false, vorgang: 'vg1' })
+  })
+
   it('erklaert EINMAL, warum die Sprache nicht waehlbar ist (#305)', () => {
     /* Der `title` an der Zeile erreicht nur die Maus, und bei zehn Aufnahmen staende
        zehnmal „Projekt-Standard" ohne Grund daneben. Der Satz gehoert deshalb ueber die

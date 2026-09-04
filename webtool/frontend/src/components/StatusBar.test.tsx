@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor, act } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { StatusBar } from './StatusBar'
-import { JobProvider } from '@/hooks/useActiveJob'
+import { JobProvider, useActiveJob } from '@/hooks/useActiveJob'
 import { ThemeProvider } from './ThemeProvider'
 import * as api from '@/lib/api'
 import type { UpdateZustand } from '@/lib/types'
@@ -11,6 +11,14 @@ vi.mock('@/lib/api')
 
 function zeigen() {
   return render(<MemoryRouter><JobProvider><StatusBar /></JobProvider></MemoryRouter>)
+}
+
+/** Reicht `adopt` nach draussen — die Statuszeile hat selbst keinen Weg, einen Lauf
+ *  anzunehmen. Dieselbe Bruecke wie in `useJobAusgang.test.tsx`. */
+function Sonde() {
+  const { adopt } = useActiveJob()
+  ;(globalThis as unknown as { __adopt: typeof adopt }).__adopt = adopt
+  return null
 }
 
 /** Electron-Bruecke nachbilden. Im Browser fehlt sie — genau der Unterschied, den die
@@ -32,6 +40,30 @@ function bruecke(zustand: UpdateZustand) {
 describe('StatusBar', () => {
   beforeEach(() => vi.resetAllMocks())
   afterEach(() => { delete (window as unknown as { transkribor?: unknown }).transkribor })
+
+  it('sagt an, wenn der Server schweigt — statt weiter „laeuft" zu behaupten (#382)', async () => {
+    /* Seit #382 gilt ein Lauf bei ausbleibenden Antworten bewusst NICHT mehr als
+       gescheitert — er bleibt im Poll, damit die Rueckkehr des Servers den echten Ausgang
+       liefert. Der Nebeneffekt waere, dass die Anzeige unbegrenzt „laeuft" behauptet und der
+       Nutzer einen Absturz erst beim Neuladen merkt.
+
+       Beide Richtungen im Test: der Text MUSS auf die fehlende Verbindung wechseln, und er
+       darf NICHT „Bereit" sagen — „Bereit" waere die alte Falschmeldung in still. */
+    vi.mocked(api.getHardware).mockResolvedValue(
+      { device: 'cuda', name: 'RTX 5080', torch_ok: true, asr: 'cuda' })
+    vi.mocked(api.getJob).mockRejectedValue(new Error('net'))
+    render(
+      <MemoryRouter>
+        <JobProvider intervalMs={5}><Sonde /><StatusBar /></JobProvider>
+      </MemoryRouter>,
+    )
+    await act(async () => {
+      (globalThis as unknown as { __adopt: (i: string, p: string, k: string) => void })
+        .__adopt('j1', 'Alpha', 'correct')
+    })
+    await waitFor(() => expect(screen.getByText(/Keine Verbindung/)).toBeInTheDocument())
+    expect(screen.queryByText('Bereit')).not.toBeInTheDocument()
+  })
 
   it('sagt "Bereit", wenn nichts laeuft', async () => {
     vi.mocked(api.getHardware).mockResolvedValue({ device: 'cuda', name: 'RTX 5080', torch_ok: true, asr: 'cuda' })

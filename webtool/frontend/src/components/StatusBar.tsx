@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Settings } from 'lucide-react'
 import { ThemeToggle } from './ThemeToggle'
-import { useActiveJob, zeigtLauf } from '@/hooks/useActiveJob'
+import { useActiveJob, zeigtLauf, UNERREICHBAR } from '@/hooks/useActiveJob'
 import { useUpdate } from '@/hooks/useUpdate'
 import { getHardware } from '@/lib/api'
 import { KIND_LABEL } from '@/lib/jobPhases'
@@ -58,10 +58,18 @@ export function StatusBar() {
   useEffect(() => { getHardware().then(h => setRechenwerk(h.asr)).catch(() => {}) }, [])
 
   const laufend = jobs.filter(j => zeigtLauf(j.status))
+  // „Es laeuft" und „wir hoeren gerade nichts" sind zwei verschiedene Aussagen, und seit
+  // #382 faellt die zweite sonst ganz weg: ein stiller Server laesst die Anzeige unbegrenzt
+  // „laeuft" behaupten, weil der Lauf bewusst NICHT mehr als gescheitert gilt. Ohne diese
+  // Zeile merkt der Nutzer einen Absturz erst beim Neuladen. Sie loest sich von selbst auf,
+  // sobald der Server antwortet — kein Toast, weil der Zustand voruebergehend ist.
+  const stillerServer = jobs.some(j => j.status === UNERREICHBAR)
   const text = laufend.length === 0
     ? 'Bereit'
-    : `${laufend.length} ${laufend.length === 1 ? 'Lauf' : 'Läufe'} · ` +
-      laufend.map(j => `${j.project}: ${KIND_LABEL[j.kind] ?? j.kind}`).join(' · ')
+    : stillerServer
+      ? 'Keine Verbindung zu Transkribor — der Lauf läuft vermutlich weiter'
+      : `${laufend.length} ${laufend.length === 1 ? 'Lauf' : 'Läufe'} · ` +
+        laufend.map(j => `${j.project}: ${KIND_LABEL[j.kind] ?? j.kind}`).join(' · ')
 
   const hinweis = updateHinweis(zustand)
   // Electron kennt die Version der LAUFENDEN App; im Browser gibt es die Bruecke nicht,

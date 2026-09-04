@@ -54,8 +54,8 @@ export type Project = { name: string; dateien: number; fertig: number; geaendert
 export type JobStatus = { status: 'running' | 'done' | 'error' | 'cancelled'; lines: string[]; kind?: string; bases?: string[]; gesehen?: string[]; entfernt?: string[] };
 /** `vorgang` steht nur bei `started: false` und ist dann die einzige brauchbare Auskunft:
  *  `job_id` ist in dem Fall der BLOCKER, und der gehoert ueber die Einzel-GPU-Sperre oft
- *  einem fremden Projekt (#381). Optional, weil vier der sechs Startwege ueber `jobs.start`
- *  laufen und dort gar keine Vormerkung entstehen kann. */
+ *  einem fremden Projekt (#381). Optional, weil zwei Endpunkte ueber `jobs.start` laufen
+ *  (`correct_file`, `fetch_urls`) und dort gar keine Vormerkung entstehen kann. */
 export type StartJob = { job_id: string; started: boolean; vorgang?: string | null };
 /** Zustand einer Vormerkung (`GET /api/vorgaenge/{nummer}`). `job_id` steht erst bei
  *  `gestartet` — vorher gibt es den Nachlauf schlicht noch nicht. */

@@ -285,6 +285,45 @@ def test_transcribe_invalid_name_400(client):
     assert client.post("/api/projects/a:b/transcribe").status_code == 400
 
 
+def test_start_liefert_die_vorgangsnummer_bei_belegtem_slot(client, monkeypatch):
+    """Der ganze Sinn von #381 haengt an DIESER Antwort.
+
+    Bei belegtem Slot ist `job_id` die Kennung des BLOCKERS — nutzlos, weil der ueber die
+    Einzel-GPU-Sperre einem fremden Projekt gehoeren kann. Ohne die Nummer daneben erfaehrt die
+    Oberflaeche nie, was aus dem Nachlauf wurde.
+
+    Der Test ist die Gegenprobe zu `test_transcribe_starts_job`, der nur den `None`-Fall
+    prueft: ein hart verdrahtetes `"vorgang": None` in allen vier Endpunkten liess DEN gruen."""
+    import webtool.jobs as jobs_mod
+    monkeypatch.setattr(jobs_mod, "request",
+                        lambda *a, **k: ("blocker_eines_fremden_projekts", False, "vg_abc123"))
+    r = client.post("/api/projects/Demo/transcribe")
+    assert r.status_code == 200
+    assert r.json() == {"job_id": "blocker_eines_fremden_projekts", "started": False,
+                        "vorgang": "vg_abc123"}
+
+
+def test_vorgang_endpunkt_liefert_den_zustand(client, monkeypatch):
+    import webtool.jobs as jobs_mod
+    monkeypatch.setattr(jobs_mod, "vorgang",
+                        lambda n: {"vorgang": n, "status": "gestartet", "job_id": "nachlauf7",
+                                   "project": "Demo", "kind": "transcribe", "base": None}
+                        if n == "vg_abc123" else None)
+    r = client.get("/api/vorgaenge/vg_abc123")
+    assert r.status_code == 200
+    assert r.json()["status"] == "gestartet" and r.json()["job_id"] == "nachlauf7"
+
+
+def test_vorgang_endpunkt_404_bei_unbekannter_nummer(client, monkeypatch):
+    """404 ist hier kein Fehler, sondern die Auskunft „kenne ich nicht (mehr)" — das Frontend
+    hoert daraufhin auf zu fragen. Ohne diesen Ausstieg fragt es fuer die Lebensdauer des Tabs
+    weiter."""
+    import webtool.jobs as jobs_mod
+    monkeypatch.setattr(jobs_mod, "vorgang", lambda n: None)
+    r = client.get("/api/vorgaenge/gibtesnicht")
+    assert r.status_code == 404
+
+
 def test_correct_starts_job(client, monkeypatch, mit_anbieter):
     calls = {}
     def fake_start(project, cmd, cwd, kind, then=None, env=None):
