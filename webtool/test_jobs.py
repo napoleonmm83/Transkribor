@@ -449,6 +449,31 @@ def test_deckel_wirft_NIE_eine_offene_vormerkung_weg():
         jobs._vorgaenge.update(sicherung)
 
 
+def test_deckel_nimmt_den_alias_mit_seinem_ziel():
+    """Ein Alias ist `vorgemerkt` und damit im Deckel immun — sein ZIEL wird `gestartet` und
+    ist raeumbar. Bliebe er allein zurueck, zeigte er ins Leere: `vorgang()` faende nichts,
+    der Endpunkt antwortete 404, und die Oberflaeche liesse die Nummer fallen. Also genau der
+    stille Ausfall, gegen den die Nummer gebaut ist — durch die Hintertuer des Deckels.
+    (CodeRabbit-Bot, major.)"""
+    sicherung = dict(jobs._vorgaenge)
+    try:
+        jobs._vorgaenge.clear()
+        jobs._vorgaenge["ziel"] = _vorgang_eintrag("ziel", "gestartet")
+        jobs._vorgaenge["zeiger"] = {**_vorgang_eintrag("zeiger"), "alias": "ziel"}
+        for i in range(jobs._VORGAENGE_MAX + 5):
+            jobs._vorgaenge[f"n{i}"] = _vorgang_eintrag(f"n{i}", "gestartet")
+        with jobs._lock:
+            jobs._prune_locked()
+        # Entweder beide sind weg oder beide sind da — ein Zeiger ohne Ziel darf es nicht geben.
+        assert ("ziel" in jobs._vorgaenge) == ("zeiger" in jobs._vorgaenge), \
+            "Alias und Ziel sind auseinandergefallen"
+        if "zeiger" in jobs._vorgaenge:
+            assert jobs.vorgang("zeiger") is not None
+    finally:
+        jobs._vorgaenge.clear()
+        jobs._vorgaenge.update(sicherung)
+
+
 def test_popen_startet_eigene_sitzung_auf_posix(monkeypatch):
     """Ohne eigene Prozessgruppe erreicht der Abbruch die Kinder nicht."""
     monkeypatch.setattr(jobs.os, "name", "posix")

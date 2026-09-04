@@ -263,13 +263,24 @@ export async function fetchUrls(project: string, urls: string[],
     }))
   } catch (e) { throw sendeFehler(e, 'der Import ist möglicherweise trotzdem gestartet') }
 }
+/** BEIDE Abfragen tragen ein Zeitlimit, und das ist kein Feinschliff.
+ *
+ *  Ein Server, der nicht ABLEHNT, sondern HAENGT, hielt die jeweilige Poll-Runde sonst
+ *  unbegrenzt offen: `Promise.all` bzw. die Vorgangs-Schleife kehrten nie zurueck, der
+ *  naechste Timer wurde nie gesetzt — der Poll war damit tot, und ausgerechnet der
+ *  Wiederanlauf nach einem Ausfall (#382) haette nicht mehr gegriffen. Mit dem Limit wird
+ *  daraus ein gewoehnlicher Fehlversuch: er zaehlt, und die naechste Runde ist geplant.
+ *
+ *  Von der CodeRabbit-CLI, dem Bot und dem gegnerischen Pruefer unabhaengig benannt. */
 export async function getJob(jobId: string): Promise<JobStatus> {
-  return jn(await fetch(`/api/jobs/${enc(jobId)}`))
+  return jn(await fetch(`/api/jobs/${enc(jobId)}`,
+    { signal: AbortSignal.timeout(LADE_ZEITLIMIT_MS) }))
 }
 /** Der Zustand einer Vormerkung (#381). Wirft wie `getJob` einen `HttpFehler` mit Status —
  *  ein 404 heisst hier NICHT „Server weg", sondern „diese Nummer kennt er nicht (mehr)". */
 export async function getVorgang(nummer: string): Promise<Vorgang> {
-  return jn(await fetch(`/api/vorgaenge/${enc(nummer)}`))
+  return jn(await fetch(`/api/vorgaenge/${enc(nummer)}`,
+    { signal: AbortSignal.timeout(LADE_ZEITLIMIT_MS) }))
 }
 export async function cancelJob(jobId: string): Promise<void> {
   await post(`/api/jobs/${enc(jobId)}/cancel`)
