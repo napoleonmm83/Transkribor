@@ -285,22 +285,23 @@ export type JobPhases = {
    *  Gemessen: das Loeschen EINER fertigen Aufnahme verlaengerte die Warteschlange aller
    *  uebrigen um eins, dauerhaft. Undefined, solange nichts geloescht wurde. */
   entfernt?: Set<string>;
-  /** Belegt dieser Lauf, dass er mitkorrigiert? (#442)
+  /** Die Aufnahmen, die der Lauf an die Korrektur-Schlange uebergeben hat — IN DER
+   *  REIHENFOLGE DER UEBERGABE (#442).
    *
-   *  Ein `transcribe`-Lauf korrigiert per Default selbst mit, aber `TRANSKRIBOR_AUTOCORRECT=0`
-   *  schaltet die ganze KI-Phase ab — dann wartet niemand auf eine Korrektur, und eine
-   *  Warteauskunft waere eine Zusage, die keiner einloest.
+   *  Quelle ist die Zeile `→ Eingereiht {base} (Korrektur) …`, die `transcribe.py`
+   *  unmittelbar hinter `ai_pool.submit` druckt. Sie ist per Konstruktion wahr: ohne
+   *  Anbieter gibt es keinen Pool und also keine Zeile.
    *
-   *  Beleg ist POSITIV und kommt aus Zeilen, die der Parser ohnehin liest: druckt der Lauf
-   *  fuer irgendeine Aufnahme eine Diarisierungs- oder Vorbereitungszeile, laeuft seine
-   *  KI-Phase. Beide stehen je Aufnahme VOR der Uebergabe an die Poolschlange
-   *  (`transcribe.py`: `cmd_diarize` und `prep_single` vor `ai_pool.submit`) — der Beleg
-   *  liegt also immer vor der ersten Wartezeit, die er rechtfertigen soll.
+   *  Die REIHENFOLGE ist tragend, nicht Beiwerk — der ThreadPoolExecutor arbeitet nach
+   *  Submit-Reihenfolge. Sie aus den Basisnamen zu sortieren (wie `laufOrdnung` es fuer die
+   *  Transkriptions-Schlange tut) waere hier falsch: eine waehrend des Laufs hochgeladene
+   *  Aufnahme wird vom Erzeuger einsortiert, steht in der Schlange aber hinten.
    *
-   *  NICHT ueber die `[autocorrect]`-Zeile des Gegenfalls: die Marke haette damit erstmals
-   *  eine Bedeutung fuer die Oberflaeche und muesste nach `paths.RESERVIERTE_NAMEN` — ein
-   *  bestehendes Projekt dieses Namens koennte danach keinen Lauf mehr starten. */
-  korrigiertMit?: boolean;
+   *  Ein frueherer Entwurf leitete den Zustand aus der Diarisierungs- und der
+   *  Vorbereitungszeile ab und lag in BEIDE Richtungen daneben: `prep_single` druckt bei
+   *  Erfolg nichts, und die Diarisierung laeuft auch ohne Anbieter. Steht hier, damit es
+   *  niemand ein zweites Mal versucht. */
+  eingereiht?: string[];
   /** Basisname -> was daran gerade laeuft. Mehrere Eintraege, weil correct parallel arbeitet. */
   active: Record<string, FileWork>;
   perBase: Record<string, FileState>;

@@ -903,6 +903,34 @@ def transcribe_project(name, model, language, only=None, autocorrect: bool = Fal
                         # 2. Datei sofort parallel an den Cloud-KI-Threadpool übergeben.
                         if ai_pool is not None:
                             fut = ai_pool.submit(_correct.correct_ai_single, name, base)
+                            # Die EINZIGE Zeile, die das Wartefenster benennt (#442). Zwischen
+                            # diesem Submit und dem `[active]` des Arbeiters druckt sonst nichts
+                            # den Basisnamen — bei drei Arbeitern und zwanzig Aufnahmen warten
+                            # siebzehn davon unsichtbar, und die Dateiliste zeigt derweil den
+                            # Ruhezustand („Transkribiert — noch nicht korrigiert"): wahr, aber
+                            # keine Warteauskunft.
+                            #
+                            # HIER und nirgends sonst, weil die Zeile nur so per Konstruktion
+                            # wahr ist. Der erste Entwurf leitete den Wartezustand aus der
+                            # Diarisierungs- und der Vorbereitungszeile ab und lag in BEIDE
+                            # Richtungen daneben: `prep_single` druckt bei Erfolg gar nichts
+                            # (die `prep:`-Zeile kommt nur aus `cmd_prep`, das dieser Lauf nie
+                            # ruft), und `cmd_diarize` laeuft auch OHNE Anbieter weiter — dann
+                            # haette die Oberflaeche eine Korrektur versprochen, die nie kommt.
+                            # Steht die Zeile dagegen hinter dem `ai_pool is not None`, gibt es
+                            # sie genau dann, wenn wirklich jemand in der Schlange steht.
+                            #
+                            # Und ihre REIHENFOLGE ist die der Schlange: der ThreadPoolExecutor
+                            # arbeitet nach Submit-Reihenfolge. Die Oberflaeche muss sie damit
+                            # nicht mehr aus den Dateinamen raten — was bei einer waehrend des
+                            # Laufs hochgeladenen Aufnahme falsch waere.
+                            #
+                            # Gewoehnliche Fortschrittszeile, KEINE Marke in eckigen Klammern:
+                            # eine Marke kostete einen Eintrag in `paths.RESERVIERTE_NAMEN`, und
+                            # ein bestehendes Projekt dieses Namens koennte danach keinen Lauf
+                            # mehr starten. Eingetragen im INVENTAR von
+                            # `webtool/frontend/jobPhases.vertrag.test.ts`.
+                            print(f"→ Eingereiht {base} (Korrektur) …", flush=True)
                             ai_futures.append((base, fut))
                             # `add_done_callback` feuert auf JEDEM Ausgang, auch auf einer
                             # Ausnahme — sonst bliebe die Aufnahme bis Jobende in

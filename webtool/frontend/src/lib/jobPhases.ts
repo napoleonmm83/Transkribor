@@ -49,10 +49,10 @@ export function parseJobPhases(kind: string, lines: string[],
   // doppelt und der Balken schoesse ueber 100%.
   const blocks: Record<string, { done: Set<number>; total: number }> = Object.create(null)
   let global: GlobalPhase | null = null
-  // KLEBRIG, nie zurueckgesetzt (#442): der Beleg gilt dem LAUF, nicht dem Augenblick. `global`
-  // faellt zurueck auf null, sobald eine Datei aktiv wird — daran haengen duerfte die Auskunft
-  // nicht, sonst verschwaende sie genau dann, wenn die erste Aufnahme in die Schlange geht.
-  let korrigiertMit = false
+  // Eine LISTE, kein Set: die Reihenfolge IST die der Poolschlange (#442). Nie geraeumt —
+  // wer heraus muss, faellt in `korrekturSchlange` durch die Filter, und die Historie bleibt
+  // der Zaehlung erhalten.
+  const eingereiht: string[] = []
   let cursor: string | null = null            // transcribe: die eine laufende Datei
   let bilanz: JobPhases['bilanz']
   let scope: Set<string> | undefined
@@ -354,7 +354,6 @@ export function parseJobPhases(kind: string, lines: string[],
       // der beiden Faelle.
       const base = scope?.has(m[1]) && !scope.has(m[2]) ? m[1] : m[2]
       active[base] = { phase: 'diarize' }; global = 'diarize'
-      korrigiertMit = true
     }
     // `[done] {base}` folgt auf JEDEN Ausgang der Diarisierungsschleife (Erfolg, "keine Sprecher",
     // Roh-JSON unlesbar, Ausnahme) und ist damit das einzige Terminal je Datei; aufgeraeumt wurde
@@ -429,7 +428,19 @@ export function parseJobPhases(kind: string, lines: string[],
       for (const [b, a] of Object.entries(active)) if (a.phase === 'diarize') delete active[b]
       if (global === 'diarize') global = null
     }
-    else if (/^prep: \d+ Datei/.test(l)) { global = 'prep'; korrigiertMit = true }
+    // `→ Eingereiht {base} (Korrektur) …` — die Uebergabe an den Korrektur-Pool (#442).
+    // KEIN `active`-Eintrag und KEIN `global`: die Aufnahme wartet, es arbeitet niemand an ihr.
+    // Nur die Reihenfolge wird festgehalten; wer die Schlange verlaesst, entscheidet
+    // `korrekturSchlange` an den anderen Feldern.
+    // Doppelte Namen werden verworfen, obwohl der Erzeuger heute keine druckt (`processed`
+    // in `transcribe_project` laesst eine Base nur einmal durch). Der Grund ist die WIRKUNG
+    // eines Duplikats: es verschoebe JEDEN Nachfolger um eins nach hinten — aus „noch 1 vor
+    // dieser" wuerde „noch 2", dauerhaft und ohne dass etwas danach aussieht. Eine Zeile
+    // gegen eine Klasse falscher Zahlen. (Gefunden vom Was-erlaubt-der-Fix-Pruefer.)
+    else if ((m = l.match(/^→ Eingereiht (.+?) \(Korrektur\) …$/))) {
+      if (!eingereiht.includes(m[1])) eingereiht.push(m[1])
+    }
+    else if (/^prep: \d+ Datei/.test(l)) { global = 'prep' }
     else if (/^(→ Glossar|✓ Glossar|↷ nutze vorhandenes _glossar)/.test(l)) { global = 'glossary' }
     // `[active] {base}` - die zweite Quelle fuer "diese Aufnahme gehoert zum Lauf", und seit
     // #431 die einzige fuer eine, die erst waehrend des Laufs dazukam.
@@ -554,7 +565,7 @@ export function parseJobPhases(kind: string, lines: string[],
            gesehen: gesehen.size ? gesehen : undefined,
            entfernt: ungueltig.size ? ungueltig : undefined,
            erreicht: Object.keys(erreicht).length ? erreicht : undefined,
-           korrigiertMit: korrigiertMit || undefined,
+           eingereiht: eingereiht.length ? eingereiht : undefined,
            active, perBase, bilanz }
 }
 
@@ -652,24 +663,30 @@ export function warteKarte(phases: JobPhases, kind: string): Record<string, Wart
  *  laengst (`fertig X:` ⇒ `done`/`raw`) — sie faellt aus `ausstehend` heraus, und genau das
  *  war die getragene Grenze aus PR #500.
  *
- *  Vier Bedingungen, jede noetig:
- *  - `perBase === 'done'` UND `erreicht === 'raw'`: die Transkription lief durch, die
- *    `edit.json` steht noch aus. Ein `edit` heisst, die Korrektur ist fertig; ein `failed`
- *    oder `skipped` heisst, dass keine mehr kommt.
- *  - KEIN `active`-Eintrag: sonst arbeitet ein Arbeiter schon an ihr, und die Pille zeigt
- *    ohnehin die Phase (der Riegel in `mergePhases` raeumt ihr `perBase` dafuer weg).
- *  - `kind === 'transcribe'`: im reinen Korrekturlauf gibt es kein vorangehendes
- *    Transkriptions-Urteil, dort traegt `warteKarte` den Fall schon.
- *  - `korrigiertMit`: ohne Beleg keine Zusage (siehe den Typ-Kommentar dort).
+ *  Die Menge kommt aus `eingereiht` und NICHT aus `scope`: nur die Uebergabezeile weiss, wer
+ *  wirklich in der Schlange steht, und ihre Reihenfolge ist die des Pools. Aus `scope`
+ *  hergeleitet waere beides geraten — die Menge, weil eine Aufnahme auch ohne Anbieter
+ *  transkribiert wird, und die Ordnung, weil ein Nachzuegler alphabetisch vorne stehen kann.
  *
- *  GETRAGENE GRENZE: ein Lauf ohne Diarisierung UND ohne Vorbereitung hat keinen Beleg und
- *  zeigt keine Warteauskunft. Auf dem Standardweg kommen beide Zeilen je Aufnahme; es ist
- *  also kein Ausfall, den man erwarten muss, aber einer, den es geben kann. */
+ *  Wer die Schlange VERLAESST, sind drei Faelle, und jeder braucht seine Bedingung:
+ *  - `active`: ein Arbeiter hat sie uebernommen (`→ Korrigiere`). Ihre Pille zeigt die Phase.
+ *  - `erreicht === 'edit'`: `apply:` hat geschrieben, die Korrektur ist durch.
+ *  - ein Urteil ausser `done`: `failed` oder `skipped` heisst, dass keine Korrektur mehr
+ *    kommt. `done` allein reicht NICHT als Ausschluss — es ist das Urteil der
+ *    TRANSKRIPTION und steht bei jeder Wartenden.
+ *  Dazu `entfernt`: eine geloeschte Aufnahme wartet nicht mehr (dieselbe Regel wie in
+ *  `warteKarte`, dort gemessen — ohne sie verlaengerte eine Loeschung die Schlange dauerhaft).
+ *
+ *  GETRAGENE GRENZE: laeuft daneben ein eigener `correct`-Job, zaehlt `mergePhases` beide
+ *  Schlangen unter derselben Art zusammen, obwohl es zwei Pools sind — die Zahl ist dann zu
+ *  gross. Der Normalweg schliesst das aus (`app.py` gibt 409), erreichbar bleibt es ueber die
+ *  Gegenrichtung aus #496. */
 export function korrekturSchlange(phases: JobPhases, kind: string): Record<string, Warten> {
-  if (kind !== 'transcribe' || !phases.korrigiertMit || !phases.scope) return {}
-  const wartend = laufOrdnung(phases.scope).filter(
-    b => phases.perBase[b] === 'done' && phases.erreicht?.[b] === 'raw'
-      && !Object.hasOwn(phases.active, b) && !phases.entfernt?.has(b))
+  if (kind !== 'transcribe' || !phases.eingereiht) return {}
+  const wartend = phases.eingereiht.filter(
+    b => !Object.hasOwn(phases.active, b) && phases.erreicht?.[b] !== 'edit'
+      && (!Object.hasOwn(phases.perBase, b) || phases.perBase[b] === 'done')
+      && !phases.entfernt?.has(b))
   const karte: Record<string, Warten> = Object.create(null)
   wartend.forEach((base, i) => { karte[base] = { art: 'correct', vor: i } })
   return karte

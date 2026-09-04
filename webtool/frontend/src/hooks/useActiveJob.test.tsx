@@ -269,9 +269,9 @@ describe('mergePhases', () => {
     const m = mergePhases([job('j1', 'transcribe', parseJobPhases('transcribe', [
       '[scope] A\tB\tC',
       '[Demo] fertig A: 12s, 30 Segmente, 1.2x Echtzeit',
-      '→ Diarisiere A …', '[done] A', 'prep: 1 Datei(en) getaggt in /x',
+      '→ Diarisiere A …', '[done] A', '→ Eingereiht A (Korrektur) …',
       '[Demo] fertig B: 9s, 21 Segmente, 1.4x Echtzeit',
-      '→ Diarisiere B …', '[done] B', 'prep: 1 Datei(en) getaggt in /x',
+      '→ Diarisiere B …', '[done] B', '→ Eingereiht B (Korrektur) …',
       '→ Korrigiere A · Block 1/4 …',
     ]))])
     // B wartet auf seinen Korrektur-Slot, C noch auf die Transkription — zwei Schlangen,
