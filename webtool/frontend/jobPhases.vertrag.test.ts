@@ -1028,3 +1028,178 @@ describe('Vertrag: gedruckte Statuszeilen <-> jobPhases.ts (#375)', () => {
     expect(Object.keys(INVENTAR)).not.toContain(UNLESBAR)
   })
 })
+
+// ═══ Fixture-Wache: keine erfundene Protokollzeile in einer Testdatei ═══════════════════
+//
+// WARUM ES SIE GIBT — und was sie ausdruecklich NICHT kann. Beides gemessen am 2026-09-05.
+//
+// Der Anlass waren zwei erfundene Zeilen in Fixtures. Die naheliegende Abwehr — "jede
+// Fixture-Zeile muss zu einer Erzeuger-Form passen" — haette KEINE davon gefangen:
+// `prep: 1 Datei(en) getaggt in /x` IST eine gueltige Form (correct.py:233). Falsch war
+// allein, dass der GESTAFFELTE Lauf sie nie druckt — er ruft `prep_single`
+// (transcribe.py:901, schweigt bei Erfolg), waehrend die Form aus `cmd_prep` stammt, und das
+// ruft nur der CLI-Unterbefehl (correct.py:1443). Dieselbe Sorte Fehler beim zweiten Fall:
+// `[autocorrect] KI-Phase uebersprungen — {}` traegt einen freien Platzhalter, ein
+// erfundener Grund passt also immer hinein.
+//
+// DREI Wege, diese Pfad-Eigenschaft maschinell zu pruefen — alle gemessen tot:
+//   (1) `kind` am INVENTAR-Eintrag: nur 15 von 112 Eintraegen tragen es, und der Default
+//       'correct' ist fuer die `[autocorrect]`-Formen nachweislich falsch — die druckt
+//       transcribe.py:583/647. Ein Waechter darauf schluege an einer RICHTIGEN Fixture an.
+//   (2) Quelldatei -> Job-Art: `→ Korrigiere` kommt aus correct.py:1009 und steht trotzdem
+//       in transcribe-Laeufen, weil der gestaffelte Weg in correct.py hineinruft.
+//   (3) Aufrufgraph: waere richtig und ist kein Testmittel.
+// Diese Haelfte bleibt also ungedeckt, und der Weg dorthin ist der Messstand — eine Fixture,
+// die einen ganzen Lauf behauptet, wird aufgezeichnet, nicht getippt.
+//
+// WAS BLEIBT und billig ist: eine Zeile, die zu GAR KEINER Form passt. Die Klasse ist hier
+// live — `prep: 1 Datei(en) vorbereitet` und `[fetch] geladen: {}` haben im ganzen
+// Python-Baum keinen Erzeuger (Baseline unten, und sie sind zugleich die Positivkontrolle:
+// ohne einen bekannten Fall belegt ein Lauf ohne Fund nichts).
+//
+// VERTRAG wie scripts/ruff_riegel.py und scripts/mypy_riegel.py: was heute abweicht, ist
+// eingefroren; NEUES wird rot; Behobenes meldet nur, dass die Baseline hinterherhaengt —
+// ein Riegel, der das Aufraeumen bestraft, wird umgangen.
+
+/** Testdateien, deren Protokoll-Fixtures gegen die Erzeuger gehalten werden. */
+const FIXTURE_DATEIEN = [
+  'jobPhases.vertrag.test.ts',
+  'src/lib/jobPhases.test.ts',
+  'src/hooks/useActiveJob.test.tsx',
+  'src/hooks/useJobAusgang.test.tsx',
+  'src/pages/ProjectWorkspace.test.tsx',
+]
+
+/** tqdm kommt von faster-whisper ueber stderr, nicht aus einem `print(` in QUELLEN — es KANN
+ *  keinen Inventar-Eintrag haben. Die einzige bewusste Ausnahme. */
+const FREMDZEILE = /^\s*\d{1,3}%\|/
+
+/** Eingefroren am 2026-09-05. Zwei Sorten stehen hier, und sie sind verschieden schlimm:
+ *  KUERZUNGEN (`apply: A -> edit.json` statt `… + md (2 Segmente)`) — der Parser reagiert auf
+ *  das Praefix, der Test schreibt nur so viel Zeile, wie seine Zusicherung braucht; und
+ *  ECHTE ABWEICHUNGEN, fuer die es nirgends einen Erzeuger gibt: `prep: 1 Datei(en)
+ *  vorbereitet` (correct.py:233 druckt `getaggt in {tdir}`) und `[fetch] geladen: {}`
+ *  (fetch.py:589 druckt `[fetch] {} von {} geladen`). Die zwei sind ein eigenes Issue —
+ *  hier eingefroren statt still repariert, weil sie aelter sind als diese Wache. */
+const FIXTURE_BASELINE = new Set<string>([
+  '→ Glossar …',
+  '→ Glossar (…) …',
+  'A: 300 Segmente → 2 Blöcke à max. 150',
+  'A: 540 Segmente → 4 Blöcke à max. 150',
+  '✓ A · Block 1/2 fertig',
+  '✓ A · Block 2/2 fertig',
+  '✓ A · Block 1/4 fertig',
+  '✗ A · Block 1/2 ohne gültiges Ergebnis',
+  '↷ A · Block 1/2 schon vorhanden',
+  'prep: 1 Datei(en) vorbereitet',
+  'prep: 1 Datei(en)',
+  'prep: 3 Datei(en)',
+  '[scope]\tD1',
+  '[scope]\tA\tB\tC',
+  '[Demo] fertig A: 12s, 30 Segmente',
+  '[Demo] fertig B: 1s',
+  'apply: A -> edit.json',
+  'apply: X -> edit.json',
+  'apply: SKIP A (waehrend des Laufs handbearbeitet)',
+  '✗ Fehler bei B: LLM-Ausgabe ungueltig',
+  'run: FEHLER — 0 von 3 versuchten Datei(en) korrigiert',
+  '[fetch] geladen: Zweites Video',
+  '[fetch] geladen: Drittes Video',
+  'starte…',
+  'spaet',
+])
+
+/** Die Form als PRAEFIX der Zeile, Platzhalter frei. Praefix, weil ein INVENTAR-Schluessel
+ *  die ERSTE Zeichenkette eines `print(` ist — bei mehrteiligen Ausgaben also nur ihr Anfang.
+ *  Bewusst OHNE Kuerzungs-Toleranz in der Gegenrichtung: "die Zeile endet frueher" liesse
+ *  sich nicht von "die Zeile hat einen anderen Schwanz" unterscheiden, und mit ihr passte
+ *  `{}%| {}` (erstes Literal leer) auf jede beliebige Zeichenkette — gemessen: 0 Funde bei
+ *  zwei bekannt vorhandenen Faellen. */
+function alsPraefix(form: string): RegExp {
+  const teile = form.split('{}').map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+  return new RegExp('^' + teile.join('[^\\n]*'))
+}
+
+/** Das Array ab `pos` (zeigt auf `[`) bis zur passenden `]`. Ein Regex reicht hier NICHT:
+ *  er bricht am ersten `]`, und das steht in `'[scope] A'` mitten in einer Zeichenkette. */
+function arrayAb(quelle: string, pos: number): string {
+  let tiefe = 0
+  for (let i = pos; i < quelle.length; i++) {
+    const c = quelle[i]
+    if (c === "'" || c === '"' || c === '`') {
+      const q = c
+      for (i++; i < quelle.length && quelle[i] !== q; i++) if (quelle[i] === '\\') i++
+      continue
+    }
+    if (c === '[') tiefe++
+    else if (c === ']' && --tiefe === 0) return quelle.slice(pos, i + 1)
+  }
+  return ''
+}
+
+/** Echte Literale BEIDER Quotierungen. Ein `'…'`-Muster allein zog `Demo` aus dem Inneren
+ *  von "run: 3 Datei(en) in Projekt 'Demo'" heraus und meldete es als unbekannte Zeile. */
+function literale(block: string): string[] {
+  const aus: string[] = []
+  for (let i = 0; i < block.length; i++) {
+    const c = block[i]
+    if (c !== "'" && c !== '"') continue
+    let s = ''
+    for (i++; i < block.length && block[i] !== c; i++) {
+      if (block[i] === '\\') { s += block[i] + block[i + 1]; i++ } else s += block[i]
+    }
+    aus.push(s)
+  }
+  return aus
+}
+
+/** `\t` steht im Quelltext als zwei Zeichen, zur Laufzeit ist es ein Tabulator. */
+function entschluesselt(s: string): string {
+  return s.replace(/\\(.)/g, (_, c: string) => (c === 't' ? '\t' : c === 'n' ? '\n' : c))
+}
+
+function fixtureZeilen(datei: string): string[] {
+  const quelle = fs.readFileSync(path.join(WURZEL, 'webtool', 'frontend', datei), 'utf8')
+  const aus: string[] = []
+  for (const m of quelle.matchAll(/(?:parseJobPhases\(\s*'[a-z]+'\s*,\s*|\blines:\s*)\[/g)) {
+    aus.push(...literale(arrayAb(quelle, m.index + m[0].length - 1)))
+  }
+  return aus
+}
+
+describe('Fixture-Wache', () => {
+  it('jede Protokollzeile in einer Fixture hat einen Erzeuger', () => {
+    const muster = Object.keys(INVENTAR).map(alsPraefix)
+    const gesehen = new Set<string>()
+    const neu: string[] = []
+    let gesamt = 0
+
+    for (const datei of FIXTURE_DATEIEN) {
+      for (const roh of fixtureZeilen(datei)) {
+        const zeile = entschluesselt(roh)
+        if (zeile.trim() === '' || FREMDZEILE.test(zeile)) continue
+        gesamt++
+        if (muster.some(m => m.test(zeile))) continue
+        gesehen.add(zeile)
+        if (!FIXTURE_BASELINE.has(zeile)) neu.push(`${datei}: ${JSON.stringify(zeile)}`)
+      }
+    }
+
+    // Der Riegel gegen das eigene Schweigen: eine kaputte Ernte (verschobene Bauform,
+    // umbenannte Datei) sieht von aussen genauso aus wie ein sauberer Baum. Erst die Zahl
+    // neben der Eigenschaft trennt "nichts gefunden" von "nichts angesehen".
+    expect(muster.length).toBeGreaterThan(50)
+    expect(gesamt).toBeGreaterThan(300)
+
+    expect(neu, `Fixture-Zeile(n) ohne Erzeuger-Form — im INVENTAR nachsehen, welche Form der `
+      + `echte Lauf druckt (kopieren, nicht erinnern), oder die Zeile in FIXTURE_BASELINE `
+      + `aufnehmen und dort begruenden:\n  ${neu.join('\n  ')}`).toEqual([])
+
+    // Behobenes macht NICHT rot — ein Riegel, der das Aufraeumen bestraft, wird umgangen.
+    const veraltet = [...FIXTURE_BASELINE].filter(z => !gesehen.has(z))
+    if (veraltet.length) {
+      console.warn(`Fixture-Baseline haengt hinterher: ${veraltet.length} Zeile(n) kommen `
+        + `nicht mehr vor — ${veraltet.map(z => JSON.stringify(z)).join(', ')}`)
+    }
+  })
+})
