@@ -4,6 +4,8 @@ import subprocess
 import sys
 import threading
 import time
+from types import SimpleNamespace
+
 from webtool import jobs
 
 
@@ -398,7 +400,11 @@ def test_vorgang_wird_aufgegeben_wenn_der_slot_belegt_bleibt(monkeypatch):
     stumm. Jetzt traegt die Nummer den Ausgang."""
     monkeypatch.setattr(jobs, "start", lambda *a, **k: ("dauerblocker", False))
     monkeypatch.setattr(jobs, "when_done", lambda jid, fn: False)
-    monkeypatch.setattr(jobs.time, "sleep", lambda s: None)   # zehn Runden ohne Wanduhr
+    # Zehn Runden ohne Wanduhr — aber NICHT ueber `jobs.time.sleep`: `jobs.time` IST das
+    # stdlib-Modul, ein `setattr` darauf legt `time.sleep` prozessweit lahm. Getroffen haette
+    # es `_wait` oben (spinnt dann ohne Pause) und jeden Job-Faden, der aus einem frueheren
+    # Test noch laeuft. Ersetzt wird deshalb der NAME, nicht das Modul.
+    monkeypatch.setattr(jobs, "time", SimpleNamespace(sleep=lambda s: None, time=time.time))
     jid, started, nummer = jobs.request("P_vgauf", _echo_cmd(1), cwd=None, kind="correct")
     assert jid is None and started is False
     assert nummer, "auch der aufgegebene Weg muss eine Nummer nennen"
@@ -443,7 +449,12 @@ def test_deckel_wirft_NIE_eine_offene_vormerkung_weg():
             jobs._prune_locked()
         assert "wartet_seit_langem" in jobs._vorgaenge, "die offene Vormerkung wurde geworfen"
         assert jobs.vorgang("wartet_seit_langem") is not None, "und sie ist noch abrufbar"
-        assert "n0" in jobs._vorgaenge or len(jobs._vorgaenge) <= jobs._VORGAENGE_MAX + 1
+        # Und der Deckel hat wirklich gegriffen: die Vormerkung ist der Rest, den er stehen
+        # laesst, nicht der Grund, warum er nichts tat. (Die frueher hier stehende
+        # `or len(...) <= MAX + 1`-Zeile war vacuous — nach dem Deckeln ist die rechte Seite
+        # per Konstruktion wahr.)
+        assert len(jobs._vorgaenge) == jobs._VORGAENGE_MAX
+        assert sum(1 for v in jobs._vorgaenge.values() if v["status"] == "vorgemerkt") == 1
     finally:
         jobs._vorgaenge.clear()
         jobs._vorgaenge.update(sicherung)
