@@ -204,34 +204,23 @@ def _vorgang_setzen(nummer, zustand, job_id=None):
             v["job_id"] = job_id
 
 
-def vorgang_an_job(jid, nummer):
-    """Haengt eine Vorgangsnummer an einen JOB-Datensatz.
-
-    Fuer den einen Weg, dessen Rueckgabewert niemand lesen kann: `fetch_urls` startet die
-    Transkription aus einem `then`-Rueckruf heraus, also lange nachdem seine Antwort beim
-    Browser war. Traeger ist der fetch-Job selbst — er gehoert UNS und ist adoptiert, anders
-    als der Blocker aus `request` (der ueber die Einzel-GPU-Sperre einem fremden Projekt
-    gehoeren kann).
-
-    GETRAGENE GRENZE: der Rueckruf laeuft, NACHDEM der Job terminal ist. Sieht die Oberflaeche
-    ihn in genau dem Millisekundenfenster davor, fehlt die Nummer und es bleibt beim
-    4-Sekunden-Weg von heute — kein Rueckschritt, aber auch keine Zusicherung."""
-    if not jid or not nummer:
-        return
-    with _lock:
-        r = _jobs.get(jid)
-        if r is not None:
-            r["vorgang"] = nummer
-
-
 def vorgang(nummer: str):
     """Der Zustand einer Vormerkung, oder None. Reiner Lesepfad fuer die Oberflaeche.
 
     Sie erfaehrt damit die Kennung des Nachlaufs, sobald er existiert — heute erfaehrt sie sie
     gar nicht: `request` liefert bei belegtem Slot die Kennung des BLOCKERS, und der gehoert
-    ueber die Einzel-GPU-Sperre oft einem fremden Projekt (#381)."""
+    ueber die Einzel-GPU-Sperre oft einem fremden Projekt (#381).
+
+    Folgt einem `alias`: zwei Nummern koennen auf dieselbe Vormerkung zeigen, wenn im
+    Sperrfenster von `rerun` eine andere Anfrage denselben Schluessel neu belegt hat (die
+    Begruendung steht dort). Die Schleife ist gegen einen Ring gesichert — ein Zyklus waere
+    hier ein Haenger UNTER dem Lock, also der teuerste Ausgang von allen."""
     with _lock:
+        gesehen = set()
         v = _vorgaenge.get(nummer)
+        while v is not None and v.get("alias") and v["alias"] not in gesehen:
+            gesehen.add(v["alias"])
+            v = _vorgaenge.get(v["alias"])
         return dict(v) if v else None
 
 
@@ -333,7 +322,20 @@ def request(project: str, cmd: list, cwd, kind: str, then=None, base: str = None
             if key in _pending:
                 # schon vorgemerkt -> der Nachlauf nimmt die neuen Dateien mit. Der Aufrufer
                 # bekommt die BESTEHENDE Nummer, nicht eine neue: es ist dieselbe Vormerkung.
-                return jid, False, _pending[key]
+                bestehende = _pending[key]
+                if nummer is not None and nummer != bestehende:
+                    # Wir kommen aus `rerun` und bringen eine Nummer mit — aber zwischen dem
+                    # `pop` dort und dieser Zeile liegen DREI getrennte Sperr-Erwerbe, und in
+                    # dem Fenster hat eine andere Anfrage denselben Schluessel neu belegt.
+                    # Ohne diesen Zweig bliebe unsere Nummer fuer immer `vorgemerkt`, und die
+                    # Oberflaeche fragte sie fuer die Lebensdauer des Tabs alle 1,5 s ab —
+                    # ein Dauerpoll auf eine Nummer, die nie wieder etwas meldet.
+                    # Ausgefuehrt reproduziert (kalter Pruefer, `N1 ORPHANED`).
+                    # Beide zeigen jetzt auf DIESELBE Vormerkung.
+                    v = _vorgaenge.get(nummer)
+                    if v is not None:
+                        v["alias"] = bestehende
+                return jid, False, bestehende
             if nummer is None:
                 nummer = uuid.uuid4().hex[:12]
             _pending[key] = nummer
