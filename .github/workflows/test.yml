@@ -305,3 +305,47 @@ jobs:
       # Rot nur bei NEUEN Befunden gegen .ruff-baseline.txt. Der Baum traegt 132 bekannte;
       # ein Riegel, der ab Tag eins rot ist, wird abgeschaltet statt gelesen.
       - run: python scripts/ruff_riegel.py
+
+  # Dasselbe Loch, dasselbe Werkzeugregal: mypy ist seit #499 exakt gepinnt (2.3.1) und lief
+  # bis hierher NIRGENDS — nicht hier, nicht im pre-commit-Hook, nicht in package.json (#546).
+  # Auch der Bot-Kanal fehlt ihm, den ruff wenigstens hatte (.coderabbit.yaml schaltet
+  # `tools.ruff` ein, kennt aber kein mypy). Renovate pflegte also die Fassung eines
+  # Werkzeugs, dessen Befunde niemand je zu sehen bekam.
+  #
+  # EIGENER Job statt eines zweiten Schritts im Ruff-Job oben: die beiden Riegel sollen
+  # unabhaengig rot werden koennen. Als Schritt haette ein roter ruff den Lauf beendet,
+  # bevor mypy ueberhaupt startet — man saehe den zweiten Befund erst nach dem Beheben des
+  # ersten. Der Preis ist ein zusaetzlicher Laeufer; er laeuft parallel und kostet damit
+  # keine Wartezeit.
+  #
+  # NUR ubuntu, obwohl `pyproject.toml` die Sicht auf `platform = "win32"` festnagelt: das
+  # ist kein Widerspruch, sondern der Grund. `--platform` ist eine STATISCHE Annahme, kein
+  # Laufzeitmerkmal — mypy urteilt damit auf jedem Betriebssystem ueber dieselbe Sicht.
+  # Gemessen am selben Baum mit 2.3.1 (2026-09-04):
+  #   Standard auf Windows        68 Befunde in 19 Dateien
+  #   --platform linux            70   (+2 Fehlalarme ueber `ctypes.WinDLL` in sperre.py,
+  #                                     also ueber Code, der nur unter Windows laeuft)
+  #   festgenagelte Sicht         65 in 18 Dateien, auf jedem Rechner gleich
+  # Der zweite Teil der Festnagelung ist `no_site_packages = true`: dieser Job installiert
+  # nur die dev-Gruppe, ein Entwicklerrechner hat fastapi, pillow und torch. Ohne die Zeile
+  # entschiede der Paketstand darueber, was der Riegel sieht — 68 gegen 65, und teils
+  # ANDERE Befunde. Beide Zeilen samt Preis stehen in pyproject.toml.
+  #
+  # Der Windows-Pfadtrenner ist trotzdem gepruefte Ware: scripts/test_mypy_riegel.py nagelt
+  # ihn fest und laeuft im `python`-Job auf BEIDEN Plattformen mit — dieselbe Konstruktion
+  # wie beim Ruff-Riegel.
+  #
+  # `pip install --group dev` statt `pip install mypy==…`: die Fassung steht damit an EINER
+  # Stelle, genau wie beim Job darueber.
+  typen:
+    name: Mypy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+      - run: pip install --group dev
+      # Rot nur bei NEUEN Typfehlern gegen .mypy-baseline.txt. Der Baum traegt 65 bekannte;
+      # ein Riegel, der ab Tag eins rot ist, wird abgeschaltet statt gelesen.
+      - run: python scripts/mypy_riegel.py

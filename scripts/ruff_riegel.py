@@ -160,10 +160,18 @@ def vergleich(neu: list[str], alt: list[str]) -> tuple[list[str], list[str]]:
 def ruff_lauf() -> str:
     """ruff im Repo-Stamm fahren und seine Befundausgabe zurueckgeben."""
     # Feste Argumentliste, eigener Interpreter, keine Shell, keine Eingabe von
-    # aussen. (Ein `# noqa: S603` stand hier und war ueberfluessig: 0.16.6
-    # meldet diesen Aufruf gar nicht — gemessen, `All checks passed!`. Eine
-    # Unterdrueckung, die nichts unterdrueckt, behauptet eine Gefahr, die der
-    # Linter nicht sieht.)
+    # aussen. (Eine Unterdrueckung `noqa: S603` stand hier und war
+    # ueberfluessig: 0.16.6 meldet diesen Aufruf gar nicht — gemessen,
+    # `All checks passed!`. Was nichts unterdrueckt, behauptet eine Gefahr, die
+    # der Linter nicht sieht.
+    #
+    # Das Doppelkreuz fehlt hier mit Absicht, und das ist ein Nachtrag zu
+    # #547: ruff liest die Marke AUCH mitten in Prosa. Mit ihm meldete dieser
+    # Kommentar bei jedem cachefreien Lauf „Invalid directive … expected code
+    # to consist of uppercase letters followed by digits only" — also in jeder
+    # CI, wo es keinen Cache gibt. Lokal blieb es unsichtbar, weil
+    # `.ruff_cache` die Datei nicht neu ansah; gefunden erst mit
+    # `ruff check scripts/ruff_riegel.py --no-cache` (2026-09-04, #546).)
     lauf = subprocess.run(
         [sys.executable, "-m", "ruff", "check", ".", "--output-format=concise"],
         cwd=STAMM,

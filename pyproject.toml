@@ -58,7 +58,49 @@ python_version = "3.13"
 warn_return_any = true
 warn_unused_ignores = true
 ignore_missing_imports = true
-exclude = "^(\\.venv|node_modules|webtool/frontend)/"
+# Plattform und Paketsicht sind FESTGENAGELT, weil mypy sonst je Ort anders
+# urteilt — dieselbe Begruendung wie beim exakten Fassungs-Pin oben, nur dass
+# sie hier zweimal gemessen ist (2026-09-04, mypy 2.3.1, derselbe Baum):
+#
+#   Standard (Windows)            68 Befunde in 19 Dateien
+#   --platform linux              70   (+2: `WinDLL` und `get_last_error` in
+#                                       webtool/sperre.py — Meldungen ueber
+#                                       Code, der nur unter Windows laeuft)
+#   --no-site-packages            65   (und teils ANDERE Befunde, nicht bloss
+#                                       weniger: build/marke.py `LANCZOS`,
+#                                       ytdlp_update.py:121 misc+assignment
+#                                       fallen weg, diarize.py:124 wechselt von
+#                                       `assignment` auf `no-redef`)
+#
+# `platform = "win32"`: der ubuntu-Laeufer saehe sonst die zwei Fehlalarme oben.
+# `--platform` ist eine statische Annahme, kein Laufzeitmerkmal — der Job auf
+# ubuntu urteilt damit ueber dieselbe Sicht wie der Entwicklerrechner. Preis:
+# die zwei winzigen `sys.platform == "darwin"`-Zweige (webtool/device.py:24,
+# transcribe.py:47) gelten als unerreichbar und werden nicht geprueft.
+#
+# `no_site_packages = true`: der CI-Job installiert nur die dev-Gruppe, dieser
+# Rechner hat fastapi, pillow, torch und pytest. Ohne die Zeile entscheidet
+# also der Paketstand darueber, was der Riegel sieht. Preis, benannt statt
+# verschwiegen: Fehlgriffe in fastapi-/pillow-Aufrufen faengt mypy nicht mehr —
+# `build/marke.py:272` (PIL `LANCZOS` an der alten Stelle) ist ein echter
+# Befund, der dadurch entfaellt. Ausweg, falls das je zaehlt: die typisierten
+# Pakete im Job installieren.
+platform = "win32"
+no_site_packages = true
+# `dist` ist der electron-builder-Ausgabeordner und traegt unter
+# `dist/win-unpacked/resources/py/webtool/` eine KOPIE des Quellbaums. mypy
+# bricht daran ab, bevor es irgendetwas prueft:
+#     webtool\__init__.py: error: Duplicate module named "webtool"
+#     Found 1 error in 1 file (errors prevented further checking)     rc 2
+# Das sieht wie EIN Typfehler aus und ist keiner — es ist ein Lauf, der nichts
+# angesehen hat. Der Ordner ist gitignoriert, existiert in der CI also nie: ohne
+# diese Zeile urteilen Entwicklerrechner und CI verschieden, und zwar so, dass
+# der Rechner gar nicht urteilt. Dieselbe Entscheidung wie
+# `.code-guardian-evidence` in `extend-exclude` oben.
+#
+# `build` steht hier bewusst NICHT: der Ordner traegt getrackten Quelltext
+# (build/marke.py, build/test_bilder.py) und liegt in pytests `testpaths`.
+exclude = "^(\\.venv|node_modules|webtool/frontend|dist)/"
 
 [tool.pytest.ini_options]
 # `build` steht in pytests eingebauter norecursedirs-Liste und wird ohne
