@@ -122,10 +122,15 @@ _KOPF = re.compile(r"^# geprueft (?P<zahl>\d+) Dateien$")
 # ist der zweite Riegel fuer den Tag, an dem mypy dabei mit 1 endet.
 _ABBRUCH = "errors prevented further checking"
 
-# Ein Fehler ohne Klammercode. Gemessen kommt das mit 2.3.1 nicht vor (selbst
-# Syntaxfehler tragen `[syntax]`) — die Marke steht trotzdem, weil genau diese
-# Annahme den Ruff-Riegel erwischt hat: dort hiess `invalid-syntax` ploetzlich
-# anders als jeder andere Befund, fiel aus dem Muster und verschwand lautlos.
+# Ein Fehler ohne Klammercode. In diesem Baum kommt das nicht vor — gemessen,
+# nicht angenommen: `mypy .` liefert 65 `: error: `-Zeilen und alle 65 enden auf
+# einen Klammercode (`grep -c ': error: '` = `grep ': error: ' | grep -cE
+# '\[[a-z][a-z0-9-]*\]$'` = 65), und auch ein absichtlich kaputtes .py traegt
+# `[syntax]`. Das ist eine Aussage ueber DIESEN Baum, nicht ueber alles, was
+# mypy 2.3.1 drucken kann — die Marke steht genau deshalb, weil die
+# entsprechende Annahme den Ruff-Riegel erwischt hat: dort hiess
+# `invalid-syntax` ploetzlich anders als jeder andere Befund, fiel aus dem
+# Muster und verschwand lautlos.
 OHNE_CODE = "ohne-code"
 
 
@@ -239,7 +244,9 @@ def unstimmig(rc: int, ausgabe: str) -> str | None:
       `befunde` leer, die ganze Baseline gaelte als „behoben", und der Riegel
       meldete rc 0. Die Zaehlprobe in `fehlende_zeilen` hilft dagegen NICHT:
       ohne Summenzeile ist auch die erwartete Zahl null.
-    * rc 0 ohne `Success: no issues found` — mypy sagt sonst immer etwas.
+    * rc 0 ohne `Success: no issues found` — in jedem Lauf ueber diesen Baum
+      stand bei rc 0 diese Zeile (gemessen); schweigt mypy stattdessen, ist
+      etwas anderes passiert als ein sauberer Baum.
     * `errors prevented further checking` — der Lauf hat abgebrochen, bevor er
       fertig war (Syntaxfehler, Duplicate Module). Heute traegt so ein Lauf
       schon rc 2 und faellt ohnehin durch; die Marke ist der Riegel fuer den
