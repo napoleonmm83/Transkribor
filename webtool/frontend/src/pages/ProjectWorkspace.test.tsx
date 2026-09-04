@@ -489,7 +489,11 @@ describe('ProjectWorkspace (Stub)', () => {
        ersatzlos entfernbar — alle 897 Tests blieben gruen (gegnerischer Pruefer, T1).
        Dieselbe Lehre wie #488: eine Regel zu bauen reicht nicht, jedes Glied braucht seinen
        eigenen Test.
-       Der Beleg ist die ABFRAGE der Nummer — die passiert nur, wenn `verfolge` lief. */
+       Der Beleg ist die ABFRAGE der Nummer — die passiert nur, wenn `verfolge` lief.
+       `nurDemo()` ist Pflicht, nicht Zierde: `vi.clearAllMocks()` in der Fixture loescht nur
+       die Aufruflisten, NICHT die Implementierungen — ohne den Aufruf erbte dieser Test die
+       Dateiliste des vorigen und haenge damit an der Reihenfolge. */
+    nurDemo()
     vi.mocked(api.uploadAudio).mockResolvedValue(
       { base: 'a', file: 'a.mp3', job_id: 'fremder_blocker', started: false, vorgang: 'vg1' })
     vi.mocked(api.getVorgang).mockResolvedValue({ vorgang: 'vg1', status: 'vorgemerkt',
