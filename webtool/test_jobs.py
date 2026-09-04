@@ -476,10 +476,35 @@ def test_deckel_nimmt_den_alias_mit_seinem_ziel():
         with jobs._lock:
             jobs._prune_locked()
         # Entweder beide sind weg oder beide sind da — ein Zeiger ohne Ziel darf es nicht geben.
+        # Hier greift der erste Fall: `ziel` steht als aeltester raeumbarer Eintrag vorn, wird
+        # zuerst geworfen und nimmt den Zeiger mit. DIESE Zusicherung traegt die Mutation
+        # (Kaskade raus ⇒ False == True ⇒ rot).
         assert ("ziel" in jobs._vorgaenge) == ("zeiger" in jobs._vorgaenge), \
             "Alias und Ziel sind auseinandergefallen"
-        if "zeiger" in jobs._vorgaenge:
-            assert jobs.vorgang("zeiger") is not None
+        assert "ziel" not in jobs._vorgaenge, "der Aufbau prueft den Fall, in dem geraeumt wird"
+    finally:
+        jobs._vorgaenge.clear()
+        jobs._vorgaenge.update(sicherung)
+
+
+def test_ein_ueberlebender_alias_zeigt_nach_dem_deckeln_noch_auf_sein_ziel():
+    """Die Gegenrichtung, und sie war zuerst ein TOTER Zweig: im Aufbau darueber steht `ziel`
+    ganz vorn, wird also immer geraeumt — ein `if "zeiger" in …` dahinter lief nie. Ein Test
+    mit einem unerreichbaren Zweig sieht aus wie eine Pruefung und ist keine (CodeRabbit-Bot).
+    Hier stehen die raeumbaren Altlasten VORNE: der Deckel wird an ihnen satt, das Paar bleibt
+    stehen — und muss danach noch aufloesbar sein."""
+    sicherung = dict(jobs._vorgaenge)
+    try:
+        jobs._vorgaenge.clear()
+        for i in range(jobs._VORGAENGE_MAX + 5):
+            jobs._vorgaenge[f"n{i}"] = _vorgang_eintrag(f"n{i}", "gestartet")
+        jobs._vorgaenge["ziel"] = {**_vorgang_eintrag("ziel", "gestartet"), "job_id": "j7"}
+        jobs._vorgaenge["zeiger"] = {**_vorgang_eintrag("zeiger"), "alias": "ziel"}
+        with jobs._lock:
+            jobs._prune_locked()
+        assert "ziel" in jobs._vorgaenge and "zeiger" in jobs._vorgaenge, \
+            "der Deckel haette an den Altlasten satt werden muessen"
+        assert jobs.vorgang("zeiger")["job_id"] == "j7", "der Zeiger fuehrt nicht mehr ans Ziel"
     finally:
         jobs._vorgaenge.clear()
         jobs._vorgaenge.update(sicherung)
