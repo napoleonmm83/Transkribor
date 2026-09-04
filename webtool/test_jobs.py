@@ -2,6 +2,7 @@ import os
 import signal
 import subprocess
 import sys
+import threading
 import time
 from webtool import jobs
 
@@ -325,6 +326,55 @@ def test_request_mit_nummer_schreibt_in_GENAU_diese(monkeypatch):
     assert jobs.vorgang("fest_a1b2")["job_id"] == jid
     assert jobs.vorgang("fest_a1b2")["status"] == "gestartet"
     _wait(jid)
+
+
+def test_vorgang_verwaist_nicht_wenn_der_schluessel_neu_belegt_wurde(monkeypatch):
+    """Zwischen dem `pop` in `rerun` und dem erneuten `request` liegen DREI getrennte
+    Sperr-Erwerbe. Belegt in diesem Fenster eine andere Anfrage denselben Schluessel, gaebe
+    der `key in _pending`-Zweig deren Nummer zurueck und ignorierte die mitgebrachte — die
+    verwaiste dann auf `vorgemerkt`, und die Oberflaeche fragte sie fuer die Lebensdauer des
+    Tabs alle 1,5 s ab. Ein Dauerpoll auf eine Nummer, die nie wieder etwas meldet.
+
+    Vom kalten Pruefer ausgefuehrt reproduziert (`N1 ORPHANED`), bevor es diese Zeile gab.
+    Hier wird der Zustand NACH dem Fenster direkt hergestellt — das Rennen selbst ist
+    zeitabhaengig und waere als Test eine Wackelkerze."""
+    schluessel = ("P_alias", "correct", None)
+    jobs._pending[schluessel] = "fremd_n2"
+    for n in ("fremd_n2", "meine_n1"):
+        jobs._vorgaenge[n] = {"vorgang": n, "status": "vorgemerkt", "job_id": None,
+                              "project": "P_alias", "kind": "correct", "base": None}
+    monkeypatch.setattr(jobs, "start", lambda *a, **k: ("blocker", False))
+    try:
+        jid, started, nummer = jobs.request("P_alias", _echo_cmd(1), cwd=None, kind="correct",
+                                            vorgang="meine_n1")
+        assert started is False
+        assert nummer == "fremd_n2", "der Aufrufer bekommt die BESTEHENDE Vormerkung"
+
+        # Der Nachlauf loest die bestehende Vormerkung auf …
+        jobs._vorgaenge["fremd_n2"].update(status="gestartet", job_id="nachlauf1")
+        # … und die mitgebrachte Nummer zeigt darauf, statt zu verwaisen.
+        v = jobs.vorgang("meine_n1")
+        assert v["status"] == "gestartet" and v["job_id"] == "nachlauf1"
+    finally:
+        jobs._pending.pop(schluessel, None)
+
+
+def test_alias_ring_haengt_nicht():
+    """Ein Zyklus waere ein Haenger UNTER dem Lock — der teuerste Ausgang von allen: er legt
+    jeden weiteren Zugriff auf die Job-Registry still, nicht nur diese eine Abfrage."""
+    for a, b in (("ring_a", "ring_b"), ("ring_b", "ring_a")):
+        jobs._vorgaenge[a] = {"vorgang": a, "status": "vorgemerkt", "job_id": None,
+                              "project": "P_ring", "kind": "correct", "base": None, "alias": b}
+    # IM FADEN mit `join`: ohne den Ring-Riegel haengt der Aufruf, und ein Haenger macht
+    # keinen Test rot — er laesst die Suite auslaufen. Dieselbe Bauart wie die
+    # Warteschleifen-Tests in `test_sperre.py`, und aus demselben Grund.
+    ergebnis = {}
+    faden = threading.Thread(target=lambda: ergebnis.update(v=jobs.vorgang("ring_a")),
+                             daemon=True)
+    faden.start()
+    faden.join(5)
+    assert not faden.is_alive(), "vorgang() haengt im Alias-Ring"
+    assert ergebnis["v"] is not None and ergebnis["v"]["project"] == "P_ring"
 
 
 def test_vorgang_wird_verworfen_wenn_der_blocker_abgebrochen_wird():

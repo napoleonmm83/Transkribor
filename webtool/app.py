@@ -1841,18 +1841,17 @@ def fetch_urls(project: str, body: FetchBody):
     # jetzt auf dieselbe Null-Richtung umgestellt.
     env_sprache["TRANSKRIBOR_FETCH_SPRECHER"] = ",".join(
         "" if s is None else str(s) for s in sprecher)
-    # Der `then`-Rueckruf ist der FUENFTE Weg, auf dem eine Vormerkung entsteht — und der
-    # einzige, dessen Rueckgabewert bisher niemand las: die Nummer entstuende, und keiner
-    # kaeme je an sie heran. Traeger ist deshalb der fetch-Job selbst; die Oberflaeche liest
-    # sie beim naechsten Tick. „Fix an einer Stelle ist kein Fix der Klasse."
-    fetch_ref = {}
-
-    def _dann():
-        _, _, vg = _start_transcribe(project)
-        jobs.vorgang_an_job(fetch_ref.get("id"), vg)
-
-    job_id, started = jobs.start(project, cmd, paths.ROOT, "fetch", then=_dann, env=env_sprache)
-    fetch_ref["id"] = job_id   # der Rueckruf laeuft erst nach dem Download, nie vor dieser Zeile
+    # BEWUSST OHNE Vorgangsnummer, und das ist eine benannte Luecke, keine Auslassung:
+    # der `then`-Rueckruf ist der fuenfte Weg, auf dem eine Vormerkung entstehen kann, und der
+    # einzige, dessen Rueckgabewert niemand lesen kann — er laeuft lange nachdem die Antwort
+    # beim Browser war. Ein erster Anlauf schrieb die Nummer auf den fetch-Job; der kalte
+    # Pruefer hat gezeigt, dass das NICHTS bringt: der Provider nimmt einen Job beim ersten
+    # terminalen Poll aus der Abfrage und fragt ihn nie wieder, und der Rueckruf laeuft ERST
+    # danach. Ein Feld mit Schreiber und ohne Leser ist schlechter als eine offene Frage.
+    # Fuer den URL-Import gilt #381 deshalb unveraendert weiter (nur der 4-Sekunden-Weg) —
+    # als eigenes Issue festgehalten.
+    job_id, started = jobs.start(project, cmd, paths.ROOT, "fetch",
+                                 then=lambda: _start_transcribe(project), env=env_sprache)
     return {"job_id": job_id, "started": started}
 
 
