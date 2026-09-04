@@ -41,6 +41,22 @@ describe('useJobAusgang (#376)', () => {
     expect(toastMock.error).not.toHaveBeenCalled()
   })
 
+  it('ein Lauf, den der Server nicht mehr kennt, meldet GAR NICHTS (#382)', async () => {
+    // Nach einem Neustart ist die Kennung weg (die Registry liegt im Arbeitsspeicher). Der
+    // Lauf ist damit aus unserer Sicht zu Ende, sein Ausgang aber UNBEKANNT — und bis #382
+    // stand hier „fehlgeschlagen", ueber einen Lauf, der oft sauber durchgelaufen war.
+    //
+    // Ohne diesen Test ist der Riegel in `useJobAusgang` Dekoration: die Mutationsprobe hat
+    // ihn ausgeschaltet und ALLE Tests blieben gruen.
+    vi.mocked(api.getJob).mockRejectedValue(
+      Object.assign(new api.HttpFehler('kein Job', 404), { status: 404 }))
+    await laufen()
+    expect(toastMock.error).not.toHaveBeenCalled()
+    expect(toastMock.warning).not.toHaveBeenCalled()
+    expect(toastMock.success).not.toHaveBeenCalled()
+    expect(toastMock.info).not.toHaveBeenCalled()
+  })
+
   it('ein TEILfehlschlag meldet NICHT „fertig" — und nennt die Datei', async () => {
     // Der Kern von #376. `correct.py:1064` wirft nur, wenn KEINE Datei gelang; eine von zweien
     // gescheitert heisst Exitcode 0 und damit Job-Status `done`. Vorher lief genau das als

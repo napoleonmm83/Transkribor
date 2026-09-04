@@ -58,6 +58,23 @@ describe('useOsFortschritt', () => {
     expect(meldungen[0]).toContain('Alpha')
   })
 
+  it('meldet GAR NICHTS, wenn der Server die Kennung nicht mehr kennt (#382)', async () => {
+    // Die teuerste Form der Falschmeldung: die Systembenachrichtigung geht an die Person, die
+    // gerade NICHT hinsieht. Ein 404 nach einem Serverneustart heisst „Ausgang unbekannt" —
+    // bis #382 fiel er durch die Ternary-Kette bis zum Schluss und meldete „fehlgeschlagen"
+    // ueber einen Lauf, der oft sauber durchgelaufen war.
+    //
+    // Ohne diesen Test ist der Riegel Dekoration: die Mutationsprobe schaltete ihn aus, und
+    // ALLE Tests blieben gruen.
+    vi.mocked(api.getJob).mockRejectedValue(
+      Object.assign(new api.HttpFehler('kein Job', 404), { status: 404 }))
+    zeigen()
+    const adopt = (globalThis as unknown as { __adopt: (i: string, p: string, k: string) => void }).__adopt
+    await act(async () => { adopt('j1', 'Alpha', 'correct') })
+    await act(async () => { await new Promise(r => setTimeout(r, 40)) })
+    expect(meldungen).toHaveLength(0)
+  })
+
   it('meldet einen TEILfehlschlag nicht als „fertig" (#376/B2)', async () => {
     // Der OS-Zwilling hatte eine EIGENE Fassung des Urteils und bildete `done` bedingungslos
     // auf „fertig" ab. Er ist damit ausgerechnet dort falsch, wo er am meisten zaehlt: die
