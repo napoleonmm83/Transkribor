@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { useMatch } from 'react-router-dom'
 import { useDateien } from './useProjektDaten'
-import { mergePhases, useActiveJob } from './useActiveJob'
+import { mergePhases, useActiveJob, zeigtLauf } from './useActiveJob'
 import { describePhases, KIND_LABEL } from '@/lib/jobPhases'
 
 const APP = 'Transkribor'
@@ -35,7 +35,7 @@ export function useDokumentTitel(): string {
 
   // NUR die Jobs dieses Projekts: Basisnamen wiederholen sich ueber Projekte hinweg, und
   // mergePhases ist nach Basisnamen indiziert (siehe dessen Kommentar).
-  const meine = jobs.filter(j => j.project === projekt && j.status === 'running')
+  const meine = jobs.filter(j => j.project === projekt && zeigtLauf(j.status))
   const lauf = meine.length
     ? (describePhases(mergePhases(meine)) || (KIND_LABEL[meine[0].kind] ?? 'läuft…'))
     : ''

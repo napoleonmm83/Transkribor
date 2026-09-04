@@ -28,6 +28,10 @@ hat. Lesbar, aber unschön — das ist Absicht.
 
 ## Unveröffentlicht
 
+**Behoben**
+- Eine Aufnahme, die du hochlädst, während schon etwas läuft, meldet ihr Ergebnis jetzt auch dann, wenn sie erst danach an die Reihe kommt — vorher konnte sie still scheitern, ohne dass irgendwo etwas davon stand.
+- Wenn Transkribor kurz nicht antwortet, wird der laufende Vorgang nicht mehr als „fehlgeschlagen" gemeldet: die Anzeige bleibt stehen und zeigt danach das richtige Ergebnis.
+
 ## v0.53.0 — 2026-09-03
 
 **Neu**

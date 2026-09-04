@@ -22,9 +22,16 @@ export type Ausgang =
   | { art: 'teil'; misslungen: string[]; versucht: number }
   /** Nur der URL-Import: er kennt keine Basisnamen, nur seine Bilanz. */
   | { art: 'unvollstaendig'; ok: number; gesamt: number }
+  /** Der Lauf ist aus der Sicht der Oberflaeche zu Ende, sein Ausgang aber UNBEKANNT — der
+   *  Server antwortet, kennt die Kennung nur nicht mehr (Registry im Arbeitsspeicher, ein
+   *  Neustart leert sie). Hier wird NICHTS gemeldet: bis #382 stand an dieser Stelle
+   *  „fehlgeschlagen", ueber einen Lauf, der oft sauber durchgelaufen war. Schweigen ist
+   *  keine Auskunft — aber eine erfundene Auskunft ist schlechter. */
+  | { art: 'unbekannt' }
 
 export function ausgang(j: { status: string; phases: JobPhases }): Ausgang {
   if (j.status === 'cancelled') return { art: 'abbruch' }
+  if (j.status === 'verschwunden') return { art: 'unbekannt' }
   if (j.status !== 'done') return { art: 'fehler' }
 
   const misslungen = Object.entries(j.phases.perBase)

@@ -52,7 +52,21 @@ export type Project = { name: string; dateien: number; fertig: number; geaendert
  *  Server gefuehrt, nicht aus `lines` gelesen. Rueckweg fuer den Fall, dass der gedeckelte
  *  Zeilenpuffer genau diese Zeile verdraengt hat (#475), Gegenstueck zu `bases`/`scope`. */
 export type JobStatus = { status: 'running' | 'done' | 'error' | 'cancelled'; lines: string[]; kind?: string; bases?: string[]; gesehen?: string[]; entfernt?: string[] };
-export type StartJob = { job_id: string; started: boolean };
+/** `vorgang` steht nur bei `started: false` und ist dann die einzige brauchbare Auskunft:
+ *  `job_id` ist in dem Fall der BLOCKER, und der gehoert ueber die Einzel-GPU-Sperre oft
+ *  einem fremden Projekt (#381). Optional, weil vier der sechs Startwege ueber `jobs.start`
+ *  laufen und dort gar keine Vormerkung entstehen kann. */
+export type StartJob = { job_id: string; started: boolean; vorgang?: string | null };
+/** Zustand einer Vormerkung (`GET /api/vorgaenge/{nummer}`). `job_id` steht erst bei
+ *  `gestartet` — vorher gibt es den Nachlauf schlicht noch nicht. */
+export type Vorgang = {
+  vorgang: string;
+  status: 'vorgemerkt' | 'gestartet' | 'verworfen' | 'aufgegeben';
+  job_id: string | null;
+  project: string;
+  kind: string;
+  base: string | null;
+};
 /** `cli`: laeuft ueber ein lokales Programm mit eigener Anmeldung (Claude-Code- oder
  *  ChatGPT-Abo) — dort gibt es kein Key-Feld, ein Modell aber sehr wohl. */
 export type ProviderInfo = {

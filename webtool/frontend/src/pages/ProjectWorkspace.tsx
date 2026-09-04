@@ -4,7 +4,7 @@ import { toast } from 'sonner'
 import { Bot, ScanText, X, FileAudio, Loader2, Plus } from 'lucide-react'
 import { useProjekte, useDateien } from '@/hooks/useProjektDaten'
 import { useAiReady } from '@/hooks/useAiReady'
-import { mergePhases, useActiveJob } from '@/hooks/useActiveJob'
+import { mergePhases, useActiveJob, zeigtLauf } from '@/hooks/useActiveJob'
 import { DateiMenue } from '@/components/DateiMenue'
 import { FileStatusPill } from '@/components/FileStatusPill'
 import { ProjektMenue } from '@/components/ProjektMenue'
@@ -41,10 +41,10 @@ export function ProjectWorkspace() {
   const navigate = useNavigate()
   const { projects, refresh } = useProjekte()
   const { files: dateien, refresh: refreshFiles, loading: dateienLaden, fehler: dateienFehler } = useDateien()
-  const { jobs, adopt } = useActiveJob()
+  const { jobs, adopt, verfolge } = useActiveJob()
   const aiReason = useAiReady()          // nicht leer -> Korrektur waere ein Leerlauf
   const p = projects.find(x => x.name === project)
-  const meine = useMemo(() => jobs.filter(j => j.project === project && j.status === 'running'),
+  const meine = useMemo(() => jobs.filter(j => j.project === project && zeigtLauf(j.status)),
     [jobs, project])
   // NUR die eigenen Jobs mergen: Basisnamen wiederholen sich ueber Projekte hinweg
   // ('Timeline 1' liegt in mehreren), sonst zeigt die Pille den fremden Status.
@@ -346,6 +346,10 @@ export function ProjectWorkspace() {
             toast.success(art === 'fetch' ? 'Herunterladen gestartet — Transkription folgt automatisch'
                                           : 'Transkription gestartet')
           } else if (job) {
+            // Der Nachlauf bekommt spaeter eine eigene Kennung, die niemand meldet — bis #381
+            // war das hier eine Zusage ohne Nachweis: „kommen danach dran", und ob es je
+            // geschah, erfuhr man nicht. Die Nummer macht daraus einen verfolgbaren Lauf.
+            if (job.vorgang) verfolge(job.vorgang)
             toast.info('Läuft schon — die neuen Dateien kommen danach dran.')
           }
         }} />

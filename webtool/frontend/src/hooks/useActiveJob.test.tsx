@@ -78,21 +78,55 @@ describe('useActiveJob', () => {
     expect(beendet[0].phases).toEqual(parseJobPhases('correct', fertig))
   })
 
-  it('meldet beim Aufgeben die zuletzt gelesenen Phasen, nicht die vom Adoptieren', async () => {
-    // Netz weg -> nach dreimal aufgeben. `jobs` im Closure steht auf dem Stand des
-    // Effekt-Aufsatzes, also auf den leeren Phasen von adopt() -- der Zuhoerer bekaeme
-    // damit nichts, obwohl der erste Poll laengst etwas gelesen hatte.
+  /** 404 aus DEM gemockten Modul, das auch `useActiveJob` sieht — `instanceof` ueber eine
+   *  Modulgrenze hinweg haengt an der Identitaet der Klasse, und `vi.mock` ersetzt sie. */
+  const nichtGefunden = () =>
+    Object.assign(new api.HttpFehler('kein Job', 404), { status: 404 })
+
+  it('meldet bei VERSCHWUNDEN die zuletzt gelesenen Phasen, nicht die vom Adoptieren', async () => {
+    // Der Server antwortet, kennt die Kennung aber nicht mehr (Registry im Arbeitsspeicher,
+    // ein Neustart leert sie). Das ist terminal — und `jobs` im Closure steht auf dem Stand
+    // des Effekt-Aufsatzes, also auf den leeren Phasen von adopt(). Ohne `letztePhasen`
+    // bekaeme der Zuhoerer nichts, obwohl der erste Poll laengst etwas gelesen hatte.
     const zeilen = ['→ Korrigiere A …']
     vi.mocked(api.getJob)
       .mockResolvedValueOnce({ status: 'running', lines: zeilen })
-      .mockRejectedValue(new Error('net'))
+      .mockRejectedValue(nichtGefunden())
     const settled = vi.fn()
     render(<JobProvider intervalMs={5}><Probe beiSettled={settled} /></JobProvider>)
     fireEvent.click(screen.getByText('go'))
     await waitFor(() => expect(settled).toHaveBeenCalled())
     const beendet = settled.mock.calls.at(-1)![0] as Job[]
-    expect(beendet[0].status).toBe('error')
+    expect(beendet[0].status).toBe('verschwunden')
     expect(beendet[0].phases).toEqual(parseJobPhases('correct', zeilen))
+  })
+
+  it('ein stiller Server ist KEIN Fehlschlag — und der Lauf bleibt im Poll (#382)', async () => {
+    // Bis hierher wurden drei erfolglose Abfragen zu `error`, und `useJobAusgang` machte
+    // daraus „fehlgeschlagen" — ueber einen Lauf, dessen Subprozess weiterlief. Schlimmer:
+    // der Job fiel danach aus dem Poll und kam auch nach der Rueckkehr des Servers nie
+    // zurueck. Beide Haelften stehen hier.
+    const zeilen = ['→ Korrigiere A …']
+    const fertig = ['apply: A -> edit.json + md (2 Segmente)']
+    vi.mocked(api.getJob)
+      .mockResolvedValueOnce({ status: 'running', lines: zeilen })
+      .mockRejectedValueOnce(new Error('net'))
+      .mockRejectedValueOnce(new Error('net'))
+      .mockRejectedValueOnce(new Error('net'))
+      .mockResolvedValue({ status: 'done', lines: fertig })   // der Server kommt zurueck
+    const settled = vi.fn()
+    render(<JobProvider intervalMs={5}><Probe beiSettled={settled} /></JobProvider>)
+    fireEvent.click(screen.getByText('go'))
+
+    // (1) Der stille Server macht `unerreichbar`, nicht `error`.
+    await waitFor(() =>
+      expect(screen.getByTestId('status').textContent).toBe('unerreichbar'))
+    // (2) und meldet NICHTS — waere er ein Ausgang, stuende hier „fehlgeschlagen".
+    expect(settled).not.toHaveBeenCalled()
+    // (3) Der Poll laeuft weiter: der zurueckgekehrte Server liefert den echten Ausgang.
+    await waitFor(() => expect(settled).toHaveBeenCalled())
+    const beendet = settled.mock.calls.at(-1)![0] as Job[]
+    expect(beendet[0].status).toBe('done')
   })
 
   it('pollt nach dem Terminal-Status nicht weiter', async () => {

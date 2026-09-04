@@ -1,7 +1,13 @@
 import { toast } from 'sonner'
+import { useActiveJob } from './useActiveJob'
 import type { StartJob } from '@/lib/types'
 
 export function useJob() {
+  // ZWEI der drei Startwege gehen durch diese Funktion (`AppShell`, `DateiMenue`) — hier
+  // sitzt der `started: false`-Zweig. Ohne das Verfolgen erreichte die Vorgangsnummer den
+  // Provider auf diesen Wegen nie, und der Nachlauf bliebe stumm wie vor #381.
+  const { verfolge } = useActiveJob()
+
   async function start(fn: () => Promise<StartJob>, label: string, onDone?: () => void) {
     let res: StartJob
     try {
@@ -11,7 +17,14 @@ export function useJob() {
       return
     }
     if (!res.started) {
-      toast.warning('Es läuft bereits ein Job für dieses Projekt.')
+      if (res.vorgang) {
+        verfolge(res.vorgang)
+        // Der alte Text („Es läuft bereits ein Job") sagte nur die halbe Wahrheit: er nannte
+        // den Grund und verschwieg die Folge — dass die Arbeit vorgemerkt IST.
+        toast.info('Es läuft bereits etwas — deine Aufnahme kommt danach dran.')
+      } else {
+        toast.warning('Es läuft bereits ein Job für dieses Projekt.')
+      }
       return
     }
     onDone?.()

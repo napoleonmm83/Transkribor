@@ -1,12 +1,28 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
-import { getJob } from '@/lib/api'
+import { toast } from 'sonner'
+import { getJob, getVorgang, HttpFehler } from '@/lib/api'
 import { laufOrdnung, parseJobPhases, RANG, warteKarte } from '@/lib/jobPhases'
 import type { GlobalPhase, JobPhases, Warten } from '@/lib/types'
+
+/** Zwei Zustaende, die der SERVER nie sendet — sie entstehen hier, aus dem Ausbleiben einer
+ *  Antwort (#382). Deshalb stehen sie in `Job.status` und NICHT im Antworttyp `JobStatus`:
+ *  dort waeren sie eine Behauptung ueber den Server, die er nie aufstellt. */
+export const UNERREICHBAR = 'unerreichbar'   // dreimal keine Antwort — der Lauf laeuft weiter
+export const VERSCHWUNDEN = 'verschwunden'   // Server antwortet 404 — Kennung unbekannt, Ausgang unbekannt
+
+/** Zaehlt dieser Zustand fuer die ANZEIGE als „es laeuft etwas"?
+ *
+ *  EINE Stelle fuer eine Regel, die sonst an sieben Lesern haengt: waehrend eines Hängers
+ *  soll die Oberflaeche stehenbleiben und nicht auf „Bereit" springen und zurueck. */
+export const zeigtLauf = (status: string) => status === 'running' || status === UNERREICHBAR
 
 export type Job = { id: string; project: string; kind: string; status: string; phases: JobPhases }
 type Ctx = {
   jobs: Job[]
   adopt: (id: string, project: string, kind: string, bases?: string[]) => void
+  /** Eine Vormerkung verfolgen, bis daraus ein Lauf wird (#381). Aufzurufen ueberall dort,
+   *  wo ein Start mit `started: false` antwortet — die Job-Kennung ist dann wertlos. */
+  verfolge: (nummer: string) => void
   // Nutzlast statt leerem Aufruf: ein Zuhoerer, der wissen muss WAS terminal wurde, kann sich
   // nicht auf `jobs` aus seinem eigenen Render-Closure verlassen -- der Aufruf unten kommt
   // synchron vor dem eigenen Rerender, der Closure-Stand ist zu diesem Zeitpunkt noch alt.
@@ -178,6 +194,7 @@ export function mergePhases(jobs: Job[]): JobPhases {
 
 export function JobProvider({ children, intervalMs = 1500 }: { children: ReactNode; intervalMs?: number }) {
   const [jobs, setJobs] = useState<Job[]>([])
+  const [vorgaenge, setVorgaenge] = useState<string[]>([])   // offene Vormerkungen (#381)
   const listeners = useRef(new Set<(beendet: Job[]) => void>())
   const failures = useRef<Record<string, number>>({})
   // Zuletzt ERFOLGREICH gelesene Phasen je Job. Der Rueckfall unten braucht sie: `jobs` aus
@@ -198,9 +215,57 @@ export function JobProvider({ children, intervalMs = 1500 }: { children: ReactNo
     return () => { listeners.current.delete(fn) }
   }, [])
 
+  /** Eine Vormerkung verfolgen (#381). Der Aufrufer bekommt bei `started: false` eine Nummer
+   *  statt einer brauchbaren Job-Kennung — hier wird daraus wieder ein adoptierter Lauf. */
+  const verfolge = useCallback((nummer: string) => {
+    setVorgaenge(prev => (prev.includes(nummer) ? prev : [...prev, nummer]))
+  }, [])
+
+  // Solange Vormerkungen offen sind, wird nach ihnen gefragt — im selben Takt wie die Jobs.
+  // Sobald eine `gestartet` meldet, ist der Nachlauf ein Lauf wie jeder andere: adoptiert,
+  // gepollt, und sein Ausgang laeuft ueber `useJobAusgang`. KEIN zweiter Meldeweg.
+  const offeneVorgaenge = vorgaenge.join(',')
+  useEffect(() => {
+    if (!offeneVorgaenge) return
+    const nummern = offeneVorgaenge.split(',')
+    let alive = true
+    let timer: ReturnType<typeof setTimeout>
+    const tick = async () => {
+      const fertig: string[] = []
+      for (const nummer of nummern) {
+        try {
+          const v = await getVorgang(nummer)
+          if (!alive) return
+          if (v.status === 'gestartet' && v.job_id) {
+            adopt(v.job_id, v.project, v.kind, v.base ? [v.base] : undefined)
+            fertig.push(nummer)
+          } else if (v.status === 'verworfen') {
+            fertig.push(nummer)   // Abbruch ist eine Entscheidung — dazu gibt es nichts zu sagen
+          } else if (v.status === 'aufgegeben') {
+            // Dieser Ausgang war bisher NUR eine stderr-Zeile. Der Nutzer hat hochgeladen und
+            // haette nie erfahren, dass daraus nichts wird.
+            toast.warning('Die Aufnahme konnte nicht eingereiht werden — der Platz blieb belegt.')
+            fertig.push(nummer)
+          }
+        } catch (e) {
+          // 404 heisst: diese Nummer kennt der Server nicht (mehr) — weiter zu fragen bringt
+          // nichts. Alles andere ist ein Haenger, und da lohnt die naechste Runde.
+          if (e instanceof HttpFehler && e.status === 404) fertig.push(nummer)
+        }
+      }
+      if (!alive) return
+      if (fertig.length) setVorgaenge(prev => prev.filter(n => !fertig.includes(n)))
+      timer = setTimeout(tick, intervalMs)
+    }
+    tick()
+    return () => { alive = false; clearTimeout(timer) }
+  }, [offeneVorgaenge, intervalMs, adopt])
+
   // Signatur statt jobs im Dep-Array: der Effekt soll neu aufsetzen, wenn sich die MENGE der
   // laufenden Jobs aendert — nicht bei jedem Poll-Ergebnis.
-  const runningIds = jobs.filter(j => j.status === 'running').map(j => j.id).sort().join(',')
+  // `unerreichbar` bleibt IM Poll — das ist der halbe Fix von #382. Frueher fiel der Job hier
+  // heraus und wurde nie wieder gefragt; die Rueckkehr des Servers half dann nichts mehr.
+  const runningIds = jobs.filter(j => zeigtLauf(j.status)).map(j => j.id).sort().join(',')
   useEffect(() => {
     if (!runningIds) return
     const ids = runningIds.split(',')
@@ -210,8 +275,21 @@ export function JobProvider({ children, intervalMs = 1500 }: { children: ReactNo
     // Kommentar an der beendet-Berechnung unten -- der Grund, warum es das braucht).
     const zuletzt: Record<string, string> = {}
     const tick = async () => {
-      const ergebnisse = await Promise.all(ids.map(id =>
-        getJob(id).then(r => [id, r] as const).catch(() => [id, null] as const)))
+      // ZWEI Fehlerarten, nicht eine (#382). Bisher fing ein blankes `.catch` beides und
+      // machte aus dreimal Schweigen einen `error` — also „fehlgeschlagen" ueber einen Lauf,
+      // dessen Subprozess weiterlief. Ein 404 heisst dagegen: der Server ANTWORTET, er kennt
+      // die Kennung nur nicht mehr (die Registry liegt im Arbeitsspeicher, ein Neustart
+      // leert sie). Das ist terminal und trotzdem kein Fehlschlag — wir wissen es schlicht
+      // nicht mehr, und Schweigen ist ehrlicher als eine erfundene Meldung.
+      const weg = new Set<string>()
+      const ergebnisse = await Promise.all(ids.map(async id => {
+        try {
+          return [id, await getJob(id)] as const
+        } catch (e) {
+          if (e instanceof HttpFehler && e.status === 404) weg.add(id)
+          return [id, null] as const
+        }
+      }))
       if (!alive) return
 
       // Den Ausgang HIER bestimmen, nicht im setJobs-Updater. React ruft Updater in der
@@ -225,9 +303,15 @@ export function JobProvider({ children, intervalMs = 1500 }: { children: ReactNo
         if (r) {
           failures.current[id] = 0
           neu[id] = r.status
+        } else if (weg.has(id)) {
+          neu[id] = VERSCHWUNDEN
         } else {
           failures.current[id] = (failures.current[id] ?? 0) + 1
-          neu[id] = failures.current[id] >= 3 ? 'error' : 'running'  // dreimal weg -> aufgeben
+          // Dreimal keine Antwort heisst NICHT mehr `error`. Der Lauf ist ein `Popen`-Kind und
+          // laeuft weiter; frueher meldete die Oberflaeche hier „fehlgeschlagen" und nahm den
+          // Job zugleich aus dem Poll — eine Einbahnstrasse, aus der ihn auch die Rueckkehr
+          // des Servers nicht mehr holte (#377 Punkt 3, #382).
+          neu[id] = failures.current[id] >= 3 ? UNERREICHBAR : 'running'
         }
       }
       const ergebnis = new Map(ergebnisse)
@@ -276,7 +360,9 @@ export function JobProvider({ children, intervalMs = 1500 }: { children: ReactNo
         // `phasen[j.id]` ist gesetzt, wann immer `r` existiert: `neu` und `phasen` entstehen
         // beide aus DERSELBEN Poll-Runde ueber dieselben Kennungen.
         if (r) return { ...j, status: r.status, phases: phasen[j.id] }
-        return neu[j.id] === 'error' ? { ...j, status: 'error' } : j
+        // Ohne Antwort gibt es keine frischen Phasen — der Zustand wechselt, die Phasen
+        // bleiben auf dem zuletzt gelesenen Stand.
+        return neu[j.id] !== 'running' ? { ...j, status: neu[j.id] } : j
       }))
 
       const stati = Object.values(neu)
@@ -301,7 +387,10 @@ export function JobProvider({ children, intervalMs = 1500 }: { children: ReactNo
       // im exakt richtigen Fenster) -- diese Begruendung ist das Argument dafuer, nicht ein
       // roter Testlauf.
       const beendet = jobs
-        .filter(j => neu[j.id] && neu[j.id] !== 'running' && zuletzt[j.id] !== neu[j.id])
+        // `unerreichbar` ist KEIN Ausgang: der Lauf ist nicht beendet, wir hoeren ihn nur
+        // gerade nicht. Ein onSettled darauf waere die Falschmeldung aus #382 durch die
+        // Hintertuer — `useJobAusgang` macht aus jedem terminalen Zustand eine Meldung.
+        .filter(j => neu[j.id] && !zeigtLauf(neu[j.id]) && zuletzt[j.id] !== neu[j.id])
         // Phasen aus dem Merker, nicht aus dem Closure: `jobs.phases` steht dort auf dem
         // Stand des Effekt-Aufsatzes -- ein Zuhoerer bekaeme bei einem Netzfehler nicht die
         // zuletzt gelesene Phase, sondern die vom Adoptieren (leer).
@@ -312,7 +401,10 @@ export function JobProvider({ children, intervalMs = 1500 }: { children: ReactNo
       // nach dem letzten Job einen Timer stehen, den allein das Aufraeumen des Effekts noch
       // abfangen konnte — ein Wettlauf, den ein ausgelasteter CI-Runner verliert. Der
       // Extra-Aufruf traf dort einen erschoepften Mock: undefined.then -> Unhandled Rejection.
-      if (stati.some(s => s === 'running')) timer = setTimeout(tick, intervalMs)
+      // MUSS `unerreichbar` mitnehmen, sonst stirbt der Poll beim dritten Fehlversuch und der
+      // Job oben im `runningIds`-Filter waere ein Zustand ohne Uhr — die Rueckkehr des
+      // Servers wuerde nie bemerkt. Selbst nachgelesen, nicht angenommen.
+      if (stati.some(zeigtLauf)) timer = setTimeout(tick, intervalMs)
     }
     tick()
     return () => { alive = false; clearTimeout(timer) }
@@ -323,7 +415,7 @@ export function JobProvider({ children, intervalMs = 1500 }: { children: ReactNo
   // Bewusst KEIN projektuebergreifendes `phases` im Context: das war die Falle — die Datei-Pillen
   // haetten den Status eines gleichnamigen Files aus einem anderen Projekt gezeigt.
   // Verbraucher filtern selbst auf ihr Projekt und rufen mergePhases().
-  return <JobContext.Provider value={{ jobs, adopt, onSettled }}>{children}</JobContext.Provider>
+  return <JobContext.Provider value={{ jobs, adopt, verfolge, onSettled }}>{children}</JobContext.Provider>
 }
 
 export function useActiveJob(): Ctx {
