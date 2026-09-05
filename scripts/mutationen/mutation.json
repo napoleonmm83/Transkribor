@@ -1,0 +1,53 @@
+[
+  {
+    "id": "MB1 Anti-Schweigen abgeschaltet (jede Ausgabe gilt als Testlauf)",
+    "datei": "scripts/mutation.py",
+    "von": "def _sah_einen_testlauf(ausgabe: str) -> bool:\n    if any(marke in ausgabe for marke in _LAUFMARKEN):",
+    "nach": "def _sah_einen_testlauf(ausgabe: str) -> bool:\n    return True\n    if any(marke in ausgabe for marke in _LAUFMARKEN):",
+    "rot": [
+      "test_cmd_fehlermeldung_gilt_NICHT_als_testlauf",
+      "test_leere_ausgabe_gilt_NICHT_als_testlauf",
+      "test_import_fehler_gilt_NICHT_als_testlauf"
+    ],
+    "gruen": [
+      "test_pytest_ausgabe_gilt_als_testlauf"
+    ]
+  },
+  {
+    "id": "MB2 Anker darf mehrfach passen",
+    "datei": "scripts/mutation.py",
+    "von": "    treffer = inhalt.count(von)\n    return treffer == 1, treffer",
+    "nach": "    treffer = inhalt.count(von)\n    return treffer >= 1, treffer",
+    "rot": [
+      "test_anker_zweimal_ist_nicht_ok"
+    ],
+    "gruen": [
+      "test_anker_gar_nicht_ist_nicht_ok",
+      "test_anker_genau_einmal_ist_ok"
+    ]
+  },
+  {
+    "id": "MB3 Zeilenenden werden nicht mehr angeglichen",
+    "datei": "scripts/mutation.py",
+    "von": "    return text.replace(\"\\n\", \"\\r\\n\") if \"\\r\\n\" in inhalt else text",
+    "nach": "    return text",
+    "rot": [
+      "test_plan_wird_an_crlf_datei_angepasst"
+    ],
+    "gruen": [
+      "test_plan_bleibt_bei_lf_datei_unveraendert"
+    ]
+  },
+  {
+    "id": "MB4 pycache wird gezaehlt, aber nicht geleert",
+    "datei": "scripts/mutation.py",
+    "von": "            shutil.rmtree(ordner, ignore_errors=True)\n            n += 1",
+    "nach": "            n += 1",
+    "rot": [
+      "test_pycache_wird_geleert"
+    ],
+    "gruen": [
+      "test_pycache_leeren_ohne_treffer_ist_kein_fehler"
+    ]
+  }
+]

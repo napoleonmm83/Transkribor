@@ -360,3 +360,45 @@ jobs:
       # Rot nur bei NEUEN Typfehlern gegen .mypy-baseline.txt. Der Baum traegt 65 bekannte;
       # ein Riegel, der ab Tag eins rot ist, wird abgeschaltet statt gelesen.
       - run: python scripts/mypy_riegel.py
+
+  # Die Mutationsprobe ist in diesem Repo Pflicht ("Logik raus -> genau dieser Test rot"),
+  # war aber bis #551 keine PRUEFUNG, sondern eine Gewohnheit: der Treiber entstand je
+  # Sitzung neu im Scratchpad, und die Angabe "20 von 20 gefangen" liess sich aus dem Repo
+  # nicht nachrechnen.
+  #
+  # WARUM der Lauf in die CI gehoert und nicht bloss auf den Entwicklerrechner: ein Waechter
+  # verliert seine Wirkung leise. GEMESSEN in genau diesem Repo — eine Tempo-Aenderung am
+  # Stop-Hook kippte ZWEI bewiesene Mutationen von rot auf gruen, ohne dass eine Zeile Code
+  # verschwand: die Eigenschaft war an eine ungetestete Stelle gewandert. Von Hand faellt so
+  # etwas erst auf, wenn jemand die Probe zufaellig wiederholt. Hier faellt es beim naechsten
+  # Push auf.
+  #
+  # ZWEI Serien, und die zweite ist die wichtigere:
+  #   * gegen scripts/mypy_riegel.py — belegt, dass die Probe an einem echten Waechter greift.
+  #   * gegen scripts/mutation.py SELBST — belegt, dass die Waechter des Treibers wirken.
+  #     Ein Mutationstreiber, dessen eigene Zusicherungen ungeprueft sind, beweist nichts
+  #     ueber andere.
+  #
+  # Der Treiber verweigert den Start auf schmutzigem Arbeitsbaum; ein CI-Checkout ist sauber,
+  # der Riegel ist hier also stumm und stoert nicht. Endet ein Lauf mit 2, war die Suite gar
+  # nicht messbar (Kommando nicht gestartet oder vorher schon rot) — das ist ausdruecklich
+  # KEIN Bestehen und macht den Job rot, genau wie eine nicht gefangene Mutation.
+  mutation:
+    name: Mutationsprobe
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+      - run: pip install --group dev
+      - name: Probe gegen den mypy-Riegel
+        run: >
+          python scripts/mutation.py --repo . --pfad scripts/
+          --test "python -m pytest scripts/test_mypy_riegel.py -q"
+          --plan scripts/mutationen/mypy_riegel.json
+      - name: Probe des Treibers gegen sich selbst
+        run: >
+          python scripts/mutation.py --repo . --pfad scripts/
+          --test "python -m pytest scripts/test_mutation.py -q"
+          --plan scripts/mutationen/mutation.json
