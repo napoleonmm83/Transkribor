@@ -140,7 +140,7 @@ describe('useJobAusgang (#376)', () => {
     // geglueckten Downloads — also auf alles ausser den Grund.
     vi.mocked(api.getJob).mockResolvedValue({ status: 'done', kind: 'fetch',
       lines: ['[fetch] FEHLER https://x/1: Video nicht verfuegbar',
-              '[fetch] geladen: Zweites Video', '[fetch] geladen: Drittes Video',
+              '[fetch] fertig Zweites Video', '[fetch] fertig Drittes Video',
               '[fetch] 2 von 3 geladen'] })
     await laufen('fetch')
     await act(async () => { await new Promise(r => setTimeout(r, 20)) })

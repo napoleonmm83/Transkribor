@@ -1053,9 +1053,12 @@ describe('Vertrag: gedruckte Statuszeilen <-> jobPhases.ts (#375)', () => {
 // die einen ganzen Lauf behauptet, wird aufgezeichnet, nicht getippt.
 //
 // WAS BLEIBT und billig ist: eine Zeile, die zu GAR KEINER Form passt. Die Klasse ist hier
-// live — `prep: 1 Datei(en) vorbereitet` und `[fetch] geladen: {}` haben im ganzen
-// Python-Baum keinen Erzeuger (Baseline unten, und sie sind zugleich die Positivkontrolle:
-// ohne einen bekannten Fall belegt ein Lauf ohne Fund nichts).
+// live — `   Interview: 540 Segmente …` traegt DREI fuehrende Leerzeichen, correct.py:1063
+// druckt ZWEI (Baseline unten, und der Eintrag ist zugleich die Positivkontrolle: ohne einen
+// bekannten Fall belegt ein Lauf ohne Fund nichts).
+// Die zwei Faelle, die hier bis #567 standen (`prep: 1 Datei(en) vorbereitet`,
+// `[fetch] geladen: {}`), sind repariert — ihre Fixturen tragen jetzt die Form, die der
+// Erzeuger wirklich druckt.
 //
 // VERTRAG wie scripts/ruff_riegel.py und scripts/mypy_riegel.py: was heute abweicht, ist
 // eingefroren; NEUES wird rot; Behobenes meldet nur, dass die Baseline hinterherhaengt —
@@ -1079,13 +1082,20 @@ const FIXTURE_DATEIEN: [string, number][] = [
  *  keinen Inventar-Eintrag haben. Die einzige bewusste Ausnahme. */
 const FREMDZEILE = /^\s*\d{1,3}%\|/
 
-/** Eingefroren am 2026-09-05. Zwei Sorten stehen hier, und sie sind verschieden schlimm:
+/** Eingefroren am 2026-09-05. Drei Sorten stehen hier, und sie sind verschieden schlimm:
  *  KUERZUNGEN (`apply: A -> edit.json` statt `… + md (2 Segmente)`) — der Parser reagiert auf
- *  das Praefix, der Test schreibt nur so viel Zeile, wie seine Zusicherung braucht; und
- *  ECHTE ABWEICHUNGEN, fuer die es nirgends einen Erzeuger gibt: `prep: 1 Datei(en)
- *  vorbereitet` (correct.py:233 druckt `getaggt in {tdir}`) und `[fetch] geladen: {}`
- *  (fetch.py:589 druckt `[fetch] {} von {} geladen`). Die zwei sind ein eigenes Issue —
- *  hier eingefroren statt still repariert, weil sie aelter sind als diese Wache. */
+ *  das Praefix, der Test schreibt nur so viel Zeile, wie seine Zusicherung braucht;
+ *  ERNTEGRENZEN (seit #566) — die Zeile hat einen Erzeuger, aber ein `${…}` verdeckt das
+ *  Stueck, an dem die Form sie erkennen wuerde; und ECHTE ABWEICHUNGEN, fuer die es nirgends
+ *  einen Erzeuger gibt.
+ *
+ *  Von den echten Abweichungen ist seit #567 nur noch EINE hier: die Zeile mit den drei
+ *  fuehrenden Leerzeichen. Die beiden anderen (`prep: 1 Datei(en) vorbereitet`,
+ *  `[fetch] geladen: {}`) sind repariert — ihre Fixturen tragen jetzt `getaggt in {tdir}`
+ *  (correct.py:233) bzw. `[fetch] fertig {base}` (fetch.py:471, die Zeile JE Download; :589
+ *  ist die Bilanz und war nie gemeint). Beide Tests blieben dabei gruen: der eine prueft
+ *  `global === 'prep'` am Praefix, der andere, dass der Grund auf die FEHLER-Zeile zeigt und
+ *  nicht auf die Erfolge danach — und `[fetch] fertig {}` IST die echte Erfolgszeile. */
 const FIXTURE_BASELINE = new Set<string>([
   '→ Glossar …',
   '→ Glossar (…) …',
@@ -1096,7 +1106,6 @@ const FIXTURE_BASELINE = new Set<string>([
   '✓ A · Block 1/4 fertig',
   '✗ A · Block 1/2 ohne gültiges Ergebnis',
   '↷ A · Block 1/2 schon vorhanden',
-  'prep: 1 Datei(en) vorbereitet',
   'prep: 1 Datei(en)',
   'prep: 3 Datei(en)',
   '[scope]\tD1',
@@ -1115,8 +1124,6 @@ const FIXTURE_BASELINE = new Set<string>([
   'apply: SKIP ${b} ${grund}',
   '✗ Fehler bei B: LLM-Ausgabe ungueltig',
   'run: FEHLER — 0 von 3 versuchten Datei(en) korrigiert',
-  '[fetch] geladen: Zweites Video',
-  '[fetch] geladen: Drittes Video',
   'starte…',
   'spaet',
   // EINE Zeile, die vorher NUR ueber den Freibrief `'  {}'` durchkam (Review F1) — sie ist
