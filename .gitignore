@@ -48,3 +48,19 @@ torch-report.json
 # Freigabe-Protokoll des Code-Guardian-Dependency-Gates. Traegt einen Zeitstempel
 # und gilt nur 30 Minuten — ein Wegwerf-Beleg des jeweiligen Laufs, keine Quelle.
 .code-guardian-dependency-report.md
+
+# Arbeitsstand des Code Guardian: Belege, Aufgabenliste, Ledger, Journale. Untracked
+# WAR nicht genug — `git add -A` haette 701 KB interne Messskripte ins OEFFENTLICHE
+# Remote geschoben, und `git clean -fd` haette sie andersherum spurlos geloescht.
+# Ignoriert ist gegen beides dicht: `clean` fasst ignorierte Dateien ohne `-x` nicht an.
+# NAMENTLICH und nicht als Muster `.code-guardian-*`, damit eine REGELDATEI des
+# Guardians (etwa `.code-guardian-narben.tsv`) sichtbar bleibt und eingecheckt wird —
+# ein Sammelmuster haette sie still mitgenommen (Entscheidung Marcus 2026-09-05, T-001).
+# Preis, den man kennen muss: ripgrep findet diese Dateien danach auch mit `--hidden`
+# nicht mehr; Suchen darueber brauchen `--no-ignore`.
+.code-guardian-evidence/
+.code-guardian-todo.md
+.code-guardian-todo-archiv.md
+.code-guardian-propagation.md
+.task-journal.md
+.audit-log.md

@@ -1,0 +1,25 @@
+# Narben-Register (T-004, Entscheidung Marcus 2026-09-05).
+#
+# BEWUSST KLEIN. Aufgenommen wird nur, was hier schon einmal zugeschlagen hat UND
+# heute keinen Test hat. Drei urspruengliche Kandidaten sind bei der Messung
+# herausgefallen, und das gehoert hierher, damit sie niemand erneut vorschlaegt:
+#   * Testlauf in urteilender Pipe -> escaping-check.sh:142-162 plus Selbsttest.
+#   * awk -v statt ENVIRON -> notizen.test.sh:108-120; die Regel traefe ausserdem
+#     zwei GEWOLLTE Stellen (notizen.sh:63 und :204). Ein Waechter mit Fehlalarm am
+#     ersten Tag wird weggeklickt.
+#   * write_text ohne newline beim Zurueckspielen -> als Zeilenmuster nicht
+#     ausdrueckbar: gemessen stehen dutzende voellig legitime write_text-Aufrufe im
+#     Baum (frische Testfixtures). Die Narbe ist die RUECKSPIELUNG, also eine
+#     Eigenschaft ueber zwei Zeilen, und die sieht re.search nicht.
+#
+# Grenze dieses Registers: auf Windows laeuft der Scan ohne Zeitbudget, und die
+# SUMMARY sagt das nicht. Muster deshalb einfach halten, kein Backtracking.
+#
+# KEINE .gitattributes-Zeile noetig — das ist gemessen, nicht angenommen: git meldet
+# beim Einchecken, dass LF hier zu CRLF wird (core.autocrlf=true). Der Selbsttest
+# gegen eine CRLF-Fassung dieser Datei laeuft identisch durch (regeln=2 rot=0 exit=0).
+# Ein \r landet zwar im letzten Feld (gegenbeispiel), und das MUSS ohnehin schweigen.
+# Wer hier doch eine eol-Regel ergaenzt, behauptet eine Gefahr, die es nicht gibt.
+id	muster	pfade	grund	beispiel	gegenbeispiel
+N1	(run|Popen|call|check_output)\(\s*\[\s*["']bash["']	**/*.py	bash ohne Pfad trifft auf Windows das WSL-bash aus System32, nicht Git Bash - CreateProcess durchsucht das Systemverzeichnis VOR dem PATH, shutil.which meldet trotzdem Git Bash. 4. Vorfall am 2026-09-05 (Reibungsjournal 9b8c9e144d), zuletzt zwei Diagnoserunden und fuenf Korrekturen. Vollen Pfad uebergeben, Vorbild guardian_update.py finde_bash().	    proc = subprocess.run(["bash", hookpfad], input=nutzlast, text=True)	    kandidaten = ["bash", "sh"]  # blosse Liste, kein Aufruf - kein Treffer
+N2	checkout["'\s,]+--	scripts/**,webtool/**,build/**,electron/**,docs/**	Ruecknahme per git checkout unterscheidet nicht, wessen Arbeit im Arbeitsbaum steht: am 2026-09-04 loeschte ein Review-Subagent damit drei uncommittete Aenderungen der Hauptsitzung. CLAUDE.md verlangt seit dieser Entscheidung die Ruecknahme aus dem SPEICHER (Originalbytes). Der Scan klammert .claude/ bewusst aus - das ist der Spiegel von claude-routing, nicht der Code dieses Repos.	            _git(a.repo, "checkout", "--", m["datei"])	            ziel.write_bytes(original)  # aus dem Speicher, nie git checkout
