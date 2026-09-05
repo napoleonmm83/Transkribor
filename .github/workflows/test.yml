@@ -373,11 +373,18 @@ jobs:
   # nicht nachrechnen.
   #
   # WARUM der Lauf in die CI gehoert und nicht bloss auf den Entwicklerrechner: ein Waechter
-  # verliert seine Wirkung leise. GEMESSEN in genau diesem Repo — eine Tempo-Aenderung am
-  # Stop-Hook kippte ZWEI bewiesene Mutationen von rot auf gruen, ohne dass eine Zeile Code
-  # verschwand: die Eigenschaft war an eine ungetestete Stelle gewandert. Von Hand faellt so
-  # etwas erst auf, wenn jemand die Probe zufaellig wiederholt. Hier faellt es beim naechsten
-  # Push auf.
+  # verliert seine Wirkung leise — die Eigenschaft wandert an eine ungetestete Stelle, ohne
+  # dass eine Zeile Code verschwindet. Von Hand faellt so etwas erst auf, wenn jemand die
+  # Probe zufaellig wiederholt; hier faellt es beim naechsten Push auf.
+  #
+  # Der Anlassfall dafuer ist eine Beobachtung aus einer FRUEHEREN Sitzung (eine
+  # Tempo-Aenderung an einem Stop-Hook liess zwei zuvor rote Mutationen gruen werden). Sie
+  # ist hier bewusst NICHT als „gemessen" ausgewiesen: im Repo liegt dazu weder ein
+  # Kommando noch ein Artefakt, sie stammt aus dem Sitzungsprotokoll und ist von hier aus
+  # nicht nachrechenbar. Der Bot hat das an der ersten Fassung dieses Kommentars zu Recht
+  # beanstandet — und die Begruendung fuer den Job traegt auch ohne sie: eine Probe, die nur
+  # laeuft, wenn jemand daran denkt, ist eine Regel und kein Riegel. Genau diese
+  # Unterscheidung hat dieses Repo bei ruff und mypy schon zweimal Geld gekostet.
   #
   # ZWEI Serien, und die zweite ist die wichtigere:
   #   * gegen scripts/mypy_riegel.py — belegt, dass die Probe an einem echten Waechter greift.

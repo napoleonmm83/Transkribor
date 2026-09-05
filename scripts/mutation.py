@@ -175,13 +175,20 @@ def _lauf(repo: str, kommando: str) -> tuple[str, int]:
     # Loch zu schliessen. (Ein Linter markiert die Zeile trotzdem — das ist die Antwort darauf.)
     #
     # `encoding="utf-8", errors="replace"` statt `text=True`, und das ist kein Feinschliff:
-    # `text=True` dekodiert mit der LOCALE. Auf einem Windows-Python ohne `PYTHONUTF8` — der
-    # Voreinstellung — ist das cp1252, und dann kommt vitests `×` (UTF-8 C3 97) als `Ã—` an,
-    # `_ist_fehlzeile` trifft nie, und JEDE vitest-Mutation gilt als wirkungslos. Ein in
-    # cp1252 undefiniertes Byte (etwa U+274C) wirft sogar `UnicodeDecodeError`, `p.stdout`
-    # wird None und die ganze Ausgabe ist weg. Gefunden vom kalten Diff-Review; dass es hier
-    # trotzdem lief, lag an `PYTHONUTF8=1` auf DIESEM Rechner — also genau die Sorte Fehler,
-    # die auf dem Rechner des Autors nie auftritt.
+    # `text=True` dekodiert mit der LOCALE, auf einem Windows-Python ohne `PYTHONUTF8` also
+    # mit cp1252 — und das ist die Voreinstellung.
+    #
+    # GEMESSEN (2026-09-05, PYTHONUTF8=0, Elternteil meldet `preferred encoding: cp1252`):
+    # schreibt das Kind ein in cp1252 UNDEFINIERTES Byte — etwa U+274C, also E2 9D 8C —,
+    # stirbt der Leser-Thread mit
+    #     UnicodeDecodeError: 'charmap' codec can't decode byte 0x9d in position 3
+    # und `p.stdout` kommt als LEERER String zurueck. Die ganze Testausgabe ist damit weg,
+    # und der Treiber saehe null rote Zeilen, wo eine ganze Suite gelaufen ist.
+    # HERGELEITET, nicht sauber messbar durch eine cp1252-Konsole: dasselbe trifft die
+    # vitest-Zeile `×` (C3 97) als Mojibake, womit `_ist_fehlzeile` nie greift.
+    #
+    # Dass es hier trotzdem lief, lag an `PYTHONUTF8=1` auf DIESEM Rechner — genau die
+    # Sorte Fehler, die auf dem Rechner des Autors nie auftritt.
     p = subprocess.run(kommando, cwd=repo, shell=True, capture_output=True,  # noqa: S602
                        encoding="utf-8", errors="replace")
     return (p.stdout or "") + (p.stderr or ""), p.returncode
@@ -222,6 +229,22 @@ def main(argv: list[str] | None = None) -> int:
     a = ap.parse_args(argv)
 
     plan = json.loads(pathlib.Path(a.plan).read_text(encoding="utf-8"))
+    # Den Plan GANZ pruefen, bevor die erste Datei angefasst wird. Sonst stirbt der Lauf
+    # mitten in der Serie an einem Traceback — und dann laufen weder die restlichen
+    # Mutationen noch die Schlusspruefung auf einen sauberen Baum. Ein LEERER Plan waere
+    # ausserdem eine Serie mit null Mutationen und ginge als „bestanden" durch: dieselbe
+    # Klasse wie eine leere `rot`-Liste, nur eine Ebene hoeher. Beides vom Bot gefunden.
+    pflicht = {"id", "datei", "von", "nach", "rot"}
+    if not isinstance(plan, list) or not plan:
+        print("ABBRUCH: --plan muss eine nicht leere JSON-Liste sein.")
+        return 2
+    unbrauchbar = [m for m in plan if not isinstance(m, dict) or not pflicht <= m.keys()]
+    if unbrauchbar:
+        print(f"ABBRUCH: {len(unbrauchbar)} Eintrag/Eintraege ohne die Pflichtfelder"
+              f" {sorted(pflicht)}:")
+        for m in unbrauchbar[:3]:
+            print(f"         {m!r}"[:160])
+        return 2
 
     # Der Startriegel bleibt, obwohl die Ruecknahme ihn nicht mehr BRAUCHT: eine Serie auf
     # schmutzigem Baum kann zwar nichts mehr loeschen, aber die Schlusspruefung
@@ -323,6 +346,7 @@ def main(argv: list[str] | None = None) -> int:
         # Die Schreibung liegt IM try: sonst laesst eine Ausnahme zwischen ihr und dem try
         # (oder ein Strg-C genau dort) die Mutation im Baum liegen, und der naechste Start
         # raet dann zum Committen der Mutation. Gefunden vom gegnerischen Pruefer.
+        fremd = False
         try:
             datei.write_bytes(mutiert)
             aus, _rc = _lauf(a.repo, a.test)
@@ -340,12 +364,21 @@ def main(argv: list[str] | None = None) -> int:
             if jetzt == mutiert:
                 datei.write_bytes(roh)
             elif jetzt != roh:
+                fremd = True
                 print(f"ABBRUCH {m['id']}: {m['datei']} wurde WAEHREND des Laufs veraendert —")
                 print("         nicht von uns. Die Datei bleibt, wie sie ist; der Ausgangs-")
                 print("         stand steht in git. NICHT ueberschrieben, damit nichts")
                 print("         verlorengeht.")
                 fehler += 1
             _pycache_leeren(pathlib.Path(a.repo) / a.pfad)
+
+        # Nach einer Fremdschreibung ist die AUSWERTUNG sinnlos: die Datei trug beim Testlauf
+        # nicht mehr unsere Mutation, also sagt „rot" oder „gruen" nichts ueber sie aus. Ohne
+        # dieses `continue` zaehlte derselbe Vorfall zweimal (Fremdschreibung plus
+        # fehlgeschlagener Bytevergleich) und produzierte dazu ein widerspruechliches Urteil.
+        # Vom Bot gefunden.
+        if fremd:
+            continue
 
         # Byte-genau derselbe Stand — die Zusicherung, die `git checkout` nie hatte.
         # WAS SIE NICHT KANN, damit es niemand glaubt: eine Mutation, die der Testlauf
