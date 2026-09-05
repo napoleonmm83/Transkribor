@@ -68,10 +68,14 @@ def test_import_fehler_gilt_NICHT_als_testlauf():
 # --- Die Fehlzeilen-Erkennung ---------------------------------------------
 
 def test_fehlzeilen_aller_drei_laeufer():
+    # Die Zeichen sind NICHT austauschbar, und die erste Fassung dieses Tests hielt eines
+    # fest, das zu keinem der Laeufer gehoert (U+2717): vitest nimmt U+00D7, der
+    # Spec-Reporter von node:test U+2716. Ein Zweig ohne Laeufer haelt sich sonst als
+    # gruener Test am Leben, waehrend der Zweig fehlt, den die CI wirklich braucht.
     assert mutation._ist_fehlzeile("not ok 101 - der Deckel ist ein Zeitfenster")
     assert mutation._ist_fehlzeile("FAILED scripts/test_x.py::test_y - assert False")
     assert mutation._ist_fehlzeile("   × jobPhases > reiht ein")
-    assert mutation._ist_fehlzeile("  ✗ etwas")
+    assert mutation._ist_fehlzeile("  ✖ faellt")
 
 
 def test_gruene_zeilen_sind_keine_fehlzeilen():
@@ -142,16 +146,32 @@ def test_pycache_leeren_ohne_treffer_ist_kein_fehler(tmp_path):
 # Mutationsserien gruen, waehrend der Treiber "SERIE FEHLGESCHLAGEN" druckte. Ein Waechter,
 # dessen Rueckgabecode ungeprueft ist, macht gruene CI aus roten Laeufen.
 
-def _lauf_main(tmp_path, monkeypatch, plan, ausgaben, pfad="."):
-    """Faehrt main() mit gefaelschtem Testlauf und gefaelschtem git — ohne echtes Repo."""
+def _lauf_main(tmp_path, monkeypatch, plan, ausgaben, pfad=".", schmutzig=("", ""),
+               nebenbei=None):
+    """Faehrt main() mit gefaelschtem Testlauf und gefaelschtem git — ohne echtes Repo.
+
+    `ausgaben` sind Strings (Rueckgabecode 0) oder Paare (Text, Rueckgabecode).
+    `schmutzig` ist (am Anfang, am Ende) — so laesst sich der Startriegel UND die
+    Schlusspruefung einzeln festhalten, ohne ein echtes Repo zu brauchen.
+    `nebenbei` schreibt WAEHREND des Testlaufs in die Zieldatei — die Attrappe fuer eine
+    parallel arbeitende Sitzung.
+    """
     ziel = tmp_path / "ziel.py"
     ziel.write_bytes(b"WERT = 1\r\nandere = 2\r\n")          # bewusst CRLF
     plandatei = tmp_path / "plan.json"
     plandatei.write_text(json.dumps(plan), encoding="utf-8")
 
-    rest = list(ausgaben)
-    monkeypatch.setattr(mutation, "_lauf", lambda repo, kommando: rest.pop(0))
-    monkeypatch.setattr(mutation, "_verfolgt_geaendert", lambda repo, p: "")
+    rest = [a if isinstance(a, tuple) else (a, 0) for a in ausgaben]
+
+    def falscher_lauf(repo, kommando):
+        if nebenbei is not None:
+            ziel.write_bytes(nebenbei)
+        return rest.pop(0)
+
+    zustaende = list(schmutzig)
+    monkeypatch.setattr(mutation, "_lauf", falscher_lauf)
+    monkeypatch.setattr(mutation, "_verfolgt_geaendert",
+                        lambda repo, p: zustaende.pop(0) if zustaende else "")
     rc = mutation.main(["--repo", str(tmp_path), "--test", "egal",
                         "--plan", str(plandatei), "--pfad", pfad])
     return rc, ziel
@@ -217,6 +237,74 @@ def test_null_ausgefuehrte_tests_ergeben_zwei(tmp_path, monkeypatch):
 def test_vorher_schon_rote_suite_ergibt_zwei(tmp_path, monkeypatch):
     aus = "FAILED x.py::test_irgendwas - assert\n1 failed, 11 passed in 0.4s\n"
     rc, _ = _lauf_main(tmp_path, monkeypatch, _PLAN_OK, [aus])
+    assert rc == 2
+
+
+def test_startriegel_haelt_schmutzigen_baum_auf(tmp_path, monkeypatch):
+    rc, _ = _lauf_main(tmp_path, monkeypatch, _PLAN_OK, [_GRUEN],
+                       schmutzig=(" M ziel.py", ""))
+    assert rc == 2
+
+
+def test_liegengebliebene_mutation_am_ende_ergibt_eins(tmp_path, monkeypatch):
+    # Der Baum war beim Start sauber und ist es am Ende nicht — irgendetwas blieb liegen.
+    rc, _ = _lauf_main(tmp_path, monkeypatch, _PLAN_OK,
+                       [_GRUEN, "FAILED x.py::test_wert - assert\n1 failed in 0.4s\n"],
+                       schmutzig=("", " M ziel.py"))
+    assert rc == 1
+
+
+def test_escapte_testnamen_werden_erkannt(tmp_path, monkeypatch):
+    # FALLE 3, gemessen an echter node-Ausgabe: TAP escapet die Raute im Testnamen.
+    # Ohne das Entescapen findet der Abgleich die rote Zeile nie und meldet
+    # faelschlich "Mutation wirkungslos".
+    plan = [{"id": "T", "datei": "ziel.py", "von": "WERT = 1", "nach": "WERT = 2",
+             "rot": ["faellt (#448)"]}]
+    aus = "TAP version 13\nnot ok 2 - faellt (\\#448)\n1..2\n# tests 2\n# fail 1\n"
+    rc, _ = _lauf_main(tmp_path, monkeypatch, plan, ["ok 1 - x\n# tests 1\n# pass 1\n", aus])
+    assert rc == 0
+
+
+def test_tap_ohne_planzeile_gilt_als_testlauf():
+    # Der zweite Zweig von _sah_einen_testlauf: eine nackte ok-Zeile ohne 1..-Plan.
+    assert mutation._sah_einen_testlauf("ok 1 - erster\nok 2 - zweiter\n")
+
+
+def test_node_spec_fehlzeile_wird_erkannt():
+    # Der Spec-Reporter von node:test nimmt U+2716, nicht das vitest-Kreuz U+00D7.
+    assert mutation._ist_fehlzeile("  ✖ faellt (#448)")
+
+
+def test_node_bilanz_gilt_als_lauf_mit_tests():
+    assert mutation._lief_mindestens_ein_test("# tests 2\n# pass 1\n# fail 1\n")
+    assert mutation._lief_mindestens_ein_test("ℹ tests 2\nℹ pass 1\n")
+
+
+def test_node_bilanz_ohne_einen_einzigen_test_gilt_nicht():
+    assert not mutation._lief_mindestens_ein_test("# tests 0\n# pass 0\n# fail 0\n")
+
+
+def test_fremde_schreibung_waehrend_des_laufs_bricht_ab(tmp_path, monkeypatch):
+    # Der Kern des gegnerischen Befundes: schreibt jemand WAEHREND des Testlaufs in die
+    # mutierte Datei, darf die Ruecknahme sie nicht ueberschreiben. Vorher ging genau das
+    # spurlos durch, mit rc 0 und der Meldung "Arbeitsbaum sauber".
+    fremd = b"FREMDE ARBEIT\r\n"
+    rc, ziel = _lauf_main(tmp_path, monkeypatch, _PLAN_OK,
+                          [_GRUEN, "FAILED x.py::test_wert - assert\n1 failed in 0.4s\n"],
+                          nebenbei=fremd)
+    assert rc == 1
+    assert ziel.read_bytes() == fremd      # NICHT ueberschrieben
+
+
+def test_pytest_nutzungsfehler_ergibt_zwei(tmp_path, monkeypatch):
+    # pytest 4 = Nutzungsfehler, 5 = keine Tests gesammelt. Der Rueckgabecode ist hier
+    # eindeutig, wo die Textsuche raten muesste.
+    rc, _ = _lauf_main(tmp_path, monkeypatch, _PLAN_OK, [("irgendwas\n", 4)])
+    assert rc == 2
+
+
+def test_pytest_keine_tests_gesammelt_ergibt_zwei(tmp_path, monkeypatch):
+    rc, _ = _lauf_main(tmp_path, monkeypatch, _PLAN_OK, [("12 passed in 1s\n", 5)])
     assert rc == 2
 
 

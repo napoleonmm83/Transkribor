@@ -98,5 +98,66 @@
     "gruen": [
       "test_erwarteter_test_wird_rot_ergibt_null"
     ]
+  },
+  {
+    "id": "MB9 Ruecknahme ueberschreibt wieder blind",
+    "datei": "scripts/mutation.py",
+    "von": "            jetzt = datei.read_bytes()\n            if jetzt == mutiert:",
+    "nach": "            jetzt = datei.read_bytes()\n            if True:",
+    "rot": [
+      "test_fremde_schreibung_waehrend_des_laufs_bricht_ab"
+    ],
+    "gruen": [
+      "test_erwarteter_test_wird_rot_ergibt_null"
+    ]
+  },
+  {
+    "id": "MB10 Rueckgabecode des Laeufers wird ignoriert",
+    "datei": "scripts/mutation.py",
+    "von": "    if rc0 in (4, 5):",
+    "nach": "    if rc0 in (4, 5) and False:",
+    "rot": [
+      "test_pytest_nutzungsfehler_ergibt_zwei",
+      "test_pytest_keine_tests_gesammelt_ergibt_zwei"
+    ],
+    "gruen": [
+      "test_erwarteter_test_wird_rot_ergibt_null"
+    ]
+  },
+  {
+    "id": "MB11 escapte Testnamen werden nicht mehr entescapt",
+    "datei": "scripts/mutation.py",
+    "von": "rote = [z.replace(\"\\\\#\", \"#\") for z in aus.splitlines()",
+    "nach": "rote = [z for z in aus.splitlines()",
+    "rot": [
+      "test_escapte_testnamen_werden_erkannt"
+    ],
+    "gruen": [
+      "test_erwarteter_test_wird_rot_ergibt_null"
+    ]
+  },
+  {
+    "id": "MB12 Startriegel laesst schmutzigen Baum durch",
+    "datei": "scripts/mutation.py",
+    "von": "    if schmutzig:",
+    "nach": "    if schmutzig and False:",
+    "rot": [
+      "test_startriegel_haelt_schmutzigen_baum_auf"
+    ],
+    "gruen": [
+      "test_erwarteter_test_wird_rot_ergibt_null"
+    ]
+  },
+  {
+    "id": "MB13 Schlusspruefung auf sauberen Baum faellt weg",
+    "datei": "scripts/mutation.py",
+    "von": "    if rest:\n        fehler += 1",
+    "nach": "    if rest and False:\n        fehler += 1",
+    "rot": [
+      "test_liegengebliebene_mutation_am_ende_ergibt_eins"
+    ],
+    "gruen": [
+      "test_erwarteter_test_wird_rot_ergibt_null"
+    ]
   }
 ]
