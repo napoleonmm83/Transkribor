@@ -163,8 +163,16 @@ def _lauf_main(tmp_path, monkeypatch, plan, ausgaben, pfad=".", schmutzig=("", "
 
     rest = [a if isinstance(a, tuple) else (a, 0) for a in ausgaben]
 
+    aufrufe = []
+
     def falscher_lauf(repo, kommando):
-        if nebenbei is not None:
+        # `nebenbei` erst AB DEM ZWEITEN Aufruf — der erste ist die Positivkontrolle, und
+        # dort ist noch nichts mutiert. Die erste Fassung schrieb bei jedem Aufruf, womit
+        # die Zieldatei schon vor der Mutation fremd war: der Anker passte dann nicht, der
+        # Test wurde aus dem FALSCHEN Grund rot und blieb es auch ohne den geprueften
+        # Waechter. Gefunden von der Mutationsprobe dieses PR (MB9) — genau ihr Zweck.
+        aufrufe.append(kommando)
+        if nebenbei is not None and len(aufrufe) > 1:
             ziel.write_bytes(nebenbei)
         return rest.pop(0)
 

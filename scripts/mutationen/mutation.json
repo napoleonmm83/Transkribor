@@ -117,7 +117,6 @@
     "von": "    if rc0 in (4, 5):",
     "nach": "    if rc0 in (4, 5) and False:",
     "rot": [
-      "test_pytest_nutzungsfehler_ergibt_zwei",
       "test_pytest_keine_tests_gesammelt_ergibt_zwei"
     ],
     "gruen": [
