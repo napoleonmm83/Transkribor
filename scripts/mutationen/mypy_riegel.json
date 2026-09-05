@@ -1,0 +1,40 @@
+[
+  {
+    "id": "M1 Befundmuster nimmt auch note-Zeilen",
+    "datei": "scripts/mypy_riegel.py",
+    "von": "_BEFUND = re.compile(r\"^(?P<pfad>.+?):\\d+: error: (?P<rest>.*)$\")",
+    "nach": "_BEFUND = re.compile(r\"^(?P<pfad>.+?):\\d+: \\w+: (?P<rest>.*)$\")",
+    "rot": [
+      "test_note_mit_klammercode_ist_kein_befund",
+      "test_note_ohne_klammercode_ist_kein_befund"
+    ],
+    "gruen": [
+      "test_windows_pfad_wird_zu_vorwaerts_schraegstrichen"
+    ]
+  },
+  {
+    "id": "M2 Vielfachheit faellt weg (Counter -> set)",
+    "datei": "scripts/mypy_riegel.py",
+    "von": "    n, a = Counter(neu), Counter(alt)\n    return sorted((n - a).elements()), sorted((a - n).elements())",
+    "nach": "    n, a = set(neu), set(alt)\n    return sorted(n - a), sorted(a - n)",
+    "rot": [
+      "test_zweiter_befund_desselben_codes_in_derselben_datei_zaehlt"
+    ],
+    "gruen": [
+      "test_neuer_befund_wird_gemeldet"
+    ]
+  },
+  {
+    "id": "M3 Anti-Schweigen abgeschaltet (unstimmig gibt immer None)",
+    "datei": "scripts/mypy_riegel.py",
+    "von": "def unstimmig(rc: int, ausgabe: str) -> str | None:\n    \"\"\"Passt mypys",
+    "nach": "def unstimmig(rc: int, ausgabe: str) -> str | None:\n    return None\n    \"\"\"Passt mypys",
+    "rot": [
+      "test_rueckgabecode_null_ohne_erfolgsmeldung_ist_unstimmig",
+      "test_unerwarteter_rueckgabecode_ist_unstimmig"
+    ],
+    "gruen": [
+      "test_neuer_befund_wird_gemeldet"
+    ]
+  }
+]
