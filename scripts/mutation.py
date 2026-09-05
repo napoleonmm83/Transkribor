@@ -13,10 +13,19 @@ Defekt:
    verweigert den Start auf schmutzigem Baum —, und der greift hier zu kurz: er prueft EINMAL,
    am Anfang. Eine parallel laufende Sitzung schreibt WAEHREND der Serie, und was es beim
    Start nicht gab, kann kein Startriegel sehen.
-   -> Zurueckgespielt werden die ORIGINALBYTES aus dem Speicher. Das fasst nur die eine Datei
-      an, die dieses Skript selbst geschrieben hat, und kann fremde Arbeit per Konstruktion
-      nicht erreichen. Es beruehrt ausserdem den DESTRUCTIVE-Guardrail nicht (Marcus'
-      Entscheidung 2026-09-04).
+   -> Zurueckgespielt werden die ORIGINALBYTES aus dem Speicher, und zwar NUR, wenn in der
+      Datei noch unsere Mutation steht. Es beruehrt ausserdem den DESTRUCTIVE-Guardrail nicht
+      (Marcus' Entscheidung 2026-09-04).
+
+      **Die Grenze gehoert dazu, und die erste Fassung dieses Absatzes hat sie falsch
+      gezogen.** Sie behauptete, die Speicher-Ruecknahme koenne fremde Arbeit „per
+      Konstruktion nicht erreichen". Das stimmt fuer JEDE ANDERE Datei — aber nicht fuer die
+      eine, die gerade mutiert ist: wer waehrend des Testlaufs genau dort hineinschreibt,
+      verlor seine Zeile beim Zurueckspielen, und der Lauf meldete dazu „Arbeitsbaum sauber".
+      Gemessen vom gegnerischen Pruefer, nicht erdacht. Deshalb der Vergleich vor der
+      Ruecknahme: steht dort etwas anderes, bleibt die Datei unangetastet und der Lauf sagt
+      es. Was bleibt, ist die eigentliche Verbesserung gegenueber `git checkout`: der fasste
+      Dateien an, die mit dieser Mutation nichts zu tun hatten.
 
 2. ZEILENENDEN. Der Arbeitsbaum steht auf Windows haeufig auf CRLF. Ein mehrzeiliger Anker mit
    `\\n` findet dann NICHTS — und ein nicht gefundener Anker ist von "die Stelle gibt es nicht"
@@ -67,10 +76,10 @@ import sys
 # Muster dagegen wuerde eine gruene Suite als rot lesen und die Probe wertlos machen.
 def _ist_fehlzeile(z: str) -> bool:
     s = z.lstrip()
-    return (z.startswith("not ok ")          # node:test / TAP
+    return (z.startswith("not ok ")          # node:test, TAP-Reporter
             or s.startswith("FAILED ")       # pytest
-            or s.startswith("×")             # vitest
-            or s.startswith("✗"))
+            or s.startswith("×")             # vitest, U+00D7
+            or s.startswith("✖"))            # node:test, Spec-Reporter, U+2716
 
 
 # Woran man erkennt, dass ueberhaupt eine Testsuite gelaufen ist — unabhaengig davon, ob sie
@@ -82,7 +91,16 @@ def _ist_fehlzeile(z: str) -> bool:
 # daraufhin dreimal „Mutation wirkungslos", obwohl nichts gemessen worden war. Dieselbe Klasse
 # wie ein fehlendes ruff (rc 1 + leeres stdout = wie „Befunde") — wer einen Riegel baut, baut
 # zuerst den Riegel gegen dessen eigenes Schweigen.
-_LAUFMARKEN = (" passed", " failed", "no tests ran", "Tests ", "1..")
+#
+# `# tests ` und `ℹ tests ` sind die Bilanzzeilen von node:test in seinen ZWEI Formen: der
+# TAP-Reporter schreibt `# tests 2 / # pass 1 / # fail 1`, der Spec-Reporter dieselben Zahlen
+# mit `ℹ`. Beide stehen hier, weil node die Voreinstellung zwischen Fassungen verschoben hat
+# und dieses Werkzeug auf beiden laufen muss. GEMESSEN habe ich nur die TAP-Form (node
+# v22.23.2, lokal und durch scripts/testlauf.mjs); die Spec-Form ist ein Reviewbefund von
+# node 24.20.0 — der Fassung, die `setup-node` in der CI laedt — und hier NICHT nachgestellt,
+# weil diese Maschine kein node 24 hat. Beide Formen zu tragen kostet nichts; sich auf eine
+# zu verlassen kostete ein falsches Rot auf genau dem Kommando, das der Docstring nennt.
+_LAUFMARKEN = (" passed", " failed", "no tests ran", "Tests ", "1..", "# tests ", "ℹ tests ")
 
 
 def _sah_einen_testlauf(ausgabe: str) -> bool:
@@ -97,7 +115,13 @@ def _sah_einen_testlauf(ausgabe: str) -> bool:
 # Positivkontrolle, und danach meldet jede Mutation "NICHT rot geworden" mit einem Hinweis,
 # der in die falsche Richtung zeigt — die eine wahre Ursache steht nirgends.
 # Gefunden vom kalten Diff-Review, mit Reproduktion.
-_MINDESTENS_EIN_TEST = re.compile(r"\b[1-9]\d* (passed|failed)\b|^(not )?ok [1-9]", re.M)
+# Die node-Zweige tragen `[1-9]` aus demselben Grund wie der pytest-Zweig: `# pass 0` neben
+# `# fail 0` heisst NULL Tests, und genau das soll hier nicht als Lauf gelten.
+_MINDESTENS_EIN_TEST = re.compile(
+    r"\b[1-9]\d* (passed|failed)\b"     # pytest, vitest
+    r"|^(not )?ok [1-9]"                # TAP, einzelne Testzeile
+    r"|^[#ℹ] (pass|fail) [1-9]",   # node:test, Bilanz beider Reporter
+    re.M)
 
 
 def _lief_mindestens_ein_test(ausgabe: str) -> bool:
@@ -134,7 +158,15 @@ def _verfolgt_geaendert(repo: str, pfad: str) -> str:
     return "\n".join(z for z in zeilen if not z.startswith("??")).strip()
 
 
-def _lauf(repo: str, kommando: str) -> str:
+def _lauf(repo: str, kommando: str) -> tuple[str, int]:
+    """Gibt (Ausgabe, Rueckgabecode) zurueck — den Code NICHT wegwerfen.
+
+    Der Rueckgabecode des Laeufers ist der ehrlichste Zeuge, den es hier gibt: pytest
+    unterscheidet damit „Tests sind rot" (1) von „Nutzungsfehler" (4) und „keine Tests
+    gesammelt" (5), und das ist eindeutig, wo eine Textsuche raten muss. Die erste Fassung
+    verwarf ihn und stuetzte sich allein auf Zeilenmuster; darauf hat der gegnerische Pruefer
+    zu Recht gezeigt.
+    """
     # `shell=True` ist hier richtig und bleibt: `--test` IST ein Kommando, das der Entwickler
     # selbst tippt ("npm run test:electron"), keine Eingabe von aussen — es gibt keine
     # Vertrauensgrenze, ueber die es kaeme. Und ohne Shell scheitert genau der Normalfall:
@@ -152,7 +184,7 @@ def _lauf(repo: str, kommando: str) -> str:
     # die auf dem Rechner des Autors nie auftritt.
     p = subprocess.run(kommando, cwd=repo, shell=True, capture_output=True,  # noqa: S602
                        encoding="utf-8", errors="replace")
-    return (p.stdout or "") + (p.stderr or "")
+    return (p.stdout or "") + (p.stderr or ""), p.returncode
 
 
 def _pycache_leeren(wurzel: pathlib.Path) -> int:
@@ -208,7 +240,15 @@ def main(argv: list[str] | None = None) -> int:
     #     Zeilen — genau wie eine Mutation ohne Wirkung.
     #   * Ist die Suite VORHER gruen? Auf einer schon roten Suite belegt eine rote Mutation
     #     nichts.
-    aus0 = _lauf(a.repo, a.test)
+    aus0, rc0 = _lauf(a.repo, a.test)
+    # Der Rueckgabecode zuerst, weil er eindeutig ist, wo die Textsuche raten muss: pytest
+    # meldet mit 4 einen Nutzungsfehler und mit 5 „keine Tests gesammelt" — beides heisst
+    # „nichts gemessen", und beides kommt mit einer Ausgabe, die harmlos aussieht.
+    if rc0 in (4, 5):
+        print(f"ABBRUCH: das Testkommando endete mit {rc0} — bei pytest heisst das"
+              " Nutzungsfehler bzw. keine Tests gesammelt.")
+        print(f"         Kommando: {a.test}")
+        return 2
     if not _sah_einen_testlauf(aus0):
         print("ABBRUCH: das Testkommando hat keine erkennbare Testausgabe geliefert —")
         print("         es ist vermutlich gar nicht gestartet. NICHT als Ergebnis werten.")
@@ -261,7 +301,15 @@ def main(argv: list[str] | None = None) -> int:
             continue
         # FALLE 2: Bytes lesen und SELBST dekodieren. `read_text` uebersetzt CRLF still.
         roh = datei.read_bytes()
-        vorher = roh.decode("utf-8")
+        try:
+            vorher = roh.decode("utf-8")
+        except UnicodeDecodeError as fehl:
+            # Als ABBRUCH statt als Traceback: sonst reisst eine einzige nicht-UTF-8-Datei
+            # die ganze Serie ab, die restlichen Mutationen laufen nie, und die Endpruefung
+            # auf einen sauberen Baum entfaellt.
+            print(f"ABBRUCH {m['id']}: {m['datei']} ist nicht UTF-8 ({fehl}).")
+            fehler += 1
+            continue
         von = zeilenenden_angleichen(vorher, m["von"])
         nach = zeilenenden_angleichen(vorher, m["nach"])
 
@@ -271,17 +319,40 @@ def main(argv: list[str] | None = None) -> int:
             fehler += 1
             continue
 
-        datei.write_bytes(vorher.replace(von, nach, 1).encode("utf-8"))
+        mutiert = vorher.replace(von, nach, 1).encode("utf-8")
+        # Die Schreibung liegt IM try: sonst laesst eine Ausnahme zwischen ihr und dem try
+        # (oder ein Strg-C genau dort) die Mutation im Baum liegen, und der naechste Start
+        # raet dann zum Committen der Mutation. Gefunden vom gegnerischen Pruefer.
         try:
-            aus = _lauf(a.repo, a.test)
+            datei.write_bytes(mutiert)
+            aus, _rc = _lauf(a.repo, a.test)
         finally:
-            # FALLE 1: aus dem SPEICHER, nicht ueber git. Fasst nur diese eine Datei an.
-            datei.write_bytes(roh)
+            # FALLE 1: aus dem SPEICHER, nicht ueber git — das fasst nur DIESE Datei an.
+            #
+            # Aber blind zurueckschreiben waere derselbe Fehler eine Ebene tiefer, und genau
+            # darauf hat der gegnerische Pruefer gezeigt: steht in der Datei inzwischen etwas
+            # ANDERES als unsere Mutation, hat jemand waehrend des Testlaufs hineingeschrieben
+            # — eine parallele Sitzung, ein Formatierer, der Testlauf selbst. Wir schrieben
+            # ihm die Arbeit weg und meldeten dazu „Arbeitsbaum sauber". Gemessen: ein
+            # Testkommando, das eine Zeile anhaengt, verlor sie spurlos bei rc 0.
+            # Deshalb: nur zurueckschreiben, wenn noch UNSERE Mutation dasteht.
+            jetzt = datei.read_bytes()
+            if jetzt == mutiert:
+                datei.write_bytes(roh)
+            elif jetzt != roh:
+                print(f"ABBRUCH {m['id']}: {m['datei']} wurde WAEHREND des Laufs veraendert —")
+                print("         nicht von uns. Die Datei bleibt, wie sie ist; der Ausgangs-")
+                print("         stand steht in git. NICHT ueberschrieben, damit nichts")
+                print("         verlorengeht.")
+                fehler += 1
             _pycache_leeren(pathlib.Path(a.repo) / a.pfad)
 
-        # Und die Zusicherung, die `git checkout` nie hatte: byte-genau derselbe Stand.
-        # Das erkennt auch eine Mutation, die versehentlich committet wurde — die saehe
-        # `git status` als sauber an.
+        # Byte-genau derselbe Stand — die Zusicherung, die `git checkout` nie hatte.
+        # WAS SIE NICHT KANN, damit es niemand glaubt: eine Mutation, die der Testlauf
+        # versehentlich COMMITTET hat, sieht sie nicht — sie vergleicht mit dem, was zwei
+        # Zeilen vorher geschrieben wurde. Diesen Fall faengt `_verfolgt_geaendert` am Ende
+        # der Serie. (Der Pruefer hat die Behauptung an dieser Zeile widerlegt; sie stimmt
+        # fuer die Serie, nicht fuer diese Pruefung.)
         if datei.read_bytes() != roh:
             print(f"FEHL {m['id']}: Ruecknahme nicht bytegleich — {m['datei']}")
             fehler += 1
