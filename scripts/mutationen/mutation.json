@@ -49,5 +49,54 @@
     "gruen": [
       "test_pycache_leeren_ohne_treffer_ist_kein_fehler"
     ]
+  },
+  {
+    "id": "MB5 Urteil abgeschaltet (immer Exit 0)",
+    "datei": "scripts/mutation.py",
+    "von": "    return 0 if fehler == 0 else 1",
+    "nach": "    return 0",
+    "rot": [
+      "test_erwarteter_test_bleibt_gruen_ergibt_eins",
+      "test_gegenprobe_wird_rot_ergibt_eins"
+    ],
+    "gruen": [
+      "test_nicht_gestartetes_kommando_ergibt_zwei"
+    ]
+  },
+  {
+    "id": "MB6 leere rot-Liste wird durchgelassen",
+    "datei": "scripts/mutation.py",
+    "von": "        if not m.get(\"rot\"):",
+    "nach": "        if not m.get(\"rot\") and False:",
+    "rot": [
+      "test_leere_rot_liste_bricht_ab"
+    ],
+    "gruen": [
+      "test_erwarteter_test_wird_rot_ergibt_null"
+    ]
+  },
+  {
+    "id": "MB7 Null-Test-Lauf wird durchgelassen",
+    "datei": "scripts/mutation.py",
+    "von": "    if not _lief_mindestens_ein_test(aus0):",
+    "nach": "    if not _lief_mindestens_ein_test(aus0) and False:",
+    "rot": [
+      "test_null_ausgefuehrte_tests_ergeben_zwei"
+    ],
+    "gruen": [
+      "test_erwarteter_test_wird_rot_ergibt_null"
+    ]
+  },
+  {
+    "id": "MB8 Datei ausserhalb von --pfad wird durchgelassen",
+    "datei": "scripts/mutation.py",
+    "von": "        if pfad_wurzel not in datei.resolve().parents:",
+    "nach": "        if pfad_wurzel not in datei.resolve().parents and False:",
+    "rot": [
+      "test_datei_ausserhalb_von_pfad_bricht_ab"
+    ],
+    "gruen": [
+      "test_erwarteter_test_wird_rot_ergibt_null"
+    ]
   }
 ]

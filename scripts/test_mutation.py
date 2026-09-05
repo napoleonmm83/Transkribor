@@ -11,6 +11,7 @@ Lauf ueber `scripts/test_mypy_riegel.py`, die vitest-Zeilen aus dem Frontend-Lau
 der cmd.exe-Text ist woertlich das, was `shell=True` auf Windows zurueckgab.
 """
 
+import json
 import sys
 from pathlib import Path
 
@@ -133,3 +134,94 @@ def test_pycache_wird_geleert(tmp_path):
 
 def test_pycache_leeren_ohne_treffer_ist_kein_fehler(tmp_path):
     assert mutation._pycache_leeren(tmp_path) == 0
+
+
+# --- Das URTEIL: was der Treiber am Ende zurueckgibt -----------------------
+# Der kalte Diff-Review hat gezeigt, dass genau dieser Teil null Abdeckung hatte: mit
+# `return 0` statt `return 0 if fehler == 0 else 1` blieben ALLE Tests UND beide
+# Mutationsserien gruen, waehrend der Treiber "SERIE FEHLGESCHLAGEN" druckte. Ein Waechter,
+# dessen Rueckgabecode ungeprueft ist, macht gruene CI aus roten Laeufen.
+
+def _lauf_main(tmp_path, monkeypatch, plan, ausgaben, pfad="."):
+    """Faehrt main() mit gefaelschtem Testlauf und gefaelschtem git — ohne echtes Repo."""
+    ziel = tmp_path / "ziel.py"
+    ziel.write_bytes(b"WERT = 1\r\nandere = 2\r\n")          # bewusst CRLF
+    plandatei = tmp_path / "plan.json"
+    plandatei.write_text(json.dumps(plan), encoding="utf-8")
+
+    rest = list(ausgaben)
+    monkeypatch.setattr(mutation, "_lauf", lambda repo, kommando: rest.pop(0))
+    monkeypatch.setattr(mutation, "_verfolgt_geaendert", lambda repo, p: "")
+    rc = mutation.main(["--repo", str(tmp_path), "--test", "egal",
+                        "--plan", str(plandatei), "--pfad", pfad])
+    return rc, ziel
+
+
+_GRUEN = "12 passed in 0.4s\n"
+_PLAN_OK = [{"id": "T1", "datei": "ziel.py", "von": "WERT = 1", "nach": "WERT = 2",
+             "rot": ["test_wert"], "gruen": ["test_andere"]}]
+
+
+def test_erwarteter_test_wird_rot_ergibt_null(tmp_path, monkeypatch):
+    rc, _ = _lauf_main(tmp_path, monkeypatch, _PLAN_OK,
+                       [_GRUEN, "FAILED x.py::test_wert - assert\n1 failed, 11 passed in 0.4s\n"])
+    assert rc == 0
+
+
+def test_erwarteter_test_bleibt_gruen_ergibt_eins(tmp_path, monkeypatch):
+    rc, _ = _lauf_main(tmp_path, monkeypatch, _PLAN_OK, [_GRUEN, _GRUEN])
+    assert rc == 1
+
+
+def test_gegenprobe_wird_rot_ergibt_eins(tmp_path, monkeypatch):
+    # Beide erwarteten Namen rot — der zweite haette gruen bleiben MUESSEN.
+    aus = ("FAILED x.py::test_wert - assert\nFAILED x.py::test_andere - assert\n"
+           "2 failed, 10 passed in 0.4s\n")
+    rc, _ = _lauf_main(tmp_path, monkeypatch, _PLAN_OK, [_GRUEN, aus])
+    assert rc == 1
+
+
+def test_leere_rot_liste_bricht_ab(tmp_path, monkeypatch):
+    plan = [{"id": "LEER", "datei": "ziel.py", "von": "WERT = 1", "nach": "WERT = 2",
+             "rot": []}]
+    rc, _ = _lauf_main(tmp_path, monkeypatch, plan, [_GRUEN])
+    assert rc == 1
+
+
+def test_datei_ausserhalb_von_pfad_bricht_ab(tmp_path, monkeypatch):
+    (tmp_path / "unter").mkdir()
+    rc, _ = _lauf_main(tmp_path, monkeypatch, _PLAN_OK, [_GRUEN], pfad="unter")
+    assert rc == 1
+
+
+def test_ruecknahme_ist_bytegleich_auch_bei_crlf(tmp_path, monkeypatch):
+    rc, ziel = _lauf_main(tmp_path, monkeypatch, _PLAN_OK,
+                          [_GRUEN, "FAILED x.py::test_wert - assert\n1 failed in 0.4s\n"])
+    assert rc == 0
+    assert ziel.read_bytes() == b"WERT = 1\r\nandere = 2\r\n"
+
+
+# --- Die Positivkontrolle -------------------------------------------------
+
+def test_nicht_gestartetes_kommando_ergibt_zwei(tmp_path, monkeypatch):
+    aus = 'Der Befehl "." ist entweder falsch geschrieben oder\n'
+    rc, _ = _lauf_main(tmp_path, monkeypatch, _PLAN_OK, [aus])
+    assert rc == 2
+
+
+def test_null_ausgefuehrte_tests_ergeben_zwei(tmp_path, monkeypatch):
+    rc, _ = _lauf_main(tmp_path, monkeypatch, _PLAN_OK, ["no tests ran in 0.31s\n"])
+    assert rc == 2
+
+
+def test_vorher_schon_rote_suite_ergibt_zwei(tmp_path, monkeypatch):
+    aus = "FAILED x.py::test_irgendwas - assert\n1 failed, 11 passed in 0.4s\n"
+    rc, _ = _lauf_main(tmp_path, monkeypatch, _PLAN_OK, [aus])
+    assert rc == 2
+
+
+def test_mehrdeutiger_anker_ergibt_eins(tmp_path, monkeypatch):
+    plan = [{"id": "MEHRDEUTIG", "datei": "ziel.py", "von": "= ", "nach": "== ",
+             "rot": ["test_wert"]}]
+    rc, _ = _lauf_main(tmp_path, monkeypatch, plan, [_GRUEN])
+    assert rc == 1
