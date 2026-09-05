@@ -37,7 +37,9 @@ services:
       # KEINE eigene Ratengrenze — und das ist eine Entscheidung, kein Vergessen
       # (T-002, Marcus 2026-09-05). Ein Deckel stand hier schon eingetragen
       # (100/500/50000 statt der Vorgaben 1000/5000/1 Mio) und ist nach zwei
-      # unabhaengigen Reviewbefunden wieder heraus. Drei Gruende, alle gemessen:
+      # unabhaengigen Reviewbefunden wieder heraus. Drei Gruende — zwei davon HIER
+      # gemessen, beim dritten steht die Herkunft ausdruecklich dabei, weil Bugsink
+      # nur als Image vorliegt und sein Quelltext von hier nicht pruefbar ist:
       #
       # 1. Es gab nie ein offenes Tor. Bugsink deckelt von sich aus bei 1000 je
       #    5 Minuten und 5000 je Stunde je Projekt. Ein Amoklauf kann den Server
