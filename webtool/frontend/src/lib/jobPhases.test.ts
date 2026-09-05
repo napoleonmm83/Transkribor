@@ -148,7 +148,7 @@ describe('parseJobPhases — correct', () => {
     // `cmd_apply` laeuft (correct.py:1343). Ein Waechter auf einer Sequenz, die kein Drucker
     // erzeugt, deckt den Fall nicht, den er decken soll — gefunden vom kalten Plan-Reviewer.
     const p = parseJobPhases('correct', [
-      'prep: 1 Datei(en) vorbereitet',
+      'prep: 1 Datei(en) getaggt in /t',
       'A: 300 Segmente → 2 Blöcke à max. 150',
       '  ↷ A · Block 1/2 schon vorhanden', '  ✓ A · Block 1/2 fertig',
       '  ↷ A · Block 2/2 schon vorhanden', '  ✓ A · Block 2/2 fertig',
