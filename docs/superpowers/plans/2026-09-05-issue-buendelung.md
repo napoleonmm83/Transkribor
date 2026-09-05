@@ -192,10 +192,10 @@ repo-weit — zwei gleichzeitige PRs kosten einander Reviews.
 | Fünf J-Issues zeigen auf **dieselbe** Datei | `gh issue view <n> --json body` je Issue, Dateiverweise ausgezogen → #564 #565 #566 #567 #568 nennen alle `webtool/frontend/jobPhases.vertrag.test.ts` |
 | Datei 1323 Zeilen, 83 506 Byte | `wc -l` · `ls -la` |
 | Vertragsdatei von keiner tsconfig erfasst | `tsconfig.app.json` include = `["src"]`, Datei liegt im Stamm; `tsconfig.node.json` include nennt `rollbalken.test.ts` namentlich |
-| #553 blockiert #554 nicht | `grep -cE '\.(resolves\|rejects)\b'` auf die Vertragsdatei = **0** |
+| Die Vertragsdatei enthält **kein** `.resolves` und **kein** `.rejects` (Negativbefund — er sagt nichts über #553 selbst) | `grep -cE '\.resolves\b'` = **0** und `grep -cE '\.rejects\b'` = **0** auf `jobPhases.vertrag.test.ts`. Zwei Befehle statt einer Alternative: ein `\|` in dieser Tabelle ist für `grep -E` ein **literales** Pipe-Zeichen — die erste Fassung dieser Zeile lieferte 0, ohne je nach `.resolves` gesucht zu haben |
 | #554 ist kein Einzeiler (TS2835) | Dateikopf `jobPhases.vertrag.test.ts:24–31` |
 | J und K fassen **denselben** Vertrag an | `QUELLEN` in `jobPhases.vertrag.test.ts:89–96` erntet `webtool/fetch.py` und `webtool/correct.py`; die Gegenrichtung (`parserMuster`) prüft `jobPhases.ts` |
-| vitest 5.0.0 installiert, #553 also live | `node -p` auf `node_modules/vitest/package.json` |
+| vitest 5.0.0 ist installiert | `node -p` auf `node_modules/vitest/package.json` — dass #553 damit auch auftritt, ist daraus **geschlossen**, nicht gemessen |
 
 **HERGELEITET aus den Issue-Texten, hier NICHT nachgemessen** — wer daran arbeitet, misst zuerst:
 
