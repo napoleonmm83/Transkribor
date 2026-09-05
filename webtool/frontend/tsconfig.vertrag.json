@@ -1,0 +1,38 @@
+// Ein DRITTES Projekt, nur fuer `jobPhases.vertrag.test.ts` (#554). Es gibt es, weil die
+// Datei in keines der beiden vorhandenen passt — und das ist gemessen, nicht vermutet:
+//
+//   * `tsconfig.app.json` hat `"include": ["src"]`, die Datei liegt im Stamm. Sie dorthin zu
+//     verschieben ginge nicht: sie liest die Python-Quellen ueber `node:fs`, und die App soll
+//     node-APIs gar nicht importieren koennen (`types: ["vite/client"]`).
+//   * `tsconfig.node.json` faehrt `moduleResolution: "nodenext"`. Dort aufgenommen scheitert
+//     der Import `./src/lib/jobPhases` mit **TS2835** („Relative import paths need explicit
+//     file extensions … Did you mean './src/lib/jobPhases.js'?") — reproduziert am
+//     2026-09-05, genau die Messung, die im Kopf der Testdatei steht.
+//
+// Also: Aufloesung wie die App (`bundler`, damit der Import aus `src/` traegt), Typen wie
+// node (die Datei braucht `node:fs`, `node:path`, `node:url`). `lib` OHNE `DOM` — gemessen,
+// dass es ohne kompiliert; das haelt die Trennung, um die es oben geht, auch hier ein.
+{
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.vertrag.tsbuildinfo",
+    "target": "es2023",
+    "lib": ["ES2023"],
+    "module": "esnext",
+    "types": ["node"],
+    "skipLibCheck": true,
+
+    /* Bundler mode — wie tsconfig.app.json */
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+
+    /* Linting — wie die beiden anderen Projekte */
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "erasableSyntaxOnly": true,
+    "noFallthroughCasesInSwitch": true
+  },
+  "include": ["jobPhases.vertrag.test.ts"]
+}
