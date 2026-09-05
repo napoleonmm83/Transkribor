@@ -41,6 +41,18 @@ services:
       # Fehlerschleife schreibt genau so schnell. 100 in fuenf Minuten faengt sie
       # frueh ab und ist fuer echte Fehler immer noch reichlich. Nur am Dienst `web`:
       # `aufraeumer` nimmt keine Meldungen an, er raeumt nur auf.
+      #
+      # DER PREIS, und er ist nicht klein: alle Installationen melden in EIN Projekt
+      # (electron/backend.js). Ueber der Grenze sperrt Bugsink das ganze PROJEKT bis
+      # zum Fensterende und antwortet mit nacktem 429 ohne Retry-After; der
+      # Sentry-Client wartet daraufhin pauschal 60 s und verwirft alles, ohne zu
+      # senden — gezaehlt werden diese Verworfenen nicht. Die Schleife EINES Rechners
+      # macht also die Meldungen ALLER unsichtbar, und der engere Deckel loest das
+      # zehnmal leichter aus als Bugsinks Vorgabe. Bewusster Tausch: lieber eine
+      # Schleife frueh abfangen als einen vollen Server. Sauber waeren getrennte
+      # Projekte je Installation — das ist ein eigener offener Punkt.
+      # Die site-weiten MAX_EVENTS_PER_* bleiben auf Vorgabe; bei einem einzigen
+      # Projekt binden ohnehin die Projekt-Grenzen zuerst.
       # Namen und Vorgaben: bugsink.com/docs/settings, Abschnitt Maximums.
       - MAX_EVENTS_PER_PROJECT_PER_5_MINUTES=100
       - MAX_EVENTS_PER_PROJECT_PER_HOUR=500

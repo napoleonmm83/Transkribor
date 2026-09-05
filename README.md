@@ -809,10 +809,17 @@ Die Compose für den Server liegt in `docs/bugsink/compose.yaml` (Coolify, Postg
 `MAX_EVENT_AGE_DAYS=90` löscht nur, wenn `bugsink-manage delete_old_events` läuft — das tut der
 Dienst `aufraeumer` in derselben Compose einmal täglich; ohne ihn wäre die 90-Tage-Zusage der
 README leer. `CREATE_SUPERUSER` gilt nur für den ersten Start und wird danach aus der
-Container-Umgebung entfernt. Die Meldungen sind je Projekt gedeckelt — **100 pro fünf
-Minuten, 500 pro Stunde, 50 000 pro Monat**; darüber antwortet der Server mit 429 und die
-Meldung geht verloren. Bugsinks eigene Vorgaben (5000 pro Stunde) sind für eine App dieser
-Größe zu weit: eine Fehlerschleife füllt den Server sonst schneller, als jemand hinsieht.
+Container-Umgebung entfernt. Die Compose deckelt die Meldungen je Projekt — **100 pro fünf
+Minuten, 500 pro Stunde, 50 000 pro Monat** (Bugsinks Vorgaben wären 1000/5000/1 Mio, für
+eine App dieser Größe zu weit). Wirksam wird das erst mit der nächsten Bereitstellung.
+**Der Preis gehört dazu, weil alle Installationen in EIN Projekt melden:** über der Grenze
+sperrt Bugsink das ganze Projekt bis zum Fensterende und antwortet mit einem nackten 429
+ohne `Retry-After`; der Sentry-Client wartet dann pauschal 60 s und verwirft in der Zeit
+alles, ohne zu senden. Die Fehlerschleife *eines* Rechners macht also die Meldungen *aller*
+unsichtbar, und Bugsink zählt die verworfenen nicht einmal. Der engere Deckel löst das
+schneller aus als Bugsinks Vorgabe — das ist der bewusste Tausch: eine Schleife früh
+abfangen statt einen vollen Server. Sauber lösen ließe es sich nur mit getrennten Projekten
+je Installation.
 
 **Ohne Oberfläche, direkt auf der Kommandozeile:**
 

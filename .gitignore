@@ -56,8 +56,15 @@ torch-report.json
 # NAMENTLICH und nicht als Muster `.code-guardian-*`, damit eine REGELDATEI des
 # Guardians (etwa `.code-guardian-narben.tsv`) sichtbar bleibt und eingecheckt wird —
 # ein Sammelmuster haette sie still mitgenommen (Entscheidung Marcus 2026-09-05, T-001).
-# Preis, den man kennen muss: ripgrep findet diese Dateien danach auch mit `--hidden`
-# nicht mehr; Suchen darueber brauchen `--no-ignore`.
+# Preis, den man kennen muss, und er ist groesser als er aussieht: ripgrep findet diese
+# Dateien danach auch mit `--hidden` nicht mehr; auf der Kommandozeile hilft `--no-ignore`.
+# Das Grep-WERKZEUG von Claude hat diesen Schalter aber NICHT — gemessen: eine Suche nach
+# "T-001" ueber das Repo meldet „No files found", waehrend `grep -c` in derselben Datei
+# vier Treffer zaehlt. Ein Agent bekommt also „gibt es nicht" und nicht „ist ignoriert",
+# und das ist dieselbe Form wie „Datei fehlt". Wer diese Dateien durchsuchen will, nimmt
+# Read auf den Pfad oder grep ueber Bash — nie das Grep-Werkzeug.
+# Neu gefaehrlich wird dadurch `git clean -fdx` bzw. `-X`: das loescht jetzt genau diese
+# Dateien mit. Kein Skript im Repo benutzt es (`git grep` = 0 Treffer), aber von Hand.
 .code-guardian-evidence/
 .code-guardian-todo.md
 .code-guardian-todo-archiv.md

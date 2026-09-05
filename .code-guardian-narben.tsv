@@ -1,5 +1,13 @@
 # Narben-Register (T-004, Entscheidung Marcus 2026-09-05).
 #
+# AUFGERUFEN WIRD ES VON HAND — das ist die wichtigste Zeile hier:
+#     python ~/.claude/skills/code-guardian/tools/detect-scars.py --wurzel .
+#     python ~/.claude/skills/code-guardian/tools/detect-scars.py --self-test --wurzel .
+# Es gibt KEINEN Laeufer im Repo (weder CI noch pre-commit noch package.json), und es
+# kann auch keinen geben: das Werkzeug liegt in ~/.claude und wandert nicht mit. Ausserhalb
+# faehrt es nur `guardian-update --mit-narben`, also opt-in. Wer sich auf dieses Register
+# verlaesst, ohne es zu starten, hat einen Waechter, der nie wacht.
+#
 # BEWUSST KLEIN. Aufgenommen wird nur, was hier schon einmal zugeschlagen hat UND
 # heute keinen Test hat. Drei urspruengliche Kandidaten sind bei der Messung
 # herausgefallen, und das gehoert hierher, damit sie niemand erneut vorschlaegt:
@@ -12,14 +20,18 @@
 #     Baum (frische Testfixtures). Die Narbe ist die RUECKSPIELUNG, also eine
 #     Eigenschaft ueber zwei Zeilen, und die sieht re.search nicht.
 #
-# Grenze dieses Registers: auf Windows laeuft der Scan ohne Zeitbudget, und die
-# SUMMARY sagt das nicht. Muster deshalb einfach halten, kein Backtracking.
-#
-# KEINE .gitattributes-Zeile noetig — das ist gemessen, nicht angenommen: git meldet
-# beim Einchecken, dass LF hier zu CRLF wird (core.autocrlf=true). Der Selbsttest
-# gegen eine CRLF-Fassung dieser Datei laeuft identisch durch (regeln=2 rot=0 exit=0).
-# Ein \r landet zwar im letzten Feld (gegenbeispiel), und das MUSS ohnehin schweigen.
-# Wer hier doch eine eol-Regel ergaenzt, behauptet eine Gefahr, die es nicht gibt.
+# GRENZEN, die man beim Erweitern kennen muss:
+#   * detect-scars.py betritt .git, node_modules, vendor, dist, BUILD, __pycache__,
+#     .venv, .code-guardian-evidence und .code-guardian-zelle nicht (AUSGESCHLOSSEN,
+#     Z. 98). Ein Glob auf build/** waere damit ein Wachgebiet, das es nicht gibt —
+#     und die WARN-Zeile deckt das NICHT auf, weil sie nur bei NULL Treffern je Regel
+#     kommt und die uebrigen Globs treffen.
+#   * Auf Windows laeuft der Scan ohne Zeitbudget, und die SUMMARY sagt das nicht.
+#     Muster deshalb einfach halten, kein Backtracking.
+#   * CRLF ist unschaedlich, gemessen und nicht angenommen: RE_ZEILEN (Z. 103) trennt
+#     \r\n als EINE Marke, es landet also kein \r im letzten Feld. Deshalb bewusst
+#     KEINE eol-Regel in .gitattributes — die waere Abwehr gegen eine Gefahr, die es
+#     nicht gibt.
 id	muster	pfade	grund	beispiel	gegenbeispiel
-N1	(run|Popen|call|check_output)\(\s*\[\s*["']bash["']	**/*.py	bash ohne Pfad trifft auf Windows das WSL-bash aus System32, nicht Git Bash - CreateProcess durchsucht das Systemverzeichnis VOR dem PATH, shutil.which meldet trotzdem Git Bash. 4. Vorfall am 2026-09-05 (Reibungsjournal 9b8c9e144d), zuletzt zwei Diagnoserunden und fuenf Korrekturen. Vollen Pfad uebergeben, Vorbild guardian_update.py finde_bash().	    proc = subprocess.run(["bash", hookpfad], input=nutzlast, text=True)	    kandidaten = ["bash", "sh"]  # blosse Liste, kein Aufruf - kein Treffer
-N2	checkout["'\s,]+--	scripts/**,webtool/**,build/**,electron/**,docs/**	Ruecknahme per git checkout unterscheidet nicht, wessen Arbeit im Arbeitsbaum steht: am 2026-09-04 loeschte ein Review-Subagent damit drei uncommittete Aenderungen der Hauptsitzung. CLAUDE.md verlangt seit dieser Entscheidung die Ruecknahme aus dem SPEICHER (Originalbytes). Der Scan klammert .claude/ bewusst aus - das ist der Spiegel von claude-routing, nicht der Code dieses Repos.	            _git(a.repo, "checkout", "--", m["datei"])	            ziel.write_bytes(original)  # aus dem Speicher, nie git checkout
+N1	(run|Popen|call|check_output)\(\s*\[\s*["']bash["']	**/*.py	bash ohne Pfad trifft auf Windows das WSL-bash aus System32, nicht Git Bash - CreateProcess durchsucht das Systemverzeichnis VOR dem PATH, waehrend shutil.which brav Git Bash meldet. Die Klasse steht seit 2026-09-02 im Reibungsjournal (bbd21ea03c, zwei Eintraege) und kam am 2026-09-05 erneut; zuletzt zwei Diagnoserunden und fuenf Korrekturen. Vollen Pfad uebergeben, Vorbild guardian_update.py finde_bash() (Z. 231-240).	    proc = subprocess.run(["bash", hookpfad], input=nutzlast, text=True)	    kandidaten = ["bash", "sh"]  # blosse Liste, kein Aufruf - kein Treffer
+N2	checkout["'\s,]+--	scripts/**,webtool/**,electron/**	Ruecknahme per git checkout unterscheidet nicht, wessen Arbeit im Arbeitsbaum steht: am 2026-09-04 loeschte ein Review-Subagent damit drei uncommittete Aenderungen der Hauptsitzung. CLAUDE.md verlangt seitdem die Ruecknahme aus dem SPEICHER (Originalbytes). ZWEI ehrliche Grenzen: (1) das Muster erfasst nur die Form OHNE Ref - checkout HEAD -- datei und git restore sind NICHT erfasst, ein Muster dafuer traefe auch Prosa. (2) .claude/ ist noch NICHT im Wachgebiet, und das ist eine Bruecke mit Abrissbedingung, kein Bereichsschnitt: dort liegt in mutation.py:140 der einzige lebende Treffer des Baums. Sobald dieser Treiber als scripts/mutation.py mit Speicher-Ruecknahme steht (T-007), kommt .claude/** dazu.	            _git(a.repo, "checkout", "--", m["datei"])	            ziel.write_bytes(original)  # aus dem Speicher, nie git checkout
