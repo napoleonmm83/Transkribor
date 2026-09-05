@@ -23,12 +23,15 @@ import { parseJobPhases } from './src/lib/jobPhases'
 // WARUM DIESE DATEI IM FRONTEND-STAMM LIEGT und nicht unter `src/`: sie liest die
 // Python-Quellen ueber `node:fs`, und `tsconfig.app.json` fuehrt bewusst `"types":
 // ["vite/client"]` — App-Code soll keine node-APIs importieren koennen.
-// Preis, benannt statt verschwiegen: diese Datei wird von `npm run build` NICHT typgeprueft.
+// Seit #554 wird sie trotzdem typgeprueft — ueber ein DRITTES Projekt,
+// `tsconfig.vertrag.json`, das `tsconfig.json` referenziert und `npm run build` (`tsc -b`)
+// mitfaehrt. Bis dahin stand hier „Preis, benannt statt verschwiegen: diese Datei wird von
+// `npm run build` NICHT typgeprueft"; das war richtig und ist es nicht mehr.
 // `rollbalken.test.ts` liegt zwar auch hier, ist aber KEIN Praezedenzfall, sondern der
-// Gegenfall: es steht in `tsconfig.node.json`s `include` und wird typgeprueft — weil es
-// nichts aus `src/` importiert. Diese Datei tut das (`parseJobPhases`), und sie dorthin
-// aufzunehmen zoege `src/lib/jobPhases.ts` samt `./types` in das node-Projekt (TS2835,
-// nachgemessen). Der Preis ist also echt, nur nicht aus dem Grund, der hier zuerst stand.
+// Gegenfall: es steht in `tsconfig.node.json`s `include` — weil es nichts aus `src/`
+// importiert. Diese Datei tut das (`parseJobPhases`), und sie dorthin aufzunehmen zoege
+// `src/lib/jobPhases.ts` samt `./types` in das node-Projekt (TS2835, nachgemessen). Genau
+// deshalb ein eigenes Projekt mit `moduleResolution: "bundler"` statt eines Eintrags dort.
 //
 // SIE GEHT SEIT #408 IN BEIDE RICHTUNGEN. Von der Druckseite zum Parser (erster Test) UND
 // zurueck (`parserMuster`): jeder Regex-Zweig muss noch eine lebende Druckform haben. Die
@@ -1053,9 +1056,10 @@ describe('Vertrag: gedruckte Statuszeilen <-> jobPhases.ts (#375)', () => {
 // die einen ganzen Lauf behauptet, wird aufgezeichnet, nicht getippt.
 //
 // WAS BLEIBT und billig ist: eine Zeile, die zu GAR KEINER Form passt. Die Klasse ist hier
-// live — `   Interview: 540 Segmente …` traegt DREI fuehrende Leerzeichen, correct.py:1063
-// druckt ZWEI (Baseline unten, und der Eintrag ist zugleich die Positivkontrolle: ohne einen
-// bekannten Fall belegt ein Lauf ohne Fund nichts).
+// live — siehe die Konstante POSITIVKONTROLLE unten. Sie ist nicht nur Baseline-Eintrag,
+// sondern seit dem gegnerischen Review zu diesem PR auch eine ZUSICHERUNG: kein Muster darf
+// sie treffen. Ohne die haette ein zu breites Muster die Wache gruen verstummen lassen —
+// `neu` und `duenn` werden dabei KLEINER, nicht groesser.
 // Die zwei Faelle, die hier bis #567 standen (`prep: 1 Datei(en) vorbereitet`,
 // `[fetch] geladen: {}`), sind repariert — ihre Fixturen tragen jetzt die Form, die der
 // Erzeuger wirklich druckt.
@@ -1082,20 +1086,39 @@ const FIXTURE_DATEIEN: [string, number][] = [
  *  keinen Inventar-Eintrag haben. Die einzige bewusste Ausnahme. */
 const FREMDZEILE = /^\s*\d{1,3}%\|/
 
-/** Eingefroren am 2026-09-05. Drei Sorten stehen hier, und sie sind verschieden schlimm:
- *  KUERZUNGEN (`apply: A -> edit.json` statt `… + md (2 Segmente)`) — der Parser reagiert auf
- *  das Praefix, der Test schreibt nur so viel Zeile, wie seine Zusicherung braucht;
- *  ERNTEGRENZEN (seit #566) — die Zeile hat einen Erzeuger, aber ein `${…}` verdeckt das
- *  Stueck, an dem die Form sie erkennen wuerde; und ECHTE ABWEICHUNGEN, fuer die es nirgends
- *  einen Erzeuger gibt.
+/** Eingefroren am 2026-09-05. Ein Eintrag hier heisst „diese Zeile trifft kein Muster", und
+ *  dafuer gibt es VIER verschiedene Gruende — sie sind verschieden schlimm, und die Liste
+ *  sagt NICHT, welcher Eintrag welchen hat (das ist je Zeile zu entscheiden, nicht pauschal):
  *
- *  Von den echten Abweichungen ist seit #567 nur noch EINE hier: die Zeile mit den drei
- *  fuehrenden Leerzeichen. Die beiden anderen (`prep: 1 Datei(en) vorbereitet`,
- *  `[fetch] geladen: {}`) sind repariert — ihre Fixturen tragen jetzt `getaggt in {tdir}`
- *  (correct.py:233) bzw. `[fetch] fertig {base}` (fetch.py:471, die Zeile JE Download; :589
- *  ist die Bilanz und war nie gemeint). Beide Tests blieben dabei gruen: der eine prueft
+ *  (1) KUERZUNG — der Test schreibt nur so viel Zeile, wie seine Zusicherung braucht, der
+ *      Parser reagiert ohnehin auf das Praefix (`apply: A -> edit.json`, `→ Glossar …`:
+ *      correct.py:839 druckt `→ Glossar (gemeinsame Namen/Begriffe) …`).
+ *  (2) ERNTEGRENZE (seit #566) — die Zeile HAT einen Erzeuger, aber ein `${…}` verdeckt genau
+ *      das Stueck, an dem die Form sie erkennen wuerde.
+ *  (3) FORM AUSSER DIENST — der Erzeuger existiert, seine Form steht aber in
+ *      OHNE_FESTES_STUECK und prueft deshalb gar nichts. So kommt `A: 300 Segmente → …`
+ *      hierher: correct.py:1063 druckt sie mit ZWEI fuehrenden Leerzeichen, und die
+ *      zugehoerige Form `'  {}: {} Segmente → …'` ist ausgefiltert.
+ *  (4) ECHTE ABWEICHUNG — im ganzen Python-Baum kein Erzeuger (`starte…`, `spaet`, und die
+ *      POSITIVKONTROLLE mit ihren drei fuehrenden Leerzeichen).
+ *
+ *  Seit #567 sind ZWEI Eintraege der Sorte (4) weg, weil ihre Fixturen repariert wurden:
+ *  `prep: 1 Datei(en) vorbereitet` traegt jetzt `getaggt in {tdir}` (correct.py:233),
+ *  `[fetch] geladen: {}` jetzt `[fetch] fertig {base}` (fetch.py:471 — die Zeile JE Download;
+ *  :589 ist die Bilanz und war nie gemeint). Beide Tests blieben gruen: der eine prueft
  *  `global === 'prep'` am Praefix, der andere, dass der Grund auf die FEHLER-Zeile zeigt und
- *  nicht auf die Erfolge danach — und `[fetch] fertig {}` IST die echte Erfolgszeile. */
+ *  nicht auf die Erfolge danach — und `[fetch] fertig {}` IST die echte Erfolgszeile.
+ *  Was die Fixture damit NICHT wird: ein echter Strom. `prep: … getaggt in` druckt nur
+ *  `cmd_prep` (correct.py:1443), der gestaffelte Lauf ruft `prep_single` und schweigt — die
+ *  ZUSAMMENSETZUNG einer Fixture prueft diese Wache nicht und behauptet es auch nirgends
+ *  (siehe die drei toten Wege oben). Repariert ist die FORM, nicht die Dramaturgie. */
+/** Die Zeile, an der die Wache beweist, dass sie ueberhaupt etwas ABLEHNT. DREI fuehrende
+ *  Leerzeichen, `correct.py:1063` druckt ZWEI — kein Muster darf sie treffen. Sie steht als
+ *  eigene Konstante, damit Baseline-Eintrag und Zusicherung EIN Literal teilen: zwei Kopien
+ *  liefen beim naechsten Umbau auseinander, und dann prueft die Zusicherung eine Zeile, die
+ *  es nicht mehr gibt — gruen, ohne etwas zu belegen. */
+const POSITIVKONTROLLE = '   Interview: 540 Segmente → 4 Blöcke à max. 150'
+
 const FIXTURE_BASELINE = new Set<string>([
   '→ Glossar …',
   '→ Glossar (…) …',
@@ -1115,21 +1138,26 @@ const FIXTURE_BASELINE = new Set<string>([
   'apply: A -> edit.json',
   'apply: X -> edit.json',
   'apply: SKIP A (waehrend des Laufs handbearbeitet)',
-  // Seit #566 erntet `literale` auch Template-Literale — und dabei bleibt der `${…}`-Ausdruck
-  // als TEXT stehen. Diese Fixture schreibt `apply: SKIP ${b} ${grund}`, und die runde
-  // Klammer, die ALLE drei echten Formen direkt hinter dem Basisnamen tragen
-  // (`apply: SKIP {} (…`, correct.py:417/425/466), steckt hier IN `grund`. Die Form kann die
-  // Zeile also nicht treffen — eine Grenze der Ernte, keine Abweichung der Fixture. Ein
-  // Erzeuger existiert; er ist nur durch den Platzhalter verdeckt.
+  // Sorte (2), Erntegrenze. Seit #566 erntet `literale` auch Template-Literale — und dabei
+  // bleibt der `${…}`-Ausdruck als TEXT stehen. Diese Fixture schreibt
+  // `apply: SKIP ${b} ${grund}`, und im Platzhalter `grund` steckt ALLES, woran die Form die
+  // Zeile erkennen wuerde: nicht nur die runde Klammer, die alle drei echten Formen hinter
+  // dem Basisnamen tragen, sondern auch der feste Text DAHINTER (`human_edited=true`,
+  // `nicht lesbar: `, `waehrend des Laufs handbearbeitet; ` — correct.py:417/425/466). Selbst
+  // mit sichtbarer Klammer paesste die Zeile also auf keine der drei.
+  // Reparabel WAERE sie: die Schleife in `jobPhases.test.ts` liesse sich zu drei echten
+  // Zeilen ausrollen. Das ist eine Entscheidung ueber die BAUFORM des Nachbartests, nicht
+  // ueber diese Wache — deshalb hier eingefroren und benannt statt dort umgebaut.
   'apply: SKIP ${b} ${grund}',
   '✗ Fehler bei B: LLM-Ausgabe ungueltig',
   'run: FEHLER — 0 von 3 versuchten Datei(en) korrigiert',
   'starte…',
   'spaet',
-  // EINE Zeile, die vorher NUR ueber den Freibrief `'  {}'` durchkam (Review F1) — sie ist
-  // der Preis dafuer, dass er weg ist, und sie ist eine echte Abweichung:
-  // DREI fuehrende Leerzeichen, correct.py:1063 druckt ZWEI.
-  '   Interview: 540 Segmente → 4 Blöcke à max. 150',
+  // EINE Zeile, die vorher NUR ueber den Freibrief `'  {}'` durchkam (Review F1 zu PR #563) —
+  // sie ist der Preis dafuer, dass er weg ist. Sie ist zugleich die POSITIVKONTROLLE der
+  // Wache und steht deshalb oben als Konstante: der Test unten prueft, dass sie WIRKLICH
+  // von keinem Muster getroffen wird.
+  POSITIVKONTROLLE,
   // (Die zwei `[diagnose]`-Zeilen standen hier bis #568. Sie waren nie falsch — die FORM
   //  trug den Tabulator als Escape und konnte sie deshalb nicht treffen. Behoben an der
   //  Ernte statt hier eingefroren; die Wache stellt jetzt ein Zertifikat ueber die richtige
@@ -1299,8 +1327,15 @@ describe('Fixture-Wache', () => {
     // Umsetzung kann die Form ihre eigenen Zeilen NIE treffen. In `alsPraefix` gezogen braeche
     // es dagegen den Test „jede Beispielzeile passt noch zu ihrer geernteten Form" — der
     // vergleicht Quelltext-Form gegen Quelltext-Beispiel, also beide Seiten UNaufgeloest.
-    const muster = Object.keys(INVENTAR).filter(traegtEinFestesStueck)
-      .map(form => alsPraefix(entschluesselt(form)))
+    // `entschluesselt` VOR dem Filter, nicht nur vor `alsPraefix`: sonst urteilt der Filter
+    // ueber die rohe Form und die Regex ueber die aufgeloeste. Eine Form, deren festes Stueck
+    // nur ein Tabulator-Escape ist (`\\t{}`), bestuende den Filter — zwei Zeichen, nicht
+    // Leerraum — und wuerde nach dem Aufloesen zu `^\t[^\n]*`, also zum Freibrief fuer JEDE
+    // tab-eingerueckte Zeile. Heute gibt es keine solche Form (der einzige Schluessel mit
+    // Rueckstrich ist `[diagnose]`, dessen festes Stueck Text traegt); die Luecke entstand
+    // mit #568 und wird hier geschlossen, statt auf ihr erstes Vorkommen zu warten.
+    const muster = Object.keys(INVENTAR).map(entschluesselt).filter(traegtEinFestesStueck)
+      .map(alsPraefix)
     const gesehen = new Set<string>()
     const neu: string[] = []
     const duenn: string[] = []
@@ -1330,6 +1365,18 @@ describe('Fixture-Wache', () => {
     expect(neu, `Fixture-Zeile(n) ohne Erzeuger-Form — im INVENTAR nachsehen, welche Form der `
       + `echte Lauf druckt (kopieren, nicht erinnern), oder die Zeile in FIXTURE_BASELINE `
       + `aufnehmen und dort begruenden:\n  ${neu.join('\n  ')}`).toEqual([])
+
+    // POSITIVKONTROLLE — der Riegel gegen ein zu BREITES Muster, und er fehlte bis hierher.
+    // Alle drei Zusicherungen darueber werden GRUENER, wenn die Muster mehr treffen: `neu`
+    // und `duenn` schrumpfen, `muster.length` waechst. Faellt also `.filter(…)` weg oder
+    // liefert `alsPraefix` ein `^`, zertifiziert die Wache JEDE Zeile — und meldet Erfolg.
+    // (Der #565-Test daneben faengt das NICHT: er prueft die Filterfunktion fuer sich, nicht
+    // ihre Anwendung hier.) Diese eine Zeile hat nachweislich keinen Erzeuger; trifft sie
+    // plotzlich ein Muster, ist das Muster kaputt, nicht die Zeile.
+    expect([...gesehen], `die Positivkontrolle wird jetzt von einem Muster GETROFFEN — damit `
+      + `bescheinigt die Wache Zeilen, fuer die es keinen Erzeuger gibt. Sieh nach, welches `
+      + `Muster zu breit geworden ist (fehlender Filter? ein leeres festes Stueck?), statt `
+      + `die Zeile aus der Baseline zu nehmen.`).toContain(POSITIVKONTROLLE)
 
     // (Weiter unten steht der Kommentar-Test — er misst die Ernte selbst, nicht die Wache.)
 
@@ -1390,7 +1437,9 @@ describe('Fixture-Wache', () => {
     // Der Riegel gegen das eigene Schweigen, eine Ebene ueber dem Mindestertrag: der zaehlt
     // die geernteten ZEILEN, dieser hier die pruefenden FORMEN. Beide Zahlen koennen
     // unabhaengig voneinander schrumpfen, ohne dass ein Test rot wird.
-    const gefiltert = Object.keys(INVENTAR).filter(f => !traegtEinFestesStueck(f)).sort()
+    // Dieselbe Reihenfolge wie in der Wache: erst aufloesen, dann filtern (siehe dort).
+    const gefiltert = Object.keys(INVENTAR).map(entschluesselt)
+      .filter(f => !traegtEinFestesStueck(f)).sort()
     expect(gefiltert, `Formen ohne festes Stueck haben sich geaendert. Eine solche Form `
       + `stellt ein Zertifikat ueber JEDE passend eingerueckte Zeile aus und faellt darum `
       + `aus der Wache — das ist gewollt, aber es muss SICHTBAR sein. Neue Form bewusst? `
