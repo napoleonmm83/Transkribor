@@ -1112,17 +1112,14 @@ const FIXTURE_BASELINE = new Set<string>([
   '[fetch] geladen: Drittes Video',
   'starte…',
   'spaet',
-  // Drei Zeilen, die vorher NUR ueber den Freibrief `'  {}'` durchkamen (Review F1) — sie
-  // sind der Preis dafuer, dass er weg ist, und jede ist eine echte Abweichung:
+  // EINE Zeile, die vorher NUR ueber den Freibrief `'  {}'` durchkam (Review F1) — sie ist
+  // der Preis dafuer, dass er weg ist, und sie ist eine echte Abweichung:
   // DREI fuehrende Leerzeichen, correct.py:1063 druckt ZWEI.
   '   Interview: 540 Segmente → 4 Blöcke à max. 150',
-  // Der Erzeuger schreibt `\t` als ESCAPE im Python-Quelltext; das INVENTAR erntet die
-  // Form woertlich und traegt darum zwei Zeichen, wo die Fixture einen echten Tabulator
-  // hat. Die Form kann diese Zeilen also nie treffen — eine Eigenschaft der Ernte, keine
-  // der Fixture. Als eigenes Issue festgehalten statt hier still geflickt.
-  '  [diagnose] limit\tKontingent\tspaeter',
-  '  [diagnose] ratelimit\tAnfrage-Limit erreicht (Rate Limit)\tDer Anbieter bittet um '
-    + 'eine kurze Pause. Bitte in 1–2 Minuten erneut auf „Korrigieren“ klicken.',
+  // (Die zwei `[diagnose]`-Zeilen standen hier bis #568. Sie waren nie falsch — die FORM
+  //  trug den Tabulator als Escape und konnte sie deshalb nicht treffen. Behoben an der
+  //  Ernte statt hier eingefroren; die Wache stellt jetzt ein Zertifikat ueber die richtige
+  //  Form aus.)
 ])
 
 /** Die Form als PRAEFIX der Zeile, Platzhalter frei. Praefix, weil ein INVENTAR-Schluessel
@@ -1253,7 +1250,14 @@ function fixtureZeilen(datei: string): string[] {
 
 describe('Fixture-Wache', () => {
   it('jede Protokollzeile in einer Fixture hat einen Erzeuger', () => {
-    const muster = Object.keys(INVENTAR).filter(traegtEinFestesStueck).map(alsPraefix)
+    // `entschluesselt` HIER und nicht in `alsPraefix` (#568): eine Fixture traegt zur Laufzeit
+    // einen echten Tabulator, ein INVENTAR-Schluessel die zwei Zeichen aus dem Python-Quelltext
+    // (`'  [diagnose] {}\\t{}\\t{}'`, der einzige Schluessel mit Rueckstrich). Ohne die
+    // Umsetzung kann die Form ihre eigenen Zeilen NIE treffen. In `alsPraefix` gezogen braeche
+    // es dagegen den Test „jede Beispielzeile passt noch zu ihrer geernteten Form" — der
+    // vergleicht Quelltext-Form gegen Quelltext-Beispiel, also beide Seiten UNaufgeloest.
+    const muster = Object.keys(INVENTAR).filter(traegtEinFestesStueck)
+      .map(form => alsPraefix(entschluesselt(form)))
     const gesehen = new Set<string>()
     const neu: string[] = []
     const duenn: string[] = []
