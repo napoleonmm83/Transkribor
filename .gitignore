@@ -50,9 +50,15 @@ torch-report.json
 .code-guardian-dependency-report.md
 
 # Arbeitsstand des Code Guardian: Belege, Aufgabenliste, Ledger, Journale. Untracked
-# WAR nicht genug — `git add -A` haette 701 KB interne Messskripte ins OEFFENTLICHE
-# Remote geschoben, und `git clean -fd` haette sie andersherum spurlos geloescht.
+# WAR nicht genug — `git add -A` haette 701 KB interne Messskripte VORGEMERKT, und der
+# naechste Commit samt Push haette sie ins OEFFENTLICHE Remote getragen; `git clean -fd`
+# haette sie andersherum spurlos geloescht. (Der Bot hat die erste Fassung dieser Zeile zu
+# Recht beanstandet: `add` schiebt nichts zum Remote, es fuellt den Index. Der Weg ist
+# laenger als behauptet — kuerzer wird er dadurch nicht, denn `git add -A` gefolgt von
+# `git commit` ist genau der Griff, der hier taeglich passiert.)
 # Ignoriert ist gegen beides dicht: `clean` fasst ignorierte Dateien ohne `-x` nicht an.
+# Die Muster tragen einen fuehrenden `/`: ohne ihn gilt ein Name in JEDER Tiefe, und eine
+# gleichnamige Datei in einem Unterordner waere still mit verschwunden.
 # NAMENTLICH und nicht als Muster `.code-guardian-*`, damit eine REGELDATEI des
 # Guardians (etwa `.code-guardian-narben.tsv`) sichtbar bleibt und eingecheckt wird —
 # ein Sammelmuster haette sie still mitgenommen (Entscheidung Marcus 2026-09-05, T-001).
@@ -65,9 +71,9 @@ torch-report.json
 # Read auf den Pfad oder grep ueber Bash — nie das Grep-Werkzeug.
 # Neu gefaehrlich wird dadurch `git clean -fdx` bzw. `-X`: das loescht jetzt genau diese
 # Dateien mit. Kein Skript im Repo benutzt es (`git grep` = 0 Treffer), aber von Hand.
-.code-guardian-evidence/
-.code-guardian-todo.md
-.code-guardian-todo-archiv.md
-.code-guardian-propagation.md
-.task-journal.md
-.audit-log.md
+/.code-guardian-evidence/
+/.code-guardian-todo.md
+/.code-guardian-todo-archiv.md
+/.code-guardian-propagation.md
+/.task-journal.md
+/.audit-log.md

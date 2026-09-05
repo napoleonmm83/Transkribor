@@ -16,9 +16,13 @@
 #     zwei GEWOLLTE Stellen (notizen.sh:63 und :204). Ein Waechter mit Fehlalarm am
 #     ersten Tag wird weggeklickt.
 #   * write_text ohne newline beim Zurueckspielen -> als Zeilenmuster nicht
-#     ausdrueckbar: gemessen stehen dutzende voellig legitime write_text-Aufrufe im
-#     Baum (frische Testfixtures). Die Narbe ist die RUECKSPIELUNG, also eine
-#     Eigenschaft ueber zwei Zeilen, und die sieht re.search nicht.
+#     ausdrueckbar. GEMESSEN am 2026-09-05 mit
+#         grep -rn '.write_text(' --include=*.py . | grep -vE '/.venv/|/node_modules/|/dist/'
+#     125 Aufrufe, davon 123 OHNE newline-Argument und davon 120 in Testdateien —
+#     also fast durchweg frische Fixtures, wo Zeilenenden gar keine Rolle spielen.
+#     Eine Regel darauf waere zu 120 Teilen Fehlalarm. Die Narbe ist die
+#     RUECKSPIELUNG (lesen, aendern, zurueckschreiben), also eine Eigenschaft ueber
+#     zwei Zeilen, und die sieht re.search nicht.
 #
 # GRENZEN, die man beim Erweitern kennen muss:
 #   * detect-scars.py betritt .git, node_modules, vendor, dist, BUILD, __pycache__,
