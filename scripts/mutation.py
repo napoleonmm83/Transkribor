@@ -56,6 +56,7 @@ from __future__ import annotations
 import argparse
 import json
 import pathlib
+import re
 import shutil
 import subprocess
 import sys
@@ -88,6 +89,21 @@ def _sah_einen_testlauf(ausgabe: str) -> bool:
     if any(marke in ausgabe for marke in _LAUFMARKEN):
         return True
     return any(z.startswith(("ok ", "not ok ")) for z in ausgabe.splitlines())
+
+
+# Zweite, SCHAERFERE Frage — und sie ist nicht dieselbe wie die erste: `no tests ran` IST
+# eine Testausgabe (`_sah_einen_testlauf` sagt zu Recht ja), aber es sind null Tests
+# gelaufen. Ein Tippfehler im Testpfad oder ein `-k` ohne Treffer kommt so durch die
+# Positivkontrolle, und danach meldet jede Mutation "NICHT rot geworden" mit einem Hinweis,
+# der in die falsche Richtung zeigt — die eine wahre Ursache steht nirgends.
+# Gefunden vom kalten Diff-Review, mit Reproduktion.
+_MINDESTENS_EIN_TEST = re.compile(r"\b[1-9]\d* (passed|failed)\b|^(not )?ok [1-9]", re.M)
+
+
+def _lief_mindestens_ein_test(ausgabe: str) -> bool:
+    if "no tests ran" in ausgabe:
+        return False
+    return bool(_MINDESTENS_EIN_TEST.search(ausgabe))
 
 
 def _git(repo: str, *args: str) -> str:
@@ -125,7 +141,17 @@ def _lauf(repo: str, kommando: str) -> str:
     # `npm` ist auf Windows `npm.cmd`, ein argv-Aufruf findet es nicht. Wer das auf
     # `shlex.split()` umstellt, macht das Werkzeug auf der Zielplattform unbrauchbar, ohne ein
     # Loch zu schliessen. (Ein Linter markiert die Zeile trotzdem — das ist die Antwort darauf.)
-    p = subprocess.run(kommando, cwd=repo, shell=True, capture_output=True, text=True)  # noqa: S602
+    #
+    # `encoding="utf-8", errors="replace"` statt `text=True`, und das ist kein Feinschliff:
+    # `text=True` dekodiert mit der LOCALE. Auf einem Windows-Python ohne `PYTHONUTF8` — der
+    # Voreinstellung — ist das cp1252, und dann kommt vitests `×` (UTF-8 C3 97) als `Ã—` an,
+    # `_ist_fehlzeile` trifft nie, und JEDE vitest-Mutation gilt als wirkungslos. Ein in
+    # cp1252 undefiniertes Byte (etwa U+274C) wirft sogar `UnicodeDecodeError`, `p.stdout`
+    # wird None und die ganze Ausgabe ist weg. Gefunden vom kalten Diff-Review; dass es hier
+    # trotzdem lief, lag an `PYTHONUTF8=1` auf DIESEM Rechner — also genau die Sorte Fehler,
+    # die auf dem Rechner des Autors nie auftritt.
+    p = subprocess.run(kommando, cwd=repo, shell=True, capture_output=True,  # noqa: S602
+                       encoding="utf-8", errors="replace")
     return (p.stdout or "") + (p.stderr or "")
 
 
@@ -195,6 +221,13 @@ def main(argv: list[str] | None = None) -> int:
         print("         Hinweis: `shell=True` startet auf Windows cmd.exe. Dort gibt es kein"
               " `./`, und ein Pfad mit fuehrendem `./` scheitert stumm mit rc 1.")
         return 2
+    if not _lief_mindestens_ein_test(aus0):
+        print("ABBRUCH: das Testkommando ist gelaufen, hat aber NULL Tests ausgefuehrt —")
+        print("         ein Tippfehler im Pfad oder eine Auswahl ohne Treffer. Eine Serie")
+        print("         darauf meldete jede Mutation als wirkungslos, und der Grund stuende")
+        print("         nirgends. NICHT als Ergebnis werten.")
+        print(f"         Kommando: {a.test}")
+        return 2
     vorlauf_rot = [z for z in aus0.splitlines() if _ist_fehlzeile(z)]
     if vorlauf_rot:
         print(f"ABBRUCH: die Suite ist schon OHNE Mutation rot ({len(vorlauf_rot)} Zeilen) —")
@@ -205,8 +238,27 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Positivkontrolle: Suite laeuft und ist gruen ({len(plan)} Mutationen folgen)")
 
     fehler = 0
+    pfad_wurzel = (pathlib.Path(a.repo) / a.pfad).resolve()
     for m in plan:
+        # Eine Mutation ohne erwarteten roten Test besteht sonst BEDINGUNGSLOS: `offen` ist
+        # leer, also gilt sie als OK — egal was der Testlauf tat. Der Plan waere damit die
+        # eine Stelle, an der sich die Probe still entwerten laesst, und der Treiber saehe
+        # es nicht. Gefunden vom kalten Diff-Review, mit Reproduktion.
+        if not m.get("rot"):
+            print(f"ABBRUCH {m['id']}: `rot` ist leer — eine Mutation ohne erwarteten roten"
+                  " Test belegt nichts.")
+            fehler += 1
+            continue
+
         datei = pathlib.Path(a.repo) / m["datei"]
+        # Eine Datei ausserhalb von `--pfad` faellt aus BEIDEN Nachkontrollen: die
+        # Sauberkeitspruefung am Ende sieht sie nicht, und ihr Bytecode wird nicht geleert.
+        # Lieber laut abbrechen als still halb pruefen.
+        if pfad_wurzel not in datei.resolve().parents:
+            print(f"ABBRUCH {m['id']}: {m['datei']} liegt ausserhalb von --pfad {a.pfad} —"
+                  " dort greifen weder die Sauberkeitspruefung noch das Bytecode-Leeren.")
+            fehler += 1
+            continue
         # FALLE 2: Bytes lesen und SELBST dekodieren. `read_text` uebersetzt CRLF still.
         roh = datei.read_bytes()
         vorher = roh.decode("utf-8")
@@ -247,9 +299,19 @@ def main(argv: list[str] | None = None) -> int:
         for n in falsch_rot:
             print(f"      faelschlich rot: {n}")
         if not rote and offen:
-            print("      Hinweis: KEINE rote Zeile erkannt. Entweder wirkte die Mutation nicht,"
-                  " oder _ist_fehlzeile kennt die Form dieses Laeufers nicht — nachsehen,"
-                  " bevor daraus ein Befund wird.")
+            # Die Diagnose muss die drei Faelle auseinanderhalten, sonst zeigt sie in die
+            # falsche Richtung — sie sehen alle drei nach "null rote Zeilen" aus.
+            if not _sah_einen_testlauf(aus):
+                print("      Achtung: die Suite ist gar nicht GELAUFEN — die Mutation hat sie"
+                      " vermutlich unlesbar gemacht (Syntaxfehler, Importfehler). Das ist"
+                      " KEINE Aussage ueber den Test.")
+            elif not _lief_mindestens_ein_test(aus):
+                print("      Achtung: die Suite lief, hat aber NULL Tests ausgefuehrt — die"
+                      " Mutation hat vermutlich das Einsammeln gebrochen.")
+            else:
+                print("      Hinweis: KEINE rote Zeile erkannt. Entweder wirkte die Mutation"
+                      " nicht, oder _ist_fehlzeile kennt die Form dieses Laeufers nicht —"
+                      " nachsehen, bevor daraus ein Befund wird.")
 
     rest = _verfolgt_geaendert(a.repo, a.pfad)
     print(f"\nArbeitsbaum nach der Serie ({a.pfad}): "
