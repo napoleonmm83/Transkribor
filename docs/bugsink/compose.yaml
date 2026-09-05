@@ -44,12 +44,17 @@ services:
       #    also auch ohne unser Zutun nicht fluten.
       # 2. Alle Installationen melden in EIN Projekt (electron/backend.js). Ueber
       #    der Grenze sperrt Bugsink deshalb nicht die eine Meldung, sondern das
-      #    ganze PROJEKT bis Fensterende (ingest/views.py:713-727), antwortet mit
-      #    nacktem 429 OHNE Retry-After, und der Sentry-Client wartet darauf
-      #    pauschal 60 s und verwirft alles ungesendet. Gezaehlt werden die
-      #    Verworfenen nicht (views.py:906). Die Schleife EINES Rechners macht also
-      #    die Meldungen ALLER anderen unsichtbar — und ein engerer Deckel loest
-      #    genau das haeufiger aus.
+      #    ganze PROJEKT bis Fensterende und antwortet mit 429 ohne Retry-After;
+      #    die Verworfenen zaehlt es nicht mit. Das ist Bugsinks Ingest-Verhalten
+      #    laut seiner Doku (bugsink.com/docs/stress-testing nennt genau diese
+      #    429-Sperre) und aus dem Quelltext des Containers berichtet — HIER nicht
+      #    selbst nachgemessen, weil Bugsink nur als Image vorliegt.
+      #    SELBST GEMESSEN ist die andere Haelfte, und die ist die teure:
+      #    @sentry/core faellt ohne Retry-After auf 60 s zurueck
+      #    (node_modules/@sentry/core/build/cjs/utils/ratelimit.js:5,
+      #    DEFAULT_RETRY_AFTER = 60 * 1e3) und sendet in der Zeit gar nichts.
+      #    Die Schleife EINES Rechners macht also die Meldungen ALLER anderen
+      #    unsichtbar — und ein engerer Deckel loest genau das haeufiger aus.
       # 3. Die uebliche Meldungsmenge ist UNGEMESSEN (Fehlerberichte laufen erst
       #    seit v0.52.0). Einen Deckel unter eine Menge zu legen, die niemand
       #    gemessen hat, ist geraten — und wer raet, raet hier zulasten aller.
