@@ -1147,6 +1147,27 @@ function traegtEinFestesStueck(form: string): boolean {
   return form.split('{}')[0].trim() !== ''
 }
 
+/** Die Formen, die `traegtEinFestesStueck` heute aus der Wache wirft — namentlich, weil das
+ *  Filtern sonst STILL waechst (#565). Der Filter ist richtig (Begruendung oben), aber er
+ *  urteilt ueber die Form, nicht ueber die Absicht: eine SIEBTE Form dieser Art kaeme
+ *  lautlos dazu, die Wache prueft danach weniger, und nichts wird rot.
+ *
+ *  Der Extremfall macht das scharf: eine Form `{}` oder `{}{}` — ein Erzeuger, dessen erste
+ *  Zeichenkette ein reiner Platzhalter ist — faellt hier ebenfalls heraus. Ohne diese Liste
+ *  bliebe die Wache dabei gruen, obwohl sie danach fuer JEDE Fixture-Zeile einen "Erzeuger"
+ *  faende. Der Test unten prueft deshalb GLEICHHEIT, nicht Teilmenge und nicht die Anzahl.
+ *
+ *  Die ersten beiden sind tqdm-Balken (die Zeile beginnt mit dem Prozentwert), die uebrigen
+ *  vier die eingerueckte Familie aus `correct.py`. */
+const OHNE_FESTES_STUECK: string[] = [
+  '{}%| Sprachmodell',
+  '{}%| {}',
+  '  {}: {} Segmente → {} Blöcke à max. {}',
+  '  {}',
+  '  {}  ({} Audio)',
+  '  {}: {} Fenster, ',
+]
+
 /** Das Array ab `pos` (zeigt auf `[`) bis zur passenden `]`. Ein Regex reicht hier NICHT:
  *  er bricht am ersten `]`, und das steht in `'[scope] A'` mitten in einer Zeichenkette. */
 function arrayAb(quelle: string, pos: number): string {
@@ -1323,5 +1344,17 @@ describe('Fixture-Wache', () => {
     // sonst waere die Bereinigung selbst der naechste blinde Fleck.
     expect(zeilenAusQuelle(RUF + "['apply: A -> // kein Kommentar'])"))
       .toEqual(['apply: A -> // kein Kommentar'])
+  })
+
+  it('keine Form faellt STILL aus der Wache (#565)', () => {
+    // Der Riegel gegen das eigene Schweigen, eine Ebene ueber dem Mindestertrag: der zaehlt
+    // die geernteten ZEILEN, dieser hier die pruefenden FORMEN. Beide Zahlen koennen
+    // unabhaengig voneinander schrumpfen, ohne dass ein Test rot wird.
+    const gefiltert = Object.keys(INVENTAR).filter(f => !traegtEinFestesStueck(f)).sort()
+    expect(gefiltert, `Formen ohne festes Stueck haben sich geaendert. Eine solche Form `
+      + `stellt ein Zertifikat ueber JEDE passend eingerueckte Zeile aus und faellt darum `
+      + `aus der Wache — das ist gewollt, aber es muss SICHTBAR sein. Neue Form bewusst? `
+      + `Dann in OHNE_FESTES_STUECK aufnehmen und dort begruenden.`)
+      .toEqual([...OHNE_FESTES_STUECK].sort())
   })
 })
