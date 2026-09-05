@@ -13,16 +13,21 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-# Alle sechs Jobs LESEN nur: pytest, Vitest/tsc, die node:test-Suite, die vier
+# Sechs der sieben Jobs LESEN nur: pytest, Vitest/tsc, die node:test-Suite, die vier
 # Skript-Tests (`notizen.test.sh` faelscht `gh` und braucht kein Token) und die beiden
 # Riegel `Ruff` und `Mypy`.
+# Der siebte, `Mutationsprobe`, SCHREIBT — und das ist kein Widerspruch zum Block unten:
+# er aendert Dateien in seinem EIGENEN, wegwerfbaren Checkout (Mutation setzen, Tests
+# fahren, Originalbytes zurueckschreiben) und spielt nichts zurueck ins Repository. Kein
+# Commit, kein Push, kein Token — `contents: read` reicht ihm genauso.
 # (Diese Zeile sagte „drei Jobs" und „drei Skript-Tests", als es schon fuenf bzw. vier
 # waren — eine Zahl in einem Kommentar driftet unsichtbar, genau wie an #536. Wer hier
 # einen Job ergaenzt, zaehlt sie nach — und zwar AB `jobs:`, sonst zaehlen `pull_request:`
 # und `push:` mit und die Antwort ist 8 statt 6 (genau so ist der erste Entwurf dieser
 # Zeile danebengegangen):
 #     sed -n '/^jobs:/,$p' .github/workflows/test.yml | grep -cE '^  [a-z_-]+:$'
-# Gegengeprueft am YAML-Parser: beide sagen 6.)
+# Gegengeprueft am YAML-Parser: beide sagen 7. Nachgezogen am 2026-09-05 beim Job
+# `Mutationsprobe` — genau der Handgriff, den diese Klammer verlangt.)
 #
 # Ohne Block gilt die Vorgabe des REPOSITORYS — und die ist eine Einstellung, die ein
 # Klick umlegt, kein Bestandteil dieses Workflows. Heute steht sie auf read: gemessen am
@@ -31,7 +36,8 @@ concurrency:
 # Der Block hier schliesst also kein offenes Schreibrecht — er macht den Workflow von der
 # Einstellung unabhaengig und nimmt das ungenutzte `Packages: read` weg
 # (zizmor: excessive-permissions, gefunden an PR #468). Workflow-weit statt je Job, damit
-# ein kuenftiger siebter Job ihn nicht vergessen kann.
+# ein kuenftiger siebter Job ihn nicht vergessen kann. (Der ist am 2026-09-05 gekommen —
+# `Mutationsprobe` — und hat ihn tatsaechlich nicht vergessen muessen.)
 permissions:
   contents: read
 
