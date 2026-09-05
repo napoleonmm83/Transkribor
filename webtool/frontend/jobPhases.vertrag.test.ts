@@ -1106,6 +1106,13 @@ const FIXTURE_BASELINE = new Set<string>([
   'apply: A -> edit.json',
   'apply: X -> edit.json',
   'apply: SKIP A (waehrend des Laufs handbearbeitet)',
+  // Seit #566 erntet `literale` auch Template-Literale — und dabei bleibt der `${…}`-Ausdruck
+  // als TEXT stehen. Diese Fixture schreibt `apply: SKIP ${b} ${grund}`, und die runde
+  // Klammer, die ALLE drei echten Formen direkt hinter dem Basisnamen tragen
+  // (`apply: SKIP {} (…`, correct.py:417/425/466), steckt hier IN `grund`. Die Form kann die
+  // Zeile also nicht treffen — eine Grenze der Ernte, keine Abweichung der Fixture. Ein
+  // Erzeuger existiert; er ist nur durch den Platzhalter verdeckt.
+  'apply: SKIP ${b} ${grund}',
   '✗ Fehler bei B: LLM-Ausgabe ungueltig',
   'run: FEHLER — 0 von 3 versuchten Datei(en) korrigiert',
   '[fetch] geladen: Zweites Video',
@@ -1185,13 +1192,21 @@ function arrayAb(quelle: string, pos: number): string {
   return ''
 }
 
-/** Echte Literale BEIDER Quotierungen. Ein `'…'`-Muster allein zog `Demo` aus dem Inneren
- *  von "run: 3 Datei(en) in Projekt 'Demo'" heraus und meldete es als unbekannte Zeile. */
+/** Echte Literale ALLER DREI Quotierungen. Ein `'…'`-Muster allein zog `Demo` aus dem Inneren
+ *  von "run: 3 Datei(en) in Projekt 'Demo'" heraus und meldete es als unbekannte Zeile.
+ *
+ *  Backticks kamen mit #566 dazu, und sie sind die riskante Form, nicht eine seltene: ein
+ *  Template-Literal ist genau das, was man schreibt, wenn eine Protokollzeile einen variablen
+ *  Anteil hat. Der `${…}`-Ausdruck bleibt dabei als TEXT stehen — das traegt, weil
+ *  `alsPraefix` jeden Platzhalter zu `[^\n]*` macht und ihn damit ueberspringt. Ein Ausdruck
+ *  mit einem Anfuehrungszeichen darin (`${x ? "a" : "b"}`) wird als Inhalt mitgelesen; heute
+ *  kommt das nicht vor, und die Fehlerrichtung waere die laute (die Zeile faende keinen
+ *  Erzeuger und der Test sagte es). */
 function literale(block: string): string[] {
   const aus: string[] = []
   for (let i = 0; i < block.length; i++) {
     const c = block[i]
-    if (c !== "'" && c !== '"') continue
+    if (c !== "'" && c !== '"' && c !== '`') continue
     let s = ''
     for (i++; i < block.length && block[i] !== c; i++) {
       if (block[i] === '\\') { s += block[i] + block[i + 1]; i++ } else s += block[i]
@@ -1344,6 +1359,24 @@ describe('Fixture-Wache', () => {
     // sonst waere die Bereinigung selbst der naechste blinde Fleck.
     expect(zeilenAusQuelle(RUF + "['apply: A -> // kein Kommentar'])"))
       .toEqual(['apply: A -> // kein Kommentar'])
+  })
+
+  it('ein Template-Literal faellt nicht aus der Ernte (#566)', () => {
+    // Vier davon standen in geernteten Arrays und waren fuer die Wache unsichtbar — und
+    // Backticks sind gerade die Form, in der man eine Zeile mit variablem Anteil schreibt,
+    // also die riskante. Der Ausloeser entsteht wie nebenan zur LAUFZEIT: diese Datei steht
+    // selbst in FIXTURE_DATEIEN, ein woertliches Beispiel waere eine Fixture mit erfundenen
+    // Zeilen und machte den Test daneben rot.
+    const RUF = "parseJobPhases('correct'," + ' '
+    const TICK = '`'
+
+    expect(zeilenAusQuelle(RUF + '[' + TICK + '→ Erfunden C ${b} …' + TICK + '])'))
+      .toContain('→ Erfunden C ${b} …')
+
+    // Gegenprobe: die beiden anderen Quotierungen bleiben unveraendert erreichbar — sonst
+    // waere „Backticks kommen dazu" durch „nur noch Backticks" ersetzt.
+    expect(zeilenAusQuelle(RUF + '[' + TICK + 'A' + TICK + ", 'B', \"C\"])"))
+      .toEqual(['A', 'B', 'C'])
   })
 
   it('keine Form faellt STILL aus der Wache (#565)', () => {
