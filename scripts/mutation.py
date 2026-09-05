@@ -60,6 +60,7 @@ import shutil
 import subprocess
 import sys
 
+
 # Wie die drei hier benutzten Laeufer eine rote Zeile schreiben. Bewusst eine kurze Liste:
 # was hier fehlt, faellt als "Mutation wirkungslos" auf und wird ergaenzt — ein zu breites
 # Muster dagegen wuerde eine gruene Suite als rot lesen und die Probe wertlos machen.
@@ -92,7 +93,11 @@ def _sah_einen_testlauf(ausgabe: str) -> bool:
 def _git(repo: str, *args: str) -> str:
     # S603: die Argumente kommen aus diesem Skript und aus `--repo`, das der Entwickler selbst
     # tippt. Es gibt keine Vertrauensgrenze, ueber die hier etwas hereinkaeme.
-    return subprocess.run(["git", "-C", repo, *args],  # noqa: S603
+    # S607: `git` bewusst OHNE vollen Pfad. Ein fester Pfad waere hier nicht sicherer, nur
+    # unbrauchbar — er unterscheidet sich zwischen Windows-Entwicklerrechner und ubuntu-Laeufer,
+    # und beide muessen dieses Skript fahren. Dieselbe Abwaegung wie in jedem git-Aufruf des
+    # Repos; die Alternative waere eine Pfadtabelle, die bei der ersten neuen Plattform driftet.
+    return subprocess.run(["git", "-C", repo, *args],  # noqa: S603, S607
                           capture_output=True, text=True, check=True).stdout
 
 
