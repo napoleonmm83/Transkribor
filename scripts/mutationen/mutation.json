@@ -1,0 +1,198 @@
+[
+  {
+    "id": "MB1 Anti-Schweigen abgeschaltet (jede Ausgabe gilt als Testlauf)",
+    "datei": "scripts/mutation.py",
+    "von": "def _sah_einen_testlauf(ausgabe: str) -> bool:\n    if any(marke in ausgabe for marke in _LAUFMARKEN):",
+    "nach": "def _sah_einen_testlauf(ausgabe: str) -> bool:\n    return True\n    if any(marke in ausgabe for marke in _LAUFMARKEN):",
+    "rot": [
+      "test_cmd_fehlermeldung_gilt_NICHT_als_testlauf",
+      "test_leere_ausgabe_gilt_NICHT_als_testlauf",
+      "test_import_fehler_gilt_NICHT_als_testlauf"
+    ],
+    "gruen": [
+      "test_pytest_ausgabe_gilt_als_testlauf"
+    ]
+  },
+  {
+    "id": "MB2 Anker darf mehrfach passen",
+    "datei": "scripts/mutation.py",
+    "von": "    treffer = inhalt.count(von)\n    return treffer == 1, treffer",
+    "nach": "    treffer = inhalt.count(von)\n    return treffer >= 1, treffer",
+    "rot": [
+      "test_anker_zweimal_ist_nicht_ok"
+    ],
+    "gruen": [
+      "test_anker_gar_nicht_ist_nicht_ok",
+      "test_anker_genau_einmal_ist_ok"
+    ]
+  },
+  {
+    "id": "MB3 Zeilenenden werden nicht mehr angeglichen",
+    "datei": "scripts/mutation.py",
+    "von": "    return text.replace(\"\\n\", \"\\r\\n\") if \"\\r\\n\" in inhalt else text",
+    "nach": "    return text",
+    "rot": [
+      "test_plan_wird_an_crlf_datei_angepasst"
+    ],
+    "gruen": [
+      "test_plan_bleibt_bei_lf_datei_unveraendert"
+    ]
+  },
+  {
+    "id": "MB4 pycache wird gezaehlt, aber nicht geleert",
+    "datei": "scripts/mutation.py",
+    "von": "            shutil.rmtree(ordner, ignore_errors=True)\n            n += 1",
+    "nach": "            n += 1",
+    "rot": [
+      "test_pycache_wird_geleert"
+    ],
+    "gruen": [
+      "test_pycache_leeren_ohne_treffer_ist_kein_fehler"
+    ]
+  },
+  {
+    "id": "MB5 Urteil abgeschaltet (immer Exit 0)",
+    "datei": "scripts/mutation.py",
+    "von": "    return 0 if fehler == 0 else 1",
+    "nach": "    return 0",
+    "rot": [
+      "test_erwarteter_test_bleibt_gruen_ergibt_eins",
+      "test_gegenprobe_wird_rot_ergibt_eins"
+    ],
+    "gruen": [
+      "test_nicht_gestartetes_kommando_ergibt_zwei"
+    ]
+  },
+  {
+    "id": "MB6 leere rot-Liste wird durchgelassen",
+    "datei": "scripts/mutation.py",
+    "von": "        if not m.get(\"rot\"):",
+    "nach": "        if not m.get(\"rot\") and False:",
+    "rot": [
+      "test_leere_rot_liste_bricht_ab"
+    ],
+    "gruen": [
+      "test_erwarteter_test_wird_rot_ergibt_null"
+    ]
+  },
+  {
+    "id": "MB7 Null-Test-Lauf wird durchgelassen",
+    "datei": "scripts/mutation.py",
+    "von": "    if not _lief_mindestens_ein_test(aus0):",
+    "nach": "    if not _lief_mindestens_ein_test(aus0) and False:",
+    "rot": [
+      "test_null_ausgefuehrte_tests_ergeben_zwei"
+    ],
+    "gruen": [
+      "test_erwarteter_test_wird_rot_ergibt_null"
+    ]
+  },
+  {
+    "id": "MB8 Datei ausserhalb von --pfad wird durchgelassen",
+    "datei": "scripts/mutation.py",
+    "von": "        if pfad_wurzel not in datei.resolve().parents:",
+    "nach": "        if pfad_wurzel not in datei.resolve().parents and False:",
+    "rot": [
+      "test_datei_ausserhalb_von_pfad_bricht_ab"
+    ],
+    "gruen": [
+      "test_erwarteter_test_wird_rot_ergibt_null"
+    ]
+  },
+  {
+    "id": "MB9 Ruecknahme ueberschreibt wieder blind",
+    "datei": "scripts/mutation.py",
+    "von": "            jetzt = datei.read_bytes()\n            if jetzt == mutiert:",
+    "nach": "            jetzt = datei.read_bytes()\n            if True:",
+    "rot": [
+      "test_fremde_schreibung_waehrend_des_laufs_bricht_ab"
+    ],
+    "gruen": [
+      "test_erwarteter_test_wird_rot_ergibt_null"
+    ]
+  },
+  {
+    "id": "MB10 Rueckgabecode des Laeufers wird ignoriert",
+    "datei": "scripts/mutation.py",
+    "von": "    if rc0 in (4, 5):",
+    "nach": "    if rc0 in (4, 5) and False:",
+    "rot": [
+      "test_pytest_keine_tests_gesammelt_ergibt_zwei"
+    ],
+    "gruen": [
+      "test_erwarteter_test_wird_rot_ergibt_null"
+    ]
+  },
+  {
+    "id": "MB11 escapte Testnamen werden nicht mehr entescapt",
+    "datei": "scripts/mutation.py",
+    "von": "rote = [z.replace(\"\\\\#\", \"#\") for z in aus.splitlines()",
+    "nach": "rote = [z for z in aus.splitlines()",
+    "rot": [
+      "test_escapte_testnamen_werden_erkannt"
+    ],
+    "gruen": [
+      "test_erwarteter_test_wird_rot_ergibt_null"
+    ]
+  },
+  {
+    "id": "MB12 Startriegel laesst schmutzigen Baum durch",
+    "datei": "scripts/mutation.py",
+    "von": "    if schmutzig:",
+    "nach": "    if schmutzig and False:",
+    "rot": [
+      "test_startriegel_haelt_schmutzigen_baum_auf"
+    ],
+    "gruen": [
+      "test_erwarteter_test_wird_rot_ergibt_null"
+    ]
+  },
+  {
+    "id": "MB13 Schlusspruefung auf sauberen Baum faellt weg",
+    "datei": "scripts/mutation.py",
+    "von": "    if rest:\n        fehler += 1",
+    "nach": "    if rest and False:\n        fehler += 1",
+    "rot": [
+      "test_liegengebliebene_mutation_am_ende_ergibt_eins"
+    ],
+    "gruen": [
+      "test_erwarteter_test_wird_rot_ergibt_null"
+    ]
+  },
+  {
+    "id": "MB14 leerer Plan gilt wieder als bestandene Serie",
+    "datei": "scripts/mutation.py",
+    "von": "    if not isinstance(plan, list) or not plan:",
+    "nach": "    if not isinstance(plan, list) or not plan and False:",
+    "rot": [
+      "test_leerer_plan_ist_kein_bestandener_lauf"
+    ],
+    "gruen": [
+      "test_plan_muss_eine_liste_sein"
+    ]
+  },
+  {
+    "id": "MB15 Pflichtfelder werden nicht mehr geprueft",
+    "datei": "scripts/mutation.py",
+    "von": "    if unbrauchbar:",
+    "nach": "    if unbrauchbar and False:",
+    "rot": [
+      "test_eintrag_ohne_pflichtfeld_bricht_ab"
+    ],
+    "gruen": [
+      "test_plan_muss_eine_liste_sein"
+    ]
+  },
+  {
+    "id": "MB16 nach Fremdschreibung wird wieder bewertet",
+    "datei": "scripts/mutation.py",
+    "von": "        if fremd:\n            continue",
+    "nach": "        if fremd and False:\n            continue",
+    "rot": [
+      "test_nach_fremdschreibung_wird_nicht_mehr_bewertet"
+    ],
+    "gruen": [
+      "test_erwarteter_test_wird_rot_ergibt_null"
+    ]
+  }
+]

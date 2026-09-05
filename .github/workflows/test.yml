@@ -13,16 +13,21 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-# Alle sechs Jobs LESEN nur: pytest, Vitest/tsc, die node:test-Suite, die vier
+# Sechs der sieben Jobs LESEN nur: pytest, Vitest/tsc, die node:test-Suite, die vier
 # Skript-Tests (`notizen.test.sh` faelscht `gh` und braucht kein Token) und die beiden
 # Riegel `Ruff` und `Mypy`.
+# Der siebte, `Mutationsprobe`, SCHREIBT — und das ist kein Widerspruch zum Block unten:
+# er aendert Dateien in seinem EIGENEN, wegwerfbaren Checkout (Mutation setzen, Tests
+# fahren, Originalbytes zurueckschreiben) und spielt nichts zurueck ins Repository. Kein
+# Commit, kein Push, kein Token — `contents: read` reicht ihm genauso.
 # (Diese Zeile sagte „drei Jobs" und „drei Skript-Tests", als es schon fuenf bzw. vier
 # waren — eine Zahl in einem Kommentar driftet unsichtbar, genau wie an #536. Wer hier
 # einen Job ergaenzt, zaehlt sie nach — und zwar AB `jobs:`, sonst zaehlen `pull_request:`
 # und `push:` mit und die Antwort ist 8 statt 6 (genau so ist der erste Entwurf dieser
 # Zeile danebengegangen):
 #     sed -n '/^jobs:/,$p' .github/workflows/test.yml | grep -cE '^  [a-z_-]+:$'
-# Gegengeprueft am YAML-Parser: beide sagen 6.)
+# Gegengeprueft am YAML-Parser: beide sagen 7. Nachgezogen am 2026-09-05 beim Job
+# `Mutationsprobe` — genau der Handgriff, den diese Klammer verlangt.)
 #
 # Ohne Block gilt die Vorgabe des REPOSITORYS — und die ist eine Einstellung, die ein
 # Klick umlegt, kein Bestandteil dieses Workflows. Heute steht sie auf read: gemessen am
@@ -31,7 +36,8 @@ concurrency:
 # Der Block hier schliesst also kein offenes Schreibrecht — er macht den Workflow von der
 # Einstellung unabhaengig und nimmt das ungenutzte `Packages: read` weg
 # (zizmor: excessive-permissions, gefunden an PR #468). Workflow-weit statt je Job, damit
-# ein kuenftiger siebter Job ihn nicht vergessen kann.
+# ein kuenftiger siebter Job ihn nicht vergessen kann. (Der ist am 2026-09-05 gekommen —
+# `Mutationsprobe` — und hat ihn tatsaechlich nicht vergessen muessen.)
 permissions:
   contents: read
 
@@ -360,3 +366,52 @@ jobs:
       # Rot nur bei NEUEN Typfehlern gegen .mypy-baseline.txt. Der Baum traegt 65 bekannte;
       # ein Riegel, der ab Tag eins rot ist, wird abgeschaltet statt gelesen.
       - run: python scripts/mypy_riegel.py
+
+  # Die Mutationsprobe ist in diesem Repo Pflicht ("Logik raus -> genau dieser Test rot"),
+  # war aber bis #551 keine PRUEFUNG, sondern eine Gewohnheit: der Treiber entstand je
+  # Sitzung neu im Scratchpad, und die Angabe "20 von 20 gefangen" liess sich aus dem Repo
+  # nicht nachrechnen.
+  #
+  # WARUM der Lauf in die CI gehoert und nicht bloss auf den Entwicklerrechner: ein Waechter
+  # verliert seine Wirkung leise — die Eigenschaft wandert an eine ungetestete Stelle, ohne
+  # dass eine Zeile Code verschwindet. Von Hand faellt so etwas erst auf, wenn jemand die
+  # Probe zufaellig wiederholt; hier faellt es beim naechsten Push auf.
+  #
+  # Der Anlassfall dafuer ist eine Beobachtung aus einer FRUEHEREN Sitzung (eine
+  # Tempo-Aenderung an einem Stop-Hook liess zwei zuvor rote Mutationen gruen werden). Sie
+  # ist hier bewusst NICHT als „gemessen" ausgewiesen: im Repo liegt dazu weder ein
+  # Kommando noch ein Artefakt, sie stammt aus dem Sitzungsprotokoll und ist von hier aus
+  # nicht nachrechenbar. Der Bot hat das an der ersten Fassung dieses Kommentars zu Recht
+  # beanstandet — und die Begruendung fuer den Job traegt auch ohne sie: eine Probe, die nur
+  # laeuft, wenn jemand daran denkt, ist eine Regel und kein Riegel. Genau diese
+  # Unterscheidung hat dieses Repo bei ruff und mypy schon zweimal Geld gekostet.
+  #
+  # ZWEI Serien, und die zweite ist die wichtigere:
+  #   * gegen scripts/mypy_riegel.py — belegt, dass die Probe an einem echten Waechter greift.
+  #   * gegen scripts/mutation.py SELBST — belegt, dass die Waechter des Treibers wirken.
+  #     Ein Mutationstreiber, dessen eigene Zusicherungen ungeprueft sind, beweist nichts
+  #     ueber andere.
+  #
+  # Der Treiber verweigert den Start auf schmutzigem Arbeitsbaum; ein CI-Checkout ist sauber,
+  # der Riegel ist hier also stumm und stoert nicht. Endet ein Lauf mit 2, war die Suite gar
+  # nicht messbar (Kommando nicht gestartet oder vorher schon rot) — das ist ausdruecklich
+  # KEIN Bestehen und macht den Job rot, genau wie eine nicht gefangene Mutation.
+  mutation:
+    name: Mutationsprobe
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+      - run: pip install --group dev
+      - name: Probe gegen den mypy-Riegel
+        run: >
+          python scripts/mutation.py --repo . --pfad scripts/
+          --test "python -m pytest scripts/test_mypy_riegel.py -q"
+          --plan scripts/mutationen/mypy_riegel.json
+      - name: Probe des Treibers gegen sich selbst
+        run: >
+          python scripts/mutation.py --repo . --pfad scripts/
+          --test "python -m pytest scripts/test_mutation.py -q"
+          --plan scripts/mutationen/mutation.json
