@@ -171,28 +171,38 @@ repo-weit — zwei gleichzeitige PRs kosten einander Reviews.
 ## Verifikation
 
 **Verifikation dieses Plans:**
-- `gh issue list --state open --json number --jq 'length'` → **38**, und jede Nummer kommt in
-  genau einem Paket vor — nachgezählt:
+
+- **Die Zahl, gemessen:** `gh issue list --state open --limit 200 --json number --jq 'length'`
+  → **38**. **`--limit` ist Pflicht, nicht Kosmetik:** ohne ihn deckelt `gh` bei **30** und
+  antwortet `30` — eine Zahl, die wie ein Ergebnis aussieht und ein Deckel ist. Die erste
+  Fassung dieser Zeile stand ohne `--limit` hier und hätte jeden Nachzähler in die Irre
+  geführt; gefunden vom Bot, mit dem Lauf bestätigt.
+- **Die Zuordnung, VON HAND gezählt** (kein Kommando prüft sie — das ist der ehrliche Stand):
   J 8 · K 3 · L 3 · C 4 · D 2 · E 3 · F 2 · G 3 · H 2 · I 7 · #558 1 = **38**.
-  (Jede Hauptnummer zählt einmal. #530 ist nach Teilpunkten auf zwei Pakete verteilt:
-  #530 (b)/(c) in C, #530 (a) in E — gezählt wird es bei C.)
+  Jede Hauptnummer zählt einmal; #530 ist nach Teilpunkten auf zwei Pakete verteilt —
+  #530 (b)/(c) in C, #530 (a) in E —, gezählt wird es bei C. Wer die Pakete umbaut, zählt
+  neu; eine maschinelle Gegenprobe gibt es nicht.
 
 **GEMESSEN — mit dem Kommando, das die Zahl erzeugt hat:**
 
 | Aussage | Messung |
 |---|---|
-| 38 offene Issues, 0 offene PRs | `gh issue list --state open --json number --jq 'length'` · `gh pr list --state open` |
+| 38 offene Issues, 0 offene PRs | `gh issue list --state open --limit 200 --json number --jq 'length'` · `gh pr list --state open` |
 | A und B geschlossen | `gh issue view <n> --json state` für #523 #496 #381 #382 #442 → alle CLOSED |
 | Fünf J-Issues zeigen auf **dieselbe** Datei | `gh issue view <n> --json body` je Issue, Dateiverweise ausgezogen → #564 #565 #566 #567 #568 nennen alle `webtool/frontend/jobPhases.vertrag.test.ts` |
 | Datei 1323 Zeilen, 83 506 Byte | `wc -l` · `ls -la` |
 | Vertragsdatei von keiner tsconfig erfasst | `tsconfig.app.json` include = `["src"]`, Datei liegt im Stamm; `tsconfig.node.json` include nennt `rollbalken.test.ts` namentlich |
 | #553 blockiert #554 nicht | `grep -cE '\.(resolves\|rejects)\b'` auf die Vertragsdatei = **0** |
 | #554 ist kein Einzeiler (TS2835) | Dateikopf `jobPhases.vertrag.test.ts:24–31` |
-| J muss vor K | `QUELLEN` in `jobPhases.vertrag.test.ts:89–96` erntet `webtool/fetch.py` und `webtool/correct.py`; die Gegenrichtung (`parserMuster`) prüft `jobPhases.ts` |
+| J und K fassen **denselben** Vertrag an | `QUELLEN` in `jobPhases.vertrag.test.ts:89–96` erntet `webtool/fetch.py` und `webtool/correct.py`; die Gegenrichtung (`parserMuster`) prüft `jobPhases.ts` |
 | vitest 5.0.0 installiert, #553 also live | `node -p` auf `node_modules/vitest/package.json` |
 
 **HERGELEITET aus den Issue-Texten, hier NICHT nachgemessen** — wer daran arbeitet, misst zuerst:
 
+- **dass J vor K laufen MUSS.** Gemessen ist der geteilte Vertrag (Zeile darüber), nicht die
+  Reihenfolge. Der Schluss „ein Wächter mit Löchern lässt die Änderung durch, die er bewachen
+  soll" ist ein Argument, kein Lauf — er wäre widerlegt, wenn K die geernteten Druckformen gar
+  nicht anfasst;
 - **was** die fünf Löcher in #564–#568 je sind (Ernte-Umfang, Formenmenge, Template-Literale,
   Escape-Tabulator) und ob sie noch bestehen;
 - **#569**: Laufzahl und Fehlerausgabe des Volllast-Kippers liegen nicht vor;
