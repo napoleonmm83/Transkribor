@@ -809,7 +809,10 @@ Die Compose für den Server liegt in `docs/bugsink/compose.yaml` (Coolify, Postg
 `MAX_EVENT_AGE_DAYS=90` löscht nur, wenn `bugsink-manage delete_old_events` läuft — das tut der
 Dienst `aufraeumer` in derselben Compose einmal täglich; ohne ihn wäre die 90-Tage-Zusage der
 README leer. `CREATE_SUPERUSER` gilt nur für den ersten Start und wird danach aus der
-Container-Umgebung entfernt.
+Container-Umgebung entfernt. Die Meldungen sind je Projekt gedeckelt — **100 pro fünf
+Minuten, 500 pro Stunde, 50 000 pro Monat**; darüber antwortet der Server mit 429 und die
+Meldung geht verloren. Bugsinks eigene Vorgaben (5000 pro Stunde) sind für eine App dieser
+Größe zu weit: eine Fehlerschleife füllt den Server sonst schneller, als jemand hinsieht.
 
 **Ohne Oberfläche, direkt auf der Kommandozeile:**
 

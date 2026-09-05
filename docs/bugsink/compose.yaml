@@ -34,6 +34,17 @@ services:
       - USE_X_FORWARDED_HOST=True
       - BASE_URL=https://bugsink.martini.digital
       - MAX_EVENT_AGE_DAYS=90
+      # Ratengrenze je Projekt (T-002). Bugsink hat Vorgaben — 1000 je 5 Minuten,
+      # 5000 je Stunde, 1 Mio je Monat —, es gab hier also nie ein offenes Tor. Was
+      # fehlte, war eine ENTSCHEIDUNG statt einer Vorgabe: fuer eine Desktop-App mit
+      # einer Handvoll Nutzern sind 5000 Meldungen pro Stunde sehr weit, und eine
+      # Fehlerschleife schreibt genau so schnell. 100 in fuenf Minuten faengt sie
+      # frueh ab und ist fuer echte Fehler immer noch reichlich. Nur am Dienst `web`:
+      # `aufraeumer` nimmt keine Meldungen an, er raeumt nur auf.
+      # Namen und Vorgaben: bugsink.com/docs/settings, Abschnitt Maximums.
+      - MAX_EVENTS_PER_PROJECT_PER_5_MINUTES=100
+      - MAX_EVENTS_PER_PROJECT_PER_HOUR=500
+      - MAX_EVENTS_PER_PROJECT_PER_MONTH=50000
     healthcheck:
       test: ["CMD-SHELL", "python -c 'import requests; requests.get(\"http://localhost:8000/health/ready\").raise_for_status()'"]
       interval: 10s
