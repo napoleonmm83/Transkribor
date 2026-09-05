@@ -158,5 +158,41 @@
     "gruen": [
       "test_erwarteter_test_wird_rot_ergibt_null"
     ]
+  },
+  {
+    "id": "MB14 leerer Plan gilt wieder als bestandene Serie",
+    "datei": "scripts/mutation.py",
+    "von": "    if not isinstance(plan, list) or not plan:",
+    "nach": "    if not isinstance(plan, list) or not plan and False:",
+    "rot": [
+      "test_leerer_plan_ist_kein_bestandener_lauf"
+    ],
+    "gruen": [
+      "test_plan_muss_eine_liste_sein"
+    ]
+  },
+  {
+    "id": "MB15 Pflichtfelder werden nicht mehr geprueft",
+    "datei": "scripts/mutation.py",
+    "von": "    if unbrauchbar:",
+    "nach": "    if unbrauchbar and False:",
+    "rot": [
+      "test_eintrag_ohne_pflichtfeld_bricht_ab"
+    ],
+    "gruen": [
+      "test_plan_muss_eine_liste_sein"
+    ]
+  },
+  {
+    "id": "MB16 nach Fremdschreibung wird wieder bewertet",
+    "datei": "scripts/mutation.py",
+    "von": "        if fremd:\n            continue",
+    "nach": "        if fremd and False:\n            continue",
+    "rot": [
+      "test_nach_fremdschreibung_wird_nicht_mehr_bewertet"
+    ],
+    "gruen": [
+      "test_erwarteter_test_wird_rot_ergibt_null"
+    ]
   }
 ]

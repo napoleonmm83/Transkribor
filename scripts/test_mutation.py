@@ -248,6 +248,41 @@ def test_vorher_schon_rote_suite_ergibt_zwei(tmp_path, monkeypatch):
     assert rc == 2
 
 
+# --- Der Plan selbst -------------------------------------------------------
+# Ein unbrauchbarer Plan darf nicht mitten in der Serie als Traceback sterben: dann laufen
+# weder die restlichen Mutationen noch die Schlusspruefung auf einen sauberen Baum.
+
+def test_plan_muss_eine_liste_sein(tmp_path, monkeypatch):
+    rc, _ = _lauf_main(tmp_path, monkeypatch, {"kein": "liste"}, [])
+    assert rc == 2
+
+
+def test_leerer_plan_ist_kein_bestandener_lauf(tmp_path, monkeypatch):
+    # Sonst waere eine Serie mit null Mutationen „bestanden" — dieselbe Klasse wie eine
+    # leere rot-Liste, nur eine Ebene hoeher.
+    rc, _ = _lauf_main(tmp_path, monkeypatch, [], [])
+    assert rc == 2
+
+
+def test_eintrag_ohne_pflichtfeld_bricht_ab(tmp_path, monkeypatch):
+    plan = [{"id": "T", "datei": "ziel.py", "von": "WERT = 1"}]      # nach und rot fehlen
+    rc, _ = _lauf_main(tmp_path, monkeypatch, plan, [])
+    assert rc == 2
+
+
+def test_nach_fremdschreibung_wird_nicht_mehr_bewertet(tmp_path, monkeypatch, capsys):
+    # Die Datei trug beim Testlauf nicht mehr unsere Mutation — „rot" oder „gruen" sagt
+    # dann nichts ueber sie aus. Ohne den Abbruch zaehlte derselbe Vorfall zweimal und
+    # produzierte eine widerspruechliche Diagnose.
+    _lauf_main(tmp_path, monkeypatch, _PLAN_OK,
+               [_GRUEN, "FAILED x.py::test_wert - assert\n1 failed in 0.4s\n"],
+               nebenbei=b"FREMDE ARBEIT\r\n")
+    ausgabe = capsys.readouterr().out
+    assert "wurde WAEHREND des Laufs veraendert" in ausgabe
+    assert "bytegleich" not in ausgabe        # die zweite, widerspruechliche Meldung
+    assert "OK  " not in ausgabe              # und kein Urteil ueber die Mutation
+
+
 def test_startriegel_haelt_schmutzigen_baum_auf(tmp_path, monkeypatch):
     rc, _ = _lauf_main(tmp_path, monkeypatch, _PLAN_OK, [_GRUEN],
                        schmutzig=(" M ziel.py", ""))
