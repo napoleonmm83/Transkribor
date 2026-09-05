@@ -34,29 +34,30 @@ services:
       - USE_X_FORWARDED_HOST=True
       - BASE_URL=https://bugsink.martini.digital
       - MAX_EVENT_AGE_DAYS=90
-      # Ratengrenze je Projekt (T-002). Bugsink hat Vorgaben — 1000 je 5 Minuten,
-      # 5000 je Stunde, 1 Mio je Monat —, es gab hier also nie ein offenes Tor. Was
-      # fehlte, war eine ENTSCHEIDUNG statt einer Vorgabe: fuer eine Desktop-App mit
-      # einer Handvoll Nutzern sind 5000 Meldungen pro Stunde sehr weit, und eine
-      # Fehlerschleife schreibt genau so schnell. 100 in fuenf Minuten faengt sie
-      # frueh ab und ist fuer echte Fehler immer noch reichlich. Nur am Dienst `web`:
-      # `aufraeumer` nimmt keine Meldungen an, er raeumt nur auf.
+      # KEINE eigene Ratengrenze — und das ist eine Entscheidung, kein Vergessen
+      # (T-002, Marcus 2026-09-05). Ein Deckel stand hier schon eingetragen
+      # (100/500/50000 statt der Vorgaben 1000/5000/1 Mio) und ist nach zwei
+      # unabhaengigen Reviewbefunden wieder heraus. Drei Gruende, alle gemessen:
       #
-      # DER PREIS, und er ist nicht klein: alle Installationen melden in EIN Projekt
-      # (electron/backend.js). Ueber der Grenze sperrt Bugsink das ganze PROJEKT bis
-      # zum Fensterende und antwortet mit nacktem 429 ohne Retry-After; der
-      # Sentry-Client wartet daraufhin pauschal 60 s und verwirft alles, ohne zu
-      # senden — gezaehlt werden diese Verworfenen nicht. Die Schleife EINES Rechners
-      # macht also die Meldungen ALLER unsichtbar, und der engere Deckel loest das
-      # zehnmal leichter aus als Bugsinks Vorgabe. Bewusster Tausch: lieber eine
-      # Schleife frueh abfangen als einen vollen Server. Sauber waeren getrennte
-      # Projekte je Installation — das ist ein eigener offener Punkt.
-      # Die site-weiten MAX_EVENTS_PER_* bleiben auf Vorgabe; bei einem einzigen
-      # Projekt binden ohnehin die Projekt-Grenzen zuerst.
+      # 1. Es gab nie ein offenes Tor. Bugsink deckelt von sich aus bei 1000 je
+      #    5 Minuten und 5000 je Stunde je Projekt. Ein Amoklauf kann den Server
+      #    also auch ohne unser Zutun nicht fluten.
+      # 2. Alle Installationen melden in EIN Projekt (electron/backend.js). Ueber
+      #    der Grenze sperrt Bugsink deshalb nicht die eine Meldung, sondern das
+      #    ganze PROJEKT bis Fensterende (ingest/views.py:713-727), antwortet mit
+      #    nacktem 429 OHNE Retry-After, und der Sentry-Client wartet darauf
+      #    pauschal 60 s und verwirft alles ungesendet. Gezaehlt werden die
+      #    Verworfenen nicht (views.py:906). Die Schleife EINES Rechners macht also
+      #    die Meldungen ALLER anderen unsichtbar — und ein engerer Deckel loest
+      #    genau das haeufiger aus.
+      # 3. Die uebliche Meldungsmenge ist UNGEMESSEN (Fehlerberichte laufen erst
+      #    seit v0.52.0). Einen Deckel unter eine Menge zu legen, die niemand
+      #    gemessen hat, ist geraten — und wer raet, raet hier zulasten aller.
+      #
+      # Wenn ein Deckel: dann mit einer Zahl aus echten Daten. Sauber waeren
+      # ohnehin getrennte Projekte je Installation; das ist der eigentliche Fix
+      # und ein eigener offener Punkt.
       # Namen und Vorgaben: bugsink.com/docs/settings, Abschnitt Maximums.
-      - MAX_EVENTS_PER_PROJECT_PER_5_MINUTES=100
-      - MAX_EVENTS_PER_PROJECT_PER_HOUR=500
-      - MAX_EVENTS_PER_PROJECT_PER_MONTH=50000
     healthcheck:
       test: ["CMD-SHELL", "python -c 'import requests; requests.get(\"http://localhost:8000/health/ready\").raise_for_status()'"]
       interval: 10s
