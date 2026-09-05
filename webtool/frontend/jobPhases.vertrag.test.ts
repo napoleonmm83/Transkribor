@@ -979,8 +979,10 @@ describe('Vertrag: gedruckte Statuszeilen <-> jobPhases.ts (#375)', () => {
   it('eine unlesbare print(-Form wird gemeldet statt still verschluckt (#410)', () => {
     // Der UNLESBAR-Sentinel war ein WAECHTER OHNE SENSOR: 95 print(-Zeilen in den QUELLEN, alle
     // 95 lesbar geerntet, 0 Ausloeser — und die Gegenprobe (Zweig ersatzlos entfernt) liess alle
-    // vier Tests gruen. Er ist auch fuer den Build unsichtbar, weil diese Datei in keinem
-    // tsconfig-`include` steht. Geprueft wird deshalb der ERNTER, nicht die Quellen: haengte der
+    // vier Tests gruen. (Bis #554 war er zusaetzlich fuer den BUILD unsichtbar, weil diese
+    // Datei in keinem tsconfig-`include` stand. Das gilt nicht mehr — siehe Dateikopf; der
+    // Satz stand hier noch, nachdem der Grund weggefallen war.)
+    // Geprueft wird deshalb der ERNTER, nicht die Quellen: haengte der
     // Waechter daran, dass irgendwann jemand ein `print(meldung)` schreibt, waere er wieder
     // ungeprueft, bis genau das passiert.
     expect(ersteZeichenkette('    print(meldung)')).toBeNull()
@@ -1095,12 +1097,19 @@ const FREMDZEILE = /^\s*\d{1,3}%\|/
  *      correct.py:839 druckt `→ Glossar (gemeinsame Namen/Begriffe) …`).
  *  (2) ERNTEGRENZE (seit #566) — die Zeile HAT einen Erzeuger, aber ein `${…}` verdeckt genau
  *      das Stueck, an dem die Form sie erkennen wuerde.
- *  (3) FORM AUSSER DIENST — der Erzeuger existiert, seine Form steht aber in
- *      OHNE_FESTES_STUECK und prueft deshalb gar nichts. So kommt `A: 300 Segmente → …`
- *      hierher: correct.py:1063 druckt sie mit ZWEI fuehrenden Leerzeichen, und die
- *      zugehoerige Form `'  {}: {} Segmente → …'` ist ausgefiltert.
- *  (4) ECHTE ABWEICHUNG — im ganzen Python-Baum kein Erzeuger (`starte…`, `spaet`, und die
- *      POSITIVKONTROLLE mit ihren drei fuehrenden Leerzeichen).
+ *  (3) FORM AUSSER DIENST — der Erzeuger existiert und traefe die Zeile per Praefix, seine
+ *      Form steht aber in OHNE_FESTES_STUECK und prueft deshalb gar nichts. Die groesste
+ *      Gruppe hier: `A: 300 Segmente → …` (correct.py:1063 druckt zwei fuehrende Leerzeichen,
+ *      der Test schreibt keine) und die POSITIVKONTROLLE (derselbe Erzeuger, drei Leerzeichen,
+ *      weil der Basisname dort selbst mit einem beginnt).
+ *  (4) ECHTE ABWEICHUNG — im ganzen Python-Baum kein Erzeuger, auch kein Praefix-Treffer einer
+ *      ausgefilterten Form: `starte…` und `spaet`.
+ *
+ *  Die Grenze zwischen (3) und (4) ist die teuerste hier, und sie wurde in diesem PR ZWEIMAL
+ *  falsch gezogen: sowohl der Kommentar von vorher als auch der gegnerische Pruefer hielten
+ *  die POSITIVKONTROLLE fuer eine Zeile OHNE Erzeuger. Wer hier etwas einordnet, sucht nicht
+ *  nach einer identischen Form, sondern nach einer, die als PRAEFIX passt — und sieht nach,
+ *  ob sie in OHNE_FESTES_STUECK steht.
  *
  *  Seit #567 sind ZWEI Eintraege der Sorte (4) weg, weil ihre Fixturen repariert wurden:
  *  `prep: 1 Datei(en) vorbereitet` traegt jetzt `getaggt in {tdir}` (correct.py:233),
@@ -1112,9 +1121,21 @@ const FREMDZEILE = /^\s*\d{1,3}%\|/
  *  `cmd_prep` (correct.py:1443), der gestaffelte Lauf ruft `prep_single` und schweigt — die
  *  ZUSAMMENSETZUNG einer Fixture prueft diese Wache nicht und behauptet es auch nirgends
  *  (siehe die drei toten Wege oben). Repariert ist die FORM, nicht die Dramaturgie. */
-/** Die Zeile, an der die Wache beweist, dass sie ueberhaupt etwas ABLEHNT. DREI fuehrende
- *  Leerzeichen, `correct.py:1063` druckt ZWEI — kein Muster darf sie treffen. Sie steht als
- *  eigene Konstante, damit Baseline-Eintrag und Zusicherung EIN Literal teilen: zwei Kopien
+/** Die Zeile, an der die Wache beweist, dass sie ueberhaupt etwas ABLEHNT.
+ *
+ *  Sie hat einen Erzeuger, und das ist der Punkt: `correct.py:1063` druckt `f"  {base}: …"`,
+ *  der Test in `jobPhases.test.ts` faehrt den Basisnamen `' Interview'` MIT fuehrendem
+ *  Leerzeichen — zwei plus eins macht drei. Ihre Form `'  {}: {} Segmente → …'` traefe sie
+ *  per Praefix mueheLOS; sie steht nur deshalb in der Baseline, weil genau diese Form in
+ *  OHNE_FESTES_STUECK liegt und damit gar nicht prueft.
+ *
+ *  Deshalb ist sie die richtige Kontrolle: faellt `traegtEinFestesStueck` aus der Wache, kommt
+ *  ihre eigene Form zurueck und trifft sie — die Zusicherung wird rot. Sie misst also nicht
+ *  „es gibt eine erfundene Zeile", sondern „der Filter greift wirklich".
+ *  (Die erste Fassung dieses Kommentars nannte sie „ohne Erzeuger". Das war falsch, und der
+ *  gegnerische Pruefer hatte es genauso falsch — gefunden hat es der kalte Zweitleser.)
+ *
+ *  Eigene Konstante, damit Baseline-Eintrag und Zusicherung EIN Literal teilen: zwei Kopien
  *  liefen beim naechsten Umbau auseinander, und dann prueft die Zusicherung eine Zeile, die
  *  es nicht mehr gibt — gruen, ohne etwas zu belegen. */
 const POSITIVKONTROLLE = '   Interview: 540 Segmente → 4 Blöcke à max. 150'
@@ -1199,8 +1220,11 @@ function traegtEinFestesStueck(form: string): boolean {
  *  bliebe die Wache dabei gruen, obwohl sie danach fuer JEDE Fixture-Zeile einen "Erzeuger"
  *  faende. Der Test unten prueft deshalb GLEICHHEIT, nicht Teilmenge und nicht die Anzahl.
  *
- *  Die ersten beiden sind tqdm-Balken (die Zeile beginnt mit dem Prozentwert), die uebrigen
- *  vier die eingerueckte Familie aus `correct.py`. */
+ *  Herkunft, nachgesehen statt vermutet: die ersten beiden sind tqdm-Balken aus
+ *  `whispercpp.py` (die Zeile beginnt mit dem Prozentwert), von den uebrigen vier kommen
+ *  ZWEI aus `correct.py` (:556, :1063) und ZWEI aus `transcribe.py` (:444, :1062) — hier
+ *  stand „die eingerueckte Familie aus correct.py", und wer die Liste danach pflegt, sucht
+ *  in der falschen Datei. */
 const OHNE_FESTES_STUECK: string[] = [
   '{}%| Sprachmodell',
   '{}%| {}',
@@ -1324,9 +1348,13 @@ describe('Fixture-Wache', () => {
     // `entschluesselt` HIER und nicht in `alsPraefix` (#568): eine Fixture traegt zur Laufzeit
     // einen echten Tabulator, ein INVENTAR-Schluessel die zwei Zeichen aus dem Python-Quelltext
     // (`'  [diagnose] {}\\t{}\\t{}'`, der einzige Schluessel mit Rueckstrich). Ohne die
-    // Umsetzung kann die Form ihre eigenen Zeilen NIE treffen. In `alsPraefix` gezogen braeche
-    // es dagegen den Test „jede Beispielzeile passt noch zu ihrer geernteten Form" — der
-    // vergleicht Quelltext-Form gegen Quelltext-Beispiel, also beide Seiten UNaufgeloest.
+    // Umsetzung kann die Form ihre eigenen Zeilen NIE treffen. Aufgeloest wird deshalb HIER,
+    // in dieser Pipeline — NICHT an den INVENTAR-Schluesseln selbst: der Test „jede
+    // Beispielzeile passt noch zu ihrer geernteten Form" vergleicht Quelltext-Form gegen
+    // Quelltext-Beispiel, also beide Seiten unaufgeloest, und braeche daran.
+    // (Hier stand „in `alsPraefix` gezogen braeche es diesen Test" — das war falsch:
+    // `alsPraefix` hat genau EINEN Aufrufer, naemlich diese Wache, und der Beispiel-Test
+    // arbeitet mit `split('{}')`/`indexOf` statt mit Regexen. Kalter Zweitleser, gemessen.)
     // `entschluesselt` VOR dem Filter, nicht nur vor `alsPraefix`: sonst urteilt der Filter
     // ueber die rohe Form und die Regex ueber die aufgeloeste. Eine Form, deren festes Stueck
     // nur ein Tabulator-Escape ist (`\\t{}`), bestuende den Filter — zwei Zeichen, nicht
