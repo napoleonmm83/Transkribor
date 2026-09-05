@@ -25,7 +25,7 @@ Der Vorgängerplan vom 2026-09-03 beschreibt eine Issue-Menge, die es so nicht m
 | PR #540 (vitest v5) offen, gehört vor die Bündel | **gemerged**, vitest **5.0.0** installiert |
 
 **14 Issues sind seit dem 03.09. dazugekommen** und stehen in keinem Bündel:
-#553, #554, #555, #556, #557, #558, #560, #561, #564, #565, #566, #567, #568, #569.
+Issues #553, #554, #555, #556, #557, #558, #560, #561, #564, #565, #566, #567, #568, #569.
 Zwölf davon sind Reviewbefunde aus PR #559/#562/#563, also Arbeit, die dieser Rechner
 heute fahren kann — kein Mac, keine Beschaffung.
 
@@ -46,7 +46,7 @@ Messstand (Wegwerf-Projekt + uvicorn + echter Job) · Marcus' Entscheidungen.
 
 **Warum zusammen — eine Datei, gemessen.** Fünf der sechs zeigen auf dieselbe Datei:
 
-```
+```text
 webtool/frontend/jobPhases.vertrag.test.ts   1323 Zeilen, 83 KB
 ```
 
@@ -154,7 +154,7 @@ steht es hier und nicht vor K.
 
 ## Reihenfolge
 
-```
+```text
 J  (#564 #565 #566 #567 #568 #554, Mitfahrer #553 #569)   ← NÄCHSTES, heute fahrbar
    └─ K (#557 + #560 + #561)        ← danach: J repariert den Waechter, den K beidseitig anfasst
 L  (#555 + #556 + #539)             ← unabhaengig, beginnt mit der Frage zu #539
@@ -170,14 +170,37 @@ repo-weit — zwei gleichzeitige PRs kosten einander Reviews.
 
 ## Verifikation
 
-**Dieses Plans:**
+**Verifikation dieses Plans:**
 - `gh issue list --state open --json number --jq 'length'` → **38**, und jede Nummer kommt in
   genau einem Paket vor — nachgezählt:
   J 8 · K 3 · L 3 · C 4 · D 2 · E 3 · F 2 · G 3 · H 2 · I 7 · #558 1 = **38**.
-  (#530 steht nur in C, nicht zusätzlich in E — der Mac-Teil #530 (a) ist ein Teilpunkt
-  desselben Issues, kein zweites.)
-- Jede Kopplungsbehauptung ist an einer Zeile belegt: `jobPhases.vertrag.test.ts:89–96`
-  (QUELLEN), Zeilen 24–31 (TS2835 zu #554), `grep -c` = 0 (#553 blockiert #554 nicht).
+  (Jede Hauptnummer zählt einmal. #530 ist nach Teilpunkten auf zwei Pakete verteilt:
+  #530 (b)/(c) in C, #530 (a) in E — gezählt wird es bei C.)
+
+**GEMESSEN — mit dem Kommando, das die Zahl erzeugt hat:**
+
+| Aussage | Messung |
+|---|---|
+| 38 offene Issues, 0 offene PRs | `gh issue list --state open --json number --jq 'length'` · `gh pr list --state open` |
+| A und B geschlossen | `gh issue view <n> --json state` für #523 #496 #381 #382 #442 → alle CLOSED |
+| Fünf J-Issues zeigen auf **dieselbe** Datei | `gh issue view <n> --json body` je Issue, Dateiverweise ausgezogen → #564 #565 #566 #567 #568 nennen alle `webtool/frontend/jobPhases.vertrag.test.ts` |
+| Datei 1323 Zeilen, 83 506 Byte | `wc -l` · `ls -la` |
+| Vertragsdatei von keiner tsconfig erfasst | `tsconfig.app.json` include = `["src"]`, Datei liegt im Stamm; `tsconfig.node.json` include nennt `rollbalken.test.ts` namentlich |
+| #553 blockiert #554 nicht | `grep -cE '\.(resolves\|rejects)\b'` auf die Vertragsdatei = **0** |
+| #554 ist kein Einzeiler (TS2835) | Dateikopf `jobPhases.vertrag.test.ts:24–31` |
+| J muss vor K | `QUELLEN` in `jobPhases.vertrag.test.ts:89–96` erntet `webtool/fetch.py` und `webtool/correct.py`; die Gegenrichtung (`parserMuster`) prüft `jobPhases.ts` |
+| vitest 5.0.0 installiert, #553 also live | `node -p` auf `node_modules/vitest/package.json` |
+
+**HERGELEITET aus den Issue-Texten, hier NICHT nachgemessen** — wer daran arbeitet, misst zuerst:
+
+- **was** die fünf Löcher in #564–#568 je sind (Ernte-Umfang, Formenmenge, Template-Literale,
+  Escape-Tabulator) und ob sie noch bestehen;
+- **#569**: Laufzahl und Fehlerausgabe des Volllast-Kippers liegen nicht vor;
+- **der geteilte Prüfstand von K** — dass ein Aufbau alle drei trägt, ist aus den
+  Dateiverweisen geschlossen, nicht durch einen Lauf belegt;
+- **L komplett**: #555 (`rc 0`), #556 (`nie`) und #539 (`drei Regeln`) stehen ohne eigene
+  Messung hier. Für #556 wäre das eine `gh api`-Abfrage über die Renovate-PRs, für #555 ein
+  Lauf gegen einen roten PR — beides gehört an den Anfang von L, nicht in diesen Plan.
 
 **Von Bündel J, bevor es als fertig gilt:**
 1. `npm --prefix webtool/frontend run build` — der tsc-Lauf muss die Vertragsdatei jetzt
