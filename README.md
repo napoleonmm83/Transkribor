@@ -373,6 +373,12 @@ schneller, sagt es dir das als Hinweis — und behauptet nicht, es habe selbst e
 Bleibt es dabei, ist das Video vermutlich nicht öffentlich abrufbar (private Videos und solche,
 die eine Anmeldung verlangen, unterstützt Transkribor nicht).
 
+Etwas anderes ist es, wenn Transkribor sagt, es **laufe schon ein Import**: dann hat es deine
+Links gar nicht erst geholt, und sie bleiben im Fenster stehen. Warte, bis der laufende Import
+durch ist, und klicke noch einmal auf „Holen“ — die Adressen musst du nicht neu eintippen.
+(Ab der nächsten Fassung sagt Transkribor das so; in Fassungen bis einschliesslich `v0.53.0`
+stand dort „die neuen Dateien kommen danach dran“, was für Links nie stimmte.)
+
 Drei Meldungen können dabei auftauchen:
 
 - **„Die Hilfsskripte für YouTube lassen sich nicht prüfen“** — eine Paketdatei auf deinem
