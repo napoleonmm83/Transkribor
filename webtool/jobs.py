@@ -713,10 +713,15 @@ def _run_proc(jid, cmd, cwd, env=None):
                     # kommt aus `correct_ai_single`s `finally` oder dem Rueckruf, und beide
                     # feuern erst, wenn die Korrektur vorbei ist (`transcribe.py:_freigeben`).
                     #
-                    # Und der Parser kann eine entfernte Base nicht wieder einsetzen: er haengt
-                    # nur an, was in seinem PUFFER steht, und `fuege_zeile_an` verdraengt
-                    # chronologisch (`del lines[10:11]`) — ist das `[done]` verdraengt, ist die
-                    # aeltere Einreih-Zeile es zwingend auch.
+                    # Der Parser darf eine entfernte Base nicht wieder einsetzen, und das ist
+                    # eine BEDINGUNG an ihn, keine Folge der Chronologie: hier stand zuerst
+                    # „ist das `[done]` verdraengt, ist die aeltere Einreih-Zeile es zwingend
+                    # auch" — schaerfer als der Code (gegnerischer Pruefer, F6). `fuege_zeile_an`
+                    # verdraengt zwar chronologisch, nimmt aber `lines[10:11]`: die ersten ZEHN
+                    # Zeilen bleiben fuer immer stehen, und dort liegt die erste Einreih-Zeile
+                    # eines Laufs (gemessen Index 8). `jobPhases.ts` nimmt den Zeilenpfad
+                    # deshalb nur noch, wenn das Feld GANZ fehlt (aelterer Server); die
+                    # Begruendung steht dort bei `serverKennt`.
                     roh = line[len(DONE_PREFIX):]
                     liste = _jobs[jid]["eingereiht"]
                     if roh in liste:

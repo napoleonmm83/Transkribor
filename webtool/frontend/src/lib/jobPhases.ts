@@ -56,11 +56,34 @@ export function parseJobPhases(kind: string, lines: string[],
   // VORBELEGT aus der Serverbuchfuehrung (#561) — derselbe Rueckweg wie `gesehen` (#475) und
   // `entfernt` (#479), und `eingereiht` war die letzte der drei Wartequellen ohne ihn.
   //
-  // Die Serverliste steht VORN, und das ist tragend, nicht Reihenfolgegeschmack: ihre Ordnung
-  // ist die der Schlange (der Server sieht jede Zeile, bevor der Puffer sie verdraengt), und
-  // genau daraus rechnet `korrekturSchlange` das „noch N vor dieser". Der Zeilenparser haengt
-  // danach nur noch an, was der Server nicht kennt — bei einem aelteren Server, der das Feld
-  // gar nicht schickt, ist das die ganze Liste, und alles bleibt wie vorher.
+  // Ist der Serverwert da, ist er die EINZIGE Quelle; der Zeilenpfad gilt nur, wenn das Feld
+  // fehlt (aelterer Server) — und die erste Fassung hatte hier genau das falsch. Sie
+  // VEREINIGTE beides („Server vorn, der Parser haengt Unbekanntes an"), und das war richtig,
+  // solange die Serverliste MONOTON war. Seit sie „steht NOCH in der Schlange" heisst (das
+  // `[done]` nimmt wieder heraus), setzt jeder Zeilenanhang wieder ein, was der Server
+  // entfernt hat.
+  //
+  // Erreichbar ist das ueber die GESCHUETZTEN ersten zehn Puffer-Zeilen: `fuege_zeile_an`
+  // verdraengt zwar chronologisch, nimmt aber `lines[10:11]` — die ersten zehn bleiben fuer
+  // immer stehen. Und genau dort liegt die erste Einreih-Zeile eines Laufs (gemessen Index 8:
+  // davor nur `[scope]`, Geraet/Modell, `[active]`, `-> transkribiere`, die zu EINER Zeile
+  // gefalteten tqdm-Refreshs, `fertig`, das Diarisierungs-Paar; Segmentzeilen druckt
+  // `transcribe.py` nicht). Ergebnis mit Vereinigung: die laengst korrigierte ERSTE Aufnahme
+  // eines langen Laufs stand wieder in der Schlange — `[B,C,D,A]` statt `[B,C,D]` — und die
+  // Pille meldete ihr „Wartet auf Korrektur · noch 2 vor dieser" bis Jobende. Gefunden vom
+  // gegnerischen Pruefer (F6), an dieser Datei gemessen.
+  //
+  // Der Server ist dabei nicht bloss gleichwertig, sondern strikt besser: er sieht JEDE Zeile,
+  // bevor der Puffer sie verdraengt, und seine Ordnung IST die der Schlange — daraus rechnet
+  // `korrekturSchlange` das „noch N vor dieser". Fehlt eine Base dort, hat er sie an `[done]`
+  // oder `[scope+]` bewusst herausgenommen.
+  //
+  // Nebenwirkung, gewollt: fuer eine Job-Art, die der Server nicht bucht (`EINGEREIHT_KINDS`
+  // ist nur `transcribe`), ist das Feld leer STATT undefined — der Zeilenpfad ist dort also
+  // aus. Das schliesst die Tuer, durch die fremder Text in einem `fetch`-Strom eine
+  // Einreih-Zeile vortaeuschen koennte. Wer eine zweite Art bucht, traegt sie in
+  // `EINGEREIHT_KINDS` ein, sonst faellt sie hier still leer aus.
+  const serverKennt = eingereihtVomServer !== undefined
   const eingereiht: string[] = [...(eingereihtVomServer ?? [])]
   let cursor: string | null = null            // transcribe: die eine laufende Datei
   let bilanz: JobPhases['bilanz']
@@ -447,7 +470,8 @@ export function parseJobPhases(kind: string, lines: string[],
     // dieser" wuerde „noch 2", dauerhaft und ohne dass etwas danach aussieht. Eine Zeile
     // gegen eine Klasse falscher Zahlen. (Gefunden vom Was-erlaubt-der-Fix-Pruefer.)
     else if ((m = l.match(/^→ Eingereiht (.+?) \(Korrektur\) …$/))) {
-      if (!eingereiht.includes(m[1])) eingereiht.push(m[1])
+      // NUR ohne Serverwert — die Begruendung steht bei `serverKennt` oben (F6).
+      if (!serverKennt && !eingereiht.includes(m[1])) eingereiht.push(m[1])
     }
     else if (/^prep: \d+ Datei/.test(l)) { global = 'prep' }
     else if (/^(→ Glossar|✓ Glossar|↷ nutze vorhandenes _glossar)/.test(l)) { global = 'glossary' }
