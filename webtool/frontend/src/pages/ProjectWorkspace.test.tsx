@@ -39,10 +39,11 @@ async function holeUrl(url = 'https://youtu.be/a') {
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Los geht/ })) })
 }
 
-async function ladeHoch(datei = new File(['x'], 'a.mp3')) {
+async function ladeHoch(...dateien: File[]) {
+  const gewaehlt = dateien.length ? dateien : [new File(['x'], 'a.mp3')]
   await oeffneDialog()
   await act(async () => {
-    fireEvent.change(screen.getByTestId('ablage-input'), { target: { files: [datei] } })
+    fireEvent.change(screen.getByTestId('ablage-input'), { target: { files: gewaehlt } })
   })
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Weiter/ })) })
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Weiter/ })) })
@@ -502,6 +503,32 @@ describe('ProjectWorkspace (Stub)', () => {
     await screen.findByRole('button', { name: /^Material$/ })
     await ladeHoch()
     await waitFor(() => expect(api.getVorgang).toHaveBeenCalledWith('vg1'))
+  })
+
+  it('verwertet JEDEN Ausgang eines Sammeluploads, nicht nur den letzten (#560)', async () => {
+    /* Die Arbeitsflaeche bekam bis hierher genau eine Antwort — die der ZULETZT gesendeten
+       Datei. Bei einem Stapel ist das die schlechteste: die erste Datei startet den Lauf,
+       jede weitere findet den Slot belegt. Der laufende Job wurde also nicht adoptiert (der
+       Balken kam erst mit dem 4-Sekunden-Sammelabruf), und der Nutzer las „Laeuft schon",
+       obwohl gerade etwas gestartet war.
+
+       Beide Belege sind ABFRAGEN, nicht Zustand: `getJob('lauf')` passiert nur nach `adopt`,
+       `getVorgang('vg2')` nur nach `verfolge`. Und beide Meldungen muessen dastehen —
+       Entscheidung Marcus 2026-09-06: je Ausgang eine, im Wortlaut von vorher. */
+    nurDemo()
+    vi.mocked(api.uploadAudio)
+      .mockResolvedValueOnce({ base: 'a', file: 'a.mp3', job_id: 'lauf', started: true })
+      .mockResolvedValueOnce({ base: 'b', file: 'b.mp3', job_id: 'lauf', started: false, vorgang: 'vg2' })
+    vi.mocked(api.getVorgang).mockResolvedValue({ vorgang: 'vg2', status: 'vorgemerkt',
+      job_id: null, project: 'Demo', kind: 'transcribe', base: null })
+    vi.mocked(api.getJob).mockResolvedValue({ status: 'running', lines: [], kind: 'transcribe' })
+    zeigen()
+    await screen.findByRole('button', { name: /^Material$/ })
+    await ladeHoch(new File(['x'], 'a.mp3'), new File(['x'], 'b.mp3'))
+    await waitFor(() => expect(api.getJob).toHaveBeenCalledWith('lauf'))
+    await waitFor(() => expect(api.getVorgang).toHaveBeenCalledWith('vg2'))
+    expect(toastMock.success).toHaveBeenCalledWith('Transkription gestartet')
+    expect(toastMock.info).toHaveBeenCalledWith(expect.stringMatching(/kommen danach dran/))
   })
 
   it('meldet einen fehlgeschlagenen Einstellungs-GET, statt ihn zu verschlucken (#215)', async () => {
