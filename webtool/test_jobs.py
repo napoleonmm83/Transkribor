@@ -1754,3 +1754,95 @@ def test_stderr_faden_beendet_den_job_statt_ihn_haengen_zulassen(monkeypatch):
         "Job haengt im running-Zustand, obwohl der stderr-Faden gestorben ist "
         f"(status={r['status'] if r else 'kein Record'}) — die Pipe laeuft voll und der "
         "Kind blockiert; nur ein manueller Abbruch wuerde ihn loesen")
+
+
+def test_vormerken_legt_eine_lesbare_vormerkung_an():
+    """Die Nummer entsteht VOR jedem Prozess und ist sofort ueber `vorgang()` lesbar (#557).
+
+    Das ist die ganze Neuerung: `request` legt eine Nummer erst an, wenn es den Slot belegt
+    findet — der URL-Import braucht sie aber schon fuer die ANTWORT seines Endpunkts, lange
+    bevor der Nachlauf ueberhaupt entstehen kann.
+    """
+    nummer = jobs.vormerken("P_vormerk", "transcribe")
+    v = jobs.vorgang(nummer)
+    assert v is not None, "die frisch angelegte Vormerkung ist nicht lesbar"
+    assert v["status"] == "vorgemerkt" and v["job_id"] is None
+    assert v["project"] == "P_vormerk" and v["kind"] == "transcribe" and v["base"] is None
+
+
+def test_vorgang_verwerfen_laesst_ein_gestartetes_in_ruhe():
+    """Der Riegel auf `vorgemerkt` ist tragend, nicht Vorsicht.
+
+    Der Aufrufer aus #557 haengt an `when_done`, und das feuert bei JEDEM terminalen Ausgang —
+    auch dann, wenn der Nachlauf laengst angelaufen ist. Ohne den Riegel schriebe ein spaeter
+    Rueckruf ein `gestartet` zurueck auf `verworfen`, und die Oberflaeche liesse einen
+    laufenden Job fallen. Beide Richtungen, sonst ist die Zusicherung halb.
+    """
+    offen = jobs.vormerken("P_riegel", "transcribe")
+    assert jobs.vorgang_verwerfen(offen) is True
+    assert jobs.vorgang(offen)["status"] == "verworfen"
+
+    schon_da = jobs.vormerken("P_riegel", "transcribe")
+    jobs._vorgang_setzen(schon_da, "gestartet", job_id="jXYZ")
+    assert jobs.vorgang_verwerfen(schon_da) is False
+    assert jobs.vorgang(schon_da)["status"] == "gestartet"
+    assert jobs.vorgang(schon_da)["job_id"] == "jXYZ"
+
+
+def test_vorgemerkte_nummer_wird_beim_nachlauf_zur_kennung():
+    """Das `Fertig-wenn` von #557 auf der jobs-Ebene, am ECHTEN Weg.
+
+    Eine vorab angelegte Nummer geht als `vorgang=` in `request`; laeuft der Job an, steht
+    unter derselben Nummer seine Kennung. Ohne die Durchreichung bliebe sie `vorgemerkt`, und
+    die Oberflaeche fragte sie fuer die Lebensdauer des Tabs vergeblich ab.
+    """
+    nummer = jobs.vormerken("P_durchreichen", "correct")
+    jid, started, zurueck = jobs.request("P_durchreichen", _echo_cmd(1), cwd=None,
+                                         kind="correct", vorgang=nummer)
+    assert started is True and zurueck == nummer
+    v = jobs.vorgang(nummer)
+    assert v["status"] == "gestartet", v
+    assert v["job_id"] == jid
+    _wait(jid, timeout=30)
+
+
+def test_gescheiterter_download_schliesst_seine_vormerkung(monkeypatch):
+    """#557, der Ausfallweg — am ECHTEN Job, nicht an einer Attrappe.
+
+    `then` laeuft nur bei `status == 'done'`. Endet der Download rot, entstuende der Nachlauf
+    also nie, und die vorab angelegte Nummer bliebe fuer immer `vorgemerkt`: die Oberflaeche
+    fragte sie fuer die Lebensdauer des Tabs alle 1,5 s ab — genau der Dauerpoll, den #381
+    beseitigt hat.
+
+    Gemessen wird mit dem echten `when_done`, weil dessen REIHENFOLGE der springende Punkt
+    ist: `jobs._run` fuehrt `next_runs` VOR den `then`-Rueckrufen aus. Ein Rueckruf, der
+    bedingungslos verwirft, traefe deshalb ausgerechnet den Erfolgsfall — der Rueckruf fragt
+    den Status selbst.
+    """
+    from webtool.app import _fetch_nachlauf_ausgang
+    nummer = jobs.vormerken("P_ausgang", "transcribe")
+    jid, started = jobs.start("P_ausgang", [sys.executable, "-c", "raise SystemExit(3)"],
+                              cwd=None, kind="fetch")
+    assert started is True
+    assert jobs.when_done(jid, lambda: _fetch_nachlauf_ausgang(jid, nummer)) is True
+    r = _wait(jid, timeout=30)
+    assert r["status"] == "error", r["status"]
+    assert jobs.vorgang(nummer)["status"] == "verworfen"
+
+
+def test_gelungener_download_laesst_die_vormerkung_offen(monkeypatch):
+    """Die Gegenprobe, und ohne sie belegt der Test darueber nichts.
+
+    Bei `done` darf der Rueckruf NICHTS tun: der Nachlauf steht dann noch aus (`then` laeuft
+    erst danach), und ein Verwerfen hier liesse den Browser einen Lauf fallen, der gleich
+    anlaeuft. Genau das waere passiert, haette der Rueckruf den Status nicht selbst gefragt.
+    """
+    from webtool.app import _fetch_nachlauf_ausgang
+    nummer = jobs.vormerken("P_ausgang_ok", "transcribe")
+    jid, started = jobs.start("P_ausgang_ok", [sys.executable, "-c", "pass"],
+                              cwd=None, kind="fetch")
+    assert started is True
+    assert jobs.when_done(jid, lambda: _fetch_nachlauf_ausgang(jid, nummer)) is True
+    r = _wait(jid, timeout=30)
+    assert r["status"] == "done", r["status"]
+    assert jobs.vorgang(nummer)["status"] == "vorgemerkt"

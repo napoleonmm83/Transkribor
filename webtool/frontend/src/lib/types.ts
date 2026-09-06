@@ -52,11 +52,18 @@ export type Project = { name: string; dateien: number; fertig: number; geaendert
  *  Server gefuehrt, nicht aus `lines` gelesen. Rueckweg fuer den Fall, dass der gedeckelte
  *  Zeilenpuffer genau diese Zeile verdraengt hat (#475), Gegenstueck zu `bases`/`scope`. */
 export type JobStatus = { status: 'running' | 'done' | 'error' | 'cancelled'; lines: string[]; kind?: string; bases?: string[]; gesehen?: string[]; entfernt?: string[] };
-/** `vorgang` steht nur bei `started: false` und ist dann die einzige brauchbare Auskunft:
- *  `job_id` ist in dem Fall der BLOCKER, und der KANN ueber die Einzel-GPU-Sperre einem
- *  fremden Projekt gehoeren (#381) — wie oft, ist nicht gemessen.
- *  Optional, weil zwei Endpunkte ueber `jobs.start` laufen
- *  (`correct_file`, `fetch_urls`) und dort gar keine Vormerkung entstehen kann. */
+/** `vorgang` steht auf ZWEI Wegen, und sie bedeuten Verschiedenes — bis #557 war es nur einer:
+ *
+ *  * Bei `started: false` (Upload, `jobs.request`) ist die Nummer die einzige brauchbare
+ *    Auskunft: `job_id` ist dann der BLOCKER, und der KANN ueber die Einzel-GPU-Sperre einem
+ *    fremden Projekt gehoeren (#381) — wie oft, ist nicht gemessen.
+ *  * Bei `started: true` UND gesetzter Nummer (nur `fetch_urls`) laeuft der Download bereits,
+ *    und die Nummer gehoert seinem Transkriptions-NACHLAUF, den es noch gar nicht gibt (#557).
+ *    Wer die beiden Zweige als sich ausschliessend liest, laesst genau diese Nummer fallen.
+ *
+ *  Optional, weil `correct_file` ueber `jobs.start` laeuft und dort keine Vormerkung
+ *  entsteht — und weil `fetch_urls` bei belegtem Slot bewusst `null` liefert (dort wird
+ *  weder geladen noch nachgelaufen). */
 /** `job_id` ist NULLBAR, und das ist kein Feinschliff: gibt `jobs.request` nach zehn
  *  Versuchen auf, liefert es `(None, False, nummer)` — dann gibt es keinen Job, wohl aber
  *  einen Vorgang, dessen Ausgang der Nutzer erfahren soll. */

@@ -224,6 +224,48 @@ def _vorgang_setzen(nummer, zustand, job_id=None):
             v["job_id"] = job_id
 
 
+def vormerken(project: str, kind: str, base: str = None) -> str:
+    """Eine Vormerkung anlegen, BEVOR irgendetwas laeuft — und ihre Nummer zurueckgeben.
+
+    `request` legt die Nummer erst an, wenn es den Slot belegt findet. Fuer den URL-Import
+    reicht das nicht: dort entsteht der Transkriptions-Nachlauf in einem `then`-Rueckruf, also
+    lange nachdem die Antwort des Endpunkts beim Browser war (#557). Der Rueckgabewert des
+    Rueckrufs ist damit unlesbar, und die Oberflaeche erfuhr von diesem Nachlauf nie etwas.
+
+    Die Nummer VOR dem Start anzulegen dreht das um: sie existiert, bevor der erste Prozess
+    laeuft, kann also in der Antwort mitgehen. Sie wird ueber `request(..., vorgang=nummer)`
+    weitergereicht; dort setzt `_vorgang_setzen` sie auf `gestartet`, sobald der Nachlauf
+    wirklich anlaeuft, oder haengt sie als `alias` an eine bestehende Vormerkung.
+
+    Kein `_prune_locked` hier: eine offene Vormerkung wird ohnehin nie geworfen (siehe dort),
+    und ein Aufraeumlauf an dieser Stelle raeumte auf, bevor der Eintrag ueberhaupt steht.
+    """
+    nummer = uuid.uuid4().hex[:12]
+    with _lock:
+        _vorgaenge[nummer] = {"vorgang": nummer, "status": "vorgemerkt", "job_id": None,
+                              "project": project, "kind": kind, "base": base}
+    return nummer
+
+
+def vorgang_verwerfen(nummer: str) -> bool:
+    """Eine Vormerkung als `verworfen` schliessen — NUR solange sie noch offen ist.
+
+    Der Riegel auf `vorgemerkt` ist tragend, nicht Vorsicht: der Aufrufer aus #557 haengt an
+    `when_done`, und das feuert bei JEDEM terminalen Ausgang — auch dann, wenn der Nachlauf
+    laengst angelaufen ist. Ohne den Riegel schriebe ein spaeter Rueckruf ein `gestartet`
+    zurueck auf `verworfen`, und die Oberflaeche liesse einen laufenden Job fallen.
+
+    Liefert True, wenn wirklich etwas geschlossen wurde — das macht den Zweig testbar, ohne
+    den Zustand von aussen nachzulesen.
+    """
+    with _lock:
+        v = _vorgaenge.get(nummer)
+        if v is None or v.get("status") != "vorgemerkt":
+            return False
+        v["status"] = "verworfen"
+        return True
+
+
 def vorgang(nummer: str):
     """Der Zustand einer Vormerkung, oder None. Reiner Lesepfad fuer die Oberflaeche.
 

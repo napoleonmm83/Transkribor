@@ -346,6 +346,14 @@ export function ProjectWorkspace() {
           const gestartet = new Set<'transcribe' | 'fetch'>()
           const wartet = new Set<'transcribe' | 'fetch'>()
           for (const { job, art } of ergebnisse) {
+            // Der URL-Import traegt seit #557 BEIDES: einen gestarteten Download UND die
+            // Nummer seines Transkriptions-Nachlaufs, der erst nach dem Download entsteht.
+            // Die beiden Zweige darunter schlossen sich bis dahin aus — hier waere die Nummer
+            // sonst still liegengeblieben, und der Nachlauf faende wieder nur der
+            // 4-Sekunden-Sammelabruf. Beim Upload gibt es die Nummer nur im `else`-Fall
+            // (`jobs.request` liefert bei Erfolg gar keine), der Aufruf ist dort also ein
+            // No-op.
+            if (job.started && job.vorgang) verfolge(job.vorgang)
             // Sofort adoptieren statt auf den naechsten Poll zu warten — der Balken soll
             // direkt stehen.
             if (job.started && job.job_id) { adopt(job.job_id, project!, art); gestartet.add(art) }
