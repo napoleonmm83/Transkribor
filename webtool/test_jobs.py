@@ -1,4 +1,5 @@
 import os
+import pathlib
 import signal
 import subprocess
 import sys
@@ -1846,3 +1847,75 @@ def test_gelungener_download_laesst_die_vormerkung_offen(monkeypatch):
     r = _wait(jid, timeout=30)
     assert r["status"] == "done", r["status"]
     assert jobs.vorgang(nummer)["status"] == "vorgemerkt"
+
+
+def _durch_den_endpunkt(monkeypatch, cmd, project):
+    """`fetch_urls` mit ECHTEM `jobs.start`/`when_done` fahren, nur das Kommando getauscht.
+
+    Der Punkt ist, was hier NICHT gefaelscht wird: die beiden Tests darueber bauen ihr
+    `when_done`-Lambda selbst und messen damit `_fetch_nachlauf_ausgang` — nicht die Stelle in
+    `fetch_urls`, die es anhaengt. Genau die blieb ungeprueft (#488-Lehre, „die VERDRAHTUNG
+    braucht eigene Tests").
+    """
+    from webtool import app as app_mod
+    echt = jobs.start
+    monkeypatch.setattr(jobs, "start",
+                        lambda p, c, cwd, kind, **k: echt(p, cmd, cwd, kind, **k))
+    return app_mod.fetch_urls(project, app_mod.FetchBody(urls=["https://youtu.be/abc123"]))
+
+
+def _bis(pruef, frist=15.0):
+    ende = time.time() + frist
+    while time.time() < ende:
+        if pruef():
+            return True
+        time.sleep(0.05)
+    return False
+
+
+def test_endpunkt_haengt_seinen_ausgangs_rueckruf_an_den_RICHTIGEN_job(monkeypatch):
+    """Die Verdrahtung selbst — und sie hatte keinen Sensor (gegnerischer Pruefer, F1).
+
+    Zwei Mutationen liessen alle 46 Tests des PR gruen: eine falsche Kennung in
+    `jobs.when_done(...)` und eine falsche in `_fetch_nachlauf_ausgang(...)`. Die erste ist
+    die schlimmere — `when_done` liefert dann False, die Sofortauswertung findet einen Job im
+    Zustand `running` (oder gar keinen), liest das als „nicht done" und verwirft JEDE
+    Import-Nummer, bevor die Antwort beim Browser ist. Das Feature waere tot und die Suite
+    gruen.
+
+    Deshalb misst dieser Test den ZUSTAND WAEHREND des Laufs: solange der Download laeuft,
+    muss die Nummer offen sein. Danach die Gegenrichtung ueber einen Abbruch — der Rueckruf
+    haengt am richtigen Job, also schliesst er sie.
+    """
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(pathlib.Path(__file__).parent.parent))
+    r = _durch_den_endpunkt(monkeypatch, [sys.executable, "-c", "import time; time.sleep(5)"],
+                            "P_verdrahtung")
+    assert r["started"] is True and r["vorgang"]
+    assert jobs.get(r["job_id"])["status"] == "running"
+    assert jobs.vorgang(r["vorgang"])["status"] == "vorgemerkt", \
+        "die Nummer ist schon verworfen, obwohl der Download noch laeuft"
+    jobs.cancel(r["job_id"])
+    _wait(r["job_id"], timeout=30)
+    assert _bis(lambda: jobs.vorgang(r["vorgang"])["status"] == "verworfen"), \
+        "nach dem Abbruch bleibt die Nummer offen — der Rueckruf haengt am falschen Job"
+
+
+def test_endpunkt_laesst_die_nummer_offen_wenn_der_download_gelingt(monkeypatch):
+    """Die Gegenprobe durch den ENDPUNKT, nicht durch ein selbstgebautes Lambda.
+
+    Bei `done` darf der Rueckruf nichts tun, und `then` muss die Nummer uebernehmen. Ohne
+    diesen Fall bliebe die zweite Mutation aus F1 unentdeckt: eine falsche Kennung im
+    `_fetch_nachlauf_ausgang`-Aufruf verwirft dann in Schritt 1, und bei belegtem Slot steht
+    die Nummer fuer die Lebensdauer des Blockers auf `verworfen`.
+    """
+    from webtool import app as app_mod
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(pathlib.Path(__file__).parent.parent))
+    gerufen = []
+    monkeypatch.setattr(app_mod, "_start_transcribe",
+                        lambda project, base=None, vorgang=None:
+                        gerufen.append(vorgang) or (None, False, vorgang))
+    r = _durch_den_endpunkt(monkeypatch, [sys.executable, "-c", "pass"], "P_verdrahtung_ok")
+    _wait(r["job_id"], timeout=30)
+    assert _bis(lambda: gerufen == [r["vorgang"]]), "der then-Rueckruf ist nicht gelaufen"
+    assert jobs.vorgang(r["vorgang"])["status"] == "vorgemerkt", \
+        "die Nummer wurde geschlossen, obwohl der Download gelang"
