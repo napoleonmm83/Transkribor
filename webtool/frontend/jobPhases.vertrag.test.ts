@@ -1418,13 +1418,16 @@ const KEINE_FIXTURE = new Set<string>([
  *  `haengt`, `praehaengt`, `schief`) tragen alle ein TEMPLATE-Literal mit `${…}`, die drei
  *  Fixture-Pushes in `PRAELUDIUM` einfache Anfuehrungszeichen. Das trennt sie ohne Namensliste.
  *  ZWEI GRENZEN, benannt statt verschwiegen:
- *  (a) Ein Fixture-`push` mit Backtick faende die Ernte nicht — heute gibt es keinen, und
- *      ein Array-Literal (Regel B) nimmt Backticks sehr wohl.
+ *  (a) Ein Fixture-`push` mit Backtick faende die Ernte nicht; ein Array-Literal (Regel B)
+ *      nimmt Backticks sehr wohl. GEZAEHLT ueber die sechs Dateien, auf der bereinigten
+ *      Quelle: SIEBEN push-Aufrufe mit Backtick, alle sieben in dieser Datei und alle
+ *      Fehlerberichte — kein einziger eine Fixture.
  *  (b) Regel B ueberspringt jedes Array, das nicht mit einem Literal BEGINNT — also auch
  *      `const zeilen = [...GESTAFFELT, '→ Erfunden …']`, waehrend Regel A dieselbe Gestalt
- *      sehr wohl erntet (`[...prae, '45%| m']` weiter oben in dieser Datei). Heute gibt es
- *      keine solche Fixture; die Asymmetrie steht hier, damit sie nicht als Absicht gelesen
- *      wird. Wer sie schliessen will, erweitert den Selektor um den Spread — und muss dann
+ *      sehr wohl erntet (`[...prae, '45%| m']` weiter oben in dieser Datei). GEZAEHLT:
+ *      FUENF eingerueckte const-Arrays beginnen mit einem Spread, alle fuenf in dieser
+ *      Datei und alle Maschinerie — keines eine Fixture. Die Asymmetrie steht hier, damit
+ *      sie nicht als Absicht gelesen wird. Wer sie schliessen will, erweitert den Selektor um den Spread — und muss dann
  *      `reserviert` (Regex-Literal in einem Spread) in KEINE_FIXTURE aufnehmen.
  *  Beide vom kalten Zweitleser benannt. */
 function beginntMitLiteral(quelle: string, pos: number, nurEinfach = false): boolean {
@@ -1475,8 +1478,9 @@ export function ernteAusQuelle(roh: string, datei = ''): {
     nimm(pos)
   }
 
-  // (C) push-Aufruf mit Zeichenketten — `PRAELUDIUM` baut seine Fixture so, als einziges im
-  // Repo. (Kein Beispiel mit Anfuehrungszeichen in diesem Kommentar: `ohneKommentare` haelt
+  // (C) push-Aufruf mit Zeichenketten — `PRAELUDIUM` baut seine Fixture so. GEZAEHLT ueber
+  // die sechs Dateien: DREI solche Aufrufe, alle drei aus `PRAELUDIUM`; es ist also wirklich
+  // die einzige Stelle dieser Bauart. (Kein Beispiel mit Anfuehrungszeichen in diesem Kommentar: `ohneKommentare` haelt
   // die Quotes der Erntemuster oben faelschlich fuer Zeichenketten und laesst den Text
   // dahinter stehen — vorbestehender blinder Fleck, #574. Er kann auch Code VERSTECKEN,
   // nicht nur Kommentare durchlassen; hier ist nur das Symptom umgangen.)
@@ -1515,9 +1519,11 @@ describe('Fixture-Wache', () => {
     // ueber die rohe Form und die Regex ueber die aufgeloeste. Eine Form, deren festes Stueck
     // nur ein Tabulator-Escape ist (`\\t{}`), bestuende den Filter — zwei Zeichen, nicht
     // Leerraum — und wuerde nach dem Aufloesen zu `^\t[^\n]*`, also zum Freibrief fuer JEDE
-    // tab-eingerueckte Zeile. Heute gibt es keine solche Form (der einzige Schluessel mit
-    // Rueckstrich ist `[diagnose]`, dessen festes Stueck Text traegt); die Luecke entstand
-    // mit #568 und wird hier geschlossen, statt auf ihr erstes Vorkommen zu warten.
+    // tab-eingerueckte Zeile. GEZAEHLT: von 112 INVENTAR-Schluesseln hat NULL ein festes
+    // Stueck aus lauter Escape-Sequenzen — und der Zaehler kann den Fall sehen, denn EIN
+    // Schluessel traegt ueberhaupt einen Rueckstrich (`[diagnose]`, dessen festes Stueck
+    // Text traegt). Die Luecke entstand mit #568 und wird hier geschlossen, statt auf ihr
+    // erstes Vorkommen zu warten.
     const muster = Object.keys(INVENTAR).map(entschluesselt).filter(traegtEinFestesStueck)
       .map(alsPraefix)
     const gesehen = new Set<string>()
