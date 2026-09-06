@@ -1916,3 +1916,43 @@ def test_endpunkt_laesst_die_nummer_offen_wenn_der_download_gelingt(monkeypatch)
     assert _bis(lambda: gerufen == [r["vorgang"]]), "der then-Rueckruf ist nicht gelaufen"
     assert jobs.vorgang(r["vorgang"])["status"] == "vorgemerkt", \
         "die Nummer wurde geschlossen, obwohl der Download gelang"
+
+
+def test_deckel_wirft_keinen_LAUFENDEN_vorgang():
+    """Ein `gestartet`, dessen Job noch laeuft, ist genauso wenig raeumbar wie ein offenes
+    `vorgemerkt` — bis #557 fragte die Bedingung nur den Zustand der VORMERKUNG.
+
+    Der Grund, warum das zaehlt, ist die Ordnung: geworfen wird der aelteste raeumbare, und
+    ein Eintrag behaelt seine EINFUEGEposition, auch wenn er erst spaeter `gestartet` wird —
+    ein laufender Vorgang steht damit weit vorn. Der Schaden waere der bekannte: `vorgang()`
+    faende nichts, der Endpunkt antwortete 404, die Oberflaeche liesse einen LAUFENDEN Job
+    fallen. (CodeRabbit-Bot, major.)
+
+    Aufgebaut wird die Ordnung ausdruecklich: der laufende Vorgang ist der ERSTE Eintrag,
+    danach kommen genug abgeschlossene, um den Deckel zu reissen. Ohne diese Reihenfolge
+    traefe die alte Bedingung ihn gar nicht und der Test waere vacuous.
+    """
+    jobs._vorgaenge.clear()
+    laeuft = jobs.vormerken("P_deckel_lauf", "transcribe")
+    jobs._jobs["j-laeuft"] = {"id": "j-laeuft", "project": "P_deckel_lauf",
+                              "kind": "transcribe", "status": "running"}
+    jobs._vorgang_setzen(laeuft, "gestartet", job_id="j-laeuft")
+
+    fertige = []
+    for i in range(jobs._VORGAENGE_MAX + 5):
+        n = jobs.vormerken("P_deckel_lauf", "transcribe")
+        jobs._jobs[f"j-fertig-{i}"] = {"id": f"j-fertig-{i}", "project": "P_deckel_lauf",
+                                       "kind": "transcribe", "status": "done"}
+        jobs._vorgang_setzen(n, "gestartet", job_id=f"j-fertig-{i}")
+        fertige.append(n)
+
+    with jobs._lock:
+        jobs._prune_locked()
+
+    assert jobs.vorgang(laeuft) is not None, "der LAUFENDE Vorgang wurde geworfen"
+    assert jobs.vorgang(laeuft)["status"] == "gestartet"
+    # Gegenprobe: geraeumt wurde trotzdem, und zwar bei den abgeschlossenen. Ohne sie waere
+    # der Test auch dann gruen, wenn der Deckel gar nicht mehr greift.
+    assert len(jobs._vorgaenge) <= jobs._VORGAENGE_MAX
+    assert any(jobs.vorgang(n) is None for n in fertige), "es wurde ueberhaupt nichts geraeumt"
+    jobs._vorgaenge.clear()
