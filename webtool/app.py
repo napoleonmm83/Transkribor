@@ -1881,7 +1881,16 @@ def fetch_urls(project: str, body: FetchBody):
         # Verwerfen traefe also ausgerechnet den Erfolgsfall. Zweiter Produktivnutzer von
         # `when_done` — dessen Docstring warnt davor, den „feuert bei JEDEM terminalen
         # Ausgang"-Vertrag still zu erben; hier wird er ausdruecklich gefragt.
-        jobs.when_done(job_id, lambda: _fetch_nachlauf_ausgang(job_id, nummer))
+        #
+        # `when_done` liefert FALSE, wenn der Job schon terminal ist — dann wird der Rueckruf
+        # gar nicht erst angehaengt, und die Nummer bliebe fuer immer offen. Das Fenster ist
+        # winzig (zwischen `start` und dieser Zeile liegen Mikrosekunden, ein fetch-Subprozess
+        # braucht allein zum Hochfahren ein Vielfaches davon), aber es ist eines: stirbt der
+        # Lauf beim Import, ist er terminal, bevor wir fragen. Der Rueckruf wird dann SOFORT
+        # ausgewertet, und weil er den Status ohnehin selbst liest, ist das dieselbe
+        # Entscheidung, nur frueher. (CodeRabbit-CLI, major.)
+        if not jobs.when_done(job_id, lambda: _fetch_nachlauf_ausgang(job_id, nummer)):
+            _fetch_nachlauf_ausgang(job_id, nummer)
     return {"job_id": job_id, "started": started, "vorgang": nummer}
 
 
