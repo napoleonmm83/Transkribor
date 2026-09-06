@@ -1906,10 +1906,18 @@ def fetch_urls(project: str, body: FetchBody):
 def _fetch_nachlauf_ausgang(job_id: str, nummer: str) -> None:
     """Die Vormerkung des URL-Imports schliessen, wenn der Download NICHT gelingt (#557).
 
-    Der Status wird SELBST gefragt: `when_done` feuert bei jedem terminalen Ausgang, und die
-    `next_runs` laufen in `jobs._run` VOR den `then`-Rueckrufen — bei `done` steht der Nachlauf
-    also noch aus, und hier ist nichts zu tun. `vorgang_verwerfen` greift ohnehin nur auf ein
-    noch offenes `vorgemerkt`; die Statusfrage spart den Weg, nicht die Sicherheit.
+    DIE STATUSFRAGE IST DER SCHUTZ, nicht eine Abkuerzung. Hier stand „`vorgang_verwerfen`
+    greift ohnehin nur auf ein noch offenes `vorgemerkt`; die Statusfrage spart den Weg, nicht
+    die Sicherheit" — das ist falsch, und zwar gegen die eigene Messung: `when_done` feuert
+    ueber `next_runs`, und die laufen in `jobs._run` in Schritt 1, die `then`-Rueckrufe erst in
+    Schritt 3. Zum Zeitpunkt dieses Aufrufs steht der Eintrag also IMMER noch auf
+    `vorgemerkt`; der Riegel in `vorgang_verwerfen` schuetzt hier gar nichts.
+
+    Gemessen, zweimal unabhaengig: die Mutation „bedingungslos verwerfen" macht drei Tests rot
+    — darunter der Fall, der den echten Schaden zeigt, naemlich ein `done` bei belegtem Slot:
+    dann verwirft Schritt 1 die Nummer, `then` legt sie in `request` als Vormerkung an, und
+    sie steht fuer die Lebensdauer des Blockers auf `verworfen`. Die Oberflaeche laesst sie
+    beim ersten Poll fallen, der Nachlauf laeuft unbeobachtet.
 
     GETRAGENE GRENZE, benannt statt behoben: endet der fetch-Job `done`, reicht `_run` sein
     `then` an einen Folge-fetch-Job weiter, falls in genau dem Moment einer fuer dasselbe

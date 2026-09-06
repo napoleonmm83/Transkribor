@@ -264,10 +264,17 @@ def vormerken(project: str, kind: str, base: str = None) -> str:
 def vorgang_verwerfen(nummer: str) -> bool:
     """Eine Vormerkung als `verworfen` schliessen — NUR solange sie noch offen ist.
 
-    Der Riegel auf `vorgemerkt` ist tragend, nicht Vorsicht: der Aufrufer aus #557 haengt an
-    `when_done`, und das feuert bei JEDEM terminalen Ausgang — auch dann, wenn der Nachlauf
-    laengst angelaufen ist. Ohne den Riegel schriebe ein spaeter Rueckruf ein `gestartet`
-    zurueck auf `verworfen`, und die Oberflaeche liesse einen laufenden Job fallen.
+    Der Riegel auf `vorgemerkt` ist Verteidigung gegen eine kuenftige Umordnung, NICHT gegen
+    einen heute erreichbaren Ablauf — und hier stand bis zum gegnerischen Review das
+    Gegenteil („tragend … auch dann, wenn der Nachlauf laengst angelaufen ist"). Gemessen: mit
+    entferntem Riegel bleiben alle Flusstests gruen, rot wird nur der Test, der
+    `_vorgang_setzen` von Hand ruft. Der Grund ist die Reihenfolge in `_run`: der einzige
+    Aufrufer, der ein `gestartet` treffen koennte (`app._fetch_nachlauf_ausgang` ueber
+    `when_done`), laeuft in Schritt 1, der Nachlauf entsteht erst in Schritt 3.
+
+    Er bleibt trotzdem stehen: laeuft `then` je vor `next_runs`, ist er der Unterschied
+    zwischen „Oberflaeche verfolgt den Lauf" und „Oberflaeche laesst ihn fallen". Eine Wache,
+    deren Bedingung heute nicht eintritt, gehoert benannt — nicht als tragend ausgegeben.
 
     Liefert True, wenn wirklich etwas geschlossen wurde — das macht den Zweig testbar, ohne
     den Zustand von aussen nachzulesen.
