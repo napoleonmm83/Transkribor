@@ -34,7 +34,7 @@ hat. Lesbar, aber unschön — das ist Absicht.
 - Nach dem Hochladen siehst du jetzt auch, welche Aufnahmen noch auf ihre Korrektur warten und wie viele vor ihnen liegen, statt nur „Transkribiert — noch nicht korrigiert".
 - Lädst du mehrere Aufnahmen auf einmal hoch, verfolgt Transkribor jetzt jede von ihnen sofort — vorher nur die zuletzt hinzugefügte, und die Meldung darüber sagte dann das Falsche.
 - Klappt ein Video-Import gerade nicht, weil schon einer läuft, sagt Transkribor jetzt, dass die Links in der Liste stehenbleiben — vorher versprach es, sie kämen von selbst danach dran, was für Links nie stimmte.
-- Ein Video-Import, der fertig wird, während gerade transkribiert wird, meldet dir jetzt auch das Ergebnis seiner eigenen Transkription — vorher lief die still im Hintergrund an, und ob sie klappte, erfuhrst du nicht.
+- Nach einem Video-Import zeigt Transkribor die anschliessende Transkription sofort an — vorher tauchte sie erst mit der nächsten Aktualisierung der Liste auf, und eine, die noch davor scheiterte, meldete sich gar nicht.
 
 ## v0.53.0 — 2026-09-03
 
