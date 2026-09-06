@@ -21,9 +21,14 @@ const QUELLEN = [['datei', 'Dateien'], ['link', 'Links']] as const
 
 /** Was EIN Sendeweg des Dialogs hinterlassen hat: die Antwort des Servers und die Art des
  *  Laufs, den sie meint. Der Dialog liefert eine LISTE davon, keinen Einzelwert (#560) —
- *  ein Stapel aus fuenf Dateien und drei Links ist acht Anfragen, und bis hierher behielt
- *  die Schleife nur die letzte. */
-export type Ausgang = { job: StartJob; art: 'transcribe' | 'fetch' }
+ *  fuenf Dateien und drei Links sind SECHS Anfragen (die Links gehen als eine einzige,
+ *  `fetchUrls` nimmt die ganze Liste), und bis hierher behielt die Schleife nur die letzte.
+ *
+ *  NICHT `Ausgang`: `lib/jobAusgang.ts` exportiert diesen Namen bereits fuer etwas anderes
+ *  (das Urteil ueber einen fertigen Lauf — `art: 'erfolg' | 'teil' | …`). Zwei gleichnamige
+ *  Exporte, beide mit einem Feld `art` und verschiedenen Wertemengen: ein Auto-Import trifft
+ *  dann den falschen, und der Typfehler steht an einer ganz anderen Stelle. */
+export type Sendeergebnis = { job: StartJob; art: 'transcribe' | 'fetch' }
 
 /** Der Dialog „Material hinzufügen": drei waagrechte Schritte (H1), Sprache und
  *  Sprecherzahl je Aufnahme (L2/S1), ein Hörbalken unten (P1).
@@ -40,7 +45,7 @@ export function MaterialDialog({ project, offen, vorbelegteDateien, sprachChoice
   projektSprache: string
   sprecherMax: number
   onSchliessen: () => void
-  onFertig: (ausgaenge: Ausgang[]) => void
+  onFertig: (ergebnisse: Sendeergebnis[]) => void
 }) {
   const [schritt, setSchritt] = useState(1)
   const [zeilen, setZeilen] = useState<Aufnahme[]>([])
@@ -161,9 +166,14 @@ export function MaterialDialog({ project, offen, vorbelegteDateien, sprachChoice
     setLaeuft(true); setKlingt(null)          // Ton hoert auf, BEVOR Zeilen verschwinden
     const gescheitert: Aufnahme[] = []
     // EINE Liste statt zweier Einzelwerte (#560): jeder Sendeweg haengt an, was er bekommen
-    // hat. Die Reihenfolge ist die des Sendens — Links zuerst, dann die Dateien in Listen-
-    // reihenfolge —, damit der Aufrufer die Antworten den Zeilen zuordnen kann.
-    const ausgaenge: Ausgang[] = []
+    // hat. Die Reihenfolge ist die des Sendens — Links zuerst, dann die Dateien in
+    // Listenreihenfolge.
+    //
+    // Sie ist NICHT zeilenparallel, und das gehoert dazu: ein Fehlschlag, ein 409 und eine
+    // Antwort ohne `job_id` UND ohne `vorgang` haengen gar nichts an. Der Eintrag traegt auch
+    // keinen Basisnamen — wer eine Antwort ihrer ZEILE zuordnen will, braucht erst ein
+    // Schluesselfeld. Heute will das niemand: die Arbeitsflaeche liest `job` und `art`.
+    const ergebnisse: Sendeergebnis[] = []
 
     // Verzweigt wird JE ZEILE, nicht nach dem zuletzt geklickten Reiter. `ergaenzen` haengt
     // an, und `quelle` ist eine Ansicht des Reiters — beides zusammen liess Dateien und
@@ -188,7 +198,7 @@ export function MaterialDialog({ project, offen, vorbelegteDateien, sprachChoice
                                     links.map(z => z.sprache === projektSprache ? null : (z.sprache || null)),
                                     undefined,
                                     links.map(z => sprecherWahl(z.sprecherText, sprecherMax) ?? null))
-        ausgaenge.push({ job: res, art: 'fetch' })
+        ergebnisse.push({ job: res, art: 'fetch' })
         // Laeuft schon ⇒ die Zeilen BLEIBEN stehen (der Nutzer versucht es spaeter noch
         // einmal); die Meldung dazu macht die Arbeitsflaeche in `onFertig`.
         if (!res.started) gescheitert.push(...links)
@@ -228,7 +238,7 @@ export function MaterialDialog({ project, offen, vorbelegteDateien, sprachChoice
         // was es gibt. Mit dem alten `if (r.job_id)` fiel genau dieser Fall stumm heraus —
         // von der CodeRabbit-CLI und vom gegnerischen Pruefer unabhaengig gefunden.
         if (r.job_id || r.vorgang) {
-          ausgaenge.push({ job: { job_id: r.job_id ?? null, started: !!r.started,
+          ergebnisse.push({ job: { job_id: r.job_id ?? null, started: !!r.started,
                                   vorgang: r.vorgang }, art: 'transcribe' })
         }
       } catch (e) {
@@ -265,7 +275,7 @@ export function MaterialDialog({ project, offen, vorbelegteDateien, sprachChoice
       // sonst in einer Zusammenfassung ueber NICHTS (im Test aufgefallen).
       else { setUrlText(''); setSchritt(1); onSchliessen() }
     }
-    onFertig(ausgaenge)     // laeuft IMMER — der Workspace muss seine Liste nachziehen
+    onFertig(ergebnisse)     // laeuft IMMER — der Workspace muss seine Liste nachziehen
   }
 
   if (!offen) return null

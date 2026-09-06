@@ -100,8 +100,12 @@ describe('MaterialDialog', () => {
        weiteren finden den Slot belegt. Der laufende Job fiel also heraus, und der Nutzer las
        „Laeuft schon", obwohl gerade etwas gestartet war.
 
-       Zusicherung ist die REIHENFOLGE mit, nicht nur die Zahl: sie ist die des Sendens, und
-       nur so lassen sich Antworten und Zeilen einander zuordnen. */
+       Zusicherung ist die REIHENFOLGE mit, nicht nur die Zahl: sie ist die des Sendens.
+       Zeilenparallel ist die Liste dabei NICHT — ein Fehlschlag haengt gar nichts an —, und
+       ein Basisname steht auch nicht darin; wer eine Antwort ihrer Zeile zuordnen wollte,
+       braeuchte erst ein Schluesselfeld. `toMatchObject` prueft bei einem Array die LAENGE
+       mit (gemessen: eine kuerzere Erwartung ist rot), eine verlorene Antwort faellt hier
+       also auf. */
     const onFertig = vi.fn()
     vi.mocked(api.uploadAudio)
       .mockResolvedValueOnce({ base: 'a', file: 'a.mp3', job_id: 'lauf', started: true })
