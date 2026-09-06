@@ -1,5 +1,4 @@
 import os
-import pathlib
 import signal
 import subprocess
 import sys
@@ -1887,7 +1886,6 @@ def test_endpunkt_haengt_seinen_ausgangs_rueckruf_an_den_RICHTIGEN_job(monkeypat
     muss die Nummer offen sein. Danach die Gegenrichtung ueber einen Abbruch — der Rueckruf
     haengt am richtigen Job, also schliesst er sie.
     """
-    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(pathlib.Path(__file__).parent.parent))
     r = _durch_den_endpunkt(monkeypatch, [sys.executable, "-c", "import time; time.sleep(5)"],
                             "P_verdrahtung")
     assert r["started"] is True and r["vorgang"]
@@ -1909,7 +1907,6 @@ def test_endpunkt_laesst_die_nummer_offen_wenn_der_download_gelingt(monkeypatch)
     die Nummer fuer die Lebensdauer des Blockers auf `verworfen`.
     """
     from webtool import app as app_mod
-    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(pathlib.Path(__file__).parent.parent))
     gerufen = []
     monkeypatch.setattr(app_mod, "_start_transcribe",
                         lambda project, base=None, vorgang=None:
