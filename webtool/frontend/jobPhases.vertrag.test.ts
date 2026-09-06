@@ -1091,6 +1091,21 @@ const FIXTURE_DATEIEN: [string, number][] = [
   ['src/hooks/useOsFortschritt.test.tsx', 2],
 ]
 
+/* WARUM DIESE LISTE VON HAND GEFUEHRT WIRD und nicht aus einem Scan ueber alle Testdateien
+ * entsteht — gemessen beim Bau von #564, weil genau das der naheliegende Riegel gegen die
+ * Luecke waere, die #564 behoben hat (eine sechste Datei fehlte, und nichts sagte es):
+ *
+ * Neun weitere Testdateien tragen `lines:`- oder `parseJobPhases(`-Formen. ACHT davon ernten
+ * NULL Zeilen (ihre `lines:` sind leer). Die neunte, `src/lib/api.test.ts`, erntet EINE — und
+ * die ist keine Protokollzeile, sondern eine URL: `fetchUrls('p', ['https://youtu.be/x'])`
+ * (Zeile 64) hat dieselbe Gestalt wie ein Fixture-Aufruf, ist aber ein API-Aufruf. Ein
+ * Rundum-Scan zoege sie herein und verlangte einen Baseline-Eintrag fuer etwas, das kein
+ * Protokoll ist.
+ *
+ * Die Aufteilung ist also bewusst: die DATEIEN sind ein Opt-in (dies hier), die BAUFORMEN
+ * darin ein Opt-out (KEINE_FIXTURE). Preis, benannt: eine neue Fixture-Datei muss von Hand
+ * eingetragen werden — genau der Fehler, den #564 behoben hat, bleibt also wiederholbar. */
+
 /** tqdm kommt von faster-whisper ueber stderr, nicht aus einem `print(` in QUELLEN — es KANN
  *  keinen Inventar-Eintrag haben. Die einzige bewusste Ausnahme. */
 const FREMDZEILE = /^\s*\d{1,3}%\|/
