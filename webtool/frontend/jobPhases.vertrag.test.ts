@@ -1456,7 +1456,8 @@ export function ernteAusQuelle(roh: string): { zeilen: string[]; uebersprungen: 
   // (C) push-Aufruf mit Zeichenketten — `PRAELUDIUM` baut seine Fixture so, als einziges im
   // Repo. (Kein Beispiel mit Anfuehrungszeichen in diesem Kommentar: `ohneKommentare` haelt
   // die Quotes der Erntemuster oben faelschlich fuer Zeichenketten und laesst den Text
-  // dahinter stehen — vorbestehender blinder Fleck, als eigenes Issue festgehalten.)
+  // dahinter stehen — vorbestehender blinder Fleck, #574. Er kann auch Code VERSTECKEN,
+  // nicht nur Kommentare durchlassen; hier ist nur das Symptom umgangen.)
   for (const m of quelle.matchAll(/\b([A-Za-z_$][\w$]*)\.push\(/g)) {
     const pos = m.index + m[0].length - 1
     if (!beginntMitLiteral(quelle, pos, true)) continue
