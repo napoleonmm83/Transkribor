@@ -4732,3 +4732,30 @@ def test_fetch_gibt_KEINE_nummer_wenn_gar_nichts_geladen_wird(client, monkeypatc
     assert r.json() == {"job_id": "blocker", "started": False, "vorgang": None}
     nachher = sum(1 for v in jobs._vorgaenge.values() if v["status"] == "vorgemerkt")
     assert nachher == vorher, "eine offene Vormerkung ist liegengeblieben"
+
+
+def test_start_transcribe_reicht_die_nummer_an_request_durch(client, monkeypatch):
+    """Die letzte Meile von #557 — und sie hatte KEINEN Sensor.
+
+    Der Test darueber faelscht `_start_transcribe` und misst damit, was das `then`-Lambda
+    UEBERGIBT. Was die Funktion selbst damit tut, sah er nicht: das `vorgang=vorgang` in ihrem
+    `jobs.request`-Aufruf wieder herauszunehmen liess die ganze Suite gruen (Mutationsprobe
+    M1). Ohne die Durchreichung legte `request` beim Nachlauf eine ZWEITE Nummer an, und die
+    erste — die, die der Browser kennt — bliebe fuer immer `vorgemerkt`.
+
+    Geprueft wird deshalb hier die Funktion selbst, gegen ein gefaelschtes `jobs.request`.
+    Und BEIDE Richtungen: ohne Argument darf nichts mitgehen, sonst waere die Zusicherung mit
+    einem fest verdrahteten Wert genauso gruen (dieselbe Falle wie bei `num_speakers`, #264).
+    """
+    from webtool import app as app_mod
+    from webtool import jobs
+    gesehen = {}
+    monkeypatch.setattr(jobs, "request",
+                        lambda project, cmd, cwd, kind, then=None, base=None, vorgang=None:
+                        gesehen.update(vorgang=vorgang, base=base) or ("j9", True, vorgang))
+    app_mod._start_transcribe("Demo", vorgang="vg-durchgereicht")
+    assert gesehen["vorgang"] == "vg-durchgereicht"
+
+    gesehen.clear()
+    app_mod._start_transcribe("Demo")
+    assert gesehen["vorgang"] is None, "ohne Argument darf keine Nummer erfunden werden"
