@@ -98,7 +98,6 @@ webtool/test_jobs.py:E702
 webtool/test_jobs.py:E702
 webtool/test_jobs.py:E702
 webtool/test_jobs.py:E702
-webtool/test_jobs.py:I001
 webtool/test_jobs.py:S603
 webtool/test_jobs.py:S607
 webtool/test_llm.py:E702
