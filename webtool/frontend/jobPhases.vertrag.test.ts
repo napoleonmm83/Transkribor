@@ -1071,11 +1071,13 @@ describe('Vertrag: gedruckte Statuszeilen <-> jobPhases.ts (#375)', () => {
 // ein Riegel, der das Aufraeumen bestraft, wird umgangen.
 
 /** Testdateien, deren Protokoll-Fixtures gegen die Erzeuger gehalten werden — mit einem
- *  MINDESTERTRAG je Datei. Eine Summe reicht dafuer nicht: bei `gesamt > 300` duerfen vier
- *  der fuenf Dateien einzeln stumm werden, weil `jobPhases.test.ts` allein 297 Zeilen
- *  traegt. Genau diese Luecke hatte die erste Fassung, und die Mutationsprobe mass die
+ *  MINDESTERTRAG je Datei. Eine Summe reicht dafuer nicht: bei einem Gesamtdeckel duerfen
+ *  fuenf der SECHS Dateien einzeln stumm werden, weil `jobPhases.test.ts` allein 364 der 450
+ *  Zeilen traegt. Genau diese Luecke hatte die erste Fassung, und die Mutationsprobe mass die
  *  leichte Haelfte (sie benannte ausgerechnet die grosse Datei um). Die Zahlen sind heutige
- *  Ertraege mit Luft nach unten; wer eine Datei umbaut, zieht sie mit. */
+ *  Ertraege mit Luft nach unten; wer eine Datei umbaut, zieht sie mit.
+ *  (Der Satz nannte bis #564 „vier der fuenf" und „297" — beides war vor der Verbreiterung
+ *  richtig und danach nicht mehr.) */
 const FIXTURE_DATEIEN: [string, number][] = [
   // Ertraege nach der Verbreiterung aus #564, gemessen: 371 -> 450 Zeilen. Die Boeden folgen
   // dem bisherigen Verhaeltnis (rund zwei Drittel); wo die Ernte unveraendert blieb, bleibt
@@ -1095,12 +1097,14 @@ const FIXTURE_DATEIEN: [string, number][] = [
  * entsteht — gemessen beim Bau von #564, weil genau das der naheliegende Riegel gegen die
  * Luecke waere, die #564 behoben hat (eine sechste Datei fehlte, und nichts sagte es):
  *
- * Neun weitere Testdateien tragen `lines:`- oder `parseJobPhases(`-Formen. ACHT davon ernten
- * NULL Zeilen (ihre `lines:` sind leer). Die neunte, `src/lib/api.test.ts`, erntet EINE — und
- * die ist keine Protokollzeile, sondern eine URL: `fetchUrls('p', ['https://youtu.be/x'])`
- * (Zeile 64) hat dieselbe Gestalt wie ein Fixture-Aufruf, ist aber ein API-Aufruf. Ein
- * Rundum-Scan zoege sie herein und verlangte einen Baseline-Eintrag fuer etwas, das kein
- * Protokoll ist.
+ * Zensus ueber alle 60 nicht gelisteten Testdateien, MIT den vier Regeln gerechnet: 58
+ * ernten null Zeilen, ZWEI ernten etwas — und beide das Falsche.
+ *   `src/lib/api.test.ts` (1): eine URL. `fetchUrls('p', ['https://youtu.be/x'])` in Zeile 64
+ *   hat dieselbe Gestalt wie ein Fixture-Aufruf und ist ein API-Aufruf.
+ *   `src/components/Notizen.test.tsx` (3): Release-Notiz-MARKDOWN aus einem const-Array.
+ * Ein Rundum-Scan verlangte also Baseline-Eintraege fuer eine URL und drei Zeilen Markdown.
+ * (Die erste Fassung dieses Absatzes zaehlte mit den ALTEN zwei Regeln und kam auf `acht
+ * null, eine mit Ertrag` — der gegnerische Pruefer hat die fehlende Datei gefunden.)
  *
  * Die Aufteilung ist also bewusst: die DATEIEN sind ein Opt-in (dies hier), die BAUFORMEN
  * darin ein Opt-out (KEINE_FIXTURE). Preis, benannt: eine neue Fixture-Datei muss von Hand
@@ -1216,18 +1220,20 @@ const FIXTURE_BASELINE = new Set<string>([
   'A: 600 Segmente → 4 Blöcke à max. 150',
   'A: 300 Segmente → 2 Blöcke',
 
-  // Sorte (2), Erntegrenze — und eine ANDERE als die aus #566: die Fixture setzt EINE Zeile
-  // aus zwei Literalen mit `+` zusammen, `literale` liefert beide Haelften einzeln, und keine
-  // halbe Zeile trifft eine Form. Der Erzeuger existiert (correct.py druckt die Phasenbilanz
-  // am Stueck); zusammengesetzt wuerde sie passen.
-  '⏱ Phasen: diarisieren 45s · vorbereiten 1s · glossar 30s · korrigieren 620s · ',
-  'gesamt 696s (parallel=3)',
+  // (Hier standen kurz die zwei Haelften der Phasenbilanz, mit der Begruendung „aus zwei
+  //  Literalen zusammengesetzt, zusammengesetzt wuerde sie passen". Die zweite Haelfte war
+  //  FALSCH — gemessen: `correct.py:1421` druckt `glossar · pipeline · gesamt`, die Fixture
+  //  trug `diarisieren · vorbereiten · glossar · korrigieren`, eine Form, die es seit #399
+  //  (`da647e1`) nicht mehr gibt. Also Sorte (4), nicht (2), und damit reparierbar wie in
+  //  #567: die Fixture traegt jetzt die echte Form in EINEM Literal. Gefunden vom
+  //  gegnerischen Pruefer, der die Behauptung gegen den Erzeuger gehalten hat.)
 
   // FREMDAUSGABE — dieselbe Klasse wie der tqdm-Balken in FREMDZEILE, nur als exakte Zeilen
   // statt als Muster: `jobs.py` mischt stderr in denselben Strom, und torch schreibt dort
   // Warnungen und Traceback-Zeilen. Sie KOENNEN keinen Inventar-Eintrag haben, weil sie aus
-  // keinem `print(` in QUELLEN stammen. Bewusst als Liste und nicht als sechster Regex in
-  // FREMDZEILE: ein Muster darauf waere breit genug, um echte Protokollzeilen mitzunehmen.
+  // keinem `print(` in QUELLEN stammen. Bewusst als Liste und nicht als zweiter Zweig in
+  // FREMDZEILE (das ist EIN Regex, der tqdm-Balken): ein Muster auf Traceback- oder
+  // Warnungszeilen waere breit genug, um echte Protokollzeilen mitzunehmen.
   '  warnings.warn(',
   'UserWarning: std(): degrees of freedom is <= 0',
   'W0827 21:23:19.042000 126312 torch\\utils\\flop_counter.py:29] triton not found',
@@ -1382,16 +1388,21 @@ export function ohneKommentare(quelle: string): string {
 /** Bezeichner, deren Arrays bzw. `push`-Aufrufe KEINE Protokoll-Fixturen sind (#564).
  *
  *  Sie liegen ALLE in dieser Datei, und das ist kein Zufall: sie ist die einzige, die
- *  Fixturen UND die Maschinerie der Wache enthaelt. In den fuenf anderen Dateien ist alles
- *  Array-foermige eine Fixture (gemessen: dort null `push`-Stellen und null eingerueckte
- *  const-Arrays ausser Fixturen).
+ *  Fixturen UND die Maschinerie der Wache enthaelt. In den fuenf anderen Dateien ist jedes
+ *  Array und jeder push, den der Selektor durchlaesst, eine Fixture — gemessen, und die
+ *  einzige `push`-Stelle dort (`useOsFortschritt.test.tsx:14`, `meldungen.push(titel)`)
+ *  faellt am Selektor heraus, weil ihr Argument keine Zeichenkette ist.
  *
  *  OPT-OUT und nicht Opt-in, und die Richtung entscheidet: ein vergessener Eintrag hier macht
  *  den Test ROT (die Zeile findet keinen Erzeuger) — ein vergessener Opt-in-Marker liesse eine
  *  Fixture STILL unbewacht, also genau den Fehler, gegen den #564 geschrieben ist. */
 const KEINE_FIXTURE = new Set<string>([
-  'probe',              // Muster-Ernte aus dem Parser-Quelltext (`parserMuster`)
-  'klammerImKommentar', // der Laufzeit-Ausloeser des Kommentar-Tests
+  // Schluessel ist DATEI:NAME, nicht der blosse Name. Ein Name allein gaelte in allen sechs
+  // Dateien: eine kuenftige Fixture `const probe = [ … ]` in `jobPhases.test.ts` wuerde still
+  // uebersprungen, und der Riegel unten bliebe gruen, weil sich an der Mengengleichheit
+  // nichts aendert. Gefunden vom gegnerischen Pruefer als „was erlaubt der Fix NEU".
+  'jobPhases.vertrag.test.ts:probe',              // Muster-Ernte aus dem Parser-Quelltext
+  'jobPhases.vertrag.test.ts:klammerImKommentar', // Laufzeit-Ausloeser des Kommentar-Tests
 ])
 
 /** Beginnt der geklammerte Block ab `pos` mit einem Zeichenketten-Literal?
@@ -1423,16 +1434,19 @@ function beginntMitLiteral(quelle: string, pos: number, nurEinfach = false): boo
  *
  *  VIER Bauformen, seit #564 statt zweier — rund 90 Fixture-Zeilen standen ausserhalb der
  *  Ernte, und die Wache meldete ueber sie Erfolg, ohne sie angesehen zu haben. */
-export function ernteAusQuelle(roh: string): { zeilen: string[]; uebersprungen: string[] } {
+export function ernteAusQuelle(roh: string, datei = ''): {
+  zeilen: string[]; uebersprungen: string[]
+} {
   const quelle = ohneKommentare(roh)
   const zeilen: string[] = []
   const uebersprungen: string[] = []
+  const optOut = (name: string) => `${datei}:${name}`
   const nimm = (pos: number, auf?: string, zu?: string) =>
     zeilen.push(...literale(klammerAb(quelle, pos, auf, zu)))
 
   // (A) Aufruf mit Art-Zeichenkette und Array. Der NAME ist seit #564 frei: `parseJobPhases`
-  // fest verdrahtet liess die sechs `von('correct', [ … ])` in jobPhases.test.ts draussen —
-  // dieselbe Gestalt, anderer Bezeichner.
+  // fest verdrahtet liess die sechs `von(…)`-Aufrufe in jobPhases.test.ts draussen (fuenfmal
+  // mit 'correct', einmal mit 'transcribe') — dieselbe Gestalt, anderer Bezeichner.
   // BEIDE Quotierungen am ersten Argument: heute schreibt jede Fixture `'correct'`, aber
   // nichts erzwingt das (kein eslint/prettier im Frontend) — eine Datei mit `"correct"`
   // faellt sonst still aus der Ernte, und die Wache meldete darueber Erfolg. Unabhaengig
@@ -1449,7 +1463,7 @@ export function ernteAusQuelle(roh: string): { zeilen: string[]; uebersprungen: 
   for (const m of quelle.matchAll(/^[ \t]+const\s+([A-Za-z_$][\w$]*)\s*(?::[^=\n]+)?=\s*\[/gm)) {
     const pos = m.index + m[0].length - 1
     if (!beginntMitLiteral(quelle, pos)) continue
-    if (KEINE_FIXTURE.has(m[1])) { uebersprungen.push(m[1]); continue }
+    if (KEINE_FIXTURE.has(optOut(m[1]))) { uebersprungen.push(optOut(m[1])); continue }
     nimm(pos)
   }
 
@@ -1461,7 +1475,7 @@ export function ernteAusQuelle(roh: string): { zeilen: string[]; uebersprungen: 
   for (const m of quelle.matchAll(/\b([A-Za-z_$][\w$]*)\.push\(/g)) {
     const pos = m.index + m[0].length - 1
     if (!beginntMitLiteral(quelle, pos, true)) continue
-    if (KEINE_FIXTURE.has(m[1])) { uebersprungen.push(m[1]); continue }
+    if (KEINE_FIXTURE.has(optOut(m[1]))) { uebersprungen.push(optOut(m[1])); continue }
     nimm(pos, '(', ')')
   }
   return { zeilen, uebersprungen }
@@ -1474,7 +1488,7 @@ export function zeilenAusQuelle(roh: string): string[] {
 
 function ernteAusDatei(datei: string): { zeilen: string[]; uebersprungen: string[] } {
   return ernteAusQuelle(
-    fs.readFileSync(path.join(WURZEL, 'webtool', 'frontend', datei), 'utf8'))
+    fs.readFileSync(path.join(WURZEL, 'webtool', 'frontend', datei), 'utf8'), datei)
 }
 
 describe('Fixture-Wache', () => {
@@ -1646,10 +1660,10 @@ describe('Fixture-Wache', () => {
     for (const [datei] of FIXTURE_DATEIEN) {
       for (const name of ernteAusDatei(datei).uebersprungen) uebersprungen.add(name)
     }
-    expect([...uebersprungen].sort(), `die per Namen uebersprungenen Bezeichner haben sich `
+    expect([...uebersprungen].sort(), `die uebersprungenen Eintraege (DATEI:NAME) haben sich `
       + `geaendert. Ein Eintrag, der nirgends mehr greift, ist eine Ausnahme ohne `
-      + `Gegenstand — und einer, der neu greift, blendet moeglicherweise eine echte Fixture `
-      + `aus. Beides gehoert entschieden, nicht angepasst.`)
+      + `Gegenstand — sie blendet spaeter eine echte Fixture desselben Namens lautlos aus. `
+      + `Das gehoert entschieden, nicht angepasst.`)
       .toEqual([...KEINE_FIXTURE].sort())
   })
 
