@@ -238,7 +238,7 @@ def _vorgang_setzen(nummer, zustand, job_id=None):
             v["job_id"] = job_id
 
 
-def vormerken(project: str, kind: str, base: str = None) -> str:
+def vormerken(project: str, kind: str, base: str | None = None) -> str:
     """Eine Vormerkung anlegen, BEVOR irgendetwas laeuft — und ihre Nummer zurueckgeben.
 
     `request` legt die Nummer erst an, wenn es den Slot belegt findet. Fuer den URL-Import

@@ -1873,6 +1873,12 @@ def fetch_urls(project: str, body: FetchBody):
     except BaseException:
         jobs.vorgang_verwerfen(nummer)
         raise
+    # Getrennte Variable, nicht `nummer = None`: die Nummer EXISTIERT intern immer (die
+    # Rueckrufe unten brauchen sie), nur die ANTWORT laesst sie im belegten Fall weg. Ein
+    # nachtraegliches `None` auf `nummer` machte daraus ein `str | None`, das sich durch jeden
+    # weiteren Aufruf zoege — mypy hat das mit vier `arg-type`-Fehlern gemeldet, und der
+    # Riegel hatte recht: die beiden Dinge sind wirklich nicht dasselbe.
+    antwort_nummer: str | None = nummer
     if not started:
         # `jobs.start` gibt bei belegtem `(projekt, fetch)` den laufenden Job zurueck und
         # verwirft `cmd` UND `then` — es wird also nie etwas heruntergeladen und nie etwas
@@ -1880,7 +1886,7 @@ def fetch_urls(project: str, body: FetchBody):
         # gerade beseitigt hat: die Oberflaeche fragte sie fuer die Lebensdauer des Tabs alle
         # 1,5 s ab.
         jobs.vorgang_verwerfen(nummer)
-        nummer = None
+        antwort_nummer = None
     else:
         # Und wenn der fetch-Job NICHT `done` wird, laeuft `then` nie (`jobs._run` ruft
         # `then`-Rueckrufe nur bei Erfolg) — die Nummer bliebe ebenfalls ewig `vorgemerkt`.
@@ -1900,7 +1906,7 @@ def fetch_urls(project: str, body: FetchBody):
         # Entscheidung, nur frueher. (CodeRabbit-CLI, major.)
         if not jobs.when_done(job_id, lambda: _fetch_nachlauf_ausgang(job_id, nummer)):
             _fetch_nachlauf_ausgang(job_id, nummer)
-    return {"job_id": job_id, "started": started, "vorgang": nummer}
+    return {"job_id": job_id, "started": started, "vorgang": antwort_nummer}
 
 
 def _fetch_nachlauf_ausgang(job_id: str, nummer: str) -> None:
