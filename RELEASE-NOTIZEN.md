@@ -33,6 +33,7 @@ hat. Lesbar, aber unschön — das ist Absicht.
 - Wenn Transkribor kurz nicht antwortet, wird der laufende Vorgang nicht mehr als „fehlgeschlagen" gemeldet: die Anzeige bleibt stehen und zeigt danach das richtige Ergebnis.
 - Nach dem Hochladen siehst du jetzt auch, welche Aufnahmen noch auf ihre Korrektur warten und wie viele vor ihnen liegen, statt nur „Transkribiert — noch nicht korrigiert".
 - Lädst du mehrere Aufnahmen auf einmal hoch, verfolgt Transkribor jetzt jede von ihnen sofort — vorher nur die zuletzt hinzugefügte, und die Meldung darüber sagte dann das Falsche.
+- Klappt ein Video-Import gerade nicht, weil schon einer läuft, sagt Transkribor jetzt, dass die Links in der Liste stehenbleiben — vorher versprach es, sie kämen von selbst danach dran, was für Links nie stimmte.
 
 ## v0.53.0 — 2026-09-03
 

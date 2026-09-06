@@ -580,18 +580,24 @@ describe('ProjectWorkspace (Stub)', () => {
        (`app.py:1853`) — seine Antwort traegt NIE ein `vorgang`. An der Nummer festgemacht
        schwiege er ganz, obwohl der Nutzer gewartet hat.
 
-       Was der Text sagt, ist fuer diesen Fall trotzdem falsch (T-046) — hier wird die
-       VERDRAHTUNG festgenagelt, nicht der Wortlaut gutgeheissen. */
+       Und er bekommt einen EIGENEN Text: `jobs.start` wirft bei belegtem Slot das Kommando
+       samt URLs weg, es kommt nichts „danach dran" — der Dialog schiebt die Links zum
+       Neuversuch zurueck in die Liste. Der alte, gemeinsame Satz war hier eine Zusage ohne
+       Gegenstand; drei Pruefer haben das unabhaengig gemeldet. Die Gegenprobe steht im Test
+       darueber: beim Upload bleibt es beim alten Satz, denn dort gibt es die Vormerkung. */
     nurDemo()
     vi.mocked(api.fetchUrls).mockResolvedValue({ job_id: 'fremder_blocker', started: false })
     zeigen()
     await screen.findByRole('button', { name: /^Material$/ })
     await holeUrl()
     await waitFor(() => expect(toastMock.info).toHaveBeenCalledWith(
-      expect.stringMatching(/kommen danach dran/)))
+      expect.stringMatching(/Links bleiben in der Liste/)))
     // Ohne Nummer gibt es nichts zu verfolgen — und der Erfolgston darf nicht kommen.
     expect(api.getVorgang).not.toHaveBeenCalled()
     expect(toastMock.success).not.toHaveBeenCalled()
+    // Der Upload-Satz darf hier NICHT stehen: er verspricht einen Nachlauf, den es fuer
+    // diesen Weg nicht gibt. Ohne diese Zeile bliebe die Trennung der beiden Texte ungeprueft.
+    expect(toastMock.info).not.toHaveBeenCalledWith(expect.stringMatching(/kommen danach dran/))
   })
 
   it('meldet einen fehlgeschlagenen Einstellungs-GET, statt ihn zu verschlucken (#215)', async () => {

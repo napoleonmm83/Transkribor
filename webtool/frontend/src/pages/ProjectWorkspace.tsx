@@ -344,7 +344,7 @@ export function ProjectWorkspace() {
           // fuenf Uploads viermal DIESELBE Nummer liefert (der `_pending`-Schluessel ist fuer
           // alle `(projekt, transcribe, None)`), kostet hier also nichts.
           const gestartet = new Set<'transcribe' | 'fetch'>()
-          let wartet = false
+          const wartet = new Set<'transcribe' | 'fetch'>()
           for (const { job, art } of ergebnisse) {
             // Sofort adoptieren statt auf den naechsten Poll zu warten — der Balken soll
             // direkt stehen.
@@ -365,21 +365,31 @@ export function ProjectWorkspace() {
               // gehaengt schwiege ein blockierter URL-Import ganz, obwohl der Nutzer gewartet
               // hat.
               //
-              // GETRAGENE GRENZE, benannt statt behoben (T-046): fuer genau diesen Fall ist
-              // der Text darunter falsch — `jobs.start` wirft das Kommando bei belegtem Slot
-              // WEG, es kommt nichts „danach dran"; der Dialog schiebt die Links stattdessen
-              // zum Neuversuch zurueck in die Liste. Vorbestehend, aber seit der Liste neben
-              // „Transkription gestartet" desselben Stapels sichtbar.
-              wartet = true
+              // Die ART wird mitgefuehrt, weil die beiden Faelle VERSCHIEDENES bedeuten —
+              // siehe die zwei Meldungen unten.
+              wartet.add(art)
             }
           }
-          // Je AUSGANGSART eine Meldung, im Wortlaut von vorher (Entscheidung Marcus
-          // 2026-09-06) — nicht je Antwort: fuenf eingereihte Dateien ergeben EINE
-          // Wartemeldung, nicht fuenf. Mehr als drei koennen es nie werden (zwei Arten plus
-          // die Wartemeldung), und deshalb stehen die drei Zeilen AUSSERHALB der Schleife.
+          // Je AUSGANGSART eine Meldung (Entscheidung Marcus 2026-09-06) — nicht je Antwort:
+          // fuenf eingereihte Dateien ergeben EINE Wartemeldung, nicht fuenf. Mehr als vier
+          // koennen es nie werden (zwei Arten gestartet, zwei Arten wartend), und deshalb
+          // stehen die Zeilen AUSSERHALB der Schleife.
+          //
+          // Die WARTEMELDUNG ist je Art verschieden, und das ist der eine Punkt, an dem der
+          // Wortlaut NICHT der von vorher ist. Der alte Satz galt beiden Arten und war fuer
+          // den URL-Import falsch: `fetch_urls` ruft `jobs.start`, und das wirft bei belegtem
+          // Slot das Kommando samt URLs WEG (`jobs.py:280`) — es kommt nichts „danach dran",
+          // der Dialog schiebt die Links stattdessen zum Neuversuch zurueck in die Liste
+          // (`MaterialDialog.tsx`, `if (!res.started) gescheitert.push(...links)`). Beim
+          // Upload dagegen stimmt er: dort legt `jobs.request` eine echte Vormerkung an.
+          // Vorbestehend falsch, aber durch die Liste erst sichtbar geworden — der Satz stand
+          // vorher allein da, jetzt neben „Transkription gestartet" desselben Stapels.
+          // Von DREI Pruefern unabhaengig gemeldet (kalter Leser, gegnerischer Pruefer,
+          // CodeRabbit-CLI major).
           if (gestartet.has('fetch')) toast.success('Herunterladen gestartet — Transkription folgt automatisch')
           if (gestartet.has('transcribe')) toast.success('Transkription gestartet')
-          if (wartet) toast.info('Läuft schon — die neuen Dateien kommen danach dran.')
+          if (wartet.has('transcribe')) toast.info('Läuft schon — die neuen Dateien kommen danach dran.')
+          if (wartet.has('fetch')) toast.info('Ein Import läuft schon — die Links bleiben in der Liste.')
         }} />
     </div>
   )
