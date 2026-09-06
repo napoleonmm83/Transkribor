@@ -1470,6 +1470,27 @@ describe('korrekturSchlange — die Wartezeit im gestaffelten Lauf (#442)', () =
       .toEqual({ B: { art: 'correct', vor: 0 }, C: { art: 'correct', vor: 1 } })
   })
 
+  it('auch NACH `[scope+]` setzt die alte Zeile die Base nicht wieder ein (#561)', () => {
+    /* Die zweite Haelfte desselben Riegels, und sie ist die schaerfere: `[scope+] A` loescht
+       die Statusfilter fuer `A` (`perBase`, `erreicht`, `active`) — genau die Felder, an denen
+       `korrekturSchlange` sonst erkennt, dass `A` die Schlange verlassen hat. Setzte der
+       Zeilenparser `A` aus der ueberlebenden alten Einreih-Zeile wieder ein, staende sie
+       danach OHNE jeden Filter in der Schlange, obwohl der Server sie an derselben Marke
+       herausgenommen hat.
+
+       Der Weg dorthin ist echt: Aufnahme loeschen und gleichnamig neu hochladen (#479/#489),
+       waehrend der Lauf noch faehrt. (CodeRabbit-Bot, major — dieselbe Zeile, die der
+       gegnerische Pruefer als F6 fand.) */
+    const p = parseJobPhases('transcribe', [
+      '[scope] A\tB',
+      '→ Eingereiht A (Korrektur) …',
+      '→ Eingereiht B (Korrektur) …',
+      '[scope+] A',
+    ], undefined, undefined, ['B'])
+    expect(p.eingereiht).toEqual(['B'])
+    expect(korrekturSchlange(p, 'transcribe')).toEqual({ B: { art: 'correct', vor: 0 } })
+  })
+
   it('ein doppelter Name verschiebt die Zaehlung NICHT', () => {
     /* Der Erzeuger druckt heute keine Dubletten (`processed` laesst jede Base einmal durch),
        der Parser ist aber eine reine Funktion und sein Vertrag gilt unabhaengig davon. Die
