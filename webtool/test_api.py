@@ -4679,6 +4679,13 @@ def test_fetch_gibt_die_nummer_seines_nachlaufs_zurueck(client, monkeypatch):
     """
     from webtool import jobs
     monkeypatch.setattr(jobs, "start", lambda *a, **k: ("j-fetch", True))
+    # `when_done` MUSS mit gefaelscht werden, und das ist keine Bequemlichkeit: `jobs.start`
+    # ist hier eine Attrappe, es gibt also gar keinen Job `j-fetch`. Das echte `when_done`
+    # liefert dafuer False, der Endpunkt wertet den Ausgang dann SOFORT aus, findet keinen
+    # Job — und verwirft die Nummer. Im Betrieb gibt es den Job an dieser Stelle immer
+    # (`start` hat ihn eben angelegt); die Attrappe stellt genau das her. Ohne diese Zeile
+    # misst der Test einen Zustand, den es nur in ihm selbst gibt.
+    monkeypatch.setattr(jobs, "when_done", lambda jid, fn: True)
     r = client.post("/api/projects/Demo/fetch", json={"urls": ["https://youtu.be/abc123"]})
     nummer = r.json()["vorgang"]
     assert isinstance(nummer, str) and nummer
@@ -4759,3 +4766,42 @@ def test_start_transcribe_reicht_die_nummer_an_request_durch(client, monkeypatch
     gesehen.clear()
     app_mod._start_transcribe("Demo")
     assert gesehen["vorgang"] is None, "ohne Argument darf keine Nummer erfunden werden"
+
+
+def test_fetch_schliesst_die_nummer_auch_wenn_der_job_schon_terminal_ist(client, monkeypatch):
+    """`jobs.when_done` liefert FALSE, wenn der Job beim Registrieren schon terminal ist.
+
+    Dann wird der Rueckruf gar nicht erst angehaengt — und die vorab angelegte Nummer bliebe
+    fuer immer `vorgemerkt`, weil auch `then` nicht mehr laeuft. Das Fenster ist winzig
+    (zwischen `jobs.start` und dem `when_done` liegen Mikrosekunden, ein fetch-Subprozess
+    braucht zum Hochfahren ein Vielfaches), aber es ist eines: stirbt der Lauf beim Import,
+    ist er terminal, bevor wir fragen. Gefunden von der CodeRabbit-CLI (major).
+
+    Nachgestellt wird die LAGE, nicht das Rennen: `when_done` sagt False, `jobs.get` meldet
+    `error`. Das Rennen selbst ist nicht herstellbar, die Reaktion darauf sehr wohl.
+    """
+    from webtool import jobs
+    monkeypatch.setattr(jobs, "start", lambda *a, **k: ("j-schnell", True))
+    monkeypatch.setattr(jobs, "when_done", lambda jid, fn: False)
+    monkeypatch.setattr(jobs, "get", lambda jid: {"status": "error"})
+    r = client.post("/api/projects/Demo/fetch", json={"urls": ["https://youtu.be/abc123"]})
+    nummer = r.json()["vorgang"]
+    assert isinstance(nummer, str) and nummer
+    # `vorgang()` ist NICHT gefaelscht — hier steht der echte Zustand der Buchfuehrung.
+    assert jobs.vorgang(nummer)["status"] == "verworfen"
+
+
+def test_fetch_laesst_die_nummer_offen_wenn_der_schon_terminale_job_gelang(client, monkeypatch):
+    """Die Gegenprobe, und ohne sie belegt der Test darueber nichts.
+
+    War der Job beim Registrieren schon `done`, laeuft sein `then` noch — die Nummer gehoert
+    dann dem Nachlauf und darf NICHT geschlossen werden. Ein Rueckruf, der die Sofortauswertung
+    bedingungslos verwuerfe, naehme dem Browser genau den Lauf weg, auf den er wartet.
+    """
+    from webtool import jobs
+    monkeypatch.setattr(jobs, "start", lambda *a, **k: ("j-schnell-ok", True))
+    monkeypatch.setattr(jobs, "when_done", lambda jid, fn: False)
+    monkeypatch.setattr(jobs, "get", lambda jid: {"status": "done"})
+    r = client.post("/api/projects/Demo/fetch", json={"urls": ["https://youtu.be/abc123"]})
+    nummer = r.json()["vorgang"]
+    assert jobs.vorgang(nummer)["status"] == "vorgemerkt"
