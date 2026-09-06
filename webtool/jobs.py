@@ -485,10 +485,16 @@ def when_done(job_id: str, fn) -> bool:
     **`fn` feuert bei JEDEM terminalen Ausgang — `done`, `error` UND `cancelled`.** Das ist
     nicht der Vertrag von `then` (das bleibt auf `done`) und war bis #417 auch nicht der von
     hier; wer den Rueckruf nur bei Erfolg laufen lassen will, fragt den Status SELBST ab.
-    Heute ist das gefahrlos, weil es genau EINEN Produktivaufrufer gibt (`request`s `rerun`,
-    der genau das tut) — der zweite erbt die Eigenschaft sonst still. Der Grund steht in
-    `_run`: `rerun` raeumt seine Vormerkung aus `_pending`, und die muss auch nach einem
-    Abbruch weg, sonst ist der Nachlauf-Weg dauerhaft vergiftet."""
+    Es gibt seit #557 ZWEI Produktivaufrufer, und beide fragen selbst: `request`s `rerun` und
+    `app._fetch_nachlauf_ausgang` (schliesst die Vormerkung des URL-Imports, aber nur wenn der
+    Download NICHT `done` wurde — bei Erfolg steht der Nachlauf ja noch aus). Hier stand bis
+    dahin „genau EINEN Produktivaufrufer … der zweite erbt die Eigenschaft sonst still": der
+    zweite ist da, er hat sie nicht still geerbt, und der Satz waere fuer den DRITTEN eine
+    falsche Beruhigung. Wer einen anhaengt, fragt den Status ebenfalls selbst.
+
+    Der Grund fuer den weiten Vertrag steht in `_run`: `rerun` raeumt seine Vormerkung aus
+    `_pending`, und die muss auch nach einem Abbruch weg, sonst ist der Nachlauf-Weg dauerhaft
+    vergiftet."""
     with _lock:
         r = _jobs.get(job_id)
         if r is None or r["status"] != "running":
@@ -509,9 +515,14 @@ def _run(jid, cmd, cwd, env):
     # `app.py:1123` (fetch -> transcribe); eine Transkription ueber Dateien, die gar nicht
     # geladen wurden, waere sinnlos. Bleibt auf `done`.
     #
-    # `next_runs` heisst „jemand anders braucht einen Lauf, du warst besetzt" (`request`).
-    # Das ist der Weg, auf dem ein Upload WAEHREND eines laufenden Laufs ueberhaupt
-    # verarbeitet wird — `app.py:1410`. Der Ausgang DIESES Laufs ist dafuer ohne Bedeutung:
+    # `next_runs` heisst „ich will von JEDEM Ausgang wissen" — und das sind seit #557 ZWEI
+    # Dinge, nicht mehr eines: „jemand anders braucht einen Lauf, du warst besetzt"
+    # (`request`s `rerun`) UND „schliesse meine Vormerkung, falls du nicht gelingst"
+    # (`app._fetch_nachlauf_ausgang`). Ein `fetch`-Job hat damit erstmals ueberhaupt einen
+    # Eintrag hier; bis dahin kam `next_runs` nur aus `request`, das `fetch` nie ruft.
+    #
+    # Der `rerun`-Fall ist der Weg, auf dem ein Upload WAEHREND eines laufenden Laufs
+    # ueberhaupt verarbeitet wird. Der Ausgang DIESES Laufs ist dafuer ohne Bedeutung:
     # der Nachlauf haengt an einer FREMDEN Datei. Endete der laufende Job rot, ging er
     # ersatzlos verloren und die eben hochgeladene Aufnahme wurde nie transkribiert, ohne
     # eine Zeile darueber. Das Loch gibt es seit es `request` gibt (ein Absturz beim

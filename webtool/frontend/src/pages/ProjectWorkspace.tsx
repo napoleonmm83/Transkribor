@@ -368,10 +368,15 @@ export function ProjectWorkspace() {
               // `correct_file` erreicht ihn nie. Hier stand er trotzdem, und der gegnerische
               // Pruefer hat es gemessen.
               //
-              // `fetch_urls` ruft `jobs.start`, nicht `jobs.request` (`app.py:1853`) — es gibt
-              // also gar keine Nummer, an der man den Zweig festmachen koennte. An `vorgang`
-              // gehaengt schwiege ein blockierter URL-Import ganz, obwohl der Nutzer gewartet
-              // hat.
+              // `fetch_urls` gibt bei belegtem Slot BEWUSST `vorgang: null` zurueck: dort
+              // wird nichts geladen und nichts nachlaufen, eine Nummer waere eine, die
+              // niemand aufloest. An `vorgang` gehaengt schwiege dieser Zweig also ganz,
+              // obwohl der Nutzer gewartet hat.
+              //
+              // (Hier stand bis #557 „es gibt gar keine Nummer" — das war vor diesem PR wahr
+              // und ist es nicht mehr: der GESTARTETE Import traegt seit dem eine, und die
+              // Zeile fuenfzehn weiter oben liest sie. Wer dem alten Satz glaubt, haelt jene
+              // Zeile fuer toten Code.)
               //
               // Die ART wird mitgefuehrt, weil die beiden Faelle VERSCHIEDENES bedeuten —
               // siehe die zwei Meldungen unten.
