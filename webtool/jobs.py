@@ -195,7 +195,9 @@ NACHTRAG_KINDS = ("transcribe",)
 # Quelltext von `transcribe.py` und laesst dieses Muster darauf laufen.
 #
 # NUR `transcribe` druckt sie (`NACHTRAG_KINDS` ist dieselbe Menge, aus demselben Grund wie
-# bei `ZULASSUNGS_KINDS`: ein `fetch`-Lauf traegt FREMDEN Text im Strom).
+# bei `ZULASSUNGS_KINDS`: ein `fetch`-Lauf traegt FREMDEN Text im Strom). Dieselbe Menge
+# schaltet auch den Gegenweg (`[done]` nimmt aus der Schlange heraus) — ein Lauf, dessen
+# Einreih-Zeilen nicht zaehlen, darf seine Abschlussmarken erst recht nicht buchen.
 EINGEREIHT_RE = re.compile(r"^→ Eingereiht (.+?) \(Korrektur\) …$")
 EINGEREIHT_KINDS = ("transcribe",)
 
@@ -403,12 +405,19 @@ def start(project: str, cmd: list, cwd, kind: str, then=None, env=None, base: st
                       # der perBase-Verdraengung muss `erreicht` UND diese Unterdrueckung
                       # mitnehmen — beides liegt damit schon serverseitig.
                       "entfernt": set(),
-                      # Wer an den Korrektur-Pool uebergeben wurde (#442/#561) — die DRITTE
+                      # Wer NOCH in der Korrektur-Schlange steht (#442/#561) — die DRITTE
                       # Wartequelle, und bis hierher die einzige ohne Rueckweg gegen den
                       # Zeilendeckel. LISTE, kein Set: ihre Reihenfolge IST die Schlangen-
                       # ordnung (der ThreadPoolExecutor arbeitet nach Submit-Reihenfolge),
                       # und `sorted()` wie bei `gesehen` zerstoerte genau die Auskunft, um
                       # die es geht („noch N vor dieser").
+                      #
+                      # Und anders als `gesehen`/`entfernt` waechst sie NICHT nur: die
+                      # Einreih-Zeile legt an, `[done]` nimmt wieder heraus (beides in
+                      # `_verarbeite`). Monoton gefuehrt haette der Rueckweg die sichere
+                      # Richtung dieses Fehlers umgedreht — statt einer zu kleinen Zahl eine
+                      # dauerhaft zu grosse, samt einer laengst fertigen Aufnahme, die fuer
+                      # immer „wartet".
                       "eingereiht": [],
                       "lines": [], "returncode": None, "started": time.time(),
                       "ended": None, "pid": None, "cancelled": False,
@@ -685,6 +694,33 @@ def _run_proc(jid, cmd, cwd, env=None):
                     # wuerde „noch 2".
                     if _m.group(1) not in liste:
                         liste.append(_m.group(1))
+                elif eingereiht_an and line.startswith(DONE_PREFIX):
+                    # Der GEGENWEG, und ohne ihn dreht der Rueckweg oben die sichere Richtung
+                    # um (CodeRabbit-CLI, major): faellt spaeter auch die Abschlusszeile aus
+                    # dem Puffer, haelt die Serverliste die Aufnahme fuer immer als „wartend"
+                    # und schiebt jede nachfolgende Position um eins nach hinten. Vor #561 war
+                    # die Zahl nur zu KLEIN — das waere zu GROSS gewesen, und dauerhaft.
+                    #
+                    # `[done] {base}` ist die Abschlussmarke der Aufnahme, nicht `apply:`:
+                    # letzteres hat DREI Formen (edit.json / SKIP / FEHLT), also drei Muster,
+                    # die neben `jobPhases.ts` her driften koennten. `[done]` liest dieselbe
+                    # Zeile, die `buche_aktive` schon zerlegt, in derselben ROHEN Form (#477).
+                    #
+                    # Die REIHENFOLGE traegt es, nicht eine Zusicherung: `cmd_diarize` druckt
+                    # sein eigenes `[active]`/`[done]`-Paar im HAUPTlauf, also VOR
+                    # `ai_pool.submit` — zu dem Zeitpunkt steht die Base gar nicht in der
+                    # Liste, das Entfernen ist ein No-op. Jedes `[done]` NACH der Einreih-Zeile
+                    # kommt aus `correct_ai_single`s `finally` oder dem Rueckruf, und beide
+                    # feuern erst, wenn die Korrektur vorbei ist (`transcribe.py:_freigeben`).
+                    #
+                    # Und der Parser kann eine entfernte Base nicht wieder einsetzen: er haengt
+                    # nur an, was in seinem PUFFER steht, und `fuege_zeile_an` verdraengt
+                    # chronologisch (`del lines[10:11]`) — ist das `[done]` verdraengt, ist die
+                    # aeltere Einreih-Zeile es zwingend auch.
+                    roh = line[len(DONE_PREFIX):]
+                    liste = _jobs[jid]["eingereiht"]
+                    if roh in liste:
+                        liste.remove(roh)
                 # Nur die ERSTE Zeile zaehlt: der Lauf druckt sie, bevor er arbeitet, und
                 # spaeter kaeme sie hoechstens aus Transkripttext, der so beginnt.
                 if _jobs[jid]["bases"] is None and line.startswith(SCOPE_PREFIX):
