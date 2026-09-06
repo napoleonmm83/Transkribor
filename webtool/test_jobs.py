@@ -2105,3 +2105,50 @@ def test_abschluss_VOR_der_einreihung_nimmt_nichts_weg():
     r = _wait(jid, timeout=30)
     assert r["status"] == "done"
     assert r["eingereiht"] == ["A"], r["eingereiht"]
+
+
+def test_reannoncierte_aufnahme_rueckt_in_der_schlange_nach_HINTEN():
+    """`[scope+]` raeumt auch die Korrektur-Schlange — sonst nagelt #561 den alten Platz fest.
+
+    Eine geloeschte und gleichnamig neu hochgeladene Aufnahme (#479/#489) haengt der Pool
+    HINTEN an; ihre zweite Einreih-Zeile faellt aber am Dublettenriegel aus. Vor #561 heilte
+    das der Zeilendeckel von selbst — war die alte Zeile verdraengt, galt die neue. Mit der
+    Serverliste, die VORN steht, bliebe der alte Platz bis Jobende stehen, und jede Aufnahme
+    dahinter bekaeme eine Position zu viel angesagt.
+
+    Gefunden vom gegnerischen Pruefer als Antwort auf „was erlaubt der Fix NEU?" (F2) — es ist
+    kein vorbestehender Fehler, sondern einer, den erst der Rueckweg geschaffen hat.
+    """
+    code = ("import sys\n"
+            "print('[scope] A', flush=True)\n"
+            "print('→ Eingereiht A (Korrektur) …', flush=True)\n"
+            "print('→ Eingereiht B (Korrektur) …', flush=True)\n"
+            "print('[scope+] A', flush=True)\n"
+            "print('→ Eingereiht A (Korrektur) …', flush=True)\n")
+    jid, _ = jobs.start("P_eingereiht_reupload", [sys.executable, "-c", code], cwd=None,
+                        kind="transcribe")
+    r = _wait(jid, timeout=30)
+    assert r["status"] == "done"
+    # B steht jetzt vorn, A hinten — die Reihenfolge des POOLS, nicht die der ersten Runde.
+    assert r["eingereiht"] == ["B", "A"], r["eingereiht"]
+
+
+def test_eingereiht_verwirft_dubletten():
+    """Der Dublettenriegel hatte NULL Abdeckung — gemessen, nicht vermutet.
+
+    Der gegnerische Pruefer (F3) nahm `if _m.group(1) not in liste` heraus und bekam
+    `pytest -k eingereiht` unveraendert gruen. Erreichbar war die Dublette ueber den
+    Reannoncement-Weg (F2); seit der behoben ist, druckt der Erzeuger keine mehr — der Riegel
+    ist damit Defensive, und genau deshalb braucht er einen eigenen Test statt Dekoration zu
+    sein. Seine Wirkung waere still und dauerhaft: jeder Nachfolger rutschte um eins, aus
+    „noch 1 vor dieser" wuerde „noch 2".
+    """
+    code = ("import sys\n"
+            "print('→ Eingereiht A (Korrektur) …', flush=True)\n"
+            "print('→ Eingereiht A (Korrektur) …', flush=True)\n"
+            "print('→ Eingereiht B (Korrektur) …', flush=True)\n")
+    jid, _ = jobs.start("P_eingereiht_dublette", [sys.executable, "-c", code], cwd=None,
+                        kind="transcribe")
+    r = _wait(jid, timeout=30)
+    assert r["status"] == "done"
+    assert r["eingereiht"] == ["A", "B"], r["eingereiht"]
