@@ -52,18 +52,29 @@ export type Project = { name: string; dateien: number; fertig: number; geaendert
  *  Server gefuehrt, nicht aus `lines` gelesen. Rueckweg fuer den Fall, dass der gedeckelte
  *  Zeilenpuffer genau diese Zeile verdraengt hat (#475), Gegenstueck zu `bases`/`scope`. */
 export type JobStatus = { status: 'running' | 'done' | 'error' | 'cancelled'; lines: string[]; kind?: string; bases?: string[]; gesehen?: string[]; entfernt?: string[] };
-/** `vorgang` steht auf ZWEI Wegen, und sie bedeuten Verschiedenes — bis #557 war es nur einer:
+/** `vorgang` — SECHS Erzeuger, drei Verhalten. Gezaehlt, nicht erinnert (`grep` auf
+ *  `Promise<StartJob>` in `api.ts` plus die Abbildung von `uploadAudio` in `MaterialDialog`):
  *
- *  * Bei `started: false` (Upload, `jobs.request`) ist die Nummer die einzige brauchbare
+ *  | Erzeuger | `started: true` | `started: false` |
+ *  |---|---|---|
+ *  | transcribe · correct · retranscribe_file · upload (`jobs.request`) | `null` | NUMMER |
+ *  | correct_file (`jobs.start`) | Schluessel fehlt | Schluessel fehlt |
+ *  | fetch_urls (`jobs.start` + Vorab-Nummer, #557) | NUMMER | `null` |
+ *
+ *  Daraus die zwei Regeln, die zaehlen:
+ *
+ *  * Bei `started: false` mit Nummer (die vier `request`-Wege) ist sie die einzige brauchbare
  *    Auskunft: `job_id` ist dann der BLOCKER, und der KANN ueber die Einzel-GPU-Sperre einem
  *    fremden Projekt gehoeren (#381) — wie oft, ist nicht gemessen.
- *  * Bei `started: true` UND gesetzter Nummer (nur `fetch_urls`) laeuft der Download bereits,
- *    und die Nummer gehoert seinem Transkriptions-NACHLAUF, den es noch gar nicht gibt (#557).
- *    Wer die beiden Zweige als sich ausschliessend liest, laesst genau diese Nummer fallen.
+ *  * Bei `started: true` MIT Nummer — und das ist ausschliesslich `fetch_urls` — laeuft der
+ *    Download bereits, und die Nummer gehoert seinem Transkriptions-NACHLAUF, den es noch gar
+ *    nicht gibt. Wer die beiden Zweige als sich ausschliessend liest, laesst sie fallen.
  *
- *  Optional, weil `correct_file` ueber `jobs.start` laeuft und dort keine Vormerkung
- *  entsteht — und weil `fetch_urls` bei belegtem Slot bewusst `null` liefert (dort wird
- *  weder geladen noch nachgelaufen). */
+ *  UMKEHRSCHLUSS VERBOTEN: aus `vorgang == null` folgt NICHT „blockierter Import". Die
+ *  haeufigste Quelle von `null` sind die vier `request`-Wege bei `started: true` — vier von
+ *  sechs Erzeugern. `?` und `| null` sind ausserdem zwei verschiedene Dinge: den SCHLUESSEL
+ *  laesst nur `correct_file` weg. (Der frueheren Fassung dieses Kommentars fehlte beides;
+ *  gefunden vom gegnerischen Pruefer, F6.) */
 /** `job_id` ist NULLBAR, und das ist kein Feinschliff: gibt `jobs.request` nach zehn
  *  Versuchen auf, liefert es `(None, False, nummer)` — dann gibt es keinen Job, wohl aber
  *  einen Vorgang, dessen Ausgang der Nutzer erfahren soll. */
