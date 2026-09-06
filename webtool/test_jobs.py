@@ -2044,3 +2044,64 @@ def test_eingereiht_bucht_nur_fuer_transcribe():
     r = _wait(jid, timeout=30)
     assert r["status"] == "done"
     assert r["eingereiht"] == [], r["eingereiht"]
+
+
+def test_eingereiht_verlaesst_die_schlange_beim_abschluss():
+    """Der Gegenweg zum Rueckweg: `[done]` nimmt wieder aus der Schlange heraus (#561).
+
+    Ohne ihn dreht der Rueckweg oben die SICHERE RICHTUNG dieses Fehlers um (CodeRabbit-CLI,
+    major). Vor #561 fiel mit der Einreih-Zeile die ganze Aufnahme aus der Schlange — die Zahl
+    war zu KLEIN. Mit einer monoton gefuehrten Serverliste waere sie dauerhaft zu GROSS: faellt
+    spaeter auch die Abschlusszeile aus dem Puffer, stuende eine laengst fertige Aufnahme fuer
+    immer als „wartend" da und schoebe jede nachfolgende Position um eins nach hinten.
+
+    Gemessen wird genau dieser Fall: BEIDE Zeilen von A werden verdraengt, und A darf trotzdem
+    nicht mehr in der Schlange stehen.
+    """
+    rauschen = jobs.MAX_JOB_LINES + 600
+    code = f"""
+import sys
+print('[scope] A\tB', flush=True)
+for i in range(30):
+    print('[Demo] vorlauf', i)
+print('→ Eingereiht A (Korrektur) …', flush=True)
+print('→ Eingereiht B (Korrektur) …', flush=True)
+print('[done] A', flush=True)
+for i in range({rauschen}):
+    print('[Demo] rauschen', i)
+"""
+    jid, _ = jobs.start("P_eingereiht_fertig", [sys.executable, "-c", code], cwd=None,
+                        kind="transcribe")
+    r = _wait(jid, timeout=60)
+    assert r["status"] == "done", r["lines"][-3:]
+    # (1) Die Verdraengung ist wirklich eingetreten — sonst misst der Test nichts.
+    assert "→ Eingereiht A (Korrektur) …" not in r["lines"]
+    assert "[done] A" not in r["lines"]
+    # (2) A ist raus, B steht noch — und B rueckt damit auf Platz eins, statt hinter einer
+    #     Phantom-Aufnahme zu warten.
+    assert r["eingereiht"] == ["B"], r["eingereiht"]
+
+
+def test_abschluss_VOR_der_einreihung_nimmt_nichts_weg():
+    """Das `[done]` aus `cmd_diarize` steht VOR `ai_pool.submit` — es darf nichts loeschen.
+
+    Genau darauf ruht der Gegenweg: `cmd_diarize` druckt sein eigenes `[active]`/`[done]`-Paar
+    im HAUPTlauf, also bevor die Aufnahme ueberhaupt eingereiht ist (`transcribe.py`, Schleife
+    um `ai_pool.submit`); erst die spaeteren `[done]` aus `correct_ai_single`s `finally` und
+    dem Rueckruf bedeuten „Korrektur vorbei".
+
+    Der Test ist nicht bloss Negativkontrolle, er ist gegen eine konkrete ANDERE Bauform
+    gerichtet und wird von ihr rot: den Abschluss als monotone MENGE zu buchen und erst in
+    `get()` herauszufiltern. Dann merkte sich der Job das fruehe `[done]` und filterte die
+    danach eingereihte Aufnahme fuer den Rest des Laufs weg — die Schlange waere leer,
+    waehrend vier Aufnahmen darin stehen.
+    """
+    code = ("import sys\n"
+            "print('[active] A', flush=True)\n"
+            "print('[done] A', flush=True)\n"
+            "print('→ Eingereiht A (Korrektur) …', flush=True)\n")
+    jid, _ = jobs.start("P_eingereiht_frueh", [sys.executable, "-c", code], cwd=None,
+                        kind="transcribe")
+    r = _wait(jid, timeout=30)
+    assert r["status"] == "done"
+    assert r["eingereiht"] == ["A"], r["eingereiht"]
