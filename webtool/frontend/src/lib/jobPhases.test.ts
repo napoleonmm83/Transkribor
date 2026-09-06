@@ -1448,16 +1448,26 @@ describe('korrekturSchlange — die Wartezeit im gestaffelten Lauf (#442)', () =
       .toEqual(['B', 'A'])
   })
 
-  it('der Serverwert steht VORN, der Zeilenparser haengt nur Unbekanntes an (#561)', () => {
-    /* Die Ordnung des Servers ist die der Schlange — er sieht jede Zeile, bevor der Puffer
-       sie verdraengt. Eine Vorbelegung, die hinten anhinge, ergaebe bei einer verdraengten
-       fruehen Aufnahme genau die falsche Zahl; deshalb steht sie vorn und der Parser
-       dedupliziert dagegen. */
+  it('ist der Serverwert da, ist er die EINZIGE Quelle (#561)', () => {
+    /* Der Vorgaenger dieses Tests hiess „der Serverwert steht VORN, der Zeilenparser haengt
+       nur Unbekanntes an" und kodierte einen Vertrag, der mit dem Gegenweg gefallen ist:
+       solange die Serverliste monoton war, war die Vereinigung richtig. Seit das `[done]`
+       wieder herausnimmt, setzt jeder Zeilenanhang ein, was der Server entfernt hat.
+
+       Der erreichbare Fall sind die GESCHUETZTEN ersten zehn Puffer-Zeilen (`fuege_zeile_an`
+       nimmt `lines[10:11]`, die ersten zehn bleiben stehen) — und dort liegt die erste
+       Einreih-Zeile eines Laufs (gemessen Index 8). Hier steht `A` also noch im Puffer,
+       obwohl der Server sie an ihrem `[done]` herausgenommen hat. Ohne den Riegel meldete die
+       laengst korrigierte ERSTE Aufnahme „Wartet auf Korrektur · noch 2 vor dieser" bis
+       Jobende. (Gegnerischer Pruefer, F6.) */
     const p = parseJobPhases('transcribe', [
       '[scope] A\tB\tC',
+      '→ Eingereiht A (Korrektur) …',
       '→ Eingereiht B (Korrektur) …', '→ Eingereiht C (Korrektur) …',
-    ], undefined, undefined, ['A', 'B'])
-    expect(p.eingereiht).toEqual(['A', 'B', 'C'])
+    ], undefined, undefined, ['B', 'C'])
+    expect(p.eingereiht).toEqual(['B', 'C'])
+    expect(korrekturSchlange(p, 'transcribe'))
+      .toEqual({ B: { art: 'correct', vor: 0 }, C: { art: 'correct', vor: 1 } })
   })
 
   it('ein doppelter Name verschiebt die Zaehlung NICHT', () => {
