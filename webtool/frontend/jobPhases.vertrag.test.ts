@@ -1628,10 +1628,17 @@ describe('Fixture-Wache', () => {
 
   it('kein Bezeichner faellt STILL aus der Ernte (#564)', () => {
     // Zwilling des #565-Riegels, eine Schicht davor: dort geht es um Formen, die nicht
-    // PRUEFEN, hier um Arrays, die nicht GEERNTET werden. Ein veralteter Eintrag in
-    // KEINE_FIXTURE — der Bezeichner wurde umbenannt, das Array ist aber weiter eine
-    // Nicht-Fixture — wuerde sonst lautlos wieder mitgeerntet oder, schlimmer, eine ECHTE
-    // Fixture desselben Namens dauerhaft ausblenden.
+    // PRUEFEN, hier um Bezeichner, die nicht GEERNTET werden.
+    //
+    // WAS ER LEISTET — und die erste Fassung dieses Kommentars behauptete mehr, bis die
+    // Mutationsprobe es widerlegt hat: er faengt den VERALTETEN Eintrag. Ein Name, den es im
+    // Quelltext nicht mehr gibt, wird nie uebersprungen, die Mengen laufen auseinander, rot.
+    // Das zaehlt, weil so ein Eintrag eine ECHTE Fixture desselben Namens spaeter lautlos
+    // ausblenden wuerde.
+    // WAS ER NICHT LEISTET: einen ENTFERNTEN Eintrag faengt er nicht — dann schrumpfen beide
+    // Seiten gleich und bleiben gleich. Gemessen: `'probe'` aus KEINE_FIXTURE genommen laesst
+    // DIESEN Test gruen und macht stattdessen die Wache nebenan rot (der TypeScript-Quelltext
+    // in `probe` findet keinen Erzeuger). Gedeckt ist der Fall also, nur nicht von hier.
     const uebersprungen = new Set<string>()
     for (const [datei] of FIXTURE_DATEIEN) {
       for (const name of ernteAusDatei(datei).uebersprungen) uebersprungen.add(name)
