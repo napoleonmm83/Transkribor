@@ -534,6 +534,56 @@ describe('ProjectWorkspace (Stub)', () => {
     expect(toastMock.info).toHaveBeenCalledWith(expect.stringMatching(/kommen danach dran/))
   })
 
+  it('meldet je AUSGANGSART einmal, nicht je Antwort (#560)', async () => {
+    /* Der Mechanismus dafuer sind `gestartet` (Set) und `wartet` (bool), und die drei
+       Toast-Zeilen stehen ausserhalb der Schleife. Bis hierher hielt das kein Test: der Test
+       darueber hat genau EINEN wartenden Ausgang und prueft mit `toHaveBeenCalledWith` statt
+       mit `toHaveBeenCalledTimes` — zwei Mutationen (Toast je Ausgang statt je Art) blieben
+       damit gruen, und ein Fuenf-Datei-Stapel haette vier gleichlautende Wartemeldungen
+       gestapelt. Genau das schliesst die Entscheidung von Marcus aus (je Ausgangsart eine).
+       Gefunden vom gegnerischen Pruefer (Befund 2), mit Mutationsprotokoll.
+
+       Drei Dateien: eine startet, ZWEI warten ⇒ je genau eine Meldung. */
+    nurDemo()
+    vi.mocked(api.uploadAudio)
+      .mockResolvedValueOnce({ base: 'a', file: 'a.mp3', job_id: 'lauf', started: true })
+      .mockResolvedValueOnce({ base: 'b', file: 'b.mp3', job_id: 'lauf', started: false, vorgang: 'vg2' })
+      .mockResolvedValueOnce({ base: 'c', file: 'c.mp3', job_id: 'lauf', started: false, vorgang: 'vg2' })
+    vi.mocked(api.getVorgang).mockResolvedValue({ vorgang: 'vg2', status: 'vorgemerkt',
+      job_id: null, project: 'Demo', kind: 'transcribe', base: null })
+    vi.mocked(api.getJob).mockResolvedValue({ status: 'running', lines: [], kind: 'transcribe' })
+    zeigen()
+    await screen.findByRole('button', { name: /^Material$/ })
+    await ladeHoch(new File(['x'], 'a.mp3'), new File(['x'], 'b.mp3'), new File(['x'], 'c.mp3'))
+    await waitFor(() => expect(api.uploadAudio).toHaveBeenCalledTimes(3))
+    expect(toastMock.info).toHaveBeenCalledTimes(1)
+    expect(toastMock.success).toHaveBeenCalledTimes(1)
+  })
+
+  it('sagt „Läuft schon" auch OHNE Vorgangsnummer — der blockierte URL-Import (#560)', async () => {
+    /* Der Wartezweig haengt an `!started`, NICHT an `vorgang`, und genau dieser Unterschied
+       war von keinem Test gedeckt: beide bestehenden Faelle mit `started: false` tragen eine
+       Nummer, `wartet = !!job.vorgang` liess alle Tests gruen (gegnerischer Pruefer, Befund 1,
+       Mutation W1).
+
+       Der Fall ist der URL-Import: `fetch_urls` ruft `jobs.start`, nicht `jobs.request`
+       (`app.py:1853`) — seine Antwort traegt NIE ein `vorgang`. An der Nummer festgemacht
+       schwiege er ganz, obwohl der Nutzer gewartet hat.
+
+       Was der Text sagt, ist fuer diesen Fall trotzdem falsch (T-046) — hier wird die
+       VERDRAHTUNG festgenagelt, nicht der Wortlaut gutgeheissen. */
+    nurDemo()
+    vi.mocked(api.fetchUrls).mockResolvedValue({ job_id: 'fremder_blocker', started: false })
+    zeigen()
+    await screen.findByRole('button', { name: /^Material$/ })
+    await holeUrl()
+    await waitFor(() => expect(toastMock.info).toHaveBeenCalledWith(
+      expect.stringMatching(/kommen danach dran/)))
+    // Ohne Nummer gibt es nichts zu verfolgen — und der Erfolgston darf nicht kommen.
+    expect(api.getVorgang).not.toHaveBeenCalled()
+    expect(toastMock.success).not.toHaveBeenCalled()
+  })
+
   it('meldet einen fehlgeschlagenen Einstellungs-GET, statt ihn zu verschlucken (#215)', async () => {
     /* Ohne Auswahl gilt stillschweigend der Projektstandard — die richtige Voreinstellung,
        aber ein FEHLENDES Bedienelement ist von „gibt es hier nicht" nicht zu unterscheiden.

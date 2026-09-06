@@ -354,8 +354,22 @@ export function ProjectWorkspace() {
               // #381 war das hier eine Zusage ohne Nachweis: „kommen danach dran", und ob es
               // je geschah, erfuhr man nicht. Die Nummer macht daraus einen verfolgbaren Lauf.
               if (job.vorgang) verfolge(job.vorgang)
-              // An `!started` und NICHT an `vorgang`: ein Endpunkt ohne Vormerkung
-              // (`correct_file`) schwiege sonst ganz, obwohl der Nutzer gewartet hat.
+              // An `!started` und NICHT an `vorgang` — und der Endpunkt, um den es dabei
+              // geht, ist `fetch_urls`, NICHT `correct_file`: durch diesen Dialog laufen nur
+              // `uploadAudio` und `fetchUrls` (die Importe oben in `MaterialDialog.tsx`),
+              // `correct_file` erreicht ihn nie. Hier stand er trotzdem, und der gegnerische
+              // Pruefer hat es gemessen.
+              //
+              // `fetch_urls` ruft `jobs.start`, nicht `jobs.request` (`app.py:1853`) — es gibt
+              // also gar keine Nummer, an der man den Zweig festmachen koennte. An `vorgang`
+              // gehaengt schwiege ein blockierter URL-Import ganz, obwohl der Nutzer gewartet
+              // hat.
+              //
+              // GETRAGENE GRENZE, benannt statt behoben (T-046): fuer genau diesen Fall ist
+              // der Text darunter falsch — `jobs.start` wirft das Kommando bei belegtem Slot
+              // WEG, es kommt nichts „danach dran"; der Dialog schiebt die Links stattdessen
+              // zum Neuversuch zurueck in die Liste. Vorbestehend, aber seit der Liste neben
+              // „Transkription gestartet" desselben Stapels sichtbar.
               wartet = true
             }
           }
