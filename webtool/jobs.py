@@ -211,8 +211,26 @@ def _prune_locked():
     # ein liegengebliebener Eintrag kostete frueher hoechstens einen je Schluessel, jetzt
     # einen je Import. Der eine bekannte Leckweg steht in `app._fetch_nachlauf_ausgang`
     # (weitergereichtes `then`). Gefunden vom Neuweg-Pruefer, hier nachgemessen.
+    # Ein `gestartet`, dessen Job NOCH LAEUFT, ist genauso wenig raeumbar wie ein offenes
+    # `vorgemerkt` — und das war es bis #557 nicht: die Bedingung fragte nur den Zustand der
+    # VORMERKUNG, nicht den des Laufs. Der Grund, warum das jetzt zaehlt, ist die Ordnung:
+    # geworfen wird der aelteste raeumbare, und ein Eintrag behaelt seine EINFUEGEposition,
+    # auch wenn er erst spaeter `gestartet` wird — ein laufender Vorgang steht damit weit
+    # vorn. Erreichbar wird das erst, seit `vormerken` je IMPORT einen Eintrag anlegt (siehe
+    # oben); es braucht dafuer immer noch mehr als `_VORGAENGE_MAX` neue Eintraege, waehrend
+    # der Lauf laeuft. Der Schaden waere der bekannte: `vorgang()` faende nichts, der Endpunkt
+    # antwortete 404, die Oberflaeche liesse einen LAUFENDEN Job fallen — genau der stille
+    # Ausfall, gegen den die Nummer gebaut ist. (CodeRabbit-Bot, major, hergeleitet.)
+    #
+    # Der Preis ist derselbe wie oben und schon benannt: sind alle Eintraege offen oder
+    # laufend, waechst die Menge ueber den Deckel. Lieber zu gross als eine verlorene Nummer.
+    def _noch_am_laufen(v):
+        jid = v.get("job_id")
+        return bool(jid) and (_jobs.get(jid) or {}).get("status") == "running"
+
     while len(_vorgaenge) > _VORGAENGE_MAX:
-        raus = next((n for n, v in _vorgaenge.items() if v["status"] != "vorgemerkt"), None)
+        raus = next((n for n, v in _vorgaenge.items()
+                     if v["status"] != "vorgemerkt" and not _noch_am_laufen(v)), None)
         if raus is None:
             break
         _vorgaenge.pop(raus, None)
