@@ -1077,11 +1077,18 @@ describe('Vertrag: gedruckte Statuszeilen <-> jobPhases.ts (#375)', () => {
  *  leichte Haelfte (sie benannte ausgerechnet die grosse Datei um). Die Zahlen sind heutige
  *  Ertraege mit Luft nach unten; wer eine Datei umbaut, zieht sie mit. */
 const FIXTURE_DATEIEN: [string, number][] = [
-  ['jobPhases.vertrag.test.ts', 4],
-  ['src/lib/jobPhases.test.ts', 200],
-  ['src/hooks/useActiveJob.test.tsx', 25],
-  ['src/hooks/useJobAusgang.test.tsx', 12],
-  ['src/pages/ProjectWorkspace.test.tsx', 6],
+  // Ertraege nach der Verbreiterung aus #564, gemessen: 371 -> 450 Zeilen. Die Boeden folgen
+  // dem bisherigen Verhaeltnis (rund zwei Drittel); wo die Ernte unveraendert blieb, bleibt
+  // auch der Boden stehen.
+  ['jobPhases.vertrag.test.ts', 6],           // Ertrag 9 (vorher 4)
+  ['src/lib/jobPhases.test.ts', 240],         // Ertrag 364 (vorher 296)
+  ['src/hooks/useActiveJob.test.tsx', 30],    // Ertrag 45 (vorher 41)
+  ['src/hooks/useJobAusgang.test.tsx', 12],   // Ertrag 21, unveraendert
+  ['src/pages/ProjectWorkspace.test.tsx', 6], // Ertrag 9, unveraendert
+  // Fehlte bis #564 GANZ — eine sechste Datei mit Protokoll-Fixturen, die nie jemand
+  // eingetragen hat. Die Wache meldete ueber sie also nicht bloss zu wenig, sondern nichts.
+  // Boden EXAKT auf dem Ertrag: bei zwei Zeilen ist jede Abweichung eine Aussage.
+  ['src/hooks/useOsFortschritt.test.tsx', 2],
 ]
 
 /** tqdm kommt von faster-whisper ueber stderr, nicht aus einem `print(` in QUELLEN — es KANN
@@ -1183,6 +1190,35 @@ const FIXTURE_BASELINE = new Set<string>([
   //  trug den Tabulator als Escape und konnte sie deshalb nicht treffen. Behoben an der
   //  Ernte statt hier eingefroren; die Wache stellt jetzt ein Zertifikat ueber die richtige
   //  Form aus.)
+
+  // ── Ab hier: erst mit #564 SICHTBAR geworden. Die Zeilen sind nicht neu, die Ernte war
+  //    blind fuer ihre Bauform (const-Arrays, Helferaufrufe, `push`). ──
+
+  // Sorte (3), Form ausser Dienst: Erzeuger ist correct.py:1063, seine Form
+  // `'  {}: {} Segmente → …'` steht in OHNE_FESTES_STUECK und prueft damit nichts. Die Tests
+  // schreiben die Zeile ohne die zwei fuehrenden Leerzeichen bzw. gekuerzt.
+  'B: 4 Segmente → 2 Blöcke à max. 150',
+  'A: 600 Segmente → 4 Blöcke à max. 150',
+  'A: 300 Segmente → 2 Blöcke',
+
+  // Sorte (2), Erntegrenze — und eine ANDERE als die aus #566: die Fixture setzt EINE Zeile
+  // aus zwei Literalen mit `+` zusammen, `literale` liefert beide Haelften einzeln, und keine
+  // halbe Zeile trifft eine Form. Der Erzeuger existiert (correct.py druckt die Phasenbilanz
+  // am Stueck); zusammengesetzt wuerde sie passen.
+  '⏱ Phasen: diarisieren 45s · vorbereiten 1s · glossar 30s · korrigieren 620s · ',
+  'gesamt 696s (parallel=3)',
+
+  // FREMDAUSGABE — dieselbe Klasse wie der tqdm-Balken in FREMDZEILE, nur als exakte Zeilen
+  // statt als Muster: `jobs.py` mischt stderr in denselben Strom, und torch schreibt dort
+  // Warnungen und Traceback-Zeilen. Sie KOENNEN keinen Inventar-Eintrag haben, weil sie aus
+  // keinem `print(` in QUELLEN stammen. Bewusst als Liste und nicht als sechster Regex in
+  // FREMDZEILE: ein Muster darauf waere breit genug, um echte Protokollzeilen mitzunehmen.
+  '  warnings.warn(',
+  'UserWarning: std(): degrees of freedom is <= 0',
+  'W0827 21:23:19.042000 126312 torch\\utils\\flop_counter.py:29] triton not found',
+  'Traceback (most recent call last):',
+  '  File "E:\\...\\torch\\_ops.py", line 1503, in load_library',
+  'OSError: Could not load this library: libtorchcodec_core8.dll',
 ])
 
 /** Die Form als PRAEFIX der Zeile, Platzhalter frei. Praefix, weil ein INVENTAR-Schluessel
@@ -1234,9 +1270,14 @@ const OHNE_FESTES_STUECK: string[] = [
   '  {}: {} Fenster, ',
 ]
 
-/** Das Array ab `pos` (zeigt auf `[`) bis zur passenden `]`. Ein Regex reicht hier NICHT:
- *  er bricht am ersten `]`, und das steht in `'[scope] A'` mitten in einer Zeichenkette. */
-function arrayAb(quelle: string, pos: number): string {
+/** Der geklammerte Block ab `pos` (zeigt auf `auf`) bis zur passenden `zu`. Ein Regex reicht
+ *  hier NICHT: er bricht am ersten `]`, und das steht in `'[scope] A'` mitten in einer
+ *  Zeichenkette.
+ *
+ *  Seit #564 auch fuer RUNDE Klammern: `PRAELUDIUM` baut seine Fixture ueber
+ *  `zeilen.push('…', '…')` statt ueber ein Array-Literal, und die Argumentliste zaehlt sich
+ *  genauso. Ein zweiter Zaehler daneben waere derselbe Code mit zwei Zeichen Unterschied. */
+function klammerAb(quelle: string, pos: number, auf = '[', zu = ']'): string {
   let tiefe = 0
   for (let i = pos; i < quelle.length; i++) {
     const c = quelle[i]
@@ -1245,8 +1286,8 @@ function arrayAb(quelle: string, pos: number): string {
       for (i++; i < quelle.length && quelle[i] !== q; i++) if (quelle[i] === '\\') i++
       continue
     }
-    if (c === '[') tiefe++
-    else if (c === ']' && --tiefe === 0) return quelle.slice(pos, i + 1)
+    if (c === auf) tiefe++
+    else if (c === zu && --tiefe === 0) return quelle.slice(pos, i + 1)
   }
   return ''
 }
@@ -1323,23 +1364,100 @@ export function ohneKommentare(quelle: string): string {
   return aus
 }
 
-/** Die Protokoll-Literale einer Quelle. Getrennt von `fixtureZeilen`, damit die zwei
- *  Kommentar-Faelle oben einen echten Test bekommen und nicht nur eine Behauptung. */
-export function zeilenAusQuelle(roh: string): string[] {
+/** Bezeichner, deren Arrays bzw. `push`-Aufrufe KEINE Protokoll-Fixturen sind (#564).
+ *
+ *  Sie liegen ALLE in dieser Datei, und das ist kein Zufall: sie ist die einzige, die
+ *  Fixturen UND die Maschinerie der Wache enthaelt. In den fuenf anderen Dateien ist alles
+ *  Array-foermige eine Fixture (gemessen: dort null `push`-Stellen und null eingerueckte
+ *  const-Arrays ausser Fixturen).
+ *
+ *  OPT-OUT und nicht Opt-in, und die Richtung entscheidet: ein vergessener Eintrag hier macht
+ *  den Test ROT (die Zeile findet keinen Erzeuger) — ein vergessener Opt-in-Marker liesse eine
+ *  Fixture STILL unbewacht, also genau den Fehler, gegen den #564 geschrieben ist. */
+const KEINE_FIXTURE = new Set<string>([
+  'probe',              // Muster-Ernte aus dem Parser-Quelltext (`parserMuster`)
+  'klammerImKommentar', // der Laufzeit-Ausloeser des Kommentar-Tests
+])
+
+/** Beginnt der geklammerte Block ab `pos` mit einem Zeichenketten-Literal?
+ *
+ *  DER Selektor, der Fixture von Maschinerie trennt — und er ist gemessen, nicht geraten:
+ *  ohne ihn nimmt Regel B in dieser Datei **20** Stellen statt 2 (leere Puffer
+ *  `const raus: string[] = []`, Spreads `[...matchAll(…)]`, Objektlisten) und in
+ *  `ProjectWorkspace.test.tsx` die Sprachtabelle `const wahl = [{ id: 'ch', … }]`. Mit ihm
+ *  bleiben genau die zwei uebrig, die wirklich Quelltext als Testdaten fuehren — und die
+ *  stehen oben namentlich.
+ *
+ *  `nurEinfach` fuer Regel C: die sechs Berichts-Pushes dieser Datei (`neu`, `duenn`, `tot`,
+ *  `haengt`, `praehaengt`, `schief`) tragen alle ein TEMPLATE-Literal mit `${…}`, die drei
+ *  Fixture-Pushes in `PRAELUDIUM` einfache Anfuehrungszeichen. Das trennt sie ohne Namensliste.
+ *  GRENZE, benannt: ein Fixture-`push` mit Backtick faende die Ernte nicht — heute gibt es
+ *  keinen, und ein Array-Literal (Regel B) nimmt Backticks sehr wohl. */
+function beginntMitLiteral(quelle: string, pos: number, nurEinfach = false): boolean {
+  for (let i = pos + 1; i < quelle.length; i++) {
+    if (/\s/.test(quelle[i])) continue
+    return nurEinfach ? quelle[i] === "'" || quelle[i] === '"'
+      : quelle[i] === "'" || quelle[i] === '"' || quelle[i] === '`'
+  }
+  return false
+}
+
+/** Die Protokoll-Literale einer Quelle, samt der uebersprungenen Bezeichner. Getrennt von
+ *  `fixtureZeilen`, damit die zwei Kommentar-Faelle oben einen echten Test bekommen und nicht
+ *  nur eine Behauptung.
+ *
+ *  VIER Bauformen, seit #564 statt zweier — rund 90 Fixture-Zeilen standen ausserhalb der
+ *  Ernte, und die Wache meldete ueber sie Erfolg, ohne sie angesehen zu haben. */
+export function ernteAusQuelle(roh: string): { zeilen: string[]; uebersprungen: string[] } {
   const quelle = ohneKommentare(roh)
-  const aus: string[] = []
+  const zeilen: string[] = []
+  const uebersprungen: string[] = []
+  const nimm = (pos: number, auf?: string, zu?: string) =>
+    zeilen.push(...literale(klammerAb(quelle, pos, auf, zu)))
+
+  // (A) Aufruf mit Art-Zeichenkette und Array. Der NAME ist seit #564 frei: `parseJobPhases`
+  // fest verdrahtet liess die sechs `von('correct', [ … ])` in jobPhases.test.ts draussen —
+  // dieselbe Gestalt, anderer Bezeichner.
   // BEIDE Quotierungen am ersten Argument: heute schreibt jede Fixture `'correct'`, aber
   // nichts erzwingt das (kein eslint/prettier im Frontend) — eine Datei mit `"correct"`
   // faellt sonst still aus der Ernte, und die Wache meldete darueber Erfolg. Unabhaengig
   // gefunden vom gegnerischen Pruefer (F6) und von der CodeRabbit-CLI.
-  for (const m of quelle.matchAll(/(?:parseJobPhases\(\s*['"][a-z]+['"]\s*,\s*|\blines:\s*)\[/g)) {
-    aus.push(...literale(arrayAb(quelle, m.index + m[0].length - 1)))
+  for (const m of quelle.matchAll(/\b[A-Za-z_$][\w$]*\(\s*['"][a-z]+['"]\s*,\s*\[/g)) {
+    nimm(m.index + m[0].length - 1)
   }
-  return aus
+  // `lines: [ … ]` in einer Job-Attrappe.
+  for (const m of quelle.matchAll(/\blines:\s*\[/g)) nimm(m.index + m[0].length - 1)
+
+  // (B) Eingeruecktes const-Array von Zeichenketten. Die Tabellen DIESER Datei stehen in Spalte 0
+  // und fallen dadurch schon heraus; von den eingerueckten trennt `beginntMitLiteral` die
+  // Maschinerie ab, und die zwei uebrigbleibenden stehen namentlich im Opt-out.
+  for (const m of quelle.matchAll(/^[ \t]+const\s+([A-Za-z_$][\w$]*)\s*(?::[^=\n]+)?=\s*\[/gm)) {
+    const pos = m.index + m[0].length - 1
+    if (!beginntMitLiteral(quelle, pos)) continue
+    if (KEINE_FIXTURE.has(m[1])) { uebersprungen.push(m[1]); continue }
+    nimm(pos)
+  }
+
+  // (C) push-Aufruf mit Zeichenketten — `PRAELUDIUM` baut seine Fixture so, als einziges im
+  // Repo. (Kein Beispiel mit Anfuehrungszeichen in diesem Kommentar: `ohneKommentare` haelt
+  // die Quotes der Erntemuster oben faelschlich fuer Zeichenketten und laesst den Text
+  // dahinter stehen — vorbestehender blinder Fleck, als eigenes Issue festgehalten.)
+  for (const m of quelle.matchAll(/\b([A-Za-z_$][\w$]*)\.push\(/g)) {
+    const pos = m.index + m[0].length - 1
+    if (!beginntMitLiteral(quelle, pos, true)) continue
+    if (KEINE_FIXTURE.has(m[1])) { uebersprungen.push(m[1]); continue }
+    nimm(pos, '(', ')')
+  }
+  return { zeilen, uebersprungen }
 }
 
-function fixtureZeilen(datei: string): string[] {
-  return zeilenAusQuelle(
+/** Nur die Zeilen — die Form, die die Kommentar-Tests brauchen. */
+export function zeilenAusQuelle(roh: string): string[] {
+  return ernteAusQuelle(roh).zeilen
+}
+
+function ernteAusDatei(datei: string): { zeilen: string[]; uebersprungen: string[] } {
+  return ernteAusQuelle(
     fs.readFileSync(path.join(WURZEL, 'webtool', 'frontend', datei), 'utf8'))
 }
 
@@ -1370,7 +1488,7 @@ describe('Fixture-Wache', () => {
 
     for (const [datei, mindestens] of FIXTURE_DATEIEN) {
       let ausDieser = 0
-      for (const roh of fixtureZeilen(datei)) {
+      for (const roh of ernteAusDatei(datei).zeilen) {
         const zeile = entschluesselt(roh)
         if (zeile.trim() === '' || FREMDZEILE.test(zeile)) continue
         ausDieser++
@@ -1459,6 +1577,55 @@ describe('Fixture-Wache', () => {
     // waere „Backticks kommen dazu" durch „nur noch Backticks" ersetzt.
     expect(zeilenAusQuelle(RUF + '[' + TICK + 'A' + TICK + ", 'B', \"C\"])"))
       .toEqual(['A', 'B', 'C'])
+  })
+
+  it('alle VIER Bauformen werden geerntet (#564)', () => {
+    // Ohne diesen Test ist jede einzelne Regel unbewacht: faellt eine weg, sinkt der Ertrag
+    // — und die Boeden in FIXTURE_DATEIEN haben rund ein Drittel Luft, fangen den Verlust
+    // einer Regel also NICHT (Regel A traegt ~15 Zeilen, der Boden liegt 124 darunter).
+    // Ein Summenriegel traegt nur die groesste Einheit; gemessen wird deshalb je Bauform.
+    // Die Ausloeser entstehen zur LAUFZEIT — diese Datei steht selbst in FIXTURE_DATEIEN,
+    // woertlich hingeschrieben waeren sie Fixturen mit erfundenen Zeilen (dieselbe Technik
+    // wie im Kommentar-Test).
+    const ART = "'correct'"
+    const z = (n: string) => "'→ Erfunden " + n + " …'"
+    // Auch der AUFRUFTEXT wird zerlegt, nicht nur die Zeile: `x.push(` woertlich hier
+    // hingeschrieben ist selbst ein Ernte-Ausloeser, und die Wache nebenan meldet dann die
+    // Bruchstuecke dieser Zeile als Fixture ohne Erzeuger (passiert, beim Bau dieses Tests).
+    const PUSH = 'x.pu' + 'sh('
+    const PUSH_TL = 'y.pu' + 'sh(`x' + '${v}`)'
+
+    // (A) beliebiger Bezeichner, nicht nur `parseJobPhases`
+    expect(zeilenAusQuelle('von(' + ART + ', [' + z('A') + '])')).toContain('→ Erfunden A …')
+    // (B) eingeruecktes const-Array
+    expect(zeilenAusQuelle('  const x = [' + z('B') + ']')).toContain('→ Erfunden B …')
+    // (C) push mit Zeichenketten
+    expect(zeilenAusQuelle(PUSH + z('C') + ')')).toContain('→ Erfunden C …')
+    // (lines) die zweite Altform
+    expect(zeilenAusQuelle('{ ' + 'lines' + ': [' + z('D') + '] }')).toContain('→ Erfunden D …')
+
+    // Gegenproben — die drei Faelle, an denen der Selektor haengt. Ohne sie waere „geerntet"
+    // von „alles geerntet" nicht zu unterscheiden.
+    expect(zeilenAusQuelle('  const y = [...irgendwas]')).toEqual([])
+    expect(zeilenAusQuelle('  const y = [{ id: ' + z('E') + ' }]')).toEqual([])
+    expect(zeilenAusQuelle(PUSH_TL)).toEqual([])
+  })
+
+  it('kein Bezeichner faellt STILL aus der Ernte (#564)', () => {
+    // Zwilling des #565-Riegels, eine Schicht davor: dort geht es um Formen, die nicht
+    // PRUEFEN, hier um Arrays, die nicht GEERNTET werden. Ein veralteter Eintrag in
+    // KEINE_FIXTURE — der Bezeichner wurde umbenannt, das Array ist aber weiter eine
+    // Nicht-Fixture — wuerde sonst lautlos wieder mitgeerntet oder, schlimmer, eine ECHTE
+    // Fixture desselben Namens dauerhaft ausblenden.
+    const uebersprungen = new Set<string>()
+    for (const [datei] of FIXTURE_DATEIEN) {
+      for (const name of ernteAusDatei(datei).uebersprungen) uebersprungen.add(name)
+    }
+    expect([...uebersprungen].sort(), `die per Namen uebersprungenen Bezeichner haben sich `
+      + `geaendert. Ein Eintrag, der nirgends mehr greift, ist eine Ausnahme ohne `
+      + `Gegenstand — und einer, der neu greift, blendet moeglicherweise eine echte Fixture `
+      + `aus. Beides gehoert entschieden, nicht angepasst.`)
+      .toEqual([...KEINE_FIXTURE].sort())
   })
 
   it('keine Form faellt STILL aus der Wache (#565)', () => {
