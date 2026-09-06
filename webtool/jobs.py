@@ -759,6 +759,15 @@ def _run_proc(jid, cmd, cwd, env=None):
                             # zweite Einreih-Zeile, und die kommt, sobald der Pool sie hat.
                             # Bis dahin lieber keine Auskunft als eine falsche — dieselbe
                             # sichere Richtung wie `imBereich` im Frontend.
+                            #
+                            # NUR hier, nicht zusaetzlich im Parser (so lautete die Empfehlung
+                            # des Pruefers) — am echten `jobPhases.ts` gemessen: die
+                            # Vorbelegung steht vorn, und der `includes`-Riegel des
+                            # Zeilenparsers laesst die ueberlebende ALTE Zeile nicht wieder
+                            # nach vorn. Mit Serverwert kommt `["B","A"]` heraus (Schlange
+                            # B vor A), ohne ihn `["A","B"]` — also genau der Vorzustand, kein
+                            # neuer Fehler. Ein zweiter Ort fuer dieselbe Regel waere die
+                            # Drift, gegen die dieses Repo sonst ueberall argumentiert.
                             if b in _jobs[jid]["eingereiht"]:
                                 _jobs[jid]["eingereiht"].remove(b)
                 else:
