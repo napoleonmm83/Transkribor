@@ -59,8 +59,12 @@ describe('parseJobPhases — correct', () => {
       'A: 300 Segmente → 2 Blöcke',
       '→ Korrigiere A · Block 1/2 …', '⏱ A · Block 1/2: Korrektur 82s, Verify 61s',
       '✓ A · Block 1/2 fertig',
-      '⏱ Phasen: diarisieren 45s · vorbereiten 1s · glossar 30s · korrigieren 620s · '
-        + 'gesamt 696s (parallel=3)',
+      // Die ECHTE Form (correct.py:1421), in EINEM Literal. Hier stand bis #564 eine Fassung
+      // mit `diarisieren · vorbereiten · glossar · korrigieren`, die es seit #399 (`da647e1`)
+      // nicht mehr gibt — und sie war ausserdem auf zwei Literale mit `+` verteilt, womit die
+      // Ernte zwei halbe Zeilen sah. Beides behoben; die Zusicherung darunter ist unberuehrt,
+      // weil die Zeile so wie so `ignoriert` ist.
+      '⏱ Phasen: glossar 30s · pipeline 620s · gesamt 696s (parallel=3)',
     ]
     expect(parseJobPhases('correct', mit)).toEqual(parseJobPhases('correct', ohne))
     // Positivkontrolle: der Vergleich oben waere auch dann gruen, wenn BEIDE Laeufe nichts
