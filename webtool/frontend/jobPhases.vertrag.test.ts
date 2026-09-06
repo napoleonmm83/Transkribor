@@ -1652,9 +1652,14 @@ describe('Fixture-Wache', () => {
 
     // Gegenproben — die drei Faelle, an denen der Selektor haengt. Ohne sie waere „geerntet"
     // von „alles geerntet" nicht zu unterscheiden.
-    // NICHT `[...spread]` als Gegenprobe: darin steckt gar kein Literal, die Zusicherung
-    // bliebe mit und ohne Selektor gruen (kalter Zweitleser, gemessen). Ein Array, dessen
-    // ERSTES Element ein Bezeichner ist, trennt dagegen wirklich.
+    // NICHT `[...spread]` als Gegenprobe: darin steckt gar kein Literal, der Selektor kann
+    // also nichts mehr ausschliessen — die Zusicherung bliebe mit und ohne ihn gruen.
+    // GEMESSEN, `literale` allein auf die drei Bloecke angewandt:
+    //   `[...irgendwas]`            -> []                      (vacuos, alte Gegenprobe)
+    //   `[x, '→ Erfunden F …']`     -> ['→ Erfunden F …']       (nur der Selektor haelt sie ab)
+    //   `[{ id: '→ Erfunden E …' }]`-> ['→ Erfunden E …']       (dito)
+    // Ein Array, dessen ERSTES Element ein Bezeichner ist, trennt also wirklich. (Befund vom
+    // kalten Zweitleser, hier selbst nachgemessen statt uebernommen.)
     expect(zeilenAusQuelle('  const y = [x, ' + z('F') + ']')).toEqual([])
     expect(zeilenAusQuelle('  const y = [{ id: ' + z('E') + ' }]')).toEqual([])
     expect(zeilenAusQuelle(PUSH_TL)).toEqual([])
