@@ -1417,8 +1417,16 @@ const KEINE_FIXTURE = new Set<string>([
  *  `nurEinfach` fuer Regel C: die sechs Berichts-Pushes dieser Datei (`neu`, `duenn`, `tot`,
  *  `haengt`, `praehaengt`, `schief`) tragen alle ein TEMPLATE-Literal mit `${…}`, die drei
  *  Fixture-Pushes in `PRAELUDIUM` einfache Anfuehrungszeichen. Das trennt sie ohne Namensliste.
- *  GRENZE, benannt: ein Fixture-`push` mit Backtick faende die Ernte nicht — heute gibt es
- *  keinen, und ein Array-Literal (Regel B) nimmt Backticks sehr wohl. */
+ *  ZWEI GRENZEN, benannt statt verschwiegen:
+ *  (a) Ein Fixture-`push` mit Backtick faende die Ernte nicht — heute gibt es keinen, und
+ *      ein Array-Literal (Regel B) nimmt Backticks sehr wohl.
+ *  (b) Regel B ueberspringt jedes Array, das nicht mit einem Literal BEGINNT — also auch
+ *      `const zeilen = [...GESTAFFELT, '→ Erfunden …']`, waehrend Regel A dieselbe Gestalt
+ *      sehr wohl erntet (`[...prae, '45%| m']` weiter oben in dieser Datei). Heute gibt es
+ *      keine solche Fixture; die Asymmetrie steht hier, damit sie nicht als Absicht gelesen
+ *      wird. Wer sie schliessen will, erweitert den Selektor um den Spread — und muss dann
+ *      `reserviert` (Regex-Literal in einem Spread) in KEINE_FIXTURE aufnehmen.
+ *  Beide vom kalten Zweitleser benannt. */
 function beginntMitLiteral(quelle: string, pos: number, nurEinfach = false): boolean {
   for (let i = pos + 1; i < quelle.length; i++) {
     if (/\s/.test(quelle[i])) continue
@@ -1432,7 +1440,7 @@ function beginntMitLiteral(quelle: string, pos: number, nurEinfach = false): boo
  *  `fixtureZeilen`, damit die zwei Kommentar-Faelle oben einen echten Test bekommen und nicht
  *  nur eine Behauptung.
  *
- *  VIER Bauformen, seit #564 statt zweier — rund 90 Fixture-Zeilen standen ausserhalb der
+ *  VIER Bauformen, seit #564 statt zweier — 79 Fixture-Zeilen standen ausserhalb der
  *  Ernte, und die Wache meldete ueber sie Erfolg, ohne sie angesehen zu haben. */
 export function ernteAusQuelle(roh: string, datei = ''): {
   zeilen: string[]; uebersprungen: string[]
@@ -1636,9 +1644,18 @@ describe('Fixture-Wache', () => {
     // (lines) die zweite Altform
     expect(zeilenAusQuelle('{ ' + 'lines' + ': [' + z('D') + '] }')).toContain('→ Erfunden D …')
 
+    // Der Opt-out-Zweig von Regel C haette sonst KEINEN roten Test: er greift in keiner der
+    // sechs Dateien (0 Treffer, gemessen), das Loeschen der Zeile liesse alles gruen — ein
+    // Zweig eines Waechters ohne Sensor. Hier bekommt er einen.
+    expect(ernteAusQuelle('pro' + 'be.pu' + 'sh(' + z('G') + ')', 'jobPhases.vertrag.test.ts')
+      .uebersprungen).toEqual(['jobPhases.vertrag.test.ts:probe'])
+
     // Gegenproben — die drei Faelle, an denen der Selektor haengt. Ohne sie waere „geerntet"
     // von „alles geerntet" nicht zu unterscheiden.
-    expect(zeilenAusQuelle('  const y = [...irgendwas]')).toEqual([])
+    // NICHT `[...spread]` als Gegenprobe: darin steckt gar kein Literal, die Zusicherung
+    // bliebe mit und ohne Selektor gruen (kalter Zweitleser, gemessen). Ein Array, dessen
+    // ERSTES Element ein Bezeichner ist, trennt dagegen wirklich.
+    expect(zeilenAusQuelle('  const y = [x, ' + z('F') + ']')).toEqual([])
     expect(zeilenAusQuelle('  const y = [{ id: ' + z('E') + ' }]')).toEqual([])
     expect(zeilenAusQuelle(PUSH_TL)).toEqual([])
   })
