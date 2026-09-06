@@ -543,19 +543,29 @@ describe('ProjectWorkspace (Stub)', () => {
        gestapelt. Genau das schliesst die Entscheidung von Marcus aus (je Ausgangsart eine).
        Gefunden vom gegnerischen Pruefer (Befund 2), mit Mutationsprotokoll.
 
-       Drei Dateien: eine startet, ZWEI warten ⇒ je genau eine Meldung. */
+       Vier Dateien: ZWEI starten, ZWEI warten ⇒ je genau eine Meldung.
+
+       Zwei GESTARTETE Antworten derselben Art kann der Server heute nicht liefern — der Slot
+       dedupliziert, nur die erste Datei startet. Der erste Anlauf dieses Tests hatte deshalb
+       nur eine, und die Mutation „Erfolgston je Antwort" blieb gruen: das `Set` war ein
+       Waechter ohne Sensor, eine Ebene unter dem Befund, der ihn ausgeloest hat.
+       Geprueft wird deshalb der Vertrag der KOMPONENTE ueber ihre Eingabe — `onFertig` nimmt
+       eine Liste beliebiger Antworten, und fuer die muss die Regel gelten, unabhaengig davon,
+       welche Teilmenge der Server gerade erzeugen kann. */
     nurDemo()
     vi.mocked(api.uploadAudio)
-      .mockResolvedValueOnce({ base: 'a', file: 'a.mp3', job_id: 'lauf', started: true })
-      .mockResolvedValueOnce({ base: 'b', file: 'b.mp3', job_id: 'lauf', started: false, vorgang: 'vg2' })
-      .mockResolvedValueOnce({ base: 'c', file: 'c.mp3', job_id: 'lauf', started: false, vorgang: 'vg2' })
+      .mockResolvedValueOnce({ base: 'a', file: 'a.mp3', job_id: 'lauf1', started: true })
+      .mockResolvedValueOnce({ base: 'b', file: 'b.mp3', job_id: 'lauf2', started: true })
+      .mockResolvedValueOnce({ base: 'c', file: 'c.mp3', job_id: 'lauf1', started: false, vorgang: 'vg2' })
+      .mockResolvedValueOnce({ base: 'd', file: 'd.mp3', job_id: 'lauf1', started: false, vorgang: 'vg2' })
     vi.mocked(api.getVorgang).mockResolvedValue({ vorgang: 'vg2', status: 'vorgemerkt',
       job_id: null, project: 'Demo', kind: 'transcribe', base: null })
     vi.mocked(api.getJob).mockResolvedValue({ status: 'running', lines: [], kind: 'transcribe' })
     zeigen()
     await screen.findByRole('button', { name: /^Material$/ })
-    await ladeHoch(new File(['x'], 'a.mp3'), new File(['x'], 'b.mp3'), new File(['x'], 'c.mp3'))
-    await waitFor(() => expect(api.uploadAudio).toHaveBeenCalledTimes(3))
+    await ladeHoch(new File(['x'], 'a.mp3'), new File(['x'], 'b.mp3'),
+                   new File(['x'], 'c.mp3'), new File(['x'], 'd.mp3'))
+    await waitFor(() => expect(api.uploadAudio).toHaveBeenCalledTimes(4))
     expect(toastMock.info).toHaveBeenCalledTimes(1)
     expect(toastMock.success).toHaveBeenCalledTimes(1)
   })
