@@ -1415,6 +1415,51 @@ describe('korrekturSchlange — die Wartezeit im gestaffelten Lauf (#442)', () =
     expect(laufOrdnung(['B', 'AB'])).toEqual(['AB', 'B'])
   })
 
+  it('die Serverbuchfuehrung haelt die Schlange, wenn die Zeile aus dem Puffer fiel (#561)', () => {
+    /* `eingereiht` war die letzte der drei Wartequellen ohne Rueckweg gegen den Zeilendeckel.
+       `fuege_zeile_an` verdraengt bei MAX_JOB_LINES aus der MITTE (an einem echten Lauf sind
+       10.560 Zeilen gemessen, #475) — faellt die Einreih-Zeile heraus, verschwand die
+       Aufnahme aus der Schlange UND die Zahl aller uebrigen sank um eins.
+
+       Hier fehlt die Zeile fuer `A` im Puffer, der Server kennt sie aber. Gemessen wird die
+       ZAHL mit: nur die Anwesenheit von `A` zu pruefen liesse eine Vorbelegung durchgehen,
+       die ans ENDE haengt statt an ihren Platz — und dann trueg `B` „noch 0 vor dieser". */
+    const p = parseJobPhases('transcribe', [
+      '[scope] A\tB',
+      '[Demo] fertig A: 9s, 21 Segmente, 1.4x Echtzeit',
+      '[Demo] fertig B: 8s, 19 Segmente, 1.5x Echtzeit',
+      '→ Eingereiht B (Korrektur) …',
+    ], undefined, undefined, ['A', 'B'])
+    expect(p.eingereiht).toEqual(['A', 'B'])
+    expect(korrekturSchlange(p, 'transcribe'))
+      .toEqual({ A: { art: 'correct', vor: 0 }, B: { art: 'correct', vor: 1 } })
+  })
+
+  it('ohne Serverwert bleibt alles, wie es war (#561)', () => {
+    /* Die Gegenprobe, und ohne sie belegt der Test darueber nichts: ein aelterer Server
+       schickt das Feld nicht, und dann darf die Vorbelegung weder etwas erfinden noch die
+       Ordnung des Zeilenparsers anfassen. */
+    const zeilen = [
+      '[scope] A\tB',
+      '→ Eingereiht B (Korrektur) …', '→ Eingereiht A (Korrektur) …',
+    ]
+    expect(parseJobPhases('transcribe', zeilen).eingereiht).toEqual(['B', 'A'])
+    expect(parseJobPhases('transcribe', zeilen, undefined, undefined, undefined).eingereiht)
+      .toEqual(['B', 'A'])
+  })
+
+  it('der Serverwert steht VORN, der Zeilenparser haengt nur Unbekanntes an (#561)', () => {
+    /* Die Ordnung des Servers ist die der Schlange — er sieht jede Zeile, bevor der Puffer
+       sie verdraengt. Eine Vorbelegung, die hinten anhinge, ergaebe bei einer verdraengten
+       fruehen Aufnahme genau die falsche Zahl; deshalb steht sie vorn und der Parser
+       dedupliziert dagegen. */
+    const p = parseJobPhases('transcribe', [
+      '[scope] A\tB\tC',
+      '→ Eingereiht B (Korrektur) …', '→ Eingereiht C (Korrektur) …',
+    ], undefined, undefined, ['A', 'B'])
+    expect(p.eingereiht).toEqual(['A', 'B', 'C'])
+  })
+
   it('ein doppelter Name verschiebt die Zaehlung NICHT', () => {
     /* Der Erzeuger druckt heute keine Dubletten (`processed` laesst jede Base einmal durch),
        der Parser ist aber eine reine Funktion und sein Vertrag gilt unabhaengig davon. Die

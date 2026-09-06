@@ -35,6 +35,7 @@ hat. Lesbar, aber unschön — das ist Absicht.
 - Lädst du mehrere Aufnahmen auf einmal hoch, verfolgt Transkribor jetzt jede von ihnen sofort — vorher nur die zuletzt hinzugefügte, und die Meldung darüber sagte dann das Falsche.
 - Klappt ein Video-Import gerade nicht, weil schon einer läuft, sagt Transkribor jetzt, dass die Links in der Liste stehenbleiben — vorher versprach es, sie kämen von selbst danach dran, was für Links nie stimmte.
 - Nach einem Video-Import zeigt Transkribor die anschliessende Transkription sofort an — vorher tauchte sie erst mit der nächsten Aktualisierung der Liste auf, und eine, die noch davor scheiterte, meldete sich gar nicht.
+- Bei langen Läufen bleibt die Auskunft „Wartet auf Korrektur · noch N vor dieser" jetzt auch dann richtig, wenn schon sehr viel im Protokoll steht — vorher fielen einzelne Aufnahmen daraus heraus und die Zahl der übrigen war zu klein.
 
 ## v0.53.0 — 2026-09-03
 

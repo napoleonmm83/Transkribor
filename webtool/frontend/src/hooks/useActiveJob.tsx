@@ -362,7 +362,13 @@ export function JobProvider({ children, intervalMs = 1500 }: { children: ReactNo
           // hochgeladene Datei die Urteile der geloeschten (#479/#489). Verdrahtungs-Test
           // in useActiveJob.test.tsx: ein weggelassenes viertes Argument wuerde den Fix
           // still abschalten (die #488-Lehre: kein Test sah das fehlende Prop).
-          const parsed = parseJobPhases(j.kind, r.lines, r.gesehen, r.entfernt)
+          // `r.eingereiht` ist der VIERTE Rueckweg (#561) und der letzte der drei
+          // Wartequellen, der noch allein am Zeilenpuffer hing: die Einreih-Zeile faellt bei
+          // `MAX_JOB_LINES` aus der Mitte, und mit ihr verschwand die Aufnahme aus der
+          // Schlange — samt einer um eins zu kleinen Zahl fuer alle uebrigen. Auch hier gilt
+          // die #488-Lehre: ein weggelassenes fuenftes Argument schaltete den Fix still ab,
+          // Verdrahtungs-Test in useActiveJob.test.tsx.
+          const parsed = parseJobPhases(j.kind, r.lines, r.gesehen, r.entfernt, r.eingereiht)
           // Die Serverbuchfuehrung ERGAENZT den Zeilenpuffer, sie springt nicht nur ein,
           // wenn er leer ist — und das ist seit dem Bereichs-Nachtrag Pflicht, nicht
           // Feinschliff. `[scope]` ist die erste Zeile des Laufs und damit von

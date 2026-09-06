@@ -1,4 +1,5 @@
 import os
+import pathlib
 import signal
 import subprocess
 import sys
@@ -1956,3 +1957,90 @@ def test_deckel_wirft_keinen_LAUFENDEN_vorgang():
     assert len(jobs._vorgaenge) <= jobs._VORGAENGE_MAX
     assert any(jobs.vorgang(n) is None for n in fertige), "es wurde ueberhaupt nichts geraeumt"
     jobs._vorgaenge.clear()
+    # Die erfundenen Job-Saetze MUESSEN wieder raus, und das ist keine Kosmetik: `_jobs` ist
+    # global, `j-laeuft` steht auf `running` mit `kind: transcribe`, und `start()`
+    # serialisiert GPU-Arten PROJEKTUEBERGREIFEND — jeder spaetere Test, der eine
+    # Transkription startet, bekaeme diesen Geist als Blocker zurueck und liefe auf einem
+    # Satz ohne `lines` in einen KeyError. Genau so passiert, in der vollen Suite und nur
+    # dort: allein lief der Test gruen.
+    jobs._jobs.pop("j-laeuft", None)
+    for i in range(jobs._VORGAENGE_MAX + 5):
+        jobs._jobs.pop(f"j-fertig-{i}", None)
+
+
+def test_eingereiht_muster_passt_auf_die_GEDRUCKTE_zeile():
+    """Der Drift-Riegel: `jobs.EINGEREIHT_RE` gegen das Literal aus `transcribe.py`.
+
+    Mit #561 gibt es eine ZWEITE Stelle, die dieselbe Druckform liest. Aendert sich die Zeile,
+    zwingt `jobPhases.vertrag.test.ts` das TS-Muster nach (INVENTAR-Eintrag) — dieses hier
+    kennt der Vertragstest nicht, und `eingereiht` bliebe dann STILL leer.
+
+    Deshalb wird das Literal aus dem QUELLTEXT gelesen und nicht abgeschrieben: eine Kopie im
+    Test waere eine Fixture ohne Erzeuger — genau die Klasse, die #567 aufgemacht hat.
+    """
+    quelle = pathlib.Path(__file__).resolve().parent.parent / "transcribe.py"
+    zeilen = [z for z in quelle.read_text(encoding="utf-8").splitlines()
+              if "print(" in z and "Eingereiht" in z]
+    assert len(zeilen) == 1, f"erwartet genau EINE Druckstelle, gefunden {len(zeilen)}: {zeilen}"
+
+    # Aus `print(f"→ Eingereiht {base} (Korrektur) …", flush=True)` die Form herausziehen und
+    # den Platzhalter durch einen echten Basisnamen ersetzen.
+    roh = zeilen[0]
+    anfang = roh.index('"') + 1
+    form = roh[anfang:roh.index('"', anfang)]
+    assert "{base}" in form, form
+    gedruckt = form.replace("{base}", "Interview Mueller.mp3")
+
+    m = jobs.EINGEREIHT_RE.match(gedruckt)
+    assert m is not None, f"das Muster passt nicht auf die gedruckte Zeile: {gedruckt!r}"
+    assert m.group(1) == "Interview Mueller.mp3"
+
+
+def test_eingereiht_ueberlebt_den_zeilendeckel():
+    """Die Einreih-Zeile faellt aus dem gedeckelten Puffer — der Job weiss sie trotzdem (#561).
+
+    Der echte Weg, nicht die Attrappe: `fuege_zeile_an` verdraengt aus der MITTE, geschuetzt
+    sind nur die ersten zehn. An einem echten Lauf sind 10.560 Zeilen gemessen (#475); fiel
+    eine Einreih-Zeile heraus, verschwand die Aufnahme aus der Schlange und die Zahl aller
+    uebrigen sank um eins.
+
+    Die Reihenfolge ist mitgeprueft — sie IST die Auskunft („noch N vor dieser"), und ein
+    `sorted()` auf dem Rueckweg wuerde sie zerstoeren, ohne dass eine Mengenpruefung es saehe.
+    """
+    rauschen = jobs.MAX_JOB_LINES + 600
+    code = f"""
+import sys
+print('[scope] Zuerst\tSpaeter', flush=True)
+for i in range(30):
+    print('[Demo] vorlauf', i)
+print('→ Eingereiht Zuerst (Korrektur) …', flush=True)
+print('→ Eingereiht Spaeter (Korrektur) …', flush=True)
+for i in range({rauschen}):
+    print('[Demo] rauschen', i)
+"""
+    jid, _ = jobs.start("P_eingereiht", [sys.executable, "-c", code], cwd=None,
+                        kind="transcribe")
+    r = _wait(jid, timeout=60)
+    assert r["status"] == "done", r["lines"][-3:]
+    # (1) Die Verdraengung ist wirklich eingetreten — ohne diese drei Zusicherungen bliebe der
+    #     Test gruen, wenn der Deckel je steigt, und maesse dann gar nichts mehr.
+    assert "→ Eingereiht Zuerst (Korrektur) …" not in r["lines"]
+    assert "→ Eingereiht Spaeter (Korrektur) …" not in r["lines"]
+    assert "[scope] Zuerst\tSpaeter" in r["lines"]
+    # (2) Der Server weiss sie trotzdem — UND in der richtigen Reihenfolge.
+    assert r["eingereiht"] == ["Zuerst", "Spaeter"], r["eingereiht"]
+
+
+def test_eingereiht_bucht_nur_fuer_transcribe():
+    """Nur `transcribe.py` druckt die Zeile — ein `fetch`-Lauf traegt FREMDEN Text im Strom.
+
+    Dieselbe Begruendung und dieselbe Form wie `ZULASSUNGS_KINDS`/`NACHTRAG_KINDS`: yt-dlp
+    gibt Videotitel aus, und ein importiertes Video kann heissen, wie es will.
+    """
+    code = ("import sys\n"
+            "print('→ Eingereiht Fremd (Korrektur) …', flush=True)\n")
+    jid, _ = jobs.start("P_eingereiht_fetch", [sys.executable, "-c", code], cwd=None,
+                        kind="fetch")
+    r = _wait(jid, timeout=30)
+    assert r["status"] == "done"
+    assert r["eingereiht"] == [], r["eingereiht"]
