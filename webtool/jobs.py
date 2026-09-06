@@ -746,6 +746,21 @@ def _run_proc(jid, cmd, cwd, env=None):
                     for b in line[len(SCOPE_ADD_PREFIX):].split("\t"):
                         if b:
                             _jobs[jid]["entfernt"].discard(b)
+                            # ... und aus der Korrektur-Schlange, aus einem Grund, den erst
+                            # #561 geschaffen hat (gegnerischer Pruefer, F2): eine geloeschte
+                            # und gleichnamig neu hochgeladene Aufnahme wird vom Pool HINTEN
+                            # angehaengt, ihre zweite Einreih-Zeile faellt aber am
+                            # Dublettenriegel oben aus — sie behielte also ihren ALTEN Platz.
+                            # Vorher heilte das der Deckel von selbst (war die alte Zeile
+                            # verdraengt, galt die neue); jetzt steht die Serverliste VORN und
+                            # nagelte den alten Platz bis Jobende fest.
+                            #
+                            # Entfernen statt Umsortieren: den neuen Platz kennt erst die
+                            # zweite Einreih-Zeile, und die kommt, sobald der Pool sie hat.
+                            # Bis dahin lieber keine Auskunft als eine falsche — dieselbe
+                            # sichere Richtung wie `imBereich` im Frontend.
+                            if b in _jobs[jid]["eingereiht"]:
+                                _jobs[jid]["eingereiht"].remove(b)
                 else:
                     buche_aktive(_jobs[jid]["active_bases"], line, zulassung)
 
@@ -874,10 +889,19 @@ def get(job_id: str):
         # die DRITTE Wartequelle und war bis #561 die einzige ohne Rueckweg: `eingereiht`
         # entstand allein aus Zeilen, und der Puffer verliert sie.
         #
-        # `list()` INNERHALB des Locks, aus demselben tragenden Grund wie das `sorted()` zwei
-        # Zeilen hoeher: `snap = dict(r)` ist flach, ohne die Kopie laege im Rumpf die LEBENDE
-        # Liste, und FastAPI serialisiert sie ausserhalb von `_lock`, waehrend `_run_proc`
-        # weiterschreibt. NICHT sortiert — die Reihenfolge IST die Auskunft.
+        # `list()` INNERHALB des Locks, weil `snap = dict(r)` flach ist: ohne die Kopie laege
+        # im Rumpf die LEBENDE Liste, und FastAPI serialisiert sie ausserhalb von `_lock`,
+        # waehrend `_run_proc` weiterschreibt. NICHT sortiert — die Reihenfolge IST die
+        # Auskunft.
+        #
+        # ABER NICHT aus demselben tragenden Grund wie das `sorted()` zwei Zeilen hoeher, und
+        # genau das stand hier zuerst — eine Begruendung, die schaerfer war als der Mechanismus
+        # (gegnerischer Pruefer, F4). Beim Set ist es ein ABSTURZ: `RuntimeError: Set changed
+        # size during iteration`, in drei Runden reproduziert. Eine Liste unter nebenlaeufigem
+        # `append` zu serialisieren wirft NICHT (fuenf Runden gegen drei Millionen appends,
+        # kein Fehler). Was die Kopie hier traegt, ist die SCHNAPPSCHUSS-Treue: kein Eintrag,
+        # der nach dem Lock dazukam — und keine Auskunft, die zur `entfernt`-Menge derselben
+        # Antwort nicht mehr passt.
         if isinstance(snap.get("eingereiht"), list):
             snap["eingereiht"] = list(snap["eingereiht"])
         return snap
