@@ -195,8 +195,22 @@ def _prune_locked():
     # CodeRabbit-CLI major).
     #
     # Preis, benannt: gibt es NUR offene Vormerkungen, waechst die Menge ueber den Deckel.
-    # Ihre Obergrenze ist dann die Zahl verschiedener (Projekt, Art, Base) — dieselbe Menge,
-    # die `_pending` ohnehin haelt, also nichts Neues.
+    #
+    # WORIN IHRE OBERGRENZE BESTEHT, HAT SICH MIT #557 GEAENDERT — hier stand bis dahin „die
+    # Zahl verschiedener (Projekt, Art, Base) — dieselbe Menge, die `_pending` ohnehin haelt,
+    # also nichts Neues", und beide Haelften stimmen seitdem nicht mehr. Solange Nummern
+    # ausschliesslich in `request` entstanden, war jede offene an einen `_pending`-Schluessel
+    # gebunden und je Schluessel gab es genau eine. `app.fetch_urls` ruft `vormerken` jetzt
+    # bei JEDEM Import, und dieser Eintrag steht in keinem `_pending`. GEMESSEN: 250 Aufrufe
+    # ergeben 250 offene Eintraege bei Deckel 200, 0 davon in `_pending`, bei EINEM
+    # Schluessel — der alte Weg ergab bei fuenf Anfragen auf denselben Schluessel einen.
+    #
+    # Im Betrieb loest sich jede dieser Nummern auf (belegter Slot ⇒ sofort `verworfen`,
+    # sonst ueber `then` bzw. den `when_done`-Rueckruf), gleichzeitig offen sind also nur die
+    # Importe, die gerade laufen. Was sich geaendert hat, ist die SCHADENSSKALA eines Lecks:
+    # ein liegengebliebener Eintrag kostete frueher hoechstens einen je Schluessel, jetzt
+    # einen je Import. Der eine bekannte Leckweg steht in `app._fetch_nachlauf_ausgang`
+    # (weitergereichtes `then`). Gefunden vom Neuweg-Pruefer, hier nachgemessen.
     while len(_vorgaenge) > _VORGAENGE_MAX:
         raus = next((n for n, v in _vorgaenge.items() if v["status"] != "vorgemerkt"), None)
         if raus is None:

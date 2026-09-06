@@ -1861,9 +1861,18 @@ def fetch_urls(project: str, body: FetchBody):
     # Vorher angelegt gibt es das Fenster gar nicht: die Nummer steht schon, bevor der erste
     # Prozess laeuft, und geht in DIESER Antwort mit.
     nummer = jobs.vormerken(project, "transcribe")
-    job_id, started = jobs.start(project, cmd, paths.ROOT, "fetch",
-                                 then=lambda: _start_transcribe(project, vorgang=nummer),
-                                 env=env_sprache)
+    # Wirft `jobs.start`, bliebe die eben angelegte Nummer liegen — und eine offene Vormerkung
+    # ist prune-immun (`_prune_locked` wirft sie NIE, mit Absicht). Seit die Nummer je IMPORT
+    # entsteht statt je `_pending`-Schluessel, kostet so ein Leck einen Eintrag pro Anfrage
+    # statt einen pro Schluessel; das ist der einzige Weg dieser Art, den dieser Endpunkt
+    # selbst schliessen kann. Der Wurf geht unveraendert weiter — er ist ein echter Fehler.
+    try:
+        job_id, started = jobs.start(project, cmd, paths.ROOT, "fetch",
+                                     then=lambda: _start_transcribe(project, vorgang=nummer),
+                                     env=env_sprache)
+    except BaseException:
+        jobs.vorgang_verwerfen(nummer)
+        raise
     if not started:
         # `jobs.start` gibt bei belegtem `(projekt, fetch)` den laufenden Job zurueck und
         # verwirft `cmd` UND `then` — es wird also nie etwas heruntergeladen und nie etwas

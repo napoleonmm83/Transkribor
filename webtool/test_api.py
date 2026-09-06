@@ -4712,6 +4712,13 @@ def test_fetch_reicht_seine_nummer_an_den_nachlauf_durch(client, monkeypatch):
     gefangen = {}
     monkeypatch.setattr(jobs, "start",
                         lambda *a, then=None, **k: gefangen.update(then=then) or ("j-fetch", True))
+    # Dieselbe Attrappe und derselbe Grund wie im Test darueber: `jobs.start` ist gefaelscht,
+    # den Job `j-fetch` gibt es also nicht. Das echte `when_done` liefert dafuer False, der
+    # Endpunkt wertet den Ausgang SOFORT aus, findet keinen Job und verwirft die Nummer —
+    # der Test bliebe trotzdem gruen, weil er nur das ARGUMENT des Lambdas prueft, und maesse
+    # damit einen Zustand, den es nur in ihm selbst gibt. Gefunden vom Neuweg-Pruefer (F2),
+    # ausgefuehrt belegt: die Nummer stand schon vor dem `then`-Aufruf auf `verworfen`.
+    monkeypatch.setattr(jobs, "when_done", lambda jid, fn: True)
     monkeypatch.setattr(app_mod, "_start_transcribe",
                         lambda project, base=None, vorgang=None:
                         gefangen.update(gerufen=(project, base, vorgang)) or (None, False, vorgang))
@@ -4805,3 +4812,29 @@ def test_fetch_laesst_die_nummer_offen_wenn_der_schon_terminale_job_gelang(clien
     r = client.post("/api/projects/Demo/fetch", json={"urls": ["https://youtu.be/abc123"]})
     nummer = r.json()["vorgang"]
     assert jobs.vorgang(nummer)["status"] == "vorgemerkt"
+
+
+def test_fetch_laesst_bei_einem_wurf_keine_vormerkung_liegen(client, monkeypatch):
+    """Ein Wurf aus `jobs.start` darf die eben angelegte Nummer nicht zuruecklassen.
+
+    Eine offene Vormerkung ist prune-immun (`_prune_locked` wirft sie NIE, mit Absicht) — und
+    seit #557 entsteht sie je IMPORT statt je `_pending`-Schluessel. GEMESSEN: 250 Aufrufe von
+    `vormerken` ergeben 250 offene Eintraege bei einem Deckel von 200, 0 davon in `_pending`,
+    bei EINEM Schluessel; der alte Weg ergab bei fuenf Anfragen auf denselben Schluessel einen.
+    Ein Leck kostet hier also einen Eintrag pro Anfrage.
+
+    Der Wurf selbst geht unveraendert weiter — er ist ein echter Fehler und soll als 500
+    sichtbar sein. Geprueft wird beides: dass er durchkommt UND dass nichts liegenbleibt.
+    Gefunden vom Neuweg-Pruefer (F1).
+    """
+    from webtool import jobs
+
+    def wirft(*a, **k):
+        raise RuntimeError("start kaputt")
+
+    monkeypatch.setattr(jobs, "start", wirft)
+    vorher = sum(1 for v in jobs._vorgaenge.values() if v["status"] == "vorgemerkt")
+    with pytest.raises(RuntimeError):
+        client.post("/api/projects/Demo/fetch", json={"urls": ["https://youtu.be/abc123"]})
+    nachher = sum(1 for v in jobs._vorgaenge.values() if v["status"] == "vorgemerkt")
+    assert nachher == vorher, "eine offene Vormerkung ist nach dem Wurf liegengeblieben"
