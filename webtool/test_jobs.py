@@ -1933,39 +1933,46 @@ def test_deckel_wirft_keinen_LAUFENDEN_vorgang():
     danach kommen genug abgeschlossene, um den Deckel zu reissen. Ohne diese Reihenfolge
     traefe die alte Bedingung ihn gar nicht und der Test waere vacuous.
     """
-    jobs._vorgaenge.clear()
-    laeuft = jobs.vormerken("P_deckel_lauf", "transcribe")
-    jobs._jobs["j-laeuft"] = {"id": "j-laeuft", "project": "P_deckel_lauf",
-                              "kind": "transcribe", "status": "running"}
-    jobs._vorgang_setzen(laeuft, "gestartet", job_id="j-laeuft")
+    try:
+        jobs._vorgaenge.clear()
+        laeuft = jobs.vormerken("P_deckel_lauf", "transcribe")
+        jobs._jobs["j-laeuft"] = {"id": "j-laeuft", "project": "P_deckel_lauf",
+                                  "kind": "transcribe", "status": "running"}
+        jobs._vorgang_setzen(laeuft, "gestartet", job_id="j-laeuft")
 
-    fertige = []
-    for i in range(jobs._VORGAENGE_MAX + 5):
-        n = jobs.vormerken("P_deckel_lauf", "transcribe")
-        jobs._jobs[f"j-fertig-{i}"] = {"id": f"j-fertig-{i}", "project": "P_deckel_lauf",
-                                       "kind": "transcribe", "status": "done"}
-        jobs._vorgang_setzen(n, "gestartet", job_id=f"j-fertig-{i}")
-        fertige.append(n)
+        fertige = []
+        for i in range(jobs._VORGAENGE_MAX + 5):
+            n = jobs.vormerken("P_deckel_lauf", "transcribe")
+            jobs._jobs[f"j-fertig-{i}"] = {"id": f"j-fertig-{i}", "project": "P_deckel_lauf",
+                                           "kind": "transcribe", "status": "done"}
+            jobs._vorgang_setzen(n, "gestartet", job_id=f"j-fertig-{i}")
+            fertige.append(n)
 
-    with jobs._lock:
-        jobs._prune_locked()
+        with jobs._lock:
+            jobs._prune_locked()
 
-    assert jobs.vorgang(laeuft) is not None, "der LAUFENDE Vorgang wurde geworfen"
-    assert jobs.vorgang(laeuft)["status"] == "gestartet"
-    # Gegenprobe: geraeumt wurde trotzdem, und zwar bei den abgeschlossenen. Ohne sie waere
-    # der Test auch dann gruen, wenn der Deckel gar nicht mehr greift.
-    assert len(jobs._vorgaenge) <= jobs._VORGAENGE_MAX
-    assert any(jobs.vorgang(n) is None for n in fertige), "es wurde ueberhaupt nichts geraeumt"
-    jobs._vorgaenge.clear()
-    # Die erfundenen Job-Saetze MUESSEN wieder raus, und das ist keine Kosmetik: `_jobs` ist
-    # global, `j-laeuft` steht auf `running` mit `kind: transcribe`, und `start()`
-    # serialisiert GPU-Arten PROJEKTUEBERGREIFEND — jeder spaetere Test, der eine
-    # Transkription startet, bekaeme diesen Geist als Blocker zurueck und liefe auf einem
-    # Satz ohne `lines` in einen KeyError. Genau so passiert, in der vollen Suite und nur
-    # dort: allein lief der Test gruen.
-    jobs._jobs.pop("j-laeuft", None)
-    for i in range(jobs._VORGAENGE_MAX + 5):
-        jobs._jobs.pop(f"j-fertig-{i}", None)
+        assert jobs.vorgang(laeuft) is not None, "der LAUFENDE Vorgang wurde geworfen"
+        assert jobs.vorgang(laeuft)["status"] == "gestartet"
+        # Gegenprobe: geraeumt wurde trotzdem, und zwar bei den abgeschlossenen. Ohne sie waere
+        # der Test auch dann gruen, wenn der Deckel gar nicht mehr greift.
+        assert len(jobs._vorgaenge) <= jobs._VORGAENGE_MAX
+        assert any(jobs.vorgang(n) is None for n in fertige), "es wurde ueberhaupt nichts geraeumt"
+    finally:
+        jobs._vorgaenge.clear()
+        # Die erfundenen Job-Saetze MUESSEN wieder raus, und das ist keine Kosmetik: `_jobs` ist
+        # global, `j-laeuft` steht auf `running` mit `kind: transcribe`, und `start()`
+        # serialisiert GPU-Arten PROJEKTUEBERGREIFEND — jeder spaetere Test, der eine
+        # Transkription startet, bekaeme diesen Geist als Blocker zurueck und liefe auf einem
+        # Satz ohne `lines` in einen KeyError. Genau so passiert, in der vollen Suite und nur
+        # dort: allein lief der Test gruen.
+        #
+        # Im `finally`, nicht am Ende des Rumpfs (CodeRabbit-CLI, minor): faellt eine der vier
+        # Zusicherungen darueber, bliebe der Geist sonst genau dann stehen, wenn er am meisten
+        # schadet — der eigentliche Fehlschlag verschwaende hinter einer Kaskade fremder Tests,
+        # die alle an demselben KeyError sterben.
+        jobs._jobs.pop("j-laeuft", None)
+        for i in range(jobs._VORGAENGE_MAX + 5):
+            jobs._jobs.pop(f"j-fertig-{i}", None)
 
 
 def test_eingereiht_muster_passt_auf_die_GEDRUCKTE_zeile():
