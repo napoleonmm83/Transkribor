@@ -1970,6 +1970,20 @@ def test_deckel_wirft_keinen_LAUFENDEN_vorgang():
         # Zusicherungen darueber, bliebe der Geist sonst genau dann stehen, wenn er am meisten
         # schadet — der eigentliche Fehlschlag verschwaende hinter einer Kaskade fremder Tests,
         # die alle an demselben KeyError sterben.
+        #
+        # BELEG, auf einer Kopie unter `$TMPDIR` gemessen (das Repo blieb unangetastet): in
+        # BEIDEN Faellen wird `assert jobs.vorgang(laeuft) is not None` zu `... is None`
+        # verdreht, damit dieser Test faellt, dann laeuft
+        #     pytest webtool/test_jobs.py -k "deckel_wirft or eingereiht_ueberlebt or
+        #                                     verlaesst_die_schlange" -q -p no:cacheprovider
+        #   mit diesem `finally`            -> 1 failed, 3 passed   (nur dieser Test)
+        #   Stand `301af91` (ohne finally)  -> 3 failed, 1 passed   samt `KeyError: 'lines'`
+        #                                      in `test_eingereiht_ueberlebt_den_zeilendeckel`
+        #                                      und `..._verlaesst_die_schlange_beim_abschluss`
+        # Die zweite Zeile ist die Kaskade, um die es geht: zwei Tests, die mit dem Fehlschlag
+        # nichts zu tun haben, sterben an dem Geist, den er hinterliess. (Nachgetragen, weil
+        # der Bot-Vorabcheck „Behauptung oder Messung" zu Recht anschlug — die Aussage stand
+        # hier als Tatsache, ohne dass ein Leser sie haette nachfahren koennen.)
         jobs._jobs.pop("j-laeuft", None)
         for i in range(jobs._VORGAENGE_MAX + 5):
             jobs._jobs.pop(f"j-fertig-{i}", None)
