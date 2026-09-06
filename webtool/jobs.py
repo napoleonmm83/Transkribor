@@ -176,6 +176,29 @@ ZULASSUNGS_KINDS = ("transcribe", "correct")
 # fuer diese Art scharf, ohne dass sie ihn je bedienen kann (Befund des kalten Diff-Lesers).
 NACHTRAG_KINDS = ("transcribe",)
 
+# Die Uebergabe an den Korrektur-Pool (#442). ZEICHENGLEICH mit dem Muster in
+# `jobPhases.ts`, nicht-gierige Gruppe inklusive — damit die beiden Leser nicht auseinander
+# laufen koennen, nicht weil die Gierigkeit hier etwas aendert. GEMESSEN: an
+# `→ Eingereiht A (Korrektur) … (Korrektur) …` liefern gierig und nicht-gierig BEIDE
+# `A (Korrektur) …`; der `$`-Anker zwingt in beiden Faellen das letzte Vorkommen als Endung.
+# Die erste Fassung dieses Kommentars behauptete das Gegenteil.
+#
+# Der Basisname wird ROH genommen, mit Randleerzeichen — dieselbe Regel und derselbe Grund
+# wie bei `gesehen` (#475/#477): `safe_name` laesst sie durch, und der Parser auf der anderen
+# Seite fasst sie ebenfalls ungetrimmt. Gestutzt gebucht waere der Rueckweg fuer diese
+# Namensklasse still wirkungslos.
+#
+# Dass hier ein ZWEITER Leser derselben Druckform entsteht, ist der Preis von #561 und
+# gehoert benannt: aendert `transcribe.py` die Zeile, zwingt der Vertragstest das
+# TS-Muster nach — dieses hier kennt er nicht. Der Riegel dagegen ist
+# `test_eingereiht_muster_passt_auf_die_gedruckte_zeile`: er liest das Literal aus dem
+# Quelltext von `transcribe.py` und laesst dieses Muster darauf laufen.
+#
+# NUR `transcribe` druckt sie (`NACHTRAG_KINDS` ist dieselbe Menge, aus demselben Grund wie
+# bei `ZULASSUNGS_KINDS`: ein `fetch`-Lauf traegt FREMDEN Text im Strom).
+EINGEREIHT_RE = re.compile(r"^→ Eingereiht (.+?) \(Korrektur\) …$")
+EINGEREIHT_KINDS = ("transcribe",)
+
 
 def _prune_locked():
     now = time.time()
@@ -380,6 +403,13 @@ def start(project: str, cmd: list, cwd, kind: str, then=None, env=None, base: st
                       # der perBase-Verdraengung muss `erreicht` UND diese Unterdrueckung
                       # mitnehmen — beides liegt damit schon serverseitig.
                       "entfernt": set(),
+                      # Wer an den Korrektur-Pool uebergeben wurde (#442/#561) — die DRITTE
+                      # Wartequelle, und bis hierher die einzige ohne Rueckweg gegen den
+                      # Zeilendeckel. LISTE, kein Set: ihre Reihenfolge IST die Schlangen-
+                      # ordnung (der ThreadPoolExecutor arbeitet nach Submit-Reihenfolge),
+                      # und `sorted()` wie bei `gesehen` zerstoerte genau die Auskunft, um
+                      # die es geht („noch N vor dieser").
+                      "eingereiht": [],
                       "lines": [], "returncode": None, "started": time.time(),
                       "ended": None, "pid": None, "cancelled": False,
                       "then": [then] if then else [],
@@ -630,6 +660,7 @@ def _run_proc(jid, cmd, cwd, env=None):
             zulassung = (_jobs[jid]["gesehen"]
                          if _jobs[jid]["kind"] in ZULASSUNGS_KINDS else None)
             nachtrag_an = _jobs[jid]["kind"] in NACHTRAG_KINDS
+            eingereiht_an = _jobs[jid]["kind"] in EINGEREIHT_KINDS
         if cancelled:                            # cancel() kam an, bevor die pid gesetzt war -> selbst killen
             _kill_tree(proc)
 
@@ -637,6 +668,23 @@ def _run_proc(jid, cmd, cwd, env=None):
             line = line.rstrip("\n")
             with _lock:
                 fuege_zeile_an(_jobs[jid]["lines"], line)
+                # Die Einreih-Zeile serverseitig buchen (#561) — NEBEN der if/elif-Kette
+                # darunter, nicht als weiterer Zweig darin: die Kette entscheidet, wer
+                # `buche_aktive` sieht, und diese Zeile soll daran nichts aendern.
+                #
+                # Der Server sieht jede Zeile, BEVOR sie in den gedeckelten Puffer wandert —
+                # genau das ist der Rueckweg. `fuege_zeile_an` verdraengt bei MAX_JOB_LINES
+                # aus der MITTE (geschuetzt sind nur die ersten zehn), und an einem echten
+                # Lauf sind 10.560 Zeilen gemessen (#475): faellt eine Einreih-Zeile heraus,
+                # verschwand die Aufnahme bisher aus der Schlange und die Zahl aller uebrigen
+                # sank um eins.
+                if eingereiht_an and (_m := EINGEREIHT_RE.match(line)):
+                    liste = _jobs[jid]["eingereiht"]
+                    # Dubletten verwerfen, wie der Parser: ihre Wirkung waere still und
+                    # dauerhaft — jeder Nachfolger rutschte um eins, aus „noch 1 vor dieser"
+                    # wuerde „noch 2".
+                    if _m.group(1) not in liste:
+                        liste.append(_m.group(1))
                 # Nur die ERSTE Zeile zaehlt: der Lauf druckt sie, bevor er arbeitet, und
                 # spaeter kaeme sie hoechstens aus Transkripttext, der so beginnt.
                 if _jobs[jid]["bases"] is None and line.startswith(SCOPE_PREFIX):
@@ -786,6 +834,16 @@ def get(job_id: str):
         # hoeher.
         if isinstance(snap.get("entfernt"), set):
             snap["entfernt"] = sorted(snap["entfernt"])
+        # `eingereiht` reist mit, aus demselben Grund wie `gesehen` und `entfernt` — es ist
+        # die DRITTE Wartequelle und war bis #561 die einzige ohne Rueckweg: `eingereiht`
+        # entstand allein aus Zeilen, und der Puffer verliert sie.
+        #
+        # `list()` INNERHALB des Locks, aus demselben tragenden Grund wie das `sorted()` zwei
+        # Zeilen hoeher: `snap = dict(r)` ist flach, ohne die Kopie laege im Rumpf die LEBENDE
+        # Liste, und FastAPI serialisiert sie ausserhalb von `_lock`, waehrend `_run_proc`
+        # weiterschreibt. NICHT sortiert — die Reihenfolge IST die Auskunft.
+        if isinstance(snap.get("eingereiht"), list):
+            snap["eingereiht"] = list(snap["eingereiht"])
         return snap
 
 

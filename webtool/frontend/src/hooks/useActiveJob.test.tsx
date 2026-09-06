@@ -584,6 +584,46 @@ describe('mergePhases', () => {
     expect(screen.getByTestId('urteil').textContent).toBe('keins')
     expect(screen.getByTestId('beleg').textContent).toBe('keiner')
   })
+
+  // DERSELBE WAECHTER fuer den FUENFTEN Parameter (#561). `r.eingereiht` ist der letzte der
+  // Rueckwege, und ein weggelassenes Argument schaltet ihn ebenso still ab: die Attrappe
+  // liefert dann einfach eine kuerzere Schlange, und nichts sieht danach falsch aus.
+  it('reicht r.eingereiht an den Parser durch: verdraengte Zeile behaelt ihren Platz (#561)', async () => {
+    function EingereihtProbe() {
+      const { jobs, adopt } = useActiveJob()
+      const phases = mergePhases(jobs.filter(j => j.status === 'running'))
+      return (
+        <div>
+          <button onClick={() => adopt('j_eing', 'Demo', 'transcribe')}>adopt_eing</button>
+          <span data-testid="bereich">{phases.scope ? Array.from(phases.scope).join(',') : 'all'}</span>
+          {/* Die ZAHL, nicht die blosse Anwesenheit: eine Vorbelegung, die ans ENDE haengt
+              statt an ihren Platz, liesse `A` zwar erscheinen, gaebe `B` aber „noch 0 vor
+              dieser" — die Auskunft waere still falsch. */}
+          <span data-testid="vorA">{phases.warten?.['A']?.vor ?? 'keins'}</span>
+          <span data-testid="vorB">{phases.warten?.['B']?.vor ?? 'keins'}</span>
+        </div>
+      )
+    }
+    // Die Einreih-Zeile fuer `A` ist aus dem gedeckelten Puffer gefallen; ihr Urteil steht
+    // noch da. Der Server hat die Uebergabe gebucht.
+    vi.mocked(api.getJob).mockResolvedValue({
+      status: 'running',
+      lines: [
+        '[scope] A\tB',
+        '[Demo] fertig A: 1s, 2 Segmente, 1.0x',
+        '[Demo] fertig B: 1s, 2 Segmente, 1.0x',
+        '→ Eingereiht B (Korrektur) …',
+      ],
+      eingereiht: ['A', 'B'],
+    })
+    render(<JobProvider intervalMs={5}><EingereihtProbe /></JobProvider>)
+    fireEvent.click(screen.getByText('adopt_eing'))
+    // Positivkontrolle zuerst, aus demselben Grund wie oben (M6): 'keins' gilt auch VOR dem
+    // ersten Poll, ein Griff darauf allein waere vacuous.
+    await waitFor(() => expect(screen.getByTestId('bereich').textContent).toBe('A,B'))
+    expect(screen.getByTestId('vorA').textContent).toBe('0')
+    expect(screen.getByTestId('vorB').textContent).toBe('1')
+  })
 })
 
 describe('mergePhases - gesehen (#431)', () => {

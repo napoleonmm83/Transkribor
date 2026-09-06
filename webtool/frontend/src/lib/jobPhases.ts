@@ -30,7 +30,8 @@ export const RANG: Record<FileState, number> = { failed: 3, done: 2, skipped: 1 
  *  (`perBase`/`active`), was der Lauf anfasst (`scope`/`gesehen`) und wie er ausging (`bilanz`). */
 export function parseJobPhases(kind: string, lines: string[],
                                gesehenVomServer?: Iterable<string>,
-                               entferntVomServer?: Iterable<string>): JobPhases {
+                               entferntVomServer?: Iterable<string>,
+                               eingereihtVomServer?: Iterable<string>): JobPhases {
   // `Object.create(null)` statt `{}` — und das ist kein Stil, sondern ein gemessener Absturz:
   // ein Basisname wie `constructor`, `toString` oder `valueOf` kommt durch `safe_name` und
   // findet in einem gewoehnlichen Objekt den PROTOTYP. `blocks['constructor']` ist dann eine
@@ -52,7 +53,15 @@ export function parseJobPhases(kind: string, lines: string[],
   // Eine LISTE, kein Set: die Reihenfolge IST die der Poolschlange (#442). Nie geraeumt —
   // wer heraus muss, faellt in `korrekturSchlange` durch die Filter, und die Historie bleibt
   // der Zaehlung erhalten.
-  const eingereiht: string[] = []
+  // VORBELEGT aus der Serverbuchfuehrung (#561) — derselbe Rueckweg wie `gesehen` (#475) und
+  // `entfernt` (#479), und `eingereiht` war die letzte der drei Wartequellen ohne ihn.
+  //
+  // Die Serverliste steht VORN, und das ist tragend, nicht Reihenfolgegeschmack: ihre Ordnung
+  // ist die der Schlange (der Server sieht jede Zeile, bevor der Puffer sie verdraengt), und
+  // genau daraus rechnet `korrekturSchlange` das „noch N vor dieser". Der Zeilenparser haengt
+  // danach nur noch an, was der Server nicht kennt — bei einem aelteren Server, der das Feld
+  // gar nicht schickt, ist das die ganze Liste, und alles bleibt wie vorher.
+  const eingereiht: string[] = [...(eingereihtVomServer ?? [])]
   let cursor: string | null = null            // transcribe: die eine laufende Datei
   let bilanz: JobPhases['bilanz']
   let scope: Set<string> | undefined

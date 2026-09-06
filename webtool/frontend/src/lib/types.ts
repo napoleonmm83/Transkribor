@@ -51,7 +51,10 @@ export type Project = { name: string; dateien: number; fertig: number; geaendert
 /** `gesehen`: die Basisnamen, fuer die der Lauf eine `[active]`-Zeile gedruckt hat -- vom
  *  Server gefuehrt, nicht aus `lines` gelesen. Rueckweg fuer den Fall, dass der gedeckelte
  *  Zeilenpuffer genau diese Zeile verdraengt hat (#475), Gegenstueck zu `bases`/`scope`. */
-export type JobStatus = { status: 'running' | 'done' | 'error' | 'cancelled'; lines: string[]; kind?: string; bases?: string[]; gesehen?: string[]; entfernt?: string[] };
+/** `eingereiht` ist die DRITTE Serverbuchfuehrung neben `gesehen` und `entfernt` (#561) und
+ *  die einzige, die eine ORDNUNG traegt: die der Korrektur-Schlange. Deshalb `string[]` und
+ *  serverseitig unsortiert — `sorted()` wie bei den anderen beiden zerstoerte die Auskunft. */
+export type JobStatus = { status: 'running' | 'done' | 'error' | 'cancelled'; lines: string[]; kind?: string; bases?: string[]; gesehen?: string[]; entfernt?: string[]; eingereiht?: string[] };
 /** `vorgang` — SECHS Erzeuger, drei Verhalten. Gezaehlt, nicht erinnert (`grep` auf
  *  `Promise<StartJob>` in `api.ts` plus die Abbildung von `uploadAudio` in `MaterialDialog`):
  *
