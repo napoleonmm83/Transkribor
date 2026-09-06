@@ -72,7 +72,7 @@ describe('MaterialDialog', () => {
     fireEvent.click(screen.getByRole('button', { name: /Weiter/ }))
     fireEvent.click(screen.getByRole('button', { name: /Los geht/ }))
     await waitFor(() => expect(onFertig).toHaveBeenCalled())
-    expect(onFertig.mock.calls[0][0]).toMatchObject({ started: false, vorgang: 'vg1' })
+    expect(onFertig.mock.calls[0][0]).toMatchObject([{ job: { started: false, vorgang: 'vg1' } }])
   })
 
   it('reicht die Nummer auch OHNE Job-Kennung weiter (aufgegebener Nachlauf)', async () => {
@@ -90,7 +90,52 @@ describe('MaterialDialog', () => {
     fireEvent.click(screen.getByRole('button', { name: /Weiter/ }))
     fireEvent.click(screen.getByRole('button', { name: /Los geht/ }))
     await waitFor(() => expect(onFertig).toHaveBeenCalled())
-    expect(onFertig.mock.calls[0][0]).toMatchObject({ job_id: null, vorgang: 'vg9' })
+    expect(onFertig.mock.calls[0][0]).toMatchObject([{ job: { job_id: null, vorgang: 'vg9' } }])
+  })
+
+  it('reicht JEDE Antwort weiter, nicht nur die letzte (#560)', async () => {
+    /* Die Schleife ueberschrieb ihre Variable `job` je Datei, `onFertig` lief genau einmal —
+       die Arbeitsflaeche sah damit nur die LETZTE Antwort. Bei einem Stapel ist das
+       ausgerechnet die schlechteste: die ERSTE Datei startet den Lauf (`started: true`), alle
+       weiteren finden den Slot belegt. Der laufende Job fiel also heraus, und der Nutzer las
+       „Laeuft schon", obwohl gerade etwas gestartet war.
+
+       Zusicherung ist die REIHENFOLGE mit, nicht nur die Zahl: sie ist die des Sendens, und
+       nur so lassen sich Antworten und Zeilen einander zuordnen. */
+    const onFertig = vi.fn()
+    vi.mocked(api.uploadAudio)
+      .mockResolvedValueOnce({ base: 'a', file: 'a.mp3', job_id: 'lauf', started: true })
+      .mockResolvedValueOnce({ base: 'b', file: 'b.mp3', job_id: 'lauf', started: false, vorgang: 'vg2' })
+    render(<MaterialDialog {...basis} onFertig={onFertig}
+      vorbelegteDateien={[datei('a.mp3'), datei('b.mp3')]} />)
+    fireEvent.click(screen.getByRole('button', { name: /Weiter/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Weiter/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Los geht/ }))
+    await waitFor(() => expect(onFertig).toHaveBeenCalled())
+    expect(onFertig.mock.calls[0][0]).toMatchObject([
+      { job: { job_id: 'lauf', started: true }, art: 'transcribe' },
+      { job: { started: false, vorgang: 'vg2' }, art: 'transcribe' },
+    ])
+  })
+
+  it('verliert den Download-Job nicht, wenn Dateien im selben Stapel liegen (#560)', async () => {
+    /* Der teuerste Fall der Einfachverfolgung: Links UND Dateien in EINEM Stapel. Die
+       fetch-Antwort kam zuerst und wurde von jeder folgenden Upload-Antwort ueberschrieben —
+       der Download lief, aber niemand verfolgte ihn. Beide Sendewege muessen im Ergebnis
+       stehen, jeder mit SEINER Art. */
+    const onFertig = vi.fn()
+    vi.mocked(api.fetchUrls).mockResolvedValue({ job_id: 'holen', started: true })
+    render(<MaterialDialog {...basis} onFertig={onFertig} vorbelegteDateien={[datei('a.mp3')]} />)
+    fireEvent.click(screen.getByRole('tab', { name: /Links/ }))
+    fireEvent.change(screen.getByLabelText('Video-URLs'), { target: { value: 'https://youtu.be/a' } })
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /^Holen$/i })) })
+    fireEvent.click(screen.getByRole('button', { name: /Weiter/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Los geht/ }))
+    await waitFor(() => expect(onFertig).toHaveBeenCalled())
+    expect(onFertig.mock.calls[0][0]).toMatchObject([
+      { job: { job_id: 'holen' }, art: 'fetch' },
+      { job: { job_id: 'j' }, art: 'transcribe' },
+    ])
   })
 
   it('erklaert EINMAL, warum die Sprache nicht waehlbar ist (#305)', () => {

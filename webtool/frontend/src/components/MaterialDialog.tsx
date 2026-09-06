@@ -19,6 +19,12 @@ const SCHRITTE = ['Material wählen', 'Einstellen', 'Prüfen & starten']
  *  statt ueber ein zweites `if`. Kommt ein dritter Reiter dazu, traegt ihn beides. */
 const QUELLEN = [['datei', 'Dateien'], ['link', 'Links']] as const
 
+/** Was EIN Sendeweg des Dialogs hinterlassen hat: die Antwort des Servers und die Art des
+ *  Laufs, den sie meint. Der Dialog liefert eine LISTE davon, keinen Einzelwert (#560) —
+ *  ein Stapel aus fuenf Dateien und drei Links ist acht Anfragen, und bis hierher behielt
+ *  die Schleife nur die letzte. */
+export type Ausgang = { job: StartJob; art: 'transcribe' | 'fetch' }
+
 /** Der Dialog „Material hinzufügen": drei waagrechte Schritte (H1), Sprache und
  *  Sprecherzahl je Aufnahme (L2/S1), ein Hörbalken unten (P1).
  *
@@ -34,7 +40,7 @@ export function MaterialDialog({ project, offen, vorbelegteDateien, sprachChoice
   projektSprache: string
   sprecherMax: number
   onSchliessen: () => void
-  onFertig: (job?: StartJob, art?: 'transcribe' | 'fetch') => void
+  onFertig: (ausgaenge: Ausgang[]) => void
 }) {
   const [schritt, setSchritt] = useState(1)
   const [zeilen, setZeilen] = useState<Aufnahme[]>([])
@@ -154,8 +160,10 @@ export function MaterialDialog({ project, offen, vorbelegteDateien, sprachChoice
     const meiner = ++laufNr.current
     setLaeuft(true); setKlingt(null)          // Ton hoert auf, BEVOR Zeilen verschwinden
     const gescheitert: Aufnahme[] = []
-    let job: StartJob | undefined
-    let art: 'transcribe' | 'fetch' = 'transcribe'
+    // EINE Liste statt zweier Einzelwerte (#560): jeder Sendeweg haengt an, was er bekommen
+    // hat. Die Reihenfolge ist die des Sendens — Links zuerst, dann die Dateien in Listen-
+    // reihenfolge —, damit der Aufrufer die Antworten den Zeilen zuordnen kann.
+    const ausgaenge: Ausgang[] = []
 
     // Verzweigt wird JE ZEILE, nicht nach dem zuletzt geklickten Reiter. `ergaenzen` haengt
     // an, und `quelle` ist eine Ansicht des Reiters — beides zusammen liess Dateien und
@@ -180,7 +188,7 @@ export function MaterialDialog({ project, offen, vorbelegteDateien, sprachChoice
                                     links.map(z => z.sprache === projektSprache ? null : (z.sprache || null)),
                                     undefined,
                                     links.map(z => sprecherWahl(z.sprecherText, sprecherMax) ?? null))
-        job = res; art = 'fetch'
+        ausgaenge.push({ job: res, art: 'fetch' })
         // Laeuft schon ⇒ die Zeilen BLEIBEN stehen (der Nutzer versucht es spaeter noch
         // einmal); die Meldung dazu macht die Arbeitsflaeche in `onFertig`.
         if (!res.started) gescheitert.push(...links)
@@ -220,8 +228,8 @@ export function MaterialDialog({ project, offen, vorbelegteDateien, sprachChoice
         // was es gibt. Mit dem alten `if (r.job_id)` fiel genau dieser Fall stumm heraus —
         // von der CodeRabbit-CLI und vom gegnerischen Pruefer unabhaengig gefunden.
         if (r.job_id || r.vorgang) {
-          job = { job_id: r.job_id ?? null, started: !!r.started, vorgang: r.vorgang }
-          art = 'transcribe'
+          ausgaenge.push({ job: { job_id: r.job_id ?? null, started: !!r.started,
+                                  vorgang: r.vorgang }, art: 'transcribe' })
         }
       } catch (e) {
         // „existiert bereits" ist KEIN wiederholbarer Fehlschlag — ein zweiter Versuch
@@ -257,7 +265,7 @@ export function MaterialDialog({ project, offen, vorbelegteDateien, sprachChoice
       // sonst in einer Zusammenfassung ueber NICHTS (im Test aufgefallen).
       else { setUrlText(''); setSchritt(1); onSchliessen() }
     }
-    onFertig(job, art)      // laeuft IMMER — der Workspace muss seine Liste nachziehen
+    onFertig(ausgaenge)     // laeuft IMMER — der Workspace muss seine Liste nachziehen
   }
 
   if (!offen) return null

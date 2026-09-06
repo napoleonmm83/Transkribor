@@ -337,21 +337,33 @@ export function ProjectWorkspace() {
       <MaterialDialog project={project!} offen={dialogOffen} vorbelegteDateien={vorbelegt}
         sprachChoices={sprachChoices} projektSprache={sprache} sprecherMax={sprecherMax}
         onSchliessen={() => { setDialogOffen(false); setVorbelegt([]) }}
-        onFertig={(job, art) => {
+        onFertig={(ausgaenge) => {
           refresh(); refreshFiles()
-          // Sofort adoptieren statt auf den naechsten Poll zu warten — der Balken soll
-          // direkt stehen.
-          if (job?.started && job.job_id) {
-            adopt(job.job_id, project!, art ?? 'transcribe')
-            toast.success(art === 'fetch' ? 'Herunterladen gestartet — Transkription folgt automatisch'
-                                          : 'Transkription gestartet')
-          } else if (job) {
-            // Der Nachlauf bekommt spaeter eine eigene Kennung, die niemand meldet — bis #381
-            // war das hier eine Zusage ohne Nachweis: „kommen danach dran", und ob es je
-            // geschah, erfuhr man nicht. Die Nummer macht daraus einen verfolgbaren Lauf.
-            if (job.vorgang) verfolge(job.vorgang)
-            toast.info('Läuft schon — die neuen Dateien kommen danach dran.')
+          // JEDER Ausgang wird verwertet, nicht nur der letzte (#560). `adopt` und `verfolge`
+          // deduplizieren selbst (`prev.some` bzw. `prev.includes`) — dass ein Stapel aus
+          // fuenf Uploads viermal DIESELBE Nummer liefert (der `_pending`-Schluessel ist fuer
+          // alle `(projekt, transcribe, None)`), kostet hier also nichts.
+          const gestartet = new Set<'transcribe' | 'fetch'>()
+          let wartet = false
+          for (const { job, art } of ausgaenge) {
+            // Sofort adoptieren statt auf den naechsten Poll zu warten — der Balken soll
+            // direkt stehen.
+            if (job.started && job.job_id) { adopt(job.job_id, project!, art); gestartet.add(art) }
+            else {
+              // Der Nachlauf bekommt spaeter eine eigene Kennung, die niemand meldet — bis
+              // #381 war das hier eine Zusage ohne Nachweis: „kommen danach dran", und ob es
+              // je geschah, erfuhr man nicht. Die Nummer macht daraus einen verfolgbaren Lauf.
+              if (job.vorgang) verfolge(job.vorgang)
+              // An `!started` und NICHT an `vorgang`: ein Endpunkt ohne Vormerkung
+              // (`correct_file`) schwiege sonst ganz, obwohl der Nutzer gewartet hat.
+              wartet = true
+            }
           }
+          // Je Ausgang eine Meldung, im Wortlaut von vorher (Entscheidung Marcus 2026-09-06).
+          // Mehr als drei koennen es nicht werden: zwei Arten plus die Wartemeldung.
+          if (gestartet.has('fetch')) toast.success('Herunterladen gestartet — Transkription folgt automatisch')
+          if (gestartet.has('transcribe')) toast.success('Transkription gestartet')
+          if (wartet) toast.info('Läuft schon — die neuen Dateien kommen danach dran.')
         }} />
     </div>
   )
