@@ -570,6 +570,32 @@ describe('ProjectWorkspace (Stub)', () => {
     expect(toastMock.success).toHaveBeenCalledTimes(1)
   })
 
+  it('verfolgt die Nummer eines GESTARTETEN URL-Imports (#557)', async () => {
+    /* Der URL-Import ist der einzige Weg, der beides zugleich liefert: einen laufenden
+       Download UND die Nummer seines Transkriptions-Nachlaufs, den es noch gar nicht gibt.
+       Die beiden Zweige des Rueckrufs schlossen sich bis #557 aus — `started: true` ging in
+       den adopt-Zweig, und die Nummer blieb dort still liegen.
+
+       Beide Belege sind ABFRAGEN: `getJob('j-fetch')` passiert nur nach `adopt`,
+       `getVorgang('vg-nach')` nur nach `verfolge`. Ohne den neuen Aufruf faende den Nachlauf
+       wieder nur der 4-Sekunden-Sammelabruf — und ein Lauf, der vorher stirbt, meldete gar
+       nichts (die Klasse aus #376). */
+    nurDemo()
+    vi.mocked(api.fetchUrls).mockResolvedValue(
+      { job_id: 'j-fetch', started: true, vorgang: 'vg-nach' })
+    vi.mocked(api.getVorgang).mockResolvedValue({ vorgang: 'vg-nach', status: 'vorgemerkt',
+      job_id: null, project: 'Demo', kind: 'transcribe', base: null })
+    vi.mocked(api.getJob).mockResolvedValue({ status: 'running', lines: [], kind: 'fetch' })
+    zeigen()
+    await screen.findByRole('button', { name: /^Material$/ })
+    await holeUrl()
+    await waitFor(() => expect(api.getJob).toHaveBeenCalledWith('j-fetch'))
+    await waitFor(() => expect(api.getVorgang).toHaveBeenCalledWith('vg-nach'))
+    // Der Download LAEUFT — die Wartemeldung darf hier nicht dazu kommen.
+    expect(toastMock.success).toHaveBeenCalledWith(expect.stringMatching(/Transkription folgt/))
+    expect(toastMock.info).not.toHaveBeenCalledWith(expect.stringMatching(/Links bleiben/))
+  })
+
   it('sagt „Läuft schon" auch OHNE Vorgangsnummer — der blockierte URL-Import (#560)', async () => {
     /* Der Wartezweig haengt an `!started`, NICHT an `vorgang`, und genau dieser Unterschied
        war von keinem Test gedeckt: beide bestehenden Faelle mit `started: false` tragen eine

@@ -1413,7 +1413,12 @@ def test_fetch_startet_job(client, monkeypatch):
                         lambda project, cmd, cwd, kind, then=None, env=None:
                         gestartet.update(cmd=cmd, kind=kind, then=then) or ("j1", True))
     r = client.post("/api/projects/Demo/fetch", json={"urls": ["https://youtu.be/abc123"]})
-    assert r.status_code == 200 and r.json() == {"job_id": "j1", "started": True}
+    # `vorgang` gehoert seit #557 dazu: die Nummer des Transkriptions-Nachlaufs
+    # entsteht VOR dem Download und geht in DIESER Antwort mit.
+    rumpf = r.json()
+    assert r.status_code == 200
+    assert rumpf["job_id"] == "j1" and rumpf["started"] is True
+    assert isinstance(rumpf["vorgang"], str) and rumpf["vorgang"]
     # Eigene Art: der Download braucht keine GPU und darf nicht hinter einer Transkription warten
     assert gestartet["kind"] == "fetch"
     assert callable(gestartet["then"])                # danach transkribieren (und korrigieren)
@@ -4662,3 +4667,68 @@ def test_unbrauchbarer_zielname_trennt_zeichen_von_laenge(monkeypatch):
     # jeden beliebigen OSError als Namensproblem.
     monkeypatch.setattr(appmod.os, "name", "nt")
     assert appmod._unbrauchbarer_zielname(OSError(_errno.ENOSPC, "voll"), "Was?") is None
+
+
+def test_fetch_gibt_die_nummer_seines_nachlaufs_zurueck(client, monkeypatch):
+    """#557: die Antwort des URL-Imports traegt eine Vorgangsnummer, und die ist lesbar.
+
+    Vorher gab es sie nicht — der Transkriptions-Nachlauf entsteht in einem `then`-Rueckruf,
+    also lange nachdem die Antwort beim Browser war, und sein Rueckgabewert wurde verworfen.
+    Die Oberflaeche erfuhr von diesem Lauf nur ueber den 4-Sekunden-Sammelabruf; ein Nachlauf,
+    der in diesem Fenster startet und scheitert, meldete gar nichts.
+    """
+    from webtool import jobs
+    monkeypatch.setattr(jobs, "start", lambda *a, **k: ("j-fetch", True))
+    r = client.post("/api/projects/Demo/fetch", json={"urls": ["https://youtu.be/abc123"]})
+    nummer = r.json()["vorgang"]
+    assert isinstance(nummer, str) and nummer
+
+    # Und sie ist ueber den Endpunkt lesbar, ohne dass der Nachlauf schon existiert.
+    v = client.get(f"/api/vorgaenge/{nummer}")
+    assert v.status_code == 200
+    assert v.json()["status"] == "vorgemerkt"
+    assert v.json()["kind"] == "transcribe" and v.json()["project"] == "Demo"
+
+
+def test_fetch_reicht_seine_nummer_an_den_nachlauf_durch(client, monkeypatch):
+    """Das mittlere Glied der Kette: der `then`-Rueckruf traegt die Nummer WEITER.
+
+    Ohne sie legte `jobs.request` beim Nachlauf eine ZWEITE Nummer an, und die erste — die,
+    die der Browser kennt — bliebe fuer immer `vorgemerkt`. Genau dieser Dauerpoll ist der
+    Schaden, den #381 an anderer Stelle schon beseitigt hat.
+
+    Geprueft wird das ARGUMENT, nicht der blosse Aufruf: ein `_start_transcribe(project)` ohne
+    `vorgang` sieht von aussen identisch aus.
+    """
+    from webtool import app as app_mod
+    from webtool import jobs
+    gefangen = {}
+    monkeypatch.setattr(jobs, "start",
+                        lambda *a, then=None, **k: gefangen.update(then=then) or ("j-fetch", True))
+    monkeypatch.setattr(app_mod, "_start_transcribe",
+                        lambda project, base=None, vorgang=None:
+                        gefangen.update(gerufen=(project, base, vorgang)) or (None, False, vorgang))
+    r = client.post("/api/projects/Demo/fetch", json={"urls": ["https://youtu.be/abc123"]})
+    nummer = r.json()["vorgang"]
+    gefangen["then"]()                      # das tut `jobs._run` nach einem gelungenen Download
+    assert gefangen["gerufen"] == ("Demo", None, nummer)
+
+
+def test_fetch_gibt_KEINE_nummer_wenn_gar_nichts_geladen_wird(client, monkeypatch):
+    """`jobs.start` verwirft bei belegtem `(projekt, fetch)` das Kommando UND das `then`.
+
+    Es wird also weder heruntergeladen noch nachgelaufen — eine Nummer waere dann eine, die
+    niemand je aufloest, und die Oberflaeche fragte sie fuer die Lebensdauer des Tabs alle
+    1,5 s ab. Sie wird deshalb sofort wieder geschlossen, und die Antwort traegt `null`.
+
+    Die zweite Zusicherung ist die wichtigere: es bleibt kein `vorgemerkt` liegen. `_prune`
+    wirft offene Vormerkungen NIE (mit Absicht), ein Leck hier waere also dauerhaft.
+    """
+    from webtool import jobs
+    monkeypatch.setattr(jobs, "start", lambda *a, **k: ("blocker", False))
+    vorher = sum(1 for v in jobs._vorgaenge.values() if v["status"] == "vorgemerkt")
+    r = client.post("/api/projects/Demo/fetch", json={"urls": ["https://youtu.be/abc123"]})
+    assert r.status_code == 200
+    assert r.json() == {"job_id": "blocker", "started": False, "vorgang": None}
+    nachher = sum(1 for v in jobs._vorgaenge.values() if v["status"] == "vorgemerkt")
+    assert nachher == vorher, "eine offene Vormerkung ist liegengeblieben"

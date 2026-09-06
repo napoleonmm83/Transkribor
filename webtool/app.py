@@ -1628,8 +1628,14 @@ def export_project_zip(project: str):
     )
 
 
-def _start_transcribe(project: str, base: str | None = None):
+def _start_transcribe(project: str, base: str | None = None, vorgang: str | None = None):
     """Transkription anstossen; danach automatisch korrigieren via Streaming-Pipeline.
+
+    `vorgang` ist die VORAB angelegte Nummer des URL-Imports (#557). Sie reist unveraendert
+    nach `jobs.request` durch — dort ist der Parameter seit #381 der Weg durch die Rekursion,
+    und er tut hier genau dasselbe: der Aufruf ist der Nachlauf DIESER Vormerkung, also traegt
+    ihr Eintrag danach die Kennung des Laufs statt einer neuen Nummer. Alle anderen Aufrufer
+    lassen ihn weg und bekommen das Verhalten von vorher.
 
     `--autocorrect` haengt hier bedingungslos dran, und das ist Absicht: ueber den Kill-Switch
     `TRANSKRIBOR_AUTOCORRECT` und den Anbieter entscheidet der LAUF (#406). Ein hier
@@ -1656,7 +1662,7 @@ def _start_transcribe(project: str, base: str | None = None):
     if base:
         cmd.extend(["--only", base])
     cmd.append("--autocorrect")
-    return jobs.request(project, cmd, paths.ROOT, "transcribe", base=base)
+    return jobs.request(project, cmd, paths.ROOT, "transcribe", base=base, vorgang=vorgang)
 
 
 @app.post("/api/projects/{project}/transcribe")
@@ -1841,18 +1847,61 @@ def fetch_urls(project: str, body: FetchBody):
     # jetzt auf dieselbe Null-Richtung umgestellt.
     env_sprache["TRANSKRIBOR_FETCH_SPRECHER"] = ",".join(
         "" if s is None else str(s) for s in sprecher)
-    # BEWUSST OHNE Vorgangsnummer, und das ist eine benannte Luecke, keine Auslassung:
-    # der `then`-Rueckruf ist der fuenfte Weg, auf dem eine Vormerkung entstehen kann, und der
-    # einzige, dessen Rueckgabewert niemand lesen kann — er laeuft lange nachdem die Antwort
-    # beim Browser war. Ein erster Anlauf schrieb die Nummer auf den fetch-Job; der kalte
-    # Pruefer hat gezeigt, dass das NICHTS bringt: der Provider nimmt einen Job beim ersten
-    # terminalen Poll aus der Abfrage und fragt ihn nie wieder, und der Rueckruf laeuft ERST
-    # danach. Ein Feld mit Schreiber und ohne Leser ist schlechter als eine offene Frage.
-    # Fuer den URL-Import gilt #381 deshalb unveraendert weiter (nur der 4-Sekunden-Weg) —
-    # als eigenes Issue festgehalten.
+    # DIE NUMMER ENTSTEHT VOR DEM JOB (#557) — das ist der ganze Trick, und der Vorgaenger
+    # scheiterte genau daran, es andersherum zu versuchen.
+    #
+    # Der `then`-Rueckruf ist der fuenfte Weg, auf dem eine Vormerkung entstehen kann, und der
+    # einzige, dessen RUECKGABEWERT niemand lesen kann: er laeuft, lange nachdem die Antwort
+    # beim Browser war. Ein erster Anlauf schrieb die Nummer deshalb NACHTRAEGLICH auf den
+    # fetch-Job — wirkungslos, wie der kalte Pruefer gezeigt hat: der Provider nimmt einen Job
+    # beim ersten terminalen Poll aus der Abfrage und fragt ihn nie wieder, und der Rueckruf
+    # laeuft ERST danach. Es gaebe genau eine Antwort, in der die Nummer stehen koennte, und
+    # die kann vor dem Schreiben liegen.
+    #
+    # Vorher angelegt gibt es das Fenster gar nicht: die Nummer steht schon, bevor der erste
+    # Prozess laeuft, und geht in DIESER Antwort mit.
+    nummer = jobs.vormerken(project, "transcribe")
     job_id, started = jobs.start(project, cmd, paths.ROOT, "fetch",
-                                 then=lambda: _start_transcribe(project), env=env_sprache)
-    return {"job_id": job_id, "started": started}
+                                 then=lambda: _start_transcribe(project, vorgang=nummer),
+                                 env=env_sprache)
+    if not started:
+        # `jobs.start` gibt bei belegtem `(projekt, fetch)` den laufenden Job zurueck und
+        # verwirft `cmd` UND `then` — es wird also nie etwas heruntergeladen und nie etwas
+        # nachlaufen. Eine Nummer, die niemand aufloest, waere genau der Dauerpoll, den #381
+        # gerade beseitigt hat: die Oberflaeche fragte sie fuer die Lebensdauer des Tabs alle
+        # 1,5 s ab.
+        jobs.vorgang_verwerfen(nummer)
+        nummer = None
+    else:
+        # Und wenn der fetch-Job NICHT `done` wird, laeuft `then` nie (`jobs._run` ruft
+        # `then`-Rueckrufe nur bei Erfolg) — die Nummer bliebe ebenfalls ewig `vorgemerkt`.
+        #
+        # Der Rueckruf fragt den Status SELBST ab, statt bedingungslos zu verwerfen, und das
+        # ist tragend: `next_runs` feuern in `_run` VOR den `then`-Rueckrufen, ein blindes
+        # Verwerfen traefe also ausgerechnet den Erfolgsfall. Zweiter Produktivnutzer von
+        # `when_done` — dessen Docstring warnt davor, den „feuert bei JEDEM terminalen
+        # Ausgang"-Vertrag still zu erben; hier wird er ausdruecklich gefragt.
+        jobs.when_done(job_id, lambda: _fetch_nachlauf_ausgang(job_id, nummer))
+    return {"job_id": job_id, "started": started, "vorgang": nummer}
+
+
+def _fetch_nachlauf_ausgang(job_id: str, nummer: str) -> None:
+    """Die Vormerkung des URL-Imports schliessen, wenn der Download NICHT gelingt (#557).
+
+    Der Status wird SELBST gefragt: `when_done` feuert bei jedem terminalen Ausgang, und die
+    `next_runs` laufen in `jobs._run` VOR den `then`-Rueckrufen — bei `done` steht der Nachlauf
+    also noch aus, und hier ist nichts zu tun. `vorgang_verwerfen` greift ohnehin nur auf ein
+    noch offenes `vorgemerkt`; die Statusfrage spart den Weg, nicht die Sicherheit.
+
+    GETRAGENE GRENZE, benannt statt behoben: endet der fetch-Job `done`, reicht `_run` sein
+    `then` an einen Folge-fetch-Job weiter, falls in genau dem Moment einer fuer dasselbe
+    Projekt in `_active` steht — scheitert DER, bleibt die Nummer `vorgemerkt`. Das Fenster
+    liegt zwischen dem `finally` von `_run_proc` und dem Lesen von `_active` und verlangt einen
+    zweiten gleichzeitigen URL-Import desselben Projekts; erreichbar ist es nur, weil
+    `_run` Schritt 2 ueberhaupt weiterreicht.
+    """
+    if (jobs.get(job_id) or {}).get("status") != "done":
+        jobs.vorgang_verwerfen(nummer)
 
 
 class AuthCodeBody(BaseModel):
