@@ -513,8 +513,11 @@ describe('ProjectWorkspace (Stub)', () => {
        obwohl gerade etwas gestartet war.
 
        Beide Belege sind ABFRAGEN, nicht Zustand: `getJob('lauf')` passiert nur nach `adopt`,
-       `getVorgang('vg2')` nur nach `verfolge`. Und beide Meldungen muessen dastehen —
-       Entscheidung Marcus 2026-09-06: je Ausgang eine, im Wortlaut von vorher. */
+       `getVorgang('vg2')` nur nach `verfolge`. `nurDemo()` liefert `active_jobs: []`, der
+       Sammelabruf kann den Job hier also nicht entdecken — im BROWSER kann er das sehr wohl,
+       und deshalb ist die Adoption nur hier isoliert messbar. Beide Meldungen muessen
+       dastehen — Entscheidung Marcus 2026-09-06: je Ausgangsart eine, im Wortlaut von
+       vorher. */
     nurDemo()
     vi.mocked(api.uploadAudio)
       .mockResolvedValueOnce({ base: 'a', file: 'a.mp3', job_id: 'lauf', started: true })

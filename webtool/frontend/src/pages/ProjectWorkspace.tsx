@@ -337,15 +337,15 @@ export function ProjectWorkspace() {
       <MaterialDialog project={project!} offen={dialogOffen} vorbelegteDateien={vorbelegt}
         sprachChoices={sprachChoices} projektSprache={sprache} sprecherMax={sprecherMax}
         onSchliessen={() => { setDialogOffen(false); setVorbelegt([]) }}
-        onFertig={(ausgaenge) => {
+        onFertig={(ergebnisse) => {
           refresh(); refreshFiles()
-          // JEDER Ausgang wird verwertet, nicht nur der letzte (#560). `adopt` und `verfolge`
+          // JEDE Antwort wird verwertet, nicht nur die letzte (#560). `adopt` und `verfolge`
           // deduplizieren selbst (`prev.some` bzw. `prev.includes`) — dass ein Stapel aus
           // fuenf Uploads viermal DIESELBE Nummer liefert (der `_pending`-Schluessel ist fuer
           // alle `(projekt, transcribe, None)`), kostet hier also nichts.
           const gestartet = new Set<'transcribe' | 'fetch'>()
           let wartet = false
-          for (const { job, art } of ausgaenge) {
+          for (const { job, art } of ergebnisse) {
             // Sofort adoptieren statt auf den naechsten Poll zu warten — der Balken soll
             // direkt stehen.
             if (job.started && job.job_id) { adopt(job.job_id, project!, art); gestartet.add(art) }
@@ -359,8 +359,10 @@ export function ProjectWorkspace() {
               wartet = true
             }
           }
-          // Je Ausgang eine Meldung, im Wortlaut von vorher (Entscheidung Marcus 2026-09-06).
-          // Mehr als drei koennen es nicht werden: zwei Arten plus die Wartemeldung.
+          // Je AUSGANGSART eine Meldung, im Wortlaut von vorher (Entscheidung Marcus
+          // 2026-09-06) — nicht je Antwort: fuenf eingereihte Dateien ergeben EINE
+          // Wartemeldung, nicht fuenf. Mehr als drei koennen es nie werden (zwei Arten plus
+          // die Wartemeldung), und deshalb stehen die drei Zeilen AUSSERHALB der Schleife.
           if (gestartet.has('fetch')) toast.success('Herunterladen gestartet — Transkription folgt automatisch')
           if (gestartet.has('transcribe')) toast.success('Transkription gestartet')
           if (wartet) toast.info('Läuft schon — die neuen Dateien kommen danach dran.')
