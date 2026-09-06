@@ -1596,9 +1596,11 @@ describe('Fixture-Wache', () => {
   })
 
   it('alle VIER Bauformen werden geerntet (#564)', () => {
-    // Ohne diesen Test ist jede einzelne Regel unbewacht: faellt eine weg, sinkt der Ertrag
-    // — und die Boeden in FIXTURE_DATEIEN haben rund ein Drittel Luft, fangen den Verlust
-    // einer Regel also NICHT (Regel A traegt ~15 Zeilen, der Boden liegt 124 darunter).
+    // Ohne diesen Test ist jede einzelne Regel unbewacht: faellt eine weg, sinkt der Ertrag —
+    // und die Boeden in FIXTURE_DATEIEN haben rund ein Drittel Luft (364 gegen 240), fangen
+    // den Verlust einer Regel also NICHT. GEMESSEN an der Mutationsprobe: Regel A auf
+    // `parseJobPhases` zurueckgenommen macht GENAU EINEN Test rot — diesen. Der Mindestertrag
+    // bleibt dabei gruen, der Verlust liegt also unter seiner Luft.
     // Ein Summenriegel traegt nur die groesste Einheit; gemessen wird deshalb je Bauform.
     // Die Ausloeser entstehen zur LAUFZEIT — diese Datei steht selbst in FIXTURE_DATEIEN,
     // woertlich hingeschrieben waeren sie Fixturen mit erfundenen Zeilen (dieselbe Technik
