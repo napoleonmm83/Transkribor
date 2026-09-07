@@ -63,6 +63,85 @@ def test_die_frist_liegt_unter_der_job_grenze(pytestconfig):
     )
 
 
+def test_jeder_job_traegt_eine_zeitgrenze():
+    """Fertig-wenn aus #583: KEIN Job laeuft gegen die Sechs-Stunden-Vorgabe.
+
+    Die Zahl stand bis #583 an genau einem der sieben Jobs. Ein Job ohne Deckel faellt
+    dabei nicht auf — er ist nur teuer, wenn er einmal haengt, und dann ist es zu spaet.
+    Geprueft wird deshalb die VOLLSTAENDIGKEIT, nicht die Anwesenheit irgendeiner Zeile:
+    ein achter Job, der die Zeile vergisst, macht diesen Test rot.
+
+    Regex statt PyYAML, weil in keinem CI-Job ein YAML-Leser installiert ist — dieselbe
+    Bauform wie im Test darueber. Die Jobnamen stehen als einzige Schluessel auf genau
+    zwei Leerzeichen Einrueckung; das Kommando dafuer steht im Kopf von `test.yml`.
+    """
+    import re
+    from pathlib import Path
+
+    workflow = Path(__file__).resolve().parents[1] / ".github" / "workflows" / "test.yml"
+    assert workflow.is_file(), f"{workflow} nicht gefunden — dieser Test misst dann nichts"
+    text = workflow.read_text(encoding="utf-8")
+
+    kopf = re.search(r"^jobs:$", text, re.MULTILINE)
+    assert kopf, "kein `jobs:`-Block in test.yml — der Test haette nichts geprueft"
+    rumpf = text[kopf.end():]
+
+    marken = list(re.finditer(r"^  ([a-z_-]+):$", rumpf, re.MULTILINE))
+    # Null Jobs waeren „alle haben einen Deckel" und damit gruen — dieselbe Klasse wie
+    # ein leerer Mutationsplan, der als bestanden durchgeht.
+    assert marken, "keine Jobs erkannt — die Einrueckung hat sich geaendert?"
+
+    ohne = []
+    for i, m in enumerate(marken):
+        ende = marken[i + 1].start() if i + 1 < len(marken) else len(rumpf)
+        if "timeout-minutes:" not in rumpf[m.end():ende]:
+            ohne.append(m.group(1))
+    assert not ohne, (
+        f"{len(ohne)} von {len(marken)} Jobs ohne `timeout-minutes`: {', '.join(ohne)}. "
+        "Ohne Deckel kostet ein Haenger dort die volle Laeufergrenze (Vorgabe 6 h)."
+    )
+
+
+def test_der_lauf_deckel_liegt_zwischen_test_frist_und_job_grenze(pytestconfig):
+    """Die dritte Stufe (#584) — und ihre Reihenfolge ist die ganze Zusicherung.
+
+    Drei Deckel greifen ineinander: je TEST (`faulthandler_timeout`), je LAUF (die
+    Wurzel-`conftest.py`) und je JOB (`test.yml`). Rutscht der mittlere ueber den
+    aeusseren, beendet GitHub den Job, bevor der Stapelabzug geschrieben ist; rutscht er
+    unter den inneren, stirbt der Lauf, bevor pytest den haengenden Test BENENNEN kann.
+    In beiden Richtungen bliebe der Riegel formal stehen und waere still wirkungslos.
+
+    Gefragt wird die AKTIVE Konfiguration ueber den Stash, nicht der Dateiinhalt —
+    dieselbe Regel wie im Docstring dieser Datei.
+    """
+    import re
+    from pathlib import Path
+
+    from conftest import deckel_key
+
+    lauf_s = pytestconfig.stash.get(deckel_key, None)
+    assert lauf_s, (
+        "Der Lauf-Deckel aus der Wurzel-conftest.py ist nicht scharf. Ohne ihn bleibt ein "
+        "Haenger nach dem letzten Test unentdeckt — mit `1 passed` im Protokoll (#584)."
+    )
+
+    workflow = Path(__file__).resolve().parents[1] / ".github" / "workflows" / "test.yml"
+    treffer = re.findall(r"^\s*timeout-minutes:\s*(\d+)", workflow.read_text(encoding="utf-8"),
+                         re.MULTILINE)
+    assert treffer, "keine timeout-minutes in test.yml — der Job-Deckel fehlt"
+    job_s = min(int(t) for t in treffer) * 60
+
+    test_s = float(pytestconfig.getini("faulthandler_timeout"))
+    assert test_s <= lauf_s, (
+        f"faulthandler_timeout={test_s:.0f}s ueber dem Lauf-Deckel {lauf_s:.0f}s: der Lauf "
+        "stirbt, bevor pytest den haengenden Test benennen kann."
+    )
+    assert lauf_s * 2 <= job_s, (
+        f"Lauf-Deckel {lauf_s:.0f}s gegen Job-Grenze {job_s}s: zu knapp. Der Job stirbt "
+        "dann, bevor der Stapelabzug geschrieben ist."
+    )
+
+
 def test_strict_config_haelt_einen_vertipper_auf(pytestconfig):
     """Der Riegel gegen das Schweigen der beiden Zeilen darueber.
 
