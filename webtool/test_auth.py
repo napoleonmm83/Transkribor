@@ -76,6 +76,42 @@ def _warte(bedingung, grenze=10.0):
     return False
 
 
+def _bericht(seit=None):
+    """Der Zustand des Anmeldevorgangs als EINE Zeile — fuer Fehlschlaege in der CI.
+
+    Grund (#558): diese Datei faellt unter der vollen Suite sporadisch um, je ein
+    anderer Test, isoliert nie. Was im Protokoll ankam, war ein nackter
+    `AttributeError: 'NoneType' object has no attribute 'poll'` — daraus laesst sich
+    NICHT entscheiden, welche der drei Erklaerungen zutrifft:
+
+      a) `Popen` ist gescheitert  ⇒ `fehler` traegt "Start fehlgeschlagen: ..."
+      b) der Start war nur langsam ⇒ `proc=None` bei kurzer `seit_start`, Ausgabe leer
+      c) die Ausgabe kam spaet     ⇒ `proc` gesetzt, Ausgabe kurz oder leer
+
+    Die drei sind am Zustand unterscheidbar, aber nur, wenn ihn jemand aufschreibt.
+    Auf diesem Rechner ist der Fehler in 25 vollen Suitenlaeufen NICHT aufgetreten
+    (7 einzeln, 18 zu sechst gleichzeitig) — ein Fix waere damit auf einer
+    ungepruefen Vermutung gebaut und liesse sich von keiner Mutationsprobe rot
+    bekommen. Deshalb hier Diagnose statt Reparatur: der naechste Fehlschlag in der
+    CI soll seine eigene Ursache mitbringen.
+    """
+    lauf = auth._lauf
+    if lauf is None:
+        return "auth._lauf is None (gar kein Vorgang)"
+    ausgabe = "".join(lauf["ausgabe"])
+    teile = []
+    if seit is not None:
+        teile.append(f"seit_start={time.time() - seit:.2f}s")
+    teile += [
+        "proc=" + ("gesetzt" if lauf["proc"] is not None else "None"),
+        f"laeuft={lauf['laeuft']}",
+        f"ok={lauf['ok']}",
+        f"fehler={lauf['fehler']!r}",
+        f"ausgabe={len(ausgabe)}z {ausgabe[-160:]!r}",
+    ]
+    return " | ".join(teile)
+
+
 def test_status_meldet_nicht_angemeldet(monkeypatch, tmp_path):
     skript, _ = _fake_cli(tmp_path)
     _verdrahte(monkeypatch, skript)
@@ -107,9 +143,13 @@ def test_login_zeigt_die_url_ohne_zeilenumbruch_abzuwarten(monkeypatch, tmp_path
     saehe die URL erst, wenn spaeter zufaellig etwas nachkommt."""
     skript, _ = _fake_cli(tmp_path)
     _verdrahte(monkeypatch, skript)
+    t0 = time.time()
     z = auth.start("claude-cli")
-    assert z["url"] == "https://example.invalid/oauth?code=true"
-    assert z["laeuft"] is True and z["braucht_code"] is True
+    # Der Zustand steht in der Meldung, nicht nur der erwartete Wert: dieser Test
+    # ist einer der zwei aus #558, und ein blosses "leer ist nicht die URL" sagt
+    # nichts darueber, WARUM sie fehlt.
+    assert z["url"] == "https://example.invalid/oauth?code=true", _bericht(t0)
+    assert z["laeuft"] is True and z["braucht_code"] is True, _bericht(t0)
 
 
 def test_code_geht_an_die_wartende_cli_und_meldet_erfolg(monkeypatch, tmp_path):
@@ -201,8 +241,13 @@ def test_start_fuer_anderen_anbieter_raeumt_den_alten_weg(monkeypatch, tmp_path)
     skript, _ = _fake_cli(tmp_path)
     _verdrahte(monkeypatch, skript)
     monkeypatch.setitem(auth.CLIS, "codex-cli", dict(auth.CLIS["claude-cli"]))
+    t0 = time.time()
     auth.start("claude-cli")
     alt = auth._lauf["proc"]
+    # Der zweite Test aus #558. Ohne diese Zeile stirbt er acht Zeilen spaeter an
+    # `alt.poll()` mit einem AttributeError, der die Ursache verschweigt — genau
+    # die Meldung, die in der CI ankam und niemandem half.
+    assert alt is not None, "start() kam ohne gesetzten Prozess zurueck — " + _bericht(t0)
     auth.start("codex-cli")
     assert auth._lauf["provider"] == "codex-cli" and auth._lauf["proc"] is not alt
     assert _warte(lambda: alt.poll() is not None), "der alte Vorgang laeuft weiter"
@@ -219,3 +264,34 @@ def test_detail_macht_aus_beiden_ausgabeformen_einen_satz():
 def test_kaputte_statusausgabe_wirft_nicht():
     assert auth._detail("{kein json", 0)
     assert auth._detail("", 1) == "Nicht angemeldet."
+
+
+def _lauf_attrappe(**abweichend):
+    lauf = {"provider": "claude-cli", "laeuft": True, "ok": False, "fehler": "",
+            "ausgabe": [], "proc": None, "braucht_code": True, "start": time.time()}
+    lauf.update(abweichend)
+    return lauf
+
+
+def test_bericht_nennt_die_tatsachen_die_die_ursachen_trennen():
+    """Der Bericht aus #558 ist nur brauchbar, wenn er die drei Faelle TRENNT.
+
+    Beide Richtungen stehen hier: ein Bericht, der immer `proc=None` sagt, waere
+    derselbe Schaden von der anderen Seite — er behauptete einen gescheiterten
+    Start, wo keiner war.
+    """
+    auth._lauf = _lauf_attrappe(fehler="Start fehlgeschlagen: [WinError 8]", ausgabe=["x"])
+    text = _bericht(time.time() - 1.5)
+    assert "proc=None" in text, text
+    assert "Start fehlgeschlagen" in text, text
+    assert "seit_start=" in text, text
+    assert "ausgabe=1z" in text, text
+
+    class _Proc:
+        pass
+
+    auth._lauf = _lauf_attrappe(proc=_Proc())
+    assert "proc=gesetzt" in _bericht(), _bericht()
+
+    auth._lauf = None
+    assert "auth._lauf is None" in _bericht()
