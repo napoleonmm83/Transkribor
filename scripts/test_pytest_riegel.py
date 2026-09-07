@@ -1,9 +1,13 @@
 """Der Haenger-Riegel muss SCHARF sein — sonst ist er ein Kommentar (#576).
 
-Die drei Einstellungen in `pyproject.toml` sind das einzige, was einen haengenden
-Testlauf ueberhaupt beendet. Sie stehen in einer Konfigurationsdatei, also faellt
-ihr Verschwinden niemandem auf: die Suite bleibt gruen, und der naechste Haenger
-laeuft wieder still bis zur Laeufergrenze.
+Die drei Einstellungen in `pyproject.toml` beenden einen haengenden Testlauf PRO
+TEST — mit Stapelabzug und dem Namen des Tests, also der genauesten Meldung der
+drei Stufen. (Hier stand „das einzige, was einen haengenden Testlauf ueberhaupt
+beendet"; seit #584 gibt es daneben den Lauf-Deckel der Wurzel-`conftest.py` und
+seit #583 die Job-Grenze — eine Behauptung, die derselbe PR widerlegt hat, der
+sie stehenliess. Gefunden vom CodeRabbit-Bot.) Sie stehen in einer
+Konfigurationsdatei, also faellt ihr Verschwinden niemandem auf: die Suite bleibt
+gruen, und der naechste Haenger laeuft wieder still bis zur naechsten Stufe.
 
 Warum ein Test und nicht nur `--strict-config`: die beiden decken VERSCHIEDENE
 Fehler. `--strict-config` faengt einen VERTIPPTEN Schluessel (gemessen: ohne die
