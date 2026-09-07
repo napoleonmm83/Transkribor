@@ -1,13 +1,22 @@
 """Der Haenger-Riegel muss SCHARF sein — sonst ist er ein Kommentar (#576).
 
-Die drei Einstellungen in `pyproject.toml` beenden einen haengenden Testlauf PRO
-TEST — mit Stapelabzug und dem Namen des Tests, also der genauesten Meldung der
-drei Stufen. (Hier stand „das einzige, was einen haengenden Testlauf ueberhaupt
-beendet"; seit #584 gibt es daneben den Lauf-Deckel der Wurzel-`conftest.py` und
-seit #583 die Job-Grenze — eine Behauptung, die derselbe PR widerlegt hat, der
-sie stehenliess. Gefunden vom CodeRabbit-Bot.) Sie stehen in einer
-Konfigurationsdatei, also faellt ihr Verschwinden niemandem auf: die Suite bleibt
-gruen, und der naechste Haenger laeuft wieder still bis zur naechsten Stufe.
+Die Datei bewacht drei Einstellungen in `pyproject.toml`, und sie tun ZWEIERLEI:
+
+* `faulthandler_timeout` und `faulthandler_exit_on_timeout` BEENDEN einen
+  haengenden Testlauf — pro TEST, mit Stapelabzug und dem Namen des Tests, also
+  der genauesten Meldung der drei Stufen.
+* `--strict-config` beendet gar nichts. Es haelt einen VERTIPPTEN ini-Schluessel
+  auf und ist damit der Riegel gegen das Schweigen der beiden anderen.
+
+(Hier stand zuerst „die drei Einstellungen sind das einzige, was einen haengenden
+Testlauf ueberhaupt beendet" — doppelt falsch: seit #584 gibt es daneben den
+Lauf-Deckel der Wurzel-`conftest.py` und seit #583 die Job-Grenze, und
+`--strict-config` beendet ohnehin nichts. Beide Haelften vom CodeRabbit-Bot
+gefunden, die zweite erst an meiner eigenen Korrektur der ersten.)
+
+Alle drei stehen in einer Konfigurationsdatei, also faellt ihr Verschwinden
+niemandem auf: die Suite bleibt gruen, und der naechste Haenger laeuft wieder
+still bis zur naechsten Stufe.
 
 Warum ein Test und nicht nur `--strict-config`: die beiden decken VERSCHIEDENE
 Fehler. `--strict-config` faengt einen VERTIPPTEN Schluessel (gemessen: ohne die
