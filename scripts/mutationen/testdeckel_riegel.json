@@ -38,5 +38,34 @@
       "test_die_frist_liegt_unter_der_job_grenze",
       "test_der_lauf_deckel_liegt_zwischen_test_frist_und_job_grenze"
     ]
+  },
+  {
+    "id": "M10 Job-Muster wieder nur kleingeschrieben und ohne Kommentar",
+    "datei": "scripts/test_pytest_riegel.py",
+    "von": "_JOB_KOPF = re.compile(r\"^  ([A-Za-z_][A-Za-z0-9_-]*):[ \\t]*(?:#.*)?$\", re.MULTILINE)",
+    "nach": "_JOB_KOPF = re.compile(r\"^  ([a-z_-]+):$\", re.MULTILINE)",
+    "rot": [
+      "test_der_job_parser_uebersieht_diese_formen_nicht[ziffer im namen]",
+      "test_der_job_parser_uebersieht_diese_formen_nicht[grossbuchstabe]",
+      "test_der_job_parser_uebersieht_diese_formen_nicht[kommentar hinter dem doppelpunkt]"
+    ],
+    "gruen": [
+      "test_jeder_job_traegt_eine_zeitgrenze",
+      "test_der_job_parser_zaehlt_nur_den_jobs_block"
+    ]
+  },
+  {
+    "id": "M11 Deckel-Erkennung wieder als Teilstring statt auf Job-Ebene",
+    "datei": "scripts/test_pytest_riegel.py",
+    "von": "        if not _JOB_DECKEL.search(rumpf[m.end():ende]):",
+    "nach": "        if \"timeout-minutes:\" not in rumpf[m.end():ende]:",
+    "rot": [
+      "test_der_job_parser_uebersieht_diese_formen_nicht[deckel nur am STEP]",
+      "test_der_job_parser_uebersieht_diese_formen_nicht[deckel auskommentiert]"
+    ],
+    "gruen": [
+      "test_jeder_job_traegt_eine_zeitgrenze",
+      "test_der_job_parser_uebersieht_diese_formen_nicht[grossbuchstabe]"
+    ]
   }
 ]

@@ -16,6 +16,9 @@ Dateiinhalt: eine Datei zu lesen bewiese nur, dass dort etwas steht — nicht, d
 pytest es auch angenommen hat. Genau diese Verwechslung ist die Fehlerklasse,
 gegen die der Riegel gebaut ist.
 """
+import re
+
+import pytest
 
 
 def test_der_haenger_riegel_ist_scharf(pytestconfig):
@@ -63,6 +66,44 @@ def test_die_frist_liegt_unter_der_job_grenze(pytestconfig):
     )
 
 
+# Ein Jobschluessel steht auf GENAU zwei Leerzeichen. Die Zeichenklasse ist die von
+# GitHub erlaubte (Buchstabe oder `_` am Anfang, danach alphanumerisch, `-`, `_`), ein
+# Kommentar dahinter ist zulaessig. Die erste Fassung nahm `[a-z_-]+` und einen harten
+# Zeilenschluss — damit galten `e2e:`, `Ruff:` und `typen:  # mypy` NICHT als Job: sie
+# wurden dem VORIGEN Block zugeschlagen, und hatte der einen Deckel, galt der deckellose
+# als gedeckt. Der Parser irrte also ausschliesslich in Richtung GRUEN (Kalt-Review).
+_JOB_KOPF = re.compile(r"^  ([A-Za-z_][A-Za-z0-9_-]*):[ \t]*(?:#.*)?$", re.MULTILINE)
+# GENAU vier Leerzeichen — also Job-Ebene. Ein blosses `"timeout-minutes:" in block`
+# nahm auch ein Step-Level `timeout-minutes: 5` (acht Leerzeichen) und ein
+# auskommentiertes `    # timeout-minutes: 20` als Job-Deckel. Beides gemessen.
+_JOB_DECKEL = re.compile(r"^    timeout-minutes:", re.MULTILINE)
+
+
+def jobs_ohne_deckel(text: str) -> tuple[list[str], list[str]]:
+    """(alle Jobs, Jobs ohne Zeitgrenze) aus einem Workflow-Text.
+
+    Herausgezogen, damit ein Test das Muster mit Gegenbeispielen fuettern kann statt nur
+    mit der echten Datei — an der ist jeder Parser gruen, der irgendetwas findet.
+    """
+    kopf = re.search(r"^jobs:$", text, re.MULTILINE)
+    if not kopf:
+        return [], []
+    rumpf = text[kopf.end():]
+    # Ein weiterer Schluessel auf Ebene 0 beendet den jobs-Block; ohne diese Grenze
+    # zaehlten dessen eingerueckte Kinder als Jobs (so wie `pull_request:` unter `on:`).
+    weiter = re.search(r"^[A-Za-z_]", rumpf, re.MULTILINE)
+    if weiter:
+        rumpf = rumpf[:weiter.start()]
+
+    marken = list(_JOB_KOPF.finditer(rumpf))
+    ohne = []
+    for i, m in enumerate(marken):
+        ende = marken[i + 1].start() if i + 1 < len(marken) else len(rumpf)
+        if not _JOB_DECKEL.search(rumpf[m.end():ende]):
+            ohne.append(m.group(1))
+    return [m.group(1) for m in marken], ohne
+
+
 def test_jeder_job_traegt_eine_zeitgrenze():
     """Fertig-wenn aus #583: KEIN Job laeuft gegen die Sechs-Stunden-Vorgabe.
 
@@ -72,34 +113,68 @@ def test_jeder_job_traegt_eine_zeitgrenze():
     ein achter Job, der die Zeile vergisst, macht diesen Test rot.
 
     Regex statt PyYAML, weil in keinem CI-Job ein YAML-Leser installiert ist — dieselbe
-    Bauform wie im Test darueber. Die Jobnamen stehen als einzige Schluessel auf genau
-    zwei Leerzeichen Einrueckung; das Kommando dafuer steht im Kopf von `test.yml`.
+    Bauform wie im Test darueber. Gegengeprueft mit einem echten YAML-Leser: derselbe
+    Baum liefert dort dieselben sieben Jobs mit je `timeout-minutes: 20`.
     """
-    import re
     from pathlib import Path
 
     workflow = Path(__file__).resolve().parents[1] / ".github" / "workflows" / "test.yml"
     assert workflow.is_file(), f"{workflow} nicht gefunden — dieser Test misst dann nichts"
-    text = workflow.read_text(encoding="utf-8")
 
-    kopf = re.search(r"^jobs:$", text, re.MULTILINE)
-    assert kopf, "kein `jobs:`-Block in test.yml — der Test haette nichts geprueft"
-    rumpf = text[kopf.end():]
-
-    marken = list(re.finditer(r"^  ([a-z_-]+):$", rumpf, re.MULTILINE))
+    alle, ohne = jobs_ohne_deckel(workflow.read_text(encoding="utf-8"))
     # Null Jobs waeren „alle haben einen Deckel" und damit gruen — dieselbe Klasse wie
     # ein leerer Mutationsplan, der als bestanden durchgeht.
-    assert marken, "keine Jobs erkannt — die Einrueckung hat sich geaendert?"
-
-    ohne = []
-    for i, m in enumerate(marken):
-        ende = marken[i + 1].start() if i + 1 < len(marken) else len(rumpf)
-        if "timeout-minutes:" not in rumpf[m.end():ende]:
-            ohne.append(m.group(1))
+    assert alle, "keine Jobs erkannt — die Einrueckung hat sich geaendert?"
     assert not ohne, (
-        f"{len(ohne)} von {len(marken)} Jobs ohne `timeout-minutes`: {', '.join(ohne)}. "
+        f"{len(ohne)} von {len(alle)} Jobs ohne `timeout-minutes`: {', '.join(ohne)}. "
         "Ohne Deckel kostet ein Haenger dort die volle Laeufergrenze (Vorgabe 6 h)."
     )
+
+
+# Jede Zeile ist ein Fall, an dem die ERSTE Fassung des Parsers still gruen blieb; sie
+# stammen samt Belegen aus dem kalten Diff-Review. Aufbau immer gleich: ein Job MIT
+# Deckel, dahinter einer OHNE — der zweite muss auffallen.
+_MIT_DECKEL = "  python:\n    runs-on: ubuntu-latest\n    timeout-minutes: 20\n    steps:\n      - run: x\n"
+_GEGENBEISPIELE = [
+    ("ziffer im namen", "  e2e:\n    runs-on: ubuntu-latest\n    steps:\n      - run: x\n", "e2e"),
+    ("grossbuchstabe", "  Ruff:\n    runs-on: ubuntu-latest\n    steps:\n      - run: x\n", "Ruff"),
+    ("kommentar hinter dem doppelpunkt",
+     "  typen:  # mypy\n    runs-on: ubuntu-latest\n    steps:\n      - run: x\n", "typen"),
+    ("deckel nur am STEP",
+     "  lint:\n    runs-on: ubuntu-latest\n    steps:\n      - run: x\n        timeout-minutes: 5\n",
+     "lint"),
+    ("deckel auskommentiert",
+     "  mutation:\n    runs-on: ubuntu-latest\n    # timeout-minutes: 20\n    steps:\n      - run: x\n",
+     "mutation"),
+]
+
+
+@pytest.mark.parametrize("titel,block,erwartet", _GEGENBEISPIELE,
+                         ids=[g[0] for g in _GEGENBEISPIELE])
+def test_der_job_parser_uebersieht_diese_formen_nicht(titel, block, erwartet):
+    """Der Waechter darf nur in Richtung ROT irren, nie in Richtung GRUEN.
+
+    Ein Parser, der einen Job nicht als Job erkennt, schlaegt ihn dem vorigen Block zu —
+    und weil der einen Deckel hat, meldet er „alles gedeckt". Genau diese Richtung ist
+    die gefaehrliche: ein uebersehener Job kostet im Ernstfall die volle Laeufergrenze,
+    ein faelschlich gemeldeter kostet eine Minute Nachsehen.
+    """
+    alle, ohne = jobs_ohne_deckel("jobs:\n" + _MIT_DECKEL + block)
+    assert erwartet in alle, f"{titel}: `{erwartet}` gar nicht als Job erkannt (alle: {alle})"
+    assert erwartet in ohne, f"{titel}: `{erwartet}` hat keinen Job-Deckel, gilt aber als gedeckt"
+
+
+def test_der_job_parser_zaehlt_nur_den_jobs_block():
+    """Was VOR oder NACH `jobs:` steht, ist kein Job — auch wenn es gleich eingerueckt ist.
+
+    `on:` traegt mit `pull_request:` und `push:` zwei Schluessel auf genau zwei
+    Leerzeichen; ohne die Schnitte zaehlte der Parser sie mit und meldete 9 statt 7.
+    """
+    text = ("on:\n  pull_request:\n  push:\n    branches: [master]\n"
+            "jobs:\n" + _MIT_DECKEL + "\ndefaults:\n  run:\n    shell: bash\n")
+    alle, ohne = jobs_ohne_deckel(text)
+    assert alle == ["python"], alle
+    assert ohne == [], ohne
 
 
 def test_der_lauf_deckel_liegt_zwischen_test_frist_und_job_grenze(pytestconfig):
