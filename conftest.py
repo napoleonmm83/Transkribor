@@ -52,15 +52,31 @@ klemmt. Die Reihenfolge ist Pflicht, nicht Geschmack — laege der Lauf-Deckel u
 Job-Grenze, beendete GitHub den Job, bevor der Abzug geschrieben ist, und der Riegel
 waere still wirkungslos. `scripts/test_pytest_riegel.py` haelt beide Abstaende fest.
 
-600 s sind gemessen statt geraten: die volle Suite braucht 48 s auf diesem Rechner, der
-langsamste CI-Job 134 s. Das ist ~12x Reserve nach unten und die Haelfte der Job-Grenze
-nach oben.
+600 s sind gemessen statt geraten: die volle Suite braucht auf diesem Rechner **80 s**
+(1419 Tests, mit den Unterprozess-Tests dieses PR — vorher 48 s bei 1395), der langsamste
+CI-Job 134 s. Das ist ~7,5x Reserve nach unten und die Haelfte der Job-Grenze nach oben.
+(Hier stand zuerst die 48 aus `pyproject.toml` — eine Zahl, die im SELBEN Diff veraltet
+ist, weil dieser Diff sie erhoeht.)
 
 ## Grenzen, benannt statt verschwiegen
 
 * Gegen einen VERLORENEN Laeufer hilft das hier nichts — genau das war der Vorfall aus
   #576 ("The hosted runner lost communication with the server"). Diese Datei deckt die
   Nachbarklasse ab, nicht den dokumentierten Vorfall.
+* **Ein Haenger, der die GIL HAELT, ist fuer diesen Deckel unsichtbar** — und das ist die
+  wichtigste Grenze, weil sie genau die Faelle trifft, fuer die er gebaut ist. `zuschlagen`
+  ist Python-Code in einem `threading.Timer` und braucht die GIL; pytests
+  `dump_traceback_later` ist ein C-Faden, der ohne sie auskommt. Gemessen (gegnerisches
+  Review) an `re.match(r"(a+)+$", "a" * 34 + "b")` — Regex-Rueckverfolgung gibt die GIL
+  nicht frei: mit Deckel (Frist 2 s) laeuft der Prozess in den aeusseren Abbruch nach 25 s
+  ohne jede Ausgabe, mit pytests Riegel allein endet er nach 2,2 s mit Abzug. `time.sleep`,
+  Sperren und Ein-/Ausgabe geben die GIL frei und sind gedeckt; C-Erweiterungen ohne
+  Freigabe und Regex-Rueckverfolgung nicht. In den drei Luecken oben faengt so einen
+  Haenger deshalb nur die Job-Grenze, ohne Diagnose. Wer das schliessen will, stellt in
+  einem aeusseren `pytest_runtest_protocol`-Wrapper NACH pytests Abbestellung erneut
+  `dump_traceback_later(rest, exit=True)` — eigener Zuschnitt, eigener Test.
+* **Am Haltepunkt wird abbestellt** (`pytest_enter_pdb`), sonst erschiesst der Deckel jede
+  laengere Fehlersuche. Danach bleibt er fuer diesen Lauf aus.
 * Der Abzug geht auf den beim Start duplizierten stderr-Deskriptor, nicht auf
   `sys.stderr`: unter `--capture=fd` ist Deskriptor 2 waehrend der Tests umgelenkt.
   Denselben Griff macht pytests eigenes faulthandler-Plugin an derselben Stelle.
@@ -98,12 +114,19 @@ _DECKEL_VORGABE = 600.0
 
 #: Ausserhalb von pytests belegtem Bereich 0-5 (OK, Tests rot, unterbrochen, interner
 #: Fehler, Nutzungsfehler, nichts gesammelt) — ein eigener Code laesst sich nicht mit
-#: einem dieser Ausgaenge verwechseln.
+#: einem dieser Ausgaenge verwechseln. **Vor allem muss er ungleich 0 sein**, und dafuer
+#: gibt es einen eigenen Waechter: die Tests vergleichen `rc` gegen genau diese Konstante,
+#: waeren mit `DECKEL_RC = 0` also alle gruen — bei einem Lauf, der auf einen Haenger mit
+#: einem gruenen Haken antwortet. Genau die Fehlerklasse, gegen die diese Datei gebaut
+#: ist, im eigenen Pruefstand (gemessen im gegnerischen Review: 7 von 7 Tests ueberlebten
+#: `DECKEL_RC = 0`).
 DECKEL_RC = 99
 
 #: Damit ein Waechter die AKTIVE Konfiguration fragen kann statt den Dateiinhalt. Eine
 #: Datei zu lesen bewiese nur, dass dort etwas steht — nicht, dass es auch scharf ist.
 deckel_key = pytest.StashKey[float]()
+#: Der laufende Waechter, damit `pytest_enter_pdb` ihn abbestellen kann.
+wache_key = pytest.StashKey[threading.Timer]()
 
 
 def _frist() -> float:
@@ -161,3 +184,23 @@ def pytest_configure(config: pytest.Config) -> None:
     wache = threading.Timer(frist, zuschlagen)
     wache.daemon = True
     wache.start()
+    config.stash[wache_key] = wache
+
+
+def pytest_enter_pdb(config: pytest.Config) -> None:
+    """Am Haltepunkt wird abbestellt — sonst erschiesst der Deckel die Fehlersuche.
+
+    pytests eigenes faulthandler-Plugin tut genau das (`pytest_enter_pdb`, dort seit
+    jeher); dieser Deckel tat es nicht, und damit hat der Fix etwas NEUES kaputtgemacht:
+    wer laenger als die Frist an einem Haltepunkt steht — oder `--pdb` bei einem roten
+    Test benutzt —, verliert den Prozess mit rc 99 und Stapelabzug. Gemessen im
+    gegnerischen Review (Frist 2 s, Test mit `breakpoint()`, stdin offen): rc 99 nach
+    2,2 s, waehrend derselbe Lauf mit pytests Riegel allein am Haltepunkt stehenbleibt.
+
+    Bewusst OHNE `pytest_leave_pdb`: nach einer Fehlersuche ist der Deckel fuer den Rest
+    des Laufs aus. Das ist die laxere Richtung, und sie ist die richtige — ein Lauf unter
+    dem Debugger ist ohnehin keiner, dessen Laufzeit etwas bedeutet.
+    """
+    wache = config.stash.get(wache_key, None)
+    if wache is not None:
+        wache.cancel()
