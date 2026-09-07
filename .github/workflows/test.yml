@@ -114,7 +114,16 @@ jobs:
       # Sprechertrennungs-Messung). Sie brechen den Waechter oben NICHT: er zielt auf
       # torch/pyannote/whisper — die bleiben draussen, ein Modulebenen-Import davon laesst
       # den Job weiterhin umfallen. ~60 MB, kein GB-Sprung.
-      - run: pip install fastapi python-multipart pytest httpx scipy scikit-learn
+      # pytest kommt aus der dev-Gruppe, NICHT als ungepinntes Paket in dieser
+      # Zeile — dieselbe Form wie bei den Jobs `Ruff` und `Mypy`. Grund: seit
+      # diesem PR haengt das Verhalten der Suite an zwei ini-Optionen, die pytest
+      # 9.1 kennt. Ein aelteres pytest kennt sie nicht, und `--strict-config`
+      # macht daraus richtigerweise rc 4 VOR dem ersten Test — der Job faellt
+      # dann um, ohne dass jemand etwas geaendert haette. Die Fassung steht damit
+      # an EINER Stelle (pyproject.toml, [dependency-groups]).
+      # Unabhaengig von zwei Reviewstufen gefunden.
+      - run: pip install --group dev
+      - run: pip install fastapi python-multipart httpx scipy scikit-learn
 
       # KEINE Pfadangaben mehr — und das ist der Fix, nicht Kosmetik.
       #
