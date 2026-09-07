@@ -156,7 +156,8 @@ def _frist() -> float:
     if frist < 0 or not math.isfinite(frist) or frist > threading.TIMEOUT_MAX:
         raise pytest.UsageError(
             f"{_DECKEL_ENV}={roh!r} ist keine brauchbare Frist "
-            f"(0 zum Abschalten, sonst endlich und hoechstens {threading.TIMEOUT_MAX:.0f}s)"
+            f"(0 zum Abschalten, sonst positiv, endlich und hoechstens "
+            f"{threading.TIMEOUT_MAX:.0f}s)"
         )
     return frist
 
