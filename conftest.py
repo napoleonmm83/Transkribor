@@ -27,10 +27,19 @@ Weil es davon nur EINEN gibt. `dump_traceback_later` ist ein globaler Zeitgeber,
 pytest stellt ihn je Test neu — ein hier gestellter waere ab dem ersten Test weg. Ein
 eigener `threading.Timer` steht daneben und wird von pytest nicht angefasst.
 
-Der Faden ist ein **Daemon**, und das ist der tragende Teil des dritten Falls:
-`threading._shutdown()` wartet beim Beenden auf alle NICHT-daemonischen Faeden. Genau
-dort haengt Fall 3 — und ein Daemon-Faden laeuft waehrenddessen weiter und kommt zum
-Zug. Ein nicht-daemonischer Waechter wuerde stattdessen selbst mit gejoint.
+Der Faden ist ein **Daemon**, und wofuer das tragend ist, wurde von der Mutationsprobe
+korrigiert — die naheliegende Begruendung ist FALSCH. `daemon = False` gemessen, Frist
+10 s, gegen zwei Laeufe:
+
+    gesunder Lauf   daemon=True  rc 0, 0 s      daemon=False  rc 99 nach 10 s
+    Fall 3          daemon=True  rc 99, 11 s    daemon=False  rc 99 nach 10 s
+
+Fuer Fall 3 macht es also KEINEN Unterschied: ein Zeitgeber-Faden laeuft, ob daemonisch
+oder nicht, und `os._exit` beendet den Prozess so oder so. Tragend ist der Daemon fuer den
+GESUNDEN Lauf — `threading._shutdown()` wartet beim Beenden auf jeden nicht-daemonischen
+Faden, also auch auf den Waechter, der noch 599 Sekunden vor sich hat. Ohne `daemon = True`
+stirbt damit JEDER gruene Lauf am eigenen Riegel, nach voller Frist und mit rc 99.
+`test_ein_armierter_deckel_stoert_den_gesunden_lauf_nicht` haelt genau das fest.
 
 ## Die Schichtung, und warum es drei Stufen sind
 
