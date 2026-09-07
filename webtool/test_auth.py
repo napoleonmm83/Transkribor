@@ -314,6 +314,19 @@ def test_bericht_nennt_die_tatsachen_die_die_ursachen_trennen():
     # `ausgabe=75z` allein beantwortet das nicht (Kalt-Review B3).
     assert "ausgabe=1z 'x'" in text, text
 
+    # Und es muss das ENDE sein, nicht der Anfang. Mit einer einzeichigen Ausgabe
+    # ist `[-160:]` von `[:160]` NICHT zu unterscheiden — der Test darueber allein
+    # bliebe unter dieser Vertauschung gruen (CodeRabbit-CLI). Deshalb eine lange
+    # Ausgabe mit unterscheidbaren Enden: der Anfang gehoert NICHT in den Bericht.
+    # Das ist die Richtung, auf die es ankommt — bei einem haengenden Login steht
+    # die verwertbare Spur am Ende der Ausgabe, nicht am Anfang.
+    lang = "ANFANGSMARKE" + "y" * 300 + "ENDMARKE"
+    auth._lauf = _lauf_attrappe(ausgabe=[lang], laeuft=False)
+    text = _bericht()
+    assert "ENDMARKE" in text, text
+    assert "ANFANGSMARKE" not in text, text
+    assert f"ausgabe={len(lang)}z" in text, text
+
     class _Proc:
         pass
 
