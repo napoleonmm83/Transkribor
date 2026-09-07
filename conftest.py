@@ -67,8 +67,24 @@ nach oben.
 * `os._exit` umgeht `atexit` und jedes Aufraeumen. Das ist Absicht: ein Prozess, der
   gerade nachweislich haengt, soll nicht noch durch Abbau-Code laufen, der ebenfalls
   haengen kann.
+* **Der Zeitgeber wird NIE abbestellt, und das ist die unangenehmste Grenze hier.** Er
+  muss die pytest-Sitzung ueberleben — sonst faellt Fall 3 wieder aus, denn der Haenger
+  nach dem letzten Test liegt hinter `pytest_unconfigure`. Die Kehrseite: ein WIRT, der
+  `pytest.main()` im eigenen Prozess ruft und danach weiterlebt, wird `frist` Sekunden
+  nach dem ERSTEN Aufruf mit `os._exit(99)` beendet — egal, was er dann gerade tut.
+  Gemessen (Kalt-Review, Frist 3 s): ein Wirt mit zwei `pytest.main()`-Sitzungen und
+  anschliessendem `sleep` endet mit rc 99 und dem Stapelabzug seines eigenen `sleep`.
+  Der konkrete Konsument in diesem Repo ist **mutmut** (`[tool.mutmut]` in
+  `pyproject.toml`; `mutmut/__main__.py:445` ruft `pytest.main()` im Elternprozess, der
+  die ganze Serie lebt). **Wer pytest in-process einbettet, setzt
+  `TRANSKRIBOR_TESTDECKEL=0`** — das ist der Zweck dieses Schalters, nicht bloss eine
+  Testhilfe. Verworfen wurde, die Bewaffnung an einer Erkennung des Wirts festzumachen
+  (`sys.argv[0]`, `__main__`): das tauscht eine benannte Grenze gegen eine stille
+  Fehlklassifikation, und ein Deckel, der sich selbst nicht bewaffnet, ist genau der
+  Ausfall, gegen den diese Datei geschrieben ist.
 """
 import faulthandler
+import math
 import os
 import threading
 
@@ -95,11 +111,26 @@ def _frist() -> float:
     if roh is None:
         return _DECKEL_VORGABE
     try:
-        return float(roh)
+        frist = float(roh)
     except ValueError as fehl:
         # Laut statt still: ein unlesbarer Wert darf nicht auf die Vorgabe zurueckfallen,
         # sonst laeuft jemand mit einem Deckel, den er abgeschaltet zu haben glaubt.
         raise pytest.UsageError(f"{_DECKEL_ENV}={roh!r} ist keine Zahl") from fehl
+
+    # `float()` allein reicht NICHT, und die drei Faelle sind gemessen (Kalt-Review):
+    #   `inf`, `1e12`  -> bestehen float() und `<= 0`, der Timer-Faden stirbt dann still
+    #                     mit `OverflowError: timestamp out of range for C PyTime_t`.
+    #                     Der Deckel ist inert, der Stash traegt eine truthy Zahl, und der
+    #                     Waechtertest haelt ihn fuer scharf.
+    #   `nan`          -> feuert SOFORT (jeder Vergleich mit nan ist falsch, auch `<= 0`):
+    #                     rc 99 nach 0,2 s mit der Meldung "steht seit nans".
+    # Beides ist genau das stille Versagen, gegen das die Zeile darueber argumentiert.
+    if not math.isfinite(frist) or frist > threading.TIMEOUT_MAX:
+        raise pytest.UsageError(
+            f"{_DECKEL_ENV}={roh!r} ist keine brauchbare Frist "
+            f"(endlich und hoechstens {threading.TIMEOUT_MAX:.0f}s)"
+        )
+    return frist
 
 
 def pytest_configure(config: pytest.Config) -> None:
@@ -114,10 +145,18 @@ def pytest_configure(config: pytest.Config) -> None:
     fd = os.dup(2)
 
     def zuschlagen() -> None:
-        os.write(fd, f"\n[testdeckel] Der Lauf steht seit {frist:.0f}s. Abzug aller "
-                     f"Faeden, danach Abbruch mit {DECKEL_RC}.\n".encode())
-        faulthandler.dump_traceback(file=fd, all_threads=True)
-        os._exit(DECKEL_RC)
+        # `finally`, weil der Waechter sonst ausgerechnet dann versagt, wenn seine
+        # Diagnose nicht ankommt: ist der Leser des stderr-Rohrs weg (`pytest 2>&1 | head`,
+        # ein Elternprozess, der stderr zumacht), wirft `os.write` — der Timer-Faden stirbt
+        # an der Ausnahme, `os._exit` wird nie erreicht, und der Prozess haengt genau so
+        # weiter wie ohne Deckel. Gemessen im Kalt-Review: Kind lebt nach 12 s trotz
+        # Frist 2 s. Das BEENDEN ist die tragende Haelfte, der Abzug die Kuer.
+        try:
+            os.write(fd, f"\n[testdeckel] Der Lauf steht seit {frist:.0f}s. Abzug aller "
+                         f"Faeden, danach Abbruch mit {DECKEL_RC}.\n".encode())
+            faulthandler.dump_traceback(file=fd, all_threads=True)
+        finally:
+            os._exit(DECKEL_RC)
 
     wache = threading.Timer(frist, zuschlagen)
     wache.daemon = True

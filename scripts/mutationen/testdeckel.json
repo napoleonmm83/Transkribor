@@ -57,5 +57,33 @@
       "test_null_schaltet_den_deckel_ab",
       "test_der_deckel_beendet_den_lauf_und_sagt_wo[koerper]"
     ]
+  },
+  {
+    "id": "M8 Abbruch ohne finally — der Waechter stirbt am eigenen Schreibversuch",
+    "datei": "conftest.py",
+    "von": "        try:\n            os.write(fd, f\"\\n[testdeckel] Der Lauf steht seit {frist:.0f}s. Abzug aller \"\n                         f\"Faeden, danach Abbruch mit {DECKEL_RC}.\\n\".encode())\n            faulthandler.dump_traceback(file=fd, all_threads=True)\n        finally:\n            os._exit(DECKEL_RC)",
+    "nach": "        os.write(fd, f\"\\n[testdeckel] Der Lauf steht seit {frist:.0f}s. Abzug aller \"\n                     f\"Faeden, danach Abbruch mit {DECKEL_RC}.\\n\".encode())\n        faulthandler.dump_traceback(file=fd, all_threads=True)\n        os._exit(DECKEL_RC)",
+    "rot": [
+      "test_der_deckel_beendet_auch_wenn_niemand_mehr_zuhoert"
+    ],
+    "gruen": [
+      "test_der_deckel_beendet_den_lauf_und_sagt_wo[koerper]",
+      "test_der_dritte_fall_meldet_sonst_erfolg"
+    ]
+  },
+  {
+    "id": "M9 Nur float() — inf, nan und 1e12 rutschen durch",
+    "datei": "conftest.py",
+    "von": "    if not math.isfinite(frist) or frist > threading.TIMEOUT_MAX:",
+    "nach": "    if False:",
+    "rot": [
+      "test_unbrauchbare_frist_bricht_ab_statt_still_zurueckzufallen[inf]",
+      "test_unbrauchbare_frist_bricht_ab_statt_still_zurueckzufallen[nan]",
+      "test_unbrauchbare_frist_bricht_ab_statt_still_zurueckzufallen[1e12]"
+    ],
+    "gruen": [
+      "test_unbrauchbare_frist_bricht_ab_statt_still_zurueckzufallen[spaeter]",
+      "test_null_schaltet_den_deckel_ab"
+    ]
   }
 ]

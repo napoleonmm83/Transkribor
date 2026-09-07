@@ -19,14 +19,41 @@ waere unter Last flatterig — dieses Repo hat dafuer zwei offene Belege (#558, 
 Der Wegwerf-Ordner bekommt bewusst KEINE `pytest.ini`: ohne sie ist der pytest-eigene
 `faulthandler_timeout` aus, und was den Prozess beendet, kann nur der Deckel aus der
 `conftest.py` gewesen sein.
+
+## Die Mutationsprobe, samt der Umgebung, ohne die sie zehn Minuten kostet
+
+Zwei Serien, und sie brauchen VERSCHIEDENE Umgebungen — das steht hier, weil eine
+Plandatei ihr Kommando nicht mitfuehrt und der naechste Leser es sonst raet
+(Kalt-Review):
+
+    TRANSKRIBOR_TESTDECKEL=0 python scripts/mutation.py --repo . --pfad . \
+      --test "<venv>\\Scripts\\python.exe -m pytest scripts/test_testdeckel.py -q" \
+      --plan scripts/mutationen/testdeckel.json
+
+    python scripts/mutation.py --repo . --pfad . \
+      --test "<venv>\\Scripts\\python.exe -m pytest scripts/test_testdeckel.py \
+              scripts/test_pytest_riegel.py -q" \
+      --plan scripts/mutationen/testdeckel_riegel.json
+
+Das `TRANSKRIBOR_TESTDECKEL=0` der ERSTEN Serie ist Pflicht: sie mutiert unter anderem
+`wache.daemon = True` zu `False`, und der aeussere pytest-Lauf des Treibers laedt dieselbe
+mutierte Wurzel-`conftest.py`. Ohne den Schalter wartet er nach der letzten Zeile seiner
+Ausgabe die volle Vorgabe von 600 s auf den nicht mehr daemonischen Waechter — die Probe
+besteht, kostet aber zehn Minuten, und `scripts/mutation.py` hat kein `timeout=`.
+Die ZWEITE Serie darf ihn nicht setzen: sie prueft ueber den Stash, dass der Deckel
+scharf ist. Rueckstriche und kein fuehrendes `./` im `--test`, weil der Treiber es mit
+`shell=True` faehrt — auf Windows also durch cmd.exe.
 """
 import os
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
+
+from conftest import DECKEL_RC
 
 WURZEL = Path(__file__).resolve().parents[1]
 
@@ -64,8 +91,9 @@ def _lauf(tmp_path: Path, quelle: str, frist: str) -> subprocess.CompletedProces
     """Einen pytest-Lauf im Wegwerf-Ordner fahren, mit der Wurzel-conftest daneben.
 
     Das Kommando ist woertlich und traegt keine Eingabe von aussen — `sys.executable` und
-    feste Schalter. Deshalb steht hier ein `noqa` fuer S603 statt einer Umschreibung, und
-    deshalb gibt es genau EINE solche Stelle in dieser Datei.
+    feste Schalter. Deshalb steht hier ein `noqa` fuer S603 statt einer Umschreibung; die
+    zweite und einzige weitere Stelle ist der Rohr-Test, der `Popen` direkt braucht, weil
+    er waehrend des Laufs an das Leseende muss.
 
     `timeout=60` ist ein RUECKFALL, keine Messgroesse: greift er, hat der Deckel versagt —
     genau das melden die Aufrufer dann auch. 60 s sind das 30-fache der Pruef-Frist.
@@ -93,8 +121,6 @@ def _haenger(tmp_path: Path, quelle: str) -> tuple[int, str]:
 @pytest.mark.parametrize("fall", sorted(FAELLE))
 def test_der_deckel_beendet_den_lauf_und_sagt_wo(tmp_path, fall):
     """Alle drei Faelle: eigener Rueckgabecode, Markerzeile, Stapelabzug."""
-    from conftest import DECKEL_RC
-
     rc, aus = _haenger(tmp_path, FAELLE[fall])
 
     assert rc == DECKEL_RC, (
@@ -116,14 +142,48 @@ def test_der_dritte_fall_meldet_sonst_erfolg(tmp_path):
     Erfolgsmeldung trotzdem ein roter Ausgang steht — die Zusammenfassungszeile ist in
     diesem Fall also NICHT die Wahrheit, der Rueckgabecode ist es.
     """
-    from conftest import DECKEL_RC
-
     rc, aus = _haenger(tmp_path, FAELLE["nach_dem_letzten_test"])
 
     assert "1 passed" in aus, f"Der Aufbau stimmt nicht mehr — der Test lief gar nicht:\n{aus}"
     assert rc == DECKEL_RC, (
         f"rc {rc}: Protokoll meldet Erfolg, der Lauf steht, und niemand merkt es."
     )
+
+
+def test_der_deckel_beendet_auch_wenn_niemand_mehr_zuhoert(tmp_path):
+    """Der Waechter darf nicht daran sterben, dass seine Diagnose nicht ankommt.
+
+    Ist der Leser des stderr-Rohrs weg — `pytest 2>&1 | head`, ein Elternprozess, der
+    stderr zumacht —, wirft `os.write`. Ohne `finally` stirbt der Timer-Faden an dieser
+    Ausnahme, `os._exit` wird nie erreicht, und der Prozess haengt danach genau so weiter
+    wie ohne jeden Deckel: der Riegel versagt ausgerechnet dann, wenn man ihn am
+    wenigsten beobachten kann.
+
+    GEMESSEN, gleicher Aufbau wie hier: ohne `finally` lebt das Kind nach 12 s noch, mit
+    `finally` endet es mit 99. Das BEENDEN ist die tragende Haelfte, der Abzug die Kuer.
+    Befund des kalten Diff-Reviews.
+    """
+    shutil.copy(WURZEL / "conftest.py", tmp_path / "conftest.py")
+    ziel = tmp_path / "test_haenger.py"
+    ziel.write_text("import time\n\ndef test_haengt():\n    time.sleep(3600)\n",
+                    encoding="utf-8")
+
+    p = subprocess.Popen(  # noqa: S603
+        [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", str(ziel)],
+        cwd=tmp_path, env={**os.environ, "TRANSKRIBOR_TESTDECKEL": "2"},
+        stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+    )
+    try:
+        time.sleep(1.5)          # noch vor Fristende, damit der Faden das Rohr tot vorfindet
+        p.stderr.close()
+        rc = p.wait(timeout=30)  # 15-fache Frist; greift der, hat der Waechter versagt
+    except subprocess.TimeoutExpired:
+        p.kill()
+        pytest.fail("Der Lauf haengt weiter, obwohl der Deckel abgelaufen ist — der "
+                    "Waechter ist am eigenen Schreibversuch gestorben.")
+    finally:
+        p.kill()
+    assert rc == DECKEL_RC, f"rc {rc} statt {DECKEL_RC}"
 
 
 def test_ein_armierter_deckel_stoert_den_gesunden_lauf_nicht(tmp_path):
@@ -163,13 +223,29 @@ def test_null_schaltet_den_deckel_ab(tmp_path):
     assert "[testdeckel]" not in (p.stdout + p.stderr)
 
 
-def test_unlesbare_frist_bricht_ab_statt_still_zurueckzufallen(tmp_path):
-    """Ein Tippfehler im Schalter darf nicht auf die Vorgabe zurueckfallen.
+@pytest.mark.parametrize("wert", ["spaeter", "inf", "nan", "1e12"])
+def test_unbrauchbare_frist_bricht_ab_statt_still_zurueckzufallen(tmp_path, wert):
+    """Ein unbrauchbarer Schalterwert darf nicht auf die Vorgabe zurueckfallen.
 
     Sonst laeuft jemand mit einem Deckel, den er abgeschaltet zu haben glaubt — oder
     umgekehrt. Dieselbe Regel wie `--strict-config` in `pyproject.toml`: wer einen Riegel
     baut, baut zuerst den Riegel gegen dessen eigenes Schweigen.
+
+    Die drei Zahlenformen stehen hier, weil `float()` allein sie ALLE durchlaesst und der
+    Kalt-Review sie gemessen hat: `inf` und `1e12` liegen ueber `threading.TIMEOUT_MAX`,
+    der Zeitgeber-Faden stirbt dann still mit `OverflowError` und der Deckel ist inert —
+    waehrend der Stash eine truthy Zahl traegt und der Waechter ihn fuer scharf haelt.
+    `nan` ist die Gegenrichtung: jeder Vergleich damit ist falsch, auch `frist <= 0`, also
+    feuert der Deckel SOFORT und toetet einen kerngesunden Lauf.
+
+    Geprueft wird rc **4**, nicht bloss „ungleich 0": mit `nan` waere ein Lauf auch ohne
+    den Riegel ungleich 0 (naemlich 99, erschossen vom eigenen Deckel) — die Zusicherung
+    haette den Fehler dann nicht von seiner Wirkung unterscheiden koennen.
     """
-    p = _lauf(tmp_path, "def test_ok():\n    assert True\n", "spaeter")
-    assert p.returncode != 0, "Ein unlesbarer Wert lief still durch"
+    p = _lauf(tmp_path, "def test_ok():\n    assert True\n", wert)
+    assert p.returncode == 4, (
+        f"{wert!r}: rc {p.returncode} statt 4 (pytest-Nutzungsfehler). "
+        f"99 hiesse, der Deckel hat einen gesunden Lauf erschossen; 0 hiesse, er ist "
+        f"still inert.\n{(p.stdout + p.stderr)[-1500:]}"
+    )
     assert "TRANSKRIBOR_TESTDECKEL" in (p.stdout + p.stderr)
