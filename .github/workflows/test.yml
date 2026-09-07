@@ -89,8 +89,23 @@ jobs:
     #
     # 20 Minuten sind reichlich: ueber zwoelf gemessene Laeufe dieses Jobs war
     # der langsamste 129 s (windows), der pytest-Schritt selbst 33-47 s.
-    # Sie steht bewusst nur an DIESEM Job — die anderen sechs haben weiterhin
-    # keine (#583).
+    #
+    # Seit #583 traegt JEDER Job dieselbe Zahl — vorher stand sie nur hier, und
+    # die uebrigen sechs liefen gegen die Vorgabe von SECHS STUNDEN. Warum
+    # ueberall dieselbe und nicht je Job die gemessene: eine Zahl je Job
+    # veraltet, sobald ein Job laenger wird, und dann faellt ein GESUNDER Lauf
+    # um — teurer als ein spaet erkannter Haenger. Gemessen ueber die letzten
+    # fuenf gruenen Laeufe (`gh api .../actions/runs/<id>/jobs`, completed_at
+    # minus started_at), Maximum je Job:
+    #     Python (windows)      134 s      Frontend               72 s
+    #     Electron win/mac/ubu   44/29/17  Mutationsprobe         33 s
+    #     Skripte win/mac/ubu    33/15/8   Mypy 21 s · Ruff 19 s
+    # Das ist 9x Reserve beim langsamsten und 63x beim schnellsten; beides
+    # faengt einen Haenger frueh genug ab. Ein achter Job kopiert die Zeile.
+    #
+    # GitHub kennt dafuer keinen workflow-weiten Vorgabewert (`defaults:` traegt
+    # nur `run:`) und keine YAML-Anker — es sind zwangslaeufig sieben Zeilen.
+    # `scripts/test_pytest_riegel.py` haelt fest, dass keine davon fehlt.
     timeout-minutes: 20
     strategy:
       fail-fast: false
@@ -170,6 +185,7 @@ jobs:
   frontend:
     name: Frontend
     runs-on: ubuntu-latest
+    timeout-minutes: 20        # Begruendung am python-Job oben (#583)
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -228,6 +244,7 @@ jobs:
   electron:
     name: Electron (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 20        # Begruendung am python-Job oben (#583)
     strategy:
       fail-fast: false
       matrix:
@@ -290,6 +307,7 @@ jobs:
   skripte:
     name: Release-Skripte (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 20        # Begruendung am python-Job oben (#583)
     strategy:
       fail-fast: false
       matrix:
@@ -337,6 +355,7 @@ jobs:
   lint:
     name: Ruff
     runs-on: ubuntu-latest
+    timeout-minutes: 20        # Begruendung am python-Job oben (#583)
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -384,6 +403,7 @@ jobs:
   typen:
     name: Mypy
     runs-on: ubuntu-latest
+    timeout-minutes: 20        # Begruendung am python-Job oben (#583)
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -426,6 +446,12 @@ jobs:
   mutation:
     name: Mutationsprobe
     runs-on: ubuntu-latest
+    # Der Deckel ist hier die EINZIGE Grenze: `scripts/mutation.py` faehrt sein
+    # Testkommando ueber `subprocess.run` OHNE `timeout=`, ein haengender Lauf
+    # darin hat also keine eigene. Ein `timeout=` dort braucht eine Behandlung,
+    # die die Serie nicht abreisst (der `finally`-Block muss die Mutation noch
+    # zuruecknehmen) — eigener Zuschnitt, eigener Test.
+    timeout-minutes: 20        # Begruendung am python-Job oben (#583)
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
