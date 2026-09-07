@@ -1,0 +1,42 @@
+[
+  {
+    "id": "M5 Die Null schaltet den Deckel nicht mehr ab",
+    "datei": "conftest.py",
+    "von": "    if frist <= 0:\n        return",
+    "nach": "    if frist < -1:\n        return",
+    "rot": [
+      "test_null_schaltet_den_deckel_ab"
+    ],
+    "gruen": [
+      "test_der_deckel_beendet_den_lauf_und_sagt_wo[koerper]",
+      "test_der_lauf_deckel_liegt_zwischen_test_frist_und_job_grenze"
+    ]
+  },
+  {
+    "id": "M6 Lauf-Deckel rutscht ueber die Job-Grenze",
+    "datei": "conftest.py",
+    "von": "_DECKEL_VORGABE = 600.0",
+    "nach": "_DECKEL_VORGABE = 1800.0",
+    "rot": [
+      "test_der_lauf_deckel_liegt_zwischen_test_frist_und_job_grenze"
+    ],
+    "gruen": [
+      "test_der_haenger_riegel_ist_scharf",
+      "test_die_frist_liegt_unter_der_job_grenze",
+      "test_jeder_job_traegt_eine_zeitgrenze"
+    ]
+  },
+  {
+    "id": "M7 Ein Job verliert seine Zeitgrenze",
+    "datei": ".github/workflows/test.yml",
+    "von": "    timeout-minutes: 20        # Begruendung am python-Job oben (#583)\n    steps:\n      - uses: actions/checkout@v7\n      - uses: actions/setup-node@v7\n        with:\n          node-version: 24\n          cache: npm\n          cache-dependency-path: webtool/frontend/package-lock.json",
+    "nach": "    steps:\n      - uses: actions/checkout@v7\n      - uses: actions/setup-node@v7\n        with:\n          node-version: 24\n          cache: npm\n          cache-dependency-path: webtool/frontend/package-lock.json",
+    "rot": [
+      "test_jeder_job_traegt_eine_zeitgrenze"
+    ],
+    "gruen": [
+      "test_die_frist_liegt_unter_der_job_grenze",
+      "test_der_lauf_deckel_liegt_zwischen_test_frist_und_job_grenze"
+    ]
+  }
+]

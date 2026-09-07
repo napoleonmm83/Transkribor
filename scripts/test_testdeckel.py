@@ -126,8 +126,38 @@ def test_der_dritte_fall_meldet_sonst_erfolg(tmp_path):
     )
 
 
+def test_ein_armierter_deckel_stoert_den_gesunden_lauf_nicht(tmp_path):
+    """Der Waechterfaden muss ein DAEMON sein — sonst stirbt jeder gruene Lauf an ihm.
+
+    Diesen Test hat die Mutationsprobe erzwungen, und sie hat dabei die Begruendung im
+    Kopf der `conftest.py` widerlegt: `daemon = False` faellt bei den drei Haenger-Faellen
+    NICHT auf (der Zeitgeber feuert ohnehin, der Prozess endet so wie so mit 99). Auffallen
+    tut es hier — `threading._shutdown()` wartet beim Beenden auf jeden nicht-daemonischen
+    Faden, also auch auf den Waechter mit seiner Restfrist.
+
+    GEMESSEN, Frist 10 s: gesunder Lauf mit Daemon rc 0 in 0 s, ohne Daemon rc 99 nach
+    10 s. Die Zusicherung haengt deshalb am RUECKGABECODE, nicht an einer Uhr — eine
+    Zeitschranke waere auf einem langsamen Laeufer flatterig, dieser Unterschied ist es
+    nicht.
+
+    Die Frist ist mit 30 s bewusst laenger als der Lauf: bei `0` gaebe es gar keinen
+    Faden, und der Test koennte den Unterschied nicht sehen (genau das ist der Test
+    darunter).
+    """
+    p = _lauf(tmp_path, "def test_ok():\n    assert True\n", "30")
+    assert p.returncode == 0, (
+        "Ein gesunder Lauf ist am eigenen Waechter gestorben — der Faden wird beim "
+        f"Beenden gejoint statt losgelassen.\n{p.stdout + p.stderr}"
+    )
+    assert "[testdeckel]" not in (p.stdout + p.stderr)
+
+
 def test_null_schaltet_den_deckel_ab(tmp_path):
-    """Der Ausweg muss ein Ausweg sein — sonst baut sich jemand einen eigenen."""
+    """Der Ausweg muss ein Ausweg sein — sonst baut sich jemand einen eigenen.
+
+    Anders als der Test darueber laeuft hier GAR KEIN Waechterfaden; das ist der
+    Unterschied zwischen `abgeschaltet` und `armiert, aber unauffaellig`.
+    """
     p = _lauf(tmp_path, "def test_ok():\n    assert True\n", "0")
     assert p.returncode == 0, p.stdout + p.stderr
     assert "[testdeckel]" not in (p.stdout + p.stderr)
