@@ -112,6 +112,22 @@ def _bericht(seit=None):
     return " | ".join(teile)
 
 
+# Die zwei Zusicherungen aus #558 stehen als FUNKTIONEN da, nicht als Inline-Zeilen —
+# und das ist kein Stil, sondern der Unterschied zwischen bewacht und unbewacht.
+# Der Kalt-Review hat gemessen, dass eine Inline-Meldung STILL verschwinden kann:
+# `, _bericht(t0)` aus beiden Zusicherungen entfernt ⇒ alle 17 Tests blieben gruen.
+# Die Absicht des ganzen PR (der Fehlschlag bringt seine Ursache mit) haette also
+# keinen roten Test gehabt — nur die Mechanik von `_bericht` hatte einen.
+# Als Funktion laesst sich der Fehlerfall herstellen; die zwei Waechter am
+# Dateiende tun genau das.
+def _url_muss_da_sein(z, erwartet, seit):
+    assert z["url"] == erwartet, "URL fehlt — " + _bericht(seit)
+
+
+def _prozess_muss_gesetzt_sein(alt, seit):
+    assert alt is not None, "start() kam ohne gesetzten Prozess zurueck — " + _bericht(seit)
+
+
 def test_status_meldet_nicht_angemeldet(monkeypatch, tmp_path):
     skript, _ = _fake_cli(tmp_path)
     _verdrahte(monkeypatch, skript)
@@ -148,7 +164,7 @@ def test_login_zeigt_die_url_ohne_zeilenumbruch_abzuwarten(monkeypatch, tmp_path
     # Der Zustand steht in der Meldung, nicht nur der erwartete Wert: dieser Test
     # ist einer der zwei aus #558, und ein blosses "leer ist nicht die URL" sagt
     # nichts darueber, WARUM sie fehlt.
-    assert z["url"] == "https://example.invalid/oauth?code=true", _bericht(t0)
+    _url_muss_da_sein(z, "https://example.invalid/oauth?code=true", t0)
     assert z["laeuft"] is True and z["braucht_code"] is True, _bericht(t0)
 
 
@@ -243,11 +259,16 @@ def test_start_fuer_anderen_anbieter_raeumt_den_alten_weg(monkeypatch, tmp_path)
     monkeypatch.setitem(auth.CLIS, "codex-cli", dict(auth.CLIS["claude-cli"]))
     t0 = time.time()
     auth.start("claude-cli")
-    alt = auth._lauf["proc"]
-    # Der zweite Test aus #558. Ohne diese Zeile stirbt er acht Zeilen spaeter an
+    # `(auth._lauf or {})`, nicht `auth._lauf[...]`: der Zugriff selbst war die ERSTE
+    # Absturzstelle. Steht dort None, starb die Zeile mit einem nackten
+    # `TypeError: 'NoneType' object is not subscriptable`, bevor die Zusicherung
+    # darunter ueberhaupt drankam — instrumentiert waere dann die zweite Stelle
+    # gewesen und die erste so geblieben, wie #558 sie beschreibt (Kalt-Review B4).
+    alt = (auth._lauf or {}).get("proc")
+    # Der zweite Test aus #558. Ohne diese Zeile stirbt er sechs Zeilen spaeter an
     # `alt.poll()` mit einem AttributeError, der die Ursache verschweigt — genau
     # die Meldung, die in der CI ankam und niemandem half.
-    assert alt is not None, "start() kam ohne gesetzten Prozess zurueck — " + _bericht(t0)
+    _prozess_muss_gesetzt_sein(alt, t0)
     auth.start("codex-cli")
     assert auth._lauf["provider"] == "codex-cli" and auth._lauf["proc"] is not alt
     assert _warte(lambda: alt.poll() is not None), "der alte Vorgang laeuft weiter"
@@ -287,11 +308,56 @@ def test_bericht_nennt_die_tatsachen_die_die_ursachen_trennen():
     assert "seit_start=" in text, text
     assert "ausgabe=1z" in text, text
 
+    # Das ENDE der Ausgabe, nicht nur ihre Laenge: es trennt einen VIERTEN Ausgang,
+    # den der Docstring nicht nennt — die Ausgabe kam vollstaendig an, aber `_URL`
+    # hat nicht getroffen (etwa nach einer Aenderung an `_ANSI`/`_URL`).
+    # `ausgabe=75z` allein beantwortet das nicht (Kalt-Review B3).
+    assert "ausgabe=1z 'x'" in text, text
+
     class _Proc:
         pass
 
-    auth._lauf = _lauf_attrappe(proc=_Proc())
+    # `laeuft=False` ist Pflicht, nicht Kosmetik: faellt die Zusicherung darunter,
+    # wird `auth._lauf = None` nie erreicht, und die autouse-Fixture ruft `abbrechen()`
+    # auf einen Lauf mit `laeuft=True` und diesem Attrappen-Prozess — `_kill_tree`
+    # stirbt dann an `str(proc.pid)` mit einem ZWEITEN AttributeError im Abbau.
+    # Ausgerechnet dieselbe Ausnahmeklasse wie die aus #558, aus einer fremden Datei:
+    # ein PR, der ein Protokoll lesbar machen will, legte daneben Rauschen ab, das ein
+    # Leser fuer die Ursache halten kann (Kalt-Review B2, zweimal unabhaengig gemessen).
+    auth._lauf = _lauf_attrappe(proc=_Proc(), laeuft=False)
     assert "proc=gesetzt" in _bericht(), _bericht()
 
     auth._lauf = None
     assert "auth._lauf is None" in _bericht()
+
+
+def test_die_zusicherungen_tragen_den_bericht_in_ihre_meldung():
+    """Der eigentliche Zweck von #558 — und bis zum Kalt-Review unbewacht.
+
+    Gemessen wurde dort: `, _bericht(t0)` aus beiden Zusicherungen entfernt ⇒ alle
+    17 Tests blieben GRUEN. Geprueft war also nur, dass `_bericht` wohlgeformt ist,
+    nicht dass sein Text je bei jemandem ankommt. Ein Refactoring haette die
+    Diagnose still mitgenommen, und aufgefallen waere es beim naechsten
+    CI-Fehlschlag — also genau dann, wenn sie gebraucht wird.
+
+    Hier wird der Fehlerfall PROVOZIERT statt beschrieben; die Reproduktion des
+    Flakes braucht es dafuer nicht.
+    """
+    auth._lauf = _lauf_attrappe(laeuft=False, fehler="Start fehlgeschlagen: [WinError 8]")
+
+    with pytest.raises(AssertionError) as e:
+        _url_muss_da_sein({"url": ""}, "https://example.invalid/x", time.time() - 0.5)
+    assert "URL fehlt" in str(e.value)
+    assert "proc=None" in str(e.value), str(e.value)
+    assert "Start fehlgeschlagen" in str(e.value), str(e.value)
+
+    with pytest.raises(AssertionError) as e:
+        _prozess_muss_gesetzt_sein(None, time.time() - 0.5)
+    assert "ohne gesetzten Prozess" in str(e.value)
+    assert "seit_start=" in str(e.value), str(e.value)
+    assert "Start fehlgeschlagen" in str(e.value), str(e.value)
+
+    # Gegenrichtung: im gruenen Fall darf keine der beiden Zusicherungen werfen —
+    # sonst waere der Waechter erfuellt und die Tests darueber dauerhaft rot.
+    _url_muss_da_sein({"url": "gleich"}, "gleich", None)
+    _prozess_muss_gesetzt_sein(object(), None)
