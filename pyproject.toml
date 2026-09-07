@@ -111,10 +111,68 @@ exclude = "^(\\.venv|node_modules|webtool/frontend|dist)/"
 # Gemessen: pytest --collect-only -q → 1139 ohne scripts, 1152 mit.
 # `docs` seit PR #531: docs/bugsink/ traegt den Envelope-Sammler samt Test.
 testpaths = ["webtool", "build", "scripts", "docs"]
-# KEIN addopts = "-q": test.yml ruft bereits mit -q auf, und zusammen ergäbe
+# KEIN `-q` in addopts: test.yml ruft bereits mit -q auf, und zusammen ergäbe
 # das -qq. Ab verbosity < -1 unterdrückt pytest die Zusammenfassungszeile
 # ("1134 passed, 5 skipped") vollständig — genau die Zeile, auf die sich die
-# Messungen in den CI-Kommentaren stützen.
+# Messungen in den CI-Kommentaren stützen. `--strict-config` ist davon nicht
+# betroffen und steht deshalb sehr wohl hier; warum, steht gleich unten.
+addopts = ["--strict-config"]
+#
+# ── Ein Hänger wird von keinem Test rot (#576) ──────────────────────────────
+#
+# WAS DER VORFALL AUS #576 WIRKLICH WAR — gemessen, nachdem der Kalt-Review die
+# ursprüngliche Begründung dieses Blocks widerlegt hatte. Der Issue-Titel sagt
+# "45 Minuten Job-Grenze", und genau das stand hier zuerst. Der Lauf selbst sagt
+# etwas anderes:
+#     gh api repos/napoleonmm83/Transkribor/check-runs/101444180736/annotations
+#     → "The hosted runner lost communication with the server."
+#     gh api .../actions/jobs/101444180736/logs  → HTTP 404, BlobNotFound
+# Der LÄUFER ist verloren gegangen; das Protokoll fehlt, weil er es nie
+# hochgeladen hat, nicht weil ein Schnitt es abgeschnitten hätte. Für DIESEN
+# Vorfall hätte keine Job-Zeitgrenze früher gegriffen und keine ein Protokoll
+# erzeugt. Die Annotation nennt als eine Ursache aber ausdrücklich, dass etwas
+# im Workflow den Läufer "starves for CPU/Memory" — und dagegen hilft, einen
+# entlaufenen Test früh abzubrechen. Mehr behauptet dieser Block nicht: er
+# deckt die NACHBARKLASSE, nicht den dokumentierten Vorfall.
+#
+# `faulthandler_exit_on_timeout` ist dabei die tragende Hälfte, nicht der
+# Stapelabzug: pytest beendet sich damit SELBST. Mutation gemessen — Schalter
+# auf `false` ⇒ der Abzug erscheint, der Lauf hängt weiter und wird von aussen
+# abgewürgt (rc 124); auf `true` ⇒ rc 1, Abzug ALLER Threads (auch der
+# Hintergrund-Threads), hängender Test mit Zeile benannt.
+#
+# DREI LÜCKEN, alle nachgemessen — wer sich hierauf verlässt, muss sie kennen:
+#  1. Nach einem ROTEN Test ist der Riegel für dieses Item AUS
+#     (`_pytest/faulthandler.py`: `pytest_exception_interact` bestellt den
+#     Timer ab). Roter Test + hängender Fixture-Abbau ⇒ rc 124. Ausgerechnet
+#     die #576-Hypothese "eine Sperre wird nicht freigegeben" lebt im Abbau.
+#  2. Ein Hänger NACH dem letzten Test ist gar nicht gedeckt: der Timer hängt
+#     am Testprotokoll eines Items. Gemessen: Ausgabe "1 passed", Prozess
+#     steht, rc 124 — das Protokoll behauptet Erfolg, während nichts mehr geht.
+#  3. Sammeln, Fixture-Aufbau auf Sitzungsebene und der pip-Schritt liegen
+#     ausserhalb. Dafür gibt es `timeout-minutes` in test.yml — als Deckel,
+#     nicht als Diagnose.
+#
+# `--strict-config` oben ist der Riegel GEGEN DAS SCHWEIGEN DIESES RIEGELS.
+# Ein Buchstabendreher im Schlüssel schaltet ihn sonst still ab: pytest warnt
+# zwar, aber erst in der Zusammenfassung — die ein hängender Lauf nie erreicht.
+# Gemessen mit `faulthandler_timout`: ohne die Option rc 124 (hängt weiter,
+# Warnung ungelesen), mit ihr rc 4 und "Unknown config option" VOR dem ersten
+# Test. Dieselbe Regel wie bei ruff_riegel.py und mypy_riegel.py: wer einen
+# Riegel baut, baut zuerst den Riegel gegen dessen eigenes Schweigen.
+#
+# 300 s ist PRO TEST, nicht für den Lauf, und die Zahl ist gemessen statt
+# geraten: langsamster Test 3,52 s
+# (test_diarize.py::test_waechter_die_griffpunkte_gibt_es_im_ECHTEN_pyannote),
+# ganze Suite 47,95 s bei 1395 Tests. Das sind ~85× Reserve auf den langsamsten
+# Einzeltest — ein CI-Läufer ist langsamer als dieser Rechner, aber nicht um
+# diesen Faktor. Wer hier einen Test einbaut, der wirklich Minuten braucht,
+# hebt die Zahl und schreibt dazu, welcher.
+#
+# Preis, benannt: faulthandler steigt hart aus, die Zusammenfassungszeile
+# ("N passed") fehlt nach einem Timeout.
+faulthandler_timeout = 300
+faulthandler_exit_on_timeout = true
 
 [tool.mutmut]
 # Beratend, kein Riegel: mutmut kennt nur Pfade, nicht geänderte Zeilen — ein

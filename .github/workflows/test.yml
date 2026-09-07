@@ -74,6 +74,24 @@ jobs:
   python:
     name: Python (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    # Deckel, keine Diagnose — und ausdruecklich NICHT die Reparatur von #576.
+    # `faulthandler_timeout` in pyproject.toml greift PRO TEST; Sammeln,
+    # Fixtures auf Sitzungsebene und der pip-Schritt liegen ausserhalb. Dafuer
+    # ist diese Zeile da. Im ganzen Workflow gab es bis hier KEINE einzige
+    # (gemessen: grep -rn timeout-minutes ueber .github/workflows/ war leer).
+    #
+    # Was sie NICHT kann, gemessen statt uebernommen: der Job aus #576 ist
+    # nicht in eine Grenze gelaufen, sondern hat seinen Laeufer verloren
+    # ("The hosted runner lost communication with the server", Annotation zu
+    # check-run 101444180736; das Protokoll fehlt mit BlobNotFound, weil es nie
+    # hochgeladen wurde). Gegen einen verlorenen Laeufer greift keine
+    # Zeitgrenze frueher und erzeugt keine ein Protokoll.
+    #
+    # 20 Minuten sind reichlich: ueber zwoelf gemessene Laeufe dieses Jobs war
+    # der langsamste 129 s (windows), der pytest-Schritt selbst 33-47 s.
+    # Sie steht bewusst nur an DIESEM Job — die anderen sechs haben weiterhin
+    # keine (#583).
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
