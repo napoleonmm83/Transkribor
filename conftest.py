@@ -83,9 +83,10 @@ ist, weil dieser Diff sie erhoeht.)
 * `os._exit` umgeht `atexit` und jedes Aufraeumen. Das ist Absicht: ein Prozess, der
   gerade nachweislich haengt, soll nicht noch durch Abbau-Code laufen, der ebenfalls
   haengen kann.
-* **Der Zeitgeber wird NIE abbestellt, und das ist die unangenehmste Grenze hier.** Er
-  muss die pytest-Sitzung ueberleben — sonst faellt Fall 3 wieder aus, denn der Haenger
-  nach dem letzten Test liegt hinter `pytest_unconfigure`. Die Kehrseite: ein WIRT, der
+* **Der Zeitgeber wird im normalen Sitzungsablauf nicht abbestellt** (die einzige Ausnahme
+  ist der Haltepunkt weiter unten), **und das ist die unangenehmste Grenze hier.** Er muss
+  die pytest-Sitzung ueberleben — sonst faellt Fall 3 wieder aus, denn der Haenger nach dem
+  letzten Test liegt hinter `pytest_unconfigure`. Die Kehrseite: ein WIRT, der
   `pytest.main()` im eigenen Prozess ruft und danach weiterlebt, wird `frist` Sekunden
   nach dem ERSTEN Aufruf mit `os._exit(99)` beendet — egal, was er dann gerade tut.
   Gemessen (Kalt-Review, Frist 3 s): ein Wirt mit zwei `pytest.main()`-Sitzungen und
@@ -148,10 +149,14 @@ def _frist() -> float:
     #   `nan`          -> feuert SOFORT (jeder Vergleich mit nan ist falsch, auch `<= 0`):
     #                     rc 99 nach 0,2 s mit der Meldung "steht seit nans".
     # Beides ist genau das stille Versagen, gegen das die Zeile darueber argumentiert.
-    if not math.isfinite(frist) or frist > threading.TIMEOUT_MAX:
+    # Eine NEGATIVE Frist ist derselbe Fall noch einmal: `-1` ist endlich und klein genug,
+    # laeuft unten in `frist <= 0` und schaltet den Deckel ab — waehrend zum Abschalten
+    # ausdruecklich die `0` reserviert ist. Wer sich vertippt, laeuft also ohne Deckel und
+    # haelt ihn fuer scharf (CodeRabbit-Bot).
+    if frist < 0 or not math.isfinite(frist) or frist > threading.TIMEOUT_MAX:
         raise pytest.UsageError(
             f"{_DECKEL_ENV}={roh!r} ist keine brauchbare Frist "
-            f"(endlich und hoechstens {threading.TIMEOUT_MAX:.0f}s)"
+            f"(0 zum Abschalten, sonst endlich und hoechstens {threading.TIMEOUT_MAX:.0f}s)"
         )
     return frist
 

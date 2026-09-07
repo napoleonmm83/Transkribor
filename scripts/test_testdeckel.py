@@ -286,7 +286,7 @@ def test_null_schaltet_den_deckel_ab(tmp_path):
     assert "[testdeckel]" not in (p.stdout + p.stderr)
 
 
-@pytest.mark.parametrize("wert", ["spaeter", "inf", "nan", "1e12"])
+@pytest.mark.parametrize("wert", ["spaeter", "inf", "nan", "1e12", "-1"])
 def test_unbrauchbare_frist_bricht_ab_statt_still_zurueckzufallen(tmp_path, wert):
     """Ein unbrauchbarer Schalterwert darf nicht auf die Vorgabe zurueckfallen.
 
