@@ -94,9 +94,12 @@ jobs:
     # die uebrigen sechs liefen gegen die Vorgabe von SECHS STUNDEN. Warum
     # ueberall dieselbe und nicht je Job die gemessene: eine Zahl je Job
     # veraltet, sobald ein Job laenger wird, und dann faellt ein GESUNDER Lauf
-    # um — teurer als ein spaet erkannter Haenger. Gemessen ueber die letzten
-    # fuenf gruenen Laeufe (`gh api .../actions/runs/<id>/jobs`, completed_at
-    # minus started_at), Maximum je Job:
+    # um — teurer als ein spaet erkannter Haenger. Gemessen ueber diese fuenf
+    # gruenen Laeufe, damit die Zahlen nachrechenbar sind statt behauptet:
+    #     34154671527  34155304890  34155929810  34156687991  34156926906
+    #     gh api repos/napoleonmm83/Transkribor/actions/runs/<lauf>/jobs \
+    #       --jq '.jobs[] | "\(.name)\t\((.completed_at|fromdate)-(.started_at|fromdate))"'
+    # Maximum je Job ueber die fuenf:
     #     Python (windows)      134 s      Frontend               72 s
     #     Electron win/mac/ubu   44/29/17  Mutationsprobe         33 s
     #     Skripte win/mac/ubu    33/15/8   Mypy 21 s · Ruff 19 s

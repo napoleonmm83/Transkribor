@@ -52,11 +52,18 @@ klemmt. Die Reihenfolge ist Pflicht, nicht Geschmack — laege der Lauf-Deckel u
 Job-Grenze, beendete GitHub den Job, bevor der Abzug geschrieben ist, und der Riegel
 waere still wirkungslos. `scripts/test_pytest_riegel.py` haelt beide Abstaende fest.
 
-600 s sind gemessen statt geraten: die volle Suite braucht auf diesem Rechner **80 s**
-(1419 Tests, mit den Unterprozess-Tests dieses PR — vorher 48 s bei 1395), der langsamste
-CI-Job 134 s. Das ist ~7,5x Reserve nach unten und die Haelfte der Job-Grenze nach oben.
-(Hier stand zuerst die 48 aus `pyproject.toml` — eine Zahl, die im SELBEN Diff veraltet
-ist, weil dieser Diff sie erhoeht.)
+600 s sind gemessen statt geraten. Die Messung traegt ihren Stand, weil sie sonst still
+altert — sie hat es in diesem PR ZWEIMAL getan:
+
+    Commit 6f9bba5, dieser Rechner:  1422 passed, 3 skipped in 85,66 s
+    vor diesem PR (pyproject.toml):  1395 Tests in 47,95 s
+    langsamster CI-Job:              134 s  (Python auf windows)
+
+Das sind ~7x Reserve nach unten und die Haelfte der Job-Grenze nach oben. Die ~10 s
+Aufschlag kommen von den Unterprozess-Tests dieses PR, die je eine Frist wirklich ablaufen
+lassen muessen. (Hier stand zuerst die 48 aus `pyproject.toml`, dann eine 1419 — beide
+waren schon beim Schreiben veraltet, weil derselbe Diff sie erhoeht hat. Zweimal vom
+CodeRabbit-Bot gefunden, das zweite Mal an meiner eigenen Korrektur des ersten.)
 
 ## Grenzen, benannt statt verschwiegen
 
