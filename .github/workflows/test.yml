@@ -104,7 +104,12 @@ jobs:
     # faengt einen Haenger frueh genug ab. Ein achter Job kopiert die Zeile.
     #
     # GitHub kennt dafuer keinen workflow-weiten Vorgabewert (`defaults:` traegt
-    # nur `run:`) und keine YAML-Anker — es sind zwangslaeufig sieben Zeilen.
+    # nur `run:`) — es sind zwangslaeufig sieben Zeilen. YAML-Anker unterstuetzt
+    # GitHub sehr wohl (die eigene Doku zeigt sogar einen Anker ueber einen ganzen
+    # Job MIT `timeout-minutes`; hier stand zuerst das Gegenteil, widerlegt vom
+    # gegnerischen Pruefer). Sie ersparen die Zeilen aber nicht: Merge-Keys sind
+    # dort nicht dokumentiert, ein Alias ersetzt nur den WERT — je Job bliebe eine
+    # Zeile `timeout-minutes: *anker`, und dafuer eine zweite Indirektion.
     # `scripts/test_pytest_riegel.py` haelt fest, dass keine davon fehlt.
     timeout-minutes: 20
     strategy:
@@ -446,11 +451,17 @@ jobs:
   mutation:
     name: Mutationsprobe
     runs-on: ubuntu-latest
-    # Der Deckel ist hier die EINZIGE Grenze: `scripts/mutation.py` faehrt sein
-    # Testkommando ueber `subprocess.run` OHNE `timeout=`, ein haengender Lauf
-    # darin hat also keine eigene. Ein `timeout=` dort braucht eine Behandlung,
-    # die die Serie nicht abreisst (der `finally`-Block muss die Mutation noch
-    # zuruecknehmen) — eigener Zuschnitt, eigener Test.
+    # `scripts/mutation.py` faehrt sein Testkommando ueber `subprocess.run` OHNE
+    # `timeout=`. Der Job-Deckel ist hier deshalb die Grenze fuer die SERIE — und
+    # fuer alles, was nicht pytest ist. Die einzelnen pytest-Laeufe darin sind seit
+    # #584 sehr wohl gedeckt: sie laufen im Repo, laden also die Wurzel-conftest.py
+    # und pyproject.toml, und haben damit 300 s je Test und 600 s je Lauf (gemessen:
+    # `TRANSKRIBOR_TESTDECKEL=0.3 python -m pytest scripts/test_mypy_riegel.py`
+    # endet mit 99). Hier stand zuerst „die EINZIGE Grenze" — das war mit diesem
+    # Diff schon falsch, gefunden vom gegnerischen Pruefer.
+    # Ein `timeout=` in mutation.py braucht eine Behandlung, die die Serie nicht
+    # abreisst (der `finally`-Block muss die Mutation noch zuruecknehmen) —
+    # eigener Zuschnitt, eigener Test.
     timeout-minutes: 20        # Begruendung am python-Job oben (#583)
     steps:
       - uses: actions/checkout@v7

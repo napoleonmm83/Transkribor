@@ -206,10 +206,16 @@ def test_der_lauf_deckel_liegt_zwischen_test_frist_und_job_grenze(pytestconfig):
     assert treffer, "keine timeout-minutes in test.yml — der Job-Deckel fehlt"
     job_s = min(int(t) for t in treffer) * 60
 
+    # Die Relation ist eine Plausibilitaet, keine Garantie ueber die Reihenfolge: ein
+    # Haenger, der erst nach 350 s Laufzeit beginnt, wird bei 600 s vom Lauf-Deckel
+    # beendet, waehrend der Test-Zeitgeber erst bei 650 s kaeme. Der Lauf-Deckel benennt
+    # die Stelle dann trotzdem — sein Abzug traegt Datei und Zeile. Was die Relation
+    # wirklich sichert: der feinere Riegel bekommt ueberhaupt eine Chance, zuerst zu
+    # feuern. (Der Text hier versprach zuerst mehr; gefunden im gegnerischen Review.)
     test_s = float(pytestconfig.getini("faulthandler_timeout"))
     assert test_s <= lauf_s, (
-        f"faulthandler_timeout={test_s:.0f}s ueber dem Lauf-Deckel {lauf_s:.0f}s: der Lauf "
-        "stirbt, bevor pytest den haengenden Test benennen kann."
+        f"faulthandler_timeout={test_s:.0f}s ueber dem Lauf-Deckel {lauf_s:.0f}s: der "
+        "feinere Riegel kaeme dann nie zum Zug, obwohl er die genauere Meldung hat."
     )
     assert lauf_s * 2 <= job_s, (
         f"Lauf-Deckel {lauf_s:.0f}s gegen Job-Grenze {job_s}s: zu knapp. Der Job stirbt "

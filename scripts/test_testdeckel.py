@@ -118,11 +118,36 @@ def _haenger(tmp_path: Path, quelle: str) -> tuple[int, str]:
     return p.returncode, p.stdout + p.stderr
 
 
+def test_der_abbruchcode_ist_selbst_ein_roter_ausgang():
+    """Der Waechter ueber der Zusicherung aller anderen Tests hier.
+
+    Alle Haenger-Tests vergleichen `rc == DECKEL_RC` — und holen die Konstante aus
+    derselben Datei, die sie pruefen. Das ist selbstbezueglich: mit `DECKEL_RC = 0` endet
+    ein Haenger mit rc 0, der gruene Haken auf einen stehenden Prozess, und **kein
+    einziger der sieben Tests wird rot** (im gegnerischen Review gemessen, 7 passed).
+    Genau die Fehlerklasse, gegen die #584 gebaut ist, im eigenen Pruefstand.
+
+    Deshalb wird der Wert hier direkt befragt statt nur verglichen: ungleich 0, und
+    ausserhalb von pytests belegtem Bereich 0-5, damit ein Abbruch durch den Deckel nicht
+    als Nutzungsfehler oder als leere Sammlung gelesen wird.
+    """
+    assert DECKEL_RC != 0, (
+        "DECKEL_RC = 0 macht aus jedem Haenger einen gruenen Lauf — und alle Tests hier "
+        "bliebe gruen, weil sie gegen genau diese Konstante vergleichen."
+    )
+    assert DECKEL_RC not in range(6), (
+        f"DECKEL_RC = {DECKEL_RC} liegt in pytests eigenem Bereich 0-5 und ist damit von "
+        "einem Nutzungsfehler oder einer leeren Sammlung nicht zu unterscheiden."
+    )
+
+
 @pytest.mark.parametrize("fall", sorted(FAELLE))
 def test_der_deckel_beendet_den_lauf_und_sagt_wo(tmp_path, fall):
     """Alle drei Faelle: eigener Rueckgabecode, Markerzeile, Stapelabzug."""
     rc, aus = _haenger(tmp_path, FAELLE[fall])
 
+    # Zuerst die Eigenschaft, die nicht an der Konstante haengt: der Ausgang ist ROT.
+    assert rc != 0, f"Fall {fall}: der Lauf hing und endete trotzdem gruen.\n{aus[-2000:]}"
     assert rc == DECKEL_RC, (
         f"Fall {fall}: rc {rc} statt {DECKEL_RC}. "
         f"124 hiesse, dass erst der aeussere timeout gegriffen hat.\n{aus[-2000:]}"
@@ -145,6 +170,7 @@ def test_der_dritte_fall_meldet_sonst_erfolg(tmp_path):
     rc, aus = _haenger(tmp_path, FAELLE["nach_dem_letzten_test"])
 
     assert "1 passed" in aus, f"Der Aufbau stimmt nicht mehr — der Test lief gar nicht:\n{aus}"
+    assert rc != 0, "Protokoll meldet Erfolg, der Lauf steht — und der Ausgang ist gruen."
     assert rc == DECKEL_RC, (
         f"rc {rc}: Protokoll meldet Erfolg, der Lauf steht, und niemand merkt es."
     )
@@ -184,6 +210,43 @@ def test_der_deckel_beendet_auch_wenn_niemand_mehr_zuhoert(tmp_path):
     finally:
         p.kill()
     assert rc == DECKEL_RC, f"rc {rc} statt {DECKEL_RC}"
+
+
+def test_am_haltepunkt_wird_abbestellt(tmp_path):
+    """Der Deckel darf keine Fehlersuche erschiessen.
+
+    pytests eigenes faulthandler-Plugin bestellt seinen Zeitgeber bei `pytest_enter_pdb`
+    ab; dieser Deckel tat es zuerst NICHT — wer laenger als die Frist an einem Haltepunkt
+    steht, verlor den Prozess mit rc 99 und Stapelabzug. Das war kein Altschaden, sondern
+    etwas, das der Fix NEU kaputtgemacht hat (gegnerisches Review, gemessen: rc 99 nach
+    2,2 s bei Frist 2 s).
+
+    Dieser Test behauptet ausnahmsweise ein NICHT-Ausloesen. Das ist hier vertretbar, weil
+    die Zusicherung nicht an einer knappen Uhr haengt: die Frist steht auf 1 s, geprueft
+    wird nach 5 s, und `pdb` wartet ohne Eingabe unbegrenzt. Ein zurueckgebauter Hook
+    schlaegt in dieser Spanne sicher zu.
+    """
+    shutil.copy(WURZEL / "conftest.py", tmp_path / "conftest.py")
+    ziel = tmp_path / "test_haltepunkt.py"
+    ziel.write_text("def test_haelt_an():\n    breakpoint()\n", encoding="utf-8")
+
+    p = subprocess.Popen(  # noqa: S603
+        [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", str(ziel)],
+        cwd=tmp_path, env={**os.environ, "TRANSKRIBOR_TESTDECKEL": "1"},
+        stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    )
+    try:
+        rc = p.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        rc = None                      # steht noch am Haltepunkt — genau richtig
+    finally:
+        p.kill()
+        if p.stdin:
+            p.stdin.close()
+    assert rc is None, (
+        f"Der Lauf endete mit rc {rc}, statt am Haltepunkt zu warten — der Deckel hat "
+        "die Fehlersuche erschossen."
+    )
 
 
 def test_ein_armierter_deckel_stoert_den_gesunden_lauf_nicht(tmp_path):
