@@ -137,10 +137,11 @@
     {
       "id": "L11 pfade als blosse Zeichenkette rutscht wieder durch",
       "datei": "scripts/mutationen_lauf.py",
-      "von": "        if not isinstance(pfade, list) or not all(isinstance(p, str) for p in pfade):",
+      "von": "        if not isinstance(pfade, list) or not pfade or not all(\n                isinstance(p, str) for p in pfade):",
       "nach": "        if False:",
       "rot": [
-        "test_pfade_als_blosse_zeichenkette_ergibt_zwei"
+        "test_pfade_als_blosse_zeichenkette_ergibt_zwei",
+        "test_leere_pfadliste_ergibt_zwei"
       ],
       "gruen": [
         "test_echte_plaene_werden_alle_geladen"

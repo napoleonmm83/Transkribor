@@ -219,6 +219,21 @@ def test_pfade_als_blosse_zeichenkette_ergibt_zwei(tmp_path, capsys):
     assert "Liste von Zeichenketten" in capsys.readouterr().out
 
 
+def test_leere_pfadliste_ergibt_zwei(tmp_path, capsys):
+    """`pfade: []` waere ein Plan, den die Auswahl nie trifft — und ein Absturz dazu.
+
+    `os.path.commonpath([])` wirft, und zwar erst in der Fahrschleife, nicht beim Laden:
+    der Lauf stirbt dann mit einem Traceback statt mit einer Meldung. Befund der
+    CodeRabbit-CLI; die vorige Pruefung liess die leere Liste durch, weil `all()` auf einer
+    leeren Menge wahr ist.
+    """
+    repo = _leeres_repo(tmp_path)
+    (repo / "scripts" / "mutationen" / "leer.json").write_text(json.dumps(
+        {"test": "egal", "pfade": [], "mutationen": [{"id": "X"}]}), encoding="utf-8")
+    assert mutationen_lauf.main(["--repo", str(repo), "--alle"]) == 2
+    assert "nicht leere Liste" in capsys.readouterr().out
+
+
 def test_env_mit_einer_zahl_ergibt_zwei(tmp_path, capsys):
     """Sonst stirbt es erst im Kind — nach dem Aufbau, mit Traceback statt Meldung."""
     repo = _leeres_repo(tmp_path)

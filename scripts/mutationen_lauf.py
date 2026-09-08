@@ -120,8 +120,10 @@ def lade_plaene(wurzel: pathlib.Path) -> list[Plan]:
         if not isinstance(roh, dict):
             raise ValueError(f"{datei.name}: blanke Liste — hier ist die Objektform Pflicht")
         pfade = roh.get("pfade")
-        if not isinstance(pfade, list) or not all(isinstance(p, str) for p in pfade):
-            raise ValueError(f"{datei.name}: `pfade` muss eine Liste von Zeichenketten sein")
+        if not isinstance(pfade, list) or not pfade or not all(
+                isinstance(p, str) for p in pfade):
+            raise ValueError(f"{datei.name}: `pfade` muss eine nicht leere Liste von"
+                             " Zeichenketten sein")
         mutationen = roh.get("mutationen")
         if not isinstance(mutationen, list):
             raise ValueError(f"{datei.name}: `mutationen` muss eine Liste sein")
