@@ -4,7 +4,16 @@ name: Tests
 # nur `npm run test:electron`, und das erst im Release-Workflow, also lange nach dem Merge.
 # 369 von 403 Tests haben sich darauf verlassen, dass jemand sie von Hand tippt.
 on:
+  # Die Typenliste ist die VORGABE (`opened`, `synchronize`, `reopened`) PLUS
+  # `ready_for_review` — und das ist kein Beiwerk: der Job `CodeRabbit` unten laeuft
+  # bewusst nur beim Oeffnen und beim Freigeben aus dem Entwurf, weil jeder Lauf eine
+  # Einheit des Pruefkontingents verbraucht. Ohne diese Zeile waere `ready_for_review` gar
+  # nicht abonniert, und sein `if:` feuerte NIE — der Job liefe nur beim Oeffnen, und
+  # niemandem fiele es auf.
+  # Fuer die sieben anderen Jobs aendert sich nichts: sie filtern nicht auf `action`, und
+  # eine ERGAENZTE Typenliste nimmt keinen Ausloeser weg.
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches: [master]
 
@@ -31,21 +40,24 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
   cancel-in-progress: true
 
-# Sechs der sieben Jobs LESEN nur: pytest, Vitest/tsc, die node:test-Suite, die vier
-# Skript-Tests (`notizen.test.sh` faelscht `gh` und braucht kein Token) und die beiden
-# Riegel `Ruff` und `Mypy`.
-# Der siebte, `Mutationsproben`, SCHREIBT — und das ist kein Widerspruch zum Block unten:
-# er aendert Dateien in seinem EIGENEN, wegwerfbaren Checkout (Mutation setzen, Tests
-# fahren, Originalbytes zurueckschreiben) und spielt nichts zurueck ins Repository. Kein
-# Commit, kein Push, kein Token — `contents: read` reicht ihm genauso.
+# ACHT Jobs, und sie teilen sich in drei Gruppen — die Unterscheidung ist der Punkt:
+#   SECHS lesen nur: pytest, Vitest/tsc, die node:test-Suite, die vier Skript-Tests
+#     (`notizen.test.sh` faelscht `gh` und braucht kein Token), `Ruff` und `Mypy`.
+#   `Mutationsproben` SCHREIBT DATEIEN, aber nur in seinem EIGENEN, wegwerfbaren Checkout
+#     (Mutation setzen, Tests fahren, Originalbytes zurueckschreiben). Kein Commit, kein
+#     Push, kein Token — `contents: read` reicht ihm genauso.
+#   `CodeRabbit` SCHREIBT NACH AUSSEN: er kommentiert am PR und traegt deshalb als ERSTER
+#     Job dieses Workflows ein eigenes `permissions` mit `pull-requests: write`. Das ist
+#     ein echtes zusaetzliches Recht, kein Buchhaltungsdetail, und es steht am Job und
+#     nicht hier oben — genau damit es die anderen sieben NICHT bekommen.
 # (Diese Zeile sagte „drei Jobs" und „drei Skript-Tests", als es schon fuenf bzw. vier
 # waren — eine Zahl in einem Kommentar driftet unsichtbar, genau wie an #536. Wer hier
 # einen Job ergaenzt, zaehlt sie nach — und zwar AB `jobs:`, sonst zaehlen `pull_request:`
-# und `push:` mit und die Antwort ist 8 statt 6 (genau so ist der erste Entwurf dieser
-# Zeile danebengegangen):
+# und `push:` mit:
 #     sed -n '/^jobs:/,$p' .github/workflows/test.yml | grep -cE '^  [a-z_-]+:$'
-# Gegengeprueft am YAML-Parser: beide sagen 7. Nachgezogen am 2026-09-05 beim Job
-# `Mutationsproben` — genau der Handgriff, den diese Klammer verlangt.)
+# Gegengeprueft am YAML-Parser: beide sagen 8. Nachgezogen am 2026-09-05 beim Job
+# `Mutationsproben` und am 2026-09-08 bei `CodeRabbit` — genau der Handgriff, den diese
+# Klammer verlangt.)
 #
 # Ohne Block gilt die Vorgabe des REPOSITORYS — und die ist eine Einstellung, die ein
 # Klick umlegt, kein Bestandteil dieses Workflows. Heute steht sie auf read: gemessen am
@@ -54,8 +66,12 @@ concurrency:
 # Der Block hier schliesst also kein offenes Schreibrecht — er macht den Workflow von der
 # Einstellung unabhaengig und nimmt das ungenutzte `Packages: read` weg
 # (zizmor: excessive-permissions, gefunden an PR #468). Workflow-weit statt je Job, damit
-# ein kuenftiger siebter Job ihn nicht vergessen kann. (Der ist am 2026-09-05 gekommen —
-# `Mutationsproben` — und hat ihn tatsaechlich nicht vergessen muessen.)
+# ein kuenftiger Job ihn nicht vergessen kann.
+#
+# ACHTUNG bei einem eigenen Job-Block: die GitHub-Doku sagt woertlich „If you specify the
+# access for any of these permissions, all of those that are not specified are set to
+# none". Ein Job-Block nur mit `pull-requests: write` naehme dem Checkout sein Leserecht —
+# `CodeRabbit` nennt deshalb BEIDE Zeilen, wie `osv-pr` in osv.yml.
 permissions:
   contents: read
 
@@ -543,3 +559,101 @@ jobs:
       - name: Alle Mutationsproben
         if: github.event_name != 'pull_request'
         run: python scripts/mutationen_lauf.py --repo . --alle
+
+  # Die dritte Reviewstufe, automatisch — auf diesem Tarif der VORGESEHENE Weg.
+  #
+  # Der CodeRabbit-BOT prueft dieses Repo seit dem 2026-09-08 nicht mehr von selbst: es hat
+  # 0 Sterne, und die Doku nennt das als Eintrittsschwelle in den Open-Source-Tarif. Auf dem
+  # heutigen Tarif gilt „code reviews accessible via the VS Code extension and CLI", und
+  # CodeRabbit dokumentiert die CLI ausdruecklich fuer CI-Laeufer. Bis hierher lief sie nur,
+  # wenn jemand sie vor dem PR von Hand tippte (#593).
+  #
+  # NEBENEFFEKT, der den Bot uebertrifft: dieser Job laeuft auch fuer GESTAPELTE PRs, bei
+  # denen der Bot grundsaetzlich gar nichts tut (#430, in CLAUDE.md als „die stillste
+  # Ausfallart" beschrieben).
+  #
+  # NUR beim Oeffnen und beim Freigeben, nicht bei jedem Push: jeder Lauf verbraucht eine
+  # Einheit, und die letzten sechs PRs hatten 10/10/3/12/1/8 Commits — volle Abdeckung waere
+  # ~44 statt 6 Einheiten gegen eine Zulassung, deren GROESSE nirgends steht. Geht sie aus,
+  # meldet der Riegel ehrlich „kein Urteil" und faerbt jeden PR rot; der Job druckt deshalb
+  # `coderabbit usage` mit, damit aus der unbekannten Zahl mit der Zeit eine gemessene wird.
+  # Preis, benannt: die spaeten Commits sieht dieser Lauf nicht.
+  coderabbit:
+    name: CodeRabbit
+    runs-on: ubuntu-latest
+    if: >-
+      github.event_name == 'pull_request'
+      && github.event.pull_request.head.repo.fork == false
+      && (github.event.action == 'opened' || github.event.action == 'ready_for_review')
+    # BEIDE Zeilen, und das ist kein Zierrat: die GitHub-Doku sagt woertlich „If you specify
+    # the access for any of these permissions, all of those that are not specified are set
+    # to none". Ein Block nur mit `pull-requests` naehme dem Checkout sein Leserecht.
+    # Dieselbe Form wie im Job `osv-pr` (osv.yml).
+    permissions:
+      contents: read
+      pull-requests: write
+    timeout-minutes: 30        # ein CLI-Lauf lag hier schon ueber 10 min; Begruendung am python-Job (#583)
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0       # `--base-commit` braucht die Historie
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+
+      # BEWUSST OHNE `curl … install.sh | sh`. Das Installationsskript wird bei jedem Lauf
+      # ungepinnt geladen und ausgefuehrt und prueft weder Pruefsumme noch Signatur (im
+      # Skript nachgelesen) — in einem Job, der ein Geheimnis sieht. Stattdessen: das
+      # gepinnte Artefakt, gegen einen selbst gemessenen Hash geprueft.
+      #
+      # Die Fassung traegt KEIN `v`: `releases/v0.7.6/…` antwortet 404, `releases/0.7.6/…`
+      # antwortet 206 (beides gemessen). Der Header des Installationsskripts nennt `v1.2.3`
+      # und ist fuer das heutige Release-Layout falsch — wer ihn abschreibt, baut einen Job,
+      # der an der Installation stirbt.
+      - name: CodeRabbit-CLI (gepinnt, mit Pruefsumme)
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/cr.zip https://cli.coderabbit.ai/releases/0.7.6/coderabbit-linux-x64.zip
+          echo "853a1727609ab0ff1f56863fa6de7acf3de593a6dc1bd7f91a32f11c5724ffc9  /tmp/cr.zip" | sha256sum -c -
+          unzip -q -o /tmp/cr.zip -d /tmp/cr
+          chmod +x /tmp/cr/coderabbit
+          /tmp/cr/coderabbit --version
+
+      # DIE ZUORDNUNG DER RUECKGABECODES IST DER KERN DIESES JOBS, und sie steht bewusst
+      # hier statt in einer `continue-on-error`-Zeile:
+      #   rc 0  geprueft, keine Befunde        -> gruen
+      #   rc 1  geprueft, Befunde da           -> gruen, Kommentar an den PR
+      #   rc 2  KONNTE NICHT URTEILEN          -> ROT
+      # Ein Befund ist ein HINWEIS, kein Sperrgrund (CLAUDE.md: „Befund ist ein Hinweis,
+      # kein Patch"; .coderabbit.yaml fuehrt die eigenen Vorab-Checks aus demselben Grund
+      # als `warning`). Eine FEHLENDE Pruefung ist dagegen sehr wohl einer — „uebersprungen
+      # ist kein Erfolg". `continue-on-error` waere hier falsch: es schluckte auch die 2.
+      - name: Review
+        env:
+          CODERABBIT_API_KEY: ${{ secrets.CODERABBIT_API_KEY }}
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          BASIS: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set +e
+          python scripts/coderabbit_riegel.py \
+            --kommando /tmp/cr/coderabbit \
+            --base-commit "$BASIS" \
+            --markdown "$RUNNER_TEMP/befunde.md"
+          rc=$?
+          set -e
+          if [ "$rc" -eq 2 ]; then
+            echo "::error::Die CodeRabbit-CLI konnte nicht urteilen — das ist eine fehlende Pruefung, kein bestandener Lauf."
+            exit 1
+          fi
+          if [ "$rc" -eq 1 ]; then
+            gh pr comment "$PR" --body-file "$RUNNER_TEMP/befunde.md"
+          fi
+
+      # Macht den Verbrauch sichtbar, statt ihn zu schaetzen. Die Groesse der Zulassung
+      # steht nirgends; erst diese Zeile ueber mehrere Laeufe macht daraus eine Messung.
+      - name: Verbrauch
+        if: always()
+        env:
+          CODERABBIT_API_KEY: ${{ secrets.CODERABBIT_API_KEY }}
+        run: /tmp/cr/coderabbit usage --api-key "$CODERABBIT_API_KEY" || true
