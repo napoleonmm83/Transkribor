@@ -108,5 +108,13 @@
     "nach": "        alle_sonst = list(r.get(\"sonst\", []))",
     "rot": ["test_geerbtes_sonst_ueberlebt_das_ZWEITE_weiterreichen"],
     "gruen": ["test_abgebrochener_empfaenger_holt_das_uebernommene_then_NICHT_nach"]
+  },
+  {
+    "id": "W14 ein WERFENDES `then` zieht seine Quittung nicht nach — die Vormerkung bleibt fuer immer offen",
+    "datei": "webtool/jobs.py",
+    "von": "    if not all(then_gelaufen):\n        sonst_callbacks = eigene_sonst",
+    "nach": "    if not all(then_gelaufen):\n        pass",
+    "rot": ["test_werfendes_then_zieht_seine_quittung_nach"],
+    "gruen": ["test_gelungener_download_laesst_die_vormerkung_offen"]
   }
 ]

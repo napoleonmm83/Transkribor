@@ -681,9 +681,11 @@ def _run(jid, cmd, cwd, env):
         #               ohne eine Zeile darueber. Dagegen steht der Herunterfahr-Fall:
         #               `cancel_all()` bricht ALLE laufenden Jobs ab, ein hier gestarteter
         #               Nachlauf waere eine Waise mit belegter GPU. (Gegnerischer Pruefer, F2.)
-        sonst_callbacks = [] if erfolg else list(r.get("sonst", []))
+        eigene_sonst = list(r.get("sonst", []))
+        geerbte_sonst = list(r.get("sonst_ueber", []))
+        sonst_callbacks = [] if erfolg else eigene_sonst
         ueber_then = [] if abgebrochen else list(r.get("then_ueber", []))
-        ueber_sonst = list(r.get("sonst_ueber", [])) if abgebrochen else []
+        ueber_sonst = geerbte_sonst if abgebrochen else []
         # Fuer die Weitergabe unten, ausgangsunabhaengig: sie erbt die Quittung als GANZES.
         #
         # DASS DIESER SCHNAPPSCHUSS UNTEN NOCH GILT, haengt an einer Invariante, die nirgends
@@ -693,7 +695,7 @@ def _run(jid, cmd, cwd, env):
         # Rueckrufe in `_active` HAELT (naheliegend, damit `betrifft()` die Nachlaufphase
         # abdeckt — die Richtung von #451), verliert damit still jeden hier angehaengten
         # Rueckruf. Kein Test bekaeme das rot.
-        alle_sonst = list(r.get("sonst", [])) + list(r.get("sonst_ueber", []))
+        alle_sonst = eigene_sonst + geerbte_sonst
         project = r["project"]
         kind = r["kind"]
 
@@ -755,14 +757,39 @@ def _run(jid, cmd, cwd, env):
     #    `vorgang_verwerfen` ab. Wer hier umsortiert („erst aufraeumen, dann starten"),
     #    verwirft eine gerade angelaufene Nummer. Ein Test dafuer gibt es nicht, weil der
     #    ausloesende Fall heute unerreichbar ist; die Zeile ist der Ersatz.
-    for fn in then_callbacks + ueber_then + sonst_callbacks + ueber_sonst:
+    def _rufe(fn) -> bool:
         try:
             fn()
+            return True
         except Exception as e:
             with _lock:
-                r = _jobs.get(jid)
-                if r is not None:
-                    fuege_zeile_an(r["lines"], f"NACHLAUF-FEHLER: {e}")
+                rec = _jobs.get(jid)
+                if rec is not None:
+                    fuege_zeile_an(rec["lines"], f"NACHLAUF-FEHLER: {e}")
+            return False
+
+    # EIN `then`, DAS WIRFT, HAT SEIN ZIEL GENAUSO WENIG ERREICHT wie eines, das gar nicht
+    # laeuft — also gehoert die Quittung auch hierher (CodeRabbit-CLI, minor). Ohne das
+    # bleibt die Vormerkung des URL-Imports haengen, wenn `_start_transcribe` stirbt, und
+    # `jobs.start` KANN werfen (`app.py` benennt den Faden-Start ausdruecklich als Wurfstelle).
+    # Das Loch ist VORBESTEHEND und derselben Klasse wie #579; vorher gab es nur nichts, was
+    # man haette nachziehen koennen. Ist das `then` unterwegs schon durchgekommen (`request`
+    # hat `gestartet` gesetzt), prallt die Quittung am Riegel in `vorgang_verwerfen` ab —
+    # genau dafuer ist er da.
+    #
+    # Erst ALLE ausfuehren, dann urteilen — die Liste steht vor dem `all`. Mit einem Generator
+    # (`all(_rufe(fn) for fn in …)`) braeche `all` beim ersten `False` ab und liesse die
+    # restlichen Rueckrufe ungelaufen; das ist strukturell vermieden, nicht bloss kommentiert,
+    # weil `ueber_then` mehrere Eintraege tragen kann (zwei Glieder, die an denselben Job
+    # weiterreichen).
+    then_gelaufen = [_rufe(fn) for fn in then_callbacks]
+    ueber_gelaufen = [_rufe(fn) for fn in ueber_then]
+    if not all(then_gelaufen):
+        sonst_callbacks = eigene_sonst
+    if not all(ueber_gelaufen):
+        ueber_sonst = geerbte_sonst
+    for fn in sonst_callbacks + ueber_sonst:
+        _rufe(fn)
 
 
 def _run_proc(jid, cmd, cwd, env=None):
