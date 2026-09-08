@@ -254,9 +254,16 @@ describe('ProjectWorkspace (Stub)', () => {
     // wirft bei mehreren Treffern, und ein vertauschtes `durch` haette die zweite Zusicherung
     // rot gemacht —, aber sie sagte nicht, was sie meint. Ein Test, dessen Schutz von einer
     // Nebenwirkung der Abfrage lebt, ist beim naechsten Umbau still weg.
+    //
+    // Und die WARTENDE Abfrage muss die auf den STATUS sein, nicht die auf den Dateinamen.
+    // Der erste Anlauf dieser Eingrenzung drehte es um (`findByText(base)` + `getByText`
+    // fuer den Status) — der Name kommt aus der Dateiliste und steht sofort, der Status
+    // erst mit dem Job-Poll. Unter Last war das ein Rennen: die Mutationsserie (zehn
+    // vitest-Laeufe hintereinander) machte diesen Test in EINEM Durchgang faelschlich rot
+    // und im naechsten wieder gruen. Genau die #569-Klasse, selbst gebaut.
     const zeile = async (base: string) =>
       (await screen.findByText(base)).closest('li')!
-    expect(within(await zeile('S1')).getByText(/Transkribiert — noch nicht korrigiert/))
+    expect(await within(await zeile('S1')).findByText(/Transkribiert — noch nicht korrigiert/))
       .toBeInTheDocument()
     // S2 laeuft und zeigt seine Phase — weder Ruhezustand noch Wartetext.
     expect(within(await zeile('S2')).queryByText(/Transkribiert — noch nicht korrigiert/)).toBeNull()
