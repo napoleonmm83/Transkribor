@@ -194,5 +194,44 @@
     "gruen": [
       "test_erwarteter_test_wird_rot_ergibt_null"
     ]
+  },
+  {
+    "id": "MB17 der Abbruch bei NULL Tests zeigt die Ausgabe nicht mehr",
+    "datei": "scripts/mutation.py",
+    "von": "        print(\"         Ausgabe (Ende):\")\n        for z in ausgabe_auszug(aus0):\n            print(f\"           {z}\")\n        return 2\n    vorlauf_rot",
+    "nach": "        return 2\n    vorlauf_rot",
+    "rot": [
+      "abbruch_bei_null_tests_zeigt_die_ausgabe"
+    ],
+    "gruen": [
+      "auszug_nimmt_das_ENDE",
+      "auszug_benennt_die_leere_ausgabe"
+    ]
+  },
+  {
+    "id": "MB18 der Auszug nimmt den ANFANG statt des Endes",
+    "datei": "scripts/mutation.py",
+    "von": "    return roh[-zeilen:]",
+    "nach": "    return roh[:zeilen]",
+    "rot": [
+      "auszug_nimmt_das_ENDE"
+    ],
+    "gruen": [
+      "auszug_benennt_die_leere_ausgabe",
+      "abbruch_bei_null_tests_zeigt_die_ausgabe"
+    ]
+  },
+  {
+    "id": "MB19 die leere Ausgabe wird verschwiegen statt benannt",
+    "datei": "scripts/mutation.py",
+    "von": "        return [\"(keine Ausgabe)\"]",
+    "nach": "        return []",
+    "rot": [
+      "auszug_benennt_die_leere_ausgabe"
+    ],
+    "gruen": [
+      "auszug_nimmt_das_ENDE",
+      "abbruch_bei_null_tests_zeigt_die_ausgabe"
+    ]
   }
 ]

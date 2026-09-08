@@ -351,6 +351,43 @@ def test_pytest_keine_tests_gesammelt_ergibt_zwei(tmp_path, monkeypatch):
     assert rc == 2
 
 
+def test_auszug_nimmt_das_ENDE_und_deckelt():
+    # Von hinten, weil ein Testlaeufer sein Scheitern am Ende meldet (Bilanzzeile,
+    # npm-Fehler, Traceback-Schluss). Der Deckel haelt einen langen Lauf aus dem Protokoll.
+    aus = "\n".join(f"zeile {i}" for i in range(50))
+    auszug = mutation.ausgabe_auszug(aus, zeilen=3)
+    assert auszug == ["zeile 47", "zeile 48", "zeile 49"]
+
+
+def test_auszug_benennt_die_leere_ausgabe():
+    # „keine Ausgabe" IST ein Befund — so sieht ein Werkzeug aus, das gar nicht startete.
+    # Eine leere Liste liesse die Meldung aussehen, als haette niemand nachgesehen.
+    assert mutation.ausgabe_auszug("   \n\n  ") == ["(keine Ausgabe)"]
+
+
+def test_abbruch_bei_null_tests_zeigt_die_ausgabe(tmp_path, monkeypatch, capsys):
+    """Der Zweig, der am 2026-09-08 DREIMAL in der CI gefeuert hat — ohne die Ursache.
+
+    Die Meldung nannte das Kommando und nicht seine Ausgabe; drei Anlaeufe drehten deshalb
+    am Kommando statt an der Ausfuehrung.
+
+    Das Fixture ist woertlich vitests Ausgabe, wenn die Filter KEINE Datei treffen — und es
+    hat beim Schreiben dieses Tests eine eigene Behauptung widerlegt: die Commit-Nachricht
+    zur CI-Ruecknahme erklaerte den Abbruch mit einem npm, das die Wurzel-`package.json`
+    aufloest und mit `Missing script` endet. Das kann NICHT der Fall gewesen sein — eine
+    npm-Fehlermeldung traegt keine Laufmarke und landete im Zweig darueber („keine
+    erkennbare Testausgabe"). Der Zweig, der in der CI feuerte, verlangt eine Laufmarke:
+    vitest IST also gestartet und hat null Dateien gefunden. Die Ursache liegt damit beim
+    Arbeitsverzeichnis, nicht bei der Paketaufloesung (T-070).
+    """
+    rc, _ = _lauf_main(tmp_path, monkeypatch, _PLAN_OK,
+                       [(" Test Files  no tests\n      Tests  no tests\n", 1)])
+    assert rc == 2
+    ausgabe = capsys.readouterr().out
+    assert "NULL Tests" in ausgabe
+    assert "no tests" in ausgabe, "der Grund muss in der Meldung stehen, nicht nur das Kommando"
+
+
 def test_mehrdeutiger_anker_ergibt_eins(tmp_path, monkeypatch):
     plan = [{"id": "MEHRDEUTIG", "datei": "ziel.py", "von": "= ", "nach": "== ",
              "rot": ["test_wert"]}]
