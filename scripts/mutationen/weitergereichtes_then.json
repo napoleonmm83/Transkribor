@@ -1,0 +1,88 @@
+[
+  {
+    "id": "W1 das uebernommene `then` wird beim Fehlschlag des Empfaengers fallengelassen (#579, der Defekt selbst)",
+    "datei": "webtool/jobs.py",
+    "von": "        ueber_then = [] if abgebrochen else list(r.get(\"then_ueber\", []))",
+    "nach": "        ueber_then = list(r.get(\"then_ueber\", [])) if erfolg else []",
+    "rot": ["test_weitergereichtes_then_laesst_keine_vormerkung_zurueck"],
+    "gruen": [
+      "test_abgebrochener_empfaenger_holt_das_uebernommene_then_NICHT_nach",
+      "test_gelungener_empfaenger_laesst_das_uebernommene_sonst_liegen"
+    ]
+  },
+  {
+    "id": "W2 das uebernommene `then` laeuft auch nach einem ABBRUCH (E2 verletzt: Herunterfahren startet Whisper)",
+    "datei": "webtool/jobs.py",
+    "von": "        ueber_then = [] if abgebrochen else list(r.get(\"then_ueber\", []))",
+    "nach": "        ueber_then = list(r.get(\"then_ueber\", []))",
+    "rot": ["test_abgebrochener_empfaenger_holt_das_uebernommene_then_NICHT_nach"],
+    "gruen": ["test_weitergereichtes_then_laesst_keine_vormerkung_zurueck"]
+  },
+  {
+    "id": "W3 das uebernommene `sonst` laeuft beim Abbruch NICHT — die Nummer bleibt vorgemerkt",
+    "datei": "webtool/jobs.py",
+    "von": "        ueber_sonst = list(r.get(\"sonst_ueber\", [])) if abgebrochen else []",
+    "nach": "        ueber_sonst = []",
+    "rot": ["test_abgebrochener_empfaenger_holt_das_uebernommene_then_NICHT_nach"],
+    "gruen": ["test_weitergereichtes_then_laesst_keine_vormerkung_zurueck"]
+  },
+  {
+    "id": "W4 das uebernommene `sonst` laeuft AUCH bei Erfolg — die Nummer wird verworfen, obwohl der Nachlauf anlaeuft",
+    "datei": "webtool/jobs.py",
+    "von": "        ueber_sonst = list(r.get(\"sonst_ueber\", [])) if abgebrochen else []",
+    "nach": "        ueber_sonst = list(r.get(\"sonst_ueber\", []))",
+    "rot": ["test_gelungener_empfaenger_laesst_das_uebernommene_sonst_liegen"],
+    "gruen": ["test_abgebrochener_empfaenger_holt_das_uebernommene_then_NICHT_nach"]
+  },
+  {
+    "id": "W5 das eigene `sonst` laeuft bei JEDEM Ausgang — es traefe ausgerechnet den Erfolgsfall",
+    "datei": "webtool/jobs.py",
+    "von": "        sonst_callbacks = [] if erfolg else list(r.get(\"sonst\", []))",
+    "nach": "        sonst_callbacks = list(r.get(\"sonst\", []))",
+    "rot": ["test_gelungener_download_laesst_die_vormerkung_offen"],
+    "gruen": ["test_gescheiterter_download_schliesst_seine_vormerkung"]
+  },
+  {
+    "id": "W6 das eigene `sonst` laeuft gar nicht — der Ausfallweg aus #557 faellt weg",
+    "datei": "webtool/jobs.py",
+    "von": "        sonst_callbacks = [] if erfolg else list(r.get(\"sonst\", []))",
+    "nach": "        sonst_callbacks = []",
+    "rot": ["test_gescheiterter_download_schliesst_seine_vormerkung"],
+    "gruen": ["test_gelungener_download_laesst_die_vormerkung_offen"]
+  },
+  {
+    "id": "W7 das `sonst` wird NICHT weitergereicht — der Empfaenger hat ein geschuldetes `then` ohne Quittung",
+    "datei": "webtool/jobs.py",
+    "von": "                for fn in alle_sonst:\n                    if fn not in folge[\"sonst\"] and fn not in folge[\"sonst_ueber\"]:\n                        folge[\"sonst_ueber\"].append(fn)",
+    "nach": "                pass",
+    "rot": ["test_abgebrochener_empfaenger_holt_das_uebernommene_then_NICHT_nach"],
+    "gruen": ["test_weitergereichtes_then_laesst_keine_vormerkung_zurueck"]
+  },
+  {
+    "id": "W8 `jobs.get` gibt die Rueckruf-Felder mit — FastAPI macht daraus `sonst: [{}]` im 1,5-s-Poll",
+    "datei": "webtool/jobs.py",
+    "von": "        snap.pop(\"sonst\", None)               # dito",
+    "nach": "        pass                                  # dito",
+    "rot": ["test_jobs_get_traegt_keine_rueckruf_felder"],
+    "gruen": ["test_weitergereichtes_then_laesst_keine_vormerkung_zurueck"]
+  },
+  {
+    "id": "W9 der Endpunkt uebergibt kein `sonst` — die Verdrahtung faellt still aus",
+    "datei": "webtool/app.py",
+    "von": "                                     sonst=lambda: jobs.vorgang_verwerfen(nummer),",
+    "nach": "",
+    "rot": [
+      "test_fetch_haengt_seinen_aufraeum_rueckruf_an_die_EIGENE_nummer",
+      "test_endpunkt_haengt_seinen_ausgangs_rueckruf_an_den_RICHTIGEN_job"
+    ],
+    "gruen": ["test_fetch_raeumt_die_nummer_NICHT_schon_beim_start_weg"]
+  },
+  {
+    "id": "W10 ein gescheiterter Lauf REICHT WEITER, statt nachzuholen — die geschuldete Arbeit haengt danach an einem dritten Job",
+    "datei": "webtool/jobs.py",
+    "von": "        if erfolg and (folge_jid or hat_pending) and folge_jid != jid:",
+    "nach": "        if (folge_jid or hat_pending) and folge_jid != jid:",
+    "rot": ["test_fehlschlag_holt_das_uebernommene_then_NACH_statt_es_weiterzureichen"],
+    "gruen": ["test_weitergereichtes_then_laesst_keine_vormerkung_zurueck"]
+  }
+]

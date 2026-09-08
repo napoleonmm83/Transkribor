@@ -231,11 +231,11 @@ def _prune_locked():
     # Schluessel — der alte Weg ergab bei fuenf Anfragen auf denselben Schluessel einen.
     #
     # Im Betrieb loest sich jede dieser Nummern auf (belegter Slot ⇒ sofort `verworfen`,
-    # sonst ueber `then` bzw. den `when_done`-Rueckruf), gleichzeitig offen sind also nur die
-    # Importe, die gerade laufen. Was sich geaendert hat, ist die SCHADENSSKALA eines Lecks:
-    # ein liegengebliebener Eintrag kostete frueher hoechstens einen je Schluessel, jetzt
-    # einen je Import. Der eine bekannte Leckweg steht in `app._fetch_nachlauf_ausgang`
-    # (weitergereichtes `then`). Gefunden vom Neuweg-Pruefer, hier nachgemessen.
+    # sonst ueber `then` bzw. dessen Gegenstueck `sonst`), gleichzeitig offen sind also nur
+    # die Importe, die gerade laufen. Was sich geaendert hat, ist die SCHADENSSKALA eines
+    # Lecks: ein liegengebliebener Eintrag kostete frueher hoechstens einen je Schluessel,
+    # jetzt einen je Import. Der eine bekannte Leckweg (weitergereichtes `then`, dessen
+    # Empfaenger scheitert) ist mit #579 zu — `sonst` wandert mit und quittiert dort.
     # Ein `gestartet`, dessen Job NOCH LAEUFT, ist genauso wenig raeumbar wie ein offenes
     # `vorgemerkt` — und das war es bis #557 nicht: die Bedingung fragte nur den Zustand der
     # VORMERKUNG, nicht den des Laufs. Der Grund, warum das jetzt zaehlt, ist die Ordnung:
@@ -311,13 +311,18 @@ def vorgang_verwerfen(nummer: str) -> bool:
     einen heute erreichbaren Ablauf — und hier stand bis zum gegnerischen Review das
     Gegenteil („tragend … auch dann, wenn der Nachlauf laengst angelaufen ist"). Gemessen: mit
     entferntem Riegel bleiben alle Flusstests gruen, rot wird nur der Test, der
-    `_vorgang_setzen` von Hand ruft. Der Grund ist die Reihenfolge in `_run`: der einzige
-    Aufrufer, der ein `gestartet` treffen koennte (`app._fetch_nachlauf_ausgang` ueber
-    `when_done`), laeuft in Schritt 1, der Nachlauf entsteht erst in Schritt 3.
+    `_vorgang_setzen` von Hand ruft. Die Begruendung hat sich mit #579 GEAENDERT, das
+    Ergebnis nicht: der einzige Aufrufer, der ein `gestartet` treffen koennte, ist das
+    `sonst` des URL-Imports — und `_run` fuehrt `then` und `sonst` desselben Auftrags nie
+    beide aus. Nur `then` setzt die Nummer auf `gestartet` (ueber `request`), also findet
+    `sonst` sie immer noch offen vor. Vorher trug diese Stelle die Reihenfolge zwischen
+    `next_runs` (Schritt 1) und `then` (Schritt 3) als Grund; beides sind Aussagen ueber
+    `_run`, aber nicht dieselbe.
 
-    Er bleibt trotzdem stehen: laeuft `then` je vor `next_runs`, ist er der Unterschied
-    zwischen „Oberflaeche verfolgt den Lauf" und „Oberflaeche laesst ihn fallen". Eine Wache,
-    deren Bedingung heute nicht eintritt, gehoert benannt — nicht als tragend ausgegeben.
+    Er bleibt trotzdem stehen: wird diese Ausschliesslichkeit je aufgeweicht, ist er der
+    Unterschied zwischen „Oberflaeche verfolgt den Lauf" und „Oberflaeche laesst ihn fallen".
+    Eine Wache, deren Bedingung heute nicht eintritt, gehoert benannt — nicht als tragend
+    ausgegeben.
 
     Liefert True, wenn wirklich etwas geschlossen wurde — das macht den Zweig testbar, ohne
     den Zustand von aussen nachzulesen.
@@ -377,10 +382,22 @@ def transcribe_laeuft_oder_wartet(project: str) -> bool:
         return any(k[0] == project and k[1] == "transcribe" for k in _pending)
 
 
-def start(project: str, cmd: list, cwd, kind: str, then=None, env=None, base: str = None, bases: set = None):
+def start(project: str, cmd: list, cwd, kind: str, then=None, env=None, base: str = None,
+          bases: set = None, sonst=None):
     """Startet den Job. `then` laeuft NACH erfolgreichem Abschluss (status 'done') im
     Job-Thread — damit haengt die Auto-Korrektur nach der Transkription nicht am Browser.
-    `env` (dict) wird in die Subprozess-Umgebung gemischt; default None aendert nichts."""
+    `env` (dict) wird in die Subprozess-Umgebung gemischt; default None aendert nichts.
+
+    `sonst` ist das GEGENSTUECK zu `then`: es laeuft genau dann, wenn dieses `then`
+    endgueltig nicht laeuft. Es wandert mit dem `then` mit, wenn `_run` Schritt 2 es an
+    einen Folge-Job weiterreicht — und darin liegt sein Zweck (#579). Vorher trug der
+    Aufrufer diese Aufgabe selbst (`app._fetch_nachlauf_ausgang` ueber `when_done`), und
+    das ging genau an der Weitergabe kaputt: der Rueckruf hing am Ausgang des ERSTEN
+    Jobs, das `then` aber am Ausgang des ZWEITEN.
+
+    Er liegt ab hier unter dem Lock im Datensatz. Damit gibt es das Fenster nicht mehr,
+    das `when_done` offenliess (Job schon terminal, bevor der Aufrufer den Rueckruf
+    anhaengen konnte)."""
     with _lock:
         _prune_locked()
         if (project, kind) in _active:
@@ -422,6 +439,13 @@ def start(project: str, cmd: list, cwd, kind: str, then=None, env=None, base: st
                       "lines": [], "returncode": None, "started": time.time(),
                       "ended": None, "pid": None, "cancelled": False,
                       "then": [then] if then else [],
+                      "sonst": [sonst] if sonst else [],
+                      # Von einem VORGAENGER uebernommen (`_run` Schritt 2). Getrennt gefuehrt,
+                      # weil sie eine andere Bedingung haben als die eigenen: ihr Ursprungsjob
+                      # war erfolgreich, ihre Arbeit ist also geschuldet — der Ausgang DIESES
+                      # Laufs entscheidet nur noch, ob sie nachgeholt (Fehler) oder
+                      # zurueckgenommen wird (Abbruch).
+                      "then_ueber": [], "sonst_ueber": [],
                       "next_runs": []}
         _active[(project, kind)] = jid
     threading.Thread(target=_run, args=(jid, cmd, cwd, env), daemon=True).start()
@@ -429,7 +453,7 @@ def start(project: str, cmd: list, cwd, kind: str, then=None, env=None, base: st
 
 
 def request(project: str, cmd: list, cwd, kind: str, then=None, base: str = None,
-            vorgang: str | None = None):
+            vorgang: str | None = None, sonst=None):
     """Startet den Job — oder merkt genau EINEN Nachlauf vor, wenn der Slot belegt ist.
 
     Ein Upload/Import soll immer zu einer Verarbeitung fuehren, auch wenn gerade eine laeuft:
@@ -453,9 +477,9 @@ def request(project: str, cmd: list, cwd, kind: str, then=None, base: str = None
     nummer = vorgang
     for _ in range(10):
         if base is not None:
-            jid, started = start(project, cmd, cwd, kind, then=then, base=base)
+            jid, started = start(project, cmd, cwd, kind, then=then, base=base, sonst=sonst)
         else:
-            jid, started = start(project, cmd, cwd, kind, then=then)
+            jid, started = start(project, cmd, cwd, kind, then=then, sonst=sonst)
         if started:
             # Traegt der Aufruf eine Nummer, ist er der Nachlauf DIESER Vormerkung — hier
             # erfaehrt die Oberflaeche die Kennung, auf die sie wartet.
@@ -529,7 +553,7 @@ def request(project: str, cmd: list, cwd, kind: str, then=None, base: str = None
                 return
             # Die Nummer reist MIT: sonst legt der Aufruf bei erneuter Blockierung eine zweite
             # an, und die erste bleibt fuer immer `vorgemerkt` (siehe Docstring).
-            request(project, cmd, cwd, kind, then=then, base=base, vorgang=_nummer)
+            request(project, cmd, cwd, kind, then=then, base=base, vorgang=_nummer, sonst=sonst)
 
         if when_done(jid, rerun):
             return jid, False, nummer
@@ -549,12 +573,13 @@ def when_done(job_id: str, fn) -> bool:
     **`fn` feuert bei JEDEM terminalen Ausgang — `done`, `error` UND `cancelled`.** Das ist
     nicht der Vertrag von `then` (das bleibt auf `done`) und war bis #417 auch nicht der von
     hier; wer den Rueckruf nur bei Erfolg laufen lassen will, fragt den Status SELBST ab.
-    Es gibt seit #557 ZWEI Produktivaufrufer, und beide fragen selbst: `request`s `rerun` und
-    `app._fetch_nachlauf_ausgang` (schliesst die Vormerkung des URL-Imports, aber nur wenn der
-    Download NICHT `done` wurde — bei Erfolg steht der Nachlauf ja noch aus). Hier stand bis
-    dahin „genau EINEN Produktivaufrufer … der zweite erbt die Eigenschaft sonst still": der
-    zweite ist da, er hat sie nicht still geerbt, und der Satz waere fuer den DRITTEN eine
-    falsche Beruhigung. Wer einen anhaengt, fragt den Status ebenfalls selbst.
+    Der einzige Produktivaufrufer ist wieder `request`s `rerun`, und er fragt selbst. Der
+    zweite (`app._fetch_nachlauf_ausgang`, #557) ist mit #579 weggefallen: er baute von
+    aussen nach, was `then` ein Gegenstueck fehlte, und ging genau daran kaputt, dass ein
+    weitergereichtes `then` am Ausgang eines ANDEREN Jobs haengt. Das kann ein Rueckruf, der
+    an einer Job-Kennung haengt, nicht sehen — deshalb steht die Quittung jetzt als `sonst`
+    im Datensatz und wandert mit. Wer hier einen anhaengt, fragt den Status ebenfalls selbst;
+    wer eine Quittung fuer ein `then` braucht, nimmt `sonst` und nicht diese Funktion.
 
     Der Grund fuer den weiten Vertrag steht in `_run`: `rerun` raeumt seine Vormerkung aus
     `_pending`, und die muss auch nach einem Abbruch weg, sonst ist der Nachlauf-Weg dauerhaft
@@ -572,18 +597,23 @@ def _run(jid, cmd, cwd, env):
     # Nachlauf AUSSERHALB von _run_proc: dessen finally hat den Slot in _active schon
     # freigegeben, sonst wuerde ein `then`, das denselben Projekt-Job startet, sich selbst
     # aussperren. Und ausserhalb von _lock, sonst blockiert es jobs.start() im Callback.
-    # ZWEI Rueckrufarten, ZWEI Vertraege — sie hingen bis #417 an derselben Bedingung
-    # (`status != "done"` -> return), und das war eine Verwechslung mit Datenverlust:
+    # DREI Rueckrufarten, DREI Vertraege — `then` und `next_runs` hingen bis #417 an derselben
+    # Bedingung (`status != "done"` -> return), und das war eine Verwechslung mit Datenverlust:
     #
     # `then` heisst „bei Erfolg weiter in der Kette". Der einzige Produktivnutzer ist
-    # `app.py:1123` (fetch -> transcribe); eine Transkription ueber Dateien, die gar nicht
+    # `app.fetch_urls` (fetch -> transcribe); eine Transkription ueber Dateien, die gar nicht
     # geladen wurden, waere sinnlos. Bleibt auf `done`.
     #
-    # `next_runs` heisst „ich will von JEDEM Ausgang wissen" — und das sind seit #557 ZWEI
-    # Dinge, nicht mehr eines: „jemand anders braucht einen Lauf, du warst besetzt"
-    # (`request`s `rerun`) UND „schliesse meine Vormerkung, falls du nicht gelingst"
-    # (`app._fetch_nachlauf_ausgang`). Ein `fetch`-Job hat damit erstmals ueberhaupt einen
-    # Eintrag hier; bis dahin kam `next_runs` nur aus `request`, das `fetch` nie ruft.
+    # `sonst` heisst „mein `then` laeuft endgueltig nicht, raeum auf" (#579). Es ist an das
+    # `then` gebunden, nicht an diesen Job: wird das `then` unten weitergereicht, wandert es
+    # mit. Deshalb kann es nicht in `next_runs` liegen — die haengen an DIESEM Job.
+    #
+    # `next_runs` heisst „ich will von JEDEM Ausgang wissen" und traegt genau EINE Sache:
+    # „jemand anders braucht einen Lauf, du warst besetzt" (`request`s `rerun`). Die zweite,
+    # die #557 hier einhaengte („schliesse meine Vormerkung, falls du nicht gelingst"), ist
+    # mit #579 als `sonst` in den Datensatz gewandert — sie gehoerte nie hierher: `next_runs`
+    # haengt an DIESEM Job, die Quittung eines `then` aber an dem Job, bei dem das `then`
+    # am Ende landet. Ein `fetch`-Job hat damit auch wieder keinen Eintrag hier.
     #
     # Der `rerun`-Fall ist der Weg, auf dem ein Upload WAEHREND eines laufenden Laufs
     # ueberhaupt verarbeitet wird. Der Ausgang DIESES Laufs ist dafuer ohne Bedeutung:
@@ -604,7 +634,27 @@ def _run(jid, cmd, cwd, env):
         if not r:
             return
         next_runs = list(r.get("next_runs", []))
-        then_callbacks = list(r.get("then", [])) if r["status"] == "done" else []
+        erfolg = r["status"] == "done"
+        abgebrochen = r["status"] == "cancelled"
+        then_callbacks = list(r.get("then", [])) if erfolg else []
+        # Die EIGENEN Rueckrufe haengen am Ausgang dieses Laufs: `then` bei Erfolg, `sonst`
+        # sonst. Die UEBERNOMMENEN haengen am Ausgang ihres Ursprungsjobs, und der war
+        # erfolgreich — sonst waeren sie nie weitergereicht worden (die Weitergabe unten
+        # laeuft nur bei `erfolg`). Fuer sie entscheidet dieser Lauf deshalb nur noch, ob
+        # die geschuldete Arbeit NACHGEHOLT oder ZURUECKGENOMMEN wird:
+        #
+        #   Fehler   -> nachholen. Der Download des Vorgaengers liegt auf der Platte; ihn
+        #               liegenzulassen, weil ein FREMDER Folgeauftrag scheiterte, waere
+        #               genau der Verlust aus #579.
+        #   Abbruch  -> zuruecknehmen. „Ein Abbruch ist eine Entscheidung" — dieselbe Regel,
+        #               die `request.rerun` fuer die Vormerkung schon trifft, und derselbe
+        #               Grund: `cancel_all()` bricht beim Herunterfahren ALLE Jobs ab, ein
+        #               hier gestarteter Nachlauf waere eine Waise mit belegter GPU.
+        sonst_callbacks = [] if erfolg else list(r.get("sonst", []))
+        ueber_then = [] if abgebrochen else list(r.get("then_ueber", []))
+        ueber_sonst = list(r.get("sonst_ueber", [])) if abgebrochen else []
+        # Fuer die Weitergabe unten, ausgangsunabhaengig: sie erbt die Quittung als GANZES.
+        alle_sonst = list(r.get("sonst", [])) + list(r.get("sonst_ueber", []))
         project = r["project"]
         kind = r["kind"]
 
@@ -622,17 +672,31 @@ def _run(jid, cmd, cwd, env):
     with _lock:
         folge_jid = _active.get((project, kind))
         hat_pending = any(k[0] == project and k[1] == kind for k in _pending)
-        if (folge_jid or hat_pending) and folge_jid != jid:
+        # NUR bei Erfolg weiterreichen. Fuer `then` ist das ein No-op (die Liste ist sonst
+        # ohnehin leer), fuer `sonst`/`then_ueber` waere es der Unterschied zwischen
+        # „nachholen" und „ein zweites Mal verschieben": ein gescheiterter Lauf hat seine
+        # Rueckrufe hier und jetzt abzuarbeiten, nicht an den naechsten zu vererben.
+        if erfolg and (folge_jid or hat_pending) and folge_jid != jid:
             # Nachlauf existiert -> `then` an den Folge-Job weiterreichen, damit autocorrect
             # erst nach Abschluss ALLER Transkriptionen des Projekts feuert (#Option1)
             if folge_jid and folge_jid in _jobs:
-                for fn in then_callbacks:
-                    if fn not in _jobs[folge_jid]["then"]:
-                        _jobs[folge_jid]["then"].append(fn)
+                folge = _jobs[folge_jid]
+                # Die Dedupe prueft BEIDE Ziellisten. Mit nur einer landete derselbe
+                # Rueckruf in `then` UND `then_ueber` und liefe bei Erfolg zweimal.
+                for fn in then_callbacks + ueber_then:
+                    if fn not in folge["then"] and fn not in folge["then_ueber"]:
+                        folge["then_ueber"].append(fn)
+                # Das Gegenstueck wandert MIT, sonst haette der Empfaenger ein geschuldetes
+                # `then` und keinen Weg, dessen Ausfall zu quittieren.
+                for fn in alle_sonst:
+                    if fn not in folge["sonst"] and fn not in folge["sonst_ueber"]:
+                        folge["sonst_ueber"].append(fn)
                 then_callbacks = []
+                ueber_then = []
 
-    # 3. Wenn die Kette komplett abgeschlossen ist: finale `then`-Callbacks ausführen
-    for fn in then_callbacks:
+    # 3. Wenn die Kette komplett abgeschlossen ist: die faelligen Rueckrufe ausführen.
+    #    `then_callbacks`/`ueber_then` sind hier leer, wenn Schritt 2 sie weitergereicht hat.
+    for fn in then_callbacks + ueber_then + sonst_callbacks + ueber_sonst:
         try:
             fn()
         except Exception as e:
@@ -875,6 +939,11 @@ def get(job_id: str):
         snap["lines"] = list(r["lines"])
         snap.pop("proc", None)                # Popen-Handle ist nicht JSON-serialisierbar
         snap.pop("then", None)                # Callables sind nicht JSON-serialisierbar
+        snap.pop("sonst", None)               # dito — und alle vier muessen HIER stehen:
+        snap.pop("then_ueber", None)          # FastAPIs Encoder wirft nicht, er bildet eine
+        snap.pop("sonst_ueber", None)         # Funktion auf {} ab. Ein vergessener Schluessel
+                                              # gaebe also 200 mit `sonst: [{}]` — in einer
+                                              # Nutzlast, die alle 1,5 s gepollt wird.
         snap.pop("next_runs", None)           # Callables sind nicht JSON-serialisierbar
         snap.pop("active_bases", None)        # Zaehler-dict ist nicht JSON-serialisierbar
                                                # und verlaesst den Server nie (test_jobs.py)

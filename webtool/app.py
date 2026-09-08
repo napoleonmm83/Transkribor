@@ -1869,6 +1869,7 @@ def fetch_urls(project: str, body: FetchBody):
     try:
         job_id, started = jobs.start(project, cmd, paths.ROOT, "fetch",
                                      then=lambda: _start_transcribe(project, vorgang=nummer),
+                                     sonst=lambda: jobs.vorgang_verwerfen(nummer),
                                      env=env_sprache)
     except BaseException:
         jobs.vorgang_verwerfen(nummer)
@@ -1881,59 +1882,22 @@ def fetch_urls(project: str, body: FetchBody):
     antwort_nummer: str | None = nummer
     if not started:
         # `jobs.start` gibt bei belegtem `(projekt, fetch)` den laufenden Job zurueck und
-        # verwirft `cmd` UND `then` — es wird also nie etwas heruntergeladen und nie etwas
-        # nachlaufen. Eine Nummer, die niemand aufloest, waere genau der Dauerpoll, den #381
-        # gerade beseitigt hat: die Oberflaeche fragte sie fuer die Lebensdauer des Tabs alle
-        # 1,5 s ab.
+        # verwirft `cmd`, `then` UND `sonst` — es wird also nie etwas heruntergeladen, nie
+        # etwas nachlaufen und nie ein Rueckruf feuern. Eine Nummer, die niemand aufloest,
+        # waere genau der Dauerpoll, den #381 gerade beseitigt hat: die Oberflaeche fragte
+        # sie fuer die Lebensdauer des Tabs alle 1,5 s ab.
+        #
+        # DAS IST DER EINZIGE AUSGANG, den dieser Endpunkt noch selbst schliessen muss (der
+        # Wurf oben ist der zweite, und auch dort laeuft kein `_run`). Jeden anderen traegt
+        # `sonst`: es liegt seit `jobs.start` unter dem Lock im Datensatz und wandert mit dem
+        # `then` mit, wenn `_run` es an einen Folge-Job weiterreicht. Hier stand bis #579 ein
+        # `when_done`-Rueckruf, der beides nicht konnte — er hing am Ausgang DIESES Jobs,
+        # waehrend das `then` laengst am Ausgang eines anderen hing, und er brauchte einen
+        # eigenen Zweig fuer den Fall, dass der Job schon terminal war, bevor der Endpunkt
+        # ihn anhaengen konnte.
         jobs.vorgang_verwerfen(nummer)
         antwort_nummer = None
-    else:
-        # Und wenn der fetch-Job NICHT `done` wird, laeuft `then` nie (`jobs._run` ruft
-        # `then`-Rueckrufe nur bei Erfolg) — die Nummer bliebe ebenfalls ewig `vorgemerkt`.
-        #
-        # Der Rueckruf fragt den Status SELBST ab, statt bedingungslos zu verwerfen, und das
-        # ist tragend: `next_runs` feuern in `_run` VOR den `then`-Rueckrufen, ein blindes
-        # Verwerfen traefe also ausgerechnet den Erfolgsfall. Zweiter Produktivnutzer von
-        # `when_done` — dessen Docstring warnt davor, den „feuert bei JEDEM terminalen
-        # Ausgang"-Vertrag still zu erben; hier wird er ausdruecklich gefragt.
-        #
-        # `when_done` liefert FALSE, wenn der Job schon terminal ist — dann wird der Rueckruf
-        # gar nicht erst angehaengt, und die Nummer bliebe fuer immer offen. Das Fenster ist
-        # winzig (zwischen `start` und dieser Zeile liegen Mikrosekunden, ein fetch-Subprozess
-        # braucht allein zum Hochfahren ein Vielfaches davon), aber es ist eines: stirbt der
-        # Lauf beim Import, ist er terminal, bevor wir fragen. Der Rueckruf wird dann SOFORT
-        # ausgewertet, und weil er den Status ohnehin selbst liest, ist das dieselbe
-        # Entscheidung, nur frueher. (CodeRabbit-CLI, major.)
-        if not jobs.when_done(job_id, lambda: _fetch_nachlauf_ausgang(job_id, nummer)):
-            _fetch_nachlauf_ausgang(job_id, nummer)
     return {"job_id": job_id, "started": started, "vorgang": antwort_nummer}
-
-
-def _fetch_nachlauf_ausgang(job_id: str, nummer: str) -> None:
-    """Die Vormerkung des URL-Imports schliessen, wenn der Download NICHT gelingt (#557).
-
-    DIE STATUSFRAGE IST DER SCHUTZ, nicht eine Abkuerzung. Hier stand „`vorgang_verwerfen`
-    greift ohnehin nur auf ein noch offenes `vorgemerkt`; die Statusfrage spart den Weg, nicht
-    die Sicherheit" — das ist falsch, und zwar gegen die eigene Messung: `when_done` feuert
-    ueber `next_runs`, und die laufen in `jobs._run` in Schritt 1, die `then`-Rueckrufe erst in
-    Schritt 3. Zum Zeitpunkt dieses Aufrufs steht der Eintrag also IMMER noch auf
-    `vorgemerkt`; der Riegel in `vorgang_verwerfen` schuetzt hier gar nichts.
-
-    Gemessen, zweimal unabhaengig: die Mutation „bedingungslos verwerfen" macht drei Tests rot
-    — darunter der Fall, der den echten Schaden zeigt, naemlich ein `done` bei belegtem Slot:
-    dann verwirft Schritt 1 die Nummer, `then` legt sie in `request` als Vormerkung an, und
-    sie steht fuer die Lebensdauer des Blockers auf `verworfen`. Die Oberflaeche laesst sie
-    beim ersten Poll fallen, der Nachlauf laeuft unbeobachtet.
-
-    GETRAGENE GRENZE, benannt statt behoben: endet der fetch-Job `done`, reicht `_run` sein
-    `then` an einen Folge-fetch-Job weiter, falls in genau dem Moment einer fuer dasselbe
-    Projekt in `_active` steht — scheitert DER, bleibt die Nummer `vorgemerkt`. Das Fenster
-    liegt zwischen dem `finally` von `_run_proc` und dem Lesen von `_active` und verlangt einen
-    zweiten gleichzeitigen URL-Import desselben Projekts; erreichbar ist es nur, weil
-    `_run` Schritt 2 ueberhaupt weiterreicht.
-    """
-    if (jobs.get(job_id) or {}).get("status") != "done":
-        jobs.vorgang_verwerfen(nummer)
 
 
 class AuthCodeBody(BaseModel):

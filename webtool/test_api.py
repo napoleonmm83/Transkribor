@@ -265,7 +265,7 @@ def test_invalid_project_name_400(client):
 
 def test_transcribe_starts_job(client, monkeypatch):
     calls = {}
-    def fake_start(project, cmd, cwd, kind, then=None, env=None):
+    def fake_start(project, cmd, cwd, kind, then=None, env=None, sonst=None):
         calls["project"] = project
         calls["kind"] = kind
         calls["cmd"] = cmd
@@ -326,7 +326,7 @@ def test_vorgang_endpunkt_404_bei_unbekannter_nummer(client, monkeypatch):
 
 def test_correct_starts_job(client, monkeypatch, mit_anbieter):
     calls = {}
-    def fake_start(project, cmd, cwd, kind, then=None, env=None):
+    def fake_start(project, cmd, cwd, kind, then=None, env=None, sonst=None):
         calls["project"] = project; calls["kind"] = kind; calls["cmd"] = cmd
         return "corr123", True
     import webtool.jobs as jobs_mod
@@ -571,7 +571,7 @@ def test_upload_ok_and_duplicate_409(client, tmp_path):
 def test_upload_startet_transkription(client, monkeypatch):
     """Hochladen IST der Trigger — ohne den muesste der Nutzer zusaetzlich auf 'Transkribieren'."""
     calls = {}
-    def fake_start(project, cmd, cwd, kind, then=None, env=None):
+    def fake_start(project, cmd, cwd, kind, then=None, env=None, sonst=None):
         calls["kind"] = kind; calls["cmd"] = cmd; calls["then"] = then
         return "upl1", True
     import webtool.jobs as jobs_mod
@@ -1410,7 +1410,7 @@ def test_fetch_startet_job(client, monkeypatch):
     from webtool import jobs
     gestartet = {}
     monkeypatch.setattr(jobs, "start",
-                        lambda project, cmd, cwd, kind, then=None, env=None:
+                        lambda project, cmd, cwd, kind, then=None, env=None, sonst=None:
                         gestartet.update(cmd=cmd, kind=kind, then=then) or ("j1", True))
     r = client.post("/api/projects/Demo/fetch", json={"urls": ["https://youtu.be/abc123"]})
     # `vorgang` gehoert seit #557 dazu: die Nummer des Transkriptions-Nachlaufs
@@ -3311,7 +3311,7 @@ def test_upload_traegt_die_sprecherzahl_ein_BEVOR_der_job_laeuft(client, monkeyp
     import webtool.jobs as jobs_mod
     beim_start = {}
 
-    def fake_start(project, cmd, cwd, kind, then=None, env=None):
+    def fake_start(project, cmd, cwd, kind, then=None, env=None, sonst=None):
         beim_start["sprecher"] = projekt_mod.datei_ansicht(project, "Neu")["sprecher"]
         return "upl1", True
 
@@ -3355,7 +3355,7 @@ def _fetch_env_faenger(monkeypatch):
     gesehen = {}
     import webtool.jobs as jobs_mod
 
-    def fake_start(project, cmd, cwd, kind, then=None, env=None):
+    def fake_start(project, cmd, cwd, kind, then=None, env=None, sonst=None):
         gesehen.update(env or {})
         gesehen["_cmd"] = cmd
         return "f1", True
@@ -4775,40 +4775,42 @@ def test_start_transcribe_reicht_die_nummer_an_request_durch(client, monkeypatch
     assert gesehen["vorgang"] is None, "ohne Argument darf keine Nummer erfunden werden"
 
 
-def test_fetch_schliesst_die_nummer_auch_wenn_der_job_schon_terminal_ist(client, monkeypatch):
-    """`jobs.when_done` liefert FALSE, wenn der Job beim Registrieren schon terminal ist.
+def test_fetch_haengt_seinen_aufraeum_rueckruf_an_die_EIGENE_nummer(client, monkeypatch):
+    """Die Verdrahtung von `sonst` — der Endpunkt muss sie MITGEBEN, und zwar fuer SEINE Nummer.
 
-    Dann wird der Rueckruf gar nicht erst angehaengt — und die vorab angelegte Nummer bliebe
-    fuer immer `vorgemerkt`, weil auch `then` nicht mehr laeuft. Das Fenster ist winzig
-    (zwischen `jobs.start` und dem `when_done` liegen Mikrosekunden, ein fetch-Subprozess
-    braucht zum Hochfahren ein Vielfaches), aber es ist eines: stirbt der Lauf beim Import,
-    ist er terminal, bevor wir fragen. Gefunden von der CodeRabbit-CLI (major).
-
-    Nachgestellt wird die LAGE, nicht das Rennen: `when_done` sagt False, `jobs.get` meldet
-    `error`. Das Rennen selbst ist nicht herstellbar, die Reaktion darauf sehr wohl.
+    Vorher lag diese Aufgabe in einem `when_done`-Rueckruf, den der Endpunkt nach `jobs.start`
+    anhaengte. Der brauchte einen eigenen Zweig fuer den Fall, dass der Job schon terminal war,
+    bevor der Endpunkt dazu kam (CodeRabbit-CLI, major) — dieses Fenster gibt es nicht mehr:
+    `sonst` liegt seit `jobs.start` unter dem Lock im Datensatz. Was bleibt, ist die Frage, ob
+    der Endpunkt es ueberhaupt uebergibt und ob es die richtige Nummer trifft; ohne diesen
+    Test bliebe die Mutation „`sonst=` weglassen" gruen, weil `jobs.start` gefaelscht ist und
+    kein `_run` laeuft.
     """
     from webtool import jobs
-    monkeypatch.setattr(jobs, "start", lambda *a, **k: ("j-schnell", True))
-    monkeypatch.setattr(jobs, "when_done", lambda jid, fn: False)
-    monkeypatch.setattr(jobs, "get", lambda jid: {"status": "error"})
+    gesehen = {}
+    monkeypatch.setattr(jobs, "start",
+                        lambda *a, **k: gesehen.update(k) or ("j-schnell", True))
     r = client.post("/api/projects/Demo/fetch", json={"urls": ["https://youtu.be/abc123"]})
     nummer = r.json()["vorgang"]
     assert isinstance(nummer, str) and nummer
+    assert callable(gesehen.get("sonst")), "der Endpunkt gibt gar kein `sonst` mit"
+    # Noch offen — der Endpunkt raeumt bei erfolgreichem Start selbst nichts weg.
+    assert jobs.vorgang(nummer)["status"] == "vorgemerkt"
+    gesehen["sonst"]()
     # `vorgang()` ist NICHT gefaelscht — hier steht der echte Zustand der Buchfuehrung.
-    assert jobs.vorgang(nummer)["status"] == "verworfen"
+    assert jobs.vorgang(nummer)["status"] == "verworfen", \
+        "das `sonst` des Endpunkts schliesst eine FREMDE Nummer"
 
 
-def test_fetch_laesst_die_nummer_offen_wenn_der_schon_terminale_job_gelang(client, monkeypatch):
+def test_fetch_raeumt_die_nummer_NICHT_schon_beim_start_weg(client, monkeypatch):
     """Die Gegenprobe, und ohne sie belegt der Test darueber nichts.
 
-    War der Job beim Registrieren schon `done`, laeuft sein `then` noch — die Nummer gehoert
-    dann dem Nachlauf und darf NICHT geschlossen werden. Ein Rueckruf, der die Sofortauswertung
-    bedingungslos verwuerfe, naehme dem Browser genau den Lauf weg, auf den er wartet.
+    Bei erfolgreichem Start gehoert die Nummer dem Nachlauf: `then` loest sie auf, `sonst`
+    liegt nur bereit. Ein Endpunkt, der sie vorsorglich schliesst — oder sein eigenes `sonst`
+    gleich mitruft —, naehme dem Browser genau den Lauf weg, auf den er wartet.
     """
     from webtool import jobs
     monkeypatch.setattr(jobs, "start", lambda *a, **k: ("j-schnell-ok", True))
-    monkeypatch.setattr(jobs, "when_done", lambda jid, fn: False)
-    monkeypatch.setattr(jobs, "get", lambda jid: {"status": "done"})
     r = client.post("/api/projects/Demo/fetch", json={"urls": ["https://youtu.be/abc123"]})
     nummer = r.json()["vorgang"]
     assert jobs.vorgang(nummer)["status"] == "vorgemerkt"
