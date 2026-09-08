@@ -37,10 +37,11 @@
     },
     {
       "id": "M3 die shell-Wache faellt weg — ein `shell: sh` am Schritt bliebe still",
-      "von": "        assert not re.match(r\"^\\s*shell:\", zeilen[i]), (",
-      "nach": "        assert True, (  # M3: mit `shell: sh` faehrt ubuntu dash, dort stirbt\n            # `set -o pipefail` in Zeile 1 — und alle bash-Tests hier blieben gruen.",
+      "von": "    assert not eigene_shell, (",
+      "nach": "    assert True, (  # M3: mit `shell: sh` faehrt ubuntu dash, dort stirbt\n        # `set -o pipefail` in Zeile 1 — und alle bash-Tests hier blieben gruen.",
       "rot": [
-        "test_ein_eigenes_shell_am_schritt_faellt_auf"
+        "test_ein_eigenes_shell_am_schritt_faellt_auf",
+        "test_ein_shell_HINTER_dem_runblock_faellt_auch_auf"
       ],
       "gruen": [
         "test_der_runblock_ist_auffindbar",
