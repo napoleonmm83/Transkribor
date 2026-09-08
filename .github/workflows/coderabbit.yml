@@ -117,8 +117,26 @@ jobs:
       # Riegel gegen das eigene Schweigen fehlte ausgerechnet an der letzten
       # Uebersetzungsstelle. Ein `case` mit `*)` hat diesen Rand nicht.
       #
-      # `set -e` ist hier AUS: der Riegel meldet sein Urteil ueber den Rueckgabecode, ein
-      # `-e` risse den Schritt vor der Auswertung ab.
+      # `|| rc=$?` STATT `cmd; rc=$?`, UND DAS IST DER TEURE TEIL DIESER DATEI.
+      #
+      # Hier stand „`set -e` ist hier AUS" — die Absicht war richtig, die Zeile erreichte
+      # sie nicht. GitHub startet JEDEN `run:`-Block als `/usr/bin/bash -e {0}` (steht
+      # woertlich im Protokoll), und `set -uo pipefail` schaltet `-e` NICHT ab; dafuer
+      # braeuchte es `set +e`. Der Riegel starb also an seinem eigenen Rueckgabecode,
+      # bevor `rc=$?` ueberhaupt gelesen wurde — die `case`-Auswertung lief nie.
+      #
+      # GEMESSEN im ersten Lauf mit echtem Schluessel (34261972330, `ready_for_review` an
+      # #596): das Skript meldete „3 Befund(e) ueber 5 Datei(en)", schrieb den
+      # Kommentartext — und der Schritt endete mit `exit code 1`, `Kommentar` uebersprungen.
+      # Auf einer POSIX-Bash nachgestellt, vier von fuenf Faellen falsch:
+      #   rc 0 -> 0 (richtig) · rc 1 -> 1 · rc 2 -> 2 · rc 3 -> 3 · rc 127 -> 127
+      # Also: rc 1 (Befunde da) und rc 3 (Kontingent leer) BEIDE rot, beide ohne Kommentar.
+      # Der Riegel haette ausgerechnet dann geschwiegen, wenn er etwas zu sagen hat.
+      #
+      # `|| rc=$?` und nicht `set +e`: es traegt, OB `-e` aktiv ist oder nicht. Genau
+      # dieses Wissen hat gefehlt — eine Form, die es nicht braucht, kann daran nicht noch
+      # einmal scheitern. Und `-e` bleibt fuer den Rest des Blocks scharf.
+      # Festgenagelt von `scripts/test_coderabbit_workflow.py`, das diesen Block AUSFUEHRT.
       #
       # KEIN `GH_TOKEN` in diesem Schritt. Er gehoert in den naechsten — sonst erbt ihn der
       # Subprozess, also das heruntergeladene Programm, das ihn fuer nichts braucht.
@@ -129,11 +147,11 @@ jobs:
           BASIS: ${{ github.event.pull_request.base.sha }}
         run: |
           set -uo pipefail
+          rc=0
           python scripts/coderabbit_riegel.py \
             --kommando /tmp/cr/coderabbit \
             --base-commit "$BASIS" \
-            --markdown "$RUNNER_TEMP/befunde.md"
-          rc=$?
+            --markdown "$RUNNER_TEMP/befunde.md" || rc=$?
           case "$rc" in
             0) echo "Geprueft, kein Befund." ;;
             1) echo "kommentar=ja" >> "$GITHUB_OUTPUT" ;;
@@ -186,6 +204,18 @@ jobs:
       # `continue-on-error` statt `|| true`: der Verbrauch ist eine Beigabe und darf den Job
       # nicht rot faerben — aber sein Ausfall soll SICHTBAR sein. Genau das hat `|| true`
       # verhindert, und deshalb ist der Defekt oben ueberhaupt erst entstanden.
+      #
+      # UND ER MISST IMMER NOCH NICHT — gemessen im Lauf 34261972330: `auth login` meldet
+      # „API key authentication configured successfully!", `usage` antwortet danach mit
+      # „Could not fetch usage for the current billing period. Check your connection and
+      # organization access". Die Ursache steht in KEINER Dokumentation (nachgesehen:
+      # docs.coderabbit.ai nennt Zusatzpaket und zugewiesenen Platz als Bedingungen fuer die
+      # CLI, aber keine fuer diesen Befehl) und liegt im Konto, nicht hier.
+      # Entscheidung Marcus 2026-09-08: Ursache verfolgen. Dieser Schritt liefert dafuer die
+      # Angaben — `auth status` sagt, auf welchen Nutzer und welche Organisation der
+      # Schluessel zeigt, und die nackte Zeile „Process completed with exit code 1" wird
+      # durch eine benannte Warnung ersetzt. Ohne funktionierendes `usage` bleibt die Frage
+      # unbeantwortbar, ob Abhaengigkeits-PRs zu viel Kontingent kosten.
       - name: Verbrauch
         if: always()
         continue-on-error: true
@@ -198,4 +228,7 @@ jobs:
             exit 0
           fi
           /tmp/cr/coderabbit auth login --api-key "$CODERABBIT_API_KEY"
-          /tmp/cr/coderabbit usage
+          /tmp/cr/coderabbit auth status || echo "::warning::auth status nicht abrufbar."
+          if ! /tmp/cr/coderabbit usage; then
+            echo "::warning::Verbrauch nicht abrufbar. Im Konto zu pruefen: zugewiesener Platz fuer den Schluessel-Nutzer, nutzungsbasiertes Zusatzpaket, richtige Organisation."
+          fi

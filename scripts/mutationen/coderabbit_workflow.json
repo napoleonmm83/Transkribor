@@ -1,0 +1,39 @@
+{
+  "test": "python -m pytest scripts/test_coderabbit_workflow.py -q",
+  "pfade": [
+    ".github/workflows/coderabbit.yml",
+    "scripts/test_coderabbit_workflow.py"
+  ],
+  "mutationen": [
+    {
+      "id": "M1 der Rueckgabecode wird wieder NACH dem Aufruf gelesen — bash -e schluckt ihn",
+      "von": "            --markdown \"$RUNNER_TEMP/befunde.md\" || rc=$?",
+      "nach": "            --markdown \"$RUNNER_TEMP/befunde.md\"\n          rc=$?",
+      "rot": [
+        "test_befunde_bleiben_GRUEN_und_loesen_den_kommentar_aus",
+        "test_kontingent_bleibt_GRUEN_und_loest_den_kommentar_aus",
+        "test_kein_urteil_faerbt_ROT",
+        "test_code_ausserhalb_des_vertrags_faerbt_ROT"
+      ],
+      "gruen": [
+        "test_kein_befund_bleibt_gruen",
+        "test_der_runblock_ist_auffindbar"
+      ],
+      "datei": ".github/workflows/coderabbit.yml"
+    },
+    {
+      "id": "M2 die Vorbelegung rc=0 faellt weg — set -u laesst ausgerechnet den Erfolgsfall auflaufen",
+      "von": "          set -uo pipefail\n          rc=0\n",
+      "nach": "          set -uo pipefail\n",
+      "rot": [
+        "test_kein_befund_bleibt_gruen"
+      ],
+      "gruen": [
+        "test_kein_urteil_faerbt_ROT",
+        "test_code_ausserhalb_des_vertrags_faerbt_ROT",
+        "test_der_runblock_ist_auffindbar"
+      ],
+      "datei": ".github/workflows/coderabbit.yml"
+    }
+  ]
+}
