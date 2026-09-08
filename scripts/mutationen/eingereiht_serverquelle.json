@@ -1,0 +1,17 @@
+[
+  {
+    "id": "E12 der Zeilenparser haengt wieder an, obwohl der Server die Base entfernt hat",
+    "datei": "webtool/frontend/src/lib/jobPhases.ts",
+    "von": "      if (!serverKennt && !eingereiht.includes(m[1])) eingereiht.push(m[1])",
+    "nach": "      if (!eingereiht.includes(m[1])) eingereiht.push(m[1])",
+    "rot": [
+      "ist der Serverwert da, ist er die EINZIGE Quelle",
+      "auch NACH"
+    ],
+    "gruen": [
+      "ohne Serverwert bleibt alles, wie es war",
+      "die Serverbuchfuehrung haelt die Schlange, wenn die Zeile aus dem Puffer fiel",
+      "ein doppelter Name verschiebt die Zaehlung NICHT"
+    ]
+  }
+]
