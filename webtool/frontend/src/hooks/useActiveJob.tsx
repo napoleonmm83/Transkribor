@@ -79,6 +79,10 @@ export function mergePhases(jobs: Job[]): JobPhases {
   // Wer den Lauf hinter sich hat (#581). Gesammelt je Job, weil `schonDurch` die ART braucht,
   // beschnitten erst ganz am Ende — `warten` steht bis dahin nicht fest.
   const durch = new Set<string>()
+  // Die geloeschten Basen aller Jobs — gesammelt wie `durch`, gebraucht erst beim Beschnitt
+  // unten. `mergePhases` reicht `entfernt` selbst NICHT heraus (die Pille braucht es nicht);
+  // hier drin wird es sehr wohl gebraucht, und das ist nicht dieselbe Frage.
+  const geloescht = new Set<string>()
   let global: JobPhases['global'] = null
   let allScoped = jobs.length > 0
   let scope: Set<string> | undefined
@@ -151,12 +155,22 @@ export function mergePhases(jobs: Job[]): JobPhases {
       warten[base] = eintrag
     }
     Object.assign(korrWarten, korrekturSchlange(j.phases, j.kind))
-    // Aus `gesehen` und nicht aus `scope`: `schonDurch` verlangt es ohnehin, und eine waehrend
-    // des Laufs hochgeladene Aufnahme steht nie im Bereich (#431). Die Menge ist damit
-    // deckelfest, soweit sie es sein kann — `gesehen` kommt vom Server, `active` (die zweite
-    // Haelfte von `schonDurch`) nicht. Was das offen laesst, faengt der Plattenbeleg in der
-    // Pille ab; die Begruendung steht bei `durch` in `types.ts`.
+    // Aus `gesehen` und nicht aus `scope`, und der Grund ist schlicht: `schonDurch` verlangt
+    // `gesehen` ohnehin, jede andere Menge waere nur eine groessere Schleife mit demselben
+    // Ergebnis. (Hier stand zuerst „eine waehrend des Laufs hochgeladene Aufnahme steht nie im
+    // Bereich (#431)" — das war die Lage VOR dem Bereichs-Nachtrag: seitdem haengt der Parser
+    // sie per `[scope+]` an `scope`, und weiter unten wird zusaetzlich mit `r.bases` vereinigt.
+    // Die Entscheidung bleibt richtig, ihre zweite Begruendung war widerlegt. Gefunden vom
+    // gegnerischen Pruefer.)
+    //
+    // Die Menge ist deckelfest, soweit sie es sein kann — `gesehen` kommt vom Server, `active`
+    // (die zweite Haelfte von `schonDurch`) nicht. Was das offen laesst, teilen sich der
+    // `warten`-Schnitt unten und der Plattenbeleg in der Pille; wer welchen Fall haelt, steht
+    // bei `durch` in `types.ts`.
     for (const b of j.phases.gesehen ?? []) if (schonDurch(j.phases, j.kind, b)) durch.add(b)
+    // Geloeschte Aufnahmen sammeln — beschnitten wird unten, aus demselben Grund wie bei
+    // `warten`: die Mengen stehen erst nach der Job-Schleife fest.
+    for (const b of j.phases.entfernt ?? []) geloescht.add(b)
   }
   for (const base of Object.keys(active)) {
     delete perBase[base]
@@ -219,6 +233,19 @@ export function mergePhases(jobs: Job[]): JobPhases {
   // aber `durch` soll nichts behaupten, was der Lauf gerade widerlegt.
   for (const b of Object.keys(warten)) durch.delete(b)
   for (const b of Object.keys(active)) durch.delete(b)
+  // Und wer geloescht ist, ist nicht „durch" — der teuerste der drei Schnitte, obwohl er wie
+  // der beilaeufigste aussieht. `remove_base` raeumt `gesehen` NICHT (Historie, #475), der
+  // Parser unterdrueckt fuer eine entfernte Base aber `perBase` UND `erreicht` (#479/#489):
+  // damit ist sie `schonDurch`-wahr, ohne Urteil, ohne Wartegrund — also in `durch`. Wird sie
+  // gleichnamig neu hochgeladen, zeigt die DATEILISTE eines zweiten Fensters bis zum naechsten
+  // Summenpoll (bis 4 s) noch die ALTE `has_edit`, und der Plattenbeleg der Pille faengt das
+  // nicht ab: er prueft, ob etwas da ist, nicht ob es dasselbe ist. Ergebnis waere „Fertig"
+  // ueber einer Aufnahme, die nur Audio ist — genau die Klasse aus #489, durch eine neue Tuer.
+  // Vorher stand dort der Wartetext, und der war in diesem Fall richtig.
+  //
+  // Der Plattenbeleg deckt die Liste also nur in EINE Richtung ab (zu alt in Richtung
+  // „weniger da"); diese Zeile deckt die andere.
+  for (const b of geloescht) durch.delete(b)
   // KEINE `bilanz` im Ergebnis, und das ist Absicht: sie gehoert EINEM Lauf (dem URL-Import),
   // und ihr einziger Leser — der Ausgang — bekommt ihn einzeln aus der `onSettled`-Nutzlast.
   // Hier stand ein `bilanz ?? j.phases.bilanz` mit der Begruendung „zwei fetch-Jobs desselben

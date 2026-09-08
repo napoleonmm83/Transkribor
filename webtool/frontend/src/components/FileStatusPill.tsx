@@ -163,21 +163,29 @@ export function FileStatusPill({ file, active, pct, detail, state, erreicht, job
     // stand danach bis zum Jobende „In Warteschlange…". Die Anzeige heilte sich nicht selbst.
     //
     // ZWEI Belege, und beide sind noetig — der erste kommt aus dem Lauf (`durch`, gebildet in
-    // `mergePhases`: gesehen, nicht aktiv, ohne Wartegrund), der zweite von der PLATTE. Der
-    // Plattenbeleg ist nicht Guertel-und-Hosentraeger, er faengt genau das ab, was `durch`
-    // nicht kann: seine zweite Haelfte (`active`) entsteht aus demselben gedeckelten Puffer,
-    // waehrend `gesehen` aus der Serverbuchfuehrung kommt (`jobs.py` verwirft `active_bases`
-    // ausdruecklich). Faellt die Startzeile einer noch LAUFENDEN Aufnahme heraus, steht sie
-    // faelschlich in `durch` — und ohne den Plattenbeleg zeigte die Pille dann einen
-    // Ruhezustand ueber einer Datei, an der gerade gearbeitet wird. Mit ihm bleibt in genau
-    // dem Fall der bisherige Wartetext stehen, also der Vorzustand.
+    // `mergePhases`: gesehen, nicht aktiv, ohne Wartegrund, nicht geloescht), der zweite von
+    // der PLATTE.
     //
-    // Dasselbe gilt fuer einen Lauf OHNE Korrektur: dort hebt kein `apply:` den `fertig`-
-    // Zaehler der Zusammenfassung, der Summenpoll-Waechter laedt die Dateiliste also nie nach
-    // (`useProjektDaten`), `has_raw` bleibt falsch — und der Wartetext bleibt stehen. Keine
-    // Heilung, aber auch kein Rueckschritt; die Alternative waere „Nur Audio — noch nicht
-    // transkribiert" ueber einer transkribierten Datei gewesen, also eine Falschaussage gegen
-    // eine andere getauscht.
+    // WAS DER PLATTENBELEG WIRKLICH FAENGT, und die erste Fassung dieses Kommentars sagte es
+    // falsch (gefunden vom gegnerischen Pruefer, hier am Code nachgelesen): er haelt die noch
+    // TRANSKRIBIERENDE Aufnahme. `active` entsteht aus dem gedeckelten Puffer, `gesehen`
+    // dagegen aus der Serverbuchfuehrung (`jobs.py` verwirft `active_bases` ausdruecklich) —
+    // faellt die Startzeile einer laufenden Aufnahme heraus, steht sie faelschlich in `durch`.
+    // In der Transkriptionsphase liegt aber noch kein Roh-JSON auf der Platte, `has_raw` ist
+    // falsch, und der Wartetext bleibt stehen.
+    //
+    // Fuer die laufende KORREKTUR trifft das NICHT zu — dort ist `has_raw` laengst wahr, der
+    // Plattenbeleg laesst also durch. Gehalten wird der Fall von der Serverliste `eingereiht`
+    // (#561): die Aufnahme bleibt darin bis `[done]`, `korrekturSchlange` gibt ihr einen
+    // `warten`-Eintrag, und der nimmt sie in `mergePhases` aus `durch`. Zwei Faelle, zwei
+    // Traeger — sie in einem Satz zusammenzuziehen war der Fehler.
+    //
+    // Der dritte Fall gehoert wirklich dem Plattenbeleg: ein Lauf OHNE Korrektur. Dort hebt
+    // kein `apply:` den `fertig`-Zaehler der Zusammenfassung, der Summenpoll-Waechter laedt
+    // die Dateiliste also nie nach (`useProjektDaten`), `has_raw` bleibt falsch — der
+    // Wartetext bleibt stehen. Keine Heilung, aber auch kein Rueckschritt; die Alternative
+    // waere „Nur Audio — noch nicht transkribiert" ueber einer transkribierten Datei gewesen,
+    // also eine Falschaussage gegen eine andere getauscht.
     //
     // Der Riegel sitzt an DIESER Bedingung und nicht am Etikett weiter unten: im selben Block
     // steht der `globalPhase`-Zweig, sonst bliebe „Glossar wird erstellt…" ueber der fertigen

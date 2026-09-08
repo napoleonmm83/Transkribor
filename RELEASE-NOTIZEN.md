@@ -29,7 +29,7 @@ hat. Lesbar, aber unschön — das ist Absicht.
 ## Unveröffentlicht
 
 **Behoben**
-- Bei langen Läufen zeigt eine früh fertig gewordene Aufnahme jetzt ihren Zustand statt bis zum Schluss wieder „In Warteschlange…“.
+- Bei langen Transkriptionsläufen zeigt eine früh fertig gewordene Aufnahme jetzt ihren Zustand statt bis zum Schluss wieder „In Warteschlange…“ — bei einem einzeln gestarteten Korrekturlauf ändert sich noch nichts.
 
 ## v0.54.0 — 2026-09-08
 

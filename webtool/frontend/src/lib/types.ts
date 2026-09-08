@@ -354,18 +354,24 @@ export type JobPhases = {
    *  einer längst transkribierten und korrigierten Datei stand danach bis zum Jobende „In
    *  Warteschlange…". Die Anzeige heilte sich nicht selbst, sondern erst mit dem Jobende.
    *
-   *  Die Menge ist ABSICHTLICH doppelt beschnitten, und beide Schnitte sind Befunde des kalten
-   *  Plan-Lesers, keine Vorsicht: wer noch einen `warten`-Eintrag hat, fliegt heraus (eine
-   *  Aufnahme in der Korrektur-Schlange hat ihr `[active]` längst gedruckt und ist damit
-   *  `schonDurch`-wahr, wartet aber sehr wohl — ohne diesen Schnitt hätte #581 genau die
-   *  #442-Auskunft gelöscht), und wer in `active` steht, ebenfalls.
+   *  Die Menge ist ABSICHTLICH DREIFACH beschnitten, und kein Schnitt ist Vorsicht — jeder
+   *  stammt aus einem Reviewbefund an genau diesem Diff:
+   *  - wer noch einen `warten`-Eintrag hat (eine Aufnahme in der Korrektur-Schlange hat ihr
+   *    `[active]` längst gedruckt und ist damit `schonDurch`-wahr, wartet aber sehr wohl —
+   *    ohne diesen Schnitt hätte #581 genau die #442-Auskunft gelöscht);
+   *  - wer in `active` steht (deckt den Job-übergreifenden Fall, den `schonDurch` nicht sieht);
+   *  - wer GELÖSCHT ist (`entfernt`, #479/#489). `remove_base` räumt `gesehen` nicht, der
+   *    Parser unterdrückt für eine entfernte Base aber `perBase` UND `erreicht` — sie wäre
+   *    also `schonDurch`-wahr, ohne Urteil, ohne Wartegrund. Beim gleichnamigen Neu-Upload
+   *    zeigte ein zweites Fenster bis zum nächsten Summenpoll „Fertig" über einer Aufnahme,
+   *    die nur Audio ist.
    *
    *  Sie ist für sich allein KEIN Freibrief: die Pille verlangt zusätzlich einen Beleg von der
-   *  PLATTE (`has_raw`/`has_md`/`has_edit`). Grund ist eine gemessene Asymmetrie — `gesehen`
-   *  kommt aus der Serverbuchführung und überlebt den Deckel, `active` NICHT (`jobs.py`
-   *  verwirft `active_bases` ausdrücklich, es „verlaesst den Server nie"). Fällt die
-   *  Startzeile einer noch LAUFENDEN Aufnahme heraus, ist sie hier fälschlich enthalten; der
-   *  Plattenbeleg fängt genau das ab. Undefined, solange nichts durch ist. */
+   *  PLATTE (`has_raw`/`has_md`/`has_edit`). Was der abdeckt, steht bei seiner Auswertung in
+   *  `FileStatusPill` — und dort NICHT mehr das, was hier zuerst stand: er hält die noch
+   *  transkribierende Aufnahme (auf der Platte liegt nichts), nicht die laufende Korrektur
+   *  (dort ist `has_raw` längst wahr; die hält `eingereiht` über den `warten`-Schnitt).
+   *  Undefined, solange nichts durch ist. */
   durch?: Set<string>;
   /** Nur der URL-Import: „N von M geladen". Er kennt KEINE Basisnamen — der Parser verwirft
    *  jede `[fetch] `-Zeile bewusst (sonst laese er die URL als Dateinamen), also entsteht dort
