@@ -28,6 +28,9 @@ hat. Lesbar, aber unschön — das ist Absicht.
 
 ## Unveröffentlicht
 
+**Behoben**
+- Bei langen Läufen zeigt eine früh fertig gewordene Aufnahme jetzt ihren Zustand statt bis zum Schluss wieder „In Warteschlange…“.
+
 ## v0.54.0 — 2026-09-08
 
 **Behoben**
@@ -38,7 +41,6 @@ hat. Lesbar, aber unschön — das ist Absicht.
 - Klappt ein Video-Import gerade nicht, weil schon einer läuft, sagt Transkribor jetzt, dass die Links in der Liste stehenbleiben — vorher versprach es, sie kämen von selbst danach dran, was für Links nie stimmte.
 - Nach einem Video-Import zeigt Transkribor die anschliessende Transkription sofort an — vorher tauchte sie erst mit der nächsten Aktualisierung der Liste auf, und eine, die noch davor scheiterte, meldete sich gar nicht.
 - Bei langen Läufen bleibt die Auskunft „Wartet auf Korrektur · noch N vor dieser“ jetzt auch dann richtig, wenn schon sehr viel im Protokoll steht — vorher fielen einzelne Aufnahmen daraus heraus und die Zahl der übrigen war zu klein.
-- Bei langen Läufen zeigt eine früh fertig gewordene Aufnahme jetzt ihren Zustand statt bis zum Schluss wieder „In Warteschlange…“.
 
 ## v0.53.0 — 2026-09-03
 
