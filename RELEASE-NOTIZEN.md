@@ -30,7 +30,7 @@ hat. Lesbar, aber unschön — das ist Absicht.
 
 **Behoben**
 - Bei langen Transkriptionsläufen zeigt eine früh fertig gewordene Aufnahme jetzt ihren Zustand statt bis zum Schluss wieder „In Warteschlange…“ — bei einem einzeln gestarteten Korrekturlauf ändert sich noch nichts.
-- Trifft ein zweiter Video-Import genau das Ende des ersten und scheitert dann, wird der erste jetzt trotzdem weiterverarbeitet, statt liegenzubleiben.
+- Trifft ein zweiter Video-Import genau das Ende des ersten und schlägt dann fehl, wird der erste jetzt trotzdem weiterverarbeitet, statt liegenzubleiben — brichst du den zweiten dagegen selbst ab, bleibt auch der erste liegen.
 
 ## v0.54.0 — 2026-09-08
 
