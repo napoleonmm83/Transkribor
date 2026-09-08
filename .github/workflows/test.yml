@@ -497,9 +497,13 @@ jobs:
       # Anti-Schweigen-Riegel des Treibers — genau der Fall, gegen den er gebaut ist, und der
       # Grund, warum dieser Job hier zweimal ehrlich rot war statt zehnmal „wirkungslos".
       #
-      # `npm run` setzt das Arbeitsverzeichnis auf das PAKET (anders als `npm exec`, das den
-      # Aufrufer-cwd behaelt) — damit stimmt es auf beiden Plattformen, ohne `cd` und ohne
-      # `--root`. Die Pfade hinter `--` sind vitest-Filter relativ zum Paket.
+      # `cd` UND `npm test`, und beide Haelften sind noetig — das ist der dritte Anlauf, und
+      # er beseitigt die zwei Unbekannten der ersten beiden statt eine dritte zu raten.
+      # `cd` macht das Paket eindeutig: `npm --prefix … test` loeste auf dem Laeufer offenbar
+      # die WURZEL-`package.json` auf, und die hat gar kein `test`-Skript — npm endet dann mit
+      # „Missing script" und ohne jede Testmarke, also genau als „NULL Tests". `npm test`
+      # statt `npx vitest`, weil npx aus einem fremden Ordner ein fremdes vitest laedt.
+      # Die Pfade hinter `--` sind vitest-Filter relativ zum Paket.
       #
       # Der Schritt davor ist die POSITIVKONTROLLE und keine Zierde: schlaegt die Serie an,
       # trennt er „die Suite laeuft auf diesem Laeufer gar nicht" von „die Mutation griff
@@ -517,13 +521,13 @@ jobs:
         working-directory: webtool/frontend
       - name: Positivkontrolle — laeuft die Auswahl auf diesem Laeufer ueberhaupt?
         run: >
-          npm --prefix webtool/frontend test --
+          cd webtool/frontend && npm test --
           src/components/FileStatusPill.test.tsx src/components/Sidebar.test.tsx
           src/hooks/useActiveJob.test.tsx src/pages/ProjectWorkspace.test.tsx
       - name: Probe gegen die Statuspille (#581)
         run: >
           python scripts/mutation.py --repo . --pfad webtool/
-          --test "npm --prefix webtool/frontend test --
+          --test "cd webtool/frontend && npm test --
           src/components/FileStatusPill.test.tsx src/components/Sidebar.test.tsx
           src/hooks/useActiveJob.test.tsx src/pages/ProjectWorkspace.test.tsx"
           --plan scripts/mutationen/statuspille_durch.json
