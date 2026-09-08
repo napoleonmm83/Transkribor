@@ -76,12 +76,12 @@
     "nach": "    // mutiert: es wird nichts mehr gesammelt",
     "rot": [
       "durch nennt, wer den Lauf hinter sich hat",
-      "reicht durch aus dem Job an die Dateizeile durch",
-      "zeigt den Ruhezustand statt des Wartesymbols"
+      "reicht durch aus dem Job an die Dateizeile durch"
     ],
     "gruen": [
       "ein correct-Lauf liefert GAR KEIN durch",
-      "durch nimmt heraus, wer geloescht ist"
+      "durch nimmt heraus, wer geloescht ist",
+      "zeigt den Ruhezustand statt des Wartesymbols"
     ]
   },
   {
