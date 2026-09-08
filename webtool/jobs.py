@@ -683,6 +683,12 @@ def _run(jid, cmd, cwd, env):
                 folge = _jobs[folge_jid]
                 # Die Dedupe prueft BEIDE Ziellisten. Mit nur einer landete derselbe
                 # Rueckruf in `then` UND `then_ueber` und liefe bei Erfolg zweimal.
+                # Der EINE Fall, in dem sie wirklich greift, ist `request`s `rerun`: es
+                # reicht dasselbe `then`-Objekt an den Folge-Job weiter, das steht dort
+                # also schon. GETRAGENE GRENZE: scheitert genau DER Job, faellt das `then`
+                # mit ihm (es liegt in seiner EIGENEN Liste, nicht in `then_ueber`).
+                # Heute unerreichbar — `request(then=…)` hat keinen Produktivaufrufer —,
+                # und wer einen baut, faengt hier an.
                 for fn in then_callbacks + ueber_then:
                     if fn not in folge["then"] and fn not in folge["then_ueber"]:
                         folge["then_ueber"].append(fn)
