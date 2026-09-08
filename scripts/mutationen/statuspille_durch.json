@@ -2,14 +2,15 @@
   "test": "npm --prefix webtool/frontend test -- src/components/FileStatusPill.test.tsx src/components/Sidebar.test.tsx src/hooks/useActiveJob.test.tsx src/pages/ProjectWorkspace.test.tsx",
   "pfade": [
     "webtool/frontend/src/components/FileRow.tsx",
-    "webtool/frontend/src/components/FileStatusPill.tsx",
-    "webtool/frontend/src/components/Sidebar.tsx",
-    "webtool/frontend/src/hooks/useActiveJob.tsx",
-    "webtool/frontend/src/pages/ProjectWorkspace.tsx",
     "webtool/frontend/src/components/FileStatusPill.test.tsx",
+    "webtool/frontend/src/components/FileStatusPill.tsx",
     "webtool/frontend/src/components/Sidebar.test.tsx",
+    "webtool/frontend/src/components/Sidebar.tsx",
     "webtool/frontend/src/hooks/useActiveJob.test.tsx",
-    "webtool/frontend/src/pages/ProjectWorkspace.test.tsx"
+    "webtool/frontend/src/hooks/useActiveJob.tsx",
+    "webtool/frontend/src/lib/jobPhases.ts",
+    "webtool/frontend/src/pages/ProjectWorkspace.test.tsx",
+    "webtool/frontend/src/pages/ProjectWorkspace.tsx"
   ],
   "mutationen": [
     {

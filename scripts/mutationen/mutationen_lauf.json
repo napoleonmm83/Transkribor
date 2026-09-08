@@ -82,7 +82,32 @@
       "gruen": [
         "test_jeder_plan_traegt_die_objektform"
       ],
-      "hinweis": "`test_jeder_anker_passt_genau_einmal` steht NICHT unter `gruen`, und das ist kein Versehen: diese Mutation aendert eine PLANDATEI, und damit verschwindet der Anker DIESER Mutation aus dem Baum, solange sie gesetzt ist. Der Waechter meldet das voellig zu Recht. Er ist hier also aus einem zweiten, selbstbezueglichen Grund rot — und genau deshalb taugt er nicht als Gegenprobe."
+      "hinweis": "`test_jeder_anker_passt_genau_einmal` steht NICHT unter `gruen`, und das ist kein Versehen, sondern eine EIGENSCHAFT: jede Mutation an einer PLANDATEI loescht den Anker genau der Mutation, die sie gerade setzt — der Waechter ist waehrenddessen also immer rot, und zwar zu Recht. Fuer Daten-Mutationen kann er deshalb grundsaetzlich keine Gegenprobe sein. Zweimal darauf hereingefallen (L6, L8), deshalb steht es hier."
+    },
+    {
+      "id": "L7 ein Signal des Treibers gilt wieder als Urteil",
+      "datei": "scripts/mutationen_lauf.py",
+      "von": "        if rc not in (0, 1, 2):",
+      "nach": "        if False:",
+      "rot": [
+        "test_ein_signal_getoeteter_treiber_meldet_NICHT_gruen"
+      ],
+      "gruen": [
+        "test_die_rueckgabecodes_der_plaene_werden_zum_schlimmsten_verdichtet"
+      ]
+    },
+    {
+      "id": "L8 ein gruen-Name im Plan zeigt ins Leere (die Gegenprobe waere leer)",
+      "datei": "scripts/mutationen/deckel_finally.json",
+      "von": "test_eingereiht_ueberlebt_den_zeilendeckel",
+      "nach": "test_diesen_namen_gibt_es_nicht",
+      "rot": [
+        "test_jeder_rot_und_gruen_name_existiert_wirklich"
+      ],
+      "gruen": [
+        "test_jeder_pfad_existiert"
+      ],
+      "hinweis": "`test_jeder_anker_passt_genau_einmal` steht NICHT unter `gruen`, und das ist kein Versehen, sondern eine EIGENSCHAFT: jede Mutation an einer PLANDATEI loescht den Anker genau der Mutation, die sie gerade setzt — der Waechter ist waehrenddessen also immer rot, und zwar zu Recht. Fuer Daten-Mutationen kann er deshalb grundsaetzlich keine Gegenprobe sein. Zweimal darauf hereingefallen (L6, L8), deshalb steht es hier."
     }
   ]
 }
