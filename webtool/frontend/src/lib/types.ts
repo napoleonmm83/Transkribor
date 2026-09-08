@@ -343,6 +343,30 @@ export type JobPhases = {
    *  fällt die Anzeige auf ihren bisherigen Text zurück, dieselbe sichere Richtung wie
    *  `imBereich`. */
   warten?: Record<string, Warten>;
+  /** Aufnahmen, die der Lauf nachweislich hinter sich hat und auf die auch nichts mehr wartet
+   *  (#581). Entsteht wie `warten` in `mergePhases` und aus demselben zwingenden Grund: nur der
+   *  einzelne Job kennt seine ART (`schonDurch` gilt allein für `transcribe`), nach dem Merge
+   *  ist sie weg.
+   *
+   *  Wozu: die Statuspille schloss aus einem FEHLENDEN `perBase`-Eintrag auf „wartet". Bei
+   *  einem langen Lauf fällt die Urteilszeile einer früh fertigen Aufnahme aus dem gedeckelten
+   *  Puffer (`MAX_JOB_LINES`, an einem echten Lauf 10.560 Zeilen gemessen — #475), und über
+   *  einer längst transkribierten und korrigierten Datei stand danach bis zum Jobende „In
+   *  Warteschlange…". Die Anzeige heilte sich nicht selbst, sondern erst mit dem Jobende.
+   *
+   *  Die Menge ist ABSICHTLICH doppelt beschnitten, und beide Schnitte sind Befunde des kalten
+   *  Plan-Lesers, keine Vorsicht: wer noch einen `warten`-Eintrag hat, fliegt heraus (eine
+   *  Aufnahme in der Korrektur-Schlange hat ihr `[active]` längst gedruckt und ist damit
+   *  `schonDurch`-wahr, wartet aber sehr wohl — ohne diesen Schnitt hätte #581 genau die
+   *  #442-Auskunft gelöscht), und wer in `active` steht, ebenfalls.
+   *
+   *  Sie ist für sich allein KEIN Freibrief: die Pille verlangt zusätzlich einen Beleg von der
+   *  PLATTE (`has_raw`/`has_md`/`has_edit`). Grund ist eine gemessene Asymmetrie — `gesehen`
+   *  kommt aus der Serverbuchführung und überlebt den Deckel, `active` NICHT (`jobs.py`
+   *  verwirft `active_bases` ausdrücklich, es „verlaesst den Server nie"). Fällt die
+   *  Startzeile einer noch LAUFENDEN Aufnahme heraus, ist sie hier fälschlich enthalten; der
+   *  Plattenbeleg fängt genau das ab. Undefined, solange nichts durch ist. */
+  durch?: Set<string>;
   /** Nur der URL-Import: „N von M geladen". Er kennt KEINE Basisnamen — der Parser verwirft
    *  jede `[fetch] `-Zeile bewusst (sonst laese er die URL als Dateinamen), also entsteht dort
    *  nie ein `perBase`-Eintrag. Ohne diese Bilanz sieht ein Teilfehlschlag des Imports von

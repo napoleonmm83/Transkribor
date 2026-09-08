@@ -282,6 +282,54 @@ describe('mergePhases', () => {
     expect(m.warten?.A).toBeUndefined()
   })
 
+  it('durch nennt, wer den Lauf hinter sich hat — auch mit verdraengtem Urteil (#581)', () => {
+    /* Der Fall aus #581: A ist fertig, seine `fertig A:`-Zeile ist aber aus dem gedeckelten
+       Puffer gefallen (hier: sie steht gar nicht in den Zeilen). `gesehen` kommt vom Server
+       und ueberlebt den Deckel — daran haengt die Auskunft. B laeuft gerade und darf NICHT
+       darin stehen. */
+    const m = mergePhases([job('j1', 'transcribe', parseJobPhases('transcribe', [
+      '[scope] A\tB',
+      '→ Korrigiere B · Block 1/4 …',
+    ], ['A', 'B']))])
+    expect(m.durch?.has('A')).toBe(true)
+    expect(m.durch?.has('B')).toBe(false)
+  })
+
+  it('durch nimmt heraus, wer noch in der Korrektur-Schlange steht (#581/#442)', () => {
+    /* Der sperrende Befund des kalten Plan-Lesers. B hat sein `[active]` in der
+       Transkriptionsphase laengst gedruckt und laeuft gerade nicht — `schonDurch` ist also
+       wahr, obwohl B sehr wohl wartet. Ohne den Schnitt an `warten` haette #581 genau die
+       #442-Auskunft geloescht, und zwar bei den Aufnahmen, die sie am laengsten brauchen. */
+    const m = mergePhases([job('j1', 'transcribe', parseJobPhases('transcribe', [
+      '[scope] A\tB',
+      '[Demo] fertig A: 12s, 30 Segmente, 1.2x Echtzeit',
+      '→ Diarisiere A …', '[done] A', '→ Eingereiht A (Korrektur) …',
+      '[Demo] fertig B: 9s, 21 Segmente, 1.4x Echtzeit',
+      '→ Diarisiere B …', '[done] B', '→ Eingereiht B (Korrektur) …',
+      '→ Korrigiere A · Block 1/4 …',
+    ], ['A', 'B']))])
+    expect(m.warten?.B).toEqual({ art: 'correct', vor: 0 })
+    // A wird gerade korrigiert, B wartet auf seinen Slot — es bleibt niemand uebrig, und
+    // `durch` faellt wie `gesehen`/`warten` auf undefined zurueck. Ohne den Schnitt an
+    // `warten` staende hier `Set{B}`, und die Pille zeigte ueber B seinen Ruhezustand statt
+    // „Wartet auf Korrektur · noch 0 vor dieser".
+    expect(m.durch).toBeUndefined()
+  })
+
+  it('durch nimmt heraus, wer in einem ANDEREN Job gerade laeuft (#581)', () => {
+    /* Der Schnitt an `active` traegt einen Fall, den `schonDurch` nicht sehen kann: es prueft
+       `phases.active` des EIGENEN Jobs. Steht dieselbe Aufnahme in einem zweiten Job unter
+       Arbeit, bliebe sie ohne diese Zeile in `durch` — und der Plattenbeleg der Pille faengt
+       das NICHT ab, weil eine gerade korrigierte Aufnahme laengst `has_raw` traegt. Dieselbe
+       Lage wie beim Waechter ganz oben in dieser Gruppe, nur fuer die andere Menge. */
+    const m = mergePhases([
+      job('j1', 'transcribe', { global: null, active: {}, perBase: {}, gesehen: new Set(['A']) }),
+      job('j2', 'correct', { global: null, active: { A: { phase: 'correct' } }, perBase: {} }),
+    ])
+    expect(m.active).toEqual({ A: { phase: 'correct' } })
+    expect(m.durch).toBeUndefined()
+  })
+
   it('die Korrektur-Schlange behaelt ihre UEBERGABE-Reihenfolge auch nach dem Merge (#442)', () => {
     /* Die Neu-Durchzaehlung am Ende von `mergePhases` sortierte BEIDE Schlangen nach Namen.
        Fuer die Transkription ist das richtig (der Erzeuger sortiert selbst so), fuer die

@@ -742,8 +742,15 @@ export function korrekturSchlange(phases: JobPhases, kind: string): Record<strin
  *  mit „diese eine Datei ist jetzt dran" (der Lauf ist sequentiell, eine GPU), „gesehen und
  *  nicht mehr aktiv" heisst also „durch". Im `correct`-Lauf meldet das Glossar seit #450
  *  KORPUSWEIT `[active]` — dort waere jede Aufnahme von der ersten Sekunde an „gesehen", und
- *  die Karte bliebe fuer immer leer. */
-function schonDurch(phases: JobPhases, kind: string, base: string): boolean {
+ *  die Karte bliebe fuer immer leer.
+ *
+ *  EXPORTIERT seit #581, weil die Statuspille dieselbe Frage stellen muss: sie schloss aus der
+ *  ABWESENHEIT eines Urteils auf „wartet" und behauptete damit ueber eine verdraengte
+ *  Aufnahme bis zum Jobende „In Warteschlange…". `warteKarte` kannte den Rueckweg da schon;
+ *  ihn ein zweites Mal hinzuschreiben waere die Drift, gegen die `jobPhases.vertrag.test.ts`
+ *  gebaut ist. Gerufen wird er dort NICHT direkt, sondern in `mergePhases` (`durch`) — nur der
+ *  einzelne Job kennt seine `kind`, nach dem Merge ist sie weg. */
+export function schonDurch(phases: JobPhases, kind: string, base: string): boolean {
   return kind === 'transcribe' && !!phases.gesehen?.has(base) && !Object.hasOwn(phases.active, base)
 }
 
