@@ -1,14 +1,22 @@
-[
-  {
-    "id": "F-fin der Deckel-Test faellt — der Geist darf trotzdem nicht liegenbleiben",
-    "datei": "webtool/test_jobs.py",
-    "von": "        assert jobs.vorgang(laeuft) is not None, \"der LAUFENDE Vorgang wurde geworfen\"",
-    "nach": "        assert jobs.vorgang(laeuft) is None, \"absichtlicher Fehlschlag (Messung finally)\"",
-    "rot": ["test_deckel_wirft_keinen_LAUFENDEN_vorgang"],
-    "gruen": [
-      "test_eingereiht_ueberlebt_den_zeilendeckel",
-      "test_eingereiht_verlaesst_die_schlange_beim_abschluss",
-      "test_reannoncierte_aufnahme_rueckt_in_der_schlange_nach_HINTEN"
-    ]
-  }
-]
+{
+  "test": "python -m pytest webtool/test_jobs.py -q",
+  "pfade": [
+    "webtool/test_jobs.py"
+  ],
+  "mutationen": [
+    {
+      "id": "F-fin der Deckel-Test faellt — der Geist darf trotzdem nicht liegenbleiben",
+      "datei": "webtool/test_jobs.py",
+      "von": "        assert jobs.vorgang(laeuft) is not None, \"der LAUFENDE Vorgang wurde geworfen\"",
+      "nach": "        assert jobs.vorgang(laeuft) is None, \"absichtlicher Fehlschlag (Messung finally)\"",
+      "rot": [
+        "test_deckel_wirft_keinen_LAUFENDEN_vorgang"
+      ],
+      "gruen": [
+        "test_eingereiht_ueberlebt_den_zeilendeckel",
+        "test_eingereiht_verlaesst_die_schlange_beim_abschluss",
+        "test_reannoncierte_aufnahme_rueckt_in_der_schlange_nach_HINTEN"
+      ]
+    }
+  ]
+}

@@ -1,140 +1,189 @@
-[
-  {
-    "id": "W1 das uebernommene `then` wird beim Fehlschlag des Empfaengers fallengelassen (#579, der Defekt selbst)",
-    "datei": "webtool/jobs.py",
-    "von": "            _paar(then_fn, sonst_fn, then_faellig=not abgebrochen)",
-    "nach": "            _paar(then_fn, sonst_fn, then_faellig=erfolg)",
-    "rot": ["test_weitergereichtes_then_laesst_keine_vormerkung_zurueck"],
-    "gruen": ["test_abgebrochener_empfaenger_holt_das_uebernommene_then_NICHT_nach"]
-  },
-  {
-    "id": "W2 das uebernommene `then` laeuft auch nach einem ABBRUCH (E2 verletzt: Herunterfahren startet Whisper)",
-    "datei": "webtool/jobs.py",
-    "von": "            _paar(then_fn, sonst_fn, then_faellig=not abgebrochen)",
-    "nach": "            _paar(then_fn, sonst_fn, then_faellig=True)",
-    "rot": ["test_abgebrochener_empfaenger_holt_das_uebernommene_then_NICHT_nach"],
-    "gruen": ["test_weitergereichtes_then_laesst_keine_vormerkung_zurueck"]
-  },
-  {
-    "id": "W3 die Quittung laeuft nie — jede Vormerkung bleibt bei einem Ausfall offen",
-    "datei": "webtool/jobs.py",
-    "von": "        if sonst_fn is not None:\n            _rufe(sonst_fn)",
-    "nach": "        if sonst_fn is None:\n            _rufe(sonst_fn)",
-    "rot": [
-      "test_gescheiterter_download_schliesst_seine_vormerkung",
-      "test_abgebrochener_empfaenger_holt_das_uebernommene_then_NICHT_nach",
-      "test_werfendes_then_zieht_seine_quittung_nach"
-    ],
-    "gruen": ["test_gelungener_download_laesst_die_vormerkung_offen"]
-  },
-  {
-    "id": "W4 die Quittung laeuft AUCH nach einem gelungenen `then` — sie verwirft eine gerade angelaufene Nummer",
-    "datei": "webtool/jobs.py",
-    "von": "        if then_faellig and then_fn is not None and _rufe(then_fn):\n            return",
-    "nach": "        if then_faellig and then_fn is not None and _rufe(then_fn):\n            pass",
-    "rot": [
-      "test_gelungener_download_laesst_die_vormerkung_offen",
-      "test_gelungener_empfaenger_laesst_das_uebernommene_sonst_liegen",
-      "test_ein_werfendes_geerbtes_then_zieht_NUR_seine_eigene_quittung"
-    ],
-    "gruen": ["test_gescheiterter_download_schliesst_seine_vormerkung"]
-  },
-  {
-    "id": "W5 das EIGENE `then` laeuft bei jedem Ausgang — auch nach einem gescheiterten Download",
-    "datei": "webtool/jobs.py",
-    "von": "            _paar(then_fn, sonst_fn, then_faellig=erfolg)",
-    "nach": "            _paar(then_fn, sonst_fn, then_faellig=True)",
-    "rot": ["test_gescheiterter_download_schliesst_seine_vormerkung"],
-    "gruen": ["test_gelungener_download_laesst_die_vormerkung_offen"]
-  },
-  {
-    "id": "W6 das EIGENE `then` laeuft gar nicht — der Nachlauf des URL-Imports faellt ersatzlos aus",
-    "datei": "webtool/jobs.py",
-    "von": "            _paar(then_fn, sonst_fn, then_faellig=erfolg)",
-    "nach": "            _paar(then_fn, sonst_fn, then_faellig=False)",
-    "rot": [
-      "test_gelungener_download_laesst_die_vormerkung_offen",
-      "test_endpunkt_laesst_die_nummer_offen_wenn_der_download_gelingt"
-    ],
-    "gruen": ["test_gescheiterter_download_schliesst_seine_vormerkung"]
-  },
-  {
-    "id": "W7 es wird gar nicht weitergereicht — der Empfaenger erbt nichts",
-    "datei": "webtool/jobs.py",
-    "von": "                    folge[\"uebernommen\"].append(paar)",
-    "nach": "                    pass",
-    "rot": [
-      "test_weitergereichtes_then_laesst_keine_vormerkung_zurueck",
-      "test_abgebrochener_empfaenger_holt_das_uebernommene_then_NICHT_nach"
-    ],
-    "gruen": ["test_gelungener_download_laesst_die_vormerkung_offen"]
-  },
-  {
-    "id": "W8 `jobs.get` gibt die Rueckruf-Paare mit — FastAPI macht daraus `[{}]` im 1,5-s-Poll",
-    "datei": "webtool/jobs.py",
-    "von": "        snap.pop(\"uebernommen\", None)         # FastAPIs Encoder wirft nicht, er bildet eine",
-    "nach": "        pass                                  # FastAPIs Encoder wirft nicht, er bildet eine",
-    "rot": ["test_jobs_get_traegt_keine_rueckruf_felder"],
-    "gruen": ["test_weitergereichtes_then_laesst_keine_vormerkung_zurueck"]
-  },
-  {
-    "id": "W9 der Endpunkt uebergibt kein `sonst` — die Verdrahtung faellt still aus",
-    "datei": "webtool/app.py",
-    "von": "                                     sonst=lambda: jobs.vorgang_verwerfen(nummer),",
-    "nach": "",
-    "rot": [
-      "test_fetch_haengt_seinen_aufraeum_rueckruf_an_die_EIGENE_nummer",
-      "test_endpunkt_haengt_seinen_ausgangs_rueckruf_an_den_RICHTIGEN_job"
-    ],
-    "gruen": ["test_fetch_raeumt_die_nummer_NICHT_schon_beim_start_weg"]
-  },
-  {
-    "id": "W10 ein gescheiterter Lauf REICHT WEITER, statt nachzuholen — die geschuldete Arbeit haengt danach an einem dritten Job",
-    "datei": "webtool/jobs.py",
-    "von": "        if erfolg and (folge_jid or hat_pending) and folge_jid != jid:",
-    "nach": "        if (folge_jid or hat_pending) and folge_jid != jid:",
-    "rot": ["test_fehlschlag_holt_das_uebernommene_then_NACH_statt_es_weiterzureichen"],
-    "gruen": ["test_weitergereichtes_then_laesst_keine_vormerkung_zurueck"]
-  },
-  {
-    "id": "W11 das GEERBTE Paar wird beim zweiten Weiterreichen fallengelassen — #579, ein Glied weiter",
-    "datei": "webtool/jobs.py",
-    "von": "                for paar in eigene_paare + geerbte_paare:",
-    "nach": "                for paar in eigene_paare:",
-    "rot": [
-      "test_geerbtes_then_ueberlebt_das_ZWEITE_weiterreichen",
-      "test_geerbtes_sonst_ueberlebt_das_ZWEITE_weiterreichen"
-    ],
-    "gruen": ["test_weitergereichtes_then_laesst_keine_vormerkung_zurueck"]
-  },
-  {
-    "id": "W12 nach dem Weiterreichen laufen die Rueckrufe TROTZDEM — ein Import wird zu zwei Whisper-Laeufen",
-    "datei": "webtool/jobs.py",
-    "von": "    if not weitergereicht:",
-    "nach": "    if True:",
-    "rot": ["test_geerbtes_then_ueberlebt_das_ZWEITE_weiterreichen"],
-    "gruen": ["test_gelungener_download_laesst_die_vormerkung_offen"]
-  },
-  {
-    "id": "W13 beim Weiterreichen faellt die Quittungs-Haelfte des Paares weg — Leck durch dieselbe Tuer",
-    "datei": "webtool/jobs.py",
-    "von": "                    folge[\"uebernommen\"].append(paar)",
-    "nach": "                    folge[\"uebernommen\"].append((paar[0], None))",
-    "rot": [
-      "test_abgebrochener_empfaenger_holt_das_uebernommene_then_NICHT_nach",
-      "test_geerbtes_sonst_ueberlebt_das_ZWEITE_weiterreichen"
-    ],
-    "gruen": ["test_weitergereichtes_then_laesst_keine_vormerkung_zurueck"]
-  },
-  {
-    "id": "W14 ein WERFENDES `then` gilt als gelaufen — die Vormerkung bleibt fuer immer offen",
-    "datei": "webtool/jobs.py",
-    "von": "        if then_faellig and then_fn is not None and _rufe(then_fn):",
-    "nach": "        if then_faellig and then_fn is not None and (_rufe(then_fn) or True):",
-    "rot": [
-      "test_werfendes_then_zieht_seine_quittung_nach",
-      "test_ein_werfendes_geerbtes_then_zieht_NUR_seine_eigene_quittung"
-    ],
-    "gruen": ["test_gelungener_download_laesst_die_vormerkung_offen"]
-  }
-]
+{
+  "test": "python -m pytest webtool/test_jobs.py webtool/test_api.py -q",
+  "pfade": [
+    "webtool/app.py",
+    "webtool/jobs.py",
+    "webtool/test_jobs.py",
+    "webtool/test_api.py"
+  ],
+  "mutationen": [
+    {
+      "id": "W1 das uebernommene `then` wird beim Fehlschlag des Empfaengers fallengelassen (#579, der Defekt selbst)",
+      "datei": "webtool/jobs.py",
+      "von": "            _paar(then_fn, sonst_fn, then_faellig=not abgebrochen)",
+      "nach": "            _paar(then_fn, sonst_fn, then_faellig=erfolg)",
+      "rot": [
+        "test_weitergereichtes_then_laesst_keine_vormerkung_zurueck"
+      ],
+      "gruen": [
+        "test_abgebrochener_empfaenger_holt_das_uebernommene_then_NICHT_nach"
+      ]
+    },
+    {
+      "id": "W2 das uebernommene `then` laeuft auch nach einem ABBRUCH (E2 verletzt: Herunterfahren startet Whisper)",
+      "datei": "webtool/jobs.py",
+      "von": "            _paar(then_fn, sonst_fn, then_faellig=not abgebrochen)",
+      "nach": "            _paar(then_fn, sonst_fn, then_faellig=True)",
+      "rot": [
+        "test_abgebrochener_empfaenger_holt_das_uebernommene_then_NICHT_nach"
+      ],
+      "gruen": [
+        "test_weitergereichtes_then_laesst_keine_vormerkung_zurueck"
+      ]
+    },
+    {
+      "id": "W3 die Quittung laeuft nie — jede Vormerkung bleibt bei einem Ausfall offen",
+      "datei": "webtool/jobs.py",
+      "von": "        if sonst_fn is not None:\n            _rufe(sonst_fn)",
+      "nach": "        if sonst_fn is None:\n            _rufe(sonst_fn)",
+      "rot": [
+        "test_gescheiterter_download_schliesst_seine_vormerkung",
+        "test_abgebrochener_empfaenger_holt_das_uebernommene_then_NICHT_nach",
+        "test_werfendes_then_zieht_seine_quittung_nach"
+      ],
+      "gruen": [
+        "test_gelungener_download_laesst_die_vormerkung_offen"
+      ]
+    },
+    {
+      "id": "W4 die Quittung laeuft AUCH nach einem gelungenen `then` — sie verwirft eine gerade angelaufene Nummer",
+      "datei": "webtool/jobs.py",
+      "von": "        if then_faellig and then_fn is not None and _rufe(then_fn):\n            return",
+      "nach": "        if then_faellig and then_fn is not None and _rufe(then_fn):\n            pass",
+      "rot": [
+        "test_gelungener_download_laesst_die_vormerkung_offen",
+        "test_gelungener_empfaenger_laesst_das_uebernommene_sonst_liegen",
+        "test_ein_werfendes_geerbtes_then_zieht_NUR_seine_eigene_quittung"
+      ],
+      "gruen": [
+        "test_gescheiterter_download_schliesst_seine_vormerkung"
+      ]
+    },
+    {
+      "id": "W5 das EIGENE `then` laeuft bei jedem Ausgang — auch nach einem gescheiterten Download",
+      "datei": "webtool/jobs.py",
+      "von": "            _paar(then_fn, sonst_fn, then_faellig=erfolg)",
+      "nach": "            _paar(then_fn, sonst_fn, then_faellig=True)",
+      "rot": [
+        "test_gescheiterter_download_schliesst_seine_vormerkung"
+      ],
+      "gruen": [
+        "test_gelungener_download_laesst_die_vormerkung_offen"
+      ]
+    },
+    {
+      "id": "W6 das EIGENE `then` laeuft gar nicht — der Nachlauf des URL-Imports faellt ersatzlos aus",
+      "datei": "webtool/jobs.py",
+      "von": "            _paar(then_fn, sonst_fn, then_faellig=erfolg)",
+      "nach": "            _paar(then_fn, sonst_fn, then_faellig=False)",
+      "rot": [
+        "test_gelungener_download_laesst_die_vormerkung_offen",
+        "test_endpunkt_laesst_die_nummer_offen_wenn_der_download_gelingt"
+      ],
+      "gruen": [
+        "test_gescheiterter_download_schliesst_seine_vormerkung"
+      ]
+    },
+    {
+      "id": "W7 es wird gar nicht weitergereicht — der Empfaenger erbt nichts",
+      "datei": "webtool/jobs.py",
+      "von": "                    folge[\"uebernommen\"].append(paar)",
+      "nach": "                    pass",
+      "rot": [
+        "test_weitergereichtes_then_laesst_keine_vormerkung_zurueck",
+        "test_abgebrochener_empfaenger_holt_das_uebernommene_then_NICHT_nach"
+      ],
+      "gruen": [
+        "test_gelungener_download_laesst_die_vormerkung_offen"
+      ]
+    },
+    {
+      "id": "W8 `jobs.get` gibt die Rueckruf-Paare mit — FastAPI macht daraus `[{}]` im 1,5-s-Poll",
+      "datei": "webtool/jobs.py",
+      "von": "        snap.pop(\"uebernommen\", None)         # FastAPIs Encoder wirft nicht, er bildet eine",
+      "nach": "        pass                                  # FastAPIs Encoder wirft nicht, er bildet eine",
+      "rot": [
+        "test_jobs_get_traegt_keine_rueckruf_felder"
+      ],
+      "gruen": [
+        "test_weitergereichtes_then_laesst_keine_vormerkung_zurueck"
+      ]
+    },
+    {
+      "id": "W9 der Endpunkt uebergibt kein `sonst` — die Verdrahtung faellt still aus",
+      "datei": "webtool/app.py",
+      "von": "                                     sonst=lambda: jobs.vorgang_verwerfen(nummer),",
+      "nach": "",
+      "rot": [
+        "test_fetch_haengt_seinen_aufraeum_rueckruf_an_die_EIGENE_nummer",
+        "test_endpunkt_haengt_seinen_ausgangs_rueckruf_an_den_RICHTIGEN_job"
+      ],
+      "gruen": [
+        "test_fetch_raeumt_die_nummer_NICHT_schon_beim_start_weg"
+      ]
+    },
+    {
+      "id": "W10 ein gescheiterter Lauf REICHT WEITER, statt nachzuholen — die geschuldete Arbeit haengt danach an einem dritten Job",
+      "datei": "webtool/jobs.py",
+      "von": "        if erfolg and (folge_jid or hat_pending) and folge_jid != jid:",
+      "nach": "        if (folge_jid or hat_pending) and folge_jid != jid:",
+      "rot": [
+        "test_fehlschlag_holt_das_uebernommene_then_NACH_statt_es_weiterzureichen"
+      ],
+      "gruen": [
+        "test_weitergereichtes_then_laesst_keine_vormerkung_zurueck"
+      ]
+    },
+    {
+      "id": "W11 das GEERBTE Paar wird beim zweiten Weiterreichen fallengelassen — #579, ein Glied weiter",
+      "datei": "webtool/jobs.py",
+      "von": "                for paar in eigene_paare + geerbte_paare:",
+      "nach": "                for paar in eigene_paare:",
+      "rot": [
+        "test_geerbtes_then_ueberlebt_das_ZWEITE_weiterreichen",
+        "test_geerbtes_sonst_ueberlebt_das_ZWEITE_weiterreichen"
+      ],
+      "gruen": [
+        "test_weitergereichtes_then_laesst_keine_vormerkung_zurueck"
+      ]
+    },
+    {
+      "id": "W12 nach dem Weiterreichen laufen die Rueckrufe TROTZDEM — ein Import wird zu zwei Whisper-Laeufen",
+      "datei": "webtool/jobs.py",
+      "von": "    if not weitergereicht:",
+      "nach": "    if True:",
+      "rot": [
+        "test_geerbtes_then_ueberlebt_das_ZWEITE_weiterreichen"
+      ],
+      "gruen": [
+        "test_gelungener_download_laesst_die_vormerkung_offen"
+      ]
+    },
+    {
+      "id": "W13 beim Weiterreichen faellt die Quittungs-Haelfte des Paares weg — Leck durch dieselbe Tuer",
+      "datei": "webtool/jobs.py",
+      "von": "                    folge[\"uebernommen\"].append(paar)",
+      "nach": "                    folge[\"uebernommen\"].append((paar[0], None))",
+      "rot": [
+        "test_abgebrochener_empfaenger_holt_das_uebernommene_then_NICHT_nach",
+        "test_geerbtes_sonst_ueberlebt_das_ZWEITE_weiterreichen"
+      ],
+      "gruen": [
+        "test_weitergereichtes_then_laesst_keine_vormerkung_zurueck"
+      ]
+    },
+    {
+      "id": "W14 ein WERFENDES `then` gilt als gelaufen — die Vormerkung bleibt fuer immer offen",
+      "datei": "webtool/jobs.py",
+      "von": "        if then_faellig and then_fn is not None and _rufe(then_fn):",
+      "nach": "        if then_faellig and then_fn is not None and (_rufe(then_fn) or True):",
+      "rot": [
+        "test_werfendes_then_zieht_seine_quittung_nach",
+        "test_ein_werfendes_geerbtes_then_zieht_NUR_seine_eigene_quittung"
+      ],
+      "gruen": [
+        "test_gelungener_download_laesst_die_vormerkung_offen"
+      ]
+    }
+  ]
+}

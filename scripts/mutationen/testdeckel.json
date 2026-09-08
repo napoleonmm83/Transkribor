@@ -1,132 +1,142 @@
-[
-  {
-    "id": "M1 Waechterfaden ist kein Daemon mehr",
-    "datei": "conftest.py",
-    "von": "    wache.daemon = True",
-    "nach": "    wache.daemon = False",
-    "rot": [
-      "test_ein_armierter_deckel_stoert_den_gesunden_lauf_nicht"
-    ],
-    "gruen": [
-      "test_der_deckel_beendet_den_lauf_und_sagt_wo[koerper]",
-      "test_der_deckel_beendet_den_lauf_und_sagt_wo[abbau_nach_rotem_test]",
-      "test_der_deckel_beendet_den_lauf_und_sagt_wo[nach_dem_letzten_test]",
-      "test_der_dritte_fall_meldet_sonst_erfolg",
-      "test_null_schaltet_den_deckel_ab"
-    ]
+{
+  "test": "python -m pytest scripts/test_testdeckel.py -q",
+  "pfade": [
+    "conftest.py",
+    "scripts/test_testdeckel.py"
+  ],
+  "env": {
+    "TRANSKRIBOR_TESTDECKEL": "0"
   },
-  {
-    "id": "M2 Der Waechterfaden wird gar nicht gestartet",
-    "datei": "conftest.py",
-    "von": "    wache.start()",
-    "nach": "    pass",
-    "rot": [
-      "test_der_deckel_beendet_den_lauf_und_sagt_wo[koerper]",
-      "test_der_deckel_beendet_den_lauf_und_sagt_wo[abbau_nach_rotem_test]",
-      "test_der_deckel_beendet_den_lauf_und_sagt_wo[nach_dem_letzten_test]",
-      "test_der_dritte_fall_meldet_sonst_erfolg"
-    ],
-    "gruen": [
-      "test_null_schaltet_den_deckel_ab"
-    ]
-  },
-  {
-    "id": "M3 Abbruch ohne Stapelabzug — Deckel ohne Diagnose",
-    "datei": "conftest.py",
-    "von": "        faulthandler.dump_traceback(file=fd, all_threads=True)",
-    "nach": "        pass",
-    "rot": [
-      "test_der_deckel_beendet_den_lauf_und_sagt_wo[koerper]",
-      "test_der_deckel_beendet_den_lauf_und_sagt_wo[abbau_nach_rotem_test]",
-      "test_der_deckel_beendet_den_lauf_und_sagt_wo[nach_dem_letzten_test]"
-    ],
-    "gruen": [
-      "test_der_dritte_fall_meldet_sonst_erfolg",
-      "test_null_schaltet_den_deckel_ab"
-    ]
-  },
-  {
-    "id": "M4 Unlesbare Frist faellt still auf die Vorgabe zurueck",
-    "datei": "conftest.py",
-    "von": "        raise pytest.UsageError(f\"{_DECKEL_ENV}={roh!r} ist keine Zahl\") from fehl",
-    "nach": "        return _DECKEL_VORGABE",
-    "rot": [
-      "test_unbrauchbare_frist_bricht_ab_statt_still_zurueckzufallen[spaeter]"
-    ],
-    "gruen": [
-      "test_null_schaltet_den_deckel_ab",
-      "test_der_deckel_beendet_den_lauf_und_sagt_wo[koerper]"
-    ]
-  },
-  {
-    "id": "M8 Abbruch ohne finally — der Waechter stirbt am eigenen Schreibversuch",
-    "datei": "conftest.py",
-    "von": "        try:\n            os.write(fd, f\"\\n[testdeckel] Der Lauf steht seit {frist:.0f}s. Abzug aller \"\n                         f\"Faeden, danach Abbruch mit {DECKEL_RC}.\\n\".encode())\n            faulthandler.dump_traceback(file=fd, all_threads=True)\n        finally:\n            os._exit(DECKEL_RC)",
-    "nach": "        os.write(fd, f\"\\n[testdeckel] Der Lauf steht seit {frist:.0f}s. Abzug aller \"\n                     f\"Faeden, danach Abbruch mit {DECKEL_RC}.\\n\".encode())\n        faulthandler.dump_traceback(file=fd, all_threads=True)\n        os._exit(DECKEL_RC)",
-    "rot": [
-      "test_der_deckel_beendet_auch_wenn_niemand_mehr_zuhoert"
-    ],
-    "gruen": [
-      "test_der_deckel_beendet_den_lauf_und_sagt_wo[koerper]",
-      "test_der_dritte_fall_meldet_sonst_erfolg"
-    ]
-  },
-  {
-    "id": "M9 Nur float() — inf, nan, 1e12 und -1 rutschen durch",
-    "datei": "conftest.py",
-    "von": "    if frist < 0 or not math.isfinite(frist) or frist > threading.TIMEOUT_MAX:",
-    "nach": "    if False:",
-    "rot": [
-      "test_unbrauchbare_frist_bricht_ab_statt_still_zurueckzufallen[inf]",
-      "test_unbrauchbare_frist_bricht_ab_statt_still_zurueckzufallen[nan]",
-      "test_unbrauchbare_frist_bricht_ab_statt_still_zurueckzufallen[1e12]",
-      "test_unbrauchbare_frist_bricht_ab_statt_still_zurueckzufallen[-1]"
-    ],
-    "gruen": [
-      "test_unbrauchbare_frist_bricht_ab_statt_still_zurueckzufallen[spaeter]",
-      "test_null_schaltet_den_deckel_ab"
-    ]
-  },
-  {
-    "id": "M12 Abbruchcode 0 — der gruene Haken auf einen Haenger",
-    "datei": "conftest.py",
-    "von": "DECKEL_RC = 99",
-    "nach": "DECKEL_RC = 0",
-    "rot": [
-      "test_der_abbruchcode_ist_selbst_ein_roter_ausgang",
-      "test_der_deckel_beendet_den_lauf_und_sagt_wo[koerper]",
-      "test_der_dritte_fall_meldet_sonst_erfolg"
-    ],
-    "gruen": [
-      "test_null_schaltet_den_deckel_ab",
-      "test_am_haltepunkt_wird_abbestellt"
-    ]
-  },
-  {
-    "id": "M14 Negative Frist rutscht durch und schaltet den Deckel still ab",
-    "datei": "conftest.py",
-    "von": "    if frist < 0 or not math.isfinite(frist)",
-    "nach": "    if not math.isfinite(frist)",
-    "rot": [
-      "test_unbrauchbare_frist_bricht_ab_statt_still_zurueckzufallen[-1]"
-    ],
-    "gruen": [
-      "test_unbrauchbare_frist_bricht_ab_statt_still_zurueckzufallen[inf]",
-      "test_unbrauchbare_frist_bricht_ab_statt_still_zurueckzufallen[nan]",
-      "test_null_schaltet_den_deckel_ab"
-    ]
-  },
-  {
-    "id": "M13 Am Haltepunkt wird nicht mehr abbestellt",
-    "datei": "conftest.py",
-    "von": "        wache.cancel()",
-    "nach": "        pass",
-    "rot": [
-      "test_am_haltepunkt_wird_abbestellt"
-    ],
-    "gruen": [
-      "test_der_deckel_beendet_den_lauf_und_sagt_wo[koerper]",
-      "test_ein_armierter_deckel_stoert_den_gesunden_lauf_nicht"
-    ]
-  }
-]
+  "mutationen": [
+    {
+      "id": "M1 Waechterfaden ist kein Daemon mehr",
+      "datei": "conftest.py",
+      "von": "    wache.daemon = True",
+      "nach": "    wache.daemon = False",
+      "rot": [
+        "test_ein_armierter_deckel_stoert_den_gesunden_lauf_nicht"
+      ],
+      "gruen": [
+        "test_der_deckel_beendet_den_lauf_und_sagt_wo[koerper]",
+        "test_der_deckel_beendet_den_lauf_und_sagt_wo[abbau_nach_rotem_test]",
+        "test_der_deckel_beendet_den_lauf_und_sagt_wo[nach_dem_letzten_test]",
+        "test_der_dritte_fall_meldet_sonst_erfolg",
+        "test_null_schaltet_den_deckel_ab"
+      ]
+    },
+    {
+      "id": "M2 Der Waechterfaden wird gar nicht gestartet",
+      "datei": "conftest.py",
+      "von": "    wache.start()",
+      "nach": "    pass",
+      "rot": [
+        "test_der_deckel_beendet_den_lauf_und_sagt_wo[koerper]",
+        "test_der_deckel_beendet_den_lauf_und_sagt_wo[abbau_nach_rotem_test]",
+        "test_der_deckel_beendet_den_lauf_und_sagt_wo[nach_dem_letzten_test]",
+        "test_der_dritte_fall_meldet_sonst_erfolg"
+      ],
+      "gruen": [
+        "test_null_schaltet_den_deckel_ab"
+      ]
+    },
+    {
+      "id": "M3 Abbruch ohne Stapelabzug — Deckel ohne Diagnose",
+      "datei": "conftest.py",
+      "von": "        faulthandler.dump_traceback(file=fd, all_threads=True)",
+      "nach": "        pass",
+      "rot": [
+        "test_der_deckel_beendet_den_lauf_und_sagt_wo[koerper]",
+        "test_der_deckel_beendet_den_lauf_und_sagt_wo[abbau_nach_rotem_test]",
+        "test_der_deckel_beendet_den_lauf_und_sagt_wo[nach_dem_letzten_test]"
+      ],
+      "gruen": [
+        "test_der_dritte_fall_meldet_sonst_erfolg",
+        "test_null_schaltet_den_deckel_ab"
+      ]
+    },
+    {
+      "id": "M4 Unlesbare Frist faellt still auf die Vorgabe zurueck",
+      "datei": "conftest.py",
+      "von": "        raise pytest.UsageError(f\"{_DECKEL_ENV}={roh!r} ist keine Zahl\") from fehl",
+      "nach": "        return _DECKEL_VORGABE",
+      "rot": [
+        "test_unbrauchbare_frist_bricht_ab_statt_still_zurueckzufallen[spaeter]"
+      ],
+      "gruen": [
+        "test_null_schaltet_den_deckel_ab",
+        "test_der_deckel_beendet_den_lauf_und_sagt_wo[koerper]"
+      ]
+    },
+    {
+      "id": "M8 Abbruch ohne finally — der Waechter stirbt am eigenen Schreibversuch",
+      "datei": "conftest.py",
+      "von": "        try:\n            os.write(fd, f\"\\n[testdeckel] Der Lauf steht seit {frist:.0f}s. Abzug aller \"\n                         f\"Faeden, danach Abbruch mit {DECKEL_RC}.\\n\".encode())\n            faulthandler.dump_traceback(file=fd, all_threads=True)\n        finally:\n            os._exit(DECKEL_RC)",
+      "nach": "        os.write(fd, f\"\\n[testdeckel] Der Lauf steht seit {frist:.0f}s. Abzug aller \"\n                     f\"Faeden, danach Abbruch mit {DECKEL_RC}.\\n\".encode())\n        faulthandler.dump_traceback(file=fd, all_threads=True)\n        os._exit(DECKEL_RC)",
+      "rot": [
+        "test_der_deckel_beendet_auch_wenn_niemand_mehr_zuhoert"
+      ],
+      "gruen": [
+        "test_der_deckel_beendet_den_lauf_und_sagt_wo[koerper]",
+        "test_der_dritte_fall_meldet_sonst_erfolg"
+      ]
+    },
+    {
+      "id": "M9 Nur float() — inf, nan, 1e12 und -1 rutschen durch",
+      "datei": "conftest.py",
+      "von": "    if frist < 0 or not math.isfinite(frist) or frist > threading.TIMEOUT_MAX:",
+      "nach": "    if False:",
+      "rot": [
+        "test_unbrauchbare_frist_bricht_ab_statt_still_zurueckzufallen[inf]",
+        "test_unbrauchbare_frist_bricht_ab_statt_still_zurueckzufallen[nan]",
+        "test_unbrauchbare_frist_bricht_ab_statt_still_zurueckzufallen[1e12]",
+        "test_unbrauchbare_frist_bricht_ab_statt_still_zurueckzufallen[-1]"
+      ],
+      "gruen": [
+        "test_unbrauchbare_frist_bricht_ab_statt_still_zurueckzufallen[spaeter]",
+        "test_null_schaltet_den_deckel_ab"
+      ]
+    },
+    {
+      "id": "M12 Abbruchcode 0 — der gruene Haken auf einen Haenger",
+      "datei": "conftest.py",
+      "von": "DECKEL_RC = 99",
+      "nach": "DECKEL_RC = 0",
+      "rot": [
+        "test_der_abbruchcode_ist_selbst_ein_roter_ausgang",
+        "test_der_deckel_beendet_den_lauf_und_sagt_wo[koerper]",
+        "test_der_dritte_fall_meldet_sonst_erfolg"
+      ],
+      "gruen": [
+        "test_null_schaltet_den_deckel_ab",
+        "test_am_haltepunkt_wird_abbestellt"
+      ]
+    },
+    {
+      "id": "M14 Negative Frist rutscht durch und schaltet den Deckel still ab",
+      "datei": "conftest.py",
+      "von": "    if frist < 0 or not math.isfinite(frist)",
+      "nach": "    if not math.isfinite(frist)",
+      "rot": [
+        "test_unbrauchbare_frist_bricht_ab_statt_still_zurueckzufallen[-1]"
+      ],
+      "gruen": [
+        "test_unbrauchbare_frist_bricht_ab_statt_still_zurueckzufallen[inf]",
+        "test_unbrauchbare_frist_bricht_ab_statt_still_zurueckzufallen[nan]",
+        "test_null_schaltet_den_deckel_ab"
+      ]
+    },
+    {
+      "id": "M13 Am Haltepunkt wird nicht mehr abbestellt",
+      "datei": "conftest.py",
+      "von": "        wache.cancel()",
+      "nach": "        pass",
+      "rot": [
+        "test_am_haltepunkt_wird_abbestellt"
+      ],
+      "gruen": [
+        "test_der_deckel_beendet_den_lauf_und_sagt_wo[koerper]",
+        "test_ein_armierter_deckel_stoert_den_gesunden_lauf_nicht"
+      ]
+    }
+  ]
+}

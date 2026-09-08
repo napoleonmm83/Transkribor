@@ -1,26 +1,37 @@
-[
-  {
-    "id": "E10 das Reannoncement laesst den alten Schlangenplatz stehen",
-    "datei": "webtool/jobs.py",
-    "von": "                            if b in _jobs[jid][\"eingereiht\"]:",
-    "nach": "                            if b in ():",
-    "rot": ["test_reannoncierte_aufnahme_rueckt_in_der_schlange_nach_HINTEN"],
-    "gruen": [
-      "test_eingereiht_verwirft_dubletten",
-      "test_eingereiht_verlaesst_die_schlange_beim_abschluss",
-      "test_eingereiht_ueberlebt_den_zeilendeckel"
-    ]
-  },
-  {
-    "id": "E11 der Dublettenriegel faellt weg",
-    "datei": "webtool/jobs.py",
-    "von": "                    if _m.group(1) not in liste:",
-    "nach": "                    if True:",
-    "rot": ["test_eingereiht_verwirft_dubletten"],
-    "gruen": [
-      "test_reannoncierte_aufnahme_rueckt_in_der_schlange_nach_HINTEN",
-      "test_eingereiht_verlaesst_die_schlange_beim_abschluss",
-      "test_eingereiht_ueberlebt_den_zeilendeckel"
-    ]
-  }
-]
+{
+  "test": "python -m pytest webtool/test_jobs.py -q",
+  "pfade": [
+    "webtool/jobs.py",
+    "webtool/test_jobs.py"
+  ],
+  "mutationen": [
+    {
+      "id": "E10 das Reannoncement laesst den alten Schlangenplatz stehen",
+      "datei": "webtool/jobs.py",
+      "von": "                            if b in _jobs[jid][\"eingereiht\"]:",
+      "nach": "                            if b in ():",
+      "rot": [
+        "test_reannoncierte_aufnahme_rueckt_in_der_schlange_nach_HINTEN"
+      ],
+      "gruen": [
+        "test_eingereiht_verwirft_dubletten",
+        "test_eingereiht_verlaesst_die_schlange_beim_abschluss",
+        "test_eingereiht_ueberlebt_den_zeilendeckel"
+      ]
+    },
+    {
+      "id": "E11 der Dublettenriegel faellt weg",
+      "datei": "webtool/jobs.py",
+      "von": "                    if _m.group(1) not in liste:",
+      "nach": "                    if True:",
+      "rot": [
+        "test_eingereiht_verwirft_dubletten"
+      ],
+      "gruen": [
+        "test_reannoncierte_aufnahme_rueckt_in_der_schlange_nach_HINTEN",
+        "test_eingereiht_verlaesst_die_schlange_beim_abschluss",
+        "test_eingereiht_ueberlebt_den_zeilendeckel"
+      ]
+    }
+  ]
+}

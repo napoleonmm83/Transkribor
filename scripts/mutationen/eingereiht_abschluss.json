@@ -1,24 +1,35 @@
-[
-  {
-    "id": "E8 der Abschluss nimmt nicht wieder aus der Schlange heraus (monoton)",
-    "datei": "webtool/jobs.py",
-    "von": "                elif eingereiht_an and line.startswith(DONE_PREFIX):",
-    "nach": "                elif eingereiht_an and line.startswith(\"[niemals] \"):",
-    "rot": ["test_eingereiht_verlaesst_die_schlange_beim_abschluss"],
-    "gruen": [
-      "test_eingereiht_ueberlebt_den_zeilendeckel",
-      "test_abschluss_VOR_der_einreihung_nimmt_nichts_weg"
-    ]
-  },
-  {
-    "id": "E9 der Abschluss wird als monotone Menge gefuehrt und filtert kuenftige Einreihungen weg",
-    "datei": "webtool/jobs.py",
-    "von": "                    if _m.group(1) not in liste:\n                        liste.append(_m.group(1))",
-    "nach": "                    if _m.group(1) not in liste and not any(\n                            z == DONE_PREFIX + _m.group(1) for z in _jobs[jid][\"lines\"]):\n                        liste.append(_m.group(1))",
-    "rot": ["test_abschluss_VOR_der_einreihung_nimmt_nichts_weg"],
-    "gruen": [
-      "test_eingereiht_verlaesst_die_schlange_beim_abschluss",
-      "test_eingereiht_ueberlebt_den_zeilendeckel"
-    ]
-  }
-]
+{
+  "test": "python -m pytest webtool/test_jobs.py -q",
+  "pfade": [
+    "webtool/jobs.py",
+    "webtool/test_jobs.py"
+  ],
+  "mutationen": [
+    {
+      "id": "E8 der Abschluss nimmt nicht wieder aus der Schlange heraus (monoton)",
+      "datei": "webtool/jobs.py",
+      "von": "                elif eingereiht_an and line.startswith(DONE_PREFIX):",
+      "nach": "                elif eingereiht_an and line.startswith(\"[niemals] \"):",
+      "rot": [
+        "test_eingereiht_verlaesst_die_schlange_beim_abschluss"
+      ],
+      "gruen": [
+        "test_eingereiht_ueberlebt_den_zeilendeckel",
+        "test_abschluss_VOR_der_einreihung_nimmt_nichts_weg"
+      ]
+    },
+    {
+      "id": "E9 der Abschluss wird als monotone Menge gefuehrt und filtert kuenftige Einreihungen weg",
+      "datei": "webtool/jobs.py",
+      "von": "                    if _m.group(1) not in liste:\n                        liste.append(_m.group(1))",
+      "nach": "                    if _m.group(1) not in liste and not any(\n                            z == DONE_PREFIX + _m.group(1) for z in _jobs[jid][\"lines\"]):\n                        liste.append(_m.group(1))",
+      "rot": [
+        "test_abschluss_VOR_der_einreihung_nimmt_nichts_weg"
+      ],
+      "gruen": [
+        "test_eingereiht_verlaesst_die_schlange_beim_abschluss",
+        "test_eingereiht_ueberlebt_den_zeilendeckel"
+      ]
+    }
+  ]
+}
