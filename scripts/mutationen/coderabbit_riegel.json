@@ -163,6 +163,20 @@
       "datei": "scripts/coderabbit_riegel.py"
     },
     {
+      "id": "M14 suggestions wird wieder als Zeichenkette behandelt",
+      "von": "        roh = b.get(\"suggestions\") or []\n        if isinstance(roh, str):          # falls der Dienst es je als Text liefert\n            roh = [roh]\n        vorschlaege = [str(v).strip() for v in roh if str(v).strip()]",
+      "nach": "        vorschlaege = [str(b.get(\"suggestions\", \"\")).strip()]  # M14: str([]) ist \"[]\" — truthy.",
+      "rot": [
+        "test_markdown_schreibt_KEINEN_leeren_vorschlagsblock",
+        "test_markdown_traegt_den_vorschlag_mit"
+      ],
+      "gruen": [
+        "test_markdown_ist_leer_ohne_befunde",
+        "test_markdown_BEHAELT_den_vorspann"
+      ],
+      "datei": "scripts/coderabbit_riegel.py"
+    },
+    {
       "id": "M13 der Schluessel wird nicht mehr aus der Ausgabe genommen",
       "von": "    return text.replace(geheimnis, \"***\") if geheimnis else text",
       "nach": "    return text",
