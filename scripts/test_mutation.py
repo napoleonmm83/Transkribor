@@ -165,7 +165,7 @@ def _lauf_main(tmp_path, monkeypatch, plan, ausgaben, pfad=".", schmutzig=("", "
 
     aufrufe = []
 
-    def falscher_lauf(repo, kommando):
+    def falscher_lauf(repo, kommando, zusatz=None):
         # `nebenbei` erst AB DEM ZWEITEN Aufruf — der erste ist die Positivkontrolle, und
         # dort ist noch nichts mutiert. Die erste Fassung schrieb bei jedem Aufruf, womit
         # die Zieldatei schon vor der Mutation fremd war: der Anker passte dann nicht, der
@@ -402,8 +402,112 @@ def test_abbruch_bei_null_tests_zeigt_die_ausgabe(tmp_path, monkeypatch, capsys)
     assert "no tests" in ausgabe, "der Grund muss in der Meldung stehen, nicht nur das Kommando"
 
 
-def test_mehrdeutiger_anker_ergibt_eins(tmp_path, monkeypatch):
+def test_mehrdeutiger_anker_bricht_VOR_dem_ersten_testlauf_ab(tmp_path, monkeypatch, capsys):
+    """T-074: ein veralteter Anker kostete bisher die ganze Serie, BEVOR er auffiel.
+
+    Bis hierher zaehlte ein mehrdeutiger Anker als EIN Fehler, die Serie lief weiter und
+    endete mit rc 1 — nachdem die Positivkontrolle die Suite schon einmal ganz gefahren
+    hatte. GEMESSEN am 2026-09-08: Serie 06:27:47Z gestartet, Abbruch 06:37:01Z. Zehn
+    Minuten gegen einen Plan, der ab Sekunde 0 veraltet war.
+
+    Jetzt ist es rc 2 — „konnte nicht urteilen", derselbe Code wie fuer ein fehlendes
+    Werkzeug — und der Lauf endet, bevor irgendetwas geschrieben oder gemessen wurde.
+
+    Dass NICHTS lief, wird ohne zusaetzliche Verdrahtung belegt: die Liste der gefaelschten
+    Ausgaben ist LEER. Faehrt der Treiber auch nur die Positivkontrolle, holt die Attrappe
+    aus einer leeren Liste und der Test stirbt an einem IndexError statt gruen zu bleiben.
+    """
     plan = [{"id": "MEHRDEUTIG", "datei": "ziel.py", "von": "= ", "nach": "== ",
              "rot": ["test_wert"]}]
-    rc, _ = _lauf_main(tmp_path, monkeypatch, plan, [_GRUEN])
+    rc, ziel = _lauf_main(tmp_path, monkeypatch, plan, [])
+    assert rc == 2
+    ausgabe = capsys.readouterr().out
+    assert "MEHRDEUTIG" in ausgabe, "die Meldung muss sagen, WELCHE Mutation nicht passt"
+    assert "2-mal" in ausgabe, "und wie oft der Anker passte — sonst raet der Leser"
+    assert ziel.read_bytes() == b"WERT = 1\r\nandere = 2\r\n", "nichts geschrieben"
+
+
+def test_fehlende_zieldatei_bricht_vorab_ab(tmp_path, monkeypatch, capsys):
+    """Dieselbe Vorpruefung deckt die Datei, die es gar nicht gibt.
+
+    Vorher lief das in denselben Zaehler wie ein schlechter Anker — nach der
+    Positivkontrolle, mit rc 1. Ein Plan, der auf eine geloeschte Datei zeigt, ist aber
+    kein Befund ueber den Code, sondern ein Plan, der nicht mehr gilt.
+    """
+    plan = [{"id": "WEG", "datei": "gibtsnicht.py", "von": "WERT = 1", "nach": "WERT = 2",
+             "rot": ["test_wert"]}]
+    rc, _ = _lauf_main(tmp_path, monkeypatch, plan, [])
+    assert rc == 2
+    ausgabe = capsys.readouterr().out
+    assert "gibtsnicht.py gibt es nicht" in ausgabe
+
+
+def test_plan_traegt_sein_testkommando_selbst(tmp_path, monkeypatch, capsys):
+    """Die Objektform: ohne `--test` gewinnt das Feld `test` des Plans, und `env` faehrt mit.
+
+    Der Laeufer kann nur deshalb ALLE Plaene fahren, ohne je Plan eine Workflow-Zeile
+    mitzuschleppen. Geprueft wird beides an dem, was beim Testlauf wirklich ankommt.
+    """
+    gesehen = {}
+
+    def falscher_lauf(repo, kommando, zusatz=None):
+        gesehen["kommando"] = kommando
+        gesehen["zusatz"] = zusatz
+        return _GRUEN, 0
+
+    ziel = tmp_path / "ziel.py"
+    ziel.write_bytes(b"WERT = 1\r\nandere = 2\r\n")
+    plandatei = tmp_path / "plan.json"
+    plandatei.write_text(json.dumps({
+        "test": "aus dem plan",
+        "pfade": ["ziel.py"],
+        "env": {"TRANSKRIBOR_TESTDECKEL": "0"},
+        "mutationen": [{"id": "T1", "datei": "ziel.py", "von": "WERT = 1",
+                        "nach": "WERT = 2", "rot": ["test_wert"]}],
+    }), encoding="utf-8")
+
+    monkeypatch.setattr(mutation, "_lauf", falscher_lauf)
+    monkeypatch.setattr(mutation, "_verfolgt_geaendert", lambda repo, p: "")
+    rc = mutation.main(["--repo", str(tmp_path), "--plan", str(plandatei), "--pfad", "."])
+
+    # rc 1, weil die Attrappe immer gruen meldet und die Mutation damit wirkungslos bleibt —
+    # das ist hier nicht der Punkt. Der Punkt sind die zwei Werte, die angekommen sind.
     assert rc == 1
+    assert gesehen["kommando"] == "aus dem plan"
+    assert gesehen["zusatz"] == {"TRANSKRIBOR_TESTDECKEL": "0"}
+
+
+def test_plan_ohne_kommando_und_ohne_test_ergibt_zwei(tmp_path, monkeypatch, capsys):
+    """Kein Kommando ist kein Ergebnis, sondern ein Nutzungsfehler.
+
+    Der Riegel muss sein, seit `--test` nicht mehr `required` ist: eine blanke Liste OHNE
+    `--test` waere sonst eine Serie ohne Testlauf — und die ginge als bestanden durch.
+    """
+    ziel = tmp_path / "ziel.py"
+    ziel.write_bytes(b"WERT = 1\r\n")
+    plandatei = tmp_path / "plan.json"
+    plandatei.write_text(json.dumps(_PLAN_OK), encoding="utf-8")
+    monkeypatch.setattr(mutation, "_verfolgt_geaendert", lambda repo, p: "")
+    rc = mutation.main(["--repo", str(tmp_path), "--plan", str(plandatei), "--pfad", "."])
+    assert rc == 2
+    assert "kein Testkommando" in capsys.readouterr().out
+
+
+def test_lauf_entfaerbt_die_ausgabe_eines_echten_kindes(tmp_path):
+    """T-070, an einem ECHTEN Subprozess — nicht an einer Attrappe.
+
+    Die Entfaerbung sitzt in `_lauf`. Jeder Test, der `_lauf` faelscht, umgeht sie und
+    pruefte am Ende die Attrappe; deshalb laeuft hier wirklich ein Kind, das faerbt.
+
+    Der Fall ist gemessen und hat vier CI-Laeufe gekostet: auf
+    `\\x1b[32m126 passed\\x1b[39m` sagte `_sah_einen_testlauf` JA und
+    `_lief_mindestens_ein_test` NEIN — das `\\b` scheitert, weil links der 1 ein `m` steht.
+    Der Treiber brach daraufhin mit „NULL Tests" ab, obwohl 126 gelaufen waren.
+    """
+    (tmp_path / "farbe.py").write_text(
+        r"print('\x1b[32m126 passed\x1b[39m')", encoding="utf-8")
+    aus, rc = mutation._lauf(str(tmp_path), f'"{sys.executable}" farbe.py')
+    assert rc == 0
+    assert "\x1b" not in aus, f"Steuerzeichen sind durchgekommen: {aus!r}"
+    assert mutation._lief_mindestens_ein_test(aus), (
+        "entfaerbt muss die Bilanzzeile als Testlauf zaehlen — sonst ist T-070 zurueck")

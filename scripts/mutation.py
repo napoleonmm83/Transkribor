@@ -47,14 +47,31 @@ Defekt:
    schlimmer: ein echter Fehler bleibt hinter gueltig aussehendem Altbytecode gruen.
    -> Nach jeder Ruecknahme werden die `__pycache__`-Ordner unter `--pfad` geleert.
 
+5. ANSI-FARBE. Die drei Proben unten lesen die Ausgabe als Text. Ist sie gefaerbt — in der CI
+   ist sie das, lokal meist nicht —, scheitern zwei von ihnen an den Steuerzeichen, und der
+   Lauf meldet "NULL Tests" ueber eine Suite, die 126 Tests gefahren hat (T-070, vier CI-
+   Laeufe). -> Die Ausgabe wird in `_lauf` EINMAL entfaerbt, bevor sie irgendwer ansieht.
+
 Aufruf:
 
-    python scripts/mutation.py --repo . --test "python -m pytest scripts/test_mypy_riegel.py -q"
-                               --plan scripts/mutationen/mypy_riegel.json --pfad scripts/
+    python scripts/mutation.py --repo . --plan scripts/mutationen/mypy_riegel.json --pfad scripts/
 
-Der Plan ist eine JSON-Liste; `rot` sind Testnamen, die die Mutation rot machen MUSS,
-`gruen` optional solche, die gruen bleiben muessen (die Gegenprobe — ohne sie belegt eine
-rote Suite nur, dass IRGENDETWAS kaputtging).
+Der Plan ist ein JSON-OBJEKT und traegt sein Kommando selbst:
+
+    {"test": "python -m pytest scripts/test_mypy_riegel.py -q",
+     "pfade": ["scripts/mypy_riegel.py", "scripts/test_mypy_riegel.py"],
+     "env": {"TRANSKRIBOR_TESTDECKEL": "0"},
+     "mutationen": [ … ]}
+
+`pfade` sagt, welche Aenderungen diesen Plan betreffen (der Laeufer waehlt danach aus),
+`env` seine Zusatzumgebung. Eine blanke JSON-Liste bleibt zulaessig — dann kommen Kommando
+und Umgebung ueber `--test` und `--env` von aussen; das ist der Ad-hoc-Plan von Hand.
+Der Waechter `scripts/test_mutationsplaene.py` verlangt fuer alles unter
+`scripts/mutationen/` die Objektform.
+
+`rot` sind Testnamen, die die Mutation rot machen MUSS, `gruen` optional solche, die gruen
+bleiben muessen (die Gegenprobe — ohne sie belegt eine rote Suite nur, dass IRGENDETWAS
+kaputtging).
 
 Exit 0 nur, wenn JEDE Mutation ihre erwarteten Tests rot bekam, keine Gegenprobe gefallen ist,
 jede Datei danach BYTEGLEICH zum Ausgangsstand ist UND der Arbeitsbaum sauber ist.
@@ -64,11 +81,37 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import pathlib
 import re
 import shutil
 import subprocess
 import sys
+
+
+# ANSI-Steuerfolgen (CSI). Sie muessen WEG, bevor irgendeine der drei Proben unten die
+# Ausgabe ansieht — und das ist kein Feinschliff, sondern die Ursache von T-070:
+#
+# GEMESSEN (2026-09-08, an genau diesen drei Funktionen):
+#     Zeile "\x1b[32m126 passed\x1b[39m"
+#       _sah_einen_testlauf        -> True   (der Teilstring " passed" steht ja da)
+#       _lief_mindestens_ein_test  -> False  (`\b` scheitert: links der 1 steht ein `m`)
+#       _ist_fehlzeile             -> False  (`lstrip()` entfernt kein ESC)
+# Genau diese Kombination ergibt „gelaufen, aber NULL Tests" — der Abbruch, den die
+# Frontend-Serie in der CI VIER Mal meldete (Laeufe 34179774574, 34180726821, 34181093282,
+# 34181500162), waehrend derselbe Befehl als eigener Workflow-Schritt 126 Tests fand.
+# Lokal fiel es nie auf, weil dort keine Farbe entsteht.
+#
+# Die gefaehrlichere Haelfte gehoert dazu: haette nur `_ist_fehlzeile` gebrochen, waere die
+# Serie NICHT abgebrochen — sie haette jede Mutation als „wirkungslos" gemeldet, ueber eine
+# Messung, die nie stattgefunden hat. Dass es auffiel, verdankt sich allein dem
+# Anti-Schweigen-Riegel.
+_ANSI = re.compile(r"\x1b\[[0-9;:?]*[ -/]*[@-~]")
+
+
+def ohne_farbe(text: str) -> str:
+    """Entfernt ANSI-CSI-Folgen. Eigene Funktion, damit ein Test sie ohne Subprozess prueft."""
+    return _ANSI.sub("", text)
 
 
 # Wie die drei hier benutzten Laeufer eine rote Zeile schreiben. Bewusst eine kurze Liste:
@@ -190,7 +233,7 @@ def _verfolgt_geaendert(repo: str, pfad: str) -> str:
     return "\n".join(z for z in zeilen if not z.startswith("??")).strip()
 
 
-def _lauf(repo: str, kommando: str) -> tuple[str, int]:
+def _lauf(repo: str, kommando: str, zusatz: dict[str, str] | None = None) -> tuple[str, int]:
     """Gibt (Ausgabe, Rueckgabecode) zurueck — den Code NICHT wegwerfen.
 
     Der Rueckgabecode des Laeufers ist der ehrlichste Zeuge, den es hier gibt: pytest
@@ -221,9 +264,16 @@ def _lauf(repo: str, kommando: str) -> tuple[str, int]:
     #
     # Dass es hier trotzdem lief, lag an `PYTHONUTF8=1` auf DIESEM Rechner — genau die
     # Sorte Fehler, die auf dem Rechner des Autors nie auftritt.
+    # `env` nur, wenn wirklich etwas dazukommt: `env=os.environ.copy()` waere zwar
+    # gleichwertig, ersetzt aber die geerbte Umgebung durch eine Kopie — und ein Unterschied,
+    # den man nicht braucht, ist einer, den man spaeter sucht.
+    umgebung = {**os.environ, **zusatz} if zusatz else None
     p = subprocess.run(kommando, cwd=repo, shell=True, capture_output=True,  # noqa: S602
-                       encoding="utf-8", errors="replace")
-    return (p.stdout or "") + (p.stderr or ""), p.returncode
+                       encoding="utf-8", errors="replace", env=umgebung)
+    # EINE Stelle fuer die Entfaerbung, nicht drei: alle drei Proben und der Abgleich der
+    # Testnamen lesen dieselbe Zeichenkette. Waere sie je Probe entfaerbt, koennte die
+    # naechste hinzukommende sie vergessen — genau so ist T-070 entstanden.
+    return ohne_farbe((p.stdout or "") + (p.stderr or "")), p.returncode
 
 
 def _pycache_leeren(wurzel: pathlib.Path) -> int:
@@ -255,12 +305,29 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--repo", required=True, help="Repo-Wurzel")
-    ap.add_argument("--test", required=True, help="Testkommando, im Repo ausgefuehrt")
+    ap.add_argument("--test", help="Testkommando; schlaegt das Feld `test` des Plans")
     ap.add_argument("--plan", required=True, help="JSON-Datei mit den Mutationen")
     ap.add_argument("--pfad", default=".", help="Auf diesen Pfad wird Sauberkeit geprueft")
+    ap.add_argument("--env", action="append", default=[], metavar="NAME=WERT",
+                    help="Zusatzvariable fuer das Testkommando; mehrfach erlaubt")
     a = ap.parse_args(argv)
 
-    plan = json.loads(pathlib.Path(a.plan).read_text(encoding="utf-8"))
+    # ZWEI Planformen, und das ist Absicht statt Uebergangszustand:
+    #   * OBJEKT — traegt sein Testkommando, seine Pfade und seine Umgebung selbst. Nur so
+    #     kann ein Laeufer alle Plaene fahren, ohne dass je Plan eine Workflow-Zeile
+    #     dazukommt; genau diese Tabelle waere die naechste, die still hinterherhinkt.
+    #   * LISTE — der Ad-hoc-Plan, den jemand von Hand tippt, mit `--test` von aussen.
+    # Streng ist der WAECHTER (scripts/test_mutationsplaene.py verlangt fuer alles unter
+    # scripts/mutationen/ die Objektform), nicht der Treiber.
+    roh = json.loads(pathlib.Path(a.plan).read_text(encoding="utf-8"))
+    plan_test, plan_env = None, {}
+    if isinstance(roh, dict):
+        plan = roh.get("mutationen")
+        plan_test = roh.get("test")
+        plan_env = roh.get("env") or {}
+    else:
+        plan = roh
+
     # Den Plan GANZ pruefen, bevor die erste Datei angefasst wird. Sonst stirbt der Lauf
     # mitten in der Serie an einem Traceback — und dann laufen weder die restlichen
     # Mutationen noch die Schlusspruefung auf einen sauberen Baum. Ein LEERER Plan waere
@@ -268,7 +335,8 @@ def main(argv: list[str] | None = None) -> int:
     # Klasse wie eine leere `rot`-Liste, nur eine Ebene hoeher. Beides vom Bot gefunden.
     pflicht = {"id", "datei", "von", "nach", "rot"}
     if not isinstance(plan, list) or not plan:
-        print("ABBRUCH: --plan muss eine nicht leere JSON-Liste sein.")
+        print("ABBRUCH: --plan braucht eine nicht leere Mutationsliste — entweder als"
+              " JSON-Liste oder als Objekt mit dem Schluessel `mutationen`.")
         return 2
     unbrauchbar = [m for m in plan if not isinstance(m, dict) or not pflicht <= m.keys()]
     if unbrauchbar:
@@ -276,6 +344,49 @@ def main(argv: list[str] | None = None) -> int:
               f" {sorted(pflicht)}:")
         for m in unbrauchbar[:3]:
             print(f"         {m!r}"[:160])
+        return 2
+
+    test = a.test or plan_test
+    if not test:
+        print("ABBRUCH: kein Testkommando — weder --test noch das Feld `test` im Plan.")
+        return 2
+    zusatz = dict(plan_env)
+    for zuweisung in a.env:
+        name, trenner, wert = zuweisung.partition("=")
+        if not trenner or not name:
+            print(f"ABBRUCH: --env {zuweisung!r} ist kein NAME=WERT.")
+            return 2
+        zusatz[name] = wert
+
+    # ANKER VOR DER ERSTEN SCHREIBUNG (T-074). Bisher fiel ein veralteter Anker erst IN der
+    # Schleife auf — und weil davor die Positivkontrolle steht, war die Suite zu dem
+    # Zeitpunkt schon einmal ganz gelaufen. GEMESSEN am 2026-09-08: Serie 06:27:47Z
+    # gestartet, Abbruch 06:37:01Z. Zehn Minuten Testlaeufe gegen einen Plan, der ab
+    # Sekunde 0 veraltet war.
+    #
+    # Das ist eine VERHALTENSAENDERUNG, kein Zusatz: vorher zaehlte ein schlechter Anker als
+    # EIN Fehler, die Serie lief weiter und endete mit rc 1. Jetzt bricht der ganze Lauf mit
+    # rc 2 ab, bevor irgendetwas geschrieben oder gemessen wurde — rc 2 heisst in diesem
+    # Skript durchgehend „konnte nicht urteilen", und genau das ist der Fall.
+    fehlstellen: list[tuple[str, str]] = []
+    for m in plan:
+        datei = pathlib.Path(a.repo) / m["datei"]
+        try:
+            inhalt = datei.read_bytes().decode("utf-8")
+        except FileNotFoundError:
+            fehlstellen.append((m["id"], f"{m['datei']} gibt es nicht"))
+            continue
+        except UnicodeDecodeError as fehl:
+            fehlstellen.append((m["id"], f"{m['datei']} ist nicht UTF-8 ({fehl})"))
+            continue
+        eindeutig, treffer = anker_ok(inhalt, zeilenenden_angleichen(inhalt, m["von"]))
+        if not eindeutig:
+            fehlstellen.append((m["id"], f"Anker {treffer}-mal gefunden, erwartet genau 1"))
+    if fehlstellen:
+        print(f"ABBRUCH: {len(fehlstellen)} Anker passen nicht mehr zum Baum — der Plan ist"
+              " veraltet. Es wurde nichts geschrieben und nichts gemessen.")
+        for kennung, grund in fehlstellen:
+            print(f"         {kennung}: {grund}")
         return 2
 
     # Der Startriegel bleibt, obwohl die Ruecknahme ihn nicht mehr BRAUCHT: eine Serie auf
@@ -295,14 +406,14 @@ def main(argv: list[str] | None = None) -> int:
     #     Zeilen — genau wie eine Mutation ohne Wirkung.
     #   * Ist die Suite VORHER gruen? Auf einer schon roten Suite belegt eine rote Mutation
     #     nichts.
-    aus0, rc0 = _lauf(a.repo, a.test)
+    aus0, rc0 = _lauf(a.repo, test, zusatz)
     # Der Rueckgabecode zuerst, weil er eindeutig ist, wo die Textsuche raten muss: pytest
     # meldet mit 4 einen Nutzungsfehler und mit 5 „keine Tests gesammelt" — beides heisst
     # „nichts gemessen", und beides kommt mit einer Ausgabe, die harmlos aussieht.
     if rc0 in (4, 5):
         print(f"ABBRUCH: das Testkommando endete mit {rc0} — bei pytest heisst das"
               " Nutzungsfehler bzw. keine Tests gesammelt.")
-        print(f"         Kommando: {a.test}")
+        print(f"         Kommando: {test}")
         print("         Ausgabe (Ende):")
         for z in ausgabe_auszug(aus0):
             print(f"           {z}")
@@ -310,7 +421,7 @@ def main(argv: list[str] | None = None) -> int:
     if not _sah_einen_testlauf(aus0):
         print("ABBRUCH: das Testkommando hat keine erkennbare Testausgabe geliefert —")
         print("         es ist vermutlich gar nicht gestartet. NICHT als Ergebnis werten.")
-        print(f"         Kommando: {a.test}")
+        print(f"         Kommando: {test}")
         print("         Ausgabe (Anfang):")
         for z in aus0.splitlines()[:5]:
             print(f"           {z}")
@@ -324,7 +435,7 @@ def main(argv: list[str] | None = None) -> int:
         print("         ein Tippfehler im Pfad oder eine Auswahl ohne Treffer. Eine Serie")
         print("         darauf meldete jede Mutation als wirkungslos, und der Grund stuende")
         print("         nirgends. NICHT als Ergebnis werten.")
-        print(f"         Kommando: {a.test}")
+        print(f"         Kommando: {test}")
         # Das ENDE, nicht der Anfang: hier ist das Werkzeug gelaufen, seine Bilanz oder sein
         # Fehler steht also hinten. Genau dieser Zweig hat am 2026-09-08 dreimal in der CI
         # gefeuert, und dreimal stand die Ursache nicht da.
@@ -390,7 +501,7 @@ def main(argv: list[str] | None = None) -> int:
         fremd = False
         try:
             datei.write_bytes(mutiert)
-            aus, _rc = _lauf(a.repo, a.test)
+            aus, _rc = _lauf(a.repo, test, zusatz)
         finally:
             # FALLE 1: aus dem SPEICHER, nicht ueber git — das fasst nur DIESE Datei an.
             #

@@ -1,140 +1,154 @@
-[
-  {
-    "id": "S1 die Pille behauptet wieder Warten aus der blossen Abwesenheit eines Urteils (#581)",
-    "datei": "webtool/frontend/src/components/FileStatusPill.tsx",
-    "von": "    if (jobRunning && betrifft && (!state || nachUrteilWartend) && !(durch && plattenBeleg)) {",
-    "nach": "    if (jobRunning && betrifft && (!state || nachUrteilWartend)) {",
-    "rot": [
-      "ein verdraengtes Urteil zeigt den Ruhezustand",
-      "reicht durch aus dem Job an die Dateizeile durch",
-      "zeigt den Ruhezustand statt des Wartesymbols"
-    ],
-    "gruen": [
-      "und NICHT, solange die Platte nichts vorweist",
-      "und NICHT ohne durch",
-      "und behaelt das Wartesymbol ohne durch",
-      "wer auf einen Korrektur-Slot wartet"
-    ]
-  },
-  {
-    "id": "S2 der Plattenbeleg faellt weg — ein Ruhezustand ueber laufender Arbeit (#581)",
-    "datei": "webtool/frontend/src/components/FileStatusPill.tsx",
-    "von": "&& !(durch && plattenBeleg)) {",
-    "nach": "&& !durch) {",
-    "rot": [
-      "und NICHT, solange die Platte nichts vorweist"
-    ],
-    "gruen": [
-      "ein verdraengtes Urteil zeigt den Ruhezustand",
-      "und NICHT ohne durch",
-      "reicht durch aus dem Job an die Dateizeile durch"
-    ]
-  },
-  {
-    "id": "S3 durch behaelt, wer noch in der Korrektur-Schlange steht (#581/#442)",
-    "datei": "webtool/frontend/src/hooks/useActiveJob.tsx",
-    "von": "  for (const b of Object.keys(warten)) durch.delete(b)",
-    "nach": "  // mutiert: der Schnitt an warten faellt weg",
-    "rot": [
-      "durch nimmt heraus, wer noch in der Korrektur-Schlange steht"
-    ],
-    "gruen": [
-      "durch nennt, wer den Lauf hinter sich hat",
-      "durch nimmt heraus, wer in einem ANDEREN Job gerade laeuft"
-    ]
-  },
-  {
-    "id": "S4 durch behaelt, wer in einem anderen Job laeuft (#581)",
-    "datei": "webtool/frontend/src/hooks/useActiveJob.tsx",
-    "von": "  for (const b of Object.keys(active)) durch.delete(b)",
-    "nach": "  // mutiert: der Schnitt an active faellt weg",
-    "rot": [
-      "durch nimmt heraus, wer in einem ANDEREN Job gerade laeuft"
-    ],
-    "gruen": [
-      "durch nennt, wer den Lauf hinter sich hat",
-      "durch nimmt heraus, wer noch in der Korrektur-Schlange steht"
-    ]
-  },
-  {
-    "id": "S5 die Arbeitsflaeche reicht durch nicht mehr durch (#581, Verdrahtung 1 von 3)",
-    "datei": "webtool/frontend/src/pages/ProjectWorkspace.tsx",
-    "von": "                      durch={phases.durch?.has(f.base)}\n",
-    "nach": "",
-    "rot": [
-      "reicht durch aus dem Job an die Dateizeile durch"
-    ],
-    "gruen": [
-      "zeigt den Ruhezustand statt des Wartesymbols",
-      "ein verdraengtes Urteil zeigt den Ruhezustand"
-    ]
-  },
-  {
-    "id": "S7 die Sammelzeile faellt weg — durch bleibt fuer immer leer (#581)",
-    "datei": "webtool/frontend/src/hooks/useActiveJob.tsx",
-    "von": "    for (const b of j.phases.gesehen ?? []) if (schonDurch(j.phases, j.kind, b)) durch.add(b)",
-    "nach": "    // mutiert: es wird nichts mehr gesammelt",
-    "rot": [
-      "durch nennt, wer den Lauf hinter sich hat",
-      "reicht durch aus dem Job an die Dateizeile durch"
-    ],
-    "gruen": [
-      "ein correct-Lauf liefert GAR KEIN durch",
-      "durch nimmt heraus, wer geloescht ist",
-      "zeigt den Ruhezustand statt des Wartesymbols"
-    ]
-  },
-  {
-    "id": "S8 der Riegel haengt nur noch an der Platte, nicht mehr an durch (#581)",
-    "datei": "webtool/frontend/src/components/FileStatusPill.tsx",
-    "von": "&& !(durch && plattenBeleg)) {",
-    "nach": "&& !plattenBeleg) {",
-    "rot": [
-      "und NICHT ohne durch",
-      "und behaelt das Wartesymbol ohne durch"
-    ],
-    "gruen": [
-      "ein verdraengtes Urteil zeigt den Ruhezustand",
-      "und NICHT, solange die Platte nichts vorweist"
-    ]
-  },
-  {
-    "id": "S9 die Seitenleiste reicht durch nicht mehr an die Dateizeile (#581, Verdrahtung 3 von 3)",
-    "datei": "webtool/frontend/src/components/Sidebar.tsx",
-    "von": "                        durch={phases?.durch?.has(f.base)}\n",
-    "nach": "",
-    "rot": [
-      "zeigt den Ruhezustand statt des Wartesymbols"
-    ],
-    "gruen": [
-      "reicht durch aus dem Job an die Dateizeile durch",
-      "ein verdraengtes Urteil zeigt den Ruhezustand"
-    ]
-  },
-  {
-    "id": "S10 eine geloeschte Aufnahme bleibt in durch (#581/#489)",
-    "datei": "webtool/frontend/src/hooks/useActiveJob.tsx",
-    "von": "  for (const b of geloescht) durch.delete(b)",
-    "nach": "  // mutiert: der Schnitt an entfernt faellt weg",
-    "rot": [
-      "durch nimmt heraus, wer geloescht ist"
-    ],
-    "gruen": [
-      "durch nennt, wer den Lauf hinter sich hat",
-      "durch nimmt heraus, wer noch in der Korrektur-Schlange steht"
-    ]
-  },
-  {
-    "id": "S6 die Dateizeile reicht durch nicht mehr an die Pille (#581, Verdrahtung 2 von 3)",
-    "datei": "webtool/frontend/src/components/FileRow.tsx",
-    "von": " inScope={inScope} durch={durch} globalPhase={globalPhase}",
-    "nach": " inScope={inScope} globalPhase={globalPhase}",
-    "rot": [
-      "zeigt den Ruhezustand statt des Wartesymbols"
-    ],
-    "gruen": [
-      "reicht durch aus dem Job an die Dateizeile durch",
-      "und behaelt das Wartesymbol ohne durch"
-    ]
-  }
-]
+{
+  "test": "npm --prefix webtool/frontend test -- src/components/FileStatusPill.test.tsx src/components/Sidebar.test.tsx src/hooks/useActiveJob.test.tsx src/pages/ProjectWorkspace.test.tsx",
+  "pfade": [
+    "webtool/frontend/src/components/FileRow.tsx",
+    "webtool/frontend/src/components/FileStatusPill.tsx",
+    "webtool/frontend/src/components/Sidebar.tsx",
+    "webtool/frontend/src/hooks/useActiveJob.tsx",
+    "webtool/frontend/src/pages/ProjectWorkspace.tsx",
+    "webtool/frontend/src/components/FileStatusPill.test.tsx",
+    "webtool/frontend/src/components/Sidebar.test.tsx",
+    "webtool/frontend/src/hooks/useActiveJob.test.tsx",
+    "webtool/frontend/src/pages/ProjectWorkspace.test.tsx"
+  ],
+  "mutationen": [
+    {
+      "id": "S1 die Pille behauptet wieder Warten aus der blossen Abwesenheit eines Urteils (#581)",
+      "datei": "webtool/frontend/src/components/FileStatusPill.tsx",
+      "von": "    if (jobRunning && betrifft && (!state || nachUrteilWartend) && !(durch && plattenBeleg)) {",
+      "nach": "    if (jobRunning && betrifft && (!state || nachUrteilWartend)) {",
+      "rot": [
+        "ein verdraengtes Urteil zeigt den Ruhezustand",
+        "reicht durch aus dem Job an die Dateizeile durch",
+        "zeigt den Ruhezustand statt des Wartesymbols"
+      ],
+      "gruen": [
+        "und NICHT, solange die Platte nichts vorweist",
+        "und NICHT ohne durch",
+        "und behaelt das Wartesymbol ohne durch",
+        "wer auf einen Korrektur-Slot wartet"
+      ]
+    },
+    {
+      "id": "S2 der Plattenbeleg faellt weg — ein Ruhezustand ueber laufender Arbeit (#581)",
+      "datei": "webtool/frontend/src/components/FileStatusPill.tsx",
+      "von": "&& !(durch && plattenBeleg)) {",
+      "nach": "&& !durch) {",
+      "rot": [
+        "und NICHT, solange die Platte nichts vorweist"
+      ],
+      "gruen": [
+        "ein verdraengtes Urteil zeigt den Ruhezustand",
+        "und NICHT ohne durch",
+        "reicht durch aus dem Job an die Dateizeile durch"
+      ]
+    },
+    {
+      "id": "S3 durch behaelt, wer noch in der Korrektur-Schlange steht (#581/#442)",
+      "datei": "webtool/frontend/src/hooks/useActiveJob.tsx",
+      "von": "  for (const b of Object.keys(warten)) durch.delete(b)",
+      "nach": "  // mutiert: der Schnitt an warten faellt weg",
+      "rot": [
+        "durch nimmt heraus, wer noch in der Korrektur-Schlange steht"
+      ],
+      "gruen": [
+        "durch nennt, wer den Lauf hinter sich hat",
+        "durch nimmt heraus, wer in einem ANDEREN Job gerade laeuft"
+      ]
+    },
+    {
+      "id": "S4 durch behaelt, wer in einem anderen Job laeuft (#581)",
+      "datei": "webtool/frontend/src/hooks/useActiveJob.tsx",
+      "von": "  for (const b of Object.keys(active)) durch.delete(b)",
+      "nach": "  // mutiert: der Schnitt an active faellt weg",
+      "rot": [
+        "durch nimmt heraus, wer in einem ANDEREN Job gerade laeuft"
+      ],
+      "gruen": [
+        "durch nennt, wer den Lauf hinter sich hat",
+        "durch nimmt heraus, wer noch in der Korrektur-Schlange steht"
+      ]
+    },
+    {
+      "id": "S5 die Arbeitsflaeche reicht durch nicht mehr durch (#581, Verdrahtung 1 von 3)",
+      "datei": "webtool/frontend/src/pages/ProjectWorkspace.tsx",
+      "von": "                      durch={phases.durch?.has(f.base)}\n",
+      "nach": "",
+      "rot": [
+        "reicht durch aus dem Job an die Dateizeile durch"
+      ],
+      "gruen": [
+        "zeigt den Ruhezustand statt des Wartesymbols",
+        "ein verdraengtes Urteil zeigt den Ruhezustand"
+      ]
+    },
+    {
+      "id": "S7 die Sammelzeile faellt weg — durch bleibt fuer immer leer (#581)",
+      "datei": "webtool/frontend/src/hooks/useActiveJob.tsx",
+      "von": "    for (const b of j.phases.gesehen ?? []) if (schonDurch(j.phases, j.kind, b)) durch.add(b)",
+      "nach": "    // mutiert: es wird nichts mehr gesammelt",
+      "rot": [
+        "durch nennt, wer den Lauf hinter sich hat",
+        "reicht durch aus dem Job an die Dateizeile durch"
+      ],
+      "gruen": [
+        "ein correct-Lauf liefert GAR KEIN durch",
+        "durch nimmt heraus, wer geloescht ist",
+        "zeigt den Ruhezustand statt des Wartesymbols"
+      ]
+    },
+    {
+      "id": "S8 der Riegel haengt nur noch an der Platte, nicht mehr an durch (#581)",
+      "datei": "webtool/frontend/src/components/FileStatusPill.tsx",
+      "von": "&& !(durch && plattenBeleg)) {",
+      "nach": "&& !plattenBeleg) {",
+      "rot": [
+        "und NICHT ohne durch",
+        "und behaelt das Wartesymbol ohne durch"
+      ],
+      "gruen": [
+        "ein verdraengtes Urteil zeigt den Ruhezustand",
+        "und NICHT, solange die Platte nichts vorweist"
+      ]
+    },
+    {
+      "id": "S9 die Seitenleiste reicht durch nicht mehr an die Dateizeile (#581, Verdrahtung 3 von 3)",
+      "datei": "webtool/frontend/src/components/Sidebar.tsx",
+      "von": "                        durch={phases?.durch?.has(f.base)}\n",
+      "nach": "",
+      "rot": [
+        "zeigt den Ruhezustand statt des Wartesymbols"
+      ],
+      "gruen": [
+        "reicht durch aus dem Job an die Dateizeile durch",
+        "ein verdraengtes Urteil zeigt den Ruhezustand"
+      ]
+    },
+    {
+      "id": "S10 eine geloeschte Aufnahme bleibt in durch (#581/#489)",
+      "datei": "webtool/frontend/src/hooks/useActiveJob.tsx",
+      "von": "  for (const b of geloescht) durch.delete(b)",
+      "nach": "  // mutiert: der Schnitt an entfernt faellt weg",
+      "rot": [
+        "durch nimmt heraus, wer geloescht ist"
+      ],
+      "gruen": [
+        "durch nennt, wer den Lauf hinter sich hat",
+        "durch nimmt heraus, wer noch in der Korrektur-Schlange steht"
+      ]
+    },
+    {
+      "id": "S6 die Dateizeile reicht durch nicht mehr an die Pille (#581, Verdrahtung 2 von 3)",
+      "datei": "webtool/frontend/src/components/FileRow.tsx",
+      "von": " inScope={inScope} durch={durch} globalPhase={globalPhase}",
+      "nach": " inScope={inScope} globalPhase={globalPhase}",
+      "rot": [
+        "zeigt den Ruhezustand statt des Wartesymbols"
+      ],
+      "gruen": [
+        "reicht durch aus dem Job an die Dateizeile durch",
+        "und behaelt das Wartesymbol ohne durch"
+      ]
+    }
+  ]
+}
