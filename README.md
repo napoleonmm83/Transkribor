@@ -212,9 +212,9 @@ Transkribor gerade arbeitet. In Fassungen bis einschliesslich `v0.50.0` stand be
 zum Ende des ganzen Laufs nur das Wartesymbol, obwohl sie längst abgehört und korrigiert
 wurden — und in der Meldung am Ende des Laufs tauchten sie gar nicht erst auf.
 
-**Ab der nächsten Fassung** erfährst du bei einer Aufnahme, die du selbst dazulegst, auch, wie
-es ihr ergangen ist. Bis dahin konnte eine von ihnen still liegenbleiben, wenn bei ihr etwas
-schiefging: die Meldung am Ende gehörte dem Lauf davor, und für die nachgereichte Aufnahme kam
+**Ab `v0.54.0`** erfährst du bei einer Aufnahme, die du selbst dazulegst, auch, wie
+es ihr ergangen ist. In Fassungen bis einschliesslich `v0.53.0` konnte eine von ihnen still
+liegenbleiben, wenn bei ihr etwas schiefging: die Meldung am Ende gehörte dem Lauf davor, und für die nachgereichte Aufnahme kam
 gar keine. Bei Aufnahmen, die Transkribor selbst von einer Adresse holt, kommt die Rückmeldung
 weiterhin erst mit der nächsten Aktualisierung der Liste.
 
@@ -226,7 +226,7 @@ Minuten dauern.
 **Seit `v0.51.0`** sagt diese Zeile in der Dateiliste des Projekts auch, *worauf*
 gewartet wird und wie viel noch davor liegt: „Wartet auf Transkription · noch 3 vor dieser“ —
 und entsprechend „Wartet auf Korrektur“. Letzteres stand in Fassungen bis einschliesslich
-`v0.53.0` nur, wenn du die Korrektur von Hand angestossen hattest; **ab der nächsten Fassung**
+`v0.53.0` nur, wenn du die Korrektur von Hand angestossen hattest; **ab `v0.54.0`**
 auch beim gewöhnlichen Hochladen, wo Transkribor gleich selbst weiterkorrigiert. Dort ist die
 Wartezeit am längsten — Transkribor korrigiert drei Aufnahmen gleichzeitig, bei zwanzig warten
 also siebzehn hintereinander, und bislang sah man ihnen das nicht an. In
@@ -376,7 +376,7 @@ die eine Anmeldung verlangen, unterstützt Transkribor nicht).
 Etwas anderes ist es, wenn Transkribor sagt, es **laufe schon ein Import**: dann hat es deine
 Links gar nicht erst geholt, und sie bleiben im Fenster stehen. Warte, bis der laufende Import
 durch ist, und klicke noch einmal auf „Holen“ — die Adressen musst du nicht neu eintippen.
-(Ab der nächsten Fassung sagt Transkribor das so; in Fassungen bis einschliesslich `v0.53.0`
+(Ab `v0.54.0` sagt Transkribor das so; in Fassungen bis einschliesslich `v0.53.0`
 stand dort „die neuen Dateien kommen danach dran“, was für Links nie stimmte.)
 
 Drei Meldungen können dabei auftauchen:
