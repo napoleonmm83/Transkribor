@@ -371,7 +371,23 @@ export type JobPhases = {
    *  `FileStatusPill` — und dort NICHT mehr das, was hier zuerst stand: er hält die noch
    *  transkribierende Aufnahme (auf der Platte liegt nichts), nicht die laufende Korrektur
    *  (dort ist `has_raw` längst wahr; die hält `eingereiht` über den `warten`-Schnitt).
-   *  Undefined, solange nichts durch ist. */
+   *  Undefined, solange nichts durch ist.
+   *
+   *  GETRAGENE GRENZE, gefunden vom CodeRabbit-Bot (major, hergeleitet — von ihm wie von mir,
+   *  ausgeführt hat sie keiner): der `entfernt`-Schnitt gilt nur, solange der Server die Base
+   *  als gelöscht führt. Beim **Reannoncement** (`[scope+]`, gleichnamiger Neu-Upload) verwirft
+   *  `jobs.py` sie aus `entfernt`, während `gesehen` als Historie bestehen bleibt (`remove_base`
+   *  fasst es bewusst nicht an, #475). Bis die neue `[active]`-Zeile kommt, ist die Base damit
+   *  wieder `schonDurch`-wahr — und ein Fenster, dessen Dateiliste noch das ALTE `has_edit`
+   *  trägt, zeigt „Fertig" über einer Aufnahme, die nur Audio ist.
+   *
+   *  NICHT hier behoben, und der Grund ist der Mechanismus, nicht der Aufwand: der Vorschlag
+   *  des Bots (`gesehen` beim Reannoncement entwerten) fasst eine MONOTONE Zusage an, an der
+   *  `zugelassen` (#431) und der Deckel-Rückweg (#475) hängen — das ist ein eigener Schnitt mit
+   *  eigenem Test, kein Nebensatz dieses PR. Die Staleness selbst ist vorbestehend und in
+   *  `webtool/frontend/CLAUDE.md` schon als offenes Fenster desselben Wegs benannt (#369/#488,
+   *  „Was NEU erlaubt ist"); dieser Fix macht sie in EINEM weiteren Zustand erreichbar, statt
+   *  sie zu schaffen. Eigenes Issue. */
   durch?: Set<string>;
   /** Nur der URL-Import: „N von M geladen". Er kennt KEINE Basisnamen — der Parser verwirft
    *  jede `[fetch] `-Zeile bewusst (sonst laese er die URL als Dateinamen), also entsteht dort
