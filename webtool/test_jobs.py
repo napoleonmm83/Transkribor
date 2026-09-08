@@ -1,3 +1,4 @@
+import json
 import os
 import pathlib
 import signal
@@ -254,7 +255,7 @@ def test_request_gibt_pending_frei_wenn_der_blocker_schon_weg_ist(monkeypatch):
     versuche = []
     echt_start = jobs.start
 
-    def fake_start(project, cmd, cwd, kind, then=None, env=None):
+    def fake_start(project, cmd, cwd, kind, then=None, env=None, sonst=None):
         versuche.append(kind)
         if len(versuche) == 1:
             return "weg", False
@@ -1412,7 +1413,7 @@ def test_vorgemerkter_nachlauf_laeuft_auch_nach_einem_GESCHEITERTEN_lauf():
     gelaufen = []
     orig_start = jobs.start
 
-    def zaehl_start(project, cmd, cwd, kind, then=None, env=None, base=None, bases=None):
+    def zaehl_start(project, cmd, cwd, kind, then=None, env=None, base=None, bases=None, sonst=None):
         jid, started = orig_start(project, cmd, cwd, kind, then=then, env=env,
                                   base=base, bases=bases)
         # NUR das eigene Projekt zaehlen: `jobs.start` ist ein Modulglobal und `_jobs`/`_pending`
@@ -1453,7 +1454,7 @@ def test_abbruch_startet_KEINEN_nachlauf():
     gelaufen = []
     orig_start = jobs.start
 
-    def zaehl_start(project, cmd, cwd, kind, then=None, env=None, base=None, bases=None):
+    def zaehl_start(project, cmd, cwd, kind, then=None, env=None, base=None, bases=None, sonst=None):
         jid, started = orig_start(project, cmd, cwd, kind, then=then, env=env,
                                   base=base, bases=bases)
         # NUR das eigene Projekt zaehlen: `jobs.start` ist ein Modulglobal und `_jobs`/`_pending`
@@ -1521,7 +1522,7 @@ def test_abbruch_hinterlaesst_keine_tote_vormerkung():
     orig_start = jobs.start
     gelaufen = []
 
-    def zaehl_start(project, cmd, cwd, kind, then=None, env=None, base=None, bases=None):
+    def zaehl_start(project, cmd, cwd, kind, then=None, env=None, base=None, bases=None, sonst=None):
         jid, started = orig_start(project, cmd, cwd, kind, then=then, env=env,
                                   base=base, bases=bases)
         # NUR das eigene Projekt zaehlen: `jobs.start` ist ein Modulglobal und `_jobs`/`_pending`
@@ -1599,7 +1600,7 @@ def test_abbruch_eines_FREMDEN_projekts_verwirft_den_eigenen_nachlauf_nicht():
     jids = []
     orig_start = jobs.start
 
-    def zaehl_start(project, cmd, cwd, kind, then=None, env=None, base=None, bases=None):
+    def zaehl_start(project, cmd, cwd, kind, then=None, env=None, base=None, bases=None, sonst=None):
         jid, started = orig_start(project, cmd, cwd, kind, then=then, env=env,
                                   base=base, bases=bases)
         if started and project in ("Q_fremd", "P_eigen"):
@@ -1815,17 +1816,17 @@ def test_gescheiterter_download_schliesst_seine_vormerkung(monkeypatch):
     fragte sie fuer die Lebensdauer des Tabs alle 1,5 s ab — genau der Dauerpoll, den #381
     beseitigt hat.
 
-    Gemessen wird mit dem echten `when_done`, weil dessen REIHENFOLGE der springende Punkt
-    ist: `jobs._run` fuehrt `next_runs` VOR den `then`-Rueckrufen aus. Ein Rueckruf, der
-    bedingungslos verwirft, traefe deshalb ausgerechnet den Erfolgsfall — der Rueckruf fragt
-    den Status selbst.
+    Gemessen wird am echten `sonst` (#579), nicht mehr an einem `when_done`-Rueckruf, der
+    den Status selbst abfragt: die Fallunterscheidung liegt jetzt in `_run` und laesst `then`
+    und `sonst` desselben Auftrags nie beide laufen. Der Test faehrt deshalb BEIDE mit —
+    haette der Riegel den Erfolgsfall getroffen, waere `gestartet` das Ergebnis.
     """
-    from webtool.app import _fetch_nachlauf_ausgang
     nummer = jobs.vormerken("P_ausgang", "transcribe")
     jid, started = jobs.start("P_ausgang", [sys.executable, "-c", "raise SystemExit(3)"],
-                              cwd=None, kind="fetch")
+                              cwd=None, kind="fetch",
+                              then=lambda: jobs._vorgang_setzen(nummer, "gestartet", job_id="x"),
+                              sonst=lambda: jobs.vorgang_verwerfen(nummer))
     assert started is True
-    assert jobs.when_done(jid, lambda: _fetch_nachlauf_ausgang(jid, nummer)) is True
     r = _wait(jid, timeout=30)
     assert r["status"] == "error", r["status"]
     assert jobs.vorgang(nummer)["status"] == "verworfen"
@@ -1834,19 +1835,25 @@ def test_gescheiterter_download_schliesst_seine_vormerkung(monkeypatch):
 def test_gelungener_download_laesst_die_vormerkung_offen(monkeypatch):
     """Die Gegenprobe, und ohne sie belegt der Test darueber nichts.
 
-    Bei `done` darf der Rueckruf NICHTS tun: der Nachlauf steht dann noch aus (`then` laeuft
-    erst danach), und ein Verwerfen hier liesse den Browser einen Lauf fallen, der gleich
-    anlaeuft. Genau das waere passiert, haette der Rueckruf den Status nicht selbst gefragt.
+    Bei `done` darf `sonst` NICHTS tun: der Nachlauf steht dann noch aus (`then` uebernimmt
+    die Nummer), und ein Verwerfen hier liesse den Browser einen Lauf fallen, der gleich
+    anlaeuft. Die Mutation, gegen die dieser Test steht, ist „`sonst` bei jedem Ausgang
+    laufen lassen" — sie ist naheliegend und faellt sonst nirgends auf, weil der Fehlerfall
+    darueber gruen bleibt.
     """
-    from webtool.app import _fetch_nachlauf_ausgang
     nummer = jobs.vormerken("P_ausgang_ok", "transcribe")
+    gelaufen = []
     jid, started = jobs.start("P_ausgang_ok", [sys.executable, "-c", "pass"],
-                              cwd=None, kind="fetch")
+                              cwd=None, kind="fetch",
+                              then=lambda: gelaufen.append("then"),
+                              sonst=lambda: jobs.vorgang_verwerfen(nummer))
     assert started is True
-    assert jobs.when_done(jid, lambda: _fetch_nachlauf_ausgang(jid, nummer)) is True
     r = _wait(jid, timeout=30)
     assert r["status"] == "done", r["status"]
-    assert jobs.vorgang(nummer)["status"] == "vorgemerkt"
+    assert _bis(lambda: gelaufen == ["then"]), "der then-Rueckruf ist nicht gelaufen"
+    assert jobs.vorgang(nummer)["status"] == "vorgemerkt", \
+        "`sonst` hat bei Erfolg mitgefeuert — dann verwirft es die Nummer, auf die der " \
+        "Browser gerade wartet"
 
 
 def _durch_den_endpunkt(monkeypatch, cmd, project):
@@ -1917,6 +1924,161 @@ def test_endpunkt_laesst_die_nummer_offen_wenn_der_download_gelingt(monkeypatch)
     assert _bis(lambda: gerufen == [r["vorgang"]]), "der then-Rueckruf ist nicht gelaufen"
     assert jobs.vorgang(r["vorgang"])["status"] == "vorgemerkt", \
         "die Nummer wurde geschlossen, obwohl der Download gelang"
+
+
+def _kette_mit_weitergabe(project, folge_cmd, then_fn=None, sonst_fn=None):
+    """Baut die Lage aus #579: Job 1 gelingt, ein Folge-Job desselben (Projekt, Art) steht,
+    wenn `_run` Schritt 2 nach ihm sieht — also wird das `then` weitergereicht.
+
+    Deterministisch OHNE Schlaf und ohne Monkeypatch am Mechanismus: `when_done` haengt den
+    Starter in `next_runs`, und die laufen in `jobs._run` Schritt 1 — im selben Faden,
+    unmittelbar vor Schritt 2. Damit der Folge-Job vorher wieder aus `_active` faellt,
+    muesste sein ganzer Subprozess zwischen zwei Anweisungen desselben Fadens hoch- und
+    wieder herunterfahren; das ist keine knappe Frist, sondern strukturell ausgeschlossen.
+    Die Weitergabe wird trotzdem in jedem Test EINZELN belegt — ohne diese Positivkontrolle
+    laeuft `then` einfach lokal auf Job 1, und die Zusicherung waere auch ohne den Fix
+    erfuellt.
+    """
+    jid1, started = jobs.start(project, [sys.executable, "-c", "pass"], cwd=None, kind="fetch",
+                               then=then_fn, sonst=sonst_fn)
+    assert started is True
+    folge = {}
+
+    def starte_folge():
+        folge["jid"], folge["started"] = jobs.start(project, folge_cmd, cwd=None, kind="fetch")
+
+    assert jobs.when_done(jid1, starte_folge) is True
+    _wait(jid1, timeout=30)
+    assert _bis(lambda: folge.get("started") is True), "der Folge-Job ist gar nicht angelaufen"
+    assert _bis(lambda: _uebernommen(folge["jid"], then_fn)), \
+        "das `then` wurde NICHT weitergereicht — der Test misst hier nichts"
+    return jid1, folge["jid"]
+
+
+def _uebernommen(folge_jid, fn):
+    with jobs._lock:
+        return fn in jobs._jobs.get(folge_jid, {}).get("then_ueber", [])
+
+
+def test_weitergereichtes_then_laesst_keine_vormerkung_zurueck():
+    """#579: das `then` haengt am Ausgang des EMPFAENGERS, seine Arbeit aber am Erfolg des
+    Absenders — scheitert der Empfaenger, wurde beides bisher stillschweigend verworfen.
+
+    Zwei Schaeden in einem: die Vorgangsnummer des URL-Imports blieb fuer immer `vorgemerkt`
+    (die Oberflaeche fragt sie alle 1,5 s ab), und der bereits heruntergeladene Ton wurde
+    nicht angefasst, bis irgendetwas anderes einen Transkriptionslauf ausloest.
+
+    Geprueft wird auf `gestartet`, nicht auf „nicht mehr `vorgemerkt`": `verworfen` erfuellt
+    das schwaechere Kriterium auch, und dann waere die Aufnahme trotzdem liegengeblieben.
+    """
+    nummer = jobs.vormerken("P_kette_fehler", "transcribe")
+    laeufe = []
+
+    def then_fn():
+        laeufe.append("then")
+        jobs._vorgang_setzen(nummer, "gestartet", job_id="nachlauf")
+
+    jid1, jid2 = _kette_mit_weitergabe(
+        "P_kette_fehler", [sys.executable, "-c", "raise SystemExit(4)"],
+        then_fn=then_fn, sonst_fn=lambda: jobs.vorgang_verwerfen(nummer))
+    r2 = _wait(jid2, timeout=30)
+    assert r2["status"] == "error", r2["status"]
+    assert _bis(lambda: laeufe == ["then"]), \
+        "das uebernommene `then` wurde mit dem gescheiterten Empfaenger verworfen (#579)"
+    assert jobs.vorgang(nummer)["status"] == "gestartet"
+
+
+def test_abgebrochener_empfaenger_holt_das_uebernommene_then_NICHT_nach():
+    """Die Gegenrichtung, und sie ist keine Geschmacksfrage.
+
+    „Ein Abbruch ist eine Entscheidung" — dieselbe Regel, die `request.rerun` fuer die
+    Vormerkung schon trifft. Sie traegt hier doppelt: `cancel_all()` bricht beim
+    Herunterfahren ALLE Jobs ab, und ein dort nachgeholtes `then` startete mitten im Beenden
+    einen neuen Whisper-Prozess, den niemand mehr einsammelt.
+
+    Die Nummer wird trotzdem geschlossen — sonst tauschte der Fix nur den Weg, auf dem sie
+    haengenbleibt.
+    """
+    nummer = jobs.vormerken("P_kette_abbruch", "transcribe")
+    laeufe = []
+    jid1, jid2 = _kette_mit_weitergabe(
+        "P_kette_abbruch", [sys.executable, "-c", "import time; time.sleep(30)"],
+        then_fn=lambda: laeufe.append("then"),
+        sonst_fn=lambda: jobs.vorgang_verwerfen(nummer))
+    assert jobs.cancel(jid2) is True
+    r2 = _wait(jid2, timeout=30)
+    assert r2["status"] == "cancelled", r2["status"]
+    assert _bis(lambda: jobs.vorgang(nummer)["status"] == "verworfen"), \
+        "nach dem Abbruch bleibt die Nummer offen — das uebernommene `sonst` ist nicht gelaufen"
+    assert laeufe == [], "der Abbruch hat trotzdem einen Nachlauf gestartet"
+
+
+def test_fehlschlag_holt_das_uebernommene_then_NACH_statt_es_weiterzureichen():
+    """E3 wörtlich: nachholen, nicht ein Glied weiterschieben.
+
+    Steht beim Fehlschlag des Empfaengers schon der naechste Job bereit, waere die Weitergabe
+    die bequeme Antwort — die geschuldete Arbeit haenge dann am Ausgang eines DRITTEN Laufs,
+    der mit ihr nichts zu tun hat, und bei dessen Abbruch faellt sie ganz weg. Job 3 laeuft
+    hier lange; die Nummer muss trotzdem sofort aufgeloest sein.
+    """
+    nummer = jobs.vormerken("P_kette_drei", "transcribe")
+    jid1, jid2 = _kette_mit_weitergabe(
+        "P_kette_drei", [sys.executable, "-c", "import time; time.sleep(2); raise SystemExit(5)"],
+        then_fn=lambda: jobs._vorgang_setzen(nummer, "gestartet", job_id="nachlauf"),
+        sonst_fn=lambda: jobs.vorgang_verwerfen(nummer))
+    drei = {}
+
+    def starte_drei():
+        drei["jid"], _ = jobs.start("P_kette_drei",
+                                    [sys.executable, "-c", "import time; time.sleep(30)"],
+                                    cwd=None, kind="fetch")
+
+    assert jobs.when_done(jid2, starte_drei) is True, "Job 2 war schon terminal"
+    r2 = _wait(jid2, timeout=30)
+    assert r2["status"] == "error", r2["status"]
+    assert _bis(lambda: drei.get("jid")), "Job 3 ist nicht angelaufen"
+    assert _bis(lambda: jobs.vorgang(nummer)["status"] == "gestartet"), \
+        "das uebernommene `then` haengt jetzt an Job 3, statt nachgeholt zu werden"
+    jobs.cancel(drei["jid"])
+    _wait(drei["jid"], timeout=30)
+
+
+def test_gelungener_empfaenger_laesst_das_uebernommene_sonst_liegen():
+    """Die Gegenprobe zu beiden Faellen darueber: bei `done` gewinnt das `then`.
+
+    Ohne sie bliebe die Mutation „das uebernommene `sonst` bei jedem Ausgang laufen lassen"
+    gruen — die Nummer stuende dann am Ende auf `verworfen` statt auf `gestartet`, und die
+    Oberflaeche liesse einen Lauf fallen, der gerade anlaeuft.
+    """
+    nummer = jobs.vormerken("P_kette_ok", "transcribe")
+    jid1, jid2 = _kette_mit_weitergabe(
+        "P_kette_ok", [sys.executable, "-c", "pass"],
+        then_fn=lambda: jobs._vorgang_setzen(nummer, "gestartet", job_id="nachlauf"),
+        sonst_fn=lambda: jobs.vorgang_verwerfen(nummer))
+    r2 = _wait(jid2, timeout=30)
+    assert r2["status"] == "done", r2["status"]
+    assert _bis(lambda: jobs.vorgang(nummer)["status"] == "gestartet"), \
+        jobs.vorgang(nummer)["status"]
+
+
+def test_jobs_get_traegt_keine_rueckruf_felder():
+    """Die drei neuen Felder duerfen den Server nicht verlassen — wie `then` und `next_runs`.
+
+    Der Riegel ist nicht `json.dumps` im Betrieb: FastAPIs Encoder WIRFT nicht, er bildet
+    eine Funktion auf `{}` ab. Ein vergessener `pop` gaebe also 200 mit `sonst: [{}]` in
+    einer Nutzlast, die alle 1,5 s gepollt wird — still, dauerhaft und nur hier sichtbar.
+    """
+    jid, started = jobs.start("P_snapshot", [sys.executable, "-c", "pass"], cwd=None,
+                              kind="fetch", then=lambda: None, sonst=lambda: None)
+    assert started is True
+    with jobs._lock:
+        jobs._jobs[jid]["then_ueber"].append(lambda: None)
+        jobs._jobs[jid]["sonst_ueber"].append(lambda: None)
+    snap = jobs.get(jid)
+    for feld in ("then", "sonst", "then_ueber", "sonst_ueber", "next_runs"):
+        assert feld not in snap, f"{feld} verlaesst den Server"
+    json.dumps(snap)          # der eigentliche Beweis: der Schnappschuss ist serialisierbar
+    _wait(jid, timeout=30)
 
 
 def test_deckel_wirft_keinen_LAUFENDEN_vorgang():
