@@ -482,3 +482,30 @@ jobs:
           python scripts/mutation.py --repo . --pfad scripts/
           --test "python -m pytest scripts/test_mutation.py -q"
           --plan scripts/mutationen/mutation.json
+      # Dritte Serie, und die erste im FRONTEND. Sie braucht node — deshalb stehen die zwei
+      # Schritte hier und nicht oben: der Job soll ohne sie starten koennen, wenn die
+      # Frontend-Serie einmal wegfaellt.
+      #
+      # `--root webtool/frontend` ist Pflicht, nicht Geschmack: `mutation.py` faehrt sein
+      # Testkommando mit cwd = Repo-Wurzel, und von dort loest vitest die `@/`-Aliase der
+      # Frontend-tsconfig nicht auf ("Cannot find package '@/lib/jobPhases'", lokal gemessen).
+      # `npm --prefix … exec` statt `npx`, weil npx sonst ein FREMDES vitest in den
+      # npx-Cache laedt, dem jsdom fehlt (ebenfalls gemessen).
+      #
+      # Vier Testdateien, weil zwei der sechs Mutationen die VERDRAHTUNG treffen: die Regel
+      # sitzt in `mergePhases`/`FileStatusPill`, ankommen muss sie in Seitenleiste UND
+      # Arbeitsflaeche (#488-Lehre — ein optionales Prop faellt lautlos weg).
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: webtool/frontend/package-lock.json
+      - run: npm ci --no-audit --fund=false
+        working-directory: webtool/frontend
+      - name: Probe gegen die Statuspille (#581)
+        run: >
+          python scripts/mutation.py --repo . --pfad webtool/
+          --test "npm --prefix webtool/frontend exec -- vitest run --root webtool/frontend
+          src/components/FileStatusPill.test.tsx src/components/Sidebar.test.tsx
+          src/hooks/useActiveJob.test.tsx src/pages/ProjectWorkspace.test.tsx"
+          --plan scripts/mutationen/statuspille_durch.json
