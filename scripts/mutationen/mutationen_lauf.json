@@ -1,0 +1,88 @@
+{
+  "test": "python -m pytest scripts/test_mutationen_lauf.py scripts/test_mutationsplaene.py -q",
+  "pfade": [
+    "scripts/mutationen_lauf.py",
+    "scripts/test_mutationen_lauf.py",
+    "scripts/test_mutationsplaene.py",
+    "scripts/mutationen/deckel_finally.json"
+  ],
+  "mutationen": [
+    {
+      "id": "L1 die globalen Pfade ziehen nicht mehr alle Plaene",
+      "datei": "scripts/mutationen_lauf.py",
+      "von": "    if geaendert & set(GLOBALE_PFADE):",
+      "nach": "    if geaendert & set(()):",
+      "rot": [
+        "test_globaler_pfad_zieht_ALLE_plaene"
+      ],
+      "gruen": [
+        "test_alle_waehlt_alle",
+        "test_nur_die_betroffenen_plaene"
+      ]
+    },
+    {
+      "id": "L2 eine geaenderte Plandatei waehlt ihren Plan nicht mehr",
+      "datei": "scripts/mutationen_lauf.py",
+      "von": "            or f\"scripts/mutationen/{p.datei.name}\" in geaendert]",
+      "nach": "            or False]",
+      "rot": [
+        "test_eine_geaenderte_plandatei_waehlt_ihren_plan"
+      ],
+      "gruen": [
+        "test_nur_die_betroffenen_plaene",
+        "test_unbeteiligte_aenderung_waehlt_nichts"
+      ]
+    },
+    {
+      "id": "L3 kein Plan gefunden gilt wieder als sauberer Lauf",
+      "datei": "scripts/mutationen_lauf.py",
+      "von": "    if not plaene:",
+      "nach": "    if False:",
+      "rot": [
+        "test_kein_plan_gefunden_ergibt_zwei"
+      ],
+      "gruen": [
+        "test_echte_plaene_werden_alle_geladen"
+      ]
+    },
+    {
+      "id": "L4 der Trenner wird beim Lesen nicht mehr normalisiert",
+      "datei": "scripts/mutationen_lauf.py",
+      "von": "    return {z.strip().replace(\"\\\\\", \"/\") for z in zeilen if z.strip()}",
+      "nach": "    return {z.strip() for z in zeilen if z.strip()}",
+      "rot": [
+        "test_rueckwaertsschraegstrich_wird_beim_LESEN_normalisiert"
+      ],
+      "gruen": [
+        "test_auswahl_ueber_echte_plaene_und_echte_datei"
+      ]
+    },
+    {
+      "id": "L5 ein Anker im Plan zeigt ins Leere (der Waechter muss anschlagen)",
+      "datei": "scripts/mutationen/deckel_finally.json",
+      "von": "assert jobs.vorgang(laeuft) is not None",
+      "nach": "assert jobs.diese_funktion_gibt_es_nicht(laeuft) is not None",
+      "rot": [
+        "test_jeder_anker_passt_genau_einmal"
+      ],
+      "gruen": [
+        "test_jeder_pfad_existiert",
+        "test_jeder_plan_traegt_die_objektform"
+      ]
+    },
+    {
+      "id": "L6 ein Pfad im Plan zeigt ins Leere (der Waechter muss anschlagen)",
+      "datei": "scripts/mutationen/deckel_finally.json",
+      "von": "  \"pfade\": [\n    \"webtool/test_jobs.py\"\n  ],",
+      "nach": "  \"pfade\": [\n    \"webtool/gibt_es_nicht.py\"\n  ],",
+      "rot": [
+        "test_jeder_pfad_existiert",
+        "test_jede_mutierte_datei_steht_in_pfaden"
+      ],
+      "gruen": [
+        "test_jeder_plan_traegt_die_objektform"
+      ],
+      "hinweis": "`test_jeder_anker_passt_genau_einmal` steht NICHT unter `gruen`, und das ist kein Versehen: diese Mutation aendert eine PLANDATEI, und damit verschwindet der Anker DIESER Mutation aus dem Baum, solange sie gesetzt ist. Der Waechter meldet das voellig zu Recht. Er ist hier also aus einem zweiten, selbstbezueglichen Grund rot — und genau deshalb taugt er nicht als Gegenprobe."
+    }
+  ]
+}
