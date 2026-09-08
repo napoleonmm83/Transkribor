@@ -223,6 +223,22 @@ def _zaun(text: str) -> str:
     return "`" * max(3, laengste + 1)
 
 
+def _kopf(wert: object) -> str:
+    """Externes Feld in eine Markdown-KOPFZEILE — ohne Ausbruch.
+
+    `fileName` und `severity` kommen aus der CLI, also mittelbar aus einem PR: dieses Repo
+    ist OEFFENTLICH, eine Datei darf `@napoleonmm83.py` heissen oder Backticks tragen. Der
+    Befundtext ist laengst gezaeunt (`_zaun`), diese eine Zeile war es nicht — sie stand roh
+    zwischen zwei Sternen und zwei Backticks, und der Kommentar wird vom Bot-Konto gepostet,
+    eine Erwaehnung darin pingt also wirklich. Befund der CLI an sich selbst.
+
+    Zeilenumbrueche zusammengezogen, Backticks entschaerft, Erwaehnungen mit einem
+    Null-Breite-Zeichen getrennt (sichtbar bleibt der Name, die Erwaehnung nicht).
+    """
+    text = " ".join(str(wert).split()).replace("`", "'")
+    return text.replace("@", "@​") or "?"
+
+
 def markdown(befunde: list[dict]) -> str:
     """Der Kommentartext fuer den PR.
 
@@ -249,7 +265,7 @@ def markdown(befunde: list[dict]) -> str:
         if vorschlaege:
             text = f"{text}\n\n--- Vorschlag der CLI ---\n" + "\n\n".join(vorschlaege)
         zaun = _zaun(text)
-        zeilen.append(f"**{b.get('severity', '?')}** · `{b.get('fileName', '?')}`")
+        zeilen.append(f"**{_kopf(b.get('severity', '?'))}** · `{_kopf(b.get('fileName', '?'))}`")
         zeilen.append("")
         zeilen.append(f"{zaun}text")
         zeilen.extend(text.splitlines())
@@ -353,7 +369,15 @@ def main(argv: list[str] | None = None) -> int:
 
     # DER KONTINGENT-FALL WIRD VOR DER UNSTIMMIGKEIT GEFRAGT — sonst faenge ihn die
     # allgemeine Regel „action_required ohne complete" ein und faerbte rot.
-    if (handlung := kontingent_erschoepft(lage)) is not None:
+    #
+    # ABER NUR, SOLANGE ES KEIN URTEIL GIBT. Ein Lauf, der Befunde geliefert hat UND
+    # unterwegs die Kontingent-Grenze meldet, fiel sonst ebenfalls hierher: rc 3, und
+    # `a.markdown` wurde mit „Stufe ausgefallen" UEBERSCHRIEBEN — die Befunde waren weg,
+    # bei gruenem Job. Gefunden hat das die CLI an sich selbst (Lauf 34269048014).
+    # Der dokumentierte Grund oben bleibt unberuehrt: ohne `complete` greift der Zweig
+    # weiter wie bisher.
+    geurteilt = (lage.complete or {}).get("status") == "review_completed"
+    if not geurteilt and (handlung := kontingent_erschoepft(lage)) is not None:
         print("STUFE AUSGEFALLEN: das CodeRabbit-Kontingent ist erschoepft.")
         print(f"                   Die CLI bietet an, mit Guthaben zu wiederholen"
               f" ({handlung.get('command', 'kein Kommando genannt')}) — das tut dieser"
@@ -368,8 +392,11 @@ def main(argv: list[str] | None = None) -> int:
                 encoding="utf-8")
         return 3
 
+    # `verdecke` auch hier: der Grund traegt Felder aus der CLI-Ausgabe (`message` etwa),
+    # und die kann den Schluessel enthalten. Die Nachbarpfade maskieren laengst; genau
+    # diese eine Stelle tat es nicht. Befund der CLI an sich selbst.
     if (grund := unstimmig(lage)) is not None:
-        print(f"ABBRUCH: {grund}")
+        print(f"ABBRUCH: {verdecke(grund, schluessel)}")
         print(f"         (Rueckgabecode der CLI: {p.returncode} — er taugt hier nicht als"
               " Zeuge, siehe Modul-Docstring.)")
         _drucke_auszug(ganze_ausgabe, schluessel)
