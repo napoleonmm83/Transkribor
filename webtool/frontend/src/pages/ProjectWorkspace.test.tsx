@@ -249,7 +249,17 @@ describe('ProjectWorkspace (Stub)', () => {
         </JobProvider>
       </MemoryRouter>,
     )
-    expect(await screen.findByText(/Transkribiert — noch nicht korrigiert/)).toBeInTheDocument()
+    // Auf die ZEILE eingegrenzt, nicht global (CodeRabbit-CLI): die globale Fassung liess
+    // offen, WELCHE Aufnahme den Ruhezustand traegt. Sie war nicht falsch — `findByText`
+    // wirft bei mehreren Treffern, und ein vertauschtes `durch` haette die zweite Zusicherung
+    // rot gemacht —, aber sie sagte nicht, was sie meint. Ein Test, dessen Schutz von einer
+    // Nebenwirkung der Abfrage lebt, ist beim naechsten Umbau still weg.
+    const zeile = async (base: string) =>
+      (await screen.findByText(base)).closest('li')!
+    expect(within(await zeile('S1')).getByText(/Transkribiert — noch nicht korrigiert/))
+      .toBeInTheDocument()
+    // S2 laeuft und zeigt seine Phase — weder Ruhezustand noch Wartetext.
+    expect(within(await zeile('S2')).queryByText(/Transkribiert — noch nicht korrigiert/)).toBeNull()
     expect(screen.queryByText(/In Warteschlange/)).toBeNull()
   })
 
