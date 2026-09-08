@@ -10,12 +10,12 @@
       "von": "    status = lage.complete.get(\"status\")\n    if status != \"review_completed\":\n        return (f\"`complete` mit status={status!r} statt 'review_completed' —\"\n                f\" es wurde NICHT geprueft\"\n                f\" ({lage.complete.get('message', 'kein Grund genannt')})\")",
       "nach": "    # M1: der naive Riegel fragt nur, OB es eine complete-Zeile gibt.\n    # Genau so meldet ein uebersprungener Lauf \"geprueft, keine Befunde\".",
       "rot": [
-        "test_review_skipped_ist_KEIN_urteil",
-        "test_der_rueckgabecode_der_cli_entscheidet_NICHT"
+        "test_review_skipped_ist_KEIN_urteil"
       ],
       "gruen": [
         "test_die_zahlen_muessen_stimmen",
-        "test_authfehler_ist_kein_urteil"
+        "test_authfehler_ist_kein_urteil",
+        "test_der_rueckgabecode_der_cli_entscheidet_NICHT"
       ],
       "datei": "scripts/coderabbit_riegel.py"
     },
