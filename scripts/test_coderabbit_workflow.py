@@ -47,11 +47,19 @@ def _bash() -> str | None:
     Waechter, und Fehlalarme werden weggeklickt. Gemessen: Git Bash 5.3.15 (MINGW64)
     faehrt denselben Vertrag Zeile fuer Zeile wie die Bash des ubuntu-Laeufers.
     """
-    kandidaten = (
-        [r"C:\Program Files\Git\bin\bash.exe", r"C:\Program Files (x86)\Git\bin\bash.exe"]
-        if os.name == "nt"
-        else ["/bin/bash", "/usr/bin/bash"]
-    )
+    if os.name == "nt":
+        kandidaten = [
+            r"C:\Program Files\Git\bin\bash.exe",
+            r"C:\Program Files (x86)\Git\bin\bash.exe",
+        ]
+        # Eine Git-Installation OHNE Administratorrechte (`winget install Git.Git` ohne
+        # `--scope machine`) landet im Nutzerprofil. Ohne diesen Eintrag uebersprangen
+        # dort fuenf von sechs Tests — mit `1 passed, 5 skipped` und rc 0, der Grund nur
+        # unter `-rs` sichtbar. Befund des gegnerischen Reviewers.
+        if lokal := os.environ.get("LOCALAPPDATA"):
+            kandidaten.append(str(Path(lokal) / "Programs" / "Git" / "bin" / "bash.exe"))
+    else:
+        kandidaten = ["/bin/bash", "/usr/bin/bash"]
     return next((p for p in kandidaten if Path(p).is_file()), None)
 
 
@@ -84,6 +92,16 @@ def _runblock(schrittname: str) -> str:
     for i in range(start + 1, len(zeilen)):
         if re.match(r"^\s*-\s+name:", zeilen[i]):
             break
+        # Dieser Test faehrt den Block hart als `bash -e` — GitHubs Vorgabe. Ein eigenes
+        # `shell:` am Schritt wuerde ihn mit einer ANDEREN Shell fahren, und das bliebe
+        # sonst STILL: mit `shell: sh` ist es auf ubuntu dash, dort stirbt `set -o pipefail`
+        # in Zeile 1 („Illegal option -o pipefail", gemessen), waehrend alle Tests hier
+        # gruen blieben. Der Test prueft dann die Vorstellung des Autors ueber den Laeufer
+        # statt den Laeufer. Befund des gegnerischen Reviewers.
+        assert not re.match(r"^\s*shell:", zeilen[i]), (
+            f"Schritt {schrittname!r} traegt ein eigenes `shell:` — dieser Test faehrt aber "
+            f"`bash -e`. Beide muessen dasselbe meinen, sonst misst er den falschen Lauf."
+        )
         if re.match(r"^\s*run:\s*\|\s*$", zeilen[i]):
             run = i
             break
@@ -137,6 +155,47 @@ def test_der_runblock_ist_auffindbar():
     block = _runblock("Review")
     assert "coderabbit_riegel.py" in block
     assert 'case "$rc" in' in block
+
+
+def test_ein_eigenes_shell_am_schritt_faellt_auf(tmp_path, monkeypatch):
+    """Die `shell:`-Wache muss FEUERN, nicht bloss dastehen.
+
+    Gemessen auf einer Kopie: mit `shell: sh` faehrt GitHub den Block auf ubuntu als dash,
+    und dort stirbt `set -o pipefail` in Zeile 1 („Illegal option"). Alle uebrigen Tests
+    hier blieben dabei gruen — sie fahren ja `bash`. Genau deshalb braucht die Wache einen
+    eigenen Zeugen, sonst ist sie eine Zeile ohne Beweis.
+    """
+    zeilen = WORKFLOW.read_text(encoding="utf-8").splitlines()
+    for i, zeile in enumerate(zeilen):
+        if zeile.strip() == "- name: Review":
+            zeilen.insert(i + 2, "        shell: sh")
+            break
+    else:
+        raise AssertionError("Schritt Review nicht gefunden — dieser Test misst dann nichts")
+
+    kopie = tmp_path / "coderabbit.yml"
+    kopie.write_text("\n".join(zeilen) + "\n", encoding="utf-8")
+    monkeypatch.setitem(globals(), "WORKFLOW", kopie)
+
+    with pytest.raises(AssertionError, match="shell:"):
+        _runblock("Review")
+
+
+def test_ein_shell_im_NACHBARschritt_ist_kein_fehlalarm(tmp_path, monkeypatch):
+    """Die Wache darf nur den eigenen Schritt sehen — sonst ist sie ein Fehlalarm."""
+    zeilen = WORKFLOW.read_text(encoding="utf-8").splitlines()
+    for i, zeile in enumerate(zeilen):
+        if zeile.strip() == "- name: Kommentar":
+            zeilen.insert(i + 2, "        shell: sh")
+            break
+    else:
+        raise AssertionError("Schritt Kommentar nicht gefunden — dieser Test misst dann nichts")
+
+    kopie = tmp_path / "coderabbit.yml"
+    kopie.write_text("\n".join(zeilen) + "\n", encoding="utf-8")
+    monkeypatch.setitem(globals(), "WORKFLOW", kopie)
+
+    assert "coderabbit_riegel.py" in _runblock("Review")
 
 
 @hat_bash
