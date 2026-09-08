@@ -330,6 +330,42 @@ describe('mergePhases', () => {
     expect(m.durch).toBeUndefined()
   })
 
+  it('durch nimmt heraus, wer geloescht ist (#581/#489)', () => {
+    /* `remove_base` raeumt `gesehen` NICHT (Historie, #475), der Parser unterdrueckt fuer eine
+       entfernte Base aber `perBase` UND `erreicht` — sie ist damit `schonDurch`-wahr, ohne
+       Urteil, ohne Wartegrund. Ohne diesen Schnitt zeigte ein ZWEITES Fenster nach Loeschen +
+       gleichnamigem Neu-Upload bis zum naechsten Summenpoll „Fertig" ueber einer Aufnahme, die
+       nur Audio ist: seine Dateiliste traegt noch das alte `has_edit`, und der Plattenbeleg der
+       Pille prueft, ob etwas DA ist, nicht ob es DASSELBE ist. Vorher stand dort der Wartetext,
+       und der war richtig. Gefunden vom Neuweg-Pruefer. */
+    const m = mergePhases([job('j1', 'transcribe', {
+      global: null, active: {}, perBase: {},
+      scope: new Set(['A']), gesehen: new Set(['A']), entfernt: new Set(['A']),
+    })])
+    expect(m.durch).toBeUndefined()
+  })
+
+  it('ein correct-Lauf liefert GAR KEIN durch — die getragene Grenze, festgenagelt (#581)', () => {
+    /* `schonDurch` gilt nur fuer `transcribe`: im Korrekturlauf meldet das Glossar seit #450
+       korpusweit `[active]`, dort waere jede Aufnahme von der ersten Sekunde an gesehen und
+       die Menge wertlos (`jobPhases.ts`, Docstring von `schonDurch`).
+
+       Der Test steht hier als WAECHTER, nicht als Zusicherung, dass das gut sei: wer
+       `schonDurch` je auf `correct` ausdehnt, bekommt ihn rot und muss sich ansehen, was das
+       fuer `durch` bedeutet — dort waere der Plattenbeleg wirkungslos (jede
+       Korrekturkandidatin traegt `has_raw`), und ALLE Wartenden fielen auf ihren Ruhezustand.
+       Fuer `warteKarte`, den anderen Aufrufer, waere dieselbe Ausdehnung harmlos; genau diese
+       Asymmetrie hat der Export der Funktion neu geschaffen. */
+    const m = mergePhases([job('j1', 'correct', {
+      global: null, active: {}, perBase: {},
+      scope: new Set(['A', 'B']), gesehen: new Set(['A', 'B']),
+    })])
+    expect(m.durch).toBeUndefined()
+    // Und die Lage, die dadurch ungeheilt bleibt: A haette sein Urteil verloren und gilt
+    // wieder als wartend. Genau der #581-Zustand, nur mit Text statt Spinner.
+    expect(m.warten?.A).toEqual({ art: 'correct', vor: 0 })
+  })
+
   it('die Korrektur-Schlange behaelt ihre UEBERGABE-Reihenfolge auch nach dem Merge (#442)', () => {
     /* Die Neu-Durchzaehlung am Ende von `mergePhases` sortierte BEIDE Schlangen nach Namen.
        Fuer die Transkription ist das richtig (der Erzeuger sortiert selbst so), fuer die

@@ -57,7 +57,7 @@
     ]
   },
   {
-    "id": "S5 die Arbeitsflaeche reicht durch nicht mehr durch (#581, Verdrahtung 1 von 2)",
+    "id": "S5 die Arbeitsflaeche reicht durch nicht mehr durch (#581, Verdrahtung 1 von 3)",
     "datei": "webtool/frontend/src/pages/ProjectWorkspace.tsx",
     "von": "                      durch={phases.durch?.has(f.base)}\n",
     "nach": "",
@@ -70,7 +70,62 @@
     ]
   },
   {
-    "id": "S6 die Dateizeile reicht durch nicht mehr an die Pille (#581, Verdrahtung 2 von 2)",
+    "id": "S7 die Sammelzeile faellt weg — durch bleibt fuer immer leer (#581)",
+    "datei": "webtool/frontend/src/hooks/useActiveJob.tsx",
+    "von": "    for (const b of j.phases.gesehen ?? []) if (schonDurch(j.phases, j.kind, b)) durch.add(b)",
+    "nach": "    // mutiert: es wird nichts mehr gesammelt",
+    "rot": [
+      "durch nennt, wer den Lauf hinter sich hat",
+      "reicht durch aus dem Job an die Dateizeile durch",
+      "zeigt den Ruhezustand statt des Wartesymbols"
+    ],
+    "gruen": [
+      "ein correct-Lauf liefert GAR KEIN durch",
+      "durch nimmt heraus, wer geloescht ist"
+    ]
+  },
+  {
+    "id": "S8 der Riegel haengt nur noch an der Platte, nicht mehr an durch (#581)",
+    "datei": "webtool/frontend/src/components/FileStatusPill.tsx",
+    "von": "&& !(durch && plattenBeleg)) {",
+    "nach": "&& !plattenBeleg) {",
+    "rot": [
+      "und NICHT ohne durch",
+      "und behaelt das Wartesymbol ohne durch"
+    ],
+    "gruen": [
+      "ein verdraengtes Urteil zeigt den Ruhezustand",
+      "und NICHT, solange die Platte nichts vorweist"
+    ]
+  },
+  {
+    "id": "S9 die Seitenleiste reicht durch nicht mehr an die Dateizeile (#581, Verdrahtung 3 von 3)",
+    "datei": "webtool/frontend/src/components/Sidebar.tsx",
+    "von": "                        durch={phases?.durch?.has(f.base)}\n",
+    "nach": "",
+    "rot": [
+      "zeigt den Ruhezustand statt des Wartesymbols"
+    ],
+    "gruen": [
+      "reicht durch aus dem Job an die Dateizeile durch",
+      "ein verdraengtes Urteil zeigt den Ruhezustand"
+    ]
+  },
+  {
+    "id": "S10 eine geloeschte Aufnahme bleibt in durch (#581/#489)",
+    "datei": "webtool/frontend/src/hooks/useActiveJob.tsx",
+    "von": "  for (const b of geloescht) durch.delete(b)",
+    "nach": "  // mutiert: der Schnitt an entfernt faellt weg",
+    "rot": [
+      "durch nimmt heraus, wer geloescht ist"
+    ],
+    "gruen": [
+      "durch nennt, wer den Lauf hinter sich hat",
+      "durch nimmt heraus, wer noch in der Korrektur-Schlange steht"
+    ]
+  },
+  {
+    "id": "S6 die Dateizeile reicht durch nicht mehr an die Pille (#581, Verdrahtung 2 von 3)",
     "datei": "webtool/frontend/src/components/FileRow.tsx",
     "von": " inScope={inScope} durch={durch} globalPhase={globalPhase}",
     "nach": " inScope={inScope} globalPhase={globalPhase}",
