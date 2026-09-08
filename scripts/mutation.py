@@ -130,6 +130,38 @@ def _lief_mindestens_ein_test(ausgabe: str) -> bool:
     return bool(_MINDESTENS_EIN_TEST.search(ausgabe))
 
 
+AUSZUG_ZEILEN = 20
+
+
+def ausgabe_auszug(ausgabe: str, zeilen: int = AUSZUG_ZEILEN) -> list[str]:
+    """Die letzten Zeilen der Werkzeugausgabe — der Auszug fuer eine ABBRUCH-Meldung.
+
+    Warum es das gibt: die Meldung nannte bisher das KOMMANDO, aber nicht seine Ausgabe.
+    Auf dem eigenen Rechner ist das folgenlos (man tippt es nach), in der CI ist es der
+    Unterschied zwischen einer Diagnose und Rateversuchen — am 2026-09-08 gemessen: DREI
+    CI-Anlaeufe (Laeufe 34179774574, 34180726821, 34181093282) bekamen dieselbe
+    nichtssagende Meldung, und die Ursache fand erst ein zusaetzlicher Workflow-Schritt
+    daneben, der dasselbe Kommando nackt fuhr. Die Ausgabe liegt hier laengst vor: `_lauf`
+    gibt stdout UND stderr zurueck.
+
+    Von HINTEN, und das ist der Punkt: ein Testlaeufer meldet sein Scheitern am ENDE
+    (Bilanzzeile, npm-Fehler, Traceback-Schluss). Der vorhandene Auszug im Zweig „gar nicht
+    gestartet" nimmt bewusst den ANFANG — dort ist die erste Zeile die Diagnose (`command
+    not found`), und was danach kommt, gibt es meist nicht.
+
+    Leere Ausgabe wird BENANNT, nicht verschwiegen: „keine Ausgabe" ist selbst ein Befund
+    (so sieht ein Werkzeug aus, das gar nicht erst startete), und eine leere Liste laesse
+    die Meldung so aussehen, als haette niemand nachgesehen.
+
+    Eigene Funktion statt drei Schleifen an den Abbruchstellen, damit ein Test sie ohne
+    Dateisystem und ohne Subprozess pruefen kann — dieselbe Form wie `anker_ok`.
+    """
+    roh = [z.rstrip() for z in ausgabe.splitlines() if z.strip()]
+    if not roh:
+        return ["(keine Ausgabe)"]
+    return roh[-zeilen:]
+
+
 def _git(repo: str, *args: str) -> str:
     # S603: die Argumente kommen aus diesem Skript und aus `--repo`, das der Entwickler selbst
     # tippt. Es gibt keine Vertrauensgrenze, ueber die hier etwas hereinkaeme.
@@ -271,6 +303,9 @@ def main(argv: list[str] | None = None) -> int:
         print(f"ABBRUCH: das Testkommando endete mit {rc0} — bei pytest heisst das"
               " Nutzungsfehler bzw. keine Tests gesammelt.")
         print(f"         Kommando: {a.test}")
+        print("         Ausgabe (Ende):")
+        for z in ausgabe_auszug(aus0):
+            print(f"           {z}")
         return 2
     if not _sah_einen_testlauf(aus0):
         print("ABBRUCH: das Testkommando hat keine erkennbare Testausgabe geliefert —")
@@ -290,6 +325,12 @@ def main(argv: list[str] | None = None) -> int:
         print("         darauf meldete jede Mutation als wirkungslos, und der Grund stuende")
         print("         nirgends. NICHT als Ergebnis werten.")
         print(f"         Kommando: {a.test}")
+        # Das ENDE, nicht der Anfang: hier ist das Werkzeug gelaufen, seine Bilanz oder sein
+        # Fehler steht also hinten. Genau dieser Zweig hat am 2026-09-08 dreimal in der CI
+        # gefeuert, und dreimal stand die Ursache nicht da.
+        print("         Ausgabe (Ende):")
+        for z in ausgabe_auszug(aus0):
+            print(f"           {z}")
         return 2
     vorlauf_rot = [z for z in aus0.splitlines() if _ist_fehlzeile(z)]
     if vorlauf_rot:
