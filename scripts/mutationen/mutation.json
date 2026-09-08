@@ -233,5 +233,18 @@
       "auszug_nimmt_das_ENDE",
       "abbruch_bei_null_tests_zeigt_die_ausgabe"
     ]
+  },
+  {
+    "id": "MB20 der Default des Auszugs wandert",
+    "datei": "scripts/mutation.py",
+    "von": "AUSZUG_ZEILEN = 20",
+    "nach": "AUSZUG_ZEILEN = 5",
+    "rot": [
+      "auszug_nimmt_das_ENDE"
+    ],
+    "gruen": [
+      "auszug_benennt_die_leere_ausgabe",
+      "abbruch_bei_null_tests_zeigt_die_ausgabe"
+    ]
   }
 ]
