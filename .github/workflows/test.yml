@@ -486,21 +486,24 @@ jobs:
       # Schritte hier und nicht oben: der Job soll ohne sie starten koennen, wenn die
       # Frontend-Serie einmal wegfaellt.
       #
-      # `cd` IM Kommando, nicht `--root`, und das ist an DIESEM Job gemessen statt hergeleitet.
-      # `mutation.py` faehrt sein Testkommando mit cwd = Repo-Wurzel; von dort loest vitest die
-      # `@/`-Aliase der Frontend-tsconfig nicht auf. Der erste Anlauf half sich mit
-      # `npm --prefix webtool/frontend exec -- vitest run --root webtool/frontend …` — das
-      # laeuft auf Windows durch und faellt auf ubuntu auf die Nase: Lauf 34179774574 endete mit
-      #     ABBRUCH: das Testkommando ist gelaufen, hat aber NULL Tests ausgefuehrt
-      # (Rueckgabecode 2). Dass daraus kein gruener Haken wurde, ist der Anti-Schweigen-Riegel
-      # des Treibers — genau der Fall, gegen den er gebaut ist.
+      # `npm --prefix … test --`, und der Weg dorthin ist zweimal auf diesem Laeufer gemessen
+      # statt hergeleitet. `mutation.py` faehrt sein Testkommando mit cwd = Repo-Wurzel; von
+      # dort loest vitest die `@/`-Aliase der Frontend-tsconfig nicht auf. Zwei Anlaeufe, die
+      # auf WINDOWS durchlaufen und auf ubuntu NULL Tests fanden:
+      #   * `npm --prefix … exec -- vitest run --root webtool/frontend …` (Lauf 34179774574)
+      #   * `cd webtool/frontend && npx vitest run …`                     (Lauf 34180726821)
+      # Beide endeten mit „ABBRUCH: das Testkommando ist gelaufen, hat aber NULL Tests
+      # ausgefuehrt" und Rueckgabecode 2. Dass daraus kein gruener Haken wurde, ist der
+      # Anti-Schweigen-Riegel des Treibers — genau der Fall, gegen den er gebaut ist, und der
+      # Grund, warum dieser Job hier zweimal ehrlich rot war statt zehnmal „wirkungslos".
       #
-      # `cd webtool/frontend && npx vitest run src/…` ist in BEIDEN Shells dieselbe Aussage
-      # (cmd.exe und /bin/sh koennen `cd` mit Schraegstrichen und `&&`), und `npx` findet aus
-      # dem Frontend-Ordner das lokale vitest samt jsdom. Von der Repo-Wurzel aus taete es das
-      # nicht: dort laedt es ein FREMDES vitest in den npx-Cache, dem jsdom fehlt
-      # ("Cannot find package 'jsdom'", lokal gemessen) — deshalb steht das `cd` davor und
-      # nicht bloss ein `npx`.
+      # `npm run` setzt das Arbeitsverzeichnis auf das PAKET (anders als `npm exec`, das den
+      # Aufrufer-cwd behaelt) — damit stimmt es auf beiden Plattformen, ohne `cd` und ohne
+      # `--root`. Die Pfade hinter `--` sind vitest-Filter relativ zum Paket.
+      #
+      # Der Schritt davor ist die POSITIVKONTROLLE und keine Zierde: schlaegt die Serie an,
+      # trennt er „die Suite laeuft auf diesem Laeufer gar nicht" von „die Mutation griff
+      # nicht". Genau diese Unterscheidung hat hier zwei Runden gekostet.
       #
       # Vier Testdateien, weil zwei der sechs Mutationen die VERDRAHTUNG treffen: die Regel
       # sitzt in `mergePhases`/`FileStatusPill`, ankommen muss sie in Seitenleiste UND
@@ -512,10 +515,15 @@ jobs:
           cache-dependency-path: webtool/frontend/package-lock.json
       - run: npm ci --no-audit --fund=false
         working-directory: webtool/frontend
+      - name: Positivkontrolle — laeuft die Auswahl auf diesem Laeufer ueberhaupt?
+        run: >
+          npm --prefix webtool/frontend test --
+          src/components/FileStatusPill.test.tsx src/components/Sidebar.test.tsx
+          src/hooks/useActiveJob.test.tsx src/pages/ProjectWorkspace.test.tsx
       - name: Probe gegen die Statuspille (#581)
         run: >
           python scripts/mutation.py --repo . --pfad webtool/
-          --test "cd webtool/frontend && npx vitest run
+          --test "npm --prefix webtool/frontend test --
           src/components/FileStatusPill.test.tsx src/components/Sidebar.test.tsx
           src/hooks/useActiveJob.test.tsx src/pages/ProjectWorkspace.test.tsx"
           --plan scripts/mutationen/statuspille_durch.json
