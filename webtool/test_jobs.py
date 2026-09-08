@@ -1964,7 +1964,30 @@ def _uebernommen(folge_jid, fn):
         return fn in jobs._jobs.get(folge_jid, {}).get("then_ueber", [])
 
 
-def _kette_ueber_drei_glieder(project, drittes_cmd, then_fn, sonst_fn):
+def _wartendes_cmd(marker, danach="pass"):
+    """Ein Job, der auf ein EREIGNIS wartet statt auf eine Frist.
+
+    `jobs.when_done` verlangt einen noch LAUFENDEN Job. Ihn mit einem `time.sleep(2)`
+    offenzuhalten ist eine Wette auf die Maschine: der kalte Zweitleser hat den Dreiglied-Test
+    in seinem ERSTEN Lauf rot gesehen (37,99 s statt der spaeteren 24-26 s, kalter Start), in
+    elf weiteren nicht mehr. Ein Test, der von der Tagesform des Laeufers abhaengt, meldet
+    irgendwann einen Fehler, den es nicht gibt — und wird dann weggeklickt.
+
+    Der Marker macht daraus eine Zusicherung: der Job laeuft, bis der Test ihn gehen laesst.
+    Der Deckel von 30 s ist die Notbremse, keine Frist — er greift nur, wenn der Test selbst
+    abbricht, und haelt dann keinen Prozess zurueck. (Gegnerischer Pruefer, B6.)
+    """
+    code = ("import os, sys, time\n"
+            "p = sys.argv[1]\n"
+            "for _ in range(1500):\n"
+            "    if os.path.exists(p):\n"
+            "        break\n"
+            "    time.sleep(0.02)\n"
+            f"{danach}\n")
+    return [sys.executable, "-c", code, str(marker)]
+
+
+def _kette_ueber_drei_glieder(project, marker, drittes_cmd, then_fn, sonst_fn):
     """Wie oben, nur EIN Glied weiter — und genau darauf kommt es an.
 
     Beim ersten Weiterreichen sind `then_ueber`/`sonst_ueber` des Absenders per Konstruktion
@@ -1974,14 +1997,14 @@ def _kette_ueber_drei_glieder(project, drittes_cmd, then_fn, sonst_fn):
     weiter (gegnerischer Pruefer, F1).
     """
     jid1, jid2 = _kette_mit_weitergabe(
-        project, [sys.executable, "-c", "import time; time.sleep(2)"],
-        then_fn=then_fn, sonst_fn=sonst_fn)
+        project, _wartendes_cmd(marker), then_fn=then_fn, sonst_fn=sonst_fn)
     drei = {}
 
     def starte_drei():
         drei["jid"], drei["started"] = jobs.start(project, drittes_cmd, cwd=None, kind="fetch")
 
     assert jobs.when_done(jid2, starte_drei) is True, "Job 2 war schon terminal"
+    marker.write_text("los", encoding="utf-8")      # erst JETZT darf Job 2 fertig werden
     r2 = _wait(jid2, timeout=30)
     assert r2["status"] == "done", r2["status"]
     assert _bis(lambda: drei.get("started") is True), "Job 3 ist nicht angelaufen"
@@ -1990,7 +2013,7 @@ def _kette_ueber_drei_glieder(project, drittes_cmd, then_fn, sonst_fn):
     return jid1, jid2, drei["jid"]
 
 
-def test_geerbtes_then_ueberlebt_das_ZWEITE_weiterreichen():
+def test_geerbtes_then_ueberlebt_das_ZWEITE_weiterreichen(tmp_path):
     """Drei Glieder: Job 1 gelingt, Job 2 erbt und gelingt, Job 3 erbt und scheitert.
 
     Die Zusicherung ist dieselbe wie bei zwei Gliedern — die geschuldete Arbeit wird
@@ -2007,7 +2030,7 @@ def test_geerbtes_then_ueberlebt_das_ZWEITE_weiterreichen():
         jobs._vorgang_setzen(nummer, "gestartet", job_id="nachlauf")
 
     _, _, jid3 = _kette_ueber_drei_glieder(
-        "P_kette_3a", [sys.executable, "-c", "raise SystemExit(7)"],
+        "P_kette_3a", tmp_path / "los", [sys.executable, "-c", "raise SystemExit(7)"],
         then_fn=then_fn, sonst_fn=lambda: jobs.vorgang_verwerfen(nummer))
     r3 = _wait(jid3, timeout=30)
     assert r3["status"] == "error", r3["status"]
@@ -2017,7 +2040,7 @@ def test_geerbtes_then_ueberlebt_das_ZWEITE_weiterreichen():
     assert jobs.vorgang(nummer)["status"] == "gestartet"
 
 
-def test_geerbtes_sonst_ueberlebt_das_ZWEITE_weiterreichen():
+def test_geerbtes_sonst_ueberlebt_das_ZWEITE_weiterreichen(tmp_path):
     """Dieselbe Kette, aber Job 3 wird ABGEBROCHEN.
 
     Wandert die geerbte Quittung beim zweiten Weiterreichen nicht mit, bleibt die Nummer fuer
@@ -2027,7 +2050,7 @@ def test_geerbtes_sonst_ueberlebt_das_ZWEITE_weiterreichen():
     nummer = jobs.vormerken("P_kette_3b", "transcribe")
     laeufe = []
     _, _, jid3 = _kette_ueber_drei_glieder(
-        "P_kette_3b", [sys.executable, "-c", "import time; time.sleep(30)"],
+        "P_kette_3b", tmp_path / "los", [sys.executable, "-c", "import time; time.sleep(30)"],
         then_fn=lambda: laeufe.append("then"),
         sonst_fn=lambda: jobs.vorgang_verwerfen(nummer))
     assert jobs.cancel(jid3) is True
@@ -2091,7 +2114,7 @@ def test_abgebrochener_empfaenger_holt_das_uebernommene_then_NICHT_nach():
     assert laeufe == [], "der Abbruch hat trotzdem einen Nachlauf gestartet"
 
 
-def test_fehlschlag_holt_das_uebernommene_then_NACH_statt_es_weiterzureichen():
+def test_fehlschlag_holt_das_uebernommene_then_NACH_statt_es_weiterzureichen(tmp_path):
     """E3 wörtlich: nachholen, nicht ein Glied weiterschieben.
 
     Steht beim Fehlschlag des Empfaengers schon der naechste Job bereit, waere die Weitergabe
@@ -2100,8 +2123,9 @@ def test_fehlschlag_holt_das_uebernommene_then_NACH_statt_es_weiterzureichen():
     hier lange; die Nummer muss trotzdem sofort aufgeloest sein.
     """
     nummer = jobs.vormerken("P_kette_drei", "transcribe")
+    marker = tmp_path / "los"
     jid1, jid2 = _kette_mit_weitergabe(
-        "P_kette_drei", [sys.executable, "-c", "import time; time.sleep(2); raise SystemExit(5)"],
+        "P_kette_drei", _wartendes_cmd(marker, "raise SystemExit(5)"),
         then_fn=lambda: jobs._vorgang_setzen(nummer, "gestartet", job_id="nachlauf"),
         sonst_fn=lambda: jobs.vorgang_verwerfen(nummer))
     drei = {}
@@ -2112,6 +2136,7 @@ def test_fehlschlag_holt_das_uebernommene_then_NACH_statt_es_weiterzureichen():
                                     cwd=None, kind="fetch")
 
     assert jobs.when_done(jid2, starte_drei) is True, "Job 2 war schon terminal"
+    marker.write_text("los", encoding="utf-8")      # erst JETZT darf Job 2 scheitern
     r2 = _wait(jid2, timeout=30)
     assert r2["status"] == "error", r2["status"]
     assert _bis(lambda: drei.get("jid")), "Job 3 ist nicht angelaufen"

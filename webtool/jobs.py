@@ -312,17 +312,24 @@ def vorgang_verwerfen(nummer: str) -> bool:
     Gegenteil („tragend … auch dann, wenn der Nachlauf laengst angelaufen ist"). Gemessen: mit
     entferntem Riegel bleiben alle Flusstests gruen, rot wird nur der Test, der
     `_vorgang_setzen` von Hand ruft. Die Begruendung hat sich mit #579 GEAENDERT, das
-    Ergebnis nicht: der einzige Aufrufer, der ein `gestartet` treffen koennte, ist das
+    Ergebnis nicht: der einzige heutige Aufrufer, der ein `gestartet` treffen koennte, ist das
     `sonst` des URL-Imports — und `_run` fuehrt `then` und `sonst` desselben Auftrags nie
-    beide aus. Nur `then` setzt die Nummer auf `gestartet` (ueber `request`), also findet
-    `sonst` sie immer noch offen vor. Vorher trug diese Stelle die Reihenfolge zwischen
-    `next_runs` (Schritt 1) und `then` (Schritt 3) als Grund; beides sind Aussagen ueber
-    `_run`, aber nicht dieselbe.
+    beide aus. Vorher trug diese Stelle die Reihenfolge zwischen `next_runs` (Schritt 1) und
+    `then` (Schritt 3) als Grund; beides sind Aussagen ueber `_run`, aber nicht dieselbe.
 
-    Er bleibt trotzdem stehen: wird diese Ausschliesslichkeit je aufgeweicht, ist er der
-    Unterschied zwischen „Oberflaeche verfolgt den Lauf" und „Oberflaeche laesst ihn fallen".
-    Eine Wache, deren Bedingung heute nicht eintritt, gehoert benannt — nicht als tragend
-    ausgegeben.
+    EINE ZWEITE FASSUNG DIESES ABSATZES WAR SCHAERFER ALS DER CODE und ist hier korrigiert
+    statt gestrichen: sie schrieb „nur `then` setzt die Nummer auf `gestartet` (ueber
+    `request`)". Das stimmt fuer den URL-Import und fuer sonst nichts — `request` setzt
+    `gestartet` SELBST, sobald der Lauf anlaeuft, und zwar bevor irgendein Rueckruf feuert.
+    Ein ueber `request(vorgang=…, sonst=…)` gestarteter Job faende seine Nummer beim
+    Scheitern also bereits auf `gestartet`, und dann ist dieser Riegel TRAGEND, nicht
+    defensiv. Diesen Aufrufer gibt es heute nicht (`request(sonst=…)` ist nur durchgereicht);
+    die Aussage gilt aber dem Mechanismus, nicht dem heutigen Aufruferkreis. (Zweiter
+    Pruefer, B3.)
+
+    Er bleibt also stehen — und ist je nach Weg Wache oder Riegel. Eine Wache, deren
+    Bedingung heute nicht eintritt, gehoert benannt; eine, die auf einem gebauten Weg
+    eintreten WUERDE, erst recht.
 
     Liefert True, wenn wirklich etwas geschlossen wurde — das macht den Zweig testbar, ohne
     den Zustand von aussen nachzulesen.
@@ -739,6 +746,15 @@ def _run(jid, cmd, cwd, env):
 
     # 3. Wenn die Kette komplett abgeschlossen ist: die faelligen Rueckrufe ausführen.
     #    `then_callbacks`/`ueber_then` sind hier leer, wenn Schritt 2 sie weitergereicht hat.
+    #
+    #    DIE REIHENFOLGE IST TRAGEND, und kein Test haelt sie (zweiter Pruefer, B4). Bei
+    #    `error` sind `ueber_then` und `sonst_callbacks` gleichzeitig gefuellt. Treffen sie je
+    #    dieselbe Vormerkung — moeglich genau dann, wenn die Dedupe oben ein `then`
+    #    ueberspringt, sein `sonst` aber nicht —, rettet nur diese Ordnung: `then` setzt
+    #    `gestartet`, und das nachfolgende `verwerfen` prallt am Riegel in
+    #    `vorgang_verwerfen` ab. Wer hier umsortiert („erst aufraeumen, dann starten"),
+    #    verwirft eine gerade angelaufene Nummer. Ein Test dafuer gibt es nicht, weil der
+    #    ausloesende Fall heute unerreichbar ist; die Zeile ist der Ersatz.
     for fn in then_callbacks + ueber_then + sonst_callbacks + ueber_sonst:
         try:
             fn()
