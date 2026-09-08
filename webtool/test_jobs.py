@@ -2174,6 +2174,35 @@ def test_gelungener_empfaenger_laesst_das_uebernommene_sonst_liegen():
     assert jobs.vorgang(nummer)["status"] == "gestartet"
 
 
+def test_werfendes_then_zieht_seine_quittung_nach():
+    """Ein `then`, das WIRFT, hat sein Ziel so wenig erreicht wie eines, das nicht laeuft.
+
+    Der Job endet `done`, `then` fliegt — und bis hierher blieb die Vormerkung damit fuer
+    immer offen: der Ausfall wurde als NACHLAUF-FEHLER protokolliert, danach lief nichts mehr.
+    Erreichbar ist das, weil `_start_transcribe` ueber `jobs.start` einen Faden startet, und
+    genau diese Stelle nennt `app.py` als Wurfstelle. Vorbestehendes Loch derselben Klasse wie
+    #579; erst mit `sonst` gibt es ueberhaupt etwas, das man nachziehen kann.
+    (CodeRabbit-CLI, minor.)
+
+    Die Gegenprobe steckt in `test_gelungener_download_laesst_die_vormerkung_offen`: ein
+    `then`, das DURCHKOMMT, darf die Quittung nicht ausloesen.
+    """
+    nummer = jobs.vormerken("P_wurf", "transcribe")
+
+    def then_fn():
+        raise RuntimeError("kein Faden mehr frei")
+
+    jid, started = jobs.start("P_wurf", [sys.executable, "-c", "pass"], cwd=None, kind="fetch",
+                              then=then_fn, sonst=lambda: jobs.vorgang_verwerfen(nummer))
+    assert started is True
+    r = _wait(jid, timeout=30)
+    assert r["status"] == "done", r["status"]
+    assert _bis(lambda: jobs.vorgang(nummer)["status"] == "verworfen"), \
+        "das geworfene `then` laesst die Nummer fuer immer vorgemerkt stehen"
+    assert any("NACHLAUF-FEHLER" in z for z in jobs.get(jid)["lines"]), \
+        "der Wurf muss trotzdem im Protokoll stehen"
+
+
 def test_jobs_get_traegt_keine_rueckruf_felder():
     """Die drei neuen Felder duerfen den Server nicht verlassen — wie `then` und `next_runs`.
 
