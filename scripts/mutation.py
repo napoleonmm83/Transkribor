@@ -88,7 +88,6 @@ import shutil
 import subprocess
 import sys
 
-
 # ANSI-Steuerfolgen (CSI). Sie muessen WEG, bevor irgendeine der drei Proben unten die
 # Ausgabe ansieht — und das ist kein Feinschliff, sondern die Ursache von T-070:
 #
@@ -320,7 +319,8 @@ def main(argv: list[str] | None = None) -> int:
     # Streng ist der WAECHTER (scripts/test_mutationsplaene.py verlangt fuer alles unter
     # scripts/mutationen/ die Objektform), nicht der Treiber.
     roh = json.loads(pathlib.Path(a.plan).read_text(encoding="utf-8"))
-    plan_test, plan_env = None, {}
+    plan_test: str | None = None
+    plan_env: dict[str, str] = {}
     if isinstance(roh, dict):
         plan = roh.get("mutationen")
         plan_test = roh.get("test")

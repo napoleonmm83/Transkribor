@@ -9,14 +9,26 @@ on:
     branches: [master]
 
 # Ein neuer Push auf denselben PR macht den vorigen Lauf wertlos.
+#
+# AUF MASTER GILT DAS NICHT, und bis #588 tat es das doch — mit Folgen, die man nicht sieht:
+# die Gruppe enthaelt `github.ref`, auf master ist das fuer JEDEN Push dieselbe, und der
+# naechste brach den laufenden ab. In den letzten master-Laeufen steht dazu ein echtes
+# `cancelled` (2026-09-07T19:46:10Z, 83 s vor dem naechsten Push), und Abstaende von 14 und
+# 26 Minuten sind normal. Ein abgebrochener Lauf ist NICHT rot — er ist gar nichts, und
+# "uebersprungen ist kein Erfolg".
+#
+# Fuer die Jobs, die Sekunden brauchen, war das folgenlos; fuer die volle Mutationsserie
+# (20-25 min geschaetzt) waere es der Regelfall gewesen: sie waere auf master fast nie zu
+# Ende gelaufen, und niemand haette es gemerkt. Auf einem PR bleibt das Abbrechen richtig —
+# dort macht der neue Push den alten Stand wirklich wertlos.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # Sechs der sieben Jobs LESEN nur: pytest, Vitest/tsc, die node:test-Suite, die vier
 # Skript-Tests (`notizen.test.sh` faelscht `gh` und braucht kein Token) und die beiden
 # Riegel `Ruff` und `Mypy`.
-# Der siebte, `Mutationsprobe`, SCHREIBT — und das ist kein Widerspruch zum Block unten:
+# Der siebte, `Mutationsproben`, SCHREIBT — und das ist kein Widerspruch zum Block unten:
 # er aendert Dateien in seinem EIGENEN, wegwerfbaren Checkout (Mutation setzen, Tests
 # fahren, Originalbytes zurueckschreiben) und spielt nichts zurueck ins Repository. Kein
 # Commit, kein Push, kein Token — `contents: read` reicht ihm genauso.
@@ -27,7 +39,7 @@ concurrency:
 # Zeile danebengegangen):
 #     sed -n '/^jobs:/,$p' .github/workflows/test.yml | grep -cE '^  [a-z_-]+:$'
 # Gegengeprueft am YAML-Parser: beide sagen 7. Nachgezogen am 2026-09-05 beim Job
-# `Mutationsprobe` — genau der Handgriff, den diese Klammer verlangt.)
+# `Mutationsproben` — genau der Handgriff, den diese Klammer verlangt.)
 #
 # Ohne Block gilt die Vorgabe des REPOSITORYS — und die ist eine Einstellung, die ein
 # Klick umlegt, kein Bestandteil dieses Workflows. Heute steht sie auf read: gemessen am
@@ -37,7 +49,7 @@ concurrency:
 # Einstellung unabhaengig und nimmt das ungenutzte `Packages: read` weg
 # (zizmor: excessive-permissions, gefunden an PR #468). Workflow-weit statt je Job, damit
 # ein kuenftiger siebter Job ihn nicht vergessen kann. (Der ist am 2026-09-05 gekommen —
-# `Mutationsprobe` — und hat ihn tatsaechlich nicht vergessen muessen.)
+# `Mutationsproben` — und hat ihn tatsaechlich nicht vergessen muessen.)
 permissions:
   contents: read
 
@@ -101,10 +113,15 @@ jobs:
     #       --jq '.jobs[] | "\(.name)\t\((.completed_at|fromdate)-(.started_at|fromdate))"'
     # Maximum je Job ueber die fuenf:
     #     Python (windows)      134 s      Frontend               72 s
-    #     Electron win/mac/ubu   44/29/17  Mutationsprobe         33 s
+    #     Electron win/mac/ubu   44/29/17  Mutationsproben        33 s *
     #     Skripte win/mac/ubu    33/15/8   Mypy 21 s · Ruff 19 s
     # Das ist 9x Reserve beim langsamsten und 63x beim schnellsten; beides
     # faengt einen Haenger frueh genug ab. Ein achter Job kopiert die Zeile.
+    #
+    # (*) Die 33 s galten dem Job, der ZWEI Plaene fuhr. Seit #588 faehrt er alle zehn und
+    # traegt deshalb als einziger eine eigene Zahl (60); die echte Laufzeit misst der erste
+    # master-Lauf, danach wird sie hier eingetragen. Bis dahin ist sie geschaetzt, und das
+    # steht auch am Job.
     #
     # GitHub kennt dafuer keinen workflow-weiten Vorgabewert (`defaults:` traegt
     # nur `run:`) — es sind zwangslaeufig sieben Zeilen. YAML-Anker unterstuetzt
@@ -452,7 +469,7 @@ jobs:
   # nicht messbar (Kommando nicht gestartet oder vorher schon rot) — das ist ausdruecklich
   # KEIN Bestehen und macht den Job rot, genau wie eine nicht gefangene Mutation.
   mutation:
-    name: Mutationsprobe
+    name: Mutationsproben
     runs-on: ubuntu-latest
     # `scripts/mutation.py` faehrt sein Testkommando ueber `subprocess.run` OHNE
     # `timeout=`. Der Job-Deckel ist hier deshalb die Grenze fuer die SERIE — und
@@ -465,20 +482,54 @@ jobs:
     # Ein `timeout=` in mutation.py braucht eine Behandlung, die die Serie nicht
     # abreisst (der `finally`-Block muss die Mutation noch zuruecknehmen) —
     # eigener Zuschnitt, eigener Test.
-    timeout-minutes: 20        # Begruendung am python-Job oben (#583)
+    #
+    # SEIT #588 FAEHRT DIESER JOB ALLE PLAENE, nicht zwei. Vorher standen genau zwei hier
+    # fest verdrahtet, waehrend zehn im Repo lagen — acht liefen nirgends automatisch, und
+    # jedes Buendel legte einen weiteren dazu. Welche Plaene es gibt, steht jetzt an EINER
+    # Stelle (dem Ordner), und `scripts/mutationen_lauf.py` liest sie dort; eine Liste im
+    # Workflow waere die naechste Tabelle, die still hinterherhinkt.
+    #
+    # AUSWAHL STATT IMMER ALLES: die volle Serie ist auf 20-25 min geschaetzt (aus
+    # Einzelmessungen hochgerechnet, als Ganzes noch nie gelaufen — der erste master-Lauf
+    # misst sie). Bei jedem PR gefahren waere sie eine Steuer auf Arbeit, die mit den
+    # Waechtern nichts zu tun hat. Am PR laufen deshalb nur die betroffenen Plaene, auf
+    # master alle. Die billige Haelfte laeuft dafuer IMMER mit: der Job `Python` faehrt
+    # `scripts/test_mutationsplaene.py`, und der bindet in Sekunden jeden Anker an den Baum.
+    timeout-minutes: 60        # bis zur ersten echten Messung; Begruendung am python-Job (#583)
     steps:
       - uses: actions/checkout@v7
+        with:
+          # Ohne die volle Historie gibt es keinen Basis-Commit, gegen den sich der Diff
+          # bilden liesse — und damit keine Auswahl.
+          fetch-depth: 0
       - uses: actions/setup-python@v7
         with:
           python-version: '3.13'
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: webtool/frontend/package-lock.json
+
+      # Dieselben zwei Zeilen wie im Job `Python`: die Plaene unter webtool/ fahren dessen
+      # Suite, und die braucht fastapi & Co. Mit nur der dev-Gruppe faenden sie null Tests
+      # — was der Treiber zwar meldet (rc 2), aber erst nach dem Aufbau.
       - run: pip install --group dev
-      - name: Probe gegen den mypy-Riegel
+      - run: pip install fastapi python-multipart httpx scipy scikit-learn
+      # ~15 s, und bewusst BEDINGUNGSLOS: eine Bedingung „nur wenn ein Frontend-Plan
+      # gewaehlt ist" waere ein zweiter Ort, an dem die Auswahl steht, und der erste, der
+      # driftet. Gegen eine 20-Minuten-Serie sind 15 s nichts.
+      - run: npm ci --no-audit --fund=false
+        working-directory: webtool/frontend
+
+      - name: Geaenderte Dateien bestimmen
+        if: github.event_name == 'pull_request'
         run: >
-          python scripts/mutation.py --repo . --pfad scripts/
-          --test "python -m pytest scripts/test_mypy_riegel.py -q"
-          --plan scripts/mutationen/mypy_riegel.json
-      - name: Probe des Treibers gegen sich selbst
-        run: >
-          python scripts/mutation.py --repo . --pfad scripts/
-          --test "python -m pytest scripts/test_mutation.py -q"
-          --plan scripts/mutationen/mutation.json
+          git diff --name-only ${{ github.event.pull_request.base.sha }} HEAD
+          > ${{ runner.temp }}/geaendert.txt
+      - name: Betroffene Mutationsproben
+        if: github.event_name == 'pull_request'
+        run: python scripts/mutationen_lauf.py --repo . --geaendert ${{ runner.temp }}/geaendert.txt
+      - name: Alle Mutationsproben
+        if: github.event_name != 'pull_request'
+        run: python scripts/mutationen_lauf.py --repo . --alle
