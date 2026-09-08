@@ -490,7 +490,14 @@ def request(project: str, cmd: list, cwd, kind: str, then=None, base: str = None
     `sonst` wird nur DURCHGEREICHT — an `start` und durch die Rekursion an `rerun`. Es hat
     heute so wenig einen Produktivaufrufer wie `then` (`grep -rn "jobs.request(" webtool/*.py`
     → zwei Aufrufer, keiner mit `then=` oder `sonst=`); es steht hier, damit ein kuenftiger
-    Aufrufer sein Gegenstueck nicht STILL verliert. Der Preis ist benannt und NACHGEZAEHLT:
+    Aufrufer sein Gegenstueck nicht STILL verliert — und das gilt fuer den START-Weg, nicht
+    fuer alle. ZWEI Ausgaenge dieser Funktion verlieren es weiterhin still, und das gehoert
+    hierhin statt in eine Fussnote (kalter Diff-Leser, Befund 3): der Rueckkehrpunkt bei schon
+    bestehender Vormerkung (`if key in _pending`) und das Aufgeben nach zehn Versuchen. In
+    beiden laeuft das `then` endgueltig nicht, und trotzdem feuert kein `sonst` — dort traegt
+    die Quittung weiterhin der Aufrufer. Heute folgenlos (kein Produktivaufrufer uebergibt
+    eines); wer den ersten baut, faengt an diesen zwei Stellen an.
+    Der Preis ist benannt und NACHGEZAEHLT:
     **elf** Test-Attrappen tragen den Parameter, ohne ihn zu pruefen — `grep -c "sonst=None"`
     ueber `test_api.py` (6) und `test_jobs.py` (5). Der gegnerische Pruefer nannte acht (F4);
     die Richtung stimmte, die Zahl nicht.
