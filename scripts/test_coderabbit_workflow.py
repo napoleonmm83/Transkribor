@@ -74,6 +74,18 @@ hat_bash = pytest.mark.skipif(
 )
 
 
+def _zeile(zeilen: list[str], ab: int, inhalt: str) -> int:
+    """Index der ersten Zeile ab `ab`, deren Inhalt genau `inhalt` ist.
+
+    Kein Treffer ist NICHT in Ordnung: dann haette der aufrufende Test seine Kopie gar
+    nicht veraendert und waere still gruen geblieben — er prueft dann nichts.
+    """
+    for i in range(ab, len(zeilen)):
+        if zeilen[i].strip() == inhalt:
+            return i
+    raise AssertionError(f"{inhalt!r} steht nicht in der Workflow-Datei — Test misst nichts")
+
+
 def _runblock(schrittname: str) -> str:
     """Zieht den `run: |`-Block eines benannten Schritts aus der Workflow-Datei."""
     assert WORKFLOW.is_file(), f"{WORKFLOW} nicht gefunden — dieser Test misst dann nichts"
@@ -88,20 +100,34 @@ def _runblock(schrittname: str) -> str:
     # nichts geprueft — dieselbe Fehlerklasse, gegen die der Riegel selbst gebaut ist.
     assert start is not None, f"Schritt {schrittname!r} nicht in {WORKFLOW.name} gefunden"
 
-    run = None
+    # ERST den ganzen Schritt abgrenzen, DANN urteilen. Die erste Fassung pruefte nur die
+    # Zeilen ZWISCHEN `- name:` und `run:` — YAML kennt aber keine Schluesselreihenfolge,
+    # ein `shell: sh` HINTER dem Block ist genauso gueltig, und die Wache schwieg dazu
+    # (vom kalten Zweitleser auf einer Kopie vorgefuehrt). Eine Wache, die nur nach oben
+    # sieht, ist genau der Waechter-der-vom-Zufall-lebt.
+    einzug_schritt = len(zeilen[start]) - len(zeilen[start].lstrip())
+    ende = len(zeilen)
     for i in range(start + 1, len(zeilen)):
-        if re.match(r"^\s*-\s+name:", zeilen[i]):
+        flach = zeilen[i].strip() and (len(zeilen[i]) - len(zeilen[i].lstrip())) <= einzug_schritt
+        if re.match(r"^\s*-\s+name:", zeilen[i]) or flach:
+            ende = i
             break
-        # Dieser Test faehrt den Block hart als `bash -e` — GitHubs Vorgabe. Ein eigenes
-        # `shell:` am Schritt wuerde ihn mit einer ANDEREN Shell fahren, und das bliebe
-        # sonst STILL: mit `shell: sh` ist es auf ubuntu dash, dort stirbt `set -o pipefail`
-        # in Zeile 1 („Illegal option -o pipefail", gemessen), waehrend alle Tests hier
-        # gruen blieben. Der Test prueft dann die Vorstellung des Autors ueber den Laeufer
-        # statt den Laeufer. Befund des gegnerischen Reviewers.
-        assert not re.match(r"^\s*shell:", zeilen[i]), (
-            f"Schritt {schrittname!r} traegt ein eigenes `shell:` — dieser Test faehrt aber "
-            f"`bash -e`. Beide muessen dasselbe meinen, sonst misst er den falschen Lauf."
-        )
+
+    # Dieser Test faehrt den Block hart als `bash -e` — GitHubs Vorgabe. Ein eigenes
+    # `shell:` am Schritt wuerde ihn mit einer ANDEREN Shell fahren, und das bliebe sonst
+    # STILL: mit `shell: sh` ist es auf ubuntu dash, dort stirbt `set -o pipefail` in
+    # Zeile 1 („Illegal option -o pipefail", gemessen), waehrend alle Tests hier gruen
+    # blieben. Der Test prueft dann die Vorstellung des Autors ueber den Laeufer statt den
+    # Laeufer. Befund des gegnerischen Reviewers, Reichweite vom kalten Zweitleser.
+    eigene_shell = [z for z in zeilen[start:ende] if re.match(r"^\s*shell:", z)]
+    assert not eigene_shell, (
+        f"Schritt {schrittname!r} traegt ein eigenes `shell:` ({eigene_shell[0].strip()!r}) — "
+        f"dieser Test faehrt aber `bash -e`. Beide muessen dasselbe meinen, sonst misst er "
+        f"den falschen Lauf."
+    )
+
+    run = None
+    for i in range(start + 1, ende):
         if re.match(r"^\s*run:\s*\|\s*$", zeilen[i]):
             run = i
             break
@@ -166,12 +192,28 @@ def test_ein_eigenes_shell_am_schritt_faellt_auf(tmp_path, monkeypatch):
     eigenen Zeugen, sonst ist sie eine Zeile ohne Beweis.
     """
     zeilen = WORKFLOW.read_text(encoding="utf-8").splitlines()
-    for i, zeile in enumerate(zeilen):
-        if zeile.strip() == "- name: Review":
-            zeilen.insert(i + 2, "        shell: sh")
-            break
-    else:
-        raise AssertionError("Schritt Review nicht gefunden — dieser Test misst dann nichts")
+    zeilen.insert(_zeile(zeilen, 0, "- name: Review") + 2, "        shell: sh")
+
+    kopie = tmp_path / "coderabbit.yml"
+    kopie.write_text("\n".join(zeilen) + "\n", encoding="utf-8")
+    monkeypatch.setitem(globals(), "WORKFLOW", kopie)
+
+    with pytest.raises(AssertionError, match="shell:"):
+        _runblock("Review")
+
+
+def test_ein_shell_HINTER_dem_runblock_faellt_auch_auf(tmp_path, monkeypatch):
+    """YAML kennt keine Schluesselreihenfolge — die Wache darf nicht nur nach oben sehen.
+
+    Die erste Fassung pruefte nur die Zeilen zwischen `- name:` und `run:`. Ein
+    `shell: sh` hinter dem Block ist genauso gueltiges YAML, GitHub faehrt den Schritt
+    dann mit dash — und die Wache schwieg. Vorgefuehrt vom kalten Zweitleser auf einer
+    Kopie: kein AssertionError, Blockende weiterhin bei esac.
+    """
+    zeilen = WORKFLOW.read_text(encoding="utf-8").splitlines()
+    start = _zeile(zeilen, 0, "- name: Review")
+    esac = _zeile(zeilen, start, "esac")
+    zeilen.insert(esac + 1, "        shell: sh")
 
     kopie = tmp_path / "coderabbit.yml"
     kopie.write_text("\n".join(zeilen) + "\n", encoding="utf-8")
@@ -184,12 +226,7 @@ def test_ein_eigenes_shell_am_schritt_faellt_auf(tmp_path, monkeypatch):
 def test_ein_shell_im_NACHBARschritt_ist_kein_fehlalarm(tmp_path, monkeypatch):
     """Die Wache darf nur den eigenen Schritt sehen — sonst ist sie ein Fehlalarm."""
     zeilen = WORKFLOW.read_text(encoding="utf-8").splitlines()
-    for i, zeile in enumerate(zeilen):
-        if zeile.strip() == "- name: Kommentar":
-            zeilen.insert(i + 2, "        shell: sh")
-            break
-    else:
-        raise AssertionError("Schritt Kommentar nicht gefunden — dieser Test misst dann nichts")
+    zeilen.insert(_zeile(zeilen, 0, "- name: Kommentar") + 2, "        shell: sh")
 
     kopie = tmp_path / "coderabbit.yml"
     kopie.write_text("\n".join(zeilen) + "\n", encoding="utf-8")

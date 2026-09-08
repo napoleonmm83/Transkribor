@@ -174,6 +174,26 @@ def test_null_geprüfte_dateien_ist_keine_pruefung():
     assert "path_filters" in grund, "die Ursache gehoert in die Meldung, nicht nur der Fehler"
 
 
+def test_reviewedFiles_ohne_liste_ist_keine_pruefung():
+    """Der Wahrheitswert allein reicht nicht — eine Zeichenkette stuerzt nicht ab.
+
+    Gemessen vom kalten Zweitleser: `"reviewedFiles": "abc"` ist truthy, kommt durch
+    `if not dateien:` und wird zum URTEIL — „geprueft, 0 Befund(e) ueber 3 Datei(en)",
+    dazu `geprueft: a`, `geprueft: b`, `geprueft: c`, rc 0 = GRUEN. Kein Absturz, also
+    faengt `haupt()` es auch nicht: der Riegel gegen den eigenen Absturz ist das Netz,
+    die Formpruefung hier ist die Ursache.
+
+    Die zwei anderen Formen (Zahl, dict) wurden vorher nur vom Netz gefangen — als
+    Stapelabzug ohne Namen. Jetzt haben alle drei denselben benannten Grund.
+    """
+    for wert, name in (('"abc"', "str"), ("5", "int"), ('{"a":1}', "dict")):
+        text = ('{"type":"complete","status":"review_completed","findings":0,'
+                f'"reviewedFiles":{wert}}}\n')
+        grund = riegel.unstimmig(riegel.lies(text))
+        assert grund is not None, f"{name} kam als Urteil durch — das ist keine Pruefung"
+        assert name in grund, f"die Meldung muss die vorgefundene Form nennen, nicht nur {wert}"
+
+
 def test_befund_ohne_text_ist_unstimmig():
     """Ein Feldwechsel beim Dienst endet sonst GRUEN mit Platzhaltern.
 
@@ -499,9 +519,12 @@ def test_ein_absturz_des_riegels_ergibt_ZWEI_nicht_eins(monkeypatch, capsys):
     unbehandelte Ausnahme. Solange der Workflow rc 1 rot faerbte, war das folgenlos; seit
     er daraus GRUEN + Kommentar macht, waere ein abgestuerzter Riegel ein Urteil.
 
-    Der Ausloeser ist nicht erfunden, er steht im Docstring des Riegels als Punkt 5: ein
-    Feldwechsel beim Dienst. `unstimmig()` prueft `reviewedFiles` nur auf Wahrheitswert —
-    eine ZAHL kommt durch, und `len(5)` wirft.
+    Der urspruenglich gemessene Ausloeser — `"reviewedFiles": 5`, wo `len(5)` wirft — ist
+    inzwischen eine Stufe frueher geschlossen: `unstimmig()` prueft die FORM und gibt einen
+    benannten Grund. Genau deshalb stubbt dieser Test `main`, statt eine Attrappe durch den
+    echten Pfad zu schicken: es gibt keinen bekannten Absturzweg mehr, den man vorfuehren
+    koennte. Das ist die Lage, fuer die dieser Riegel da ist — nicht der bekannte Fehler,
+    sondern der naechste unbekannte. Ein Netz, dessen Loecher man kennt, braucht man nicht.
     """
     def kracht(*_a, **_k):
         raise TypeError("object of type 'int' has no len()")

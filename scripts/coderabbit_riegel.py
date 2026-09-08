@@ -187,11 +187,19 @@ def unstimmig(lage: Lage) -> str | None:
         return (f"die CLI meldet {gemeldet} Befunde, gezaehlt sind {len(lage.befunde)} —"
                 f" die Ausgabe ist unvollstaendig")
 
+    # `isinstance(..., list)` und nicht bloss `if not dateien`: der Wahrheitswert allein
+    # laesst eine ZEICHENKETTE durch, und die stuerzt nicht ab — `"reviewedFiles": "abc"`
+    # wurde zu „geprueft, 0 Befund(e) ueber 3 Datei(en)" samt `geprueft: a/b/c`, rc 0,
+    # also GRUEN. Gemessen vom kalten Zweitleser. Der Absturz-Riegel in `haupt()` faengt
+    # nur die Formen, die WERFEN (Zahl, dict); die stille Form lag darunter durch — Netz
+    # geflickt, Loch offen.
     dateien = lage.complete.get("reviewedFiles")
-    if not dateien:
-        return ("`review_completed` ueber NULL Dateien — das ist keine Pruefung."
-                " Moegliche Ursache: ein `path_filters`-Eintrag in der `.coderabbit.yaml`"
-                " des PR-Checkouts, oder der Dienst hat nichts angesehen")
+    if not isinstance(dateien, list) or not dateien:
+        return (f"`review_completed` ueber NULL Dateien (`reviewedFiles` ist"
+                f" {type(dateien).__name__}, erwartet eine nicht-leere Liste) — das ist"
+                f" keine Pruefung. Moegliche Ursache: ein `path_filters`-Eintrag in der"
+                f" `.coderabbit.yaml` des PR-Checkouts, der Dienst hat nichts angesehen,"
+                f" oder er hat die Feldform gewechselt")
 
     ohne_text = [b.get("fileName", "?") for b in lage.befunde
                  if not str(b.get("codegenInstructions", "")).strip()]

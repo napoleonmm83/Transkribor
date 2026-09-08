@@ -201,9 +201,14 @@ jobs:
       # es in 0 s mit rc 1 (gemessen bei leerem HOME) — es faellt NICHT in die
       # Browser-Anmeldung zurueck, an der `review` ohne Schluessel bis zur Zeitgrenze haengt.
       #
-      # `continue-on-error` bleibt als Netz — es faengt, was die drei `||`/`if !` unten NICHT
-      # abfangen (eine fehlende CLI zum Beispiel: `always()` zieht auch bei rotem
-      # Installationsschritt, gemessen rc 127). Die SICHTBARKEIT haengt seit diesem Diff
+      # `continue-on-error` bleibt als Netz — aber OHNE benannten Fall, und das gehoert
+      # dazugesagt: seit die drei Aufrufe unten `||` bzw. `if !` tragen, faengt sich der
+      # Schritt selbst. Auch eine FEHLENDE CLI, der frueher gemessene rc-127-Fall: der
+      # Block endet dann mit drei Warnungen und rc 0 (auf einer Kopie nachgemessen, kalter
+      # Zweitleser). Hier stand bis eben, `continue-on-error` fange genau diesen Fall —
+      # eine Messung aus der Fassung VOR den `||`, durch denselben Diff ungueltig geworden.
+      # Es bleibt fuer den ungemessenen Rest stehen (`set -u` etwa), nicht fuer einen
+      # bekannten. Die SICHTBARKEIT haengt seit diesem Diff
       # aber an den `::warning::`-Zeilen, nicht mehr an ihm — und das ist die bessere
       # Mechanik, denn `continue-on-error` macht den Ausfall in der API gar nicht sichtbar:
       # zu Lauf 34261972330 meldet `gh run view --json jobs` fuer den Verbrauch-Schritt

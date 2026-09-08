@@ -47,10 +47,11 @@
     },
     {
       "id": "M4 null gepruefte Dateien gelten wieder als Pruefung",
-      "von": "    dateien = lage.complete.get(\"reviewedFiles\")\n    if not dateien:\n        return (\"`review_completed` ueber NULL Dateien — das ist keine Pruefung.\"\n                \" Moegliche Ursache: ein `path_filters`-Eintrag in der `.coderabbit.yaml`\"\n                \" des PR-Checkouts, oder der Dienst hat nichts angesehen\")",
-      "nach": "    # M4: reviewedFiles wird wieder nur gedruckt, nicht beurteilt —\n    # der Fall \"checked 16 statt 60\", und der Weg, auf dem ein PR sich\n    # seine eigene Pruefung per path_filters abschaltet.",
+      "von": "    dateien = lage.complete.get(\"reviewedFiles\")\n    if not isinstance(dateien, list) or not dateien:",
+      "nach": "    dateien = lage.complete.get(\"reviewedFiles\")\n    if False:  # M4: reviewedFiles wird wieder nur gedruckt, nicht beurteilt —\n        # der Fall \"checked 16 statt 60\", der Weg, auf dem ein PR sich seine\n        # eigene Pruefung per path_filters abschaltet, UND die stille Zeichenkette.",
       "rot": [
-        "test_null_geprüfte_dateien_ist_keine_pruefung"
+        "test_null_geprüfte_dateien_ist_keine_pruefung",
+        "test_reviewedFiles_ohne_liste_ist_keine_pruefung"
       ],
       "gruen": [
         "test_erfolg_wird_als_urteil_erkannt",
