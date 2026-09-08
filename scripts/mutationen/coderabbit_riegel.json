@@ -7,8 +7,7 @@
   "mutationen": [
     {
       "id": "M1 die review_completed-Pflicht faellt weg (nur Anwesenheit zaehlt)",
-      "datei": "scripts/coderabbit_riegel.py",
-      "von": "    status = complete.get(\"status\")\n    if status != \"review_completed\":\n        return (f\"`complete` mit status={status!r} statt 'review_completed' —\"\n                f\" es wurde NICHT geprueft ({complete.get('message', 'kein Grund genannt')})\")",
+      "von": "    status = lage.complete.get(\"status\")\n    if status != \"review_completed\":\n        return (f\"`complete` mit status={status!r} statt 'review_completed' —\"\n                f\" es wurde NICHT geprueft\"\n                f\" ({lage.complete.get('message', 'kein Grund genannt')})\")",
       "nach": "    # M1: der naive Riegel fragt nur, OB es eine complete-Zeile gibt.\n    # Genau so meldet ein uebersprungener Lauf \"geprueft, keine Befunde\".",
       "rot": [
         "test_review_skipped_ist_KEIN_urteil",
@@ -17,12 +16,12 @@
       "gruen": [
         "test_die_zahlen_muessen_stimmen",
         "test_authfehler_ist_kein_urteil"
-      ]
+      ],
+      "datei": "scripts/coderabbit_riegel.py"
     },
     {
       "id": "M2 der Zahlenabgleich faellt weg (zweiter Zeuge raus)",
-      "datei": "scripts/coderabbit_riegel.py",
-      "von": "    gemeldet = complete.get(\"findings\")\n    if not isinstance(gemeldet, int) or gemeldet != len(befunde):\n        return (f\"die CLI meldet {gemeldet} Befunde, gezaehlt sind {len(befunde)} —\"\n                f\" die Ausgabe ist unvollstaendig\")",
+      "von": "    gemeldet = lage.complete.get(\"findings\")\n    if not isinstance(gemeldet, int) or gemeldet != len(lage.befunde):\n        return (f\"die CLI meldet {gemeldet} Befunde, gezaehlt sind {len(lage.befunde)} —\"\n                f\" die Ausgabe ist unvollstaendig\")",
       "nach": "    # M2: ohne den Abgleich traegt eine abgeschnittene Ausgabe eine\n    # gueltige complete-Zeile und hat trotzdem Befunde verloren.",
       "rot": [
         "test_die_zahlen_muessen_stimmen"
@@ -30,11 +29,11 @@
       "gruen": [
         "test_review_skipped_ist_KEIN_urteil",
         "test_erfolg_wird_als_urteil_erkannt"
-      ]
+      ],
+      "datei": "scripts/coderabbit_riegel.py"
     },
     {
       "id": "M3 der Riegel vor dem Start faellt weg (leerer Schluessel startet die CLI)",
-      "datei": "scripts/coderabbit_riegel.py",
       "von": "    if not schluessel:\n        print(\"ABBRUCH: CODERABBIT_API_KEY ist leer oder nicht gesetzt.\")\n        print(\"         Ohne Schluessel wartet die CLI auf eine Browser-Anmeldung, bis der\")\n        print(\"         Job in seine Zeitgrenze laeuft — sie wird deshalb gar nicht erst\")\n        print(\"         gestartet. Das ist KEIN bestandener Lauf.\")\n        return 2",
       "nach": "    # M3: ohne diese Pruefung geht ein leerer Schluessel in die CLI —\n    # sie wartet dann auf eine Browser-Anmeldung, bis der Job stirbt.",
       "rot": [
@@ -43,7 +42,138 @@
       "gruen": [
         "test_fehlende_cli_ergibt_zwei",
         "test_kein_befund_ergibt_null"
-      ]
+      ],
+      "datei": "scripts/coderabbit_riegel.py"
+    },
+    {
+      "id": "M4 null gepruefte Dateien gelten wieder als Pruefung",
+      "von": "    dateien = lage.complete.get(\"reviewedFiles\")\n    if not dateien:\n        return (\"`review_completed` ueber NULL Dateien — das ist keine Pruefung.\"\n                \" Moegliche Ursache: ein `path_filters`-Eintrag in der `.coderabbit.yaml`\"\n                \" des PR-Checkouts, oder der Dienst hat nichts angesehen\")",
+      "nach": "    # M4: reviewedFiles wird wieder nur gedruckt, nicht beurteilt —\n    # der Fall \"checked 16 statt 60\", und der Weg, auf dem ein PR sich\n    # seine eigene Pruefung per path_filters abschaltet.",
+      "rot": [
+        "test_null_geprüfte_dateien_ist_keine_pruefung"
+      ],
+      "gruen": [
+        "test_erfolg_wird_als_urteil_erkannt",
+        "test_die_zahlen_muessen_stimmen"
+      ],
+      "datei": "scripts/coderabbit_riegel.py"
+    },
+    {
+      "id": "M5 ein Befund ohne Text gilt wieder als Befund",
+      "von": "    ohne_text = [b.get(\"fileName\", \"?\") for b in lage.befunde\n                 if not str(b.get(\"codegenInstructions\", \"\")).strip()]\n    if ohne_text:\n        return (f\"{len(ohne_text)} Befund(e) ohne Text ({', '.join(ohne_text[:3])}) —\"\n                f\" vermutlich hat der Dienst das Feld `codegenInstructions` umbenannt.\"\n                f\" Ein Befund ohne Text ist kein Befund\")",
+      "nach": "    # M5: ein Feldwechsel beim Dienst endet damit wieder gruen — der\n    # Zahlenzeuge stimmt (7 == 7), der Kommentar traegt 7x \"(kein Text)\".",
+      "rot": [
+        "test_befund_ohne_text_ist_unstimmig"
+      ],
+      "gruen": [
+        "test_erfolg_wird_als_urteil_erkannt"
+      ],
+      "datei": "scripts/coderabbit_riegel.py"
+    },
+    {
+      "id": "M6 eine kaputte Zeile ist wieder blosses Rauschen",
+      "von": "    if lage.kaputt:\n        return (f\"{lage.kaputt} Zeile(n) beginnen mit einer Klammer und sind kein JSON —\"\n                f\" die Ausgabe ist abgeschnitten oder verklebt\")",
+      "nach": "    # M6: eine Zeile, die mit { beginnt und nicht parst, verfaellt wieder\n    # wortlos — eine abgeschnittene Ausgabe sieht dann sauber aus.",
+      "rot": [
+        "test_kaputte_zeile_ist_ein_defekt_kein_rauschen"
+      ],
+      "gruen": [
+        "test_json_umgebung_stoert_nicht",
+        "test_erfolg_wird_als_urteil_erkannt"
+      ],
+      "datei": "scripts/coderabbit_riegel.py"
+    },
+    {
+      "id": "M7 die Stroeme werden wieder aneinandergehaengt gelesen",
+      "von": "    for strom in strome:",
+      "nach": "    for strom in [\"\".join(strome)]:",
+      "rot": [
+        "test_getrennte_stroeme_verkleben_nicht"
+      ],
+      "gruen": [
+        "test_erfolg_wird_als_urteil_erkannt",
+        "test_json_umgebung_stoert_nicht"
+      ],
+      "datei": "scripts/coderabbit_riegel.py"
+    },
+    {
+      "id": "M8 der Zaun ist wieder fest drei Backticks lang",
+      "von": "    laengste = max((len(m) for m in re.findall(r\"`+\", text)), default=0)\n    return \"`\" * max(3, laengste + 1)",
+      "nach": "    return \"```\"  # M8: zerbricht an jedem Befund, der Code zitiert —\n    # danach ist alles Weitere lebendes Markdown im PR-Kommentar.",
+      "rot": [
+        "test_der_zaun_ist_laenger_als_die_laengste_backtick_folge",
+        "test_markdown_zaeunt_auch_text_MIT_codeblock_ein"
+      ],
+      "gruen": [
+        "test_markdown_ist_leer_ohne_befunde",
+        "test_markdown_BEHAELT_den_vorspann"
+      ],
+      "datei": "scripts/coderabbit_riegel.py"
+    },
+    {
+      "id": "M9 der Vorspann wird wieder abgeschnitten",
+      "von": "        text = str(b.get(\"codegenInstructions\", \"\")).strip() or \"(kein Text)\"",
+      "nach": "        text = str(b.get(\"codegenInstructions\", \"\")).strip() or \"(kein Text)\"\n        # M9: die erste Fassung schnitt CodeRabbits eigene Abwehr weg.\n        text = text[len(VORSPANN):].lstrip() if text.startswith(VORSPANN) else text",
+      "rot": [
+        "test_markdown_BEHAELT_den_vorspann"
+      ],
+      "gruen": [
+        "test_markdown_traegt_den_vorschlag_mit",
+        "test_markdown_zaeunt_auch_text_MIT_codeblock_ein"
+      ],
+      "datei": "scripts/coderabbit_riegel.py"
+    },
+    {
+      "id": "M10 das Kontingent faellt wieder in den roten Zweig",
+      "von": "    if (handlung := kontingent_erschoepft(lage)) is not None:\n        print(\"STUFE AUSGEFALLEN: das CodeRabbit-Kontingent ist erschoepft.\")\n        print(f\"                   Die CLI bietet an, mit Guthaben zu wiederholen\"\n              f\" ({handlung.get('command', 'kein Kommando genannt')}) — das tut dieser\"\n              f\" Riegel NICHT von sich aus.\")\n        print(\"                   Das ist eine FEHLENDE Pruefung, kein bestandener Lauf.\")\n        if a.markdown:\n            a.markdown.write_text(\n                \"### CodeRabbit-CLI: Stufe ausgefallen\\n\\n\"\n                \"Das Kontingent ist erschoepft — dieser PR hat **kein** CLI-Review\\n\"\n                \"bekommen. Uebersprungen ist kein Erfolg.\\n\\n\"\n                \"_Der Bot prueft dieses Repo nicht automatisch (#593)._\\n\",\n                encoding=\"utf-8\")\n        return 3",
+      "nach": "    # M10: ohne diesen Zweig faerbt ein erschoepftes Kontingent jeden neu\n    # geoeffneten PR rot, unbehebbar von innen (Entscheidung Marcus).",
+      "rot": [
+        "test_kontingent_ergibt_drei_und_schreibt_den_kommentar"
+      ],
+      "gruen": [
+        "test_kein_befund_ergibt_null",
+        "test_unbekannte_handlungsaufforderung_bleibt_ROT"
+      ],
+      "datei": "scripts/coderabbit_riegel.py"
+    },
+    {
+      "id": "M11 jede Handlungsaufforderung gilt als Kontingent-Fall",
+      "von": "        if e.get(\"type\") == \"action_required\" and e.get(\"action\") == \"rerun_with_use_credits\":",
+      "nach": "        if e.get(\"type\") == \"action_required\":",
+      "rot": [
+        "test_unbekannte_handlungsaufforderung_bleibt_ROT"
+      ],
+      "gruen": [
+        "test_kontingent_erschoepft_wird_erkannt",
+        "test_kontingent_ergibt_drei_und_schreibt_den_kommentar"
+      ],
+      "datei": "scripts/coderabbit_riegel.py"
+    },
+    {
+      "id": "M12 die Frist wird dem Subprozess nicht mehr uebergeben",
+      "von": "                           encoding=\"utf-8\", errors=\"replace\", timeout=a.frist)",
+      "nach": "                           encoding=\"utf-8\", errors=\"replace\")",
+      "rot": [
+        "test_haenger_ergibt_zwei_und_rettet_die_teilausgabe"
+      ],
+      "gruen": [
+        "test_kein_befund_ergibt_null",
+        "test_erfolg_wird_als_urteil_erkannt"
+      ],
+      "datei": "scripts/coderabbit_riegel.py"
+    },
+    {
+      "id": "M13 der Schluessel wird nicht mehr aus der Ausgabe genommen",
+      "von": "    return text.replace(geheimnis, \"***\") if geheimnis else text",
+      "nach": "    return text",
+      "rot": [
+        "test_verdecke_nimmt_den_schluessel_heraus",
+        "test_der_schluessel_steht_nicht_in_der_ausgabe"
+      ],
+      "gruen": [
+        "test_auszug_benennt_die_leere_ausgabe"
+      ],
+      "datei": "scripts/coderabbit_riegel.py"
     }
   ]
 }
