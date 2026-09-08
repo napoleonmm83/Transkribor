@@ -447,12 +447,21 @@ def start(project: str, cmd: list, cwd, kind: str, then=None, env=None, base: st
                       "ended": None, "pid": None, "cancelled": False,
                       "then": [then] if then else [],
                       "sonst": [sonst] if sonst else [],
-                      # Von einem VORGAENGER uebernommen (`_run` Schritt 2). Getrennt gefuehrt,
-                      # weil sie eine andere Bedingung haben als die eigenen: ihr Ursprungsjob
-                      # war erfolgreich, ihre Arbeit ist also geschuldet — der Ausgang DIESES
-                      # Laufs entscheidet nur noch, ob sie nachgeholt (Fehler) oder
-                      # zurueckgenommen wird (Abbruch).
-                      "then_ueber": [], "sonst_ueber": [],
+                      # Von einem VORGAENGER uebernommen (`_run` Schritt 2), als PAARE
+                      # `(then, sonst)`. Getrennt von den eigenen gefuehrt, weil sie eine
+                      # andere Bedingung haben: ihr Ursprungsjob war erfolgreich, ihre Arbeit
+                      # ist also geschuldet — der Ausgang DIESES Laufs entscheidet nur noch,
+                      # ob sie nachgeholt (Fehler) oder zurueckgenommen wird (Abbruch).
+                      #
+                      # ALS PAAR, NICHT ALS ZWEI LISTEN, und das ist am ausgefuehrten Code
+                      # belegt (kalter Diff-Leser, Befund 2): mit getrennten Listen feuerte
+                      # EIN werfendes `then` ALLE geerbten `sonst` — auch die, deren `then`
+                      # sauber durchgelaufen war. Gemessen hat er `sonstA` mit Rueckgabe True:
+                      # es hat wirklich eine Vormerkung geschlossen, deren Nachlauf gerade
+                      # anlief. Die naheliegende Reparatur (`zip`) traegt nicht — sie setzt
+                      # index-parallele Listen voraus, und ein Job mit `then` ohne `sonst`
+                      # bricht die Parallelitaet auf der Stelle.
+                      "uebernommen": [],
                       "next_runs": []}
         _active[(project, kind)] = jid
     threading.Thread(target=_run, args=(jid, cmd, cwd, env), daemon=True).start()
@@ -651,7 +660,6 @@ def _run(jid, cmd, cwd, env):
         next_runs = list(r.get("next_runs", []))
         erfolg = r["status"] == "done"
         abgebrochen = r["status"] == "cancelled"
-        then_callbacks = list(r.get("then", [])) if erfolg else []
         # Die EIGENEN Rueckrufe haengen am Ausgang dieses Laufs: `then` bei Erfolg, `sonst`
         # sonst. Die UEBERNOMMENEN haengen am Ausgang ihres Ursprungsjobs, und der war
         # erfolgreich — sonst waeren sie nie weitergereicht worden (die Weitergabe unten
@@ -681,12 +689,15 @@ def _run(jid, cmd, cwd, env):
         #               ohne eine Zeile darueber. Dagegen steht der Herunterfahr-Fall:
         #               `cancel_all()` bricht ALLE laufenden Jobs ab, ein hier gestarteter
         #               Nachlauf waere eine Waise mit belegter GPU. (Gegnerischer Pruefer, F2.)
-        eigene_sonst = list(r.get("sonst", []))
-        geerbte_sonst = list(r.get("sonst_ueber", []))
-        sonst_callbacks = [] if erfolg else eigene_sonst
-        ueber_then = [] if abgebrochen else list(r.get("then_ueber", []))
-        ueber_sonst = geerbte_sonst if abgebrochen else []
-        # Fuer die Weitergabe unten, ausgangsunabhaengig: sie erbt die Quittung als GANZES.
+        # Alles als PAARE `(then, sonst)`. `start` legt je hoechstens einen an; die Schleife
+        # ueber die laengere der beiden Listen deckt auch ein `sonst` ohne `then` ab, statt es
+        # still fallenzulassen.
+        eigenes_then = list(r.get("then", []))
+        eigenes_sonst = list(r.get("sonst", []))
+        eigene_paare = [(eigenes_then[i] if i < len(eigenes_then) else None,
+                         eigenes_sonst[i] if i < len(eigenes_sonst) else None)
+                        for i in range(max(len(eigenes_then), len(eigenes_sonst)))]
+        geerbte_paare = list(r.get("uebernommen", []))
         #
         # DASS DIESER SCHNAPPSCHUSS UNTEN NOCH GILT, haengt an einer Invariante, die nirgends
         # sonst steht (gegnerischer Pruefer, F7): `_run_proc`s `finally` nimmt den Job aus
@@ -695,7 +706,6 @@ def _run(jid, cmd, cwd, env):
         # Rueckrufe in `_active` HAELT (naheliegend, damit `betrifft()` die Nachlaufphase
         # abdeckt — die Richtung von #451), verliert damit still jeden hier angehaengten
         # Rueckruf. Kein Test bekaeme das rot.
-        alle_sonst = eigene_sonst + geerbte_sonst
         project = r["project"]
         kind = r["kind"]
 
@@ -710,6 +720,7 @@ def _run(jid, cmd, cwd, env):
                     fuege_zeile_an(r["lines"], f"NACHLAUF-FEHLER: {e}")
 
     # 2. Prüfen, ob noch Folge-Läufe für (Projekt, Art) aktiv oder vorgemerkt sind
+    weitergereicht = False
     with _lock:
         folge_jid = _active.get((project, kind))
         hat_pending = any(k[0] == project and k[1] == kind for k in _pending)
@@ -722,41 +733,33 @@ def _run(jid, cmd, cwd, env):
             # erst nach Abschluss ALLER Transkriptionen des Projekts feuert (#Option1)
             if folge_jid and folge_jid in _jobs:
                 folge = _jobs[folge_jid]
-                # Die Dedupe prueft BEIDE Ziellisten. Mit nur einer landete derselbe
-                # Rueckruf in `then` UND `then_ueber` und liefe bei Erfolg zweimal.
-                # Der EINE Fall, in dem sie wirklich greift, ist `request`s `rerun`: es
-                # reicht dasselbe `then`-Objekt an den Folge-Job weiter, das steht dort
-                # also schon. GETRAGENE GRENZE: scheitert genau DER Job, faellt das `then`
-                # mit ihm (es liegt in seiner EIGENEN Liste, nicht in `then_ueber`).
-                # UND SIE SPALTET DAS PAAR, was schlimmer ist als der Satz darueber: greift
-                # die Dedupe fuer das `then`, wandert dessen `sonst` trotzdem nach
-                # `sonst_ueber` (die Schleife darunter kennt die Dedupe des `then` nicht).
-                # Endet der Empfaenger dann mit `error`, feuert KEINES von beiden — das ist
-                # #579 durch diese Tuer. Heute unerreichbar (`request(then=…)` hat keinen
-                # Produktivaufrufer); wer einen baut, repariert BEIDE Haelften, nicht nur die
-                # `then`-Haelfte. (Gegnerischer Pruefer, F8.)
-                for fn in then_callbacks + ueber_then:
-                    if fn not in folge["then"] and fn not in folge["then_ueber"]:
-                        folge["then_ueber"].append(fn)
-                # Das Gegenstueck wandert MIT, sonst haette der Empfaenger ein geschuldetes
-                # `then` und keinen Weg, dessen Ausfall zu quittieren.
-                for fn in alle_sonst:
-                    if fn not in folge["sonst"] and fn not in folge["sonst_ueber"]:
-                        folge["sonst_ueber"].append(fn)
-                then_callbacks = []
-                ueber_then = []
+                # Das PAAR wandert, nie eine Haelfte allein — sonst haette der Empfaenger ein
+                # geschuldetes `then` ohne Weg, dessen Ausfall zu quittieren (oder umgekehrt).
+                #
+                # Die Dedupe haengt am `then` und prueft BEIDE Ziellisten. Der EINE Fall, in
+                # dem sie greift, ist `request`s `rerun`: es reicht dasselbe `then`-Objekt an
+                # den Folge-Job weiter, das steht dort also schon. GETRAGENE GRENZE: scheitert
+                # genau DER Job, faellt das `then` mit ihm (es liegt in seiner EIGENEN Liste).
+                # Heute unerreichbar — `request(then=…)` hat keinen Produktivaufrufer.
+                schon_da = list(folge["then"]) + [t for t, _ in folge["uebernommen"]]
+                for paar in eigene_paare + geerbte_paare:
+                    if paar[0] is not None and paar[0] in schon_da:
+                        continue
+                    folge["uebernommen"].append(paar)
+                    schon_da.append(paar[0])
+                weitergereicht = True
 
     # 3. Wenn die Kette komplett abgeschlossen ist: die faelligen Rueckrufe ausführen.
-    #    `then_callbacks`/`ueber_then` sind hier leer, wenn Schritt 2 sie weitergereicht hat.
+    #    Hat Schritt 2 weitergereicht, passiert hier gar nichts mehr — die Paare gehoeren
+    #    dann dem Empfaenger.
     #
-    #    DIE REIHENFOLGE IST TRAGEND, und kein Test haelt sie (zweiter Pruefer, B4). Bei
-    #    `error` sind `ueber_then` und `sonst_callbacks` gleichzeitig gefuellt. Treffen sie je
-    #    dieselbe Vormerkung — moeglich genau dann, wenn die Dedupe oben ein `then`
-    #    ueberspringt, sein `sonst` aber nicht —, rettet nur diese Ordnung: `then` setzt
-    #    `gestartet`, und das nachfolgende `verwerfen` prallt am Riegel in
-    #    `vorgang_verwerfen` ab. Wer hier umsortiert („erst aufraeumen, dann starten"),
-    #    verwirft eine gerade angelaufene Nummer. Ein Test dafuer gibt es nicht, weil der
-    #    ausloesende Fall heute unerreichbar ist; die Zeile ist der Ersatz.
+    #    HIER STAND EINE REIHENFOLGE-BEGRUENDUNG, und sie ist mit der Paarbildung
+    #    GEGENSTANDSLOS geworden: „`then` vor `sonst`, sonst verwirft die Quittung eine
+    #    gerade angelaufene Nummer" rettete den Fall, in dem ein `then` und ein FREMDES
+    #    `sonst` dieselbe Vormerkung trafen. Mit Paaren kann das nicht mehr entstehen —
+    #    jedes `sonst` gehoert genau einem `then` und feuert nur, wenn GENAU DAS ausfaellt.
+    #    Der zweite Pruefer hatte die Ordnung als tragend-und-ungetestet gemeldet (B4); die
+    #    bessere Antwort war, sie ueberfluessig zu machen statt sie zu testen.
     def _rufe(fn) -> bool:
         try:
             fn()
@@ -777,19 +780,32 @@ def _run(jid, cmd, cwd, env):
     # hat `gestartet` gesetzt), prallt die Quittung am Riegel in `vorgang_verwerfen` ab —
     # genau dafuer ist er da.
     #
-    # Erst ALLE ausfuehren, dann urteilen — die Liste steht vor dem `all`. Mit einem Generator
-    # (`all(_rufe(fn) for fn in …)`) braeche `all` beim ersten `False` ab und liesse die
-    # restlichen Rueckrufe ungelaufen; das ist strukturell vermieden, nicht bloss kommentiert,
-    # weil `ueber_then` mehrere Eintraege tragen kann (zwei Glieder, die an denselben Job
-    # weiterreichen).
-    then_gelaufen = [_rufe(fn) for fn in then_callbacks]
-    ueber_gelaufen = [_rufe(fn) for fn in ueber_then]
-    if not all(then_gelaufen):
-        sonst_callbacks = eigene_sonst
-    if not all(ueber_gelaufen):
-        ueber_sonst = geerbte_sonst
-    for fn in sonst_callbacks + ueber_sonst:
-        _rufe(fn)
+    # UND SIE GEHOERT ZU GENAU DIESEM `then`, nicht zu allen. Der erste Entwurf fuehrte zwei
+    # getrennte Listen und feuerte bei EINEM werfenden `then` ALLE geerbten `sonst` — auch
+    # die, deren `then` sauber durchlief. Der kalte Diff-Leser hat das AUSGEFUEHRT: `sonstA`
+    # gab True zurueck, es hatte also wirklich eine Vormerkung geschlossen, deren Nachlauf
+    # gerade anlief. Genau der Schaden, gegen den dieser PR gebaut ist, durch die Tuer, die
+    # er selbst aufgemacht hatte.
+    def _paar(then_fn, sonst_fn, then_faellig: bool) -> None:
+        """Je Paar laeuft GENAU EINES: das `then`, oder — faellt es aus — sein `sonst`.
+
+        „Faellt aus" heisst dreierlei: nicht faellig (der Ausgang gibt es nicht her), gar
+        nicht vorhanden, oder geworfen. Der dritte Fall ist der, den man vergisst.
+        """
+        if then_faellig and then_fn is not None and _rufe(then_fn):
+            return
+        if then_faellig and then_fn is None:
+            return                      # nichts geschuldet, also nichts zu quittieren
+        if sonst_fn is not None:
+            _rufe(sonst_fn)
+
+    if not weitergereicht:
+        for then_fn, sonst_fn in eigene_paare:
+            _paar(then_fn, sonst_fn, then_faellig=erfolg)
+        for then_fn, sonst_fn in geerbte_paare:
+            # Der Ursprungsjob war erfolgreich, sonst gaebe es das Paar hier nicht. Nur ein
+            # ABBRUCH nimmt die geschuldete Arbeit zurueck; ein Fehlschlag holt sie nach.
+            _paar(then_fn, sonst_fn, then_faellig=not abgebrochen)
 
 
 def _run_proc(jid, cmd, cwd, env=None):
@@ -1025,9 +1041,9 @@ def get(job_id: str):
         snap["lines"] = list(r["lines"])
         snap.pop("proc", None)                # Popen-Handle ist nicht JSON-serialisierbar
         snap.pop("then", None)                # Callables sind nicht JSON-serialisierbar
-        snap.pop("sonst", None)               # dito — und alle vier muessen HIER stehen:
-        snap.pop("then_ueber", None)          # FastAPIs Encoder wirft nicht, er bildet eine
-        snap.pop("sonst_ueber", None)         # Funktion auf {} ab. Ein vergessener Schluessel
+        snap.pop("sonst", None)               # dito — und alle drei muessen HIER stehen:
+        snap.pop("uebernommen", None)         # FastAPIs Encoder wirft nicht, er bildet eine
+                                              # Funktion auf {} ab. Ein vergessener Schluessel
                                               # gaebe also 200 mit `sonst: [{}]` — in einer
                                               # Nutzlast, die alle 1,5 s gepollt wird.
         snap.pop("next_runs", None)           # Callables sind nicht JSON-serialisierbar

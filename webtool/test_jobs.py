@@ -1961,7 +1961,7 @@ def _kette_mit_weitergabe(project, folge_cmd, then_fn=None, sonst_fn=None):
 
 def _uebernommen(folge_jid, fn):
     with jobs._lock:
-        return fn in jobs._jobs.get(folge_jid, {}).get("then_ueber", [])
+        return any(t is fn for t, _ in jobs._jobs.get(folge_jid, {}).get("uebernommen", []))
 
 
 def _wartendes_cmd(marker, danach="pass"):
@@ -2203,6 +2203,49 @@ def test_werfendes_then_zieht_seine_quittung_nach():
         "der Wurf muss trotzdem im Protokoll stehen"
 
 
+def test_ein_werfendes_geerbtes_then_zieht_NUR_seine_eigene_quittung(tmp_path):
+    """Befund 2 des kalten Diff-Lesers, an seinem eigenen Messaufbau nachgebaut.
+
+    Der erste Entwurf fuehrte `then` und `sonst` als ZWEI Listen. Wirft dann EIN geerbtes
+    `then`, feuerten ALLE geerbten `sonst` — auch die, deren `then` sauber durchgelaufen war.
+    Er hat es ausgefuehrt: `sonstA` gab True zurueck, hatte also wirklich eine Vormerkung
+    geschlossen, deren Nachlauf gerade anlief. Der Browser laesst sie beim naechsten Poll
+    fallen, und der Lauf laeuft unbeobachtet weiter — genau der Schaden aus #579, durch die
+    Tuer, die dessen Reparatur selbst aufgemacht hatte.
+
+    Das zweite Paar wird von Hand eingehaengt: erzeugen wuerde es eine Kette ueber DREI
+    Importe, und der Test braucht dafuer keinen dritten Job — gemessen wird die Regel in
+    `_paar`, nicht der Weg dorthin (den halten die ZWEITE-Weiterreichen-Tests).
+    """
+    nummer_a = jobs.vormerken("P_paare", "transcribe")
+    nummer_b = jobs.vormerken("P_paare", "transcribe")
+    laeufe = []
+    marker = tmp_path / "los"
+
+    def then_a():
+        laeufe.append("thenA")
+        jobs._vorgang_setzen(nummer_a, "gestartet", job_id="nachlauf")
+
+    def then_b():
+        laeufe.append("thenB")
+        raise RuntimeError("kein Faden mehr frei")
+
+    _, jid2 = _kette_mit_weitergabe(
+        "P_paare", _wartendes_cmd(marker, "raise SystemExit(9)"), then_fn=then_a,
+        sonst_fn=lambda: laeufe.append("sonstA") or jobs.vorgang_verwerfen(nummer_a))
+    with jobs._lock:
+        jobs._jobs[jid2]["uebernommen"].append(
+            (then_b, lambda: laeufe.append("sonstB") or jobs.vorgang_verwerfen(nummer_b)))
+    marker.write_text("los", encoding="utf-8")
+    r2 = _wait(jid2, timeout=30)
+    assert r2["status"] == "error", r2["status"]
+    assert _bis(lambda: "sonstB" in laeufe), laeufe
+    assert "sonstA" not in laeufe, \
+        "das werfende `then` hat die Quittung des NACHBARN ausgeloest"
+    assert jobs.vorgang(nummer_a)["status"] == "gestartet"
+    assert jobs.vorgang(nummer_b)["status"] == "verworfen"
+
+
 def test_jobs_get_traegt_keine_rueckruf_felder():
     """Die drei neuen Felder duerfen den Server nicht verlassen — wie `then` und `next_runs`.
 
@@ -2214,10 +2257,9 @@ def test_jobs_get_traegt_keine_rueckruf_felder():
                               kind="fetch", then=lambda: None, sonst=lambda: None)
     assert started is True
     with jobs._lock:
-        jobs._jobs[jid]["then_ueber"].append(lambda: None)
-        jobs._jobs[jid]["sonst_ueber"].append(lambda: None)
+        jobs._jobs[jid]["uebernommen"].append((lambda: None, lambda: None))
     snap = jobs.get(jid)
-    for feld in ("then", "sonst", "then_ueber", "sonst_ueber", "next_runs"):
+    for feld in ("then", "sonst", "uebernommen", "next_runs"):
         assert feld not in snap, f"{feld} verlaesst den Server"
     json.dumps(snap)          # der eigentliche Beweis: der Schnappschuss ist serialisierbar
     _wait(jid, timeout=30)
