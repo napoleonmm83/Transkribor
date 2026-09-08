@@ -361,9 +361,16 @@ def test_auszug_nimmt_das_ENDE_und_deckelt():
     # nehmen die Abbruchzweige (CodeRabbit-Bot, minor). Ein danebenliegender Default waere
     # mit dem Aufruf oben unsichtbar geblieben: derselbe Waechter, der nur seinen eigenen
     # Parameter prueft.
+    #
+    # Die ZAHL steht hier ausgeschrieben, und das ist der zweite Anlauf: zuerst stand dort
+    # `len(ohne) == mutation.AUSZUG_ZEILEN`, also eine Zusicherung gegen genau die Konstante,
+    # die sie pruefen soll. Die Mutationsprobe hat es gezeigt — Default auf 5 verschoben, Test
+    # blieb GRUEN, weil die Erwartung mitwanderte. Selbstbezueglich, dieselbe Klasse wie eine
+    # Zusicherung, die ihren eigenen Parameter prueft.
     ohne = mutation.ausgabe_auszug(aus)
-    assert len(ohne) == mutation.AUSZUG_ZEILEN
-    assert ohne[0] == f"zeile {50 - mutation.AUSZUG_ZEILEN}" and ohne[-1] == "zeile 49"
+    assert mutation.AUSZUG_ZEILEN == 20, "der Auszug zeigt 20 Zeilen — wer das aendert, aendert einen Vertrag"
+    assert len(ohne) == 20
+    assert ohne[0] == "zeile 30" and ohne[-1] == "zeile 49"
 
 
 def test_auszug_benennt_die_leere_ausgabe():
