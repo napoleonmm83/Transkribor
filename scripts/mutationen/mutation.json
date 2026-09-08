@@ -252,6 +252,55 @@
         "auszug_benennt_die_leere_ausgabe",
         "abbruch_bei_null_tests_zeigt_die_ausgabe"
       ]
+    },
+    {
+      "id": "MB21 die Anker-Vorpruefung entfaellt (T-074)",
+      "datei": "scripts/mutation.py",
+      "von": "    if fehlstellen:",
+      "nach": "    if False:",
+      "rot": [
+        "test_mehrdeutiger_anker_bricht_VOR_dem_ersten_testlauf_ab",
+        "test_fehlende_zieldatei_bricht_vorab_ab"
+      ],
+      "gruen": [
+        "test_erwarteter_test_wird_rot_ergibt_null"
+      ]
+    },
+    {
+      "id": "MB22 die Entfaerbung entfaellt (T-070)",
+      "datei": "scripts/mutation.py",
+      "von": "    return ohne_farbe((p.stdout or \"\") + (p.stderr or \"\")), p.returncode",
+      "nach": "    return ((p.stdout or \"\") + (p.stderr or \"\")), p.returncode",
+      "rot": [
+        "test_lauf_entfaerbt_die_ausgabe_eines_echten_kindes"
+      ],
+      "gruen": [
+        "test_erwarteter_test_wird_rot_ergibt_null"
+      ]
+    },
+    {
+      "id": "MB23 das Testkommando des Plans wird ignoriert",
+      "datei": "scripts/mutation.py",
+      "von": "        plan_test = roh.get(\"test\")",
+      "nach": "        plan_test = None",
+      "rot": [
+        "test_plan_traegt_sein_testkommando_selbst"
+      ],
+      "gruen": [
+        "test_erwarteter_test_wird_rot_ergibt_null"
+      ]
+    },
+    {
+      "id": "MB24 die Umgebung des Plans wird ignoriert",
+      "datei": "scripts/mutation.py",
+      "von": "        plan_env = roh.get(\"env\") or {}",
+      "nach": "        plan_env = {}",
+      "rot": [
+        "test_plan_traegt_sein_testkommando_selbst"
+      ],
+      "gruen": [
+        "test_erwarteter_test_wird_rot_ergibt_null"
+      ]
     }
   ]
 }

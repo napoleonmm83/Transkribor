@@ -189,7 +189,14 @@ def main(argv: list[str] | None = None) -> int:
         # Ohne Shell und als Argumentliste: der Treiber selbst braucht `shell=True` fuer
         # sein Testkommando, dieser Aufruf hier nicht — und was ohne Shell laeuft, laeuft
         # auf cmd.exe und sh gleich.
-        rc = subprocess.run([sys.executable, treiber, "--repo", str(wurzel),  # noqa: S603
+        #
+        # `-u` ist nicht Kosmetik. Pythons stdout ist BLOCKGEPUFFERT, sobald es nicht auf
+        # ein Terminal geht — also in jeder CI und in jeder Umleitung. Ohne den Schalter
+        # erscheint die gesamte Ausgabe eines Plans erst, wenn sein Prozess ENDET; bei einer
+        # Serie von 20 Minuten heisst das 20 Minuten ohne Lebenszeichen, und ein Haenger
+        # saehe genauso aus wie Arbeit. Beim Bau dieses Skripts genau so beobachtet: die
+        # Kopfzeile des Plans stand da, die Positivkontrolle des Kindes nicht.
+        rc = subprocess.run([sys.executable, "-u", treiber, "--repo", str(wurzel),  # noqa: S603
                              "--pfad", p.pfad_wurzel(wurzel), "--plan", str(p.datei)],
                             check=False).returncode
         if rc:
