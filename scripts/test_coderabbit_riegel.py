@@ -342,7 +342,19 @@ def test_der_schluessel_steht_nicht_in_der_ausgabe(monkeypatch, capsys):
     Schluessel je in einer Fehlermeldung wiederholt, ist nicht gemessen — deshalb legt die
     Attrappe ihn hier genau dorthin.
     """
-    geheim = "cr-streng-geheim-123"
+    # DER WERT DARF NICHT WIE EIN SCHLUESSEL AUSSEHEN, und das ist keine Kosmetik: die
+    # erste Fassung nahm hier das CLI-Praefix plus einen Ziffernschwanz, und GitGuardian
+    # meldete das an PR #596 als „Generic High Entropy Secret" — Pruefpunkt rot, auf eine
+    # frei erfundene Testzeichenkette. Das kurze `cr-egal` in denselben Tests loeste NICHT
+    # aus; es war die Laenge samt Zufallsanteil.
+    #
+    # Der alte Wert wird hier ABSICHTLICH NICHT ZITIERT: der erste Anlauf dieses Kommentars
+    # schrieb ihn zur Erklaerung hin — und haette den Fehlalarm damit konserviert. Ein
+    # Erklaertext, der den Ausloeser mitschleppt, erklaert ihn nicht, er wiederholt ihn.
+    #
+    # Wer den Wert spaeter „realistischer" macht, holt den roten Haken zurueck. Ein roter
+    # Haken, der nichts bedeutet, erzieht dazu, rote Haken wegzuklicken.
+    geheim = "attrappe-kein-echter-schluessel"
     gesehen = {}
 
     def falscher_lauf(kommando, **k):
