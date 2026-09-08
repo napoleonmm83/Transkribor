@@ -81,10 +81,34 @@ def test_rueckwaertsschraegstrich_wird_beim_LESEN_normalisiert(tmp_path):
     """
     liste = tmp_path / "geaendert.txt"
     liste.write_text("webtool\\jobs.py\n  webtool/app.py  \n\n", encoding="utf-8")
-    assert mutationen_lauf._lies_geaendert(liste) == {"webtool/jobs.py", "webtool/app.py"}
+    assert mutationen_lauf._lies_geaendert(liste) == {"webtool/jobs.py": "?",
+                                                      "webtool/app.py": "?"}
 
     plaene = [_plan("a", ["webtool/jobs.py"])]
-    assert mutationen_lauf.waehle(plaene, mutationen_lauf._lies_geaendert(liste)) == plaene
+    gelesen = set(mutationen_lauf._lies_geaendert(liste))
+    assert mutationen_lauf.waehle(plaene, gelesen) == plaene
+
+
+def test_der_status_aus_dem_diff_wird_gelesen(tmp_path):
+    """Nur der Status trennt eine Loeschung von einer Umbenennung.
+
+    `git diff --name-status` schreibt `D\\tpfad` fuer geloescht und `R100\\talt\\tneu` fuer
+    umbenannt. Ohne diese Unterscheidung bliebe nur die Heuristik „Pfad im Diff, aber kein
+    Plan geladen" — und die sieht bei einem PR, der einen Plan loescht UND einen zweiten
+    aendert, wie eine Umbenennung aus (CodeRabbit-Bot, major).
+    """
+    liste = tmp_path / "geaendert.txt"
+    liste.write_text("M\twebtool/jobs.py\n"
+                     "D\tscripts/mutationen/weg.json\n"
+                     "R100\tscripts/mutationen/alt.json\tscripts/mutationen/neu.json\n",
+                     encoding="utf-8")
+    gelesen = mutationen_lauf._lies_geaendert(liste)
+    assert gelesen["webtool/jobs.py"] == "M"
+    assert gelesen["scripts/mutationen/weg.json"] == "D"
+    # BEIDE Seiten der Umbenennung, und beide als R: der neue Plan soll laufen, der alte
+    # Pfad darf keinen Loeschalarm ausloesen.
+    assert gelesen["scripts/mutationen/alt.json"] == "R"
+    assert gelesen["scripts/mutationen/neu.json"] == "R"
 
 
 # --- Der abgeleitete --pfad -----------------------------------------------
@@ -183,7 +207,7 @@ def test_eine_geloeschte_plandatei_ist_nicht_lautlos(tmp_path, capsys):
     Befund des kalten Diff-Lesers; eine NEUE Luecke dieses PR, keine vorbestehende.
     """
     liste = tmp_path / "geaendert.txt"
-    liste.write_text("scripts/mutationen/gibt_es_nicht_mehr.json\n", encoding="utf-8")
+    liste.write_text("D\tscripts/mutationen/gibt_es_nicht_mehr.json\n", encoding="utf-8")
     rc = mutationen_lauf.main(["--repo", str(WURZEL), "--geaendert", str(liste),
                                "--nur-auswahl"])
     assert rc == 2
@@ -191,18 +215,48 @@ def test_eine_geloeschte_plandatei_ist_nicht_lautlos(tmp_path, capsys):
 
 
 def test_eine_umbenannte_plandatei_ist_KEIN_verlust(tmp_path, capsys):
-    """Die Gegenprobe, ohne die der Riegel oben eine legitime Umbenennung blockierte.
+    """Die Gegenprobe, ohne die der Riegel eine legitime Umbenennung blockierte.
 
-    Eine Umbenennung steht als Loeschung UND als Zugang im Diff; der Waechter existiert
-    weiter. Nur wenn NICHTS dazukam, ist wirklich einer verschwunden.
+    Eine Umbenennung traegt den Status `R`, keine Loeschung — der Waechter existiert weiter.
     """
     liste = tmp_path / "geaendert.txt"
-    liste.write_text("scripts/mutationen/alt_und_weg.json\n"
-                     "scripts/mutationen/mypy_riegel.json\n", encoding="utf-8")
+    liste.write_text("R100\tscripts/mutationen/alt.json\tscripts/mutationen/neu.json\n"
+                     "M\tscripts/mutationen/mypy_riegel.json\n", encoding="utf-8")
     rc = mutationen_lauf.main(["--repo", str(WURZEL), "--geaendert", str(liste),
                                "--nur-auswahl"])
     assert rc == 0
     assert "mypy_riegel" in capsys.readouterr().out
+
+
+def test_eine_loeschung_NEBEN_einer_planaenderung_faellt_trotzdem_auf(tmp_path, capsys):
+    """Genau der Fall, den die erste Fassung durchliess (CodeRabbit-Bot, major).
+
+    Loescht ein PR `a.json` und aendert zusaetzlich `b.json`, war frueher beides nicht leer
+    und der Abbruch entfiel — der entfernte Waechter verschwand lautlos. Am STATUS
+    entschieden gibt es diesen Ausweg nicht.
+    """
+    liste = tmp_path / "geaendert.txt"
+    liste.write_text("D\tscripts/mutationen/weg.json\n"
+                     "M\tscripts/mutationen/mypy_riegel.json\n", encoding="utf-8")
+    rc = mutationen_lauf.main(["--repo", str(WURZEL), "--geaendert", str(liste),
+                               "--nur-auswahl"])
+    assert rc == 2
+    assert "loescht Plandateien" in capsys.readouterr().out
+
+
+def test_der_workflow_liefert_den_status_mit():
+    """Bindet den Laeufer an die Zeile, die ihn in der CI fuettert.
+
+    Der Loesch-Riegel oben haengt am Status aus `git diff --name-status`. Stellt jemand die
+    Workflow-Zeile auf `--name-only` zurueck, faellt er lautlos aus — die Auswahl liefe
+    weiter, nur die Loeschung waere wieder unsichtbar. Dieselbe Bauform wie der Test, der
+    jedem Job seine Zeitgrenze abverlangt.
+    """
+    workflow = (WURZEL / ".github" / "workflows" / "test.yml").read_text(encoding="utf-8")
+    assert "mutationen_lauf.py" in workflow, "der Job fehlt — dann misst dieser Test nichts"
+    assert "git diff --name-status" in workflow, (
+        "der Workflow muss --name-status liefern; mit --name-only kann der Laeufer eine"
+        " Loeschung nicht von einer Umbenennung unterscheiden")
 
 
 def test_pfade_als_blosse_zeichenkette_ergibt_zwei(tmp_path, capsys):
