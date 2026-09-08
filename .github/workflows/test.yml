@@ -652,8 +652,30 @@ jobs:
 
       # Macht den Verbrauch sichtbar, statt ihn zu schaetzen. Die Groesse der Zulassung
       # steht nirgends; erst diese Zeile ueber mehrere Laeufe macht daraus eine Messung.
+      #
+      # `usage` KENNT `--api-key` NICHT. Es hat ueberhaupt keine Optionen und liest
+      # ausschliesslich einen gespeicherten Login — gemessen am 2026-09-08 an 0.7.6:
+      # `error: unknown option '--api-key'`. Der erste Entwurf rief es genau so auf und
+      # verbarg das hinter `|| true`: ein Schritt, der aussieht wie eine Messung und in
+      # JEDEM Lauf nichts misst. Deshalb erst anmelden, dann fragen.
+      #
+      # `auth login --api-key` ist dafuer sicher: mit einem ungueltigen Schluessel scheitert
+      # es in 0 s mit rc 1 (gemessen bei leerem HOME) — es faellt NICHT in die
+      # Browser-Anmeldung zurueck, an der `review` ohne Schluessel bis zur Zeitgrenze haengt.
+      #
+      # `continue-on-error` statt `|| true`: der Verbrauch ist eine Beigabe und darf den Job
+      # nicht rot faerben — aber sein Ausfall soll SICHTBAR sein. Genau das hat `|| true`
+      # verhindert, und deshalb ist der Defekt oben ueberhaupt erst entstanden.
       - name: Verbrauch
         if: always()
+        continue-on-error: true
         env:
           CODERABBIT_API_KEY: ${{ secrets.CODERABBIT_API_KEY }}
-        run: /tmp/cr/coderabbit usage --api-key "$CODERABBIT_API_KEY" || true
+        run: |
+          set -euo pipefail
+          if [ -z "${CODERABBIT_API_KEY:-}" ]; then
+            echo "Kein Schluessel gesetzt — der Verbrauch ist nicht abrufbar."
+            exit 0
+          fi
+          /tmp/cr/coderabbit auth login --api-key "$CODERABBIT_API_KEY"
+          /tmp/cr/coderabbit usage
