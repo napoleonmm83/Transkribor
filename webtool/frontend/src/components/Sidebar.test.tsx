@@ -273,6 +273,31 @@ describe('Sidebar - der Beleg des Laufs erreicht die Zeile', () => {
     expect(screen.getByLabelText('Fertig')).toBeInTheDocument()
     expect(screen.queryByLabelText(/Nur Audio/)).toBeNull()
   })
+
+  // Zweites Glied derselben Kette, fuer #581 — und aus demselben Grund: `durch` ist optional
+  // und liesse sich hier ersatzlos streichen, ohne dass etwas rot wird. Die Seitenleiste ist
+  // dabei der haertere Fall, weil sie `warten` bewusst NICHT durchreicht: hier entscheidet
+  // `durch` allein zwischen Wartesymbol und Ruhezustand.
+  it('zeigt den Ruhezustand statt des Wartesymbols, wenn der Lauf die Aufnahme hinter sich hat (#581)', () => {
+    // `a` liegt transkribiert auf der Platte, steht im Bereich, hat aber kein Urteil mehr —
+    // seine Zeile ist aus dem gedeckelten Puffer gefallen.
+    zeigen({ offen: 'Alpha', dateien: DATEIEN, jobRunning: true,
+      phases: { global: null, active: {}, perBase: {},
+                scope: new Set(['a']), gesehen: new Set(['a']), durch: new Set(['a']) } })
+    expect(screen.getByLabelText(/noch nicht korrigiert/)).toBeInTheDocument()
+    // getByTEXT, nicht getByLabelText: der Wartezweig rendert seinen Satz als Textknoten, nur
+    // der Ruhezustand traegt ihn im aria-label. Andersherum geschrieben waere die Zusicherung
+    // vacuous — sie fand hier beim ersten Anlauf tatsaechlich nichts und waere trotzdem gruen
+    // gewesen.
+    expect(screen.queryByText('In Warteschlange…')).toBeNull()
+  })
+
+  it('… und behaelt das Wartesymbol ohne durch (#581)', () => {
+    // Die Gegenrichtung: dieselbe Lage, aber der Lauf hat `a` nie angefasst.
+    zeigen({ offen: 'Alpha', dateien: DATEIEN, jobRunning: true,
+      phases: { global: null, active: {}, perBase: {}, scope: new Set(['a']) } })
+    expect(screen.getByText('In Warteschlange…')).toBeInTheDocument()
+  })
 })
 
 describe('Sidebar - Beobachtung stellt keine Warte-Prognose (#431, Review-Befund A2)', () => {

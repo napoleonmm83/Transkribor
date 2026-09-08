@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
 import { getJob, getVorgang, HttpFehler } from '@/lib/api'
-import { korrekturSchlange, laufOrdnung, parseJobPhases, RANG, warteKarte } from '@/lib/jobPhases'
+import { korrekturSchlange, laufOrdnung, parseJobPhases, RANG, schonDurch, warteKarte } from '@/lib/jobPhases'
 import type { GlobalPhase, JobPhases, Warten } from '@/lib/types'
 
 /** Zwei Zustaende, die der SERVER nie sendet — sie entstehen hier, aus dem Ausbleiben einer
@@ -76,6 +76,9 @@ export function mergePhases(jobs: Job[]): JobPhases {
   // also samt und sonders wieder. Hier oben eingehaengt waere der ganze Fix wirkungslos —
   // und zwar lautlos, weil das Ergebnis dann einfach dem Vorzustand gleicht.
   const korrWarten: Record<string, Warten> = Object.create(null)
+  // Wer den Lauf hinter sich hat (#581). Gesammelt je Job, weil `schonDurch` die ART braucht,
+  // beschnitten erst ganz am Ende — `warten` steht bis dahin nicht fest.
+  const durch = new Set<string>()
   let global: JobPhases['global'] = null
   let allScoped = jobs.length > 0
   let scope: Set<string> | undefined
@@ -148,6 +151,12 @@ export function mergePhases(jobs: Job[]): JobPhases {
       warten[base] = eintrag
     }
     Object.assign(korrWarten, korrekturSchlange(j.phases, j.kind))
+    // Aus `gesehen` und nicht aus `scope`: `schonDurch` verlangt es ohnehin, und eine waehrend
+    // des Laufs hochgeladene Aufnahme steht nie im Bereich (#431). Die Menge ist damit
+    // deckelfest, soweit sie es sein kann — `gesehen` kommt vom Server, `active` (die zweite
+    // Haelfte von `schonDurch`) nicht. Was das offen laesst, faengt der Plattenbeleg in der
+    // Pille ab; die Begruendung steht bei `durch` in `types.ts`.
+    for (const b of j.phases.gesehen ?? []) if (schonDurch(j.phases, j.kind, b)) durch.add(b)
   }
   for (const base of Object.keys(active)) {
     delete perBase[base]
@@ -196,6 +205,20 @@ export function mergePhases(jobs: Job[]): JobPhases {
       : [...bases].sort((a, b) => stabil(a) - stabil(b))
     geordnet.forEach((b, i) => { warten[b] = { art, vor: i } })
   }
+  // ERST HIER beschneiden, nicht beim Sammeln: `warten` ist bis zu dieser Zeile nicht fertig —
+  // `korrWarten` kommt oben erst nach der Job-Schleife dazu.
+  //
+  // Der Schnitt an `warten` ist der Befund, der die erste Fassung dieses Fixes gesperrt hat
+  // (kalter Plan-Leser): eine Aufnahme in der KORREKTUR-Schlange hat ihr `[active]` in der
+  // Transkriptionsphase laengst gedruckt und laeuft gerade nicht — `schonDurch` ist fuer sie
+  // also wahr, obwohl sie sehr wohl wartet. Ohne diese Zeile haette #581 genau die
+  // #442-Auskunft „Wartet auf Korrektur · noch N vor dieser" geloescht, und zwar bei den
+  // Aufnahmen, die sie am laengsten brauchen.
+  //
+  // `active` daneben ist der billige Teil: eine laufende Aufnahme zeigt ohnehin ihre Phase,
+  // aber `durch` soll nichts behaupten, was der Lauf gerade widerlegt.
+  for (const b of Object.keys(warten)) durch.delete(b)
+  for (const b of Object.keys(active)) durch.delete(b)
   // KEINE `bilanz` im Ergebnis, und das ist Absicht: sie gehoert EINEM Lauf (dem URL-Import),
   // und ihr einziger Leser — der Ausgang — bekommt ihn einzeln aus der `onSettled`-Nutzlast.
   // Hier stand ein `bilanz ?? j.phases.bilanz` mit der Begruendung „zwei fetch-Jobs desselben
@@ -215,6 +238,8 @@ export function mergePhases(jobs: Job[]): JobPhases {
     // leeres Objekt waere eine Feldaenderung in JEDER Antwort, fuer einen Fall, den es meist
     // gar nicht gibt (kein Bereich, kein wartender Rest).
     warten: Object.keys(warten).length ? warten : undefined,
+    // Wie `gesehen`/`erreicht`/`warten` nur, wenn wirklich etwas darin steht.
+    durch: durch.size ? durch : undefined,
     active,
     perBase,
   }

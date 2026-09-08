@@ -218,6 +218,41 @@ describe('ProjectWorkspace (Stub)', () => {
     expect(screen.queryByText(/In Warteschlange/)).toBeNull()
   })
 
+  // Der dritte Zwilling, fuer #581 — und aus demselben Grund wie die beiden darueber: `durch`
+  // ist ein optionales Prop und faellt lautlos weg. Die Wache in FileStatusPill.test.tsx
+  // prueft die Komponente, nicht die Verdrahtung; ohne diesen Test hier bliebe der Fix
+  // abklemmbar, ohne dass etwas rot wird (#488-Lehre, drittes Vorkommen an derselben
+  // Komponente).
+  it('reicht durch aus dem Job an die Dateizeile durch (#581)', async () => {
+    vi.mocked(api.listProjects).mockResolvedValue([
+      { name: 'Demo', dateien: 0, fertig: 0, geaendert: 0, active_jobs: [{ id: 'j1', kind: 'transcribe' }] },
+    ])
+    vi.mocked(api.getProjectFiles).mockResolvedValue({ name: 'Demo', files: [
+      // S1 liegt fertig auf der Platte, S2 laeuft noch.
+      { base: 'S1', has_audio: true, has_raw: true, has_edit: false, has_md: false },
+      { base: 'S2', has_audio: true, has_raw: false, has_edit: false, has_md: false },
+    ] })
+    // Das Urteil von S1 ist aus dem gedeckelten Puffer gefallen — es steht nicht in `lines`.
+    // `gesehen` kommt aus der Serverbuchfuehrung und ueberlebt den Deckel; genau daran haengt
+    // die Auskunft.
+    vi.mocked(api.getJob).mockResolvedValue({ status: 'running', gesehen: ['S1', 'S2'],
+      lines: ['[scope] S1\tS2', '[active] S2', '[Demo] -> transkribiere S2 …'] })
+    const { JobProvider } = await import('@/hooks/useActiveJob')
+    render(
+      <MemoryRouter initialEntries={['/p/Demo']}>
+        <JobProvider intervalMs={5}>
+          <ProjektDatenProvider>
+            <EditorBrueckeProvider>
+            <Routes><Route path="/p/:project" element={<ProjectWorkspace />} /></Routes>
+            </EditorBrueckeProvider>
+          </ProjektDatenProvider>
+        </JobProvider>
+      </MemoryRouter>,
+    )
+    expect(await screen.findByText(/Transkribiert — noch nicht korrigiert/)).toBeInTheDocument()
+    expect(screen.queryByText(/In Warteschlange/)).toBeNull()
+  })
+
   it('verfolgt Transkription und Korrektur desselben Projekts nebeneinander', async () => {
     vi.mocked(api.listProjects).mockResolvedValue([
       { name: 'Demo', dateien: 0, fertig: 0, geaendert: 0,

@@ -82,7 +82,7 @@ function ruhe(file: ProjectFile, erreicht?: Erreicht) {
   return null
 }
 
-export function FileStatusPill({ file, active, pct, detail, state, erreicht, jobRunning, inScope, warten, globalPhase, mitText }: {
+export function FileStatusPill({ file, active, pct, detail, state, erreicht, jobRunning, inScope, warten, durch, globalPhase, mitText }: {
   file: ProjectFile
   active?: FilePhase
   pct?: number
@@ -106,6 +106,13 @@ export function FileStatusPill({ file, active, pct, detail, state, erreicht, job
    *  durchgereicht stellte ein Einzeldatei-Korrekturlauf den ganzen Korpus auf „wartet",
    *  weil das Glossar seit #450 korpusweit `[active]` meldet. */
   warten?: Warten
+  /** Der Lauf hat diese Aufnahme hinter sich und nichts wartet mehr auf sie (#581) —
+   *  `phases.durch`, gebildet in `mergePhases`. Nicht am selben Riegel wie `state`/`warten`
+   *  durchgereicht, sondern roh: die Menge ist bereits um `warten` und `active` beschnitten,
+   *  und ein zweiter Filter darueber koennte nur MEHR herausnehmen, also den Wartetext dort
+   *  stehen lassen, wo er falsch ist. Ohne den Plattenbeleg daneben wirkungslos — die
+   *  Begruendung steht bei seiner Auswertung. */
+  durch?: boolean
   globalPhase?: GlobalPhase | null
   /** Ruhezustand mit Wort statt nur Symbol. Die Arbeitsflaeche hat die Breite dafuer,
    *  die 260px-Seitenleiste des Editors nicht. */
@@ -148,7 +155,35 @@ export function FileStatusPill({ file, active, pct, detail, state, erreicht, job
     // Haken pro Zeile faerbt die Liste zu") bleibt damit unangetastet, und ein kuenftiger
     // dritter Wartezustand muesste sich hier ausdruecklich eintragen statt still mitzufahren.
     const nachUrteilWartend = warten?.art === 'correct' && state === 'done'
-    if (jobRunning && betrifft && (!state || nachUrteilWartend)) {
+    // Die Warteauskunft verlangt seit #581 einen BELEG, statt aus der Abwesenheit eines
+    // Urteils zu schliessen. Bei einem langen Lauf faellt die Urteilszeile einer frueh fertig
+    // gewordenen Aufnahme aus dem gedeckelten Puffer (`MAX_JOB_LINES`, an einem echten Lauf
+    // 10.560 Zeilen gemessen — #475): `state` ist dann wieder `undefined`, die Aufnahme steht
+    // aber weiter im Bereich, und ueber einer laengst transkribierten und korrigierten Datei
+    // stand danach bis zum Jobende „In Warteschlange…". Die Anzeige heilte sich nicht selbst.
+    //
+    // ZWEI Belege, und beide sind noetig — der erste kommt aus dem Lauf (`durch`, gebildet in
+    // `mergePhases`: gesehen, nicht aktiv, ohne Wartegrund), der zweite von der PLATTE. Der
+    // Plattenbeleg ist nicht Guertel-und-Hosentraeger, er faengt genau das ab, was `durch`
+    // nicht kann: seine zweite Haelfte (`active`) entsteht aus demselben gedeckelten Puffer,
+    // waehrend `gesehen` aus der Serverbuchfuehrung kommt (`jobs.py` verwirft `active_bases`
+    // ausdruecklich). Faellt die Startzeile einer noch LAUFENDEN Aufnahme heraus, steht sie
+    // faelschlich in `durch` — und ohne den Plattenbeleg zeigte die Pille dann einen
+    // Ruhezustand ueber einer Datei, an der gerade gearbeitet wird. Mit ihm bleibt in genau
+    // dem Fall der bisherige Wartetext stehen, also der Vorzustand.
+    //
+    // Dasselbe gilt fuer einen Lauf OHNE Korrektur: dort hebt kein `apply:` den `fertig`-
+    // Zaehler der Zusammenfassung, der Summenpoll-Waechter laedt die Dateiliste also nie nach
+    // (`useProjektDaten`), `has_raw` bleibt falsch — und der Wartetext bleibt stehen. Keine
+    // Heilung, aber auch kein Rueckschritt; die Alternative waere „Nur Audio — noch nicht
+    // transkribiert" ueber einer transkribierten Datei gewesen, also eine Falschaussage gegen
+    // eine andere getauscht.
+    //
+    // Der Riegel sitzt an DIESER Bedingung und nicht am Etikett weiter unten: im selben Block
+    // steht der `globalPhase`-Zweig, sonst bliebe „Glossar wird erstellt…" ueber der fertigen
+    // Aufnahme stehen.
+    const plattenBeleg = file.has_raw || file.has_md || file.has_edit
+    if (jobRunning && betrifft && (!state || nachUrteilWartend) && !(durch && plattenBeleg)) {
       if (globalPhase && GLOBAL_WAIT[globalPhase]) {
         const gLabel = GLOBAL_WAIT[globalPhase]
         return (

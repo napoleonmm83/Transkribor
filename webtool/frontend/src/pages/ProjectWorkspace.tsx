@@ -316,6 +316,7 @@ export function ProjectWorkspace() {
                       state={state} erreicht={darfZustand ? phases.erreicht?.[f.base] : undefined}
                       jobRunning={running} inScope={darfWarten}
                       warten={darfWarten ? phases.warten?.[f.base] : undefined}
+                      durch={phases.durch?.has(f.base)}
                       globalPhase={running ? (phases.globalPerBase?.[f.base] ?? (phases.scope === undefined ? phases.global : null)) : null} mitText />
                     <DateiMenue project={project!} file={f} aiReason={aiReason} />
                   </div>

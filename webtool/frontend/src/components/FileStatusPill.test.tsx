@@ -83,6 +83,39 @@ describe('FileStatusPill', () => {
     render(<FileStatusPill file={f()} jobRunning inScope mitText />)
     expect(screen.getByText(/In Warteschlange…/)).toBeInTheDocument()
   })
+  it('ein verdraengtes Urteil zeigt den Ruhezustand, nicht den Wartetext (#581)', () => {
+    /* Der Fall, um den es geht. Bei einem langen Lauf faellt die Urteilszeile einer frueh
+       fertig gewordenen Aufnahme aus dem gedeckelten Puffer (MAX_JOB_LINES; an einem echten
+       Lauf sind 10.560 Zeilen gemessen, #475) — `state` ist wieder undefined, die Aufnahme
+       steht aber weiter im Bereich. Vorher stand darueber bis zum Jobende „In Warteschlange…",
+       ohne Selbstheilung. */
+    render(<FileStatusPill file={f({ has_edit: true })} jobRunning inScope mitText durch />)
+    expect(screen.getByText('Fertig')).toBeInTheDocument()
+    expect(screen.queryByText(/Warteschlange/)).toBeNull()
+  })
+  /* Der Fall „steht noch in der Korrektur-Schlange" steht BEWUSST nicht hier: `durch` kommt
+     dort gar nicht erst an, weil `mergePhases` jede Aufnahme mit `warten`-Eintrag heraus-
+     nimmt (Test „durch nimmt heraus, wer noch in der Korrektur-Schlange steht" in
+     useActiveJob.test.tsx). Die Regel ein zweites Mal in die Pille zu schreiben waere der
+     zweite Ort fuer dieselbe Regel — und in der Seitenleiste ohnehin wirkungslos, die reicht
+     `warten` absichtlich nicht durch (FileRow-Dateikopf). */
+  it('… und NICHT, solange die Platte nichts vorweist (#581)', () => {
+    /* Die zweite Haelfte von `schonDurch` (`active`) entsteht aus demselben gedeckelten Puffer
+       wie das Urteil — `jobs.py` liefert `active_bases` bewusst nicht aus. Faellt die
+       Startzeile einer noch LAUFENDEN Aufnahme heraus, steht sie faelschlich in `durch`. Ohne
+       diesen Riegel zeigte die Pille dann einen Ruhezustand ueber einer Datei, an der gerade
+       gearbeitet wird. Derselbe Riegel deckt den Lauf ohne Korrektur ab, wo der
+       Summenpoll-Waechter die Dateiliste nie nachlaedt. */
+    render(<FileStatusPill file={f({ has_audio: true, has_raw: false })} jobRunning inScope mitText durch />)
+    expect(screen.getByText(/In Warteschlange…/)).toBeInTheDocument()
+    expect(screen.queryByText(/Nur Audio/)).toBeNull()
+  })
+  it('… und NICHT ohne durch — die Abwesenheit eines Urteils allein genuegt nicht (#581)', () => {
+    /* Die noch gar nicht begonnene Aufnahme: im Bereich, kein Urteil, aber der Lauf hat sie nie
+       angefasst. Sie behaelt ihren Wartetext — die sichere Richtung aus #370/#442. */
+    render(<FileStatusPill file={f({ has_edit: true })} jobRunning inScope mitText />)
+    expect(screen.getByText(/In Warteschlange…/)).toBeInTheDocument()
+  })
   it('eine globale Phase schlaegt die Wartezeile — sie sagt mehr als eine Zahl', () => {
     render(<FileStatusPill file={f()} jobRunning inScope mitText globalPhase="glossary"
       warten={{ art: 'correct', vor: 2 }} />)
