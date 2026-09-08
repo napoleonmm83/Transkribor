@@ -1857,12 +1857,13 @@ def test_gelungener_download_laesst_die_vormerkung_offen(monkeypatch):
 
 
 def _durch_den_endpunkt(monkeypatch, cmd, project):
-    """`fetch_urls` mit ECHTEM `jobs.start`/`when_done` fahren, nur das Kommando getauscht.
+    """`fetch_urls` mit ECHTEM `jobs.start` fahren, nur das Kommando getauscht.
 
-    Der Punkt ist, was hier NICHT gefaelscht wird: die beiden Tests darueber bauen ihr
-    `when_done`-Lambda selbst und messen damit `_fetch_nachlauf_ausgang` — nicht die Stelle in
-    `fetch_urls`, die es anhaengt. Genau die blieb ungeprueft (#488-Lehre, „die VERDRAHTUNG
-    braucht eigene Tests").
+    Der Punkt ist, was hier NICHT gefaelscht wird: die beiden Tests darueber uebergeben ihr
+    `sonst` selbst und messen damit die Regel in `jobs._run` — nicht die Stelle in
+    `fetch_urls`, die den Rueckruf mitgibt. Genau die blieb ungeprueft (#488-Lehre, „die
+    VERDRAHTUNG braucht eigene Tests"). Bis #579 hing sie an `when_done`; der Vertrag ist
+    derselbe geblieben, der Traeger nicht.
     """
     from webtool import app as app_mod
     echt = jobs.start
@@ -1883,16 +1884,16 @@ def _bis(pruef, frist=15.0):
 def test_endpunkt_haengt_seinen_ausgangs_rueckruf_an_den_RICHTIGEN_job(monkeypatch):
     """Die Verdrahtung selbst — und sie hatte keinen Sensor (gegnerischer Pruefer, F1).
 
-    Zwei Mutationen liessen alle 46 Tests des PR gruen: eine falsche Kennung in
-    `jobs.when_done(...)` und eine falsche in `_fetch_nachlauf_ausgang(...)`. Die erste ist
-    die schlimmere — `when_done` liefert dann False, die Sofortauswertung findet einen Job im
-    Zustand `running` (oder gar keinen), liest das als „nicht done" und verwirft JEDE
-    Import-Nummer, bevor die Antwort beim Browser ist. Das Feature waere tot und die Suite
-    gruen.
+    Zwei Mutationen liessen damals alle 46 Tests des PR gruen: eine falsche Kennung in
+    `jobs.when_done(...)` und eine falsche in `_fetch_nachlauf_ausgang(...)`. BEIDE sind seit
+    #579 nicht mehr formulierbar — die Kennung kommt gar nicht mehr vor, der Rueckruf liegt
+    ab `jobs.start` im Datensatz. Der Test hat trotzdem einen Sensor (die Mutation „der
+    Endpunkt uebergibt kein `sonst`" macht ihn rot); seine urspruengliche Begruendung zeigt
+    aber auf eine Mechanik, die es nicht mehr gibt, und das gehoert hier hin statt in eine
+    stille Loeschung. (Gegnerischer Pruefer, F5.)
 
-    Deshalb misst dieser Test den ZUSTAND WAEHREND des Laufs: solange der Download laeuft,
-    muss die Nummer offen sein. Danach die Gegenrichtung ueber einen Abbruch — der Rueckruf
-    haengt am richtigen Job, also schliesst er sie.
+    Was er MISST, ist unveraendert: den ZUSTAND WAEHREND des Laufs — solange der Download
+    laeuft, muss die Nummer offen sein — und danach die Gegenrichtung ueber einen Abbruch.
     """
     r = _durch_den_endpunkt(monkeypatch, [sys.executable, "-c", "import time; time.sleep(5)"],
                             "P_verdrahtung")
@@ -1909,10 +1910,12 @@ def test_endpunkt_haengt_seinen_ausgangs_rueckruf_an_den_RICHTIGEN_job(monkeypat
 def test_endpunkt_laesst_die_nummer_offen_wenn_der_download_gelingt(monkeypatch):
     """Die Gegenprobe durch den ENDPUNKT, nicht durch ein selbstgebautes Lambda.
 
-    Bei `done` darf der Rueckruf nichts tun, und `then` muss die Nummer uebernehmen. Ohne
-    diesen Fall bliebe die zweite Mutation aus F1 unentdeckt: eine falsche Kennung im
-    `_fetch_nachlauf_ausgang`-Aufruf verwirft dann in Schritt 1, und bei belegtem Slot steht
-    die Nummer fuer die Lebensdauer des Blockers auf `verworfen`.
+    Bei `done` darf `sonst` nichts tun, und `then` muss die Nummer uebernehmen. Die Mutation,
+    gegen die dieser Fall urspruenglich stand, war eine falsche Kennung im
+    `_fetch_nachlauf_ausgang`-Aufruf (verwirft dann in Schritt 1, bei belegtem Slot steht die
+    Nummer fuer die Lebensdauer des Blockers auf `verworfen`). Die gibt es seit #579 nicht
+    mehr; die Eigenschaft schon — sie liegt jetzt in der Fallunterscheidung von `jobs._run`,
+    und dieser Test ist die einzige Stelle, die sie DURCH DEN ENDPUNKT misst.
     """
     from webtool import app as app_mod
     gerufen = []
@@ -1933,11 +1936,12 @@ def _kette_mit_weitergabe(project, folge_cmd, then_fn=None, sonst_fn=None):
     Deterministisch OHNE Schlaf und ohne Monkeypatch am Mechanismus: `when_done` haengt den
     Starter in `next_runs`, und die laufen in `jobs._run` Schritt 1 — im selben Faden,
     unmittelbar vor Schritt 2. Damit der Folge-Job vorher wieder aus `_active` faellt,
-    muesste sein ganzer Subprozess zwischen zwei Anweisungen desselben Fadens hoch- und
-    wieder herunterfahren; das ist keine knappe Frist, sondern strukturell ausgeschlossen.
-    Die Weitergabe wird trotzdem in jedem Test EINZELN belegt — ohne diese Positivkontrolle
-    laeuft `then` einfach lokal auf Job 1, und die Zusicherung waere auch ohne den Fix
-    erfuellt.
+    muesste sein ganzer Subprozess dazwischen hoch- und wieder herunterfahren: rund 40 ms
+    gegen Mikrosekunden. Das ist ein ZEITargument, kein struktureller Ausschluss — hier stand
+    zuerst das Gegenteil (gegnerischer Pruefer, F6). Es traegt trotzdem, und wenn es je
+    umfaellt, ist der Ausgang kein falsches Gruen, sondern ein roter Test: die Weitergabe
+    wird in JEDEM Test einzeln belegt. Ohne diese Positivkontrolle liefe `then` einfach lokal
+    auf Job 1, und die Zusicherung waere auch ohne den Fix erfuellt.
     """
     jid1, started = jobs.start(project, [sys.executable, "-c", "pass"], cwd=None, kind="fetch",
                                then=then_fn, sonst=sonst_fn)
@@ -1958,6 +1962,80 @@ def _kette_mit_weitergabe(project, folge_cmd, then_fn=None, sonst_fn=None):
 def _uebernommen(folge_jid, fn):
     with jobs._lock:
         return fn in jobs._jobs.get(folge_jid, {}).get("then_ueber", [])
+
+
+def _kette_ueber_drei_glieder(project, drittes_cmd, then_fn, sonst_fn):
+    """Wie oben, nur EIN Glied weiter — und genau darauf kommt es an.
+
+    Beim ersten Weiterreichen sind `then_ueber`/`sonst_ueber` des Absenders per Konstruktion
+    leer; die Zeilen, die eine SCHON GEERBTE Liste weitergeben, laufen dort also durch nichts
+    hindurch. Erst das zweite Glied uebt sie aus. Ohne diesen Aufbau bleibt „das geerbte
+    `then` beim Weiterreichen fallenlassen" gruen — derselbe Schaden wie #579, ein Glied
+    weiter (gegnerischer Pruefer, F1).
+    """
+    jid1, jid2 = _kette_mit_weitergabe(
+        project, [sys.executable, "-c", "import time; time.sleep(2)"],
+        then_fn=then_fn, sonst_fn=sonst_fn)
+    drei = {}
+
+    def starte_drei():
+        drei["jid"], drei["started"] = jobs.start(project, drittes_cmd, cwd=None, kind="fetch")
+
+    assert jobs.when_done(jid2, starte_drei) is True, "Job 2 war schon terminal"
+    r2 = _wait(jid2, timeout=30)
+    assert r2["status"] == "done", r2["status"]
+    assert _bis(lambda: drei.get("started") is True), "Job 3 ist nicht angelaufen"
+    assert _bis(lambda: _uebernommen(drei["jid"], then_fn)), \
+        "das GEERBTE `then` wurde beim zweiten Weiterreichen fallengelassen"
+    return jid1, jid2, drei["jid"]
+
+
+def test_geerbtes_then_ueberlebt_das_ZWEITE_weiterreichen():
+    """Drei Glieder: Job 1 gelingt, Job 2 erbt und gelingt, Job 3 erbt und scheitert.
+
+    Die Zusicherung ist dieselbe wie bei zwei Gliedern — die geschuldete Arbeit wird
+    nachgeholt —, aber sie laeuft ueber andere Zeilen: das Weiterreichen liest hier eine
+    NICHT leere Erbschaft. Zusaetzlich geprueft: genau EINMAL. Faellt das Leeren nach dem
+    Weiterreichen weg, laeuft der Rueckruf zweimal, und aus einem Import werden zwei
+    Whisper-Laeufe.
+    """
+    nummer = jobs.vormerken("P_kette_3a", "transcribe")
+    laeufe = []
+
+    def then_fn():
+        laeufe.append("then")
+        jobs._vorgang_setzen(nummer, "gestartet", job_id="nachlauf")
+
+    _, _, jid3 = _kette_ueber_drei_glieder(
+        "P_kette_3a", [sys.executable, "-c", "raise SystemExit(7)"],
+        then_fn=then_fn, sonst_fn=lambda: jobs.vorgang_verwerfen(nummer))
+    r3 = _wait(jid3, timeout=30)
+    assert r3["status"] == "error", r3["status"]
+    assert _bis(lambda: laeufe == ["then"]), laeufe
+    time.sleep(0.3)          # dieselbe Frist wie oben: auf ein AUSBLEIBEN kann man nur warten
+    assert laeufe == ["then"], laeufe
+    assert jobs.vorgang(nummer)["status"] == "gestartet"
+
+
+def test_geerbtes_sonst_ueberlebt_das_ZWEITE_weiterreichen():
+    """Dieselbe Kette, aber Job 3 wird ABGEBROCHEN.
+
+    Wandert die geerbte Quittung beim zweiten Weiterreichen nicht mit, bleibt die Nummer fuer
+    immer `vorgemerkt` — genau der Leckweg, den der Kommentar in `_prune_locked` seit diesem
+    PR als geschlossen fuehrt.
+    """
+    nummer = jobs.vormerken("P_kette_3b", "transcribe")
+    laeufe = []
+    _, _, jid3 = _kette_ueber_drei_glieder(
+        "P_kette_3b", [sys.executable, "-c", "import time; time.sleep(30)"],
+        then_fn=lambda: laeufe.append("then"),
+        sonst_fn=lambda: jobs.vorgang_verwerfen(nummer))
+    assert jobs.cancel(jid3) is True
+    r3 = _wait(jid3, timeout=30)
+    assert r3["status"] == "cancelled", r3["status"]
+    assert _bis(lambda: jobs.vorgang(nummer)["status"] == "verworfen"), \
+        "die geerbte Quittung ist beim zweiten Weiterreichen verlorengegangen"
+    assert laeufe == [], "der Abbruch hat trotzdem einen Nachlauf gestartet"
 
 
 def test_weitergereichtes_then_laesst_keine_vormerkung_zurueck():

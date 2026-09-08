@@ -467,6 +467,14 @@ def request(project: str, cmd: list, cwd, kind: str, then=None, base: str = None
     Nummer, die der Vormerkung gehoert und unter der die Oberflaeche die Kennung des
     Nachlaufs erfaehrt, sobald er existiert (#381).
 
+    `sonst` wird nur DURCHGEREICHT — an `start` und durch die Rekursion an `rerun`. Es hat
+    heute so wenig einen Produktivaufrufer wie `then` (`grep -rn "jobs.request(" webtool/*.py`
+    → zwei Aufrufer, keiner mit `then=` oder `sonst=`); es steht hier, damit ein kuenftiger
+    Aufrufer sein Gegenstueck nicht STILL verliert. Der Preis ist benannt und NACHGEZAEHLT:
+    **elf** Test-Attrappen tragen den Parameter, ohne ihn zu pruefen — `grep -c "sonst=None"`
+    ueber `test_api.py` (6) und `test_jobs.py` (5). Der gegnerische Pruefer nannte acht (F4);
+    die Richtung stimmte, die Zahl nicht.
+
     `vorgang` als PARAMETER ist der Weg durch die Rekursion: `rerun` ruft `request` erneut,
     und ist der Slot dann wieder belegt, entstuende sonst eine ZWEITE Nummer fuer denselben
     Schluessel — die erste, die die Oberflaeche kennt, bliebe ewig `vorgemerkt`. Am echten
@@ -645,15 +653,39 @@ def _run(jid, cmd, cwd, env):
         #
         #   Fehler   -> nachholen. Der Download des Vorgaengers liegt auf der Platte; ihn
         #               liegenzulassen, weil ein FREMDER Folgeauftrag scheiterte, waere
-        #               genau der Verlust aus #579.
-        #   Abbruch  -> zuruecknehmen. „Ein Abbruch ist eine Entscheidung" — dieselbe Regel,
-        #               die `request.rerun` fuer die Vormerkung schon trifft, und derselbe
-        #               Grund: `cancel_all()` bricht beim Herunterfahren ALLE Jobs ab, ein
-        #               hier gestarteter Nachlauf waere eine Waise mit belegter GPU.
+        #               genau der Verlust aus #579. WAS DAS NEU ERLAUBT: `cancel_all()` fasst
+        #               nur Jobs mit Status `running` an — ein Job, der gerade `error` wurde
+        #               und hier steht, ist keiner mehr. Sein geerbtes `then` kann also NACH
+        #               dem Herunterfahren noch einen Whisper-Lauf starten. Sehr schmal (es
+        #               braucht die ganze Kette PLUS das Beenden in genau diesem Moment) und
+        #               keine neue Klasse: `request.rerun` startet auf demselben Weg schon
+        #               seit #417 nach einem Fehlschlag neu. (Gegnerischer Pruefer, F9.)
+        #   Abbruch  -> zuruecknehmen (Entscheidung Marcus, 2026-09-08). „Ein Abbruch ist eine
+        #               Entscheidung" steht auch in `request.rerun` — der Verweis ist aber nur
+        #               zur HAELFTE ein Praezedenzfall, und die andere Haelfte gehoert genannt:
+        #               `rerun` unterdrueckt den Nachlauf ausschliesslich bei GLEICHEM Projekt
+        #               UND gleicher Art und sagt fuer alles andere ausdruecklich, ein Abbruch
+        #               sei „eine fremde Nachricht". Hier gilt die erste Haelfte (der
+        #               Empfaenger ist per `_active`-Schluessel dasselbe Paar), die zweite
+        #               spricht dagegen: das geerbte `then` gehoert einem ANDEREN Import.
+        #               GETRAGENER PREIS, benannt statt versteckt: bricht der Nutzer den
+        #               zweiten Import ab, bleibt die schon geladene Tonspur des ersten
+        #               unverarbeitet liegen, bis irgendetwas den naechsten Lauf ausloest —
+        #               ohne eine Zeile darueber. Dagegen steht der Herunterfahr-Fall:
+        #               `cancel_all()` bricht ALLE laufenden Jobs ab, ein hier gestarteter
+        #               Nachlauf waere eine Waise mit belegter GPU. (Gegnerischer Pruefer, F2.)
         sonst_callbacks = [] if erfolg else list(r.get("sonst", []))
         ueber_then = [] if abgebrochen else list(r.get("then_ueber", []))
         ueber_sonst = list(r.get("sonst_ueber", [])) if abgebrochen else []
         # Fuer die Weitergabe unten, ausgangsunabhaengig: sie erbt die Quittung als GANZES.
+        #
+        # DASS DIESER SCHNAPPSCHUSS UNTEN NOCH GILT, haengt an einer Invariante, die nirgends
+        # sonst steht (gegnerischer Pruefer, F7): `_run_proc`s `finally` nimmt den Job aus
+        # `_active`, BEVOR dieser Block laeuft — und Schritt 2 eines fremden Jobs schreibt nur
+        # in Datensaetze, die in `_active` stehen. Wer einen Job kuenftig bis zum Ende der
+        # Rueckrufe in `_active` HAELT (naheliegend, damit `betrifft()` die Nachlaufphase
+        # abdeckt — die Richtung von #451), verliert damit still jeden hier angehaengten
+        # Rueckruf. Kein Test bekaeme das rot.
         alle_sonst = list(r.get("sonst", [])) + list(r.get("sonst_ueber", []))
         project = r["project"]
         kind = r["kind"]
@@ -687,8 +719,13 @@ def _run(jid, cmd, cwd, env):
                 # reicht dasselbe `then`-Objekt an den Folge-Job weiter, das steht dort
                 # also schon. GETRAGENE GRENZE: scheitert genau DER Job, faellt das `then`
                 # mit ihm (es liegt in seiner EIGENEN Liste, nicht in `then_ueber`).
-                # Heute unerreichbar — `request(then=…)` hat keinen Produktivaufrufer —,
-                # und wer einen baut, faengt hier an.
+                # UND SIE SPALTET DAS PAAR, was schlimmer ist als der Satz darueber: greift
+                # die Dedupe fuer das `then`, wandert dessen `sonst` trotzdem nach
+                # `sonst_ueber` (die Schleife darunter kennt die Dedupe des `then` nicht).
+                # Endet der Empfaenger dann mit `error`, feuert KEINES von beiden — das ist
+                # #579 durch diese Tuer. Heute unerreichbar (`request(then=…)` hat keinen
+                # Produktivaufrufer); wer einen baut, repariert BEIDE Haelften, nicht nur die
+                # `then`-Haelfte. (Gegnerischer Pruefer, F8.)
                 for fn in then_callbacks + ueber_then:
                     if fn not in folge["then"] and fn not in folge["then_ueber"]:
                         folge["then_ueber"].append(fn)

@@ -84,5 +84,29 @@
     "nach": "        if (folge_jid or hat_pending) and folge_jid != jid:",
     "rot": ["test_fehlschlag_holt_das_uebernommene_then_NACH_statt_es_weiterzureichen"],
     "gruen": ["test_weitergereichtes_then_laesst_keine_vormerkung_zurueck"]
+  },
+  {
+    "id": "W11 das GEERBTE `then` wird beim zweiten Weiterreichen fallengelassen — #579, ein Glied weiter",
+    "datei": "webtool/jobs.py",
+    "von": "                for fn in then_callbacks + ueber_then:",
+    "nach": "                for fn in then_callbacks:",
+    "rot": ["test_geerbtes_then_ueberlebt_das_ZWEITE_weiterreichen"],
+    "gruen": ["test_weitergereichtes_then_laesst_keine_vormerkung_zurueck"]
+  },
+  {
+    "id": "W12 nach dem Weiterreichen wird die geerbte Liste nicht geleert — ein Import wird zu zwei Whisper-Laeufen",
+    "datei": "webtool/jobs.py",
+    "von": "                then_callbacks = []\n                ueber_then = []",
+    "nach": "                then_callbacks = []",
+    "rot": ["test_geerbtes_then_ueberlebt_das_ZWEITE_weiterreichen"],
+    "gruen": ["test_weitergereichtes_then_laesst_keine_vormerkung_zurueck"]
+  },
+  {
+    "id": "W13 die GEERBTE Quittung wandert beim zweiten Weiterreichen nicht mit — Leck durch dieselbe Tuer",
+    "datei": "webtool/jobs.py",
+    "von": "        alle_sonst = list(r.get(\"sonst\", [])) + list(r.get(\"sonst_ueber\", []))",
+    "nach": "        alle_sonst = list(r.get(\"sonst\", []))",
+    "rot": ["test_geerbtes_sonst_ueberlebt_das_ZWEITE_weiterreichen"],
+    "gruen": ["test_abgebrochener_empfaenger_holt_das_uebernommene_then_NICHT_nach"]
   }
 ]
