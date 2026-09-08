@@ -313,9 +313,13 @@ def vorgang_verwerfen(nummer: str) -> bool:
     entferntem Riegel bleiben alle Flusstests gruen, rot wird nur der Test, der
     `_vorgang_setzen` von Hand ruft. Die Begruendung hat sich mit #579 GEAENDERT, das
     Ergebnis nicht: der einzige heutige Aufrufer, der ein `gestartet` treffen koennte, ist das
-    `sonst` des URL-Imports — und `_run` fuehrt `then` und `sonst` desselben Auftrags nie
-    beide aus. Vorher trug diese Stelle die Reihenfolge zwischen `next_runs` (Schritt 1) und
-    `then` (Schritt 3) als Grund; beides sind Aussagen ueber `_run`, aber nicht dieselbe.
+    `sonst` des URL-Imports — und `_run` fuehrt das `sonst` eines GELUNGENEN `then` nie aus.
+    Hier stand kurz „nie beide aus", und das war schaerfer als der Code (CodeRabbit-Bot):
+    nach einem WERFENDEN `then` laufen sehr wohl beide, und GENAU DORT ist der Riegel
+    tragend — ein `request`, das unterwegs schon durchkam, hat die Nummer dann bereits auf
+    `gestartet` gesetzt. Vorher trug diese Stelle die Reihenfolge zwischen `next_runs`
+    (Schritt 1) und `then` (Schritt 3) als Grund; alles drei sind Aussagen ueber `_run`, aber
+    nicht dieselbe.
 
     EINE ZWEITE FASSUNG DIESES ABSATZES WAR SCHAERFER ALS DER CODE und ist hier korrigiert
     statt gestrichen: sie schrieb „nur `then` setzt die Nummer auf `gestartet` (ueber

@@ -1415,7 +1415,7 @@ def test_vorgemerkter_nachlauf_laeuft_auch_nach_einem_GESCHEITERTEN_lauf():
 
     def zaehl_start(project, cmd, cwd, kind, then=None, env=None, base=None, bases=None, sonst=None):
         jid, started = orig_start(project, cmd, cwd, kind, then=then, env=env,
-                                  base=base, bases=bases)
+                                  base=base, bases=bases, sonst=sonst)
         # NUR das eigene Projekt zaehlen: `jobs.start` ist ein Modulglobal und `_jobs`/`_pending`
         # sind prozessweiter Zustand — ein Nachhall-Thread eines frueheren Tests, der in diesem
         # Fenster startet, landete sonst im Zaehler. Die Asserts sind strikt, der Fehlerfall
@@ -1456,7 +1456,7 @@ def test_abbruch_startet_KEINEN_nachlauf():
 
     def zaehl_start(project, cmd, cwd, kind, then=None, env=None, base=None, bases=None, sonst=None):
         jid, started = orig_start(project, cmd, cwd, kind, then=then, env=env,
-                                  base=base, bases=bases)
+                                  base=base, bases=bases, sonst=sonst)
         # NUR das eigene Projekt zaehlen: `jobs.start` ist ein Modulglobal und `_jobs`/`_pending`
         # sind prozessweiter Zustand — ein Nachhall-Thread eines frueheren Tests, der in diesem
         # Fenster startet, landete sonst im Zaehler. Die Asserts sind strikt, der Fehlerfall
@@ -1524,7 +1524,7 @@ def test_abbruch_hinterlaesst_keine_tote_vormerkung():
 
     def zaehl_start(project, cmd, cwd, kind, then=None, env=None, base=None, bases=None, sonst=None):
         jid, started = orig_start(project, cmd, cwd, kind, then=then, env=env,
-                                  base=base, bases=bases)
+                                  base=base, bases=bases, sonst=sonst)
         # NUR das eigene Projekt zaehlen: `jobs.start` ist ein Modulglobal und `_jobs`/`_pending`
         # sind prozessweiter Zustand — ein Nachhall-Thread eines frueheren Tests, der in diesem
         # Fenster startet, landete sonst im Zaehler. Die Asserts sind strikt, der Fehlerfall
@@ -1602,7 +1602,7 @@ def test_abbruch_eines_FREMDEN_projekts_verwirft_den_eigenen_nachlauf_nicht():
 
     def zaehl_start(project, cmd, cwd, kind, then=None, env=None, base=None, bases=None, sonst=None):
         jid, started = orig_start(project, cmd, cwd, kind, then=then, env=env,
-                                  base=base, bases=bases)
+                                  base=base, bases=bases, sonst=sonst)
         if started and project in ("Q_fremd", "P_eigen"):
             gestartet.append(project)
             jids.append(jid)
@@ -1851,6 +1851,11 @@ def test_gelungener_download_laesst_die_vormerkung_offen(monkeypatch):
     r = _wait(jid, timeout=30)
     assert r["status"] == "done", r["status"]
     assert _bis(lambda: gelaufen == ["then"]), "der then-Rueckruf ist nicht gelaufen"
+    # Dieselbe Frist wie in `test_gelungener_empfaenger_laesst_das_uebernommene_sonst_liegen`,
+    # und aus demselben Grund: `_bis` kehrt zurueck, sobald `then` gelaufen ist — `sonst`
+    # kaeme Mikrosekunden spaeter. Ohne die Frist waere die Mutation „Quittung auch nach
+    # Erfolg" sprunghaft gruen statt rot (CodeRabbit-Bot).
+    time.sleep(0.3)
     assert jobs.vorgang(nummer)["status"] == "vorgemerkt", \
         "`sonst` hat bei Erfolg mitgefeuert — dann verwirft es die Nummer, auf die der " \
         "Browser gerade wartet"
