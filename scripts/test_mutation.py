@@ -357,6 +357,13 @@ def test_auszug_nimmt_das_ENDE_und_deckelt():
     aus = "\n".join(f"zeile {i}" for i in range(50))
     auszug = mutation.ausgabe_auszug(aus, zeilen=3)
     assert auszug == ["zeile 47", "zeile 48", "zeile 49"]
+    # UND einmal OHNE Argument — sonst ist der produktive Default ungeprueft, und genau den
+    # nehmen die Abbruchzweige (CodeRabbit-Bot, minor). Ein danebenliegender Default waere
+    # mit dem Aufruf oben unsichtbar geblieben: derselbe Waechter, der nur seinen eigenen
+    # Parameter prueft.
+    ohne = mutation.ausgabe_auszug(aus)
+    assert len(ohne) == mutation.AUSZUG_ZEILEN
+    assert ohne[0] == f"zeile {50 - mutation.AUSZUG_ZEILEN}" and ohne[-1] == "zeile 49"
 
 
 def test_auszug_benennt_die_leere_ausgabe():
