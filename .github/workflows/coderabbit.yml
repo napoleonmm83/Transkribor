@@ -1,0 +1,201 @@
+name: CodeRabbit
+
+# WARUM EIN EIGENER WORKFLOW UND NICHT EIN ACHTER JOB IN `test.yml` — das ist der Kern
+# dieser Datei, und der erste Entwurf hatte es falsch.
+#
+# `test.yml` gruppiert PR-Laeufe ueber `github.ref` mit `cancel-in-progress: true`. Der
+# Ablauf dahinter, Schritt fuer Schritt:
+#   1. `gh pr create` -> `opened` -> Lauf A startet, das CLI-Review beginnt (es dauert
+#      regelmaessig ueber 10 Minuten).
+#   2. Ein weiterer Push auf den Zweig — in diesem Repo der NORMALFALL: die letzten sechs
+#      PRs hatten 10/10/3/12/1/8 Commits, und der erste Nachschub kam nach 21/12/14/15/12
+#      Minuten (#595, #594, #592, #590, #587).
+#   3. `synchronize` -> Lauf B, gleiche Gruppe -> **Lauf A wird abgebrochen, das Review
+#      mittendrin.**
+#   4. Lauf B faehrt den Job nicht (er laeuft nur bei `opened`/`ready_for_review`).
+#   5. Ergebnis: kein Review, kein Kommentar, KEINE rote Farbe — in Lauf A steht
+#      „cancelled", in Lauf B „skipped". Die Kontingent-Einheit ist trotzdem verbraucht.
+#
+# Das ist genau die Ausfallart, gegen die dieser Riegel gebaut ist — still gruen, ohne
+# geprueft zu haben —, nur entsteht sie nicht im Skript, sondern aus seiner Beruehrung mit
+# dem vorhandenen `concurrency`-Block. Der Riegel kann sie nicht sehen: er laeuft gar nicht
+# zu Ende. Gefunden von zwei Review-Subagenten unabhaengig voneinander.
+#
+# `concurrency` auf JOB-Ebene hilft nicht: der Workflow-Abbruch trifft den ganzen Lauf.
+# Deshalb eine eigene Datei mit eigener Gruppe und `cancel-in-progress: false`.
+#
+# NEBENGEWINN, und er ist der Grund, warum diese Loesung billiger ist als sie aussieht:
+# `test.yml` musste fuer den achten Job seine Typenliste um `ready_for_review` erweitern.
+# Das haette JEDEM „Entwurf wird bereit" die volle Matrix ein zusaetzliches Mal beschert
+# (Python x2, Frontend, Electron x2, Skripte x3, Ruff, Mypy, Mutationsproben) und dabei
+# einen laufenden `synchronize`-Lauf abgebrochen. Mit der eigenen Datei bleibt `test.yml`
+# Byte fuer Byte wie auf master.
+
+on:
+  pull_request:
+    types: [opened, ready_for_review]
+
+# Eigene Gruppe je PR, und ausdruecklich OHNE Abbruch: ein Review, das durchlaeuft, ist
+# wertvoller als das neueste. Mehr als zwei Laeufe je PR kann es hier ohnehin nicht geben
+# (`opened` und `ready_for_review` treten je hoechstens einmal auf).
+concurrency:
+  group: coderabbit-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  review:
+    name: CodeRabbit
+    runs-on: ubuntu-latest
+    # `head.repo.full_name == github.repository` statt `head.repo.fork == false`: bei einem
+    # geloeschten Head-Repository ist `fork` null, und GitHubs lockerer Vergleich macht aus
+    # `null == false` ein WAHR. Der Namensvergleich hat diesen Rand nicht.
+    #
+    # `draft == false` ist keine Kosmetik: `opened` feuert AUCH fuer einen Entwurfs-PR.
+    # Ohne diese Zeile kostet der uebliche Ablauf (als Entwurf oeffnen, spaeter freigeben)
+    # ZWEI Kontingent-Einheiten und postet zwei Kommentare. `.coderabbit.yaml` hat fuer den
+    # Bot aus demselben Grund `drafts: false`.
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository
+      && github.event.pull_request.draft == false
+    # BEIDE Zeilen, und das ist kein Zierrat: die GitHub-Doku sagt woertlich „If you specify
+    # the access for any of these permissions, all of those that are not specified are set
+    # to none". Ein Block nur mit `pull-requests` naehme dem Checkout sein Leserecht.
+    permissions:
+      contents: read
+      pull-requests: write
+    timeout-minutes: 30        # ein CLI-Lauf lag hier schon ueber 10 min
+    steps:
+      # SHA-GEPINNT, und NUR in diesem Workflow. Das ist bewusst inkonsistent zum Rest des
+      # Repos (`@v7` ueberall sonst) und hat einen Grund: dies ist der einzige Job, der ein
+      # GEHEIMNIS sieht. Ein beweglicher Tag heisst, dass der Inhalt sich unter uns aendern
+      # kann — anderswo trifft das einen Wegwerf-Laeufer ohne Geheimnis, hier nicht.
+      # zizmor nennt die Regel `unpinned-uses`.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          fetch-depth: 0            # `--base-commit` braucht die Historie
+          # Ohne diese Zeile liegt der GITHUB_TOKEN (hier mit `pull-requests: write`) in
+          # `.git/config` DES CHECKOUTS, den das heruntergeladene Programm liest. Praezedenz
+          # im Repo: `release.yml` setzt es an zwei Stellen aus genau diesem Grund.
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7
+        with:
+          python-version: '3.13'
+
+      # BEWUSST OHNE `curl … install.sh | sh`. Das Installationsskript wird bei jedem Lauf
+      # ungepinnt geladen und ausgefuehrt und prueft weder Pruefsumme noch Signatur (im
+      # Skript nachgelesen) — in einem Job, der ein Geheimnis sieht. Stattdessen: das
+      # gepinnte Artefakt, gegen einen selbst gemessenen Hash geprueft.
+      #
+      # Die Fassung traegt KEIN `v`: `releases/v0.7.6/…` antwortet 404, `releases/0.7.6/…`
+      # antwortet 206 (beides gemessen). Der Header des Installationsskripts nennt `v1.2.3`
+      # und ist fuer das heutige Release-Layout falsch — wer ihn abschreibt, baut einen Job,
+      # der an der Installation stirbt.
+      - name: CodeRabbit-CLI (gepinnt, mit Pruefsumme)
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/cr.zip https://cli.coderabbit.ai/releases/0.7.6/coderabbit-linux-x64.zip
+          echo "853a1727609ab0ff1f56863fa6de7acf3de593a6dc1bd7f91a32f11c5724ffc9  /tmp/cr.zip" | sha256sum -c -
+          unzip -q -o /tmp/cr.zip -d /tmp/cr
+          chmod +x /tmp/cr/coderabbit
+          /tmp/cr/coderabbit --version
+
+      # DIE ZUORDNUNG DER RUECKGABECODES IST DER KERN DIESES JOBS:
+      #   rc 0  geprueft, keine Befunde        -> gruen
+      #   rc 1  geprueft, Befunde da           -> gruen, Kommentar an den PR
+      #   rc 3  Kontingent erschoepft          -> gruen, WARNUNG + Kommentar
+      #   rc 2  KONNTE NICHT URTEILEN          -> ROT
+      #   sonst ausserhalb des Vertrags        -> ROT
+      #
+      # DER LETZTE ZWEIG IST DER WICHTIGSTE, und er hat gefehlt. Die erste Fassung stand als
+      # zwei `if` ohne `else` da — und nach zwei falschen `if` ist der Rueckgabewert des
+      # Schritts 0. Damit endeten 127 (Interpreter nicht ausfuehrbar), 137 (OOM-Kill), 139
+      # (Segfault) und 143 (SIGTERM) alle GRUEN, ohne eine Zeile im Protokoll. Das ist
+      # woertlich die Klasse aus #588 (`max(0, -9)` = 0), nur in bash statt in Python: der
+      # Riegel gegen das eigene Schweigen fehlte ausgerechnet an der letzten
+      # Uebersetzungsstelle. Ein `case` mit `*)` hat diesen Rand nicht.
+      #
+      # `set -e` ist hier AUS: der Riegel meldet sein Urteil ueber den Rueckgabecode, ein
+      # `-e` risse den Schritt vor der Auswertung ab.
+      #
+      # KEIN `GH_TOKEN` in diesem Schritt. Er gehoert in den naechsten — sonst erbt ihn der
+      # Subprozess, also das heruntergeladene Programm, das ihn fuer nichts braucht.
+      - name: Review
+        id: review
+        env:
+          CODERABBIT_API_KEY: ${{ secrets.CODERABBIT_API_KEY }}
+          BASIS: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -uo pipefail
+          python scripts/coderabbit_riegel.py \
+            --kommando /tmp/cr/coderabbit \
+            --base-commit "$BASIS" \
+            --markdown "$RUNNER_TEMP/befunde.md"
+          rc=$?
+          case "$rc" in
+            0) echo "Geprueft, kein Befund." ;;
+            1) echo "kommentar=ja" >> "$GITHUB_OUTPUT" ;;
+            3) echo "::warning::CodeRabbit-Kontingent erschoepft — dieser PR hat KEIN CLI-Review bekommen. Uebersprungen ist kein Erfolg."
+               echo "kommentar=ja" >> "$GITHUB_OUTPUT" ;;
+            2) echo "::error::Die CodeRabbit-CLI konnte nicht urteilen — das ist eine fehlende Pruefung, kein bestandener Lauf."
+               exit 1 ;;
+            *) echo "::error::Der Riegel endete mit $rc — ausserhalb seines Vertrags 0/1/2/3. Das ist kein Urteil."
+               exit 1 ;;
+          esac
+
+      # Der EINZIGE Schritt mit `GH_TOKEN`. Getrennt, damit weder die CLI noch der Riegel
+      # ihn je in ihrer Umgebung haben.
+      - name: Kommentar
+        if: steps.review.outputs.kommentar == 'ja'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          # GitHub nimmt hoechstens 65536 Zeichen je Kommentar. Ohne diese Kuerzung
+          # scheitert `gh` bei sehr vielen Befunden, der Schritt wird ROT — obwohl rc 1
+          # laut der Zuordnung oben gruen sein soll — und der Kommentar fehlt GANZ statt
+          # gekuerzt. Der lange Zaun schliesst einen eventuell mitten durchgeschnittenen
+          # Codeblock.
+          quelle="$RUNNER_TEMP/befunde.md"
+          ziel="$RUNNER_TEMP/kommentar.md"
+          if [ "$(wc -c < "$quelle")" -gt 60000 ]; then
+            head -c 60000 "$quelle" > "$ziel"
+            printf '\n%s\n\n_Gekuerzt: der Kommentar ueberschritt GitHubs Grenze von 65536 Zeichen._\n' \
+              '````````````````````````' >> "$ziel"
+          else
+            cp "$quelle" "$ziel"
+          fi
+          gh pr comment "$PR" --body-file "$ziel"
+
+      # Macht den Verbrauch sichtbar, statt ihn zu schaetzen. Die Groesse der Zulassung
+      # steht nirgends; erst diese Zeile ueber mehrere Laeufe macht daraus eine Messung.
+      #
+      # `usage` KENNT `--api-key` NICHT. Es hat ueberhaupt keine Optionen und liest
+      # ausschliesslich einen gespeicherten Login — gemessen am 2026-09-08 an 0.7.6:
+      # `error: unknown option '--api-key'`. Der erste Entwurf rief es genau so auf und
+      # verbarg das hinter `|| true`: ein Schritt, der aussieht wie eine Messung und in
+      # JEDEM Lauf nichts misst. Deshalb erst anmelden, dann fragen.
+      #
+      # `auth login --api-key` ist dafuer sicher: mit einem ungueltigen Schluessel scheitert
+      # es in 0 s mit rc 1 (gemessen bei leerem HOME) — es faellt NICHT in die
+      # Browser-Anmeldung zurueck, an der `review` ohne Schluessel bis zur Zeitgrenze haengt.
+      #
+      # `continue-on-error` statt `|| true`: der Verbrauch ist eine Beigabe und darf den Job
+      # nicht rot faerben — aber sein Ausfall soll SICHTBAR sein. Genau das hat `|| true`
+      # verhindert, und deshalb ist der Defekt oben ueberhaupt erst entstanden.
+      - name: Verbrauch
+        if: always()
+        continue-on-error: true
+        env:
+          CODERABBIT_API_KEY: ${{ secrets.CODERABBIT_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${CODERABBIT_API_KEY:-}" ]; then
+            echo "Kein Schluessel gesetzt — der Verbrauch ist nicht abrufbar."
+            exit 0
+          fi
+          /tmp/cr/coderabbit auth login --api-key "$CODERABBIT_API_KEY"
+          /tmp/cr/coderabbit usage
