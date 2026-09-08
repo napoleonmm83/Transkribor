@@ -108,6 +108,55 @@
         "test_jeder_pfad_existiert"
       ],
       "hinweis": "`test_jeder_anker_passt_genau_einmal` steht NICHT unter `gruen`, und das ist kein Versehen, sondern eine EIGENSCHAFT: jede Mutation an einer PLANDATEI loescht den Anker genau der Mutation, die sie gerade setzt — der Waechter ist waehrenddessen also immer rot, und zwar zu Recht. Fuer Daten-Mutationen kann er deshalb grundsaetzlich keine Gegenprobe sein. Zweimal darauf hereingefallen (L6, L8), deshalb steht es hier."
+    },
+    {
+      "id": "L9 der abgeleitete --pfad zeigt wieder auf eine DATEI statt ihren Ordner",
+      "datei": "scripts/mutationen_lauf.py",
+      "von": "        if (wurzel / gemeinsam).is_file():",
+      "nach": "        if False:",
+      "rot": [
+        "test_pfad_wurzel_einer_einzelnen_datei_ist_ihr_ordner"
+      ],
+      "gruen": [
+        "test_pfad_wurzel_ist_der_gemeinsame_ordner",
+        "test_pfad_wurzel_faellt_auf_die_wurzel_zurueck"
+      ]
+    },
+    {
+      "id": "L10 eine geloeschte Plandatei ist wieder lautlos",
+      "datei": "scripts/mutationen_lauf.py",
+      "von": "        if verschwunden and not noch_da:",
+      "nach": "        if False:",
+      "rot": [
+        "test_eine_geloeschte_plandatei_ist_nicht_lautlos"
+      ],
+      "gruen": [
+        "test_eine_umbenannte_plandatei_ist_KEIN_verlust"
+      ]
+    },
+    {
+      "id": "L11 pfade als blosse Zeichenkette rutscht wieder durch",
+      "datei": "scripts/mutationen_lauf.py",
+      "von": "        if not isinstance(pfade, list) or not all(isinstance(p, str) for p in pfade):",
+      "nach": "        if False:",
+      "rot": [
+        "test_pfade_als_blosse_zeichenkette_ergibt_zwei"
+      ],
+      "gruen": [
+        "test_echte_plaene_werden_alle_geladen"
+      ]
+    },
+    {
+      "id": "L12 ein globaler Pflichtpfad faellt weg",
+      "datei": "scripts/mutationen_lauf.py",
+      "von": "    \"pyproject.toml\",\n",
+      "nach": "",
+      "rot": [
+        "test_globale_pfade_existieren_und_ziehen_JEDEN_plan"
+      ],
+      "gruen": [
+        "test_nur_die_betroffenen_plaene"
+      ]
     }
   ]
 }

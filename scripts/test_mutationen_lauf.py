@@ -9,6 +9,7 @@ subprocess-Aufruf. Ein Test, der wirklich mutiert, braeuchte Minuten und pruefte
 statt den Laeufer.
 """
 
+import json
 import sys
 from pathlib import Path
 
@@ -171,6 +172,61 @@ def test_die_rueckgabecodes_der_plaene_werden_zum_schlimmsten_verdichtet(monkeyp
     monkeypatch.setattr(mutationen_lauf, "lade_plaene",
                         lambda w: [_plan("a", ["x"]), _plan("b", ["y"]), _plan("c", ["z"])])
     assert mutationen_lauf.main(["--repo", str(WURZEL), "--alle"]) == 2
+
+
+def test_eine_geloeschte_plandatei_ist_nicht_lautlos(tmp_path, capsys):
+    """Vor #588 machte das Loeschen eines verdrahteten Plans den Schritt rot.
+
+    Jetzt liest der Laeufer den ORDNER — und was nicht mehr da ist, kann er nicht vermissen:
+    der Diff traegt den Pfad, die Auswahl findet nichts, und der Lauf meldete „0 von N
+    gewaehlt", rc 0. Ein Waechter waere damit verschwunden, ohne dass eine Zeile rot wird.
+    Befund des kalten Diff-Lesers; eine NEUE Luecke dieses PR, keine vorbestehende.
+    """
+    liste = tmp_path / "geaendert.txt"
+    liste.write_text("scripts/mutationen/gibt_es_nicht_mehr.json\n", encoding="utf-8")
+    rc = mutationen_lauf.main(["--repo", str(WURZEL), "--geaendert", str(liste),
+                               "--nur-auswahl"])
+    assert rc == 2
+    assert "lautlos verschwunden" in capsys.readouterr().out
+
+
+def test_eine_umbenannte_plandatei_ist_KEIN_verlust(tmp_path, capsys):
+    """Die Gegenprobe, ohne die der Riegel oben eine legitime Umbenennung blockierte.
+
+    Eine Umbenennung steht als Loeschung UND als Zugang im Diff; der Waechter existiert
+    weiter. Nur wenn NICHTS dazukam, ist wirklich einer verschwunden.
+    """
+    liste = tmp_path / "geaendert.txt"
+    liste.write_text("scripts/mutationen/alt_und_weg.json\n"
+                     "scripts/mutationen/mypy_riegel.json\n", encoding="utf-8")
+    rc = mutationen_lauf.main(["--repo", str(WURZEL), "--geaendert", str(liste),
+                               "--nur-auswahl"])
+    assert rc == 0
+    assert "mypy_riegel" in capsys.readouterr().out
+
+
+def test_pfade_als_blosse_zeichenkette_ergibt_zwei(tmp_path, capsys):
+    """`list("a/b.py")` ist eine Liste von ZEICHEN — und traf damit nie einen Pfad.
+
+    Der Plan waere geladen worden, die Auswahl haette ihn nie gewaehlt, und der Lauf haette
+    „0 von 1 Plaenen gewaehlt" gemeldet: rc 0, still. Gemessen vom gegnerischen Pruefer.
+    """
+    repo = _leeres_repo(tmp_path)
+    (repo / "scripts" / "mutationen" / "krumm.json").write_text(json.dumps(
+        {"test": "egal", "pfade": "webtool/jobs.py", "mutationen": [{"id": "X"}]}),
+        encoding="utf-8")
+    assert mutationen_lauf.main(["--repo", str(repo), "--alle"]) == 2
+    assert "Liste von Zeichenketten" in capsys.readouterr().out
+
+
+def test_env_mit_einer_zahl_ergibt_zwei(tmp_path, capsys):
+    """Sonst stirbt es erst im Kind — nach dem Aufbau, mit Traceback statt Meldung."""
+    repo = _leeres_repo(tmp_path)
+    (repo / "scripts" / "mutationen" / "krumm.json").write_text(json.dumps(
+        {"test": "egal", "pfade": ["a.py"], "env": {"N": 0}, "mutationen": [{"id": "X"}]}),
+        encoding="utf-8")
+    assert mutationen_lauf.main(["--repo", str(repo), "--alle"]) == 2
+    assert "nur Zeichenketten" in capsys.readouterr().out
 
 
 def test_echte_plaene_werden_alle_geladen():

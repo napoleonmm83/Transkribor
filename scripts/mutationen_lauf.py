@@ -1,10 +1,16 @@
 #!/usr/bin/env python3
 """Faehrt die Mutationsplaene dieses Repos — alle, oder nur die von einer Aenderung betroffenen.
 
-WOZU. Bis #588 standen genau ZWEI Plaene fest verdrahtet im Workflow, waehrend zehn im Repo
-lagen; acht liefen nirgends automatisch. Eine Mutationsprobe, die nur laeuft, wenn jemand
-daran denkt, ist eine Regel und kein Riegel — mit genau dieser Begruendung wurde der Job
-ueberhaupt eingefuehrt (#551).
+WOZU. Bis #588 standen genau ZWEI Plaene fest verdrahtet im Workflow. GEMESSEN am master
+davor (`git ls-tree --name-only master scripts/mutationen/`): SECHS Plaene eingecheckt, vier
+davon ohne Laeufer — und vier weitere lagen ueberhaupt nur auf dem Rechner ihres Autors, nie
+committet. Eine Mutationsprobe, die nur laeuft, wenn jemand daran denkt, ist eine Regel und
+kein Riegel; mit genau dieser Begruendung wurde der Job eingefuehrt (#551).
+
+(Hier stand zuerst „zehn im Repo, acht ohne Laeufer". Das beschrieb einen Zustand, den es nie
+gab: die Zehn entstand erst durch den ersten Commit dieses Branches, der die vier
+liegengebliebenen nachreichte. Gefunden von zwei Pruefern unabhaengig — und es ist genau die
+Klasse, gegen die dieses Werkzeug gebaut ist.)
 
 WARUM EIN SKRIPT UND KEINE ZEILEN IM WORKFLOW. Dieselbe Regel wie bei `notizen.sh` und
 `versionshoehe.sh`: damit ein Test genau das prueft, was in der CI laeuft. Im Workflow-Rumpf
@@ -99,14 +105,32 @@ class Plan:
 
 
 def lade_plaene(wurzel: pathlib.Path) -> list[Plan]:
-    """Liest alle Plaene unter scripts/mutationen/. Wirft bei unbrauchbarer Form."""
+    """Liest alle Plaene unter scripts/mutationen/. Wirft bei unbrauchbarer Form.
+
+    Die Typpruefungen sind nicht Zierde. `list("webtool/jobs.py")` ist in Python eine Liste
+    von ZEICHEN, nicht von Pfaden — ein `pfade`-Eintrag als blosser String ergab damit einen
+    Plan, den die Auswahl nie trifft: „0 von 1 Plaenen gewaehlt", rc 0, still. Und ein
+    `env`-Wert als Zahl stirbt erst im Kind (`environment can only contain strings`), also
+    nach dem Aufbau und mit einem Traceback statt einer Meldung. Beides vom gegnerischen
+    Pruefer gemessen.
+    """
     geladen = []
     for datei in sorted((wurzel / "scripts" / "mutationen").glob("*.json")):
         roh = json.loads(datei.read_text(encoding="utf-8"))
         if not isinstance(roh, dict):
             raise ValueError(f"{datei.name}: blanke Liste — hier ist die Objektform Pflicht")
-        geladen.append(Plan(datei=datei, test=roh["test"], pfade=list(roh["pfade"]),
-                            mutationen=list(roh["mutationen"]), env=dict(roh.get("env", {}))))
+        pfade = roh.get("pfade")
+        if not isinstance(pfade, list) or not all(isinstance(p, str) for p in pfade):
+            raise ValueError(f"{datei.name}: `pfade` muss eine Liste von Zeichenketten sein")
+        mutationen = roh.get("mutationen")
+        if not isinstance(mutationen, list):
+            raise ValueError(f"{datei.name}: `mutationen` muss eine Liste sein")
+        umgebung = roh.get("env") or {}
+        if not isinstance(umgebung, dict) or not all(
+                isinstance(k, str) and isinstance(v, str) for k, v in umgebung.items()):
+            raise ValueError(f"{datei.name}: `env` nimmt nur Zeichenketten")
+        geladen.append(Plan(datei=datei, test=roh["test"], pfade=list(pfade),
+                            mutationen=list(mutationen), env=dict(umgebung)))
     return geladen
 
 
@@ -149,7 +173,7 @@ def main(argv: list[str] | None = None) -> int:
     wurzel = pathlib.Path(a.repo).resolve()
     try:
         plaene = lade_plaene(wurzel)
-    except (OSError, ValueError, KeyError, json.JSONDecodeError) as fehl:
+    except (OSError, TypeError, ValueError, KeyError, json.JSONDecodeError) as fehl:
         print(f"ABBRUCH: ein Plan ist unlesbar — {fehl}")
         return 2
 
@@ -170,6 +194,30 @@ def main(argv: list[str] | None = None) -> int:
         geaendert = None
 
     gewaehlt = waehle(plaene, geaendert)
+
+    # EINE GELOESCHTE PLANDATEI IST SONST LAUTLOS — und das war sie vor #588 NICHT.
+    # Damals nannte der Workflow zwei Plaene namentlich; wer einen loeschte, machte den
+    # Schritt rot. Jetzt liest der Laeufer den Ordner, und was nicht mehr da ist, kann er
+    # nicht vermissen: der Diff traegt den Pfad, die Auswahl findet keinen Plan dazu, und
+    # der Lauf meldet „0 von N gewaehlt", rc 0. Ein Waechter verschwindet damit, ohne dass
+    # eine Zeile rot wird (Befund des kalten Diff-Lesers).
+    #
+    # Eine UMBENENNUNG ist kein solcher Fall: sie traegt denselben Ordner auch als Zugang,
+    # der Waechter existiert weiter. Deshalb schlaegt es nur an, wenn nichts dazukam.
+    if geaendert is not None:
+        bekannt = {f"scripts/mutationen/{p.datei.name}" for p in plaene}
+        erwaehnt = {g for g in geaendert
+                    if g.startswith("scripts/mutationen/") and g.endswith(".json")}
+        verschwunden = sorted(erwaehnt - bekannt)
+        noch_da = sorted(erwaehnt & bekannt)
+        if verschwunden and not noch_da:
+            print("ABBRUCH: der Diff nennt Plandateien, die es nicht mehr gibt — ein"
+                  " Waechter waere damit lautlos verschwunden:")
+            for g in verschwunden:
+                print(f"         {g}")
+            print("         (Eine Umbenennung ist davon nicht betroffen: dort steht der"
+                  " neue Name mit im Diff.)")
+            return 2
 
     # ANTI-SCHWEIGEN, zweite Haelfte: bei --alle ist eine leere Auswahl ein Widerspruch —
     # es gibt Plaene (oben geprueft), also muessen sie auch gewaehlt sein. Bei --geaendert

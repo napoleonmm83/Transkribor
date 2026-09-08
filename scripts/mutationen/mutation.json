@@ -301,6 +301,18 @@
       "gruen": [
         "test_erwarteter_test_wird_rot_ergibt_null"
       ]
+    },
+    {
+      "id": "MB25 das Entfaerbungsmuster wird auf reine Farbcodes verengt",
+      "datei": "scripts/mutation.py",
+      "von": "_ANSI = re.compile(r\"\\x1b\\[[0-9;:?]*[ -/]*[@-~]\")",
+      "nach": "_ANSI = re.compile(r\"\\x1b\\[[0-9;]*m\")",
+      "rot": [
+        "test_ohne_farbe_deckt_mehr_als_die_farbcodes"
+      ],
+      "gruen": [
+        "test_lauf_entfaerbt_die_ausgabe_eines_echten_kindes"
+      ]
     }
   ]
 }

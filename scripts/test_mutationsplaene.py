@@ -179,24 +179,40 @@ def test_jeder_rot_und_gruen_name_existiert_wirklich():
         + "\n  ".join(fehlend[:10]))
 
 
-def test_der_laeufer_findet_jeden_plan():
-    """Bindet die AUSWAHL an die Plaene, nicht nur das Format.
-
-    Ein Plan, den `mutationen_lauf` nicht einliest, laeuft nie — und das faellt sonst
-    nirgends auf, weil jeder Test hier ihn trotzdem sieht.
-    """
-    geladen = {p.datei.name for p in mutationen_lauf.lade_plaene(WURZEL)}
-    assert geladen == {d.name for d in plaene()}
-
-
-def test_globale_pfade_existieren():
-    """Die Liste, die ALLE Plaene ausloest, darf nicht still ins Leere zeigen.
+def test_globale_pfade_existieren_und_ziehen_JEDEN_plan():
+    """Die Liste, die ALLE Plaene ausloest, darf weder ins Leere zeigen noch teilwirken.
 
     Sie deckt, was kein `pfade`-Eintrag deckt: der Treiber selbst, die Wurzel-conftest,
-    die pytest-Konfiguration, die vitest-Konfiguration. Aendert sich dort etwas, kann
-    JEDER Plan seine Aussagekraft verlieren, ohne dass eine seiner Dateien angefasst
-    wurde. Zeigt ein Eintrag auf nichts, faellt genau diese Deckung lautlos weg.
+    die pytest-Konfiguration, die vitest-Konfiguration, die gemeinsame Testhuelle. Aendert
+    sich dort etwas, kann JEDER Plan seine Aussagekraft verlieren, ohne dass eine seiner
+    Dateien angefasst wurde.
+
+    Geprueft wird JEDER Eintrag einzeln, nicht zwei von neun: die vorige Fassung haette es
+    nicht gemerkt, wenn jemand `pyproject.toml` oder `setupTests.ts` aus der Liste nimmt
+    (Befund des gegnerischen Pruefers). Und die Existenz allein genuegt nicht — ein Eintrag,
+    der da ist, aber nicht mehr auswaehlt, deckt genauso wenig.
     """
+    # Das Weglassen eines Eintrags bliebe sonst gruen: die Schleife unten prueft nur, was
+    # DA ist. Fuer „vollstaendig" gibt es kein Orakel — also wird die begruendete Menge
+    # festgenagelt. Hinzufuegen bleibt frei (Obermenge), Herausnehmen wird eine bewusste
+    # Handlung mit einem roten Test davor. Dieselbe Bauform wie eine Linter-Baseline.
+    pflicht = {
+        "scripts/mutation.py",              # ein Treiberfehler entwertet JEDE Serie
+        "scripts/mutationen_lauf.py",       # dito fuer die Auswahl
+        "conftest.py",                      # Lauf-Deckel und Fixtures aller pytest-Plaene
+        "pyproject.toml",                   # die pytest-Sicht selbst
+        "webtool/frontend/vitest.config.ts",  # die des Frontends
+    }
+    fehlend = pflicht - set(mutationen_lauf.GLOBALE_PFADE)
+    assert not fehlend, (
+        f"aus GLOBALE_PFADE verschwunden: {sorted(fehlend)} — damit faellt die Deckung fuer"
+        " ALLE Plaene weg, und zwar lautlos. Wenn das gewollt ist, hier mit begruenden.")
+
     assert mutationen_lauf.GLOBALE_PFADE, "die Liste ist leer — dann deckt sie nichts"
+    alle = mutationen_lauf.lade_plaene(WURZEL)
+    assert alle, "keine Plaene geladen — der Test misst dann nichts"
     for p in mutationen_lauf.GLOBALE_PFADE:
         assert (WURZEL / p).exists(), f"globaler Pfad {p} gibt es nicht (mehr)"
+        gewaehlt = mutationen_lauf.waehle(alle, {p})
+        assert len(gewaehlt) == len(alle), (
+            f"{p} steht in GLOBALE_PFADE, waehlt aber nur {len(gewaehlt)} von {len(alle)}")

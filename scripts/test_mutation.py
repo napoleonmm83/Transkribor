@@ -493,6 +493,39 @@ def test_plan_ohne_kommando_und_ohne_test_ergibt_zwei(tmp_path, monkeypatch, cap
     assert "kein Testkommando" in capsys.readouterr().out
 
 
+def test_ohne_farbe_deckt_mehr_als_die_farbcodes():
+    """Ein zu enges Muster faellt sonst nur dann auf, wenn es zu spaet ist.
+
+    `ohne_farbe` ist heute nur ueber den Aufruf in `_lauf` gedeckt: eine Verengung auf
+    `\\x1b\\[[0-9;]*m` — also nur Farbe — bliebe an jedem anderen Test gruen, obwohl der
+    Cursor- und Loeschcodes stehenblieben, die vitest im Fortschritt schreibt. Genau die
+    stehen dann mitten in der Zeile, die `_lief_mindestens_ein_test` lesen soll.
+    Befund des gegnerischen Pruefers.
+
+    Die Gegenrichtung steht mit drin: was KEINE Steuerfolge ist, bleibt unangetastet —
+    sonst fraesse das Muster Testnamen mit eckigen Klammern.
+    """
+    esc = "\x1b"
+    weg = {
+        f"{esc}[32m126 passed{esc}[39m": "126 passed",          # Farbe
+        f"{esc}[38;5;196mFAILED{esc}[0m x": "FAILED x",         # 256 Farben
+        f"{esc}[?25lTests{esc}[?25h": "Tests",                  # Cursor aus/an
+        f"{esc}[2K{esc}[1G3 failed": "3 failed",                # Zeile loeschen
+        f"{esc}[1m{esc}[46m RUN {esc}[49m{esc}[22m": " RUN ",   # fett + Hintergrund
+    }
+    for roh, erwartet in weg.items():
+        assert mutation.ohne_farbe(roh) == erwartet, f"nicht entfernt: {roh!r}"
+
+    bleibt = [
+        "test_der_deckel_beendet_den_lauf_und_sagt_wo[koerper]",   # pytest-Parameter
+        "not ok 101 - der Name traegt (#448)",                     # TAP
+        "[32m ist hier Text, kein Steuerzeichen",
+        r'_JOB_KOPF = re.compile(r"^  ([A-Za-z_][A-Za-z0-9_-]*):[ \t]*(?:#.*)?$")',
+    ]
+    for roh in bleibt:
+        assert mutation.ohne_farbe(roh) == roh, f"faelschlich veraendert: {roh!r}"
+
+
 def test_lauf_entfaerbt_die_ausgabe_eines_echten_kindes(tmp_path):
     """T-070, an einem ECHTEN Subprozess — nicht an einer Attrappe.
 
