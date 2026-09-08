@@ -188,6 +188,20 @@
         "test_auszug_benennt_die_leere_ausgabe"
       ],
       "datei": "scripts/coderabbit_riegel.py"
+    },
+    {
+      "id": "M15 der eigene Absturz wird wieder zu rc 1 — also zu einem Urteil",
+      "von": "    try:\n        return main()\n    except Exception:\n        traceback.print_exc()\n        print(\"ABBRUCH: der Riegel selbst ist abgestuerzt — das ist KEIN Urteil, sondern\")\n        print(\"         eine fehlende Pruefung. Der Stapelabzug steht darueber.\")\n        return 2",
+      "nach": "    # M15: ohne den Riegel um den eigenen Absturz endet jede unbehandelte Ausnahme\n    # mit Pythons rc 1 — und rc 1 heisst im Workflow GRUEN plus Kommentar.\n    return main()",
+      "rot": [
+        "test_ein_absturz_des_riegels_ergibt_ZWEI_nicht_eins"
+      ],
+      "gruen": [
+        "test_haupt_reicht_den_gewoehnlichen_code_durch",
+        "test_kein_befund_ergibt_null",
+        "test_erfolg_wird_als_urteil_erkannt"
+      ],
+      "datei": "scripts/coderabbit_riegel.py"
     }
   ]
 }

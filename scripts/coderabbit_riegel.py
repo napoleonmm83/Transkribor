@@ -77,6 +77,7 @@ import os
 import pathlib
 import re
 import subprocess
+import traceback
 from typing import NamedTuple
 
 # Der feste Vorspann, den CodeRabbit jedem `codegenInstructions`-Text voranstellt:
@@ -401,5 +402,32 @@ def main(argv: list[str] | None = None) -> int:
     return 1
 
 
+def haupt() -> int:
+    """`main()` mit einem Riegel um den eigenen Absturz.
+
+    rc 1 heisst „geprueft, Befunde da" — und es ist zugleich Pythons Code fuer JEDE
+    unbehandelte Ausnahme. Solange der Workflow rc 1 ROT faerbte, war diese Doppel-
+    deutigkeit folgenlos. Seit rc 1 GRUEN + Kommentar bedeutet, ist sie ein Weg, auf dem
+    ein ABGESTUERZTER Riegel wie ein Urteil aussieht — der achte Weg in einem Skript, das
+    gegen sieben solcher Wege gebaut wurde.
+
+    Gefunden vom gegnerischen Reviewer, gemessen mit einer CLI-Attrappe, die genau ein
+    Feld anders liefert (`"reviewedFiles": 5`): `unstimmig()` laesst die Zahl durch (5 ist
+    truthy), `len(5)` wirft, rc 1 — Review-Schritt GRUEN mit `kommentar=ja`. Rot wurde
+    danach nur der KOMMENTAR-Schritt, an der fehlenden `befunde.md`, also mit falscher
+    Schuldzuweisung. Und sobald eine Ausnahme HINTER `a.markdown.write_text()` faellt,
+    gibt es die Datei — dann ist es still gruen mit altem Inhalt.
+
+    Ein Absturz ist „konnte nicht urteilen", und das ist 2.
+    """
+    try:
+        return main()
+    except Exception:
+        traceback.print_exc()
+        print("ABBRUCH: der Riegel selbst ist abgestuerzt — das ist KEIN Urteil, sondern")
+        print("         eine fehlende Pruefung. Der Stapelabzug steht darueber.")
+        return 2
+
+
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(haupt())

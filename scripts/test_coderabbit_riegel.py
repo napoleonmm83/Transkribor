@@ -490,3 +490,31 @@ def test_der_rueckgabecode_der_cli_entscheidet_NICHT(monkeypatch, capsys):
 
     monkeypatch.setattr(riegel.subprocess, "run", _lauf(UEBERSPRUNGEN, rc=0))
     assert riegel.main(["--base-commit", "HEAD~1"]) == 2, "rc 0 der CLI ist kein Urteil"
+
+
+def test_ein_absturz_des_riegels_ergibt_ZWEI_nicht_eins(monkeypatch, capsys):
+    """Der eigene Absturz darf nicht als „Befunde da" durchgehen.
+
+    rc 1 heisst „geprueft, Befunde da" — und ist zugleich Pythons Code fuer jede
+    unbehandelte Ausnahme. Solange der Workflow rc 1 rot faerbte, war das folgenlos; seit
+    er daraus GRUEN + Kommentar macht, waere ein abgestuerzter Riegel ein Urteil.
+
+    Der Ausloeser ist nicht erfunden, er steht im Docstring des Riegels als Punkt 5: ein
+    Feldwechsel beim Dienst. `unstimmig()` prueft `reviewedFiles` nur auf Wahrheitswert —
+    eine ZAHL kommt durch, und `len(5)` wirft.
+    """
+    def kracht(*_a, **_k):
+        raise TypeError("object of type 'int' has no len()")
+
+    monkeypatch.setattr(riegel, "main", kracht)
+    assert riegel.haupt() == 2, "ein Absturz heisst konnte nicht urteilen, nicht Befunde da"
+    ausgabe = capsys.readouterr()
+    assert "ABBRUCH" in ausgabe.out, "der Grund muss im Protokoll stehen"
+    assert "TypeError" in ausgabe.err, "ohne Stapelabzug sucht niemand die Ursache"
+
+
+def test_haupt_reicht_den_gewoehnlichen_code_durch(monkeypatch):
+    """Der Riegel um den Absturz darf die vier Vertragscodes nicht anfassen."""
+    for code in (0, 1, 2, 3):
+        monkeypatch.setattr(riegel, "main", lambda *_a, _c=code, **_k: _c)
+        assert riegel.haupt() == code

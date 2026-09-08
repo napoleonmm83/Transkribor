@@ -201,9 +201,21 @@ jobs:
       # es in 0 s mit rc 1 (gemessen bei leerem HOME) — es faellt NICHT in die
       # Browser-Anmeldung zurueck, an der `review` ohne Schluessel bis zur Zeitgrenze haengt.
       #
-      # `continue-on-error` statt `|| true`: der Verbrauch ist eine Beigabe und darf den Job
-      # nicht rot faerben — aber sein Ausfall soll SICHTBAR sein. Genau das hat `|| true`
-      # verhindert, und deshalb ist der Defekt oben ueberhaupt erst entstanden.
+      # `continue-on-error` bleibt als Netz — es faengt, was die drei `||`/`if !` unten NICHT
+      # abfangen (eine fehlende CLI zum Beispiel: `always()` zieht auch bei rotem
+      # Installationsschritt, gemessen rc 127). Die SICHTBARKEIT haengt seit diesem Diff
+      # aber an den `::warning::`-Zeilen, nicht mehr an ihm — und das ist die bessere
+      # Mechanik, denn `continue-on-error` macht den Ausfall in der API gar nicht sichtbar:
+      # zu Lauf 34261972330 meldet `gh run view --json jobs` fuer den Verbrauch-Schritt
+      # `conclusion: success`, waehrend im Protokoll desselben Schrittes `##[error] Process
+      # completed with exit code 1` steht. Dieselbe Form wie `CodeRabbit pass` bei
+      # erschoepftem Kontingent.
+      #
+      # `auth login` traegt sein `||` NICHT aus Bequemlichkeit: unter `set -e` haette ein
+      # ungueltiger Schluessel den Schritt sofort beendet — `auth status` und `usage` liefen
+      # dann NIE, und genau die Frage, fuer die dieser Schritt umgebaut wurde (auf welchen
+      # Nutzer und welche Organisation zeigt der Schluessel?), bliebe unbeantwortet.
+      # Gemessen vom gegnerischen Reviewer an einer CLI-Attrappe, vier Faelle.
       #
       # UND ER MISST IMMER NOCH NICHT — gemessen im Lauf 34261972330: `auth login` meldet
       # „API key authentication configured successfully!", `usage` antwortet danach mit
@@ -227,7 +239,8 @@ jobs:
             echo "Kein Schluessel gesetzt — der Verbrauch ist nicht abrufbar."
             exit 0
           fi
-          /tmp/cr/coderabbit auth login --api-key "$CODERABBIT_API_KEY"
+          /tmp/cr/coderabbit auth login --api-key "$CODERABBIT_API_KEY" \
+            || echo "::warning::auth login gescheitert."
           /tmp/cr/coderabbit auth status || echo "::warning::auth status nicht abrufbar."
           if ! /tmp/cr/coderabbit usage; then
             echo "::warning::Verbrauch nicht abrufbar. Im Konto zu pruefen: zugewiesener Platz fuer den Schluessel-Nutzer, nutzungsbasiertes Zusatzpaket, richtige Organisation."
