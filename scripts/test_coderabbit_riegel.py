@@ -294,10 +294,28 @@ def test_markdown_BEHAELT_den_vorspann():
 
 
 def test_markdown_traegt_den_vorschlag_mit():
-    """`suggestions` fiel vorher wortlos weg — der konkrete Patch stand nie im Kommentar."""
+    """`suggestions` ist eine LISTE — gemessen an der Fixture, nicht angenommen.
+
+    Der erste Anlauf uebergab hier eine Zeichenkette und hat deshalb nicht gesehen, dass
+    `str([])` gleich `"[]"` und damit truthy ist: JEDER Befund haette einen Vorschlagsblock
+    mit dem Inhalt `[]` bekommen, ein gefuellter die Python-Listendarstellung. Die Attrappe
+    trug die Vorstellung des Autors statt der gemessenen Form — die Fixture sagt
+    `suggestions: []`, Typ `list`.
+    """
     md = riegel.markdown([{"severity": "minor", "fileName": "a.py",
-                           "codegenInstructions": "tu dies", "suggestions": "- alt\n+ neu"}])
+                           "codegenInstructions": "tu dies",
+                           "suggestions": ["- alt\n+ neu"]}])
     assert "+ neu" in md and "Vorschlag" in md
+    assert "['" not in md, "keine Python-Listendarstellung im PR-Kommentar"
+
+
+def test_markdown_schreibt_KEINEN_leeren_vorschlagsblock():
+    """Die gemessene Fixture traegt `suggestions: []` — der Normalfall, nicht der Rand."""
+    for leer in ([], "", None):
+        md = riegel.markdown([{"severity": "minor", "fileName": "a.py",
+                               "codegenInstructions": "tu dies", "suggestions": leer}])
+        assert "Vorschlag" not in md, f"leeres {leer!r} darf keinen Block erzeugen"
+        assert "[]" not in md
 
 
 def test_markdown_ist_leer_ohne_befunde():

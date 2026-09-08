@@ -226,9 +226,19 @@ def markdown(befunde: list[dict]) -> str:
     zeilen = [f"### CodeRabbit-CLI: {len(befunde)} Befund(e)", ""]
     for b in befunde:
         text = str(b.get("codegenInstructions", "")).strip() or "(kein Text)"
-        vorschlag = str(b.get("suggestions", "")).strip()
-        if vorschlag:
-            text = f"{text}\n\n--- Vorschlag der CLI ---\n{vorschlag}"
+        # `suggestions` ist eine LISTE, keine Zeichenkette — in der gemessenen Fixture eine
+        # LEERE. Der erste Entwurf schrieb `str(b.get("suggestions", "")).strip()`, und
+        # `str([])` ist `"[]"`: truthy. Jeder Befund haette einen Vorschlagsblock mit dem
+        # Inhalt `[]` bekommen, ein gefuellter die Python-Listendarstellung. Der Test dazu
+        # uebergab eine Zeichenkette und konnte es deshalb nicht sehen — die Attrappe trug
+        # die Vorstellung des Autors statt der gemessenen Form. Gefunden von der
+        # CodeRabbit-CLI.
+        roh = b.get("suggestions") or []
+        if isinstance(roh, str):          # falls der Dienst es je als Text liefert
+            roh = [roh]
+        vorschlaege = [str(v).strip() for v in roh if str(v).strip()]
+        if vorschlaege:
+            text = f"{text}\n\n--- Vorschlag der CLI ---\n" + "\n\n".join(vorschlaege)
         zaun = _zaun(text)
         zeilen.append(f"**{b.get('severity', '?')}** · `{b.get('fileName', '?')}`")
         zeilen.append("")
