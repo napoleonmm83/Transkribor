@@ -48,8 +48,8 @@
     {
       "id": "L4 der Trenner wird beim Lesen nicht mehr normalisiert",
       "datei": "scripts/mutationen_lauf.py",
-      "von": "    return {z.strip().replace(\"\\\\\", \"/\") for z in zeilen if z.strip()}",
-      "nach": "    return {z.strip() for z in zeilen if z.strip()}",
+      "von": "        felder = [f.strip().replace(\"\\\\\", \"/\") for f in zeile.split(\"\\t\") if f.strip()]",
+      "nach": "        felder = [f.strip() for f in zeile.split(\"\\t\") if f.strip()]",
       "rot": [
         "test_rueckwaertsschraegstrich_wird_beim_LESEN_normalisiert"
       ],
@@ -73,8 +73,8 @@
     {
       "id": "L6 ein Pfad im Plan zeigt ins Leere (der Waechter muss anschlagen)",
       "datei": "scripts/mutationen/deckel_finally.json",
-      "von": "  \"pfade\": [\n    \"webtool/test_jobs.py\"\n  ],",
-      "nach": "  \"pfade\": [\n    \"webtool/gibt_es_nicht.py\"\n  ],",
+      "von": "    \"webtool/test_jobs.py\"\n  ],",
+      "nach": "    \"webtool/gibt_es_nicht.py\"\n  ],",
       "rot": [
         "test_jeder_pfad_existiert",
         "test_jede_mutierte_datei_steht_in_pfaden"
@@ -125,10 +125,11 @@
     {
       "id": "L10 eine geloeschte Plandatei ist wieder lautlos",
       "datei": "scripts/mutationen_lauf.py",
-      "von": "        if verschwunden and not noch_da:",
+      "von": "        if geloescht:",
       "nach": "        if False:",
       "rot": [
-        "test_eine_geloeschte_plandatei_ist_nicht_lautlos"
+        "test_eine_geloeschte_plandatei_ist_nicht_lautlos",
+        "test_eine_loeschung_NEBEN_einer_planaenderung_faellt_trotzdem_auf"
       ],
       "gruen": [
         "test_eine_umbenannte_plandatei_ist_KEIN_verlust"

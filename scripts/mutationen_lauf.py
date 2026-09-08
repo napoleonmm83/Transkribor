@@ -152,9 +152,30 @@ def waehle(plaene: list[Plan], geaendert: set[str] | None) -> list[Plan]:
             or f"scripts/mutationen/{p.datei.name}" in geaendert]
 
 
-def _lies_geaendert(pfad: pathlib.Path) -> set[str]:
-    zeilen = pfad.read_text(encoding="utf-8").splitlines()
-    return {z.strip().replace("\\", "/") for z in zeilen if z.strip()}
+def _lies_geaendert(pfad: pathlib.Path) -> dict[str, str]:
+    """Pfad -> Status aus `git diff --name-status`; `?`, wenn die Zeile nur einen Pfad traegt.
+
+    Der Status ist nicht Zierde: nur er unterscheidet eine LOESCHUNG (`D`) von einer
+    UMBENENNUNG (`R100 alt neu`). Ohne ihn bliebe nur die Heuristik „Pfad im Diff, aber kein
+    Plan geladen" — und die kann beides nicht trennen: ein PR, der einen Plan loescht UND
+    einen zweiten aendert, saehe aus wie eine Umbenennung. Befund des CodeRabbit-Bots
+    (major), der damit dieselbe Loesung vorschlaegt wie der Code hier.
+
+    Beide Seiten einer Umbenennung zaehlen als geaendert — der neue Plan soll laufen, und
+    der alte Pfad darf keinen Loesch-Alarm ausloesen.
+    """
+    eintraege: dict[str, str] = {}
+    for zeile in pfad.read_text(encoding="utf-8").splitlines():
+        if not zeile.strip():
+            continue
+        felder = [f.strip().replace("\\", "/") for f in zeile.split("\t") if f.strip()]
+        if len(felder) == 1:
+            eintraege[felder[0]] = "?"
+            continue
+        status = felder[0][0].upper()
+        for p in felder[1:]:
+            eintraege[p] = status
+    return eintraege
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -186,12 +207,14 @@ def main(argv: list[str] | None = None) -> int:
         print(f"ABBRUCH: keine Plaene unter {wurzel / 'scripts' / 'mutationen'} gefunden.")
         return 2
 
+    eintraege: dict[str, str] = {}
     if a.geaendert:
         try:
-            geaendert = _lies_geaendert(a.geaendert)
+            eintraege = _lies_geaendert(a.geaendert)
         except OSError as fehl:
             print(f"ABBRUCH: --geaendert nicht lesbar — {fehl}")
             return 2
+        geaendert: set[str] | None = set(eintraege)
     else:
         geaendert = None
 
@@ -204,21 +227,21 @@ def main(argv: list[str] | None = None) -> int:
     # der Lauf meldet „0 von N gewaehlt", rc 0. Ein Waechter verschwindet damit, ohne dass
     # eine Zeile rot wird (Befund des kalten Diff-Lesers).
     #
-    # Eine UMBENENNUNG ist kein solcher Fall: sie traegt denselben Ordner auch als Zugang,
-    # der Waechter existiert weiter. Deshalb schlaegt es nur an, wenn nichts dazukam.
+    # Entschieden wird am STATUS des Diffs, nicht an einer Heuristik. Die erste Fassung
+    # verglich „im Diff genannt" gegen „geladen" und nahm jede noch vorhandene Plandatei als
+    # Entwarnung — womit ein PR, der einen Plan LOESCHT und einen zweiten AENDERT, den Alarm
+    # verlor (CodeRabbit-Bot, major). `D` gegen `R` kann nur der Status trennen.
     if geaendert is not None:
-        bekannt = {f"scripts/mutationen/{p.datei.name}" for p in plaene}
-        erwaehnt = {g for g in geaendert
-                    if g.startswith("scripts/mutationen/") and g.endswith(".json")}
-        verschwunden = sorted(erwaehnt - bekannt)
-        noch_da = sorted(erwaehnt & bekannt)
-        if verschwunden and not noch_da:
-            print("ABBRUCH: der Diff nennt Plandateien, die es nicht mehr gibt — ein"
-                  " Waechter waere damit lautlos verschwunden:")
-            for g in verschwunden:
+        geloescht = sorted(p for p, s in eintraege.items()
+                           if s == "D" and p.startswith("scripts/mutationen/")
+                           and p.endswith(".json"))
+        if geloescht:
+            print("ABBRUCH: der Diff loescht Plandateien — ein Waechter waere damit lautlos"
+                  " verschwunden:")
+            for g in geloescht:
                 print(f"         {g}")
-            print("         (Eine Umbenennung ist davon nicht betroffen: dort steht der"
-                  " neue Name mit im Diff.)")
+            print("         (Eine Umbenennung traegt den Status R und faellt nicht"
+                  " darunter.)")
             return 2
 
     # ANTI-SCHWEIGEN, zweite Haelfte: bei --alle ist eine leere Auswahl ein Widerspruch —

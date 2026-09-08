@@ -1,6 +1,7 @@
 {
   "test": "python -m pytest webtool/test_jobs.py -q",
   "pfade": [
+    "webtool/jobs.py",
     "webtool/test_jobs.py"
   ],
   "mutationen": [
