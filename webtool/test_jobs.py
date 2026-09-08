@@ -2046,19 +2046,29 @@ def test_fehlschlag_holt_das_uebernommene_then_NACH_statt_es_weiterzureichen():
 def test_gelungener_empfaenger_laesst_das_uebernommene_sonst_liegen():
     """Die Gegenprobe zu beiden Faellen darueber: bei `done` gewinnt das `then`.
 
-    Ohne sie bliebe die Mutation „das uebernommene `sonst` bei jedem Ausgang laufen lassen"
-    gruen — die Nummer stuende dann am Ende auf `verworfen` statt auf `gestartet`, und die
-    Oberflaeche liesse einen Lauf fallen, der gerade anlaeuft.
+    Gezaehlt wird der AUFRUF, nicht sein Ergebnis — und das ist von der Mutationsprobe
+    erzwungen worden: `vorgang_verwerfen` greift nur auf ein noch offenes `vorgemerkt`, und
+    das `then` laeuft in `_run` davor. Ueber die Nummer gemessen blieb die Mutation „das
+    uebernommene `sonst` bei jedem Ausgang laufen lassen" deshalb GRUEN. Die Zusicherung ist
+    „es laeuft nicht", nicht „es richtet nichts an": der eine heutige Aufrufer ist zufaellig
+    idempotent, der Vertrag gilt fuer den naechsten.
     """
     nummer = jobs.vormerken("P_kette_ok", "transcribe")
+    laeufe = []
     jid1, jid2 = _kette_mit_weitergabe(
         "P_kette_ok", [sys.executable, "-c", "pass"],
-        then_fn=lambda: jobs._vorgang_setzen(nummer, "gestartet", job_id="nachlauf"),
-        sonst_fn=lambda: jobs.vorgang_verwerfen(nummer))
+        then_fn=lambda: laeufe.append("then") or jobs._vorgang_setzen(
+            nummer, "gestartet", job_id="nachlauf"),
+        sonst_fn=lambda: laeufe.append("sonst") or jobs.vorgang_verwerfen(nummer))
     r2 = _wait(jid2, timeout=30)
     assert r2["status"] == "done", r2["status"]
-    assert _bis(lambda: jobs.vorgang(nummer)["status"] == "gestartet"), \
-        jobs.vorgang(nummer)["status"]
+    assert _bis(lambda: laeufe[:1] == ["then"]), laeufe
+    # Auf das AUSBLEIBEN eines Ereignisses laesst sich nicht warten — nur eine Frist setzen.
+    # `_run` ruft beide Listen in EINER Schleife, zwischen ihnen liegen Mikrosekunden; 0,3 s
+    # sind vier Grossenordnungen Luft, ohne den Lauf spuerbar zu verlaengern.
+    time.sleep(0.3)
+    assert laeufe == ["then"], laeufe
+    assert jobs.vorgang(nummer)["status"] == "gestartet"
 
 
 def test_jobs_get_traegt_keine_rueckruf_felder():
