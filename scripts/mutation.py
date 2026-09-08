@@ -358,6 +358,22 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         zusatz[name] = wert
 
+    # Der Startriegel bleibt, obwohl die Ruecknahme ihn nicht mehr BRAUCHT: eine Serie auf
+    # schmutzigem Baum kann zwar nichts mehr loeschen, aber die Schlusspruefung
+    # (`_verfolgt_geaendert`) koennte fremde Aenderungen nicht von einer nicht
+    # zurueckgenommenen Mutation unterscheiden. Der Riegel haelt die Aussage sauber.
+    #
+    # Er steht VOR der Ankerpruefung, und das ist eine Entscheidung: wer eine Zeile
+    # geaendert und nicht committet hat, kann damit einen Anker verschoben haben. „Der Plan
+    # ist veraltet" waere dann zwar wahr, aber der zweite Schritt — zu tun ist zuerst das
+    # Committen. Die teurere Meldung gehoert nach hinten.
+    schmutzig = _verfolgt_geaendert(a.repo, a.pfad)
+    if schmutzig:
+        print(f"ABBRUCH: getrackte Aenderungen unter {a.pfad} — erst committen, DANN mutieren.")
+        print(schmutzig)
+        print("(Sonst laesst sich am Ende nicht sagen, ob eine Mutation haengen blieb.)")
+        return 2
+
     # ANKER VOR DER ERSTEN SCHREIBUNG (T-074). Bisher fiel ein veralteter Anker erst IN der
     # Schleife auf — und weil davor die Positivkontrolle steht, war die Suite zu dem
     # Zeitpunkt schon einmal ganz gelaufen. GEMESSEN am 2026-09-08: Serie 06:27:47Z
@@ -368,6 +384,10 @@ def main(argv: list[str] | None = None) -> int:
     # EIN Fehler, die Serie lief weiter und endete mit rc 1. Jetzt bricht der ganze Lauf mit
     # rc 2 ab, bevor irgendetwas geschrieben oder gemessen wurde — rc 2 heisst in diesem
     # Skript durchgehend „konnte nicht urteilen", und genau das ist der Fall.
+    #
+    # Die Datei wird JE MUTATION gelesen, nicht einmal je Datei. Bei 24 Mutationen auf einer
+    # Datei sind das 24 Lesevorgaenge von wenigen Kilobyte — gemessen unter einer Sekunde,
+    # gegen eine Serie von Minuten. Ein Zwischenspeicher waere hier Zustand ohne Gegenwert.
     fehlstellen: list[tuple[str, str]] = []
     for m in plan:
         datei = pathlib.Path(a.repo) / m["datei"]
@@ -387,17 +407,6 @@ def main(argv: list[str] | None = None) -> int:
               " veraltet. Es wurde nichts geschrieben und nichts gemessen.")
         for kennung, grund in fehlstellen:
             print(f"         {kennung}: {grund}")
-        return 2
-
-    # Der Startriegel bleibt, obwohl die Ruecknahme ihn nicht mehr BRAUCHT: eine Serie auf
-    # schmutzigem Baum kann zwar nichts mehr loeschen, aber die Schlusspruefung
-    # (`_verfolgt_geaendert`) koennte fremde Aenderungen nicht von einer nicht
-    # zurueckgenommenen Mutation unterscheiden. Der Riegel haelt die Aussage sauber.
-    schmutzig = _verfolgt_geaendert(a.repo, a.pfad)
-    if schmutzig:
-        print(f"ABBRUCH: getrackte Aenderungen unter {a.pfad} — erst committen, DANN mutieren.")
-        print(schmutzig)
-        print("(Sonst laesst sich am Ende nicht sagen, ob eine Mutation haengen blieb.)")
         return 2
 
     # POSITIVKONTROLLE, unmutiert, vor der Serie. Sie beantwortet zwei Fragen, die eine
