@@ -15,8 +15,10 @@ Es ist dieselbe Klasse wie `tabelle-hinkt-still-hinterher` (#536): eine Nachschl
 gegen die Aussenwelt veraltet lautlos, und der Riegel dagegen ist ein Test, der sie an
 ihren Konsumenten bindet.
 
-CRLF ist kein Detail: 17 der 67 Anker sind mehrzeilig, und der Arbeitsbaum steht auf
-Windows auf CRLF. Ohne `zeilenenden_angleichen` findet ein mehrzeiliger Anker NICHTS —
+CRLF ist kein Detail: ein Teil der Anker ist MEHRZEILIG, und der Arbeitsbaum steht auf
+Windows auf CRLF. (Die genaue Zahl steht hier bewusst nicht: sie aendert sich mit jedem
+Plan, und eine Zahl in einem Kommentar driftet unsichtbar — dieselbe Lehre wie #536. Wer
+sie braucht, zaehlt sie.) Ohne `zeilenenden_angleichen` findet ein mehrzeiliger Anker NICHTS —
 und "nicht gefunden" ist von "die Stelle gibt es nicht mehr" nicht zu unterscheiden.
 Deshalb wird hier dieselbe Funktion benutzt wie im Treiber, nicht eine zweite Fassung
 daneben: zwei Stellen fuer eine Regel driften.
@@ -133,6 +135,48 @@ def test_jeder_anker_passt_genau_einmal():
             assert eindeutig, (
                 f"{datei.name}/{m['id']}: Anker passt {treffer}-mal auf {m['datei']},"
                 " erwartet genau 1 — der Plan ist veraltet.")
+
+
+def test_jeder_rot_und_gruen_name_existiert_wirklich():
+    """Ein vertippter `gruen`-Name ist eine Gegenprobe, die es nicht gibt — und sie schweigt.
+
+    Der Treiber sucht die `gruen`-Namen in den ROTEN Zeilen der Ausgabe: taucht der Name
+    dort auf, ist die Mutation zu breit. Ein Name, den es gar nicht gibt, taucht nie auf —
+    die Gegenprobe gilt damit als erfuellt, ohne je etwas geprueft zu haben. Bei `rot` ist
+    derselbe Tippfehler laut (die Mutation gilt als wirkungslos), bei `gruen` ist er stumm.
+    Genau die Asymmetrie macht ihn gefaehrlich.
+
+    Gesucht wird in den Dateien aus `pfade` — nicht ueber das Testkommando geparst. Das hat
+    zwei Gruende: der Befehl kann `npm --prefix … --` heissen und seine Pfade relativ zu
+    einem anderen Wurzelverzeichnis nennen, und ein Testname, der in KEINER der Dateien
+    steht, die den Plan betreffen, gehoert ohnehin nicht hierher.
+
+    Verglichen wird der Name VOR der eckigen Klammer: pytest haengt dort die Parameter an
+    (`test_x[fall_a]`), und die stehen im Quelltext nicht als Text.
+
+    Befund des kalten Diff-Lesers; zum Zeitpunkt des Einbaus waren alle Namen vorhanden.
+    """
+    fehlend = []
+    geprueft = 0
+    for datei in plaene():
+        plan = json.loads(datei.read_text(encoding="utf-8"))
+        texte = []
+        for p in plan["pfade"]:
+            ziel = WURZEL / p
+            if ziel.is_file():
+                texte.append(ziel.read_text(encoding="utf-8", errors="replace"))
+        zusammen = "\n".join(texte)
+        for m in plan["mutationen"]:
+            for art in ("rot", "gruen"):
+                for name in m.get(art, []):
+                    geprueft += 1
+                    if name.split("[")[0] not in zusammen:
+                        fehlend.append(f"{datei.name}/{m['id']}: {art} `{name}`")
+    # Ohne diese Zahl waere der Test gruen, wenn die Schleife nie etwas ansieht.
+    assert geprueft > 0, "kein einziger rot/gruen-Name geprueft — die Schleife lief leer"
+    assert not fehlend, (
+        f"{len(fehlend)} von {geprueft} Testnamen stehen in keiner Datei aus `pfade`:\n  "
+        + "\n  ".join(fehlend[:10]))
 
 
 def test_der_laeufer_findet_jeden_plan():

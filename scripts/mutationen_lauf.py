@@ -52,6 +52,11 @@ GLOBALE_PFADE = (
     "webtool/frontend/src/setupTests.ts",
     "webtool/frontend/package.json",
     "webtool/frontend/package-lock.json",
+    # Die gemeinsame Testhuelle des Frontends. Sie steht in keinem `pfade`, traegt aber
+    # Zusicherungen mehrerer Suiten — `Sidebar.test.tsx:4` holt `Huelle` von hier. Eine
+    # Aenderung daran kann einen Waechter entwerten, ohne eine seiner Dateien anzufassen
+    # (Befund des kalten Diff-Lesers).
+    "webtool/frontend/src/lib/testHuelle.tsx",
 )
 
 
@@ -199,6 +204,19 @@ def main(argv: list[str] | None = None) -> int:
         rc = subprocess.run([sys.executable, "-u", treiber, "--repo", str(wurzel),  # noqa: S603
                              "--pfad", p.pfad_wurzel(wurzel), "--plan", str(p.datei)],
                             check=False).returncode
+        # EIN RUECKGABECODE AUSSERHALB VON 0/1/2 IST KEIN URTEIL, sondern das Fehlen eines
+        # Urteils — und ohne diese Zeile wird er zu einem gruenen Haken.
+        #
+        # Auf POSIX meldet `subprocess` ein Signal als NEGATIVE Zahl: -9 fuer den
+        # OOM-Killer, -2 fuer Strg-C, -15 fuer ein Timeout von aussen. `max(0, -9)` ist 0.
+        # Der Laeufer haette also rc 0 gemeldet — Job gruen — waehrend seine eigene Bilanz
+        # daneben „0 von 11 bestanden" druckt. Genau die Fehlerklasse, gegen die dieses
+        # ganze Werkzeug gebaut ist, im Werkzeug selbst. Gefunden vom kalten Diff-Leser mit
+        # gefaelschtem `subprocess.run`; die Fahrschleife hatte bis dahin keinen Test.
+        if rc not in (0, 1, 2):
+            print(f"  ABBRUCH {p.name}: Rueckgabecode {rc} — kein Urteil des Treibers"
+                  " (negativ heisst auf POSIX: durch ein Signal beendet).")
+            rc = 2
         if rc:
             gescheitert.append((p.name, rc))
         # rc 2 (konnte nicht urteilen) wiegt schwerer als rc 1 (Befund) — sonst verschwindet

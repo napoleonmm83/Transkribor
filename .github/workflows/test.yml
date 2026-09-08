@@ -8,22 +8,28 @@ on:
   push:
     branches: [master]
 
-# Ein neuer Push auf denselben PR macht den vorigen Lauf wertlos.
+# Ein neuer Push auf denselben PR macht den vorigen Lauf wertlos — dort wird abgebrochen.
 #
-# AUF MASTER GILT DAS NICHT, und bis #588 tat es das doch — mit Folgen, die man nicht sieht:
-# die Gruppe enthaelt `github.ref`, auf master ist das fuer JEDEN Push dieselbe, und der
-# naechste brach den laufenden ab. In den letzten master-Laeufen steht dazu ein echtes
-# `cancelled` (2026-09-07T19:46:10Z, 83 s vor dem naechsten Push), und Abstaende von 14 und
-# 26 Minuten sind normal. Ein abgebrochener Lauf ist NICHT rot — er ist gar nichts, und
-# "uebersprungen ist kein Erfolg".
+# AUF MASTER BEKOMMT JEDER COMMIT SEINE EIGENE GRUPPE, und das ist seit #588 so. Vorher
+# enthielt die Gruppe `github.ref`, auf master also fuer JEDEN Push dieselbe — der naechste
+# brach den laufenden ab. In den master-Laeufen steht dazu ein echtes `cancelled`
+# (2026-09-07T19:46:10Z, 83 s vor dem naechsten Push); Abstaende von 14 und 26 Minuten sind
+# normal. Fuer Jobs von Sekunden war das folgenlos, fuer die Mutationsserie (20-25 min
+# geschaetzt) waere es der Regelfall gewesen — und ein abgebrochener Lauf ist nicht rot, er
+# ist gar nichts.
 #
-# Fuer die Jobs, die Sekunden brauchen, war das folgenlos; fuer die volle Mutationsserie
-# (20-25 min geschaetzt) waere es der Regelfall gewesen: sie waere auf master fast nie zu
-# Ende gelaufen, und niemand haette es gemerkt. Auf einem PR bleibt das Abbrechen richtig —
-# dort macht der neue Push den alten Stand wirklich wertlos.
+# WARUM PRO SHA UND NICHT NUR `cancel-in-progress: false`: der erste Entwurf tat genau das,
+# und der kalte Diff-Leser hat ihn an der Doku widerlegt. GitHub sagt woertlich: „By default,
+# any existing PENDING job in a concurrency group is canceled when a new one is queued."
+# Ohne `cancel-in-progress` waere der laufende Lauf also geschuetzt — der WARTENDE aber
+# nicht: bei drei master-Pushes im selben Fenster faellt der mittlere trotzdem weg. Und der
+# Preis waere neu: der neueste Commit muesste hinter der ganzen Serie warten, mit ihm alle
+# sieben Jobs. Eine eigene Gruppe je SHA hat beides nicht — nichts kollidiert, nichts wartet.
+# (`queue: max` gibt es laut derselben Doku, ist aber mit `cancel-in-progress: true`
+# ausdruecklich unvertraeglich.)
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: true
 
 # Sechs der sieben Jobs LESEN nur: pytest, Vitest/tsc, die node:test-Suite, die vier
 # Skript-Tests (`notizen.test.sh` faelscht `gh` und braucht kein Token) und die beiden
@@ -483,15 +489,19 @@ jobs:
     # abreisst (der `finally`-Block muss die Mutation noch zuruecknehmen) —
     # eigener Zuschnitt, eigener Test.
     #
-    # SEIT #588 FAEHRT DIESER JOB ALLE PLAENE, nicht zwei. Vorher standen genau zwei hier
-    # fest verdrahtet, waehrend zehn im Repo lagen — acht liefen nirgends automatisch, und
-    # jedes Buendel legte einen weiteren dazu. Welche Plaene es gibt, steht jetzt an EINER
-    # Stelle (dem Ordner), und `scripts/mutationen_lauf.py` liest sie dort; eine Liste im
-    # Workflow waere die naechste Tabelle, die still hinterherhinkt.
+    # SEIT #588 FAEHRT DIESER JOB ALLE PLAENE DES ORDNERS, nicht zwei fest verdrahtete.
+    # Vorher standen genau zwei hier, waehrend deutlich mehr im Repo lagen — der Rest lief
+    # nirgends automatisch, und jedes Buendel legte einen weiteren dazu. Welche Plaene es
+    # gibt, steht jetzt an EINER Stelle (dem Ordner), und `scripts/mutationen_lauf.py` liest
+    # sie dort; eine Liste im Workflow waere die naechste Tabelle, die still hinterherhinkt.
+    # (Auch eine ZAHL hier waere eine: sie stand als „zehn" im ersten Entwurf und war beim
+    # naechsten Commit elf. Deshalb steht hier keine.)
     #
     # AUSWAHL STATT IMMER ALLES: die volle Serie ist auf 20-25 min geschaetzt (aus
-    # Einzelmessungen hochgerechnet, als Ganzes noch nie gelaufen — der erste master-Lauf
-    # misst sie). Bei jedem PR gefahren waere sie eine Steuer auf Arbeit, die mit den
+    # Einzelmessungen hochgerechnet, als Ganzes noch nie gelaufen). Gemessen wird sie zum
+    # ersten Mal vom PR ZU #588 SELBST — nicht erst auf master: er aendert
+    # `scripts/mutation.py`, und das steht in GLOBALE_PFADE, waehlt also alle Plaene.
+    # Bei jedem PR gefahren waere sie eine Steuer auf Arbeit, die mit den
     # Waechtern nichts zu tun hat. Am PR laufen deshalb nur die betroffenen Plaene, auf
     # master alle. Die billige Haelfte laeuft dafuer IMMER mit: der Job `Python` faehrt
     # `scripts/test_mutationsplaene.py`, und der bindet in Sekunden jeden Anker an den Baum.

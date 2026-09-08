@@ -135,6 +135,44 @@ def test_beide_schalter_oder_keiner_ergibt_zwei(tmp_path, capsys):
     assert "genau eines" in capsys.readouterr().out
 
 
+def test_ein_signal_getoeteter_treiber_meldet_NICHT_gruen(tmp_path, monkeypatch, capsys):
+    """Die Fahrschleife hatte keinen Test — und darin steckte ein gruener Haken.
+
+    `subprocess` meldet ein Signal auf POSIX als NEGATIVE Zahl (-9 OOM-Killer, -2 Strg-C,
+    -15 Timeout von aussen). Die Aggregation war `max(schlimmster, rc)`, und `max(0, -9)`
+    ist 0: der Laeufer haette rc 0 gemeldet — Job gruen — waehrend seine eigene Bilanz
+    daneben „0 von N bestanden" druckt.
+
+    Gefunden vom kalten Diff-Leser. Der Test faelscht `subprocess.run`, weil ein echtes
+    Signal plattformabhaengig waere und der Fehler es nicht ist.
+    """
+    class Ergebnis:
+        def __init__(self, rc):
+            self.returncode = rc
+
+    monkeypatch.setattr(mutationen_lauf.subprocess, "run", lambda *a, **k: Ergebnis(-9))
+    rc = mutationen_lauf.main(["--repo", str(WURZEL), "--alle"])
+    assert rc == 2, "ein Signal ist kein Urteil und darf nicht als bestanden durchgehen"
+    ausgabe = capsys.readouterr().out
+    assert "Rueckgabecode -9" in ausgabe, "der Grund muss dastehen, nicht nur die Farbe"
+    assert "GESCHEITERT" in ausgabe
+
+
+def test_die_rueckgabecodes_der_plaene_werden_zum_schlimmsten_verdichtet(monkeypatch):
+    """rc 2 wiegt schwerer als rc 1: ein Plan, der nicht gemessen hat, darf nicht hinter
+    einem verschwinden, der ehrlich rot war."""
+    codes = iter([1, 2, 0])
+
+    class Ergebnis:
+        def __init__(self):
+            self.returncode = next(codes)
+
+    monkeypatch.setattr(mutationen_lauf.subprocess, "run", lambda *a, **k: Ergebnis())
+    monkeypatch.setattr(mutationen_lauf, "lade_plaene",
+                        lambda w: [_plan("a", ["x"]), _plan("b", ["y"]), _plan("c", ["z"])])
+    assert mutationen_lauf.main(["--repo", str(WURZEL), "--alle"]) == 2
+
+
 def test_echte_plaene_werden_alle_geladen():
     """Bindet den Laeufer an die WIRKLICHEN Plaene, nicht nur an gebaute.
 
