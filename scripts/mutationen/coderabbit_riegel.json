@@ -126,7 +126,7 @@
     },
     {
       "id": "M10 das Kontingent faellt wieder in den roten Zweig",
-      "von": "    if (handlung := kontingent_erschoepft(lage)) is not None:\n        print(\"STUFE AUSGEFALLEN: das CodeRabbit-Kontingent ist erschoepft.\")\n        print(f\"                   Die CLI bietet an, mit Guthaben zu wiederholen\"\n              f\" ({handlung.get('command', 'kein Kommando genannt')}) — das tut dieser\"\n              f\" Riegel NICHT von sich aus.\")\n        print(\"                   Das ist eine FEHLENDE Pruefung, kein bestandener Lauf.\")\n        if a.markdown:\n            a.markdown.write_text(\n                \"### CodeRabbit-CLI: Stufe ausgefallen\\n\\n\"\n                \"Das Kontingent ist erschoepft — dieser PR hat **kein** CLI-Review\\n\"\n                \"bekommen. Uebersprungen ist kein Erfolg.\\n\\n\"\n                \"_Der Bot prueft dieses Repo nicht automatisch (#593)._\\n\",\n                encoding=\"utf-8\")\n        return 3",
+      "von": "    if not geurteilt and (handlung := kontingent_erschoepft(lage)) is not None:\n        print(\"STUFE AUSGEFALLEN: das CodeRabbit-Kontingent ist erschoepft.\")\n        print(f\"                   Die CLI bietet an, mit Guthaben zu wiederholen\"\n              f\" ({handlung.get('command', 'kein Kommando genannt')}) — das tut dieser\"\n              f\" Riegel NICHT von sich aus.\")\n        print(\"                   Das ist eine FEHLENDE Pruefung, kein bestandener Lauf.\")\n        if a.markdown:\n            a.markdown.write_text(\n                \"### CodeRabbit-CLI: Stufe ausgefallen\\n\\n\"\n                \"Das Kontingent ist erschoepft — dieser PR hat **kein** CLI-Review\\n\"\n                \"bekommen. Uebersprungen ist kein Erfolg.\\n\\n\"\n                \"_Der Bot prueft dieses Repo nicht automatisch (#593)._\\n\",\n                encoding=\"utf-8\")\n        return 3",
       "nach": "    # M10: ohne diesen Zweig faerbt ein erschoepftes Kontingent jeden neu\n    # geoeffneten PR rot, unbehebbar von innen (Entscheidung Marcus).",
       "rot": [
         "test_kontingent_ergibt_drei_und_schreibt_den_kommentar"
@@ -201,6 +201,47 @@
         "test_haupt_reicht_den_gewoehnlichen_code_durch",
         "test_kein_befund_ergibt_null",
         "test_erfolg_wird_als_urteil_erkannt"
+      ],
+      "datei": "scripts/coderabbit_riegel.py"
+    },
+    {
+      "id": "M16 der Kontingent-Zweig gilt wieder AUCH nach einem Urteil — Befunde weg",
+      "von": "    if not geurteilt and (handlung := kontingent_erschoepft(lage)) is not None:",
+      "nach": "    if (handlung := kontingent_erschoepft(lage)) is not None:  # M16: ein Lauf, der\n        # geurteilt UND die Grenze gemeldet hat, faellt wieder hierher — rc 3, und die\n        # Kommentardatei wird mit \"Stufe ausgefallen\" ueberschrieben.",
+      "rot": [
+        "test_kontingent_NACH_einem_urteil_verwirft_die_befunde_NICHT"
+      ],
+      "gruen": [
+        "test_kontingent_ergibt_drei_und_schreibt_den_kommentar",
+        "test_kontingent_erschoepft_wird_erkannt",
+        "test_kein_befund_ergibt_null"
+      ],
+      "datei": "scripts/coderabbit_riegel.py"
+    },
+    {
+      "id": "M17 der Abbruchgrund wird wieder unmaskiert gedruckt",
+      "von": "        print(f\"ABBRUCH: {verdecke(grund, schluessel)}\")",
+      "nach": "        print(f\"ABBRUCH: {grund}\")  # M17: der Grund traegt CLI-Felder, die den\n        # Schluessel enthalten koennen — und landen damit im Protokoll.",
+      "rot": [
+        "test_der_abbruchgrund_wird_maskiert"
+      ],
+      "gruen": [
+        "test_review_skipped_ist_KEIN_urteil",
+        "test_authfehler_ist_kein_urteil"
+      ],
+      "datei": "scripts/coderabbit_riegel.py"
+    },
+    {
+      "id": "M18 die Kopfzeile nimmt fileName und severity wieder roh",
+      "von": "        zeilen.append(f\"**{_kopf(b.get('severity', '?'))}** · `{_kopf(b.get('fileName', '?'))}`\")",
+      "nach": "        zeilen.append(f\"**{b.get('severity', '?')}** · `{b.get('fileName', '?')}`\")  # M18",
+      "rot": [
+        "test_die_kopfzeile_bricht_nicht_aus_dem_markdown_aus"
+      ],
+      "gruen": [
+        "test_markdown_traegt_den_vorschlag_mit",
+        "test_markdown_ist_leer_ohne_befunde",
+        "test_markdown_BEHAELT_den_vorspann"
       ],
       "datei": "scripts/coderabbit_riegel.py"
     }

@@ -541,3 +541,62 @@ def test_haupt_reicht_den_gewoehnlichen_code_durch(monkeypatch):
     for code in (0, 1, 2, 3):
         monkeypatch.setattr(riegel, "main", lambda *_a, _c=code, **_k: _c)
         assert riegel.haupt() == code
+
+
+def test_kontingent_NACH_einem_urteil_verwirft_die_befunde_NICHT(monkeypatch, tmp_path, capsys):
+    """Ein Lauf kann urteilen UND unterwegs die Kontingent-Grenze melden.
+
+    Der Kontingent-Zweig stand vor der Urteilspruefung — mit gutem Grund (ohne `complete`
+    faenge die allgemeine Regel den Fall und faerbte rot). Nur galt er dadurch AUCH, wenn
+    laengst ein `review_completed` samt Befunden vorlag: rc 3, und die Kommentardatei wurde
+    mit „Stufe ausgefallen" ueberschrieben. Die Befunde waren weg, der Job gruen.
+
+    Befund der CLI an sich selbst (Lauf 34269048014).
+    """
+    ausgabe = (
+        '{"type":"finding","fileName":"a.py","severity":"minor",'
+        '"codegenInstructions":"etwas ist faul"}\n'
+        + KONTINGENT
+        + '{"type":"complete","status":"review_completed","findings":1,'
+          '"reviewedFiles":["a.py"]}\n'
+    )
+    ziel = tmp_path / "befunde.md"
+    monkeypatch.setenv("CODERABBIT_API_KEY", "cr-egal")
+    monkeypatch.setattr(riegel.subprocess, "run", _lauf(ausgabe))
+
+    rc = riegel.main(["--base-commit", "HEAD~1", "--markdown", str(ziel)])
+    assert rc == 1, "ein Urteil mit Befunden ist rc 1, nicht der Kontingent-Fall"
+    text = ziel.read_text(encoding="utf-8")
+    assert "etwas ist faul" in text, "die Befunde duerfen nicht ueberschrieben werden"
+    assert "Stufe ausgefallen" not in text
+    capsys.readouterr()
+
+
+def test_der_abbruchgrund_wird_maskiert(monkeypatch, capsys):
+    """Der Grund traegt Felder der CLI-Ausgabe — und die koennen den Schluessel tragen."""
+    schluessel = "cr-geheim-1234567890"
+    monkeypatch.setenv("CODERABBIT_API_KEY", schluessel)
+    ausgabe = ('{"type":"complete","status":"review_skipped","findings":0,'
+               f'"message":"key {schluessel} rejected"}}\n')
+    monkeypatch.setattr(riegel.subprocess, "run", _lauf(ausgabe))
+
+    assert riegel.main(["--base-commit", "HEAD~1"]) == 2
+    gesehen = capsys.readouterr()
+    assert schluessel not in gesehen.out, "der Schluessel darf nicht im Protokoll stehen"
+    assert "ABBRUCH" in gesehen.out
+
+
+def test_die_kopfzeile_bricht_nicht_aus_dem_markdown_aus():
+    """`fileName` kommt mittelbar aus einem PR — dieses Repo ist oeffentlich.
+
+    Eine Datei darf `@napoleonmm83.py` heissen oder Backticks tragen. Der Befundtext ist
+    laengst gezaeunt; die Kopfzeile stand roh zwischen zwei Sternen und zwei Backticks,
+    und der Kommentar wird vom Bot-Konto gepostet — eine Erwaehnung darin pingt wirklich.
+    """
+    befund = {"fileName": "`@napoleonmm83`.py\nzweite Zeile", "severity": "**minor**",
+              "codegenInstructions": "egal"}
+    text = riegel.markdown([befund])
+    kopf = next(z for z in text.splitlines() if "napoleonmm83" in z)
+    assert "\n" not in kopf and "`@" not in kopf, "kein Ausbruch aus der Kopfzeile"
+    assert "@​" in kopf, "die Erwaehnung muss entschaerft sein"
+    assert "napoleonmm83" in kopf, "lesbar bleiben muss der Name trotzdem"
