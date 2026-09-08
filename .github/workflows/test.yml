@@ -14,9 +14,9 @@ on:
 # enthielt die Gruppe `github.ref`, auf master also fuer JEDEN Push dieselbe — der naechste
 # brach den laufenden ab. In den master-Laeufen steht dazu ein echtes `cancelled`
 # (2026-09-07T19:46:10Z, 83 s vor dem naechsten Push); Abstaende von 14 und 26 Minuten sind
-# normal. Fuer Jobs von Sekunden war das folgenlos, fuer die Mutationsserie (20-25 min
-# geschaetzt) waere es der Regelfall gewesen — und ein abgebrochener Lauf ist nicht rot, er
-# ist gar nichts.
+# normal. Fuer Jobs von Sekunden war das folgenlos, fuer die Mutationsserie (GEMESSEN
+# 1616 s = 27 min, Lauf 34225644988) waere es der Regelfall gewesen — und ein abgebrochener
+# Lauf ist nicht rot, er ist gar nichts.
 #
 # WARUM PRO SHA UND NICHT NUR `cancel-in-progress: false`: der erste Entwurf tat genau das,
 # und der kalte Diff-Leser hat ihn an der Doku widerlegt. GitHub sagt woertlich: „By default,
@@ -497,15 +497,15 @@ jobs:
     # (Auch eine ZAHL hier waere eine: sie stand als „zehn" im ersten Entwurf und war beim
     # naechsten Commit elf. Deshalb steht hier keine.)
     #
-    # AUSWAHL STATT IMMER ALLES: die volle Serie ist auf 20-25 min geschaetzt (aus
-    # Einzelmessungen hochgerechnet, als Ganzes noch nie gelaufen). Gemessen wird sie zum
-    # ersten Mal vom PR ZU #588 SELBST — nicht erst auf master: er aendert
-    # `scripts/mutation.py`, und das steht in GLOBALE_PFADE, waehlt also alle Plaene.
-    # Bei jedem PR gefahren waere sie eine Steuer auf Arbeit, die mit den
-    # Waechtern nichts zu tun hat. Am PR laufen deshalb nur die betroffenen Plaene, auf
+    # AUSWAHL STATT IMMER ALLES: die volle Serie braucht **1616 s (27 min)** — GEMESSEN am
+    # PR zu #588 selbst (Lauf 34225644988, 11 von 11 Plaenen, 84 Mutationen, alle
+    # bestanden). Die Schaetzung davor lag bei 20-25 min; sie stand hier, bis es einen Lauf
+    # gab. Die zwei teuersten Plaene sind `weitergereichtes_then` (14 Mutationen, 12 min)
+    # und `testdeckel` (9, 8 min) — dort faehrt jede Mutation eine ganze Suite bzw. laesst
+    # eine Frist ablaufen. Bei jedem PR gefahren waere das eine Steuer auf Arbeit, die mit
+    # den Waechtern nichts zu tun hat. Am PR laufen deshalb nur die betroffenen Plaene, auf
     # master alle. Die billige Haelfte laeuft dafuer IMMER mit: der Job `Python` faehrt
-    # `scripts/test_mutationsplaene.py`, und der bindet in Sekunden jeden Anker an den Baum.
-    timeout-minutes: 60        # bis zur ersten echten Messung; Begruendung am python-Job (#583)
+    timeout-minutes: 60        # 2,2x Reserve auf die gemessenen 27 min; Begruendung am python-Job (#583)
     steps:
       - uses: actions/checkout@v7
         with:
