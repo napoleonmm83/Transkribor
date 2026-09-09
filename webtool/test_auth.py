@@ -161,10 +161,18 @@ def test_login_zeigt_die_url_ohne_zeilenumbruch_abzuwarten(monkeypatch, tmp_path
     _verdrahte(monkeypatch, skript)
     t0 = time.time()
     z = auth.start("claude-cli")
+    # Die URL wird am Ereignis erwartet, nicht an der festen 3-s-Frist der Rueckgabe (#558):
+    # unter Volllast kam `Popen` langsamer hoch als diese Frist, `start()` kehrte ohne URL
+    # zurueck, und der Test schlug auf einen langsamen Start statt auf einen kaputten Leser.
+    # Der UI-Poll geht denselben Weg (GET loginState, SettingsPage) — die Rueckgabe bleibt
+    # fuer das verantwortlich, was sie synchron zusagen kann (Zeile ganz unten).
+    erwartet = "https://example.invalid/oauth?code=true"
+    assert _warte(lambda: auth.zustand("claude-cli")["url"]), \
+        "URL kam nicht in den Zustand — " + _bericht(t0)
     # Der Zustand steht in der Meldung, nicht nur der erwartete Wert: dieser Test
     # ist einer der zwei aus #558, und ein blosses "leer ist nicht die URL" sagt
     # nichts darueber, WARUM sie fehlt.
-    _url_muss_da_sein(z, "https://example.invalid/oauth?code=true", t0)
+    _url_muss_da_sein(auth.zustand("claude-cli"), erwartet, t0)
     assert z["laeuft"] is True and z["braucht_code"] is True, _bericht(t0)
 
 
@@ -204,10 +212,18 @@ def test_zweiter_start_raeumt_den_laufenden_nicht_weg(monkeypatch, tmp_path):
     gerade tippt."""
     skript, _ = _fake_cli(tmp_path)
     _verdrahte(monkeypatch, skript)
-    erst = auth.start("claude-cli")
+    auth.start("claude-cli")
+    # Ereignis statt Frist (#558, Nachbarstelle desselben Rennens): `proc` und die URL
+    # stehen erst nach `Popen` bzw. dem zeichenweisen Lesen im Zustand — ohne Warten
+    # verglich der Test zwei Rueckgaben, deren eine die URL noch nicht trug (rot aus
+    # Verschwinden) oder gar None mit None (vacuous gruen, schlimmer).
+    assert _warte(lambda: (auth._lauf or {}).get("proc") is not None
+                  and auth.zustand("claude-cli")["url"]), "Start nicht sichtbar — " + _bericht()
     proc = auth._lauf["proc"]
+    url_vor = auth.zustand("claude-cli")["url"]
     zweit = auth.start("claude-cli")
-    assert auth._lauf["proc"] is proc and zweit["url"] == erst["url"]
+    assert auth._lauf["proc"] is proc
+    assert zweit["url"] == url_vor
 
 
 def test_code_ohne_laufende_anmeldung_meldet_sich(monkeypatch, tmp_path):
@@ -259,15 +275,16 @@ def test_start_fuer_anderen_anbieter_raeumt_den_alten_weg(monkeypatch, tmp_path)
     monkeypatch.setitem(auth.CLIS, "codex-cli", dict(auth.CLIS["claude-cli"]))
     t0 = time.time()
     auth.start("claude-cli")
+    # Ereignis statt Rueckgabe-Frist (#558): `proc` wird erst gesetzt, nachdem der
+    # Daemon-Faden durch `Popen` ist — unter Volllast spaeter als `start()` zurueckkehrt.
+    # Vorher direkt gelesen, starb der Test an `alt.poll()` mit einem AttributeError, der
+    # die Ursache verschweigt; das Warten traegt denselben Bericht mit sich.
+    assert _warte(lambda: (auth._lauf or {}).get("proc") is not None), \
+        "erster Start hat keinen Prozess gesetzt — " + _bericht(t0)
     # `(auth._lauf or {})`, nicht `auth._lauf[...]`: der Zugriff selbst war die ERSTE
     # Absturzstelle. Steht dort None, starb die Zeile mit einem nackten
-    # `TypeError: 'NoneType' object is not subscriptable`, bevor die Zusicherung
-    # darunter ueberhaupt drankam — instrumentiert waere dann die zweite Stelle
-    # gewesen und die erste so geblieben, wie #558 sie beschreibt (Kalt-Review B4).
+    # `TypeError: 'NoneType' object is not subscriptable` (Kalt-Review B4).
     alt = (auth._lauf or {}).get("proc")
-    # Der zweite Test aus #558. Ohne diese Zeile stirbt er sechs Zeilen spaeter an
-    # `alt.poll()` mit einem AttributeError, der die Ursache verschweigt — genau
-    # die Meldung, die in der CI ankam und niemandem half.
     _prozess_muss_gesetzt_sein(alt, t0)
     auth.start("codex-cli")
     assert auth._lauf["provider"] == "codex-cli" and auth._lauf["proc"] is not alt

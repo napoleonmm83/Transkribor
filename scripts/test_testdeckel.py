@@ -96,7 +96,9 @@ def _lauf(tmp_path: Path, quelle: str, frist: str) -> subprocess.CompletedProces
     er waehrend des Laufs an das Leseende muss.
 
     `timeout=60` ist ein RUECKFALL, keine Messgroesse: greift er, hat der Deckel versagt —
-    genau das melden die Aufrufer dann auch. 60 s sind das 30-fache der Pruef-Frist.
+    genau das melden die Aufrufer dann auch. 60 s sind das 30-fache der Standard-Frist (2 s)
+    und immer noch das Doppelte der hoechsten Frist, die ein Aufrufer je stellt (30 s, der
+    dritte-Fall-Test unten rechnet seine Frist seit #597 aus der gemessenen Laufzeit).
     """
     shutil.copy(WURZEL / "conftest.py", tmp_path / "conftest.py")
     ziel = tmp_path / "test_haenger.py"
@@ -109,9 +111,9 @@ def _lauf(tmp_path: Path, quelle: str, frist: str) -> subprocess.CompletedProces
     )
 
 
-def _haenger(tmp_path: Path, quelle: str) -> tuple[int, str]:
+def _haenger(tmp_path: Path, quelle: str, frist: str = "2") -> tuple[int, str]:
     try:
-        p = _lauf(tmp_path, quelle, "2")
+        p = _lauf(tmp_path, quelle, frist)
     except subprocess.TimeoutExpired:
         pytest.fail("Der Lauf-Deckel hat NICHT zugeschlagen — der Prozess hing 60 s lang, "
                     "obwohl die Frist auf 2 s stand. Genau der Ausfall, gegen den er da ist.")
@@ -166,8 +168,25 @@ def test_der_dritte_fall_meldet_sonst_erfolg(tmp_path):
     von aussen abgewuergt wird (gemessen: rc 124). Hier wird festgehalten, dass hinter der
     Erfolgsmeldung trotzdem ein roter Ausgang steht — die Zusammenfassungszeile ist in
     diesem Fall also NICHT die Wahrheit, der Rueckgabecode ist es.
+
+    Die Frist haengt seit #597 an der gemessenen Laufzeit desselben Aufbaus, nicht an einer
+    festen Zahl: 2 s riss auf windows-latest unter Last schon beim Schreiben der .pyc-Dateien
+    (Lauf 34277620526, Stapelabzug auf `_write_pyc_fp`) — der Deckel erschoss den Lauf VOR
+    der Zusammenfassungszeile, und die Zusicherung darunter schlug auf den langsamen Laeufer,
+    nicht auf den Deckel. Gemessen wird ein Gesundlauf mit abgeschaltetem Deckel (derselbe
+    Interpreter-, pytest- und conftest-Aufbau, nur ohne den haengenden Faden); Faktor 5,
+    Boden 5 s, Deckel 30 s — der Deckel haelt den Test damit unter dem aeusseren timeout
+    der `_lauf`-Hilfe.
     """
-    rc, aus = _haenger(tmp_path, FAELLE["nach_dem_letzten_test"])
+    t0 = time.monotonic()
+    gesund = _lauf(tmp_path, "def test_ok():\n    assert True\n", "0")
+    dauer = time.monotonic() - t0
+    assert gesund.returncode == 0, (
+        "Der Gesundlauf (Deckel aus) schlug fehl — als Frist-Messung taugt er dann nicht:\n"
+        f"{gesund.stdout + gesund.stderr}"
+    )
+    frist = f"{min(30.0, max(5.0, 5.0 * dauer)):.0f}"
+    rc, aus = _haenger(tmp_path, FAELLE["nach_dem_letzten_test"], frist=frist)
 
     assert "1 passed" in aus, f"Der Aufbau stimmt nicht mehr — der Test lief gar nicht:\n{aus}"
     assert rc != 0, "Protokoll meldet Erfolg, der Lauf steht — und der Ausgang ist gruen."
