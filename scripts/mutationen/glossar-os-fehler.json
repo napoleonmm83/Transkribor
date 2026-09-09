@@ -1,0 +1,22 @@
+{
+  "test": "python -m pytest webtool/test_correct.py -q",
+  "pfade": [
+    "webtool/correct.py",
+    "webtool/test_correct.py"
+  ],
+  "mutationen": [
+    {
+      "id": "455-A der Glossar-OS-Fehler wirft wieder durch — der GESAMTE Lauf stirbt",
+      "datei": "webtool/correct.py",
+      "von": "        except OSError as e:",
+      "nach": "        except OSError as e:\n            raise",
+      "rot": [
+        "test_glossar_os_fehler_ueberspringt_glossar_und_laeuft_weiter"
+      ],
+      "gruen": [
+        "test_glossar_sperrt_alle_gelesenen_aufnahmen",
+        "test_glossar_sperrt_nicht_wenn_es_wiederverwendet_wird"
+      ]
+    }
+  ]
+}

@@ -814,14 +814,14 @@ def _glossary(project: str, context: str) -> str:
     """Ein claude-Aufruf über alle .raw.txt -> _glossar.json. Gibt das Glossar als JSON-Text
     zurück; leer heisst „die Korrektur läuft ohne gemeinsames Glossar weiter".
 
-    „Leer" deckt den ANBIETER-Fehler (`_ask_llm` fängt `llm.LLMError`) und ein unlesbares
-    Ergebnis (`_load` -> `OSError`/`ValueError`). Es deckt NICHT jeden Fehlschlag: ein
-    OS-Fehler aus dem Schreibweg (`paths.atomic_write` in `llm.complete_to_file`) geht
-    hindurch und bricht den GANZEN Lauf ab, keine einzige Datei wird korrigiert.
-    Vorbestehend — hier benannt, weil der Satz vorher das Gegenteil versprach und das
-    `finally` unten genau von diesem Weg lebt (ein Test schreibt ihn fest). Ob ein OS-Fehler
-    den Lauf abbrechen SOLL, statt nur das Glossar zu überspringen, ist eine offene
-    Entscheidung (#455)."""
+    „Leer" deckt den ANBIETER-Fehler (`_ask_llm` fängt `llm.LLMError`), ein unlesbares
+    Ergebnis (`_load` -> `OSError`/`ValueError`) und — seit #455, Entscheidung Marcus
+    2026-09-09 — jeden `OSError` aus dem `_ask_llm`-Aufruf, Schreibweg wie Prozess-Start:
+    das Glossar wird uebersprungen, statt den GANZEN Lauf abzubrechen. Preis, bewusst
+    getragen: ist die Ursache dauerhaft (echt volle Platte), scheitert JEDE Datei-Korrektur
+    einzeln — `correct_ai_single` faengt breit —, der Lauf endet ordentlich mit
+    `run: FEHLER — 0 von N` und Exit 1 statt als Crash; seine Grund-Zeile nennt dann
+    pauschal den Anbieter, der wahre Grund steht in den Zeilen darueber."""
     tdir = paths.transkripte_dir(project)
     gpath = os.path.abspath(os.path.join(tdir, "_glossar.json"))
     # Basisname NEBEN dem Pfad fuehren, statt ihn unten aus dem Dateinamen zurueckzurechnen:
@@ -897,6 +897,16 @@ def _glossary(project: str, context: str) -> str:
             # ziel="" + dialekt=False: das Glossar ist sprachneutral (Spec F2) -- sonst
             # leaked der Default "lesbarem Standarddeutsch" in jedes Projekt, auch Englisches.
             _ask_llm(_glossary_prompt(gpath, raw_files, context, ziel=""), raw_files, gpath)
+        except OSError as e:
+            # #455: das Glossar ist eine Optimierung. JEDER OSError aus _ask_llm nimmt hier
+            # denselben Rueckfall wie der Anbieter-Fehler: Schreibweg (atomic_write — volle
+            # Platte, gesperrtes Verzeichnis) wie Prozess-Start oder Verbindungsabbruch
+            # mitten im Antwort-Strom; die Warnzeile nennt deshalb nur den Typ, keine
+            # Ursachen-Raterei. Lieber das Glossar uebersprungen als der GANZE Lauf tot
+            # (Entscheidung Marcus 09-09, Option 1).
+            print(f"⚠ Glossar-Fehler ({type(e).__name__}) — "
+                  "fahre ohne gemeinsames Glossar fort", flush=True)
+            return ""
         finally:
             for b in gelesen:
                 print(f"[done] {b}", flush=True)
