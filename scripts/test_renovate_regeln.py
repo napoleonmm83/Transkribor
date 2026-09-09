@@ -9,14 +9,16 @@ Zwei Ebenen, und die Trennung ist Absicht:
   `-m "not renovate"` aus der normalen Suite -- der eigene CI-Job holt ihn mit
   `-m renovate` wieder herein.
 
-**Warum ein Marker und kein Umgebungsschalter:** ein uebersehener Schalter laesst
-den Test still ueberspringen, und der Job waere gruen, ohne etwas gefahren zu
+**Warum ein Marker und kein Umgebungsschalter:** ein übersehener Schalter lässt
+den Test still überspringen, und der Job wäre grün, ohne etwas gefahren zu
 haben -- genau die Klasse, gegen die dieses ganze Paket gebaut ist. Passt der
 Marker nicht mehr, sammelt pytest im eigenen Job NULL Tests ein und endet mit
-rc 5. Der Ausfall ist damit rot statt gruen, ohne dass jemand etwas dazubauen musste.
+rc 5. Ausgeführt gemessen: `-m renovatex` ⇒ `15 deselected`, rc 5.
 
 Die Beispielausgabe unten ist AUFGEZEICHNET, nicht erfunden: sie stammt aus dem
-Lauf vom 2026-09-09 gegen Renovate 41.173.1 mit Token.
+Lauf vom 2026-09-09 gegen Renovate 41.173.1 mit Token, samt der Verschachtelung
+des `packageFiles`-Dumps -- ein geglätteter Auszug hätte die Nähe-Prüfung von
+`_PYTHON_ABGESCHALTET` gegen eine Form getestet, die es so nicht gibt.
 """
 
 from __future__ import annotations
@@ -34,16 +36,33 @@ import renovate_regeln as rr  # noqa: E402, I001
 
 
 GEMESSEN = """\
-DEBUG: Filtered out 1 disabled update(s). 5 update(s) remaining. (repository=local)
-DEBUG: 5 flattened updates found: postgres, actions/setup-python, \
-@vitejs/plugin-react, lucide-react, lucide-react (repository=local)
+DEBUG: Found 4 package file(s) (repository=local)
+DEBUG: packageFiles with updates (repository=local)
+             {
+               "datasource": "github-runners",
+               "depName": "ubuntu",
+               "skipReason": "invalid-version",
+               "updates": [],
+               "packageName": "ubuntu"
+             },
+             {
+               "datasource": "github-releases",
+               "depName": "python",
+               "packageName": "actions/python-versions",
+               "versioning": "npm",
+               "currentValue": "3.12",
+               "depType": "uses-with",
+               "updates": [],
+               "skipReason": "disabled"
+             }
                      "branchName": "renovate/postgres-18.x"
                      "branchName": "renovate/actions-setup-python-7.x"
                      "branchName": "renovate/vitejs-plugin-react"
                      "branchName": "renovate/all-minor-patch"
                      "branchName": "renovate/major-lucide-monorepo"
-                 "depName": "python",
-                 "skipReason": "disabled"
+DEBUG: Filtered out 1 disabled update(s). 5 update(s) remaining. (repository=local)
+DEBUG: 5 flattened updates found: postgres, actions/setup-python, \
+@vitejs/plugin-react, lucide-react, lucide-react (repository=local)
 """
 
 
@@ -63,8 +82,7 @@ def test_flache_liste_liest_die_namen():
 def test_flache_liste_bei_null_updates_ist_leer_nicht_none():
     """`keine Updates` und `Zeile fehlt` sind verschiedene Dinge.
 
-    Aufgezeichnet aus dem ersten Spike-Lauf, in dem die Fixture nicht ankam.
-    Waeren beide `None`, koennte der Riegel `nichts gefunden` nicht von
+    Wären beide `None`, könnte der Riegel `nichts gefunden` nicht von
     `nicht hingesehen` unterscheiden -- die Kernklasse dieses Repos.
     """
     leer = "DEBUG: 0 flattened updates found:  (repository=local)\n"
@@ -78,38 +96,63 @@ def test_flache_liste_ohne_die_zeile_ist_none():
 # --- unstimmig: der Riegel gegen das eigene Schweigen -------------------------
 
 def test_gemessene_ausgabe_ist_stimmig():
-    """Positivkontrolle: der Riegel darf nicht ALLES fuer unstimmig halten."""
+    """Positivkontrolle: der Riegel darf nicht ALLES für unstimmig halten."""
     assert rr.unstimmig(0, GEMESSEN) is None
+
+
+def test_kleinere_dateimenge_ist_unstimmig():
+    """DER Befund des gegnerischen Reviews, ausgeführt reproduziert.
+
+    Der erste Entwurf verbot `Found 0` und liess jede kleinere Menge durch: eine
+    Fixture ohne die Kontroll-Compose ergab `Found 3` -- und das Urteil lautete
+    „Alle drei Regeln wirken". Wörtlich die #588-Klasse: der Riegel schweigt
+    nicht, er spricht leiser.
+    """
+    grund = rr.unstimmig(0, GEMESSEN.replace("Found 4", "Found 3"))
+    assert grund is not None and "3 Paketdateien" in grund
 
 
 def test_null_paketdateien_ist_unstimmig():
     """Gemessen am 2026-09-09: Fixture ohne Commit ⇒ rc 0 und nichts gesehen."""
-    ausgabe = ("DEBUG: Found 0 package file(s) (repository=local)\n"
-               "DEBUG: 0 flattened updates found:  (repository=local)\n")
-    grund = rr.unstimmig(0, ausgabe)
-    assert grund is not None and "NULL Paketdateien" in grund
+    grund = rr.unstimmig(0, GEMESSEN.replace("Found 4", "Found 0"))
+    assert grund is not None and "0 Paketdateien" in grund
 
 
-def test_fehlende_ausgabezeile_ist_unstimmig():
+def test_fehlende_dateizeile_ist_unstimmig():
     """Falle 3: falsche node-Fassung ⇒ rc 0 ohne jede Ausgabe."""
     grund = rr.unstimmig(0, "")
-    assert grund is not None and "flattened updates found" in grund
+    assert grund is not None and "Found N package file(s)" in grund
+
+
+def test_rueckgabecode_ungleich_null_wird_gelesen():
+    """Der Docstring behauptete die Prüfung, der Code hatte sie nicht."""
+    grund = rr.unstimmig(1, GEMESSEN)
+    assert grund is not None and "endete mit 1" in grund
 
 
 def test_zahl_gegen_aufzaehlung_wird_bemerkt():
-    ausgabe = "DEBUG: 9 flattened updates found: postgres (repository=local)\n"
+    ausgabe = GEMESSEN.replace("DEBUG: 5 flattened", "DEBUG: 9 flattened")
     grund = rr.unstimmig(0, ausgabe)
     assert grund is not None and "Ausgabeform" in grund
 
 
 def test_ohne_token_wird_nicht_geurteilt():
     """Ohne Token ist Regel 2 unfalsifizierbar -- dann lieber gar kein Urteil."""
-    ausgabe = GEMESSEN + '                 "skipReason": "github-token-required"\n'
+    ausgabe = GEMESSEN.replace('"skipReason": "disabled"',
+                               '"skipReason": "github-token-required"')
     grund = rr.unstimmig(0, ausgabe)
     assert grund is not None and "Token" in grund
 
 
-# --- urteile: je Regel beide Richtungen ---------------------------------------
+def test_nicht_erkannter_python_dep_wird_nicht_geurteilt():
+    """Ein Lookup-Fehler, der NICHT `github-token-required` heisst, nimmt den
+    Dep ebenfalls aus der Liste -- ohne diesen Riegel gälte Regel 2 als wirksam.
+    """
+    grund = rr.unstimmig(0, ohne(GEMESSEN, '"depName": "python",'))
+    assert grund is not None and "gar nicht erkannt" in grund
+
+
+# --- urteile: je Regel positiver Beleg UND Kontrolle ---------------------------
 
 def test_urteil_ist_gruen_wenn_alle_drei_wirken():
     code, zeilen = rr.urteile(GEMESSEN)
@@ -118,15 +161,30 @@ def test_urteil_ist_gruen_wenn_alle_drei_wirken():
 
 
 def test_regel1_faellt_auf_wenn_der_eigene_zweig_fehlt():
-    """Ohne die Regel landet das Paket im Sammelbuendel -- der Zweig verschwindet."""
-    code, zeilen = rr.urteile(ohne(GEMESSEN, "renovate/vitejs-plugin-react"))
+    """Ohne die Regel landet das Paket im Sammelbündel -- der Zweig verschwindet."""
+    code, zeilen = rr.urteile(
+        ohne(GEMESSEN, '"branchName": "renovate/vitejs-plugin-react"'))
     assert code == 1
     assert any("FEHL Regel 1" in z for z in zeilen)
 
 
 def test_regel1_faellt_auf_wenn_gar_nicht_mehr_gebuendelt_wird():
-    """Die Kontrolle: ohne Sammelbuendel saehe Regel 1 sonst gruen aus."""
-    code, zeilen = rr.urteile(ohne(GEMESSEN, "renovate/all-minor-patch"))
+    """Die Kontrolle: ohne Sammelbündel sähe Regel 1 sonst grün aus."""
+    code, zeilen = rr.urteile(
+        ohne(GEMESSEN, '"branchName": "renovate/all-minor-patch"'))
+    assert code == 1
+    assert any("FEHL Regel 1" in z for z in zeilen)
+
+
+def test_regel1_zaehlt_nur_die_feldform_nicht_jede_erwaehnung():
+    """Der Config-Dump enthält unsere eigenen `description`-Texte.
+
+    Nennt eine künftige Beschreibung den Zweignamen, wäre ein Substring-Sensor
+    vacuous. Verankert wird deshalb an `"branchName": "..."`.
+    """
+    nur_prosa = ohne(GEMESSEN, '"branchName": "renovate/vitejs-plugin-react"') + (
+        '  "description": "siehe Zweig renovate/vitejs-plugin-react"\n')
+    code, zeilen = rr.urteile(nur_prosa)
     assert code == 1
     assert any("FEHL Regel 1" in z for z in zeilen)
 
@@ -141,6 +199,17 @@ def test_regel2_faellt_auf_wenn_python_vorgeschlagen_wird():
     assert any("FEHL Regel 2" in z for z in zeilen)
 
 
+def test_regel2_faellt_auf_wenn_der_positive_beleg_fehlt():
+    """Abwesenheit allein genügt nicht -- sie hat zu viele Ursachen.
+
+    Verschwindet der Dep aus einem anderen Grund als der Regel, fehlt der
+    `skipReason: disabled` daneben, und genau daran fällt es auf.
+    """
+    code, zeilen = rr.urteile(ohne(GEMESSEN, '"skipReason": "disabled"'))
+    assert code == 1
+    assert any("FEHL Regel 2" in z for z in zeilen)
+
+
 def test_regel3_faellt_auf_wenn_das_geschuetzte_postgres_durchkommt():
     """Ohne die Regel stehen ZWEI postgres in der Liste, nicht eines."""
     ausgabe = GEMESSEN.replace(
@@ -149,28 +218,41 @@ def test_regel3_faellt_auf_wenn_das_geschuetzte_postgres_durchkommt():
     ).replace("DEBUG: 5 flattened", "DEBUG: 6 flattened")
     code, zeilen = rr.urteile(ausgabe)
     assert code == 1
-    assert any("filtert nichts mehr" in z for z in zeilen)
+    assert any("FEHL Regel 3" in z for z in zeilen)
 
 
 def test_regel3_faellt_auf_wenn_matchfilenames_zu_breit_greift():
-    """Die Gegenrichtung: ohne `matchFileNames` waere JEDES postgres stumm."""
+    """Die Gegenrichtung: ohne `matchFileNames` wäre JEDES postgres stumm."""
     ausgabe = GEMESSEN.replace(
         "flattened updates found: postgres, ", "flattened updates found: "
     ).replace("DEBUG: 5 flattened", "DEBUG: 4 flattened")
     code, zeilen = rr.urteile(ausgabe)
     assert code == 1
-    assert any("zu breit" in z for z in zeilen)
+    assert any("FEHL Regel 3" in z for z in zeilen)
+
+
+def test_regel3_faellt_auf_wenn_gar_nichts_gefiltert_wurde():
+    """Der zweite Befund des gegnerischen Reviews, ausgeführt reproduziert.
+
+    Die Zahl allein unterscheidet nicht: „Kontrolle da, geschütztes Abbild
+    gefiltert" und „Kontrolle fehlt, nichts gefiltert" ergeben BEIDE genau ein
+    postgres. Die flache Liste trägt keinen Dateinamen -- deshalb zusätzlich
+    die Filterzeile.
+    """
+    code, zeilen = rr.urteile(ohne(GEMESSEN, "Filtered out 1 disabled update(s)."))
+    assert code == 1
+    assert any("0 gefiltert" in z for z in zeilen)
 
 
 # --- der echte Lauf -----------------------------------------------------------
 
 @pytest.mark.renovate
 def test_die_drei_regeln_wirken_am_echten_lauf():
-    """Faehrt die ECHTE renovate.json gegen ein Wegwerf-Repo.
+    """Fährt die ECHTE renovate.json gegen ein Wegwerf-Repo.
 
     Nicht in der normalen Suite (Marker + `-m "not renovate"`); der eigene
-    CI-Job holt ihn mit `-m renovate` herein. rc 2 ist hier ausdruecklich KEIN
-    Erfolg -- es heisst `konnte nicht urteilen` und faellt genauso durch.
+    CI-Job holt ihn mit `-m renovate` herein. rc 2 ist hier ausdrücklich KEIN
+    Erfolg -- es heisst `konnte nicht urteilen` und fällt genauso durch.
     """
     fertig = subprocess.run(
         [sys.executable, str(rr.STAMM / "scripts/renovate_regeln.py")],

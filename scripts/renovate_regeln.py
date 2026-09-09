@@ -19,26 +19,39 @@ Test seine eigene Fixture.
 Rueckgabecodes -- derselbe Vertrag wie `ruff_riegel.py` und `mypy_riegel.py`:
   0  alle drei Regeln wirken
   1  mindestens eine Regel wirkt NICHT
-  2  NICHT URTEILSFAEHIG (npx fehlt, kein Token, unbekannte Ausgabeform)
+  2  NICHT URTEILSFAEHIG (npx fehlt, kein Token, unbekannte Ausgabeform, Absturz)
 
-DREI FALLEN, alle GEMESSEN am 2026-09-09, und jede davon hat den Lauf schon
-einmal gruen aussehen lassen, ohne dass er etwas gesehen hat:
+JEDE ZUSICHERUNG BRAUCHT EINEN POSITIVEN BELEG, nicht nur eine Abwesenheit --
+das ist die tragende Regel dieser Datei, und der erste Entwurf hat sie an drei
+Stellen gebrochen. Ein gegnerisches Review hat sie ausgefuehrt statt gelesen:
+
+* Der Riegel verbot `Found 0 package file(s)` und liess damit jede KLEINERE
+  Menge durch. Mit einer Fixture ohne die Kontroll-Compose meldete Renovate
+  `Found 3` -- und der Test sagte „Alle drei Regeln wirken". Das ist woertlich
+  die #588-Klasse (`checked 16` statt 60): der Riegel schweigt nicht, er spricht
+  leiser. Jetzt wird `Found 4` VERLANGT.
+* Regel 3 zaehlte `postgres` genau einmal. Das unterscheidet „Kontrolle da,
+  geschuetztes Abbild gefiltert" NICHT von „Kontrolle fehlt, nichts gefiltert" --
+  die flache Liste traegt keinen Dateinamen. Jetzt zusaetzlich die Filterzeile.
+* Regel 2 prueft eine ABWESENHEIT. Verschwindet der Dep aus einem anderen Grund
+  (Ratengrenze, Netz weg, geaenderte Fixture), gilt die Regel als wirksam. Jetzt
+  wird der positive Beleg verlangt, der im Lauf ohnehin steht: `skipReason:
+  disabled` im selben Objekt wie `depName: python`.
+
+DREI FALLEN DER UMGEBUNG, alle am 2026-09-09 gemessen:
 
 1. **Renovate zaehlt die Dateien ueber git auf.** Ein Wegwerf-Repo ohne Commit
    ergibt `Found 0 package file(s)` und rc 0 -- ein Lauf, der NICHTS ansieht und
-   sich nicht beschwert. Deshalb `git add` + `git commit` in der Fixture, und
-   deshalb prueft `unstimmig()` genau auf diese Zeile.
+   sich nicht beschwert. Deshalb `git add` + `git commit` in der Fixture.
 2. **Ohne GitHub-Token ist die Python-Regel unfalsifizierbar.** Renovate meldet
    dann `skipReason: github-token-required` und liefert fuer den Dep gar keine
-   Aktualisierung -- MIT UND OHNE Regel. Die Zusicherung waere gruen geblieben,
-   auch wenn die Regel geloescht ist: ein vacuous guard, den keine Mutationsprobe
-   je rot bekommt. Gefunden vom kalten Plan-Pruefer, bevor eine Zeile davon stand.
+   Aktualisierung -- MIT UND OHNE Regel. Gefunden vom kalten Plan-Pruefer, bevor
+   eine Zeile davon stand.
 3. **`renovate@latest` (44.x) verlangt node ^24.11 und stirbt auf node 22 mit
-   rc 0 UND OHNE JEDE AUSGABE.** Deshalb ist die Fassung gepinnt und die
-   Ausgabeform wird gegen den Rueckgabecode geprueft.
+   rc 0 UND OHNE JEDE AUSGABE.** Deshalb ist die Fassung gepinnt.
 
 Aufruf:
-    python scripts/renovate_regeln.py
+    GITHUB_COM_TOKEN=<token> python scripts/renovate_regeln.py
     python scripts/renovate_regeln.py --behalten   # Fixture stehen lassen
 """
 
@@ -48,6 +61,7 @@ import json
 import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -55,15 +69,43 @@ from pathlib import Path
 
 STAMM = Path(__file__).resolve().parents[1]
 
-# Gepinnt, nicht `latest`: siehe Falle 3 im Kopf. 41.173.1 ist auf node 22
-# (Entwicklerrechner) UND node 24 (CI) gemessen.
+# Gepinnt, nicht `latest`: siehe Falle 3 im Kopf.
+#
+# GEMESSEN ist 41.173.1 auf **node 22** (Entwicklerrechner, 2026-09-09): laeuft,
+# meldet seine Fassung, liefert die Lookup-Ausgabe. Auf **node 24** (CI) ist es
+# NICHT gemessen -- der erste Lauf dieses Jobs ist die Messung. Faellt es dort
+# aus, faellt es LAUT aus: `unstimmig()` fangt sowohl einen Abbruch als auch die
+# stille rc-0-Form aus Falle 3.
 RENOVATE = "renovate@41.173.1"
 
-# Renovate laedt bei jedem Lauf sein Paket und fragt Registries ab; der gemessene
-# Lauf lag bei ~40 s. Die Grenze ist Deckel, nicht Erwartung.
+#: Wieviele Paketdateien Renovate in der Fixture sehen MUSS: zwei compose.yaml,
+#: ein Workflow, ein package.json. Eine kleinere Zahl heisst, dass die Fixture
+#: nicht vollstaendig angekommen ist -- und genau daran ist der erste Entwurf
+#: dieses Riegels vorbeigelaufen.
+ERWARTETE_DATEIEN = 4
+
+# Renovate laedt bei jedem Lauf sein Paket und fragt Registries ab. GEMESSEN mit
+# WARMEM npx-Zwischenspeicher: der markierte Test lief in 5,7 s. Ein kalter
+# Zwischenspeicher laedt ~100 MB dazu und ist NICHT gestoppt.
+#
+# Die Frist greift nur im EIGENSTAENDIGEN Lauf. Unter pytest steht
+# `faulthandler_timeout = 300` in pyproject.toml davor und steigt frueher aus --
+# 600 s werden dort nie erreicht.
 FRIST = 600
 
 _FLACH = re.compile(r"(\d+) flattened updates found:(?P<namen>[^(]*)\(repository=")
+_GEFUNDEN = re.compile(r"Found (\d+) package file\(s\)")
+_GEFILTERT = re.compile(r"Filtered out (\d+) disabled update\(s\)")
+
+# Der positive Beleg fuer Regel 2, so wie er im gemessenen Lauf steht: beide
+# Felder im SELBEN Objekt des packageFiles-Dumps. `[^}]` haelt die Suche
+# innerhalb des Objekts -- ohne das koennte sie ueber einen fremden Dep
+# hinweggreifen und die Regel fuer wirksam halten, weil irgendwo anders etwas
+# abgeschaltet ist.
+_PYTHON_ABGESCHALTET = re.compile(
+    r'"depName":\s*"python",[^}]{0,600}?"skipReason":\s*"disabled"', re.S
+)
+_PYTHON_ERKANNT = re.compile(r'"depName":\s*"python"')
 
 COMPOSE = "services:\n  db:\n    image: postgres:17\n"
 
@@ -89,17 +131,37 @@ PAKET = {
 }
 
 
+class NichtUrteilsfaehig(Exception):
+    """Ich konnte nicht hinsehen -- rc 2, nicht rc 1."""
+
+
 def token() -> str:
-    """Ein GitHub-Token, sonst ist Regel 2 nicht pruefbar (Falle 2 im Kopf)."""
+    """Ein GitHub-Token aus der Umgebung, sonst nichts.
+
+    BEWUSST OHNE Rueckfall auf `gh auth token` -- das war im ersten Entwurf drin
+    und ist nach dem gegnerischen Review heraus. Der Grund: das Token geht in
+    einen per `npx --yes` FRISCH aufgeloesten Abhaengigkeitsbaum ohne Lockfile,
+    und `gh auth token` liefert das persoenliche OAuth-Token des Entwicklers mit
+    `repo`, `workflow` und `write:packages`. Renovate braucht hier nur
+    oeffentliche Lesezugriffe. Wer ein Token hergibt, soll entscheiden, WELCHES.
+    """
     for name in ("GITHUB_COM_TOKEN", "GITHUB_TOKEN", "RENOVATE_TOKEN"):
         wert = os.environ.get(name)
         if wert:
             return wert
-    gh = shutil.which("gh")
-    if not gh:
-        return ""
-    fertig = subprocess.run([gh, "auth", "token"], capture_output=True, text=True)
-    return fertig.stdout.strip() if fertig.returncode == 0 else ""
+    return ""
+
+
+def _weg_damit(funktion, pfad, fehler) -> None:  # noqa: ARG001 -- onexc-Form
+    """Schreibgeschuetztes wegraeumen. Git legt `.git/objects` read-only an.
+
+    Ohne diesen Handler bleibt die Fixture auf Windows STILL liegen:
+    `ignore_errors=True` verschluckt den Fehler, und es sammeln sich Ordner an
+    (gemessen: neun Altlasten nach einem halben Tag Entwicklung). In der CI
+    (ubuntu) tritt es nicht auf -- deshalb saehe es dort nie jemand.
+    """
+    os.chmod(pfad, stat.S_IWRITE)
+    funktion(pfad)
 
 
 def baue_fixture(ziel: Path) -> None:
@@ -118,7 +180,7 @@ def baue_fixture(ziel: Path) -> None:
 
     git = shutil.which("git")
     if not git:
-        raise RuntimeError("git nicht gefunden -- die Fixture braucht ein Repo")
+        raise NichtUrteilsfaehig("git nicht gefunden -- die Fixture braucht ein Repo")
     subprocess.run([git, "init", "-q"], cwd=ziel, check=True)
     subprocess.run([git, "add", "-A"], cwd=ziel, check=True)
     # `.invalid` ist die dafuer reservierte Spitzendomaene (RFC 2606) -- ein Commit
@@ -145,34 +207,56 @@ def flache_liste(ausgabe: str) -> list[str] | None:
 
 def unstimmig(rc: int, ausgabe: str) -> str | None:
     """Der Riegel gegen das eigene Schweigen. Grund als Text, sonst None."""
-    if "Found 0 package file(s)" in ausgabe:
-        return ("Renovate hat NULL Paketdateien gesehen -- die Fixture ist nicht "
-                "angekommen. Ein Urteil darueber waere die Luege.")
+    if rc != 0:
+        return (f"Renovate endete mit {rc} -- ein Lookup-Lauf, der nicht sauber "
+                "endet, liefert kein Urteil.")
+
+    gefunden = _GEFUNDEN.search(ausgabe)
+    if not gefunden:
+        return ("Keine Zeile `Found N package file(s)` -- unbekannte Ausgabeform. "
+                "Moeglicherweise falsche node- oder Renovate-Fassung.")
+    if int(gefunden.group(1)) != ERWARTETE_DATEIEN:
+        return (f"Renovate hat {gefunden.group(1)} Paketdateien gesehen, erwartet "
+                f"sind {ERWARTETE_DATEIEN}. Die Fixture ist nicht vollstaendig "
+                "angekommen -- ein Urteil ueber eine kleinere Menge waere die Luege.")
+
     treffer = _FLACH.search(ausgabe)
     if treffer is None:
         return (f"Keine Zeile `flattened updates found` in der Ausgabe (rc {rc}). "
-                "Unbekannte Ausgabeform -- moeglicherweise falsche node- oder "
-                "Renovate-Fassung.")
+                "Unbekannte Ausgabeform.")
     namen = flache_liste(ausgabe) or []
     if int(treffer.group(1)) != len(namen):
         return (f"Renovate nennt {treffer.group(1)} Updates, aufgezaehlt sind "
                 f"{len(namen)} -- die Ausgabeform hat sich geaendert.")
+
     if "github-token-required" in ausgabe:
         return ("Kein brauchbares GitHub-Token: Regel 2 (github-actions python) "
                 "ist ohne Token unfalsifizierbar -- sie saehe mit und ohne Regel "
-                "gleich aus. Setze GITHUB_COM_TOKEN oder melde dich mit gh an.")
+                "gleich aus. Setze GITHUB_COM_TOKEN.")
+    if not _PYTHON_ERKANNT.search(ausgabe):
+        return ("Der github-actions-Manager hat den Dep `python` gar nicht "
+                "erkannt -- Regel 2 ist damit nicht pruefbar, egal wie ihr "
+                "Ergebnis aussieht.")
     return None
 
 
 def urteile(ausgabe: str) -> tuple[int, list[str]]:
-    """Wirken die drei Regeln? Rein, damit der Test sie ohne Renovate fahren kann."""
+    """Wirken die drei Regeln? Rein, damit der Test sie ohne Renovate fahren kann.
+
+    Jede Regel braucht einen POSITIVEN Beleg und eine Kontrolle -- eine blosse
+    Abwesenheit hat zu viele Ursachen.
+    """
     namen = flache_liste(ausgabe) or []
     zeilen: list[str] = []
     schlecht = False
 
     # Regel 1 -- eigener Zweig statt Sammelbuendel, samt Kontrolle.
-    eigen = "renovate/vitejs-plugin-react" in ausgabe
-    buendel = "renovate/all-minor-patch" in ausgabe
+    # Verankert an der Feldform `"branchName": "..."`, nicht am blossen Vorkommen
+    # der Zeichenkette: die Debug-Ausgabe enthaelt den Config-Dump samt unserer
+    # eigenen `description`-Texte, und wer dort einmal einen Zweignamen erwaehnt,
+    # macht den Sensor sonst vacuous (gegnerisches Review, K4).
+    eigen = '"branchName": "renovate/vitejs-plugin-react"' in ausgabe
+    buendel = '"branchName": "renovate/all-minor-patch"' in ausgabe
     if eigen and buendel:
         zeilen.append("ok   Regel 1: @vitejs/plugin-react hat einen eigenen Zweig, "
                       "die Kontrolle laeuft im Sammelbuendel")
@@ -181,24 +265,32 @@ def urteile(ausgabe: str) -> tuple[int, list[str]]:
         zeilen.append(f"FEHL Regel 1: eigener Zweig={eigen}, Sammelbuendel={buendel} "
                       "-- erwartet beides True")
 
-    # Regel 2 -- die CI-Python-Fassung bekommt keine Vorschlaege.
-    if "python" in namen:
-        schlecht = True
-        zeilen.append("FEHL Regel 2: `python` steht in der Update-Liste, die Regel "
-                      "haelt es also nicht mehr zurueck")
+    # Regel 2 -- Abwesenheit UND positiver Beleg. Ohne den zweiten Teil gaelte
+    # die Regel auch dann als wirksam, wenn der Dep aus einem ganz anderen Grund
+    # aus der Liste faellt (Ratengrenze, Netz weg, geaenderte Fixture).
+    abgeschaltet = bool(_PYTHON_ABGESCHALTET.search(ausgabe))
+    if "python" not in namen and abgeschaltet:
+        zeilen.append("ok   Regel 2: `python` bekommt keinen Vorschlag, und der "
+                      "Grund steht als skipReason `disabled` daneben")
     else:
-        zeilen.append("ok   Regel 2: `python` bekommt keinen Vorschlag")
+        schlecht = True
+        zeilen.append(f"FEHL Regel 2: in der Liste={'python' in namen}, "
+                      f"skipReason disabled={abgeschaltet} -- erwartet False/True")
 
-    # Regel 3 -- genau EIN postgres: das geschuetzte ist weg, die Kontrolle bleibt.
+    # Regel 3 -- genau EIN postgres UND die Filterzeile. Die Zahl allein
+    # unterscheidet „Kontrolle da, geschuetztes Abbild gefiltert" nicht von
+    # „Kontrolle fehlt, nichts gefiltert": die flache Liste traegt keinen
+    # Dateinamen. Am zweiten Fall ist der erste Entwurf gemessen vorbeigelaufen.
     wie_oft = namen.count("postgres")
-    if wie_oft == 1:
-        zeilen.append("ok   Regel 3: genau ein postgres-Major -- die Kontrolle; "
-                      "docs/bugsink/compose.yaml ist gefiltert")
+    gefiltert = _GEFILTERT.search(ausgabe)
+    anzahl = int(gefiltert.group(1)) if gefiltert else 0
+    if wie_oft == 1 and anzahl == 1:
+        zeilen.append("ok   Regel 3: genau ein postgres-Major (die Kontrolle), und "
+                      "genau eines wurde gefiltert -- docs/bugsink/compose.yaml")
     else:
         schlecht = True
-        grund = ("beide gefiltert -- matchFileNames greift zu breit" if wie_oft == 0
-                 else "die Regel filtert nichts mehr")
-        zeilen.append(f"FEHL Regel 3: {wie_oft} postgres-Majors statt einem ({grund})")
+        zeilen.append(f"FEHL Regel 3: {wie_oft} postgres-Majors in der Liste, "
+                      f"{anzahl} gefiltert -- erwartet 1 und 1")
 
     return (1 if schlecht else 0), zeilen
 
@@ -207,7 +299,7 @@ def fahre(ziel: Path) -> tuple[int, str]:
     """Renovate gegen das Wegwerf-Repo. Rueckgabe: (rc, stdout+stderr)."""
     npx = shutil.which("npx")
     if not npx:
-        return 127, "npx nicht gefunden"
+        raise NichtUrteilsfaehig("npx nicht gefunden")
     umgebung = dict(os.environ)
     umgebung["LOG_LEVEL"] = "debug"
     tok = token()
@@ -217,10 +309,16 @@ def fahre(ziel: Path) -> tuple[int, str]:
     try:
         fertig = subprocess.run(
             [npx, "--yes", RENOVATE, "--platform=local", "--dry-run=lookup"],
-            cwd=ziel, capture_output=True, text=True, env=umgebung, timeout=FRIST,
+            cwd=ziel, capture_output=True, text=True,
+            # Hausform (`mutation.py`): ohne beides haengt die Dekodierung an
+            # `PYTHONUTF8`, und die Ausgabe traegt Gedankenstriche aus unserem
+            # eigenen Config-Dump.
+            encoding="utf-8", errors="replace",
+            env=umgebung, timeout=FRIST,
         )
-    except subprocess.TimeoutExpired:
-        return 124, f"Renovate hat nach {FRIST}s nicht geantwortet"
+    except subprocess.TimeoutExpired as fehl:
+        raise NichtUrteilsfaehig(
+            f"Renovate hat nach {FRIST}s nicht geantwortet") from fehl
     return fertig.returncode, fertig.stdout + fertig.stderr
 
 
@@ -231,9 +329,6 @@ def main(argv: list[str]) -> int:
     try:
         baue_fixture(ziel)
         rc, ausgabe = fahre(ziel)
-        if rc == 127:
-            print("NICHT URTEILSFAEHIG: npx nicht gefunden.", file=sys.stderr)
-            return 2
         grund = unstimmig(rc, ausgabe)
         if grund:
             print(f"NICHT URTEILSFAEHIG: {grund}", file=sys.stderr)
@@ -244,11 +339,20 @@ def main(argv: list[str]) -> int:
         print("\n" + ("Alle drei Regeln wirken." if code == 0
                       else "MINDESTENS EINE REGEL WIRKT NICHT -- siehe Zeilen oben."))
         return code
+    except NichtUrteilsfaehig as fehl:
+        print(f"NICHT URTEILSFAEHIG: {fehl}", file=sys.stderr)
+        return 2
+    except Exception as fehl:  # noqa: BLE001
+        # rc 1 ist auch Pythons Absturzcode -- ohne diesen Fang saehe ein
+        # Traceback aus wie „mindestens eine Regel wirkt nicht". Dieselbe Stelle
+        # hat `coderabbit_riegel.py` seit fb1b747.
+        print(f"NICHT URTEILSFAEHIG: {type(fehl).__name__}: {fehl}", file=sys.stderr)
+        return 2
     finally:
         if behalten:
             print(f"Fixture bleibt stehen: {ziel}")
         else:
-            shutil.rmtree(ziel, ignore_errors=True)
+            shutil.rmtree(ziel, onexc=_weg_damit)
 
 
 if __name__ == "__main__":
