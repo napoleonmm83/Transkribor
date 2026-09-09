@@ -254,21 +254,26 @@ def ereignis_maskieren(event: dict, ctx: dict | None = None) -> dict:
 def _llm_uebernehmen(event: dict) -> None:
     """Spec 6.4: Ausnahmen, deren Ursprungs-Frame in ``webtool/llm.py`` liegt, verlieren ihre
     Meldung — LLM-Antwortfragmente und Anbieter-Rohantworten reisen nie. An ihrer Stelle
-    stehen Ausnahme-Typ und Kategorie aus ``diagnose_fehler``."""
+    stehen Ausnahme-Typ und Kategorie aus ``diagnose_fehler``; schlägt der Import von llm
+    fehl, heisst die Kategorie unbekannt — die Rohmeldung geht auch dann nie raus."""
     try:
         from . import llm
     except Exception:
-        return
+        llm = None  # Import-Fehler darf die Entschärfung nicht aussetzen: ein early return
+        # hier liess die Rohmeldung (Anbieter-Fragmente) durch (CodeRabbit) — ohne llm
+        # heisst die Kategorie eben unbekannt, die Meldung geht nie raus.
     for wert in ((event.get("exception") or {}).get("values") or []):
         frames = ((wert.get("stacktrace") or {}).get("frames") or [])
         herkunft = frames[-1].get("filename", "") if frames else ""
         if not herkunft.endswith("llm.py"):
             continue
         roh = wert.get("value") or ""
-        try:
-            kategorie = llm.diagnose_fehler(roh).get("kategorie", "unbekannt")
-        except Exception:
-            kategorie = "unbekannt"
+        kategorie = "unbekannt"
+        if llm is not None:
+            try:
+                kategorie = llm.diagnose_fehler(roh).get("kategorie", "unbekannt")
+            except Exception:
+                pass
         wert["value"] = f"[{wert.get('type', 'Fehler')}: {kategorie}]"
 
 
@@ -375,7 +380,9 @@ def init(env=None) -> bool:
         _aktiv = True
         if env.get("TRANSKRIBOR_FEHLERPROBE") == "1":
             sentry_sdk.capture_exception(Exception(FEHLERPROBE))
-            sentry_sdk.flush(10000)
+            # flush() wartet SEKUNDEN (Client.flush-Docstring), nicht Millisekunden —
+            # 10000 haengen bei totem Endpunkt bis zu 2 h 47 min im Start (CodeRabbit).
+            sentry_sdk.flush(10)
         return True
     except Exception as fehler:  # noqa: BLE001 — der Vertrag ist: nie werfen
         print(f"[fehlerberichte] init gescheitert: {type(fehler).__name__}",
