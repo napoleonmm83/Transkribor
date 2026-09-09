@@ -13,7 +13,9 @@ Zwei Ebenen, und die Trennung ist Absicht:
 den Test still überspringen, und der Job wäre grün, ohne etwas gefahren zu
 haben -- genau die Klasse, gegen die dieses ganze Paket gebaut ist. Passt der
 Marker nicht mehr, sammelt pytest im eigenen Job NULL Tests ein und endet mit
-rc 5. Ausgeführt gemessen: `-m renovatex` ⇒ `15 deselected`, rc 5.
+rc 5. Ausgeführt gemessen: ein Marker, den es nicht gibt, wählt alles ab und
+endet mit rc 5 (die Zahl der abgewählten Tests wächst mit dieser Datei und steht
+deshalb bewusst nicht hier).
 
 Die Beispielausgabe unten ist AUFGEZEICHNET, nicht erfunden: sie stammt aus dem
 Lauf vom 2026-09-09 gegen Renovate 41.173.1 mit Token, samt der Verschachtelung
@@ -142,6 +144,26 @@ def test_ohne_token_wird_nicht_geurteilt():
                                '"skipReason": "github-token-required"')
     grund = rr.unstimmig(0, ausgabe)
     assert grund is not None and "Token" in grund
+
+
+def test_fehlende_kontrolle_fuer_regel1_wird_nicht_geurteilt():
+    """Nicht prüfbar ist nicht verletzt.
+
+    Den Zweig `renovate/all-minor-patch` gibt es nur, solange die Aussenwelt für
+    `lucide-react` überhaupt eine Minor-Aktualisierung anbietet. Fällt die weg,
+    wäre „Zweig fehlt" ein FEHL für eine Regel, die tadellos wirkt -- ein
+    Fehlalarm, und ein Riegel mit Fehlalarmen wird weggeklickt.
+    """
+    ausgabe = GEMESSEN.replace(
+        ", lucide-react, lucide-react (repository=local)", " (repository=local)"
+    ).replace("DEBUG: 5 flattened", "DEBUG: 3 flattened")
+    grund = rr.unstimmig(0, ausgabe)
+    assert grund is not None and "lucide-react" in grund
+
+
+def test_vorhandene_kontrolle_stoert_das_urteil_nicht():
+    """Gegenprobe: mit der Kontrolle in der Liste urteilt der Riegel normal."""
+    assert rr.unstimmig(0, GEMESSEN) is None
 
 
 def test_nicht_erkannter_python_dep_wird_nicht_geurteilt():
