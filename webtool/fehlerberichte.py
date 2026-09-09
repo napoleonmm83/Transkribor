@@ -335,6 +335,20 @@ def init(env=None) -> bool:
         from sentry_sdk.integrations.excepthook import ExcepthookIntegration
         from sentry_sdk.integrations.starlette import StarletteIntegration
         from sentry_sdk.integrations.threading import ThreadingIntegration
+        from sentry_sdk.transport import HttpTransport
+
+        class ZaehlerloserTransport(HttpTransport):
+            """Wirft die Verwerfungs-Zähler weg (client_reports): bei Schalter AUS verlässt
+            dann KEIN Byte die Maschine. Gemessen am Sammler: das SDK meldete trotz
+            before_send-Verwurf einen 186-Byte-Zähler-Umschlag an denselben Server (Anzahl
+            und Grund, keinerlei Inhalt) — die Electron-Hälfte tat das nicht, und die
+            README-Zusage steht ohne Vorbehalt. Preis, bewusst getragen (Marcus, 2026-09-09):
+            die Kopplung an eine SDK-interne Methode — benennt ein Update sie um, kämen die
+            Zähler still zurück; dagegen pinnt ein Test das Vorhandensein der Methode am
+            installierten Paket."""
+
+            def record_lost_event(self, *args, **kwargs):  # noqa: ARG002
+                return None
 
         sentry_sdk.init(
             dsn=dsn,
@@ -350,6 +364,7 @@ def init(env=None) -> bool:
                 DedupeIntegration(), ExcepthookIntegration(), AtexitIntegration(),
                 ThreadingIntegration(), AsyncioIntegration(), StarletteIntegration(),
             ],
+            transport=ZaehlerloserTransport,
             before_send=before_send,
         )
         _aktiv = True

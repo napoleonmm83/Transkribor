@@ -87,6 +87,19 @@
         "test_before_send_plichtprobe_namen_erreichen_das_ereignis_nicht",
         "test_before_send_streicht_request_ganz"
       ]
+    },
+    {
+      "id": "530b-G der zaehlerlose Transport greift nicht — Verwerfungszaehler gehen wieder raus",
+      "datei": "webtool/fehlerberichte.py",
+      "von": "            def record_lost_event(self, *args, **kwargs):  # noqa: ARG002\n                return None",
+      "nach": "            def record_lost_event(self, *args, **kwargs):  # noqa: ARG002\n                return HttpTransport.record_lost_event(self, *args, **kwargs)",
+      "rot": [
+        "test_init_mit_allem_initialisiert_und_laesst_probe_nur_bei_exakt_eins"
+      ],
+      "gruen": [
+        "test_before_send_plichtprobe_namen_erreichen_das_ereignis_nicht",
+        "test_erlaubnisliste_gegen_das_installierte_paket"
+      ]
     }
   ]
 }
