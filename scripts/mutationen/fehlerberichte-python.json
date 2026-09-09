@@ -89,16 +89,29 @@
       ]
     },
     {
-      "id": "530b-G der zaehlerlose Transport greift nicht — Verwerfungszaehler gehen wieder raus",
+      "id": "530b-G die Verwerfungszaehler gehen wieder raus — send_client_reports fehlt",
       "datei": "webtool/fehlerberichte.py",
-      "von": "            def record_lost_event(self, *args, **kwargs):  # noqa: ARG002\n                return None",
-      "nach": "            def record_lost_event(self, *args, **kwargs):  # noqa: ARG002\n                return HttpTransport.record_lost_event(self, *args, **kwargs)",
+      "von": "            send_client_reports=False,  # Verwerfungs-Zähler: bei AUS verlässt KEIN Byte die",
+      "nach": "            send_client_reports=True,  # Verwerfungs-Zähler: bei AUS verlässt KEIN Byte die",
       "rot": [
         "test_init_mit_allem_initialisiert_und_laesst_probe_nur_bei_exakt_eins"
       ],
       "gruen": [
         "test_before_send_plichtprobe_namen_erreichen_das_ereignis_nicht",
         "test_erlaubnisliste_gegen_das_installierte_paket"
+      ]
+    },
+    {
+      "id": "530b-H der Abbruch wird als Fehler gemeldet — Ctrl+C reist als Ereignis",
+      "datei": "webtool/fehlerberichte.py",
+      "von": "    if any(w.get(\"type\") == \"KeyboardInterrupt\"\n           for w in (event.get(\"exception\") or {}).get(\"values\") or []):\n        return None",
+      "nach": "    if False:\n        return None",
+      "rot": [
+        "test_before_send_wirft_einen_abbruch_weg"
+      ],
+      "gruen": [
+        "test_before_send_plichtprobe_namen_erreichen_das_ereignis_nicht",
+        "test_before_send_streicht_request_ganz"
       ]
     }
   ]
