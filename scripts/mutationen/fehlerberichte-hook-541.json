@@ -1,0 +1,39 @@
+{
+  "test": "npm --prefix webtool/frontend run test -- useFehlerberichte",
+  "pfade": [
+    "webtool/frontend/src/hooks/useFehlerberichte.ts",
+    "webtool/frontend/src/hooks/useFehlerberichte.test.tsx"
+  ],
+  "mutationen": [
+    {
+      "id": "541-A setzen traegt die Antwort in keinen Store — keine Instanz folgt der Schreibung",
+      "datei": "webtool/frontend/src/hooks/useFehlerberichte.ts",
+      "von": "    return b.fehlerberichte.setzen(an).then(z => { eintragen(z); return z })",
+      "nach": "    return b.fehlerberichte.setzen(an).then(z => { return z })",
+      "rot": [
+        "zwei Instanzen sehen dieselbe Schreibung — der Dialog schreibt, der Haken folgt",
+        "setzen reicht den Wert durch und uebernimmt die Antwort des Hauptprozesses"
+      ],
+      "gruen": [
+        "ohne Bruecke (Browser) gibt es keinen Schalter",
+        "eine Huelle MIT update, aber OHNE fehlerberichte, hat auch keinen Schalter",
+        "holt den Zustand aus dem Hauptprozess; bis dahin ist er null",
+        "setzen reicht einen Fehlschlag DURCH statt ihn zu schlucken"
+      ]
+    },
+    {
+      "id": "541-B eintragen meldet die Hoerer nicht — jede Instanz bleibt auf ihrer Kopie",
+      "datei": "webtool/frontend/src/hooks/useFehlerberichte.ts",
+      "von": "function eintragen(z: FehlerberichteZustand): void {\n  speicher = z\n  for (const h of hoerer) h()\n}",
+      "nach": "function eintragen(z: FehlerberichteZustand): void {\n  speicher = z\n}",
+      "rot": [
+        "zwei Instanzen sehen dieselbe Schreibung — der Dialog schreibt, der Haken folgt",
+        "holt den Zustand aus dem Hauptprozess; bis dahin ist er null"
+      ],
+      "gruen": [
+        "ohne Bruecke (Browser) gibt es keinen Schalter",
+        "eine Huelle MIT update, aber OHNE fehlerberichte, hat auch keinen Schalter"
+      ]
+    }
+  ]
+}
