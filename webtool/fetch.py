@@ -17,7 +17,7 @@ from urllib.parse import urlparse
 
 import transcribe
 
-from . import druck, paths, projekt, sprachen, ytdlp_update
+from . import druck, fehlerberichte, paths, projekt, sprachen, ytdlp_update
 
 # Trust-Boundary: die URL kommt aus dem Browser. Gleichzeitig der Feature-Scope.
 ALLOWED_HOSTS = {
@@ -515,6 +515,7 @@ def main(argv=None):
     except (AttributeError, ValueError):
         pass
     sys.stdout = druck.zeilenweise(sys.stdout)   # EIN write je Zeile (#344)
+    fehlerberichte.init()  # #530b: Opt-in-Fehlerberichte; wirft nie, ohne alle drei Env-Variablen no-op
     ap = argparse.ArgumentParser(description="URL-Import (YouTube/Instagram) fuer ein Projekt")
     ap.add_argument("project")
     ap.add_argument("urls", nargs="+")

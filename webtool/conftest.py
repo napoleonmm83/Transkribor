@@ -234,3 +234,23 @@ def _kein_echtes_pip():
         mp.setattr(subprocess, "Popen", Wache)
         yield
     assert not versuche, "pip-Aufruf aus einem Nebenfaden: " + " | ".join(versuche)
+
+
+@pytest.fixture(autouse=True)
+def _kein_echter_sentry(monkeypatch):
+    """#530b: ein Testlauf, der Fehlerberichte an einen ECHten Server schickt, waere dieselbe
+    Klasse wie einer, der echtes pip startet — rot, nicht gewarnt. Drei Teile:
+
+    (a) Die drei Variablen der gepackten App werden defensiv geloescht (ein Test, der sie per
+        monkeypatch.setenv selbst setzt, gewinnt wie ueblich — er meldet sich dann auch beim
+        Zeugen).
+    (b) Vor jedem Test steht der Modul-Schalter auf AUS (Leak vom vorigen Test).
+    (c) Nach dem Test muss KEIN initialisiertes SDK uebrig sein. Wer absichtlich init() mit
+        einer Attrappe faehrt, raeumt im finally selbst zurueck (`_zuruecksetzen`).
+    """
+    from webtool import fehlerberichte as _fb
+    for var in ("TRANSKRIBOR_BUGSINK_DSN", "TRANSKRIBOR_VERSION", "TRANSKRIBOR_FEHLERBERICHTE"):
+        monkeypatch.delenv(var, raising=False)
+    _fb._zuruecksetzen()
+    yield
+    assert not _fb.aktiv(), "Ein Test hat ein Fehlerberichte-SDK initialisiert und nicht zurueckgesetzt."  # noqa: S101 — Waechter-assert, dieselbe Form wie die pip-Wache oben

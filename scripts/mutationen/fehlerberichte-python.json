@@ -1,0 +1,92 @@
+{
+  "test": "python -m pytest webtool/test_fehlerberichte.py -q",
+  "pfade": [
+    "webtool/fehlerberichte.py",
+    "webtool/test_fehlerberichte.py",
+    "webtool/conftest.py",
+    "webtool/app.py",
+    "transcribe.py",
+    "webtool/correct.py",
+    "webtool/fetch.py"
+  ],
+  "mutationen": [
+    {
+      "id": "530b-A der Riegel liest den Schalter nicht mehr — jedes Ereignis geht raus",
+      "datei": "webtool/fehlerberichte.py",
+      "von": "    if not schalter_pfad or not lesen(schalter_pfad)[\"automatisch\"]:\n        return None",
+      "nach": "    if False:\n        return None",
+      "rot": [
+        "test_before_send_aus_verwirft_ganz"
+      ],
+      "gruen": [
+        "test_lesen_fehlend_und_kaputt_heisst_aus",
+        "test_maskiere_schluessel_aller_fuenf_familien"
+      ]
+    },
+    {
+      "id": "530b-B die Namensliste bleibt leer — Projektnamen erreichen das Ereignis",
+      "datei": "webtool/fehlerberichte.py",
+      "von": "        \"namen\": namen(projekte) if projekte else {\"projekte\": [], \"dateien\": []},",
+      "nach": "        \"namen\": {\"projekte\": [], \"dateien\": []},",
+      "rot": [
+        "test_before_send_plichtprobe_namen_erreichen_das_ereignis_nicht"
+      ],
+      "gruen": [
+        "test_before_send_streicht_request_ganz",
+        "test_maskiere_schluessel_aller_fuenf_familien"
+      ]
+    },
+    {
+      "id": "530b-C request bleibt im Ereignis",
+      "datei": "webtool/fehlerberichte.py",
+      "von": "    event.pop(\"request\", None)",
+      "nach": "    pass",
+      "rot": [
+        "test_before_send_streicht_request_ganz"
+      ],
+      "gruen": [
+        "test_before_send_plichtprobe_namen_erreichen_das_ereignis_nicht",
+        "test_before_send_llm_fragment_wird_zu_typ_und_kategorie"
+      ]
+    },
+    {
+      "id": "530b-D die llm.py-Ersetzung faellt weg — Anbieterfragmente reisen",
+      "datei": "webtool/fehlerberichte.py",
+      "von": "        if not herkunft.endswith(\"llm.py\"):\n            continue",
+      "nach": "        if True:\n            continue",
+      "rot": [
+        "test_before_send_llm_fragment_wird_zu_typ_und_kategorie"
+      ],
+      "gruen": [
+        "test_before_send_plichtprobe_namen_erreichen_das_ereignis_nicht",
+        "test_before_send_streicht_request_ganz"
+      ]
+    },
+    {
+      "id": "530b-E der BOM-Strip faellt weg — AN wird zu AUS gelesen",
+      "datei": "webtool/fehlerberichte.py",
+      "von": "        with open(pfad, encoding=\"utf-8-sig\") as f:",
+      "nach": "        with open(pfad, encoding=\"utf-8\") as f:",
+      "rot": [
+        "test_lesen_streift_ein_bom"
+      ],
+      "gruen": [
+        "test_lesen_fehlend_und_kaputt_heisst_aus",
+        "test_before_send_plichtprobe_namen_erreichen_das_ereignis_nicht"
+      ]
+    },
+    {
+      "id": "530b-F die Integrations-Erlaubnisliste ist leer",
+      "datei": "webtool/fehlerberichte.py",
+      "von": "            integrations=[\n                DedupeIntegration(), ExcepthookIntegration(), AtexitIntegration(),\n                ThreadingIntegration(), AsyncioIntegration(), StarletteIntegration(),\n            ],",
+      "nach": "            integrations=[],",
+      "rot": [
+        "test_init_mit_allem_initialisiert_und_laesst_probe_nur_bei_exakt_eins"
+      ],
+      "gruen": [
+        "test_before_send_plichtprobe_namen_erreichen_das_ereignis_nicht",
+        "test_before_send_streicht_request_ganz"
+      ]
+    }
+  ]
+}

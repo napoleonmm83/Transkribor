@@ -1045,6 +1045,11 @@ def main():
         pass
     else:
         sys.stdout = druck.zeilenweise(sys.stdout)   # EIN write je Zeile (#344)
+    try:  # #530b: Opt-in-Fehlerberichte; lazy wie oben (ohne webtool kein Bericht), init wirft nie
+        from webtool import fehlerberichte
+        fehlerberichte.init()
+    except ImportError:
+        pass
     ap = argparse.ArgumentParser(description="Whisper-Transkription pro Projekt")
     ap.add_argument("projekt", nargs="?", help="Projektname (Ordner in projekte/)")
     ap.add_argument("--all", action="store_true", help="alle Projekte")

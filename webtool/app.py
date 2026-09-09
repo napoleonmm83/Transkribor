@@ -34,6 +34,7 @@ from . import auth
 from . import correct as _correct
 from . import device
 from . import diarize as _diarize
+from . import fehlerberichte
 from . import fetch as fetch_mod
 from . import jobs
 from . import llm
@@ -160,6 +161,10 @@ def _weg_aufraeumen_starten() -> "threading.Thread":
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
+    # #530b: Opt-in-Fehlerberichte — VOR allem anderen, damit auch Ausnahmen in den folgenden
+    # Startschritten ankommen. Vertrag wie beim_start: wirft nie; ohne alle drei Env-Variablen
+    # (DSN, Fassung, Schalterpfad — reicht die Electron-Huelle durch) ist es ein no-op.
+    fehlerberichte.init()
     # #253: die faellige yt-dlp-Kalenderpruefung gehoert HIERHER, nicht vor jeden URL-Import.
     # Dort (`fetch._hole_yt_dlp()`) lag sie zwischen „Adresse eingefuegt" und „Download
     # beginnt" und kostete den Wartenden bis zu 120 s pip.

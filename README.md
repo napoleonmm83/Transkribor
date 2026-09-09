@@ -641,7 +641,10 @@ Projekte und Aufnahmen — Pfade und Namen werden vor dem Senden durch Platzhalt
 gesagt: Fehlermeldungen fremder Bausteine können Text enthalten, den keine Liste kennt — die
 Platzhalter greifen für Namen und Pfade, nicht für beliebigen Text. Wer das nicht möchte, lässt
 den Haken aus; dann verlässt kein Byte den Rechner, und der Mail-Bericht unten steht weiter
-bereit. Die Berichte werden nach 90 Tagen gelöscht.
+bereit. Die Berichte werden nach 90 Tagen gelöscht. *(In Fassungen bis einschließlich `v0.52.0`
+meldete nur die App-Hülle selbst; ab der nächsten Fassung kommen bei eingeschaltetem Haken
+auch Fehler aus Transkription, Korrektur und Video-Import an — ausgerechnet die liefen vorher
+in keinem Bericht mit.)*
 
 **„Fehlerbericht schreiben“** öffnet eine vorbereitete E-Mail in deinem Mailprogramm: mit der
 Fassung, deinem Betriebssystem und den letzten **aussagekräftigen** Zeilen aus dem Protokoll.
@@ -811,6 +814,14 @@ Datei ab), dann `npm run dist -- -c.extraMetadata.bugsinkDsn=http://k@127.0.0.1:
 den gepackten Lauf mit `TRANSKRIBOR_FEHLERPROBE=1` starten — er wirft einmal absichtlich. Der
 Python-Server bekommt `TRANSKRIBOR_BUGSINK_DSN`, `TRANSKRIBOR_VERSION` und
 `TRANSKRIBOR_FEHLERBERICHTE` (Pfad der Schalterdatei `fehlerberichte.json` in `userData`).
+Die Python-Seite (#530b) ist `webtool/fehlerberichte.py`: `init()` im Server-Lifespan und in
+allen drei Subprozess-Einstiegen, ohne eine der drei Variablen no-op. Der Schalter wird je
+Ereignis gelesen; eine `.env`-Zeile kann die drei Variablen wie jede andere bewusst
+übersteuern (Datei gewinnt — dieselbe Regel wie überall). Messen ohne App: Sammler starten,
+dann z. B. `TRANSKRIBOR_BUGSINK_DSN=http://k@127.0.0.1:8123/1 TRANSKRIBOR_VERSION=0.0.0-test
+TRANSKRIBOR_FEHLERBERICHTE=<wegwerf>/fehlerberichte.json TRANSKRIBOR_FEHLERPROBE=1 python -m
+uvicorn webtool.app:app`. `sentry-sdk` steht in der `requirements.txt` — das ändert deren
+Hash (#181), Bestandsinstallationen sehen nach dem Update einmal die Einrichtungsseite.
 Die Compose für den Server liegt in `docs/bugsink/compose.yaml` (Coolify, Postgres 17).
 `MAX_EVENT_AGE_DAYS=90` löscht nur, wenn `bugsink-manage delete_old_events` läuft — das tut der
 Dienst `aufraeumer` in derselben Compose einmal täglich; ohne ihn wäre die 90-Tage-Zusage der
