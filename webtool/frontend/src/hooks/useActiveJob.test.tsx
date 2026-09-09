@@ -112,12 +112,21 @@ describe('useActiveJob', () => {
     // zurueck. Beide Haelften stehen hier.
     const zeilen = ['→ Korrigiere A …']
     const fertig = ['apply: A -> edit.json + md (2 Segmente)']
+    // Die Rueckkehr des Servers haengt an einem VERSPROCHENEN Antwortwert, nicht an der
+    // Uhr (#569): zwischen `unerreichbar` (vierter Tick) und der Zusicherung darunter
+    // liegen nur 5 ms Takt — ein ausgelasteter Laeufer vollzog den fuenften Tick in
+    // diesem Fenster, und die Zusicherung „meldet NICHTS" schlug auf etwas los, das der
+    // Test selbst veranstaltet hatte. Waehrend das Versprechen offen ist, haengt der
+    // Tick im await und plant KEINEN Folge-Timer — ueberholt werden kann hier nichts mehr.
+    type Antwort = Awaited<ReturnType<typeof api.getJob>>
+    let rueckkehr!: (w: Antwort) => void
+    const versprochen = new Promise<Antwort>(r => { rueckkehr = r })
     vi.mocked(api.getJob)
       .mockResolvedValueOnce({ status: 'running', lines: zeilen })
       .mockRejectedValueOnce(new Error('net'))
       .mockRejectedValueOnce(new Error('net'))
       .mockRejectedValueOnce(new Error('net'))
-      .mockResolvedValue({ status: 'done', lines: fertig })   // der Server kommt zurueck
+      .mockImplementationOnce(() => versprochen)   // der Server kommt zurueck — wann, sagt der Test
     const settled = vi.fn()
     render(<JobProvider intervalMs={5}><Probe beiSettled={settled} /></JobProvider>)
     fireEvent.click(screen.getByText('go'))
@@ -128,6 +137,9 @@ describe('useActiveJob', () => {
     // (2) und meldet NICHTS — waere er ein Ausgang, stuende hier „fehlgeschlagen".
     expect(settled).not.toHaveBeenCalled()
     // (3) Der Poll laeuft weiter: der zurueckgekehrte Server liefert den echten Ausgang.
+    // Nach `done` stuende kein `zeigtLauf` mehr an — der Mock ist damit erschoepft und
+    // bleibt es: ein sechster Aufruf (undefined.then) ist unerreichbar.
+    rueckkehr({ status: 'done', lines: fertig })
     await waitFor(() => expect(settled).toHaveBeenCalled())
     const beendet = settled.mock.calls.at(-1)![0] as Job[]
     expect(beendet[0].status).toBe('done')
