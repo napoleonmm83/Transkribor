@@ -625,6 +625,10 @@ const INVENTAR: Record<string, Eintrag> = {
   '⚠ Glossar fehlt/ungültig — fahre ohne gemeinsames Glossar fort': {
     art: 'ignoriert', beispiel: '⚠ Glossar fehlt/ungültig — fahre ohne gemeinsames Glossar fort',
   },
+  '⚠ Glossar-Fehler ({}) — ': { // #455: Ernte endet am Ende des ersten String-Literals
+    art: 'gelesen_anderswo', notiz: GRUND,
+    beispiel: '⚠ Glossar-Fehler (OSError) — fahre ohne gemeinsames Glossar fort',
+  },
   '⚠ Verifikation ungültig — behalte unverifizierte {}.correction.json': {
     art: 'ignoriert', beispiel: '⚠ Verifikation ungültig — behalte unverifizierte A.correction.json',
   },

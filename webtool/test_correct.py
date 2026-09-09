@@ -2457,12 +2457,15 @@ def test_glossar_sperrt_alle_gelesenen_aufnahmen(monkeypatch, tmp_path, capsys):
     assert verlauf[-1][1] == {}, _zeige(verlauf)       # und am Ende ist nichts mehr gesperrt
 
 
-def test_glossar_gibt_die_aufnahmen_auch_bei_einer_ausnahme_frei(monkeypatch, tmp_path, capsys):
-    """Das `[done]` steht im `finally` — die #444-Lehre auf den neuen Ausgang angewandt.
+def test_glossar_os_fehler_ueberspringt_glossar_und_laeuft_weiter(monkeypatch, tmp_path, capsys):
+    """#455: Ein OS-Fehler aus dem Glossar-Schreibweg (atomic_write — volle Platte, gesperrtes
+    Verzeichnis) nimmt denselben Rueckfall wie der Anbieter-Fehler: Warnzeile, ohne gemeinsames
+    Glossar weiter — statt den GANZEN Lauf abzubrechen (Entscheidung Marcus 09-09, Option 1).
 
-    Kein Vorrat: `_ask_llm` faengt nur `llm.LLMError`, `_run_claude` nur `FileNotFoundError`
-    und `TimeoutExpired`. Ein `OSError` geht hindurch, und ohne das `finally` blieben BEIDE
-    Aufnahmen bis Jobende gesperrt — Loeschen dauerhaft 409, wo nichts mehr an ihnen arbeitet.
+    Das `[done]` steht im `finally` — die #444-Lehre gilt auch fuer diesen Ausgang: ohne es
+    blieben BEIDE Aufnahmen bis Jobende gesperrt (Loeschen dauerhaft 409). Die Attrappe wirft
+    fuer JEDEN _ask_llm-Aufruf; Datei-Korrekturen laufen hier ueber die gefaelschte
+    correct_ai_single, der Wurf trifft also nur das Glossar.
     """
     _glossar_projekt(monkeypatch, tmp_path)
 
@@ -2471,14 +2474,19 @@ def test_glossar_gibt_die_aufnahmen_auch_bei_einer_ausnahme_frei(monkeypatch, tm
 
     monkeypatch.setattr(correct, "_ask_llm", ask_llm_wirft)
 
-    with pytest.raises(OSError):
-        correct.cmd_run("Sperr", "B_lauf")
+    correct.cmd_run("Sperr", "B_lauf")  # wirft NICHT mehr — der Lauf ueberlebt (#455)
     verlauf = _replay(capsys.readouterr().out.splitlines())
     zeilen = [z for z, _ in verlauf]
 
     assert "[active] A_fremd" in zeilen, _zeige(verlauf)  # Vorbedingung: gesperrt wurde ueberhaupt
+    assert any(z.startswith("⚠ Glossar-Fehler (OSError)") for z in zeilen), _zeige(verlauf)
+    # Weiterlauf bezeugt, nicht nur Nicht-Werfen: die ZAEHLERHALTIGE Endbilanz (Vorlage
+    # test_correct.py:812) — der Praefix allein griffe auch fuer 0/1, ein Lauf, der die
+    # Datei-Korrekturen ueberspringt, bliebe gruen. done=1 erfordert den True-Rueckruf
+    # der gefaelschten correct_ai_single (Gegner-Review F1).
+    assert "run: fertig — 1/1 Datei(en) korrigiert" in zeilen, _zeige(verlauf)
     assert verlauf[-1][1] == {}, (
-        "eine Ausnahme aus `_ask_llm` laesst die Aufnahmen gesperrt zurueck."
+        "der Glossar-Ausgang laesst die Aufnahmen gesperrt zurueck."
         + chr(10) + _zeige(verlauf))
 
 
