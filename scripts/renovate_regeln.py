@@ -248,6 +248,17 @@ def unstimmig(rc: int, ausgabe: str) -> str | None:
         return ("Der github-actions-Manager hat den Dep `python` gar nicht "
                 "erkannt -- Regel 2 ist damit nicht pruefbar, egal wie ihr "
                 "Ergebnis aussieht.")
+    # Die Kontrolle zu Regel 1 haengt an der AUSSENWELT: den Zweig
+    # `renovate/all-minor-patch` gibt es nur, solange fuer `lucide-react` ueberhaupt
+    # eine Minor-Aktualisierung angeboten wird. Faellt die weg, waere „Zweig fehlt"
+    # ein FEHL fuer eine Regel, die tadellos wirkt -- ein Fehlalarm, und ein Riegel
+    # mit Fehlalarmen wird weggeklickt. Nicht pruefbar ist nicht verletzt.
+    # (CodeRabbit-CLI, major.)
+    if "lucide-react" not in namen:
+        return ("Die Kontrolle fuer Regel 1 (`lucide-react`) hat gar keine "
+                "Aktualisierung -- ohne sie gibt es kein Sammelbuendel, gegen das "
+                "sich der eigene Zweig abheben koennte. Nicht pruefbar, nicht "
+                "verletzt: Fixture-Fassung anheben.")
     return None
 
 
