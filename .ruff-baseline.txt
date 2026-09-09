@@ -7,7 +7,6 @@ scripts/renovate_regeln.py:S603
 scripts/renovate_regeln.py:S603
 scripts/renovate_regeln.py:S603
 scripts/renovate_regeln.py:S603
-scripts/renovate_regeln.py:S603
 scripts/test_coderabbit_status.py:F401
 scripts/test_coderabbit_status.py:F401
 scripts/test_coderabbit_status.py:I001

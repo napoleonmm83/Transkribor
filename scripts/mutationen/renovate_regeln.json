@@ -15,7 +15,7 @@
         "test_die_drei_regeln_wirken_am_echten_lauf"
       ],
       "gruen": [
-        "test_urteil_ist_gruen_wenn_alle_drei_wirken"
+        "test_renovate_json_bleibt_lesbar_und_traegt_drei_regeln"
       ]
     },
     {
@@ -27,7 +27,7 @@
         "test_die_drei_regeln_wirken_am_echten_lauf"
       ],
       "gruen": [
-        "test_urteil_ist_gruen_wenn_alle_drei_wirken"
+        "test_renovate_json_bleibt_lesbar_und_traegt_drei_regeln"
       ]
     },
     {
@@ -39,7 +39,7 @@
         "test_die_drei_regeln_wirken_am_echten_lauf"
       ],
       "gruen": [
-        "test_urteil_ist_gruen_wenn_alle_drei_wirken"
+        "test_renovate_json_bleibt_lesbar_und_traegt_drei_regeln"
       ]
     },
     {
@@ -51,7 +51,7 @@
         "test_die_drei_regeln_wirken_am_echten_lauf"
       ],
       "gruen": [
-        "test_urteil_ist_gruen_wenn_alle_drei_wirken"
+        "test_renovate_json_bleibt_lesbar_und_traegt_drei_regeln"
       ]
     }
   ]
