@@ -81,4 +81,19 @@ describe('useFehlerberichte', () => {
     dialog.unmount()
     haken.unmount()
   })
+
+  // CodeRabbit-Major am Store: ein status()-Abruf, der vor der Schreibung startet und erst
+  // NACH ihr antwortet, darf die bestätigte Schreibung nicht mehr überschreiben. Mit dem
+  // heutigen (synchronen) Hauptprozess ist Überholen FIFO-mässig aus — der Wächter macht den
+  // Hook unabhängig von dieser Implementierung.
+  it('ein veralteter status-Abruf ueberschreibt die bestaetigte Schreibung nicht', async () => {
+    const api = bruecke(AUS)
+    let aufloesen: (z: FehlerberichteZustand) => void = () => {}
+    api.fehlerberichte!.status.mockReturnValueOnce(new Promise<FehlerberichteZustand>(r => { aufloesen = r }))
+    const { result } = renderHook(() => useFehlerberichte())
+    await act(async () => { await result.current!.setzen(true) })
+    expect(result.current?.zustand).toEqual(AN)
+    await act(async () => { aufloesen(AUS) })
+    expect(result.current?.zustand).toEqual(AN)
+  })
 })

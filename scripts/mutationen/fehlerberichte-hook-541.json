@@ -10,7 +10,7 @@
     {
       "id": "541-A setzen traegt die Antwort in keinen Store — keine Instanz folgt der Schreibung",
       "datei": "webtool/frontend/src/hooks/useFehlerberichte.ts",
-      "von": "    return b.fehlerberichte.setzen(an).then(z => { eintragen(z); return z })",
+      "von": "    return b.fehlerberichte.setzen(an).then(z => { if (meine === runde) eintragen(z); return z })",
       "nach": "    return b.fehlerberichte.setzen(an).then(z => { return z })",
       "rot": [
         "zwei Instanzen sehen dieselbe Schreibung — der Dialog schreibt, der Haken folgt",
@@ -48,6 +48,19 @@
       "gruen": [
         "fragt, solange der Hauptprozess gefragt: null meldet",
         "Ja schaltet an und schliesst"
+      ]
+    },
+    {
+      "id": "541-D der Runde-Waechter am status-Abruf fehlt — ein veralteter Abruf ueberschreibt die bestaetigte Schreibung",
+      "datei": "webtool/frontend/src/hooks/useFehlerberichte.ts",
+      "von": "    b.fehlerberichte.status().then(z => { if (meine === runde) eintragen(z) }).catch(() => {})",
+      "nach": "    b.fehlerberichte.status().then(z => { eintragen(z) }).catch(() => {})",
+      "rot": [
+        "ein veralteter status-Abruf ueberschreibt die bestaetigte Schreibung nicht"
+      ],
+      "gruen": [
+        "holt den Zustand aus dem Hauptprozess; bis dahin ist er null",
+        "setzen reicht einen Fehlschlag DURCH statt ihn zu schlucken"
       ]
     }
   ]
