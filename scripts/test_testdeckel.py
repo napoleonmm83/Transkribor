@@ -115,8 +115,8 @@ def _haenger(tmp_path: Path, quelle: str, frist: str = "2") -> tuple[int, str]:
     try:
         p = _lauf(tmp_path, quelle, frist)
     except subprocess.TimeoutExpired:
-        pytest.fail("Der Lauf-Deckel hat NICHT zugeschlagen — der Prozess hing 60 s lang, "
-                    "obwohl die Frist auf 2 s stand. Genau der Ausfall, gegen den er da ist.")
+        pytest.fail(f"Der Lauf-Deckel hat NICHT zugeschlagen — der Prozess hing 60 s lang, "
+                    f"obwohl die Frist auf {frist} stand. Genau der Ausfall, gegen den er da ist.")
     return p.returncode, p.stdout + p.stderr
 
 

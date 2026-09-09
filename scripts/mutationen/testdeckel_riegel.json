@@ -13,7 +13,8 @@
       "von": "    if frist <= 0:\n        return",
       "nach": "    if frist < -1:\n        return",
       "rot": [
-        "test_null_schaltet_den_deckel_ab"
+        "test_null_schaltet_den_deckel_ab",
+        "test_der_dritte_fall_meldet_sonst_erfolg"
       ],
       "gruen": [
         "test_der_deckel_beendet_den_lauf_und_sagt_wo[koerper]",

@@ -216,9 +216,13 @@ def test_zweiter_start_raeumt_den_laufenden_nicht_weg(monkeypatch, tmp_path):
     # Ereignis statt Frist (#558, Nachbarstelle desselben Rennens): `proc` und die URL
     # stehen erst nach `Popen` bzw. dem zeichenweisen Lesen im Zustand — ohne Warten
     # verglich der Test zwei Rueckgaben, deren eine die URL noch nicht trug (rot aus
-    # Verschwinden) oder gar None mit None (vacuous gruen, schlimmer).
+    # Verschwinden) oder gar None mit None (vacuous gruen, schlimmer). Auf die VOLLE
+    # URL warten: der Puffer waechst zeichenweise, ein Praefix-Treffer wuerde das
+    # Gleichheits-Ziel unten kippen lassen (Review-Befund 4).
+    vollauf = "https://example.invalid/oauth?code=true"
     assert _warte(lambda: (auth._lauf or {}).get("proc") is not None
-                  and auth.zustand("claude-cli")["url"]), "Start nicht sichtbar — " + _bericht()
+                  and auth.zustand("claude-cli")["url"] == vollauf), \
+        "Start nicht sichtbar — " + _bericht()
     proc = auth._lauf["proc"]
     url_vor = auth.zustand("claude-cli")["url"]
     zweit = auth.start("claude-cli")
@@ -235,6 +239,11 @@ def test_abbrechen_beendet_den_vorgang(monkeypatch, tmp_path):
     skript, _ = _fake_cli(tmp_path)
     _verdrahte(monkeypatch, skript)
     auth.start("claude-cli")
+    # Erst auf den Prozess warten (#558, Nachbarstelle): trifft `abbrechen()` auf
+    # `proc=None` (Popen noch nicht durch), ist es ein No-op, der Login laeuft weiter,
+    # und der Test fiele zehn Sekunden spaeter ohne Ursache.
+    assert _warte(lambda: (auth._lauf or {}).get("proc") is not None), \
+        "Abbrechen griff ins Leere — kein Prozess da — " + _bericht()
     auth.abbrechen()
     assert _warte(lambda: not auth.zustand()["laeuft"])
     assert auth.zustand()["ok"] is False
@@ -253,8 +262,16 @@ def test_farbcodes_zerstoeren_weder_url_noch_code(monkeypatch, tmp_path):
         "sys.stdout.flush()\n"
         "import time; time.sleep(30)\n", encoding="utf-8")
     _verdrahte(monkeypatch, skript, code_noetig=False)
-    z = auth.start("claude-cli")
-    assert z["url"] == "https://auth.openai.com/codex/device"
+    auth.start("claude-cli")
+    # Ereignis statt Rueckgabefrist (#558, Nachbarstelle): URL und Code am Zustand
+    # erwarten — an der Rueckgabe von start() haengen sie an der 3-s-Frist, und unter
+    # Volllast kam Popen spaeter als diese (derselbe Mechanismus wie im Hauptfall).
+    erwartet_url = "https://auth.openai.com/codex/device"
+    assert _warte(lambda: auth.zustand("claude-cli")["url"] == erwartet_url
+                  and auth.zustand("claude-cli")["code"] == "IUO4-YVUNH"), \
+        "URL/Code kamen nicht an — " + _bericht()
+    z = auth.zustand("claude-cli")
+    assert z["url"] == erwartet_url
     assert z["code"] == "IUO4-YVUNH"
     assert "\x1b" not in z["ausgabe"]
 
@@ -284,8 +301,11 @@ def test_start_fuer_anderen_anbieter_raeumt_den_alten_weg(monkeypatch, tmp_path)
     # `(auth._lauf or {})`, nicht `auth._lauf[...]`: der Zugriff selbst war die ERSTE
     # Absturzstelle. Steht dort None, starb die Zeile mit einem nackten
     # `TypeError: 'NoneType' object is not subscriptable` (Kalt-Review B4).
+    # Die einst hier stehende Zusicherung _prozess_muss_gesetzt_sein ist mit dem
+    # _warte darueber vacuous geworden ( dieselbe Bedingung, derselbe Bericht )
+    # und ist gestrichen; die Funktion selbst bleibt vom Waechtertest am Dateiende
+    # abgedeckt (Review-Befund 3).
     alt = (auth._lauf or {}).get("proc")
-    _prozess_muss_gesetzt_sein(alt, t0)
     auth.start("codex-cli")
     assert auth._lauf["provider"] == "codex-cli" and auth._lauf["proc"] is not alt
     assert _warte(lambda: alt.poll() is not None), "der alte Vorgang laeuft weiter"
