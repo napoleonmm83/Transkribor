@@ -29,6 +29,7 @@ hat. Lesbar, aber unschön — das ist Absicht.
 ## Unveröffentlicht
 
 **Behoben**
+- Beantwortest du die einmalige Frage zu automatischen Fehlerberichten, zeigt der Schalter auf der Versionsseite ab sofort denselben Zustand, der gespeichert ist — vorher konnte er das Gegenteil anzeigen, bis die Seite neu geladen wurde.
 - Bei langen Transkriptionsläufen zeigt eine früh fertig gewordene Aufnahme jetzt ihren Zustand statt bis zum Schluss wieder „In Warteschlange…“ — bei einem einzeln gestarteten Korrekturlauf ändert sich noch nichts.
 - Trifft ein zweiter Video-Import genau das Ende des ersten und schlägt dann fehl, wird der erste jetzt trotzdem weiterverarbeitet, statt liegenzubleiben — brichst du den zweiten dagegen selbst ab, bleibt auch der erste liegen.
 
