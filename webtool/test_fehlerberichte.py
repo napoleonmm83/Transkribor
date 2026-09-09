@@ -190,7 +190,6 @@ def sentry_attrappe(monkeypatch):
     modul.init = lambda **kwargs: aufrufe.setdefault("init", kwargs)
     modul.capture_exception = lambda e: aufrufe.setdefault("capture", str(e))
     modul.flush = lambda t: aufrufe.setdefault("flush", t) or True
-    zaehler = []
     for name in ("dedupe", "excepthook", "atexit", "threading", "asyncio", "starlette"):
         teile = types.ModuleType(f"sentry_sdk.integrations.{name}")
         klassenname = {"dedupe": "DedupeIntegration", "excepthook": "ExcepthookIntegration",
@@ -199,17 +198,9 @@ def sentry_attrappe(monkeypatch):
         setattr(teile, klassenname, type(klassenname, (), {}))
         monkeypatch.setitem(sys.modules, f"sentry_sdk.integrations.{name}", teile)
         monkeypatch.setattr(modul, "integrations", types.ModuleType("sentry_sdk.integrations"), raising=False)
-    transport_modul = types.ModuleType("sentry_sdk.transport")
-
-    class HttpTransport:
-        def record_lost_event(self, *args, **kwargs):
-            zaehler.append((args, kwargs))
-
-    transport_modul.HttpTransport = HttpTransport
-    monkeypatch.setitem(sys.modules, "sentry_sdk.transport", transport_modul)
     monkeypatch.setitem(sys.modules, "sentry_sdk", modul)
     try:
-        yield {"aufrufe": aufrufe, "zaehler": zaehler, "HttpTransport": HttpTransport}
+        yield aufrufe
     finally:
         fb._zuruecksetzen()
 
@@ -221,9 +212,8 @@ def test_init_mit_allem_initialisiert_und_laesst_probe_nur_bei_exakt_eins(monkey
     monkeypatch.setenv("TRANSKRIBOR_FEHLERPROBE", "true")  # NICHT "1" — darf nicht werfen
     assert fb.init() is True
     assert fb.aktiv() is True
-    aufrufe = sentry_attrappe["aufrufe"]
-    assert "capture" not in aufrufe
-    kwargs = aufrufe["init"]
+    assert "capture" not in sentry_attrappe
+    kwargs = sentry_attrappe["init"]
     assert kwargs["release"] == "transkribor@0.0.0-test"
     assert kwargs["environment"] == "gepackt"
     assert kwargs["send_default_pii"] is False
@@ -231,14 +221,12 @@ def test_init_mit_allem_initialisiert_und_laesst_probe_nur_bei_exakt_eins(monkey
     assert kwargs["auto_session_tracking"] is False
     assert kwargs["default_integrations"] is False
     assert len(kwargs["integrations"]) == 6
-    # Der zaehlerlose Transport: bei AUS verlaesst KEIN Byte die Maschine — auch kein
-    # Verwerfungszaehler (gemessen am Sammler: 186-Byte-Umschlag trotz AUS, Marcus 09-09).
-    assert issubclass(kwargs["transport"], sentry_attrappe["HttpTransport"])
-    kwargs["transport"]().record_lost_event("before_send", "error")
-    assert sentry_attrappe["zaehler"] == []
+    # Keine Verwerfungszaehler: bei AUS verlaesst KEIN Byte die Maschine — auch kein
+    # client_report (gemessen am Sammler: 186-Byte-Umschlag trotz AUS, Marcus 09-09).
+    assert kwargs["send_client_reports"] is False
     monkeypatch.setenv("TRANSKRIBOR_FEHLERPROBE", "1")
     assert fb.init() is True
-    assert aufrufe["capture"] == fb.FEHLERPROBE
+    assert sentry_attrappe["capture"] == fb.FEHLERPROBE
 
 
 def test_init_wirft_nie_auch_bei_kaputtem_sdk(monkeypatch, tmp_path):
@@ -272,11 +260,8 @@ def test_erlaubnisliste_gegen_das_installierte_paket():
         assert hasattr(importlib.import_module(pfad), name), f"{pfad}.{name} fehlt im Paket"
 
 
-def test_kopplung_zaehlerloser_transport_pinnt_die_methode():
-    """Der zaehlerlose Transport ueberschreibt eine SDK-interne Methode. Benennt ein Update
-    sie um, kaemen die Verwerfungszaehler STILL zurueck — dieser Test wird dann rot und
-    nennt den Grund. Die Verhaltens-Seite (null Umschlaege bei AUS) steht im Sammler-Messlauf."""
-    pytest.importorskip("sentry_sdk", reason="sentry-sdk erst mit der gepackten venv Pflicht")
-    from sentry_sdk.transport import HttpTransport
-    assert hasattr(HttpTransport, "record_lost_event"), \
-        "sentry-sdk hat record_lost_event umbenannt — der zaehlerlose Transport greift nicht mehr"
+def test_before_send_wirft_einen_abbruch_weg(meldeweg):
+    """Ctrl+C im Konsolenlauf ist kein Fehler — der Nutzer haette sonst seinen eigenen
+    Abbruch als Fehlerbericht (Fund des Nebenwirkungs-Reviews)."""
+    event = {"exception": {"values": [{"type": "KeyboardInterrupt", "value": ""}]}}
+    assert fb.before_send(event) is None

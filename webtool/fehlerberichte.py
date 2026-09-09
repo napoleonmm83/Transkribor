@@ -308,6 +308,13 @@ def before_send(event: dict, hint=None):
     schalter_pfad = os.environ.get("TRANSKRIBOR_FEHLERBERICHTE")
     if not schalter_pfad or not lesen(schalter_pfad)["automatisch"]:
         return None
+    # Ein Abbruch ist kein Fehler: Ctrl+C im Konsolenlauf schlaegt als KeyboardInterrupt bis
+    # zum sys.excepthook durch (transcribe.py faengt ihn nirgends), und die SDK-Integration
+    # meldet ihn — der Nutzer haette seinen eigenen Abbruch als Fehlerbericht. Gewollter
+    # Abbruch über jobs.cancel_all() ist ohnehin harter Kill und erreicht Python nie.
+    if any(w.get("type") == "KeyboardInterrupt"
+           for w in (event.get("exception") or {}).get("values") or []):
+        return None
     event.pop("request", None)
     _llm_uebernehmen(event)
     _tags_setzen(event)
@@ -335,20 +342,6 @@ def init(env=None) -> bool:
         from sentry_sdk.integrations.excepthook import ExcepthookIntegration
         from sentry_sdk.integrations.starlette import StarletteIntegration
         from sentry_sdk.integrations.threading import ThreadingIntegration
-        from sentry_sdk.transport import HttpTransport
-
-        class ZaehlerloserTransport(HttpTransport):
-            """Wirft die Verwerfungs-Zähler weg (client_reports): bei Schalter AUS verlässt
-            dann KEIN Byte die Maschine. Gemessen am Sammler: das SDK meldete trotz
-            before_send-Verwurf einen 186-Byte-Zähler-Umschlag an denselben Server (Anzahl
-            und Grund, keinerlei Inhalt) — die Electron-Hälfte tat das nicht, und die
-            README-Zusage steht ohne Vorbehalt. Preis, bewusst getragen (Marcus, 2026-09-09):
-            die Kopplung an eine SDK-interne Methode — benennt ein Update sie um, kämen die
-            Zähler still zurück; dagegen pinnt ein Test das Vorhandensein der Methode am
-            installierten Paket."""
-
-            def record_lost_event(self, *args, **kwargs):  # noqa: ARG002
-                return None
 
         sentry_sdk.init(
             dsn=dsn,
@@ -359,12 +352,15 @@ def init(env=None) -> bool:
             max_breadcrumbs=0,
             before_breadcrumb=lambda crumb, hint: None,
             auto_session_tracking=False,  # Sitzungen wären Installations-Zählung
+            send_client_reports=False,  # Verwerfungs-Zähler: bei AUS verlässt KEIN Byte die
+            # Maschine — gemessen am Sammler meldete das SDK sonst einen 186-Byte-Umschlag
+            # (client_report) trotz before_send-Verwurf; die Electron-Hälfte mass 0
+            # (Marcus, 2026-09-09).
             default_integrations=False,
             integrations=[
                 DedupeIntegration(), ExcepthookIntegration(), AtexitIntegration(),
                 ThreadingIntegration(), AsyncioIntegration(), StarletteIntegration(),
             ],
-            transport=ZaehlerloserTransport,
             before_send=before_send,
         )
         _aktiv = True
