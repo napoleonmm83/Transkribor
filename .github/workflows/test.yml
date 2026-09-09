@@ -445,6 +445,49 @@ jobs:
       # ein Riegel, der ab Tag eins rot ist, wird abgeschaltet statt gelesen.
       - run: python scripts/mypy_riegel.py
 
+  # Dasselbe Loch zum dritten Mal, jetzt an der Abhaengigkeitssteuerung (#539): renovate.json
+  # traegt seit #535 drei `packageRules`, und KEINE hatte einen Test. Eine Renovate-Regel ist
+  # stiller Code — faellt sie aus, kommt einfach ein Vorschlag mehr oder nie wieder einer.
+  # Bei der Postgres-Regel ist die Richtung besonders unangenehm: sie haelt ein
+  # Datenbank-Major von der Wiederherstellungsvorlage eines LIVE-Servers fern.
+  #
+  # WIRKUNG statt FORM, Entscheidung Marcus 2026-09-09. Der billige Weg
+  # (`renovate-config-validator`) prueft nur die Syntax, und ein `matchPackageNames:
+  # "postgress"` ist syntaktisch tadellos — genau der Fall, den das `Fertig-wenn` von #539
+  # rot sehen will. Deshalb faehrt der Job das ECHTE Werkzeug gegen ein Wegwerf-Repo.
+  #
+  # `-m renovate` IST DER ANTI-SCHWEIGEN-RIEGEL DIESES JOBS, und das ist der Grund fuer den
+  # Marker statt eines Umgebungsschalters: ein uebersehener Schalter laesst den Test STILL
+  # ueberspringen, und der Job waere gruen, ohne etwas gefahren zu haben. Passt der Marker
+  # nicht mehr, sammelt pytest NULL Tests ein und endet mit rc 5 — rot, ohne Zusatzbau.
+  # Die Gegenrichtung deckt `--strict-markers` in pyproject.toml ab.
+  #
+  # Das Token ist nicht Bequemlichkeit, sondern Bedingung: OHNE es meldet Renovate fuer die
+  # Python-Regel `skipReason: github-token-required` und liefert gar keine Aktualisierung —
+  # mit UND ohne Regel. Die Zusicherung waere dann gruen geblieben, auch wenn die Regel
+  # geloescht ist. `renovate_regeln.py` erkennt den Fall und endet mit 2 statt zu urteilen.
+  # Gefunden vom kalten Plan-Pruefer, bevor eine Zeile davon geschrieben war.
+  #
+  # EIGENER Job aus demselben Grund wie Mypy neben Ruff: die Riegel sollen unabhaengig rot
+  # werden koennen. node 24 wie im Mutationsjob, damit beide Orte dieselbe Fassung fahren.
+  renovate_regeln:
+    name: Renovate-Regeln
+    runs-on: ubuntu-latest
+    timeout-minutes: 20        # Begruendung am python-Job oben (#583)
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - run: pip install --group dev
+      - name: Wirkungstest der drei packageRules
+        env:
+          GITHUB_COM_TOKEN: ${{ github.token }}
+        run: python -m pytest scripts/test_renovate_regeln.py -q -m renovate
+
   # Die Mutationsprobe ist in diesem Repo Pflicht ("Logik raus -> genau dieser Test rot"),
   # war aber bis #551 keine PRUEFUNG, sondern eine Gewohnheit: der Treiber entstand je
   # Sitzung neu im Scratchpad, und die Angabe "20 von 20 gefangen" liess sich aus dem Repo
@@ -537,9 +580,17 @@ jobs:
         run: >
           git diff --name-status ${{ github.event.pull_request.base.sha }} HEAD
           > ${{ runner.temp }}/geaendert.txt
+      # `GITHUB_COM_TOKEN` fuer den Plan `renovate_regeln`: ohne Token ist dessen
+      # Python-Regel unfalsifizierbar, der Test endet mit 2 (nicht urteilsfaehig), und
+      # der Treiber braeche schon an der Positivkontrolle ab. Begruendung ausfuehrlich
+      # am Job `Renovate-Regeln` oben. Lesend — test.yml traegt workflow-weit `contents: read`.
       - name: Betroffene Mutationsproben
         if: github.event_name == 'pull_request'
+        env:
+          GITHUB_COM_TOKEN: ${{ github.token }}
         run: python scripts/mutationen_lauf.py --repo . --geaendert ${{ runner.temp }}/geaendert.txt
       - name: Alle Mutationsproben
         if: github.event_name != 'pull_request'
+        env:
+          GITHUB_COM_TOKEN: ${{ github.token }}
         run: python scripts/mutationen_lauf.py --repo . --alle

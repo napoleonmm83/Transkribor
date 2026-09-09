@@ -116,7 +116,13 @@ testpaths = ["webtool", "build", "scripts", "docs"]
 # ("1134 passed, 5 skipped") vollständig — genau die Zeile, auf die sich die
 # Messungen in den CI-Kommentaren stützen. `--strict-config` ist davon nicht
 # betroffen und steht deshalb sehr wohl hier; warum, steht gleich unten.
-addopts = ["--strict-config"]
+#
+# `-m "not renovate"` nimmt den einen Test heraus, der einen ECHTEN Renovate-Lauf
+# faehrt (#539, ~100 MB Download plus Registry-Abfragen); der Job `Renovate-Regeln`
+# holt ihn mit `-m renovate` wieder herein. `--strict-markers` ist der Riegel
+# darueber: ohne ihn waere ein Tippfehler im Markernamen stumm, der Test liefe
+# ueberall mit, und niemand saehe es an einer Meldung.
+addopts = ["--strict-config", "--strict-markers", "-m", "not renovate"]
 #
 # ── Ein Hänger wird von keinem Test rot (#576) ──────────────────────────────
 #
@@ -173,6 +179,19 @@ addopts = ["--strict-config"]
 # ("N passed") fehlt nach einem Timeout.
 faulthandler_timeout = 300
 faulthandler_exit_on_timeout = true
+
+# `renovate` (#539) faehrt einen ECHTEN Renovate-Lauf: npx laedt ~100 MB und fragt
+# Registries ab. Das gehoert nicht in jede Suite, aber es gehoert auch nicht hinter
+# einen Umgebungsschalter: ein uebersehener Schalter LAESST DEN TEST STILL AUS, und
+# der eigene Job waere gruen, ohne etwas gefahren zu haben — genau die Klasse, gegen
+# die dieser Test gebaut ist. Ein Marker faellt dagegen laut aus: passt er nicht mehr,
+# sammelt `pytest -m renovate` im eigenen Job NULL Tests ein und endet mit rc 5.
+# `--strict-markers` ist der Riegel darueber (ein Tippfehler im Marker ist sonst
+# stumm); im eigenen Baum wird ausser `parametrize` und `skipif` nichts markiert,
+# er kostet also nichts.
+markers = [
+  "renovate: faehrt einen echten Renovate-Lauf (#539); nur im Job `Renovate-Regeln`",
+]
 
 [tool.mutmut]
 # Beratend, kein Riegel: mutmut kennt nur Pfade, nicht geänderte Zeilen — ein
