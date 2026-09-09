@@ -25,6 +25,7 @@ des `packageFiles`-Dumps -- ein geglätteter Auszug hätte die Nähe-Prüfung vo
 
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -264,6 +265,27 @@ def test_regel3_faellt_auf_wenn_gar_nichts_gefiltert_wurde():
     code, zeilen = rr.urteile(ohne(GEMESSEN, "Filtered out 1 disabled update(s)."))
     assert code == 1
     assert any("0 gefiltert" in z for z in zeilen)
+
+
+# --- der gruene Zeuge der Mutationsserie ---------------------------------------
+
+def test_renovate_json_bleibt_lesbar_und_traegt_drei_regeln():
+    """Der GRÜNE Zeuge: die Mutation war chirurgisch, nicht zerstörend.
+
+    Ein grüner Zeuge, der die mutierte Datei gar nicht liest, bezeugt nichts —
+    er bliebe auch dann grün, wenn die Mutation die Datei zerschossen hätte.
+    Genau das stand hier zuerst im Mutationsplan (`urteile(GEMESSEN)` prüft eine
+    aufgezeichnete Zeichenkette und kann von einer Änderung an renovate.json
+    per Konstruktion nicht betroffen sein). Gefunden von der CodeRabbit-CLI im
+    CI-Lauf dieses PR.
+
+    Dieser Test liest die ECHTE Datei. Unter allen vier Mutationen — es sind
+    Wertänderungen an Matchern — bleibt er grün; eine Mutation, die die Datei
+    unlesbar macht oder eine Regel entfernt, bekommt er rot. Das ist die
+    Aussage, die ein grüner Zeuge treffen soll.
+    """
+    daten = json.loads((rr.STAMM / "renovate.json").read_text(encoding="utf-8"))
+    assert len(daten["packageRules"]) == 3
 
 
 # --- der echte Lauf -----------------------------------------------------------
