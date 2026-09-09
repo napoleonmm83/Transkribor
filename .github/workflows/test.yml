@@ -169,7 +169,7 @@ jobs:
       # an EINER Stelle (pyproject.toml, [dependency-groups]).
       # Unabhaengig von zwei Reviewstufen gefunden.
       - run: pip install --group dev
-      - run: pip install fastapi python-multipart httpx scipy scikit-learn
+      - run: pip install fastapi python-multipart httpx scipy scikit-learn sentry-sdk
 
       # KEINE Pfadangaben mehr — und das ist der Fix, nicht Kosmetik.
       #
@@ -568,7 +568,7 @@ jobs:
       # Suite, und die braucht fastapi & Co. Mit nur der dev-Gruppe faenden sie null Tests
       # — was der Treiber zwar meldet (rc 2), aber erst nach dem Aufbau.
       - run: pip install --group dev
-      - run: pip install fastapi python-multipart httpx scipy scikit-learn
+      - run: pip install fastapi python-multipart httpx scipy scikit-learn sentry-sdk
       # ~15 s, und bewusst BEDINGUNGSLOS: eine Bedingung „nur wenn ein Frontend-Plan
       # gewaehlt ist" waere ein zweiter Ort, an dem die Auswahl steht, und der erste, der
       # driftet. Gegen eine 20-Minuten-Serie sind 15 s nichts.

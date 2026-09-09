@@ -56,8 +56,10 @@ numpy
 pycryptodomex>=3.19.1
 # Opt-in-Fehlerberichte an Bugsink (#530b): Sentry-kompatibles SDK fuer Server und alle
 # Subprozess-Einstiege (webtool/fehlerberichte.py). Ohne die drei TRANSKRIBOR_*-Variablen der
-# gepackten App initialisiert es sich nicht. Major-2-Boden, weil die Integrations-Erlaubnis-
-# liste gegen die installierte Fassung geprueft wird.
+# gepackten App initialisiert es sich nicht. Major-2-Boden wegen der Client-Reports-Mechanik
+# (send_client_reports; die Zaehler-Unterdrueckung haengt daran) und server_name als Option —
+# beides ab 2.0. Die Integrations-Erlaubnisliste wird nur per hasattr geprueft (Namen gibt es
+# auch in 1.x) und traegt den Boden nicht.
 # ACHTUNG #181: diese Zeile aendert den requirements-Hash — jede Bestandsinstallation sieht
 # nach dem Update EINMAL die Einrichtungsseite (README weiss es).
 sentry-sdk>=2.0

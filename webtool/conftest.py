@@ -237,7 +237,7 @@ def _kein_echtes_pip():
 
 
 @pytest.fixture(autouse=True)
-def _kein_echter_sentry(monkeypatch):
+def _kein_echter_sentry():
     """#530b: ein Testlauf, der Fehlerberichte an einen ECHten Server schickt, waere dieselbe
     Klasse wie einer, der echtes pip startet — rot, nicht gewarnt. Drei Teile:
 
@@ -249,8 +249,13 @@ def _kein_echter_sentry(monkeypatch):
         einer Attrappe faehrt, raeumt im finally selbst zurueck (`_zuruecksetzen`).
     """
     from webtool import fehlerberichte as _fb
-    for var in ("TRANSKRIBOR_BUGSINK_DSN", "TRANSKRIBOR_VERSION", "TRANSKRIBOR_FEHLERBERICHTE"):
-        monkeypatch.delenv(var, raising=False)
-    _fb._zuruecksetzen()
-    yield
+    # EIGENER Kontext, nicht der monkeypatch des Tests — dieselbe Regel wie bei
+    # _wegwerf_projektwurzel 90 Zeilen darueber (PR #529): ein monkeypatch.undo() MITTEN im
+    # Test holte die geloeschten Variablen zurueck und entwerte Teil (a). Der Teardown-assert
+    # (c) haelte auch dann, aber der Riegel soll der eigenen Datei-Regel entsprechen.
+    with pytest.MonkeyPatch.context() as mp:
+        for var in ("TRANSKRIBOR_BUGSINK_DSN", "TRANSKRIBOR_VERSION", "TRANSKRIBOR_FEHLERBERICHTE"):
+            mp.delenv(var, raising=False)
+        _fb._zuruecksetzen()
+        yield
     assert not _fb.aktiv(), "Ein Test hat ein Fehlerberichte-SDK initialisiert und nicht zurueckgesetzt."  # noqa: S101 — Waechter-assert, dieselbe Form wie die pip-Wache oben
