@@ -26,7 +26,7 @@
     {
       "id": "530b-B die Namensliste bleibt leer — Projektnamen erreichen das Ereignis",
       "datei": "webtool/fehlerberichte.py",
-      "von": "        \"namen\": namen(projekte) if projekte else {\"projekte\": [], \"dateien\": []},",
+      "von": "        \"namen\": namen(projekte),",
       "nach": "        \"namen\": {\"projekte\": [], \"dateien\": []},",
       "rot": [
         "test_before_send_plichtprobe_namen_erreichen_das_ereignis_nicht"
@@ -121,6 +121,19 @@
       "nach": "            server_name=None,  # Der Rechnername ist PII — die JS-Hälfte schaltet ihn mit",
       "rot": [
         "test_init_mit_allem_initialisiert_und_laesst_probe_nur_bei_exakt_eins"
+      ],
+      "gruen": [
+        "test_before_send_plichtprobe_namen_erreichen_das_ereignis_nicht",
+        "test_before_send_streicht_request_ganz"
+      ]
+    },
+    {
+      "id": "530b-J die Maske faellt ohne TRANSKRIBOR_PROJEKTE auf die leere Liste zurueck — Namen des Dev-Laufs reisen unmaskiert",
+      "datei": "webtool/fehlerberichte.py",
+      "von": "    projekte = env.get(\"TRANSKRIBOR_PROJEKTE\") or paths.projekte_root()",
+      "nach": "    projekte = env.get(\"TRANSKRIBOR_PROJEKTE\") or \"\"",
+      "rot": [
+        "test_before_send_maske_fallt_auf_die_repo_wurzel_zurueck"
       ],
       "gruen": [
         "test_before_send_plichtprobe_namen_erreichen_das_ereignis_nicht",

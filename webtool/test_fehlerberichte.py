@@ -159,6 +159,20 @@ def test_before_send_plichtprobe_namen_erreichen_das_ereignis_nicht(meldeweg):
     assert "<projekt>" in zusammen and "<datei>" in zusammen
 
 
+def test_before_send_maske_fallt_auf_die_repo_wurzel_zurueck(meldeweg, monkeypatch, tmp_path):
+    """Ohne TRANSKRIBOR_PROJEKTE laeuft die Arbeit gegen <repo>/projekte (transcribe.py:23,
+    paths.projekte_root()) — die Maske muss dieselbe Wurzel scannen, sonst reisen Namen aus
+    genau dem Lauf unmaskiert, den sie schuetzen soll. Der Dev-Lauf ohne die Variable ist der
+    erreichbare Fall, und die Messanleitung in der README setzt sie ebenfalls nicht
+    (CodeRabbit-CLI, Major)."""
+    monkeypatch.delenv("TRANSKRIBOR_PROJEKTE")
+    monkeypatch.setattr(fb.paths, "ROOT", str(tmp_path))  # Wurzel der Fixture: tmp_path/projekte
+    event = {"message": "Fehler in Mueller-Interview"}
+    aus = fb.before_send(event)
+    assert "<projekt>" in aus["message"]
+    assert "Mueller" not in json.dumps(aus)
+
+
 def test_before_send_llm_fragment_wird_zu_typ_und_kategorie(meldeweg):
     event = {"exception": {"values": [{
         "type": "RuntimeError",
