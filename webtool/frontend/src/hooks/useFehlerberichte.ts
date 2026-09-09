@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 
 export type FehlerberichteZustand = { automatisch: boolean; gefragt: string | null }
 
@@ -17,16 +17,37 @@ function bruecke(): Bruecke | null {
 }
 
 /**
+ * Der Modul-Level-Store (#541). Der Hook hat ZWEI gleichzeitig gemountete Verwender — der
+ * Zustimmungs-Dialog hängt app-weit in App.tsx, der Haken auf der Version-Seite — und bis hierher
+ * hielt jede Instanz ihre eigene Kopie: antwortete der Dialog, zeigte der Haken das Gegenteil
+ * der Datei. Jede Instanz, die schreibt (Dialog-Antwort wie Haken-Klick), trägt das Ergebnis
+ * HIER ein und meldet alle Hörer — jede mountete Instanz sieht jede Änderung, ohne Neuladen.
+ */
+let speicher: FehlerberichteZustand | null = null
+const hoerer = new Set<() => void>()
+
+function eintragen(z: FehlerberichteZustand): void {
+  speicher = z
+  for (const h of hoerer) h()
+}
+
+/**
  * Der Opt-in-Schalter für automatische Fehlerberichte (#530). `null` heisst: keine Brücke —
  * im Browser oder in einer App-Hülle ohne den Schalter gibt es den Haken nicht.
  * `zustand` ist `null`, bis der Hauptprozess geantwortet hat (Haken solange gesperrt).
  */
 export function useFehlerberichte() {
   const [da] = useState(() => bruecke() !== null)
-  const [zustand, setZustand] = useState<FehlerberichteZustand | null>(null)
+  const zustand = useSyncExternalStore(
+    useCallback((hoert: () => void) => { hoerer.add(hoert); return () => { hoerer.delete(hoert) } }, []),
+    () => speicher,
+  )
 
+  // Bei JEDEM Mount frisch holen (nicht nur wenn der Speicher leer ist): der Mount ist der
+  // billigste Weg, eine zwischenzeitliche Fremdänderung einzufangen — und die Antwort ist
+  // ohnehin dieselbe Datei.
   useEffect(() => {
-    bruecke()?.fehlerberichte.status().then(setZustand).catch(() => {})
+    bruecke()?.fehlerberichte.status().then(eintragen).catch(() => {})
   }, [])
 
   // Reicht das Versprechen DURCH (wie `fehlerbericht` in useUpdate): schlägt das Schreiben
@@ -34,8 +55,15 @@ export function useFehlerberichte() {
   const setzen = useCallback((an: boolean) => {
     const b = bruecke()
     if (!b) return Promise.reject(new Error('keine Brücke'))
-    return b.fehlerberichte.setzen(an).then(z => { setZustand(z); return z })
+    return b.fehlerberichte.setzen(an).then(z => { eintragen(z); return z })
   }, [])
 
   return da ? { zustand, setzen } : null
+}
+
+/** Nur für Tests: setzt den Modul-Speicher zurück, sonst trägt jeder Test den Zustand des
+ *  vorigen in den seinen (Muster `_home` in electron/fehlerberichte.js). */
+export function _zuruecksetzen(): void {
+  speicher = null
+  hoerer.clear()
 }

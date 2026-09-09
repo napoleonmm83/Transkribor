@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { renderHook, act, waitFor } from '@testing-library/react'
-import { useFehlerberichte, type FehlerberichteZustand } from './useFehlerberichte'
+import { useFehlerberichte, _zuruecksetzen, type FehlerberichteZustand } from './useFehlerberichte'
 
 const AUS: FehlerberichteZustand = { automatisch: false, gefragt: '2026-09-03T00:00:00Z' }
 const AN: FehlerberichteZustand = { automatisch: true, gefragt: '2026-09-03T00:00:00Z' }
@@ -22,7 +22,12 @@ function bruecke(start: FehlerberichteZustand, mitSchalter = true) {
 
 describe('useFehlerberichte', () => {
   beforeEach(() => vi.clearAllMocks())
-  afterEach(() => { delete (window as unknown as { transkribor?: unknown }).transkribor })
+  afterEach(() => {
+    delete (window as unknown as { transkribor?: unknown }).transkribor
+    // Der Store ist Modul-Zustand und überlebt den einzelnen Test; ohne Zurücksetzen
+    // redet jeder Test mit dem Zustand des vorigen (#541).
+    _zuruecksetzen()
+  })
 
   it('ohne Bruecke (Browser) gibt es keinen Schalter', () => {
     const { result } = renderHook(() => useFehlerberichte())
@@ -58,5 +63,22 @@ describe('useFehlerberichte', () => {
     await waitFor(() => expect(result.current?.zustand).toEqual(AUS))
     await expect(result.current!.setzen(true)).rejects.toThrow('Platte voll')
     expect(result.current?.zustand).toEqual(AUS)
+  })
+
+  // #541, Fertig-wenn: Dialog und Haken sind gleichzeitig gemountet (der Dialog hängt
+  // app-weit). Antwortet der eine Instanz, muss die andere denselben Wert zeigen, der in
+  // fehlerberichte.json steht — ohne Neuladen. Vor dem Store blieb die zweite auf ihrem
+  // Mount-Stand stehen.
+  it('zwei Instanzen sehen dieselbe Schreibung — der Dialog schreibt, der Haken folgt', async () => {
+    bruecke(AUS)
+    const dialog = renderHook(() => useFehlerberichte())
+    const haken = renderHook(() => useFehlerberichte())
+    await waitFor(() => expect(dialog.result.current?.zustand).toEqual(AUS))
+    await waitFor(() => expect(haken.result.current?.zustand).toEqual(AUS))
+    await act(async () => { await dialog.result.current!.setzen(true) })
+    expect(dialog.result.current?.zustand).toEqual(AN)
+    expect(haken.result.current?.zustand).toEqual(AN)
+    dialog.unmount()
+    haken.unmount()
   })
 })
