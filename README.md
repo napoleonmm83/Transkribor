@@ -818,9 +818,19 @@ Die Python-Seite (#530b) ist `webtool/fehlerberichte.py`: `init()` im Server-Lif
 allen drei Subprozess-Einstiegen, ohne eine der drei Variablen no-op. Der Schalter wird je
 Ereignis gelesen; eine `.env`-Zeile kann die drei Variablen wie jede andere bewusst
 übersteuern (Datei gewinnt — dieselbe Regel wie überall). Messen ohne App: Sammler starten,
-dann z. B. `TRANSKRIBOR_BUGSINK_DSN=http://k@127.0.0.1:8123/1 TRANSKRIBOR_VERSION=0.0.0-test
-TRANSKRIBOR_FEHLERBERICHTE=<wegwerf>/fehlerberichte.json TRANSKRIBOR_FEHLERPROBE=1 python -m
-uvicorn webtool.app:app`. `sentry-sdk` steht in der `requirements.txt` — das ändert deren
+Schalterdatei anlegen und den Server mit allen vier Variablen starten (Git Bash; ohne die
+angelegte Schalterdatei bleibt der Probe-Wurf verworfen, und ein `<platzhalter>`-Pfad würde
+von der Shell als Umleitung gelesen):
+
+```bash
+schalter="$(mktemp -d)/fehlerberichte.json"
+printf '%s\n' '{"automatisch": true}' > "$schalter"
+TRANSKRIBOR_BUGSINK_DSN=http://k@127.0.0.1:8123/1 TRANSKRIBOR_VERSION=0.0.0-test \
+  TRANSKRIBOR_FEHLERBERICHTE="$schalter" TRANSKRIBOR_FEHLERPROBE=1 \
+  python -m uvicorn webtool.app:app
+```
+
+`sentry-sdk` steht in der `requirements.txt` — das ändert deren
 Hash (#181), Bestandsinstallationen sehen nach dem Update einmal die Einrichtungsseite.
 Die Compose für den Server liegt in `docs/bugsink/compose.yaml` (Coolify, Postgres 17).
 `MAX_EVENT_AGE_DAYS=90` löscht nur, wenn `bugsink-manage delete_old_events` läuft — das tut der

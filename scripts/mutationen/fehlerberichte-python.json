@@ -139,6 +139,45 @@
         "test_before_send_plichtprobe_namen_erreichen_das_ereignis_nicht",
         "test_before_send_streicht_request_ganz"
       ]
+    },
+    {
+      "id": "530b-K flush wartet wieder 10000 SEKUNDEN — toter Endpunkt haengt den Start um Stunden auf",
+      "datei": "webtool/fehlerberichte.py",
+      "von": "            sentry_sdk.flush(10)",
+      "nach": "            sentry_sdk.flush(10000)",
+      "rot": [
+        "test_init_mit_allem_initialisiert_und_laesst_probe_nur_bei_exakt_eins"
+      ],
+      "gruen": [
+        "test_init_wirft_nie_auch_bei_kaputtem_sdk",
+        "test_before_send_streicht_request_ganz"
+      ]
+    },
+    {
+      "id": "530b-L llm-Importfehler fuehrt wieder zum early return — die Rohmeldung reist",
+      "datei": "webtool/fehlerberichte.py",
+      "von": "    except Exception:\n        llm = None",
+      "nach": "    except Exception:\n        return",
+      "rot": [
+        "test_llm_importfehler_entwafft_trotzdem"
+      ],
+      "gruen": [
+        "test_before_send_plichtprobe_namen_erreichen_das_ereignis_nicht",
+        "test_before_send_streicht_request_ganz"
+      ]
+    },
+    {
+      "id": "530b-M transcribe.py ruft fehlerberichte.init() nicht mehr — Job-Tracebacks reisen in keinen Bericht",
+      "datei": "transcribe.py",
+      "von": "        from webtool import fehlerberichte\n        fehlerberichte.init()",
+      "nach": "        from webtool import fehlerberichte\n        pass",
+      "rot": [
+        "test_einstiegspunkte_initialisieren_die_fehlerberichte[transcribe.py]"
+      ],
+      "gruen": [
+        "test_einstiegspunkte_initialisieren_die_fehlerberichte[webtool/app.py]",
+        "test_before_send_streicht_request_ganz"
+      ]
     }
   ]
 }

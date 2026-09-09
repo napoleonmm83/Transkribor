@@ -6,6 +6,7 @@ erreichen. `before_send` wird direkt als reine Funktion gerufen — das ist das 
 Transports auf Einheitsebene; der echte Versand steht im Messlauf gegen den Sammler.
 """
 import json
+import pathlib
 import sys
 import types
 
@@ -173,6 +174,31 @@ def test_before_send_maske_fallt_auf_die_repo_wurzel_zurueck(meldeweg, monkeypat
     assert "Mueller" not in json.dumps(aus)
 
 
+def test_llm_importfehler_entwafft_trotzdem(meldeweg, monkeypatch):
+    """CodeRabbit: schlug ``from . import llm`` fehl, fuehrte ein early return um die ganze
+    Entschärfungs-Schleife — die Rohmeldung (Anbieter-Fragmente) reiste unmaskiert. Jetzt
+    heisst der Import-Fehler Kategorie unbekannt, die Meldung geht nie raus."""
+    monkeypatch.setitem(sys.modules, "webtool.llm", None)  # from . import llm → ImportError
+    event = {"exception": {"values": [{
+        "type": "Vorbedingung",
+        "value": "claude ist nicht installiert: /Users/benutzer/.claude/claude",
+        "stacktrace": {"frames": [{"filename": "webtool/llm.py"}]},
+    }]}}
+    aus = fb.before_send(event)
+    assert aus["exception"]["values"][0]["value"] == "[Vorbedingung: unbekannt]"
+
+
+@pytest.mark.parametrize("pfad", ["transcribe.py", "webtool/app.py", "webtool/correct.py",
+                                  "webtool/fetch.py"])
+def test_einstiegspunkte_initialisieren_die_fehlerberichte(pfad):
+    """CodeRabbit: kein einziger der vier init()-Aufrufe hatte einen Wächter — ein entfernter
+    Aufruf waere still unbeleuchtet gewesen (die zehn Mutationen tasten nur fehlerberichte.py
+    an). Quell-Vertrag wie jobPhases.vertrag.test.ts: Quelle gegen Inventar; Mutation 530b-M
+    beweist, dass die Probe beisst."""
+    quelle = (pathlib.Path(__file__).resolve().parent.parent / pfad).read_text(encoding="utf-8")
+    assert "fehlerberichte.init()" in quelle, f"{pfad} ruft fehlerberichte.init() nicht mehr"
+
+
 def test_before_send_llm_fragment_wird_zu_typ_und_kategorie(meldeweg):
     event = {"exception": {"values": [{
         "type": "RuntimeError",
@@ -244,6 +270,9 @@ def test_init_mit_allem_initialisiert_und_laesst_probe_nur_bei_exakt_eins(monkey
     monkeypatch.setenv("TRANSKRIBOR_FEHLERPROBE", "1")
     assert fb.init() is True
     assert sentry_attrappe["capture"] == fb.FEHLERPROBE
+    # flush() wartet SEKUNDEN — 10000 haetten bei totem Endpunkt den Serverstart um bis zu
+    # 2 h 47 min haengen lassen (CodeRabbit; Client.flush-Docstring: at most `timeout` seconds).
+    assert sentry_attrappe["flush"] == 10
 
 
 def test_init_wirft_nie_auch_bei_kaputtem_sdk(monkeypatch, tmp_path):
