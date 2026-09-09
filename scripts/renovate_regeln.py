@@ -88,10 +88,21 @@ ERWARTETE_DATEIEN = 4
 # WARMEM npx-Zwischenspeicher: der markierte Test lief in 5,7 s. Ein kalter
 # Zwischenspeicher laedt ~100 MB dazu und ist NICHT gestoppt.
 #
-# Die Frist greift nur im EIGENSTAENDIGEN Lauf. Unter pytest steht
-# `faulthandler_timeout = 300` in pyproject.toml davor und steigt frueher aus --
-# 600 s werden dort nie erreicht.
-FRIST = 600
+# DIE ZAHL MUSS UNTER 300 LIEGEN, und das ist der ganze Grund fuer sie. Der
+# erste Entwurf stand auf 600 -- unter pytest unerreichbar, weil
+# `faulthandler_timeout = 300` (pyproject.toml) davor steht. Ein haengendes
+# Renovate haette dort einen faulthandler-Stapelabzug mit **rc 1** ergeben, also
+# „mindestens eine Regel wirkt nicht", und das Enkelkind waere weitergelaufen.
+# In einem Paket, dessen ganzer Zweck ist, dass ein Rueckgabecode sagt was er
+# meint, ist das die falsche Antwort. Gefunden vom blinden Zweitleser, ausgefuehrt
+# belegt (`-o faulthandler_timeout=3`).
+#
+# Gestaffelt wie der Testdeckel in conftest.py, jede Stufe faengt was die
+# darunter nicht sieht -- und nur die unteren beiden sagen, WO es klemmt:
+#     240 s  dieser Lauf      eigene Meldung, rc 2 „nicht urteilsfaehig"
+#     270 s  der Test         subprocess-Zeitgrenze, benennt das Kind
+#     300 s  pytest           faulthandler-Abzug, rc 1
+FRIST = 240
 
 _FLACH = re.compile(r"(\d+) flattened updates found:(?P<namen>[^(]*)\(repository=")
 _GEFUNDEN = re.compile(r"Found (\d+) package file\(s\)")

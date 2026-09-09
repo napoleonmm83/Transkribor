@@ -254,9 +254,12 @@ def test_die_drei_regeln_wirken_am_echten_lauf():
     CI-Job holt ihn mit `-m renovate` herein. rc 2 ist hier ausdrücklich KEIN
     Erfolg -- es heisst `konnte nicht urteilen` und fällt genauso durch.
     """
+    # +30 statt +60: die Staffelung muss unter pytests `faulthandler_timeout`
+    # von 300 s bleiben (240 < 270 < 300). Sonst gewinnt der faulthandler, und
+    # aus „konnte nicht urteilen" (rc 2) wird ein Stapelabzug mit rc 1.
     fertig = subprocess.run(
         [sys.executable, str(rr.STAMM / "scripts/renovate_regeln.py")],
-        capture_output=True, text=True, timeout=rr.FRIST + 60,
+        capture_output=True, text=True, timeout=rr.FRIST + 30,
     )
     assert fertig.returncode == 0, (
         f"rc={fertig.returncode}\nstdout:\n{fertig.stdout}\nstderr:\n{fertig.stderr}"
