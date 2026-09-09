@@ -348,6 +348,10 @@ def init(env=None) -> bool:
             release=f"transkribor@{version}",
             environment="gepackt",  # init läuft praktisch nur in der gepackten App; Messläufe ebenso
             send_default_pii=False,
+            server_name="",  # Der Rechnername ist PII — die JS-Hälfte schaltet ihn mit
+            # includeServerName:false ab (electron/fehlerberichte.js, „Rechnername ist PII");
+            # das SDK füllt hier sonst socket.gethostname() in JEDES Ereignis (gemessen am
+            # Stub-Transport: 'workstation' reiste unmaskiert, Fund beider Reviewer).
             include_local_variables=False,
             max_breadcrumbs=0,
             before_breadcrumb=lambda crumb, hint: None,

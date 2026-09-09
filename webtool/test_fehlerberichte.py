@@ -217,6 +217,9 @@ def test_init_mit_allem_initialisiert_und_laesst_probe_nur_bei_exakt_eins(monkey
     assert kwargs["release"] == "transkribor@0.0.0-test"
     assert kwargs["environment"] == "gepackt"
     assert kwargs["send_default_pii"] is False
+    # Der Rechnername ist PII (Fund beider Reviewer: 'workstation' reiste unmaskiert;
+    # die JS-Haelfte schaltet ihn mit includeServerName:false ab).
+    assert kwargs["server_name"] == ""
     assert kwargs["include_local_variables"] is False
     assert kwargs["auto_session_tracking"] is False
     assert kwargs["default_integrations"] is False

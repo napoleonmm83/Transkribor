@@ -113,6 +113,19 @@
         "test_before_send_plichtprobe_namen_erreichen_das_ereignis_nicht",
         "test_before_send_streicht_request_ganz"
       ]
+    },
+    {
+      "id": "530b-I der Rechnername reist wieder — server_name leer bleibt nicht gesetzt",
+      "datei": "webtool/fehlerberichte.py",
+      "von": "            server_name=\"\",  # Der Rechnername ist PII — die JS-Hälfte schaltet ihn mit",
+      "nach": "            server_name=None,  # Der Rechnername ist PII — die JS-Hälfte schaltet ihn mit",
+      "rot": [
+        "test_init_mit_allem_initialisiert_und_laesst_probe_nur_bei_exakt_eins"
+      ],
+      "gruen": [
+        "test_before_send_plichtprobe_namen_erreichen_das_ereignis_nicht",
+        "test_before_send_streicht_request_ganz"
+      ]
     }
   ]
 }
