@@ -3,9 +3,15 @@ scripts/coderabbit_status.py:I001
 scripts/coderabbit_status.py:S603
 scripts/coderabbit_status.py:S603
 scripts/osv_freeze.py:S603
+scripts/renovate_regeln.py:S603
+scripts/renovate_regeln.py:S603
+scripts/renovate_regeln.py:S603
+scripts/renovate_regeln.py:S603
+scripts/renovate_regeln.py:S603
 scripts/test_coderabbit_status.py:F401
 scripts/test_coderabbit_status.py:F401
 scripts/test_coderabbit_status.py:I001
+scripts/test_renovate_regeln.py:S603
 scripts/test_weg_benchmark.py:I001
 tools/diar_eval.py:B904
 transcribe.py:E401

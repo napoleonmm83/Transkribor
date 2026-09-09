@@ -1,0 +1,58 @@
+{
+  "test": "python -m pytest scripts/test_renovate_regeln.py -q -m \"\"",
+  "pfade": [
+    "renovate.json",
+    "scripts/renovate_regeln.py",
+    "scripts/test_renovate_regeln.py"
+  ],
+  "mutationen": [
+    {
+      "id": "M1 Tippfehler im Paketnamen der Postgres-Regel (das Fertig-wenn von #539)",
+      "datei": "renovate.json",
+      "von": "      \"matchPackageNames\": [\"postgres\"],",
+      "nach": "      \"matchPackageNames\": [\"postgress\"],",
+      "rot": [
+        "test_die_drei_regeln_wirken_am_echten_lauf"
+      ],
+      "gruen": [
+        "test_urteil_ist_gruen_wenn_alle_drei_wirken"
+      ]
+    },
+    {
+      "id": "M2 matchFileNames greift zu breit — die Regel schaltet JEDES postgres stumm",
+      "datei": "renovate.json",
+      "von": "      \"matchFileNames\": [\"docs/bugsink/compose.yaml\"],",
+      "nach": "      \"matchFileNames\": [\"docs/**/compose.yaml\"],",
+      "rot": [
+        "test_die_drei_regeln_wirken_am_echten_lauf"
+      ],
+      "gruen": [
+        "test_urteil_ist_gruen_wenn_alle_drei_wirken"
+      ]
+    },
+    {
+      "id": "M3 Python-Regel scharf geschaltet — mehrzeiliger Anker, `enabled: false` steht zweimal",
+      "datei": "renovate.json",
+      "von": "      \"matchDepNames\": [\"python\"],\n      \"enabled\": false",
+      "nach": "      \"matchDepNames\": [\"python\"],\n      \"enabled\": true",
+      "rot": [
+        "test_die_drei_regeln_wirken_am_echten_lauf"
+      ],
+      "gruen": [
+        "test_urteil_ist_gruen_wenn_alle_drei_wirken"
+      ]
+    },
+    {
+      "id": "M4 Tippfehler im Paketnamen der vitejs-Regel — das Paket faellt ins Sammelbuendel",
+      "datei": "renovate.json",
+      "von": "      \"matchPackageNames\": [\"@vitejs/plugin-react\"],",
+      "nach": "      \"matchPackageNames\": [\"@vitejs/plugin-reactx\"],",
+      "rot": [
+        "test_die_drei_regeln_wirken_am_echten_lauf"
+      ],
+      "gruen": [
+        "test_urteil_ist_gruen_wenn_alle_drei_wirken"
+      ]
+    }
+  ]
+}
