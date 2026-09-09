@@ -37,6 +37,8 @@ import sys
 import unicodedata
 from urllib.parse import quote
 
+from . import paths
+
 # Namen kürzer als das werden nicht maskiert — `ab` in jedem Wort zu ersetzen hilft niemandem
 # (denselben Wert und dieselbe Begründung wie electron/fehlerberichte.js).
 MIN_NAME = 3
@@ -292,12 +294,15 @@ def _kontext(env) -> dict:
     """Die Maskier-Kontexte: home, daten (das Verzeichnis der Schalterdatei — im gepackten
     Lauf userData), projekte und die Namensliste zum Sendezeitpunkt."""
     schalter = env.get("TRANSKRIBOR_FEHLERBERICHTE", "")
-    projekte = env.get("TRANSKRIBOR_PROJEKTE", "")
+    # Ohne TRANSKRIBOR_PROJEKTE laeuft die Arbeit gegen <repo>/projekte (transcribe.py:23,
+    # paths.projekte_root()) — die Maske muss dieselbe Wurzel scannen, sonst reisen Namen
+    # aus genau dem Lauf unmaskiert, den sie schuetzen soll (CodeRabbit-CLI, Major).
+    projekte = env.get("TRANSKRIBOR_PROJEKTE") or paths.projekte_root()
     return {
         "home": os.path.expanduser("~"),
         "daten": os.path.dirname(schalter) if schalter else "",
         "projekte": projekte,
-        "namen": namen(projekte) if projekte else {"projekte": [], "dateien": []},
+        "namen": namen(projekte),
     }
 
 
