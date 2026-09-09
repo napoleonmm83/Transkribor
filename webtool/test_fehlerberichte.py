@@ -12,6 +12,7 @@ import types
 
 import pytest
 
+import webtool
 from webtool import fehlerberichte as fb
 
 # ---------------------------------------------------------------- lesen
@@ -177,8 +178,14 @@ def test_before_send_maske_fallt_auf_die_repo_wurzel_zurueck(meldeweg, monkeypat
 def test_llm_importfehler_entwafft_trotzdem(meldeweg, monkeypatch):
     """CodeRabbit: schlug ``from . import llm`` fehl, fuehrte ein early return um die ganze
     Entschärfungs-Schleife — die Rohmeldung (Anbieter-Fragmente) reiste unmaskiert. Jetzt
-    heisst der Import-Fehler Kategorie unbekannt, die Meldung geht nie raus."""
-    monkeypatch.setitem(sys.modules, "webtool.llm", None)  # from . import llm → ImportError
+    heisst der Import-Fehler Kategorie unbekannt, die Meldung geht nie raus.
+
+    BEIDE Gifte sind Pflicht: ``from . import llm`` befragt bei gesetzem Eltern-Attribut
+    sys.modules gar nicht mehr (getattr greift zuerst) — ein früherer Test der Datei hat
+    llm dann schon real importiert, und die Mutation waere UNERREICHBAR. Genau das meldete
+    die Mutationsserie (rot: 0 im VollDatei-Lauf, rot im Einzellauf)."""
+    monkeypatch.setitem(sys.modules, "webtool.llm", None)  # Submodul-Import → ImportError
+    monkeypatch.delattr(webtool, "llm", raising=False)     # getattr-Kurzschluss → derselbe
     event = {"exception": {"values": [{
         "type": "Vorbedingung",
         "value": "claude ist nicht installiert: /Users/benutzer/.claude/claude",
