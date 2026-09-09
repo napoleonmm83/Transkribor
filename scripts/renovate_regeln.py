@@ -352,7 +352,16 @@ def main(argv: list[str]) -> int:
         if behalten:
             print(f"Fixture bleibt stehen: {ziel}")
         else:
-            shutil.rmtree(ziel, onexc=_weg_damit)
+            # Der Fang ist NICHT Vorsicht, sondern eine Korrektur: hilft `chmod`
+            # nicht (Datei von einem Prozess gehalten -- auf Windows nach dem
+            # Zeitgrenzen-Pfad realistisch), wirft `_weg_damit` weiter. Eine
+            # Ausnahme im `finally` ERSETZT den Rueckgabewert von `main()` --
+            # aus einem sauberen 0 oder einem ehrlichen 2 wuerde dann rc 1,
+            # also „eine Regel wirkt nicht". Aufraeumen darf kein Urteil faellen.
+            try:
+                shutil.rmtree(ziel, onexc=_weg_damit)
+            except OSError as fehl:
+                print(f"Fixture blieb liegen ({fehl}): {ziel}", file=sys.stderr)
 
 
 if __name__ == "__main__":
