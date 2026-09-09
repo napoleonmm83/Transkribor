@@ -745,6 +745,12 @@ die Ursache samt Handlungsempfehlung (z. B. Rate-Limit mit Wartezeit, aufgebrauc
 abgelaufene Anmeldung oder ungültiger API-Schlüssel) in der Meldung und im Verbindungstest der
 Einstellungen. Nicht erkannte Fehler zeigt Transkribor mit dem technischen Fehlertext an.
 
+Ein Sonderfall: Scheitert der Aufbau des **gemeinsamen Glossars** an einem Systemfehler (z. B.
+kein Platz mehr auf der Platte), gilt das nicht als Ausfall des Laufs — Transkribor schreibt eine
+Warnung ins Protokoll und korrigiert ohne das Glossar weiter. Die Schreibweisen von Namen sind
+dann vielleicht weniger einheitlich, aber alle Aufnahmen werden bearbeitet. (In Fassungen bis
+einschließlich `v0.54.0` brach in diesem Fall der ganze Lauf mit einer Fehlermeldung ab.)
+
 Ein Sonderfall davon war in den Fassungen `v0.48.0` und `v0.48.1` grün statt rot (davor
 nicht): gingen beim Abhören alle Aufnahmen durch und scheiterte dabei jede einzelne
 Korrektur, meldete Transkribor „fertig“. Die Transkripte waren da, die Korrektur fehlte vollständig — und nichts sagte es. Jetzt ist die
