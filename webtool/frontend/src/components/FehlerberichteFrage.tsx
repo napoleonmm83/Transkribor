@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { Bug } from 'lucide-react'
 import { useFehlerberichte } from '@/hooks/useFehlerberichte'
@@ -39,6 +39,17 @@ export function FehlerberichteFrage() {
   // nach. (Der Rundlauf ist kurz, aber nicht null — die Mutationsprobe sieht ihn nur mit einem
   // haengenden Versprechen, und ohne dieses Detail war die Zusicherung Dekoration.)
   const [beantwortet, setBeantwortet] = useState(false)
+
+  // Seit der Hook seinen Zustand TEILT (#541), sieht der Dialog auch Nachträge: JEDER Mount
+  // lädt `status()` neu in den gemeinsamen Speicher. Wird die Schalterdatei mitten in der
+  // Sitzung unlesbar (gelöscht, korrupt, Scanner-Handle — der Hauptprozess meldet dann
+  // `gefragt: null`), ginge die „einmalige" Nachfrage bei der nächsten Navigation ein zweites
+  // Mal auf, und ein Nein dort schaltet Berichte aus, die an waren. Wer einmal `gefragt`
+  // GESEHEN hat, gilt für diese Sitzung als beantwortet; der nächste Start entscheidet neu
+  // (Fund des Nebenwirkungs-Reviews am eigenen Fix).
+  useEffect(() => {
+    if (fb?.zustand?.gefragt) setBeantwortet(true)
+  }, [fb?.zustand?.gefragt])
 
   // `fb === null`: Browser oder aeltere App-Huelle. `zustand === null`: der Hauptprozess hat
   // noch nicht geantwortet — solange wird nicht gefragt, sonst blitzt der Dialog beim Start auf.

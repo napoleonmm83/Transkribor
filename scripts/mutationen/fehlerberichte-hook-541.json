@@ -1,8 +1,10 @@
 {
-  "test": "npm --prefix webtool/frontend run test -- useFehlerberichte",
+  "test": "npm --prefix webtool/frontend run test -- useFehlerberichte FehlerberichteFrage",
   "pfade": [
     "webtool/frontend/src/hooks/useFehlerberichte.ts",
-    "webtool/frontend/src/hooks/useFehlerberichte.test.tsx"
+    "webtool/frontend/src/hooks/useFehlerberichte.test.tsx",
+    "webtool/frontend/src/components/FehlerberichteFrage.tsx",
+    "webtool/frontend/src/components/FehlerberichteFrage.test.tsx"
   ],
   "mutationen": [
     {
@@ -33,6 +35,19 @@
       "gruen": [
         "ohne Bruecke (Browser) gibt es keinen Schalter",
         "eine Huelle MIT update, aber OHNE fehlerberichte, hat auch keinen Schalter"
+      ]
+    },
+    {
+      "id": "541-C der Sitzungs-Riegel fehlt — ein spaeterer status-Rundlauf bewaffnet die einmalige Nachfrage neu",
+      "datei": "webtool/frontend/src/components/FehlerberichteFrage.tsx",
+      "von": "  useEffect(() => {\n    if (fb?.zustand?.gefragt) setBeantwortet(true)\n  }, [fb?.zustand?.gefragt])",
+      "nach": "  useEffect(() => {}, [])",
+      "rot": [
+        "bewaffnet sich nicht neu, wenn eine spaetere status-Antwort gefragt: null meldet"
+      ],
+      "gruen": [
+        "fragt, solange der Hauptprozess gefragt: null meldet",
+        "Ja schaltet an und schliesst"
       ]
     }
   ]

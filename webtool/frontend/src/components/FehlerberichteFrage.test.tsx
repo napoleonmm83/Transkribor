@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react'
 import { FehlerberichteFrage } from './FehlerberichteFrage'
-import type { FehlerberichteZustand } from '@/hooks/useFehlerberichte'
+import { useFehlerberichte, _zuruecksetzen, type FehlerberichteZustand } from '@/hooks/useFehlerberichte'
 
 const toastMock = vi.hoisted(() => Object.assign(vi.fn(),
   { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn(), dismiss: vi.fn() }))
@@ -34,7 +34,14 @@ async function zeigen(start: FehlerberichteZustand, mitSchalter = true) {
 
 describe('FehlerberichteFrage', () => {
   beforeEach(() => vi.clearAllMocks())
-  afterEach(() => { delete (window as unknown as { transkribor?: unknown }).transkribor })
+  afterEach(() => {
+    delete (window as unknown as { transkribor?: unknown }).transkribor
+    // Der Hook-Store ist Modul-Zustand und ueberlebt den einzelnen Test; diese Datei mountet
+    // den ECHTEN Hook — ohne Zuruecksetzen lief jeder Test mit dem Zustand des vorigen, und
+    // die Vor-Zusicherung des wartet-Tests uebte zustand === null nie aus (Fund des
+    // Nebenwirkungs-Reviews: gruen wegen des Leaks).
+    _zuruecksetzen()
+  })
 
   it('fragt, solange der Hauptprozess gefragt: null meldet', async () => {
     await zeigen(NIE_GEFRAGT)
@@ -52,6 +59,22 @@ describe('FehlerberichteFrage', () => {
 
   it('fragt nicht mehr, sobald eine Antwort in der Datei steht', async () => {
     await zeigen(SCHON_GEFRAGT)
+    expect(screen.queryByText(FRAGE)).toBeNull()
+  })
+
+  it('bewaffnet sich nicht neu, wenn eine spaetere status-Antwort gefragt: null meldet', async () => {
+    // #541-Nachtrag, Fund des Nebenwirkungs-Reviews: der Dialog liest den GETEILTEN Store,
+    // und jeder Mount laedt status() neu. Wird die Schalterdatei mitten in der Sitzung
+    // unlesbar, meldet der Hauptprozess gefragt: null — ohne den Sitzungs-Riegel ginge die
+    // einmalige Nachfrage ein zweites Mal auf, und ein Nein dort schalte Berichte aus, die
+    // an waren. Wer gefragt GESEHEN hat, bleibt fuer diese Sitzung beantwortet.
+    const { fehlerberichte } = bruecke(SCHON_GEFRAGT)
+    fehlerberichte.status.mockResolvedValueOnce(SCHON_GEFRAGT).mockResolvedValueOnce(NIE_GEFRAGT)
+    await act(async () => { render(<FehlerberichteFrage />) })
+    expect(screen.queryByText(FRAGE)).toBeNull()
+    // Ein spaeterer Mount (Navigation auf /version) laedt status() erneut und kippt den
+    // Store auf gefragt: null — der Dialog darf darauf NICHT aufgehen.
+    await act(async () => { renderHook(() => useFehlerberichte()) })
     expect(screen.queryByText(FRAGE)).toBeNull()
   })
 
