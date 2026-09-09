@@ -54,3 +54,10 @@ numpy
 # pycryptodomex kommt neu ueber `[default]` herein und wird von yt-dlp ohne jede Grenze
 # deklariert — ein Pin ist das hier NICHT (die fuehrt yt-dlp, siehe oben), nur ein Boden.
 pycryptodomex>=3.19.1
+# Opt-in-Fehlerberichte an Bugsink (#530b): Sentry-kompatibles SDK fuer Server und alle
+# Subprozess-Einstiege (webtool/fehlerberichte.py). Ohne die drei TRANSKRIBOR_*-Variablen der
+# gepackten App initialisiert es sich nicht. Major-2-Boden, weil die Integrations-Erlaubnis-
+# liste gegen die installierte Fassung geprueft wird.
+# ACHTUNG #181: diese Zeile aendert den requirements-Hash — jede Bestandsinstallation sieht
+# nach dem Update EINMAL die Einrichtungsseite (README weiss es).
+sentry-sdk>=2.0
