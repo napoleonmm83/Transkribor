@@ -34,6 +34,7 @@ import json
 import os
 import re
 import sys
+import types
 import unicodedata
 from urllib.parse import quote
 
@@ -256,12 +257,14 @@ def _llm_uebernehmen(event: dict) -> None:
     Meldung — LLM-Antwortfragmente und Anbieter-Rohantworten reisen nie. An ihrer Stelle
     stehen Ausnahme-Typ und Kategorie aus ``diagnose_fehler``; schlägt der Import von llm
     fehl, heisst die Kategorie unbekannt — die Rohmeldung geht auch dann nie raus."""
+    llm_modul: types.ModuleType | None
     try:
-        from . import llm
+        from . import llm as llm_modul
     except Exception:
-        llm = None  # Import-Fehler darf die Entschärfung nicht aussetzen: ein early return
-        # hier liess die Rohmeldung (Anbieter-Fragmente) durch (CodeRabbit) — ohne llm
-        # heisst die Kategorie eben unbekannt, die Meldung geht nie raus.
+        # Import-Fehler darf die Entschärfung nicht aussetzen: ein early return hier liess
+        # die Rohmeldung (Anbieter-Fragmente) durch (CodeRabbit) — ohne llm heisst die
+        # Kategorie eben unbekannt, die Meldung geht nie raus.
+        llm_modul = None
     for wert in ((event.get("exception") or {}).get("values") or []):
         frames = ((wert.get("stacktrace") or {}).get("frames") or [])
         herkunft = frames[-1].get("filename", "") if frames else ""
@@ -269,11 +272,9 @@ def _llm_uebernehmen(event: dict) -> None:
             continue
         roh = wert.get("value") or ""
         kategorie = "unbekannt"
-        if llm is not None:
-            try:
-                kategorie = llm.diagnose_fehler(roh).get("kategorie", "unbekannt")
-            except Exception:
-                pass
+        if llm_modul is not None:
+            with contextlib.suppress(Exception):  # best effort — die Kategorie darf nie werfen
+                kategorie = llm_modul.diagnose_fehler(roh).get("kategorie", "unbekannt")
         wert["value"] = f"[{wert.get('type', 'Fehler')}: {kategorie}]"
 
 

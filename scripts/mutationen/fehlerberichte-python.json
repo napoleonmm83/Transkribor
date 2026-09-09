@@ -156,8 +156,8 @@
     {
       "id": "530b-L llm-Importfehler fuehrt wieder zum early return — die Rohmeldung reist",
       "datei": "webtool/fehlerberichte.py",
-      "von": "    except Exception:\n        llm = None",
-      "nach": "    except Exception:\n        return",
+      "von": "        llm_modul = None",
+      "nach": "        return",
       "rot": [
         "test_llm_importfehler_entwafft_trotzdem"
       ],
