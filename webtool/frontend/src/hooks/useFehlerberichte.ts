@@ -26,6 +26,14 @@ function bruecke(): Bruecke | null {
 let speicher: FehlerberichteZustand | null = null
 const hoerer = new Set<() => void>()
 
+/**
+ * Nur der JÜNGSTE Abruf darf eintragen. Mit dem heutigen Hauptprozess ist Überholen
+ * strukturell aus (ipcMain-Handler sind synchron, die Antworten lösen in Absenderordnung
+ * auf) — aber der Hook steht auf der Brücke-Schnittstelle, nicht auf dieser Implementierung:
+ * ein künftiger asynchroner Handler öffnete das Fenster still. CodeRabbit-Major am Store.
+ */
+let runde = 0
+
 function eintragen(z: FehlerberichteZustand): void {
   speicher = z
   for (const h of hoerer) h()
@@ -47,15 +55,21 @@ export function useFehlerberichte() {
   // billigste Weg, eine zwischenzeitliche Fremdänderung einzufangen — und die Antwort ist
   // ohnehin dieselbe Datei.
   useEffect(() => {
-    bruecke()?.fehlerberichte.status().then(eintragen).catch(() => {})
+    const b = bruecke()
+    if (!b) return
+    const meine = ++runde
+    b.fehlerberichte.status().then(z => { if (meine === runde) eintragen(z) }).catch(() => {})
   }, [])
 
   // Reicht das Versprechen DURCH (wie `fehlerbericht` in useUpdate): schlägt das Schreiben
-  // fehl, soll der Haken nicht so tun, als stünde er.
+  // fehl, soll der Haken nicht so tun, als stünde er. Die Antwort trägt den Runde-Wächter:
+  // ein zwischendurch gestarteter, langsamer status()-Abruf darf die bestätigte Schreibung
+  // nicht mehr überschreiben.
   const setzen = useCallback((an: boolean) => {
     const b = bruecke()
     if (!b) return Promise.reject(new Error('keine Brücke'))
-    return b.fehlerberichte.setzen(an).then(z => { eintragen(z); return z })
+    const meine = ++runde
+    return b.fehlerberichte.setzen(an).then(z => { if (meine === runde) eintragen(z); return z })
   }, [])
 
   return da ? { zustand, setzen } : null
@@ -66,4 +80,5 @@ export function useFehlerberichte() {
 export function _zuruecksetzen(): void {
   speicher = null
   hoerer.clear()
+  runde = 0
 }
