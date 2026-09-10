@@ -20,8 +20,8 @@ gibt. Fertig seitdem — Issues zu, nachgesehen bzw. nicht mehr in der offenen L
 | **C1** | #530 (b) · #541 | PR #601/#600 (2026-09-09) |
 
 Dazu **drei Issues, die in keinem Plan stehen** — alle nach dem 05.09. entstanden:
-#591, #574, #604. Dieser Plan ordnet sie ein und benennt, welches Bündel als
-nächstes läuft.
+betroffen sind #591, #574 und #604. Dieser Plan ordnet sie ein und benennt,
+welches Bündel als nächstes läuft.
 
 **Zensus, gemessen am 2026-09-10:** `gh issue list --state open --limit 200` →
 **25** (24 echte + #45, das Renovate-Dashboard, das kein Issue ist).
@@ -35,22 +35,22 @@ Gebündelt wird nach **geteilten Prüfkosten**, nicht nach Themenähnlichkeit
 Electron-Lauf · CodeRabbit-Kontingent (je Commit, repo-weit) · Mac-Hardware ·
 Messstand (Wegwerf-Projekt + uvicorn + echter Job) · Marcus' Entscheidungen.
 
-## Bestandsaufnahme — alle 25, jede Nummer genau einmal
+## Bestandsaufnahme — alle 25, jede Nummer eine Primär-Disposition
 
 | Paket | Issues | Zustand / geteilter Kostenposten |
 |---|---|---|
 | **M (NEU)** | #591 + #574 | Verfolgung II: `jobPhases`-Cluster + eine Verfolgungs-Messung. **Nächstes, heute fahrbar.** |
 | **C2** | #530(c) → #519 → #520 | gepackter Electron-Lauf (`electron/main.js`, `bericht.js`). **Blockiert auf Marcus' Bau-Secret-Entscheidung.** |
 | **D** | #423 → #515 | Browser-Sitzung + `design-beweis`. Bedingung vor dem Bau klären. |
-| **E (Mac)** | #36 · #504 · #512 (+ #530-Anteil: gepackter Bugsink-Lauf auf macOS) | Mac-Hardware; ein M1-Durchgang bewegt 4 Punkte. **Blockiert auf Marcus.** |
+| **E (Mac)** | #36 · #504 · #512 (Querverweis #530, zählt bei C2: gepackter Bugsink-Lauf auf macOS) | Mac-Hardware; ein M1-Durchgang bewegt 4 Punkte. **Blockiert auf Marcus.** |
 | **F** | #210 + #237 | `sperre.py`-Reviewdurchgang + Lock-Konkurrenz-Prüfstand. Später. |
 | **G** | #136 → #137, #164 blockiert | **Kette, kein Bündel** — teilen keinen Kostenposten. |
 | **H** | #274 + #276 | **Blockiert** auf den Referenzsatz aus Task 8 (Marcus). |
 | **Einzel** | #604 · #509 · #346 · #553 · #288 · #95 · #469 · #45 | Dispositionen unten. |
 
 Handzählung: M 2 + C2 3 + D 2 + E 3 + F 2 + G 3 + H 2 + Einzel 8 = **25**.
-(#530 zählt bei C2; sein macOS-Beleg-Anteil ist in E benannt, nicht doppelt
-gezählt — dieselbe Konvention wie im 09-05-Plan.)
+(#530 hat seine Primär-Disposition bei C2; der macOS-Beleg-Anteil in E ist ein
+Querverweis, kein zweiter Zählpunkt — dieselbe Konvention wie im 09-05-Plan.)
 
 ---
 
@@ -159,9 +159,13 @@ zwei gleichzeitige PRs kosten einander Reviews.
 
 ## Verifikation dieses Plans
 
-**Gemessen (Kommandos im zugehörigen Sitzungstranskript):**
-- Zensus 25 offene Issues (`--limit 200`, ohne ihn deckelt `gh` bei 30) · 0 offene PRs.
-- #541 · #539 · #536 CLOSED · `078a64b` ist Vorfahr von master.
+**Gemessen — Kommando → Ergebnis, alle am 2026-09-10 gefahren:**
+- `gh issue list --state open --limit 200 --json number --jq length` → **25**
+  (`--limit` ist Pflicht: ohne ihn deckelt `gh` bei 30) · `gh pr list --state
+  open` → leere Liste (0 offene PRs).
+- `gh issue view <n> --json state` für #541, #539, #536 → je CLOSED ·
+  `git merge-base --is-ancestor 078a64b master` → rc 0 (der Linux-Icon-Fix liegt
+  auf master).
 - J geliefert durch #572/#573, **#564 durch #575** — Timeline je Issue: #554 und
   #565–#568 je 1 s nach Merge #573, #564 1 s nach Merge #575 (Schliessdaten
   09-05/09-06).
