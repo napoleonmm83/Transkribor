@@ -357,6 +357,41 @@ describe('mergePhases', () => {
     expect(m.durch).toBeUndefined()
   })
 
+  it('das [scope+]-Reannoncement weckt durch nicht wieder auf (#591)', () => {
+    /* Fertig-wenn von #591, hier erstmals AUSGEFUEHRT statt nur gelesen: Die Marke tilgt
+       das alte Urteil (Identitaetssignal, #479/#489) und der Server verwirft die Base aus
+       der LIVEN entfernt-Menge — `gesehen` bleibt aber stehen (Historie, #475), also ist
+       die Aufnahme `schonDurch`-wahr: OHNE weitere Wache steht sie in `durch`, und ein
+       zweites Fenster mit alter `has_edit`-Liste zeigt „Fertig" ueber einer Aufnahme, die
+       nur Audio ist. Der Schnitt darueber (`entfernt`) trifft sie nicht mehr — die Marke
+       hat die Base ja gerade daraus entfernt. Die Antwort ist die monotone Menge
+       `entferntJe`: gebucht bei der Loeschung, NICHT gehoben von der Marke, sondern erst
+       von einer NEUEN [active]-Zeile der gleichnamigen Datei. */
+    const m = mergePhases([job('j1', 'transcribe', parseJobPhases('transcribe', [
+      '[scope] A',
+      '[Demo] fertig A: 9s, 21 Segmente, 1.4x Echtzeit',
+      '[scope+] A',
+    ], new Set(['A']), new Set(), undefined, new Set(['A'])))])
+    expect(m.durch).toBeUndefined()
+  })
+
+  it('die neue [active]-Zeile hebt die Sperre auf — #581 gilt auch fuer die Zweitleben (#591)', () => {
+    /* Was der Fix NEU erlaubt: ohne den Lift bei [active] traegt die Sperre in das
+       ZWEITE Leben der Datei hinein, und #581 regredierte dort — das Urteil der neu
+       hochgeladenen Aufnahme kann verdraengt sein wie jedes andere, und dann MUSS durch
+       es wieder aufnehmen. Serverseite hat der Lift schon stattgefunden (entferntJe leer),
+       der Parser reicht die leere Menge durch. */
+    const m = mergePhases([job('j1', 'transcribe', parseJobPhases('transcribe', [
+      '[scope] A',
+      '[Demo] fertig A: 9s, 21 Segmente, 1.4x Echtzeit',
+      '[scope+] A',
+      '[active] A',
+      '[done] A',
+    ], new Set(['A']), new Set(), undefined, new Set()))])
+    expect(m.durch).toEqual(new Set(['A']))
+    expect(m.active.A).toBeUndefined()
+  })
+
   it('ein correct-Lauf liefert GAR KEIN durch — die getragene Grenze, festgenagelt (#581)', () => {
     /* `schonDurch` gilt nur fuer `transcribe`: im Korrekturlauf meldet das Glossar seit #450
        korpusweit `[active]`, dort waere jede Aufnahme von der ersten Sekunde an gesehen und
@@ -679,6 +714,42 @@ describe('mergePhases', () => {
     // „Fertig" (#489 ist der Beleg, #479 das Urteil — beide Haelften geprueft).
     expect(screen.getByTestId('urteil').textContent).toBe('keins')
     expect(screen.getByTestId('beleg').textContent).toBe('keiner')
+  })
+
+  // DERSELBE WAECHTER fuer den SECHSTEN Parameter (#591). `r.entfernt_je` ist der vierte
+  // Rueckweg, und ein weggelassenes Argument schaltet ihn ebenso still ab: die Attrappe
+  // lieferte dann einfach keine Menge, `durch` stuende wieder auf — und nichts saehe
+  // falsch aus (#488-Lehre). Die Positivkontrolle ist der BEREICH: 'A' gilt erst nach
+  // dem ersten Poll, 'leer' allein waere auch der Anfangszustand.
+  it('reicht r.entfernt_je an den Parser durch: Reannoncement weckt durch nicht auf (#591)', async () => {
+    function JeProbe() {
+      const { jobs, adopt } = useActiveJob()
+      const phases = mergePhases(jobs.filter(j => j.status === 'running'))
+      return (
+        <div>
+          <button onClick={() => adopt('j_je', 'Demo', 'transcribe')}>adopt_je</button>
+          <span data-testid="bereich">{phases.scope ? Array.from(phases.scope).join(',') : 'all'}</span>
+          <span data-testid="durch">{phases.durch ? Array.from(phases.durch).join(',') : 'leer'}</span>
+        </div>
+      )
+    }
+    // Das Protokoll der geloeschten Datei samt Urteil, die Marke dahinter; der Server hat
+    // die LIVEN Loeschbuchung an der Marke aufgehoben (entfernt fehlt), die MONOTONE
+    // nicht (entfernt_je steht) — genau das Fenster von #591.
+    vi.mocked(api.getJob).mockResolvedValue({
+      status: 'running',
+      lines: [
+        '[scope] A',
+        '[Demo] fertig A: 1s, 2 Segmente, 1.0x',
+        '[scope+] A',
+      ],
+      gesehen: ['A'],
+      entfernt_je: ['A'],
+    })
+    render(<JobProvider intervalMs={5}><JeProbe /></JobProvider>)
+    fireEvent.click(screen.getByText('adopt_je'))
+    await waitFor(() => expect(screen.getByTestId('bereich').textContent).toBe('A'))
+    expect(screen.getByTestId('durch').textContent).toBe('leer')
   })
 
   // DERSELBE WAECHTER fuer den FUENFTEN Parameter (#561). `r.eingereiht` ist der letzte der

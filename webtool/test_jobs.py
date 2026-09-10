@@ -1068,6 +1068,10 @@ def test_remove_base_bucht_entfernt_bedingungslos_und_get_liefert_eine_kopie():
         jobs.remove_base("P_entf", "B")
         assert snap["entfernt"] == ["A", "X"]
         assert jobs.get(jid)["entfernt"] == ["A", "B", "X"]
+        # Dieselbe Buchung in die MONOTONE Menge (#591) — hier noch gleichlautend mit
+        # `entfernt`; die beiden Mengen laufen erst an der `[scope+]`-Marke bzw. einer
+        # neuen `[active]`-Zeile auseinander (Test darunter).
+        assert jobs.get(jid)["entfernt_je"] == ["A", "B", "X"]
     finally:
         jobs.cancel(jid)
         _wait(jid)
@@ -1089,14 +1093,18 @@ def test_reannoncement_reaktiviert_die_server_menge_deckelfest(tmp_path):
     Last haarig — dieselbe Klasse wie die #461-Barrier."""
     tor1 = tmp_path / "marke1.jetzt"
     tor2 = tmp_path / "marke2.jetzt"
+    tor3 = tmp_path / "marke3.jetzt"
     code = ("import os, sys, time\n"
             f"tor1 = {str(tor1)!r}\n"
             f"tor2 = {str(tor2)!r}\n"
+            f"tor3 = {str(tor3)!r}\n"
             "print('[scope] X', flush=True)\n"
             "while not os.path.exists(tor1): time.sleep(0.05)\n"
             "print('[scope+] X', flush=True)\n"
             "while not os.path.exists(tor2): time.sleep(0.05)\n"
             "print('[scope+] X', flush=True)\n"
+            "while not os.path.exists(tor3): time.sleep(0.05)\n"
+            "print('[active] X', flush=True)\n"
             "time.sleep(30)\n")
     jid, _ = jobs.start("P_entf_rea", [sys.executable, "-c", code], cwd=None, kind="transcribe")
     try:
@@ -1107,6 +1115,10 @@ def test_reannoncement_reaktiviert_die_server_menge_deckelfest(tmp_path):
         snap = jobs.get(jid)
         assert snap["bases"] == ["X"]      # die Marke kam wirklich durch den Strom
         assert snap["entfernt"] == []      # ... und hat die Unterdrueckung aufgehoben
+        # ... die MONOTONE Menge aber NICHT (#591): die Marke meldet nur eine neue
+        # IDENTITAET, nicht dass die neue Datei schon laeuft — genau in diesem Fenster
+        # waere `durch` ohne sie wieder aufgeweckt.
+        assert snap["entfernt_je"] == ["X"]
         # ZWEITER Loeschzyklus: die Buchung greift erneut (remove_base ist bedingungslos),
         # bis die ZWEITE Marke eintrifft — genau die Kombination, an der das parser-seitige
         # Lift scheiterte.
@@ -1115,6 +1127,13 @@ def test_reannoncement_reaktiviert_die_server_menge_deckelfest(tmp_path):
         tor2.write_text("jetzt")
         _warte_auf_zeilen(jid, 3)
         assert jobs.get(jid)["entfernt"] == []
+        assert jobs.get(jid)["entfernt_je"] == ["X"]   # auch die zweite Marke hebt nicht
+        # Erst eine NEUE [active]-Zeile der Base hebt die monotone Loeschung auf (#591):
+        # die gleichnamige Datei arbeitet jetzt wirklich, ab hier gelten ihre eigenen
+        # Urteile — und #581s Rueckweg fuer verdraengte Urteile greift wieder.
+        tor3.write_text("jetzt")
+        _warte_auf_zeilen(jid, 4)
+        assert jobs.get(jid)["entfernt_je"] == []
     finally:
         jobs.cancel(jid)
         _wait(jid)

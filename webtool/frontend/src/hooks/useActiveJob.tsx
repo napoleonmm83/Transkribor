@@ -83,6 +83,11 @@ export function mergePhases(jobs: Job[]): JobPhases {
   // unten. `mergePhases` reicht `entfernt` selbst NICHT heraus (die Pille braucht es nicht);
   // hier drin wird es sehr wohl gebraucht, und das ist nicht dieselbe Frage.
   const geloescht = new Set<string>()
+  // JEMALS geloescht, bis eine neue [active]-Zeile der Base (#591) — dieselbe Sammlung,
+  // ein Schnitt weiter unten. Die LIVEN Menge `entfernt` hoert an der `[scope+]`-Marke auf
+  // (Identitaetssignal, #479/#489), die MONOTONE hoert erst auf, wenn die neue Datei
+  // laeuft; zwischen beidem liegt das Fenster von #591.
+  const jeGeloescht = new Set<string>()
   let global: JobPhases['global'] = null
   let allScoped = jobs.length > 0
   let scope: Set<string> | undefined
@@ -171,6 +176,7 @@ export function mergePhases(jobs: Job[]): JobPhases {
     // Geloeschte Aufnahmen sammeln — beschnitten wird unten, aus demselben Grund wie bei
     // `warten`: die Mengen stehen erst nach der Job-Schleife fest.
     for (const b of j.phases.entfernt ?? []) geloescht.add(b)
+    for (const b of j.phases.entferntJe ?? []) jeGeloescht.add(b)
   }
   for (const base of Object.keys(active)) {
     delete perBase[base]
@@ -246,6 +252,15 @@ export function mergePhases(jobs: Job[]): JobPhases {
   // Der Plattenbeleg deckt die Liste also nur in EINE Richtung ab (zu alt in Richtung
   // „weniger da"); diese Zeile deckt die andere.
   for (const b of geloescht) durch.delete(b)
+  // Der zweite Loesch-Schnitt, und er trifft eine Base, die der erste gerade
+  // freigegeben hat (#591): das Reannoncement `[scope+] A` nahm A aus `entfernt` heraus
+  // und tilgte sein altes Urteil — `gesehen` aber bleibt stehen (Historie, #475), also
+  // ist A `schonDurch`-wahr und stuende OHNE diesen Schnitt wieder in `durch`. Ein
+  // zweites Fenster mit alter `has_edit`-Dateiliste zeigte dann „Fertig" ueber einer
+  // Aufnahme, die nur Audio ist. Erst eine NEUE `[active]`-Zeile der Base hebt die
+  // monotone Menge auf (serverseitig, `buche_aktive`) — ohne den Lift regredierte #581
+  // in das Zweitleben der Datei: auch ihr Urteil kann verdraengt sein.
+  for (const b of jeGeloescht) durch.delete(b)
   // KEINE `bilanz` im Ergebnis, und das ist Absicht: sie gehoert EINEM Lauf (dem URL-Import),
   // und ihr einziger Leser — der Ausgang — bekommt ihn einzeln aus der `onSettled`-Nutzlast.
   // Hier stand ein `bilanz ?? j.phases.bilanz` mit der Begruendung „zwei fetch-Jobs desselben
@@ -420,7 +435,7 @@ export function JobProvider({ children, intervalMs = 1500 }: { children: ReactNo
           // Schlange — samt einer um eins zu kleinen Zahl fuer alle uebrigen. Auch hier gilt
           // die #488-Lehre: ein weggelassenes fuenftes Argument schaltete den Fix still ab,
           // Verdrahtungs-Test in useActiveJob.test.tsx.
-          const parsed = parseJobPhases(j.kind, r.lines, r.gesehen, r.entfernt, r.eingereiht)
+          const parsed = parseJobPhases(j.kind, r.lines, r.gesehen, r.entfernt, r.eingereiht, r.entfernt_je)
           // Die Serverbuchfuehrung ERGAENZT den Zeilenpuffer, sie springt nicht nur ein,
           // wenn er leer ist — und das ist seit dem Bereichs-Nachtrag Pflicht, nicht
           // Feinschliff. `[scope]` ist die erste Zeile des Laufs und damit von

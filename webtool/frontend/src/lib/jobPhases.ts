@@ -31,7 +31,8 @@ export const RANG: Record<FileState, number> = { failed: 3, done: 2, skipped: 1 
 export function parseJobPhases(kind: string, lines: string[],
                                gesehenVomServer?: Iterable<string>,
                                entferntVomServer?: Iterable<string>,
-                               eingereihtVomServer?: Iterable<string>): JobPhases {
+                               eingereihtVomServer?: Iterable<string>,
+                               entferntJeVomServer?: Iterable<string>): JobPhases {
   // `Object.create(null)` statt `{}` — und das ist kein Stil, sondern ein gemessener Absturz:
   // ein Basisname wie `constructor`, `toString` oder `valueOf` kommt durch `safe_name` und
   // findet in einem gewoehnlichen Objekt den PROTOTYP. `blocks['constructor']` ist dann eine
@@ -111,6 +112,14 @@ export function parseJobPhases(kind: string, lines: string[],
   // alte Marke des ersten Reuploads die frisch gebuchte Unterdrueckung auf, und die
   // naechste Aufnahme erbte wieder ein Fremd-Urteil (am echten Parser gemessen).
   const ungueltig = new Set<string>(entferntVomServer ?? [])
+  // JEMALS geloescht in diesem Lauf (#591) — reine Durchreichung der vierten
+  // Serverbuchfuehrung, dieselbe Form wie `ungueltig` eine Zeile darueber. Der Parser
+  // leitet sie NICHT aus Zeilen ab, und das ist der Punkt: das Loeschen druckt keine
+  // Zeile, das Reannoncement (`[scope+]`) faellt dem Zeilendeckel zum Opfer, und nur
+  // der Server sieht beides sicher. Verbraucht wird sie im Merge (`durch`-Schnitt in
+  // `useActiveJob.tsx`), nicht hier — der Parser unterdrueckt Urteile, er behauptet
+  // keine Ruhezustaende.
+  const entferntJe = new Set<string>(entferntJeVomServer ?? [])
   // Was ein Endurteil ueber die PLATTE beweist. Die Pille faellt bei `done` auf `ruhe(file)`
   // durch, und `file` kommt aus der ungepollten Dateiliste — im Moment des Urteils also aus
   // einem Schnappschuss, der aelter ist als die Zeile, die das Urteil erzeugt hat. Ohne diese
@@ -597,6 +606,7 @@ export function parseJobPhases(kind: string, lines: string[],
   return { global: Object.keys(active).length ? null : global, scope,
            gesehen: gesehen.size ? gesehen : undefined,
            entfernt: ungueltig.size ? ungueltig : undefined,
+           entferntJe: entferntJe.size ? entferntJe : undefined,
            erreicht: Object.keys(erreicht).length ? erreicht : undefined,
            eingereiht: eingereiht.length ? eingereiht : undefined,
            active, perBase, bilanz }

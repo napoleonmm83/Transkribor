@@ -55,7 +55,8 @@ ACTIVE_PREFIX = "[active] "
 DONE_PREFIX = "[done] "
 
 
-def buche_aktive(aktive: dict, line: str, gesehen: set | None = None) -> None:
+def buche_aktive(aktive: dict, line: str, gesehen: set | None = None,
+                 entfernt_je: set | None = None) -> None:
     """Eine Protokollzeile auf die Menge der GERADE bearbeiteten Aufnahmen anwenden.
 
     Herausgezogen aus `_run` (#418), damit ein Test dieselbe Regel fahren kann wie der
@@ -114,6 +115,13 @@ def buche_aktive(aktive: dict, line: str, gesehen: set | None = None) -> None:
         # dem rohen `slice(9)`): ein Name aus lauter Leerzeichen ist dort wahr, hier auch.
         if gesehen is not None and roh:
             gesehen.add(roh)
+        # #591: Eine NEUE [active]-Zeile der Base hebt die monoton gebuchte Loeschung auf —
+        # die gleichnamige Datei arbeitet jetzt wirklich, ab hier gelten ihre eigenen
+        # Urteile (und #581s Rueckweg fuer verdraengte Urteile greift wieder). Nicht die
+        # Marke `[scope+]` hebt auf: die meldet nur eine ANDERE IDENTITAET, nicht dass die
+        # neue Datei schon laeuft — zwischen beidem liegt genau das Fenster von #591.
+        if entfernt_je is not None and roh:
+            entfernt_je.discard(roh)
     elif line.startswith(DONE_PREFIX):
         roh = line[len(DONE_PREFIX):]
         if roh:
@@ -433,6 +441,15 @@ def start(project: str, cmd: list, cwd, kind: str, then=None, env=None, base: st
                       # der perBase-Verdraengung muss `erreicht` UND diese Unterdrueckung
                       # mitnehmen — beides liegt damit schon serverseitig.
                       "entfernt": set(),
+                      # JEMALS geloescht, bis eine NEUE [active]-Zeile derselben Base (#591):
+                      # die Marke `[scope+]` hebt aus `entfernt` heraus (Identitaetssignal,
+                      # #479/#489) — damit steht die Base wieder `schonDurch`-wahr da (`gesehen`
+                      # ist Historie und bleibt), und `durch` zeigte im zweiten Fenster
+                      # „Fertig" ueber einer Aufnahme, die nur Audio ist. Diese Menge hebt
+                      # die Loeschung NICHT an der Marke auf, sondern erst, wenn die NEUE
+                      # Datei wirklich laeuft — der Lift dort ist noetig, sonst regredierte
+                      # #581 in das Zweitleben der Datei (verdraengtes Urteil => Ruhezustand).
+                      "entfernt_je": set(),
                       # Wer NOCH in der Korrektur-Schlange steht (#442/#561) — die DRITTE
                       # Wartequelle, und bis hierher die einzige ohne Rueckweg gegen den
                       # Zeilendeckel. LISTE, kein Set: ihre Reihenfolge IST die Schlangen-
@@ -953,7 +970,8 @@ def _run_proc(jid, cmd, cwd, env=None):
                             if b in _jobs[jid]["eingereiht"]:
                                 _jobs[jid]["eingereiht"].remove(b)
                 else:
-                    buche_aktive(_jobs[jid]["active_bases"], line, zulassung)
+                    buche_aktive(_jobs[jid]["active_bases"], line, zulassung,
+                                 _jobs[jid].get("entfernt_je"))
 
         def _lese_stderr():
             try:
@@ -1081,6 +1099,13 @@ def get(job_id: str):
         # hoeher.
         if isinstance(snap.get("entfernt"), set):
             snap["entfernt"] = sorted(snap["entfernt"])
+        # `entfernt_je` reist mit, aus demselben Grund wie `entfernt` — nur dass der
+        # Zeilendeckel hier DOPPELT zuschlaegt: die Marke `[scope+]`, die den monotonen
+        # Zustand bezeugt, faellt aus der Mitte des Puffers, und auch das alte Urteil der
+        # geloeschten Datei kann laengst verdraengt sein (#591). `sorted()` im Lock, aus
+        # demselben tragenden Grund wie eine Zeile hoeher.
+        if isinstance(snap.get("entfernt_je"), set):
+            snap["entfernt_je"] = sorted(snap["entfernt_je"])
         # `eingereiht` reist mit, aus demselben Grund wie `gesehen` und `entfernt` — es ist
         # die DRITTE Wartequelle und war bis #561 die einzige ohne Rueckweg: `eingereiht`
         # entstand allein aus Zeilen, und der Puffer verliert sie.
@@ -1134,6 +1159,9 @@ def remove_base(project: str, base: str) -> None:
                 # ohne diese Aufnahme im Bereich soll trotzdem nichts Altes über ihren
                 # Namen zeigen.
                 r["entfernt"].add(base)
+                # Und dieselbe Buchung in die MONOTONE Menge (#591): `entfernt` wird beim
+                # Reannoncement geraeumt, `entfernt_je` erst, wenn die neue Datei laeuft.
+                r.setdefault("entfernt_je", set()).add(base)
 
 
 def betrifft(project: str, base: str, active_only: bool = False) -> dict | None:
