@@ -82,6 +82,18 @@
         "durch nimmt heraus, wer geloescht ist (#581/#489)"
       ],
       "datei": "webtool/frontend/src/lib/jobPhases.ts"
+    },
+    {
+      "id": "M7 die Leerzeichen-Zuweisung im abgerissenen Zweig faellt weg (Folgezeilen-Schraegstrich wird Regex)",
+      "von": "      else { aus += quelle[i] ?? ''; letzte = ' ' }      // abgerissen — Umbruch gehoert der Zeile",
+      "nach": "      else { aus += quelle[i] ?? '' }      // M7: letzte bleibt das Zeichen vor dem Schraegstrich",
+      "rot": [
+        "ein abgerissenes Regex-Muster vergiftet die Folgezeile nicht (#574-Nachtrag)"
+      ],
+      "gruen": [
+        "ein Regex-Literal macht die Ernte nicht blind (#574)"
+      ],
+      "datei": "webtool/frontend/jobPhases.vertrag.test.ts"
     }
   ]
 }

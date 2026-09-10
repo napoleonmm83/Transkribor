@@ -312,8 +312,10 @@ export type JobPhases = {
   /** Jemals geloescht in diesem Lauf, bis eine NEUE `[active]`-Zeile der Base (#591) —
    *  durchgereicht, weil `durch` es braucht: die `[scope+]`-Marke tilgt das alte Urteil und
    *  hebt die LIVEN Loeschbuchung auf, `gesehen` bleibt aber stehen, also waere die Base
-   *  `schonDurch`-wahr und ein zweites Fenster zeigte „Fertig" ueber Nur-Audio. Undefined,
-   *  solange in diesem Lauf nichts unter dem Namen geloescht und neu hochgeladen wurde. */
+   *  `schonDurch`-wahr und ein zweites Fenster zeigte „Fertig" ueber Nur-Audio. Undefined
+   *  nur, solange in diesem Lauf NICHTS geloescht wurde — auch eine NUR geloeschte Base
+   *  steht drin (kein Reupload noetig), und der `[active]`-Lift leert die Menge danach
+   *  wieder; dieselbe Formulierung wie der serverseitige Zwilling in JobStatus. */
   entferntJe?: Set<string>;
   /** Die Aufnahmen, die der Lauf an die Korrektur-Schlange uebergeben hat — IN DER
    *  REIHENFOLGE DER UEBERGABE (#442).
