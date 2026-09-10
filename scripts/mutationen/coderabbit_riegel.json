@@ -260,8 +260,8 @@
     },
     {
       "id": "M20 der Anker schmalert auf EINEN Marker — halb erkannt gilt wieder als Ausfall",
-      "von": "        if (\"No files to review\" in meldung\n                and \"Previous local review has no stored findings\" in meldung):\n            return e",
-      "nach": "        if \"No files to review\" in meldung:  # M20: ein Marker genuegt wieder\n            return e",
+      "von": "    if (\"No files to review\" in meldung\n            and \"Previous local review has no stored findings\" in meldung):\n        return e",
+      "nach": "    if \"No files to review\" in meldung:  # M20: ein Marker genuegt wieder\n        return e",
       "rot": [
         "test_nur_ein_marker_ist_kein_benannter_ausfall"
       ],
@@ -273,14 +273,40 @@
     },
     {
       "id": "M21 der FehlerTyp-Anker faellt weg (beide Marker allein tragen wieder)",
-      "von": "        if e.get(\"type\") != \"error\" or e.get(\"errorType\") != \"review\":\n            continue",
-      "nach": "        if e.get(\"type\") != \"error\":  # M21: jede Fehlerart mit beiden Markern gilt\n            continue",
+      "von": "    e = stoerungen[0]\n    if e.get(\"errorType\") != \"review\":\n        return None",
+      "nach": "    e = stoerungen[0]  # M21: jede Fehlerart mit beiden Markern gilt wieder",
       "rot": [
         "test_beide_marker_mit_anderem_fehlertyp_bleiben_ROT"
       ],
       "gruen": [
         "test_wiederverwendet_ergibt_VIER_und_schreibt_den_kommentar",
         "test_anderer_review_fehler_bleibt_ROT"
+      ],
+      "datei": "scripts/coderabbit_riegel.py"
+    },
+    {
+      "id": "M23 die Einzigkeit der Stoerung faellt weg (Mehrfach-Stoerungen erben den Ausfall)",
+      "von": "    stoerungen = [e for e in lage.ereignisse if e.get(\"type\") in (\"error\", \"action_required\")]\n    if len(stoerungen) != 1:\n        return None",
+      "nach": "    stoerungen = [e for e in lage.ereignisse if e.get(\"type\") in (\"error\", \"action_required\")]\n    if len(stoerungen) < 1:  # M23: nur Leere prueft, Einzigkeit nicht\n        return None",
+      "rot": [
+        "test_zweite_stoerung_verhindert_den_benannten_ausfall"
+      ],
+      "gruen": [
+        "test_wiederverwendet_ergibt_VIER_und_schreibt_den_kommentar",
+        "test_anderer_review_fehler_bleibt_ROT"
+      ],
+      "datei": "scripts/coderabbit_riegel.py"
+    },
+    {
+      "id": "M24 die kaputt-Wache faellt weg (korrumpierte Ausgabe erbt den Ausfall)",
+      "von": "    if lage.kaputt:\n        return None\n    stoerungen = [e for e in lage.ereignisse if e.get(\"type\") in (\"error\", \"action_required\")]",
+      "nach": "    # M24: eine kaputte Ausgabe gilt wieder als benannter Ausfall\n    stoerungen = [e for e in lage.ereignisse if e.get(\"type\") in (\"error\", \"action_required\")]",
+      "rot": [
+        "test_kaputte_zeile_verhindert_den_benannten_ausfall"
+      ],
+      "gruen": [
+        "test_wiederverwendet_ergibt_VIER_und_schreibt_den_kommentar",
+        "test_zweite_stoerung_verhindert_den_benannten_ausfall"
       ],
       "datei": "scripts/coderabbit_riegel.py"
     },

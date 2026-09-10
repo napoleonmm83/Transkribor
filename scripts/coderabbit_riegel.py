@@ -177,18 +177,27 @@ def wiederverwendeter_zweig(lage: Lage) -> dict | None:
     frisch, der Zustand liegt also beim Dienst, nicht lokal; er heilt nicht wie ein
     Kontingent von selbst.
 
-    Absichtlich eng, wie bei `kontingent_erschoepft`: der FehlerTyp muss `review` sein UND
-    BEIDE Marker muessen in der Meldung stehen. Ein Marker allein, ein anderer Review-Fehler
-    oder ein Fehler neben einer `complete`-Zeile ist kein bekannter Ausfall und faellt
-    weiter in die 2 (rot) — eine unbekannte Form ist kein bekannter Ausfall.
+    Absichtlich eng, wie bei `kontingent_erschoepft`, und enger noch als das Geschwister:
+    die Ausgabe muss kaputt-frei sein, die Stoerung muss die EINZIGE sein, der FehlerTyp
+    muss `review` sein UND BEIDE Marker muessen in der Meldung stehen. Eine kaputte Zeile,
+    eine weitere Stoerung daneben, ein Marker allein, ein anderer Review-Fehler oder ein
+    Fehler neben einer `complete`-Zeile ist keine gemessene Form und faellt weiter in die
+    2 (rot) — eine unbekannte Form ist kein bekannter Ausfall. (Befund der CodeRabbit-CLI
+    an der ersten Fassung dieses Zweigs: ohne die kaputt- und Einzigkeit-Wache haetten
+    korrumpierte Ausgaben und Mehrfach-Stoerungen den benannten Ausfall geerbt.)
     """
-    for e in reversed(lage.ereignisse):
-        if e.get("type") != "error" or e.get("errorType") != "review":
-            continue
-        meldung = str(e.get("message", ""))
-        if ("No files to review" in meldung
-                and "Previous local review has no stored findings" in meldung):
-            return e
+    if lage.kaputt:
+        return None
+    stoerungen = [e for e in lage.ereignisse if e.get("type") in ("error", "action_required")]
+    if len(stoerungen) != 1:
+        return None
+    e = stoerungen[0]
+    if e.get("errorType") != "review":
+        return None
+    meldung = str(e.get("message", ""))
+    if ("No files to review" in meldung
+            and "Previous local review has no stored findings" in meldung):
+        return e
     return None
 
 

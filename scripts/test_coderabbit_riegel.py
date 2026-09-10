@@ -333,6 +333,41 @@ def test_wiederverwendet_ergibt_VIER_und_schreibt_den_kommentar(monkeypatch, tmp
     assert "nicht** rezensiert" in text and "Uebersprungen ist kein" in text
 
 
+def test_kaputte_zeile_verhindert_den_benannten_ausfall(monkeypatch, tmp_path, capsys):
+    """Korrumpierte Ausgabe erbt den benannten Ausfall NICHT — sie bleibt unstimmig (rot).
+
+    Befund der CodeRabbit-CLI an der ersten Fassung (major): ohne die kaputt-Wache koennte
+    eine abgeschnittene Ausgabe, die zufaellig die Marker in einer unlesbaren Zeile traegt,
+    trotzdem rc 4 ernten.
+    """
+    kaputt = WIEDERVERWENDET + "{not json\n"
+    monkeypatch.setenv("CODERABBIT_API_KEY", "cr-egal")
+    monkeypatch.setattr(riegel.subprocess, "run", _lauf(kaputt))
+    ziel = tmp_path / "k.md"
+    assert riegel.main(["--base-commit", "HEAD~1", "--markdown", str(ziel)]) == 2
+    assert "kein JSON" in capsys.readouterr().out
+    assert not ziel.exists(), "bei rot darf kein Kommentar liegen"
+
+
+def test_zweite_stoerung_verhindert_den_benannten_ausfall(monkeypatch, tmp_path, capsys):
+    """Der CLI-Regressionstest (major): rc 4 nur, wenn die Stoerung die EINZIGE ist.
+
+    Ein zusaetzlicher Fehler daneben — hier ein Auth-Fehler hinter dem Review-Fehler —
+    ist eine ungemessene Form und bleibt rot; `unstimmig()` nennt dann die letzte Stoerung.
+    """
+    mit_auth = WIEDERVERWENDET + (
+        '{"type":"error","errorType":"connection","recoverable":true,'
+        '"message":"Connection failed: Invalid or expired API key"}\n'
+    )
+    monkeypatch.setenv("CODERABBIT_API_KEY", "cr-egal")
+    monkeypatch.setattr(riegel.subprocess, "run", _lauf(mit_auth))
+    ziel = tmp_path / "a.md"
+    assert riegel.main(["--base-commit", "HEAD~1", "--markdown", str(ziel)]) == 2
+    out = capsys.readouterr().out
+    assert "ist mit einem Fehler ausgestiegen" in out
+    assert not ziel.exists()
+
+
 def test_wiederverwendet_NEBEN_einer_complete_zeile_bleibt_ROT(monkeypatch, tmp_path, capsys):
     """Die gemessene Form traegt KEINE complete-Zeile — daneben ist ungemessen und rot.
 
