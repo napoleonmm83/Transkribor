@@ -440,7 +440,7 @@ def main(argv: list[str] | None = None) -> int:
     # das wird erkannt (`lage.complete is None`, nicht `not geurteilt`). Ein Fehler NEBEN
     # einer `complete`-Zeile — auch einer mit `review_skipped` — ist eine ungemessene
     # Konstellation und bleibt rot; benannt ist ausschliesslich, was zweimal so gelaufen ist.
-    if lage.complete is None and (zustand := wiederverwendeter_zweig(lage)) is not None:
+    if lage.complete is None and wiederverwendeter_zweig(lage) is not None:
         print("STUFE AUSGEFALLEN: wiederverwendeter Zweig ohne gespeicherten Review-Zustand.")
         print("                   Die CLI verweigert das Urteil ueber den neuen Diff"
               " (No files to review,")

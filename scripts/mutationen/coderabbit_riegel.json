@@ -247,8 +247,8 @@
     },
     {
       "id": "M19 der rc-4-Zweig faellt weg (wiederverwendeter Zweig faerbt wieder rot)",
-      "von": "    if lage.complete is None and (zustand := wiederverwendeter_zweig(lage)) is not None:",
-      "nach": "    if False and lage.complete is None and (zustand := wiederverwendeter_zweig(lage)) is not None:  # M19",
+      "von": "    if lage.complete is None and wiederverwendeter_zweig(lage) is not None:",
+      "nach": "    if False and wiederverwendeter_zweig(lage) is not None:  # M19: der Zweig ist tot",
       "rot": [
         "test_wiederverwendet_ergibt_VIER_und_schreibt_den_kommentar"
       ],
@@ -286,8 +286,8 @@
     },
     {
       "id": "M22 die complete-Wache faellt weg (rc 4 gilt wieder auch neben einer complete-Zeile)",
-      "von": "    if lage.complete is None and (zustand := wiederverwendeter_zweig(lage)) is not None:",
-      "nach": "    if (zustand := wiederverwendeter_zweig(lage)) is not None:  # M22: ungemessene Konstellation wird benannt statt rot",
+      "von": "    if lage.complete is None and wiederverwendeter_zweig(lage) is not None:",
+      "nach": "    if wiederverwendeter_zweig(lage) is not None:  # M22: ungemessene Konstellation wird benannt statt rot",
       "rot": [
         "test_wiederverwendet_NEBEN_einer_complete_zeile_bleibt_ROT"
       ],
