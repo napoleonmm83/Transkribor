@@ -32,13 +32,25 @@
     },
     {
       "id": "M3 das vierte Argument am buche_aktive-Aufruf faellt weg (Lift laeuft leer)",
-      "von": "                    buche_aktive(_jobs[jid][\"active_bases\"], line, zulassung,\n                                 _jobs[jid].get(\"entfernt_je\"))",
+      "von": "                    buche_aktive(_jobs[jid][\"active_bases\"], line, zulassung,\n                                 je_sperre)",
       "nach": "                    buche_aktive(_jobs[jid][\"active_bases\"], line, zulassung)  # M3",
       "rot": [
         "test_reannoncement_reaktiviert_die_server_menge_deckelfest"
       ],
       "gruen": [
         "test_remove_base_bucht_entfernt_bedingungslos_und_get_liefert_eine_kopie"
+      ],
+      "datei": "webtool/jobs.py"
+    },
+    {
+      "id": "M5 der Art-Filter am Lift faellt weg (fremder fetch-Text hebt die Sperre)",
+      "von": "            je_sperre = (_jobs[jid].get(\"entfernt_je\")\n                         if _jobs[jid][\"kind\"] in NACHTRAG_KINDS else None)",
+      "nach": "            je_sperre = _jobs[jid].get(\"entfernt_je\")  # M5: jede Art hebt, auch fetch-Fremdtext",
+      "rot": [
+        "test_fremder_active_text_hebt_die_monotone_sperre_nicht"
+      ],
+      "gruen": [
+        "test_reannoncement_reaktiviert_die_server_menge_deckelfest"
       ],
       "datei": "webtool/jobs.py"
     },

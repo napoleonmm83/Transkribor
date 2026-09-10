@@ -862,6 +862,15 @@ def _run_proc(jid, cmd, cwd, env=None):
             # Einmal gelesen, die Art aendert sich ueber den Lauf nicht.
             zulassung = (_jobs[jid]["gesehen"]
                          if _jobs[jid]["kind"] in ZULASSUNGS_KINDS else None)
+            # Der [active]-Lift der monotone Sperre (#591) traegt denselben Art-Filter wie
+            # die Marke darunter — NACHTRAG_KINDS, nicht ZULASSUNGS_KINDS: ein `fetch`-Lauf
+            # haelt FREMDEN Text im Strom (yt-dlp, Videotitel), und fremder Text der Form
+            # [active] <geloeschte Base> duerfte die Sperre nicht heben. Ein correct-Lauf
+            # allein kann #591 zwar nicht bauen (`durch` entsteht nur fuer transcribe),
+            # aber sein Glossar druckt korpusweit [active] — auch dort liften nur die
+            # eigenen Zeilen der Base, nicht fremde. Befund des Neuweg-P ruefers.
+            je_sperre = (_jobs[jid].get("entfernt_je")
+                         if _jobs[jid]["kind"] in NACHTRAG_KINDS else None)
             nachtrag_an = _jobs[jid]["kind"] in NACHTRAG_KINDS
             eingereiht_an = _jobs[jid]["kind"] in EINGEREIHT_KINDS
         if cancelled:                            # cancel() kam an, bevor die pid gesetzt war -> selbst killen
@@ -971,7 +980,7 @@ def _run_proc(jid, cmd, cwd, env=None):
                                 _jobs[jid]["eingereiht"].remove(b)
                 else:
                     buche_aktive(_jobs[jid]["active_bases"], line, zulassung,
-                                 _jobs[jid].get("entfernt_je"))
+                                 je_sperre)
 
         def _lese_stderr():
             try:

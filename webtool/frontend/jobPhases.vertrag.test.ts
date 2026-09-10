@@ -1362,8 +1362,15 @@ function entschluesselt(s: string): string {
  *      sein `]` bricht die Klammerzaehlung, und die Zeile dahinter faellt aus der Ernte.
  *      Die Muster der Ernte selbst sind solche Regexe — der Fleck sass unmittelbar vor
  *      dem Code, der ihn ausnutzt.
- *  Der dritte Weg ist heute in den geernteten Dateien vorhanden (17 Regex-Literale mit
- *  Quotes, Zensus in #574); ob er trifft, entscheidet die Zeichenklasse um das Quote. */
+ *  Der dritte Weg ist in den geernteten Dateien real: Zensus am 2026-09-10 mit der
+ *  eingebauten Heuristik — 84 Regex-Literale, 2 mit Quote, beide in DIESEM Datei (die
+ *  Erntemuster selbst; der Fleck sass unmittelbar vor dem Code, der ihn ausnutzt). Die
+ *  Zahl 17 aus Issue #574 ist unter diesem Kriterium nicht reproduzierbar; welche Form
+ *  dort gezaehlt wurde, steht nicht im Repo. GRENZE, ehrlich: erkannt wird der Regex
+ *  nur an Akzeptlistepositionen (siehe unten) — etwa return /x'/ (letzte bedeutungstragende
+ *  Zeichen: Buchstaben) bleibt Division und kippt die Paritaet; `letzte` wird an
+ *  Zeilenumbruechen nicht zurueckgesetzt, ein Regex am Zeilenanfang nach einer Wortzeile
+ *  ebenfalls (beides gemessen vom Neuweg-P ruefer; in den sechs Dateien nicht präsent). */
 export function ohneKommentare(quelle: string): string {
   let aus = ''
   // Letztes bedeutungstragendes Zeichen VOR dem aktuellen Schraegstrich — entscheidet
@@ -1400,8 +1407,11 @@ export function ohneKommentare(quelle: string): string {
     // Quotes sind der Paritaetskiller. In einer Zeichenklasse [...] schliesst `/` das
     // Muster nicht. Ein Zeilenumbruch beendet es ohne Schliesser: dann ist die Zeile
     // kein Literal, und der Rest bleibt Code (die Ernte liest zeilenweise; ein
-    // abgerissenes Muster beschreibt die eigene Zeile falsch, aber keine folgende —
-    // die Paritaet laeuft nicht in die naechste Zeile hinaus).
+    // abgerissenes Muster beschreibt die eigene Zeile falsch). `letzte` wird dabei
+    // BEWUSST nicht am Umbruch zurueckgesetzt: eine Division ueber Zeilengrenze
+    // (x = a\n/ b) ist seltener als ein Regex am Zeilenanfang, aber beide sind legal —
+    // die Akzeptliste entscheidet, und ihre Grenze steht im Kopfkommentar dieser
+    // Funktion.
     if (c === '/' && (letzte === '' || '(,=:[!&|?{};'.includes(letzte))) {
       aus += c
       let klasse = false
@@ -1519,10 +1529,10 @@ export function ernteAusQuelle(roh: string, datei = ''): {
 
   // (C) push-Aufruf mit Zeichenketten — `PRAELUDIUM` baut seine Fixture so. GEZAEHLT ueber
   // die sechs Dateien: DREI solche Aufrufe, alle drei aus `PRAELUDIUM`; es ist also wirklich
-  // die einzige Stelle dieser Bauart. (Kein Beispiel mit Anfuehrungszeichen in diesem Kommentar: `ohneKommentare` haelt
-  // die Quotes der Erntemuster oben faelschlich fuer Zeichenketten und laesst den Text
-  // dahinter stehen — vorbestehender blinder Fleck, #574. Er kann auch Code VERSTECKEN,
-  // nicht nur Kommentare durchlassen; hier ist nur das Symptom umgangen.)
+  // die einzige Stelle dieser Bauart. (Kein Beispiel mit Anfuehrungszeichen in diesem Kommentar: VOR #574 hielt `ohneKommentare`
+  // die Quotes der Erntemuster fuer Zeichenketten und liess den Text dahinter stehen —
+  // seit #574 werden Regex-Literale erkannt und der Fleck ist zu; die Vorsicht bleibt,
+  // sie kostet nichts und schuetzt gegen die Akzeptlistengrenze aus dem Kopfkommentar.)
   for (const m of quelle.matchAll(/\b([A-Za-z_$][\w$]*)\.push\(/g)) {
     const pos = m.index + m[0].length - 1
     if (!beginntMitLiteral(quelle, pos, true)) continue

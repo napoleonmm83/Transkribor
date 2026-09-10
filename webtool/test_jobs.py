@@ -1139,6 +1139,34 @@ def test_reannoncement_reaktiviert_die_server_menge_deckelfest(tmp_path):
         _wait(jid)
 
 
+def test_fremder_active_text_hebt_die_monotone_sperre_nicht(tmp_path):
+    """Art-Filter am [active]-Lift (#591, Befund des Neuweg-P ruefers): ein fetch-Lauf
+    haelt FREMDEN Text im Strom (yt-dlp-Rohausgabe, Videotitel) — fremder Text der Form
+    [active] <geloeschte Base> duerfte die monotone Loeschsperre nicht heben. Dieselbe
+    Begruendung und dieselbe Form wie ZULASSUNGS_KINDS/NACHTRAG_KINDS: der Zweig wird
+    nur fuer die Art scharf, die ihn bedienen kann. Die Gegenrichtung (transcribe hebt
+    an der EIGENEN [active]-Zeile) traegt der tor3-Abschnitt des Reannonce-Tests."""
+    tor = tmp_path / "marke.jetzt"
+    code = ("import os, sys, time\n"
+            f"tor = {str(tor)!r}\n"
+            "print('warte', flush=True)\n"
+            "while not os.path.exists(tor): time.sleep(0.05)\n"
+            "print('[active] X', flush=True)\n"
+            "time.sleep(30)\n")
+    jid, _ = jobs.start("P_entf_fetch", [sys.executable, "-c", code], cwd=None, kind="fetch")
+    try:
+        _warte_auf_zeilen(jid, 1)
+        jobs.remove_base("P_entf_fetch", "X")   # Buchung VOR der fremden Zeile
+        tor.write_text("jetzt")
+        _warte_auf_zeilen(jid, 2)
+        snap = jobs.get(jid)
+        assert snap["entfernt"] == ["X"]        # live Buchung haelt (keine Marke im fetch-Strom)
+        assert snap["entfernt_je"] == ["X"]     # Filter: fremdes [active] hebt die Sperre NICHT
+    finally:
+        jobs.cancel(jid)
+        _wait(jid)
+
+
 def test_jobs_start_mit_initialem_base_scope():
     """jobs.start mit base= setzt den Scope ab Millisekunde 0."""
     jid, started = jobs.start("P_single", _scope_cmd(["warte"]), cwd=None, kind="correct", base="DateiA")
