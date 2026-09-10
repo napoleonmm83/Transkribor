@@ -1363,14 +1363,19 @@ function entschluesselt(s: string): string {
  *      Die Muster der Ernte selbst sind solche Regexe — der Fleck sass unmittelbar vor
  *      dem Code, der ihn ausnutzt.
  *  Der dritte Weg ist in den geernteten Dateien real: Zensus am 2026-09-10 mit der
- *  eingebauten Heuristik — 84 Regex-Literale, 2 mit Quote, beide in DIESEM Datei (die
- *  Erntemuster selbst; der Fleck sass unmittelbar vor dem Code, der ihn ausnutzt). Die
- *  Zahl 17 aus Issue #574 ist unter diesem Kriterium nicht reproduzierbar; welche Form
- *  dort gezaehlt wurde, steht nicht im Repo. GRENZE, ehrlich: erkannt wird der Regex
- *  nur an Akzeptlistepositionen (siehe unten) — etwa return /x'/ (letzte bedeutungstragende
- *  Zeichen: Buchstaben) bleibt Division und kippt die Paritaet; `letzte` wird an
- *  Zeilenumbruechen nicht zurueckgesetzt, ein Regex am Zeilenanfang nach einer Wortzeile
- *  ebenfalls (beides gemessen vom Neuweg-P ruefer; in den sechs Dateien nicht präsent). */
+ *  eingebauten Heuristik — 2 Regex-Literale mit Quote, beide in DIESEM Datei (die
+ *  Erntemuster selbst; der Fleck sass unmittelbar vor dem Code, der ihn ausnutzt;
+ *  dreifach unabhaengig gezaehlt). Eine GESAMTzahl steht bewusst nicht hier: drei
+ *  Zaehlfassungen derselben Heuristik lieferten 84, 81 und 83 — die Gesamtzahl driftet
+ *  mit der Zaehlmethode, die Quote-Treffer nicht. Die Zahl 17 aus Issue #574 ist unter
+ *  diesem Kriterium nicht reproduzierbar; welche Form dort gezaehlt wurde, steht nicht
+ *  im Repo. GRENZE, ehrlich: erkannt wird der Regex nur an Akzeptlistepositionen (siehe
+ *  unten) — etwa return /x'/ (letzte bedeutungstragende Zeichen: Buchstaben) bleibt
+ *  Division und kippt die Paritaet; `letzte` wird an Zeilenumbruechen nicht
+ *  zurueckgesetzt, ein Regex am Zeilenanfang nach einer Wortzeile ebenfalls. Beide
+ *  Blindformen sind GEMESSEN nicht praesent (Superset-Sonde, 0 Kipper in allen sechs
+ *  Dateien, gegnerischer Review); der ABGERISSENE Zweig hat dafuer zwei unschaedliche
+ *  Live-Treffer in ProjectWorkspace.test.tsx (Zeilenende der Routen-JSX). */
 export function ohneKommentare(quelle: string): string {
   let aus = ''
   // Letztes bedeutungstragendes Zeichen VOR dem aktuellen Schraegstrich — entscheidet
@@ -1681,6 +1686,24 @@ describe('Fixture-Wache', () => {
       'const halbe = anzahl / 2; ' + RE + '\n  const probe = [\n    // ]\n    '
       + FIXTUR + '\n  ]',
     )).toContain('[done] B')
+  })
+
+  it('ein abgerissenes Regex-Muster vergiftet die Folgezeile nicht (#574-Nachtrag)', () => {
+    /* Riegel fuer die Leerzeichen-Zuweisung im abgerissenen Zweig — gegnerischer Review,
+       Frage 3.1: die drei letzte-Pflegestellen von ohneKommentare hatten keine Mutation
+       gegen sich, und der Zweig hat zwei Live-Treffer in ProjectWorkspace.test.tsx
+       (Zeilenende der Routen-JSX: geschweifte Klammer, Leerzeichen, Schraegstrich, und
+       hinter dem Schraegstrich nur noch ein Spitz-ende bis zum Umbruch). Ohne die
+       Zuweisung bliebe die geschlossene Klammer als letzte stehen — sie steht IN der
+       Akzeptliste —, und der Schraegstrich am Anfang der Folgezeile waere Regex-Anfang
+       statt Division: er frisst bis zum naechsten Schraegstrich, und die Zeichenkette
+       dahinter schluckt den Kommentar der Zeile. Mit ihr ist der Zustand danach Leerraum,
+       nicht in der Liste: Division, und der Kommentar wird normal gestrippt. */
+    /* Per Konkatenation (Konvention dieses Blocks): DIESE Datei steht selbst in den
+       geernteten Quellen, die Zeilen als Literal-Bausteine waeren selbst Ernte-Futter. */
+    const ABGERISSEN = 'a = {} />' + '\n'
+    const FOLGE = '/x' + "'" + '/' + "'" + ' g ' + '// k ]' + '\n'
+    expect(ohneKommentare(ABGERISSEN + FOLGE)).not.toContain('//')
   })
 
   it('ein Template-Literal faellt nicht aus der Ernte (#566)', () => {

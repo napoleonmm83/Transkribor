@@ -120,6 +120,12 @@ def buche_aktive(aktive: dict, line: str, gesehen: set | None = None,
         # Urteile (und #581s Rueckweg fuer verdraengte Urteile greift wieder). Nicht die
         # Marke `[scope+]` hebt auf: die meldet nur eine ANDERE IDENTITAET, nicht dass die
         # neue Datei schon laeuft — zwischen beidem liegt genau das Fenster von #591.
+        # GETRAGENE GRENZE, Restfenster (Neuweg-Review): trifft das DELETE waehrend der
+        # Leserlatenz einer [active]-Zeile ein, verarbeitet der Leserfaden die STALE Zeile
+        # nach remove_base und hebt die frisch gebuchte Sperre doch auf. Millisekunden-
+        # fenster, sichtbar nur bei Neu-Upload + Poll vor dem zweiten [active] + hoechstens
+        # 4 s alter Dateiliste — dieselbe Klasse wie die Stale-Verschmutzung von `gesehen`
+        # seit #475; ein Fix braeuchte Zeitstempel je Base.
         if entfernt_je is not None and roh:
             entfernt_je.discard(roh)
     elif line.startswith(DONE_PREFIX):
@@ -173,7 +179,8 @@ GPU_KINDS = ("transcribe",)
 # traegt dieselbe Verschmutzung seit #431 dokumentiert. Anzeige-Folgen hat das keine (die
 # Muellschluessel treffen keinen Basisnamen), die Nutzlast je Poll waechst aber, und `gesehen`
 # war bis K1 Glied 3 die einzige ungedeckelte Sammlung im Datensatz — seitdem gibt es mit
-# `entfernt` eine zweite (gleiches Wachstum, gleiche Nutzlast-Frage). Siehe Issue.
+# `entfernt` eine zweite, seit #591 mit `entfernt_je` eine dritte (gleiches Wachstum,
+# gleiche Nutzlast-Frage; die monotone schrumpft nur am [active]-Lift). Siehe Issue.
 ZULASSUNGS_KINDS = ("transcribe", "correct")
 
 # Welche Job-Arten einen Bereichs-NACHTRAG drucken duerfen. Nur `transcribe_project` tut es
@@ -866,9 +873,11 @@ def _run_proc(jid, cmd, cwd, env=None):
             # die Marke darunter — NACHTRAG_KINDS, nicht ZULASSUNGS_KINDS: ein `fetch`-Lauf
             # haelt FREMDEN Text im Strom (yt-dlp, Videotitel), und fremder Text der Form
             # [active] <geloeschte Base> duerfte die Sperre nicht heben. Ein correct-Lauf
-            # allein kann #591 zwar nicht bauen (`durch` entsteht nur fuer transcribe),
-            # aber sein Glossar druckt korpusweit [active] — auch dort liften nur die
-            # eigenen Zeilen der Base, nicht fremde. Befund des Neuweg-P ruefers.
+            # lifft GAR NICHT (je_sperre bleibt None): `durch` entsteht nur fuer transcribe,
+            # und das korpusweite Glossar-[active] laeuft der Loeschung nie hinterher — es
+            # kommt VOR ihr (oder die Datei war beim Glossar-Scan schon weg), fuer die
+            # geloeschte Base gibt es danach keine eigene Zeile im correct-Strom. Befund
+            # des Neuweg-Pruefers; der correct-Satz nach Kalt-Review korrigiert.
             je_sperre = (_jobs[jid].get("entfernt_je")
                          if _jobs[jid]["kind"] in NACHTRAG_KINDS else None)
             nachtrag_an = _jobs[jid]["kind"] in NACHTRAG_KINDS

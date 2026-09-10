@@ -1140,7 +1140,7 @@ def test_reannoncement_reaktiviert_die_server_menge_deckelfest(tmp_path):
 
 
 def test_fremder_active_text_hebt_die_monotone_sperre_nicht(tmp_path):
-    """Art-Filter am [active]-Lift (#591, Befund des Neuweg-P ruefers): ein fetch-Lauf
+    """Art-Filter am [active]-Lift (#591, Befund des Neuweg-Pruefers): ein fetch-Lauf
     haelt FREMDEN Text im Strom (yt-dlp-Rohausgabe, Videotitel) — fremder Text der Form
     [active] <geloeschte Base> duerfte die monotone Loeschsperre nicht heben. Dieselbe
     Begruendung und dieselbe Form wie ZULASSUNGS_KINDS/NACHTRAG_KINDS: der Zweig wird
@@ -1162,6 +1162,36 @@ def test_fremder_active_text_hebt_die_monotone_sperre_nicht(tmp_path):
         snap = jobs.get(jid)
         assert snap["entfernt"] == ["X"]        # live Buchung haelt (keine Marke im fetch-Strom)
         assert snap["entfernt_je"] == ["X"]     # Filter: fremdes [active] hebt die Sperre NICHT
+    finally:
+        jobs.cancel(jid)
+        _wait(jid)
+
+
+def test_correct_lauf_hebt_die_monotone_sperre_gar_nicht(tmp_path):
+    """Die correct-Richtung des Art-Filters (#591, Nachzahlung zum Kalt-Review): je_sperre
+    bleibt fuer correct None, der Kommentar am Lift behauptete zuerst einen correct-Lift
+    nur fuer eigene Zeilen — geliftet wird dort GAR nichts. Dass das folgenlos ist, hat
+    zwei Gruende, beide am Code belegt: `durch` entsteht nur aus transcribe-Urteilen, und
+    das korpusweite Glossar-[active] eines correct-Laufs laeuft der Loeschung nie
+    hinterher (es kommt VOR ihr, oder die Datei war beim Scan schon weg). Der Test nagelt
+    die ENGINE-Seite fest — die eigene [active]-Zeile hebt bei correct nicht, bei
+    transcribe schon (Gegenstueck: tor3-Abschnitt des Reannonce-Tests)."""
+    tor = tmp_path / "marke.jetzt"
+    code = ("import os, sys, time\n"
+            f"tor = {str(tor)!r}\n"
+            "print('warte', flush=True)\n"
+            "while not os.path.exists(tor): time.sleep(0.05)\n"
+            "print('[active] X', flush=True)\n"
+            "time.sleep(30)\n")
+    jid, _ = jobs.start("P_entf_correct", [sys.executable, "-c", code], cwd=None, kind="correct")
+    try:
+        _warte_auf_zeilen(jid, 1)
+        jobs.remove_base("P_entf_correct", "X")   # Buchung VOR der eigenen Zeile
+        tor.write_text("jetzt")
+        _warte_auf_zeilen(jid, 2)
+        snap = jobs.get(jid)
+        assert snap["entfernt"] == ["X"]        # [scope+] kommt im correct-Strom nie
+        assert snap["entfernt_je"] == ["X"]     # Filter: correct lifft GAR NICHT
     finally:
         jobs.cancel(jid)
         _wait(jid)
