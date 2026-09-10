@@ -1349,17 +1349,28 @@ function entschluesselt(s: string): string {
 /** Ersetzt Kommentare durch Leerzeichen — LAENGENTREU, damit die Fundstellen der
  *  Suchausdruecke weiter in denselben Text zeigen.
  *
- *  Ohne diesen Schritt ist die Ernte auf zwei Wegen blind, beide unabhaengig gefunden
- *  (gegnerischer Pruefer F7, CodeRabbit-Bot als Major):
+ *  Ohne diesen Schritt ist die Ernte auf drei Wegen blind, die ersten beiden unabhaengig
+ *  gefunden (gegnerischer Pruefer F7, CodeRabbit-Bot als Major), der dritte ist #574:
  *    * ein Blockkommentar zwischen Komma und `[` laesst den Aufruf nicht finden, weil dort
  *      nur Leerraum erlaubt ist (ein Beispiel steht im Test, nicht hier: das schliessende
  *      Kommentarzeichen beendete diesen Absatz mittendrin — einmal passiert, Parse-Fehler,
  *      und ALLE Tests der Datei liefen daraufhin gar nicht);
  *    * `lines: ['gueltig', // ]` beendet die Klammerzaehlung im Kommentar — alles danach
- *      faellt aus der Ernte, und die erfundene Zeile bleibt unentdeckt.
- *  Beide sind heute in keiner Datei vorhanden; das ist der Zustand, nicht die Zusicherung. */
+ *      faellt aus der Ernte, und die erfundene Zeile bleibt unentdeckt;
+ *    * ein REGEX-LITERAL mit Anfuehrungszeichen verschiebt die Paarung aller folgenden
+ *      Quotes (Paritaet): ein Kommentar in der falschen Spanne wird nicht gestrippt,
+ *      sein `]` bricht die Klammerzaehlung, und die Zeile dahinter faellt aus der Ernte.
+ *      Die Muster der Ernte selbst sind solche Regexe — der Fleck sass unmittelbar vor
+ *      dem Code, der ihn ausnutzt.
+ *  Der dritte Weg ist heute in den geernteten Dateien vorhanden (17 Regex-Literale mit
+ *  Quotes, Zensus in #574); ob er trifft, entscheidet die Zeichenklasse um das Quote. */
 export function ohneKommentare(quelle: string): string {
   let aus = ''
+  // Letztes bedeutungstragendes Zeichen VOR dem aktuellen Schraegstrich — entscheidet
+  // Regex gegen Division (#574): ein `/` beginnt ein Literal nach `( , = : [ ! & | ? { } ;`
+  // oder am Anfang, nach einem Wortzeichen oder schliessenden Quote ist es Division.
+  // Nach einem Regex gilt `x` (Wortzeichen): `re / 2` bleibt Division.
+  let letzte = ''
   for (let i = 0; i < quelle.length; i++) {
     const c = quelle[i]
     if (c === "'" || c === '"' || c === '`') {          // Zeichenkette unangetastet lassen
@@ -1370,6 +1381,7 @@ export function ohneKommentare(quelle: string): string {
         else aus += quelle[i]
       }
       aus += quelle[i] ?? ''
+      letzte = q
       continue
     }
     if (c === '/' && quelle[i + 1] === '/') {
@@ -1384,7 +1396,30 @@ export function ohneKommentare(quelle: string): string {
       i--
       continue
     }
+    // REGEX-LITERAL: Koerper samt Anfuehrungszeichen darin konsumieren — genau die
+    // Quotes sind der Paritaetskiller. In einer Zeichenklasse [...] schliesst `/` das
+    // Muster nicht. Ein Zeilenumbruch beendet es ohne Schliesser: dann ist die Zeile
+    // kein Literal, und der Rest bleibt Code (die Ernte liest zeilenweise; ein
+    // abgerissenes Muster beschreibt die eigene Zeile falsch, aber keine folgende —
+    // die Paritaet laeuft nicht in die naechste Zeile hinaus).
+    if (c === '/' && (letzte === '' || '(,=:[!&|?{};'.includes(letzte))) {
+      aus += c
+      let klasse = false
+      for (i++; i < quelle.length; i++) {
+        const r = quelle[i]
+        if (r === '\\') { aus += r + (quelle[i + 1] ?? ''); i++; continue }
+        if (r === '\n') break
+        if (r === '[') klasse = true
+        else if (r === ']') klasse = false
+        else if (r === '/' && !klasse) break
+        aus += r
+      }
+      if (i < quelle.length && quelle[i] === '/') { aus += '/'; letzte = 'x' }
+      else { aus += quelle[i] ?? ''; letzte = ' ' }      // abgerissen — Umbruch gehoert der Zeile
+      continue
+    }
     aus += c
+    if (!/\s/.test(c)) letzte = c
   }
   return aus
 }
@@ -1607,6 +1642,32 @@ describe('Fixture-Wache', () => {
     // sonst waere die Bereinigung selbst der naechste blinde Fleck.
     expect(zeilenAusQuelle(RUF + "['apply: A -> // kein Kommentar'])"))
       .toEqual(['apply: A -> // kein Kommentar'])
+  })
+
+  it('ein Regex-Literal macht die Ernte nicht blind (#574)', () => {
+    /* Der Ausloeser entsteht zur Laufzeit (Konvention dieses Blocks): DIESE Datei steht
+       selbst in den geernteten Quellen, ein woertliches Beispiel waere selbst Ernte-Futter.
+       Die Mechanik ist eine PARITAETSVERSCHIEBUNG, nicht ein Entfernen: Zeichenketten
+       laufen unveraendert durch, aber ein Anfuehrungszeichen IM Regex-Literal oeffnet den
+       Zeichenketten-Modus, und mit UNGERADER Zahl im Muster ist jeder folgende Quote ein
+       Schliesser statt Oeffner. Ein Kommentar in dieser Spanne wird nicht gestrippt,
+       sein `]` beendet die Klammerzaehlung der Ernte frueh — die Fixture-Zeile dahinter
+       faellt aus der Ernte, und die Wache meldet ueber sie Erfolg, ohne sie angesehen zu
+       haben. Genau das Fertig-wenn von #574: die Zeile HINTER dem Muster wird gefunden.
+
+       Die Divisionszeile oben ist kein Zierat: naehme die Heuristik JEDEN
+       Schraegstrich als Regex-Anfang, frasse der falsche Regex von `anzahl / 2` bis zum
+       OEFFNEN des echten Musters, und derselbe Test wird rot — er ist damit auch der
+       Sensor fuer die Unterscheidung, nicht nur fuer das Vorhandensein. */
+    /* Per Konkatenation, nicht als Array-Literal (Konvention dieses Blocks): DIESE Datei
+       steht selbst in den geernteten Quellen, und die Zeilen als Literal-Elemente waeren
+       selbst Fixture-Futter — der Lauf oben ist daran rot geworden, nicht der Fix. */
+    const RE = 'const RE = /x' + "'/"
+    const FIXTUR = "'[done] B'" + ','
+    expect(zeilenAusQuelle(
+      'const halbe = anzahl / 2\n' + RE + '\n  const probe = [\n    // ]\n    '
+      + FIXTUR + '\n  ]',
+    )).toContain('[done] B')
   })
 
   it('ein Template-Literal faellt nicht aus der Ernte (#566)', () => {

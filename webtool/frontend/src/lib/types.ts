@@ -53,8 +53,11 @@ export type Project = { name: string; dateien: number; fertig: number; geaendert
  *  Zeilenpuffer genau diese Zeile verdraengt hat (#475), Gegenstueck zu `bases`/`scope`. */
 /** `eingereiht` ist die DRITTE Serverbuchfuehrung neben `gesehen` und `entfernt` (#561) und
  *  die einzige, die eine ORDNUNG traegt: die der Korrektur-Schlange. Deshalb `string[]` und
- *  serverseitig unsortiert — `sorted()` wie bei den anderen beiden zerstoerte die Auskunft. */
-export type JobStatus = { status: 'running' | 'done' | 'error' | 'cancelled'; lines: string[]; kind?: string; bases?: string[]; gesehen?: string[]; entfernt?: string[]; eingereiht?: string[] };
+ *  serverseitig unsortiert — `sorted()` wie bei den anderen beiden zerstoerte die Auskunft.
+ *  `entfernt_je` ist die VIERTE (#591): monoton „jemals geloescht", bis eine NEUE
+ *  `[active]`-Zeile der Base — der Rueweg dafuer, dass die `[scope+]`-Marke die Base aus
+ *  `entfernt` herausnimmt und `durch` sie sonst wieder aufweckt. */
+export type JobStatus = { status: 'running' | 'done' | 'error' | 'cancelled'; lines: string[]; kind?: string; bases?: string[]; gesehen?: string[]; entfernt?: string[]; eingereiht?: string[]; entfernt_je?: string[] };
 /** `vorgang` — SECHS Erzeuger, drei Verhalten. Gezaehlt, nicht erinnert (`grep` auf
  *  `Promise<StartJob>` in `api.ts` plus die Abbildung von `uploadAudio` in `MaterialDialog`):
  *
@@ -306,6 +309,12 @@ export type JobPhases = {
    *  Gemessen: das Loeschen EINER fertigen Aufnahme verlaengerte die Warteschlange aller
    *  uebrigen um eins, dauerhaft. Undefined, solange nichts geloescht wurde. */
   entfernt?: Set<string>;
+  /** Jemals geloescht in diesem Lauf, bis eine NEUE `[active]`-Zeile der Base (#591) —
+   *  durchgereicht, weil `durch` es braucht: die `[scope+]`-Marke tilgt das alte Urteil und
+   *  hebt die LIVEN Loeschbuchung auf, `gesehen` bleibt aber stehen, also waere die Base
+   *  `schonDurch`-wahr und ein zweites Fenster zeigte „Fertig" ueber Nur-Audio. Undefined,
+   *  solange in diesem Lauf nichts unter dem Namen geloescht und neu hochgeladen wurde. */
+  entferntJe?: Set<string>;
   /** Die Aufnahmen, die der Lauf an die Korrektur-Schlange uebergeben hat — IN DER
    *  REIHENFOLGE DER UEBERGABE (#442).
    *
