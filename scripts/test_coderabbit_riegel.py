@@ -63,6 +63,21 @@ KONTINGENT = (
     '"action":"rerun_with_use_credits","command":"coderabbit review --use-credits"}\n'
 )
 
+# Wiederverwendeter Renovate-Zweig — WOERTLICH aus Lauf 34452219628 (PR #606, 2026-09-10,
+# `renovate/all-minor-patch`); dieselbe Form schon in Lauf 34393299643 (PR #602). Issue #604.
+# KEINE `complete`-Zeile — das ist Teil der erkannten Form.
+WIEDERVERWENDET = (
+    '{"type":"review_context","reviewType":"committed","currentBranch":"HEAD",'
+    '"baseBranch":"master","baseCommit":"dde488a380001efe628a2a10cae56bf70e808b8c",'
+    '"workingDirectory":"/home/runner/work/Transkribor/Transkribor"}\n'
+    '{"type":"status","phase":"connecting","status":"connecting_to_review_service"}\n'
+    '{"type":"status","phase":"setup","status":"setting_up"}\n'
+    '{"type":"error","errorType":"review","recoverable":false,'
+    '"message":"Review failed: No files to review\\nPrevious local review has no stored findings."}\n'
+    "Error: No files to review\n"
+    "Previous local review has no stored findings.\n"
+)
+
 ERFOLG_OHNE_BEFUND = (
     '{"type":"complete","status":"review_completed","findings":0,'
     '"reviewedFiles":["a.py"]}\n'
@@ -261,6 +276,79 @@ def test_kontingent_ergibt_drei_und_schreibt_den_kommentar(monkeypatch, tmp_path
     assert riegel.main(["--base-commit", "HEAD~1", "--markdown", str(ziel)]) == 3
     assert "Kontingent" in capsys.readouterr().out
     assert "kein" in ziel.read_text(encoding="utf-8")
+
+
+# --- Der wiederverwendete Zweig (Rueckgabecode 4, Issue #604) -------------
+
+def test_wiederverwendeter_zweig_wird_erkannt():
+    lage = riegel.lies(WIEDERVERWENDET)
+    zustand = riegel.wiederverwendeter_zweig(lage)
+    assert zustand is not None
+    assert zustand["errorType"] == "review"
+    assert lage.complete is None, "die gemessene Form traegt keine complete-Zeile"
+
+
+def test_nur_ein_marker_ist_kein_benannter_ausfall():
+    """BEIDE Marker muessen stehen — ein halber ist eine unbekannte Form und bleibt rot."""
+    nur_der_erste = (
+        '{"type":"error","errorType":"review","recoverable":false,'
+        '"message":"Review failed: No files to review"}\n'
+    )
+    nur_der_zweite = (
+        '{"type":"error","errorType":"review","recoverable":false,'
+        '"message":"Previous local review has no stored findings."}\n'
+    )
+    for text in (nur_der_erste, nur_der_zweite):
+        lage = riegel.lies(text)
+        assert riegel.wiederverwendeter_zweig(lage) is None
+        assert riegel.unstimmig(lage) is not None, "halb erkannt muss ROT bleiben"
+
+
+def test_anderer_review_fehler_bleibt_ROT():
+    """Gleicher FehlerTyp, andere Meldung — die Form ist ungemessen, also kein Ausfall."""
+    lage = riegel.lies(
+        '{"type":"error","errorType":"review","recoverable":false,'
+        '"message":"Review failed: model unavailable today"}\n')
+    assert riegel.wiederverwendeter_zweig(lage) is None
+    assert riegel.unstimmig(lage) is not None
+
+
+def test_beide_marker_mit_anderem_fehlertyp_bleiben_ROT():
+    """Der Anker sitzt auf (Typ UND beide Marker) — die Marker allein tragen nicht."""
+    lage = riegel.lies(
+        '{"type":"error","errorType":"connection","recoverable":true,'
+        '"message":"No files to review\\nPrevious local review has no stored findings."}\n')
+    assert riegel.wiederverwendeter_zweig(lage) is None
+    assert riegel.unstimmig(lage) is not None
+
+
+def test_wiederverwendet_ergibt_VIER_und_schreibt_den_kommentar(monkeypatch, tmp_path, capsys):
+    """Entscheidung Marcus 2026-09-10 (Issue #604): benannt statt rot — aber SCHRIFTLICH."""
+    monkeypatch.setenv("CODERABBIT_API_KEY", "cr-egal")
+    monkeypatch.setattr(riegel.subprocess, "run", _lauf(WIEDERVERWENDET))
+    ziel = tmp_path / "w.md"
+    assert riegel.main(["--base-commit", "HEAD~1", "--markdown", str(ziel)]) == 4
+    assert "wiederverwendeter Zweig" in capsys.readouterr().out
+    text = ziel.read_text(encoding="utf-8")
+    assert "nicht** rezensiert" in text and "Uebersprungen ist kein" in text
+
+
+def test_wiederverwendet_NEBEN_einer_complete_zeile_bleibt_ROT(monkeypatch, tmp_path, capsys):
+    """Die gemessene Form traegt KEINE complete-Zeile — daneben ist ungemessen und rot.
+
+    Genau diese Wache haelt den Unterschied zum Kontingent-Zweig: dort wahlt `not geurteilt`,
+    hier `lage.complete is None`, weil nur diese Form zweimal gelaufen ist (#602, #606).
+    """
+    mit_complete = WIEDERVERWENDET + (
+        '{"type":"complete","status":"review_skipped","findings":0,'
+        '"message":"No committed changes detected"}\n'
+    )
+    monkeypatch.setenv("CODERABBIT_API_KEY", "cr-egal")
+    monkeypatch.setattr(riegel.subprocess, "run", _lauf(mit_complete))
+    ziel = tmp_path / "x.md"
+    assert riegel.main(["--base-commit", "HEAD~1", "--markdown", str(ziel)]) == 2
+    assert "review_skipped" in capsys.readouterr().out
+    assert not ziel.exists(), "bei rot darf kein Kommentar liegen"
 
 
 # --- Der Kommentartext ----------------------------------------------------

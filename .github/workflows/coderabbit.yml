@@ -106,6 +106,9 @@ jobs:
       #   rc 0  geprueft, keine Befunde        -> gruen
       #   rc 1  geprueft, Befunde da           -> gruen, Kommentar an den PR
       #   rc 3  Kontingent erschoepft          -> gruen, WARNUNG + Kommentar
+      #   rc 4  wiederverwendeter Zweig ohne   -> gruen, WARNUNG + Kommentar
+      #        gespeicherten Review-Zustand       (Issue #604: Renovate vergibt Branchnamen
+      #        wieder; die CLI verweigert das Urteil. Nur die GEMESSENE Form, sonst rot)
       #   rc 2  KONNTE NICHT URTEILEN          -> ROT
       #   sonst ausserhalb des Vertrags        -> ROT
       #
@@ -157,9 +160,11 @@ jobs:
             1) echo "kommentar=ja" >> "$GITHUB_OUTPUT" ;;
             3) echo "::warning::CodeRabbit-Kontingent erschoepft — dieser PR hat KEIN CLI-Review bekommen. Uebersprungen ist kein Erfolg."
                echo "kommentar=ja" >> "$GITHUB_OUTPUT" ;;
+            4) echo "::warning::CodeRabbit-CLI ohne Urteil: wiederverwendeter Zweig ohne gespeicherten Review-Zustand — dieser PR hat KEIN CLI-Review bekommen. Uebersprungen ist kein Erfolg."
+               echo "kommentar=ja" >> "$GITHUB_OUTPUT" ;;
             2) echo "::error::Die CodeRabbit-CLI konnte nicht urteilen — das ist eine fehlende Pruefung, kein bestandener Lauf."
                exit 1 ;;
-            *) echo "::error::Der Riegel endete mit $rc — ausserhalb seines Vertrags 0/1/2/3. Das ist kein Urteil."
+            *) echo "::error::Der Riegel endete mit $rc — ausserhalb seines Vertrags 0/1/2/3/4. Das ist kein Urteil."
                exit 1 ;;
           esac
 

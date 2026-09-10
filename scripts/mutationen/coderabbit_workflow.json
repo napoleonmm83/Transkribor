@@ -49,6 +49,20 @@
         "test_kein_befund_bleibt_gruen"
       ],
       "datei": "scripts/test_coderabbit_workflow.py"
+    },
+    {
+      "id": "M4 der rc-4-Zweig faellt aus dem case (benannter Ausfall faerbt wieder rot)",
+      "von": "            4) echo \"::warning::CodeRabbit-CLI ohne Urteil: wiederverwendeter Zweig ohne gespeicherten Review-Zustand — dieser PR hat KEIN CLI-Review bekommen. Uebersprungen ist kein Erfolg.\"\n               echo \"kommentar=ja\" >> \"$GITHUB_OUTPUT\" ;;",
+      "nach": "            # M4: rc 4 faellt auf den Ausserhalb-Vertrag-Zweig und faerbt rot.",
+      "rot": [
+        "test_wiederverwendeter_zweig_bleibt_GRUEN_und_loest_den_kommentar_aus"
+      ],
+      "gruen": [
+        "test_kontingent_bleibt_GRUEN_und_loest_den_kommentar_aus",
+        "test_kein_urteil_faerbt_ROT",
+        "test_code_ausserhalb_des_vertrags_faerbt_ROT"
+      ],
+      "datei": ".github/workflows/coderabbit.yml"
     }
   ]
 }

@@ -265,6 +265,15 @@ def test_kontingent_bleibt_GRUEN_und_loest_den_kommentar_aus(tmp_path):
 
 
 @hat_bash
+def test_wiederverwendeter_zweig_bleibt_GRUEN_und_loest_den_kommentar_aus(tmp_path):
+    """rc 4 (Issue #604): benannter Ausfall am wiederverwendeten Renovate-Zweig."""
+    rc, ausgabe, text = _fahre(4, tmp_path)
+    assert rc == 0, f"rc 4 (wiederverwendeter Zweig) ist gruen mit Warnung, war {rc}:\n{text}"
+    assert "kommentar=ja" in ausgabe
+    assert "::warning::" in text, "ein benannter Ausfall muss sichtbar warnen"
+
+
+@hat_bash
 def test_kein_urteil_faerbt_ROT(tmp_path):
     rc, ausgabe, text = _fahre(2, tmp_path)
     assert rc == 1, f"rc 2 muss der Schritt selbst zu 1 machen, war {rc}:\n{text}"
