@@ -52,12 +52,14 @@ ein Ergebnis:
    und mit `capture_output=True` puffert alles im Speicher; schneidet GitHub den Job ab, ist
    der gesamte CLI-Text weg — auch die `heartbeat`-Zeilen, die es genau dafuer gibt.
 
-Rueckgabecodes — VIER, nicht die drei der Geschwister `ruff_riegel.py`/`mypy_riegel.py`:
+Rueckgabecodes — FÜNF, nicht die drei der Geschwister `ruff_riegel.py`/`mypy_riegel.py`:
     0  geprueft, keine Befunde
     1  geprueft, Befunde da
     2  KONNTE NICHT URTEILEN (kein Schluessel, CLI fehlt, kein `review_completed`,
        Zahlen unstimmig, null gepruefte Dateien, Befund ohne Text, kaputte Zeile, Haenger)
     3  STUFE AUSGEFALLEN, KONTINGENT ERSCHOEPFT — benannt, nicht rot
+    4  STUFE AUSGEFALLEN, WIEDERVERWENDETER ZWEIG OHNE GESPEICHERTEN REVIEW-ZUSTAND —
+       benannt, nicht rot
 
 Die 3 ist eine Entscheidung von Marcus (2026-09-08) und kein Schlupfloch. Zwei Regeln in
 CLAUDE.md tragen sie: „ein Limit haelt die Kette NICHT auf — die Stufe wird UEBERSPRUNGEN"
@@ -67,6 +69,14 @@ deshalb schreibt der Job in diesem Fall einen KOMMENTAR an den PR — Schriftlic
 Farbe, das ist die Hausregel. Erkannt wird ausschliesslich die GEMESSENE Form
 (`action_required` mit `rerun_with_use_credits`); jede andere Handlungsaufforderung bleibt
 rot, weil eine unbekannte Form kein bekannter Ausfall ist.
+
+Die 4 traegt dieselbe Begruendung (Entscheidung Marcus, 2026-09-10, Issue #604): Renovate
+vergibt Branchnamen nach dem Merge wieder, die CLI findet ihren frueheren Review-Zustand
+zum Branch, hat dafuer keine gespeicherten Befunde und verweigert das Urteil ueber den
+neuen Diff — als FEHLEREREIGNIS, das `unstimmig()` bis dahin zu Recht rot faerbte. Ein
+dauerhaft roter Check ohne Befund gewoehnt ans Rot-ignorieren; benannt ist er laut. Auch
+hier gilt: erkannt wird ausschliesslich die GEMESSENE Form (FehlerTyp `review` UND BEIDE
+Marker in der Meldung, ohne `complete`-Zeile); jede andere Fehlerform bleibt rot.
 """
 
 from __future__ import annotations
@@ -148,6 +158,36 @@ def kontingent_erschoepft(lage: Lage) -> dict | None:
     """
     for e in reversed(lage.ereignisse):
         if e.get("type") == "action_required" and e.get("action") == "rerun_with_use_credits":
+            return e
+    return None
+
+
+def wiederverwendeter_zweig(lage: Lage) -> dict | None:
+    """Die EINE gemessene Form des CLI-Zustands an einem wiederverwendeten Branch, sonst None.
+
+    Renovate vergibt Branchnamen wie `renovate/all-minor-patch` nach dem Merge wieder. Die
+    CLI findet ihren frueheren Review-Zustand zum Branch, hat dafuer „no stored findings"
+    und verweigert das Urteil ueber den neuen Ein-Dateien-Diff — als FEHLEREREIGNIS:
+
+        {"type":"error","errorType":"review","recoverable":false,
+         "message":"Review failed: No files to review\\nPrevious local review has no stored findings."}
+
+    Gemessen an PR #602 (Lauf 34393299643, 2026-09-09) und PR #606 (Lauf 34452219628,
+    2026-09-10), beides `renovate/all-minor-patch` — Issue #604. Der Laeufer ist jederzeit
+    frisch, der Zustand liegt also beim Dienst, nicht lokal; er heilt nicht wie ein
+    Kontingent von selbst.
+
+    Absichtlich eng, wie bei `kontingent_erschoepft`: der FehlerTyp muss `review` sein UND
+    BEIDE Marker muessen in der Meldung stehen. Ein Marker allein, ein anderer Review-Fehler
+    oder ein Fehler neben einer `complete`-Zeile ist kein bekannter Ausfall und faellt
+    weiter in die 2 (rot) — eine unbekannte Form ist kein bekannter Ausfall.
+    """
+    for e in reversed(lage.ereignisse):
+        if e.get("type") != "error" or e.get("errorType") != "review":
+            continue
+        meldung = str(e.get("message", ""))
+        if ("No files to review" in meldung
+                and "Previous local review has no stored findings" in meldung):
             return e
     return None
 
@@ -316,7 +356,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--base-commit", required=True, help="Vergleichsstand")
     ap.add_argument("--kommando", default="coderabbit", help="Pfad zur CLI")
     ap.add_argument("--markdown", type=pathlib.Path,
-                    help="Datei fuer den PR-Kommentar (bei Befunden und bei rc 3)")
+                    help="Datei fuer den PR-Kommentar (bei Befunden und bei rc 3/4)")
     ap.add_argument("--frist", type=int, default=STANDARD_FRIST,
                     help=f"Sekunden, nach denen der Lauf abgebrochen wird (Default"
                          f" {STANDARD_FRIST})")
@@ -391,6 +431,34 @@ def main(argv: list[str] | None = None) -> int:
                 "_Der Bot prueft dieses Repo nicht automatisch (#593)._\n",
                 encoding="utf-8")
         return 3
+
+    # DIE ZWEITE BENANNTE FORM (rc 4, Issue #604) — dieselbe Stelle im Ablauf wie das
+    # Kontingent: VOR der Unstimmigkeit fragen, sonst faenge sie die allgemeine Regel
+    # „Fehlerereignis ohne complete" ein und faerbte rot.
+    #
+    # ENGER ALS BEIM KONTINGENT: die gemessene Form traegt KEINE `complete`-Zeile, und nur
+    # das wird erkannt (`lage.complete is None`, nicht `not geurteilt`). Ein Fehler NEBEN
+    # einer `complete`-Zeile — auch einer mit `review_skipped` — ist eine ungemessene
+    # Konstellation und bleibt rot; benannt ist ausschliesslich, was zweimal so gelaufen ist.
+    if lage.complete is None and (zustand := wiederverwendeter_zweig(lage)) is not None:
+        print("STUFE AUSGEFALLEN: wiederverwendeter Zweig ohne gespeicherten Review-Zustand.")
+        print("                   Die CLI verweigert das Urteil ueber den neuen Diff"
+              " (No files to review,")
+        print("                   Previous local review has no stored findings) — zu diesem"
+              " Branch liegt ein")
+        print("                   frueherer Review ohne gespeicherte Befunde beim Dienst.")
+        print("                   Das ist eine FEHLENDE Pruefung, kein bestandener Lauf.")
+        if a.markdown:
+            a.markdown.write_text(
+                "### CodeRabbit-CLI: Stufe ausgefallen — wiederverwendeter Zweig\n\n"
+                "Die CLI hat diesen Pull-Request **nicht** rezensiert: zum Branch liegt ein\n"
+                "frueherer Review ohne gespeicherte Befunde beim Dienst, und der neue Diff\n"
+                "wird deshalb nicht angesehen (`No files to review`). Uebersprungen ist kein\n"
+                "Erfolg.\n\n"
+                "_Der Bot prueft dieses Repo nicht automatisch (#593); dies ist die CLI"
+                " aus der CI._\n",
+                encoding="utf-8")
+        return 4
 
     # `verdecke` auch hier: der Grund traegt Felder aus der CLI-Ausgabe (`message` etwa),
     # und die kann den Schluessel enthalten. Die Nachbarpfade maskieren laengst; genau

@@ -244,6 +244,58 @@
         "test_markdown_BEHAELT_den_vorspann"
       ],
       "datei": "scripts/coderabbit_riegel.py"
+    },
+    {
+      "id": "M19 der rc-4-Zweig faellt weg (wiederverwendeter Zweig faerbt wieder rot)",
+      "von": "    if lage.complete is None and (zustand := wiederverwendeter_zweig(lage)) is not None:",
+      "nach": "    if False and lage.complete is None and (zustand := wiederverwendeter_zweig(lage)) is not None:  # M19",
+      "rot": [
+        "test_wiederverwendet_ergibt_VIER_und_schreibt_den_kommentar"
+      ],
+      "gruen": [
+        "test_kontingent_ergibt_drei_und_schreibt_den_kommentar",
+        "test_kein_befund_ergibt_null"
+      ],
+      "datei": "scripts/coderabbit_riegel.py"
+    },
+    {
+      "id": "M20 der Anker schmalert auf EINEN Marker — halb erkannt gilt wieder als Ausfall",
+      "von": "        if (\"No files to review\" in meldung\n                and \"Previous local review has no stored findings\" in meldung):\n            return e",
+      "nach": "        if \"No files to review\" in meldung:  # M20: ein Marker genuegt wieder\n            return e",
+      "rot": [
+        "test_nur_ein_marker_ist_kein_benannter_ausfall"
+      ],
+      "gruen": [
+        "test_wiederverwendet_ergibt_VIER_und_schreibt_den_kommentar",
+        "test_kontingent_ergibt_drei_und_schreibt_den_kommentar"
+      ],
+      "datei": "scripts/coderabbit_riegel.py"
+    },
+    {
+      "id": "M21 der FehlerTyp-Anker faellt weg (beide Marker allein tragen wieder)",
+      "von": "        if e.get(\"type\") != \"error\" or e.get(\"errorType\") != \"review\":\n            continue",
+      "nach": "        if e.get(\"type\") != \"error\":  # M21: jede Fehlerart mit beiden Markern gilt\n            continue",
+      "rot": [
+        "test_beide_marker_mit_anderem_fehlertyp_bleiben_ROT"
+      ],
+      "gruen": [
+        "test_wiederverwendet_ergibt_VIER_und_schreibt_den_kommentar",
+        "test_anderer_review_fehler_bleibt_ROT"
+      ],
+      "datei": "scripts/coderabbit_riegel.py"
+    },
+    {
+      "id": "M22 die complete-Wache faellt weg (rc 4 gilt wieder auch neben einer complete-Zeile)",
+      "von": "    if lage.complete is None and (zustand := wiederverwendeter_zweig(lage)) is not None:",
+      "nach": "    if (zustand := wiederverwendeter_zweig(lage)) is not None:  # M22: ungemessene Konstellation wird benannt statt rot",
+      "rot": [
+        "test_wiederverwendet_NEBEN_einer_complete_zeile_bleibt_ROT"
+      ],
+      "gruen": [
+        "test_wiederverwendet_ergibt_VIER_und_schreibt_den_kommentar",
+        "test_kontingent_ergibt_drei_und_schreibt_den_kommentar"
+      ],
+      "datei": "scripts/coderabbit_riegel.py"
     }
   ]
 }
