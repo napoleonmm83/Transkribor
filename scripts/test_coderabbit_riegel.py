@@ -63,17 +63,18 @@ KONTINGENT = (
     '"action":"rerun_with_use_credits","command":"coderabbit review --use-credits"}\n'
 )
 
-# Wiederverwendeter Renovate-Zweig — WOERTLICH aus Lauf 34452219628 (PR #606, 2026-09-10,
-# `renovate/all-minor-patch`); dieselbe Form schon in Lauf 34393299643 (PR #602). Issue #604.
-# KEINE `complete`-Zeile — das ist Teil der erkannten Form.
+# Wiederverwendeter Renovate-Zweig — das Fehlerereignis byte-gleich der Zeile aus Lauf
+# 34452219628 (PR #606, 2026-09-10, `renovate/all-minor-patch`; Zeilen drumherum gekuerzt);
+# dieselbe Form schon in Lauf 34393299643 (PR #602). Issue #604. KEINE `complete`-Zeile —
+# das ist Teil der erkannten Form.
 WIEDERVERWENDET = (
     '{"type":"review_context","reviewType":"committed","currentBranch":"HEAD",'
     '"baseBranch":"master","baseCommit":"dde488a380001efe628a2a10cae56bf70e808b8c",'
     '"workingDirectory":"/home/runner/work/Transkribor/Transkribor"}\n'
     '{"type":"status","phase":"connecting","status":"connecting_to_review_service"}\n'
     '{"type":"status","phase":"setup","status":"setting_up"}\n'
-    '{"type":"error","errorType":"review","recoverable":false,'
-    '"message":"Review failed: No files to review\\nPrevious local review has no stored findings."}\n'
+    '{"type":"error","errorType":"review","message":"Review failed: No files to review'
+    '\\nPrevious local review has no stored findings.","recoverable":false,"details":{}}\n'
     "Error: No files to review\n"
     "Previous local review has no stored findings.\n"
 )
@@ -365,6 +366,60 @@ def test_zweite_stoerung_verhindert_den_benannten_ausfall(monkeypatch, tmp_path,
     assert riegel.main(["--base-commit", "HEAD~1", "--markdown", str(ziel)]) == 2
     out = capsys.readouterr().out
     assert "ist mit einem Fehler ausgestiegen" in out
+    assert not ziel.exists()
+
+
+def test_befunde_neben_der_form_bleiben_ROT(monkeypatch, tmp_path, capsys):
+    """Praezedenz Lauf 34269048014: ein benannter Ausfall darf Befunde NICHT verschlucken.
+
+    Befunde ohne `complete` heissen abgeschnittener Lauf — der Zahlenzeuge fehlt — und
+    bleiben unstimmig. Befund des gegnerischen Pruefers: ohne den Deckel waere derselbe
+    Lauf rc 4 gewesen und der Kommentar haette behauptet, es gebe nichts zu sehen.
+    """
+    mit_befund = WIEDERVERWENDET + (
+        '{"type":"finding","severity":"info","fileName":"a.py",'
+        '"codegenInstructions":"irgendetwas"}\n'
+    )
+    monkeypatch.setenv("CODERABBIT_API_KEY", "cr-egal")
+    monkeypatch.setattr(riegel.subprocess, "run", _lauf(mit_befund))
+    ziel = tmp_path / "b.md"
+    assert riegel.main(["--base-commit", "HEAD~1", "--markdown", str(ziel)]) == 2
+    assert not ziel.exists(), "bei rot darf kein Kommentar liegen"
+
+
+def test_erholsame_markierung_ist_kein_benannter_ausfall(monkeypatch, tmp_path, capsys):
+    """Beide gemessenen Laeufe tragen recoverable:false — true ist eine andere Form (rot).
+
+    Befund des Neuweg-Pruefers: ohne diesen Anker trage jede spaetere Form-Variante der CLI
+    mit erholsamem Flag den benannten Ausfall mit.
+    """
+    erholsam = WIEDERVERWENDET.replace('"recoverable":false', '"recoverable":true')
+    assert '"recoverable":true' in erholsam, "Replace griff nicht — Fixture pruefen"
+    monkeypatch.setenv("CODERABBIT_API_KEY", "cr-egal")
+    monkeypatch.setattr(riegel.subprocess, "run", _lauf(erholsam))
+    ziel = tmp_path / "e.md"
+    assert riegel.main(["--base-commit", "HEAD~1", "--markdown", str(ziel)]) == 2
+    assert not ziel.exists()
+
+
+def test_handlungsaufforderung_mit_fehlerfeld_bleibt_ROT(monkeypatch, tmp_path, capsys):
+    """Der Typ-Anker: nur ein error-Ereignis traegt den Ausfall, nie action_required.
+
+    Befund des Neuweg-Pruefers an der Kaputt-haertung: die erste Fassung dieses Zweigs
+    hatte die Typ-Wache verloren — ein action_required mit Fehlerfeld und beiden Markern
+    waere rc 4 gegangen.
+    """
+    handlung = (
+        '{"type":"action_required","status":"awaiting_confirmation",'
+        '"errorType":"review","recoverable":false,'
+        '"message":"No files to review\\nPrevious local review has no stored findings."}\n'
+    )
+    lage = riegel.lies(handlung)
+    assert riegel.wiederverwendeter_zweig(lage) is None
+    monkeypatch.setenv("CODERABBIT_API_KEY", "cr-egal")
+    monkeypatch.setattr(riegel.subprocess, "run", _lauf(handlung))
+    ziel = tmp_path / "h.md"
+    assert riegel.main(["--base-commit", "HEAD~1", "--markdown", str(ziel)]) == 2
     assert not ziel.exists()
 
 
@@ -660,8 +715,8 @@ def test_ein_absturz_des_riegels_ergibt_ZWEI_nicht_eins(monkeypatch, capsys):
 
 
 def test_haupt_reicht_den_gewoehnlichen_code_durch(monkeypatch):
-    """Der Riegel um den Absturz darf die vier Vertragscodes nicht anfassen."""
-    for code in (0, 1, 2, 3):
+    """Der Riegel um den Absturz darf die fuenf Vertragscodes nicht anfassen."""
+    for code in (0, 1, 2, 3, 4):
         monkeypatch.setattr(riegel, "main", lambda *_a, _c=code, **_k: _c)
         assert riegel.haupt() == code
 

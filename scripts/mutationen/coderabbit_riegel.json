@@ -247,8 +247,8 @@
     },
     {
       "id": "M19 der rc-4-Zweig faellt weg (wiederverwendeter Zweig faerbt wieder rot)",
-      "von": "    if lage.complete is None and wiederverwendeter_zweig(lage) is not None:",
-      "nach": "    if False and wiederverwendeter_zweig(lage) is not None:  # M19: der Zweig ist tot",
+      "von": "    if (lage.complete is None and not lage.befunde\n            and wiederverwendeter_zweig(lage) is not None):",
+      "nach": "    if False:  # M19: der Zweig ist tot",
       "rot": [
         "test_wiederverwendet_ergibt_VIER_und_schreibt_den_kommentar"
       ],
@@ -273,7 +273,7 @@
     },
     {
       "id": "M21 der FehlerTyp-Anker faellt weg (beide Marker allein tragen wieder)",
-      "von": "    e = stoerungen[0]\n    if e.get(\"errorType\") != \"review\":\n        return None",
+      "von": "    e = stoerungen[0]\n    if e.get(\"type\") != \"error\" or e.get(\"errorType\") != \"review\":\n        return None",
       "nach": "    e = stoerungen[0]  # M21: jede Fehlerart mit beiden Markern gilt wieder",
       "rot": [
         "test_beide_marker_mit_anderem_fehlertyp_bleiben_ROT"
@@ -312,10 +312,49 @@
     },
     {
       "id": "M22 die complete-Wache faellt weg (rc 4 gilt wieder auch neben einer complete-Zeile)",
-      "von": "    if lage.complete is None and wiederverwendeter_zweig(lage) is not None:",
-      "nach": "    if wiederverwendeter_zweig(lage) is not None:  # M22: ungemessene Konstellation wird benannt statt rot",
+      "von": "    if (lage.complete is None and not lage.befunde\n            and wiederverwendeter_zweig(lage) is not None):",
+      "nach": "    if (not lage.befunde\n            and wiederverwendeter_zweig(lage) is not None):  # M22: complete-Wache faellt weg",
       "rot": [
         "test_wiederverwendet_NEBEN_einer_complete_zeile_bleibt_ROT"
+      ],
+      "gruen": [
+        "test_wiederverwendet_ergibt_VIER_und_schreibt_den_kommentar",
+        "test_kontingent_ergibt_drei_und_schreibt_den_kommentar"
+      ],
+      "datei": "scripts/coderabbit_riegel.py"
+    },
+    {
+      "id": "M25 der Befunde-Deckel faellt weg (rc 4 verschluckt wieder abgeschnittene Befunde)",
+      "von": "    if (lage.complete is None and not lage.befunde\n            and wiederverwendeter_zweig(lage) is not None):",
+      "nach": "    if (lage.complete is None\n            and wiederverwendeter_zweig(lage) is not None):  # M25: Befunde-Deckel faellt weg",
+      "rot": [
+        "test_befunde_neben_der_form_bleiben_ROT"
+      ],
+      "gruen": [
+        "test_wiederverwendet_ergibt_VIER_und_schreibt_den_kommentar",
+        "test_kein_befund_ergibt_null"
+      ],
+      "datei": "scripts/coderabbit_riegel.py"
+    },
+    {
+      "id": "M26 der recoverable-Anker faellt weg (erholsame Form-Variante erbt den Ausfall)",
+      "von": "    if e.get(\"recoverable\") is not False:\n        return None",
+      "nach": "    # M26: recoverable ist kein Anker mehr",
+      "rot": [
+        "test_erholsame_markierung_ist_kein_benannter_ausfall"
+      ],
+      "gruen": [
+        "test_wiederverwendet_ergibt_VIER_und_schreibt_den_kommentar",
+        "test_anderer_review_fehler_bleibt_ROT"
+      ],
+      "datei": "scripts/coderabbit_riegel.py"
+    },
+    {
+      "id": "M27 der Typ-Anker faellt weg (action_required mit Fehlerfeld erbt den Ausfall)",
+      "von": "    if e.get(\"type\") != \"error\" or e.get(\"errorType\") != \"review\":\n        return None",
+      "nach": "    if e.get(\"errorType\") != \"review\":  # M27: auch action_required mit Fehlerfeld gilt\n        return None",
+      "rot": [
+        "test_handlungsaufforderung_mit_fehlerfeld_bleibt_ROT"
       ],
       "gruen": [
         "test_wiederverwendet_ergibt_VIER_und_schreibt_den_kommentar",
