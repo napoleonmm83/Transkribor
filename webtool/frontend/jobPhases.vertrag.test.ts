@@ -1661,11 +1661,14 @@ describe('Fixture-Wache', () => {
        Sensor fuer die Unterscheidung, nicht nur fuer das Vorhandensein. */
     /* Per Konkatenation, nicht als Array-Literal (Konvention dieses Blocks): DIESE Datei
        steht selbst in den geernteten Quellen, und die Zeilen als Literal-Elemente waeren
-       selbst Fixture-Futter — der Lauf oben ist daran rot geworden, nicht der Fix. */
+       selbst Fixture-Futter — der Lauf oben ist daran rot geworden, nicht der Fix.
+       Die Divisionszeile steht absichtlich in DERSELBEN Zeile wie das Muster: ein
+       abgerissenes Literal endet am Zeilenende von selbst, die Heuristik entscheidet
+       also erst, wenn beides zusammen auftrifft (`a/b.test(x)`-Gestalt). */
     const RE = 'const RE = /x' + "'/"
     const FIXTUR = "'[done] B'" + ','
     expect(zeilenAusQuelle(
-      'const halbe = anzahl / 2\n' + RE + '\n  const probe = [\n    // ]\n    '
+      'const halbe = anzahl / 2; ' + RE + '\n  const probe = [\n    // ]\n    '
       + FIXTUR + '\n  ]',
     )).toContain('[done] B')
   })
