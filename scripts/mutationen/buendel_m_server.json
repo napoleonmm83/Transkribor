@@ -1,0 +1,59 @@
+{
+  "test": "python -m pytest webtool/test_jobs.py -q",
+  "pfade": [
+    "webtool/jobs.py",
+    "webtool/test_jobs.py"
+  ],
+  "mutationen": [
+    {
+      "id": "M1 die monotone Buchung in remove_base faellt weg",
+      "von": "                r.setdefault(\"entfernt_je\", set()).add(base)",
+      "nach": "                # M1: entfernt_je wird nie gebucht — die Menge bleibt leer",
+      "rot": [
+        "test_remove_base_bucht_entfernt_bedingungslos_und_get_liefert_eine_kopie",
+        "test_reannoncement_reaktiviert_die_server_menge_deckelfest"
+      ],
+      "gruen": [
+        "test_jobs_start_mit_initialem_base_scope"
+      ],
+      "datei": "webtool/jobs.py"
+    },
+    {
+      "id": "M2 der [active]-Lift in buche_aktive faellt weg (Sperre traegt ins Zweitleben)",
+      "von": "        if entfernt_je is not None and roh:\n            entfernt_je.discard(roh)",
+      "nach": "        # M2: keine neue [active]-Zeile hebt die monotone Loeschung mehr auf",
+      "rot": [
+        "test_reannoncement_reaktiviert_die_server_menge_deckelfest"
+      ],
+      "gruen": [
+        "test_remove_base_bucht_entfernt_bedingungslos_und_get_liefert_eine_kopie"
+      ],
+      "datei": "webtool/jobs.py"
+    },
+    {
+      "id": "M3 das vierte Argument am buche_aktive-Aufruf faellt weg (Lift laeuft leer)",
+      "von": "                    buche_aktive(_jobs[jid][\"active_bases\"], line, zulassung,\n                                 _jobs[jid].get(\"entfernt_je\"))",
+      "nach": "                    buche_aktive(_jobs[jid][\"active_bases\"], line, zulassung)  # M3",
+      "rot": [
+        "test_reannoncement_reaktiviert_die_server_menge_deckelfest"
+      ],
+      "gruen": [
+        "test_remove_base_bucht_entfernt_bedingungslos_und_get_liefert_eine_kopie"
+      ],
+      "datei": "webtool/jobs.py"
+    },
+    {
+      "id": "M4 die Auslieferung in get() faellt weg (entfernt_je bleibt ein Set im Snap)",
+      "von": "        if isinstance(snap.get(\"entfernt_je\"), set):\n            snap[\"entfernt_je\"] = sorted(snap[\"entfernt_je\"])",
+      "nach": "        # M4: entfernt_je reist als lebendes Set statt als sortierte Liste",
+      "rot": [
+        "test_remove_base_bucht_entfernt_bedingungslos_und_get_liefert_eine_kopie",
+        "test_reannoncement_reaktiviert_die_server_menge_deckelfest"
+      ],
+      "gruen": [
+        "test_jobs_start_mit_initialem_base_scope"
+      ],
+      "datei": "webtool/jobs.py"
+    }
+  ]
+}

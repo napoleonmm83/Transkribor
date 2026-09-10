@@ -1,0 +1,87 @@
+{
+  "test": "npm --prefix webtool/frontend test -- jobPhases.vertrag.test.ts src/hooks/useActiveJob.test.tsx src/lib/jobPhases.test.ts",
+  "pfade": [
+    "webtool/frontend/jobPhases.vertrag.test.ts",
+    "webtool/frontend/src/hooks/useActiveJob.test.tsx",
+    "webtool/frontend/src/hooks/useActiveJob.tsx",
+    "webtool/frontend/src/lib/jobPhases.test.ts",
+    "webtool/frontend/src/lib/jobPhases.ts"
+  ],
+  "mutationen": [
+    {
+      "id": "M1 der Regex-Zweig faellt weg (Paritaetsverschiebung kommt wieder)",
+      "von": "    if (c === '/' && (letzte === '' || '(,=:[!&|?{};'.includes(letzte))) {",
+      "nach": "    if (false && c === '/' && (letzte === '' || '(,=:[!&|?{};'.includes(letzte))) {  // M1",
+      "rot": [
+        "ein Regex-Literal macht die Ernte nicht blind (#574)"
+      ],
+      "gruen": [
+        "ein Kommentar macht die Ernte nicht blind",
+        "das [scope+]-Reannoncement weckt durch nicht wieder auf (#591)"
+      ],
+      "datei": "webtool/frontend/jobPhases.vertrag.test.ts"
+    },
+    {
+      "id": "M2 die Heuristik faellt weg (jeder Schraegstrich gilt als Regex-Anfang)",
+      "von": "    if (c === '/' && (letzte === '' || '(,=:[!&|?{};'.includes(letzte))) {",
+      "nach": "    if (c === '/') {  // M2: Division wird auch Regex — der falsche frisst bis zum echten",
+      "rot": [
+        "ein Regex-Literal macht die Ernte nicht blind (#574)"
+      ],
+      "gruen": [
+        "ein Kommentar macht die Ernte nicht blind"
+      ],
+      "datei": "webtool/frontend/jobPhases.vertrag.test.ts"
+    },
+    {
+      "id": "M3 der entferntJe-Schnitt faellt weg (durch waechst am Reannoncement wieder)",
+      "von": "  for (const b of jeGeloescht) durch.delete(b)",
+      "nach": "  // M3: der zweite Loesch-Schnitt fehlt — durch steht nach dem Reannoncement wieder auf",
+      "rot": [
+        "das [scope+]-Reannoncement weckt durch nicht wieder auf (#591)"
+      ],
+      "gruen": [
+        "die neue [active]-Zeile hebt die Sperre auf — #581 gilt auch fuer die Zweitleben (#591)",
+        "durch nimmt heraus, wer geloescht ist (#581/#489)"
+      ],
+      "datei": "webtool/frontend/src/hooks/useActiveJob.tsx"
+    },
+    {
+      "id": "M4 das Einsammeln von entferntJe faellt weg (der Schnitt laeuft leer)",
+      "von": "    for (const b of j.phases.entferntJe ?? []) jeGeloescht.add(b)",
+      "nach": "    // M4: entferntJe wird nicht eingesammelt — der Schnitt darunter trifft nie",
+      "rot": [
+        "das [scope+]-Reannoncement weckt durch nicht wieder auf (#591)"
+      ],
+      "gruen": [
+        "durch nimmt heraus, wer geloescht ist (#581/#489)"
+      ],
+      "datei": "webtool/frontend/src/hooks/useActiveJob.tsx"
+    },
+    {
+      "id": "M5 das sechste Argument faellt weg (r.entfernt_je kommt nicht im Parser an)",
+      "von": "          const parsed = parseJobPhases(j.kind, r.lines, r.gesehen, r.entfernt, r.eingereiht, r.entfernt_je)",
+      "nach": "          const parsed = parseJobPhases(j.kind, r.lines, r.gesehen, r.entfernt, r.eingereiht)  // M5",
+      "rot": [
+        "reicht r.entfernt_je an den Parser durch: Reannoncement weckt durch nicht auf (#591)"
+      ],
+      "gruen": [
+        "nimmt r.bases als Rueckweg, wenn die [scope+]-Zeile aus dem Puffer gefallen ist"
+      ],
+      "datei": "webtool/frontend/src/hooks/useActiveJob.tsx"
+    },
+    {
+      "id": "M6 die Parser-Durchreichung faellt weg (entferntJe bleibt immer undefined)",
+      "von": "           entferntJe: entferntJe.size ? entferntJe : undefined,",
+      "nach": "           entferntJe: undefined,  // M6: der Parser gibt die Menge nie heraus",
+      "rot": [
+        "das [scope+]-Reannoncement weckt durch nicht wieder auf (#591)",
+        "reicht r.entfernt_je an den Parser durch: Reannoncement weckt durch nicht auf (#591)"
+      ],
+      "gruen": [
+        "durch nimmt heraus, wer geloescht ist (#581/#489)"
+      ],
+      "datei": "webtool/frontend/src/lib/jobPhases.ts"
+    }
+  ]
+}
