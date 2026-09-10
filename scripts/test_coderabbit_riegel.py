@@ -315,9 +315,14 @@ def test_anderer_review_fehler_bleibt_ROT():
 
 
 def test_beide_marker_mit_anderem_fehlertyp_bleiben_ROT():
-    """Der Anker sitzt auf (Typ UND beide Marker) — die Marker allein tragen nicht."""
+    """Der Anker sitzt auf (Typ UND beide Marker) — die Marker allein tragen nicht.
+
+    recoverable:false wie in der gemessenen Form: nur der FEHLERTYP unterscheidet diese
+    Fixture — sonst steht ein zweiter Anker zwischen ihr und rc 4, und die Mutation M21
+    laeuft ins Leere (gemessen: Serie vom 2026-09-10, M21 wirkungslos).
+    """
     lage = riegel.lies(
-        '{"type":"error","errorType":"connection","recoverable":true,'
+        '{"type":"error","errorType":"connection","recoverable":false,'
         '"message":"No files to review\\nPrevious local review has no stored findings."}\n')
     assert riegel.wiederverwendeter_zweig(lage) is None
     assert riegel.unstimmig(lage) is not None
