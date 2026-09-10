@@ -109,7 +109,8 @@ benutzt (beide erledigt, kein Plan-Dokument) — das hier ist ein anderes Bünde
 - **F** — #210 bauen (der fadenfreie Weg macht die Fristschätzung überflüssig),
   #237 zuerst **messen**, nicht bauen — die Messung darf mit „nein" enden.
 - **G** — #136 ist die Messung (nicht-deutsches Audio liegt vor, bestätigt
-  2026-08-22) und entscheidet, ob #137 das richtige Problem löst; #164 hängt am
+  2026-08-22 — Nachweis im 09-03-Plan, am G-Anfang neu verifizieren) und
+  entscheidet, ob #137 das richtige Problem löst; #164 hängt am
   Datenproblem (`faster_whisper.Segment` hat kein `language`).
 - **H** — blockiert auf den Task-8-Referenzsatz; #276 ist seit dem 22.08. keine
   Entscheidung mehr (CC-BY-NC akzeptabel), sondern Messaufgabe.
@@ -121,7 +122,7 @@ benutzt (beide erledigt, kein Plan-Dokument) — das hier ist ein anderes Bünde
 | Issue | Disposition |
 |---|---|
 | **#604** | CodeRabbit-CI rot aus CLI-Zustand am wiederverwendeten Renovate-Branch. Trägt eine eigene kleine Entscheidung im Issue. **Mitfahrer T-015** (Aufgabenindex): dieselbe Gelegenheit — der nächste Renovate-PR belegt beide. |
-| **#509** | `.weg`-Karenz im Mischbetrieb. **Vermutlich per Beleg schließbar:** das Fenster endet, wenn kein Erzeuger des alten Formats mehr läuft — seit PR #508 sind mehrere Releases raus. Erst Marcus' Installationslage klären, dann Fix oder Beleg-Schluss. |
+| **#509** | `.weg`-Karenz im Mischbetrieb. **Vermutlich per Beleg schließbar:** das Fenster endet, wenn kein Erzeuger des alten Formats mehr läuft — PR #508 liegt in vier Releases (v0.51.0–v0.54.0, `git tag --contains e731be68c`). Erst Marcus' Installationslage klären, dann Fix oder Beleg-Schluss. |
 | **#346** | BatchedInferencePipeline-Messung. GPU, ruhiges Fenster, auf diesem Rechner fahrbar; zwei Fallstricke stehen im Issue. |
 | **#553** | jest-dom unter vitest 5. 0 betroffene Stellen, fällt laut auf (tsc). Bewusst auf jest-dom-Upstream warten; eigene `.d.ts` nur bei Bedarf. |
 | **#288** | torch-CVE, bewusst getragen. Nichts zu tun; quartalsweise nachsehen. Schliesst sich selbst, sobald der cu128-Index eine Fixfassung führt. |
@@ -143,8 +144,9 @@ Einzel: #604 (nächster Renovate-PR) · #509 · #346 (ruhiges Fenster) · #553 �
 #469                                      ← GANZ zuletzt, allein
 ```
 
-**Nicht parallel:** nichts aktuell Offenes teilt Dateien mit M; C2 braucht die
-gepackte Bau-Serie exklusiv; #469 gegen alles. Der CodeRabbit-Slot ist repo-weit —
+**Nicht parallel:** von den offenen Issues nennen nur #591, #574 und #469 die
+M-Dateien (Zensus über die Issue-Bodies) — #469 läuft bewusst zuletzt und allein;
+C2 braucht die gepackte Bau-Serie exklusiv. Der CodeRabbit-Slot ist repo-weit —
 zwei gleichzeitige PRs kosten einander Reviews.
 
 ## Was ausdrücklich NICHT gebündelt wird
@@ -166,6 +168,9 @@ zwei gleichzeitige PRs kosten einander Reviews.
 - `gh issue view <n> --json state` für #541, #539, #536 → je CLOSED ·
   `git merge-base --is-ancestor 078a64b master` → rc 0 (der Linux-Icon-Fix liegt
   auf master).
+- `gh issue list --state open --json number,body`, Suche nach `jobPhases|useActiveJob`
+  → nur #591, #574, #469 · `git tag --contains e731be68c` (Merge von PR #508) →
+  v0.51.0 v0.52.0 v0.53.0 v0.54.0.
 - J geliefert durch #572/#573, **#564 durch #575** — Timeline je Issue: #554 und
   #565–#568 je 1 s nach Merge #573, #564 1 s nach Merge #575 (Schliessdaten
   09-05/09-06).
