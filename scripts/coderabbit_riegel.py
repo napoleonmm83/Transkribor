@@ -75,8 +75,9 @@ vergibt Branchnamen nach dem Merge wieder, die CLI findet ihren frueheren Review
 zum Branch, hat dafuer keine gespeicherten Befunde und verweigert das Urteil ueber den
 neuen Diff — als FEHLEREREIGNIS, das `unstimmig()` bis dahin zu Recht rot faerbte. Ein
 dauerhaft roter Check ohne Befund gewoehnt ans Rot-ignorieren; benannt ist er laut. Auch
-hier gilt: erkannt wird ausschliesslich die GEMESSENE Form (FehlerTyp `review` UND BEIDE
-Marker in der Meldung, ohne `complete`-Zeile); jede andere Fehlerform bleibt rot.
+hier gilt: erkannt wird ausschliesslich die GEMESSENE Form (FehlerTyp `review`,
+`recoverable` falsch, BEIDE Marker in der Meldung, kaputt-frei, einzige Stoerung, keine
+Befunde, keine `complete`-Zeile); jede andere Fehlerform bleibt rot.
 """
 
 from __future__ import annotations
@@ -178,13 +179,16 @@ def wiederverwendeter_zweig(lage: Lage) -> dict | None:
     Kontingent von selbst.
 
     Absichtlich eng, wie bei `kontingent_erschoepft`, und enger noch als das Geschwister:
-    die Ausgabe muss kaputt-frei sein, die Stoerung muss die EINZIGE sein, der FehlerTyp
-    muss `review` sein UND BEIDE Marker muessen in der Meldung stehen. Eine kaputte Zeile,
-    eine weitere Stoerung daneben, ein Marker allein, ein anderer Review-Fehler oder ein
-    Fehler neben einer `complete`-Zeile ist keine gemessene Form und faellt weiter in die
-    2 (rot) — eine unbekannte Form ist kein bekannter Ausfall. (Befund der CodeRabbit-CLI
-    an der ersten Fassung dieses Zweigs: ohne die kaputt- und Einzigkeit-Wache haetten
-    korrumpierte Ausgaben und Mehrfach-Stoerungen den benannten Ausfall geerbt.)
+    die Ausgabe muss kaputt-frei sein, die Stoerung muss die EINZIGE sein und ein
+    `error`-Ereignis sein, der FehlerTyp muss `review` sein, `recoverable` muss falsch
+    sein UND BEIDE Marker muessen in der Meldung stehen. Eine kaputte Zeile, eine weitere
+    Stoerung daneben, ein Marker allein, ein anderer Review-Fehler oder ein Fehler neben
+    einer `complete`-Zeile ist keine gemessene Form: mit gueltigem Urteil bleibt das der
+    erholte Teilausfall (rc 0 mit HINWEIS-Zeile, so der vorhandene Pfad), ohne gueltiges
+    Urteil bleibt es rot — eine unbekannte Form ist kein bekannter Ausfall. (Befunde der
+    CodeRabbit-CLI und des Neuweg-Pruefers an frueheren Fassungen dieses Zweigs: ohne die
+    kaputt- und Einzigkeits-Wache ererbten korrumpierte Ausgaben und Mehrfach-Stoerungen
+    den Ausfall; ohne Typ- und recoverable-Anker trugen Fremdereignisse ihn mit.)
     """
     if lage.kaputt:
         return None
@@ -192,7 +196,9 @@ def wiederverwendeter_zweig(lage: Lage) -> dict | None:
     if len(stoerungen) != 1:
         return None
     e = stoerungen[0]
-    if e.get("errorType") != "review":
+    if e.get("type") != "error" or e.get("errorType") != "review":
+        return None
+    if e.get("recoverable") is not False:
         return None
     meldung = str(e.get("message", ""))
     if ("No files to review" in meldung
@@ -445,11 +451,15 @@ def main(argv: list[str] | None = None) -> int:
     # Kontingent: VOR der Unstimmigkeit fragen, sonst faenge sie die allgemeine Regel
     # „Fehlerereignis ohne complete" ein und faerbte rot.
     #
-    # ENGER ALS BEIM KONTINGENT: die gemessene Form traegt KEINE `complete`-Zeile, und nur
-    # das wird erkannt (`lage.complete is None`, nicht `not geurteilt`). Ein Fehler NEBEN
-    # einer `complete`-Zeile — auch einer mit `review_skipped` — ist eine ungemessene
-    # Konstellation und bleibt rot; benannt ist ausschliesslich, was zweimal so gelaufen ist.
-    if lage.complete is None and wiederverwendeter_zweig(lage) is not None:
+    # ENGER ALS BEIM KONTINGENT, dreifach: die gemessene Form traegt KEINE `complete`-Zeile
+    # (`lage.complete is None`, nicht `not geurteilt`) UND keine Befunde. Befunde ohne
+    # `complete` bedeuten einen ABGESCHNITTENEN Lauf — der Zahlenzeuge fehlt — und duerfen
+    # von keinem benannten Ausfall verschluckt werden (Praezedenz am Kontingent-Geschwister:
+    # Lauf 34269048014, dort ueberschrieb rc 3 echte Befunde). Ein Fehler NEBEN einer
+    # `complete`-Zeile faellt nicht hierher: mit gueltigem Urteil bleibt das der erholte
+    # Teilausfall (rc 0, HINWEIS-Zeile), mit ungueltigem rot.
+    if (lage.complete is None and not lage.befunde
+            and wiederverwendeter_zweig(lage) is not None):
         print("STUFE AUSGEFALLEN: wiederverwendeter Zweig ohne gespeicherten Review-Zustand.")
         print("                   Die CLI verweigert das Urteil ueber den neuen Diff"
               " (No files to review,")

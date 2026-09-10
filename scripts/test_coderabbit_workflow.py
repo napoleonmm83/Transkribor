@@ -1,6 +1,6 @@
 """Der Workflow muss den Rueckgabecode des Riegels UEBERSETZEN — und tat es nicht.
 
-Die 31 Tests in `test_coderabbit_riegel.py` pruefen das SKRIPT: welcher Fall welchen
+Die Tests in `test_coderabbit_riegel.py` pruefen das SKRIPT: welcher Fall welchen
 Code ergibt. Kaputt war die Schicht darueber — die Uebersetzung dieses Codes in ein
 Job-Ergebnis. Sie steht in `.github/workflows/coderabbit.yml` und hatte bis heute
 keinen einzigen Test.
@@ -285,6 +285,6 @@ def test_kein_urteil_faerbt_ROT(tmp_path):
 def test_code_ausserhalb_des_vertrags_faerbt_ROT(tmp_path):
     """127, 137, 139, 143 — der Zweig, der in der ersten Fassung ganz fehlte."""
     rc, ausgabe, text = _fahre(127, tmp_path)
-    assert rc == 1, f"ein Code ausserhalb 0/1/2/3 muss rot werden, war {rc}:\n{text}"
+    assert rc == 1, f"ein Code ausserhalb 0/1/2/3/4 muss rot werden, war {rc}:\n{text}"
     assert "ausserhalb seines Vertrags" in text
     assert "kommentar=ja" not in ausgabe
