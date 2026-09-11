@@ -79,7 +79,12 @@ export function StatusBar() {
   return (
     // col-span-1 md:col-span-2: auf breiten Fenstern steht sie neben der Leiste in einer
     // eigenen Spalte -- ohne den Span reichte sie nur unter die Inhaltsspalte.
-    <footer className="col-span-1 flex h-6 shrink-0 items-center gap-4 border-t bg-background px-3 text-xs text-muted-foreground md:col-span-2">
+    // #515: bei 320 px war die Zeile fest 89 px zu breit — lauter shrink-0-Glieder
+    // plus gap-4. Der Ctrl+K-Hinweis darf jetzt ellipsieren (min-w-0 statt shrink-0),
+    // und die Luecke verengt sich unter sm auf 8 px. Der Hinweis bleibt ERHALTEN,
+    // nur angeschnitten: ausgerechnet unter md ist er der einzige Weg zu allen
+    // Projekten, ganz wegnehmen waere die schlechtere Richtung.
+    <footer className="col-span-1 flex h-6 min-w-0 shrink-0 items-center gap-2 border-t bg-background px-3 text-xs text-muted-foreground sm:gap-4 md:col-span-2">
       <span className="min-w-0 flex-1 truncate" aria-live="polite">{text}</span>
       {hinweis && (
         // aria-live: ein Update taucht auf, ohne dass jemand etwas angeklickt hat.
@@ -97,7 +102,7 @@ export function StatusBar() {
           Ausloeser braeuchte einen gehobenen Zustand fuer einen Fall, den es nur unter `md`
           gibt. Reiner Browser-Betrieb im schmalen Fenster; das Electron-Fenster hat
           `minWidth: 900` und kommt hier nie an. */}
-      <span className="shrink-0 md:hidden">
+      <span className="min-w-0 truncate md:hidden">
         {/* „Ctrl“, nicht „Strg“: die Palette nimmt `ctrlKey || metaKey`, und macOS ist ein
             ausgeliefertes Ziel (dmg) — dort steht auf der Taste „ctrl“, ein „Strg“ gibt es
             nicht. Die App schreibt es anderswo schon so (`Abspielen (Ctrl+Space)`). */}

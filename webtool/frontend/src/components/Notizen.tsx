@@ -50,7 +50,10 @@ export function Notizen({ text }: { text: string }) {
   const teile = bloecke(text)
   if (!teile.length) return null
   return (
-    <div className="space-y-3 text-sm leading-relaxed text-muted-foreground">
+    // #515: break-words — Release-Notizen enthalten ungebrochene Tokens (URLs), die
+    // die Versionsseite bei 320 px um 155 px sprengten (gemessen, e2e/reflow-320).
+    // overflow-wrap vererbt auf alle Absaetze und Listen dieser Wurzel.
+    <div className="space-y-3 text-sm leading-relaxed break-words text-muted-foreground">
       {teile.map((block, i) => {
         if (block.art === 'titel') {
           return <h4 key={i} className="mt-4 font-semibold text-foreground first:mt-0">{inline(block.text)}</h4>

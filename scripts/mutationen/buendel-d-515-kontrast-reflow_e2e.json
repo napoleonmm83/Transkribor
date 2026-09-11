@@ -1,0 +1,88 @@
+{
+  "test": "npm --prefix webtool/frontend run test:e2e",
+  "pfade": [
+    "webtool/frontend/e2e/seitenleiste-kontrast.e2e.ts",
+    "webtool/frontend/e2e/reflow-320.e2e.ts",
+    "webtool/frontend/e2e/farb-mathematik.ts",
+    "webtool/frontend/e2e/testApp.ts",
+    "webtool/frontend/src/components/ui/button.tsx",
+    "webtool/frontend/src/components/Sidebar.tsx",
+    "webtool/frontend/src/components/PageHeader.tsx",
+    "webtool/frontend/src/components/StatusBar.tsx",
+    "webtool/frontend/src/components/AppShell.tsx",
+    "webtool/frontend/src/components/Notizen.tsx"
+  ],
+  "mutationen": [
+    {
+      "id": "K1 die Outline-Kontur faellt unter 3:1 — der #515-Befund kehrt zurueck",
+      "datei": "webtool/frontend/src/components/ui/button.tsx",
+      "von": "border border-foreground/50 bg-transparent shadow-xs hover:border-foreground/80",
+      "nach": "border border-foreground/10 bg-transparent shadow-xs hover:border-foreground/40",
+      "rot": [
+        "Hell: drei Bedienelemente × vier Zustände >= 3:1",
+        "Dunkel: dieselben Elemente und Zustände >= 3:1"
+      ],
+      "gruen": []
+    },
+    {
+      "id": "K2 die Outline-Flaeche wird wieder deckend — 1,00:1 auf dem Leistengrund",
+      "datei": "webtool/frontend/src/components/ui/button.tsx",
+      "von": "border-foreground/50 bg-transparent shadow-xs",
+      "nach": "border-foreground/50 bg-background shadow-xs",
+      "rot": [
+        "Hell: drei Bedienelemente × vier Zustände >= 3:1"
+      ],
+      "gruen": []
+    },
+    {
+      "id": "K3 die Projektzeile bekommt ihren 1,05:1-Hover-Tint zurueck",
+      "datei": "webtool/frontend/src/components/Sidebar.tsx",
+      "von": "'hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring'",
+      "nach": "'hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring'",
+      "rot": [
+        "Hell: drei Bedienelemente × vier Zustände >= 3:1"
+      ],
+      "gruen": []
+    },
+    {
+      "id": "R1 Release-Notizen brechen lange Tokens wieder nicht — URL sprengt 320 px",
+      "datei": "webtool/frontend/src/components/Notizen.tsx",
+      "von": "space-y-3 text-sm leading-relaxed break-words text-muted-foreground",
+      "nach": "space-y-3 text-sm leading-relaxed text-muted-foreground",
+      "rot": [
+        "Version (/version): bei 320 px kein waagerechter Überhang"
+      ],
+      "gruen": []
+    },
+    {
+      "id": "R2 der Ctrl+K-Hinweis wird wieder starr — die Fusszeile sprengt die Rasterspur",
+      "datei": "webtool/frontend/src/components/StatusBar.tsx",
+      "von": "className=\"min-w-0 truncate md:hidden\"",
+      "nach": "className=\"shrink-0 md:hidden\"",
+      "rot": [
+        "Start (/): bei 320 px kein waagerechter Überhang"
+      ],
+      "gruen": []
+    },
+    {
+      "id": "R3 die Aktionsleiste der Arbeitsflaeche bricht wieder nicht um",
+      "datei": "webtool/frontend/src/components/PageHeader.tsx",
+      "von": "flex flex-wrap items-center gap-2",
+      "nach": "flex shrink-0 items-center gap-2",
+      "rot": [
+        "Arbeitsfläche (/p/Rhyathlon): bei 320 px kein waagerechter Überhang"
+      ],
+      "gruen": []
+    },
+    {
+      "id": "R4 die implizite Rasterspur kehrt zurueck (Härtung ohne eigenen Wächter?)",
+      "datei": "webtool/frontend/src/components/AppShell.tsx",
+      "von": "grid h-screen grid-cols-1 md:grid-cols-[260px_1fr]",
+      "nach": "grid h-screen md:grid-cols-[260px_1fr]",
+      "rot": [],
+      "gruen": [
+        "Start (/): bei 320 px kein waagerechter Überhang — MIT gekuerzter Fusszeile ist die Auto-Spur schmal genug; diese Mutation prueft, ob grid-cols-1 ein Wächter ist oder bewusste Haertung"
+      ]
+    }
+  ]
+}

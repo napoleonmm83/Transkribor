@@ -32,6 +32,7 @@ hat. Lesbar, aber unschön — das ist Absicht.
 - Bei eingeschaltetem Fehlerbericht-Schalter werden jetzt auch Fehler aus Transkription, Korrektur und Video-Import gemeldet — dafür erscheint nach dem Update einmalig die Einrichtungsseite.
 
 **Behoben**
+- Die Knöpfe der Seitenleiste heben sich wieder deutlich vom Hintergrund ab, und schmale Browserfenster laufen nicht mehr seitlich aus dem Bild.
 - Scheitert der Aufbau des gemeinsamen Glossars an einem Systemfehler, stürzt die Korrektur nicht mehr als Ganzes ab — der Lauf warnt und arbeitet ohne Glossar weiter.
 - Beantwortest du die einmalige Frage zu automatischen Fehlerberichten, zeigt der Schalter auf der Versionsseite ab sofort denselben Zustand, der gespeichert ist — vorher konnte er das Gegenteil anzeigen, bis die Seite neu geladen wurde.
 - Bei langen Transkriptionsläufen zeigt eine früh fertig gewordene Aufnahme jetzt ihren Zustand statt bis zum Schluss wieder „In Warteschlange…“ — bei einem einzeln gestarteten Korrekturlauf ändert sich noch nichts.
