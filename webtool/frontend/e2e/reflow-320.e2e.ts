@@ -76,11 +76,23 @@ const REFLOW = () => {
   }
 }
 
-const ROUTEN: [string, string][] = [
-  ['Start', '/'],
-  ['Version', '/version'],
-  ['Einstellungen', '/einstellungen'],
-  ['Arbeitsfläche', `/p/${PROJEKT}`],
+// INTENTIONAL-UNTESTED: Diese Datei IST der Browser-Waechter (#515); ihr Netz ist der
+// gruene Lauf plus scripts/mutationen/buendel-d-515-kontrast-reflow_e2e.json.
+//
+// Der TITEL steht als Literal in der Tabelle, nicht mehr im Template. Der
+// Mutationsplan nennt Testnamen, und scripts/test_mutationsplaene.py sucht sie im
+// Quelltext — ein interpolierter Name ist dort per Konstruktion nicht auffindbar.
+// Gemessen: fuenf `rot`-Namen dieses Plans galten als fehlend, die Ankerpruefung war
+// rot. Die Richtung ist dabei das Teure: bei `rot` meldet sich der Tippfehler, bei
+// einer `gruen`-Gegenprobe faellt er STILL aus (ein Name, den es nicht gibt, taucht
+// nie in einer roten Zeile auf — die Gegenprobe gilt als erfuellt, ohne zu pruefen).
+// Die Route bleibt aus dem Titel heraus: sie traegt bei der Arbeitsflaeche PROJEKT,
+// und ein Literal daraus liefe beim naechsten Umbenennen still neben der Wahrheit her.
+const ROUTEN: [string, string, string][] = [
+  ['Start', '/', 'Start: bei 320 px kein waagerechter Überhang'],
+  ['Version', '/version', 'Version: bei 320 px kein waagerechter Überhang'],
+  ['Einstellungen', '/einstellungen', 'Einstellungen: bei 320 px kein waagerechter Überhang'],
+  ['Arbeitsfläche', `/p/${PROJEKT}`, 'Arbeitsfläche: bei 320 px kein waagerechter Überhang'],
 ]
 
 test.beforeEach(async ({ page }) => {
@@ -99,8 +111,10 @@ const ROUTEN_KOPF: Record<string, RegExp> = {
   '/einstellungen': /einstellungen/i,
 }
 
-for (const [name, route] of ROUTEN) {
-  test(`${name} (${route}): bei 320 px kein waagerechter Überhang`, async ({ page }) => {
+// INTENTIONAL-UNTESTED: entstehender Test selbst (#515); der Titel wandert aus dem
+// Template in die Tabelle (Begruendung dort), der Testkoerper bleibt unberuehrt.
+for (const [name, route, titel] of ROUTEN) {
+  test(titel, async ({ page }) => {
     await page.goto(route)
     // Positivkontrolle VOR der Messung — sie ist die Voraussetzung, nicht das Ergebnis.
     const kopf = ROUTEN_KOPF[route]

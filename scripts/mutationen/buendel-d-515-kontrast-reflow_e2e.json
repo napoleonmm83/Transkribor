@@ -45,12 +45,23 @@
       "gruen": []
     },
     {
+      "id": "K4 der Knopf verliert JEDEN Fokus-Indikator — die dauerhafte #515-Kontur darf ihn nicht ersetzen",
+      "datei": "webtool/frontend/src/components/ui/button.tsx",
+      "von": "focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50",
+      "nach": "focus-visible:ring-0",
+      "rot": [
+        "Hell: drei Bedienelemente × vier Zustände >= 3:1",
+        "Dunkel: dieselben Elemente und Zustände >= 3:1"
+      ],
+      "gruen": []
+    },
+    {
       "id": "R1 Release-Notizen brechen lange Tokens wieder nicht — URL sprengt 320 px",
       "datei": "webtool/frontend/src/components/Notizen.tsx",
       "von": "space-y-3 text-sm leading-relaxed break-words text-muted-foreground",
       "nach": "space-y-3 text-sm leading-relaxed text-muted-foreground",
       "rot": [
-        "Version (/version): bei 320 px kein waagerechter Überhang"
+        "Version: bei 320 px kein waagerechter Überhang"
       ],
       "gruen": []
     },
@@ -60,7 +71,7 @@
       "von": "className=\"min-w-0 truncate md:hidden\"",
       "nach": "className=\"shrink-0 md:hidden\"",
       "rot": [
-        "Start (/): bei 320 px kein waagerechter Überhang"
+        "Start: bei 320 px kein waagerechter Überhang"
       ],
       "gruen": []
     },
@@ -70,7 +81,7 @@
       "von": "flex flex-wrap items-center gap-2",
       "nach": "flex shrink-0 items-center gap-2",
       "rot": [
-        "Arbeitsfläche (/p/Rhyathlon): bei 320 px kein waagerechter Überhang"
+        "Arbeitsfläche: bei 320 px kein waagerechter Überhang"
       ],
       "gruen": []
     },
@@ -80,7 +91,7 @@
       "von": "className=\"min-w-0 truncate\">{rechenwerk}</span>",
       "nach": "className=\"shrink-0\">{rechenwerk}</span>",
       "rot": [
-        "Start (/): bei 320 px kein waagerechter Überhang"
+        "Start: bei 320 px kein waagerechter Überhang"
       ],
       "gruen": []
     },
@@ -90,7 +101,7 @@
       "von": "await page.route('**/api/settings', (r) => r.fulfill({ json: SETTINGS }))",
       "nach": "await page.route('**/api/settings', (r) => r.fulfill({ status: 500, body: 'weg' }))",
       "rot": [
-        "Einstellungen (/einstellungen): bei 320 px kein waagerechter Überhang"
+        "Einstellungen: bei 320 px kein waagerechter Überhang"
       ],
       "gruen": []
     }

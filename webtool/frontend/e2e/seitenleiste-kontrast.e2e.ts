@@ -132,9 +132,9 @@ async function messeZustand(page: Page, el: Locator, zustand: Zustand): Promise<
 
 /** Die drei Zusicherungen je Element × Zustand — die Flaeche darf fehlen (transparent
  *  ist die WCAG-konforme Ghost-Bauart), aber nie schwach sein; eine Kontur, sobald
- *  vorhanden, muss messbar UND >= 3:1 sein; der Text braucht 4,5:1; im Fokus muss
- *  IRGENDEIN Indikator (Ring oder Kontur) >= 3:1 tragen. */
-function urteile(name: string, zustand: Zustand, thema: string, m: Messung) {
+ *  vorhanden, muss messbar UND >= 3:1 sein; der Text braucht 4,5:1; im Fokus muss ein
+ *  Indikator >= 3:1 tragen, der gegenueber der RUHE NEU ist — siehe dort. */
+function urteile(name: string, zustand: Zustand, thema: string, m: Messung, ruhe?: Messung) {
   expect(m.unbekannt, `${thema} · ${name} · ${zustand}: messbar`).toBeUndefined()
   if (m.flaeche !== null)
     expect(m.flaeche, `${thema} · ${name} · ${zustand}: Fläche >= 3:1 (WCAG 1.4.11)`).toBeGreaterThanOrEqual(3)
@@ -143,8 +143,18 @@ function urteile(name: string, zustand: Zustand, thema: string, m: Messung) {
   if (m.text !== null)
     expect(m.text, `${thema} · ${name} · ${zustand}: Schrift >= 4,5:1 (WCAG 1.4.3)`).toBeGreaterThanOrEqual(4.5)
   if (zustand === 'focus') {
-    const bester = Math.max(...m.ringe, m.kontur ?? 0)
-    expect(bester, `${thema} · ${name} · Fokus: ein Indikator (Ring/Kontur) >= 3:1`).toBeGreaterThanOrEqual(3)
+    // Gemessen gegen die RUHE, nicht absolut: der #515-Fix gibt "+ Neues Projekt" eine
+    // DAUERHAFTE Kontur >= 3:1, und die erfuellte diese Zusicherung von selbst — mit
+    // button.tsx ohne jeden Fokus-Indikator (weder Ring noch Konturwechsel) blieben alle
+    // drei Tests GRUEN. Gezaehlt wird deshalb nur, was im Fokus NEU ist oder sich
+    // geaendert hat; ein Indikator, den der Ruhezustand schon garantiert, beweist nichts
+    // ueber den Fokus. Befund der CodeRabbit-CLI, Mutation als Beleg gefahren.
+    const gleich = (a: number, b: number) => Math.abs(a - b) < 0.05
+    const neueRinge = m.ringe.filter((r) => !(ruhe?.ringe ?? []).some((v) => gleich(v, r)))
+    const neueKontur =
+      m.kontur !== null && (ruhe?.kontur == null || !gleich(m.kontur, ruhe.kontur)) ? m.kontur : 0
+    const bester = Math.max(...neueRinge, neueKontur)
+    expect(bester, `${thema} · ${name} · Fokus: ein NEUER Indikator (Ring/Kontur) >= 3:1`).toBeGreaterThanOrEqual(3)
   }
 }
 
@@ -162,9 +172,15 @@ async function dieDrei(page: Page): Promise<[string, Locator][]> {
 async function alleMessen(page: Page, thema: string) {
   for (const [name, el] of await dieDrei(page)) {
     await expect(el, `${thema}: ${name} sichtbar`).toBeVisible()
-    for (const zustand of ZUSTAENDE) {
+    // Ruhe zuerst und FESTGEHALTEN — sie ist der Bezug, gegen den der Fokus-Indikator
+    // gemessen wird. Ueber ZUSTAENDE zu laufen und darauf zu bauen, dass 'ruhe' vorne
+    // steht, waere dieselbe Zusicherung mit einer stillen Bedingung: eine Umsortierung
+    // des Arrays machte sie wieder zahnlos, ohne dass ein Test rot wuerde.
+    const ruhe = await messeZustand(page, el, 'ruhe')
+    urteile(name, 'ruhe', thema, ruhe)
+    for (const zustand of ZUSTAENDE.filter((z) => z !== 'ruhe')) {
       const m = await messeZustand(page, el, zustand)
-      urteile(name, zustand, thema, m)
+      urteile(name, zustand, thema, m, ruhe)
     }
   }
 }
