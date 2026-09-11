@@ -559,7 +559,13 @@ jobs:
     # eine Frist ablaufen. Bei jedem PR gefahren waere das eine Steuer auf Arbeit, die mit
     # den Waechtern nichts zu tun hat. Am PR laufen deshalb nur die betroffenen Plaene, auf
     # master alle. Die billige Haelfte laeuft dafuer IMMER mit: der Job `Python` faehrt
-    timeout-minutes: 60        # 2,2x Reserve auf die gemessenen 27 min; Begruendung am python-Job (#583)
+    # 1,7x Reserve auf die gemessenen 35m46s (Lauf 34635350923); Begruendung am python-Job (#583).
+    # Hier stand „2,2x auf die gemessenen 27 min", und das galt bis Buendel D: seitdem fahren zwei
+    # Plaene ihre Waechter im echten Chromium, das kostet Browser-Installation plus zehn volle
+    # Playwright-Laeufe. Die Zahl ist mitgezogen statt stehengelassen — ein Reserve-Faktor, den
+    # niemand nachrechnet, ist beim naechsten Zuwachs die Begruendung fuer einen Deckel, der
+    # nicht mehr traegt. Wer einen weiteren E2E-Plan anlegt, misst hier nach.
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
         with:
