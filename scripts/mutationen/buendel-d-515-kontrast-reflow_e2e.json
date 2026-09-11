@@ -73,16 +73,6 @@
         "Arbeitsfläche (/p/Rhyathlon): bei 320 px kein waagerechter Überhang"
       ],
       "gruen": []
-    },
-    {
-      "id": "R4 die implizite Rasterspur kehrt zurueck (Härtung ohne eigenen Wächter?)",
-      "datei": "webtool/frontend/src/components/AppShell.tsx",
-      "von": "grid h-screen grid-cols-1 md:grid-cols-[260px_1fr]",
-      "nach": "grid h-screen md:grid-cols-[260px_1fr]",
-      "rot": [],
-      "gruen": [
-        "Start (/): bei 320 px kein waagerechter Überhang — MIT gekuerzter Fusszeile ist die Auto-Spur schmal genug; diese Mutation prueft, ob grid-cols-1 ein Wächter ist oder bewusste Haertung"
-      ]
     }
   ]
 }

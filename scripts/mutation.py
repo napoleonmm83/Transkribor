@@ -113,7 +113,7 @@ def ohne_farbe(text: str) -> str:
     return _ANSI.sub("", text)
 
 
-# Wie die drei hier benutzten Laeufer eine rote Zeile schreiben. Bewusst eine kurze Liste:
+# Wie die vier hier benutzten Laeufer eine rote Zeile schreiben. Bewusst eine kurze Liste:
 # was hier fehlt, faellt als "Mutation wirkungslos" auf und wird ergaenzt — ein zu breites
 # Muster dagegen wuerde eine gruene Suite als rot lesen und die Probe wertlos machen.
 def _ist_fehlzeile(z: str) -> bool:
@@ -121,7 +121,18 @@ def _ist_fehlzeile(z: str) -> bool:
     return (z.startswith("not ok ")          # node:test, TAP-Reporter
             or s.startswith("FAILED ")       # pytest
             or s.startswith("×")             # vitest, U+00D7
-            or s.startswith("✖"))            # node:test, Spec-Reporter, U+2716
+            or s.startswith("✖")             # node:test, Spec-Reporter, U+2716
+            or _PLAYWRIGHT_FEHL.match(s) is not None)  # Playwright: "1) [chromium] › …"
+
+# Playwrights Fehlerliste (gemessen am Laeufer dieser Maschine, reporter=line UND default):
+#   "  1) [chromium] › e2e\reflow-320.e2e.ts:50:3 › Start … ────"
+# Die Zahl-Klammer kennt sonst kein Laeufer hier; der Anker auf die Browser-Klammer haelt
+# das Muster eng — eine gruene Suite druckt diese Form nie. Ohne diese Zeile meldete der
+# Treiber JEDE Playwright-Mutation als wirkungslos (gemessen 2026-09-11: beide E2E-Plaene
+# komplett FEHL bei gruener Positivkontrolle — dieselbe Klasse wie die CI-Farbungluecke
+# oben, diesmal Form statt Farbe). Die Summenzeile "  7 failed" zaehlt bewusst NICHT:
+# sie stuende auch in einem Lauf, der nur abgebrochene Vorbereitung meldet.
+_PLAYWRIGHT_FEHL = re.compile(r"^\d+\)\s+\[")
 
 
 # Woran man erkennt, dass ueberhaupt eine Testsuite gelaufen ist — unabhaengig davon, ob sie
