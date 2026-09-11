@@ -1,0 +1,22 @@
+{
+  "test": "npm --prefix webtool/frontend run test:e2e",
+  "pfade": [
+    "webtool/frontend/e2e/dialog-schliesskreuz.e2e.ts",
+    "webtool/frontend/playwright.config.ts",
+    "webtool/frontend/src/components/ui/dialog.tsx"
+  ],
+  "mutationen": [
+    {
+      "id": "E1 die sticky-Huelle wird absolut gesetzt — der #330-Fehlerzustand kehrt zurueck (#423)",
+      "datei": "webtool/frontend/src/components/ui/dialog.tsx",
+      "von": "sticky top-0 z-10 order-first h-0",
+      "nach": "absolute top-0 z-10 order-first h-0",
+      "rot": [
+        "Basis-Dialog (Datei-Einstellungen): ✕ bleibt im gerollten Dialog und ist klickbar",
+        "CommandDialog (overflow-hidden · p-0): ✕ bleibt sichtbar und klickbar",
+        "MaterialDialog (flex · overflow-visible): ✕ klebt oben und bleibt klickbar"
+      ],
+      "gruen": []
+    }
+  ]
+}

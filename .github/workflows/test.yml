@@ -236,6 +236,17 @@ jobs:
       - run: npm run build
         working-directory: webtool/frontend
 
+      # #423: Layout-Wächter im echten Chromium. jsdom rechnet kein Layout — die
+      # Klassenstring-Wächter von #330 sind gegen echte Regressionen (Sticky weg,
+      # overflow-Deckel weg) blind, und genau das hat #330 versehentlich ausgeliefert.
+      # Der Browser-Download (~1–2 min) bewusst OHNE actions/cache: Das Repo nutzt ihn
+      # nirgends, der Job hat laut Zeitbudget oben 9x Reserve — eine neue Cache-Mechanik
+      # waere hier Rueckstand fuer eine Ersparnis, die niemand vermisst.
+      - run: npx playwright install --with-deps chromium
+        working-directory: webtool/frontend
+      - run: npm run test:e2e
+        working-directory: webtool/frontend
+
   # Drei Plattformen, und der Anlass ist gemessen: am 2026-08-28 starb der Release-Lauf
   # 33183032424 im Job „bauen (macos-latest)" an genau dieser Suite — 189 Tests, 1 fail
   # (`titelleisteFarbe reicht nur geprueftes Hex durch`, ein plattformblinder Test gegen die

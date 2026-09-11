@@ -31,6 +31,9 @@ dist/
 # Playwright-MCP: Konsolenprotokolle und Snapshots aus Dogfood-Sitzungen
 .playwright-mcp/
 
+# Playwright-Testlaeufe (#423): Fehlkontexte und Traces je fehlgeschlagener Lauf
+webtool/frontend/test-results/
+
 # Arbeitsanleitung fuer Claude: bleibt lokal, nicht im Repo
 CLAUDE.md
 .spike/
