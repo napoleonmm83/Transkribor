@@ -44,10 +44,15 @@ const REFLOW = () => {
   for (const e of Array.from(document.querySelectorAll('body *'))) {
     const r = e.getBoundingClientRect()
     if (r.right <= de.clientWidth + 1) continue
-    const cs = getComputedStyle(e)
+    // INTENTIONAL-UNTESTED: entstehender Test selbst (#515). Die Klassen kommen vom
+    // ELEMENT, nicht aus `getComputedStyle` — ein CSSStyleDeclaration hat kein
+    // `className`. Der Ausdruck war an BEIDEN Stellen immer `undefined` und fiel auf ''
+    // zurueck: die Fehlermeldung nannte den Verursaecher ohne eine einzige Klasse, und
+    // sichtbar wird das erst, wenn der Waechter rot ist — also genau dann, wenn die
+    // Meldung zaehlt (CodeRabbit-Bot, minor, an beiden Stellen).
     const text = (e.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 24)
-    const bez = `${e.tagName.toLowerCase()}${e.id ? '#' + e.id : ''}.${(cs.className || '')
-      .toString().split(/\s+/).slice(0, 4).join('.')}${text ? ` «${text}»` : ''}`
+    const bez = `${e.tagName.toLowerCase()}${e.id ? '#' + e.id : ''}.${(e.getAttribute('class') || '')
+      .split(/\s+/).slice(0, 4).join('.')}${text ? ` «${text}»` : ''}`
     fund.push({ bez, rechts: Math.round(r.right) })
   }
   fund.sort((a, b) => b.rechts - a.rechts)
@@ -62,10 +67,11 @@ const REFLOW = () => {
     if (e.scrollWidth <= e.clientWidth + 1 || e.clientWidth <= 1) continue
     const pos = getComputedStyle(e).position
     if (pos === 'absolute' || pos === 'fixed' || pos === 'sticky') continue
-    const cs = getComputedStyle(e)
+    // INTENTIONAL-UNTESTED: entstehender Test selbst (#515); zweite Fundstelle
+    // desselben Klassen-Fehlers, Begruendung an der ersten.
     const text = (e.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 24)
-    const bez = `${e.tagName.toLowerCase()}${e.id ? '#' + e.id : ''}.${(cs.className || '')
-      .toString().split(/\s+/).slice(0, 4).join('.')}${text ? ` «${text}»` : ''}`
+    const bez = `${e.tagName.toLowerCase()}${e.id ? '#' + e.id : ''}.${(e.getAttribute('class') || '')
+      .split(/\s+/).slice(0, 4).join('.')}${text ? ` «${text}»` : ''}`
     treiber.push(`${bez} ${e.scrollWidth}>${e.clientWidth}`)
     if (treiber.length >= 8) break
   }
@@ -126,9 +132,26 @@ for (const [name, route, titel] of ROUTEN) {
       await expect(page.getByRole('heading', { level: 1, name: PROJEKT }),
         `${name}: Seite muss gerendert haben, sonst misst dieser Test nichts`).toBeVisible()
     }
-    // Umbruch-Animationen und nachlaufende Effekte abwarten: die Rechtecke muessen
-    // stehen, sonst misst der Test einen Zwischenstand.
-    await page.waitForTimeout(300)
+    // INTENTIONAL-UNTESTED: entstehender Test selbst (#515) — die feste Frist wird durch
+    // eine Bedingung auf die nachlaufenden Inhalte ersetzt; Netz ist der gruene Lauf
+    // plus die Mutationen R1/R5, die genau diese Flaechen treffen.
+    //
+    // Auf die NACHLAUFENDEN Inhalte warten, nicht auf eine Frist. Die Ueberschrift kann
+    // stehen, bevor die Hardware-Antwort und die Release-Notizen gerendert sind — dann
+    // misst der Waechter einen Zwischenstand und bliebe gruen, ohne StatusBar.tsx oder
+    // Notizen.tsx je gesehen zu haben. Das sind genau die beiden Flaechen, die R5 und R1
+    // mutieren; eine feste Frist macht die Mutationsprobe vom Zeitverhalten des Laeufers
+    // abhaengig statt vom Code (CodeRabbit-Bot, major).
+    // Die Fusszeile rendert `rechenwerk` NUR, wenn er nicht leer ist
+    // (StatusBar.tsx:124) — die Zeile ist damit selbst der Beleg, dass die Antwort da ist.
+    await expect(page.getByText('cuda · NVIDIA GeForce RTX 5080'),
+      `${name}: Fusszeile muss die Hardware-Antwort tragen, sonst fehlt die Flaeche von R5`).toBeVisible()
+    if (route === '/version') {
+      await expect(page.getByText(/Seitenleiste klar erkennbar/),
+        'Version: Release-Notizen muessen stehen, sonst fehlt die Flaeche von R1').toBeVisible()
+    }
+    // Kurzer Nachlauf nur noch fuer Umbruch-Animationen; die Inhalte stehen bereits.
+    await page.waitForTimeout(150)
     const ergebnis = await page.evaluate(REFLOW)
     // INTENTIONAL-UNTESTED: entstehender Test selbst (#515); die Meldung nennt beide
     // Fragen — wer am weitesten rechts steht und wer gegen die EIGENE Kante laeuft.
