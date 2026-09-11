@@ -12,8 +12,14 @@ const buttonVariants = cva(
         default: "bg-primary text-primary-foreground hover:bg-primary/90",
         destructive:
           "bg-destructive text-white hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:bg-destructive/60 dark:focus-visible:ring-destructive/40",
+        // #515: bg-background war auf dem Leistengrund unsichtbar (1,00:1) und der
+        // Hover-Tint #EEF2FF ein 1,05:1-Schimmer — WCAG 1.4.11 verlangt 3:1 fuer die
+        // Kennzeichnung. Transparente Flaeche + sichtbare Kontur (beide Modi gemessen,
+        // e2e/seitenleiste-kontrast.e2e.ts) statt Fuellung; der Hover vertieft Kontur
+        // und Schrift. Die schwachen dark:-Tints (input/30, input/50) sind mit weg —
+        // dieselbe Klasse von 1,0x:1, nur im Dunkeln.
         outline:
-          "border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50",
+          "border border-foreground/50 bg-transparent shadow-xs hover:border-foreground/80 hover:text-accent-foreground",
         secondary:
           "bg-secondary text-secondary-foreground hover:bg-secondary/80",
         ghost:

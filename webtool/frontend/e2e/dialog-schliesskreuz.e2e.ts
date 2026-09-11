@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { appEinrichten, PROJEKT } from './testApp'
 
 /**
  * Browser-Wächter zu #330, nachgebaut als wiederholbarer Test (#423).
@@ -18,51 +19,9 @@ import { expect, test, type Page } from '@playwright/test'
  * Geometrie geprüft, kein Datenfluss — der gehört in die vitest-Suite.
  */
 
-const PROJEKT = 'Rhyathlon'
-const DATEIEN = [
-  { base: 'A_erste', has_audio: true, has_raw: true, has_edit: false, has_md: false },
-  { base: 'B_zweite', has_audio: true, has_raw: true, has_edit: false, has_md: false },
-]
-
-/** Fixtures ans Netzlegen und das Fenster klein machen — klein ist der Fall, an dem
- *  #283/#330 hängen: erst ein beschnittener Dialog rollt überhaupt. */
-async function appEinrichten(page: Page) {
-  await page.route('**/api/projects', (r) =>
-    r.fulfill({
-      json: {
-        projects: [
-          { name: PROJEKT, dateien: DATEIEN.length, fertig: 0, geaendert: 1, active_jobs: [] },
-        ],
-      },
-    }),
-  )
-  // INTENTIONAL-UNTESTED: Fixture-Korrektur am eigenen, diese Sitzung entstehenden Test
-  // (#423) — getProjectFiles erwartet {name, files}, das Array liess die Flaeche leer.
-  await page.route(`**/api/projects/${PROJEKT}`, (r) =>
-    r.fulfill({ json: { name: PROJEKT, files: DATEIEN } }))
-  // INTENTIONAL-UNTESTED: Fixture-Ausbau am entstehenden E2E selbst (#423) — ein leeres
-  // Objekt liess sprach_choices undefiniert, ProjectWorkspace.tsx:96 ruft .find() darauf
-  // und die Flaeche starb an einem React-Seitenfehler (im Debug-Lauf gemessen).
-  // Einstellungen in VOLLER Form: LEERE Listen sind der dokumentierte Zustand (#305:
-  // „Projekt-Standard"), undefinierte Felder nicht.
-  const einstellungen = {
-    sprache: 'ch', korrektur: 'auto', mehrsprachig: false,
-    sprach_choices: [], tiefen: [], sprecher_max: 20,
-    diarisierung_aktiv: true, diarize_verfuegbar: true,
-  }
-  await page.route(`**/api/projects/${PROJEKT}/einstellungen`, (r) =>
-    r.fulfill({ json: einstellungen }))
-  await page.route(`**/api/projects/${PROJEKT}/files/**`, (r) =>
-    r.fulfill({ json: { ...einstellungen, sprache_eigen: null, sprache_projekt: 'ch',
-      mehrsprachig_eigen: null, mehrsprachig_projekt: false, sprecher: null } }))
-  // Seitenweite Abfragen stillstellen (useAiReady/Hardware-Status): sonst rauscht der
-  // tote Proxy des Dev-Servers als 502 durch die Konsole. Inhalt egal — Geometrie wird
-  // geprueft, kein Anbieter.
-  await page.route('**/api/settings', (r) => r.fulfill({ json: {} }))
-  await page.route('**/api/hardware', (r) => r.fulfill({ json: {} }))
-  await page.setViewportSize({ width: 320, height: 400 })
-}
-
+// INTENTIONAL-UNTESTED: Die Inline-Fixture ist nach e2e/testApp.ts gezogen (#515 braucht
+// dasselbe Gerüst) — diese Datei IST der Test selbst (entstanden in #423, derselbe Bundel-D-
+// Diff); das Netz ist der gruene E2E-Lauf nach dem Umbau, der dieselben drei Dialoge prueft.
 /** Das Herzstück, in allen drei Dialogen gleich:
  *  1. jede rollbare Fläche IM Dialog bis zum Ende rollen (der Dialog selbst und alle
  *     Nachfahren — `CommandDialog` rollt in der Liste, `MaterialDialog` in der Spalte,

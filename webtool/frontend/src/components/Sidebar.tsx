@@ -118,12 +118,16 @@ export function Sidebar({
             <div key={p.name}>
               {/* Klick auf das offene Projekt klappt zu (onWaehlen(null)) — sonst gaebe es
                   keinen Weg zurueck zur Uebersicht ausser ueber die Adresszeile. */}
+              {/* #515: hover:bg-muted war ein 1,05:1-Schimmer — die Zeile signalisiert
+                  Hover und Auswahl jetzt ueber die Schriftfarbe (muted -> foreground),
+                  der Chevron erbt mit (sein eigenes muted-foreground ist bewusst weg —
+                  sonst bliebe er beim Hover stumm zurueck). */}
               <button type="button" onClick={() => onWaehlen(auf ? null : p.name)}
                 aria-expanded={auf}
-                className={cn('flex h-8 w-full items-center gap-1.5 rounded-md px-2 text-left text-sm outline-none',
-                  'hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring',
-                  auf && 'font-medium')}>
-                <ChevronRight className={cn('size-3.5 shrink-0 text-muted-foreground transition-transform',
+                className={cn('flex h-8 w-full items-center gap-1.5 rounded-md px-2 text-left text-sm text-muted-foreground outline-none',
+                  'hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring',
+                  auf && 'font-medium text-foreground')}>
+                <ChevronRight className={cn('size-3.5 shrink-0 transition-transform',
                   auf && 'rotate-90')} aria-hidden="true" />
                 <span className="min-w-0 flex-1 truncate">{p.name}</span>
                 {(p.active_jobs?.length ?? 0) > 0

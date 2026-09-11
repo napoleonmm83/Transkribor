@@ -39,7 +39,14 @@ export function PageHeader({ rubrik, titel, zurueck, zurueckText = 'Übersicht',
               Wechsel zur Bedienschrift ueberhaupt sichtbar zu machen. */}
           <h1 className="text-3xl font-semibold break-words">{titel}</h1>
         </div>
-        {children && <div className="flex shrink-0 items-center gap-2">{children}</div>}
+        {/* INTENTIONAL-UNTESTED: Das HEUTIGE Verhalten (Aktionsleiste nie umbrechend,
+            149 px Überhang bei 320 px) ist der rote Erstlauf von e2e/reflow-320.e2e.ts
+            (#515) — dieser Pin ist gerade entstanden, der Umbau macht ihn gruen. */}
+        {/* #515: ohne flex-wrap lief die Aktionsleiste der Arbeitsflaeche bei 320 px
+            149 px aus dem Fenster (shrink-0 hielt die Knoepfe zusaammengedrueckt in
+            EINER Zeile, die nicht mehr passte). Die Leiste bricht jetzt innerhalb
+            ihrer Zeile um; shrink-0 fiel bewusst mit — genau das verbot das Schrumpfen. */}
+        {children && <div className="flex flex-wrap items-center gap-2">{children}</div>}
       </div>
     </header>
   )

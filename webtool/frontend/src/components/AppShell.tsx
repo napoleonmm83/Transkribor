@@ -155,7 +155,11 @@ function Rahmen({ children }: { children: ReactNode }) {
       {/* Zeilenzahl NACH der Titelzeile: im Browser rendert sie `null` und steuert kein
           Rasterelement bei -- mit drei festen Zeilen rutscht dann alles hoch, der Inhalt in
           `auto`, die Statuszeile in `1fr` (gemessen 374 px Leerraum unter ihr). */}
-      <div className={cn('grid h-screen md:grid-cols-[260px_1fr]',
+      {/* #515: grid-cols-1 ist KEIN Toter Zweck — eine implizite Auto-Spur unter md
+          folgte dem min-content der Fusszeile und zog ALLE Seiten auf 421 px, obwohl
+          main (overflow-auto) schrumpfen darf. minmax(0,1fr) klemmt die Spur auf das
+          Fenster; die Fusszeile regelt ihre eigene Zeile (min-w-0 dort). */}
+      <div className={cn('grid h-screen grid-cols-1 md:grid-cols-[260px_1fr]',
         hatTitelzeile() ? 'grid-rows-[auto_1fr_auto]' : 'grid-rows-[1fr_auto]')}>
         <TitleBar titel={titel} />
         <aside className="hidden min-h-0 border-r md:block"><Leiste /></aside>
