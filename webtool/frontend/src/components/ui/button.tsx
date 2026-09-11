@@ -15,8 +15,10 @@ const buttonVariants = cva(
         // #515: bg-background war auf dem Leistengrund unsichtbar (1,00:1) und der
         // Hover-Tint #EEF2FF ein 1,05:1-Schimmer — WCAG 1.4.11 verlangt 3:1 fuer die
         // Kennzeichnung. Transparente Flaeche + sichtbare Kontur (beide Modi gemessen,
-        // e2e/seitenleiste-kontrast.e2e.ts) statt Fuellung; der Hover vertieft Kontur
-        // und Schrift. Die schwachen dark:-Tints (input/30, input/50) sind mit weg —
+        // e2e/seitenleiste-kontrast.e2e.ts) statt Fuellung; der Hover vertieft die
+        // Kontur und hebt die Schrift farbig ab (accent-foreground ist Indigo, im
+        // Helligkeitssinn heller — Review F2: nicht „vertiefen“ nennen).
+        // Die schwachen dark:-Tints (input/30, input/50) sind mit weg —
         // dieselbe Klasse von 1,0x:1, nur im Dunkeln.
         outline:
           "border border-foreground/50 bg-transparent shadow-xs hover:border-foreground/80 hover:text-accent-foreground",

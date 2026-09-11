@@ -88,9 +88,30 @@ test.beforeEach(async ({ page }) => {
   await releasesEinrichten(page)
 })
 
+/** Positivkontrolle je Route (Review F5): eine LEERE oder abgestuerzte Seite bestuende
+ *  eine reine scrollWidth-Messung vacuous — erst die sichtbare Hauptueberschrift
+ *  beweist, dass ueberhaupt gemessen wurde, was die Route zeigt. */
+// INTENTIONAL-UNTESTED: entstehender Test selbst (#515) — Korrektur des Titels
+// der Startseite gegen den Quelltext (HomeGallery.tsx:172: titel=Übersicht).
+const ROUTEN_KOPF: Record<string, RegExp> = {
+  '/': /übersicht/i,
+  '/version': /version und updates/i,
+  '/einstellungen': /einstellungen/i,
+}
+
 for (const [name, route] of ROUTEN) {
   test(`${name} (${route}): bei 320 px kein waagerechter Überhang`, async ({ page }) => {
     await page.goto(route)
+    // Positivkontrolle VOR der Messung — sie ist die Voraussetzung, nicht das Ergebnis.
+    const kopf = ROUTEN_KOPF[route]
+    if (kopf) {
+      await expect(page.getByRole('heading', { level: 1, name: kopf }),
+        `${name}: Seite muss gerendert haben, sonst misst dieser Test nichts`).toBeVisible()
+    } else {
+      // Die Arbeitsflaeche traegt den Projektnamen als H1.
+      await expect(page.getByRole('heading', { level: 1, name: PROJEKT }),
+        `${name}: Seite muss gerendert haben, sonst misst dieser Test nichts`).toBeVisible()
+    }
     // Umbruch-Animationen und nachlaufende Effekte abwarten: die Rechtecke muessen
     // stehen, sonst misst der Test einen Zwischenstand.
     await page.waitForTimeout(300)
