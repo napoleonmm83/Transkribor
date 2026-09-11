@@ -48,7 +48,7 @@
       "id": "K4 der Knopf verliert JEDEN Fokus-Indikator — die dauerhafte #515-Kontur darf ihn nicht ersetzen",
       "datei": "webtool/frontend/src/components/ui/button.tsx",
       "von": "focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50",
-      "nach": "focus-visible:ring-0",
+      "nach": "",
       "rot": [
         "Hell: drei Bedienelemente × vier Zustände >= 3:1",
         "Dunkel: dieselben Elemente und Zustände >= 3:1"
