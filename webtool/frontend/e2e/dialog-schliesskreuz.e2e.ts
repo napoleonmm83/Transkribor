@@ -40,18 +40,32 @@ async function kreuzHaelt(page: Page, huelleRollt: boolean) {
   // Ein-/Ausblendanimation (duration-200) abwarten: boundingBox() wartet nicht auf sie.
   await page.waitForTimeout(300)
 
-  const rollweg = await dialog.evaluate((el) => {
-    let weitester = 0
+  // INTENTIONAL-UNTESTED: Diese Datei IST der Browser-Waechter (#423); ihr Netz ist der
+  // gruene Lauf direkt danach plus der committete Mutationsplan
+  // scripts/mutationen/dialog-schliesskreuz_e2e.json, der genau diese Zusicherungen
+  // rot bekommen muss. Ein Pin-Test ueber einen Test waere eine dritte Schicht ohne
+  // eigenen Sensor.
+  //
+  // Gerollt wird ALLES, was rollen kann — das ✕ wird im gerollten Zustand geprueft.
+  // Die Vorbedingung liest danach aber NUR den Weg der Huelle: das Maximum ueber alle
+  // Nachfahren machte den Satz "der Dialog selbst rollt" auch dann wahr, wenn allein
+  // ein Kind rollt — und diese Vorbedingung ist genau das, was den Test vor dem
+  // Leerlauf bewahrt. Heute traegt `dialog-content` sein `overflow-y-auto` selbst
+  // (ui/dialog.tsx), die Meldung stimmt also; sie misst es jetzt, statt es zu erben.
+  // Befund der CodeRabbit-CLI; latent, gleiche Klasse wie der Fokus-Befund im
+  // Kontrast-Waechter desselben Buendels.
+  const huelleWeg = await dialog.evaluate((el) => {
+    let eigener = 0
     for (const flaeche of [el, ...el.querySelectorAll<HTMLElement>('*')]) {
       if (flaeche.scrollHeight > flaeche.clientHeight + 1) {
         flaeche.scrollTop = flaeche.scrollHeight
-        weitester = Math.max(weitester, flaeche.scrollTop)
+        if (flaeche === el) eigener = flaeche.scrollTop
       }
     }
-    return weitester
+    return eigener
   })
   if (huelleRollt)
-    expect(rollweg, 'der Dialog selbst rollt — sonst prüft dieser Test nichts').toBeGreaterThan(0)
+    expect(huelleWeg, 'der Dialog selbst rollt — sonst prüft dieser Test nichts').toBeGreaterThan(0)
 
   const vp = page.viewportSize()!
   const k = (await kreuz.boundingBox())!
