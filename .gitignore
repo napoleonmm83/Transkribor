@@ -33,6 +33,7 @@ dist/
 
 # Playwright-Testlaeufe (#423): Fehlkontexte und Traces je fehlgeschlagener Lauf
 webtool/frontend/test-results/
+webtool/frontend/.vitest/
 
 # Arbeitsanleitung fuer Claude: bleibt lokal, nicht im Repo
 CLAUDE.md
