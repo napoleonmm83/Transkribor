@@ -114,6 +114,19 @@ async function tastaturFokussieren(page: Page, el: Locator) {
  *  Knopf noch auf den HELLEN Werten, während der Körper längst dunkel war. WCAG
  *  1.4.11 urteilt über den gesetzten Zustand, nicht über ein Übergangsbild. */
 async function messeZustand(page: Page, el: Locator, zustand: Zustand): Promise<Messung> {
+  // INTENTIONAL-UNTESTED: Diese Datei IST der Waechter (#515); Netz ist der gruene Lauf
+  // plus die Mutationen K1-K4.
+  //
+  // Zustaende duerfen einander NICHT faerben. Die Schleife misst dasselbe Element
+  // nacheinander, und nach dem Fokus-Durchgang bleibt der Fokus stehen: Chromium wendet
+  // weiter `:focus-visible` an, also auch `focus-visible:border-ring` (button.tsx) — und
+  // diese Kontur verdeckte dann eine zu schwache Hover- oder Aktiv-Kontur. Der Waechter
+  // haette Zustaende bescheinigt, die er nie isoliert gesehen hat (CodeRabbit-Bot, major;
+  // dieselbe Klasse wie die Fokus-Zusicherung, eine Ebene weiter).
+  if (zustand !== 'focus') {
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur?.())
+    await page.mouse.move(2, 2)
+  }
   if (zustand === 'hover') await el.hover()
   if (zustand === 'focus') await tastaturFokussieren(page, el)
   if (zustand === 'active') {
