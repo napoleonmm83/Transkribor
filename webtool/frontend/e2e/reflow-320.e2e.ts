@@ -22,9 +22,16 @@ import { appEinrichten, releasesEinrichten, PROJEKT } from './testApp'
  *  Kontrast-Wächter: Closure-Variabeln ueberleben die Serialisierung nicht). */
 const REFLOW = () => {
   const de = document.documentElement
-  const ueberhang = de.scrollWidth - de.clientWidth
-  // INTENTIONAL-UNTESTED: entstehender Test selbst (#515); der Erfolgspfad traegt jetzt
-  // auch treiber, weil die Meldung GIERIG gebaut wird — vorher crashte sie beim Erfolg.
+  // INTENTIONAL-UNTESTED: entstehender Test selbst (#515). ZWEI Ebenen: das Dokument
+  // UND der Inhaltsbereich (main, der eigene Bildlaufbehaelter der Huelle). Die zweite
+  // fehlte im Erstlauf, und zwei Mutationen (R1 URL-Token, R3 Aktionsleiste) bewiesen
+  // die Blindstelle: was IN main ueberlaeuft, treibt das Dokument nie (overflow-auto
+  // schluckt es) — 2D-Scrollen innerhalb des Inhalts ist aber derselbe 1.4.10-Verstoss.
+  const main = document.querySelector('main')
+  const ueberhang = Math.max(
+    de.scrollWidth - de.clientWidth,
+    main ? main.scrollWidth - main.clientWidth : 0,
+  )
   if (ueberhang <= 1) return { ueberhang: 0, schuldige: [] as string[], treiber: [] as string[] }
   // INTENTIONAL-UNTESTED: diese Datei ist der entstehende Test selbst (#515); die
   // Ausbaustufe sortiert nur die Verursaechner-Ausgabe der selben Messung.
