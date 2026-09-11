@@ -54,16 +54,26 @@ async function kreuzHaelt(page: Page, huelleRollt: boolean) {
   // (ui/dialog.tsx), die Meldung stimmt also; sie misst es jetzt, statt es zu erben.
   // Befund der CodeRabbit-CLI; latent, gleiche Klasse wie der Fokus-Befund im
   // Kontrast-Waechter desselben Buendels.
-  const huelleWeg = await dialog.evaluate((el) => {
+  // INTENTIONAL-UNTESTED: Diese Datei IST der Waechter (#423), Netz wie oben.
+  const { huelleWeg, irgendwoWeg } = await dialog.evaluate((el) => {
     let eigener = 0
+    let weitester = 0
     for (const flaeche of [el, ...el.querySelectorAll<HTMLElement>('*')]) {
       if (flaeche.scrollHeight > flaeche.clientHeight + 1) {
         flaeche.scrollTop = flaeche.scrollHeight
+        weitester = Math.max(weitester, flaeche.scrollTop)
         if (flaeche === el) eigener = flaeche.scrollTop
       }
     }
-    return eigener
+    return { huelleWeg: eigener, irgendwoWeg: weitester }
   })
+  // JEDE Variante muss wirklich gerollt haben — sonst prueft der Test das ✕ im
+  // Ruhezustand, und die Mutation sticky->absolute koennte gruen bleiben. Bis hierher
+  // galt eine Rollbedingung nur fuer den Basis-Dialog; CommandDialog und MaterialDialog
+  // uebergeben `false` und hatten damit GAR KEINE (CodeRabbit-Bot, major). Die
+  // Huellen-Bedingung bleibt daneben stehen, weil sie eine ANDERE Tatsache prueft.
+  expect(irgendwoWeg, 'im Dialog muss etwas gerollt sein — sonst prüft dieser Test nichts')
+    .toBeGreaterThan(0)
   if (huelleRollt)
     expect(huelleWeg, 'der Dialog selbst rollt — sonst prüft dieser Test nichts').toBeGreaterThan(0)
 

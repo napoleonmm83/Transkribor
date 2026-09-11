@@ -585,6 +585,19 @@ jobs:
       # driftet. Gegen eine 20-Minuten-Serie sind 15 s nichts.
       - run: npm ci --no-audit --fund=false
         working-directory: webtool/frontend
+      # Der Browser gehoert seit Buendel D dazu: zwei Plaene fahren ihre Waechter im
+      # echten Chromium (buendel-d-515-kontrast-reflow_e2e, dialog-schliesskreuz_e2e).
+      # Ohne ihn faellt nicht eine Mutation um, sondern die POSITIVKONTROLLE — alle zehn
+      # Tests scheitern am fehlenden Binary, der Treiber bricht mit rc 2 ab und meldet
+      # „die Suite ist schon OHNE Mutation rot", also einen Befund ueber den Code, wo ein
+      # Werkzeug fehlte. GEMESSEN an Lauf 34631352339: `npx playwright install` stand
+      # genau EINMAL im Workflow, im Job `Frontend` — dieselbe Suite, derselbe Commit,
+      # dort `10 passed (22.7s)`, hier zehn rote Zeilen.
+      # Bedingungslos aus demselben Grund wie das `npm ci` darueber: eine Bedingung
+      # „nur wenn ein E2E-Plan gewaehlt ist" waere ein zweiter Ort, an dem die Auswahl
+      # steht, und der erste, der driftet.
+      - run: npx playwright install --with-deps chromium
+        working-directory: webtool/frontend
 
       - name: Geaenderte Dateien bestimmen
         if: github.event_name == 'pull_request'
