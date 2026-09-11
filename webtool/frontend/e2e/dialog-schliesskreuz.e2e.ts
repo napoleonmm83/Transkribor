@@ -58,8 +58,15 @@ async function kreuzHaelt(page: Page, huelleRollt: boolean) {
   const d = (await dialog.boundingBox())!
   expect(k.y, '✕-Oberkante im Dialog').toBeGreaterThanOrEqual(d.y - 0.5)
   expect(k.y + k.height, '✕-Unterkante im Dialog').toBeLessThanOrEqual(d.y + d.height + 0.5)
+  // INTENTIONAL-UNTESTED: Ausbau des eigenen Tests (derselbe Buendel-D-Diff) um die
+  // x-Assertionen, die der Kommentar bereits versprach (kalter Review, Befund 2) —
+  // das Netz ist der grueene Lauf dieses Tests selbst, direkt danach gefahren.
+  expect(k.x, '✕-Linke Kante im Dialog').toBeGreaterThanOrEqual(d.x - 0.5)
+  expect(k.x + k.width, '✕-Rechte Kante im Dialog').toBeLessThanOrEqual(d.x + d.width + 0.5)
   expect(k.y, '✕-Oberkante im Fenster').toBeGreaterThanOrEqual(-0.5)
   expect(k.y + k.height, '✕-Unterkante im Fenster').toBeLessThanOrEqual(vp.height + 0.5)
+  expect(k.x, '✕-Linke Kante im Fenster').toBeGreaterThanOrEqual(-0.5)
+  expect(k.x + k.width, '✕-Rechte Kante im Fenster').toBeLessThanOrEqual(vp.width + 0.5)
 
   const trifft = await page.evaluate(
     ({ x, y }) => {

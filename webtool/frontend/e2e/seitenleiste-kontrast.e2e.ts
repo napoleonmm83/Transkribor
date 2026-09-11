@@ -185,17 +185,22 @@ test('Rechenkern: schwarz/weiss 21:1, oklch und color(srgb) landen korrekt', asy
     const oklchWeiss = H.rgba('oklch(1 0 0)')
     const oklchSchwarz = H.rgba('oklch(0 0 0)')
     const srgbWeiss = H.rgba('color(srgb 1 1 1)')
+    const prozentAlpha = H.rgba('rgb(0 0 0 / 50%)')
     return {
       schwarzWeiss: H.verhaeltnis(schwarz, weiss),
       oklchWeiss: [oklchWeiss.r, oklchWeiss.g, oklchWeiss.b],
       oklchSchwarz: [oklchSchwarz.r, oklchSchwarz.g, oklchSchwarz.b],
       srgbWeiss: [srgbWeiss.r, srgbWeiss.g, srgbWeiss.b],
+      // Prozent-Alpha skaliert 0-1 (kalter Review: gab 127.5, Kaskade bis in
+      // verhaeltnis hinein) — der Gegenfall zum eigenen Kommentar im Parser.
+      prozentAlpha: [prozentAlpha.r, prozentAlpha.g, prozentAlpha.b, prozentAlpha.a],
     }
   })
   expect(checks.schwarzWeiss).toBeCloseTo(21, 1)
   expect(checks.oklchWeiss).toEqual([255, 255, 255])
   expect(checks.oklchSchwarz).toEqual([0, 0, 0])
   expect(checks.srgbWeiss).toEqual([255, 255, 255])
+  expect(checks.prozentAlpha).toEqual([0, 0, 0, 0.5])
 })
 
 test('Hell: drei Bedienelemente × vier Zustände >= 3:1', async ({ page }) => {
