@@ -119,7 +119,9 @@ export function StatusBar() {
       </Link>
       {/* Aus derselben Not wie der Einstellungen-Link: er stand nur in der Editor-Leiste. */}
       <ThemeToggle />
-      {rechenwerk && <span className="shrink-0">{rechenwerk}</span>}
+      {/* min-w-0 truncate statt shrink-0 (Review F3): der Text kann lang werden
+          (Geraetename), und als einziger Glieder ohne Ellipse trieb er die Zeile. */}
+      {rechenwerk && <span className="min-w-0 truncate">{rechenwerk}</span>}
       {/* Die Nummer IST der Weg zur Versionsseite — sie steht auf jeder Route, und wer
           wissen will, welche Fassung laeuft, klickt genau hier. */}
       <Link to="/version"

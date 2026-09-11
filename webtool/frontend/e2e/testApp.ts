@@ -58,7 +58,11 @@ export async function appEinrichten(page: Page, viewport: { width: number; heigh
   // Seitenweite Abfragen stillstellen (useAiReady/Hardware-Status): sonst rauscht der
   // tote Proxy des Dev-Servers als 502 durch die Konsole.
   await page.route('**/api/settings', (r) => r.fulfill({ json: SETTINGS }))
-  await page.route('**/api/hardware', (r) => r.fulfill({ json: {} }))
+  // INTENTIONAL-UNTESTED: Fixture dieses selben Buendel-D-Diffs (Review F3) — asr mit
+  // vollem Namen: das rechenwerk-Glied der Fusszeile ist real sichtbar und kann lang
+  // werden; mit {} blieb es immer leer und der Reflow-Waechter sah es nie.
+  await page.route('**/api/hardware', (r) =>
+    r.fulfill({ json: { asr: 'cuda · NVIDIA GeForce RTX 5080' } }))
   await page.setViewportSize(viewport)
 }
 

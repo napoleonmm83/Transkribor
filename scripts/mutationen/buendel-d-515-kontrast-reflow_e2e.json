@@ -73,6 +73,26 @@
         "Arbeitsfläche (/p/Rhyathlon): bei 320 px kein waagerechter Überhang"
       ],
       "gruen": []
+    },
+    {
+      "id": "R5 das Rechenwerk-Glied wird wieder starr — langer Geraetename sprengt die Fusszeile (Review F3)",
+      "datei": "webtool/frontend/src/components/StatusBar.tsx",
+      "von": "className=\"min-w-0 truncate\">{rechenwerk}</span>",
+      "nach": "className=\"shrink-0\">{rechenwerk}</span>",
+      "rot": [
+        "Start (/): bei 320 px kein waagerechter Überhang"
+      ],
+      "gruen": []
+    },
+    {
+      "id": "R6 die Einstellungen-Antwort bricht — die Seite bleibt leer, die Positivkontrolle muss rot werden (Review F5)",
+      "datei": "webtool/frontend/e2e/testApp.ts",
+      "von": "await page.route('**/api/settings', (r) => r.fulfill({ json: SETTINGS }))",
+      "nach": "await page.route('**/api/settings', (r) => r.fulfill({ status: 500, body: 'weg' }))",
+      "rot": [
+        "Einstellungen (/einstellungen): bei 320 px kein waagerechter Überhang"
+      ],
+      "gruen": []
     }
   ]
 }
