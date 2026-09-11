@@ -54,12 +54,16 @@ globalThis.TKFarbe = {
     }
     m = s.match(/^rgba?\\(([^)]+)\\)/i)
     if (m) {
-      // getComputedStyle liefert Zahlen bereits 0-255; nur Prozentangaben (Autoren-CSS)
-      // brauchen die Umrechnung — blankettes *255 machte aus rgb(255,255,255) 65025.
-      const teile = m[1].split(/[\\s,/]+/).filter(Boolean)
-        .map((t) => (t.endsWith('%') ? (parseFloat(t) / 100) * 255 : parseFloat(t)))
-      if (teile.length < 3 || teile.slice(0, 4).some((v) => Number.isNaN(v))) return null
-      return { r: teile[0], g: teile[1], b: teile[2], a: teile.length > 3 ? teile[3] : 1 }
+      // Kanäle: getComputedStyle liefert 0-255, Prozentangaben (Autoren-CSS) brauchen
+      // die Umrechnung. Alpha ist SEPARAT zu behandeln — sie skaliert 0-1, auch als
+      // Prozent (kalter Review: 'rgb(0 0 0 / 50%)' gab a=127.5, ueber() rechnete dann
+      // auf r=-32257). Latent (computed styles tragen dezimales Alpha), aber der
+      // Zweig existiert laut eigenem Kommentar genau fuer Prozentangaben.
+      const roh = m[1].split(/[\\s,/]+/).filter(Boolean)
+      const kanal = (t) => (t.endsWith('%') ? (parseFloat(t) / 100) * 255 : parseFloat(t))
+      const alphaWert = (t) => (t.endsWith('%') ? parseFloat(t) / 100 : parseFloat(t))
+      if (roh.length < 3 || roh.slice(0, 4).some((v) => Number.isNaN(parseFloat(v)))) return null
+      return { r: kanal(roh[0]), g: kanal(roh[1]), b: kanal(roh[2]), a: roh.length > 3 ? alphaWert(roh[3]) : 1 }
     }
     m = s.match(/^oklch\\(\\s*([\\d.]+)\\s+([\\d.]+)\\s+([\\d.]+)(?:\\s*\\/\\s*([\\d.]+%?))?\\s*\\)/i)
     if (m) {
