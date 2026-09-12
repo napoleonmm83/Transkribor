@@ -34,7 +34,7 @@
     {
       "id": "612-C der Treue-Pass darf die Aufloesung wieder als Drift zurueckdrehen",
       "datei": "webtool/correct.py",
-      "von": " {WIDERSPRUCH_REGEL} NUR eine unter annotations als AUFLÖSUNG vermerkte Abweichung ist KEINE Drift: die NICHT zurückdrehen, auch wenn sie vom Roh abweicht — prüfe nur, ob sie zum Klang des Rohs passt.",
+      "von": " {WIDERSPRUCH_REGEL} AN EINER SOLCHEN WIDERSPRUCHS-STELLE ist nur eine unter annotations als AUFLÖSUNG vermerkte Abweichung KEINE Drift: die NICHT zurückdrehen, auch wenn sie vom Roh abweicht — prüfe nur, ob sie zum Klang des Rohs passt.",
       "nach": " {WIDERSPRUCH_REGEL}",
       "rot": [
         "test_verify_prompt_dreht_den_aufgeloesten_widerspruch_nicht_zurueck"
@@ -71,9 +71,9 @@
       ]
     },
     {
-      "id": "612-F die Verify-Ausnahme wird zum Freibrief — die Gegenrichtung faellt weg",
+      "id": "612-F die Verify-Ausnahme verliert ihre Schranke — jede unannotierte ASR-Korrektur ginge zurueck",
       "datei": "webtool/correct.py",
-      "von": " Eine Abweichung OHNE solchen Vermerk bleibt HALLUZINATION/DRIFT und geht zurück.",
+      "von": " Eine Abweichung DORT ohne solchen Vermerk geht zurück; gewöhnliche ASR-Korrekturen ausserhalb eines Widerspruchs beurteilst du unverändert nach den Punkten oben.",
       "nach": "",
       "rot": [
         "test_verify_prompt_dreht_den_aufgeloesten_widerspruch_nicht_zurueck"
@@ -86,10 +86,10 @@
     {
       "id": "612-G die Tiefe zusammenfassung verlaesst sich wieder allein auf Prompt-Gehorsam",
       "datei": "webtool/correct.py",
-      "von": "    _text_schluessel_entfernen(target)",
-      "nach": "",
+      "von": "        if tiefe == \"zusammenfassung\":\n            _text_schluessel_entfernen(cpath)",
+      "nach": "        pass  # MUTATION: der Riegel ist weg",
       "rot": [
-        "test_zusammenfassung_verwirft_einen_text_schluessel_mechanisch"
+        "test_zusammenfassung_verwirft_den_text_schluessel_auf_BEIDEN_wegen"
       ],
       "gruen": [
         "test_alle_prompts_tragen_die_widerspruch_regel",
@@ -106,7 +106,7 @@
       ],
       "gruen": [
         "test_alle_prompts_tragen_die_widerspruch_regel",
-        "test_zusammenfassung_verwirft_einen_text_schluessel_mechanisch"
+        "test_zusammenfassung_verwirft_den_text_schluessel_auf_BEIDEN_wegen"
       ]
     },
     {
@@ -118,8 +118,21 @@
         "test_gescheitertes_bereinigungsschreiben_laesst_die_datei_nicht_liegen"
       ],
       "gruen": [
-        "test_zusammenfassung_verwirft_einen_text_schluessel_mechanisch",
+        "test_zusammenfassung_verwirft_den_text_schluessel_auf_BEIDEN_wegen",
         "test_force_baut_das_glossar_neu"
+      ]
+    },
+    {
+      "id": "612-J der Riegel deckt nur noch den frischen Weg — eine wiederverwendete Fassung kommt durch",
+      "datei": "webtool/correct.py",
+      "von": "        if tiefe == \"zusammenfassung\":",
+      "nach": "        if tiefe == \"zusammenfassung\" and not reuse:",
+      "rot": [
+        "test_zusammenfassung_verwirft_den_text_schluessel_auf_BEIDEN_wegen"
+      ],
+      "gruen": [
+        "test_alle_prompts_tragen_die_widerspruch_regel",
+        "test_gescheitertes_bereinigungsschreiben_laesst_die_datei_nicht_liegen"
       ]
     }
   ]

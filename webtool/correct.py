@@ -778,7 +778,7 @@ Prüfe kritisch gegen das ROH — konservativ, im Zweifel näher am Original:
 - VOLLSTÄNDIGKEIT: für JEDE Roh-Segment-ID {scope} genau ein Eintrag? Fehlende ergänzen (Text nah am Roh), zusammengefasste auftrennen.
 - SPRECHER: konsistent pro akustischem (Sprecher N)-Cluster und plausibel (Interviewer stellt Fragen; Antworten korrekt zugeordnet)? {CLUSTER_REGEL} Fehlzuordnungen korrigieren — einzelne Segmente ebenso wie einen durchgehend falsch benannten Cluster; zwei Cluster mit demselben Namen aber NICHT auseinanderziehen.
 - RESTFEHLER: offensichtliche verbleibende ASR-Fehler nur wenn eindeutig (konservativ).
-- UNSICHER: wirklich unklare Stellen NICHT raten — nah am Original belassen und unter annotations vermerken. {WIDERSPRUCH_REGEL} NUR eine unter annotations als AUFLÖSUNG vermerkte Abweichung ist KEINE Drift: die NICHT zurückdrehen, auch wenn sie vom Roh abweicht — prüfe nur, ob sie zum Klang des Rohs passt. Eine Abweichung OHNE solchen Vermerk bleibt HALLUZINATION/DRIFT und geht zurück. Und ein Vermerk, der den Widerspruch WEGERKLÄRT (Wortspiel, Scherz, Ironie), ist keine Auflösung: stelle den Rohstand wieder her und vermerke die Stelle als UNGEKLÄRT. Entferne evtl. übrige [[...]]-Markierungen im Text.
+- UNSICHER: wirklich unklare Stellen NICHT raten — nah am Original belassen und unter annotations vermerken. {WIDERSPRUCH_REGEL} AN EINER SOLCHEN WIDERSPRUCHS-STELLE ist nur eine unter annotations als AUFLÖSUNG vermerkte Abweichung KEINE Drift: die NICHT zurückdrehen, auch wenn sie vom Roh abweicht — prüfe nur, ob sie zum Klang des Rohs passt. Eine Abweichung DORT ohne solchen Vermerk geht zurück; gewöhnliche ASR-Korrekturen ausserhalb eines Widerspruchs beurteilst du unverändert nach den Punkten oben. Und ein Vermerk, der den Widerspruch WEGERKLÄRT (Wortspiel, Scherz, Ironie), ist keine Auflösung: stelle den Rohstand wieder her und vermerke die Stelle als UNGEKLÄRT. Entferne evtl. übrige [[...]]-Markierungen im Text.
 
 Schreibe die VOLLSTÄNDIGE, geprüfte Korrektur mit dem Write-Tool als JSON nach GENAU diesem Pfad (alle Segment-IDs {scope}, gleiches Schema):
 {cpath}
@@ -1236,14 +1236,10 @@ def _summary_only_file(project: str, base: str, ziel: str, context: str,
     tagged = os.path.abspath(os.path.join(tdir, base + ".tagged.txt"))
     print(f"→ Nur Zusammenfassung {base} …", flush=True)
     _ask_llm(_summary_prompt(base, tagged, target, context, ziel, dialekt), [tagged], target)
-    # Der Vertrag dieser Tiefe ist MECHANISCH, nicht nur im Prompt: `apply_correction` ersetzt
-    # den Rohtext, sobald der Schluessel `text` dasteht (der Schluessel entscheidet, nicht sein
-    # Wert) — und hier gibt es weder Treue-Pass noch Glossar, die das auffangen koennten. Der
-    # Prompt sagt seit jeher „KEIN Text-Feld"; seit er daneben auch die Widerspruchs-Regel
-    # traegt, steht dort Korrektur-Vokabular neben seinem Gegenteil, und genau diese Form
-    # beschreibt der Kommentar ueber CLUSTER_REGEL als wirkungslos (beide Pruefer, #612).
-    # Prompt-Gehorsam als einziger Riegel ist hier also zu duenn.
-    _text_schluessel_entfernen(target)
+    # Der Vertrag dieser Tiefe ist MECHANISCH, nicht nur im Prompt — durchgesetzt wird er aber
+    # NICHT hier, sondern in `correct_ai_single` unmittelbar vor `_valid_correction`: dort
+    # laufen der frische und der wiederverwendete Weg zusammen, und nur dort deckt EIN Riegel
+    # beide. Zwei Stellen fuer eine Regel driften beim naechsten Umbau auseinander.
 
 
 def correct_ai_single(project: str, b: str, gjson: str = "", context: str = None,
@@ -1291,12 +1287,18 @@ def correct_ai_single(project: str, b: str, gjson: str = "", context: str = None
             context = _context(project)
         reuse = (base_explicit is None and not force
                  and os.path.exists(cpath) and os.path.getmtime(cpath) >= os.path.getmtime(raw_json))
+        # Tiefe pro Datei: voll-Dateien laufen wie bisher (Glossar + Verify),
+        # leicht/zusammenfassung sind einzelne LLM-Aufrufe ohne Treue-Pass.
+        #
+        # Sie wird VOR dem reuse-Zweig bestimmt, weil der Vertrag der Tiefe `zusammenfassung`
+        # auch fuer eine WIEDERVERWENDETE `correction.json` gilt: die kann aus einem Lauf vor
+        # diesem Riegel stammen (oder aus einer Tiefenumstellung) und `text`-Schluessel tragen —
+        # `_valid_correction` winkt sie durch und `cmd_apply` wendet sie an. Der Riegel steht
+        # deshalb an der EINEN Stelle, an der beide Wege zusammenlaufen (CodeRabbit-CLI).
+        tiefe = _pj.tiefe_effektiv(project, b)
         if reuse:
             print(f"↷ nutze vorhandene {b}.correction.json", flush=True)
         else:
-            # Tiefe pro Datei: voll-Dateien laufen wie bisher (Glossar + Verify),
-            # leicht/zusammenfassung sind einzelne LLM-Aufrufe ohne Treue-Pass.
-            tiefe = _pj.tiefe_effektiv(project, b)
             ziel, dialekt, mehr = _ziel_dialekt(project, b)
             if tiefe in ("voll", "voll_dialekt"):
                 _correct_file(project, b, gjson, context, verify, force,
@@ -1305,6 +1307,8 @@ def correct_ai_single(project: str, b: str, gjson: str = "", context: str = None
                 _light_correct_file(project, b, ziel, dialekt, context, mehrsprachig=mehr)
             else:  # zusammenfassung
                 _summary_only_file(project, b, ziel, context, dialekt)
+        if tiefe == "zusammenfassung":
+            _text_schluessel_entfernen(cpath)
         if not _valid_correction(cpath):
             print(f"✗ FEHLT/ungültig: {b}.correction.json — überspringe", flush=True)
             return False
