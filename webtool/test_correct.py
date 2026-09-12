@@ -1691,9 +1691,15 @@ def test_verify_prompt_dreht_den_aufgeloesten_widerspruch_nicht_zurueck():
     Halluzinations-Pruefung, die direkt darueber steht.
     """
     p = correct._verify_prompt("b", "t.txt", "c.json", "kontext")
-    assert "NUR eine unter annotations als AUFLÖSUNG vermerkte Abweichung ist KEINE Drift" in p
-    assert "Eine Abweichung OHNE solchen Vermerk bleibt HALLUZINATION/DRIFT und geht zurück" in p
+    assert "nur eine unter annotations als AUFLÖSUNG vermerkte Abweichung KEINE Drift" in p
+    assert "Eine Abweichung DORT ohne solchen Vermerk geht zurück" in p
     assert "ist keine Auflösung: stelle den Rohstand wieder her" in p
+    # Und die Begrenzung, ohne die der Satz die GANZE Korrektur zurueckdrehen liesse: der
+    # Korrektur-Pass verbessert klare ASR-Fehler routinemaessig OHNE Anmerkung (Regel 2).
+    # Eine Fassung ohne diese Schranke sagte „jede Abweichung ohne Vermerk geht zurueck" —
+    # gefunden von der CodeRabbit-CLI, zweimal.
+    assert "AN EINER SOLCHEN WIDERSPRUCHS-STELLE" in p
+    assert "gewöhnliche ASR-Korrekturen ausserhalb eines Widerspruchs beurteilst du" in p
 
 
 def test_beide_umschreibenden_prompts_verlangen_den_vermerk_fuer_BEIDE_ausgaenge():
@@ -1732,7 +1738,9 @@ def test_summary_und_glossar_sagen_was_STATT_aufloesen_zu_tun_ist():
     assert "Löse ihn auf" not in g
 
 
-def test_zusammenfassung_verwirft_einen_text_schluessel_mechanisch(tmp_path, monkeypatch):
+@pytest.mark.parametrize("wiederverwendet", [False, True])
+def test_zusammenfassung_verwirft_den_text_schluessel_auf_BEIDEN_wegen(
+        tmp_path, monkeypatch, wiederverwendet):
     """Der Vertrag der Tiefe „zusammenfassung" steht seit #612 nicht mehr nur im Prompt.
 
     `apply_correction` entscheidet am SCHLUESSEL: steht `text` da, ersetzt es den Rohtext —
@@ -1740,27 +1748,44 @@ def test_zusammenfassung_verwirft_einen_text_schluessel_mechanisch(tmp_path, mon
     Prompt neben „KEIN Text-Feld" auch Korrektur-Vokabular traegt, ist Prompt-Gehorsam als
     einziger Riegel zu duenn (beide Pruefer, #612).
 
+    Gefahren werden BEIDE Wege. Der erste Anlauf sass im frischen Schreibweg und liess den
+    WIEDERVERWENDETEN offen (CodeRabbit-CLI): eine `correction.json` aus einem Lauf vor
+    diesem Riegel — oder aus einer Tiefenumstellung — traegt ihre `text`-Schluessel weiter,
+    `_valid_correction` winkt sie durch, `cmd_apply` wendet sie an. Ein Riegel, der nur den
+    Weg deckt, auf dem er entstanden ist, ist kein Riegel.
+
     Der dritte Segmenteintrag pruefte zuerst nichts: `"text": null` faellt durch jeden
     Wert-Vergleich, der Schluessel steht aber da — und genau der entscheidet im Apply-Pfad.
     """
+    from webtool import projekt as _pj
     monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
     tdir = tmp_path / "P" / "transkripte"
     tdir.mkdir(parents=True)
-    ziel = tdir / "b.correction.json"
+    (tdir / "b.json").write_text('{"segments": [{"id": 0, "text": "roh"}]}', encoding="utf-8")
+    cpath = tdir / "b.correction.json"
+    ungehorsam = json.dumps({
+        "base": "b", "speakers": ["A"], "annotations": [], "summary": "s",
+        "segments": [{"id": 0, "speaker": "A", "text": "umgeschrieben"},
+                     {"id": 1, "speaker": "A"},
+                     {"id": 2, "speaker": "A", "text": None}],
+    })
+    monkeypatch.setattr(_pj, "tiefe_effektiv", lambda p, b: "zusammenfassung")
+    monkeypatch.setattr(correct, "cmd_apply", lambda *a, **k: "written")
 
-    def ungehorsamer_lauf(prompt, inputs, output):
-        ziel.write_text(json.dumps({
-            "base": "b", "speakers": ["A"], "annotations": [], "summary": "s",
-            "segments": [{"id": 0, "speaker": "A", "text": "umgeschrieben"},
-                         {"id": 1, "speaker": "A"},
-                         {"id": 2, "speaker": "A", "text": None}],
-        }), encoding="utf-8")
+    if wiederverwendet:
+        cpath.write_text(ungehorsam, encoding="utf-8")
+        frisch = os.path.getmtime(tdir / "b.json") + 60
+        os.utime(cpath, (frisch, frisch))
+        # Positivkontrolle fuer den Weg selbst: auf dem reuse-Zweig darf KEIN LLM laufen.
+        monkeypatch.setattr(correct, "_ask_llm", lambda *a, **k: pytest.fail("kein reuse"))
+    else:
+        monkeypatch.setattr(correct, "_ask_llm",
+                            lambda *a, **k: cpath.write_text(ungehorsam, encoding="utf-8"))
 
-    monkeypatch.setattr(correct, "_ask_llm", ungehorsamer_lauf)
-    correct._summary_only_file("P", "b", "lesbarem Standarddeutsch", "kontext")
-    segs = json.loads(ziel.read_text(encoding="utf-8"))["segments"]
+    assert correct.correct_ai_single("P", "b") is True
+    segs = json.loads(cpath.read_text(encoding="utf-8"))["segments"]
     assert all("text" not in s for s in segs), segs
-    # Positivkontrolle: gestrichen wird NUR der Schluessel, die Segmente bleiben vollzaehlig
+    # Gestrichen wird NUR der Schluessel — die Segmente bleiben vollzaehlig.
     assert [s["id"] for s in segs] == [0, 1, 2]
     assert all(s["speaker"] == "A" for s in segs)
 
