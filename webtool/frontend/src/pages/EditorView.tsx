@@ -131,9 +131,12 @@ export function EditorView() {
     // `grid-cols-[minmax(0,1fr)]` ist nicht schmueckend: ohne Spaltenangabe hat das Raster eine
     // implizite `auto`-Spur, die mit dem min-content ihres breitesten Kindes waechst — der Kopf
     // schiebt dann ueber `main` hinaus, und weil der Flex-Behaelter nie eingeklemmt wird, greift
-    // das `shrink` am Rueckweg-Link kaum (gemessen: 900 px Fenster, Speicherstand sichtbar, 69 px
-    // Ueberlauf; mit dieser Spur 0). Dieselbe Klasse wie `minmax(0,1fr)` an der Rasterspur der
-    // Huelle (AppShell.tsx, #515).
+    // das `shrink` am Rueckweg-Link kaum. Gemessen bei 900 px Fensterbreite (dem Mindestmass des
+    // Electron-Fensters) als `main.scrollWidth - main.clientWidth`, je ohne und mit dieser Spur:
+    // langer Projektname und ruhiger Speicherstand 67 -> 0, kurzer Name mit sichtbarem
+    // Speicherstand 69 -> 3. Die 3 px bleiben, und der Link ist dort auf den blossen Pfeil
+    // geschrumpft — benannte Grenze, siehe #616. Dieselbe Klasse wie `minmax(0,1fr)` an der
+    // Rasterspur der Huelle (AppShell.tsx, #515).
     <div className="grid h-full grid-cols-[minmax(0,1fr)] grid-rows-[auto_1fr_auto]">
       {/* Der Rueckweg im Kopf verlaesst den Editor genauso wie ein Klick in der Leiste — und
           geht deshalb durch dieselbe Rueckfrage (`darfWechseln`, EINE Fassung fuer beide Wege).
