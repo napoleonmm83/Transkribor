@@ -642,7 +642,7 @@ gesagt: Fehlermeldungen fremder Bausteine können Text enthalten, den keine List
 Platzhalter greifen für Namen und Pfade, nicht für beliebigen Text. Wer das nicht möchte, lässt
 den Haken aus; dann verlässt kein Byte den Rechner, und der Mail-Bericht unten steht weiter
 bereit. Die Berichte werden nach 90 Tagen gelöscht. *(In Fassungen bis einschließlich `v0.54.0`
-meldete nur die App-Hülle selbst; ab der nächsten Fassung kommen bei eingeschaltetem Haken
+meldete nur die App-Hülle selbst; ab `v0.55.0` kommen bei eingeschaltetem Haken
 auch Fehler aus Transkription, Korrektur und Video-Import an — ausgerechnet die liefen vorher
 in keinem Bericht mit.)*
 
