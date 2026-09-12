@@ -904,8 +904,14 @@ def _glossary(project: str, context: str, force: bool = False) -> str:
             except FileNotFoundError:
                 pass                                  # gab es nicht — nichts zu raeumen
             except OSError as e:
-                print(f"  ↷ altes Glossar nicht raeumbar ({_einzeilig(e)}) — Lauf ohne Glossar",
-                      flush=True)
+                # Der TYPNAME gehoert mit hinein — wie in den vier Nachbarzeilen dieses Moduls.
+                # `_einzeilig` liefert nur `str(e)`, und das ist bei einem `PermissionError` auf
+                # POSIX `[Errno 13] Permission denied`: der Grund-Filter des Fehler-Toasts sucht
+                # FEHLER/Fehler/Error/Traceback und faende darin NICHTS. Die Zeile waere als
+                # Auskunft ueber einen gescheiterten Lauf unsichtbar — auf Windows nur zufaellig
+                # nicht, weil dort `WinError` im Text steht (kalter Diff-Leser).
+                grund = f"{type(e).__name__}: {_einzeilig(e)}"
+                print(f"  ↷ Glossar nicht raeumbar ({grund}) — Lauf ohne Glossar", flush=True)
                 return ""
         # #450: Dieser Schritt liest die `.raw.txt` JEDER Aufnahme des Projekts — auf dem
         # API-/Codex-Weg oeffnet `llm._with_files` sie im Job-Prozess selbst, auf dem

@@ -164,8 +164,8 @@
     {
       "id": "612-M ein nicht raeumbares Glossar wird wieder geschluckt statt aufzugeben",
       "datei": "webtool/correct.py",
-      "von": "                      flush=True)\n                return \"\"",
-      "nach": "                      flush=True)",
+      "von": "                print(f\"  ↷ Glossar nicht raeumbar ({grund}) — Lauf ohne Glossar\", flush=True)\n                return \"\"",
+      "nach": "                print(f\"  ↷ Glossar nicht raeumbar ({grund}) — Lauf ohne Glossar\", flush=True)",
       "rot": [
         "test_force_gibt_auf_wenn_das_alte_glossar_nicht_raeumbar_ist"
       ],
