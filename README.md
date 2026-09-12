@@ -206,7 +206,7 @@ erst beim Darüberfahren mit der Maus voll sichtbar, am Tablet also kaum zu erke
 über dem Transkript auf die Seite des Projekts, zu dem sie gehört. Der Projektname in der
 Seitenleiste tut dasselbe: ein Klick bringt dich zum Projekt, ein zweiter zur Übersicht mit
 allen Projekten. Bisher landetest du von einer geöffneten Aufnahme aus immer gleich auf der
-Übersicht und musstest das Projekt von dort neu öffnen. *(Ab der nächsten Fassung.)*
+Übersicht und musstest das Projekt von dort neu öffnen. *(Ab `v0.56.0`.)*
 
 **Es wartet nicht auf dich.** Aufnahmen werden nacheinander abgehört, die Korrektur läuft
 danach für mehrere gleichzeitig, und mehrere Projekte laufen ohnehin nebeneinander — du
