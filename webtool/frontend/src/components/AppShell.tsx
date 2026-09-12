@@ -3,7 +3,7 @@ import { useLocation, useMatch, useNavigate } from 'react-router-dom'
 import { ProjektDatenProvider, useProjekte, useDateien } from '@/hooks/useProjektDaten'
 import { mergePhases, useActiveJob, zeigtLauf } from '@/hooks/useActiveJob'
 import { useAiReady } from '@/hooks/useAiReady'
-import { EditorBrueckeProvider, useEditorBruecke } from '@/hooks/useEditorBruecke'
+import { EditorBrueckeProvider, useEditorBruecke, darfWechseln } from '@/hooks/useEditorBruecke'
 import { useDokumentTitel } from '@/hooks/useDokumentTitel'
 import { useJob } from '@/hooks/useJob'
 import { useOsFortschritt } from '@/hooks/useOsFortschritt'
@@ -34,19 +34,16 @@ function Leiste() {
     : null
 
   const editor = useEditorBruecke()
-  // Jeder Klick hier verlaesst den Editor. Seit #106 fragt die Leiste nur noch bei stand='fehler':
-  // in der Tipppause ('offen') hatte die Oberflaeche "wird gespeichert" versprochen, und useDoc
-  // spült den neuesten Stand beim Verlassen selbst (useEffect-Cleanup an der Speicher-Kette). Auf
-  // 'fehler' dagegen stand der nie beim Server — dort muss die Rueckfrage bleiben. `beforeunload`
+  // Jeder Klick hier verlaesst den Editor. Die Regel dafuer steht seit dem Rueckweg im
+  // Editorkopf in `useEditorBruecke.darfWechseln` — dort, weil BEIDE Wege dieselbe Frage
+  // stellen und zwei Fassungen davon auseinanderlaufen. Kurz: seit #106 fragt sie nur noch bei
+  // stand='fehler'; in der Tipppause ('offen') hatte die Oberflaeche "wird gespeichert"
+  // versprochen, und useDoc spült den neuesten Stand beim Verlassen selbst. `beforeunload`
   // greift nur beim Schliessen des Tabs, nicht bei Router-Navigation.
   // Die drei Server-Prozess-Rueckfragen (DateiMenue ×2, ProjektUmbenennen) pruefen weiter `dirty`
   // — dort laeuft ein Server-Prozess ueber dieselbe Datei, den der Browser-Flush nicht einholt.
-  const wechselErlaubt = (ziel: { project: string; base: string } | null) => {
-    const e = editor.current
-    if (!e || e.stand !== 'fehler') return true
-    if (ziel && ziel.project === e.project && ziel.base === e.base) return true   // dieselbe Datei
-    return window.confirm('Ungespeicherte Änderungen verwerfen?')
-  }
+  const wechselErlaubt = (ziel: { project: string; base: string } | null) =>
+    darfWechseln(editor.current, ziel)
 
   const nachladen = () => { refresh(); refreshFiles() }
   return (

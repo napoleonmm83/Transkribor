@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, act, screen, fireEvent, waitFor } from '@testing-library/react'
-import { MemoryRouter, Routes, Route } from 'react-router-dom'
+import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom'
 import { EditorView } from './EditorView'
 import { JobProvider } from '@/hooks/useActiveJob'
 import { EditorBrueckeProvider, useEditorBruecke } from '@/hooks/useEditorBruecke'
@@ -204,6 +204,96 @@ describe('#123 — Editor lädt nach ferngestarteter Korrektur neu', () => {
       expect('dateistand' in vi.mocked(api.saveDoc).mock.calls.at(-1)![2]).toBe(false)
     } finally {
       confirm.mockRestore()
+    }
+  })
+})
+
+describe('Rueckweg im Editorkopf', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    einstellungen({})
+    vi.mocked(api.getDoc).mockResolvedValue(doc)
+    vi.mocked(api.listProjects).mockResolvedValue([{ name: 'Demo', dateien: 1, fertig: 0, geaendert: 0 }])
+    vi.mocked(api.getProjectFiles).mockResolvedValue({ name: 'Demo',
+      files: [{ base: 'S1', has_audio: true, has_raw: true, has_edit: true, has_md: false }] })
+  })
+
+  /** Der Ort als Text — verglichen wird spaeter mit `toBe`, nicht `toHaveTextContent`: das
+   *  prueft auf Teilstring und waere unter `/p/Demo/S1` fuer `/p/Demo` trivial wahr. */
+  function Ort() {
+    const { pathname } = useLocation()
+    return <span data-testid="ort">{pathname}</span>
+  }
+
+  const zeigen = () => render(
+    <TooltipProvider>
+      <MemoryRouter initialEntries={['/p/Demo/S1']}>
+        <JobProvider intervalMs={10000}>
+          <ProjektDatenProvider>
+            <EditorBrueckeProvider>
+              <Routes>
+                <Route path="/p/:project/:base" element={<><EditorView /><Ort /></>} />
+                <Route path="/p/:project" element={<Ort />} />
+              </Routes>
+            </EditorBrueckeProvider>
+          </ProjektDatenProvider>
+        </JobProvider>
+      </MemoryRouter>
+    </TooltipProvider>,
+  )
+
+  it('fragt nach, wenn das Speichern fehlgeschlagen ist — und bleibt bei Abbruch', async () => {
+    /* Der Weg, den dieser Rueckweg NEU aufmacht: der Verlassens-Flush in `useDoc` schreibt auf
+       `stand === 'fehler'` ausdruecklich NICHT (`useDoc.ts`, Cleanup: `standRef.current ===
+       'fehler'` kehrt zurueck) — und zwar mit der Begruendung, dass der Nutzer an der Leiste
+       gefragt wird. Ein Link, der diese Frage umgeht, verliert die Aenderung STILL. Darum
+       geht der Kopf durch dieselbe Regel wie die Leiste (`darfWechseln`). */
+    vi.mocked(api.saveDoc).mockRejectedValue(new Error('Server weg'))
+    const { container } = zeigen()
+    await waitFor(() => expect(api.getDoc).toHaveBeenCalledTimes(1))
+    // Dirty machen: Kontextfeld oeffnen, aendern, uebernehmen.
+    await act(async () => { fireEvent.click(screen.getByTitle(/^Kontext bearbeiten/)) })
+    const feld = container.querySelector('textarea')!
+    await act(async () => {
+      fireEvent.change(feld, { target: { value: 'meine Notiz' } })
+      fireEvent.blur(feld)
+    })
+    // Der Speicherstand im Kopf ist die Positivkontrolle: ohne ihn pruefte der Test einen
+    // Zustand, den es im Programm gar nicht gibt.
+    await waitFor(() => expect(screen.getByText('nicht gespeichert')).toBeInTheDocument(),
+      { timeout: 3000 })
+
+    const frage = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    try {
+      fireEvent.click(screen.getByRole('link', { name: /Demo/ }))
+      expect(frage).toHaveBeenCalled()
+      expect(screen.getByTestId('ort').textContent).toBe('/p/Demo/S1')
+    } finally {
+      frage.mockRestore()
+    }
+  })
+
+  it('navigiert nach zugestimmter Rueckfrage auf die Projektseite', async () => {
+    // Die Gegenrichtung: eine Rueckfrage, die IMMER haelt, ist derselbe Schaden von der
+    // anderen Seite — dann fuehrt der Rueckweg nirgendwohin.
+    vi.mocked(api.saveDoc).mockRejectedValue(new Error('Server weg'))
+    const { container } = zeigen()
+    await waitFor(() => expect(api.getDoc).toHaveBeenCalledTimes(1))
+    await act(async () => { fireEvent.click(screen.getByTitle(/^Kontext bearbeiten/)) })
+    const feld = container.querySelector('textarea')!
+    await act(async () => {
+      fireEvent.change(feld, { target: { value: 'meine Notiz' } })
+      fireEvent.blur(feld)
+    })
+    await waitFor(() => expect(screen.getByText('nicht gespeichert')).toBeInTheDocument(),
+      { timeout: 3000 })
+
+    const frage = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    try {
+      fireEvent.click(screen.getByRole('link', { name: /Demo/ }))
+      expect(screen.getByTestId('ort').textContent).toBe('/p/Demo')
+    } finally {
+      frage.mockRestore()
     }
   })
 })

@@ -22,11 +22,16 @@ const STAND: Record<Exclude<SpeicherStand, 'ruhig'>, { text: string; punkt: 'war
   fehler: { text: 'nicht gespeichert', punkt: 'fehler' },
 }
 
-export function Toolbar({ projekt, stand, bereit, onExport, suchQuery, onSuchChange, suchCount = 0, suchIndex = 0, onSuchPrev, onSuchNext }: {
+export function Toolbar({ projekt, zurueckErlaubt, stand, bereit, onExport, suchQuery, onSuchChange, suchCount = 0, suchIndex = 0, onSuchPrev, onSuchNext }: {
   /** Projekt der offenen Aufnahme — Ziel des Rueckwegs. Fehlt es, entfaellt der Link, und die
    *  Leiste rendert damit auch AUSSERHALB eines Routers (ein unbedingter `Link` wuerde dort
    *  werfen; zwei Tests dieser Datei laufen genau so). */
   projekt?: string;
+  /** Darf der Rueckweg jetzt gegangen werden? Fehlt er, gilt ja. Der Klick verlaesst den
+   *  Editor wie ein Klick in der Leiste — und muss deshalb durch dieselbe Rueckfrage
+   *  (`useEditorBruecke.darfWechseln`); ohne sie ginge die Aenderung nach einem
+   *  fehlgeschlagenen Speichern STILL verloren. */
+  zurueckErlaubt?: () => boolean;
   stand: SpeicherStand; bereit: boolean;
   onExport: (fmt: ExportFmt, sprecher?: boolean) => void;
   suchQuery?: string; onSuchChange?: (v: string) => void;
@@ -49,6 +54,7 @@ export function Toolbar({ projekt, stand, bereit, onExport, suchQuery, onSuchCha
           schon Speicherstand, Suche, Legende und zwei Export-Knoepfe. */}
       {projekt && (
         <Link to={`/p/${encodeURIComponent(projekt)}`}
+          onClick={e => { if (zurueckErlaubt && !zurueckErlaubt()) e.preventDefault() }}
           aria-label={`Zur Projektseite von ${projekt}`}
           className="-ml-1 inline-flex min-w-0 max-w-48 shrink items-center gap-1.5 rounded-md
                      px-2 py-1 text-sm text-muted-foreground transition-colors hover:text-foreground">

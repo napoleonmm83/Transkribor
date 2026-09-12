@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { useDoc } from '@/hooks/useDoc'
-import { useEditorMelden } from '@/hooks/useEditorBruecke'
+import { useEditorMelden, darfWechseln } from '@/hooks/useEditorBruecke'
 import { useActiveJob } from '@/hooks/useActiveJob'
 import { useSuche } from '@/hooks/useSuche'
 import { audioUrl } from '@/lib/api'
@@ -129,7 +129,12 @@ export function EditorView() {
   return (
     // Nur noch der Inhalt: die Projektnavigation zieht in die AppShell (Task 5).
     <div className="grid h-full grid-rows-[auto_1fr_auto]">
-      <Toolbar projekt={project} stand={stand} bereit={!!doc} onExport={exportDownload}
+      {/* Der Rueckweg im Kopf verlaesst den Editor genauso wie ein Klick in der Leiste — und
+          geht deshalb durch dieselbe Rueckfrage (`darfWechseln`, EINE Fassung fuer beide Wege).
+          Mit den Werten aus DIESEM Render, nicht ueber die Bruecke: die haengt um einen passiven
+          Effekt hinterher. */}
+      <Toolbar projekt={project} zurueckErlaubt={() => darfWechseln(sel && { ...sel, stand }, null)}
+        stand={stand} bereit={!!doc} onExport={exportDownload}
         suchQuery={suchQuery} onSuchChange={setSuchQuery} suchCount={anzahl} suchIndex={idx}
         onSuchPrev={suchPrev} onSuchNext={suchNext} />
       {/* Kein eigenes <main> mehr (#72): die Huelle traegt es fuer alle Seiten (`#inhalt`),

@@ -45,6 +45,33 @@ function useBruecke(): Bruecke {
 export function useEditorBruecke(): Bruecke { return useBruecke() }
 
 /**
+ * Darf die Oberflaeche den Editor JETZT verlassen? `ziel === null` heisst „irgendwohin, nur
+ * nicht hierher".
+ *
+ * #106: nur ein FEHLGESCHLAGENES Speichern haelt auf — in der Tipppause ('offen') spuelt
+ * `useDoc` den Stand beim Verlassen selbst. Auf 'fehler' tut es das ausdruecklich NICHT
+ * (`useDoc.ts`, Verlassens-Flush: `standRef.current === 'fehler'` kehrt zurueck), und zwar mit
+ * der Begruendung, dass hier gefragt wird. **Diese Rueckfrage IST also der Grund, warum der
+ * Flush dort schweigt** — ein Weg aus dem Editor, der sie umgeht, verliert die Aenderung still.
+ *
+ * Die Regel steht deshalb HIER und nicht bei den Aufrufern: die Projektleiste und der Rueckweg
+ * im Editorkopf stellen dieselbe Frage, und zwei Fassungen davon laufen auseinander.
+ *
+ * Sie nimmt den ZUSTAND, nicht die Bruecke. Die Leiste hat nur die Bruecke (`editor.current`),
+ * der Editor hat seine Werte direkt aus dem Render — und die Bruecke haengt dort um einen
+ * passiven Effekt hinterher. Wer im Editor ueber die Bruecke fragte, bekaeme im ersten
+ * Augenblick nach einem Standwechsel noch den vorigen Stand.
+ */
+export function darfWechseln(
+  offen: Pick<OffenesDokument, 'project' | 'base' | 'stand'> | null,
+  ziel: { project: string; base: string } | null,
+): boolean {
+  if (!offen || offen.stand !== 'fehler') return true
+  if (ziel && ziel.project === offen.project && ziel.base === offen.base) return true   // dieselbe Datei
+  return window.confirm('Ungespeicherte Änderungen verwerfen?')
+}
+
+/**
  * Editor-Seite: meldet an, solange der Editor auf dem Schirm steht (`null` = kein Dokument).
  *
  * Absichtlich OHNE Dep-Array: `dirty` und `reload` aendern sich waehrend der Sitzung, und der

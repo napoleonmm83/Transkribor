@@ -1,10 +1,13 @@
 {
-  "test": "npm --prefix webtool/frontend test -- src/components/Toolbar.test.tsx src/components/AppShell.test.tsx",
+  "test": "npm --prefix webtool/frontend test -- src/components/Toolbar.test.tsx src/components/AppShell.test.tsx src/pages/EditorView.test.tsx",
   "pfade": [
     "webtool/frontend/src/components/Toolbar.tsx",
     "webtool/frontend/src/components/Toolbar.test.tsx",
     "webtool/frontend/src/components/AppShell.tsx",
-    "webtool/frontend/src/components/AppShell.test.tsx"
+    "webtool/frontend/src/components/AppShell.test.tsx",
+    "webtool/frontend/src/hooks/useEditorBruecke.tsx",
+    "webtool/frontend/src/pages/EditorView.tsx",
+    "webtool/frontend/src/pages/EditorView.test.tsx"
   ],
   "mutationen": [
     {
@@ -53,6 +56,31 @@
       ],
       "gruen": [
         "navigiert nach zugestimmter Rueckfrage"
+      ]
+    },
+    {
+      "id": "R5 der Rueckweg im Kopf umgeht die Rueckfrage — stiller Verlust nach fehlgeschlagenem Speichern",
+      "datei": "webtool/frontend/src/pages/EditorView.tsx",
+      "von": "zurueckErlaubt={() => darfWechseln(sel && { ...sel, stand }, null)}",
+      "nach": "zurueckErlaubt={undefined}",
+      "rot": [
+        "fragt nach, wenn das Speichern fehlgeschlagen ist — und bleibt bei Abbruch"
+      ],
+      "gruen": [
+        "navigiert nach zugestimmter Rueckfrage auf die Projektseite"
+      ]
+    },
+    {
+      "id": "R6 die Regel selbst haelt nie mehr auf — beide Wege aus dem Editor fragen nicht mehr",
+      "datei": "webtool/frontend/src/hooks/useEditorBruecke.tsx",
+      "von": "  if (!offen || offen.stand !== 'fehler') return true",
+      "nach": "  if (!offen || offen.stand !== 'niemals') return true",
+      "rot": [
+        "fragt nach, wenn das Speichern fehlgeschlagen ist — und bleibt bei Abbruch",
+        "navigiert NICHT, wenn die Rueckfrage abgelehnt wird"
+      ],
+      "gruen": [
+        "fragt nicht ohne ungespeicherte Aenderungen"
       ]
     }
   ]
