@@ -885,6 +885,15 @@ def _glossary(project: str, context: str, force: bool = False) -> str:
             # dem es am meisten zaehlt. Lieber KEIN Glossar (der dokumentierte Rueckfall: die
             # Korrektur laeuft ohne gemeinsames weiter) als das alte mit dem falsch gehoerten
             # Namen darin (CodeRabbit-CLI).
+            #
+            # NUR bei `force`, und das ist eine Entscheidung, keine Auslassung: die CLI wollte
+            # es fuer JEDEN Erzeugungsversuch. Ohne `force` heisst „veraltet" aber
+            # UNVOLLSTAENDIG, nicht falsch — die Datei ist nur aelter als eine neu
+            # hinzugekommene `.raw.txt`, ihre bisherigen Schreibweisen stimmen weiter. Ein
+            # voruebergehender Fehlschlag (offline) wuerfe dort ein brauchbares Glossar fuer
+            # das GANZE Projekt weg und naehme jeder folgenden Datei ihre Konsistenz. Bei
+            # `force` ist die Praemisse umgekehrt: der Aufrufer sagt gerade, dass der alte
+            # Stand nicht mehr gilt.
             with contextlib.suppress(OSError):
                 os.remove(gpath)
         # #450: Dieser Schritt liest die `.raw.txt` JEDER Aufnahme des Projekts — auf dem
