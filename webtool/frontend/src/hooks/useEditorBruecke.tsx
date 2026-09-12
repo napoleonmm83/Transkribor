@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useRef, type ReactNode } from 'react'
+import { createContext, useContext, useLayoutEffect, useRef, type ReactNode } from 'react'
 import type { SpeicherStand } from './useDoc'
 
 /** Was der Editor der Huelle ueber sein offenes Dokument verraet — mehr braucht die Leiste nicht. */
@@ -77,10 +77,19 @@ export function darfWechseln(
  * Absichtlich OHNE Dep-Array: `dirty` und `reload` aendern sich waehrend der Sitzung, und der
  * Ref muss bei JEDEM Render den frischen Stand tragen. Ein vergessener Eintrag in einem Array
  * waere ein veralteter `dirty`-Wert — also genau der stille Datenverlust, gegen den es geht.
+ *
+ * `useLayoutEffect`, nicht `useEffect`: der laeuft synchron im Commit, ein passiver Effekt
+ * dagegen ueber den Scheduler. Dazwischen liegt ein Fenster, in dem der Ref noch den Stand des
+ * VORIGEN Renders traegt — klickt die Leiste genau darin, liest `darfWechseln` ein `stand`, das
+ * nicht mehr gilt, und laesst den Wechsel ohne Rueckfrage durch, waehrend der Verlassens-Flush
+ * in `useDoc` auf 'fehler' bewusst nicht schreibt. Dasselbe Muster und derselbe Grund wie bei
+ * `offen` in `useDoc.ts` und `notizJetzt` in `SegmentView.tsx`. Der Unterschied laesst sich
+ * nicht rot bekommen (RTLs `act` spuelt passive Effekte ohnehin) — das Argument ist der
+ * Mechanismus, nicht ein Testlauf. Gemeldet vom CodeRabbit-Bot (major) an PR #617.
  */
 export function useEditorMelden(offen: OffenesDokument | null) {
   const ref = useBruecke()
-  useEffect(() => {
+  useLayoutEffect(() => {
     ref.current = offen
     return () => { ref.current = null }
   })

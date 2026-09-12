@@ -46,3 +46,28 @@ describe('Toolbar Rueckweg', () => {
     expect(screen.queryByRole('link')).toBeNull()
   })
 })
+
+describe('Toolbar Rueckweg — modifizierte Klicks', () => {
+  /** Beide Richtungen in EINEM Test: „wurde nicht gefragt" allein waere auch dann wahr, wenn
+   *  die Verdrahtung ganz fehlte. Der schlichte Klick darunter ist die Positivkontrolle. */
+  it('fragt beim schlichten Linksklick, laesst einen Strg-Klick aber durch', () => {
+    // Ein Strg-/Cmd-/Shift-/Mittelklick oeffnet einen neuen Tab — die Seite bleibt stehen, es
+    // geht nichts verloren. Ein `preventDefault` machte daraus einen toten Link, samt
+    // Rueckfrage fuer eine Bewegung, die gar keine ist (CodeRabbit-Bot, minor, PR #617).
+    const erlaubt = vi.fn(() => false)
+    render(<MemoryRouter><TooltipProvider>
+      <Toolbar projekt="Demo" zurueckErlaubt={erlaubt} stand="fehler" bereit onExport={vi.fn()} />
+    </TooltipProvider></MemoryRouter>)
+    const link = screen.getByRole('link', { name: /Demo/ })
+
+    fireEvent.click(link)
+    expect(erlaubt).toHaveBeenCalledTimes(1)
+
+    fireEvent.click(link, { ctrlKey: true })
+    fireEvent.click(link, { metaKey: true })
+    fireEvent.click(link, { shiftKey: true })
+    fireEvent.click(link, { altKey: true })
+    fireEvent.click(link, { button: 1 })
+    expect(erlaubt).toHaveBeenCalledTimes(1)
+  })
+})
