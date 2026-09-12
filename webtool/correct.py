@@ -878,6 +878,15 @@ def _glossary(project: str, context: str, force: bool = False) -> str:
         print("↷ nutze vorhandenes _glossar.json", flush=True)
     else:
         print("→ Glossar (gemeinsame Namen/Begriffe) …", flush=True)
+        if force:
+            # Ein erzwungener Lauf, dessen Erzeugung scheitert (`_ask_llm` faengt `LLMError`,
+            # seit #455 auch jeden `OSError`), laese sonst weiter das ALTE Glossar von der
+            # Platte — `--force` waere damit ausgerechnet auf dem Fehlerpfad wirkungslos, auf
+            # dem es am meisten zaehlt. Lieber KEIN Glossar (der dokumentierte Rueckfall: die
+            # Korrektur laeuft ohne gemeinsames weiter) als das alte mit dem falsch gehoerten
+            # Namen darin (CodeRabbit-CLI).
+            with contextlib.suppress(OSError):
+                os.remove(gpath)
         # #450: Dieser Schritt liest die `.raw.txt` JEDER Aufnahme des Projekts — auf dem
         # API-/Codex-Weg oeffnet `llm._with_files` sie im Job-Prozess selbst, auf dem
         # `claude -p`-Weg der CLI-Enkel. Ohne Marken ist `active_bases` dabei LEER

@@ -134,6 +134,19 @@
         "test_alle_prompts_tragen_die_widerspruch_regel",
         "test_gescheitertes_bereinigungsschreiben_laesst_die_datei_nicht_liegen"
       ]
+    },
+    {
+      "id": "612-K ein gescheiterter --force-Lauf laedt wieder das alte Glossar von der Platte",
+      "datei": "webtool/correct.py",
+      "von": "            with contextlib.suppress(OSError):\n                os.remove(gpath)",
+      "nach": "            pass  # MUTATION: das alte Glossar bleibt liegen",
+      "rot": [
+        "test_force_baut_das_glossar_neu"
+      ],
+      "gruen": [
+        "test_alle_prompts_tragen_die_widerspruch_regel",
+        "test_zusammenfassung_verwirft_den_text_schluessel_auf_BEIDEN_wegen"
+      ]
     }
   ]
 }

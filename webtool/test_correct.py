@@ -1840,10 +1840,15 @@ def test_force_baut_das_glossar_neu(tmp_path, monkeypatch):
 
     gerufen = []
     monkeypatch.setattr(correct, "_ask_llm", lambda *a, **k: gerufen.append(1))
-    correct._glossary("P", "kontext")
+    assert correct._glossary("P", "kontext") != ""
     assert gerufen == [], "ohne --force wird ein frisches Glossar wiederverwendet"
-    correct._glossary("P", "kontext", force=True)
+    # Und der Fehlerpfad, auf dem `--force` am meisten zaehlt: die Erzeugung schreibt nichts
+    # (die Attrappe tut nichts, genau wie ein `_ask_llm`, das `LLMError` gefangen hat). Ohne
+    # das Wegraeumen laege das ALTE Glossar noch da und wuerde geladen — `--force` waere dann
+    # ausgerechnet dort wirkungslos, wo es gebraucht wird (CodeRabbit-CLI).
+    assert correct._glossary("P", "kontext", force=True) == ""
     assert gerufen == [1], "mit --force muss das Glossar neu gebaut werden"
+    assert not glossar.exists(), "das alte Glossar darf einen erzwungenen Lauf nicht ueberleben"
 
 
 def test_ziel_dialekt_meldet_mehrsprachig(tmp_path, monkeypatch):
