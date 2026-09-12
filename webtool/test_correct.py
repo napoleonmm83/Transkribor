@@ -1692,7 +1692,10 @@ def test_verify_prompt_dreht_den_aufgeloesten_widerspruch_nicht_zurueck():
     """
     p = correct._verify_prompt("b", "t.txt", "c.json", "kontext")
     assert "nur eine unter annotations als AUFLÖSUNG vermerkte Abweichung KEINE Drift" in p
-    assert "Eine Abweichung DORT ohne solchen Vermerk geht zurück" in p
+    assert "Eine Abweichung DORT ohne solchen Vermerk geht ebenfalls zurück" in p
+    # Und die FOLGE bei fehlgeschlagener Pruefung: die Klausel nannte zuerst nur die Pruefung,
+    # nicht ihren Ausgang — die MUSIK-Zeile zwei Punkte darueber nennt beide Folgen.
+    assert "passt sie NICHT, stelle den Rohstand wieder her" in p
     assert "ist keine Auflösung: stelle den Rohstand wieder her" in p
     # Und die Begrenzung, ohne die der Satz die GANZE Korrektur zurueckdrehen liesse: der
     # Korrektur-Pass verbessert klare ASR-Fehler routinemaessig OHNE Anmerkung (Regel 2).
