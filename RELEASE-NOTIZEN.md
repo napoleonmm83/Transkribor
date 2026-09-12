@@ -28,6 +28,8 @@ hat. Lesbar, aber unschön — das ist Absicht.
 
 ## Unveröffentlicht
 
+## v0.56.0 — 2026-09-12
+
 **Neu**
 - Aus einer geöffneten Aufnahme führt dich der Pfeil links oben zurück auf die Seite des Projekts — und der Projektname in der Seitenleiste bringt dich dorthin statt gleich zur Übersicht.
 
