@@ -612,6 +612,9 @@ const INVENTAR: Record<string, Eintrag> = {
   '↷ Diarisierung deaktiviert (TRANSKRIBOR_DIARIZE=0)': {
     art: 'ignoriert', beispiel: '↷ Diarisierung deaktiviert (TRANSKRIBOR_DIARIZE=0)',
   },
+  '  ↷ {} text-Feld(er) verworfen (Tiefe zusammenfassung)': {
+    art: 'ignoriert', beispiel: '  ↷ 2 text-Feld(er) verworfen (Tiefe zusammenfassung)',
+  },
   '↷ nutze vorhandene {}.correction.json': { art: 'ignoriert', beispiel: '↷ nutze vorhandene A.correction.json' },
   '↷ nutze vorhandene {}.diar.json': { art: 'ignoriert', beispiel: '↷ nutze vorhandene A.diar.json' },
   '⏱ Phasen: glossar {}s · pipeline {}s · ': {

@@ -1224,8 +1224,13 @@ def _text_schluessel_entfernen(cpath: str) -> int:
             del s["text"]
             n += 1
     if n:
-        print(f"  ↷ {n} text-Feld(er) verworfen — Tiefe „zusammenfassung“ lässt den Inhalt "
-              f"unangetastet", flush=True)
+        # EINZEILIG, nicht ueber zwei Literale: der Vertragstest erntet die Druckformen und
+        # bekaeme von einer impliziten Verkettung nur das ERSTE Stueck — ein Inventar-Schluessel
+        # mit abgeschnittenem Ende und Leerzeichen dahinter. (Und das Wort fuer die Druckfunktion
+        # steht hier bewusst ohne Klammer: der Ernter liest auch KOMMENTARE, und eine Erwaehnung
+        # mit Klammer wird als unlesbare Druckform gezaehlt — der UNLESBAR-Sentinel des Tests
+        # nennt genau diesen Preis.)
+        print(f"  ↷ {n} text-Feld(er) verworfen (Tiefe zusammenfassung)", flush=True)
         try:
             paths.atomic_write(cpath, json.dumps(d, ensure_ascii=False, indent=1))
         except OSError:
