@@ -1,0 +1,59 @@
+{
+  "test": "npm --prefix webtool/frontend test -- src/components/Toolbar.test.tsx src/components/AppShell.test.tsx",
+  "pfade": [
+    "webtool/frontend/src/components/Toolbar.tsx",
+    "webtool/frontend/src/components/Toolbar.test.tsx",
+    "webtool/frontend/src/components/AppShell.tsx",
+    "webtool/frontend/src/components/AppShell.test.tsx"
+  ],
+  "mutationen": [
+    {
+      "id": "R1 der Rueckweg im Editor zeigt wieder auf die Startseite statt auf das Projekt",
+      "datei": "webtool/frontend/src/components/Toolbar.tsx",
+      "von": "<Link to={`/p/${encodeURIComponent(projekt)}`}",
+      "nach": "<Link to={`/`}",
+      "rot": [
+        "fuehrt mit dem Projektnamen auf die Projektseite"
+      ],
+      "gruen": [
+        "ohne Projekt kein Link — der Kopf laeuft auch ausserhalb eines Routers"
+      ]
+    },
+    {
+      "id": "R2 der Projektname wandert ungeschuetzt in die Adresse (Leerzeichen zerlegt sie)",
+      "datei": "webtool/frontend/src/components/Toolbar.tsx",
+      "von": "`/p/${encodeURIComponent(projekt)}`",
+      "nach": "`/p/${projekt}`",
+      "rot": [
+        "fuehrt mit dem Projektnamen auf die Projektseite"
+      ],
+      "gruen": [
+        "ohne Projekt kein Link — der Kopf laeuft auch ausserhalb eines Routers"
+      ]
+    },
+    {
+      "id": "R3 der Link wird unbedingt gerendert — die Leiste wirft dann ausserhalb eines Routers",
+      "datei": "webtool/frontend/src/components/Toolbar.tsx",
+      "von": "      {projekt && (",
+      "nach": "      {true && (",
+      "rot": [
+        "ohne Projekt kein Link — der Kopf laeuft auch ausserhalb eines Routers"
+      ],
+      "gruen": [
+        "fuehrt mit dem Projektnamen auf die Projektseite"
+      ]
+    },
+    {
+      "id": "R4 der Klick auf den Projektnamen faellt wieder auf die Startseite zurueck",
+      "datei": "webtool/frontend/src/components/AppShell.tsx",
+      "von": "          : active ? `/p/${encodeURIComponent(active.project)}`",
+      "nach": "          : active ? '/'",
+      "rot": [
+        "der Klick auf den Projektnamen geht EINE Ebene hoch, nicht auf die Startseite"
+      ],
+      "gruen": [
+        "navigiert nach zugestimmter Rueckfrage"
+      ]
+    }
+  ]
+}

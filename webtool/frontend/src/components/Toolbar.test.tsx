@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { Toolbar } from './Toolbar'
 
@@ -21,5 +22,27 @@ describe('Toolbar Suche', () => {
     fireEvent.change(screen.getByPlaceholderText('Im Transkript suchen …'), { target: { value: 'Wiesental' } })
     expect(onChange).toHaveBeenCalledWith('Wiesental')
     expect(screen.getByText('3 / 5')).toBeInTheDocument()
+  })
+})
+
+describe('Toolbar Rueckweg', () => {
+  it('fuehrt mit dem Projektnamen auf die Projektseite', () => {
+    // Der Editor ist die einzige Seite ohne PageHeader — ohne diesen Link gibt es aus einer
+    // geoeffneten Aufnahme keinen Weg zurueck zum Projekt ausser ueber die Startseite.
+    render(<MemoryRouter><TooltipProvider>
+      <Toolbar projekt="Demo Projekt" stand="ruhig" bereit onExport={vi.fn()} />
+    </TooltipProvider></MemoryRouter>)
+    // Der Name steht im Linktext UND im aria-label (WCAG 2.5.3): der Name allein sagt nicht,
+    // wohin es geht, das Label allein verliert den sichtbaren Text.
+    const zurueck = screen.getByRole('link', { name: /Demo Projekt/ })
+    // encodeURIComponent MUSS greifen: ein Leerzeichen im Projektnamen ist Alltag hier.
+    expect(zurueck).toHaveAttribute('href', '/p/Demo%20Projekt')
+  })
+
+  it('ohne Projekt kein Link — der Kopf laeuft auch ausserhalb eines Routers', () => {
+    // Bewusst OHNE MemoryRouter: ein unbedingter <Link> wuerde hier werfen. Die Bedingung ist
+    // damit keine Kosmetik, sondern das, was diesen Test ueberhaupt rendern laesst.
+    render(<TooltipProvider><Toolbar stand="ruhig" bereit onExport={vi.fn()} /></TooltipProvider>)
+    expect(screen.queryByRole('link')).toBeNull()
   })
 })

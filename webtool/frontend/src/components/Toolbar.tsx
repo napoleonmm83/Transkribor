@@ -1,4 +1,5 @@
-import { Check, CircleHelp, Download, Subtitles, TriangleAlert } from 'lucide-react'
+import { ArrowLeft, Check, CircleHelp, Download, Subtitles, TriangleAlert } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -21,7 +22,11 @@ const STAND: Record<Exclude<SpeicherStand, 'ruhig'>, { text: string; punkt: 'war
   fehler: { text: 'nicht gespeichert', punkt: 'fehler' },
 }
 
-export function Toolbar({ stand, bereit, onExport, suchQuery, onSuchChange, suchCount = 0, suchIndex = 0, onSuchPrev, onSuchNext }: {
+export function Toolbar({ projekt, stand, bereit, onExport, suchQuery, onSuchChange, suchCount = 0, suchIndex = 0, onSuchPrev, onSuchNext }: {
+  /** Projekt der offenen Aufnahme — Ziel des Rueckwegs. Fehlt es, entfaellt der Link, und die
+   *  Leiste rendert damit auch AUSSERHALB eines Routers (ein unbedingter `Link` wuerde dort
+   *  werfen; zwei Tests dieser Datei laufen genau so). */
+  projekt?: string;
   stand: SpeicherStand; bereit: boolean;
   onExport: (fmt: ExportFmt, sprecher?: boolean) => void;
   suchQuery?: string; onSuchChange?: (v: string) => void;
@@ -33,6 +38,24 @@ export function Toolbar({ stand, bereit, onExport, suchQuery, onSuchChange, such
     // Kein sticky noetig: EditorView setzt die Leiste als eigene Grid-Zeile, gescrollt wird
     // nur das <main> darunter.
     <header className="flex items-center gap-2 border-b px-3 py-2">
+      {/* Der EINZIGE Weg aus einer geoeffneten Aufnahme zurueck zum Projekt — der Editor ist
+          die einzige Seite ohne `PageHeader`, und die Leiste links faellt unter `md` ganz weg.
+          Bewusst dieselbe Geste wie dort (Pfeil + Ziel, gedaempft, Hover auf `foreground`):
+          ein zweites Muster fuer dieselbe Bewegung waere eines zu viel. Beschriftet mit dem
+          ZIEL statt mit dem Wort „zurueck"; das `aria-label` nennt den Ort ausdruecklich und
+          enthaelt den sichtbaren Text (WCAG 2.5.3). Kein `outline-none` — wie in `PageHeader`
+          bleibt der Standard-Fokusring stehen.
+          `min-w-0 max-w-48 truncate`: Projektnamen sind Nutzereingaben, und diese Zeile traegt
+          schon Speicherstand, Suche, Legende und zwei Export-Knoepfe. */}
+      {projekt && (
+        <Link to={`/p/${encodeURIComponent(projekt)}`}
+          aria-label={`Zur Projektseite von ${projekt}`}
+          className="-ml-1 inline-flex min-w-0 max-w-48 shrink items-center gap-1.5 rounded-md
+                     px-2 py-1 text-sm text-muted-foreground transition-colors hover:text-foreground">
+          <ArrowLeft className="size-4 shrink-0" aria-hidden="true" />
+          <span className="truncate">{projekt}</span>
+        </Link>
+      )}
       {/* aria-live: es speichert von selbst, es klickt also niemand und schaut hin. */}
       {anzeige && (
         <span aria-live="polite"
