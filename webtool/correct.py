@@ -255,6 +255,40 @@ CLUSTER_REGEL = (
     "Entscheidung, KEINE Fehlzuordnung."
 )
 
+# Die EINE Fassung der Widerspruchs-Regel, eingebettet in ALLE FUENF Prompts (#612).
+#
+# Der gemessene Fall: die Korrektur liess einen Ortsnamen stehen, der dem Land widersprach,
+# das ein Segment spaeter genannt wurde — und tat den Widerspruch in den eigenen Anmerkungen
+# als Wortspiel ab. Danach diente ausgerechnet dieser falsch gehoerte Ort als BEGRUENDUNG
+# fuer eine zweite Korrektur. Der Anmerkungs-Kanal funktionierte dabei nachweislich (vier
+# andere Unsicherheiten stehen sauber darin); es fehlte die Regel, dass ein Widerspruch ein
+# Anlass ist. Regel 5 (wirklich unklare Stellen NICHT raten) hat ihn nicht gefangen, weil das
+# Modell die Stelle fuer GEKLAERT hielt, nicht fuer unklar — deshalb nennt die Regel das
+# Erkennungsmerkmal, nicht nur das Verbot. Dieselbe Lehre wie bei CLUSTER_REGEL (#267).
+#
+# Sie befiehlt bewusst NICHT "loese ihn auf": sie steht auch in _summary_prompt, der woertlich
+# "Den Inhalt laesst du UNANGETASTET" sagt, und in _glossary_prompt, das gar keine Segmente
+# schreibt. Ein Aufloese-Befehl staende dort neben seinem Gegenteil — genau die Form, die der
+# Kommentar ueber CLUSTER_REGEL als wirkungslos beschreibt. WAS zu tun ist, sagt jeder Prompt
+# in seinem eigenen Umfeld; die Regel sagt nur, dass Wegerklaeren keine Antwort ist.
+#
+# Die Treue-Klammer (falsch GEHOERT, nicht falsch GESAGT) ist keine Zierde: die Regel gilt auf
+# Entscheidung des Eigentuemers fuer JEDEN nachpruefbaren Widerspruch, nicht nur fuer Orte —
+# ohne die Klammer laedt sie das Modell ein, einen Irrtum der sprechenden Person glattzuziehen,
+# und ein geglaetteter Satz faellt hinterher niemandem mehr auf.
+#
+# KEIN kleingeschriebenes "text" in dieser Zeichenkette: sie landet auch im summary-Prompt,
+# und test_summary_prompt_ohne_text_korrektur prueft dort genau auf diesen Teilstring.
+WIDERSPRUCH_REGEL = (
+    "Widersprechen sich zwei Angaben, die sich aneinander prüfen lassen — ein Ort und das "
+    "Land, in dem er liegen soll; ein Datum und sein Wochentag; eine Zahl und ihre Einheit —, "
+    "dann ist das ein HINWEIS auf eine Fehlhörung: kein Wortspiel, kein Scherz, keine Ironie. "
+    "Wegerklären ist die eine verbotene Antwort; lege den Widerspruch offen. Du korrigierst "
+    "dabei nur, was falsch GEHÖRT wurde, nie was falsch GESAGT wurde — eine sprechende Person "
+    "darf sich irren, und dann bleibt ihr Irrtum stehen. Und ein ungeklärter Punkt ist KEIN "
+    "Beleg: begründe mit ihm keine andere Korrektur."
+)
+
 
 def _sidecar_sprecher(dpath: str):
     """Mit welcher Sprecherzahl wurde ein vorhandenes `<base>.diar.json` gerechnet?
@@ -642,7 +676,7 @@ Schema:
   "likely_corrections": [{{"wrong": "wiederkehrender ASR-Fehler", "right": "korrekt", "why": "optional"}}]
 }}
 
-Nimm nur Einträge mit vernünftiger Sicherheit auf — ERFINDE KEINE Namen. Lieber wenige sichere als viele geratene. Gib ausser der geschriebenen Datei nichts weiter aus."""
+Nimm nur Einträge mit vernünftiger Sicherheit auf — ERFINDE KEINE Namen. Lieber wenige sichere als viele geratene. {WIDERSPRUCH_REGEL} Ein Name, der seinem Umfeld widerspricht, kommt NICHT als richtige Schreibweise ins Glossar; nimmst du ihn trotzdem auf, nenne den Widerspruch im note-Feld. Gib ausser der geschriebenen Datei nichts weiter aus."""
 
 
 def _scope(id_range, known: str = "") -> tuple:
@@ -693,7 +727,7 @@ Gemeinsames Glossar (für konsistente Schreibweisen — nutze es, ergänze nicht
 2) KORRIGIEREN: klare ASR-Fehler mit Kontext + Glossar verbessern{norm_satz} BLEIB TREU: nichts erfinden, den Sinn nicht verändern, nicht über das Nötige hinaus glätten (Füllwörter wie „äh“/„ähm“ dürfen dezent weg). Entferne die [[...]]-Markierungen im Ausgabetext.
 3) PRO SEGMENT: gib für JEDE Segment-ID {scope} GENAU EINEN Eintrag {{id, speaker, text}} zurück — keine ID auslassen, keine Segmente zusammenfassen (die Redebeitrags-Bündelung passiert später).
 4) SPRECHER: Das akustische (Sprecher N)-Präfix sagt, WANN die Stimme wechselt — vergib pro Cluster GENAU EINEN konsistenten Namen: meist „Interviewer“ (stellt Fragen) und die befragte Person (Name/Betrieb falls genannt, sonst „Befragte Person“). {CLUSTER_REGEL} Eine Cluster-Grenze nur überschreiben, wenn sie offensichtlich falsch ist (z.B. ein einzelnes Rückkanal-Wort). Fehlt das Präfix, ordne nach Inhalt zu (wie bisher). Gib JEDEM Segment einen Sprecher.
-5) UNSICHER: wirklich unklare Stellen NICHT raten — nah am Original belassen und unter annotations vermerken.
+5) UNSICHER: wirklich unklare Stellen NICHT raten — nah am Original belassen und unter annotations vermerken. {WIDERSPRUCH_REGEL} Löse ihn auf, wenn die richtige Lesart aus Klang und Zusammenhang EINDEUTIG folgt; sonst lass die Stelle unverändert und vermerke ihn unter annotations als UNGEKLÄRT — nichts zu tun ist hier keine Option.
 6) MUSIK/GESANG: Whisper "hört" in gesungenen Passagen sicher klingenden Unsinn (typisch: dieselbe kurze Zeile mehrfach hintereinander, fremdsprachig wirkende Wortfetzen, Text der zum Gespräch nicht passt). Bei GESUNGENEN Stellen und bei Segmenten ohne verständliche Sprache (Musik, Jubel, Applaus) schreibe als text exakt „[Musik]“ — nicht raten, was gesungen wurde. GESPROCHENE Bühnenansagen sind KEINE Musik, die bleiben Text.
 7) ASR-ARTEFAKTE & HALLUZINATIONSSCHLEIFEN: Segmente, deren Text nachweislich nicht aus dem Ton stammt (Untertitel-Floskeln wie „ARD Text im Auftrag von Funk“, „Untertitelung des ZDF“, „Vielen Dank fürs Zuschauen“ sowie endlose ASR-Wiederholungsschleifen desselben Satzes über Musik/Stille), bekommen einen LEEREN text (""). In summary fasst du AUSSCHLIESSLICH den echten Gesprächsinhalt zusammen — beschreibe dort KEINE ASR-Fehler, keine leeren Blöcke und keine Halluzinationsschleifen. Regel 6 und 7 gelten nur, wenn du dir sicher bist — im Zweifel Text belassen und unter annotations vermerken.
 
@@ -744,7 +778,7 @@ Prüfe kritisch gegen das ROH — konservativ, im Zweifel näher am Original:
 - VOLLSTÄNDIGKEIT: für JEDE Roh-Segment-ID {scope} genau ein Eintrag? Fehlende ergänzen (Text nah am Roh), zusammengefasste auftrennen.
 - SPRECHER: konsistent pro akustischem (Sprecher N)-Cluster und plausibel (Interviewer stellt Fragen; Antworten korrekt zugeordnet)? {CLUSTER_REGEL} Fehlzuordnungen korrigieren — einzelne Segmente ebenso wie einen durchgehend falsch benannten Cluster; zwei Cluster mit demselben Namen aber NICHT auseinanderziehen.
 - RESTFEHLER: offensichtliche verbleibende ASR-Fehler nur wenn eindeutig (konservativ).
-- UNSICHER: wirklich unklare Stellen NICHT raten — nah am Original belassen und unter annotations vermerken. Entferne evtl. übrige [[...]]-Markierungen im Text.
+- UNSICHER: wirklich unklare Stellen NICHT raten — nah am Original belassen und unter annotations vermerken. {WIDERSPRUCH_REGEL} Ein aufgelöster Widerspruch und ein Vermerk dazu sind ERLAUBTE Entscheidungen, KEINE Drift: NICHT zurückdrehen, auch wenn die aufgelöste Stelle vom Roh abweicht — prüfe nur, ob die Auflösung zum Klang des Rohs passt und der Vermerk zutrifft. Entferne evtl. übrige [[...]]-Markierungen im Text.
 
 Schreibe die VOLLSTÄNDIGE, geprüfte Korrektur mit dem Write-Tool als JSON nach GENAU diesem Pfad (alle Segment-IDs {scope}, gleiches Schema):
 {cpath}
@@ -780,7 +814,7 @@ def _light_prompt(base: str, tagged_path: str, cpath: str, context: str,
 
 Projekt-Kontext: {context or _default_context(ziel, dialekt, mehrsprachig)}
 1) Lies die Rohsegmente (Read-Tool): {tagged_path}
-2) KORRIGIERE NUR offensichtliche ASR-Fehler und Eigennamen{norm_satz} KEIN Umschreiben, keine Dialekt-Glättung, keine Normalisierung. Entferne [[...]]-Markierungen.
+2) KORRIGIERE NUR offensichtliche ASR-Fehler und Eigennamen{norm_satz} KEIN Umschreiben, keine Dialekt-Glättung, keine Normalisierung. Entferne [[...]]-Markierungen. {WIDERSPRUCH_REGEL} Löse ihn auf, wenn die richtige Lesart EINDEUTIG folgt; sonst lass die Stelle unverändert und vermerke ihn unter annotations als UNGEKLÄRT.
 3) SPRECHER: vergib pro (Sprecher N)-Cluster einen konsistenten Namen (meist „Interviewer" und die befragte Person). {CLUSTER_REGEL} Gib JEDEM Segment einen speaker.
 4) SUMMARY: eine Inhalts-Zusammenfassung (3-5 Sätze; nur echter Gesprächsinhalt, keine Berichte über ASR-Fehler oder leere Abschnitte).
 
@@ -801,7 +835,7 @@ def _summary_prompt(base: str, tagged_path: str, cpath: str, context: str,
 Projekt-Kontext: {context or _default_context(ziel, dialekt)}
 1) Lies die Rohsegmente (Read-Tool): {tagged_path}
 2) SPRECHER: vergib pro (Sprecher N)-Cluster einen konsistenten Namen. {CLUSTER_REGEL} JEDES Segment bekommt einen speaker — KEIN Text-Feld (der Roh-Inhalt bleibt unveraendert, uebernimm nur id und speaker).
-3) SUMMARY: eine Inhalts-Zusammenfassung (3-5 Sätze; nur echter Gesprächsinhalt, keine Berichte über ASR-Fehler oder leere Abschnitte) in {ziel or 'der Originalsprache'}.
+3) SUMMARY: eine Inhalts-Zusammenfassung (3-5 Sätze; nur echter Gesprächsinhalt, keine Berichte über ASR-Fehler oder leere Abschnitte) in {ziel or 'der Originalsprache'}. {WIDERSPRUCH_REGEL} Hier änderst du nichts am Gesagten — übernimm die Angabe nicht als Tatsache in die Zusammenfassung und vermerke den Widerspruch unter annotations.
 
 Schema (Write-Tool nach {cpath}):
 {{"base":"{base}","context":"1-2 Sätze","speakers":["…"],
