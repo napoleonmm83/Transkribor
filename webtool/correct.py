@@ -1208,8 +1208,21 @@ def _text_schluessel_entfernen(cpath: str) -> int:
     if n:
         print(f"  ↷ {n} text-Feld(er) verworfen — Tiefe „zusammenfassung“ lässt den Inhalt "
               f"unangetastet", flush=True)
-        with contextlib.suppress(OSError):
+        try:
             paths.atomic_write(cpath, json.dumps(d, ensure_ascii=False, indent=1))
+        except OSError:
+            # Der SCHREIBVORGANG ist der Riegel, nicht das Streichen im Speicher. Scheitert er,
+            # liegt auf der Platte weiter die Fassung MIT `text` — `_valid_correction` winkt sie
+            # anstandslos durch und `cmd_apply` wendet sie an: genau der Datenverlust, gegen den
+            # diese Funktion steht. Und sie ueberlebte den Fehlschlag, weil der naechste Lauf sie
+            # ueber `reuse` (mtime neuer als die Roh-JSON) wiederverwendet.
+            #
+            # Also weg damit und laut scheitern. `correct_ai_single` faengt breit, meldet die
+            # Datei als misslungen und faehrt den Batch weiter — ein stiller Erfolg waere hier
+            # die teuerste aller Antworten (CodeRabbit-CLI, zweimal am selben Ort).
+            with contextlib.suppress(OSError):
+                os.remove(cpath)
+            raise
     return n
 
 
