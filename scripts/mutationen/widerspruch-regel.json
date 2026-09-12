@@ -108,6 +108,19 @@
         "test_alle_prompts_tragen_die_widerspruch_regel",
         "test_zusammenfassung_verwirft_einen_text_schluessel_mechanisch"
       ]
+    },
+    {
+      "id": "612-I der gescheiterte Bereinigungs-Schreibvorgang wird wieder still geschluckt",
+      "datei": "webtool/correct.py",
+      "von": "        except OSError:\n            # Der SCHREIBVORGANG ist der Riegel, nicht das Streichen im Speicher. Scheitert er,",
+      "nach": "        except OSError:\n            return n  # MUTATION: der geschluckte Fehler ist zurueck",
+      "rot": [
+        "test_gescheitertes_bereinigungsschreiben_laesst_die_datei_nicht_liegen"
+      ],
+      "gruen": [
+        "test_zusammenfassung_verwirft_einen_text_schluessel_mechanisch",
+        "test_force_baut_das_glossar_neu"
+      ]
     }
   ]
 }

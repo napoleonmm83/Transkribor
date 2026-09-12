@@ -1765,6 +1765,35 @@ def test_zusammenfassung_verwirft_einen_text_schluessel_mechanisch(tmp_path, mon
     assert all(s["speaker"] == "A" for s in segs)
 
 
+def test_gescheitertes_bereinigungsschreiben_laesst_die_datei_nicht_liegen(tmp_path, monkeypatch):
+    """Der SCHREIBVORGANG ist der Riegel — ein geschluckter OSError machte ihn wirkungslos.
+
+    Bleibt die Fassung MIT `text` liegen, winkt `_valid_correction` sie durch und `cmd_apply`
+    wendet sie an; beim naechsten Lauf zaehlt sie ueber `reuse` (mtime neuer als die Roh-JSON)
+    zusaetzlich als wiederverwendbar — der Schaden ueberlebte den Fehlschlag also. Gefunden von
+    der CodeRabbit-CLI, zweimal an derselben Stelle.
+    """
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    tdir = tmp_path / "P" / "transkripte"
+    tdir.mkdir(parents=True)
+    cpath = tdir / "b.correction.json"
+    cpath.write_text(json.dumps({
+        "base": "b", "speakers": ["A"], "annotations": [], "summary": "s",
+        "segments": [{"id": 0, "speaker": "A", "text": "umgeschrieben"}],
+    }), encoding="utf-8")
+    # Positivkontrolle: GENAU so, wie sie hier liegt, waere sie gueltig — und damit anwendbar.
+    # Ohne diese Zeile bewiese der Test nur, dass eine Datei weg ist, nicht dass Gefahr bestand.
+    assert correct._valid_correction(str(cpath))
+
+    def kaputter_schreiber(*a, **k):
+        raise OSError("Platte voll")
+
+    monkeypatch.setattr(correct.paths, "atomic_write", kaputter_schreiber)
+    with pytest.raises(OSError):
+        correct._text_schluessel_entfernen(str(cpath))
+    assert not cpath.exists(), "die unbereinigte Fassung muss weg sein, sonst wird sie angewendet"
+
+
 def test_force_baut_das_glossar_neu(tmp_path, monkeypatch):
     """`--force` galt bis #612 nur der `correction.json`, nicht dem gemeinsamen Glossar.
 
