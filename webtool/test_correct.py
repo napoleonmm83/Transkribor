@@ -1614,6 +1614,72 @@ def test_verify_prompt_verbietet_das_auseinanderziehen_gleich_benannter_cluster(
     assert "durchgehend falsch benannten Cluster" in p
 
 
+def test_alle_prompts_tragen_die_widerspruch_regel():
+    """#612: die Regel gilt fuer ALLE FUENF Prompt-Bauer — auch die zwei, die keinen Inhalt
+    aendern duerfen (Entscheidung Marcus, 12.09.2026). `_summary_prompt` kann den Ort nicht
+    korrigieren, aber sehr wohl melden; `_glossary_prompt` ist der Weg, auf dem ein falsch
+    gehoerter Name in ALLE weiteren Aufnahmen desselben Projekts wandert.
+
+    Dieser Test allein genuegt NICHT: eine ausgeweidete Konstante liesse ihn gruen, weil
+    `{WIDERSPRUCH_REGEL}` per f-String immer im Prompt landet — mit `= ""` ist die Zusicherung
+    `"" in p` und damit immer wahr. Die Gegenwache ist der naechste Test, und der
+    Mutationsplan traegt deshalb ZWEI getrennte Mutationen.
+    """
+    prompts = {
+        "correct": correct._correct_prompt("b", "t.txt", "c.json", "g.json", "kontext"),
+        "verify":  correct._verify_prompt("b", "t.txt", "c.json", "kontext"),
+        "light":   correct._light_prompt("b", "t.txt", "c.json", "kontext"),
+        "summary": correct._summary_prompt("b", "t.txt", "c.json", "kontext"),
+        "glossar": correct._glossary_prompt("g.json", ["a.raw.txt"], "kontext"),
+    }
+    for name, p in prompts.items():
+        assert correct.WIDERSPRUCH_REGEL in p, f"{name}-Prompt traegt die Widerspruchs-Regel nicht"
+
+
+def test_widerspruch_regel_nennt_merkmal_verbot_treue_und_belegverbot():
+    """Vacuity-Wache: alle VIER Teile einzeln, sonst bewacht der Einbettungstest eine Huelse.
+
+    Warum das Erkennungsmerkmal mitgeprueft wird: das Verbot allein haette den gemessenen Fall
+    nicht gefangen. Regel 5 (wirklich unklare Stellen NICHT raten) stand bereits da — das
+    Modell hielt die Stelle fuer GEKLAERT, nicht fuer unklar, und schrieb die Begruendung
+    gleich mit in die Anmerkungen. Dieselbe Lehre wie beim CodeRabbit-Befund an PR #269.
+
+    Und warum die Treue-Klammer: die Regel gilt fuer JEDEN nachpruefbaren Widerspruch, nicht
+    nur fuer Orte. Ohne sie laedt sie das Modell ein, einen Irrtum der sprechenden Person
+    glattzuziehen — und ein geglaetteter Satz faellt hinterher niemandem mehr auf.
+    """
+    r = correct.WIDERSPRUCH_REGEL
+    # 1. das Erkennungsmerkmal — woran das Modell den Fall ueberhaupt bemerkt
+    assert "aneinander prüfen" in r
+    assert "Land" in r and "Wochentag" in r and "Einheit" in r
+    # 2. das Verbot selbst
+    assert "Wortspiel" in r and "Scherz" in r and "Ironie" in r
+    assert "Wegerklären ist die eine verbotene Antwort" in r
+    # 3. die Treue-Klammer
+    assert "GEHÖRT" in r and "GESAGT" in r
+    assert "darf sich irren" in r
+    # 4. das Beleg-Verbot — die zweite Haelfte des gemessenen Schadens
+    assert "ungeklärter Punkt ist KEIN Beleg" in r
+    # 5. und das, was NICHT drinstehen darf: `text` klein bricht
+    #    test_summary_prompt_ohne_text_korrektur, sobald die Regel dort landet.
+    assert "text" not in r.replace("Kontext", "")
+
+
+def test_verify_prompt_dreht_den_aufgeloesten_widerspruch_nicht_zurueck():
+    """Der Treue-Pass vergleicht gegen das ROH und schreibt ZULETZT: ein aufgeloester Ortsname
+    steht dort zwangslaeufig anders als im Roh und liest sich als HALLUZINATION/DRIFT. Ohne
+    diese Klausel dreht er genau die Korrektur zurueck, die die Regel erzeugt — dieselbe Falle
+    wie bei `[Musik]` und bei der Fremdsprache, beide in dieser Datei schon gemessen.
+
+    Geprueft werden BEIDE Ausgaenge. Ein Test nur auf den Vermerk liesse die erste Fassung
+    durch, die der kalte Plan-Leser beanstandet hat: sie schuetzte die Anmerkung und liess die
+    AUFLOESUNG ungedeckt — also genau den Ausgang, den die Regel neu erzeugt.
+    """
+    p = correct._verify_prompt("b", "t.txt", "c.json", "kontext")
+    assert "Ein aufgelöster Widerspruch und ein Vermerk dazu sind ERLAUBTE Entscheidungen" in p
+    assert "auch wenn die aufgelöste Stelle vom Roh abweicht" in p
+
+
 def test_ziel_dialekt_meldet_mehrsprachig(tmp_path, monkeypatch):
     monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
     from webtool import projekt

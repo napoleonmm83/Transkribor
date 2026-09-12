@@ -31,6 +31,9 @@ hat. Lesbar, aber unschön — das ist Absicht.
 **Neu**
 - Aus einer geöffneten Aufnahme führt dich der Pfeil links oben zurück auf die Seite des Projekts — und der Projektname in der Seitenleiste bringt dich dorthin statt gleich zur Übersicht.
 
+**Behoben**
+- Passt ein Ortsname nicht zum Land, das kurz darauf genannt wird, erklärt die Korrektur den Widerspruch nicht mehr weg, sondern klärt ihn oder schreibt ihn unter „Anmerkungen“.
+
 ## v0.55.0 — 2026-09-12
 
 **Neu**

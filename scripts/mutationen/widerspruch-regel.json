@@ -1,0 +1,48 @@
+{
+  "test": "python -m pytest webtool/test_correct.py -q",
+  "pfade": [
+    "webtool/correct.py",
+    "webtool/test_correct.py"
+  ],
+  "mutationen": [
+    {
+      "id": "612-A die Einbettung faellt aus EINEM Prompt — der Glossar-Weg traegt die Regel nicht mehr",
+      "datei": "webtool/correct.py",
+      "von": "geratene. {WIDERSPRUCH_REGEL} Ein Name, der seinem Umfeld widerspricht",
+      "nach": "geratene. Ein Name, der seinem Umfeld widerspricht",
+      "rot": [
+        "test_alle_prompts_tragen_die_widerspruch_regel"
+      ],
+      "gruen": [
+        "test_widerspruch_regel_nennt_merkmal_verbot_treue_und_belegverbot",
+        "test_verify_prompt_dreht_den_aufgeloesten_widerspruch_nicht_zurueck"
+      ]
+    },
+    {
+      "id": "612-B die Regel verliert ihr Erkennungsmerkmal und wird zur Huelse",
+      "datei": "webtool/correct.py",
+      "von": "    \"Widersprechen sich zwei Angaben, die sich aneinander prüfen lassen — ein Ort und das \"",
+      "nach": "    \"Achte beim Korrigieren auf den Zusammenhang. \"",
+      "rot": [
+        "test_widerspruch_regel_nennt_merkmal_verbot_treue_und_belegverbot"
+      ],
+      "gruen": [
+        "test_alle_prompts_tragen_die_widerspruch_regel",
+        "test_verify_prompt_dreht_den_aufgeloesten_widerspruch_nicht_zurueck"
+      ]
+    },
+    {
+      "id": "612-C der Treue-Pass darf die Aufloesung wieder als Drift zurueckdrehen",
+      "datei": "webtool/correct.py",
+      "von": " Ein aufgelöster Widerspruch und ein Vermerk dazu sind ERLAUBTE Entscheidungen, KEINE Drift: NICHT zurückdrehen, auch wenn die aufgelöste Stelle vom Roh abweicht — prüfe nur, ob die Auflösung zum Klang des Rohs passt und der Vermerk zutrifft.",
+      "nach": "",
+      "rot": [
+        "test_verify_prompt_dreht_den_aufgeloesten_widerspruch_nicht_zurueck"
+      ],
+      "gruen": [
+        "test_alle_prompts_tragen_die_widerspruch_regel",
+        "test_widerspruch_regel_nennt_merkmal_verbot_treue_und_belegverbot"
+      ]
+    }
+  ]
+}
