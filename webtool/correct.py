@@ -1264,7 +1264,10 @@ def _summary_only_file(project: str, base: str, ziel: str, context: str,
                        dialekt: bool = True) -> None:
     """Nur Zusammenfassung + Sprecher -> <base>.correction.json (EIN LLM-Aufruf).
     Das Schema verlangt {id, speaker} OHNE text-Schluessel, sodass apply_correction
-    den Roh-Text jedes Segments unveraendert laesst."""
+    den Roh-Text jedes Segments unveraendert laesst.
+
+    Seit #612 ist das nicht mehr nur eine Bitte an das Modell: der Riegel dazu steht in
+    `correct_ai_single` — siehe den Kommentar am Ende dieser Funktion."""
     tdir = paths.transkripte_dir(project)
     target = os.path.abspath(os.path.join(tdir, base + ".correction.json"))
     tagged = os.path.abspath(os.path.join(tdir, base + ".tagged.txt"))
