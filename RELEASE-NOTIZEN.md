@@ -33,7 +33,7 @@ hat. Lesbar, aber unschön — das ist Absicht.
 
 **Behoben**
 - Widersprechen sich zwei Angaben im Gespräch — etwa ein Ort, der nicht zum genannten Land passt —, achtet die Korrektur jetzt darauf: sie klärt den Widerspruch oder schreibt ihn unter „Anmerkungen“, statt ihn wegzuerklären.
-- Lässt du eine Aufnahme neu korrigieren, wird die gemeinsame Namensliste des Projekts jetzt mit erneuert statt die alte weiterzuverwenden.
+- Lässt du eine Aufnahme mit der vollen Korrektur neu durchlaufen, wird die gemeinsame Namensliste des Projekts jetzt mit erneuert statt die alte weiterzuverwenden.
 
 ## v0.55.0 — 2026-09-12
 

@@ -1762,6 +1762,8 @@ def test_zusammenfassung_verwirft_den_text_schluessel_auf_BEIDEN_wegen(
     """
     from webtool import projekt as _pj
     monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    monkeypatch.setenv("TRANSKRIBOR_SETTINGS", str(tmp_path / "settings.json"))
+    monkeypatch.setenv("TRANSKRIBOR_YTDLP_UPDATE", "0")
     tdir = tmp_path / "P" / "transkripte"
     tdir.mkdir(parents=True)
     (tdir / "b.json").write_text('{"segments": [{"id": 0, "text": "roh"}]}', encoding="utf-8")
@@ -1803,6 +1805,8 @@ def test_cmd_run_reicht_force_ans_glossar_durch(tmp_path, monkeypatch):
     """
     from webtool import projekt as _pj
     monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    monkeypatch.setenv("TRANSKRIBOR_SETTINGS", str(tmp_path / "settings.json"))
+    monkeypatch.setenv("TRANSKRIBOR_YTDLP_UPDATE", "0")
     t = tmp_path / "Demo" / "transkripte"
     t.mkdir(parents=True)
     (t / "S1.json").write_text('{"language": "de", "segments": [{"id": 0, "text": "roh"}]}',
@@ -1835,6 +1839,8 @@ def test_gescheitertes_bereinigungsschreiben_laesst_die_datei_nicht_liegen(tmp_p
     der CodeRabbit-CLI, zweimal an derselben Stelle.
     """
     monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    monkeypatch.setenv("TRANSKRIBOR_SETTINGS", str(tmp_path / "settings.json"))
+    monkeypatch.setenv("TRANSKRIBOR_YTDLP_UPDATE", "0")
     tdir = tmp_path / "P" / "transkripte"
     tdir.mkdir(parents=True)
     cpath = tdir / "b.correction.json"
@@ -1864,6 +1870,8 @@ def test_force_baut_das_glossar_neu(tmp_path, monkeypatch):
     dokumentierte Lehre zum Block-Cache, eine Ebene hoeher.
     """
     monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    monkeypatch.setenv("TRANSKRIBOR_SETTINGS", str(tmp_path / "settings.json"))
+    monkeypatch.setenv("TRANSKRIBOR_YTDLP_UPDATE", "0")
     tdir = tmp_path / "P" / "transkripte"
     tdir.mkdir(parents=True)
     (tdir / "a.json").write_text('{"segments": []}', encoding="utf-8")
@@ -1896,6 +1904,8 @@ def test_force_gibt_auf_wenn_das_alte_glossar_nicht_raeumbar_ist(tmp_path, monke
     wie ein geglueckter Lauf.
     """
     monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    monkeypatch.setenv("TRANSKRIBOR_SETTINGS", str(tmp_path / "settings.json"))
+    monkeypatch.setenv("TRANSKRIBOR_YTDLP_UPDATE", "0")
     tdir = tmp_path / "P" / "transkripte"
     tdir.mkdir(parents=True)
     (tdir / "a.json").write_text('{"segments": []}', encoding="utf-8")
