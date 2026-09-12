@@ -28,6 +28,8 @@ hat. Lesbar, aber unschön — das ist Absicht.
 
 ## Unveröffentlicht
 
+## v0.55.0 — 2026-09-12
+
 **Neu**
 - Bei eingeschaltetem Fehlerbericht-Schalter werden jetzt auch Fehler aus Transkription, Korrektur und Video-Import gemeldet — dafür erscheint nach dem Update einmalig die Einrichtungsseite.
 
