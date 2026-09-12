@@ -1793,6 +1793,39 @@ def test_zusammenfassung_verwirft_den_text_schluessel_auf_BEIDEN_wegen(
     assert all(s["speaker"] == "A" for s in segs)
 
 
+def test_cmd_run_reicht_force_ans_glossar_durch(tmp_path, monkeypatch):
+    """Die Weitergabe in `cmd_run` war UNBEWACHT — gemessen vom CodeRabbit-Bot.
+
+    `test_force_baut_das_glossar_neu` prueft `_glossary` direkt; die beiden `cmd_run`-Tests
+    ersetzen es durch `lambda *a: ""` und sehen die Argumente nie. Die Zeile
+    `_glossary(project, context, force)` haette also ihr `force` verlieren koennen, ohne dass
+    ein Test rot wird — und damit die ganze Wirkung des Riegels, eine Ebene ueber ihm.
+    """
+    from webtool import projekt as _pj
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    t = tmp_path / "Demo" / "transkripte"
+    t.mkdir(parents=True)
+    (t / "S1.json").write_text('{"language": "de", "segments": [{"id": 0, "text": "roh"}]}',
+                               encoding="utf-8")
+    (t / "S1.raw.txt").write_text("roh", encoding="utf-8")
+
+    gesehen = []
+    monkeypatch.setattr(correct, "_glossary", lambda *a: gesehen.append(a) or "")
+    monkeypatch.setattr(correct, "cmd_diarize", lambda *a, **k: 0)
+    monkeypatch.setattr(correct, "prep_single", lambda *a, **k: True)
+    monkeypatch.setattr(correct, "_correct_file", lambda *a, **k: (t / "S1.correction.json")
+                        .write_text('{"segments": [{"id": 0, "text": "x"}]}', encoding="utf-8"))
+    monkeypatch.setattr(correct, "cmd_apply", lambda *a, **k: "written")
+    monkeypatch.setattr(_pj, "tiefe_effektiv", lambda p, b: "voll")
+
+    correct.cmd_run("Demo", force=True)
+    assert gesehen and gesehen[-1][-1] is True, f"force kam nicht am Glossar an: {gesehen}"
+    # Gegenrichtung — sonst bliebe ein fest verdrahtetes True unbemerkt.
+    gesehen.clear()
+    correct.cmd_run("Demo", force=False)
+    assert gesehen and gesehen[-1][-1] is False, f"ohne --force darf kein True ankommen: {gesehen}"
+
+
 def test_gescheitertes_bereinigungsschreiben_laesst_die_datei_nicht_liegen(tmp_path, monkeypatch):
     """Der SCHREIBVORGANG ist der Riegel — ein geschluckter OSError machte ihn wirkungslos.
 
@@ -1852,6 +1885,39 @@ def test_force_baut_das_glossar_neu(tmp_path, monkeypatch):
     assert correct._glossary("P", "kontext", force=True) == ""
     assert gerufen == [1], "mit --force muss das Glossar neu gebaut werden"
     assert not glossar.exists(), "das alte Glossar darf einen erzwungenen Lauf nicht ueberleben"
+
+
+def test_force_gibt_auf_wenn_das_alte_glossar_nicht_raeumbar_ist(tmp_path, monkeypatch):
+    """FAIL-CLOSED statt geschluckt (CodeRabbit-Bot).
+
+    Gelingt das Raeumen nicht und ersetzt die Erzeugung die Datei danach auch nicht, laese
+    `_load(gpath)` am Ende wieder das ALTE Glossar — `--force` waere still wirkungslos, also
+    genau der Zustand, gegen den der Block steht. Ein geschluckter `OSError` sieht dabei aus
+    wie ein geglueckter Lauf.
+    """
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    tdir = tmp_path / "P" / "transkripte"
+    tdir.mkdir(parents=True)
+    (tdir / "a.json").write_text('{"segments": []}', encoding="utf-8")
+    (tdir / "a.raw.txt").write_text("Dresden, Liechtenstein", encoding="utf-8")
+    glossar = tdir / "_glossar.json"
+    glossar.write_text('{"proper_nouns": [{"correct": "falsch gehoert"}]}', encoding="utf-8")
+
+    echt = os.remove
+
+    def zickig(pfad, *a, **k):
+        if str(pfad).endswith("_glossar.json"):
+            raise OSError("Zugriff verweigert")
+        return echt(pfad, *a, **k)
+
+    gerufen = []
+    monkeypatch.setattr(os, "remove", zickig)
+    monkeypatch.setattr(correct, "_ask_llm", lambda *a, **k: gerufen.append(1))
+    assert correct._glossary("P", "kontext", force=True) == ""
+    # Und der Verzicht ist SOFORT: ein Erzeugungsversuch, der die Datei doch nicht ersetzt,
+    # haette den alten Stand zurueckgebracht — genau die Falle.
+    assert gerufen == [], "nach einem gescheiterten Raeumen darf kein Erzeugungsversuch folgen"
+    assert glossar.exists(), "die Datei selbst bleibt liegen — geraeumt werden konnte sie ja nicht"
 
 
 def test_ziel_dialekt_meldet_mehrsprachig(tmp_path, monkeypatch):

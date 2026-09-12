@@ -8,8 +8,8 @@
     {
       "id": "455-A der Glossar-OS-Fehler wirft wieder durch — der GESAMTE Lauf stirbt",
       "datei": "webtool/correct.py",
-      "von": "        except OSError as e:",
-      "nach": "        except OSError as e:\n            raise",
+      "von": "        except OSError as e:\n            # #455: das Glossar ist eine Optimierung.",
+      "nach": "        except OSError as e:\n            raise\n            # #455: das Glossar ist eine Optimierung.",
       "rot": [
         "test_glossar_os_fehler_ueberspringt_glossar_und_laeuft_weiter"
       ],

@@ -138,14 +138,40 @@
     {
       "id": "612-K ein gescheiterter --force-Lauf laedt wieder das alte Glossar von der Platte",
       "datei": "webtool/correct.py",
-      "von": "            with contextlib.suppress(OSError):\n                os.remove(gpath)",
-      "nach": "            pass  # MUTATION: das alte Glossar bleibt liegen",
+      "von": "            try:\n                os.remove(gpath)\n            except FileNotFoundError:",
+      "nach": "            try:\n                pass\n            except FileNotFoundError:",
       "rot": [
         "test_force_baut_das_glossar_neu"
       ],
       "gruen": [
         "test_alle_prompts_tragen_die_widerspruch_regel",
         "test_zusammenfassung_verwirft_den_text_schluessel_auf_BEIDEN_wegen"
+      ]
+    },
+    {
+      "id": "612-L cmd_run reicht --force nicht mehr ans Glossar durch",
+      "datei": "webtool/correct.py",
+      "von": "    gjson = _glossary(project, context, force) if hat_voll else \"\"",
+      "nach": "    gjson = _glossary(project, context) if hat_voll else \"\"",
+      "rot": [
+        "test_cmd_run_reicht_force_ans_glossar_durch"
+      ],
+      "gruen": [
+        "test_force_baut_das_glossar_neu",
+        "test_alle_prompts_tragen_die_widerspruch_regel"
+      ]
+    },
+    {
+      "id": "612-M ein nicht raeumbares Glossar wird wieder geschluckt statt aufzugeben",
+      "datei": "webtool/correct.py",
+      "von": "                      flush=True)\n                return \"\"",
+      "nach": "                      flush=True)",
+      "rot": [
+        "test_force_gibt_auf_wenn_das_alte_glossar_nicht_raeumbar_ist"
+      ],
+      "gruen": [
+        "test_force_baut_das_glossar_neu",
+        "test_cmd_run_reicht_force_ans_glossar_durch"
       ]
     }
   ]
