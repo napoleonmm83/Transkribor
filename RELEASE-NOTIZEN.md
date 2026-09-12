@@ -32,7 +32,7 @@ hat. Lesbar, aber unschön — das ist Absicht.
 - Aus einer geöffneten Aufnahme führt dich der Pfeil links oben zurück auf die Seite des Projekts — und der Projektname in der Seitenleiste bringt dich dorthin statt gleich zur Übersicht.
 
 **Behoben**
-- Widersprechen sich zwei Angaben im Gespräch — etwa ein Ort, der nicht zum genannten Land passt —, erklärt die Korrektur das nicht mehr weg, sondern klärt es oder schreibt es unter „Anmerkungen“.
+- Widersprechen sich zwei Angaben im Gespräch — etwa ein Ort, der nicht zum genannten Land passt —, achtet die Korrektur jetzt darauf: sie klärt den Widerspruch oder schreibt ihn unter „Anmerkungen“, statt ihn wegzuerklären.
 - Lässt du eine Aufnahme neu korrigieren, wird die gemeinsame Namensliste des Projekts jetzt mit erneuert statt die alte weiterzuverwenden.
 
 ## v0.55.0 — 2026-09-12

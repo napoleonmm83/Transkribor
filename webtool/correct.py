@@ -894,8 +894,19 @@ def _glossary(project: str, context: str, force: bool = False) -> str:
             # das GANZE Projekt weg und naehme jeder folgenden Datei ihre Konsistenz. Bei
             # `force` ist die Praemisse umgekehrt: der Aufrufer sagt gerade, dass der alte
             # Stand nicht mehr gilt.
-            with contextlib.suppress(OSError):
+            #
+            # FAIL-CLOSED, nicht geschluckt: gelingt das Raeumen nicht und ersetzt die
+            # Erzeugung die Datei danach auch nicht, laese `_load(gpath)` am Ende wieder das
+            # ALTE Glossar — `--force` waere still wirkungslos, also genau der Zustand, gegen
+            # den dieser Block steht. Dann lieber sofort ohne Glossar weiter (CodeRabbit-Bot).
+            try:
                 os.remove(gpath)
+            except FileNotFoundError:
+                pass                                  # gab es nicht — nichts zu raeumen
+            except OSError as e:
+                print(f"  ↷ altes Glossar nicht raeumbar ({_einzeilig(e)}) — Lauf ohne Glossar",
+                      flush=True)
+                return ""
         # #450: Dieser Schritt liest die `.raw.txt` JEDER Aufnahme des Projekts — auf dem
         # API-/Codex-Weg oeffnet `llm._with_files` sie im Job-Prozess selbst, auf dem
         # `claude -p`-Weg der CLI-Enkel. Ohne Marken ist `active_bases` dabei LEER

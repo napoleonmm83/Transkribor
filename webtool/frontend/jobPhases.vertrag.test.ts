@@ -615,6 +615,10 @@ const INVENTAR: Record<string, Eintrag> = {
   '  ↷ {} text-Feld(er) verworfen (Tiefe zusammenfassung)': {
     art: 'ignoriert', beispiel: '  ↷ 2 text-Feld(er) verworfen (Tiefe zusammenfassung)',
   },
+  '  ↷ altes Glossar nicht raeumbar ({}) — Lauf ohne Glossar': {
+    art: 'gelesen_anderswo', notiz: GRUND,
+    beispiel: '  ↷ altes Glossar nicht raeumbar (OSError: Zugriff verweigert) — Lauf ohne Glossar',
+  },
   '↷ nutze vorhandene {}.correction.json': { art: 'ignoriert', beispiel: '↷ nutze vorhandene A.correction.json' },
   '↷ nutze vorhandene {}.diar.json': { art: 'ignoriert', beispiel: '↷ nutze vorhandene A.diar.json' },
   '⏱ Phasen: glossar {}s · pipeline {}s · ': {
