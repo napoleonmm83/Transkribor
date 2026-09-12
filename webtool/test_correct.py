@@ -1647,21 +1647,29 @@ def test_widerspruch_regel_nennt_merkmal_verbot_treue_und_belegverbot():
     Und warum die Treue-Klammer: die Regel gilt fuer JEDEN nachpruefbaren Widerspruch, nicht
     nur fuer Orte. Ohne sie laedt sie das Modell ein, einen Irrtum der sprechenden Person
     glattzuziehen — und ein geglaetteter Satz faellt hinterher niemandem mehr auf.
+
+    Geprueft werden GANZE AUSSAGEN, nicht Schluesselwoerter — das ist der Unterschied, den der
+    gegnerische Pruefer gemessen hat: gegen eine blosse Wortliste blieben vier INVERSIONEN der
+    Regel gruen (GEHOERT *oder* GESAGT, begruende mit ihm *ruhig*, *meist* ein Wortspiel).
+    Eine Regel, deren Umkehrung denselben Test besteht, ist unbewacht.
     """
     r = correct.WIDERSPRUCH_REGEL
     # 1. das Erkennungsmerkmal — woran das Modell den Fall ueberhaupt bemerkt
-    assert "aneinander prüfen" in r
+    assert "die sich aneinander prüfen lassen" in r
     assert "Land" in r and "Wochentag" in r and "Einheit" in r
-    # 2. das Verbot selbst
-    assert "Wortspiel" in r and "Scherz" in r and "Ironie" in r
+    # 2. das Verbot selbst — als Aussage, nicht als Wortliste
+    assert "kein Wortspiel, kein Scherz, keine Ironie" in r
     assert "Wegerklären ist die eine verbotene Antwort" in r
-    # 3. die Treue-Klammer
-    assert "GEHÖRT" in r and "GESAGT" in r
-    assert "darf sich irren" in r
+    # 3. die Treue-Klammer, ganz: die Inversion mit „oder" faellt hier durch
+    assert "nur, was falsch GEHÖRT wurde, nie, was falsch GESAGT wurde" in r
+    assert "darf sich irren, und dann bleibt ihr Irrtum stehen" in r
     # 4. das Beleg-Verbot — die zweite Haelfte des gemessenen Schadens
-    assert "ungeklärter Punkt ist KEIN Beleg" in r
-    # 5. und das, was NICHT drinstehen darf: `text` klein bricht
-    #    test_summary_prompt_ohne_text_korrektur, sobald die Regel dort landet.
+    assert "ungeklärter Punkt ist KEIN Beleg: begründe mit ihm keine andere Korrektur" in r
+    # 5. KEIN Imperativ zum Korrigieren: die Konstante steht auch in zwei Prompts, die den
+    #    Inhalt nicht anfassen duerfen — „Du korrigierst" stuende dort neben seinem Gegenteil.
+    assert "Du korrigierst" not in r
+    # 6. und kein kleingeschriebenes `text`: das braeche
+    #    test_summary_prompt_ohne_text_korrektur, sobald die Regel im summary-Prompt landet.
     assert "text" not in r.replace("Kontext", "")
 
 
@@ -1674,10 +1682,114 @@ def test_verify_prompt_dreht_den_aufgeloesten_widerspruch_nicht_zurueck():
     Geprueft werden BEIDE Ausgaenge. Ein Test nur auf den Vermerk liesse die erste Fassung
     durch, die der kalte Plan-Leser beanstandet hat: sie schuetzte die Anmerkung und liess die
     AUFLOESUNG ungedeckt — also genau den Ausgang, den die Regel neu erzeugt.
+
+    Die ERSTE Fassung sagte, ein aufgeloester Widerspruch UND EIN VERMERK DAZU seien erlaubte
+    Entscheidungen — und ein WEGERKLAERENDER Vermerk (Wortspiel) ist auch ein Vermerk dazu.
+    Die Klausel haette damit ausgerechnet das Artefakt aus #612 vor dem Zurueckdrehen
+    geschuetzt (gegnerischer Pruefer). Die Ausnahme haengt deshalb an einem MARKER, und beide
+    Gegenrichtungen werden mitgeprueft — ohne sie ist sie ein Freibrief gegen die
+    Halluzinations-Pruefung, die direkt darueber steht.
     """
     p = correct._verify_prompt("b", "t.txt", "c.json", "kontext")
-    assert "Ein aufgelöster Widerspruch und ein Vermerk dazu sind ERLAUBTE Entscheidungen" in p
-    assert "auch wenn die aufgelöste Stelle vom Roh abweicht" in p
+    assert "NUR eine unter annotations als AUFLÖSUNG vermerkte Abweichung ist KEINE Drift" in p
+    assert "Eine Abweichung OHNE solchen Vermerk bleibt HALLUZINATION/DRIFT und geht zurück" in p
+    assert "ist keine Auflösung: stelle den Rohstand wieder her" in p
+
+
+def test_beide_umschreibenden_prompts_verlangen_den_vermerk_fuer_BEIDE_ausgaenge():
+    """Die Konstante sagt nur, dass Wegerklaeren verboten ist — WAS zu tun ist, sagt das Umfeld
+    jedes Prompts. Genau diese Umfeld-Saetze liessen sich streichen, ohne dass ein Test rot
+    wurde (gegnerischer Pruefer, gemessen ueber 12 Mutationen).
+
+    Der Vermerk fuer die AUFLOESUNG ist dabei nicht Kosmetik, sondern der MARKER, an dem der
+    Treue-Pass eine Aufloesung von einer klangaehnlichen Halluzination unterscheidet. Ohne ihn
+    verliert er seine kategorische Rueckdreh-Regel fuer eine ganze Kategorie.
+    """
+    fuer = {
+        "correct": correct._correct_prompt("b", "t.txt", "c.json", "g.json", "kontext"),
+        "light": correct._light_prompt("b", "t.txt", "c.json", "kontext"),
+    }
+    for name, p in fuer.items():
+        assert "vermerke unter annotations als AUFLÖSUNG" in p, name
+        assert "vermerke sie als UNGEKLÄRT" in p, name
+        # `light` hatte diesen Anker zuerst NICHT — und ausgerechnet dort gibt es weder
+        # Treue-Pass noch Glossar, die eine zu mutige Aufloesung auffangen koennten.
+        assert "aus Klang und Zusammenhang EINDEUTIG folgt" in p, name
+
+
+def test_summary_und_glossar_sagen_was_STATT_aufloesen_zu_tun_ist():
+    """Die zwei Prompts, die den Inhalt nicht anfassen, brauchen ein EIGENES Umfeld.
+
+    Ein Aufloese-Befehl staende dort neben seinem Gegenteil — und genau diese Form beschreibt
+    der Kommentar ueber CLUSTER_REGEL als wirkungslos (zweimal gemessen: Musik, Mehrsprachig).
+    """
+    s = correct._summary_prompt("b", "t.txt", "c.json", "kontext")
+    assert "Hier änderst du nichts am Gesagten" in s
+    assert "vermerke den Widerspruch unter annotations" in s
+    assert "Löse ihn auf" not in s
+    g = correct._glossary_prompt("g.json", ["a.raw.txt"], "kontext")
+    assert "gehört MIT dem Widerspruch im note-Feld ins Glossar" in g
+    assert "Löse ihn auf" not in g
+
+
+def test_zusammenfassung_verwirft_einen_text_schluessel_mechanisch(tmp_path, monkeypatch):
+    """Der Vertrag der Tiefe „zusammenfassung" steht seit #612 nicht mehr nur im Prompt.
+
+    `apply_correction` entscheidet am SCHLUESSEL: steht `text` da, ersetzt es den Rohtext —
+    und diese Tiefe hat weder Treue-Pass noch Glossar, die das auffangen koennten. Seit der
+    Prompt neben „KEIN Text-Feld" auch Korrektur-Vokabular traegt, ist Prompt-Gehorsam als
+    einziger Riegel zu duenn (beide Pruefer, #612).
+
+    Der dritte Segmenteintrag pruefte zuerst nichts: `"text": null` faellt durch jeden
+    Wert-Vergleich, der Schluessel steht aber da — und genau der entscheidet im Apply-Pfad.
+    """
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    tdir = tmp_path / "P" / "transkripte"
+    tdir.mkdir(parents=True)
+    ziel = tdir / "b.correction.json"
+
+    def ungehorsamer_lauf(prompt, inputs, output):
+        ziel.write_text(json.dumps({
+            "base": "b", "speakers": ["A"], "annotations": [], "summary": "s",
+            "segments": [{"id": 0, "speaker": "A", "text": "umgeschrieben"},
+                         {"id": 1, "speaker": "A"},
+                         {"id": 2, "speaker": "A", "text": None}],
+        }), encoding="utf-8")
+
+    monkeypatch.setattr(correct, "_ask_llm", ungehorsamer_lauf)
+    correct._summary_only_file("P", "b", "lesbarem Standarddeutsch", "kontext")
+    segs = json.loads(ziel.read_text(encoding="utf-8"))["segments"]
+    assert all("text" not in s for s in segs), segs
+    # Positivkontrolle: gestrichen wird NUR der Schluessel, die Segmente bleiben vollzaehlig
+    assert [s["id"] for s in segs] == [0, 1, 2]
+    assert all(s["speaker"] == "A" for s in segs)
+
+
+def test_force_baut_das_glossar_neu(tmp_path, monkeypatch):
+    """`--force` galt bis #612 nur der `correction.json`, nicht dem gemeinsamen Glossar.
+
+    Ein erzwungener Lauf nach einer PROMPT-Aenderung lief damit still mit dem ALTEN Glossar
+    weiter — und dessen `proper_nouns` koennen genau den falsch gehoerten Namen als `correct`
+    tragen, waehrend `_correct_prompt` dazu sagt „nutze es". Dieselbe Klasse wie die
+    dokumentierte Lehre zum Block-Cache, eine Ebene hoeher.
+    """
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    tdir = tmp_path / "P" / "transkripte"
+    tdir.mkdir(parents=True)
+    (tdir / "a.json").write_text('{"segments": []}', encoding="utf-8")
+    roh = tdir / "a.raw.txt"
+    roh.write_text("Dresden, Liechtenstein", encoding="utf-8")
+    glossar = tdir / "_glossar.json"
+    glossar.write_text('{"proper_nouns": []}', encoding="utf-8")
+    frisch = os.path.getmtime(roh) + 60          # neuer als JEDE .raw.txt
+    os.utime(glossar, (frisch, frisch))
+
+    gerufen = []
+    monkeypatch.setattr(correct, "_ask_llm", lambda *a, **k: gerufen.append(1))
+    correct._glossary("P", "kontext")
+    assert gerufen == [], "ohne --force wird ein frisches Glossar wiederverwendet"
+    correct._glossary("P", "kontext", force=True)
+    assert gerufen == [1], "mit --force muss das Glossar neu gebaut werden"
 
 
 def test_ziel_dialekt_meldet_mehrsprachig(tmp_path, monkeypatch):

@@ -34,14 +34,79 @@
     {
       "id": "612-C der Treue-Pass darf die Aufloesung wieder als Drift zurueckdrehen",
       "datei": "webtool/correct.py",
-      "von": " Ein aufgelöster Widerspruch und ein Vermerk dazu sind ERLAUBTE Entscheidungen, KEINE Drift: NICHT zurückdrehen, auch wenn die aufgelöste Stelle vom Roh abweicht — prüfe nur, ob die Auflösung zum Klang des Rohs passt und der Vermerk zutrifft.",
-      "nach": "",
+      "von": " {WIDERSPRUCH_REGEL} NUR eine unter annotations als AUFLÖSUNG vermerkte Abweichung ist KEINE Drift: die NICHT zurückdrehen, auch wenn sie vom Roh abweicht — prüfe nur, ob sie zum Klang des Rohs passt.",
+      "nach": " {WIDERSPRUCH_REGEL}",
       "rot": [
         "test_verify_prompt_dreht_den_aufgeloesten_widerspruch_nicht_zurueck"
       ],
       "gruen": [
         "test_alle_prompts_tragen_die_widerspruch_regel",
         "test_widerspruch_regel_nennt_merkmal_verbot_treue_und_belegverbot"
+      ]
+    },
+    {
+      "id": "612-D die Treue-Klammer wird UMGEDREHT — das Modell darf den Irrtum der sprechenden Person glattziehen",
+      "datei": "webtool/correct.py",
+      "von": "dabei nur, was falsch GEHÖRT wurde, nie, was falsch GESAGT wurde — eine sprechende Person ",
+      "nach": "dabei auch, was falsch GESAGT wurde — eine sprechende Person ",
+      "rot": [
+        "test_widerspruch_regel_nennt_merkmal_verbot_treue_und_belegverbot"
+      ],
+      "gruen": [
+        "test_alle_prompts_tragen_die_widerspruch_regel",
+        "test_verify_prompt_dreht_den_aufgeloesten_widerspruch_nicht_zurueck"
+      ]
+    },
+    {
+      "id": "612-E der Handlungssatz faellt aus _correct_prompt — die Regel steht da und sagt nicht, was zu tun ist",
+      "datei": "webtool/correct.py",
+      "von": " und vermerke unter annotations als AUFLÖSUNG, was du woraus gemacht hast; sonst lass die Stelle unverändert und vermerke sie als UNGEKLÄRT — nichts zu tun ist hier keine Option.",
+      "nach": ".",
+      "rot": [
+        "test_beide_umschreibenden_prompts_verlangen_den_vermerk_fuer_BEIDE_ausgaenge"
+      ],
+      "gruen": [
+        "test_alle_prompts_tragen_die_widerspruch_regel",
+        "test_widerspruch_regel_nennt_merkmal_verbot_treue_und_belegverbot"
+      ]
+    },
+    {
+      "id": "612-F die Verify-Ausnahme wird zum Freibrief — die Gegenrichtung faellt weg",
+      "datei": "webtool/correct.py",
+      "von": " Eine Abweichung OHNE solchen Vermerk bleibt HALLUZINATION/DRIFT und geht zurück.",
+      "nach": "",
+      "rot": [
+        "test_verify_prompt_dreht_den_aufgeloesten_widerspruch_nicht_zurueck"
+      ],
+      "gruen": [
+        "test_alle_prompts_tragen_die_widerspruch_regel",
+        "test_beide_umschreibenden_prompts_verlangen_den_vermerk_fuer_BEIDE_ausgaenge"
+      ]
+    },
+    {
+      "id": "612-G die Tiefe zusammenfassung verlaesst sich wieder allein auf Prompt-Gehorsam",
+      "datei": "webtool/correct.py",
+      "von": "    _text_schluessel_entfernen(target)",
+      "nach": "",
+      "rot": [
+        "test_zusammenfassung_verwirft_einen_text_schluessel_mechanisch"
+      ],
+      "gruen": [
+        "test_alle_prompts_tragen_die_widerspruch_regel",
+        "test_force_baut_das_glossar_neu"
+      ]
+    },
+    {
+      "id": "612-H --force erreicht das gemeinsame Glossar nicht mehr",
+      "datei": "webtool/correct.py",
+      "von": "    if not force and os.path.exists(gpath)",
+      "nach": "    if os.path.exists(gpath)",
+      "rot": [
+        "test_force_baut_das_glossar_neu"
+      ],
+      "gruen": [
+        "test_alle_prompts_tragen_die_widerspruch_regel",
+        "test_zusammenfassung_verwirft_einen_text_schluessel_mechanisch"
       ]
     }
   ]
