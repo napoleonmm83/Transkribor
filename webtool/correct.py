@@ -283,8 +283,8 @@ WIDERSPRUCH_REGEL = (
     "Widersprechen sich zwei Angaben, die sich aneinander prüfen lassen — ein Ort und das "
     "Land, in dem er liegen soll; ein Datum und sein Wochentag; eine Zahl und ihre Einheit —, "
     "dann ist das ein HINWEIS auf eine Fehlhörung: kein Wortspiel, kein Scherz, keine Ironie. "
-    "Wegerklären ist die eine verbotene Antwort; lege den Widerspruch offen. Du korrigierst "
-    "dabei nur, was falsch GEHÖRT wurde, nie was falsch GESAGT wurde — eine sprechende Person "
+    "Wegerklären ist die eine verbotene Antwort; lege den Widerspruch offen. Korrigiert wird "
+    "dabei nur, was falsch GEHÖRT wurde, nie, was falsch GESAGT wurde — eine sprechende Person "
     "darf sich irren, und dann bleibt ihr Irrtum stehen. Und ein ungeklärter Punkt ist KEIN "
     "Beleg: begründe mit ihm keine andere Korrektur."
 )
@@ -676,7 +676,7 @@ Schema:
   "likely_corrections": [{{"wrong": "wiederkehrender ASR-Fehler", "right": "korrekt", "why": "optional"}}]
 }}
 
-Nimm nur Einträge mit vernünftiger Sicherheit auf — ERFINDE KEINE Namen. Lieber wenige sichere als viele geratene. {WIDERSPRUCH_REGEL} Ein Name, der seinem Umfeld widerspricht, kommt NICHT als richtige Schreibweise ins Glossar; nimmst du ihn trotzdem auf, nenne den Widerspruch im note-Feld. Gib ausser der geschriebenen Datei nichts weiter aus."""
+Nimm nur Einträge mit vernünftiger Sicherheit auf — ERFINDE KEINE Namen. Lieber wenige sichere als viele geratene. {WIDERSPRUCH_REGEL} Ein Name, der seinem Umfeld widerspricht, gehört MIT dem Widerspruch im note-Feld ins Glossar — nie als unkommentierte richtige Schreibweise und nie durch einen erfundenen Namen ersetzt; ganz weglassen nur, wenn gar keine plausible Form dasteht. Gib ausser der geschriebenen Datei nichts weiter aus."""
 
 
 def _scope(id_range, known: str = "") -> tuple:
@@ -727,7 +727,7 @@ Gemeinsames Glossar (für konsistente Schreibweisen — nutze es, ergänze nicht
 2) KORRIGIEREN: klare ASR-Fehler mit Kontext + Glossar verbessern{norm_satz} BLEIB TREU: nichts erfinden, den Sinn nicht verändern, nicht über das Nötige hinaus glätten (Füllwörter wie „äh“/„ähm“ dürfen dezent weg). Entferne die [[...]]-Markierungen im Ausgabetext.
 3) PRO SEGMENT: gib für JEDE Segment-ID {scope} GENAU EINEN Eintrag {{id, speaker, text}} zurück — keine ID auslassen, keine Segmente zusammenfassen (die Redebeitrags-Bündelung passiert später).
 4) SPRECHER: Das akustische (Sprecher N)-Präfix sagt, WANN die Stimme wechselt — vergib pro Cluster GENAU EINEN konsistenten Namen: meist „Interviewer“ (stellt Fragen) und die befragte Person (Name/Betrieb falls genannt, sonst „Befragte Person“). {CLUSTER_REGEL} Eine Cluster-Grenze nur überschreiben, wenn sie offensichtlich falsch ist (z.B. ein einzelnes Rückkanal-Wort). Fehlt das Präfix, ordne nach Inhalt zu (wie bisher). Gib JEDEM Segment einen Sprecher.
-5) UNSICHER: wirklich unklare Stellen NICHT raten — nah am Original belassen und unter annotations vermerken. {WIDERSPRUCH_REGEL} Löse ihn auf, wenn die richtige Lesart aus Klang und Zusammenhang EINDEUTIG folgt; sonst lass die Stelle unverändert und vermerke ihn unter annotations als UNGEKLÄRT — nichts zu tun ist hier keine Option.
+5) UNSICHER: wirklich unklare Stellen NICHT raten — nah am Original belassen und unter annotations vermerken. {WIDERSPRUCH_REGEL} Löse ihn auf, wenn die richtige Lesart aus Klang und Zusammenhang EINDEUTIG folgt, und vermerke unter annotations als AUFLÖSUNG, was du woraus gemacht hast; sonst lass die Stelle unverändert und vermerke sie als UNGEKLÄRT — nichts zu tun ist hier keine Option.
 6) MUSIK/GESANG: Whisper "hört" in gesungenen Passagen sicher klingenden Unsinn (typisch: dieselbe kurze Zeile mehrfach hintereinander, fremdsprachig wirkende Wortfetzen, Text der zum Gespräch nicht passt). Bei GESUNGENEN Stellen und bei Segmenten ohne verständliche Sprache (Musik, Jubel, Applaus) schreibe als text exakt „[Musik]“ — nicht raten, was gesungen wurde. GESPROCHENE Bühnenansagen sind KEINE Musik, die bleiben Text.
 7) ASR-ARTEFAKTE & HALLUZINATIONSSCHLEIFEN: Segmente, deren Text nachweislich nicht aus dem Ton stammt (Untertitel-Floskeln wie „ARD Text im Auftrag von Funk“, „Untertitelung des ZDF“, „Vielen Dank fürs Zuschauen“ sowie endlose ASR-Wiederholungsschleifen desselben Satzes über Musik/Stille), bekommen einen LEEREN text (""). In summary fasst du AUSSCHLIESSLICH den echten Gesprächsinhalt zusammen — beschreibe dort KEINE ASR-Fehler, keine leeren Blöcke und keine Halluzinationsschleifen. Regel 6 und 7 gelten nur, wenn du dir sicher bist — im Zweifel Text belassen und unter annotations vermerken.
 
@@ -778,7 +778,7 @@ Prüfe kritisch gegen das ROH — konservativ, im Zweifel näher am Original:
 - VOLLSTÄNDIGKEIT: für JEDE Roh-Segment-ID {scope} genau ein Eintrag? Fehlende ergänzen (Text nah am Roh), zusammengefasste auftrennen.
 - SPRECHER: konsistent pro akustischem (Sprecher N)-Cluster und plausibel (Interviewer stellt Fragen; Antworten korrekt zugeordnet)? {CLUSTER_REGEL} Fehlzuordnungen korrigieren — einzelne Segmente ebenso wie einen durchgehend falsch benannten Cluster; zwei Cluster mit demselben Namen aber NICHT auseinanderziehen.
 - RESTFEHLER: offensichtliche verbleibende ASR-Fehler nur wenn eindeutig (konservativ).
-- UNSICHER: wirklich unklare Stellen NICHT raten — nah am Original belassen und unter annotations vermerken. {WIDERSPRUCH_REGEL} Ein aufgelöster Widerspruch und ein Vermerk dazu sind ERLAUBTE Entscheidungen, KEINE Drift: NICHT zurückdrehen, auch wenn die aufgelöste Stelle vom Roh abweicht — prüfe nur, ob die Auflösung zum Klang des Rohs passt und der Vermerk zutrifft. Entferne evtl. übrige [[...]]-Markierungen im Text.
+- UNSICHER: wirklich unklare Stellen NICHT raten — nah am Original belassen und unter annotations vermerken. {WIDERSPRUCH_REGEL} NUR eine unter annotations als AUFLÖSUNG vermerkte Abweichung ist KEINE Drift: die NICHT zurückdrehen, auch wenn sie vom Roh abweicht — prüfe nur, ob sie zum Klang des Rohs passt. Eine Abweichung OHNE solchen Vermerk bleibt HALLUZINATION/DRIFT und geht zurück. Und ein Vermerk, der den Widerspruch WEGERKLÄRT (Wortspiel, Scherz, Ironie), ist keine Auflösung: stelle den Rohstand wieder her und vermerke die Stelle als UNGEKLÄRT. Entferne evtl. übrige [[...]]-Markierungen im Text.
 
 Schreibe die VOLLSTÄNDIGE, geprüfte Korrektur mit dem Write-Tool als JSON nach GENAU diesem Pfad (alle Segment-IDs {scope}, gleiches Schema):
 {cpath}
@@ -814,7 +814,7 @@ def _light_prompt(base: str, tagged_path: str, cpath: str, context: str,
 
 Projekt-Kontext: {context or _default_context(ziel, dialekt, mehrsprachig)}
 1) Lies die Rohsegmente (Read-Tool): {tagged_path}
-2) KORRIGIERE NUR offensichtliche ASR-Fehler und Eigennamen{norm_satz} KEIN Umschreiben, keine Dialekt-Glättung, keine Normalisierung. Entferne [[...]]-Markierungen. {WIDERSPRUCH_REGEL} Löse ihn auf, wenn die richtige Lesart EINDEUTIG folgt; sonst lass die Stelle unverändert und vermerke ihn unter annotations als UNGEKLÄRT.
+2) KORRIGIERE NUR offensichtliche ASR-Fehler und Eigennamen{norm_satz} KEIN Umschreiben, keine Dialekt-Glättung, keine Normalisierung. Entferne [[...]]-Markierungen. {WIDERSPRUCH_REGEL} Löse ihn auf, wenn die richtige Lesart aus Klang und Zusammenhang EINDEUTIG folgt, und vermerke unter annotations als AUFLÖSUNG, was du woraus gemacht hast; sonst lass die Stelle unverändert und vermerke sie als UNGEKLÄRT.
 3) SPRECHER: vergib pro (Sprecher N)-Cluster einen konsistenten Namen (meist „Interviewer" und die befragte Person). {CLUSTER_REGEL} Gib JEDEM Segment einen speaker.
 4) SUMMARY: eine Inhalts-Zusammenfassung (3-5 Sätze; nur echter Gesprächsinhalt, keine Berichte über ASR-Fehler oder leere Abschnitte).
 
@@ -844,7 +844,7 @@ Schema (Write-Tool nach {cpath}):
 Gib ausser der Datei nichts aus."""
 
 
-def _glossary(project: str, context: str) -> str:
+def _glossary(project: str, context: str, force: bool = False) -> str:
     """Ein claude-Aufruf über alle .raw.txt -> _glossar.json. Gibt das Glossar als JSON-Text
     zurück; leer heisst „die Korrektur läuft ohne gemeinsames Glossar weiter".
 
@@ -868,7 +868,13 @@ def _glossary(project: str, context: str) -> str:
         return ""
     # vorhandenes Glossar nur wiederverwenden, wenn es neuer als JEDE Roh-Text-Datei ist
     # (korpus-weit: eine neu transkribierte Datei macht das gemeinsame Glossar veraltet)
-    if os.path.exists(gpath) and os.path.getmtime(gpath) >= max(os.path.getmtime(f) for f in raw_files):
+    #
+    # `--force` muss BIS HIERHIN durchgereicht werden, sonst laeuft ein erzwungener Lauf nach
+    # einer PROMPT-Aenderung still mit dem alten Glossar — und dessen `proper_nouns` koennen
+    # genau den falsch gehoerten Namen als `correct` tragen, waehrend `_correct_prompt` dazu
+    # sagt „nutze es". Das ist dieselbe Klasse wie die dokumentierte Lehre, dass `--force` bis
+    # in den Block-Cache reichen muss, eine Ebene hoeher (#612, beide Pruefer).
+    if not force and os.path.exists(gpath) and os.path.getmtime(gpath) >= max(os.path.getmtime(f) for f in raw_files):
         print("↷ nutze vorhandenes _glossar.json", flush=True)
     else:
         print("→ Glossar (gemeinsame Namen/Begriffe) …", flush=True)
@@ -1176,6 +1182,37 @@ def _light_correct_file(project: str, base: str, ziel: str, dialekt: bool,
              [tagged], target)
 
 
+def _text_schluessel_entfernen(cpath: str) -> int:
+    """Streicht den Schluessel `text` aus allen Segmenten einer `correction.json`.
+
+    Best effort — fehlt die Datei oder ist sie unlesbar, passiert nichts: `_valid_correction`
+    urteilt unmittelbar danach, und ein Wurf hier risse den ganzen Lauf mit.
+
+    Entschieden wird am SCHLUESSEL, nicht am Wert — dieselbe Unterscheidung, die
+    `apply_correction` trifft (ein `"text": ""` ist dort eine Streichung, ein fehlender
+    Schluessel laesst den Rohtext stehen). Ein Wert-Vergleich liesse `"text": null` stehen
+    und der Rohtext waere weg.
+    """
+    try:
+        d = _load(cpath)
+    except (OSError, ValueError):
+        return 0
+    segs = d.get("segments")
+    if not isinstance(segs, list):
+        return 0
+    n = 0
+    for s in segs:
+        if isinstance(s, dict) and "text" in s:
+            del s["text"]
+            n += 1
+    if n:
+        print(f"  ↷ {n} text-Feld(er) verworfen — Tiefe „zusammenfassung“ lässt den Inhalt "
+              f"unangetastet", flush=True)
+        with contextlib.suppress(OSError):
+            paths.atomic_write(cpath, json.dumps(d, ensure_ascii=False, indent=1))
+    return n
+
+
 def _summary_only_file(project: str, base: str, ziel: str, context: str,
                        dialekt: bool = True) -> None:
     """Nur Zusammenfassung + Sprecher -> <base>.correction.json (EIN LLM-Aufruf).
@@ -1186,6 +1223,14 @@ def _summary_only_file(project: str, base: str, ziel: str, context: str,
     tagged = os.path.abspath(os.path.join(tdir, base + ".tagged.txt"))
     print(f"→ Nur Zusammenfassung {base} …", flush=True)
     _ask_llm(_summary_prompt(base, tagged, target, context, ziel, dialekt), [tagged], target)
+    # Der Vertrag dieser Tiefe ist MECHANISCH, nicht nur im Prompt: `apply_correction` ersetzt
+    # den Rohtext, sobald der Schluessel `text` dasteht (der Schluessel entscheidet, nicht sein
+    # Wert) — und hier gibt es weder Treue-Pass noch Glossar, die das auffangen koennten. Der
+    # Prompt sagt seit jeher „KEIN Text-Feld"; seit er daneben auch die Widerspruchs-Regel
+    # traegt, steht dort Korrektur-Vokabular neben seinem Gegenteil, und genau diese Form
+    # beschreibt der Kommentar ueber CLUSTER_REGEL als wirkungslos (beide Pruefer, #612).
+    # Prompt-Gehorsam als einziger Riegel ist hier also zu duenn.
+    _text_schluessel_entfernen(target)
 
 
 def correct_ai_single(project: str, b: str, gjson: str = "", context: str = None,
@@ -1362,7 +1407,7 @@ def cmd_run(project: str, base: str = None, force: bool = False, verify: bool = 
     # Glossar nur bauen, wenn mind. eine Datei im Voll-Modus laeuft -- leicht/zusammenfassung
     # sind Einzeldatei-Laeufe ohne korpus-weites Glossar (spart den Glossar-Aufruf).
     hat_voll = any(_pj.tiefe_effektiv(project, b) in ("voll", "voll_dialekt") for b in all_bases)
-    gjson = _glossary(project, context) if hat_voll else ""
+    gjson = _glossary(project, context, force) if hat_voll else ""
     t_gloss = time.monotonic()
 
     def one(b: str) -> bool:
