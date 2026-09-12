@@ -128,7 +128,13 @@ export function EditorView() {
 
   return (
     // Nur noch der Inhalt: die Projektnavigation zieht in die AppShell (Task 5).
-    <div className="grid h-full grid-rows-[auto_1fr_auto]">
+    // `grid-cols-[minmax(0,1fr)]` ist nicht schmueckend: ohne Spaltenangabe hat das Raster eine
+    // implizite `auto`-Spur, die mit dem min-content ihres breitesten Kindes waechst — der Kopf
+    // schiebt dann ueber `main` hinaus, und weil der Flex-Behaelter nie eingeklemmt wird, greift
+    // das `shrink` am Rueckweg-Link kaum (gemessen: 900 px Fenster, Speicherstand sichtbar, 69 px
+    // Ueberlauf; mit dieser Spur 0). Dieselbe Klasse wie `minmax(0,1fr)` an der Rasterspur der
+    // Huelle (AppShell.tsx, #515).
+    <div className="grid h-full grid-cols-[minmax(0,1fr)] grid-rows-[auto_1fr_auto]">
       {/* Der Rueckweg im Kopf verlaesst den Editor genauso wie ein Klick in der Leiste — und
           geht deshalb durch dieselbe Rueckfrage (`darfWechseln`, EINE Fassung fuer beide Wege).
           Mit den Werten aus DIESEM Render, nicht ueber die Bruecke: die haengt um einen passiven
