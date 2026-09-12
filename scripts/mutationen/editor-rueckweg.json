@@ -71,6 +71,18 @@
       ]
     },
     {
+      "id": "R7 auch der Strg-Klick laeuft durch die Rueckfrage — der neue Tab bliebe zu",
+      "datei": "webtool/frontend/src/components/Toolbar.tsx",
+      "von": "            if (e.button !== 0 || e.metaKey || e.altKey || e.ctrlKey || e.shiftKey) return",
+      "nach": "            if (false) return",
+      "rot": [
+        "fragt beim schlichten Linksklick, laesst einen Strg-Klick aber durch"
+      ],
+      "gruen": [
+        "fuehrt mit dem Projektnamen auf die Projektseite"
+      ]
+    },
+    {
       "id": "R6 die Regel selbst haelt nie mehr auf — beide Wege aus dem Editor fragen nicht mehr",
       "datei": "webtool/frontend/src/hooks/useEditorBruecke.tsx",
       "von": "  if (!offen || offen.stand !== 'fehler') return true",

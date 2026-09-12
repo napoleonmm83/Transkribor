@@ -54,7 +54,17 @@ export function Toolbar({ projekt, zurueckErlaubt, stand, bereit, onExport, such
           schon Speicherstand, Suche, Legende und zwei Export-Knoepfe. */}
       {projekt && (
         <Link to={`/p/${encodeURIComponent(projekt)}`}
-          onClick={e => { if (zurueckErlaubt && !zurueckErlaubt()) e.preventDefault() }}
+          // NUR der schlichte Linksklick verlaesst diese Seite. Strg-/Cmd-, Shift-, Alt- und
+          // Mittelklick oeffnen ein neues Fenster bzw. einen neuen Tab — der Editor bleibt
+          // dabei stehen, es geht nichts verloren, und ein `preventDefault` machte daraus
+          // einen toten Link samt Rueckfrage fuer eine Bewegung, die gar keine ist. Die
+          // Bedingung spiegelt `shouldProcessLinkClick` von react-router
+          // (`react-router/lib/dom/dom.ts`: `button === 0 && !metaKey && !altKey && !ctrlKey
+          // && !shiftKey`) — dieselbe Frage, die der Link danach selbst stellt.
+          onClick={e => {
+            if (e.button !== 0 || e.metaKey || e.altKey || e.ctrlKey || e.shiftKey) return
+            if (zurueckErlaubt && !zurueckErlaubt()) e.preventDefault()
+          }}
           aria-label={`Zur Projektseite von ${projekt}`}
           className="-ml-1 inline-flex min-w-0 max-w-48 shrink items-center gap-1.5 rounded-md
                      px-2 py-1 text-sm text-muted-foreground transition-colors hover:text-foreground">
