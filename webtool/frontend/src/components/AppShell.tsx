@@ -53,7 +53,18 @@ function Leiste() {
     <Sidebar
       projekte={projects} loading={loading} fehler={fehler}
       offen={projekt} dateien={files} dateienLaden={dateienLaden}
-      onWaehlen={n => { if (wechselErlaubt(null)) navigate(n ? `/p/${encodeURIComponent(n)}` : '/') }}
+      // Der Klick auf den Projektnamen geht EINE Ebene hoch, nicht ganz nach oben: aus einer
+      // geoeffneten Aufnahme auf die Projektseite, erst von dort auf die Uebersicht. `null`
+      // heisst in der Leiste weiterhin „zuklappen" — welche Ebene darueber liegt, sagt die URL
+      // (`active`), und die ist hier die einzige Wahrheit ueber „aufgeklappt"
+      // (webtool/frontend/CLAUDE.md, App-Huelle). Vorher landete dieser Klick auch aus einer
+      // Aufnahme heraus auf `/`, also an der Projektseite vorbei.
+      onWaehlen={n => {
+        if (!wechselErlaubt(null)) return
+        navigate(n ? `/p/${encodeURIComponent(n)}`
+          : active ? `/p/${encodeURIComponent(active.project)}`
+          : '/')
+      }}
       // Getrennt von onWaehlen (#74): dort heisst `null` „zuklappen", ein Anlegen kennt das
       // nicht. Der Wechsel-Waechter bleibt — auch ein frisch angelegtes Projekt navigiert
       // vom Editor weg und darf Ungespeichertes nicht stillschweigend hinter sich lassen.

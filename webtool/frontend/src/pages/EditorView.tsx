@@ -129,7 +129,7 @@ export function EditorView() {
   return (
     // Nur noch der Inhalt: die Projektnavigation zieht in die AppShell (Task 5).
     <div className="grid h-full grid-rows-[auto_1fr_auto]">
-      <Toolbar stand={stand} bereit={!!doc} onExport={exportDownload}
+      <Toolbar projekt={project} stand={stand} bereit={!!doc} onExport={exportDownload}
         suchQuery={suchQuery} onSuchChange={setSuchQuery} suchCount={anzahl} suchIndex={idx}
         onSuchPrev={suchPrev} onSuchNext={suchNext} />
       {/* Kein eigenes <main> mehr (#72): die Huelle traegt es fuer alle Seiten (`#inhalt`),

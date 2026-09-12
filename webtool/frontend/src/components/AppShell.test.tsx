@@ -303,6 +303,31 @@ describe('AppShell', () => {
     expect(ohneAnker).toEqual([])
   })
 
+  it('der Klick auf den Projektnamen geht EINE Ebene hoch, nicht auf die Startseite', async () => {
+    /* Aus einer geoeffneten Aufnahme fuehrte der Klick auf den aufgeklappten Projektnamen
+       bisher auf `/` — also an der Projektseite VORBEI, obwohl man in genau diesem Projekt
+       stand. `null` heisst in der Leiste weiterhin „zuklappen"; welche Ebene darueber liegt,
+       entscheidet die URL.
+
+       Verglichen wird `textContent` mit `toBe`, NICHT `toHaveTextContent`: das prueft auf
+       Teilstring und waere unter `/p/Alpha/a` trivial wahr — der Test bliebe gruen, auch wenn
+       gar nicht navigiert wuerde. */
+    vi.mocked(api.listProjects).mockResolvedValue(ZWEI)
+    vi.mocked(api.getProjectFiles).mockResolvedValue({ name: 'Alpha', files: DATEIEN })
+    render(
+      <MemoryRouter initialEntries={['/p/Alpha/a']}>
+        <JobProvider><AppShell><Schreibtisch /></AppShell></JobProvider>
+      </MemoryRouter>,
+    )
+    await waitFor(() => expect(screen.getByText('Alpha')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('Alpha'))
+    expect(screen.getByTestId('ort').textContent).toBe('/p/Alpha')
+    // Zweite Haelfte, und sie ist der Grund, warum der Weg zur Startseite nicht einfach
+    // wegfaellt: von der Projektseite aus bleibt derselbe Klick der Weg nach ganz oben.
+    fireEvent.click(screen.getByText('Alpha'))
+    expect(screen.getByTestId('ort').textContent).toBe('/')
+  })
+
   describe('ungespeicherte Aenderungen', () => {
     beforeEach(() => {
       vi.mocked(api.listProjects).mockResolvedValue(ZWEI)
