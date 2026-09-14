@@ -37,6 +37,32 @@ def test_lock_wird_gehalten_und_wieder_freigegeben(tmp_path):
     assert not os.path.exists(ziel + ".lock")
 
 
+def test_strikte_sperre_uebernimmt_keinen_lebenden_halter(tmp_path, monkeypatch):
+    ziel = str(tmp_path / "x.json")
+    lock = ziel + ".lock"
+    os.mkdir(lock)
+    _merker(lock, os.getpid())
+    monkeypatch.setattr(sperre, "frist", lambda stale: 0)
+    try:
+        with sperre.datei(ziel, erzwinge_uebernahme=False, wartezeit=0) as gehalten:
+            assert gehalten is False
+        assert os.path.isdir(lock)
+    finally:
+        os.remove(os.path.join(lock, sperre._HALTER))
+        os.rmdir(lock)
+
+
+def test_strikte_sperre_raemt_eindeutig_toten_halter_auf(tmp_path, monkeypatch):
+    ziel = str(tmp_path / "x.json")
+    lock = ziel + ".lock"
+    os.mkdir(lock)
+    _merker(lock, os.getpid())
+    monkeypatch.setattr(sperre, "_lebt_laut", lambda merker: False)
+    with sperre.datei(ziel, erzwinge_uebernahme=False, wartezeit=0) as gehalten:
+        assert gehalten is True
+    assert not os.path.exists(lock)
+
+
 def test_verwaistes_lock_wird_nach_frist_aufgeraeumt(tmp_path):
     """Ein `taskkill /F /T` auf den Job-Prozessbaum laesst kein `finally` laufen — ohne die
     Frist blockierte das liegengebliebene Verzeichnis fuer immer."""

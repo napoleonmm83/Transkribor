@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, type ReactNode } from 'react'
 import { useLocation, useMatch, useNavigate } from 'react-router-dom'
 import { ProjektDatenProvider, useProjekte, useDateien } from '@/hooks/useProjektDaten'
 import { mergePhases, useActiveJob, zeigtLauf } from '@/hooks/useActiveJob'
@@ -34,6 +34,8 @@ function Leiste() {
     : null
 
   const editor = useEditorBruecke()
+  const aktuellesProjekt = useRef(projekt)
+  useLayoutEffect(() => { aktuellesProjekt.current = projekt }, [projekt])
   // Jeder Klick hier verlaesst den Editor. Die Regel dafuer steht seit dem Rueckweg im
   // Editorkopf in `useEditorBruecke.darfWechseln` — dort, weil BEIDE Wege dieselbe Frage
   // stellen und zwei Fassungen davon auseinanderlaufen. Kurz: seit #106 fragt sie nur noch bei
@@ -100,7 +102,14 @@ function Leiste() {
       // (Leiste mit Ueberschreib-Rueckfrage, Arbeitsflaeche ohne) auseinanderlaufen lassen.
       // Weg von der Seite des geloeschten Projekts -- sonst steht dort "Projekt nicht
       // gefunden". Keine zweite Rueckfrage: der Dialog hat den Namen abtippen lassen.
-      onGeloescht={() => { navigate('/'); refresh() }}
+      onGeloescht={name => {
+        // DELETE kann nach einem weiteren Projektwechsel zurueckkommen.
+        if (aktuellesProjekt.current === name) {
+          if (editor.current?.project === name) editor.current.vergiss()
+          navigate('/')
+        }
+        refresh()
+      }}
       // Anders als beim Loeschen gibt es das Ziel noch — nur unter anderem Namen. Steht eine
       // Datei dieses Projekts im Editor, muss sie MITwandern: sonst zeigt die Adresse auf ein
       // Projekt, das es nicht mehr gibt. replace, weil der alte Pfad tot ist und der

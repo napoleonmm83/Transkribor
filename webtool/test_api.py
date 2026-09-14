@@ -201,6 +201,7 @@ def test_put_saves_non_destructive(client, tmp_path):
     saved = (tdir / "S1.edit.json").read_text(encoding="utf-8")
     assert '"human_edited": true' in saved
     assert "Interviewer" in saved
+    assert "projektinstanz" not in saved
     md = (tdir / "S1.md").read_text(encoding="utf-8")
     assert "**Interviewer:** Hallo, Welt!" in md
     # Roh-JSON unangetastet
@@ -611,9 +612,12 @@ def test_list_projects_active_jobs_reported(client, monkeypatch):
 
 
 def test_create_project_ok_and_duplicate_409(client, tmp_path):
+    import uuid
+
     r = client.post("/api/projects", json={"name": "Neu"})
     assert r.status_code == 200 and r.json() == {"ok": True, "name": "Neu"}
     assert (tmp_path / "Neu" / "audio").is_dir()
+    uuid.UUID((tmp_path / "Neu" / ".projektinstanz").read_text(encoding="utf-8"))
     assert client.post("/api/projects", json={"name": "Neu"}).status_code == 409
     assert client.post("/api/projects", json={"name": "Demo"}).status_code == 409
 
@@ -1369,6 +1373,117 @@ def test_delete_project_ok(client, tmp_path):
     assert (tmp_path / "Demo").is_dir()
     r = client.delete("/api/projects/Demo")
     assert r.status_code == 200 and r.json() == {"ok": True}
+    assert not (tmp_path / "Demo").exists()
+
+
+@pytest.mark.parametrize("vorbehalt", [None, "", "alter-stand"])
+def test_save_after_delete_does_not_recreate_project(client, tmp_path, vorbehalt):
+    doc = client.get("/api/projects/Demo/files/S1").json()
+    if vorbehalt is None:
+        doc.pop("dateistand", None)
+    else:
+        doc["dateistand"] = vorbehalt
+    assert client.delete("/api/projects/Demo").status_code == 200
+    response = client.put("/api/projects/Demo/files/S1", json=doc)
+    assert response.status_code == 404
+    assert not (tmp_path / "Demo").exists()
+
+
+def test_late_save_after_delete_and_recreate_cannot_touch_new_project(client, tmp_path):
+    doc = client.get("/api/projects/Demo/files/S1").json()
+    assert doc["projektinstanz"]
+    assert client.delete("/api/projects/Demo").status_code == 200
+    assert client.post("/api/projects", json={"name": "Demo"}).status_code == 200
+
+    response = client.put("/api/projects/Demo/files/S1", json=doc)
+    assert response.status_code == 409
+    assert not (tmp_path / "Demo" / "transkripte" / "S1.edit.json").exists()
+
+
+def test_save_without_project_instance_is_rejected(client, tmp_path):
+    doc = client.get("/api/projects/Demo/files/S1").json()
+    doc.pop("projektinstanz")
+
+    response = client.put("/api/projects/Demo/files/S1", json=doc)
+    assert response.status_code == 409
+    assert not (tmp_path / "Demo" / "transkripte" / "S1.edit.json").exists()
+
+
+def test_lifecycle_lock_failure_returns_503(client, monkeypatch):
+    from contextlib import contextmanager
+    import webtool.app as appmod
+
+    aufrufe = []
+
+    @contextmanager
+    def nicht_gehalten(*args, **kwargs):
+        aufrufe.append((args, kwargs))
+        yield False
+
+    monkeypatch.setattr(appmod.sperre, "datei", nicht_gehalten)
+    response = client.get("/api/projects/Demo/files/S1")
+    assert response.status_code == 503
+    assert aufrufe[0][1] == {
+        "erzwinge_uebernahme": False,
+        "wartezeit": appmod._LIFECYCLE_LOCK_WARTE_S,
+    }
+
+
+@pytest.mark.parametrize("phase", ["mkdir", "write"])
+def test_save_delete_race_does_not_recreate_project(client, tmp_path, monkeypatch, phase):
+    import os
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event
+    from webtool import paths
+
+    doc = client.get("/api/projects/Demo/files/S1").json()
+    doc.pop("dateistand", None)
+    tdir = tmp_path / "Demo" / "transkripte"
+    angekommen, delete_wartet, weiter = Event(), Event(), Event()
+
+    if phase == "mkdir":
+        for entry in tdir.iterdir():
+            entry.unlink()
+        tdir.rmdir()
+        original = os.mkdir
+
+        def gebremst(path, *args, **kwargs):
+            if os.path.abspath(path) == str(tdir):
+                angekommen.set()
+                assert weiter.wait(5)
+            return original(path, *args, **kwargs)
+
+        monkeypatch.setattr(os, "mkdir", gebremst)
+    else:
+        original = paths.atomic_write
+
+        def gebremst(path, *args, **kwargs):
+            if os.path.abspath(path) == str(tdir / "S1.edit.json"):
+                angekommen.set()
+                assert weiter.wait(5)
+            return original(path, *args, **kwargs)
+
+        monkeypatch.setattr(paths, "atomic_write", gebremst)
+
+    import webtool.jobs as jobs_mod
+    original_active_for = jobs_mod.active_for
+
+    def delete_hat_angefragt(project):
+        delete_wartet.set()
+        return original_active_for(project)
+
+    monkeypatch.setattr(jobs_mod, "active_for", delete_hat_angefragt)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        save = pool.submit(client.put, "/api/projects/Demo/files/S1", json=doc)
+        try:
+            assert angekommen.wait(5)
+            delete = pool.submit(client.delete, "/api/projects/Demo")
+            assert delete_wartet.wait(5)
+        finally:
+            weiter.set()
+        assert save.result(timeout=5).status_code == 200
+        assert delete.result(timeout=5).status_code == 200
     assert not (tmp_path / "Demo").exists()
 
 
@@ -4366,7 +4481,8 @@ def test_es_gibt_nur_EINEN_erzeuger_des_weg_namens():
     Name muss einen lesbaren Stempel tragen."""
     import inspect
     import webtool.app as appmod
-    assert inspect.getsource(appmod).count("uuid.uuid4") == 1, "ein zweiter Erzeuger ist zurueck"
+    assert inspect.getsource(appmod._weg_suffix).count("uuid.uuid4") == 1, \
+        "ein zweiter Erzeuger ist zurueck"
 
 
 def test_weg_alter_liest_rechtsverankert_und_ueberlebt_das_umbenennen():

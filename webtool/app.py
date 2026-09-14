@@ -10,7 +10,7 @@ import threading
 import time
 import uuid
 import zipfile
-from contextlib import asynccontextmanager, suppress
+from contextlib import asynccontextmanager, contextmanager, suppress
 from urllib.parse import urlparse
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
@@ -650,13 +650,65 @@ class NewProject(BaseModel):
     name: str
 
 
+_PROJEKTINSTANZ_DATEI = ".projektinstanz"
+_LIFECYCLE_LOCK_WARTE_S = 5.0
+
+
+def _projektinstanz_pfad(project: str) -> str:
+    return os.path.join(paths.project_dir(project), _PROJEKTINSTANZ_DATEI)
+
+
+def _projektinstanz(project: str) -> str:
+    """Liefert die dauerhafte Kennung dieser Projektinstanz.
+
+    Der Name darf nach DELETE wiederverwendet werden, die Instanz nicht. Alte Projekte
+    bekommen ihren Merker beim ersten GET unter dem Lifecycle-Lock; eine kaputte Markierung
+    wird als neue Instanz behandelt, damit ein alter Browser-Tab niemals weiterschreiben kann.
+    """
+    pdir = paths.project_dir(project)
+    if not os.path.isdir(pdir):
+        raise HTTPException(status_code=404, detail="Projekt nicht gefunden")
+    try:
+        with open(_projektinstanz_pfad(project), encoding="utf-8") as fh:
+            kennung = fh.read().strip()
+        uuid.UUID(kennung)
+        return kennung
+    except (FileNotFoundError, OSError, ValueError):
+        kennung = uuid.uuid4().hex
+        paths.atomic_write(_projektinstanz_pfad(project), kennung)
+        return kennung
+
+
+@contextmanager
+def _projektlebenszyklus(project: str):
+    """Serialisiert GET, Save, Create und Delete ausserhalb des loeschbaren Baums."""
+    lock_root = os.path.join(os.path.dirname(paths.projekte_root()), ".transkribor-project-locks")
+    try:
+        os.makedirs(lock_root, exist_ok=True)
+    except OSError as e:
+        raise HTTPException(status_code=503,
+                            detail="Projektlebenszyklus kann nicht sicher gesperrt werden") from e
+    lock_pfad = os.path.join(lock_root, f"{paths.safe_name(project)}.lifecycle")
+    # Ein Projekt-Lifecycle darf nie neben einem noch lebenden Delete weiterlaufen. Anders als
+    # die allgemeinen Best-Effort-Locks endet der Request deshalb sicher mit 503, statt den
+    # Halter nach einer Zeitgrenze zu uebernehmen.
+    with sperre.datei(lock_pfad, erzwinge_uebernahme=False,
+                      wartezeit=_LIFECYCLE_LOCK_WARTE_S) as gehalten:
+        if not gehalten:
+            raise HTTPException(status_code=503,
+                                detail="Projektlebenszyklus kann nicht sicher gesperrt werden")
+        yield
+
+
 @app.post("/api/projects")
 def create_project(body: NewProject):
     name = _sicherer_projektname(body.name)   # strip macht der Riegel selbst
-    pdir = paths.project_dir(name)
-    if os.path.exists(pdir):
-        raise HTTPException(status_code=409, detail="Projekt existiert bereits")
-    os.makedirs(os.path.join(pdir, "audio"))
+    with _projektlebenszyklus(name):
+        pdir = paths.project_dir(name)
+        if os.path.exists(pdir):
+            raise HTTPException(status_code=409, detail="Projekt existiert bereits")
+        os.makedirs(os.path.join(pdir, "audio"))
+        _projektinstanz(name)
     return {"ok": True, "name": name}
 
 
@@ -665,10 +717,11 @@ def delete_project(project: str):
     _validate(project)
     if jobs.active_for(project):
         raise HTTPException(status_code=409, detail="Job läuft — erst abbrechen")
-    pdir = paths.project_dir(project)
-    if not os.path.isdir(pdir):
-        raise HTTPException(status_code=404, detail="kein Projekt")
-    shutil.rmtree(pdir)
+    with _projektlebenszyklus(project):
+        pdir = paths.project_dir(project)
+        if not os.path.isdir(pdir):
+            raise HTTPException(status_code=404, detail="kein Projekt")
+        shutil.rmtree(pdir)
     return {"ok": True}
 
 
@@ -1409,7 +1462,8 @@ def rename_file(project: str, base: str, body: RenameBody):
 @app.get("/api/projects/{project}/files/{base}")
 def get_file(project: str, base: str):
     _validate(project, base)
-    return load_or_build_doc(project, base)
+    with _projektlebenszyklus(project):
+        return {**load_or_build_doc(project, base), "projektinstanz": _projektinstanz(project)}
 
 
 @app.get("/api/projects/{project}/audio/{base}")
@@ -1427,7 +1481,19 @@ def get_audio(project: str, base: str):
 _KEIN_VORBEHALT = object()
 
 
-def _pruefe_und_schreibe(project: str, base: str, doc: dict, erwartet) -> str:
+def _pruefe_und_schreibe(project: str, base: str, doc: dict, erwartet, projektinstanz: str) -> str:
+    """Bindet den Save an dieselbe Projektinstanz, die der Client geladen hat."""
+    with _projektlebenszyklus(project):
+        pdir = paths.project_dir(project)
+        if not os.path.isdir(pdir):
+            raise HTTPException(status_code=404, detail="Projekt nicht gefunden")
+        if projektinstanz != _projektinstanz(project):
+            raise HTTPException(status_code=409,
+                                detail="Projekt wurde inzwischen gelöscht und neu angelegt")
+        return _pruefe_und_schreibe_unter_projektlock(project, base, doc, erwartet)
+
+
+def _pruefe_und_schreibe_unter_projektlock(project: str, base: str, doc: dict, erwartet) -> str:
     """Stand pruefen UND schreiben unter EINER Sperre — sonst bleibt #160 als schmales
     Fenster offen (CodeRabbit an PR #278).
 
@@ -1453,30 +1519,41 @@ def _pruefe_und_schreibe(project: str, base: str, doc: dict, erwartet) -> str:
     epath = _edit_path(project, base)
     # VOR der Sperre: `sperre.datei` verlangt ein vorhandenes Elternverzeichnis.
     tdir = paths.transkripte_dir(project)
-    os.makedirs(tdir, exist_ok=True)
-    with sperre.datei(epath):
-        if erwartet is not _KEIN_VORBEHALT and erwartet != _dateistand(epath):
-            raise HTTPException(
-                status_code=409,
-                detail="Die Datei wurde inzwischen von aussen geändert "
-                       "(vermutlich ist eine Korrektur fertig geworden).")
-        # Hier drin, nicht davor: der Zweig legt eine Datei beiseite, und die erste Rettung
-        # gewinnt — ein abgelehnter Schreibvorgang darf keinen Seiteneffekt hinterlassen.
-        if doc.pop("selbstgeheilt", None) and _ist_unlesbar(epath):
-            paths.beiseitelegen(epath)
-        doc["human_edited"] = True
-        paths.atomic_write(epath, json.dumps(doc, ensure_ascii=False, indent=1))
-        paths.atomic_write(_md_path(project, base), render_md(doc))
-        return _dateistand(epath)
+    pdir = paths.project_dir(project)
+    if not os.path.isdir(pdir):
+        raise HTTPException(status_code=404, detail="Projekt nicht gefunden")
+    try:
+        # Nur das Blatt anlegen: ein spaeter PUT darf die geloeschte Projektwurzel
+        # auch dann nicht wiederherstellen, wenn DELETE nach der Pruefung oben endet.
+        try:
+            os.mkdir(tdir)
+        except FileExistsError:
+            if not os.path.isdir(tdir):
+                raise
+        with sperre.datei(epath):
+            if erwartet is not _KEIN_VORBEHALT and erwartet != _dateistand(epath):
+                raise HTTPException(
+                    status_code=409,
+                    detail="Die Datei wurde inzwischen von aussen geändert "
+                           "(vermutlich ist eine Korrektur fertig geworden).")
+            # Hier drin, nicht davor: der Zweig legt eine Datei beiseite, und die erste Rettung
+            # gewinnt — ein abgelehnter Schreibvorgang darf keinen Seiteneffekt hinterlassen.
+            if doc.pop("selbstgeheilt", None) and _ist_unlesbar(epath):
+                paths.beiseitelegen(epath)
+            doc["human_edited"] = True
+            paths.atomic_write(epath, json.dumps(doc, ensure_ascii=False, indent=1))
+            paths.atomic_write(_md_path(project, base), render_md(doc))
+            return _dateistand(epath)
+    except FileNotFoundError as e:
+        if not os.path.isdir(pdir):
+            raise HTTPException(status_code=404, detail="Projekt nicht gefunden") from e
+        raise
 
 
 @app.put("/api/projects/{project}/files/{base}")
 async def save_file(project: str, base: str, request: Request):
     _validate(project, base)
-    # Der schreibende Anlegeweg mit INHALT (K1-Glied-1-Review): ein Stale-Editor-Tab,
-    # das nach dem Umbenennen eines Altprojekts "active" weiterspeichert, wuerde das
-    # Projekt sonst samt edit.json WIEDER aufstehen lassen — makedirs + atomic_write
-    # legen bedingungslos an, und die Galerie listet jeden Ordner unter projekte/.
+    # Die Namensregel gilt auch fuer alte Editor-Tabs auf reservierten Projektnamen.
     _sicherer_projektname(project)
     doc = await request.json()
     # Trust-Boundary: der Rumpf kommt vom Client. Ein JSON-Array kam bisher bis zum
@@ -1485,6 +1562,13 @@ async def save_file(project: str, base: str, request: Request):
     if not isinstance(doc, dict):
         raise HTTPException(status_code=400,
                             detail=f"JSON-Objekt erwartet, {type(doc).__name__} bekommen")
+    # Die Kennung kommt ausschliesslich aus GET und darf nie in der edit.json landen. Ein
+    # fehlender oder alter Browser-Tab kann nach DELETE + gleichnamigem POST sonst seine alte
+    # Fassung in die neue Projektinstanz schreiben.
+    projektinstanz = doc.pop("projektinstanz", None)
+    if not isinstance(projektinstanz, str) or not projektinstanz:
+        raise HTTPException(status_code=409,
+                            detail="Projektinstanz fehlt oder ist nicht mehr gültig")
     # Optimistisches Sperren (#160). Der Editor speichert 800 ms nach dem letzten Tastendruck;
     # wird eine Korrektur fertig, waehrend ein PUT schon unterwegs ist, landete er DANACH und
     # ersetzte die frische edit.json — ein kompletter Lauf weg, ohne eine Zeile im Protokoll.
@@ -1522,7 +1606,8 @@ async def save_file(project: str, base: str, request: Request):
     # Der neue Stand MUSS zurueck: sonst liefe der naechste Autosave gegen die eigene
     # Schreibung von gerade eben und bekaeme 409 — die Sperre schluege bei jedem zweiten
     # Speichern zu, ohne dass irgendein fremder Schreiber beteiligt waere.
-    stand = await run_in_threadpool(_pruefe_und_schreibe, project, base, doc, erwartet)
+    stand = await run_in_threadpool(_pruefe_und_schreibe, project, base, doc, erwartet,
+                                    projektinstanz)
     return {"ok": True, "dateistand": stand}
 
 
@@ -1553,7 +1638,7 @@ def _get_or_render_md(project: str, base: str) -> str | None:
     md_p = _md_path(project, base)
     if os.path.exists(md_p):
         try:
-            with open(md_p, "r", encoding="utf-8") as fh:
+            with open(md_p, encoding="utf-8") as fh:
                 return fh.read()
         except OSError:
             pass

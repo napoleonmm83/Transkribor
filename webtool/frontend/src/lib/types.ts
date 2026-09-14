@@ -36,6 +36,10 @@ export type EditDoc = {
    *  gelingt oder ein `reload()` kommt. Als Folge einer ausdruecklichen Nutzerentscheidung
    *  vertretbar, aber es ist keine Zusicherung. */
   dateistand?: string;
+  /** Kennung des Projektlebenszyklus. Der Server liefert sie mit jedem GET und erwartet sie
+   *  bei jedem PUT, entfernt sie aber vor dem Speichern. Optional bleibt sie nur, damit alte
+   *  Test- und Migrationsdaten darstellbar sind; ein echter Save ohne Kennung erhält 409. */
+  projektinstanz?: string;
   /** Abschnitte der Aufnahme, zu denen es KEIN Segment gibt (#83). Whisper kann ein
    *  30-Sekunden-Fenster ueberspringen, ohne dass irgendetwas im Ergebnis darauf hinweist —
    *  nur die Abdeckung sieht das. Optional: vor diesem Feature geschriebene edit.json haben

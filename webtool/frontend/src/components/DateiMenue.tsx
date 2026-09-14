@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useMatch, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { Bot, FileDown, Languages, MoreHorizontal, Pencil, RotateCcw, Trash2 } from 'lucide-react'
 import type { ProjectFile, StartJob } from '@/lib/types'
@@ -48,20 +48,24 @@ export function DateiMenue({ project, file, aiReason }: {
   const { start } = useJob()
   const editor = useEditorBruecke()
   const navigate = useNavigate()
-  const imEditor = useMatch('/p/:project/:base')
-  const offen = imEditor?.params.project === project && imEditor?.params.base === file.base
+  // Eine andere offene Datei darf durch den Abschluss dieser Aktion nicht verworfen werden.
+  const passenderEditor = () => {
+    const e = editor.current
+    return e?.project === project && e.base === file.base ? e : null
+  }
+  const editorVergessen = (vorher: ReturnType<typeof passenderEditor>) => {
+    vorher?.vergiss()
+    const aktuell = passenderEditor()
+    // Dieselbe Datei kann waehrend des Requests in einer neuen Hook-Instanz geoeffnet werden.
+    if (aktuell && aktuell.vergiss !== vorher?.vergiss) aktuell.vergiss()
+  }
 
   const nachladen = () => { refresh(); refreshFiles() }
   // Wer die offene Datei VERWIRFT, muss den Editor verlassen: der haelt das alte Dokument im
   // Speicher, und "Speichern" schriebe es zurueck — beim Loeschen legt es die Datei sogar neu
   // an. Fuer die Korrektur gilt das NICHT: dort bleibt das Dokument gueltig, und der Editor
   // laedt es nach dem Lauf nach (EditorView lauscht auf onSettled, #123).
-  const wegVomEditor = () => { if (offen) navigate(`/p/${encodeURIComponent(project)}`) }
-  /** #106-Review C1/C2: bevor der Editor eine Datei verlaesst, die der Server gerade zerstoert
-   *  oder verschiebt, verwirft er seine ungespeicherte Fassung — sonst spuelte der Verlassens-
-   *  Flush sie als Waise ans alte Ziel zurueck (Backend save_file legt sie bedingungslos neu an).
-   *  Nur wenn DIESE Datei offen ist: eine andere offene Datei darf nicht angestastet werden. */
-  const editorVergessen = () => { if (offen) editor.current?.vergiss() }
+  const wegVomEditor = () => { if (passenderEditor()) navigate(`/p/${encodeURIComponent(project)}`) }
 
   const jobStarten = (fn: () => Promise<StartJob>, kind: string,
                       label: string) =>
@@ -69,6 +73,8 @@ export function DateiMenue({ project, file, aiReason }: {
       label, nachladen)
 
   const ausfuehren = async (was: Aktion) => {
+    // Vor dem Request binden: dessen Antwort kann nach einem Dokumentwechsel eintreffen.
+    const e = passenderEditor()
     setDialog(null)
     if (was === 'correct') {
       jobStarten(() => startCorrectFile(project, file.base, file.has_edit), 'correct',
@@ -77,12 +83,12 @@ export function DateiMenue({ project, file, aiReason }: {
       // Erst navigieren, wenn der Lauf wirklich angenommen ist: bei 409 (ein Job laeuft schon)
       // wurde nichts verworfen — den Editor trotzdem zu verlassen waere ein Verlust ohne Anlass.
       jobStarten(() => startRetranscribeFile(project, file.base)
-        .then(res => { if (res.started) { editorVergessen(); wegVomEditor() }; return res }),
+        .then(res => { if (res.started) { editorVergessen(e); wegVomEditor() }; return res }),
         'transcribe', `Transkribieren ${file.base}`)
     } else {
       try { await deleteFile(project, file.base) }
       catch (e) { toast.error(`Löschen fehlgeschlagen: ${(e as Error).message}`); return }
-      editorVergessen()
+      editorVergessen(e)
       wegVomEditor()
       toast.success(`„${file.base}“ gelöscht`)
       nachladen()
@@ -99,13 +105,14 @@ export function DateiMenue({ project, file, aiReason }: {
   }
 
   const umbenannt = async (neu: string) => {
+    const e = passenderEditor()
     // Der Editor laedt beim Pfadwechsel neu — ungespeichertes waere sonst still weg.
-    if (offen && editor.current?.dirty && !window.confirm(
+    if (e?.dirty && !window.confirm(
       `„${file.base}“ hat ungespeicherte Änderungen.\n\n`
       + 'Beim Umbenennen wird die Datei neu geladen — die Änderungen gehen verloren.')) return false
     const res = await renameFile(project, file.base, neu)
-    editorVergessen()   // sonst spuelte der Flush die alte Fassung als Waise ans alte Base
-    if (offen) navigate(`/p/${encodeURIComponent(project)}/${encodeURIComponent(res.name)}`, { replace: true })
+    editorVergessen(e)   // sonst spuelte der Flush die alte Fassung als Waise ans alte Base
+    if (passenderEditor()) navigate(`/p/${encodeURIComponent(project)}/${encodeURIComponent(res.name)}`, { replace: true })
     toast.success(`„${file.base}“ heisst jetzt „${res.name}“`)
     nachladen()
   }
@@ -116,13 +123,14 @@ export function DateiMenue({ project, file, aiReason }: {
    *  bleibt es beim Override — die nächste Transkription übernimmt ihn. */
   const einstellungenGespeichert = ({ neuTranskribieren, neuKorrigieren }: {
     neuTranskribieren: boolean; neuKorrigieren: boolean }) => {
+    const e = passenderEditor()
     toast.success(`Einstellungen für „${file.base}“ gespeichert`)
     if (!file.has_raw) return
     // neuTranskribieren deckt Sprachwechsel UND den Mehrsprachig-Haken ab — beide aendern,
     // wie der Decoder laeuft, ein vorhandenes Transkript ist danach nach anderen Regeln entstanden.
     if (neuTranskribieren) {
       jobStarten(() => startRetranscribeFile(project, file.base)
-        .then(res => { if (res.started) { editorVergessen(); wegVomEditor() }; return res }),
+        .then(res => { if (res.started) { editorVergessen(e); wegVomEditor() }; return res }),
         'transcribe', `Neu transkribieren ${file.base}`)
     // neuKorrigieren deckt die Korrektur-Tiefe UND die Sprecherzahl ab: die akustische
     // Diarisierung laeuft als Prep-Schritt von `correct run`, eine neue Sprecherzahl wirkt

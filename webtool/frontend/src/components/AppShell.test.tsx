@@ -328,6 +328,56 @@ describe('AppShell', () => {
     expect(screen.getByTestId('ort').textContent).toBe('/')
   })
 
+  describe('Projektloeschen und Editor (#618)', () => {
+    beforeEach(() => {
+      vi.mocked(api.listProjects).mockResolvedValue(ZWEI)
+      vi.mocked(api.getProjectFiles).mockResolvedValue({ name: 'Alpha', files: DATEIEN })
+    })
+
+    async function loeschen(vergiss: () => void) {
+      render(<MemoryRouter initialEntries={['/p/Alpha/a']}>
+        <JobProvider><AppShell><Schreibtisch vergiss={vergiss} /></AppShell></JobProvider>
+      </MemoryRouter>)
+      fireEvent.click(await screen.findByRole('button', { name: 'Projekt Alpha löschen' }))
+      fireEvent.change(screen.getByRole('textbox', { name: 'Projektname bestätigen' }), { target: { value: 'Alpha' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Löschen' }))
+      await waitFor(() => expect(api.deleteProject).toHaveBeenCalledWith('Alpha'))
+    }
+
+    it('verwirft erst nach erfolgreichem DELETE und vor dem Navigieren', async () => {
+      let fertig!: () => void
+      vi.mocked(api.deleteProject).mockReturnValueOnce(new Promise(resolve => { fertig = resolve }))
+      const vergiss = vi.fn(() => expect(screen.getByTestId('ort').textContent).toBe('/p/Alpha/a'))
+      await loeschen(vergiss)
+      expect(vergiss).not.toHaveBeenCalled()
+      await act(async () => { fertig() })
+      expect(vergiss).toHaveBeenCalledTimes(1)
+      expect(screen.getByTestId('ort').textContent).toBe('/')
+    })
+
+    it('laesst nach einem fehlgeschlagenen DELETE den Editor bestehen', async () => {
+      vi.mocked(api.deleteProject).mockRejectedValueOnce(new Error('Loeschen gesperrt'))
+      const vergiss = vi.fn()
+      await loeschen(vergiss)
+      await waitFor(() => expect(toastMock.error).toHaveBeenCalled())
+      expect(vergiss).not.toHaveBeenCalled()
+      expect(screen.getByTestId('ort').textContent).toBe('/p/Alpha/a')
+    })
+
+    it('beruecksichtigt einen Projektwechsel waehrend DELETE noch laeuft', async () => {
+      let fertig!: () => void
+      vi.mocked(api.deleteProject).mockReturnValueOnce(new Promise(resolve => { fertig = resolve }))
+      const vergiss = vi.fn()
+      await loeschen(vergiss)
+      fireEvent.click(screen.getByRole('button', { name: 'Abbrechen' }))
+      fireEvent.click(screen.getByText('Beta'))
+      expect(screen.getByTestId('ort').textContent).toBe('/p/Beta')
+      await act(async () => { fertig() })
+      expect(vergiss).not.toHaveBeenCalled()
+      expect(screen.getByTestId('ort').textContent).toBe('/p/Beta')
+    })
+  })
+
   describe('ungespeicherte Aenderungen', () => {
     beforeEach(() => {
       vi.mocked(api.listProjects).mockResolvedValue(ZWEI)

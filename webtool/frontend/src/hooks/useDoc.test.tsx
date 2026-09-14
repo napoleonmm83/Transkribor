@@ -71,7 +71,135 @@ async function geladen() {
 
 afterEach(() => { vi.useRealTimers(); vi.clearAllMocks(); toasts.clear() })
 
+describe('useDoc: Verwerfen beendet alte Speicherlaeufe (#618)', () => {
+  it.each([{ project: 'B', base: 'a' }, { project: 'A', base: 'b' }])(
+    'ein alter Verwerfungs-Rueckruf erhaelt die Saves von $project/$base', async ziel => {
+      vi.useFakeTimers()
+      vi.mocked(api.getDoc).mockImplementation(async (project, base) => ({ ...doc, project, base }))
+      let fertig!: (wert: { dateistand?: string }) => void
+      vi.mocked(api.saveDoc).mockReturnValueOnce(new Promise(resolve => { fertig = resolve })).mockResolvedValue({})
+      const h = renderHook(({ project, base }) => useDoc(project, base), {
+        initialProps: { project: 'A', base: 'a' },
+      })
+      await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+      const vergissAlt = h.result.current.vergiss
+      h.rerender(ziel)
+      await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+      act(() => h.result.current.updateSegment(0, { text: 'erste Fassung' }))
+      await act(async () => { await vi.advanceTimersByTimeAsync(800) })
+      act(() => h.result.current.updateSegment(0, { text: 'letzte Fassung' }))
+      await act(async () => { await vi.advanceTimersByTimeAsync(800) })
+      act(() => vergissAlt())
+      expect(h.result.current.dirty).toBe(true)
+      h.unmount()
+      await act(async () => { fertig({ dateistand: 'erste-stand' }) })
+      expect(vi.mocked(api.saveDoc).mock.calls.map(([project, base, inhalt]) => [project, base, inhalt.segments[0].text]))
+        .toEqual([[ziel.project, ziel.base, 'erste Fassung'], [ziel.project, ziel.base, 'letzte Fassung']])
+    },
+  )
+
+  it('erhaelt die wartenden Saves eines anderen Dokuments', async () => {
+    vi.useFakeTimers()
+    vi.mocked(api.getDoc).mockImplementation(async (project, base) => ({ ...doc, project, base }))
+    let fertig!: (wert: { dateistand?: string }) => void
+    vi.mocked(api.saveDoc).mockReturnValueOnce(new Promise(resolve => { fertig = resolve })).mockResolvedValue({})
+    const h = renderHook(({ project, base }) => useDoc(project, base), {
+      initialProps: { project: 'A', base: 'a' },
+    })
+    await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+    act(() => h.result.current.updateSegment(0, { text: 'A1' }))
+    await act(async () => { await vi.advanceTimersByTimeAsync(800) })
+    act(() => h.result.current.updateSegment(0, { text: 'A2' }))
+    await act(async () => { await vi.advanceTimersByTimeAsync(800) })
+    h.rerender({ project: 'B', base: 'b' })
+    await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+    act(() => h.result.current.updateSegment(0, { text: 'B verworfen' }))
+    await act(async () => { await vi.advanceTimersByTimeAsync(800) })
+    act(() => h.result.current.vergiss())
+    await act(async () => { fertig({ dateistand: 'A1-stand' }) })
+    expect(vi.mocked(api.saveDoc).mock.calls.map(([project, , inhalt]) => [project, inhalt.segments[0].text]))
+      .toEqual([['A', 'A1'], ['A', 'A2']])
+    expect(h.result.current.stand).toBe('ruhig')
+  })
+
+  it('meldet einen spaeten Erfolg nach dem Verwerfen nicht mehr als gespeichert', async () => {
+    let fertig!: (wert: { dateistand?: string }) => void
+    vi.mocked(api.saveDoc).mockReturnValueOnce(new Promise(resolve => { fertig = resolve }))
+    const h = await geladen()
+    act(() => h.result.current.updateSegment(0, { text: 'verworfen' }))
+    await act(async () => { await vi.advanceTimersByTimeAsync(800) })
+    act(() => h.result.current.vergiss())
+    await act(async () => { fertig({ dateistand: 'alt' }) })
+    expect(h.result.current.stand).toBe('ruhig')
+    expect(h.result.current.dirty).toBe(false)
+  })
+
+  it('laesst den wartenden Save nach vergiss und Unmount nicht mehr starten', async () => {
+    let fertig!: (wert: { dateistand?: string }) => void
+    vi.mocked(api.saveDoc).mockReturnValueOnce(new Promise(resolve => { fertig = resolve }))
+    const h = await geladen()
+    act(() => h.result.current.updateSegment(0, { text: 'erste Fassung' }))
+    await act(async () => { await vi.advanceTimersByTimeAsync(800) })
+    act(() => h.result.current.updateSegment(0, { text: 'zweite Fassung' }))
+    await act(async () => { await vi.advanceTimersByTimeAsync(800) })
+    expect(api.saveDoc).toHaveBeenCalledTimes(1)
+    act(() => h.result.current.vergiss())
+    h.unmount()
+    await act(async () => { fertig({ dateistand: 'alt' }) })
+    expect(api.saveDoc).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([new Error('zu spaet'), new api.HttpFehler('Konflikt', 409)])(
+    'ignoriert spaete Fehler nach dem Verwerfen: %s', async fehler => {
+      let ablehnen!: (grund: Error) => void
+      vi.mocked(api.saveDoc).mockReturnValueOnce(new Promise((_resolve, reject) => { ablehnen = reject }))
+      const frage = vi.spyOn(window, 'confirm').mockReturnValue(false)
+      const h = await geladen()
+      act(() => h.result.current.updateSegment(0, { text: 'verworfen' }))
+      await act(async () => { await vi.advanceTimersByTimeAsync(800) })
+      act(() => h.result.current.vergiss())
+      await act(async () => { ablehnen(fehler) })
+      await act(async () => { await vi.advanceTimersByTimeAsync(15000) })
+      expect(h.result.current.stand).toBe('ruhig')
+      expect(h.result.current.dirty).toBe(false)
+      expect(api.saveDoc).toHaveBeenCalledTimes(1)
+      expect(frage).not.toHaveBeenCalled()
+      expect(toast.error).not.toHaveBeenCalled()
+      frage.mockRestore()
+    },
+  )
+
+  it('beendet einen geplanten Retry und erlaubt danach neue Bearbeitung', async () => {
+    vi.mocked(api.saveDoc).mockRejectedValueOnce(new Error('offline')).mockResolvedValue({})
+    const h = await geladen()
+    act(() => h.result.current.updateSegment(0, { text: 'verworfen' }))
+    await act(async () => { await vi.advanceTimersByTimeAsync(800) })
+    expect(h.result.current.stand).toBe('fehler')
+    act(() => h.result.current.vergiss())
+    await act(async () => { await vi.advanceTimersByTimeAsync(15000) })
+    expect(api.saveDoc).toHaveBeenCalledTimes(1)
+    act(() => h.result.current.updateSegment(0, { text: 'neu begonnen' }))
+    await act(async () => { await vi.advanceTimersByTimeAsync(800) })
+    expect(api.saveDoc).toHaveBeenCalledTimes(2)
+    expect(vi.mocked(api.saveDoc).mock.calls[1][2].segments[0].text).toBe('neu begonnen')
+    expect(h.result.current.stand).toBe('gespeichert')
+  })
+})
+
 describe('useDoc Autosave', () => {
+  it('reicht die Projektinstanz aus dem GET mit dem Save zurueck', async () => {
+    vi.useFakeTimers()
+    vi.mocked(api.getDoc).mockResolvedValue({ ...doc, projektinstanz: 'instanz-a' })
+    vi.mocked(api.saveDoc).mockResolvedValue({})
+    const h = renderHook(() => useDoc('P', 'b'))
+    await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+
+    act(() => h.result.current.updateSegment(0, { text: 'mit Instanz' }))
+    await act(async () => { await vi.advanceTimersByTimeAsync(800) })
+    expect(vi.mocked(api.saveDoc)).toHaveBeenCalledWith('P', 'b',
+      expect.objectContaining({ projektinstanz: 'instanz-a' }))
+  })
+
   it('speichert erst nach der Tipppause — und mehrere Aenderungen nur EINMAL', async () => {
     vi.mocked(api.saveDoc).mockResolvedValue({})
     const { result } = await geladen()
