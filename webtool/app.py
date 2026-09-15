@@ -1,6 +1,7 @@
 """FastAPI-Backend für den Transkribor-Editor (Stufe 1)."""
 import errno
 import glob
+import hashlib
 import io
 import json
 import os
@@ -10,7 +11,7 @@ import threading
 import time
 import uuid
 import zipfile
-from contextlib import asynccontextmanager, contextmanager, suppress
+from contextlib import ExitStack, asynccontextmanager, contextmanager, suppress
 from urllib.parse import urlparse
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
@@ -339,11 +340,16 @@ def _sicherer_projektname(roh: str) -> str:
     """
     try:
         name = paths.sicherer_projektname(roh)
-        if name == _LIFECYCLE_LOCK_ORDNER:
+        if _ist_lifecycle_lock_ordner(name):
             raise ValueError("Projektname ist fuer interne Sperren reserviert")
         return name
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+def _ist_lifecycle_lock_ordner(name: str) -> bool:
+    """Vergleicht den internen Ordner so, wie Windows Projektnamen aufloest."""
+    return name.casefold() == _LIFECYCLE_LOCK_ORDNER.casefold()
 
 
 def _json_objekt(pfad: str) -> dict:
@@ -455,7 +461,7 @@ def list_projects():
     if not os.path.isdir(root):
         return {"projects": out}
     for eintrag in os.scandir(root):
-        if not eintrag.is_dir() or eintrag.name == _LIFECYCLE_LOCK_ORDNER:
+        if not eintrag.is_dir() or _ist_lifecycle_lock_ordner(eintrag.name):
             continue
         try:
             _validate(eintrag.name)
@@ -575,9 +581,7 @@ def projekteinstellungen_speichern(project: str, body: EinstellungenBody):
         raise HTTPException(status_code=400, detail=fehler)
     # speichern() ueberspringt None-Werte (isinstance-Pruefung je Feld) -> leerer Body ist
     # sicher, und ein PUT ohne `mehrsprachig` laesst den Haken stehen (Partial-Update).
-    with _projektlebenszyklus(project):
-        if not os.path.isdir(paths.project_dir(project)):
-            raise HTTPException(status_code=404, detail="Projekt nicht gefunden")
+    with _vorhandener_projektlebenszyklus(project):
         d = _projekt.speichern(project, {"sprache": body.sprache, "korrektur": body.korrektur,
                                          "mehrsprachig": body.mehrsprachig})
     return _projekt_body(d)
@@ -645,11 +649,12 @@ def dateieinstellungen_speichern(project: str, base: str, body: DateiEinstellung
 
     # `sprecher: null` heisst hier nicht „folgt dem Projekt" (den Standard gibt es bewusst
     # nicht), sondern „wieder automatisch" — derselbe Mechanismus, s. `projekt.setze_datei`.
-    _projekt.setze_datei(project, base, sprache=_erben(body.sprache, "sprache"),
-                         korrektur=body.korrektur,
-                         mehrsprachig=_erben(body.mehrsprachig, "mehrsprachig"),
-                         sprecher=_erben(body.sprecher, "sprecher"))
-    return _projekt.datei_ansicht(project, base)      # EIN Lesevorgang, s. GET oben
+    with _vorhandener_projektlebenszyklus(project):
+        _projekt.setze_datei(project, base, sprache=_erben(body.sprache, "sprache"),
+                             korrektur=body.korrektur,
+                             mehrsprachig=_erben(body.mehrsprachig, "mehrsprachig"),
+                             sprecher=_erben(body.sprecher, "sprecher"))
+        return _projekt.datei_ansicht(project, base)  # EIN Lesevorgang, s. GET oben
 
 
 class NewProject(BaseModel):
@@ -663,6 +668,20 @@ _LIFECYCLE_LOCK_WARTE_S = 5.0
 
 def _projektinstanz_pfad(project: str) -> str:
     return os.path.join(paths.project_dir(project), _PROJEKTINSTANZ_DATEI)
+
+
+def _projekt_lock_schluessel(project: str) -> str:
+    """Kanonischer Dateisystempfad fuer case-, Junction- und Symlink-Aliasse."""
+    name = paths.safe_name(project)
+    pdir = os.path.abspath(paths.project_dir(name))
+    return os.path.normcase(os.path.realpath(pdir))
+
+
+def _ist_projekt_alias(project: str) -> bool:
+    """Erkennt Projektpfade, die auf einen anderen Dateisystemort verweisen."""
+    pdir = paths.project_dir(project)
+    ist_junction = getattr(os.path, "isjunction", None)
+    return os.path.islink(pdir) or bool(ist_junction and ist_junction(pdir))
 
 
 def _projektinstanz(project: str) -> str:
@@ -693,7 +712,7 @@ def _projektinstanz(project: str) -> str:
 @contextmanager
 def _projektlebenszyklus(project: str):
     """Serialisiert GET, Save, Create und Delete ausserhalb des loeschbaren Baums."""
-    if project == _LIFECYCLE_LOCK_ORDNER:
+    if _ist_lifecycle_lock_ordner(project):
         raise HTTPException(status_code=400, detail="Projektname ist fuer interne Sperren reserviert")
     # Innerhalb der konfigurierten Projektwurzel ist die Ablage ueberall dort beschreibbar,
     # wo Transkribor Projekte anlegen darf. Sie liegt weiterhin ausserhalb jedes einzelnen,
@@ -704,7 +723,8 @@ def _projektlebenszyklus(project: str):
     except OSError as e:
         raise HTTPException(status_code=503,
                             detail="Projektlebenszyklus kann nicht sicher gesperrt werden") from e
-    lock_pfad = os.path.join(lock_root, f"{paths.safe_name(project)}.lifecycle")
+    lock_id = hashlib.sha256(_projekt_lock_schluessel(project).encode("utf-8")).hexdigest()
+    lock_pfad = os.path.join(lock_root, f"{lock_id}.lifecycle")
     # Ein Projekt-Lifecycle darf nie neben einem noch lebenden Delete weiterlaufen. Anders als
     # die allgemeinen Best-Effort-Locks endet der Request deshalb sicher mit 503, statt den
     # Halter nach einer Zeitgrenze zu uebernehmen.
@@ -713,7 +733,49 @@ def _projektlebenszyklus(project: str):
         if not gehalten:
             raise HTTPException(status_code=503,
                                 detail="Projektlebenszyklus kann nicht sicher gesperrt werden")
+        if _ist_projekt_alias(project):
+            raise HTTPException(status_code=400, detail="Projekt-Aliasse werden nicht unterstuetzt")
         yield
+
+
+@contextmanager
+def _vorhandener_projektlebenszyklus(project: str):
+    """Haelt den Lebenszyklus und laesst keinen Schreiber ein geloeschtes Projekt anlegen."""
+    with _projektlebenszyklus(project):
+        if not os.path.isdir(paths.project_dir(project)):
+            raise HTTPException(status_code=404, detail="Projekt nicht gefunden")
+        yield
+
+
+@contextmanager
+def _projektlebenszyklen(*projects: str):
+    """Haelt mehrere Projekt-Lebenszyklen ohne gegenlaeufige Lock-Reihenfolge."""
+    namen: dict[str, str] = {}
+    for project in projects:
+        name = paths.safe_name(project)
+        schluessel = _projekt_lock_schluessel(name)
+        namen.setdefault(schluessel, name)
+    with ExitStack() as stack:
+        for schluessel in sorted(namen):
+            stack.enter_context(_projektlebenszyklus(namen[schluessel]))
+        yield
+
+
+@contextmanager
+def _gebundene_projektinstanz(project: str, erwartet: str):
+    """Haelt den Lifecycle und meldet, ob noch dieselbe Projektinstanz existiert."""
+    with _projektlebenszyklus(project):
+        if not os.path.isdir(paths.project_dir(project)):
+            yield False
+            return
+        try:
+            aktuell = _projektinstanz(project)
+        except HTTPException as e:
+            if e.status_code in (404, 410):
+                yield False
+                return
+            raise
+        yield aktuell == erwartet
 
 
 @app.post("/api/projects")
@@ -743,9 +805,9 @@ def create_project(body: NewProject):
 @app.delete("/api/projects/{project}")
 def delete_project(project: str):
     _validate(project)
-    if jobs.active_for(project):
-        raise HTTPException(status_code=409, detail="Job läuft — erst abbrechen")
     with _projektlebenszyklus(project):
+        if jobs.active_for(project):
+            raise HTTPException(status_code=409, detail="Job läuft — erst abbrechen")
         pdir = paths.project_dir(project)
         if not os.path.isdir(pdir):
             raise HTTPException(status_code=404, detail="kein Projekt")
@@ -1249,18 +1311,19 @@ def delete_file(project: str, base: str):
     """Eine einzelne Aufnahme samt Audio loeschen (das Projekt bleibt)."""
     _validate(project, base)
     _sicherer_projektname(project)   # sonst legt das makedirs unten ein Geisterprojekt an
-    epath = _edit_path(project, base)
-    tdir = paths.transkripte_dir(project)
-    os.makedirs(tdir, exist_ok=True)
-    with sperre.datei(epath) as gehalten:
-        if not gehalten:
-            raise HTTPException(status_code=503,
-                                detail="Datei kann gerade nicht sicher gelöscht werden")
-        _keine_jobs(project, base, active_only=True)
-        n = _datei_weg(project, base, mit_audio=True)
-        if not n:
-            raise HTTPException(status_code=404, detail=f"keine Datei: {base}")
-        jobs.remove_base(project, base)
+    with _vorhandener_projektlebenszyklus(project):
+        epath = _edit_path(project, base)
+        tdir = paths.transkripte_dir(project)
+        os.makedirs(tdir, exist_ok=True)
+        with sperre.datei(epath) as gehalten:
+            if not gehalten:
+                raise HTTPException(status_code=503,
+                                    detail="Datei kann gerade nicht sicher gelöscht werden")
+            _keine_jobs(project, base, active_only=True)
+            n = _datei_weg(project, base, mit_audio=True)
+            if not n:
+                raise HTTPException(status_code=404, detail=f"keine Datei: {base}")
+            jobs.remove_base(project, base)
     return {"ok": True, "geloescht": n}
 
 
@@ -1283,21 +1346,21 @@ def retranscribe_file(project: str, base: str):
     genau wie `delete_file` seit je."""
     _validate(project, base)
     _sicherer_projektname(project)   # ein Lauf ERZEUGT den vergifteten Strom (#416)
-    if not find_audio(project, base):
-        raise HTTPException(status_code=404, detail=f"kein Audio: {base}")
-    # `sperre.datei` legt sein Lock NEBEN die Datei und braucht das Elternverzeichnis —
-    # `create_project` legt aber nur `audio/` an. Ein Projekt mit Ton, aber ohne `transkripte/`
-    # (Upload ohne Lauf, von Hand angelegt) bekaeme sonst `FileNotFoundError` und damit 503:
-    # ausgerechnet die erste Transkription waere unmoeglich. `delete_file` macht es seit je so;
-    # das Muster gehoerte mit der Sperre hierher und ist beim Einbau untergegangen.
-    os.makedirs(paths.transkripte_dir(project), exist_ok=True)
-    with sperre.datei(_edit_path(project, base)) as gehalten:
-        if not gehalten:
-            raise HTTPException(status_code=503,
-                                detail="Aufnahme kann gerade nicht sicher neu transkribiert werden")
-        _keine_jobs(project, base)
-        _datei_weg(project, base, mit_audio=False)
-        job_id, started, vorgang = _start_transcribe(project, base=base)
+    with _vorhandener_projektlebenszyklus(project):
+        if not find_audio(project, base):
+            raise HTTPException(status_code=404, detail=f"kein Audio: {base}")
+        # `sperre.datei` legt sein Lock NEBEN die Datei und braucht das Elternverzeichnis —
+        # `create_project` legt aber nur `audio/` an. Ein Projekt mit Ton, aber ohne
+        # `transkripte/` braucht den Ordner vor der Dateisperre.
+        os.makedirs(paths.transkripte_dir(project), exist_ok=True)
+        with sperre.datei(_edit_path(project, base)) as gehalten:
+            if not gehalten:
+                raise HTTPException(
+                    status_code=503,
+                    detail="Aufnahme kann gerade nicht sicher neu transkribiert werden")
+            _keine_jobs(project, base)
+            _datei_weg(project, base, mit_audio=False)
+            job_id, started, vorgang = _start_transcribe(project, base=base)
     return {"job_id": job_id, "started": started, "vorgang": vorgang}
 
 
@@ -1352,7 +1415,17 @@ def rename_project(project: str, body: RenameBody):
     gerechnet — der Projektname steht nirgends ausser im Ordnernamen und in `project` der
     edit.json."""
     _validate(project)
+    if _ist_lifecycle_lock_ordner(project):
+        raise HTTPException(status_code=400, detail="Projektname ist fuer interne Sperren reserviert")
     neu = _sicherer_projektname(body.name)   # Zielname im Markenraum? (#416)
+    with _projektlebenszyklen(project, neu):
+        if not os.path.isdir(paths.project_dir(project)):
+            raise HTTPException(status_code=404, detail="Projekt nicht gefunden")
+        return _rename_project_unter_projektlebenszyklus(project, neu)
+
+
+def _rename_project_unter_projektlebenszyklus(project: str, neu: str):
+    """Benennt ein Projekt um; der Aufrufer haelt Quelle und Ziel."""
     _keine_jobs(project)
     alt_dir = paths.project_dir(project)
     if not os.path.isdir(alt_dir):
@@ -1389,6 +1462,12 @@ def rename_file(project: str, base: str, body: RenameBody):
     _validate(project, base)
     _sicherer_projektname(project)   # sonst legt das makedirs unten ein Geisterprojekt an
     neu = _neuer_name(body.name)
+    with _vorhandener_projektlebenszyklus(project):
+        return _rename_file_unter_projektlebenszyklus(project, base, neu)
+
+
+def _rename_file_unter_projektlebenszyklus(project: str, base: str, neu: str):
+    """Benennt eine Aufnahme um; der Aufrufer haelt den Projekt-Lebenszyklus."""
     # DIESELBE `sperre.datei` wie `delete_file` und `retranscribe_file` — der dritte Endpunkt
     # fehlte, und `_keine_jobs` schuetzt nur gegen JOBS, nicht gegen den Nachbar-ENDPUNKT.
     # Konkret: ein gleichzeitiges DELETE raeumt eine Datei zwischen `_ziel_frei` und dem
@@ -1605,11 +1684,11 @@ async def save_file(project: str, base: str, request: Request):
     # `pop`, nicht `get` — dieselbe Regel wie bei `selbstgeheilt`: das Feld beschreibt den
     # ZUSTAND der Datei, geschrieben stuende es in der Datei, deren Zustand es beschreibt.
     #
-    # **Fehlender Schluessel heisst „ohne Vorbehalt schreiben"** und ist kein Versehen: er
-    # haelt `curl` und jeden Nicht-Browser-Aufrufer unveraendert lauffaehig — und er ist
-    # zugleich der Weg fuers BEWUSSTE Ueberschreiben. Wer im Editor „meine Fassung behalten"
-    # waehlt, schickt das Feld einfach nicht mehr mit. Ein eigenes Kraft-Flag waere ein
-    # zweiter Schalter fuer dieselbe Aussage — und einer, der haengenbleiben kann.
+    # **Fehlender dateistand-Schluessel heisst „ohne Vorbehalt schreiben"** und ist kein
+    # Versehen: Aufrufer mit gueltiger `projektinstanz` koennen so bewusst ueberschreiben.
+    # Wer im Editor „meine Fassung behalten" waehlt, schickt das Feld einfach nicht mehr
+    # mit. Ein eigenes Kraft-Flag waere ein zweiter Schalter fuer dieselbe Aussage — und
+    # einer, der haengenbleiben kann.
     # Unterschieden wird am SCHLUESSEL, nicht am Wert: `""` ist eine Erwartung („noch keine
     # Datei"), nur das Fehlen ist der Verzicht.
     #
@@ -1642,10 +1721,11 @@ async def save_file(project: str, base: str, request: Request):
 @app.post("/api/projects/{project}/files/{base}/export")
 def export_file(project: str, base: str):
     _validate(project, base)
-    doc = load_or_build_doc(project, base)
-    md = render_md(doc)
-    paths.atomic_write(_md_path(project, base), md)
-    return {"md": md}
+    with _vorhandener_projektlebenszyklus(project):
+        doc = load_or_build_doc(project, base)
+        md = render_md(doc)
+        paths.atomic_write(_md_path(project, base), md)
+        return {"md": md}
 
 
 @app.post("/api/projects/{project}/files/{base}/export/srt")
@@ -1656,9 +1736,10 @@ def export_srt(project: str, base: str, sprecher: bool = True):
     `?sprecher=false` blendet die Sprechernamen aus. Beide Fassungen schreiben dieselbe
     `<base>.srt` — die Datei ist eine Kopie des Downloads, kein zweites Artefakt."""
     _validate(project, base)
-    srt = render_srt(load_or_build_doc(project, base), sprecher)
-    paths.atomic_write(_srt_path(project, base), srt)
-    return {"srt": srt}
+    with _vorhandener_projektlebenszyklus(project):
+        srt = render_srt(load_or_build_doc(project, base), sprecher)
+        paths.atomic_write(_srt_path(project, base), srt)
+        return {"srt": srt}
 
 
 def _get_or_render_md(project: str, base: str) -> str | None:
@@ -1685,6 +1766,12 @@ def _get_or_render_md(project: str, base: str) -> str | None:
 def export_file_md(project: str, base: str):
     """Direkter Download der Markdown-Fassung einer einzelnen Datei."""
     _validate(project, base)
+    with _vorhandener_projektlebenszyklus(project):
+        return _export_file_md_unter_projektlebenszyklus(project, base)
+
+
+def _export_file_md_unter_projektlebenszyklus(project: str, base: str):
+    """Liefert Markdown; der Aufrufer haelt den Projekt-Lebenszyklus."""
     md = _get_or_render_md(project, base)
     if md is None:
         raise HTTPException(status_code=404, detail=f"kein Transkript vorhanden: {base}")
@@ -1700,8 +1787,12 @@ def export_file_md(project: str, base: str):
 def export_project_downloads(project: str):
     """Exportiert alle Markdown-Dateien des Projekts direkt in den Downloads-Ordner."""
     _validate(project)
-    if not os.path.isdir(paths.project_dir(project)):
-        raise HTTPException(status_code=404, detail="Projekt nicht gefunden")
+    with _vorhandener_projektlebenszyklus(project):
+        return _export_project_downloads_unter_projektlebenszyklus(project)
+
+
+def _export_project_downloads_unter_projektlebenszyklus(project: str):
+    """Exportiert Downloads; der Aufrufer haelt den Projekt-Lebenszyklus."""
     dateien = _projekt_dateien(project)
     target_dir = os.path.join(paths.downloads_dir(), paths.safe_name(project))
     os.makedirs(target_dir, exist_ok=True)
@@ -1726,8 +1817,12 @@ def export_project_downloads(project: str):
 def export_project_zip(project: str):
     """Packt alle Markdown-Dateien des Projekts in ein ZIP-Archiv zum Download."""
     _validate(project)
-    if not os.path.isdir(paths.project_dir(project)):
-        raise HTTPException(status_code=404, detail="Projekt nicht gefunden")
+    with _vorhandener_projektlebenszyklus(project):
+        return _export_project_zip_unter_projektlebenszyklus(project)
+
+
+def _export_project_zip_unter_projektlebenszyklus(project: str):
+    """Baut das ZIP; der Aufrufer haelt den Projekt-Lebenszyklus."""
     dateien = _projekt_dateien(project)
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
@@ -1780,15 +1875,21 @@ def _start_transcribe(project: str, base: str | None = None, vorgang: str | None
     if base:
         cmd.extend(["--only", base])
     cmd.append("--autocorrect")
-    return jobs.request(project, cmd, paths.ROOT, "transcribe", base=base, vorgang=vorgang)
+    projektinstanz = _projektinstanz(project)
+    return jobs.request(
+        project, cmd, paths.ROOT, "transcribe", base=base, vorgang=vorgang,
+        wiederholung=lambda: _gebundene_projektinstanz(project, projektinstanz),
+        bindung=projektinstanz,
+    )
 
 
 @app.post("/api/projects/{project}/transcribe")
 def transcribe(project: str):
     _validate(project)
     _sicherer_projektname(project)   # ein Lauf ERZEUGT den vergifteten Strom (#416)
-    job_id, started, vorgang = _start_transcribe(project)
-    return {"job_id": job_id, "started": started, "vorgang": vorgang}
+    with _vorhandener_projektlebenszyklus(project):
+        job_id, started, vorgang = _start_transcribe(project)
+        return {"job_id": job_id, "started": started, "vorgang": vorgang}
 
 
 def _require_ai():
@@ -1816,17 +1917,28 @@ def correct(project: str):
     _sicherer_projektname(project)   # ein Lauf ERZEUGT den vergifteten Strom (#416)
     # Vor _require_ai wie beim Einzeldatei-Riegel: der laufende Konflikt ist die
     # aktuellere Auskunft als die Anbieterfrage (#441, projektweite Haelfte).
-    _laeuft_mitkorrektur(project)
-    _require_ai()
-    job_id, started, vorgang = jobs.request(project, [sys.executable, "-m", "webtool.correct", "run", project],
-                                            paths.ROOT, "correct")
-    return {"job_id": job_id, "started": started, "vorgang": vorgang}
+    with _vorhandener_projektlebenszyklus(project):
+        _laeuft_mitkorrektur(project)
+        _require_ai()
+        projektinstanz = _projektinstanz(project)
+        job_id, started, vorgang = jobs.request(
+            project, [sys.executable, "-m", "webtool.correct", "run", project],
+            paths.ROOT, "correct",
+            wiederholung=lambda: _gebundene_projektinstanz(project, projektinstanz),
+            bindung=projektinstanz)
+        return {"job_id": job_id, "started": started, "vorgang": vorgang}
 
 
 @app.post("/api/projects/{project}/files/{base}/correct")
 def correct_file(project: str, base: str, force: bool = False):
     _validate(project, base)
     _sicherer_projektname(project)   # ein Lauf ERZEUGT den vergifteten Strom (#416)
+    with _vorhandener_projektlebenszyklus(project):
+        return _correct_file_unter_projektlebenszyklus(project, base, force)
+
+
+def _correct_file_unter_projektlebenszyklus(project: str, base: str, force: bool):
+    """Startet die Einzelkorrektur; der Aufrufer haelt den Projekt-Lebenszyklus."""
     # Zwei Schreiber auf derselben edit.json verhindern (#441, Einzeldatei-Haelfte):
     # seit der gestaffelten Pipeline (v0.48.0) korrigiert der transcribe-Job selbst mit,
     # und die Job-Dedupe je (Projekt, Art) sieht keinen Konflikt zwischen "transcribe"
@@ -1965,6 +2077,12 @@ def fetch_urls(project: str, body: FetchBody):
     # jetzt auf dieselbe Null-Richtung umgestellt.
     env_sprache["TRANSKRIBOR_FETCH_SPRECHER"] = ",".join(
         "" if s is None else str(s) for s in sprecher)
+    with _vorhandener_projektlebenszyklus(project):
+        return _fetch_starten_unter_projektlebenszyklus(project, cmd, env_sprache)
+
+
+def _fetch_starten_unter_projektlebenszyklus(project: str, cmd: list[str], env_sprache: dict):
+    """Registriert Import und Nachlauf; der Aufrufer haelt den Projekt-Lebenszyklus."""
     # DIE NUMMER ENTSTEHT VOR DEM JOB (#557) — das ist der ganze Trick, und der Vorgaenger
     # scheiterte genau daran, es andersherum zu versuchen.
     #
@@ -1979,6 +2097,7 @@ def fetch_urls(project: str, body: FetchBody):
     # Vorher angelegt gibt es das Fenster gar nicht: die Nummer steht schon, bevor der erste
     # Prozess laeuft, und geht in DIESER Antwort mit.
     nummer = jobs.vormerken(project, "transcribe")
+    projektinstanz = _projektinstanz(project)
     # Wirft `jobs.start`, bliebe die eben angelegte Nummer liegen — und eine offene Vormerkung
     # ist prune-immun (`_prune_locked` wirft sie NIE, mit Absicht). Seit die Nummer je IMPORT
     # entsteht statt je `_pending`-Schluessel, kostet so ein Leck einen Eintrag pro Anfrage
@@ -1986,7 +2105,8 @@ def fetch_urls(project: str, body: FetchBody):
     # selbst schliessen kann. Der Wurf geht unveraendert weiter — er ist ein echter Fehler.
     try:
         job_id, started = jobs.start(project, cmd, paths.ROOT, "fetch",
-                                     then=lambda: _start_transcribe(project, vorgang=nummer),
+                                     then=lambda: _fetch_nachlauf(
+                                         project, nummer, projektinstanz),
                                      sonst=lambda: jobs.vorgang_verwerfen(nummer),
                                      env=env_sprache)
     except BaseException:
@@ -2016,6 +2136,15 @@ def fetch_urls(project: str, body: FetchBody):
         jobs.vorgang_verwerfen(nummer)
         antwort_nummer = None
     return {"job_id": job_id, "started": started, "vorgang": antwort_nummer}
+
+
+def _fetch_nachlauf(project: str, nummer: str, projektinstanz: str):
+    """Startet den URL-Nachlauf nur fuer die Instanz, die den Import angenommen hat."""
+    with _gebundene_projektinstanz(project, projektinstanz) as aktuell:
+        if not aktuell:
+            jobs.vorgang_verwerfen(nummer)
+            return None
+        return _start_transcribe(project, vorgang=nummer)
 
 
 class AuthCodeBody(BaseModel):
@@ -2296,29 +2425,30 @@ def upload_audio(project: str, file: UploadFile = File(...), sprache: str = Form
                                     sprecher=sprecher)
     if fehler:
         raise HTTPException(status_code=400, detail=fehler)
-    adir = os.path.join(paths.project_dir(project), "audio")
-    os.makedirs(adir, exist_ok=True)
-    dest = os.path.join(adir, base + ext)
-    try:
-        with open(dest, "xb") as out:  # exklusiv: FileExistsError statt TOCTOU
-            shutil.copyfileobj(file.file, out)
-    except FileExistsError:
-        raise HTTPException(status_code=409, detail="Datei existiert bereits")
-    # Sprache und Sprecherzahl fuer diese Datei eintragen, BEVOR der Job laeuft — sonst
-    # transkribiert er auf Projekt-Standard und diarisiert ohne die Zahl. Fehlt ein Feld,
-    # greift der Projekt-Default bzw. „automatisch" (Legacy-Verhalten).
-    #
-    # Der Zeitpunkt ist der ganze Grund, warum die Vorschau VOR dem Upload sitzt und nicht
-    # daneben: der Upload startet die Pipeline selbst, wer die Zahl danach eintraegt, rennt
-    # gegen die eigene Korrektur. Ein Test misst deshalb den Zeitpunkt, nicht nur das Ergebnis.
-    if sprache or mehrsprachig is not None or sprecher is not None:
-        _projekt.setze_datei(project, base, sprache=sprache, mehrsprachig=mehrsprachig,
-                             sprecher=sprecher)
-    # Hochladen IST der Startschuss: Transkription (und danach Korrektur) laufen von selbst an.
-    # jobs.request() sorgt dafuer, dass ein Mehrfach-Upload hoechstens EINEN Nachlauf anhaengt.
-    job_id, started, vorgang = _start_transcribe(project)
-    return {"ok": True, "base": base, "file": base + ext, "job_id": job_id, "started": started,
-            "vorgang": vorgang}
+    with _vorhandener_projektlebenszyklus(project):
+        adir = os.path.join(paths.project_dir(project), "audio")
+        os.makedirs(adir, exist_ok=True)
+        dest = os.path.join(adir, base + ext)
+        try:
+            with open(dest, "xb") as out:  # exklusiv: FileExistsError statt TOCTOU
+                shutil.copyfileobj(file.file, out)
+        except FileExistsError:
+            raise HTTPException(status_code=409, detail="Datei existiert bereits")
+        # Sprache und Sprecherzahl fuer diese Datei eintragen, BEVOR der Job laeuft — sonst
+        # transkribiert er auf Projekt-Standard und diarisiert ohne die Zahl. Fehlt ein Feld,
+        # greift der Projekt-Default bzw. „automatisch" (Legacy-Verhalten).
+        #
+        # Der Zeitpunkt ist der ganze Grund, warum die Vorschau VOR dem Upload sitzt und nicht
+        # daneben: der Upload startet die Pipeline selbst, wer die Zahl danach eintraegt, rennt
+        # gegen die eigene Korrektur. Ein Test misst deshalb den Zeitpunkt, nicht nur das Ergebnis.
+        if sprache or mehrsprachig is not None or sprecher is not None:
+            _projekt.setze_datei(project, base, sprache=sprache, mehrsprachig=mehrsprachig,
+                                 sprecher=sprecher)
+        # Hochladen IST der Startschuss: Transkription (und danach Korrektur) laufen von selbst an.
+        # jobs.request() sorgt dafuer, dass ein Mehrfach-Upload hoechstens EINEN Nachlauf anhaengt.
+        job_id, started, vorgang = _start_transcribe(project)
+        return {"ok": True, "base": base, "file": base + ext, "job_id": job_id,
+                "started": started, "vorgang": vorgang}
 
 
 _STATIC = os.path.join(os.path.dirname(__file__), "static")

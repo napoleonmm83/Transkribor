@@ -7,7 +7,7 @@
   "mutationen": [
     {
       "id": "M1 die monotone Buchung in remove_base faellt weg",
-      "von": "                r.setdefault(\"entfernt_je\", set()).add(base)",
+      "von": "                r.setdefault(\"entfernt_je\", set()).update(aliases or {base})",
       "nach": "                # M1: entfernt_je wird nie gebucht — die Menge bleibt leer",
       "rot": [
         "test_remove_base_bucht_entfernt_bedingungslos_und_get_liefert_eine_kopie",
@@ -20,7 +20,7 @@
     },
     {
       "id": "M2 der [active]-Lift in buche_aktive faellt weg (Sperre traegt ins Zweitleben)",
-      "von": "        if entfernt_je is not None and roh:\n            entfernt_je.discard(roh)",
+      "von": "        if entfernt_je is not None and roh:\n            alias = _base_schluessel(entfernt_je, roh)\n            if alias is not None:\n                entfernt_je.discard(alias)",
       "nach": "        # M2: keine neue [active]-Zeile hebt die monotone Loeschung mehr auf",
       "rot": [
         "test_reannoncement_reaktiviert_die_server_menge_deckelfest"

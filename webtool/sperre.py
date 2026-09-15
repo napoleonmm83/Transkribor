@@ -505,6 +505,7 @@ def datei(pfad: str, stale: float = STALTES_ALTER, *, erzwinge_uebernahme: bool 
     hakelig_seit = None
     gemeldet = False
     erzwungen = False
+    strikte_pause = 0.01
     while True:
         try:
             os.mkdir(lockdir)             # atomar auf allen Plattformen -> Lock erworben
@@ -620,7 +621,14 @@ def datei(pfad: str, stale: float = STALTES_ALTER, *, erzwinge_uebernahme: bool 
             with contextlib.suppress(OSError):
                 _wegraeumen(lockdir, _merker_lesen(lockdir))
             continue
-        time.sleep(0.01)
+        if erzwinge_uebernahme:
+            time.sleep(0.01)
+        else:
+            # Lebenszyklus-Sperren warten bis zu mehreren Sekunden. Ein kurzer Anfangswert
+            # haelt die normale Uebergabe schnell; der Deckel begrenzt Systemaufrufe bei
+            # laengerer Konkurrenz, ohne die Reaktionszeit grob werden zu lassen.
+            time.sleep(strikte_pause)
+            strikte_pause = min(strikte_pause * 2, 0.05)
     try:
         yield gehalten
     finally:

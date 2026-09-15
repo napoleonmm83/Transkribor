@@ -12,7 +12,7 @@ def test_safe_name_accepts_normal():
 @pytest.mark.parametrize("bad", [
     "../etc", "a/b", "a\\b", "..", "", "x\x00y", "C:temp", "Z:foo",
     "a\tb", "a\rb", "a\nb", "x\x1fy", "test\tfile", "name\nwith\nnewline",
-    "del\x7ffile",
+    "del\x7ffile", "Demo.", "Demo ", ".transkribor-project-locks.",
 ])
 def test_safe_name_rejects_traversal(bad):
     with pytest.raises(ValueError):

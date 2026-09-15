@@ -79,6 +79,32 @@ def test_strikte_sperre_nimmt_lebendem_halter_auch_vor_positiver_wartezeit_nicht
             os.rmdir(lock)
 
 
+def test_strikte_sperre_pollt_bei_laengerem_warten_mit_begrenztem_backoff(
+        tmp_path, monkeypatch):
+    ziel = str(tmp_path / "x.json")
+    lock = ziel + ".lock"
+    os.mkdir(lock)
+    _merker(lock, os.getpid())
+    vergangen = [0.0]
+    pausen = []
+
+    monkeypatch.setattr(sperre.time, "monotonic", lambda: vergangen[0])
+
+    def schlafen(dauer):
+        pausen.append(dauer)
+        vergangen[0] += dauer
+
+    monkeypatch.setattr(sperre.time, "sleep", schlafen)
+    try:
+        with sperre.datei(ziel, erzwinge_uebernahme=False, wartezeit=0.2) as gehalten:
+            assert gehalten is False
+        assert max(pausen) >= 0.04
+        assert len(pausen) <= 10
+    finally:
+        os.remove(os.path.join(lock, sperre._HALTER))
+        os.rmdir(lock)
+
+
 def test_strikte_sperre_raemt_eindeutig_toten_halter_auf(tmp_path, monkeypatch):
     ziel = str(tmp_path / "x.json")
     lock = ziel + ".lock"

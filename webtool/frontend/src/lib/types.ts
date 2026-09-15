@@ -38,7 +38,7 @@ export type EditDoc = {
   dateistand?: string;
   /** Kennung des Projektlebenszyklus. Der Server liefert sie mit jedem GET und erwartet sie
    *  bei jedem PUT, entfernt sie aber vor dem Speichern. Optional bleibt sie nur, damit alte
-   *  Test- und Migrationsdaten darstellbar sind; ein echter Save ohne Kennung erhält 409. */
+   *  Test- und Migrationsdaten darstellbar sind; ein echter Save ohne Kennung erhält 410. */
   projektinstanz?: string;
   /** Abschnitte der Aufnahme, zu denen es KEIN Segment gibt (#83). Whisper kann ein
    *  30-Sekunden-Fenster ueberspringen, ohne dass irgendetwas im Ergebnis darauf hinweist —
