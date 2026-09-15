@@ -589,7 +589,8 @@ def datei(pfad: str, stale: float = STALTES_ALTER, *, erzwinge_uebernahme: bool 
         # verbrennen und eines danach); im Review gemessen: 0,704 s Ueberhang ueber `frist`.
         # **Wer ein `continue` in den `FileExistsError`-Zweig setzt oder `erzwungen` wieder
         # scharf macht, oeffnet die unbegrenzte Schleife aus #191 durch genau diese Tuer.**
-        if (not erzwinge_uebernahme and time.monotonic() - seit_monoton > wartezeit):
+        if (not erzwinge_uebernahme and wartezeit is not None
+                and time.monotonic() - seit_monoton > wartezeit):
             break
         if hakelig_seit is None and time.time() - seit > frist(stale):
             if erzwungen:

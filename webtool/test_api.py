@@ -1411,6 +1411,7 @@ def test_save_without_project_instance_is_rejected(client, tmp_path):
 
 def test_lifecycle_lock_failure_returns_503(client, monkeypatch):
     from contextlib import contextmanager
+
     import webtool.app as appmod
 
     aufrufe = []
@@ -1434,6 +1435,7 @@ def test_save_delete_race_does_not_recreate_project(client, tmp_path, monkeypatc
     import os
     from concurrent.futures import ThreadPoolExecutor
     from threading import Event
+
     from webtool import paths
 
     doc = client.get("/api/projects/Demo/files/S1").json()
