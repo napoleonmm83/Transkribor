@@ -347,11 +347,14 @@ def _sicherer_projektname(roh: str) -> str:
         raise HTTPException(status_code=400, detail=str(e))
 
 
-def _ist_lifecycle_lock_ordner(name: str) -> bool:
+def _ist_lifecycle_lock_ordner(name: str, *, eintrag=None, lock_root_stat=None) -> bool:
     """Vergleicht den internen Ordner so, wie Windows Projektnamen aufloest."""
     if name.casefold() == _LIFECYCLE_LOCK_ORDNER.casefold():
         return True
     try:
+        if eintrag is not None:
+            return lock_root_stat is not None and os.path.samestat(
+                eintrag.stat(), lock_root_stat)
         kandidat = paths.project_dir(name)
         lock_root = os.path.join(paths.projekte_root(), _LIFECYCLE_LOCK_ORDNER)
         return os.path.samefile(kandidat, lock_root)
@@ -467,8 +470,14 @@ def list_projects():
     out = []
     if not os.path.isdir(root):
         return {"projects": out}
+    lock_root = os.path.join(root, _LIFECYCLE_LOCK_ORDNER)
+    try:
+        lock_root_stat = os.stat(lock_root)
+    except OSError:
+        lock_root_stat = None
     for eintrag in os.scandir(root):
-        if not eintrag.is_dir() or _ist_lifecycle_lock_ordner(eintrag.name):
+        if not eintrag.is_dir() or _ist_lifecycle_lock_ordner(
+                eintrag.name, eintrag=eintrag, lock_root_stat=lock_root_stat):
             continue
         try:
             _validate(eintrag.name)
@@ -801,7 +810,7 @@ def create_project(body: NewProject):
         try:
             os.makedirs(audio)
             _projektinstanz(name)
-        except OSError:
+        except (OSError, HTTPException):
             # Nur Artefakte dieses noch nicht erfolgreichen Aufrufs entfernen. os.rmdir
             # verweigert nichtleere Ordner, sodass fremd entstandene Daten stehenbleiben.
             with suppress(OSError):

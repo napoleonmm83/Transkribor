@@ -21,23 +21,24 @@ def _warte(pruef, sekunden=5.0) -> bool:
 
 
 def _beobachte_projektlebenszyklus(monkeypatch):
-    """Meldet deterministisch, wenn ein Request den Projekt-Lifecycle anfordert."""
-    from contextlib import contextmanager
+    """Meldet erst den echten Zusammenstoss mit einem gehaltenen Lifecycle-Lock."""
     from threading import Event
 
     import webtool.app as appmod
 
-    echt = appmod._projektlebenszyklus
-    angefragt = Event()
+    echt_mkdir = appmod.sperre.os.mkdir
+    kollidiert = Event()
 
-    @contextmanager
-    def beobachtet(project):
-        angefragt.set()
-        with echt(project):
-            yield
+    def beobachtet(path, *args, **kwargs):
+        try:
+            return echt_mkdir(path, *args, **kwargs)
+        except FileExistsError:
+            if os.fspath(path).endswith(".lifecycle.lock"):
+                kollidiert.set()
+            raise
 
-    monkeypatch.setattr(appmod, "_projektlebenszyklus", beobachtet)
-    return angefragt
+    monkeypatch.setattr(appmod.sperre.os, "mkdir", beobachtet)
+    return kollidiert
 
 
 @pytest.fixture
@@ -148,6 +149,50 @@ def test_list_projects_ignoriert_nicht_audio_dateien(client, tmp_path):
 
 def test_list_projects_ueberspringt_ordner_mit_unsicherem_namen(client, tmp_path):
     (tmp_path / "Interview..2026").mkdir()
+
+    response = client.get("/api/projects")
+
+    assert response.status_code == 200
+    assert [p["name"] for p in response.json()["projects"]] == ["Demo"]
+
+
+def test_list_projects_prueft_den_internen_lockordner_nur_einmal(
+        client, tmp_path, monkeypatch):
+    import webtool.app as appmod
+
+    lock_root = tmp_path / appmod._LIFECYCLE_LOCK_ORDNER
+    lock_root.mkdir()
+    (tmp_path / "Zwei").mkdir()
+    (tmp_path / "Drei").mkdir()
+    echt_stat = appmod.os.stat
+    lock_root_absolut = os.path.abspath(lock_root)
+    lock_root_stats = 0
+
+    def gezaehlt(path, *args, **kwargs):
+        nonlocal lock_root_stats
+        if os.path.abspath(path) == lock_root_absolut:
+            lock_root_stats += 1
+        return echt_stat(path, *args, **kwargs)
+
+    monkeypatch.setattr(appmod.os, "stat", gezaehlt)
+
+    response = client.get("/api/projects")
+
+    assert response.status_code == 200
+    assert lock_root_stats == 1
+    assert {p["name"] for p in response.json()["projects"]} == {"Demo", "Zwei", "Drei"}
+
+
+def test_list_projects_ueberspringt_dateisystemalias_des_lockordners(client, tmp_path):
+    import webtool.app as appmod
+
+    lock_root = tmp_path / appmod._LIFECYCLE_LOCK_ORDNER
+    alias = tmp_path / "LockAlias"
+    lock_root.mkdir()
+    try:
+        alias.symlink_to(lock_root, target_is_directory=True)
+    except OSError as e:
+        pytest.skip(f"Verzeichnis-Symlink nicht erlaubt: {e}")
 
     response = client.get("/api/projects")
 
@@ -812,6 +857,41 @@ def test_create_project_raeumt_nach_fehlgeschlagenem_instanzmerker_nur_neue_leer
     with pytest.raises(OSError, match="Merkerschreiben fehlgeschlagen"):
         client.post("/api/projects", json={"name": "Neu"})
     assert not (tmp_path / "Neu").exists()
+
+
+def test_create_project_raeumt_auch_nach_httpfehler_beim_instanzlesen_auf(
+        client, tmp_path, monkeypatch):
+    from fastapi import HTTPException
+
+    import webtool.app as appmod
+
+    def nicht_lesbar(_name):
+        raise HTTPException(status_code=503, detail="Projektinstanz nicht lesbar")
+
+    monkeypatch.setattr(appmod, "_projektinstanz", nicht_lesbar)
+
+    response = client.post("/api/projects", json={"name": "Neu"})
+
+    assert response.status_code == 503
+    assert not (tmp_path / "Neu").exists()
+
+
+def test_create_project_belaesst_fremde_daten_auch_nach_httpfehler(
+        client, tmp_path, monkeypatch):
+    from fastapi import HTTPException
+
+    import webtool.app as appmod
+
+    def fremder_merker(_name):
+        (tmp_path / "Neu" / "fremd.txt").write_text("behalten", encoding="utf-8")
+        raise HTTPException(status_code=503, detail="Projektinstanz nicht lesbar")
+
+    monkeypatch.setattr(appmod, "_projektinstanz", fremder_merker)
+
+    response = client.post("/api/projects", json={"name": "Neu"})
+
+    assert response.status_code == 503
+    assert (tmp_path / "Neu" / "fremd.txt").read_text(encoding="utf-8") == "behalten"
 
 
 def test_create_project_invalid_name_400(client):
