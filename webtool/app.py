@@ -349,7 +349,14 @@ def _sicherer_projektname(roh: str) -> str:
 
 def _ist_lifecycle_lock_ordner(name: str) -> bool:
     """Vergleicht den internen Ordner so, wie Windows Projektnamen aufloest."""
-    return name.casefold() == _LIFECYCLE_LOCK_ORDNER.casefold()
+    if name.casefold() == _LIFECYCLE_LOCK_ORDNER.casefold():
+        return True
+    try:
+        kandidat = paths.project_dir(name)
+        lock_root = os.path.join(paths.projekte_root(), _LIFECYCLE_LOCK_ORDNER)
+        return os.path.samefile(kandidat, lock_root)
+    except (OSError, ValueError):
+        return False
 
 
 def _json_objekt(pfad: str) -> dict:
@@ -723,6 +730,11 @@ def _projektlebenszyklus(project: str):
     except OSError as e:
         raise HTTPException(status_code=503,
                             detail="Projektlebenszyklus kann nicht sicher gesperrt werden") from e
+    # Der NTFS-Kurzname des Lockordners kann erst aufloesbar werden, nachdem der Ordner
+    # gerade oben angelegt wurde. Darum dieselbe Reservierung unter dem neuen Zustand.
+    if _ist_lifecycle_lock_ordner(project):
+        raise HTTPException(status_code=400,
+                            detail="Projektname ist fuer interne Sperren reserviert")
     lock_id = hashlib.sha256(_projekt_lock_schluessel(project).encode("utf-8")).hexdigest()
     lock_pfad = os.path.join(lock_root, f"{lock_id}.lifecycle")
     # Ein Projekt-Lifecycle darf nie neben einem noch lebenden Delete weiterlaufen. Anders als
@@ -2096,8 +2108,8 @@ def _fetch_starten_unter_projektlebenszyklus(project: str, cmd: list[str], env_s
     #
     # Vorher angelegt gibt es das Fenster gar nicht: die Nummer steht schon, bevor der erste
     # Prozess laeuft, und geht in DIESER Antwort mit.
-    nummer = jobs.vormerken(project, "transcribe")
     projektinstanz = _projektinstanz(project)
+    nummer = jobs.vormerken(project, "transcribe")
     # Wirft `jobs.start`, bliebe die eben angelegte Nummer liegen — und eine offene Vormerkung
     # ist prune-immun (`_prune_locked` wirft sie NIE, mit Absicht). Seit die Nummer je IMPORT
     # entsteht statt je `_pending`-Schluessel, kostet so ein Leck einen Eintrag pro Anfrage

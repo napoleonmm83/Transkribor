@@ -146,6 +146,15 @@ def test_list_projects_ignoriert_nicht_audio_dateien(client, tmp_path):
     assert demo["dateien"] == 1
 
 
+def test_list_projects_ueberspringt_ordner_mit_unsicherem_namen(client, tmp_path):
+    (tmp_path / "Interview..2026").mkdir()
+
+    response = client.get("/api/projects")
+
+    assert response.status_code == 200
+    assert [p["name"] for p in response.json()["projects"]] == ["Demo"]
+
+
 def test_zusammenfassung_zaehlt_dasselbe_wie_die_dateiliste(tmp_path, monkeypatch):
     """Die Zusammenfassung darf nicht anders zaehlen als der Einzelendpunkt.
     Genau diese Gegenprobe hat bei der Messung belegt, dass der schlanke Weg
@@ -738,6 +747,48 @@ def test_interner_lifecycle_ordner_ist_kein_umbenennziel(client, tmp_path):
     assert response.status_code == 400
     assert lock_root.is_dir()
     assert not (tmp_path / "Locks-Stolen").exists()
+
+
+def test_dateisystemalias_des_lifecycle_ordners_ist_reserviert(client, tmp_path, monkeypatch):
+    import webtool.app as appmod
+
+    lock_root = tmp_path / ".transkribor-project-locks"
+    lock_root.mkdir(exist_ok=True)
+    marker = lock_root / "gehalten.lifecycle"
+    marker.write_text("bleibt", encoding="utf-8")
+    echter_project_dir = appmod.paths.project_dir
+
+    def project_dir_mit_kurzname(name):
+        if name.casefold() == "transk~1":
+            return str(lock_root)
+        return echter_project_dir(name)
+
+    monkeypatch.setattr(appmod.paths, "project_dir", project_dir_mit_kurzname)
+
+    response = client.delete("/api/projects/TRANSK~1")
+
+    assert response.status_code == 400
+    assert marker.read_text(encoding="utf-8") == "bleibt"
+
+
+def test_lifecycle_alias_wird_auch_beim_ersten_anlegen_des_lockordners_erkannt(
+        client, tmp_path, monkeypatch):
+    import webtool.app as appmod
+
+    lock_root = tmp_path / ".transkribor-project-locks"
+    echter_project_dir = appmod.paths.project_dir
+
+    def project_dir_mit_spaetem_kurznamen(name):
+        if name.casefold() == "transk~1" and lock_root.exists():
+            return str(lock_root)
+        return echter_project_dir(name)
+
+    monkeypatch.setattr(appmod.paths, "project_dir", project_dir_mit_spaetem_kurznamen)
+
+    response = client.delete("/api/projects/TRANSK~1")
+
+    assert response.status_code == 400
+    assert lock_root.is_dir()
 
 
 def test_windows_pfadalias_bekommt_keinen_eigenen_lifecycle_lock(client, tmp_path):
@@ -5492,3 +5543,31 @@ def test_fetch_laesst_bei_einem_wurf_keine_vormerkung_liegen(client, monkeypatch
         client.post("/api/projects/Demo/fetch", json={"urls": ["https://youtu.be/abc123"]})
     nachher = sum(1 for v in jobs._vorgaenge.values() if v["status"] == "vorgemerkt")
     assert nachher == vorher, "eine offene Vormerkung ist nach dem Wurf liegengeblieben"
+
+
+def test_fetch_laesst_bei_unlesbarer_projektinstanz_keine_vormerkung_liegen(
+        client, monkeypatch):
+    """Vorbereitung gehoert vor die dauerhafte Vorgangsregistrierung.
+
+    Eine Windows-Lesesperre auf ``.projektinstanz`` wird als 503 gemeldet. Entsteht die
+    Nummer davor, erreicht der Ablauf weder ``jobs.start`` noch dessen Aufraeumpfad, und
+    die prune-immune Vormerkung bleibt fuer immer liegen.
+    """
+    from fastapi import HTTPException
+
+    from webtool import app as app_mod
+    from webtool import jobs
+
+    def instanz_unlesbar(_project):
+        raise HTTPException(status_code=503,
+                            detail="Projektinstanz kann nicht sicher gelesen werden")
+
+    monkeypatch.setattr(app_mod, "_projektinstanz", instanz_unlesbar)
+    vorher = sum(1 for v in jobs._vorgaenge.values() if v["status"] == "vorgemerkt")
+
+    response = client.post(
+        "/api/projects/Demo/fetch", json={"urls": ["https://youtu.be/abc123"]})
+
+    assert response.status_code == 503
+    nachher = sum(1 for v in jobs._vorgaenge.values() if v["status"] == "vorgemerkt")
+    assert nachher == vorher, "eine offene Vormerkung ist nach dem 503 liegengeblieben"

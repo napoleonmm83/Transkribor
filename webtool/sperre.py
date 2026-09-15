@@ -555,9 +555,12 @@ def datei(pfad: str, stale: float = STALTES_ALTER, *, erzwinge_uebernahme: bool 
                 fremd = _merker_lesen(lockdir)
                 lebt = _lebt_laut(fremd)
                 if lebt is False:
-                    with contextlib.suppress(OSError):
+                    try:
                         _wegraeumen(lockdir, fremd)
-                    continue
+                    except OSError:
+                        pass
+                    else:
+                        continue
                 if (erzwinge_uebernahme and lebt is None
                         and time.time() - zustand.st_mtime > stale):
                     with contextlib.suppress(OSError):

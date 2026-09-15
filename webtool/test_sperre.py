@@ -643,6 +643,30 @@ def test_toter_halter_muss_die_frist_nicht_absitzen(tmp_path):
     assert not os.path.exists(lock)
 
 
+def test_toter_nicht_raeumbarer_halter_respektiert_strikte_wartezeit(tmp_path, monkeypatch):
+    ziel = str(tmp_path / "x.json")
+    lock = ziel + ".lock"
+    os.mkdir(lock)
+    _merker(lock, 4711)
+    monkeypatch.setattr(sperre, "_lebt_laut", lambda merker: False)
+    echt = sperre._wegraeumen
+    versuche = []
+
+    def erst_nicht_raeumbar(lockdir, erwartet):
+        versuche.append(lockdir)
+        if len(versuche) < 3:
+            raise PermissionError("Virenscanner haelt den Lock")
+        echt(lockdir, erwartet)
+
+    monkeypatch.setattr(sperre, "_wegraeumen", erst_nicht_raeumbar)
+
+    with sperre.datei(ziel, erzwinge_uebernahme=False, wartezeit=0.0) as gehalten:
+        assert gehalten is False
+
+    assert versuche == [lock]
+    assert os.path.isdir(lock)
+
+
 def test_merker_von_einem_anderen_rechner_gilt_nicht(tmp_path, monkeypatch, capsys):
     """Liegt das Lock auf einem geteilten Ordner, kann der Merker von einem ANDEREN Rechner
     stammen — dort sagt eine lokale PID nichts, im schlimmsten Fall das Gegenteil (die Zahl
