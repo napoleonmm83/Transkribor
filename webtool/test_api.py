@@ -1,9 +1,10 @@
-import json
 import errno
+import json
 import os
 import re
 import threading
 import time
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -17,6 +18,27 @@ def _warte(pruef, sekunden=5.0) -> bool:
             return True
         time.sleep(0.01)
     return bool(pruef())
+
+
+def _beobachte_projektlebenszyklus(monkeypatch):
+    """Meldet erst den echten Zusammenstoss mit einem gehaltenen Lifecycle-Lock."""
+    from threading import Event
+
+    import webtool.app as appmod
+
+    echt_mkdir = appmod.sperre.os.mkdir
+    kollidiert = Event()
+
+    def beobachtet(path, *args, **kwargs):
+        try:
+            return echt_mkdir(path, *args, **kwargs)
+        except FileExistsError:
+            if os.fspath(path).endswith(".lifecycle.lock"):
+                kollidiert.set()
+            raise
+
+    monkeypatch.setattr(appmod.sperre.os, "mkdir", beobachtet)
+    return kollidiert
 
 
 @pytest.fixture
@@ -125,6 +147,59 @@ def test_list_projects_ignoriert_nicht_audio_dateien(client, tmp_path):
     assert demo["dateien"] == 1
 
 
+def test_list_projects_ueberspringt_ordner_mit_unsicherem_namen(client, tmp_path):
+    (tmp_path / "Interview..2026").mkdir()
+
+    response = client.get("/api/projects")
+
+    assert response.status_code == 200
+    assert [p["name"] for p in response.json()["projects"]] == ["Demo"]
+
+
+def test_list_projects_prueft_den_internen_lockordner_nur_einmal(
+        client, tmp_path, monkeypatch):
+    import webtool.app as appmod
+
+    lock_root = tmp_path / appmod._LIFECYCLE_LOCK_ORDNER
+    lock_root.mkdir()
+    (tmp_path / "Zwei").mkdir()
+    (tmp_path / "Drei").mkdir()
+    echt_stat = appmod.os.stat
+    lock_root_absolut = os.path.abspath(lock_root)
+    lock_root_stats = 0
+
+    def gezaehlt(path, *args, **kwargs):
+        nonlocal lock_root_stats
+        if os.path.abspath(path) == lock_root_absolut:
+            lock_root_stats += 1
+        return echt_stat(path, *args, **kwargs)
+
+    monkeypatch.setattr(appmod.os, "stat", gezaehlt)
+
+    response = client.get("/api/projects")
+
+    assert response.status_code == 200
+    assert lock_root_stats == 1
+    assert {p["name"] for p in response.json()["projects"]} == {"Demo", "Zwei", "Drei"}
+
+
+def test_list_projects_ueberspringt_dateisystemalias_des_lockordners(client, tmp_path):
+    import webtool.app as appmod
+
+    lock_root = tmp_path / appmod._LIFECYCLE_LOCK_ORDNER
+    alias = tmp_path / "LockAlias"
+    lock_root.mkdir()
+    try:
+        alias.symlink_to(lock_root, target_is_directory=True)
+    except OSError as e:
+        pytest.skip(f"Verzeichnis-Symlink nicht erlaubt: {e}")
+
+    response = client.get("/api/projects")
+
+    assert response.status_code == 200
+    assert [p["name"] for p in response.json()["projects"]] == ["Demo"]
+
+
 def test_zusammenfassung_zaehlt_dasselbe_wie_die_dateiliste(tmp_path, monkeypatch):
     """Die Zusammenfassung darf nicht anders zaehlen als der Einzelendpunkt.
     Genau diese Gegenprobe hat bei der Messung belegt, dass der schlanke Weg
@@ -201,6 +276,7 @@ def test_put_saves_non_destructive(client, tmp_path):
     saved = (tdir / "S1.edit.json").read_text(encoding="utf-8")
     assert '"human_edited": true' in saved
     assert "Interviewer" in saved
+    assert "projektinstanz" not in saved
     md = (tdir / "S1.md").read_text(encoding="utf-8")
     assert "**Interviewer:** Hallo, Welt!" in md
     # Roh-JSON unangetastet
@@ -324,18 +400,23 @@ def test_vorgang_endpunkt_404_bei_unbekannter_nummer(client, monkeypatch):
     assert r.status_code == 404
 
 
-def test_correct_starts_job(client, monkeypatch, mit_anbieter):
+def test_correct_starts_job(client, tmp_path, monkeypatch, mit_anbieter):
     calls = {}
-    def fake_start(project, cmd, cwd, kind, then=None, env=None, sonst=None):
-        calls["project"] = project; calls["kind"] = kind; calls["cmd"] = cmd
-        return "corr123", True
+    def fake_request(project, cmd, cwd, kind, wiederholung=None, bindung=None, **kwargs):
+        calls.update(project=project, kind=kind, cmd=cmd,
+                     wiederholung=wiederholung, bindung=bindung)
+        return "corr123", True, None
     import webtool.jobs as jobs_mod
-    monkeypatch.setattr(jobs_mod, "start", fake_start)
+    monkeypatch.setattr(jobs_mod, "request", fake_request)
     r = client.post("/api/projects/Demo/correct")
     assert r.status_code == 200
     assert r.json() == {"job_id": "corr123", "started": True, "vorgang": None}
     assert calls["kind"] == "correct" and calls["project"] == "Demo"
     assert calls["cmd"][-3:] == ["webtool.correct", "run", "Demo"]
+    assert calls["bindung"] == (tmp_path / "Demo" / ".projektinstanz").read_text(
+        encoding="utf-8")
+    with calls["wiederholung"]() as erlaubt:
+        assert erlaubt is True
 
 
 def test_correct_invalid_name_400(client):
@@ -611,11 +692,206 @@ def test_list_projects_active_jobs_reported(client, monkeypatch):
 
 
 def test_create_project_ok_and_duplicate_409(client, tmp_path):
+    import uuid
+
     r = client.post("/api/projects", json={"name": "Neu"})
     assert r.status_code == 200 and r.json() == {"ok": True, "name": "Neu"}
     assert (tmp_path / "Neu" / "audio").is_dir()
+    uuid.UUID((tmp_path / "Neu" / ".projektinstanz").read_text(encoding="utf-8"))
     assert client.post("/api/projects", json={"name": "Neu"}).status_code == 409
     assert client.post("/api/projects", json={"name": "Demo"}).status_code == 409
+
+
+def test_lifecycle_locks_liegen_in_der_beschreibbaren_projektwurzel_und_bleiben_unsichtbar(
+        client, tmp_path, monkeypatch):
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path) + os.sep)
+    assert client.get("/api/projects/Demo/files/S1").status_code == 200
+    lock_root = tmp_path / ".transkribor-project-locks"
+    assert lock_root.is_dir()
+    namen = {p["name"] for p in client.get("/api/projects").json()["projects"]}
+    assert ".transkribor-project-locks" not in namen
+    assert client.post("/api/projects", json={"name": ".transkribor-project-locks"}).status_code == 400
+    assert client.delete("/api/projects/.transkribor-project-locks").status_code == 400
+    assert client.post(
+        "/api/projects", json={"name": ".TRANSKRIBOR-PROJECT-LOCKS"}).status_code == 400
+    assert client.delete("/api/projects/.TRANSKRIBOR-PROJECT-LOCKS").status_code == 400
+    assert lock_root.is_dir()
+
+
+def test_lifecycle_aliases_desgleichen_projektpfads_teilen_einen_lock(tmp_path, monkeypatch):
+    from contextlib import contextmanager
+
+    import webtool.app as appmod
+
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    echt = appmod.os.path.realpath
+    ziel = os.path.normcase(str(tmp_path / "Echt"))
+
+    def gleicher_realer_pfad(pfad):
+        if os.path.basename(pfad) in {"Echt", "Alias"}:
+            return ziel
+        return echt(pfad)
+
+    locks = []
+
+    @contextmanager
+    def lock_faenger(pfad, **kwargs):
+        locks.append(os.path.normcase(os.path.abspath(pfad)))
+        yield True
+
+    monkeypatch.setattr(appmod.os.path, "realpath", gleicher_realer_pfad)
+    monkeypatch.setattr(appmod.sperre, "datei", lock_faenger)
+
+    with appmod._projektlebenszyklus("Echt"):
+        pass
+    with appmod._projektlebenszyklus("Alias"):
+        pass
+
+    assert len(locks) == 2
+    assert locks[0] == locks[1]
+
+
+def test_projektalias_wird_vor_umbenennung_abgewiesen(client, tmp_path, monkeypatch):
+    import webtool.app as appmod
+
+    echter_islink = appmod.os.path.islink
+
+    def ist_demo_alias(pfad):
+        return os.path.basename(os.fspath(pfad)) == "Demo" or echter_islink(pfad)
+
+    monkeypatch.setattr(appmod.os.path, "islink", ist_demo_alias)
+    edit_pfad = tmp_path / "Demo" / "transkripte" / "S1.edit.json"
+    edit_pfad.write_text(json.dumps({"project": "Demo"}), encoding="utf-8")
+    vorher = edit_pfad.read_bytes()
+
+    response = client.post("/api/projects/Demo/rename", json={"name": "Neu"})
+
+    assert response.status_code == 400
+    assert (tmp_path / "Demo").is_dir()
+    assert not (tmp_path / "Neu").exists()
+    assert edit_pfad.read_bytes() == vorher
+
+
+def test_interner_lifecycle_ordner_ist_kein_umbenennziel(client, tmp_path):
+    assert client.get("/api/projects/Demo/files/S1").status_code == 200
+    lock_root = tmp_path / ".transkribor-project-locks"
+
+    response = client.post(
+        "/api/projects/Demo/rename", json={"name": ".TRANSKRIBOR-PROJECT-LOCKS"})
+
+    assert response.status_code == 400
+    assert (tmp_path / "Demo").is_dir()
+    assert lock_root.is_dir()
+    response = client.post(
+        "/api/projects/.transkribor-project-locks/rename", json={"name": "Locks-Stolen"})
+    assert response.status_code == 400
+    assert lock_root.is_dir()
+    assert not (tmp_path / "Locks-Stolen").exists()
+    response = client.post(
+        "/api/projects/.transkribor-project-locks./rename", json={"name": "Locks-Stolen"})
+    assert response.status_code == 400
+    assert lock_root.is_dir()
+    assert not (tmp_path / "Locks-Stolen").exists()
+
+
+def test_dateisystemalias_des_lifecycle_ordners_ist_reserviert(client, tmp_path, monkeypatch):
+    import webtool.app as appmod
+
+    lock_root = tmp_path / ".transkribor-project-locks"
+    lock_root.mkdir(exist_ok=True)
+    marker = lock_root / "gehalten.lifecycle"
+    marker.write_text("bleibt", encoding="utf-8")
+    echter_project_dir = appmod.paths.project_dir
+
+    def project_dir_mit_kurzname(name):
+        if name.casefold() == "transk~1":
+            return str(lock_root)
+        return echter_project_dir(name)
+
+    monkeypatch.setattr(appmod.paths, "project_dir", project_dir_mit_kurzname)
+
+    response = client.delete("/api/projects/TRANSK~1")
+
+    assert response.status_code == 400
+    assert marker.read_text(encoding="utf-8") == "bleibt"
+
+
+def test_lifecycle_alias_wird_auch_beim_ersten_anlegen_des_lockordners_erkannt(
+        client, tmp_path, monkeypatch):
+    import webtool.app as appmod
+
+    lock_root = tmp_path / ".transkribor-project-locks"
+    echter_project_dir = appmod.paths.project_dir
+
+    def project_dir_mit_spaetem_kurznamen(name):
+        if name.casefold() == "transk~1" and lock_root.exists():
+            return str(lock_root)
+        return echter_project_dir(name)
+
+    monkeypatch.setattr(appmod.paths, "project_dir", project_dir_mit_spaetem_kurznamen)
+
+    response = client.delete("/api/projects/TRANSK~1")
+
+    assert response.status_code == 400
+    assert lock_root.is_dir()
+
+
+def test_windows_pfadalias_bekommt_keinen_eigenen_lifecycle_lock(client, tmp_path):
+    assert client.post("/api/projects", json={"name": "Demo."}).status_code == 400
+    assert client.delete("/api/projects/Demo.").status_code == 400
+    assert (tmp_path / "Demo").is_dir()
+
+
+def test_create_project_raeumt_nach_fehlgeschlagenem_instanzmerker_nur_neue_leere_ordner_weg(
+        client, tmp_path, monkeypatch):
+    from webtool import paths
+
+    echt = paths.atomic_write
+
+    def fehler(pfad, text):
+        if str(pfad).endswith(os.path.join("Neu", ".projektinstanz")):
+            raise OSError("Merkerschreiben fehlgeschlagen")
+        return echt(pfad, text)
+
+    monkeypatch.setattr(paths, "atomic_write", fehler)
+    with pytest.raises(OSError, match="Merkerschreiben fehlgeschlagen"):
+        client.post("/api/projects", json={"name": "Neu"})
+    assert not (tmp_path / "Neu").exists()
+
+
+def test_create_project_raeumt_auch_nach_httpfehler_beim_instanzlesen_auf(
+        client, tmp_path, monkeypatch):
+    from fastapi import HTTPException
+
+    import webtool.app as appmod
+
+    def nicht_lesbar(_name):
+        raise HTTPException(status_code=503, detail="Projektinstanz nicht lesbar")
+
+    monkeypatch.setattr(appmod, "_projektinstanz", nicht_lesbar)
+
+    response = client.post("/api/projects", json={"name": "Neu"})
+
+    assert response.status_code == 503
+    assert not (tmp_path / "Neu").exists()
+
+
+def test_create_project_belaesst_fremde_daten_auch_nach_httpfehler(
+        client, tmp_path, monkeypatch):
+    from fastapi import HTTPException
+
+    import webtool.app as appmod
+
+    def fremder_merker(_name):
+        (tmp_path / "Neu" / "fremd.txt").write_text("behalten", encoding="utf-8")
+        raise HTTPException(status_code=503, detail="Projektinstanz nicht lesbar")
+
+    monkeypatch.setattr(appmod, "_projektinstanz", fremder_merker)
+
+    response = client.post("/api/projects", json={"name": "Neu"})
+
+    assert response.status_code == 503
+    assert (tmp_path / "Neu" / "fremd.txt").read_text(encoding="utf-8") == "behalten"
 
 
 def test_create_project_invalid_name_400(client):
@@ -1369,6 +1645,132 @@ def test_delete_project_ok(client, tmp_path):
     assert (tmp_path / "Demo").is_dir()
     r = client.delete("/api/projects/Demo")
     assert r.status_code == 200 and r.json() == {"ok": True}
+    assert not (tmp_path / "Demo").exists()
+
+
+@pytest.mark.parametrize("vorbehalt", [None, "", "alter-stand"])
+def test_save_after_delete_does_not_recreate_project(client, tmp_path, vorbehalt):
+    doc = client.get("/api/projects/Demo/files/S1").json()
+    if vorbehalt is None:
+        doc.pop("dateistand", None)
+    else:
+        doc["dateistand"] = vorbehalt
+    assert client.delete("/api/projects/Demo").status_code == 200
+    response = client.put("/api/projects/Demo/files/S1", json=doc)
+    assert response.status_code == 404
+    assert not (tmp_path / "Demo").exists()
+
+
+def test_late_save_after_delete_and_recreate_cannot_touch_new_project(client, tmp_path):
+    doc = client.get("/api/projects/Demo/files/S1").json()
+    assert doc["projektinstanz"]
+    assert client.delete("/api/projects/Demo").status_code == 200
+    assert client.post("/api/projects", json={"name": "Demo"}).status_code == 200
+
+    response = client.put("/api/projects/Demo/files/S1", json=doc)
+    assert response.status_code == 410
+    assert not (tmp_path / "Demo" / "transkripte" / "S1.edit.json").exists()
+
+
+def test_save_without_project_instance_is_rejected(client, tmp_path):
+    doc = client.get("/api/projects/Demo/files/S1").json()
+    doc.pop("projektinstanz")
+
+    response = client.put("/api/projects/Demo/files/S1", json=doc)
+    assert response.status_code == 410
+    assert not (tmp_path / "Demo" / "transkripte" / "S1.edit.json").exists()
+
+
+def test_unlesbarer_instanzmerker_wird_nicht_ersetzt_und_gibt_503(client, tmp_path, monkeypatch):
+    import builtins
+
+    assert client.get("/api/projects/Demo/files/S1").status_code == 200
+    marker = tmp_path / "Demo" / ".projektinstanz"
+    vorher = marker.read_text(encoding="utf-8")
+    echt = builtins.open
+
+    def unlesbar(pfad, *args, **kwargs):
+        if os.path.abspath(os.fspath(pfad)) == os.path.abspath(marker) and not args:
+            raise PermissionError("Marker nicht lesbar")
+        return echt(pfad, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "open", unlesbar)
+    response = client.get("/api/projects/Demo/files/S1")
+    assert response.status_code == 503
+    assert marker.read_text(encoding="utf-8") == vorher
+
+
+def test_lifecycle_lock_failure_returns_503(client, monkeypatch):
+    from contextlib import contextmanager
+
+    import webtool.app as appmod
+
+    aufrufe = []
+
+    @contextmanager
+    def nicht_gehalten(*args, **kwargs):
+        aufrufe.append((args, kwargs))
+        yield False
+
+    monkeypatch.setattr(appmod.sperre, "datei", nicht_gehalten)
+    response = client.get("/api/projects/Demo/files/S1")
+    assert response.status_code == 503
+    assert aufrufe[0][1] == {
+        "erzwinge_uebernahme": False,
+        "wartezeit": appmod._LIFECYCLE_LOCK_WARTE_S,
+    }
+
+
+@pytest.mark.parametrize("phase", ["mkdir", "write"])
+def test_save_delete_race_does_not_recreate_project(client, tmp_path, monkeypatch, phase):
+    import os
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event
+
+    from webtool import paths
+
+    doc = client.get("/api/projects/Demo/files/S1").json()
+    doc.pop("dateistand", None)
+    tdir = tmp_path / "Demo" / "transkripte"
+    angekommen, weiter = Event(), Event()
+    lebenszyklus_angefragt = _beobachte_projektlebenszyklus(monkeypatch)
+
+    if phase == "mkdir":
+        for entry in tdir.iterdir():
+            entry.unlink()
+        tdir.rmdir()
+        original = os.mkdir
+
+        def gebremst(path, *args, **kwargs):
+            if os.path.abspath(path) == str(tdir):
+                angekommen.set()
+                assert weiter.wait(5)
+            return original(path, *args, **kwargs)
+
+        monkeypatch.setattr(os, "mkdir", gebremst)
+    else:
+        original = paths.atomic_write
+
+        def gebremst(path, *args, **kwargs):
+            if os.path.abspath(path) == str(tdir / "S1.edit.json"):
+                angekommen.set()
+                assert weiter.wait(5)
+            return original(path, *args, **kwargs)
+
+        monkeypatch.setattr(paths, "atomic_write", gebremst)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        save = pool.submit(client.put, "/api/projects/Demo/files/S1", json=doc)
+        try:
+            assert angekommen.wait(5)
+            lebenszyklus_angefragt.clear()
+            delete = pool.submit(client.delete, "/api/projects/Demo")
+            assert lebenszyklus_angefragt.wait(5), "DELETE forderte den Lifecycle nicht an"
+            assert not delete.done(), "DELETE lief neben dem noch schreibenden Save"
+        finally:
+            weiter.set()
+        assert save.result(timeout=5).status_code == 200
+        assert delete.result(timeout=5).status_code == 200
     assert not (tmp_path / "Demo").exists()
 
 
@@ -2260,9 +2662,11 @@ def test_neu_transkribieren_raeumt_transkripte_weg_und_startet_den_lauf(client, 
     aufrufe = []
     import webtool.jobs as jobs_mod
     orig_request = jobs_mod.request
-    def mock_request(project, cmd, cwd, kind, then=None, base=None, vorgang=None):
+    def mock_request(project, cmd, cwd, kind, then=None, base=None, vorgang=None,
+                     wiederholung=None, bindung=None):
         aufrufe.append((project, cmd, kind, base))
-        return orig_request(project, cmd, cwd, kind, then=then, base=base, vorgang=vorgang)
+        return orig_request(project, cmd, cwd, kind, then=then, base=base, vorgang=vorgang,
+                            wiederholung=wiederholung, bindung=bindung)
     monkeypatch.setattr(jobs_mod, "request", mock_request)
     r = client.post("/api/projects/Demo/files/S1/transcribe")
     assert r.status_code == 200 and r.json()["started"] is True
@@ -2329,6 +2733,44 @@ def test_projekt_umbenennen_auf_bestehenden_namen_gibt_409(client, tmp_path):
     (tmp_path / "Zweit").mkdir()
     assert client.post("/api/projects/Demo/rename", json={"name": "Zweit"}).status_code == 409
     assert (tmp_path / "Demo").is_dir()
+
+
+def test_projekt_umbenennen_sperrt_quelle_und_ziel_gemeinsam(
+        client, tmp_path, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event
+
+    import webtool.app as appmod
+
+    assert client.get("/api/projects/Demo/files/S1").status_code == 200
+    umbenennen_begonnen, weiter = Event(), Event()
+    lebenszyklus_angefragt = _beobachte_projektlebenszyklus(monkeypatch)
+    echt = appmod.os.rename
+
+    def gebremst(quelle, ziel):
+        if os.path.abspath(quelle) == str(tmp_path / "Demo"):
+            umbenennen_begonnen.set()
+            assert weiter.wait(5), "Testfreigabe fuer Projekt-Rename fehlte"
+        return echt(quelle, ziel)
+
+    monkeypatch.setattr(appmod.os, "rename", gebremst)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        umbenennen = pool.submit(
+            client.post, "/api/projects/Demo/rename", json={"name": "Neu"})
+        try:
+            assert umbenennen_begonnen.wait(5), "Projekt-Rename erreichte os.rename nicht"
+            lebenszyklus_angefragt.clear()
+            anlegen = pool.submit(client.post, "/api/projects", json={"name": "Neu"})
+            assert lebenszyklus_angefragt.wait(5), "POST fuer das Ziel forderte keinen Lifecycle an"
+            assert not anlegen.done(), "Das Rename-Ziel war waehrend des Rename ungesperrt"
+        finally:
+            weiter.set()
+        assert umbenennen.result(5).status_code == 200
+        assert anlegen.result(5).status_code == 409
+
+    assert not (tmp_path / "Demo").exists()
+    assert (tmp_path / "Neu" / "audio").is_dir()
+    assert (tmp_path / "Neu" / ".projektinstanz").is_file()
 
 
 def test_projekt_umbenennen_darf_nur_die_schreibweise_aendern(client, tmp_path):
@@ -2484,6 +2926,174 @@ def test_dateieinstellungen_speichern_schreibt_override(client, tmp_projekt):
     assert client.get(f"/api/projects/{tmp_projekt}/files/S1/einstellungen").json()["sprache"] == "en"
 
 
+def test_dateieinstellungen_nach_delete_stellen_das_projekt_nicht_wieder_her(client, tmp_path):
+    assert client.delete("/api/projects/Demo").status_code == 200
+
+    response = client.put(
+        "/api/projects/Demo/files/S1/einstellungen", json={"sprache": "en"})
+
+    assert response.status_code == 404
+    assert not (tmp_path / "Demo").exists()
+
+
+def test_retranscribe_und_delete_laufen_im_selben_projektlebenszyklus(
+        client, tmp_path, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event
+
+    import webtool.app as appmod
+    import webtool.jobs as jobs_mod
+
+    begonnen, weiter = Event(), Event()
+    lebenszyklus_angefragt = _beobachte_projektlebenszyklus(monkeypatch)
+    echt = appmod.find_audio
+    aktiv = [False]
+
+    def gebremst(project, base):
+        gefunden = echt(project, base)
+        begonnen.set()
+        assert weiter.wait(5), "Testfreigabe fuer Neu-Transkription fehlte"
+        return gefunden
+
+    monkeypatch.setattr(appmod, "find_audio", gebremst)
+    monkeypatch.setattr(jobs_mod, "active_for", lambda project: [{"id": "j1"}] if aktiv[0] else [])
+
+    def starten(*args, **kwargs):
+        aktiv[0] = True
+        return "j1", True, "v1"
+
+    monkeypatch.setattr(appmod, "_start_transcribe", starten)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        transkribieren = pool.submit(client.post, "/api/projects/Demo/files/S1/transcribe")
+        assert begonnen.wait(5), "Neu-Transkription erreichte die Audiopruefung nicht"
+        lebenszyklus_angefragt.clear()
+        loeschen = pool.submit(client.delete, "/api/projects/Demo")
+        assert lebenszyklus_angefragt.wait(5), "DELETE forderte den Lifecycle nicht an"
+        assert not loeschen.done(), "DELETE lief neben der Neu-Transkription"
+        weiter.set()
+        assert transkribieren.result(5).status_code == 200
+        assert loeschen.result(5).status_code == 409
+    assert (tmp_path / "Demo").is_dir()
+
+
+def test_upload_und_delete_laufen_im_selben_projektlebenszyklus(
+        client, tmp_path, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event
+    import shutil
+
+    import webtool.app as appmod
+
+    begonnen, weiter = Event(), Event()
+    lebenszyklus_angefragt = _beobachte_projektlebenszyklus(monkeypatch)
+    echt = shutil.copyfileobj
+
+    def gebremst(quelle, ziel):
+        echt(quelle, ziel)
+        begonnen.set()
+        assert weiter.wait(5), "Testfreigabe fuer Upload fehlte"
+
+    monkeypatch.setattr(shutil, "copyfileobj", gebremst)
+    monkeypatch.setattr(appmod, "_start_transcribe", lambda *a, **k: ("j1", True, "v1"))
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        upload = pool.submit(
+            client.post,
+            "/api/projects/Demo/audio",
+            files={"file": ("Neu.mp3", b"ID3fakeaudio", "audio/mpeg")},
+            data={"sprache": "de"},
+        )
+        assert begonnen.wait(5), "Upload erreichte den Datei-Schreibpfad nicht"
+        lebenszyklus_angefragt.clear()
+        loeschen = pool.submit(client.delete, "/api/projects/Demo")
+        assert lebenszyklus_angefragt.wait(5), "DELETE forderte den Lifecycle nicht an"
+        assert not loeschen.done(), "DELETE lief neben dem Upload"
+        weiter.set()
+        assert upload.result(5).status_code == 200
+        assert loeschen.result(5).status_code == 200
+    assert not (tmp_path / "Demo").exists()
+
+
+@pytest.mark.parametrize(
+    ("pfad", "renderer"),
+    [("/api/projects/Demo/files/S1/export", "render_md"),
+     ("/api/projects/Demo/files/S1/export/srt", "render_srt")],
+)
+def test_export_und_delete_laufen_im_selben_projektlebenszyklus(
+        client, tmp_path, monkeypatch, pfad, renderer):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event
+
+    import webtool.app as appmod
+
+    begonnen, weiter = Event(), Event()
+    lebenszyklus_angefragt = _beobachte_projektlebenszyklus(monkeypatch)
+    echt = getattr(appmod, renderer)
+
+    def gebremst(*args, **kwargs):
+        ergebnis = echt(*args, **kwargs)
+        begonnen.set()
+        assert weiter.wait(5), "Testfreigabe fuer Export fehlte"
+        return ergebnis
+
+    monkeypatch.setattr(appmod, renderer, gebremst)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        export = pool.submit(client.post, pfad)
+        assert begonnen.wait(5), "Export erreichte den Renderer nicht"
+        lebenszyklus_angefragt.clear()
+        loeschen = pool.submit(client.delete, "/api/projects/Demo")
+        assert lebenszyklus_angefragt.wait(5), "DELETE forderte den Lifecycle nicht an"
+        assert not loeschen.done(), "DELETE lief neben dem Export"
+        weiter.set()
+        assert export.result(5).status_code == 200
+        assert loeschen.result(5).status_code == 200
+    assert not (tmp_path / "Demo").exists()
+
+
+@pytest.mark.parametrize("aktion", ["delete", "rename"])
+def test_dateiaktion_nach_projekt_delete_hinterlaesst_keinen_geisterordner(
+        client, tmp_path, aktion):
+    assert client.delete("/api/projects/Demo").status_code == 200
+
+    if aktion == "delete":
+        response = client.delete("/api/projects/Demo/files/S1")
+    else:
+        response = client.post("/api/projects/Demo/files/S1/rename", json={"name": "Neu"})
+
+    assert response.status_code == 404
+    assert not (tmp_path / "Demo").exists()
+
+
+def test_dateieinstellungen_und_delete_laufen_nicht_nebeneinander(
+        client, tmp_path, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event
+
+    from webtool import projekt
+
+    begonnen, weiter = Event(), Event()
+    lebenszyklus_angefragt = _beobachte_projektlebenszyklus(monkeypatch)
+    echt = projekt.setze_datei
+
+    def langsam(project, base, **werte):
+        begonnen.set()
+        assert weiter.wait(5), "Testfreigabe fuer Datei-Einstellungen fehlte"
+        return echt(project, base, **werte)
+
+    monkeypatch.setattr(projekt, "setze_datei", langsam)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        speichern = pool.submit(
+            client.put, "/api/projects/Demo/files/S1/einstellungen", json={"sprache": "en"})
+        assert begonnen.wait(5), "Datei-Einstellungs-PUT erreichte setze_datei nicht"
+        lebenszyklus_angefragt.clear()
+        loeschen = pool.submit(client.delete, "/api/projects/Demo")
+        assert lebenszyklus_angefragt.wait(5), "DELETE forderte den Lifecycle nicht an"
+        assert not loeschen.done(), "DELETE lief neben den Datei-Einstellungen"
+        weiter.set()
+        assert speichern.result(5).status_code == 200
+        assert loeschen.result(5).status_code == 200
+    assert not (tmp_path / "Demo").exists()
+
+
 def test_dateieinstellungen_speichern_ignoriert_none(client, tmp_projekt):
     # Leerer Body -> nichts ändert sich, kein Fehler (EinstellungenBody ist komplett optional).
     r = client.put(f"/api/projects/{tmp_projekt}/files/S1/einstellungen", json={})
@@ -2597,6 +3207,36 @@ def test_projekteinstellungen_lehnt_unbekannte_tiefe_ab(client, tmp_projekt):
     r = client.put(f"/api/projects/{tmp_projekt}/einstellungen", json={"korrektur": "galaktisch"})
     assert r.status_code == 400
     assert "Tiefe" in r.json()["detail"]
+
+
+def test_projekteinstellungen_und_delete_laufen_nicht_nebeneinander(client, tmp_path, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event
+
+    from webtool import projekt
+
+    begonnen, weiter = Event(), Event()
+    lebenszyklus_angefragt = _beobachte_projektlebenszyklus(monkeypatch)
+    echt = projekt.speichern
+
+    def langsam(project, patch):
+        begonnen.set()
+        assert weiter.wait(5), "Testfreigabe fuer Einstellungen fehlte"
+        return echt(project, patch)
+
+    monkeypatch.setattr(projekt, "speichern", langsam)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        speichern = pool.submit(
+            client.put, "/api/projects/Demo/einstellungen", json={"sprache": "de"})
+        assert begonnen.wait(5), "Einstellungs-PUT erreichte speichern nicht"
+        lebenszyklus_angefragt.clear()
+        loeschen = pool.submit(client.delete, "/api/projects/Demo")
+        assert lebenszyklus_angefragt.wait(5), "DELETE forderte den Lifecycle nicht an"
+        assert not loeschen.done(), "DELETE lief neben den Projekt-Einstellungen"
+        weiter.set()
+        assert speichern.result(5).status_code == 200
+        assert loeschen.result(5).status_code == 200
+    assert not (tmp_path / "Demo").exists()
 
 
 def test_dateieinstellungen_lehnt_unbekannte_sprache_ab(client, tmp_projekt):
@@ -4366,7 +5006,8 @@ def test_es_gibt_nur_EINEN_erzeuger_des_weg_namens():
     Name muss einen lesbaren Stempel tragen."""
     import inspect
     import webtool.app as appmod
-    assert inspect.getsource(appmod).count("uuid.uuid4") == 1, "ein zweiter Erzeuger ist zurueck"
+    assert inspect.getsource(appmod._weg_suffix).count("uuid.uuid4") == 1, \
+        "ein zweiter Erzeuger ist zurueck"
 
 
 def test_weg_alter_liest_rechtsverankert_und_ueberlebt_das_umbenennen():
@@ -4728,6 +5369,142 @@ def test_fetch_reicht_seine_nummer_an_den_nachlauf_durch(client, monkeypatch):
     assert gefangen["gerufen"] == ("Demo", None, nummer)
 
 
+def test_fetch_nachlauf_startet_nach_projekt_delete_nicht_mehr(client, monkeypatch):
+    from webtool import jobs
+
+    starts = []
+
+    def fake_start(project, cmd, cwd, kind, then=None, env=None, sonst=None, **kwargs):
+        starts.append({"project": project, "kind": kind, "then": then})
+        return f"j{len(starts)}", True
+
+    monkeypatch.setattr(jobs, "start", fake_start)
+    response = client.post(
+        "/api/projects/Demo/fetch", json={"urls": ["https://youtu.be/abc123"]})
+    nummer = response.json()["vorgang"]
+    nachlauf = starts[0]["then"]
+    assert callable(nachlauf)
+    assert client.delete("/api/projects/Demo").status_code == 200
+
+    nachlauf()
+
+    assert len(starts) == 1
+    assert jobs.vorgang(nummer)["status"] == "verworfen"
+
+
+def test_vorgemerkte_transkription_ist_an_die_alte_projektinstanz_gebunden(
+        client, monkeypatch):
+    from webtool import app as app_mod
+    from webtool import jobs
+
+    starts = []
+    nachlauf = []
+
+    def fake_start(project, cmd, cwd, kind, **kwargs):
+        starts.append((project, kind))
+        return ("fremder-blocker", False) if len(starts) == 1 else ("spaet", True)
+
+    project = "AlteInstanz"
+    assert client.post("/api/projects", json={"name": project}).status_code == 200
+    monkeypatch.setattr(jobs, "start", fake_start)
+    monkeypatch.setattr(
+        jobs, "when_done", lambda jid, callback: nachlauf.append(callback) or True)
+    _, started, nummer = app_mod._start_transcribe(project)
+    assert started is False and nummer
+    assert client.delete(f"/api/projects/{project}").status_code == 200
+    assert client.post("/api/projects", json={"name": project}).status_code == 200
+
+    nachlauf[0]()
+
+    assert starts == [(project, "transcribe")]
+    assert jobs.vorgang(nummer)["status"] == "verworfen"
+
+
+def test_neue_projektinstanz_bekommt_eine_eigene_vormerkung(client, monkeypatch):
+    from webtool import app as app_mod
+    from webtool import jobs
+
+    project = "NeueInstanz"
+    assert client.post("/api/projects", json={"name": project}).status_code == 200
+    starts = []
+    nachlaeufe = []
+    darf_starten = [False]
+
+    def fake_start(project, cmd, cwd, kind, **kwargs):
+        starts.append((project, kind))
+        if darf_starten[0]:
+            return "neuer-nachlauf", True
+        return "fremder-blocker", False
+
+    monkeypatch.setattr(jobs, "start", fake_start)
+    monkeypatch.setattr(
+        jobs, "when_done", lambda jid, callback: nachlaeufe.append(callback) or True)
+
+    _, alt_started, alte_nummer = app_mod._start_transcribe(project)
+    assert alt_started is False and alte_nummer
+    assert client.delete(f"/api/projects/{project}").status_code == 200
+    assert client.post("/api/projects", json={"name": project}).status_code == 200
+
+    _, neu_started, neue_nummer = app_mod._start_transcribe(project)
+    assert neu_started is False
+    assert neue_nummer and neue_nummer != alte_nummer
+    assert len(nachlaeufe) == 2
+
+    nachlaeufe[0]()
+    assert jobs.vorgang(alte_nummer)["status"] == "verworfen"
+    assert jobs.vorgang(neue_nummer)["status"] == "vorgemerkt"
+
+    darf_starten[0] = True
+    nachlaeufe[1]()
+    assert starts == [(project, "transcribe")] * 3
+    assert jobs.vorgang(neue_nummer)["status"] == "gestartet"
+
+
+@pytest.mark.skipif(os.name != "nt", reason="NTFS-Projektnamen sind case-insensitiv")
+def test_delete_erkennt_laufenden_job_auch_bei_anderer_schreibweise(
+        client, tmp_path):
+    from webtool import jobs
+
+    jid = "case-job"
+    with jobs._lock:
+        jobs._jobs[jid] = {
+            "id": jid, "project": "Demo", "kind": "transcribe", "status": "running",
+            "bases": None,
+        }
+        jobs._active[("Demo", "transcribe")] = jid
+    try:
+        response = client.delete("/api/projects/demo")
+        assert response.status_code == 409
+        assert (tmp_path / "Demo").is_dir()
+    finally:
+        with jobs._lock:
+            jobs._active.pop(("Demo", "transcribe"), None)
+            jobs._jobs.pop(jid, None)
+
+
+@pytest.mark.skipif(os.name != "nt", reason="NTFS-Dateinamen sind case-insensitiv")
+def test_datei_delete_erkennt_aktive_aufnahme_auch_bei_anderer_schreibweise(
+        client, tmp_path):
+    from webtool import jobs
+
+    jid = "case-base-job"
+    with jobs._lock:
+        jobs._jobs[jid] = {
+            "id": jid, "project": "Demo", "kind": "transcribe", "status": "running",
+            "bases": {"S1"}, "active_bases": {"S1": 1},
+            "entfernt": set(), "entfernt_je": set(),
+        }
+        jobs._active[("Demo", "transcribe")] = jid
+    try:
+        response = client.delete("/api/projects/demo/files/s1")
+        assert response.status_code == 409
+        assert (tmp_path / "Demo" / "transkripte" / "S1.json").is_file()
+    finally:
+        with jobs._lock:
+            jobs._active.pop(("Demo", "transcribe"), None)
+            jobs._jobs.pop(jid, None)
+
+
 def test_fetch_gibt_KEINE_nummer_wenn_gar_nichts_geladen_wird(client, monkeypatch):
     """`jobs.start` verwirft bei belegtem `(projekt, fetch)` das Kommando UND das `then`.
 
@@ -4748,7 +5525,7 @@ def test_fetch_gibt_KEINE_nummer_wenn_gar_nichts_geladen_wird(client, monkeypatc
     assert nachher == vorher, "eine offene Vormerkung ist liegengeblieben"
 
 
-def test_start_transcribe_reicht_die_nummer_an_request_durch(client, monkeypatch):
+def test_start_transcribe_reicht_die_nummer_an_request_durch(client, tmp_path, monkeypatch):
     """Die letzte Meile von #557 — und sie hatte KEINEN Sensor.
 
     Der Test darueber faelscht `_start_transcribe` und misst damit, was das `then`-Lambda
@@ -4765,10 +5542,16 @@ def test_start_transcribe_reicht_die_nummer_an_request_durch(client, monkeypatch
     from webtool import jobs
     gesehen = {}
     monkeypatch.setattr(jobs, "request",
-                        lambda project, cmd, cwd, kind, then=None, base=None, vorgang=None:
-                        gesehen.update(vorgang=vorgang, base=base) or ("j9", True, vorgang))
+                        lambda project, cmd, cwd, kind, then=None, base=None, vorgang=None,
+                        wiederholung=None, bindung=None:
+                        gesehen.update(vorgang=vorgang, base=base, wiederholung=wiederholung,
+                                       bindung=bindung) or ("j9", True, vorgang))
     app_mod._start_transcribe("Demo", vorgang="vg-durchgereicht")
     assert gesehen["vorgang"] == "vg-durchgereicht"
+    assert gesehen["bindung"] == (tmp_path / "Demo" / ".projektinstanz").read_text(
+        encoding="utf-8")
+    with gesehen["wiederholung"]() as erlaubt:
+        assert erlaubt is True
 
     gesehen.clear()
     app_mod._start_transcribe("Demo")
@@ -4840,3 +5623,31 @@ def test_fetch_laesst_bei_einem_wurf_keine_vormerkung_liegen(client, monkeypatch
         client.post("/api/projects/Demo/fetch", json={"urls": ["https://youtu.be/abc123"]})
     nachher = sum(1 for v in jobs._vorgaenge.values() if v["status"] == "vorgemerkt")
     assert nachher == vorher, "eine offene Vormerkung ist nach dem Wurf liegengeblieben"
+
+
+def test_fetch_laesst_bei_unlesbarer_projektinstanz_keine_vormerkung_liegen(
+        client, monkeypatch):
+    """Vorbereitung gehoert vor die dauerhafte Vorgangsregistrierung.
+
+    Eine Windows-Lesesperre auf ``.projektinstanz`` wird als 503 gemeldet. Entsteht die
+    Nummer davor, erreicht der Ablauf weder ``jobs.start`` noch dessen Aufraeumpfad, und
+    die prune-immune Vormerkung bleibt fuer immer liegen.
+    """
+    from fastapi import HTTPException
+
+    from webtool import app as app_mod
+    from webtool import jobs
+
+    def instanz_unlesbar(_project):
+        raise HTTPException(status_code=503,
+                            detail="Projektinstanz kann nicht sicher gelesen werden")
+
+    monkeypatch.setattr(app_mod, "_projektinstanz", instanz_unlesbar)
+    vorher = sum(1 for v in jobs._vorgaenge.values() if v["status"] == "vorgemerkt")
+
+    response = client.post(
+        "/api/projects/Demo/fetch", json={"urls": ["https://youtu.be/abc123"]})
+
+    assert response.status_code == 503
+    nachher = sum(1 for v in jobs._vorgaenge.values() if v["status"] == "vorgemerkt")
+    assert nachher == vorher, "eine offene Vormerkung ist nach dem 503 liegengeblieben"

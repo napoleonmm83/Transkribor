@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, within, act } from '@testing-library/react'
+import { useNavigate, useParams } from 'react-router-dom'
+import { useState } from 'react'
 import { DateiMenue } from './DateiMenue'
 import { Huelle } from '@/lib/testHuelle'
 import { useEditorMelden } from '@/hooks/useEditorBruecke'
@@ -17,6 +19,18 @@ const datei = (p: Partial<ProjectFile> = {}): ProjectFile =>
 function OffeneDatei({ vergiss }: { vergiss: () => void }) {
   useEditorMelden({ project: 'P', base: 'a', dirty: true, stand: 'offen', reload: () => {}, vergiss })
   return null
+}
+
+function WechselnderEditor({ alt, neu }: { alt: () => void; neu: () => void }) {
+  const [neuGeoeffnet, setNeuGeoeffnet] = useState(false)
+  const { project, base } = useParams()
+  const navigate = useNavigate()
+  useEditorMelden(project && base ? {
+    project, base, dirty: false, stand: 'ruhig', reload: () => {},
+    vergiss: project === 'P' && !neuGeoeffnet ? alt : neu,
+  } : null)
+  return <><button onClick={() => navigate('/p/B/b')}>Andere Datei</button>
+    <button onClick={() => setNeuGeoeffnet(true)}>Editor neu öffnen</button></>
 }
 
 /** Radix oeffnet das Menue nur auf einen echten Zeigerklick — `click` allein reicht nicht. */
@@ -147,11 +161,11 @@ describe('Neu transkribieren', () => {
   it('verlässt den Editor, wenn der Lauf angenommen wurde', async () => {
     // Gegenprobe zum Test darueber: hier IST das Transkript verworfen, der Editor haelt ein
     // Dokument, das es nicht mehr gibt — und "Speichern" schriebe es zurueck.
-    render(<Huelle pfad="/p/P/a"><DateiMenue project="P" file={datei()} /></Huelle>)
+    render(<Huelle pfad="/p/P/a"><OffeneDatei vergiss={vi.fn()} /><DateiMenue project="P" file={datei()} /></Huelle>)
     await menueOeffnen()
     fireEvent.click(await screen.findByText('Neu transkribieren'))
     fireEvent.click(screen.getByRole('button', { name: 'Neu transkribieren' }))
-    await waitFor(() => expect(screen.getByTestId('ort')).toHaveTextContent('/p/P'))
+    await waitFor(() => expect(screen.getByTestId('ort')).toHaveTextContent(/^\/p\/P$/))
   })
 })
 
@@ -190,6 +204,51 @@ describe('Löschen', () => {
   })
 })
 
+describe('Spaeter Abschluss einer Dateiaktion', () => {
+  it.each(['Löschen', 'Neu transkribieren', 'Umbenennen'].flatMap(aktion =>
+    [false, true].map(neuGeoeffnet => ({ aktion, neuGeoeffnet }))))(
+    '$aktion ordnet den Abschluss der betroffenen Datei zu (erneut geöffnet: $neuGeoeffnet)', async ({ aktion, neuGeoeffnet }) => {
+      const alt = vi.fn(), neu = vi.fn()
+      let fertig!: () => void
+      if (aktion === 'Löschen') {
+        vi.mocked(api.deleteFile).mockReturnValueOnce(new Promise(resolve => { fertig = () => resolve() }))
+      } else if (aktion === 'Neu transkribieren') {
+        vi.mocked(api.startRetranscribeFile).mockReturnValueOnce(new Promise(resolve => {
+          fertig = () => resolve({ started: true, job_id: 'neu' })
+        }))
+      } else {
+        vi.mocked(api.getDoc).mockResolvedValue({ project: 'P', base: 'a', audio: '', language: 'de',
+          human_edited: false, context: '', speakers: [], segments: [], annotations: [] })
+        vi.mocked(api.renameFile).mockReturnValueOnce(new Promise(resolve => { fertig = () => resolve({ name: 'neu' }) }))
+      }
+      render(<Huelle pfad="/p/P/a"><WechselnderEditor alt={alt} neu={neu} /><DateiMenue project="P" file={datei()} /></Huelle>)
+      await menueOeffnen()
+      fireEvent.click(await screen.findByRole('menuitem', { name: aktion }))
+      if (aktion === 'Umbenennen') {
+        fireEvent.change(await screen.findByRole('textbox', { name: 'Neuer Name' }), { target: { value: 'neu' } })
+        fireEvent.click(screen.getByRole('button', { name: 'Umbenennen' }))
+      } else {
+        fireEvent.click(await screen.findByRole('button', { name: aktion }))
+      }
+      await waitFor(() => expect(fertig).toBeTypeOf('function'))
+      const request = aktion === 'Löschen' ? api.deleteFile
+        : aktion === 'Neu transkribieren' ? api.startRetranscribeFile : api.renameFile
+      await waitFor(() => expect(request).toHaveBeenCalled())
+      if (aktion === 'Umbenennen') fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+      fireEvent.click(screen.getByRole('button', { name: neuGeoeffnet ? 'Editor neu öffnen' : 'Andere Datei' }))
+      await act(async () => { fertig() })
+      expect(alt).toHaveBeenCalledTimes(1)
+      if (neuGeoeffnet) {
+        expect(neu).toHaveBeenCalledTimes(1)
+        expect(screen.getByTestId('ort')).toHaveTextContent(aktion === 'Umbenennen' ? /^\/p\/P\/neu$/ : /^\/p\/P$/)
+      } else {
+        expect(neu).not.toHaveBeenCalled()
+        expect(screen.getByTestId('ort')).toHaveTextContent('/p/B/b')
+      }
+    },
+  )
+})
+
 describe('Sprache, Sprecher & Korrektur', () => {
   const spracheAendern = async () => {
     await menueOeffnen()
@@ -223,12 +282,12 @@ describe('Sprache, Sprecher & Korrektur', () => {
   })
 
   it('änderte Sprache stößt Neu-Transkription an (und verlässt den Editor)', async () => {
-    render(<Huelle pfad="/p/P/a"><DateiMenue project="P" file={datei()} /></Huelle>)
+    render(<Huelle pfad="/p/P/a"><OffeneDatei vergiss={vi.fn()} /><DateiMenue project="P" file={datei()} /></Huelle>)
     await spracheAendern()
     fireEvent.click(screen.getByRole('button', { name: 'Speichern & neu transkribieren' }))
     await waitFor(() => expect(api.saveFileEinstellungen).toHaveBeenCalledWith('P', 'a', expect.objectContaining({ sprache: 'en' })))
     await waitFor(() => expect(api.startRetranscribeFile).toHaveBeenCalledWith('P', 'a'))
-    expect(screen.getByTestId('ort')).toHaveTextContent('/p/P')   // Editor verlassen
+    await waitFor(() => expect(screen.getByTestId('ort')).toHaveTextContent(/^\/p\/P$/))
   })
 
   it('nur geänderte Tiefe stößt Neu-Korrektur mit force=true an (Editor bleibt)', async () => {

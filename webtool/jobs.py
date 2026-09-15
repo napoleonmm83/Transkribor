@@ -25,6 +25,8 @@ _active = {}               # (project, kind) -> job_id (Dedupe: je Art einer pro
 # („weg, und es ist kein Fehler, wenn er schon weg war"), samt dem Leck-Riegel aus #417.
 # Der Wert ist neu und wird von der Sperrlogik nirgends gelesen.
 _pending = {}
+_pending_bindungen: dict[tuple[str, str, str | None], str | None] = {}
+# derselbe Schluessel -> fachliche Instanz des vorgemerkten Laufs
 
 # Vorgangsnummer -> Zustand der Vormerkung. Die zweite Struktur ist noetig, weil ein
 # AUFGELOESTER Vorgang lesbar bleiben muss, nachdem `rerun` seinen Schluessel aus `_pending`
@@ -53,6 +55,43 @@ SCOPE_PREFIX = "[scope] "
 SCOPE_ADD_PREFIX = "[scope+] "
 ACTIVE_PREFIX = "[active] "
 DONE_PREFIX = "[done] "
+
+
+def _gleiches_projekt(links: str, rechts: str) -> bool:
+    """Vergleicht Projektnamen so, wie das lokale Dateisystem sie aufloest."""
+    return os.path.normcase(links) == os.path.normcase(rechts)
+
+
+def _gleiche_base(links: str | None, rechts: str | None) -> bool:
+    if links is None or rechts is None:
+        return links is rechts
+    return os.path.normcase(links) == os.path.normcase(rechts)
+
+
+def _base_schluessel(namen, gesucht: str):
+    return next((name for name in namen if _gleiche_base(name, gesucht)), None)
+
+
+def _aktiver_schluessel_locked(project: str, kind: str):
+    return next((key for key in _active
+                 if key[1] == kind and _gleiches_projekt(key[0], project)), None)
+
+
+def _vorgemerkter_schluessel_locked(project: str, kind: str, base: str | None):
+    return next((key for key in _pending
+                 if key[1] == kind and _gleiche_base(key[2], base)
+                 and _gleiches_projekt(key[0], project)), None)
+
+
+def _pending_entfernen_locked(key, nummer=None) -> bool:
+    """Entfernt nur die erwartete Vormerkung, nie einen spaeteren Nachfolger."""
+    if nummer is not None and _pending.get(key) != nummer:
+        return False
+    if key not in _pending:
+        return False
+    _pending.pop(key, None)
+    _pending_bindungen.pop(key, None)
+    return True
 
 
 def buche_aktive(aktive: dict, line: str, gesehen: set | None = None,
@@ -102,7 +141,8 @@ def buche_aktive(aktive: dict, line: str, gesehen: set | None = None,
     if line.startswith(ACTIVE_PREFIX):
         roh = line[len(ACTIVE_PREFIX):]
         if roh:
-            aktive[roh] = aktive.get(roh, 0) + 1
+            alias = _base_schluessel(aktive, roh) or roh
+            aktive[alias] = aktive.get(alias, 0) + 1
         # BEIDE Mengen bekommen denselben UNGESTUTZTEN Namen (#477). Bis dahin buchte
         # `aktive` gestutzt, `gesehen` roh -- und genau diese Asymmetrie war der Riegel-Loch:
         # `aktive` treibt `betrifft()`, das gegen einen HTTP-Pfadparameter vergleicht, und
@@ -127,14 +167,17 @@ def buche_aktive(aktive: dict, line: str, gesehen: set | None = None,
         # 4 s alter Dateiliste — dieselbe Klasse wie die Stale-Verschmutzung von `gesehen`
         # seit #475; ein Fix braeuchte Zeitstempel je Base.
         if entfernt_je is not None and roh:
-            entfernt_je.discard(roh)
+            alias = _base_schluessel(entfernt_je, roh)
+            if alias is not None:
+                entfernt_je.discard(alias)
     elif line.startswith(DONE_PREFIX):
         roh = line[len(DONE_PREFIX):]
         if roh:
-            if aktive.get(roh, 0) <= 1:
-                aktive.pop(roh, None)   # Boden 0 — Nachfolger der alten discard-Idempotenz
+            alias = _base_schluessel(aktive, roh) or roh
+            if aktive.get(alias, 0) <= 1:
+                aktive.pop(alias, None)   # Boden 0 — Nachfolger der alten discard-Idempotenz
             else:
-                aktive[roh] -= 1
+                aktive[alias] -= 1
 
 _PROZENT_RE = re.compile(r"^\d+%(?:\||\s|$)")
 MAX_JOB_LINES = 10_000
@@ -400,15 +443,16 @@ def transcribe_laeuft_oder_wartet(project: str) -> bool:
     Fuer eine ENTSCHEIDUNG, nicht fuer eine Anzeige: die Antwort ist eine Momentaufnahme."""
     with _lock:
         for (proj, kind), jid in _active.items():
-            if proj != project or kind != "transcribe":
+            if not _gleiches_projekt(proj, project) or kind != "transcribe":
                 continue
             r = _jobs.get(jid)
             if r is not None and r["status"] == "running":
                 return True
-        return any(k[0] == project and k[1] == "transcribe" for k in _pending)
+        return any(_gleiches_projekt(k[0], project) and k[1] == "transcribe"
+                   for k in _pending)
 
 
-def start(project: str, cmd: list, cwd, kind: str, then=None, env=None, base: str = None,
+def start(project: str, cmd: list, cwd, kind: str, then=None, env=None, base: str | None = None,
           bases: set = None, sonst=None):
     """Startet den Job. `then` laeuft NACH erfolgreichem Abschluss (status 'done') im
     Job-Thread — damit haengt die Auto-Korrektur nach der Transkription nicht am Browser.
@@ -426,8 +470,9 @@ def start(project: str, cmd: list, cwd, kind: str, then=None, env=None, base: st
     anhaengen konnte)."""
     with _lock:
         _prune_locked()
-        if (project, kind) in _active:
-            return _active[(project, kind)], False
+        aktiver_schluessel = _aktiver_schluessel_locked(project, kind)
+        if aktiver_schluessel is not None:
+            return _active[aktiver_schluessel], False
         if kind in GPU_KINDS:
             busy = next((jid for jid, r in _jobs.items()
                          if r["kind"] in GPU_KINDS and r["status"] == "running"), None)
@@ -496,8 +541,9 @@ def start(project: str, cmd: list, cwd, kind: str, then=None, env=None, base: st
     return jid, True
 
 
-def request(project: str, cmd: list, cwd, kind: str, then=None, base: str = None,
-            vorgang: str | None = None, sonst=None):
+def request(project: str, cmd: list, cwd, kind: str, then=None, base: str | None = None,
+            vorgang: str | None = None, sonst=None, wiederholung=None,
+            bindung: str | None = None):
     """Startet den Job — oder merkt genau EINEN Nachlauf vor, wenn der Slot belegt ist.
 
     Ein Upload/Import soll immer zu einer Verarbeitung fuehren, auch wenn gerade eine laeuft:
@@ -531,6 +577,15 @@ def request(project: str, cmd: list, cwd, kind: str, then=None, base: str = None
     Schluessel — die erste, die die Oberflaeche kennt, bliebe ewig `vorgemerkt`. Am echten
     Ablauf getraced (Q blockt P und R, danach blockt P das R): add-Zaehlung 2 fuer denselben
     Schluessel, der zweite aus dem `_run`-Faden.
+
+    `wiederholung` ist eine Context-Manager-Factory fuer den spaeten `rerun`. Sie kann den
+    Start unter einer fachlichen Sperre ausfuehren und mit `False` verwerfen, wenn der
+    urspruengliche Kontext nicht mehr gilt. Der erste Aufruf wird bereits vom API-Handler
+    gesperrt; die Factory gilt deshalb nur fuer den spaeteren Rueckruf.
+
+    `bindung` trennt Vormerkungen gleichnamiger, aber verschiedener Projektinstanzen. Eine
+    neue Instanz ersetzt die alte Vormerkung, waehrend deren bereits registrierter Rueckruf
+    nur noch seine eigene Nummer verwerfen darf.
     """
     key = (project, kind, base)
     nummer = vorgang
@@ -545,26 +600,44 @@ def request(project: str, cmd: list, cwd, kind: str, then=None, base: str = None
             _vorgang_setzen(nummer, "gestartet", job_id=jid)
             return jid, True, nummer
         with _lock:
+            vorhandener_schluessel = _vorgemerkter_schluessel_locked(project, kind, base)
+            if vorhandener_schluessel is not None:
+                key = vorhandener_schluessel
             if key in _pending:
                 # schon vorgemerkt -> der Nachlauf nimmt die neuen Dateien mit. Der Aufrufer
                 # bekommt die BESTEHENDE Nummer, nicht eine neue: es ist dieselbe Vormerkung.
                 bestehende = _pending[key]
-                if nummer is not None and nummer != bestehende:
-                    # Wir kommen aus `rerun` und bringen eine Nummer mit — aber zwischen dem
-                    # `pop` dort und dieser Zeile liegen DREI getrennte Sperr-Erwerbe, und in
-                    # dem Fenster hat eine andere Anfrage denselben Schluessel neu belegt.
-                    # Ohne diesen Zweig bliebe unsere Nummer fuer immer `vorgemerkt`, und die
-                    # Oberflaeche fragte sie fuer die Lebensdauer des Tabs alle 1,5 s ab —
-                    # ein Dauerpoll auf eine Nummer, die nie wieder etwas meldet.
-                    # Ausgefuehrt reproduziert (kalter Pruefer, `N1 ORPHANED`).
-                    # Beide zeigen jetzt auf DIESELBE Vormerkung.
-                    v = _vorgaenge.get(nummer)
-                    if v is not None:
-                        v["alias"] = bestehende
-                return jid, False, bestehende
+                bestehende_bindung = _pending_bindungen.get(key)
+                if bestehende_bindung != bindung:
+                    # Derselbe sichtbare Projektname gehoert inzwischen zu einer anderen
+                    # Instanz. Der alte Rueckruf bleibt registriert, darf aber weder diese
+                    # neue Vormerkung uebernehmen noch sie spaeter aus `_pending` entfernen.
+                    if nummer is not None and nummer == bestehende:
+                        v = _vorgaenge.get(nummer)
+                        if v is not None:
+                            v["status"] = "verworfen"
+                        return jid, False, nummer
+                    alt = _vorgaenge.get(bestehende)
+                    if alt is not None and alt.get("status") == "vorgemerkt":
+                        alt["status"] = "verworfen"
+                else:
+                    if nummer is not None and nummer != bestehende:
+                        # Wir kommen aus `rerun` und bringen eine Nummer mit — aber zwischen dem
+                        # `pop` dort und dieser Zeile liegen DREI getrennte Sperr-Erwerbe, und in
+                        # dem Fenster hat eine andere Anfrage denselben Schluessel neu belegt.
+                        # Ohne diesen Zweig bliebe unsere Nummer fuer immer `vorgemerkt`, und die
+                        # Oberflaeche fragte sie fuer die Lebensdauer des Tabs alle 1,5 s ab —
+                        # ein Dauerpoll auf eine Nummer, die nie wieder etwas meldet.
+                        # Ausgefuehrt reproduziert (kalter Pruefer, `N1 ORPHANED`).
+                        # Beide zeigen jetzt auf DIESELBE Vormerkung.
+                        v = _vorgaenge.get(nummer)
+                        if v is not None:
+                            v["alias"] = bestehende
+                    return jid, False, bestehende
             if nummer is None:
                 nummer = uuid.uuid4().hex[:12]
             _pending[key] = nummer
+            _pending_bindungen[key] = bindung
             _vorgaenge.setdefault(nummer, {"vorgang": nummer, "status": "vorgemerkt",
                                            "job_id": None, "project": project,
                                            "kind": kind, "base": base})
@@ -599,10 +672,10 @@ def request(project: str, cmd: list, cwd, kind: str, then=None, base: str = None
             # `base` wird BEWUSST nicht verglichen: innerhalb desselben (Projekt, Art) ist der
             # Blocker per Dedupe genau der Lauf, den der Nutzer gemeint hat.
             with _lock:
-                _pending.pop(_key, None)
+                _pending_entfernen_locked(_key, _nummer)
                 blocker = _jobs.get(_jid) or {}
                 abgebrochen = (blocker.get("status") == "cancelled"
-                               and blocker.get("project") == project
+                               and _gleiches_projekt(blocker.get("project", ""), project)
                                and blocker.get("kind") == kind)
             if abgebrochen:
                 # Der Nutzer hat DIESE Arbeit abgebrochen — der Vorgang ist damit erledigt,
@@ -612,12 +685,26 @@ def request(project: str, cmd: list, cwd, kind: str, then=None, base: str = None
                 return
             # Die Nummer reist MIT: sonst legt der Aufruf bei erneuter Blockierung eine zweite
             # an, und die erste bleibt fuer immer `vorgemerkt` (siehe Docstring).
-            request(project, cmd, cwd, kind, then=then, base=base, vorgang=_nummer, sonst=sonst)
+            if wiederholung is None:
+                request(project, cmd, cwd, kind, then=then, base=base,
+                        vorgang=_nummer, sonst=sonst, wiederholung=None, bindung=bindung)
+                return
+            try:
+                with wiederholung() as erlaubt:
+                    if not erlaubt:
+                        _vorgang_setzen(_nummer, "verworfen")
+                        return
+                    request(project, cmd, cwd, kind, then=then, base=base,
+                            vorgang=_nummer, sonst=sonst, wiederholung=wiederholung,
+                            bindung=bindung)
+            except Exception:
+                _vorgang_setzen(_nummer, "aufgegeben")
+                raise
 
         if when_done(jid, rerun):
             return jid, False, nummer
         with _lock:                       # jid wurde eben terminal -> Slot frei, gleich nochmal
-            _pending.pop(key, None)
+            _pending_entfernen_locked(key, nummer)
         time.sleep(0.05)
     print(f"Nachlauf fuer {project!r}/{kind} aufgegeben: Slot blieb belegt", file=sys.stderr)
     # Bisher endete dieser Weg nur in einer stderr-Zeile, die der Nutzer nie sieht.
@@ -757,8 +844,9 @@ def _run(jid, cmd, cwd, env):
     # 2. Prüfen, ob noch Folge-Läufe für (Projekt, Art) aktiv oder vorgemerkt sind
     weitergereicht = False
     with _lock:
-        folge_jid = _active.get((project, kind))
-        hat_pending = any(k[0] == project and k[1] == kind for k in _pending)
+        folge_schluessel = _aktiver_schluessel_locked(project, kind)
+        folge_jid = _active.get(folge_schluessel) if folge_schluessel is not None else None
+        hat_pending = any(_gleiches_projekt(k[0], project) and k[1] == kind for k in _pending)
         # NUR bei Erfolg weiterreichen. Fuer `then` ist das ein No-op (die Liste ist sonst
         # ohnehin leer), fuer `sonst`/`then_ueber` waere es der Unterschied zwischen
         # „nachholen" und „ein zweites Mal verschieben": ein gescheiterter Lauf hat seine
@@ -962,7 +1050,9 @@ def _run_proc(jid, cmd, cwd, env=None):
                         b for b in line[len(SCOPE_ADD_PREFIX):].split("\t") if b)
                     for b in line[len(SCOPE_ADD_PREFIX):].split("\t"):
                         if b:
-                            _jobs[jid]["entfernt"].discard(b)
+                            entfernt_alias = _base_schluessel(_jobs[jid]["entfernt"], b)
+                            if entfernt_alias is not None:
+                                _jobs[jid]["entfernt"].discard(entfernt_alias)
                             # ... und aus der Korrektur-Schlange, aus einem Grund, den erst
                             # #561 geschaffen hat (gegnerischer Pruefer, F2): eine geloeschte
                             # und gleichnamig neu hochgeladene Aufnahme wird vom Pool HINTEN
@@ -985,8 +1075,9 @@ def _run_proc(jid, cmd, cwd, env=None):
                             # B vor A), ohne ihn `["A","B"]` — also genau der Vorzustand, kein
                             # neuer Fehler. Ein zweiter Ort fuer dieselbe Regel waere die
                             # Drift, gegen die dieses Repo sonst ueberall argumentiert.
-                            if b in _jobs[jid]["eingereiht"]:
-                                _jobs[jid]["eingereiht"].remove(b)
+                            queue_alias = _base_schluessel(_jobs[jid]["eingereiht"], b)
+                            if queue_alias is not None:
+                                _jobs[jid]["eingereiht"].remove(queue_alias)
                 else:
                     buche_aktive(_jobs[jid]["active_bases"], line, zulassung,
                                  je_sperre)
@@ -1030,7 +1121,8 @@ def _run_proc(jid, cmd, cwd, env=None):
             _jobs[jid]["ended"] = time.time()
     finally:
         with _lock:
-            key = (_jobs[jid]["project"], _jobs[jid]["kind"])
+            key = _aktiver_schluessel_locked(
+                _jobs[jid]["project"], _jobs[jid]["kind"])
             if _active.get(key) == jid:
                 _active.pop(key, None)
 
@@ -1161,25 +1253,32 @@ def remove_base(project: str, base: str) -> None:
     """
     with _lock:
         for (proj, _kind), jid in _active.items():
-            if proj != project:
+            if not _gleiches_projekt(proj, project):
                 continue
             r = _jobs.get(jid)
             if r is not None:
+                aliases: set[str] = set()
                 if r.get("bases") is not None:
-                    r["bases"].discard(base)
+                    aliases.update(name for name in r["bases"] if _gleiche_base(name, base))
+                    r["bases"].difference_update(aliases)
                 # `gesehen` bleibt bewusst stehen: das ist eine Historie ("gehoerte zu
                 # diesem Lauf"), kein Wirkungsbereich - sie aendert sich nicht dadurch,
                 # dass eine Datei geloescht wird, und kein Riegel haengt daran
                 # (`zugelassen()` im Frontend ist reine Anzeige).
                 if r.get("active_bases") is not None:
-                    r["active_bases"].pop(base, None)
+                    aktiv_alias = _base_schluessel(r["active_bases"], base)
+                    if aktiv_alias is not None:
+                        aliases.add(aktiv_alias)
+                        r["active_bases"].pop(aktiv_alias, None)
+                aliases.update(name for name in r.get("gesehen", set())
+                               if _gleiche_base(name, base))
                 # Bedingungslos, auch wenn die Base nie in `bases` stand: ein correct-Lauf
                 # ohne diese Aufnahme im Bereich soll trotzdem nichts Altes über ihren
                 # Namen zeigen.
-                r["entfernt"].add(base)
+                r.setdefault("entfernt", set()).update(aliases or {base})
                 # Und dieselbe Buchung in die MONOTONE Menge (#591): `entfernt` wird beim
                 # Reannoncement geraeumt, `entfernt_je` erst, wenn die neue Datei laeuft.
-                r.setdefault("entfernt_je", set()).add(base)
+                r.setdefault("entfernt_je", set()).update(aliases or {base})
 
 
 def betrifft(project: str, base: str, active_only: bool = False) -> dict | None:
@@ -1212,17 +1311,18 @@ def betrifft(project: str, base: str, active_only: bool = False) -> dict | None:
     """
     with _lock:
         for (proj, _kind), jid in _active.items():
-            if proj != project:
+            if not _gleiches_projekt(proj, project):
                 continue
             r = _jobs.get(jid)
             if r is None or r["status"] != "running":
                 continue
             if active_only:
-                if base in r.get("active_bases", {}):
+                if _base_schluessel(r.get("active_bases", {}), base) is not None:
                     return {"id": r["id"], "kind": r["kind"]}
             else:
-                if (r["bases"] is None or base in r["bases"]
-                        or base in r.get("active_bases", {})):
+                if (r["bases"] is None
+                        or _base_schluessel(r["bases"], base) is not None
+                        or _base_schluessel(r.get("active_bases", {}), base) is not None):
                     return {"id": r["id"], "kind": r["kind"]}
     return None
 
@@ -1233,7 +1333,7 @@ def active_for(project: str) -> list:
     with _lock:
         out = []
         for (proj, _kind), jid in _active.items():
-            if proj != project:
+            if not _gleiches_projekt(proj, project):
                 continue
             r = _jobs.get(jid)
             if r is not None and r["status"] == "running":

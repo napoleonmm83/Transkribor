@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type MouseEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { Settings } from 'lucide-react'
 import { ThemeToggle } from './ThemeToggle'
 import { useActiveJob, zeigtLauf, UNERREICHBAR } from '@/hooks/useActiveJob'
 import { useUpdate } from '@/hooks/useUpdate'
+import { useEditorBruecke, darfWechseln } from '@/hooks/useEditorBruecke'
 import { getHardware } from '@/lib/api'
 import { KIND_LABEL } from '@/lib/jobPhases'
 import type { UpdateZustand } from '@/lib/types'
@@ -52,6 +53,11 @@ export function StatusBar() {
   const { jobs } = useActiveJob()
   const { zustand } = useUpdate()
   const [rechenwerk, setRechenwerk] = useState('')
+  const editor = useEditorBruecke()
+  const vorWechsel = (e: MouseEvent<HTMLAnchorElement>) => {
+    if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return
+    if (!darfWechseln(editor.current, null)) e.preventDefault()
+  }
 
   // Einmal je Serverlauf ermittelt (GET /api/hardware ist auf der Backend-Seite gecacht) —
   // ein Poll waere hier sinnlos, die Grafikkarte wechselt nicht zur Laufzeit.
@@ -88,7 +94,7 @@ export function StatusBar() {
       <span className="min-w-0 flex-1 truncate" aria-live="polite">{text}</span>
       {hinweis && (
         // aria-live: ein Update taucht auf, ohne dass jemand etwas angeklickt hat.
-        <Link to="/version" aria-live="polite"
+        <Link to="/version" aria-live="polite" onClick={vorWechsel}
           className="shrink-0 font-medium text-primary underline-offset-2 hover:underline
                      focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
           {hinweis}
@@ -112,9 +118,9 @@ export function StatusBar() {
       </span>
       {/* Der einzige Weg zu den Einstellungen stand bisher auf der Uebersicht -- aus dem
           Editor musste man erst dorthin zurueck. Die Fusszeile ist auf JEDER Seite da. */}
-      <Link to="/einstellungen"
-        className="inline-flex shrink-0 items-center gap-1 underline-offset-2 hover:text-foreground
-                   hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+      <Link to="/einstellungen" onClick={vorWechsel}
+        className="inline-flex shrink-0 items-center gap-1 rounded px-1 underline-offset-2 hover:text-foreground
+                   hover:underline active:bg-primary active:text-primary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
         <Settings className="size-3" aria-hidden="true" /> Einstellungen
       </Link>
       {/* Aus derselben Not wie der Einstellungen-Link: er stand nur in der Editor-Leiste. */}
@@ -124,7 +130,7 @@ export function StatusBar() {
       {rechenwerk && <span className="min-w-0 truncate">{rechenwerk}</span>}
       {/* Die Nummer IST der Weg zur Versionsseite — sie steht auf jeder Route, und wer
           wissen will, welche Fassung laeuft, klickt genau hier. */}
-      <Link to="/version"
+      <Link to="/version" onClick={vorWechsel}
         className="shrink-0 tabular-nums underline-offset-2 hover:text-foreground hover:underline
                    focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
         v{version}

@@ -1,6 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, waitFor, act } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
+import { render as renderBase, screen, waitFor, act, fireEvent } from '@testing-library/react'
+import { MemoryRouter, useLocation } from 'react-router-dom'
+import type { ReactNode } from 'react'
+import { EditorBrueckeProvider, useEditorMelden } from '@/hooks/useEditorBruecke'
+import type { SpeicherStand } from '@/hooks/useDoc'
 import { StatusBar } from './StatusBar'
 import { JobProvider, useActiveJob } from '@/hooks/useActiveJob'
 import { ThemeProvider } from './ThemeProvider'
@@ -35,6 +38,15 @@ function bruecke(zustand: UpdateZustand) {
     fehlerbericht: () => Promise.resolve({ pfad: '', verwendet: 0, gekuerzt: false }),
     on: () => () => {},
   }
+}
+
+function render(ui: ReactNode) {
+  return renderBase(ui, { wrapper: EditorBrueckeProvider })
+}
+
+function EditorOrt({ stand }: { stand: SpeicherStand }) {
+  useEditorMelden({ project: 'Alpha', base: 'a', dirty: true, stand, reload: () => {}, vergiss: () => {} })
+  return <span data-testid="editor-ort">{useLocation().pathname}</span>
 }
 
 describe('StatusBar', () => {
@@ -86,12 +98,54 @@ describe('StatusBar', () => {
     expect(screen.getByText('Bereit')).toBeInTheDocument()
   })
 
+  it.each([
+    [/Einstellungen/, '/einstellungen'],
+    [/^v0\.10\.0$/, '/version'],
+    [/Update 0\.11\.0 verfügbar/, '/version'],
+  ] as const)('fragt bei Speicherfehler vor Link %s und respektiert Abbrechen', async (name, ziel) => {
+    vi.mocked(api.getHardware).mockRejectedValue(new Error('weg'))
+    bruecke({ version: '0.10.0', art: 'verfuegbar', neue: '0.11.0', groesse: 96 })
+    const frage = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    render(<MemoryRouter initialEntries={['/p/Alpha/a']}><JobProvider>
+      <StatusBar /><EditorOrt stand="fehler" />
+    </JobProvider></MemoryRouter>)
+    const link = await screen.findByRole('link', { name })
+    fireEvent.click(link)
+    expect(frage).toHaveBeenCalledTimes(1)
+    expect(screen.getByTestId('editor-ort').textContent).toBe('/p/Alpha/a')
+    frage.mockReturnValue(true)
+    fireEvent.click(link)
+    expect(screen.getByTestId('editor-ort').textContent).toBe(ziel)
+    frage.mockRestore()
+  })
+
+  it('laesst die normale Tipppause ohne Rueckfrage verlassen', async () => {
+    vi.mocked(api.getHardware).mockRejectedValue(new Error('weg'))
+    const frage = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    render(<MemoryRouter initialEntries={['/p/Alpha/a']}><JobProvider>
+      <StatusBar /><EditorOrt stand="offen" />
+    </JobProvider></MemoryRouter>)
+    fireEvent.click(screen.getByRole('link', { name: /Einstellungen/ }))
+    expect(frage).not.toHaveBeenCalled()
+    expect(screen.getByTestId('editor-ort').textContent).toBe('/einstellungen')
+    frage.mockRestore()
+  })
+
   it('fuehrt von jeder Seite in die Einstellungen', async () => {
     // Vorher stand der einzige Weg dorthin auf der Uebersicht — aus dem Editor musste man
     // erst zurueck zur Startseite.
     vi.mocked(api.getHardware).mockRejectedValue(new Error('weg'))
     zeigen()
     expect(screen.getByRole('link', { name: /Einstellungen/ })).toHaveAttribute('href', '/einstellungen')
+  })
+
+  it('gibt dem aktiven Einstellungen-Link eine kontrastreiche Flaeche', async () => {
+    vi.mocked(api.getHardware).mockRejectedValue(new Error('weg'))
+    render(<MemoryRouter><JobProvider><StatusBar /></JobProvider></MemoryRouter>)
+    const link = await screen.findByRole('link', { name: /Einstellungen/ })
+    expect(link).toHaveClass(
+      'active:bg-primary', 'active:text-primary-foreground',
+    )
   })
 
   it('haelt den Theme-Umschalter auf jeder Seite bereit und schaltet ihn um', async () => {

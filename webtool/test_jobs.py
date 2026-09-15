@@ -1938,7 +1938,7 @@ def test_gelungener_download_laesst_die_vormerkung_offen(monkeypatch):
         "Browser gerade wartet"
 
 
-def _durch_den_endpunkt(monkeypatch, cmd, project):
+def _durch_den_endpunkt(monkeypatch, cmd, project, tmp_path):
     """`fetch_urls` mit ECHTEM `jobs.start` fahren, nur das Kommando getauscht.
 
     Der Punkt ist, was hier NICHT gefaelscht wird: die beiden Tests darueber uebergeben ihr
@@ -1948,6 +1948,8 @@ def _durch_den_endpunkt(monkeypatch, cmd, project):
     derselbe geblieben, der Traeger nicht.
     """
     from webtool import app as app_mod
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    (tmp_path / project / "audio").mkdir(parents=True)
     echt = jobs.start
     monkeypatch.setattr(jobs, "start",
                         lambda p, c, cwd, kind, **k: echt(p, cmd, cwd, kind, **k))
@@ -1963,7 +1965,8 @@ def _bis(pruef, frist=15.0):
     return False
 
 
-def test_endpunkt_haengt_seinen_ausgangs_rueckruf_an_den_RICHTIGEN_job(monkeypatch):
+def test_endpunkt_haengt_seinen_ausgangs_rueckruf_an_den_RICHTIGEN_job(
+        monkeypatch, tmp_path):
     """Die Verdrahtung selbst — und sie hatte keinen Sensor (gegnerischer Pruefer, F1).
 
     Zwei Mutationen liessen damals alle 46 Tests des PR gruen: eine falsche Kennung in
@@ -1978,7 +1981,7 @@ def test_endpunkt_haengt_seinen_ausgangs_rueckruf_an_den_RICHTIGEN_job(monkeypat
     laeuft, muss die Nummer offen sein — und danach die Gegenrichtung ueber einen Abbruch.
     """
     r = _durch_den_endpunkt(monkeypatch, [sys.executable, "-c", "import time; time.sleep(5)"],
-                            "P_verdrahtung")
+                            "P_verdrahtung", tmp_path)
     assert r["started"] is True and r["vorgang"]
     assert jobs.get(r["job_id"])["status"] == "running"
     assert jobs.vorgang(r["vorgang"])["status"] == "vorgemerkt", \
@@ -1989,7 +1992,7 @@ def test_endpunkt_haengt_seinen_ausgangs_rueckruf_an_den_RICHTIGEN_job(monkeypat
         "nach dem Abbruch bleibt die Nummer offen — der Rueckruf haengt am falschen Job"
 
 
-def test_endpunkt_laesst_die_nummer_offen_wenn_der_download_gelingt(monkeypatch):
+def test_endpunkt_laesst_die_nummer_offen_wenn_der_download_gelingt(monkeypatch, tmp_path):
     """Die Gegenprobe durch den ENDPUNKT, nicht durch ein selbstgebautes Lambda.
 
     Bei `done` darf `sonst` nichts tun, und `then` muss die Nummer uebernehmen. Die Mutation,
@@ -2004,7 +2007,8 @@ def test_endpunkt_laesst_die_nummer_offen_wenn_der_download_gelingt(monkeypatch)
     monkeypatch.setattr(app_mod, "_start_transcribe",
                         lambda project, base=None, vorgang=None:
                         gerufen.append(vorgang) or (None, False, vorgang))
-    r = _durch_den_endpunkt(monkeypatch, [sys.executable, "-c", "pass"], "P_verdrahtung_ok")
+    r = _durch_den_endpunkt(
+        monkeypatch, [sys.executable, "-c", "pass"], "P_verdrahtung_ok", tmp_path)
     _wait(r["job_id"], timeout=30)
     assert _bis(lambda: gerufen == [r["vorgang"]]), "der then-Rueckruf ist nicht gelaufen"
     assert jobs.vorgang(r["vorgang"])["status"] == "vorgemerkt", \
