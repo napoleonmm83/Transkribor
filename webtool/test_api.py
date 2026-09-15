@@ -635,6 +635,18 @@ def test_lifecycle_locks_liegen_in_der_beschreibbaren_projektwurzel_und_bleiben_
     assert lock_root.is_dir()
 
 
+def test_interner_lifecycle_ordner_ist_kein_umbenennziel(client, tmp_path):
+    assert client.get("/api/projects/Demo/files/S1").status_code == 200
+    lock_root = tmp_path / ".transkribor-project-locks"
+
+    response = client.post(
+        "/api/projects/Demo/rename", json={"name": ".transkribor-project-locks"})
+
+    assert response.status_code == 400
+    assert (tmp_path / "Demo").is_dir()
+    assert lock_root.is_dir()
+
+
 def test_create_project_raeumt_nach_fehlgeschlagenem_instanzmerker_nur_neue_leere_ordner_weg(
         client, tmp_path, monkeypatch):
     from webtool import paths
