@@ -338,7 +338,10 @@ def _sicherer_projektname(roh: str) -> str:
     Umbenennen auf einen sauberen Namen (rename_project prüft nur das Ziel).
     """
     try:
-        return paths.sicherer_projektname(roh)
+        name = paths.sicherer_projektname(roh)
+        if name == _LIFECYCLE_LOCK_ORDNER:
+            raise ValueError("Projektname ist fuer interne Sperren reserviert")
+        return name
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -452,7 +455,7 @@ def list_projects():
     if not os.path.isdir(root):
         return {"projects": out}
     for eintrag in os.scandir(root):
-        if not eintrag.is_dir():
+        if not eintrag.is_dir() or eintrag.name == _LIFECYCLE_LOCK_ORDNER:
             continue
         try:
             _validate(eintrag.name)
@@ -572,8 +575,11 @@ def projekteinstellungen_speichern(project: str, body: EinstellungenBody):
         raise HTTPException(status_code=400, detail=fehler)
     # speichern() ueberspringt None-Werte (isinstance-Pruefung je Feld) -> leerer Body ist
     # sicher, und ein PUT ohne `mehrsprachig` laesst den Haken stehen (Partial-Update).
-    d = _projekt.speichern(project, {"sprache": body.sprache, "korrektur": body.korrektur,
-                                     "mehrsprachig": body.mehrsprachig})
+    with _projektlebenszyklus(project):
+        if not os.path.isdir(paths.project_dir(project)):
+            raise HTTPException(status_code=404, detail="Projekt nicht gefunden")
+        d = _projekt.speichern(project, {"sprache": body.sprache, "korrektur": body.korrektur,
+                                         "mehrsprachig": body.mehrsprachig})
     return _projekt_body(d)
 
 
@@ -651,6 +657,7 @@ class NewProject(BaseModel):
 
 
 _PROJEKTINSTANZ_DATEI = ".projektinstanz"
+_LIFECYCLE_LOCK_ORDNER = ".transkribor-project-locks"
 _LIFECYCLE_LOCK_WARTE_S = 5.0
 
 
@@ -673,16 +680,25 @@ def _projektinstanz(project: str) -> str:
             kennung = fh.read().strip()
         uuid.UUID(kennung)
         return kennung
-    except (FileNotFoundError, OSError, ValueError):
-        kennung = uuid.uuid4().hex
-        paths.atomic_write(_projektinstanz_pfad(project), kennung)
-        return kennung
+    except (FileNotFoundError, ValueError):
+        pass
+    except OSError as e:
+        raise HTTPException(status_code=503,
+                            detail="Projektinstanz kann nicht sicher gelesen werden") from e
+    kennung = uuid.uuid4().hex
+    paths.atomic_write(_projektinstanz_pfad(project), kennung)
+    return kennung
 
 
 @contextmanager
 def _projektlebenszyklus(project: str):
     """Serialisiert GET, Save, Create und Delete ausserhalb des loeschbaren Baums."""
-    lock_root = os.path.join(os.path.dirname(paths.projekte_root()), ".transkribor-project-locks")
+    if project == _LIFECYCLE_LOCK_ORDNER:
+        raise HTTPException(status_code=400, detail="Projektname ist fuer interne Sperren reserviert")
+    # Innerhalb der konfigurierten Projektwurzel ist die Ablage ueberall dort beschreibbar,
+    # wo Transkribor Projekte anlegen darf. Sie liegt weiterhin ausserhalb jedes einzelnen,
+    # loeschbaren Projektbaums und wird von list_projects() ausgeblendet.
+    lock_root = os.path.join(paths.projekte_root(), _LIFECYCLE_LOCK_ORDNER)
     try:
         os.makedirs(lock_root, exist_ok=True)
     except OSError as e:
@@ -707,8 +723,20 @@ def create_project(body: NewProject):
         pdir = paths.project_dir(name)
         if os.path.exists(pdir):
             raise HTTPException(status_code=409, detail="Projekt existiert bereits")
-        os.makedirs(os.path.join(pdir, "audio"))
-        _projektinstanz(name)
+        audio = os.path.join(pdir, "audio")
+        try:
+            os.makedirs(audio)
+            _projektinstanz(name)
+        except OSError:
+            # Nur Artefakte dieses noch nicht erfolgreichen Aufrufs entfernen. os.rmdir
+            # verweigert nichtleere Ordner, sodass fremd entstandene Daten stehenbleiben.
+            with suppress(OSError):
+                os.remove(_projektinstanz_pfad(name) + ".tmp")
+            with suppress(OSError):
+                os.rmdir(audio)
+            with suppress(OSError):
+                os.rmdir(pdir)
+            raise
     return {"ok": True, "name": name}
 
 
@@ -1488,7 +1516,7 @@ def _pruefe_und_schreibe(project: str, base: str, doc: dict, erwartet, projektin
         if not os.path.isdir(pdir):
             raise HTTPException(status_code=404, detail="Projekt nicht gefunden")
         if projektinstanz != _projektinstanz(project):
-            raise HTTPException(status_code=409,
+            raise HTTPException(status_code=410,
                                 detail="Projekt wurde inzwischen gelöscht und neu angelegt")
         return _pruefe_und_schreibe_unter_projektlock(project, base, doc, erwartet)
 
@@ -1567,7 +1595,7 @@ async def save_file(project: str, base: str, request: Request):
     # Fassung in die neue Projektinstanz schreiben.
     projektinstanz = doc.pop("projektinstanz", None)
     if not isinstance(projektinstanz, str) or not projektinstanz:
-        raise HTTPException(status_code=409,
+        raise HTTPException(status_code=410,
                             detail="Projektinstanz fehlt oder ist nicht mehr gültig")
     # Optimistisches Sperren (#160). Der Editor speichert 800 ms nach dem letzten Tastendruck;
     # wird eine Korrektur fertig, waehrend ein PUT schon unterwegs ist, landete er DANACH und

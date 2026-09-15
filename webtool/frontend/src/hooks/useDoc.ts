@@ -375,6 +375,16 @@ export function useDoc(project: string | null, base: string | null) {
         setFehlerZaehler(0); finalToastGezeigt.current = false   // Erfolg beendet die Fehler-Episode
       } catch (e) {
         if (!gueltig()) return
+        // 410 bezeichnet keine fremde Dateifassung: das Projekt hinter demselben Namen ist
+        // inzwischen eine neue Instanz. Die alte Kennung kann auch ohne Vorbehalt nie wieder
+        // speichern, also darf hier weder konflikt() noch dessen Ueberschreib-Weg greifen.
+        if (e instanceof HttpFehler && e.status === 410) {
+          if (meins()) {
+            toast.error('Das Projekt wurde inzwischen neu angelegt — der Editor wird neu geladen.')
+            reload()
+          }
+          return
+        }
         // 409 ist KEIN Fehlschlag, sondern eine Frage an den Nutzer (#160) — und darf deshalb
         // NICHT in die Wiederhol-Schleife aus #107 geraten: die ist fuer einen Server gedacht,
         // der gerade neu startet. Ein Konflikt loest sich nicht durch Warten, drei weitere
@@ -403,7 +413,7 @@ export function useDoc(project: string | null, base: string | null) {
     // bekommt kein rotes Signal — der Schutz ist die Kombination, nicht die einzelne Zeile.
     kette.current = lauf.catch(() => {})
     return lauf
-  }, [doc, project, base, konflikt, erzwingen, verworfenStand])
+  }, [doc, project, base, konflikt, erzwingen, reload, verworfenStand])
 
   // Flush beim Verlassen einer Datei (#106). In der 800-ms-Pause hatte die Oberflaeche "wird
   // gespeichert" versprochen; eine "Verwerfen?"-Rueckfrage beim Wechseln widerspricht dem. Der
@@ -473,6 +483,11 @@ export function useDoc(project: string | null, base: string | null) {
         })
         .catch((e) => {
           if (!gueltig()) return
+          if (e instanceof HttpFehler && e.status === 410) {
+            toast.error(`„${base}“: die letzte Änderung gehört zu einer gelöschten Projektinstanz `
+              + 'und wurde nicht in das neu angelegte Projekt geschrieben.')
+            return
+          }
           // 409 ist hier KEIN Fehlschlag, sondern ein Ausgang — und er braucht eine eigene
           // Meldung (#160). Die Datei ist verlassen, `doc` gehoert schon der naechsten: eine
           // Rueckfrage wie in `konflikt` ginge ins Leere, und die letzte Aenderung existiert

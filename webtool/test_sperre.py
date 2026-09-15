@@ -52,6 +52,33 @@ def test_strikte_sperre_uebernimmt_keinen_lebenden_halter(tmp_path, monkeypatch)
         os.rmdir(lock)
 
 
+@pytest.mark.parametrize("wartezeit", [False, True, "1", float("nan"), float("inf")])
+def test_strikte_sperre_lehnt_ungueltige_wartezeit_ab(tmp_path, wartezeit):
+    with pytest.raises(ValueError, match="nichtnegative Wartezeit"):
+        with sperre.datei(str(tmp_path / "x.json"), erzwinge_uebernahme=False,
+                          wartezeit=wartezeit):
+            pass
+
+
+def test_strikte_sperre_nimmt_lebendem_halter_auch_vor_positiver_wartezeit_nichts_weg(
+        tmp_path, monkeypatch):
+    ziel = str(tmp_path / "x.json")
+    lock = ziel + ".lock"
+    os.mkdir(lock)
+    _merker(lock, os.getpid())
+    vorher = sperre._merker_lesen(lock)
+    monkeypatch.setattr(sperre, "frist", lambda stale: 0)
+    try:
+        with sperre.datei(ziel, erzwinge_uebernahme=False, wartezeit=0.05) as gehalten:
+            assert gehalten is False
+        assert sperre._merker_lesen(lock) == vorher
+    finally:
+        if os.path.exists(os.path.join(lock, sperre._HALTER)):
+            os.remove(os.path.join(lock, sperre._HALTER))
+        if os.path.isdir(lock):
+            os.rmdir(lock)
+
+
 def test_strikte_sperre_raemt_eindeutig_toten_halter_auf(tmp_path, monkeypatch):
     ziel = str(tmp_path / "x.json")
     lock = ziel + ".lock"

@@ -15,6 +15,7 @@ zweimal zu fuehren heisst, sie beim naechsten Mal an einer Stelle falsch zu aend
 (dieselbe Regel wie bei `DateiMenue`).
 """
 import contextlib
+import math
 import os
 import platform
 import stat
@@ -491,8 +492,11 @@ def datei(pfad: str, stale: float = STALTES_ALTER, *, erzwinge_uebernahme: bool 
     """
     # Strikte Aufrufer dürfen bei einer unklaren oder noch lebenden Gegenstelle nicht
     # ersatzweise ohne Lock fortfahren; nach ihrer Wartezeit erhalten sie deshalb `False`.
-    if not erzwinge_uebernahme and (wartezeit is None or wartezeit < 0):
-        raise ValueError("strikte Sperre braucht eine nichtnegative Wartezeit")
+    if not erzwinge_uebernahme and (
+            wartezeit is None or isinstance(wartezeit, bool)
+            or not isinstance(wartezeit, (int, float))
+            or not math.isfinite(wartezeit) or wartezeit < 0):
+        raise ValueError("strikte Sperre braucht eine endliche nichtnegative Wartezeit")
     lockdir = pfad + ".lock"
     mein_merker = None                # was in UNSEREM Lock steht (None = nichts geschrieben)
     gehalten = False
@@ -592,7 +596,8 @@ def datei(pfad: str, stale: float = STALTES_ALTER, *, erzwinge_uebernahme: bool 
         if (not erzwinge_uebernahme and wartezeit is not None
                 and time.monotonic() - seit_monoton > wartezeit):
             break
-        if hakelig_seit is None and time.time() - seit > frist(stale):
+        if (erzwinge_uebernahme and hakelig_seit is None
+                and time.time() - seit > frist(stale)):
             if erzwungen:
                 print(f"[sperre] {lockdir} laesst sich nicht uebernehmen — ungeschuetzt "
                       f"weiter", flush=True)

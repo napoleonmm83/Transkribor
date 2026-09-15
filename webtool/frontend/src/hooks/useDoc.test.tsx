@@ -69,7 +69,14 @@ async function geladen() {
   return h
 }
 
-afterEach(() => { vi.useRealTimers(); vi.clearAllMocks(); toasts.clear() })
+afterEach(() => {
+  vi.useRealTimers()
+  vi.mocked(api.getDoc).mockReset()
+  vi.mocked(api.saveDoc).mockReset()
+  vi.mocked(api.exportText).mockReset()
+  vi.clearAllMocks()
+  toasts.clear()
+})
 
 describe('useDoc: Verwerfen beendet alte Speicherlaeufe (#618)', () => {
   it.each([{ project: 'B', base: 'a' }, { project: 'A', base: 'b' }])(
@@ -198,6 +205,31 @@ describe('useDoc Autosave', () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(800) })
     expect(vi.mocked(api.saveDoc)).toHaveBeenCalledWith('P', 'b',
       expect.objectContaining({ projektinstanz: 'instanz-a' }))
+  })
+
+  it('laedt bei einer veralteten Projektinstanz neu statt einen Dateikonflikt zu behaupten', async () => {
+    vi.useFakeTimers()
+    const neu = { ...doc, projektinstanz: 'instanz-neu',
+      segments: [{ ...seg, text: 'Inhalt der neuen Projektinstanz' }] }
+    vi.mocked(api.getDoc)
+      .mockResolvedValueOnce({ ...doc, projektinstanz: 'instanz-alt' })
+      .mockResolvedValueOnce(neu)
+    vi.mocked(api.saveDoc).mockRejectedValueOnce(
+      new api.HttpFehler('Projekt wurde inzwischen neu angelegt', 410))
+    const frage = vi.spyOn(window, 'confirm')
+    const h = renderHook(() => useDoc('P', 'b'))
+    await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+
+    act(() => h.result.current.updateSegment(0, { text: 'veraltete Aenderung' }))
+    await act(async () => { await vi.advanceTimersByTimeAsync(800) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+
+    expect(frage).not.toHaveBeenCalled()
+    expect(api.getDoc).toHaveBeenCalledTimes(2)
+    expect(api.saveDoc).toHaveBeenCalledTimes(1)
+    expect(h.result.current.doc?.segments[0].text).toBe('Inhalt der neuen Projektinstanz')
+    await act(async () => { await vi.advanceTimersByTimeAsync(15000) })
+    expect(api.saveDoc).toHaveBeenCalledTimes(1)
   })
 
   it('speichert erst nach der Tipppause — und mehrere Aenderungen nur EINMAL', async () => {

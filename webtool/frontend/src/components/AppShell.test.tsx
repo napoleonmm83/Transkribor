@@ -347,11 +347,15 @@ describe('AppShell', () => {
     it('verwirft erst nach erfolgreichem DELETE und vor dem Navigieren', async () => {
       let fertig!: () => void
       vi.mocked(api.deleteProject).mockReturnValueOnce(new Promise(resolve => { fertig = resolve }))
-      const vergiss = vi.fn(() => expect(screen.getByTestId('ort').textContent).toBe('/p/Alpha/a'))
+      const orteBeimVergiss: string[] = []
+      const vergiss = vi.fn(() => {
+        orteBeimVergiss.push(screen.getByTestId('ort').textContent ?? '')
+      })
       await loeschen(vergiss)
       expect(vergiss).not.toHaveBeenCalled()
       await act(async () => { fertig() })
       expect(vergiss).toHaveBeenCalledTimes(1)
+      expect(orteBeimVergiss).toEqual(['/p/Alpha/a'])
       expect(screen.getByTestId('ort').textContent).toBe('/')
     })
 
@@ -373,7 +377,7 @@ describe('AppShell', () => {
       fireEvent.click(screen.getByText('Beta'))
       expect(screen.getByTestId('ort').textContent).toBe('/p/Beta')
       await act(async () => { fertig() })
-      expect(vergiss).not.toHaveBeenCalled()
+      expect(vergiss).toHaveBeenCalledTimes(1)
       expect(screen.getByTestId('ort').textContent).toBe('/p/Beta')
     })
   })

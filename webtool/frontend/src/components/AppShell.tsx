@@ -35,6 +35,7 @@ function Leiste() {
 
   const editor = useEditorBruecke()
   const aktuellesProjekt = useRef(projekt)
+  const loeschEditor = useRef(new Map<string, typeof editor.current>())
   useLayoutEffect(() => { aktuellesProjekt.current = projekt }, [projekt])
   // Jeder Klick hier verlaesst den Editor. Die Regel dafuer steht seit dem Rueckweg im
   // Editorkopf in `useEditorBruecke.darfWechseln` — dort, weil BEIDE Wege dieselbe Frage
@@ -102,10 +103,18 @@ function Leiste() {
       // (Leiste mit Ueberschreib-Rueckfrage, Arbeitsflaeche ohne) auseinanderlaufen lassen.
       // Weg von der Seite des geloeschten Projekts -- sonst steht dort "Projekt nicht
       // gefunden". Keine zweite Rueckfrage: der Dialog hat den Namen abtippen lassen.
+      onLoeschenBegonnen={name => {
+        const gestartet = editor.current
+        loeschEditor.current.set(name, gestartet?.project === name ? gestartet : null)
+      }}
       onGeloescht={name => {
+        // Der DELETE-Erfolg gehoert zu der Editorinstanz vom Start der Anfrage. Ein
+        // zwischenzeitlicher Projektwechsel darf deren wartende Saves nicht am Leben lassen.
+        const gestartet = loeschEditor.current.get(name)
+        loeschEditor.current.delete(name)
+        gestartet?.vergiss()
         // DELETE kann nach einem weiteren Projektwechsel zurueckkommen.
         if (aktuellesProjekt.current === name) {
-          if (editor.current?.project === name) editor.current.vergiss()
           navigate('/')
         }
         refresh()

@@ -622,6 +622,36 @@ def test_create_project_ok_and_duplicate_409(client, tmp_path):
     assert client.post("/api/projects", json={"name": "Demo"}).status_code == 409
 
 
+def test_lifecycle_locks_liegen_in_der_beschreibbaren_projektwurzel_und_bleiben_unsichtbar(
+        client, tmp_path, monkeypatch):
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path) + os.sep)
+    assert client.get("/api/projects/Demo/files/S1").status_code == 200
+    lock_root = tmp_path / ".transkribor-project-locks"
+    assert lock_root.is_dir()
+    namen = {p["name"] for p in client.get("/api/projects").json()["projects"]}
+    assert ".transkribor-project-locks" not in namen
+    assert client.post("/api/projects", json={"name": ".transkribor-project-locks"}).status_code == 400
+    assert client.delete("/api/projects/.transkribor-project-locks").status_code == 400
+    assert lock_root.is_dir()
+
+
+def test_create_project_raeumt_nach_fehlgeschlagenem_instanzmerker_nur_neue_leere_ordner_weg(
+        client, tmp_path, monkeypatch):
+    from webtool import paths
+
+    echt = paths.atomic_write
+
+    def fehler(pfad, text):
+        if str(pfad).endswith(os.path.join("Neu", ".projektinstanz")):
+            raise OSError("Merkerschreiben fehlgeschlagen")
+        return echt(pfad, text)
+
+    monkeypatch.setattr(paths, "atomic_write", fehler)
+    with pytest.raises(OSError, match="Merkerschreiben fehlgeschlagen"):
+        client.post("/api/projects", json={"name": "Neu"})
+    assert not (tmp_path / "Neu").exists()
+
+
 def test_create_project_invalid_name_400(client):
     assert client.post("/api/projects", json={"name": "a/b"}).status_code == 400
     assert client.post("/api/projects", json={"name": ""}).status_code == 400
@@ -1396,7 +1426,7 @@ def test_late_save_after_delete_and_recreate_cannot_touch_new_project(client, tm
     assert client.post("/api/projects", json={"name": "Demo"}).status_code == 200
 
     response = client.put("/api/projects/Demo/files/S1", json=doc)
-    assert response.status_code == 409
+    assert response.status_code == 410
     assert not (tmp_path / "Demo" / "transkripte" / "S1.edit.json").exists()
 
 
@@ -1405,8 +1435,27 @@ def test_save_without_project_instance_is_rejected(client, tmp_path):
     doc.pop("projektinstanz")
 
     response = client.put("/api/projects/Demo/files/S1", json=doc)
-    assert response.status_code == 409
+    assert response.status_code == 410
     assert not (tmp_path / "Demo" / "transkripte" / "S1.edit.json").exists()
+
+
+def test_unlesbarer_instanzmerker_wird_nicht_ersetzt_und_gibt_503(client, tmp_path, monkeypatch):
+    import builtins
+
+    assert client.get("/api/projects/Demo/files/S1").status_code == 200
+    marker = tmp_path / "Demo" / ".projektinstanz"
+    vorher = marker.read_text(encoding="utf-8")
+    echt = builtins.open
+
+    def unlesbar(pfad, *args, **kwargs):
+        if os.path.abspath(os.fspath(pfad)) == os.path.abspath(marker) and not args:
+            raise PermissionError("Marker nicht lesbar")
+        return echt(pfad, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "open", unlesbar)
+    response = client.get("/api/projects/Demo/files/S1")
+    assert response.status_code == 503
+    assert marker.read_text(encoding="utf-8") == vorher
 
 
 def test_lifecycle_lock_failure_returns_503(client, monkeypatch):
@@ -2714,6 +2763,33 @@ def test_projekteinstellungen_lehnt_unbekannte_tiefe_ab(client, tmp_projekt):
     r = client.put(f"/api/projects/{tmp_projekt}/einstellungen", json={"korrektur": "galaktisch"})
     assert r.status_code == 400
     assert "Tiefe" in r.json()["detail"]
+
+
+def test_projekteinstellungen_und_delete_laufen_nicht_nebeneinander(client, tmp_path, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event
+
+    from webtool import projekt
+
+    begonnen, weiter = Event(), Event()
+    echt = projekt.speichern
+
+    def langsam(project, patch):
+        begonnen.set()
+        assert weiter.wait(5), "Testfreigabe fuer Einstellungen fehlte"
+        return echt(project, patch)
+
+    monkeypatch.setattr(projekt, "speichern", langsam)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        speichern = pool.submit(
+            client.put, "/api/projects/Demo/einstellungen", json={"sprache": "de"})
+        assert begonnen.wait(5), "Einstellungs-PUT erreichte speichern nicht"
+        loeschen = pool.submit(client.delete, "/api/projects/Demo")
+        time.sleep(0.1)
+        weiter.set()
+        assert speichern.result(5).status_code == 200
+        assert loeschen.result(5).status_code == 200
+    assert not (tmp_path / "Demo").exists()
 
 
 def test_dateieinstellungen_lehnt_unbekannte_sprache_ab(client, tmp_projekt):
