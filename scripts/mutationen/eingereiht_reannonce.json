@@ -22,7 +22,7 @@
     {
       "id": "E11 der Dublettenriegel faellt weg",
       "datei": "webtool/jobs.py",
-      "von": "                    if _m.group(1) not in liste:",
+      "von": "                    if eingereiht not in liste:",
       "nach": "                    if True:",
       "rot": [
         "test_eingereiht_verwirft_dubletten"

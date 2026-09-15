@@ -358,8 +358,31 @@ def _ist_lifecycle_lock_ordner(name: str, *, eintrag=None, lock_root_stat=None) 
         kandidat = paths.project_dir(name)
         lock_root = os.path.join(paths.projekte_root(), _LIFECYCLE_LOCK_ORDNER)
         return os.path.samefile(kandidat, lock_root)
-    except (OSError, ValueError):
-        return False
+    except FileNotFoundError as e:
+        if eintrag is not None:
+            return False  # der bereits gelistete Eintrag ist verschwunden
+        # `samefile` nennt nicht, WELCHER Pfad fehlt. Fehlt Kandidat oder Lockwurzel
+        # wirklich, kann noch kein Alias bestehen; existieren beide, ist die Identitaet
+        # wegen eines Rennens unklar und darf nicht als "kein Alias" gelten.
+        try:
+            os.stat(kandidat)
+            os.stat(lock_root)
+        except FileNotFoundError:
+            return False
+        except OSError as prueffehler:
+            raise HTTPException(
+                status_code=503,
+                detail="Interner Projekt-Lockordner kann nicht sicher identifiziert werden",
+            ) from prueffehler
+        raise HTTPException(
+            status_code=503,
+            detail="Interner Projekt-Lockordner kann nicht sicher identifiziert werden",
+        ) from e
+    except (OSError, ValueError) as e:
+        raise HTTPException(
+            status_code=503,
+            detail="Interner Projekt-Lockordner kann nicht sicher identifiziert werden",
+        ) from e
 
 
 def _json_objekt(pfad: str) -> dict:
@@ -473,8 +496,13 @@ def list_projects():
     lock_root = os.path.join(root, _LIFECYCLE_LOCK_ORDNER)
     try:
         lock_root_stat = os.stat(lock_root)
-    except OSError:
+    except FileNotFoundError:
         lock_root_stat = None
+    except OSError as e:
+        raise HTTPException(
+            status_code=503,
+            detail="Interner Projekt-Lockordner kann nicht sicher gelesen werden",
+        ) from e
     for eintrag in os.scandir(root):
         if not eintrag.is_dir() or _ist_lifecycle_lock_ordner(
                 eintrag.name, eintrag=eintrag, lock_root_stat=lock_root_stat):
@@ -523,8 +551,10 @@ def list_projects():
             # vorhandene Datei ueberschrieben wird (gemessen) — und genau das tut
             # der Editor. Fuer ein leeres Projekt ist sie aber das Einzige, was es gibt.
             "geaendert": neuste or eintrag.stat().st_mtime,
-            "active_jobs": jobs.active_for(eintrag.name),
         })
+    aktive_jobs = jobs.active_for_known_projects(p["name"] for p in out)
+    for projekt in out:
+        projekt["active_jobs"] = aktive_jobs[projekt["name"]]
     return {"projects": out}
 
 
@@ -688,7 +718,11 @@ def _projektinstanz_pfad(project: str) -> str:
 
 def _projekt_lock_schluessel(project: str) -> str:
     """Kanonischer Dateisystempfad fuer case-, Junction- und Symlink-Aliasse."""
-    name = paths.safe_name(project)
+    try:
+        name = paths.vorhandener_projektname(project)
+    except OSError as e:
+        raise HTTPException(status_code=503,
+                            detail="Projektlebenszyklus kann nicht sicher gesperrt werden") from e
     pdir = os.path.abspath(paths.project_dir(name))
     return os.path.normcase(os.path.realpath(pdir))
 
@@ -725,11 +759,8 @@ def _projektinstanz(project: str) -> str:
     return kennung
 
 
-@contextmanager
-def _projektlebenszyklus(project: str):
-    """Serialisiert GET, Save, Create und Delete ausserhalb des loeschbaren Baums."""
-    if _ist_lifecycle_lock_ordner(project):
-        raise HTTPException(status_code=400, detail="Projektname ist fuer interne Sperren reserviert")
+def _lifecycle_lock_root():
+    """Liefert die beschreibbare Sperrablage ausserhalb einzelner Projektbaeume."""
     # Innerhalb der konfigurierten Projektwurzel ist die Ablage ueberall dort beschreibbar,
     # wo Transkribor Projekte anlegen darf. Sie liegt weiterhin ausserhalb jedes einzelnen,
     # loeschbaren Projektbaums und wird von list_projects() ausgeblendet.
@@ -739,6 +770,27 @@ def _projektlebenszyklus(project: str):
     except OSError as e:
         raise HTTPException(status_code=503,
                             detail="Projektlebenszyklus kann nicht sicher gesperrt werden") from e
+    return lock_root
+
+
+@contextmanager
+def _projektwurzel_lebenszyklus():
+    """Serialisiert die Vergabe neuer Projektnamen auf der gesamten Projektwurzel."""
+    lock_pfad = os.path.join(_lifecycle_lock_root(), "namenvergabe.lifecycle")
+    with sperre.datei(lock_pfad, erzwinge_uebernahme=False,
+                      wartezeit=_LIFECYCLE_LOCK_WARTE_S) as gehalten:
+        if not gehalten:
+            raise HTTPException(status_code=503,
+                                detail="Projektnamen koennen gerade nicht sicher vergeben werden")
+        yield
+
+
+@contextmanager
+def _projektlebenszyklus(project: str):
+    """Serialisiert GET, Save, Create und Delete ausserhalb des loeschbaren Baums."""
+    if _ist_lifecycle_lock_ordner(project):
+        raise HTTPException(status_code=400, detail="Projektname ist fuer interne Sperren reserviert")
+    lock_root = _lifecycle_lock_root()
     # Der NTFS-Kurzname des Lockordners kann erst aufloesbar werden, nachdem der Ordner
     # gerade oben angelegt wurde. Darum dieselbe Reservierung unter dem neuen Zustand.
     if _ist_lifecycle_lock_ordner(project):
@@ -771,14 +823,15 @@ def _vorhandener_projektlebenszyklus(project: str):
 @contextmanager
 def _projektlebenszyklen(*projects: str):
     """Haelt mehrere Projekt-Lebenszyklen ohne gegenlaeufige Lock-Reihenfolge."""
-    namen: dict[str, str] = {}
-    for project in projects:
-        name = paths.safe_name(project)
-        schluessel = _projekt_lock_schluessel(name)
-        namen.setdefault(schluessel, name)
     with ExitStack() as stack:
-        for schluessel in sorted(namen):
-            stack.enter_context(_projektlebenszyklus(namen[schluessel]))
+        with _projektwurzel_lebenszyklus():
+            namen: dict[str, str] = {}
+            for project in projects:
+                name = paths.safe_name(project)
+                schluessel = _projekt_lock_schluessel(name)
+                namen.setdefault(schluessel, name)
+            for schluessel in sorted(namen):
+                stack.enter_context(_projektlebenszyklus(namen[schluessel]))
         yield
 
 
@@ -802,7 +855,7 @@ def _gebundene_projektinstanz(project: str, erwartet: str):
 @app.post("/api/projects")
 def create_project(body: NewProject):
     name = _sicherer_projektname(body.name)   # strip macht der Riegel selbst
-    with _projektlebenszyklus(name):
+    with _projektwurzel_lebenszyklus(), _projektlebenszyklus(name):
         pdir = paths.project_dir(name)
         if os.path.exists(pdir):
             raise HTTPException(status_code=409, detail="Projekt existiert bereits")
@@ -1333,6 +1386,12 @@ def delete_file(project: str, base: str):
     _validate(project, base)
     _sicherer_projektname(project)   # sonst legt das makedirs unten ein Geisterprojekt an
     with _vorhandener_projektlebenszyklus(project):
+        try:
+            project = paths.vorhandener_projektname(project)
+            base = paths.vorhandener_aufnahmename(project, base)
+        except OSError as e:
+            raise HTTPException(status_code=503,
+                                detail="Dateiname kann nicht sicher aufgeloest werden") from e
         epath = _edit_path(project, base)
         tdir = paths.transkripte_dir(project)
         os.makedirs(tdir, exist_ok=True)

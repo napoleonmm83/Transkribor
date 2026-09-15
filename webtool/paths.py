@@ -1,6 +1,8 @@
 """Pfade + Namensvalidierung (Trust-Boundary: project/base kommen aus der URL)."""
 import glob
 import os
+import stat
+import unicodedata
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -61,6 +63,129 @@ def sicherer_projektname(roh: str) -> str:
 
 def project_dir(project: str) -> str:
     return os.path.join(projekte_root(), safe_name(project))
+
+
+def vorhandener_projektname(project: str) -> str:
+    """Liefert die echte Verzeichnis-Schreibweise eines vorhandenen Projekts.
+
+    ``normcase`` kennt nur die Python-Plattform, nicht das konkrete Volume. Auf einem
+    case-insensitiven APFS-Volume ist es deshalb wirkungslos. ``samefile`` fragt dagegen
+    das Dateisystem und laesst case-sensitive Volumes weiterhin getrennt.
+    """
+    name = safe_name(project)
+    kandidat = os.path.join(projekte_root(), name)
+    try:
+        with os.scandir(projekte_root()) as eintraege:
+            kandidaten = list(eintraege)
+    except FileNotFoundError:
+        return name
+    except OSError:
+        raise
+    for eintrag in kandidaten:
+        if eintrag.name == name:
+            return name
+    for eintrag in kandidaten:
+        if namensform(eintrag.name) != namensform(name):
+            continue
+        try:
+            if eintrag.is_dir() and os.path.samefile(eintrag.path, kandidat):
+                return eintrag.name
+        except FileNotFoundError:
+            continue
+        except OSError:
+            raise
+    return name
+
+
+def namensform(name: str) -> str:
+    """Nur Vorfilter fuer samefile; die Dateisystemprobe bleibt das Urteil."""
+    return unicodedata.normalize("NFD", name).casefold()
+
+
+_TRANSKRIPT_ENDUNGEN = (
+    ".edit.json", ".correction.json", ".diar.json", ".segments.json",
+    ".json", ".md", ".srt", ".vtt", ".txt",
+)
+
+
+def vorhandene_aufnahmenamen(project: str, bases) -> dict[str, str]:
+    """Loest mehrere Aufnahmen mit genau einem Scan je Artefaktordner auf.
+
+    Ein exakt sichtbarer Stamm gewinnt immer. Erst wenn er fehlt, darf ``samefile``
+    eine andere Schreibweise desselben Dateisystemobjekts liefern. Damit bleiben zwei
+    sichtbare Hardlink-Namen fachlich getrennt. Unerwartete Dateisystemfehler werden
+    weitergegeben, damit Sperrentscheidungen nicht mit einer geratenen Identitaet laufen.
+    """
+    project = vorhandener_projektname(project)
+    gesucht = {base: safe_name(base) for base in bases}
+    if not gesucht:
+        return {}
+    formen = {namensform(name) for name in gesucht.values()}
+    pdir = project_dir(project)
+    audio = os.path.join(pdir, "audio")
+    try:
+        audio_ordner = audio if stat.S_ISDIR(os.stat(audio).st_mode) else pdir
+    except FileNotFoundError:
+        audio_ordner = pdir
+    except OSError:
+        raise
+    ordner = [transkripte_dir(project), audio_ordner]
+    gesehen: set[str] = set()
+    kandidaten: dict[str, list[tuple[str, str, str]]] = {}
+    for verzeichnis in ordner:
+        real = os.path.realpath(verzeichnis)
+        if real in gesehen:
+            continue
+        gesehen.add(real)
+        try:
+            with os.scandir(verzeichnis) as eintraege:
+                eintragsliste = list(eintraege)
+        except FileNotFoundError:
+            continue
+        except OSError:
+            raise
+        for eintrag in eintragsliste:
+            endungen = [e for e in _TRANSKRIPT_ENDUNGEN if eintrag.name.endswith(e)]
+            if not endungen:
+                _stamm, endung = os.path.splitext(eintrag.name)
+                endungen = [endung] if endung else []
+            for endung in endungen:
+                wirklich = eintrag.name[:-len(endung)]
+                form = namensform(wirklich)
+                if form not in formen:
+                    continue
+                try:
+                    if not eintrag.is_file():
+                        continue
+                except FileNotFoundError:
+                    continue
+                except OSError:
+                    raise
+                kandidaten.setdefault(form, []).append((wirklich, eintrag.path, endung))
+
+    ergebnis: dict[str, str] = {}
+    for roh, name in gesucht.items():
+        passende = kandidaten.get(namensform(name), [])
+        if any(wirklich == name for wirklich, _pfad, _endung in passende):
+            ergebnis[roh] = name
+            continue
+        ergebnis[roh] = name
+        for wirklich, eintragspfad, endung in passende:
+            kandidat = os.path.join(os.path.dirname(eintragspfad), name + endung)
+            try:
+                if os.path.samefile(eintragspfad, kandidat):
+                    ergebnis[roh] = wirklich
+                    break
+            except FileNotFoundError:
+                continue
+            except OSError:
+                raise
+    return ergebnis
+
+
+def vorhandener_aufnahmename(project: str, base: str) -> str:
+    """Liefert die echte Schreibweise einer vorhandenen Aufnahme."""
+    return vorhandene_aufnahmenamen(project, [base])[base]
 
 
 def transkripte_dir(project: str) -> str:

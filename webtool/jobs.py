@@ -11,8 +11,9 @@ import sys
 import threading
 import time
 import uuid
+from contextvars import ContextVar
 
-from . import settings
+from . import paths, settings
 
 _jobs = {}                 # job_id -> record
 _active = {}               # (project, kind) -> job_id (Dedupe: je Art einer pro Projekt)
@@ -38,6 +39,7 @@ _VORGAENGE_MAX = 200
                            # und zwei Zusicherungen in `test_jobs.py` sind darauf hereingefallen
                            # (sie fragen ein Zweitupel ab und koennen nie rot werden).
 _lock = threading.Lock()
+_request_namen_kanonisch = ContextVar("request_namen_kanonisch", default=False)
 
 _CREATE_NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 _PRUNE_AGE = 3600          # fertige Jobs nach 1h vergessen
@@ -58,7 +60,7 @@ DONE_PREFIX = "[done] "
 
 
 def _gleiches_projekt(links: str, rechts: str) -> bool:
-    """Vergleicht Projektnamen so, wie das lokale Dateisystem sie aufloest."""
+    """Vergleicht bereits aufgeloeste Projektnamen ohne Dateisystemzugriff."""
     return os.path.normcase(links) == os.path.normcase(rechts)
 
 
@@ -76,6 +78,41 @@ def _entferne_base_aliases(namen: set[str], gesucht: str) -> None:
     """Entfernt alle Schreibweisen derselben Dateisystem-Base."""
     aliases = {name for name in namen if _gleiche_base(name, gesucht)}
     namen.difference_update(aliases)
+
+
+def _kanonische_namen(project: str, bases=()) -> tuple[str, dict[str, str]]:
+    """Loest Registry-Namen vor dem globalen Lock ueber das Dateisystem auf."""
+    project = paths.vorhandener_projektname(project)
+    bases = tuple(bases)
+    if not bases:
+        return project, {}
+    return project, paths.vorhandene_aufnahmenamen(project, bases)
+
+
+def _schutz_namen(project: str, base: str | None = None) -> tuple[str, str | None, bool]:
+    """Loest eine Schutzabfrage auf; Dateisystemfehler werden konservativ markiert."""
+    try:
+        project, bases = _kanonische_namen(project, [base] if base is not None else [])
+        return project, bases.get(base) if base is not None else None, False
+    except OSError:
+        return project, base, True
+
+
+def _gleiches_projekt_geschuetzt(links: str, rechts: str, unsicher: bool) -> bool:
+    return (_gleiches_projekt(links, rechts)
+            or (unsicher and paths.namensform(links) == paths.namensform(rechts)))
+
+
+def _gleiche_base_geschuetzt(links: str | None, rechts: str | None, unsicher: bool) -> bool:
+    if _gleiche_base(links, rechts):
+        return True
+    return (unsicher and links is not None and rechts is not None
+            and paths.namensform(links) == paths.namensform(rechts))
+
+
+def _base_schluessel_geschuetzt(namen, gesucht: str, unsicher: bool):
+    return next((name for name in namen
+                 if _gleiche_base_geschuetzt(name, gesucht, unsicher)), None)
 
 
 def _aktiver_schluessel_locked(project: str, kind: str):
@@ -359,6 +396,9 @@ def vormerken(project: str, kind: str, base: str | None = None) -> str:
     Kein `_prune_locked` hier: eine offene Vormerkung wird ohnehin nie geworfen (siehe dort),
     und ein Aufraeumlauf an dieser Stelle raeumte auf, bevor der Eintrag ueberhaupt steht.
     """
+    project, bases = _kanonische_namen(project, [base] if base is not None else [])
+    if base is not None:
+        base = bases[base]
     nummer = uuid.uuid4().hex[:12]
     with _lock:
         _vorgaenge[nummer] = {"vorgang": nummer, "status": "vorgemerkt", "job_id": None,
@@ -445,14 +485,17 @@ def transcribe_laeuft_oder_wartet(project: str) -> bool:
     genau dann sieht die Oberflaeche fuer P auch nichts Laufendes.
 
     Fuer eine ENTSCHEIDUNG, nicht fuer eine Anzeige: die Antwort ist eine Momentaufnahme."""
+    project, _base, unsicher = _schutz_namen(project)
     with _lock:
         for (proj, kind), jid in _active.items():
-            if not _gleiches_projekt(proj, project) or kind != "transcribe":
+            if (not _gleiches_projekt_geschuetzt(proj, project, unsicher)
+                    or kind != "transcribe"):
                 continue
             r = _jobs.get(jid)
             if r is not None and r["status"] == "running":
                 return True
-        return any(_gleiches_projekt(k[0], project) and k[1] == "transcribe"
+        return any(_gleiches_projekt_geschuetzt(k[0], project, unsicher)
+                   and k[1] == "transcribe"
                    for k in _pending)
 
 
@@ -472,6 +515,27 @@ def start(project: str, cmd: list, cwd, kind: str, then=None, env=None, base: st
     Er liegt ab hier unter dem Lock im Datensatz. Damit gibt es das Fenster nicht mehr,
     das `when_done` offenliess (Job schon terminal, bevor der Aufrufer den Rueckruf
     anhaengen konnte)."""
+    if _request_namen_kanonisch.get():
+        if base is not None:
+            return _start_kanonisch(
+                project, cmd, cwd, kind, then=then, env=env, base=base, sonst=sonst)
+        if bases is not None:
+            return _start_kanonisch(
+                project, cmd, cwd, kind, then=then, env=env, bases=bases, sonst=sonst)
+        return _start_kanonisch(project, cmd, cwd, kind, then=then, env=env, sonst=sonst)
+    namen = set(bases) if bases is not None else ({base} if base is not None else set())
+    project, aufgeloest = _kanonische_namen(project, namen)
+    if base is not None:
+        base = aufgeloest[base]
+    if bases is not None:
+        bases = {aufgeloest[name] for name in bases}
+    return _start_kanonisch(
+        project, cmd, cwd, kind, then=then, env=env, base=base, bases=bases, sonst=sonst)
+
+
+def _start_kanonisch(project: str, cmd: list, cwd, kind: str, then=None, env=None,
+                     base: str | None = None, bases: set | None = None, sonst=None):
+    """Startet mit bereits dateisystemseitig aufgeloesten Registry-Namen."""
     with _lock:
         _prune_locked()
         aktiver_schluessel = _aktiver_schluessel_locked(project, kind)
@@ -591,13 +655,22 @@ def request(project: str, cmd: list, cwd, kind: str, then=None, base: str | None
     neue Instanz ersetzt die alte Vormerkung, waehrend deren bereits registrierter Rueckruf
     nur noch seine eigene Nummer verwerfen darf.
     """
+    project, bases = _kanonische_namen(project, [base] if base is not None else [])
+    if base is not None:
+        base = bases[base]
     key = (project, kind, base)
     nummer = vorgang
     for _ in range(10):
-        if base is not None:
-            jid, started = start(project, cmd, cwd, kind, then=then, base=base, sonst=sonst)
-        else:
-            jid, started = start(project, cmd, cwd, kind, then=then, sonst=sonst)
+        token = _request_namen_kanonisch.set(True)
+        try:
+            if base is not None:
+                jid, started = start(
+                    project, cmd, cwd, kind, then=then, base=base, sonst=sonst)
+            else:
+                jid, started = start(
+                    project, cmd, cwd, kind, then=then, sonst=sonst)
+        finally:
+            _request_namen_kanonisch.reset(token)
         if started:
             # Traegt der Aufruf eine Nummer, ist er der Nachlauf DIESER Vormerkung — hier
             # erfaehrt die Oberflaeche die Kennung, auf die sie wartet.
@@ -974,11 +1047,31 @@ def _run_proc(jid, cmd, cwd, env=None):
                          if _jobs[jid]["kind"] in NACHTRAG_KINDS else None)
             nachtrag_an = _jobs[jid]["kind"] in NACHTRAG_KINDS
             eingereiht_an = _jobs[jid]["kind"] in EINGEREIHT_KINDS
+            project = _jobs[jid]["project"]
         if cancelled:                            # cancel() kam an, bevor die pid gesetzt war -> selbst killen
             _kill_tree(proc)
 
         def _verarbeite(line):
             line = line.rstrip("\n")
+            scope_roh = (line[len(SCOPE_PREFIX):].split("\t")
+                         if line.startswith(SCOPE_PREFIX) else [])
+            nachtrag_roh = (line[len(SCOPE_ADD_PREFIX):].split("\t")
+                            if line.startswith(SCOPE_ADD_PREFIX) else [])
+            eingereiht_match = EINGEREIHT_RE.match(line) if eingereiht_an else None
+            eingereiht_roh = eingereiht_match.group(1) if eingereiht_match else None
+            aktiv_roh = line[len(ACTIVE_PREFIX):] if line.startswith(ACTIVE_PREFIX) else None
+            fertig_roh = line[len(DONE_PREFIX):] if line.startswith(DONE_PREFIX) else None
+            aufzuloesen = {
+                name for name in [*scope_roh, *nachtrag_roh, eingereiht_roh, aktiv_roh, fertig_roh]
+                if name
+            }
+            aufgeloest = (paths.vorhandene_aufnahmenamen(project, aufzuloesen)
+                          if aufzuloesen else {})
+            buchungszeile = line
+            if aktiv_roh:
+                buchungszeile = ACTIVE_PREFIX + aufgeloest[aktiv_roh]
+            elif fertig_roh:
+                buchungszeile = DONE_PREFIX + aufgeloest[fertig_roh]
             with _lock:
                 fuege_zeile_an(_jobs[jid]["lines"], line)
                 # Die Einreih-Zeile serverseitig buchen (#561) — NEBEN der if/elif-Kette
@@ -991,14 +1084,15 @@ def _run_proc(jid, cmd, cwd, env=None):
                 # Lauf sind 10.560 Zeilen gemessen (#475): faellt eine Einreih-Zeile heraus,
                 # verschwand die Aufnahme bisher aus der Schlange und die Zahl aller uebrigen
                 # sank um eins.
-                if eingereiht_an and (_m := EINGEREIHT_RE.match(line)):
+                if eingereiht_roh:
                     liste = _jobs[jid]["eingereiht"]
                     # Dubletten verwerfen, wie der Parser: ihre Wirkung waere still und
                     # dauerhaft — jeder Nachfolger rutschte um eins, aus „noch 1 vor dieser"
                     # wuerde „noch 2".
-                    if _m.group(1) not in liste:
-                        liste.append(_m.group(1))
-                elif eingereiht_an and line.startswith(DONE_PREFIX):
+                    eingereiht = aufgeloest[eingereiht_roh]
+                    if eingereiht not in liste:
+                        liste.append(eingereiht)
+                elif eingereiht_an and fertig_roh:
                     # Der GEGENWEG, und ohne ihn dreht der Rueckweg oben die sichere Richtung
                     # um (CodeRabbit-CLI, major): faellt spaeter auch die Abschlusszeile aus
                     # dem Puffer, haelt die Serverliste die Aufnahme fuer immer als „wartend"
@@ -1026,14 +1120,14 @@ def _run_proc(jid, cmd, cwd, env=None):
                     # eines Laufs (gemessen Index 8). `jobPhases.ts` nimmt den Zeilenpfad
                     # deshalb nur noch, wenn das Feld GANZ fehlt (aelterer Server); die
                     # Begruendung steht dort bei `serverKennt`.
-                    roh = line[len(DONE_PREFIX):]
+                    roh = aufgeloest[fertig_roh]
                     liste = _jobs[jid]["eingereiht"]
                     if roh in liste:
                         liste.remove(roh)
                 # Nur die ERSTE Zeile zaehlt: der Lauf druckt sie, bevor er arbeitet, und
                 # spaeter kaeme sie hoechstens aus Transkripttext, der so beginnt.
-                if _jobs[jid]["bases"] is None and line.startswith(SCOPE_PREFIX):
-                    _jobs[jid]["bases"] = {b for b in line[len(SCOPE_PREFIX):].split("\t") if b}
+                if _jobs[jid]["bases"] is None and scope_roh:
+                    _jobs[jid]["bases"] = {aufgeloest[b] for b in scope_roh if b}
                 # Nachtrag: NUR wenn der Erstbereich schon steht. Ohne ihn gibt es nichts zu
                 # ergaenzen, und ein Nachtrag als Erstbereich waere eine Zusage, die der Lauf
                 # nie gegeben hat — `bases is None` heisst fuer `betrifft()` "allumfassend",
@@ -1048,11 +1142,10 @@ def _run_proc(jid, cmd, cwd, env=None):
                 # Nur-Audio). Der Server sieht jede Zeile, BEVOR sie in den gedeckelten Puffer
                 # wandert — sein discard ist deckelfest und gilt ab EINTREFFEN der Marke; der
                 # Parser tilgt an derselben Marke alles bis dahin und braucht kein Lift mehr.
-                elif (nachtrag_an and _jobs[jid]["bases"] is not None
-                      and line.startswith(SCOPE_ADD_PREFIX)):
-                    _jobs[jid]["bases"].update(
-                        b for b in line[len(SCOPE_ADD_PREFIX):].split("\t") if b)
-                    for b in line[len(SCOPE_ADD_PREFIX):].split("\t"):
+                elif (nachtrag_an and _jobs[jid]["bases"] is not None and nachtrag_roh):
+                    nachtrag = [aufgeloest[b] for b in nachtrag_roh if b]
+                    _jobs[jid]["bases"].update(nachtrag)
+                    for b in nachtrag:
                         if b:
                             _entferne_base_aliases(_jobs[jid]["entfernt"], b)
                             # ... und aus der Korrektur-Schlange, aus einem Grund, den erst
@@ -1077,11 +1170,12 @@ def _run_proc(jid, cmd, cwd, env=None):
                             # B vor A), ohne ihn `["A","B"]` — also genau der Vorzustand, kein
                             # neuer Fehler. Ein zweiter Ort fuer dieselbe Regel waere die
                             # Drift, gegen die dieses Repo sonst ueberall argumentiert.
-                            queue_alias = _base_schluessel(_jobs[jid]["eingereiht"], b)
+                            queue_alias = _base_schluessel(
+                                _jobs[jid]["eingereiht"], b)
                             if queue_alias is not None:
                                 _jobs[jid]["eingereiht"].remove(queue_alias)
                 else:
-                    buche_aktive(_jobs[jid]["active_bases"], line, zulassung,
+                    buche_aktive(_jobs[jid]["active_bases"], buchungszeile, zulassung,
                                  je_sperre)
 
         def _lese_stderr():
@@ -1261,7 +1355,8 @@ def remove_base(project: str, base: str) -> None:
             if r is not None:
                 aliases: set[str] = set()
                 if r.get("bases") is not None:
-                    aliases.update(name for name in r["bases"] if _gleiche_base(name, base))
+                    aliases.update(
+                        name for name in r["bases"] if _gleiche_base(name, base))
                     r["bases"].difference_update(aliases)
                 # `gesehen` bleibt bewusst stehen: das ist eine Historie ("gehoerte zu
                 # diesem Lauf"), kein Wirkungsbereich - sie aendert sich nicht dadurch,
@@ -1311,20 +1406,25 @@ def betrifft(project: str, base: str, active_only: bool = False) -> dict | None:
     nie etwas kaputtgehen konnte. Bewusst so: EIN Verhalten auf allen Plattformen ist mehr wert
     als ein Zweig, den niemand testet, und die Datei WIRD in dem Moment gelesen.
     """
+    project, base, unsicher = _schutz_namen(project, base)
+    if base is None:
+        return None
     with _lock:
         for (proj, _kind), jid in _active.items():
-            if not _gleiches_projekt(proj, project):
+            if not _gleiches_projekt_geschuetzt(proj, project, unsicher):
                 continue
             r = _jobs.get(jid)
             if r is None or r["status"] != "running":
                 continue
             if active_only:
-                if _base_schluessel(r.get("active_bases", {}), base) is not None:
+                if _base_schluessel_geschuetzt(
+                        r.get("active_bases", {}), base, unsicher) is not None:
                     return {"id": r["id"], "kind": r["kind"]}
             else:
                 if (r["bases"] is None
-                        or _base_schluessel(r["bases"], base) is not None
-                        or _base_schluessel(r.get("active_bases", {}), base) is not None):
+                        or _base_schluessel_geschuetzt(r["bases"], base, unsicher) is not None
+                        or _base_schluessel_geschuetzt(
+                            r.get("active_bases", {}), base, unsicher) is not None):
                     return {"id": r["id"], "kind": r["kind"]}
     return None
 
@@ -1332,10 +1432,11 @@ def betrifft(project: str, base: str, active_only: bool = False) -> dict | None:
 def active_for(project: str) -> list:
     """[{'id','kind', 'bases'}, …] der laufenden Jobs des Projekts — transcribe und correct duerfen
     gleichzeitig laufen, deshalb eine Liste."""
+    project, _base, unsicher = _schutz_namen(project)
     with _lock:
         out = []
         for (proj, _kind), jid in _active.items():
-            if not _gleiches_projekt(proj, project):
+            if not _gleiches_projekt_geschuetzt(proj, project, unsicher):
                 continue
             r = _jobs.get(jid)
             if r is not None and r["status"] == "running":
@@ -1344,3 +1445,25 @@ def active_for(project: str) -> list:
                     item["bases"] = list(r["bases"])
                 out.append(item)
         return sorted(out, key=lambda j: j["kind"])
+
+
+def active_for_known_projects(projects) -> dict[str, list]:
+    """Liest Jobs fuer bereits dateisystemseitig kanonische Projektnamen in einem Snapshot."""
+    projects = tuple(projects)
+    nach_schluessel = {os.path.normcase(project): project for project in projects}
+    out: dict[str, list] = {project: [] for project in projects}
+    with _lock:
+        for (project, _kind), jid in _active.items():
+            sichtbar = nach_schluessel.get(os.path.normcase(project))
+            if sichtbar is None:
+                continue
+            r = _jobs.get(jid)
+            if r is None or r["status"] != "running":
+                continue
+            item = {"id": r["id"], "kind": r["kind"]}
+            if r.get("bases") is not None:
+                item["bases"] = list(r["bases"])
+            out[sichtbar].append(item)
+    for jobs_im_projekt in out.values():
+        jobs_im_projekt.sort(key=lambda job: job["kind"])
+    return out

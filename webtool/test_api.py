@@ -200,6 +200,37 @@ def test_list_projects_ueberspringt_dateisystemalias_des_lockordners(client, tmp
     assert [p["name"] for p in response.json()["projects"]] == ["Demo"]
 
 
+def test_list_projects_lockordner_identitaetsfehler_gibt_503(client, tmp_path, monkeypatch):
+    import webtool.app as appmod
+
+    (tmp_path / appmod._LIFECYCLE_LOCK_ORDNER).mkdir()
+
+    def fehler(*_args, **_kwargs):
+        raise PermissionError("Lockordner-Identitaet nicht lesbar")
+
+    monkeypatch.setattr(appmod.os.path, "samestat", fehler)
+
+    assert client.get("/api/projects").status_code == 503
+
+
+def test_list_projects_unlesbarer_lockordner_gibt_503(client, tmp_path, monkeypatch):
+    import webtool.app as appmod
+
+    lock_root = tmp_path / appmod._LIFECYCLE_LOCK_ORDNER
+    lock_root.mkdir()
+    echt_stat = appmod.os.stat
+
+    def stat(pfad, *args, **kwargs):
+        if (isinstance(pfad, (str, os.PathLike))
+                and os.path.abspath(os.fspath(pfad)) == os.path.abspath(os.fspath(lock_root))):
+            raise PermissionError("Lockordner nicht lesbar")
+        return echt_stat(pfad, *args, **kwargs)
+
+    monkeypatch.setattr(appmod.os, "stat", stat)
+
+    assert client.get("/api/projects").status_code == 503
+
+
 def test_zusammenfassung_zaehlt_dasselbe_wie_die_dateiliste(tmp_path, monkeypatch):
     """Die Zusammenfassung darf nicht anders zaehlen als der Einzelendpunkt.
     Genau diese Gegenprobe hat bei der Messung belegt, dass der schlanke Weg
@@ -683,12 +714,28 @@ def test_list_projects_active_jobs_default_empty(client):
     assert demo["active_jobs"] == []
 
 
-def test_list_projects_active_jobs_reported(client, monkeypatch):
+def test_list_projects_active_jobs_werden_in_einem_registry_snapshot_gelesen(
+        client, tmp_path, monkeypatch):
     import webtool.jobs as jobs_mod
+
+    (tmp_path / "Zweit").mkdir()
     laufend = [{"id": "j9", "kind": "correct"}, {"id": "j8", "kind": "transcribe"}]
-    monkeypatch.setattr(jobs_mod, "active_for", lambda name: laufend if name == "Demo" else [])
-    demo = next(p for p in client.get("/api/projects").json()["projects"] if p["name"] == "Demo")
+    aufrufe = []
+
+    def mehrere(namen):
+        namen = tuple(namen)
+        aufrufe.append(namen)
+        return {name: laufend if name == "Demo" else [] for name in namen}
+
+    monkeypatch.setattr(
+        jobs_mod, "active_for",
+        lambda _name: pytest.fail("Galerieliste darf nicht je Projekt einzeln lesen"))
+    monkeypatch.setattr(jobs_mod, "active_for_known_projects", mehrere, raising=False)
+
+    projekte = client.get("/api/projects").json()["projects"]
+    demo = next(p for p in projekte if p["name"] == "Demo")
     assert demo["active_jobs"] == laufend         # beide Arten gleichzeitig sind erlaubt
+    assert len(aufrufe) == 1 and set(aufrufe[0]) == {"Demo", "Zweit"}
 
 
 def test_create_project_ok_and_duplicate_409(client, tmp_path):
@@ -749,6 +796,97 @@ def test_lifecycle_aliases_desgleichen_projektpfads_teilen_einen_lock(tmp_path, 
 
     assert len(locks) == 2
     assert locks[0] == locks[1]
+
+
+def test_lifecycle_lock_nutzt_vorhandene_dateisystemschreibweise(tmp_path, monkeypatch):
+    """Auf case-insensitivem POSIX muss Demo denselben Lock liefern wie der Alias demo."""
+    import posixpath
+
+    import webtool.app as appmod
+
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    monkeypatch.setattr(
+        appmod.paths, "vorhandener_projektname", lambda name: "Demo" if name.casefold() == "demo" else name)
+    monkeypatch.setattr(appmod.os.path, "normcase", posixpath.normcase)
+
+    assert appmod._projekt_lock_schluessel("Demo") == appmod._projekt_lock_schluessel("demo")
+
+
+def test_lifecycle_lock_bricht_bei_unsicherer_dateisystemaufloesung_mit_503(monkeypatch):
+    from fastapi import HTTPException
+
+    import webtool.app as appmod
+
+    def fehler(_name):
+        raise PermissionError("Projektwurzel nicht lesbar")
+
+    monkeypatch.setattr(appmod.paths, "vorhandener_projektname", fehler)
+
+    with pytest.raises(HTTPException) as exc:
+        appmod._projekt_lock_schluessel("Demo")
+    assert exc.value.status_code == 503
+
+
+def test_create_nimmt_namenvergabe_lock_vor_projektlock(tmp_path, monkeypatch):
+    from contextlib import contextmanager
+
+    import webtool.app as appmod
+
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    reihenfolge = []
+
+    @contextmanager
+    def wurzel():
+        reihenfolge.append("wurzel")
+        yield
+
+    @contextmanager
+    def projekt(name):
+        reihenfolge.append(f"projekt:{name}")
+        yield
+
+    monkeypatch.setattr(appmod, "_projektwurzel_lebenszyklus", wurzel, raising=False)
+    monkeypatch.setattr(appmod, "_projektlebenszyklus", projekt)
+    monkeypatch.setattr(appmod, "_projektinstanz", lambda _name: "instanz")
+
+    assert appmod.create_project(appmod.NewProject(name="Neu"))["ok"] is True
+    assert reihenfolge == ["wurzel", "projekt:Neu"]
+
+
+def test_mehrprojekt_lock_nimmt_namenvergabe_lock_vor_einzellocks(monkeypatch):
+    from contextlib import contextmanager
+
+    import webtool.app as appmod
+
+    reihenfolge = []
+
+    @contextmanager
+    def wurzel():
+        reihenfolge.append("wurzel:an")
+        try:
+            yield
+        finally:
+            reihenfolge.append("wurzel:aus")
+
+    @contextmanager
+    def projekt(name):
+        reihenfolge.append(f"projekt:{name}:an")
+        try:
+            yield
+        finally:
+            reihenfolge.append(f"projekt:{name}:aus")
+
+    monkeypatch.setattr(appmod, "_projektwurzel_lebenszyklus", wurzel, raising=False)
+    monkeypatch.setattr(appmod, "_projektlebenszyklus", projekt)
+    monkeypatch.setattr(appmod, "_projekt_lock_schluessel", lambda name: name)
+
+    with appmod._projektlebenszyklen("B", "A"):
+        reihenfolge.append("rumpf")
+
+    assert reihenfolge == [
+        "wurzel:an", "projekt:A:an", "projekt:B:an", "wurzel:aus",
+        "rumpf", "projekt:B:aus", "projekt:A:aus",
+    ]
 
 
 def test_projektalias_wird_vor_umbenennung_abgewiesen(client, tmp_path, monkeypatch):
@@ -814,6 +952,21 @@ def test_dateisystemalias_des_lifecycle_ordners_ist_reserviert(client, tmp_path,
 
     assert response.status_code == 400
     assert marker.read_text(encoding="utf-8") == "bleibt"
+
+
+def test_lifecycle_lockordner_identitaetsfehler_gibt_vor_mutation_503(
+        client, tmp_path, monkeypatch):
+    import webtool.app as appmod
+
+    def fehler(*_args, **_kwargs):
+        raise PermissionError("Lockordner-Identitaet nicht lesbar")
+
+    monkeypatch.setattr(appmod.os.path, "samefile", fehler)
+
+    response = client.delete("/api/projects/Unsicher")
+
+    assert response.status_code == 503
+    assert (tmp_path / "Demo").is_dir()
 
 
 def test_lifecycle_alias_wird_auch_beim_ersten_anlegen_des_lockordners_erkannt(
@@ -2629,6 +2782,43 @@ def test_datei_loeschen_ruft_remove_base_auf(client, monkeypatch, tmp_path):
     monkeypatch.setattr(jobs_mod, "remove_base", lambda name, base: entfernt.append((name, base)))
     assert client.delete("/api/projects/Demo/files/S1").status_code == 200
     assert entfernt == [("Demo", "S1")]
+
+
+def test_datei_loeschen_haelt_kanonische_base_bis_zur_registry(monkeypatch, tmp_path):
+    from contextlib import contextmanager
+
+    import webtool.app as appmod
+
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    vorhanden = {"wert": True}
+    gesehen = []
+
+    @contextmanager
+    def offen(*_args, **_kwargs):
+        yield True
+
+    def aufloesen(_project, base):
+        return "S1" if vorhanden["wert"] and base.casefold() == "s1" else base
+
+    def weg(_project, base, **_kwargs):
+        gesehen.append(("weg", base))
+        vorhanden["wert"] = False
+        return 1
+
+    monkeypatch.setattr(appmod, "_vorhandener_projektlebenszyklus", offen)
+    monkeypatch.setattr(appmod.sperre, "datei", offen)
+    monkeypatch.setattr(appmod.paths, "vorhandener_projektname", lambda name: "Demo")
+    monkeypatch.setattr(appmod.paths, "vorhandener_aufnahmename", aufloesen)
+    monkeypatch.setattr(
+        appmod, "_keine_jobs",
+        lambda _project, base, **_kwargs: gesehen.append(("schutz", base)))
+    monkeypatch.setattr(appmod, "_datei_weg", weg)
+    monkeypatch.setattr(
+        appmod.jobs, "remove_base",
+        lambda _project, base: gesehen.append(("registry", base)))
+
+    assert appmod.delete_file("demo", "s1") == {"ok": True, "geloescht": 1}
+    assert gesehen == [("schutz", "S1"), ("weg", "S1"), ("registry", "S1")]
 
 
 def test_datei_loeschen_ohne_sperre_gibt_503(client, monkeypatch, tmp_path):

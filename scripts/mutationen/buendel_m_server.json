@@ -44,8 +44,8 @@
     },
     {
       "id": "M3 das vierte Argument am buche_aktive-Aufruf faellt weg (Lift laeuft leer)",
-      "von": "                    buche_aktive(_jobs[jid][\"active_bases\"], line, zulassung,\n                                 je_sperre)",
-      "nach": "                    buche_aktive(_jobs[jid][\"active_bases\"], line, zulassung)  # M3",
+      "von": "                    buche_aktive(_jobs[jid][\"active_bases\"], buchungszeile, zulassung,\n                                 je_sperre)",
+      "nach": "                    buche_aktive(_jobs[jid][\"active_bases\"], buchungszeile,\n                                 zulassung)  # M3",
       "rot": [
         "test_reannoncement_reaktiviert_die_server_menge_deckelfest"
       ],
