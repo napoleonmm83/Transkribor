@@ -72,6 +72,12 @@ def _base_schluessel(namen, gesucht: str):
     return next((name for name in namen if _gleiche_base(name, gesucht)), None)
 
 
+def _entferne_base_aliases(namen: set[str], gesucht: str) -> None:
+    """Entfernt alle Schreibweisen derselben Dateisystem-Base."""
+    aliases = {name for name in namen if _gleiche_base(name, gesucht)}
+    namen.difference_update(aliases)
+
+
 def _aktiver_schluessel_locked(project: str, kind: str):
     return next((key for key in _active
                  if key[1] == kind and _gleiches_projekt(key[0], project)), None)
@@ -167,9 +173,7 @@ def buche_aktive(aktive: dict, line: str, gesehen: set | None = None,
         # 4 s alter Dateiliste — dieselbe Klasse wie die Stale-Verschmutzung von `gesehen`
         # seit #475; ein Fix braeuchte Zeitstempel je Base.
         if entfernt_je is not None and roh:
-            alias = _base_schluessel(entfernt_je, roh)
-            if alias is not None:
-                entfernt_je.discard(alias)
+            _entferne_base_aliases(entfernt_je, roh)
     elif line.startswith(DONE_PREFIX):
         roh = line[len(DONE_PREFIX):]
         if roh:
@@ -1050,9 +1054,7 @@ def _run_proc(jid, cmd, cwd, env=None):
                         b for b in line[len(SCOPE_ADD_PREFIX):].split("\t") if b)
                     for b in line[len(SCOPE_ADD_PREFIX):].split("\t"):
                         if b:
-                            entfernt_alias = _base_schluessel(_jobs[jid]["entfernt"], b)
-                            if entfernt_alias is not None:
-                                _jobs[jid]["entfernt"].discard(entfernt_alias)
+                            _entferne_base_aliases(_jobs[jid]["entfernt"], b)
                             # ... und aus der Korrektur-Schlange, aus einem Grund, den erst
                             # #561 geschaffen hat (gegnerischer Pruefer, F2): eine geloeschte
                             # und gleichnamig neu hochgeladene Aufnahme wird vom Pool HINTEN

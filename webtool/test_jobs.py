@@ -6,6 +6,7 @@ import subprocess
 import sys
 import threading
 import time
+import unittest
 from types import SimpleNamespace
 
 from webtool import jobs
@@ -1134,6 +1135,66 @@ def test_reannoncement_reaktiviert_die_server_menge_deckelfest(tmp_path):
         tor3.write_text("jetzt")
         _warte_auf_zeilen(jid, 4)
         assert jobs.get(jid)["entfernt_je"] == []
+    finally:
+        jobs.cancel(jid)
+        _wait(jid)
+
+
+def test_entferne_base_aliases_loescht_alle_gleichen_schreibweisen_portabel(monkeypatch):
+    """Der Mengenschritt bleibt auch in der Linux-Mutationsserie pruefbar."""
+    monkeypatch.setattr(
+        jobs, "_gleiche_base", lambda links, rechts: links.casefold() == rechts.casefold())
+    namen = {"S1", "s1", "andere"}
+
+    jobs._entferne_base_aliases(namen, "s1")
+
+    assert namen == {"andere"}
+
+
+@unittest.skipUnless(
+    os.path.normcase("S1") == os.path.normcase("s1"),
+    "Case-Aliasse sind nur auf einem case-insensitiven Dateisystem dieselbe Aufnahme",
+)
+def test_reaktivierung_entfernt_alle_case_aliasse(tmp_path):
+    """Zwei Loeschzyklen duerfen keinen alten Schreibweisen-Alias stehenlassen."""
+    tor1 = tmp_path / "zweite-identitaet.jetzt"
+    tor2 = tmp_path / "dritte-identitaet.jetzt"
+    code = (
+        "import os, time\n"
+        f"tor1 = {str(tor1)!r}\n"
+        f"tor2 = {str(tor2)!r}\n"
+        "print('[scope] S1', flush=True)\n"
+        "print('[active] S1', flush=True)\n"
+        "print('[done] S1', flush=True)\n"
+        "print('bereit1', flush=True)\n"
+        "while not os.path.exists(tor1): time.sleep(0.01)\n"
+        "print('[scope+] s1', flush=True)\n"
+        "print('[active] s1', flush=True)\n"
+        "print('[done] s1', flush=True)\n"
+        "print('bereit2', flush=True)\n"
+        "while not os.path.exists(tor2): time.sleep(0.01)\n"
+        "print('[scope+] s1', flush=True)\n"
+        "print('[active] s1', flush=True)\n"
+        "print('[done] s1', flush=True)\n"
+    )
+    jid, _ = jobs.start(
+        "P_entf_case_rea", [sys.executable, "-c", code], cwd=None, kind="transcribe")
+    try:
+        _warte_auf_zeilen(jid, 4)
+        jobs.remove_base("P_entf_case_rea", "S1")
+        tor1.write_text("jetzt")
+        _warte_auf_zeilen(jid, 8)
+        jobs.remove_base("P_entf_case_rea", "s1")
+        vor_reaktivierung = jobs.get(jid)
+        assert set(vor_reaktivierung["entfernt"]) == {"S1", "s1"}
+        assert set(vor_reaktivierung["entfernt_je"]) == {"S1", "s1"}
+
+        tor2.write_text("jetzt")
+        ergebnis = _wait(jid, timeout=30)
+
+        assert ergebnis["status"] == "done"
+        assert ergebnis["entfernt"] == []
+        assert ergebnis["entfernt_je"] == []
     finally:
         jobs.cancel(jid)
         _wait(jid)

@@ -20,13 +20,25 @@
     },
     {
       "id": "M2 der [active]-Lift in buche_aktive faellt weg (Sperre traegt ins Zweitleben)",
-      "von": "        if entfernt_je is not None and roh:\n            alias = _base_schluessel(entfernt_je, roh)\n            if alias is not None:\n                entfernt_je.discard(alias)",
+      "von": "        if entfernt_je is not None and roh:\n            _entferne_base_aliases(entfernt_je, roh)",
       "nach": "        # M2: keine neue [active]-Zeile hebt die monotone Loeschung mehr auf",
       "rot": [
         "test_reannoncement_reaktiviert_die_server_menge_deckelfest"
       ],
       "gruen": [
         "test_remove_base_bucht_entfernt_bedingungslos_und_get_liefert_eine_kopie"
+      ],
+      "datei": "webtool/jobs.py"
+    },
+    {
+      "id": "M6 die Alias-Loeschung entfernt nur eine Schreibweise",
+      "von": "def _entferne_base_aliases(namen: set[str], gesucht: str) -> None:\n    \"\"\"Entfernt alle Schreibweisen derselben Dateisystem-Base.\"\"\"\n    aliases = {name for name in namen if _gleiche_base(name, gesucht)}\n    namen.difference_update(aliases)",
+      "nach": "def _entferne_base_aliases(namen: set[str], gesucht: str) -> None:\n    \"\"\"M6: Entfernt nur einen beliebigen Alias.\"\"\"\n    alias = _base_schluessel(namen, gesucht)\n    if alias is not None:\n        namen.discard(alias)",
+      "rot": [
+        "test_entferne_base_aliases_loescht_alle_gleichen_schreibweisen_portabel"
+      ],
+      "gruen": [
+        "test_reannoncement_reaktiviert_die_server_menge_deckelfest"
       ],
       "datei": "webtool/jobs.py"
     },
