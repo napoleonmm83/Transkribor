@@ -20,6 +20,7 @@ const einstellungen = (s: Partial<Settings>) =>
 const doc: EditDoc = {
   base: 'S1', project: 'Demo', audio: 'a.wav', language: 'de',
   human_edited: false, context: '', speakers: [], segments: [], annotations: [],
+  projektinstanz: 'instanz-editor',
   // Seit #160 liefert der Server einen Stand mit. Ohne ihn waere der Waechter unten vacuous:
   // „kein Token gesendet" waere dann trivial wahr.
   dateistand: 'A',
@@ -78,7 +79,9 @@ describe('EditorView (Stub)', () => {
       </TooltipProvider>,
     )
     await act(async () => { await Promise.resolve() })
-    expect(bruecke.current).toMatchObject({ project: 'Demo', base: 'S1', dirty: false })
+    expect(bruecke.current).toMatchObject({
+      project: 'Demo', base: 'S1', projektinstanz: 'instanz-editor', dirty: false,
+    })
     // reload muss das echte useDoc.reload sein, kein Platzhalter: der Beweis ist ein
     // zweiter getDoc-Aufruf.
     const vorher = vi.mocked(api.getDoc).mock.calls.length

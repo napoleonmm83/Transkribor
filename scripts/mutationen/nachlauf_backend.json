@@ -1,0 +1,36 @@
+{
+  "test": "python -m pytest webtool/test_jobs.py::test_kanonische_namen_scannt_die_projektwurzel_nur_einmal webtool/test_api.py::test_projekt_umbenennen_bleibt_bei_vorgemerktem_nachlauf_gesperrt -q",
+  "pfade": [
+    "webtool/paths.py",
+    "webtool/jobs.py",
+    "webtool/app.py",
+    "webtool/test_jobs.py",
+    "webtool/test_api.py"
+  ],
+  "mutationen": [
+    {
+      "id": "N1 die Aufnahmeaufloesung scannt ein bereits kanonisches Projekt erneut",
+      "datei": "webtool/paths.py",
+      "von": "    if not os.path.isdir(os.path.join(projekte_root(), project)):\n        project = vorhandener_projektname(project)",
+      "nach": "    if True:  # N1: der bereits kanonische Projektname wird erneut gescannt\n        project = vorhandener_projektname(project)",
+      "rot": [
+        "test_kanonische_namen_scannt_die_projektwurzel_nur_einmal"
+      ],
+      "gruen": [
+        "test_projekt_umbenennen_bleibt_bei_vorgemerktem_nachlauf_gesperrt"
+      ]
+    },
+    {
+      "id": "N2 Projekt-Rename sieht nur aktive Jobs und ignoriert Vormerkungen",
+      "datei": "webtool/app.py",
+      "von": "        laufend = offen[0] if offen else jobs.vorgemerkt_fuer(project)",
+      "nach": "        laufend = offen[0] if offen else None  # N2: Vormerkung bleibt unsichtbar",
+      "rot": [
+        "test_projekt_umbenennen_bleibt_bei_vorgemerktem_nachlauf_gesperrt"
+      ],
+      "gruen": [
+        "test_kanonische_namen_scannt_die_projektwurzel_nur_einmal"
+      ]
+    }
+  ]
+}

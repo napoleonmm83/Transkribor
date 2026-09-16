@@ -250,6 +250,7 @@ def _popen_kwargs() -> dict:
 # haengt fast nur an Opus und braucht die GPU nur fuer den kurzen pyannote-Schritt — es hier
 # mitzufuehren hiesse, dass eine 25-Minuten-Korrektur jede Transkription blockiert.
 GPU_KINDS = ("transcribe",)
+_FEHLERPROZESS_WARTE_S = 1.0
 
 # Welche Job-Arten `[active]` ueberhaupt bedeuten duerfen - dieselbe Menge, die
 # `jobPhases.ts` am Anfang seiner Schleife durchlaesst. Ohne diesen Filter buchte auch ein
@@ -817,6 +818,10 @@ def when_done(job_id: str, fn) -> bool:
 
 def _run(jid, cmd, cwd, env):
     _run_proc(jid, cmd, cwd, env)
+    with _lock:
+        r = _jobs.get(jid)
+        if r is None or r["status"] not in ("done", "error", "cancelled"):
+            return
     # Nachlauf AUSSERHALB von _run_proc: dessen finally hat den Slot in _active schon
     # freigegeben, sonst wuerde ein `then`, das denselben Projekt-Job startet, sich selbst
     # aussperren. Und ausserhalb von _lock, sonst blockiert es jobs.start() im Callback.
@@ -1009,6 +1014,40 @@ def _run(jid, cmd, cwd, env):
 
 
 def _run_proc(jid, cmd, cwd, env=None):
+    proc = None
+    fehlerprozess_zustand = {"fehler": False, "bereinigt": True}
+    fehlerprozess_lock = threading.Lock()
+
+    def _behandle_prozessfehler(meldung):
+        """Bereinigt den Prozessbaum je Job genau einmal und teilt das Ergebnis."""
+        with fehlerprozess_lock:
+            erste_meldung = not fehlerprozess_zustand["fehler"]
+            bereinigungsfehler = []
+            if erste_meldung and proc is not None:
+                try:
+                    bereinigungsfehler, bereinigt = _bereinige_fehlerprozess(proc)
+                except Exception as cleanup_error:
+                    bereinigungsfehler = [
+                        f"Fehlerprozess-Bereinigung schlug fehl: {cleanup_error}"]
+                    bereinigt = False
+                fehlerprozess_zustand["fehler"] = True
+                fehlerprozess_zustand["bereinigt"] = bereinigt
+            elif erste_meldung:
+                fehlerprozess_zustand["fehler"] = True
+
+            bereinigt = fehlerprozess_zustand["bereinigt"]
+            with _lock:
+                r = _jobs.get(jid)
+                if r is not None:
+                    fuege_zeile_an(r["lines"], f"JOB-FEHLER: {meldung}")
+                    if erste_meldung:
+                        for fehler in bereinigungsfehler:
+                            fuege_zeile_an(
+                                r["lines"], f"PROZESSBEREINIGUNG-FEHLER: {fehler}")
+                        if not bereinigt:
+                            r["cleanup_incomplete"] = True
+            return bereinigt
+
     try:
         # settings.job_env() reicht die Whisper-Einstellungen durch: die .env laedt nur
         # webtool.ps1, in der Desktop-App gibt es keine. `env` (z.B. TRANSKRIBOR_FETCH_SPRACHE)
@@ -1051,6 +1090,9 @@ def _run_proc(jid, cmd, cwd, env=None):
         if cancelled:                            # cancel() kam an, bevor die pid gesetzt war -> selbst killen
             _kill_tree(proc)
 
+        namenindex = {}
+        namenindex_lock = threading.Lock()
+
         def _verarbeite(line):
             line = line.rstrip("\n")
             scope_roh = (line[len(SCOPE_PREFIX):].split("\t")
@@ -1065,8 +1107,15 @@ def _run_proc(jid, cmd, cwd, env=None):
                 name for name in [*scope_roh, *nachtrag_roh, eingereiht_roh, aktiv_roh, fertig_roh]
                 if name
             }
-            aufgeloest = (paths.vorhandene_aufnahmenamen(project, aufzuloesen)
-                          if aufzuloesen else {})
+            with namenindex_lock:
+                zu_scannen = {name for name in aufzuloesen if name not in namenindex}
+                # Ein scope+-Nachtrag signalisiert eine neue Dateisysteminstanz. Auch bei
+                # gleichem Roh-Namen muss ihre aktuelle Schreibweise den alten Index ersetzen.
+                zu_scannen.update(name for name in nachtrag_roh if name)
+                if zu_scannen:
+                    namenindex.update(
+                        paths.vorhandene_aufnahmenamen(project, zu_scannen))
+                aufgeloest = {name: namenindex[name] for name in aufzuloesen}
             buchungszeile = line
             if aktiv_roh:
                 buchungszeile = ACTIVE_PREFIX + aufgeloest[aktiv_roh]
@@ -1178,21 +1227,15 @@ def _run_proc(jid, cmd, cwd, env=None):
                     buche_aktive(_jobs[jid]["active_bases"], buchungszeile, zulassung,
                                  je_sperre)
 
+
         def _lese_stderr():
             try:
                 for line in proc.stderr:
                     _verarbeite(line)
-            except Exception as e:   # dasselbe Muster wie der Hauptpfad: kein Zombie 'running'
-                with _lock:
-                    r = _jobs.get(jid)
-                    if r is not None:
-                        fuege_zeile_an(r["lines"], f"JOB-FEHLER: {e}")
-                # Endet der Faden hier, laeuft die stderr-Pipe voll und der Kind blockiert
-                # im naechsten write — der stdout-Loop erreichte nie EOF, der Job bliebe
-                # dauerhaft 'running' (409-Riegel stehen). Also den Baum killen: stdout
-                # endet, und der aeussere Handler setzt den terminalen Status (Kaltreview
-                # zu #481; Wächter: test_stderr_faden_beendet_den_job_statt_ihn_haengen_zulassen).
-                _kill_tree(proc)
+            except Exception as e:
+                _behandle_prozessfehler(e)
+                # Bei Erfolg endet die Bereinigung auch stdout. Ohne bestaetigten
+                # Baumabschluss bleiben Job und Slot sichtbar fail-closed.
 
         stderr_faden = threading.Thread(target=_lese_stderr, daemon=True)
         stderr_faden.start()
@@ -1204,39 +1247,117 @@ def _run_proc(jid, cmd, cwd, env=None):
         # Join, und der Timeout deckelt ihn gegen einen haengenden Enkel, der das
         # stderr-Handle offen haelt (EOF kaeme dann erst nach dem Kind).
         stderr_faden.join(timeout=30)
+        if stderr_faden.is_alive():
+            _behandle_prozessfehler("stderr-Leser endete nicht innerhalb der Wartefrist")
+            if not fehlerprozess_zustand["bereinigt"]:
+                return
+            stderr_faden.join(timeout=_FEHLERPROZESS_WARTE_S)
+            if stderr_faden.is_alive():
+                with _lock:
+                    fehlerprozess_zustand["bereinigt"] = False
+                    _jobs[jid]["cleanup_incomplete"] = True
+                    fuege_zeile_an(
+                        _jobs[jid]["lines"],
+                        "PROZESSBEREINIGUNG-FEHLER: stderr-Leser blieb aktiv")
+                return
         proc.wait()
         with _lock:
             _jobs[jid]["returncode"] = proc.returncode
-            _jobs[jid]["status"] = "cancelled" if _jobs[jid]["cancelled"] \
-                else ("done" if proc.returncode == 0 else "error")
-            _jobs[jid]["ended"] = time.time()
-    except Exception as e:  # Launch-Fehler etc. -> kein Zombie 'running'
+            if fehlerprozess_zustand["fehler"]:
+                if fehlerprozess_zustand["bereinigt"]:
+                    _jobs[jid]["status"] = (
+                        "cancelled" if _jobs[jid]["cancelled"] else "error")
+                    _jobs[jid]["ended"] = time.time()
+            else:
+                _jobs[jid]["status"] = "cancelled" if _jobs[jid]["cancelled"] \
+                    else ("done" if proc.returncode == 0 else "error")
+                _jobs[jid]["ended"] = time.time()
+    except Exception as e:  # Launch- oder Parserfehler -> kein Zombie 'running'
+        bereinigt = _behandle_prozessfehler(e)
         with _lock:
-            fuege_zeile_an(_jobs[jid]["lines"], f"JOB-FEHLER: {e}")
-            _jobs[jid]["status"] = "cancelled" if _jobs[jid]["cancelled"] else "error"
-            _jobs[jid]["ended"] = time.time()
+            if bereinigt:
+                _jobs[jid]["status"] = "cancelled" if _jobs[jid]["cancelled"] else "error"
+                _jobs[jid]["ended"] = time.time()
+            else:
+                _jobs[jid]["cleanup_incomplete"] = True
     finally:
         with _lock:
             key = _aktiver_schluessel_locked(
                 _jobs[jid]["project"], _jobs[jid]["kind"])
-            if _active.get(key) == jid:
+            if _active.get(key) == jid and not _jobs[jid].get("cleanup_incomplete"):
                 _active.pop(key, None)
 
 
-def _kill_tree(proc):
+def _bereinige_fehlerprozess(proc) -> tuple[list[str], bool]:
+    """Raeumt begrenzt auf; False haelt Job und Slot bei unbestaetigtem Baum fail-closed."""
+    fehler = []
+    baum_beendet = False
+    try:
+        baum_beendet = _kill_tree(proc) is True
+    except Exception as e:
+        fehler.append(f"Prozessbaum konnte nicht beendet werden: {e}")
+    if not baum_beendet:
+        fehler.append("Prozessbaum-Beendigung wurde nicht bestaetigt")
+        try:
+            _kill_tree_native(proc)
+            baum_beendet = True
+        except Exception as baum_error:
+            fehler.append(f"Nativer Prozessbaum-Rueckfall fehlgeschlagen: {baum_error}")
+            try:
+                proc.kill()
+            except Exception as kill_error:
+                fehler.append(f"Prozess konnte nicht direkt beendet werden: {kill_error}")
+
+    try:
+        proc.wait(timeout=_FEHLERPROZESS_WARTE_S)
+    except subprocess.TimeoutExpired:
+        fehler.append("Prozess reagierte nicht innerhalb der Bereinigungsfrist")
+        try:
+            _kill_tree_native(proc)
+            baum_beendet = True
+        except Exception as baum_error:
+            fehler.append(f"Prozessbaum konnte nach Fristablauf nicht beendet werden: {baum_error}")
+            try:
+                proc.kill()
+            except Exception as e:
+                fehler.append(f"Prozess konnte nach Fristablauf nicht beendet werden: {e}")
+        try:
+            proc.wait(timeout=_FEHLERPROZESS_WARTE_S)
+        except Exception as e:
+            fehler.append(f"Prozessende konnte nicht bestaetigt werden: {e}")
+    except Exception as e:
+        fehler.append(f"Prozessende konnte nicht bestaetigt werden: {e}")
+    try:
+        prozess_beendet = proc.poll() is not None
+    except Exception as e:
+        fehler.append(f"Prozessstatus nach Bereinigung nicht lesbar: {e}")
+        prozess_beendet = False
+    return fehler, baum_beendet and prozess_beendet
+
+
+def _kill_tree_native(proc):
     if os.name == "nt":
         # /T killt den ganzen Prozessbaum (python -> [claude.cmd] -> claude/node -> MCP-Kinder);
         # ein blosses terminate() liesse den claude-Subtree verwaisen (vgl. correct.py:147-149).
-        subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)],
-                       capture_output=True, creationflags=_CREATE_NO_WINDOW)  # exit!=0 (schon weg) ist ok
-        return
-    # Dasselbe auf POSIX: die Prozessgruppe aus _popen_kwargs() abraeumen. Ein blosses
-    # terminate() liesse whisper/claude als Waisen mit belegter GPU zurueck.
+        result = subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                                capture_output=True, creationflags=_CREATE_NO_WINDOW)
+        if result.returncode != 0:
+            detail = result.stderr.decode(errors="replace").strip()
+            raise OSError(detail or f"taskkill endete mit {result.returncode}")
+        return True
+    sigkill = getattr(signal, 'SIGKILL', 9)
+    os.killpg(os.getpgid(proc.pid), sigkill)
+    return True
+
+
+def _kill_tree(proc):
     try:
-        sigkill = getattr(signal, 'SIGKILL', 9)  # ponytail: Rueckfall auf 9 nur fuer Tests auf Windows-als-posix
-        os.killpg(os.getpgid(proc.pid), sigkill)
+        _kill_tree_native(proc)
+        return True
     except (ProcessLookupError, PermissionError, OSError):
-        proc.terminate()
+        if os.name != "nt":
+            proc.terminate()
+        return False
 
 
 def cancel(job_id: str):
@@ -1445,6 +1566,16 @@ def active_for(project: str) -> list:
                     item["bases"] = list(r["bases"])
                 out.append(item)
         return sorted(out, key=lambda j: j["kind"])
+
+
+def vorgemerkt_fuer(project: str) -> dict | None:
+    """Ein vorgemerkter Lauf des Projekts, auch bevor er in ``_active`` steht."""
+    project, _base, unsicher = _schutz_namen(project)
+    with _lock:
+        for (proj, kind, _base), nummer in _pending.items():
+            if _gleiches_projekt_geschuetzt(proj, project, unsicher):
+                return {"id": nummer, "kind": kind}
+    return None
 
 
 def active_for_known_projects(projects) -> dict[str, list]:

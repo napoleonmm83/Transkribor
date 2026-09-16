@@ -379,7 +379,7 @@ export function useDoc(project: string | null, base: string | null) {
         // inzwischen eine neue Instanz. Die alte Kennung kann auch ohne Vorbehalt nie wieder
         // speichern, also darf hier weder konflikt() noch dessen Ueberschreib-Weg greifen.
         if (e instanceof HttpFehler && e.status === 410) {
-          if (meins()) {
+          if (meins() && docRef.current?.projektinstanz === doc.projektinstanz) {
             toast.error('Das Projekt wurde inzwischen neu angelegt — der Editor wird neu geladen.')
             reload()
           }

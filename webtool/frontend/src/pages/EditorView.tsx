@@ -18,7 +18,7 @@ export function EditorView() {
   // Die Leiste in der Huelle navigiert und startet Einzeldatei-Korrekturen — beides braucht
   // Dinge, die nur hier existieren. Ohne diese Meldung wechselt ein Klick ohne Rueckfrage
   // ueber ungespeicherte Aenderungen hinweg, und ein Korrekturlauf bleibt unsichtbar.
-  useEditorMelden(sel ? { ...sel, dirty, stand, reload, vergiss } : null)
+  useEditorMelden(sel ? { ...sel, projektinstanz: doc?.projektinstanz, dirty, stand, reload, vergiss } : null)
 
   // #123: Eine ferngestartete Korrektur (Workspace „Korrigieren" oder laeuft schon beim Oeffnen)
   // sieht der Editor sonst nicht — useJob.onDone erreicht nur das ⋯-Menue derselben Datei. Der

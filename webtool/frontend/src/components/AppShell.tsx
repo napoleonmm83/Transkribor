@@ -112,9 +112,15 @@ function Leiste() {
         // zwischenzeitlicher Projektwechsel darf deren wartende Saves nicht am Leben lassen.
         const gestartet = loeschEditor.current.get(name)
         loeschEditor.current.delete(name)
-        gestartet?.vergiss()
+        const aktuell = editor.current
+        const neueInstanz = Boolean(
+          gestartet?.projektinstanz && aktuell?.projektinstanz
+          && aktuell.project === name
+          && aktuell.projektinstanz !== gestartet.projektinstanz,
+        )
+        if (!neueInstanz) gestartet?.vergiss()
         // DELETE kann nach einem weiteren Projektwechsel zurueckkommen.
-        if (aktuellesProjekt.current === name) {
+        if (!neueInstanz && aktuellesProjekt.current === name) {
           navigate('/')
         }
         refresh()

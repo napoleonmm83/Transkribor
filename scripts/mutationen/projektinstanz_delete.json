@@ -1,0 +1,36 @@
+{
+  "test": "npm --prefix webtool/frontend test -- --run src/components/AppShell.test.tsx src/pages/EditorView.test.tsx -t \"Projektinstanz|meldet das offene Dokument\"",
+  "pfade": [
+    "webtool/frontend/src/components/AppShell.tsx",
+    "webtool/frontend/src/components/AppShell.test.tsx",
+    "webtool/frontend/src/hooks/useEditorBruecke.tsx",
+    "webtool/frontend/src/pages/EditorView.tsx",
+    "webtool/frontend/src/pages/EditorView.test.tsx"
+  ],
+  "mutationen": [
+    {
+      "id": "D1 ein spaeter DELETE-Erfolg verwechselt alte und neue Projektinstanz",
+      "datei": "webtool/frontend/src/components/AppShell.tsx",
+      "von": "          && aktuell.projektinstanz !== gestartet.projektinstanz,",
+      "nach": "          && false,  // D1: dieselbe Pfadadresse gilt faelschlich als dieselbe Instanz",
+      "rot": [
+        "laesst eine neu angelegte Projektinstanz nach spaetem DELETE-Erfolg offen"
+      ],
+      "gruen": [
+        "meldet das offene Dokument samt reload an die Huelle"
+      ]
+    },
+    {
+      "id": "D2 der Editor meldet seine Projektinstanz nicht an die Huelle",
+      "datei": "webtool/frontend/src/pages/EditorView.tsx",
+      "von": "  useEditorMelden(sel ? { ...sel, projektinstanz: doc?.projektinstanz, dirty, stand, reload, vergiss } : null)",
+      "nach": "  useEditorMelden(sel ? { ...sel, dirty, stand, reload, vergiss } : null)  // D2",
+      "rot": [
+        "meldet das offene Dokument samt reload an die Huelle"
+      ],
+      "gruen": [
+        "laesst eine neu angelegte Projektinstanz nach spaetem DELETE-Erfolg offen"
+      ]
+    }
+  ]
+}

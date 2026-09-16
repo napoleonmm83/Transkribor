@@ -119,6 +119,18 @@ def test_vorhandener_aufnahmename_nimmt_dateisystemschreibweise(monkeypatch, tmp
     assert paths.vorhandener_aufnahmename("Demo", "elina.nicol") == "Elina.Nicol"
 
 
+@pytest.mark.parametrize("base", ["Folge ", "Folge."])
+def test_vorhandener_aufnahmename_erlaubt_stamm_mit_angehaengter_dateiendung(
+        monkeypatch, tmp_path, base):
+    """Der Stamm ist kein vollstaendiges Windows-Pfadelement: .wav/.json folgt noch."""
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    audio = tmp_path / "Demo" / "audio"
+    audio.mkdir(parents=True)
+    (audio / f"{base}.wav").write_bytes(b"audio")
+
+    assert paths.vorhandener_aufnahmename("Demo", base) == base
+
+
 def test_vorhandener_aufnahmename_bevorzugt_exakten_hardlink_namen(monkeypatch, tmp_path):
     """Zwei sichtbare Hardlink-Namen bleiben zwei fachliche Aufnahmen."""
     monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))

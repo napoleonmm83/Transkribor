@@ -320,10 +320,11 @@ def _srt_path(project, base):
     return os.path.join(paths.transkripte_dir(project), base + ".srt")
 
 
-def _validate(*names: str) -> None:
+def _validate(project: str, *bases: str) -> None:
     try:
-        for n in names:
-            paths.safe_name(n)
+        paths.safe_name(project)
+        for base in bases:
+            paths.safe_aufnahmename(base)
     except ValueError:
         raise HTTPException(status_code=400, detail="ungültiger Name")
 
@@ -1335,7 +1336,8 @@ def _keine_jobs(project: str, base: str = None, active_only: bool = False) -> No
     gerade schreibt, ist Warten fast immer die richtige Reaktion."""
     if base is None:
         offen = jobs.active_for(project)
-        laufend, wen = (offen[0] if offen else None), "Im Projekt wird"
+        laufend = offen[0] if offen else jobs.vorgemerkt_fuer(project)
+        wen = "Im Projekt wird"
     else:
         laufend, wen = jobs.betrifft(project, base, active_only=active_only), f"„{base}“ wird"
     if laufend:
@@ -1450,7 +1452,7 @@ class RenameBody(BaseModel):
 
 def _neuer_name(roh: str) -> str:
     try:
-        return paths.safe_name(roh.strip())
+        return paths.safe_aufnahmename(roh.strip())
     except ValueError:
         raise HTTPException(status_code=400, detail="ungültiger Name")
 
@@ -1855,7 +1857,7 @@ def _export_file_md_unter_projektlebenszyklus(project: str, base: str):
     md = _get_or_render_md(project, base)
     if md is None:
         raise HTTPException(status_code=404, detail=f"kein Transkript vorhanden: {base}")
-    filename = f"{paths.safe_name(base)}.md"
+    filename = f"{paths.safe_aufnahmename(base)}.md"
     return Response(
         content=md.encode("utf-8"),
         media_type="text/markdown; charset=utf-8",
@@ -1881,7 +1883,7 @@ def _export_project_downloads_unter_projektlebenszyklus(project: str):
         base = f["base"]
         md = _get_or_render_md(project, base)
         if md is not None:
-            safe_base = paths.safe_name(base)
+            safe_base = paths.safe_aufnahmename(base)
             dest = os.path.join(target_dir, f"{safe_base}.md")
             paths.atomic_write(dest, md)
             exported.append(f"{safe_base}.md")
@@ -1910,7 +1912,7 @@ def _export_project_zip_unter_projektlebenszyklus(project: str):
             base = f["base"]
             md = _get_or_render_md(project, base)
             if md is not None:
-                safe_base = paths.safe_name(base)
+                safe_base = paths.safe_aufnahmename(base)
                 zf.writestr(f"{safe_base}.md", md.encode("utf-8"))
     buf.seek(0)
     filename = f"{paths.safe_name(project)}_markdown.zip"
@@ -2497,7 +2499,7 @@ def upload_audio(project: str, file: UploadFile = File(...), sprache: str = Form
     name = os.path.basename(file.filename or "")           # vom Browser mitgesendete Pfade entfernen
     base, ext = os.path.splitext(name)
     ext = ext.lower()
-    _validate(base)
+    _validate(project, base)
     if ext not in AUDIO_EXT:
         raise HTTPException(status_code=400, detail=f"nicht unterstützte Endung: {ext or '(keine)'}")
     # Sprache VOR dem Datei-Schreiben pruefen — sonst laege bei 400 eine orphan-Audiodatei.

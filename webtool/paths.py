@@ -16,17 +16,33 @@ def downloads_dir() -> str:
     return os.environ.get("TRANSKRIBOR_DOWNLOADS") or os.path.join(os.path.expanduser("~"), "Downloads")
 
 
-def safe_name(name: str) -> str:
+def _safe_name(name: str, *, vollstaendiges_pfadelement: bool) -> str:
     # "." / ".." resolven auf Eltern-/Self-Verzeichnis -> dürfen project_dir()
     # nie erreichen (sonst rmtree auf projekte_root() selbst, siehe Task 4 Review).
     # Steuerzeichen (\t, \r, \n, ord < 32, ord == 127) zerbrechen Protokoll- und Scope-Zeilen (#378).
     # Windows entfernt abschliessende Punkte und Leerzeichen bei der Pfadauflösung. Ohne
     # diese Wache bekämen etwa "Demo" und "Demo." verschiedene Sperren für denselben Ordner.
-    if (not name or name in (".", "..") or name.endswith((".", " "))
+    if (not name or name in (".", "..")
+            or (vollstaendiges_pfadelement and name.endswith((".", " ")))
             or "/" in name or "\\" in name
             or ":" in name or ".." in name or any(ord(c) < 32 or ord(c) == 127 for c in name)):
         raise ValueError(f"unsicherer Name: {name!r}")
     return name
+
+
+def safe_name(name: str) -> str:
+    """Validiert ein vollstaendiges Datei- oder Verzeichnis-Pfadelement."""
+    return _safe_name(name, vollstaendiges_pfadelement=True)
+
+
+def safe_aufnahmename(name: str) -> str:
+    """Validiert einen Aufnahmestamm, an den vor dem Pfadzugriff eine Endung kommt.
+
+    Ein Stamm wie ``"Folge "`` ist fuer ``"Folge .wav"`` eindeutig. Die Windows-Regel
+    fuer abschliessende Punkte/Leerzeichen gilt fuer das vollstaendige Pfadelement, nicht
+    fuer den Stamm vor ``.wav``, ``.json`` oder einer anderen festen Artefaktendung.
+    """
+    return _safe_name(name, vollstaendiges_pfadelement=False)
 
 
 # Abgeleitet aus den KONSUMENTEN des Zeilenstroms, nicht geraten: jobs.py parst
@@ -79,8 +95,6 @@ def vorhandener_projektname(project: str) -> str:
             kandidaten = list(eintraege)
     except FileNotFoundError:
         return name
-    except OSError:
-        raise
     for eintrag in kandidaten:
         if eintrag.name == name:
             return name
@@ -92,8 +106,6 @@ def vorhandener_projektname(project: str) -> str:
                 return eintrag.name
         except FileNotFoundError:
             continue
-        except OSError:
-            raise
     return name
 
 
@@ -116,8 +128,10 @@ def vorhandene_aufnahmenamen(project: str, bases) -> dict[str, str]:
     sichtbare Hardlink-Namen fachlich getrennt. Unerwartete Dateisystemfehler werden
     weitergegeben, damit Sperrentscheidungen nicht mit einer geratenen Identitaet laufen.
     """
-    project = vorhandener_projektname(project)
-    gesucht = {base: safe_name(base) for base in bases}
+    project = safe_name(project)
+    if not os.path.isdir(os.path.join(projekte_root(), project)):
+        project = vorhandener_projektname(project)
+    gesucht = {base: safe_aufnahmename(base) for base in bases}
     if not gesucht:
         return {}
     formen = {namensform(name) for name in gesucht.values()}
@@ -127,8 +141,6 @@ def vorhandene_aufnahmenamen(project: str, bases) -> dict[str, str]:
         audio_ordner = audio if stat.S_ISDIR(os.stat(audio).st_mode) else pdir
     except FileNotFoundError:
         audio_ordner = pdir
-    except OSError:
-        raise
     ordner = [transkripte_dir(project), audio_ordner]
     gesehen: set[str] = set()
     kandidaten: dict[str, list[tuple[str, str, str]]] = {}
@@ -142,8 +154,6 @@ def vorhandene_aufnahmenamen(project: str, bases) -> dict[str, str]:
                 eintragsliste = list(eintraege)
         except FileNotFoundError:
             continue
-        except OSError:
-            raise
         for eintrag in eintragsliste:
             endungen = [e for e in _TRANSKRIPT_ENDUNGEN if eintrag.name.endswith(e)]
             if not endungen:
@@ -159,8 +169,6 @@ def vorhandene_aufnahmenamen(project: str, bases) -> dict[str, str]:
                         continue
                 except FileNotFoundError:
                     continue
-                except OSError:
-                    raise
                 kandidaten.setdefault(form, []).append((wirklich, eintrag.path, endung))
 
     ergebnis: dict[str, str] = {}
@@ -178,8 +186,6 @@ def vorhandene_aufnahmenamen(project: str, bases) -> dict[str, str]:
                     break
             except FileNotFoundError:
                 continue
-            except OSError:
-                raise
     return ergebnis
 
 

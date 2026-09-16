@@ -286,6 +286,18 @@ def test_get_file_builds_doc(client):
     assert doc["segments"][0]["text"] == "Hallo Welt."
 
 
+def test_get_file_erlaubt_aufnahme_mit_leerzeichen_am_stammende(client, tmp_path):
+    tdir = tmp_path / "Demo" / "transkripte"
+    audio = tmp_path / "Demo" / "audio"
+    (tdir / "Folge .json").write_bytes((tdir / "S1.json").read_bytes())
+    (audio / "Folge .wav").write_bytes(b"audio")
+
+    response = client.get("/api/projects/Demo/files/Folge%20")
+
+    assert response.status_code == 200
+    assert response.json()["base"] == "Folge "
+
+
 def test_get_missing_file_404(client):
     assert client.get("/api/projects/Demo/files/nope").status_code == 404
 
@@ -730,7 +742,7 @@ def test_list_projects_active_jobs_werden_in_einem_registry_snapshot_gelesen(
     monkeypatch.setattr(
         jobs_mod, "active_for",
         lambda _name: pytest.fail("Galerieliste darf nicht je Projekt einzeln lesen"))
-    monkeypatch.setattr(jobs_mod, "active_for_known_projects", mehrere, raising=False)
+    monkeypatch.setattr(jobs_mod, "active_for_known_projects", mehrere)
 
     projekte = client.get("/api/projects").json()["projects"]
     demo = next(p for p in projekte if p["name"] == "Demo")
@@ -845,7 +857,7 @@ def test_create_nimmt_namenvergabe_lock_vor_projektlock(tmp_path, monkeypatch):
         reihenfolge.append(f"projekt:{name}")
         yield
 
-    monkeypatch.setattr(appmod, "_projektwurzel_lebenszyklus", wurzel, raising=False)
+    monkeypatch.setattr(appmod, "_projektwurzel_lebenszyklus", wurzel)
     monkeypatch.setattr(appmod, "_projektlebenszyklus", projekt)
     monkeypatch.setattr(appmod, "_projektinstanz", lambda _name: "instanz")
 
@@ -876,7 +888,7 @@ def test_mehrprojekt_lock_nimmt_namenvergabe_lock_vor_einzellocks(monkeypatch):
         finally:
             reihenfolge.append(f"projekt:{name}:aus")
 
-    monkeypatch.setattr(appmod, "_projektwurzel_lebenszyklus", wurzel, raising=False)
+    monkeypatch.setattr(appmod, "_projektwurzel_lebenszyklus", wurzel)
     monkeypatch.setattr(appmod, "_projektlebenszyklus", projekt)
     monkeypatch.setattr(appmod, "_projekt_lock_schluessel", lambda name: name)
 
@@ -2845,6 +2857,25 @@ def test_projekt_umbenennen_bleibt_grob_gesperrt(client, monkeypatch):
     # nur mit; es bleibt trotzdem eine Zusicherung und wird deshalb nachgezogen statt gelockert.
     assert r.status_code == 409
     assert "Verarbeitung" in r.json()["detail"]
+
+
+def test_projekt_umbenennen_bleibt_bei_vorgemerktem_nachlauf_gesperrt(
+        client, tmp_path):
+    import webtool.jobs as jobs_mod
+
+    schluessel = ("Demo", "transcribe", None)
+    with jobs_mod._lock:
+        jobs_mod._pending[schluessel] = "rename-vorgemerkt"
+    try:
+        r = client.post("/api/projects/Demo/rename", json={"name": "Neu"})
+    finally:
+        with jobs_mod._lock:
+            jobs_mod._pending.pop(schluessel, None)
+
+    assert r.status_code == 409
+    assert "Verarbeitung" in r.json()["detail"]
+    assert (tmp_path / "Demo").is_dir()
+    assert not (tmp_path / "Neu").exists()
 
 
 def test_neu_transkribieren_raeumt_transkripte_weg_und_startet_den_lauf(client, tmp_path, monkeypatch):

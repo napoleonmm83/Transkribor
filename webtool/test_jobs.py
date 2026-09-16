@@ -283,6 +283,26 @@ def test_request_loest_registry_namen_vor_dem_start_nur_einmal_auf(monkeypatch):
     assert gestartet == [("demo", "s1")]
 
 
+def test_kanonische_namen_scannt_die_projektwurzel_nur_einmal(monkeypatch, tmp_path):
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    (tmp_path / "Demo" / "transkripte").mkdir(parents=True)
+    (tmp_path / "Demo" / "transkripte" / "S1.json").write_text(
+        "{}", encoding="utf-8")
+    echt_scandir = jobs.paths.os.scandir
+    wurzel_scans = 0
+
+    def scan(verzeichnis):
+        nonlocal wurzel_scans
+        if os.path.abspath(os.fspath(verzeichnis)) == os.path.abspath(tmp_path):
+            wurzel_scans += 1
+        return echt_scandir(verzeichnis)
+
+    monkeypatch.setattr(jobs.paths.os, "scandir", scan)
+
+    assert jobs._kanonische_namen("Demo", ["S1"]) == ("Demo", {"S1": "S1"})
+    assert wurzel_scans == 1
+
+
 def test_request_haengt_genau_einen_nachlauf_an():
     """Fuenf Uploads waehrend eines laufenden Laufs duerfen nicht fuenf Laeufe aufreihen —
     einer reicht, er sieht ohnehin alle inzwischen dazugekommenen Dateien."""
@@ -593,6 +613,7 @@ def test_start_reicht_die_popen_kwargs_wirklich_durch(monkeypatch):
         pid = 1234
         returncode = 0
         stdout = iter(())
+        stderr = iter(())
 
         def wait(self):
             return 0
@@ -657,6 +678,84 @@ def test_kill_tree_posix_faellt_auf_terminate_zurueck(monkeypatch):
     monkeypatch.setattr(jobs.os, "killpg", lambda pgid, sig: None, raising=False)
     jobs._kill_tree(FakeProc())
     assert getoetet == [("getpgid-versucht", 4711), "terminate"]
+
+
+def test_kill_tree_native_windows_meldet_taskkill_fehler(monkeypatch):
+    class FakeProc:
+        pid = 4711
+
+        @staticmethod
+        def poll():
+            return None
+
+    monkeypatch.setattr(jobs.os, "name", "nt")
+    monkeypatch.setattr(
+        jobs.subprocess, "run",
+        lambda *_args, **_kwargs: SimpleNamespace(returncode=5, stderr=b"Zugriff verweigert"),
+    )
+
+    with pytest.raises(OSError, match="Zugriff verweigert"):
+        jobs._kill_tree_native(FakeProc())
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Win32-Prozessbaumvertrag")
+def test_kill_tree_native_windows_meldet_parent_exit_race(tmp_path, monkeypatch):
+    kind_pid = tmp_path / "kind.pid"
+    code = (
+        "import pathlib, subprocess, sys\n"
+        "kind = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)'])\n"
+        f"pathlib.Path({str(kind_pid)!r}).write_text(str(kind.pid), encoding='utf-8')\n"
+    )
+    parent = subprocess.Popen([sys.executable, "-c", code])  # noqa: S603 -- sys.executable und code sind testintern
+    parent.wait(timeout=5)
+    kindprozess_pid = int(kind_pid.read_text(encoding="utf-8"))
+    echt_run = jobs.subprocess.run
+
+    def taskkill_fehler(args, **kwargs):
+        if args[0] == "taskkill" and "/T" in args:
+            return SimpleNamespace(returncode=128, stderr=b"nicht gefunden")
+        return echt_run(args, **kwargs)
+
+    monkeypatch.setattr(jobs.subprocess, "run", taskkill_fehler)
+    try:
+        with pytest.raises(OSError, match="nicht gefunden"):
+            jobs._kill_tree_native(parent)
+        assert _alive(kindprozess_pid), (
+            "Die Probe braucht einen weiterlebenden Kindprozess, damit der Aufrufer "
+            "die unbestaetigte Baumbeendigung fail-closed behandeln muss")
+    finally:
+        if _alive(kindprozess_pid):
+            os.kill(kindprozess_pid, signal.SIGTERM)
+
+
+def test_stdout_parserfehler_bleibt_bei_parent_exit_race_fail_closed(monkeypatch):
+    code = "print('[active] S1', flush=True)\n"
+    monkeypatch.setattr(
+        jobs.paths, "vorhandene_aufnahmenamen",
+        lambda _project, _bases: (_ for _ in ()).throw(OSError("Scanfehler")),
+    )
+    monkeypatch.setattr(
+        jobs, "_bereinige_fehlerprozess",
+        lambda _proc: (["Prozessbaum-Beendigung wurde nicht bestaetigt"], False),
+    )
+    jid, _ = jobs.start("P_parent_exit_race", [sys.executable, "-c", code], cwd=None,
+                        kind="correct")
+    try:
+        deadline = time.time() + 5
+        while time.time() < deadline and not jobs.get(jid).get("cleanup_incomplete"):
+            time.sleep(0.02)
+        time.sleep(0.05)
+        r = jobs.get(jid)
+        assert r["status"] == "running" and r["ended"] is None
+        assert r["cleanup_incomplete"] is True and jid in jobs._active.values()
+    finally:
+        with jobs._lock:
+            jobs._jobs[jid]["status"] = "error"
+            jobs._jobs[jid]["ended"] = time.time()
+            jobs._jobs[jid].pop("cleanup_incomplete", None)
+            for key, active_jid in list(jobs._active.items()):
+                if active_jid == jid:
+                    jobs._active.pop(key, None)
 
 
 # ---- Wirkungsbereich (Issue #80): welche Aufnahmen ein Lauf anfasst ----
@@ -1313,6 +1412,31 @@ def test_jobparser_scannt_dateisystem_nur_fuer_registry_marken(monkeypatch):
     assert snap["status"] == "done"
     assert aufrufe == []
 
+
+def test_jobparser_nutzt_scope_aliasindex_und_erneuert_nachtraege(monkeypatch):
+    aufrufe = []
+
+    def aufnahmen(_project, namen):
+        aufrufe.append(set(namen))
+        return {name: f"{name}-v{len(aufrufe)}" for name in namen}
+
+    monkeypatch.setattr(jobs.paths, "vorhandene_aufnahmenamen", aufnahmen)
+    code = (
+        "print('[scope] S1', flush=True); "
+        "print('[active] S1', flush=True); print('[done] S1', flush=True); "
+        "print('[scope+] S1', flush=True); "
+        "print('[active] S1', flush=True); print('[done] S1', flush=True); "
+        "print('[active] S2', flush=True); print('[done] S2', flush=True)"
+    )
+
+    jid, _ = jobs.start(
+        "P_aliasindex", [sys.executable, "-c", code], cwd=None, kind="transcribe")
+
+    snap = _wait(jid)
+    assert snap["status"] == "done"
+    assert aufrufe == [{"S1"}, {"S1"}, {"S2"}], (
+        "Scope-Namen sollen active/done speisen; scope+ muss erneuern und ein unbekannter "
+        "Name genau einmal aufgeloest werden")
 
 @unittest.skipUnless(
     os.path.normcase("S1") == os.path.normcase("s1"),
@@ -2044,10 +2168,10 @@ def test_stderr_faden_beendet_den_job_statt_ihn_haengen_zulassen(monkeypatch):
     )
     echt = jobs.buche_aktive
 
-    def kaputt(aktive, line, gesehen=None):
+    def kaputt(aktive, line, gesehen=None, je_sperre=None):
         if line == "boese":
             raise RuntimeError("der erste kuenftige werfende Callee")
-        return echt(aktive, line, gesehen)
+        return echt(aktive, line, gesehen, je_sperre)
 
     monkeypatch.setattr(jobs, "buche_aktive", kaputt)
     jid, _ = jobs.start("P_stderr_wurf", [sys.executable, "-c", code], cwd=None,
@@ -2057,6 +2181,298 @@ def test_stderr_faden_beendet_den_job_statt_ihn_haengen_zulassen(monkeypatch):
         "Job haengt im running-Zustand, obwohl der stderr-Faden gestorben ist "
         f"(status={r['status'] if r else 'kein Record'}) — die Pipe laeuft voll und der "
         "Kind blockiert; nur ein manueller Abbruch wuerde ihn loesen")
+
+
+def test_stderr_parserfehler_bleibt_bei_unbestaetigtem_baum_fail_closed(monkeypatch):
+    code = "import sys\nprint('[active] S1', file=sys.stderr, flush=True)\n"
+
+    def resolverfehler(_project, _bases):
+        raise OSError("stderr-Aufnahmeverzeichnis nicht lesbar")
+
+    monkeypatch.setattr(jobs.paths, "vorhandene_aufnahmenamen", resolverfehler)
+    monkeypatch.setattr(jobs, "_kill_tree", lambda _proc: False)
+    monkeypatch.setattr(
+        jobs, "_bereinige_fehlerprozess",
+        lambda _proc: (["Prozessbaum-Beendigung wurde nicht bestaetigt"], False),
+    )
+    jid, _ = jobs.start("P_stderr_fail_closed", [sys.executable, "-c", code], cwd=None,
+                        kind="correct")
+    try:
+        deadline = time.time() + 5
+        while time.time() < deadline:
+            r = jobs.get(jid)
+            if r.get("cleanup_incomplete") or r["status"] != "running":
+                break
+            time.sleep(0.02)
+        r = jobs.get(jid)
+        assert r["status"] == "running" and r["ended"] is None
+        assert r["cleanup_incomplete"] is True and jid in jobs._active.values()
+    finally:
+        with jobs._lock:
+            jobs._jobs[jid]["status"] = "error"
+            jobs._jobs[jid]["ended"] = time.time()
+            jobs._jobs[jid].pop("cleanup_incomplete", None)
+            for key, active_jid in list(jobs._active.items()):
+                if active_jid == jid:
+                    jobs._active.pop(key, None)
+
+
+def test_nichtterminaler_fehlerprozess_startet_keine_nachlaeufe(monkeypatch):
+    class KaputtePipe:
+        def __iter__(self):
+            raise OSError("Pipe-Lesefehler")
+
+    class Prozess:
+        pid = 12345
+        stdout = KaputtePipe()
+        stderr = []
+
+        def poll(self):
+            return None
+
+    aufrufe = []
+    jid = "P_nichtterminaler_fehlerprozess"
+    record = {
+        "id": jid,
+        "project": "P_nichtterminal",
+        "kind": "fetch",
+        "status": "running",
+        "cancelled": False,
+        "lines": [],
+        "bases": None,
+        "active_bases": {},
+        "gesehen": set(),
+        "entfernt": set(),
+        "entfernt_je": set(),
+        "eingereiht": [],
+        "next_runs": [lambda: aufrufe.append("next_run")],
+        "then": [],
+        "sonst": [lambda: aufrufe.append("eigenes_sonst")],
+        "uebernommen": [(
+            lambda: aufrufe.append("geerbtes_then"),
+            lambda: aufrufe.append("geerbtes_sonst"),
+        )],
+    }
+    with jobs._lock:
+        jobs._jobs[jid] = record
+        jobs._active[("P_nichtterminal", "fetch")] = jid
+    monkeypatch.setattr(jobs.subprocess, "Popen", lambda *_args, **_kwargs: Prozess())
+    monkeypatch.setattr(jobs.settings, "job_env", lambda: {})
+    monkeypatch.setattr(
+        jobs, "_bereinige_fehlerprozess",
+        lambda _proc: (["Prozessbaum-Beendigung wurde nicht bestaetigt"], False),
+    )
+
+    try:
+        jobs._run(jid, ["dummy"], None, None)
+
+        assert record["status"] == "running" and record["cleanup_incomplete"] is True
+        assert jobs._active[("P_nichtterminal", "fetch")] == jid
+        assert aufrufe == []
+    finally:
+        with jobs._lock:
+            jobs._jobs.pop(jid, None)
+            jobs._active.pop(("P_nichtterminal", "fetch"), None)
+
+
+def test_gleichzeitige_stdout_stderr_parserfehler_bereinigen_nur_einmal(monkeypatch):
+    code = (
+        "import sys\n"
+        "print('[active] S1', flush=True)\n"
+        "print('[active] S1', file=sys.stderr, flush=True)\n"
+    )
+    beide_parser = threading.Barrier(2)
+    bereinigungen = []
+    bereinigungen_lock = threading.Lock()
+    zweiter_aufruf = threading.Event()
+
+    def resolverfehler(_project, _bases):
+        beide_parser.wait(timeout=3)
+        raise OSError("gleichzeitiger Parserfehler")
+
+    def bereinige(_proc):
+        with bereinigungen_lock:
+            bereinigungen.append(threading.current_thread().name)
+            nummer = len(bereinigungen)
+        if nummer == 1:
+            zweiter_aufruf.wait(timeout=1)
+            return [], True
+        zweiter_aufruf.set()
+        return ["zweite Bereinigung sah den bereits beendeten Prozess"], False
+
+    monkeypatch.setattr(jobs.paths, "vorhandene_aufnahmenamen", resolverfehler)
+    monkeypatch.setattr(jobs, "_bereinige_fehlerprozess", bereinige)
+    jid, gestartet = jobs.start(
+        "P_doppel_parserfehler", [sys.executable, "-c", code], cwd=None, kind="correct")
+    assert gestartet is True
+    deadline = time.time() + 5
+    while time.time() < deadline:
+        r = jobs.get(jid)
+        if len(bereinigungen) >= 2 or r["status"] != "running":
+            break
+        time.sleep(0.02)
+    r = jobs.get(jid)
+    assert not zweiter_aufruf.wait(timeout=0.2)
+    assert len(bereinigungen) == 1, bereinigungen
+    assert r["status"] == "error" and r["ended"] is not None
+    assert r.get("cleanup_incomplete") is not True and jid not in jobs._active.values()
+
+    folge, folge_gestartet = jobs.start(
+        "P_doppel_parserfehler", [sys.executable, "-c", "pass"], cwd=None, kind="correct")
+    assert folge_gestartet is True and folge != jid
+    assert _wait(folge, timeout=5)["status"] == "done"
+
+def test_stderr_parserfehler_ueberschreibt_erfolgreichen_elternprozess(monkeypatch):
+    code = "import sys\nprint('[active] S1', file=sys.stderr, flush=True)\n"
+
+    def resolverfehler(_project, _bases):
+        raise OSError("stderr-Aufnahmeverzeichnis nicht lesbar")
+
+    monkeypatch.setattr(jobs.paths, "vorhandene_aufnahmenamen", resolverfehler)
+    monkeypatch.setattr(jobs, "_bereinige_fehlerprozess", lambda _proc: ([], True))
+    jid, _ = jobs.start("P_stderr_parent_ok", [sys.executable, "-c", code], cwd=None,
+                        kind="correct")
+    r = _wait(jid, timeout=5)
+    assert r is not None and r["returncode"] == 0
+    assert r["status"] == "error" and r["ended"] is not None
+    assert any("stderr-Aufnahmeverzeichnis nicht lesbar" in line for line in r["lines"])
+
+
+def test_stderr_join_timeout_bleibt_bei_unbestaetigtem_baum_fail_closed(monkeypatch):
+    code = "print('Elternprozess fertig', flush=True)\n"
+    echt_join = threading.Thread.join
+    monkeypatch.setattr(threading.Thread, "join", lambda _self, timeout=None: None)
+    monkeypatch.setattr(threading.Thread, "is_alive", lambda _self: True)
+    monkeypatch.setattr(
+        jobs, "_bereinige_fehlerprozess",
+        lambda _proc: (["Prozessbaum-Beendigung wurde nicht bestaetigt"], False),
+    )
+    jid, _ = jobs.start("P_stderr_join_timeout", [sys.executable, "-c", code], cwd=None,
+                        kind="correct")
+    try:
+        deadline = time.time() + 5
+        while time.time() < deadline:
+            r = jobs.get(jid)
+            if r.get("cleanup_incomplete") or r["status"] != "running":
+                break
+            time.sleep(0.02)
+        r = jobs.get(jid)
+        monkeypatch.setattr(threading.Thread, "join", echt_join)
+        assert r["status"] == "running" and r["ended"] is None
+        assert r["cleanup_incomplete"] is True and jid in jobs._active.values()
+    finally:
+        monkeypatch.setattr(threading.Thread, "join", echt_join)
+        with jobs._lock:
+            jobs._jobs[jid]["status"] = "error"
+            jobs._jobs[jid]["ended"] = time.time()
+            jobs._jobs[jid].pop("cleanup_incomplete", None)
+            for key, active_jid in list(jobs._active.items()):
+                if active_jid == jid:
+                    jobs._active.pop(key, None)
+
+def test_stdout_parserfehler_beendet_den_kindprozess(monkeypatch):
+    """Ein Fehler beim Aufloesen einer stdout-Marke darf kein Kind verwaisen lassen.
+
+    Der aeussere Handler setzt den Job bereits auf ``error``. Ohne Prozessbereinigung
+    laeuft das Kind danach jedoch weiter und ist ueber ``cancel`` nicht mehr erreichbar,
+    weil der Job schon terminal ist.
+    """
+    code = (
+        "import time\n"
+        "print('[active] S1', flush=True)\n"
+        "time.sleep(30)\n"
+    )
+    echt_killen = jobs._kill_tree
+    getoetet = []
+
+    def resolverfehler(_project, _bases):
+        raise OSError("Aufnahmeverzeichnis nicht lesbar")
+
+    def beobachte_kill(proc):
+        getoetet.append(proc.pid)
+        return echt_killen(proc)
+
+    monkeypatch.setattr(jobs.paths, "vorhandene_aufnahmenamen", resolverfehler)
+    monkeypatch.setattr(jobs, "_kill_tree", beobachte_kill)
+    jid, _ = jobs.start("P_stdout_wurf", [sys.executable, "-c", code], cwd=None,
+                        kind="transcribe")
+    proc = None
+    try:
+        r = _wait(jid, timeout=15)
+        proc = jobs._jobs[jid]["proc"]
+        assert r is not None and r["status"] == "error"
+        assert getoetet == [proc.pid], "Parserfehler liess den Kindprozess weiterlaufen"
+        assert proc.poll() is not None
+    finally:
+        if proc is not None and proc.poll() is None:
+            echt_killen(proc)
+            proc.wait(timeout=5)
+
+
+def test_stdout_parserfehler_bleibt_terminal_wenn_baumkill_wirft(monkeypatch):
+    code = "import time\nprint('[active] S1', flush=True)\ntime.sleep(2)\n"
+    echt_killen = jobs._kill_tree
+
+    def resolverfehler(_project, _bases):
+        raise OSError("Aufnahmeverzeichnis nicht lesbar")
+
+    def killfehler(_proc):
+        raise PermissionError("Prozessbaum nicht zugreifbar")
+
+    monkeypatch.setattr(jobs.paths, "vorhandene_aufnahmenamen", resolverfehler)
+    monkeypatch.setattr(jobs, "_kill_tree", killfehler)
+    monkeypatch.setattr(jobs, "_FEHLERPROZESS_WARTE_S", 0.05)
+    jid, _ = jobs.start("P_stdout_killfehler", [sys.executable, "-c", code], cwd=None,
+                        kind="correct")
+    proc = None
+    try:
+        r = _wait(jid, timeout=1)
+        proc = jobs._jobs[jid]["proc"]
+        assert r is not None and r["status"] == "error"
+        assert r["ended"] is not None and proc.poll() is not None
+        assert any("PROZESSBEREINIGUNG-FEHLER" in line for line in r["lines"])
+        assert not any("reagierte nicht" in line for line in r["lines"])
+    finally:
+        if proc is not None and proc.poll() is None:
+            echt_killen(proc)
+            proc.wait(timeout=5)
+
+
+def test_stdout_parserfehler_deckelt_wirkungslosen_baumkill(tmp_path, monkeypatch):
+    kind_pid = tmp_path / "kind.pid"
+    code = (
+        "import pathlib, subprocess, sys, time\n"
+        "kind = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)'])\n"
+        f"pathlib.Path({str(kind_pid)!r}).write_text(str(kind.pid), encoding='utf-8')\n"
+        "print('[active] S1', flush=True)\n"
+        "time.sleep(2)\n"
+    )
+    echt_killen = jobs._kill_tree
+
+    def resolverfehler(_project, _bases):
+        raise OSError("Aufnahmeverzeichnis nicht lesbar")
+
+    monkeypatch.setattr(jobs.paths, "vorhandene_aufnahmenamen", resolverfehler)
+    monkeypatch.setattr(jobs, "_kill_tree", lambda _proc: None)
+    monkeypatch.setattr(jobs, "_FEHLERPROZESS_WARTE_S", 0.05)
+    jid, _ = jobs.start("P_stdout_killwirkungslos", [sys.executable, "-c", code], cwd=None,
+                        kind="correct")
+    proc = None
+    kindprozess_pid = None
+    try:
+        r = _wait(jid, timeout=1)
+        proc = jobs._jobs[jid]["proc"]
+        kindprozess_pid = int(kind_pid.read_text(encoding="utf-8"))
+        assert r is not None and r["status"] == "error"
+        assert r["ended"] is not None and proc.poll() is not None
+        assert not _alive(kindprozess_pid), "Frist-Rueckfall liess einen Kindprozess zurueck"
+        assert any("nicht bestaetigt" in line for line in r["lines"])
+    finally:
+        if proc is not None and proc.poll() is None:
+            echt_killen(proc)
+            proc.wait(timeout=5)
+        if kindprozess_pid is not None and _alive(kindprozess_pid):
+            os.kill(kindprozess_pid, signal.SIGTERM)
 
 
 def test_vormerken_legt_eine_lesbare_vormerkung_an():

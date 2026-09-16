@@ -232,6 +232,42 @@ describe('useDoc Autosave', () => {
     expect(api.saveDoc).toHaveBeenCalledTimes(1)
   })
 
+  it('ueberschreibt bei A-B-A keinen neuen Entwurf durch den spaeten 410 der alten Instanz', async () => {
+    vi.useFakeTimers()
+    let ablehnenAlt!: (grund: Error) => void
+    vi.mocked(api.getDoc)
+      .mockResolvedValueOnce({ ...doc, project: 'A', projektinstanz: 'instanz-alt' })
+      .mockResolvedValueOnce({ ...doc, project: 'B', projektinstanz: 'instanz-b' })
+      .mockResolvedValueOnce({ ...doc, project: 'A', projektinstanz: 'instanz-neu',
+        segments: [{ ...seg, text: 'Neue Projektinstanz' }] })
+      .mockResolvedValueOnce({ ...doc, project: 'A', projektinstanz: 'instanz-neu',
+        segments: [{ ...seg, text: 'Serverstand ohne Entwurf' }] })
+    vi.mocked(api.saveDoc).mockReturnValueOnce(
+      new Promise((_resolve, reject) => { ablehnenAlt = reject }),
+    )
+    const h = renderHook(({ project }) => useDoc(project, 'b'), {
+      initialProps: { project: 'A' },
+    })
+    await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+
+    act(() => h.result.current.updateSegment(0, { text: 'Aenderung der alten Instanz' }))
+    await act(async () => { await vi.advanceTimersByTimeAsync(800) })
+    h.rerender({ project: 'B' })
+    await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+    h.rerender({ project: 'A' })
+    await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+    act(() => h.result.current.updateSegment(0, { text: 'Ungesicherter neuer Entwurf' }))
+
+    await act(async () => {
+      ablehnenAlt(new api.HttpFehler('Alte Projektinstanz', 410))
+      await vi.advanceTimersByTimeAsync(0)
+    })
+
+    expect(api.getDoc).toHaveBeenCalledTimes(3)
+    expect(h.result.current.doc?.segments[0].text).toBe('Ungesicherter neuer Entwurf')
+    expect(h.result.current.dirty).toBe(true)
+  })
+
   it('speichert erst nach der Tipppause — und mehrere Aenderungen nur EINMAL', async () => {
     vi.mocked(api.saveDoc).mockResolvedValue({})
     const { result } = await geladen()
