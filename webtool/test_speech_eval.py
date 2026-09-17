@@ -167,6 +167,41 @@ def test_wortzeiten_aendern_die_rate_nicht_bei_gleichem_text():
     assert mit["quality_evidence_available"] is True
 
 
+def test_stille_ohne_wortzeiten_zaehlt_keine_halluzinationen():
+    """Die Trennung gilt fuer STILLE genauso — sonst trifft sie die Kopfzahl des Werkzeugs.
+
+    Ein geprueftes Stillefenster, dessen Auswahl auf den ganzen Segmenttext zurueckfaellt,
+    zaehlte jedes Wort des Segments als Halluzination, obwohl von keinem einzigen belegt
+    ist, dass es im Fenster liegt. Gemessen vom kalten Leser: ein 1-Sekunden-Fenster in
+    einem 30-Sekunden-Segment ohne Wortzeiten meldete acht halluzinierte Woerter, tauchte
+    in keinem untimed-Posten auf, und `quality_evidence_available` blieb True — womit die
+    `scope`-Zeile des eigenen Berichts falsch war.
+
+    Halluzinierte Woerter in Stille ist die Zahl, fuer die `reference_kind: silence`
+    ueberhaupt existiert; eine erfundene Zahl an dieser Stelle entwertet sie ganz.
+    """
+    ohne_zeiten = {"segments": [{"start": 0, "end": 30,
+                                 "text": "eins zwei drei vier fuenf sechs sieben acht"}]}
+    still = case("", case_id="quiet", start=10, end=11, reference_kind="silence")
+    bericht = se.score_cases([still], ohne_zeiten)
+
+    assert bericht["reviewed_silence"]["hallucinated_word_count"] == 0
+    assert bericht["reviewed_silence"]["case_count"] == 0
+    assert bericht["reviewed_silence_untimed"]["case_count"] == 1
+    assert bericht["coverage"]["untimed_fallback_cases"] == 1
+    assert bericht["coverage"]["reviewed_silence_cases"] == 1   # geprueft bleibt geprueft
+    assert bericht["quality_evidence_available"] is False
+
+    # Gegenrichtung: MIT Wortzeiten zaehlt dieselbe Lage sehr wohl — sonst waere die
+    # Kennzahl jetzt von der anderen Seite kaputt.
+    mit_zeiten = {"segments": [{"start": 10, "end": 11, "text": "danke fuers zuschauen",
+                                "words": _wortzeiten("danke fuers zuschauen", 10, 11)}]}
+    echt = se.score_cases([still], mit_zeiten)
+    assert echt["reviewed_silence"]["hallucinated_word_count"] == 3
+    assert echt["reviewed_silence_untimed"]["case_count"] == 0
+    assert echt["quality_evidence_available"] is True
+
+
 def test_wort_ueber_der_segmentgrenze_verwirft_nicht_das_ganze_segment():
     """Ein ueberhaengendes Wort wird GEKLEMMT, nicht zum Anlass genommen, alles zu verwerfen.
 
@@ -188,6 +223,18 @@ def test_wort_ueber_der_segmentgrenze_verwirft_nicht_das_ganze_segment():
     assert bericht["reviewed"]["case_count"] == 1
     assert bericht["reviewed"]["wer"]["rate"] == 0
     assert bericht["coverage"]["untimed_fallback_cases"] == 0
+
+    # Und die KLEMMUNG selbst — die zwei Zusicherungen oben haengen nicht an ihr (kalter
+    # Leser): ihr Fenster enthaelt die Woerter ohnehin, sie pinnen nur das alte Verwerfen
+    # weg. Die Klemmung wirkt erst, wenn eine FENSTERGRENZE IM UEBERHANG liegt. Ohne sie
+    # behaelt das Wort seine Rohzeiten und faellt aus BEIDEN Fenstern: gemessen lieferte
+    # eine lueckenlose 5-s-Kette dann ['beta'] statt ['alpha','beta','gamma'].
+    ueberhang_vorne = {"segments": [{"start": 10, "end": 20, "text": "alpha",
+                                     "words": [{"start": 8, "end": 10, "word": "alpha"}]}]}
+    drin = se.score_cases([case("alpha", start=10, end=12)], ueberhang_vorne)
+    assert drin["cases"][0]["hypothesis"] == "alpha", "geklemmtes Wort fehlt im eigenen Segment"
+    draussen = se.score_cases([case("alpha", start=5, end=10)], ueberhang_vorne)
+    assert draussen["cases"][0]["hypothesis"] == "", "Wort im Fenster VOR seinem Segment"
 
     # Gegenrichtung: ein Wort GANZ ausserhalb seines Segments bleibt kaputte Daten.
     daneben = hypothesis("ein guter tag", words=[

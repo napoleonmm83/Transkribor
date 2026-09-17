@@ -230,25 +230,34 @@ def score_cases(cases: list, hypothesis: dict) -> dict:
     untimed = [row for row in reviewed_alle if row["selection"]["method"] in UNGETIMT]
     reviewed = [row for row in reviewed_alle if row["selection"]["method"] not in UNGETIMT]
     candidates = [row for row in rows if row["group"] == "candidate_only"]
-    silence = [row for row in rows if row["group"] == "reviewed_silence"]
-    draft_silence = [row for row in rows if row["group"] == "candidate_silence"]
+    # Die Trennung gilt fuer STILLE genauso. Ein geprueftes Stillefenster, dessen Auswahl
+    # auf den ganzen Segmenttext zurueckfaellt, zaehlte sonst Halluzinationen, von denen
+    # kein einziges Wort im Fenster belegt ist — gemessen: ein 1-s-Fenster in einem
+    # 30-s-Segment ohne Wortzeiten meldete 8 halluzinierte Woerter. Das trifft die
+    # KOPFZAHL dieses Werkzeugs (halluzinierte Woerter in Stille ist die Zahl, fuer die
+    # `reference_kind: silence` existiert), und es machte die eigene `scope`-Zeile falsch.
+    silence_alle = [row for row in rows if row["group"] == "reviewed_silence"]
+    silence_untimed = [row for row in silence_alle if row["selection"]["method"] in UNGETIMT]
+    silence = [row for row in silence_alle if row["selection"]["method"] not in UNGETIMT]
+    draft_alle = [row for row in rows if row["group"] == "candidate_silence"]
+    draft_silence = [row for row in draft_alle if row["selection"]["method"] not in UNGETIMT]
     silence_summary = _silence_summary(silence)
     # Fuer die ABDECKUNG zaehlen auch die ungetimten Faelle: der Nutzer hat sie geprueft.
     # Getrennt wird nur, was in die KENNZAHL eingeht.
-    reviewed_count = len(reviewed_alle) + len(silence)
+    reviewed_count = len(reviewed_alle) + len(silence_alle)
     return {
         "version": 1, "quality_evidence_available": bool(reviewed or silence_summary["case_count"]),
-        "scope": "Text agreement in supplied spans only; no speaker/timing score. Explicit reviewed silence counted separately. Seconds sum case durations including overlaps. Candidate distances are not quality evidence. Cases whose span selection fell back to whole segments (no usable word times) are reported under reviewed_untimed and are NOT part of the reviewed rate: that fallback repeats segment text across overlapping windows and its insertions measure timing availability, not transcript quality.",
+        "scope": "Text agreement in supplied spans only; no speaker/timing score. Explicit reviewed silence counted separately. Seconds sum case durations including overlaps. Candidate distances are not quality evidence. Cases whose span selection fell back to whole segments (no usable word times) are reported under reviewed_untimed (speech) and reviewed_silence_untimed (silence) and are NOT part of the reviewed rate or the silence hallucination counts: that fallback repeats segment text across overlapping windows, so its insertions measure timing availability, not transcript quality, and its words are not evidenced to lie inside the window at all.",
         "normalization": "NFKC, casefold (ss), numeric minus preserved/canonicalized, other punctuation to spaces, collapsed whitespace; CER includes spaces",
         "coverage": {"total_cases": len(rows), "reviewed_cases": reviewed_count,
-                     "reviewed_speech_cases": len(reviewed_alle), "reviewed_silence_cases": len(silence),
+                     "reviewed_speech_cases": len(reviewed_alle), "reviewed_silence_cases": len(silence_alle),
                      # Was von den geprueften Sprachfaellen wirklich in `reviewed` steckt —
                      # und was mangels Wortzeiten daneben liegt. Beide Zahlen zusammen
                      # ergeben `reviewed_speech_cases`; steht `untimed_fallback_cases` hoch,
                      # sagt die Rate ueber einen grossen Teil des Materials nichts.
                      "scored_speech_cases": len(reviewed),
-                     "untimed_fallback_cases": len(untimed),
-                     "candidate_cases": len(candidates) + len(draft_silence),
+                     "untimed_fallback_cases": len(untimed) + len(silence_untimed),
+                     "candidate_cases": len(candidates) + len(draft_alle),
                      "excluded_empty_reference": sum(row["group"] == "excluded_empty_reference" for row in rows),
                      "reviewed_case_fraction": reviewed_count / len(rows) if rows else None,
                      # Dieselbe Grundgesamtheit wie `reviewed_cases` und
@@ -257,12 +266,12 @@ def score_cases(cases: list, hypothesis: dict) -> dict:
                      # liesse zwei Abdeckungszahlen ueber verschiedene Mengen sprechen
                      # (CodeRabbit-CLI). Was in die KENNZAHL eingeht, sagt allein
                      # `scored_speech_cases`.
-                     "reviewed_case_seconds": sum(row["end"] - row["start"] for row in reviewed_alle + silence),
+                     "reviewed_case_seconds": sum(row["end"] - row["start"] for row in reviewed_alle + silence_alle),
                      "missing_hypothesis_cases": sum(row["selection"]["method"] == "missing_hypothesis" for row in rows),
                      "boundary_uncertain_cases": sum(row["selection"]["approximate"] for row in rows)},
         "reviewed": _aggregate(reviewed), "reviewed_untimed": _aggregate(untimed),
         "candidate_only": _aggregate(candidates),
-        "reviewed_silence": silence_summary, "candidate_silence": _silence_summary(draft_silence), "cases": rows,
+        "reviewed_silence": silence_summary, "reviewed_silence_untimed": _silence_summary(silence_untimed), "candidate_silence": _silence_summary(draft_silence), "cases": rows,
     }
 
 
