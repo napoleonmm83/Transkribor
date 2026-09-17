@@ -3062,6 +3062,141 @@ def test_datei_umbenennen_unbekannt_gibt_404_und_prueft_namen(client, monkeypatc
 
 # --- Projekteinstellungen: Sprache + Korrektur-Tiefe (Task 6) -----------------
 
+@pytest.mark.parametrize("gesperrt", ["Demo", "Neu"])
+def test_projektkontext_rename_respektiert_quell_und_ziellock(client, tmp_path, monkeypatch, gesperrt):
+    import webtool.app as api
+    monkeypatch.setattr(api, "_LIFECYCLE_LOCK_WARTE_S", 0.01)
+    with api._projektlebenszyklus(gesperrt):
+        response = client.post("/api/projects/Demo/rename", json={"name": "Neu"})
+    assert response.status_code == 503
+    assert (tmp_path / "Demo").is_dir()
+    assert not (tmp_path / "Neu").exists()
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows-Pfadaliase")
+@pytest.mark.parametrize("alias", ["Demo.", "Demo...", "Demo "])
+def test_projektkontext_windows_alias_ist_keine_zweite_sperre(client, alias):
+    loaded = client.get("/api/projects/Demo/kontext").json()
+    assert client.get(f"/api/projects/{alias}/kontext").status_code == 400
+    assert client.put(f"/api/projects/{alias}/kontext", json={**loaded, "text": "Alias"}).status_code == 400
+    assert client.post(f"/api/projects/{alias}/rename", json={"name": "Neu"}).status_code == 400
+    assert client.get("/api/projects/Demo/kontext").json()["text"] == ""
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows-Pfadaliase")
+def test_projektkontext_rename_zielalias_abgewiesen(client):
+    assert client.post("/api/projects/Demo/rename", json={"name": "Neu."}).status_code == 400
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows-Pfadaliase")
+def test_projektkontext_delete_create_aliase_koennen_saves_nicht_umgehen(client):
+    loaded = client.get("/api/projects/Demo/kontext").json()
+    assert client.delete("/api/projects/Demo.").status_code == 400
+    assert client.post("/api/projects", json={"name": "Neu."}).status_code == 400
+    assert client.get("/api/projects/Demo/kontext").json() == loaded
+
+
+def test_projektkontext_roundtrip_und_korrektureingabe(client, tmp_path):
+    from webtool import correct
+    url = "/api/projects/Demo/kontext"
+    initial = client.get(url)
+    assert initial.status_code == 200
+    assert initial.json()["text"] == initial.json()["dateistand"] == ""
+    text = "# Bekannte Begriffe\n\nBergtal; Käser AG\n"
+    saved = client.put(url, json={**initial.json(), "text": text})
+    assert saved.status_code == 200
+    assert saved.json()["text"] == text
+    assert saved.json()["dateistand"]
+    assert client.get(url).json() == saved.json()
+    assert correct._context("Demo") == text.strip()
+    assert not (tmp_path / "Demo" / "projekt.json").exists()
+    cleared = client.put(url, json={**saved.json(), "text": ""})
+    assert cleared.status_code == 200
+    assert correct._context("Demo") == ""
+
+
+def test_projektkontext_zu_langer_text_wird_abgewiesen(client, tmp_path):
+    """Die Groessengrenze ist keine Formsache: dieser Text reist als `context` in JEDEN
+    Korrektur- und Verify-Prompt JEDER Datei des Projekts — auf dem Abo-Weg in einen
+    `claude -p`-Lauf mit `acceptEdits` und Read/Write. Ohne Grenze gingen 5,4 MB
+    Browsertext durch (gemessen vom gegnerischen Pruefer) und landeten vervielfacht in
+    den Prompts.
+
+    Beide Richtungen, sonst ist eine Grenze, die ALLES abweist, derselbe Schaden von der
+    anderen Seite.
+    """
+    from webtool import correct as correct_mod
+    url = "/api/projects/Demo/kontext"
+    geladen = client.get(url).json()
+    grenze = correct_mod.KONTEXT_MAX_BYTES
+
+    zu_lang = client.put(url, json={**geladen, "text": "x" * (grenze + 1)})
+    assert zu_lang.status_code == 400
+    assert "zu lang" in zu_lang.json()["detail"]
+    assert not (tmp_path / "Demo" / "kontext.md").exists(), "abgewiesener Text wurde geschrieben"
+
+    genau_passend = client.put(url, json={**geladen, "text": "x" * grenze})
+    assert genau_passend.status_code == 200
+
+    # Gemessen wird in BYTES, nicht in Zeichen: ein Umlaut belegt in UTF-8 zwei.
+    geladen2 = client.get(url).json()
+    umlaute = "ä" * (grenze // 2 + 1)
+    assert len(umlaute) <= grenze, "Vorbedingung: als ZEICHEN noch unter der Grenze"
+    assert client.put(url, json={**geladen2, "text": umlaute}).status_code == 400
+
+
+def test_projektkontext_veralteter_tab_ueberschreibt_nichts(client, tmp_path):
+    url = "/api/projects/Demo/kontext"
+    loaded = client.get(url).json()
+    assert client.put(url, json={**loaded, "text": "Erste Änderung"}).status_code == 200
+    assert client.put(url, json={**loaded, "text": "Alter Tab"}).status_code == 409
+    assert (tmp_path / "Demo" / "kontext.md").read_text(encoding="utf-8") == "Erste Änderung"
+
+
+def test_projektkontext_externe_aenderung_bleibt_erhalten(client, tmp_path):
+    url = "/api/projects/Demo/kontext"
+    loaded = client.get(url).json()
+    path = tmp_path / "Demo" / "kontext.md"
+    path.write_text("Extern", encoding="utf-8")
+    assert client.put(url, json={**loaded, "text": "Veraltet"}).status_code == 409
+    assert path.read_text(encoding="utf-8") == "Extern"
+
+
+def test_projektkontext_unlesbar_ist_kein_leeres_dokument(client, tmp_path):
+    path = tmp_path / "Demo" / "kontext.md"
+    path.write_bytes(b"\xff\xfe\x00")
+    response = client.get("/api/projects/Demo/kontext")
+    assert response.status_code == 500
+    assert "lesen" in response.json()["detail"].lower()
+    assert path.read_bytes() == b"\xff\xfe\x00"
+
+
+def test_projektkontext_geloeschtes_projekt_bleibt_geloescht(client, tmp_path):
+    url = "/api/projects/Demo/kontext"
+    loaded = client.get(url).json()
+    assert client.delete("/api/projects/Demo").status_code == 200
+    assert client.get(url).status_code == 404
+    assert client.put(url, json={**loaded, "text": "Alter Tab"}).status_code == 404
+    assert not (tmp_path / "Demo").exists()
+
+
+def test_projektkontext_schuetzt_neue_projektinstanz(client):
+    url = "/api/projects/Demo/kontext"
+    loaded = client.get(url).json()
+    assert client.delete("/api/projects/Demo").status_code == 200
+    assert client.post("/api/projects", json={"name": "Demo"}).status_code == 200
+    assert client.put(url, json={**loaded, "text": "Alter Tab"}).status_code == 409
+    assert client.get(url).json()["text"] == ""
+
+
+def test_projektkontext_verlangt_text_und_beide_kennungen(client):
+    url = "/api/projects/Demo/kontext"
+    loaded = client.get(url).json()
+    for field in ("text", "dateistand", "projektinstanz"):
+        body = {k: v for k, v in loaded.items() if k != field}
+        assert client.put(url, json=body).status_code == 422
+    assert client.put(url, json={**loaded, "text": 42}).status_code == 422
+
 def test_einstellungen_default_fuer_neues_projekt(client, tmp_projekt):
     r = client.get(f"/api/projects/{tmp_projekt}/einstellungen")
     assert r.status_code == 200

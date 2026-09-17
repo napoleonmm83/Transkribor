@@ -12,6 +12,7 @@ API-Key). `prep`/`apply` sind deterministisches Python; der LLM-Schritt liegt da
 """
 import argparse
 import contextlib
+import hashlib
 import json
 import os
 import re
@@ -22,20 +23,28 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 
-from . import druck
-from . import fehlerberichte
-from . import llm
-from . import paths
-from . import settings
-from . import sperre
-from . import sprachen           # importiert selbst nichts -> kein Zirkel
-from .edit_model import tag_uncertain_segments, apply_correction
+from . import (
+    druck,
+    fehlerberichte,
+    llm,
+    paths,
+    settings,
+    sperre,
+    sprachen,  # importiert selbst nichts -> kein Zirkel
+)
+from .edit_model import apply_correction, tag_uncertain_segments
 from .render_md import render_md
 
 AUDIO_EXT = (".mp3", ".wav", ".m4a", ".aac", ".flac", ".ogg", ".opus", ".wma", ".mp4")
 
 CLAUDE_MODEL = "opus"        # Rueckfall, wenn in den Einstellungen nichts steht
 CLAUDE_TIMEOUT = 900          # s pro claude-Aufruf; Hänger killen statt Job blockieren
+# Obergrenze fuer das Projektwissen aus kontext.md. Sie steht HIER, beim Konsumenten, und
+# `app.py` nimmt denselben Wert — zwei Orte fuer dieselbe Regel driften auseinander. Der
+# Grund ist nicht die Platte: der Text reist in JEDEN Korrektur- und Verify-Prompt JEDER
+# Datei, auf dem Abo-Weg in einen `claude -p`-Lauf mit `acceptEdits` und Read/Write. Eine
+# Liste von Namen und Fachbegriffen braucht Kilobytes.
+KONTEXT_MAX_BYTES = 64 * 1024
 CHUNK_SEGMENTS = 150          # max. Segmente pro claude-Aufruf; darüber wird die Datei gestückelt.
                               # Der Engpass ist der OUTPUT: ~540 Segmente sind ~15k Tokens JSON am
                               # Stück und laufen in CLAUDE_TIMEOUT (echter Fall: 21-min-Interview).
@@ -516,7 +525,18 @@ def _context(project: str) -> str:
     if os.path.exists(p):
         try:
             with open(p, encoding="utf-8") as fh:
-                return fh.read().strip()
+                roh = fh.read()
+            # Die Groessengrenze gehoert HIERHIN, nicht nur an den PUT-Endpunkt: dieser
+            # Text geht in jeden Korrektur- und Verify-Prompt jeder Datei, und die README
+            # sagt ausdruecklich, dass `kontext.md` auch von Hand angelegt werden darf —
+            # der Schreibweg der App ist also nicht der einzige. Eine Wache am Endpunkt
+            # allein waere an der falschen Stelle verankert (CodeRabbit-CLI, major).
+            if len(roh.encode("utf-8")) > KONTEXT_MAX_BYTES:
+                gekuerzt = roh.encode("utf-8")[:KONTEXT_MAX_BYTES].decode("utf-8", "ignore")
+                print(f"⚠ kontext.md ist groesser als {KONTEXT_MAX_BYTES // 1024} KB — "
+                      f"nur der Anfang geht in die Korrektur", flush=True)
+                return gekuerzt.strip()
+            return roh.strip()
         except (OSError, ValueError) as e:
             # `kontext.md` schreibt der NUTZER von Hand — im Editor als ANSI gespeichert ist
             # sie mit Umlaut nicht als UTF-8 lesbar (#190-Klasse, hier sogar wahrscheinlicher
@@ -560,6 +580,41 @@ def _valid_correction(cpath: str) -> bool:
     except (OSError, ValueError):     # ValueError deckt auch UnicodeDecodeError (#190)
         return False
     return isinstance(segs, list) and len(segs) > 0
+
+
+def _correction_cache_matches(cpath: str, raw_json: str, context: str) -> bool:
+    """Nur gueltige, zum Rohtext und Projektkontext passende Ergebnisse fortsetzen."""
+    try:
+        if not _valid_correction(cpath):
+            return False
+        if os.path.getmtime(cpath) < os.path.getmtime(raw_json):
+            return False
+        doc = _load(cpath)
+    except (OSError, ValueError):
+        return False
+    if "_context_sha256" not in doc:
+        # Altbestand ohne Marker: WOMIT er entstanden ist, steht nirgends. Ein leerer
+        # Kontext allein beweist es nicht — `kontext.md` gab es schon vor dieser
+        # Funktion, eine alte Korrektur kann also sehr wohl mit Projektwissen entstanden
+        # sein. Wer das Feld dann LEERT, bekaeme seine alte Korrektur zurueck, waehrend
+        # die README das Gegenteil zusagt („leer heisst gestrichen").
+        # Uebernommen wird der Altbestand deshalb nur, wenn dieses Projekt nachweislich
+        # nie Projektwissen hatte: kein Kontext UND keine Datei, in der einer stuende.
+        if context:
+            return False
+        # cpath ist <projekt>/transkripte/<base>.correction.json — eine Ebene hoeher
+        # liegt kontext.md. Kein Projektname noetig, keine zweite Signatur.
+        return not os.path.exists(
+            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(cpath))), "kontext.md"))
+    digest = doc["_context_sha256"]
+    return isinstance(digest, str) and digest == hashlib.sha256(context.encode("utf-8")).hexdigest()
+
+
+def _stamp_correction_context(cpath: str, context: str) -> None:
+    """Lokales Metadatum einer gueltigen, frisch erzeugten Korrektur."""
+    doc = _load(cpath)
+    doc["_context_sha256"] = hashlib.sha256(context.encode("utf-8")).hexdigest()
+    paths.atomic_write(cpath, json.dumps(doc, ensure_ascii=False, indent=1))
 
 
 def _claude_exe() -> str:
@@ -844,6 +899,18 @@ Schema (Write-Tool nach {cpath}):
 Gib ausser der Datei nichts aus."""
 
 
+def _glossary_snapshot(gelesen: dict, context: str):
+    inputs = {}
+    for pfad in gelesen.values():
+        kennung = paths.kennung(pfad)
+        if kennung is None:
+            return None
+        inputs[os.path.basename(pfad)] = list(kennung)
+    return {"version": 1,
+            "context_sha256": hashlib.sha256(context.encode("utf-8")).hexdigest(),
+            "inputs": inputs}
+
+
 def _glossary(project: str, context: str, force: bool = False) -> str:
     """Ein claude-Aufruf über alle .raw.txt -> _glossar.json. Gibt das Glossar als JSON-Text
     zurück; leer heisst „die Korrektur läuft ohne gemeinsames Glossar weiter".
@@ -866,15 +933,25 @@ def _glossary(project: str, context: str, force: bool = False) -> str:
     if not raw_files:
         print("  keine .raw.txt gefunden — überspringe Glossar", flush=True)
         return ""
-    # vorhandenes Glossar nur wiederverwenden, wenn es neuer als JEDE Roh-Text-Datei ist
-    # (korpus-weit: eine neu transkribierte Datei macht das gemeinsame Glossar veraltet)
+    snapshot = _glossary_snapshot(gelesen, context)
+    if snapshot is None:
+        print("⚠ Glossar-Eingaben nicht lesbar — fahre ohne gemeinsames Glossar fort", flush=True)
+        return ""
+    try:
+        cached = _load(gpath)
+    except (OSError, ValueError):
+        cached = {}
+    erneuert = False
+    # Die Ausgabezeit beweist nicht, WELCHE Rohtexte gelesen wurden: waehrend einer
+    # LLM-Runde kann bereits die naechste Transkription fertig werden. Nur der vor
+    # dem Lesen fixierte Eingabestand berechtigt zur Wiederverwendung.
     #
     # `--force` muss BIS HIERHIN durchgereicht werden, sonst laeuft ein erzwungener Lauf nach
     # einer PROMPT-Aenderung still mit dem alten Glossar — und dessen `proper_nouns` koennen
     # genau den falsch gehoerten Namen als `correct` tragen, waehrend `_correct_prompt` dazu
     # sagt „nutze es". Das ist dieselbe Klasse wie die dokumentierte Lehre, dass `--force` bis
     # in den Block-Cache reichen muss, eine Ebene hoeher (#612, beide Pruefer).
-    if not force and os.path.exists(gpath) and os.path.getmtime(gpath) >= max(os.path.getmtime(f) for f in raw_files):
+    if not force and cached.get("_source_snapshot") == snapshot:
         print("↷ nutze vorhandenes _glossar.json", flush=True)
     else:
         print("→ Glossar (gemeinsame Namen/Begriffe) …", flush=True)
@@ -958,7 +1035,7 @@ def _glossary(project: str, context: str, force: bool = False) -> str:
         # zwei Klammer-Semantiken fuer einen Aufruf waeren teurer als die zu lange Sperre.
         #
         # NUR um diesen Zweig, nicht um die ganze Funktion: der Wiederverwendungs-Zweig
-        # darueber liest keine `.raw.txt`, nur `getmtime` (kein Griff) — dort zu sperren
+        # darueber liest keine `.raw.txt`, nur Dateiidentitaeten — dort zu sperren
         # waere eine Sperre ohne Grund. Negativkontrolle im Test.
         #
         # Das `finally` ist UNBEDINGT — die #444-Lehre: wer eine Sperre setzt, uebernimmt
@@ -969,9 +1046,12 @@ def _glossary(project: str, context: str, force: bool = False) -> str:
         for b in gelesen:
             print(f"[active] {b}", flush=True)
         try:
+            vorher = paths.kennung(gpath)
             # ziel="" + dialekt=False: das Glossar ist sprachneutral (Spec F2) -- sonst
             # leaked der Default "lesbarem Standarddeutsch" in jedes Projekt, auch Englisches.
             _ask_llm(_glossary_prompt(gpath, raw_files, context, ziel=""), raw_files, gpath)
+            nachher = paths.kennung(gpath)
+            erneuert = nachher is not None and nachher != vorher
         except OSError as e:
             # #455: das Glossar ist eine Optimierung. JEDER OSError aus _ask_llm nimmt hier
             # denselben Rueckfall wie der Anbieter-Fehler: Schreibweg (atomic_write — volle
@@ -990,6 +1070,11 @@ def _glossary(project: str, context: str, force: bool = False) -> str:
     except (OSError, ValueError):     # ValueError deckt auch UnicodeDecodeError (#190)
         print("⚠ Glossar fehlt/ungültig — fahre ohne gemeinsames Glossar fort", flush=True)
         return ""
+    if erneuert:
+        # Ein erfolgloser Versuch darf den alten Snapshot nicht als aktuell ausgeben.
+        g["_source_snapshot"] = snapshot
+        paths.atomic_write(gpath, json.dumps(g, ensure_ascii=False, indent=1))
+    g.pop("_source_snapshot", None)
     print(f"✓ Glossar: {len(g.get('proper_nouns') or [])} Eigennamen, "
           f"{len(g.get('likely_corrections') or [])} Korrekturen", flush=True)
     return json.dumps(g, ensure_ascii=False, indent=1)
@@ -1093,6 +1178,9 @@ def _correct_one(base: str, tagged: str, target: str, gjson: str, context: str, 
     gehört in JEDE Zeile: bei parallelen Läufen verschränken sich die Ausgaben, eine Zeile
     ohne Basisnamen liesse sich keinem Lauf mehr zuordnen."""
     print(f"→ Korrigiere {base}{part} …", flush=True)
+    # Bei einem Anbieterfehler darf keine alte Antwort als neuer Erfolg gelten.
+    with contextlib.suppress(FileNotFoundError):
+        os.remove(target)
     t0 = time.monotonic()
     _ask_llm(_correct_prompt(base, tagged, target, gjson, context, id_range, known, ziel, dialekt,
                              mehrsprachig),
@@ -1115,6 +1203,12 @@ def _correct_one(base: str, tagged: str, target: str, gjson: str, context: str, 
             paths.atomic_write(target, json.dumps(good, ensure_ascii=False, indent=1))
             print(f"⚠ Verifikation ungültig — behalte unverifizierte {base}.correction.json", flush=True)
         dt_verify = time.monotonic() - t0
+    if id_range is not None and _valid_correction(target):
+        # NACHBARSTELLE zu der in `correct_ai_single`, gleiche Klasse: der Stempel darf
+        # eine gueltige Korrektur nicht zu Fall bringen. Hier propagierte der Wurf ueber
+        # `_correct_file` in dasselbe `except Exception`.
+        with contextlib.suppress(OSError, ValueError):
+            _stamp_correction_context(target, context)
     wie = f", Verify {dt_verify:.0f}s" if dt_verify else ""
     print(f"⏱ {base}{part}: Korrektur {dt_korrektur:.0f}s{wie}", flush=True)
 
@@ -1156,7 +1250,7 @@ def _correct_file(project: str, base: str, gjson: str, context: str, verify: boo
         # wiederverwendet wurden — ein Lauf nach einer Prompt-Änderung übernahm damit still
         # Blöcke, die noch nach der ALTEN Regel entstanden waren. Genau so ist die
         # Musik-Markierung beim ersten Test nur in Block 1 gelandet.
-        if not force and _valid_correction(ppath) and os.path.getmtime(ppath) >= os.path.getmtime(raw_json):
+        if not force and _correction_cache_matches(ppath, raw_json, context):
             print(f"  ↷ {base}{label} schon vorhanden", flush=True)
         else:
             _correct_one(base, tagged, ppath, gjson, context, verify,
@@ -1290,6 +1384,17 @@ def correct_ai_single(project: str, b: str, gjson: str = "", context: str = None
                       base_explicit: str = None, pruefe=None) -> bool | None:
     """Führt die Cloud-KI-Korrektur und Finalisierung (cmd_apply) für eine vorbereitete Datei aus.
 
+    `gjson` wird HEREINGEREICHT, nie hier beschafft — Entscheidung Marcus 2026-09-17.
+    Ein Zwischenstand dieser Arbeit liess `gjson=None` das Glossar selbst bauen; im
+    gestaffelten Lauf (`transcribe_project`) ruft aber jede fertige Aufnahme einzeln
+    hier herein, und `_glossary` liest ALLE vorhandenen `.raw.txt`. Gemessen an drei
+    Aufnahmen: drei korpusweite LLM-Aufrufe mit den Eingabemengen [A], [A,B], [A,B,C] —
+    die erste Datei bekam also ein „gemeinsames" Glossar aus sich selbst. Der gemessene
+    Nutzen dieser Arbeit stammt ohnehin aus `kontext.md` (vier bestaetigte Begriffe,
+    6 von 6 Fundstellen), nicht aus der erzeugten Namensliste. Das korpusweite Glossar
+    bleibt deshalb `cmd_run` vorbehalten, wo alle Aufnahmen fertig vorliegen.
+    `""` heisst wie bisher: kein gemeinsames Glossar fuer diese Datei.
+
     DREI Ausgänge, nicht zwei — dieselbe Unterscheidung, die `cmd_apply` über seine drei
     Zeichenketten trifft (`"skipped"`/`"missing"`/`"written"`):
 
@@ -1329,7 +1434,7 @@ def correct_ai_single(project: str, b: str, gjson: str = "", context: str = None
         if context is None:
             context = _context(project)
         reuse = (base_explicit is None and not force
-                 and os.path.exists(cpath) and os.path.getmtime(cpath) >= os.path.getmtime(raw_json))
+                 and _correction_cache_matches(cpath, raw_json, context))
         # Tiefe pro Datei: voll-Dateien laufen wie bisher (Glossar + Verify),
         # leicht/zusammenfassung sind einzelne LLM-Aufrufe ohne Treue-Pass.
         #
@@ -1342,8 +1447,14 @@ def correct_ai_single(project: str, b: str, gjson: str = "", context: str = None
         if reuse:
             print(f"↷ nutze vorhandene {b}.correction.json", flush=True)
         else:
+            # Auch leichte Korrektur, Zusammenfassung und Part-Merge brauchen ein
+            # frisches Ziel. Die Editorfassung bleibt bis zum erfolgreichen Apply.
+            with contextlib.suppress(FileNotFoundError):
+                os.remove(cpath)
             ziel, dialekt, mehr = _ziel_dialekt(project, b)
             if tiefe in ("voll", "voll_dialekt"):
+                # Kein Glossarbau an dieser Stelle: siehe Docstring — im gestaffelten
+                # Lauf waere das ein korpusweiter Aufruf JE Aufnahme.
                 _correct_file(project, b, gjson, context, verify, force,
                               ziel=ziel, dialekt=dialekt, mehrsprachig=mehr)
             elif tiefe == "leicht":
@@ -1355,6 +1466,15 @@ def correct_ai_single(project: str, b: str, gjson: str = "", context: str = None
         if not _valid_correction(cpath):
             print(f"✗ FEHLT/ungültig: {b}.correction.json — überspringe", flush=True)
             return False
+        if not reuse:
+            # Der Stempel ist eine OPTIMIERUNG (er erspart der naechsten Runde einen
+            # Neubau), kein Ergebnis. Ungefangen stuerbe eine GELUNGENE Korrektur an
+            # ihm: der Aufruf steht im grossen `except Exception` und VOR `cmd_apply`,
+            # ein `WinError 32` (Datei in Benutzung — in diesem Repo mehrfach gemessen)
+            # machte daraus ein `False`, und die edit.json bliebe ungeschrieben, obwohl
+            # die gueltige Korrektur auf der Platte liegt.
+            with contextlib.suppress(OSError, ValueError):
+                _stamp_correction_context(cpath, context)
         # LETZTE Identitaetspruefung, unmittelbar vor dem Schreiben (#523, CodeRabbit-CLI).
         #
         # Zwischen der Pruefung in `one()` und dieser Zeile liegt die ganze KI-Phase — das

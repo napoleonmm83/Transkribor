@@ -575,6 +575,62 @@ class EinstellungenBody(BaseModel):
     mehrsprachig: bool | None = None
 
 
+class ProjektKontextBody(BaseModel):
+    text: str
+    dateistand: str
+    projektinstanz: str
+
+
+def _projektkontext_lesen(project: str) -> dict:
+    """Unter dem Projekt-Lock lesen; unlesbarer Inhalt darf kein leerer Entwurf werden."""
+    instanz = _projektinstanz(project)
+    pfad = os.path.join(paths.project_dir(project), "kontext.md")
+    stand = _dateistand(pfad)
+    try:
+        with open(pfad, encoding="utf-8") as fh:
+            text = fh.read()
+    except FileNotFoundError:
+        text = ""
+    except (OSError, UnicodeError) as exc:
+        raise HTTPException(status_code=500, detail="Projektwissen lässt sich nicht lesen") from exc
+    return {"text": text, "dateistand": stand, "projektinstanz": instanz}
+
+
+@app.get("/api/projects/{project}/kontext")
+def projektkontext(project: str):
+    # Nur der Traversal-Riegel: Case-, Junction- und Symlink-Aliase loest seit #624
+    # _projektlebenszyklus selbst auf (_projekt_lock_schluessel + _ist_projekt_alias).
+    _validate(project)
+    with _projektlebenszyklus(project):
+        return _projektkontext_lesen(project)
+
+
+@app.put("/api/projects/{project}/kontext")
+def projektkontext_speichern(project: str, body: ProjektKontextBody):
+    _validate(project)   # Aliase: siehe GET oben
+    # Groessengrenze, und sie ist keine Formsache: dieser Text reist als `context` in
+    # JEDEN Korrektur- und Verify-Prompt JEDER Datei des Projekts — auf dem Abo-Weg in
+    # einen `claude -p`-Lauf mit `acceptEdits` und Read/Write. Ohne Grenze gingen 5,4 MB
+    # Browsertext durch (gemessen) und landeten vervielfacht in den Prompts. Eine Liste
+    # von Namen und Fachbegriffen braucht Kilobytes, nicht Megabytes.
+    if len(body.text.encode("utf-8")) > _correct.KONTEXT_MAX_BYTES:
+        raise HTTPException(status_code=400,
+                            detail=f"Projektwissen ist zu lang (höchstens {_correct.KONTEXT_MAX_BYTES // 1024} KB). "
+                                   "Es geht in jede Korrektur ein — bitte auf Namen und Fachbegriffe kürzen.")
+    with _projektlebenszyklus(project):
+        current = _projektkontext_lesen(project)
+        if body.projektinstanz != current["projektinstanz"]:
+            raise HTTPException(status_code=409, detail="Projekt wurde inzwischen gelöscht und neu angelegt")
+        if body.dateistand != current["dateistand"]:
+            raise HTTPException(status_code=409,
+                                detail="Projektwissen wurde inzwischen geändert. Bitte den Dialog erneut öffnen und die Änderungen zusammenführen.")
+        try:
+            paths.atomic_write(os.path.join(paths.project_dir(project), "kontext.md"), body.text)
+        except OSError as exc:
+            raise HTTPException(status_code=500, detail="Projektwissen lässt sich nicht speichern") from exc
+        return _projektkontext_lesen(project)
+
+
 class DateiEinstellungenBody(EinstellungenBody):
     """Der Datei-PUT kann eines mehr als der Projekt-PUT: die Sprecherzahl.
 

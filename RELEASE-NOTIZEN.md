@@ -28,9 +28,14 @@ hat. Lesbar, aber unschön — das ist Absicht.
 
 ## Unveröffentlicht
 
+**Neu**
+- Im Projektmenü kannst du unter „Namen & Fachbegriffe“ bekannte Schreibweisen für die nächsten Korrekturen hinterlegen.
+
 **Behoben**
 - Nach dem Löschen eines Projekts können verspätete Speicherungen nicht mehr in ein neu angelegtes Projekt mit demselben Namen geraten.
 - Die Werkzeugleiste im Editor bricht ab 768 Pixel Fensterbreite bei Bedarf um, damit Speicherstatus, Suche und Export vollständig sichtbar bleiben.
+- Wartende Aufnahmen bleiben während der gemeinsamen Glossarerstellung korrekt in der Korrekturschlange sichtbar.
+- Nach geändertem Projektwissen verwendet die nächste Korrektur keine veralteten KI-Ergebnisse weiter. Schlägt die neue Korrektur fehl, bleibt die bisherige Editorfassung erhalten.
 
 ## v0.56.0 — 2026-09-12
 

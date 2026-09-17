@@ -46,6 +46,19 @@ export function getProjectFiles(project: string): Promise<{ name: string; files:
 export async function getProjektEinstellungen(project: string): Promise<ProjectEinstellungen> {
   return get(`/api/projects/${enc(project)}/einstellungen`)
 }
+
+export type ProjektKontext = { text: string; dateistand: string; projektinstanz: string }
+
+export async function getProjektKontext(project: string): Promise<ProjektKontext> {
+  return jn(await fetch(`/api/projects/${enc(project)}/kontext`,
+    { signal: AbortSignal.timeout(LADE_ZEITLIMIT_MS) }))
+}
+
+export async function saveProjektKontext(project: string, body: ProjektKontext): Promise<ProjektKontext> {
+  return jn(await fetch(`/api/projects/${enc(project)}/kontext`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  }))
+}
 /** Nur gesetzte Felder senden (Partial). Der PUT echo't {sprache, korrektur} — ohne die
  *  Wahlmoeglichkeiten, die nur der GET liefert (siehe EinstellungenWerte). */
 export async function saveProjektEinstellungen(

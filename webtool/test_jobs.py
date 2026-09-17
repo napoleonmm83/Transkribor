@@ -3175,6 +3175,25 @@ for i in range({rauschen}):
     assert r["eingereiht"] == ["B"], r["eingereiht"]
 
 
+def test_inneres_glossar_done_erhaelt_wartende_aufnahme(monkeypatch):
+    """Korpuslesen darf B nicht aus der Korrekturschlange von A freigeben."""
+    _eigener_transcribe_lauf(monkeypatch)
+    zeilen = [
+        "[active] A", "[active] B",
+        "→ Eingereiht A (Korrektur) …", "→ Eingereiht B (Korrektur) …",
+        "[active] A", "[active] A", "[active] B",
+        "[done] A", "[done] B",  # nur das gemeinsame Glossar ist fertig
+        "[done] A", "[done] A",  # A ist vollstaendig abgeschlossen
+    ]
+    code = "\n".join(f"print({line!r}, flush=True)" for line in zeilen)
+    jid, gestartet = jobs.start("P_glossar_schlange", [sys.executable, "-c", code],
+                                cwd=None, kind="transcribe")
+    assert gestartet
+    stand = _wait(jid)
+    assert stand["status"] == "done"
+    assert stand["eingereiht"] == ["B"]
+
+
 def test_abschluss_VOR_der_einreihung_nimmt_nichts_weg():
     """Das `[done]` aus `cmd_diarize` steht VOR `ai_pool.submit` — es darf nichts loeschen.
 
