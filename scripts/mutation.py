@@ -125,7 +125,7 @@ def _ist_fehlzeile(z: str) -> bool:
             or _PLAYWRIGHT_FEHL.match(s) is not None)  # Playwright: "1) [chromium] › …"
 
 # Playwrights Fehlerliste (gemessen am Laeufer dieser Maschine, reporter=line UND default):
-#   "  1) [chromium] › e2e\reflow-320.e2e.ts:50:3 › Start … ────"
+#   "  1) [chromium] › e2e\reflow-320.spec.ts:50:3 › Start … ────"
 # Die Zahl-Klammer kennt sonst kein Laeufer hier; der Anker auf die Browser-Klammer haelt
 # das Muster eng — eine gruene Suite druckt diese Form nie. Ohne diese Zeile meldete der
 # Treiber JEDE Playwright-Mutation als wirkungslos (gemessen 2026-09-11: beide E2E-Plaene

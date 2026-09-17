@@ -1,13 +1,14 @@
 {
   "test": "npm --prefix webtool/frontend run test:e2e",
   "pfade": [
-    "webtool/frontend/e2e/seitenleiste-kontrast.e2e.ts",
-    "webtool/frontend/e2e/reflow-320.e2e.ts",
+    "webtool/frontend/e2e/seitenleiste-kontrast.spec.ts",
+    "webtool/frontend/e2e/reflow-320.spec.ts",
     "webtool/frontend/e2e/farb-mathematik.ts",
     "webtool/frontend/e2e/testApp.ts",
     "webtool/frontend/src/components/ui/button.tsx",
     "webtool/frontend/src/components/Sidebar.tsx",
     "webtool/frontend/src/components/PageHeader.tsx",
+    "webtool/frontend/src/components/Toolbar.tsx",
     "webtool/frontend/src/components/StatusBar.tsx",
     "webtool/frontend/src/components/AppShell.tsx",
     "webtool/frontend/src/components/Notizen.tsx"
@@ -82,6 +83,16 @@
       "nach": "flex shrink-0 items-center gap-2",
       "rot": [
         "Arbeitsfläche: bei 320 px kein waagerechter Überhang"
+      ],
+      "gruen": []
+    },
+    {
+      "id": "R4 die Editor-Werkzeugleiste bricht wieder nicht um",
+      "datei": "webtool/frontend/src/components/Toolbar.tsx",
+      "von": "flex flex-wrap items-center gap-2 border-b px-3 py-2",
+      "nach": "flex items-center gap-2 border-b px-3 py-2",
+      "rot": [
+        "Editor: bei 900 px bleiben Fehlerstand, Suche und Exporte ohne waagerechten Ueberhang"
       ],
       "gruen": []
     },

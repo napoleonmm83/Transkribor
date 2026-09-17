@@ -1,8 +1,9 @@
 import { expect, test } from '@playwright/test'
-import { appEinrichten, DATEIEN, PROJEKT } from './testApp'
+import { appEinrichten, DATEIEN, editorEinrichten, PROJEKT } from './testApp'
 
 test('Speicherfehler schuetzt Fusszeile und Palette; bestaetigtes Loeschen verlaesst den Editor', async ({ page }) => {
   await appEinrichten(page, { width: 1280, height: 800 })
+  await editorEinrichten(page, true)
   let geloescht = false
   await page.route('**/api/projects', r => r.fulfill({ json: {
     projects: (geloescht ? ['Beta'] : [PROJEKT, 'Beta']).map(name => ({
@@ -15,16 +16,6 @@ test('Speicherfehler schuetzt Fusszeile und Palette; bestaetigtes Loeschen verla
       return r.fulfill({ json: { ok: true } })
     }
     return r.fulfill({ json: { name: PROJEKT, files: DATEIEN } })
-  })
-  await page.route(`**/api/projects/${PROJEKT}/files/A_erste`, r => {
-    if (r.request().method() === 'PUT') return r.fulfill({ status: 500, json: { detail: 'Speicherprobe' } })
-    return r.fulfill({ json: {
-      base: 'A_erste', project: PROJEKT, audio: '', language: 'de', human_edited: false,
-      context: '', speakers: ['A'], annotations: [], dateistand: 'stand-1', projektinstanz: 'instanz-a',
-      segments: [{ id: 0, start: 0, end: 1, speaker: 'A', raw_text: 'Browser-Probe', text: 'Browser-Probe',
-        words: [{ word: 'Browser-Probe', start: 0, end: 1, probability: 1 }],
-        flags: { hallucination: false, low_conf: false }, note: '' }],
-    } })
   })
   const fragen: string[] = []
   page.on('dialog', async dialog => {

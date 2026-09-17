@@ -19,7 +19,7 @@ import { appEinrichten, PROJEKT } from './testApp'
  * Geometrie geprüft, kein Datenfluss — der gehört in die vitest-Suite.
  */
 
-// INTENTIONAL-UNTESTED: Die Inline-Fixture ist nach e2e/testApp.ts gezogen (#515 braucht
+// Die Inline-Fixture ist nach e2e/testApp.ts gezogen (#515 braucht
 // dasselbe Gerüst) — diese Datei IST der Test selbst (entstanden in #423, derselbe Bundel-D-
 // Diff); das Netz ist der gruene E2E-Lauf nach dem Umbau, der dieselben drei Dialoge prueft.
 /** Das Herzstück, in allen drei Dialogen gleich:
@@ -40,7 +40,7 @@ async function kreuzHaelt(page: Page, huelleRollt: boolean) {
   // Ein-/Ausblendanimation (duration-200) abwarten: boundingBox() wartet nicht auf sie.
   await page.waitForTimeout(300)
 
-  // INTENTIONAL-UNTESTED: Diese Datei IST der Browser-Waechter (#423); ihr Netz ist der
+  // Diese Datei IST der Browser-Waechter (#423); ihr Netz ist der
   // gruene Lauf direkt danach plus der committete Mutationsplan
   // scripts/mutationen/dialog-schliesskreuz_e2e.json, der genau diese Zusicherungen
   // rot bekommen muss. Ein Pin-Test ueber einen Test waere eine dritte Schicht ohne
@@ -54,7 +54,7 @@ async function kreuzHaelt(page: Page, huelleRollt: boolean) {
   // (ui/dialog.tsx), die Meldung stimmt also; sie misst es jetzt, statt es zu erben.
   // Befund der CodeRabbit-CLI; latent, gleiche Klasse wie der Fokus-Befund im
   // Kontrast-Waechter desselben Buendels.
-  // INTENTIONAL-UNTESTED: Diese Datei IST der Waechter (#423), Netz wie oben.
+  // Diese Datei IST der Waechter (#423), Netz wie oben.
   const { huelleWeg, irgendwoWeg } = await dialog.evaluate((el) => {
     let eigener = 0
     let weitester = 0
@@ -82,7 +82,7 @@ async function kreuzHaelt(page: Page, huelleRollt: boolean) {
   const d = (await dialog.boundingBox())!
   expect(k.y, '✕-Oberkante im Dialog').toBeGreaterThanOrEqual(d.y - 0.5)
   expect(k.y + k.height, '✕-Unterkante im Dialog').toBeLessThanOrEqual(d.y + d.height + 0.5)
-  // INTENTIONAL-UNTESTED: Ausbau des eigenen Tests (derselbe Buendel-D-Diff) um die
+  // Ausbau des eigenen Tests (derselbe Buendel-D-Diff) um die
   // x-Assertionen, die der Kommentar bereits versprach (kalter Review, Befund 2) —
   // das Netz ist der grueene Lauf dieses Tests selbst, direkt danach gefahren.
   expect(k.x, '✕-Linke Kante im Dialog').toBeGreaterThanOrEqual(d.x - 0.5)
@@ -102,22 +102,17 @@ async function kreuzHaelt(page: Page, huelleRollt: boolean) {
   expect(trifft, 'elementFromPoint in der ✕-Mitte trifft den ✕').toBe(true)
 }
 
-// INTENTIONAL-UNTESTED: diese Datei IST der Test (entsteht in dieser Sitzung, #423);
-// der Edit fixt ihren eigenen Hook-Aufruf, der im ersten Lauf an der Signatur scheiterte.
-// Es gibt kein Verhalten vor diesem Edit, das verschwinden koennte.
 test.beforeEach(async ({ page }) => appEinrichten(page))
 
 test('Basis-Dialog (Datei-Einstellungen): ✕ bleibt im gerollten Dialog und ist klickbar', async ({ page }) => {
   // Noch enger als 400: die Datei-Einstellungen sind hoch (Sprache, Tiefe, Sprecher,
   // Hinweise) — bei 340 px Fensterhöhe rollt die Hülle garantiert.
   await page.setViewportSize({ width: 320, height: 340 })
-  // INTENTIONAL-UNTESTED: entstehender E2E (#423) — Korrektur des eigenen Ablaufs: das
-  // Aufklappen der Seitenleiste navigiert nicht, die URL treibt die App (AppShell:
+  // Das Aufklappen der Seitenleiste navigiert nicht, die URL treibt die App (AppShell:
   // das aufgeklappte Projekt der Leiste IST das aus der URL).
   await page.goto(`/p/${PROJEKT}`)
   await page.getByRole('button', { name: 'Aktionen für „A_erste“' }).click()
-  // INTENTIONAL-UNTESTED: entstehender E2E (#423) — Menüpunkt heisst „Sprache, Sprecher &
-  // Korrektur“, nicht „Einstellungen“ (DateiMenue.tsx:193).
+  // Der Menüpunkt heisst „Sprache, Sprecher & Korrektur“ (DateiMenue.tsx:193).
   await page.getByRole('menuitem', { name: 'Sprache, Sprecher & Korrektur' }).click()
   await kreuzHaelt(page, true)
 })
@@ -131,8 +126,7 @@ test('CommandDialog (overflow-hidden · p-0): ✕ bleibt sichtbar und klickbar',
 })
 
 test('MaterialDialog (flex · overflow-visible): ✕ klebt oben und bleibt klickbar', async ({ page }) => {
-  // INTENTIONAL-UNTESTED: entstehender E2E (#423) — Direktnavigation, gleicher Grund
-  // wie im Basis-Test: die Seitenleisten-Zeile klappt nur auf.
+  // Direktnavigation, gleicher Grund wie im Basis-Test: die Seitenleisten-Zeile klappt nur auf.
   await page.goto(`/p/${PROJEKT}`)
   await page.getByRole('button', { name: /Material/ }).first().click()
   await expect(page.getByRole('dialog')).toBeVisible()
