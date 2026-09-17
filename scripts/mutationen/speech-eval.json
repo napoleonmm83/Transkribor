@@ -1,0 +1,69 @@
+{
+  "test": "python -m pytest webtool/test_speech_eval.py -q",
+  "pfade": [
+    "tools/speech_eval.py",
+    "webtool/test_speech_eval.py"
+  ],
+  "mutationen": [
+    {
+      "id": "SE-A die Fehlersumme verliert die Einfuegungen",
+      "datei": "tools/speech_eval.py",
+      "von": "    errors = substitutions + deletions + insertions",
+      "nach": "    errors = substitutions + deletions",
+      "rot": [
+        "test_einfuegungen_zaehlen_in_errors_und_rate"
+      ],
+      "gruen": [
+        "test_wortzeiten_aendern_die_rate_nicht_bei_gleichem_text"
+      ]
+    },
+    {
+      "id": "SE-B der ungetimte Rueckfall zaehlt wieder in die Kennzahl",
+      "datei": "tools/speech_eval.py",
+      "von": "    UNGETIMT = (\"segment_overlap\", \"mixed\")",
+      "nach": "    UNGETIMT = ()",
+      "rot": [
+        "test_wortzeiten_aendern_die_rate_nicht_bei_gleichem_text"
+      ],
+      "gruen": [
+        "test_einfuegungen_zaehlen_in_errors_und_rate"
+      ]
+    },
+    {
+      "id": "SE-C die Stille zaehlt Halluzinationen ohne Wortzeiten wieder mit",
+      "datei": "tools/speech_eval.py",
+      "von": "    silence = [row for row in silence_alle if row[\"selection\"][\"method\"] not in UNGETIMT]",
+      "nach": "    silence = silence_alle",
+      "rot": [
+        "test_stille_ohne_wortzeiten_zaehlt_keine_halluzinationen"
+      ],
+      "gruen": [
+        "test_einfuegungen_zaehlen_in_errors_und_rate"
+      ]
+    },
+    {
+      "id": "SE-D die Wortzeiten werden nicht mehr auf die Segmentgrenze geklemmt",
+      "datei": "tools/speech_eval.py",
+      "von": "            start, end = max(start, segment[\"start\"]), min(end, segment[\"end\"])",
+      "nach": "            pass  # MUTATION: keine Klemmung",
+      "rot": [
+        "test_wort_ueber_der_segmentgrenze_verwirft_nicht_das_ganze_segment"
+      ],
+      "gruen": [
+        "test_einfuegungen_zaehlen_in_errors_und_rate"
+      ]
+    },
+    {
+      "id": "SE-E die Manifest-Pfadpruefung faellt weg",
+      "datei": "tools/speech_eval.py",
+      "von": "                if any(not isinstance(path, str) or not path for path in paths.values()):",
+      "nach": "                if False:",
+      "rot": [
+        "test_cli_weist_nicht_string_pfade_im_manifest_ab"
+      ],
+      "gruen": [
+        "test_einfuegungen_zaehlen_in_errors_und_rate"
+      ]
+    }
+  ]
+}
