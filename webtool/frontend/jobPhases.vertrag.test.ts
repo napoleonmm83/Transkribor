@@ -348,10 +348,13 @@ const INVENTAR: Record<string, Eintrag> = {
     beispiel: 'apply: KAPUTT A (ValueError: A.correction.json: JSON-Objekt erwartet, list '
       + 'gelesen) — Korrektur nicht anwendbar, A.correction.json pruefen',
     basis: 'A',
-    notiz: 'Wie die beiden apply: FEHLT-Zeilen im Job-Protokoll nur ueber ein TOCTOU-Fenster '
-      + 'erreichbar (correct_ai_single prueft _valid_correction vor cmd_apply), am CLI-Einstieg '
-      + 'correct apply dagegen direkt. Ohne eigenen Parser-Zweig bliebe die Aufnahme im '
-      + 'Spinner — dieselbe Begruendung wie bei den Nachbarn.',
+    notiz: 'KEIN TOCTOU-Fall, anders als die beiden apply: FEHLT-Zeilen — das stand hier und '
+      + 'ist widerlegt: _valid_correction prueft nur parst/dict/segments-nichtleere-Liste, '
+      + 'keine Elementtypen. {"segments":[{"id":0,"text":5}]} kommt deterministisch durch und '
+      + 'stirbt in apply_correction, bei JEDEM Lauf derselben Datei erneut (der reuse-Pfad '
+      + 'nimmt die liegengebliebene correction.json wieder). Es ist damit ein Regelpfad-'
+      + 'Ausgang einer schlechten LLM-Antwort, nicht ein Rennen. Ohne eigenen Parser-Zweig '
+      + 'bliebe die Aufnahme im Spinner — dieselbe Begruendung wie bei den Nachbarn.',
   },
   'apply: SKIP {} (human_edited=true; --force zum Ueberschreiben)': {
     art: 'gelesen', beispiel: 'apply: SKIP A (human_edited=true; --force zum Ueberschreiben)', basis: 'A',

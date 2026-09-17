@@ -201,6 +201,24 @@ describe('parseJobPhases — correct', () => {
     ])
     expect(p.perBase).toEqual({ 'Interview (Teil 1)': 'skipped', 'Zweites (Teil 2)': 'skipped' })
   })
+  it('Basisname mit Klammern -> KAPUTT trifft den ganzen Namen, nicht sein erstes Wort', () => {
+    // Der Zweig war bei seiner Einfuehrung (17.09.2026) in BEIDE Richtungen kaputt, und beide
+    // Faelle stehen hier: nicht-gierig schnitt `Interview (Teil 1)` auf `Interview` zu —
+    // Urteil ueber die gesunde Nachbaraufnahme, waehrend die kaputte im Spinner blieb. Gierig
+    // schluckte an der zweiten Zeile die halbe Ausnahmemeldung, weil `JSONDecodeError` seine
+    // eigene Klammer mitbringt (`(char 2)`). Nur der Rueckverweis auf den Dateinamen am
+    // Zeilenende traegt beide.
+    // Je EIN Literal je Zeile: die Fixture-Wache im Vertragstest sucht den Erzeuger einer
+    // gedruckten Form und sieht eine mit `+` zusammengesetzte Zeile als zwei Zeilen ohne
+    // Erzeuger (gemessen — genau daran ist die erste Fassung dieses Tests gescheitert).
+    const p = parseJobPhases('correct', [
+      'apply: KAPUTT Interview (Teil 1) (AttributeError: x) — Korrektur nicht anwendbar, Interview (Teil 1).correction.json pruefen',
+      'apply: KAPUTT C0701 (JSONDecodeError: Expecting value: line 1 column 3 (char 2)) — Korrektur nicht anwendbar, C0701.correction.json pruefen',
+    ])
+    expect(p.perBase).toEqual({ 'Interview (Teil 1)': 'failed', C0701: 'failed' })
+    // Die Gegenprobe zur Spinner-Haelfte: kein Name bleibt als laufend stehen.
+    expect(Object.keys(p.active)).toEqual([])
+  })
 })
 
 describe('parseJobPhases — transcribe', () => {
