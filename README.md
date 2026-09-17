@@ -892,6 +892,39 @@ Die Roh-Transkription bleibt unangetastet: Korrekturen liegen in `<base>.edit.js
 Messungen dahinter — steht in [`CLAUDE.md`](CLAUDE.md), Entwürfe in
 [`docs/superpowers/specs/`](docs/superpowers/specs/).
 
+### Transkriptqualität vergleichen
+
+`python tools/speech_eval.py score --manifest eval/faelle.json --output eval/bericht.json`
+vergleicht Texte anhand von Aufnahme und Zeitfenster, unabhängig von Segment-IDs.
+Das Manifest enthält `cases` mit `case_id`, `audio_id`, `start`, `end`, `reference`
+und einem ausdrücklich gesetzten `reviewed` sowie `hypotheses` als Zuordnung von
+Audio-IDs zu JSON-Dateien (Pfade relativ zum Manifest). Nur am Audio geprüfte
+Referenzen dürfen `reviewed: true` tragen. Entfernungen zu ungeprüften Entwürfen
+stehen separat; sie belegen keine Erkennungsqualität.
+
+`extract --raw … --corrected … --edited … --audio-id … --output …` bereitet
+manuelle Textänderungen als ungeprüfte Referenzkandidaten vor. Ausdrücklich
+geprüfte Stille lässt sich mit `reference_kind: "silence"` und leerer Referenz
+erfassen; dort werden erfundene Wörter separat gezählt. Fehlende Ergebnisse
+werden sichtbar. Das Werkzeug misst keine Sprecher- oder Zeitmarkengenauigkeit.
+Private Aufnahmen und Berichte gehören nach `eval/`, das von Git ausgeschlossen
+ist.
+
+**Die Rate gilt nur für Läufe mit Wortzeiten.** Fehlen sie einem Segment, lässt
+sich der Text nicht auf das Zeitfenster eingrenzen; solche Fälle stehen als
+`reviewed_untimed` neben der Kennzahl statt darin, und `coverage` nennt ihre
+Zahl. Das ist kein Feinschliff: gezählt wurden sie, ergaben zwei Hypothesen mit
+wortgleichem Text 0,0 gegen 0,0998 — die Zahl maß dann, ob ein Lauf Zeitstempel
+mitbringt, nicht seine Qualität. Und weil die KI-Korrektur die Wortzeiten genau
+dort verwirft, wo sie korrigiert hat, traf das systematisch den korrigierten
+Lauf. Steht `untimed_fallback_cases` hoch, sagt die Rate über einen großen Teil
+des Materials nichts; fällt jeder Fall dorthin, meldet der Bericht
+`quality_evidence_available: false`.
+
+Läufe mit hinterlegtem Projektwissen sind getrennt von Läufen ohne
+Hilfestellung auszuwerten — ein Glossar verbessert die Trefferquote, sagt aber
+nichts über die Erkennung selbst.
+
 **Was ein Nutzer merkt, bekommt eine Zeile in
 [`RELEASE-NOTIZEN.md`](RELEASE-NOTIZEN.md)** — unter `## Unveröffentlicht`, im selben PR wie
 die Änderung, in der Sprache der Nutzerin statt in der des Codes. Beim Freigeben über den
