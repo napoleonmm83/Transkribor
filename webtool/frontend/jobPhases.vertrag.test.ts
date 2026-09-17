@@ -648,6 +648,11 @@ const INVENTAR: Record<string, Eintrag> = {
   '⚠ kontext.md nicht lesbar ({}: {}) — fahre ohne ': {
     art: 'gelesen_anderswo', notiz: GRUND, beispiel: '⚠ kontext.md nicht lesbar (OSError: kein Zugriff) — fahre ohne Kontext fort',
   },
+  // Die Groessengrenze am Leseweg: kontext.md darf von Hand angelegt werden und kommt so
+  // am PUT-Riegel vorbei. Gekuerzt wird laut, nicht still — der Lauf geht weiter.
+  '⚠ kontext.md ist groesser als {} KB — ': {
+    art: 'ignoriert', beispiel: '⚠ kontext.md ist groesser als 64 KB — nur der Anfang geht in die Korrektur',
+  },
   '⚠ {} nicht lesbar ({}: {}) — gilt ': {
     art: 'gelesen_anderswo', notiz: GRUND, beispiel: '⚠ /x/A.edit.json nicht lesbar (JSONDecodeError: x) — gilt als handbearbeitet',
   },
