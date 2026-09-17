@@ -4,7 +4,7 @@ Stand: 17.09.2026 · Basis: `master` auf `a283f899c1ecbb610d4e9f0946d6197e2b1356
 
 ## Gemessener Bestand
 
-`gh issue list --state open --limit 100` liefert 26 offene Issues. `gh pr list --state open --limit 100` liefert einen offenen PR: Renovate #621. PR #624 ist mit allen beobachteten Prüfungen grün gemergt; der Merge-Commit ist `a283f899`.
+Die Bestandsabfrage vor Beginn des Bündels am 17.09.2026 liefert mit `gh issue list --state open --limit 100` 26 offene Issues und mit `gh pr list --state open --limit 100` einen offenen PR: Renovate #621. Der aus diesem Plan entstandene PR #625 existierte zu diesem Abfragezeitpunkt noch nicht. PR #624 ist mit allen ausgeführten Prüfungen auf `SUCCESS` gemergt; `resolve-python` und `osv-voll` waren planmäßig `SKIPPED`. Der vollständige Merge-Commit ist `a283f899c1ecbb610d4e9f0946d6197e2b135671`.
 
 Jedes offene Issue steht in genau einer Primär-Disposition:
 
@@ -25,7 +25,7 @@ Kontrollsumme: 2 + 2 + 1 + 1 + 3 + 3 + 2 + 3 + 2 + 7 = **26**.
 
 ## Änderung zum Plan vom 10.09.2026
 
-Fakt: Die neuen Issues #613, #615, #616, #618, #619 und #622 sind seit dem Vorgängerzensus hinzugekommen; erledigte Vorgängerissues sind nicht mehr offen. Fakt: Das frühere Bündel D ist geliefert, und #615/#618 sind mit PR #624 umgesetzt. Fakt: Renovate #621 ist der einzige offene PR.
+Fakt: Die neuen Issues #613, #615, #616, #618, #619 und #622 sind seit dem Vorgängerzensus hinzugekommen; erledigte Vorgängerissues sind nicht mehr offen. Fakt: Das frühere Bündel D ist geliefert, und #615/#618 sind mit PR #624 umgesetzt. Fakt: Zum dokumentierten Abfragezeitpunkt war Renovate #621 der einzige offene PR.
 
 Herleitung: #613 und #616 bilden das nächste Bündel, weil beide in derselben Browser-Sitzung überprüfbar sind und dieselben Konfigurations-, Fixture- und Mutationspfade berühren. Der offene Renovate-PR verändert diese fachliche Reihenfolge nicht; er beansprucht lediglich denselben CI- und Review-Kanal.
 

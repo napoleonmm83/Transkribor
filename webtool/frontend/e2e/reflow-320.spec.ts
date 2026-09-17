@@ -171,9 +171,13 @@ test('Editor: bei 900 px bleiben Fehlerstand, Suche und Exporte ohne waagerechte
     .toBeLessThanOrEqual(1)
 
   const messwerte = [{ breite: 900, ueberhang: ergebnis.ueberhang }]
-  for (const breite of [768, 320]) {
+  for (const [breite, hoechstens] of [[768, 1], [320, 20]] as const) {
     await page.setViewportSize({ width: breite, height: 700 })
-    messwerte.push({ breite, ueberhang: (await page.evaluate(REFLOW)).ueberhang })
+    const messung = await page.evaluate(REFLOW)
+    messwerte.push({ breite, ueberhang: messung.ueberhang })
+    expect(messung.ueberhang,
+      `Editor bei ${breite}px: ${messung.ueberhang}px waagerechter Ueberhang — Verursacher: ${messung.schuldige.join(' · ')} — Treiber: ${messung.treiber.join(' · ') || 'keine'}`)
+      .toBeLessThanOrEqual(hoechstens)
   }
   console.info(`Editor-Reflow-Messwerte: ${JSON.stringify(messwerte)}`)
 })

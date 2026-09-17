@@ -30,6 +30,7 @@ hat. Lesbar, aber unschön — das ist Absicht.
 
 **Behoben**
 - Nach dem Löschen eines Projekts können verspätete Speicherungen nicht mehr in ein neu angelegtes Projekt mit demselben Namen geraten.
+- Die Werkzeugleiste im Editor bricht in schmalen Fenstern um, damit Speicherstatus, Suche und Export vollständig sichtbar bleiben.
 
 ## v0.56.0 — 2026-09-12
 
