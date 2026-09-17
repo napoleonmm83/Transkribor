@@ -1094,12 +1094,26 @@ def _glossary(project: str, context: str, force: bool = False) -> str:
         # bedeutet, steht nicht in „der alte Snapshot bleibt stehen" — den gibt es gar
         # nicht mehr, `_ask_llm` hat die Datei ja gerade ersetzt (daran erkennt
         # `erneuert` den Neubau), auf der Platte steht danach GAR KEIN Snapshot.
-        # Gemessen: jeder Folgelauf baut das korpusweite Glossar dann NEU — ein
-        # bezahlter LLM-Aufruf je Lauf — und nimmt dabei `[active]`/`[done]` ueber ALLE
-        # Aufnahmen des Projekts, womit deren Loeschen mit 409 antwortet. Drei Laeufe mit
-        # dauerhaft scheiterndem Schreiben ergaben drei Aufrufe, null Warnzeilen und
-        # dreimal die Erfolgsmeldung mit Haken. Alle VIER Nachbar-Ausgaenge dieser
-        # Funktion nennen ihren Grund; dieser eine schwieg. `ValueError` faengt mit,
+        # GEMESSEN: jeder Folgelauf baut das korpusweite Glossar dann NEU — ein
+        # bezahlter LLM-Aufruf je Lauf. Drei Laeufe mit dauerhaft scheiterndem Schreiben
+        # ergaben drei Aufrufe, null Warnzeilen und dreimal die Erfolgsmeldung mit Haken.
+        # Der Mechanismus steht dreissig Zeilen hoeher: der Wiederverwendungs-Zweig
+        # verlangt `cached.get("_source_snapshot") == snapshot`, und ohne Merker ist die
+        # linke Seite `None`. Reproduziert in
+        # `test_gescheitertes_snapshot_schreiben_reisst_den_lauf_nicht_ab` — mit
+        # Negativkontrolle, denn „der Lauf ruft das Modell" beweist nichts, solange nicht
+        # danebensteht, dass er es mit heilem Merker NICHT tut.
+        #
+        # HERGELEITET, nicht gemessen: dass dabei auch das Loeschen jeder Aufnahme mit
+        # 409 antwortet. Der Glossar-Schritt meldet `[active]`/`[done]` korpusweit (#450,
+        # die Schleife ueber `gelesen` oben), und `jobs.betrifft` macht daraus die Sperre
+        # — belegt ist die Druckstelle, nicht der Statuscode. Wer die Aussage braucht,
+        # misst sie am Loeschpfad mit mehreren Aufnahmen; als eigener Punkt festgehalten,
+        # weil das ein anderer Messaufbau ist (CodeRabbit-Bot an PR #628, Vorab-Check
+        # „Behauptung oder Messung" — er hatte recht: beides stand unter EINEM „Gemessen").
+        #
+        # Alle VIER Nachbar-Ausgaenge dieser Funktion nennen ihren Grund; dieser eine
+        # schwieg — das ist der Grund fuer die Warnzeile. `ValueError` faengt mit,
         # weil die Vorbild-Stelle in `_correct_one` es auch tut (ein einzelnes Surrogat
         # macht aus `atomic_write` einen `UnicodeEncodeError`, und der ist kein OSError).
         try:
