@@ -928,7 +928,16 @@ def test_prep_single_ueberspringt_falsch_geformte_diar_json(project, monkeypatch
     assert not (t / "S1.tagged.txt").exists()
 
 
-def test_cmd_prep_ueberspringt_falsch_geformtes_raw(project, capsys):
+@pytest.mark.parametrize("roh", [
+    # `segments` als Zeichenkette -> `seg.get` auf einem `str` -> AttributeError
+    {"language": "de", "segments": "kaputt"},
+    # Wort-Wahrscheinlichkeit als Text -> `prob < threshold` -> TypeError. DIESE Form ist der
+    # Waechter fuer die zweite Haelfte des neuen Filters: ohne sie blieb die Mutation
+    # „`TypeError` aus dem Tupel streichen" gruen (gegnerischer Pruefer, 174/174).
+    {"language": "de", "segments": [{"id": 0, "start": 0.0, "end": 1.0, "text": " x",
+                                     "words": [{"word": " x", "probability": "hoch"}]}]},
+])
+def test_cmd_prep_ueberspringt_falsch_geformtes_raw(project, capsys, roh):
     """Die ZWEITE Aufrufstelle von `prep_single` — ohne sie waere es ein Fix an einer Stelle.
 
     `cmd_prep` zaehlt mit `sum(1 for base in bases(project) if prep_single(...))`. Ein Wurf
@@ -936,8 +945,7 @@ def test_cmd_prep_ueberspringt_falsch_geformtes_raw(project, capsys):
     Plan-Pruefer am 17.09.2026 (S1 getaggt, Bilanzzeile nie gedruckt).
     """
     _root, t = project
-    (t / "S2.json").write_text(json.dumps({"language": "de", "segments": "kaputt"}),
-                               encoding="utf-8")
+    (t / "S2.json").write_text(json.dumps(roh), encoding="utf-8")
 
     assert correct.cmd_prep("Demo") == 1
     out = capsys.readouterr().out
@@ -979,20 +987,67 @@ def test_apply_meldet_erfolg_wenn_nur_md_export_scheitert(project, monkeypatch, 
     assert "md-Export fehlgeschlagen" in out, out
 
 
-def test_apply_meldet_kaputte_correction_statt_abzustuerzen(project, capsys):
+@pytest.mark.parametrize("kaputt", [
+    '[]',                                     # gueltiges JSON, kein Objekt -> ValueError (_load)
+    '{ kaputt',                               # unparsebar               -> JSONDecodeError
+    '{"segments": [{"id": 0, "text": 5}]}',   # Zahl statt Text          -> TypeError
+    '{"segments": [{"id": 0, "speaker": 5, "text": "x"}]}',   # Zahl als Sprecher -> TypeError
+])
+def test_apply_meldet_kaputte_correction_statt_abzustuerzen(project, capsys, kaputt):
     """Der dritte Einstiegspunkt — `correct apply` von Hand, der einzige ganz ohne Fang.
 
     Die beiden Ladezeilen und `apply_correction` lagen in keinem `try`: eine kaputte
     `correction.json` endete als roher Traceback statt als Meldung. Ausgefuehrt gemessen vom
-    kalten Plan-Pruefer mit drei Formen (`[]`, unparsebar, falsche Typen) — drei Abbrueche.
+    kalten Plan-Pruefer mit drei Formen — drei Abbrueche.
+
+    VIER Formen, weil die ersten beiden den Filter nicht vollstaendig bewachen: sie werfen
+    `ValueError`, und den fing er schon vorher. Die TYPFEHLER sind der Zweck der neuen Zeile,
+    und ohne sie blieb die Mutation „Filter zurueck auf (OSError, ValueError)" gruen
+    (gegnerischer Pruefer, 174/174 — ein Waechter, der seine eigene Erweiterung nicht prueft).
+    Beide Typformen kommen durch `_valid_correction`: es prueft nur parst/dict/`segments`-
+    nichtleere-Liste, keine Elementtypen. Genau deshalb ist dieser Ausgang KEIN TOCTOU-Fall,
+    sondern der Regelpfad einer schlechten LLM-Antwort.
     """
     _root, t = project
-    (t / "S1.correction.json").write_text("[]", encoding="utf-8")   # gueltiges JSON, kein Objekt
+    (t / "S1.correction.json").write_text(kaputt, encoding="utf-8")
 
     assert correct.cmd_apply("Demo", "S1") == "missing"
     out = capsys.readouterr().out
     assert not (t / "S1.edit.json").exists()
     assert "S1" in out and "KAPUTT" in out, out
+
+
+def test_cli_apply_endet_rot_wenn_nichts_geschrieben_wurde(project, capsys):
+    """Der Exitcode des Handwegs — er fiel ersatzlos weg, und der Fang machte daraus einen
+    stillen Erfolg.
+
+    Vor dem Fang endete eine kaputte `correction.json` hier im Traceback, also mit Exitcode 1.
+    Seit `cmd_apply` sie faengt, war es eine 0 auf einem Lauf, der nichts geschrieben hat —
+    `tools/correct_label.mjs` nennt genau diesen Aufruf als Assemblierschritt, ein verketteter
+    Aufrufer lief damit weiter. Beide Pruefer haben es unabhaengig gemessen.
+    """
+    _root, t = project
+    (t / "S1.correction.json").write_text('{"segments": [{"id": 0, "text": 5}]}',
+                                          encoding="utf-8")
+    with pytest.raises(SystemExit) as ei:
+        correct.main(["apply", "Demo", "S1"])
+    assert ei.value.code != 0
+    assert "KAPUTT" in capsys.readouterr().out
+
+
+def test_cli_apply_endet_gruen_wenn_geschrieben_wurde(project, capsys):
+    """Die Gegenrichtung, ohne die der Riegel oben ein Daueralarm waere.
+
+    Die drei `"skipped"`-Ausgaenge von `cmd_apply` sind die Schutzpfade dieses Repos und
+    heissen „deine Fassung bleibt stehen" — sie duerfen NICHT rot faerben. Hier der
+    Normalfall: eine gueltige Korrektur wird angewendet, der Lauf endet ohne SystemExit.
+    """
+    _root, t = project
+    _dump(t / "S1.correction.json",
+          {"base": "S1", "segments": [{"id": 0, "speaker": "Interviewer", "text": "Neu."}]})
+    correct.main(["apply", "Demo", "S1"])            # kein SystemExit
+    assert (t / "S1.edit.json").exists()
+    assert "edit.json + md" in capsys.readouterr().out
 
 
 def test_run_bilanz_nennt_nicht_den_anbieter_bei_echtem_fehler(project, monkeypatch, capsys):
@@ -1017,7 +1072,7 @@ def test_run_bilanz_nennt_nicht_den_anbieter_bei_echtem_fehler(project, monkeypa
     out = capsys.readouterr().out
     assert ei.value.code != 0
     assert "KI-Anbieter nicht erreichbar" not in out, out
-    assert "siehe die ✗-Zeilen oben" in out, out
+    assert "siehe die Fehlerzeilen oben" in out, out
 
 
 # ---- _run_claude: Vertrag (argv/cwd/stdin/timeout) + Fehlerzweige (subprocess gefälscht) ----
@@ -1133,12 +1188,19 @@ def test_run_claude_timeout_is_caught(project, monkeypatch, capsys):
 
 # ---- 2C: CLI-Exitcode signalisiert Total-Ausfall (sonst wird der Job faelschlich "done") ----
 
-def test_run_cli_exits_nonzero_when_nothing_corrected(project, monkeypatch):
+def test_run_cli_exits_nonzero_when_nothing_corrected(project, monkeypatch, capsys):
     # claude schreibt nie etwas (z.B. nicht auf PATH) -> jede versuchte Datei schlaegt fehl
     monkeypatch.setattr(correct, "_run_claude", lambda prompt, workdir: None)
     with pytest.raises(SystemExit) as ei:
         correct.main(["run", "Demo"])
+    out = capsys.readouterr().out
     assert ei.value.code != 0                            # Job-Signal: Fehler, nicht "done"
+    # Die GEGENRICHTUNG zum Fehlerzweig der Schlusszeile, und ohne sie war der Zweig nur halb
+    # bewacht: hier hat der Anbieter wirklich nichts Brauchbares geliefert (`✗ FEHLT/ungueltig`,
+    # wurffrei und bewusst ungezaehlt), der Anbieter-Hinweis ist also RICHTIG und muss
+    # stehenbleiben. Gemessen vom gegnerischen Pruefer: `elif _letzte_fehler:` -> `elif True:`
+    # liess alle 174 Tests gruen, weil nur die Richtung „Zweig tot" einen Test hatte.
+    assert "KI-Anbieter nicht erreichbar" in out, out
 
 
 def test_run_cli_ok_when_all_human_edited(project, monkeypatch):
@@ -1195,6 +1257,56 @@ def test_main_setzt_den_bereich_selbst_zurueck(project, monkeypatch):
     monkeypatch.setattr(correct, "cmd_run", lambda project, base=None, force=False, verify=True: 0)
     correct.main(["run", "Demo"])                                     # kein SystemExit
     assert correct._letzter_bereich is None
+
+
+def test_main_setzt_den_fehlerzaehler_selbst_zurueck(project, monkeypatch, capsys):
+    """Derselbe Waechter fuer `_letzte_fehler` — und er fehlte, obwohl die Zeile dastand.
+
+    Der gegnerische Pruefer hat BEIDE Resets mutiert (den in `cmd_run` und den in `main`) und
+    beide Male blieben 174 Tests gruen. Ein Reset ohne roten Test ist eine Behauptung.
+
+    Hier liegt ein Rest von 3 aus einem frueheren Lauf, `cmd_run` ist eine Attrappe (der Reset
+    dort laeuft also nie) und meldet 0 korrigierte Dateien bei einer versuchten. Ohne den Reset
+    in `main` gewaenne der Fehlerzweig, und die Schlusszeile spraeche von Fehlern eines Laufs,
+    der nicht stattgefunden hat.
+    """
+    _root, t = project
+
+    def fake_run(project, base=None, force=False, verify=True):
+        # Setzt Bereich und Kennungen wie ein echter Lauf — aber NICHT `_letzte_fehler`.
+        # Genau das ist die Lage, fuer die der Reset in `main` da ist. (Die Werte VOR dem
+        # Aufruf vorzulegen geht nicht: `main` setzt beide selbst auf None, bevor es hier
+        # landet — der #524-Reset. Erster Anlauf dieses Tests ist genau daran gescheitert.)
+        correct._letzter_bereich = ["S1"]
+        correct._letzte_kennungen = {"S1": paths.kennung(str(t / "S1.json"))}
+        return 0
+
+    monkeypatch.setattr(correct, "_letzte_fehler", 3)                 # Rest eines frueheren Laufs
+    monkeypatch.setattr(correct, "cmd_run", fake_run)
+    with pytest.raises(SystemExit):
+        correct.main(["run", "Demo"])
+    out = capsys.readouterr().out
+    assert correct._letzte_fehler == 0
+    assert "3 Datei(en) mit Fehler" not in out, out
+    assert "KI-Anbieter nicht erreichbar" in out, out                 # der richtige Rueckfall
+
+
+def test_cmd_run_setzt_den_fehlerzaehler_zurueck(project, monkeypatch):
+    """Die zweite Haelfte: ein Rest aus einem frueheren Lauf faerbt den naechsten nicht ein.
+
+    `cmd_run` ist der Normalweg (die Attrappe oben ist der Testweg), und auch dieser Reset war
+    unbewacht — entfernt blieben 174 Tests gruen.
+    """
+    def fake(prompt, workdir):
+        if "_glossar.json" in prompt:
+            return
+        _dump(re.search(r"(\S+\.correction\.json)", prompt).group(1),
+              {"base": "S1", "segments": [{"id": 0, "speaker": "Interviewer", "text": "ok"}]})
+    monkeypatch.setattr(correct, "_run_claude", fake)
+    monkeypatch.setattr(correct, "_letzte_fehler", 7)
+
+    assert correct.cmd_run("Demo", verify=False) == 1
+    assert correct._letzte_fehler == 0
 
 
 def test_run_cli_ok_on_success(project, monkeypatch):

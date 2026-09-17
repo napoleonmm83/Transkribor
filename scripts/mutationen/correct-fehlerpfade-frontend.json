@@ -1,17 +1,42 @@
 {
-  "test": "npm --prefix webtool/frontend test -- jobPhases.vertrag.test.ts",
+  "test": "npm --prefix webtool/frontend test -- jobPhases",
   "pfade": [
     "webtool/frontend/jobPhases.vertrag.test.ts",
-    "webtool/frontend/src/lib/jobPhases.ts"
+    "webtool/frontend/src/lib/jobPhases.ts",
+    "webtool/frontend/src/lib/jobPhases.test.ts"
   ],
   "mutationen": [
     {
-      "id": "T187-E der Parser-Zweig fuer `apply: KAPUTT` faellt weg — die Aufnahme bliebe im Spinner",
+      "id": "T187-K der Parser-Zweig fuer `apply: KAPUTT` faellt weg — die Aufnahme bliebe im Spinner",
       "datei": "webtool/frontend/src/lib/jobPhases.ts",
-      "von": "    else if ((m = l.match(/^apply: KAPUTT (.+?) \\(/))) terminal(m[1], 'failed')",
-      "nach": "    else if ((m = l.match(/^apply: ZZZNIE (.+?) \\(/))) terminal(m[1], 'failed')",
+      "von": "    else if ((m = l.match(/^apply: KAPUTT (.+) \\(.*\\1\\.correction\\.json pruefen$/)))",
+      "nach": "    else if ((m = l.match(/^apply: ZZZNIE (.+) \\(.*\\1\\.correction\\.json pruefen$/)))",
       "rot": [
         "jeder Parser-Zweig hat noch eine lebende Druckform"
+      ],
+      "gruen": [
+        "jede gedruckte Form ist klassifiziert"
+      ]
+    },
+    {
+      "id": "T187-L nicht-gierig ohne Rueckverweis — schneidet IM Namen ab, urteilt ueber die Nachbaraufnahme",
+      "datei": "webtool/frontend/src/lib/jobPhases.ts",
+      "von": "    else if ((m = l.match(/^apply: KAPUTT (.+) \\(.*\\1\\.correction\\.json pruefen$/)))",
+      "nach": "    else if ((m = l.match(/^apply: KAPUTT (.+?) \\(/)))",
+      "rot": [
+        "Basisname mit Klammern -> KAPUTT trifft den ganzen Namen, nicht sein erstes Wort"
+      ],
+      "gruen": [
+        "jede gedruckte Form ist klassifiziert"
+      ]
+    },
+    {
+      "id": "T187-M gierig ohne Rueckverweis — die Ausnahmemeldung bringt ihre eigene Klammer mit",
+      "datei": "webtool/frontend/src/lib/jobPhases.ts",
+      "von": "    else if ((m = l.match(/^apply: KAPUTT (.+) \\(.*\\1\\.correction\\.json pruefen$/)))",
+      "nach": "    else if ((m = l.match(/^apply: KAPUTT (.+) \\(/)))",
+      "rot": [
+        "Basisname mit Klammern -> KAPUTT trifft den ganzen Namen, nicht sein erstes Wort"
       ],
       "gruen": [
         "jede gedruckte Form ist klassifiziert"

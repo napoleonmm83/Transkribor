@@ -467,9 +467,21 @@ export function parseJobPhases(kind: string, lines: string[],
     // aber nicht anwendbar (kaputtes JSON, kein Objekt, falsche Typen). Vorher endete das als
     // roher Traceback — ohne Zeile, also auch ohne Urteil. Der Zweig gehoert zu seinen zwei
     // Nachbarn darueber: ohne ihn bliebe die Aufnahme im Spinner, genau wie deren Notiz im
-    // INVENTAR es fuer ihren eigenen Wegfall beschreibt. `(.+?)` nicht-gierig wie bei 465,
-    // damit ein Basisname mit Klammer nicht den Rest der Zeile verschluckt.
-    else if ((m = l.match(/^apply: KAPUTT (.+?) \(/))) terminal(m[1], 'failed')
+    // INVENTAR es fuer ihren eigenen Wegfall beschreibt.
+    //
+    // RUECKVERWEIS wie bei der `apply: SKIP`-Zeile oben, und KEINE der beiden naheliegenden
+    // Formen — beide sind gemessen falsch, je in eine andere Richtung:
+    //   `(.+?) \(` nicht-gierig  -> schneidet IM Namen ab: `Interview (Teil 1)` ergibt
+    //       `Interview`, also ein FEHLER-Urteil ueber die gesunde Nachbaraufnahme, waehrend
+    //       die kaputte bis Jobende im Spinner dreht. Genau der Zustand, den dieser Zweig
+    //       beheben soll. Klammern sind hier Alltag: `safe_name` laesst `(` durch, und
+    //       yt-dlp-Titel heissen `Song (Official Video)`.
+    //   `(.+) \(` gierig         -> die Ausnahmemeldung traegt selbst Klammern
+    //       (`JSONDecodeError: … (char 2)`), der Name schluckt dann den halben Satz.
+    // Der Basisname steht ZWEIMAL in der Zeile (vorn und im Dateinamen am Ende), also traegt
+    // ihn der Rueckverweis: gierig beginnen, bis `\1` am verankerten Ende passt.
+    else if ((m = l.match(/^apply: KAPUTT (.+) \(.*\1\.correction\.json pruefen$/)))
+      terminal(m[1], 'failed')
     else if ((m = l.match(/^✗ FEHLT\/ungültig: (.+?)\.correction\.json/))) terminal(m[1], 'failed')
     else if ((m = l.match(/^✗ Fehler bei (.+?): /))) terminal(m[1], 'failed')
     else if (/^diarize: \d+ Datei/.test(l)) {

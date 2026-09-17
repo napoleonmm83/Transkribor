@@ -127,11 +127,25 @@ _letzte_kennungen: dict | None = None
 # geliefert hatte und nur ein Dateischreibvorgang scheiterte. Wer das liest, sucht an der
 # falschen Stelle.
 #
+# DREI Zaehlstellen, weil die Fehlschlaege auf drei verschiedenen Wegen enden und nur EINER
+# davon wirft: `correct_ai_single`s `except` (der Wurf), `one()` bei `prep_single == False`
+# (der Datenfehler) und `cmd_apply`s KAPUTT-Zweig (die unbrauchbare correction.json). Die
+# erste Fassung hatte nur die erste — und beide Pruefer haben unabhaengig gemessen, dass die
+# Schlusszeile damit auf DREI von vier Wegen weiter den KI-Anbieter beschuldigte, der in
+# zweien davon nie gefragt wurde.
+#
 # ZWEI Grenzen, benannt statt behauptet: (1) das `+= 1` laeuft in bis zu `CLAUDE_PARALLEL`
 # Pool-Threads und ist nicht atomar — die ZAHL kann untertreiben, das `> 0` bleibt sicher,
-# und nur daran haengt die Weiche. (2) Die Ausstiege `✗ FEHLT/ungueltig` und
-# `cmd_apply == "missing"` werfen nicht, zaehlen also nicht mit; fuer sie bleibt der
-# Anbieter-Hinweis der Rueckfall — was fuer `FEHLT/ungueltig` meistens sogar stimmt.
+# und nur daran haengt die Weiche (nachgemessen: GIL an, `with ThreadPoolExecutor` joint vor
+# der Rueckkehr, beide Resets liegen ausserhalb des Poolfensters). (2) Der Ausstieg
+# `✗ FEHLT/ungueltig` zaehlt bewusst NICHT mit: dort hat der Anbieter wirklich nichts oder
+# Unbrauchbares geliefert, und genau dafuer ist der Anbieter-Hinweis der richtige Rueckfall.
+#
+# Und eine dritte, die nur ausserhalb dieses Moduls sichtbar ist: `transcribe.py --all` faehrt
+# `prep_single` und `correct_ai_single` im EIGENEN Prozess ueber mehrere Projekte, der Zaehler
+# waechst dort also projektuebergreifend. Heute folgenlos — der einzige Leser steht in
+# `correct.main`, und das laeuft dort nie. Wer in `transcribe.main` einen Leser ergaenzt, erbt
+# Fremdzaehlung und braucht vorher einen Reset.
 _letzte_fehler: int = 0
 _CREATE_NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 
@@ -525,6 +539,12 @@ def cmd_apply(project: str, base: str, force: bool = False) -> str:
         # unterscheidet `cmd_apply`s Fehlschlag-Ausgang von seinen drei Schutzpfaden
         # (`human_edited`, unlesbare `edit.json`, Handarbeit unter der Sperre). Die Bilanz in
         # `correct_ai_single` wertet nur `"missing"` als Fehlschlag — sie bleibt damit korrekt.
+        # Zweite wurffreie Fehlerquelle, und sie entstand in DIESEM Umbau: `cmd_apply` faengt
+        # jetzt selbst, statt zu werfen — der Fall verliesse damit genau die Zaehlung, die der
+        # Zusatzfund nebenan eingebaut hat. Ohne diese Zeile nimmt eine Aenderung der anderen
+        # ihren Gegenstand weg (gemessen, beide Pruefer unabhaengig).
+        global _letzte_fehler
+        _letzte_fehler += 1
         print(f"apply: KAPUTT {base} ({type(e).__name__}: {_einzeilig(e)}) — "
               f"Korrektur nicht anwendbar, {base}.correction.json pruefen", flush=True)
         return "missing"
@@ -578,6 +598,19 @@ def cmd_apply(project: str, base: str, force: bool = False) -> str:
             # Nur `OSError`: ein Wurf aus `render_md` selbst waere ein Fehler von uns und bleibt
             # laut. Scheitert auch das Entfernen, ist der Zustand der vor dieser Aenderung —
             # kein Rueckschritt, deshalb `suppress` und keine zweite Meldung.
+            #
+            # GETRAGENE VERLUSTSEITE, weil der Tausch sonst einseitig aufgeschrieben waere:
+            # im `--force`-Fenster ersetzt die Zeile darueber eine HANDBEARBEITETE `edit.json`
+            # durch das Maschinendokument — ab da lebt der Nutzertext nur noch in dieser `.md`,
+            # und hier wird sie geloescht. Vorher flog eine Ausnahme und die alte `.md` blieb
+            # liegen. Dass „Schreiben scheitert, Loeschen gelingt" erreichbar ist, ist gemessen
+            # (`atomic_write` schreibt `pfad + ".tmp"`, also vier Zeichen laenger — bei einem
+            # 253-Zeichen-Ziel scheitert das Schreiben und das Loeschen gelingt).
+            # Bewusst so entschieden: `--force` IST die Anweisung, die Handarbeit zu verwerfen,
+            # und eine stehenbleibende `.md` waere keine Rettung, sondern ein FALSCHER Export
+            # (`app._get_or_render_md` liefert eine vorhandene Datei unbesehen aus). Eine
+            # Rettung nach `.kaputt` waere die dritte Moeglichkeit — sie braucht einen eigenen
+            # Entschluss, nicht eine Nebenwirkung dieser Zeile.
             with contextlib.suppress(OSError):
                 os.remove(md_pfad)
             print(f"apply: {base} -> edit.json geschrieben, md-Export fehlgeschlagen "
@@ -1780,6 +1813,14 @@ def cmd_run(project: str, base: str = None, force: bool = False, verify: bool = 
                 gemeldet = True
                 cmd_diarize(project, [b])
                 if not prep_single(project, b):
+                    # MITZAEHLEN, und das ist der Pfad, den dieser PR selbst verbreitert hat:
+                    # seit `prep_single` die Typfehler faengt, endet eine kaputte Roh-JSON hier
+                    # als `False` statt als Wurf — also NICHT mehr im `except` von
+                    # `correct_ai_single`, wo der Zaehler sonst sitzt. Ohne diese Zeile meldete
+                    # die Schlusszeile fuer einen reinen Datenfehler weiter den KI-Anbieter,
+                    # der nie gefragt wurde (gemessen, gegnerischer Pruefer).
+                    global _letzte_fehler
+                    _letzte_fehler += 1
                     return False
             # 2. Lokaler GPU-Schritt fertig -> Hardware-Lock freigegeben für nächste Datei.
             # 3. Sofortige Cloud-KI-Phase (parallel über _claude_slots)
@@ -1901,8 +1942,12 @@ def main(argv=None):
             if _letzte_diagnose:
                 grund_text = f"{_letzte_diagnose['titel']} · {_letzte_diagnose['hinweis']}"
             elif _letzte_fehler:
+                # „Fehlerzeilen", nicht „✗-Zeilen": die drei Zaehlstellen drucken DREI Formen,
+                # und nur eine davon traegt ein ✗ (`prep: SKIP …`, `apply: KAPUTT …`,
+                # `✗ Fehler bei …`). Der erste Entwurf schickte den Leser nach einem Zeichen
+                # suchen, das in seinem Fall gar nicht dasteht.
                 grund_text = (f"{_letzte_fehler} Datei(en) mit Fehler — "
-                              f"siehe die ✗-Zeilen oben")
+                              f"siehe die Fehlerzeilen oben")
             else:
                 grund_text = "KI-Anbieter nicht erreichbar oder ohne Ausgabe — siehe die Zeilen oben"
             print(f"run: FEHLER — 0 von {attempted} versuchten Datei(en) korrigiert "
@@ -1911,7 +1956,19 @@ def main(argv=None):
             raise SystemExit(1)
     else:
         paths.safe_aufnahmename(args.base)
-        cmd_apply(args.project, args.base, args.force)
+        # Der Rueckgabewert fiel hier ersatzlos weg, und seit `cmd_apply` eine unbrauchbare
+        # correction.json FAENGT statt zu werfen, ist das ein stiller Erfolg auf einem Lauf,
+        # der nichts geschrieben hat: vorher Traceback und Exitcode 1, danach 0. Gemessen von
+        # beiden Pruefern. `tools/correct_label.mjs` nennt genau diesen Aufruf als
+        # Assemblierschritt — ein verketteter Aufrufer lief damit weiter.
+        #
+        # `"missing"` und nur das: die drei `"skipped"`-Ausgaenge sind die Schutzpfade dieses
+        # Repos (`human_edited`, unlesbare `edit.json`, Handarbeit unter der Sperre) und heissen
+        # „deine Fassung bleibt stehen" — dieselbe Unterscheidung, die `correct_ai_single` fuer
+        # seine Bilanz trifft. Die zwei `apply: FEHLT`-Ausgaenge gaben schon vorher 0 zurueck;
+        # sie sind jetzt mitgedeckt, und das ist gewollt: nichts geschrieben ist kein Erfolg.
+        if cmd_apply(args.project, args.base, args.force) == "missing":
+            raise SystemExit(1)
 
 
 if __name__ == "__main__":

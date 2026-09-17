@@ -20,6 +20,18 @@
       ]
     },
     {
+      "id": "T186-B nur TypeError aus dem Filter — die HAELFTE, die eine Wahrscheinlichkeit als Text trifft",
+      "datei": "webtool/correct.py",
+      "von": "    except (OSError, ValueError, TypeError, AttributeError) as e:\n        # `TypeError`/`AttributeError` seit dem 17.09.2026",
+      "nach": "    except (OSError, ValueError, AttributeError) as e:\n        # `TypeError`/`AttributeError` seit dem 17.09.2026",
+      "rot": [
+        "test_cmd_prep_ueberspringt_falsch_geformtes_raw"
+      ],
+      "gruen": [
+        "test_run_survives_corrupt_raw"
+      ]
+    },
+    {
       "id": "T187-A der md-except trifft nie — ein geschriebenes Ergebnis gilt wieder als Fehlschlag",
       "datei": "webtool/correct.py",
       "von": "        except OSError as e:\n            # Die `edit.json` IST das Dokument",
@@ -44,12 +56,13 @@
       ]
     },
     {
-      "id": "T187-C der Ladefilter in cmd_apply trifft nie — correct apply stirbt wieder am Traceback",
+      "id": "T187-C der Ladefilter in cmd_apply faellt auf (OSError, ValueError) zurueck — die ZWEI NEUEN Typen sind der Zweck der Zeile",
       "datei": "webtool/correct.py",
       "von": "    except (OSError, ValueError, TypeError, AttributeError) as e:\n        # Derselbe Filter",
-      "nach": "    except FloatingPointError as e:\n        # Derselbe Filter",
+      "nach": "    except (OSError, ValueError) as e:\n        # Derselbe Filter",
       "rot": [
-        "test_apply_meldet_kaputte_correction_statt_abzustuerzen"
+        "test_apply_meldet_kaputte_correction_statt_abzustuerzen",
+        "test_cli_apply_endet_rot_wenn_nichts_geschrieben_wurde"
       ],
       "gruen": [
         "test_run_full_flow"
@@ -65,6 +78,79 @@
       ],
       "gruen": [
         "test_run_cli_exits_nonzero_when_nothing_corrected"
+      ]
+    },
+    {
+      "id": "T187-E der Fehlerzweig feuert IMMER — die Rueckfall-Richtung, an der der Anbieter-Hinweis haengt",
+      "datei": "webtool/correct.py",
+      "von": "            elif _letzte_fehler:",
+      "nach": "            elif True:",
+      "rot": [
+        "test_run_cli_exits_nonzero_when_nothing_corrected",
+        "test_main_setzt_den_fehlerzaehler_selbst_zurueck"
+      ],
+      "gruen": [
+        "test_run_full_flow"
+      ]
+    },
+    {
+      "id": "T187-F die Zaehlstelle des prep-Wegs faellt weg — ein reiner Datenfehler beschuldigt wieder den Anbieter",
+      "datei": "webtool/correct.py",
+      "von": "                    global _letzte_fehler\n                    _letzte_fehler += 1",
+      "nach": "                    pass",
+      "rot": [
+        "test_run_bilanz_nennt_nicht_den_anbieter_bei_echtem_fehler"
+      ],
+      "gruen": [
+        "test_run_survives_falsch_geformtes_raw"
+      ]
+    },
+    {
+      "id": "T187-G die Zaehlstelle des KAPUTT-Wegs faellt weg — Aenderung 4 naehme Aenderung 3 ihren Gegenstand",
+      "datei": "webtool/correct.py",
+      "von": "        global _letzte_fehler\n        _letzte_fehler += 1",
+      "nach": "        pass",
+      "rot": [
+        "test_run_bilanz_nennt_nicht_den_anbieter_bei_echtem_fehler"
+      ],
+      "gruen": [
+        "test_apply_meldet_kaputte_correction_statt_abzustuerzen"
+      ]
+    },
+    {
+      "id": "T187-H der Reset in cmd_run faellt weg — ein Rest faerbt den naechsten Lauf ein",
+      "datei": "webtool/correct.py",
+      "von": "    _letzte_kennungen = None\n    _letzte_fehler = 0",
+      "nach": "    _letzte_kennungen = None",
+      "rot": [
+        "test_cmd_run_setzt_den_fehlerzaehler_zurueck"
+      ],
+      "gruen": [
+        "test_run_full_flow"
+      ]
+    },
+    {
+      "id": "T187-I der Reset in main faellt weg — eine cmd_run-Attrappe laesst den Rest stehen",
+      "datei": "webtool/correct.py",
+      "von": "        # stehen, und die Schlusszeile urteilte dann ueber fremde Fehler (kalter Plan-Reviewer).\n        _letzte_fehler = 0",
+      "nach": "        # stehen, und die Schlusszeile urteilte dann ueber fremde Fehler (kalter Plan-Reviewer).",
+      "rot": [
+        "test_main_setzt_den_fehlerzaehler_selbst_zurueck"
+      ],
+      "gruen": [
+        "test_run_full_flow"
+      ]
+    },
+    {
+      "id": "T187-J der CLI-Handweg wertet den Rueckgabewert nicht mehr aus — stiller Exit 0 ohne Schreibvorgang",
+      "datei": "webtool/correct.py",
+      "von": "        if cmd_apply(args.project, args.base, args.force) == \"missing\":\n            raise SystemExit(1)",
+      "nach": "        cmd_apply(args.project, args.base, args.force)",
+      "rot": [
+        "test_cli_apply_endet_rot_wenn_nichts_geschrieben_wurde"
+      ],
+      "gruen": [
+        "test_cli_apply_endet_gruen_wenn_geschrieben_wurde"
       ]
     }
   ]

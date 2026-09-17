@@ -39,7 +39,7 @@ hat. Lesbar, aber unschön — das ist Absicht.
 - Nach geändertem Projektwissen verwendet die nächste Korrektur keine veralteten KI-Ergebnisse weiter. Schlägt die neue Korrektur fehl, bleibt die bisherige Editorfassung erhalten.
 - Eine beschädigte Aufnahme bricht den Korrekturlauf nicht mehr ab: sie wird übersprungen, alle übrigen Aufnahmen werden fertig korrigiert und gemeldet.
 - Konnte nur die Markdown-Fassung nicht geschrieben werden, gilt die Korrektur nicht mehr als fehlgeschlagen — das Ergebnis bleibt erhalten und der Export entsteht beim nächsten Herunterladen neu.
-- Scheitert ein Korrekturlauf, nennt die Schlussmeldung nicht mehr pauschal den KI-Anbieter als Ursache, sondern verweist auf die tatsächlichen Fehlerzeilen.
+- Scheitert ein Korrekturlauf, nennt die Schlussmeldung den KI-Anbieter nur noch dann als Ursache, wenn er wirklich nichts geliefert hat — sonst verweist sie auf die Fehlerzeilen des Laufs.
 
 ## v0.56.0 — 2026-09-12
 
