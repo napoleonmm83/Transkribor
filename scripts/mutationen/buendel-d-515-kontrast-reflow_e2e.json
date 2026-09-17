@@ -9,6 +9,7 @@
     "webtool/frontend/src/components/Sidebar.tsx",
     "webtool/frontend/src/components/PageHeader.tsx",
     "webtool/frontend/src/components/Toolbar.tsx",
+    "webtool/frontend/src/components/Suchfeld.tsx",
     "webtool/frontend/src/components/StatusBar.tsx",
     "webtool/frontend/src/components/AppShell.tsx",
     "webtool/frontend/src/components/Notizen.tsx"
