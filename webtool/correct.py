@@ -533,6 +533,14 @@ def _context(project: str) -> str:
             # allein waere an der falschen Stelle verankert (CodeRabbit-CLI, major).
             if len(roh.encode("utf-8")) > KONTEXT_MAX_BYTES:
                 gekuerzt = roh.encode("utf-8")[:KONTEXT_MAX_BYTES].decode("utf-8", "ignore")
+                # An der letzten ZEILENGRENZE schneiden, nicht mitten im Wort. Der
+                # Byteschnitt allein endete gemessen auf einem Namensrumpf
+                # (…Ansprechpartnerin Beatrice Sch), und der reist als Projektwissen in
+                # jeden Korrektur- und Verify-Prompt, wo er wie eine belegte Schreibweise
+                # aussieht — eine halbe Wahrheit ist hier schlechter als eine Zeile
+                # weniger (kalter Zweitleser). Ohne Zeilenumbruch bleibt es beim Byteschnitt.
+                if "\n" in gekuerzt:
+                    gekuerzt = gekuerzt.rsplit("\n", 1)[0]
                 print(f"⚠ kontext.md ist groesser als {KONTEXT_MAX_BYTES // 1024} KB — "
                       f"nur der Anfang geht in die Korrektur", flush=True)
                 return gekuerzt.strip()

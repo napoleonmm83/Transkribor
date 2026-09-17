@@ -2419,6 +2419,17 @@ def test_zu_grosse_kontext_md_geht_gekuerzt_in_die_prompts(project, capsys):
     assert correct._context("Demo") == "y" * (grenze - 10)
     assert "groesser als" not in capsys.readouterr().out
 
+    # Geschnitten wird an der letzten ZEILENGRENZE, nicht mitten im Wort: ein
+    # Namensrumpf reist sonst als Projektwissen in jeden Prompt und sieht dort wie eine
+    # belegte Schreibweise aus (kalter Zweitleser, gemessen an einem echten Schnitt, der
+    # auf "Ansprechpartnerin Beatrice Sch" endete).
+    zeile = "Ansprechpartnerin Beatrice Schindelholz\n"
+    (root / "Demo" / "kontext.md").write_text(zeile * (grenze // len(zeile) + 40), encoding="utf-8")
+    gelesen = correct._context("Demo")
+    assert len(gelesen.encode("utf-8")) <= grenze
+    assert gelesen.endswith("Schindelholz"), "mitten im Namen geschnitten"
+    assert "Sch\n" not in gelesen and not gelesen.endswith("Sch")
+
 
 def test_load_meldet_ein_nicht_objekt_als_valuerror(tmp_path):
     """Gueltiges JSON, aber kein Objekt (ein Modell antwortet auch mal mit einer Liste). Alle
