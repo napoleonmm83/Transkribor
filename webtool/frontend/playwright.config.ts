@@ -16,10 +16,9 @@ import { defineConfig } from '@playwright/test'
  */
 export default defineConfig({
   testDir: './e2e',
-  // `*.e2e.ts` statt des Playwright-Defaults `*.spec|test.ts`: vitest greift auf
-  // `*.test.*` und `*.spec.*` — gemeinsame Muster wuerden die Browser-Tests in die
-  // jsdom-Suite ziehen (und umgekehrt). Beide Seiten deklarieren ihr Muster selbst.
-  testMatch: '**/*.e2e.ts',
+  // Das gemeinsame *.spec.ts-Muster macht Browser-Waechter fuer Werkzeuge als Tests erkennbar.
+  // Vitest schliesst e2e/** ausdruecklich aus, damit nur Playwright sie sammelt.
+  testMatch: '**/*.spec.ts',
   timeout: 30_000,
   fullyParallel: false,
   workers: 1,

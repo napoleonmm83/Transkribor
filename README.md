@@ -115,7 +115,9 @@ dazuerfunden oder weggelassen wurde.
 **Du behältst das letzte Wort.** Im eingebauten Editor hörst du jeden Abschnitt per
 Tastendruck nach und änderst, was nicht stimmt — unsichere Stellen sind farbig markiert, und
 einen falsch verstandenen Namen tippst du **einmal** richtig: er zieht durchs ganze Dokument
-bis in den Export. Gespeichert wird von selbst.
+bis in den Export. Gespeichert wird von selbst. Ab 768 Pixel Fensterbreite bricht die
+Werkzeugleiste bei Bedarf um, damit Speicherstatus, Suche und die vollständigen
+Exportbeschriftungen sichtbar bleiben.
 
 Löschst du ein Projekt, entwertet Transkribor auch Speicherungen, die im geöffneten Editor
 noch unterwegs sind. Legst du später ein Projekt mit demselben Namen an, können Änderungen

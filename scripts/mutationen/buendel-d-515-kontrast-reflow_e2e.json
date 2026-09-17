@@ -1,13 +1,15 @@
 {
   "test": "npm --prefix webtool/frontend run test:e2e",
   "pfade": [
-    "webtool/frontend/e2e/seitenleiste-kontrast.e2e.ts",
-    "webtool/frontend/e2e/reflow-320.e2e.ts",
+    "webtool/frontend/e2e/seitenleiste-kontrast.spec.ts",
+    "webtool/frontend/e2e/reflow-320.spec.ts",
     "webtool/frontend/e2e/farb-mathematik.ts",
     "webtool/frontend/e2e/testApp.ts",
     "webtool/frontend/src/components/ui/button.tsx",
     "webtool/frontend/src/components/Sidebar.tsx",
     "webtool/frontend/src/components/PageHeader.tsx",
+    "webtool/frontend/src/components/Toolbar.tsx",
+    "webtool/frontend/src/components/Suchfeld.tsx",
     "webtool/frontend/src/components/StatusBar.tsx",
     "webtool/frontend/src/components/AppShell.tsx",
     "webtool/frontend/src/components/Notizen.tsx"
@@ -86,6 +88,16 @@
       "gruen": []
     },
     {
+      "id": "R4 die Editor-Werkzeugleiste bricht wieder nicht um",
+      "datei": "webtool/frontend/src/components/Toolbar.tsx",
+      "von": "flex flex-wrap items-center gap-2 border-b px-3 py-2",
+      "nach": "flex items-center gap-2 border-b px-3 py-2",
+      "rot": [
+        "Editor: bei 900 px bleiben Fehlerstand, Suche und Exporte ohne waagerechten Ueberhang"
+      ],
+      "gruen": []
+    },
+    {
       "id": "R5 das Rechenwerk-Glied wird wieder starr — langer Geraetename sprengt die Fusszeile (Review F3)",
       "datei": "webtool/frontend/src/components/StatusBar.tsx",
       "von": "className=\"min-w-0 truncate\">{rechenwerk}</span>",
@@ -102,6 +114,16 @@
       "nach": "await page.route('**/api/settings', (r) => r.fulfill({ status: 500, body: 'weg' }))",
       "rot": [
         "Einstellungen: bei 320 px kein waagerechter Überhang"
+      ],
+      "gruen": []
+    },
+    {
+      "id": "R7 das Editor-Suchfeld bricht bei 320 px wieder nicht um",
+      "datei": "webtool/frontend/src/components/Suchfeld.tsx",
+      "von": "flex w-full min-w-0 flex-wrap items-center gap-1 sm:w-auto",
+      "nach": "flex items-center gap-1",
+      "rot": [
+        "Editor: bei 900 px bleiben Fehlerstand, Suche und Exporte ohne waagerechten Ueberhang"
       ],
       "gruen": []
     }

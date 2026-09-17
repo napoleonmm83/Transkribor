@@ -42,7 +42,7 @@ export function Toolbar({ projekt, zurueckErlaubt, stand, bereit, onExport, such
   return (
     // Kein sticky noetig: EditorView setzt die Leiste als eigene Grid-Zeile, gescrollt wird
     // nur das <main> darunter.
-    <header className="flex items-center gap-2 border-b px-3 py-2">
+    <header className="flex flex-wrap items-center gap-2 border-b px-3 py-2">
       {/* Der EINZIGE Weg aus einer geoeffneten Aufnahme zurueck zum Projekt — der Editor ist
           die einzige Seite ohne `PageHeader`, und die Leiste links faellt unter `md` ganz weg.
           Bewusst dieselbe Geste wie dort (Pfeil + Ziel, gedaempft, Hover auf `foreground`):

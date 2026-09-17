@@ -14,7 +14,7 @@ export function Suchfeld({ value, onChange, count, index, onPrev, onNext }: {
 }) {
   const aktiv = value.trim() !== ''
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex w-full min-w-0 flex-wrap items-center gap-1 sm:w-auto">
       <div className="relative">
         <Search className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
         {/* type="text" (nicht "search"): der Browser-Eigenbau-Clear-Knopf wuerde sonst doppelt

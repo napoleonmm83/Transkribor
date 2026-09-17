@@ -2,7 +2,7 @@ import type { Page } from '@playwright/test'
 
 /**
  * Geteilte Fixture der Browser-Wächter: alle /api/**-Routen per page.route(), kein
- * Backend, kein Python. Aus dialog-schliesskreuz.e2e.ts (#423) herausgelöst, sobald der
+ * Backend, kein Python. Aus dialog-schliesskreuz.spec.ts (#423) herausgelöst, sobald der
  * zweite Wächter (#515) dasselbe Gerüst brauchte — dieselbe Regel wie bei DateiMenue:
  * denselben Knopf zweimal fuehren heisst, ihn beim naechsten Mal an einer Stelle zu
  * vergessen.
@@ -17,6 +17,16 @@ export const DATEIEN = [
   { base: 'A_erste', has_audio: true, has_raw: true, has_edit: false, has_md: false },
   { base: 'B_zweite', has_audio: true, has_raw: true, has_edit: false, has_md: false },
 ]
+
+const EDITOR_DOKUMENT = {
+  base: 'A_erste', project: PROJEKT, audio: '', language: 'de', human_edited: false,
+  context: '', speakers: ['A'], annotations: [], dateistand: 'stand-1', projektinstanz: 'instanz-a',
+  segments: [{
+    id: 0, start: 0, end: 1, speaker: 'A', raw_text: 'Browser-Probe', text: 'Browser-Probe',
+    words: [{ word: 'Browser-Probe', start: 0, end: 1, probability: 1 }],
+    flags: { hallucination: false, low_conf: false }, note: '',
+  }],
+}
 
 /** Volle Einstellungen — LEERE Listen sind der dokumentierte Zustand (#305), undefinierte
  *  Felder lassen die Flaeche an React-Seitenfehlern sterben (gemessen am ProjectWorkspace). */
@@ -58,12 +68,21 @@ export async function appEinrichten(page: Page, viewport: { width: number; heigh
   // Seitenweite Abfragen stillstellen (useAiReady/Hardware-Status): sonst rauscht der
   // tote Proxy des Dev-Servers als 502 durch die Konsole.
   await page.route('**/api/settings', (r) => r.fulfill({ json: SETTINGS }))
-  // INTENTIONAL-UNTESTED: Fixture dieses selben Buendel-D-Diffs (Review F3) — asr mit
+  // Fixture dieses selben Buendel-D-Diffs (Review F3) — asr mit
   // vollem Namen: das rechenwerk-Glied der Fusszeile ist real sichtbar und kann lang
   // werden; mit {} blieb es immer leer und der Reflow-Waechter sah es nie.
   await page.route('**/api/hardware', (r) =>
     r.fulfill({ json: { asr: 'cuda · NVIDIA GeForce RTX 5080' } }))
   await page.setViewportSize(viewport)
+}
+
+export async function editorEinrichten(page: Page, speichernFehlschlaegt = false) {
+  await page.route(`**/api/projects/${PROJEKT}/files/A_erste`, (r) => {
+    if (r.request().method() === 'PUT' && speichernFehlschlaegt) {
+      return r.fulfill({ status: 500, json: { detail: 'Speicherprobe' } })
+    }
+    return r.fulfill({ json: EDITOR_DOKUMENT })
+  })
 }
 
 /** Der Versionsverlauf kommt DIREKT aus dem Browser von api.github.com — auch die ist

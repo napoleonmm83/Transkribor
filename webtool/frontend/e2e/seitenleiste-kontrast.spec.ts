@@ -114,7 +114,7 @@ async function tastaturFokussieren(page: Page, el: Locator) {
  *  Knopf noch auf den HELLEN Werten, während der Körper längst dunkel war. WCAG
  *  1.4.11 urteilt über den gesetzten Zustand, nicht über ein Übergangsbild. */
 async function messeZustand(page: Page, el: Locator, zustand: Zustand): Promise<Messung> {
-  // INTENTIONAL-UNTESTED: Diese Datei IST der Waechter (#515); Netz ist der gruene Lauf
+  // Diese Datei IST der Waechter (#515); Netz ist der gruene Lauf
   // plus die Mutationen K1-K4.
   //
   // Zustaende duerfen einander NICHT faerben. Die Schleife misst dasselbe Element
