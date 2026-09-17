@@ -115,6 +115,16 @@
         "Einstellungen: bei 320 px kein waagerechter Überhang"
       ],
       "gruen": []
+    },
+    {
+      "id": "R7 das Editor-Suchfeld bricht bei 320 px wieder nicht um",
+      "datei": "webtool/frontend/src/components/Suchfeld.tsx",
+      "von": "flex w-full min-w-0 flex-wrap items-center gap-1 sm:w-auto",
+      "nach": "flex items-center gap-1",
+      "rot": [
+        "Editor: bei 900 px bleiben Fehlerstand, Suche und Exporte ohne waagerechten Ueberhang"
+      ],
+      "gruen": []
     }
   ]
 }

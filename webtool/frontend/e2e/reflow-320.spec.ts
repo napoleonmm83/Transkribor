@@ -8,7 +8,8 @@ import { appEinrichten, editorEinrichten, releasesEinrichten, PROJEKT } from './
  *
  * Entscheidung Marcus 2026-09-11: alle vier Haupt-Routen, nicht nur die Versionsseite
  * — PageHeader und Notizen sind geteilt, ein Fix wirkt ohnehin auf mehreren Seiten.
- * Die Editor-Route ist bewusst draussen (eigene Zeilenwelt, eigener Auftrag).
+ * Die vier Haupt-Routen laufen bei 320 px; der Editor hat wegen seiner eigenen
+ * Zeilenwelt zusätzliche Prüfungen bei 900, 768 und 320 px.
  *
  * Gemessen wird documentElement.scrollWidth gegen clientWidth — dieselbe Frage, die
  * die Sonde stellt. 320 px ist reiner Browser-Betrieb (Electron: minWidth 900), und
@@ -171,7 +172,7 @@ test('Editor: bei 900 px bleiben Fehlerstand, Suche und Exporte ohne waagerechte
     .toBeLessThanOrEqual(1)
 
   const messwerte = [{ breite: 900, ueberhang: ergebnis.ueberhang }]
-  for (const [breite, hoechstens] of [[768, 1], [320, 20]] as const) {
+  for (const [breite, hoechstens] of [[768, 1], [320, 1]] as const) {
     await page.setViewportSize({ width: breite, height: 700 })
     const messung = await page.evaluate(REFLOW)
     messwerte.push({ breite, ueberhang: messung.ueberhang })
