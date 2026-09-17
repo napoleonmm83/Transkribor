@@ -247,6 +247,9 @@ export function useDoc(project: string | null, base: string | null) {
    * Dokument-IDs wuerde das zaehlen — dann beim Schliessen praegen.
    */
   const neuester = useRef<Record<string, number>>({})
+  // Je Dokument: das Verwerfen von B darf einen noch wartenden Save von A nicht verlieren.
+  const verwerfungen = useRef<Record<string, number>>({})
+  const verworfenStand = verwerfungen.current[`${project}\n${base}`] ?? 0
   /** Juengste Werte zum Lesen im Flush-Cleanup (#106). Im Render-Koerper zugewiesen: der passive
    *  Effekt-Cleanup laeuft NACH dem Render, bekommt also den Stand von JUST DIESER Datei —
    *  reload()s setDoc/setDirty greifen erst in einem spaeteren Effekt / asynchron. */
@@ -311,6 +314,10 @@ export function useDoc(project: string | null, base: string | null) {
 
   const save = useCallback(async () => {
     if (!doc || !project || !base) return
+    const meinKey = `${project}\n${base}`
+    const gueltig = () => (verwerfungen.current[meinKey] ?? 0) === verworfenStand
+    // Auch ein schon faelliger Timer traegt noch die vor dem Verwerfen erfasste Generation.
+    if (!gueltig()) return
     // Ein Ladelauf ersetzt das Dokument gerade — was diese Closure traegt, ist die Fassung
     // davor. `dirty` bleibt oben; `reload` setzt es beim Eintreffen zurueck (der Normalfall)
     // oder im Fehlerzweig (#121). Ein `getDoc`, das NIE zurueckkommt, gaebe es als dritten
@@ -337,7 +344,6 @@ export function useDoc(project: string | null, base: string | null) {
     // Verkettung lagen beide im selben Tick; der Fehler entstand durch das Verschieben der
     // Zeile und ist deshalb in keinem Diff zu sehen.
     const v = fassung.current
-    const meinKey = `${project}\n${base}`   // derselbe Schluessel wie `offen`/`meins`
     const meine = (neuester.current[meinKey] ?? 0) + 1
     neuester.current[meinKey] = meine
     const lauf = kette.current.then(async () => {
@@ -345,12 +351,13 @@ export function useDoc(project: string | null, base: string | null) {
       // zaehlt dieser hier nicht mehr, saveDoc und Buchfuehrung entfallen (der juengste schreibt
       // denselben Inhalt ohnehin zuletzt). Der AKTIVE Lauf besteht den Check: sein then-Body lief
       // als Microtask, sobald er angehaengt wurde — bevor ein weiterer save() den Zaehler trieb.
-      if (meine !== neuester.current[meinKey]) return
+      if (!gueltig() || meine !== neuester.current[meinKey]) return
       /** Gilt dieser Lauf noch dem Dokument, das der Editor zeigt? */
       const meins = () => offen.current === meinKey
       if (meins()) setStand('speichert')
       try {
         const antwort = await saveDoc(project, base, mitStand(doc, meinKey))
+        if (!gueltig()) return
         // VOR dem `meins()`-Riegel (#160): geschrieben wurde JETZT, und zwar an DIESER Datei.
         // Dahinter gestellt bekaeme die verlassene Datei ihren neuen Stand nie zu sehen, und
         // der Verlassens-Flush liefe mit dem alten in einen 409 — gemessen, samt Toast, der
@@ -367,6 +374,17 @@ export function useDoc(project: string | null, base: string | null) {
         setDirty(false); setStand('gespeichert')
         setFehlerZaehler(0); finalToastGezeigt.current = false   // Erfolg beendet die Fehler-Episode
       } catch (e) {
+        if (!gueltig()) return
+        // 410 bezeichnet keine fremde Dateifassung: das Projekt hinter demselben Namen ist
+        // inzwischen eine neue Instanz. Die alte Kennung kann auch ohne Vorbehalt nie wieder
+        // speichern, also darf hier weder konflikt() noch dessen Ueberschreib-Weg greifen.
+        if (e instanceof HttpFehler && e.status === 410) {
+          if (meins() && docRef.current?.projektinstanz === doc.projektinstanz) {
+            toast.error('Das Projekt wurde inzwischen neu angelegt — der Editor wird neu geladen.')
+            reload()
+          }
+          return
+        }
         // 409 ist KEIN Fehlschlag, sondern eine Frage an den Nutzer (#160) — und darf deshalb
         // NICHT in die Wiederhol-Schleife aus #107 geraten: die ist fuer einen Server gedacht,
         // der gerade neu startet. Ein Konflikt loest sich nicht durch Warten, drei weitere
@@ -395,7 +413,7 @@ export function useDoc(project: string | null, base: string | null) {
     // bekommt kein rotes Signal — der Schutz ist die Kombination, nicht die einzelne Zeile.
     kette.current = lauf.catch(() => {})
     return lauf
-  }, [doc, project, base, konflikt, erzwingen])
+  }, [doc, project, base, konflikt, erzwingen, reload, verworfenStand])
 
   // Flush beim Verlassen einer Datei (#106). In der 800-ms-Pause hatte die Oberflaeche "wird
   // gespeichert" versprochen; eine "Verwerfen?"-Rueckfrage beim Wechseln widerspricht dem. Der
@@ -411,6 +429,8 @@ export function useDoc(project: string | null, base: string | null) {
   // noch nicht. `haengt` schliesst den Doppel-Fire aus, wenn die Kette den Stand schon traegt;
   // stand!=='fehler', weil der Nutzer auf 'fehler' an der Leiste explizit verwirft (#106-Review).
   useEffect(() => {
+    // Die Map bleibt dieselbe; ihre Eintraege werden beim Verwerfen synchron aktualisiert.
+    const verwerfungsStaende = verwerfungen.current
     return () => {
       // VOR allen Wächtern, und deshalb hier zusätzlich zu `reload()`: dieser Cleanup ist der
       // einzige Weg, der auch das **Unmount** deckt (Editor verlassen, Datei gelöscht oder neu
@@ -449,15 +469,25 @@ export function useDoc(project: string | null, base: string | null) {
       if (ladeLauf.current !== fertig.current) return
       const dokument = docRef.current
       if (!dokument) return
+      const key = schluessel(project, base)
+      const verwerfung = verwerfungsStaende[key] ?? 0
+      const gueltig = () => (verwerfungsStaende[key] ?? 0) === verwerfung
       kette.current = kette.current
         // Der neue `dateistand` wird hier bewusst NICHT uebernommen (#160): wir haben die
         // Datei gerade verlassen, der Ref-Zustand des Hooks gehoert schon der naechsten.
         // Das Dokument traegt sein Token selbst mit — deshalb liegt es im Dokument und nicht
         // in einem Ref daneben, der beim Cleanup bereits umgeschwenkt waere.
         .then(async () => {
+          if (!gueltig()) return
           await saveDoc(project, base, mitStand(dokument, schluessel(project, base)))
         })
         .catch((e) => {
+          if (!gueltig()) return
+          if (e instanceof HttpFehler && e.status === 410) {
+            toast.error(`„${base}“: die letzte Änderung gehört zu einer gelöschten Projektinstanz `
+              + 'und wurde nicht in das neu angelegte Projekt geschrieben.')
+            return
+          }
           // 409 ist hier KEIN Fehlschlag, sondern ein Ausgang — und er braucht eine eigene
           // Meldung (#160). Die Datei ist verlassen, `doc` gehoert schon der naechsten: eine
           // Rueckfrage wie in `konflikt` ginge ins Leere, und die letzte Aenderung existiert
@@ -534,11 +564,8 @@ export function useDoc(project: string | null, base: string | null) {
     } catch (e) { toast.error('Export fehlgeschlagen: ' + (e as Error).message) }
   }, [project, base])
 
-  /** #106-Review C1/C2: destruktive Aktionen (Loeschen / Neu transkribieren / Umbenennen) rufen
-   *  das VOR dem Server-Aufruf, der die Datei zerstoert oder verschiebt. Ohne das spuelte der
-   *  Verlassens-Flush die Datei als Waise wieder auf — der Backend-Save legt eine geloeschte
-   *  Datei bedingungslos neu an (`makedirs exist_ok` + `atomic_write`). `setDirty(false)` bricht
-   *  auch den haengenden Autosave-Timer ab; der Flush-Guard greift danach ueber dirtyRef. */
+  /** Verwirft den Stand dieses Dokuments samt wartenden Saves und spaeten Rueckmeldungen.
+   *  Beim Projektloeschen wird dies nach dem bestaetigten DELETE aufgerufen. */
   const vergiss = useCallback(() => {
     // Auch die offenen Rueckwege (#154, CodeRabbit): zwischen `vergiss()` und dem Ende der
     // Aktion liegt ein ganzer Server-Aufruf, und der Editor steht dabei noch — der Cleanup
@@ -546,9 +573,14 @@ export function useDoc(project: string | null, base: string | null) {
     // ruft `updateDoc` -> `beruehrt()` -> `dirty` und traegt den Autosave 800 ms spaeter in
     // eine Datei, die gerade geloescht oder verschoben wird. Genau die Waise, gegen die
     // `vergiss` selbst gebaut ist (#106-Review C1/C2).
+    const key = `${project}\n${base}`
+    verwerfungen.current[key] = (verwerfungen.current[key] ?? 0) + 1
+    // Ein asynchroner Aufrufer kann inzwischen zu einer anderen Datei gewechselt sein.
+    if (offen.current !== key) return
     streichungenVergessen()
-    setDirty(false); haengt.current = false
-  }, [])
+    setDirty(false); haengt.current = false; setStand('ruhig')
+    setFehlerZaehler(0); finalToastGezeigt.current = false
+  }, [project, base])
 
   // `save` wandert bewusst NICHT nach draussen: es gibt keinen Speichern-Knopf mehr, und eine
   // zweite Ausloesestelle waere eine, die neben der Entprellung herlaeuft.

@@ -11,8 +11,9 @@ import sys
 import threading
 import time
 import uuid
+from contextvars import ContextVar
 
-from . import settings
+from . import paths, settings
 
 _jobs = {}                 # job_id -> record
 _active = {}               # (project, kind) -> job_id (Dedupe: je Art einer pro Projekt)
@@ -25,6 +26,8 @@ _active = {}               # (project, kind) -> job_id (Dedupe: je Art einer pro
 # („weg, und es ist kein Fehler, wenn er schon weg war"), samt dem Leck-Riegel aus #417.
 # Der Wert ist neu und wird von der Sperrlogik nirgends gelesen.
 _pending = {}
+_pending_bindungen: dict[tuple[str, str, str | None], str | None] = {}
+# derselbe Schluessel -> fachliche Instanz des vorgemerkten Laufs
 
 # Vorgangsnummer -> Zustand der Vormerkung. Die zweite Struktur ist noetig, weil ein
 # AUFGELOESTER Vorgang lesbar bleiben muss, nachdem `rerun` seinen Schluessel aus `_pending`
@@ -36,6 +39,7 @@ _VORGAENGE_MAX = 200
                            # und zwei Zusicherungen in `test_jobs.py` sind darauf hereingefallen
                            # (sie fragen ein Zweitupel ab und koennen nie rot werden).
 _lock = threading.Lock()
+_request_namen_kanonisch = ContextVar("request_namen_kanonisch", default=False)
 
 _CREATE_NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 _PRUNE_AGE = 3600          # fertige Jobs nach 1h vergessen
@@ -53,6 +57,84 @@ SCOPE_PREFIX = "[scope] "
 SCOPE_ADD_PREFIX = "[scope+] "
 ACTIVE_PREFIX = "[active] "
 DONE_PREFIX = "[done] "
+
+
+def _gleiches_projekt(links: str, rechts: str) -> bool:
+    """Vergleicht bereits aufgeloeste Projektnamen ohne Dateisystemzugriff."""
+    return os.path.normcase(links) == os.path.normcase(rechts)
+
+
+def _gleiche_base(links: str | None, rechts: str | None) -> bool:
+    if links is None or rechts is None:
+        return links is rechts
+    return os.path.normcase(links) == os.path.normcase(rechts)
+
+
+def _base_schluessel(namen, gesucht: str):
+    return next((name for name in namen if _gleiche_base(name, gesucht)), None)
+
+
+def _entferne_base_aliases(namen: set[str], gesucht: str) -> None:
+    """Entfernt alle Schreibweisen derselben Dateisystem-Base."""
+    aliases = {name for name in namen if _gleiche_base(name, gesucht)}
+    namen.difference_update(aliases)
+
+
+def _kanonische_namen(project: str, bases=()) -> tuple[str, dict[str, str]]:
+    """Loest Registry-Namen vor dem globalen Lock ueber das Dateisystem auf."""
+    project = paths.vorhandener_projektname(project)
+    bases = tuple(bases)
+    if not bases:
+        return project, {}
+    return project, paths.vorhandene_aufnahmenamen(project, bases)
+
+
+def _schutz_namen(project: str, base: str | None = None) -> tuple[str, str | None, bool]:
+    """Loest eine Schutzabfrage auf; Dateisystemfehler werden konservativ markiert."""
+    try:
+        project, bases = _kanonische_namen(project, [base] if base is not None else [])
+        return project, bases.get(base) if base is not None else None, False
+    except OSError:
+        return project, base, True
+
+
+def _gleiches_projekt_geschuetzt(links: str, rechts: str, unsicher: bool) -> bool:
+    return (_gleiches_projekt(links, rechts)
+            or (unsicher and paths.namensform(links) == paths.namensform(rechts)))
+
+
+def _gleiche_base_geschuetzt(links: str | None, rechts: str | None, unsicher: bool) -> bool:
+    if _gleiche_base(links, rechts):
+        return True
+    return (unsicher and links is not None and rechts is not None
+            and paths.namensform(links) == paths.namensform(rechts))
+
+
+def _base_schluessel_geschuetzt(namen, gesucht: str, unsicher: bool):
+    return next((name for name in namen
+                 if _gleiche_base_geschuetzt(name, gesucht, unsicher)), None)
+
+
+def _aktiver_schluessel_locked(project: str, kind: str):
+    return next((key for key in _active
+                 if key[1] == kind and _gleiches_projekt(key[0], project)), None)
+
+
+def _vorgemerkter_schluessel_locked(project: str, kind: str, base: str | None):
+    return next((key for key in _pending
+                 if key[1] == kind and _gleiche_base(key[2], base)
+                 and _gleiches_projekt(key[0], project)), None)
+
+
+def _pending_entfernen_locked(key, nummer=None) -> bool:
+    """Entfernt nur die erwartete Vormerkung, nie einen spaeteren Nachfolger."""
+    if nummer is not None and _pending.get(key) != nummer:
+        return False
+    if key not in _pending:
+        return False
+    _pending.pop(key, None)
+    _pending_bindungen.pop(key, None)
+    return True
 
 
 def buche_aktive(aktive: dict, line: str, gesehen: set | None = None,
@@ -102,7 +184,8 @@ def buche_aktive(aktive: dict, line: str, gesehen: set | None = None,
     if line.startswith(ACTIVE_PREFIX):
         roh = line[len(ACTIVE_PREFIX):]
         if roh:
-            aktive[roh] = aktive.get(roh, 0) + 1
+            alias = _base_schluessel(aktive, roh) or roh
+            aktive[alias] = aktive.get(alias, 0) + 1
         # BEIDE Mengen bekommen denselben UNGESTUTZTEN Namen (#477). Bis dahin buchte
         # `aktive` gestutzt, `gesehen` roh -- und genau diese Asymmetrie war der Riegel-Loch:
         # `aktive` treibt `betrifft()`, das gegen einen HTTP-Pfadparameter vergleicht, und
@@ -127,14 +210,15 @@ def buche_aktive(aktive: dict, line: str, gesehen: set | None = None,
         # 4 s alter Dateiliste — dieselbe Klasse wie die Stale-Verschmutzung von `gesehen`
         # seit #475; ein Fix braeuchte Zeitstempel je Base.
         if entfernt_je is not None and roh:
-            entfernt_je.discard(roh)
+            _entferne_base_aliases(entfernt_je, roh)
     elif line.startswith(DONE_PREFIX):
         roh = line[len(DONE_PREFIX):]
         if roh:
-            if aktive.get(roh, 0) <= 1:
-                aktive.pop(roh, None)   # Boden 0 — Nachfolger der alten discard-Idempotenz
+            alias = _base_schluessel(aktive, roh) or roh
+            if aktive.get(alias, 0) <= 1:
+                aktive.pop(alias, None)   # Boden 0 — Nachfolger der alten discard-Idempotenz
             else:
-                aktive[roh] -= 1
+                aktive[alias] -= 1
 
 _PROZENT_RE = re.compile(r"^\d+%(?:\||\s|$)")
 MAX_JOB_LINES = 10_000
@@ -166,6 +250,7 @@ def _popen_kwargs() -> dict:
 # haengt fast nur an Opus und braucht die GPU nur fuer den kurzen pyannote-Schritt — es hier
 # mitzufuehren hiesse, dass eine 25-Minuten-Korrektur jede Transkription blockiert.
 GPU_KINDS = ("transcribe",)
+_FEHLERPROZESS_WARTE_S = 1.0
 
 # Welche Job-Arten `[active]` ueberhaupt bedeuten duerfen - dieselbe Menge, die
 # `jobPhases.ts` am Anfang seiner Schleife durchlaesst. Ohne diesen Filter buchte auch ein
@@ -312,6 +397,9 @@ def vormerken(project: str, kind: str, base: str | None = None) -> str:
     Kein `_prune_locked` hier: eine offene Vormerkung wird ohnehin nie geworfen (siehe dort),
     und ein Aufraeumlauf an dieser Stelle raeumte auf, bevor der Eintrag ueberhaupt steht.
     """
+    project, bases = _kanonische_namen(project, [base] if base is not None else [])
+    if base is not None:
+        base = bases[base]
     nummer = uuid.uuid4().hex[:12]
     with _lock:
         _vorgaenge[nummer] = {"vorgang": nummer, "status": "vorgemerkt", "job_id": None,
@@ -398,17 +486,21 @@ def transcribe_laeuft_oder_wartet(project: str) -> bool:
     genau dann sieht die Oberflaeche fuer P auch nichts Laufendes.
 
     Fuer eine ENTSCHEIDUNG, nicht fuer eine Anzeige: die Antwort ist eine Momentaufnahme."""
+    project, _base, unsicher = _schutz_namen(project)
     with _lock:
         for (proj, kind), jid in _active.items():
-            if proj != project or kind != "transcribe":
+            if (not _gleiches_projekt_geschuetzt(proj, project, unsicher)
+                    or kind != "transcribe"):
                 continue
             r = _jobs.get(jid)
             if r is not None and r["status"] == "running":
                 return True
-        return any(k[0] == project and k[1] == "transcribe" for k in _pending)
+        return any(_gleiches_projekt_geschuetzt(k[0], project, unsicher)
+                   and k[1] == "transcribe"
+                   for k in _pending)
 
 
-def start(project: str, cmd: list, cwd, kind: str, then=None, env=None, base: str = None,
+def start(project: str, cmd: list, cwd, kind: str, then=None, env=None, base: str | None = None,
           bases: set = None, sonst=None):
     """Startet den Job. `then` laeuft NACH erfolgreichem Abschluss (status 'done') im
     Job-Thread — damit haengt die Auto-Korrektur nach der Transkription nicht am Browser.
@@ -424,10 +516,32 @@ def start(project: str, cmd: list, cwd, kind: str, then=None, env=None, base: st
     Er liegt ab hier unter dem Lock im Datensatz. Damit gibt es das Fenster nicht mehr,
     das `when_done` offenliess (Job schon terminal, bevor der Aufrufer den Rueckruf
     anhaengen konnte)."""
+    if _request_namen_kanonisch.get():
+        if base is not None:
+            return _start_kanonisch(
+                project, cmd, cwd, kind, then=then, env=env, base=base, sonst=sonst)
+        if bases is not None:
+            return _start_kanonisch(
+                project, cmd, cwd, kind, then=then, env=env, bases=bases, sonst=sonst)
+        return _start_kanonisch(project, cmd, cwd, kind, then=then, env=env, sonst=sonst)
+    namen = set(bases) if bases is not None else ({base} if base is not None else set())
+    project, aufgeloest = _kanonische_namen(project, namen)
+    if base is not None:
+        base = aufgeloest[base]
+    if bases is not None:
+        bases = {aufgeloest[name] for name in bases}
+    return _start_kanonisch(
+        project, cmd, cwd, kind, then=then, env=env, base=base, bases=bases, sonst=sonst)
+
+
+def _start_kanonisch(project: str, cmd: list, cwd, kind: str, then=None, env=None,
+                     base: str | None = None, bases: set | None = None, sonst=None):
+    """Startet mit bereits dateisystemseitig aufgeloesten Registry-Namen."""
     with _lock:
         _prune_locked()
-        if (project, kind) in _active:
-            return _active[(project, kind)], False
+        aktiver_schluessel = _aktiver_schluessel_locked(project, kind)
+        if aktiver_schluessel is not None:
+            return _active[aktiver_schluessel], False
         if kind in GPU_KINDS:
             busy = next((jid for jid, r in _jobs.items()
                          if r["kind"] in GPU_KINDS and r["status"] == "running"), None)
@@ -496,8 +610,9 @@ def start(project: str, cmd: list, cwd, kind: str, then=None, env=None, base: st
     return jid, True
 
 
-def request(project: str, cmd: list, cwd, kind: str, then=None, base: str = None,
-            vorgang: str | None = None, sonst=None):
+def request(project: str, cmd: list, cwd, kind: str, then=None, base: str | None = None,
+            vorgang: str | None = None, sonst=None, wiederholung=None,
+            bindung: str | None = None):
     """Startet den Job — oder merkt genau EINEN Nachlauf vor, wenn der Slot belegt ist.
 
     Ein Upload/Import soll immer zu einer Verarbeitung fuehren, auch wenn gerade eine laeuft:
@@ -531,40 +646,76 @@ def request(project: str, cmd: list, cwd, kind: str, then=None, base: str = None
     Schluessel — die erste, die die Oberflaeche kennt, bliebe ewig `vorgemerkt`. Am echten
     Ablauf getraced (Q blockt P und R, danach blockt P das R): add-Zaehlung 2 fuer denselben
     Schluessel, der zweite aus dem `_run`-Faden.
+
+    `wiederholung` ist eine Context-Manager-Factory fuer den spaeten `rerun`. Sie kann den
+    Start unter einer fachlichen Sperre ausfuehren und mit `False` verwerfen, wenn der
+    urspruengliche Kontext nicht mehr gilt. Der erste Aufruf wird bereits vom API-Handler
+    gesperrt; die Factory gilt deshalb nur fuer den spaeteren Rueckruf.
+
+    `bindung` trennt Vormerkungen gleichnamiger, aber verschiedener Projektinstanzen. Eine
+    neue Instanz ersetzt die alte Vormerkung, waehrend deren bereits registrierter Rueckruf
+    nur noch seine eigene Nummer verwerfen darf.
     """
+    project, bases = _kanonische_namen(project, [base] if base is not None else [])
+    if base is not None:
+        base = bases[base]
     key = (project, kind, base)
     nummer = vorgang
     for _ in range(10):
-        if base is not None:
-            jid, started = start(project, cmd, cwd, kind, then=then, base=base, sonst=sonst)
-        else:
-            jid, started = start(project, cmd, cwd, kind, then=then, sonst=sonst)
+        token = _request_namen_kanonisch.set(True)
+        try:
+            if base is not None:
+                jid, started = start(
+                    project, cmd, cwd, kind, then=then, base=base, sonst=sonst)
+            else:
+                jid, started = start(
+                    project, cmd, cwd, kind, then=then, sonst=sonst)
+        finally:
+            _request_namen_kanonisch.reset(token)
         if started:
             # Traegt der Aufruf eine Nummer, ist er der Nachlauf DIESER Vormerkung — hier
             # erfaehrt die Oberflaeche die Kennung, auf die sie wartet.
             _vorgang_setzen(nummer, "gestartet", job_id=jid)
             return jid, True, nummer
         with _lock:
+            vorhandener_schluessel = _vorgemerkter_schluessel_locked(project, kind, base)
+            if vorhandener_schluessel is not None:
+                key = vorhandener_schluessel
             if key in _pending:
                 # schon vorgemerkt -> der Nachlauf nimmt die neuen Dateien mit. Der Aufrufer
                 # bekommt die BESTEHENDE Nummer, nicht eine neue: es ist dieselbe Vormerkung.
                 bestehende = _pending[key]
-                if nummer is not None and nummer != bestehende:
-                    # Wir kommen aus `rerun` und bringen eine Nummer mit — aber zwischen dem
-                    # `pop` dort und dieser Zeile liegen DREI getrennte Sperr-Erwerbe, und in
-                    # dem Fenster hat eine andere Anfrage denselben Schluessel neu belegt.
-                    # Ohne diesen Zweig bliebe unsere Nummer fuer immer `vorgemerkt`, und die
-                    # Oberflaeche fragte sie fuer die Lebensdauer des Tabs alle 1,5 s ab —
-                    # ein Dauerpoll auf eine Nummer, die nie wieder etwas meldet.
-                    # Ausgefuehrt reproduziert (kalter Pruefer, `N1 ORPHANED`).
-                    # Beide zeigen jetzt auf DIESELBE Vormerkung.
-                    v = _vorgaenge.get(nummer)
-                    if v is not None:
-                        v["alias"] = bestehende
-                return jid, False, bestehende
+                bestehende_bindung = _pending_bindungen.get(key)
+                if bestehende_bindung != bindung:
+                    # Derselbe sichtbare Projektname gehoert inzwischen zu einer anderen
+                    # Instanz. Der alte Rueckruf bleibt registriert, darf aber weder diese
+                    # neue Vormerkung uebernehmen noch sie spaeter aus `_pending` entfernen.
+                    if nummer is not None and nummer == bestehende:
+                        v = _vorgaenge.get(nummer)
+                        if v is not None:
+                            v["status"] = "verworfen"
+                        return jid, False, nummer
+                    alt = _vorgaenge.get(bestehende)
+                    if alt is not None and alt.get("status") == "vorgemerkt":
+                        alt["status"] = "verworfen"
+                else:
+                    if nummer is not None and nummer != bestehende:
+                        # Wir kommen aus `rerun` und bringen eine Nummer mit — aber zwischen dem
+                        # `pop` dort und dieser Zeile liegen DREI getrennte Sperr-Erwerbe, und in
+                        # dem Fenster hat eine andere Anfrage denselben Schluessel neu belegt.
+                        # Ohne diesen Zweig bliebe unsere Nummer fuer immer `vorgemerkt`, und die
+                        # Oberflaeche fragte sie fuer die Lebensdauer des Tabs alle 1,5 s ab —
+                        # ein Dauerpoll auf eine Nummer, die nie wieder etwas meldet.
+                        # Ausgefuehrt reproduziert (kalter Pruefer, `N1 ORPHANED`).
+                        # Beide zeigen jetzt auf DIESELBE Vormerkung.
+                        v = _vorgaenge.get(nummer)
+                        if v is not None:
+                            v["alias"] = bestehende
+                    return jid, False, bestehende
             if nummer is None:
                 nummer = uuid.uuid4().hex[:12]
             _pending[key] = nummer
+            _pending_bindungen[key] = bindung
             _vorgaenge.setdefault(nummer, {"vorgang": nummer, "status": "vorgemerkt",
                                            "job_id": None, "project": project,
                                            "kind": kind, "base": base})
@@ -599,10 +750,10 @@ def request(project: str, cmd: list, cwd, kind: str, then=None, base: str = None
             # `base` wird BEWUSST nicht verglichen: innerhalb desselben (Projekt, Art) ist der
             # Blocker per Dedupe genau der Lauf, den der Nutzer gemeint hat.
             with _lock:
-                _pending.pop(_key, None)
+                _pending_entfernen_locked(_key, _nummer)
                 blocker = _jobs.get(_jid) or {}
                 abgebrochen = (blocker.get("status") == "cancelled"
-                               and blocker.get("project") == project
+                               and _gleiches_projekt(blocker.get("project", ""), project)
                                and blocker.get("kind") == kind)
             if abgebrochen:
                 # Der Nutzer hat DIESE Arbeit abgebrochen — der Vorgang ist damit erledigt,
@@ -612,12 +763,26 @@ def request(project: str, cmd: list, cwd, kind: str, then=None, base: str = None
                 return
             # Die Nummer reist MIT: sonst legt der Aufruf bei erneuter Blockierung eine zweite
             # an, und die erste bleibt fuer immer `vorgemerkt` (siehe Docstring).
-            request(project, cmd, cwd, kind, then=then, base=base, vorgang=_nummer, sonst=sonst)
+            if wiederholung is None:
+                request(project, cmd, cwd, kind, then=then, base=base,
+                        vorgang=_nummer, sonst=sonst, wiederholung=None, bindung=bindung)
+                return
+            try:
+                with wiederholung() as erlaubt:
+                    if not erlaubt:
+                        _vorgang_setzen(_nummer, "verworfen")
+                        return
+                    request(project, cmd, cwd, kind, then=then, base=base,
+                            vorgang=_nummer, sonst=sonst, wiederholung=wiederholung,
+                            bindung=bindung)
+            except Exception:
+                _vorgang_setzen(_nummer, "aufgegeben")
+                raise
 
         if when_done(jid, rerun):
             return jid, False, nummer
         with _lock:                       # jid wurde eben terminal -> Slot frei, gleich nochmal
-            _pending.pop(key, None)
+            _pending_entfernen_locked(key, nummer)
         time.sleep(0.05)
     print(f"Nachlauf fuer {project!r}/{kind} aufgegeben: Slot blieb belegt", file=sys.stderr)
     # Bisher endete dieser Weg nur in einer stderr-Zeile, die der Nutzer nie sieht.
@@ -653,6 +818,10 @@ def when_done(job_id: str, fn) -> bool:
 
 def _run(jid, cmd, cwd, env):
     _run_proc(jid, cmd, cwd, env)
+    with _lock:
+        r = _jobs.get(jid)
+        if r is None or r["status"] not in ("done", "error", "cancelled"):
+            return
     # Nachlauf AUSSERHALB von _run_proc: dessen finally hat den Slot in _active schon
     # freigegeben, sonst wuerde ein `then`, das denselben Projekt-Job startet, sich selbst
     # aussperren. Und ausserhalb von _lock, sonst blockiert es jobs.start() im Callback.
@@ -757,8 +926,9 @@ def _run(jid, cmd, cwd, env):
     # 2. Prüfen, ob noch Folge-Läufe für (Projekt, Art) aktiv oder vorgemerkt sind
     weitergereicht = False
     with _lock:
-        folge_jid = _active.get((project, kind))
-        hat_pending = any(k[0] == project and k[1] == kind for k in _pending)
+        folge_schluessel = _aktiver_schluessel_locked(project, kind)
+        folge_jid = _active.get(folge_schluessel) if folge_schluessel is not None else None
+        hat_pending = any(_gleiches_projekt(k[0], project) and k[1] == kind for k in _pending)
         # NUR bei Erfolg weiterreichen. Fuer `then` ist das ein No-op (die Liste ist sonst
         # ohnehin leer), fuer `sonst`/`then_ueber` waere es der Unterschied zwischen
         # „nachholen" und „ein zweites Mal verschieben": ein gescheiterter Lauf hat seine
@@ -844,6 +1014,40 @@ def _run(jid, cmd, cwd, env):
 
 
 def _run_proc(jid, cmd, cwd, env=None):
+    proc = None
+    fehlerprozess_zustand = {"fehler": False, "bereinigt": True}
+    fehlerprozess_lock = threading.Lock()
+
+    def _behandle_prozessfehler(meldung):
+        """Bereinigt den Prozessbaum je Job genau einmal und teilt das Ergebnis."""
+        with fehlerprozess_lock:
+            erste_meldung = not fehlerprozess_zustand["fehler"]
+            bereinigungsfehler = []
+            if erste_meldung and proc is not None:
+                try:
+                    bereinigungsfehler, bereinigt = _bereinige_fehlerprozess(proc)
+                except Exception as cleanup_error:
+                    bereinigungsfehler = [
+                        f"Fehlerprozess-Bereinigung schlug fehl: {cleanup_error}"]
+                    bereinigt = False
+                fehlerprozess_zustand["fehler"] = True
+                fehlerprozess_zustand["bereinigt"] = bereinigt
+            elif erste_meldung:
+                fehlerprozess_zustand["fehler"] = True
+
+            bereinigt = fehlerprozess_zustand["bereinigt"]
+            with _lock:
+                r = _jobs.get(jid)
+                if r is not None:
+                    fuege_zeile_an(r["lines"], f"JOB-FEHLER: {meldung}")
+                    if erste_meldung:
+                        for fehler in bereinigungsfehler:
+                            fuege_zeile_an(
+                                r["lines"], f"PROZESSBEREINIGUNG-FEHLER: {fehler}")
+                        if not bereinigt:
+                            r["cleanup_incomplete"] = True
+            return bereinigt
+
     try:
         # settings.job_env() reicht die Whisper-Einstellungen durch: die .env laedt nur
         # webtool.ps1, in der Desktop-App gibt es keine. `env` (z.B. TRANSKRIBOR_FETCH_SPRACHE)
@@ -882,11 +1086,41 @@ def _run_proc(jid, cmd, cwd, env=None):
                          if _jobs[jid]["kind"] in NACHTRAG_KINDS else None)
             nachtrag_an = _jobs[jid]["kind"] in NACHTRAG_KINDS
             eingereiht_an = _jobs[jid]["kind"] in EINGEREIHT_KINDS
+            project = _jobs[jid]["project"]
         if cancelled:                            # cancel() kam an, bevor die pid gesetzt war -> selbst killen
             _kill_tree(proc)
 
+        namenindex = {}
+        namenindex_lock = threading.Lock()
+
         def _verarbeite(line):
             line = line.rstrip("\n")
+            scope_roh = (line[len(SCOPE_PREFIX):].split("\t")
+                         if line.startswith(SCOPE_PREFIX) else [])
+            nachtrag_roh = (line[len(SCOPE_ADD_PREFIX):].split("\t")
+                            if line.startswith(SCOPE_ADD_PREFIX) else [])
+            eingereiht_match = EINGEREIHT_RE.match(line) if eingereiht_an else None
+            eingereiht_roh = eingereiht_match.group(1) if eingereiht_match else None
+            aktiv_roh = line[len(ACTIVE_PREFIX):] if line.startswith(ACTIVE_PREFIX) else None
+            fertig_roh = line[len(DONE_PREFIX):] if line.startswith(DONE_PREFIX) else None
+            aufzuloesen = {
+                name for name in [*scope_roh, *nachtrag_roh, eingereiht_roh, aktiv_roh, fertig_roh]
+                if name
+            }
+            with namenindex_lock:
+                zu_scannen = {name for name in aufzuloesen if name not in namenindex}
+                # Ein scope+-Nachtrag signalisiert eine neue Dateisysteminstanz. Auch bei
+                # gleichem Roh-Namen muss ihre aktuelle Schreibweise den alten Index ersetzen.
+                zu_scannen.update(name for name in nachtrag_roh if name)
+                if zu_scannen:
+                    namenindex.update(
+                        paths.vorhandene_aufnahmenamen(project, zu_scannen))
+                aufgeloest = {name: namenindex[name] for name in aufzuloesen}
+            buchungszeile = line
+            if aktiv_roh:
+                buchungszeile = ACTIVE_PREFIX + aufgeloest[aktiv_roh]
+            elif fertig_roh:
+                buchungszeile = DONE_PREFIX + aufgeloest[fertig_roh]
             with _lock:
                 fuege_zeile_an(_jobs[jid]["lines"], line)
                 # Die Einreih-Zeile serverseitig buchen (#561) — NEBEN der if/elif-Kette
@@ -899,14 +1133,15 @@ def _run_proc(jid, cmd, cwd, env=None):
                 # Lauf sind 10.560 Zeilen gemessen (#475): faellt eine Einreih-Zeile heraus,
                 # verschwand die Aufnahme bisher aus der Schlange und die Zahl aller uebrigen
                 # sank um eins.
-                if eingereiht_an and (_m := EINGEREIHT_RE.match(line)):
+                if eingereiht_roh:
                     liste = _jobs[jid]["eingereiht"]
                     # Dubletten verwerfen, wie der Parser: ihre Wirkung waere still und
                     # dauerhaft — jeder Nachfolger rutschte um eins, aus „noch 1 vor dieser"
                     # wuerde „noch 2".
-                    if _m.group(1) not in liste:
-                        liste.append(_m.group(1))
-                elif eingereiht_an and line.startswith(DONE_PREFIX):
+                    eingereiht = aufgeloest[eingereiht_roh]
+                    if eingereiht not in liste:
+                        liste.append(eingereiht)
+                elif eingereiht_an and fertig_roh:
                     # Der GEGENWEG, und ohne ihn dreht der Rueckweg oben die sichere Richtung
                     # um (CodeRabbit-CLI, major): faellt spaeter auch die Abschlusszeile aus
                     # dem Puffer, haelt die Serverliste die Aufnahme fuer immer als „wartend"
@@ -934,14 +1169,14 @@ def _run_proc(jid, cmd, cwd, env=None):
                     # eines Laufs (gemessen Index 8). `jobPhases.ts` nimmt den Zeilenpfad
                     # deshalb nur noch, wenn das Feld GANZ fehlt (aelterer Server); die
                     # Begruendung steht dort bei `serverKennt`.
-                    roh = line[len(DONE_PREFIX):]
+                    roh = aufgeloest[fertig_roh]
                     liste = _jobs[jid]["eingereiht"]
                     if roh in liste:
                         liste.remove(roh)
                 # Nur die ERSTE Zeile zaehlt: der Lauf druckt sie, bevor er arbeitet, und
                 # spaeter kaeme sie hoechstens aus Transkripttext, der so beginnt.
-                if _jobs[jid]["bases"] is None and line.startswith(SCOPE_PREFIX):
-                    _jobs[jid]["bases"] = {b for b in line[len(SCOPE_PREFIX):].split("\t") if b}
+                if _jobs[jid]["bases"] is None and scope_roh:
+                    _jobs[jid]["bases"] = {aufgeloest[b] for b in scope_roh if b}
                 # Nachtrag: NUR wenn der Erstbereich schon steht. Ohne ihn gibt es nichts zu
                 # ergaenzen, und ein Nachtrag als Erstbereich waere eine Zusage, die der Lauf
                 # nie gegeben hat — `bases is None` heisst fuer `betrifft()` "allumfassend",
@@ -956,13 +1191,12 @@ def _run_proc(jid, cmd, cwd, env=None):
                 # Nur-Audio). Der Server sieht jede Zeile, BEVOR sie in den gedeckelten Puffer
                 # wandert — sein discard ist deckelfest und gilt ab EINTREFFEN der Marke; der
                 # Parser tilgt an derselben Marke alles bis dahin und braucht kein Lift mehr.
-                elif (nachtrag_an and _jobs[jid]["bases"] is not None
-                      and line.startswith(SCOPE_ADD_PREFIX)):
-                    _jobs[jid]["bases"].update(
-                        b for b in line[len(SCOPE_ADD_PREFIX):].split("\t") if b)
-                    for b in line[len(SCOPE_ADD_PREFIX):].split("\t"):
+                elif (nachtrag_an and _jobs[jid]["bases"] is not None and nachtrag_roh):
+                    nachtrag = [aufgeloest[b] for b in nachtrag_roh if b]
+                    _jobs[jid]["bases"].update(nachtrag)
+                    for b in nachtrag:
                         if b:
-                            _jobs[jid]["entfernt"].discard(b)
+                            _entferne_base_aliases(_jobs[jid]["entfernt"], b)
                             # ... und aus der Korrektur-Schlange, aus einem Grund, den erst
                             # #561 geschaffen hat (gegnerischer Pruefer, F2): eine geloeschte
                             # und gleichnamig neu hochgeladene Aufnahme wird vom Pool HINTEN
@@ -985,27 +1219,23 @@ def _run_proc(jid, cmd, cwd, env=None):
                             # B vor A), ohne ihn `["A","B"]` — also genau der Vorzustand, kein
                             # neuer Fehler. Ein zweiter Ort fuer dieselbe Regel waere die
                             # Drift, gegen die dieses Repo sonst ueberall argumentiert.
-                            if b in _jobs[jid]["eingereiht"]:
-                                _jobs[jid]["eingereiht"].remove(b)
+                            queue_alias = _base_schluessel(
+                                _jobs[jid]["eingereiht"], b)
+                            if queue_alias is not None:
+                                _jobs[jid]["eingereiht"].remove(queue_alias)
                 else:
-                    buche_aktive(_jobs[jid]["active_bases"], line, zulassung,
+                    buche_aktive(_jobs[jid]["active_bases"], buchungszeile, zulassung,
                                  je_sperre)
+
 
         def _lese_stderr():
             try:
                 for line in proc.stderr:
                     _verarbeite(line)
-            except Exception as e:   # dasselbe Muster wie der Hauptpfad: kein Zombie 'running'
-                with _lock:
-                    r = _jobs.get(jid)
-                    if r is not None:
-                        fuege_zeile_an(r["lines"], f"JOB-FEHLER: {e}")
-                # Endet der Faden hier, laeuft die stderr-Pipe voll und der Kind blockiert
-                # im naechsten write — der stdout-Loop erreichte nie EOF, der Job bliebe
-                # dauerhaft 'running' (409-Riegel stehen). Also den Baum killen: stdout
-                # endet, und der aeussere Handler setzt den terminalen Status (Kaltreview
-                # zu #481; Wächter: test_stderr_faden_beendet_den_job_statt_ihn_haengen_zulassen).
-                _kill_tree(proc)
+            except Exception as e:
+                _behandle_prozessfehler(e)
+                # Bei Erfolg endet die Bereinigung auch stdout. Ohne bestaetigten
+                # Baumabschluss bleiben Job und Slot sichtbar fail-closed.
 
         stderr_faden = threading.Thread(target=_lese_stderr, daemon=True)
         stderr_faden.start()
@@ -1017,38 +1247,117 @@ def _run_proc(jid, cmd, cwd, env=None):
         # Join, und der Timeout deckelt ihn gegen einen haengenden Enkel, der das
         # stderr-Handle offen haelt (EOF kaeme dann erst nach dem Kind).
         stderr_faden.join(timeout=30)
+        if stderr_faden.is_alive():
+            _behandle_prozessfehler("stderr-Leser endete nicht innerhalb der Wartefrist")
+            if not fehlerprozess_zustand["bereinigt"]:
+                return
+            stderr_faden.join(timeout=_FEHLERPROZESS_WARTE_S)
+            if stderr_faden.is_alive():
+                with _lock:
+                    fehlerprozess_zustand["bereinigt"] = False
+                    _jobs[jid]["cleanup_incomplete"] = True
+                    fuege_zeile_an(
+                        _jobs[jid]["lines"],
+                        "PROZESSBEREINIGUNG-FEHLER: stderr-Leser blieb aktiv")
+                return
         proc.wait()
         with _lock:
             _jobs[jid]["returncode"] = proc.returncode
-            _jobs[jid]["status"] = "cancelled" if _jobs[jid]["cancelled"] \
-                else ("done" if proc.returncode == 0 else "error")
-            _jobs[jid]["ended"] = time.time()
-    except Exception as e:  # Launch-Fehler etc. -> kein Zombie 'running'
+            if fehlerprozess_zustand["fehler"]:
+                if fehlerprozess_zustand["bereinigt"]:
+                    _jobs[jid]["status"] = (
+                        "cancelled" if _jobs[jid]["cancelled"] else "error")
+                    _jobs[jid]["ended"] = time.time()
+            else:
+                _jobs[jid]["status"] = "cancelled" if _jobs[jid]["cancelled"] \
+                    else ("done" if proc.returncode == 0 else "error")
+                _jobs[jid]["ended"] = time.time()
+    except Exception as e:  # Launch- oder Parserfehler -> kein Zombie 'running'
+        bereinigt = _behandle_prozessfehler(e)
         with _lock:
-            fuege_zeile_an(_jobs[jid]["lines"], f"JOB-FEHLER: {e}")
-            _jobs[jid]["status"] = "cancelled" if _jobs[jid]["cancelled"] else "error"
-            _jobs[jid]["ended"] = time.time()
+            if bereinigt:
+                _jobs[jid]["status"] = "cancelled" if _jobs[jid]["cancelled"] else "error"
+                _jobs[jid]["ended"] = time.time()
+            else:
+                _jobs[jid]["cleanup_incomplete"] = True
     finally:
         with _lock:
-            key = (_jobs[jid]["project"], _jobs[jid]["kind"])
-            if _active.get(key) == jid:
+            key = _aktiver_schluessel_locked(
+                _jobs[jid]["project"], _jobs[jid]["kind"])
+            if _active.get(key) == jid and not _jobs[jid].get("cleanup_incomplete"):
                 _active.pop(key, None)
 
 
-def _kill_tree(proc):
+def _bereinige_fehlerprozess(proc) -> tuple[list[str], bool]:
+    """Raeumt begrenzt auf; False haelt Job und Slot bei unbestaetigtem Baum fail-closed."""
+    fehler = []
+    baum_beendet = False
+    try:
+        baum_beendet = _kill_tree(proc) is True
+    except Exception as e:
+        fehler.append(f"Prozessbaum konnte nicht beendet werden: {e}")
+    if not baum_beendet:
+        fehler.append("Prozessbaum-Beendigung wurde nicht bestaetigt")
+        try:
+            _kill_tree_native(proc)
+            baum_beendet = True
+        except Exception as baum_error:
+            fehler.append(f"Nativer Prozessbaum-Rueckfall fehlgeschlagen: {baum_error}")
+            try:
+                proc.kill()
+            except Exception as kill_error:
+                fehler.append(f"Prozess konnte nicht direkt beendet werden: {kill_error}")
+
+    try:
+        proc.wait(timeout=_FEHLERPROZESS_WARTE_S)
+    except subprocess.TimeoutExpired:
+        fehler.append("Prozess reagierte nicht innerhalb der Bereinigungsfrist")
+        try:
+            _kill_tree_native(proc)
+            baum_beendet = True
+        except Exception as baum_error:
+            fehler.append(f"Prozessbaum konnte nach Fristablauf nicht beendet werden: {baum_error}")
+            try:
+                proc.kill()
+            except Exception as e:
+                fehler.append(f"Prozess konnte nach Fristablauf nicht beendet werden: {e}")
+        try:
+            proc.wait(timeout=_FEHLERPROZESS_WARTE_S)
+        except Exception as e:
+            fehler.append(f"Prozessende konnte nicht bestaetigt werden: {e}")
+    except Exception as e:
+        fehler.append(f"Prozessende konnte nicht bestaetigt werden: {e}")
+    try:
+        prozess_beendet = proc.poll() is not None
+    except Exception as e:
+        fehler.append(f"Prozessstatus nach Bereinigung nicht lesbar: {e}")
+        prozess_beendet = False
+    return fehler, baum_beendet and prozess_beendet
+
+
+def _kill_tree_native(proc):
     if os.name == "nt":
         # /T killt den ganzen Prozessbaum (python -> [claude.cmd] -> claude/node -> MCP-Kinder);
         # ein blosses terminate() liesse den claude-Subtree verwaisen (vgl. correct.py:147-149).
-        subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)],
-                       capture_output=True, creationflags=_CREATE_NO_WINDOW)  # exit!=0 (schon weg) ist ok
-        return
-    # Dasselbe auf POSIX: die Prozessgruppe aus _popen_kwargs() abraeumen. Ein blosses
-    # terminate() liesse whisper/claude als Waisen mit belegter GPU zurueck.
+        result = subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                                capture_output=True, creationflags=_CREATE_NO_WINDOW)
+        if result.returncode != 0:
+            detail = result.stderr.decode(errors="replace").strip()
+            raise OSError(detail or f"taskkill endete mit {result.returncode}")
+        return True
+    sigkill = getattr(signal, 'SIGKILL', 9)
+    os.killpg(os.getpgid(proc.pid), sigkill)
+    return True
+
+
+def _kill_tree(proc):
     try:
-        sigkill = getattr(signal, 'SIGKILL', 9)  # ponytail: Rueckfall auf 9 nur fuer Tests auf Windows-als-posix
-        os.killpg(os.getpgid(proc.pid), sigkill)
+        _kill_tree_native(proc)
+        return True
     except (ProcessLookupError, PermissionError, OSError):
-        proc.terminate()
+        if os.name != "nt":
+            proc.terminate()
+        return False
 
 
 def cancel(job_id: str):
@@ -1161,25 +1470,33 @@ def remove_base(project: str, base: str) -> None:
     """
     with _lock:
         for (proj, _kind), jid in _active.items():
-            if proj != project:
+            if not _gleiches_projekt(proj, project):
                 continue
             r = _jobs.get(jid)
             if r is not None:
+                aliases: set[str] = set()
                 if r.get("bases") is not None:
-                    r["bases"].discard(base)
+                    aliases.update(
+                        name for name in r["bases"] if _gleiche_base(name, base))
+                    r["bases"].difference_update(aliases)
                 # `gesehen` bleibt bewusst stehen: das ist eine Historie ("gehoerte zu
                 # diesem Lauf"), kein Wirkungsbereich - sie aendert sich nicht dadurch,
                 # dass eine Datei geloescht wird, und kein Riegel haengt daran
                 # (`zugelassen()` im Frontend ist reine Anzeige).
                 if r.get("active_bases") is not None:
-                    r["active_bases"].pop(base, None)
+                    aktiv_alias = _base_schluessel(r["active_bases"], base)
+                    if aktiv_alias is not None:
+                        aliases.add(aktiv_alias)
+                        r["active_bases"].pop(aktiv_alias, None)
+                aliases.update(name for name in r.get("gesehen", set())
+                               if _gleiche_base(name, base))
                 # Bedingungslos, auch wenn die Base nie in `bases` stand: ein correct-Lauf
                 # ohne diese Aufnahme im Bereich soll trotzdem nichts Altes über ihren
                 # Namen zeigen.
-                r["entfernt"].add(base)
+                r.setdefault("entfernt", set()).update(aliases or {base})
                 # Und dieselbe Buchung in die MONOTONE Menge (#591): `entfernt` wird beim
                 # Reannoncement geraeumt, `entfernt_je` erst, wenn die neue Datei laeuft.
-                r.setdefault("entfernt_je", set()).add(base)
+                r.setdefault("entfernt_je", set()).update(aliases or {base})
 
 
 def betrifft(project: str, base: str, active_only: bool = False) -> dict | None:
@@ -1210,19 +1527,25 @@ def betrifft(project: str, base: str, active_only: bool = False) -> dict | None:
     nie etwas kaputtgehen konnte. Bewusst so: EIN Verhalten auf allen Plattformen ist mehr wert
     als ein Zweig, den niemand testet, und die Datei WIRD in dem Moment gelesen.
     """
+    project, base, unsicher = _schutz_namen(project, base)
+    if base is None:
+        return None
     with _lock:
         for (proj, _kind), jid in _active.items():
-            if proj != project:
+            if not _gleiches_projekt_geschuetzt(proj, project, unsicher):
                 continue
             r = _jobs.get(jid)
             if r is None or r["status"] != "running":
                 continue
             if active_only:
-                if base in r.get("active_bases", {}):
+                if _base_schluessel_geschuetzt(
+                        r.get("active_bases", {}), base, unsicher) is not None:
                     return {"id": r["id"], "kind": r["kind"]}
             else:
-                if (r["bases"] is None or base in r["bases"]
-                        or base in r.get("active_bases", {})):
+                if (r["bases"] is None
+                        or _base_schluessel_geschuetzt(r["bases"], base, unsicher) is not None
+                        or _base_schluessel_geschuetzt(
+                            r.get("active_bases", {}), base, unsicher) is not None):
                     return {"id": r["id"], "kind": r["kind"]}
     return None
 
@@ -1230,10 +1553,11 @@ def betrifft(project: str, base: str, active_only: bool = False) -> dict | None:
 def active_for(project: str) -> list:
     """[{'id','kind', 'bases'}, …] der laufenden Jobs des Projekts — transcribe und correct duerfen
     gleichzeitig laufen, deshalb eine Liste."""
+    project, _base, unsicher = _schutz_namen(project)
     with _lock:
         out = []
         for (proj, _kind), jid in _active.items():
-            if proj != project:
+            if not _gleiches_projekt_geschuetzt(proj, project, unsicher):
                 continue
             r = _jobs.get(jid)
             if r is not None and r["status"] == "running":
@@ -1242,3 +1566,35 @@ def active_for(project: str) -> list:
                     item["bases"] = list(r["bases"])
                 out.append(item)
         return sorted(out, key=lambda j: j["kind"])
+
+
+def vorgemerkt_fuer(project: str) -> dict | None:
+    """Ein vorgemerkter Lauf des Projekts, auch bevor er in ``_active`` steht."""
+    project, _base, unsicher = _schutz_namen(project)
+    with _lock:
+        for (proj, kind, _base), nummer in _pending.items():
+            if _gleiches_projekt_geschuetzt(proj, project, unsicher):
+                return {"id": nummer, "kind": kind}
+    return None
+
+
+def active_for_known_projects(projects) -> dict[str, list]:
+    """Liest Jobs fuer bereits dateisystemseitig kanonische Projektnamen in einem Snapshot."""
+    projects = tuple(projects)
+    nach_schluessel = {os.path.normcase(project): project for project in projects}
+    out: dict[str, list] = {project: [] for project in projects}
+    with _lock:
+        for (project, _kind), jid in _active.items():
+            sichtbar = nach_schluessel.get(os.path.normcase(project))
+            if sichtbar is None:
+                continue
+            r = _jobs.get(jid)
+            if r is None or r["status"] != "running":
+                continue
+            item = {"id": r["id"], "kind": r["kind"]}
+            if r.get("bases") is not None:
+                item["bases"] = list(r["bases"])
+            out[sichtbar].append(item)
+    for jobs_im_projekt in out.values():
+        jobs_im_projekt.sort(key=lambda job: job["kind"])
+    return out

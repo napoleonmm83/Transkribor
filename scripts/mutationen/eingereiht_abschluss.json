@@ -8,8 +8,8 @@
     {
       "id": "E8 der Abschluss nimmt nicht wieder aus der Schlange heraus (monoton)",
       "datei": "webtool/jobs.py",
-      "von": "                elif eingereiht_an and line.startswith(DONE_PREFIX):",
-      "nach": "                elif eingereiht_an and line.startswith(\"[niemals] \"):",
+      "von": "                elif eingereiht_an and fertig_roh:",
+      "nach": "                elif eingereiht_an and False:  # E8: Abschluss bleibt monoton",
       "rot": [
         "test_eingereiht_verlaesst_die_schlange_beim_abschluss"
       ],
@@ -21,8 +21,8 @@
     {
       "id": "E9 der Abschluss wird als monotone Menge gefuehrt und filtert kuenftige Einreihungen weg",
       "datei": "webtool/jobs.py",
-      "von": "                    if _m.group(1) not in liste:\n                        liste.append(_m.group(1))",
-      "nach": "                    if _m.group(1) not in liste and not any(\n                            z == DONE_PREFIX + _m.group(1) for z in _jobs[jid][\"lines\"]):\n                        liste.append(_m.group(1))",
+      "von": "                    if eingereiht not in liste:\n                        liste.append(eingereiht)",
+      "nach": "                    if eingereiht not in liste and not any(\n                            z == DONE_PREFIX + eingereiht for z in _jobs[jid][\"lines\"]):\n                        liste.append(eingereiht)",
       "rot": [
         "test_abschluss_VOR_der_einreihung_nimmt_nichts_weg"
       ],

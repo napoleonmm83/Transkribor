@@ -9,8 +9,10 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
 
-export function DeleteProjectDialog({ project, onDeleted, offen, onOpenChange }: {
+export function DeleteProjectDialog({ project, onDeleted, onDeleteStart, offen, onOpenChange }: {
   project: string; onDeleted: () => void
+  /** Unmittelbar vor dem DELETE: der Aufrufer kann die damals aktive Editorinstanz merken. */
+  onDeleteStart?: () => void
   /** Von aussen gesteuert (ProjektMenue): dann OHNE eigenen Knopf. Ein Dialog-Trigger IM
    *  Menue wird beim Schliessen des Menues mit ausgehaengt — dieselbe Falle, die in
    *  DateiMenue schon dazu fuehrte, die Dialoge neben das Menue zu stellen. */
@@ -22,6 +24,7 @@ export function DeleteProjectDialog({ project, onDeleted, offen, onOpenChange }:
   const open = gesteuert ? offen : eigen
   const setOpen = (o: boolean) => { if (gesteuert) onOpenChange?.(o); else setEigen(o) }
   const del = async () => {
+    onDeleteStart?.()
     try { await deleteProject(project) } catch (e) { toast.error(`Löschen fehlgeschlagen: ${(e as Error).message}`); return }
     setOpen(false); onDeleted()
   }

@@ -4,6 +4,8 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import { ProjektPalette } from './ProjektPalette'
 import { ProjektDatenProvider } from '@/hooks/useProjektDaten'
 import { JobProvider } from '@/hooks/useActiveJob'
+import { EditorBrueckeProvider, useEditorMelden } from '@/hooks/useEditorBruecke'
+import type { SpeicherStand } from '@/hooks/useDoc'
 import * as api from '@/lib/api'
 import type { Project } from '@/lib/types'
 
@@ -14,7 +16,12 @@ const demoProjects: Project[] = [
   { name: 'Beta', dateien: 1, fertig: 0, geaendert: 1, active_jobs: [{ id: 'j1', kind: 'transcribe' }] },
 ]
 
-function renderPalette(projects = demoProjects) {
+function OffenerEditor({ stand }: { stand: SpeicherStand }) {
+  useEditorMelden({ project: 'Alpha', base: 'a', dirty: true, stand, reload: () => {}, vergiss: () => {} })
+  return <div>Editor Alpha</div>
+}
+
+function renderPalette(projects = demoProjects, stand?: SpeicherStand) {
   vi.mocked(api.listProjects).mockResolvedValue(projects)
   // Seit Task 3 sitzt der ProjektDatenProvider ueber den Routen: navigiert ein Test nach
   // /p/:project, ruft schon der Provider getProjectFiles -- unabhaengig davon, ob die
@@ -26,14 +33,17 @@ function renderPalette(projects = demoProjects) {
   // Seit Task 5 haengt ProjektDatenProvider selbst an useActiveJob (onSettled fuer die
   // Zusammenlegung) -- ohne JobProvider drumherum wirft er "ausserhalb JobProvider".
   return render(
-    <MemoryRouter initialEntries={['/']}>
+    <MemoryRouter initialEntries={[stand ? '/p/Alpha/a' : '/']}>
       <JobProvider>
         <ProjektDatenProvider>
+          <EditorBrueckeProvider>
           <ProjektPalette />
           <Routes>
             <Route path="/" element={<div>Galerie</div>} />
             <Route path="/p/:project" element={<div>Projekt-Seite</div>} />
+            <Route path="/p/:project/:base" element={<OffenerEditor stand={stand ?? 'ruhig'} />} />
           </Routes>
+          </EditorBrueckeProvider>
         </ProjektDatenProvider>
       </JobProvider>
     </MemoryRouter>,
@@ -41,6 +51,22 @@ function renderPalette(projects = demoProjects) {
 }
 
 describe('ProjektPalette', () => {
+  it.each(['Alpha', 'Beta'])('haelt bei abgelehntem Wechsel zu %s die Palette offen', async name => {
+    const frage = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    renderPalette(demoProjects, 'fehler')
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+    const option = await screen.findByRole('option', { name })
+    fireEvent.click(option)
+    expect(frage).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    expect(screen.getByText('Editor Alpha')).toBeInTheDocument()
+    frage.mockReturnValue(true)
+    fireEvent.click(option)
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByText('Projekt-Seite')).toBeInTheDocument()
+    frage.mockRestore()
+  })
+
   it('öffnet mit Ctrl+K, schliesst mit Escape', async () => {
     renderPalette()
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()

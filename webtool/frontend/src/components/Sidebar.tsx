@@ -18,7 +18,7 @@ type SidebarProjekt = { name: string; dateien: number; geaendert: number; active
  *  Stand des laufenden Jobs, gefiltert ueber `imBereich`/`zugelassen` aus `lib/jobPhases`. */
 export function Sidebar({
   projekte, loading, fehler, offen, dateien, dateienLaden, onWaehlen, onAngelegt,
-  active, onOpen, onUpload, onTranscribe, onCorrect, onGeloescht, onUmbenannt,
+  active, onOpen, onUpload, onTranscribe, onCorrect, onLoeschenBegonnen, onGeloescht, onUmbenannt,
   phases, jobRunning, aiReason,
 }: {
   projekte: SidebarProjekt[]; loading?: boolean; fehler?: boolean
@@ -33,6 +33,8 @@ export function Sidebar({
   onUpload: (project: string, file: File) => void
   onTranscribe: (project: string) => void
   onCorrect: (project: string) => void
+  /** Merkt den Editorzustand vor dem asynchronen DELETE. */
+  onLoeschenBegonnen?: (project: string) => void
   /** Nach dem Loeschen: die Liste ist veraltet, und das geloeschte Projekt war das offene. */
   onGeloescht: (project: string) => void
   /** Nach dem Umbenennen: derselbe Grund, aber der Weg fuehrt zum neuen Namen statt zurueck. */
@@ -163,7 +165,9 @@ export function Sidebar({
                         ein aelteres Projekt gar nicht mehr loeschbar. */}
                     <ProjektUmbenennen project={p.name} onUmbenannt={neu => onUmbenannt(p.name, neu)} />
                     <span className="ml-auto">
-                      <DeleteProjectDialog project={p.name} onDeleted={() => onGeloescht(p.name)} />
+                      <DeleteProjectDialog project={p.name}
+                        onDeleteStart={() => onLoeschenBegonnen?.(p.name)}
+                        onDeleted={() => onGeloescht(p.name)} />
                     </span>
                   </div>
                   {dateienLaden && dateien.length === 0 && (

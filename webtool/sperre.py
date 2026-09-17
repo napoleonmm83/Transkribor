@@ -15,6 +15,7 @@ zweimal zu fuehren heisst, sie beim naechsten Mal an einer Stelle falsch zu aend
 (dieselbe Regel wie bei `DateiMenue`).
 """
 import contextlib
+import math
 import os
 import platform
 import stat
@@ -461,7 +462,8 @@ def _wegraeumen(lockdir: str, erwartet) -> None:
 
 
 @contextlib.contextmanager
-def datei(pfad: str, stale: float = STALTES_ALTER):
+def datei(pfad: str, stale: float = STALTES_ALTER, *, erzwinge_uebernahme: bool = True,
+          wartezeit: float | None = None):
     """Sperrt `<pfad>.lock`. Der Aufrufer sorgt dafuer, dass das Elternverzeichnis existiert.
 
     **`stale` ist die Zusage ueber die eigene HALTEDAUER, nicht bloss eine Aufraeumfrist** —
@@ -488,13 +490,22 @@ def datei(pfad: str, stale: float = STALTES_ALTER):
     jeden Aufruf die volle Frist kosten und ihn danach ungeschuetzt laufen lassen — schlimmer
     als der Fall, den die Pruefung verhindert.
     """
+    # Strikte Aufrufer dürfen bei einer unklaren oder noch lebenden Gegenstelle nicht
+    # ersatzweise ohne Lock fortfahren; nach ihrer Wartezeit erhalten sie deshalb `False`.
+    if not erzwinge_uebernahme and (
+            wartezeit is None or isinstance(wartezeit, bool)
+            or not isinstance(wartezeit, (int, float))
+            or not math.isfinite(wartezeit) or wartezeit < 0):
+        raise ValueError("strikte Sperre braucht eine endliche nichtnegative Wartezeit")
     lockdir = pfad + ".lock"
     mein_merker = None                # was in UNSEREM Lock steht (None = nichts geschrieben)
     gehalten = False
     seit = time.time()
+    seit_monoton = time.monotonic()
     hakelig_seit = None
     gemeldet = False
     erzwungen = False
+    strikte_pause = 0.01
     while True:
         try:
             os.mkdir(lockdir)             # atomar auf allen Plattformen -> Lock erworben
@@ -543,8 +554,15 @@ def datei(pfad: str, stale: float = STALTES_ALTER):
                 # entscheidet noch die Uhr.
                 fremd = _merker_lesen(lockdir)
                 lebt = _lebt_laut(fremd)
-                if lebt is False or (lebt is None
-                                     and time.time() - zustand.st_mtime > stale):
+                if lebt is False:
+                    try:
+                        _wegraeumen(lockdir, fremd)
+                    except OSError:
+                        pass
+                    else:
+                        continue
+                if (erzwinge_uebernahme and lebt is None
+                        and time.time() - zustand.st_mtime > stale):
                     with contextlib.suppress(OSError):
                         _wegraeumen(lockdir, fremd)
         except OSError as e:
@@ -579,7 +597,11 @@ def datei(pfad: str, stale: float = STALTES_ALTER):
         # verbrennen und eines danach); im Review gemessen: 0,704 s Ueberhang ueber `frist`.
         # **Wer ein `continue` in den `FileExistsError`-Zweig setzt oder `erzwungen` wieder
         # scharf macht, oeffnet die unbegrenzte Schleife aus #191 durch genau diese Tuer.**
-        if hakelig_seit is None and time.time() - seit > frist(stale):
+        if (not erzwinge_uebernahme and wartezeit is not None
+                and time.monotonic() - seit_monoton > wartezeit):
+            break
+        if (erzwinge_uebernahme and hakelig_seit is None
+                and time.time() - seit > frist(stale)):
             if erzwungen:
                 print(f"[sperre] {lockdir} laesst sich nicht uebernehmen — ungeschuetzt "
                       f"weiter", flush=True)
@@ -602,7 +624,14 @@ def datei(pfad: str, stale: float = STALTES_ALTER):
             with contextlib.suppress(OSError):
                 _wegraeumen(lockdir, _merker_lesen(lockdir))
             continue
-        time.sleep(0.01)
+        if erzwinge_uebernahme:
+            time.sleep(0.01)
+        else:
+            # Lebenszyklus-Sperren warten bis zu mehreren Sekunden. Ein kurzer Anfangswert
+            # haelt die normale Uebergabe schnell; der Deckel begrenzt Systemaufrufe bei
+            # laengerer Konkurrenz, ohne die Reaktionszeit grob werden zu lassen.
+            time.sleep(strikte_pause)
+            strikte_pause = min(strikte_pause * 2, 0.05)
     try:
         yield gehalten
     finally:

@@ -28,6 +28,9 @@ hat. Lesbar, aber unschön — das ist Absicht.
 
 ## Unveröffentlicht
 
+**Behoben**
+- Nach dem Löschen eines Projekts können verspätete Speicherungen nicht mehr in ein neu angelegtes Projekt mit demselben Namen geraten.
+
 ## v0.56.0 — 2026-09-12
 
 **Neu**

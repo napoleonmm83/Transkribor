@@ -12,7 +12,7 @@ def test_safe_name_accepts_normal():
 @pytest.mark.parametrize("bad", [
     "../etc", "a/b", "a\\b", "..", "", "x\x00y", "C:temp", "Z:foo",
     "a\tb", "a\rb", "a\nb", "x\x1fy", "test\tfile", "name\nwith\nnewline",
-    "del\x7ffile",
+    "del\x7ffile", "Demo.", "Demo ", ".transkribor-project-locks.",
 ])
 def test_safe_name_rejects_traversal(bad):
     with pytest.raises(ValueError):
@@ -71,6 +71,114 @@ def test_projekte_root_respects_env(monkeypatch, tmp_path):
 def test_project_dir_joins(monkeypatch, tmp_path):
     monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
     assert paths.project_dir("P") == os.path.join(str(tmp_path), "P")
+
+
+def test_vorhandener_projektname_nimmt_dateisystemschreibweise(monkeypatch, tmp_path):
+    """POSIX normcase hilft auf case-insensitivem APFS nicht; samefile bestimmt das Objekt."""
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    (tmp_path / "Demo").mkdir()
+    echt = paths.os.path.samefile
+
+    def samefile(links, rechts):
+        if os.path.basename(os.fspath(links)).casefold() == os.path.basename(os.fspath(rechts)).casefold():
+            return True
+        return echt(links, rechts)
+
+    monkeypatch.setattr(paths.os.path, "samefile", samefile)
+
+    assert paths.vorhandener_projektname("demo") == "Demo"
+
+
+def test_vorhandener_projektname_verschweigt_scanfehler_nicht(monkeypatch, tmp_path):
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+
+    def fehler(_verzeichnis):
+        raise PermissionError("Projektwurzel nicht lesbar")
+
+    monkeypatch.setattr(paths.os, "scandir", fehler)
+
+    with pytest.raises(OSError, match="nicht lesbar"):
+        paths.vorhandener_projektname("Demo")
+
+
+def test_vorhandener_aufnahmename_nimmt_dateisystemschreibweise(monkeypatch, tmp_path):
+    """Die reale Verzeichniszeile traegt den Namen, auch wenn posixpath.normcase nichts tut."""
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    tdir = tmp_path / "Demo" / "transkripte"
+    tdir.mkdir(parents=True)
+    (tdir / "Elina.Nicol.edit.json").write_text("{}", encoding="utf-8")
+    echt = paths.os.path.samefile
+
+    def samefile(links, rechts):
+        if os.path.basename(os.fspath(links)).casefold() == os.path.basename(os.fspath(rechts)).casefold():
+            return True
+        return echt(links, rechts)
+
+    monkeypatch.setattr(paths.os.path, "samefile", samefile)
+
+    assert paths.vorhandener_aufnahmename("Demo", "elina.nicol") == "Elina.Nicol"
+
+
+@pytest.mark.parametrize("base", ["Folge ", "Folge."])
+def test_vorhandener_aufnahmename_erlaubt_stamm_mit_angehaengter_dateiendung(
+        monkeypatch, tmp_path, base):
+    """Der Stamm ist kein vollstaendiges Windows-Pfadelement: .wav/.json folgt noch."""
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    audio = tmp_path / "Demo" / "audio"
+    audio.mkdir(parents=True)
+    (audio / f"{base}.wav").write_bytes(b"audio")
+
+    assert paths.vorhandener_aufnahmename("Demo", base) == base
+
+
+def test_vorhandener_aufnahmename_bevorzugt_exakten_hardlink_namen(monkeypatch, tmp_path):
+    """Zwei sichtbare Hardlink-Namen bleiben zwei fachliche Aufnahmen."""
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    tdir = tmp_path / "Demo" / "transkripte"
+    tdir.mkdir(parents=True)
+    alias = tdir / "Straße.wav"
+    exakt = tdir / "STRASSE.wav"
+    alias.write_bytes(b"audio")
+    os.link(alias, exakt)
+    echt_scandir = paths.os.scandir
+
+    class GeordneterScan:
+        def __init__(self, eintraege):
+            self.eintraege = eintraege
+
+        def __enter__(self):
+            return iter(self.eintraege)
+
+        def __exit__(self, *_args):
+            return False
+
+    def alias_zuerst(verzeichnis):
+        with echt_scandir(verzeichnis) as eintraege:
+            liste = list(eintraege)
+        if os.path.abspath(os.fspath(verzeichnis)) == os.path.abspath(os.fspath(tdir)):
+            liste.sort(key=lambda eintrag: eintrag.name != alias.name)
+        return GeordneterScan(liste)
+
+    monkeypatch.setattr(paths.os, "scandir", alias_zuerst)
+
+    assert paths.vorhandener_aufnahmename("Demo", "STRASSE") == "STRASSE"
+
+
+def test_vorhandener_aufnahmename_verschweigt_scanfehler_nicht(monkeypatch, tmp_path):
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    tdir = tmp_path / "Demo" / "transkripte"
+    tdir.mkdir(parents=True)
+    echt_scandir = paths.os.scandir
+
+    def scan(verzeichnis):
+        if os.path.abspath(os.fspath(verzeichnis)) == os.path.abspath(os.fspath(tdir)):
+            raise PermissionError("nicht lesbar")
+        return echt_scandir(verzeichnis)
+
+    monkeypatch.setattr(paths.os, "scandir", scan)
+
+    with pytest.raises(OSError, match="nicht lesbar"):
+        paths.vorhandener_aufnahmename("Demo", "S1")
 
 
 def test_atomic_write_creates_file_and_no_tmp(tmp_path):

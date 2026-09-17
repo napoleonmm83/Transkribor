@@ -1,0 +1,24 @@
+{
+  "test": "python -m pytest webtool/test_paths.py::test_vorhandener_aufnahmename_erlaubt_stamm_mit_angehaengter_dateiendung webtool/test_api.py::test_get_file_erlaubt_aufnahme_mit_leerzeichen_am_stammende -q",
+  "pfade": [
+    "webtool/paths.py",
+    "webtool/app.py",
+    "webtool/correct.py",
+    "webtool/test_paths.py",
+    "webtool/test_api.py"
+  ],
+  "mutationen": [
+    {
+      "id": "A1 Aufnahmestaemme werden wieder wie vollstaendige Pfadelemente validiert",
+      "datei": "webtool/paths.py",
+      "von": "    gesucht = {base: safe_aufnahmename(base) for base in bases}",
+      "nach": "    gesucht = {base: safe_name(base) for base in bases}  # A1: Stamm verwechselt mit Pfadelement",
+      "rot": [
+        "test_vorhandener_aufnahmename_erlaubt_stamm_mit_angehaengter_dateiendung"
+      ],
+      "gruen": [
+        "test_get_file_erlaubt_aufnahme_mit_leerzeichen_am_stammende"
+      ]
+    }
+  ]
+}

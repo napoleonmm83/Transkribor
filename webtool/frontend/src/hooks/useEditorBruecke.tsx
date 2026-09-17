@@ -5,6 +5,7 @@ import type { SpeicherStand } from './useDoc'
 export type OffenesDokument = {
   project: string
   base: string
+  projektinstanz?: string
   dirty: boolean
   /** #106: 'fehler' ist der einzige Stand, in dem die Leiste vor dem Verlassen fragt — in der
    *  Tipppause ('offen') spült useDoc den Stand beim Verlassen selbst (useEffect-Cleanup). */

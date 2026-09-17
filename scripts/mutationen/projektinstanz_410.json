@@ -1,0 +1,19 @@
+{
+  "test": "npm --prefix webtool/frontend test -- --run src/hooks/useDoc.test.tsx -t A-B-A",
+  "pfade": [
+    "webtool/frontend/src/hooks/useDoc.ts",
+    "webtool/frontend/src/hooks/useDoc.test.tsx"
+  ],
+  "mutationen": [
+    {
+      "id": "I1 ein spaeter 410 prueft nur den Pfad und ueberschreibt die neue Projektinstanz",
+      "datei": "webtool/frontend/src/hooks/useDoc.ts",
+      "von": "          if (meins() && docRef.current?.projektinstanz === doc.projektinstanz) {",
+      "nach": "          if (meins()) {  // I1: A-B-A verwechselt alte und neue Projektinstanz",
+      "rot": [
+        "ueberschreibt bei A-B-A keinen neuen Entwurf durch den spaeten 410 der alten Instanz"
+      ],
+      "gruen": []
+    }
+  ]
+}

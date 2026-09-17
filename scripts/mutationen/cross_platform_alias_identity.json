@@ -1,0 +1,275 @@
+{
+  "test": "python -m pytest webtool/test_paths.py::test_vorhandener_projektname_nimmt_dateisystemschreibweise webtool/test_paths.py::test_vorhandener_projektname_verschweigt_scanfehler_nicht webtool/test_paths.py::test_vorhandener_aufnahmename_nimmt_dateisystemschreibweise webtool/test_paths.py::test_vorhandener_aufnahmename_bevorzugt_exakten_hardlink_namen webtool/test_paths.py::test_vorhandener_aufnahmename_verschweigt_scanfehler_nicht webtool/test_jobs.py::test_jobvergleich_loest_dateisystemnamen_ausserhalb_des_globalen_locks webtool/test_jobs.py::test_jobschutz_blockiert_namensalias_bei_scanfehler webtool/test_jobs.py::test_jobparser_loest_scope_ausserhalb_des_globalen_locks webtool/test_jobs.py::test_jobparser_scannt_dateisystem_nur_fuer_registry_marken webtool/test_jobs.py::test_jobparser_nutzt_scope_aliasindex_und_erneuert_nachtraege webtool/test_jobs.py::test_request_loest_registry_namen_vor_dem_start_nur_einmal_auf webtool/test_jobs.py::test_active_for_known_projects_liefert_einen_gemeinsamen_snapshot webtool/test_jobs.py::test_kill_tree_native_windows_meldet_taskkill_fehler webtool/test_jobs.py::test_kill_tree_native_windows_meldet_parent_exit_race webtool/test_jobs.py::test_stdout_parserfehler_bleibt_bei_parent_exit_race_fail_closed webtool/test_jobs.py::test_stderr_parserfehler_bleibt_bei_unbestaetigtem_baum_fail_closed webtool/test_jobs.py::test_nichtterminaler_fehlerprozess_startet_keine_nachlaeufe webtool/test_jobs.py::test_gleichzeitige_stdout_stderr_parserfehler_bereinigen_nur_einmal webtool/test_jobs.py::test_stderr_parserfehler_ueberschreibt_erfolgreichen_elternprozess webtool/test_jobs.py::test_stderr_join_timeout_bleibt_bei_unbestaetigtem_baum_fail_closed webtool/test_jobs.py::test_stdout_parserfehler_beendet_den_kindprozess webtool/test_jobs.py::test_stdout_parserfehler_bleibt_terminal_wenn_baumkill_wirft webtool/test_jobs.py::test_stdout_parserfehler_deckelt_wirkungslosen_baumkill webtool/test_api.py::test_lifecycle_lock_nutzt_vorhandene_dateisystemschreibweise webtool/test_api.py::test_lifecycle_lock_bricht_bei_unsicherer_dateisystemaufloesung_mit_503 webtool/test_api.py::test_create_nimmt_namenvergabe_lock_vor_projektlock webtool/test_api.py::test_mehrprojekt_lock_nimmt_namenvergabe_lock_vor_einzellocks webtool/test_api.py::test_datei_loeschen_haelt_kanonische_base_bis_zur_registry webtool/test_api.py::test_list_projects_active_jobs_werden_in_einem_registry_snapshot_gelesen webtool/test_api.py::test_list_projects_lockordner_identitaetsfehler_gibt_503 webtool/test_api.py::test_list_projects_unlesbarer_lockordner_gibt_503 webtool/test_api.py::test_lifecycle_lockordner_identitaetsfehler_gibt_vor_mutation_503 -q",
+  "pfade": [
+    "webtool/paths.py",
+    "webtool/jobs.py",
+    "webtool/app.py",
+    "webtool/test_paths.py",
+    "webtool/test_jobs.py",
+    "webtool/test_api.py"
+  ],
+  "mutationen": [
+    {
+      "id": "P1 die echte Projekt-Schreibweise wird verworfen",
+      "datei": "webtool/paths.py",
+      "von": "            if eintrag.is_dir() and os.path.samefile(eintrag.path, kandidat):\n                return eintrag.name",
+      "nach": "            if eintrag.is_dir() and os.path.samefile(eintrag.path, kandidat):\n                return name  # P1: Alias bleibt roh",
+      "rot": ["test_vorhandener_projektname_nimmt_dateisystemschreibweise"],
+      "gruen": ["test_vorhandener_aufnahmename_nimmt_dateisystemschreibweise"]
+    },
+    {
+      "id": "P2 die echte Aufnahme-Schreibweise wird verworfen",
+      "datei": "webtool/paths.py",
+      "von": "                if os.path.samefile(eintragspfad, kandidat):\n                    ergebnis[roh] = wirklich\n                    break",
+      "nach": "                if os.path.samefile(eintragspfad, kandidat):\n                    ergebnis[roh] = name  # P2: Alias bleibt roh\n                    break",
+      "rot": ["test_vorhandener_aufnahmename_nimmt_dateisystemschreibweise"],
+      "gruen": ["test_vorhandener_projektname_nimmt_dateisystemschreibweise"]
+    },
+    {
+      "id": "P3 der Job-Projektname bleibt unaufgeloest",
+      "datei": "webtool/jobs.py",
+      "von": "    project = paths.vorhandener_projektname(project)\n    bases = tuple(bases)",
+      "nach": "    project = project  # P3: Projekt bleibt roh\n    bases = tuple(bases)",
+      "rot": ["test_jobvergleich_loest_dateisystemnamen_ausserhalb_des_globalen_locks"],
+      "gruen": ["test_jobparser_loest_scope_ausserhalb_des_globalen_locks"]
+    },
+    {
+      "id": "P4 die Job-Bases bleiben unaufgeloest",
+      "datei": "webtool/jobs.py",
+      "von": "    return project, paths.vorhandene_aufnahmenamen(project, bases)",
+      "nach": "    return project, {base: base for base in bases}  # P4: Bases bleiben roh",
+      "rot": ["test_jobvergleich_loest_dateisystemnamen_ausserhalb_des_globalen_locks"],
+      "gruen": ["test_vorhandener_aufnahmename_nimmt_dateisystemschreibweise"]
+    },
+    {
+      "id": "P5 der Lifecycle-Lock behaelt den rohen Projektalias",
+      "datei": "webtool/app.py",
+      "von": "        name = paths.vorhandener_projektname(project)",
+      "nach": "        name = paths.safe_name(project)  # P5: POSIX-Alias bleibt roh",
+      "rot": ["test_lifecycle_lock_nutzt_vorhandene_dateisystemschreibweise"],
+      "gruen": ["test_vorhandener_projektname_nimmt_dateisystemschreibweise"]
+    },
+    {
+      "id": "P6 ein Projektwurzel-Scanfehler wird verschwiegen",
+      "datei": "webtool/paths.py",
+      "von": "    except FileNotFoundError:\n        return name\n    for eintrag in kandidaten:",
+      "nach": "    except FileNotFoundError:\n        return name\n    except OSError:\n        return name  # P6: unsichere Identitaet gilt als roh\n    for eintrag in kandidaten:",
+      "rot": ["test_vorhandener_projektname_verschweigt_scanfehler_nicht"],
+      "gruen": ["test_vorhandener_projektname_nimmt_dateisystemschreibweise"]
+    },
+    {
+      "id": "P7 ein Artefakt-Scanfehler wird verschwiegen",
+      "datei": "webtool/paths.py",
+      "von": "        except FileNotFoundError:\n            continue\n        for eintrag in eintragsliste:",
+      "nach": "        except FileNotFoundError:\n            continue\n        except OSError:\n            continue  # P7: unsichere Artefakte werden ignoriert\n        for eintrag in eintragsliste:",
+      "rot": ["test_vorhandener_aufnahmename_verschweigt_scanfehler_nicht"],
+      "gruen": ["test_vorhandener_aufnahmename_nimmt_dateisystemschreibweise"]
+    },
+    {
+      "id": "P8 ein exakter Hardlink-Name verliert seinen Vorrang",
+      "datei": "webtool/paths.py",
+      "von": "        if any(wirklich == name for wirklich, _pfad, _endung in passende):\n            ergebnis[roh] = name\n            continue",
+      "nach": "        if False:  # P8: die Scanreihenfolge darf den Hardlink-Namen waehlen\n            ergebnis[roh] = name\n            continue",
+      "rot": ["test_vorhandener_aufnahmename_bevorzugt_exakten_hardlink_namen"],
+      "gruen": ["test_vorhandener_aufnahmename_nimmt_dateisystemschreibweise"]
+    },
+    {
+      "id": "P9 der unsichere Projektvergleich blockiert nicht konservativ",
+      "datei": "webtool/jobs.py",
+      "von": "    return (_gleiches_projekt(links, rechts)\n            or (unsicher and paths.namensform(links) == paths.namensform(rechts)))",
+      "nach": "    return _gleiches_projekt(links, rechts)  # P9: Scanfehler oeffnet den Alias",
+      "rot": ["test_jobschutz_blockiert_namensalias_bei_scanfehler"],
+      "gruen": ["test_jobvergleich_loest_dateisystemnamen_ausserhalb_des_globalen_locks"]
+    },
+    {
+      "id": "P10 der unsichere Basevergleich blockiert nicht konservativ",
+      "datei": "webtool/jobs.py",
+      "von": "    return (unsicher and links is not None and rechts is not None\n            and paths.namensform(links) == paths.namensform(rechts))",
+      "nach": "    return False  # P10: Scanfehler oeffnet den Base-Alias",
+      "rot": ["test_jobschutz_blockiert_namensalias_bei_scanfehler"],
+      "gruen": ["test_jobvergleich_loest_dateisystemnamen_ausserhalb_des_globalen_locks"]
+    },
+    {
+      "id": "P11 der Parser uebernimmt rohe Scope-Bases",
+      "datei": "webtool/jobs.py",
+      "von": "                    namenindex.update(\n                        paths.vorhandene_aufnahmenamen(project, zu_scannen))",
+      "nach": "                    namenindex.update({name: name for name in zu_scannen})  # P11: Parser bleibt roh",
+      "rot": ["test_jobparser_loest_scope_ausserhalb_des_globalen_locks"],
+      "gruen": ["test_jobvergleich_loest_dateisystemnamen_ausserhalb_des_globalen_locks"]
+    },    {
+      "id": "P12 CREATE vergibt Namen ohne Wurzellock",
+      "datei": "webtool/app.py",
+      "von": "    with _projektwurzel_lebenszyklus(), _projektlebenszyklus(name):",
+      "nach": "    with _projektlebenszyklus(name):  # P12: gleichzeitige Aliasse teilen keinen Lock",
+      "rot": ["test_create_nimmt_namenvergabe_lock_vor_projektlock"],
+      "gruen": ["test_lifecycle_lock_nutzt_vorhandene_dateisystemschreibweise"]
+    },
+    {
+      "id": "P13 RENAME vergibt den Zielnamen ohne Wurzellock",
+      "datei": "webtool/app.py",
+      "von": "        with _projektwurzel_lebenszyklus():\n            namen: dict[str, str] = {}",
+      "nach": "        with ExitStack():  # P13: kein wurzelweiter Namensvergabelock\n            namen: dict[str, str] = {}",
+      "rot": ["test_mehrprojekt_lock_nimmt_namenvergabe_lock_vor_einzellocks"],
+      "gruen": ["test_create_nimmt_namenvergabe_lock_vor_projektlock"]
+    },
+    {
+      "id": "P14 DELETE verliert die kanonische Base vor remove_base",
+      "datei": "webtool/app.py",
+      "von": "            base = paths.vorhandener_aufnahmename(project, base)",
+      "nach": "            base = base  # P14: nach dem Loeschen bleibt nur der rohe Alias",
+      "rot": ["test_datei_loeschen_haelt_kanonische_base_bis_zur_registry"],
+      "gruen": ["test_lifecycle_lock_nutzt_vorhandene_dateisystemschreibweise"]
+    },
+    {
+      "id": "P15 der Lifecycle-Lock reicht einen Scanfehler als 500 weiter",
+      "datei": "webtool/app.py",
+      "von": "    except OSError as e:\n        raise HTTPException(status_code=503,\n                            detail=\"Projektlebenszyklus kann nicht sicher gesperrt werden\") from e\n    pdir = os.path.abspath(paths.project_dir(name))",
+      "nach": "    except OSError:\n        raise  # P15: kein definierter 503-Vertrag\n    pdir = os.path.abspath(paths.project_dir(name))",
+      "rot": ["test_lifecycle_lock_bricht_bei_unsicherer_dateisystemaufloesung_mit_503"],
+      "gruen": ["test_lifecycle_lock_nutzt_vorhandene_dateisystemschreibweise"]
+    },
+    {
+      "id": "P16 leere Base-Mengen scannen trotzdem das Dateisystem",
+      "datei": "webtool/jobs.py",
+      "von": "    if not bases:\n        return project, {}",
+      "nach": "    if False:  # P16: auch eine leere Base-Menge geht zum Resolver\n        return project, {}",
+      "rot": ["test_jobparser_scannt_dateisystem_nur_fuer_registry_marken"],
+      "gruen": ["test_jobparser_loest_scope_ausserhalb_des_globalen_locks"]
+    },
+    {
+      "id": "P17 jede Subprozesszeile loest Dateisystemnamen auf",
+      "datei": "webtool/jobs.py",
+      "von": "                if zu_scannen:\n                    namenindex.update(\n                        paths.vorhandene_aufnahmenamen(project, zu_scannen))",
+      "nach": "                if True:  # P17: Leerscan je Zeile\n                    namenindex.update(\n                        paths.vorhandene_aufnahmenamen(project, zu_scannen))",
+      "rot": ["test_jobparser_scannt_dateisystem_nur_fuer_registry_marken"],
+      "gruen": ["test_jobparser_loest_scope_ausserhalb_des_globalen_locks"]
+    },    {
+      "id": "P18 der Wurzellock bleibt waehrend des Request-Rumpfs gehalten",
+      "datei": "webtool/app.py",
+      "von": "            for schluessel in sorted(namen):\n                stack.enter_context(_projektlebenszyklus(namen[schluessel]))\n        yield",
+      "nach": "            for schluessel in sorted(namen):\n                stack.enter_context(_projektlebenszyklus(namen[schluessel]))\n            yield  # P18: globale Sperre bleibt bis zum Ende des Request-Rumpfs",
+      "rot": ["test_mehrprojekt_lock_nimmt_namenvergabe_lock_vor_einzellocks"],
+      "gruen": ["test_create_nimmt_namenvergabe_lock_vor_projektlock"]
+    },
+    {
+      "id": "P19 request loest kanonische Namen im Start ein zweites Mal auf",
+      "datei": "webtool/jobs.py",
+      "von": "    if _request_namen_kanonisch.get():",
+      "nach": "    if False and _request_namen_kanonisch.get():  # P19: Markierung wird ignoriert",
+      "rot": ["test_request_loest_registry_namen_vor_dem_start_nur_einmal_auf"],
+      "gruen": ["test_request_startet_sofort_wenn_frei"]
+    },
+    {
+      "id": "P20 die Projektliste liest die Registry wieder einzeln",
+      "datei": "webtool/app.py",
+      "von": "    aktive_jobs = jobs.active_for_known_projects(p[\"name\"] for p in out)\n    for projekt in out:\n        projekt[\"active_jobs\"] = aktive_jobs[projekt[\"name\"]]",
+      "nach": "    for projekt in out:\n        projekt[\"active_jobs\"] = jobs.active_for(projekt[\"name\"])  # P20: N+1 Root-Scan",
+      "rot": ["test_list_projects_active_jobs_werden_in_einem_registry_snapshot_gelesen"],
+      "gruen": ["test_list_projects_active_jobs_default_empty"]
+    },
+    {
+      "id": "P21 der gemeinsame Registry-Snapshot loest jedes Projekt erneut auf",
+      "datei": "webtool/jobs.py",
+      "von": "    projects = tuple(projects)\n    nach_schluessel = {os.path.normcase(project): project for project in projects}",
+      "nach": "    projects = tuple(projects)\n    return {project: active_for(project) for project in projects}  # P21: FS-Scan je Projekt\n    nach_schluessel = {os.path.normcase(project): project for project in projects}",
+      "rot": ["test_active_for_known_projects_liefert_einen_gemeinsamen_snapshot"],
+      "gruen": ["test_active_for_running_then_none"]
+    },
+    {
+      "id": "P22 Identitaetsfehler am Lockordner werden als kein Alias behandelt",
+      "datei": "webtool/app.py",
+      "von": "    except (OSError, ValueError) as e:\n        raise HTTPException(\n            status_code=503,\n            detail=\"Interner Projekt-Lockordner kann nicht sicher identifiziert werden\",\n        ) from e",
+      "nach": "    except (OSError, ValueError):\n        return False  # P22: unsichere Identitaet wird wieder freigegeben",
+      "rot": ["test_list_projects_lockordner_identitaetsfehler_gibt_503", "test_lifecycle_lockordner_identitaetsfehler_gibt_vor_mutation_503"],
+      "gruen": ["test_list_projects_ueberspringt_dateisystemalias_des_lockordners"]
+    },
+    {
+      "id": "P23 ein unlesbarer Lockordner gilt in der Projektliste als abwesend",
+      "datei": "webtool/app.py",
+      "von": "    except OSError as e:\n        raise HTTPException(\n            status_code=503,\n            detail=\"Interner Projekt-Lockordner kann nicht sicher gelesen werden\",\n        ) from e",
+      "nach": "    except OSError:\n        lock_root_stat = None  # P23: Lesefehler wird wie nicht vorhanden behandelt",
+      "rot": ["test_list_projects_unlesbarer_lockordner_gibt_503"],
+      "gruen": ["test_list_projects_active_jobs_default_empty"]
+    },
+    {
+      "id": "P24 ein stdout-Parserfehler laesst den Kindprozess weiterlaufen",
+      "datei": "webtool/jobs.py",
+      "von": "            if erste_meldung and proc is not None:\n                try:\n                    bereinigungsfehler, bereinigt = _bereinige_fehlerprozess(proc)",
+      "nach": "            if erste_meldung and proc is not None:\n                try:\n                    bereinigungsfehler, bereinigt = [], True  # P24: Prozess bleibt unbeachtet",
+      "rot": ["test_stdout_parserfehler_beendet_den_kindprozess"],
+      "gruen": ["test_stderr_faden_beendet_den_job_statt_ihn_haengen_zulassen"]
+    },
+    {
+      "id": "P25 ein werfender Baumkill erhaelt keinen direkten Rueckfall",
+      "datei": "webtool/jobs.py",
+      "von": "    if not baum_beendet:\n        fehler.append(\"Prozessbaum-Beendigung wurde nicht bestaetigt\")\n        try:\n            _kill_tree_native(proc)",
+      "nach": "    if False:  # P25: kein unabhaengiger Prozessbaum-Rueckfall\n        fehler.append(\"Prozessbaum-Beendigung wurde nicht bestaetigt\")\n        try:\n            _kill_tree_native(proc)",
+      "rot": ["test_stdout_parserfehler_bleibt_terminal_wenn_baumkill_wirft", "test_stdout_parserfehler_deckelt_wirkungslosen_baumkill"],
+      "gruen": ["test_stdout_parserfehler_beendet_den_kindprozess"]
+    },
+    {
+      "id": "P26 ein fehlgeschlagenes taskkill gilt als erfolgreich",
+      "datei": "webtool/jobs.py",
+      "von": "        if result.returncode != 0:\n            detail = result.stderr.decode(errors=\"replace\").strip()\n            raise OSError(detail or f\"taskkill endete mit {result.returncode}\")",
+      "nach": "        if False:  # P26: taskkill-Fehler wird verschwiegen\n            detail = result.stderr.decode(errors=\"replace\").strip()\n            raise OSError(detail or f\"taskkill endete mit {result.returncode}\")",
+      "rot": ["test_kill_tree_native_windows_meldet_taskkill_fehler"],
+      "gruen": ["test_stdout_parserfehler_deckelt_wirkungslosen_baumkill"]
+    },
+    {
+      "id": "P27 ein unbestaetigter Prozessbaum gibt den Jobslot frei",
+      "datei": "webtool/jobs.py",
+      "von": "            if bereinigt:\n                _jobs[jid][\"status\"] = \"cancelled\" if _jobs[jid][\"cancelled\"] else \"error\"",
+      "nach": "            if True:  # P27: unbestaetigter Baum gilt faelschlich als terminal\n                _jobs[jid][\"status\"] = \"cancelled\" if _jobs[jid][\"cancelled\"] else \"error\"",
+      "rot": ["test_stdout_parserfehler_bleibt_bei_parent_exit_race_fail_closed"],
+      "gruen": ["test_stdout_parserfehler_beendet_den_kindprozess"]
+    },
+    {
+      "id": "P28 ein stderr-Parserfehler wird nach erfolgreichem Elternprozess verschwiegen",
+      "datei": "webtool/jobs.py",
+      "von": "            if fehlerprozess_zustand[\"fehler\"]:\n                if fehlerprozess_zustand[\"bereinigt\"]:",
+      "nach": "            if False:  # P28: stderr-Parserfehler wird trotz bestaetigter Bereinigung als Erfolg gewertet\n                if fehlerprozess_zustand[\"bereinigt\"]:",
+      "rot": ["test_stderr_parserfehler_ueberschreibt_erfolgreichen_elternprozess"],
+      "gruen": ["test_stdout_parserfehler_beendet_den_kindprozess"]
+    },
+    {
+      "id": "P29 ein weiterlebender stderr-Leser gibt den Jobslot frei",
+      "datei": "webtool/jobs.py",
+      "von": "        if stderr_faden.is_alive():\n            _behandle_prozessfehler(\"stderr-Leser endete nicht innerhalb der Wartefrist\")",
+      "nach": "        if False:  # P29: Join-Timeout wird als sauberer EOF behandelt\n            _behandle_prozessfehler(\"stderr-Leser endete nicht innerhalb der Wartefrist\")",
+      "rot": ["test_stderr_join_timeout_bleibt_bei_unbestaetigtem_baum_fail_closed"],
+      "gruen": ["test_stdout_parserfehler_beendet_den_kindprozess"]
+    },
+    {
+      "id": "P30 bekannte Registry-Namen werden bei jeder Marke neu gescannt",
+      "datei": "webtool/jobs.py",
+      "von": "                zu_scannen = {name for name in aufzuloesen if name not in namenindex}",
+      "nach": "                zu_scannen = set(aufzuloesen)  # P30: Aliasindex wird fuer bekannte Namen ignoriert",
+      "rot": ["test_jobparser_nutzt_scope_aliasindex_und_erneuert_nachtraege"],
+      "gruen": ["test_jobparser_loest_scope_ausserhalb_des_globalen_locks"]
+    },
+    {
+      "id": "P31 scope-Nachtraege erneuern den Aliasindex nicht",
+      "datei": "webtool/jobs.py",
+      "von": "                zu_scannen.update(name for name in nachtrag_roh if name)",
+      "nach": "                zu_scannen.update(())  # P31: bekannte scope+-Namen bleiben veraltet",
+      "rot": ["test_jobparser_nutzt_scope_aliasindex_und_erneuert_nachtraege"],
+      "gruen": ["test_jobparser_loest_scope_ausserhalb_des_globalen_locks"]
+    },
+    {
+      "id": "P32 stdout und stderr bereinigen denselben Fehlerprozess zweimal",
+      "datei": "webtool/jobs.py",
+      "von": "    except Exception as e:  # Launch- oder Parserfehler -> kein Zombie 'running'\n        bereinigt = _behandle_prozessfehler(e)",
+      "nach": "    except Exception as e:  # Launch- oder Parserfehler -> kein Zombie 'running'\n        _, bereinigt = _bereinige_fehlerprozess(proc)  # P32: zweite unabhaengige Bereinigung",
+      "rot": ["test_gleichzeitige_stdout_stderr_parserfehler_bereinigen_nur_einmal"],
+      "gruen": ["test_stderr_parserfehler_ueberschreibt_erfolgreichen_elternprozess"]
+    },
+    {
+      "id": "P33 ein nichtterminaler Fehlerprozess startet Abschlussrueckrufe",
+      "datei": "webtool/jobs.py",
+      "von": "    with _lock:\n        r = _jobs.get(jid)\n        if r is None or r[\"status\"] not in (\"done\", \"error\", \"cancelled\"):\n            return",
+      "nach": "    with _lock:\n        r = _jobs.get(jid)\n        if False:  # P33: nichtterminaler Job gilt faelschlich als abgeschlossen\n            return",
+      "rot": ["test_nichtterminaler_fehlerprozess_startet_keine_nachlaeufe"],
+      "gruen": ["test_stdout_parserfehler_beendet_den_kindprozess"]
+    }
+  ]
+}

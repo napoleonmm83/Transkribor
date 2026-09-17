@@ -117,6 +117,10 @@ Tastendruck nach und änderst, was nicht stimmt — unsichere Stellen sind farbi
 einen falsch verstandenen Namen tippst du **einmal** richtig: er zieht durchs ganze Dokument
 bis in den Export. Gespeichert wird von selbst.
 
+Löschst du ein Projekt, entwertet Transkribor auch Speicherungen, die im geöffneten Editor
+noch unterwegs sind. Legst du später ein Projekt mit demselben Namen an, können Änderungen
+aus dem alten Editor dort nicht hineinrutschen; stattdessen wird der aktuelle Stand geladen.
+
 <details>
 <summary>Mehr im Editor: finden, anmerken, rückgängig machen</summary>
 

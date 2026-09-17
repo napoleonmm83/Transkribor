@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useProjekte } from '@/hooks/useProjektDaten'
+import { useEditorBruecke, darfWechseln } from '@/hooks/useEditorBruecke'
 import {
   CommandDialog,
   CommandEmpty,
@@ -21,6 +22,7 @@ export function ProjektPalette() {
   // noch EINEN Poll fuer die ganze App.
   const { projects } = useProjekte()
   const navigate = useNavigate()
+  const editor = useEditorBruecke()
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -35,9 +37,10 @@ export function ProjektPalette() {
   }, [])
 
   const gehe = useCallback((name: string) => {
+    if (!darfWechseln(editor.current, null)) return
     setOpen(false)
     navigate(`/p/${encodeURIComponent(name)}`)
-  }, [navigate])
+  }, [navigate, editor])
 
   const laufende = projects.filter(p => (p.active_jobs?.length ?? 0) > 0)
   // "Projekte" ohne die laufenden -- sonst stuende jedes laufende Projekt doppelt in der Liste.

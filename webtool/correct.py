@@ -1594,7 +1594,7 @@ def main(argv=None):
         cmd_prep(args.project)
     elif args.cmd == "run":
         if args.base is not None:
-            paths.safe_name(args.base)
+            paths.safe_aufnahmename(args.base)
         # Treue-Pass: Default an; abschaltbar per --no-verify oder Env TRANSKRIBOR_VERIFY=0
         # (Env greift server-weit — der Job-Subprozess erbt die uvicorn-Umgebung, kein Browser-Toggle).
         verify = (os.environ.get("TRANSKRIBOR_VERIFY", "1").strip().lower()
@@ -1646,7 +1646,7 @@ def main(argv=None):
                   flush=True)
             raise SystemExit(1)
     else:
-        paths.safe_name(args.base)
+        paths.safe_aufnahmename(args.base)
         cmd_apply(args.project, args.base, args.force)
 
 

@@ -8,8 +8,8 @@
     {
       "id": "E10 das Reannoncement laesst den alten Schlangenplatz stehen",
       "datei": "webtool/jobs.py",
-      "von": "                            if b in _jobs[jid][\"eingereiht\"]:",
-      "nach": "                            if b in ():",
+      "von": "                            if queue_alias is not None:",
+      "nach": "                            if False:  # E10: alter Schlangenplatz bleibt stehen",
       "rot": [
         "test_reannoncierte_aufnahme_rueckt_in_der_schlange_nach_HINTEN"
       ],
@@ -22,7 +22,7 @@
     {
       "id": "E11 der Dublettenriegel faellt weg",
       "datei": "webtool/jobs.py",
-      "von": "                    if _m.group(1) not in liste:",
+      "von": "                    if eingereiht not in liste:",
       "nach": "                    if True:",
       "rot": [
         "test_eingereiht_verwirft_dubletten"

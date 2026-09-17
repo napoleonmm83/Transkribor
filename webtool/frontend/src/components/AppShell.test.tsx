@@ -24,10 +24,10 @@ vi.mock('sonner', () => ({ toast: toastMock, Toaster: () => null }))
 /** Ersatz-Editor: meldet der Huelle ein offenes Dokument, ohne useDoc und ohne Server.
  *  Geprueft wird die Huelle — dass EditorView selbst meldet, sichert EditorView.test.tsx.
  *  `stand` (Default 'ruhig'): seit #106 fragt die Leiste vor dem Verlassen nur bei 'fehler'. */
-function Schreibtisch({ dirty = true, stand = 'ruhig', reload = () => {}, vergiss = () => {} }: {
-  dirty?: boolean; stand?: SpeicherStand; reload?: () => void; vergiss?: () => void
+function Schreibtisch({ dirty = true, stand = 'ruhig', reload = () => {}, vergiss = () => {}, projektinstanz = 'instanz-alt' }: {
+  dirty?: boolean; stand?: SpeicherStand; reload?: () => void; vergiss?: () => void; projektinstanz?: string
 }) {
-  useEditorMelden({ project: 'Alpha', base: 'a', dirty, stand, reload, vergiss })
+  useEditorMelden({ project: 'Alpha', base: 'a', dirty, stand, reload, vergiss, projektinstanz })
   const { pathname } = useLocation()
   return <span data-testid="ort">{pathname}</span>
 }
@@ -326,6 +326,81 @@ describe('AppShell', () => {
     // wegfaellt: von der Projektseite aus bleibt derselbe Klick der Weg nach ganz oben.
     fireEvent.click(screen.getByText('Alpha'))
     expect(screen.getByTestId('ort').textContent).toBe('/')
+  })
+
+  describe('Projektloeschen und Editor (#618)', () => {
+    beforeEach(() => {
+      vi.mocked(api.listProjects).mockResolvedValue(ZWEI)
+      vi.mocked(api.getProjectFiles).mockResolvedValue({ name: 'Alpha', files: DATEIEN })
+    })
+
+    async function loeschen(vergiss: () => void) {
+      render(<MemoryRouter initialEntries={['/p/Alpha/a']}>
+        <JobProvider><AppShell><Schreibtisch vergiss={vergiss} /></AppShell></JobProvider>
+      </MemoryRouter>)
+      fireEvent.click(await screen.findByRole('button', { name: 'Projekt Alpha löschen' }))
+      fireEvent.change(screen.getByRole('textbox', { name: 'Projektname bestätigen' }), { target: { value: 'Alpha' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Löschen' }))
+      await waitFor(() => expect(api.deleteProject).toHaveBeenCalledWith('Alpha'))
+    }
+
+    it('verwirft erst nach erfolgreichem DELETE und vor dem Navigieren', async () => {
+      let fertig!: () => void
+      vi.mocked(api.deleteProject).mockReturnValueOnce(new Promise(resolve => { fertig = resolve }))
+      const orteBeimVergiss: string[] = []
+      const vergiss = vi.fn(() => {
+        orteBeimVergiss.push(screen.getByTestId('ort').textContent ?? '')
+      })
+      await loeschen(vergiss)
+      expect(vergiss).not.toHaveBeenCalled()
+      await act(async () => { fertig() })
+      expect(vergiss).toHaveBeenCalledTimes(1)
+      expect(orteBeimVergiss).toEqual(['/p/Alpha/a'])
+      expect(screen.getByTestId('ort').textContent).toBe('/')
+    })
+
+    it('laesst nach einem fehlgeschlagenen DELETE den Editor bestehen', async () => {
+      vi.mocked(api.deleteProject).mockRejectedValueOnce(new Error('Loeschen gesperrt'))
+      const vergiss = vi.fn()
+      await loeschen(vergiss)
+      await waitFor(() => expect(toastMock.error).toHaveBeenCalled())
+      expect(vergiss).not.toHaveBeenCalled()
+      expect(screen.getByTestId('ort').textContent).toBe('/p/Alpha/a')
+    })
+
+    it('beruecksichtigt einen Projektwechsel waehrend DELETE noch laeuft', async () => {
+      let fertig!: () => void
+      vi.mocked(api.deleteProject).mockReturnValueOnce(new Promise(resolve => { fertig = resolve }))
+      const vergiss = vi.fn()
+      await loeschen(vergiss)
+      fireEvent.click(screen.getByRole('button', { name: 'Abbrechen' }))
+      fireEvent.click(screen.getByText('Beta'))
+      expect(screen.getByTestId('ort').textContent).toBe('/p/Beta')
+      await act(async () => { fertig() })
+      expect(vergiss).toHaveBeenCalledTimes(1)
+      expect(screen.getByTestId('ort').textContent).toBe('/p/Beta')
+    })
+
+    it('laesst eine neu angelegte Projektinstanz nach spaetem DELETE-Erfolg offen', async () => {
+      let fertig!: () => void
+      vi.mocked(api.deleteProject).mockReturnValueOnce(new Promise(resolve => { fertig = resolve }))
+      const vergiss = vi.fn()
+      const ansicht = render(<MemoryRouter initialEntries={['/p/Alpha/a']}>
+        <JobProvider><AppShell><Schreibtisch vergiss={vergiss} projektinstanz="instanz-alt" /></AppShell></JobProvider>
+      </MemoryRouter>)
+      fireEvent.click(await screen.findByRole('button', { name: /Projekt Alpha .*schen$/ }))
+      fireEvent.change(screen.getByRole('textbox', { name: /Projektname/ }), { target: { value: 'Alpha' } })
+      fireEvent.click(screen.getByRole('button', { name: /^L.*schen$/ }))
+      await waitFor(() => expect(api.deleteProject).toHaveBeenCalledWith('Alpha'))
+
+      ansicht.rerender(<MemoryRouter initialEntries={['/p/Alpha/a']}>
+        <JobProvider><AppShell><Schreibtisch vergiss={vergiss} projektinstanz="instanz-neu" /></AppShell></JobProvider>
+      </MemoryRouter>)
+      await act(async () => { fertig() })
+
+      expect(vergiss).not.toHaveBeenCalled()
+      expect(screen.getByTestId('ort').textContent).toBe('/p/Alpha/a')
+    })
   })
 
   describe('ungespeicherte Aenderungen', () => {

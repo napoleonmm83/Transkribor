@@ -37,6 +37,85 @@ def test_lock_wird_gehalten_und_wieder_freigegeben(tmp_path):
     assert not os.path.exists(ziel + ".lock")
 
 
+def test_strikte_sperre_uebernimmt_keinen_lebenden_halter(tmp_path, monkeypatch):
+    ziel = str(tmp_path / "x.json")
+    lock = ziel + ".lock"
+    os.mkdir(lock)
+    _merker(lock, os.getpid())
+    monkeypatch.setattr(sperre, "frist", lambda stale: 0)
+    try:
+        with sperre.datei(ziel, erzwinge_uebernahme=False, wartezeit=0) as gehalten:
+            assert gehalten is False
+        assert os.path.isdir(lock)
+    finally:
+        os.remove(os.path.join(lock, sperre._HALTER))
+        os.rmdir(lock)
+
+
+@pytest.mark.parametrize("wartezeit", [False, True, "1", float("nan"), float("inf")])
+def test_strikte_sperre_lehnt_ungueltige_wartezeit_ab(tmp_path, wartezeit):
+    with pytest.raises(ValueError, match="nichtnegative Wartezeit"):
+        with sperre.datei(str(tmp_path / "x.json"), erzwinge_uebernahme=False,
+                          wartezeit=wartezeit):
+            pass
+
+
+def test_strikte_sperre_nimmt_lebendem_halter_auch_vor_positiver_wartezeit_nichts_weg(
+        tmp_path, monkeypatch):
+    ziel = str(tmp_path / "x.json")
+    lock = ziel + ".lock"
+    os.mkdir(lock)
+    _merker(lock, os.getpid())
+    vorher = sperre._merker_lesen(lock)
+    monkeypatch.setattr(sperre, "frist", lambda stale: 0)
+    try:
+        with sperre.datei(ziel, erzwinge_uebernahme=False, wartezeit=0.05) as gehalten:
+            assert gehalten is False
+        assert sperre._merker_lesen(lock) == vorher
+    finally:
+        if os.path.exists(os.path.join(lock, sperre._HALTER)):
+            os.remove(os.path.join(lock, sperre._HALTER))
+        if os.path.isdir(lock):
+            os.rmdir(lock)
+
+
+def test_strikte_sperre_pollt_bei_laengerem_warten_mit_begrenztem_backoff(
+        tmp_path, monkeypatch):
+    ziel = str(tmp_path / "x.json")
+    lock = ziel + ".lock"
+    os.mkdir(lock)
+    _merker(lock, os.getpid())
+    vergangen = [0.0]
+    pausen = []
+
+    monkeypatch.setattr(sperre.time, "monotonic", lambda: vergangen[0])
+
+    def schlafen(dauer):
+        pausen.append(dauer)
+        vergangen[0] += dauer
+
+    monkeypatch.setattr(sperre.time, "sleep", schlafen)
+    try:
+        with sperre.datei(ziel, erzwinge_uebernahme=False, wartezeit=0.2) as gehalten:
+            assert gehalten is False
+        assert max(pausen) >= 0.04
+        assert len(pausen) <= 10
+    finally:
+        os.remove(os.path.join(lock, sperre._HALTER))
+        os.rmdir(lock)
+
+
+def test_strikte_sperre_raemt_eindeutig_toten_halter_auf(tmp_path, monkeypatch):
+    ziel = str(tmp_path / "x.json")
+    lock = ziel + ".lock"
+    os.mkdir(lock)
+    _merker(lock, os.getpid())
+    monkeypatch.setattr(sperre, "_lebt_laut", lambda merker: False)
+    with sperre.datei(ziel, erzwinge_uebernahme=False, wartezeit=0) as gehalten:
+        assert gehalten is True
+    assert not os.path.exists(lock)
+
+
 def test_verwaistes_lock_wird_nach_frist_aufgeraeumt(tmp_path):
     """Ein `taskkill /F /T` auf den Job-Prozessbaum laesst kein `finally` laufen — ohne die
     Frist blockierte das liegengebliebene Verzeichnis fuer immer."""
@@ -562,6 +641,30 @@ def test_toter_halter_muss_die_frist_nicht_absitzen(tmp_path):
     assert not faden.is_alive(), "wartet die Frist auf einen Halter ab, den es nicht mehr gibt"
     assert gehalten == [True]                     # erworben, nicht bloss ungeschuetzt weiter
     assert not os.path.exists(lock)
+
+
+def test_toter_nicht_raeumbarer_halter_respektiert_strikte_wartezeit(tmp_path, monkeypatch):
+    ziel = str(tmp_path / "x.json")
+    lock = ziel + ".lock"
+    os.mkdir(lock)
+    _merker(lock, 4711)
+    monkeypatch.setattr(sperre, "_lebt_laut", lambda merker: False)
+    echt = sperre._wegraeumen
+    versuche = []
+
+    def erst_nicht_raeumbar(lockdir, erwartet):
+        versuche.append(lockdir)
+        if len(versuche) < 3:
+            raise PermissionError("Virenscanner haelt den Lock")
+        echt(lockdir, erwartet)
+
+    monkeypatch.setattr(sperre, "_wegraeumen", erst_nicht_raeumbar)
+
+    with sperre.datei(ziel, erzwinge_uebernahme=False, wartezeit=0.0) as gehalten:
+        assert gehalten is False
+
+    assert versuche == [lock]
+    assert os.path.isdir(lock)
 
 
 def test_merker_von_einem_anderen_rechner_gilt_nicht(tmp_path, monkeypatch, capsys):
