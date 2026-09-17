@@ -336,7 +336,7 @@ const INVENTAR: Record<string, Eintrag> = {
   'apply: {} -> edit.json geschrieben, md-Export fehlgeschlagen ': {
     art: 'gelesen',
     beispiel: 'apply: A -> edit.json geschrieben, md-Export fehlgeschlagen (OSError: kein Platz '
-      + 'auf dem Geraet); wird beim naechsten Export neu erzeugt',
+      + 'auf dem Geraet); die Markdown-Fassung kann veraltet sein',
     basis: 'A',
     notiz: 'Faellt in denselben Zweig wie die Zeile darueber (^apply: (.+) -> edit.json) und '
       + 'urteilt damit done/edit — richtig so: die edit.json IST geschrieben, nur ihr Export '
