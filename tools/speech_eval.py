@@ -336,6 +336,12 @@ def main(argv=None) -> int:
                 paths = manifest.get("hypotheses", {})
                 if not isinstance(paths, dict):
                     raise ValueError("manifest hypotheses must map audio IDs to paths")
+                # Das Manifest ist eine Vertrauensgrenze: es wird von Hand geschrieben.
+                # Ein Nicht-String (Zahl, null, Liste) liesse `parent / path` mit TypeError
+                # werfen, und den faengt das umgebende `except (OSError, ValueError)` NICHT —
+                # der Nutzer saehe einen Traceback statt einer Fehlermeldung (CodeRabbit).
+                if any(not isinstance(path, str) or not path for path in paths.values()):
+                    raise ValueError("manifest hypotheses must map audio IDs to non-empty path strings")
                 hypotheses = {audio: _read(args.manifest.parent / path) for audio, path in paths.items()}
             result = score_cases(manifest["cases"], hypotheses)
         content = json.dumps(result, ensure_ascii=args.output is None, indent=2, allow_nan=False) + "\n"

@@ -367,6 +367,24 @@ def test_extraction_ignores_automatic_changes_and_keeps_deleted_text():
     assert se.extract_candidates(raw, auto, edited, "x")[0]["reference"] == ""
 
 
+@pytest.mark.parametrize("pfad", [3, None, ["hyp.json"], ""])
+def test_cli_weist_nicht_string_pfade_im_manifest_ab(tmp_path, capsys, pfad):
+    """Das Manifest ist eine Vertrauensgrenze — es wird von Hand geschrieben.
+
+    Ein Nicht-String liess `args.manifest.parent / path` mit `TypeError` werfen, und den
+    faengt das umgebende `except (OSError, ValueError)` NICHT: der Nutzer bekam einen
+    Traceback statt einer Fehlermeldung (CodeRabbit). Der leere String steht mit in der
+    Liste, weil `parent / ""` KEINEN TypeError wirft, sondern still das Elternverzeichnis
+    ergibt — ein anderer Weg, derselbe unbrauchbare Ausgang.
+    """
+    manifest = tmp_path / "cases.json"
+    manifest.write_text(json.dumps({"cases": [case()], "hypotheses": {"a": pfad}}), encoding="utf-8")
+    with pytest.raises(SystemExit) as abbruch:
+        se.main(["score", "--manifest", str(manifest)])
+    assert abbruch.value.code == 2                      # argparse-Fehler, kein Traceback
+    assert "hypotheses" in capsys.readouterr().err
+
+
 def test_cli_reads_manifest_relative_paths_and_writes_valid_json(tmp_path):
     (tmp_path / "hyp.json").write_text(json.dumps(hypothesis("ein guter tag")), encoding="utf-8")
     manifest = tmp_path / "cases.json"
