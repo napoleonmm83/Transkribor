@@ -99,8 +99,8 @@
     {
       "id": "612-H --force erreicht das gemeinsame Glossar nicht mehr",
       "datei": "webtool/correct.py",
-      "von": "    if not force and os.path.exists(gpath)",
-      "nach": "    if os.path.exists(gpath)",
+      "von": "    if not force and cached.get(\"_source_snapshot\") == snapshot:",
+      "nach": "    if cached.get(\"_source_snapshot\") == snapshot:",
       "rot": [
         "test_force_baut_das_glossar_neu"
       ],
