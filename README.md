@@ -139,8 +139,10 @@ an. Damit lässt sich auch ein älteres Transkript geradeziehen, in dem noch ein
 verstandener Name steht. Willst du einen der beiden Absätze ganz loswerden, löschst du einfach
 den Text — leer heisst gestrichen.
 
-**Namen und Fachbegriffe vorab hinterlegen.** Kennt die KI die Eigennamen aus deinem Projekt,
-verhört sie sich seltener. Im Projektmenü unter **Namen & Fachbegriffe** trägst du bekannte
+**Namen und Fachbegriffe vorab hinterlegen** (ab der nächsten Fassung; in `v0.56.0` gibt es
+den Eintrag im Projektmenü noch nicht). Kennt die KI die Eigennamen aus deinem Projekt,
+kann sie falsch gehörte Stellen beim Korrigieren richtigstellen. Im Projektmenü unter
+**Namen & Fachbegriffe** trägst du bekannte
 Personen, Orte und Schreibweisen einmal ein; sie gelten dann für alle Aufnahmen des Projekts.
 Gespeichert wird das in `kontext.md` im Projektordner — hattest du die Datei schon von Hand
 angelegt, bearbeitest du hier genau sie. Nicht zu verwechseln mit dem Feld „Kontext“ über

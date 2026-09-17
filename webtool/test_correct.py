@@ -198,6 +198,67 @@ def test_auto_skips_glossary_when_no_fresh_full_correction(project, monkeypatch,
     assert correct.correct_ai_single("Demo", "S1") is (None if mode in ("human", "missing") else True)
 
 
+@pytest.mark.parametrize("fehler", [
+    OSError(28, "No space left on device"),
+    # Die zweite Haelfte des Fangs: `atomic_write` wirft bei einem einzelnen Surrogat
+    # einen `UnicodeEncodeError`, und der ist ein ValueError, KEIN OSError. Der Fang wurde
+    # dafuer geweitet (die Vorbild-Stelle in `_correct_one` faengt beide) — ohne diesen
+    # Fall waere die Erweiterung ungetestet (CodeRabbit-CLI).
+    ValueError("surrogates not allowed"),
+], ids=["OSError", "ValueError"])
+def test_gescheitertes_snapshot_schreiben_reisst_den_lauf_nicht_ab(project, monkeypatch, capsys, fehler):
+    """Der Snapshot ist eine OPTIMIERUNG und darf den Korrekturlauf nicht mitnehmen —
+    aber er darf auch nicht STUMM scheitern.
+
+    Sein `paths.atomic_write` lag zwischen den beiden `try`-Bloecken von `_glossary` und
+    in keinem: das obere `except OSError` deckt nur `_ask_llm`, das untere nur `_load`.
+    Und `cmd_run` ruft `_glossary` blank auf. Ein `OSError` hier — volle Platte,
+    gesperrtes Verzeichnis, WinError 32 — riss damit den GANZEN Lauf ab.
+
+    Was der Fehlschlag WIRKLICH kostet, steht nicht in „der alte Snapshot bleibt
+    stehen": den gibt es nicht, `_ask_llm` hat die Datei gerade ersetzt (daran erkennt
+    `erneuert` den Neubau), auf der Platte steht danach gar keiner. Gemessen: jeder
+    Folgelauf baut das korpusweite Glossar NEU — ein bezahlter LLM-Aufruf je Lauf — und
+    nimmt dabei `[active]`/`[done]` ueber ALLE Aufnahmen, womit deren Loeschen mit 409
+    antwortet. Deshalb eine Warnzeile statt `contextlib.suppress`; alle vier
+    Nachbar-Ausgaenge dieser Funktion nennen ihren Grund ebenfalls.
+    """
+    _, tdir = project
+    def answer(prompt, inputs, output):
+        paths.atomic_write(output, json.dumps({"proper_nouns": [{"correct": "Bergtal"}]}))
+    monkeypatch.setattr(correct, "_ask_llm", answer)
+
+    echt = paths.atomic_write
+    getroffen = []
+    def wirft(pfad, inhalt):
+        # Am INHALT aufgehaengt, nicht an der Reihenfolge: beide Schreibvorgaenge treffen
+        # `_glossar.json` (erst der des Anbieters aus `_ask_llm`, dann der Snapshot), und
+        # ein Zaehler auf den ZWEITEN ist gegen eine Substitution blind — ein
+        # zusaetzliches `atomic_write` davor liess den Test gruen, waehrend der
+        # Snapshot-Schreibvorgang gar nicht mehr lief (gegnerischer Pruefer, gemessen).
+        if "_source_snapshot" in inhalt:
+            getroffen.append(pfad)
+            raise fehler
+        return echt(pfad, inhalt)
+
+    erzeugt = correct._glossary("Demo", "kontext")
+    capsys.readouterr()
+    monkeypatch.setattr(paths, "atomic_write", wirft)
+    zweiter = correct._glossary("Demo", "kontext", force=True)
+    assert len(getroffen) == 1, "Vorbedingung: der Snapshot-Schreibvorgang lief wirklich"
+
+    # Der Lauf laeuft weiter und liefert dasselbe Glossar wie ohne Fehler.
+    assert json.loads(zweiter)["proper_nouns"][0]["correct"] == "Bergtal"
+    assert "_source_snapshot" not in json.loads(zweiter)
+    assert json.loads(erzeugt) == json.loads(zweiter)
+    # Und er sagt, was los war. Ein lautlos verschluckter Fehlschlag ist von einem
+    # gelungenen Schreibvorgang nicht zu unterscheiden — und kostet ab dann jeden Lauf
+    # einen korpusweiten Aufruf.
+    ausgabe = capsys.readouterr().out
+    assert "Glossar-Merker nicht geschrieben" in ausgabe
+    assert type(fehler).__name__ in ausgabe
+
+
 def test_glossary_snapshot_detects_new_input_during_generation(project, monkeypatch):
     _, tdir = project
     seen = []

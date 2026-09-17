@@ -173,6 +173,30 @@
         "test_force_baut_das_glossar_neu",
         "test_cmd_run_reicht_force_ans_glossar_durch"
       ]
+    },
+    {
+      "id": "612-N der Glossar-Snapshot reisst den ganzen Lauf ab, wenn sein Schreiben scheitert",
+      "datei": "webtool/correct.py",
+      "von": "        except (OSError, ValueError) as e:\n            print(f\"⚠ Glossar-Merker nicht geschrieben",
+      "nach": "        except RuntimeError as e:\n            print(f\"⚠ Glossar-Merker nicht geschrieben",
+      "rot": [
+        "test_gescheitertes_snapshot_schreiben_reisst_den_lauf_nicht_ab"
+      ],
+      "gruen": [
+        "test_force_baut_das_glossar_neu"
+      ]
+    },
+    {
+      "id": "612-O der gescheiterte Glossar-Merker wird wieder still verschluckt",
+      "datei": "webtool/correct.py",
+      "von": "            print(f\"⚠ Glossar-Merker nicht geschrieben ({type(e).__name__}) — \"\n                  \"der naechste Lauf baut das Glossar neu\", flush=True)",
+      "nach": "            pass  # MUTATION: schweigt wieder",
+      "rot": [
+        "test_gescheitertes_snapshot_schreiben_reisst_den_lauf_nicht_ab"
+      ],
+      "gruen": [
+        "test_force_baut_das_glossar_neu"
+      ]
     }
   ]
 }
