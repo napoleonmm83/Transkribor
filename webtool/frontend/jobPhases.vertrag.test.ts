@@ -632,6 +632,12 @@ const INVENTAR: Record<string, Eintrag> = {
   '⚠ Glossar fehlt/ungültig — fahre ohne gemeinsames Glossar fort': {
     art: 'ignoriert', beispiel: '⚠ Glossar fehlt/ungültig — fahre ohne gemeinsames Glossar fort',
   },
+  // Rueckfall des Eingabe-Schnappschusses: eine .raw.txt liess sich nicht identifizieren.
+  // Die Korrektur laeuft weiter, nur ohne gemeinsames Glossar — fuer den Phasen-Parser
+  // also dasselbe wie der Nachbar oben.
+  '⚠ Glossar-Eingaben nicht lesbar — fahre ohne gemeinsames Glossar fort': {
+    art: 'ignoriert', beispiel: '⚠ Glossar-Eingaben nicht lesbar — fahre ohne gemeinsames Glossar fort',
+  },
   '⚠ Glossar-Fehler ({}) — ': { // #455: Ernte endet am Ende des ersten String-Literals
     art: 'gelesen_anderswo', notiz: GRUND,
     beispiel: '⚠ Glossar-Fehler (OSError) — fahre ohne gemeinsames Glossar fort',

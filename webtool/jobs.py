@@ -1153,12 +1153,10 @@ def _run_proc(jid, cmd, cwd, env=None):
                     # die neben `jobPhases.ts` her driften koennten. `[done]` liest dieselbe
                     # Zeile, die `buche_aktive` schon zerlegt, in derselben ROHEN Form (#477).
                     #
-                    # Die REIHENFOLGE traegt es, nicht eine Zusicherung: `cmd_diarize` druckt
-                    # sein eigenes `[active]`/`[done]`-Paar im HAUPTlauf, also VOR
-                    # `ai_pool.submit` — zu dem Zeitpunkt steht die Base gar nicht in der
-                    # Liste, das Entfernen ist ein No-op. Jedes `[done]` NACH der Einreih-Zeile
-                    # kommt aus `correct_ai_single`s `finally` oder dem Rueckruf, und beide
-                    # feuern erst, wenn die Korrektur vorbei ist (`transcribe.py:_freigeben`).
+                    # Das gemeinsame Glossar kann auch fuer noch wartende Aufnahmen
+                    # innere `[active]`/`[done]`-Paare drucken. Erst das letzte `[done]`
+                    # beendet die Aufnahme. Die Aktivbuchung wird weiter unten abgezogen;
+                    # hier muss deshalb hoechstens eine Buchung uebrig sein.
                     #
                     # Der Parser darf eine entfernte Base nicht wieder einsetzen, und das ist
                     # eine BEDINGUNG an ihn, keine Folge der Chronologie: hier stand zuerst
@@ -1171,7 +1169,7 @@ def _run_proc(jid, cmd, cwd, env=None):
                     # Begruendung steht dort bei `serverKennt`.
                     roh = aufgeloest[fertig_roh]
                     liste = _jobs[jid]["eingereiht"]
-                    if roh in liste:
+                    if roh in liste and _jobs[jid]["active_bases"].get(roh, 0) <= 1:
                         liste.remove(roh)
                 # Nur die ERSTE Zeile zaehlt: der Lauf druckt sie, bevor er arbeitet, und
                 # spaeter kaeme sie hoechstens aus Transkripttext, der so beginnt.

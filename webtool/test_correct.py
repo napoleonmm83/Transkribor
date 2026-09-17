@@ -1,9 +1,280 @@
+import hashlib
 import json
 import os
 import re
+
 import pytest
+
 from webtool import correct, jobs, paths
 
+
+def _context_answer(tdir, calls, failed_parts=None):
+    def answer(prompt, inputs, output):
+        match = re.search(r"\.part(\d+)\.correction\.json$", output)
+        part = int(match.group(1)) if match else None
+        calls.append((part, prompt))
+        if failed_parts and part in failed_parts:
+            return
+        ids = [s["id"] for s in json.loads((tdir / "S1.json").read_text(encoding="utf-8"))["segments"]]
+        if part is not None:
+            ids = ids[(part - 1) * 2:part * 2]
+        paths.atomic_write(output, json.dumps({"base": "S1", "speakers": ["Person"],
+            "segments": [{"id": sid, "speaker": "Person", "text": f"Neu {sid}."} for sid in ids]}))
+    return answer
+
+
+@pytest.mark.parametrize("tiefe", ["voll_dialekt", "leicht", "zusammenfassung"])
+def test_context_cache_aendern_entfernen_und_wiederverwenden(project, monkeypatch, tiefe):
+    from webtool import projekt
+    root, t = project
+    context_file = root / "Demo" / "kontext.md"
+    monkeypatch.setattr(projekt, "tiefe_effektiv", lambda *a: tiefe)
+    calls = []
+    monkeypatch.setattr(correct, "_ask_llm", _context_answer(t, calls))
+    assert correct.prep_single("Demo", "S1")
+    for context, count in [("", 1), ("", 1), ("Ort Ä", 2), ("Ort Ä", 2), ("Ort B", 3), ("", 4), ("", 4)]:
+        context_file.write_text(context, encoding="utf-8")
+        assert correct.correct_ai_single("Demo", "S1", gjson="", verify=False) is True
+        assert len(calls) == count
+        doc = json.loads((t / "S1.correction.json").read_text(encoding="utf-8"))
+        assert doc["_context_sha256"] == hashlib.sha256(context.encode("utf-8")).hexdigest()
+        if context:
+            assert context in calls[-1][1]
+
+
+@pytest.mark.parametrize("datei_da,context,count", [
+    (False, "", 0),              # nie Projektwissen gehabt -> Altbestand gilt weiter
+    (True, "", 1),               # Feld GELEERT -> alte Korrektur ist ueberholt
+    (True, "Neuer Kontext", 1),  # Feld gefuellt -> ohnehin ueberholt
+])
+def test_context_cache_legacy_ohne_kontext(project, monkeypatch, datei_da, context, count):
+    """Ein Altbestand ohne Marker sagt nicht, WOMIT er entstanden ist.
+
+    `kontext.md` gab es schon vor dem Dialog — eine alte Korrektur kann also sehr wohl
+    mit Projektwissen entstanden sein. Ein leerer Kontext allein darf sie deshalb nicht
+    als passend durchwinken: wer das Feld LEERT, bekaeme sonst seine alte Korrektur
+    zurueck, waehrend die README zusagt, dass geaendertes Projektwissen alte
+    KI-Ergebnisse entwertet. Uebernommen wird nur, was nachweislich nie Projektwissen
+    hatte — kein Kontext UND keine Datei, in der einer stuende.
+
+    Der mittlere Fall ist der reparierte; ohne ihn bleibt die Mutation
+    (Rueckfall auf `return context == ""`) gruen.
+    """
+    root, t = project
+    if datei_da:
+        (root / "Demo" / "kontext.md").write_text(context, encoding="utf-8")
+    cpath = t / "S1.correction.json"
+    cpath.write_text(json.dumps({"segments": [{"id": 0, "text": "Legacy."}]}), encoding="utf-8")
+    fresh = (t / "S1.json").stat().st_mtime + 10
+    os.utime(cpath, (fresh, fresh))
+    calls = []
+    monkeypatch.setattr(correct, "_ask_llm", _context_answer(t, calls))
+    assert correct.prep_single("Demo", "S1")
+    assert correct.correct_ai_single("Demo", "S1", gjson="", verify=False) is True
+    assert len(calls) == count
+    erwartet = "Legacy." if count == 0 else "Neu 0."
+    assert json.loads((t / "S1.edit.json").read_text(encoding="utf-8"))["segments"][0]["text"] == erwartet
+
+
+@pytest.mark.parametrize("force", [False, True])
+def test_context_cache_providerfehler_erhaelt_editor_ohne_alten_erfolg(project, monkeypatch, force):
+    _, t = project
+    calls = []
+    monkeypatch.setattr(correct, "_ask_llm", _context_answer(t, calls))
+    assert correct.prep_single("Demo", "S1")
+    assert correct.correct_ai_single("Demo", "S1", gjson="", context="alt", verify=False) is True
+    previous = (t / "S1.edit.json").read_bytes()
+    attempts = []
+    monkeypatch.setattr(correct, "_ask_llm", lambda *a: attempts.append(a))
+    assert correct.correct_ai_single("Demo", "S1", gjson="", context="alt" if force else "neu", force=force) is False
+    assert len(attempts) == 1
+    assert (t / "S1.edit.json").read_bytes() == previous
+    assert not (t / "S1.correction.json").exists()
+
+
+@pytest.mark.parametrize("context,count", [("Kontext A", 1), ("Kontext B", 2), ("", 2)])
+def test_context_cache_parts_resume_und_wechsel(project, monkeypatch, context, count):
+    _, t = project
+    _write_raw(t, "S1", 4)
+    monkeypatch.setattr(correct, "CHUNK_SEGMENTS", 2)
+    assert correct.prep_single("Demo", "S1")
+    calls, failed = [], {2}
+    monkeypatch.setattr(correct, "_ask_llm", _context_answer(t, calls, failed))
+    assert correct.correct_ai_single("Demo", "S1", gjson="", context="Kontext A", verify=False) is False
+    assert (t / "S1.part1.correction.json").exists()
+    calls.clear()
+    failed.clear()
+    assert correct.correct_ai_single("Demo", "S1", gjson="", context=context, verify=False) is True
+    assert len(calls) == count
+    assert not list(t.glob("S1.part*.correction.json"))
+    calls.clear()
+    assert correct.correct_ai_single("Demo", "S1", gjson="", context=context, verify=False) is True
+    assert calls == []
+
+
+def test_context_cache_human_edited_bleibt_unveraendert(project, monkeypatch):
+    _, t = project
+    previous = b'{"human_edited":true,"segments":[{"id":0,"text":"Handarbeit"}]}'
+    (t / "S1.edit.json").write_bytes(previous)
+    monkeypatch.setattr(correct, "_ask_llm", lambda *a: pytest.fail("Handarbeit ueberschrieben"))
+    assert correct.correct_ai_single("Demo", "S1", gjson="", context="Neuer Kontext") is None
+    assert (t / "S1.edit.json").read_bytes() == previous
+
+
+def _glossary_cache_metadata(tdir, context=""):
+    inputs = {}
+    for p in sorted(tdir.glob("*.raw.txt")):
+        st = p.stat()
+        inputs[p.name] = [st.st_ino, st.st_mtime_ns, st.st_size]
+    return {"version": 1, "context_sha256": hashlib.sha256(context.encode("utf-8")).hexdigest(), "inputs": inputs}
+
+
+@pytest.mark.parametrize("tiefe", ["voll", "voll_dialekt"])
+@pytest.mark.parametrize("force", [False, True])
+def test_auto_full_baut_KEIN_glossar(project, monkeypatch, tiefe, force):
+    """Ohne durchgereichtes Glossar wird hier KEINES gebaut — Entscheidung Marcus 2026-09-17.
+
+    Der gestaffelte Lauf (`transcribe_project`) ruft `correct_ai_single` je fertiger
+    Aufnahme einzeln, und `_glossary` liest ALLE vorhandenen `.raw.txt`. Ein Bau an
+    dieser Stelle waere also ein korpusweiter LLM-Aufruf JE Datei, und die erste Datei
+    bekaeme ein „gemeinsames" Glossar aus sich selbst (gemessen: Eingabemengen [A],
+    [A,B], [A,B,C]). Das korpusweite Glossar bleibt `cmd_run` vorbehalten.
+
+    Dieser Test ist die Umkehrung seines Vorgaengers `…_resolves_unsupplied_glossary`
+    und damit der Waechter gegen dessen Rueckkehr.
+    """
+    from webtool import projekt
+    _, tdir = project
+    received = []
+    monkeypatch.setattr(projekt, "tiefe_effektiv", lambda *a: tiefe)
+    monkeypatch.setattr(correct, "_context", lambda *a: "Projektwissen")
+    monkeypatch.setattr(correct, "_ziel_dialekt", lambda *a: ("Deutsch", True, False))
+    monkeypatch.setattr(correct, "_glossary",
+                        lambda *a: pytest.fail("korpusweites Glossar im Pro-Datei-Pfad gebaut"))
+    def generated(_project, base, gjson, *args, **kwargs):
+        received.append(gjson)
+        _dump(tdir / f"{base}.correction.json", {"segments": [{"id": 0, "text": "Korrigiert."}]})
+    monkeypatch.setattr(correct, "_correct_file", generated)
+    monkeypatch.setattr(correct, "cmd_apply", lambda *a, **kw: "written")
+    assert correct.correct_ai_single("Demo", "S1", force=force) is True
+    # Der Kontext floss auch vorher schon hierher; NUR das Glossar bleibt leer.
+    assert received == [""]
+
+
+@pytest.mark.parametrize("gjson", ["", "shared glossary"])
+def test_explicit_glossary_including_empty_is_not_rebuilt(project, monkeypatch, gjson):
+    from webtool import projekt
+    _, tdir = project
+    received = []
+    monkeypatch.setattr(projekt, "tiefe_effektiv", lambda *a: "voll_dialekt")
+    monkeypatch.setattr(correct, "_glossary", lambda *a: pytest.fail("shared attempt repeated"))
+    def generated(_project, base, glossary, *args, **kwargs):
+        received.append(glossary)
+        _dump(tdir / f"{base}.correction.json", {"segments": [{"id": 0, "text": "Korrigiert."}]})
+    monkeypatch.setattr(correct, "_correct_file", generated)
+    monkeypatch.setattr(correct, "cmd_apply", lambda *a, **kw: "written")
+    assert correct.correct_ai_single("Demo", "S1", gjson=gjson, force=True) is True
+    assert received == [gjson]
+
+
+@pytest.mark.parametrize("mode", ["leicht", "zusammenfassung", "reuse", "human", "missing"])
+def test_auto_skips_glossary_when_no_fresh_full_correction(project, monkeypatch, mode):
+    from webtool import projekt
+    _, tdir = project
+    monkeypatch.setattr(projekt, "tiefe_effektiv", lambda *a: mode if mode in ("leicht", "zusammenfassung") else "voll")
+    monkeypatch.setattr(correct, "_glossary", lambda *a: pytest.fail("unnecessary glossary"))
+    monkeypatch.setattr(correct, "_ask_llm", lambda prompt, inputs, output:
+                        _dump(output, {"segments": [{"id": 0, "text": "Korrigiert."}]}))
+    monkeypatch.setattr(correct, "cmd_apply", lambda *a, **kw: "written")
+    if mode == "reuse":
+        cp = tdir / "S1.correction.json"
+        cp.write_text('{"segments": [{"id": 0}]}', encoding="utf-8")
+        newer = (tdir / "S1.json").stat().st_mtime + 10
+        os.utime(cp, (newer, newer))
+    elif mode == "human":
+        (tdir / "S1.edit.json").write_text('{"human_edited": true}', encoding="utf-8")
+    elif mode == "missing":
+        (tdir / "S1.json").unlink()
+    assert correct.correct_ai_single("Demo", "S1") is (None if mode in ("human", "missing") else True)
+
+
+def test_glossary_snapshot_detects_new_input_during_generation(project, monkeypatch):
+    _, tdir = project
+    seen = []
+    def answer(prompt, inputs, output):
+        seen.append([os.path.basename(p) for p in inputs])
+        if len(seen) == 1:
+            (tdir / "S2.raw.txt").write_text("Neue Aufnahme", encoding="utf-8")
+            (tdir / "S2.json").write_text('{"segments": []}', encoding="utf-8")
+        paths.atomic_write(output, json.dumps({"proper_nouns": [{"correct": str(len(seen))}]}))
+    monkeypatch.setattr(correct, "_ask_llm", answer)
+    first = json.loads(correct._glossary("Demo", "context"))
+    second = json.loads(correct._glossary("Demo", "context"))
+    third = json.loads(correct._glossary("Demo", "context"))
+    assert seen == [["S1.raw.txt"], ["S1.raw.txt", "S2.raw.txt"]]
+    assert first["proper_nouns"][0]["correct"] == "1"
+    assert second == third
+    assert second["proper_nouns"][0]["correct"] == "2"
+    assert "_source_snapshot" not in first and "_source_snapshot" not in second
+
+
+@pytest.mark.parametrize("change", ["context", "replace", "remove"])
+def test_glossary_snapshot_invalidates_changed_inputs(project, monkeypatch, change):
+    _, tdir = project
+    (tdir / "S2.raw.txt").write_text("Zweite Aufnahme", encoding="utf-8")
+    (tdir / "S2.json").write_text('{"segments": []}', encoding="utf-8")
+    seen = []
+    def answer(prompt, inputs, output):
+        seen.append(list(inputs))
+        paths.atomic_write(output, '{"proper_nouns": []}')
+    monkeypatch.setattr(correct, "_ask_llm", answer)
+    assert correct._glossary("Demo", "old")
+    context = "old"
+    if change == "context":
+        context = "new"
+    elif change == "replace":
+        raw = tdir / "S1.raw.txt"
+        old_stat = raw.stat()
+        replacement = tdir / "replacement.tmp"
+        replacement.write_text("Anderer Inhalt", encoding="utf-8")
+        os.replace(replacement, raw)
+        os.utime(raw, ns=(old_stat.st_atime_ns, old_stat.st_mtime_ns))
+    else:
+        (tdir / "S2.json").unlink()
+        (tdir / "S2.raw.txt").unlink()
+    assert correct._glossary("Demo", context)
+    assert len(seen) == 2
+
+
+def test_glossary_failure_preserves_old_snapshot_and_retries(project, monkeypatch):
+    _, tdir = project
+    monkeypatch.setattr(correct, "_ask_llm", lambda p, i, o: paths.atomic_write(o, '{"proper_nouns": [{"correct": "old"}]}'))
+    old = correct._glossary("Demo", "old")
+    gpath = tdir / "_glossar.json"
+    before = gpath.read_bytes()
+    seen = []
+    monkeypatch.setattr(correct, "_ask_llm", lambda *a: seen.append(a))
+    assert correct._glossary("Demo", "new") == old
+    assert gpath.read_bytes() == before
+    assert correct._glossary("Demo", "new") == old
+    assert len(seen) == 2
+    assert gpath.read_bytes() == before
+    assert correct._glossary("Demo", "new", force=True) == ""
+    assert not gpath.exists()
+
+
+# Hier standen zwei Tests der Glossar-Schreibsperre
+# (test_glossary_unavailable_strict_lock_falls_back_without_writing und
+# test_parallel_glossary_calls_share_one_generation). Die Sperre ist mit der
+# Entscheidung vom 2026-09-17 weggefallen: sie war noetig geworden, weil der
+# gestaffelte Lauf das Glossar je Aufnahme baute. Seit das nicht mehr passiert,
+# hat _glossary wieder genau EINEN Aufrufer (cmd_run), und jobs.py dedupliziert
+# je (Projekt, Art) — zwei gleichzeitige Glossarbauten sind damit nicht
+# konstruierbar. Die Sperre schuetzte also nichts mehr und konnte bei einem
+# liegengebliebenen Lock 900 s klemmen, ohne je von selbst zu heilen
+# (erzwinge_uebernahme=False schaltet BEIDE Uebernahmewege ab, gemessen).
+# Wer sie zurueckholt, braucht ein endliches stale nach der frist()-Rechnung
+# aus #207 und beide Tests wieder dazu.
 
 @pytest.fixture
 def project(monkeypatch, tmp_path):
@@ -434,7 +705,8 @@ def test_run_reuses_fresh_glossary(project, monkeypatch):
     gpath = t / "_glossar.json"
     gpath.write_text(json.dumps(
         {"context_summary": "vorhanden", "proper_nouns": [{"correct": "Matthias"}],
-         "likely_corrections": []}), encoding="utf-8")
+         "likely_corrections": [],
+         "_source_snapshot": _glossary_cache_metadata(t)}), encoding="utf-8")
     raw_mtime = (t / "S1.raw.txt").stat().st_mtime
     os.utime(gpath, (raw_mtime + 10, raw_mtime + 10))   # deterministisch neuer als raw
     calls = []
@@ -449,7 +721,8 @@ def test_run_regenerates_stale_glossary(project, monkeypatch):
     # veraltetes Glossar (aelter als eine .raw.txt, z.B. nach Neu-Transkription) -> neu bauen
     gpath = t / "_glossar.json"
     gpath.write_text(json.dumps(
-        {"context_summary": "alt", "proper_nouns": [], "likely_corrections": []}), encoding="utf-8")
+        {"context_summary": "alt", "proper_nouns": [], "likely_corrections": [],
+         "_source_snapshot": _glossary_cache_metadata(t)}), encoding="utf-8")
     g_mtime = gpath.stat().st_mtime
     os.utime(t / "S1.raw.txt", (g_mtime + 10, g_mtime + 10))   # raw neuer -> Glossar stale
     calls = []
@@ -1282,6 +1555,73 @@ def test_force_ignoriert_liegengebliebene_teil_dateien(project, monkeypatch):
     assert texte[2] == "Satz 2." and texte[3] == "Satz 3."
 
 
+def test_waechter_A_raeumt_die_alte_correction_wenn_der_anbieter_nichts_schreibt(project, monkeypatch):
+    """Der `os.remove(cpath)` in `correct_ai_single` — EINZELN nachgewiesen.
+
+    Er deckte sich in der Suite mit dem `os.remove(target)` in `_correct_one`: einzeln
+    mutiert blieb jeder von beiden gruen, nur beide zusammen wurden rot. Zwei Waechter,
+    die einander in den Tests decken, sind in der Sache ungedeckt.
+
+    Getrennt werden sie ueber die Tiefe `leicht` — dort laeuft `_correct_one` gar nicht,
+    also kann nur Waechter A wirken. Ohne ihn gilt die ALTE Antwort als frisches
+    Ergebnis, wird angewendet UND mit dem NEUEN Kontext-Stempel versehen; der falsche
+    Stand gilt ab da dauerhaft als passend.
+    """
+    from webtool import projekt
+    _root, t = project
+    alt = {"base": "S1", "context": "", "speakers": [], "annotations": [], "summary": "",
+           "segments": [{"id": 0, "speaker": "Alt", "text": "ALTE ANTWORT"}]}
+    cpath = t / "S1.correction.json"
+    cpath.write_text(json.dumps(alt), encoding="utf-8")
+    # AELTER als die Roh-JSON: der Cache-Vergleich lehnt sie ab, der Lauf korrigiert frisch.
+    veraltet = (t / "S1.json").stat().st_mtime - 10
+    os.utime(cpath, (veraltet, veraltet))
+    monkeypatch.setattr(projekt, "tiefe_effektiv", lambda *a: "leicht")
+    monkeypatch.setattr(correct, "_ask_llm", lambda *a, **kw: None)   # Anbieter schreibt nichts
+    assert correct.prep_single("Demo", "S1")
+
+    assert correct.correct_ai_single("Demo", "S1", gjson="", verify=False) is False
+    assert not cpath.exists(), "alte correction.json ueberlebt den Fehlschlag"
+    assert not (t / "S1.edit.json").exists(), "alte Antwort wurde angewendet"
+
+
+def test_waechter_B_raeumt_die_alte_teil_datei_vor_dem_anbieter_aufruf(project, monkeypatch):
+    """Der `os.remove(target)` in `_correct_one` — EINZELN nachgewiesen.
+
+    Gegenstueck zum Test darueber. Getrennt wird ueber den BLOCK-Pfad: dort ist `target`
+    eine `partN.correction.json`, und die fasst Waechter A nicht an (er raeumt nur
+    `cpath`). Bleibt eine alte Teil-Datei liegen und schreibt der Anbieter fuer diesen
+    Block nichts, gilt ohne Waechter B der alte Block als frisches Ergebnis und wird mit
+    den neuen Bloecken VERMISCHT — gemessen als Text aus zwei Kontextstaenden in einer
+    Datei, gemeldet als Erfolg.
+    """
+    _root, t = project
+    _write_raw(t, "S1", 4)
+    monkeypatch.setattr(correct, "CHUNK_SEGMENTS", 2)          # -> 2 Bloecke
+    alt = {"base": "S1", "context": "", "speakers": [], "annotations": [], "summary": "",
+           "segments": [{"id": 2, "speaker": "Alt", "text": "ALTE ANTWORT"},
+                        {"id": 3, "speaker": "Alt", "text": "ALTE ANTWORT"}]}
+    ppath = t / "S1.part2.correction.json"
+    ppath.write_text(json.dumps(alt), encoding="utf-8")
+    # AELTER als die Roh-JSON: der Cache-Vergleich lehnt sie ab, `_correct_one` laeuft.
+    veraltet = (t / "S1.json").stat().st_mtime - 10
+    os.utime(ppath, (veraltet, veraltet))
+
+    calls = []
+    echter = _chunk_claude(t, calls)
+    def nur_block_eins(prompt, workdir=None):
+        # Block 2 bekommt keine Antwort — der Normalfall eines Anbieter-Ausfalls.
+        if "part2.correction.json" in prompt and "TREUE-CHECK" not in prompt:
+            calls.append(prompt)
+            return
+        echter(prompt, workdir)
+    monkeypatch.setattr(correct, "_run_claude", nur_block_eins)
+
+    assert correct.cmd_run("Demo", verify=False) == 0, "Lauf meldet Erfolg trotz fehlendem Block"
+    assert not ppath.exists(), "alte Teil-Datei ueberlebt den Fehlschlag"
+    assert not (t / "S1.correction.json").exists(), "halbe Datei zusammengefuehrt"
+
+
 def test_ohne_force_bleibt_die_teil_datei_der_resume_anker(project, monkeypatch):
     """Die Kehrseite muss erhalten bleiben: ein abgebrochener Lauf ist resumbar, ein
     erneuter Lauf OHNE --force holt nur die fehlenden Bloecke nach."""
@@ -1878,7 +2218,10 @@ def test_force_baut_das_glossar_neu(tmp_path, monkeypatch):
     roh = tdir / "a.raw.txt"
     roh.write_text("Dresden, Liechtenstein", encoding="utf-8")
     glossar = tdir / "_glossar.json"
-    glossar.write_text('{"proper_nouns": []}', encoding="utf-8")
+    glossar.write_text(json.dumps({
+        "proper_nouns": [],
+        "_source_snapshot": _glossary_cache_metadata(tdir, "kontext"),
+    }), encoding="utf-8")
     frisch = os.path.getmtime(roh) + 60          # neuer als JEDE .raw.txt
     os.utime(glossar, (frisch, frisch))
 
@@ -2051,6 +2394,30 @@ def test_kontext_md_nicht_lesbar_stoppt_den_lauf_nicht(project, capsys):
         fh.write(b"Interview mit Gr\xfcnder")          # ANSI/CP1252, kein UTF-8
     assert correct._context("Demo") == ""
     assert "kontext.md nicht lesbar" in capsys.readouterr().out
+
+
+def test_zu_grosse_kontext_md_geht_gekuerzt_in_die_prompts(project, capsys):
+    """Die Groessengrenze muss am LESEweg haengen, nicht nur am Endpunkt.
+
+    Der PUT weist zu langen Text ab — aber `kontext.md` darf laut README auch von Hand
+    angelegt werden, und dann kommt sie an diesem Riegel vorbei. Ohne Grenze HIER reiste
+    eine beliebig grosse Datei in jeden Korrektur- und Verify-Prompt jeder Aufnahme
+    (CodeRabbit-CLI, major — der Endpunkt-Riegel war an der falschen Stelle verankert).
+
+    Beide Richtungen, sonst ist eine Kuerzung, die immer zuschlaegt, derselbe Schaden von
+    der anderen Seite.
+    """
+    root, _t = project
+    grenze = correct.KONTEXT_MAX_BYTES
+    (root / "Demo" / "kontext.md").write_text("x" * (grenze + 5000), encoding="utf-8")
+    gelesen = correct._context("Demo")
+    assert len(gelesen.encode("utf-8")) <= grenze
+    assert "groesser als" in capsys.readouterr().out
+
+    # Knapp darunter bleibt unangetastet — und ohne Warnzeile.
+    (root / "Demo" / "kontext.md").write_text("y" * (grenze - 10), encoding="utf-8")
+    assert correct._context("Demo") == "y" * (grenze - 10)
+    assert "groesser als" not in capsys.readouterr().out
 
 
 def test_load_meldet_ein_nicht_objekt_als_valuerror(tmp_path):
@@ -2386,10 +2753,9 @@ def test_correct_ai_single_liest_cmd_apply_und_nur_missing_ist_ein_fehler(
     tdir = tmp_path / "P" / "transkripte"
     tdir.mkdir(parents=True)
     (tdir / "A.json").write_text(json.dumps({"segments": []}), encoding="utf-8")
-    (tdir / "A.correction.json").write_text(json.dumps({"segments": [{"id": 0}]}), encoding="utf-8")
-
     gerufen = []
-    monkeypatch.setattr(correct, "_correct_file", lambda *a, **kw: None)
+    monkeypatch.setattr(correct, "_correct_file", lambda *a, **kw:
+                        _dump(tdir / "A.correction.json", {"segments": [{"id": 0}]}))
     monkeypatch.setattr(correct, "_context", lambda *a: "")
     monkeypatch.setattr(correct, "cmd_apply",
                         lambda *a, **kw: (gerufen.append(a), apply_ergebnis)[1])
@@ -2814,7 +3180,10 @@ def test_glossar_sperrt_nicht_wenn_es_wiederverwendet_wird(monkeypatch, tmp_path
     """
     tdir = _glossar_projekt(monkeypatch, tmp_path)
     gpath = tdir / "_glossar.json"
-    gpath.write_text(json.dumps({"proper_nouns": [], "likely_corrections": []}), encoding="utf-8")
+    gpath.write_text(json.dumps({
+        "proper_nouns": [], "likely_corrections": [],
+        "_source_snapshot": _glossary_cache_metadata(tdir),
+    }), encoding="utf-8")
     neuer = max(os.path.getmtime(str(tdir / (b + ".raw.txt")))
                 for b in ("A_fremd", "B_lauf")) + 10
     os.utime(str(gpath), (neuer, neuer))                  # deterministisch neuer als jede raw

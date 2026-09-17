@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { FileArchive, FolderDown, Languages, MoreHorizontal, Pencil, Trash2 } from 'lucide-react'
+import { BookOpen, FileArchive, FolderDown, Languages, MoreHorizontal, Pencil, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {
@@ -9,6 +9,7 @@ import { exportProjectMarkdownToDownloads, projectMarkdownZipUrl, triggerDownloa
 import { ProjektUmbenennen } from './ProjektUmbenennen'
 import { DeleteProjectDialog } from './DeleteProjectDialog'
 import { ProjektEinstellungenDialog } from './ProjektEinstellungenDialog'
+import { ProjektKontextDialog } from './ProjektKontextDialog'
 
 /**
  * Die Projekt-Aktionen der Uebersicht — Zwilling von DateiMenue, eine Ebene hoeher.
@@ -30,7 +31,7 @@ export function ProjektMenue({ project, onUmbenannt, onGeloescht, onEinstellunge
    *  Aufrufer ohne Workspace (z. B. die Galerie) geben nichts mit und es ist ein No-Op. */
   onEinstellungenGeaendert?: () => void
 }) {
-  const [zeige, setZeige] = useState<'umbenennen' | 'loeschen' | 'einstellungen' | null>(null)
+  const [zeige, setZeige] = useState<'umbenennen' | 'loeschen' | 'einstellungen' | 'kontext' | null>(null)
 
   const exportDownloads = async () => {
     try {
@@ -69,6 +70,9 @@ export function ProjektMenue({ project, onUmbenannt, onGeloescht, onEinstellunge
             <DropdownMenuItem onSelect={() => setZeige('einstellungen')}>
               <Languages /> Sprache &amp; Korrektur
             </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => setZeige('kontext')}>
+              <BookOpen /> Namen &amp; Fachbegriffe
+            </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={exportDownloads}>
               <FolderDown /> Markdown in Downloads ablegen
@@ -93,6 +97,8 @@ export function ProjektMenue({ project, onUmbenannt, onGeloescht, onEinstellunge
         onGeaendert={onEinstellungenGeaendert} />
       <DeleteProjectDialog project={project} onDeleted={onGeloescht}
         offen={zeige === 'loeschen'} onOpenChange={o => setZeige(o ? 'loeschen' : null)} />
+      <ProjektKontextDialog project={project}
+        offen={zeige === 'kontext'} onOpenChange={o => setZeige(o ? 'kontext' : null)} />
     </>
   )
 }

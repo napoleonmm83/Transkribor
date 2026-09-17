@@ -139,6 +139,20 @@ an. Damit lässt sich auch ein älteres Transkript geradeziehen, in dem noch ein
 verstandener Name steht. Willst du einen der beiden Absätze ganz loswerden, löschst du einfach
 den Text — leer heisst gestrichen.
 
+**Namen und Fachbegriffe vorab hinterlegen.** Kennt die KI die Eigennamen aus deinem Projekt,
+verhört sie sich seltener. Im Projektmenü unter **Namen & Fachbegriffe** trägst du bekannte
+Personen, Orte und Schreibweisen einmal ein; sie gelten dann für alle Aufnahmen des Projekts.
+Gespeichert wird das in `kontext.md` im Projektordner — hattest du die Datei schon von Hand
+angelegt, bearbeitest du hier genau sie. Nicht zu verwechseln mit dem Feld „Kontext“ über
+einem Transkript: das gehört zur einzelnen fertigen Fassung, das hier zum ganzen Projekt.
+
+**Speichern allein startet aber nichts.** Bei Aufnahmen, die schon fertig sind, wählst du
+danach **Neu korrigieren** im Dateimenü — die Spracherkennung muss dafür nicht noch einmal
+laufen, es wird nur der Text überarbeitet. Änderst du die Namensliste, gelten alte
+KI-Korrekturen als überholt und werden beim nächsten Lauf neu gemacht. Was du selbst von Hand
+bearbeitet hast, bleibt dabei geschützt; nur wenn du eine solche Aufnahme ausdrücklich neu
+korrigieren lässt, fragt Transkribor noch einmal nach und überschreibt sie dann.
+
 **Offene Punkte abhaken.** Ganz unten unter „Anmerkungen“ sammelt die KI, was sie *nicht* raten
 wollte — also genau die Stellen, an denen sich Nachhören lohnt. Die Liste gehört dir: eine
 Anmerkung geradeziehen, eine erledigte streichen (Text löschen genügt) oder eine eigene

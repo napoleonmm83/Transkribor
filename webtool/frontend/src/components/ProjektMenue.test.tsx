@@ -33,6 +33,15 @@ beforeEach(() => {
 })
 
 describe('ProjektMenue', () => {
+  it('öffnet Projektwissen mit dem zugehörigen Projekt', async () => {
+    vi.mocked(api.getProjektKontext).mockResolvedValue({ text: 'Bekannte Namen', dateistand: '1', projektinstanz: 'p' })
+    render(<Huelle><ProjektMenue project="Demo" onUmbenannt={() => {}} onGeloescht={() => {}} /></Huelle>)
+    await menueOeffnen()
+    fireEvent.click(await screen.findByRole('menuitem', { name: /Namen & Fachbegriffe/ }))
+    expect(await screen.findByLabelText('Projektwissen')).toHaveValue('Bekannte Namen')
+    expect(api.getProjektKontext).toHaveBeenCalledWith('Demo')
+  })
+
   it('öffnet „Sprache & Korrektur" aus dem ⋯-Menü und lädt die Einstellungen', async () => {
     render(<Huelle><ProjektMenue project="Demo" onUmbenannt={() => {}} onGeloescht={() => {}} /></Huelle>)
     await menueOeffnen()
