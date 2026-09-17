@@ -902,8 +902,9 @@ Audio-IDs zu JSON-Dateien (Pfade relativ zum Manifest). Nur am Audio geprüfte
 Referenzen dürfen `reviewed: true` tragen. Entfernungen zu ungeprüften Entwürfen
 stehen separat; sie belegen keine Erkennungsqualität.
 
-`extract --raw … --corrected … --edited … --audio-id … --output …` bereitet
-manuelle Textänderungen als ungeprüfte Referenzkandidaten vor. Ausdrücklich
+`python tools/speech_eval.py extract --raw … --corrected … --edited …
+--audio-id … --output …` bereitet manuelle Textänderungen als ungeprüfte
+Referenzkandidaten vor. Ausdrücklich
 geprüfte Stille lässt sich mit `reference_kind: "silence"` und leerer Referenz
 erfassen; dort werden erfundene Wörter separat gezählt. Fehlende Ergebnisse
 werden sichtbar. Das Werkzeug misst keine Sprecher- oder Zeitmarkengenauigkeit.
@@ -913,13 +914,16 @@ ist.
 **Die Rate gilt nur für Läufe mit Wortzeiten.** Fehlen sie einem Segment, lässt
 sich der Text nicht auf das Zeitfenster eingrenzen; solche Fälle stehen als
 `reviewed_untimed` neben der Kennzahl statt darin, und `coverage` nennt ihre
-Zahl. Das ist kein Feinschliff: gezählt wurden sie, ergaben zwei Hypothesen mit
-wortgleichem Text 0,0 gegen 0,0998 — die Zahl maß dann, ob ein Lauf Zeitstempel
-mitbringt, nicht seine Qualität. Und weil die KI-Korrektur die Wortzeiten genau
-dort verwirft, wo sie korrigiert hat, traf das systematisch den korrigierten
-Lauf. Steht `untimed_fallback_cases` hoch, sagt die Rate über einen großen Teil
-des Materials nichts; fällt jeder Fall dorthin, meldet der Bericht
-`quality_evidence_available: false`.
+Zahl. Das ist kein Feinschliff: zählte man sie mit, maß die Zahl, ob ein Lauf
+Zeitstempel mitbringt, statt seine Qualität — und weil die KI-Korrektur die
+Wortzeiten genau dort verwirft, wo sie korrigiert hat, traf das systematisch den
+korrigierten Lauf. Der Mechanismus ist reproduzierbar in
+`webtool/test_speech_eval.py::test_wortzeiten_aendern_die_rate_nicht_bei_gleichem_text`
+festgehalten; die Größenordnung an echtem Material (0,0 gegen 0,0998 bei
+30-Sekunden-Fenstern) stammt aus einer Messung auf nicht öffentlichen Aufnahmen
+und lässt sich hier deshalb nicht nachfahren. Steht `untimed_fallback_cases`
+hoch, sagt die Rate über einen großen Teil des Materials nichts; fällt jeder
+Fall dorthin, meldet der Bericht `quality_evidence_available: false`.
 
 Läufe mit hinterlegtem Projektwissen sind getrennt von Läufen ohne
 Hilfestellung auszuwerten — ein Glossar verbessert die Trefferquote, sagt aber
