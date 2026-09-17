@@ -773,6 +773,19 @@ die Ursache samt Handlungsempfehlung (z. B. Rate-Limit mit Wartezeit, aufgebrauc
 abgelaufene Anmeldung oder ungültiger API-Schlüssel) in der Meldung und im Verbindungstest der
 Einstellungen. Nicht erkannte Fehler zeigt Transkribor mit dem technischen Fehlertext an.
 
+**Ab der nächsten Fassung kostet dich eine beschädigte Aufnahme nicht mehr den ganzen Lauf.**
+Bisher konnte eine Aufnahme, deren Transkriptdatei zwar lesbar, aber innen durcheinander war,
+den Korrekturlauf mitten im Betrieb abbrechen — ohne Schlussmeldung, und die Aufnahmen, die
+schon fertig waren, wurden dir nie gemeldet. Jetzt wird diese eine Aufnahme übersprungen und
+beim Namen genannt, alle anderen laufen durch.
+
+**Und zwei Meldungen sagen dir jetzt die Wahrheit statt einer bequemen Vermutung.** Konnte
+Transkribor nur die Markdown-Fassung nicht schreiben, gilt der Lauf nicht mehr als
+gescheitert — dein korrigiertes Ergebnis ist ja da; die Meldung sagt dazu, dass die
+Markdown-Fassung veraltet sein kann. Und scheitert ein Lauf wirklich, nennt die Schlusszeile
+den KI-Dienst nur noch dann als Ursache, wenn er tatsächlich nichts geliefert hat — vorher
+stand das bei jedem Fehlschlag da und schickte dich an die falsche Stelle.
+
 Ein Sonderfall: Scheitert der Aufbau des **gemeinsamen Glossars** an einem Systemfehler (z. B.
 kein Platz mehr auf der Platte), gilt das nicht als Ausfall des Laufs — Transkribor schreibt eine
 Warnung ins Protokoll und korrigiert ohne das Glossar weiter. Die Schreibweisen von Namen sind
