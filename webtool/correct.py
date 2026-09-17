@@ -121,6 +121,18 @@ _letzter_bereich: list | None = None
 # durch den #523-Pfad neu aufgemacht (kalter Diff-Leser, mit Reproduktion).
 # `None` heisst „kein Bereich fixiert" (fruehe Ausgaenge), wie beim Bereich daneben.
 _letzte_kennungen: dict | None = None
+# Wie viele Aufnahmen `correct_ai_single` mit einer GEFANGENEN Ausnahme beendet hat. Ohne
+# diesen Zaehler behauptete die Schlusszeile in `main` bei JEDEM Totalausfall, der KI-Anbieter
+# sei nicht erreichbar — gemessen am 17.09.2026 an einem Lauf, in dem der Anbieter sauber
+# geliefert hatte und nur ein Dateischreibvorgang scheiterte. Wer das liest, sucht an der
+# falschen Stelle.
+#
+# ZWEI Grenzen, benannt statt behauptet: (1) das `+= 1` laeuft in bis zu `CLAUDE_PARALLEL`
+# Pool-Threads und ist nicht atomar — die ZAHL kann untertreiben, das `> 0` bleibt sicher,
+# und nur daran haengt die Weiche. (2) Die Ausstiege `✗ FEHLT/ungueltig` und
+# `cmd_apply == "missing"` werfen nicht, zaehlen also nicht mit; fuer sie bleibt der
+# Anbieter-Hinweis der Rueckfall — was fuer `FEHLT/ungueltig` meistens sogar stimmt.
+_letzte_fehler: int = 0
 _CREATE_NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 
 
@@ -232,7 +244,25 @@ def prep_single(project: str, base: str) -> bool:
             lines.append(f"[{s['id']}] {prefix}{s['tagged_text']}")
         paths.atomic_write(os.path.join(tdir, base + ".tagged.txt"), "\n".join(lines) + "\n")
         return True
-    except (OSError, ValueError) as e:
+    except (OSError, ValueError, TypeError, AttributeError) as e:
+        # `TypeError`/`AttributeError` seit dem 17.09.2026, und der Filter ist damit bewusst
+        # BREITER als der Ausnahmetyp, den eine Datei "kaputt" macht. Der Grund: eine Roh-JSON,
+        # die sauber PARST aber falsche Typen traegt (`{"segments": "kaputt"}`), wirft aus
+        # `tag_uncertain_segments` `AttributeError` — kein `ValueError`, also bis dahin kein
+        # Schutz. Sie fiel durch alle drei Schichten (hier, `one()`s try/finally ohne except,
+        # `ex.map`) und toetete den GANZEN `cmd_run`: `run: fertig` wurde nie gedruckt,
+        # waehrend eine zweite, fertige Aufnahme ungemeldet auf der Platte lag. Dieselbe
+        # Zeile deckt `cmd_prep` mit, das an einem Wurf genauso stirbt.
+        #
+        # GETRAGENER PREIS, damit er nicht unsichtbar ist: ein echter Programmierfehler in
+        # dieser Funktion erscheint jetzt als uebersprungene Datei statt als lauter Absturz.
+        # Deshalb nennt die Zeile unten den Ausnahmetyp — `prep: SKIP x (AttributeError: …)`
+        # ist ein Datenproblem, `prep: SKIP x (NameError: …)` waere ein Fehler von uns.
+        #
+        # GETRAGENE GRENZE (kalter Plan-Review, 18 Formen ausgefuehrt): zwei JSON-gueltige
+        # Formen entkommen weiter — eine Zahl mit >= 309 Stellen (`OverflowError` beim
+        # Formatieren) und eine tausendfach verschachtelte Struktur (`RecursionError`).
+        # Whisper erzeugt beides nicht; "jeder kaputte Datensatz" gilt also nicht woertlich.
         print(f"prep: SKIP {base} ({type(e).__name__}: {_einzeilig(e)})", flush=True)
         return False
 
@@ -477,10 +507,27 @@ def cmd_apply(project: str, base: str, force: bool = False) -> str:
     if not os.path.exists(raw_path):
         print(f"apply: FEHLT {base}.json - Roh-Transkript nicht gefunden")
         return "missing"
-    raw = _load(raw_path)
-    correction = _load(cpath)
-    doc = apply_correction(raw, correction, base=base, project=project,
-                           audio=_audio_name(project, base))
+    try:
+        raw = _load(raw_path)
+        correction = _load(cpath)
+        doc = apply_correction(raw, correction, base=base, project=project,
+                               audio=_audio_name(project, base))
+    except (OSError, ValueError, TypeError, AttributeError) as e:
+        # Derselbe Filter und derselbe Grund wie in `prep_single` — hier aber eine Ebene
+        # hoeher, und bis zum 17.09.2026 war das der EINZIGE der drei Einstiegspunkte ganz
+        # ohne Fang. Ueber `cmd_run` faengt `correct_ai_single` breit; wer eine einzelne
+        # Aufnahme von Hand nachkorrigieren laesst (`correct apply`), bekam dagegen einen
+        # rohen Traceback. Ausgefuehrt gemessen mit drei Formen: `[]` (gueltiges JSON, kein
+        # Objekt -> `ValueError` aus `_load`), unparsebar (`JSONDecodeError`) und falsche
+        # Typen (`AttributeError` aus `apply_correction`).
+        #
+        # `"missing"` und nicht `"skipped"`: es wurde NICHTS geschrieben, und genau das
+        # unterscheidet `cmd_apply`s Fehlschlag-Ausgang von seinen drei Schutzpfaden
+        # (`human_edited`, unlesbare `edit.json`, Handarbeit unter der Sperre). Die Bilanz in
+        # `correct_ai_single` wertet nur `"missing"` als Fehlschlag — sie bleibt damit korrekt.
+        print(f"apply: KAPUTT {base} ({type(e).__name__}: {_einzeilig(e)}) — "
+              f"Korrektur nicht anwendbar, {base}.correction.json pruefen", flush=True)
+        return "missing"
     # Dieselbe Sperre wie `app._pruefe_und_schreibe` (#160/PR #278). Der Editor prueft dort
     # den Dateistand und schreibt dann — dazwischen liegen ein `json.dumps` und ein
     # vollstaendiges `render_md`. Landet DIESER Schreibvorgang in genau dem Fenster, hat der
@@ -511,7 +558,31 @@ def cmd_apply(project: str, base: str, force: bool = False) -> str:
                   f"--force zum Ueberschreiben)")
             return "skipped"
         paths.atomic_write(epath, json.dumps(doc, ensure_ascii=False, indent=1))
-        paths.atomic_write(os.path.join(tdir, base + ".md"), render_md(doc))
+        md_pfad = os.path.join(tdir, base + ".md")
+        try:
+            paths.atomic_write(md_pfad, render_md(doc))
+        except OSError as e:
+            # Die `edit.json` IST das Dokument, die `.md` ihr Export — und sie steht zu diesem
+            # Zeitpunkt vollstaendig auf der Platte. Bis zum 17.09.2026 riss der Export sie mit
+            # in den Fehlschlag: `run: fertig — 0/1`, Exitcode 1, roter Job auf einem richtigen
+            # Ergebnis, und die `correction.json` blieb liegen, sodass der naechste Lauf
+            # denselben Ausgang reproduzierte.
+            #
+            # Das `os.remove` ist die HAELFTE, die eine blosse Warnzeile nicht leistet (kalter
+            # Plan-Review, ausgefuehrt): `app._get_or_render_md` liefert eine VORHANDENE `.md`
+            # unbesehen zurueck — es invalidiert nichts. Eine aeltere Fassung neben einer neuen
+            # `edit.json` waere damit kein fehlender Export, sondern ein FALSCHER: die Wege
+            # `export/md`, `export/downloads` und `export/zip` lieferten stillschweigend Altes.
+            # Entfernt rendert dieselbe Funktion frisch aus dem Dokument.
+            #
+            # Nur `OSError`: ein Wurf aus `render_md` selbst waere ein Fehler von uns und bleibt
+            # laut. Scheitert auch das Entfernen, ist der Zustand der vor dieser Aenderung —
+            # kein Rueckschritt, deshalb `suppress` und keine zweite Meldung.
+            with contextlib.suppress(OSError):
+                os.remove(md_pfad)
+            print(f"apply: {base} -> edit.json geschrieben, md-Export fehlgeschlagen "
+                  f"({type(e).__name__}: {_einzeilig(e)}); wird beim naechsten Export neu erzeugt")
+            return "written"
     print(f"apply: {base} -> edit.json + md ({len(doc['segments'])} Segmente)")
     return "written"
 
@@ -1557,6 +1628,11 @@ def correct_ai_single(project: str, b: str, gjson: str = "", context: str = None
         # stillen Datenverlust rote Zeilen in der Bilanz.
         return cmd_apply(project, b, force=force) != "missing"
     except Exception as e:
+        global _letzte_fehler
+        # Genau HIER und nirgends sonst: dies ist die einzige Stelle, an der eine Aufnahme an
+        # einer gefangenen Ausnahme scheitert. `main` unterscheidet daran, ob es den
+        # KI-Anbieter beschuldigen darf — siehe den Kommentar am Global.
+        _letzte_fehler += 1
         print(f"✗ Fehler bei {b}: {_einzeilig(e)} — überspringe", flush=True)
         return False
     finally:
@@ -1571,10 +1647,11 @@ def cmd_run(project: str, base: str = None, force: bool = False, verify: bool = 
     - Cloud-KI-Phasen laufen nach Abschluss der lokalen Phase sofort parallel (bis zu CLAUDE_PARALLEL Slots).
     - Abgeschlossene Dateien werden sofort finalisiert (cmd_apply) und stehen im Frontend bereit.
     """
-    global _letzte_diagnose, _letzter_bereich, _letzte_kennungen
+    global _letzte_diagnose, _letzter_bereich, _letzte_kennungen, _letzte_fehler
     _letzte_diagnose = None
     _letzter_bereich = None
     _letzte_kennungen = None
+    _letzte_fehler = 0
     tdir = paths.transkripte_dir(project)
     all_bases = bases(project)
     if base is not None:                               # expliziter Einzel-Datei-Lauf (Per-Datei-✎)
@@ -1647,9 +1724,13 @@ def cmd_run(project: str, base: str = None, force: bool = False, verify: bool = 
             print(f"↷ SKIP {b} (human_edited=true; --force zum Neu-Korrigieren)", flush=True)
             return False
         # `gemeldet` ist der Riegel, den der Kalt-Review an fbb6a22 gefordert hat: das `try`
-        # muss VOR dem `with` beginnen, weil `prep_single` nur `(OSError, ValueError)` faengt
-        # (s. dort) — eine Roh-JSON, die als Objekt parst, aber falsche Typen traegt
-        # (`{"segments": "kaputt"}`), wirft `AttributeError` glatt hindurch. Lag das `try`
+        # muss VOR dem `with` beginnen, weil aus `prep_single` ein Wurf kommen KANN (s. dort).
+        # Bis zum 17.09.2026 war die haeufigste Quelle eine Roh-JSON, die als Objekt parst
+        # aber falsche Typen traegt (`{"segments": "kaputt"}`): `prep_single` fing damals nur
+        # `(OSError, ValueError)`, der `AttributeError` fiel glatt hindurch. Dieser eine Fall
+        # ist dort jetzt gefangen — das `try` bleibt trotzdem hier, denn die zwei benannten
+        # Restformen (`OverflowError`, `RecursionError`) und jeder unerwartete Wurf aus
+        # `cmd_diarize` nehmen weiter genau diesen Weg. Lag das `try`
         # erst hinter dem Hardware-Block, lief das `finally` in genau dem Fall NICHT, und die
         # Aufnahme blieb bis Jobende in `active_bases` haengen — Loeschen dauerhaft 409, wo
         # nichts mehr an ihr arbeitet. Reproduziert, A/B: auf diesem Stand ohne den Riegel
@@ -1714,8 +1795,9 @@ def cmd_run(project: str, base: str = None, force: bool = False, verify: bool = 
                                           pruefe=lambda: unveraendert(b, raw_json)))
         finally:
             # UNBEDINGT, weil FUENF Ausgaenge dahinter weder `[active]` noch `[done]` drucken:
-            # `prep_single` = False, ein WURF aus `prep_single` (es faengt nur
-            # `(OSError, ValueError)`), die TOCTOU-Pruefung, und `correct_ai_single`s ZWEI
+            # `prep_single` = False, ein WURF aus `prep_single` (sein Filter ist seit dem
+            # 17.09.2026 breiter, aber nicht vollstaendig — s. die zwei Restformen dort),
+            # die TOCTOU-Pruefung, und `correct_ai_single`s ZWEI
             # Schutz-Ausstiege (Roh-JSON weg, `human_edited`) — die beiden liegen VOR ihrem
             # eigenen `[active]` und drucken nichts. Ohne dieses `finally` bliebe die Aufnahme
             # dort bis Jobende in `active_bases` haengen: Loeschen dauerhaft 409, ausgerechnet
@@ -1770,9 +1852,13 @@ def main(argv=None):
         # Selbst zuruecksetzen, nicht nur in `cmd_run`: ersetzt ein Test `cmd_run` durch eine
         # Attrappe, laeuft der Reset dort nie, und `main` urteilte ueber den Bereich des
         # VORIGEN Laufs (kalter Plan-Reviewer, ausgefuehrt).
-        global _letzter_bereich, _letzte_kennungen
+        global _letzter_bereich, _letzte_kennungen, _letzte_fehler
         _letzter_bereich = None
         _letzte_kennungen = None
+        # `_letzte_fehler` gehoert aus demselben Grund hierher wie die zwei darueber: ein Test,
+        # der `cmd_run` durch eine Attrappe ersetzt, laesst den Wert eines FRUEHEREN Laufs
+        # stehen, und die Schlusszeile urteilte dann ueber fremde Fehler (kalter Plan-Reviewer).
+        _letzte_fehler = 0
         done = cmd_run(args.project, args.base, args.force, verify)
         # Exitcode fürs Job-Signal: Fehler nur, wenn Dateien VERSUCHT wurden aber KEINE gelang —
         # sonst wäre der Job „done“ trotz Totalausfall (z.B. claude fehlt auf PATH). „nichts zu
@@ -1806,9 +1892,19 @@ def main(argv=None):
             # Anbieterneutral: beim API-Weg heisst der Anbieter vielleicht OpenAI, und wer nur
             # die letzte Zeile liest, sucht sonst bei claude. Der echte Grund steht als
             # "KI-Anbieter: …" bzw. "[diagnose] …" weiter oben — hier direkt benennen.
-            grund_text = (f"{_letzte_diagnose['titel']} · {_letzte_diagnose['hinweis']}"
-                          if _letzte_diagnose
-                          else "KI-Anbieter nicht erreichbar oder ohne Ausgabe — siehe die Zeilen oben")
+            # Der mittlere Zweig seit dem 17.09.2026: hat mindestens EINE Aufnahme an einer
+            # gefangenen Ausnahme verloren, ist der KI-Anbieter als Grund eine Erfindung.
+            # Gemessen an einem Lauf, in dem er sauber geliefert hatte und nur der md-Export
+            # scheiterte — die Zeile schickte den Leser zum Anbieter statt zur Platte.
+            # Reihenfolge: die echte Diagnose schlaegt alles, dann der gezaehlte Fehler, und
+            # der Anbieter-Hinweis bleibt der Rueckfall fuer „es kam wirklich nichts zurueck".
+            if _letzte_diagnose:
+                grund_text = f"{_letzte_diagnose['titel']} · {_letzte_diagnose['hinweis']}"
+            elif _letzte_fehler:
+                grund_text = (f"{_letzte_fehler} Datei(en) mit Fehler — "
+                              f"siehe die ✗-Zeilen oben")
+            else:
+                grund_text = "KI-Anbieter nicht erreichbar oder ohne Ausgabe — siehe die Zeilen oben"
             print(f"run: FEHLER — 0 von {attempted} versuchten Datei(en) korrigiert "
                   f"({grund_text})",
                   flush=True)

@@ -875,6 +875,151 @@ def test_run_survives_corrupt_raw(project, monkeypatch):
     assert not (t / "S2.edit.json").exists()
 
 
+def test_run_survives_falsch_geformtes_raw(project, monkeypatch, capsys):
+    """Die Luecke, die `test_run_survives_corrupt_raw` daneben NICHT sieht.
+
+    Der Nachbartest oben nimmt UNPARSEBARES JSON — das wirft `JSONDecodeError`, eine
+    Unterklasse von `ValueError`, und `prep_single` fing das schon immer. Eine Roh-JSON, die
+    sauber PARST aber falsche Typen traegt, wirft dagegen `AttributeError` aus
+    `tag_uncertain_segments` und fiel durch alle drei Schichten: `prep_single` (enger Filter),
+    `one()` (try/finally ohne except) und `ex.map`. Reproduziert am 17.09.2026: der ganze
+    `cmd_run` starb, `run: fertig` wurde nie gedruckt — waehrend die gesunde Aufnahme fertig
+    auf der Platte lag und niemand davon erfuhr.
+    """
+    _root, t = project
+    (t / "S2.json").write_text(json.dumps({"language": "de", "segments": "kaputt"}),
+                               encoding="utf-8")
+
+    def fake(prompt, workdir):
+        if "_glossar.json" in prompt:
+            return
+        _dump(re.search(r"(\S+\.correction\.json)", prompt).group(1),
+              {"base": "x", "segments": [{"id": 0, "speaker": "Interviewer", "text": "ok"}]})
+    monkeypatch.setattr(correct, "_run_claude", fake)
+
+    assert correct.cmd_run("Demo") == 1
+    out = capsys.readouterr().out
+    assert (t / "S1.edit.json").exists()
+    assert not (t / "S2.edit.json").exists()
+    # Die Bilanz ist die eigentliche Zusicherung: ohne sie hat der Lauf die fertige Aufnahme
+    # zwar geschrieben, aber nie gemeldet — genau der gemessene Schaden.
+    assert "run: fertig — 1/2" in out, out
+    assert "prep: SKIP S2" in out, out
+
+
+def test_prep_single_ueberspringt_falsch_geformte_diar_json(project, monkeypatch):
+    """Zweite Quelle derselben Klasse, eine Zeile neben der ersten.
+
+    `_load_diar_clusters` verspricht in seinem Kommentar, den prep-Batch nie zu killen — sein
+    `except Exception` deckt aber nur das Laden (Zeile 212), nicht das Dict-Comprehension
+    darunter (215). Eine `diar.json`, die parst und falsche Typen traegt, wirft also an dem
+    `try` vorbei. Der breite Filter in `prep_single` faengt es mit; ohne diesen Test bliebe
+    genau dieser Mitfang unbewacht.
+
+    Direkt gegen `prep_single` statt ueber `cmd_run`, weil die Diarisierung dafuer AN sein
+    muss und die Fixture sie bewusst abschaltet (kein Test ruehrt echtes pyannote an) —
+    `prep_single` liest nur das fertige Sidecar.
+    """
+    _root, t = project
+    monkeypatch.setenv("TRANSKRIBOR_DIARIZE", "1")
+    (t / "S1.diar.json").write_text(json.dumps({"segments": "kaputt"}), encoding="utf-8")
+
+    assert correct.prep_single("Demo", "S1") is False
+    assert not (t / "S1.tagged.txt").exists()
+
+
+def test_cmd_prep_ueberspringt_falsch_geformtes_raw(project, capsys):
+    """Die ZWEITE Aufrufstelle von `prep_single` — ohne sie waere es ein Fix an einer Stelle.
+
+    `cmd_prep` zaehlt mit `sum(1 for base in bases(project) if prep_single(...))`. Ein Wurf
+    daraus toetet die Summe genauso wie er `cmd_run` toetete; ausgefuehrt gemessen vom kalten
+    Plan-Pruefer am 17.09.2026 (S1 getaggt, Bilanzzeile nie gedruckt).
+    """
+    _root, t = project
+    (t / "S2.json").write_text(json.dumps({"language": "de", "segments": "kaputt"}),
+                               encoding="utf-8")
+
+    assert correct.cmd_prep("Demo") == 1
+    out = capsys.readouterr().out
+    assert (t / "S1.tagged.txt").exists()
+    assert not (t / "S2.tagged.txt").exists()
+    assert "prep: 1 Datei(en) getaggt" in out, out
+
+
+def test_apply_meldet_erfolg_wenn_nur_md_export_scheitert(project, monkeypatch, capsys):
+    """Ein geschriebenes Ergebnis ist kein Fehlschlag — und die alte `.md` ist eine Luege.
+
+    Die `edit.json` ist das kanonische Dokument, die `.md` ihr Export. Scheitert ALLEIN der
+    Export, stand die `edit.json` bereits vollstaendig auf der Platte, gemeldet wurde aber
+    `0/1` mit Exitcode 1 (reproduziert 17.09.2026) — ein roter Lauf auf einem richtigen
+    Ergebnis, und die `correction.json` blieb liegen.
+
+    Die zweite Zusicherung kommt vom kalten Plan-Pruefer: `app._get_or_render_md` liefert eine
+    VORHANDENE `.md` unbesehen zurueck. Bliebe die alte stehen, bekaemen die Export-Wege eine
+    veraltete Fassung zu einer neuen `edit.json`. Entfernt, rendern sie frisch aus dem Dokument.
+    """
+    _root, t = project
+    _dump(t / "S1.correction.json",
+          {"base": "S1", "segments": [{"id": 0, "speaker": "Interviewer", "text": "Neu."}]})
+    (t / "S1.md").write_text("ALTE FASSUNG", encoding="utf-8")
+
+    echt = paths.atomic_write
+
+    def md_wirft(pfad, inhalt, *a, **kw):
+        if str(pfad).endswith(".md"):
+            raise OSError(28, "kein Platz auf dem Geraet")
+        return echt(pfad, inhalt, *a, **kw)
+    monkeypatch.setattr(paths, "atomic_write", md_wirft)
+
+    assert correct.cmd_apply("Demo", "S1") == "written"
+    out = capsys.readouterr().out
+    doc = json.loads((t / "S1.edit.json").read_text(encoding="utf-8"))
+    assert len(doc["segments"]) == 1
+    assert not (t / "S1.md").exists(), "die veraltete .md muss weg sein, sonst exportiert sie Altes"
+    assert "md-Export fehlgeschlagen" in out, out
+
+
+def test_apply_meldet_kaputte_correction_statt_abzustuerzen(project, capsys):
+    """Der dritte Einstiegspunkt — `correct apply` von Hand, der einzige ganz ohne Fang.
+
+    Die beiden Ladezeilen und `apply_correction` lagen in keinem `try`: eine kaputte
+    `correction.json` endete als roher Traceback statt als Meldung. Ausgefuehrt gemessen vom
+    kalten Plan-Pruefer mit drei Formen (`[]`, unparsebar, falsche Typen) — drei Abbrueche.
+    """
+    _root, t = project
+    (t / "S1.correction.json").write_text("[]", encoding="utf-8")   # gueltiges JSON, kein Objekt
+
+    assert correct.cmd_apply("Demo", "S1") == "missing"
+    out = capsys.readouterr().out
+    assert not (t / "S1.edit.json").exists()
+    assert "S1" in out and "KAPUTT" in out, out
+
+
+def test_run_bilanz_nennt_nicht_den_anbieter_bei_echtem_fehler(project, monkeypatch, capsys):
+    """Die Schlusszeile beschuldigte den KI-Anbieter, auch wenn der sauber geliefert hatte.
+
+    Gemessen 17.09.2026: ein gescheiterter Dateischreibvorgang erzeugte woertlich
+    `KI-Anbieter nicht erreichbar oder ohne Ausgabe` — wer das liest, sucht an der falschen
+    Stelle. Der Anbieter-Hinweis bleibt der Rueckfall fuer den Fall, in dem wirklich nichts
+    zurueckkam; er darf nur nicht mehr jeden Fehler erklaeren.
+    """
+    def fake(prompt, workdir):
+        if "_glossar.json" in prompt:
+            return
+        _dump(re.search(r"(\S+\.correction\.json)", prompt).group(1),
+              {"base": "S1", "segments": [{"id": 0, "speaker": "Interviewer", "text": "ok"}]})
+    monkeypatch.setattr(correct, "_run_claude", fake)
+    monkeypatch.setattr(correct, "cmd_apply",
+                        lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("Platte voll")))
+
+    with pytest.raises(SystemExit) as ei:
+        correct.main(["run", "Demo", "--no-verify"])
+    out = capsys.readouterr().out
+    assert ei.value.code != 0
+    assert "KI-Anbieter nicht erreichbar" not in out, out
+    assert "siehe die ✗-Zeilen oben" in out, out
+
+
 # ---- _run_claude: Vertrag (argv/cwd/stdin/timeout) + Fehlerzweige (subprocess gefälscht) ----
 
 def test_run_claude_argv_and_confinement(project, monkeypatch):
@@ -3056,9 +3201,12 @@ def test_run_gibt_die_aufnahme_frei_wenn_die_korrektur_sich_nie_meldet(monkeypat
 def test_run_gibt_die_aufnahme_frei_wenn_die_vorbereitung_wirft(monkeypatch, tmp_path, capsys):
     """Die Antwort auf „was erlaubt die Reparatur NEU?" — und sie kam vom Kalt-Review.
 
-    `prep_single` faengt nur `(OSError, ValueError)`. Eine Roh-JSON, die als Objekt parst, aber
-    falsche Typen traegt (`{"segments": "kaputt"}`), wirft `AttributeError` glatt hindurch —
-    kein `ValueError`, also kein Schutz. Lag das `try` erst HINTER dem Hardware-Block, stand das
+    Der historische Anlass: `prep_single` fing bis zum 17.09.2026 nur `(OSError, ValueError)`,
+    und eine Roh-JSON, die als Objekt parst aber falsche Typen traegt (`{"segments": "kaputt"}`),
+    warf `AttributeError` glatt hindurch. Dieser Fall ist dort inzwischen gefangen; der Test
+    faelscht `prep_single` deshalb und prueft, was er immer geprueft hat — die BUCHFUEHRUNG bei
+    einem Wurf, den es weiterhin geben kann (`OverflowError`, `RecursionError`, `cmd_diarize`).
+    Lag das `try` erst HINTER dem Hardware-Block, stand das
     `[active]` aus dem Fix schon im Protokoll, das `finally` lief aber nie: die Aufnahme blieb
     bis Jobende in `active_bases`, Loeschen antwortete dauerhaft 409, obwohl nichts mehr an ihr
     arbeitete. Und „bis Jobende" ist nicht „gleich" — `ex.map` hat alle Aufgaben eingereiht.

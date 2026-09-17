@@ -1,0 +1,71 @@
+{
+  "test": "python -m pytest webtool/test_correct.py -q",
+  "pfade": [
+    "webtool/correct.py",
+    "webtool/test_correct.py"
+  ],
+  "mutationen": [
+    {
+      "id": "T186-A prep_single faengt wieder nur (OSError, ValueError) — der Typfehler toetet den Lauf",
+      "datei": "webtool/correct.py",
+      "von": "    except (OSError, ValueError, TypeError, AttributeError) as e:\n        # `TypeError`/`AttributeError` seit dem 17.09.2026",
+      "nach": "    except (OSError, ValueError) as e:\n        # `TypeError`/`AttributeError` seit dem 17.09.2026",
+      "rot": [
+        "test_run_survives_falsch_geformtes_raw",
+        "test_prep_single_ueberspringt_falsch_geformte_diar_json",
+        "test_cmd_prep_ueberspringt_falsch_geformtes_raw"
+      ],
+      "gruen": [
+        "test_run_survives_corrupt_raw"
+      ]
+    },
+    {
+      "id": "T187-A der md-except trifft nie — ein geschriebenes Ergebnis gilt wieder als Fehlschlag",
+      "datei": "webtool/correct.py",
+      "von": "        except OSError as e:\n            # Die `edit.json` IST das Dokument",
+      "nach": "        except FloatingPointError as e:\n            # Die `edit.json` IST das Dokument",
+      "rot": [
+        "test_apply_meldet_erfolg_wenn_nur_md_export_scheitert"
+      ],
+      "gruen": [
+        "test_run_full_flow"
+      ]
+    },
+    {
+      "id": "T187-B die veraltete .md bleibt liegen — der Export liefert Altes zu einer neuen edit.json",
+      "datei": "webtool/correct.py",
+      "von": "                os.remove(md_pfad)",
+      "nach": "                pass",
+      "rot": [
+        "test_apply_meldet_erfolg_wenn_nur_md_export_scheitert"
+      ],
+      "gruen": [
+        "test_run_full_flow"
+      ]
+    },
+    {
+      "id": "T187-C der Ladefilter in cmd_apply trifft nie — correct apply stirbt wieder am Traceback",
+      "datei": "webtool/correct.py",
+      "von": "    except (OSError, ValueError, TypeError, AttributeError) as e:\n        # Derselbe Filter",
+      "nach": "    except FloatingPointError as e:\n        # Derselbe Filter",
+      "rot": [
+        "test_apply_meldet_kaputte_correction_statt_abzustuerzen"
+      ],
+      "gruen": [
+        "test_run_full_flow"
+      ]
+    },
+    {
+      "id": "T187-D der Fehlerzweig der Schlusszeile ist tot — der KI-Anbieter wird wieder beschuldigt",
+      "datei": "webtool/correct.py",
+      "von": "            elif _letzte_fehler:",
+      "nach": "            elif False:",
+      "rot": [
+        "test_run_bilanz_nennt_nicht_den_anbieter_bei_echtem_fehler"
+      ],
+      "gruen": [
+        "test_run_cli_exits_nonzero_when_nothing_corrected"
+      ]
+    }
+  ]
+}

@@ -463,6 +463,13 @@ export function parseJobPhases(kind: string, lines: string[],
     // und in einem PR, dessen Thema genau diese Fehlerklasse ist.)
     else if ((m = l.match(/^apply: FEHLT (.+)\.json - Roh-Transkript nicht gefunden$/))) terminal(m[1], 'failed')
     else if ((m = l.match(/^apply: FEHLT (.+?)\.correction\.json/))) terminal(m[1], 'failed')
+    // Seit dem 17.09.2026: `cmd_apply` faengt jetzt auch eine correction.json, die zwar DA ist,
+    // aber nicht anwendbar (kaputtes JSON, kein Objekt, falsche Typen). Vorher endete das als
+    // roher Traceback — ohne Zeile, also auch ohne Urteil. Der Zweig gehoert zu seinen zwei
+    // Nachbarn darueber: ohne ihn bliebe die Aufnahme im Spinner, genau wie deren Notiz im
+    // INVENTAR es fuer ihren eigenen Wegfall beschreibt. `(.+?)` nicht-gierig wie bei 465,
+    // damit ein Basisname mit Klammer nicht den Rest der Zeile verschluckt.
+    else if ((m = l.match(/^apply: KAPUTT (.+?) \(/))) terminal(m[1], 'failed')
     else if ((m = l.match(/^✗ FEHLT\/ungültig: (.+?)\.correction\.json/))) terminal(m[1], 'failed')
     else if ((m = l.match(/^✗ Fehler bei (.+?): /))) terminal(m[1], 'failed')
     else if (/^diarize: \d+ Datei/.test(l)) {

@@ -1,0 +1,21 @@
+{
+  "test": "npm --prefix webtool/frontend test -- jobPhases.vertrag.test.ts",
+  "pfade": [
+    "webtool/frontend/jobPhases.vertrag.test.ts",
+    "webtool/frontend/src/lib/jobPhases.ts"
+  ],
+  "mutationen": [
+    {
+      "id": "T187-E der Parser-Zweig fuer `apply: KAPUTT` faellt weg — die Aufnahme bliebe im Spinner",
+      "datei": "webtool/frontend/src/lib/jobPhases.ts",
+      "von": "    else if ((m = l.match(/^apply: KAPUTT (.+?) \\(/))) terminal(m[1], 'failed')",
+      "nach": "    else if ((m = l.match(/^apply: ZZZNIE (.+?) \\(/))) terminal(m[1], 'failed')",
+      "rot": [
+        "jeder Parser-Zweig hat noch eine lebende Druckform"
+      ],
+      "gruen": [
+        "jede gedruckte Form ist klassifiziert"
+      ]
+    }
+  ]
+}

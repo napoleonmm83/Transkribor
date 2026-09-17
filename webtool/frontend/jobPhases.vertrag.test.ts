@@ -333,6 +333,26 @@ const INVENTAR: Record<string, Eintrag> = {
     vor: ['  A: 540 Segmente → 4 Blöcke à max. 150'], nach: ['→ Korrigiere A · Block 2/4 …'],
   },
   'apply: {} -> edit.json + md ({} Segmente)': { art: 'gelesen', beispiel: 'apply: A -> edit.json + md (12 Segmente)', basis: 'A' },
+  'apply: {} -> edit.json geschrieben, md-Export fehlgeschlagen ': {
+    art: 'gelesen',
+    beispiel: 'apply: A -> edit.json geschrieben, md-Export fehlgeschlagen (OSError: kein Platz '
+      + 'auf dem Geraet); wird beim naechsten Export neu erzeugt',
+    basis: 'A',
+    notiz: 'Faellt in denselben Zweig wie die Zeile darueber (^apply: (.+) -> edit.json) und '
+      + 'urteilt damit done/edit — richtig so: die edit.json IST geschrieben, nur ihr Export '
+      + 'nicht. Bis 17.09.2026 riss ein gescheiterter md-Export die ganze Aufnahme in den '
+      + 'Fehlschlag (0/1 bei vollstaendiger edit.json).',
+  },
+  'apply: KAPUTT {} ({}: {}) — ': {
+    art: 'gelesen',
+    beispiel: 'apply: KAPUTT A (ValueError: A.correction.json: JSON-Objekt erwartet, list '
+      + 'gelesen) — Korrektur nicht anwendbar, A.correction.json pruefen',
+    basis: 'A',
+    notiz: 'Wie die beiden apply: FEHLT-Zeilen im Job-Protokoll nur ueber ein TOCTOU-Fenster '
+      + 'erreichbar (correct_ai_single prueft _valid_correction vor cmd_apply), am CLI-Einstieg '
+      + 'correct apply dagegen direkt. Ohne eigenen Parser-Zweig bliebe die Aufnahme im '
+      + 'Spinner — dieselbe Begruendung wie bei den Nachbarn.',
+  },
   'apply: SKIP {} (human_edited=true; --force zum Ueberschreiben)': {
     art: 'gelesen', beispiel: 'apply: SKIP A (human_edited=true; --force zum Ueberschreiben)', basis: 'A',
   },
