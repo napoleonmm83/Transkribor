@@ -613,8 +613,16 @@ def cmd_apply(project: str, base: str, force: bool = False) -> str:
             # Entschluss, nicht eine Nebenwirkung dieser Zeile.
             with contextlib.suppress(OSError):
                 os.remove(md_pfad)
+            # „kann veraltet sein" und NICHT „wird neu erzeugt", und das ist der Befund der
+            # CodeRabbit-CLI: scheitert auch das Entfernen (beide scheitern z.B. an denselben
+            # Rechten), bleibt die alte `.md` liegen — und `app._get_or_render_md` liefert eine
+            # VORHANDENE Datei unbesehen aus. Die Zusage der Neuerzeugung waere in genau dem
+            # Unterfall falsch, in dem sie zaehlt. Der Vorschlag, stattdessen VOR dem Schreiben
+            # zu entfernen und bei Misserfolg abzubrechen, ist verworfen: er liesse einen
+            # sauberen Lauf an einer nicht loeschbaren Altdatei scheitern — ein neuer
+            # Fehlerausgang auf dem Normalweg, um einen Randfall zu decken.
             print(f"apply: {base} -> edit.json geschrieben, md-Export fehlgeschlagen "
-                  f"({type(e).__name__}: {_einzeilig(e)}); wird beim naechsten Export neu erzeugt")
+                  f"({type(e).__name__}: {_einzeilig(e)}); die Markdown-Fassung kann veraltet sein")
             return "written"
     print(f"apply: {base} -> edit.json + md ({len(doc['segments'])} Segmente)")
     return "written"

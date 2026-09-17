@@ -987,6 +987,37 @@ def test_apply_meldet_erfolg_wenn_nur_md_export_scheitert(project, monkeypatch, 
     assert "md-Export fehlgeschlagen" in out, out
 
 
+def test_apply_verspricht_keine_neuerzeugung_wenn_auch_das_entfernen_scheitert(
+        project, monkeypatch, capsys):
+    """Der Unterfall, in dem die Zusage falsch waere — Befund der CodeRabbit-CLI.
+
+    Scheitern Schreiben UND Entfernen (dieselben Rechte treffen beides), bleibt die alte `.md`
+    liegen, und `app._get_or_render_md` liefert eine VORHANDENE Datei unbesehen aus. Eine
+    Meldung, die Neuerzeugung zusagt, ist dann genau dort falsch, wo sie zaehlt. Der Lauf
+    bleibt trotzdem ein Erfolg: die `edit.json` steht vollstaendig da.
+    """
+    _root, t = project
+    _dump(t / "S1.correction.json",
+          {"base": "S1", "segments": [{"id": 0, "speaker": "Interviewer", "text": "Neu."}]})
+    (t / "S1.md").write_text("ALTE FASSUNG", encoding="utf-8")
+
+    echt = paths.atomic_write
+
+    def md_wirft(pfad, inhalt, *a, **kw):
+        if str(pfad).endswith(".md"):
+            raise OSError(13, "kein Zugriff")
+        return echt(pfad, inhalt, *a, **kw)
+    monkeypatch.setattr(paths, "atomic_write", md_wirft)
+    monkeypatch.setattr(correct.os, "remove",
+                        lambda p: (_ for _ in ()).throw(OSError(13, "kein Zugriff")))
+
+    assert correct.cmd_apply("Demo", "S1") == "written"
+    out = capsys.readouterr().out
+    assert (t / "S1.md").read_text(encoding="utf-8") == "ALTE FASSUNG"   # sie liegt noch da
+    assert "kann veraltet sein" in out, out
+    assert "neu erzeugt" not in out, out
+
+
 @pytest.mark.parametrize("kaputt", [
     '[]',                                     # gueltiges JSON, kein Objekt -> ValueError (_load)
     '{ kaputt',                               # unparsebar               -> JSONDecodeError
