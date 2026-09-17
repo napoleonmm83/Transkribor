@@ -638,6 +638,17 @@ const INVENTAR: Record<string, Eintrag> = {
   '⚠ Glossar-Eingaben nicht lesbar — fahre ohne gemeinsames Glossar fort': {
     art: 'ignoriert', beispiel: '⚠ Glossar-Eingaben nicht lesbar — fahre ohne gemeinsames Glossar fort',
   },
+  // Der Snapshot-Merker ist eine Optimierung — sein Fehlschlag beendet den Lauf NICHT,
+  // darf aber auch nicht schweigen: ohne Merker baut jeder Folgelauf das korpusweite
+  // Glossar neu (bezahlter Aufruf) und sperrt dabei jede Aufnahme gegen Loeschen.
+  // `gelesen_anderswo`, nicht `ignoriert`: der Platzhalter traegt zur Laufzeit den
+  // Ausnahmetyp (OSError, ValueError), und damit faellt die Zeile unter den generischen
+  // /Error/-Filter des Toasts — genau wie der Nachbar darunter. `ignoriert` waere hier
+  // die Falschaussage, gegen die #422/B5 geschrieben ist.
+  '⚠ Glossar-Merker nicht geschrieben ({}) — ': {
+    art: 'gelesen_anderswo', notiz: GRUND,
+    beispiel: '⚠ Glossar-Merker nicht geschrieben (OSError) — der naechste Lauf baut das Glossar neu',
+  },
   '⚠ Glossar-Fehler ({}) — ': { // #455: Ernte endet am Ende des ersten String-Literals
     art: 'gelesen_anderswo', notiz: GRUND,
     beispiel: '⚠ Glossar-Fehler (OSError) — fahre ohne gemeinsames Glossar fort',

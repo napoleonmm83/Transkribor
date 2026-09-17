@@ -1080,8 +1080,34 @@ def _glossary(project: str, context: str, force: bool = False) -> str:
         return ""
     if erneuert:
         # Ein erfolgloser Versuch darf den alten Snapshot nicht als aktuell ausgeben.
-        g["_source_snapshot"] = snapshot
-        paths.atomic_write(gpath, json.dumps(g, ensure_ascii=False, indent=1))
+        #
+        # Und das Schreiben selbst darf den LAUF nicht mitnehmen: der Aufruf lag zwischen
+        # den beiden `try`-Bloecken dieser Funktion und in keinem — das obere `except
+        # OSError` deckt nur `_ask_llm`, das untere nur `_load` —, und `cmd_run` ruft
+        # `_glossary` blank auf. Ein `OSError` hier (volle Platte, gesperrtes Verzeichnis,
+        # WinError 32) riss damit den ganzen Korrekturlauf ab, obwohl der Snapshot bloss
+        # eine OPTIMIERUNG ist. Dieselbe Klasse wie beim Kontext-Stempel zwei Ebenen
+        # tiefer und wie #455 eine Zeile hoeher; dort war sie gekapselt, hier NICHT
+        # (CodeRabbit-Bot an PR #626, Major).
+        #
+        # ABER NICHT STUMM, und das ist der teurere Teil. Was der Fehlschlag WIRKLICH
+        # bedeutet, steht nicht in „der alte Snapshot bleibt stehen" — den gibt es gar
+        # nicht mehr, `_ask_llm` hat die Datei ja gerade ersetzt (daran erkennt
+        # `erneuert` den Neubau), auf der Platte steht danach GAR KEIN Snapshot.
+        # Gemessen: jeder Folgelauf baut das korpusweite Glossar dann NEU — ein
+        # bezahlter LLM-Aufruf je Lauf — und nimmt dabei `[active]`/`[done]` ueber ALLE
+        # Aufnahmen des Projekts, womit deren Loeschen mit 409 antwortet. Drei Laeufe mit
+        # dauerhaft scheiterndem Schreiben ergaben drei Aufrufe, null Warnzeilen und
+        # dreimal die Erfolgsmeldung mit Haken. Alle VIER Nachbar-Ausgaenge dieser
+        # Funktion nennen ihren Grund; dieser eine schwieg. `ValueError` faengt mit,
+        # weil die Vorbild-Stelle in `_correct_one` es auch tut (ein einzelnes Surrogat
+        # macht aus `atomic_write` einen `UnicodeEncodeError`, und der ist kein OSError).
+        try:
+            g["_source_snapshot"] = snapshot
+            paths.atomic_write(gpath, json.dumps(g, ensure_ascii=False, indent=1))
+        except (OSError, ValueError) as e:
+            print(f"⚠ Glossar-Merker nicht geschrieben ({type(e).__name__}) — "
+                  "der naechste Lauf baut das Glossar neu", flush=True)
     g.pop("_source_snapshot", None)
     print(f"✓ Glossar: {len(g.get('proper_nouns') or [])} Eigennamen, "
           f"{len(g.get('likely_corrections') or [])} Korrekturen", flush=True)

@@ -34,6 +34,7 @@ hat. Lesbar, aber unschön — das ist Absicht.
 **Behoben**
 - Nach dem Löschen eines Projekts können verspätete Speicherungen nicht mehr in ein neu angelegtes Projekt mit demselben Namen geraten.
 - Die Werkzeugleiste im Editor bricht ab 768 Pixel Fensterbreite bei Bedarf um, damit Speicherstatus, Suche und Export vollständig sichtbar bleiben.
+- Lässt sich die Merkdatei der gemeinsamen Namensliste nicht schreiben — etwa weil die Festplatte voll ist —, bricht der Korrekturlauf nicht mehr ab, sondern sagt es und macht weiter.
 - Wartende Aufnahmen bleiben während der gemeinsamen Glossarerstellung korrekt in der Korrekturschlange sichtbar.
 - Nach geändertem Projektwissen verwendet die nächste Korrektur keine veralteten KI-Ergebnisse weiter. Schlägt die neue Korrektur fehl, bleibt die bisherige Editorfassung erhalten.
 
