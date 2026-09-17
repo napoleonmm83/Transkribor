@@ -217,14 +217,27 @@ def test_gescheitertes_snapshot_schreiben_reisst_den_lauf_nicht_ab(project, monk
 
     Was der Fehlschlag WIRKLICH kostet, steht nicht in „der alte Snapshot bleibt
     stehen": den gibt es nicht, `_ask_llm` hat die Datei gerade ersetzt (daran erkennt
-    `erneuert` den Neubau), auf der Platte steht danach gar keiner. Gemessen: jeder
-    Folgelauf baut das korpusweite Glossar NEU — ein bezahlter LLM-Aufruf je Lauf — und
-    nimmt dabei `[active]`/`[done]` ueber ALLE Aufnahmen, womit deren Loeschen mit 409
-    antwortet. Deshalb eine Warnzeile statt `contextlib.suppress`; alle vier
-    Nachbar-Ausgaenge dieser Funktion nennen ihren Grund ebenfalls.
+    `erneuert` den Neubau), auf der Platte steht danach gar keiner. Jeder Folgelauf baut
+    das korpusweite Glossar dann NEU — ein bezahlter LLM-Aufruf je Lauf. Deshalb eine
+    Warnzeile statt `contextlib.suppress`; alle vier Nachbar-Ausgaenge dieser Funktion
+    nennen ihren Grund ebenfalls.
+
+    Diese Kostenaussage PRUEFT der Test seit PR #628 selbst, statt sie zu behaupten: er
+    zaehlt die `_ask_llm`-Aufrufe und faehrt nach dem Fehlschlag einen gewoehnlichen
+    Folgelauf OHNE `force`. Davor steht die Negativkontrolle, ohne die die Zusicherung
+    nichts waere — mit heilem Merker darf derselbe Lauf das Modell NICHT rufen. (Der
+    Vorab-Check des Bots hatte recht: die Aussage stand vorher hier als „Gemessen", und
+    der Test reproduzierte sie nicht.)
+
+    NICHT geprueft, und deshalb steht es auch nicht mehr als Messung da: dass der
+    korpusweite `[active]`-Druck das Loeschen jeder Aufnahme mit 409 beantwortet. Das
+    ist aus #450 und `jobs.betrifft` HERGELEITET; es zu messen braucht den Loeschpfad
+    mit mehreren Aufnahmen, also einen anderen Aufbau.
     """
     _, tdir = project
+    aufrufe = []
     def answer(prompt, inputs, output):
+        aufrufe.append(output)
         paths.atomic_write(output, json.dumps({"proper_nouns": [{"correct": "Bergtal"}]}))
     monkeypatch.setattr(correct, "_ask_llm", answer)
 
@@ -242,10 +255,18 @@ def test_gescheitertes_snapshot_schreiben_reisst_den_lauf_nicht_ab(project, monk
         return echt(pfad, inhalt)
 
     erzeugt = correct._glossary("Demo", "kontext")
+    # NEGATIVKONTROLLE, und sie traegt die Zusicherung unten: mit heilem Merker nimmt ein
+    # gewoehnlicher Folgelauf den Wiederverwendungs-Zweig und ruft das Modell NICHT. Ohne
+    # sie belegte „nach dem Fehlschlag wird gerufen" gar nichts — ein `_glossary`, das
+    # IMMER ruft, saehe genauso aus.
+    correct._glossary("Demo", "kontext")
+    assert len(aufrufe) == 1, "Negativkontrolle: heiler Merker spart den Aufruf"
+
     capsys.readouterr()
     monkeypatch.setattr(paths, "atomic_write", wirft)
     zweiter = correct._glossary("Demo", "kontext", force=True)
     assert len(getroffen) == 1, "Vorbedingung: der Snapshot-Schreibvorgang lief wirklich"
+    assert len(aufrufe) == 2, "Vorbedingung: der erzwungene Lauf hat wirklich neu gebaut"
 
     # Der Lauf laeuft weiter und liefert dasselbe Glossar wie ohne Fehler.
     assert json.loads(zweiter)["proper_nouns"][0]["correct"] == "Bergtal"
@@ -257,6 +278,15 @@ def test_gescheitertes_snapshot_schreiben_reisst_den_lauf_nicht_ab(project, monk
     ausgabe = capsys.readouterr().out
     assert "Glossar-Merker nicht geschrieben" in ausgabe
     assert type(fehler).__name__ in ausgabe
+
+    # Und hier steht der PREIS, den die Warnzeile ankuendigt — gemessen statt behauptet:
+    # ein GEWOEHNLICHER Folgelauf, kein `force`. Ohne Merker ist
+    # `cached.get("_source_snapshot")` None, der Wiederverwendungs-Zweig greift nicht,
+    # und das Modell wird erneut bezahlt. Die Attrappe bleibt absichtlich stehen: genau
+    # das ist der Fall „dauerhaft scheiterndes Schreiben" aus der Messung im Code.
+    correct._glossary("Demo", "kontext")
+    assert len(aufrufe) == 3, "ohne Merker baut jeder Folgelauf das Glossar erneut"
+    assert len(getroffen) == 2, "und scheitert dabei erneut am Merker"
 
 
 def test_glossary_snapshot_detects_new_input_during_generation(project, monkeypatch):

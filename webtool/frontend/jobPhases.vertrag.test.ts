@@ -640,7 +640,11 @@ const INVENTAR: Record<string, Eintrag> = {
   },
   // Der Snapshot-Merker ist eine Optimierung — sein Fehlschlag beendet den Lauf NICHT,
   // darf aber auch nicht schweigen: ohne Merker baut jeder Folgelauf das korpusweite
-  // Glossar neu (bezahlter Aufruf) und sperrt dabei jede Aufnahme gegen Loeschen.
+  // Glossar neu, ein bezahlter Aufruf je Lauf (gemessen in
+  // `test_gescheitertes_snapshot_schreiben_reisst_den_lauf_nicht_ab`, mit
+  // Negativkontrolle). Dass er dabei auch jede Aufnahme gegen Loeschen sperrt, ist aus
+  // dem korpusweiten `[active]`-Druck HERGELEITET und nicht gemessen — hier stand es
+  // bis PR #628 als Tatsache.
   // `gelesen_anderswo`, nicht `ignoriert`: der Platzhalter traegt zur Laufzeit den
   // Ausnahmetyp (OSError, ValueError), und damit faellt die Zeile unter den generischen
   // /Error/-Filter des Toasts — genau wie der Nachbar darunter. `ignoriert` waere hier

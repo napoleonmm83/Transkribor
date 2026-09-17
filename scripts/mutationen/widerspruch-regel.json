@@ -197,6 +197,18 @@
       "gruen": [
         "test_force_baut_das_glossar_neu"
       ]
+    },
+    {
+      "id": "612-P ein Glossar OHNE Merker gilt als passend — der Folgelauf spart den bezahlten Neubau",
+      "datei": "webtool/correct.py",
+      "von": "    if not force and cached.get(\"_source_snapshot\") == snapshot:",
+      "nach": "    if not force and cached and cached.get(\"_source_snapshot\", snapshot) == snapshot:  # MUTATION: fehlender Merker gilt als passend",
+      "rot": [
+        "test_gescheitertes_snapshot_schreiben_reisst_den_lauf_nicht_ab"
+      ],
+      "gruen": [
+        "test_force_baut_das_glossar_neu"
+      ]
     }
   ]
 }
