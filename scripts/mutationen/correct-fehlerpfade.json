@@ -99,7 +99,7 @@
       "von": "                    global _letzte_fehler\n                    _letzte_fehler += 1",
       "nach": "                    pass",
       "rot": [
-        "test_run_bilanz_nennt_nicht_den_anbieter_bei_echtem_fehler"
+        "test_run_bilanz_nennt_nicht_den_anbieter_bei_kaputter_roh_json"
       ],
       "gruen": [
         "test_run_survives_falsch_geformtes_raw"
@@ -111,7 +111,7 @@
       "von": "        global _letzte_fehler\n        _letzte_fehler += 1",
       "nach": "        pass",
       "rot": [
-        "test_run_bilanz_nennt_nicht_den_anbieter_bei_echtem_fehler"
+        "test_run_bilanz_nennt_nicht_den_anbieter_bei_kaputter_correction"
       ],
       "gruen": [
         "test_apply_meldet_kaputte_correction_statt_abzustuerzen"

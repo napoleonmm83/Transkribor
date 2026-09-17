@@ -1050,6 +1050,58 @@ def test_cli_apply_endet_gruen_wenn_geschrieben_wurde(project, capsys):
     assert "edit.json + md" in capsys.readouterr().out
 
 
+def test_run_bilanz_nennt_nicht_den_anbieter_bei_kaputter_roh_json(project, monkeypatch, capsys):
+    """Der PREP-Weg — und er ist der, den dieser Umbau selbst verbreitert hat.
+
+    Seit `prep_single` die Typfehler faengt, endet eine kaputte Roh-JSON als `False` statt als
+    Wurf: NICHT mehr im `except` von `correct_ai_single`, wo der Zaehler zuerst allein sass.
+    Gemessen von beiden Pruefern — der Lauf endete sauber mit einer Falschauskunft ueber einen
+    Anbieter, der fuer diese Datei nie gefragt wurde.
+    """
+    _root, t = project
+    (t / "S1.json").write_text(json.dumps({"language": "de", "segments": "kaputt"}),
+                               encoding="utf-8")
+
+    def fake(prompt, workdir):
+        if "_glossar.json" in prompt:
+            return
+        _dump(re.search(r"(\S+\.correction\.json)", prompt).group(1),
+              {"base": "S1", "segments": [{"id": 0, "speaker": "Interviewer", "text": "ok"}]})
+    monkeypatch.setattr(correct, "_run_claude", fake)
+
+    with pytest.raises(SystemExit) as ei:
+        correct.main(["run", "Demo", "--no-verify"])
+    out = capsys.readouterr().out
+    assert ei.value.code != 0
+    assert "prep: SKIP S1" in out, out
+    assert "KI-Anbieter nicht erreichbar" not in out, out
+    assert "siehe die Fehlerzeilen oben" in out, out
+
+
+def test_run_bilanz_nennt_nicht_den_anbieter_bei_kaputter_correction(project, monkeypatch,
+                                                                     capsys):
+    """Der KAPUTT-Weg — die Stelle, an der zwei Teile dieses Umbaus einander aufhoben.
+
+    `cmd_apply` faengt eine unbrauchbare `correction.json` jetzt selbst und gibt `"missing"`
+    zurueck, statt zu werfen — der Fall verliesse damit genau die Zaehlung, die der Zusatzfund
+    eingebaut hat. Die liegengebliebene Datei kommt ueber den reuse-Pfad, ohne dass der
+    Anbieter ueberhaupt gefragt wird; `_valid_correction` winkt sie durch (es prueft keine
+    Elementtypen).
+    """
+    _root, t = project
+    (t / "S1.correction.json").write_text('{"segments": [{"id": 0, "text": 5}]}',
+                                          encoding="utf-8")
+    monkeypatch.setattr(correct, "_run_claude", lambda prompt, workdir: None)
+
+    with pytest.raises(SystemExit) as ei:
+        correct.main(["run", "Demo", "--no-verify"])
+    out = capsys.readouterr().out
+    assert ei.value.code != 0
+    assert "KAPUTT S1" in out, out
+    assert "KI-Anbieter nicht erreichbar" not in out, out
+    assert "siehe die Fehlerzeilen oben" in out, out
+
+
 def test_run_bilanz_nennt_nicht_den_anbieter_bei_echtem_fehler(project, monkeypatch, capsys):
     """Die Schlusszeile beschuldigte den KI-Anbieter, auch wenn der sauber geliefert hatte.
 
