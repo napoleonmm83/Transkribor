@@ -8,7 +8,8 @@
 
 `run` fährt den ganzen Korrektur-Ablauf per headless `claude -p` (Claude-Code-Abo, kein
 API-Key). `prep`/`apply` sind deterministisches Python; der LLM-Schritt liegt dazwischen
-(entweder `run` hier oder der Workflow tools/correct_label.mjs).
+(entweder `run` hier oder von Hand inline, siehe CLAUDE.md). Die Prompts hier sind die
+massgebliche Regelquelle fuer beide Wege.
 """
 import argparse
 import contextlib
@@ -1974,8 +1975,8 @@ def main(argv=None):
         # Der Rueckgabewert fiel hier ersatzlos weg, und seit `cmd_apply` eine unbrauchbare
         # correction.json FAENGT statt zu werfen, ist das ein stiller Erfolg auf einem Lauf,
         # der nichts geschrieben hat: vorher Traceback und Exitcode 1, danach 0. Gemessen von
-        # beiden Pruefern. `tools/correct_label.mjs` nennt genau diesen Aufruf als
-        # Assemblierschritt — ein verketteter Aufrufer lief damit weiter.
+        # beiden Pruefern. Wer `apply` als Assemblierschritt AUFRUFT — ein Skript, eine
+        # Pipeline, ein Ablauf aus CLAUDE.md — lief damit weiter, statt zu stoppen.
         #
         # `"missing"` und nur das: die drei `"skipped"`-Ausgaenge sind die Schutzpfade dieses
         # Repos (`human_edited`, unlesbare `edit.json`, Handarbeit unter der Sperre) und heissen
