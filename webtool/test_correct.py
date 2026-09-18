@@ -1105,8 +1105,9 @@ def test_cli_apply_endet_rot_wenn_nichts_geschrieben_wurde(project, capsys):
 
     Vor dem Fang endete eine kaputte `correction.json` hier im Traceback, also mit Exitcode 1.
     Seit `cmd_apply` sie faengt, war es eine 0 auf einem Lauf, der nichts geschrieben hat —
-    `tools/correct_label.mjs` nennt genau diesen Aufruf als Assemblierschritt, ein verketteter
-    Aufrufer lief damit weiter. Beide Pruefer haben es unabhaengig gemessen.
+    wer `apply` als Assemblierschritt aufruft (ein Skript, eine Pipeline, der Handweg aus
+    CLAUDE.md), lief damit weiter statt zu stoppen. Beide Pruefer haben es unabhaengig
+    gemessen.
     """
     _root, t = project
     (t / "S1.correction.json").write_text('{"segments": [{"id": 0, "text": 5}]}',
