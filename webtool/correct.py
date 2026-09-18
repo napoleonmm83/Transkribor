@@ -273,10 +273,17 @@ def prep_single(project: str, base: str) -> bool:
         # Deshalb nennt die Zeile unten den Ausnahmetyp — `prep: SKIP x (AttributeError: …)`
         # ist ein Datenproblem, `prep: SKIP x (NameError: …)` waere ein Fehler von uns.
         #
-        # GETRAGENE GRENZE (kalter Plan-Review, 18 Formen ausgefuehrt): zwei JSON-gueltige
-        # Formen entkommen weiter — eine Zahl mit >= 309 Stellen (`OverflowError` beim
-        # Formatieren) und eine tausendfach verschachtelte Struktur (`RecursionError`).
-        # Whisper erzeugt beides nicht; "jeder kaputte Datensatz" gilt also nicht woertlich.
+        # GETRAGENE GRENZE, und sie steht als TEST da statt als Zahl: die Reichweite dieses
+        # Filters fuehrt `test_prep_single_ueberspringt_jede_falsch_geformte_roh_json` vor (elf
+        # JSON-gueltige, unbrauchbare Formen), die Grenze
+        # `test_prep_single_getragene_grenze_die_riesige_zahl_entkommt` — eine Zahl mit >= 309
+        # Stellen wirft `OverflowError` beim Formatieren, ausserhalb dieses Filters, und der
+        # Lauf stirbt daran wie zuvor. Dasselbe gilt fuer eine tausendfach verschachtelte
+        # Struktur (`RecursionError`), die hier bewusst keinen Test hat: sie liesse sich nur
+        # nahe am Rekursionslimit des Interpreters herstellen.
+        # „jeder kaputte Datensatz" gilt also nicht woertlich. Ob Whisper solche Werte je
+        # schreibt, steht hier NICHT — das waere eine Aussage ueber ein fremdes Werkzeug, die
+        # niemand gemessen hat (Vorab-Check des Bots, zu Recht).
         print(f"prep: SKIP {base} ({type(e).__name__}: {_einzeilig(e)})", flush=True)
         return False
 

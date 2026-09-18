@@ -907,6 +907,57 @@ def test_run_survives_falsch_geformtes_raw(project, monkeypatch, capsys):
     assert "prep: SKIP S2" in out, out
 
 
+@pytest.mark.parametrize("roh", [
+    {"segments": "kaputt"},                                    # str statt Liste
+    {"segments": {"id": 0}},                                   # dict statt Liste
+    {"segments": None},                                        # null
+    {"segments": [5]},                                         # Zahl statt Segment
+    {"segments": [None]},                                      # null statt Segment
+    {"segments": [{"id": 0, "words": "kaputt"}]},              # str statt Wortliste
+    {"segments": [{"id": 0, "words": [5]}]},                   # Zahl statt Wort
+    {"segments": [{"id": 0, "words": [{"word": 5}]}]},         # Zahl als Wort
+    {"segments": [{"id": 0, "words": [{"word": " x", "probability": "hoch"}]}]},   # Text
+    {"segments": [{"id": 0, "words": [{"word": " x", "probability": None}]}]},     # null
+    {"segments": [{"id": 0, "text": 5}]},                      # Zahl als Text
+])
+def test_prep_single_ueberspringt_jede_falsch_geformte_roh_json(project, roh):
+    """Der BELEG fuer die Reichweite des Filters — vorher stand sie als Zahl im Kommentar.
+
+    Der Vorab-Check des Bots hatte recht: „18 Formen geprueft" war eine Messung ohne Artefakt
+    im Repo (sie lag im Scratchpad eines Pruefers). Eine Zahl, die niemand nachfahren kann, ist
+    in drei Monaten eine Behauptung. Jetzt steht die Reichweite als Liste da und laeuft mit.
+
+    Alle elf parsen als JSON und sind trotzdem unbrauchbar; keine darf werfen, jede muss als
+    uebersprungen gelten.
+    """
+    _root, t = project
+    (t / "S1.json").write_text(json.dumps({"language": "de", **roh}), encoding="utf-8")
+
+    assert correct.prep_single("Demo", "S1") is False
+    assert not (t / "S1.tagged.txt").exists()
+
+
+def test_prep_single_getragene_grenze_die_riesige_zahl_entkommt(project):
+    """Die GRENZE des Filters, ebenfalls als Test statt als Behauptung.
+
+    `-10**400` als Wahrscheinlichkeit ist kleiner als die Schwelle, also wird formatiert — und
+    `f"{prob:.2f}"` auf einem int dieser Groesse wirft `OverflowError`, der ausserhalb des
+    Filters liegt. Der Lauf stirbt daran wie vorher.
+
+    Der Test haelt die Grenze fest, statt sie zu beschreiben: wer den Filter spaeter weitet,
+    bekommt hier ein rotes Ergebnis und entscheidet bewusst. Was der Kommentar NICHT mehr
+    behauptet: dass Whisper solche Werte nie schreibt — das ist eine Aussage ueber ein fremdes
+    Werkzeug, die hier niemand gemessen hat.
+    """
+    _root, t = project
+    (t / "S1.json").write_text(
+        '{"language": "de", "segments": [{"id": 0, "words": '
+        '[{"word": " x", "probability": -1' + "0" * 400 + '}]}]}', encoding="utf-8")
+
+    with pytest.raises(OverflowError):
+        correct.prep_single("Demo", "S1")
+
+
 def test_prep_single_ueberspringt_falsch_geformte_diar_json(project, monkeypatch):
     """Zweite Quelle derselben Klasse, eine Zeile neben der ersten.
 
