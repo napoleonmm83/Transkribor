@@ -777,7 +777,8 @@ Einstellungen. Nicht erkannte Fehler zeigt Transkribor mit dem technischen Fehle
 Bisher konnte eine Aufnahme, deren Transkriptdatei zwar lesbar, aber innen durcheinander war,
 den Korrekturlauf mitten im Betrieb abbrechen — ohne Schlussmeldung, und die Aufnahmen, die
 schon fertig waren, wurden dir nie gemeldet. Jetzt wird diese eine Aufnahme übersprungen und
-beim Namen genannt, alle anderen laufen durch.
+beim Namen genannt; die übrigen werden ganz normal weiterbearbeitet und melden ihr Ergebnis
+wie immer — jede für sich, mit denselben Ausgängen wie oben beschrieben.
 
 **Und zwei Meldungen sagen dir jetzt die Wahrheit statt einer bequemen Vermutung.** Konnte
 Transkribor nur die Markdown-Fassung nicht schreiben, gilt der Lauf nicht mehr als
