@@ -3,6 +3,13 @@
 Datum: 2026-07-06
 Status: freigegeben (Design), bereit für Implementierungsplan
 
+> **Stand-Hinweis (2026-09-18):** Dieses Dokument beschreibt den Entwurfsstand vom 06.07.2026.
+> Überholt ist darin der Korrekturpfad `tools/correct_label.mjs` (§2 Punkt 7, §3) — er ist mit
+> Issue #619 entfernt worden, weil er keine der seither entstandenen Korrektur-Regeln trug.
+> Maßgeblich sind heute `python -m webtool.correct run` und, als Notweg, die inline ausgeführte
+> Korrektur nach den Prompts in `webtool/correct.py`; der Ablauf steht in der Projektanleitung.
+> Der Rest der Spec gilt unverändert.
+
 ## 1. Kontext & Ziel
 
 Transkribor transkribiert Interview-Audio (oft **Schweizerdeutsch / Bündnerdeutsch**) mit
