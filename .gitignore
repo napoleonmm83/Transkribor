@@ -55,6 +55,28 @@ eval/
 # NAMENTLICH statt als Muster `.tmp*` oder `*-tmp`: dieselbe Begruendung wie beim
 # Guardian-Block weiter unten — ein Sammelmuster naehme still mit, was spaeter
 # zufaellig so heisst. Fuehrender `/`: verankert auf die Wurzel.
+#
+# DER PREIS, und er ist groesser als die ripgrep-Zeile beim Guardian-Block:
+# der KALT-REVIEW-RIEGEL sieht diese vier Ordner ab jetzt ebenfalls nicht mehr.
+# Er bildet seine Dateimenge aus `git ls-files --others --exclude-standard`
+# (kaltreview-gate-check.sh:1416) — also genau dem Schalter, der diese Datei
+# respektiert. Vorher zaehlte er jede Datei darin einzeln (daher das Zeitlimit,
+# das dieser Block behebt); nachher ist er dort blind, und zwar dauerhaft und
+# fuer ALLES, was kuenftig hineingeschrieben wird. Die Pruefung vor dem
+# Aufraeumen (4735 Treffer, 0 ausserhalb pytest-Fixtures) war eine EINMALIGE
+# Kontrolle des Altbestands, keine fortlaufende Zusicherung.
+# Was das konkret oeffnet: ein Mutationsrest, ein Fixture mit echten Daten oder
+# ein fehlgeleiteter Schreibzugriff in einem dieser Ordner bekommt keinen
+# kalten Blick — und faellt auch dem Menschen nicht auf, weil `git status`
+# schweigt. Bewusst hingenommen, weil dieselben Ordner sonst JEDEN Lauf des
+# Riegels ueber sein Zeitlimit treiben; benannt, damit es niemand spaeter
+# entdecken muss. Gefunden vom Subagent-Review, nicht vom Autor.
+#
+# Verankerung auf die Wurzel heisst auch: taucht kuenftig `webtool/.tmp/` oder
+# `scripts/.pytest-tmp/` auf, greift hier nichts, und das Laufzeitproblem kaeme
+# lautlos zurueck. Kein aktueller Fall (`find . -type d -iname "*tmp*"` findet
+# ausserhalb von eval/ und .code-guardian-evidence/ keinen), aber der Grund,
+# warum eine wiederkehrende Messung besser waere als diese Liste.
 /.tmp/
 /.pytest-tmp/
 /.pytest-security-tmp/

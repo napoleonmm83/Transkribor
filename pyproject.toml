@@ -29,6 +29,29 @@ target-version = "py313"
 # 2026-09-03). Ohne den Ausschluss urteilt `scripts/ruff_riegel.py` auf dem Rechner
 # des Entwicklers anders als in der CI — und ein Riegel, der je Ort anders urteilt,
 # ist keiner (dieselbe Begruendung wie beim exakten Fassungs-Pin oben).
+#
+# WAS HIER BEWUSST NICHT STEHT, und warum das eine Annahme ist: `eval/` und die
+# Wegwerfordner aus der .gitignore (`.tmp/`, `.pytest-tmp/`,
+# `.pytest-security-tmp/`, `.cg_tmp_efficiency/`) fehlen in dieser Liste — sie
+# werden trotzdem uebersprungen, weil ruff von sich aus die .gitignore
+# respektiert. Das traegt heute (nachgemessen 2026-09-18: `ruff_riegel.py`
+# EXIT=0 ohne die 207 Befunde, die vorher aus diesen Ordnern kamen), haengt
+# aber an einem DEFAULT und nicht an dieser Datei. Kippt er — ein
+# ruff-Update, ein `--no-respect-gitignore` in einem kuenftigen Aufruf —, sind
+# die Ordner wieder drin, und lokal und CI urteilen wieder verschieden.
+# Der mypy-Block weiter unten macht es andersherum und nennt `eval` ausdruecklich;
+# die beiden Werkzeuge stehen hier also auf verschiedenen Fuessen. Bewusst nicht
+# angeglichen, weil ein Ausschluss, der nichts ausnimmt, eine Gefahr behauptet,
+# die es nicht gibt — aber benannt, damit es beim naechsten Zweifel gemessen
+# statt geraten wird. Gemessen am 2026-09-18, derselbe Baum, nur der Schalter
+# anders: `ruff check .` meldet **131** Befunde, `ruff check .
+# --no-respect-gitignore` meldet **896**. Die 765 Differenz sind genau das, was
+# heute still am Default haengt statt an dieser Liste.
+# (Die Zahl aus der Schlusszeile `Found N errors.` nehmen — ein Zaehlmuster auf
+# `datei:zeile:spalte` trifft NICHT: ruff schreibt die Fundstelle seit laengerem
+# als `--> datei:zeile:spalte` in eine eigene Zeile, und ein solcher Zaehler
+# meldet 0 fuer beide Laeufe. Genau so passiert, beim Schreiben dieses Absatzes.)
+# Gefunden vom Subagent-Review, nicht vom Autor.
 extend-exclude = [".venv", "node_modules", "webtool/frontend", ".code-guardian-evidence"]
 
 [tool.ruff.lint]
