@@ -37,7 +37,7 @@ hat. Lesbar, aber unschön — das ist Absicht.
 - Lässt sich die Merkdatei der gemeinsamen Namensliste nicht schreiben — etwa weil die Festplatte voll ist —, bricht der Korrekturlauf nicht mehr ab, sondern sagt es und macht weiter.
 - Wartende Aufnahmen bleiben während der gemeinsamen Glossarerstellung korrekt in der Korrekturschlange sichtbar.
 - Nach geändertem Projektwissen verwendet die nächste Korrektur keine veralteten KI-Ergebnisse weiter. Schlägt die neue Korrektur fehl, bleibt die bisherige Editorfassung erhalten.
-- Eine beschädigte Aufnahme bricht den Korrekturlauf nicht mehr ab: sie wird übersprungen, alle übrigen Aufnahmen werden fertig korrigiert und gemeldet.
+- Eine beschädigte Aufnahme bricht den Korrekturlauf nicht mehr ab: sie wird übersprungen und beim Namen genannt, und der Lauf arbeitet mit den übrigen geeigneten Aufnahmen weiter.
 - Konnte nur die Markdown-Fassung nicht geschrieben werden, gilt die Korrektur nicht mehr als fehlgeschlagen: das Ergebnis bleibt erhalten, und der Lauf sagt dazu, dass die Markdown-Fassung veraltet sein kann.
 - Scheitert ein Korrekturlauf, nennt die Schlussmeldung den KI-Anbieter nur noch dann als Ursache, wenn er wirklich nichts geliefert hat — sonst verweist sie auf die Fehlerzeilen des Laufs.
 
