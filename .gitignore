@@ -50,8 +50,13 @@ eval/
 # ab, und der Kalt-Review-Riegel lief in sein 30-Sekunden-Limit, weil er jede
 # unversionierte Datei einzeln anfasst (gemessen 168,9 ms je Datei; 140 953 der
 # 147 506 Dateien lagen allein in .tmp/). Nach dem Aufraeumen: 58 Dateien.
-# Die CI war nie betroffen — lokal und CI urteilten damit verschieden, und genau
+# Die CI kann diese Ordner per Konstruktion nicht sehen: sie sind untracked, und
+# ein frischer Checkout holt nur Getracktes — das ist der Mechanismus, nicht eine
+# Auswertung von CI-Laeufen. Lokal und CI urteilten damit verschieden, und genau
 # das ist der Grund fuer diesen Block (T-174, Entscheidung Marcus 2026-09-18).
+# Nachpruefbar gemacht statt behauptet: scripts/test_ignoriermuster.py bindet
+# beide Zusagen an ihre Wirkung und ist mutationsgeprueft (ein entferntes Muster
+# und ein zu weiter mypy-Ausschluss machen ihn nachweislich rot).
 # NAMENTLICH statt als Muster `.tmp*` oder `*-tmp`: dieselbe Begruendung wie beim
 # Guardian-Block weiter unten — ein Sammelmuster naehme still mit, was spaeter
 # zufaellig so heisst. Fuehrender `/`: verankert auf die Wurzel.
@@ -68,9 +73,11 @@ eval/
 # Was das konkret oeffnet: ein Mutationsrest, ein Fixture mit echten Daten oder
 # ein fehlgeleiteter Schreibzugriff in einem dieser Ordner bekommt keinen
 # kalten Blick — und faellt auch dem Menschen nicht auf, weil `git status`
-# schweigt. Bewusst hingenommen, weil dieselben Ordner sonst JEDEN Lauf des
-# Riegels ueber sein Zeitlimit treiben; benannt, damit es niemand spaeter
-# entdecken muss. Gefunden vom Subagent-Review, nicht vom Autor.
+# schweigt. Bewusst hingenommen: mit diesen Ordnern im Baum riss der Riegel sein
+# Limit in elf protokollierten Faellen ueber drei Sitzungen (30 268 bis 30 492 ms
+# bei 30 000 ms), und ein Lauf gegen den vollen Baum wurde nach ueber 560 s
+# abgebrochen — nach dem Aufraeumen sind es 20,8 s. Benannt, damit es niemand
+# spaeter entdecken muss. Gefunden vom Subagent-Review, nicht vom Autor.
 #
 # Verankerung auf die Wurzel heisst auch: taucht kuenftig `webtool/.tmp/` oder
 # `scripts/.pytest-tmp/` auf, greift hier nichts, und das Laufzeitproblem kaeme
