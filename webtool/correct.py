@@ -8,8 +8,10 @@
 
 `run` fährt den ganzen Korrektur-Ablauf per headless `claude -p` (Claude-Code-Abo, kein
 API-Key). `prep`/`apply` sind deterministisches Python; der LLM-Schritt liegt dazwischen
-(entweder `run` hier oder von Hand inline, siehe CLAUDE.md). Die Prompts hier sind die
-massgebliche Regelquelle fuer beide Wege.
+(entweder `run` hier oder von Hand inline, siehe CLAUDE.md). Die Prompts dieses Moduls sind
+die massgebliche Regelquelle fuer beide Wege — mitsamt dem, was sie einbetten
+(`sprachen.ZIEL_MEHRSPRACHIG`) und was die Prompt-WAHL steuert (`projekt.tiefe_effektiv`,
+`_ziel_dialekt`). Nur `run` wertet diese Wahl aus; der Handweg nimmt immer das Voll-Prompt.
 """
 import argparse
 import contextlib
