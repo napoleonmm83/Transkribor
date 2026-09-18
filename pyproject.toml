@@ -100,7 +100,19 @@ no_site_packages = true
 #
 # `build` steht hier bewusst NICHT: der Ordner traegt getrackten Quelltext
 # (build/marke.py, build/test_bilder.py) und liegt in pytests `testpaths`.
-exclude = "^(\\.venv|node_modules|webtool/frontend|dist)/"
+#
+# `eval` kam am 2026-09-18 dazu, aus exakt demselben Grund und mit demselben
+# Schadensbild: `eval/dialekt-2026-09-14/baseline-correct.py` traegt relative
+# Importe ohne Elternmodul, und mypy brach mit
+#     Found 12 errors in 1 file (errors prevented further checking)   rc 2
+# ab, ohne eine einzige getrackte Datei anzusehen. Der Ordner ist gitignoriert
+# (.gitignore:44) und existiert in der CI nie — ohne diese Zeile urteilt also
+# wieder nur die CI, waehrend der Entwicklerrechner schweigt. Der Riegel selbst
+# hat sich dabei richtig verhalten: er meldete MESSFEHLER statt eines Urteils.
+# Gegenprobe zur gepruefeten Menge: `git ls-files '*.py' | grep -v webtool/frontend`
+# = 77, und `eval` ist darin nicht enthalten — der Ausschluss nimmt dem Lauf
+# also nichts weg, was er pruefen sollte.
+exclude = "^(\\.venv|node_modules|webtool/frontend|dist|eval)/"
 
 [tool.pytest.ini_options]
 # `build` steht in pytests eingebauter norecursedirs-Liste und wird ohne

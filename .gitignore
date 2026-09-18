@@ -43,6 +43,23 @@ CLAUDE.md
 # Dieselbe Regel wie fuer projekte/ — bleibt lokal, wird nie committet.
 eval/
 
+# Wegwerfordner der Testlaeufe. Sie entstehen von selbst neu, und solange sie
+# unversioniert HERUMLIEGEN statt ignoriert zu sein, kosten sie doppelt:
+# `scripts/ruff_riegel.py` zaehlte am 2026-09-17 daraus 207 Phantombefunde (207 von
+# 207 — ausserhalb NULL), `scripts/mypy_riegel.py` stuerzte darauf mit PermissionError
+# ab, und der Kalt-Review-Riegel lief in sein 30-Sekunden-Limit, weil er jede
+# unversionierte Datei einzeln anfasst (gemessen 168,9 ms je Datei; 140 953 der
+# 147 506 Dateien lagen allein in .tmp/). Nach dem Aufraeumen: 58 Dateien.
+# Die CI war nie betroffen — lokal und CI urteilten damit verschieden, und genau
+# das ist der Grund fuer diesen Block (T-174, Entscheidung Marcus 2026-09-18).
+# NAMENTLICH statt als Muster `.tmp*` oder `*-tmp`: dieselbe Begruendung wie beim
+# Guardian-Block weiter unten — ein Sammelmuster naehme still mit, was spaeter
+# zufaellig so heisst. Fuehrender `/`: verankert auf die Wurzel.
+/.tmp/
+/.pytest-tmp/
+/.pytest-security-tmp/
+/.cg_tmp_efficiency/
+
 # Artefakte von scripts/osv_freeze.py (#284): das aufgeloeste Abbild driftet (wird je
 # Lauf in der CI neu erzeugt) und die pip-Reports sind Wegwerfzeug vom Dry-Run.
 requirements-resolved.txt
