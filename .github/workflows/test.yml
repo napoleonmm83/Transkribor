@@ -540,8 +540,15 @@ jobs:
     # den Lauf, nicht ueber die Waechter (dieselbe Grenze wie bei `--geaendert` gegen `--alle`).
     #
     # Der Anlass, gemessen am Lauf 35438398886: ein PR, der den TREIBER anfasst, waehlt jeden
-    # Plan (`GLOBALE_PFADE`) — 54:22 in einem Job. Vier Teile: laengster 25:21. Faktor 2,1;
-    # die Rechnung samt der drei verworfenen Vergaben steht im Docstring von `teile()`.
+    # Plan (`GLOBALE_PFADE`) — 54:22 in einem Job (Lauf 35438398886, Wanduhr des Jobs).
+    #
+    # NACHGEMESSEN an der echten CI, Lauf 35443162073, vier Teile:
+    #     1/4 10,9 min · 2/4 21,8 min · 3/4 6,8 min · 4/4 13,9 min
+    # Laengster also 21,8 min, Faktor 2,5. Die Vorhersage aus den Einzelzeiten lag bei
+    # 24:41 — drei der vier Teile trafen sie auf eine halbe Minute, der laengste kam
+    # 2,9 min DARUNTER heraus. Das Modell ist damit konservativ, nicht geschoent; wer es
+    # weiterverwendet, darf ihm nach unten trauen und nicht nach oben.
+    # Die Rechnung samt der drei verworfenen Vergaben steht im Docstring von `teile()`.
     # Wer die Zahl hier aendert, aendert sie an DREI Stellen: der Matrix, dem Jobnamen eine
     # Zeile darueber, und den zwei `--teil …/4` weiter unten. Eine Matrix mit weniger
     # Eintraegen als dem Nenner ist dabei der stille Schaden: ganze Teile liefen NIE, und
@@ -594,7 +601,7 @@ jobs:
     # nicht mehr traegt. Wer einen weiteren E2E-Plan anlegt, misst hier nach.
     #
     # SEIT DER AUFTEILUNG gilt der Deckel je TEIL, nicht mehr fuer die ganze Serie: gemessen
-    # 25:21 fuer den laengsten, der Faktor ist damit von 1,1x auf 2,4x gestiegen. Bewusst
+    # 21,8 min fuer den laengsten, der Faktor ist damit von 1,1x auf 2,8x gestiegen. Bewusst
     # nicht mitgesenkt — ein Deckel ist hier die Notbremse gegen einen Haenger, und ein
     # einzelner Plan kann 16:28 kosten; zu eng gesetzt riesse er bei einem langsamen Laeufer
     # einen gesunden Lauf ab, und das sieht von aussen aus wie ein Befund.
