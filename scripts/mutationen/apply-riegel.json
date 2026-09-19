@@ -1,5 +1,5 @@
 {
-  "test": "python -m pytest webtool/test_correct.py -k \"verwirft_eine_korrektur or warnt_wenn_ein_getroffenes or warnt_NICHT_bei_einer_gesunden or faerbt_ein_transkript_OHNE or erlaubt_cmd_apply_das_verwerfen or raeumt_den_resume_anker_nur_mit_erlaubnis or zaehlt_eine_doppelte_id\" -q",
+  "test": "python -m pytest webtool/test_correct.py -k \"verwirft_eine_korrektur or warnt_wenn_ein_getroffenes or warnt_NICHT_bei_einer_gesunden or faerbt_ein_transkript_OHNE or erlaubt_cmd_apply_das_verwerfen or raeumt_den_resume_anker_nur_mit_erlaubnis or zaehlt_eine_doppelte_id or urteilt_NICHT_ueber_einen\" -q",
   "pfade": [
     "webtool/correct.py",
     "webtool/test_correct.py"
@@ -69,8 +69,8 @@
     {
       "id": "T199-6 der Resume-Anker bleibt liegen und macht die Aufnahme dauerhaft rot",
       "datei": "webtool/correct.py",
-      "von": "        if verwerfe_unpassende:",
-      "nach": "        if False:  # T199-6: Resume-Anker bleibt liegen",
+      "von": "        if verwerfe_unpassende:\n            with contextlib.suppress(OSError):\n                os.remove(cpath)\n        print(f\"apply: KAPUTT {base} (Korrektur trifft kein Segment der Aufnahme: \"",
+      "nach": "        print(f\"apply: KAPUTT {base} (Korrektur trifft kein Segment der Aufnahme: \"  # T199-6",
       "rot": [
         "test_apply_raeumt_den_resume_anker_nur_mit_erlaubnis_weg"
       ],
@@ -100,6 +100,30 @@
       ],
       "gruen": [
         "test_apply_warnt_NICHT_bei_einer_gesunden_korrektur"
+      ]
+    },
+    {
+      "id": "T199-9 eine Korrektur, die eine ANDERE Aufnahme nennt, wird wieder angewandt",
+      "datei": "webtool/correct.py",
+      "von": "    if isinstance(fremd, str) and fremd.strip() and fremd.strip() != base:",
+      "nach": "    if False:  # T199-9: Basisnamen-Wache abgeschaltet",
+      "rot": [
+        "test_apply_verwirft_eine_korrektur_die_eine_ANDERE_aufnahme_nennt"
+      ],
+      "gruen": [
+        "test_apply_urteilt_NICHT_ueber_einen_unbekannten_basisnamen"
+      ]
+    },
+    {
+      "id": "T199-10 die Wache urteilt auch ueber einen UNBEKANNTEN Basisnamen — gesunde Korrekturen fallen durch",
+      "datei": "webtool/correct.py",
+      "von": "    if isinstance(fremd, str) and fremd.strip() and fremd.strip() != base:",
+      "nach": "    if fremd != base:  # T199-10: urteilt auch ueber fehlende/leere/fremdtypige Felder",
+      "rot": [
+        "test_apply_urteilt_NICHT_ueber_einen_unbekannten_basisnamen"
+      ],
+      "gruen": [
+        "test_apply_verwirft_eine_korrektur_die_eine_ANDERE_aufnahme_nennt"
       ]
     }
   ]
