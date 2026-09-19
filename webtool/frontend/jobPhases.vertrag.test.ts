@@ -332,7 +332,17 @@ const INVENTAR: Record<string, Eintrag> = {
     art: 'gelesen', beispiel: '  ↷ A · Block 1/4 schon vorhanden', basis: 'A',
     vor: ['  A: 540 Segmente → 4 Blöcke à max. 150'], nach: ['→ Korrigiere A · Block 2/4 …'],
   },
-  'apply: {} -> edit.json + md ({} Segmente)': { art: 'gelesen', beispiel: 'apply: A -> edit.json + md (12 Segmente)', basis: 'A' },
+  'apply: {} -> edit.json + md ({} Segmente, ': {
+    art: 'gelesen',
+    beispiel: 'apply: A -> edit.json + md (12 Segmente, 7 korrigiert)',
+    basis: 'A',
+    notiz: 'Die zweite Zahl kam mit T-199 dazu und ist der Punkt: die erste zaehlt die '
+      + 'Segmente der edit.json, nicht die ANGEWANDTEN Korrekturen — daran war der stillste '
+      + 'Fall (ids passen nicht, die ganze Korrektur verfaellt) nicht zu erkennen. Der '
+      + 'Parser-Zweig ^apply: (.+) -> edit\\.json matcht nur bis edit.json und bleibt '
+      + 'unberuehrt; der Schluessel endet hier am Komma, weil die Ernte nur das ERSTE '
+      + 'Fragment eines ueber zwei Zeilen verteilten f-Strings sieht.',
+  },
   'apply: {} -> edit.json geschrieben, md-Export fehlgeschlagen ': {
     art: 'gelesen',
     beispiel: 'apply: A -> edit.json geschrieben, md-Export fehlgeschlagen (OSError: kein Platz '
@@ -342,6 +352,19 @@ const INVENTAR: Record<string, Eintrag> = {
       + 'urteilt damit done/edit — richtig so: die edit.json IST geschrieben, nur ihr Export '
       + 'nicht. Bis 17.09.2026 riss ein gescheiterter md-Export die ganze Aufnahme in den '
       + 'Fehlschlag (0/1 bei vollstaendiger edit.json).',
+  },
+  'apply: KAPUTT {} (Korrektur trifft kein Segment der Aufnahme: ': {
+    art: 'gelesen',
+    beispiel: 'apply: KAPUTT A (Korrektur trifft kein Segment der Aufnahme: 0 von 12 '
+      + 'Eintraegen passen zu einer Segment-Kennung) — nicht angewandt, A.correction.json '
+      + 'pruefen',
+    basis: 'A',
+    notiz: 'T-199. Faellt in denselben Zweig wie die Zeile darunter (^apply: KAPUTT (.+) '
+      + '\\(.*\\1\\.correction\\.json pruefen$) und urteilt damit failed — deshalb endet sie '
+      + 'auf dieselbe Form. Der Unterschied zur Nachbarin: dort laedt die correction.json '
+      + 'nicht, hier laedt sie und passt trotzdem nicht zum Roh (ids treffen kein Segment). '
+      + 'Ohne eigenen Eintrag bliebe die Aufnahme nicht im Spinner — der Zweig existiert ja '
+      + '—, aber der Erntetest faende einen unbekannten Schluessel.',
   },
   'apply: KAPUTT {} ({}: {}) — ': {
     art: 'gelesen',
@@ -456,6 +479,16 @@ const INVENTAR: Record<string, Eintrag> = {
   },
   '[autocorrect] KI-Phase uebersprungen — {}': {
     art: 'ignoriert', beispiel: '[autocorrect] KI-Phase uebersprungen — kein KI-Anbieter eingestellt',
+  },
+  '  apply: WARNUNG {} — {} von {} getroffenen ': {
+    art: 'ignoriert',
+    beispiel: '  apply: WARNUNG A — 3 von 12 getroffenen Segmenten ohne Sprecher; der Export '
+      + 'fasst sie als Befragte Person zusammen',
+    notiz: 'T-199, und die Einrueckung ist tragend: die Zeile darf KEIN Datei-Urteil sein. '
+      + 'Das Dokument WIRD geschrieben, unmittelbar danach kommt die Erfolgszeile — ein '
+      + 'terminal() hier verdraengte sie. Zwei Zeichen Einzug halten sie aus beiden '
+      + 'apply-Zweigen heraus (^apply: … ist verankert), auch nach dem Zeilenschnitt in '
+      + 'jobPhases.ts, und der GRUND_FILTER trifft sie nicht (kein FEHLER/Error/Traceback).',
   },
   '  KI-Anbieter: {}': { art: 'ignoriert', beispiel: '  KI-Anbieter: Anthropic (claude-opus-5)' },
   '  claude Timeout nach {}s': { art: 'ignoriert', beispiel: '  claude Timeout nach 600s' },
