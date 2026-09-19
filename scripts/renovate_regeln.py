@@ -135,10 +135,14 @@ WORKFLOW = (
 # `lucide-react` ist die KONTROLLE zu Regel 1: es muss im Sammelbuendel landen,
 # waehrend `@vitejs/plugin-react` seinen eigenen Zweig bekommt. Ohne die Kontrolle
 # koennte die Zusicherung auch dann gruen sein, wenn gar nicht mehr gebuendelt wird.
-# `jsdom` gehoert zu Regel 4 und steht bewusst auf einer ALTEN Fassung: ohne die
-# Regel schlaegt Renovate hier etwas vor, mit ihr nichts. Dieselbe Kontrolle wie
-# oben traegt beide Regeln -- laege lucide-react still, waere auch Regel 4 gruen,
-# ohne dass sie irgendetwas bewiesen haette.
+# `jsdom` gehoert zu Regel 4 und steht bewusst auf einer ALTEN Fassung.
+# GEMESSEN ist davon eine Haelfte: mit der Regel taucht jsdom nicht in der flachen
+# Liste auf, und der markierte Lauf blieb gruen (CI-Lauf 35450463030 vom 19.09.2026,
+# `1 passed, 25 deselected in 52.09s`). Die andere Haelfte -- dass es OHNE die Regel
+# einen Vorschlag gaebe -- ist die Gegentatsache und hat niemand gefahren; sie ist
+# plausibel, weil 30.0.0 hinter 30.1.0 liegt, aber sie ist hier nicht belegt.
+# Dieselbe Kontrolle wie oben traegt beide Regeln -- laege lucide-react still, waere
+# auch Regel 4 gruen, ohne dass sie irgendetwas bewiesen haette.
 PAKET = {
     "name": "wegwerf",
     "private": True,
