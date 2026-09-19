@@ -520,9 +520,16 @@ def cmd_apply(project: str, base: str, force: bool = False, *,
     beide Reviewstufen unabhaengig ausgefuehrt haben: die Loeschung stand zuerst in
     `correct_ai_single` an `== "missing"`, und `"missing"` heisst an fuenf Stellen dieser
     Funktion Verschiedenes — zwei davon meinen NICHT die Korrektur (fehlende Roh-JSON; ein
-    transienter `OSError` beim Lesen des Rohs, den der KAPUTT-Zweig mitfaengt). Gemessen
-    wurde eine einwandfreie, teuer erzeugte Korrektur geloescht, worauf der naechste Lauf die
-    volle KI-Zeit erneut zahlte statt sie wiederzuverwenden.
+    transienter `OSError` beim Lesen des Rohs, den der KAPUTT-Zweig mitfaengt).
+
+    REPRODUKTION (beide Reviewstufen unabhaengig, je Wegwerf-Projekt im tmpdir): eine gueltige
+    `correction.json` anlegen, das Roh-JSON voruebergehend unlesbar machen — durch ein
+    Verzeichnis gleichen Namens ersetzen ergibt `PermissionError`, ein offener Griff
+    `WinError 32` —, dann `correct_ai_single` fahren. Ergebnis vor dieser Aenderung:
+    `apply: KAPUTT …`, Rueckgabe `"missing"`, und `os.path.exists(cpath)` danach `False`.
+    Der naechste Lauf fand keinen Anker und korrigierte neu, wo vorher ein reuse in Sekunden
+    stand. Die Beleglaeufe stehen in `review-t199-neuwege.md` (Fall F) und
+    `review-t199-gegner.md` (Probe B).
     """
     # `global` steht am Funktionsanfang statt im `except` unten. Es gilt ohnehin funktionsweit,
     # aber der zweite Schreiber (der T-199-Riegel) steht TEXTLICH davor und las sich damit wie
@@ -1829,9 +1836,12 @@ def correct_ai_single(project: str, b: str, gjson: str = "", context: str = None
         # ersten Entwurf dieses Fixes und diesem: hier draussen haenge sie am Rueckgabewert,
         # und `"missing"` heisst an fuenf Stellen von `cmd_apply` Verschiedenes — zwei davon
         # meinen nicht die Korrektur (fehlende Roh-JSON; ein transienter `OSError` beim Lesen
-        # des Rohs, den der KAPUTT-Zweig mitfaengt). Beide Reviewstufen haben unabhaengig
-        # ausgefuehrt, dass dabei eine EINWANDFREIE, teuer erzeugte Korrektur geloescht wird
-        # und der naechste Lauf die volle KI-Zeit erneut zahlt. Innen haengt sie am GRUND.
+        # des Rohs, den der KAPUTT-Zweig mitfaengt). Innen haengt sie am GRUND.
+        #
+        # Die Reproduktion steht im Docstring von `cmd_apply` — Roh-JSON voruebergehend
+        # unlesbar machen, `correct_ai_single` fahren, danach `os.path.exists(cpath)` pruefen;
+        # ausgefuehrt in `review-t199-neuwege.md` (Fall F) und `review-t199-gegner.md`
+        # (Probe B).
         #
         # PREIS, benannt: der KAPUTT-Zweig raeumt damit weiterhin nicht auf, sein dauerhaftes
         # Rot bleibt also bestehen. Das ist der Stand vor diesem PR — kein Rueckschritt, aber
