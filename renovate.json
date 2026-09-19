@@ -61,6 +61,41 @@
       "matchPackageNames": ["postgres"],
       "matchUpdateTypes": ["major"],
       "enabled": false
+    },
+    {
+      "description": [
+        "jsdom bleibt auf 30.0.1 — unter 30.1.0 laesst sich ein Radix-Menue pro Dokument nur",
+        "EINMAL oeffnen; jeder weitere Versuch laesst den Trigger auf data-state=closed stehen,",
+        "und es entsteht kein role=menu. Gemessen am 2026-09-19 als A/B ueber eine einzige",
+        "Variable (gleicher Baum, nur jsdom getauscht): dreimal derselbe Trigger in EINEM Test",
+        "ergibt unter 30.0.1 open/closed/open, unter 30.1.0 open/closed/CLOSED. Das kostete",
+        "30 Tests in 4 Dateien (PR #621) und riss den Job Mutationsproben als Folgefehler mit.",
+        "Der Pin sitzt zusaetzlich als exakte Fassung in webtool/frontend/package.json: diese",
+        "Regel haelt nur Renovate zurueck, sie bindet npm nicht.",
+        "Unser Testcode kann es nicht umgehen — das Menue vor dem Testende sauber zu schliessen",
+        "hilft auf keinem der drei Wege, und der Fehlschlag tritt schon INNERHALB eines Tests",
+        "auf, also ohne Testgrenze dazwischen. Einzelheiten und die offenen Fragen: #635.",
+        "Wieder entfernen, sobald eine jsdom-Fassung das Wiederoeffnen kann — Abnahme ist das",
+        "Fertig-wenn aus #635, nicht die blosse Existenz einer neueren Fassung.",
+        "PREIS, benannt statt still: `enabled: false` unterdrueckt auch SICHERHEITS-PRs fuer",
+        "jsdom. Renovate haengt seine Alert-Regeln HINTER die Nutzerregeln, und der Default von",
+        "vulnerabilityAlerts traegt kein eigenes `enabled: true` — diese Zeile gewinnt also.",
+        "Abgefedert, nicht geheilt: jsdom ist devDependency (Testumgebung, wird nicht",
+        "ausgeliefert), und der OSV-Scan meldet eine verwundbare Fassung weiterhin; nur die",
+        "Behebung waere Handarbeit. Zweiter Preis: jsdom verschwindet damit auch aus dem",
+        "Dependency Dashboard, es gibt also keinen Wecker ausser #635.",
+        "VERWORFEN wurde `dependencyDashboardApproval: true`, und zwar gemessen statt nach",
+        "Geschmack — zwei Pruefer hatten es unabhaengig empfohlen, weil es Wecker und",
+        "Sicherheits-PRs behielte. Es geht hier aber nicht: Renovate setzt das Merkmal fuer",
+        "einen ZWEIG, nicht fuer ein Paket (dist/workers/repository/updates/generate.js:348,",
+        "`config.upgrades.some(u => u.dependencyDashboardApproval)`, gelesen in der gepinnten",
+        "Fassung 41.173.1). Mit `group:allNonMajor` liegt jedes Minor/Patch-Update in EINEM",
+        "Zweig — ein einziges genehmigungspflichtiges Paket legte damit das GANZE Buendel",
+        "hinter einen Dashboard-Klick. Das waere schlimmer als der Preis oben."
+      ],
+      "matchManagers": ["npm"],
+      "matchPackageNames": ["jsdom"],
+      "enabled": false
     }
   ]
 }
