@@ -168,9 +168,14 @@ def teile(gewaehlt: list[Plan], nummer: int, anzahl: int) -> list[Plan]:
         gierig auf Mutationszahl (LPT)              31:09   <- die naheliegende „Verbesserung"
         perfekte Packung (braucht Kostentabelle)    17:26
 
-    Also Faktor 2,2, nicht mehr. Die Zahl hat sich waehrend dieses Umbaus ZWEIMAL bewegt,
-    und beide Male stand vorher eine falsche da: erst 22 min aus einer Handrechnung, dann
-    25:21 aus einer Messung, die den Stand VOR diesem Commit beschrieb.
+    UND DANN AN DER ECHTEN CI NACHGEMESSEN (Lauf 35443162073): 10,9 · 21,8 · 6,8 · 13,9 min.
+    Der laengste also 21,8 statt der vorhergesagten 24:41 — Faktor 2,5. Drei der vier Teile
+    trafen die Vorhersage auf eine halbe Minute, der teuerste kam 2,9 min darunter heraus.
+    Das Modell ist konservativ; man darf ihm nach unten trauen, nicht nach oben.
+
+    Die Zahl hat sich waehrend dieses Umbaus DREIMAL bewegt, und zweimal stand vorher eine
+    falsche da: erst 22 min aus einer Handrechnung, dann 25:21 aus einer Messung, die den
+    Stand VOR diesem Commit beschrieb. Beide Male hat ein fremder Leser es gefunden.
 
     DER ZWEITE FALL IST DER LEHRREICHE, weil er eine Eigenschaft der Vergabe zeigt: dieser
     Branch hebt den Plan `mutationen_lauf` von 12 auf 18 Mutationen, und das verschiebt die
