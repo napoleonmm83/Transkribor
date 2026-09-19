@@ -503,6 +503,122 @@ def test_apply_missing_correction_returns_missing(project):
     assert not (t / "S1.edit.json").exists()
 
 
+# ---- T-199: `apply` prueft die Korrektur gegen das Roh, statt sie blind anzuwenden ----
+
+@pytest.mark.parametrize("segment", [
+    pytest.param({"speaker": "Matthias", "text": "Neu."}, id="id-fehlt"),
+    pytest.param({"id": "0", "speaker": "Matthias", "text": "Neu."}, id="id-als-string"),
+    pytest.param({"id": 99, "speaker": "Matthias", "text": "Neu."}, id="id-halluziniert"),
+])
+def test_apply_verwirft_eine_korrektur_die_kein_segment_trifft(project, capsys, segment):
+    """Die drei STILLSTEN Formen aus T-199 — sie luden sauber und wirkten trotzdem nie.
+
+    `edit_model.apply_correction` baut sein `by_id` gegen die int-ids des Rohs (edit_model.py:144).
+    Ein Modell, das `segment_id` schreibt, ids als Strings ausgibt oder Nummern erfindet,
+    verliert damit die GANZE Korrektur einer Datei — und die alte Erfolgszeile zaehlte die
+    Segmente der `edit.json`, nicht die angewandten Korrekturen, meldete also unveraendert
+    Erfolg. Bis hierher lief `cmd_apply` ohne jede Strukturpruefung: `_valid_correction` haengt
+    ausschliesslich am `run`-Pfad.
+    """
+    _root, t = project
+    (t / "S1.correction.json").write_text(json.dumps(
+        {"base": "S1", "segments": [segment]}), encoding="utf-8")
+    assert correct.cmd_apply("Demo", "S1") == "missing"
+    # Nichts geschrieben — beide Ausgaben, nicht nur die `edit.json`: der `.md`-Export ist die
+    # Datei, die ein Mensch am Ende oeffnet.
+    assert not (t / "S1.edit.json").exists()
+    assert not (t / "S1.md").exists()
+    assert "trifft kein Segment" in capsys.readouterr().out
+
+
+def test_apply_warnt_wenn_ein_getroffenes_segment_keinen_sprecher_hat(project, capsys):
+    """Der TEUERSTE Fall aus T-199 — der einzige, der ein vollstaendig plausibles Dokument baut.
+
+    Ein fehlender `speaker` wird in `apply_correction` zu `""` (edit_model.py:156); `render_md`
+    tauft ihn auf "Befragte Person" (render_md.py:24) UND verschmilzt aufeinanderfolgende
+    gleiche Sprecher (:27). Aus Frage und Antwort wird ein Monolog, und nichts daran sieht
+    kaputt aus.
+
+    Das Dokument entsteht bewusst TROTZDEM (Entscheidung Marcus 19.09.2026): eine zu 95 %
+    brauchbare Korrektur zu verwerfen liesse den Nutzer ohne jedes Ergebnis statt mit einem
+    fast fertigen. Laut wird die Zeile daneben.
+    """
+    _root, t = project
+    (t / "S1.correction.json").write_text(json.dumps(
+        {"base": "S1", "segments": [{"id": 0, "text": "Ich bin Matthias."}]}), encoding="utf-8")
+    assert correct.cmd_apply("Demo", "S1") == "written"
+    assert (t / "S1.edit.json").exists()
+    aus = capsys.readouterr().out
+    assert "WARNUNG" in aus
+    assert "1 von 1" in aus
+
+
+def test_apply_warnt_NICHT_bei_einer_gesunden_korrektur(project, capsys):
+    """Gegenkontrolle — ohne sie waere der Riegel ein Daueralarm.
+
+    Ein Waechter, der immer anschlaegt, wird weggeklickt; dieses Repo hat schon einen
+    abgeschafft, der sechs Fehlalarme an einem Tag produzierte. Die letzte Zusicherung prueft
+    zugleich die zweite Haelfte des Fixes: die Erfolgsmeldung nennt jetzt die TREFFER, nicht
+    nur die Segmentzahl — genau die Zahl, an der der stillste Fall nicht zu erkennen war.
+    """
+    _root, t = project
+    (t / "S1.correction.json").write_text(json.dumps({
+        "base": "S1",
+        "segments": [{"id": 0, "speaker": "Matthias", "text": "Ich bin Matthias."}],
+    }), encoding="utf-8")
+    assert correct.cmd_apply("Demo", "S1") == "written"
+    aus = capsys.readouterr().out
+    assert "WARNUNG" not in aus
+    assert "trifft kein Segment" not in aus
+    assert "(1 Segmente, 1 korrigiert)" in aus
+
+
+def test_apply_faerbt_ein_transkript_OHNE_segmente_nicht_rot(project, capsys):
+    """Ein leeres Roh-Transkript hat nichts zu treffen — das ist kein Totalausfall.
+
+    Ohne diese Unterscheidung faerbte der Riegel eine Aufnahme rot, an der nichts falsch ist
+    (eine Tonspur ohne erkannte Sprache). Der kalte Plan-Review hat den Fall als die EINE
+    Abweichung benannt, in der das neue Kriterium und `_valid_correction` auseinandergehen:
+    dort ist er `False`, hier bewusst kein Fehlschlag.
+    """
+    _root, t = project
+    (t / "S1.json").write_text(json.dumps({"language": "de", "segments": []}), encoding="utf-8")
+    (t / "S1.correction.json").write_text(json.dumps(
+        {"base": "S1", "segments": []}), encoding="utf-8")
+    assert correct.cmd_apply("Demo", "S1") == "written"
+    assert "trifft kein Segment" not in capsys.readouterr().out
+
+
+def test_correct_ai_single_raeumt_den_resume_anker_weg_wenn_nichts_angewandt_wurde(
+        project, monkeypatch):
+    """Der sperrende Befund des kalten Plan-Reviews, festgenagelt — samt Gegenrichtung.
+
+    `one()` ueberspringt eine Datei, die schon eine `correction.json` hat, und
+    `_correction_cache_matches` nimmt sie nach dem Kontext-Stempel wieder an (ausgefuehrt
+    belegt). Bleibt sie nach einem `"missing"` liegen, ist die Aufnahme bei JEDEM weiteren
+    projektweiten Lauf rot, bis jemand `--force` nimmt — aus einer Meldung wuerde ein
+    Dauerzustand. Das trifft `cmd_apply`s KAPUTT-Zweig seit jeher; der neue Riegel loest ihn
+    nur oefter aus.
+
+    Die zweite Haelfte ist Pflicht: wer bei JEDEM Ausgang raeumt, nimmt dem Lauf seinen
+    Resume-Anker und macht aus einem abgebrochenen Lauf einen, der von vorn beginnt.
+    """
+    _root, t = project
+    cpath = t / "S1.correction.json"
+    monkeypatch.setattr(correct, "_correction_cache_matches", lambda *a, **k: True)
+
+    cpath.write_text(json.dumps({"base": "S1", "segments": [{"id": 99}]}), encoding="utf-8")
+    monkeypatch.setattr(correct, "cmd_apply", lambda *a, **k: "missing")
+    assert correct.correct_ai_single("Demo", "S1", context="") is False
+    assert not cpath.exists()
+
+    # Gegenrichtung: ein geschriebenes Dokument laesst den Anker stehen.
+    cpath.write_text(json.dumps({"base": "S1", "segments": [{"id": 0}]}), encoding="utf-8")
+    monkeypatch.setattr(correct, "cmd_apply", lambda *a, **k: "written")
+    assert correct.correct_ai_single("Demo", "S1", context="") is True
+    assert cpath.exists()
+
+
 # ---- Stufe 2b: cmd_run-Orchestrierung (claude-Aufruf gefälscht) ----
 
 def _fake_claude(t, calls):

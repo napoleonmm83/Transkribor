@@ -1,0 +1,70 @@
+{
+  "test": "python -m pytest webtool/test_correct.py -k \"verwirft_eine_korrektur or warnt_wenn_ein_getroffenes or warnt_NICHT_bei_einer_gesunden or faerbt_ein_transkript_OHNE or raeumt_den_resume_anker\" -q",
+  "pfade": [
+    "webtool/correct.py",
+    "webtool/test_correct.py"
+  ],
+  "mutationen": [
+    {
+      "id": "T199-1 Totalausfall wird wieder angewandt statt verworfen",
+      "datei": "webtool/correct.py",
+      "von": "    if roh_ids and not getroffen:",
+      "nach": "    if False:  # T199-1: Totalausfall-Riegel abgeschaltet",
+      "rot": [
+        "test_apply_verwirft_eine_korrektur_die_kein_segment_trifft"
+      ],
+      "gruen": [
+        "test_apply_warnt_NICHT_bei_einer_gesunden_korrektur",
+        "test_apply_faerbt_ein_transkript_OHNE_segmente_nicht_rot"
+      ]
+    },
+    {
+      "id": "T199-2 der Randfall-Schutz faellt weg, ein leeres Transkript gilt als Totalausfall",
+      "datei": "webtool/correct.py",
+      "von": "    if roh_ids and not getroffen:",
+      "nach": "    if not getroffen:  # T199-2: leeres Roh zaehlt faelschlich als Ausfall",
+      "rot": [
+        "test_apply_faerbt_ein_transkript_OHNE_segmente_nicht_rot"
+      ],
+      "gruen": [
+        "test_apply_verwirft_eine_korrektur_die_kein_segment_trifft"
+      ]
+    },
+    {
+      "id": "T199-3 der Sprecherverlust wird wieder verschwiegen",
+      "datei": "webtool/correct.py",
+      "von": "    if ohne_sprecher:",
+      "nach": "    if False:  # T199-3: Warnung abgeschaltet",
+      "rot": [
+        "test_apply_warnt_wenn_ein_getroffenes_segment_keinen_sprecher_hat"
+      ],
+      "gruen": [
+        "test_apply_warnt_NICHT_bei_einer_gesunden_korrektur"
+      ]
+    },
+    {
+      "id": "T199-4 die Erfolgszeile zaehlt wieder Segmente statt angewandter Korrekturen",
+      "datei": "webtool/correct.py",
+      "von": "    print(f\"apply: {base} -> edit.json + md ({len(doc['segments'])} Segmente, \"\n          f\"{len(getroffen)} korrigiert)\")",
+      "nach": "    print(f\"apply: {base} -> edit.json + md ({len(doc['segments'])} Segmente)\")  # T199-4",
+      "rot": [
+        "test_apply_warnt_NICHT_bei_einer_gesunden_korrektur"
+      ],
+      "gruen": [
+        "test_apply_verwirft_eine_korrektur_die_kein_segment_trifft"
+      ]
+    },
+    {
+      "id": "T199-5 der Resume-Anker bleibt liegen und macht die Aufnahme dauerhaft rot",
+      "datei": "webtool/correct.py",
+      "von": "        if ergebnis == \"missing\":",
+      "nach": "        if False:  # T199-5: Resume-Anker bleibt liegen",
+      "rot": [
+        "test_correct_ai_single_raeumt_den_resume_anker_weg_wenn_nichts_angewandt_wurde"
+      ],
+      "gruen": [
+        "test_apply_verwirft_eine_korrektur_die_kein_segment_trifft"
+      ]
+    }
+  ]
+}
