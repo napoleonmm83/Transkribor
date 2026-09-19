@@ -506,7 +506,28 @@ def cmd_diarize(project: str, only_bases: list = None) -> int:
     return n
 
 
-def cmd_apply(project: str, base: str, force: bool = False) -> str:
+def cmd_apply(project: str, base: str, force: bool = False, *,
+              verwerfe_unpassende: bool = False) -> str:
+    """Korrektur anwenden. `verwerfe_unpassende` erlaubt das Wegraeumen des Resume-Ankers.
+
+    Der Schalter ist AUS als Vorgabe, und das ist der Unterschied zwischen den beiden
+    Aufrufern: auf dem CLI-Weg (`correct apply`) hat ein Mensch die `correction.json`
+    hingelegt, und es gibt keinen reuse-Pfad, der sie wieder einfinge — dort waere ein
+    Loeschen eine Ueberraschung. `correct_ai_single` setzt ihn dagegen, weil die Datei dort
+    Sekunden alt und maschinell erzeugt ist.
+
+    Er haengt am GRUND, nicht am Rueckgabewert. Das ist die Korrektur eines Befundes, den
+    beide Reviewstufen unabhaengig ausgefuehrt haben: die Loeschung stand zuerst in
+    `correct_ai_single` an `== "missing"`, und `"missing"` heisst an fuenf Stellen dieser
+    Funktion Verschiedenes — zwei davon meinen NICHT die Korrektur (fehlende Roh-JSON; ein
+    transienter `OSError` beim Lesen des Rohs, den der KAPUTT-Zweig mitfaengt). Gemessen
+    wurde eine einwandfreie, teuer erzeugte Korrektur geloescht, worauf der naechste Lauf die
+    volle KI-Zeit erneut zahlte statt sie wiederzuverwenden.
+    """
+    # `global` steht am Funktionsanfang statt im `except` unten. Es gilt ohnehin funktionsweit,
+    # aber der zweite Schreiber (der T-199-Riegel) steht TEXTLICH davor und las sich damit wie
+    # eine Lokale (gegnerischer Review).
+    global _letzte_fehler
     tdir = paths.transkripte_dir(project)
     epath = os.path.join(tdir, base + ".edit.json")
     if os.path.exists(epath) and not force:
@@ -553,7 +574,6 @@ def cmd_apply(project: str, base: str, force: bool = False) -> str:
         # jetzt selbst, statt zu werfen — der Fall verliesse damit genau die Zaehlung, die der
         # Zusatzfund nebenan eingebaut hat. Ohne diese Zeile nimmt eine Aenderung der anderen
         # ihren Gegenstand weg (gemessen, beide Pruefer unabhaengig).
-        global _letzte_fehler
         _letzte_fehler += 1
         print(f"apply: KAPUTT {base} ({type(e).__name__}: {_einzeilig(e)}) — "
               f"Korrektur nicht anwendbar, {base}.correction.json pruefen", flush=True)
@@ -568,12 +588,25 @@ def cmd_apply(project: str, base: str, force: bool = False) -> str:
     # ihn auf "Befragte Person" UND verschmilzt aufeinanderfolgende gleiche Sprecher — die
     # FRAGE des Interviewers steht danach als Satz der befragten Person im Export, bei Exit 0.
     #
-    # Gezaehlt wird gegen `doc["segments"]`, also gegen exakt die Menge, aus der
-    # `apply_correction` sein `by_id` baut. Eine zweite Herleitung liefe beim naechsten Umbau
-    # auseinander; unhashbare ids erreichen diese Zeile nie (sie werfen vorher im `try`).
+    # Gezaehlt wird ueber DIESELBE Abbildung, die `apply_correction` benutzt — `by_id`, letzter
+    # Eintrag je id gewinnt (`edit_model.py:144`). Der erste Entwurf lief stattdessen ueber die
+    # rohe Liste, und der gegnerische Review hat daraus zwei Befunde ausgefuehrt:
+    #
+    # 1. Eine DUBLETTE mit kaputtem `speaker` im UEBERSCHRIEBENEN Eintrag
+    #    (`[{"id":0,"speaker":5},{"id":0,"speaker":"Matthias"}]`) traf `.strip()` auf einen int
+    #    — und zwar AUSSERHALB des `try`. Auf dem CLI-Weg ein roher Traceback, also genau die
+    #    Klasse, die der Fix vom 17.09.2026 gerade geschlossen hat. Ueber `by_id` wird der
+    #    ueberschriebene Eintrag nie angefasst, und der gewinnende laeuft ohnehin durch
+    #    dasselbe `.strip()` in `apply_correction` — also im `try`.
+    # 2. Dieselbe Dublette meldete `3 korrigiert`, angewandt wurde EINE. Eine Zahl, die Erfolg
+    #    behauptet — dieselbe Klasse wie der Fehler, den dieser Riegel behebt.
+    #
+    # Unhashbare ids erreichen die Zeile nie: `apply_correction` baut sein `by_id` vorher im
+    # `try` und stirbt dort.
     roh_ids = {s["id"] for s in doc["segments"]}
     korr = [c for c in (correction.get("segments") or []) if isinstance(c, dict)]
-    getroffen = [c for c in korr if c.get("id") in roh_ids]
+    by_id = {c.get("id"): c for c in korr}
+    getroffen = [c for i, c in by_id.items() if i in roh_ids]
     ohne_sprecher = sum(1 for c in getroffen if not (c.get("speaker") or "").strip())
     # EIN Kriterium statt zweier Mechanismen: "kein einziges Roh-Segment getroffen, obwohl es
     # welche gibt" deckt auch die beiden Faelle ab, die `_valid_correction` faengt (`segments`
@@ -582,6 +615,23 @@ def cmd_apply(project: str, base: str, force: bool = False) -> str:
     # Riegel eine Aufnahme rot, an der nichts falsch ist.
     if roh_ids and not getroffen:
         _letzte_fehler += 1
+        # Der Resume-Anker geht weg — aber NUR hier, wo die Ursache bewiesen ist: die
+        # Korrektur wurde gelesen, sie passt nicht zu dieser Aufnahme, und niemand sonst
+        # kann schuld sein. `one()` ueberspringt sonst eine Datei, die schon eine
+        # `correction.json` hat, und `_correction_cache_matches` nimmt sie nach dem
+        # Kontext-Stempel wieder an — die Aufnahme bliebe bei JEDEM weiteren projektweiten
+        # Lauf rot, bis jemand `--force` nimmt (kalter Plan-Review, ausgefuehrt).
+        #
+        # GETRAGENER TAUSCH, weil er sonst nur halb aufgeschrieben waere: die Formen, gegen
+        # die dieser Riegel gebaut ist (`segment_id` statt `id`, ids als Strings), sind
+        # Prompt- oder Modellfehler und damit SYSTEMATISCH — dieselbe Datei liefert sie beim
+        # naechsten Lauf wieder. Aus dem dauerhaften Rot werden damit wiederholte
+        # KI-Vollkosten, nicht Gruen. Der Tausch ist trotzdem richtig: rot ohne Aussicht ist
+        # schlechter als rot mit einem zweiten Versuch, und ein Prompt-Fix wirkt erst, wenn
+        # die alte Antwort nicht mehr wiederverwendet wird.
+        if verwerfe_unpassende:
+            with contextlib.suppress(OSError):
+                os.remove(cpath)
         print(f"apply: KAPUTT {base} (Korrektur trifft kein Segment der Aufnahme: "
               f"0 von {len(korr)} Eintraegen passen zu einer Segment-Kennung) — "
               f"nicht angewandt, {base}.correction.json pruefen", flush=True)
@@ -589,7 +639,14 @@ def cmd_apply(project: str, base: str, force: bool = False) -> str:
     # Teildefekt: das Dokument entsteht, aber der Sprecherverlust wird benannt statt als Erfolg
     # gemeldet. Bewusst KEIN Fehlschlag — eine zu 95 % brauchbare Korrektur zu verwerfen liesse
     # den Nutzer ohne jedes Ergebnis statt mit einem fast fertigen (Entscheidung Marcus
-    # 19.09.2026). Eingerueckt, damit `jobPhases.ts` sie nicht als Datei-Urteil liest.
+    # 19.09.2026).
+    #
+    # Sie ist eingerueckt wie die uebrigen Nebenzeilen dieses Moduls — aber die EINRUECKUNG ist
+    # nicht der Grund, warum `jobPhases.ts` sie durchlaesst; hier stand das zuerst, und der
+    # gegnerische Review hat es widerlegt: der Parser schneidet `^ {0,2}` als ERSTES weg
+    # (`jobPhases.ts:231`). Harmlos ist die Zeile, weil keine der fuenf `^apply:`-Regexe auf
+    # `WARNUNG` passt — das misst der Vertragstest (Eintrag `art: 'ignoriert'`), nicht der
+    # Einzug. Wer hier eine Zeile ergaenzt, verlaesst sich also auf den Vertragstest.
     if ohne_sprecher:
         print(f"  apply: WARNUNG {base} — {ohne_sprecher} von {len(getroffen)} getroffenen "
               f"Segmenten ohne Sprecher; der Export fasst sie als Befragte Person zusammen",
@@ -1717,25 +1774,24 @@ def correct_ai_single(project: str, b: str, gjson: str = "", context: str = None
         # (#190), Handarbeit unter der Sperre entdeckt (#278). Sie heissen „deine Fassung
         # bleibt stehen"; als Fehlschlag gemeldet wuerden aus genau den Waechtern gegen
         # stillen Datenverlust rote Zeilen in der Bilanz.
-        ergebnis = cmd_apply(project, b, force=force)
-        # Der Resume-Anker MUSS weg, wenn nichts angewandt wurde — dieselbe Begruendung wie
-        # zwanzig Zeilen darueber im Austausch-Fall, nur aus dem anderen Anlass: `one()`
-        # ueberspringt eine Datei, die schon eine `correction.json` hat, und
-        # `_correction_cache_matches` nimmt sie nach dem Kontext-Stempel wieder an. Liegen
-        # gelassen bliebe die Aufnahme bei JEDEM weiteren projektweiten Lauf rot, bis jemand
-        # `--force` nimmt (kalter Plan-Review, ausgefuehrt: Stempel gesetzt ⇒ `matches` True).
-        # Das gilt fuer `cmd_apply`s KAPUTT-Zweig seit jeher — der neue Riegel darueber loest
-        # ihn nur oefter aus, und ein Fix, der die Klasse stehen laesst, waere keiner.
+        # `verwerfe_unpassende=True` erlaubt `cmd_apply`, den Resume-Anker wegzuraeumen —
+        # noetig, weil `one()` eine Datei mit vorhandener `correction.json` ueberspringt und
+        # `_correction_cache_matches` sie nach dem Kontext-Stempel wieder annimmt: die
+        # Aufnahme bliebe sonst bei JEDEM weiteren projektweiten Lauf rot, bis jemand
+        # `--force` nimmt (kalter Plan-Review, ausgefuehrt).
         #
-        # Sicher an GENAU dieser Stelle, und nur hier: Roh-JSON und `correction.json` sind
-        # beide nachweislich da (der Lauf hat sie eben gelesen bzw. geschrieben), `"missing"`
-        # kann also nur „die Korrektur taugt nicht" heissen, nie „eine Datei fehlt". Auf dem
-        # CLI-Weg (`correct apply`) passiert es bewusst NICHT: dort hat ein Mensch die Datei
-        # hingelegt, und es gibt keinen reuse-Pfad, der sie wieder einfinge.
-        if ergebnis == "missing":
-            with contextlib.suppress(OSError):
-                os.remove(cpath)
-        return ergebnis != "missing"
+        # Die Loeschung liegt DORT und nicht hier, und das ist der Unterschied zwischen dem
+        # ersten Entwurf dieses Fixes und diesem: hier draussen haenge sie am Rueckgabewert,
+        # und `"missing"` heisst an fuenf Stellen von `cmd_apply` Verschiedenes — zwei davon
+        # meinen nicht die Korrektur (fehlende Roh-JSON; ein transienter `OSError` beim Lesen
+        # des Rohs, den der KAPUTT-Zweig mitfaengt). Beide Reviewstufen haben unabhaengig
+        # ausgefuehrt, dass dabei eine EINWANDFREIE, teuer erzeugte Korrektur geloescht wird
+        # und der naechste Lauf die volle KI-Zeit erneut zahlt. Innen haengt sie am GRUND.
+        #
+        # PREIS, benannt: der KAPUTT-Zweig raeumt damit weiterhin nicht auf, sein dauerhaftes
+        # Rot bleibt also bestehen. Das ist der Stand vor diesem PR — kein Rueckschritt, aber
+        # auch keine Behebung mehr; die braeuchte eine Unterscheidung der Fehlerquelle INNEN.
+        return cmd_apply(project, b, force=force, verwerfe_unpassende=True) != "missing"
     except Exception as e:
         global _letzte_fehler
         # Genau HIER und nirgends sonst: dies ist die einzige Stelle, an der eine Aufnahme an

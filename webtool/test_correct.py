@@ -523,12 +523,21 @@ def test_apply_verwirft_eine_korrektur_die_kein_segment_trifft(project, capsys, 
     _root, t = project
     (t / "S1.correction.json").write_text(json.dumps(
         {"base": "S1", "segments": [segment]}), encoding="utf-8")
+    vorher = correct._letzte_fehler
     assert correct.cmd_apply("Demo", "S1") == "missing"
     # Nichts geschrieben — beide Ausgaben, nicht nur die `edit.json`: der `.md`-Export ist die
     # Datei, die ein Mensch am Ende oeffnet.
     assert not (t / "S1.edit.json").exists()
     assert not (t / "S1.md").exists()
     assert "trifft kein Segment" in capsys.readouterr().out
+    # Der Fehlerzaehler MUSS hochgehen: `main` waehlt seine Schlusszeile danach und
+    # beschuldigt sonst den KI-Anbieter fuer etwas, das unsere EIGENE Pruefung verworfen hat.
+    # Die Zeile war zuerst unbewacht — der gegnerische Review hat sie entfernt und 204 Tests
+    # blieben gruen.
+    assert correct._letzte_fehler == vorher + 1
+    # OHNE das Flag bleibt der Resume-Anker liegen: das ist der CLI-Weg, dort hat ein Mensch
+    # die Datei hingelegt.
+    assert (t / "S1.correction.json").exists()
 
 
 def test_apply_warnt_wenn_ein_getroffenes_segment_keinen_sprecher_hat(project, capsys):
@@ -589,34 +598,85 @@ def test_apply_faerbt_ein_transkript_OHNE_segmente_nicht_rot(project, capsys):
     assert "trifft kein Segment" not in capsys.readouterr().out
 
 
-def test_correct_ai_single_raeumt_den_resume_anker_weg_wenn_nichts_angewandt_wurde(
+def test_correct_ai_single_erlaubt_cmd_apply_das_verwerfen_der_unpassenden_korrektur(
         project, monkeypatch):
-    """Der sperrende Befund des kalten Plan-Reviews, festgenagelt — samt Gegenrichtung.
+    """Die VERDRAHTUNG des Flags, nicht seine Wirkung — die misst der Test darunter.
 
-    `one()` ueberspringt eine Datei, die schon eine `correction.json` hat, und
-    `_correction_cache_matches` nimmt sie nach dem Kontext-Stempel wieder an (ausgefuehrt
-    belegt). Bleibt sie nach einem `"missing"` liegen, ist die Aufnahme bei JEDEM weiteren
-    projektweiten Lauf rot, bis jemand `--force` nimmt — aus einer Meldung wuerde ein
-    Dauerzustand. Das trifft `cmd_apply`s KAPUTT-Zweig seit jeher; der neue Riegel loest ihn
-    nur oefter aus.
+    Der sperrende Befund des kalten Plan-Reviews lautete: bleibt eine unpassende
+    `correction.json` liegen, nimmt `_correction_cache_matches` sie nach dem Kontext-Stempel
+    beim naechsten projektweiten Lauf wieder an (ausgefuehrt belegt), und die Aufnahme ist bis
+    zu einem `--force` dauerhaft rot.
 
-    Die zweite Haelfte ist Pflicht: wer bei JEDEM Ausgang raeumt, nimmt dem Lauf seinen
-    Resume-Anker und macht aus einem abgebrochenen Lauf einen, der von vorn beginnt.
+    Geraeumt wird deshalb — aber in `cmd_apply`, wo der GRUND bekannt ist, und nur auf
+    ausdrueckliche Erlaubnis. Diese Erlaubnis ist optional und damit typkonform weglassbar:
+    ohne einen Test auf das ARGUMENT liesse sich der ganze Fix rueckstandslos abklemmen, und
+    keine Zusicherung wuerde rot.
     """
     _root, t = project
     cpath = t / "S1.correction.json"
     monkeypatch.setattr(correct, "_correction_cache_matches", lambda *a, **k: True)
-
-    cpath.write_text(json.dumps({"base": "S1", "segments": [{"id": 99}]}), encoding="utf-8")
-    monkeypatch.setattr(correct, "cmd_apply", lambda *a, **k: "missing")
-    assert correct.correct_ai_single("Demo", "S1", context="") is False
-    assert not cpath.exists()
-
-    # Gegenrichtung: ein geschriebenes Dokument laesst den Anker stehen.
+    gesehen = []
+    monkeypatch.setattr(correct, "cmd_apply",
+                        lambda *a, **k: (gesehen.append(k.get("verwerfe_unpassende")), "written")[1])
     cpath.write_text(json.dumps({"base": "S1", "segments": [{"id": 0}]}), encoding="utf-8")
-    monkeypatch.setattr(correct, "cmd_apply", lambda *a, **k: "written")
     assert correct.correct_ai_single("Demo", "S1", context="") is True
-    assert cpath.exists()
+    # Die Erlaubnis muss ANKOMMEN — geprueft wird das Argument, nicht der blosse Aufruf.
+    # Ohne sie raeumt `cmd_apply` nichts weg, und der Fix waere rueckstandslos abgeklemmt,
+    # ohne dass ein Test es merkte (dieselbe Lehre wie bei der Statuspille: die VERDRAHTUNG
+    # braucht einen eigenen Test, die Regel reicht nicht).
+    assert gesehen == [True]
+
+
+def test_apply_raeumt_den_resume_anker_nur_mit_erlaubnis_weg(project):
+    """Beide Richtungen der Erlaubnis — und die zweite ist die teurere.
+
+    MIT Erlaubnis (der `run`-Pfad) muss die unpassende `correction.json` weg, sonst nimmt
+    `_correction_cache_matches` sie beim naechsten projektweiten Lauf wieder an und die
+    Aufnahme bleibt bis zu einem `--force` rot.
+
+    OHNE Erlaubnis (der CLI-Weg) muss sie liegen bleiben: dort hat ein Mensch die Datei
+    hingelegt, und es gibt keinen reuse-Pfad, der sie wieder einfinge. Genau diese Trennung
+    ist die Korrektur eines Befundes, den beide Reviewstufen ausgefuehrt haben — die
+    Loeschung hing zuerst am Rueckgabewert `"missing"`, und der heisst an fuenf Stellen
+    Verschiedenes.
+    """
+    _root, t = project
+    unpassend = json.dumps({"base": "S1", "segments": [{"id": 99, "speaker": "X", "text": "N."}]})
+
+    (t / "S1.correction.json").write_text(unpassend, encoding="utf-8")
+    assert correct.cmd_apply("Demo", "S1") == "missing"
+    assert (t / "S1.correction.json").exists()
+
+    (t / "S1.correction.json").write_text(unpassend, encoding="utf-8")
+    assert correct.cmd_apply("Demo", "S1", verwerfe_unpassende=True) == "missing"
+    assert not (t / "S1.correction.json").exists()
+
+
+def test_apply_zaehlt_eine_doppelte_id_EINMAL_und_fasst_den_verlierer_nicht_an(project, capsys):
+    """Gezaehlt wird ueber dieselbe Abbildung, die auch angewandt wird — sonst zweierlei.
+
+    `apply_correction` baut `by_id` mit last-wins (edit_model.py:144): bei doppelter id
+    gewinnt der LETZTE Eintrag, die frueheren werden nie angefasst. Der erste Entwurf dieses
+    Riegels lief stattdessen ueber die rohe Liste, und der gegnerische Review hat daraus zwei
+    ausgefuehrte Befunde gemacht:
+
+    1. `.strip()` traf den `speaker` des UEBERSCHRIEBENEN Eintrags — bei einem Nicht-String
+       ein `AttributeError` AUSSERHALB des `try`, auf dem CLI-Weg also ein roher Traceback.
+       Das ist die Klasse, die der Fix vom 17.09.2026 gerade geschlossen hatte.
+    2. Drei Eintraege mit derselben id meldeten `3 korrigiert`, angewandt wurde EINE — eine
+       Zahl, die Erfolg behauptet, also genau der Fehler, den dieser Riegel behebt.
+    """
+    _root, t = project
+    (t / "S1.correction.json").write_text(json.dumps({"base": "S1", "segments": [
+        {"id": 0, "speaker": 5, "text": "verliert"},          # Nicht-String, wird ueberschrieben
+        {"id": 0, "speaker": "Matthias", "text": "gewinnt"},
+    ]}), encoding="utf-8")
+    assert correct.cmd_apply("Demo", "S1") == "written"
+    aus = capsys.readouterr().out
+    assert "(1 Segmente, 1 korrigiert)" in aus
+    assert "WARNUNG" not in aus
+    doc = json.loads((t / "S1.edit.json").read_text(encoding="utf-8"))
+    assert doc["segments"][0]["text"] == "gewinnt"
 
 
 # ---- Stufe 2b: cmd_run-Orchestrierung (claude-Aufruf gefälscht) ----
