@@ -498,10 +498,15 @@ jobs:
         with:
           node-version: 24
       - run: pip install --group dev
-      - name: Wirkungstest der drei packageRules
+      # `-s` ist nicht Geschmack: ohne das verschluckt pytest bei GRUEN die Urteilszeilen
+      # des Skripts ("ok Regel 1..4", die flache Update-Liste, `Found N package file(s)`),
+      # und im Protokoll steht nur `1 passed`. Genau die Zahlen sind hier die Aussage --
+      # dieselbe Regel, mit der dieses Repo sonst jede gruene CI liest. Aufgefallen beim
+      # Versuch, den Beleg fuer Regel 4 aus dem Lauf zu holen: er war nicht da.
+      - name: Wirkungstest der vier packageRules
         env:
           GITHUB_COM_TOKEN: ${{ github.token }}
-        run: python -m pytest scripts/test_renovate_regeln.py -q -m renovate
+        run: python -m pytest scripts/test_renovate_regeln.py -q -s -m renovate
 
   # Die Mutationsprobe ist in diesem Repo Pflicht ("Logik raus -> genau dieser Test rot"),
   # war aber bis #551 keine PRUEFUNG, sondern eine Gewohnheit: der Treiber entstand je

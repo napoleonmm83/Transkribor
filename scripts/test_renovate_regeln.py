@@ -178,6 +178,12 @@ def test_nicht_erkannter_python_dep_wird_nicht_geurteilt():
 # --- urteile: je Regel positiver Beleg UND Kontrolle ---------------------------
 
 def test_urteil_ist_gruen_wenn_alle_vier_wirken():
+    """Positivkontrolle: die aufgezeichnete Ausgabe muss VIER ok-Zeilen ergeben.
+
+    Die Zahl steht hier absichtlich und nicht als `> 0`: eine Regel, die still
+    aus `urteile()` faellt, liesse eine Schwellenprobe gruen -- und genau diese
+    Klasse (`checked 16` statt 60) hat dieses Repo schon einmal bezahlt.
+    """
     code, zeilen = rr.urteile(GEMESSEN)
     assert code == 0, zeilen
     assert sum(z.startswith("ok") for z in zeilen) == 4
