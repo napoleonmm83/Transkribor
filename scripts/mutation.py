@@ -226,7 +226,7 @@ def _git(repo: str, *args: str) -> str:
                           capture_output=True, text=True, check=True).stdout
 
 
-def _verfolgt_geaendert(repo: str, pfad: str) -> str:
+def _verfolgt_geaendert(repo: str, pfad: str, *, ausser_plaene: frozenset[str] | None = None) -> str:
     """Nur VERFOLGTE Aenderungen — die EINE Quelle fuer beide Sauberkeitspruefungen.
 
     UNTRACKED (`??`) zaehlt bewusst nicht: eine untracked Datei ist von einer Mutation nicht
@@ -239,35 +239,60 @@ def _verfolgt_geaendert(repo: str, pfad: str) -> str:
     die Gegenprobe mit einer untracked Datei lief sauber durch und meldete danach trotzdem
     `SERIE FEHLGESCHLAGEN`. Zwei Stellen fuer eine Regel driften.
     """
+    # `None` heisst KEINE Ausnahme — nicht „leere Ausnahmeliste". Die Vorgabe stand zuerst
+    # andersherum, und die Mutationsprobe hat es gefangen: ohne Argument wurden damit ALLE
+    # Plaene uebergangen, also genau der fail-open, den dieser Zuschnitt verhindern soll,
+    # durch die Hintertuer der Vorgabe. Wer die Ausnahme will, sagt es und nennt dabei seine
+    # eigenen Ziele; wer nichts sagt, bekommt den strengen Riegel.
+    uebergehen = ausser_plaene is not None
+    eigene = ausser_plaene or frozenset()
     zeilen = _git(repo, "status", "--porcelain", "--", pfad).splitlines()
-    return "\n".join(z for z in zeilen
-                     if not z.startswith("??") and not _ist_mutationsplan(z)).strip()
+    return "\n".join(
+        z for z in zeilen
+        if not z.startswith("??")
+        and not (uebergehen and _ist_mutationsplan(z) and _statuspfad(z) not in eigene)
+    ).strip()
+
+
+def _statuspfad(statuszeile: str) -> str:
+    """Der Pfad aus einer `--porcelain`-Zeile, bei Umbenennungen das ZIEL.
+
+    `R  alt -> neu` nennt zwei Pfade; gefragt ist, welche Datei jetzt im Baum liegt.
+    """
+    pfad = statuszeile[3:].strip().strip('"')
+    return pfad.split(" -> ")[-1].strip().strip('"')
 
 
 def _ist_mutationsplan(statuszeile: str) -> bool:
-    """Ein PLAN ist kein Mutationsziel — er kann keine haengengebliebene Mutation sein.
+    """Zeigt die Statuszeile auf eine Plandatei unter `scripts/mutationen/`?
 
-    Der Sauberkeitscheck oben begruendet sich damit, dass sich sonst am Ende nicht sagen
-    laesst, ob eine Mutation im Baum stehengeblieben ist. Fuer `scripts/mutationen/*.json`
-    trifft das nicht zu: mutiert werden die Dateien aus den `datei`-Feldern, nie der Plan
-    selbst.
+    Beide Riegel nehmen fremde Plaene aus, keiner nimmt die ZIELE dieses Laufs aus — und
+    dieser Zuschnitt ist in zwei Anlaeufen entstanden, beide fremd korrigiert. Der erste nahm
+    Plaene UEBERALL aus, begruendet damit, ein Plan sei nie ein Mutationsziel: **widerlegt**
+    (gegnerischer Review, ausgefuehrt) — `scripts/mutationen/mutationen_lauf.json` mutiert
+    `scripts/mutationen/deckel_finally.json` an drei Stellen, am Schlussriegel waere das ein
+    fail-open gewesen. Der zweite nahm sie nur am START aus; dann meldete der Schluss den
+    fremden Plan als Rest, und die Serie wurde rot statt durchzulaufen (eigener Test).
 
-    Gemessen am 2026-09-19, und es war der GROESSTE Einzelposten jener Sitzung: ein editierter,
-    noch nicht committeter Plan liess `fehlerberichte-python` (`--pfad .`) mit ABBRUCH enden —
-    eine Serie von knapp vier Minuten lieferte fuer diesen Plan kein Urteil und musste
-    vollstaendig wiederholt werden. Der eigene Plan (`--pfad webtool`) sah die Datei nicht,
-    ein fremder mit weiterem Pfad schon; welcher Plan also abbricht, haengt an einem
-    Pfadpraefix, das mit der Sache nichts zu tun hat.
+    Was bleibt, ist die exakte Form: was DIESER Lauf anfasst, zaehlt immer; jede andere
+    Plandatei nie. Der Aufrufer reicht die `datei`-Felder seiner Mutationen als `ausser_plaene`
+    durch.
 
-    ENG gestellt: nur der Ordner, nur `.json`. Alles andere unter `scripts/` bleibt ein
-    Mutationsziel und zaehlt weiter. Die exaktere Loesung waere, gegen die `datei`-Felder der
-    Mutationen dieses Plans zu pruefen statt gegen ein Praefix — sie ist besser und groesser
-    und steht als eigener Punkt im Aufgabenindex.
+    Der Anlass, gemessen am 2026-09-19 und groesster Einzelposten jener Sitzung: ein
+    editierter, uncommitteter Plan liess `fehlerberichte-python` (`--pfad .`) am START mit
+    ABBRUCH enden — knapp vier Minuten ohne Urteil, komplett wiederholt. Der eigene Plan
+    (`--pfad webtool`) sah die Datei nicht, ein fremder mit weiterem Pfad schon; welcher Plan
+    abbrach, hing an einem Pfadpraefix, das mit der Sache nichts zu tun hat.
+
+    ZU UMBENENNUNGEN — hier stand zweimal das Gegenteil des Codes, beide Male fremd gefunden.
+    Die Statuszeile einer Umbenennung traegt `alt -> neu`, und geprueft wird die GANZE
+    Zeichenkette: `R  scripts/mutationen/a.json -> scripts/mutationen/b.json` ergibt True
+    (beginnt mit dem Praefix, endet auf `.json`), `-> scripts/weg.json` ebenfalls, `-> x.py`
+    dagegen False. Am Startriegel ist das durchweg harmlos — dort geht es nur darum, ob der
+    Mensch an einer Plandatei gearbeitet hat, und das hat er in allen drei Formen.
 
     Die Statuszeile hat die Form `XY pfad`; `--porcelain` liefert Vorwaertsschraegstriche,
-    auch auf Windows. Eine Umbenennung (`R  alt -> neu`) faellt hier bewusst durch, weil ihr
-    Pfadteil zwei Namen traegt: ein umbenannter Plan ist selten, und die sichere Richtung ist,
-    ihn zaehlen zu lassen.
+    auch auf Windows, und quotet Pfade mit Sonderzeichen.
     """
     pfad = statuszeile[3:].strip().strip('"')
     return pfad.startswith("scripts/mutationen/") and pfad.endswith(".json")
@@ -427,7 +452,20 @@ def main(argv: list[str] | None = None) -> int:
     # geaendert und nicht committet hat, kann damit einen Anker verschoben haben. „Der Plan
     # ist veraltet" waere dann zwar wahr, aber der zweite Schritt — zu tun ist zuerst das
     # Committen. Die teurere Meldung gehoert nach hinten.
-    schmutzig = _verfolgt_geaendert(a.repo, a.pfad)
+    # Ein fremder Mutationsplan ist die VORLAGE eines Laufs, nicht sein Ziel — dass jemand
+    # einen editiert hat, darf den Start nicht aufhalten. Genau das kostete am 2026-09-19 den
+    # groessten Einzelposten der Sitzung: ein uncommitteter Plan liess eine Serie mit `--pfad .`
+    # abbrechen, knapp vier Minuten ohne Urteil, komplett wiederholt.
+    #
+    # `ziele` ist die AUSNAHME VON DER AUSNAHME, und ohne sie waere das hier fail-open:
+    # ein Plan KANN sehr wohl Mutationsziel sein — `scripts/mutationen/mutationen_lauf.json`
+    # mutiert `scripts/mutationen/deckel_finally.json` an drei Stellen (gegnerischer Review,
+    # ausgefuehrt). Waere er pauschal ausgenommen, meldete der Schlussriegel unten eine
+    # haengengebliebene Mutation als „sauber" — in genau dem Riegel, der das Gegenteil
+    # zusichert. Was DIESER Lauf anfasst, zaehlt also weiterhin; alles andere unter
+    # `scripts/mutationen/` nicht.
+    ziele = frozenset(str(m.get("datei", "")).replace("\\", "/") for m in plan)
+    schmutzig = _verfolgt_geaendert(a.repo, a.pfad, ausser_plaene=ziele)
     if schmutzig:
         print(f"ABBRUCH: getrackte Aenderungen unter {a.pfad} — erst committen, DANN mutieren.")
         print(schmutzig)
@@ -638,7 +676,12 @@ def main(argv: list[str] | None = None) -> int:
                       " nicht, oder _ist_fehlzeile kennt die Form dieses Laeufers nicht —"
                       " nachsehen, bevor daraus ein Befund wird.")
 
-    rest = _verfolgt_geaendert(a.repo, a.pfad)
+    # DIESELBE Ausnahme wie am Startriegel, und aus demselben Grund: ein fremder Plan, den
+    # jemand nebenher editiert hat, ist kein Rest DIESES Laufs. Die Ziele dieses Plans sind
+    # ausgenommen — auch wenn eines davon selbst eine Plandatei ist (das gibt es, siehe die
+    # Begruendung oben). Damit bleibt die Zusage dieses Riegels vollstaendig: was wir angefasst
+    # haben, sehen wir.
+    rest = _verfolgt_geaendert(a.repo, a.pfad, ausser_plaene=ziele)
     print(f"\nArbeitsbaum nach der Serie ({a.pfad}): "
           f"{'NICHT SAUBER:' + chr(10) + rest if rest else 'sauber'}")
     if rest:

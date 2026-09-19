@@ -178,8 +178,11 @@ def _lauf_main(tmp_path, monkeypatch, plan, ausgaben, pfad=".", schmutzig=("", "
 
     zustaende = list(schmutzig)
     monkeypatch.setattr(mutation, "_lauf", falscher_lauf)
+    # `**k` fuer `plaene_zaehlen`: der Startriegel reicht es durch. Eine Attrappe ohne
+    # das Argument scheitert LAUT (TypeError) statt still ein falsches Ergebnis zu
+    # liefern — genau so ist die Erweiterung hier aufgefallen.
     monkeypatch.setattr(mutation, "_verfolgt_geaendert",
-                        lambda repo, p: zustaende.pop(0) if zustaende else "")
+                        lambda repo, p, **k: zustaende.pop(0) if zustaende else "")
     rc = mutation.main(["--repo", str(tmp_path), "--test", "egal",
                         "--plan", str(plandatei), "--pfad", pfad])
     return rc, ziel
@@ -467,7 +470,7 @@ def test_plan_traegt_sein_testkommando_selbst(tmp_path, monkeypatch, capsys):
     }), encoding="utf-8")
 
     monkeypatch.setattr(mutation, "_lauf", falscher_lauf)
-    monkeypatch.setattr(mutation, "_verfolgt_geaendert", lambda repo, p: "")
+    monkeypatch.setattr(mutation, "_verfolgt_geaendert", lambda repo, p, **k: "")
     rc = mutation.main(["--repo", str(tmp_path), "--plan", str(plandatei), "--pfad", "."])
 
     # rc 1, weil die Attrappe immer gruen meldet und die Mutation damit wirkungslos bleibt —
@@ -487,7 +490,7 @@ def test_plan_ohne_kommando_und_ohne_test_ergibt_zwei(tmp_path, monkeypatch, cap
     ziel.write_bytes(b"WERT = 1\r\n")
     plandatei = tmp_path / "plan.json"
     plandatei.write_text(json.dumps(_PLAN_OK), encoding="utf-8")
-    monkeypatch.setattr(mutation, "_verfolgt_geaendert", lambda repo, p: "")
+    monkeypatch.setattr(mutation, "_verfolgt_geaendert", lambda repo, p, **k: "")
     rc = mutation.main(["--repo", str(tmp_path), "--plan", str(plandatei), "--pfad", "."])
     assert rc == 2
     assert "kein Testkommando" in capsys.readouterr().out
@@ -584,3 +587,86 @@ def test_ein_geaenderter_MUTATIONSPLAN_gilt_nicht_als_schmutziger_baum():
     assert not mutation._ist_mutationsplan(" M scripts/mutationen/liesmich.md")
     assert not mutation._ist_mutationsplan(" M webtool/correct.py")
     assert not mutation._ist_mutationsplan(" M scripts/mutationen_lauf.py")
+    # UMBENENNUNGEN: geprueft wird die GANZE Zeichenkette `alt -> neu`. Innerhalb des Ordners
+    # und heraus auf `.json` ergibt True, auf eine andere Endung False. Am Startriegel ist das
+    # durchweg harmlos — dort zaehlt nur, ob ein Mensch an einer Plandatei gearbeitet hat.
+    assert mutation._ist_mutationsplan("R  scripts/mutationen/a.json -> scripts/mutationen/b.json")
+    assert mutation._ist_mutationsplan("R  scripts/mutationen/a.json -> scripts/weg.json")
+    assert not mutation._ist_mutationsplan("R  scripts/mutationen/a.json -> scripts/x.py")
+
+
+def test_ein_FREMDER_plan_zaehlt_nicht_ein_ZIEL_dieses_laufs_schon(monkeypatch):
+    """Die VERDRAHTUNG, nicht das Praedikat — und sie ist der eigentliche Fix.
+
+    Der erste Anlauf nahm Plaene UEBERALL aus, begruendet damit, ein Plan sei nie ein
+    Mutationsziel. Der gegnerische Review hat das ausgefuehrt widerlegt:
+    `scripts/mutationen/mutationen_lauf.json` mutiert `scripts/mutationen/deckel_finally.json`
+    an drei Stellen. Am SCHLUSSriegel haette die Ausnahme damit eine haengengebliebene
+    Mutation als „sauber" gemeldet — ein fail-open in genau dem Riegel, der das Gegenteil
+    zusichert.
+
+    Die beiden Riegel stellen verschiedene Fragen: der Start „ist der Baum sauber, BEVOR wir
+    mutieren", der Schluss „ist eine Mutation haengengeblieben". Nur die erste geht den Plan
+    nichts an.
+
+    Ohne diesen Test war die Verdrahtung UNBEWACHT: das `plaene_zaehlen`-Argument aus dem
+    Startriegel entfernt liess der Praedikat-Test darueber gruen (gemessen vom Review).
+    """
+    monkeypatch.setattr(mutation, "_git", lambda *a, **k: (
+        " M scripts/mutationen/apply-riegel.json\n M webtool/correct.py"))
+
+    # ZIEL dieses Laufs: zaehlt — sonst verschwiege der Riegel eine Mutation an ihm.
+    # Genau das ist der fail-open, den der Review gefunden hat: `mutationen_lauf.json`
+    # mutiert `deckel_finally.json`, ein Plan KANN Ziel sein.
+    ziel = frozenset({"scripts/mutationen/apply-riegel.json"})
+    assert "apply-riegel.json" in mutation._verfolgt_geaendert("r", ".", ausser_plaene=ziel)
+    # OHNE Argument gibt es GAR KEINE Ausnahme — `None` heisst nicht „leere Liste". Stand
+    # zuerst andersherum; die Mutationsprobe hat es gefangen, kein Test.
+    assert "apply-riegel.json" in mutation._verfolgt_geaendert("r", ".")
+    # START: der Plan zaehlt nicht, die echte Aenderung sehr wohl.
+    start = mutation._verfolgt_geaendert("r", ".", ausser_plaene=frozenset())  # eigene Ziele: keine
+    assert "apply-riegel.json" not in start
+    assert "webtool/correct.py" in start, (
+        "der Startriegel darf NUR Plaene uebergehen — eine gewoehnliche Aenderung "
+        "muss ihn weiterhin aufhalten")
+
+
+def test_main_laesst_einen_geaenderten_PLAN_am_startriegel_durch(tmp_path, monkeypatch):
+    """Die Verdrahtung IN `main`, und ohne sie ist der ganze Fix wirkungslos.
+
+    Der Test darueber prueft die Funktion mit beiden Flags — aber nicht, ob der Startriegel
+    das Flag ueberhaupt SETZT. Gemessen: `plaene_zaehlen=False` in `main` auf `True`
+    zurueckgedreht, und jener Test blieb gruen (`mutiere` meldete NICHT gefangen). Dieselbe
+    Luecke, die der Review schon einmal an dieser Stelle gefunden hat.
+
+    Deshalb wird hier `_git` gefaelscht statt `_verfolgt_geaendert` — nur so laeuft der ECHTE
+    Weg durch den Riegel. Die uebrige Fixture dieser Datei faelscht `_verfolgt_geaendert` und
+    kann die Verdrahtung per Bau nicht sehen.
+    """
+    ziel = tmp_path / "ziel.py"
+    ziel.write_bytes(b"WERT = 1\n")
+    plandatei = tmp_path / "plan.json"
+    plandatei.write_text(json.dumps(_PLAN_OK), encoding="utf-8")
+
+    # Der Baum traegt NUR einen geaenderten Mutationsplan.
+    monkeypatch.setattr(mutation, "_git",
+                        lambda *a, **k: " M scripts/mutationen/apply-riegel.json")
+    monkeypatch.setattr(mutation, "_lauf", lambda repo, kommando, zusatz=None: (
+        _GRUEN if "WERT = 1" in ziel.read_text(encoding="utf-8")
+        else "FAILED x.py::test_wert - assert\n1 failed, 11 passed in 0.4s\n", 0))
+
+    rc = mutation.main(["--repo", str(tmp_path), "--test", "egal",
+                       "--plan", str(plandatei), "--pfad", "."])
+    assert rc == 0, "ein geaenderter PLAN darf den Startriegel nicht aufhalten"
+
+
+def test_main_haelt_bei_einer_gewoehnlichen_aenderung_weiterhin_an(tmp_path, monkeypatch):
+    """Die Gegenrichtung — ohne sie waere die Ausnahme ein Loch statt einer Ausnahme."""
+    plandatei = tmp_path / "plan.json"
+    plandatei.write_text(json.dumps(_PLAN_OK), encoding="utf-8")
+    (tmp_path / "ziel.py").write_bytes(b"WERT = 1\n")
+
+    monkeypatch.setattr(mutation, "_git", lambda *a, **k: " M webtool/correct.py")
+    rc = mutation.main(["--repo", str(tmp_path), "--test", "egal",
+                       "--plan", str(plandatei), "--pfad", "."])
+    assert rc == 2, "eine gewoehnliche Aenderung MUSS den Startriegel weiterhin ausloesen"
