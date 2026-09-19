@@ -294,8 +294,15 @@ def _ist_mutationsplan(statuszeile: str) -> bool:
     Die Statuszeile hat die Form `XY pfad`; `--porcelain` liefert Vorwaertsschraegstriche,
     auch auf Windows, und quotet Pfade mit Sonderzeichen.
     """
-    pfad = statuszeile[3:].strip().strip('"')
-    return pfad.startswith("scripts/mutationen/") and pfad.endswith(".json")
+    roh = statuszeile[3:].strip()
+    # BEIDE Seiten einer Umbenennung, nicht die ganze Zeichenkette (CodeRabbit-CLI, zweimal
+    # gemeldet). `R  scripts/x.py -> scripts/mutationen/neu.json` beginnt sonst mit `scripts/x`
+    # und gaelte nicht als Plan; `R  scripts/mutationen/a.json -> scripts/x.py` endet auf `.py`
+    # und ebenso wenig. Beide Male war die Wirkung die sichere (der Riegel haelt an), aber der
+    # Docstring behauptete etwas ueber Umbenennungen, das der Code nicht tat — und eine
+    # Plandatei, die in den Ordner hinein umbenannt wird, IST eine Planaenderung.
+    teile = [t.strip().strip('"') for t in roh.split(" -> ")]
+    return any(t.startswith("scripts/mutationen/") and t.endswith(".json") for t in teile)
 
 
 def _lauf(repo: str, kommando: str, zusatz: dict[str, str] | None = None) -> tuple[str, int]:
