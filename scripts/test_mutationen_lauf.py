@@ -395,11 +395,24 @@ def test_unbrauchbare_teil_angaben_enden_mit_zwei(tmp_path, capsys):
     argparse fuer eine weitere OPTION und steigt selbst mit SystemExit(2) aus, bevor die
     Pruefung unten laeuft. Derselbe Rueckgabecode, anderer Weg — nur laesst sich der
     Vertrag dieser Funktion dann nicht messen. Ausgefuehrt festgestellt, nicht gelesen.
+
+    UND DAS REPO MUSS EINEN PLAN TRAGEN. Der erste Entwurf nahm `_leeres_repo` — dort endet
+    JEDER Lauf mit rc 2 („keine Plaene gefunden"), und der Test bestand, ohne die Pruefung
+    je zu beruehren: die Mutationen L16 und L17 blieben gruen, obwohl beide Bereichspruefungen
+    abgeschaltet waren. Gefunden von der Serie, nicht beim Lesen. Die Zeile darunter ist die
+    Positivkontrolle dazu — mit gueltigem Teiler muss derselbe Aufruf 0 ergeben.
     """
     repo = str(_leeres_repo(tmp_path))
+    (tmp_path / "scripts" / "mutationen" / "a.json").write_text(
+        json.dumps({"test": "echo", "pfade": ["webtool/x.py"], "mutationen": []}),
+        encoding="utf-8")
+    assert mutationen_lauf.main(
+        ["--repo", repo, "--alle", "--teil=1/4", "--nur-auswahl"]) == 0, (
+        "POSITIVKONTROLLE: mit gueltigem Teiler muss der Lauf durchgehen — sonst misst"
+        " die Schleife darunter nur, dass irgendetwas anderes scheitert")
     for schlecht in ("0/4", "5/4", "x/4", "4", "1/0", "-1/4", "1/2/3", ""):
         assert mutationen_lauf.main(
-            ["--repo", repo, "--alle", f"--teil={schlecht}"]) == 2, (
+            ["--repo", repo, "--alle", f"--teil={schlecht}", "--nur-auswahl"]) == 2, (
             f"--teil {schlecht!r} kam durch")
     assert "--teil" in capsys.readouterr().out
 
