@@ -592,7 +592,11 @@ def test_ein_geaenderter_MUTATIONSPLAN_gilt_nicht_als_schmutziger_baum():
     # durchweg harmlos — dort zaehlt nur, ob ein Mensch an einer Plandatei gearbeitet hat.
     assert mutation._ist_mutationsplan("R  scripts/mutationen/a.json -> scripts/mutationen/b.json")
     assert mutation._ist_mutationsplan("R  scripts/mutationen/a.json -> scripts/weg.json")
-    assert not mutation._ist_mutationsplan("R  scripts/mutationen/a.json -> scripts/x.py")
+    # BEIDE Seiten, nicht die ganze Zeichenkette (CodeRabbit-CLI): eine Plandatei, die in den
+    # Ordner HINEIN umbenannt wird, ist ebenso eine Planaenderung wie eine, die HERAUS wandert.
+    assert mutation._ist_mutationsplan("R  scripts/x.py -> scripts/mutationen/neu.json")
+    assert mutation._ist_mutationsplan("R  scripts/mutationen/a.json -> scripts/x.py")
+    assert not mutation._ist_mutationsplan("R  scripts/x.py -> scripts/y.py")
 
 
 def test_ein_FREMDER_plan_zaehlt_nicht_ein_ZIEL_dieses_laufs_schon(monkeypatch):
