@@ -15,7 +15,7 @@ describe('parseJobPhases — correct', () => {
       'diarize: 2 Datei(en) diarisiert in 45s',
       'prep: 3 Datei(en) getaggt in /x',
       '→ Glossar (gemeinsame Namen/Begriffe) …', '✓ Glossar: 4 Eigennamen, 2 Korrekturen',
-      '→ Korrigiere A …', 'apply: A -> edit.json + md (12 Segmente)',
+      '→ Korrigiere A …', 'apply: A -> edit.json + md (12 Segmente, 12 korrigiert)',
       '→ Korrigiere B …', '→ Verifiziere B (Treue gegen Roh) …',
     ])
     expect(p.active).toEqual({ B: { phase: 'verify' } })
@@ -79,7 +79,7 @@ describe('parseJobPhases — correct', () => {
     const p = parseJobPhases('correct', [
       '→ Korrigiere A …', '→ Korrigiere B …', '→ Korrigiere C …',
       '→ Verifiziere A (Treue gegen Roh) …',
-      'apply: B -> edit.json + md (12 Segmente)',
+      'apply: B -> edit.json + md (12 Segmente, 12 korrigiert)',
     ])
     expect(p.active).toEqual({ A: { phase: 'verify' }, C: { phase: 'correct' } })
     expect(p.perBase).toEqual({ B: 'done' })
@@ -104,7 +104,7 @@ describe('parseJobPhases — correct', () => {
   })
   it('reuse -> apply -> done', () => {
     const p = parseJobPhases('correct', [
-      '↷ nutze vorhandene A.correction.json', 'apply: A -> edit.json + md (3 Segmente)',
+      '↷ nutze vorhandene A.correction.json', 'apply: A -> edit.json + md (3 Segmente, 3 korrigiert)',
     ])
     expect(p.perBase).toEqual({ A: 'done' })
   })
@@ -181,7 +181,7 @@ describe('parseJobPhases — correct', () => {
   it('Blockzaehler endet mit der Datei — die naechste faengt ohne an', () => {
     const p = parseJobPhases('correct', [
       'A: 540 Segmente → 4 Blöcke à max. 150', '→ Korrigiere A · Block 1/4 …',
-      'apply: A -> edit.json + md (540 Segmente)',
+      'apply: A -> edit.json + md (540 Segmente, 540 korrigiert)',
       '→ Korrigiere B …',
     ])
     expect(p.active).toEqual({ B: { phase: 'correct' } })
@@ -490,7 +490,7 @@ describe('parseJobPhases — die gestaffelte Pipeline (#405)', () => {
     const p = parseJobPhases('fetch', [
       '[fetch] lade https://x/y …',
       '→ Korrigiere Video …',
-      'apply: Video -> edit.json + md (3 Segmente)',
+      'apply: Video -> edit.json + md (3 Segmente, 3 korrigiert)',
       '[fetch] FEHLER https://x/y: tot',
     ])
     expect(p.perBase).toEqual({})
@@ -1315,7 +1315,7 @@ describe('laufOrdnung / warteKarte (#370, #442)', () => {
   })
 
   it('eine Aufnahme mit Endurteil liegt vor niemandem mehr', () => {
-    const phasen = parseJobPhases('correct', ['[scope] A\tB\tC', 'apply: A -> edit.json + md (3 Segmente)'])
+    const phasen = parseJobPhases('correct', ['[scope] A\tB\tC', 'apply: A -> edit.json + md (3 Segmente, 3 korrigiert)'])
     expect(warteKarte(phasen, 'correct')).toEqual({ B: { art: 'correct', vor: 0 },
                                                    C: { art: 'correct', vor: 1 } })
   })

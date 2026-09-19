@@ -33,7 +33,7 @@ describe('useActiveJob', () => {
   it('adoptiert, pollt und parst bis Terminal', async () => {
     vi.mocked(api.getJob)
       .mockResolvedValueOnce({ status: 'running', lines: ['→ Korrigiere A …'] })
-      .mockResolvedValueOnce({ status: 'done', lines: ['apply: A -> edit.json + md (2 Segmente)'] })
+      .mockResolvedValueOnce({ status: 'done', lines: ['apply: A -> edit.json + md (2 Segmente, 2 korrigiert)'] })
     render(<JobProvider intervalMs={5}><Probe /></JobProvider>)
     fireEvent.click(screen.getByText('go'))
     await waitFor(() => expect(screen.getByTestId('active').textContent).toBe('A:correct'))
@@ -44,7 +44,7 @@ describe('useActiveJob', () => {
     vi.mocked(api.getJob)
       .mockRejectedValueOnce(new Error('net'))
       .mockResolvedValueOnce({ status: 'running', lines: ['→ Korrigiere A …'] })
-      .mockResolvedValueOnce({ status: 'done', lines: ['apply: A -> edit.json + md (2 Segmente)'] })
+      .mockResolvedValueOnce({ status: 'done', lines: ['apply: A -> edit.json + md (2 Segmente, 2 korrigiert)'] })
     render(<JobProvider intervalMs={5}><Probe /></JobProvider>)
     fireEvent.click(screen.getByText('go'))
     await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('done'))
@@ -59,7 +59,7 @@ describe('useActiveJob', () => {
     // Ausfall blieb nur deshalb unbemerkt, weil useProjects ohnehin alle 4s pollt.
     vi.mocked(api.getJob)
       .mockResolvedValueOnce({ status: 'running', lines: ['→ Korrigiere A …'] })
-      .mockResolvedValue({ status: 'done', lines: ['apply: A -> edit.json + md (2 Segmente)'] })
+      .mockResolvedValue({ status: 'done', lines: ['apply: A -> edit.json + md (2 Segmente, 2 korrigiert)'] })
     const settled = vi.fn()
     render(<JobProvider intervalMs={5}><Probe beiSettled={settled} /></JobProvider>)
     fireEvent.click(screen.getByText('go'))
@@ -70,7 +70,7 @@ describe('useActiveJob', () => {
   it('meldet die Phasen aus DEM Tick, in dem der Job terminal wird', async () => {
     // `jobs` im Closure ist eine Runde alt -- ohne die frischen Zeilen traegt das Ereignis
     // die vorletzte Phase eines gerade beendeten Laufs.
-    const fertig = ['apply: A -> edit.json + md (2 Segmente)']
+    const fertig = ['apply: A -> edit.json + md (2 Segmente, 2 korrigiert)']
     vi.mocked(api.getJob)
       .mockResolvedValueOnce({ status: 'running', lines: ['→ Korrigiere A …'] })
       .mockResolvedValue({ status: 'done', lines: fertig })
@@ -111,7 +111,7 @@ describe('useActiveJob', () => {
     // der Job fiel danach aus dem Poll und kam auch nach der Rueckkehr des Servers nie
     // zurueck. Beide Haelften stehen hier.
     const zeilen = ['→ Korrigiere A …']
-    const fertig = ['apply: A -> edit.json + md (2 Segmente)']
+    const fertig = ['apply: A -> edit.json + md (2 Segmente, 2 korrigiert)']
     // Die Rueckkehr des Servers haengt an einem VERSPROCHENEN Antwortwert, nicht an der
     // Uhr (#569): zwischen `unerreichbar` (vierter Tick) und der Zusicherung darunter
     // liegen nur 5 ms Takt — ein ausgelasteter Laeufer vollzog den fuenften Tick in
@@ -201,7 +201,7 @@ describe('useActiveJob', () => {
     vi.mocked(api.getJob).mockImplementation(async () => {
       n += 1
       return n === 1 ? { status: 'running', lines: ['→ Korrigiere A …'] }
-                     : { status: 'done', lines: ['apply: A -> edit.json + md (2 Segmente)'] }
+                     : { status: 'done', lines: ['apply: A -> edit.json + md (2 Segmente, 2 korrigiert)'] }
     })
     render(<JobProvider intervalMs={5}><Probe /></JobProvider>)
     fireEvent.click(screen.getByText('go'))

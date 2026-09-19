@@ -94,7 +94,7 @@ describe('useJobAusgang (#376)', () => {
     vi.mocked(api.getJob).mockResolvedValue({ status: 'done', kind: 'correct',
       lines: ['apply: SKIP alt1 (human_edited=true; --force zum Ueberschreiben)',
               'apply: SKIP alt2 (human_edited=true; --force zum Ueberschreiben)',
-              'apply: neu1 -> edit.json + md (12 Segmente)',
+              'apply: neu1 -> edit.json + md (12 Segmente, 12 korrigiert)',
               '✗ Fehler bei neu2: kaputt — überspringe'] })
     await laufen('correct')
     expect(toastMock.warning.mock.calls[0][0]).toContain('1 von 2')
