@@ -417,6 +417,26 @@ def test_unbrauchbare_teil_angaben_enden_mit_zwei(tmp_path, capsys):
     assert "--teil" in capsys.readouterr().out
 
 
+def test_ein_nenner_von_null_wird_als_solcher_benannt(tmp_path, capsys):
+    """Der Nullnenner-Riegel traegt die MELDUNG, nicht den Rueckgabecode — und nur die
+    laesst sich messen.
+
+    `1/0` faellt ohnehin durch die Bereichspruefung („1 <= 1 <= 0" ist falsch), der
+    Rueckgabewert waere also auch ohne ihn 2: die Serie hat ihn genau deshalb als
+    ungefangen gemeldet. Weg kann er trotzdem nicht — `teile()` ist oeffentlich und
+    getestet, und ohne ihn kaeme dort `i % 0`, also ein ZeroDivisionError statt eines
+    Urteils. Was er beitraegt, ist die richtige Diagnose; also wird die gepinnt.
+    """
+    repo = str(_leeres_repo(tmp_path))
+    (tmp_path / "scripts" / "mutationen" / "a.json").write_text(
+        json.dumps({"test": "echo", "pfade": ["webtool/x.py"], "mutationen": []}),
+        encoding="utf-8")
+    assert mutationen_lauf.main(
+        ["--repo", repo, "--alle", "--teil=1/0", "--nur-auswahl"]) == 2
+    assert "n muss mindestens 1 sein" in capsys.readouterr().out, (
+        "ein Nenner von null muss als solcher benannt werden, nicht als Bereichsfehler")
+
+
 def test_ohne_teil_bleibt_die_ausgabe_wie_vorher(tmp_path, capsys):
     """NEGATIVKONTROLLE: der Regelweg darf sich nicht mitveraendert haben."""
     rc = mutationen_lauf.main(["--repo", str(WURZEL), "--alle", "--nur-auswahl"])

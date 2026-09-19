@@ -215,10 +215,10 @@
       "von": "    if anzahl < 1:",
       "nach": "    if anzahl < 0:",
       "rot": [
-        "test_unbrauchbare_teil_angaben_enden_mit_zwei"
+        "test_ein_nenner_von_null_wird_als_solcher_benannt"
       ],
       "gruen": [
-        "test_die_teile_decken_die_ganze_auswahl_ab_und_ueberschneiden_sich_nicht"
+        "test_unbrauchbare_teil_angaben_enden_mit_zwei"
       ]
     },
     {
