@@ -354,6 +354,15 @@ def _lauf(repo: str, kommando: str, zusatz: dict[str, str] | None = None) -> tup
     # No-op, weil `python` schon darauf zeigt. VORNE und nicht hinten, denn ein System-Python
     # frueher im PATH ist genau der gemessene Fall.
     #
+    # WAS DAS NEU ERLAUBT, benannt und nachgemessen (gegnerischer Review): der FALSCHE Treiber
+    # bindet das Kind jetzt an sich. Wer `py scripts/mutation.py` in einer aktivierten venv
+    # startet, bekam bisher ueber den PATH doch noch das venv-Python; jetzt erbt das Kind den
+    # Interpreter des Elternteils. Das ist die richtige Richtung und NICHT still — gemessen
+    # mit `C:/Python314/python.exe scripts/mutation.py` bei venv vorn im PATH: rc **2**, also
+    # „konnte nicht urteilen", mit `No module named pytest` und der Zeile „es ist vermutlich
+    # gar nicht gestartet. NICHT als Ergebnis werten". Der Anti-Schweigen-Riegel faengt den
+    # Fall; was vorher zufaellig funktionierte, scheitert jetzt sichtbar.
+    #
     # Der frueher hier stehende Grund gegen ein unbedingtes `env` („ein Unterschied, den man
     # nicht braucht, ist einer, den man spaeter sucht") gilt weiter — er trifft nur nicht
     # mehr zu: der Unterschied wird jetzt GEBRAUCHT, und er steht hier.
