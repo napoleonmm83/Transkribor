@@ -446,12 +446,18 @@ def test_ohne_teil_bleibt_die_ausgabe_wie_vorher(tmp_path, capsys):
 
 
 def test_die_matrix_des_workflows_passt_zum_nenner():
-    """Die Teilzahl steht im Workflow ZWEIMAL — in der Matrix und in jedem `--teil i/n`.
+    """Die Teilzahl steht im Workflow an DREI Stellen: Matrix, Jobname, und jedes `--teil`.
 
-    Laufen die auseinander, ist der Schaden still und einseitig: bei einer Matrix mit
+    Laufen sie auseinander, ist der Schaden still und einseitig: bei einer Matrix mit
     weniger Eintraegen als dem Nenner laufen ganze Teile NIE, und die uebrigen Jobs sind
-    gruen. Genau dafuer gibt es diesen Test — die Kommentarzeile im Workflow behauptete
-    zuerst, es gaebe ihn nicht.
+    gruen.
+
+    ZWEI LOECHER, BEIDE VON PRUEFERN AUSGEFUEHRT, beide hier geschlossen:
+    - Die erste Fassung suchte woertlich `--teil ${{ matrix.teil }}/N`. Die Gleichheitsform
+      `--teil=${{ matrix.teil }}/8` fiel damit aus der MENGE, statt sie zu widerlegen — der
+      Test blieb gruen, waehrend vier Teile von acht nie liefen. Deshalb zaehlt er jetzt die
+      Aufrufe des Laeufers und verlangt fuer JEDEN einen Treffer.
+    - Der Jobname traegt den Nenner ein drittes Mal und war gar nicht gebunden.
     """
     workflow = (WURZEL / ".github" / "workflows" / "test.yml").read_text(encoding="utf-8")
     # Am Zeilenanfang verankert: ohne das trifft `anteil: [9]` mit, und dieser Test urteilte
@@ -459,9 +465,24 @@ def test_die_matrix_des_workflows_passt_zum_nenner():
     matrix = re.search(r"^\s*teil:\s*\[([0-9,\s]+)\]", workflow, re.M)
     assert matrix, "die Matrix `teil:` fehlt — dann misst dieser Test nichts"
     eintraege = [int(x) for x in matrix.group(1).split(",")]
-    nenner = {int(m) for m in re.findall(r"--teil \$\{\{ matrix\.teil \}\}/(\d+)", workflow)}
-    assert nenner, "keine --teil-Zeile gefunden — dann misst dieser Test nichts"
-    assert nenner == {len(eintraege)}, (
-        f"Matrix hat {len(eintraege)} Eintraege, der Nenner sagt {sorted(nenner)}")
     assert eintraege == list(range(1, len(eintraege) + 1)), (
         f"die Matrix muss 1..n lueckenlos aufzaehlen, ist {eintraege}")
+
+    # JEDER Aufruf des Laeufers muss einen Teiler tragen — sonst faehrt ein Schritt die
+    # ganze Serie in jedem der vier Jobs. Gezaehlt statt nur gesucht, weil ein fehlender
+    # Treffer sonst als „gibt es nicht" durchgeht.
+    aufrufe = len(re.findall(r"python scripts/mutationen_lauf\.py", workflow))
+    assert aufrufe >= 2, f"nur {aufrufe} Aufruf(e) gefunden — dann misst dieser Test nichts"
+    teiler = re.findall(r"--teil[= ]\$\{\{ matrix\.teil \}\}/(\d+)", workflow)
+    assert len(teiler) == aufrufe, (
+        f"{aufrufe} Aufruf(e) des Laeufers, aber {len(teiler)} mit --teil — einer faehrt"
+        " die ganze Serie")
+
+    # Der Nenner steht auch im Jobnamen. Dort driftet er am leisesten: die Jobs heissen
+    # dann „x/4", waehrend acht Teile gefahren werden.
+    im_namen = re.findall(r"^\s*name: Mutationsproben \$\{\{ matrix\.teil \}\}/(\d+)",
+                          workflow, re.M)
+    assert im_namen, "der Jobname nennt den Nenner nicht — dann misst dieser Test nichts"
+    alle = {int(x) for x in teiler} | {int(x) for x in im_namen}
+    assert alle == {len(eintraege)}, (
+        f"Matrix hat {len(eintraege)} Eintraege, genannt werden {sorted(alle)}")

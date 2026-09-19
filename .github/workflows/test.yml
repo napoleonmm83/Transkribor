@@ -542,11 +542,15 @@ jobs:
     # Der Anlass, gemessen am Lauf 35438398886: ein PR, der den TREIBER anfasst, waehlt jeden
     # Plan (`GLOBALE_PFADE`) — 54:22 in einem Job. Vier Teile: laengster 25:21. Faktor 2,1;
     # die Rechnung samt der drei verworfenen Vergaben steht im Docstring von `teile()`.
-    # Wer die Zahl hier aendert, aendert sie an BEIDEN Stellen — `--teil i/4` unten traegt
-    # sie ein zweites Mal. Eine Matrix mit weniger Eintraegen als dem Nenner ist dabei der
-    # stille Schaden: ganze Teile liefen NIE, und die uebrigen Jobs waeren gruen.
-    # `test_die_matrix_des_workflows_passt_zum_nenner` bindet die beiden aneinander und
-    # verlangt zusaetzlich, dass die Matrix 1..n lueckenlos aufzaehlt.
+    # Wer die Zahl hier aendert, aendert sie an DREI Stellen: der Matrix, dem Jobnamen eine
+    # Zeile darueber, und den zwei `--teil …/4` weiter unten. Eine Matrix mit weniger
+    # Eintraegen als dem Nenner ist dabei der stille Schaden: ganze Teile liefen NIE, und
+    # die uebrigen Jobs waeren gruen.
+    # `test_die_matrix_des_workflows_passt_zum_nenner` bindet alle drei aneinander, zaehlt
+    # die Aufrufe des Laeufers gegen die Zahl der Teiler (sonst faehrt einer die ganze
+    # Serie) und verlangt, dass die Matrix 1..n lueckenlos aufzaehlt. Drei Umgehungen sind
+    # dabei ausgefuehrt widerlegt worden — die Gleichheitsform `--teil=`, ein abweichender
+    # Jobname und ein Aufruf ohne Teiler kamen in der ersten Fassung alle durch.
     #
     # `fail-fast: false`, weil die Information, WELCHER Teil umfaellt, der ganze Zweck ist —
     # dieselbe Begruendung wie bei der Plattform-Matrix des Jobs `Python` ganz oben.
