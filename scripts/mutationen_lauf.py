@@ -164,13 +164,23 @@ def teile(gewaehlt: list[Plan], nummer: int, anzahl: int) -> list[Plan]:
 
         heute, ein Job                              54:19
         reihum in Dateireihenfolge                  25:55
-        reihum nach Mutationszahl absteigend        25:21   <- gebaut
+        reihum nach Mutationszahl absteigend        24:41   <- gebaut
         gierig auf Mutationszahl (LPT)              31:09   <- die naheliegende „Verbesserung"
         perfekte Packung (braucht Kostentabelle)    17:26
 
-    Also Faktor 2,1, nicht mehr. Der erste Entwurf dieser Zeile behauptete 22 min; das war
-    eine Handrechnung, die die beiden teuersten Plaene in verschiedene Teile legte, und die
-    echte Vergabe tut das nicht.
+    Also Faktor 2,2, nicht mehr. Die Zahl hat sich waehrend dieses Umbaus ZWEIMAL bewegt,
+    und beide Male stand vorher eine falsche da: erst 22 min aus einer Handrechnung, dann
+    25:21 aus einer Messung, die den Stand VOR diesem Commit beschrieb.
+
+    DER ZWEITE FALL IST DER LEHRREICHE, weil er eine Eigenschaft der Vergabe zeigt: dieser
+    Branch hebt den Plan `mutationen_lauf` von 12 auf 18 Mutationen, und das verschiebt die
+    Reihenfolge — die beiden teuersten Plaene landen dadurch in verschiedenen Teilen. **Die
+    Vergabe haengt also an Zahlen, die sich bei jeder neuen Mutation aendern.** Wer hier
+    eine Zahl liest, liest eine Momentaufnahme; wer sie braucht, misst nach. Gemessen mit
+    `scripts/mutationen_lauf.py --alle --teil=i/n --nur-auswahl` gegen die Einzelzeiten.
+
+    Aus demselben Grund sind MEHR Teile nicht automatisch besser: sechs ergeben 27:52, also
+    schlechter als vier. Die Teilzahl ist kein Regler, an dem man dreht.
 
     DIE DRITTE ZEILE IST DER EIGENTLICHE MERKPOSTEN: LPT — jeden Plan in den bis dahin
     leichtesten Teil — ist die Lehrbuchantwort und hier MESSBAR SCHLECHTER als reihum. Der
@@ -183,9 +193,13 @@ def teile(gewaehlt: list[Plan], nummer: int, anzahl: int) -> list[Plan]:
     hier sonst als stille Drift beanstandet wird, und sie veraltet mit jedem neuen Test.
     Unter 17:26 kaeme ohnehin nur, wer INNERHALB eines Plans aufteilt — eigener Zuschnitt.
 
-    Der Sortierschluessel traegt den Namen als zweites Glied, damit die Vergabe bei gleicher
-    Mutationszahl stabil ist — sonst haengt es an der Dateireihenfolge, welcher Teil welchen
-    Plan bekommt, und zwei Laeufe ueber denselben Commit sind nicht mehr vergleichbar.
+    Der Sortierschluessel traegt den Namen als zweites Glied. Heute ist das WIRKUNGSLOS —
+    `sorted` ist stabil und `lade_plaene` liefert schon sortiert, die Vergabe ist mit und
+    ohne das zweite Glied identisch (gemessen ueber die sieben Gleichstandsgruppen; die
+    erste Fassung dieses Absatzes behauptete eine Gefahr, die es nicht gibt, und der
+    gegnerische Pruefer hat es nachgerechnet). Es bleibt stehen, weil die Stabilitaet dann
+    an DIESER Zeile haengt statt an einer Zusage von `lade_plaene` — aber es verdient keine
+    Begruendung, die mehr verspricht.
     """
     nach_kosten = sorted(gewaehlt, key=lambda p: (-len(p.mutationen), p.name))
     return [p for i, p in enumerate(nach_kosten) if i % anzahl == nummer - 1]

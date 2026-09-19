@@ -233,5 +233,6 @@
         "test_der_workflow_liefert_den_status_mit"
       ]
     }
-  ]
+  ],
+  "hinweis": "`.github/workflows/test.yml` steht ABSICHTLICH in `pfade`, obwohl das den abgeleiteten --pfad von `scripts` auf `.` weitet: nur so waehlt eine reine Workflow-Aenderung diesen Plan, und nur so liegt L18 innerhalb des Pfades (der Treiber bricht sonst ab). Der Preis ist gemessen und tragbar — Sauberkeitspruefung und Bytecode-Leeren laufen ueber den ganzen Baum, bei 62 unversionierten Dateien (Stand 19.09.2026) sind das rund 10 s je Pruefung. Wer den Baum zumuellt, zahlt hier zuerst: die Hausregel dazu steht in ~/.claude/CLAUDE.md unter 'Reisst ein Riegel sein Limit, sieh ZUERST im Arbeitsbaum nach' (dort waren es 147506 Dateien und ueber 560 s). Praezedenz: testdeckel_riegel, fehlerberichte-python."
 }

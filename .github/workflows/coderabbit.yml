@@ -27,7 +27,7 @@ name: CodeRabbit
 # NEBENGEWINN, und er ist der Grund, warum diese Loesung billiger ist als sie aussieht:
 # `test.yml` musste fuer den achten Job seine Typenliste um `ready_for_review` erweitern.
 # Das haette JEDEM „Entwurf wird bereit" die volle Matrix ein zusaetzliches Mal beschert
-# (Python x2, Frontend, Electron x2, Skripte x3, Ruff, Mypy, Mutationsproben) und dabei
+# (Python x2, Frontend, Electron x2, Skripte x3, Ruff, Mypy, Mutationsproben x4) und dabei
 # einen laufenden `synchronize`-Lauf abgebrochen. Mit der eigenen Datei bleibt `test.yml`
 # Byte fuer Byte wie auf master.
 
