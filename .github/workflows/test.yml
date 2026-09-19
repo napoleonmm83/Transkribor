@@ -44,8 +44,12 @@ concurrency:
 # und `push:` mit und die Antwort ist 8 statt 6 (genau so ist der erste Entwurf dieser
 # Zeile danebengegangen):
 #     sed -n '/^jobs:/,$p' .github/workflows/test.yml | grep -cE '^  [a-z_-]+:$'
-# Gegengeprueft am YAML-Parser: beide sagen 7. Nachgezogen am 2026-09-05 beim Job
-# `Mutationsproben` — genau der Handgriff, den diese Klammer verlangt.)
+# Gegengeprueft am YAML-Parser: beide sagen 8. Nachgezogen am 2026-09-05 beim Job
+# `Mutationsproben` — genau der Handgriff, den diese Klammer verlangt.
+# Und am 2026-09-19 schon wieder: die Zeile stand auf 7, beide Zaehlweisen sagten 8, und
+# zwar SEIT `renovate_regeln` — also vor der Aenderung, die sie gerade wieder aufgedeckt
+# hat. Die Klammer beschreibt damit ihren eigenen Rueckfall: der Handgriff, den sie
+# verlangt, ist genau einmal gemacht worden.)
 #
 # Ohne Block gilt die Vorgabe des REPOSITORYS — und die ist eine Einstellung, die ein
 # Klick umlegt, kein Bestandteil dieses Workflows. Heute steht sie auf read: gemessen am
@@ -529,8 +533,27 @@ jobs:
   # nicht messbar (Kommando nicht gestartet oder vorher schon rot) — das ist ausdruecklich
   # KEIN Bestehen und macht den Job rot, genau wie eine nicht gefangene Mutation.
   mutation:
-    name: Mutationsproben
+    name: Mutationsproben ${{ matrix.teil }}/4
     runs-on: ubuntu-latest
+    # VIER TEILE NEBENEINANDER, seit dem 19.09.2026. Auswahl und Aufteilung liegen beide in
+    # `mutationen_lauf.py` — hier steht nur, WIE VIELE Teile es sind, und das ist Wissen ueber
+    # den Lauf, nicht ueber die Waechter (dieselbe Grenze wie bei `--geaendert` gegen `--alle`).
+    #
+    # Der Anlass, gemessen am Lauf 35438398886: ein PR, der den TREIBER anfasst, waehlt jeden
+    # Plan (`GLOBALE_PFADE`) — 54:22 in einem Job. Vier Teile: laengster 25:21. Faktor 2,1;
+    # die Rechnung samt der drei verworfenen Vergaben steht im Docstring von `teile()`.
+    # Wer die Zahl hier aendert, aendert sie an BEIDEN Stellen — `--teil i/4` unten traegt
+    # sie ein zweites Mal. Eine Matrix mit weniger Eintraegen als dem Nenner ist dabei der
+    # stille Schaden: ganze Teile liefen NIE, und die uebrigen Jobs waeren gruen.
+    # `test_die_matrix_des_workflows_passt_zum_nenner` bindet die beiden aneinander und
+    # verlangt zusaetzlich, dass die Matrix 1..n lueckenlos aufzaehlt.
+    #
+    # `fail-fast: false`, weil die Information, WELCHER Teil umfaellt, der ganze Zweck ist —
+    # dieselbe Begruendung wie bei der Plattform-Matrix des Jobs `Python` ganz oben.
+    strategy:
+      fail-fast: false
+      matrix:
+        teil: [1, 2, 3, 4]
     # `scripts/mutation.py` faehrt sein Testkommando ueber `subprocess.run` OHNE
     # `timeout=`. Der Job-Deckel ist hier deshalb die Grenze fuer die SERIE — und
     # fuer alles, was nicht pytest ist. Die einzelnen pytest-Laeufe darin sind seit
@@ -565,6 +588,12 @@ jobs:
     # Playwright-Laeufe. Die Zahl ist mitgezogen statt stehengelassen — ein Reserve-Faktor, den
     # niemand nachrechnet, ist beim naechsten Zuwachs die Begruendung fuer einen Deckel, der
     # nicht mehr traegt. Wer einen weiteren E2E-Plan anlegt, misst hier nach.
+    #
+    # SEIT DER AUFTEILUNG gilt der Deckel je TEIL, nicht mehr fuer die ganze Serie: gemessen
+    # 25:21 fuer den laengsten, der Faktor ist damit von 1,1x auf 2,4x gestiegen. Bewusst
+    # nicht mitgesenkt — ein Deckel ist hier die Notbremse gegen einen Haenger, und ein
+    # einzelner Plan kann 16:28 kosten; zu eng gesetzt riesse er bei einem langsamen Laeufer
+    # einen gesunden Lauf ab, und das sieht von aussen aus wie ein Befund.
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
@@ -618,9 +647,11 @@ jobs:
         if: github.event_name == 'pull_request'
         env:
           GITHUB_COM_TOKEN: ${{ github.token }}
-        run: python scripts/mutationen_lauf.py --repo . --geaendert ${{ runner.temp }}/geaendert.txt
+        run: >
+          python scripts/mutationen_lauf.py --repo .
+          --geaendert ${{ runner.temp }}/geaendert.txt --teil ${{ matrix.teil }}/4
       - name: Alle Mutationsproben
         if: github.event_name != 'pull_request'
         env:
           GITHUB_COM_TOKEN: ${{ github.token }}
-        run: python scripts/mutationen_lauf.py --repo . --alle
+        run: python scripts/mutationen_lauf.py --repo . --alle --teil ${{ matrix.teil }}/4
