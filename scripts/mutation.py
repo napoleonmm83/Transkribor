@@ -240,7 +240,37 @@ def _verfolgt_geaendert(repo: str, pfad: str) -> str:
     `SERIE FEHLGESCHLAGEN`. Zwei Stellen fuer eine Regel driften.
     """
     zeilen = _git(repo, "status", "--porcelain", "--", pfad).splitlines()
-    return "\n".join(z for z in zeilen if not z.startswith("??")).strip()
+    return "\n".join(z for z in zeilen
+                     if not z.startswith("??") and not _ist_mutationsplan(z)).strip()
+
+
+def _ist_mutationsplan(statuszeile: str) -> bool:
+    """Ein PLAN ist kein Mutationsziel — er kann keine haengengebliebene Mutation sein.
+
+    Der Sauberkeitscheck oben begruendet sich damit, dass sich sonst am Ende nicht sagen
+    laesst, ob eine Mutation im Baum stehengeblieben ist. Fuer `scripts/mutationen/*.json`
+    trifft das nicht zu: mutiert werden die Dateien aus den `datei`-Feldern, nie der Plan
+    selbst.
+
+    Gemessen am 2026-09-19, und es war der GROESSTE Einzelposten jener Sitzung: ein editierter,
+    noch nicht committeter Plan liess `fehlerberichte-python` (`--pfad .`) mit ABBRUCH enden —
+    eine Serie von knapp vier Minuten lieferte fuer diesen Plan kein Urteil und musste
+    vollstaendig wiederholt werden. Der eigene Plan (`--pfad webtool`) sah die Datei nicht,
+    ein fremder mit weiterem Pfad schon; welcher Plan also abbricht, haengt an einem
+    Pfadpraefix, das mit der Sache nichts zu tun hat.
+
+    ENG gestellt: nur der Ordner, nur `.json`. Alles andere unter `scripts/` bleibt ein
+    Mutationsziel und zaehlt weiter. Die exaktere Loesung waere, gegen die `datei`-Felder der
+    Mutationen dieses Plans zu pruefen statt gegen ein Praefix — sie ist besser und groesser
+    und steht als eigener Punkt im Aufgabenindex.
+
+    Die Statuszeile hat die Form `XY pfad`; `--porcelain` liefert Vorwaertsschraegstriche,
+    auch auf Windows. Eine Umbenennung (`R  alt -> neu`) faellt hier bewusst durch, weil ihr
+    Pfadteil zwei Namen traegt: ein umbenannter Plan ist selten, und die sichere Richtung ist,
+    ihn zaehlen zu lassen.
+    """
+    pfad = statuszeile[3:].strip().strip('"')
+    return pfad.startswith("scripts/mutationen/") and pfad.endswith(".json")
 
 
 def _lauf(repo: str, kommando: str, zusatz: dict[str, str] | None = None) -> tuple[str, int]:
@@ -274,10 +304,29 @@ def _lauf(repo: str, kommando: str, zusatz: dict[str, str] | None = None) -> tup
     #
     # Dass es hier trotzdem lief, lag an `PYTHONUTF8=1` auf DIESEM Rechner — genau die
     # Sorte Fehler, die auf dem Rechner des Autors nie auftritt.
-    # `env` nur, wenn wirklich etwas dazukommt: `env=os.environ.copy()` waere zwar
-    # gleichwertig, ersetzt aber die geerbte Umgebung durch eine Kopie — und ein Unterschied,
-    # den man nicht braucht, ist einer, den man spaeter sucht.
-    umgebung = {**os.environ, **zusatz} if zusatz else None
+    # DER INTERPRETER REIST MIT — und das ist der Grund, warum die Umgebung jetzt IMMER gebaut
+    # wird (bis zum 2026-09-19 nur, wenn ein Plan `env` mitbrachte).
+    #
+    # `shell=True` startet auf Windows cmd.exe, und dort entscheidet der PATH, was `python`
+    # ist. Jeder committete Plan schreibt `python -m pytest …`; auf diesem Rechner traf das
+    # ein System-3.14 OHNE pytest. Gemessen am 2026-09-19: ALLE SECHS ueber `--geaendert`
+    # gewaehlten Plaene brachen mit rc 2 ab, Ausgabe je
+    # `C:\Python314\python.exe: No module named pytest`, und die Bilanzzeile lautete
+    # `0 von 6 bestanden` mit `GESCHEITERT` an jedem Plan — wer nur sie liest, sucht den
+    # Fehler im eigenen Diff. Zweites Vorkommen in zwei Tagen; im Reibungsjournal steht die
+    # Klasse beim 6. Mal.
+    #
+    # Das Verzeichnis von `sys.executable` VORNE anzustellen ist sicher, weil der Treiber
+    # ohnehin unter genau diesem Interpreter laeuft (`mutationen_lauf.py` startet ihn mit
+    # `sys.executable`): lokal ist das die venv, in der CI das setup-python — dort also ein
+    # No-op, weil `python` schon darauf zeigt. VORNE und nicht hinten, denn ein System-Python
+    # frueher im PATH ist genau der gemessene Fall.
+    #
+    # Der frueher hier stehende Grund gegen ein unbedingtes `env` („ein Unterschied, den man
+    # nicht braucht, ist einer, den man spaeter sucht") gilt weiter — er trifft nur nicht
+    # mehr zu: der Unterschied wird jetzt GEBRAUCHT, und er steht hier.
+    umgebung = {**os.environ, **(zusatz or {})}
+    umgebung["PATH"] = os.path.dirname(sys.executable) + os.pathsep + umgebung.get("PATH", "")
     p = subprocess.run(kommando, cwd=repo, shell=True, capture_output=True,  # noqa: S602
                        encoding="utf-8", errors="replace", env=umgebung)
     # EINE Stelle fuer die Entfaerbung, nicht drei: alle drei Proben und der Abgleich der

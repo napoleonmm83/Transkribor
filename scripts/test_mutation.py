@@ -544,3 +544,43 @@ def test_lauf_entfaerbt_die_ausgabe_eines_echten_kindes(tmp_path):
     assert "\x1b" not in aus, f"Steuerzeichen sind durchgekommen: {aus!r}"
     assert mutation._lief_mindestens_ein_test(aus), (
         "entfaerbt muss die Bilanzzeile als Testlauf zaehlen — sonst ist T-070 zurueck")
+
+
+def test_der_interpreter_des_treibers_steht_vorn_im_PATH_des_kindes(tmp_path):
+    """Der Kindprozess muss dasselbe `python` finden, unter dem der Treiber laeuft.
+
+    `shell=True` startet auf Windows cmd.exe, und dort entscheidet der PATH, was `python`
+    ist. Jeder committete Plan schreibt `python -m pytest …`; traf das ein System-Python ohne
+    pytest, brach der Lauf mit rc 2 ab — gemessen am 2026-09-19 an ALLEN SECHS gewaehlten
+    Plaenen, Ausgabe je `No module named pytest`, Bilanz `0 von 6 bestanden`. Das liest sich
+    wie sechs kaputte Waechter und ist ein Umgebungsfehler.
+
+    Geprueft wird die EIGENSCHAFT, nicht der Weg: das Kind meldet den Interpreter, den es
+    ueber den blanken Namen `python` findet, und der muss der des Treibers sein. Ein Test auf
+    die PATH-Zeichenkette wuerde die Formel pruefen statt ihre Wirkung.
+    """
+    (tmp_path / "wer.py").write_text("import sys; print(sys.executable)", encoding="utf-8")
+    aus, rc = mutation._lauf(str(tmp_path), "python wer.py")
+    assert rc == 0, f"das Kind ist nicht gestartet: {aus!r}"
+    assert Path(aus.strip()).resolve() == Path(sys.executable).resolve(), (
+        f"das Kind fand ein anderes python: {aus.strip()!r} statt {sys.executable!r}")
+
+
+def test_ein_geaenderter_MUTATIONSPLAN_gilt_nicht_als_schmutziger_baum():
+    """Ein Plan ist kein Mutationsziel — er kann keine haengengebliebene Mutation sein.
+
+    Gemessen am 2026-09-19 und der groesste Einzelposten jener Sitzung: ein editierter,
+    uncommitteter Plan liess eine FREMDE Serie (`--pfad .`) mit ABBRUCH enden; knapp vier
+    Minuten lieferten kein Urteil und mussten wiederholt werden. Welcher Plan dabei abbricht,
+    hing an einem Pfadpraefix, das mit der Sache nichts zu tun hat.
+
+    Beide Richtungen, sonst waere die Ausnahme ein Loch: ein geaenderter Plan zaehlt NICHT,
+    jede andere Datei unter `scripts/` weiterhin schon.
+    """
+    assert mutation._ist_mutationsplan(" M scripts/mutationen/apply-riegel.json")
+    assert mutation._ist_mutationsplan("M  scripts/mutationen/x.json")
+    # Gegenrichtung — alles davon bleibt ein Mutationsziel:
+    assert not mutation._ist_mutationsplan(" M scripts/mutation.py")
+    assert not mutation._ist_mutationsplan(" M scripts/mutationen/liesmich.md")
+    assert not mutation._ist_mutationsplan(" M webtool/correct.py")
+    assert not mutation._ist_mutationsplan(" M scripts/mutationen_lauf.py")
