@@ -652,6 +652,44 @@ def test_apply_raeumt_den_resume_anker_nur_mit_erlaubnis_weg(project):
     assert not (t / "S1.correction.json").exists()
 
 
+def test_apply_verwirft_eine_korrektur_die_eine_ANDERE_aufnahme_nennt(project, capsys):
+    """Zweites Erkennungsmerkmal fuer dieselbe Lage (CodeRabbit-CLI, zweimal gemeldet).
+
+    Die Trefferzaehlung faengt das NICHT: Roh-ids sind `0, 1, 2, …` und passen zwischen zwei
+    Transkripten zufaellig zusammen. Der Schaden ist derselbe, gegen den der ganze Riegel
+    gebaut ist — ein vollstaendig plausibles Dokument mit dem Text einer FREMDEN Aufnahme.
+    Erreichbar ueber ein halluziniertes Feld (alle vier Prompts schreiben `"base": "{base}"`
+    vor) und ueber den dokumentierten Handweg.
+    """
+    _root, t = project
+    (t / "S1.correction.json").write_text(json.dumps({
+        "base": "S7", "segments": [{"id": 0, "speaker": "X", "text": "Text von S7."}],
+    }), encoding="utf-8")
+    assert correct.cmd_apply("Demo", "S1") == "missing"
+    assert not (t / "S1.edit.json").exists()
+    assert "nennt eine andere Aufnahme" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("feld", [
+    pytest.param({}, id="base-fehlt"),
+    pytest.param({"base": ""}, id="base-leer"),
+    pytest.param({"base": "   "}, id="base-nur-leerraum"),
+    pytest.param({"base": 5}, id="base-kein-string"),
+])
+def test_apply_urteilt_NICHT_ueber_einen_unbekannten_basisnamen(project, feld):
+    """Gegenkontrolle — die Fehlerrichtung des ganzen Moduls: Unbekanntes verwirft nichts.
+
+    Der DATEINAME ist die Wahrheit; das Feld im Inhalt ist nur der Widerspruch dazu. Fehlt
+    es, ist es leer oder traegt es einen fremden Typ, ist der Basisname unbekannt — und eine
+    Wache, die daraus einen Fehlschlag macht, verwirft gesunde Korrekturen aelterer Modelle.
+    Ohne diese vier Faelle waere die Wache in der gefaehrlichen Richtung ungeprueft.
+    """
+    _root, t = project
+    (t / "S1.correction.json").write_text(json.dumps(dict(
+        feld, segments=[{"id": 0, "speaker": "X", "text": "Neu."}])), encoding="utf-8")
+    assert correct.cmd_apply("Demo", "S1") == "written"
+
+
 def test_apply_zaehlt_eine_doppelte_id_EINMAL_und_fasst_den_verlierer_nicht_an(project, capsys):
     """Gezaehlt wird ueber dieselbe Abbildung, die auch angewandt wird — sonst zweierlei.
 
@@ -1041,8 +1079,13 @@ def test_run_survives_corrupt_raw(project, monkeypatch):
     def fake(prompt, workdir):
         if "_glossar.json" in prompt:
             return
-        _dump(re.search(r"(\S+\.correction\.json)", prompt).group(1),
-              {"base": "x", "segments": [{"id": 0, "speaker": "Interviewer", "text": "ok"}]})
+        cpath = re.search(r"(\S+\.correction\.json)", prompt).group(1)
+        # `base` aus dem Pfad, wie es das echte `claude -p` tut — alle vier Prompts schreiben
+        # `"base": "{base}"` vor. Hier stand ein Platzhalter `"x"`, und das war folgenlos,
+        # solange niemand das Feld prueft; seit T-199 prueft es jemand, und die Attrappe
+        # behauptete damit eine Korrektur, die zu einer fremden Aufnahme gehoert.
+        _dump(cpath, {"base": os.path.basename(cpath)[: -len(".correction.json")],
+                      "segments": [{"id": 0, "speaker": "Interviewer", "text": "ok"}]})
     monkeypatch.setattr(correct, "_run_claude", fake)
     # S1 wird korrigiert, S2 (korrupte Roh-JSON) übersprungen — kein Absturz des Batches
     assert correct.cmd_run("Demo") == 1
@@ -1069,8 +1112,13 @@ def test_run_survives_falsch_geformtes_raw(project, monkeypatch, capsys):
     def fake(prompt, workdir):
         if "_glossar.json" in prompt:
             return
-        _dump(re.search(r"(\S+\.correction\.json)", prompt).group(1),
-              {"base": "x", "segments": [{"id": 0, "speaker": "Interviewer", "text": "ok"}]})
+        cpath = re.search(r"(\S+\.correction\.json)", prompt).group(1)
+        # `base` aus dem Pfad, wie es das echte `claude -p` tut — alle vier Prompts schreiben
+        # `"base": "{base}"` vor. Hier stand ein Platzhalter `"x"`, und das war folgenlos,
+        # solange niemand das Feld prueft; seit T-199 prueft es jemand, und die Attrappe
+        # behauptete damit eine Korrektur, die zu einer fremden Aufnahme gehoert.
+        _dump(cpath, {"base": os.path.basename(cpath)[: -len(".correction.json")],
+                      "segments": [{"id": 0, "speaker": "Interviewer", "text": "ok"}]})
     monkeypatch.setattr(correct, "_run_claude", fake)
 
     assert correct.cmd_run("Demo") == 1

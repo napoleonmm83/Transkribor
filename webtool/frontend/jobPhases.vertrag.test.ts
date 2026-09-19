@@ -353,6 +353,18 @@ const INVENTAR: Record<string, Eintrag> = {
       + 'nicht. Bis 17.09.2026 riss ein gescheiterter md-Export die ganze Aufnahme in den '
       + 'Fehlschlag (0/1 bei vollstaendiger edit.json).',
   },
+  'apply: KAPUTT {} (Korrektur nennt eine andere Aufnahme: ': {
+    art: 'gelesen',
+    beispiel: 'apply: KAPUTT A (Korrektur nennt eine andere Aufnahme: \'S7\') — nicht '
+      + 'angewandt, A.correction.json pruefen',
+    basis: 'A',
+    notiz: 'T-199, zweites Erkennungsmerkmal (CodeRabbit-CLI). Die Trefferzaehlung faengt es '
+      + 'nicht: Roh-ids sind 0, 1, 2 … und passen zwischen zwei Transkripten zufaellig '
+      + 'zusammen — der Text einer fremden Aufnahme landete als vollstaendig plausibles '
+      + 'Dokument im Export. Faellt in denselben Parser-Zweig wie die Schwester darunter und '
+      + 'urteilt failed; geurteilt wird NUR ueber ein vorhandenes, nichtleeres '
+      + 'Zeichenketten-Feld, der Dateiname bleibt die Wahrheit.',
+  },
   'apply: KAPUTT {} (Korrektur trifft kein Segment der Aufnahme: ': {
     art: 'gelesen',
     beispiel: 'apply: KAPUTT A (Korrektur trifft kein Segment der Aufnahme: 0 von 12 '

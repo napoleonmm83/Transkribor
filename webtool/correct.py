@@ -608,6 +608,29 @@ def cmd_apply(project: str, base: str, force: bool = False, *,
     by_id = {c.get("id"): c for c in korr}
     getroffen = [c for i, c in by_id.items() if i in roh_ids]
     ohne_sprecher = sum(1 for c in getroffen if not (c.get("speaker") or "").strip())
+    # ZWEITES Erkennungsmerkmal fuer dieselbe Lage (CodeRabbit-CLI, zweimal gemeldet): eine
+    # Korrektur, die einen ANDEREN Basisnamen nennt, gehoert zu einer anderen Aufnahme. Die
+    # Zaehlung oben faengt das nicht — Roh-ids sind schlicht `0, 1, 2, …` und passen zwischen
+    # zwei Transkripten zufaellig zusammen. Der Schaden ist derselbe, gegen den dieser ganze
+    # Riegel gebaut ist: ein vollstaendig plausibles Dokument mit dem Text einer fremden
+    # Aufnahme. Erreichbar ueber ein halluziniertes Feld (alle vier Prompts schreiben
+    # `"base": "{base}"` vor) und ueber den dokumentierten Handweg, auf dem ein Mensch die
+    # Datei unter einem Namen ablegt.
+    #
+    # Eng gestellt, und die Fehlerrichtung ist die des ganzen Moduls: geurteilt wird NUR ueber
+    # ein vorhandenes, nichtleeres Zeichenketten-Feld. Fehlt es oder traegt es einen fremden
+    # Typ, ist der Basisname unbekannt — und Unbekanntes verwirft dieses Modul nicht. Der
+    # DATEINAME bleibt die Wahrheit; dieses Feld ist nur der Widerspruch dazu.
+    fremd = correction.get("base")
+    if isinstance(fremd, str) and fremd.strip() and fremd.strip() != base:
+        _letzte_fehler += 1
+        if verwerfe_unpassende:
+            with contextlib.suppress(OSError):
+                os.remove(cpath)
+        print(f"apply: KAPUTT {base} (Korrektur nennt eine andere Aufnahme: "
+              f"{fremd.strip()!r}) — nicht angewandt, {base}.correction.json pruefen",
+              flush=True)
+        return "missing"
     # EIN Kriterium statt zweier Mechanismen: "kein einziges Roh-Segment getroffen, obwohl es
     # welche gibt" deckt auch die beiden Faelle ab, die `_valid_correction` faengt (`segments`
     # fehlt, `segments` leer) — dort ist `getroffen` ebenfalls leer. Ein LEERES `roh_ids` heisst
