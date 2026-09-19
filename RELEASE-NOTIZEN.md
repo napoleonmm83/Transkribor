@@ -39,7 +39,7 @@ hat. Lesbar, aber unschön — das ist Absicht.
 - Nach geändertem Projektwissen verwendet die nächste Korrektur keine veralteten KI-Ergebnisse weiter. Schlägt die neue Korrektur fehl, bleibt die bisherige Editorfassung erhalten.
 - Eine beschädigte Aufnahme bricht den Korrekturlauf nicht mehr ab: sie wird übersprungen und beim Namen genannt, und der Lauf arbeitet mit den übrigen geeigneten Aufnahmen weiter.
 - Konnte nur die Markdown-Fassung nicht geschrieben werden, gilt die Korrektur nicht mehr als fehlgeschlagen: das Ergebnis bleibt erhalten, und der Lauf sagt dazu, dass die Markdown-Fassung veraltet sein kann.
-- Passt ein Korrekturergebnis überhaupt nicht zur Aufnahme, entsteht daraus kein Transkript mehr: bisher blieb in so einem Fall unbemerkt der unkorrigierte Text stehen, während der Lauf Erfolg meldete.
+- Passt ein Korrekturergebnis nicht zur Aufnahme, wird daraus kein neues Transkript mehr geschrieben und der Lauf sagt warum: bisher blieb in so einem Fall unbemerkt der unkorrigierte Text stehen, während Erfolg gemeldet wurde.
 - Fehlen in einem Korrekturergebnis die Sprecher, sagt der Lauf das jetzt im Protokoll — bisher wurde daraus stillschweigend ein Monolog, in dem die Frage der interviewenden Person der befragten zugeschrieben war.
 - Scheitert ein Korrekturlauf, nennt die Schlussmeldung den KI-Anbieter nur noch dann als Ursache, wenn er wirklich nichts geliefert hat — sonst verweist sie auf die Fehlerzeilen des Laufs.
 

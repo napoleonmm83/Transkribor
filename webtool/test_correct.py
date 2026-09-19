@@ -670,6 +670,37 @@ def test_apply_verwirft_eine_korrektur_die_eine_ANDERE_aufnahme_nennt(project, c
     assert "nennt eine andere Aufnahme" in capsys.readouterr().out
 
 
+@pytest.mark.parametrize("kennung,roh_id", [
+    pytest.param(False, 0, id="false-trifft-segment-0"),
+    pytest.param(True, 1, id="true-trifft-segment-1"),
+])
+def test_apply_verwirft_boolesche_segment_kennungen(project, capsys, kennung, roh_id):
+    """`True == 1` und `False == 0` — und beide teilen den Hash ihrer Zahl (CodeRabbit-CLI).
+
+    Eine JSON-Kennung `false` landet damit in `by_id` auf demselben Platz wie `0`, und
+    `apply_correction` wendet den Eintrag auf Roh-Segment 0 an. Die Trefferzaehlung sieht das
+    nicht: fuer sie ist es ein Treffer wie jeder andere — das Dokument entstuende mit einer
+    Korrektur an einer Stelle, die sie nie gemeint hat.
+
+    Verworfen statt gefiltert, und das ist der Punkt: `apply_correction` laeuft VOR der
+    Pruefung und hat den Eintrag schon eingewoben. Ihn aus `by_id` zu nehmen aenderte nur die
+    ZAHL, nicht das Dokument.
+    """
+    _root, t = project
+    (t / "S1.json").write_text(json.dumps({"language": "de", "segments": [
+        {"id": i, "start": float(i), "end": i + 1.0, "text": f" Satz {i}.", "words": []}
+        for i in range(2)
+    ]}), encoding="utf-8")
+    (t / "S1.correction.json").write_text(json.dumps({
+        "base": "S1", "segments": [{"id": kennung, "speaker": "X", "text": "Untergeschoben."}],
+    }), encoding="utf-8")
+    assert correct.cmd_apply("Demo", "S1") == "missing"
+    assert not (t / "S1.edit.json").exists()
+    assert "boolesche Segment-Kennungen" in capsys.readouterr().out
+    # Die Positivkontrolle zur Mechanik: die Kennung WUERDE dieses Roh-Segment treffen.
+    assert kennung == roh_id
+
+
 @pytest.mark.parametrize("feld", [
     pytest.param({}, id="base-fehlt"),
     pytest.param({"base": ""}, id="base-leer"),
