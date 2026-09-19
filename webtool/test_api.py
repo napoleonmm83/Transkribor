@@ -2411,6 +2411,22 @@ def test_ytdlp_hintergrundlauf_gibt_den_knopf_auch_nach_einem_wurf_frei(client, 
     assert _warte(lambda: not ytdlp_update.hintergrund_zustand()[0])
 
 
+# Die Warnung ist hier ERWARTET, nicht uebersehen: der Test wirft absichtlich `SystemExit`
+# in einem Faden (siehe Begruendung unten), und pytest ersetzt `threading.excepthook`, macht
+# daraus also eine `PytestUnhandledThreadExceptionWarning` MIT vollem Traceback.
+#
+# Weggefiltert wird sie nicht aus Kosmetik, sondern weil sie eine Messung verdraengt: bei
+# einem roten Lauf mit `tail -12` bis `tail -25` schiebt der Traceback die `FAILED`-Namen aus
+# dem Fenster, und man braucht ein zweites Kommando, nur um zu sehen, WAS rot war (gemessen
+# am 2026-09-19, zweimal in einer Sitzung). Eine Warnung, die das Lesen des Ergebnisses
+# kostet, macht den Lauf schlechter lesbar, nicht sicherer.
+#
+# Der Mutationsschutz bleibt vollstaendig: die Zusicherung dieses Tests liegt in seinen
+# `assert`s, nicht in der Warnung — nimmt man das `finally` heraus, wird er rot wie zuvor.
+# Eng gestellt auf GENAU diesen Test und GENAU diese Warnungsklasse; ein Eintrag in
+# `pyproject.toml` haette sie fuer die ganze Suite stummgeschaltet, auch dort, wo ein
+# unerwarteter Faden-Wurf ein echter Befund waere.
+@pytest.mark.filterwarnings("ignore::pytest.PytestUnhandledThreadExceptionWarning")
 def test_ytdlp_hintergrundlauf_gibt_den_knopf_auch_nach_einem_BaseException_frei(
         client, monkeypatch):
     """Erst DIESER Test uebt das `finally` aus — der Test darueber nicht.
