@@ -4,7 +4,8 @@
     "scripts/mutationen_lauf.py",
     "scripts/test_mutationen_lauf.py",
     "scripts/test_mutationsplaene.py",
-    "scripts/mutationen/deckel_finally.json"
+    "scripts/mutationen/deckel_finally.json",
+    ".github/workflows/test.yml"
   ],
   "mutationen": [
     {
@@ -158,6 +159,78 @@
       ],
       "gruen": [
         "test_nur_die_betroffenen_plaene"
+      ]
+    },
+    {
+      "id": "L13 das Aufteilen tut nichts mehr",
+      "datei": "scripts/mutationen_lauf.py",
+      "von": "        gewaehlt = teile(gewaehlt, *teil)",
+      "nach": "        gewaehlt = list(gewaehlt)",
+      "rot": [
+        "test_ein_leerer_TEIL_ist_rc_0_und_nicht_der_anti_schweigen_abbruch"
+      ],
+      "gruen": [
+        "test_ohne_teil_bleibt_die_ausgabe_wie_vorher"
+      ]
+    },
+    {
+      "id": "L14 die Vergabe trifft nicht mehr jeden Plan genau einmal",
+      "datei": "scripts/mutationen_lauf.py",
+      "von": "    return [p for i, p in enumerate(nach_kosten) if i % anzahl == nummer - 1]",
+      "nach": "    return [p for i, p in enumerate(nach_kosten) if i % anzahl == 0]",
+      "rot": [
+        "test_die_teile_decken_die_ganze_auswahl_ab_und_ueberschneiden_sich_nicht"
+      ],
+      "gruen": [
+        "test_ohne_teil_bleibt_die_ausgabe_wie_vorher"
+      ]
+    },
+    {
+      "id": "L15 der Anti-Schweigen-Riegel feuert nicht mehr (fail-open)",
+      "datei": "scripts/mutationen_lauf.py",
+      "von": "    if a.alle and not gewaehlt:\n        print(\"ABBRUCH: --alle hat null Plaene gewaehlt, obwohl welche vorliegen.\")",
+      "nach": "    if False and not gewaehlt:\n        print(\"ABBRUCH: --alle hat null Plaene gewaehlt, obwohl welche vorliegen.\")",
+      "rot": [
+        "test_der_anti_schweigen_riegel_bleibt_trotz_aufteilung_scharf"
+      ],
+      "gruen": [
+        "test_ein_leerer_TEIL_ist_rc_0_und_nicht_der_anti_schweigen_abbruch"
+      ]
+    },
+    {
+      "id": "L16 eine Teilnummer ausserhalb des Bereichs kommt durch",
+      "datei": "scripts/mutationen_lauf.py",
+      "von": "    if not 1 <= nummer <= anzahl:",
+      "nach": "    if False:",
+      "rot": [
+        "test_unbrauchbare_teil_angaben_enden_mit_zwei"
+      ],
+      "gruen": [
+        "test_mehr_teile_als_plaene_laesst_teile_leer"
+      ]
+    },
+    {
+      "id": "L17 ein Nenner von null kommt durch",
+      "datei": "scripts/mutationen_lauf.py",
+      "von": "    if anzahl < 1:",
+      "nach": "    if anzahl < 0:",
+      "rot": [
+        "test_unbrauchbare_teil_angaben_enden_mit_zwei"
+      ],
+      "gruen": [
+        "test_die_teile_decken_die_ganze_auswahl_ab_und_ueberschneiden_sich_nicht"
+      ]
+    },
+    {
+      "id": "L18 Matrix und Nenner laufen auseinander",
+      "datei": ".github/workflows/test.yml",
+      "von": "        teil: [1, 2, 3, 4]",
+      "nach": "        teil: [1, 2]",
+      "rot": [
+        "test_die_matrix_des_workflows_passt_zum_nenner"
+      ],
+      "gruen": [
+        "test_der_workflow_liefert_den_status_mit"
       ]
     }
   ]

@@ -152,6 +152,64 @@ def waehle(plaene: list[Plan], geaendert: set[str] | None) -> list[Plan]:
             or f"scripts/mutationen/{p.datei.name}" in geaendert]
 
 
+def teile(gewaehlt: list[Plan], nummer: int, anzahl: int) -> list[Plan]:
+    """Der `nummer`-te von `anzahl` Teilen der Auswahl (1-basiert), reihum vergeben.
+
+    WOZU. Eine Aenderung am Treiber oder an einem globalen Pfad waehlt JEDEN Plan, und die
+    volle Serie kostet dann eine knappe Stunde: GEMESSEN am Lauf 35438398886, 54:22 gesamt,
+    davon 53:21 Serie und 0:58 Aufbau.
+
+    WAS ES BRINGT, und die Zahl ist nachgerechnet statt geschaetzt — alle Vergaben unten
+    gegen die Einzelzeiten DESSELBEN Laufs, vier Teile, Aufbau je Teil eingerechnet:
+
+        heute, ein Job                              54:19
+        reihum in Dateireihenfolge                  25:55
+        reihum nach Mutationszahl absteigend        25:21   <- gebaut
+        gierig auf Mutationszahl (LPT)              31:09   <- die naheliegende „Verbesserung"
+        perfekte Packung (braucht Kostentabelle)    17:26
+
+    Also Faktor 2,1, nicht mehr. Der erste Entwurf dieser Zeile behauptete 22 min; das war
+    eine Handrechnung, die die beiden teuersten Plaene in verschiedene Teile legte, und die
+    echte Vergabe tut das nicht.
+
+    DIE DRITTE ZEILE IST DER EIGENTLICHE MERKPOSTEN: LPT — jeden Plan in den bis dahin
+    leichtesten Teil — ist die Lehrbuchantwort und hier MESSBAR SCHLECHTER als reihum. Der
+    Grund ist der Schaetzer, nicht das Verfahren: LPT vertraut ihm mehr, und er taugt nicht.
+    `weitergereichtes_then` kostet 71 s je Mutation (14 Mutationen, 16:28),
+    `cross_platform_alias_identity` 7,5 s (33 Mutationen, 4:08). Wer das hier verbessern
+    will, braucht echte Kosten, kein besseres Packverfahren.
+
+    Eine Kostentabelle im Repo ist bewusst NICHT gebaut: sie waere genau die Sorte Zahl, die
+    hier sonst als stille Drift beanstandet wird, und sie veraltet mit jedem neuen Test.
+    Unter 17:26 kaeme ohnehin nur, wer INNERHALB eines Plans aufteilt — eigener Zuschnitt.
+
+    Der Sortierschluessel traegt den Namen als zweites Glied, damit die Vergabe bei gleicher
+    Mutationszahl stabil ist — sonst haengt es an der Dateireihenfolge, welcher Teil welchen
+    Plan bekommt, und zwei Laeufe ueber denselben Commit sind nicht mehr vergleichbar.
+    """
+    nach_kosten = sorted(gewaehlt, key=lambda p: (-len(p.mutationen), p.name))
+    return [p for i, p in enumerate(nach_kosten) if i % anzahl == nummer - 1]
+
+
+def _teil_lesen(roh: str) -> tuple[int, int]:
+    """`i/n` -> (i, n). Wirft `ValueError` mit Klartext, wenn die Form nicht stimmt.
+
+    Eine falsche Angabe darf NIE als „dann eben alles" oder „dann eben nichts" durchgehen:
+    beides waere ein Lauf, der etwas anderes prueft als der Aufrufer glaubt, und genau diese
+    Klasse — ein Messmittel, das seinen eigenen Fehler als Ergebnis meldet — ist der Grund
+    fuer die drei Rueckgabecodes dieses Skripts.
+    """
+    stuecke = roh.split("/")
+    if len(stuecke) != 2 or not all(s.strip().isdecimal() for s in stuecke):
+        raise ValueError(f"--teil erwartet die Form i/n, bekam {roh!r}")
+    nummer, anzahl = (int(s) for s in stuecke)
+    if anzahl < 1:
+        raise ValueError(f"--teil: n muss mindestens 1 sein, bekam {anzahl}")
+    if not 1 <= nummer <= anzahl:
+        raise ValueError(f"--teil: i muss zwischen 1 und {anzahl} liegen, bekam {nummer}")
+    return nummer, anzahl
+
+
 def _lies_geaendert(pfad: pathlib.Path) -> dict[str, str]:
     """Pfad -> Status aus `git diff --name-status`; `?`, wenn die Zeile nur einen Pfad traegt.
 
@@ -187,11 +245,23 @@ def main(argv: list[str] | None = None) -> int:
                     help="Datei mit geaenderten Pfaden, einer je Zeile")
     ap.add_argument("--nur-auswahl", action="store_true",
                     help="nur die Auswahl drucken, nichts fahren")
+    ap.add_argument("--teil", metavar="i/n",
+                    help="nur den i-ten von n Teilen der Auswahl fahren (1-basiert)")
     a = ap.parse_args(argv)
 
     if a.alle == bool(a.geaendert):
         print("ABBRUCH: genau eines von --alle und --geaendert.")
         return 2
+
+    # VOR allem anderen geprueft, damit ein Tippfehler im Teiler nicht erst nach dem
+    # Planladen auffaellt — und ausdruecklich NICHT als Rueckfall auf „dann eben alles".
+    teil: tuple[int, int] | None = None
+    if a.teil is not None:
+        try:
+            teil = _teil_lesen(a.teil)
+        except ValueError as fehl:
+            print(f"ABBRUCH: {fehl}")
+            return 2
 
     wurzel = pathlib.Path(a.repo).resolve()
     try:
@@ -251,12 +321,29 @@ def main(argv: list[str] | None = None) -> int:
         print("ABBRUCH: --alle hat null Plaene gewaehlt, obwohl welche vorliegen.")
         return 2
 
-    print(f"{len(gewaehlt)} von {len(plaene)} Plaenen gewaehlt"
+    # DIE REIHENFOLGE IST DER GANZE PUNKT. Das Aufteilen steht HINTER dem Riegel darueber,
+    # nie davor: nach dem Aufteilen ist eine leere Menge der NORMALFALL (mehr Teile als
+    # Plaene, oder ein Teil trifft keinen), und der Riegel wuerde daraus rc 2 machen — also
+    # jeden Lauf rot. Wer ihn deshalb aufweicht, statt ihn stehen zu lassen, bekommt das
+    # Loch zurueck, gegen das er gebaut ist: eine Auswahl, die still nichts prueft.
+    #
+    # Der Riegel urteilt damit weiterhin ueber die VOLLE Auswahl, das Aufteilen nur ueber
+    # die Verteilung auf die Jobs. Zwei Fragen, zwei Stellen.
+    ganze_auswahl = len(gewaehlt)
+    if teil is not None:
+        gewaehlt = teile(gewaehlt, *teil)
+
+    teil_text = f", Teil {teil[0]}/{teil[1]}" if teil else ""
+    print(f"{len(gewaehlt)} von {len(plaene)} Plaenen gewaehlt{teil_text}"
           f" ({sum(len(p.mutationen) for p in gewaehlt)} Mutationen):")
     for p in gewaehlt:
         print(f"  {p.name}  --pfad {p.pfad_wurzel(wurzel)}")
     if not gewaehlt:
-        print("  (keiner — die Aenderung beruehrt keinen Waechter)")
+        if teil is not None and ganze_auswahl:
+            print(f"  (keiner — die {ganze_auswahl} gewaehlten Plaene liegen in anderen"
+                  f" Teilen; das ist kein Fehler)")
+        else:
+            print("  (keiner — die Aenderung beruehrt keinen Waechter)")
     if a.nur_auswahl:
         return 0
 
@@ -296,7 +383,8 @@ def main(argv: list[str] | None = None) -> int:
         # ein Plan, der gar nicht gemessen hat, hinter einem, der ehrlich rot war.
         schlimmster = max(schlimmster, rc)
 
-    print(f"\nBILANZ: {len(gewaehlt) - len(gescheitert)} von {len(gewaehlt)} bestanden")
+    print(f"\nBILANZ{teil_text}: {len(gewaehlt) - len(gescheitert)} von {len(gewaehlt)}"
+          " bestanden")
     for name, rc in gescheitert:
         print(f"  GESCHEITERT {name} (rc {rc})")
     return schlimmster

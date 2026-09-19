@@ -10,6 +10,7 @@ statt den Laeufer.
 """
 
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -319,3 +320,115 @@ def test_auswahl_ueber_echte_plaene_und_echte_datei(tmp_path, capsys):
     assert "eingereiht_abschluss" in ausgabe
     assert "weitergereichtes_then" in ausgabe
     assert "mypy_riegel" not in ausgabe, "ein unbeteiligter Plan darf nicht mitlaufen"
+
+
+# --- Das Aufteilen in Teile -----------------------------------------------
+
+def test_die_teile_decken_die_ganze_auswahl_ab_und_ueberschneiden_sich_nicht():
+    """Jeder Plan in GENAU einem Teil — beide Richtungen, denn beide sind Ausfallarten.
+
+    Eine Luecke laesst einen Waechter ungeprueft (der teure Fall: gruene Haken ueber einer
+    Serie, die nie lief). Eine Dublette kostet nur Zeit, verschiebt aber die Bilanz und
+    laesst die Aufteilung besser aussehen, als sie ist.
+    """
+    plaene = [_plan(f"p{i}", ["webtool/x.py"], mutationen=i % 5 + 1) for i in range(13)]
+    for n in (1, 2, 3, 4, 7):
+        verteilt = [p.name for i in range(1, n + 1)
+                    for p in mutationen_lauf.teile(plaene, i, n)]
+        assert len(verteilt) == len(set(verteilt)), f"n={n}: ein Plan liegt in zwei Teilen"
+        assert set(verteilt) == {p.name for p in plaene}, f"n={n}: ein Plan fehlt ueberall"
+
+
+def test_mehr_teile_als_plaene_laesst_teile_leer():
+    """Der Normalfall, der NICHT als Fehler gelten darf — siehe den Test darunter."""
+    plaene = [_plan("a", ["webtool/x.py"]), _plan("b", ["webtool/x.py"])]
+    assert [p.name for p in mutationen_lauf.teile(plaene, 1, 5)] == ["a"]
+    assert mutationen_lauf.teile(plaene, 4, 5) == []
+
+
+def test_ein_leerer_TEIL_ist_rc_0_und_nicht_der_anti_schweigen_abbruch(tmp_path, capsys):
+    """DER Riegel dieses Umbaus: das Aufteilen muss HINTER dem Anti-Schweigen-Riegel stehen.
+
+    Davor gesetzt macht es aus jedem leeren Teil ein rc 2 („--alle hat null Plaene
+    gewaehlt") — also jeden Lauf rot, sobald es mehr Teile als betroffene Plaene gibt. Wer
+    den Riegel daraufhin aufweicht statt das Aufteilen zu verschieben, hat das Loch zurueck,
+    gegen das er gebaut ist.
+    """
+    repo = _leeres_repo(tmp_path)
+    (repo / "scripts" / "mutationen" / "a.json").write_text(
+        json.dumps({"test": "echo", "pfade": ["webtool/x.py"], "mutationen": []}),
+        encoding="utf-8")
+    rc = mutationen_lauf.main(["--repo", str(repo), "--alle", "--teil", "9/9",
+                               "--nur-auswahl"])
+    assert rc == 0, "ein leerer Teil ist kein Abbruch"
+    ausgabe = capsys.readouterr().out
+    assert "0 von 1 Plaenen gewaehlt, Teil 9/9" in ausgabe
+    assert "das ist kein Fehler" in ausgabe
+
+
+def test_der_anti_schweigen_riegel_bleibt_trotz_aufteilung_scharf(tmp_path, monkeypatch,
+                                                                 capsys):
+    """Die Gegenrichtung zum Test darueber — sonst waere „leer ist ok" die Hintertuer.
+
+    Waehlt `waehle` bei `--alle` nichts, ist das weiterhin ein Widerspruch und muss rc 2
+    geben, AUCH mit `--teil`: der Riegel urteilt ueber die volle Auswahl, nicht ueber den
+    Teil.
+    """
+    repo = _leeres_repo(tmp_path)
+    (repo / "scripts" / "mutationen" / "a.json").write_text(
+        json.dumps({"test": "echo", "pfade": ["webtool/x.py"], "mutationen": []}),
+        encoding="utf-8")
+    monkeypatch.setattr(mutationen_lauf, "waehle", lambda plaene, geaendert: [])
+    rc = mutationen_lauf.main(["--repo", str(repo), "--alle", "--teil", "1/4",
+                               "--nur-auswahl"])
+    assert rc == 2
+    assert "null Plaene gewaehlt" in capsys.readouterr().out
+
+
+def test_unbrauchbare_teil_angaben_enden_mit_zwei(tmp_path, capsys):
+    """Kein Rueckfall auf „dann eben alles" und keiner auf „dann eben nichts".
+
+    Beides waere ein Lauf, der etwas anderes prueft als der Aufrufer glaubt — genau die
+    Klasse, gegen die dieses Skript seine drei Rueckgabecodes hat.
+
+    Die Gleichheitsform ist hier nicht Geschmack: `--teil -1/4` als zwei argv-Glieder haelt
+    argparse fuer eine weitere OPTION und steigt selbst mit SystemExit(2) aus, bevor die
+    Pruefung unten laeuft. Derselbe Rueckgabecode, anderer Weg — nur laesst sich der
+    Vertrag dieser Funktion dann nicht messen. Ausgefuehrt festgestellt, nicht gelesen.
+    """
+    repo = str(_leeres_repo(tmp_path))
+    for schlecht in ("0/4", "5/4", "x/4", "4", "1/0", "-1/4", "1/2/3", ""):
+        assert mutationen_lauf.main(
+            ["--repo", repo, "--alle", f"--teil={schlecht}"]) == 2, (
+            f"--teil {schlecht!r} kam durch")
+    assert "--teil" in capsys.readouterr().out
+
+
+def test_ohne_teil_bleibt_die_ausgabe_wie_vorher(tmp_path, capsys):
+    """NEGATIVKONTROLLE: der Regelweg darf sich nicht mitveraendert haben."""
+    rc = mutationen_lauf.main(["--repo", str(WURZEL), "--alle", "--nur-auswahl"])
+    assert rc == 0
+    ausgabe = capsys.readouterr().out
+    assert "Teil " not in ausgabe, "ohne --teil darf keine Teil-Angabe erscheinen"
+
+
+def test_die_matrix_des_workflows_passt_zum_nenner():
+    """Die Teilzahl steht im Workflow ZWEIMAL — in der Matrix und in jedem `--teil i/n`.
+
+    Laufen die auseinander, ist der Schaden still und einseitig: bei einer Matrix mit
+    weniger Eintraegen als dem Nenner laufen ganze Teile NIE, und die uebrigen Jobs sind
+    gruen. Genau dafuer gibt es diesen Test — die Kommentarzeile im Workflow behauptete
+    zuerst, es gaebe ihn nicht.
+    """
+    workflow = (WURZEL / ".github" / "workflows" / "test.yml").read_text(encoding="utf-8")
+    # Am Zeilenanfang verankert: ohne das trifft `anteil: [9]` mit, und dieser Test urteilte
+    # dann ueber einen fremden Schluessel. Ausgefuehrt gegengeprueft, nicht gelesen.
+    matrix = re.search(r"^\s*teil:\s*\[([0-9,\s]+)\]", workflow, re.M)
+    assert matrix, "die Matrix `teil:` fehlt — dann misst dieser Test nichts"
+    eintraege = [int(x) for x in matrix.group(1).split(",")]
+    nenner = {int(m) for m in re.findall(r"--teil \$\{\{ matrix\.teil \}\}/(\d+)", workflow)}
+    assert nenner, "keine --teil-Zeile gefunden — dann misst dieser Test nichts"
+    assert nenner == {len(eintraege)}, (
+        f"Matrix hat {len(eintraege)} Eintraege, der Nenner sagt {sorted(nenner)}")
+    assert eintraege == list(range(1, len(eintraege) + 1)), (
+        f"die Matrix muss 1..n lueckenlos aufzaehlen, ist {eintraege}")
