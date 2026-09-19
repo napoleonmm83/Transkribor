@@ -558,6 +558,42 @@ def cmd_apply(project: str, base: str, force: bool = False) -> str:
         print(f"apply: KAPUTT {base} ({type(e).__name__}: {_einzeilig(e)}) — "
               f"Korrektur nicht anwendbar, {base}.correction.json pruefen", flush=True)
         return "missing"
+    # DRITTER Riegel, und der erste, der die Korrektur inhaltlich gegen das Roh haelt (T-199).
+    # Die beiden darueber fangen eine Korrektur, die nicht LADBAR ist; dieser faengt eine, die
+    # laedt und trotzdem nicht passt. Bis hierher lief `cmd_apply` ganz ohne Strukturpruefung:
+    # `_valid_correction` haengt ausschliesslich am `run`-Pfad (Aufrufstellen 718, 1364, 1372,
+    # 1376, 1429, 1636 — keine davon in dieser Funktion). Gemessen an neun kaputten Formen
+    # (#619) kamen acht still durch, und die teuerste erzeugt ein vollstaendig PLAUSIBLES
+    # Dokument: ein fehlender `speaker` wird in `apply_correction` zu `""`, `render_md` tauft
+    # ihn auf "Befragte Person" UND verschmilzt aufeinanderfolgende gleiche Sprecher — die
+    # FRAGE des Interviewers steht danach als Satz der befragten Person im Export, bei Exit 0.
+    #
+    # Gezaehlt wird gegen `doc["segments"]`, also gegen exakt die Menge, aus der
+    # `apply_correction` sein `by_id` baut. Eine zweite Herleitung liefe beim naechsten Umbau
+    # auseinander; unhashbare ids erreichen diese Zeile nie (sie werfen vorher im `try`).
+    roh_ids = {s["id"] for s in doc["segments"]}
+    korr = [c for c in (correction.get("segments") or []) if isinstance(c, dict)]
+    getroffen = [c for c in korr if c.get("id") in roh_ids]
+    ohne_sprecher = sum(1 for c in getroffen if not (c.get("speaker") or "").strip())
+    # EIN Kriterium statt zweier Mechanismen: "kein einziges Roh-Segment getroffen, obwohl es
+    # welche gibt" deckt auch die beiden Faelle ab, die `_valid_correction` faengt (`segments`
+    # fehlt, `segments` leer) — dort ist `getroffen` ebenfalls leer. Ein LEERES `roh_ids` heisst
+    # dagegen, dass es nichts zu treffen GAB; das ist kein Totalausfall, sonst faerbte der
+    # Riegel eine Aufnahme rot, an der nichts falsch ist.
+    if roh_ids and not getroffen:
+        _letzte_fehler += 1
+        print(f"apply: KAPUTT {base} (Korrektur trifft kein Segment der Aufnahme: "
+              f"0 von {len(korr)} Eintraegen passen zu einer Segment-Kennung) — "
+              f"nicht angewandt, {base}.correction.json pruefen", flush=True)
+        return "missing"
+    # Teildefekt: das Dokument entsteht, aber der Sprecherverlust wird benannt statt als Erfolg
+    # gemeldet. Bewusst KEIN Fehlschlag — eine zu 95 % brauchbare Korrektur zu verwerfen liesse
+    # den Nutzer ohne jedes Ergebnis statt mit einem fast fertigen (Entscheidung Marcus
+    # 19.09.2026). Eingerueckt, damit `jobPhases.ts` sie nicht als Datei-Urteil liest.
+    if ohne_sprecher:
+        print(f"  apply: WARNUNG {base} — {ohne_sprecher} von {len(getroffen)} getroffenen "
+              f"Segmenten ohne Sprecher; der Export fasst sie als Befragte Person zusammen",
+              flush=True)
     # Dieselbe Sperre wie `app._pruefe_und_schreibe` (#160/PR #278). Der Editor prueft dort
     # den Dateistand und schreibt dann — dazwischen liegen ein `json.dumps` und ein
     # vollstaendiges `render_md`. Landet DIESER Schreibvorgang in genau dem Fenster, hat der
@@ -634,7 +670,11 @@ def cmd_apply(project: str, base: str, force: bool = False) -> str:
             print(f"apply: {base} -> edit.json geschrieben, md-Export fehlgeschlagen "
                   f"({type(e).__name__}: {_einzeilig(e)}); die Markdown-Fassung kann veraltet sein")
             return "written"
-    print(f"apply: {base} -> edit.json + md ({len(doc['segments'])} Segmente)")
+    # Die Trefferzahl steht daneben, weil die Segmentzahl allein die Frage nicht beantwortet,
+    # um die es hier geht: sie zaehlt die Segmente der `edit.json`, nicht die ANGEWANDTEN
+    # Korrekturen. Genau daran war der stillste Fall aus T-199 nicht zu erkennen.
+    print(f"apply: {base} -> edit.json + md ({len(doc['segments'])} Segmente, "
+          f"{len(getroffen)} korrigiert)")
     return "written"
 
 
@@ -1677,7 +1717,25 @@ def correct_ai_single(project: str, b: str, gjson: str = "", context: str = None
         # (#190), Handarbeit unter der Sperre entdeckt (#278). Sie heissen „deine Fassung
         # bleibt stehen"; als Fehlschlag gemeldet wuerden aus genau den Waechtern gegen
         # stillen Datenverlust rote Zeilen in der Bilanz.
-        return cmd_apply(project, b, force=force) != "missing"
+        ergebnis = cmd_apply(project, b, force=force)
+        # Der Resume-Anker MUSS weg, wenn nichts angewandt wurde — dieselbe Begruendung wie
+        # zwanzig Zeilen darueber im Austausch-Fall, nur aus dem anderen Anlass: `one()`
+        # ueberspringt eine Datei, die schon eine `correction.json` hat, und
+        # `_correction_cache_matches` nimmt sie nach dem Kontext-Stempel wieder an. Liegen
+        # gelassen bliebe die Aufnahme bei JEDEM weiteren projektweiten Lauf rot, bis jemand
+        # `--force` nimmt (kalter Plan-Review, ausgefuehrt: Stempel gesetzt ⇒ `matches` True).
+        # Das gilt fuer `cmd_apply`s KAPUTT-Zweig seit jeher — der neue Riegel darueber loest
+        # ihn nur oefter aus, und ein Fix, der die Klasse stehen laesst, waere keiner.
+        #
+        # Sicher an GENAU dieser Stelle, und nur hier: Roh-JSON und `correction.json` sind
+        # beide nachweislich da (der Lauf hat sie eben gelesen bzw. geschrieben), `"missing"`
+        # kann also nur „die Korrektur taugt nicht" heissen, nie „eine Datei fehlt". Auf dem
+        # CLI-Weg (`correct apply`) passiert es bewusst NICHT: dort hat ein Mensch die Datei
+        # hingelegt, und es gibt keinen reuse-Pfad, der sie wieder einfinge.
+        if ergebnis == "missing":
+            with contextlib.suppress(OSError):
+                os.remove(cpath)
+        return ergebnis != "missing"
     except Exception as e:
         global _letzte_fehler
         # Genau HIER und nirgends sonst: dies ist die einzige Stelle, an der eine Aufnahme an
