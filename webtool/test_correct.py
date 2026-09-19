@@ -670,6 +670,37 @@ def test_apply_verwirft_eine_korrektur_die_eine_ANDERE_aufnahme_nennt(project, c
     assert "nennt eine andere Aufnahme" in capsys.readouterr().out
 
 
+@pytest.mark.parametrize("segmente", [
+    pytest.param([{"id": 0, "speaker": "X", "text": "echt"},
+                  {"id": False, "speaker": "X", "text": "untergeschoben"}], id="int-vor-bool"),
+    pytest.param([{"id": False, "speaker": "X", "text": "untergeschoben"},
+                  {"id": 0, "speaker": "X", "text": "echt"}], id="bool-vor-int"),
+])
+def test_apply_verwirft_boolesche_kennungen_in_BEIDER_reihenfolge(project, capsys, segmente):
+    """Die Reihenfolge entscheidet, ob eine Wache ueber `by_id` ueberhaupt etwas sieht.
+
+    Ein Python-Dict behaelt bei einer Kollision den ERSTEN Schluessel und ersetzt nur den
+    Wert. Ausgefuehrt gemessen: `[{"id":0},{"id":False}]` ergibt `Keys: [(0, 'int')]` — mit
+    dem Wert des `false`-Eintrags. Eine Wache, die die SCHLUESSEL von `by_id` befragt, meldet
+    hier `False` und laesst die untergeschobene Korrektur durch; nur die umgekehrte
+    Reihenfolge haette sie gefangen. Genau so stand sie im ersten Anlauf, und der Bot hat es
+    hergeleitet, bevor es jemand ausprobiert hat.
+
+    Deshalb wird ueber die KORREKTUR-EINTRAEGE geprueft, und deshalb fahren beide
+    Reihenfolgen — ein Test mit nur einer waere in der Haelfte der Faelle vacuous.
+    """
+    _root, t = project
+    (t / "S1.json").write_text(json.dumps({"language": "de", "segments": [
+        {"id": i, "start": float(i), "end": i + 1.0, "text": f" Satz {i}.", "words": []}
+        for i in range(2)
+    ]}), encoding="utf-8")
+    (t / "S1.correction.json").write_text(json.dumps(
+        {"base": "S1", "segments": segmente}), encoding="utf-8")
+    assert correct.cmd_apply("Demo", "S1") == "missing"
+    assert not (t / "S1.edit.json").exists()
+    assert "boolesche Segment-Kennungen" in capsys.readouterr().out
+
+
 @pytest.mark.parametrize("kennung,roh_id", [
     pytest.param(False, 0, id="false-trifft-segment-0"),
     pytest.param(True, 1, id="true-trifft-segment-1"),

@@ -1,5 +1,5 @@
 {
-  "test": "python -m pytest webtool/test_correct.py -k \"verwirft_eine_korrektur or warnt_wenn_ein_getroffenes or warnt_NICHT_bei_einer_gesunden or faerbt_ein_transkript_OHNE or erlaubt_cmd_apply_das_verwerfen or raeumt_den_resume_anker_nur_mit_erlaubnis or zaehlt_eine_doppelte_id or urteilt_NICHT_ueber_einen or verwirft_boolesche\" -q",
+  "test": "python -m pytest webtool/test_correct.py -k \"verwirft_eine_korrektur or warnt_wenn_ein_getroffenes or warnt_NICHT_bei_einer_gesunden or faerbt_ein_transkript_OHNE or erlaubt_cmd_apply_das_verwerfen or raeumt_den_resume_anker_nur_mit_erlaubnis or zaehlt_eine_doppelte_id or urteilt_NICHT_ueber_einen or verwirft_boolesche or BEIDER_reihenfolge\" -q",
   "pfade": [
     "webtool/correct.py",
     "webtool/test_correct.py"
@@ -129,25 +129,26 @@
     {
       "id": "T199-11 boolesche Segment-Kennungen kommen wieder durch und treffen 0 bzw. 1",
       "datei": "webtool/correct.py",
-      "von": "    elif any(type(i) is bool for i in by_id):",
+      "von": "    elif any(type(c.get(\"id\")) is bool for c in korr):",
       "nach": "    elif False:  # T199-11: Bool-Wache abgeschaltet",
       "rot": [
-        "test_apply_verwirft_boolesche_segment_kennungen"
+        "test_apply_verwirft_boolesche_segment_kennungen",
+        "test_apply_verwirft_boolesche_kennungen_in_BEIDER_reihenfolge"
       ],
       "gruen": [
         "test_apply_warnt_NICHT_bei_einer_gesunden_korrektur"
       ]
     },
     {
-      "id": "T199-12 die Bool-Wache trifft auch ECHTE Zahlen — jede gesunde Korrektur faellt durch",
+      "id": "T199-12 die Bool-Wache fragt wieder die SCHLUESSEL von by_id — bei int-vor-bool sieht sie nichts",
       "datei": "webtool/correct.py",
-      "von": "    elif any(type(i) is bool for i in by_id):",
-      "nach": "    elif any(isinstance(i, int) for i in by_id):  # T199-12: isinstance statt type",
+      "von": "    elif any(type(c.get(\"id\")) is bool for c in korr):",
+      "nach": "    elif any(type(i) is bool for i in by_id):  # T199-12: Schluessel statt Eintraege",
       "rot": [
-        "test_apply_warnt_NICHT_bei_einer_gesunden_korrektur"
+        "test_apply_verwirft_boolesche_kennungen_in_BEIDER_reihenfolge"
       ],
       "gruen": [
-        "test_apply_verwirft_eine_korrektur_die_eine_ANDERE_aufnahme_nennt"
+        "test_apply_verwirft_boolesche_segment_kennungen"
       ]
     }
   ]

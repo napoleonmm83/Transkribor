@@ -644,11 +644,20 @@ def cmd_apply(project: str, base: str, force: bool = False, *,
         # Typ, ist der Basisname unbekannt — und Unbekanntes verwirft dieses Modul nicht. Der
         # DATEINAME bleibt die Wahrheit; dieses Feld ist nur der Widerspruch dazu.
         grund = f"Korrektur nennt eine andere Aufnahme: {fremd.strip()!r}"
-    elif any(type(i) is bool for i in by_id):
+    elif any(type(c.get("id")) is bool for c in korr):
         # `True == 1` und `False == 0`, und beide teilen sich den Hash ihrer Zahl: eine
         # JSON-Kennung `false` landet in `by_id` auf demselben Platz wie `0` und wird von
         # `apply_correction` auf Roh-Segment 0 ANGEWANDT (CodeRabbit-CLI, major). Die
         # Trefferzaehlung sieht das nicht — fuer sie ist es ein Treffer wie jeder andere.
+        #
+        # Geprueft wird ueber die KORREKTUR-Eintraege, nicht ueber die Schluessel von `by_id`,
+        # und das ist der Unterschied zwischen einer Wache und einer halben. Bei einer
+        # Kollision behaelt ein Python-Dict den ERSTEN Schluessel und ersetzt nur den Wert —
+        # ausgefuehrt gemessen: `[{"id":0},{"id":False}]` ergibt `Keys: [(0, 'int')]` mit dem
+        # Wert des `false`-Eintrags. Ueber die Schluessel gefragt meldet die Wache dann
+        # `False` und laesst die untergeschobene Korrektur durch; nur die umgekehrte
+        # Reihenfolge haette sie gefangen. Ueber die Eintraege greift sie in beiden
+        # (CodeRabbit-CLI, zweiter Anlauf am selben Punkt).
         #
         # Deshalb verwerfen statt filtern: `apply_correction` laeuft VOR dieser Zeile und hat
         # den Eintrag bereits eingewoben. Ihn hier aus `by_id` zu nehmen aenderte nur die
