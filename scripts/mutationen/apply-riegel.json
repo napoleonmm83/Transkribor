@@ -147,7 +147,7 @@
         "test_apply_warnt_NICHT_bei_einer_gesunden_korrektur"
       ],
       "gruen": [
-        "test_apply_urteilt_NICHT_ueber_einen_unbekannten_basisnamen"
+        "test_apply_verwirft_eine_korrektur_die_eine_ANDERE_aufnahme_nennt"
       ]
     }
   ]
