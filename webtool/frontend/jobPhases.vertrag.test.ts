@@ -484,11 +484,14 @@ const INVENTAR: Record<string, Eintrag> = {
     art: 'ignoriert',
     beispiel: '  apply: WARNUNG A — 3 von 12 getroffenen Segmenten ohne Sprecher; der Export '
       + 'fasst sie als Befragte Person zusammen',
-    notiz: 'T-199, und die Einrueckung ist tragend: die Zeile darf KEIN Datei-Urteil sein. '
-      + 'Das Dokument WIRD geschrieben, unmittelbar danach kommt die Erfolgszeile — ein '
-      + 'terminal() hier verdraengte sie. Zwei Zeichen Einzug halten sie aus beiden '
-      + 'apply-Zweigen heraus (^apply: … ist verankert), auch nach dem Zeilenschnitt in '
-      + 'jobPhases.ts, und der GRUND_FILTER trifft sie nicht (kein FEHLER/Error/Traceback).',
+    notiz: 'T-199. Die Zeile darf KEIN Datei-Urteil sein: das Dokument WIRD geschrieben, '
+      + 'unmittelbar danach kommt die Erfolgszeile — ein terminal() hier verdraengte sie. '
+      + 'Hier stand zuerst, die EINRUECKUNG halte sie aus den apply-Zweigen heraus; der '
+      + 'gegnerische Review hat das widerlegt: jobPhases.ts schneidet ^ {0,2} als ERSTES weg '
+      + '(Zeilenschnitt), der Einzug traegt also nichts. Harmlos ist sie, weil keine der '
+      + 'fuenf ^apply:-Regexe auf WARNUNG passt — und GENAU DAS misst dieser Eintrag. Wer '
+      + 'die Zeile umformuliert, verlaesst sich auf ihn, nicht auf den Einzug. Der '
+      + 'GRUND_FILTER trifft sie ebenfalls nicht (kein FEHLER/Error/Traceback).',
   },
   '  KI-Anbieter: {}': { art: 'ignoriert', beispiel: '  KI-Anbieter: Anthropic (claude-opus-5)' },
   '  claude Timeout nach {}s': { art: 'ignoriert', beispiel: '  claude Timeout nach 600s' },

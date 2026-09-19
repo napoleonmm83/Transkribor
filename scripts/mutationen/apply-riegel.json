@@ -1,5 +1,5 @@
 {
-  "test": "python -m pytest webtool/test_correct.py -k \"verwirft_eine_korrektur or warnt_wenn_ein_getroffenes or warnt_NICHT_bei_einer_gesunden or faerbt_ein_transkript_OHNE or raeumt_den_resume_anker\" -q",
+  "test": "python -m pytest webtool/test_correct.py -k \"verwirft_eine_korrektur or warnt_wenn_ein_getroffenes or warnt_NICHT_bei_einer_gesunden or faerbt_ein_transkript_OHNE or erlaubt_cmd_apply_das_verwerfen or raeumt_den_resume_anker_nur_mit_erlaubnis or zaehlt_eine_doppelte_id\" -q",
   "pfade": [
     "webtool/correct.py",
     "webtool/test_correct.py"
@@ -55,15 +55,51 @@
       ]
     },
     {
-      "id": "T199-5 der Resume-Anker bleibt liegen und macht die Aufnahme dauerhaft rot",
+      "id": "T199-5 die Erlaubnis zum Verwerfen wird nicht mehr durchgereicht — der Fix ist abgeklemmt",
       "datei": "webtool/correct.py",
-      "von": "        if ergebnis == \"missing\":",
-      "nach": "        if False:  # T199-5: Resume-Anker bleibt liegen",
+      "von": "        return cmd_apply(project, b, force=force, verwerfe_unpassende=True) != \"missing\"",
+      "nach": "        return cmd_apply(project, b, force=force) != \"missing\"  # T199-5",
       "rot": [
-        "test_correct_ai_single_raeumt_den_resume_anker_weg_wenn_nichts_angewandt_wurde"
+        "test_correct_ai_single_erlaubt_cmd_apply_das_verwerfen_der_unpassenden_korrektur"
       ],
       "gruen": [
+        "test_apply_raeumt_den_resume_anker_nur_mit_erlaubnis_weg"
+      ]
+    },
+    {
+      "id": "T199-6 der Resume-Anker bleibt liegen und macht die Aufnahme dauerhaft rot",
+      "datei": "webtool/correct.py",
+      "von": "        if verwerfe_unpassende:",
+      "nach": "        if False:  # T199-6: Resume-Anker bleibt liegen",
+      "rot": [
+        "test_apply_raeumt_den_resume_anker_nur_mit_erlaubnis_weg"
+      ],
+      "gruen": [
+        "test_correct_ai_single_erlaubt_cmd_apply_das_verwerfen_der_unpassenden_korrektur"
+      ]
+    },
+    {
+      "id": "T199-7 der Fehlerzaehler bleibt stehen — der Lauf beschuldigt den KI-Anbieter",
+      "datei": "webtool/correct.py",
+      "von": "    if roh_ids and not getroffen:\n        _letzte_fehler += 1\n",
+      "nach": "    if roh_ids and not getroffen:  # T199-7: Zaehler entfernt\n",
+      "rot": [
         "test_apply_verwirft_eine_korrektur_die_kein_segment_trifft"
+      ],
+      "gruen": [
+        "test_apply_warnt_NICHT_bei_einer_gesunden_korrektur"
+      ]
+    },
+    {
+      "id": "T199-8 gezaehlt wird wieder ueber die rohe Liste statt ueber by_id",
+      "datei": "webtool/correct.py",
+      "von": "    getroffen = [c for i, c in by_id.items() if i in roh_ids]",
+      "nach": "    getroffen = [c for c in korr if c.get(\"id\") in roh_ids]  # T199-8",
+      "rot": [
+        "test_apply_zaehlt_eine_doppelte_id_EINMAL_und_fasst_den_verlierer_nicht_an"
+      ],
+      "gruen": [
+        "test_apply_warnt_NICHT_bei_einer_gesunden_korrektur"
       ]
     }
   ]

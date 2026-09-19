@@ -108,8 +108,8 @@
     {
       "id": "T187-G die Zaehlstelle des KAPUTT-Wegs faellt weg — Aenderung 4 naehme Aenderung 3 ihren Gegenstand",
       "datei": "webtool/correct.py",
-      "von": "        global _letzte_fehler\n        _letzte_fehler += 1",
-      "nach": "        pass",
+      "von": "        _letzte_fehler += 1\n        print(f\"apply: KAPUTT {base} ({type(e).__name__}: {_einzeilig(e)}) — \"",
+      "nach": "        print(f\"apply: KAPUTT {base} ({type(e).__name__}: {_einzeilig(e)}) — \"",
       "rot": [
         "test_run_bilanz_nennt_nicht_den_anbieter_bei_kaputter_correction"
       ],
