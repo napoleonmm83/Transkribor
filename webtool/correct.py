@@ -622,21 +622,44 @@ def cmd_apply(project: str, base: str, force: bool = False, *,
     # Typ, ist der Basisname unbekannt — und Unbekanntes verwirft dieses Modul nicht. Der
     # DATEINAME bleibt die Wahrheit; dieses Feld ist nur der Widerspruch dazu.
     fremd = correction.get("base")
+    # DREI Gruende, EIN Zweig — und das ist kein Stilentscheid. Jeder eigene KAPUTT-Zweig
+    # kostet eine eigene Protokollzeile, einen eigenen Eintrag im Vertrags-INVENTAR und einen
+    # eigenen Parser-Abgleich; nach dem zweiten war absehbar, dass der dritte dieselbe Arbeit
+    # noch einmal macht. So kostet ein weiterer Grund eine Zeile, und die Zusicherung "es
+    # wurde nichts geschrieben" steht an EINER Stelle statt an dreien.
+    #
+    # Die Reihenfolge ist die der AUSSAGEKRAFT, nicht die des Zufalls: wer eine andere
+    # Aufnahme nennt, sagt es selbst; wer boolesche Kennungen traegt, ist strukturell kaputt;
+    # "trifft nichts" ist der Rueckfall, der die uebrigen Formen einsammelt.
     if isinstance(fremd, str) and fremd.strip() and fremd.strip() != base:
-        _letzte_fehler += 1
-        if verwerfe_unpassende:
-            with contextlib.suppress(OSError):
-                os.remove(cpath)
-        print(f"apply: KAPUTT {base} (Korrektur nennt eine andere Aufnahme: "
-              f"{fremd.strip()!r}) — nicht angewandt, {base}.correction.json pruefen",
-              flush=True)
-        return "missing"
-    # EIN Kriterium statt zweier Mechanismen: "kein einziges Roh-Segment getroffen, obwohl es
-    # welche gibt" deckt auch die beiden Faelle ab, die `_valid_correction` faengt (`segments`
-    # fehlt, `segments` leer) — dort ist `getroffen` ebenfalls leer. Ein LEERES `roh_ids` heisst
-    # dagegen, dass es nichts zu treffen GAB; das ist kein Totalausfall, sonst faerbte der
-    # Riegel eine Aufnahme rot, an der nichts falsch ist.
-    if roh_ids and not getroffen:
+        # Eng gestellt, Fehlerrichtung wie im ganzen Modul: geurteilt wird NUR ueber ein
+        # vorhandenes, nichtleeres Zeichenketten-Feld. Fehlt es oder traegt es einen fremden
+        # Typ, ist der Basisname unbekannt — und Unbekanntes verwirft dieses Modul nicht. Der
+        # DATEINAME bleibt die Wahrheit; dieses Feld ist nur der Widerspruch dazu.
+        grund = f"Korrektur nennt eine andere Aufnahme: {fremd.strip()!r}"
+    elif any(type(i) is bool for i in by_id):
+        # `True == 1` und `False == 0`, und beide teilen sich den Hash ihrer Zahl: eine
+        # JSON-Kennung `false` landet in `by_id` auf demselben Platz wie `0` und wird von
+        # `apply_correction` auf Roh-Segment 0 ANGEWANDT (CodeRabbit-CLI, major). Die
+        # Trefferzaehlung sieht das nicht — fuer sie ist es ein Treffer wie jeder andere.
+        #
+        # Deshalb verwerfen statt filtern: `apply_correction` laeuft VOR dieser Zeile und hat
+        # den Eintrag bereits eingewoben. Ihn hier aus `by_id` zu nehmen aenderte nur die
+        # ZAHL, nicht das Dokument — und ein Dokument mit einer Korrektur an der falschen
+        # Stelle ist genau der Schaden, gegen den dieser Riegel steht. `type(...) is bool`
+        # statt `isinstance`, weil `isinstance(True, int)` wahr ist.
+        grund = "Korrektur traegt boolesche Segment-Kennungen (in Python gleich 0 und 1)"
+    elif roh_ids and not getroffen:
+        # EIN Kriterium statt zweier Mechanismen: "kein einziges Roh-Segment getroffen, obwohl
+        # es welche gibt" deckt auch die beiden Faelle ab, die `_valid_correction` faengt
+        # (`segments` fehlt, `segments` leer) — dort ist `getroffen` ebenfalls leer. Ein
+        # LEERES `roh_ids` heisst dagegen, dass es nichts zu treffen GAB; das ist kein
+        # Totalausfall, sonst faerbte der Riegel eine Aufnahme rot, an der nichts falsch ist.
+        grund = (f"Korrektur trifft kein Segment der Aufnahme: 0 von {len(korr)} "
+                 f"Eintraegen passen zu einer Segment-Kennung")
+    else:
+        grund = None
+    if grund:
         _letzte_fehler += 1
         # Der Resume-Anker geht weg — aber NUR hier, wo die Ursache bewiesen ist: die
         # Korrektur wurde gelesen, sie passt nicht zu dieser Aufnahme, und niemand sonst
@@ -655,8 +678,7 @@ def cmd_apply(project: str, base: str, force: bool = False, *,
         if verwerfe_unpassende:
             with contextlib.suppress(OSError):
                 os.remove(cpath)
-        print(f"apply: KAPUTT {base} (Korrektur trifft kein Segment der Aufnahme: "
-              f"0 von {len(korr)} Eintraegen passen zu einer Segment-Kennung) — "
+        print(f"apply: KAPUTT {base} ({grund}) — "
               f"nicht angewandt, {base}.correction.json pruefen", flush=True)
         return "missing"
     # Teildefekt: das Dokument entsteht, aber der Sprecherverlust wird benannt statt als Erfolg

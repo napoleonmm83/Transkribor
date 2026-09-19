@@ -1,5 +1,5 @@
 {
-  "test": "python -m pytest webtool/test_correct.py -k \"verwirft_eine_korrektur or warnt_wenn_ein_getroffenes or warnt_NICHT_bei_einer_gesunden or faerbt_ein_transkript_OHNE or erlaubt_cmd_apply_das_verwerfen or raeumt_den_resume_anker_nur_mit_erlaubnis or zaehlt_eine_doppelte_id or urteilt_NICHT_ueber_einen\" -q",
+  "test": "python -m pytest webtool/test_correct.py -k \"verwirft_eine_korrektur or warnt_wenn_ein_getroffenes or warnt_NICHT_bei_einer_gesunden or faerbt_ein_transkript_OHNE or erlaubt_cmd_apply_das_verwerfen or raeumt_den_resume_anker_nur_mit_erlaubnis or zaehlt_eine_doppelte_id or urteilt_NICHT_ueber_einen or verwirft_boolesche\" -q",
   "pfade": [
     "webtool/correct.py",
     "webtool/test_correct.py"
@@ -8,8 +8,8 @@
     {
       "id": "T199-1 Totalausfall wird wieder angewandt statt verworfen",
       "datei": "webtool/correct.py",
-      "von": "    if roh_ids and not getroffen:",
-      "nach": "    if False:  # T199-1: Totalausfall-Riegel abgeschaltet",
+      "von": "    elif roh_ids and not getroffen:",
+      "nach": "    elif False:  # T199-1: Totalausfall-Riegel abgeschaltet",
       "rot": [
         "test_apply_verwirft_eine_korrektur_die_kein_segment_trifft"
       ],
@@ -21,8 +21,8 @@
     {
       "id": "T199-2 der Randfall-Schutz faellt weg, ein leeres Transkript gilt als Totalausfall",
       "datei": "webtool/correct.py",
-      "von": "    if roh_ids and not getroffen:",
-      "nach": "    if not getroffen:  # T199-2: leeres Roh zaehlt faelschlich als Ausfall",
+      "von": "    elif roh_ids and not getroffen:",
+      "nach": "    elif not getroffen:  # T199-2: leeres Roh zaehlt faelschlich als Ausfall",
       "rot": [
         "test_apply_faerbt_ein_transkript_OHNE_segmente_nicht_rot"
       ],
@@ -69,8 +69,8 @@
     {
       "id": "T199-6 der Resume-Anker bleibt liegen und macht die Aufnahme dauerhaft rot",
       "datei": "webtool/correct.py",
-      "von": "        if verwerfe_unpassende:\n            with contextlib.suppress(OSError):\n                os.remove(cpath)\n        print(f\"apply: KAPUTT {base} (Korrektur trifft kein Segment der Aufnahme: \"",
-      "nach": "        print(f\"apply: KAPUTT {base} (Korrektur trifft kein Segment der Aufnahme: \"  # T199-6",
+      "von": "        if verwerfe_unpassende:",
+      "nach": "        if False:  # T199-6: Resume-Anker bleibt liegen",
       "rot": [
         "test_apply_raeumt_den_resume_anker_nur_mit_erlaubnis_weg"
       ],
@@ -81,8 +81,8 @@
     {
       "id": "T199-7 der Fehlerzaehler bleibt stehen — der Lauf beschuldigt den KI-Anbieter",
       "datei": "webtool/correct.py",
-      "von": "    if roh_ids and not getroffen:\n        _letzte_fehler += 1\n",
-      "nach": "    if roh_ids and not getroffen:  # T199-7: Zaehler entfernt\n",
+      "von": "    if grund:\n        _letzte_fehler += 1\n",
+      "nach": "    if grund:  # T199-7: Zaehler entfernt\n",
       "rot": [
         "test_apply_verwirft_eine_korrektur_die_kein_segment_trifft"
       ],
@@ -124,6 +124,30 @@
       ],
       "gruen": [
         "test_apply_verwirft_eine_korrektur_die_eine_ANDERE_aufnahme_nennt"
+      ]
+    },
+    {
+      "id": "T199-11 boolesche Segment-Kennungen kommen wieder durch und treffen 0 bzw. 1",
+      "datei": "webtool/correct.py",
+      "von": "    elif any(type(i) is bool for i in by_id):",
+      "nach": "    elif False:  # T199-11: Bool-Wache abgeschaltet",
+      "rot": [
+        "test_apply_verwirft_boolesche_segment_kennungen"
+      ],
+      "gruen": [
+        "test_apply_warnt_NICHT_bei_einer_gesunden_korrektur"
+      ]
+    },
+    {
+      "id": "T199-12 die Bool-Wache trifft auch ECHTE Zahlen — jede gesunde Korrektur faellt durch",
+      "datei": "webtool/correct.py",
+      "von": "    elif any(type(i) is bool for i in by_id):",
+      "nach": "    elif any(isinstance(i, int) for i in by_id):  # T199-12: isinstance statt type",
+      "rot": [
+        "test_apply_warnt_NICHT_bei_einer_gesunden_korrektur"
+      ],
+      "gruen": [
+        "test_apply_urteilt_NICHT_ueber_einen_unbekannten_basisnamen"
       ]
     }
   ]

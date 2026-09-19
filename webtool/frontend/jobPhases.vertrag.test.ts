@@ -353,30 +353,21 @@ const INVENTAR: Record<string, Eintrag> = {
       + 'nicht. Bis 17.09.2026 riss ein gescheiterter md-Export die ganze Aufnahme in den '
       + 'Fehlschlag (0/1 bei vollstaendiger edit.json).',
   },
-  'apply: KAPUTT {} (Korrektur nennt eine andere Aufnahme: ': {
-    art: 'gelesen',
-    beispiel: 'apply: KAPUTT A (Korrektur nennt eine andere Aufnahme: \'S7\') — nicht '
-      + 'angewandt, A.correction.json pruefen',
-    basis: 'A',
-    notiz: 'T-199, zweites Erkennungsmerkmal (CodeRabbit-CLI). Die Trefferzaehlung faengt es '
-      + 'nicht: Roh-ids sind 0, 1, 2 … und passen zwischen zwei Transkripten zufaellig '
-      + 'zusammen — der Text einer fremden Aufnahme landete als vollstaendig plausibles '
-      + 'Dokument im Export. Faellt in denselben Parser-Zweig wie die Schwester darunter und '
-      + 'urteilt failed; geurteilt wird NUR ueber ein vorhandenes, nichtleeres '
-      + 'Zeichenketten-Feld, der Dateiname bleibt die Wahrheit.',
-  },
-  'apply: KAPUTT {} (Korrektur trifft kein Segment der Aufnahme: ': {
+  'apply: KAPUTT {} ({}) — ': {
     art: 'gelesen',
     beispiel: 'apply: KAPUTT A (Korrektur trifft kein Segment der Aufnahme: 0 von 12 '
       + 'Eintraegen passen zu einer Segment-Kennung) — nicht angewandt, A.correction.json '
       + 'pruefen',
     basis: 'A',
-    notiz: 'T-199. Faellt in denselben Zweig wie die Zeile darunter (^apply: KAPUTT (.+) '
-      + '\\(.*\\1\\.correction\\.json pruefen$) und urteilt damit failed — deshalb endet sie '
-      + 'auf dieselbe Form. Der Unterschied zur Nachbarin: dort laedt die correction.json '
-      + 'nicht, hier laedt sie und passt trotzdem nicht zum Roh (ids treffen kein Segment). '
-      + 'Ohne eigenen Eintrag bliebe die Aufnahme nicht im Spinner — der Zweig existiert ja '
-      + '—, aber der Erntetest faende einen unbekannten Schluessel.',
+    notiz: 'T-199, EIN Eintrag fuer DREI Gruende: die Korrektur nennt eine andere Aufnahme, '
+      + 'sie traegt boolesche Segment-Kennungen (in Python gleich 0 und 1, treffen also ein '
+      + 'Roh-Segment ohne es zu meinen), oder sie trifft gar kein Segment. Der Grund ist der '
+      + 'Klammerinhalt; die Zeile endet immer gleich und faellt damit in denselben Zweig wie '
+      + 'die Schwester darunter (^apply: KAPUTT (.+) \\(.*\\1\\.correction\\.json pruefen$), '
+      + 'urteilt also failed. Hier standen zuerst zwei getrennte Eintraege, und der dritte '
+      + 'Grund haette denselben Aufwand noch einmal gekostet — jetzt kostet ein weiterer '
+      + 'Grund eine Zeile im Erzeuger und keine hier. Der Unterschied zur Schwester bleibt: '
+      + 'dort laedt die correction.json NICHT, hier laedt sie und passt trotzdem nicht.',
   },
   'apply: KAPUTT {} ({}: {}) — ': {
     art: 'gelesen',
