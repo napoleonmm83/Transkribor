@@ -333,6 +333,14 @@ def test_die_vier_regeln_wirken_am_echten_lauf():
         [sys.executable, str(rr.STAMM / "scripts/renovate_regeln.py")],
         capture_output=True, text=True, timeout=rr.FRIST + 30,
     )
+    # Die Urteilszeilen gehoeren ins Protokoll, AUCH wenn der Lauf gruen ist.
+    # `capture_output=True` nimmt sie dem Job weg, und die Assertion unten gibt sie
+    # nur im FEHLERfall zurueck -- bei gruen stand im Protokoll `1 passed` und sonst
+    # nichts. Das `-s` im Workflow allein reicht dafuer NICHT: es hebt nur pytests
+    # eigenen Auffang auf, an dieser Stelle faengt aber subprocess ab. Beides zusammen.
+    print(fertig.stdout, end="")
+    if fertig.stderr:
+        print(fertig.stderr, end="", file=sys.stderr)
     assert fertig.returncode == 0, (
         f"rc={fertig.returncode}\nstdout:\n{fertig.stdout}\nstderr:\n{fertig.stderr}"
     )
