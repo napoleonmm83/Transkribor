@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Wirkungstest der drei `packageRules` in `renovate.json` (#539).
+"""Wirkungstest der vier `packageRules` in `renovate.json` (#539).
 
-Die drei Regeln sind stiller Code: faellt eine aus -- Umbenennung eines Abbilds,
+Die vier Regeln sind stiller Code: faellt eine aus -- Umbenennung eines Abbilds,
 geaenderte Feldsemantik, ein Tippfehler in `matchPackageNames` --, merkt das
 niemand. Es kommt einfach ein Vorschlag mehr, oder nie wieder einer. Bei der
 Postgres-Regel ist die Richtung besonders unangenehm: faellt sie aus, schlaegt
@@ -17,7 +17,7 @@ der Regeln: eine Nachbildung koennte von der Datei abdriften, und dann prueft de
 Test seine eigene Fixture.
 
 Rueckgabecodes -- derselbe Vertrag wie `ruff_riegel.py` und `mypy_riegel.py`:
-  0  alle drei Regeln wirken
+  0  alle vier Regeln wirken
   1  mindestens eine Regel wirkt NICHT
   2  NICHT URTEILSFAEHIG (npx fehlt, kein Token, unbekannte Ausgabeform, Absturz)
 
@@ -135,10 +135,22 @@ WORKFLOW = (
 # `lucide-react` ist die KONTROLLE zu Regel 1: es muss im Sammelbuendel landen,
 # waehrend `@vitejs/plugin-react` seinen eigenen Zweig bekommt. Ohne die Kontrolle
 # koennte die Zusicherung auch dann gruen sein, wenn gar nicht mehr gebuendelt wird.
+# `jsdom` gehoert zu Regel 4 und steht bewusst auf einer ALTEN Fassung.
+# GEMESSEN ist davon eine Haelfte: mit der Regel taucht jsdom nicht in der flachen
+# Liste auf, und der markierte Lauf blieb gruen (CI-Lauf 35450463030 vom 19.09.2026,
+# `1 passed, 25 deselected in 52.09s`). Die andere Haelfte -- dass es OHNE die Regel
+# einen Vorschlag gaebe -- ist die Gegentatsache und hat niemand gefahren; sie ist
+# plausibel, weil 30.0.0 hinter 30.1.0 liegt, aber sie ist hier nicht belegt.
+# Dieselbe Kontrolle wie oben traegt beide Regeln -- laege lucide-react still, waere
+# auch Regel 4 gruen, ohne dass sie irgendetwas bewiesen haette.
 PAKET = {
     "name": "wegwerf",
     "private": True,
-    "devDependencies": {"@vitejs/plugin-react": "6.0.3", "lucide-react": "0.500.0"},
+    "devDependencies": {
+        "@vitejs/plugin-react": "6.0.3",
+        "lucide-react": "0.500.0",
+        "jsdom": "30.0.0",
+    },
 }
 
 
@@ -176,7 +188,7 @@ def _weg_damit(funktion, pfad, fehler) -> None:  # noqa: ARG001 -- onexc-Form
 
 
 def baue_fixture(ziel: Path) -> None:
-    """Ein Wegwerf-Repo mit allen drei Regelformen, samt der ECHTEN renovate.json."""
+    """Ein Wegwerf-Repo mit allen vier Regelformen, samt der ECHTEN renovate.json."""
     (ziel / "docs/bugsink").mkdir(parents=True)
     (ziel / "docs/andere").mkdir(parents=True)
     (ziel / ".github/workflows").mkdir(parents=True)
@@ -263,7 +275,7 @@ def unstimmig(rc: int, ausgabe: str) -> str | None:
 
 
 def urteile(ausgabe: str) -> tuple[int, list[str]]:
-    """Wirken die drei Regeln? Rein, damit der Test sie ohne Renovate fahren kann.
+    """Wirken die vier Regeln? Rein, damit der Test sie ohne Renovate fahren kann.
 
     Jede Regel braucht einen POSITIVEN Beleg und eine Kontrolle -- eine blosse
     Abwesenheit hat zu viele Ursachen.
@@ -314,6 +326,31 @@ def urteile(ausgabe: str) -> tuple[int, list[str]]:
         zeilen.append(f"FEHL Regel 3: {wie_oft} postgres-Majors in der Liste, "
                       f"{anzahl} gefiltert -- erwartet 1 und 1")
 
+    # Regel 4 -- `jsdom` darf gar nicht erst vorgeschlagen werden (#635).
+    #
+    # UND HIER STEHT DIESE REGEL SCHWAECHER DA ALS REGEL 2, das gehoert benannt:
+    # der Modulkopf verlangt fuer jede Zusicherung einen POSITIVEN Beleg, und
+    # Regel 2 hat ihn (`_PYTHON_ABGESCHALTET` -- skipReason im selben Objekt).
+    # Regel 4 prueft bisher nur eine Abwesenheit. Was damit durchrutscht: faellt
+    # jsdom aus einem jsdom-EIGENEN Grund aus der Liste (Lookup-Fehler, invalid
+    # version), sieht das genauso aus wie eine wirkende Regel -- ein Tippfehler
+    # `matchPackageNames: ["jsdon"]` bliebe unbemerkt. Der Beleg-Block dafuer
+    # muesste aus einem ECHTEN Lauf stammen; die Aufzeichnung in den Tests traegt
+    # kein jsdom-Objekt, und erfinden darf man es hier nicht. Offen als T-216.
+    #
+    # Die Kontrolle unten faengt nur den groben Fall (Fixture gar nicht geladen)
+    # und ist im Lauf ueber `main()` ohnehin nie falsch: `unstimmig()` steigt bei
+    # fehlendem lucide-react schon vorher mit rc 2 aus. Sie steht trotzdem hier,
+    # weil `urteile()` einzeln aufrufbar ist und dann keinen Vorposten hat.
+    kontrolle_da = "lucide-react" in namen
+    if "jsdom" not in namen and kontrolle_da:
+        zeilen.append("ok   Regel 4: `jsdom` bekommt keinen Vorschlag, waehrend "
+                      "lucide-react aus derselben Liste einen bekommt")
+    else:
+        schlecht = True
+        zeilen.append(f"FEHL Regel 4: jsdom in der Liste={'jsdom' in namen}, "
+                      f"Kontrolle lucide-react da={kontrolle_da} -- erwartet False/True")
+
     return (1 if schlecht else 0), zeilen
 
 
@@ -358,7 +395,7 @@ def main(argv: list[str]) -> int:
         code, zeilen = urteile(ausgabe)
         for zeile in zeilen:
             print(zeile)
-        print("\n" + ("Alle drei Regeln wirken." if code == 0
+        print("\n" + ("Alle vier Regeln wirken." if code == 0
                       else "MINDESTENS EINE REGEL WIRKT NICHT -- siehe Zeilen oben."))
         return code
     except NichtUrteilsfaehig as fehl:

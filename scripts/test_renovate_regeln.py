@@ -177,10 +177,38 @@ def test_nicht_erkannter_python_dep_wird_nicht_geurteilt():
 
 # --- urteile: je Regel positiver Beleg UND Kontrolle ---------------------------
 
-def test_urteil_ist_gruen_wenn_alle_drei_wirken():
+def test_urteil_ist_gruen_wenn_alle_vier_wirken():
+    """Positivkontrolle: die aufgezeichnete Ausgabe muss VIER ok-Zeilen ergeben.
+
+    Die Zahl steht hier absichtlich und nicht als `> 0`: eine Regel, die still
+    aus `urteile()` faellt, liesse eine Schwellenprobe gruen -- und genau diese
+    Klasse (`checked 16` statt 60) hat dieses Repo schon einmal bezahlt.
+    """
     code, zeilen = rr.urteile(GEMESSEN)
     assert code == 0, zeilen
-    assert sum(z.startswith("ok") for z in zeilen) == 3
+    assert sum(z.startswith("ok") for z in zeilen) == 4
+
+
+def test_regel4_faellt_auf_wenn_jsdom_doch_vorgeschlagen_wird():
+    """Ohne die Regel taucht `jsdom` in der flachen Liste auf (#635).
+
+    `GEMESSEN` kennt jsdom nicht -- das ist genau der Zustand MIT Regel. Der
+    Fehlerfall wird deshalb hergestellt, indem der Name in die Liste gehaengt
+    wird; die Kontrolle lucide-react bleibt dabei stehen.
+    """
+    code, zeilen = rr.urteile(GEMESSEN.replace(
+        ", lucide-react, lucide-react (repository=local)",
+        ", lucide-react, lucide-react, jsdom (repository=local)"))
+    assert code == 1
+    assert any("FEHL Regel 4" in z for z in zeilen)
+
+
+def test_regel4_faellt_auf_wenn_die_kontrolle_fehlt():
+    """Die Kontrolle: ohne lucide-react waere „jsdom fehlt" auch dann gruen,
+    wenn Renovate die Fixture gar nicht geladen haette."""
+    code, zeilen = rr.urteile(ohne(GEMESSEN, "lucide-react"))
+    assert code == 1
+    assert any("FEHL Regel 4" in z for z in zeilen)
 
 
 def test_regel1_faellt_auf_wenn_der_eigene_zweig_fehlt():
@@ -269,7 +297,7 @@ def test_regel3_faellt_auf_wenn_gar_nichts_gefiltert_wurde():
 
 # --- der gruene Zeuge der Mutationsserie ---------------------------------------
 
-def test_renovate_json_bleibt_lesbar_und_traegt_drei_regeln():
+def test_renovate_json_bleibt_lesbar_und_traegt_vier_regeln():
     """Der GRÜNE Zeuge: die Mutation war chirurgisch, nicht zerstörend.
 
     Ein grüner Zeuge, der die mutierte Datei gar nicht liest, bezeugt nichts —
@@ -285,13 +313,13 @@ def test_renovate_json_bleibt_lesbar_und_traegt_drei_regeln():
     Aussage, die ein grüner Zeuge treffen soll.
     """
     daten = json.loads((rr.STAMM / "renovate.json").read_text(encoding="utf-8"))
-    assert len(daten["packageRules"]) == 3
+    assert len(daten["packageRules"]) == 4
 
 
 # --- der echte Lauf -----------------------------------------------------------
 
 @pytest.mark.renovate
-def test_die_drei_regeln_wirken_am_echten_lauf():
+def test_die_vier_regeln_wirken_am_echten_lauf():
     """Fährt die ECHTE renovate.json gegen ein Wegwerf-Repo.
 
     Nicht in der normalen Suite (Marker + `-m "not renovate"`); der eigene
@@ -305,6 +333,14 @@ def test_die_drei_regeln_wirken_am_echten_lauf():
         [sys.executable, str(rr.STAMM / "scripts/renovate_regeln.py")],
         capture_output=True, text=True, timeout=rr.FRIST + 30,
     )
+    # Die Urteilszeilen gehoeren ins Protokoll, AUCH wenn der Lauf gruen ist.
+    # `capture_output=True` nimmt sie dem Job weg, und die Assertion unten gibt sie
+    # nur im FEHLERfall zurueck -- bei gruen stand im Protokoll `1 passed` und sonst
+    # nichts. Das `-s` im Workflow allein reicht dafuer NICHT: es hebt nur pytests
+    # eigenen Auffang auf, an dieser Stelle faengt aber subprocess ab. Beides zusammen.
+    print(fertig.stdout, end="")
+    if fertig.stderr:
+        print(fertig.stderr, end="", file=sys.stderr)
     assert fertig.returncode == 0, (
         f"rc={fertig.returncode}\nstdout:\n{fertig.stdout}\nstderr:\n{fertig.stderr}"
     )
