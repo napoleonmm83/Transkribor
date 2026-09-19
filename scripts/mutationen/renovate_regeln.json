@@ -12,10 +12,10 @@
       "von": "      \"matchPackageNames\": [\"postgres\"],",
       "nach": "      \"matchPackageNames\": [\"postgress\"],",
       "rot": [
-        "test_die_drei_regeln_wirken_am_echten_lauf"
+        "test_die_vier_regeln_wirken_am_echten_lauf"
       ],
       "gruen": [
-        "test_renovate_json_bleibt_lesbar_und_traegt_drei_regeln"
+        "test_renovate_json_bleibt_lesbar_und_traegt_vier_regeln"
       ]
     },
     {
@@ -24,10 +24,10 @@
       "von": "      \"matchFileNames\": [\"docs/bugsink/compose.yaml\"],",
       "nach": "      \"matchFileNames\": [\"docs/**/compose.yaml\"],",
       "rot": [
-        "test_die_drei_regeln_wirken_am_echten_lauf"
+        "test_die_vier_regeln_wirken_am_echten_lauf"
       ],
       "gruen": [
-        "test_renovate_json_bleibt_lesbar_und_traegt_drei_regeln"
+        "test_renovate_json_bleibt_lesbar_und_traegt_vier_regeln"
       ]
     },
     {
@@ -36,10 +36,10 @@
       "von": "      \"matchDepNames\": [\"python\"],\n      \"enabled\": false",
       "nach": "      \"matchDepNames\": [\"python\"],\n      \"enabled\": true",
       "rot": [
-        "test_die_drei_regeln_wirken_am_echten_lauf"
+        "test_die_vier_regeln_wirken_am_echten_lauf"
       ],
       "gruen": [
-        "test_renovate_json_bleibt_lesbar_und_traegt_drei_regeln"
+        "test_renovate_json_bleibt_lesbar_und_traegt_vier_regeln"
       ]
     },
     {
@@ -48,10 +48,10 @@
       "von": "      \"matchPackageNames\": [\"@vitejs/plugin-react\"],",
       "nach": "      \"matchPackageNames\": [\"@vitejs/plugin-reactx\"],",
       "rot": [
-        "test_die_drei_regeln_wirken_am_echten_lauf"
+        "test_die_vier_regeln_wirken_am_echten_lauf"
       ],
       "gruen": [
-        "test_renovate_json_bleibt_lesbar_und_traegt_drei_regeln"
+        "test_renovate_json_bleibt_lesbar_und_traegt_vier_regeln"
       ]
     }
   ]
