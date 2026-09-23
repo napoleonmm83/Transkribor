@@ -245,6 +245,8 @@ es ihr ergangen ist. In Fassungen bis einschliesslich `v0.53.0` konnte eine von 
 liegenbleiben, wenn bei ihr etwas schiefging: die Meldung am Ende gehörte dem Lauf davor, und für die nachgereichte Aufnahme kam
 gar keine. Bei Aufnahmen, die Transkribor selbst von einer Adresse holt, kommt die Rückmeldung
 weiterhin erst mit der nächsten Aktualisierung der Liste.
+Auch beim Hochladen über die Seitenleiste verfolgt Transkribor eine wartende Aufnahme jetzt bis
+zu ihrem Start und meldet, wenn sie nicht eingereiht werden kann.
 
 Auch **bevor** sie an der Reihe sind, stehen sie ab `v0.50.1` als wartend in der Liste
 statt weiter wie unbearbeitetes Audio auszusehen. Das greift, sobald die Aufnahme fertig

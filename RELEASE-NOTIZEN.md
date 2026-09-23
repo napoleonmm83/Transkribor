@@ -32,6 +32,7 @@ hat. Lesbar, aber unschön — das ist Absicht.
 - Im Projektmenü kannst du unter „Namen & Fachbegriffe“ bekannte Schreibweisen für die nächsten Korrekturen hinterlegen.
 
 **Behoben**
+- Wartende Aufnahmen aus der Seitenleiste werden jetzt bis zu ihrem Start verfolgt; scheitert das Einreihen, meldet Transkribor das.
 - Nach dem Löschen eines Projekts können verspätete Speicherungen nicht mehr in ein neu angelegtes Projekt mit demselben Namen geraten.
 - Die Werkzeugleiste im Editor bricht ab 768 Pixel Fensterbreite bei Bedarf um, damit Speicherstatus, Suche und Export vollständig sichtbar bleiben.
 - Lässt sich die Merkdatei der gemeinsamen Namensliste nicht schreiben — etwa weil die Festplatte voll ist —, bricht der Korrekturlauf nicht mehr ab, sondern sagt es und macht weiter.
