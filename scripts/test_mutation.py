@@ -147,7 +147,7 @@ def test_pycache_leeren_ohne_treffer_ist_kein_fehler(tmp_path):
 # dessen Rueckgabecode ungeprueft ist, macht gruene CI aus roten Laeufen.
 
 def _lauf_main(tmp_path, monkeypatch, plan, ausgaben, pfad=".", schmutzig=("", ""),
-               nebenbei=None):
+               nebenbei=None, nur_vorlauf=False, testkommando="python -m pytest ziel.py"):
     """Faehrt main() mit gefaelschtem Testlauf und gefaelschtem git — ohne echtes Repo.
 
     `ausgaben` sind Strings (Rueckgabecode 0) oder Paare (Text, Rueckgabecode).
@@ -183,8 +183,11 @@ def _lauf_main(tmp_path, monkeypatch, plan, ausgaben, pfad=".", schmutzig=("", "
     # liefern — genau so ist die Erweiterung hier aufgefallen.
     monkeypatch.setattr(mutation, "_verfolgt_geaendert",
                         lambda repo, p, **k: zustaende.pop(0) if zustaende else "")
-    rc = mutation.main(["--repo", str(tmp_path), "--test", "egal",
-                        "--plan", str(plandatei), "--pfad", pfad])
+    args = ["--repo", str(tmp_path), "--test", testkommando,
+            "--plan", str(plandatei), "--pfad", pfad]
+    if nur_vorlauf:
+        args.append("--nur-vorlauf")
+    rc = mutation.main(args)
     return rc, ziel
 
 
@@ -216,13 +219,13 @@ def test_leere_rot_liste_bricht_ab(tmp_path, monkeypatch):
     plan = [{"id": "LEER", "datei": "ziel.py", "von": "WERT = 1", "nach": "WERT = 2",
              "rot": []}]
     rc, _ = _lauf_main(tmp_path, monkeypatch, plan, [_GRUEN])
-    assert rc == 1
+    assert rc == 2
 
 
 def test_datei_ausserhalb_von_pfad_bricht_ab(tmp_path, monkeypatch):
     (tmp_path / "unter").mkdir()
     rc, _ = _lauf_main(tmp_path, monkeypatch, _PLAN_OK, [_GRUEN], pfad="unter")
-    assert rc == 1
+    assert rc == 2
 
 
 def test_ruecknahme_ist_bytegleich_auch_bei_crlf(tmp_path, monkeypatch):
@@ -249,6 +252,92 @@ def test_vorher_schon_rote_suite_ergibt_zwei(tmp_path, monkeypatch):
     aus = "FAILED x.py::test_irgendwas - assert\n1 failed, 11 passed in 0.4s\n"
     rc, _ = _lauf_main(tmp_path, monkeypatch, _PLAN_OK, [aus])
     assert rc == 2
+
+
+def test_vorlauf_gruen_ohne_mutation_und_ohne_pycache_leeren(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(mutation, "_pycache_leeren",
+                        lambda _: (_ for _ in ()).throw(AssertionError("Cache geleert")))
+    rc, ziel = _lauf_main(tmp_path, monkeypatch, _PLAN_OK, [_GRUEN], nur_vorlauf=True)
+    assert rc == 0
+    assert ziel.read_bytes() == b"WERT = 1\r\nandere = 2\r\n"
+    assert "VORLAUF BESTANDEN" in capsys.readouterr().out
+
+
+def test_vorlauf_schmutziger_start_ergibt_zwei(tmp_path, monkeypatch):
+    rc, _ = _lauf_main(tmp_path, monkeypatch, _PLAN_OK, [],
+                       schmutzig=(" M ziel.py", ""), nur_vorlauf=True)
+    assert rc == 2
+
+
+def test_vorlauf_schmutzig_nach_test_ergibt_zwei(tmp_path, monkeypatch):
+    rc, _ = _lauf_main(tmp_path, monkeypatch, _PLAN_OK, [_GRUEN],
+                       schmutzig=("", " M ziel.py"), nur_vorlauf=True)
+    assert rc == 2
+
+
+def test_vorlauf_nicht_gestartet_oder_rote_suite_ergibt_zwei(tmp_path, monkeypatch):
+    for ausgabe in ("kein Testlauf\n", "FAILED test_x - assert\n1 failed\n"):
+        rc, _ = _lauf_main(tmp_path, monkeypatch, _PLAN_OK, [ausgabe], nur_vorlauf=True)
+        assert rc == 2
+
+
+def test_vorlauf_null_tests_ergibt_zwei(tmp_path, monkeypatch):
+    rc, _ = _lauf_main(tmp_path, monkeypatch, _PLAN_OK, ["no tests ran\n"],
+                       nur_vorlauf=True)
+    assert rc == 2
+
+
+def test_vorlauf_nichtnull_rc_mit_gruener_textbilanz_ergibt_zwei(tmp_path, monkeypatch):
+    rc, _ = _lauf_main(tmp_path, monkeypatch, _PLAN_OK, [(_GRUEN, 1)],
+                       nur_vorlauf=True)
+    assert rc == 2
+
+
+def test_vorlauf_verwirft_vorgetaeuschten_testlauf(tmp_path, monkeypatch):
+    for kommando in ("python -c \"print('1 passed')\"",
+                     "python -m pytest scripts/test_mutation.py && echo 1 passed",
+                     "python -m pytest --version\necho 1 passed",
+                     'python -m pytest --version -k "$(echo 1 passed)"',
+                     "python -m pytest --version -k 'a&echo 1 passed'"):
+        rc, _ = _lauf_main(tmp_path, monkeypatch, _PLAN_OK, [_GRUEN],
+                           nur_vorlauf=True, testkommando=kommando)
+        assert rc == 2
+    paket = tmp_path / "frontend"
+    paket.mkdir()
+    (paket / "package.json").write_text(
+        json.dumps({"scripts": {"test": "echo 1 passed"}}), encoding="utf-8"
+    )
+    rc, _ = _lauf_main(tmp_path, monkeypatch, _PLAN_OK, [_GRUEN],
+                       nur_vorlauf=True, testkommando="npm --prefix frontend test")
+    assert rc == 2
+
+
+def test_vorlauf_leere_rot_liste_und_falscher_pfad_werden_vorab_abgewiesen(
+        tmp_path, monkeypatch):
+    plan = [{**_PLAN_OK[0], "rot": []}]
+    rc, _ = _lauf_main(tmp_path, monkeypatch, plan, [], nur_vorlauf=True)
+    assert rc == 2
+    (tmp_path / "unter").mkdir()
+    rc, _ = _lauf_main(tmp_path, monkeypatch, _PLAN_OK, [], pfad="unter",
+                       nur_vorlauf=True)
+    assert rc == 2
+
+
+def test_vorlauf_fehlende_oder_kaputte_plandatei_ergibt_zwei(tmp_path, monkeypatch):
+    for name, inhalt in (("fehlt.json", None), ("kaputt.json", "{")):
+        pfad = tmp_path / name
+        if inhalt is not None:
+            pfad.write_text(inhalt, encoding="utf-8")
+        rc = mutation.main(["--repo", str(tmp_path), "--plan", str(pfad),
+                            "--test", "egal", "--nur-vorlauf"])
+        assert rc == 2
+
+
+def test_vorlauf_verwirft_env_mit_falschem_typ(tmp_path, monkeypatch):
+    for env in ([], "", None):
+        plan = {"test": "egal", "env": env, "mutationen": _PLAN_OK}
+        rc, _ = _lauf_main(tmp_path, monkeypatch, plan, [], nur_vorlauf=True)
+        assert rc == 2
 
 
 # --- Der Plan selbst -------------------------------------------------------

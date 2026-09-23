@@ -84,6 +84,7 @@ import json
 import os
 import pathlib
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -401,6 +402,42 @@ def zeilenenden_angleichen(inhalt: str, text: str) -> str:
     return text.replace("\n", "\r\n") if "\r\n" in inhalt else text
 
 
+def _direkte_kommando_teile(kommando: str) -> list[str] | None:
+    """Nur ein einzelnes Kommando; Zeilen und Shell-Operatoren sind keine Argumente."""
+    # cmd.exe behandelt einfache Quotes nicht als Schutz fuer &/|; POSIX-Shells
+    # werten $() auch in doppelten Quotes aus. Beide Plattformen muessen dieselbe
+    # Befehlsgrenze sehen, bevor der Vorlauf ein Urteil aus Shell-Ausgabe ableitet.
+    if any(zeichen in kommando for zeichen in "\n\r$`%!^'\\"):
+        return None
+    try:
+        lexer = shlex.shlex(kommando, posix=True, punctuation_chars=";&|<>")
+        lexer.whitespace_split = True
+        teile = list(lexer)
+    except ValueError:
+        return None
+    if any(teil and set(teil) <= set(";&|<>") for teil in teile):
+        return None
+    return teile
+
+
+def _npm_testlaeufer(teile: list[str], wurzel: pathlib.Path) -> bool:
+    """Das benannte npm-Skript muss selbst einen Testlaeufer starten."""
+    if len(teile) < 4 or teile[:2] != ["npm", "--prefix"]:
+        return False
+    skript = teile[3] if teile[3] != "run" else (teile[4] if len(teile) > 4 else "")
+    paket = (wurzel / teile[2] / "package.json").resolve()
+    if wurzel.resolve() not in paket.parents:
+        return False
+    try:
+        scripts = json.loads(paket.read_text(encoding="utf-8")).get("scripts", {})
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return False
+    befehl = scripts.get(skript) if isinstance(scripts, dict) else None
+    lauf = _direkte_kommando_teile(befehl) if isinstance(befehl, str) else None
+    return bool(lauf and (lauf[:2] == ["vitest", "run"]
+                          or lauf[:2] == ["playwright", "test"]))
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -408,6 +445,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--test", help="Testkommando; schlaegt das Feld `test` des Plans")
     ap.add_argument("--plan", required=True, help="JSON-Datei mit den Mutationen")
     ap.add_argument("--pfad", default=".", help="Auf diesen Pfad wird Sauberkeit geprueft")
+    ap.add_argument("--nur-vorlauf", action="store_true",
+                    help="Nur sauberen Baum, Plan und gruene Suite pruefen; nichts mutieren")
     ap.add_argument("--env", action="append", default=[], metavar="NAME=WERT",
                     help="Zusatzvariable fuer das Testkommando; mehrfach erlaubt")
     a = ap.parse_args(argv)
@@ -419,13 +458,17 @@ def main(argv: list[str] | None = None) -> int:
     #   * LISTE — der Ad-hoc-Plan, den jemand von Hand tippt, mit `--test` von aussen.
     # Streng ist der WAECHTER (scripts/test_mutationsplaene.py verlangt fuer alles unter
     # scripts/mutationen/ die Objektform), nicht der Treiber.
-    roh = json.loads(pathlib.Path(a.plan).read_text(encoding="utf-8"))
+    try:
+        roh = json.loads(pathlib.Path(a.plan).read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as fehl:
+        print(f"ABBRUCH: --plan ist nicht lesbar oder kein gueltiges JSON: {fehl}")
+        return 2
     plan_test: str | None = None
     plan_env: dict[str, str] = {}
     if isinstance(roh, dict):
         plan = roh.get("mutationen")
         plan_test = roh.get("test")
-        plan_env = roh.get("env") or {}
+        plan_env = roh.get("env", {})
     else:
         plan = roh
 
@@ -447,9 +490,30 @@ def main(argv: list[str] | None = None) -> int:
             print(f"         {m!r}"[:160])
         return 2
 
+    for m in plan:
+        if (not all(isinstance(m[k], str) for k in ("id", "datei", "von", "nach"))
+                or not m["id"] or not m["datei"] or not m["von"]
+                or not isinstance(m["rot"], list) or not m["rot"]
+                or not all(isinstance(n, str) and n for n in m["rot"])
+                or not isinstance(m.get("gruen", []), list)
+                or not all(isinstance(n, str) and n for n in m.get("gruen", []))):
+            print(f"ABBRUCH {m['id']}: unbrauchbare Felder oder leeres `rot` im Plan.")
+            return 2
+
     test = a.test or plan_test
-    if not test:
+    if not isinstance(test, str) or not test.strip():
         print("ABBRUCH: kein Testkommando — weder --test noch das Feld `test` im Plan.")
+        return 2
+    if a.nur_vorlauf:
+        teile = _direkte_kommando_teile(test)
+        pytest_lauf = teile is not None and teile[:3] == ["python", "-m", "pytest"]
+        npm_lauf = teile is not None and _npm_testlaeufer(teile, pathlib.Path(a.repo))
+        if not (pytest_lauf or npm_lauf):
+            print("ABBRUCH: --nur-vorlauf braucht ein direktes Pytest- oder npm-Testkommando.")
+            return 2
+    if not isinstance(plan_env, dict) or not all(
+            isinstance(k, str) and isinstance(v, str) for k, v in plan_env.items()):
+        print("ABBRUCH: `env` im Plan braucht Zeichenketten als Namen und Werte.")
         return 2
     zusatz = dict(plan_env)
     for zuweisung in a.env:
@@ -523,6 +587,14 @@ def main(argv: list[str] | None = None) -> int:
             print(f"         {kennung}: {grund}")
         return 2
 
+    pfad_wurzel = (pathlib.Path(a.repo) / a.pfad).resolve()
+    ausserhalb = [m for m in plan
+                  if pfad_wurzel not in (pathlib.Path(a.repo) / m["datei"]).resolve().parents]
+    if ausserhalb:
+        for m in ausserhalb:
+            print(f"ABBRUCH {m['id']}: {m['datei']} liegt ausserhalb von --pfad {a.pfad}.")
+        return 2
+
     # POSITIVKONTROLLE, unmutiert, vor der Serie. Sie beantwortet zwei Fragen, die eine
     # Mutationsserie sonst offen laesst und still falsch beantwortet:
     #   * Laeuft das Testkommando ueberhaupt? Eines, das gar nicht startet, liefert null rote
@@ -573,30 +645,23 @@ def main(argv: list[str] | None = None) -> int:
         for z in vorlauf_rot[:5]:
             print(f"           {z.strip()}")
         return 2
+    if rc0 != 0:
+        print(f"ABBRUCH: die Positivkontrolle meldet trotz Testbilanz Exit-Code {rc0}.")
+        return 2
+    if a.nur_vorlauf:
+        rest = _verfolgt_geaendert(a.repo, a.pfad, ausser_plaene=ziele)
+        if rest:
+            print(f"ABBRUCH: getrackte Aenderungen nach dem Testlauf unter {a.pfad}:")
+            print(rest)
+            return 2
+        print("VORLAUF BESTANDEN: Arbeitsbaum sauber, Plan gueltig, Suite gruen;"
+              " keine Mutation ausgefuehrt.")
+        return 0
     print(f"Positivkontrolle: Suite laeuft und ist gruen ({len(plan)} Mutationen folgen)")
 
     fehler = 0
-    pfad_wurzel = (pathlib.Path(a.repo) / a.pfad).resolve()
     for m in plan:
-        # Eine Mutation ohne erwarteten roten Test besteht sonst BEDINGUNGSLOS: `offen` ist
-        # leer, also gilt sie als OK — egal was der Testlauf tat. Der Plan waere damit die
-        # eine Stelle, an der sich die Probe still entwerten laesst, und der Treiber saehe
-        # es nicht. Gefunden vom kalten Diff-Review, mit Reproduktion.
-        if not m.get("rot"):
-            print(f"ABBRUCH {m['id']}: `rot` ist leer — eine Mutation ohne erwarteten roten"
-                  " Test belegt nichts.")
-            fehler += 1
-            continue
-
         datei = pathlib.Path(a.repo) / m["datei"]
-        # Eine Datei ausserhalb von `--pfad` faellt aus BEIDEN Nachkontrollen: die
-        # Sauberkeitspruefung am Ende sieht sie nicht, und ihr Bytecode wird nicht geleert.
-        # Lieber laut abbrechen als still halb pruefen.
-        if pfad_wurzel not in datei.resolve().parents:
-            print(f"ABBRUCH {m['id']}: {m['datei']} liegt ausserhalb von --pfad {a.pfad} —"
-                  " dort greifen weder die Sauberkeitspruefung noch das Bytecode-Leeren.")
-            fehler += 1
-            continue
         # FALLE 2: Bytes lesen und SELBST dekodieren. `read_text` uebersetzt CRLF still.
         roh = datei.read_bytes()
         try:
