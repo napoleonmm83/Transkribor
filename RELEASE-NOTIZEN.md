@@ -28,6 +28,9 @@ hat. Lesbar, aber unschön — das ist Absicht.
 
 ## Unveröffentlicht
 
+**Neu**
+- Fehlerberichte lassen sich jetzt mit einer Vorschau direkt an uns senden; ein Mailprogramm ist dafür nicht mehr nötig.
+
 ## v0.57.0 — 2026-09-23
 
 **Neu**

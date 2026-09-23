@@ -2,6 +2,19 @@
 /** Schmale Bruecke: die Statusseite darf nur die hier aufgezaehlten Dinge, sonst nichts (contextIsolation). */
 const { contextBridge, ipcRenderer } = require('electron')
 
+// Das Renderer-SDK darf nur Fehlerereignisse an den Hauptprozess geben. Keine generischen
+// Sentry-IPC-Kanaele fuer Sessions, Profile, Breadcrumbs oder Anhaenge.
+contextBridge.exposeInMainWorld('__SENTRY_IPC__', {
+  'sentry-ipc': {
+    sendRendererStart: () => {},
+    sendScope: () => {},
+    sendEnvelope: envelope => ipcRenderer.send('fehlerberichte:renderer', envelope),
+    sendStatus: () => {},
+    sendStructuredLog: () => {},
+    sendMetric: () => {},
+  },
+})
+
 contextBridge.exposeInMainWorld('transkribor', {
   status: () => ipcRenderer.invoke('status'),
   einrichten: () => ipcRenderer.invoke('einrichten'),
@@ -10,15 +23,10 @@ contextBridge.exposeInMainWorld('transkribor', {
   abbrechen: () => ipcRenderer.invoke('einrichten:abbrechen'),
   logs: () => ipcRenderer.invoke('logs'),
   protokollOeffnen: () => ipcRenderer.invoke('protokollOeffnen'),
-  // Ohne Argument, aus demselben Grund wie `projekteOeffnen`: der Empfaenger, der Betreff
-  // und was mitgeht, entscheidet der Hauptprozess. Ein durchgereichter Rumpf waere ein
-  // „oeffne beliebige URL" fuer alles, was in diesem Fenster laeuft — und dort laeuft
-  // Transkripttext, der aus einem URL-Import stammen kann.
-  // Seit #426 traegt diese Zusage auch neben sich: `setWindowOpenHandler` in `main.js` laesst
-  // nur noch Ziele durch, die `fenster.externesZiel` akzeptiert. Vorher stand sie hier
-  // und war eine Datei weiter oben offen — eine Zusicherung, die im selben Modul unterlaufen
-  // wird, ist keine.
-  fehlerbericht: () => ipcRenderer.invoke('fehlerbericht'),
+  fehlerbericht: {
+    vorschau: () => ipcRenderer.invoke('fehlerbericht:vorschau'),
+    senden: (id, indices, kommentar) => ipcRenderer.invoke('fehlerbericht:senden', id, indices, kommentar),
+  },
   // Der Opt-in-Schalter fuer automatische Fehlerberichte (#530). `setzen` traegt ein Argument,
   // und das ist mit #218 vereinbar: ein Boolean komponiert nichts — keinen Pfad, keine URL,
   // keinen Rumpf. Alles andere als `true` heisst AUS (`main.js` prueft `=== true`).

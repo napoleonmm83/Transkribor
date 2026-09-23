@@ -7,6 +7,7 @@ import { PageHeader } from '@/components/PageHeader'
 import { Abschnitt } from '@/components/Abschnitt'
 import { Notizen } from '@/components/Notizen'
 import { Button } from '@/components/ui/button'
+import { FehlerberichtDialog } from '@/components/FehlerberichtDialog'
 import { holeReleases, type Release } from '@/lib/releases'
 import type { UpdateZustand } from '@/lib/types'
 import { tag } from '@/lib/utils'
@@ -49,19 +50,12 @@ function mb(bytes: number, stellen = 0) {
  * geht niemand, der die App benutzt, um nicht mit Dateien zu hantieren.
  */
 export function VersionPage() {
-  const { zustand: upd, pruefen, laden, installieren, protokollOeffnen, fehlerbericht } = useUpdate()
+  const { zustand: upd, pruefen, laden, installieren, protokollOeffnen, berichtVorschau, berichtSenden } = useUpdate()
   const fb = useFehlerberichte()
   // Ausserhalb von Electron gibt es keinen Update-Zustand — dann ist der zur Bauzeit
   // eingesetzte Wert die einzige (und richtige) Quelle, wie in der Fusszeile.
   const version = upd?.version ?? __APP_VERSION__
-  /** Ohne registriertes Mailprogramm lehnt `openExternal` ab — das muss ankommen, sonst sieht
-   *  der Knopf aus, als haette er nichts getan. Die Protokolldatei zeigt der Hauptprozess
-   *  VORHER, der Satz stimmt also auch im Fehlerfall. */
-  const berichtSchreiben = () => {
-    fehlerbericht()?.catch(() => toast.error(
-      'Es liess sich kein Mailprogramm öffnen. Die Protokolldatei wird trotzdem im '
-      + 'Dateimanager gezeigt — schick sie von Hand an marcusmartini83@gmail.com.'))
-  }
+  const [berichtOffen, setBerichtOffen] = useState(false)
   const [verlauf, setVerlauf] = useState<Release[] | null>(null)
   const [fehler, setFehler] = useState('')
 
@@ -205,14 +199,12 @@ export function VersionPage() {
       {upd && (
         <Abschnitt titel="Etwas geht schief?">
           <p className="text-sm text-muted-foreground">
-            Der Bericht öffnet eine vorbereitete E-Mail mit Fassung, Betriebssystem und den
-            letzten aussagekräftigen Zeilen des Protokolls. <strong className="font-medium text-foreground">Du
-            siehst alles im Mailprogramm, bevor du sendest</strong> — und kannst jede Zeile
-            löschen. Die Protokolldatei wird daneben im Dateimanager gezeigt; hänge sie an,
-            wenn du magst (ältere Teile liegen als <code>.1</code> bis <code>.3</code> daneben).
+            Sende uns einen Bericht über Bugsink. Du siehst vorher Fassung, Betriebssystem und
+            die ausgewählten Protokollzeilen und kannst einzelne Zeilen abwählen. Das geht auch,
+            wenn automatische Fehlerberichte ausgeschaltet sind.
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
-            <Button variant="secondary" onClick={berichtSchreiben}>Fehlerbericht schreiben</Button>
+            <Button variant="secondary" onClick={() => setBerichtOffen(true)}>Fehlerbericht schreiben</Button>
             <Button variant="ghost" onClick={protokollOeffnen}>Protokoll anzeigen</Button>
           </div>
           {/* Der Opt-in-Schalter (#530) — nur, wenn die App-Hülle ihn kennt (`fb === null` heisst:
@@ -232,9 +224,9 @@ export function VersionPage() {
               <span>
                 <span className="font-medium">Fehler automatisch an uns senden</span>
                 <span className="mt-1 block text-xs text-muted-foreground">
-                  Ohne Mailprogramm und ohne Klick: die Fehlermeldung mit Stelle im Programm, die Fassung, dein
+                  Ohne Klick: die Fehlermeldung mit Stelle im Programm, die Fassung, dein
                   Betriebssystem und die letzten Protokollzeilen. Benutzername, Projekt- und Aufnahmenamen werden
-                  vorher unkenntlich gemacht; Aufnahmen und Transkripte gehen nie mit.{' '}
+                  vorher unkenntlich gemacht. Dateien werden nicht angehängt; Fehlermeldungen können unbekannten Text enthalten.{' '}
                   <a className="underline underline-offset-2 hover:text-foreground" href={README_FEHLERBERICHTE}
                     target="_blank" rel="noreferrer">Was genau mitgeht</a>
                 </span>
@@ -304,6 +296,8 @@ export function VersionPage() {
           </p>
         )}
       </Abschnitt>
+      {upd && <FehlerberichtDialog offen={berichtOffen} schliessen={() => setBerichtOffen(false)}
+        vorschau={berichtVorschau} senden={berichtSenden} />}
     </div>
   )
 }

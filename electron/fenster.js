@@ -79,16 +79,8 @@ function fortschrittGueltig(anteil) {
  * Lockert jemand eine dieser drei Wachen, wird dieser Kommentar still falsch, und nichts
  * verbindet die Stellen. Wer dort etwas aendert, sieht hier nach.
  *
- * **`mailto:` steht bewusst NICHT auf der Liste.** Die erste Fassung hatte es, mit der
- * Begruendung, die App oeffne `mailto:` auf ihrem anderen externen Weg ohnehin. Der
- * Praezedenzfall traegt nicht: dort baut der HAUPTPROZESS die URL aus Konstanten
- * (`bericht.mailto`), hier komponierte sie der RENDERER — Empfaenger, Betreff und Rumpf frei.
- * Genau diese Trennung zieht `preload.js` vier Zeilen weiter oben schon selbst. Kein Link der
- * App braucht diesen Weg (gemessen: keiner der elf ist `mailto:`), und es gibt einen
- * unbelegten, aber plausiblen Zugewinn fuer einen Angreifer: manche Mailprogramme werten
- * `?attach=` aus. Nicht ausgefuehrt — kein Mailprogramm in dieser Umgebung —, aber eine
- * Faehigkeit ohne Nutzer laesst man nicht offen, um einen Verdacht zu widerlegen. Kommt je ein
- * Kontakt-Link, wird die Abweisung protokolliert und die Zeile hier ergaenzt.
+ * `mailto:` bleibt gesperrt: die App verschickt Fehlerberichte ausschliesslich ueber Bugsink
+ * und braucht keinen Mail-Link. Ein fremder Link darf keinen lokalen Mail-Handler starten.
  *
  * **Warum das ZIEL zurueckkommt und nicht ja/nein:** mit einem Praedikat prueft der Aufrufer
  * die GEPARSTE URL und oeffnet die ROHE. Gemessen bestehen `"\0https://x"`, `"https\t://x"`

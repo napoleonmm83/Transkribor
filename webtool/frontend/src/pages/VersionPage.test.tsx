@@ -8,7 +8,7 @@ import type { Release } from '@/lib/releases'
 import { toast } from 'sonner'
 
 vi.mock('@/hooks/useUpdate', () => ({
-  useUpdate: vi.fn(() => ({ zustand: null, pruefen: vi.fn(), laden: vi.fn(), installieren: vi.fn(), protokollOeffnen: vi.fn(), fehlerbericht: vi.fn(() => Promise.resolve(BERICHT)) })),
+  useUpdate: vi.fn(() => ({ zustand: null, pruefen: vi.fn(), laden: vi.fn(), installieren: vi.fn(), protokollOeffnen: vi.fn(), berichtVorschau: vi.fn(() => Promise.resolve(BERICHT)), berichtSenden: vi.fn(() => Promise.resolve({ id: 'abc' })) })),
 }))
 vi.mock('@/lib/releases', () => ({ holeReleases: vi.fn() }))
 // Der Opt-in-Schalter (#530): ohne Bruecke liefert der Hook `null`, und so bleibt es fuer die
@@ -24,7 +24,7 @@ import { holeReleases } from '@/lib/releases'
 
 /** Rueckgabe des Fehlerbericht-Kanals — die Attrappe muss die VOLLE Form liefern, sonst
  *  behauptet der Test einen Vertrag, den es nicht gibt (dieselbe Falle wie `as Settings`). */
-const BERICHT = { pfad: 'C:\\log.txt', verwendet: 13, gekuerzt: true }
+const BERICHT = { id: 'abc', kopf: ['Transkribor 1.0'], zeilen: ['Fehler eins', 'Fehler zwei'] }
 
 const RELEASE: Release = {
   version: '0.29.0', tag: 'v0.29.0', datum: '2026-08-21',
@@ -33,7 +33,7 @@ const RELEASE: Release = {
 
 /** Seite mit einem Update-Zustand zeigen. `null` = kein Electron (reiner Browser). */
 function zeigeMit(zustand: UpdateZustand | null, releases: Release[] = []) {
-  const spies = { pruefen: vi.fn(), laden: vi.fn(), installieren: vi.fn(), protokollOeffnen: vi.fn(), fehlerbericht: vi.fn(() => Promise.resolve(BERICHT)) }
+  const spies = { pruefen: vi.fn(), laden: vi.fn(), installieren: vi.fn(), protokollOeffnen: vi.fn(), berichtVorschau: vi.fn(() => Promise.resolve(BERICHT)), berichtSenden: vi.fn(() => Promise.resolve({ id: 'abc' })) }
   vi.mocked(useUpdate).mockReturnValue({ zustand, ...spies })
   vi.mocked(holeReleases).mockResolvedValue(releases)
   return { ...render(<MemoryRouter><VersionPage /></MemoryRouter>), spies }
@@ -160,40 +160,35 @@ describe('VersionPage — diese Fassung', () => {
     expect(screen.getByRole('button', { name: /Protokoll anzeigen/ })).toBeInTheDocument()
   })
 
-  it('schreibt einen Fehlerbericht (#372)', async () => {
+  it('zeigt vor dem Senden die Vorschau und erlaubt Zeilen abzuwählen', async () => {
     const { spies } = zeigeMit({ version: '0.2.1', art: 'aktuell' })
     fireEvent.click(await screen.findByRole('button', { name: /Fehlerbericht schreiben/ }))
-    expect(spies.fehlerbericht).toHaveBeenCalled()
+    expect(spies.berichtVorschau).toHaveBeenCalled()
+    expect(await screen.findByText('Fehler eins')).toBeTruthy()
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Zeile 1 mitsenden' }))
+    fireEvent.click(screen.getByRole('button', { name: /An Bugsink senden/ }))
+    await waitFor(() => expect(spies.berichtSenden).toHaveBeenCalledWith('abc', [1], ''))
   })
 
-  it('scheitert das Oeffnen der Mail, sagt es die Seite (Reviewbefund B1)', async () => {
-    // `openExternal` lehnt ohne registriertes Mailprogramm ab — auf einer frischen
-    // Windows-Installation der Normalfall. Ohne diesen Zweig taete der Knopf sichtbar
-    // nichts, waehrend die Zeile darueber eine vorbereitete Mail verspricht.
+  it('zeigt eine Bugsink-Ablehnung sichtbar im Dialog', async () => {
     const { spies } = zeigeMit({ version: '0.2.1', art: 'aktuell' })
-    spies.fehlerbericht.mockRejectedValue(new Error('Kein Programm fuer mailto'))
+    spies.berichtSenden.mockRejectedValue(new Error('Bugsink nicht erreichbar'))
     fireEvent.click(await screen.findByRole('button', { name: /Fehlerbericht schreiben/ }))
-    await waitFor(() => expect(toast.error).toHaveBeenCalled())
+    fireEvent.click(await screen.findByRole('button', { name: /An Bugsink senden/ }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Bugsink nicht erreichbar')
   })
 
-  it('bei Erfolg gibt es KEINE Fehlermeldung', async () => {
-    // Gegenrichtung: ein Toast, der immer kommt, ist derselbe Schaden von der anderen Seite.
-    const { spies } = zeigeMit({ version: '0.2.1', art: 'aktuell' })
+  it('zeigt erst nach der Bugsink-Antwort eine Erfolgsmeldung', async () => {
+    zeigeMit({ version: '0.2.1', art: 'aktuell' })
     fireEvent.click(await screen.findByRole('button', { name: /Fehlerbericht schreiben/ }))
-    // Auf das VERSPRECHEN der Attrappe warten, nicht auf einen Knopf, der schon vor dem Klick
-    // dasteht: sonst kehrt `waitFor` beim ersten Versuch zurueck, die Promise-Kette aus
-    // `berichtSchreiben` ist noch gar nicht gelaufen, und ein irrtuemlicher Toast entstuende
-    // erst danach — der Test bliebe gruen (CodeRabbit-Bot).
-    await spies.fehlerbericht.mock.results[0].value
-    expect(toast.error).not.toHaveBeenCalled()
+    fireEvent.click(await screen.findByRole('button', { name: /An Bugsink senden/ }))
+    expect(await screen.findByRole('status')).toHaveTextContent('angenommen')
   })
 
   it('sagt VOR dem Klick, was mitgeht — das ist die Antwort auf „was darf mit?"', async () => {
-    // Der Kern von #372: gezeigt statt gefiltert. Ein Knopf, der wortlos eine Mail mit
-    // Protokollzeilen aufmacht, waere genau das, was die README-Zusage verletzt.
     zeigeMit({ version: '0.2.1', art: 'aktuell' })
-    expect(await screen.findByText(/letzten aussagekräftigen Zeilen des Protokolls/)).toBeTruthy()
-    expect(screen.getByText(/bevor du sendest/)).toBeTruthy()
+    expect(await screen.findByText(/kannst einzelne Zeilen abwählen/)).toBeTruthy()
+    expect(screen.getByText(/automatische Fehlerberichte ausgeschaltet/)).toBeTruthy()
   })
 
   it('im reinen Browser gibt es den Abschnitt NICHT', async () => {
@@ -268,7 +263,7 @@ describe('VersionPage — Versionsverlauf', () => {
   it('sagt es, wenn der Verlauf nicht ladbar ist — samt Grund und Weg zu GitHub', async () => {
     // Kein Netz ist der Normalfall auf einem Rechner ohne Verbindung; eine leere Flaeche
     // liesse den Leser raten, ob es keine Fassungen gibt oder die Abfrage scheiterte.
-    vi.mocked(useUpdate).mockReturnValue({ zustand: null, pruefen: vi.fn(), laden: vi.fn(), installieren: vi.fn(), protokollOeffnen: vi.fn(), fehlerbericht: vi.fn(() => Promise.resolve(BERICHT)) })
+    vi.mocked(useUpdate).mockReturnValue({ zustand: null, pruefen: vi.fn(), laden: vi.fn(), installieren: vi.fn(), protokollOeffnen: vi.fn(), berichtVorschau: vi.fn(() => Promise.resolve(BERICHT)), berichtSenden: vi.fn(() => Promise.resolve({ id: 'abc' })) })
     vi.mocked(holeReleases).mockRejectedValue(new Error('GitHub antwortet 403'))
     render(<MemoryRouter><VersionPage /></MemoryRouter>)
     expect(await screen.findByText(/GitHub antwortet 403/)).toBeTruthy()
@@ -296,7 +291,7 @@ describe('VersionPage — Versionsverlauf', () => {
     // was der catch tut. Scharf wird es nur im StrictMode: mount→unmount→mount auf
     // DERSELBEN Fiber, der erste Abruf lehnt ab, die Seite steht danach aber da.
     let n = 0
-    vi.mocked(useUpdate).mockReturnValue({ zustand: null, pruefen: vi.fn(), laden: vi.fn(), installieren: vi.fn(), protokollOeffnen: vi.fn(), fehlerbericht: vi.fn(() => Promise.resolve(BERICHT)) })
+    vi.mocked(useUpdate).mockReturnValue({ zustand: null, pruefen: vi.fn(), laden: vi.fn(), installieren: vi.fn(), protokollOeffnen: vi.fn(), berichtVorschau: vi.fn(() => Promise.resolve(BERICHT)), berichtSenden: vi.fn(() => Promise.resolve({ id: 'abc' })) })
     vi.mocked(holeReleases).mockImplementation((signal?: AbortSignal) => {
       n += 1
       if (n === 1) {

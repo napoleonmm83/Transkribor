@@ -11,6 +11,7 @@ const test = require('node:test')
 const assert = require('node:assert')
 const fs = require('node:fs')
 const path = require('node:path')
+const vm = require('node:vm')
 const Ajv = require('ajv')
 
 const schema = require('app-builder-lib/scheme.json')
@@ -62,6 +63,31 @@ test('setup.html findet Zeichen und Schriften neben sich', () => {
   for (const datei of ['marke.png', 'fonts/space-grotesk.woff2', 'fonts/dm-sans.woff2']) {
     assert.ok(html.includes(datei), `setup.html verweist nicht auf ${datei}`)
     assert.ok(fs.existsSync(path.join(__dirname, datei)), `${datei} fehlt in electron/`)
+  }
+})
+
+test('setup.html meldet unbehandelte Fehler und Rejections ueber die Renderer-Bruecke', () => {
+  const html = fs.readFileSync(path.join(__dirname, 'setup.html'), 'utf8')
+  const script = html.match(/<script>([\s\S]*?)<\/script>/)?.[1]
+  assert.ok(script)
+  const events = {}
+  const envelopes = []
+  const element = { style: {}, classList: { toggle: () => {}, add: () => {} } }
+  const window = {
+    addEventListener: (name, fn) => { events[name] = fn },
+    __SENTRY_IPC__: { 'sentry-ipc': { sendEnvelope: e => envelopes.push(e) } },
+    transkribor: { on: () => {}, status: () => new Promise(() => {}) },
+  }
+  const document = { getElementById: () => element }
+  vm.runInNewContext(script, { window, document, Error, Date, JSON, String, Number })
+  events.error({ error: new Error('Setup kaputt') })
+  events.unhandledrejection({ reason: new Error('Setup abgelehnt') })
+  assert.equal(envelopes.length, 2)
+  for (const roh of envelopes) {
+    const teile = roh.split('\n')
+    assert.equal(JSON.parse(teile[1]).type, 'event')
+    const event = JSON.parse(teile[2])
+    assert.ok(event.exception.values[0].stacktrace.frames.length > 0)
   }
 })
 

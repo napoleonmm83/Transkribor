@@ -45,6 +45,9 @@ Module._load = (req, ...rest) => {
   // Das echte SDK stirbt unter node an `process.versions.electron` und greift auf
   // `app.getAppPath`, `protocol`, `crashReporter`, `session` — die Attrappe zeichnet nur auf.
   if (req === '@sentry/electron/main') return welt.sentry
+  if (req === '../package.json' && rest[0]?.filename?.endsWith('main.js')) {
+    return { ...echtesLaden(req, ...rest), bugsinkDsn: welt.dsn }
+  }
   // `./fenster` bleibt ECHT: `farbeGueltig`/`fortschrittGueltig` sind die Waechter, deren
   // Anwendung hier geprueft wird — mit einer Attrappe pruefte der Test seine eigene Zusage.
   return echtesLaden(req, ...rest)
@@ -56,6 +59,7 @@ function attrappen(opt = {}) {
     // REIHENFOLGEN (Backend stoppen VOR dem Installieren), und die sieht man nur so.
     spur: [],
     protokollzeilen: [],
+    dsn: opt.dsn || '',
     gesendet: [],
     kanaele: new Map(),
     // Jeder Lauf bekommt sein eigenes userData (#530): der Opt-in-Schalter liegt dort als
@@ -133,7 +137,7 @@ function attrappen(opt = {}) {
       on: (n, fn) => { w.appEreignisse.set(n, fn) },
     },
     BrowserWindow: function (o) { w.fenster.push(o); return scheibeBauen() },
-    ipcMain: { handle: (n, fn) => { w.kanaele.set(n, fn) } },
+    ipcMain: { handle: (n, fn) => { w.kanaele.set(n, fn) }, on: (n, fn) => { w.kanaele.set(n, fn) } },
     shell: {
       showItemInFolder: p => w.spur.push(`zeigen:${p}`),
       openPath: async p => { w.spur.push(`openPath:${p}`); return opt.openPathFehler || '' },
@@ -160,6 +164,8 @@ function attrappen(opt = {}) {
       // VOR `appendSwitch`, nicht nur vor whenReady: was davor wirft, sieht das SDK nicht.
       w.sentryVorSchalter = !w.spur.includes('schalter:disable-http2')
     },
+    captureEvent: e => { w.sentryEvent = e },
+    makeElectronTransport: () => ({ send: async envelope => { w.envelope = envelope; return { statusCode: 202 } } }),
     close: async () => { w.spur.push('sentry.close'); return true },
     IPCMode: { Classic: 1, Protocol: 2, Both: 3 },
   }
@@ -464,56 +470,39 @@ test('projekteOeffnen wirft die Systemmeldung weiter, statt still nichts zu tun'
 })
 
 // ── Fehlerbericht (#372) ──────────────────────────────────────────────────────
-test('fehlerbericht oeffnet eine mailto-URL UND zeigt die Datei daneben', async () => {
-  // Beides gehoert zusammen: `mailto` kann keine Anhaenge, die vollstaendige Spur ist aber
-  // genau das, was man anhaengt.
-  const w = await laden()
-  const r = await w.ruf('fehlerbericht')
-  const mail = w.spur.find(z => z.startsWith('extern:mailto:'))
-  assert.ok(mail, 'keine mailto-URL geoeffnet')
-  assert.ok(w.spur.includes(`zeigen:${w.logpfad}`))
-  assert.strictEqual(r.pfad, w.logpfad)
+test('manueller Bericht zeigt vorab maskierte Zeilen und oeffnet keine Mail', async () => {
+  const w = await laden({ logtext: 'PATH      : C:\\Windows\nFEHLER: key sk-ant-abcdefghijklmnop\n' })
+  const b = await w.ruf('fehlerbericht:vorschau')
+  assert.ok(b.kopf.join(' ').includes('9.9.9'))
+  assert.deepStrictEqual(b.zeilen, ['FEHLER: key ***[API-KEY]***'])
+  assert.ok(!w.spur.some(z => z.startsWith('extern:mailto:')))
 })
 
-test('der Bericht traegt Fassung und Plattform, aber NICHT den PATH', async () => {
-  const w = await laden({ logtext: 'PATH      : C:\\Windows;C:\\Users\\marcus\\bin\nirgendwas ging schief\n' })
-  await w.ruf('fehlerbericht')
-  const rumpf = decodeURIComponent(w.spur.find(z => z.startsWith('extern:mailto:')).split('&body=')[1])
-  assert.ok(rumpf.includes('9.9.9'), 'die Fassung, sonst raet der Empfaenger')
-  assert.ok(rumpf.includes(process.platform))
-  assert.ok(rumpf.includes('irgendwas ging schief'), 'die Protokollzeilen gehen mit')
-  assert.ok(!/PATH/i.test(rumpf),
-    'der PATH traegt den Benutzernamen — er bleibt in der Datei, die der Nutzer BEWUSST anhaengt')
+test('manueller Bericht akzeptiert nur den aktuellen Vorschau-Token', async () => {
+  const w = await laden({ logtext: 'erste\nzweite\n' })
+  const b = await w.ruf('fehlerbericht:vorschau')
+  await assert.rejects(() => w.ruf('fehlerbericht:senden', 'falsch', [0], ''), /Vorschau/)
+  // Im Testbau fehlt der DSN: auch bei ausgeschaltetem Automat bleibt der manuelle Weg
+  // erreichbar, aber der Fehler ist sichtbar statt eine Mail zu oeffnen.
+  await assert.rejects(() => w.ruf('fehlerbericht:senden', b.id, [0], ''), /Bugsink/)
 })
 
-test('ein durchgerutschter Schluessel wird maskiert, bevor er in eine Mail geht', async () => {
-  // Geschrieben werden die Zeilen zwar schon maskiert (#371) — eine rotierte Datei kann
-  // aber aus einer Fassung davor stammen, und hier landet sie in einer Mail.
-  const w = await laden({ logtext: 'FEHLER: Anthropic sagt nein, key sk-ant-abcdefghijklmnop\n' })
-  await w.ruf('fehlerbericht')
-  const rumpf = decodeURIComponent(w.spur.find(z => z.startsWith('extern:mailto:')).split('&body=')[1])
-  assert.ok(!rumpf.includes('sk-ant-abcdefghijklmnop'))
-  assert.ok(rumpf.includes('***[API-KEY]***'))
-})
-
-test('die Marke steht NACH dem Lesen — sie verdraengt keine echte Zeile', async () => {
-  // Andersherum stuende „vom Nutzer erstellt" als juengste Zeile im eigenen Bericht.
-  const w = await laden({ logtext: 'eine echte Zeile\n' })
-  await w.ruf('fehlerbericht')
-  const rumpf = decodeURIComponent(w.spur.find(z => z.startsWith('extern:mailto:')).split('&body=')[1])
-  assert.ok(!rumpf.includes('Fehlerbericht vom Nutzer erstellt'))
-  assert.ok(w.protokollzeilen.some(z => z.includes('Fehlerbericht vom Nutzer erstellt')),
-    'in der DATEI steht sie sehr wohl')
-})
-
-test('scheitert das Oeffnen der Mail, erfaehrt es der Nutzer — und die Datei liegt trotzdem da', async () => {
-  // Ohne registrierten mailto-Handler ist das der NORMALFALL, nicht der Randfall. Ohne den
-  // Wurf taete der Knopf sichtbar nichts, waehrend die Seite eine Mail verspricht.
-  const w = await laden({ logtext: 'zeile\n', externFehler: 'Kein Programm fuer mailto' })
-  await assert.rejects(() => w.ruf('fehlerbericht'), /Kein Programm fuer mailto/)
-  // Die zweite Haelfte ist die eigentliche Zusage der Reihenfolge: der Weg, der immer geht,
-  // ist VORHER gegangen worden.
-  assert.ok(w.spur.includes(`zeigen:${w.logpfad}`))
+test('Renderer-Ausnahmen erreichen Sentry nur bei Opt-in; andere Envelope-Typen nie', async () => {
+  const w = await laden({ dsn: 'http://key@127.0.0.1:8123/1' })
+  const envelope = typ => JSON.stringify({ sent_at: 'jetzt' }) + '\n'
+    + JSON.stringify({ type: typ }) + '\n'
+    + JSON.stringify({ exception: { values: [{ type: 'Error', value: 'kaputt' }] } })
+  w.ruf('fehlerberichte:renderer', envelope('event'))
+  assert.equal(w.sentryEvent, undefined, 'AUS blockiert auch Renderer-Fehler')
+  await w.ruf('fehlerberichte:setzen', true)
+  w.ruf('fehlerberichte:renderer', envelope('session'))
+  assert.equal(w.sentryEvent, undefined, 'Sessions bleiben gesperrt')
+  w.ruf('fehlerberichte:renderer', envelope('event'))
+  assert.equal(w.sentryEvent.exception.values[0].value, 'kaputt')
+  w.sentryEvent = undefined
+  await w.ruf('fehlerberichte:setzen', false)
+  w.ruf('fehlerberichte:renderer', envelope('event'))
+  assert.equal(w.sentryEvent, undefined, 'AUS wirkt sofort')
 })
 
 // ── Update ────────────────────────────────────────────────────────────────────
@@ -1102,7 +1091,7 @@ test('das SDK wird VOR whenReady initialisiert und ist ohne DSN aus', async () =
   assert.ok(w.sentryOptionen, 'init wurde nicht gerufen')
   assert.strictEqual(w.sentryVorReady, true, 'init muss vor dem whenReady-Abonnement laufen')
   assert.strictEqual(w.sentryVorSchalter, true, 'init muss vor appendSwitch stehen — vor allem anderen')
-  assert.strictEqual(w.sentryOptionen.ipcMode, 1, 'IPCMode.Classic: kein sentry-ipc://-Schema ohne Renderer-SDK')
+  assert.strictEqual(w.sentryOptionen.ipcMode, 0, 'nur die eigens begrenzte Renderer-Bruecke, keine SDK-IPC-Kanaele')
   assert.strictEqual(w.sentryOptionen.enabled, false, 'die package.json des Repos traegt keinen DSN')
   assert.strictEqual(w.sentryOptionen.release, 'transkribor@9.9.9')
   assert.strictEqual(w.sentryOptionen.environment, 'dev')

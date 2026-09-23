@@ -32,6 +32,34 @@ const PROJEKTE = 'C:\\Users\\marcus\\AppData\\Roaming\\Transkribor\\projekte'
 const NAMEN = { projekte: ['Interview Mueller'], dateien: ['2026-01-01 Gespraech Mueller'] }
 const CTX = { home: HOME, daten: DATEN, projekte: PROJEKTE, namen: NAMEN }
 
+test('Renderer-Bridge nimmt nur ein einzelnes Ausnahmeereignis an', () => {
+  const env = (typ, event) => JSON.stringify({ sent_at: 'jetzt' }) + '\n'
+    + JSON.stringify({ type: typ }) + '\n' + JSON.stringify(event)
+  const fehler = { exception: { values: [{ type: 'Error', value: 'kaputt' }] } }
+  assert.deepStrictEqual(fb.rendererEreignis(env('event', fehler)), { ...fehler, level: 'error' })
+  assert.strictEqual(fb.rendererEreignis(env('session', fehler)), null)
+  assert.strictEqual(fb.rendererEreignis(env('event', { message: 'kein Fehler' })), null)
+  assert.strictEqual(fb.rendererEreignis(env('event', fehler) + '\n' + env('attachment', {})), null)
+  assert.strictEqual(fb.rendererEreignis('x'.repeat(65537)), null)
+})
+
+test('Renderer-Bridge streift freie Zusatzdaten und Breadcrumbs ab', () => {
+  const event = {
+    exception: { values: [{ type: 'Error', value: 'kaputt', stacktrace: { frames: [
+      { filename: 'app.js', function: 'run', lineno: 4, colno: 2, vars: { transcript: 'privat' } },
+    ] } }] },
+    extra: { transcript: 'privat' }, breadcrumbs: [{ message: 'privat' }], user: { email: 'privat' },
+  }
+  const roh = '{}\n{"type":"event"}\n' + JSON.stringify(event)
+  const aus = fb.rendererEreignis(roh)
+  assert.deepStrictEqual(aus, {
+    exception: { values: [{ type: 'Error', value: 'kaputt', stacktrace: { frames: [
+      { filename: 'app.js', function: 'run', lineno: 4, colno: 2 },
+    ] } }] }, level: 'error',
+  })
+  assert.ok(!JSON.stringify(aus).includes('privat'))
+})
+
 // ---------------------------------------------------------------- Schalter-Datei
 
 test('lesen: fehlende, kaputte und fremd geformte Datei heissen AUS und „nie gefragt"', () => {

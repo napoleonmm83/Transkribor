@@ -8,7 +8,7 @@ import { Toaster } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { JobProvider } from '@/hooks/useActiveJob'
 
-createRoot(document.getElementById('root')!).render(
+function anzeigen() { createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ThemeProvider>
       <TooltipProvider>
@@ -21,4 +21,22 @@ createRoot(document.getElementById('root')!).render(
       </TooltipProvider>
     </ThemeProvider>
   </StrictMode>,
-)
+) }
+
+// Im normalen Browser gibt es keine Electron-Bruecke. Die Renderer-Integrationen erfassen
+// ausschliesslich unbehandelte Fehler; der Hauptprozess entscheidet ueber Opt-in und Maske.
+if ('__SENTRY_IPC__' in window) {
+  import('@sentry/electron/renderer').then(Sentry => {
+    Sentry.init({
+      defaultIntegrations: [
+        Sentry.globalHandlersIntegration(),
+        Sentry.browserApiErrorsIntegration(),
+        Sentry.linkedErrorsIntegration(),
+      ],
+      sendDefaultPii: false,
+      autoSessionTracking: false,
+      beforeBreadcrumb: () => null,
+    })
+  }).catch(e => console.error('Renderer-Fehlerberichte konnten nicht gestartet werden', e))
+    .finally(anzeigen)
+} else anzeigen()

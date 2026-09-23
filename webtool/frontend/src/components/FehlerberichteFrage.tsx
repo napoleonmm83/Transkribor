@@ -78,8 +78,8 @@ export function FehlerberichteFrage() {
                 Aufnahmenamen werden vorher unkenntlich gemacht.
               </p>
               <p>
-                <strong className="font-medium text-foreground">Nie mitgeschickt:</strong> Aufnahmen,
-                Transkripte, Einstellungen, Schlüssel.
+                <strong className="font-medium text-foreground">Keine Dateien als Anhang:</strong> Aufnahmen,
+                Transkripte und Einstellungen. Fehlermeldungen können unbekannten Text enthalten.
               </p>
               <p>Du kannst das jederzeit unter „Version“ umstellen.</p>
             </div>
