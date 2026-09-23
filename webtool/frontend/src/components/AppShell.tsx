@@ -21,7 +21,7 @@ function Leiste() {
   const navigate = useNavigate()
   const { projects, loading, fehler, refresh } = useProjekte()
   const { projekt, files, loading: dateienLaden, refresh: refreshFiles } = useDateien()
-  const { jobs, adopt } = useActiveJob()
+  const { jobs, adopt, verfolge } = useActiveJob()
   const { start } = useJob()
   const aiReason = useAiReady()
 
@@ -83,8 +83,16 @@ function Leiste() {
       // das sieht der JobProvider den Lauf erst ueber den 4-s-Summenpoll, und ein Lauf, der
       // vorher stirbt, bleibt wieder ohne Ausgangsmeldung: genau die Klasse, die #376
       // schliesst. Der MaterialDialog tat es laengst; dieser zweite Upload-Weg nicht.
+      // Ein vorgemerkter Upload hat noch keinen eigenen Job: dessen Nummer verfolgt der Provider.
       onUpload={(p, f) => uploadAudio(p, f)
-        .then(res => { if (res.started && res.job_id) adopt(res.job_id, p, 'transcribe'); nachladen() })
+        .then(res => {
+          if (res.started && res.job_id) adopt(res.job_id, p, 'transcribe')
+          else if (!res.started && res.vorgang) {
+            verfolge(res.vorgang)
+            if (res.job_id) toast.info('Es läuft bereits etwas — die Arbeit ist vorgemerkt und kommt danach dran.')
+          }
+          nachladen()
+        })
         .catch(e => toast.error(`Hochladen: ${(e as Error)?.message || 'fehlgeschlagen'}`))}
       // `adopt` innerhalb von `fn` — dasselbe Muster wie in DateiMenue.tsx. Es ist seit #376
       // Pflicht, nicht Beschleunigung: den Ausgang meldet `useJobAusgang` ueber den
