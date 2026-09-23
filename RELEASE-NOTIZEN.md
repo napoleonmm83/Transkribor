@@ -28,6 +28,8 @@ hat. Lesbar, aber unschön — das ist Absicht.
 
 ## Unveröffentlicht
 
+## v0.57.0 — 2026-09-23
+
 **Neu**
 - Im Projektmenü kannst du unter „Namen & Fachbegriffe“ bekannte Schreibweisen für die nächsten Korrekturen hinterlegen.
 
