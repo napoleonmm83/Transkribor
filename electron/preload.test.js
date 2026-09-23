@@ -5,16 +5,19 @@ const test = require('node:test')
 const assert = require('node:assert')
 
 let freigegeben = null
+const welten = {}
 const kanaele = []
 const abmeldungen = []
 const aufrufe = []
+const senden = []
 const echt = Module._load
 Module._load = (req, ...rest) => req === 'electron' ? {
-  contextBridge: { exposeInMainWorld: (_name, api) => { freigegeben = api } },
+  contextBridge: { exposeInMainWorld: (name, api) => { welten[name] = api; if (name === 'transkribor') freigegeben = api } },
   ipcRenderer: {
     // ALLE Argumente merken, nicht nur das erste: sonst sieht der Test einen zweiten Wert
     // (den Fortschritts-Modus) nicht, und eine verlorene Weitergabe faellt nicht auf.
     invoke: (...args) => { aufrufe.push(args); return Promise.resolve() },
+    send: (...args) => senden.push(args),
     on: (k) => kanaele.push(k),
     removeListener: (k) => abmeldungen.push(k),
   },
@@ -64,12 +67,21 @@ test('projekteOeffnen ruft den Hauptprozess OHNE Argument (#218)', async () => {
   assert.deepStrictEqual(aufrufe.at(-1), ['projekteOeffnen'])
 })
 
-test('fehlerbericht ruft den Hauptprozess OHNE Argument (#372)', async () => {
-  // Dieselbe Zusicherung wie bei `projekteOeffnen`: naehme der Kanal einen Rumpf oder einen
-  // Empfaenger entgegen, waere aus der schmalen Bruecke ein „oeffne beliebige URL" geworden
-  // — fuer alles, was in diesem Fenster laeuft.
-  await freigegeben.fehlerbericht()
-  assert.deepStrictEqual(aufrufe.at(-1), ['fehlerbericht'])
+test('manueller Fehlerbericht holt die Vorschau ohne Argument und sendet die Auswahl', async () => {
+  await freigegeben.fehlerbericht.vorschau()
+  assert.deepStrictEqual(aufrufe.at(-1), ['fehlerbericht:vorschau'])
+  await freigegeben.fehlerbericht.senden('token', [0, 2], 'Beschreibung')
+  assert.deepStrictEqual(aufrufe.at(-1), ['fehlerbericht:senden', 'token', [0, 2], 'Beschreibung'])
+})
+
+test('Renderer-SDK darf nur einen Envelope-Kanal senden', () => {
+  const bruecke = welten.__SENTRY_IPC__['sentry-ipc']
+  const envelope = { event: 'test' }
+  bruecke.sendEnvelope(envelope)
+  assert.deepStrictEqual(senden.at(-1), ['fehlerberichte:renderer', envelope])
+  const vorher = senden.length
+  for (const methode of ['sendRendererStart', 'sendScope', 'sendStatus', 'sendStructuredLog', 'sendMetric']) bruecke[methode]('ignoriert')
+  assert.strictEqual(senden.length, vorher)
 })
 
 test('plattform ist die process.platform des Hauptprozesses', () => {
