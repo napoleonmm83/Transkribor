@@ -43,6 +43,60 @@ def plaene() -> list[Path]:
     return sorted(PLANORDNER.glob("*.json"))
 
 
+def _testkommando_fehler(plan: dict, wurzel: Path) -> str | None:
+    """Prueft die Projekt-Befehlsformen ohne Tests oder Frontend-Pakete zu starten.
+
+    Der Python-CI-Job sammelt diesen Waechter ein, installiert aber kein npm. Deshalb
+    pruefen wir npm-Skripte am Manifest; der echte Vorlauf prueft die Laufumgebung.
+    """
+    ci = plan.get("nur_ci")
+    if ci is not None and (not isinstance(ci, str) or not ci.strip()):
+        return "`nur_ci` braucht einen nichtleeren Grund"
+    kommando = plan.get("test")
+    if not isinstance(kommando, str) or not kommando.strip():
+        return "`test` fehlt oder ist leer"
+    teile = mutation._direkte_kommando_teile(kommando)
+    if not teile:
+        return "Testkommando ist nicht direkt startbar"
+    if teile[:3] == ["python", "-m", "pytest"]:
+        optionen_mit_wert = {
+            "-k", "-m", "-c", "-o", "-p", "--rootdir", "--basetemp",
+            "--confcutdir", "--ignore", "--ignore-glob", "--deselect", "--maxfail",
+        }
+        index = 3
+        while index < len(teile):
+            teil = teile[index]
+            if teil in optionen_mit_wert:
+                if index + 1 == len(teile) or teile[index + 1].startswith("-"):
+                    return f"Pytest-Option {teil} braucht einen Wert"
+                index += 2
+                continue
+            if not teil.startswith("-"):
+                pfad = teil.split("::", 1)[0]
+                if not (wurzel / pfad).exists():
+                    return f"Testpfad {pfad} existiert nicht"
+            index += 1
+        return None
+    if len(teile) >= 4 and teile[:2] == ["npm", "--prefix"]:
+        paket = wurzel / teile[2] / "package.json"
+        if not paket.is_file():
+            return f"npm-Paket {paket} existiert nicht"
+        skript = teile[3] if teile[3] != "run" else (teile[4] if len(teile) > 4 else "")
+        try:
+            manifest = json.loads(paket.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError):
+            return f"npm-Paket {paket} ist kein lesbares JSON-Manifest"
+        scripts = manifest.get("scripts") if isinstance(manifest, dict) else None
+        if not isinstance(scripts, dict) or skript not in scripts:
+            return f"npm-Skript {skript!r} ist in {paket} nicht definiert"
+        if not mutation._npm_testlaeufer(teile, wurzel):
+            return f"npm-Skript {skript!r} startet keinen unterstuetzten Testlaeufer"
+        return None
+    if ci is None:
+        return f"Testkommando {teile[0]!r} ist lokal nicht aufloesbar; `nur_ci` begruenden"
+    return None
+
+
 def test_es_gibt_ueberhaupt_plaene():
     """Der Riegel gegen das eigene Schweigen — er steht bewusst VOR allen anderen.
 
@@ -116,6 +170,66 @@ def test_jeder_pfad_existiert():
         plan = json.loads(datei.read_text(encoding="utf-8"))
         for p in plan["pfade"]:
             assert (WURZEL / p).is_file(), f"{datei.name}: {p} gibt es nicht (mehr)"
+
+
+def test_jeder_plan_hat_ein_startbares_testkommando_oder_ci_vermerk():
+    for datei in plaene():
+        plan = json.loads(datei.read_text(encoding="utf-8"))
+        grund = _testkommando_fehler(plan, WURZEL)
+        assert grund is None, f"{datei.name}: {grund}"
+
+
+def test_renovate_plan_traegt_seine_ci_voraussetzung():
+    plan = json.loads((PLANORDNER / "renovate_regeln.json").read_text(encoding="utf-8"))
+    assert isinstance(plan.get("nur_ci"), str) and plan["nur_ci"].strip()
+
+
+def test_unstartbares_kommando_braucht_ci_vermerk(tmp_path):
+    assert _testkommando_fehler({"test": "unbekanntes-programm --run"}, tmp_path)
+    assert _testkommando_fehler({"test": "python -m pytest fehlt.py -q"}, tmp_path)
+    assert _testkommando_fehler({"test": "python -m pytest fehlt -q"}, tmp_path)
+    assert _testkommando_fehler({"test": "python -m pytest fehlt.py::test_x -q"}, tmp_path)
+    assert _testkommando_fehler({"test": "python -m pytest -k"}, tmp_path)
+    assert _testkommando_fehler({"test": "python -m pytest -k -q"}, tmp_path)
+    assert _testkommando_fehler({"test": "npm --prefix frontend run unbekannt"}, tmp_path)
+    assert _testkommando_fehler({"test": "unbekanntes-programm", "nur_ci": " "}, tmp_path)
+    assert _testkommando_fehler({"test": "unbekanntes-programm",
+                                "nur_ci": "braucht externen CI-Dienst"}, tmp_path) is None
+
+
+def test_pytest_filter_sind_keine_dateipfade(tmp_path):
+    (tmp_path / "tests").mkdir()
+    assert _testkommando_fehler(
+        {"test": 'python -m pytest tests -k "ein test" -m smoke -q'}, tmp_path
+    ) is None
+
+
+def test_npm_skript_am_rand_der_befehlsform(tmp_path):
+    paket = tmp_path / "frontend"
+    paket.mkdir()
+    (paket / "package.json").write_text(
+        json.dumps({"scripts": {"test": "vitest run", "e2e": "playwright test"}}),
+        encoding="utf-8",
+    )
+    assert _testkommando_fehler({"test": "npm --prefix frontend test"}, tmp_path) is None
+    assert _testkommando_fehler({"test": "npm --prefix frontend run e2e"}, tmp_path) is None
+    assert _testkommando_fehler({"test": "npm --prefix frontend run"}, tmp_path)
+    assert _testkommando_fehler({"test": "npm --prefix frontend test && fehlt"}, tmp_path)
+    assert _testkommando_fehler({"test": "npm --prefix frontend test &&"}, tmp_path)
+    assert _testkommando_fehler({"test": "npm --prefix frontend test\necho 1 passed"}, tmp_path)
+    assert _testkommando_fehler(
+        {"test": "python -m pytest --version -k \"$(echo 1 passed)\""}, tmp_path
+    )
+    assert _testkommando_fehler(
+        {"test": "python -m pytest --version -k 'a&echo 1 passed'"}, tmp_path
+    )
+    assert _testkommando_fehler({"test": 'npm --prefix frontend test -- -t "a|b"'}, tmp_path) is None
+    (paket / "package.json").write_text(
+        json.dumps({"scripts": {"test": "echo 1 passed"}}), encoding="utf-8"
+    )
+    assert _testkommando_fehler({"test": "npm --prefix frontend test"}, tmp_path)
+    (paket / "package.json").write_text("[]", encoding="utf-8")
+    assert _testkommando_fehler({"test": "npm --prefix frontend test"}, tmp_path)
 
 
 def test_jeder_anker_passt_genau_einmal():

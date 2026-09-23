@@ -1,5 +1,6 @@
 {
   "test": "python -m pytest scripts/test_renovate_regeln.py -q -m \"\"",
+  "nur_ci": "Die echte Renovate-Regelprobe braucht GITHUB_COM_TOKEN und den Renovate-Lauf im CI-Job.",
   "pfade": [
     "renovate.json",
     "scripts/renovate_regeln.py",
