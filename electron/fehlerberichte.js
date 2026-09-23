@@ -13,7 +13,7 @@
  *      aus dem Projekte-Ordner gelesen: deterministisch, keine Regex-Vermutung.
  *   3. Keine Breadcrumbs, keine Sitzungen, keine Minidumps, keine Screenshots, keine lokalen
  *      Variablen — nur die Ausnahme selbst, der Kontext der Maschine und die letzten
- *      Protokollzeilen (gefiltert wie beim Mail-Bericht, `bericht.letzteZeilen`).
+ *      Protokollzeilen (ausgewaehlt durch `bericht.letzteZeilen`).
  */
 const fs = require('fs')
 const os = require('os')
@@ -22,6 +22,10 @@ const bericht = require('./bericht')
 const protokoll = require('./protokoll')
 
 const DATEI = 'fehlerberichte.json'
+// IPC begrenzen, bevor JSON verarbeitet wird. Stack und Meldung bleiben diagnostisch
+// brauchbar, ohne beliebig grosse oder tiefe Renderer-Objekte zu uebernehmen.
+const RENDERER_GRENZEN = Object.freeze({ bytes: 64 * 1024, werte: 5, frames: 50,
+  datei: 1000, funktion: 200, typ: 120, meldung: 4000 })
 
 /**
  * Die Integrationen, die laufen DUERFEN — eine Erlaubnisliste, keine Verbotsliste. Die erste
@@ -204,9 +208,37 @@ function ereignisMaskieren(event, ctx) {
   return aus
 }
 
-/** Dieselbe Auswahl wie im Mail-Bericht, dazu die Namensmaske und der Zeilendeckel. */
+/** Relevante Protokollzeilen mit Namensmaske und Zeilendeckel. */
 function protokollZeilen(text, ctx) {
   return bericht.letzteZeilen(text || '').map(z => bericht.kappen(maskiere(z, ctx)))
+}
+
+/** Nur eine einzelne, kleine Fehler-Envelope aus dem Renderer. Alles andere bleibt lokal. */
+function rendererEreignis(roh) {
+  if (typeof roh !== 'string' || Buffer.byteLength(roh, 'utf8') > RENDERER_GRENZEN.bytes) return null
+  try {
+    const teile = roh.split('\n')
+    if (teile.length !== 3 || JSON.parse(teile[1]).type !== 'event') return null
+    const event = JSON.parse(teile[2])
+    if (!event || typeof event !== 'object' || Array.isArray(event) || event.type
+      || !Array.isArray(event.exception?.values) || !event.exception.values.length) return null
+    const werte = event.exception.values.slice(0, RENDERER_GRENZEN.werte).map(w => {
+      if (!w || typeof w !== 'object' || typeof w.value !== 'string') return null
+      const frames = Array.isArray(w.stacktrace?.frames) ? w.stacktrace.frames.slice(-RENDERER_GRENZEN.frames).map(f => ({
+        filename: typeof f.filename === 'string' ? f.filename.slice(0, RENDERER_GRENZEN.datei) : undefined,
+        function: typeof f.function === 'string' ? f.function.slice(0, RENDERER_GRENZEN.funktion) : undefined,
+        lineno: Number.isInteger(f.lineno) ? f.lineno : undefined,
+        colno: Number.isInteger(f.colno) ? f.colno : undefined,
+      })) : []
+      return {
+        type: typeof w.type === 'string' ? w.type.slice(0, RENDERER_GRENZEN.typ) : 'Error',
+        value: w.value.slice(0, RENDERER_GRENZEN.meldung),
+        ...(frames.length ? { stacktrace: { frames } } : {}),
+      }
+    })
+    if (werte.some(w => !w)) return null
+    return { exception: { values: werte }, level: 'error' }
+  } catch { return null }
 }
 
 function wert(x) { return typeof x === 'function' ? x() : x }
@@ -234,9 +266,8 @@ function beforeSend(ctx) {
  * `maxValueLength` kuerzt im SDK nur `message`, `exception.values[].value` und `request.url`
  * (`extra` bleibt ungekuerzt) — 700 statt 250, damit eine Fehlermeldung in Laenge einer
  * Protokollzeile (`bericht.MAX_ZEILE`) ganz ankommt.
- * `ipcMode` kommt vom Hauptprozess (`Sentry.IPCMode.Classic`): die Vorgabe `Both` registriert
- * ein privilegiertes `sentry-ipc://`-Schema fuer die ganze Session; ohne Renderer-SDK (PR c)
- * braucht das niemand, also bleibt die Flaeche zu.
+ * `ipcMode: 0` registriert keine allgemeinen SDK-Kanaele. Renderer-Ausnahmen laufen ueber
+ * die eng begrenzte Bruecke in `preload.js` und werden in `main.js` geprueft.
  */
 function optionen({ dsn, version, gepackt, ctx, ipcMode }) {
   return {
@@ -277,7 +308,7 @@ function fehlerprobeGewuenscht(env) { return !!env && env.TRANSKRIBOR_FEHLERPROB
 
 module.exports = {
   DATEI, ERLAUBT, MIN_NAME, FEHLERPROBE, INHALTSFELDER, pfad, lesen, schreiben, namen,
-  namensFormen, maskiere, maskiereTief, ereignisMaskieren, protokollZeilen, beforeSend, optionen,
+  namensFormen, maskiere, maskiereTief, ereignisMaskieren, protokollZeilen, rendererEreignis, beforeSend, optionen,
   fehlerprobeGewuenscht,
   _home: () => os.homedir(),
 }

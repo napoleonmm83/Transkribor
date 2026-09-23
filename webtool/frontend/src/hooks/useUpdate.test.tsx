@@ -16,7 +16,10 @@ function bruecke(start: UpdateZustand | null) {
       installieren: vi.fn().mockResolvedValue(undefined),
     },
     protokollOeffnen: vi.fn().mockResolvedValue('C:\\log.txt'),
-    fehlerbericht: vi.fn().mockResolvedValue({ pfad: 'C:\\log.txt', verwendet: 12, gekuerzt: false }),
+    fehlerbericht: {
+      vorschau: vi.fn().mockResolvedValue({ id: 'abc', kopf: ['Version'], zeilen: ['Fehler'] }),
+      senden: vi.fn().mockResolvedValue({ id: 'abc' }),
+    },
     on: (kanal: string, fn: (z: UpdateZustand) => void) => {
       if (kanal === 'update') melden = fn
       return abmelden
@@ -59,7 +62,7 @@ describe('useUpdate', () => {
     expect(api.update.laden).toHaveBeenCalled()
   })
 
-  it('reicht fehlerbericht durch (#372)', async () => {
+  it('reicht die Vorschau durch', async () => {
     const { api } = bruecke(AKTUELL)
     const { result } = renderHook(() => useUpdate())
     await waitFor(() => expect(result.current.zustand).toEqual(AKTUELL))
@@ -68,19 +71,19 @@ describe('useUpdate', () => {
     // und `act` haelt einen zurueckgegebenen Thenable fuer einen ASYNC act, den niemand
     // abwartet. Gemessen: die drei FOLGENDEN Tests dieser Datei fielen daraufhin mit
     // „Cannot read properties of null (reading 'zustand')" um, nicht dieser hier.
-    act(() => { result.current.fehlerbericht() })
-    expect(api.fehlerbericht).toHaveBeenCalled()
+    act(() => { result.current.berichtVorschau() })
+    expect(api.fehlerbericht.vorschau).toHaveBeenCalled()
   })
 
-  it('reicht die ABLEHNUNG durch — daran haengt der Toast der Seite', async () => {
+  it('reicht eine Sendefehler-Ablehnung an den Dialog durch', async () => {
     // Der Test darueber misst nur, DASS gerufen wird. Ein `.catch(() => {})` im Hook bliebe
     // damit gruen, und der Toast in VersionPage waere tot, ohne dass ein Test faellt
     // (CodeRabbit-Bot). Die Zusage ist das durchgereichte Versprechen, nicht der Aufruf.
     const { api } = bruecke(AKTUELL)
-    api.fehlerbericht.mockRejectedValue(new Error('Kein Programm fuer mailto'))
+    api.fehlerbericht.senden.mockRejectedValue(new Error('Bugsink nicht erreichbar'))
     const { result } = renderHook(() => useUpdate())
     await waitFor(() => expect(result.current.zustand).toEqual(AKTUELL))
-    await expect(result.current.fehlerbericht()).rejects.toThrow(/mailto/)
+    await expect(result.current.berichtSenden('abc', [0], '')).rejects.toThrow(/Bugsink/)
   })
 
   it('reicht protokollOeffnen durch — der Weg aus dem Fehlerzustand', async () => {

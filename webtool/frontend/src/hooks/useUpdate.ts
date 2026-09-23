@@ -9,10 +9,14 @@ type Bruecke = {
     installieren: () => Promise<void>
   }
   protokollOeffnen: () => Promise<string>
-  /** #372: baut den Bericht im Hauptprozess und oeffnet ihn im Mailprogramm. */
-  fehlerbericht: () => Promise<{ pfad: string; verwendet: number; gekuerzt: boolean }>
+  fehlerbericht: {
+    vorschau: () => Promise<BerichtVorschau>
+    senden: (id: string, indices: number[], kommentar: string) => Promise<{ id: string }>
+  }
   on: (kanal: string, fn: (z: UpdateZustand) => void) => () => void   // Rueckgabe: Abmelden
 }
+
+export type BerichtVorschau = { id: string; kopf: string[]; zeilen: string[] }
 
 function bruecke(): Bruecke | null {
   const w = window as unknown as { transkribor?: Bruecke }
@@ -38,11 +42,9 @@ export function useUpdate() {
   const laden = useCallback(() => { bruecke()?.update.laden().catch(() => {}) }, [])
   const installieren = useCallback(() => { bruecke()?.update.installieren().catch(() => {}) }, [])
   const protokollOeffnen = useCallback(() => { bruecke()?.protokollOeffnen().catch(() => {}) }, [])
-  // Reicht das Versprechen DURCH, anders als die vier darueber: `openExternal` lehnt ab, wenn
-  // kein Mailprogramm registriert ist, und das ist keine Randlage (frische Windows-
-  // Installation, Linux ohne xdg-Handler). Blind geschluckt taete der Knopf sichtbar nichts,
-  // waehrend die Seite eine Zeile darueber eine vorbereitete Mail verspricht.
-  const fehlerbericht = useCallback(() => bruecke()?.fehlerbericht(), [])
+  const berichtVorschau = useCallback(() => bruecke()?.fehlerbericht.vorschau(), [])
+  const berichtSenden = useCallback((id: string, indices: number[], kommentar: string) =>
+    bruecke()?.fehlerbericht.senden(id, indices, kommentar), [])
 
-  return { zustand, pruefen, laden, installieren, protokollOeffnen, fehlerbericht }
+  return { zustand, pruefen, laden, installieren, protokollOeffnen, berichtVorschau, berichtSenden }
 }

@@ -103,6 +103,28 @@
 </div>
 
 <script>
+// Die Einrichtungsseite ist ein eigener Renderer ohne Vite-Bundle. Auch ihre unbehandelten
+// Ausnahmen laufen ueber die begrenzte Bruecke; der Hauptprozess prueft Opt-in und Maske.
+function unbehandelterFehler(wert) {
+  const fehler = wert instanceof Error ? wert : new Error(String(wert))
+  const frames = String(fehler.stack || '').split('\n').slice(1, 21).map(zeile => {
+    const stelle = zeile.match(/^\s*at (?:(.*?) \()?(.+):(\d+):(\d+)\)?$/)
+    return stelle ? {
+      filename: stelle[2], function: stelle[1] || '<anonymous>',
+      lineno: Number(stelle[3]), colno: Number(stelle[4]),
+    } : null
+  }).filter(Boolean).reverse()
+  const event = {
+    exception: { values: [{ type: fehler.name || 'Error', value: fehler.message || 'Unbekannter Fehler',
+      stacktrace: { frames } }] },
+  }
+  const envelope = JSON.stringify({ sent_at: new Date().toISOString() }) + '\n'
+    + JSON.stringify({ type: 'event' }) + '\n' + JSON.stringify(event)
+  window.__SENTRY_IPC__?.['sentry-ipc']?.sendEnvelope(envelope)
+}
+window.addEventListener('error', e => unbehandelterFehler(e.error || e.message))
+window.addEventListener('unhandledrejection', e => unbehandelterFehler(e.reason))
+
 const $ = id => document.getElementById(id)
 const log = $('log'), check = $('check')
 

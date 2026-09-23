@@ -17,9 +17,9 @@ const { pathToFileURL } = require('url')
 const backend = require('./backend')
 const setup = require('./setup')
 const protokoll = require('./protokoll')
-const bericht = require('./bericht')
 const updater = require('./updater')
 const fehlerberichte = require('./fehlerberichte')
+const manuellerBericht = require('./manueller-bericht')
 const P = require('./paths')
 const {
   fensterOptionen, TITELLEISTE_HOEHE, farbeGueltig, fortschrittGueltig, externesZiel,
@@ -56,7 +56,7 @@ Sentry.init(fehlerberichte.optionen({
   dsn: paket.bugsinkDsn,
   version: app.getVersion(),
   gepackt: app.isPackaged,
-  ipcMode: Sentry.IPCMode.Classic,
+  ipcMode: 0,
   ctx: {
     home: fehlerberichte._home(),
     daten: P.daten,
@@ -65,6 +65,14 @@ Sentry.init(fehlerberichte.optionen({
     protokollPfad: () => protokoll.pfad(),
   },
 }))
+
+// Nur ein einzelnes Fehlerereignis aus dem Renderer annehmen. Andere Envelope-Typen
+// (Sessions, Profile, Anhaenge) umgehen beforeSend im SDK und bleiben hier gesperrt.
+ipcMain.on('fehlerberichte:renderer', (_event, roh) => {
+  if (!fehlerberichte.lesen(schalterPfad()).automatisch || !paket.bugsinkDsn) return
+  const event = fehlerberichte.rendererEreignis(roh)
+  if (event) Sentry.captureEvent(event)
+})
 
 // Vor app.whenReady: HTTP/2 abschalten. autoUpdater.checkForUpdates() nutzt Electrons
 // net = HTTP/2, und GitHub/Fastly verweigert dessen Stream sporadisch/persistent mit
@@ -92,99 +100,12 @@ function senden(kanal, nutzlast) {
   if (win && !win.isDestroyed()) win.webContents.send(kanal, nutzlast)
 }
 
-/**
- * Die Abweisung gehoert ins Protokoll — sonst tut ein Link sichtbar nichts und niemand findet
- * den Grund. Der Rueckkanal zum Renderer fehlt dabei ("dieselbe Regel wie beim
- * `fehlerbericht`-Wurf" stand hier zuerst und stimmt NICHT: dort wird die Ablehnung
- * durchgereicht und als Toast gezeigt, `setWindowOpenHandler` ist synchron und kennt keinen).
- * Diagnostizierbar wird es, sichtbar nicht.
- *
- * **Deckel und Bremse sind der Pflichtteil, nicht die Vorsicht** — beides an echtem Electron
- * gemessen, nachdem die erste Fassung dieser Zeile ungebremst schrieb:
- *   - Eine einzelne `window.open`-URL kommt mit bis zu **2 MB** am Handler an
- *     (Chromiums `kMaxURLChars`), und `protokoll.MAX` sind 2 MB. **Vier** Aufrufe draengten
- *     40 echte FEHLER-Zeilen aus dem Protokoll, **zwoelf** loeschten alle vier Generationen
- *     (15,26 MB auf der Platte statt der in `protokoll.js` zugesagten 8).
- *   - Schlimmer als der Datenverlust ist der stille: `bericht.mailto` kuerzt von OBEN und
- *     bricht ab, sobald keine Zeile mehr uebrig ist. **Ein** Aufruf mit ~1800 Zeichen
- *     entleerte den naechsten Fehlerbericht auf "letzte 0 Protokollzeilen" — der Nutzer
- *     schickt eine Mail ohne seinen Fehler ab und merkt nichts.
- *   - Gebremst wird nichts von selbst: 20 000 Aufrufe ohne Nutzergeste kamen alle an
- *     (~4200/s), Electron hat keinen Popup-Blocker.
- * Der Deckel allein reicht nicht (er macht aus 2 MB ~250 Byte, die Rate bleibt), die Bremse
- * allein auch nicht. Kein `replace` fuer Zeilenumbrueche: zweimal unabhaengig gemessen, dass
- * Chromium CR/LF/TAB vor dem Handler entfernt — eine Wache dagegen waere Code fuer einen Fall,
- * den es nicht gibt, mit einem Test, der immer gruen ist.
- */
+/** Abgewiesene Ziele werden je Stunde gedeckelt protokolliert; eine URL wird auf 200 Zeichen gekuerzt. */
 const ABWEISUNGEN_MAX = 20
 const ABWEISUNGEN_FENSTER_MS = 60 * 60 * 1000
 let abweisungen = 0
 let fensterStart = 0
-/**
- * `was` unterscheidet die beiden Absender (#434) — sonst steht im Protokoll nicht, ob ein
- * FENSTER aufgehen wollte oder das bestehende wegnavigieren. `grund` sagt daneben, WARUM
- * abgewiesen wurde (#458): der Klammerzusatz war eine Konstante und stand unter drei
- * verschiedenen Gruenden. Zaehler, Deckel und Bremse bleiben **geteilt**, und das ist die
- * eigentliche Zusicherung: ein zweiter, eigener Schreibweg waere genau der Fehler, den #426
- * hier schon einmal gemacht hat — ein Renderer, der beide Wege abwechselnd flutet, haette
- * sonst wieder den doppelten Deckel und entleerte den naechsten Fehlerbericht auf
- * „letzte 0 Protokollzeilen".
- *
- * **Der Deckel ist ein Zeitfenster, kein Lebenszeit-Budget (#448).** Bis dahin wurde
- * `abweisungen` nie zurueckgesetzt: nach 20 abgewiesenen Zielen — verteilt ueber beliebig
- * viele Tage, und die App bleibt bei langen Transkriptionen tagelang offen — schwieg die
- * Diagnose bis zum Neustart. Genau dann fehlte sie, wenn jemand meldet „ich klicke auf den
- * Link und es passiert nichts". Jetzt beginnt der Zaehler jede Stunde neu.
- *
- * **Was das NEU erlaubt, benannt statt uebersehen — und die Rechnung geht nur fuer die PLATTE
- * auf.** An einer Fenstergrenze sind im Extremfall 40 Zeilen in kurzer Folge moeglich (20 am
- * Ende von Fenster N, 20 am Anfang von N+1). Der gemessene Schaden von #426 kam von
- * UNGEKAPPTEN URLs — eine mit 2 MB entleerte den naechsten Fehlerbericht, zwoelf loeschten alle
- * vier Protokollgenerationen. Seit dem 200-Zeichen-Deckel eine Zeile weiter unten sind 40
- * Zeilen rund **11 KB** (277 Byte je Zeile, gemessen; hier stand zuerst „8 KB", geschaetzt),
- * und bis 2 MB dauert es in dem Tempo Tage. Fuer Platte und Rotation bleibt der Flutschutz
- * also intakt. Wer `ABWEISUNGEN_FENSTER_MS` verkleinert, rechnet das nach.
- *
- * **Fuer den FEHLERBERICHT gilt das NICHT — und das ist der Preis dieses Fixes, nicht eine
- * Randnotiz.** Drei Reviewstufen haben es unabhaengig am echten `bericht.js` gemessen:
- * `bericht.mailto` kuerzt von OBEN, `AUSSORTIEREN` filtert Abweisungszeilen nicht, und der
- * Bericht traegt ohnehin nur 2-14 Zeilen — **drei bis fuenf** Abweisungen am Protokollende
- * genuegen also, damit die naechste Mail NULL echte Zeilen enthaelt. Genau diesen Kanal nennt
- * der Absatz weiter oben den STILLEN Schadensweg.
- *
- * Der Unterschied ist die Dauer, nicht die Moeglichkeit: vorher waren es 20 Schuss je App-Lauf
- * — einmal verbraucht, und jede spaetere echte Zeile schob die Abweisungen aus dem
- * Mail-Ausschnitt heraus. Jetzt kann ein dauerhaft flutender Renderer das Protokollende
- * **stuendlich neu** belegen (~96-160 Vergiftungen am Tag), und der Zustand heilt nicht mehr
- * von selbst aus. Das ist bewusst in Kauf genommen: die Alternative waere die stumme Diagnose
- * aus #448, und der Hebel dagegen liegt ohnehin nicht hier, sondern in `bericht.js`
- * (Abweisungszeilen deckeln oder aus `AUSSORTIEREN` heraushalten) — eigener Mechanismus,
- * eigener Pruefstand: **#506**, verwandt mit #435 und #436.
- *
- * **Die Schlusszeile feuert je Fenster erneut** — gewollt: sie sagt, ab wo geschwiegen wurde,
- * und das gilt pro Stunde neu.
- *
- * **`grund` hat bewusst KEINEN Vorgabewert.** Er hatte einen (`'Schema nicht erlaubt'`), und der
- * war nach diesem Fix tot: beide Aufrufer setzen ihn. Ein toter Vorgabewert genau dieses Textes
- * ist aber kein Komfort, sondern eine Falle — der naechste Aufrufer, der ihn vergisst, stellt
- * #458 wieder her, und zwar STILL. Ohne Vorgabewert steht im Protokoll „abgewiesen (undefined)":
- * sofort sichtbar falsch statt plausibel falsch. `was` behaelt seinen, weil ein fehlendes `was`
- * nur unspezifisch ist und nicht luegt.
- */
-/**
- * Von einer FREMDEN URL geht nur die Herkunft ins Protokoll (CodeRabbit-Bot an PR #522).
- *
- * Die drei alten Wege (#426, #434) protokollieren die volle URL, und das bleibt richtig: dort
- * hat der NUTZER das Ziel gewaehlt, und „welcher Link ging nicht auf" ist die Frage, wegen der
- * jemand schreibt — genau so steht es in der README. Bei den beiden Wegen aus #446 ist es
- * umgekehrt: gefragt hat eine fremde Seite, und die Antwort auf „wer" ist die Herkunft. Pfad,
- * Query und Fragment tragen dort nichts bei, koennen aber ein Token oder einen OAuth-Code
- * fuehren — und der Rumpf faehrt ueber `bericht.letzteZeilen` in eine Mail.
- *
- * `origin` ist bei `file:`, `data:` und Co. die Zeichenkette `'null'`; dann sagt das SCHEMA
- * mehr als nichts. Unlesbares wird benannt statt verschwiegen — eine leere Klammer laesst den
- * Leser glauben, es sei nichts angekommen.
- */
+/** Fremde URLs werden auf ihre Herkunft gekuerzt, bevor sie ins Protokoll gehen. */
 function nurHerkunft(url) {
   try {
     const u = new URL(String(url))
@@ -208,7 +129,7 @@ function abweisungProtokollieren(url, was = 'Externer Link', grund) {
   } else if (abweisungen === ABWEISUNGEN_MAX + 1) {
     // **Nicht mehr „Links" (#446) und nicht mehr leer (#506).** Seit die Berechtigungs- und
     // webview-Wachen ueber denselben Zaehler melden, sind es nicht zwangslaeufig Links; und
-    // weil `bericht.letzteZeilen` genau EINE Zeile dieser Gruppe in die Fehlermail laesst, ist
+    // weil `bericht.letzteZeilen` genau EINE Zeile dieser Gruppe in den Bugsink-Bericht laesst, ist
     // im Flutfall GENAU DIESE Zeile die einzige Auskunft ueber Abweisungen, die der Nutzer
     // mitschickt. Ohne den Zusatz nennt sie weder Art noch Ziel noch Grund — gemessen am
     // echten `bericht.js`: acht echte Zeilen, 20 Abweisungen, eine Schlusszeile, und was
@@ -373,7 +294,7 @@ function fenster() {
    * **Beide melden ueber `abweisungProtokollieren`** — geteilter Zaehler, geteilter Deckel,
    * geteilte Bremse. Ein zweiter, eigener Schreibweg waere genau der Fehler aus #426; und die
    * Zeilen fallen so nebenbei unter den Abweisungs-Deckel des Fehlerberichts (#506), ein
-   * Berechtigungssturm kann die naechste Fehlermail also nicht entleeren.
+   * Berechtigungssturm kann den naechsten Fehlerbericht also nicht entleeren.
    */
   win.webContents.session.setPermissionRequestHandler((_inhalt, art, erlauben, angaben) => {
     // **Die HERKUNFT zaehlt mit, nicht nur die Art** — dieselbe Liste und dieselbe
@@ -450,7 +371,7 @@ function fenster() {
    * **Gemeldet wird nur der ERSTE Fall je Art, und daran haengt der Fehlerbericht.** Auf
    * 18 Anfragen kamen 111 Pruefungen — sechsmal so viele. Ungebremst waere der gemeinsame
    * Abweisungs-Deckel (#426) nach wenigen Sekunden voll, und genau der entscheidet, was von
-   * einem Fehlerbericht uebrig bleibt (#506): eine Fehlermail ohne den Fehler war der Anlass
+   * einem Fehlerbericht uebrig bleibt (#506): ein Bericht ohne den Fehler war der Anlass
    * dieser Regel. Die Merkliste haengt an DIESEM Fensterlauf; ein zweiter `fenster()`-Lauf
    * ersetzt Handler und Liste gemeinsam (der Handler ist ein Slot, siehe oben).
    *
@@ -475,7 +396,7 @@ function fenster() {
     // Zeile.
     //
     // **Dass sie bleiben, ist eine Entscheidung mit Preis.** Sie kosten vier der zwanzig
-    // Deckelplaetze je Fensterlauf, und in einer kurzen Sitzung traegt die Fehlermail eine
+    // Deckelplaetze je Fensterlauf, und in einer kurzen Sitzung traegt der Bugsink-Bericht eine
     // davon (`bericht.ABWEISUNGEN_IM_BERICHT` = 1, gewaehlt von hinten — jede spaetere echte
     // Abweisung verdraengt sie wieder). Dafuer sind sie der EINZIGE Kanal fuer die Arten, die
     // nur hier auflaufen: `background-sync` ist genau so gefunden worden — es erscheint nie
@@ -603,59 +524,40 @@ ipcMain.handle('fehlerberichte:setzen', (_e, an) => {
   // Handler sieht nur den Dateizustand; schlug das Schreiben der Dialog-Antwort fehl, ist die
   // erste Antwort der Haken unter „Version". Ein Zusatz wie „(Nachfrage beim Start)" waere dann
   // eine Behauptung ueber etwas, das nicht stattfand — und sie bliebe nicht hier: `AUSSORTIEREN`
-  // filtert sie nicht, sie faehrt ueber `bericht.letzteZeilen` in die Fehlermail und ueber
-  // `fehlerberichte.protokollZeilen` in den Bugsink-Bericht (gegnerisches Review, Befund 2).
+  // filtert sie nicht, sie kann ueber `fehlerberichte.protokollZeilen` in einen
+  // Bugsink-Bericht gelangen (gegnerisches Review, Befund 2).
   if (!vorher.gefragt) fehlerprobe()
   return jetzt
 })
 
-/**
- * Fehlerbericht per Mail (#372) — der zweite Halbschritt zu `protokollOeffnen` darueber.
- *
- * `mailto:` statt eines eigenen Dienstes: kein Konto, kein Empfaengerserver, keine
- * Aufbewahrungsfrage — und die VORSCHAU ist gratis, weil der Text im Mailprogramm des
- * Nutzers steht, bevor er sendet. Das ist die Antwort auf „was darf mit?" aus dem Issue:
- * gezeigt statt gefiltert.
- *
- * Die Protokolldatei geht daneben im Dateimanager auf — `mailto` kann keine Anhaenge, und
- * die vollstaendige Spur ist genau das, was man anhaengen will. Der Rumpf nennt deshalb
- * ihren Pfad.
- *
- * Eine Leitung: was mitgeht und wie gekuerzt wird, entscheidet `bericht.js` (mit Tests).
- * Die Zeilen laufen trotzdem noch einmal durch `protokoll.maskiere` — geschrieben werden
- * sie zwar schon maskiert, aber eine rotierte Datei kann aus einer Fassung vor #371
- * stammen, und ein durchgerutschter Schluessel waere hier in einer Mail.
- */
-ipcMain.handle('fehlerbericht', async () => {
-  const pfad = protokoll.pfad()
+/** Manueller Bugsink-Bericht: Vorschau und Versand verwenden denselben maskierten Schnappschuss. */
+let berichtVorschau = null
+const berichtMeta = () => ({
+  version: app.getVersion(), plattform: process.platform, arch: process.arch,
+  electron: process.versions.electron, node: process.versions.node, gepackt: app.isPackaged,
+})
+const berichtKontext = () => ({
+  home: fehlerberichte._home(), daten: P.daten, projekte: projekteWurzel || P.projekte,
+})
+ipcMain.handle('fehlerbericht:vorschau', () => {
   let text = ''
-  try { text = fs.readFileSync(pfad, 'utf8') } catch { /* kein Protokoll: Kopf allein reicht */ }
-  // Erst lesen, dann die Marke: sonst stuende sie als juengste Zeile im eigenen Bericht und
-  // verdraengte dort eine echte.
-  protokoll.schreiben('— Fehlerbericht vom Nutzer erstellt —')
-  const { url, verwendet, gekuerzt } = bericht.mailto({
-    empfaenger: paket.author && paket.author.email,
-    betreff: `Fehlerbericht Transkribor ${app.getVersion()}`,
-    kopf: bericht.kopf({
-      version: app.getVersion(),
-      plattform: process.platform,
-      arch: process.arch,
-      electron: process.versions.electron,
-      node: process.versions.node,
-      gepackt: app.isPackaged,
-    }),
-    zeilen: bericht.letzteZeilen(text).map(protokoll.maskiere),
-    logpfad: pfad,
-  })
-  // Reihenfolge: erst der Weg, der IMMER geht. `openExternal` lehnt ab, wenn kein
-  // `mailto:`-Handler registriert ist (frische Windows-Installation ohne Mailprogramm, Linux
-  // ohne xdg-Handler) — dann hat der Nutzer wenigstens die Datei vor sich.
-  shell.showItemInFolder(pfad)
-  // Die Ablehnung wird DURCHGEREICHT, nicht geschluckt — dieselbe Regel wie bei
-  // `projekteOeffnen` (#218/I1): ohne sie tut der Knopf sichtbar nichts, waehrend die Seite
-  // eine Zeile darueber eine vorbereitete Mail verspricht.
-  await shell.openExternal(url)
-  return { pfad, verwendet, gekuerzt }
+  try { text = fs.readFileSync(protokoll.pfad(), 'utf8') } catch { /* Kopf bleibt verfuegbar */ }
+  berichtVorschau = manuellerBericht.vorschau(text, berichtKontext(), berichtMeta())
+  return berichtVorschau
+})
+ipcMain.handle('fehlerbericht:senden', async (_event, id, indices, kommentar) => {
+  if (!berichtVorschau || id !== berichtVorschau.id) throw new Error('Vorschau ist nicht mehr gueltig. Bitte neu oeffnen.')
+  const snapshot = berichtVorschau
+  berichtVorschau = null
+  try {
+    return await manuellerBericht.senden({
+      dsn: paket.bugsinkDsn, snapshot, indices, kommentar,
+      meta: berichtMeta(), ctx: berichtKontext(), transport: Sentry.makeElectronTransport,
+    })
+  } catch (e) {
+    if (!berichtVorschau) berichtVorschau = snapshot
+    throw e
+  }
 })
 
 /**

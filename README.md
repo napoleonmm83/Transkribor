@@ -92,8 +92,9 @@ Auch mit **Schweizerdeutsch** kommt es zurecht.
 **Deine Aufnahmen bleiben bei dir.** Das Zuhören und Mitschreiben passiert vollständig auf
 deinem Rechner — ohne Konto, ohne Cloud, ohne Upload der Aufnahme. Nur wenn du die Korrektur
 über einen Onlinedienst laufen lässt, verlässt der *Text* deinen Rechner. Und Fehlerberichte
-gehen nur, wenn du es ausdrücklich einschaltest, an einen Server, den wir selbst betreiben —
-nie mit Aufnahmen oder Transkripten darin (siehe „Etwas geht schief“ weiter unten).
+gehen automatisch nur, wenn du es ausdrücklich einschaltest, an einen Server, den wir selbst
+betreiben. Dateien werden nicht angehängt; Fehlermeldungen können unbekannten Text enthalten
+(siehe „Etwas geht schief“ weiter unten).
 
 <details>
 <summary>Und die Textkorrektur?</summary>
@@ -650,79 +651,28 @@ speicherst, wandert sie als `<Name>.edit.json.kaputt` zur Seite und bleibt im Or
 <details>
 <summary><strong>Etwas geht schief — wie melde ich das?</strong></summary>
 
-*(Der Mail-Bericht ab `v0.49.0`; das automatische Melden ab `v0.52.0` — in `v0.51.0` und
-davor gibt es den Haken noch nicht.)*
+Der manuelle Bericht und die automatische Fehlererfassung verwenden Bugsink. Unter **Version**
+(in der Fusszeile auf die Versionsnummer klicken) findest du beide Möglichkeiten.
 
-Unter **Version** (in der Fusszeile auf die Versionsnummer `v…` klicken) steht der
-Abschnitt „Etwas geht schief?“ mit zwei Knöpfen und einem Haken.
+**„Fehler automatisch an uns senden“** ist standardmäßig aus. Beim ersten Start nach dem Update
+fragt Transkribor einmal nach. Ist der Haken gesetzt, werden unbehandelte Fehler aus App,
+Oberfläche und Server mit Fassung, Betriebssystem und den letzten aussagekräftigen
+Protokollzeilen an unseren Bugsink-Server gemeldet. Aufnahmen, Transkripte und Einstellungen
+werden nicht angehängt. Bekannte Schlüssel, Benutzerpfade sowie erkannte Projekt- und
+Aufnahmenamen werden vor dem Senden ersetzt. Fehlermeldungen fremder Bausteine können
+unbekannten Text enthalten; wer das nicht möchte, lässt den Haken aus.
+Die Berichte werden nach 90 Tagen gelöscht.
 
-**„Fehler automatisch an uns senden“** — der Haken. Beim ersten Start nach dem Update fragt
-Transkribor dich einmal, ob Fehler von selbst gemeldet werden dürfen; die Antwort stellst du
-hier jederzeit um. Vorgabe ist **aus**. Ist er an, geht ein Bericht ohne dein Zutun an einen
-Server, den wir selbst betreiben, sobald im Programm etwas Unerwartetes schiefgeht — kein
-Mailprogramm, kein Klick.
-
-Was so ein Bericht trägt: die Fehlermeldung mit der Stelle im Programm, die Fassung von
-Transkribor, dein Betriebssystem und die letzten aussagekräftigen Zeilen aus dem Protokoll
-(dieselbe Auswahl wie in der Mail unten). Was er **nicht** trägt: deine Aufnahmen, deine
-Transkripte, deine Einstellungen, deine Schlüssel, deinen Benutzernamen und die Namen deiner
-Projekte und Aufnahmen — Pfade und Namen werden vor dem Senden durch Platzhalter wie `<home>`,
-`<projekt>` und `<datei>.m4a` ersetzt, Schlüssel unkenntlich gemacht. Eine Grenze, ehrlich
-gesagt: Fehlermeldungen fremder Bausteine können Text enthalten, den keine Liste kennt — die
-Platzhalter greifen für Namen und Pfade, nicht für beliebigen Text. Wer das nicht möchte, lässt
-den Haken aus; dann verlässt kein Byte den Rechner, und der Mail-Bericht unten steht weiter
-bereit. Die Berichte werden nach 90 Tagen gelöscht. *(In Fassungen bis einschließlich `v0.54.0`
-meldete nur die App-Hülle selbst; ab `v0.55.0` kommen bei eingeschaltetem Haken
-auch Fehler aus Transkription, Korrektur und Video-Import an — ausgerechnet die liefen vorher
-in keinem Bericht mit.)*
-
-**„Fehlerbericht schreiben“** öffnet eine vorbereitete E-Mail in deinem Mailprogramm: mit der
-Fassung, deinem Betriebssystem und den letzten **aussagekräftigen** Zeilen aus dem Protokoll.
-Weggelassen wird genau dreierlei: leere Zeilen, die lange `PATH`-Zeile (siehe unten) und die
-Zeilen, mit denen die App laufend ihren eigenen, erfolgreichen Betrieb protokolliert —
-die machen **neun von zehn** Zeilen aus, ohne sie bestünde der Bericht nur daraus. Meldungen
-über Fehlschläge bleiben ausdrücklich drin. Von den Meldungen über **abgewiesene Vorgänge** —
-ein Link, eine Weiterleitung, eine Rechte-Anfrage der Programmoberfläche — kommt nur die
-jüngste mit: davon können in kurzer Zeit viele entstehen, und weil in eine E-Mail nur wenige
-Zeilen passen, schoben sie den eigentlichen Fehler sonst ganz aus dem Bericht heraus —
-in der Protokolldatei stehen sie weiterhin (bis zu zwanzig je Stunde, siehe weiter unten).
-Eine Zeile wird ausserdem **gekürzt** statt
-weggelassen: zeigt sie auf eine Datei auf deinem Rechner — etwa weil ein Link dorthin verwies,
-den Transkribor nicht geöffnet hat —, bleibt der Hinweis stehen, während Ort und Name **dieser
-einen** Datei wegfallen — und mit ihnen alles, was in derselben Zeile noch dahinter stand.
-Was **davor** steht, bleibt; die übrigen Zeilen ändert die Kürzung nicht — welche der Filter
-von vornherein weglässt, steht oben, und was in den verbleibenden alles auftauchen kann, ein
-paar Absätze weiter unten. Und eine einzelne, sehr lange Zeile wird hinten gekürzt und als
-gekürzt markiert (`[…]`) — früher verdrängte so eine Zeile den ganzen Rest, und der Bericht
-kam ohne Protokoll bei uns an. In der Protokolldatei stehen
-Ort und Name weiter, bei sehr langen Pfaden dort allerdings ebenfalls gekürzt.
-Und weil eine E-Mail nur begrenzt lang sein darf,
-fallen von den übrigen Zeilen notfalls die **ältesten** weg — die Mail sagt dir das dann an,
-und die vollständige Datei liegt daneben. Schreib oben hinein, was passiert ist, und schick
-sie ab.
-
-Hast du gar kein Mailprogramm eingerichtet, sagt dir Transkribor das. Die Protokolldatei wird
-in dem Fall trotzdem angezeigt — schick sie dann von Hand an die Adresse aus dem Fenster.
-
-**Du siehst alles, bevor du sendest** — die Mail geht nicht von selbst raus, und du kannst
-jede Zeile löschen, die du nicht mitschicken willst. Das ist die Zusage des Mail-Berichts:
-nicht ein Filter, dem du vertrauen musst, sondern die Vorschau. Für den automatischen Bericht
-gilt sie nicht — dort ersetzen die Platzhalter oben die Vorschau, und der Haken ist deine
-Zustimmung.
-
-Was in diesen Zeilen stehen kann: **Pfade auf deinem Rechner, und die enthalten deinen
-Benutzernamen** (`C:\Users\…`). Sie stehen bewusst drin — ohne sie ist kaum ein Fehler
-auffindbar. Dazu Namen deiner Aufnahmedateien — sie stehen in **Fehlermeldungen**, etwa wenn
-das Hochladen einer Datei scheitert; genau diese Zeilen sind der Grund, warum du schreibst —
-und Meldungen aus dem Korrekturlauf, in denen auch Teile eines Transkripts vorkommen können. Schlüssel in den gängigen Formaten
-(`sk-…`, `AIza…`, `gsk_…`, `hf_…`) werden unkenntlich gemacht. Der vollständige Suchpfad
-(`PATH`) bleibt draussen — er ist über tausend Zeichen lang und würde den Platz auffressen,
-den die eigentlichen Meldungen brauchen. Im automatischen Bericht sind Pfade und Namen an
-genau diesen Stellen durch Platzhalter ersetzt.
-
-**„Protokoll anzeigen“** zeigt dir die Protokolldatei im Dateimanager. Sie ist länger als das,
-was in die Mail passt — häng sie an, wenn du magst. Ist sie sehr gross geworden, liegen die
-älteren Teile als `.1` bis `.3` daneben. Auch hier gilt: erst hineinschauen, dann verschicken.
+**„Fehlerbericht schreiben“** zeigt zuerst eine Vorschau mit Systemangaben und den
+maskierten Protokollzeilen. Du kannst einzelne Zeilen abwählen und einen Kommentar eingeben.
+Das ist sinnvoll, weil ein unbekannter Schlüssel oder fremder Pfad in einer Fehlermeldung
+stehen kann. Erst **„An Bugsink senden“** überträgt genau die ausgewählten Zeilen. Der
+manuelle Versand funktioniert auch bei ausgeschalteter automatischer Erfassung. Falls
+Bugsink nicht erreichbar oder in der App nicht eingerichtet ist, zeigt der Dialog einen
+Fehler; es geht keine Mail heraus.
+**„Protokoll anzeigen“** zeigt dir die lokale Protokolldatei im Dateimanager. Sie wird beim
+manuellen Bericht nicht angehängt. Ist sie sehr gross geworden, liegen ältere Teile als
+`.1` bis `.3` daneben.
 
 </details>
 
