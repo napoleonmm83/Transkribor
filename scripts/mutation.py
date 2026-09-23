@@ -429,9 +429,12 @@ def _npm_testlaeufer(teile: list[str], wurzel: pathlib.Path) -> bool:
     if wurzel.resolve() not in paket.parents:
         return False
     try:
-        scripts = json.loads(paket.read_text(encoding="utf-8")).get("scripts", {})
+        manifest = json.loads(paket.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError):
         return False
+    if not isinstance(manifest, dict):
+        return False
+    scripts = manifest.get("scripts", {})
     befehl = scripts.get(skript) if isinstance(scripts, dict) else None
     lauf = _direkte_kommando_teile(befehl) if isinstance(befehl, str) else None
     return bool(lauf and (lauf[:2] == ["vitest", "run"]

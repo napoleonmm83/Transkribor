@@ -312,6 +312,15 @@ def test_vorlauf_verwirft_vorgetaeuschten_testlauf(tmp_path, monkeypatch):
     assert rc == 2
 
 
+def test_vorlauf_verwirft_npm_manifest_ohne_objekt(tmp_path, monkeypatch):
+    paket = tmp_path / "frontend"
+    paket.mkdir()
+    (paket / "package.json").write_text("[]", encoding="utf-8")
+    rc, _ = _lauf_main(tmp_path, monkeypatch, _PLAN_OK, [_GRUEN],
+                       nur_vorlauf=True, testkommando="npm --prefix frontend test")
+    assert rc == 2
+
+
 def test_vorlauf_leere_rot_liste_und_falscher_pfad_werden_vorab_abgewiesen(
         tmp_path, monkeypatch):
     plan = [{**_PLAN_OK[0], "rot": []}]

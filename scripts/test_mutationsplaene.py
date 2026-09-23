@@ -67,7 +67,7 @@ def _testkommando_fehler(plan: dict, wurzel: Path) -> str | None:
         while index < len(teile):
             teil = teile[index]
             if teil in optionen_mit_wert:
-                if index + 1 == len(teile):
+                if index + 1 == len(teile) or teile[index + 1].startswith("-"):
                     return f"Pytest-Option {teil} braucht einen Wert"
                 index += 2
                 continue
@@ -82,7 +82,12 @@ def _testkommando_fehler(plan: dict, wurzel: Path) -> str | None:
         if not paket.is_file():
             return f"npm-Paket {paket} existiert nicht"
         skript = teile[3] if teile[3] != "run" else (teile[4] if len(teile) > 4 else "")
-        if skript not in json.loads(paket.read_text(encoding="utf-8")).get("scripts", {}):
+        try:
+            manifest = json.loads(paket.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError):
+            return f"npm-Paket {paket} ist kein lesbares JSON-Manifest"
+        scripts = manifest.get("scripts") if isinstance(manifest, dict) else None
+        if not isinstance(scripts, dict) or skript not in scripts:
             return f"npm-Skript {skript!r} ist in {paket} nicht definiert"
         if not mutation._npm_testlaeufer(teile, wurzel):
             return f"npm-Skript {skript!r} startet keinen unterstuetzten Testlaeufer"
@@ -185,6 +190,7 @@ def test_unstartbares_kommando_braucht_ci_vermerk(tmp_path):
     assert _testkommando_fehler({"test": "python -m pytest fehlt -q"}, tmp_path)
     assert _testkommando_fehler({"test": "python -m pytest fehlt.py::test_x -q"}, tmp_path)
     assert _testkommando_fehler({"test": "python -m pytest -k"}, tmp_path)
+    assert _testkommando_fehler({"test": "python -m pytest -k -q"}, tmp_path)
     assert _testkommando_fehler({"test": "npm --prefix frontend run unbekannt"}, tmp_path)
     assert _testkommando_fehler({"test": "unbekanntes-programm", "nur_ci": " "}, tmp_path)
     assert _testkommando_fehler({"test": "unbekanntes-programm",
@@ -221,6 +227,8 @@ def test_npm_skript_am_rand_der_befehlsform(tmp_path):
     (paket / "package.json").write_text(
         json.dumps({"scripts": {"test": "echo 1 passed"}}), encoding="utf-8"
     )
+    assert _testkommando_fehler({"test": "npm --prefix frontend test"}, tmp_path)
+    (paket / "package.json").write_text("[]", encoding="utf-8")
     assert _testkommando_fehler({"test": "npm --prefix frontend test"}, tmp_path)
 
 
