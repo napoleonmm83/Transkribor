@@ -202,6 +202,32 @@ describe('AppShell', () => {
     await waitFor(() => expect(screen.getByTestId('jobspiegel')).toHaveTextContent('j7:transcribe'))
   })
 
+  it.each([
+    { blocker: 'blocker', status: 'vorgemerkt' as const, hinweis: true },
+    { blocker: null, status: 'aufgegeben' as const, hinweis: false },
+  ])('verfolgt den Vorgang eines nicht gestarteten Leisten-Uploads ($status)', async ({ blocker, status, hinweis }) => {
+    vi.mocked(api.listProjects).mockResolvedValue([{ name: 'Alpha', dateien: 1, fertig: 0, geaendert: 0 }])
+    vi.mocked(api.getProjectFiles).mockResolvedValue({ name: 'Alpha', files: [] })
+    vi.mocked(api.uploadAudio).mockResolvedValue({ base: 'a', file: 'a.mp3', job_id: blocker, started: false, vorgang: 'vg1' })
+    vi.mocked(api.getVorgang).mockResolvedValue({ vorgang: 'vg1', status, job_id: null, project: 'Alpha', kind: 'transcribe', base: 'a' })
+    const { container } = render(
+      <MemoryRouter initialEntries={['/p/Alpha']}>
+        <JobProvider intervalMs={10000}><AppShell><Jobspiegel /></AppShell></JobProvider>
+      </MemoryRouter>,
+    )
+    await waitFor(() => expect(screen.getByText('Alpha')).toBeInTheDocument())
+    const feld = container.querySelector('input[type=file]') as HTMLInputElement
+    fireEvent.change(feld, { target: { files: [new File(['x'], 'a.mp3', { type: 'audio/mpeg' })] } })
+    await waitFor(() => expect(api.getVorgang).toHaveBeenCalledWith('vg1'))
+    expect(screen.getByTestId('jobspiegel')).not.toHaveTextContent('blocker')
+    if (hinweis) {
+      expect(toastMock.info).toHaveBeenCalledWith('Es läuft bereits etwas — die Arbeit ist vorgemerkt und kommt danach dran.')
+    } else {
+      expect(toastMock.info).not.toHaveBeenCalled()
+      await waitFor(() => expect(toastMock.warning).toHaveBeenCalled())
+    }
+  })
+
   it('bietet einen Sprunglink VOR der Leiste', () => {
     render(
       <MemoryRouter initialEntries={['/']}>
