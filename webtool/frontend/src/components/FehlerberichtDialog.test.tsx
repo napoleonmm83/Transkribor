@@ -35,6 +35,9 @@ it('FehlerberichtDialog zeigt die Meldung ohne Electrons IPC-Praefix', async () 
   fireEvent.click(await screen.findByRole('button', { name: /An Bugsink senden/ }))
   const alert = await screen.findByRole('alert')
   expect(alert).toHaveTextContent(/^Zu viele Berichte in kurzer Zeit\.$/)
+  // Rueckrichtung: nach dem Fehlschlag sendet nichts mehr — kein Hinweis, wieder „Abbrechen".
+  expect(screen.queryByText(/Versand läuft weiter/)).toBeNull()
+  expect(screen.getByRole('button', { name: 'Abbrechen' })).toBeTruthy()
 })
 
 it('FehlerberichtDialog laesst sich waehrend des Sendens schliessen', async () => {
@@ -42,10 +45,15 @@ it('FehlerberichtDialog laesst sich waehrend des Sendens schliessen', async () =
   render(<FehlerberichtDialog offen schliessen={schliessen}
     vorschau={() => Promise.resolve({ id: 'bericht-1', kopf: [], zeilen: ['Fehler'] })}
     senden={() => new Promise(() => {})} />)
-  fireEvent.click(await screen.findByRole('button', { name: /An Bugsink senden/ }))
-  const abbrechen = screen.getByRole('button', { name: 'Abbrechen' })
-  expect(abbrechen).toBeEnabled()
-  fireEvent.click(abbrechen)
+  expect(await screen.findByRole('button', { name: 'Abbrechen' })).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: /An Bugsink senden/ }))
+  // CodeRabbit an PR #641: der Versand laeuft im Hauptprozess weiter — „Abbrechen" versprach, was
+  // nicht geschieht, und lud zum Doppelbericht ein. Vor dem Senden bleibt es beim Abbrechen.
+  expect(screen.queryByRole('button', { name: 'Abbrechen' })).toBeNull()
+  expect(screen.getByText(/Versand läuft weiter/)).toBeTruthy()
+  const zu = screen.getByRole('button', { name: 'Schliessen' })
+  expect(zu).toBeEnabled()
+  fireEvent.click(zu)
   expect(schliessen).toHaveBeenCalled()
 })
 

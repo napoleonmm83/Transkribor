@@ -20,8 +20,12 @@ export function FehlerberichtDialog({ offen, schliessen, vorschau, senden }: Pro
   const [sendet, setSendet] = useState(false)
   const [fehler, setFehler] = useState('')
   const [gesendet, setGesendet] = useState(false)
-  // Abbrechen ist waehrend des Sendens erlaubt (der Transport hat selbst keine Frist); die spaete
-  // Antwort eines abgebrochenen Versands darf dann nicht im neu geoeffneten Dialog landen.
+  // Schliessen ist waehrend des Sendens erlaubt (der Transport hat selbst keine Frist); die spaete
+  // Antwort eines verlassenen Versands darf dann nicht im neu geoeffneten Dialog landen. Der Knopf
+  // heisst dann NICHT „Abbrechen": der IPC-Aufruf laeuft im Hauptprozess weiter und der Bericht kann
+  // ankommen (CodeRabbit an PR #641). Das gilt nur, solange DIESER Dialog den Versand verfolgt —
+  // nach der 30-s-Frist in manueller-bericht.js oder nach dem Wiederoeffnen steht wieder
+  // „Abbrechen", obwohl der erste Transport weiterlaufen kann (dort gibt es keinen Abbruch).
   const lauf = useRef(0)
 
   useEffect(() => {
@@ -85,8 +89,9 @@ export function FehlerberichtDialog({ offen, schliessen, vorschau, senden }: Pro
         </>}
         {gesendet && <p role="status" className="text-sm">Der Bericht wurde von Bugsink angenommen. Danke!</p>}
         {fehler && <p role="alert" className="text-sm text-destructive">{fehler}</p>}
+        {sendet && <p className="text-sm text-muted-foreground">Der Versand läuft weiter, auch wenn du den Dialog schliesst – ob er ankommt, siehst du dann nicht mehr.</p>}
         <DialogFooter>
-          <Button variant="outline" onClick={schliessen}>{gesendet ? 'Schliessen' : 'Abbrechen'}</Button>
+          <Button variant="outline" onClick={schliessen}>{gesendet || sendet ? 'Schliessen' : 'Abbrechen'}</Button>
           {bericht && !gesendet && <Button onClick={abschicken} disabled={sendet}>
             {sendet && <Loader2 className="size-4 animate-spin" />} An Bugsink senden
           </Button>}
