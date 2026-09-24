@@ -30,6 +30,7 @@ hat. Lesbar, aber unschön — das ist Absicht.
 
 **Neu**
 - Fehlerberichte lassen sich jetzt mit einer Vorschau direkt an uns senden; ein Mailprogramm ist dafür nicht mehr nötig.
+- Sind automatische Fehlerberichte eingeschaltet, werden jetzt auch Fehler in der Oberfläche gemeldet; Namen und Pfade werden dabei unkenntlich gemacht.
 
 ## v0.57.0 — 2026-09-23
 

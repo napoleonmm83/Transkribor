@@ -49,7 +49,10 @@ export function FehlerberichtDialog({ offen, schliessen, vorschau, senden }: Pro
       if (!antwort || antwort.id !== bericht.id) throw new Error('Bugsink hat den Bericht nicht bestätigt.')
       setGesendet(true)
     } catch (e) {
-      if (meiner === lauf.current) setFehler(e instanceof Error ? e.message : 'Bugsink konnte den Bericht nicht annehmen.')
+      // Electron stellt jeder Ablehnung aus `ipcRenderer.invoke` ein technisches Praefix voran
+      // („Error invoking remote method '…': Error: …"); gezeigt wird nur die eigentliche Meldung.
+      const text = e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']*': (?:\w*Error: )?/, '') : ''
+      if (meiner === lauf.current) setFehler(text || 'Bugsink konnte den Bericht nicht annehmen.')
     } finally { if (meiner === lauf.current) setSendet(false) }
   }
 
@@ -83,7 +86,7 @@ export function FehlerberichtDialog({ offen, schliessen, vorschau, senden }: Pro
         {gesendet && <p role="status" className="text-sm">Der Bericht wurde von Bugsink angenommen. Danke!</p>}
         {fehler && <p role="alert" className="text-sm text-destructive">{fehler}</p>}
         <DialogFooter>
-          <Button variant="outline" onClick={schliessen}>{gesendet ? 'Schließen' : 'Abbrechen'}</Button>
+          <Button variant="outline" onClick={schliessen}>{gesendet ? 'Schliessen' : 'Abbrechen'}</Button>
           {bericht && !gesendet && <Button onClick={abschicken} disabled={sendet}>
             {sendet && <Loader2 className="size-4 animate-spin" />} An Bugsink senden
           </Button>}

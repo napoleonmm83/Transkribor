@@ -26,6 +26,17 @@ it('FehlerberichtDialog meldet ohne bestätigende Antwort keinen Erfolg', async 
 
 // Kalt-Review 24.09.: der Transport hat keine eigene Frist; ein haengender Versand sperrte
 // beide Knoepfe und Escape bis zum Neustart.
+// Electron setzt vor jede Ablehnung ueber ipcRenderer.invoke ein technisches Praefix; gemessen in
+// der gepackten App stand es woertlich im Dialog.
+it('FehlerberichtDialog zeigt die Meldung ohne Electrons IPC-Praefix', async () => {
+  render(<FehlerberichtDialog offen schliessen={vi.fn()}
+    vorschau={() => Promise.resolve({ id: 'bericht-1', kopf: [], zeilen: [] })}
+    senden={() => Promise.reject(new Error("Error invoking remote method 'fehlerbericht:senden': Error: Zu viele Berichte in kurzer Zeit."))} />)
+  fireEvent.click(await screen.findByRole('button', { name: /An Bugsink senden/ }))
+  const alert = await screen.findByRole('alert')
+  expect(alert).toHaveTextContent(/^Zu viele Berichte in kurzer Zeit\.$/)
+})
+
 it('FehlerberichtDialog laesst sich waehrend des Sendens schliessen', async () => {
   const schliessen = vi.fn()
   render(<FehlerberichtDialog offen schliessen={schliessen}
