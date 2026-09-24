@@ -13,12 +13,14 @@ einem Transkribor-Update: dann ist der Pin ein anderer, und eine Automatik-
 Installation (auch ein Alt-Marker ohne `quelle`) wird darauf gehoben.
 """
 
+import contextlib
 import datetime as dt
 import json
 import os
 import re
 import subprocess
 import sys
+import tempfile
 import threading
 import urllib.request
 from importlib import metadata
@@ -101,11 +103,20 @@ def zustand() -> dict:
     marker = _marker()
     with _lock:
         lauf = dict(_state)
+    bereit = _bereit(marker)
     if not lauf["laeuft"] and not lauf["fehler"]:
-        # Nach einem Neustart ist `_state` leer; ein Grund, der schon vorher feststeht,
-        # soll trotzdem auf der Seite stehen (sonst nur "nicht geeignet", ohne Warum).
+        # Nach einem Neustart ist `_state` leer. Jeder Grund, aus dem die Automatik gerade
+        # NICHTS tut, muss trotzdem auf der Seite stehen — sonst sagte sie "startet
+        # automatisch" (CodeRabbit-Bot an PR #645): die Tagesbremse und eine unvollstaendige
+        # Knopf-Fassung lassen `_faellig()` False, ohne dass `_state` davon weiss.
         lauf["fehler"] = _pin_fehler()
-    return {"bereit": _bereit(marker), "version": _version("nemo-toolkit") or "",
+        if not lauf["fehler"] and marker.get("fehlgeschlagen"):
+            lauf["fehler"] = ("Die letzte Einrichtung ist fehlgeschlagen — automatisch erst "
+                              "am nächsten Tag wieder.")
+        elif not lauf["fehler"] and not bereit and marker.get("quelle") == "knopf":
+            lauf["fehler"] = ("Die per Knopf geholte NeMo-Fassung ist unvollständig — "
+                              "„Geprüfte Fassung einrichten“ richtet sie neu ein.")
+    return {"bereit": bereit, "version": _version("nemo-toolkit") or "",
             "revision": marker.get("revision", ""), "geprueft": marker.get("geprueft", ""),
             **lauf}
 
@@ -156,6 +167,25 @@ def _run(args: list[str], timeout: int) -> str | None:
     return None
 
 
+def _torch_festhalten() -> str | None:
+    """Constraint-Datei mit der INSTALLIERTEN torch-Fassung — oder None ohne torch.
+
+    CodeRabbit-Bot an PR #645: NeMo verlangt `torch>=2.7.0`, und `pip install --upgrade`
+    hebt eine aeltere Abhaengigkeit dann von PyPI — auf Windows ein CPU-Rad statt des
+    cu128-Baus: die GPU waere still weg (dieselbe Falle wie beim CPU-Rad in `setup.js`).
+    Mit dem Constraint scheitert so ein Lauf LAUT (ResolutionImpossible -> Fehlermeldung
+    auf der Seite), statt die Installation zu tauschen. Heute greift er nicht (2.11.0+cu128
+    erfuellt >=2.7.0); er ist die Wache fuer den naechsten Pin.
+    """
+    zeilen = [f"{name}=={v}" for name in ("torch", "torchaudio") if (v := _version(name))]
+    if not zeilen:
+        return None
+    fd, pfad = tempfile.mkstemp(prefix="nemo-constraints-", suffix=".txt")
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write("\n".join(zeilen) + "\n")
+    return pfad
+
+
 def _marker_entwerten() -> None:
     path = _marker_path()
     tmp = path.with_suffix(".tmp")
@@ -182,8 +212,15 @@ def _install_gesperrt(force: bool = False, neuester: bool = True) -> str:
         # Wird ein pip-Lauf abgebrochen, darf ein alter Erfolgsmarker den
         # moeglicherweise halb installierten Paketstand nicht freigeben.
         _marker_entwerten()
-        error = _run(["-m", "pip", "install", "--no-cache-dir", "--upgrade",
-                      f"nemo-toolkit[asr] @ {url}"], 900)
+        constraints = _torch_festhalten()
+        try:
+            error = _run(["-m", "pip", "install", "--no-cache-dir", "--upgrade",
+                          *(["-c", constraints] if constraints else []),
+                          f"nemo-toolkit[asr] @ {url}"], 900)
+        finally:
+            if constraints:
+                with contextlib.suppress(OSError):
+                    os.remove(constraints)
         if error:
             raise RuntimeError(f"NeMo-Installation: {error}")
         result = "installiert"

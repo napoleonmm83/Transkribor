@@ -1954,6 +1954,28 @@ def test_nicht_bereites_nemotron_behaelt_das_pyannote_sidecar(project, monkeypat
     assert "Nemotron 3 ist noch nicht bereit" in capsys.readouterr().out
 
 
+def test_nemotron_sidecar_bleibt_waehrend_nemotron_kurz_nicht_bereit_ist(project, monkeypatch):
+    # CodeRabbit-Bot an PR #645: waehrend einer Knopf-Installation ist `bereit` False. Ein
+    # Projektlauf rechnete dann jede Datei mit pyannote und danach wieder mit Nemotron.
+    _root, t = project
+    monkeypatch.setenv("TRANSKRIBOR_DIARIZE", "1")
+    from webtool import diarize, nemotron_diarize, nemotron_setup
+    monkeypatch.setattr(correct.settings, "load", lambda: {"diarization_model": "nemotron3"})
+    bereit = {"bereit": True}
+    monkeypatch.setattr(nemotron_setup, "zustand", lambda: bereit)
+    monkeypatch.setattr(nemotron_diarize, "diarize_file", lambda _audio: _fake_turns())
+    assert correct.cmd_diarize("Demo") == 1
+    vorher = (t / "S1.diar.json").read_bytes()
+
+    bereit["bereit"] = False
+    pyannote_calls = []
+    monkeypatch.setattr(diarize, "diarize_file",
+                        lambda *a, **kw: pyannote_calls.append(1) or _fake_turns())
+    assert correct.cmd_diarize("Demo") == 0
+    assert pyannote_calls == []
+    assert (t / "S1.diar.json").read_bytes() == vorher
+
+
 def test_scheiterndes_nemotron_faellt_auf_pyannote_zurueck(project, monkeypatch, capsys):
     _root, t = project
     monkeypatch.setenv("TRANSKRIBOR_DIARIZE", "1")
