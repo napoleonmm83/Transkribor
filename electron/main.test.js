@@ -505,6 +505,40 @@ test('Renderer-Ausnahmen erreichen Sentry nur bei Opt-in; andere Envelope-Typen 
   assert.equal(w.sentryEvent, undefined, 'AUS wirkt sofort')
 })
 
+// Kalt-Review 24.09.: ohne Deckel konnte eine Fehlerschleife im Renderer den Hauptprozess mit
+// ~195 ms je Ereignis (beforeSend) blockieren, und ein Skript im Renderer beliebig viele
+// manuelle Berichte senden — auch bei ausgeschaltetem Automaten.
+test('Renderer-Ereignisse sind je Stunde gedeckelt; das Erreichen steht einmal im Protokoll', async () => {
+  const w = await laden({ dsn: 'http://key@127.0.0.1:8123/1', logtext: '' })
+  await w.ruf('fehlerberichte:setzen', true)
+  const envelope = JSON.stringify({}) + '\n' + JSON.stringify({ type: 'event' }) + '\n'
+    + JSON.stringify({ exception: { values: [{ type: 'Error', value: 'schleife' }] } })
+  let gesendet = 0
+  for (let i = 0; i < 25; i++) {
+    w.sentryEvent = undefined
+    w.ruf('fehlerberichte:renderer', envelope)
+    if (w.sentryEvent) gesendet++
+  }
+  assert.equal(gesendet, 20)
+  const log = fs.readFileSync(w.logpfad, 'utf8')
+  assert.equal(log.split('Renderer-Fehlerberichte gedeckelt').length - 1, 1)
+})
+
+test('manuelle Berichte: je Versand eine Protokollzeile, der sechste in der Stunde wird abgewiesen', async () => {
+  const w = await laden({ dsn: 'http://key@127.0.0.1:8123/1', logtext: 'Fehler\n' })
+  for (let i = 0; i < 5; i++) {
+    const b = await w.ruf('fehlerbericht:vorschau')
+    await w.ruf('fehlerbericht:senden', b.id, [0], '')
+  }
+  const b = await w.ruf('fehlerbericht:vorschau')
+  let gesendet = false
+  w.sentry.makeElectronTransport = () => ({ send: async () => { gesendet = true; return { statusCode: 202 } } })
+  await assert.rejects(() => w.ruf('fehlerbericht:senden', b.id, [0], ''), /Zu viele/)
+  assert.equal(gesendet, false)
+  const log = fs.readFileSync(w.logpfad, 'utf8')
+  assert.equal(log.split('Manueller Fehlerbericht gesendet').length - 1, 5)
+})
+
 // ── Update ────────────────────────────────────────────────────────────────────
 test('installieren tut nichts, solange der Download nicht fertig ist', async () => {
   const w = await laden({ updateZustand: { art: 'laedt' } })

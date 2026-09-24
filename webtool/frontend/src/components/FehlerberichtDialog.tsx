@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
@@ -20,11 +20,15 @@ export function FehlerberichtDialog({ offen, schliessen, vorschau, senden }: Pro
   const [sendet, setSendet] = useState(false)
   const [fehler, setFehler] = useState('')
   const [gesendet, setGesendet] = useState(false)
+  // Abbrechen ist waehrend des Sendens erlaubt (der Transport hat selbst keine Frist); die spaete
+  // Antwort eines abgebrochenen Versands darf dann nicht im neu geoeffneten Dialog landen.
+  const lauf = useRef(0)
 
   useEffect(() => {
     if (!offen) return
     let aktiv = true
-    setBericht(null); setFehler(''); setGesendet(false); setKommentar(''); setLaedt(true)
+    lauf.current++
+    setBericht(null); setFehler(''); setGesendet(false); setKommentar(''); setSendet(false); setLaedt(true)
     Promise.resolve(vorschau()).then(b => {
       if (!aktiv) return
       if (!b) throw new Error('Die Vorschau ist nicht verfuegbar.')
@@ -37,18 +41,20 @@ export function FehlerberichtDialog({ offen, schliessen, vorschau, senden }: Pro
 
   async function abschicken() {
     if (!bericht || sendet) return
+    const meiner = lauf.current
     setSendet(true); setFehler('')
     try {
       const antwort = await senden(bericht.id, auswahl, kommentar)
+      if (meiner !== lauf.current) return
       if (!antwort || antwort.id !== bericht.id) throw new Error('Bugsink hat den Bericht nicht bestätigt.')
       setGesendet(true)
     } catch (e) {
-      setFehler(e instanceof Error ? e.message : 'Bugsink konnte den Bericht nicht annehmen.')
-    } finally { setSendet(false) }
+      if (meiner === lauf.current) setFehler(e instanceof Error ? e.message : 'Bugsink konnte den Bericht nicht annehmen.')
+    } finally { if (meiner === lauf.current) setSendet(false) }
   }
 
   return (
-    <Dialog open={offen} onOpenChange={an => { if (!an && !sendet) schliessen() }}>
+    <Dialog open={offen} onOpenChange={an => { if (!an) schliessen() }}>
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Fehlerbericht an Bugsink</DialogTitle>
@@ -77,7 +83,7 @@ export function FehlerberichtDialog({ offen, schliessen, vorschau, senden }: Pro
         {gesendet && <p role="status" className="text-sm">Der Bericht wurde von Bugsink angenommen. Danke!</p>}
         {fehler && <p role="alert" className="text-sm text-destructive">{fehler}</p>}
         <DialogFooter>
-          <Button variant="outline" onClick={schliessen} disabled={sendet}>{gesendet ? 'Schließen' : 'Abbrechen'}</Button>
+          <Button variant="outline" onClick={schliessen}>{gesendet ? 'Schließen' : 'Abbrechen'}</Button>
           {bericht && !gesendet && <Button onClick={abschicken} disabled={sendet}>
             {sendet && <Loader2 className="size-4 animate-spin" />} An Bugsink senden
           </Button>}

@@ -306,9 +306,23 @@ const FEHLERPROBE = 'Fehlerprobe: absichtlich geworfen (TRANSKRIBOR_FEHLERPROBE=
 /** Nur der Wert `1` zaehlt — `true`, `ja` oder ein leerer Wert nicht; niemand wirft aus Versehen. */
 function fehlerprobeGewuenscht(env) { return !!env && env.TRANSKRIBOR_FEHLERPROBE === '1' }
 
+/** Stundendeckel fuer Kanaele, die der Renderer ausloesen kann (Kalt-Review 24.09.2026): eine
+ *  Fehlerschleife kostet sonst je Ereignis ~195 ms synchron im Hauptprozess (beforeSend liest und
+ *  maskiert das Protokoll), und ein Skript im Renderer koennte beliebig viele manuelle Berichte
+ *  senden. Dasselbe Fensterprinzip wie ABWEISUNGEN_MAX in main.js; `jetzt` kommt von aussen
+ *  (performance.now()), damit der Test die Uhr fuehrt. */
+function deckel(max, fensterMs) {
+  let start = 0
+  let anzahl = 0
+  return jetzt => {
+    if (jetzt - start >= fensterMs) { start = jetzt; anzahl = 0 }
+    return ++anzahl <= max
+  }
+}
+
 module.exports = {
   DATEI, ERLAUBT, MIN_NAME, FEHLERPROBE, INHALTSFELDER, pfad, lesen, schreiben, namen,
   namensFormen, maskiere, maskiereTief, ereignisMaskieren, protokollZeilen, rendererEreignis, beforeSend, optionen,
-  fehlerprobeGewuenscht,
+  fehlerprobeGewuenscht, deckel,
   _home: () => os.homedir(),
 }

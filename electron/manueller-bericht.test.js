@@ -45,3 +45,33 @@ test('nur eine bestätigte 2xx-Antwort ist Erfolg; falsche Auswahl wird nie gese
     kommentar: '', meta: META, ctx: CTX, transport }), /ungueltig/)
   assert.equal(aufrufe, 1)
 })
+
+// Kalt-Review 24.09.: diese Riegel hatten keinen Waechter. Die Eindeutigkeit ist zugleich der
+// einzige Groessendeckel der Auswahl ([0,0,0,…] waere sonst beliebig gross).
+test('doppelte Indizes und ein zu langer Kommentar werden nie gesendet', async () => {
+  const b = m.vorschau('Fehler\n', CTX, META)
+  let aufrufe = 0
+  const transport = () => ({ send: async () => { aufrufe++; return { statusCode: 202 } } })
+  const senden = (indices, kommentar) => m.senden({ dsn: 'http://key@localhost/1', snapshot: b,
+    indices, kommentar, meta: META, ctx: CTX, transport })
+  await assert.rejects(() => senden([0, 0], ''), /ungueltig/)
+  await assert.rejects(() => senden([0], 'x'.repeat(2001)), /zu lang/)
+  await senden([0], 'x'.repeat(2000))
+  assert.equal(aufrufe, 1)
+})
+
+test('4xx und 5xx vom Server sind kein Erfolg', async () => {
+  const b = m.vorschau('Fehler\n', CTX, META)
+  for (const statusCode of [429, 500, 300]) {
+    const transport = () => ({ send: async () => ({ statusCode }) })
+    await assert.rejects(() => m.senden({ dsn: 'http://key@localhost/1', snapshot: b, indices: [0],
+      kommentar: '', meta: META, ctx: CTX, transport }), /nicht bestaetigt/, String(statusCode))
+  }
+})
+
+test('ein Server, der nie antwortet, endet nach der Frist mit einem Fehler statt zu haengen', async () => {
+  const b = m.vorschau('Fehler\n', CTX, META)
+  const transport = () => ({ send: () => new Promise(() => {}) })
+  await assert.rejects(() => m.senden({ dsn: 'http://key@localhost/1', snapshot: b, indices: [0],
+    kommentar: '', meta: META, ctx: CTX, transport, frist: 20 }), /antwortet nicht/)
+})
