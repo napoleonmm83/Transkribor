@@ -437,6 +437,7 @@ def cmd_diarize(project: str, only_bases: list = None) -> int:
         print("↷ Diarisierung deaktiviert (TRANSKRIBOR_DIARIZE=0)", flush=True)
         return 0
     diarization_model = _wirksames_diarisierungsmodell()
+    gewaehlt = str(settings.load()["diarization_model"])
     tdir = paths.transkripte_dir(project)
     n = 0
     t_phase = time.monotonic()
@@ -463,7 +464,14 @@ def cmd_diarize(project: str, only_bases: list = None) -> int:
                     and ((_sidecar_sprecher(dpath) == wirksame_sprecher
                           and _sidecar_diarization_model(dpath) == diarization_model)
                          or (diarization_model == "nemotron3"
-                             and _rueckfall_von_heute(dpath, diarization_model, sprecher)))):
+                             and _rueckfall_von_heute(dpath, diarization_model, sprecher))
+                         # Gegenrichtung (CodeRabbit-Bot an PR #645): Nemotron GEWAEHLT, aber
+                         # gerade nicht bereit (etwa waehrend einer Knopf-Installation) — ein
+                         # vorhandenes Nemotron-Sidecar ist das gewuenschte Ergebnis und bleibt.
+                         # Ohne das rechnete ein Projektlauf jede Datei mit pyannote und danach
+                         # noch einmal mit Nemotron.
+                         or (gewaehlt == "nemotron3" and diarization_model == "pyannote"
+                             and _sidecar_diarization_model(dpath) == "nemotron3"))):
                 print(f"↷ nutze vorhandene {base}.diar.json", flush=True)
                 continue
             audio = _audio_path(project, base)

@@ -559,7 +559,9 @@ daran nichts.
 **Zweites Modell zur Wahl (ab der nächsten Fassung).** Unter *Einstellungen → Sprecher-Erkennung*
 lässt sich statt des mitgelieferten Modells **NVIDIA Nemotron 3** wählen. Es erkennt bis zu acht
 Sprecher selbst und nimmt deshalb keine feste Zahl an — das Feld oben steht dann grau, dein
-eingetragener Wert bleibt aber für das Standardmodell erhalten. Beim ersten Mal richtet
+eingetragener Wert bleibt aber für das Standardmodell erhalten. Ist Nemotron noch nicht
+eingerichtet oder klappt es bei einer Aufnahme nicht, trennt das Standardmodell die Sprecher;
+eine Aufnahme bleibt also nie ohne Sprechertrennung, und die eingetragene Zahl gilt dann. Beim ersten Mal richtet
 Transkribor die nötigen Pakete in einer von uns geprüften Fassung ein und lädt das Modell einmalig
 herunter (rund 190 MB); ein Konto braucht es dafür nicht. Ein Knopf holt auf Wunsch den neuesten Stand von NVIDIA — der ist dann nicht von
 uns geprüft.

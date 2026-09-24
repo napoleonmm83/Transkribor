@@ -832,6 +832,55 @@ describe('SettingsPage', () => {
     expect(await screen.findByRole('button', { name: /Jetzt aktualisieren/i })).toBeEnabled()
   })
 
+  it('gibt den Fremdlauf-Poll nicht auf, solange NeMo die geteilte Sperre hält', async () => {
+    // Hält die NeMo-Einrichtung die pip-Sperre, dauert das bis ~29 min — länger als die 240
+    // Runden x 3 s. „läuft ungewöhnlich lange" wäre dort falsch; die Runden zählen nicht mit.
+    // Fake-Timer VOR dem Aufbau: das Intervall entsteht beim Laden der Seite, und ein unter
+    // echter Uhr angelegtes Intervall bewegt `advanceTimersByTimeAsync` nicht (der erste
+    // Entwurf war genau deshalb vacuous grün).
+    const nemo = { ...BASIS, ytdlp: { ...BASIS.ytdlp, laeuft: true, nemo_haelt: true } }
+    vi.useFakeTimers()
+    try {
+      zeige(nemo)
+      vi.mocked(api.getSettings).mockResolvedValue(nemo)
+      await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+      expect(screen.getByText(/NeMo-Einrichtung benutzt gerade die Paketverwaltung/)).toBeInTheDocument()
+      const vorher = vi.mocked(api.getSettings).mock.calls.length
+      await act(async () => { await vi.advanceTimersByTimeAsync(13 * 60_000) })
+      expect(vi.mocked(api.getSettings).mock.calls.length - vorher).toBeGreaterThan(250) // Positivkontrolle
+      expect(screen.queryByText(/läuft ungewöhnlich lange/)).not.toBeInTheDocument()
+      // Gegenprobe im selben Lauf: endet die NeMo-Sperre, zählen die Runden wieder.
+      const fremd = { ...BASIS, ytdlp: { ...BASIS.ytdlp, laeuft: true, nemo_haelt: false } }
+      vi.mocked(api.getSettings).mockResolvedValue(fremd)
+      await act(async () => { await vi.advanceTimersByTimeAsync(13 * 60_000) })
+      expect(screen.getByText(/läuft ungewöhnlich lange/)).toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('beendet den NeMo-Poll nach seiner Obergrenze', async () => {
+    // Deckel 1300 x 3 s: Warten an der Sperre (1905 s) plus längster Weg (1750 s).
+    const laeuft = { ...BASIS, diarization_model: 'nemotron3' as const,
+                     nemotron: { ...BASIS.nemotron, laeuft: true } }
+    vi.useFakeTimers()                                   // vor dem Aufbau, s. Test darüber
+    try {
+      zeige(laeuft)
+      vi.mocked(api.getSettings).mockResolvedValue(laeuft)
+      await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+      expect(screen.getByText(/NeMo-Pakete werden geprüft und installiert/)).toBeInTheDocument()
+      vi.mocked(api.getSettings).mockClear()
+      await act(async () => { await vi.advanceTimersByTimeAsync(1310 * 3000) })
+      const nachDeckel = vi.mocked(api.getSettings).mock.calls.length
+      expect(nachDeckel).toBeGreaterThan(1200)           // hat wirklich gepollt
+      expect(nachDeckel).toBeLessThanOrEqual(1300)
+      await act(async () => { await vi.advanceTimersByTimeAsync(60_000) })
+      expect(vi.mocked(api.getSettings).mock.calls.length).toBe(nachDeckel)  // und danach Ruhe
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('meldet EINEN Lauf genau einmal, auch wenn zwei Polls sich überholen (#247)', async () => {
     // Der Poll hängt seine Meldung an einen ZUSTAND („läuft nicht mehr"), nicht an den
     // Übergang dorthin. Braucht `getSettings()` länger als die 1,5 s des Intervalls, sind

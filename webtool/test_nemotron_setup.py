@@ -186,6 +186,8 @@ def test_knopf_mit_neuerem_stand_markiert_die_fassung_als_knopf(monkeypatch, tmp
 
 def test_nemo_nutzt_dieselbe_pip_sperre_wie_ytdlp(monkeypatch, tmp_path):
     monkeypatch.setattr(nemotron_setup, "_faellig", lambda: True)
+    # Unabhaengig von der torch-Fassung DIESES Rechners (CodeRabbit-Bot an PR #645).
+    monkeypatch.setattr(nemotron_setup, "_pin_fehler", lambda: "")
     monkeypatch.setattr(ytdlp_update, "_lockziel", lambda: str(tmp_path / "pip"))
     gehalten = False
 
@@ -248,6 +250,7 @@ def test_nemo_raeumt_eine_merkerlose_alte_sperre_nach_der_uhr(monkeypatch, tmp_p
     monkeypatch.setattr(ytdlp_update, "_lockziel", lambda: lockziel)
     monkeypatch.setattr(ytdlp_update, "_lock_stale", lambda: 0.2)
     monkeypatch.setattr(nemotron_setup, "_faellig", lambda: True)
+    monkeypatch.setattr(nemotron_setup, "_pin_fehler", lambda: "")  # s. Test darueber
     lockdir = lockziel + ".lock"
     os.mkdir(lockdir)                                   # Lock ohne Merker = keine Auskunft
     alt = time.time() - 3600
@@ -305,6 +308,48 @@ def test_gepruefter_knopf_uebergeht_die_tagesbremse_und_bleibt_auf_dem_pin(monke
     zip_url = f"codeload.github.com/NVIDIA-NeMo/Speech/zip/{nemotron_setup.GEPRUEFTE_REVISION}"
     assert any(zip_url in " ".join(c) for c in calls)
     assert json.loads(marker.read_text())["quelle"] == "auto"
+
+
+def test_nemo_pip_haelt_die_installierte_torch_fassung_fest(monkeypatch, tmp_path):
+    # CodeRabbit-Bot an PR #645: `--upgrade` haette ein aelteres cu-torch gegen ein CPU-Rad von
+    # PyPI tauschen koennen. Der Constraint muss IM Aufruf stehen und danach weg sein.
+    _marker_setzen(monkeypatch, tmp_path, None,
+                   {"nemo-toolkit": "3.0.0", "lhotse": "1.33.0", "torch": "2.11.0+cu128",
+                    "torchaudio": "2.11.0+cu128"})
+    monkeypatch.setattr(nemotron_setup, "_triton_pin", lambda: None)
+    gesehen = {}
+
+    def run(args, timeout):
+        if "-c" in args and args[0] == "-m":
+            pfad = args[args.index("-c") + 1]
+            gesehen["pfad"] = pfad
+            gesehen["inhalt"] = open(pfad, encoding="utf-8").read()
+        return None
+
+    monkeypatch.setattr(nemotron_setup, "_run", run)
+    assert nemotron_setup._install_gesperrt(force=False) == "installiert"
+    assert gesehen["inhalt"].split() == ["torch==2.11.0+cu128", "torchaudio==2.11.0+cu128"]
+    import os
+    assert not os.path.exists(gesehen["pfad"])
+
+
+def test_zustand_nennt_den_grund_wenn_die_automatik_nichts_tut(monkeypatch, tmp_path):
+    # Nach einem Neustart ist `_state` leer — die Seite sagte trotzdem "startet automatisch".
+    heute = nemotron_setup.dt.date.today().isoformat()
+    _marker_setzen(monkeypatch, tmp_path, {"fehlgeschlagen": True, "am": heute})
+    monkeypatch.setattr(nemotron_setup, "_triton_pin", lambda: None)
+    assert nemotron_setup._faellig() is False
+    assert "fehlgeschlagen" in nemotron_setup.zustand()["fehler"]
+
+    _marker_setzen(monkeypatch, tmp_path, {"revision": "1" * 40, "version": "9.9.9",
+                                           "geprueft": heute, "quelle": "knopf"})
+    assert nemotron_setup._faellig() is False
+    assert nemotron_setup.zustand()["bereit"] is False
+    assert "Geprüfte Fassung einrichten" in nemotron_setup.zustand()["fehler"]
+
+    _marker_setzen(monkeypatch, tmp_path, {"revision": nemotron_setup.GEPRUEFTE_REVISION,
+                                           "version": "3.1.0", "geprueft": heute})
+    assert nemotron_setup.zustand()["fehler"] == ""   # bereit: kein Grund, keine Meldung
 
 
 def test_ytdlp_zustand_meldet_die_nemo_sperre(monkeypatch):
