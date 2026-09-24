@@ -387,6 +387,25 @@ def diarize_enabled() -> bool:
     return os.environ.get("TRANSKRIBOR_DIARIZE", "1").strip().lower() not in ("0", "false", "no")
 
 
+def _wirksames_diarisierungsmodell() -> str:
+    """Das Modell, mit dem dieser Lauf rechnet — nicht zwingend das gewaehlte.
+
+    Entscheidung Marcus 2026-09-24: ist Nemotron gewaehlt, aber (noch) nicht bereit —
+    Einrichtung laeuft, offline, Fehlschlag —, rechnet das mitgelieferte pyannote. Vorher
+    loeschte der Modellwechsel das gueltige pyannote-Sidecar und die Aufnahme lief ohne
+    jede Sprechertrennung. Weil der Skip gegen DIESES Modell vergleicht, bleibt ein
+    vorhandenes pyannote-Sidecar in diesem Fall einfach stehen.
+    """
+    gewaehlt = settings.load()["diarization_model"]
+    if gewaehlt != "nemotron3":
+        return gewaehlt
+    from . import nemotron_setup                    # lazy: liest nur Paket-Metadaten
+    if nemotron_setup.zustand()["bereit"]:
+        return gewaehlt
+    print("↷ Nemotron 3 ist noch nicht bereit — Sprechertrennung mit pyannote", flush=True)
+    return "pyannote"
+
+
 def cmd_diarize(project: str, only_bases: list = None) -> int:
     """Akustische Diarisierung je Datei -> <base>.diar.json (best-effort, idempotent).
     Fehlt pyannote oder scheitert die Diarisierung, wird die Datei übersprungen
@@ -396,7 +415,7 @@ def cmd_diarize(project: str, only_bases: list = None) -> int:
     if not diarize_enabled():
         print("↷ Diarisierung deaktiviert (TRANSKRIBOR_DIARIZE=0)", flush=True)
         return 0
-    diarization_model = settings.load()["diarization_model"]
+    diarization_model = _wirksames_diarisierungsmodell()
     tdir = paths.transkripte_dir(project)
     n = 0
     t_phase = time.monotonic()
@@ -473,10 +492,21 @@ def cmd_diarize(project: str, only_bases: list = None) -> int:
             print(f"→ Diarisiere {base}{wieviele} …", flush=True)
             diagnose: dict = {}
             t0 = time.monotonic()
-            if diarization_model == "nemotron3":
+            modell = diarization_model
+            turns = None
+            if modell == "nemotron3":
                 from . import nemotron_diarize
-                turns = nemotron_diarize.diarize_file(audio)
-            else:
+                try:
+                    turns = nemotron_diarize.diarize_file(audio)
+                except Exception as e:                  # noqa: BLE001 — Rueckfall statt Ausfall
+                    # Bereit heisst: Pakete da. Der Lauf kann trotzdem scheitern — gemessen am
+                    # ersten Modell-Download hinter einem HTTPS-pruefenden Virenscanner (#644).
+                    # Dann rechnet pyannote, statt die Aufnahme ohne Trennung zu lassen.
+                    grund = type(e).__name__
+                    print(f"↷ Nemotron 3 fehlgeschlagen ({grund}) — Sprechertrennung mit pyannote",
+                          flush=True)
+                    modell, wirksame_sprecher = "pyannote", sprecher
+            if modell == "pyannote":
                 turns = diarize.diarize_file(audio, min_speakers=DIARIZE_MIN_SPEAKERS,
                                              num_speakers=wirksame_sprecher, diagnose=diagnose)
             dt = time.monotonic() - t0
@@ -489,10 +519,10 @@ def cmd_diarize(project: str, only_bases: list = None) -> int:
             # ausschliesslich `num_speakers` an pyannote, und eine Grenze im Sidecar, die der
             # Lauf nie gesehen hat, schickt den naechsten Debugger auf die falsche Faehrte.
             doc = {"base": base, "audio": os.path.basename(audio),
-                   "min_speakers": (DIARIZE_MIN_SPEAKERS if diarization_model == "pyannote"
+                   "min_speakers": (DIARIZE_MIN_SPEAKERS if modell == "pyannote"
                                     and not wirksame_sprecher else None),
                    "sprecher": wirksame_sprecher,
-                   "diarization_model": diarization_model,
+                   "diarization_model": modell,           # was WIRKLICH gerechnet hat
                    "turns": turns,
                    "segments": [{"id": sid, "speaker": spk} for sid, spk in seg_speakers.items()]}
             # Diagnose nur, WENN sie zustande kam (#275). Ein leerer Schluessel waere schlimmer

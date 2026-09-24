@@ -2393,7 +2393,7 @@ def put_settings(body: SettingsBody):
     if "whisper_model" in patch and patch["whisper_model"] not in settings.KNOWN_WHISPER_MODELS:
         raise HTTPException(status_code=400,
                             detail=f"unbekanntes Whisper-Modell: {patch['whisper_model']}")
-    if "diarization_model" in patch and patch["diarization_model"] not in ("pyannote", "nemotron3"):
+    if "diarization_model" in patch and patch["diarization_model"] not in settings.DIARIZATION_MODELS:
         raise HTTPException(status_code=400, detail="unbekanntes Diarisierungsmodell")
     if "parallel" in patch and not settings.parallel_ok(patch["parallel"]):
         raise HTTPException(
@@ -2419,9 +2419,18 @@ def put_settings(body: SettingsBody):
     return {**_settings_body(cfg), "ungeschuetzt": not gehalten}
 
 
+class NemotronUpdateBody(BaseModel):
+    # "geprueft" richtet die gepruefte Fassung ein (auch am Tag eines Fehlschlags),
+    # "neuester" holt den ungeprueften NVIDIA-Stand. Ohne Rumpf: "neuester", wie bisher.
+    ziel: str = "neuester"
+
+
 @app.post("/api/settings/nemotron/update")
-def settings_nemotron_update():
-    gestartet = nemotron_setup.starten(force=True)
+def settings_nemotron_update(body: NemotronUpdateBody | None = None):
+    ziel = (body or NemotronUpdateBody()).ziel
+    if ziel not in ("geprueft", "neuester"):
+        raise HTTPException(status_code=400, detail="unbekanntes Ziel")
+    gestartet = nemotron_setup.starten(force=True, neuester=ziel == "neuester")
     return {"gestartet": gestartet, **nemotron_setup.zustand()}
 
 

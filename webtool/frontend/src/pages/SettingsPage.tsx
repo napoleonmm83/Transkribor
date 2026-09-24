@@ -283,19 +283,27 @@ export function SettingsPage() {
   useEffect(() => {
     if (!s?.nemotron.laeuft) return
     let aktiv = true
+    // 3 s wie der yt-dlp-Fremdlauf-Poll (jede Runde kostet den Server einen
+    // `llm.available()`-Subprozess, #250), und eine Obergrenze: der längste NeMo-Weg sind
+    // 1750 s, 700 x 3 s = 35 min deckt ihn mit Reserve. `ytdlp` fährt mit, weil dessen Zeile
+    // an `nemo_haelt` hängt und sonst bis zum Neuladen „NeMo benutzt die Paketverwaltung" sagte.
+    let runden = 0
     const timer = setInterval(() => {
+      if (++runden > 700) { clearInterval(timer); return }
       getSettings().then(neu => {
-        if (aktiv) setS(alt => alt && { ...alt, nemotron: neu.nemotron, nemotron_da: neu.nemotron_da })
+        if (aktiv) setS(alt => alt && {
+          ...alt, nemotron: neu.nemotron, nemotron_da: neu.nemotron_da, ytdlp: neu.ytdlp,
+        })
       }).catch(() => {})
-    }, 2000)
+    }, 3000)
     return () => { aktiv = false; clearInterval(timer) }
   }, [s?.nemotron.laeuft])
 
-  const nemotronJetzt = async () => {
+  const nemotronJetzt = async (ziel: 'geprueft' | 'neuester') => {
     try {
-      await updateNemotron()
+      await updateNemotron(ziel)
       const neu = await getSettings()
-      setS(alt => alt && { ...alt, nemotron: neu.nemotron, nemotron_da: neu.nemotron_da })
+      setS(alt => alt && { ...alt, nemotron: neu.nemotron, nemotron_da: neu.nemotron_da, ytdlp: neu.ytdlp })
     } catch (e) { toast.error(`NeMo: ${(e as Error).message}`) }
   }
 
@@ -471,7 +479,9 @@ export function SettingsPage() {
     // was Last erzeugt (ein im Hintergrund gedrosselter Tab soll nicht früher aufgeben),
     // und `Date.now()` wäre nicht prüfbar — `vi.useFakeTimers()` fälscht in dieser Fassung
     // die Uhr NICHT mit, die Obergrenze feuerte im Test also nie und blieb ungetestet.
-    // 480 × 1,5 s ≈ 12 Min, also gut das Doppelte des gemessenen Worst Case von ~340 s.
+    // 480 × 1,5 s ≈ 12 Min, also gut das Doppelte des gemessenen Worst Case von ~340 s — ohne
+    // NeMo. Hält die NeMo-Einrichtung die geteilte pip-Sperre, wartete ein Knopf-Lauf bis zu
+    // ~32 min; deshalb ist der Knopf dann gesperrt (`nemo_haelt`), statt hier aufzugeben.
     let runden = 0
     // Die höchste Rundennummer, deren Antwort schon angewandt wurde. Überholte Antworten
     // werden verworfen (CodeRabbit-Bot an PR #248): der Merker deckt die MELDUNG, nicht
@@ -549,8 +559,14 @@ export function SettingsPage() {
     // VOR einem `speichern()` zurück; das Modellfeld hängt an `key={provider|model}` und zeigte
     // dann wieder den ALTEN Namen — eine Anzeige, die widerruft, was gerade gespeichert wurde.
     let angewandt = 0
+    // Hält die NeMo-Einrichtung die gemeinsame pip-Sperre, zählt die Runde NICHT gegen die
+    // Obergrenze: das dauert bis ~29 min (NeMo-Weg 1750 s), also länger als 240 x 3 s — und
+    // „läuft ungewöhnlich lange" wäre dort falsch. `runden` zählt weiter, es ordnet die Antworten.
+    let nemoHaelt = !!s?.ytdlp.nemo_haelt
+    let gezaehlt = 0
     const t = setInterval(async () => {
-      if (++runden > 240) { clearInterval(t); setYtAufgegeben(true); return }
+      ++runden
+      if (!nemoHaelt && ++gezaehlt > 240) { clearInterval(t); setYtAufgegeben(true); return }
       const meineRunde = runden
       const meinStand = settingsStand.current
       const neu = await getSettings().catch(() => null)
@@ -562,9 +578,13 @@ export function SettingsPage() {
       if (meinStand !== settingsStand.current) return
       if (meineRunde < angewandt) return
       angewandt = meineRunde
+      nemoHaelt = !!neu.ytdlp.nemo_haelt
       setS(neu)
     }, 3000)
     return () => clearInterval(t)
+    // `s?.ytdlp.nemo_haelt` gehört bewusst NICHT in die Abhängigkeiten: der Effekt setzte sonst
+    // neu auf und `runden` fiele auf 0 (derselbe Grund wie bei `ytAufgegeben` oben).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [s?.ytdlp.laeuft, ytLaeuft])
 
   // Der Knopf wartet seit #174 nicht mehr auf pip — er stösst an, und ein Effekt fragt nach.
@@ -769,7 +789,11 @@ export function SettingsPage() {
         </label>
 
         <div className="mt-4 flex flex-wrap items-center gap-3">
-          <Button variant="outline" size="sm" onClick={ytJetzt} disabled={ytLaeuft}>
+          {/* Gesperrt auch, solange NeMo die gemeinsame pip-Sperre hält: ein Klick wartete dann
+              bis ~30 min an der Sperre, länger als die 12-min-Obergrenze des Knopf-Polls — er
+              meldete „meldet sich nicht mehr" für einen Lauf, der nur wartet. */}
+          <Button variant="outline" size="sm" onClick={ytJetzt}
+            disabled={ytLaeuft || s.ytdlp.nemo_haelt}>
             {ytLaeuft ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
             {ytLaeuft ? 'Aktualisiere …' : 'Jetzt aktualisieren'}
           </Button>
@@ -804,6 +828,8 @@ export function SettingsPage() {
                 den die README sogar empfiehlt. `zustand()` fragt dafür die pip-Sperre mit. */}
             {ytLaeuft
               ? 'Die Fassung steht fest, sobald der Lauf fertig ist.'
+              : s.ytdlp.nemo_haelt
+              ? 'Die NeMo-Einrichtung benutzt gerade die Paketverwaltung — yt-dlp wartet, bis sie fertig ist.'
               : s.ytdlp.laeuft
               ? ytAufgegeben
                 ? 'Eine Aktualisierung läuft ungewöhnlich lange — Transkribor fragt nicht '
@@ -1010,18 +1036,32 @@ export function SettingsPage() {
         </p>
         {s.diarization_model === 'nemotron3' && (
           <div className="mt-2 space-y-2 text-xs text-muted-foreground">
+            {/* Nach einem Fehlschlag sagt die Seite NICHT mehr „startet automatisch": die
+                Tagesbremse lässt die Automatik am selben Tag nicht wieder anlaufen (und bei
+                einem torch außerhalb der Triton-Tabelle gar nicht) — der Satz wäre falsch. */}
             <p>{s.nemotron.laeuft ? 'NeMo-Pakete werden geprüft und installiert …'
               : s.nemotron.bereit ? `NeMo ${s.nemotron.version} ist bereit.`
+              : s.nemotron.fehler
+              ? 'Die Einrichtung hat nicht geklappt (Grund unten). „Geprüfte Fassung einrichten" versucht es sofort erneut.'
               : 'NeMo fehlt oder ist für Nemotron 3 nicht geeignet. Die Einrichtung der geprüften Fassung startet automatisch.'}
+              {!s.nemotron.bereit && ' Bis dahin trennt das Standardmodell pyannote die Sprecher.'}
               {' '}Eine feste Sprecherzahl kann Nemotron 3 nicht übernehmen.</p>
             {s.nemotron.fehler && <p role="alert" className="text-destructive">{s.nemotron.fehler}</p>}
             {s.nemotron.geprueft && <p>Zuletzt geprüft: {tag(s.nemotron.geprueft)}</p>}
-            <Button variant="outline" size="sm" disabled={s.nemotron.laeuft} onClick={nemotronJetzt}>
-              {s.nemotron.laeuft && <Loader2 className="size-3.5 animate-spin" />}
-              Neuesten NeMo-Stand holen
-            </Button>
-            <p>Automatisch richtet Transkribor nur die von uns geprüfte NeMo-Fassung ein. Der Knopf
-              holt den neuesten Stand von NVIDIA — ungeprüft, auf eigenen Wunsch.
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" size="sm" disabled={s.nemotron.laeuft}
+                onClick={() => nemotronJetzt('geprueft')}>
+                {s.nemotron.laeuft && <Loader2 className="size-3.5 animate-spin" />}
+                Geprüfte Fassung einrichten
+              </Button>
+              <Button variant="outline" size="sm" disabled={s.nemotron.laeuft}
+                onClick={() => nemotronJetzt('neuester')}>
+                Neuesten NeMo-Stand holen
+              </Button>
+            </div>
+            <p>Automatisch richtet Transkribor nur die von uns geprüfte NeMo-Fassung ein; der erste
+              Knopf wiederholt das sofort. Der zweite holt den neuesten Stand von NVIDIA — ungeprüft,
+              auf eigenen Wunsch, und danach tauscht die Automatik ihn nicht mehr aus.
               Das Modell lädt beim ersten Lauf einmalig herunter; ein Konto braucht es nicht.</p>
           </div>
         )}

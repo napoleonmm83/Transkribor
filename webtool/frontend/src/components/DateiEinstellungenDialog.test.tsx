@@ -63,6 +63,18 @@ describe('DateiEinstellungenDialog', () => {
     expect(screen.getByText(/akzeptiert keine feste Sprecherzahl/)).toBeInTheDocument()
     getSpy.mockRestore()
   })
+  it('laesst die Zahl bedienbar, solange Nemotron nicht bereit ist — dann rechnet pyannote', async () => {
+    // Entscheidung 2026-09-24: nicht bereites Nemotron faellt auf pyannote zurueck, und dort
+    // WIRKT die Zahl. Ein gesperrtes Feld haette dem Nutzer genau den Hebel genommen, der gilt.
+    const getSpy = vi.spyOn(api, 'getFileEinstellungen').mockResolvedValue({
+      ...BASIS, diarization_model: 'nemotron3', nemotron_da: false, pyannote_da: true, sprecher: 4,
+    })
+    render(<DateiEinstellungenDialog project="p" base="a" file={datei()} offen />)
+    const feld = await screen.findByLabelText(/Anzahl Sprecher/)
+    expect(feld).not.toHaveAttribute('aria-disabled')
+    expect(screen.getByText(/noch nicht bereit — bis dahin trennt pyannote/)).toBeInTheDocument()
+    getSpy.mockRestore()
+  })
   it('zeigt ohne eigenen Wert „folgt dem Projekt" — mit dem geerbten Namen (#234)', async () => {
     // Der Trigger muss BEIDES sagen: dass die Datei erbt, und WAS sie erbt. Nur „folgt dem
     // Projekt" liesse offen, worauf die naechste Transkription laeuft; nur „Schweizerdeutsch"

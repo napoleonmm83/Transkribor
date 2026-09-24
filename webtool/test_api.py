@@ -2073,7 +2073,9 @@ def test_settings_modellwechsel_behaelt_den_key(client):
                                         # #236: der Lauf lief ohne Sperre — gehoert zu
                                         # `ergebnis`. #198: die Metadaten der Loeserskripte
                                         # sind kaputt, ihre Pruefung ist ausgesetzt.
-                                        "ungeschuetzt", "unterbrochen", "ejs_unlesbar"}
+                                        "ungeschuetzt", "unterbrochen", "ejs_unlesbar",
+                                        # die pip-Sperre ist mit NeMo geteilt (B2)
+                                        "nemo_haelt"}
     # Seit #239 baut der PUT denselben Rumpf wie der GET. Diese sechs haengen an der Umgebung
     # (installierte Abo-CLIs, Projektwurzel) und kommen deshalb hier heraus — sonst fiele der
     # Vergleich unten auf jedem zweiten Rechner um. Fehlt eines, wirft schon das `pop`.
@@ -2184,6 +2186,20 @@ def test_settings_put_liefert_denselben_rumpf_wie_der_get(client):
     # Beide Richtungen: `ungeschuetzt` beschreibt EINEN Schreibvorgang (#194) — im GET waere
     # es sinnlos, und im `Settings`-Typ bliebe die Warnung bis zum Neuladen stehen.
     assert "ungeschuetzt" in put and "ungeschuetzt" not in get
+
+
+def test_nemotron_knopf_waehlt_das_ziel(client, monkeypatch):
+    # Zwei Knoepfe (Entscheidung 2026-09-24): "geprueft" bleibt auf dem Pin, "neuester" holt
+    # main; ohne Rumpf wie bisher "neuester". Ein Tippfehler wird 400, nicht still "neuester".
+    from webtool import nemotron_setup
+    aufrufe = []
+    monkeypatch.setattr(nemotron_setup, "starten",
+                        lambda force=False, neuester=True: aufrufe.append((force, neuester)) or True)
+    assert client.post("/api/settings/nemotron/update", json={"ziel": "geprueft"}).status_code == 200
+    assert client.post("/api/settings/nemotron/update", json={"ziel": "neuester"}).status_code == 200
+    assert client.post("/api/settings/nemotron/update").status_code == 200
+    assert client.post("/api/settings/nemotron/update", json={"ziel": "gepruft"}).status_code == 400
+    assert aufrufe == [(True, False), (True, True), (True, True)]
 
 
 def test_diarization_model_roundtrip_and_validation(client, tmp_projekt, monkeypatch):

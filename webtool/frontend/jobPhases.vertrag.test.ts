@@ -683,6 +683,17 @@ const INVENTAR: Record<string, Eintrag> = {
   },
   '↷ nutze vorhandene {}.correction.json': { art: 'ignoriert', beispiel: '↷ nutze vorhandene A.correction.json' },
   '↷ nutze vorhandene {}.diar.json': { art: 'ignoriert', beispiel: '↷ nutze vorhandene A.diar.json' },
+  // Rueckfall auf pyannote (Entscheidung 2026-09-24): reine Auskunft ohne Basisnamen — die
+  // Diarisierung der Datei laeuft danach unter ihren gewohnten Zeilen weiter.
+  '↷ Nemotron 3 ist noch nicht bereit — Sprechertrennung mit pyannote': {
+    art: 'ignoriert', beispiel: '↷ Nemotron 3 ist noch nicht bereit — Sprechertrennung mit pyannote',
+  },
+  // Traegt den Ausnahmetyp (`…Error`) und wird damit vom Toast-Grund gelesen — gewollt: faellt
+  // ein Lauf danach doch noch, ist das die erste Spur (etwa ein HTTPS-pruefender Scanner, #644).
+  '↷ Nemotron 3 fehlgeschlagen ({}) — Sprechertrennung mit pyannote': {
+    art: 'gelesen_anderswo', notiz: GRUND,
+    beispiel: '↷ Nemotron 3 fehlgeschlagen (RuntimeError) — Sprechertrennung mit pyannote',
+  },
   '⏱ Phasen: glossar {}s · pipeline {}s · ': {
     art: 'ignoriert', beispiel: '⏱ Phasen: glossar 12s · pipeline 340s · apply 2s',
   },

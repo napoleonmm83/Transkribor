@@ -77,8 +77,32 @@ describe('SettingsPage', () => {
       nemotron: { ...BASIS.nemotron, laeuft: true },
     })
     fireEvent.click(knopf)
-    await waitFor(() => expect(api.updateNemotron).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(api.updateNemotron).toHaveBeenCalledWith('neuester'))
     expect(await screen.findByText(/NeMo-Pakete werden geprüft und installiert/)).toBeInTheDocument()
+  })
+  it('richtet per zweitem Knopf die geprüfte Fassung ein', async () => {
+    // Entscheidung 2026-09-24: nach einem Fehlschlag darf der einzige Weg am selben Tag nicht
+    // der ungeprüfte sein. Der zweite Knopf schickt ausdrücklich `geprueft`.
+    vi.mocked(api.updateNemotron).mockResolvedValue({ gestartet: true, bereit: false, version: '', revision: '', geprueft: '', laeuft: true, ergebnis: '', fehler: '' })
+    zeige({ diarization_model: 'nemotron3' })
+    fireEvent.click(await screen.findByRole('button', { name: /Geprüfte Fassung einrichten/ }))
+    await waitFor(() => expect(api.updateNemotron).toHaveBeenCalledWith('geprueft'))
+  })
+  it('sagt nach einem Fehlschlag nicht mehr, dass die Einrichtung automatisch startet', async () => {
+    zeige({ diarization_model: 'nemotron3',
+            nemotron: { ...BASIS.nemotron, fehler: 'NeMo-Installation: offline' } })
+    expect(await screen.findByText(/Die Einrichtung hat nicht geklappt/)).toBeInTheDocument()
+    expect(screen.queryByText(/startet automatisch/)).not.toBeInTheDocument()
+    expect(screen.getByText(/Bis dahin trennt das Standardmodell pyannote/)).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent('NeMo-Installation: offline')
+  })
+  it('meldet bei NeMo-Sperre keinen yt-dlp-Lauf und sperrt dessen Knopf', async () => {
+    // Die pip-Sperre ist geteilt: hält NeMo sie, ist `laeuft` wahr, obwohl kein yt-dlp-Lauf
+    // existiert. „Eine Aktualisierung läuft gerade" wäre dort gelogen.
+    zeige({ ytdlp: { ...BASIS.ytdlp, laeuft: true, nemo_haelt: true } })
+    expect(await screen.findByText(/NeMo-Einrichtung benutzt gerade die Paketverwaltung/)).toBeInTheDocument()
+    expect(screen.queryByText(/Eine Aktualisierung läuft gerade/)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Jetzt aktualisieren/ })).toBeDisabled()
   })
   // Der Automock von '@/lib/api' liefert sonst `undefined` — eine Antwort, die die echte
   // API nie gibt. Seit die Seite von selbst laedt, traefe die JEDEN Test mit Anbieter.

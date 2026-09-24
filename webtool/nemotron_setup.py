@@ -88,10 +88,23 @@ def _bereit(marker: dict) -> bool:
     return pin is None or _version("triton-windows") == pin
 
 
+def _pin_fehler() -> str:
+    """Grund, aus dem KEINE Installation gelingen kann — leer, wenn es keinen gibt."""
+    try:
+        _triton_pin()
+    except RuntimeError as exc:
+        return str(exc)
+    return ""
+
+
 def zustand() -> dict:
     marker = _marker()
     with _lock:
         lauf = dict(_state)
+    if not lauf["laeuft"] and not lauf["fehler"]:
+        # Nach einem Neustart ist `_state` leer; ein Grund, der schon vorher feststeht,
+        # soll trotzdem auf der Seite stehen (sonst nur "nicht geeignet", ohne Warum).
+        lauf["fehler"] = _pin_fehler()
     return {"bereit": _bereit(marker), "version": _version("nemo-toolkit") or "",
             "revision": marker.get("revision", ""), "geprueft": marker.get("geprueft", ""),
             **lauf}
@@ -102,16 +115,23 @@ def _heute() -> str:
 
 
 def _faellig() -> bool:
-    """Muss die AUTOMATIK etwas tun? Der Knopf fragt das nicht."""
+    """Muss die AUTOMATIK etwas tun? Die Knoepfe fragen das nicht."""
+    if _pin_fehler():
+        # Steht vorher fest, dass es nicht gelingen kann (torch ausserhalb der Triton-
+        # Tabelle), liefe sonst TAEGLICH ein 900-s-pip, das erst danach scheitert.
+        return False
     marker = _marker()
     if marker.get("fehlgeschlagen"):
         # Tagesbremse: ohne sie startete jeder Serverstart nach einem Fehlschlag
         # (offline, kaputter Stand) erneut ein bis zu 900 s langes pip.
         return marker.get("am") != _heute()
-    if not _bereit(marker):
-        return True
+    # VOR `_bereit`: eine Knopf-Fassung fasst die Automatik nie an — auch nicht, wenn nur
+    # ein Nebenpaket (Triton) abweicht. Repariert wird sie ueber den Knopf "gepruefte
+    # Fassung einrichten", nicht still.
     if marker.get("quelle", "auto") == "knopf":
         return False
+    if not _bereit(marker):
+        return True
     return marker.get("revision") != GEPRUEFTE_REVISION
 
 
@@ -143,10 +163,16 @@ def _marker_entwerten() -> None:
     os.replace(tmp, path)
 
 
-def _install_gesperrt(force: bool = False) -> str:
+def _install_gesperrt(force: bool = False, neuester: bool = True) -> str:
+    """`force` = ein Knopf; `neuester` waehlt, welcher: der neueste NVIDIA-Stand oder
+    die gepruefte Fassung (zweiter Knopf, Entscheidung Marcus 2026-09-24 — sonst fuehrte
+    nach einem Fehlschlag am selben Tag nur der ungepruefte Weg weiter)."""
     if not force and not _faellig():
         return "aktuell"
-    revision = _latest_revision() if force else GEPRUEFTE_REVISION
+    # Zuerst: steht fest, dass Triton nicht passt, wirft das HIER — vorher lief erst das
+    # 900-s-pip von NeMo komplett durch und scheiterte danach.
+    pin = _triton_pin()
+    revision = _latest_revision() if force and neuester else GEPRUEFTE_REVISION
     marker = _marker()
     url = f"https://codeload.github.com/NVIDIA-NeMo/Speech/zip/{revision}"
     if _bereit(marker) and (marker.get("revision") == revision
@@ -161,7 +187,6 @@ def _install_gesperrt(force: bool = False) -> str:
         if error:
             raise RuntimeError(f"NeMo-Installation: {error}")
         result = "installiert"
-    pin = _triton_pin()
     if pin and _version("triton-windows") != pin:
         error = _run(["-m", "pip", "install", "--no-cache-dir",
                       f"triton-windows=={pin}"], 300)
@@ -211,7 +236,7 @@ def _install_gesperrt(force: bool = False) -> str:
     return result
 
 
-def _install(force: bool = False) -> str:
+def _install(force: bool = False, neuester: bool = True) -> str:
     global _haelt_pip_lock
     if not force and not _faellig():
         return "aktuell"
@@ -221,17 +246,27 @@ def _install(force: bool = False) -> str:
 
     lockziel = ytdlp_update._lockziel()
     os.makedirs(os.path.dirname(lockziel) or ".", exist_ok=True)
-    with sperre.datei(lockziel, stale=ytdlp_update._lock_stale(),
-                      erzwinge_uebernahme=False, wartezeit=1950) as gehalten:
+    # Dieselbe Sperrart wie yt-dlp, NICHT strikt: der strikte Warter raeumte ein Lock ohne
+    # Merker nie nach der Uhr ab — genau den Zustand, den `beim_ende()` beim Shutdown
+    # absichtlich erzeugt. Danach wartete JEDER Start 32 min und scheiterte (Befund beider
+    # Kalt-Leser). Der erzwungene Griff ist sicher, weil jeder Halter kuerzer bleibt als
+    # die Frist: yt-dlp <= 215 s, NeMo <= 1750 s gegen frist(1900) = 1905 s.
+    with sperre.datei(lockziel, stale=ytdlp_update._lock_stale()) as gehalten:
         if not gehalten:
             raise RuntimeError("NeMo-Installation: Pip-Sperre nicht verfuegbar")
         with _lock:
             _haelt_pip_lock = True
         try:
-            return _install_gesperrt(force)
+            return _install_gesperrt(force, neuester)
         finally:
             with _lock:
                 _haelt_pip_lock = False
+
+
+def haelt_pip_sperre() -> bool:
+    """Haelt die NeMo-Einrichtung DIESES Prozesses gerade die gemeinsame pip-Sperre?"""
+    with _lock:
+        return _haelt_pip_lock
 
 
 def beim_ende() -> bool:
@@ -244,9 +279,9 @@ def beim_ende() -> bool:
         return sperre.merker_aufgeben(ytdlp_update._lockziel())
 
 
-def _hintergrund(force: bool) -> None:
+def _hintergrund(force: bool, neuester: bool = True) -> None:
     try:
-        result = _install(force)
+        result = _install(force, neuester)
         with _lock:
             _state.update(laeuft=False, ergebnis=result, fehler="")
     except Exception as exc:
@@ -254,7 +289,10 @@ def _hintergrund(force: bool) -> None:
             _state.update(laeuft=False, ergebnis="fehler", fehler=str(exc)[-700:])
 
 
-def starten(force: bool = False) -> bool:
+def starten(force: bool = False, neuester: bool = True) -> bool:
+    """`force=False` = Automatik (Pin, Tagesbremse). Die Knoepfe setzen `force=True`:
+    `neuester=True` holt den ungeprueften NVIDIA-Stand, `neuester=False` richtet die
+    gepruefte Fassung ein — auch am Tag eines Fehlschlags."""
     if not force and not _faellig():
         return False
     with _lock:
@@ -262,7 +300,7 @@ def starten(force: bool = False) -> bool:
             return False
         _state.update(laeuft=True, ergebnis="", fehler="")
     try:
-        threading.Thread(target=_hintergrund, args=(force,), name="nemotron-setup",
+        threading.Thread(target=_hintergrund, args=(force, neuester), name="nemotron-setup",
                          daemon=True).start()
     except RuntimeError:
         with _lock:

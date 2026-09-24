@@ -14,7 +14,12 @@ def test_diarize_file_converts_nemo_segments(monkeypatch):
             return [["1.800 3.250 speaker_1", "0.400 2.100 speaker_0"]]
 
     monkeypatch.setattr(nemotron_diarize, "_model", lambda: Model())
-    monkeypatch.setattr("faster_whisper.decode_audio", lambda *a, **kw: [0.0, 0.1])
+    # Ein eingeschleustes Modul statt des echten: der Python-Job der CI installiert kein
+    # faster_whisper, und ein Patch auf "faster_whisper.decode_audio" starb dort am Import
+    # (CodeRabbit-CLI). Gleiches Muster wie der nemo-Stub weiter unten.
+    fw = ModuleType("faster_whisper")
+    fw.decode_audio = lambda *a, **kw: [0.0, 0.1]
+    monkeypatch.setitem(sys.modules, "faster_whisper", fw)
     turns = nemotron_diarize.diarize_file("ignored.mp3")
     assert turns == [
         {"start": 0.4, "end": 2.1, "cluster": "speaker_0"},
