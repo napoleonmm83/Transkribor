@@ -1384,7 +1384,7 @@ def zustand() -> dict:
     g = geprueft()
     v, unlesbar = _fassung_und_lesbarkeit()
     laeuft, ergebnis, ungeschuetzt = hintergrund_zustand()
-    from . import nemotron_setup   # lazy: nemotron_setup importiert dieses Modul ebenfalls lazy
+    from . import nemotron_setup  # lazy: nemotron_setup importiert dieses Modul ebenfalls lazy
     return {"version": v, "unlesbar": unlesbar, "geprueft": g.isoformat() if g else "",
             "auto": auto_an(), "env": env_override() is not None,
             "laeuft": laeuft_gerade(laeuft),

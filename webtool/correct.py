@@ -396,7 +396,7 @@ def _wirksames_diarisierungsmodell() -> str:
     jede Sprechertrennung. Weil der Skip gegen DIESES Modell vergleicht, bleibt ein
     vorhandenes pyannote-Sidecar in diesem Fall einfach stehen.
     """
-    gewaehlt = settings.load()["diarization_model"]
+    gewaehlt = str(settings.load()["diarization_model"])  # `_lesen` normalisiert ohnehin
     if gewaehlt != "nemotron3":
         return gewaehlt
     from . import nemotron_setup                    # lazy: liest nur Paket-Metadaten
