@@ -505,6 +505,11 @@ def cmd_diarize(project: str, only_bases: list = None) -> int:
                     grund = type(e).__name__
                     print(f"↷ Nemotron 3 fehlgeschlagen ({grund}) — Sprechertrennung mit pyannote",
                           flush=True)
+                    # Das Sidecar traegt danach "pyannote"; der naechste Lauf dieser Datei
+                    # versucht Nemotron also ERNEUT. Bewusst so (CodeRabbit schlug vor, den
+                    # Rueckfall wiederzuverwenden): sonst heilte sich der Zustand nie — ist der
+                    # Scanner weg, bliebe die Datei bei pyannote, bis sich die Roh-JSON aendert.
+                    # Kosten nur bei einem AUSDRUECKLICHEN Neu-Korrigieren, keine Schleife.
                     modell, wirksame_sprecher = "pyannote", sprecher
             if modell == "pyannote":
                 turns = diarize.diarize_file(audio, min_speakers=DIARIZE_MIN_SPEAKERS,

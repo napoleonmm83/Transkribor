@@ -43,6 +43,9 @@ def test_installation_nutzt_offizielle_revision_und_prueft_import(monkeypatch, t
     monkeypatch.setattr(nemotron_setup, "_version", lambda name: {
         "nemo-toolkit": "3.0.0", "lhotse": "1.33.0", "torch": "2.11.0+cu128",
     }.get(name))
+    # Plattformunabhaengig: `_triton_pin` liefert nur unter Windows+cu-torch einen Pin — auf
+    # dem Linux-Laeufer der CI war dieser Test sonst rot (CodeRabbit-CLI, gegengeprueft).
+    monkeypatch.setattr(nemotron_setup, "_triton_pin", lambda: "3.6.0.post26")
     calls = []
     monkeypatch.setattr(nemotron_setup, "_run", lambda args, timeout: calls.append(args) or None)
     nemotron_setup._install(force=True)
@@ -351,6 +354,7 @@ def test_defekter_import_repariert_auch_bei_aktueller_revision(monkeypatch, tmp_
         "nemo-toolkit": "3.1.0", "lhotse": "2.0.0a6", "torch": "2.11.0+cu128",
         "triton-windows": "3.6.0.post26",
     }.get(name))
+    monkeypatch.setattr(nemotron_setup, "_triton_pin", lambda: "3.6.0.post26")  # s. oben
     calls = []
 
     def run(args, timeout):
