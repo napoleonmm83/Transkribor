@@ -561,7 +561,7 @@ lässt sich statt des mitgelieferten Modells **NVIDIA Nemotron 3** wählen. Es e
 Sprecher selbst und nimmt deshalb keine feste Zahl an — das Feld oben steht dann grau, dein
 eingetragener Wert bleibt aber für das Standardmodell erhalten. Beim ersten Mal richtet
 Transkribor die nötigen Pakete in einer von uns geprüften Fassung ein und lädt das Modell einmalig
-herunter; ein Konto braucht es dafür nicht. Das dauert beim ersten Mal einige Minuten. Ein Knopf holt auf Wunsch den neuesten Stand von NVIDIA — der ist dann nicht von
+herunter (rund 190 MB); ein Konto braucht es dafür nicht. Ein Knopf holt auf Wunsch den neuesten Stand von NVIDIA — der ist dann nicht von
 uns geprüft.
 
 Bei Aufnahmen, die du **vor dieser Fassung** hinzugefügt hast, steht meist „Ja“ oder „Nein“ —
