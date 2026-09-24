@@ -1992,11 +1992,15 @@ def test_laufzeit_rueckfall_gilt_den_tag_ueber_und_wird_danach_neu_versucht(proj
         raise RuntimeError("Download scheitert")
 
     monkeypatch.setattr(nemotron_diarize, "diarize_file", scheitert)
+    # Beide Tage fest, nicht die echte Uhr: sonst wackelte der Test ueber Mitternacht, und
+    # der "naechste Tag" ist wirklich der Folgetag des gespeicherten Datums (CodeRabbit-CLI).
+    monkeypatch.setattr(correct, "_heute", lambda: "2026-09-24")
     assert correct.cmd_diarize("Demo") == 1
+    assert json.loads((t / "S1.diar.json").read_text(encoding="utf-8"))["rueckfall_am"] == "2026-09-24"
     assert correct.cmd_diarize("Demo") == 0          # derselbe Tag: Rueckfall gilt weiter
     assert (len(nemo_calls), len(pyannote_calls)) == (1, 1)
 
-    monkeypatch.setattr(correct, "_heute", lambda: "2099-01-01")  # naechster Tag
+    monkeypatch.setattr(correct, "_heute", lambda: "2026-09-25")  # Folgetag
     assert correct.cmd_diarize("Demo") == 1
     assert (len(nemo_calls), len(pyannote_calls)) == (2, 2)
 
