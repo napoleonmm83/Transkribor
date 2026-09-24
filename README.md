@@ -556,6 +556,14 @@ verfügbar“ heisst, ihr fehlt ein Baustein (etwa nach einer halben Einrichtung
 Fällen werden die Sprecher allein aus dem Gesprächsverlauf erschlossen, und die Zahl ändert
 daran nichts.
 
+**Zweites Modell zur Wahl (ab der nächsten Fassung).** Unter *Einstellungen → Sprecher-Erkennung*
+lässt sich statt des mitgelieferten Modells **NVIDIA Nemotron 3** wählen. Es erkennt bis zu acht
+Sprecher selbst und nimmt deshalb keine feste Zahl an — das Feld oben steht dann grau, dein
+eingetragener Wert bleibt aber für das Standardmodell erhalten. Beim ersten Mal richtet
+Transkribor die nötigen Pakete in einer von uns geprüften Fassung ein und lädt das Modell einmalig
+herunter; ein Konto braucht es dafür nicht. Das dauert beim ersten Mal einige Minuten. Ein Knopf holt auf Wunsch den neuesten Stand von NVIDIA — der ist dann nicht von
+uns geprüft.
+
 Bei Aufnahmen, die du **vor dieser Fassung** hinzugefügt hast, steht meist „Ja“ oder „Nein“ —
 damals wurde die Einstellung bei jedem Hinzufügen fest an der Aufnahme vermerkt. Wenn du
 willst, dass sie wieder dem Projekt folgen, stellst du sie einmal von Hand auf „Folgt dem
@@ -925,7 +933,7 @@ letzten Fassung — und zwar dieselbe Auswahl, die auch die Versionsnummer hebt 
 Dazu schreibt er, dass eine Notiz gefehlt hat.
 
 **Technisch drunter:** Whisper `large-v3` über faster-whisper (CUDA, mit `repetition_penalty=1.1`) bzw. whisper.cpp (Metal, mit `-mc 64`), automatischer Bereinigung von Wiederholungsschleifen bei Hintergrundmusik/Stille,
-Sprechertrennung mit pyannote, Korrektur über einen frei wählbaren LLM-Anbieter, Oberfläche
+Sprechertrennung mit pyannote oder optional NVIDIA Nemotron 3 (bei Auswahl richtet Transkribor automatisch die von uns geprüfte NeMo-Fassung ein; den neuesten NVIDIA-Stand gibt es auf Knopfdruck), Korrektur über einen frei wählbaren LLM-Anbieter, Oberfläche
 als React 19 + Vite + TypeScript + Tailwind v4 + shadcn/ui, Backend FastAPI, Desktop-Hülle
 Electron mit Auto-Update.
 

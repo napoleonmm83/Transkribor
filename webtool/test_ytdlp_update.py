@@ -35,6 +35,7 @@ _ECHTES_EJS_UNTAUGLICH = yu._ejs_untauglich
 # `yu.subprocess` DASSELBE Modulobjekt ist wie das hier importierte, trifft das jeden Aufruf
 # in dieser Datei — auch einen, der gar kein pip startet.
 _ECHTES_RUN = subprocess.run
+_PLATFORM_MACHINE = platform.machine()
 
 
 @pytest.fixture(autouse=True)
@@ -43,6 +44,9 @@ def isoliert(monkeypatch, tmp_path):
     monkeypatch.delenv("TRANSKRIBOR_YTDLP_UPDATE", raising=False)
     monkeypatch.setattr(yu.subprocess, "run",
                         lambda *a, **k: pytest.fail("kein echtes pip im Test"))
+    # packaging fragt seit der NeMo-Installation platform.machine() ab. Unter
+    # Windows startet das sonst `ver` ueber das gerade gesperrte subprocess.run.
+    monkeypatch.setattr(platform, "machine", lambda: _PLATFORM_MACHINE)
     monkeypatch.setattr(yu, "_heute", lambda: HEUTE)
     # Die Suite laeuft bewusst ohne yt-dlp (und damit ohne yt-dlp-ejs) — im CI-Job steht
     # `pip install fastapi python-multipart pytest httpx`, sonst nichts. Ungepinnt haengen
@@ -1384,7 +1388,8 @@ def test_beim_ende_gibt_den_merker_auf_wenn_der_eigene_lauf_noch_haelt(monkeypat
     with open(os.path.join(ziel + ".lock", sperre._HALTER), "wb") as f:
         f.write(sperre._mein_merker())
 
-    assert yu.beim_ende(eigener=True) is True
+    monkeypatch.setattr(yu, "_pip_lock_gehalten", True)
+    assert yu.beim_ende() is True
     monkeypatch.setattr(sperre, "_prozess_lebt", lambda pid: False)
     assert yu.laeuft_gerade(eigener=False) is True, "der naechste Start wuerde ein zweites pip starten"
 
@@ -1396,17 +1401,30 @@ def test_beim_ende_fasst_ein_FREMDES_lock_nicht_an(monkeypatch):
     ihm weg."""
     monkeypatch.setattr(sperre, "merker_aufgeben",
                         lambda *a: pytest.fail("kein eigener Lauf — nichts aufzugeben"))
-    assert yu.beim_ende(eigener=False) is False
+    monkeypatch.setattr(yu, "_pip_lock_gehalten", False)
+    assert yu.beim_ende() is False
 
 
 def test_beim_ende_fragt_den_eigenen_lauf_selbst(monkeypatch):
-    """Ohne Argument kommt die Antwort aus `hintergrund_zustand()` — der Lifespan reicht
-    nichts hinein."""
-    monkeypatch.setattr(yu, "hintergrund_zustand", lambda: (True, "", False))
+    """Nur der Besitz der pip-Sperre, nicht ein bloss laufender Faden, zaehlt."""
+    monkeypatch.setattr(yu, "_pip_lock_gehalten", True)
     gerufen = []
     monkeypatch.setattr(sperre, "merker_aufgeben", lambda p: gerufen.append(p) or True)
     assert yu.beim_ende() is True
     assert gerufen == [yu._lockziel()]
+
+
+def test_beim_ende_entfernt_nicht_den_nemo_merker_waehrend_yt_wartet(monkeypatch, tmp_path):
+    ziel = str(tmp_path / "pip")
+    monkeypatch.setattr(yu, "_lockziel", lambda: ziel)
+    monkeypatch.setattr(yu, "_pip_lock_gehalten", False)
+    monkeypatch.setattr(yu, "hintergrund_zustand", lambda: (True, "", False))
+    with sperre.datei(ziel) as gehalten:
+        assert gehalten
+        merker = os.path.join(ziel + ".lock", sperre._HALTER)
+        assert os.path.exists(merker)
+        assert yu.beim_ende() is False
+        assert os.path.exists(merker)
 
 
 # --- Der Merker eines unterbrochenen pip-Laufs (#257/#258) -------------------

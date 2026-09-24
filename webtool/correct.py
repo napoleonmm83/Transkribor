@@ -368,6 +368,13 @@ def _sidecar_sprecher(dpath: str):
         return None
 
 
+def _sidecar_diarization_model(dpath: str) -> str:
+    try:
+        return _load(dpath).get("diarization_model", "pyannote")
+    except Exception:
+        return ""
+
+
 def diarize_enabled() -> bool:
     """Ist die akustische Sprechertrennung eingeschaltet? (`TRANSKRIBOR_DIARIZE`)
 
@@ -387,6 +394,7 @@ def cmd_diarize(project: str, only_bases: list = None) -> int:
     if not diarize_enabled():
         print("↷ Diarisierung deaktiviert (TRANSKRIBOR_DIARIZE=0)", flush=True)
         return 0
+    diarization_model = settings.load()["diarization_model"]
     tdir = paths.transkripte_dir(project)
     n = 0
     t_phase = time.monotonic()
@@ -397,6 +405,7 @@ def cmd_diarize(project: str, only_bases: list = None) -> int:
             continue
         from . import projekt as _pj          # lazy wie in `_ziel_dialekt` (s. dort)
         sprecher = _pj.datei_sprecher(project, base)
+        wirksame_sprecher = sprecher if diarization_model == "pyannote" else None
         try:
             # >= (nicht >): das Sidecar wird stets NACH der Roh-JSON geschrieben; ein Skip bei exakt
             # gleicher Sekunde ist unrealistisch (Transkription dauert Minuten). Neu-Diarisieren = Sidecar löschen.
@@ -409,7 +418,8 @@ def cmd_diarize(project: str, only_bases: list = None) -> int:
             # diesem Feld hat keinen und gilt als „automatisch" (= None) — hat der Nutzer nichts
             # eingestellt, aendert sich damit nichts, und genau das ist gewollt.
             if (os.path.exists(dpath) and os.path.getmtime(dpath) >= os.path.getmtime(raw_json)
-                    and _sidecar_sprecher(dpath) == sprecher):
+                    and _sidecar_sprecher(dpath) == wirksame_sprecher
+                    and _sidecar_diarization_model(dpath) == diarization_model):
                 print(f"↷ nutze vorhandene {base}.diar.json", flush=True)
                 continue
             audio = _audio_path(project, base)
@@ -457,12 +467,16 @@ def cmd_diarize(project: str, only_bases: list = None) -> int:
             if os.path.exists(dpath):
                 with contextlib.suppress(OSError):   # best effort; sonst ueberschreibt unten ohnehin
                     os.remove(dpath)
-            wieviele = f" ({sprecher} Sprecher)" if sprecher else ""
+            wieviele = f" ({wirksame_sprecher} Sprecher)" if wirksame_sprecher else ""
             print(f"→ Diarisiere {base}{wieviele} …", flush=True)
             diagnose: dict = {}
             t0 = time.monotonic()
-            turns = diarize.diarize_file(audio, min_speakers=DIARIZE_MIN_SPEAKERS,
-                                         num_speakers=sprecher, diagnose=diagnose)
+            if diarization_model == "nemotron3":
+                from . import nemotron_diarize
+                turns = nemotron_diarize.diarize_file(audio)
+            else:
+                turns = diarize.diarize_file(audio, min_speakers=DIARIZE_MIN_SPEAKERS,
+                                             num_speakers=wirksame_sprecher, diagnose=diagnose)
             dt = time.monotonic() - t0
             if not turns:
                 print(f"diarize: SKIP {base} (keine Sprecher erkannt)", flush=True)
@@ -473,8 +487,10 @@ def cmd_diarize(project: str, only_bases: list = None) -> int:
             # ausschliesslich `num_speakers` an pyannote, und eine Grenze im Sidecar, die der
             # Lauf nie gesehen hat, schickt den naechsten Debugger auf die falsche Faehrte.
             doc = {"base": base, "audio": os.path.basename(audio),
-                   "min_speakers": None if sprecher else DIARIZE_MIN_SPEAKERS,
-                   "sprecher": sprecher,          # womit gerechnet wurde -> Skip-Entscheidung oben
+                   "min_speakers": (DIARIZE_MIN_SPEAKERS if diarization_model == "pyannote"
+                                    and not wirksame_sprecher else None),
+                   "sprecher": wirksame_sprecher,
+                   "diarization_model": diarization_model,
                    "turns": turns,
                    "segments": [{"id": sid, "speaker": spk} for sid, spk in seg_speakers.items()]}
             # Diagnose nur, WENN sie zustande kam (#275). Ein leerer Schluessel waere schlimmer

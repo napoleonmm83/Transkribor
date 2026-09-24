@@ -110,8 +110,9 @@ export function DateiEinstellungenDialog({ project, base, file, offen, onOpenCha
   const diarAus = data?.diarisierung_aktiv === false
   // Zweiter Sperrgrund (#270), dieselbe `=== false`-Regel: pyannote oder das Modell
   // fehlt — die Sprechertrennung wuerde still ausfallen, obwohl der Kill-Switch an ist.
-  const diarWeg = data?.pyannote_da === false
-  const diarGesperrt = diarAus || diarWeg
+  const nemotron = data?.diarization_model === 'nemotron3'
+  const diarWeg = nemotron ? data?.nemotron_da === false : data?.pyannote_da === false
+  const diarGesperrt = diarAus || diarWeg || nemotron
   const sprecherGeaendert = !!data && sprecherWahl !== undefined && sprecherWahl !== data.sprecher
   const tiefeGeaendert = !!data && korrektur !== data.korrektur
   // Beides zieht denselben Lauf nach sich: die Diarisierung ist ein Prep-Schritt von
@@ -290,6 +291,10 @@ export function DateiEinstellungenDialog({ project, base, file, offen, onOpenCha
                   ? 'Die Sprechertrennung ist auf diesem Server abgeschaltet '
                     + '(Umgebungsvariable TRANSKRIBOR_DIARIZE) — die Zahl hätte hier '
                     + 'keine Wirkung.'
+                  : nemotron
+                  ? diarWeg
+                    ? 'Nemotron 3 ist hier nicht installiert. Es akzeptiert zudem keine feste Sprecherzahl; der gespeicherte Wert bleibt für pyannote erhalten.'
+                    : 'Nemotron 3 erkennt bis zu acht Sprecher automatisch und akzeptiert keine feste Sprecherzahl. Der gespeicherte Wert bleibt für pyannote erhalten.'
                   : diarWeg
                   // Was hier fehlt, ist eine Sache der Umgebung, nicht einer Entscheidung:
                   // pyannote oder das Modell sind nicht da (je Serverlauf gemessen, #270).

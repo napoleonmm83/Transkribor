@@ -34,6 +34,7 @@ const EINSTELLUNGEN = {
   sprache: 'ch', korrektur: 'auto', mehrsprachig: false,
   sprach_choices: [], tiefen: [], sprecher_max: 20,
   diarisierung_aktiv: true, diarize_verfuegbar: true,
+  pyannote_da: true, nemotron_da: false, diarization_model: 'pyannote',
 }
 
 /** Die Serverform von GET /api/settings — vollstaendig genug, dass SettingsPage rendert
@@ -42,6 +43,7 @@ const SETTINGS = {
   provider: 'claude', model: 'opus', base_url: '', has_key: false,
   providers: [], env_key: '',
   whisper_model: 'large-v3', whisper_lang: 'de', whisper_choices: [{ model: 'large-v3', label: 'large-v3' }],
+  diarization_model: 'pyannote', nemotron_da: false,
   parallel: '3', parallel_max: 16, parallel_default: '3', parallel_env: '', parallel_env_wirksam: '3',
   ai_ready: false, ai_reason: 'Testlauf ohne Anbieter',
   ytdlp_auto: '1', ytdlp: { laeuft: false, ergebnis: null, unlesbar: false, ejs_unlesbar: false, auto: true },

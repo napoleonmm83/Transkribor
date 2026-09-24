@@ -57,6 +57,9 @@ from . import settings, sperre
 # liesse einen kaputten Extraktor monatelang kaputt. Eine Zahl, an einer Stelle.
 INTERVALL_TAGE = 14
 PIP_TIMEOUT = 120
+PIP_SHARED_STALE = 1900  # NeMo-Reparatur: GitHub + 300+300+900 s pip + 2x120 s Probe + Reserve
+_pip_lock_guard = threading.Lock()
+_pip_lock_gehalten = False
 # Kein MERKER-Konstante mehr: der Kalendermerker lebt seit #281 als Datei je venv
 # (`_kalender_merker()`), nicht als Schluessel in settings.json.
 # Das Paket mit den Loeserskripten fuer YouTubes JS-Challenge; kommt ueber `yt-dlp[default]`.
@@ -641,7 +644,23 @@ def _lock_stale() -> float:
     spaeter als verwaist — ein toter lokaler Halter wird weiterhin sofort erkannt, die Uhr
     ist nur der Rueckfall.
     """
-    return PIP_TIMEOUT + 30 + sperre.frist()
+    return max(PIP_TIMEOUT + 30 + sperre.frist(), PIP_SHARED_STALE)
+
+
+@contextlib.contextmanager
+def _pip_sperre(ziel: str):
+    """Merkt sich nur eine tatsaechlich erworbene pip-Sperre fuer den Shutdown."""
+    global _pip_lock_gehalten
+    with sperre.datei(ziel, stale=_lock_stale()) as gehalten:
+        if gehalten:
+            with _pip_lock_guard:
+                _pip_lock_gehalten = True
+        try:
+            yield gehalten
+        finally:
+            if gehalten:
+                with _pip_lock_guard:
+                    _pip_lock_gehalten = False
 
 
 def _venv_kennung() -> str:
@@ -976,7 +995,7 @@ def aktualisiere(nur_wenn_faellig: bool = False) -> tuple[bool | None, bool]:
     except OSError as e:
         print(f"[ytdlp] Sperrverzeichnis nicht anlegbar: {e}", flush=True)
     # Die Frist deckt die WIRKLICHE Haltedauer, nicht nur den pip-Lauf — siehe `_lock_stale`.
-    with sperre.datei(lockziel, stale=_lock_stale()) as gehalten:
+    with _pip_sperre(lockziel) as gehalten:
         # **Die Faelligkeit noch einmal, hier drin** (#254 Weg 3). Sie wurde VOR dem
         # Sperrerwerb ausgewertet, und genau dazwischen kann der andere seinen ganzen Lauf
         # gefahren haben: zwei Serverprozesse starten gleichzeitig (gepackte App neben
@@ -1291,39 +1310,18 @@ def beim_start() -> bool:
         return False
 
 
-def beim_ende(eigener: bool | None = None) -> bool:
-    """Der Serverprozess endet, waehrend der eigene Update-Faden noch pip haelt (#224).
-    True = der Merker wurde aufgegeben.
+def beim_ende() -> bool:
+    """Gibt beim Shutdown nur den Merker der selbst ERWORBENEN pip-Sperre auf.
 
-    Das Gegenstueck zu `beim_start()`, und es steht aus demselben Grund hier: seit #253 laeuft
-    das pip **im Serverprozess**, in den ersten Sekunden nach dem Start — also genau in dem
-    Fenster, in dem jemand die frisch geoeffnete App wieder zumacht. Bei einer Neuinstallation
-    ist die Pruefung garantiert faellig.
-
-    Der Faden ist `daemon=True`, sein `finally` laeuft beim Interpreter-Ende also nicht, und
-    das pip-Kind ueberlebt uns (in WSL gemessen, siehe `sperre.merker_aufgeben`). Wir koennen
-    das Lock deshalb nicht freigeben — wir wollen es auch nicht: es soll halten, bis das Kind
-    fertig ist. Aufgegeben wird nur die **Auskunft**, damit der naechste Start die Uhr
-    befragt statt eine tote PID.
-
-    **Nur der EIGENE Lauf** (`hintergrund_zustand`, nicht `laeuft_gerade`): ein fremder Halter
-    — der fetch-Subprozess mit seiner Selbstheilung, oder ein zweiter Serverprozess (#254) —
-    lebt weiter und braucht seine Auskunft. Der Ausweis in `merker_aufgeben` faengt den Fall
-    ein zweites Mal ab; hier steht er, weil ein Lock, das uns nie gehoerte, gar nicht erst
-    angefasst werden soll.
-
-    **`_lauf` kennt nur den FADEN-Weg**, und das ist eine Falle fuer den naechsten Umbau:
-    `automatisch()` ruft `aktualisiere()` **synchron** (fetch-Subprozess), dort steht
-    `_lauf["laeuft"]` nie auf True. Heute folgenlos — jenen Prozess raeumt `jobs.cancel_all()`
-    per SIGKILL ab, es laeuft ohnehin kein Handler. Wer ihm einen gibt, bekommt `beim_ende()`
-    als stillen No-op, der abgedeckt aussieht.
-
-    `eigener` ist derselbe Saum wie bei `laeuft_gerade` — und hier zusaetzlich der einzige
-    Weg, den Fall im Test ohne echten Faden zu stellen.
+    Der daemon-Faden und sein pip-Kind koennen den Server ueberleben. Dann bleibt
+    das Lock bis zur Frist liegen; nur seine PID-Auskunft wird entfernt. Ein
+    wartender yt-dlp-Faden besitzt die gemeinsame Sperre noch nicht und darf den
+    Merker des NeMo-Halters nicht anruehren.
     """
-    if eigener is None:
-        eigener = hintergrund_zustand()[0]
-    return eigener and sperre.merker_aufgeben(_lockziel())
+    with _pip_lock_guard:
+        if not _pip_lock_gehalten:
+            return False
+        return sperre.merker_aufgeben(_lockziel())
 
 
 def zustand() -> dict:

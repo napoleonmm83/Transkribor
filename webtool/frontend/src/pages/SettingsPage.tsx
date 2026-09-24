@@ -4,7 +4,7 @@ import { toast } from 'sonner'
 import { Check, Copy, FolderOpen, KeyRound, Loader2, LogIn, RefreshCw } from 'lucide-react'
 import {
   cancelLogin, getAuth, getHardware, getSettings, listModels, loginState,
-  saveSettings, startLogin, submitLoginCode, testSettings, updateYtdlp, verwerfeKaputt,
+  saveSettings, startLogin, submitLoginCode, testSettings, updateNemotron, updateYtdlp, verwerfeKaputt,
 } from '@/lib/api'
 import { PageHeader } from '@/components/PageHeader'
 import { Abschnitt } from '@/components/Abschnitt'
@@ -280,6 +280,24 @@ export function SettingsPage() {
 
   useEffect(() => { getSettings().then(setS).catch(e => toast.error(String(e))) }, [])
   useEffect(() => { getHardware().then(setHw).catch(() => setHw(null)) }, [])
+  useEffect(() => {
+    if (!s?.nemotron.laeuft) return
+    let aktiv = true
+    const timer = setInterval(() => {
+      getSettings().then(neu => {
+        if (aktiv) setS(alt => alt && { ...alt, nemotron: neu.nemotron, nemotron_da: neu.nemotron_da })
+      }).catch(() => {})
+    }, 2000)
+    return () => { aktiv = false; clearInterval(timer) }
+  }, [s?.nemotron.laeuft])
+
+  const nemotronJetzt = async () => {
+    try {
+      await updateNemotron()
+      const neu = await getSettings()
+      setS(alt => alt && { ...alt, nemotron: neu.nemotron, nemotron_da: neu.nemotron_da })
+    } catch (e) { toast.error(`NeMo: ${(e as Error).message}`) }
+  }
 
   // Anmeldezustand hängt am Anbieter. Nach einer Anmeldung auch die Einstellungen neu holen:
   // `ai_ready` kippt dadurch, und der Warnbalken oben soll sofort verschwinden.
@@ -978,17 +996,42 @@ export function SettingsPage() {
         </div>
       </Abschnitt>
 
-      {/* Nichts einzustellen — der Abschnitt bleibt, weil er die CC-BY-Namensnennung fuer die
-          mitgelieferten Gewichte traegt (siehe LICENSE-MODELLE.md). */}
       <Abschnitt titel="Sprecher-Erkennung">
+        <label id="lbl-diarization-model" className="mb-1.5 block text-sm font-medium">Diarisierungsmodell</label>
+        <Select value={s.diarization_model} onValueChange={m => speichern({ diarization_model: m })}>
+          <SelectTrigger className="w-full" aria-labelledby="lbl-diarization-model"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="pyannote">pyannote · Standard</SelectItem>
+            <SelectItem value="nemotron3">NVIDIA Nemotron 3 · bis zu 8 Sprecher</SelectItem>
+          </SelectContent>
+        </Select>
         <p className="text-sm">
-          Transkribor trennt die Sprecher akustisch und braucht dafür weder Konto noch Token.
+          Transkribor trennt die Sprecher akustisch. Die Auswahl gilt für künftige Diarisierungen.
         </p>
+        {s.diarization_model === 'nemotron3' && (
+          <div className="mt-2 space-y-2 text-xs text-muted-foreground">
+            <p>{s.nemotron.laeuft ? 'NeMo-Pakete werden geprüft und installiert …'
+              : s.nemotron.bereit ? `NeMo ${s.nemotron.version} ist bereit.`
+              : 'NeMo fehlt oder ist für Nemotron 3 nicht geeignet. Die Einrichtung der geprüften Fassung startet automatisch.'}
+              {' '}Eine feste Sprecherzahl kann Nemotron 3 nicht übernehmen.</p>
+            {s.nemotron.fehler && <p role="alert" className="text-destructive">{s.nemotron.fehler}</p>}
+            {s.nemotron.geprueft && <p>Zuletzt geprüft: {tag(s.nemotron.geprueft)}</p>}
+            <Button variant="outline" size="sm" disabled={s.nemotron.laeuft} onClick={nemotronJetzt}>
+              {s.nemotron.laeuft && <Loader2 className="size-3.5 animate-spin" />}
+              Neuesten NeMo-Stand holen
+            </Button>
+            <p>Automatisch richtet Transkribor nur die von uns geprüfte NeMo-Fassung ein. Der Knopf
+              holt den neuesten Stand von NVIDIA — ungeprüft, auf eigenen Wunsch.
+              Das Modell lädt beim ersten Lauf einmalig herunter; ein Konto braucht es nicht.</p>
+          </div>
+        )}
         <p className="mt-1.5 text-xs text-muted-foreground">
           Modell:&nbsp;
-          <a className="underline underline-offset-2 hover:text-foreground" href="https://huggingface.co/pyannote/speaker-diarization-community-1" target="_blank" rel="noreferrer">
+          {s.diarization_model === 'nemotron3' ? (
+            <a className="underline underline-offset-2 hover:text-foreground" href="https://huggingface.co/nvidia/Nemotron-3-Diarization" target="_blank" rel="noreferrer">nvidia/Nemotron-3-Diarization</a>
+          ) : <><a className="underline underline-offset-2 hover:text-foreground" href="https://huggingface.co/pyannote/speaker-diarization-community-1" target="_blank" rel="noreferrer">
             pyannote speaker-diarization-community-1</a>, mitgeliefert unter&nbsp;
-          <a className="underline underline-offset-2 hover:text-foreground" href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">CC BY 4.0</a>.
+          <a className="underline underline-offset-2 hover:text-foreground" href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">CC BY 4.0</a></>}.
         </p>
       </Abschnitt>
 

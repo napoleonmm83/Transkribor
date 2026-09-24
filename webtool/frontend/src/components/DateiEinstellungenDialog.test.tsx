@@ -19,6 +19,8 @@ const BASIS = {
   // „Anzahl Sprecher" ein Schalter, der gespeichert wird und nichts tut (#266).
   diarisierung_aktiv: true,
   pyannote_da: true,   // Normalfall: Sprechertrennung kann rechnen (#270)
+  nemotron_da: false,
+  diarization_model: 'pyannote' as const,
   sprach_choices: [
     // `dialekt` seit #301 — der Erklaersatz zur `auto`-Regel haengt daran, und ohne das
     // Flag schweigt er (bewusst: „unbekannt" statt einer moeglichen Falschaussage).
@@ -50,6 +52,17 @@ const spracheWaehlen = async (label: string) => {
 }
 
 describe('DateiEinstellungenDialog', () => {
+  it('sperrt die feste Sprecherzahl fuer Nemotron und erklaert den Grund', async () => {
+    const getSpy = vi.spyOn(api, 'getFileEinstellungen').mockResolvedValue({
+      ...BASIS, diarization_model: 'nemotron3', nemotron_da: true, sprecher: 4,
+    })
+    render(<DateiEinstellungenDialog project="p" base="a" file={datei()} offen />)
+    const feld = await screen.findByLabelText(/Anzahl Sprecher/)
+    expect(feld).toHaveAttribute('aria-disabled', 'true')
+    expect(feld).toHaveValue('4')
+    expect(screen.getByText(/akzeptiert keine feste Sprecherzahl/)).toBeInTheDocument()
+    getSpy.mockRestore()
+  })
   it('zeigt ohne eigenen Wert „folgt dem Projekt" — mit dem geerbten Namen (#234)', async () => {
     // Der Trigger muss BEIDES sagen: dass die Datei erbt, und WAS sie erbt. Nur „folgt dem
     // Projekt" liesse offen, worauf die naechste Transkription laeuft; nur „Schweizerdeutsch"

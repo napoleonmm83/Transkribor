@@ -68,6 +68,7 @@ beforeEach(() => {
     mehrsprachig_eigen: null, mehrsprachig_projekt: false,
     sprecher: null, sprecher_max: 20, diarisierung_aktiv: true,   // Kill-Switch an (#266)
     pyannote_da: true,                                          // Sprechertrennung kann rechnen (#270)
+    nemotron_da: false, diarization_model: 'pyannote',
     sprach_choices: [{ id: 'ch', label: 'Schweizerdeutsch', hint: '', dialekt: true },
                      { id: 'en', label: 'Englisch', hint: '', dialekt: false }],
     tiefen: [{ id: 'auto', label: 'Automatisch (aus Sprache)' }, { id: 'voll_dialekt', label: 'Voll' }, { id: 'leicht', label: 'Leicht' }],
